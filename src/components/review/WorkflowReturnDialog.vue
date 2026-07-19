@@ -68,29 +68,29 @@ function handleClose() {
     panel-class="max-w-[30rem]"
     body-class="space-y-5 px-6 py-5"
     @update:open="(open) => emit('update:visible', open)">
-    <div class="flex items-center gap-2 text-sm font-medium text-[#DC2626]">
+    <div class="flex items-center gap-2 text-sm font-medium text-danger">
       <CornerDownLeft class="h-4 w-4" />
       <span>确认驳回流转并填写流转驳回原因</span>
     </div>
 
-    <div class="rounded-2xl border border-[#FECACA] bg-[#FFF7F7] p-4" data-testid="workflow-return-flow">
+    <div class="rounded-2xl border border-danger/30 bg-danger-subtle p-4" data-testid="workflow-return-flow">
       <div class="flex items-center justify-between gap-3">
-        <div class="min-w-0 flex-1 rounded-xl bg-[#DC2626] px-4 py-3 text-white shadow-sm">
-          <div class="text-xs font-medium uppercase tracking-[0.16em] text-red-100">目标环节</div>
+        <div class="min-w-0 flex-1 rounded-xl bg-danger px-4 py-3 text-danger-foreground shadow-sm">
+          <div class="text-xs font-medium uppercase tracking-[0.16em] text-danger-foreground/80">目标环节</div>
           <div class="mt-2 text-sm font-semibold">{{ targetNodeLabel }}</div>
         </div>
-        <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#FEE2E2] text-[#DC2626]">
+        <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-danger-subtle text-danger">
           <ArrowLeft class="h-4 w-4" />
         </div>
-        <div class="min-w-0 flex-1 rounded-xl border border-[#FECACA] bg-white px-4 py-3">
-          <div class="text-xs font-medium uppercase tracking-[0.16em] text-[#F87171]">当前环节</div>
-          <div class="mt-2 text-sm font-semibold text-[#991B1B]">{{ WORKFLOW_NODE_NAMES[currentNode] }}</div>
+        <div class="min-w-0 flex-1 rounded-xl border border-danger/30 bg-white px-4 py-3">
+          <div class="text-xs font-medium uppercase tracking-[0.16em] text-danger/70">当前环节</div>
+          <div class="mt-2 text-sm font-semibold text-danger">{{ WORKFLOW_NODE_NAMES[currentNode] }}</div>
         </div>
       </div>
     </div>
 
     <div class="space-y-2">
-      <label class="block text-sm font-medium text-[#374151]">目标环节</label>
+      <label class="block text-sm font-medium text-slate-700">目标环节</label>
       <div class="flex gap-2">
         <button v-for="node in availableTargetNodes"
           :key="node.value"
@@ -98,8 +98,8 @@ function handleClose() {
           class="flex-1 rounded-xl border px-3 py-2 text-sm font-medium transition-colors"
           :class="
             targetNode === node.value
-              ? 'border-[#DC2626] bg-[#FFF1F2] text-[#B91C1C]'
-              : 'border-[#D1D5DB] bg-white text-[#4B5563] hover:bg-[#F9FAFB]'
+              ? 'border-danger bg-danger-subtle text-danger'
+              : 'border-slate-300 bg-white text-slate-600 hover:bg-slate-50'
           "
           @click="targetNode = node.value">
           {{ node.label }}
@@ -108,16 +108,16 @@ function handleClose() {
     </div>
 
     <div class="space-y-2">
-      <label for="workflow-return-reason" class="block text-sm font-medium text-[#374151]">
+      <label for="workflow-return-reason" class="block text-sm font-medium text-slate-700">
         流转驳回原因（必填）
       </label>
       <textarea id="workflow-return-reason"
         v-model="reason"
         data-testid="workflow-return-reason"
-        class="min-h-[112px] w-full rounded-xl border border-[#D1D5DB] bg-white px-4 py-3 text-sm text-[#111827] placeholder:text-[#9CA3AF] focus:border-[#DC2626] focus:outline-none focus:ring-4 focus:ring-[#FEE2E2]"
+        class="min-h-[112px] w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-danger focus:outline-none focus:ring-4 focus:ring-danger-subtle"
         rows="4"
         placeholder="请输入流转驳回原因（必填）" />
-      <p v-if="reason.trim().length === 0" class="text-xs text-[#DC2626]">流转驳回原因为必填项</p>
+      <p v-if="reason.trim().length === 0" class="text-xs text-danger">流转驳回原因为必填项</p>
     </div>
 
     <template #footer>

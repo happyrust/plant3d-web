@@ -70,13 +70,13 @@ const displayItems = computed(() => props.items);
             class="rounded p-1 hover:bg-muted"
             title="定位到碰撞位置"
             @click.stop="emit('locate', item)">
-            <Crosshair class="h-3.5 w-3.5 text-blue-600" />
+            <Crosshair class="h-3.5 w-3.5 text-brand" />
           </button>
           <button type="button"
             class="rounded p-1 hover:bg-muted"
             title="高亮碰撞构件"
             @click.stop="emit('highlight', item)">
-            <Eye class="h-3.5 w-3.5 text-orange-600" />
+            <Eye class="h-3.5 w-3.5 text-warning" />
           </button>
         </div>
       </div>
@@ -94,7 +94,7 @@ const displayItems = computed(() => props.items);
           <span class="text-muted-foreground">专业2:</span>
           <span>{{ item.ObjectTwoMajor }}</span>
           <span class="text-muted-foreground">错误描述:</span>
-          <span class="text-red-600">{{ item.ErrorMsg }}</span>
+          <span class="text-danger">{{ item.ErrorMsg }}</span>
           <span class="text-muted-foreground">检查人:</span>
           <span>{{ item.CheckUsr }} ({{ item.CheckDate }})</span>
           <template v-if="item.UpUsr">

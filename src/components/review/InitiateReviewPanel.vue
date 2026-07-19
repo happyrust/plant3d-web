@@ -1020,7 +1020,7 @@ function closePanel() {
 
       <Card class="border border-[#F3F4F6] shadow-none" body-class="p-3">
         <div class="flex items-center gap-3">
-          <div class="flex h-8 w-8 items-center justify-center rounded-full bg-[#FFF0E6] text-[#FF6B00]">
+          <div class="flex h-8 w-8 items-center justify-center rounded-full bg-brand-subtle text-brand">
             <Box class="h-4 w-4" />
           </div>
           <div class="min-w-0">

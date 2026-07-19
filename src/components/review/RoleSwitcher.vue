@@ -65,7 +65,7 @@ function handleClickOutside() {
           class="flex w-full items-center gap-2 px-3 py-1.5 text-xs transition-colors"
           :class="
             user.id === currentUser?.id
-              ? 'bg-blue-50 dark:bg-blue-950'
+              ? 'bg-brand-subtle'
               : 'hover:bg-muted'
           "
           @click="handleSwitch(user.id)">

@@ -62,26 +62,26 @@ const statusFilterOptions: StatusFilterOption[] = [
   {
     value: 'submitted',
     label: '待审核',
-    badgeClass: 'bg-amber-100 text-amber-700',
-    activeClass: 'border-amber-300 bg-amber-500 text-white',
+    badgeClass: 'bg-warning-subtle text-warning',
+    activeClass: 'border-warning bg-warning text-warning-foreground',
   },
   {
     value: 'in_review',
     label: '审核中',
-    badgeClass: 'bg-sky-100 text-sky-700',
-    activeClass: 'border-sky-300 bg-sky-500 text-white',
+    badgeClass: 'bg-brand-subtle text-brand',
+    activeClass: 'border-brand bg-brand text-brand-foreground',
   },
   {
     value: 'approved',
     label: '已通过',
-    badgeClass: 'bg-emerald-100 text-emerald-700',
-    activeClass: 'border-emerald-300 bg-emerald-500 text-white',
+    badgeClass: 'bg-success-subtle text-success',
+    activeClass: 'border-success bg-success text-success-foreground',
   },
   {
     value: 'rejected',
     label: '已驳回',
-    badgeClass: 'bg-rose-100 text-rose-700',
-    activeClass: 'border-rose-300 bg-rose-500 text-white',
+    badgeClass: 'bg-danger-subtle text-danger',
+    activeClass: 'border-danger bg-danger text-danger-foreground',
   },
   {
     value: 'cancelled',
@@ -182,17 +182,17 @@ function getStatusIcon(status: ReviewTask['status']) {
 function getStatusIconClass(status: ReviewTask['status']) {
   switch (status) {
     case 'approved':
-      return 'text-green-500';
+      return 'text-success';
     case 'rejected':
-      return 'text-rose-500';
+      return 'text-danger';
     case 'cancelled':
       return 'text-slate-400';
     case 'draft':
       return 'text-slate-500';
     case 'submitted':
-      return 'text-amber-500';
+      return 'text-warning';
     default:
-      return 'text-sky-500';
+      return 'text-brand';
   }
 }
 
@@ -205,12 +205,12 @@ function getCurrentNodeLabel(node?: ReviewTask['currentNode']): string {
 }
 
 function getTaskCardClass(task: ReviewTask): string {
-  if (task.status === 'approved') return 'border-emerald-200 bg-emerald-50/40';
-  if (isDesignerResubmissionTask(task)) return 'border-rose-200 bg-rose-50/60';
-  if (task.status === 'rejected') return 'border-rose-200 bg-rose-50/60';
+  if (task.status === 'approved') return 'border-success bg-success-subtle/40';
+  if (isDesignerResubmissionTask(task)) return 'border-danger bg-danger-subtle/60';
+  if (task.status === 'rejected') return 'border-danger bg-danger-subtle/60';
   if (task.status === 'cancelled') return 'border-slate-300 bg-slate-100/80';
-  if (task.status === 'in_review') return 'border-sky-200 bg-sky-50/40';
-  if (task.status === 'submitted') return 'border-amber-200 bg-amber-50/50';
+  if (task.status === 'in_review') return 'border-brand bg-brand-subtle/40';
+  if (task.status === 'submitted') return 'border-warning bg-warning-subtle/50';
   return 'border-slate-200 bg-white';
 }
 
@@ -225,8 +225,8 @@ onMounted(() => {
 <template>
   <div v-if="isPassiveWorkflowMode"
     class="flex h-full items-center justify-center bg-[#F6F7FB] p-4 text-slate-900">
-    <div class="w-full max-w-xl rounded-[24px] border border-blue-200 bg-white p-6 text-center shadow-[0_18px_40px_rgba(15,23,42,0.08)]">
-      <FileText class="mx-auto mb-4 h-12 w-12 text-blue-300" />
+    <div class="w-full max-w-xl rounded-[24px] border border-brand/30 bg-white p-6 text-center shadow-[0_18px_40px_rgba(15,23,42,0.08)]">
+      <FileText class="mx-auto mb-4 h-12 w-12 text-brand/40" />
       <h3 class="text-xl font-semibold text-slate-900">外部流程模式</h3>
       <p class="mt-2 text-sm text-slate-500">
         当前流程由外部平台驱动，不提供内部“我的编校审单”列表界面。
@@ -258,25 +258,25 @@ onMounted(() => {
 
       <!-- 统计卡片行 -->
       <div class="mt-4 grid grid-cols-4 gap-3">
-        <div class="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-center cursor-pointer transition hover:shadow-sm"
+        <div class="rounded-xl border border-success bg-success-subtle p-3 text-center cursor-pointer transition hover:shadow-sm"
           @click="statusFilter = 'all'">
-          <div class="text-2xl font-bold text-emerald-700">{{ taskCountByStatus.all }}</div>
-          <div class="mt-0.5 text-xs text-emerald-600">全部</div>
+          <div class="text-2xl font-bold text-success">{{ taskCountByStatus.all }}</div>
+          <div class="mt-0.5 text-xs text-success">全部</div>
         </div>
-        <div class="rounded-xl border border-amber-200 bg-amber-50 p-3 text-center cursor-pointer transition hover:shadow-sm"
+        <div class="rounded-xl border border-warning bg-warning-subtle p-3 text-center cursor-pointer transition hover:shadow-sm"
           @click="statusFilter = 'submitted'">
-          <div class="text-2xl font-bold text-amber-700">{{ taskCountByStatus.submitted }}</div>
-          <div class="mt-0.5 text-xs text-amber-600">待审核</div>
+          <div class="text-2xl font-bold text-warning">{{ taskCountByStatus.submitted }}</div>
+          <div class="mt-0.5 text-xs text-warning">待审核</div>
         </div>
-        <div class="rounded-xl border border-blue-200 bg-blue-50 p-3 text-center cursor-pointer transition hover:shadow-sm"
+        <div class="rounded-xl border border-brand bg-brand-subtle p-3 text-center cursor-pointer transition hover:shadow-sm"
           @click="statusFilter = 'approved'">
-          <div class="text-2xl font-bold text-blue-700">{{ taskCountByStatus.approved }}</div>
-          <div class="mt-0.5 text-xs text-blue-600">已通过</div>
+          <div class="text-2xl font-bold text-brand">{{ taskCountByStatus.approved }}</div>
+          <div class="mt-0.5 text-xs text-brand">已通过</div>
         </div>
-        <div class="rounded-xl border border-red-200 bg-red-50 p-3 text-center cursor-pointer transition hover:shadow-sm"
+        <div class="rounded-xl border border-danger bg-danger-subtle p-3 text-center cursor-pointer transition hover:shadow-sm"
           @click="statusFilter = 'rejected'">
-          <div class="text-2xl font-bold text-red-700">{{ taskCountByStatus.rejected }}</div>
-          <div class="mt-0.5 text-xs text-red-600">退回待修改</div>
+          <div class="text-2xl font-bold text-danger">{{ taskCountByStatus.rejected }}</div>
+          <div class="mt-0.5 text-xs text-danger">退回待修改</div>
         </div>
       </div>
 
@@ -332,7 +332,7 @@ onMounted(() => {
                   <span :class="['inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium', getPriorityDisplayName(task.priority).color]">
                     {{ getPriorityDisplayName(task.priority).label }}
                   </span>
-                  <span v-if="isDesignerResubmissionTask(task)" class="inline-flex items-center rounded-full bg-rose-100 px-2.5 py-1 text-xs font-medium text-rose-700">
+                  <span v-if="isDesignerResubmissionTask(task)" class="inline-flex items-center rounded-full bg-danger-subtle px-2.5 py-1 text-xs font-medium text-danger">
                     已退回
                   </span>
                 </div>

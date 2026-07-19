@@ -41,12 +41,12 @@ function getActionLabel(action: string): string {
 function getActionColor(action: string): { dot: string; bg: string; text: string } {
   switch (action) {
     case 'submit':
-      return { dot: 'bg-blue-500', bg: 'bg-blue-50 dark:bg-blue-950', text: 'text-blue-700 dark:text-blue-300' };
+      return { dot: 'bg-brand', bg: 'bg-brand-subtle', text: 'text-brand' };
     case 'approve':
-      return { dot: 'bg-green-500', bg: 'bg-green-50 dark:bg-green-950', text: 'text-green-700 dark:text-green-300' };
+      return { dot: 'bg-success', bg: 'bg-success-subtle', text: 'text-success' };
     case 'return':
     case 'reject':
-      return { dot: 'bg-red-500', bg: 'bg-red-50 dark:bg-red-950', text: 'text-red-700 dark:text-red-300' };
+      return { dot: 'bg-danger', bg: 'bg-danger-subtle', text: 'text-danger' };
     default:
       return { dot: 'bg-gray-400', bg: 'bg-gray-50 dark:bg-gray-900', text: 'text-gray-600 dark:text-gray-400' };
   }
@@ -68,7 +68,7 @@ function getActionIcon(action: string) {
     <!-- 当前节点指示 -->
     <div class="mb-2 flex items-center gap-2 text-xs">
       <span class="text-muted-foreground">当前节点:</span>
-      <span class="rounded bg-blue-100 px-2 py-0.5 font-medium text-blue-700 dark:bg-blue-900 dark:text-blue-300">
+      <span class="rounded bg-brand-subtle px-2 py-0.5 font-medium text-brand">
         {{ WORKFLOW_NODE_NAMES[currentNode] }}
       </span>
     </div>

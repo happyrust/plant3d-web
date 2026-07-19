@@ -31,9 +31,9 @@ const priorityLabel = computed(() => {
 
 const priorityClass = computed(() => {
   switch (props.task?.priority) {
-    case 'urgent': return 'bg-red-100 text-red-700';
-    case 'high': return 'bg-orange-100 text-orange-700';
-    case 'normal': return 'bg-blue-100 text-blue-700';
+    case 'urgent': return 'bg-danger-subtle text-danger';
+    case 'high': return 'bg-warning-subtle text-warning';
+    case 'normal': return 'bg-brand-subtle text-brand';
     case 'low': return 'bg-gray-100 text-gray-700';
     default: return 'bg-gray-100 text-gray-700';
   }
@@ -110,7 +110,7 @@ const formatDate = (timestamp?: number) => {
 
       <!-- 状态信息 -->
       <div class="flex flex-wrap gap-2">
-        <span class="inline-flex items-center rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-medium text-blue-800">
+        <span class="inline-flex items-center rounded-full bg-brand-subtle px-2.5 py-0.5 text-xs font-medium text-brand">
           {{ currentNodeLabel }}
         </span>
         <span class="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-800">
