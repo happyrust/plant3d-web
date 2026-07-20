@@ -24,5 +24,54 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Type check
+        run: npm run type-check
+
+      - name: Lint dimension cutover scope
+        run: |
+          npx eslint \
+            "src/dimension/**/*.{ts,vue}" \
+            src/components/dock_panels/ViewerPanel.vue \
+            src/components/review/ReviewConfirmation.vue \
+            src/components/review/ReviewConfirmation.test.ts \
+            src/composables/useDbnoInstancesParquetLoader.ts \
+            src/composables/useDbnoInstancesParquetLoader.mbd.test.ts \
+            src/composables/useReviewStore.ts \
+            src/composables/useReviewStore.confirm.test.ts \
+            src/composables/useXeokitMeasurementTools.ts \
+            src/composables/useXeokitMeasurementTools.test.ts \
+            src/debug/dimensionKernelDemo.ts \
+            src/debug/dimensionPerf.ts \
+            e2e/dimension-app-dev-smoke.spec.ts \
+            e2e/dimension-canvas-smoke.spec.ts \
+            e2e/dimension-perf.spec.ts \
+            scripts/run-dimension-browser-perf.mjs
+
+      - name: Dimension and integration tests
+        run: |
+          npx vitest run \
+            src/dimension \
+            src/composables/useDbnoInstancesParquetLoader.mbd.test.ts \
+            src/composables/useReviewStore.confirm.test.ts \
+            src/composables/useXeokitMeasurementTools.test.ts \
+            src/components/review/ReviewConfirmation.test.ts
+
+      - name: Legacy dimension removal guard
+        run: npx vitest run src/testing/dimensionLegacyRemovalGuard.test.ts
+
       - name: Build
-        run: npm run build
+        run: npm run build-only
+
+      - name: Install Chrome for dimension gates
+        run: npx playwright install --with-deps chrome
+
+      - name: Dimension E2E
+        run: |
+          npx playwright test \
+            e2e/dimension-app-dev-smoke.spec.ts \
+            e2e/dimension-canvas-smoke.spec.ts
+
+      - name: Dimension performance gates
+        run: |
+          for attempt in 1 2 3; do npm run perf:dimensions:kernel; done
+          for attempt in 1 2 3; do npm run perf:dimensions:browser; done

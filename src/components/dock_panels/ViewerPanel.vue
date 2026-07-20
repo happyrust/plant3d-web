@@ -38,9 +38,16 @@ import {
 
 import { e3dGetChildren, e3dGetVisibleInsts } from '@/api/genModelE3dApi';
 import { pdmsGetUiAttr, type PtsetResponse } from '@/api/genModelPdmsAttrApi';
+import {
+  reviewRecordCreate,
+  reviewRecordGetByTaskId,
+  type ReviewSnapshotAnnotationPayload,
+  type ReviewSnapshotMeasurementPayload,
+} from '@/api/reviewApi';
 import { resolveViewerToolbarSelection } from '@/components/dock_panels/viewerToolbarSelection';
 import PipeDistanceDrawer from '@/components/pipe-distance/PipeDistanceDrawer.vue';
 import ReviewConfirmation from '@/components/review/ReviewConfirmation.vue';
+import { buildReviewConfirmSnapshotPayload } from '@/components/review/reviewPanelActions';
 import SpatialQueryDrawer from '@/components/spatial-query/SpatialQueryDrawer.vue';
 import AnnotationOverlayBar from '@/components/tools/AnnotationOverlayBar.vue';
 import MeasurementOverlayBar from '@/components/tools/MeasurementOverlayBar.vue';
@@ -48,7 +55,6 @@ import MeasurementWizard from '@/components/tools/MeasurementWizard.vue';
 import ObjectMeasureDrawer from '@/components/tools/ObjectMeasureDrawer.vue';
 import { useAnnotationThree } from '@/composables/useAnnotationThree';
 import { useBackgroundStore } from '@/composables/useBackgroundStore';
-import { useBranClearanceAnnotationThree } from '@/composables/useBranClearanceAnnotationThree';
 import { useConsoleStore } from '@/composables/useConsoleStore';
 import { ensureDbMetaInfoLoaded, getDbnumByRefno } from '@/composables/useDbMetaInfo';
 import {
@@ -73,13 +79,40 @@ import {
   queryPtsetWithRuntimeFallback,
 } from '@/composables/usePtsetRuntimeLookup';
 import { usePtsetVisualizationThree } from '@/composables/usePtsetVisualizationThree';
+import { useReviewStore } from '@/composables/useReviewStore';
 import { useSelectionStore } from '@/composables/useSelectionStore';
 import { useSpatialCompute } from '@/composables/useSpatialCompute';
 import { initializeSpatialQueryFromUrl, useSpatialQuery } from '@/composables/useSpatialQuery';
 import { useToolStore } from '@/composables/useToolStore';
 import { useUnitSettingsStore } from '@/composables/useUnitSettingsStore';
+import { useUserStore } from '@/composables/useUserStore';
 import { useViewerContext } from '@/composables/useViewerContext';
 import { useXeokitMeasurementTools } from '@/composables/useXeokitMeasurementTools';
+import {
+  branClearanceToExternalDimensions,
+  canEditUserDimension,
+  createAngularEditSession,
+  createDimensionSystem,
+  createDtxDimensionViewerAdapter,
+  createEmptyDimensionDocument,
+  createLinearEditSession,
+  createPlacementEditSession,
+  createProjectedEditSession,
+  createRadialEditSession,
+  DtxDimensionAnchorResolver,
+  DtxDimensionSnapPort,
+  isDimensionFlagEnabled,
+  loadArchivedDimensionArchives,
+  localDimensionDocumentId,
+  LocalStorageDimensionCommandJournal,
+  LocalStorageDimensionDocumentRepository,
+  mbdToExternalDimensions,
+  migrateLegacyDimensionArchives,
+  ReviewDimensionRepository,
+  type DimensionDocumentState,
+  type DimensionSystem,
+} from '@/dimension';
+import { getOutputProjectFromUrl } from '@/lib/filesOutput';
 import { onCommand } from '@/ribbon/commandBus';
 import { emitToast } from '@/ribbon/toastBus';
 import { buildBackendUrl } from '@/utils/apiBase';
@@ -106,9 +139,14 @@ defineProps<{
 
 const containerRef = ref<HTMLDivElement | null>(null);
 const mainCanvas = ref<HTMLCanvasElement>();
+const dimensionOverlayCanvas = ref<HTMLCanvasElement | null>(null);
 const overlayContainer = ref<HTMLElement | null>(null);
+const dimensionDevEnabled = isDimensionFlagEnabled('DIMENSION_V2_DEV')
+  || isDimensionFlagEnabled('DIMENSION_V2_CUTOVER');
 
 const store = useToolStore();
+const userStore = useUserStore();
+const reviewStore = useReviewStore();
 const consoleStore = useConsoleStore();
 const modelLoadStatus = useModelLoadStatus();
 const unitSettings = useUnitSettingsStore();
@@ -658,7 +696,7 @@ async function loadIncrementalCompareReleaseDtx(refno: string): Promise<boolean>
     failedGeometries: 0,
     displayMode: 'release-local-side-by-side',
     offset: 0,
-    sideCenters: [] as Array<{ side: string; center: number[]; size: number[]; components: number }>,
+    sideCenters: [] as { side: string; center: number[]; size: number[]; components: number }[],
     error: null as string | null,
   };
   if (isDev) {
@@ -1154,12 +1192,22 @@ const ptsetVisRef = shallowRef<ReturnType<
 const annotationSystemRef = shallowRef<ReturnType<
     typeof useAnnotationThree
 > | null>(null);
-const branClearanceVisRef = shallowRef<ReturnType<
-    typeof useBranClearanceAnnotationThree
-> | null>(null);
 const modelGenerationRef = shallowRef<ReturnType<
     typeof useModelGeneration
 > | null>(null);
+let dimensionSystem: DimensionSystem | null = null;
+let offDimensionReviewBinding: (() => void) | null = null;
+let offLocalDimensionAutosave: (() => void) | null = null;
+let localDimensionAutosaveTimer: ReturnType<typeof setTimeout> | null = null;
+let localDimensionAutosaveRunning = false;
+let mbdExternalSyncVersion = 0;
+let dimensionMountDisposed = false;
+let dimensionInitializationVersion = 0;
+const dimensionViewerAdapter = createDtxDimensionViewerAdapter({
+  getCamera: () => dtxViewerRef.value?.camera,
+  getMillimetresToScene: () => dtxLayerRef.value?.getGlobalModelMatrix(),
+  getContainer: () => containerRef.value,
+});
 
 type IncrementalCompareModel = {
     refno: string;
@@ -1577,6 +1625,7 @@ function applyDtxGlobalTransformOnce(dbno: number, dtxLayer: DTXLayer): void {
     );
   }
   dtxLayer.setGlobalModelMatrix(m);
+  dimensionSystem?.notifyViewerChanged();
 
   dtxGlobalTransformAppliedKey = key;
 }
@@ -2103,11 +2152,100 @@ function setAutoNearestMode(
 }
 
 function clearBranClearanceAnnotations(): void {
-  try {
-    branClearanceVisRef.value?.clearAnnotations();
-  } catch {
-    // ignore
+  dimensionSystem?.replaceExternalSource('bran-clearance', []);
+}
+
+function syncBranClearanceDimensions(): void {
+  const system = dimensionSystem;
+  const candidates = spatialComputeStore.scenarios.branNearestClearance.annotationCandidates;
+  if (!system || candidates.length === 0) {
+    system?.replaceExternalSource('bran-clearance', []);
+    return;
   }
+  const result = branClearanceToExternalDimensions(
+    candidates,
+    point => {
+      const design = new Vector3(...point).applyMatrix4(
+        dimensionViewerAdapter.getDesignToWorld().invert(),
+      );
+      return [design.x, design.y, design.z];
+    },
+  );
+  system.replaceExternalSource('bran-clearance', result.records);
+  if (result.skipped.length > 0) {
+    console.warn(
+      '[bran-clearance] skipped incomplete dimension candidates',
+      result.skipped,
+    );
+  }
+}
+
+function nextDimensionId(prefix: string): string {
+  return typeof crypto.randomUUID === 'function'
+    ? `${prefix}-${crypto.randomUUID()}`
+    : `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+function startDimensionCreation(
+  kind: 'linear' | 'projected' | 'angular' | 'radial',
+): void {
+  const system = dimensionSystem;
+  const snapPort = system?.snapPort;
+  const user = userStore.currentUser.value;
+  if (!system || !snapPort) {
+    emitToast({ message: '尺寸系统或捕捉数据尚未就绪', level: 'warning' });
+    return;
+  }
+  if (system.hasPendingRecovery()) {
+    emitToast({ message: '请先在尺寸面板中恢复或放弃未保存修改', level: 'warning' });
+    return;
+  }
+  if (!user) {
+    emitToast({ message: '请先登录再创建尺寸', level: 'warning' });
+    return;
+  }
+  store.setToolMode('none');
+  const input = {
+    snapPort,
+    actor: { actorId: user.id, actorRole: String(user.role) },
+    createDimensionId: () => nextDimensionId('dimension'),
+    createCommandId: () => nextDimensionId('dimension-command'),
+    now: Date.now,
+    onPreview: (preview: Parameters<typeof system.viewport.setPreview>[0]) => {
+      system.viewport.setPreview(preview);
+    },
+  };
+  const session = kind === 'linear'
+    ? createLinearEditSession(input)
+    : kind === 'projected'
+      ? createProjectedEditSession(input)
+      : kind === 'angular'
+        ? createAngularEditSession(input)
+        : createRadialEditSession(input);
+  system.pointer.start(session);
+  requestRender();
+}
+
+function dimensionHistoryAction(action: 'undo' | 'redo'): void {
+  const system = dimensionSystem;
+  const user = userStore.currentUser.value;
+  if (!system || !user) return;
+  const actor = { actorId: user.id, actorRole: String(user.role) };
+  const result = action === 'undo'
+    ? system.document.undo(
+      actor,
+      Date.now(),
+      nextDimensionId('dimension-command'),
+    )
+    : system.document.redo(
+      actor,
+      Date.now(),
+      nextDimensionId('dimension-command'),
+    );
+  if (!result.ok) {
+    emitToast({ message: `尺寸${action === 'undo' ? '撤销' : '重做'}失败：${result.reason}`, level: 'warning' });
+  }
+  requestRender();
 }
 
 function handleRibbonCommand(commandId: string) {
@@ -2160,6 +2298,38 @@ function handleRibbonCommand(commandId: string) {
       } else {
         store.clearMeasurements();
       }
+      requestRender();
+      return;
+    case 'dimension.create.linear':
+      startDimensionCreation('linear');
+      return;
+    case 'dimension.create.projected':
+      startDimensionCreation('projected');
+      return;
+    case 'dimension.create.angular':
+      startDimensionCreation('angular');
+      return;
+    case 'dimension.create.radial':
+      startDimensionCreation('radial');
+      return;
+    case 'dimension.axis.x':
+    case 'dimension.axis.y':
+    case 'dimension.axis.z':
+      dimensionSystem?.pointer.selectDesignAxis(commandId.slice(-1) as 'x' | 'y' | 'z');
+      requestRender();
+      return;
+    case 'dimension.flip':
+      dimensionSystem?.pointer.flipActiveSession();
+      requestRender();
+      return;
+    case 'dimension.undo':
+      dimensionHistoryAction('undo');
+      return;
+    case 'dimension.redo':
+      dimensionHistoryAction('redo');
+      return;
+    case 'dimension.cancel':
+      dimensionSystem?.pointer.pointerCancel();
       requestRender();
       return;
     case 'annotation.create':
@@ -2446,6 +2616,374 @@ function detachToolsInput() {
   offToolsInput = null;
 }
 
+function getDimensionStorageScope(): string {
+  const params = new URLSearchParams(window.location.search);
+  const project = getOutputProjectFromUrl()
+    || params.get('project_id')
+    || '__default__';
+  return `project=${project}|db=${params.get('show_dbnum') || '__all__'}`;
+}
+
+function getDimensionDocumentContext() {
+  const task = reviewStore.currentTask.value;
+  const formId = task?.formId?.trim() || undefined;
+  const taskId = task?.id?.trim() || undefined;
+  const localScope = getDimensionStorageScope();
+  return {
+    documentId: formId
+      ? `dimension-document:form:${formId}`
+      : taskId
+        ? `dimension-document:task:${taskId}`
+        : localDimensionDocumentId(localScope),
+    taskId,
+    formId,
+    localScope,
+  };
+}
+
+function createViewerDimensionRepository() {
+  const repositoryContext = getDimensionDocumentContext();
+  const localRepository = repositoryContext.taskId
+    ? null
+    : new LocalStorageDimensionDocumentRepository(
+      window.localStorage,
+      repositoryContext.localScope,
+    );
+  const apiRepository = new ReviewDimensionRepository({
+    async loadRecords(context) {
+      if (!context.taskId) return [];
+      const response = await reviewRecordGetByTaskId(context.taskId, {
+        formId: context.formId,
+      });
+      if (!response.success) {
+        throw new Error(response.error_message || '加载尺寸校审记录失败');
+      }
+      return response.records ?? [];
+    },
+    async buildBaseRecord() {
+      const context = getDimensionDocumentContext();
+      if (!context.taskId) throw new Error('当前未关联校审任务');
+      const payload = buildReviewConfirmSnapshotPayload({
+        annotations: [...store.annotations.value],
+        cloudAnnotations: [...store.cloudAnnotations.value],
+        rectAnnotations: [...store.rectAnnotations.value],
+        obbAnnotations: [...store.obbAnnotations.value],
+        measurements:
+          [...store.measurements.value] as ReviewSnapshotMeasurementPayload[],
+        xeokitDistanceMeasurements: [...store.xeokitDistanceMeasurements.value],
+        xeokitAngleMeasurements: [...store.xeokitAngleMeasurements.value],
+        xeokitElevationPointMeasurements: [...store.xeokitElevationPointMeasurements.value],
+        xeokitElevationDeltaMeasurements: [...store.xeokitElevationDeltaMeasurements.value],
+      });
+      return {
+        taskId: context.taskId,
+        formId: context.formId,
+        type: 'batch' as const,
+        annotations: payload.annotations as ReviewSnapshotAnnotationPayload[],
+        cloudAnnotations:
+          payload.cloudAnnotations as ReviewSnapshotAnnotationPayload[],
+        rectAnnotations:
+          payload.rectAnnotations as ReviewSnapshotAnnotationPayload[],
+        obbAnnotations:
+          payload.obbAnnotations as ReviewSnapshotAnnotationPayload[],
+        measurements:
+          payload.measurements as ReviewSnapshotMeasurementPayload[],
+        note: '尺寸文档保存',
+      };
+    },
+    saveRecord: reviewRecordCreate,
+  });
+  return {
+    async load(context: { taskId?: string; formId?: string }) {
+      const fallbackContext = getDimensionDocumentContext();
+      const loaded = localRepository
+        ? await localRepository.load(context)
+        : context.taskId
+          ? await apiRepository.load(context)
+          : createEmptyDimensionDocument({
+            documentId: fallbackContext.documentId,
+            ...context,
+          });
+      if (loaded.records.length > 0 || loaded.baseVersion > 0) return loaded;
+      const archives = loadArchivedDimensionArchives(
+        window.localStorage,
+        getDimensionStorageScope(),
+      );
+      if (archives.length === 0) return loaded;
+      const user = userStore.currentUser.value;
+      const migrated = migrateLegacyDimensionArchives(archives, {
+        documentId: loaded.documentId,
+        taskId: context.taskId,
+        formId: context.formId,
+        actorId: user?.id || 'legacy-migration',
+        actorRole: String(user?.role || 'designer'),
+      }).state;
+      if (!localRepository) return migrated;
+      const saved = await localRepository.save(migrated);
+      return saved.ok ? saved.state : migrated;
+    },
+    save: (state: DimensionDocumentState) => (
+      localRepository?.save(state) ?? apiRepository.save(state)
+    ),
+  };
+}
+
+function stopLocalDimensionAutosave(): void {
+  offLocalDimensionAutosave?.();
+  offLocalDimensionAutosave = null;
+  if (localDimensionAutosaveTimer !== null) {
+    clearTimeout(localDimensionAutosaveTimer);
+    localDimensionAutosaveTimer = null;
+  }
+  localDimensionAutosaveRunning = false;
+}
+
+function bindLocalDimensionAutosave(system: DimensionSystem): void {
+  stopLocalDimensionAutosave();
+  const persist = async (): Promise<void> => {
+    localDimensionAutosaveTimer = null;
+    if (
+      localDimensionAutosaveRunning
+      || !system.document.dirty
+      || system.hasPendingRecovery()
+    ) return;
+    localDimensionAutosaveRunning = true;
+    try {
+      const result = await system.persistDocument({ preserveHistory: true });
+      if (!result) return;
+      if (!result.ok) {
+        if (result.reason === 'conflict') {
+          system.stageRecovery(result.latest);
+          emitToast({
+            message: '本地尺寸草稿已在其他窗口更新，请在尺寸面板中处理冲突',
+            level: 'warning',
+          });
+        } else {
+          emitToast({
+            message: `本地尺寸草稿保存失败：${result.message}`,
+            level: 'error',
+          });
+        }
+        return;
+      }
+      if (system.document.dirty) schedule();
+    } finally {
+      localDimensionAutosaveRunning = false;
+    }
+  };
+  const schedule = (): void => {
+    if (localDimensionAutosaveTimer !== null) {
+      clearTimeout(localDimensionAutosaveTimer);
+    }
+    localDimensionAutosaveTimer = setTimeout(() => void persist(), 400);
+  };
+  offLocalDimensionAutosave = system.document.subscribe(() => schedule());
+}
+
+async function syncMbdExternalDimensions(
+  system: DimensionSystem,
+  options: Readonly<{ forceRefresh?: boolean }> = {},
+): Promise<void> {
+  const syncVersion = ++mbdExternalSyncVersion;
+  const rawDbno = new URLSearchParams(window.location.search).get('show_dbnum');
+  const parsedDbno = rawDbno === null ? Number.NaN : Number(rawDbno);
+  if (!Number.isSafeInteger(parsedDbno) || parsedDbno < 0) {
+    system.replaceExternalSource('mbd', []);
+    return;
+  }
+  try {
+    const loader = useDbnoInstancesParquetLoader();
+    const loaded = await loader.queryMbdDimensionsByDbno(parsedDbno, options);
+    const mapped = mbdToExternalDimensions(loaded.dimensions);
+    if (
+      syncVersion !== mbdExternalSyncVersion
+      || dimensionSystem !== system
+      || dimensionMountDisposed
+    ) return;
+    system.replaceExternalSource('mbd', mapped.records);
+    const skipped = [...loaded.skipped, ...mapped.skipped];
+    if (skipped.length > 0) {
+      console.warn('[dimension-v2] skipped invalid DTX MBD dimensions', skipped);
+    }
+  } catch (error) {
+    if (syncVersion !== mbdExternalSyncVersion || dimensionSystem !== system) {
+      return;
+    }
+    system.replaceExternalSource('mbd', []);
+    console.warn('[dimension-v2] DTX MBD dimensions unavailable', error);
+  }
+}
+
+async function initializeDimensionViewport(): Promise<void> {
+  if (!dimensionDevEnabled) return;
+  const initializationVersion = ++dimensionInitializationVersion;
+  const canvas = dimensionOverlayCanvas.value;
+  const inputCanvas = mainCanvas.value;
+  const container = containerRef.value;
+  if (!canvas || !inputCanvas || !container) return;
+
+  dimensionSystem?.dispose();
+  dimensionSystem = null;
+  stopLocalDimensionAutosave();
+  offDimensionReviewBinding?.();
+  offDimensionReviewBinding = null;
+  viewerContext.dimensionSystem.value = null;
+
+  const context = getDimensionDocumentContext();
+  const sceneWorldToDesignMetres = (
+    point: readonly [number, number, number],
+  ): readonly [number, number, number] => {
+    const design = new Vector3(...point).applyMatrix4(
+      dimensionViewerAdapter.getDesignToWorld().invert(),
+    );
+    return [design.x, design.y, design.z];
+  };
+  const sceneDirectionToDesign = (
+    direction: readonly [number, number, number],
+  ): readonly [number, number, number] => {
+    const origin = sceneWorldToDesignMetres([0, 0, 0]);
+    const endpoint = sceneWorldToDesignMetres(direction);
+    return [
+      endpoint[0] - origin[0],
+      endpoint[1] - origin[1],
+      endpoint[2] - origin[2],
+    ];
+  };
+  const anchorResolver = new DtxDimensionAnchorResolver({
+    loadCandidates: async (refno) => {
+      const candidates = await xeokitMeasurementToolsRef.value
+        ?.loadDimensionAnchorCandidates(refno) ?? [];
+      return candidates.map(candidate => ({
+        id: candidate.id,
+        point: sceneWorldToDesignMetres(candidate.sceneWorld),
+        accuracy: candidate.source === 'mesh_pick_point'
+          ? 'approximate' as const
+          : 'exact' as const,
+        ...(candidate.direction
+          ? { direction: sceneDirectionToDesign(candidate.direction) }
+          : {}),
+        ...(candidate.circle
+          ? {
+            circle: {
+              center: sceneWorldToDesignMetres(candidate.circle.center),
+              rim: sceneWorldToDesignMetres(candidate.circle.rim),
+              normal: sceneDirectionToDesign(candidate.circle.normal),
+            },
+          }
+          : {}),
+        ...(candidate.arc
+          ? {
+            arc: {
+              center: sceneWorldToDesignMetres(candidate.arc.center),
+              rim: sceneWorldToDesignMetres(candidate.arc.rim),
+              normal: sceneDirectionToDesign(candidate.arc.normal),
+            },
+          }
+          : {}),
+      }));
+    },
+  });
+  const result = await createDimensionSystem({
+    overlayCanvas: canvas,
+    inputCanvas,
+    viewer: dimensionViewerAdapter,
+    journal: new LocalStorageDimensionCommandJournal(window.localStorage),
+    context,
+    repository: createViewerDimensionRepository(),
+    snapPort: new DtxDimensionSnapPort({
+      queryMeasurementCandidates: screen => (
+        xeokitMeasurementToolsRef.value?.queryDimensionSnapCandidates(
+          inputCanvas,
+          screen,
+        ) ?? []
+      ),
+      sceneWorldToDesignMetres,
+    }),
+    anchorResolver,
+    requestFrame: callback => window.requestAnimationFrame(callback),
+    cancelFrame: id => window.cancelAnimationFrame(id),
+  });
+  if (!result.ok) {
+    (window as any).__dimensionSystemError = `${result.stage}: ${
+      result.error instanceof Error ? result.error.message : String(result.error)
+    }`;
+    console.warn(
+      '[dimension-v2] Development viewport initialization failed',
+      result.stage,
+      result.error,
+    );
+    return;
+  }
+  if (
+    dimensionMountDisposed
+    || initializationVersion !== dimensionInitializationVersion
+  ) {
+    result.system.dispose();
+    return;
+  }
+
+  dimensionSystem = result.system;
+  void syncMbdExternalDimensions(result.system);
+  result.system.pointer.setEditSessionFactory((target) => {
+    if (!['label', 'dimension', 'arc', 'leader'].includes(target.part)) {
+      return null;
+    }
+    const record = result.system.document.state.records.find(
+      item => item.id === target.dimensionId,
+    );
+    const user = userStore.currentUser.value;
+    if (
+      !record
+      || !user
+      || !canEditUserDimension(
+        { id: user.id, role: String(user.role) },
+        record,
+      )
+    ) {
+      return null;
+    }
+    return createPlacementEditSession({
+      record,
+      actor: { actorId: user.id, actorRole: String(user.role) },
+      createCommandId: () => nextDimensionId('dimension-command'),
+      now: Date.now,
+      onPreview: preview => result.system.viewport.setPreview(preview),
+      placementAt: screen => result.system.viewport.placementAtScreen(
+        record,
+        screen,
+      ),
+    });
+  });
+  result.system.pointer.setCommitResultHandler((outcome) => {
+    if (outcome.ok) return;
+    const detail = outcome.reason === 'exception'
+      ? outcome.error instanceof Error
+        ? outcome.error.message
+        : String(outcome.error)
+      : outcome.reason;
+    emitToast({ message: `尺寸修改失败：${detail}`, level: 'error' });
+  });
+  delete (window as any).__dimensionSystemError;
+  offDimensionReviewBinding =
+    useReviewStore().bindDimensionDocumentSession(result.system.document);
+  if (!context.taskId) bindLocalDimensionAutosave(result.system);
+  viewerContext.dimensionSystem.value = result.system;
+  result.system.notifyViewerChanged();
+  syncBranClearanceDimensions();
+}
+
+watch(
+  () => [
+    reviewStore.currentTask.value?.id ?? null,
+    reviewStore.currentTask.value?.formId ?? null,
+  ],
+  () => {
+    if (!dimensionDevEnabled || !dimensionOverlayCanvas.value) return;
+    void initializeDimensionViewport();
+  },
+  { flush: 'post' },
+);
+
 /**
  * 处理容器尺寸变化：同步渲染方案
  * 在 setSize 后立即渲染一帧，消除黑屏闪烁
@@ -2459,6 +2997,7 @@ function handleResize() {
   dtxViewer.setSize(rect.width, rect.height);
   selectionControllerRef.value?.resize(rect.width, rect.height);
   tileLodControllerRef.value?.setViewportSize(rect.width, rect.height);
+  dimensionSystem?.notifyViewerChanged();
 
   // 更新三维标注系统的分辨率（LineMaterial 需要）
   annotationSystemRef.value?.setResolution(rect.width, rect.height);
@@ -2573,6 +3112,7 @@ function renderFrame() {
     if (cameraChanged) {
       viewCullControllerRef.value?.update(dtxViewer.camera);
       tileLodControllerRef.value?.requestUpdate(dtxViewer.camera);
+      dimensionSystem?.notifyViewerChanged();
     }
 
     syncGlobalEdgeOverlay();
@@ -2663,6 +3203,7 @@ onMounted(async () => {
   attachedToScene = false;
   shaderPrecompiled = false;
   continuousRender = false;
+  dimensionMountDisposed = false;
   annotationVectorTextRebuildCount = 0;
   demoMode = 'none';
   demoPrimitiveCount = 1000;
@@ -2956,6 +3497,19 @@ onMounted(async () => {
       tileLodControllerRef.value?.requestUpdate(dtxViewer.camera);
       requestRender();
     }
+    if (dimensionSystem) {
+      void syncMbdExternalDimensions(dimensionSystem, { forceRefresh: true });
+      void dimensionSystem.refreshAnchors().then((report) => {
+        if (report.invalidated > 0) {
+          emitToast({
+            message: `${report.invalidated} 条尺寸因模型锚点缺失已标记为 STALE`,
+            level: 'warning',
+          });
+        }
+      }).catch((error) => {
+        console.warn('[dimension-v2] anchor refresh failed', error);
+      });
+    }
     requestRender();
   };
   compatViewerRef.value = compat;
@@ -3006,10 +3560,6 @@ onMounted(async () => {
       dtxLayerRef.value?.getGlobalModelMatrix() ?? null,
   });
   annotationSystemRef.value = annotationSystem;
-  const branClearanceVis = useBranClearanceAnnotationThree(annotationSystem, {
-    requestRender,
-  });
-  branClearanceVisRef.value = branClearanceVis;
   offBranClearanceWatch?.();
   offBranClearanceWatch = watch(
     () => ({
@@ -3020,21 +3570,13 @@ onMounted(async () => {
     }),
     ({ loading, error, candidates }) => {
       if (loading || error || candidates.length === 0) {
-        branClearanceVis.clearAnnotations();
+        clearBranClearanceAnnotations();
         return;
       }
-      const result = branClearanceVis.renderAnnotations(candidates);
-      if (result.skipped.length > 0) {
-        console.warn('[bran-clearance] skipped incomplete annotation candidates', result.skipped);
-      }
+      syncBranClearanceDimensions();
     },
     { deep: true, immediate: true },
   );
-  if (isDev) {
-    (window as any).__plant3dBranClearanceAnnotations = {
-      getSnapshot: () => branClearanceVis.getDebugSnapshot(),
-    };
-  }
   // 初始化 CSS2DRenderer
   if (overlayContainer.value && mainCanvas.value) {
     annotationSystem.initCSS2DRenderer(overlayContainer.value, mainCanvas.value);
@@ -3462,6 +4004,12 @@ onMounted(async () => {
           }
 
           requestRender();
+          if (dimensionSystem) {
+            void syncMbdExternalDimensions(dimensionSystem, {
+              forceRefresh: true,
+            });
+            void dimensionSystem.refreshAnchors();
+          }
           if (shouldAutoFit) {
             const combinedBox = computeDtxLayersBoundingBox(getShowDbnumAllLayers(dtxLayer));
             if (combinedBox) {
@@ -3918,7 +4466,6 @@ onMounted(async () => {
     { immediate: true },
   );
 
-
   offRibbonCommand = onCommand(handleRibbonCommand);
   window.addEventListener('openSpatialQuery', handleOpenSpatialQueryEvent as EventListener);
   offOpenSpatialQuery = () => window.removeEventListener('openSpatialQuery', handleOpenSpatialQueryEvent as EventListener);
@@ -3950,6 +4497,13 @@ onMounted(async () => {
             (target as any)?.isContentEditable === true;
     if (isEditable) return;
 
+    const dimensionResult = dimensionSystem?.pointer.keyDown(ev);
+    if (dimensionResult?.consumed) {
+      ev.preventDefault();
+      ev.stopImmediatePropagation();
+      requestRender();
+      return;
+    }
 
     if (ev.key === 'Escape') {
       // 在 pick_refno 模式中，Escape 取消拾取
@@ -4028,11 +4582,21 @@ onMounted(async () => {
 
   attachPicking();
   attachToolsInput();
+  await initializeDimensionViewport();
   requestRender();
 });
 
 onUnmounted(() => {
   viewerContext.viewerError.value = null;
+  dimensionMountDisposed = true;
+  mbdExternalSyncVersion += 1;
+  dimensionInitializationVersion += 1;
+  dimensionSystem?.dispose();
+  dimensionSystem = null;
+  stopLocalDimensionAutosave();
+  offDimensionReviewBinding?.();
+  offDimensionReviewBinding = null;
+  viewerContext.dimensionSystem.value = null;
   if (rafId !== null) {
     window.cancelAnimationFrame(rafId);
     rafId = null;
@@ -4070,7 +4634,6 @@ onUnmounted(() => {
   offPtsetWatch?.();
   offPtsetWatch = null;
 
-
   offBranClearanceWatch?.();
   offBranClearanceWatch = null;
 
@@ -4081,13 +4644,11 @@ onUnmounted(() => {
   }
   ptsetVisRef.value = null;
 
-
   try {
     clearBranClearanceAnnotations();
   } catch {
     // ignore
   }
-  branClearanceVisRef.value = null;
 
   // 仅清理引用（useAnnotationThree 内部已注册 onUnmounted 执行 dispose）
   annotationSystemRef.value = null;
@@ -4192,7 +4753,6 @@ onUnmounted(() => {
     delete (window as any).__viewer;
     delete (window as any).__dtxShowDbnumLayers;
     delete (window as any).__dtxShowDbnumExtraLayers;
-    delete (window as any).__plant3dBranClearanceAnnotations;
   } catch {
     // ignore
   }
@@ -4208,6 +4768,10 @@ onUnmounted(() => {
 <template>
   <div ref="containerRef" class="viewer-panel-container">
     <canvas ref="mainCanvas" class="viewer" />
+    <canvas v-if="dimensionDevEnabled"
+      ref="dimensionOverlayCanvas"
+      class="dimension-viewport-overlay"
+      aria-hidden="true" />
     <div ref="overlayContainer" class="xeokitOverlay" />
 
     <!-- DEV：LOD 调参面板（屏幕相关阈值 + L2 预热） -->
@@ -4334,8 +4898,7 @@ onUnmounted(() => {
     </div>
 
     <!-- 左侧竖直工具栏（快捷操作） -->
-    <div
-      ref="leftToolbarRef"
+    <div ref="leftToolbarRef"
       class="pointer-events-auto absolute left-3 top-1/2 flex -translate-y-1/2 flex-col items-center gap-1 rounded-xl border border-border bg-background/90 p-1 shadow-lg backdrop-blur"
       style="z-index: 940"
       @pointerdown.stop
@@ -4443,8 +5006,7 @@ onUnmounted(() => {
     </div>
 
     <!-- 右侧竖直工具栏（查看/快捷） -->
-    <div
-      class="pointer-events-auto absolute right-3 top-1/2 flex -translate-y-1/2 flex-col items-center gap-1 rounded-xl border border-border bg-background/90 p-1 shadow-lg backdrop-blur"
+    <div class="pointer-events-auto absolute right-3 top-1/2 flex -translate-y-1/2 flex-col items-center gap-1 rounded-xl border border-border bg-background/90 p-1 shadow-lg backdrop-blur"
       style="z-index: 940"
       @pointerdown.stop
       @wheel.stop>

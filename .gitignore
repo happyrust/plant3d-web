@@ -59,7 +59,11 @@ e2e/*
 !e2e/helpers/spatialQueryRealBran.ts
 !e2e/spatial-query-real-bran.spec.ts
 !e2e/mbd-real-bran-standalone.spec.ts
+!e2e/dimension-app-dev-smoke.spec.ts
+!e2e/dimension-canvas-smoke.spec.ts
+!e2e/dimension-perf.spec.ts
 scripts/*
+!scripts/run-dimension-browser-perf.mjs
 !scripts/pms-chrome-devtools-flow.ts
 !scripts/pms-plant3d-initiate-flow.ts
 !scripts/pms-contract-sequence.ts

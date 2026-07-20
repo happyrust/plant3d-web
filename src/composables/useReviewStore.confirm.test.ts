@@ -7,6 +7,9 @@ vi.mock('@/api/reviewApi', () => ({
       ...record,
       id: 'record-mocked-1',
       confirmedAt: 1700000000000,
+      dimensionDocumentVersion: record.dimensionDocument
+        ? record.dimensionDocumentBaseVersion + 1
+        : undefined,
     },
   })),
   reviewRecordDelete: vi.fn(async () => ({ success: true })),
@@ -26,12 +29,28 @@ vi.mock('@/composables/useUserStore', () => ({
 import { useReviewStore } from './useReviewStore';
 import { useToolStore } from './useToolStore';
 
+import { reviewRecordCreate } from '@/api/reviewApi';
+import { dimensionDocumentToSnapshot } from '@/dimension/adapters/reviewSnapshotAdapter';
+import { emptyDimensionDocument, linearRecord } from '@/dimension/domain/testFixtures';
+import { DimensionDocumentSession } from '@/dimension/services/dimensionDocumentSession';
+
+const memoryJournal = {
+  load: () => null,
+  append: vi.fn(),
+  replace: vi.fn(),
+  clear: vi.fn(),
+};
+
 describe('useReviewStore - confirm without OBB', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     const reviewStore = useReviewStore();
     const toolStore = useToolStore();
-    reviewStore.clearConfirmedRecords();
+    await reviewStore.clearConfirmedRecords();
+    reviewStore.bindDimensionDocumentSession(null);
     toolStore.clearAll();
+    vi.mocked(reviewRecordCreate).mockClear();
+    memoryJournal.append.mockClear();
+    memoryJournal.clear.mockClear();
   });
 
   it('should preserve empty obbAnnotations in confirmed records', async () => {
@@ -164,6 +183,166 @@ describe('useReviewStore - confirm without OBB', () => {
     expect(confirmed?.formId).toBe('FORM-LINEAGE-1');
   });
 
+  it('should save and accept a versioned dimension document with the review record', async () => {
+    const reviewStore = useReviewStore();
+    await reviewStore.setCurrentTask({
+      id: 'task-dimension-1',
+      formId: 'FORM-DIMENSION-1',
+      title: 'Dimension task',
+      description: '',
+      modelName: 'Demo',
+      status: 'in_review',
+      priority: 'medium',
+      requesterId: 'designer-1',
+      requesterName: 'Designer',
+      checkerId: 'checker-1',
+      checkerName: 'Checker',
+      approverId: 'approver-1',
+      approverName: 'Approver',
+      reviewerId: 'checker-1',
+      reviewerName: 'Checker',
+      components: [],
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      currentNode: 'jd',
+    });
+    const state = emptyDimensionDocument(
+      [linearRecord({ id: 'dimension-confirm-1' })],
+      {
+        documentId: 'dimension-document:form:FORM-DIMENSION-1',
+        taskId: 'task-dimension-1',
+        formId: 'FORM-DIMENSION-1',
+        baseVersion: 4,
+      },
+    );
+    const session = new DimensionDocumentSession({
+      initialState: state,
+      journal: memoryJournal,
+    });
+    reviewStore.bindDimensionDocumentSession(session);
+
+    await reviewStore.addConfirmedRecord({
+      type: 'batch',
+      annotations: [],
+      cloudAnnotations: [],
+      rectAnnotations: [],
+      measurements: [],
+      dimensionDocument: dimensionDocumentToSnapshot(state),
+      dimensionDocumentVersion: state.baseVersion,
+      note: 'Dimension snapshot',
+    });
+
+    expect(reviewRecordCreate).toHaveBeenCalledWith(expect.objectContaining({
+      dimensionDocument: dimensionDocumentToSnapshot(state),
+      dimensionDocumentBaseVersion: 4,
+    }));
+    expect(reviewStore.confirmedRecords.value[0]).toMatchObject({
+      dimensionDocumentVersion: 5,
+      dimensionDocument: dimensionDocumentToSnapshot(state),
+    });
+    expect(session.state.baseVersion).toBe(5);
+    expect(memoryJournal.clear).toHaveBeenCalledWith(state.documentId);
+  });
+
+  it('should expose a replay preview instead of overwriting a dimension conflict', async () => {
+    const reviewStore = useReviewStore();
+    await reviewStore.setCurrentTask({
+      id: 'task-conflict-1',
+      formId: 'FORM-CONFLICT-1',
+      title: 'Dimension conflict',
+      description: '',
+      modelName: 'Demo',
+      status: 'in_review',
+      priority: 'medium',
+      requesterId: 'designer-1',
+      requesterName: 'Designer',
+      checkerId: 'checker-1',
+      checkerName: 'Checker',
+      approverId: 'approver-1',
+      approverName: 'Approver',
+      reviewerId: 'checker-1',
+      reviewerName: 'Checker',
+      components: [],
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      currentNode: 'jd',
+    });
+    const documentId = 'dimension-document:form:FORM-CONFLICT-1';
+    const pendingRecord = linearRecord({ id: 'dimension-local-conflict' });
+    const pendingCommand = {
+      type: 'create' as const,
+      commandId: 'command-local-conflict',
+      actorId: pendingRecord.authorId,
+      actorRole: pendingRecord.authorRole,
+      at: 10,
+      record: pendingRecord,
+    };
+    const journal = {
+      load: () => ({
+        version: 1 as const,
+        documentId,
+        baseVersion: 4,
+        commands: [pendingCommand],
+        updatedAt: 10,
+      }),
+      append: vi.fn(),
+      replace: vi.fn(),
+      clear: vi.fn(),
+    };
+    const local = emptyDimensionDocument([pendingRecord], {
+      documentId,
+      taskId: 'task-conflict-1',
+      formId: 'FORM-CONFLICT-1',
+      baseVersion: 4,
+    });
+    const session = new DimensionDocumentSession({
+      initialState: local,
+      journal,
+    });
+    reviewStore.bindDimensionDocumentSession(session);
+    const latest = emptyDimensionDocument([], {
+      documentId,
+      taskId: 'task-conflict-1',
+      formId: 'FORM-CONFLICT-1',
+      baseVersion: 5,
+    });
+    vi.mocked(reviewRecordCreate).mockRejectedValueOnce(Object.assign(
+      new Error('dimension version conflict'),
+      {
+        status: 409,
+        statusText: 'Conflict',
+        responseBody: {
+          record: {
+            dimensionDocument: dimensionDocumentToSnapshot(latest),
+            dimensionDocumentVersion: 5,
+            taskId: 'task-conflict-1',
+            formId: 'FORM-CONFLICT-1',
+          },
+        },
+      },
+    ));
+
+    await expect(reviewStore.addConfirmedRecord({
+      type: 'batch',
+      annotations: [],
+      cloudAnnotations: [],
+      rectAnnotations: [],
+      measurements: [],
+      dimensionDocument: dimensionDocumentToSnapshot(local),
+      dimensionDocumentVersion: 4,
+      note: 'conflict',
+    })).rejects.toThrow('请选择重放本地修改或放弃本地修改');
+
+    expect(reviewStore.dimensionDocumentConflict.value?.latest.baseVersion).toBe(5);
+    expect(reviewStore.dimensionDocumentConflict.value?.preview.applied)
+      .toEqual([pendingCommand]);
+    expect(reviewStore.resolveDimensionDocumentConflict('replay')).toBe(true);
+    expect(session.state.baseVersion).toBe(5);
+    expect(session.state.records.map(record => record.id))
+      .toEqual(['dimension-local-conflict']);
+    expect(session.dirty).toBe(true);
+  });
+
   it('should preserve annotation severity across confirm snapshot and exportReviewData', async () => {
     const reviewStore = useReviewStore();
     const toolStore = useToolStore();
@@ -198,8 +377,8 @@ describe('useReviewStore - confirm without OBB', () => {
       id: 'cloud-sev', objectIds: ['o1'], anchorWorldPos: [0, 0, 0],
       visible: true, title: 'severe cloud', description: '', createdAt: 2, refnos: ['o1'],
     });
-    toolStore.updateAnnotationSeverity('text', 'text-sev', 'critical');
-    toolStore.updateAnnotationSeverity('cloud', 'cloud-sev', 'severe');
+    toolStore.updateAnnotationSeverity('text', 'text-sev', 'principle');
+    toolStore.updateAnnotationSeverity('cloud', 'cloud-sev', 'general');
 
     await reviewStore.addConfirmedRecord({
       type: 'batch',
@@ -211,11 +390,11 @@ describe('useReviewStore - confirm without OBB', () => {
     });
 
     const confirmed = reviewStore.confirmedRecords.value[0];
-    expect((confirmed?.annotations[0] as any).severity).toBe('critical');
-    expect((confirmed?.cloudAnnotations[0] as any).severity).toBe('severe');
+    expect((confirmed?.annotations[0] as any).severity).toBe('principle');
+    expect((confirmed?.cloudAnnotations[0] as any).severity).toBe('general');
 
     const exported = JSON.parse(reviewStore.exportReviewData());
-    expect(exported.records[0].annotations[0].severity).toBe('critical');
-    expect(exported.records[0].cloudAnnotations[0].severity).toBe('severe');
+    expect(exported.records[0].annotations[0].severity).toBe('principle');
+    expect(exported.records[0].cloudAnnotations[0].severity).toBe('general');
   });
 });

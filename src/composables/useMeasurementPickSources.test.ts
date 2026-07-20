@@ -21,6 +21,16 @@ describe('useMeasurementPickSources', () => {
     return cam;
   }
 
+  it('enables item origin snapping and keeps model surface snap opt-in by default', () => {
+    const settings = cloneMeasurementPickSourceSettings();
+
+    expect(settings.position.show).toBe(true);
+    expect(settings.position.snap).toBe(true);
+    expect(settings.position.thresholdPx).toBe(18);
+    expect(settings.mesh_pick_point.show).toBe(true);
+    expect(settings.mesh_pick_point.snap).toBe(false);
+  });
+
   it('filters display and snap independently, then sorts by priority, distance, and id', () => {
     const settings = cloneMeasurementPickSourceSettings({
       ptset: { show: true, snap: true, priority: 20, thresholdPx: 40 },
@@ -60,7 +70,7 @@ describe('useMeasurementPickSources', () => {
     });
 
     expect(resolved.visibleCandidates.map((item) => item.id)).toEqual(['position:a', 'ptset:b']);
-    expect(resolved.snapCandidates.map((item) => item.id)).toEqual(['position:a', 'ptset:b', 'mesh:c']);
+    expect(resolved.snapCandidates.map((item) => item.id)).toEqual(['position:a', 'mesh:c', 'ptset:b']);
     expect(resolved.hit?.id).toBe('position:a');
   });
 
@@ -111,11 +121,11 @@ describe('useMeasurementPickSources', () => {
       id: 'position:24381_145018',
       source: 'position',
       entityId: 'position:24381_145018',
-      label: 'Position 24381_145018',
+      label: '实例原点 24381_145018',
     });
   });
 
-  it('selects PTSET before a closer mesh pick when both sources are enabled', () => {
+  it('selects a clearly closer mesh pick before a higher-priority P-Point', () => {
     const settings = cloneMeasurementPickSourceSettings({
       ptset: { show: true, snap: true, priority: 20, thresholdPx: 80 },
       mesh_pick_point: { show: true, snap: true, priority: 40, thresholdPx: 80 },
@@ -146,12 +156,51 @@ describe('useMeasurementPickSources', () => {
     });
 
     expect(resolved.snapCandidates.map((item) => item.id)).toEqual([
+      'mesh:o:24381_145018:0',
+      'ptset:24381_145018#1',
+    ]);
+    expect(resolved.snapCandidates[0]?.pixelDistance).toBe(0);
+    expect(resolved.snapCandidates[1]?.pixelDistance).toBeCloseTo(10);
+    expect(resolved.hit?.id).toBe('mesh:o:24381_145018:0');
+    expect(resolved.hit?.source).toBe('mesh_pick_point');
+  });
+
+  it('uses source priority as the tie-breaker for near-overlapping candidates', () => {
+    const settings = cloneMeasurementPickSourceSettings({
+      ptset: { show: true, snap: true, priority: 20, thresholdPx: 80 },
+      mesh_pick_point: { show: true, snap: true, priority: 40, thresholdPx: 80 },
+    });
+    const candidates: MeasurementPickCandidate[] = [
+      {
+        id: 'mesh:o:24381_145018:0',
+        source: 'mesh_pick_point',
+        entityId: 'o:24381_145018:0',
+        objectId: 'o:24381_145018:0',
+        worldPos: new Vector3(0, 0, 0),
+      },
+      {
+        id: 'ptset:24381_145018#1',
+        source: 'ptset',
+        entityId: 'ptset:24381_145018#1',
+        objectId: 'o:24381_145018:0',
+        worldPos: new Vector3(0.02, 0, 0),
+      },
+    ];
+
+    const resolved = resolveMeasurementPickCandidates({
+      cursor: { x: 100, y: 100 },
+      camera: camera(),
+      rect: { width: 200, height: 200 },
+      settings,
+      candidates,
+    });
+
+    expect(resolved.snapCandidates.map((item) => item.id)).toEqual([
       'ptset:24381_145018#1',
       'mesh:o:24381_145018:0',
     ]);
-    expect(resolved.snapCandidates[0]?.pixelDistance).toBeCloseTo(10);
+    expect(resolved.snapCandidates[0]?.pixelDistance).toBeCloseTo(2);
     expect(resolved.snapCandidates[1]?.pixelDistance).toBe(0);
-    expect(resolved.hit?.id).toBe('ptset:24381_145018#1');
     expect(resolved.hit?.source).toBe('ptset');
   });
 

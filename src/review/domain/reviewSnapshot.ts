@@ -17,7 +17,7 @@
  *      还原与 `buildReviewRecordReplayPayload` 字节一致的输出。
  */
 
-import type { SnapshotDimensionDocument } from '@/dimension/adapters/reviewSnapshotAdapter';
+import type { SnapshotDimensionDocument } from '@/dimension';
 import type { AnnotationComment, ReviewAttachment, WorkflowNode } from '@/types/auth';
 
 export type SnapshotSource =

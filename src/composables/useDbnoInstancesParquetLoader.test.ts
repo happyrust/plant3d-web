@@ -262,6 +262,10 @@ describe('useDbnoInstancesParquetLoader', () => {
         return new Response(JSON.stringify(createManifest(7997)), { status: 200 });
       }
 
+      if (url.endsWith('/files/output/instances/manifest_7997_buckets.json')) {
+        return new Response('', { status: 404 });
+      }
+
       throw new Error(`unexpected fetch: ${url}`);
     });
 
@@ -280,7 +284,7 @@ describe('useDbnoInstancesParquetLoader', () => {
     expect(registerFileURLMock).toHaveBeenCalledTimes(5);
   });
 
-  it('show_dbnum 先查询全量 refno 再分批加载时不会重复注册同名 DuckDB 文件', async () => {
+  it('show_dbnum 先查询可绘制 refno 再分批加载时不会重复注册同名 DuckDB 文件', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
 
@@ -302,6 +306,10 @@ describe('useDbnoInstancesParquetLoader', () => {
         return new Response(JSON.stringify(createManifest(7997)), { status: 200 });
       }
 
+      if (url.endsWith('/files/output/instances/manifest_7997_buckets.json')) {
+        return new Response('', { status: 404 });
+      }
+
       throw new Error(`unexpected fetch: ${url}`);
     });
 
@@ -316,6 +324,7 @@ describe('useDbnoInstancesParquetLoader', () => {
     await loader.queryAllRefnosByDbno(7997);
     await loader.queryInstanceEntriesByRefnos(7997, ['24381_145018']);
 
+    expect(String(queryMock.mock.calls[0]?.[0] ?? '')).toContain('geo_instances');
     expect(registerFileURLMock).toHaveBeenCalledTimes(10);
     const allRefnoQueryNames = registerFileURLMock.mock.calls.slice(0, 5).map((call) => String(call[0]));
     const instanceQueryNames = registerFileURLMock.mock.calls.slice(5, 10).map((call) => String(call[0]));

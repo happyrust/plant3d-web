@@ -258,6 +258,35 @@ export default tseslint.config(
     }
   },
   {
+    // 尺寸标注系统（ADR 0006 / plan 05）：外部消费者只能走 @/dimension facade
+    // barrel；深路径 import 会绕过组装 seam。UI 组件（.vue 挂载）豁免。
+    files: ['src/**/*.ts', 'src/**/*.vue'],
+    ignores: [
+      'src/dimension/**',
+      'src/debug/**',
+      'src/**/*.test.ts',
+      'src/**/*.spec.ts'
+    ],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: [
+                '@/dimension/*',
+                '@/dimension/**',
+                '!@/dimension/ui',
+                '!@/dimension/ui/**'
+              ],
+              message: 'Import the dimension system through the "@/dimension" facade barrel instead of deep paths (dimension UI components are exempt).'
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
     files: [
       'src/api/**/*.ts',
       'src/benchmark/**/*.ts',

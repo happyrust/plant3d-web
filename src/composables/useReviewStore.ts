@@ -9,6 +9,7 @@ import type {
   ObbAnnotationRecord,
   RectAnnotationRecord,
 } from './useToolStore';
+import type { DimensionDocumentSession } from '@/dimension';
 import type { ReviewTask, WorkflowNode } from '@/types/auth';
 
 import {
@@ -38,6 +39,14 @@ import {
   hasReviewConfirmPayloadData,
 } from '@/components/review/reviewPanelActions';
 import { useUserStore } from '@/composables/useUserStore';
+import {
+  dimensionConflictStateFromError,
+  dimensionDocumentFromSnapshot,
+  dimensionDocumentToSnapshot,
+  type DimensionDocumentState,
+  type ReplayPendingCommandsResult,
+  type SnapshotDimensionDocument,
+} from '@/dimension';
 
 export type ConfirmedRecord = {
   id: string;
@@ -49,6 +58,8 @@ export type ConfirmedRecord = {
   rectAnnotations: RectAnnotationRecord[];
   obbAnnotations?: ObbAnnotationRecord[];
   measurements: MeasurementRecord[];
+  dimensionDocument?: SnapshotDimensionDocument;
+  dimensionDocumentVersion?: number;
   confirmedAt: number;
   note: string;
 };
@@ -115,6 +126,80 @@ const currentTask = ref<ReviewTask | null>(null);
 const loading = ref(false);
 const error = ref<string | null>(null);
 const reviewHistory = ref<ReviewHistoryItem[]>([]);
+let activeDimensionDocumentSession: DimensionDocumentSession | null = null;
+let activeDimensionDocumentUnsubscribe: (() => void) | null = null;
+const dimensionDocumentDirty = ref(false);
+const dimensionDocumentRecordCount = ref(0);
+export type DimensionReviewConflict = Readonly<{
+  latest: DimensionDocumentState;
+  preview: ReplayPendingCommandsResult;
+}>;
+const dimensionDocumentConflict = ref<DimensionReviewConflict | null>(null);
+
+function bindDimensionDocumentSession(
+  session: DimensionDocumentSession | null,
+): () => void {
+  activeDimensionDocumentUnsubscribe?.();
+  activeDimensionDocumentUnsubscribe = null;
+  activeDimensionDocumentSession = session;
+  dimensionDocumentConflict.value = null;
+  dimensionDocumentDirty.value = session?.dirty ?? false;
+  dimensionDocumentRecordCount.value = session?.state.records.length ?? 0;
+  if (session) {
+    activeDimensionDocumentUnsubscribe = session.subscribe((state) => {
+      if (activeDimensionDocumentSession !== session) return;
+      dimensionDocumentDirty.value = session.dirty;
+      dimensionDocumentRecordCount.value = state.records.length;
+    });
+  }
+  return () => {
+    if (activeDimensionDocumentSession === session) {
+      activeDimensionDocumentUnsubscribe?.();
+      activeDimensionDocumentUnsubscribe = null;
+      activeDimensionDocumentSession = null;
+      dimensionDocumentDirty.value = false;
+      dimensionDocumentRecordCount.value = 0;
+      dimensionDocumentConflict.value = null;
+    }
+  };
+}
+
+function clearBoundDimensionDocumentSession(): void {
+  activeDimensionDocumentUnsubscribe?.();
+  activeDimensionDocumentUnsubscribe = null;
+  activeDimensionDocumentSession = null;
+  dimensionDocumentDirty.value = false;
+  dimensionDocumentRecordCount.value = 0;
+  dimensionDocumentConflict.value = null;
+}
+
+function getBoundDimensionConfirmPayload(): Readonly<{
+  dimensionDocument?: SnapshotDimensionDocument;
+  dimensionDocumentVersion?: number;
+}> {
+  const state = activeDimensionDocumentSession?.state;
+  return state
+    ? {
+      dimensionDocument: dimensionDocumentToSnapshot(state),
+      dimensionDocumentVersion: state.baseVersion,
+    }
+    : {};
+}
+
+function resolveDimensionDocumentConflict(
+  action: 'replay' | 'discard',
+): boolean {
+  const session = activeDimensionDocumentSession;
+  const conflict = dimensionDocumentConflict.value;
+  if (!session || !conflict) return false;
+  if (action === 'replay') {
+    session.acceptReplayedState(conflict.preview);
+  } else {
+    session.discardPendingCommands(conflict.latest);
+  }
+  dimensionDocumentConflict.value = null;
+  return true;
+}
 
 // WebSocket 连接状态
 const wsConnected = ref(false);
@@ -181,6 +266,13 @@ async function addConfirmedRecord(
   loading.value = true;
   error.value = null;
   try {
+    const boundDimensionState = activeDimensionDocumentSession?.state;
+    const dimensionDocument = record.dimensionDocument
+      ?? (boundDimensionState
+        ? dimensionDocumentToSnapshot(boundDimensionState)
+        : undefined);
+    const dimensionDocumentVersion = record.dimensionDocumentVersion
+      ?? boundDimensionState?.baseVersion;
     const response = await reviewRecordCreate({
       taskId,
       formId,
@@ -190,6 +282,8 @@ async function addConfirmedRecord(
       rectAnnotations: record.rectAnnotations,
       obbAnnotations: record.obbAnnotations ?? [],
       measurements: record.measurements,
+      dimensionDocument,
+      dimensionDocumentBaseVersion: dimensionDocumentVersion,
       note: record.note,
     });
 
@@ -204,9 +298,34 @@ async function addConfirmedRecord(
         rectAnnotations: record.rectAnnotations,
         obbAnnotations: record.obbAnnotations ?? [],
         measurements: record.measurements,
+        dimensionDocument: response.record.dimensionDocument,
+        dimensionDocumentVersion: response.record.dimensionDocumentVersion,
         confirmedAt: response.record.confirmedAt,
         note: record.note,
       };
+      if (dimensionDocument) {
+        if (
+          !response.record.dimensionDocument
+          || response.record.dimensionDocumentVersion === undefined
+        ) {
+          throw new Error('保存确认记录成功，但后端未返回尺寸文档版本');
+        }
+        if (
+          activeDimensionDocumentSession?.state.documentId
+          === response.record.dimensionDocument.documentId
+        ) {
+          activeDimensionDocumentSession.acceptSavedState(
+            dimensionDocumentFromSnapshot(
+              response.record.dimensionDocument,
+              {
+                taskId,
+                formId: response.record.formId || formId,
+                baseVersion: response.record.dimensionDocumentVersion,
+              },
+            ),
+          );
+        }
+      }
       const nextRecords = [...confirmedRecords.value];
       const existingIndex = nextRecords.findIndex((item) => item.id === newRecord.id);
       if (existingIndex >= 0) {
@@ -215,11 +334,29 @@ async function addConfirmedRecord(
         nextRecords.push(newRecord);
       }
       confirmedRecords.value = nextRecords;
+      dimensionDocumentConflict.value = null;
       return newRecord.id;
     }
 
     throw new Error(response.error_message || '保存确认记录失败');
   } catch (e) {
+    const session = activeDimensionDocumentSession;
+    if (session) {
+      const latest = dimensionConflictStateFromError(e, { taskId, formId });
+      if (latest) {
+        const preview = session.previewPendingCommands(latest);
+        dimensionDocumentConflict.value = { latest, preview };
+        const rejected = preview.rejected.length;
+        const suffix = rejected > 0
+          ? `，其中 ${rejected} 条命令无法重放`
+          : '';
+        const conflictError = new Error(
+          `尺寸文档已被其他用户更新，请选择重放本地修改或放弃本地修改${suffix}`,
+        );
+        error.value = conflictError.message;
+        throw conflictError;
+      }
+    }
     error.value = e instanceof Error ? e.message : '保存确认记录失败';
     throw e;
   } finally {
@@ -311,6 +448,8 @@ async function loadConfirmedRecords(
         rectAnnotations: r.rectAnnotations as RectAnnotationRecord[],
         obbAnnotations: ((r as unknown as { obbAnnotations?: unknown[] }).obbAnnotations ?? []) as ObbAnnotationRecord[],
         measurements: r.measurements as MeasurementRecord[],
+        dimensionDocument: r.dimensionDocument,
+        dimensionDocumentVersion: r.dimensionDocumentVersion,
         confirmedAt: r.confirmedAt,
         note: r.note,
       }));
@@ -345,6 +484,9 @@ async function loadReviewHistory(taskId: string): Promise<void> {
 // ============ 当前任务管理 ============
 
 async function setCurrentTask(task: ReviewTask | null) {
+  if (task?.id !== currentTask.value?.id) {
+    clearBoundDimensionDocumentSession();
+  }
   if (task && USE_BACKEND.value && task.id?.trim()) {
     try {
       const response = await reviewTaskGetById(task.id);
@@ -384,6 +526,7 @@ async function setCurrentTask(task: ReviewTask | null) {
 }
 
 function clearCurrentTask() {
+  clearBoundDimensionDocumentSession();
   currentTask.value = null;
   disconnectWebSocket();
 }
@@ -581,6 +724,7 @@ async function flushPendingConfirmForExternalAction(
   }
 
   const toolStore = useToolStore();
+  const activeDimensionState = activeDimensionDocumentSession?.state;
   const draftPayload = buildReviewConfirmSnapshotPayload({
     annotations: [...toolStore.annotations.value],
     cloudAnnotations: [...toolStore.cloudAnnotations.value],
@@ -591,6 +735,10 @@ async function flushPendingConfirmForExternalAction(
     xeokitAngleMeasurements: [...toolStore.xeokitAngleMeasurements.value],
     xeokitElevationPointMeasurements: [...(toolStore.xeokitElevationPointMeasurements?.value ?? [])],
     xeokitElevationDeltaMeasurements: [...(toolStore.xeokitElevationDeltaMeasurements?.value ?? [])],
+    dimensionDocument: activeDimensionState
+      ? dimensionDocumentToSnapshot(activeDimensionState)
+      : undefined,
+    dimensionDocumentVersion: activeDimensionState?.baseVersion,
   });
   const confirmedSnapshot = buildReviewConfirmSnapshotPayloadFromRecords(
     sortedConfirmedRecords.value,
@@ -608,6 +756,8 @@ async function flushPendingConfirmForExternalAction(
       rectAnnotations: unsavedPayload.rectAnnotations as RectAnnotationRecord[],
       obbAnnotations: unsavedPayload.obbAnnotations as ObbAnnotationRecord[],
       measurements: unsavedPayload.measurements as unknown as MeasurementRecord[],
+      dimensionDocument: unsavedPayload.dimensionDocument,
+      dimensionDocumentVersion: unsavedPayload.dimensionDocumentVersion,
       note: 'PMS workflow_pre_action 自动保存',
     });
     return { ok: true };
@@ -930,6 +1080,9 @@ export function useReviewStore() {
     loading,
     error,
     reviewHistory,
+    dimensionDocumentDirty,
+    dimensionDocumentRecordCount,
+    dimensionDocumentConflict,
 
     // WebSocket 状态
     wsConnected,
@@ -956,6 +1109,9 @@ export function useReviewStore() {
     exportReviewData,
     setCurrentTask,
     clearCurrentTask,
+    bindDimensionDocumentSession,
+    getBoundDimensionConfirmPayload,
+    resolveDimensionDocumentConflict,
 
     // PMS 跨平台 workflow 同步
     flushPendingConfirmForExternalAction,

@@ -1,6 +1,7 @@
 import { reactive, watch } from 'vue';
 
 import {
+  DEFAULT_POSITION_SNAP_PX,
   cloneMeasurementPickSourceSettings,
   measurementPickSettingsFromLegacy,
   type MeasurementPickSourceId,
@@ -12,6 +13,7 @@ import { DEFAULT_PTSET_SNAP_PX } from '@/composables/usePtsetSnap';
 import { getOutputProjectFromUrl } from '@/lib/filesOutput';
 
 export type XeokitMeasurementStyleConfig = {
+  distanceKeepDimensions: boolean;
   distanceShowTotalLabel: boolean;
   distanceShowMarkers: boolean;
   distanceShowAxisBreakdown: boolean;
@@ -37,9 +39,12 @@ export type XeokitMeasurementStyleConfig = {
 const STORAGE_KEY_V1 = 'plant3d-web-xeokit-measurement-style-v1';
 const STORAGE_KEY_V2 = 'plant3d-web-xeokit-measurement-style-v2';
 const STORAGE_KEY_V3 = 'plant3d-web-xeokit-measurement-style-v3';
+const STORAGE_KEY_V4 = 'plant3d-web-xeokit-measurement-style-v4';
+const STORAGE_KEY_V5 = 'plant3d-web-xeokit-measurement-style-v5';
 const DEFAULT_STORAGE_SCOPE = '__default__';
 
 export const DEFAULT_XEOKIT_MEASUREMENT_STYLE: Readonly<XeokitMeasurementStyleConfig> = {
+  distanceKeepDimensions: true,
   distanceShowTotalLabel: true,
   distanceShowMarkers: true,
   distanceShowAxisBreakdown: false,
@@ -88,7 +93,10 @@ function loadPersisted(scope = getCurrentStorageScope()): XeokitMeasurementStyle
   }
 
   try {
-    const raw = localStorage.getItem(withStorageScope(STORAGE_KEY_V3, scope))
+    const rawV5 = localStorage.getItem(withStorageScope(STORAGE_KEY_V5, scope));
+    const raw = rawV5
+      ?? localStorage.getItem(withStorageScope(STORAGE_KEY_V4, scope))
+      ?? localStorage.getItem(withStorageScope(STORAGE_KEY_V3, scope))
       ?? localStorage.getItem(withStorageScope(STORAGE_KEY_V2, scope))
       ?? localStorage.getItem(STORAGE_KEY_V1);
     if (!raw) return createDefaultMeasurementStyle();
@@ -104,8 +112,20 @@ function loadPersisted(scope = getCurrentStorageScope()): XeokitMeasurementStyle
         keypointSnapEnabled: legacySnapEnabled,
         keypointSnapPx: legacySnapPx,
       });
+    if (!rawV5) {
+      measurementPickSources.position = {
+        ...measurementPickSources.position,
+        show: true,
+        snap: true,
+        thresholdPx: Math.max(
+          measurementPickSources.position.thresholdPx,
+          DEFAULT_POSITION_SNAP_PX,
+        ),
+      };
+    }
     const ptsetSetting = measurementPickSources.ptset;
     return {
+      distanceKeepDimensions: parsed.distanceKeepDimensions ?? DEFAULT_XEOKIT_MEASUREMENT_STYLE.distanceKeepDimensions,
       distanceShowTotalLabel: parsed.distanceShowTotalLabel ?? DEFAULT_XEOKIT_MEASUREMENT_STYLE.distanceShowTotalLabel,
       distanceShowMarkers: parsed.distanceShowMarkers ?? DEFAULT_XEOKIT_MEASUREMENT_STYLE.distanceShowMarkers,
       distanceShowAxisBreakdown: parsed.distanceShowAxisBreakdown ?? DEFAULT_XEOKIT_MEASUREMENT_STYLE.distanceShowAxisBreakdown,
@@ -136,7 +156,7 @@ watch(
   (next) => {
     if (typeof localStorage === 'undefined') return;
     try {
-      localStorage.setItem(withStorageScope(STORAGE_KEY_V3), JSON.stringify(next));
+      localStorage.setItem(withStorageScope(STORAGE_KEY_V5), JSON.stringify(next));
     } catch {
       // ignore storage failures
     }

@@ -34,20 +34,26 @@ const pendingAnnotationCount = computed(() => {
 });
 
 const hasPendingData = computed(() => {
-  return pendingAnnotationCount.value > 0 || pendingMeasurementCount.value > 0;
+  return pendingAnnotationCount.value > 0
+    || pendingMeasurementCount.value > 0
+    || reviewStore.dimensionDocumentDirty.value;
 });
 
-const currentDraftConfirmPayload = computed(() => buildReviewConfirmSnapshotPayload({
-  annotations: [...toolStore.annotations.value],
-  cloudAnnotations: [...toolStore.cloudAnnotations.value],
-  rectAnnotations: [...toolStore.rectAnnotations.value],
-  obbAnnotations: [...toolStore.obbAnnotations.value],
-  measurements: [...toolStore.measurements.value],
-  xeokitDistanceMeasurements: [...toolStore.xeokitDistanceMeasurements.value],
-  xeokitAngleMeasurements: [...toolStore.xeokitAngleMeasurements.value],
-  xeokitElevationPointMeasurements: [...(toolStore.xeokitElevationPointMeasurements?.value ?? [])],
-  xeokitElevationDeltaMeasurements: [...(toolStore.xeokitElevationDeltaMeasurements?.value ?? [])],
-}));
+const currentDraftConfirmPayload = computed(() => {
+  const dimensionPayload = reviewStore.getBoundDimensionConfirmPayload();
+  return buildReviewConfirmSnapshotPayload({
+    annotations: [...toolStore.annotations.value],
+    cloudAnnotations: [...toolStore.cloudAnnotations.value],
+    rectAnnotations: [...toolStore.rectAnnotations.value],
+    obbAnnotations: [...toolStore.obbAnnotations.value],
+    measurements: [...toolStore.measurements.value],
+    xeokitDistanceMeasurements: [...toolStore.xeokitDistanceMeasurements.value],
+    xeokitAngleMeasurements: [...toolStore.xeokitAngleMeasurements.value],
+    xeokitElevationPointMeasurements: [...(toolStore.xeokitElevationPointMeasurements?.value ?? [])],
+    xeokitElevationDeltaMeasurements: [...(toolStore.xeokitElevationDeltaMeasurements?.value ?? [])],
+    ...dimensionPayload,
+  });
+});
 const pendingMeasurementCount = computed(() => currentDraftConfirmPayload.value.measurements.length);
 
 const currentTaskConfirmedRecords = computed(() => {
@@ -95,6 +101,8 @@ async function confirmCurrentData() {
         rectAnnotations: [...unsavedConfirmPayload.value.rectAnnotations],
         obbAnnotations: [...unsavedConfirmPayload.value.obbAnnotations],
         measurements: [...unsavedConfirmPayload.value.measurements],
+        dimensionDocument: unsavedConfirmPayload.value.dimensionDocument,
+        dimensionDocumentVersion: unsavedConfirmPayload.value.dimensionDocumentVersion,
         note: confirmNote.value.trim(),
       },
       addConfirmedRecord: reviewStore.addConfirmedRecord,
@@ -118,6 +126,17 @@ function cancel() {
   showNoteInput.value = false;
   confirmNote.value = '';
 }
+
+function resolveDimensionConflict(action: 'replay' | 'discard') {
+  if (!reviewStore.resolveDimensionDocumentConflict(action)) return;
+  confirmError.value = null;
+  emitToast({
+    message: action === 'replay'
+      ? '已基于最新版本重放可用的本地尺寸修改，请重新保存'
+      : '已放弃本地尺寸修改并加载最新版本',
+    level: action === 'replay' ? 'success' : 'warning',
+  });
+}
 </script>
 
 <template>
@@ -140,7 +159,7 @@ function cancel() {
       </div>
 
       <!-- 统计 -->
-      <div class="mt-3 grid grid-cols-2 gap-2 text-xs">
+      <div class="mt-3 grid grid-cols-3 gap-2 text-xs">
         <div class="rounded-2xl border border-white/10 bg-white/5 px-3 py-3">
           <div class="flex items-center gap-1 text-slate-300">
             <MessageSquare class="h-3.5 w-3.5 text-brand" />
@@ -155,6 +174,13 @@ function cancel() {
           </div>
           <div class="mt-1 text-base font-semibold text-white">{{ pendingMeasurementCount }}</div>
         </div>
+        <div class="rounded-2xl border border-white/10 bg-white/5 px-3 py-3">
+          <div class="flex items-center gap-1 text-slate-300">
+            <Ruler class="h-3.5 w-3.5 text-brand" />
+            <span>尺寸</span>
+          </div>
+          <div class="mt-1 text-base font-semibold text-white">{{ reviewStore.dimensionDocumentRecordCount.value }}</div>
+        </div>
       </div>
 
       <!-- 备注输入 -->
@@ -163,6 +189,27 @@ function cancel() {
           class="h-10 w-full rounded-xl border border-white/10 bg-white/5 px-3 text-xs text-white placeholder:text-slate-400"
           placeholder="输入确认备注（可选）..."
           @keyup.enter="confirmCurrentData" />
+      </div>
+
+      <div v-if="reviewStore.dimensionDocumentConflict.value"
+        class="mt-3 rounded-xl border border-amber-400/40 bg-amber-400/10 p-3 text-xs text-amber-100">
+        <div class="font-semibold">检测到尺寸文档版本冲突</div>
+        <div class="mt-1">
+          可重放 {{ reviewStore.dimensionDocumentConflict.value.preview.applied.length }} 条，
+          拒绝 {{ reviewStore.dimensionDocumentConflict.value.preview.rejected.length }} 条。
+        </div>
+        <div class="mt-2 flex gap-2">
+          <button type="button"
+            class="rounded-lg border border-amber-200/40 px-2 py-1 hover:bg-white/10"
+            @click="resolveDimensionConflict('replay')">
+            按最新版本重放
+          </button>
+          <button type="button"
+            class="rounded-lg border border-white/20 px-2 py-1 hover:bg-white/10"
+            @click="resolveDimensionConflict('discard')">
+            放弃本地修改
+          </button>
+        </div>
       </div>
 
       <!-- 操作按钮 -->

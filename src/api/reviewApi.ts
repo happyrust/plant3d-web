@@ -1,6 +1,8 @@
 // 校审管理 API 模块
 // 提供编校审单、审核任务、确认记录的 CRUD 操作
 
+import type { SnapshotDimensionDocument } from '@/dimension';
+
 import {
   fromBackendRole,
   type AnnotationComment,
@@ -13,7 +15,6 @@ import {
   type User,
   UserRole,
 } from '@/types/auth';
-import type { SnapshotDimensionDocument } from '@/dimension/adapters/reviewSnapshotAdapter';
 import { getBackendApiBaseUrl } from '@/utils/apiBase';
 
 // ============ 基础配置 ============

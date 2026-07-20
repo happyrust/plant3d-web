@@ -11,6 +11,7 @@ import {
   reviewAttachmentUploadWithProgress,
   type ReviewAttachmentUploadOptions,
 } from '@/api/reviewApi';
+import { composeViewerCanvases } from '@/dimension';
 
 export type ScreenshotUploadResult = {
   attachment: ReviewAttachment;
@@ -27,7 +28,7 @@ export type CaptureAndUploadOptions = {
 };
 
 export function useScreenshot() {
-  const { viewerRef } = useViewerContext();
+  const { viewerRef, dimensionSystem } = useViewerContext();
   const isCapturing = ref(false);
   const uploadProgress = ref(0);
 
@@ -49,6 +50,36 @@ export function useScreenshot() {
     return scene.canvas?.canvas || null;
   }
 
+  function getCaptureCanvas(): HTMLCanvasElement | null {
+    const canvas = getCanvas();
+    if (!canvas) return null;
+    const dimensionCanvas =
+      dimensionSystem?.value?.viewport.getCanvas() ?? null;
+    if (!dimensionCanvas || dimensionCanvas.width <= 0 || dimensionCanvas.height <= 0) {
+      return canvas;
+    }
+    return composeViewerCanvases({
+      webgl: canvas,
+      dimensions: dimensionCanvas,
+      width: canvas.width || canvas.clientWidth,
+      height: canvas.height || canvas.clientHeight,
+    });
+  }
+
+  function canvasToBlob(
+    canvas: HTMLCanvasElement,
+    format: 'image/png' | 'image/jpeg',
+    quality: number,
+  ): Promise<Blob | null> {
+    return new Promise((resolve) => {
+      canvas.toBlob(
+        (blob) => resolve(blob),
+        format,
+        quality,
+      );
+    });
+  }
+
   /**
    * 截取当前视图为 Blob
    */
@@ -56,19 +87,13 @@ export function useScreenshot() {
     format: 'image/png' | 'image/jpeg' = 'image/png',
     quality = 0.92
   ): Promise<Blob | null> {
-    const canvas = getCanvas();
+    const canvas = getCaptureCanvas();
     if (!canvas) {
       console.warn('Canvas not available for screenshot');
       return null;
     }
 
-    return new Promise((resolve) => {
-      canvas.toBlob(
-        (blob) => resolve(blob),
-        format,
-        quality
-      );
-    });
+    return canvasToBlob(canvas, format, quality);
   }
 
   /**
@@ -78,7 +103,7 @@ export function useScreenshot() {
     format: 'image/png' | 'image/jpeg' = 'image/png',
     quality = 0.92
   ): string | null {
-    const canvas = getCanvas();
+    const canvas = getCaptureCanvas();
     if (!canvas) {
       console.warn('Canvas not available for screenshot');
       return null;
@@ -121,7 +146,7 @@ export function useScreenshot() {
     uploadProgress.value = 0;
 
     try {
-      const canvas = getCanvas();
+      const canvas = getCaptureCanvas();
       if (!canvas) {
         console.error('Canvas not available for screenshot');
         return null;
@@ -129,7 +154,7 @@ export function useScreenshot() {
 
       const capturedAt = Date.now();
       const format = resolved.format ?? 'image/png';
-      const blob = await captureToBlob(format, resolved.quality ?? 0.92);
+      const blob = await canvasToBlob(canvas, format, resolved.quality ?? 0.92);
       if (!blob) {
         console.error('Failed to capture screenshot');
         return null;

@@ -21,13 +21,14 @@ import {
 import { Matrix4, Vector3 } from 'three';
 
 import type { PtsetPoint, PtsetResponse } from '@/api/genModelPdmsAttrApi';
+import type { MbdDimensionDto } from '@/dimension';
 import type { InstanceEntry } from '@/utils/instances/instanceManifest';
 
 import { getParquetVersion } from '@/api/genModelRealtimeApi';
 import { buildFilesOutputUrl } from '@/lib/filesOutput';
 import { configureLocalDuckDBExtensions, selectLocalDuckDBBundle } from '@/utils/duckdbBundles';
 
-type ParquetManifest = {
+export type ParquetManifest = {
   version: number
   format: 'parquet'
   generated_at: string
@@ -37,6 +38,7 @@ type ParquetManifest = {
     instances: { file: string; rows?: number }
     ptsets?: { file: string; rows?: number; key?: string[] }
     primitive_keypoints?: { file: string; rows?: number; key?: string[] }
+    mbd_dimensions?: { file: string; rows?: number; key?: string[] }
     geo_instances: { file: string; rows?: number }
     tubings: { file: string; rows?: number }
     transforms: { file: string; rows?: number }
@@ -56,6 +58,13 @@ type ParquetManifest = {
     conversion_factor?: number
     coordinate_space?: string
   }
+  mbd_dimension_unit?: {
+    source?: string
+    target?: string
+    conversion_factor?: number
+    coordinate_space?: string
+    source_to_design?: number[]
+  }
   mesh_validation?: {
     lod_tag?: string
     report_file?: string
@@ -63,6 +72,27 @@ type ParquetManifest = {
     missing_geo_hashes?: number
     missing_owner_refnos?: number
   }
+}
+
+type ParquetBucketIndex = {
+  version: number
+  format: 'parquet-buckets'
+  generated_at?: string
+  dbnum: number
+  buckets: {
+    name: string
+    role?: string
+    noun?: string
+    manifest?: string
+    prefix?: string
+    tables: ParquetManifest['tables']
+    rows?: {
+      instances?: number
+      geo_instances?: number
+      tubings?: number
+    }
+    total_bytes?: number
+  }[]
 }
 
 type MissingMeshReport = {
@@ -133,6 +163,21 @@ export type PrimitiveKeyPointCandidate = {
   world: [number, number, number]
   hasDir: boolean
   dir: [number, number, number] | null
+  circle?: {
+    center: [number, number, number]
+    rim: [number, number, number]
+    normal: [number, number, number]
+  }
+  arc?: {
+    center: [number, number, number]
+    rim: [number, number, number]
+    normal: [number, number, number]
+  }
+}
+
+export type MbdDimensionLoadResult = {
+  dimensions: MbdDimensionDto[]
+  skipped: { id: string; reason: string }[]
 }
 
 type RegisteredDbno = {
@@ -144,6 +189,7 @@ type RegisteredDbno = {
     instances: string
     ptsets: string
     primitive_keypoints: string
+    mbd_dimensions: string
     geo_instances: string
     tubings: string
     transforms: string
@@ -155,6 +201,7 @@ type ParquetManifestWithBaseDir = {
   manifest: ParquetManifest
   // manifest 所在目录：用于拼接 parquet 文件 URL
   baseDir: 'parquet' | 'instances'
+  bucketIndex?: ParquetBucketIndex | null
 }
 
 type ParquetBaseDir = 'parquet' | 'instances'
@@ -254,11 +301,37 @@ function buildRegisteredDbnoFiles(
     instances: `p_${dbno}_instances${suffix}.parquet`,
     ptsets: `p_${dbno}_ptsets${suffix}.parquet`,
     primitive_keypoints: `p_${dbno}_primitive_keypoints${suffix}.parquet`,
+    mbd_dimensions: `p_${dbno}_mbd_dimensions${suffix}.parquet`,
     geo_instances: `p_${dbno}_geo_instances${suffix}.parquet`,
     tubings: `p_${dbno}_tubings${suffix}.parquet`,
     transforms: `p_${dbno}_transforms${suffix}.parquet`,
     aabb: `p_${dbno}_aabb${suffix}.parquet`,
   };
+}
+
+function duckdbFileListExpression(files: string[]): string {
+  return `[${files.map(sqlQuoteString).join(', ')}]`;
+}
+
+function safeBucketFileToken(bucketName: string): string {
+  return String(bucketName || 'bucket').replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase();
+}
+
+async function registerBucketTableFiles(
+  dbno: number,
+  baseDirUrl: string,
+  bucketIndex: ParquetBucketIndex,
+  table: keyof RegisteredDbno['files'],
+  requestToken: string,
+): Promise<string> {
+  const registered: string[] = [];
+  for (const bucket of bucketIndex.buckets) {
+    const remoteFile = bucket.tables?.[table]?.file;
+    if (!remoteFile) continue;
+    const localName = `p_${dbno}_${safeBucketFileToken(bucket.name)}_${table}_${toDuckdbLocalFileToken(requestToken)}.parquet`;
+    registered.push(await registerDuckdbRemoteFile(localName, baseDirUrl, remoteFile, requestToken));
+  }
+  return duckdbFileListExpression(registered);
 }
 
 async function urlExists(url: string): Promise<boolean> {
@@ -292,6 +365,30 @@ async function tryFetchManifest(
   const json = (await resp.json()) as ParquetManifest;
   if (!json || typeof json !== 'object' || !json.tables?.instances?.file) {
     throw new Error(`manifest 结构不符合预期(${baseDir})`);
+  }
+  return json;
+}
+
+async function tryFetchBucketIndex(
+  dbno: number,
+  baseDir: ParquetBaseDir
+): Promise<ParquetBucketIndex | null> {
+  const url = buildFilesOutputUrl(`${baseDir}/manifest_${dbno}_buckets.json`);
+  let resp: Response;
+  try {
+    resp = await fetch(url, { cache: 'no-store' });
+  } catch {
+    // Bucket manifests are an optional optimization. Older deployments and
+    // strict fetch adapters may reject the probe instead of returning 404.
+    return null;
+  }
+  if (resp.status === 404) return null;
+  if (!resp.ok) {
+    throw new Error(`加载 bucket manifest 失败(${baseDir}): HTTP ${resp.status} ${resp.statusText}`);
+  }
+  const json = (await resp.json()) as ParquetBucketIndex;
+  if (!json || json.format !== 'parquet-buckets' || !Array.isArray(json.buckets)) {
+    throw new Error(`bucket manifest 结构不符合预期(${baseDir})`);
   }
   return json;
 }
@@ -347,6 +444,8 @@ const registeredPtsetsByDbno = new Map<number, string>();
 const registeringPtsetsByDbno = new Map<number, Promise<string | null>>();
 const registeredPrimitiveKeypointsByDbno = new Map<number, string>();
 const registeringPrimitiveKeypointsByDbno = new Map<number, Promise<string | null>>();
+const registeredMbdDimensionsByDbno = new Map<number, string>();
+const registeringMbdDimensionsByDbno = new Map<number, Promise<string | null>>();
 const availableByDbno = new Map<number, boolean>();
 const availabilityCheckingByDbno = new Map<number, Promise<boolean>>();
 const meshValidationByDbno = new Map<number, Promise<ParquetMeshValidationInfo | null>>();
@@ -382,6 +481,16 @@ function normalizeRefnoKey(refno: string): string {
 function sqlQuoteString(s: string): string {
   // DuckDB SQL: 单引号用 '' 转义
   return `'${String(s).replace(/'/g, '\'\'')}'`;
+}
+
+function isDuckdbFileListExpression(value: string): boolean {
+  return String(value || '').trim().startsWith('[');
+}
+
+function parquetScan(value: string): string {
+  return isDuckdbFileListExpression(value)
+    ? `parquet_scan(${value})`
+    : `parquet_scan(${sqlQuoteString(value)})`;
 }
 
 function buildInList(values: string[]): string {
@@ -484,6 +593,196 @@ function primitiveKeypointConversionFactorFromManifest(manifest: ParquetManifest
   return Number.isFinite(conversionFactor) ? conversionFactor : null;
 }
 
+type MbdDimensionUnitMetadata = ParquetManifest['mbd_dimension_unit'];
+
+const IDENTITY_MATRIX = [
+  1, 0, 0, 0,
+  0, 1, 0, 0,
+  0, 0, 1, 0,
+  0, 0, 0, 1,
+] as const;
+
+function finiteNumber(value: unknown): number | null {
+  const number = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function mbdPointFromRow(
+  row: Record<string, unknown>,
+  prefix: string,
+  conversionFactor: number,
+): [number, number, number] | null {
+  const x = finiteNumber(row[`${prefix}_x`]);
+  const y = finiteNumber(row[`${prefix}_y`]);
+  const z = finiteNumber(row[`${prefix}_z`]);
+  return x === null || y === null || z === null
+    ? null
+    : [x * conversionFactor, y * conversionFactor, z * conversionFactor];
+}
+
+function mbdLinesFromJson(
+  value: unknown,
+  conversionFactor: number,
+): MbdDimensionDto['extensionLines'] | null {
+  if (value === null || value === undefined || value === '') return [];
+  let parsed: unknown = value;
+  if (typeof value === 'string') {
+    try {
+      parsed = JSON.parse(value);
+    } catch {
+      return null;
+    }
+  }
+  if (!Array.isArray(parsed)) return null;
+  const lines: {
+    from: [number, number, number];
+    to: [number, number, number];
+  }[] = [];
+  for (const item of parsed) {
+    if (!item || typeof item !== 'object') return null;
+    const raw = item as Record<string, unknown>;
+    const from = Array.isArray(raw.from) ? raw.from : null;
+    const to = Array.isArray(raw.to) ? raw.to : null;
+    if (!from || !to || from.length !== 3 || to.length !== 3) return null;
+    const convertedFrom = from.map(finiteNumber);
+    const convertedTo = to.map(finiteNumber);
+    if (
+      convertedFrom.some(point => point === null)
+      || convertedTo.some(point => point === null)
+    ) return null;
+    lines.push({
+      from: convertedFrom.map(point => point! * conversionFactor) as [
+        number,
+        number,
+        number,
+      ],
+      to: convertedTo.map(point => point! * conversionFactor) as [
+        number,
+        number,
+        number,
+      ],
+    });
+  }
+  return lines;
+}
+
+function mbdSourceToDesign(
+  row: Record<string, unknown>,
+  metadata: MbdDimensionUnitMetadata,
+): readonly number[] | null {
+  const json = row.source_to_design_json;
+  if (typeof json === 'string' && json.trim()) {
+    try {
+      const parsed = JSON.parse(json);
+      if (
+        Array.isArray(parsed)
+        && parsed.length === 16
+        && parsed.every(value => finiteNumber(value) !== null)
+      ) {
+        return parsed.map(value => Number(value));
+      }
+    } catch {
+      return null;
+    }
+  }
+  const rowMatrix = colsMajorToMatrixArray(row);
+  if (rowMatrix) return rowMatrix;
+  if (
+    Array.isArray(metadata?.source_to_design)
+    && metadata.source_to_design.length === 16
+    && metadata.source_to_design.every(value => Number.isFinite(value))
+  ) {
+    return [...metadata.source_to_design];
+  }
+  return metadata?.coordinate_space === 'design' ? IDENTITY_MATRIX : null;
+}
+
+export function mapMbdDimensionRows(
+  rows: readonly Record<string, unknown>[],
+  metadata: MbdDimensionUnitMetadata,
+): MbdDimensionLoadResult {
+  const dimensions: MbdDimensionDto[] = [];
+  const skipped: { id: string; reason: string }[] = [];
+  const rawFactor = finiteNumber(metadata?.conversion_factor ?? 1);
+  const conversionFactor = rawFactor && rawFactor > 0 ? rawFactor : 1;
+  rows.forEach((row, index) => {
+    const id = String(row.id ?? `mbd-row-${index}`).trim();
+    const dimensionFrom = mbdPointFromRow(
+      row,
+      'dimension_from',
+      conversionFactor,
+    );
+    const dimensionTo = mbdPointFromRow(
+      row,
+      'dimension_to',
+      conversionFactor,
+    );
+    const labelAnchor = mbdPointFromRow(row, 'label', conversionFactor);
+    const extensionLines = mbdLinesFromJson(
+      row.extension_lines_json,
+      conversionFactor,
+    );
+    const arrowLines = mbdLinesFromJson(
+      row.arrow_lines_json,
+      conversionFactor,
+    );
+    const sourceToDesign = mbdSourceToDesign(row, metadata);
+    if (
+      !id
+      || !dimensionFrom
+      || !dimensionTo
+      || !labelAnchor
+      || extensionLines === null
+      || arrowLines === null
+      || !sourceToDesign
+    ) {
+      skipped.push({
+        id: id || `mbd-row-${index}`,
+        reason: 'Invalid MBD dimension row geometry or coordinate metadata',
+      });
+      return;
+    }
+    dimensions.push({
+      id,
+      reference: row.reference === true
+        || row.reference === 1
+        || String(row.reference).toLowerCase() === 'true',
+      formattedLabel: String(row.formatted_label ?? row.label ?? id),
+      dimensionLine: { from: dimensionFrom, to: dimensionTo },
+      extensionLines,
+      arrowLines,
+      labelAnchor,
+      sourceToDesign,
+    });
+  });
+  return { dimensions, skipped };
+}
+
+function primitiveCircularGeometryFromRow(
+  row: Record<string, unknown>,
+  prefix: 'circle' | 'arc',
+  conversionFactor: number,
+  matrix: Matrix4,
+): PrimitiveKeyPointCandidate['circle'] | null {
+  const center = mbdPointFromRow(
+    row,
+    `${prefix}_center`,
+    conversionFactor,
+  );
+  const rim = mbdPointFromRow(row, `${prefix}_rim`, conversionFactor);
+  const normal = mbdPointFromRow(row, `${prefix}_normal`, 1);
+  if (!center || !rim || !normal) return null;
+  const centerWorld = new Vector3(...center).applyMatrix4(matrix);
+  const rimWorld = new Vector3(...rim).applyMatrix4(matrix);
+  const normalWorld = new Vector3(...normal).transformDirection(matrix);
+  if (normalWorld.lengthSq() <= 1e-18) return null;
+  return {
+    center: [centerWorld.x, centerWorld.y, centerWorld.z],
+    rim: [rimWorld.x, rimWorld.y, rimWorld.z],
+    normal: [normalWorld.x, normalWorld.y, normalWorld.z],
+  };
+}
+
 function rowToPtsetPoint(row: any): PtsetPoint {
   const hasDir = Boolean(row.has_dir);
   const hasRefDir = Boolean(row.has_ref_dir);
@@ -519,6 +818,14 @@ function rowToPtsetPoint(row: any): PtsetPoint {
 async function fetchManifest(dbno: number): Promise<ParquetManifestWithBaseDir> {
   const hint = await getDirectoryHint(dbno);
   if (hint?.manifestBaseDir) {
+    const hintedBuckets = await tryFetchBucketIndex(dbno, hint.manifestBaseDir);
+    if (hintedBuckets?.buckets.length) {
+      return {
+        manifest: bucketIndexToSyntheticManifest(dbno, hintedBuckets),
+        baseDir: hint.manifestBaseDir,
+        bucketIndex: hintedBuckets,
+      };
+    }
     const hintedManifest = await tryFetchManifest(dbno, hint.manifestBaseDir);
     if (hintedManifest) {
       return { manifest: hintedManifest, baseDir: hint.manifestBaseDir };
@@ -526,9 +833,25 @@ async function fetchManifest(dbno: number): Promise<ParquetManifestWithBaseDir> 
   }
 
   // 优先新目录 parquet/，兼容旧目录 instances/
+  const parquetBuckets = await tryFetchBucketIndex(dbno, 'parquet');
+  if (parquetBuckets?.buckets.length) {
+    return {
+      manifest: bucketIndexToSyntheticManifest(dbno, parquetBuckets),
+      baseDir: 'parquet',
+      bucketIndex: parquetBuckets,
+    };
+  }
   const parquetManifest = await tryFetchManifest(dbno, 'parquet');
   if (parquetManifest) {
     return { manifest: parquetManifest, baseDir: 'parquet' };
+  }
+  const instancesBuckets = await tryFetchBucketIndex(dbno, 'instances');
+  if (instancesBuckets?.buckets.length) {
+    return {
+      manifest: bucketIndexToSyntheticManifest(dbno, instancesBuckets),
+      baseDir: 'instances',
+      bucketIndex: instancesBuckets,
+    };
   }
   const instancesManifest = await tryFetchManifest(dbno, 'instances');
   if (instancesManifest) {
@@ -556,6 +879,43 @@ async function fetchManifest(dbno: number): Promise<ParquetManifestWithBaseDir> 
   };
 }
 
+function bucketIndexToSyntheticManifest(dbno: number, index: ParquetBucketIndex): ParquetManifest {
+  const sumRows = (table: keyof ParquetManifest['tables']): number => index.buckets.reduce((sum, bucket) => {
+    const rows = bucket.tables?.[table]?.rows;
+    return sum + (typeof rows === 'number' && Number.isFinite(rows) ? rows : 0);
+  }, 0);
+
+  return {
+    version: 1,
+    format: 'parquet',
+    generated_at: index.generated_at || new Date().toISOString(),
+    dbnum: dbno,
+    root_refno: null,
+    tables: {
+      instances: { file: '__bucketed_instances__', rows: sumRows('instances') },
+      geo_instances: { file: '__bucketed_geo_instances__', rows: sumRows('geo_instances') },
+      tubings: { file: '__bucketed_tubings__', rows: sumRows('tubings') },
+      transforms: { file: '__bucketed_transforms__', rows: sumRows('transforms') },
+      aabb: { file: '__bucketed_aabb__', rows: sumRows('aabb') },
+      ptsets: { file: '__bucketed_ptsets__', rows: sumRows('ptsets'), key: ['cata_hash', 'point_number'] },
+      primitive_keypoints: {
+        file: '__bucketed_primitive_keypoints__',
+        rows: sumRows('primitive_keypoints'),
+        key: ['geo_hash', 'keypoint_index'],
+      },
+      ...(index.buckets.some(bucket => bucket.tables?.mbd_dimensions?.file)
+        ? {
+          mbd_dimensions: {
+            file: '__bucketed_mbd_dimensions__',
+            rows: sumRows('mbd_dimensions'),
+            key: ['id'],
+          },
+        }
+        : {}),
+    },
+  };
+}
+
 async function registerDbno(dbno: number, options: { forceRefresh?: boolean } = {}): Promise<RegisteredDbno> {
   const forceRefresh = options.forceRefresh === true;
   const cached = registeredByDbno.get(dbno);
@@ -567,7 +927,7 @@ async function registerDbno(dbno: number, options: { forceRefresh?: boolean } = 
     await ensureDuckDB();
     if (!db || !conn) throw new Error('DuckDB not ready');
 
-    const { manifest, baseDir } = await fetchManifest(dbno);
+    const { manifest, baseDir, bucketIndex } = await fetchManifest(dbno);
     const baseDirUrl = buildFilesOutputUrl(baseDir);
 
     const requestToken = createDuckdbRemoteQueryToken();
@@ -576,13 +936,36 @@ async function registerDbno(dbno: number, options: { forceRefresh?: boolean } = 
       forceRefresh ? toDuckdbLocalFileToken(requestToken) : undefined,
     );
 
-    const [instances, geoInstances, tubings, transforms, aabb] = await Promise.all([
-      registerDuckdbRemoteFile(files.instances, baseDirUrl, manifest.tables.instances.file, requestToken),
-      registerDuckdbRemoteFile(files.geo_instances, baseDirUrl, manifest.tables.geo_instances.file, requestToken),
-      registerDuckdbRemoteFile(files.tubings, baseDirUrl, manifest.tables.tubings.file, requestToken),
-      registerDuckdbRemoteFile(files.transforms, baseDirUrl, manifest.tables.transforms.file, requestToken),
-      registerDuckdbRemoteFile(files.aabb, baseDirUrl, manifest.tables.aabb.file, requestToken),
-    ]);
+    const [
+      instances,
+      geoInstances,
+      tubings,
+      transforms,
+      aabb,
+      ptsets,
+      primitiveKeypoints,
+      mbdDimensions,
+    ] = bucketIndex
+      ? await Promise.all([
+        registerBucketTableFiles(dbno, baseDirUrl, bucketIndex, 'instances', requestToken),
+        registerBucketTableFiles(dbno, baseDirUrl, bucketIndex, 'geo_instances', requestToken),
+        registerBucketTableFiles(dbno, baseDirUrl, bucketIndex, 'tubings', requestToken),
+        registerBucketTableFiles(dbno, baseDirUrl, bucketIndex, 'transforms', requestToken),
+        registerBucketTableFiles(dbno, baseDirUrl, bucketIndex, 'aabb', requestToken),
+        registerBucketTableFiles(dbno, baseDirUrl, bucketIndex, 'ptsets', requestToken),
+        registerBucketTableFiles(dbno, baseDirUrl, bucketIndex, 'primitive_keypoints', requestToken),
+        registerBucketTableFiles(dbno, baseDirUrl, bucketIndex, 'mbd_dimensions', requestToken),
+      ])
+      : await Promise.all([
+        registerDuckdbRemoteFile(files.instances, baseDirUrl, manifest.tables.instances.file, requestToken),
+        registerDuckdbRemoteFile(files.geo_instances, baseDirUrl, manifest.tables.geo_instances.file, requestToken),
+        registerDuckdbRemoteFile(files.tubings, baseDirUrl, manifest.tables.tubings.file, requestToken),
+        registerDuckdbRemoteFile(files.transforms, baseDirUrl, manifest.tables.transforms.file, requestToken),
+        registerDuckdbRemoteFile(files.aabb, baseDirUrl, manifest.tables.aabb.file, requestToken),
+        Promise.resolve(files.ptsets),
+        Promise.resolve(files.primitive_keypoints),
+        Promise.resolve(files.mbd_dimensions),
+      ]);
 
     const reg: RegisteredDbno = {
       dbno,
@@ -590,8 +973,9 @@ async function registerDbno(dbno: number, options: { forceRefresh?: boolean } = 
       manifest,
       files: {
         instances,
-        ptsets: files.ptsets,
-        primitive_keypoints: files.primitive_keypoints,
+        ptsets,
+        primitive_keypoints: primitiveKeypoints,
+        mbd_dimensions: mbdDimensions,
         geo_instances: geoInstances,
         tubings,
         transforms,
@@ -613,6 +997,7 @@ async function registerDbno(dbno: number, options: { forceRefresh?: boolean } = 
 async function ensurePtsetsRegistered(reg: RegisteredDbno, options: { forceRefresh?: boolean } = {}): Promise<string | null> {
   const ptsetsTable = reg.manifest.tables.ptsets;
   if (!ptsetsTable?.file) return null;
+  if (isDuckdbFileListExpression(reg.files.ptsets)) return reg.files.ptsets;
 
   if (options.forceRefresh) {
     registeredPtsetsByDbno.delete(reg.dbno);
@@ -655,6 +1040,7 @@ async function ensurePrimitiveKeypointsRegistered(
 ): Promise<string | null> {
   const table = reg.manifest.tables.primitive_keypoints;
   if (!table?.file) return null;
+  if (isDuckdbFileListExpression(reg.files.primitive_keypoints)) return reg.files.primitive_keypoints;
 
   if (options.forceRefresh) {
     registeredPrimitiveKeypointsByDbno.delete(reg.dbno);
@@ -691,6 +1077,48 @@ async function ensurePrimitiveKeypointsRegistered(
   }
 }
 
+async function ensureMbdDimensionsRegistered(
+  reg: RegisteredDbno,
+  options: { forceRefresh?: boolean } = {},
+): Promise<string | null> {
+  const table = reg.manifest.tables.mbd_dimensions;
+  if (!table?.file) return null;
+  if (isDuckdbFileListExpression(reg.files.mbd_dimensions)) {
+    return reg.files.mbd_dimensions === '[]' ? null : reg.files.mbd_dimensions;
+  }
+
+  if (options.forceRefresh) {
+    registeredMbdDimensionsByDbno.delete(reg.dbno);
+  }
+  const cached = registeredMbdDimensionsByDbno.get(reg.dbno);
+  if (cached && !options.forceRefresh) return cached;
+  const pending = registeringMbdDimensionsByDbno.get(reg.dbno);
+  if (pending && !options.forceRefresh) return await pending;
+
+  const task = (async () => {
+    await ensureDuckDB();
+    if (!db || !conn) throw new Error('DuckDB not ready');
+    const requestToken = createDuckdbRemoteQueryToken();
+    const localName = options.forceRefresh
+      ? appendDuckdbLocalFileToken(reg.files.mbd_dimensions, requestToken)
+      : reg.files.mbd_dimensions;
+    const registered = await registerDuckdbRemoteFile(
+      localName,
+      reg.baseDirUrl,
+      table.file,
+      requestToken,
+    );
+    registeredMbdDimensionsByDbno.set(reg.dbno, registered);
+    return registered;
+  })();
+  registeringMbdDimensionsByDbno.set(reg.dbno, task);
+  try {
+    return await task;
+  } finally {
+    registeringMbdDimensionsByDbno.delete(reg.dbno);
+  }
+}
+
 export function useDbnoInstancesParquetLoader() {
   const lastError = shallowRef<string | null>(null);
   const lastQueryTiming = shallowRef<ParquetQueryTiming | null>(null);
@@ -713,6 +1141,16 @@ export function useDbnoInstancesParquetLoader() {
       try {
         const hint = await getDirectoryHint(dbno);
         if (hint?.manifestBaseDir) {
+          const hintedBuckets = await tryFetchBucketIndex(dbno, hint.manifestBaseDir);
+          if (hintedBuckets?.buckets.length) {
+            const checks = hintedBuckets.buckets.map((bucket) => areRequiredParquetFilesPresent(hint.manifestBaseDir!, {
+              instances: bucket.tables.instances.file,
+              geo_instances: bucket.tables.geo_instances.file,
+              transforms: bucket.tables.transforms.file,
+              aabb: bucket.tables.aabb.file,
+            }));
+            return (await Promise.all(checks)).every(Boolean);
+          }
           const hintedManifest = await tryFetchManifest(dbno, hint.manifestBaseDir);
           if (hintedManifest) {
             return await areRequiredParquetFilesPresent(hint.manifestBaseDir, {
@@ -729,6 +1167,16 @@ export function useDbnoInstancesParquetLoader() {
         }
 
         // 1) manifest 驱动（优先 parquet/，兼容 instances/）
+        const parquetBuckets = await tryFetchBucketIndex(dbno, 'parquet');
+        if (parquetBuckets?.buckets.length) {
+          const checks = parquetBuckets.buckets.map((bucket) => areRequiredParquetFilesPresent('parquet', {
+            instances: bucket.tables.instances.file,
+            geo_instances: bucket.tables.geo_instances.file,
+            transforms: bucket.tables.transforms.file,
+            aabb: bucket.tables.aabb.file,
+          }));
+          return (await Promise.all(checks)).every(Boolean);
+        }
         const parquetManifest = await tryFetchManifest(dbno, 'parquet');
         if (parquetManifest) {
           return await areRequiredParquetFilesPresent('parquet', {
@@ -739,6 +1187,16 @@ export function useDbnoInstancesParquetLoader() {
           });
         }
 
+        const instancesBuckets = await tryFetchBucketIndex(dbno, 'instances');
+        if (instancesBuckets?.buckets.length) {
+          const checks = instancesBuckets.buckets.map((bucket) => areRequiredParquetFilesPresent('instances', {
+            instances: bucket.tables.instances.file,
+            geo_instances: bucket.tables.geo_instances.file,
+            transforms: bucket.tables.transforms.file,
+            aabb: bucket.tables.aabb.file,
+          }));
+          return (await Promise.all(checks)).every(Boolean);
+        }
         const instancesManifest = await tryFetchManifest(dbno, 'instances');
         if (instancesManifest) {
           return await areRequiredParquetFilesPresent('instances', {
@@ -818,8 +1276,8 @@ export function useDbnoInstancesParquetLoader() {
           tw.m01, tw.m11, tw.m21, tw.m31,
           tw.m02, tw.m12, tw.m22, tw.m32,
           tw.m03, tw.m13, tw.m23, tw.m33
-        FROM parquet_scan('${reg.files.instances}') i
-        LEFT JOIN parquet_scan('${reg.files.transforms}') tw ON tw.trans_hash = i.trans_hash
+        FROM ${parquetScan(reg.files.instances)} i
+        LEFT JOIN ${parquetScan(reg.files.transforms)} tw ON tw.trans_hash = i.trans_hash
         WHERE i.refno_str = ${sqlQuoteString(normalizedRefno)}
         LIMIT 1
       `;
@@ -851,7 +1309,7 @@ export function useDbnoInstancesParquetLoader() {
           has_dir, dir_x, dir_y, dir_z, dir_flag,
           has_ref_dir, ref_dir_x, ref_dir_y, ref_dir_z,
           pbore, pwidth, pheight, pconnect
-        FROM parquet_scan('${ptsetsFile}')
+        FROM ${parquetScan(ptsetsFile)}
         WHERE cata_hash = ${sqlQuoteString(cataHash)}
         ORDER BY point_number
       `;
@@ -932,10 +1390,10 @@ export function useDbnoInstancesParquetLoader() {
             tg.m02 AS g_m02, tg.m12 AS g_m12, tg.m22 AS g_m22, tg.m32 AS g_m32,
             tg.m03 AS g_m03, tg.m13 AS g_m13, tg.m23 AS g_m23, tg.m33 AS g_m33
           FROM target t
-          JOIN parquet_scan('${reg.files.instances}') i ON i.refno_str = t.refno_str
-          JOIN parquet_scan('${reg.files.geo_instances}') gi ON gi.refno_str = i.refno_str
-          LEFT JOIN parquet_scan('${reg.files.transforms}') tw ON tw.trans_hash = i.trans_hash
-          LEFT JOIN parquet_scan('${reg.files.transforms}') tg ON tg.trans_hash = gi.geo_trans_hash
+          JOIN ${parquetScan(reg.files.instances)} i ON i.refno_str = t.refno_str
+          JOIN ${parquetScan(reg.files.geo_instances)} gi ON gi.refno_str = i.refno_str
+          LEFT JOIN ${parquetScan(reg.files.transforms)} tw ON tw.trans_hash = i.trans_hash
+          LEFT JOIN ${parquetScan(reg.files.transforms)} tg ON tg.trans_hash = gi.geo_trans_hash
         ),
         tubi_geo AS (
           SELECT
@@ -951,10 +1409,10 @@ export function useDbnoInstancesParquetLoader() {
             NULL AS g_m02, NULL AS g_m12, NULL AS g_m22, NULL AS g_m32,
             NULL AS g_m03, NULL AS g_m13, NULL AS g_m23, NULL AS g_m33
           FROM target t
-          JOIN parquet_scan('${reg.files.tubings}') tb
+          JOIN ${parquetScan(reg.files.tubings)} tb
             ON tb.tubi_refno_str = t.refno_str
             OR tb.owner_refno_str = t.refno_str
-          LEFT JOIN parquet_scan('${reg.files.transforms}') tw ON tw.trans_hash = tb.trans_hash
+          LEFT JOIN ${parquetScan(reg.files.transforms)} tw ON tw.trans_hash = tb.trans_hash
         ),
         all_geo AS (
           SELECT * FROM instance_geo
@@ -973,18 +1431,9 @@ export function useDbnoInstancesParquetLoader() {
           g.g_m01, g.g_m11, g.g_m21, g.g_m31,
           g.g_m02, g.g_m12, g.g_m22, g.g_m32,
           g.g_m03, g.g_m13, g.g_m23, g.g_m33,
-          pk.keypoint_index,
-          pk.kind,
-          pk.local_x,
-          pk.local_y,
-          pk.local_z,
-          pk.has_dir,
-          pk.dir_x,
-          pk.dir_y,
-          pk.dir_z,
-          pk.source
+          pk.*
         FROM all_geo g
-        JOIN parquet_scan('${primitiveFile}') pk ON pk.geo_hash = g.geo_hash
+        JOIN ${parquetScan(primitiveFile)} pk ON pk.geo_hash = g.geo_hash
         ORDER BY g.refno_str, g.geo_index, pk.keypoint_index
       `;
 
@@ -1012,13 +1461,35 @@ export function useDbnoInstancesParquetLoader() {
         const keypointIndex = Number(row.keypoint_index ?? 0);
         const geoIndex = Number(row.geo_index ?? 0);
         const hasDir = Boolean(row.has_dir);
-        const dir: [number, number, number] | null = hasDir
-          ? [
+        const rawDirection = hasDir
+          ? new Vector3(
             Number(row.dir_x ?? 0),
             Number(row.dir_y ?? 0),
             Number(row.dir_z ?? 0),
-          ]
+          )
           : null;
+        const worldDirection = rawDirection
+          && Number.isFinite(rawDirection.x)
+          && Number.isFinite(rawDirection.y)
+          && Number.isFinite(rawDirection.z)
+          && rawDirection.lengthSq() > 1e-18
+          ? rawDirection.transformDirection(matrix)
+          : null;
+        const dir: [number, number, number] | null = worldDirection
+          ? [worldDirection.x, worldDirection.y, worldDirection.z]
+          : null;
+        const circle = primitiveCircularGeometryFromRow(
+          row,
+          'circle',
+          conversionFactor,
+          matrix,
+        );
+        const arc = primitiveCircularGeometryFromRow(
+          row,
+          'arc',
+          conversionFactor,
+          matrix,
+        );
 
         out.push({
           id: `primitive:${refnoStr}:${geoIndex}:${geoHash}#${keypointIndex}`,
@@ -1031,8 +1502,10 @@ export function useDbnoInstancesParquetLoader() {
           source: String(row.source || 'primitive_keypoints.parquet'),
           local,
           world: [v.x, v.y, v.z],
-          hasDir,
+          hasDir: dir !== null,
           dir,
+          ...(circle ? { circle } : {}),
+          ...(arc ? { arc } : {}),
         });
       }
       return out;
@@ -1040,6 +1513,44 @@ export function useDbnoInstancesParquetLoader() {
       const message = error instanceof Error ? error.message : String(error);
       lastError.value = message;
       throw new Error(`查询 primitive_keypoints.parquet 失败: ${message}`);
+    }
+  }
+
+  async function isMbdDimensionParquetAvailable(dbno: number): Promise<boolean> {
+    try {
+      const reg = await registerDbno(dbno);
+      return (await ensureMbdDimensionsRegistered(reg)) !== null;
+    } catch {
+      return false;
+    }
+  }
+
+  async function queryMbdDimensionsByDbno(
+    dbno: number,
+    options?: { forceRefresh?: boolean },
+  ): Promise<MbdDimensionLoadResult> {
+    lastError.value = null;
+    try {
+      const reg = await registerDbno(dbno, {
+        forceRefresh: options?.forceRefresh,
+      });
+      await ensureDuckDB();
+      if (!conn) throw new Error('DuckDB connection unavailable');
+      const file = await ensureMbdDimensionsRegistered(reg, {
+        forceRefresh: options?.forceRefresh,
+      });
+      if (!file) return { dimensions: [], skipped: [] };
+      const arrow = await conn.query(`
+        SELECT *
+        FROM ${parquetScan(file)}
+        ORDER BY id
+      `);
+      const rows = arrow.toArray() as Record<string, unknown>[];
+      return mapMbdDimensionRows(rows, reg.manifest.mbd_dimension_unit);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      lastError.value = message;
+      throw new Error(`查询 mbd_dimensions.parquet 失败: ${message}`);
     }
   }
 
@@ -1086,7 +1597,7 @@ export function useDbnoInstancesParquetLoader() {
         ? `
         LEFT JOIN (
           SELECT cata_hash, COUNT(*) AS pt_count
-          FROM parquet_scan('${ptsetsFile}')
+          FROM ${parquetScan(ptsetsFile)}
           WHERE cata_hash IS NOT NULL AND cata_hash <> ''
           GROUP BY cata_hash
         ) pc ON pc.cata_hash = i.cata_hash
@@ -1100,7 +1611,7 @@ export function useDbnoInstancesParquetLoader() {
           '' AS name,
           i.cata_hash,
           ${ptCountSelect}
-        FROM parquet_scan('${reg.files.instances}') i
+        FROM ${parquetScan(reg.files.instances)} i
         ${ptCountJoin}
         WHERE i.owner_refno_str = ${sqlQuoteString(normalizedOwner)}
         ORDER BY i.refno_str
@@ -1120,7 +1631,7 @@ export function useDbnoInstancesParquetLoader() {
   async function queryInstanceEntriesByRefnos(
     dbno: number,
     refnoKeys: string[],
-    options?: { debug?: boolean }
+    options?: { debug?: boolean; forceRefresh?: boolean; includeOwnedTubings?: boolean }
   ): Promise<Map<string, InstanceEntry[]>> {
     lastError.value = null;
     lastQueryTiming.value = null;
@@ -1137,7 +1648,9 @@ export function useDbnoInstancesParquetLoader() {
     if (!conn) throw new Error('DuckDB connection unavailable');
 
     const registerDbnoStartedAt = Date.now();
-    const reg = await registerDbno(dbno, { forceRefresh: true });
+    const reg = await registerDbno(dbno, {
+      forceRefresh: options?.forceRefresh !== false,
+    });
     timing.phaseMs.registerDbno = Date.now() - registerDbnoStartedAt;
 
     // refno 在 parquet 里是 refno_str（与前端 refnoKey 一致：`24381_100818` 这种下划线格式）
@@ -1145,6 +1658,7 @@ export function useDbnoInstancesParquetLoader() {
 
     const resultMap = new Map<string, InstanceEntry[]>();
     const cataHashSelect = reg.manifest.tables.ptsets?.file ? 'i.cata_hash' : 'NULL AS cata_hash';
+    const includeOwnedTubings = options?.includeOwnedTubings !== false;
 
     const CHUNK = 500;
     for (let i = 0; i < normalized.length; i += CHUNK) {
@@ -1179,11 +1693,11 @@ export function useDbnoInstancesParquetLoader() {
           tg.m02 AS g_m02, tg.m12 AS g_m12, tg.m22 AS g_m22, tg.m32 AS g_m32,
           tg.m03 AS g_m03, tg.m13 AS g_m13, tg.m23 AS g_m23, tg.m33 AS g_m33
         FROM target t
-        JOIN parquet_scan('${reg.files.instances}') i ON i.refno_str = t.refno_str
-        JOIN parquet_scan('${reg.files.geo_instances}') gi ON gi.refno_str = i.refno_str
-        LEFT JOIN parquet_scan('${reg.files.aabb}') aw ON aw.aabb_hash = i.aabb_hash
-        LEFT JOIN parquet_scan('${reg.files.transforms}') tw ON tw.trans_hash = i.trans_hash
-        LEFT JOIN parquet_scan('${reg.files.transforms}') tg ON tg.trans_hash = gi.geo_trans_hash
+        JOIN ${parquetScan(reg.files.instances)} i ON i.refno_str = t.refno_str
+        JOIN ${parquetScan(reg.files.geo_instances)} gi ON gi.refno_str = i.refno_str
+        LEFT JOIN ${parquetScan(reg.files.aabb)} aw ON aw.aabb_hash = i.aabb_hash
+        LEFT JOIN ${parquetScan(reg.files.transforms)} tw ON tw.trans_hash = i.trans_hash
+        LEFT JOIN ${parquetScan(reg.files.transforms)} tg ON tg.trans_hash = gi.geo_trans_hash
         ORDER BY i.refno_str, gi.geo_index
       `;
 
@@ -1266,6 +1780,13 @@ export function useDbnoInstancesParquetLoader() {
         console.log('[instances-parquet] chunk loaded', { dbno, chunk: [i, i + CHUNK], rows: rows.length });
       }
 
+      const tubiJoinCondition = includeOwnedTubings
+        ? `
+            tb.tubi_refno_str = t.refno_str
+            OR tb.owner_refno_str = t.refno_str
+          `
+        : 'tb.tubi_refno_str = t.refno_str';
+
       const sqlTubi = `
         WITH target(refno_str) AS (
           SELECT UNNEST(${listExpr}) AS refno_str
@@ -1281,9 +1802,8 @@ export function useDbnoInstancesParquetLoader() {
             tb.aabb_hash,
             tb.spec_value
           FROM target t
-          JOIN parquet_scan('${reg.files.tubings}') tb
-            ON tb.tubi_refno_str = t.refno_str
-            OR tb.owner_refno_str = t.refno_str
+          JOIN ${parquetScan(reg.files.tubings)} tb
+            ON ${tubiJoinCondition}
         )
         SELECT
           c.bucket_refno_str AS refno_str,
@@ -1313,10 +1833,10 @@ export function useDbnoInstancesParquetLoader() {
           NULL AS g_m02, NULL AS g_m12, NULL AS g_m22, NULL AS g_m32,
           NULL AS g_m03, NULL AS g_m13, NULL AS g_m23, NULL AS g_m33
         FROM tubi_candidates c
-        LEFT JOIN parquet_scan('${reg.files.aabb}') aw ON aw.aabb_hash = c.aabb_hash
-        LEFT JOIN parquet_scan('${reg.files.transforms}') tw ON tw.trans_hash = c.trans_hash
-        LEFT JOIN parquet_scan('${reg.files.instances}') ti ON ti.refno_str = c.tubi_refno_str
-        LEFT JOIN parquet_scan('${reg.files.transforms}') iw ON iw.trans_hash = ti.trans_hash
+        LEFT JOIN ${parquetScan(reg.files.aabb)} aw ON aw.aabb_hash = c.aabb_hash
+        LEFT JOIN ${parquetScan(reg.files.transforms)} tw ON tw.trans_hash = c.trans_hash
+        LEFT JOIN ${parquetScan(reg.files.instances)} ti ON ti.refno_str = c.tubi_refno_str
+        LEFT JOIN ${parquetScan(reg.files.transforms)} iw ON iw.trans_hash = ti.trans_hash
         ORDER BY c.bucket_refno_str, c.order, c.tubi_refno_str
       `;
 
@@ -1406,13 +1926,13 @@ export function useDbnoInstancesParquetLoader() {
     const sql = `
       WITH all_refnos AS (
         SELECT refno_str AS refno
-        FROM parquet_scan('${reg.files.instances}')
+        FROM ${parquetScan(reg.files.instances)}
         UNION
-        SELECT owner_refno_str AS refno
-        FROM parquet_scan('${reg.files.tubings}')
+        SELECT refno_str AS refno
+        FROM ${parquetScan(reg.files.geo_instances)}
         UNION
         SELECT tubi_refno_str AS refno
-        FROM parquet_scan('${reg.files.tubings}')
+        FROM ${parquetScan(reg.files.tubings)}
       )
       SELECT refno
       FROM all_refnos
@@ -1517,8 +2037,10 @@ export function useDbnoInstancesParquetLoader() {
     isParquetAvailable,
     isPtsetParquetAvailable,
     isPrimitiveKeypointParquetAvailable,
+    isMbdDimensionParquetAvailable,
     queryPtsetByRefnoFromParquet,
     queryPrimitiveKeypointsByRefnoFromParquet,
+    queryMbdDimensionsByDbno,
     queryDirectChildrenPtsetSummary,
     queryInstanceEntriesByRefnos,
     queryAllRefnosByDbno,

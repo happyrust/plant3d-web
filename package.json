@@ -16,6 +16,7 @@
     "perf:frustum-culling:all": "npx tsx test/perf/frustum-culling/run.ts --all",
     "perf:frustum-culling:ui": "vite --open /perf-test.html",
     "perf:dimensions:kernel": "npx tsx test/perf/dimensions/benchKernel.ts",
+    "perf:dimensions:browser": "node scripts/run-dimension-browser-perf.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",

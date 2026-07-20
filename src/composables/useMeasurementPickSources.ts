@@ -9,6 +9,9 @@ import {
 
 import type { Camera } from 'three';
 
+export const DEFAULT_POSITION_SNAP_PX = 18;
+export const MEASUREMENT_SNAP_TIE_PX = 4;
+
 export type MeasurementPickSourceId =
   | 'mesh_pick_point'
   | 'ptset'
@@ -34,6 +37,9 @@ export type MeasurementPickCandidate = {
   objectId: string;
   worldPos: Vector3;
   label?: string | null;
+  direction?: Vector3;
+  circle?: Readonly<{ center: Vector3; rim: Vector3; normal: Vector3 }>;
+  arc?: Readonly<{ center: Vector3; rim: Vector3; normal: Vector3 }>;
 };
 
 export type ProjectedMeasurementPickCandidate =
@@ -53,10 +59,10 @@ export const MEASUREMENT_PICK_SOURCE_IDS: readonly MeasurementPickSourceId[] = [
 ] as const;
 
 export const MEASUREMENT_PICK_SOURCE_LABELS: Record<MeasurementPickSourceId, string> = {
-  mesh_pick_point: 'Mesh Pick Point',
-  ptset: 'PTSET',
-  position: 'Position',
-  primitive_key_point: 'Primitive Key Point',
+  mesh_pick_point: '模型表面点',
+  ptset: 'P-Point',
+  position: '实例原点',
+  primitive_key_point: '基本体关键点',
 };
 
 export const DEFAULT_MEASUREMENT_PICK_SOURCE_SETTINGS: Readonly<MeasurementPickSourceSettings> = {
@@ -74,9 +80,9 @@ export const DEFAULT_MEASUREMENT_PICK_SOURCE_SETTINGS: Readonly<MeasurementPickS
   },
   position: {
     show: true,
-    snap: false,
+    snap: true,
     priority: 30,
-    thresholdPx: DEFAULT_PTSET_SNAP_PX,
+    thresholdPx: DEFAULT_POSITION_SNAP_PX,
   },
   mesh_pick_point: {
     show: true,
@@ -181,7 +187,7 @@ export function buildPositionPickCandidate(input: {
     entityId: `position:${refno}`,
     objectId: input.objectId,
     worldPos: position,
-    label: `Position ${refno}`,
+    label: `实例原点 ${refno}`,
   };
 }
 
@@ -213,12 +219,14 @@ function sortProjectedCandidates(
   settings: MeasurementPickSourceSettings,
 ): ProjectedMeasurementPickCandidate[] {
   return candidates.sort((a, b) => {
+    const distanceDelta = a.pixelDistance - b.pixelDistance;
+    if (Math.abs(distanceDelta) > MEASUREMENT_SNAP_TIE_PX) return distanceDelta;
+
     const aSetting = settings[a.source];
     const bSetting = settings[b.source];
     const priorityDelta = (aSetting?.priority ?? 999) - (bSetting?.priority ?? 999);
     if (priorityDelta !== 0) return priorityDelta;
 
-    const distanceDelta = a.pixelDistance - b.pixelDistance;
     if (distanceDelta !== 0) return distanceDelta;
 
     return a.id.localeCompare(b.id);

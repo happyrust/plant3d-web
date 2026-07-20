@@ -48,6 +48,7 @@ import { useTaskCreationStore } from '@/composables/useTaskCreationStore';
 import { useToolStore } from '@/composables/useToolStore';
 import { useUserStore } from '@/composables/useUserStore';
 import { showModelByRefnosWithAck, useViewerContext, waitForViewerReady } from '@/composables/useViewerContext';
+import { isDimensionFlagEnabled } from '@/dimension';
 import { onCommand } from '@/ribbon/commandBus';
 
 const embedModeParams = ref<EmbedModeParams>(readEmbedModeParamsFromSearch(window.location.search));
@@ -55,6 +56,8 @@ const embedModeParams = ref<EmbedModeParams>(readEmbedModeParamsFromSearch(windo
 const LAYOUT_STORAGE_KEY = 'plant3d-web-dock-layout-v3';
 const LAYOUT_MIGRATION_PROPERTIES_KEY = 'plant3d-web-dock-layout-v3-migrated-properties';
 const popoutUrl = `${import.meta.env.BASE_URL}popout.html`;
+const dimensionPanelEnabled = isDimensionFlagEnabled('DIMENSION_V2_DEV')
+  || isDimensionFlagEnabled('DIMENSION_V2_CUTOVER');
 
 type DockviewGroupLike = {
   api: {
@@ -540,6 +543,15 @@ function createDefaultLayout(dockApi: DockApi) {
     position: { referencePanel: viewerPanel, direction: 'right' },
   });
 
+  if (dimensionPanelEnabled) {
+    dockApi.addPanel({
+      id: 'dimension',
+      component: 'DimensionPanel',
+      title: '尺寸标注',
+      position: { referencePanel: measurementPanel, direction: 'within' },
+    });
+  }
+
   dockApi.addPanel({
     id: 'annotation',
     component: 'AnnotationPanel',
@@ -689,6 +701,20 @@ function ensurePanel(panelId: string) {
       component: 'MeasurementPanel',
       title: '测量',
       position: viewerPanel ? { referencePanel: viewerPanel, direction: 'right' } : undefined,
+    });
+  }
+  if (normalizedPanelId === 'dimension' && dimensionPanelEnabled) {
+    const measurementPanel = dockApi.getPanel('measurement')
+      ?? ensurePanel(dockApi, 'measurement');
+    return addPanelSafely(dockApi, {
+      id: 'dimension',
+      component: 'DimensionPanel',
+      title: '尺寸标注',
+      position: measurementPanel
+        ? { referencePanel: measurementPanel, direction: 'within' }
+        : viewerPanel
+          ? { referencePanel: viewerPanel, direction: 'right' }
+          : undefined,
     });
   }
   if (normalizedPanelId === 'annotation') {
@@ -1160,6 +1186,9 @@ function handleRibbonCommand(commandId: string) {
       return;
     case 'panel.measurement':
       togglePanel('measurement');
+      return;
+    case 'panel.dimension':
+      if (dimensionPanelEnabled) togglePanel('dimension');
       return;
     case 'panel.annotation':
       togglePanel('annotation');

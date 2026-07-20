@@ -35,6 +35,7 @@ import SpatialComputePanelDock from '@/components/dock_panels/SpatialComputePane
 import TaskCreationPanelDock from '@/components/dock_panels/TaskCreationPanelDock.vue';
 import TaskMonitorPanelDock from '@/components/dock_panels/TaskMonitorPanelDock.vue';
 import ViewerPanel from '@/components/dock_panels/ViewerPanel.vue';
+import DimensionPanelDock from '@/dimension/ui/DimensionPanelDock.vue';
 import vuetify from '@/plugins/vuetify';
 
 const app = createApp(App);
@@ -43,6 +44,7 @@ app.use(VueQueryPlugin);
 app.component('ViewerPanel', ViewerPanel);
 app.component('ModelTreePanel', ModelTreePanelDock);
 app.component('MeasurementPanel', MeasurementPanelDock);
+app.component('DimensionPanel', DimensionPanelDock);
 app.component('AnnotationPanel', AnnotationPanelDock);
 app.component('AnnotationStylePanel', AnnotationStylePanelDock);
 app.component('HydraulicPanel', HydraulicPanelDock);

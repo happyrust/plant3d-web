@@ -6,7 +6,6 @@ import {
 } from './reviewRecordAdapter';
 import { buildReplayPayloadFromSnapshot } from './toolStoreAdapter';
 
-import type { SnapshotDimensionDocument } from '@/dimension/adapters/reviewSnapshotAdapter';
 import type { ConfirmedRecord } from '@/composables/useReviewStore';
 import type {
   AnnotationRecord,
@@ -17,6 +16,7 @@ import type {
   AngleMeasurementRecord,
   MeasurementPoint,
 } from '@/composables/useToolStore';
+import type { SnapshotDimensionDocument } from '@/dimension/adapters/reviewSnapshotAdapter';
 
 import { UserRole, type AnnotationComment } from '@/types/auth';
 

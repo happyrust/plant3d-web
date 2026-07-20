@@ -232,6 +232,57 @@ describe('DimensionDocumentSession', () => {
     expect(listener).toHaveBeenCalledWith(saved);
   });
 
+  it('previews and accepts pending commands against a latest base version', () => {
+    const journal = new MemoryJournal();
+    const command = createCommand('recovered-1', 'dimension-recovered', 15);
+    journal.state = {
+      version: 1,
+      documentId: 'document-1',
+      baseVersion: 1,
+      commands: [command],
+      updatedAt: command.at,
+    };
+    const session = new DimensionDocumentSession({
+      initialState: emptyDimensionDocument([], { baseVersion: 1 }),
+      journal,
+    });
+    const latest = emptyDimensionDocument([], { baseVersion: 2 });
+
+    const preview = session.previewPendingCommands(latest);
+    expect(preview.applied).toEqual([command]);
+    expect(preview.rejected).toEqual([]);
+    expect(preview.state.records.map(record => record.id))
+      .toEqual(['dimension-recovered']);
+
+    session.acceptReplayedState(preview);
+
+    expect(session.state.baseVersion).toBe(2);
+    expect(session.state.records.map(record => record.id))
+      .toEqual(['dimension-recovered']);
+    expect(session.pendingCommands).toEqual([command]);
+    expect(journal.state?.baseVersion).toBe(2);
+    expect(session.dirty).toBe(true);
+  });
+
+  it('can acknowledge a persisted state without discarding undo history', () => {
+    const journal = new MemoryJournal();
+    const session = new DimensionDocumentSession({
+      initialState: emptyDimensionDocument(),
+      journal,
+    });
+    session.apply(createCommand('c-local', 'd-local', 10));
+    const saved = emptyDimensionDocument(
+      [linearRecord({ id: 'd-local' })],
+      { baseVersion: 1 },
+    );
+
+    session.acceptPersistedState(saved, { preserveHistory: true });
+
+    expect(session.dirty).toBe(false);
+    expect(session.canUndo).toBe(true);
+    expect(session.canRedo).toBe(false);
+  });
+
   it('does not publish reducer state if journaling fails', () => {
     const journal = new MemoryJournal();
     journal.onAppend = () => {

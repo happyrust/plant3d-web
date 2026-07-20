@@ -37,7 +37,7 @@ import {
   type SnapshotDimensionDocument,
   DimensionSnapshotValidationError,
   validateDimensionDocumentSnapshot,
-} from '@/dimension/adapters/reviewSnapshotAdapter';
+} from '@/dimension';
 import {
   fromBackendRole,
   type AnnotationComment,

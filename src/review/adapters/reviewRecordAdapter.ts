@@ -27,13 +27,13 @@ import {
 } from '../domain/reviewSnapshot';
 
 import type { ConfirmedRecord } from '@/composables/useReviewStore';
-import type { SnapshotDimensionDocument } from '@/dimension/adapters/reviewSnapshotAdapter';
+import type { SnapshotDimensionDocument } from '@/dimension';
 import type { AnnotationComment, WorkflowNode } from '@/types/auth';
 
 import {
   DimensionSnapshotValidationError,
   validateDimensionDocumentSnapshot,
-} from '@/dimension/adapters/reviewSnapshotAdapter';
+} from '@/dimension';
 
 export const REVIEW_RECORD_SNAPSHOT_VERSION = 1;
 

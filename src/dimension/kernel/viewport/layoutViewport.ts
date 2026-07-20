@@ -20,12 +20,21 @@ export function layoutViewport(
   baseContext: Omit<LayoutContext, 'interaction'>,
   interactionById: ReadonlyMap<string, InteractionState>,
 ): ViewportLayoutBatch {
-  const raw = inputs.map((input) =>
-    layoutDimension(input, {
-      ...baseContext,
-      interaction: interactionById.get(input.id) ?? 'normal',
-    }),
-  );
+  const normalContext: LayoutContext = {
+    ...baseContext,
+    interaction: 'normal',
+  };
+  const raw = new Array<LayoutResult>(inputs.length);
+  for (let index = 0; index < inputs.length; index += 1) {
+    const input = inputs[index];
+    const interaction = interactionById.get(input.id) ?? 'normal';
+    raw[index] = layoutDimension(
+      input,
+      interaction === 'normal'
+        ? normalContext
+        : { ...normalContext, interaction },
+    );
+  }
   const layouts = resolveLabelCollisions(raw);
   return { layouts, hitIndex: buildHitIndex(layouts) };
 }

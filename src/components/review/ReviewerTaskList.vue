@@ -105,6 +105,7 @@ const selectedTaskDraftConfirmPayload = computed(() => buildReviewConfirmSnapsho
   measurements: [...toolStore.measurements.value],
   xeokitDistanceMeasurements: [...toolStore.xeokitDistanceMeasurements.value],
   xeokitAngleMeasurements: [...toolStore.xeokitAngleMeasurements.value],
+  ...(reviewStore.getBoundDimensionConfirmPayload?.() ?? {}),
 }));
 const selectedTaskConfirmedSnapshotPayload = computed(() => (
   buildReviewConfirmSnapshotPayloadFromRecords(selectedTaskConfirmedRecords.value)

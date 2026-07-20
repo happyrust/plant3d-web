@@ -10,6 +10,11 @@ const reviewStoreMock = {
   reviewMode: { value: true },
   currentTask: { value: { id: 'task-1' } },
   sortedConfirmedRecords: { value: [] as Record<string, unknown>[] },
+  dimensionDocumentDirty: { value: false },
+  dimensionDocumentRecordCount: { value: 0 },
+  dimensionDocumentConflict: { value: null as Record<string, unknown> | null },
+  getBoundDimensionConfirmPayload: vi.fn(() => ({})),
+  resolveDimensionDocumentConflict: vi.fn(() => true),
   addConfirmedRecord: (...args: unknown[]) => addConfirmedRecordMock(...args),
   setReviewMode: vi.fn(),
 };
@@ -49,6 +54,13 @@ describe('ReviewConfirmation', () => {
     reviewStoreMock.reviewMode.value = true;
     reviewStoreMock.currentTask.value = { id: 'task-1' };
     reviewStoreMock.sortedConfirmedRecords.value = [];
+    reviewStoreMock.dimensionDocumentDirty.value = false;
+    reviewStoreMock.dimensionDocumentRecordCount.value = 0;
+    reviewStoreMock.dimensionDocumentConflict.value = null;
+    reviewStoreMock.getBoundDimensionConfirmPayload.mockReset();
+    reviewStoreMock.getBoundDimensionConfirmPayload.mockReturnValue({});
+    reviewStoreMock.resolveDimensionDocumentConflict.mockReset();
+    reviewStoreMock.resolveDimensionDocumentConflict.mockReturnValue(true);
     toolStoreMock.annotations.value = [];
     toolStoreMock.cloudAnnotations.value = [];
     toolStoreMock.rectAnnotations.value = [];
@@ -119,7 +131,7 @@ describe('ReviewConfirmation', () => {
       obbAnnotations: [],
       measurements: [],
     }));
-    expect(emitToastMock).toHaveBeenCalledWith({ message: '确认数据已保存', level: 'success' });
+    expect(emitToastMock).toHaveBeenCalledWith({ message: '新增证据已保存', level: 'success' });
   });
 
   it('xeokit 已完成测量会进入保存，草稿不会进入', async () => {
@@ -168,6 +180,38 @@ describe('ReviewConfirmation', () => {
       measurements: expect.arrayContaining([
         expect.objectContaining({ id: 'xeokit-draft' }),
       ]),
+    }));
+  });
+
+  it('尺寸文档 dirty 时展示并提交完整尺寸快照', async () => {
+    const dimensionDocument = {
+      schemaVersion: 1 as const,
+      documentId: 'dimension-document:task:task-1',
+      records: [],
+    };
+    reviewStoreMock.dimensionDocumentDirty.value = true;
+    reviewStoreMock.dimensionDocumentRecordCount.value = 2;
+    reviewStoreMock.getBoundDimensionConfirmPayload.mockReturnValue({
+      dimensionDocument,
+      dimensionDocumentVersion: 6,
+    });
+    addConfirmedRecordMock.mockResolvedValue('record-dimension');
+
+    await mountComponent();
+
+    expect(document.body.textContent).toContain('尺寸');
+    expect(document.body.textContent).toContain('2');
+    const confirmButton = Array.from(document.querySelectorAll('button'))
+      .find((button) => button.textContent?.includes('确认完成'));
+    expect(confirmButton).toBeTruthy();
+
+    confirmButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await Promise.resolve();
+    await nextTick();
+
+    expect(addConfirmedRecordMock).toHaveBeenCalledWith(expect.objectContaining({
+      dimensionDocument,
+      dimensionDocumentVersion: 6,
     }));
   });
 });

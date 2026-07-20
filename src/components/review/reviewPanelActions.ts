@@ -7,6 +7,7 @@ import type {
   XeokitElevationDeltaMeasurementRecord,
   XeokitElevationPointMeasurementRecord,
 } from '@/composables/useToolStore';
+import type { SnapshotDimensionDocument } from '@/dimension';
 import type { ReviewTask, WorkflowNode, WorkflowStep } from '@/types/auth';
 
 import {
@@ -79,6 +80,8 @@ export type ReviewConfirmSnapshotPayload = {
   rectAnnotations: unknown[];
   obbAnnotations: unknown[];
   measurements: ReviewSnapshotMeasurementPayload[];
+  dimensionDocument?: SnapshotDimensionDocument;
+  dimensionDocumentVersion?: number;
 };
 
 type ReviewConfirmSnapshotRecordLike = {
@@ -87,6 +90,9 @@ type ReviewConfirmSnapshotRecordLike = {
   rectAnnotations?: unknown[];
   obbAnnotations?: unknown[];
   measurements?: ReviewSnapshotMeasurementPayload[];
+  dimensionDocument?: SnapshotDimensionDocument;
+  dimensionDocumentVersion?: number;
+  confirmedAt?: number;
 };
 
 type ReviewConfirmSnapshotPayloadInput = ReviewConfirmSnapshotRecordLike & {
@@ -210,18 +216,32 @@ export function buildReviewConfirmSnapshotPayload(
     rectAnnotations: [...(payload.rectAnnotations ?? [])],
     obbAnnotations: [...(payload.obbAnnotations ?? [])],
     measurements: dedupeSnapshotCollection([...(payload.measurements ?? []), ...xeokitMeasurements]),
+    ...(payload.dimensionDocument
+      ? { dimensionDocument: payload.dimensionDocument }
+      : {}),
+    ...(payload.dimensionDocumentVersion !== undefined
+      ? { dimensionDocumentVersion: payload.dimensionDocumentVersion }
+      : {}),
   };
 }
 
 export function buildReviewConfirmSnapshotPayloadFromRecords(
   records: ReviewConfirmSnapshotRecordLike[]
 ): ReviewConfirmSnapshotPayload {
+  const latestDimensionRecord = records
+    .filter((record) => record.dimensionDocument !== undefined)
+    .sort((a, b) => (
+      (b.dimensionDocumentVersion ?? 0) - (a.dimensionDocumentVersion ?? 0)
+      || (b.confirmedAt ?? 0) - (a.confirmedAt ?? 0)
+    ))[0];
   return buildReviewConfirmSnapshotPayload({
     annotations: records.flatMap((record) => record.annotations ?? []),
     cloudAnnotations: records.flatMap((record) => record.cloudAnnotations ?? []),
     rectAnnotations: records.flatMap((record) => record.rectAnnotations ?? []),
     obbAnnotations: records.flatMap((record) => record.obbAnnotations ?? []),
     measurements: records.flatMap((record) => record.measurements ?? []),
+    dimensionDocument: latestDimensionRecord?.dimensionDocument,
+    dimensionDocumentVersion: latestDimensionRecord?.dimensionDocumentVersion,
   });
 }
 
@@ -282,6 +302,7 @@ export function buildReviewConfirmSnapshotKey(payload: ReviewConfirmSnapshotPayl
     rectAnnotations: normalizeSnapshotForComparison(payload.rectAnnotations),
     obbAnnotations: normalizeSnapshotForComparison(payload.obbAnnotations),
     measurements: normalizeSnapshotForComparison(payload.measurements),
+    dimensionDocument: normalizeSnapshotForComparison(payload.dimensionDocument),
   });
 }
 
@@ -341,6 +362,13 @@ export function buildUnsavedReviewConfirmPayload(
     rectAnnotations: diffSnapshotCollection(current.rectAnnotations, baseline.rectAnnotations),
     obbAnnotations: diffSnapshotCollection(current.obbAnnotations, baseline.obbAnnotations),
     measurements: diffSnapshotCollection(current.measurements, baseline.measurements),
+    ...(JSON.stringify(normalizeSnapshotForComparison(current.dimensionDocument))
+      !== JSON.stringify(normalizeSnapshotForComparison(baseline.dimensionDocument))
+      ? {
+        dimensionDocument: current.dimensionDocument,
+        dimensionDocumentVersion: current.dimensionDocumentVersion,
+      }
+      : {}),
   };
 }
 
@@ -366,6 +394,12 @@ export function buildReviewEvidenceSnapshotPayload(
     rectAnnotations: payload.rectAnnotations.map((item) => omitReviewState(item)),
     obbAnnotations: payload.obbAnnotations.map((item) => omitReviewState(item)),
     measurements: payload.measurements,
+    ...(payload.dimensionDocument
+      ? { dimensionDocument: payload.dimensionDocument }
+      : {}),
+    ...(payload.dimensionDocumentVersion !== undefined
+      ? { dimensionDocumentVersion: payload.dimensionDocumentVersion }
+      : {}),
   };
 }
 
@@ -399,7 +433,8 @@ export function hasReviewConfirmPayloadData(payload: ReviewConfirmSnapshotPayloa
     || payload.cloudAnnotations.length > 0
     || payload.rectAnnotations.length > 0
     || payload.obbAnnotations.length > 0
-    || payload.measurements.length > 0;
+    || payload.measurements.length > 0
+    || payload.dimensionDocument !== undefined;
 }
 
 export function hasSubmitBlockingReviewConfirmPayloadData(
@@ -408,7 +443,8 @@ export function hasSubmitBlockingReviewConfirmPayloadData(
   return payload.annotations.length > 0
     || payload.cloudAnnotations.length > 0
     || payload.rectAnnotations.length > 0
-    || payload.measurements.length > 0;
+    || payload.measurements.length > 0
+    || payload.dimensionDocument !== undefined;
 }
 
 function resolveReviewAnnotationCheckMessage(

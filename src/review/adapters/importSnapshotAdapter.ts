@@ -6,7 +6,7 @@ import {
 import {
   DimensionSnapshotValidationError,
   validateDimensionDocumentSnapshot,
-} from '@/dimension/adapters/reviewSnapshotAdapter';
+} from '@/dimension';
 
 export type BuildSnapshotFromImportPayloadOptions = {
   taskId?: string;

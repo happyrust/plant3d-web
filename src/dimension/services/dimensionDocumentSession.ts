@@ -1,6 +1,9 @@
 import { reduceDimensionDocument } from '../domain/reducer';
 
+import { replayPendingCommands } from './replayPendingCommands';
+
 import type { DimensionCommandJournal } from './commandJournal';
+import type { ReplayPendingCommandsResult } from './replayPendingCommands';
 import type {
   DimensionActor,
   DimensionCommand,
@@ -66,6 +69,10 @@ export class DimensionDocumentSession {
 
   get canRedo(): boolean {
     return this.redoIntents.length > 0;
+  }
+
+  get pendingCommands(): readonly DimensionCommand[] {
+    return this.journal.load(this.currentState.documentId)?.commands ?? [];
   }
 
   subscribe(listener: DimensionDocumentListener): () => void {
@@ -150,13 +157,59 @@ export class DimensionDocumentSession {
     return result;
   }
 
-  acceptSavedState(state: DimensionDocumentState): void {
-    if (state.documentId !== this.currentState.documentId) {
-      throw new Error(
-        `Cannot hydrate dimension document "${this.currentState.documentId}" `
-        + `from "${state.documentId}"`,
-      );
+  /**
+   * Replace the current state after a batch anchor re-resolution (ADR 0005).
+   * Unlike `acceptSavedState`, this keeps the command journal, undo/redo
+   * stacks and dirty flag: an anchor refresh is a recomputable system event,
+   * not a user edit and not a backend save.
+   */
+  acceptRefreshedState(state: DimensionDocumentState): void {
+    this.assertSameDocument(state, 'refresh');
+    this.currentState = state;
+    this.notify();
+  }
+
+  previewPendingCommands(
+    latest: DimensionDocumentState,
+  ): ReplayPendingCommandsResult {
+    this.assertSameDocument(latest, 'replay');
+    return replayPendingCommands(latest, this.pendingCommands);
+  }
+
+  acceptReplayedState(
+    preview: ReplayPendingCommandsResult,
+    options: Readonly<{ preserveHistory?: boolean }> = {},
+  ): void {
+    this.assertSameDocument(preview.state, 'replay');
+    const commands = [...preview.applied];
+    if (commands.length > 0) {
+      this.journal.replace({
+        version: 1,
+        documentId: preview.state.documentId,
+        baseVersion: preview.state.baseVersion,
+        commands,
+        updatedAt: Math.max(...commands.map(command => command.at)),
+      });
+    } else {
+      this.journal.clear(preview.state.documentId);
     }
+
+    this.currentState = preview.state;
+    this.pendingCommandIds.clear();
+    commands.forEach(command => this.pendingCommandIds.add(command.commandId));
+    if (!options.preserveHistory) {
+      this.undoIntents = [];
+      this.redoIntents = [];
+    }
+    this.dirtyValue = commands.length > 0;
+    this.notify();
+  }
+
+  acceptPersistedState(
+    state: DimensionDocumentState,
+    options: Readonly<{ preserveHistory?: boolean }> = {},
+  ): void {
+    this.assertSameDocument(state, 'hydrate');
     const previousState = this.currentState;
     this.currentState = state;
     try {
@@ -165,11 +218,32 @@ export class DimensionDocumentSession {
       this.currentState = previousState;
       throw error;
     }
-    this.undoIntents = [];
-    this.redoIntents = [];
+    if (!options.preserveHistory) {
+      this.undoIntents = [];
+      this.redoIntents = [];
+    }
     this.pendingCommandIds.clear();
     this.dirtyValue = false;
     this.notify();
+  }
+
+  acceptSavedState(state: DimensionDocumentState): void {
+    this.acceptPersistedState(state);
+  }
+
+  discardPendingCommands(latest: DimensionDocumentState): void {
+    this.acceptPersistedState(latest);
+  }
+
+  private assertSameDocument(
+    state: DimensionDocumentState,
+    operation: 'hydrate' | 'refresh' | 'replay',
+  ): void {
+    if (state.documentId === this.currentState.documentId) return;
+    throw new Error(
+      `Cannot ${operation} dimension document "${this.currentState.documentId}" `
+      + `from "${state.documentId}"`,
+    );
   }
 
   private notify(): void {

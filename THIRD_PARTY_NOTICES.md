@@ -2,7 +2,9 @@
 
 ## SolveSpace Unicode LFF vector font
 
-- Asset: `public/fonts/unicode.lff.gz`
+- Source asset: `public/fonts/unicode.lff.gz`
+- Browser transport copy: `public/fonts/unicode.lff.bin` (identical compressed bytes;
+  the neutral extension prevents static servers from applying HTTP gzip decoding)
 - Source: SolveSpace `res/fonts/unicode.lff.gz`
 - Revision: `9aeb715efd8c274851af0fdad5b275dde1198bf5`
 - Source URL: <https://github.com/solvespace/solvespace/blob/9aeb715efd8c274851af0fdad5b275dde1198bf5/res/fonts/unicode.lff.gz>

@@ -27,7 +27,9 @@ export type ReviewDimensionApi = Readonly<{
   buildBaseRecord(): Promise<
     Omit<
       ConfirmedRecordData,
-      'dimensionDocument' | 'dimensionDocumentBaseVersion'
+      | 'dimensionDocument'
+      | 'dimensionDocumentBaseVersion'
+      | 'dimensionDocumentVersion'
     >
   >;
   saveRecord(
@@ -145,6 +147,24 @@ function conflictRecordFromError(
   return undefined;
 }
 
+export function dimensionConflictStateFromError(
+  error: unknown,
+  context: Readonly<{ taskId?: string; formId?: string }>,
+): DimensionDocumentState | null {
+  if (statusFromError(error) !== 409) return null;
+  const latestRecord = conflictRecordFromError(error);
+  if (!latestRecord) return null;
+  try {
+    return stateFromRecord(latestRecord, {
+      taskId: context.taskId,
+      formId: context.formId,
+      requireVersion: true,
+    });
+  } catch {
+    return null;
+  }
+}
+
 export class ReviewDimensionRepository implements DimensionDocumentRepository {
   constructor(private readonly api: ReviewDimensionApi) {}
 
@@ -204,34 +224,22 @@ export class ReviewDimensionRepository implements DimensionDocumentRepository {
 
       const status = statusFromError(error);
       if (status === 409) {
-        const latestRecord = conflictRecordFromError(error);
-        if (!latestRecord) {
+        const latest = dimensionConflictStateFromError(error, {
+          taskId: state.taskId,
+          formId: state.formId,
+        });
+        if (!latest) {
           return {
             ok: false,
             reason: 'invalid',
             message: 'conflict response did not include the latest dimension document',
           };
         }
-        try {
-          return {
-            ok: false,
-            reason: 'conflict',
-            latest: stateFromRecord(latestRecord, {
-              taskId: state.taskId,
-              formId: state.formId,
-              requireVersion: true,
-            }),
-          };
-        } catch (validationError) {
-          return {
-            ok: false,
-            reason: 'invalid',
-            message: messageFromError(
-              validationError,
-              'conflict response included an invalid dimension document',
-            ),
-          };
-        }
+        return {
+          ok: false,
+          reason: 'conflict',
+          latest,
+        };
       }
       if (status === 403) {
         return {

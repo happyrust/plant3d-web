@@ -15,6 +15,7 @@ import {
   getDefaultReturnTargetNode,
   getSubmitActionLabel,
   getWorkflowSubmitBridgeAction,
+  hasReviewConfirmPayloadData,
   hasSubmitBlockingReviewConfirmPayloadData,
   mapWorkflowHistoryToTaskDetailItems,
   runReviewSubmitPreflight,
@@ -298,6 +299,65 @@ describe('reviewPanelActions', () => {
     expect(unsaved.rectAnnotations).toEqual([]);
     expect(unsaved.obbAnnotations).toEqual([]);
     expect(unsaved.measurements).toEqual([]);
+  });
+
+  it('尺寸文档内容变化时提交完整文档和当前基线版本', () => {
+    const baselineDocument = {
+      schemaVersion: 1 as const,
+      documentId: 'dimension-document-1',
+      records: [],
+    };
+    const currentDocument = {
+      ...baselineDocument,
+      records: [{
+        id: 'dimension-1',
+        kind: 'linear' as const,
+        a: { snapshot: [0, 0, 0] as const, accuracy: 'exact' as const },
+        b: { snapshot: [1, 0, 0] as const, accuracy: 'exact' as const },
+        placement: { offsetM: 0.1, labelT: 0.5, side: 1 as const },
+        authorId: 'owner',
+        authorRole: 'designer',
+        createdAt: 1,
+        updatedAt: 1,
+        validity: 'valid' as const,
+      }],
+    };
+    const baseline = buildReviewConfirmSnapshotPayload({
+      dimensionDocument: baselineDocument,
+      dimensionDocumentVersion: 4,
+    });
+    const current = buildReviewConfirmSnapshotPayload({
+      dimensionDocument: currentDocument,
+      dimensionDocumentVersion: 4,
+    });
+
+    const unsaved = buildUnsavedReviewConfirmPayload(current, baseline);
+
+    expect(unsaved.dimensionDocument).toEqual(currentDocument);
+    expect(unsaved.dimensionDocumentVersion).toBe(4);
+    expect(hasReviewConfirmPayloadData(unsaved)).toBe(true);
+  });
+
+  it('尺寸文档内容未变化时不因版本字段产生未保存差异', () => {
+    const document = {
+      schemaVersion: 1 as const,
+      documentId: 'dimension-document-1',
+      records: [],
+    };
+    const baseline = buildReviewConfirmSnapshotPayload({
+      dimensionDocument: document,
+      dimensionDocumentVersion: 3,
+    });
+    const current = buildReviewConfirmSnapshotPayload({
+      dimensionDocument: document,
+      dimensionDocumentVersion: 3,
+    });
+
+    const unsaved = buildUnsavedReviewConfirmPayload(current, baseline);
+
+    expect(unsaved.dimensionDocument).toBeUndefined();
+    expect(unsaved.dimensionDocumentVersion).toBeUndefined();
+    expect(hasReviewConfirmPayloadData(unsaved)).toBe(false);
   });
 
   it('confirmCurrentDataSafely 应等待保存成功后再清理工具数据', async () => {

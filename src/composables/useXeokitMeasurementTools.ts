@@ -26,6 +26,7 @@ import {
   sourceNeedsHoverData,
   type MeasurementPickCandidate,
   type MeasurementPickSourceId,
+  type MeasurementPickSourceSettings,
   type ProjectedMeasurementPickCandidate,
 } from './useMeasurementPickSources';
 import { queryPtsetWithRuntimeFallback } from './usePtsetRuntimeLookup';
@@ -92,6 +93,17 @@ type PickHit = {
   pixelDistance?: number;
   sourcePriority?: number;
 };
+export type MeasurementViewerSnapCandidate = Readonly<{
+  id: string;
+  source: MeasurementPickSourceId;
+  sceneWorld: Vec3;
+  refno?: string;
+  label?: string;
+  distancePx: number;
+  direction?: Vec3;
+  circle?: Readonly<{ center: Vec3; rim: Vec3; normal: Vec3 }>;
+  arc?: Readonly<{ center: Vec3; rim: Vec3; normal: Vec3 }>;
+}>;
 type PtsetPickResult = {
   hit: PickHit | null;
   preview: PickHit | null;
@@ -99,6 +111,7 @@ type PtsetPickResult = {
   source: MeasurementPickSourceId | null;
   reason: string | null;
 };
+type PtsetLoadState = 'debouncing' | 'loading' | 'ready' | 'empty' | 'error';
 
 const XEOKIT_PREFIX = 'xmeas_';
 const XEOKIT_DISTANCE_DRAFT_ID = `${XEOKIT_PREFIX}draft_distance`;
@@ -128,6 +141,17 @@ function worldToAnnotationLocal(world: Vec3, dtxLayerRef: Ref<DTXLayer | null>):
   if (Math.abs(inverse.determinant()) <= 1e-12) return v;
 
   return v.applyMatrix4(inverse.invert());
+}
+
+function sceneWorldToDesignMeters(world: Vector3, dtxLayerRef: Ref<DTXLayer | null>): Vector3 {
+  const globalModelMatrix = dtxLayerRef.value?.getGlobalModelMatrix?.();
+  if (!globalModelMatrix) return world.clone();
+
+  const inverse = globalModelMatrix.clone();
+  if (Math.abs(inverse.determinant()) <= 1e-12) return world.clone();
+
+  const raw = world.clone().applyMatrix4(inverse.invert());
+  return raw.multiply(new Vector3().setFromMatrixScale(globalModelMatrix));
 }
 
 function getCanvasPos(canvas: HTMLCanvasElement, e: PointerEvent): Vector2 {
@@ -201,6 +225,7 @@ export function useXeokitMeasurementTools(options: {
   const requestedPtsetRefnos = new Set<string>();
   const ptsetResponseByRefno = new Map<string, PtsetResponse>();
   const ptsetErrorByRefno = new Map<string, string>();
+  const ptsetLoadStateByRefno = new Map<string, PtsetLoadState>();
   const requestedPrimitiveKeypointRefnos = new Set<string>();
   const primitiveKeypointsByRefno = new Map<string, PrimitiveKeyPointCandidate[]>();
   const primitiveKeypointErrorByRefno = new Map<string, string>();
@@ -323,6 +348,9 @@ export function useXeokitMeasurementTools(options: {
       clearTimeout(hoverFetchTimer);
       hoverFetchTimer = null;
     }
+    if (pendingHoverRefno && ptsetLoadStateByRefno.get(pendingHoverRefno) === 'debouncing') {
+      ptsetLoadStateByRefno.delete(pendingHoverRefno);
+    }
     pendingHoverRefno = null;
     currentHoverRefno = null;
     pickPointMessage.value = null;
@@ -335,19 +363,33 @@ export function useXeokitMeasurementTools(options: {
   function scheduleHoverPtsetFetch(refno: string | null): void {
     if (!sourceNeedsHoverData(measurementStyle.state.measurementPickSources.ptset) || !refno) return;
     if (requestedPtsetRefnos.has(refno) || ptsetSnap.hasCandidates(refno)) return;
+    if (
+      pendingHoverRefno
+      && pendingHoverRefno !== refno
+      && ptsetLoadStateByRefno.get(pendingHoverRefno) === 'debouncing'
+    ) {
+      ptsetLoadStateByRefno.delete(pendingHoverRefno);
+    }
     pendingHoverRefno = refno;
+    ptsetLoadStateByRefno.set(refno, 'debouncing');
     if (hoverFetchTimer !== null) clearTimeout(hoverFetchTimer);
     hoverFetchTimer = setTimeout(() => {
       hoverFetchTimer = null;
       const r = pendingHoverRefno;
       pendingHoverRefno = null;
-      if (!r || requestedPtsetRefnos.has(r) || ptsetSnap.hasCandidates(r)) return;
+      if (!r || requestedPtsetRefnos.has(r)) return;
+      if (ptsetSnap.hasCandidates(r)) {
+        ptsetLoadStateByRefno.set(r, 'ready');
+        return;
+      }
       requestedPtsetRefnos.add(r);
+      ptsetLoadStateByRefno.set(r, 'loading');
       let dbno: number;
       try {
         dbno = getDbnumByRefno(r);
       } catch (error) {
         ptsetErrorByRefno.set(r, error instanceof Error ? error.message : String(error));
+        ptsetLoadStateByRefno.set(r, 'error');
         return;
       }
       queryPtsetForMeasurement(dbno, r)
@@ -356,6 +398,7 @@ export function useXeokitMeasurementTools(options: {
             ptsetResponseByRefno.set(r, resp);
             ptsetErrorByRefno.delete(r);
             ptsetSnap.upsertCandidates(r, resp);
+            ptsetLoadStateByRefno.set(r, 'ready');
             if (currentHoverRefno === r || lockedMeasurementRefnos.has(r)) {
               showHoverPtset(currentHoverRefno);
             }
@@ -363,15 +406,25 @@ export function useXeokitMeasurementTools(options: {
             return;
           }
           ptsetErrorByRefno.set(r, resp?.error_message || '当前构件没有可用 ptset');
+          ptsetLoadStateByRefno.set(r, 'empty');
+          requestRender?.();
         })
         .catch((error) => {
           ptsetErrorByRefno.set(r, error instanceof Error ? error.message : String(error));
+          ptsetLoadStateByRefno.set(r, 'error');
+          requestRender?.();
         });
     }, 80);
   }
 
   async function queryPtsetForMeasurement(dbno: number, refno: string): Promise<PtsetResponse> {
     return await queryPtsetWithRuntimeFallback(parquetLoader, dbno, refno);
+  }
+
+  function isPtsetPickPending(refno: string | null): boolean {
+    if (!refno || !measurementStyle.state.measurementPickSources.ptset.snap) return false;
+    const state = ptsetLoadStateByRefno.get(refno);
+    return state === 'debouncing' || state === 'loading';
   }
 
   function refnoFromMeasurementPoint(point: MeasurementPoint | null | undefined): string | null {
@@ -400,7 +453,7 @@ export function useXeokitMeasurementTools(options: {
     renderMeasurementPtsets(currentHoverRefno);
   }
 
-  function updateTemporaryXray(refnos: Array<string | null | undefined>): void {
+  function updateTemporaryXray(refnos: (string | null | undefined)[]): void {
     const compat = compatViewerRef.value;
     if (!compat?.scene) return;
 
@@ -468,14 +521,14 @@ export function useXeokitMeasurementTools(options: {
 
   function ptsetMissReason(refno: string | null): string {
     if (!measurementStyle.state.measurementPickSources.ptset.snap) {
-      return 'PTSET 捕捉已关闭';
+      return 'P-Point 捕捉已关闭';
     }
-    if (!refno) return '当前未命中模型实例，无法确定 PTSET 来源';
+    if (!refno) return '当前未命中模型实例，无法确定 P-Point 来源';
     const error = ptsetErrorByRefno.get(refno);
     if (error) return error;
     if (!requestedPtsetRefnos.has(refno)) return '正在准备读取 ptsets.parquet，请稍候再靠近关键点';
-    if (!ptsetSnap.hasCandidates(refno)) return '当前模型包未提供该构件的 PTSET，无法登记测量点';
-    return '请将光标靠近构件 PTSET 关键点后再点击';
+    if (!ptsetSnap.hasCandidates(refno)) return '当前模型包未提供该构件的 P-Point，无法登记测量点';
+    return '请将光标靠近构件 P-Point 后再点击';
   }
 
   function primitiveKeypointMissReason(refno: string | null): string {
@@ -525,17 +578,17 @@ export function useXeokitMeasurementTools(options: {
     return `当前未捕捉到已启用点源：${sourceLabels(sources)}`;
   }
 
-  function buildPtsetCandidates(base: PickHit | null, refno: string | null): MeasurementPickCandidate[] {
-    if (!base || !refno) return [];
+  function buildPtsetCandidates(): MeasurementPickCandidate[] {
     const setting = measurementStyle.state.measurementPickSources.ptset;
     if (!sourceNeedsHoverData(setting)) return [];
-    return ptsetSnap.getCandidates([refno]).map((candidate) => ({
+    // ponytail: scan only the hover-loaded cache; add a screen-space index if profiling shows this grows large.
+    return ptsetSnap.getCandidates().map((candidate) => ({
       id: `ptset:${candidate.refno}#${candidate.number}`,
       source: 'ptset',
       entityId: `ptset:${candidate.refno}#${candidate.number}`,
-      objectId: base.objectId,
+      objectId: `o:${candidate.refno}:ptset`,
       worldPos: new Vector3(candidate.worldPos[0], candidate.worldPos[1], candidate.worldPos[2]),
-      label: `PTSET #${candidate.number}`,
+      label: `P-Point #${candidate.number}`,
     }));
   }
 
@@ -575,24 +628,58 @@ export function useXeokitMeasurementTools(options: {
     return candidate ? [candidate] : [];
   }
 
-  function buildPrimitiveKeyPointCandidates(base: PickHit | null, refno: string | null): MeasurementPickCandidate[] {
-    if (!base || !refno) return [];
-    const setting = measurementStyle.state.measurementPickSources.primitive_key_point;
-    if (!sourceNeedsHoverData(setting)) return [];
-
+  function primitiveKeyPointCandidates(
+    refno: string,
+    objectId: string,
+  ): MeasurementPickCandidate[] {
     const globalModelMatrix = dtxLayerRef.value?.getGlobalModelMatrix?.() ?? null;
     return (primitiveKeypointsByRefno.get(refno) ?? []).map((candidate) => {
       const worldPos = new Vector3(candidate.world[0], candidate.world[1], candidate.world[2]);
       if (globalModelMatrix) worldPos.applyMatrix4(globalModelMatrix);
+      const direction = candidate.dir
+        ? new Vector3(...candidate.dir)
+        : null;
+      if (direction && globalModelMatrix) {
+        direction.transformDirection(globalModelMatrix);
+      }
+      const circularGeometry = (
+        geometry: PrimitiveKeyPointCandidate['circle'],
+      ) => {
+        if (!geometry) return null;
+        const center = new Vector3(...geometry.center);
+        const rim = new Vector3(...geometry.rim);
+        const normal = new Vector3(...geometry.normal);
+        if (globalModelMatrix) {
+          center.applyMatrix4(globalModelMatrix);
+          rim.applyMatrix4(globalModelMatrix);
+          normal.transformDirection(globalModelMatrix);
+        }
+        return { center, rim, normal };
+      };
+      const circle = circularGeometry(candidate.circle);
+      const arc = circularGeometry(candidate.arc);
       return {
         id: candidate.id,
         source: 'primitive_key_point' as const,
         entityId: candidate.id,
-        objectId: base.objectId,
+        objectId,
         worldPos,
         label: `${MEASUREMENT_PICK_SOURCE_LABELS.primitive_key_point} #${candidate.keypointIndex}`,
+        ...(direction ? { direction } : {}),
+        ...(circle ? { circle } : {}),
+        ...(arc ? { arc } : {}),
       };
     });
+  }
+
+  function buildPrimitiveKeyPointCandidates(
+    base: PickHit | null,
+    refno: string | null,
+  ): MeasurementPickCandidate[] {
+    if (!base || !refno) return [];
+    const setting = measurementStyle.state.measurementPickSources.primitive_key_point;
+    if (!sourceNeedsHoverData(setting)) return [];
+    return primitiveKeyPointCandidates(refno, base.objectId);
   }
 
   function candidateToPickHit(candidate: MeasurementPickCandidate | ProjectedMeasurementPickCandidate): PickHit {
@@ -617,6 +704,7 @@ export function useXeokitMeasurementTools(options: {
     return {
       entityId: hit.entityId,
       worldPos: vec3ToTuple(hit.worldPos),
+      designWorldPos: vec3ToTuple(sceneWorldToDesignMeters(hit.worldPos, dtxLayerRef)),
       sourceInfo: {
         source: hit.source,
         candidateId: hit.candidateId,
@@ -624,6 +712,10 @@ export function useXeokitMeasurementTools(options: {
         label: hit.label ?? null,
       },
     };
+  }
+
+  function hasApproximatePoint(...points: MeasurementPoint[]): boolean {
+    return points.some((point) => point.sourceInfo?.source === 'mesh_pick_point');
   }
 
   const currentMeasurement = computed(() => {
@@ -682,13 +774,13 @@ export function useXeokitMeasurementTools(options: {
 
     if (mode === 'xeokit_measure_angle') {
       const draft = store.currentXeokitAngleDraft.value;
-      if (!draft) return `角度测量：捕捉起点（${sourceText}）`;
-      if (draft.stage === 'finding_corner') return `角度测量：捕捉拐点（${sourceText}）；点空白取消`;
-      return `角度测量：捕捉终点（${sourceText}）；点空白取消`;
+      if (!draft) return `角度测量：捕捉角度顶点（${sourceText}）`;
+      if (draft.stage === 'finding_first_arm') return `角度测量：捕捉第一边点（${sourceText}）；点空白取消`;
+      return `角度测量：捕捉第二边点（${sourceText}）；点空白取消`;
     }
 
     if (mode === 'xeokit_measure_elevation_point') {
-      return `点标高：捕捉测量点（${sourceText}），单击完成；点空白取消`;
+      return `位置/标高：捕捉测量点（${sourceText}），单击完成；点空白取消`;
     }
 
     return store.currentXeokitElevationDeltaDraft.value
@@ -812,13 +904,7 @@ export function useXeokitMeasurementTools(options: {
     }
     ensurePrimitiveKeypointsForRefno(surfaceRefno);
 
-    if (!base) {
-      showHoverPickCandidates([]);
-      pickPointMessage.value = '当前未命中模型实例，无法捕捉测量点';
-      return { hit: null, preview: null, surfaceRefno: null, source: null, reason: pickPointMessage.value };
-    }
-
-    if (base.entityId.startsWith('annotation:')) {
+    if (base?.entityId.startsWith('annotation:')) {
       showHoverPickCandidates([]);
       pickPointMessage.value = null;
       return {
@@ -840,7 +926,7 @@ export function useXeokitMeasurementTools(options: {
     const cursor = getCanvasPos(canvas, e);
     const rect = canvas.getBoundingClientRect();
     const candidates: MeasurementPickCandidate[] = [
-      ...buildPtsetCandidates(base, surfaceRefno),
+      ...buildPtsetCandidates(),
       ...buildMeshPickCandidate(base),
       ...buildPositionCandidates(base, surfaceRefno),
       ...buildPrimitiveKeyPointCandidates(base, surfaceRefno),
@@ -854,6 +940,18 @@ export function useXeokitMeasurementTools(options: {
     });
     showHoverPickCandidates(resolution.visibleCandidates);
 
+    const ptsetPending = isPtsetPickPending(surfaceRefno);
+    if (ptsetPending) {
+      pickPointMessage.value = 'P-Point 正在加载，加载完成后再确认测量点';
+      return {
+        hit: null,
+        preview: base,
+        surfaceRefno,
+        source: null,
+        reason: pickPointMessage.value,
+      };
+    }
+
     if (resolution.hit) {
       pickPointMessage.value = null;
       return {
@@ -863,6 +961,11 @@ export function useXeokitMeasurementTools(options: {
         source: resolution.hit.source,
         reason: null,
       };
+    }
+
+    if (!base) {
+      pickPointMessage.value = '当前未命中模型实例，无法捕捉测量点';
+      return { hit: null, preview: null, surfaceRefno: null, source: null, reason: pickPointMessage.value };
     }
 
     const preview = resolution.visibleCandidates.find((candidate) => (
@@ -876,6 +979,141 @@ export function useXeokitMeasurementTools(options: {
       source: null,
       reason: pickPointMessage.value,
     };
+  }
+
+  function toDimensionViewerSnapCandidate(
+    candidate: MeasurementPickCandidate,
+    distancePx: number,
+  ): MeasurementViewerSnapCandidate {
+    const refno = refnoFromObjectId(candidate.objectId);
+    return {
+      id: candidate.id,
+      source: candidate.source,
+      sceneWorld: vec3ToTuple(candidate.worldPos),
+      ...(refno ? { refno } : {}),
+      ...(candidate.label ? { label: candidate.label } : {}),
+      distancePx,
+      ...(candidate.direction
+        ? { direction: vec3ToTuple(candidate.direction) }
+        : {}),
+      ...(candidate.circle
+        ? {
+          circle: {
+            center: vec3ToTuple(candidate.circle.center),
+            rim: vec3ToTuple(candidate.circle.rim),
+            normal: vec3ToTuple(candidate.circle.normal),
+          },
+        }
+        : {}),
+      ...(candidate.arc
+        ? {
+          arc: {
+            center: vec3ToTuple(candidate.arc.center),
+            rim: vec3ToTuple(candidate.arc.rim),
+            normal: vec3ToTuple(candidate.arc.normal),
+          },
+        }
+        : {}),
+    };
+  }
+
+  async function loadDimensionAnchorCandidates(
+    refno: string,
+  ): Promise<readonly MeasurementViewerSnapCandidate[]> {
+    const normalizedRefno = String(refno || '').trim().replace(/\//g, '_');
+    if (!normalizedRefno) return [];
+    const dbno = getDbnumByRefno(normalizedRefno);
+    const response = ptsetResponseByRefno.get(normalizedRefno)
+      ?? await queryPtsetForMeasurement(dbno, normalizedRefno);
+    if (response.success && response.ptset.length > 0) {
+      ptsetResponseByRefno.set(normalizedRefno, response);
+      ptsetSnap.upsertCandidates(normalizedRefno, response);
+    }
+    if (!primitiveKeypointsByRefno.has(normalizedRefno)) {
+      try {
+        primitiveKeypointsByRefno.set(
+          normalizedRefno,
+          await parquetLoader.queryPrimitiveKeypointsByRefnoFromParquet(
+            dbno,
+            normalizedRefno,
+          ),
+        );
+      } catch {
+        primitiveKeypointsByRefno.set(normalizedRefno, []);
+      }
+    }
+    const objectId = `o:${normalizedRefno}:0`;
+    const ptsetCandidates: MeasurementPickCandidate[] = ptsetSnap
+      .getCandidates([normalizedRefno])
+      .map(candidate => ({
+        id: `ptset:${candidate.refno}#${candidate.number}`,
+        source: 'ptset',
+        entityId: `ptset:${candidate.refno}#${candidate.number}`,
+        objectId,
+        worldPos: new Vector3(...candidate.worldPos),
+        label: `P-Point #${candidate.number}`,
+      }));
+    const transform = getDtxRefnoTransform(dbno, normalizedRefno);
+    const position = buildPositionPickCandidate({
+      refno: normalizedRefno,
+      objectId,
+      transform,
+      globalModelMatrix: dtxLayerRef.value?.getGlobalModelMatrix?.() ?? null,
+    });
+    return [
+      ...ptsetCandidates,
+      ...(position ? [position] : []),
+      ...primitiveKeyPointCandidates(normalizedRefno, objectId),
+    ].map(candidate => toDimensionViewerSnapCandidate(candidate, 0));
+  }
+
+  function queryDimensionSnapCandidates(
+    canvas: HTMLCanvasElement,
+    screen: Readonly<{ x: number; y: number }>,
+  ): readonly MeasurementViewerSnapCandidate[] {
+    const selection = selectionRef.value;
+    const picked = selection?.pickPoint({ x: screen.x, y: screen.y }) ?? null;
+    const base: PickHit | null = picked
+      ? {
+        entityId: picked.objectId,
+        objectId: picked.objectId,
+        worldPos: picked.point.clone(),
+        source: 'mesh_pick_point',
+      }
+      : null;
+    const surfaceRefno = base ? refnoFromObjectId(base.objectId) : null;
+    if (surfaceRefno) {
+      currentHoverRefno = surfaceRefno;
+      scheduleHoverPtsetFetch(surfaceRefno);
+      ensurePrimitiveKeypointsForRefno(surfaceRefno);
+    }
+    const camera = dtxViewerRef.value?.camera;
+    if (!camera) return [];
+    const candidates: MeasurementPickCandidate[] = [
+      ...buildPtsetCandidates(),
+      ...buildMeshPickCandidate(base),
+      ...buildPositionCandidates(base, surfaceRefno),
+      ...buildPrimitiveKeyPointCandidates(base, surfaceRefno),
+    ];
+    const settings = Object.fromEntries(
+      MEASUREMENT_PICK_SOURCE_IDS.map(id => [
+        id,
+        {
+          ...measurementStyle.state.measurementPickSources[id],
+          show: true,
+        },
+      ]),
+    ) as MeasurementPickSourceSettings;
+    const rect = canvas.getBoundingClientRect();
+    const resolution = resolveMeasurementPickCandidates({
+      cursor: screen,
+      camera,
+      rect: { width: rect.width, height: rect.height },
+      settings,
+      candidates,
+    });
+    return resolution.visibleCandidates.map(candidate =>
+      toDimensionViewerSnapCandidate(candidate, candidate.pixelDistance));
   }
 
   function ensureOverlayElements(): void {
@@ -990,11 +1228,10 @@ export function useXeokitMeasurementTools(options: {
     if (store.toolMode.value === 'xeokit_measure_elevation_delta') {
       return store.currentXeokitElevationDeltaDraft.value ? 'target' : 'origin';
     }
-    if (store.toolMode.value === 'xeokit_measure_angle' && store.currentXeokitAngleDraft.value?.stage === 'finding_target') {
-      return 'target';
-    }
-    if (store.toolMode.value === 'xeokit_measure_angle' && store.currentXeokitAngleDraft.value?.stage === 'finding_corner') {
-      return 'corner';
+    if (store.toolMode.value === 'xeokit_measure_angle') {
+      const stage = store.currentXeokitAngleDraft.value?.stage;
+      if (!stage) return 'corner';
+      return stage === 'finding_first_arm' ? 'origin' : 'target';
     }
     if (store.currentXeokitDistanceDraft.value) {
       return 'target';
@@ -1026,15 +1263,11 @@ export function useXeokitMeasurementTools(options: {
     }
 
     const source = hit?.source ?? null;
-    const details: string[] = [];
-    if (source) details.push(MEASUREMENT_PICK_SOURCE_LABELS[source]);
-    if (typeof hit?.sourcePriority === 'number') {
-      details.push(`优先级 ${hit.sourcePriority}`);
-    }
-    if (typeof hit?.pixelDistance === 'number') {
-      details.push(`${hit.pixelDistance.toFixed(1)}px`);
-    }
-    const subtitle = details.join(' · ');
+    const sourceLabel = source ? MEASUREMENT_PICK_SOURCE_LABELS[source] : '';
+    const pickedLabel = hit?.label || sourceLabel;
+    const subtitle = source === 'mesh_pick_point'
+      ? `${pickedLabel}（近似）`
+      : pickedLabel;
     if (mode === 'xeokit_measure_elevation_point') {
       return { title: '锁定标高点', subtitle };
     }
@@ -1161,7 +1394,7 @@ export function useXeokitMeasurementTools(options: {
     const visible = isDraft || record.visible === undefined ? true : record.visible;
     const common = {
       approximate: isDraft || record.approximate,
-      labelPrefix: isDraft ? '预览' : '',
+      labelPrefix: '',
       visible,
     };
 
@@ -1170,6 +1403,8 @@ export function useXeokitMeasurementTools(options: {
         origin: worldToAnnotationLocal(record.origin.worldPos, dtxLayerRef),
         target: worldToAnnotationLocal(record.target.worldPos, dtxLayerRef),
         displayTransform,
+        displayUnit,
+        precision,
         ...common,
         visible,
         originVisible: measurementStyle.state.distanceShowMarkers,
@@ -1205,6 +1440,7 @@ export function useXeokitMeasurementTools(options: {
       const params: XeokitElevationPointMeasurementParams = {
         point: worldToAnnotationLocal(record.point.worldPos, dtxLayerRef),
         labelLines: buildElevationPointLabelLines({
+          worldPosition: record.point.designWorldPos,
           absoluteElevation: record.absoluteElevation,
           relativeElevation: record.relativeElevation,
           unit: displayUnit,
@@ -1288,27 +1524,27 @@ export function useXeokitMeasurementTools(options: {
       visible,
       originVisible: measurementStyle.state.angleShowMarkers,
       cornerVisible: measurementStyle.state.angleShowMarkers && (isDraft && isAngleDraft(record)
-        ? record.stage === 'finding_corner'
+        ? record.stage === 'finding_first_arm'
           ? visible
           : visible
         : visible),
       targetVisible: measurementStyle.state.angleShowMarkers && (isDraft && isAngleDraft(record)
-        ? record.stage === 'finding_target'
+        ? record.stage === 'finding_second_arm'
           ? visible
           : false
         : visible),
       originWireVisible: isDraft && isAngleDraft(record)
-        ? record.stage === 'finding_target'
+        ? record.stage === 'finding_second_arm'
           ? visible
           : true
         : visible,
       targetWireVisible: isDraft && isAngleDraft(record)
-        ? record.stage === 'finding_target'
+        ? record.stage === 'finding_second_arm'
           ? visible
           : false
         : visible,
       angleVisible: measurementStyle.state.angleShowLabel && (isDraft && isAngleDraft(record)
-        ? record.stage === 'finding_target'
+        ? record.stage === 'finding_second_arm'
           ? visible
           : false
         : visible),
@@ -1456,12 +1692,15 @@ export function useXeokitMeasurementTools(options: {
     store.setToolMode(mode);
   }
 
-  function reset() {
+  function reset(): boolean {
+    const hadDraft = currentMeasurement.value !== null;
+    clickTracker.value = { down: null, moved: false };
     store.clearCurrentXeokitDraft();
     clearHoverFeedback();
     clearMeasurementVisualAssists();
     syncFromStore();
     requestRender?.();
+    return hadDraft;
   }
 
   function deactivate() {
@@ -1579,12 +1818,11 @@ export function useXeokitMeasurementTools(options: {
           ...angleDraft,
           visible: false,
         });
-      } else if (angleDraft.stage === 'finding_corner') {
+      } else if (angleDraft.stage === 'finding_first_arm') {
         const point = measurementPointFromHit(hit);
         store.setCurrentXeokitAngleDraft({
           ...angleDraft,
-          corner: point,
-          target: point,
+          origin: point,
           visible: true,
         });
       } else {
@@ -1654,7 +1892,7 @@ export function useXeokitMeasurementTools(options: {
         datumElevation,
         relativeElevation: absoluteElevation - datumElevation,
         visible: true,
-        approximate: false,
+        approximate: hasApproximatePoint(point),
         createdAt: draft.createdAt,
         sourceAnnotationId: store.activeAnnotationContext.value?.id,
         sourceAnnotationType: store.activeAnnotationContext.value?.type,
@@ -1707,17 +1945,23 @@ export function useXeokitMeasurementTools(options: {
         return;
       }
 
+      const target = measurementPointFromHit(hit);
       const rec: XeokitDistanceMeasurementRecord = {
         id: draft.id,
         kind: 'distance',
         origin: draft.origin,
-        target: measurementPointFromHit(hit),
+        target,
         visible: true,
-        approximate: false,
+        approximate: hasApproximatePoint(draft.origin, target),
         createdAt: draft.createdAt,
         sourceAnnotationId: store.activeAnnotationContext.value?.id,
         sourceAnnotationType: store.activeAnnotationContext.value?.type,
       };
+      if (!measurementStyle.state.distanceKeepDimensions) {
+        for (const measurement of store.xeokitDistanceMeasurements.value) {
+          store.updateXeokitMeasurementVisible(measurement.id, false);
+        }
+      }
       store.addXeokitDistanceMeasurement(rec);
       store.clearCurrentXeokitDraft();
       clearMeasurementVisualAssists();
@@ -1784,7 +2028,7 @@ export function useXeokitMeasurementTools(options: {
         deltaElevation: targetElevation - draft.originElevation,
         datumElevation,
         visible: true,
-        approximate: false,
+        approximate: hasApproximatePoint(draft.origin, targetPoint),
         createdAt: draft.createdAt,
         sourceAnnotationId: store.activeAnnotationContext.value?.id,
         sourceAnnotationType: store.activeAnnotationContext.value?.type,
@@ -1814,7 +2058,7 @@ export function useXeokitMeasurementTools(options: {
         origin: point,
         corner: point,
         target: point,
-        stage: 'finding_corner',
+        stage: 'finding_first_arm',
         visible: true,
         approximate: true,
         createdAt: Date.now(),
@@ -1838,13 +2082,12 @@ export function useXeokitMeasurementTools(options: {
       return;
     }
 
-    if (draft.stage === 'finding_corner') {
+    if (draft.stage === 'finding_first_arm') {
       const point = measurementPointFromHit(hit);
       store.setCurrentXeokitAngleDraft({
         ...draft,
-        corner: point,
-        target: point,
-        stage: 'finding_target',
+        origin: point,
+        stage: 'finding_second_arm',
         visible: true,
       });
       syncFromStore();
@@ -1852,14 +2095,15 @@ export function useXeokitMeasurementTools(options: {
       return;
     }
 
+    const target = measurementPointFromHit(hit);
     const rec: XeokitAngleMeasurementRecord = {
       id: draft.id,
       kind: 'angle',
       origin: draft.origin,
       corner: draft.corner,
-      target: measurementPointFromHit(hit),
+      target,
       visible: true,
-      approximate: false,
+      approximate: hasApproximatePoint(draft.origin, draft.corner, target),
       createdAt: draft.createdAt,
       sourceAnnotationId: store.activeAnnotationContext.value?.id,
       sourceAnnotationType: store.activeAnnotationContext.value?.type,
@@ -1889,6 +2133,8 @@ export function useXeokitMeasurementTools(options: {
     try { hoverPickCandidateGroup.parent?.remove(hoverPickCandidateGroup); } catch { /* ignore */ }
     requestedPtsetRefnos.clear();
     ptsetResponseByRefno.clear();
+    ptsetErrorByRefno.clear();
+    ptsetLoadStateByRefno.clear();
     ptsetSnap.clear();
     ptsetHoverViz.clearAll();
     if (hoverMarkerEl) {
@@ -2026,6 +2272,8 @@ export function useXeokitMeasurementTools(options: {
     onCanvasPointerMove,
     onCanvasPointerUp,
     onCanvasPointerCancel,
+    queryDimensionSnapCandidates,
+    loadDimensionAnchorCandidates,
     dispose,
   };
 }
