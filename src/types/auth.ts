@@ -23,6 +23,11 @@ export type AnnotationScreenshot = {
   attachmentId?: string;
   name?: string;
   capturedAt?: number;
+  mimeType?: string;
+  size?: number;
+  width?: number;
+  height?: number;
+  uploadedAt?: number;
 };
 
 /**
@@ -52,6 +57,11 @@ function readStringField(record: Record<string, unknown>, key: string): string |
   return typeof value === 'string' && value.trim() ? value.trim() : undefined;
 }
 
+function readNumberField(record: Record<string, unknown>, key: string): number | undefined {
+  const value = record[key];
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
 export function normalizeAnnotationScreenshot(value: unknown): AnnotationScreenshot | undefined {
   if (!value || typeof value !== 'object') return undefined;
 
@@ -59,16 +69,16 @@ export function normalizeAnnotationScreenshot(value: unknown): AnnotationScreens
   const url = readStringField(record, 'url') || readStringField(record, 'thumbnailUrl');
   if (!url) return undefined;
 
-  const capturedAtRaw = record.capturedAt;
-  const capturedAt = typeof capturedAtRaw === 'number' && Number.isFinite(capturedAtRaw)
-    ? capturedAtRaw
-    : undefined;
-
   return {
     url,
     attachmentId: readStringField(record, 'attachmentId'),
     name: readStringField(record, 'name'),
-    capturedAt,
+    capturedAt: readNumberField(record, 'capturedAt'),
+    mimeType: readStringField(record, 'mimeType'),
+    size: readNumberField(record, 'size'),
+    width: readNumberField(record, 'width'),
+    height: readNumberField(record, 'height'),
+    uploadedAt: readNumberField(record, 'uploadedAt'),
   };
 }
 

@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { computed, ref, watch, type Ref } from 'vue';
 
-import { Camera, LayoutGrid, List, MessageSquareMore } from 'lucide-vue-next';
+import { LayoutGrid, List, MessageSquareMore } from 'lucide-vue-next';
+
+import AnnotationScreenshotCard from './AnnotationScreenshotCard.vue';
 
 import {
   reviewAttachmentDelete,
@@ -28,8 +30,10 @@ import {
   getAnnotationSeverityDisplay,
   getRoleDisplayName,
   getRoleTheme,
+  normalizeAnnotationScreenshot,
   UserRole,
   type AnnotationComment,
+  type AnnotationScreenshot,
   type AnnotationSeverity,
 } from '@/types/auth';
 
@@ -57,25 +61,59 @@ const userStore = useUserStore();
 const reviewStore = useReviewStore();
 const { captureAndUpload, isCapturing, uploadProgress } = useScreenshot();
 
-const capturingAnnotationId = ref<string | null>(null);
+/** 正在截图的批注，格式 `${type}:${id}`（避免不同类型间 id 撞车） */
+const capturingAnnotationKey = ref<string | null>(null);
 
 const canCaptureAnnotation = computed(() => {
   const task = reviewStore.currentTask.value;
   return !!task?.id && !isCapturing.value;
 });
 
+function isCapturingAnnotation(type: AnnotationType, annotationId: string): boolean {
+  return capturingAnnotationKey.value === `${type}:${annotationId}`;
+}
+
+/** 读取批注代表截图；兼容历史 cloud 顶层 `thumbnailUrl` / `attachmentId` 字段 */
+function resolveAnnotationShot(
+  record: { screenshot?: AnnotationScreenshot },
+): AnnotationScreenshot | null {
+  const legacy = record as { thumbnailUrl?: string; attachmentId?: string };
+  return normalizeAnnotationScreenshot(record.screenshot)
+    ?? normalizeAnnotationScreenshot({
+      thumbnailUrl: legacy.thumbnailUrl,
+      attachmentId: legacy.attachmentId,
+    })
+    ?? null;
+}
+
+function findAnnotationRecord(
+  type: AnnotationType,
+  annotationId: string,
+): { title?: string; severity?: AnnotationSeverity } | undefined {
+  switch (type) {
+    case 'text':
+      return store.annotations.value.find((item) => item.id === annotationId);
+    case 'cloud':
+      return store.cloudAnnotations.value.find((item) => item.id === annotationId);
+    case 'rect':
+      return store.rectAnnotations.value.find((item) => item.id === annotationId);
+    case 'obb':
+      return store.obbAnnotations.value.find((item) => item.id === annotationId);
+  }
+}
+
 /**
- * 为批注拍摄一张代表截图并挂到 record 上。
+ * 为批注拍摄一张代表截图并挂到 record 上（text/cloud/rect/obb 通用）。
  * 语义：覆盖（再次拍摄时替换旧图）；重拍成功后异步清理旧 attachment。
  */
-async function captureCloudAnnotationShot(annotationId: string) {
+async function captureAnnotationShot(type: AnnotationType, annotationId: string) {
   const task = reviewStore.currentTask.value;
   if (!task?.id) {
     emitToast({ message: '请先进入校审任务后再截图', level: 'warning' });
     return;
   }
   if (isCapturing.value) return;
-  const existingScreenshot = store.getAnnotationScreenshot('cloud', annotationId);
+  const existingScreenshot = store.getAnnotationScreenshot(type, annotationId);
   if (
     existingScreenshot
     && typeof window !== 'undefined'
@@ -84,10 +122,10 @@ async function captureCloudAnnotationShot(annotationId: string) {
     return;
   }
 
-  capturingAnnotationId.value = annotationId;
+  capturingAnnotationKey.value = `${type}:${annotationId}`;
   try {
-    const annotation = store.cloudAnnotations.value.find((item) => item.id === annotationId);
-    const previousAttachmentId = store.getAnnotationScreenshot('cloud', annotationId)?.attachmentId;
+    const annotation = findAnnotationRecord(type, annotationId);
+    const previousAttachmentId = existingScreenshot?.attachmentId;
     const severityLabel = getAnnotationSeverityDisplay(annotation?.severity).label;
     const description = [
       severityLabel !== '未设置' ? severityLabel : null,
@@ -102,7 +140,7 @@ async function captureCloudAnnotationShot(annotationId: string) {
       emitToast({ message: '截图失败，请重试', level: 'error' });
       return;
     }
-    store.setAnnotationScreenshot('cloud', annotationId, {
+    store.setAnnotationScreenshot(type, annotationId, {
       url: attachment.url,
       attachmentId: attachment.id,
       name: attachment.name,
@@ -111,7 +149,7 @@ async function captureCloudAnnotationShot(annotationId: string) {
     cleanupScreenshotAttachment(previousAttachmentId, '旧截图附件清理失败', attachment.id);
     emitToast({ message: '截图已添加', level: 'success' });
   } finally {
-    capturingAnnotationId.value = null;
+    capturingAnnotationKey.value = null;
   }
 }
 
@@ -916,6 +954,12 @@ function formatCommentTime(timestamp: number): string {
             </div>
           </div>
 
+          <AnnotationScreenshotCard :screenshot="resolveAnnotationShot(a)"
+            :can-capture="canCaptureAnnotation"
+            :capturing="isCapturingAnnotation('text', a.id)"
+            :upload-progress="uploadProgress"
+            @capture="captureAnnotationShot('text', a.id)" />
+
           <div class="mt-2 flex flex-wrap gap-2">
             <button type="button"
               class="h-8 rounded-md border border-input bg-background px-2 text-xs hover:bg-muted"
@@ -983,41 +1027,11 @@ function formatCommentTime(timestamp: number): string {
             </div>
           </div>
 
-          <!-- 代表截图：有则显示，hover 显示「重拍」角标；无且可拍则显示虚线「添加截图」入口 -->
-          <div v-if="a.thumbnailUrl"
-            class="group relative mt-2 overflow-hidden rounded border border-border"
-            style="height: 120px;">
-            <img :src="a.thumbnailUrl" alt="批注截图" class="h-full w-full object-cover" />
-            <div v-if="capturingAnnotationId === a.id"
-              class="absolute inset-0 flex flex-col items-center justify-center bg-slate-950/55 px-4 text-white">
-              <div class="text-xs font-semibold">{{ uploadProgress > 0 ? `${uploadProgress}%` : '截图上传中…' }}</div>
-              <div class="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-white/25">
-                <div class="h-full rounded-full bg-white transition-all"
-                  :style="{ width: `${Math.max(uploadProgress, 8)}%` }" />
-              </div>
-            </div>
-            <button v-if="canCaptureAnnotation" type="button"
-              class="absolute right-1 top-1 flex items-center gap-1 rounded-full bg-white/90 px-2 py-1 text-[11px] text-slate-900 opacity-0 shadow-sm transition-opacity hover:bg-white group-hover:opacity-100"
-              :disabled="capturingAnnotationId === a.id"
-              title="重新截图"
-              @click.stop="captureCloudAnnotationShot(a.id)">
-              <Camera class="h-3 w-3" />
-              <span>{{ capturingAnnotationId === a.id ? '截图中…' : '重拍' }}</span>
-            </button>
-          </div>
-          <button v-else-if="canCaptureAnnotation" type="button"
-            class="mt-2 flex h-[80px] w-full flex-col items-center justify-center gap-2 rounded border border-dashed border-slate-300 text-xs text-muted-foreground hover:border-brand/40 hover:bg-brand-subtle hover:text-brand"
-            :disabled="capturingAnnotationId === a.id"
-            @click.stop="captureCloudAnnotationShot(a.id)">
-            <span class="inline-flex items-center gap-2">
-              <Camera class="h-3.5 w-3.5" />
-              <span>{{ capturingAnnotationId === a.id ? '正在截图…' : '添加截图 · 记录当前视角' }}</span>
-            </span>
-            <span v-if="capturingAnnotationId === a.id" class="w-40 overflow-hidden rounded-full bg-slate-200">
-              <span class="block h-1.5 rounded-full bg-brand transition-all"
-                :style="{ width: `${Math.max(uploadProgress, 8)}%` }" />
-            </span>
-          </button>
+          <AnnotationScreenshotCard :screenshot="resolveAnnotationShot(a)"
+            :can-capture="canCaptureAnnotation"
+            :capturing="isCapturingAnnotation('cloud', a.id)"
+            :upload-progress="uploadProgress"
+            @capture="captureAnnotationShot('cloud', a.id)" />
 
           <div class="mt-2 flex flex-wrap gap-2">
             <button type="button"
@@ -1085,6 +1099,12 @@ function formatCommentTime(timestamp: number): string {
               <span class="text-xs text-muted-foreground">{{ new Date(a.createdAt).toLocaleString() }}</span>
             </div>
           </div>
+
+          <AnnotationScreenshotCard :screenshot="resolveAnnotationShot(a)"
+            :can-capture="canCaptureAnnotation"
+            :capturing="isCapturingAnnotation('rect', a.id)"
+            :upload-progress="uploadProgress"
+            @capture="captureAnnotationShot('rect', a.id)" />
 
           <div class="mt-2 flex flex-wrap gap-2">
             <button type="button"

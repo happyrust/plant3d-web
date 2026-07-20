@@ -1,8 +1,31 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { nextTick, shallowRef } from 'vue';
 
+type UploadMockOptions = {
+  sourceAnnotationId?: string;
+  description?: string;
+  fileType?: string;
+};
+
+type UploadMockResponse = {
+  success: boolean;
+  attachment?: {
+    id: string;
+    url: string;
+    name: string;
+    size: number;
+    uploadedAt: number;
+  };
+  error_message?: string;
+};
+
 const uploadMock = vi.hoisted(() =>
-  vi.fn(async () => ({
+  vi.fn(async (
+    _taskId: string | null,
+    _file: File,
+    _onProgress?: (percent: number) => void,
+    _options?: UploadMockOptions,
+  ): Promise<UploadMockResponse> => ({
     success: true,
     attachment: {
       id: 'att-1',
@@ -69,7 +92,7 @@ describe('useScreenshot', () => {
 
       expect(attachment).not.toBeNull();
       expect(uploadMock).toHaveBeenCalledTimes(1);
-      const [, file] = uploadMock.mock.calls[0];
+      const file = uploadMock.mock.calls[0]?.[1];
       expect((file as File).name).toBe('custom-name.png');
     });
 
@@ -84,7 +107,7 @@ describe('useScreenshot', () => {
       };
       await captureAndUpload('task-1', opts);
 
-      const [, file] = uploadMock.mock.calls[0];
+      const file = uploadMock.mock.calls[0]?.[1];
       expect((file as File).name).toBe('override.png');
     });
 
@@ -100,7 +123,7 @@ describe('useScreenshot', () => {
       });
 
       expect(uploadMock).toHaveBeenCalledTimes(1);
-      const options = uploadMock.mock.calls[0][3];
+      const options = uploadMock.mock.calls[0]?.[3];
       expect(options).toEqual({
         sourceAnnotationId: 'ann-1',
         description: '原则错误 - 管线间距不足',
@@ -118,7 +141,7 @@ describe('useScreenshot', () => {
 
       await captureAndUpload('task-1');
 
-      const [, file] = uploadMock.mock.calls[0];
+      const file = uploadMock.mock.calls[0]?.[1];
       expect((file as File).name).toMatch(/^screenshot-\d+\.png$/);
     });
   });
@@ -133,7 +156,7 @@ describe('useScreenshot', () => {
         sourceAnnotationId: 'ann-42',
       });
 
-      const [, file] = uploadMock.mock.calls[0];
+      const file = uploadMock.mock.calls[0]?.[1];
       expect((file as File).name).toMatch(/^annotation-ann-42-\d+\.png$/);
     });
 
@@ -146,7 +169,7 @@ describe('useScreenshot', () => {
         sourceAnnotationId: 'cloud-7',
       });
 
-      const [, file] = uploadMock.mock.calls[0];
+      const file = uploadMock.mock.calls[0]?.[1];
       expect((file as File).name).toMatch(/^cloud-cloud-7-\d+\.png$/);
     });
 
@@ -156,7 +179,7 @@ describe('useScreenshot', () => {
 
       await captureAndUpload('task-1', { kind: 'manual' });
 
-      const [, file] = uploadMock.mock.calls[0];
+      const file = uploadMock.mock.calls[0]?.[1];
       expect((file as File).name).toMatch(/^screenshot-\d+\.png$/);
     });
 
@@ -166,7 +189,7 @@ describe('useScreenshot', () => {
 
       await captureAndUpload('task-1', { kind: 'annotation_shot' });
 
-      const [, file] = uploadMock.mock.calls[0];
+      const file = uploadMock.mock.calls[0]?.[1];
       expect((file as File).name).toMatch(/^screenshot-\d+\.png$/);
     });
   });
@@ -179,6 +202,9 @@ describe('useScreenshot', () => {
 
       // 让 toBlob 异步以模拟慢回调，制造竞态窗口
       let pendingCb: BlobCallback | null = null;
+      const flushPendingBlob = () => {
+        pendingCb?.(new Blob([new Uint8Array([1])], { type: 'image/png' }));
+      };
       const scene = (viewerRef.value as { scene?: { canvas?: { canvas?: HTMLCanvasElement } } })?.scene;
       const canvas = scene?.canvas?.canvas as HTMLCanvasElement;
       (canvas.toBlob as unknown as ReturnType<typeof vi.fn>).mockImplementationOnce((cb: BlobCallback) => {
@@ -194,7 +220,7 @@ describe('useScreenshot', () => {
       const second = await captureAndUpload('task-2');
       expect(second).toBeNull();
 
-      pendingCb?.(new Blob([new Uint8Array([1])], { type: 'image/png' }));
+      flushPendingBlob();
       const firstRes = await first;
       expect(firstRes).not.toBeNull();
     });
