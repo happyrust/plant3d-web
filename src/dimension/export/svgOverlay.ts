@@ -1,3 +1,5 @@
+import { resolveDimensionLineDash } from '../kernel/theme';
+
 import type { DimensionFormatPolicy } from '../kernel/format';
 import type { LffFont } from '../kernel/glyph/lffParser';
 import type { DimensionStyleRole, DimensionTheme } from '../kernel/theme';
@@ -33,13 +35,6 @@ function strokeFor(theme: DimensionTheme, styleRole: string): string {
   return theme.colors[styleRole as DimensionStyleRole] ?? theme.colors.normal;
 }
 
-function dashFor(styleRole: string): string | null {
-  if (styleRole === 'external-reference') return '6 4';
-  if (styleRole === 'invalid') return '7 3';
-  if (styleRole === 'approximate') return '2 2';
-  return null;
-}
-
 export function layoutResultsToSvg(
   layouts: readonly LayoutResult[],
   font: LffFont,
@@ -61,7 +56,10 @@ export function layoutResultsToSvg(
   const groups = layouts.map((layout) => {
     const primitives = layout.primitives.map((primitive) => {
       const stroke = escapeXml(strokeFor(theme, primitive.styleRole));
-      const dash = dashFor(primitive.styleRole);
+      const dash = resolveDimensionLineDash(
+        primitive.styleRole,
+        primitive.kind === 'glyph-run' ? undefined : primitive.lineStyle,
+      );
       const common = [
         `stroke="${stroke}"`,
         `stroke-width="${coordinate(theme.lineWidthPx)}"`,
@@ -69,10 +67,30 @@ export function layoutResultsToSvg(
         'stroke-linecap="round"',
         'stroke-linejoin="round"',
         `data-style-role="${escapeXml(primitive.styleRole)}"`,
-        ...(dash ? [`stroke-dasharray="${dash}"`] : []),
+        ...(dash.length > 0
+          ? [`stroke-dasharray="${dash.map(coordinate).join(' ')}"`]
+          : []),
       ].join(' ');
       if (primitive.kind === 'line') {
         return `<line x1="${coordinate(primitive.from[0])}" y1="${coordinate(primitive.from[1])}" x2="${coordinate(primitive.to[0])}" y2="${coordinate(primitive.to[1])}" data-part="${escapeXml(primitive.part)}" ${common}/>`;
+      }
+      if (primitive.kind === 'path') {
+        const commands = primitive.points.map((point, index) => (
+          `${index === 0 ? 'M' : 'L'} ${coordinate(point[0])} ${coordinate(point[1])}`
+        )).join(' ');
+        const closedSuffix = primitive.closed ? ' Z' : '';
+        return `<path d="${commands}${closedSuffix}" data-part="${escapeXml(primitive.part)}" ${common}/>`;
+      }
+      if (primitive.kind === 'marker') {
+        const [x, y] = primitive.at;
+        if (primitive.shape === 'circle') {
+          return `<circle cx="${coordinate(x)}" cy="${coordinate(y)}" r="${coordinate(primitive.radiusPx)}" data-part="${escapeXml(primitive.part)}" ${common}/>`;
+        }
+        const radius = primitive.radiusPx;
+        const crossPath =
+          `M ${coordinate(x - radius)} ${coordinate(y)} L ${coordinate(x + radius)} ${coordinate(y)} `
+          + `M ${coordinate(x)} ${coordinate(y - radius)} L ${coordinate(x)} ${coordinate(y + radius)}`;
+        return `<path d="${crossPath}" data-part="${escapeXml(primitive.part)}" ${common}/>`;
       }
       const path = font.trace(
         primitive.capHeightPx,

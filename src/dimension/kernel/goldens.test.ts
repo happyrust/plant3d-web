@@ -10,7 +10,12 @@ import { createTestFont, createTestProjector, roundNumbers } from './testUtils';
 import { SOLVESPACE_DIMENSION_THEME } from './theme';
 import { layoutViewport } from './viewport/layoutViewport';
 
-import type { LayoutPrimitive, NormalizedDimensionInput, Vec3 } from './types';
+import type {
+  ExplicitLayoutInput,
+  LayoutPrimitive,
+  NormalizedDimensionInput,
+  Vec3,
+} from './types';
 
 const baseContext = {
   projector: createTestProjector(),
@@ -109,7 +114,7 @@ function compareText(a: string, b: string): number {
   return a < b ? -1 : a > b ? 1 : 0;
 }
 
-function normalizeLayout(input: NormalizedDimensionInput) {
+function normalizeLayout(input: NormalizedDimensionInput | ExplicitLayoutInput) {
   const result = layoutViewport([input], baseContext, new Map()).layouts[0];
   const primitives = result.primitives
     .map((primitive, sourceOrder) => ({ primitive, sourceOrder }))
@@ -129,6 +134,44 @@ describe('canonical dimension structural goldens', () => {
     const value = normalized.derived.valueM ?? normalized.derived.valueRad;
 
     expect(value).toBe(roundNumbers(expectedValue, 6));
+    expect(normalized).toMatchSnapshot();
+  });
+});
+
+const explicitAnnotationInput: ExplicitLayoutInput = {
+  id: 'explicit-annotation-golden',
+  role: 'external',
+  labelPinned: true,
+  formattedLabel: 'A',
+  lines: [
+    { from: [0, 0, 0], to: [1, 0, 0], part: 'leader', style: 'dash-dot' },
+    { from: [0, 0, 0], to: [0, 0.4, 0], part: 'extension', style: 'dashed' },
+  ],
+  labelAnchor: [0.5, 0.3, 0],
+  arrowLines: [{ from: [0, 0, 0], to: [0.1, 0.05, 0] }],
+  arcs: [
+    { center: [0.5, 0, 0], normal: [0, 0, 1], radiusM: 0.25 },
+    {
+      center: [0.5, 0, 0],
+      normal: [0, 0, 1],
+      radiusM: 0.45,
+      startAngle: 0,
+      endAngle: Math.PI / 2,
+      style: 'dashed',
+    },
+  ],
+  markers: [
+    { at: [0.5, 0, 0], shape: 'circle', radiusPx: 5 },
+    { at: [1, 0, 0], shape: 'cross' },
+  ],
+  texts: [{ text: 'h', anchor: [0.5, -0.35, 0] }],
+};
+
+describe('explicit annotation structural goldens', () => {
+  it('explicit-annotation', () => {
+    const normalized = normalizeLayout(explicitAnnotationInput);
+
+    expect(normalized.derived.formattedLabel).toBe('A');
     expect(normalized).toMatchSnapshot();
   });
 });

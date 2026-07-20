@@ -167,23 +167,36 @@ function translateLayout(result: LayoutResult, offset: Vec2): LayoutResult {
     point[0] + offset[0],
     point[1] + offset[1],
   ];
-  const primitives: LayoutPrimitive[] = result.primitives.map((primitive) => (
-    primitive.kind === 'line'
-      ? {
-        ...primitive,
-        from: movePoint(primitive.from),
-        to: movePoint(primitive.to),
-      }
-      : {
-        ...primitive,
-        origin: movePoint(primitive.origin),
-        bounds: {
-          ...primitive.bounds,
-          x: primitive.bounds.x + offset[0],
-          y: primitive.bounds.y + offset[1],
-        },
-      }
-  ));
+  const primitives: LayoutPrimitive[] = result.primitives.map((primitive) => {
+    switch (primitive.kind) {
+      case 'line':
+        return {
+          ...primitive,
+          from: movePoint(primitive.from),
+          to: movePoint(primitive.to),
+        };
+      case 'path':
+        return {
+          ...primitive,
+          points: primitive.points.map(movePoint),
+        };
+      case 'marker':
+        return {
+          ...primitive,
+          at: movePoint(primitive.at),
+        };
+      case 'glyph-run':
+        return {
+          ...primitive,
+          origin: movePoint(primitive.origin),
+          bounds: {
+            ...primitive.bounds,
+            x: primitive.bounds.x + offset[0],
+            y: primitive.bounds.y + offset[1],
+          },
+        };
+    }
+  });
   const hitRegions: HitRegion[] = result.hitRegions.map((region) => (
     region.kind === 'segment'
       ? {

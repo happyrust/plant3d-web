@@ -1,12 +1,17 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { DEFAULT_DIMENSION_FORMAT } from '../format';
+import { buildHitIndex } from '../hit/hitIndex';
 import { createTestFont, createTestProjector, roundNumbers } from '../testUtils';
 import { SOLVESPACE_DIMENSION_THEME } from '../theme';
 
 import { layoutExplicit } from './explicit';
 
-import type { ExplicitLayoutInput } from '../types';
+import type {
+  ExplicitLayoutInput,
+  ScreenMarker,
+  ScreenPath,
+} from '../types';
 import type { LayoutContext } from './context';
 
 const input: ExplicitLayoutInput = {
@@ -73,5 +78,99 @@ describe('layoutExplicit', () => {
     });
 
     expect(result.primitives.every((primitive) => primitive.styleRole === 'hovered')).toBe(true);
+  });
+
+  it('lays out arcs, markers, and extra texts with bounded hit regions', () => {
+    const annotated: ExplicitLayoutInput = {
+      id: 'explicit-annotation',
+      role: 'external',
+      labelPinned: true,
+      formattedLabel: 'A',
+      lines: [{
+        from: [0, 0, 0],
+        to: [1, 0, 0],
+        part: 'leader',
+        style: 'dash-dot',
+      }],
+      labelAnchor: [0.5, 0.2, 0],
+      arrowLines: [],
+      arcs: [{ center: [0, 0, 0], normal: [0, 0, 1], radiusM: 0.5 }],
+      markers: [
+        { at: [0.1, 0, 0], shape: 'cross' },
+        { at: [0, 0, 0], shape: 'circle', radiusPx: 6, style: 'dashed' },
+      ],
+      texts: [{ text: 'h', anchor: [0.5, 0.1, 0] }],
+    };
+    const context: LayoutContext = {
+      projector: createTestProjector(),
+      font: createTestFont(),
+      theme: SOLVESPACE_DIMENSION_THEME,
+      format: DEFAULT_DIMENSION_FORMAT,
+      interaction: 'normal',
+    };
+
+    const result = layoutExplicit(annotated, context);
+
+    const path = result.primitives.find(
+      (primitive): primitive is ScreenPath => primitive.kind === 'path',
+    );
+    expect(path).toBeDefined();
+    expect(path!.part).toBe('arc');
+    expect(path!.closed).toBe(true);
+    expect(path!.points.length).toBeGreaterThanOrEqual(16);
+
+    const markers = result.primitives.filter(
+      (primitive): primitive is ScreenMarker => primitive.kind === 'marker',
+    );
+    expect(markers).toEqual([
+      {
+        kind: 'marker',
+        at: [210, 200],
+        shape: 'cross',
+        radiusPx: 4,
+        part: 'marker',
+        styleRole: 'external',
+      },
+      {
+        kind: 'marker',
+        at: [200, 200],
+        shape: 'circle',
+        radiusPx: 6,
+        part: 'marker',
+        styleRole: 'external',
+        lineStyle: 'dashed',
+      },
+    ]);
+
+    const line = result.primitives.find(
+      (primitive) => primitive.kind === 'line' && primitive.part === 'leader',
+    );
+    expect(line).toMatchObject({ lineStyle: 'dash-dot' });
+
+    const glyphs = result.primitives.filter(
+      (primitive) => primitive.kind === 'glyph-run',
+    );
+    expect(glyphs.map(glyph => glyph.kind === 'glyph-run' && glyph.text))
+      .toEqual(['A', 'h']);
+
+    const pathRegions = result.hitRegions.filter(
+      (region) => region.part === 'arc',
+    );
+    expect(pathRegions.length).toBeGreaterThan(0);
+    expect(pathRegions.length).toBeLessThanOrEqual(32);
+    expect(result.hitRegions.filter(region => region.part === 'marker'))
+      .toHaveLength(2);
+    expect(result.hitRegions.filter(region => region.part === 'label'))
+      .toHaveLength(2);
+
+    const hitIndex = buildHitIndex([result]);
+    expect(hitIndex.hitTest([150, 200], 2)).toMatchObject({
+      dimensionId: 'explicit-annotation',
+      part: 'arc',
+    });
+    expect(hitIndex.hitTest([210, 200], 2)).toMatchObject({
+      dimensionId: 'explicit-annotation',
+      part: 'marker',
+    });
   });
 });

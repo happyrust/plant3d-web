@@ -1,4 +1,5 @@
 import type {
+  DimensionLineStyle,
   DimensionSemanticRole,
   InteractionState,
 } from './types';
@@ -52,4 +53,28 @@ export function resolveDimensionColor(
   interaction: InteractionState,
 ): string {
   return theme.colors[resolveDimensionStyleRole(role, interaction)];
+}
+
+const ROLE_LINE_DASH: Readonly<Record<string, readonly number[]>> = {
+  'external-reference': [6, 4],
+  invalid: [7, 3],
+  approximate: [2, 2],
+};
+
+const STYLE_LINE_DASH: Readonly<Record<DimensionLineStyle, readonly number[]>> = {
+  solid: [],
+  dashed: [6, 4],
+  'dash-dot': [8, 3, 2, 3],
+};
+
+/**
+ * Dash pattern for a primitive: an explicit per-primitive line style wins,
+ * otherwise the semantic style role decides (ADR 0042).
+ */
+export function resolveDimensionLineDash(
+  styleRole: string,
+  lineStyle?: DimensionLineStyle,
+): readonly number[] {
+  if (lineStyle) return STYLE_LINE_DASH[lineStyle];
+  return ROLE_LINE_DASH[styleRole] ?? [];
 }

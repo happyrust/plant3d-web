@@ -4,6 +4,8 @@ export * from './adapters/dtxDimensionAnchorResolver';
 export * from './adapters/dtxDimensionViewerAdapter';
 export * from './adapters/dtxDimensionSnapPort';
 export * from './adapters/mbdExternalDimensions';
+export * from './adapters/mbdV2Contract';
+export * from './adapters/mbdV2ExternalAnnotations';
 export * from './adapters/normalizeExternalDimensions';
 export * from './adapters/reviewSnapshotAdapter';
 export * from './domain/anchors';

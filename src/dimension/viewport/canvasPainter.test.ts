@@ -22,6 +22,8 @@ function createRecordingCanvas() {
     beginPath: (...args: unknown[]) => operations.push({ name: 'beginPath', args }),
     moveTo: (...args: unknown[]) => operations.push({ name: 'moveTo', args }),
     lineTo: (...args: unknown[]) => operations.push({ name: 'lineTo', args }),
+    arc: (...args: unknown[]) => operations.push({ name: 'arc', args }),
+    closePath: (...args: unknown[]) => operations.push({ name: 'closePath', args }),
     stroke: (...args: unknown[]) => operations.push({ name: 'stroke', args }),
     save: (...args: unknown[]) => operations.push({ name: 'save', args }),
     restore: (...args: unknown[]) => operations.push({ name: 'restore', args }),
@@ -138,6 +140,67 @@ describe('Canvas2DDimensionPainter', () => {
     });
     expect(canvas.width).toBe(0);
     expect(canvas.height).toBe(0);
+  });
+
+  it('paints paths and markers, splitting batches by per-primitive line style', () => {
+    const { canvas, operations } = createRecordingCanvas();
+    const painter = new Canvas2DDimensionPainter(canvas, createTestFont());
+    painter.resize(320, 180, 1);
+    operations.length = 0;
+
+    painter.paint([
+      {
+        dimensionId: 'annotation',
+        primitives: [
+          {
+            kind: 'path',
+            points: [[10, 10], [30, 10], [30, 30]],
+            closed: true,
+            part: 'arc',
+            styleRole: 'external',
+          },
+          {
+            kind: 'marker',
+            at: [50, 50],
+            shape: 'circle',
+            radiusPx: 4,
+            part: 'marker',
+            styleRole: 'external',
+          },
+          {
+            kind: 'marker',
+            at: [70, 70],
+            shape: 'cross',
+            radiusPx: 3,
+            part: 'marker',
+            styleRole: 'external',
+          },
+          {
+            kind: 'line',
+            from: [0, 0],
+            to: [5, 0],
+            part: 'leader',
+            styleRole: 'external',
+            lineStyle: 'dash-dot',
+          },
+        ],
+        hitRegions: [],
+        labelBounds: { x: 0, y: 0, width: 0, height: 0 },
+        labelPinned: true,
+        derived: { formattedLabel: '' },
+      },
+    ], SOLVESPACE_DIMENSION_THEME);
+
+    expect(operations.filter(operation => operation.name === 'stroke')).toHaveLength(2);
+    expect(operations.filter(operation => operation.name === 'arc')).toEqual([
+      { name: 'arc', args: [50, 50, 4, 0, Math.PI * 2] },
+    ]);
+    expect(operations.filter(operation => operation.name === 'closePath')).toHaveLength(1);
+    const dashes = operations
+      .filter(operation => operation.name === 'setLineDash')
+      .map(operation => operation.args[0]);
+    expect(dashes).toContainEqual([]);
+    expect(dashes).toContainEqual([8, 3, 2, 3]);
   });
 
   it('caches repeated LFF glyph traces across frames', () => {

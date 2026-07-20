@@ -162,4 +162,33 @@ describe('DimensionSemanticList', () => {
     expect(host.querySelector('[data-dimension-id="approximate-1"]')?.textContent)
       .toContain('近似');
   });
+
+  it('renders one group header per category (ADR 0041 terms)', () => {
+    const annotation: ExternalDimensionRecord = {
+      id: 'weld-1',
+      source: 'mbd',
+      sourceLabel: 'MBD: weld-1',
+      role: 'external',
+      category: 'annotation',
+      layout: {
+        id: 'weld-1',
+        role: 'external',
+        labelPinned: true,
+        formattedLabel: '',
+        lines: [],
+        labelAnchor: [0, 0, 0],
+        arrowLines: [],
+        markers: [{ at: [0, 0, 0], shape: 'circle', radiusPx: 5 }],
+      },
+    };
+    const host = mountList({
+      items: [linearRecord(), external, annotation],
+    });
+
+    const headers = [...host.querySelectorAll('[data-group]')]
+      .map(node => node.textContent?.trim());
+    expect(headers).toEqual(['用户尺寸', '外部尺寸', '外部标注图元']);
+    expect(host.querySelector('[data-dimension-id="weld-1"]')?.textContent)
+      .toContain('MBD: weld-1');
+  });
 });

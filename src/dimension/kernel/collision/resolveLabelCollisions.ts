@@ -140,6 +140,7 @@ function moveLabel(result: LayoutResult, offset: Vec2): LayoutResult {
       };
     }
     if (
+      primitive.kind === 'line' &&
       primitive.part === 'leader' &&
       (pointInRect(primitive.from, originalBounds) || pointInRect(primitive.to, originalBounds))
     ) {

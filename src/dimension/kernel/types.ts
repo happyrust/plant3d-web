@@ -16,6 +16,9 @@ export type DimensionSemanticRole =
   | 'invalid'
   | 'approximate';
 
+/** Per-primitive stroke style; overrides the role-derived dash when set. */
+export type DimensionLineStyle = 'solid' | 'dashed' | 'dash-dot';
+
 export type ScreenLinePart =
   | 'dimension'
   | 'extension'
@@ -30,6 +33,34 @@ export type ScreenLine = Readonly<{
   to: Vec2;
   part: ScreenLinePart;
   styleRole: string;
+  lineStyle?: DimensionLineStyle;
+}>;
+
+/**
+ * One connected polyline path (projected design-space arc/circle). Kept as a
+ * single primitive so dash patterns flow continuously along the whole path
+ * (ADR 0042).
+ */
+export type ScreenPath = Readonly<{
+  kind: 'path';
+  points: readonly Vec2[];
+  closed: boolean;
+  part: ScreenLinePart;
+  styleRole: string;
+  lineStyle?: DimensionLineStyle;
+}>;
+
+export type ScreenMarkerShape = 'circle' | 'cross';
+
+/** Screen-pixel sized symbol anchored at a projected design-space point. */
+export type ScreenMarker = Readonly<{
+  kind: 'marker';
+  at: Vec2;
+  shape: ScreenMarkerShape;
+  radiusPx: number;
+  part: string;
+  styleRole: string;
+  lineStyle?: DimensionLineStyle;
 }>;
 
 export type ScreenGlyphRun = Readonly<{
@@ -41,7 +72,11 @@ export type ScreenGlyphRun = Readonly<{
   styleRole: string;
 }>;
 
-export type LayoutPrimitive = ScreenLine | ScreenGlyphRun;
+export type LayoutPrimitive =
+  | ScreenLine
+  | ScreenPath
+  | ScreenMarker
+  | ScreenGlyphRun;
 
 export type HitRegion =
   | Readonly<{
@@ -115,12 +150,50 @@ export type NormalizedDimensionInput =
         placement: Readonly<{ leaderDirection: Vec3; labelDistanceM: number }>;
       }>);
 
+/** Design-space arc; omit both angles for a full circle (radians otherwise). */
+export type ExplicitArcInput = Readonly<{
+  center: Vec3;
+  normal: Vec3;
+  radiusM: number;
+  startAngle?: number;
+  endAngle?: number;
+  part?: ScreenLinePart;
+  style?: DimensionLineStyle;
+}>;
+
+export type ExplicitMarkerInput = Readonly<{
+  at: Vec3;
+  shape: ScreenMarkerShape;
+  radiusPx?: number;
+  style?: DimensionLineStyle;
+}>;
+
+export type ExplicitTextInput = Readonly<{
+  text: string;
+  anchor: Vec3;
+  /**
+   * Screen-space line index below the anchor (0 = at the anchor). Used to
+   * stack the lines of a multi-line label without inventing design-space
+   * offsets.
+   */
+  stackIndex?: number;
+}>;
+
 export type ExplicitLayoutInput = Readonly<{
   id: string;
   role: DimensionSemanticRole;
   labelPinned: true;
   formattedLabel: string;
-  lines: readonly Readonly<{ from: Vec3; to: Vec3; part: ScreenLinePart }>[];
+  lines: readonly Readonly<{
+    from: Vec3;
+    to: Vec3;
+    part: ScreenLinePart;
+    style?: DimensionLineStyle;
+  }>[];
   labelAnchor: Vec3;
   arrowLines: readonly Readonly<{ from: Vec3; to: Vec3 }>[];
+  arcs?: readonly ExplicitArcInput[];
+  markers?: readonly ExplicitMarkerInput[];
+  /** Additional glyph runs, e.g. extra lines of a multi-line label. */
+  texts?: readonly ExplicitTextInput[];
 }>;

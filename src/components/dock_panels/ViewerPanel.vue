@@ -38,6 +38,7 @@ import {
 
 import { e3dGetChildren, e3dGetVisibleInsts } from '@/api/genModelE3dApi';
 import { pdmsGetUiAttr, type PtsetResponse } from '@/api/genModelPdmsAttrApi';
+import { fetchMbdV2PipeData } from '@/api/mbdV2Api';
 import {
   reviewRecordCreate,
   reviewRecordGetByTaskId,
@@ -71,6 +72,8 @@ import { useDbnoInstancesParquetLoader } from '@/composables/useDbnoInstancesPar
 import { useDisplayThemeStore, type DisplayTheme } from '@/composables/useDisplayThemeStore';
 import { ensurePanelAndActivate } from '@/composables/useDockApi';
 import { useDtxTools } from '@/composables/useDtxTools';
+import { useMbdDiagnosticsStore } from '@/composables/useMbdDiagnosticsStore';
+import { createMbdExternalSync } from '@/composables/useMbdExternalSync';
 import { MeasurementAnnotationManager } from '@/composables/useMeasurementAnnotation';
 import { useModelGeneration } from '@/composables/useModelGeneration';
 import { useModelLoadStatus } from '@/composables/useModelLoadStatus';
@@ -106,7 +109,6 @@ import {
   localDimensionDocumentId,
   LocalStorageDimensionCommandJournal,
   LocalStorageDimensionDocumentRepository,
-  mbdToExternalDimensions,
   migrateLegacyDimensionArchives,
   ReviewDimensionRepository,
   type DimensionDocumentState,
@@ -156,6 +158,7 @@ const spatialComputeStore = useSpatialCompute();
 const viewerContext = useViewerContext();
 const backgroundStore = useBackgroundStore();
 const displayThemeStore = useDisplayThemeStore();
+const mbdDiagnosticsStore = useMbdDiagnosticsStore();
 
 const initError = ref<string | null>(null);
 
@@ -1200,7 +1203,6 @@ let offDimensionReviewBinding: (() => void) | null = null;
 let offLocalDimensionAutosave: (() => void) | null = null;
 let localDimensionAutosaveTimer: ReturnType<typeof setTimeout> | null = null;
 let localDimensionAutosaveRunning = false;
-let mbdExternalSyncVersion = 0;
 let dimensionMountDisposed = false;
 let dimensionInitializationVersion = 0;
 const dimensionViewerAdapter = createDtxDimensionViewerAdapter({
@@ -2780,38 +2782,23 @@ function bindLocalDimensionAutosave(system: DimensionSystem): void {
   offLocalDimensionAutosave = system.document.subscribe(() => schedule());
 }
 
-async function syncMbdExternalDimensions(
+const mbdExternalSync = createMbdExternalSync({
+  fetchPipeData: fetchMbdV2PipeData,
+  queryParquetDimensions: (dbno, options) =>
+    useDbnoInstancesParquetLoader().queryMbdDimensionsByDbno(dbno, options),
+  diagnostics: mbdDiagnosticsStore,
+  getSearch: () => window.location.search,
+  emitToast,
+});
+
+function syncMbdExternalDimensions(
   system: DimensionSystem,
   options: Readonly<{ forceRefresh?: boolean }> = {},
 ): Promise<void> {
-  const syncVersion = ++mbdExternalSyncVersion;
-  const rawDbno = new URLSearchParams(window.location.search).get('show_dbnum');
-  const parsedDbno = rawDbno === null ? Number.NaN : Number(rawDbno);
-  if (!Number.isSafeInteger(parsedDbno) || parsedDbno < 0) {
-    system.replaceExternalSource('mbd', []);
-    return;
-  }
-  try {
-    const loader = useDbnoInstancesParquetLoader();
-    const loaded = await loader.queryMbdDimensionsByDbno(parsedDbno, options);
-    const mapped = mbdToExternalDimensions(loaded.dimensions);
-    if (
-      syncVersion !== mbdExternalSyncVersion
-      || dimensionSystem !== system
-      || dimensionMountDisposed
-    ) return;
-    system.replaceExternalSource('mbd', mapped.records);
-    const skipped = [...loaded.skipped, ...mapped.skipped];
-    if (skipped.length > 0) {
-      console.warn('[dimension-v2] skipped invalid DTX MBD dimensions', skipped);
-    }
-  } catch (error) {
-    if (syncVersion !== mbdExternalSyncVersion || dimensionSystem !== system) {
-      return;
-    }
-    system.replaceExternalSource('mbd', []);
-    console.warn('[dimension-v2] DTX MBD dimensions unavailable', error);
-  }
+  return mbdExternalSync.sync(system, {
+    ...options,
+    isCancelled: () => dimensionSystem !== system || dimensionMountDisposed,
+  });
 }
 
 async function initializeDimensionViewport(): Promise<void> {
@@ -4589,7 +4576,7 @@ onMounted(async () => {
 onUnmounted(() => {
   viewerContext.viewerError.value = null;
   dimensionMountDisposed = true;
-  mbdExternalSyncVersion += 1;
+  mbdExternalSync.invalidate();
   dimensionInitializationVersion += 1;
   dimensionSystem?.dispose();
   dimensionSystem = null;

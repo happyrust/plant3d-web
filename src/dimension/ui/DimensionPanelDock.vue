@@ -7,6 +7,7 @@ import {
   watch,
 } from 'vue';
 
+import { externalDimensionCategory } from '../adapters/normalizeExternalDimensions';
 import { isDimensionFlagEnabled } from '../flags';
 import { createRebindEditSession } from '../interaction/editSession';
 import { DEFAULT_DIMENSION_FORMAT } from '../kernel/format';
@@ -23,6 +24,10 @@ import type { DimensionBoundAction } from './dimensionBoundActions';
 import type { ExternalDimensionRecord } from '../adapters/normalizeExternalDimensions';
 import type { UserDimensionRecord } from '../domain/types';
 
+import {
+  useMbdDiagnosticsStore,
+  type MbdDiagnosticsSnapshot,
+} from '@/composables/useMbdDiagnosticsStore';
 import { useUserStore } from '@/composables/useUserStore';
 import { useViewerContext } from '@/composables/useViewerContext';
 import { emitToast } from '@/ribbon/toastBus';
@@ -97,8 +102,36 @@ onUnmounted(() => {
 
 const items = computed(() => [
   ...(documentState.value?.records ?? []),
-  ...externalRecords.value,
+  ...externalRecords.value.filter(
+    record => externalDimensionCategory(record) === 'dimension',
+  ),
+  ...externalRecords.value.filter(
+    record => externalDimensionCategory(record) === 'annotation',
+  ),
 ]);
+
+const mbdDiagnostics = useMbdDiagnosticsStore().snapshot;
+const diagnosticsBySeverity = computed(() => {
+  const groups: Record<'error' | 'warning' | 'info', MbdDiagnosticsSnapshot['issues'][number][]> = {
+    error: [],
+    warning: [],
+    info: [],
+  };
+  for (const issue of mbdDiagnostics.value.issues) {
+    groups[issue.severity].push(issue);
+  }
+  return groups;
+});
+const diagnosticsCount = computed(() =>
+  mbdDiagnostics.value.issues.length + mbdDiagnostics.value.skipped.length);
+const diagnosticsVisible = computed(() =>
+  diagnosticsCount.value > 0 || mbdDiagnostics.value.loadError !== null);
+
+function locateIssueRefno(refno: string): void {
+  window.dispatchEvent(new CustomEvent('showModelByRefnos', {
+    detail: { refnos: [refno], flyTo: true },
+  }));
+}
 const recoveryPreview = computed(() => {
   void documentState.value;
   return viewerContext.dimensionSystem.value?.getRecoveryPreview() ?? null;
@@ -274,6 +307,60 @@ function act(
         </button>
       </div>
     </div>
+    <details v-if="diagnosticsVisible"
+      class="m-2 rounded border border-slate-200 bg-slate-50 p-2 text-xs text-slate-700"
+      data-testid="mbd-diagnostics">
+      <summary class="cursor-pointer font-semibold">
+        MBD 诊断（{{ diagnosticsCount }}）
+        <span v-if="mbdDiagnostics.channel" class="font-normal opacity-70">
+          {{ mbdDiagnostics.channel === 'api' ? '实时' : 'parquet' }}
+          · {{ mbdDiagnostics.sourceId }}
+        </span>
+      </summary>
+      <div v-if="mbdDiagnostics.loadError"
+        class="mt-2 font-semibold text-red-700"
+        data-testid="mbd-load-error">
+        装载失败：{{ mbdDiagnostics.loadError }}
+      </div>
+      <div v-for="severity in (['error', 'warning', 'info'] as const)"
+        :key="severity">
+        <template v-if="diagnosticsBySeverity[severity].length > 0">
+          <div class="mt-2 font-semibold"
+            :class="{
+              'text-red-700': severity === 'error',
+              'text-amber-700': severity === 'warning',
+            }">
+            {{ severity }}（{{ diagnosticsBySeverity[severity].length }}）
+          </div>
+          <div v-for="issue in diagnosticsBySeverity[severity]"
+            :key="issue.id"
+            class="mt-1 flex items-center justify-between gap-2"
+            :data-issue-id="issue.id">
+            <span class="min-w-0 break-all">
+              [{{ issue.category }}] {{ issue.message }}
+            </span>
+            <button v-if="issue.refno"
+              type="button"
+              class="shrink-0 rounded border px-1.5 py-0.5"
+              :data-locate-refno="issue.refno"
+              @click="locateIssueRefno(issue.refno)">
+              定位 {{ issue.refno }}
+            </button>
+          </div>
+        </template>
+      </div>
+      <template v-if="mbdDiagnostics.skipped.length > 0">
+        <div class="mt-2 font-semibold">
+          跳过图元（{{ mbdDiagnostics.skipped.length }}）
+        </div>
+        <div v-for="entry in mbdDiagnostics.skipped"
+          :key="entry.id"
+          class="mt-1 break-all"
+          :data-skipped-id="entry.id">
+          {{ entry.id }}：{{ entry.reason }}
+        </div>
+      </template>
+    </details>
     <div class="min-h-0 flex-1">
       <DimensionSemanticList :items="items"
         :selected-id="selectedId"

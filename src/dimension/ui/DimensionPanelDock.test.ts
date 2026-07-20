@@ -8,6 +8,8 @@ import DimensionPanelDock from './DimensionPanelDock.vue';
 
 import type { ExternalDimensionRecord } from '../adapters/normalizeExternalDimensions';
 
+import { useMbdDiagnosticsStore } from '@/composables/useMbdDiagnosticsStore';
+
 const mocks = vi.hoisted(() => ({
   currentUser: {
     value: { id: 'designer-1', role: 'designer' } as {
@@ -96,6 +98,7 @@ afterEach(() => {
   document.body.innerHTML = '';
   mocks.dimensionSystem.value = null;
   mocks.emitToast.mockReset();
+  useMbdDiagnosticsStore().clear();
 });
 
 describe('DimensionPanelDock', () => {
@@ -120,5 +123,103 @@ describe('DimensionPanelDock', () => {
 
     expect(system.externalRegistry.isHidden('mbd-1')).toBe(true);
     expect(hide?.textContent).toContain('临时显示');
+  });
+
+  it('orders annotation records behind dimensions and shows MBD diagnostics', async () => {
+    const system = createSystem();
+    system.externalRegistry.replaceSource('mbd', [
+      {
+        id: 'weld-1',
+        source: 'mbd',
+        sourceLabel: 'MBD: weld-1',
+        role: 'external',
+        category: 'annotation',
+        layout: {
+          id: 'weld-1',
+          role: 'external',
+          labelPinned: true,
+          formattedLabel: '',
+          lines: [],
+          labelAnchor: [0, 0, 0],
+          arrowLines: [],
+          markers: [{ at: [0, 0, 0], shape: 'circle', radiusPx: 5 }],
+        },
+      },
+      {
+        id: 'mbd-1',
+        source: 'mbd',
+        sourceLabel: 'MBD',
+        role: 'external-reference',
+        layout: {
+          id: 'mbd-1',
+          kind: 'linear',
+          role: 'external-reference',
+          labelPinned: false,
+          a: [0, 1, 0],
+          b: [1, 1, 0],
+          placement: { offsetM: 0.2, labelT: 0.5, side: 1 },
+        },
+      },
+    ]);
+    mocks.dimensionSystem.value = system;
+
+    const diagnostics = useMbdDiagnosticsStore();
+    diagnostics.set({
+      channel: 'api',
+      sourceId: '24381/145712',
+      issues: [{
+        id: 'issue-1',
+        severity: 'error',
+        category: 'data',
+        message: 'missing tubi geometry',
+        refno: '24381/145712',
+      }],
+      skipped: [{ id: 'angle-1', reason: 'contract-incomplete' }],
+    });
+
+    const host = mountPanel();
+    await nextTick();
+
+    const rowIds = [...host.querySelectorAll('[data-dimension-id]')]
+      .map(node => node.getAttribute('data-dimension-id'));
+    expect(rowIds).toEqual(['linear-1', 'mbd-1', 'weld-1']);
+
+    const panel = host.querySelector('[data-testid="mbd-diagnostics"]');
+    expect(panel).not.toBeNull();
+    expect(panel?.textContent).toContain('MBD 诊断（2）');
+    expect(panel?.textContent).toContain('missing tubi geometry');
+    expect(panel?.textContent).toContain('angle-1：contract-incomplete');
+
+    const locateEvents: string[][] = [];
+    const onLocate = (event: Event) => {
+      locateEvents.push(((event as CustomEvent).detail?.refnos ?? []) as string[]);
+    };
+    window.addEventListener('showModelByRefnos', onLocate);
+    try {
+      host.querySelector<HTMLButtonElement>(
+        '[data-locate-refno="24381/145712"]',
+      )?.click();
+    } finally {
+      window.removeEventListener('showModelByRefnos', onLocate);
+    }
+    expect(locateEvents).toEqual([['24381/145712']]);
+  });
+
+  it('surfaces channel-level load failures instead of hiding them', async () => {
+    mocks.dimensionSystem.value = createSystem();
+    useMbdDiagnosticsStore().set({
+      channel: 'api',
+      sourceId: '24381/145712',
+      issues: [],
+      skipped: [],
+      loadError: 'MBD V2 API responded with status 404',
+    });
+
+    const host = mountPanel();
+    await nextTick();
+
+    const errorLine = host.querySelector('[data-testid="mbd-load-error"]');
+    expect(errorLine?.textContent).toContain('装载失败');
+    expect(errorLine?.textContent).toContain('404');
   });
 });

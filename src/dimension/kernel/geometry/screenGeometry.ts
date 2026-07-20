@@ -4,9 +4,14 @@ import type {
   ScreenGlyphRun,
   ScreenLine,
   ScreenLinePart,
+  ScreenMarker,
+  ScreenPath,
   ScreenRect,
   Vec2,
 } from '../types';
+
+/** Bounded hit-region count per path so large arcs stay within budget. */
+const MAX_PATH_HIT_REGIONS = 32;
 
 export function makeScreenLine(
   from: Vec2,
@@ -29,6 +34,45 @@ export function makeLineHitRegion(line: ScreenLine, widthPx: number): HitRegion 
 
 export function makeGlyphHitRegion(glyph: ScreenGlyphRun): HitRegion {
   return { kind: 'rect', rect: glyph.bounds, part: 'label' };
+}
+
+/**
+ * Hit regions for a projected path: chord segments with a stride so a densely
+ * subdivided arc contributes at most MAX_PATH_HIT_REGIONS regions. The chord
+ * approximation error stays far below pointer tolerances.
+ */
+export function makePathHitRegions(path: ScreenPath, widthPx: number): HitRegion[] {
+  const points = path.closed && path.points.length > 1
+    ? [...path.points, path.points[0]!]
+    : path.points;
+  const spanCount = points.length - 1;
+  if (spanCount < 1) return [];
+  const stride = Math.max(1, Math.ceil(spanCount / MAX_PATH_HIT_REGIONS));
+  const regions: HitRegion[] = [];
+  for (let start = 0; start < spanCount; start += stride) {
+    const end = Math.min(start + stride, spanCount);
+    regions.push({
+      kind: 'segment',
+      from: points[start]!,
+      to: points[end]!,
+      widthPx,
+      part: path.part,
+    });
+  }
+  return regions;
+}
+
+export function makeMarkerHitRegion(marker: ScreenMarker): HitRegion {
+  return {
+    kind: 'rect',
+    rect: {
+      x: marker.at[0] - marker.radiusPx,
+      y: marker.at[1] - marker.radiusPx,
+      width: marker.radiusPx * 2,
+      height: marker.radiusPx * 2,
+    },
+    part: marker.part,
+  };
 }
 
 export function expandRect(rect: ScreenRect, amountPx: number): ScreenRect {

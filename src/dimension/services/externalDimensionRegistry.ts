@@ -1,3 +1,5 @@
+import { externalDimensionCategory } from '../adapters/normalizeExternalDimensions';
+
 import type { ExternalDimensionRecord } from '../adapters/normalizeExternalDimensions';
 
 export type ExternalDimensionSource = 'bran-clearance' | 'mbd';
@@ -6,6 +8,10 @@ export type ExternalDimensionRegistrySnapshot = Readonly<{
   records: readonly ExternalDimensionRecord[];
   visibleRecords: readonly ExternalDimensionRecord[];
   hiddenIds: ReadonlySet<string>;
+  /** 外部尺寸（ADR 0041 术语）。 */
+  dimensionRecords: readonly ExternalDimensionRecord[];
+  /** 外部标注图元（标签/引线/辅助几何/焊缝/坡度）。 */
+  annotationRecords: readonly ExternalDimensionRecord[];
 }>;
 
 export type ExternalDimensionRegistryListener = (
@@ -30,6 +36,12 @@ export class ExternalDimensionRegistry {
       records,
       visibleRecords: records.filter(record => !this.hiddenIds.has(record.id)),
       hiddenIds: new Set(this.hiddenIds),
+      dimensionRecords: records.filter(
+        record => externalDimensionCategory(record) === 'dimension',
+      ),
+      annotationRecords: records.filter(
+        record => externalDimensionCategory(record) === 'annotation',
+      ),
     };
   }
 

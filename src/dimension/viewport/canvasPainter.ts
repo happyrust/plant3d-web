@@ -1,6 +1,13 @@
+import { resolveDimensionLineDash } from '../kernel/theme';
+
 import type { LffFont } from '../kernel/glyph/lffParser';
 import type { DimensionStyleRole, DimensionTheme } from '../kernel/theme';
-import type { LayoutPrimitive, LayoutResult, Vec2 } from '../kernel/types';
+import type {
+  DimensionLineStyle,
+  LayoutPrimitive,
+  LayoutResult,
+  Vec2,
+} from '../kernel/types';
 
 function alignedCoordinate(value: number, lineWidthPx: number): number {
   const roundedWidth = Math.round(lineWidthPx);
@@ -9,17 +16,89 @@ function alignedCoordinate(value: number, lineWidthPx: number): number {
     : Math.round(value);
 }
 
-function lineDashFor(role: string): readonly number[] {
-  switch (role) {
-    case 'external-reference':
-      return [6, 4];
-    case 'invalid':
-      return [7, 3];
-    case 'approximate':
-      return [2, 2];
-    default:
-      return [];
+/** Both CanvasRenderingContext2D and Path2D satisfy this surface. */
+type PathSink = {
+  moveTo(x: number, y: number): void;
+  lineTo(x: number, y: number): void;
+  arc(
+    x: number,
+    y: number,
+    radius: number,
+    startAngle: number,
+    endAngle: number,
+  ): void;
+  closePath(): void;
+};
+
+/**
+ * Single dispatch for geometric stroke primitives, shared by the batched
+ * Path2D path and the direct-context fallback so the two rendering paths
+ * cannot drift: lines stay pixel-aligned, paths and markers stay unaligned
+ * (arc smoothness beats crispness).
+ */
+function appendStrokePrimitive(
+  sink: PathSink,
+  primitive: Exclude<LayoutPrimitive, { kind: 'glyph-run' }>,
+  offset: Vec2,
+  lineWidthPx: number,
+): void {
+  if (primitive.kind === 'line') {
+    sink.moveTo(
+      alignedCoordinate(primitive.from[0] + offset[0], lineWidthPx),
+      alignedCoordinate(primitive.from[1] + offset[1], lineWidthPx),
+    );
+    sink.lineTo(
+      alignedCoordinate(primitive.to[0] + offset[0], lineWidthPx),
+      alignedCoordinate(primitive.to[1] + offset[1], lineWidthPx),
+    );
+    return;
   }
+  if (primitive.kind === 'path') {
+    const first = primitive.points[0];
+    if (!first || primitive.points.length < 2) return;
+    sink.moveTo(first[0] + offset[0], first[1] + offset[1]);
+    for (let index = 1; index < primitive.points.length; index += 1) {
+      const point = primitive.points[index]!;
+      sink.lineTo(point[0] + offset[0], point[1] + offset[1]);
+    }
+    if (primitive.closed) sink.closePath();
+    return;
+  }
+  const x = primitive.at[0] + offset[0];
+  const y = primitive.at[1] + offset[1];
+  const radius = primitive.radiusPx;
+  if (primitive.shape === 'circle') {
+    sink.moveTo(x + radius, y);
+    sink.arc(x, y, radius, 0, Math.PI * 2);
+    return;
+  }
+  sink.moveTo(x - radius, y);
+  sink.lineTo(x + radius, y);
+  sink.moveTo(x, y - radius);
+  sink.lineTo(x, y + radius);
+}
+
+type StrokeBatchKey = string;
+
+type StrokeBatchStyle = Readonly<{
+  styleRole: string;
+  lineStyle?: DimensionLineStyle;
+}>;
+
+function strokeBatchKey(primitive: LayoutPrimitive): StrokeBatchKey {
+  const lineStyle = primitive.kind === 'glyph-run'
+    ? undefined
+    : primitive.lineStyle;
+  return `${primitive.styleRole}\u0000${lineStyle ?? ''}`;
+}
+
+function strokeBatchStyle(primitive: LayoutPrimitive): StrokeBatchStyle {
+  return {
+    styleRole: primitive.styleRole,
+    ...(primitive.kind !== 'glyph-run' && primitive.lineStyle
+      ? { lineStyle: primitive.lineStyle }
+      : {}),
+  };
 }
 
 export class Canvas2DDimensionPainter {
@@ -83,31 +162,41 @@ export class Canvas2DDimensionPainter {
       return;
     }
 
-    const byStyleRole = new Map<string, LayoutPrimitive[]>();
+    const byBatch = new Map<StrokeBatchKey, {
+      style: StrokeBatchStyle;
+      primitives: LayoutPrimitive[];
+    }>();
     for (const layout of layouts) {
       for (const primitive of layout.primitives) {
-        const group = byStyleRole.get(primitive.styleRole);
-        if (group) group.push(primitive);
-        else byStyleRole.set(primitive.styleRole, [primitive]);
+        const key = strokeBatchKey(primitive);
+        const group = byBatch.get(key);
+        if (group) group.primitives.push(primitive);
+        else {
+          byBatch.set(key, {
+            style: strokeBatchStyle(primitive),
+            primitives: [primitive],
+          });
+        }
       }
     }
 
-    for (const [styleRole, primitives] of byStyleRole) {
+    for (const { style, primitives } of byBatch.values()) {
       this.context.save();
       this.context.strokeStyle =
-        theme.colors[styleRole as DimensionStyleRole] ?? theme.colors.normal;
+        theme.colors[style.styleRole as DimensionStyleRole]
+        ?? theme.colors.normal;
       this.context.lineWidth = theme.lineWidthPx;
-      this.context.setLineDash([...lineDashFor(styleRole)]);
+      this.context.setLineDash([
+        ...resolveDimensionLineDash(style.styleRole, style.lineStyle),
+      ]);
       this.context.beginPath();
       for (const primitive of primitives) {
-        if (primitive.kind === 'line') {
-          this.context.moveTo(
-            alignedCoordinate(primitive.from[0] + offset[0], theme.lineWidthPx),
-            alignedCoordinate(primitive.from[1] + offset[1], theme.lineWidthPx),
-          );
-          this.context.lineTo(
-            alignedCoordinate(primitive.to[0] + offset[0], theme.lineWidthPx),
-            alignedCoordinate(primitive.to[1] + offset[1], theme.lineWidthPx),
+        if (primitive.kind !== 'glyph-run') {
+          appendStrokePrimitive(
+            this.context,
+            primitive,
+            offset,
+            theme.lineWidthPx,
           );
           continue;
         }
@@ -175,27 +264,24 @@ export class Canvas2DDimensionPainter {
     theme: DimensionTheme,
     offset: Vec2,
   ): void {
-    const byStyleRole = new Map<string, Path2D>();
+    const byBatch = new Map<StrokeBatchKey, {
+      style: StrokeBatchStyle;
+      path: Path2D;
+    }>();
     const transform = new DOMMatrix();
-    const pathFor = (styleRole: string): Path2D => {
-      const existing = byStyleRole.get(styleRole);
-      if (existing) return existing;
+    const pathFor = (primitive: LayoutPrimitive): Path2D => {
+      const key = strokeBatchKey(primitive);
+      const existing = byBatch.get(key);
+      if (existing) return existing.path;
       const path = new Path2D();
-      byStyleRole.set(styleRole, path);
+      byBatch.set(key, { style: strokeBatchStyle(primitive), path });
       return path;
     };
     for (const layout of layouts) {
       for (const primitive of layout.primitives) {
-        const framePath = pathFor(primitive.styleRole);
-        if (primitive.kind === 'line') {
-          framePath.moveTo(
-            alignedCoordinate(primitive.from[0] + offset[0], theme.lineWidthPx),
-            alignedCoordinate(primitive.from[1] + offset[1], theme.lineWidthPx),
-          );
-          framePath.lineTo(
-            alignedCoordinate(primitive.to[0] + offset[0], theme.lineWidthPx),
-            alignedCoordinate(primitive.to[1] + offset[1], theme.lineWidthPx),
-          );
+        const framePath = pathFor(primitive);
+        if (primitive.kind !== 'glyph-run') {
+          appendStrokePrimitive(framePath, primitive, offset, theme.lineWidthPx);
           continue;
         }
         const cacheKey = `${primitive.capHeightPx}\u0000${primitive.text}`;
@@ -220,12 +306,15 @@ export class Canvas2DDimensionPainter {
         framePath.addPath(glyphPath, transform);
       }
     }
-    for (const [styleRole, path] of byStyleRole) {
+    for (const { style, path } of byBatch.values()) {
       this.context.save();
       this.context.strokeStyle =
-        theme.colors[styleRole as DimensionStyleRole] ?? theme.colors.normal;
+        theme.colors[style.styleRole as DimensionStyleRole]
+        ?? theme.colors.normal;
       this.context.lineWidth = theme.lineWidthPx;
-      this.context.setLineDash([...lineDashFor(styleRole)]);
+      this.context.setLineDash([
+        ...resolveDimensionLineDash(style.styleRole, style.lineStyle),
+      ]);
       this.context.stroke(path);
       this.context.restore();
     }

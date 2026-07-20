@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 
-import { normalizeExternalDimension } from '../adapters/normalizeExternalDimensions';
+import {
+  externalDimensionCategory,
+  normalizeExternalDimension,
+} from '../adapters/normalizeExternalDimensions';
 import { normalizeUserDimension } from '../adapters/normalizeUserDimensions';
 import { formatDimensionLabel } from '../kernel/format';
 import { deriveDimensionValue } from '../kernel/value';
@@ -35,6 +38,20 @@ const props = withDefaults(defineProps<{
 
 const activeIndex = ref(0);
 const hiddenExternal = computed(() => new Set(props.hiddenExternalIds));
+
+function itemGroup(item: DimensionListItem): string {
+  if (!isExternalDimensionRecord(item)) return '用户尺寸';
+  return externalDimensionCategory(item) === 'annotation'
+    ? '外部标注图元'
+    : '外部尺寸';
+}
+
+/** 组标题只在该组第一行之前渲染一次（列表顺序由父组件按组排好）。 */
+const groupHeaders = computed(() => props.items.map((item, index) => {
+  const group = itemGroup(item);
+  const previousGroup = index > 0 ? itemGroup(props.items[index - 1]!) : null;
+  return group !== previousGroup ? group : null;
+}));
 
 watch(
   () => [props.selectedId, props.items] as const,
@@ -75,7 +92,7 @@ function itemLabel(item: DimensionListItem): string {
     const label = 'formattedLabel' in normalized
       ? normalized.formattedLabel
       : normalizedLabel(normalized);
-    return `${item.sourceLabel} ${label}`;
+    return `${item.sourceLabel} ${label}`.trim();
   }
 
   const normalized = normalizeUserDimension(item);
@@ -167,32 +184,38 @@ function onKeydown(event: KeyboardEvent): void {
     aria-label="尺寸列表"
     :aria-activedescendant="items[activeIndex] ? optionId(items[activeIndex]) : undefined"
     @keydown="onKeydown">
-    <div v-for="(item, index) in items"
-      :id="optionId(item)"
-      :key="item.id"
-      class="dimension-semantic-list__row"
-      :class="{ 'is-active': index === activeIndex }"
-      role="option"
-      :aria-selected="item.id === selectedId"
-      :data-dimension-id="item.id"
-      @click="selectItem(item, index)">
-      <div class="dimension-semantic-list__content">
-        <span>{{ itemLabel(item) }}</span>
-        <span v-if="statusLabel(item)"
-          class="dimension-semantic-list__status">
-          {{ statusLabel(item) }}
-        </span>
+    <template v-for="(item, index) in items" :key="item.id">
+      <div v-if="groupHeaders[index]"
+        class="dimension-semantic-list__group"
+        role="presentation"
+        :data-group="groupHeaders[index]">
+        {{ groupHeaders[index] }}
       </div>
-      <div class="dimension-semantic-list__actions">
-        <button v-for="action in actionsFor(item).filter(action => action !== 'select')"
-          :key="action"
-          type="button"
-          :data-action="action"
-          @click.stop="invokeAction(action, item)">
-          {{ actionLabel(action, item) }}
-        </button>
+      <div :id="optionId(item)"
+        class="dimension-semantic-list__row"
+        :class="{ 'is-active': index === activeIndex }"
+        role="option"
+        :aria-selected="item.id === selectedId"
+        :data-dimension-id="item.id"
+        @click="selectItem(item, index)">
+        <div class="dimension-semantic-list__content">
+          <span>{{ itemLabel(item) }}</span>
+          <span v-if="statusLabel(item)"
+            class="dimension-semantic-list__status">
+            {{ statusLabel(item) }}
+          </span>
+        </div>
+        <div class="dimension-semantic-list__actions">
+          <button v-for="action in actionsFor(item).filter(action => action !== 'select')"
+            :key="action"
+            type="button"
+            :data-action="action"
+            @click.stop="invokeAction(action, item)">
+            {{ actionLabel(action, item) }}
+          </button>
+        </div>
       </div>
-    </div>
+    </template>
     <div v-if="items.length === 0" class="dimension-semantic-list__empty">
       暂无尺寸
     </div>
@@ -208,6 +231,14 @@ function onKeydown(event: KeyboardEvent): void {
   overflow: auto;
   padding: 8px;
   outline: none;
+}
+
+.dimension-semantic-list__group {
+  padding: 6px 4px 2px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  opacity: 0.65;
 }
 
 .dimension-semantic-list__row {

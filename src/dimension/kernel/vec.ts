@@ -70,6 +70,16 @@ export function normalize3(a: Vec3): Vec3 {
   return scale3(a, 1 / length);
 }
 
+/**
+ * Non-throwing normalization for callers that treat degenerate vectors as
+ * "no result" (adapters, arc projection). Single zero-length policy: EPSILON.
+ */
+export function tryNormalize3(a: Vec3): Vec3 | null {
+  const length = length3(a);
+  if (!Number.isFinite(length) || length <= EPSILON) return null;
+  return scale3(a, 1 / length);
+}
+
 export function lerp3(a: Vec3, b: Vec3, t: number): Vec3 {
   return add3(a, scale3(sub3(b, a), t));
 }

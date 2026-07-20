@@ -1,3 +1,4 @@
+import type { ExternalDimensionRecord } from '@/dimension/adapters/normalizeExternalDimensions';
 import type { UserDimensionRecord } from '@/dimension/domain/types';
 import type { ViewportProjector } from '@/dimension/kernel/projector';
 
@@ -10,6 +11,7 @@ import { loadDimensionFont } from '@/dimension/viewport/loadDimensionFont';
 type PerfResult = {
   loaded: number;
   visible: number;
+  external: number;
   samples: number;
   updateP50Ms: number;
   updateP95Ms: number;
@@ -30,7 +32,10 @@ declare global {
 }
 
 const LOADED = 10_000;
-const VISIBLE = 2_000;
+/** 用户尺寸 + 外部图元合计 2000 条同屏可见（ADR 0040 预算口径）。 */
+const VISIBLE_USER = 1_500;
+const VISIBLE_EXTERNAL = 500;
+const VISIBLE = VISIBLE_USER + VISIBLE_EXTERNAL;
 
 function percentile(values: readonly number[], quantile: number): number {
   const sorted = [...values].sort((a, b) => a - b);
@@ -38,7 +43,7 @@ function percentile(values: readonly number[], quantile: number): number {
 }
 
 function records(): readonly UserDimensionRecord[] {
-  return Array.from({ length: VISIBLE }, (_, index) => {
+  return Array.from({ length: VISIBLE_USER }, (_, index) => {
     const column = index % 50;
     const row = Math.floor(index / 50);
     const x = column * 0.18 - 4.5;
@@ -54,6 +59,64 @@ function records(): readonly UserDimensionRecord[] {
       createdAt: 1,
       updatedAt: 1,
       validity: 'valid',
+    };
+  });
+}
+
+/**
+ * External MBD-style annotation primitives: weld markers, full-circle arcs
+ * and multi-line labels take the arc/marker/text code paths introduced for
+ * the V2 contract (ADR 0041/0042).
+ */
+function externalRecords(): readonly ExternalDimensionRecord[] {
+  return Array.from({ length: VISIBLE_EXTERNAL }, (_, index) => {
+    const column = index % 50;
+    const row = Math.floor(index / 50);
+    const x = column * 0.18 - 4.5;
+    const y = -0.4 - row * 0.13;
+    const id = `perf-external-${index}`;
+    const variant = index % 3;
+    return {
+      id,
+      source: 'mbd' as const,
+      sourceLabel: `MBD: ${id}`,
+      role: 'external' as const,
+      category: 'annotation' as const,
+      layout: {
+        id,
+        role: 'external' as const,
+        labelPinned: true as const,
+        formattedLabel: variant === 2 ? `W${index}` : '',
+        lines: [],
+        labelAnchor: [x, y, 0] as const,
+        arrowLines: [],
+        ...(variant === 0
+          ? {
+            arcs: [{
+              center: [x, y, 0] as const,
+              normal: [0, 0, 1] as const,
+              radiusM: 0.04,
+            }],
+          }
+          : {}),
+        ...(variant === 1
+          ? {
+            markers: [
+              { at: [x, y, 0] as const, shape: 'circle' as const, radiusPx: 5 },
+              { at: [x, y, 0] as const, shape: 'cross' as const, radiusPx: 5 },
+            ],
+          }
+          : {}),
+        ...(variant === 2
+          ? {
+            texts: [{
+              text: `L${index}`,
+              anchor: [x, y, 0] as const,
+              stackIndex: 1,
+            }],
+          }
+          : {}),
+      },
     };
   });
 }
@@ -121,6 +184,7 @@ async function main(): Promise<void> {
     ...createEmptyDimensionDocument({ documentId: 'dimension-perf' }),
     records: records(),
   });
+  viewport.setExternalDimensions(externalRecords());
 
   const renderAt = (offset: number) => new Promise<void>((resolve) => {
     frameResolved = resolve;
@@ -151,6 +215,7 @@ async function main(): Promise<void> {
       return {
         loaded: LOADED,
         visible: VISIBLE,
+        external: VISIBLE_EXTERNAL,
         samples: frameDurations.length,
         updateP50Ms: percentile(frameDurations, 0.5),
         updateP95Ms: percentile(frameDurations, 0.95),

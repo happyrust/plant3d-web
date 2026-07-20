@@ -22,6 +22,7 @@ test('2k visible dimension browser pipeline stays within ADR-0040 budgets', asyn
   console.log('dimension-perf', result);
   expect(result.loaded).toBe(10_000);
   expect(result.visible).toBe(2_000);
+  expect(result.external).toBe(500);
   expect(result.samples).toBe(60);
   expect(result.updateP95Ms).toBeLessThanOrEqual(16);
   expect(result.hitP95Ms).toBeLessThanOrEqual(2);
