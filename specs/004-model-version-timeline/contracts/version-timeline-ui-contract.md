@@ -80,6 +80,8 @@
 | `compare-workbench` | 双树对比工作台根 |
 | `version-scrubber` | 视口刻度条 |
 
+> 别名注记（2026-07-20，tasks.md Phase 4 纠偏）：契约 `tree-diff-filter` ↔ 实现 `model-tree-diff-chip-*`（`ModelTreePanel.vue` 实际 testid 为 `model-tree-diff-chip-all/-added/-modified/-deleted`，按 chip key 展开）；以现有实现 testid 为准，本注记仅作契约别名映射，不改代码不改测试。
+
 ## 守护契约
 
 - 快照/对比目标默认仅接受 `release_lifecycle === 'published'`；其余生命周期 MUST 置灰并悬浮说明，诊断模式显式开启后方可选（FR-032）。
