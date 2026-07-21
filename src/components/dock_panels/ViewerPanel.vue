@@ -3419,6 +3419,7 @@ onMounted(async () => {
   });
   // 让 useModelGeneration 能识别 DTX 后端
   (compat as any).__dtxLayer = dtxLayer;
+  (window as any).__dtxLayer = dtxLayer;
   (compat as any).__dtxAfterInstancesLoaded = (
     _dbno: number,
     loadedRefnos: string[],
@@ -4097,15 +4098,33 @@ onMounted(async () => {
           level: 'info',
         });
 
-        // 3. 加载实例到 DTX（优先 parquet，失败回退 json）
-        const urlDataSource = new URLSearchParams(window.location.search).get('data_source') as 'json' | 'parquet' | 'auto' | null;
-        const ds = urlDataSource || 'auto';
+        // 3. 加载实例到 DTX（data_source=json|parquet|backend；未指定则 parquet 可用时优先，否则 json）
+        const urlDataSource = new URLSearchParams(window.location.search).get('data_source');
+        const normalizedSource = String(urlDataSource || '').trim().toLowerCase();
+        let ds: 'json' | 'parquet' | 'backend' = 'json';
+        if (normalizedSource === 'json' || normalizedSource === 'parquet' || normalizedSource === 'backend') {
+          ds = normalizedSource;
+        } else {
+          try {
+            const { useDbnoInstancesParquetLoader } = await import('@/composables/useDbnoInstancesParquetLoader');
+            ds = (await useDbnoInstancesParquetLoader().isParquetAvailable(dbno)) ? 'parquet' : 'json';
+          } catch {
+            ds = 'json';
+          }
+        }
         console.log(`[debug_refno] dataSource=${ds}`);
         const result = await loadDbnoInstancesForVisibleRefnosDtx(
           dtxLayer,
           dbno,
           refnos,
-          { lodAssetKey: 'L1', debug: true, dataSource: ds }
+          {
+            lodAssetKey: 'L1',
+            debug: true,
+            dataSource: ds,
+            forceReloadRefnos: refnos,
+            replaceExistingObjects: true,
+            includeOwnedTubings: true,
+          }
         );
         (compat as any).__dtxAfterInstancesLoaded?.(dbno, refnos);
 
@@ -4231,7 +4250,7 @@ onMounted(async () => {
       return;
     }
     const detail = (
-            ev as CustomEvent<{ refnos?: unknown; regenModel?: boolean }>
+            ev as CustomEvent<{ refnos?: unknown; regenModel?: boolean; dbnum?: number; sesno?: number }>
     ).detail;
     const raw = (detail as any)?.refnos;
     const refnos = Array.isArray(raw)
@@ -4243,6 +4262,12 @@ onMounted(async () => {
 
     const unique = Array.from(new Set(refnos));
     const flyTo = !!(detail as any)?.flyTo;
+    const versionDbnum = Number((detail as any)?.dbnum);
+    const versionSesno = Number((detail as any)?.sesno);
+    const loadUnitVersion = Number.isInteger(versionDbnum)
+      && versionDbnum > 0
+      && Number.isInteger(versionSesno)
+      && versionSesno > 0;
     const requestIdRaw = (detail as any)?.requestId;
     const requestId =
             typeof requestIdRaw === 'string'
@@ -4302,10 +4327,14 @@ onMounted(async () => {
         for (const r of unique) {
           const dtxStatsBefore =
                         (dtxLayer as any)?.getStats?.() ?? null;
-          const ok = await mg.showModelByRefno(r, {
-            flyTo: flyTo && unique.length === 1,
-            regenerate: !!(detail as any)?.regenModel,
-          });
+          const ok = loadUnitVersion
+            ? await mg.showModelUnitVersion(r, versionDbnum, versionSesno, {
+              flyTo: flyTo && unique.length === 1,
+            })
+            : await mg.showModelByRefno(r, {
+              flyTo: flyTo && unique.length === 1,
+              regenerate: !!(detail as any)?.regenModel,
+            });
           const loadDebug = mg.lastLoadDebug?.value ?? null;
           const dtxStatsAfter =
                         (dtxLayer as any)?.getStats?.() ?? null;
@@ -4733,6 +4762,7 @@ onUnmounted(() => {
   try {
     delete (window as any).__xeokitViewer;
     delete (window as any).__dtxViewer;
+    delete (window as any).__dtxLayer;
     delete (window as any).__viewerContext;
     delete (window as any).__viewerToolStore;
     delete (window as any).__xeokitMeasurementTools;

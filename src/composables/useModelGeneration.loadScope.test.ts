@@ -178,3 +178,16 @@ describe('resolveActualModelLoadScope', () => {
     });
   });
 });
+
+describe('mergeVersionReplacementRefnos', () => {
+  it('切换版本时保留旧版本独有 refno 进入替换范围，以便隐藏已删除模型', async () => {
+    const { mergeVersionReplacementRefnos } = await import('@/composables/useModelGeneration');
+
+    expect(
+      mergeVersionReplacementRefnos(
+        ['24381/145018', '24381_145019'],
+        ['24381_145019', '24381_145020'],
+      ),
+    ).toEqual(['24381_145018', '24381_145019', '24381_145020']);
+  });
+});

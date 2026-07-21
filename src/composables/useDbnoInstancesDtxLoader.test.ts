@@ -44,6 +44,25 @@ describe('useDbnoInstancesDtxLoader', () => {
     expect(typeof mod.hasDtxDbnoCache).toBe('function');
   });
 
+  it('指定最小交付单元版本时直接使用该 manifest，不探测当前 dbno 包', async () => {
+    const { DTXLayer } = await import('@/utils/three/dtx');
+    const mod = await import('./useDbnoInstancesDtxLoader');
+    const manifestUrl = '/files/output/AvevaMarineSample/model_units/7997/24381_145018/897/manifest.json';
+    const dtxLayer = new DTXLayer({ maxVertices: 64, maxIndices: 128, maxObjects: 8 });
+
+    await mod.loadDbnoInstancesForVisibleRefnosDtx(dtxLayer, 7997, ['24381_145018'], {
+      dataSource: 'parquet',
+      parquetManifestUrl: manifestUrl,
+    });
+
+    expect(parquetLoaderMocks.isParquetAvailable).not.toHaveBeenCalled();
+    expect(parquetLoaderMocks.queryInstanceEntriesByRefnos).toHaveBeenCalledWith(
+      7997,
+      ['24381_145018'],
+      expect.objectContaining({ manifestUrl }),
+    );
+  });
+
   it('AABB 代理模型应登记到 DTX refno 索引，便于空间查询定位和显隐', async () => {
     const { DTXLayer } = await import('@/utils/three/dtx');
     const mod = await import('./useDbnoInstancesDtxLoader');
@@ -135,11 +154,12 @@ describe('useDbnoInstancesDtxLoader', () => {
     expect(mod.resolveDtxObjectIdsByRefno(dbno, tubiRefno)).toHaveLength(1);
   });
 
-  it('ELBO 自身已有几何时，应跳过与 ELBO 同 refno 的 TUBI primitive', async () => {
+  it('ELBO 自身已有几何时，同 refno 的 TUBI 应挂到 BRAN owner 而非丢弃', async () => {
     const { DTXLayer } = await import('@/utils/three/dtx');
     const mod = await import('./useDbnoInstancesDtxLoader');
 
     const elboRefno = '24381_145714';
+    const branRefno = '24381_145712';
     const dbno = 99002;
 
     parquetLoaderMocks.queryInstanceEntriesByRefnos.mockResolvedValue(new Map([
@@ -155,7 +175,7 @@ describe('useDbnoInstancesDtxLoader', () => {
           uniforms: {
             refno: elboRefno,
             noun: 'ELBO',
-            owner_refno: '24381_145712',
+            owner_refno: branRefno,
             owner_noun: 'BRAN',
             spec_value: 3,
           },
@@ -171,8 +191,8 @@ describe('useDbnoInstancesDtxLoader', () => {
           uniforms: {
             refno: elboRefno,
             noun: 'TUBI',
-            owner_refno: '24381_145712',
-            owner_noun: '',
+            owner_refno: branRefno,
+            owner_noun: 'BRAN',
             spec_value: 3,
           },
         },
@@ -185,12 +205,14 @@ describe('useDbnoInstancesDtxLoader', () => {
       maxObjects: 16,
     });
 
-    await mod.loadDbnoInstancesForVisibleRefnosDtx(dtxLayer, dbno, [elboRefno], {
+    const result = await mod.loadDbnoInstancesForVisibleRefnosDtx(dtxLayer, dbno, [elboRefno], {
       dataSource: 'parquet',
       debug: false,
     });
 
+    expect(result.loadedObjects).toBe(2);
     expect(mod.resolveDtxObjectIdsByRefno(dbno, elboRefno)).toHaveLength(1);
+    expect(mod.resolveDtxObjectIdsByRefno(dbno, branRefno)).toHaveLength(1);
   });
 
   it('已知 404 的 geoHash 默认不跨批次重复请求，forceReload 时允许重试', async () => {
@@ -246,5 +268,44 @@ describe('useDbnoInstancesDtxLoader', () => {
     });
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('replaceExistingObjects 应隐藏旧对象并只保留新对象索引', async () => {
+    const { DTXLayer } = await import('@/utils/three/dtx');
+    const mod = await import('./useDbnoInstancesDtxLoader');
+    const dbno = 99004;
+    const refno = '24381_76693';
+    parquetLoaderMocks.queryInstanceEntriesByRefnos.mockResolvedValue(new Map([[
+      refno,
+      [{
+        geo_hash: '1',
+        matrix: [
+          1, 0, 0, 0,
+          0, 1, 0, 0,
+          0, 0, 1, 0,
+          0, 0, 0, 1,
+        ],
+        uniforms: { refno, noun: 'STRT', owner_refno: '24381_76692', owner_noun: 'BRAN' },
+      }],
+    ]]));
+    const dtxLayer = new DTXLayer({ maxVertices: 128, maxIndices: 256, maxObjects: 8 });
+
+    await mod.loadDbnoInstancesForVisibleRefnosDtx(dtxLayer, dbno, [refno], {
+      dataSource: 'parquet',
+    });
+    const oldIds = mod.resolveDtxObjectIdsByRefno(dbno, refno);
+
+    await mod.loadDbnoInstancesForVisibleRefnosDtx(dtxLayer, dbno, [refno], {
+      dataSource: 'parquet',
+      forceReloadRefnos: [refno],
+      replaceExistingObjects: true,
+    });
+    const newIds = mod.resolveDtxObjectIdsByRefno(dbno, refno);
+
+    expect(oldIds).toHaveLength(1);
+    expect(newIds).toHaveLength(1);
+    expect(newIds[0]).not.toBe(oldIds[0]);
+    expect(dtxLayer.isObjectVisible(oldIds[0]!)).toBe(false);
+    expect(dtxLayer.isObjectVisible(newIds[0]!)).toBe(true);
   });
 });

@@ -335,6 +335,29 @@ describe('useDbnoInstancesParquetLoader', () => {
     }
   });
 
+  it('按模型提交 manifest URL 注册该版本目录下的 Parquet 文件', async () => {
+    const manifestUrl = '/files/output/AvevaMarineSample/model_units/7997/24381_145018/897/manifest.json';
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === manifestUrl) {
+        return new Response(JSON.stringify(createManifest(7997)), { status: 200 });
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+
+    vi.stubGlobal('fetch', fetchMock);
+    queryMock.mockResolvedValue({ toArray: () => [] });
+
+    const { useDbnoInstancesParquetLoader } = await import('./useDbnoInstancesParquetLoader');
+    const loader = useDbnoInstancesParquetLoader();
+    await loader.queryAllRefnosByDbno(7997, { manifestUrl });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const registeredUrls = registerFileURLMock.mock.calls.map((call) => String(call[1]));
+    expect(registeredUrls).toHaveLength(5);
+    expect(registeredUrls.every((url) => url.includes('/model_units/7997/24381_145018/897/'))).toBe(true);
+  });
+
   it('DuckDB 报本地文件名已注册时改用唯一文件名继续查询', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);

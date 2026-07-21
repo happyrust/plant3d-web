@@ -22,6 +22,10 @@ type LoaderOptions = {
   lodAssetKey?: string // "L1"
   debug?: boolean
   forceReloadRefnos?: string[]
+  /** 隐藏 refno 现有对象并用本次结果替换，避免强制重载后新旧模型叠加。 */
+  replaceExistingObjects?: boolean
+  /** 即使 geoHash 未变化也重新拉取 GLB，用于显式模型重建。 */
+  forceRefreshGeometries?: boolean
   /**
    * 数据源选择：
    * - 'parquet'：默认（失败则抛错）
@@ -29,6 +33,9 @@ type LoaderOptions = {
    * - 'json'：读取 instances_{dbno}.json 并本地索引
    */
   dataSource?: 'parquet' | 'backend' | 'json'
+  includeOwnedTubings?: boolean
+  /** 不可变最小交付单元提交的 manifest URL；提供后不读取 dbno 当前包。 */
+  parquetManifestUrl?: string
 }
 
 export type DtxMissingBreakdown = {
@@ -47,6 +54,7 @@ export type DtxAabbProxyEntry = {
 type DbnoRuntimeCache = {
   loadedRefnos: Set<string>
   loadedGeoHash: Set<string>
+  geometryByGeoHash: Map<string, BufferGeometry>
   /** 记录曾经 404 的 geoHash；用于触发按 refno 的自动生成，并在后续 forceReload 时重新拉取 GLB */
   notFoundGeoHash: Set<string>
   loadingGeoHash: Map<string, Promise<void>>
@@ -68,11 +76,13 @@ function getCache(dbno: number): DbnoRuntimeCache {
   const existing = cachesByDbno.get(dbno);
   if (existing) {
     if (!existing.objectIdToSpecValue) existing.objectIdToSpecValue = new Map();
+    if (!existing.geometryByGeoHash) existing.geometryByGeoHash = new Map();
     return existing;
   }
   const created: DbnoRuntimeCache = {
     loadedRefnos: new Set(),
     loadedGeoHash: new Set(),
+    geometryByGeoHash: new Map(),
     notFoundGeoHash: new Set(),
     loadingGeoHash: new Map(),
     objectCounter: 0,
@@ -167,12 +177,24 @@ async function ensureGeometryForGeoHash(
   dbno: number,
   geoHash: string,
   lodAssetKey: string,
-  debug: boolean
+  debug: boolean,
+  options: { forceRetryNotFound?: boolean; forceRefresh?: boolean } = {}
 ): Promise<{ status: 'ok' | 'not_found' | 'error'; notFoundNew: boolean }> {
   const cache = getCache(dbno);
   const wasNotFound = cache.notFoundGeoHash.has(geoHash);
+  const forceRetryNotFound = options.forceRetryNotFound === true;
+  const forceRefresh = options.forceRefresh === true;
+  const cachedGeometry = cache.geometryByGeoHash.get(geoHash);
+  if (!forceRefresh && cache.loadedGeoHash.has(geoHash) && !(forceRetryNotFound && wasNotFound)) {
+    if (!dtxLayer.hasGeometry(geoHash) && cachedGeometry) {
+      dtxLayer.addGeometry(geoHash, cachedGeometry);
+    }
+    if (dtxLayer.hasGeometry(geoHash)) {
+      return { status: wasNotFound ? 'not_found' : 'ok', notFoundNew: false };
+    }
+  }
   // 已加载且非 404：无需再拉取
-  if (cache.loadedGeoHash.has(geoHash) && !wasNotFound) {
+  if (!forceRefresh && cache.loadedGeoHash.has(geoHash) && !wasNotFound && dtxLayer.hasGeometry(geoHash)) {
     return { status: 'ok', notFoundNew: false };
   }
   const pending = cache.loadingGeoHash.get(geoHash);
@@ -185,20 +207,26 @@ async function ensureGeometryForGeoHash(
     // 基础几何体（后端约定 geo_hash = 1/2/3），直接在前端生成，避免无意义的 GLB 请求。
     const basic = String(geoHash).trim();
     if (basic === '1') {
-      dtxLayer.addGeometry(geoHash, getUnitBoxGeometry());
+      const geometry = getUnitBoxGeometry();
+      dtxLayer.addGeometry(geoHash, geometry);
+      cache.geometryByGeoHash.set(geoHash, geometry);
       cache.loadedGeoHash.add(geoHash);
       cache.notFoundGeoHash.delete(geoHash);
       return { status: 'ok' as const, notFoundNew: false };
     }
     if (basic === '2') {
       // CYLINDER/TUBI 在后端均使用 2，统一用单位圆柱承接
-      dtxLayer.addGeometry(geoHash, getUnitTubiGeometry());
+      const geometry = getUnitTubiGeometry();
+      dtxLayer.addGeometry(geoHash, geometry);
+      cache.geometryByGeoHash.set(geoHash, geometry);
       cache.loadedGeoHash.add(geoHash);
       cache.notFoundGeoHash.delete(geoHash);
       return { status: 'ok' as const, notFoundNew: false };
     }
     if (basic === '3') {
-      dtxLayer.addGeometry(geoHash, getUnitSphereGeometry());
+      const geometry = getUnitSphereGeometry();
+      dtxLayer.addGeometry(geoHash, geometry);
+      cache.geometryByGeoHash.set(geoHash, geometry);
       cache.loadedGeoHash.add(geoHash);
       cache.notFoundGeoHash.delete(geoHash);
       return { status: 'ok' as const, notFoundNew: false };
@@ -207,7 +235,9 @@ async function ensureGeometryForGeoHash(
     // 约定：tubi_* 属于“虚拟管段几何”（unit cylinder），不走 glb 下载。
     // 这样可避免大量 404 噪音，并确保“管道只有标注不见模型”的场景可直接显示。
     if (geoHash.startsWith('tubi_') || geoHash.startsWith('t_')) {
-      dtxLayer.addGeometry(geoHash, getUnitTubiGeometry());
+      const geometry = getUnitTubiGeometry();
+      dtxLayer.addGeometry(geoHash, geometry);
+      cache.geometryByGeoHash.set(geoHash, geometry);
       cache.loadedGeoHash.add(geoHash);
       cache.notFoundGeoHash.delete(geoHash);
       return { status: 'ok' as const, notFoundNew: false };
@@ -244,14 +274,21 @@ async function ensureGeometryForGeoHash(
     }
 
     if (geometry) {
-      dtxLayer.addGeometry(geoHash, geometry);
+      if (forceRefresh) {
+        dtxLayer.replaceGeometry(geoHash, geometry);
+      } else {
+        dtxLayer.addGeometry(geoHash, geometry);
+      }
+      cache.geometryByGeoHash.set(geoHash, geometry);
       cache.loadedGeoHash.add(geoHash);
       cache.notFoundGeoHash.delete(geoHash);
       return { status: 'ok' as const, notFoundNew: false };
     }
 
     // 404 或解析失败：用兜底盒子承接，避免完全不可见；同时保留 notFound 标记，便于后续生成后重拉 GLB。
-    dtxLayer.addGeometry(geoHash, getUnitBoxGeometry());
+    const fallbackGeometry = getUnitBoxGeometry();
+    dtxLayer.addGeometry(geoHash, fallbackGeometry);
+    cache.geometryByGeoHash.set(geoHash, fallbackGeometry);
     cache.loadedGeoHash.add(geoHash);
     return { status: notFound ? ('not_found' as const) : ('error' as const), notFoundNew };
   })();
@@ -270,12 +307,15 @@ async function ensureGeometriesForGeoHashes(
   geoHashes: string[],
   lodAssetKey: string,
   debug: boolean,
-  options: { concurrency?: number; forceRetryNotFound?: boolean } = {}
+  options: { concurrency?: number; forceRetryNotFound?: boolean; forceRefresh?: boolean } = {}
 ): Promise<string[]> {
   const cache = getCache(dbno);
   const forceRetryNotFound = options.forceRetryNotFound === true;
+  const forceRefresh = options.forceRefresh === true;
   const unique = Array.from(new Set(geoHashes)).filter((h) => {
     if (!h) return false;
+    if (forceRefresh) return true;
+    if (!dtxLayer.hasGeometry(h)) return true;
     if (!cache.loadedGeoHash.has(h)) return true;
     // 对曾经 404 的几何体：允许重试拉取（用于生成完成后的 forceReload）。
     return forceRetryNotFound && cache.notFoundGeoHash.has(h);
@@ -290,7 +330,10 @@ async function ensureGeometriesForGeoHashes(
     while (queue.length > 0) {
       const geoHash = queue.pop();
       if (!geoHash) continue;
-      const res = await ensureGeometryForGeoHash(dtxLayer, dbno, geoHash, lodAssetKey, debug);
+      const res = await ensureGeometryForGeoHash(dtxLayer, dbno, geoHash, lodAssetKey, debug, {
+        forceRetryNotFound,
+        forceRefresh,
+      });
       if (res.status === 'not_found' && res.notFoundNew) {
         missing.add(geoHash);
       }
@@ -578,6 +621,8 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
   const normalizedForceReload = forceReloadSet
     ? new Set(Array.from(forceReloadSet).map((r) => normalizeRefnoKey(String(r ?? ''))).filter((r) => !!r))
     : null;
+  const replaceExistingObjects = options.replaceExistingObjects === true;
+  const forceRefreshGeometries = options.forceRefreshGeometries === true;
 
   const toLoad = Array.from(new Set(normalizedRefnos))
     .filter((r) => (normalizedForceReload && normalizedForceReload.has(r)) || !cache.loadedRefnos.has(r));
@@ -624,12 +669,31 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
     if (debug) console.log('[dtx][instances] using json', { dbno, refnos: toLoad.length, indexSize: index.size });
   } else {
     const parquet = useDbnoInstancesParquetLoader();
-    const available = await parquet.isParquetAvailable(dbno);
-    if (!available) {
-      throw new Error(`Parquet not available (dbno=${dbno})`);
+    if (!options.parquetManifestUrl) {
+      const available = await parquet.isParquetAvailable(dbno);
+      if (!available) {
+        throw new Error(`Parquet not available (dbno=${dbno})`);
+      }
     }
-    index = await parquet.queryInstanceEntriesByRefnos(dbno, toLoad, { debug });
+    index = await parquet.queryInstanceEntriesByRefnos(dbno, toLoad, {
+      debug,
+      forceRefresh: normalizedForceReload !== null,
+      includeOwnedTubings: options.includeOwnedTubings,
+      manifestUrl: options.parquetManifestUrl,
+    });
     if (debug) console.log('[dtx][instances] using parquet', { dbno, refnos: toLoad.length });
+  }
+
+  // 先成功取得替换数据，再隐藏旧对象；请求失败时仍保留当前可见模型。
+  if (replaceExistingObjects) {
+    for (const refno of toLoad) {
+      const previousObjectIds = cache.refnoToObjectIds.get(refno) ?? [];
+      if (previousObjectIds.length > 0) {
+        dtxLayer.setObjectsVisible(previousObjectIds, false);
+      }
+      cache.refnoToObjectIds.set(refno, []);
+      cache.loadedRefnos.delete(refno);
+    }
   }
 
   let loadedObjects = 0;
@@ -660,6 +724,7 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
   const missingGeoHashes = await ensureGeometriesForGeoHashes(dtxLayer, dbno, Array.from(neededGeoHashes), lodAssetKey, debug, {
     concurrency: 8,
     forceRetryNotFound: normalizedForceReload !== null,
+    forceRefresh: forceRefreshGeometries,
   });
   if (missingGeoHashes.length > 0) {
     const extraMissing = new Set<string>();
@@ -731,10 +796,16 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
       if (noun && hiddenNouns.has(noun)) {
         continue;
       }
-      // 某些 fitting（如 ELBO）自身已有几何时，Parquet 里还会混入一个与 fitting 同 refno 的 TUBI primitive。
-      // 这条 primitive 在选择/高亮时会表现成“连着一段直管一起被选中”，因此这里直接跳过。
+      const ownerRefFromUniforms = normalizeRefnoKey(String((inst as any).uniforms?.owner_refno || ''));
+
+      // 某些 fitting（如 ELBO）自身已有几何时，还会混入同 refno 的 TUBI。
+      // 若直接挂在 fitting 下，选择/高亮会连带直管；若直接丢弃，BRAN 只剩 fittings 变成碎点。
+      // 有独立 BRAN/HANG owner 时：保留绘制，但把 object 挂到 owner_refno。
+      // 无独立 owner 时：保持旧行为跳过，避免污染 fitting 选择。
       if (bucketHasOwnGeometry && noun === 'TUBI' && actualRefnoKey === refnoKey) {
-        continue;
+        if (!ownerRefFromUniforms || ownerRefFromUniforms === actualRefnoKey) {
+          continue;
+        }
       }
 
       const instOwnerNoun = (() => {
@@ -742,8 +813,7 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
         if (raw) return raw;
         // TUBI 只可能属于 BRAN/HANG，从已加载 cache 推断或 fallback 为 BRAN
         if (noun === 'TUBI') {
-          const ownerRef = normalizeRefnoKey(String((inst as any).uniforms?.owner_refno || ''));
-          return (ownerRef && cache.refnoToNoun.get(ownerRef)) || 'BRAN';
+          return (ownerRefFromUniforms && cache.refnoToNoun.get(ownerRefFromUniforms)) || 'BRAN';
         }
         return raw;
       })();
@@ -752,10 +822,21 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
         continue;
       }
 
-      const mappedRefnoKey =
-        bucketHasOwnGeometry && actualRefnoKey !== refnoKey
-          ? actualRefnoKey
-          : refnoKey;
+      const mappedRefnoKey = (() => {
+        if (
+          bucketHasOwnGeometry
+          && noun === 'TUBI'
+          && actualRefnoKey === refnoKey
+          && ownerRefFromUniforms
+          && ownerRefFromUniforms !== actualRefnoKey
+        ) {
+          return ownerRefFromUniforms;
+        }
+        if (bucketHasOwnGeometry && actualRefnoKey !== refnoKey) {
+          return actualRefnoKey;
+        }
+        return refnoKey;
+      })();
       const objectId = `o:${mappedRefnoKey}:${cache.objectCounter++}`;
 
       // 获取预计算的 AABB（如果 instances.json 中提供了）

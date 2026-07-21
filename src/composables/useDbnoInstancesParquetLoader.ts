@@ -201,6 +201,8 @@ type ParquetManifestWithBaseDir = {
   manifest: ParquetManifest
   // manifest 所在目录：用于拼接 parquet 文件 URL
   baseDir: 'parquet' | 'instances'
+  // 指定模型提交时，文件相对该不可变 manifest 所在目录解析。
+  baseDirUrl?: string
   bucketIndex?: ParquetBucketIndex | null
 }
 
@@ -438,8 +440,8 @@ let conn: AsyncDuckDBConnection | null = null;
 let initPromise: Promise<void> | null = null;
 
 // 每个 dbno 的注册缓存
-const registeredByDbno = new Map<number, RegisteredDbno>();
-const registeringByDbno = new Map<number, Promise<RegisteredDbno>>();
+const registeredByDbno = new Map<string, RegisteredDbno>();
+const registeringByDbno = new Map<string, Promise<RegisteredDbno>>();
 const registeredPtsetsByDbno = new Map<number, string>();
 const registeringPtsetsByDbno = new Map<number, Promise<string | null>>();
 const registeredPrimitiveKeypointsByDbno = new Map<number, string>();
@@ -815,7 +817,25 @@ function rowToPtsetPoint(row: any): PtsetPoint {
   };
 }
 
-async function fetchManifest(dbno: number): Promise<ParquetManifestWithBaseDir> {
+async function fetchManifest(dbno: number, manifestUrl?: string): Promise<ParquetManifestWithBaseDir> {
+  if (manifestUrl) {
+    const resp = await fetch(manifestUrl, { cache: 'no-store' });
+    if (!resp.ok) {
+      throw new Error(`加载模型提交 manifest 失败: HTTP ${resp.status} ${resp.statusText}`);
+    }
+    const manifest = (await resp.json()) as ParquetManifest;
+    if (!manifest || manifest.dbnum !== dbno || !manifest.tables?.instances?.file) {
+      throw new Error(`模型提交 manifest 与 dbno=${dbno} 不匹配或结构无效`);
+    }
+    const cleanUrl = manifestUrl.split(/[?#]/, 1)[0] || manifestUrl;
+    const separator = cleanUrl.lastIndexOf('/');
+    return {
+      manifest,
+      baseDir: 'parquet',
+      baseDirUrl: separator > 0 ? cleanUrl.slice(0, separator) : '.',
+    };
+  }
+
   const hint = await getDirectoryHint(dbno);
   if (hint?.manifestBaseDir) {
     const hintedBuckets = await tryFetchBucketIndex(dbno, hint.manifestBaseDir);
@@ -916,19 +936,26 @@ function bucketIndexToSyntheticManifest(dbno: number, index: ParquetBucketIndex)
   };
 }
 
-async function registerDbno(dbno: number, options: { forceRefresh?: boolean } = {}): Promise<RegisteredDbno> {
+async function registerDbno(
+  dbno: number,
+  options: { forceRefresh?: boolean; manifestUrl?: string } = {},
+): Promise<RegisteredDbno> {
   const forceRefresh = options.forceRefresh === true;
-  const cached = registeredByDbno.get(dbno);
+  const cacheKey = `${dbno}|${options.manifestUrl || 'current'}`;
+  const cached = registeredByDbno.get(cacheKey);
   if (cached && !forceRefresh) return cached;
-  const pending = registeringByDbno.get(dbno);
+  const pending = registeringByDbno.get(cacheKey);
   if (pending) return await pending;
 
   const task = (async () => {
     await ensureDuckDB();
     if (!db || !conn) throw new Error('DuckDB not ready');
 
-    const { manifest, baseDir, bucketIndex } = await fetchManifest(dbno);
-    const baseDirUrl = buildFilesOutputUrl(baseDir);
+    const { manifest, baseDir, baseDirUrl: exactBaseDirUrl, bucketIndex } = await fetchManifest(
+      dbno,
+      options.manifestUrl,
+    );
+    const baseDirUrl = exactBaseDirUrl || buildFilesOutputUrl(baseDir);
 
     const requestToken = createDuckdbRemoteQueryToken();
     const files = buildRegisteredDbnoFiles(
@@ -982,15 +1009,15 @@ async function registerDbno(dbno: number, options: { forceRefresh?: boolean } = 
         aabb,
       },
     };
-    registeredByDbno.set(dbno, reg);
+    registeredByDbno.set(cacheKey, reg);
     return reg;
   })();
 
-  registeringByDbno.set(dbno, task);
+  registeringByDbno.set(cacheKey, task);
   try {
     return await task;
   } finally {
-    registeringByDbno.delete(dbno);
+    registeringByDbno.delete(cacheKey);
   }
 }
 
@@ -1631,7 +1658,12 @@ export function useDbnoInstancesParquetLoader() {
   async function queryInstanceEntriesByRefnos(
     dbno: number,
     refnoKeys: string[],
-    options?: { debug?: boolean; forceRefresh?: boolean; includeOwnedTubings?: boolean }
+    options?: {
+      debug?: boolean
+      forceRefresh?: boolean
+      includeOwnedTubings?: boolean
+      manifestUrl?: string
+    }
   ): Promise<Map<string, InstanceEntry[]>> {
     lastError.value = null;
     lastQueryTiming.value = null;
@@ -1650,6 +1682,7 @@ export function useDbnoInstancesParquetLoader() {
     const registerDbnoStartedAt = Date.now();
     const reg = await registerDbno(dbno, {
       forceRefresh: options?.forceRefresh !== false,
+      manifestUrl: options?.manifestUrl,
     });
     timing.phaseMs.registerDbno = Date.now() - registerDbnoStartedAt;
 
@@ -1910,11 +1943,14 @@ export function useDbnoInstancesParquetLoader() {
 
   async function queryAllRefnosByDbno(
     dbno: number,
-    options?: { limit?: number; debug?: boolean }
+    options?: { limit?: number; debug?: boolean; manifestUrl?: string }
   ): Promise<string[]> {
     lastError.value = null;
 
-    const reg = await registerDbno(dbno, { forceRefresh: true });
+    const reg = await registerDbno(dbno, {
+      forceRefresh: true,
+      manifestUrl: options?.manifestUrl,
+    });
     await ensureDuckDB();
     if (!conn) throw new Error('DuckDB connection unavailable');
 

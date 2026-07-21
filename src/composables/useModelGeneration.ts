@@ -5,6 +5,7 @@ import { e3dGetSubtreeRefnos, e3dGetVisibleInsts } from '@/api/genModelE3dApi';
 import { pdmsGetTypeInfo } from '@/api/genModelPdmsAttrApi';
 import { enqueueParquetIncremental, getParquetVersion } from '@/api/genModelRealtimeApi';
 import { modelRegenerateByRefno, modelShowByRefno } from '@/api/genModelTaskApi';
+import { getModelUnitCommit } from '@/api/modelUnitVersionApi';
 import { useConfirmDialogStore } from '@/composables/useConfirmDialogStore';
 import { useConsoleStore } from '@/composables/useConsoleStore';
 import { ensureDbMetaInfoLoaded, tryGetDbnumByRefno } from '@/composables/useDbMetaInfo';
@@ -36,6 +37,20 @@ function shouldEnableAutoGeneration(): boolean {
     // ignore
   }
   return false;
+}
+
+/** URL `data_source=json|parquet|backend` 强制数据源；未指定时走默认优先级。 */
+function preferredDataSourceFromUrl(): 'json' | 'parquet' | 'backend' | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = (new URLSearchParams(window.location.search).get('data_source') || '')
+      .trim()
+      .toLowerCase();
+    if (raw === 'json' || raw === 'parquet' || raw === 'backend') return raw;
+  } catch {
+    // ignore
+  }
+  return null;
 }
 
 function isViewerDebugToastEnabled(): boolean {
@@ -127,6 +142,17 @@ function uniqStrings(list: string[]): string[] {
     out.push(v);
   }
   return out;
+}
+
+export function mergeVersionReplacementRefnos(
+  targetRefnos: string[],
+  previouslyLoadedRefnos: string[],
+): string[] {
+  return uniqStrings(
+    [...targetRefnos, ...previouslyLoadedRefnos]
+      .map((refno) => normalizeRefnoString(refno))
+      .filter(Boolean),
+  );
 }
 
 async function prepareJsonManifestForFallback(
@@ -248,8 +274,9 @@ export async function resolveActualModelLoadScope(
 
 export function useModelGeneration(options: ModelGenerationOptions): ModelGenerationState & {
   generateAndLoadModel: (refno: string) => Promise<boolean>
-  showModelByDbnum: (dbno: number, options?: { flyTo?: boolean }) => Promise<{ loaded: boolean; instanceCount: number; refnoCount: number }>
+  showModelByDbnum: (dbno: number, options?: { flyTo?: boolean; manifestUrl?: string; replaceRefnos?: string[] }) => Promise<{ loaded: boolean; instanceCount: number; refnoCount: number; refnos: string[] }>
   showModelByRefno: (refno: string, options?: { flyTo?: boolean; regenerate?: boolean }) => Promise<boolean>
+  showModelUnitVersion: (unitRefno: string, dbno: number, sesno: number, options?: { flyTo?: boolean }) => Promise<boolean>
   isModelActuallyLoaded: (refno: string) => boolean
   checkRefnoExists: (refno: string) => boolean
 } {
@@ -269,6 +296,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
   const lastLoadDebug = ref<ModelLoadDebugInfo | null>(null);
 
   const loadedRoots = new Set<string>();
+  const loadedUnitVersionRefnos = new Map<string, string[]>();
   const PARQUET_VERSION_POLL_INTERVAL_MS = 3000;
 
   function syncGlobalLoadStatus() {
@@ -842,10 +870,15 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
       }
 
       // ========== Parquet 优先路径（不可用时自动导出） ==========
+      // URL data_source=json 时跳过 parquet，直接用已修复的 instances JSON
+      const forcedSource = preferredDataSourceFromUrl();
       const parquetLoader = useDbnoInstancesParquetLoader();
-      let parquetAvailable = await parquetLoader.isParquetAvailable(dbno);
+      let parquetAvailable =
+        forcedSource === 'json' || forcedSource === 'backend'
+          ? false
+          : await parquetLoader.isParquetAvailable(dbno);
 
-      if (!parquetAvailable) {
+      if (!parquetAvailable && forcedSource !== 'json' && forcedSource !== 'backend') {
         const exportTargets = loadScope.actualLoadRefnos;
         parquetAvailable = await ensureParquetAvailableByAutoExport(dbno, exportTargets);
       }
@@ -1114,8 +1147,8 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
 
   async function showModelByDbnum(
     dbno: number,
-    loadOptions?: { flyTo?: boolean }
-  ): Promise<{ loaded: boolean; instanceCount: number; refnoCount: number }> {
+    loadOptions?: { flyTo?: boolean; manifestUrl?: string; replaceRefnos?: string[] }
+  ): Promise<{ loaded: boolean; instanceCount: number; refnoCount: number; refnos: string[] }> {
     isGenerating.value = true;
     error.value = null;
     lastLoadDebug.value = null;
@@ -1138,19 +1171,27 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
       progress.value = 10;
       syncGlobalLoadStatus();
 
-      let parquetAvailable = await parquetLoader.isParquetAvailable(dbno);
-      if (!parquetAvailable) {
-        parquetAvailable = await ensureParquetAvailableByAutoExport(dbno, []);
-      }
-      if (!parquetAvailable) {
-        throw new Error(`Model files not found for dbnum=${dbno}`);
+      if (!loadOptions?.manifestUrl) {
+        let parquetAvailable = await parquetLoader.isParquetAvailable(dbno);
+        if (!parquetAvailable) {
+          parquetAvailable = await ensureParquetAvailableByAutoExport(dbno, []);
+        }
+        if (!parquetAvailable) {
+          throw new Error(`Model files not found for dbnum=${dbno}`);
+        }
       }
 
       statusMessage.value = `Loading refnos for dbnum=${dbno}...`;
       progress.value = 25;
       syncGlobalLoadStatus();
-      const loadRefnos = await parquetLoader.queryAllRefnosByDbno(dbno, { debug: false });
+      const loadRefnos = await parquetLoader.queryAllRefnosByDbno(dbno, {
+        debug: false,
+        manifestUrl: loadOptions?.manifestUrl,
+      });
       const uniqueRefnos = uniqStrings(loadRefnos.map((r) => normalizeRefnoString(r))).filter(Boolean);
+      const requestRefnos = loadOptions?.manifestUrl
+        ? mergeVersionReplacementRefnos(uniqueRefnos, loadOptions.replaceRefnos ?? [])
+        : uniqueRefnos;
 
       if (uniqueRefnos.length === 0) {
         statusMessage.value = 'Model is empty (0 instances)';
@@ -1159,7 +1200,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         const message = `[警告] dbno=${dbno} 的 Parquet 中没有任何 refno，无法加载模型`;
         consoleStore.addLog('warning', `[model-load] ${message}`);
         emitDebugWarningToast(message);
-        return { loaded: true, instanceCount: 0, refnoCount: 0 };
+        return { loaded: true, instanceCount: 0, refnoCount: 0, refnos: [] };
       }
 
       const anyViewer = viewer as unknown as {
@@ -1173,7 +1214,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         throw new Error('DTXLayer 未初始化，无法加载模型');
       }
 
-      totalCount.value = uniqueRefnos.length;
+      totalCount.value = requestRefnos.length;
       currentIndex.value = 0;
 
       const LOAD_BATCH_SIZE = VISIBLE_REFNOS_PAGE_SIZE;
@@ -1182,12 +1223,12 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
       let totalLoadedObjects = 0;
       const missingAll: string[] = [];
 
-      for (let start = 0; start < uniqueRefnos.length; start += LOAD_BATCH_SIZE) {
-        const end = Math.min(uniqueRefnos.length, start + LOAD_BATCH_SIZE);
-        const batch = uniqueRefnos.slice(start, end);
+      for (let start = 0; start < requestRefnos.length; start += LOAD_BATCH_SIZE) {
+        const end = Math.min(requestRefnos.length, start + LOAD_BATCH_SIZE);
+        const batch = requestRefnos.slice(start, end);
         currentIndex.value = end;
-        statusMessage.value = `Loading model batch ${Math.ceil(end / LOAD_BATCH_SIZE)}/${Math.ceil(uniqueRefnos.length / LOAD_BATCH_SIZE)}...`;
-        progress.value = Math.max(35, Math.min(92, 35 + Math.floor((end / uniqueRefnos.length) * 55)));
+        statusMessage.value = `Loading model batch ${Math.ceil(end / LOAD_BATCH_SIZE)}/${Math.ceil(requestRefnos.length / LOAD_BATCH_SIZE)}...`;
+        progress.value = Math.max(35, Math.min(92, 35 + Math.floor((end / requestRefnos.length) * 55)));
         syncGlobalLoadStatus();
 
         const result = await loadDbnoInstancesForVisibleRefnosDtx(dtxLayer, dbno, batch, {
@@ -1195,6 +1236,11 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
           debug: false,
           dataSource: 'parquet',
           forceReloadRefnos: batch,
+          replaceExistingObjects: !!loadOptions?.manifestUrl,
+          // 单元 manifest 已包含 root 与全部成员；按 refno 逐项加载时关闭 owner 扩展，
+          // 避免同一 TUBI 同时命中 BRAN root 和 leave refno 而重复绘制。
+          includeOwnedTubings: loadOptions?.manifestUrl ? false : undefined,
+          parquetManifestUrl: loadOptions?.manifestUrl,
         });
         anyViewer.__dtxAfterInstancesLoaded?.(dbno, batch);
         totalLoadedRefnos += result.loadedRefnos;
@@ -1206,7 +1252,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
       }
 
       const uniqueMissing = uniqStrings(missingAll.map((r) => normalizeRefnoString(r))).filter(Boolean);
-      if (uniqueMissing.length > 0) {
+      if (uniqueMissing.length > 0 && !loadOptions?.manifestUrl) {
         const realtimeResult = await handleMissingRefnos(dtxLayer, dbno, uniqueMissing, anyViewer);
         totalLoadedObjects += realtimeResult.loadedObjects;
       }
@@ -1242,6 +1288,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         loaded: true,
         instanceCount: totalLoadedObjects,
         refnoCount: uniqueRefnos.length,
+        refnos: uniqueRefnos,
       };
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -1249,7 +1296,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
       statusMessage.value = '加载失败';
       syncGlobalLoadStatus();
       emitToast({ message: `[错误] 按 dbnum 加载失败：${msg}`, level: 'error' });
-      return { loaded: false, instanceCount: 0, refnoCount: 0 };
+      return { loaded: false, instanceCount: 0, refnoCount: 0, refnos: [] };
     } finally {
       isGenerating.value = false;
       showProgressModal.value = false;
@@ -1257,6 +1304,38 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         message: statusMessage.value,
         error: error.value,
       });
+    }
+  }
+
+  async function showModelUnitVersion(
+    unitRefno: string,
+    dbno: number,
+    sesno: number,
+    loadOptions?: { flyTo?: boolean },
+  ): Promise<boolean> {
+    const normalized = normalizeRefnoString(unitRefno);
+    const unitKey = `${dbno}|${normalized}`;
+    try {
+      const version = await getModelUnitCommit(dbno, normalized, sesno);
+      const result = await showModelByDbnum(dbno, {
+        flyTo: loadOptions?.flyTo,
+        manifestUrl: version.manifest_url,
+        replaceRefnos: loadedUnitVersionRefnos.get(unitKey) ?? [],
+      });
+      if (result.loaded) {
+        loadedRoots.add(normalized);
+        loadedUnitVersionRefnos.set(unitKey, result.refnos);
+        consoleStore.addLog(
+          'info',
+          `[model-load] unit version loaded dbno=${dbno} unit_refno=${normalized} sesno=${sesno} artifact_sesno=${version.commit.artifact_sesno}`,
+        );
+      }
+      return result.loaded;
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      error.value = message;
+      emitToast({ message: `[错误] 模型版本加载失败：${message}`, level: 'error' });
+      return false;
     }
   }
 
@@ -1279,6 +1358,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
     generateAndLoadModel,
     showModelByDbnum,
     showModelByRefno,
+    showModelUnitVersion,
     isModelActuallyLoaded,
     checkRefnoExists,
   };
