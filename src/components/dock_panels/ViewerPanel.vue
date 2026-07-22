@@ -121,6 +121,7 @@ import { onCommand } from '@/ribbon/commandBus';
 import { emitToast } from '@/ribbon/toastBus';
 import { buildBackendUrl } from '@/utils/apiBase';
 import {
+  formatModelUnitVersionTime,
   MODEL_UNIT_VERSION_COMPARE_EVENT,
   type ModelUnitVersionCompareEventDetail,
 } from '@/utils/modelUnitVersionCompare';
@@ -2505,13 +2506,9 @@ async function openModelUnitVersionCompare(detail: ModelUnitCompareOpenDetail): 
 
   const runId = ++modelUnitCompareRunId;
   modelUnitCompareState.value = { detail, status: 'loading' };
-  const currentObjectIds = Array.from(new Set(
-    [
-      ...resolveDtxObjectIdsByUnitRefno(detail.dbnum, detail.unitRefno),
-      ...detail.refnos.flatMap((refno) => resolveDtxObjectIdsByRefno(detail.dbnum, refno)),
-    ],
-  ));
-  modelUnitCompareOriginalVisibleObjectIds = currentObjectIds.filter((objectId) => primaryLayer.isObjectVisible(objectId));
+  modelUnitCompareOriginalVisibleObjectIds = primaryLayer
+    .getAllObjectIds()
+    .filter((objectId) => primaryLayer.isObjectVisible(objectId));
   if (modelUnitCompareOriginalVisibleObjectIds.length > 0) {
     primaryLayer.setObjectsVisible(modelUnitCompareOriginalVisibleObjectIds, false);
   }
@@ -2557,8 +2554,14 @@ async function openModelUnitVersionCompare(detail: ModelUnitCompareOpenDetail): 
 
     const beforeColor = new Color(0x2563eb);
     const afterColor = new Color(0x10b981);
-    for (const objectId of beforeLayer.getAllObjectIds()) beforeLayer.setObjectColor(objectId, beforeColor);
-    for (const objectId of afterLayer.getAllObjectIds()) afterLayer.setObjectColor(objectId, afterColor);
+    // 比较层使用基础材质调色板着色；DTX 的颜色覆盖通道主要服务于选择态，
+    // 在多 DTXLayer 并存时可能被共享的 shader program 复用为前一层纹理。
+    for (const objectId of beforeLayer.getAllObjectIds()) {
+      beforeLayer.setObjectMaterial(objectId, { color: beforeColor });
+    }
+    for (const objectId of afterLayer.getAllObjectIds()) {
+      afterLayer.setObjectMaterial(objectId, { color: afterColor });
+    }
 
     const beforeBox = beforeLayer.getBoundingBox();
     const afterBox = afterLayer.getBoundingBox();
@@ -2605,7 +2608,7 @@ async function openModelUnitVersionCompare(detail: ModelUnitCompareOpenDetail): 
       compareBox.getSize(size);
       const sceneSize = Math.max(size.x, size.y, size.z, 1);
       viewer.flyTo(
-        new Vector3(center.x + sceneSize * 1.2, center.y - sceneSize * 1.5, center.z + sceneSize),
+        new Vector3(center.x, center.y - sceneSize * 1.5, center.z + sceneSize),
         center,
         { duration: 650 },
       );
@@ -5478,10 +5481,12 @@ onUnmounted(() => {
       <div class="mt-2 grid grid-cols-2 gap-2 text-xs">
         <div class="rounded-md border border-blue-200 bg-blue-50 px-2 py-1.5 text-blue-700">
           <div class="font-semibold">A · sesno {{ modelUnitCompareState.detail.before.sesno }}</div>
+          <div class="mt-0.5 text-[10px] opacity-75">{{ formatModelUnitVersionTime(modelUnitCompareState.detail.before.generatedAt) }}</div>
           <div class="mt-0.5 text-[10px] opacity-75">artifact {{ modelUnitCompareState.detail.before.artifactSesno }}</div>
         </div>
         <div class="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1.5 text-emerald-700">
           <div class="font-semibold">B · sesno {{ modelUnitCompareState.detail.after.sesno }}</div>
+          <div class="mt-0.5 text-[10px] opacity-75">{{ formatModelUnitVersionTime(modelUnitCompareState.detail.after.generatedAt) }}</div>
           <div class="mt-0.5 text-[10px] opacity-75">artifact {{ modelUnitCompareState.detail.after.artifactSesno }}</div>
         </div>
       </div>

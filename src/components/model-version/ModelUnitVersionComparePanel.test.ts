@@ -18,11 +18,11 @@ vi.mock('@/composables/useDbnoInstancesParquetLoader', () => ({
 const versions = [
   {
     manifest_url: '/791/manifest.json',
-    commit: { dbnum: 7997, unit_refno: '24381_145018', unit_noun: 'BRAN', sesno: 791, impact_kind: 'mesh', artifact_sesno: 791 },
+    commit: { dbnum: 7997, unit_refno: '24381_145018', unit_noun: 'BRAN', sesno: 791, impact_kind: 'mesh', artifact_sesno: 791, generated_at: '2026-07-22T01:00:00Z' },
   },
   {
     manifest_url: '/897/manifest.json',
-    commit: { dbnum: 7997, unit_refno: '24381_145018', unit_noun: 'BRAN', sesno: 897, impact_kind: 'mesh', artifact_sesno: 897 },
+    commit: { dbnum: 7997, unit_refno: '24381_145018', unit_noun: 'BRAN', sesno: 897, impact_kind: 'mesh', artifact_sesno: 897, generated_at: '2026-07-22T02:00:00Z' },
   },
 ];
 
@@ -76,6 +76,7 @@ describe('ModelUnitVersionComparePanel', () => {
     expect(host.textContent).toContain('DB 7997');
     expect((host.querySelector('[data-testid="model-unit-compare-a"]') as HTMLSelectElement).value).toBe('791');
     expect((host.querySelector('[data-testid="model-unit-compare-b"]') as HTMLSelectElement).value).toBe('897');
+    expect((host.querySelector('[data-testid="model-unit-compare-a"]') as HTMLSelectElement).textContent).toContain('2026');
 
     (host.querySelector('[data-testid="model-unit-compare-run"]') as HTMLButtonElement).click();
     await flushUi();

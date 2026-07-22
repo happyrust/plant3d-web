@@ -26,6 +26,7 @@ import type { InstanceEntry } from '@/utils/instances/instanceManifest';
 
 import { getParquetVersion } from '@/api/genModelRealtimeApi';
 import { buildFilesOutputUrl } from '@/lib/filesOutput';
+import { buildBackendUrl } from '@/utils/apiBase';
 import { configureLocalDuckDBExtensions, selectLocalDuckDBBundle } from '@/utils/duckdbBundles';
 
 export type ParquetManifest = {
@@ -184,6 +185,7 @@ type RegisteredDbno = {
   dbno: number
   baseDirUrl: string
   manifest: ParquetManifest
+  transformLayout: TransformStorageLayout
   // duckdb local filenames (to avoid cross-dbno collision)
   files: {
     instances: string
@@ -495,6 +497,12 @@ function parquetScan(value: string): string {
     : `parquet_scan(${sqlQuoteString(value)})`;
 }
 
+function parquetSchema(value: string): string {
+  return isDuckdbFileListExpression(value)
+    ? `parquet_schema(${value})`
+    : `parquet_schema(${sqlQuoteString(value)})`;
+}
+
 function buildInList(values: string[]): string {
   // 使用 LIST 常量 + UNNEST 比较安全，也避免超长 IN (...) 语句
   // e.g. UNNEST(['a','b','c'])
@@ -502,47 +510,58 @@ function buildInList(values: string[]): string {
   return `[${inner}]`;
 }
 
-function colsMajorToMatrixArray(row: any): number[] | null {
-  // transforms.parquet: m00..m33 按列主序存储（后端 DMat4.to_cols_array）
-  const keys = [
-    'm00','m10','m20','m30',
-    'm01','m11','m21','m31',
-    'm02','m12','m22','m32',
-    'm03','m13','m23','m33',
-  ];
+type TransformStorageLayout = 'columns' | 'legacy-rows'
+
+function colsMajorToMatrixArray(
+  row: any,
+  prefix = '',
+  layout: TransformStorageLayout = 'columns',
+): number[] | null {
+  const keys = layout === 'legacy-rows'
+    ? [
+        'm00','m01','m02','m03',
+        'm10','m11','m12','m13',
+        'm20','m21','m22','m23',
+        'm30','m31','m32','m33',
+      ]
+    : [
+        'm00','m10','m20','m30',
+        'm01','m11','m21','m31',
+        'm02','m12','m22','m32',
+        'm03','m13','m23','m33',
+      ];
   const out: number[] = [];
   for (const k of keys) {
-    const v = (row as any)[k];
+    const v = (row as any)[`${prefix}${k}`];
     if (v === null || v === undefined) return null;
     const n = typeof v === 'number' ? v : Number(v);
     if (!Number.isFinite(n)) return null;
     out.push(n);
   }
+  if (layout === 'legacy-rows') {
+    // 旧版 artifact 将列主序数据写进了按行命名的字段；旧版位置模拟还会
+    // 把位移增量写入 m03/m13/m23，加载时一并归回平移分量。
+    out[12] = out[12]! + out[3]!;
+    out[13] = out[13]! + out[7]!;
+    out[14] = out[14]! + out[11]!;
+    out[3] = 0;
+    out[7] = 0;
+    out[11] = 0;
+  }
   return out;
 }
 
-function colsMajorToMatrixArrayWithPrefix(row: any, prefix: string): number[] | null {
-  const prefixedRow: Record<string, unknown> = {
-    m00: row?.[`${prefix}m00`],
-    m10: row?.[`${prefix}m10`],
-    m20: row?.[`${prefix}m20`],
-    m30: row?.[`${prefix}m30`],
-    m01: row?.[`${prefix}m01`],
-    m11: row?.[`${prefix}m11`],
-    m21: row?.[`${prefix}m21`],
-    m31: row?.[`${prefix}m31`],
-    m02: row?.[`${prefix}m02`],
-    m12: row?.[`${prefix}m12`],
-    m22: row?.[`${prefix}m22`],
-    m32: row?.[`${prefix}m32`],
-    m03: row?.[`${prefix}m03`],
-    m13: row?.[`${prefix}m13`],
-    m23: row?.[`${prefix}m23`],
-    m33: row?.[`${prefix}m33`],
-  };
-  const hasAnyValue = Object.values(prefixedRow).some((v) => v !== null && v !== undefined);
+function colsMajorToMatrixArrayWithPrefix(
+  row: any,
+  prefix: string,
+  layout?: TransformStorageLayout,
+): number[] | null {
+  const hasAnyValue = [
+    'm00','m10','m20','m30','m01','m11','m21','m31',
+    'm02','m12','m22','m32','m03','m13','m23','m33',
+  ].some((key) => row?.[`${prefix}${key}`] !== null && row?.[`${prefix}${key}`] !== undefined);
   if (!hasAnyValue) return null;
-  return colsMajorToMatrixArray(prefixedRow);
+  return colsMajorToMatrixArray(row, prefix, layout);
 }
 
 function multiplyWorldAndGeoLocal(worldCols: number[], geoCols: number[] | null): number[] {
@@ -819,7 +838,10 @@ function rowToPtsetPoint(row: any): PtsetPoint {
 
 async function fetchManifest(dbno: number, manifestUrl?: string): Promise<ParquetManifestWithBaseDir> {
   if (manifestUrl) {
-    const resp = await fetch(manifestUrl, { cache: 'no-store' });
+    const resolvedManifestUrl = /^https?:\/\//i.test(manifestUrl)
+      ? manifestUrl
+      : buildBackendUrl(manifestUrl);
+    const resp = await fetch(resolvedManifestUrl, { cache: 'no-store' });
     if (!resp.ok) {
       throw new Error(`加载模型提交 manifest 失败: HTTP ${resp.status} ${resp.statusText}`);
     }
@@ -827,7 +849,7 @@ async function fetchManifest(dbno: number, manifestUrl?: string): Promise<Parque
     if (!manifest || manifest.dbnum !== dbno || !manifest.tables?.instances?.file) {
       throw new Error(`模型提交 manifest 与 dbno=${dbno} 不匹配或结构无效`);
     }
-    const cleanUrl = manifestUrl.split(/[?#]/, 1)[0] || manifestUrl;
+    const cleanUrl = resolvedManifestUrl.split(/[?#]/, 1)[0] || resolvedManifestUrl;
     const separator = cleanUrl.lastIndexOf('/');
     return {
       manifest,
@@ -994,10 +1016,26 @@ async function registerDbno(
         Promise.resolve(files.mbd_dimensions),
       ]);
 
+    let transformLayout: TransformStorageLayout = 'columns';
+    if (options.manifestUrl) {
+      const schemaRows = (await conn.query(`
+        SELECT name, min(column_id) AS column_id
+        FROM ${parquetSchema(transforms)}
+        WHERE name IN ('m01', 'm10')
+        GROUP BY name
+      `)).toArray() as any[];
+      const m01 = Number(schemaRows.find((row) => row.name === 'm01')?.column_id);
+      const m10 = Number(schemaRows.find((row) => row.name === 'm10')?.column_id);
+      if (Number.isFinite(m01) && Number.isFinite(m10) && m01 < m10) {
+        transformLayout = 'legacy-rows';
+      }
+    }
+
     const reg: RegisteredDbno = {
       dbno,
       baseDirUrl,
       manifest,
+      transformLayout,
       files: {
         instances,
         ptsets,
@@ -1320,7 +1358,7 @@ export function useDbnoInstancesParquetLoader() {
         return fail('PTSET_CATA_HASH_MISSING', `refno=${normalizedRefno} 缺少 cata_hash，无法查询 ptset`);
       }
 
-      const worldTransform = colsMajorToMatrixArray(instanceRow);
+      const worldTransform = colsMajorToMatrixArray(instanceRow, '', reg.transformLayout);
       if (!worldTransform) {
         const transHash = String(instanceRow.trans_hash || '').trim();
         return fail(
@@ -1472,9 +1510,9 @@ export function useDbnoInstancesParquetLoader() {
         const geoHash = String(row.geo_hash || '').trim();
         if (!refnoStr || !geoHash) continue;
 
-        const worldCols = colsMajorToMatrixArray(row);
+        const worldCols = colsMajorToMatrixArray(row, '', reg.transformLayout);
         if (!worldCols) continue;
-        const geoLocal = colsMajorToMatrixArrayWithPrefix(row, 'g_');
+        const geoLocal = colsMajorToMatrixArrayWithPrefix(row, 'g_', reg.transformLayout);
         const matrix = new Matrix4().fromArray(multiplyWorldAndGeoLocal(worldCols, geoLocal));
 
         const local: [number, number, number] = [
@@ -1747,7 +1785,7 @@ export function useDbnoInstancesParquetLoader() {
         const refnoKey = normalizeRefnoKey(refnoStr);
         if (!refnoKey) continue;
 
-        const worldCols = colsMajorToMatrixArray(row);
+        const worldCols = colsMajorToMatrixArray(row, '', reg.transformLayout);
         if (!worldCols) continue;
 
         // geo local matrix（可能为空）
@@ -1761,7 +1799,7 @@ export function useDbnoInstancesParquetLoader() {
           // 如果 tg 没 join 到，字段会是 null
           const anyVal = Object.values(gRow).some((v) => v !== null && v !== undefined);
           if (!anyVal) return null;
-          const arr = colsMajorToMatrixArray(gRow);
+          const arr = colsMajorToMatrixArray(gRow, '', reg.transformLayout);
           return arr;
         })();
 
@@ -1888,7 +1926,7 @@ export function useDbnoInstancesParquetLoader() {
 
         // TUBI 的 trans_hash 已是世界空间完整变换矩阵（world_trans_hash），
         // 不需要再乘以 parentWorld
-        const tubiTransform = colsMajorToMatrixArray(row);
+        const tubiTransform = colsMajorToMatrixArray(row, '', reg.transformLayout);
         if (!tubiTransform) continue;
         const matrix = tubiTransform;
 

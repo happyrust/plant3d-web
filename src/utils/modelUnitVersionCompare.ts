@@ -20,6 +20,17 @@ export type ModelUnitVersionSide = {
   sesno: number
   artifactSesno: number
   manifestUrl: string
+  generatedAt: string
+}
+
+export function formatModelUnitVersionTime(generatedAt: string): string {
+  const date = new Date(generatedAt);
+  return Number.isNaN(date.getTime())
+    ? generatedAt
+    : date.toLocaleString('zh-CN', {
+        year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', hour12: false,
+      });
 }
 
 export type ModelUnitVersionCompareEventDetail =

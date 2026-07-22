@@ -11,6 +11,7 @@ import { ensureDbMetaInfoLoaded, getDbnumByRefno } from '@/composables/useDbMeta
 import { useDbnoInstancesParquetLoader } from '@/composables/useDbnoInstancesParquetLoader';
 import {
   compareModelUnitGeometry,
+  formatModelUnitVersionTime,
   geometrySnapshotsFromInstanceEntries,
   MODEL_UNIT_VERSION_COMPARE_EVENT,
   orderModelUnitVersionPair,
@@ -68,7 +69,7 @@ function versionLabel(item: ModelUnitCommitData): string {
   const reused = item.commit.artifact_sesno !== item.commit.sesno
     ? ` · 复用 ${item.commit.artifact_sesno}`
     : '';
-  return `${item.commit.sesno} · ${item.commit.impact_kind}${reused}`;
+  return `${item.commit.sesno} · ${formatModelUnitVersionTime(item.commit.generated_at)} · ${item.commit.impact_kind}${reused}`;
 }
 
 async function loadVersions(): Promise<void> {
@@ -162,11 +163,13 @@ async function runCompare(): Promise<void> {
         sesno: before.commit.sesno,
         artifactSesno: before.commit.artifact_sesno,
         manifestUrl: before.manifest_url,
+        generatedAt: before.commit.generated_at,
       },
       after: {
         sesno: after.commit.sesno,
         artifactSesno: after.commit.artifact_sesno,
         manifestUrl: after.manifest_url,
+        generatedAt: after.commit.generated_at,
       },
       refnos: rows.value.map((row) => row.refno),
       rows: rows.value,
