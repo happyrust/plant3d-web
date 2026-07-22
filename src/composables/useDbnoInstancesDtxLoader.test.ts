@@ -309,6 +309,70 @@ describe('useDbnoInstancesDtxLoader', () => {
     expect(dtxLayer.isObjectVisible(newIds[0]!)).toBe(true);
   });
 
+  it('替换所需几何加载失败时保留旧对象可见', async () => {
+    const { DTXLayer } = await import('@/utils/three/dtx');
+    const mod = await import('./useDbnoInstancesDtxLoader');
+    const dbno = 99009;
+    const refno = '24381_76694';
+    const entry = (geoHash: string) => ({
+      geo_hash: geoHash,
+      matrix: [
+        1, 0, 0, 0,
+        0, 1, 0, 0,
+        0, 0, 1, 0,
+        0, 0, 0, 1,
+      ],
+      uniforms: { refno, noun: 'STRT', owner_refno: '24381_76692', owner_noun: 'BRAN' },
+    });
+    parquetLoaderMocks.queryInstanceEntriesByRefnos
+      .mockResolvedValueOnce(new Map([[refno, [entry('1')]]]))
+      .mockResolvedValueOnce(new Map([[refno, [entry('missing-mesh')]]]));
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(null, { status: 404 })));
+    const dtxLayer = new DTXLayer({ maxVertices: 128, maxIndices: 256, maxObjects: 8 });
+
+    await mod.loadDbnoInstancesForVisibleRefnosDtx(dtxLayer, dbno, [refno], { dataSource: 'parquet' });
+    const oldId = mod.resolveDtxObjectIdsByRefno(dbno, refno)[0]!;
+
+    await expect(mod.loadDbnoInstancesForVisibleRefnosDtx(dtxLayer, dbno, [refno], {
+      dataSource: 'parquet',
+      forceReloadRefnos: [refno],
+      replaceExistingObjects: true,
+    })).rejects.toThrow('替换模型所需几何不完整');
+
+    expect(dtxLayer.isObjectVisible(oldId)).toBe(true);
+    expect(mod.resolveDtxObjectIdsByRefno(dbno, refno)).toEqual([oldId]);
+  });
+
+  it('替换追加对象或重编译失败时回滚旧对象索引和显隐', async () => {
+    const { DTXLayer } = await import('@/utils/three/dtx');
+    const mod = await import('./useDbnoInstancesDtxLoader');
+    const dbno = 99010;
+    const refno = '24381_76695';
+    parquetLoaderMocks.queryInstanceEntriesByRefnos.mockResolvedValue(new Map([[
+      refno,
+      [{
+        geo_hash: '1',
+        matrix: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1],
+        uniforms: { refno, noun: 'STRT', owner_refno: '24381_76692', owner_noun: 'BRAN' },
+      }],
+    ]]));
+    const dtxLayer = new DTXLayer({ maxVertices: 128, maxIndices: 256, maxObjects: 8 });
+    await mod.loadDbnoInstancesForVisibleRefnosDtx(dtxLayer, dbno, [refno], { dataSource: 'parquet' });
+    const oldId = mod.resolveDtxObjectIdsByRefno(dbno, refno)[0]!;
+    vi.spyOn(dtxLayer, 'addObject').mockImplementationOnce(() => {
+      throw new Error('simulated addObject failure');
+    });
+
+    await expect(mod.loadDbnoInstancesForVisibleRefnosDtx(dtxLayer, dbno, [refno], {
+      dataSource: 'parquet',
+      forceReloadRefnos: [refno],
+      replaceExistingObjects: true,
+    })).rejects.toThrow();
+
+    expect(dtxLayer.isObjectVisible(oldId)).toBe(true);
+    expect(mod.resolveDtxObjectIdsByRefno(dbno, refno)).toEqual([oldId]);
+  });
+
   it('隔离加载应写入独立 DTXLayer 且不污染当前模型 refno 索引', async () => {
     const { DTXLayer } = await import('@/utils/three/dtx');
     const mod = await import('./useDbnoInstancesDtxLoader');

@@ -121,14 +121,18 @@ function normalizeSelectedPair(): void {
 }
 
 async function snapshotsFor(version: ModelUnitCommitData) {
-  if (dbnum.value === null || version.manifest_url === null) return [];
+  if (dbnum.value === null || version.manifest_url === null) return { snapshots: [], refnos: [] };
   const parquet = useDbnoInstancesParquetLoader();
-  const refnos = await parquet.queryAllRefnosByDbno(dbnum.value, { manifestUrl: version.manifest_url });
+  const refnos = await parquet.queryAllRefnosByDbno(dbnum.value, {
+    manifestUrl: version.manifest_url,
+    expectedRootRefno: normalizedRefno.value,
+  });
   const entries = await parquet.queryInstanceEntriesByRefnos(dbnum.value, refnos, {
     manifestUrl: version.manifest_url,
+    expectedRootRefno: normalizedRefno.value,
     includeOwnedTubings: false,
   });
-  return geometrySnapshotsFromInstanceEntries(entries);
+  return { snapshots: geometrySnapshotsFromInstanceEntries(entries), refnos };
 }
 
 async function runCompare(): Promise<void> {
@@ -148,11 +152,11 @@ async function runCompare(): Promise<void> {
   error.value = null;
   try {
     const sameArtifact = before.commit.artifact_sesno === after.commit.artifact_sesno;
-    const [beforeSnapshots, afterSnapshots] = sameArtifact
-      ? await snapshotsFor(after).then((snapshots) => [snapshots, snapshots] as const)
+    const [beforeData, afterData] = sameArtifact
+      ? await snapshotsFor(after).then((data) => [data, data] as const)
       : await Promise.all([snapshotsFor(before), snapshotsFor(after)]);
     if (run !== requestId) return;
-    rows.value = compareModelUnitGeometry(beforeSnapshots, afterSnapshots);
+    rows.value = compareModelUnitGeometry(beforeData.snapshots, afterData.snapshots);
     compareCompleted.value = true;
     compareActive.value = true;
     dispatch({
@@ -164,12 +168,14 @@ async function runCompare(): Promise<void> {
         artifactSesno: before.commit.artifact_sesno,
         manifestUrl: before.manifest_url,
         generatedAt: before.commit.generated_at,
+        refnos: beforeData.refnos,
       },
       after: {
         sesno: after.commit.sesno,
         artifactSesno: after.commit.artifact_sesno,
         manifestUrl: after.manifest_url,
         generatedAt: after.commit.generated_at,
+        refnos: afterData.refnos,
       },
       refnos: rows.value.map((row) => row.refno),
       rows: rows.value,

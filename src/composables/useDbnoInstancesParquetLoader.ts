@@ -208,6 +208,12 @@ type ParquetManifestWithBaseDir = {
   bucketIndex?: ParquetBucketIndex | null
 }
 
+export type LatestDbnoManifest = {
+  manifestUrl: string
+  generatedAt: string
+  manifest: ParquetManifest
+}
+
 type ParquetBaseDir = 'parquet' | 'instances'
 
 type ParquetDirectoryHint = {
@@ -371,6 +377,42 @@ async function tryFetchManifest(
     throw new Error(`manifest 结构不符合预期(${baseDir})`);
   }
   return json;
+}
+
+function normalizeManifestRefno(value: unknown): string {
+  return String(value ?? '').trim().replace(/\//g, '_');
+}
+
+function assertManifestIdentity(
+  manifest: ParquetManifest,
+  dbno: number,
+  options: { expectedRootRefno?: string; requireAggregateRoot?: boolean } = {},
+): void {
+  if (manifest.dbnum !== dbno) {
+    throw new Error(`manifest dbnum=${manifest.dbnum} 与目标 dbnum=${dbno} 不匹配`);
+  }
+  const rootRefno = normalizeManifestRefno(manifest.root_refno);
+  if (options.requireAggregateRoot && rootRefno) {
+    throw new Error(`dbnum 最新环境 manifest 的 root_refno 必须为空，实际为 ${rootRefno}`);
+  }
+  const expectedRootRefno = normalizeManifestRefno(options.expectedRootRefno);
+  if (expectedRootRefno && rootRefno !== expectedRootRefno) {
+    throw new Error(`模型提交 manifest root_refno=${rootRefno || 'EMPTY'} 与目标 ${expectedRootRefno} 不匹配`);
+  }
+}
+
+export async function fetchLatestDbnoManifest(dbno: number): Promise<LatestDbnoManifest> {
+  const manifest = await tryFetchManifest(dbno, 'parquet');
+  if (!manifest) throw new Error(`未找到 dbnum=${dbno} 的 parquet 最新环境 manifest`);
+  assertManifestIdentity(manifest, dbno, { requireAggregateRoot: true });
+  if (!String(manifest.generated_at || '').trim()) {
+    throw new Error(`dbnum=${dbno} 的最新环境 manifest 缺少 generated_at`);
+  }
+  return {
+    manifestUrl: buildFilesOutputUrl(`parquet/manifest_${dbno}.json`),
+    generatedAt: manifest.generated_at,
+    manifest,
+  };
 }
 
 async function tryFetchBucketIndex(
@@ -836,19 +878,28 @@ function rowToPtsetPoint(row: any): PtsetPoint {
   };
 }
 
-async function fetchManifest(dbno: number, manifestUrl?: string): Promise<ParquetManifestWithBaseDir> {
+async function fetchManifest(
+  dbno: number,
+  manifestUrl?: string,
+  expectedRootRefno?: string,
+  pinnedManifest?: ParquetManifest,
+): Promise<ParquetManifestWithBaseDir> {
   if (manifestUrl) {
     const resolvedManifestUrl = /^https?:\/\//i.test(manifestUrl)
       ? manifestUrl
       : buildBackendUrl(manifestUrl);
-    const resp = await fetch(resolvedManifestUrl, { cache: 'no-store' });
-    if (!resp.ok) {
-      throw new Error(`加载模型提交 manifest 失败: HTTP ${resp.status} ${resp.statusText}`);
+    let manifest = pinnedManifest;
+    if (!manifest) {
+      const resp = await fetch(resolvedManifestUrl, { cache: 'no-store' });
+      if (!resp.ok) {
+        throw new Error(`加载模型提交 manifest 失败: HTTP ${resp.status} ${resp.statusText}`);
+      }
+      manifest = (await resp.json()) as ParquetManifest;
     }
-    const manifest = (await resp.json()) as ParquetManifest;
-    if (!manifest || manifest.dbnum !== dbno || !manifest.tables?.instances?.file) {
+    if (!manifest || !manifest.tables?.instances?.file) {
       throw new Error(`模型提交 manifest 与 dbno=${dbno} 不匹配或结构无效`);
     }
+    assertManifestIdentity(manifest, dbno, { expectedRootRefno });
     const cleanUrl = resolvedManifestUrl.split(/[?#]/, 1)[0] || resolvedManifestUrl;
     const separator = cleanUrl.lastIndexOf('/');
     return {
@@ -960,10 +1011,20 @@ function bucketIndexToSyntheticManifest(dbno: number, index: ParquetBucketIndex)
 
 async function registerDbno(
   dbno: number,
-  options: { forceRefresh?: boolean; manifestUrl?: string } = {},
+  options: {
+    forceRefresh?: boolean
+    manifestUrl?: string
+    expectedRootRefno?: string
+    pinnedManifest?: ParquetManifest
+  } = {},
 ): Promise<RegisteredDbno> {
   const forceRefresh = options.forceRefresh === true;
-  const cacheKey = `${dbno}|${options.manifestUrl || 'current'}`;
+  const cacheKey = [
+    dbno,
+    options.manifestUrl || 'current',
+    normalizeManifestRefno(options.expectedRootRefno),
+    options.pinnedManifest?.generated_at || '',
+  ].join('|');
   const cached = registeredByDbno.get(cacheKey);
   if (cached && !forceRefresh) return cached;
   const pending = registeringByDbno.get(cacheKey);
@@ -976,6 +1037,8 @@ async function registerDbno(
     const { manifest, baseDir, baseDirUrl: exactBaseDirUrl, bucketIndex } = await fetchManifest(
       dbno,
       options.manifestUrl,
+      options.expectedRootRefno,
+      options.pinnedManifest,
     );
     const baseDirUrl = exactBaseDirUrl || buildFilesOutputUrl(baseDir);
 
@@ -1701,6 +1764,8 @@ export function useDbnoInstancesParquetLoader() {
       forceRefresh?: boolean
       includeOwnedTubings?: boolean
       manifestUrl?: string
+      expectedRootRefno?: string
+      pinnedManifest?: ParquetManifest
     }
   ): Promise<Map<string, InstanceEntry[]>> {
     lastError.value = null;
@@ -1721,6 +1786,8 @@ export function useDbnoInstancesParquetLoader() {
     const reg = await registerDbno(dbno, {
       forceRefresh: options?.forceRefresh !== false,
       manifestUrl: options?.manifestUrl,
+      expectedRootRefno: options?.expectedRootRefno,
+      pinnedManifest: options?.pinnedManifest,
     });
     timing.phaseMs.registerDbno = Date.now() - registerDbnoStartedAt;
 
@@ -1981,13 +2048,14 @@ export function useDbnoInstancesParquetLoader() {
 
   async function queryAllRefnosByDbno(
     dbno: number,
-    options?: { limit?: number; debug?: boolean; manifestUrl?: string }
+    options?: { limit?: number; debug?: boolean; manifestUrl?: string; expectedRootRefno?: string }
   ): Promise<string[]> {
     lastError.value = null;
 
     const reg = await registerDbno(dbno, {
       forceRefresh: true,
       manifestUrl: options?.manifestUrl,
+      expectedRootRefno: options?.expectedRootRefno,
     });
     await ensureDuckDB();
     if (!conn) throw new Error('DuckDB connection unavailable');

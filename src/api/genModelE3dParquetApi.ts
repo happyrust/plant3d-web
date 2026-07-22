@@ -732,7 +732,10 @@ async function querySubtreeRefnosSingleDb(
       JOIN subtree s ON t.parent = s.id
       ${depthWhere}
     )
-    SELECT t.refno_str AS refno
+    SELECT
+      t.refno_str AS refno,
+      s.depth,
+      EXISTS(SELECT 1 FROM tree child WHERE child.parent = t.id) AS has_children
     FROM tree t
     JOIN subtree s ON t.id = s.id
     ORDER BY s.depth, t.id
@@ -741,7 +744,10 @@ async function querySubtreeRefnosSingleDb(
 
   const rows = await queryRows(sql);
   const refnos = rows.map((r) => String(r.refno || '')).filter(Boolean);
-  const truncated = refnos.length >= limit;
+  const depthTruncated = rows.some((row) =>
+    Number(row.depth) >= maxDepth && Boolean(row.has_children)
+  );
+  const truncated = refnos.length >= limit || depthTruncated;
   return { refnos, truncated };
 }
 

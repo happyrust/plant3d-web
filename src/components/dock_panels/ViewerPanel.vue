@@ -8,6 +8,7 @@ import {
   EyeOff,
   Focus,
   GitCompare,
+  RefreshCw,
   Ruler,
   ScanEye,
   Search,
@@ -37,6 +38,7 @@ import {
 } from 'three';
 
 import { e3dGetChildren, e3dGetVisibleInsts } from '@/api/genModelE3dApi';
+import { e3dParquetGetSubtreeRefnos } from '@/api/genModelE3dParquetApi';
 import { pdmsGetUiAttr, type PtsetResponse } from '@/api/genModelPdmsAttrApi';
 import { fetchMbdV2PipeData } from '@/api/mbdV2Api';
 import {
@@ -70,7 +72,10 @@ import {
   getDbnoInstancesManifest,
   getDbnoInstancesMeta,
 } from '@/composables/useDbnoInstancesJsonLoader';
-import { useDbnoInstancesParquetLoader } from '@/composables/useDbnoInstancesParquetLoader';
+import {
+  fetchLatestDbnoManifest,
+  useDbnoInstancesParquetLoader,
+} from '@/composables/useDbnoInstancesParquetLoader';
 import { useDisplayThemeStore, type DisplayTheme } from '@/composables/useDisplayThemeStore';
 import { ensurePanelAndActivate } from '@/composables/useDockApi';
 import { useDtxTools } from '@/composables/useDtxTools';
@@ -121,6 +126,10 @@ import { onCommand } from '@/ribbon/commandBus';
 import { emitToast } from '@/ribbon/toastBus';
 import { buildBackendUrl } from '@/utils/apiBase';
 import {
+  applyModelUnitRefnoVisibility,
+  applyModelUnitVersionSide,
+  collectModelUnitTargetObjectIds,
+  DEFAULT_MODEL_UNIT_COMPARE_SIDE,
   formatModelUnitVersionTime,
   MODEL_UNIT_VERSION_COMPARE_EVENT,
   type ModelUnitVersionCompareEventDetail,
@@ -1191,11 +1200,25 @@ type ModelUnitCompareOpenDetail = Extract<ModelUnitVersionCompareEventDetail, { 
 type ModelUnitCompareRuntimeState = {
   detail: ModelUnitCompareOpenDetail;
   status: 'loading' | 'ready' | 'error';
+  activeSide: 'before' | 'after';
+  environment?: {
+    generatedAt: string;
+    loadedRefnos: number;
+    refreshing: boolean;
+    error?: string;
+  };
   error?: string;
 };
 const modelUnitCompareState = ref<ModelUnitCompareRuntimeState | null>(null);
 let modelUnitCompareLayers: DTXLayer[] = [];
-let modelUnitCompareOriginalVisibleObjectIds: string[] = [];
+let modelUnitCompareOriginalVisibility = new Map<string, boolean>();
+let modelUnitCompareTargetRefnos: string[] = [];
+let modelUnitCompareCameraState: {
+  position: Vector3;
+  target: Vector3;
+  near: number;
+  far: number;
+} | null = null;
 let modelUnitCompareRunId = 0;
 const selectionControllerRef = shallowRef<DTXSelectionController | null>(null);
 const globalEdgeOverlayRef = shallowRef<DTXOverlayHighlighter | null>(null);
@@ -2440,16 +2463,134 @@ function disposeModelUnitCompareLayer(layer: DTXLayer): void {
   }
 }
 
+function disposeModelUnitCompareRunLayers(layers: DTXLayer[]): void {
+  for (const layer of layers) {
+    const index = modelUnitCompareLayers.indexOf(layer);
+    if (index < 0) continue;
+    modelUnitCompareLayers.splice(index, 1);
+    disposeModelUnitCompareLayer(layer);
+  }
+}
+
+function collectLoadedRefnoVisibility(primaryLayer: DTXLayer, dbnum: number): Map<string, boolean> {
+  const refnos = new Set<string>();
+  for (const objectId of primaryLayer.getAllObjectIds()) {
+    const refno = resolveDtxRefnoByObjectId(dbnum, objectId);
+    if (refno) refnos.add(refno);
+  }
+  const visibility = new Map<string, boolean>();
+  for (const refno of refnos) {
+    visibility.set(
+      refno,
+      resolveDtxObjectIdsByRefno(dbnum, refno).some((objectId) => primaryLayer.isObjectVisible(objectId)),
+    );
+  }
+  return visibility;
+}
+
+async function refreshModelUnitCompareEnvironment(
+  detail: ModelUnitCompareOpenDetail,
+  runId: number,
+): Promise<{ generatedAt: string; loadedRefnos: number; refreshing: false }> {
+  const primaryLayer = dtxLayerRef.value;
+  if (!primaryLayer) throw new Error('三维环境图层尚未就绪');
+
+  const latest = await fetchLatestDbnoManifest(detail.dbnum);
+  if (runId !== modelUnitCompareRunId) throw new Error('版本对比已取消');
+  const visibilityByRefno = collectLoadedRefnoVisibility(primaryLayer, detail.dbnum);
+  const loadedRefnos = [...visibilityByRefno.keys()];
+  if (loadedRefnos.length > 0) {
+    await loadDbnoInstancesForVisibleRefnosDtx(primaryLayer, detail.dbnum, loadedRefnos, {
+      dataSource: 'parquet',
+      forceReloadRefnos: loadedRefnos,
+      replaceExistingObjects: true,
+      parquetManifestUrl: latest.manifestUrl,
+      parquetManifest: latest.manifest,
+    });
+    if (runId !== modelUnitCompareRunId) throw new Error('版本对比已取消');
+    applyModelUnitRefnoVisibility(
+      primaryLayer,
+      visibilityByRefno,
+      (refno) => resolveDtxObjectIdsByRefno(detail.dbnum, refno),
+    );
+  }
+
+  return {
+    generatedAt: latest.generatedAt,
+    loadedRefnos: loadedRefnos.length,
+    refreshing: false,
+  };
+}
+
+function hideModelUnitCompareTarget(primaryLayer: DTXLayer, dbnum: number): void {
+  const unitRefno = modelUnitCompareTargetRefnos[0] || '';
+  primaryLayer.setObjectsVisible(collectModelUnitTargetObjectIds(
+    unitRefno,
+    modelUnitCompareTargetRefnos,
+    (refno) => resolveDtxObjectIdsByRefno(dbnum, refno),
+    (refno) => resolveDtxObjectIdsByUnitRefno(dbnum, refno),
+  ), false);
+}
+
+function setModelUnitCompareSide(side: 'before' | 'after'): void {
+  const state = modelUnitCompareState.value;
+  if (!state || state.status !== 'ready') return;
+  const [beforeLayer, afterLayer] = modelUnitCompareLayers;
+  applyModelUnitVersionSide(beforeLayer, afterLayer, side);
+  state.activeSide = side;
+  requestRender();
+}
+
+async function requestRefreshModelUnitCompareEnvironment(): Promise<void> {
+  const state = modelUnitCompareState.value;
+  const primaryLayer = dtxLayerRef.value;
+  if (!state || state.status !== 'ready' || !state.environment || !primaryLayer || state.environment.refreshing) return;
+  const runId = modelUnitCompareRunId;
+  state.environment = { ...state.environment, refreshing: true, error: undefined };
+  try {
+    const environment = await refreshModelUnitCompareEnvironment(state.detail, runId);
+    if (runId !== modelUnitCompareRunId || !modelUnitCompareState.value) return;
+    hideModelUnitCompareTarget(primaryLayer, state.detail.dbnum);
+    modelUnitCompareState.value.environment = environment;
+    requestRender();
+  } catch (error) {
+    if (runId !== modelUnitCompareRunId || !modelUnitCompareState.value) return;
+    const message = error instanceof Error ? error.message : String(error);
+    modelUnitCompareState.value.environment = {
+      ...state.environment,
+      refreshing: false,
+      error: message,
+    };
+    emitToast({ message: `最新环境刷新失败，已保留当前环境：${message}`, level: 'error' });
+  }
+}
+
 function clearModelUnitVersionCompare(): void {
   modelUnitCompareRunId += 1;
   for (const layer of modelUnitCompareLayers.splice(0)) {
     disposeModelUnitCompareLayer(layer);
   }
   const primaryLayer = dtxLayerRef.value;
-  if (primaryLayer && modelUnitCompareOriginalVisibleObjectIds.length > 0) {
-    primaryLayer.setObjectsVisible(modelUnitCompareOriginalVisibleObjectIds, true);
+  const detail = modelUnitCompareState.value?.detail;
+  if (primaryLayer && detail) {
+    applyModelUnitRefnoVisibility(
+      primaryLayer,
+      modelUnitCompareOriginalVisibility,
+      (refno) => resolveDtxObjectIdsByRefno(detail.dbnum, refno),
+    );
   }
-  modelUnitCompareOriginalVisibleObjectIds = [];
+  modelUnitCompareOriginalVisibility = new Map();
+  modelUnitCompareTargetRefnos = [];
+  const viewer = dtxViewerRef.value;
+  if (viewer && modelUnitCompareCameraState) {
+    viewer.camera.position.copy(modelUnitCompareCameraState.position);
+    viewer.controls.target.copy(modelUnitCompareCameraState.target);
+    viewer.camera.near = modelUnitCompareCameraState.near;
+    viewer.camera.far = modelUnitCompareCameraState.far;
+    viewer.camera.updateProjectionMatrix();
+    viewer.controls.update();
+  }
+  modelUnitCompareCameraState = null;
   modelUnitCompareState.value = null;
   if (isDev && typeof window !== 'undefined') {
     delete (window as any).__modelUnitVersionCompare;
@@ -2500,29 +2641,56 @@ async function openModelUnitVersionCompare(detail: ModelUnitCompareOpenDetail): 
   const viewer = dtxViewerRef.value;
   const primaryLayer = dtxLayerRef.value;
   if (!viewer || !primaryLayer) {
-    modelUnitCompareState.value = { detail, status: 'error', error: '三维查看器尚未就绪' };
+    modelUnitCompareState.value = { detail, status: 'error', activeSide: 'after', error: '三维查看器尚未就绪' };
     return;
   }
 
   const runId = ++modelUnitCompareRunId;
-  modelUnitCompareState.value = { detail, status: 'loading' };
-  modelUnitCompareOriginalVisibleObjectIds = primaryLayer
-    .getAllObjectIds()
-    .filter((objectId) => primaryLayer.isObjectVisible(objectId));
-  if (modelUnitCompareOriginalVisibleObjectIds.length > 0) {
-    primaryLayer.setObjectsVisible(modelUnitCompareOriginalVisibleObjectIds, false);
-  }
-
-  const beforeLayer = createShowDbnumDtxLayer(viewer, primaryLayer);
-  const afterLayer = createShowDbnumDtxLayer(viewer, primaryLayer);
-  modelUnitCompareLayers = [beforeLayer, afterLayer];
+  modelUnitCompareState.value = { detail, status: 'loading', activeSide: 'after' };
+  modelUnitCompareCameraState = {
+    position: viewer.camera.position.clone(),
+    target: viewer.controls.target.clone(),
+    near: viewer.camera.near,
+    far: viewer.camera.far,
+  };
+  const runLayers: DTXLayer[] = [];
 
   try {
+    const [environment, subtree] = await Promise.all([
+      refreshModelUnitCompareEnvironment(detail, runId),
+      e3dParquetGetSubtreeRefnos(detail.unitRefno, {
+        includeSelf: true,
+        maxDepth: 256,
+        limit: 200_000,
+      }),
+    ]);
+    if (runId !== modelUnitCompareRunId) return;
+    if (!subtree.success) {
+      throw new Error(subtree.error_message || '无法查询最小交付单元的最新完整子树');
+    }
+    if (subtree.truncated) throw new Error('最小交付单元子树查询被截断，拒绝显示不完整对比');
+    modelUnitCompareTargetRefnos = Array.from(new Set([
+      detail.unitRefno,
+      ...subtree.refnos.map(normalizeCompareRefno).filter(Boolean),
+    ]));
+    const currentVisibility = collectLoadedRefnoVisibility(primaryLayer, detail.dbnum);
+    modelUnitCompareOriginalVisibility = new Map(
+      modelUnitCompareTargetRefnos
+        .map((refno) => [refno, currentVisibility.get(refno)] as const)
+        .filter((entry): entry is readonly [string, boolean] => typeof entry[1] === 'boolean'),
+    );
+    hideModelUnitCompareTarget(primaryLayer, detail.dbnum);
+
+    const beforeLayer = createShowDbnumDtxLayer(viewer, primaryLayer);
+    const afterLayer = createShowDbnumDtxLayer(viewer, primaryLayer);
+    runLayers.push(beforeLayer, afterLayer);
+    modelUnitCompareLayers = [beforeLayer, afterLayer];
     const sharedInstanceEntries = detail.before.manifestUrl
       && detail.after.manifestUrl
       && detail.before.artifactSesno === detail.after.artifactSesno
-      ? await useDbnoInstancesParquetLoader().queryInstanceEntriesByRefnos(detail.dbnum, detail.refnos, {
+      ? await useDbnoInstancesParquetLoader().queryInstanceEntriesByRefnos(detail.dbnum, detail.after.refnos, {
         manifestUrl: detail.after.manifestUrl,
+        expectedRootRefno: detail.unitRefno,
         includeOwnedTubings: false,
       })
       : undefined;
@@ -2534,29 +2702,31 @@ async function openModelUnitVersionCompare(detail: ModelUnitCompareOpenDetail): 
       instanceEntriesByRefno: sharedInstanceEntries,
     };
     const [beforeResult, afterResult] = await Promise.all([
-      detail.before.manifestUrl ? loadDbnoInstancesForVisibleRefnosDtx(beforeLayer, detail.dbnum, detail.refnos, {
+      detail.before.manifestUrl ? loadDbnoInstancesForVisibleRefnosDtx(beforeLayer, detail.dbnum, detail.before.refnos, {
         ...commonOptions,
         parquetManifestUrl: detail.before.manifestUrl,
+        expectedRootRefno: detail.unitRefno,
         objectIdPrefix: 'unit-compare:a',
       }) : Promise.resolve(null),
-      detail.after.manifestUrl ? loadDbnoInstancesForVisibleRefnosDtx(afterLayer, detail.dbnum, detail.refnos, {
+      detail.after.manifestUrl ? loadDbnoInstancesForVisibleRefnosDtx(afterLayer, detail.dbnum, detail.after.refnos, {
         ...commonOptions,
         parquetManifestUrl: detail.after.manifestUrl,
+        expectedRootRefno: detail.unitRefno,
         objectIdPrefix: 'unit-compare:b',
       }) : Promise.resolve(null),
     ]);
     if (runId !== modelUnitCompareRunId) {
-      disposeModelUnitCompareLayer(beforeLayer);
-      disposeModelUnitCompareLayer(afterLayer);
+      disposeModelUnitCompareRunLayers(runLayers);
       return;
     }
     const beforeObjects = beforeResult?.loadedObjects ?? 0;
     const afterObjects = afterResult?.loadedObjects ?? 0;
-    if (detail.refnos.length > 0 && beforeObjects + afterObjects === 0
-      && detail.before.manifestUrl && detail.after.manifestUrl) {
-      throw new Error('所选版本没有可显示的几何对象');
+    if (detail.before.manifestUrl && beforeObjects === 0) {
+      throw new Error(`版本 A（sesno ${detail.before.sesno}）没有可显示的几何对象`);
     }
-
+    if (detail.after.manifestUrl && afterObjects === 0) {
+      throw new Error(`版本 B（sesno ${detail.after.sesno}）没有可显示的几何对象`);
+    }
     const beforeColor = new Color(0x2563eb);
     const afterColor = new Color(0x10b981);
     // 比较层使用基础材质调色板着色；DTX 的颜色覆盖通道主要服务于选择态，
@@ -2568,58 +2738,16 @@ async function openModelUnitVersionCompare(detail: ModelUnitCompareOpenDetail): 
       afterLayer.setObjectMaterial(objectId, { color: afterColor });
     }
 
-    const beforeBox = beforeLayer.getBoundingBox();
-    const afterBox = afterLayer.getBoundingBox();
-    const beforeCenter = new Vector3();
-    const afterCenter = new Vector3();
-    const beforeSize = new Vector3(1, 1, 1);
-    const afterSize = new Vector3(1, 1, 1);
-    if (!beforeBox.isEmpty()) {
-      beforeBox.getCenter(beforeCenter);
-      beforeBox.getSize(beforeSize);
-    }
-    if (!afterBox.isEmpty()) {
-      afterBox.getCenter(afterCenter);
-      afterBox.getSize(afterSize);
-    }
-    const maxDim = Math.max(
-      beforeSize.x, beforeSize.y, beforeSize.z,
-      afterSize.x, afterSize.y, afterSize.z,
-      1,
-    );
-    const gap = Math.max(maxDim * 0.16, 1);
-    const beforeTargetX = -(gap / 2 + beforeSize.x / 2);
-    const afterTargetX = gap / 2 + afterSize.x / 2;
-    const sourceMatrix = primaryLayer.getGlobalModelMatrix();
-    beforeLayer.setGlobalModelMatrix(
-      new Matrix4()
-        .makeTranslation(beforeTargetX - beforeCenter.x, -beforeCenter.y, -beforeCenter.z)
-        .multiply(sourceMatrix),
-    );
-    afterLayer.setGlobalModelMatrix(
-      new Matrix4()
-        .makeTranslation(afterTargetX - afterCenter.x, -afterCenter.y, -afterCenter.z)
-        .multiply(sourceMatrix),
-    );
-
     ensureShowDbnumExtraLayerAttached(beforeLayer, viewer);
     ensureShowDbnumExtraLayerAttached(afterLayer, viewer);
-    const compareBox = computeDtxLayersBoundingBox([beforeLayer, afterLayer]);
-    if (compareBox) {
-      viewer.fitClipPlanesToBox(compareBox);
-      const center = new Vector3();
-      const size = new Vector3();
-      compareBox.getCenter(center);
-      compareBox.getSize(size);
-      const sceneSize = Math.max(size.x, size.y, size.z, 1);
-      viewer.flyTo(
-        new Vector3(center.x, center.y - sceneSize * 1.5, center.z + sceneSize),
-        center,
-        { duration: 650 },
-      );
-    }
+    applyModelUnitVersionSide(beforeLayer, afterLayer, DEFAULT_MODEL_UNIT_COMPARE_SIDE);
 
-    modelUnitCompareState.value = { detail, status: 'ready' };
+    modelUnitCompareState.value = {
+      detail,
+      status: 'ready',
+      activeSide: DEFAULT_MODEL_UNIT_COMPARE_SIDE,
+      environment,
+    };
     if (isDev) {
       (window as any).__modelUnitVersionCompare = {
         unitRefno: detail.unitRefno,
@@ -2627,18 +2755,20 @@ async function openModelUnitVersionCompare(detail: ModelUnitCompareOpenDetail): 
         afterSesno: detail.after.sesno,
         beforeObjects,
         afterObjects,
+        environmentGeneratedAt: environment.generatedAt,
+        environmentLoadedRefnos: environment.loadedRefnos,
+        activeSide: 'after',
       };
     }
     requestRender();
   } catch (error) {
     if (runId !== modelUnitCompareRunId) {
-      disposeModelUnitCompareLayer(beforeLayer);
-      disposeModelUnitCompareLayer(afterLayer);
+      disposeModelUnitCompareRunLayers(runLayers);
       return;
     }
     const message = error instanceof Error ? error.message : String(error);
     clearModelUnitVersionCompare();
-    modelUnitCompareState.value = { detail, status: 'error', error: message };
+    modelUnitCompareState.value = { detail, status: 'error', activeSide: 'after', error: message };
     emitToast({ message: `最小交付单元版本加载失败：${message}`, level: 'error' });
   }
 }
@@ -5484,16 +5614,50 @@ onUnmounted(() => {
       </div>
 
       <div class="mt-2 grid grid-cols-2 gap-2 text-xs">
-        <div class="rounded-md border border-blue-200 bg-blue-50 px-2 py-1.5 text-blue-700">
+        <button type="button"
+          class="rounded-md border border-blue-200 bg-blue-50 px-2 py-1.5 text-left text-blue-700 transition-opacity"
+          :class="modelUnitCompareState.activeSide === 'before' ? 'ring-2 ring-blue-500' : 'opacity-60'"
+          data-testid="viewer-model-unit-compare-before"
+          :disabled="modelUnitCompareState.status !== 'ready'"
+          @click="setModelUnitCompareSide('before')">
           <div class="font-semibold">A · sesno {{ modelUnitCompareState.detail.before.sesno }}</div>
           <div class="mt-0.5 text-[10px] opacity-75">{{ formatModelUnitVersionTime(modelUnitCompareState.detail.before.generatedAt) }}</div>
-          <div class="mt-0.5 text-[10px] opacity-75">artifact {{ modelUnitCompareState.detail.before.artifactSesno }}</div>
-        </div>
-        <div class="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1.5 text-emerald-700">
+          <div v-if="modelUnitCompareState.detail.before.manifestUrl" class="mt-0.5 text-[10px] opacity-75">artifact {{ modelUnitCompareState.detail.before.artifactSesno }}</div>
+          <div v-else class="mt-1 text-[10px] font-semibold">该版本单元已删除</div>
+        </button>
+        <button type="button"
+          class="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1.5 text-left text-emerald-700 transition-opacity"
+          :class="modelUnitCompareState.activeSide === 'after' ? 'ring-2 ring-emerald-500' : 'opacity-60'"
+          data-testid="viewer-model-unit-compare-after"
+          :disabled="modelUnitCompareState.status !== 'ready'"
+          @click="setModelUnitCompareSide('after')">
           <div class="font-semibold">B · sesno {{ modelUnitCompareState.detail.after.sesno }}</div>
           <div class="mt-0.5 text-[10px] opacity-75">{{ formatModelUnitVersionTime(modelUnitCompareState.detail.after.generatedAt) }}</div>
-          <div class="mt-0.5 text-[10px] opacity-75">artifact {{ modelUnitCompareState.detail.after.artifactSesno }}</div>
+          <div v-if="modelUnitCompareState.detail.after.manifestUrl" class="mt-0.5 text-[10px] opacity-75">artifact {{ modelUnitCompareState.detail.after.artifactSesno }}</div>
+          <div v-else class="mt-1 text-[10px] font-semibold">该版本单元已删除</div>
+        </button>
+      </div>
+
+      <div v-if="modelUnitCompareState.environment" class="mt-2 rounded-md border border-amber-200 bg-amber-50/80 p-2 text-[10px] text-amber-900">
+        <div class="flex items-start justify-between gap-2">
+          <div>
+            <div class="font-semibold">
+              {{ modelUnitCompareState.environment.error ? '当前环境（刷新失败）' : '最新环境' }} ·
+              {{ formatModelUnitVersionTime(modelUnitCompareState.environment.generatedAt) }}
+            </div>
+            <div class="mt-0.5 opacity-80">已固定当前加载范围：{{ modelUnitCompareState.environment.loadedRefnos }} 个 refno</div>
+          </div>
+          <button type="button"
+            class="inline-flex shrink-0 items-center gap-1 rounded border border-amber-300 bg-background px-1.5 py-1 font-medium disabled:opacity-50"
+            data-testid="viewer-model-unit-compare-refresh-environment"
+            :disabled="modelUnitCompareState.environment.refreshing"
+            @click="requestRefreshModelUnitCompareEnvironment">
+            <RefreshCw class="h-3 w-3" :class="{ 'animate-spin': modelUnitCompareState.environment.refreshing }" />
+            刷新
+          </button>
         </div>
+        <div class="mt-1 border-t border-amber-200 pt-1">混合时间视图：环境始终取 dbnum 最新模型，目标单元取所选 sesno。</div>
+        <div v-if="modelUnitCompareState.environment.error" class="mt-1 text-destructive">{{ modelUnitCompareState.environment.error }}</div>
       </div>
 
       <div v-if="modelUnitCompareState.status === 'loading'" class="mt-2 text-xs text-muted-foreground">
@@ -5503,7 +5667,7 @@ onUnmounted(() => {
         {{ modelUnitCompareState.error }}
       </div>
       <div v-else class="mt-2 text-[11px] text-muted-foreground">
-        左侧蓝色为较早版本，右侧绿色为较新版本；在差异列表点击构件可联动聚焦。
+        A/B 在原坐标重叠显示，默认显示 B；切换版本不会重载模型或移动相机。
       </div>
     </div>
 

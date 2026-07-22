@@ -1,7 +1,11 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
+  applyModelUnitRefnoVisibility,
+  applyModelUnitVersionSide,
+  collectModelUnitTargetObjectIds,
   compareModelUnitGeometry,
+  DEFAULT_MODEL_UNIT_COMPARE_SIDE,
   geometrySnapshotsFromInstanceEntries,
   orderModelUnitVersionPair,
   type ModelUnitGeometrySnapshot,
@@ -17,6 +21,38 @@ describe('modelUnitVersionCompare', () => {
     const newer = { manifest_url: '/897/manifest.json', commit: { sesno: 897 } };
 
     expect(orderModelUnitVersionPair(newer, older)).toEqual([older, newer]);
+  });
+
+  it('单 viewport 默认显示 B，切换只改变两个版本层的显隐', () => {
+    const before = { setAllVisible: vi.fn() };
+    const after = { setAllVisible: vi.fn() };
+
+    expect(DEFAULT_MODEL_UNIT_COMPARE_SIDE).toBe('after');
+    applyModelUnitVersionSide(before, after, 'before');
+
+    expect(before.setAllVisible).toHaveBeenCalledWith(true);
+    expect(after.setAllVisible).toHaveBeenCalledWith(false);
+  });
+
+  it('只收集目标完整子树对象并按 refno 显隐状态恢复', () => {
+    const ids = collectModelUnitTargetObjectIds(
+      '1_10',
+      ['1_10', '1_11'],
+      (refno) => refno === '1_10' ? ['root'] : ['child-a', 'child-b'],
+      () => ['child-b', 'owned'],
+    );
+    expect(ids).toEqual(['child-b', 'owned', 'root', 'child-a']);
+
+    const setObjectVisible = vi.fn();
+    applyModelUnitRefnoVisibility(
+      { setObjectVisible },
+      new Map([['1_11', false]]),
+      () => ['child-a', 'child-b'],
+    );
+    expect(setObjectVisible.mock.calls).toEqual([
+      ['child-a', false],
+      ['child-b', false],
+    ]);
   });
 
   it('按 refno 分类新增、删除、修改和未变几何', () => {

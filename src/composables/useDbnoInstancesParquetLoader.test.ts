@@ -142,6 +142,54 @@ describe('useDbnoInstancesParquetLoader', () => {
     vi.restoreAllMocks();
   });
 
+  it('严格读取 parquet 当前清单且拒绝最小交付单元清单冒充环境', async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({
+      ...createManifest(7997),
+      root_refno: '24381_145018',
+    }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { fetchLatestDbnoManifest } = await import('./useDbnoInstancesParquetLoader');
+
+    await expect(fetchLatestDbnoManifest(7997)).rejects.toThrow('root_refno');
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('/files/output/parquet/manifest_7997.json'),
+      { cache: 'no-store' },
+    );
+  });
+
+  it('模型提交清单必须匹配目标最小交付单元根参考号', async () => {
+    const manifestUrl = '/files/output/AvevaMarineSample/model_units/7997/24381_145018/897/manifest.json';
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      ...createManifest(7997),
+      root_refno: '24381_999999',
+    }), { status: 200 })));
+
+    const { useDbnoInstancesParquetLoader } = await import('./useDbnoInstancesParquetLoader');
+    const loader = useDbnoInstancesParquetLoader();
+
+    await expect(loader.queryAllRefnosByDbno(7997, {
+      manifestUrl,
+      expectedRootRefno: '24381_145018',
+    })).rejects.toThrow('root_refno');
+  });
+
+  it('环境替换使用已读取的清单快照，不会再次解析可变 latest 指针', async () => {
+    const manifest = createManifest(7997);
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    queryMock.mockResolvedValue({ toArray: () => [] });
+
+    const { useDbnoInstancesParquetLoader } = await import('./useDbnoInstancesParquetLoader');
+    const loader = useDbnoInstancesParquetLoader();
+    await loader.queryInstanceEntriesByRefnos(7997, ['24381_145018'], {
+      manifestUrl: '/files/output/parquet/manifest_7997.json',
+      pinnedManifest: manifest,
+    });
+
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it('后端提示 instances manifest 时不再请求 parquet manifest', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);

@@ -87,10 +87,20 @@ describe('ModelUnitVersionComparePanel', () => {
       action: 'open',
       dbnum: 7997,
       unitRefno: '24381_145018',
-      before: expect.objectContaining({ sesno: 791 }),
-      after: expect.objectContaining({ sesno: 897 }),
+      before: expect.objectContaining({ sesno: 791, refnos: ['1_1', '1_2'] }),
+      after: expect.objectContaining({ sesno: 897, refnos: ['1_1', '1_3'] }),
       refnos: ['1_3', '1_2', '1_1'],
     }));
+
+    const parquet = vi.mocked(useDbnoInstancesParquetLoader).mock.results[0]?.value;
+    expect(parquet?.queryAllRefnosByDbno).toHaveBeenNthCalledWith(1, 7997, {
+      expectedRootRefno: '24381_145018',
+      manifestUrl: '/791/manifest.json',
+    });
+    expect(parquet?.queryAllRefnosByDbno).toHaveBeenNthCalledWith(2, 7997, {
+      expectedRootRefno: '24381_145018',
+      manifestUrl: '/897/manifest.json',
+    });
 
     window.removeEventListener('plant3d:model-unit-version-compare', listener);
     app.unmount();

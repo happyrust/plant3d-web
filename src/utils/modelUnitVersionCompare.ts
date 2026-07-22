@@ -15,12 +15,55 @@ export type ModelUnitGeometryDiff = {
 }
 
 export const MODEL_UNIT_VERSION_COMPARE_EVENT = 'plant3d:model-unit-version-compare';
+export type ModelUnitCompareSide = 'before' | 'after'
+export const DEFAULT_MODEL_UNIT_COMPARE_SIDE: ModelUnitCompareSide = 'after';
+
+type VersionVisibilityLayer = {
+  setAllVisible: (visible: boolean) => void
+}
+
+type ObjectVisibilityLayer = {
+  setObjectVisible: (objectId: string, visible: boolean) => void
+}
+
+export function applyModelUnitVersionSide(
+  beforeLayer: VersionVisibilityLayer | undefined,
+  afterLayer: VersionVisibilityLayer | undefined,
+  side: ModelUnitCompareSide,
+): void {
+  beforeLayer?.setAllVisible(side === 'before');
+  afterLayer?.setAllVisible(side === 'after');
+}
+
+export function collectModelUnitTargetObjectIds(
+  unitRefno: string,
+  targetRefnos: string[],
+  resolveByRefno: (refno: string) => string[],
+  resolveByUnitRefno: (unitRefno: string) => string[],
+): string[] {
+  const objectIds = new Set(resolveByUnitRefno(unitRefno));
+  for (const refno of targetRefnos) {
+    for (const objectId of resolveByRefno(refno)) objectIds.add(objectId);
+  }
+  return [...objectIds];
+}
+
+export function applyModelUnitRefnoVisibility(
+  layer: ObjectVisibilityLayer,
+  visibilityByRefno: Map<string, boolean>,
+  resolveByRefno: (refno: string) => string[],
+): void {
+  for (const [refno, visible] of visibilityByRefno) {
+    for (const objectId of resolveByRefno(refno)) layer.setObjectVisible(objectId, visible);
+  }
+}
 
 export type ModelUnitVersionSide = {
   sesno: number
   artifactSesno: number
   manifestUrl: string | null
   generatedAt: string
+  refnos: string[]
 }
 
 export function formatModelUnitVersionTime(generatedAt: string): string {
