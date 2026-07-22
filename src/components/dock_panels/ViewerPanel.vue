@@ -130,8 +130,11 @@ import {
   applyModelUnitVersionSide,
   collectModelUnitTargetObjectIds,
   DEFAULT_MODEL_UNIT_COMPARE_SIDE,
+  DEFAULT_MODEL_UNIT_COMPARE_VIEW_MODE,
   formatModelUnitVersionTime,
+  getModelUnitCompareRenderPasses,
   MODEL_UNIT_VERSION_COMPARE_EVENT,
+  type ModelUnitCompareViewMode,
   type ModelUnitVersionCompareEventDetail,
 } from '@/utils/modelUnitVersionCompare';
 import { parseGlbGeometry } from '@/utils/parseGlbGeometry';
@@ -1201,6 +1204,7 @@ type ModelUnitCompareRuntimeState = {
   detail: ModelUnitCompareOpenDetail;
   status: 'loading' | 'ready' | 'error';
   activeSide: 'before' | 'after';
+  viewMode: ModelUnitCompareViewMode;
   environment?: {
     generatedAt: string;
     loadedRefnos: number;
@@ -2541,6 +2545,73 @@ function setModelUnitCompareSide(side: 'before' | 'after'): void {
   requestRender();
 }
 
+function setModelUnitCompareViewMode(viewMode: ModelUnitCompareViewMode): void {
+  const state = modelUnitCompareState.value;
+  if (!state || state.status !== 'ready' || state.viewMode === viewMode) return;
+  if (viewMode === 'split') {
+    leftToolbarOpenMeasureMenu.value = false;
+    dimensionSystem?.pointer.pointerCancel();
+    toolsRef.value?.cancelMeasurementInteraction?.();
+    exitXeokitMeasureMode();
+    store.setToolMode('none');
+    pivotControllerRef.value?.handleMouseUp();
+  }
+  state.viewMode = viewMode;
+  requestRender();
+}
+
+function isModelUnitSplitCompareReady(): boolean {
+  return modelUnitCompareState.value?.status === 'ready'
+    && modelUnitCompareState.value.viewMode === 'split'
+    && modelUnitCompareLayers.length === 2;
+}
+
+function renderModelUnitCompareScene(viewer: DtxViewer): boolean {
+  const state = modelUnitCompareState.value;
+  const [beforeLayer, afterLayer] = modelUnitCompareLayers;
+  if (!state || !beforeLayer || !afterLayer || !isModelUnitSplitCompareReady()) return false;
+
+  const renderer = viewer.renderer;
+  const camera = viewer.camera;
+  const viewportSize = renderer.getSize(new Vector2());
+  const passes = getModelUnitCompareRenderPasses(
+    'split',
+    state.activeSide,
+    viewportSize.x,
+    viewportSize.y,
+  );
+  const originalAspect = camera.aspect;
+  let splitRenderError: unknown = null;
+  try {
+    renderer.setScissorTest(true);
+    for (const pass of passes) {
+      applyModelUnitVersionSide(beforeLayer, afterLayer, pass.side);
+      renderer.setViewport(pass.x, pass.y, pass.width, pass.height);
+      renderer.setScissor(pass.x, pass.y, pass.width, pass.height);
+      camera.aspect = pass.width / Math.max(1, pass.height);
+      camera.updateProjectionMatrix();
+      renderer.render(viewer.scene, camera);
+    }
+  } catch (error) {
+    splitRenderError = error;
+  } finally {
+    applyModelUnitVersionSide(beforeLayer, afterLayer, state.activeSide);
+    renderer.setScissorTest(false);
+    renderer.setViewport(0, 0, viewportSize.x, viewportSize.y);
+    camera.aspect = originalAspect;
+    camera.updateProjectionMatrix();
+  }
+  if (splitRenderError) {
+    state.viewMode = 'single';
+    emitToast({
+      message: `双视口渲染失败，已回退单视口：${splitRenderError instanceof Error ? splitRenderError.message : String(splitRenderError)}`,
+      level: 'error',
+    });
+    return false;
+  }
+  return true;
+}
+
 async function requestRefreshModelUnitCompareEnvironment(): Promise<void> {
   const state = modelUnitCompareState.value;
   const primaryLayer = dtxLayerRef.value;
@@ -2641,12 +2712,23 @@ async function openModelUnitVersionCompare(detail: ModelUnitCompareOpenDetail): 
   const viewer = dtxViewerRef.value;
   const primaryLayer = dtxLayerRef.value;
   if (!viewer || !primaryLayer) {
-    modelUnitCompareState.value = { detail, status: 'error', activeSide: 'after', error: '三维查看器尚未就绪' };
+    modelUnitCompareState.value = {
+      detail,
+      status: 'error',
+      activeSide: 'after',
+      viewMode: DEFAULT_MODEL_UNIT_COMPARE_VIEW_MODE,
+      error: '三维查看器尚未就绪',
+    };
     return;
   }
 
   const runId = ++modelUnitCompareRunId;
-  modelUnitCompareState.value = { detail, status: 'loading', activeSide: 'after' };
+  modelUnitCompareState.value = {
+    detail,
+    status: 'loading',
+    activeSide: 'after',
+    viewMode: DEFAULT_MODEL_UNIT_COMPARE_VIEW_MODE,
+  };
   modelUnitCompareCameraState = {
     position: viewer.camera.position.clone(),
     target: viewer.controls.target.clone(),
@@ -2746,6 +2828,7 @@ async function openModelUnitVersionCompare(detail: ModelUnitCompareOpenDetail): 
       detail,
       status: 'ready',
       activeSide: DEFAULT_MODEL_UNIT_COMPARE_SIDE,
+      viewMode: DEFAULT_MODEL_UNIT_COMPARE_VIEW_MODE,
       environment,
     };
     if (isDev) {
@@ -2758,6 +2841,7 @@ async function openModelUnitVersionCompare(detail: ModelUnitCompareOpenDetail): 
         environmentGeneratedAt: environment.generatedAt,
         environmentLoadedRefnos: environment.loadedRefnos,
         activeSide: 'after',
+        viewMode: DEFAULT_MODEL_UNIT_COMPARE_VIEW_MODE,
       };
     }
     requestRender();
@@ -2768,7 +2852,13 @@ async function openModelUnitVersionCompare(detail: ModelUnitCompareOpenDetail): 
     }
     const message = error instanceof Error ? error.message : String(error);
     clearModelUnitVersionCompare();
-    modelUnitCompareState.value = { detail, status: 'error', activeSide: 'after', error: message };
+    modelUnitCompareState.value = {
+      detail,
+      status: 'error',
+      activeSide: 'after',
+      viewMode: DEFAULT_MODEL_UNIT_COMPARE_VIEW_MODE,
+      error: message,
+    };
     emitToast({ message: `最小交付单元版本加载失败：${message}`, level: 'error' });
   }
 }
@@ -2828,6 +2918,7 @@ function attachPicking() {
   };
 
   const onDown = (e: PointerEvent) => {
+    if (isModelUnitSplitCompareReady()) return;
     // 工具模式开启时，交由 tools
     if (store.toolMode.value && store.toolMode.value !== 'none') return;
     if (e.button !== 0) return;
@@ -2845,6 +2936,12 @@ function attachPicking() {
   };
 
   const onUp = (e: PointerEvent) => {
+    if (isModelUnitSplitCompareReady()) {
+      clickState.down = null;
+      clickState.moved = false;
+      clickState.pointerId = null;
+      return;
+    }
     // 工具模式开启时，交由 tools
     if (store.toolMode.value && store.toolMode.value !== 'none') return;
 
@@ -2960,14 +3057,17 @@ function attachToolsInput() {
   if (!canvas || !tools) return;
 
   const onDown = (e: PointerEvent) => {
+    if (isModelUnitSplitCompareReady()) return;
     tools.onCanvasPointerDown(canvas, e);
     requestRender();
   };
   const onMove = (e: PointerEvent) => {
+    if (isModelUnitSplitCompareReady()) return;
     tools.onCanvasPointerMove(canvas, e);
     requestRender();
   };
   const onUp = (e: PointerEvent) => {
+    if (isModelUnitSplitCompareReady()) return;
     tools.onCanvasPointerUp(canvas, e);
     requestRender();
   };
@@ -3398,7 +3498,9 @@ function renderFrameImmediate() {
   annotationSystem?.update(dtxViewer.camera);
 
   const selection = selectionControllerRef.value;
-  if (selection?.hasOutline()) {
+  if (renderModelUnitCompareScene(dtxViewer)) {
+    // 分屏共享同一场景和相机；版本层显隐由两个 viewport 的 render pass 控制。
+  } else if (selection?.hasOutline()) {
     selection.renderOutline();
   } else {
     dtxViewer.renderer.render(dtxViewer.scene, dtxViewer.camera);
@@ -3411,9 +3513,11 @@ function renderFrameImmediate() {
   }
 
   // resize 同步渲染：补一次 overlay/labels 更新，避免标签与线条在首帧错位
-  toolsRef.value?.updateOverlayPositions();
-  ptsetVisRef.value?.updateLabelPositions();
-  annotationSystem?.renderLabels(dtxViewer.scene, dtxViewer.camera);
+  if (!isModelUnitSplitCompareReady()) {
+    toolsRef.value?.updateOverlayPositions();
+    ptsetVisRef.value?.updateLabelPositions();
+    annotationSystem?.renderLabels(dtxViewer.scene, dtxViewer.camera);
+  }
 }
 
 let needsRender = true;
@@ -3484,7 +3588,9 @@ function renderFrame() {
     annotationSystem?.update(dtxViewer.camera);
 
     const selection = selectionControllerRef.value;
-    if (selection?.hasOutline()) {
+    if (renderModelUnitCompareScene(dtxViewer)) {
+      // 分屏共享同一场景和相机；版本层显隐由两个 viewport 的 render pass 控制。
+    } else if (selection?.hasOutline()) {
       selection.renderOutline();
     } else {
       dtxViewer.renderer.render(dtxViewer.scene, dtxViewer.camera);
@@ -3497,11 +3603,13 @@ function renderFrame() {
       // ignore
     }
 
-    toolsRef.value?.updateOverlayPositions();
-    ptsetVisRef.value?.updateLabelPositions();
+    if (!isModelUnitSplitCompareReady()) {
+      toolsRef.value?.updateOverlayPositions();
+      ptsetVisRef.value?.updateLabelPositions();
 
-    // 三维标注系统更新
-    annotationSystem?.renderLabels(dtxViewer.scene, dtxViewer.camera);
+      // 三维标注系统更新
+      annotationSystem?.renderLabels(dtxViewer.scene, dtxViewer.camera);
+    }
 
     needsRender = false;
 
@@ -4564,12 +4672,14 @@ onMounted(async () => {
 
   // 添加鼠标事件监听器，用于动态 pivot（长按 300ms 触发）
   const onCanvasMouseDown = (e: PointerEvent) => {
+    if (isModelUnitSplitCompareReady()) return;
     const rect = canvas.getBoundingClientRect();
     const canvasPos = new Vector2(e.clientX - rect.left, e.clientY - rect.top);
     pivotControllerRef.value?.handleMouseDown(canvasPos);
   };
 
   const onCanvasMouseMove = (e: PointerEvent) => {
+    if (isModelUnitSplitCompareReady()) return;
     const rect = canvas.getBoundingClientRect();
     const canvasPos = new Vector2(e.clientX - rect.left, e.clientY - rect.top);
     pivotControllerRef.value?.handleMouseMove(canvasPos);
@@ -4592,12 +4702,15 @@ onMounted(async () => {
   };
 
   const onXeokitToolsPointerDown = (e: PointerEvent) => {
+    if (isModelUnitSplitCompareReady()) return;
     xeokitMeasurementToolsRef.value?.onCanvasPointerDown(canvas, e);
   };
   const onXeokitToolsPointerMove = (e: PointerEvent) => {
+    if (isModelUnitSplitCompareReady()) return;
     xeokitMeasurementToolsRef.value?.onCanvasPointerMove(canvas, e);
   };
   const onXeokitToolsPointerUp = (e: PointerEvent) => {
+    if (isModelUnitSplitCompareReady()) return;
     xeokitMeasurementToolsRef.value?.onCanvasPointerUp(canvas, e);
   };
   const onXeokitToolsPointerCancel = (e: PointerEvent) => {
@@ -5170,10 +5283,24 @@ onUnmounted(() => {
   <div ref="containerRef" class="viewer-panel-container">
     <canvas ref="mainCanvas" class="viewer" />
     <canvas v-if="dimensionDevEnabled"
+      v-show="modelUnitCompareState?.viewMode !== 'split'"
       ref="dimensionOverlayCanvas"
       class="dimension-viewport-overlay"
       aria-hidden="true" />
-    <div ref="overlayContainer" class="xeokitOverlay" />
+    <div v-show="modelUnitCompareState?.viewMode !== 'split'" ref="overlayContainer" class="xeokitOverlay" />
+
+    <div v-if="modelUnitCompareState?.status === 'ready' && modelUnitCompareState.viewMode === 'split'"
+      class="pointer-events-none absolute inset-0"
+      style="z-index: 930"
+      data-testid="viewer-model-unit-split-overlay">
+      <div class="absolute inset-y-0 left-1/2 border-l border-white/80 shadow-[0_0_0_1px_rgba(15,23,42,0.35)]" />
+      <div class="absolute left-3 top-3 rounded bg-blue-600/90 px-2 py-1 text-xs font-semibold text-white shadow">
+        A · sesno {{ modelUnitCompareState.detail.before.sesno }}
+      </div>
+      <div class="absolute left-[calc(50%+0.75rem)] top-3 rounded bg-emerald-600/90 px-2 py-1 text-xs font-semibold text-white shadow">
+        B · sesno {{ modelUnitCompareState.detail.after.sesno }}
+      </div>
+    </div>
 
     <!-- DEV：LOD 调参面板（屏幕相关阈值 + L2 预热） -->
     <div v-if="lodDebugVisible"
@@ -5267,7 +5394,7 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <div v-if="store.toolMode.value !== 'none' && activeMeasureTools"
+    <div v-if="store.toolMode.value !== 'none' && activeMeasureTools && modelUnitCompareState?.viewMode !== 'split'"
       class="pointer-events-none absolute bottom-2 right-2 rounded-md border border-border bg-background/85 px-2 py-1 text-xs text-foreground shadow-sm backdrop-blur"
       style="z-index: 940">
       <div>{{ activeMeasureStatusText }}</div>
@@ -5300,6 +5427,7 @@ onUnmounted(() => {
 
     <!-- 左侧竖直工具栏（快捷操作） -->
     <div ref="leftToolbarRef"
+      v-show="modelUnitCompareState?.viewMode !== 'split'"
       class="pointer-events-auto absolute left-3 top-1/2 flex -translate-y-1/2 flex-col items-center gap-1 rounded-xl border border-border bg-background/90 p-1 shadow-lg backdrop-blur"
       style="z-index: 940"
       @pointerdown.stop
@@ -5407,7 +5535,8 @@ onUnmounted(() => {
     </div>
 
     <!-- 右侧竖直工具栏（查看/快捷） -->
-    <div class="pointer-events-auto absolute right-3 top-1/2 flex -translate-y-1/2 flex-col items-center gap-1 rounded-xl border border-border bg-background/90 p-1 shadow-lg backdrop-blur"
+    <div v-show="modelUnitCompareState?.viewMode !== 'split'"
+      class="pointer-events-auto absolute right-3 top-1/2 flex -translate-y-1/2 flex-col items-center gap-1 rounded-xl border border-border bg-background/90 p-1 shadow-lg backdrop-blur"
       style="z-index: 940"
       @pointerdown.stop
       @wheel.stop>
@@ -5613,6 +5742,27 @@ onUnmounted(() => {
         </button>
       </div>
 
+      <div class="mt-2 grid grid-cols-2 gap-1 rounded-md bg-muted p-1 text-xs">
+        <button type="button"
+          class="rounded px-2 py-1.5"
+          :class="modelUnitCompareState.viewMode === 'single' ? 'bg-background font-semibold shadow-sm' : 'text-muted-foreground hover:text-foreground'"
+          :aria-pressed="modelUnitCompareState.viewMode === 'single'"
+          data-testid="viewer-model-unit-compare-single-mode"
+          :disabled="modelUnitCompareState.status !== 'ready'"
+          @click="setModelUnitCompareViewMode('single')">
+          单视口切换
+        </button>
+        <button type="button"
+          class="rounded px-2 py-1.5"
+          :class="modelUnitCompareState.viewMode === 'split' ? 'bg-background font-semibold shadow-sm' : 'text-muted-foreground hover:text-foreground'"
+          :aria-pressed="modelUnitCompareState.viewMode === 'split'"
+          data-testid="viewer-model-unit-compare-split-mode"
+          :disabled="modelUnitCompareState.status !== 'ready'"
+          @click="setModelUnitCompareViewMode('split')">
+          双视口分屏
+        </button>
+      </div>
+
       <div class="mt-2 grid grid-cols-2 gap-2 text-xs">
         <button type="button"
           class="rounded-md border border-blue-200 bg-blue-50 px-2 py-1.5 text-left text-blue-700 transition-opacity"
@@ -5667,7 +5817,9 @@ onUnmounted(() => {
         {{ modelUnitCompareState.error }}
       </div>
       <div v-else class="mt-2 text-[11px] text-muted-foreground">
-        A/B 在原坐标重叠显示，默认显示 B；切换版本不会重载模型或移动相机。
+        {{ modelUnitCompareState.viewMode === 'split'
+          ? '左侧固定 A、右侧固定 B；两侧共享最新环境和同步相机。'
+          : 'A/B 在原坐标重叠显示，默认显示 B；切换版本不会重载模型或移动相机。' }}
       </div>
     </div>
 
@@ -5764,9 +5916,9 @@ onUnmounted(() => {
       @pointerdown.stop
       @wheel.stop />
 
-    <AnnotationOverlayBar v-if="toolsRef" :tools="toolsRef" />
+    <AnnotationOverlayBar v-if="toolsRef && modelUnitCompareState?.viewMode !== 'split'" :tools="toolsRef" />
 
-    <MeasurementOverlayBar v-if="isXeokitMeasureMode && xeokitMeasurementToolsRef" :tools="xeokitMeasurementToolsRef" />
+    <MeasurementOverlayBar v-if="isXeokitMeasureMode && xeokitMeasurementToolsRef && modelUnitCompareState?.viewMode !== 'split'" :tools="xeokitMeasurementToolsRef" />
 
     <ReviewConfirmation />
   </div>

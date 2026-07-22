@@ -6,6 +6,8 @@ import {
   collectModelUnitTargetObjectIds,
   compareModelUnitGeometry,
   DEFAULT_MODEL_UNIT_COMPARE_SIDE,
+  DEFAULT_MODEL_UNIT_COMPARE_VIEW_MODE,
+  getModelUnitCompareRenderPasses,
   geometrySnapshotsFromInstanceEntries,
   orderModelUnitVersionPair,
   type ModelUnitGeometrySnapshot,
@@ -32,6 +34,17 @@ describe('modelUnitVersionCompare', () => {
 
     expect(before.setAllVisible).toHaveBeenCalledWith(true);
     expect(after.setAllVisible).toHaveBeenCalledWith(false);
+  });
+
+  it('版本查看默认单视口，分屏时左 A 右 B 且完整覆盖奇数宽度', () => {
+    expect(DEFAULT_MODEL_UNIT_COMPARE_VIEW_MODE).toBe('single');
+    expect(getModelUnitCompareRenderPasses('single', 'before', 1001, 600)).toEqual([
+      { side: 'before', x: 0, y: 0, width: 1001, height: 600 },
+    ]);
+    expect(getModelUnitCompareRenderPasses('split', 'after', 1001, 600)).toEqual([
+      { side: 'before', x: 0, y: 0, width: 500, height: 600 },
+      { side: 'after', x: 500, y: 0, width: 501, height: 600 },
+    ]);
   });
 
   it('只收集目标完整子树对象并按 refno 显隐状态恢复', () => {

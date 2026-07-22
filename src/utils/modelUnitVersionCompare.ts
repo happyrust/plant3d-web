@@ -17,6 +17,30 @@ export type ModelUnitGeometryDiff = {
 export const MODEL_UNIT_VERSION_COMPARE_EVENT = 'plant3d:model-unit-version-compare';
 export type ModelUnitCompareSide = 'before' | 'after'
 export const DEFAULT_MODEL_UNIT_COMPARE_SIDE: ModelUnitCompareSide = 'after';
+export type ModelUnitCompareViewMode = 'single' | 'split'
+export const DEFAULT_MODEL_UNIT_COMPARE_VIEW_MODE: ModelUnitCompareViewMode = 'single';
+
+export type ModelUnitCompareRenderPass = {
+  side: ModelUnitCompareSide
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+export function getModelUnitCompareRenderPasses(
+  viewMode: ModelUnitCompareViewMode,
+  activeSide: ModelUnitCompareSide,
+  width: number,
+  height: number,
+): ModelUnitCompareRenderPass[] {
+  if (viewMode === 'single') return [{ side: activeSide, x: 0, y: 0, width, height }];
+  const leftWidth = Math.floor(width / 2);
+  return [
+    { side: 'before', x: 0, y: 0, width: leftWidth, height },
+    { side: 'after', x: leftWidth, y: 0, width: width - leftWidth, height },
+  ];
+}
 
 type VersionVisibilityLayer = {
   setAllVisible: (visible: boolean) => void
