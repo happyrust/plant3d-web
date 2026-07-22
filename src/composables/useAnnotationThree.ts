@@ -16,10 +16,8 @@ import type { DtxViewer } from '@/viewer/dtx/DtxViewer';
 import {
   AnnotationMaterials,
   AnnotationBase,
-  LinearDimension,
   LeaderAnnotation,
   AnnotationInteractionController,
-  type LinearDimensionParams,
   type LeaderAnnotationParams,
   type AnnotationInteractionOptions,
   type AnnotationInteractionCallback,
@@ -49,8 +47,6 @@ export type UseAnnotationThreeReturn = {
   /** 当前选中的标注 ID */
   selectedId: Ref<string | null>
 
-  /** 创建线性尺寸标注 */
-  createLinearDimension: (id: string, params: LinearDimensionParams) => LinearDimension
   /** 创建引线标注 */
   createLeaderAnnotation: (id: string, params: LeaderAnnotationParams) => LeaderAnnotation
 
@@ -287,14 +283,6 @@ export function useAnnotationThree(
     css2dRenderer?.setSize(width, height);
   }
 
-  /** 创建线性尺寸标注 */
-  function createLinearDimension(id: string, params: LinearDimensionParams): LinearDimension {
-    ensureGroupAttached();
-    const dim = new LinearDimension(materials, params);
-    addAnnotation(id, dim);
-    return dim;
-  }
-
   /** 创建引线标注 */
   function createLeaderAnnotation(id: string, params: LeaderAnnotationParams): LeaderAnnotation {
     ensureGroupAttached();
@@ -349,7 +337,6 @@ export function useAnnotationThree(
     interactionController,
     hoveredId: interactionController.hoveredId,
     selectedId: interactionController.selectedId,
-    createLinearDimension,
     createLeaderAnnotation,
     addAnnotation,
     removeAnnotation,

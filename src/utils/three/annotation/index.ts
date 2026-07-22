@@ -20,7 +20,6 @@ export { AnnotationBase, type AnnotationOptions, type AnnotationInteractionState
 export { AnnotationMaterials, type AnnotationMaterialSet } from './core/AnnotationMaterials';
 
 // Annotations
-export { LinearDimension, type LinearDimensionParams } from './annotations/LinearDimension';
 export { AlignedDimension, type AlignedDimensionParams } from './annotations/AlignedDimension';
 export { AngleDimension, type AngleDimensionParams } from './annotations/AngleDimension';
 export { LeaderAnnotation, type LeaderAnnotationParams } from './annotations/LeaderAnnotation';

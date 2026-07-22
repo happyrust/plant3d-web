@@ -1,9 +1,7 @@
 /**
  * 对齐标注（沿两点之间的真实距离标注）
  *
- * 与 LinearDimension 的区别：
- * - LinearDimension：标注线偏移后与原线段平行
- * - AlignedDimension：标注线沿两点连线方向，无偏移
+ * 标注线沿两点连线方向，无偏移。
  *
  * 结构：
  *     start ●─────────────────● end

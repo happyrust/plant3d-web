@@ -2,14 +2,14 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 import * as THREE from 'three';
 
-import { LinearDimension } from '../annotations/LinearDimension';
+import { AlignedDimension } from '../annotations/AlignedDimension';
 import { AnnotationMaterials } from '../core/AnnotationMaterials';
 
 import { AnnotationInteractionController } from './AnnotationInteractionController';
 
 describe('AnnotationInteractionController', () => {
   let materials: AnnotationMaterials;
-  let annotations: Map<string, LinearDimension>;
+  let annotations: Map<string, AlignedDimension>;
   let controller: AnnotationInteractionController;
 
   beforeEach(() => {
@@ -17,11 +17,11 @@ describe('AnnotationInteractionController', () => {
     annotations = new Map();
 
     // 创建一些测试标注
-    const dim1 = new LinearDimension(materials, {
+    const dim1 = new AlignedDimension(materials, {
       start: new THREE.Vector3(0, 0, 0),
       end: new THREE.Vector3(10, 0, 0),
     });
-    const dim2 = new LinearDimension(materials, {
+    const dim2 = new AlignedDimension(materials, {
       start: new THREE.Vector3(0, 10, 0),
       end: new THREE.Vector3(10, 10, 0),
     });
@@ -86,7 +86,7 @@ describe('AnnotationInteractionController', () => {
 
   describe('setAnnotations', () => {
     it('should update annotations reference', () => {
-      const newAnnotations = new Map<string, LinearDimension>();
+      const newAnnotations = new Map<string, AlignedDimension>();
       expect(() => controller.setAnnotations(newAnnotations)).not.toThrow();
     });
   });

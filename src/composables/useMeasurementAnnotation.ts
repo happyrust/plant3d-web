@@ -10,7 +10,6 @@ import type { UseAnnotationThreeReturn } from './useAnnotationThree';
 import type { MeasurementRecord, DistanceMeasurementRecord, AngleMeasurementRecord } from './useToolStore';
 
 import {
-  LinearDimension,
   AlignedDimension,
   AngleDimension,
 } from '@/utils/three/annotation';
