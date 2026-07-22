@@ -121,7 +121,7 @@ function normalizeSelectedPair(): void {
 }
 
 async function snapshotsFor(version: ModelUnitCommitData) {
-  if (dbnum.value === null) return [];
+  if (dbnum.value === null || version.manifest_url === null) return [];
   const parquet = useDbnoInstancesParquetLoader();
   const refnos = await parquet.queryAllRefnosByDbno(dbnum.value, { manifestUrl: version.manifest_url });
   const entries = await parquet.queryInstanceEntriesByRefnos(dbnum.value, refnos, {

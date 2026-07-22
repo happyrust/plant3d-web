@@ -2518,7 +2518,9 @@ async function openModelUnitVersionCompare(detail: ModelUnitCompareOpenDetail): 
   modelUnitCompareLayers = [beforeLayer, afterLayer];
 
   try {
-    const sharedInstanceEntries = detail.before.artifactSesno === detail.after.artifactSesno
+    const sharedInstanceEntries = detail.before.manifestUrl
+      && detail.after.manifestUrl
+      && detail.before.artifactSesno === detail.after.artifactSesno
       ? await useDbnoInstancesParquetLoader().queryInstanceEntriesByRefnos(detail.dbnum, detail.refnos, {
         manifestUrl: detail.after.manifestUrl,
         includeOwnedTubings: false,
@@ -2532,23 +2534,26 @@ async function openModelUnitVersionCompare(detail: ModelUnitCompareOpenDetail): 
       instanceEntriesByRefno: sharedInstanceEntries,
     };
     const [beforeResult, afterResult] = await Promise.all([
-      loadDbnoInstancesForVisibleRefnosDtx(beforeLayer, detail.dbnum, detail.refnos, {
+      detail.before.manifestUrl ? loadDbnoInstancesForVisibleRefnosDtx(beforeLayer, detail.dbnum, detail.refnos, {
         ...commonOptions,
         parquetManifestUrl: detail.before.manifestUrl,
         objectIdPrefix: 'unit-compare:a',
-      }),
-      loadDbnoInstancesForVisibleRefnosDtx(afterLayer, detail.dbnum, detail.refnos, {
+      }) : Promise.resolve(null),
+      detail.after.manifestUrl ? loadDbnoInstancesForVisibleRefnosDtx(afterLayer, detail.dbnum, detail.refnos, {
         ...commonOptions,
         parquetManifestUrl: detail.after.manifestUrl,
         objectIdPrefix: 'unit-compare:b',
-      }),
+      }) : Promise.resolve(null),
     ]);
     if (runId !== modelUnitCompareRunId) {
       disposeModelUnitCompareLayer(beforeLayer);
       disposeModelUnitCompareLayer(afterLayer);
       return;
     }
-    if (detail.refnos.length > 0 && beforeResult.loadedObjects + afterResult.loadedObjects === 0) {
+    const beforeObjects = beforeResult?.loadedObjects ?? 0;
+    const afterObjects = afterResult?.loadedObjects ?? 0;
+    if (detail.refnos.length > 0 && beforeObjects + afterObjects === 0
+      && detail.before.manifestUrl && detail.after.manifestUrl) {
       throw new Error('所选版本没有可显示的几何对象');
     }
 
@@ -2620,8 +2625,8 @@ async function openModelUnitVersionCompare(detail: ModelUnitCompareOpenDetail): 
         unitRefno: detail.unitRefno,
         beforeSesno: detail.before.sesno,
         afterSesno: detail.after.sesno,
-        beforeObjects: beforeResult.loadedObjects,
-        afterObjects: afterResult.loadedObjects,
+        beforeObjects,
+        afterObjects,
       };
     }
     requestRender();
