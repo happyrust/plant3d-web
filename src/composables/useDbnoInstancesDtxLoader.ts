@@ -820,13 +820,23 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
   }
   const replacementSnapshot = replaceExistingObjects
     ? {
-      objectIds: new Set(dtxLayer.getAllObjectIds()),
+      objectCount: dtxLayer.getAllObjectIds().length,
       visibility: new Map(
         dtxLayer.getAllObjectIds().map((objectId) => [objectId, dtxLayer.isObjectVisible(objectId)]),
       ),
+      objectCounter: cache.objectCounter,
       refnoToObjectIds: new Map(
         [...cache.refnoToObjectIds].map(([refno, objectIds]) => [refno, [...objectIds]]),
       ),
+      objectIdToRefno: new Map(cache.objectIdToRefno),
+      objectIdToSpecValue: new Map(cache.objectIdToSpecValue),
+      refnoTransform: new Map(
+        [...cache.refnoTransform].map(([refno, transform]) => [refno, [...transform]]),
+      ),
+      refnoToNoun: new Map(cache.refnoToNoun),
+      refnoToOwnerNoun: new Map(cache.refnoToOwnerNoun),
+      refnoToOwnerRefno: new Map(cache.refnoToOwnerRefno),
+      refnoToSpecValue: new Map(cache.refnoToSpecValue),
       loadedRefnos: new Set(cache.loadedRefnos),
     }
     : null;
@@ -1016,16 +1026,23 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
     }
   } catch (error) {
     if (replacementSnapshot) {
-      for (const objectId of dtxLayer.getAllObjectIds()) {
-        if (replacementSnapshot.objectIds.has(objectId)) continue;
-        dtxLayer.setObjectVisible(objectId, false);
-        cache.objectIdToRefno.delete(objectId);
-        cache.objectIdToSpecValue.delete(objectId);
+      try {
+        dtxLayer.rollbackObjectsAddedAfter(replacementSnapshot.objectCount);
+      } catch (rollbackError) {
+        if (debug) console.warn('[dtx][instances] rollback appended objects failed', rollbackError);
       }
       for (const [objectId, visible] of replacementSnapshot.visibility) {
         dtxLayer.setObjectVisible(objectId, visible);
       }
+      cache.objectCounter = replacementSnapshot.objectCounter;
       cache.refnoToObjectIds = replacementSnapshot.refnoToObjectIds;
+      cache.objectIdToRefno = replacementSnapshot.objectIdToRefno;
+      cache.objectIdToSpecValue = replacementSnapshot.objectIdToSpecValue;
+      cache.refnoTransform = replacementSnapshot.refnoTransform;
+      cache.refnoToNoun = replacementSnapshot.refnoToNoun;
+      cache.refnoToOwnerNoun = replacementSnapshot.refnoToOwnerNoun;
+      cache.refnoToOwnerRefno = replacementSnapshot.refnoToOwnerRefno;
+      cache.refnoToSpecValue = replacementSnapshot.refnoToSpecValue;
       cache.loadedRefnos = replacementSnapshot.loadedRefnos;
       try {
         dtxLayer.recompile();

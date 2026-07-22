@@ -1782,6 +1782,43 @@ export class DTXLayer {
   }
 
   /**
+   * 回滚在指定对象数量之后追加的对象。
+   *
+   * 该操作只允许移除尾部增量，供上层在批量追加或 recompile 失败时恢复事务快照；
+   * 调用后应重新编译 GPU 资源。
+   */
+  rollbackObjectsAddedAfter(existingObjectCount: number): void {
+    if (!Number.isInteger(existingObjectCount) || existingObjectCount < 0 || existingObjectCount > this._objectCount) {
+      throw new Error(`无效的 DTX 对象回滚位置: ${existingObjectCount}`);
+    }
+    if (existingObjectCount === this._objectCount) return;
+
+    const previousObjectCount = this._objectCount;
+    for (const object of this._objectsArray.slice(existingObjectCount)) {
+      this._objects.delete(object.objectId);
+    }
+    this._objectsArray.length = existingObjectCount;
+    this._objectCount = existingObjectCount;
+    this._totalObjects = existingObjectCount;
+
+    const lastObject = this._objectsArray.at(-1);
+    this._drawTriangleCount = lastObject
+      ? lastObject.primitiveOffset + Math.floor(lastObject.indexCount / 3)
+      : 0;
+    this._drawIndexCount = this._drawTriangleCount * 3;
+
+    this._matricesBuffer.fill(0, existingObjectCount * 16, previousObjectCount * 16);
+    this._colorsAndFlagsBuffer.fill(0, existingObjectCount * 16, previousObjectCount * 16);
+    this._colorOverrideBuffer.fill(0, existingObjectCount * 4, previousObjectCount * 4);
+
+    this._sceneBoundingBox.makeEmpty();
+    for (const object of this._objectsArray) {
+      this._sceneBoundingBox.union(object.boundingBox);
+    }
+    this._visibilityRevision++;
+  }
+
+  /**
    * 获取当前可见对象 ID 列表（基于对象 visible 标志）。
    */
   getVisibleObjectIds(): string[] {

@@ -373,6 +373,55 @@ describe('useDbnoInstancesDtxLoader', () => {
     expect(mod.resolveDtxObjectIdsByRefno(dbno, refno)).toEqual([oldId]);
   });
 
+  it('替换重编译失败时移除尾部对象并恢复全部 refno 元数据', async () => {
+    const { DTXLayer } = await import('@/utils/three/dtx');
+    const mod = await import('./useDbnoInstancesDtxLoader');
+    const dbno = 99011;
+    const refno = '24381_76696';
+    const childRefno = '24381_76697';
+    const entry = (actualRefno: string, noun: string) => ({
+      geo_hash: '1',
+      matrix: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1],
+      refno_transform: [1, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1],
+      uniforms: {
+        refno: actualRefno,
+        noun,
+        owner_refno: actualRefno === childRefno ? refno : '',
+        owner_noun: actualRefno === childRefno ? 'BRAN' : '',
+        spec_value: actualRefno === childRefno ? 42 : 0,
+      },
+    });
+    parquetLoaderMocks.queryInstanceEntriesByRefnos
+      .mockResolvedValueOnce(new Map([[refno, [entry(refno, 'BRAN')]]]))
+      .mockResolvedValue(new Map([[refno, [entry(refno, 'BRAN'), entry(childRefno, 'ELBO')]]]));
+    const dtxLayer = new DTXLayer({ maxVertices: 128, maxIndices: 256, maxObjects: 8 });
+    await mod.loadDbnoInstancesForVisibleRefnosDtx(dtxLayer, dbno, [refno], { dataSource: 'parquet' });
+    const oldId = mod.resolveDtxObjectIdsByRefno(dbno, refno)[0]!;
+    vi.spyOn(dtxLayer, 'recompile').mockImplementationOnce(() => {
+      throw new Error('simulated recompile failure');
+    });
+
+    await expect(mod.loadDbnoInstancesForVisibleRefnosDtx(dtxLayer, dbno, [refno], {
+      dataSource: 'parquet',
+      forceReloadRefnos: [refno],
+      replaceExistingObjects: true,
+    })).rejects.toThrow('simulated recompile failure');
+
+    expect(dtxLayer.getAllObjectIds()).toEqual([oldId]);
+    expect(dtxLayer.isObjectVisible(oldId)).toBe(true);
+    expect(mod.resolveDtxObjectIdsByRefno(dbno, refno)).toEqual([oldId]);
+    expect(mod.resolveDtxObjectIdsByRefno(dbno, childRefno)).toEqual([]);
+    expect(mod.resolveDtxNounByRefno(dbno, childRefno)).toBeNull();
+    expect(mod.getDtxRefnoTransform(dbno, childRefno)).toBeUndefined();
+
+    await mod.loadDbnoInstancesForVisibleRefnosDtx(dtxLayer, dbno, [refno], {
+      dataSource: 'parquet',
+      forceReloadRefnos: [refno],
+      replaceExistingObjects: true,
+    });
+    expect(mod.resolveDtxObjectIdsByRefno(dbno, refno)).toEqual([`o:${refno}:1`]);
+  });
+
   it('隔离加载应写入独立 DTXLayer 且不污染当前模型 refno 索引', async () => {
     const { DTXLayer } = await import('@/utils/three/dtx');
     const mod = await import('./useDbnoInstancesDtxLoader');
