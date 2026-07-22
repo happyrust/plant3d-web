@@ -33,7 +33,7 @@ import {
 import { ensurePanelAndActivate } from '@/composables/useDockApi';
 import { useReviewStore } from '@/composables/useReviewStore';
 import { useSelectionStore } from '@/composables/useSelectionStore';
-import { useToolStore, type AngleMeasurementRecord, type AnnotationRecord, type CloudAnnotationRecord, type DistanceMeasurementRecord, type MeasurementPoint, type Obb, type ObbAnnotationRecord, type RectAnnotationRecord, type Vec3 } from '@/composables/useToolStore';
+import { useToolStore, type AnnotationRecord, type CloudAnnotationRecord, type DistanceMeasurementRecord, type MeasurementPoint, type Obb, type ObbAnnotationRecord, type RectAnnotationRecord, type Vec3 } from '@/composables/useToolStore';
 import { useUnitSettingsStore } from '@/composables/useUnitSettingsStore';
 import { useUserStore } from '@/composables/useUserStore';
 import { emitToast } from '@/ribbon/toastBus';
@@ -1704,7 +1704,6 @@ export function useDtxTools(options: {
     return isDtxInteractionReady(dtxLayerRef.value);
   });
 
-  const progressPoints = ref<MeasurementPoint[]>([]);
   const pointToObjectStart = ref<MeasurementPoint | null>(null);
   const objectToObjectSourceCandidate = ref<ObjectMeasureCandidate | null>(null);
   const objectToObjectTargetCandidate = ref<ObjectMeasureCandidate | null>(null);
@@ -2745,14 +2744,6 @@ export function useDtxTools(options: {
     if (!selectionRef.value) return '拾取控制器未就绪';
     if (!ready.value) return '等待模型加载完成…';
 
-    if (mode === 'measure_distance') {
-      return progressPoints.value.length === 0 ? '距离测量：请选择起点' : '距离测量：请选择终点';
-    }
-    if (mode === 'measure_angle') {
-      if (progressPoints.value.length === 0) return '角度测量：请选择起点';
-      if (progressPoints.value.length === 1) return '角度测量：请选择拐点';
-      return '角度测量：请选择终点';
-    }
     if (mode === 'measure_point_to_object') {
       return pointToObjectStart.value ? '点到面测量：请点击选择目标对象（自动计算最近距离）' : '点到面测量：请点击选择起始点';
     }
@@ -2858,7 +2849,6 @@ export function useDtxTools(options: {
   const rectPreviewLine = ref<Line | null>(null);
 
   function resetProgress() {
-    progressPoints.value = [];
     pointToObjectStart.value = null;
     clearObjectMeasureCandidates({ clearStatus: true, clearLastPairKey: true });
     clearPipeToPipeCandidate({ clearStatus: true });
@@ -4139,29 +4129,6 @@ export function useDtxTools(options: {
       return;
     }
 
-    if (mode === 'measure_distance') {
-      const hit = pickSurfacePoint(canvas, e);
-      if (!hit) return;
-      progressPoints.value = [...progressPoints.value, { entityId: hit.entityId, worldPos: vec3ToTuple(hit.worldPos) }];
-      if (progressPoints.value.length >= 2) {
-        const [p0, p1] = progressPoints.value as [MeasurementPoint, MeasurementPoint];
-        const sourceAnnotation = store.activeAnnotationContext.value;
-        const rec: DistanceMeasurementRecord = {
-          id: nowId('dist'),
-          kind: 'distance',
-          origin: p0,
-          target: p1,
-          visible: true,
-          createdAt: Date.now(),
-          sourceAnnotationId: sourceAnnotation?.id,
-          sourceAnnotationType: sourceAnnotation?.type,
-        };
-        store.addMeasurement(rec);
-        progressPoints.value = [];
-      }
-      return;
-    }
-
     if (mode === 'measure_pipe_to_structure') {
       void runPipeToStructureMeasurement(canvas, e);
       return;
@@ -4169,30 +4136,6 @@ export function useDtxTools(options: {
 
     if (mode === 'measure_pipe_to_pipe') {
       void runPipeToPipeMeasurement(canvas, e);
-      return;
-    }
-
-    if (mode === 'measure_angle') {
-      const hit = pickSurfacePoint(canvas, e);
-      if (!hit) return;
-      progressPoints.value = [...progressPoints.value, { entityId: hit.entityId, worldPos: vec3ToTuple(hit.worldPos) }];
-      if (progressPoints.value.length >= 3) {
-        const [p0, p1, p2] = progressPoints.value as [MeasurementPoint, MeasurementPoint, MeasurementPoint];
-        const sourceAnnotation = store.activeAnnotationContext.value;
-        const rec: AngleMeasurementRecord = {
-          id: nowId('angle'),
-          kind: 'angle',
-          origin: p0,
-          corner: p1,
-          target: p2,
-          visible: true,
-          createdAt: Date.now(),
-          sourceAnnotationId: sourceAnnotation?.id,
-          sourceAnnotationType: sourceAnnotation?.type,
-        };
-        store.addMeasurement(rec);
-        progressPoints.value = [];
-      }
       return;
     }
 
