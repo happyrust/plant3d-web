@@ -38,7 +38,6 @@ import {
 } from 'three';
 
 import { e3dGetChildren, e3dGetVisibleInsts } from '@/api/genModelE3dApi';
-import { e3dParquetGetSubtreeRefnos } from '@/api/genModelE3dParquetApi';
 import { pdmsGetUiAttr, type PtsetResponse } from '@/api/genModelPdmsAttrApi';
 import { fetchMbdV2PipeData } from '@/api/mbdV2Api';
 import {
@@ -1206,7 +1205,7 @@ type ModelUnitCompareRuntimeState = {
   activeSide: 'before' | 'after';
   viewMode: ModelUnitCompareViewMode;
   environment?: {
-    generatedAt: string;
+    generatedAt?: string;
     loadedRefnos: number;
     refreshing: boolean;
     error?: string;
@@ -2738,22 +2737,22 @@ async function openModelUnitVersionCompare(detail: ModelUnitCompareOpenDetail): 
   const runLayers: DTXLayer[] = [];
 
   try {
-    const [environment, subtree] = await Promise.all([
-      refreshModelUnitCompareEnvironment(detail, runId),
-      e3dParquetGetSubtreeRefnos(detail.unitRefno, {
-        includeSelf: true,
-        maxDepth: 256,
-        limit: 200_000,
-      }),
-    ]);
+    const environmentResult = await refreshModelUnitCompareEnvironment(detail, runId)
+      .then((environment) => ({ environment, error: undefined }))
+      .catch((error: unknown) => ({
+        environment: undefined,
+        error: error instanceof Error ? error.message : String(error),
+      }));
     if (runId !== modelUnitCompareRunId) return;
-    if (!subtree.success) {
-      throw new Error(subtree.error_message || '无法查询最小交付单元的最新完整子树');
-    }
-    if (subtree.truncated) throw new Error('最小交付单元子树查询被截断，拒绝显示不完整对比');
+    const environment = environmentResult.environment ?? {
+      loadedRefnos: collectLoadedRefnoVisibility(primaryLayer, detail.dbnum).size,
+      refreshing: false as const,
+      error: environmentResult.error,
+    };
     modelUnitCompareTargetRefnos = Array.from(new Set([
       detail.unitRefno,
-      ...subtree.refnos.map(normalizeCompareRefno).filter(Boolean),
+      ...detail.before.refnos.map(normalizeCompareRefno).filter(Boolean),
+      ...detail.after.refnos.map(normalizeCompareRefno).filter(Boolean),
     ]));
     const currentVisibility = collectLoadedRefnoVisibility(primaryLayer, detail.dbnum);
     modelUnitCompareOriginalVisibility = new Map(
@@ -2823,6 +2822,15 @@ async function openModelUnitVersionCompare(detail: ModelUnitCompareOpenDetail): 
     ensureShowDbnumExtraLayerAttached(beforeLayer, viewer);
     ensureShowDbnumExtraLayerAttached(afterLayer, viewer);
     applyModelUnitVersionSide(beforeLayer, afterLayer, DEFAULT_MODEL_UNIT_COMPARE_SIDE);
+    const compareBox = computeDtxLayersBoundingBox([beforeLayer, afterLayer]);
+    if (compareBox) {
+      fitDtxViewerToBox(viewer, compareBox, 0);
+      try {
+        cadGridRef.value?.fitToBoundingBox(compareBox);
+      } catch {
+        // 网格适配失败不影响两个精确版本的模型加载与对比。
+      }
+    }
 
     modelUnitCompareState.value = {
       detail,
@@ -2838,7 +2846,7 @@ async function openModelUnitVersionCompare(detail: ModelUnitCompareOpenDetail): 
         afterSesno: detail.after.sesno,
         beforeObjects,
         afterObjects,
-        environmentGeneratedAt: environment.generatedAt,
+        environmentGeneratedAt: environment.generatedAt ?? null,
         environmentLoadedRefnos: environment.loadedRefnos,
         activeSide: 'after',
         viewMode: DEFAULT_MODEL_UNIT_COMPARE_VIEW_MODE,
@@ -5799,8 +5807,10 @@ onUnmounted(() => {
         <div class="flex items-start justify-between gap-2">
           <div>
             <div class="font-semibold">
-              {{ modelUnitCompareState.environment.error ? '当前环境（刷新失败）' : '最新环境' }} ·
-              {{ formatModelUnitVersionTime(modelUnitCompareState.environment.generatedAt) }}
+              {{ modelUnitCompareState.environment.error ? '当前环境（刷新失败）' : '最新环境' }}
+              <template v-if="modelUnitCompareState.environment.generatedAt">
+                · {{ formatModelUnitVersionTime(modelUnitCompareState.environment.generatedAt) }}
+              </template>
             </div>
             <div class="mt-0.5 opacity-80">已固定当前加载范围：{{ modelUnitCompareState.environment.loadedRefnos }} 个 refno</div>
           </div>
@@ -5813,7 +5823,11 @@ onUnmounted(() => {
             刷新
           </button>
         </div>
-        <div class="mt-1 border-t border-amber-200 pt-1">混合时间视图：环境始终取 dbnum 最新模型，目标单元取所选 sesno。</div>
+        <div class="mt-1 border-t border-amber-200 pt-1">
+          {{ modelUnitCompareState.environment.error
+            ? '整库最新环境不可用；当前仅显示两个所选最小交付单元。'
+            : '混合时间视图：环境始终取 dbnum 最新模型，目标单元取所选 sesno。' }}
+        </div>
         <div v-if="modelUnitCompareState.environment.error" class="mt-1 text-destructive">{{ modelUnitCompareState.environment.error }}</div>
       </div>
 
