@@ -19,6 +19,28 @@ export type ModelUnitCommitData = {
   commit: ModelUnitCommit
 }
 
+function modelUnitVersionsPath(dbnum: number, unitRefno: string): string {
+  const normalizedRefno = String(unitRefno || '').trim().replace(/\//g, '_');
+  return `/api/model/units/${encodeURIComponent(normalizedRefno)}/versions?dbnum=${encodeURIComponent(String(dbnum))}`;
+}
+
+export async function listModelUnitCommits(
+  dbnum: number,
+  unitRefno: string,
+): Promise<ModelUnitCommitData[]> {
+  const base = getBaseUrl().replace(/\/$/, '');
+  const resp = await fetch(`${base}${modelUnitVersionsPath(dbnum, unitRefno)}`);
+  const body = await resp.json().catch(() => null) as {
+    success?: boolean
+    data?: ModelUnitCommitData[]
+    message?: string
+  } | null;
+  if (!resp.ok || !body?.success || !Array.isArray(body.data)) {
+    throw new Error(body?.message || `加载模型提交列表失败: HTTP ${resp.status}`);
+  }
+  return [...body.data].sort((a, b) => a.commit.sesno - b.commit.sesno);
+}
+
 export async function getModelUnitCommit(
   dbnum: number,
   unitRefno: string,

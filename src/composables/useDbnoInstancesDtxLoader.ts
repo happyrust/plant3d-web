@@ -36,6 +36,12 @@ type LoaderOptions = {
   includeOwnedTubings?: boolean
   /** 不可变最小交付单元提交的 manifest URL；提供后不读取 dbno 当前包。 */
   parquetManifestUrl?: string
+  /** 使用独立运行时索引，避免版本对比对象污染当前模型的 refno 映射。 */
+  isolated?: boolean
+  /** 隔离对象的 ID 前缀，用于区分版本侧。 */
+  objectIdPrefix?: string
+  /** 调用方已按精确 manifest 读取的实例，供同 artifact 的多图层复用。 */
+  instanceEntriesByRefno?: Map<string, InstanceEntry[]>
 }
 
 export type DtxMissingBreakdown = {
@@ -72,14 +78,8 @@ type DbnoRuntimeCache = {
 const cachesByDbno = new Map<number, DbnoRuntimeCache>();
 const AABB_PROXY_GEO_HASH = '__spatial_query_aabb_proxy_box';
 
-function getCache(dbno: number): DbnoRuntimeCache {
-  const existing = cachesByDbno.get(dbno);
-  if (existing) {
-    if (!existing.objectIdToSpecValue) existing.objectIdToSpecValue = new Map();
-    if (!existing.geometryByGeoHash) existing.geometryByGeoHash = new Map();
-    return existing;
-  }
-  const created: DbnoRuntimeCache = {
+function createRuntimeCache(): DbnoRuntimeCache {
+  return {
     loadedRefnos: new Set(),
     loadedGeoHash: new Set(),
     geometryByGeoHash: new Map(),
@@ -95,6 +95,16 @@ function getCache(dbno: number): DbnoRuntimeCache {
     refnoToOwnerRefno: new Map(),
     refnoToSpecValue: new Map(),
   };
+}
+
+function getCache(dbno: number): DbnoRuntimeCache {
+  const existing = cachesByDbno.get(dbno);
+  if (existing) {
+    if (!existing.objectIdToSpecValue) existing.objectIdToSpecValue = new Map();
+    if (!existing.geometryByGeoHash) existing.geometryByGeoHash = new Map();
+    return existing;
+  }
+  const created = createRuntimeCache();
   cachesByDbno.set(dbno, created);
   return created;
 }
@@ -200,6 +210,10 @@ async function ensureGeometryForGeoHash(
   const pending = cache.loadingGeoHash.get(geoHash);
   if (pending) {
     await pending;
+    const resolvedGeometry = cache.geometryByGeoHash.get(geoHash);
+    if (!dtxLayer.hasGeometry(geoHash) && resolvedGeometry) {
+      dtxLayer.addGeometry(geoHash, resolvedGeometry);
+    }
     return { status: cache.notFoundGeoHash.has(geoHash) ? 'not_found' : 'ok', notFoundNew: false };
   }
 
@@ -348,6 +362,26 @@ export function resolveDtxObjectIdsByRefno(dbno: number, refno: string): string[
   const cache = cachesByDbno.get(dbno);
   const key = String(refno ?? '').trim().replace('/', '_');
   return cache?.refnoToObjectIds.get(key) ?? [];
+}
+
+export function resolveDtxObjectIdsByUnitRefno(dbno: number, unitRefno: string): string[] {
+  const cache = cachesByDbno.get(dbno);
+  const root = normalizeRefnoKey(String(unitRefno ?? ''));
+  if (!cache || !root) return [];
+  const objectIds = new Set<string>();
+  for (const [refno, ids] of cache.refnoToObjectIds) {
+    let current = refno;
+    const visited = new Set<string>();
+    while (current && !visited.has(current)) {
+      if (current === root) {
+        for (const objectId of ids) objectIds.add(objectId);
+        break;
+      }
+      visited.add(current);
+      current = cache.refnoToOwnerRefno.get(current) || '';
+    }
+  }
+  return [...objectIds];
 }
 
 export function isDtxRefnoLoaded(dbno: number, refno: string): boolean {
@@ -614,7 +648,8 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
     };
   }
 
-  const cache = getCache(dbno);
+  const cache = options.isolated === true ? createRuntimeCache() : getCache(dbno);
+  const objectIdPrefix = options.objectIdPrefix?.trim() || 'o';
   const normalizedRefnos = refnos
     .map((r) => normalizeRefnoKey(String(r ?? '')))
     .filter((r) => !!r);
@@ -648,7 +683,9 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
   const dataSource = options.dataSource || 'parquet';
   let index: Map<string, InstanceEntry[]>;
 
-  if (dataSource === 'backend') {
+  if (options.instanceEntriesByRefno) {
+    index = options.instanceEntriesByRefno;
+  } else if (dataSource === 'backend') {
     const resp = await realtimeInstancesByRefnos(dbno, toLoad, {
       includeTubings: true,
       enableHoles: true,
@@ -837,7 +874,7 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
         }
         return refnoKey;
       })();
-      const objectId = `o:${mappedRefnoKey}:${cache.objectCounter++}`;
+      const objectId = `${objectIdPrefix}:${mappedRefnoKey}:${cache.objectCounter++}`;
 
       // 获取预计算的 AABB（如果 instances.json 中提供了）
       const precomputedAabb = (inst as any).aabb ?? null;

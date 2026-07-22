@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import ModelVersionComparePanel from '@/components/model-version/ModelVersionComparePanel.vue';
+import ModelUnitVersionComparePanel from '@/components/model-version/ModelUnitVersionComparePanel.vue';
 
 defineProps<{
   params: {
@@ -12,6 +12,6 @@ defineProps<{
 
 <template>
   <div class="h-full w-full overflow-hidden">
-    <ModelVersionComparePanel />
+    <ModelUnitVersionComparePanel />
   </div>
 </template>

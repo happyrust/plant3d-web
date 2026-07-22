@@ -308,4 +308,116 @@ describe('useDbnoInstancesDtxLoader', () => {
     expect(dtxLayer.isObjectVisible(oldIds[0]!)).toBe(false);
     expect(dtxLayer.isObjectVisible(newIds[0]!)).toBe(true);
   });
+
+  it('隔离加载应写入独立 DTXLayer 且不污染当前模型 refno 索引', async () => {
+    const { DTXLayer } = await import('@/utils/three/dtx');
+    const mod = await import('./useDbnoInstancesDtxLoader');
+    const dbno = 99005;
+    const refno = '24381_145018';
+    parquetLoaderMocks.queryInstanceEntriesByRefnos.mockResolvedValue(new Map([[
+      refno,
+      [{
+        geo_hash: '1',
+        matrix: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1],
+        uniforms: { refno, noun: 'BRAN', owner_refno: '', owner_noun: '' },
+      }],
+    ]]));
+    const primary = new DTXLayer({ maxVertices: 128, maxIndices: 256, maxObjects: 8 });
+    const compare = new DTXLayer({ maxVertices: 128, maxIndices: 256, maxObjects: 8 });
+
+    await mod.loadDbnoInstancesForVisibleRefnosDtx(primary, dbno, [refno], { dataSource: 'parquet' });
+    const primaryIds = mod.resolveDtxObjectIdsByRefno(dbno, refno);
+    await mod.loadDbnoInstancesForVisibleRefnosDtx(compare, dbno, [refno], {
+      dataSource: 'parquet',
+      isolated: true,
+      objectIdPrefix: 'unit-compare:a',
+    });
+
+    expect(compare.getAllObjectIds()).toEqual([expect.stringMatching(/^unit-compare:a:24381_145018:/)]);
+    expect(mod.resolveDtxObjectIdsByRefno(dbno, refno)).toEqual(primaryIds);
+  });
+
+  it('两个版本并发加载同一未缓存网格时应分别写入各自的 DTXLayer', async () => {
+    const { DTXLayer } = await import('@/utils/three/dtx');
+    const mod = await import('./useDbnoInstancesDtxLoader');
+    const dbno = 99006;
+    const refno = '24381_145018';
+    parquetLoaderMocks.queryInstanceEntriesByRefnos.mockResolvedValue(new Map([[
+      refno,
+      [{
+        geo_hash: 'shared-pending-mesh',
+        matrix: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1],
+        uniforms: { refno, noun: 'BRAN', owner_refno: '', owner_noun: '' },
+      }],
+    ]]));
+    let resolveFetch!: (value: { status: number; ok: boolean }) => void;
+    const fetchPromise = new Promise<{ status: number; ok: boolean }>((resolve) => {
+      resolveFetch = resolve;
+    });
+    const fetchMock = vi.fn(() => fetchPromise);
+    vi.stubGlobal('fetch', fetchMock);
+    const before = new DTXLayer({ maxVertices: 128, maxIndices: 256, maxObjects: 8 });
+    const after = new DTXLayer({ maxVertices: 128, maxIndices: 256, maxObjects: 8 });
+
+    try {
+      const loading = Promise.all([
+        mod.loadDbnoInstancesForVisibleRefnosDtx(before, dbno, [refno], {
+          dataSource: 'parquet', isolated: true, objectIdPrefix: 'unit-compare:a',
+        }),
+        mod.loadDbnoInstancesForVisibleRefnosDtx(after, dbno, [refno], {
+          dataSource: 'parquet', isolated: true, objectIdPrefix: 'unit-compare:b',
+        }),
+      ]);
+      await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+      resolveFetch({ status: 404, ok: false });
+      await loading;
+
+      expect(before.getAllObjectIds()).toHaveLength(1);
+      expect(after.getAllObjectIds()).toHaveLength(1);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('应按 owner 链解析当前最小交付单元的全部对象', async () => {
+    const { DTXLayer } = await import('@/utils/three/dtx');
+    const mod = await import('./useDbnoInstancesDtxLoader');
+    const dbno = 99007;
+    const root = '24381_145018';
+    const child = '24381_145019';
+    const matrix = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
+    parquetLoaderMocks.queryInstanceEntriesByRefnos.mockResolvedValue(new Map([
+      [root, [{ geo_hash: '1', matrix, uniforms: { refno: root, noun: 'BRAN', owner_refno: '', owner_noun: '' } }]],
+      [child, [{ geo_hash: '1', matrix, uniforms: { refno: child, noun: 'ELBO', owner_refno: root, owner_noun: 'BRAN' } }]],
+    ]));
+    const layer = new DTXLayer({ maxVertices: 128, maxIndices: 256, maxObjects: 8 });
+
+    await mod.loadDbnoInstancesForVisibleRefnosDtx(layer, dbno, [root, child], { dataSource: 'parquet' });
+
+    expect(mod.resolveDtxObjectIdsByUnitRefno(dbno, root).sort()).toEqual(layer.getAllObjectIds().sort());
+  });
+
+  it('提供预读实例索引时不应再次查询 parquet', async () => {
+    const { DTXLayer } = await import('@/utils/three/dtx');
+    const mod = await import('./useDbnoInstancesDtxLoader');
+    const refno = '24381_145018';
+    const entries = new Map([[
+      refno,
+      [{
+        geo_hash: '1',
+        matrix: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1],
+        uniforms: { refno, noun: 'BRAN', owner_refno: '', owner_noun: '' },
+      }],
+    ]]);
+    const layer = new DTXLayer({ maxVertices: 128, maxIndices: 256, maxObjects: 8 });
+
+    await mod.loadDbnoInstancesForVisibleRefnosDtx(layer, 99008, [refno], {
+      dataSource: 'parquet',
+      isolated: true,
+      instanceEntriesByRefno: entries,
+    });
+
+    expect(parquetLoaderMocks.queryInstanceEntriesByRefnos).not.toHaveBeenCalled();
+    expect(layer.getAllObjectIds()).toHaveLength(1);
+  });
 });
