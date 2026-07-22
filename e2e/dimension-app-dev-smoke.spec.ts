@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 
-test('cutover default mounts the dimension system and starts a typed creation session', async ({ page }) => {
-  await page.goto('/');
+test('dimension_demo mounts the dimension system and starts a typed creation session', async ({ page }) => {
+  await page.goto('/?dimension_demo=1');
   await page.waitForFunction(() => (
     (window as any).__viewerContext?.dimensionSystem?.value
     || typeof (window as any).__dimensionSystemError === 'string'

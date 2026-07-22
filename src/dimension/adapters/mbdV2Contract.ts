@@ -4,9 +4,9 @@
  * are stable; fields grow as the upstream algorithm porting progresses
  * (ADR 0043).
  *
- * Coordinate convention for this module: every Vec3 consumed by the mapper is
- * in Design Space metres (ADR 0008). Channel loaders (HTTP API, parquet) own
- * unit conversion and source-to-design transforms before data reaches here.
+ * Payload coordinates use `meta.geometry_space`. The mapper converts
+ * `source_mm` through `source_to_design` before records enter Design Space
+ * metres (ADR 0008).
  */
 
 export type MbdV2Vec3 = readonly [number, number, number];
@@ -32,9 +32,16 @@ export type MbdV2Issue = Readonly<{
   category: MbdV2IssueCategory;
   message: string;
   refno?: string;
+  isoline_idx?: number;
+  object_refno?: string;
+  rule_id?: string;
 }>;
 
+export type MbdV2GeometrySpace = 'source_mm' | 'design_m';
+
 export type MbdV2Meta = Readonly<{
+  geometry_space: MbdV2GeometrySpace;
+  source_to_design?: readonly number[];
   cheight_mm?: number | null;
   layout_mode?: string | null;
   notes: readonly string[];
@@ -42,12 +49,6 @@ export type MbdV2Meta = Readonly<{
 
 export type MbdV2AidLineStyle = 'solid' | 'dashed' | 'dash_dot';
 
-/**
- * `extension_lines` / `arrow_lines` / `label_anchor` / `reference` are a
- * documented superset of the Phase 0 contract: the parquet channel already
- * ships this geometry and upstream declared the fields will be filled in.
- * Re-align the names here once rs-mbd freezes them.
- */
 export type MbdV2LinearDim = Readonly<{
   kind: 'linear_dim';
   id: string;
@@ -55,11 +56,9 @@ export type MbdV2LinearDim = Readonly<{
   end: MbdV2Vec3;
   text: string;
   sub_kind?: string;
-  offset?: number;
-  suppressed_reason?: string;
-  extension_lines?: readonly MbdV2LineSegment[];
-  arrow_lines?: readonly MbdV2LineSegment[];
-  label_anchor?: MbdV2Vec3;
+  extension_lines: readonly MbdV2LineSegment[];
+  arrow_lines: readonly MbdV2LineSegment[];
+  label_anchor: MbdV2Vec3;
   reference?: boolean;
 }>;
 
@@ -67,7 +66,6 @@ export type MbdV2AngleDim = Readonly<{
   kind: 'angle_dim';
   id: string;
   text: string;
-  suppressed_reason?: string;
 }>;
 
 export type MbdV2Label = Readonly<{
@@ -75,7 +73,6 @@ export type MbdV2Label = Readonly<{
   id: string;
   text: string;
   position: MbdV2Vec3;
-  suppressed_reason?: string;
 }>;
 
 export type MbdV2LeaderLine = Readonly<{
@@ -147,7 +144,7 @@ export type MbdPrimitive =
 export type MbdPrimitiveKind = MbdPrimitive['kind'];
 
 export type MbdV2PipeData = Readonly<{
-  version: string;
+  version: 'v2';
   input_refno: string;
   branch_refno: string;
   primitives: readonly MbdPrimitive[];
@@ -167,20 +164,6 @@ export type MbdV2ParseResult =
     diagnostics: readonly MbdV2ParseDiagnostic[];
   }>
   | Readonly<{ ok: false; error: string }>;
-
-const PRIMITIVE_KINDS: readonly MbdPrimitiveKind[] = [
-  'linear_dim',
-  'angle_dim',
-  'label',
-  'leader_line',
-  'aid_line',
-  'aid_arc',
-  'aid_circle',
-  'aid_point',
-  'aid_text',
-  'weld_mark',
-  'slope_mark',
-];
 
 const ISSUE_SEVERITIES: readonly MbdV2IssueSeverity[] = [
   'info',
@@ -218,11 +201,15 @@ function isVec3(value: unknown): value is MbdV2Vec3 {
 function isLineSegmentArray(
   value: unknown,
 ): value is readonly MbdV2LineSegment[] {
-  return value === undefined || (
-    Array.isArray(value)
+  return Array.isArray(value)
     && value.every(item =>
-      isObject(item) && isVec3(item.from) && isVec3(item.to))
-  );
+      isObject(item) && isVec3(item.from) && isVec3(item.to));
+}
+
+function isMatrix4(value: unknown): value is readonly number[] {
+  return Array.isArray(value)
+    && value.length === 16
+    && value.every(item => typeof item === 'number' && Number.isFinite(item));
 }
 
 function isPrimitive(value: unknown): value is MbdPrimitive {
@@ -233,20 +220,17 @@ function isPrimitive(value: unknown): value is MbdPrimitive {
         && isVec3(value.end)
         && typeof value.text === 'string'
         && isOptionalString(value.sub_kind)
-        && (value.offset === undefined
-          || (typeof value.offset === 'number' && Number.isFinite(value.offset)))
-        && isOptionalString(value.suppressed_reason)
         && isLineSegmentArray(value.extension_lines)
         && isLineSegmentArray(value.arrow_lines)
-        && (value.label_anchor === undefined || isVec3(value.label_anchor))
-        && (value.reference === undefined || typeof value.reference === 'boolean');
+        && isVec3(value.label_anchor)
+        && (value.reference === undefined || typeof value.reference === 'boolean')
+        && value.offset === undefined
+        && value.suppressed_reason === undefined;
     case 'angle_dim':
-      return typeof value.text === 'string'
-        && isOptionalString(value.suppressed_reason);
+      return false;
     case 'label':
       return typeof value.text === 'string'
-        && isVec3(value.position)
-        && isOptionalString(value.suppressed_reason);
+        && isVec3(value.position);
     case 'leader_line':
       return isVec3(value.start) && isVec3(value.end);
     case 'aid_line':
@@ -255,7 +239,7 @@ function isPrimitive(value: unknown): value is MbdPrimitive {
         && isOptionalString(value.style);
     case 'aid_arc':
     case 'aid_circle':
-      return true;
+      return false;
     case 'aid_point':
       return isVec3(value.position);
     case 'aid_text':
@@ -279,6 +263,10 @@ function parseIssue(value: unknown): MbdV2Issue | null {
     || !ISSUE_CATEGORIES.includes(value.category as MbdV2IssueCategory)
     || typeof value.message !== 'string'
     || !isOptionalString(value.refno)
+    || (value.isoline_idx !== undefined
+      && (!Number.isInteger(value.isoline_idx) || (value.isoline_idx as number) < 0))
+    || !isOptionalString(value.object_refno)
+    || !isOptionalString(value.rule_id)
   ) {
     return null;
   }
@@ -288,79 +276,82 @@ function parseIssue(value: unknown): MbdV2Issue | null {
     category: value.category as MbdV2IssueCategory,
     message: value.message,
     ...(value.refno ? { refno: value.refno } : {}),
+    ...(value.isoline_idx !== undefined
+      ? { isoline_idx: value.isoline_idx as number }
+      : {}),
+    ...(value.object_refno ? { object_refno: value.object_refno } : {}),
+    ...(value.rule_id ? { rule_id: value.rule_id } : {}),
   };
 }
 
-function parseMeta(value: unknown): MbdV2Meta {
-  if (!isObject(value)) return { notes: [] };
+function parseMeta(value: unknown): MbdV2Meta | null {
+  if (
+    !isObject(value)
+    || (value.geometry_space !== 'source_mm' && value.geometry_space !== 'design_m')
+    || !Array.isArray(value.notes)
+    || !value.notes.every(note => typeof note === 'string')
+    || (value.source_to_design !== undefined && !isMatrix4(value.source_to_design))
+    || (value.geometry_space === 'source_mm' && value.source_to_design === undefined)
+    || (value.cheight_mm !== undefined
+      && value.cheight_mm !== null
+      && (typeof value.cheight_mm !== 'number' || !Number.isFinite(value.cheight_mm)))
+    || (value.layout_mode !== undefined
+      && value.layout_mode !== null
+      && typeof value.layout_mode !== 'string')
+  ) return null;
   return {
-    ...(typeof value.cheight_mm === 'number' && Number.isFinite(value.cheight_mm)
-      ? { cheight_mm: value.cheight_mm }
+    geometry_space: value.geometry_space,
+    ...(value.source_to_design !== undefined
+      ? { source_to_design: value.source_to_design as readonly number[] }
       : {}),
-    ...(typeof value.layout_mode === 'string'
-      ? { layout_mode: value.layout_mode }
-      : {}),
-    notes: Array.isArray(value.notes)
-      ? value.notes.filter((note): note is string => typeof note === 'string')
-      : [],
+    ...(value.cheight_mm !== undefined ? { cheight_mm: value.cheight_mm as number | null } : {}),
+    ...(value.layout_mode !== undefined ? { layout_mode: value.layout_mode as string | null } : {}),
+    notes: value.notes as string[],
   };
 }
 
 /**
- * Tolerant contract validation: a structurally broken top level fails hard;
- * individual invalid primitives/issues are skipped with a diagnostic so one
- * bad row never blanks a whole branch (mirrors the parquet loader posture).
+ * Strict validation for the external V2 JSON contract. Parquet rows are
+ * normalized before this boundary and keep their own per-row diagnostics.
  */
 export function parseMbdV2PipeData(value: unknown): MbdV2ParseResult {
   if (!isObject(value)) {
     return { ok: false, error: 'MBD V2 payload must be an object' };
   }
-  if (!isNonEmptyString(value.version)) {
-    return { ok: false, error: 'MBD V2 payload is missing version' };
+  if (value.version !== 'v2') {
+    return { ok: false, error: 'MBD V2 payload version must be "v2"' };
+  }
+  if (!isNonEmptyString(value.input_refno) || !isNonEmptyString(value.branch_refno)) {
+    return { ok: false, error: 'MBD V2 payload is missing input_refno or branch_refno' };
   }
   if (!Array.isArray(value.primitives)) {
     return { ok: false, error: 'MBD V2 payload is missing primitives array' };
   }
-
-  const diagnostics: MbdV2ParseDiagnostic[] = [];
-  const primitives: MbdPrimitive[] = [];
-  value.primitives.forEach((candidate, index) => {
-    if (isPrimitive(candidate)) {
-      primitives.push(candidate);
-      return;
-    }
-    const candidateObject = isObject(candidate) ? candidate : null;
-    const id = isNonEmptyString(candidateObject?.id)
-      ? candidateObject!.id as string
-      : `primitive-${index}`;
-    const kind = candidateObject?.kind;
-    diagnostics.push({
-      id,
-      reason: typeof kind === 'string' && !PRIMITIVE_KINDS.includes(kind as MbdPrimitiveKind)
-        ? `unknown primitive kind "${kind}"`
-        : 'invalid primitive fields',
-    });
-  });
-
-  const issues: MbdV2Issue[] = [];
-  if (Array.isArray(value.issues)) {
-    value.issues.forEach((candidate, index) => {
-      const issue = parseIssue(candidate);
-      if (issue) issues.push(issue);
-      else diagnostics.push({ id: `issue-${index}`, reason: 'invalid issue entry' });
-    });
+  const meta = parseMeta(value.meta);
+  if (!meta) return { ok: false, error: 'MBD V2 payload has invalid meta' };
+  if (!Array.isArray(value.issues)) {
+    return { ok: false, error: 'MBD V2 payload is missing issues array' };
+  }
+  const primitiveIndex = value.primitives.findIndex(candidate => !isPrimitive(candidate));
+  if (primitiveIndex >= 0) {
+    return { ok: false, error: `MBD V2 payload has invalid primitive at index ${primitiveIndex}` };
+  }
+  const parsedIssues = value.issues.map(parseIssue);
+  const issueIndex = parsedIssues.findIndex(issue => issue === null);
+  if (issueIndex >= 0) {
+    return { ok: false, error: `MBD V2 payload has invalid issue at index ${issueIndex}` };
   }
 
   return {
     ok: true,
     data: {
-      version: value.version,
-      input_refno: typeof value.input_refno === 'string' ? value.input_refno : '',
-      branch_refno: typeof value.branch_refno === 'string' ? value.branch_refno : '',
-      primitives,
-      meta: parseMeta(value.meta),
-      issues,
+      version: 'v2',
+      input_refno: value.input_refno,
+      branch_refno: value.branch_refno,
+      primitives: value.primitives as MbdPrimitive[],
+      meta,
+      issues: parsedIssues as MbdV2Issue[],
     },
-    diagnostics,
+    diagnostics: [],
   };
 }

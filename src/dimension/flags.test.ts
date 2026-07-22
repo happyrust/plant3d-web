@@ -62,8 +62,8 @@ describe('dimension development flags', () => {
     expect(isDimensionFlagEnabled('DIMENSION_V2_CUTOVER')).toBe(false);
   });
 
-  it('keeps the development flag off and enables the completed cutover by default', () => {
+  it('keeps development and production cutover disabled by default', () => {
     expect(isDimensionFlagEnabled('DIMENSION_V2_DEV')).toBe(false);
-    expect(isDimensionFlagEnabled('DIMENSION_V2_CUTOVER')).toBe(true);
+    expect(isDimensionFlagEnabled('DIMENSION_V2_CUTOVER')).toBe(false);
   });
 });

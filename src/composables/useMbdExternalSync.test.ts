@@ -30,8 +30,21 @@ function contractPayload(
       start: [0, 0, 0],
       end: [1, 0, 0],
       text: '1000',
+      extension_lines: [
+        { from: [0, 0, 0], to: [0, 0.1, 0] },
+        { from: [1, 0, 0], to: [1, 0.1, 0] },
+      ],
+      arrow_lines: [
+        { from: [0, 0, 0], to: [0.1, 0.05, 0] },
+        { from: [1, 0, 0], to: [0.9, 0.05, 0] },
+      ],
+      label_anchor: [0.5, 0.1, 0],
     }],
-    meta: { notes: [] },
+    meta: {
+      geometry_space: 'source_mm',
+      source_to_design: IDENTITY,
+      notes: [],
+    },
     issues: [],
     ...overrides,
   };
@@ -169,6 +182,15 @@ describe('createMbdExternalSync', () => {
           start: [0, 0, 0],
           end: [2, 0, 0],
           text: '2000',
+          extension_lines: [
+            { from: [0, 0, 0], to: [0, 0.1, 0] },
+            { from: [2, 0, 0], to: [2, 0.1, 0] },
+          ],
+          arrow_lines: [
+            { from: [0, 0, 0], to: [0.1, 0.05, 0] },
+            { from: [2, 0, 0], to: [1.9, 0.05, 0] },
+          ],
+          label_anchor: [1, 0.1, 0],
         }],
       }),
       diagnostics: [],
@@ -212,6 +234,82 @@ describe('createMbdExternalSync', () => {
 
     await harness.sync.sync(harness.target, { isCancelled: () => true });
     expect(harness.target.replaceExternalSource).not.toHaveBeenCalled();
+  });
+
+  it('rejects an API payload atomically when any primitive fails to map', async () => {
+    const goodPayload = contractPayload();
+    const duplicated = contractPayload({
+      primitives: [goodPayload.primitives[0]!, goodPayload.primitives[0]!],
+      issues: [{
+        id: 'issue-1',
+        severity: 'warning' as const,
+        category: 'split' as const,
+        message: 'upstream warning kept for diagnostics',
+      }],
+    });
+    const responses = [
+      { ok: true as const, data: goodPayload, diagnostics: [] },
+      { ok: true as const, data: duplicated, diagnostics: [] },
+    ];
+    let call = 0;
+    const harness = createHarness({
+      search: '?mbd_refno=A',
+      fetchPipeData: vi.fn(async () => responses[call++]!),
+    });
+
+    await harness.sync.sync(harness.target);
+    await harness.sync.sync(harness.target);
+
+    const replaceCalls = (harness.target.replaceExternalSource as ReturnType<typeof vi.fn>)
+      .mock.calls;
+    expect(replaceCalls).toHaveLength(2);
+    expect(replaceCalls[0]![1].map((record: { id: string }) => record.id))
+      .toEqual(['dim-1']);
+    expect(replaceCalls[1]!).toEqual(['mbd', []]);
+
+    const lastDiagnostics = (harness.diagnostics.set as ReturnType<typeof vi.fn>)
+      .mock.calls.at(-1)![0];
+    expect(lastDiagnostics.loadError).toContain('整包拒绝');
+    expect(lastDiagnostics.loadError).toContain('dim-1');
+    expect(lastDiagnostics.skipped).toEqual([{
+      id: 'dim-1',
+      reason: 'Duplicate primitive id within MBD payload',
+    }]);
+    expect(lastDiagnostics.issues).toEqual(duplicated.issues);
+  });
+
+  it('tolerates parquet row-level skips but rejects mapping failures atomically', async () => {
+    const tolerated = createHarness({
+      search: '?show_dbnum=1',
+      queryParquetDimensions: vi.fn(async () => ({
+        dimensions: [parquetDto()],
+        skipped: [{ id: 'row-bad', reason: 'invalid parquet row' }],
+      })),
+    });
+    await tolerated.sync.sync(tolerated.target);
+    const [, records] = (tolerated.target.replaceExternalSource as ReturnType<typeof vi.fn>)
+      .mock.calls[0]!;
+    expect(records.map((record: { id: string }) => record.id)).toEqual(['parquet-1']);
+    expect(tolerated.diagnostics.set).toHaveBeenCalledWith(expect.objectContaining({
+      skipped: [{ id: 'row-bad', reason: 'invalid parquet row' }],
+    }));
+
+    const rejected = createHarness({
+      search: '?show_dbnum=1',
+      queryParquetDimensions: vi.fn(async () => ({
+        dimensions: [parquetDto(), parquetDto()],
+        skipped: [],
+      })),
+    });
+    await rejected.sync.sync(rejected.target);
+    expect(rejected.target.replaceExternalSource).toHaveBeenCalledWith('mbd', []);
+    const diagnostics = (rejected.diagnostics.set as ReturnType<typeof vi.fn>)
+      .mock.calls.at(-1)![0];
+    expect(diagnostics.loadError).toContain('整包拒绝');
+    expect(diagnostics.skipped).toEqual([{
+      id: 'parquet-1',
+      reason: 'Duplicate primitive id within MBD payload',
+    }]);
   });
 
   it('emits one error toast when backend issues contain error severity', async () => {

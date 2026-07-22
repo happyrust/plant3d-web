@@ -2,6 +2,7 @@ import type { MbdDiagnosticsStore } from './useMbdDiagnosticsStore';
 import type {
   DimensionSystem,
   MbdDimensionDto,
+  MbdV2Issue,
   MbdV2ParseResult,
   MbdV2PipeData,
 } from '@/dimension';
@@ -50,6 +51,21 @@ export type MbdExternalSync = Readonly<{
   /** 使所有在途 sync 的结果失效（组件卸载时调用）。 */
   invalidate(): void;
 }>;
+
+/**
+ * 原子拒绝（ADR 0046）：负载校验或映射未全量成功时携带诊断明细进入统一
+ * 失败分支，不提交任何部分记录。
+ */
+class MbdAtomicRejectionError extends Error {
+  constructor(
+    message: string,
+    readonly issues: readonly MbdV2Issue[],
+    readonly skipped: readonly Readonly<{ id: string; reason: string }>[],
+  ) {
+    super(message);
+    this.name = 'MbdAtomicRejectionError';
+  }
+}
 
 /**
  * MBD 外部图元双通道同步（从 ViewerPanel 抽出以获得可测缝）：
@@ -101,9 +117,21 @@ export function createMbdExternalSync(
           channelSkipped = [...loaded.skipped, ...converted.skipped];
         }
         const mapped = mbdV2ToExternalRecords(payload);
+        const skipped = [...channelSkipped, ...mapped.skipped];
+        // ADR 0046：先校验、后原子替换。parquet 装载/契约化阶段的逐行跳过
+        // （channelSkipped）保留为通道容忍；实时 API 负载的任何跳过、以及两个
+        // 通道进入适配层后的映射失败（mapped.skipped）都整包拒绝，不部分提交。
+        const atomicSkipped = channel === 'api' ? skipped : mapped.skipped;
+        if (atomicSkipped.length > 0) {
+          throw new MbdAtomicRejectionError(
+            `MBD 负载整包拒绝：${atomicSkipped.length} 个图元无法映射`
+              + `（首个：${atomicSkipped[0]!.id} — ${atomicSkipped[0]!.reason}）`,
+            payload.issues,
+            skipped,
+          );
+        }
         if (cancelled()) return;
         target.replaceExternalSource('mbd', mapped.records);
-        const skipped = [...channelSkipped, ...mapped.skipped];
         deps.diagnostics.set({
           channel,
           sourceId,
@@ -125,11 +153,12 @@ export function createMbdExternalSync(
       } catch (error) {
         if (cancelled()) return;
         target.replaceExternalSource('mbd', []);
+        const rejection = error instanceof MbdAtomicRejectionError ? error : null;
         deps.diagnostics.set({
           channel,
           sourceId,
-          issues: [],
-          skipped: [],
+          issues: rejection?.issues ?? [],
+          skipped: rejection?.skipped ?? [],
           loadError: error instanceof Error ? error.message : String(error),
         });
         console.warn('[dimension-v2] MBD annotations unavailable', error);

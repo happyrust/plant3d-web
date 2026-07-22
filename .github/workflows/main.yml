@@ -36,6 +36,8 @@ jobs:
             src/components/review/ReviewConfirmation.test.ts \
             src/composables/useDbnoInstancesParquetLoader.ts \
             src/composables/useDbnoInstancesParquetLoader.mbd.test.ts \
+            src/composables/useMbdExternalSync.ts \
+            src/composables/useMbdExternalSync.test.ts \
             src/composables/useReviewStore.ts \
             src/composables/useReviewStore.confirm.test.ts \
             src/composables/useXeokitMeasurementTools.ts \
@@ -44,6 +46,7 @@ jobs:
             src/debug/dimensionPerf.ts \
             e2e/dimension-app-dev-smoke.spec.ts \
             e2e/dimension-canvas-smoke.spec.ts \
+            e2e/dimension-mbd-v2-fixture.spec.ts \
             e2e/dimension-perf.spec.ts \
             scripts/run-dimension-browser-perf.mjs
 
@@ -52,6 +55,7 @@ jobs:
           npx vitest run \
             src/dimension \
             src/composables/useDbnoInstancesParquetLoader.mbd.test.ts \
+            src/composables/useMbdExternalSync.test.ts \
             src/composables/useReviewStore.confirm.test.ts \
             src/composables/useXeokitMeasurementTools.test.ts \
             src/components/review/ReviewConfirmation.test.ts
@@ -69,7 +73,8 @@ jobs:
         run: |
           npx playwright test \
             e2e/dimension-app-dev-smoke.spec.ts \
-            e2e/dimension-canvas-smoke.spec.ts
+            e2e/dimension-canvas-smoke.spec.ts \
+            e2e/dimension-mbd-v2-fixture.spec.ts
 
       - name: Dimension performance gates
         run: |

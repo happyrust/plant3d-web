@@ -1,3 +1,5 @@
+import { Matrix4, Vector3 } from 'three';
+
 import { stablePerpendicular } from '../kernel/geometry/planeBasis';
 import { length3, lerp3, sub3, tryNormalize3 } from '../kernel/vec';
 
@@ -35,6 +37,20 @@ type ExplicitLine = Readonly<{
   part: ScreenLinePart;
   style?: DimensionLineStyle;
 }>;
+
+type TransformPoint = (point: MbdV2Vec3) => Vec3;
+
+function pointTransformer(data: MbdV2PipeData): TransformPoint | null {
+  if (data.meta.geometry_space === 'design_m') {
+    return point => [point[0], point[1], point[2]];
+  }
+  if (!data.meta.source_to_design) return null;
+  const matrix = new Matrix4().fromArray([...data.meta.source_to_design]);
+  return (point) => {
+    const transformed = new Vector3(...point).applyMatrix4(matrix);
+    return [transformed.x, transformed.y, transformed.z];
+  };
+}
 
 function lineStyleFrom(style: string | undefined): DimensionLineStyle | undefined {
   switch (style) {
@@ -134,22 +150,29 @@ function explicitRecord(
   };
 }
 
-function mapLinearDim(primitive: MbdV2LinearDim): ExternalDimensionRecord {
+function mapLinearDim(
+  primitive: MbdV2LinearDim,
+  transformPoint: TransformPoint,
+): ExternalDimensionRecord {
   const role = primitive.reference ? 'external-reference' : 'external';
+  const start = transformPoint(primitive.start);
+  const end = transformPoint(primitive.end);
   const lines: ExplicitLine[] = [
-    { from: primitive.start, to: primitive.end, part: 'dimension' },
-    ...(primitive.extension_lines ?? []).map(line => ({
-      from: line.from,
-      to: line.to,
+    { from: start, to: end, part: 'dimension' },
+    ...primitive.extension_lines.map(line => ({
+      from: transformPoint(line.from),
+      to: transformPoint(line.to),
       part: 'extension' as const,
     })),
   ];
   return explicitRecord(primitive, 'dimension', {
     formattedLabel: primitive.text,
-    labelAnchor: primitive.label_anchor
-      ?? midpoint(primitive.start, primitive.end),
+    labelAnchor: transformPoint(primitive.label_anchor),
     lines,
-    arrowLines: primitive.arrow_lines ?? [],
+    arrowLines: primitive.arrow_lines.map(line => ({
+      from: transformPoint(line.from),
+      to: transformPoint(line.to),
+    })),
   }, role);
 }
 
@@ -166,6 +189,17 @@ export function mbdV2ToExternalRecords(
   const records: ExternalDimensionRecord[] = [];
   const skipped: { id: string; reason: string }[] = [];
   const seenIds = new Set<string>();
+  const transformPoint = pointTransformer(data);
+
+  if (!transformPoint) {
+    return {
+      records,
+      skipped: data.primitives.map(primitive => ({
+        id: primitive.id,
+        reason: 'source_mm payload requires a valid source_to_design matrix',
+      })),
+    };
+  }
 
   for (const primitive of data.primitives) {
     if (seenIds.has(primitive.id)) {
@@ -175,46 +209,44 @@ export function mbdV2ToExternalRecords(
       });
       continue;
     }
-    if ('suppressed_reason' in primitive && primitive.suppressed_reason) {
-      skipped.push({
-        id: primitive.id,
-        reason: `suppressed: ${primitive.suppressed_reason}`,
-      });
-      continue;
-    }
-
     let record: ExternalDimensionRecord | null = null;
     switch (primitive.kind) {
       case 'linear_dim':
-        record = mapLinearDim(primitive);
+        record = mapLinearDim(primitive, transformPoint);
         break;
       case 'label':
       case 'aid_text': {
+        const position = transformPoint(primitive.position);
         const { formattedLabel, texts } = multiLineTexts(
           primitive.text,
-          primitive.position,
+          position,
         );
         record = explicitRecord(primitive, 'annotation', {
           formattedLabel,
-          labelAnchor: primitive.position,
+          labelAnchor: position,
           texts,
         });
         break;
       }
-      case 'leader_line':
+      case 'leader_line': {
+        const start = transformPoint(primitive.start);
+        const end = transformPoint(primitive.end);
         record = explicitRecord(primitive, 'annotation', {
           formattedLabel: '',
-          labelAnchor: primitive.start,
-          lines: [{ from: primitive.start, to: primitive.end, part: 'leader' }],
+          labelAnchor: start,
+          lines: [{ from: start, to: end, part: 'leader' }],
         });
         break;
-      case 'aid_line':
+      }
+      case 'aid_line': {
+        const start = transformPoint(primitive.start);
+        const end = transformPoint(primitive.end);
         record = explicitRecord(primitive, 'annotation', {
           formattedLabel: '',
-          labelAnchor: primitive.start,
+          labelAnchor: start,
           lines: [{
-            from: primitive.start,
-            to: primitive.end,
+            from: start,
+            to: end,
             part: 'extension',
             ...(lineStyleFrom(primitive.style)
               ? { style: lineStyleFrom(primitive.style) }
@@ -222,26 +254,30 @@ export function mbdV2ToExternalRecords(
           }],
         });
         break;
-      case 'aid_point':
+      }
+      case 'aid_point': {
+        const position = transformPoint(primitive.position);
         record = explicitRecord(primitive, 'annotation', {
           formattedLabel: '',
-          labelAnchor: primitive.position,
-          markers: [{ at: primitive.position, shape: 'cross' }],
+          labelAnchor: position,
+          markers: [{ at: position, shape: 'cross' }],
         });
         break;
-      case 'weld_mark':
+      }
+      case 'weld_mark': {
+        const position = transformPoint(primitive.position);
         record = explicitRecord(primitive, 'annotation', {
           formattedLabel: '',
-          labelAnchor: primitive.position,
+          labelAnchor: position,
           markers: [
             {
-              at: primitive.position,
+              at: position,
               shape: 'circle',
               radiusPx: WELD_MARKER_RADIUS_PX,
             },
             ...(primitive.weld_type === 'field'
               ? [{
-                at: primitive.position,
+                at: position,
                 shape: 'cross' as const,
                 radiusPx: WELD_MARKER_RADIUS_PX,
               }]
@@ -249,14 +285,18 @@ export function mbdV2ToExternalRecords(
           ],
         });
         break;
-      case 'slope_mark':
+      }
+      case 'slope_mark': {
+        const start = transformPoint(primitive.start);
+        const end = transformPoint(primitive.end);
         record = explicitRecord(primitive, 'annotation', {
           formattedLabel: primitive.text,
-          labelAnchor: midpoint(primitive.start, primitive.end),
-          lines: [{ from: primitive.start, to: primitive.end, part: 'dimension' }],
-          arrowLines: slopeArrowLines(primitive.start, primitive.end),
+          labelAnchor: midpoint(start, end),
+          lines: [{ from: start, to: end, part: 'dimension' }],
+          arrowLines: slopeArrowLines(start, end),
         });
         break;
+      }
       case 'angle_dim':
       case 'aid_arc':
       case 'aid_circle':

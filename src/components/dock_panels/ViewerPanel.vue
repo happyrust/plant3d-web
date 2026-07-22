@@ -3277,6 +3277,11 @@ function syncMbdExternalDimensions(
   });
 }
 
+function handleMbdLocationChange(): void {
+  if (!dimensionSystem) return;
+  void syncMbdExternalDimensions(dimensionSystem, { forceRefresh: true });
+}
+
 async function initializeDimensionViewport(): Promise<void> {
   if (!dimensionDevEnabled) return;
   const initializationVersion = ++dimensionInitializationVersion;
@@ -5091,6 +5096,7 @@ onMounted(async () => {
 
   attachPicking();
   attachToolsInput();
+  window.addEventListener('popstate', handleMbdLocationChange);
   await initializeDimensionViewport();
   requestRender();
 });
@@ -5098,6 +5104,7 @@ onMounted(async () => {
 onUnmounted(() => {
   viewerContext.viewerError.value = null;
   dimensionMountDisposed = true;
+  window.removeEventListener('popstate', handleMbdLocationChange);
   mbdExternalSync.invalidate();
   dimensionInitializationVersion += 1;
   dimensionSystem?.dispose();
@@ -5426,8 +5433,8 @@ onUnmounted(() => {
     </div>
 
     <!-- 左侧竖直工具栏（快捷操作） -->
-    <div ref="leftToolbarRef"
-      v-show="modelUnitCompareState?.viewMode !== 'split'"
+    <div v-show="modelUnitCompareState?.viewMode !== 'split'"
+      ref="leftToolbarRef"
       class="pointer-events-auto absolute left-3 top-1/2 flex -translate-y-1/2 flex-col items-center gap-1 rounded-xl border border-border bg-background/90 p-1 shadow-lg backdrop-blur"
       style="z-index: 940"
       @pointerdown.stop

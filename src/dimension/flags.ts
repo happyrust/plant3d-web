@@ -2,7 +2,7 @@ export type DimensionFlagName = 'DIMENSION_V2_DEV' | 'DIMENSION_V2_CUTOVER';
 
 const DEFAULTS: Readonly<Record<DimensionFlagName, boolean>> = {
   DIMENSION_V2_DEV: false,
-  DIMENSION_V2_CUTOVER: true,
+  DIMENSION_V2_CUTOVER: false,
 };
 
 function parseBoolean(value: string | null | undefined): boolean | null {

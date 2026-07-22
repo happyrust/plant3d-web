@@ -91,7 +91,10 @@ export function mbdDtosToV2PipeData(
       input_refno: context.inputRefno,
       branch_refno: context.branchRefno ?? context.inputRefno,
       primitives,
-      meta: { notes: ['converted from mbd_dimensions.parquet'] },
+      meta: {
+        geometry_space: 'design_m',
+        notes: ['converted from mbd_dimensions.parquet'],
+      },
       issues: [],
     },
     skipped,

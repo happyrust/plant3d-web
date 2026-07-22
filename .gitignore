@@ -55,6 +55,7 @@ npm-cache
 e2e/*
 !e2e/pms-powerpms-review-new.spec.ts
 !e2e/output-project-direct-entry.spec.ts
+!e2e/dimension-mbd-v2-fixture.spec.ts
 !e2e/helpers/
 !e2e/helpers/spatialQueryRealBran.ts
 !e2e/spatial-query-real-bran.spec.ts

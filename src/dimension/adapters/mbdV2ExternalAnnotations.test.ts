@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import fullCoverageFixture from '../../fixtures/mbd-v2/full-coverage.json';
+import cliLinearFixture from '../../fixtures/mbd-v2/rs-mbd-cli-linear.json';
 import { DEFAULT_DIMENSION_FORMAT } from '../kernel/format';
 import { createTestFont, createTestProjector } from '../kernel/testUtils';
 import { SOLVESPACE_DIMENSION_THEME } from '../kernel/theme';
@@ -17,9 +18,9 @@ import type { MbdV2PipeData } from './mbdV2Contract';
 import type { ExplicitLayoutInput } from '../kernel/types';
 
 function fixtureData(): MbdV2PipeData {
-  const parsed = parseMbdV2PipeData(fullCoverageFixture);
-  if (!parsed.ok) throw new Error(parsed.error);
-  return parsed.data;
+  // Mapper-only future-kind coverage. This hand-authored fixture is not a
+  // V2 wire-contract authority; the parser contract uses the Rust fixture.
+  return fullCoverageFixture as unknown as MbdV2PipeData;
 }
 
 function explicitLayout(
@@ -48,7 +49,6 @@ describe('mbdV2ToExternalRecords', () => {
       'slope-1',
     ]);
     expect(result.skipped).toEqual([
-      { id: 'dim-suppressed-3', reason: 'suppressed: overlap' },
       {
         id: 'angle-1',
         reason: 'contract-incomplete: angle_dim geometry is not yet defined '
@@ -110,6 +110,26 @@ describe('mbdV2ToExternalRecords', () => {
     expect(reference.role).toBe('external-reference');
     const referenceLayout = reference.layout as ExplicitLayoutInput;
     expect(referenceLayout.labelAnchor).toEqual([0, 0.4, 0]);
+  });
+
+  it('normalizes rs-mbd source millimetres before entering the registry', () => {
+    const parsed = parseMbdV2PipeData(cliLinearFixture);
+    if (!parsed.ok) throw new Error(parsed.error);
+
+    const layout = explicitLayout(
+      mbdV2ToExternalRecords(parsed.data),
+      'linear-small-dimension:isoline:0:member:T-SMALL',
+    );
+
+    expect(layout.lines[0]).toMatchObject({
+      from: [0, -0.5, 0],
+      to: [0.08, -0.5, 0],
+    });
+    expect(layout.labelAnchor).toEqual([0.116, -0.5, 0]);
+    expect(layout.arrowLines[0]).toEqual({
+      from: [0, -0.5, 0],
+      to: [-0.024, -0.507, 0],
+    });
   });
 
   it('splits multi-line labels into stacked texts', () => {

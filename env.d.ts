@@ -1,6 +1,8 @@
 /// <reference types="vite/client" />
 
 interface ImportMetaEnv {
+  readonly VITE_DIMENSION_V2_CUTOVER?: string;
+  readonly VITE_DIMENSION_V2_DEV?: string;
   readonly VITE_REVIEW_ENABLE_INTERNAL_WORKFLOW_MODE?: string;
 }
 
