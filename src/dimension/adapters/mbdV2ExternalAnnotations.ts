@@ -130,7 +130,7 @@ function explicitRecord(
   const layout: ExplicitLayoutInput = {
     id: primitive.id,
     role,
-    labelPinned: true,
+    labelPinned: category !== 'dimension',
     formattedLabel: parts.formattedLabel,
     lines: parts.lines ?? [],
     labelAnchor: parts.labelAnchor,

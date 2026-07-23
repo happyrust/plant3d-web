@@ -10,6 +10,15 @@ const forbidden = [
   'use' + 'DimensionAnnotation',
   'dimension_' + 'linear',
   'dimension_' + 'angle',
+  'Canvas2D' + 'DimensionPainter',
+  'compose' + 'ViewerCanvases',
+  'Aligned' + 'Dimension',
+  'Angle' + 'Dimension',
+  'annotations/Xeokit' + 'DistanceMeasurement',
+  'annotations/Xeokit' + 'AngleMeasurement',
+  'annotations/Xeokit' + 'ElevationPointMeasurement',
+  'annotations/Xeokit' + 'ElevationDeltaMeasurement',
+  'dimension-' + 'viewport-overlay',
 ];
 
 function productionTsFiles(dir = join(process.cwd(), 'src')): string[] {

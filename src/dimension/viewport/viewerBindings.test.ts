@@ -24,7 +24,7 @@ describe('createDimensionViewerBindings', () => {
     const bindings = createDimensionViewerBindings({
       enabled: false,
       mainCanvas: canvas,
-      viewport: { setProjector: vi.fn() },
+      viewport: { setProjector: vi.fn(), setDesignToWorld: vi.fn() },
       pointer: {
         pointerDown: vi.fn(),
         pointerMove: vi.fn(),
@@ -47,6 +47,7 @@ describe('createDimensionViewerBindings', () => {
     camera.lookAt(0, 0, 0);
     camera.updateMatrixWorld(true);
     const setProjector = vi.fn();
+    const setDesignToWorld = vi.fn();
     const pointerDown = vi.fn(() => ({
       consumed: true as const,
       requestRender: true as const,
@@ -54,7 +55,7 @@ describe('createDimensionViewerBindings', () => {
     const bindings = createDimensionViewerBindings({
       enabled: true,
       mainCanvas: canvas,
-      viewport: { setProjector },
+      viewport: { setProjector, setDesignToWorld },
       pointer: {
         pointerDown,
         pointerMove: vi.fn(() => ({ consumed: false as const })),
@@ -73,6 +74,7 @@ describe('createDimensionViewerBindings', () => {
     expect(projector.heightCssPx).toBe(300);
     expect(projector.dpr).toBe(2);
     expect(projector.project([0, 0, 0])).toMatchObject({ x: 200, y: 150 });
+    expect(setDesignToWorld).toHaveBeenCalledTimes(1);
 
     const stopImmediatePropagation = vi.fn();
     const preventDefault = vi.fn();
@@ -93,7 +95,7 @@ describe('createDimensionViewerBindings', () => {
     const bindings = createDimensionViewerBindings({
       enabled: true,
       mainCanvas: canvas,
-      viewport: { setProjector: vi.fn() },
+      viewport: { setProjector: vi.fn(), setDesignToWorld: vi.fn() },
       pointer: {
         pointerDown: vi.fn(() => ({ consumed: false as const })),
         pointerMove: vi.fn(() => ({ consumed: false as const })),

@@ -100,7 +100,14 @@ export function layoutResultsToSvg(
         `M ${coordinate(segment.from[0])} ${coordinate(segment.from[1])} `
         + `L ${coordinate(segment.to[0])} ${coordinate(segment.to[1])}`
       )).join(' ');
-      return `<path d="${path}" data-part="label" ${common}/>`;
+      const rotation = primitive.rotationRad && primitive.rotationCenter
+        ? ` transform="rotate(${coordinate(
+          (primitive.rotationRad * 180) / Math.PI,
+        )} ${coordinate(primitive.rotationCenter[0])} ${
+          coordinate(primitive.rotationCenter[1])
+        })"`
+        : '';
+      return `<path d="${path}" data-part="label"${rotation} ${common}/>`;
     }).join('');
     return `<g data-dimension-id="${escapeXml(layout.dimensionId)}">${primitives}</g>`;
   }).join('');

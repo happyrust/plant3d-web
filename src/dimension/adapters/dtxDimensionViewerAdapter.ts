@@ -1,4 +1,4 @@
-import { Matrix4, type Camera } from 'three';
+import { Matrix4, type Camera, type Object3D } from 'three';
 
 import type { DimensionViewerAdapter } from '../facade/createDimensionSystem';
 
@@ -10,12 +10,15 @@ import type { DimensionViewerAdapter } from '../facade/createDimensionSystem';
  */
 export function createDtxDimensionViewerAdapter(input: Readonly<{
   getCamera: () => Camera | null | undefined;
+  getScene: () => Object3D | null | undefined;
   getMillimetresToScene: () => Matrix4 | null | undefined;
   getContainer: () => HTMLElement | null | undefined;
+  requestRender: () => void;
   getDpr?: () => number;
 }>): DimensionViewerAdapter {
   return {
     getCamera: () => input.getCamera() ?? null,
+    getScene: () => input.getScene() ?? null,
     getDesignToWorld: () => {
       const millimetresToScene =
         input.getMillimetresToScene()?.clone() ?? new Matrix4();
@@ -33,5 +36,6 @@ export function createDtxDimensionViewerAdapter(input: Readonly<{
         dpr,
       };
     },
+    requestRender: input.requestRender,
   };
 }

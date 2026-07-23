@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { Matrix4, PerspectiveCamera } from 'three';
+import { Group, Matrix4, PerspectiveCamera } from 'three';
 
 import { createEmptyDimensionDocument } from '../domain/document';
 import { exactAnchor, linearRecord } from '../domain/testFixtures';
@@ -18,30 +18,6 @@ import type {
   DimensionCommandJournal,
   DimensionCommandJournalState,
 } from '../services/commandJournal';
-
-function createOverlayCanvas() {
-  const operations: string[] = [];
-  const context = {
-    strokeStyle: '',
-    lineWidth: 0,
-    setTransform: vi.fn(() => operations.push('setTransform')),
-    clearRect: vi.fn(() => operations.push('clearRect')),
-    beginPath: vi.fn(),
-    moveTo: vi.fn(),
-    lineTo: vi.fn(),
-    stroke: vi.fn(() => operations.push('stroke')),
-    save: vi.fn(),
-    restore: vi.fn(),
-    setLineDash: vi.fn(),
-  };
-  const canvas = {
-    width: 0,
-    height: 0,
-    style: { width: '', height: '' },
-    getContext: vi.fn(() => context),
-  } as unknown as HTMLCanvasElement;
-  return { canvas, operations };
-}
 
 function createInputCanvas() {
   const addEventListener = vi.fn();
@@ -63,12 +39,15 @@ function createViewerAdapter(
   overrides: Partial<DimensionViewerAdapter> = {},
 ): DimensionViewerAdapter {
   const camera = new PerspectiveCamera(50, 1, 0.1, 100);
+  const scene = new Group();
   camera.position.set(0, 0, 10);
   camera.updateMatrixWorld(true);
   return {
     getCamera: () => camera,
+    getScene: () => scene,
     getDesignToWorld: () => new Matrix4(),
     getSize: () => ({ widthCssPx: 400, heightCssPx: 400, dpr: 1 }),
+    requestRender: vi.fn(),
     ...overrides,
   };
 }
@@ -103,14 +82,13 @@ function createHarness(input: {
   anchorResolver?: DimensionAnchorResolver;
   viewer?: DimensionViewerAdapter;
 } = {}) {
-  const overlay = createOverlayCanvas();
   const inputCanvas = createInputCanvas();
+  const viewer = input.viewer ?? createViewerAdapter();
   const callbacks: FrameRequestCallback[] = [];
   const flush = () => callbacks.shift()?.(performance.now());
   const promise = createDimensionSystem({
-    overlayCanvas: overlay.canvas,
     inputCanvas: inputCanvas.canvas,
-    viewer: input.viewer ?? createViewerAdapter(),
+    viewer,
     journal: input.journal ?? createMemoryJournal().journal,
     context: { documentId: 'doc-1' },
     repository: input.repository,
@@ -122,7 +100,7 @@ function createHarness(input: {
     cancelFrame: () => undefined,
     loadFont: async () => createTestFont(),
   });
-  return { overlay, inputCanvas, flush, promise };
+  return { scene: viewer.getScene(), inputCanvas, flush, promise };
 }
 
 function documentWithRecords(
@@ -156,7 +134,7 @@ describe('createDimensionSystem', () => {
     const harness = createHarness({ repository });
 
     await Promise.resolve();
-    expect(harness.overlay.operations).toHaveLength(0);
+    expect(harness.scene?.children).toHaveLength(0);
 
     resolveLoad(documentWithRecords([linearRecord()], 3));
     const system = await createdSystem(harness);
@@ -167,7 +145,8 @@ describe('createDimensionSystem', () => {
 
     system.notifyViewerChanged();
     harness.flush();
-    expect(harness.overlay.operations).toContain('stroke');
+    expect(harness.scene?.children).toHaveLength(1);
+    expect(harness.scene?.children[0]?.children).toHaveLength(2);
   });
 
   it('reports a typed document failure without mounting a canvas', async () => {
@@ -180,7 +159,7 @@ describe('createDimensionSystem', () => {
 
     expect(result).toMatchObject({ ok: false, stage: 'document' });
     expect(harness.inputCanvas.addEventListener).not.toHaveBeenCalled();
-    expect(harness.overlay.operations).toHaveLength(0);
+    expect(harness.scene?.children).toHaveLength(0);
   });
 
   it('detects journal commands without replaying them', async () => {
@@ -292,13 +271,15 @@ describe('createDimensionSystem', () => {
     const system = await createdSystem(harness);
 
     expect(harness.inputCanvas.addEventListener).toHaveBeenCalledTimes(4);
+    expect(harness.scene?.children).toHaveLength(1);
     system.dispose();
     system.dispose();
 
     expect(harness.inputCanvas.removeEventListener).toHaveBeenCalledTimes(4);
-    expect(harness.overlay.canvas.width).toBe(0);
+    expect(harness.scene?.children).toHaveLength(0);
     system.notifyViewerChanged();
-    expect(harness.overlay.operations).not.toContain('stroke');
+    harness.flush();
+    expect(harness.scene?.children).toHaveLength(0);
   });
 
   it('never lets external records touch the document', async () => {
@@ -391,6 +372,6 @@ describe('createDimensionSystem', () => {
     system.notifyViewerChanged();
     harness.flush();
 
-    expect(harness.overlay.operations).not.toContain('stroke');
+    expect(system.viewport.getLayouts()).toHaveLength(0);
   });
 });

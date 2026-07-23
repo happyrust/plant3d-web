@@ -12,6 +12,7 @@ export type DimensionBoundAction =
   | 'delete'
   | 'flip-angle'
   | 'toggle-radial-display'
+  | 'restore-auto-layout'
   | 'hide-external'
   | DimensionRebindAction;
 
@@ -47,8 +48,9 @@ export function getDimensionBoundActions(
     ...dimensionAnchorSlots(item).map(
       slot => `rebind:${slot}` as DimensionRebindAction,
     ),
-    'delete',
   ];
+  if (item.labelPinned) actions.push('restore-auto-layout');
+  actions.push('delete');
   if (item.kind === 'angular') actions.push('flip-angle');
   if (item.kind === 'radial') actions.push('toggle-radial-display');
   return actions;

@@ -130,6 +130,8 @@ function actionLabel(
       return '翻转角度';
     case 'toggle-radial-display':
       return '切换半径/直径';
+    case 'restore-auto-layout':
+      return '恢复自动布局';
     case 'hide-external':
       return hiddenExternal.value.has(item.id) ? '临时显示' : '临时隐藏';
   }

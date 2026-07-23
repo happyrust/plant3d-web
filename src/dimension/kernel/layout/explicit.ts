@@ -1,107 +1,123 @@
-import { projectArcToScreenPath } from '../geometry/arcProjection';
+import { sampleArcToDesignAndScreenPath } from '../geometry/arcProjection';
 import {
   expandRect,
-  makeCenteredGlyphRun,
   makeGlyphHitRegion,
   makeLineHitRegion,
   makeMarkerHitRegion,
   makePathHitRegions,
-  makeScreenLine,
 } from '../geometry/screenGeometry';
+import {
+  makeSceneLine,
+  projectScenePrimitives,
+  sceneGlyph,
+  sceneMarker,
+  scenePath,
+  sceneVertex,
+} from '../geometry/sceneGeometry';
 import { resolveDimensionStyleRole } from '../theme';
 
 import type {
   ExplicitLayoutInput,
   HitRegion,
-  LayoutPrimitive,
   LayoutResult,
+  ScenePrimitive,
   ScreenGlyphRun,
   ScreenLine,
   ScreenMarker,
   ScreenPath,
-  Vec2,
-  Vec3,
 } from '../types';
 import type { LayoutContext } from './context';
 
 const DEFAULT_MARKER_RADIUS_PX = 4;
-
-function toScreen(point: Vec3, context: LayoutContext): Vec2 {
-  const projected = context.projector.project(point);
-  return [projected.x, projected.y];
-}
 
 export function layoutExplicit(
   input: ExplicitLayoutInput,
   context: LayoutContext,
 ): LayoutResult {
   const styleRole = resolveDimensionStyleRole(input.role, context.interaction);
-  const lines: ScreenLine[] = [
+  const sceneLines = [
     ...input.lines.map((line) => ({
-      ...makeScreenLine(
-        toScreen(line.from, context),
-        toScreen(line.to, context),
+      ...makeSceneLine(
+        sceneVertex(line.from),
+        sceneVertex(line.to),
         line.part,
         styleRole,
       ),
       ...(line.style ? { lineStyle: line.style } : {}),
     })),
     ...input.arrowLines.map((line) =>
-      makeScreenLine(
-        toScreen(line.from, context),
-        toScreen(line.to, context),
+      makeSceneLine(
+        sceneVertex(line.from),
+        sceneVertex(line.to),
         'arrow',
         styleRole,
       ),
     ),
   ];
-  const paths: ScreenPath[] = (input.arcs ?? []).flatMap((arc) => {
-    const projected = projectArcToScreenPath(arc, context.projector);
-    if (!projected) return [];
-    return [{
-      kind: 'path' as const,
-      points: projected.points,
-      closed: projected.closed,
-      part: arc.part ?? 'arc',
+  const scenePaths = (input.arcs ?? []).flatMap((arc) => {
+    const sampled = sampleArcToDesignAndScreenPath(arc, context.projector);
+    if (!sampled) return [];
+    return [scenePath(
+      sampled.designPoints.map(point => sceneVertex(point)),
+      sampled.closed,
+      arc.part ?? 'arc',
       styleRole,
-      ...(arc.style ? { lineStyle: arc.style } : {}),
-    }];
+      arc.style,
+    )];
   });
-  const markers: ScreenMarker[] = (input.markers ?? []).map((marker) => ({
-    kind: 'marker' as const,
-    at: toScreen(marker.at, context),
-    shape: marker.shape,
-    radiusPx: marker.radiusPx ?? DEFAULT_MARKER_RADIUS_PX,
-    part: 'marker',
-    styleRole,
-    ...(marker.style ? { lineStyle: marker.style } : {}),
-  }));
-  const glyph = makeCenteredGlyphRun(
-    context.font,
+  const sceneMarkers = (input.markers ?? []).map((marker) =>
+    sceneMarker(
+      sceneVertex(marker.at),
+      marker.shape,
+      marker.radiusPx ?? DEFAULT_MARKER_RADIUS_PX,
+      styleRole,
+      marker.style,
+    ));
+  const glyphScene = sceneGlyph(
     input.formattedLabel,
-    toScreen(input.labelAnchor, context),
+    sceneVertex(input.labelAnchor),
     context.theme.textHeightPx,
     styleRole,
   );
   const lineAdvancePx = context.theme.textHeightPx * 1.5;
-  const extraGlyphs: ScreenGlyphRun[] = (input.texts ?? []).map((text) => {
-    const anchor = toScreen(text.anchor, context);
-    return makeCenteredGlyphRun(
-      context.font,
+  const extraGlyphScenes = (input.texts ?? []).map((text) =>
+    sceneGlyph(
       text.text,
-      [anchor[0], anchor[1] + (text.stackIndex ?? 0) * lineAdvancePx],
+      sceneVertex(
+        text.anchor,
+        [0, (text.stackIndex ?? 0) * lineAdvancePx],
+      ),
       context.theme.textHeightPx,
       styleRole,
-    );
-  });
-  const labelBounds = expandRect(glyph.bounds, context.theme.labelPaddingPx / 2);
-  const primitives: LayoutPrimitive[] = [
-    ...lines,
-    ...paths,
-    ...markers,
-    glyph,
-    ...extraGlyphs,
+    ));
+  const scenePrimitives: ScenePrimitive[] = [
+    ...sceneLines,
+    ...scenePaths,
+    ...sceneMarkers,
+    glyphScene,
+    ...extraGlyphScenes,
   ];
+  const primitives = projectScenePrimitives(
+    scenePrimitives,
+    context.projector,
+    context.font,
+  );
+  const lines = primitives.filter(
+    (primitive): primitive is ScreenLine => primitive.kind === 'line',
+  );
+  const paths = primitives.filter(
+    (primitive): primitive is ScreenPath => primitive.kind === 'path',
+  );
+  const markers = primitives.filter(
+    (primitive): primitive is ScreenMarker => primitive.kind === 'marker',
+  );
+  const glyphs = primitives.filter(
+    (primitive): primitive is ScreenGlyphRun =>
+      primitive.kind === 'glyph-run',
+  );
+  const glyph = glyphs[0]!;
+  const extraGlyphs = glyphs.slice(1);
+  const labelBounds = expandRect(glyph.bounds, context.theme.labelPaddingPx / 2);
   const hitRegions: HitRegion[] = [
     ...lines.map((line) => makeLineHitRegion(line, context.theme.lineWidthPx)),
     ...paths.flatMap((path) =>
@@ -114,10 +130,11 @@ export function layoutExplicit(
 
   return {
     dimensionId: input.id,
+    scenePrimitives,
     primitives,
     hitRegions,
     labelBounds,
-    labelPinned: true,
+    labelPinned: input.labelPinned,
     derived: { formattedLabel: input.formattedLabel },
   };
 }

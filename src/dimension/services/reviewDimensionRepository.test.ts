@@ -80,7 +80,7 @@ describe('ReviewDimensionRepository', () => {
     });
 
     expect(state).toMatchObject({
-      schemaVersion: 1,
+      schemaVersion: 2,
       taskId: 'task-empty',
       formId: 'form-empty',
       baseVersion: 0,
@@ -139,7 +139,7 @@ describe('ReviewDimensionRepository', () => {
     expect(harness.saveRecord).toHaveBeenCalledWith(expect.objectContaining({
       note: 'keep me',
       dimensionDocument: {
-        schemaVersion: 1,
+        schemaVersion: 2,
         documentId: 'document-save',
         records: state.records,
       },

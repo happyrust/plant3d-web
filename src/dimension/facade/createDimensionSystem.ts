@@ -26,7 +26,7 @@ import type { DimensionSnapPort } from '../ports/snapPort';
 import type { DimensionCommandJournal } from '../services/commandJournal';
 import type { ExternalDimensionSource } from '../services/externalDimensionRegistry';
 import type { ReplayPendingCommandsResult } from '../services/replayPendingCommands';
-import type { Camera, Matrix4 } from 'three';
+import type { Camera, Matrix4, Object3D } from 'three';
 
 /**
  * Everything the dimension system needs to know about the hosting viewer.
@@ -37,6 +37,7 @@ import type { Camera, Matrix4 } from 'three';
  */
 export type DimensionViewerAdapter = Readonly<{
   getCamera(): Camera | null;
+  getScene(): Object3D | null;
   /** Design Space metres -> scene world (ADR 0008). */
   getDesignToWorld(): Matrix4;
   getSize(): Readonly<{
@@ -44,6 +45,7 @@ export type DimensionViewerAdapter = Readonly<{
     heightCssPx: number;
     dpr: number;
   }>;
+  requestRender(): void;
 }>;
 
 export type DimensionAnchorRefreshReport = Readonly<{
@@ -85,8 +87,6 @@ export type DimensionSystem = Readonly<{
 }>;
 
 export type CreateDimensionSystemInput = Readonly<{
-  /** Transparent overlay canvas the dimension painter owns (ADR 0011). */
-  overlayCanvas: HTMLCanvasElement;
   /** Viewer canvas that receives pointer events. */
   inputCanvas: HTMLCanvasElement;
   viewer: DimensionViewerAdapter;
@@ -109,7 +109,11 @@ export type CreateDimensionSystemInput = Readonly<{
 
 export type CreateDimensionSystemResult =
   | Readonly<{ ok: true; system: DimensionSystem }>
-  | Readonly<{ ok: false; stage: 'font' | 'document'; error: unknown }>;
+  | Readonly<{
+      ok: false;
+      stage: 'font' | 'document' | 'viewer';
+      error: unknown;
+    }>;
 
 /**
  * Composition root for the dimension system (ADR 0006, plan 05 Task 1):
@@ -137,6 +141,14 @@ export async function createDimensionSystem(
   }
   const font = fontResult.value;
   const initialState = documentResult.value;
+  const scene = input.viewer.getScene();
+  if (!scene) {
+    return {
+      ok: false,
+      stage: 'viewer',
+      error: new Error('Dimension viewer scene is unavailable'),
+    };
+  }
 
   const session = new DimensionDocumentSession({
     initialState,
@@ -148,12 +160,13 @@ export async function createDimensionSystem(
   const theme = input.theme ?? SOLVESPACE_DIMENSION_THEME;
   const format = input.format ?? DEFAULT_DIMENSION_FORMAT;
   const viewport = new DimensionViewport({
-    canvas: input.overlayCanvas,
+    scene,
     font,
     theme,
     format,
     requestFrame: input.requestFrame,
     cancelFrame: input.cancelFrame,
+    requestRender: () => input.viewer.requestRender(),
   });
   viewport.setDocument(session.state);
   const externalRegistry = new ExternalDimensionRegistry();
@@ -276,10 +289,9 @@ export async function createDimensionSystem(
       setExternalDimensions(records): void {
         if (disposed) return;
         externalRegistry.clear();
-        const sources: readonly ExternalDimensionSource[] = [
-          'bran-clearance',
-          'mbd',
-        ];
+        const sources = new Set<ExternalDimensionSource>(
+          records.map(record => record.source),
+        );
         sources.forEach((source) => {
           const sourceRecords = records.filter(record => record.source === source);
           if (sourceRecords.length > 0) {

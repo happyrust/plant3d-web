@@ -11,7 +11,6 @@ import {
   reviewAttachmentUploadWithProgress,
   type ReviewAttachmentUploadOptions,
 } from '@/api/reviewApi';
-import { composeViewerCanvases } from '@/dimension';
 
 export type ScreenshotKind = 'manual' | 'annotation_shot' | 'auto_cloud_finish';
 
@@ -66,7 +65,7 @@ function buildUploadOptions(opts: CaptureOptions): ReviewAttachmentUploadOptions
 }
 
 export function useScreenshot() {
-  const { viewerRef, dimensionSystem } = useViewerContext();
+  const { viewerRef } = useViewerContext();
   const isCapturing = ref(false);
   const uploadProgress = ref(0);
 
@@ -117,22 +116,10 @@ export function useScreenshot() {
   }
 
   /**
-   * 取用于截图的画布：主 WebGL 画布 + dimension 尺寸标注 overlay 合成。
+   * 取用于截图的画布。尺寸标注已绘入主 WebGL scene，直接读取主画布。
    */
   function getCaptureCanvas(): HTMLCanvasElement | null {
-    const canvas = getCanvas();
-    if (!canvas) return null;
-    const dimensionCanvas =
-      dimensionSystem?.value?.viewport.getCanvas() ?? null;
-    if (!dimensionCanvas || dimensionCanvas.width <= 0 || dimensionCanvas.height <= 0) {
-      return canvas;
-    }
-    return composeViewerCanvases({
-      webgl: canvas,
-      dimensions: dimensionCanvas,
-      width: canvas.width || canvas.clientWidth,
-      height: canvas.height || canvas.clientHeight,
-    });
+    return getCanvas();
   }
 
   function canvasToBlob(

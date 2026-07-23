@@ -114,6 +114,8 @@ function placementKind(
 
 function hasValidCommonFields(record: Record<string, unknown>): boolean {
   return isNonEmptyString(record.id)
+    && (record.labelPinned === undefined
+      || typeof record.labelPinned === 'boolean')
     && isNonEmptyString(record.authorId)
     && isNonEmptyString(record.authorRole)
     && isFiniteNumber(record.createdAt)
@@ -288,29 +290,33 @@ export function reduceDimensionDocument(
       if (!isUserDimensionRecord(command.record)) {
         return failure('invalid-command');
       }
+      const record = {
+        ...command.record,
+        labelPinned: command.record.labelPinned ?? false,
+      } as UserDimensionRecord;
       const isRestore = command.type === 'restore';
-      const mayCreate = command.actorId === command.record.authorId
+      const mayCreate = command.actorId === record.authorId
         || (isRestore && command.actorRole.toLowerCase() === 'admin');
       if (!mayCreate) {
         return failure('forbidden');
       }
-      if (state.records.some(record => record.id === command.record.id)) {
+      if (state.records.some(existing => existing.id === record.id)) {
         return failure('duplicate-id');
       }
       return {
         ok: true,
         state: {
           ...state,
-          records: [...state.records, command.record],
+          records: [...state.records, record],
         },
         event: {
           type: 'created',
           commandId: command.commandId,
-          record: command.record,
+          record,
         },
         inverse: {
           type: 'delete',
-          dimensionId: command.record.id,
+          dimensionId: record.id,
         },
       };
     }
@@ -338,6 +344,12 @@ export function reduceDimensionDocument(
       };
     }
     case 'replace-placement': {
+      if (
+        command.labelPinned !== undefined
+        && typeof command.labelPinned !== 'boolean'
+      ) {
+        return failure('invalid-command');
+      }
       const found = findMutableRecord(state, command);
       if (!found.ok) return found.result;
       const suppliedKind = placementKind(command.placement);
@@ -349,6 +361,7 @@ export function reduceDimensionDocument(
       const next = {
         ...found.record,
         placement: command.placement,
+        labelPinned: command.labelPinned ?? found.record.labelPinned,
         updatedAt: command.at,
       } as UserDimensionRecord;
       return {
@@ -360,11 +373,42 @@ export function reduceDimensionDocument(
           dimensionId: command.dimensionId,
           previous: found.record.placement,
           next: next.placement,
+          previousLabelPinned: found.record.labelPinned,
+          nextLabelPinned: next.labelPinned,
         },
         inverse: {
           type: 'replace-placement',
           dimensionId: command.dimensionId,
           placement: found.record.placement,
+          labelPinned: found.record.labelPinned,
+        },
+      };
+    }
+    case 'set-label-pinned': {
+      if (typeof command.labelPinned !== 'boolean') {
+        return failure('invalid-command');
+      }
+      const found = findMutableRecord(state, command);
+      if (!found.ok) return found.result;
+      const next: UserDimensionRecord = {
+        ...found.record,
+        labelPinned: command.labelPinned,
+        updatedAt: command.at,
+      };
+      return {
+        ok: true,
+        state: replaceRecord(state, found.index, next),
+        event: {
+          type: 'label-pinned-set',
+          commandId: command.commandId,
+          dimensionId: command.dimensionId,
+          previous: found.record.labelPinned,
+          next: command.labelPinned,
+        },
+        inverse: {
+          type: 'set-label-pinned',
+          dimensionId: command.dimensionId,
+          labelPinned: found.record.labelPinned,
         },
       };
     }

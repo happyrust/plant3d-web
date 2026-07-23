@@ -1,8 +1,11 @@
 import { externalDimensionCategory } from '../adapters/normalizeExternalDimensions';
 
-import type { ExternalDimensionRecord } from '../adapters/normalizeExternalDimensions';
+import type {
+  ExternalDimensionRecord,
+  ExternalDimensionSource,
+} from '../adapters/normalizeExternalDimensions';
 
-export type ExternalDimensionSource = 'bran-clearance' | 'mbd';
+export type { ExternalDimensionSource };
 
 export type ExternalDimensionRegistrySnapshot = Readonly<{
   records: readonly ExternalDimensionRecord[];

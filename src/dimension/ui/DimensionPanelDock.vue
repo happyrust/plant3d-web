@@ -257,6 +257,18 @@ function act(
     }
     return;
   }
+  if (action === 'restore-auto-layout') {
+    const result = session.apply({
+      ...metadata,
+      type: 'set-label-pinned',
+      dimensionId: item.id,
+      labelPinned: false,
+    });
+    if (!result.ok) {
+      emitToast({ message: `恢复自动布局失败：${result.reason}`, level: 'warning' });
+    }
+    return;
+  }
   if (action === 'flip-angle' && item.kind === 'angular') {
     const result = session.apply({
       ...metadata,

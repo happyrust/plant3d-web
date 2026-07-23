@@ -78,6 +78,24 @@ describe('LocalStorageDimensionCommandJournal', () => {
     expect(harness.writes).toHaveLength(1);
   });
 
+  it('round-trips label pinning commands without losing the flag', () => {
+    const harness = storageHarness();
+    const journal = new LocalStorageDimensionCommandJournal(harness.storage);
+    const command: DimensionCommand = {
+      type: 'set-label-pinned',
+      commandId: 'pin-1',
+      actorId: 'owner',
+      actorRole: 'designer',
+      at: 15,
+      dimensionId: 'dimension-1',
+      labelPinned: true,
+    };
+
+    journal.append('document-1', 0, command);
+
+    expect(journal.load('document-1')?.commands).toEqual([command]);
+  });
+
   it('refuses to mix commands from different base versions', () => {
     const harness = storageHarness();
     const journal = new LocalStorageDimensionCommandJournal(harness.storage);

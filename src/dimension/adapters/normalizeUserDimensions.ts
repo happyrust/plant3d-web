@@ -39,7 +39,7 @@ export function normalizeUserDimension(
   const base = {
     id: record.id,
     role,
-    labelPinned: false,
+    labelPinned: record.labelPinned,
   } as const;
 
   switch (record.kind) {

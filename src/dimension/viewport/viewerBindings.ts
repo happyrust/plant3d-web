@@ -17,6 +17,7 @@ export function createDimensionViewerBindings(input: Readonly<{
   mainCanvas: HTMLCanvasElement;
   viewport: Readonly<{
     setProjector(projector: ViewportProjector): void;
+    setDesignToWorld(matrix: Matrix4): void;
   }>;
   pointer: Readonly<{
     pointerDown: PointerHandler;
@@ -75,9 +76,11 @@ export function createDimensionViewerBindings(input: Readonly<{
       ) {
         return;
       }
+      const designToWorld = input.getDesignToWorld();
+      input.viewport.setDesignToWorld(designToWorld);
       input.viewport.setProjector(new ThreeViewportProjector({
         camera,
-        designToWorld: input.getDesignToWorld(),
+        designToWorld,
         widthCssPx: size.widthCssPx,
         heightCssPx: size.heightCssPx,
         dpr: size.dpr,

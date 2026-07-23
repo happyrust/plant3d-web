@@ -2,12 +2,13 @@ import { normalizeExternalDimension } from '../adapters/normalizeExternalDimensi
 import { normalizeUserDimension } from '../adapters/normalizeUserDimensions';
 import { buildHitIndex, type HitIndex, type HitTarget } from '../kernel/hit/hitIndex';
 import { layoutViewport } from '../kernel/viewport/layoutViewport';
+import { resolveDimensionStyleRole } from '../kernel/theme';
 
-import { Canvas2DDimensionPainter } from './canvasPainter';
 import {
   DimensionViewportScheduler,
   type DimensionViewportDirtyReason,
 } from './invalidation';
+import { ThreeSceneDimensionPainter } from './scenePainter';
 
 import type { ExternalDimensionRecord } from '../adapters/normalizeExternalDimensions';
 import type { DimensionDocumentState } from '../domain/document';
@@ -17,13 +18,16 @@ import type { LffFont } from '../kernel/glyph/lffParser';
 import type { ViewportProjector } from '../kernel/projector';
 import type { DimensionTheme } from '../kernel/theme';
 import type {
+  ExplicitLayoutInput,
   HitRegion,
   InteractionState,
   LayoutPrimitive,
   LayoutResult,
   NormalizedDimensionInput,
+  ScenePrimitive,
   Vec2,
 } from '../kernel/types';
+import type { Matrix4, Object3D } from 'three';
 
 export type DimensionFrameBreakdown = Readonly<{
   layoutMs: number;
@@ -225,11 +229,46 @@ function translateLayout(result: LayoutResult, offset: Vec2): LayoutResult {
   };
 }
 
+function restyleLayout(
+  result: LayoutResult,
+  styleRole: string,
+): LayoutResult {
+  const restyle = <T extends Readonly<{ styleRole: string }>>(
+    primitive: T,
+  ): T => ({ ...primitive, styleRole }) as T;
+  return {
+    ...result,
+    scenePrimitives: result.scenePrimitives.map(
+      primitive => restyle(primitive) as ScenePrimitive,
+    ),
+    primitives: result.primitives.map(
+      primitive => restyle(primitive) as LayoutPrimitive,
+    ),
+  };
+}
+
+type DimensionViewportBaseInput = Readonly<{
+  font: LffFont;
+  theme: DimensionTheme;
+  format: DimensionFormatPolicy;
+  requestFrame: (callback: FrameRequestCallback) => number;
+  cancelFrame: (id: number) => void;
+  onFrame?: (durationMs: number, breakdown: DimensionFrameBreakdown) => void;
+}>;
+
+export type DimensionViewportInput = DimensionViewportBaseInput & Readonly<{
+  scene: Object3D;
+  requestRender: () => void;
+}>;
+
 export class DimensionViewport {
-  private readonly painter: Canvas2DDimensionPainter;
+  private readonly scenePainter: ThreeSceneDimensionPainter;
   private readonly scheduler: DimensionViewportScheduler;
   private normalizedUsers: readonly NormalizedDimensionInput[] = [];
-  private normalizedExternal: readonly NormalizedDimensionInput[] = [];
+  private normalizedExternal: readonly (
+    | NormalizedDimensionInput
+    | ExplicitLayoutInput
+  )[] = [];
   private projector: ViewportProjector | null = null;
   private preview: NormalizedDimensionInput | null = null;
   private selectionId: string | null = null;
@@ -244,20 +283,14 @@ export class DimensionViewport {
   private renderedProjectorSignature: ProjectorSignature | null = null;
   private theme: DimensionTheme;
   private format: DimensionFormatPolicy;
+  private cameraSettleTimer: ReturnType<typeof setTimeout> | null = null;
+  private readonly pendingStyleIds = new Set<string>();
   private disposed = false;
 
-  constructor(private readonly input: Readonly<{
-    canvas: HTMLCanvasElement;
-    font: LffFont;
-    theme: DimensionTheme;
-    format: DimensionFormatPolicy;
-    requestFrame: (callback: FrameRequestCallback) => number;
-    cancelFrame: (id: number) => void;
-    onFrame?: (durationMs: number, breakdown: DimensionFrameBreakdown) => void;
-  }>) {
+  constructor(private readonly input: DimensionViewportInput) {
     this.theme = input.theme;
     this.format = input.format;
-    this.painter = new Canvas2DDimensionPainter(input.canvas, input.font);
+    this.scenePainter = new ThreeSceneDimensionPainter(input.scene, input.font);
     this.scheduler = new DimensionViewportScheduler({
       requestFrame: input.requestFrame,
       cancelFrame: input.cancelFrame,
@@ -280,20 +313,39 @@ export class DimensionViewport {
   setProjector(projector: ViewportProjector): void {
     const previous = this.projector;
     this.projector = projector;
-    this.painter.resize(
+    this.scenePainter.resize(
       projector.widthCssPx,
       projector.heightCssPx,
-      projector.dpr,
     );
-    if (
+    const sizeChanged = (
       !previous
       || previous.widthCssPx !== projector.widthCssPx
       || previous.heightCssPx !== projector.heightCssPx
-    ) {
-      this.invalidate('size');
-    }
+    );
+    if (sizeChanged) this.invalidate('size');
     if (!previous || previous.dpr !== projector.dpr) this.invalidate('dpr');
-    this.invalidate('camera');
+
+    if (
+      !previous
+      || sizeChanged
+      || this.layouts.length === 0
+    ) {
+      this.invalidate('camera');
+      return;
+    }
+    this.input.requestRender?.();
+    if (this.cameraSettleTimer !== null) {
+      clearTimeout(this.cameraSettleTimer);
+    }
+    this.cameraSettleTimer = setTimeout(() => {
+      this.cameraSettleTimer = null;
+      this.invalidate('camera');
+    }, 80);
+  }
+
+  setDesignToWorld(matrix: Matrix4): void {
+    this.scenePainter.setDesignToWorld(matrix);
+    this.input.requestRender?.();
   }
 
   setTheme(theme: DimensionTheme): void {
@@ -308,6 +360,8 @@ export class DimensionViewport {
 
   setSelection(id: string | null): void {
     if (this.selectionId === id) return;
+    if (this.selectionId) this.pendingStyleIds.add(this.selectionId);
+    if (id) this.pendingStyleIds.add(id);
     this.selectionId = id;
     this.selectionListeners.forEach(listener => listener(id));
     this.invalidate('interaction');
@@ -326,6 +380,8 @@ export class DimensionViewport {
 
   setHover(id: string | null): void {
     if (this.hoverId === id) return;
+    if (this.hoverId) this.pendingStyleIds.add(this.hoverId);
+    if (id) this.pendingStyleIds.add(id);
     this.hoverId = id;
     this.invalidate('interaction');
   }
@@ -368,8 +424,17 @@ export class DimensionViewport {
     return this.layouts.map(layout => translateLayout(layout, this.layoutOffset));
   }
 
-  getCanvas(): HTMLCanvasElement {
-    return this.input.canvas;
+  getCanvas(): HTMLCanvasElement | null {
+    return null;
+  }
+
+  flushProjection(): void {
+    if (!this.projector || this.disposed) return;
+    if (this.cameraSettleTimer !== null) {
+      clearTimeout(this.cameraSettleTimer);
+      this.cameraSettleTimer = null;
+    }
+    this.render(new Set(['camera']));
   }
 
   placementAtScreen(
@@ -455,7 +520,11 @@ export class DimensionViewport {
   dispose(): void {
     if (this.disposed) return;
     this.scheduler.dispose();
-    this.painter.dispose();
+    if (this.cameraSettleTimer !== null) {
+      clearTimeout(this.cameraSettleTimer);
+      this.cameraSettleTimer = null;
+    }
+    this.scenePainter.dispose();
     this.layouts = [];
     this.hitIndex = buildHitIndex([]);
     this.layoutOffset = [0, 0];
@@ -466,6 +535,7 @@ export class DimensionViewport {
     this.projector = null;
     this.preview = null;
     this.externalHidden.clear();
+    this.pendingStyleIds.clear();
     this.disposed = true;
   }
 
@@ -473,28 +543,47 @@ export class DimensionViewport {
     if (!this.projector) return;
     const startedAt = performance.now();
     if (
-      reasons.size === 1
-      && reasons.has('camera')
-      && this.renderedProjectorSignature
+      this.scenePainter
+      && reasons.size === 1
+      && reasons.has('interaction')
+      && this.pendingStyleIds.size > 0
       && this.layouts.length > 0
     ) {
-      const offset = translationFromSignature(
-        this.renderedProjectorSignature,
-        this.projector,
+      const inputById = new Map(
+        [
+          ...this.normalizedUsers,
+          ...this.normalizedExternal,
+          ...(this.preview ? [this.preview] : []),
+        ].map(input => [input.id, input] as const),
       );
-      if (offset) {
-        this.layoutOffset = offset;
-        const layoutCompletedAt = performance.now();
-        this.painter.paint(this.layouts, this.theme, offset);
-        const completedAt = performance.now();
-        this.input.onFrame?.(completedAt - startedAt, {
-          layoutMs: layoutCompletedAt - startedAt,
-          paintMs: completedAt - layoutCompletedAt,
-        });
-        return;
+      this.layouts = this.layouts.map((layout) => {
+        if (!this.pendingStyleIds.has(layout.dimensionId)) return layout;
+        const source = inputById.get(layout.dimensionId);
+        if (!source) return layout;
+        const interaction: InteractionState =
+          layout.dimensionId === this.selectionId
+            ? 'selected'
+            : layout.dimensionId === this.hoverId
+              ? 'hovered'
+              : 'normal';
+        return restyleLayout(
+          layout,
+          resolveDimensionStyleRole(source.role, interaction),
+        );
+      });
+      const styleIds = new Set(this.pendingStyleIds);
+      this.pendingStyleIds.clear();
+      if (!this.scenePainter.updateStyles(this.layouts, this.theme, styleIds)) {
+        this.scenePainter.paint(this.layouts, this.theme);
       }
+      this.input.requestRender?.();
+      const completedAt = performance.now();
+      this.input.onFrame?.(completedAt - startedAt, {
+        layoutMs: 0,
+        paintMs: completedAt - startedAt,
+      });
+      return;
     }
-
     this.layoutOffset = [0, 0];
     const inputs = [
       ...this.normalizedUsers,
@@ -517,7 +606,9 @@ export class DimensionViewport {
     this.layouts = batch.layouts;
     this.hitIndex = batch.hitIndex;
     this.renderedProjectorSignature = projectorSignature(this.projector);
-    this.painter.paint(this.layouts, this.theme);
+    this.pendingStyleIds.clear();
+    this.scenePainter.paint(this.layouts, this.theme);
+    this.input.requestRender();
     const completedAt = performance.now();
     this.input.onFrame?.(completedAt - startedAt, {
       layoutMs: layoutCompletedAt - startedAt,

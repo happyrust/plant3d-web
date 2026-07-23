@@ -14,6 +14,7 @@ import type {
   ExplicitLayoutInput,
   LayoutPrimitive,
   NormalizedDimensionInput,
+  ScenePrimitive,
   Vec3,
 } from './types';
 
@@ -114,6 +115,23 @@ function compareText(a: string, b: string): number {
   return a < b ? -1 : a > b ? 1 : 0;
 }
 
+function compactScenePrimitive(primitive: ScenePrimitive) {
+  if (primitive.kind !== 'scene-path') {
+    return primitive;
+  }
+
+  const middleIndex = Math.floor(primitive.points.length / 2);
+  return {
+    ...primitive,
+    points: {
+      count: primitive.points.length,
+      first: primitive.points[0],
+      middle: primitive.points[middleIndex],
+      last: primitive.points.at(-1),
+    },
+  };
+}
+
 function normalizeLayout(input: NormalizedDimensionInput | ExplicitLayoutInput) {
   const result = layoutViewport([input], baseContext, new Map()).layouts[0];
   const primitives = result.primitives
@@ -125,7 +143,9 @@ function normalizeLayout(input: NormalizedDimensionInput | ExplicitLayoutInput) 
         a.sourceOrder - b.sourceOrder,
     )
     .map(({ primitive }) => primitive);
-  return roundNumbers({ ...result, primitives }, 6);
+  const sceneTopology = result.scenePrimitives.map(compactScenePrimitive);
+  const { scenePrimitives: _scenePrimitives, ...projectedLayout } = result;
+  return roundNumbers({ ...projectedLayout, primitives, sceneTopology }, 6);
 }
 
 describe('canonical dimension structural goldens', () => {

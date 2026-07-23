@@ -32,7 +32,7 @@ describe('review dimension snapshot adapter', () => {
     const snapshot = dimensionDocumentToSnapshot(state);
 
     expect(snapshot).toEqual({
-      schemaVersion: 1,
+      schemaVersion: 2,
       documentId: 'document-round-trip',
       records: state.records,
     });
@@ -46,7 +46,7 @@ describe('review dimension snapshot adapter', () => {
 
   it('rejects an unsupported schema version', () => {
     const malformed = {
-      schemaVersion: 2,
+      schemaVersion: 3,
       documentId: 'document-1',
       records: [],
     };
@@ -57,9 +57,30 @@ describe('review dimension snapshot adapter', () => {
     )).toThrow(/schemaVersion/);
   });
 
+  it('migrates a schema v1 snapshot with unpinned labels', () => {
+    const legacyRecord = {
+      ...linearRecord({ id: 'legacy-linear', labelPinned: true }),
+    } as Record<string, unknown>;
+    delete legacyRecord.labelPinned;
+
+    const restored = dimensionDocumentFromSnapshot({
+      schemaVersion: 1,
+      documentId: 'legacy-document',
+      records: [legacyRecord],
+    } as unknown as SnapshotDimensionDocument, {
+      baseVersion: 4,
+    });
+
+    expect(restored.schemaVersion).toBe(2);
+    expect(restored.records[0]).toMatchObject({
+      id: 'legacy-linear',
+      labelPinned: false,
+    });
+  });
+
   it('rejects duplicate record ids', () => {
     const malformed = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       documentId: 'document-1',
       records: [
         linearRecord({ id: 'duplicate' }),
@@ -75,7 +96,7 @@ describe('review dimension snapshot adapter', () => {
 
   it('rejects non-finite coordinates', () => {
     const malformed = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       documentId: 'document-1',
       records: [
         linearRecord({
@@ -95,7 +116,7 @@ describe('review dimension snapshot adapter', () => {
 
   it('rejects a record marked valid without resolved geometry', () => {
     const malformed = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       documentId: 'document-1',
       records: [
         linearRecord({

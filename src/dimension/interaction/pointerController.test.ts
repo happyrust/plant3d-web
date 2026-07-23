@@ -133,12 +133,14 @@ describe('DimensionPointerController', () => {
   });
 
   it('hit-tests existing dimensions before any model snap query', () => {
+    const flushProjection = vi.fn();
     const viewport = {
       hitTest: vi.fn(() => ({
         dimensionId: 'existing',
         part: 'label',
         distancePx: 0,
       })),
+      flushProjection,
       setHover: vi.fn(),
       setSelection: vi.fn(),
       setPreview: vi.fn(),
@@ -156,6 +158,9 @@ describe('DimensionPointerController', () => {
     expect(viewport.hitTest).toHaveBeenCalledWith([20, 30], 6);
     expect(viewport.setHover).toHaveBeenCalledWith('existing');
     controller.pointerDown(event(30, 50));
+    expect(flushProjection).toHaveBeenCalledTimes(1);
+    expect(flushProjection.mock.invocationCallOrder[0])
+      .toBeLessThan(viewport.hitTest.mock.invocationCallOrder[1]);
     expect(viewport.setSelection).toHaveBeenCalledWith('existing');
   });
 

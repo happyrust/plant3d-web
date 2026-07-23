@@ -136,6 +136,49 @@ describe('DimensionDocumentSession', () => {
     ]);
   });
 
+  it('undoes and redoes placement and label pinning as one transaction', () => {
+    const record = linearRecord({ id: 'd-pinned', labelPinned: false });
+    const session = new DimensionDocumentSession({
+      initialState: emptyDimensionDocument([record]),
+      journal: new MemoryJournal(),
+    });
+    session.apply({
+      type: 'replace-placement',
+      commandId: 'move',
+      actorId: record.authorId,
+      actorRole: record.authorRole,
+      at: 40,
+      dimensionId: record.id,
+      placement: { offsetM: 2, labelT: 0.75, side: -1 },
+      labelPinned: true,
+    });
+
+    expect(session.state.records[0]).toMatchObject({
+      placement: { offsetM: 2, labelT: 0.75, side: -1 },
+      labelPinned: true,
+    });
+
+    session.undo(
+      { actorId: record.authorId, actorRole: record.authorRole },
+      41,
+      'undo-move',
+    );
+    expect(session.state.records[0]).toMatchObject({
+      placement: record.placement,
+      labelPinned: false,
+    });
+
+    session.redo(
+      { actorId: record.authorId, actorRole: record.authorRole },
+      42,
+      'redo-move',
+    );
+    expect(session.state.records[0]).toMatchObject({
+      placement: { offsetM: 2, labelT: 0.75, side: -1 },
+      labelPinned: true,
+    });
+  });
+
   it('allows an admin to undo deletion without changing the original author', () => {
     const record = linearRecord({ id: 'd-admin', authorId: 'owner' });
     const session = new DimensionDocumentSession({

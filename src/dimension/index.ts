@@ -16,7 +16,6 @@ export * from './domain/migrationV5';
 export * from './domain/permissions';
 export * from './domain/reducer';
 export * from './domain/types';
-export * from './export/composePng';
 export * from './export/svgOverlay';
 export * from './facade/createDimensionSystem';
 export * from './flags';

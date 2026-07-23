@@ -1,13 +1,19 @@
 import { formatDimensionLabel } from '../format';
-import { makeOpenArrow } from '../geometry/arrow';
 import {
   expandRect,
-  makeCenteredGlyphRun,
   makeGlyphHitRegion,
   makeLineHitRegion,
-  makeScreenLine,
 } from '../geometry/screenGeometry';
-import { trimLineAgainstRect } from '../geometry/trimLineAgainstRect';
+import {
+  engineeringTextRotation,
+  makeFilledSceneArrow,
+  makeSceneLine,
+  projectScenePrimitives,
+  sceneGlyph,
+  sceneVertex,
+  sceneVertexAtScreen,
+} from '../geometry/sceneGeometry';
+import { trimLineAgainstRotatedRect } from '../geometry/trimLineAgainstRect';
 import { resolveDimensionStyleRole } from '../theme';
 import { deriveDimensionValue } from '../value';
 import { EPSILON, lerp3 } from '../vec';
@@ -15,6 +21,9 @@ import { EPSILON, lerp3 } from '../vec';
 import type {
   LayoutResult,
   NormalizedDimensionInput,
+  SceneLine,
+  ScenePrimitive,
+  ScreenGlyphRun,
   ScreenLine,
   Vec2,
   Vec3,
@@ -30,6 +39,7 @@ export function emptyLayout(
 ): LayoutResult {
   return {
     dimensionId,
+    scenePrimitives: [],
     primitives: [],
     hitRegions: [],
     labelBounds: { x: 0, y: 0, width: 0, height: 0 },
@@ -47,7 +57,7 @@ export function layoutLinearBetween(
   input: NormalizedDimensionInput,
   geometry: Readonly<{ a: Vec3; b: Vec3; placement: LinearPlacement }>,
   context: LayoutContext,
-  leadingLines: readonly ScreenLine[] = [],
+  leadingLines: readonly SceneLine[] = [],
 ): LayoutResult {
   const value = deriveDimensionValue(input);
   const formatted = formatDimensionLabel(input, value, context.format);
@@ -86,57 +96,104 @@ export function layoutLinearBetween(
     arrowA[0] + (arrowB[0] - arrowA[0]) * geometry.placement.labelT,
     arrowA[1] + (arrowB[1] - arrowA[1]) * geometry.placement.labelT,
   ];
-  const glyph = makeCenteredGlyphRun(
-    context.font,
+  const labelAnchor = lerp3(
+    geometry.a,
+    geometry.b,
+    geometry.placement.labelT,
+  );
+  const glyphScene = sceneGlyph(
     formatted.text,
-    labelCenter,
+    sceneVertexAtScreen(labelAnchor, labelCenter, context.projector),
     context.theme.textHeightPx,
     styleRole,
+    engineeringTextRotation(arrowA, arrowB),
   );
+  const glyph = projectScenePrimitives(
+    [glyphScene],
+    context.projector,
+    context.font,
+  )[0] as ScreenGlyphRun;
   const labelBounds = expandRect(glyph.bounds, context.theme.labelPaddingPx / 2);
-  const trimmed = trimLineAgainstRect(arrowA, arrowB, labelBounds, true);
+  const trimBounds = expandRect(
+    glyph.unrotatedBounds ?? glyph.bounds,
+    context.theme.labelPaddingPx / 2,
+  );
+  const trimmed = trimLineAgainstRotatedRect(
+    arrowA,
+    arrowB,
+    trimBounds,
+    glyph.rotationCenter ?? labelCenter,
+    glyph.rotationRad ?? 0,
+    true,
+  );
 
   const extensionEndX = outwardX * context.theme.extensionOvershootPx;
   const extensionEndY = outwardY * context.theme.extensionOvershootPx;
-  const lines: ScreenLine[] = [
+  const sceneLines: SceneLine[] = [
     ...leadingLines,
-    makeScreenLine(
-      aScreen,
-      [arrowA[0] + extensionEndX, arrowA[1] + extensionEndY],
+    makeSceneLine(
+      sceneVertex(geometry.a),
+      sceneVertexAtScreen(
+        geometry.a,
+        [arrowA[0] + extensionEndX, arrowA[1] + extensionEndY],
+        context.projector,
+      ),
       'extension',
       styleRole,
     ),
-    makeScreenLine(
-      bScreen,
-      [arrowB[0] + extensionEndX, arrowB[1] + extensionEndY],
+    makeSceneLine(
+      sceneVertex(geometry.b),
+      sceneVertexAtScreen(
+        geometry.b,
+        [arrowB[0] + extensionEndX, arrowB[1] + extensionEndY],
+        context.projector,
+      ),
       'extension',
       styleRole,
-    ),
-    ...trimmed.segments.map((segment) =>
-      makeScreenLine(segment.from, segment.to, 'dimension', styleRole),
     ),
   ];
+  const screenLengthSquared = screenDx * screenDx + screenDy * screenDy;
+  const sceneVertexOnDimension = (point: Vec2) => {
+    const t = (
+      (point[0] - arrowA[0]) * screenDx
+      + (point[1] - arrowA[1]) * screenDy
+    ) / screenLengthSquared;
+    return sceneVertexAtScreen(
+      lerp3(geometry.a, geometry.b, t),
+      point,
+      context.projector,
+    );
+  };
+  sceneLines.push(...trimmed.segments.map((segment) =>
+    makeSceneLine(
+      sceneVertexOnDimension(segment.from),
+      sceneVertexOnDimension(segment.to),
+      'dimension',
+      styleRole,
+    )));
 
   if (trimmed.outsideSide < 0) {
-    lines.push(
-      makeScreenLine(
-        arrowB,
-        [
-          arrowB[0] + alongX * context.theme.outsideExtensionPx,
-          arrowB[1] + alongY * context.theme.outsideExtensionPx,
-        ],
+    const outsideEnd: Vec2 = [
+      arrowB[0] + alongX * context.theme.outsideExtensionPx,
+      arrowB[1] + alongY * context.theme.outsideExtensionPx,
+    ];
+    sceneLines.push(
+      makeSceneLine(
+        sceneVertexOnDimension(arrowB),
+        sceneVertexOnDimension(outsideEnd),
         'dimension',
         styleRole,
       ),
     );
   } else if (trimmed.outsideSide > 0) {
-    lines.push(
-      makeScreenLine(
-        arrowA,
-        [
+    const outsideEnd: Vec2 = [
           arrowA[0] - alongX * context.theme.outsideExtensionPx,
           arrowA[1] - alongY * context.theme.outsideExtensionPx,
-        ],
+        ];
+    sceneLines.push(
+      makeSceneLine(
+        sceneVertexOnDimension(arrowA),
+        sceneVertexOnDimension(outsideEnd),
         'dimension',
         styleRole,
       ),
@@ -144,30 +201,43 @@ export function layoutLinearBetween(
   }
 
   const arrowDirectionScale = trimmed.outsideSide === 0 ? 1 : -1;
-  lines.push(
-    ...makeOpenArrow(
-      arrowA,
+  const scenePrimitives: ScenePrimitive[] = [
+    ...sceneLines,
+    makeFilledSceneArrow(
+      sceneVertexAtScreen(geometry.a, arrowA, context.projector),
       [alongX * arrowDirectionScale, alongY * arrowDirectionScale],
       context.theme.arrowLengthPx,
       context.theme.arrowHalfAngleDeg,
       styleRole,
     ),
-    ...makeOpenArrow(
-      arrowB,
+    makeFilledSceneArrow(
+      sceneVertexAtScreen(geometry.b, arrowB, context.projector),
       [-alongX * arrowDirectionScale, -alongY * arrowDirectionScale],
       context.theme.arrowLengthPx,
       context.theme.arrowHalfAngleDeg,
       styleRole,
     ),
+    glyphScene,
+  ];
+  const primitives = projectScenePrimitives(
+    scenePrimitives,
+    context.projector,
+    context.font,
   );
-
-  const primitives = [...lines, glyph];
+  const lines = primitives.filter(
+    (primitive): primitive is ScreenLine => primitive.kind === 'line',
+  );
+  const projectedGlyph = primitives.find(
+    (primitive): primitive is ScreenGlyphRun =>
+      primitive.kind === 'glyph-run',
+  )!;
   return {
     dimensionId: input.id,
+    scenePrimitives,
     primitives,
     hitRegions: [
       ...lines.map((line) => makeLineHitRegion(line, context.theme.lineWidthPx)),
-      makeGlyphHitRegion(glyph),
+      makeGlyphHitRegion(projectedGlyph),
     ],
     labelBounds,
     labelPinned: input.labelPinned,

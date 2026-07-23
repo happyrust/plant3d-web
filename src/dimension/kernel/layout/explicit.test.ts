@@ -65,6 +65,22 @@ describe('layoutExplicit', () => {
         styleRole: 'external-reference',
       },
     ]);
+    expect(result.scenePrimitives).toMatchObject([
+      {
+        kind: 'scene-line',
+        from: { anchor: [0, 0, 0], offsetPx: [0, 0] },
+        to: { anchor: [1, 0, 0], offsetPx: [0, 0] },
+      },
+      {
+        kind: 'scene-line',
+        from: { anchor: [0, 0, 0], offsetPx: [0, 0] },
+        to: { anchor: [0.1, 0.05, 0], offsetPx: [0, 0] },
+      },
+      {
+        kind: 'scene-glyph-run',
+        at: { anchor: [0.5, 0.2, 0], offsetPx: [0, 0] },
+      },
+    ]);
     expect(result.hitRegions).toHaveLength(3);
   });
 
@@ -162,6 +178,11 @@ describe('layoutExplicit', () => {
       .toHaveLength(2);
     expect(result.hitRegions.filter(region => region.part === 'label'))
       .toHaveLength(2);
+    expect(result.scenePrimitives.some(
+      primitive => primitive.kind === 'scene-path'
+        && primitive.points.every(point => point.offsetPx[0] === 0
+          && point.offsetPx[1] === 0),
+    )).toBe(true);
 
     const hitIndex = buildHitIndex([result]);
     expect(hitIndex.hitTest([150, 200], 2)).toMatchObject({

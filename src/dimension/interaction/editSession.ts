@@ -231,6 +231,7 @@ abstract class BaseEditSession implements DimensionEditSession {
   protected common(at: number) {
     return {
       id: this.dimensionId,
+      labelPinned: false,
       authorId: this.input.actor.actorId,
       authorRole: this.input.actor.actorRole,
       createdAt: at,
@@ -677,6 +678,7 @@ class PlacementEditSession implements DimensionEditSession {
     this.input.onPreview(normalizeUserDimension({
       ...this.input.record,
       placement,
+      labelPinned: true,
       updatedAt: this.input.now(),
     } as UserDimensionRecord));
   }
@@ -701,6 +703,7 @@ class PlacementEditSession implements DimensionEditSession {
       at: this.input.now(),
       dimensionId: this.input.record.id,
       placement: this.placement,
+      labelPinned: true,
     };
   }
 

@@ -9,10 +9,16 @@ import type {
  * 焊缝/坡度符号等非尺寸图元。两类都只读、共用呈现内核。
  */
 export type ExternalDimensionCategory = 'dimension' | 'annotation';
+export type ExternalDimensionSource =
+  | 'bran-clearance'
+  | 'mbd'
+  | 'measurement'
+  | 'pipe-distance'
+  | 'xeokit-measurement';
 
 export type ExternalDimensionRecord = Readonly<{
   id: string;
-  source: 'bran-clearance' | 'mbd';
+  source: ExternalDimensionSource;
   sourceLabel: string;
   role: 'external' | 'external-reference';
   /** Omitted means 'dimension' (pre-existing records are all dimensions). */

@@ -159,7 +159,6 @@ defineProps<{
 
 const containerRef = ref<HTMLDivElement | null>(null);
 const mainCanvas = ref<HTMLCanvasElement>();
-const dimensionOverlayCanvas = ref<HTMLCanvasElement | null>(null);
 const overlayContainer = ref<HTMLElement | null>(null);
 const dimensionDevEnabled = isDimensionFlagEnabled('DIMENSION_V2_DEV')
   || isDimensionFlagEnabled('DIMENSION_V2_CUTOVER');
@@ -1250,9 +1249,32 @@ let dimensionMountDisposed = false;
 let dimensionInitializationVersion = 0;
 const dimensionViewerAdapter = createDtxDimensionViewerAdapter({
   getCamera: () => dtxViewerRef.value?.camera,
+  getScene: () => dtxViewerRef.value?.scene,
   getMillimetresToScene: () => dtxLayerRef.value?.getGlobalModelMatrix(),
   getContainer: () => containerRef.value,
+  requestRender,
 });
+
+function sceneWorldToDesignMetres(
+  point: readonly [number, number, number],
+): readonly [number, number, number] {
+  const design = new Vector3(...point).applyMatrix4(
+    dimensionViewerAdapter.getDesignToWorld().clone().invert(),
+  );
+  return [design.x, design.y, design.z];
+}
+
+function sceneDirectionToDesign(
+  direction: readonly [number, number, number],
+): readonly [number, number, number] {
+  const origin = sceneWorldToDesignMetres([0, 0, 0]);
+  const endpoint = sceneWorldToDesignMetres(direction);
+  return [
+    endpoint[0] - origin[0],
+    endpoint[1] - origin[1],
+    endpoint[2] - origin[2],
+  ];
+}
 
 type IncrementalCompareModel = {
     refno: string;
@@ -3293,10 +3315,9 @@ function handleMbdLocationChange(): void {
 async function initializeDimensionViewport(): Promise<void> {
   if (!dimensionDevEnabled) return;
   const initializationVersion = ++dimensionInitializationVersion;
-  const canvas = dimensionOverlayCanvas.value;
   const inputCanvas = mainCanvas.value;
   const container = containerRef.value;
-  if (!canvas || !inputCanvas || !container) return;
+  if (!inputCanvas || !container) return;
 
   dimensionSystem?.dispose();
   dimensionSystem = null;
@@ -3306,25 +3327,6 @@ async function initializeDimensionViewport(): Promise<void> {
   viewerContext.dimensionSystem.value = null;
 
   const context = getDimensionDocumentContext();
-  const sceneWorldToDesignMetres = (
-    point: readonly [number, number, number],
-  ): readonly [number, number, number] => {
-    const design = new Vector3(...point).applyMatrix4(
-      dimensionViewerAdapter.getDesignToWorld().invert(),
-    );
-    return [design.x, design.y, design.z];
-  };
-  const sceneDirectionToDesign = (
-    direction: readonly [number, number, number],
-  ): readonly [number, number, number] => {
-    const origin = sceneWorldToDesignMetres([0, 0, 0]);
-    const endpoint = sceneWorldToDesignMetres(direction);
-    return [
-      endpoint[0] - origin[0],
-      endpoint[1] - origin[1],
-      endpoint[2] - origin[2],
-    ];
-  };
   const anchorResolver = new DtxDimensionAnchorResolver({
     loadCandidates: async (refno) => {
       const candidates = await xeokitMeasurementToolsRef.value
@@ -3360,7 +3362,6 @@ async function initializeDimensionViewport(): Promise<void> {
     },
   });
   const result = await createDimensionSystem({
-    overlayCanvas: canvas,
     inputCanvas,
     viewer: dimensionViewerAdapter,
     journal: new LocalStorageDimensionCommandJournal(window.localStorage),
@@ -3454,7 +3455,7 @@ watch(
     reviewStore.currentTask.value?.formId ?? null,
   ],
   () => {
-    if (!dimensionDevEnabled || !dimensionOverlayCanvas.value) return;
+    if (!dimensionDevEnabled) return;
     void initializeDimensionViewport();
   },
   { flush: 'post' },
@@ -4019,6 +4020,8 @@ onMounted(async () => {
     selectionRef: selectionControllerRef,
     overlayContainerRef: overlayContainer,
     annotationSystemRef,
+    getDimensionSystem: () => viewerContext.dimensionSystem.value,
+    sceneWorldToDesignMetres,
     store,
     compatViewerRef,
     requestRender,
@@ -4096,9 +4099,13 @@ onMounted(async () => {
 
   // 测量标注：同步到三维标注系统（SolveSpace 风格 3D 标注）
   try {
-    const mgr = new MeasurementAnnotationManager(annotationSystem);
+    const mgr = new MeasurementAnnotationManager(annotationSystem, {
+      getDimensionSystem: () => viewerContext.dimensionSystem.value,
+      sceneWorldToDesignMetres,
+    });
     const syncSelectedMeasurementAnnotation = () => {
       const activeId = store.activeMeasurementId.value;
+      mgr.highlight(activeId);
       if (activeId) {
         annotationSystem.selectAnnotation(`meas_${activeId}`);
         return;
@@ -5297,11 +5304,6 @@ onUnmounted(() => {
 <template>
   <div ref="containerRef" class="viewer-panel-container">
     <canvas ref="mainCanvas" class="viewer" />
-    <canvas v-if="dimensionDevEnabled"
-      v-show="modelUnitCompareState?.viewMode !== 'split'"
-      ref="dimensionOverlayCanvas"
-      class="dimension-viewport-overlay"
-      aria-hidden="true" />
     <div v-show="modelUnitCompareState?.viewMode !== 'split'" ref="overlayContainer" class="xeokitOverlay" />
 
     <div v-if="modelUnitCompareState?.status === 'ready' && modelUnitCompareState.viewMode === 'split'"

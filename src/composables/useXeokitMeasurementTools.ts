@@ -37,11 +37,8 @@ import { useXeokitMeasurementStyleStore } from './useXeokitMeasurementStyleStore
 import { getXeokitOverlayPalette } from './xeokitMeasurementUi';
 
 import type { UseAnnotationThreeReturn } from './useAnnotationThree';
+import type { DimensionSystem, ExternalDimensionRecord } from '@/dimension';
 import type { PtsetResponse } from '@/api/genModelPdmsAttrApi';
-import type { XeokitAngleMeasurementParams } from '@/utils/three/annotation/annotations/XeokitAngleMeasurement';
-import type { XeokitDistanceMeasurementParams } from '@/utils/three/annotation/annotations/XeokitDistanceMeasurement';
-import type { XeokitElevationDeltaMeasurementParams } from '@/utils/three/annotation/annotations/XeokitElevationDeltaMeasurement';
-import type { XeokitElevationPointMeasurementParams } from '@/utils/three/annotation/annotations/XeokitElevationPointMeasurement';
 import type { DTXLayer, DTXSelectionController } from '@/utils/three/dtx';
 import type { DtxCompatViewer } from '@/viewer/dtx/DtxCompatViewer';
 import type { DtxViewer } from '@/viewer/dtx/DtxViewer';
@@ -61,21 +58,7 @@ import {
   type XeokitMarkerRole,
   type XeokitMeasurementRecord,
 } from '@/composables/useToolStore';
-import { XeokitAngleMeasurement } from '@/utils/three/annotation/annotations/XeokitAngleMeasurement';
-import { XeokitDistanceMeasurement } from '@/utils/three/annotation/annotations/XeokitDistanceMeasurement';
-import { XeokitElevationDeltaMeasurement } from '@/utils/three/annotation/annotations/XeokitElevationDeltaMeasurement';
-import { XeokitElevationPointMeasurement } from '@/utils/three/annotation/annotations/XeokitElevationPointMeasurement';
-import {
-  buildElevationDeltaLabelTexts,
-  buildElevationPointLabelLines,
-  getMeasurementPointElevation,
-} from '@/utils/xeokitMeasurementFormat';
-
-type AnnotationInstance =
-  | XeokitDistanceMeasurement
-  | XeokitAngleMeasurement
-  | XeokitElevationPointMeasurement
-  | XeokitElevationDeltaMeasurement;
+import { getMeasurementPointElevation } from '@/utils/xeokitMeasurementFormat';
 
 type ClickTracker = {
   down: { x: number; y: number } | null;
@@ -114,10 +97,7 @@ type PtsetPickResult = {
 type PtsetLoadState = 'debouncing' | 'loading' | 'ready' | 'empty' | 'error';
 
 const XEOKIT_PREFIX = 'xmeas_';
-const XEOKIT_DISTANCE_DRAFT_ID = `${XEOKIT_PREFIX}draft_distance`;
-const XEOKIT_ANGLE_DRAFT_ID = `${XEOKIT_PREFIX}draft_angle`;
-const XEOKIT_ELEVATION_POINT_DRAFT_ID = `${XEOKIT_PREFIX}draft_elevation_point`;
-const XEOKIT_ELEVATION_DELTA_DRAFT_ID = `${XEOKIT_PREFIX}draft_elevation_delta`;
+const DIMENSION_XEOKIT_PREFIX = 'xeokit-measurement:';
 const CLICK_TOLERANCE = 20;
 
 function nowId(prefix: string): string {
@@ -130,17 +110,6 @@ function vec3ToTuple(v: Vector3): Vec3 {
 
 function tupleToVector(v: Vec3): Vector3 {
   return new Vector3(v[0], v[1], v[2]);
-}
-
-function worldToAnnotationLocal(world: Vec3, dtxLayerRef: Ref<DTXLayer | null>): Vector3 {
-  const v = tupleToVector(world);
-  const globalModelMatrix = dtxLayerRef.value?.getGlobalModelMatrix?.();
-  if (!globalModelMatrix) return v;
-
-  const inverse = globalModelMatrix.clone();
-  if (Math.abs(inverse.determinant()) <= 1e-12) return v;
-
-  return v.applyMatrix4(inverse.invert());
 }
 
 function sceneWorldToDesignMeters(world: Vector3, dtxLayerRef: Ref<DTXLayer | null>): Vector3 {
@@ -173,12 +142,131 @@ function isAngleDraft(record: XeokitMeasurementRecord): record is XeokitAngleDra
   return record.kind === 'angle' && 'stage' in record;
 }
 
+function formatDistance(meters: number, unit: string, precision: number): string {
+  if (unit === 'mm') return `${(meters * 1000).toFixed(precision)} mm`;
+  if (unit === 'cm') return `${(meters * 100).toFixed(precision)} cm`;
+  if (unit === 'ft') return `${(meters * 3.28084).toFixed(precision)} ft`;
+  if (unit === 'in') return `${(meters * 39.3701).toFixed(precision)} in`;
+  return `${meters.toFixed(precision)} m`;
+}
+
+function distance(a: readonly [number, number, number], b: readonly [number, number, number]): number {
+  return Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+}
+
+function toDesignPoint(
+  point: MeasurementPoint,
+  fallback?: (point: Vec3) => readonly [number, number, number],
+): readonly [number, number, number] {
+  return point.designWorldPos ?? fallback?.(point.worldPos) ?? point.worldPos;
+}
+
+function xeokitMeasurementToExternalRecord(
+  rec: XeokitMeasurementRecord,
+  unit: string,
+  precision: number,
+  sceneWorldToDesignMetres?: (point: Vec3) => readonly [number, number, number],
+  isDraft = false,
+): ExternalDimensionRecord | null {
+  const visible = isDraft || rec.visible !== false;
+  if (!visible) return null;
+  const id = `${DIMENSION_XEOKIT_PREFIX}${rec.id}`;
+  const sourceLabel = isDraft ? 'Xeokit Measurement Draft' : 'Xeokit Measurement';
+
+  if (rec.kind === 'distance') {
+    const a = toDesignPoint(rec.origin, sceneWorldToDesignMetres);
+    const b = toDesignPoint(rec.target, sceneWorldToDesignMetres);
+    return {
+      id,
+      source: 'xeokit-measurement',
+      sourceLabel,
+      role: 'external',
+      layout: {
+        id,
+        kind: 'linear',
+        role: 'external',
+        labelPinned: false,
+        authoritativeText: formatDistance(distance(a, b), unit, precision),
+        a,
+        b,
+        placement: { offsetM: 0.2, labelT: 0.5, side: 1 },
+      },
+    };
+  }
+
+  if (rec.kind === 'angle') {
+    return {
+      id,
+      source: 'xeokit-measurement',
+      sourceLabel,
+      role: 'external',
+      layout: {
+        id,
+        kind: 'angular',
+        role: 'external',
+        labelPinned: false,
+        vertex: toDesignPoint(rec.corner, sceneWorldToDesignMetres),
+        rayA: toDesignPoint(rec.origin, sceneWorldToDesignMetres),
+        rayB: toDesignPoint(rec.target, sceneWorldToDesignMetres),
+        placement: { radiusM: 0.5, labelT: 0.5, arcChoice: 'minor' },
+      },
+    };
+  }
+
+  if (rec.kind === 'elevation_delta') {
+    const a = toDesignPoint(rec.origin, sceneWorldToDesignMetres);
+    const b = toDesignPoint(rec.target, sceneWorldToDesignMetres);
+    return {
+      id,
+      source: 'xeokit-measurement',
+      sourceLabel,
+      role: 'external',
+      layout: {
+        id,
+        kind: 'linear',
+        role: 'external',
+        labelPinned: false,
+        authoritativeText: formatDistance(rec.deltaElevation, unit, precision),
+        a,
+        b,
+        placement: { offsetM: 0.2, labelT: 0.5, side: 1 },
+      },
+    };
+  }
+
+  const at = toDesignPoint(rec.point, sceneWorldToDesignMetres);
+  return {
+    id,
+    source: 'xeokit-measurement',
+    sourceLabel,
+    role: 'external',
+    category: 'annotation',
+    layout: {
+      id,
+      role: 'external',
+      labelPinned: false,
+      formattedLabel: formatDistance(rec.absoluteElevation, unit, precision),
+      lines: [],
+      labelAnchor: at,
+      arrowLines: [],
+      markers: [{ at, shape: 'circle', radiusPx: 4 }],
+      texts: [{
+        text: `REL ${formatDistance(rec.relativeElevation, unit, precision)}`,
+        anchor: at,
+        stackIndex: 1,
+      }],
+    },
+  };
+}
+
 export function useXeokitMeasurementTools(options: {
   dtxViewerRef: Ref<DtxViewer | null>;
   dtxLayerRef: Ref<DTXLayer | null>;
   selectionRef: Ref<DTXSelectionController | null>;
   overlayContainerRef: Ref<HTMLElement | null>;
   annotationSystemRef?: Ref<UseAnnotationThreeReturn | null>;
+  getDimensionSystem?: () => DimensionSystem | null | undefined;
+  sceneWorldToDesignMetres?: (point: Vec3) => readonly [number, number, number];
   store: ReturnType<typeof useToolStore>;
   compatViewerRef: Ref<DtxCompatViewer | null>;
   requestRender?: (() => void) | null;
@@ -200,7 +288,6 @@ export function useXeokitMeasurementTools(options: {
 
   const readyRevision = ref(0);
   const clickTracker = ref<ClickTracker>({ down: null, moved: false });
-  const annotations = new Map<string, AnnotationInstance>();
   let hoverMarkerEl: HTMLDivElement | null = null;
   let pointerLensEl: HTMLDivElement | null = null;
   const hoverPickCandidateGroup = new Group();
@@ -799,10 +886,6 @@ export function useXeokitMeasurementTools(options: {
       || store.toolMode.value === 'xeokit_measure_elevation_delta';
   }
 
-  function buildMeasurementAnnotationId(id: string): string {
-    return `${XEOKIT_PREFIX}${id}`;
-  }
-
   function pickModelSurfacePoint(canvas: HTMLCanvasElement, e: PointerEvent): PickHit | null {
     const selection = selectionRef.value;
     if (selection) {
@@ -1360,289 +1443,49 @@ export function useXeokitMeasurementTools(options: {
     updateOverlayElements();
   }
 
-  function removeAnnotationById(id: string): void {
-    const annotationSystem = options.annotationSystemRef?.value ?? null;
-    const ann = annotations.get(id);
-    if (annotationSystem) {
-      try {
-        annotationSystem.unregisterExternalAnnotation(id);
-      } catch {
-        // ignore
-      }
-    }
-    try {
-      ann?.parent?.remove(ann);
-    } catch {
-      // ignore
-    }
-    try {
-      ann?.dispose();
-    } catch {
-      // ignore
-    }
-    annotations.delete(id);
-  }
-
-  function syncRecordAnnotation(annotationId: string, record: XeokitMeasurementRecord, isDraft = false): void {
-    const annotationSystem = options.annotationSystemRef?.value ?? null;
-    if (!annotationSystem) return;
-
-    const existing = annotations.get(annotationId);
-    const displayTransform = dtxLayerRef.value?.getGlobalModelMatrix?.() ?? new Matrix4();
-    const displayUnit = unitSettings.displayUnit.value;
-    const precision = unitSettings.precision.value;
-    const visible = isDraft || record.visible === undefined ? true : record.visible;
-    const common = {
-      approximate: isDraft || record.approximate,
-      labelPrefix: '',
-      visible,
-    };
-
-    if (record.kind === 'distance') {
-      const params: XeokitDistanceMeasurementParams = {
-        origin: worldToAnnotationLocal(record.origin.worldPos, dtxLayerRef),
-        target: worldToAnnotationLocal(record.target.worldPos, dtxLayerRef),
-        displayTransform,
-        displayUnit,
-        precision,
-        ...common,
-        visible,
-        originVisible: measurementStyle.state.distanceShowMarkers,
-        targetVisible: visible && measurementStyle.state.distanceShowMarkers,
-        wireVisible: visible,
-        axisVisible: visible && measurementStyle.state.distanceShowAxisBreakdown,
-        xAxisVisible: measurementStyle.state.distanceShowAxisBreakdown,
-        yAxisVisible: measurementStyle.state.distanceShowAxisBreakdown,
-        zAxisVisible: measurementStyle.state.distanceShowAxisBreakdown,
-        labelVisible: visible && measurementStyle.state.distanceShowTotalLabel,
-      };
-
-      if (existing instanceof XeokitDistanceMeasurement) {
-        existing.userData.pickable = !isDraft;
-        existing.setParams(params);
-        if (existing.parent !== annotationSystem.annotationGroup) {
-          annotationSystem.annotationGroup.add(existing);
-        }
-        return;
-      }
-
-      if (existing) removeAnnotationById(annotationId);
-      const next = new XeokitDistanceMeasurement(annotationSystem.materials, params);
-      next.userData.pickable = !isDraft;
-      next.userData.draggable = false;
-      annotationSystem.annotationGroup.add(next);
-      annotations.set(annotationId, next);
-      annotationSystem.registerExternalAnnotation(annotationId, next);
-      return;
-    }
-
-    if (record.kind === 'elevation_point') {
-      const params: XeokitElevationPointMeasurementParams = {
-        point: worldToAnnotationLocal(record.point.worldPos, dtxLayerRef),
-        labelLines: buildElevationPointLabelLines({
-          worldPosition: record.point.designWorldPos,
-          absoluteElevation: record.absoluteElevation,
-          relativeElevation: record.relativeElevation,
-          unit: displayUnit,
-          precision,
-          showAbsolute: measurementStyle.state.elevationPointShowAbsoluteLabel,
-          showRelative: measurementStyle.state.elevationPointShowRelativeLabel,
-        }),
-        visible,
-        markerVisible: measurementStyle.state.elevationPointShowMarker,
-        leaderVisible: visible && measurementStyle.state.elevationPointShowLeader,
-        labelVisible: visible && (
-          measurementStyle.state.elevationPointShowAbsoluteLabel
-          || measurementStyle.state.elevationPointShowRelativeLabel
-        ),
-      };
-
-      if (existing instanceof XeokitElevationPointMeasurement) {
-        existing.userData.pickable = !isDraft;
-        existing.setParams(params);
-        if (existing.parent !== annotationSystem.annotationGroup) {
-          annotationSystem.annotationGroup.add(existing);
-        }
-        return;
-      }
-
-      if (existing) removeAnnotationById(annotationId);
-      const next = new XeokitElevationPointMeasurement(annotationSystem.materials, params);
-      next.userData.pickable = !isDraft;
-      next.userData.draggable = false;
-      annotationSystem.annotationGroup.add(next);
-      annotations.set(annotationId, next);
-      annotationSystem.registerExternalAnnotation(annotationId, next);
-      return;
-    }
-
-    if (record.kind === 'elevation_delta') {
-      const labels = buildElevationDeltaLabelTexts({
-        originElevation: record.originElevation,
-        targetElevation: record.targetElevation,
-        deltaElevation: record.deltaElevation,
-        unit: displayUnit,
-        precision,
-      });
-      const params: XeokitElevationDeltaMeasurementParams = {
-        origin: worldToAnnotationLocal(record.origin.worldPos, dtxLayerRef),
-        target: worldToAnnotationLocal(record.target.worldPos, dtxLayerRef),
-        originLabelText: labels.origin,
-        targetLabelText: labels.target,
-        deltaLabelText: labels.delta,
-        visible,
-        markerVisible: measurementStyle.state.elevationDeltaShowMarkers,
-        endpointLabelsVisible: visible && measurementStyle.state.elevationDeltaShowEndpointLabels,
-        deltaLabelVisible: visible && measurementStyle.state.elevationDeltaShowDeltaLabel,
-        verticalGuideVisible: visible && measurementStyle.state.elevationDeltaShowVerticalGuide,
-      };
-
-      if (existing instanceof XeokitElevationDeltaMeasurement) {
-        existing.userData.pickable = !isDraft;
-        existing.setParams(params);
-        if (existing.parent !== annotationSystem.annotationGroup) {
-          annotationSystem.annotationGroup.add(existing);
-        }
-        return;
-      }
-
-      if (existing) removeAnnotationById(annotationId);
-      const next = new XeokitElevationDeltaMeasurement(annotationSystem.materials, params);
-      next.userData.pickable = !isDraft;
-      next.userData.draggable = false;
-      annotationSystem.annotationGroup.add(next);
-      annotations.set(annotationId, next);
-      annotationSystem.registerExternalAnnotation(annotationId, next);
-      return;
-    }
-
-    const params: XeokitAngleMeasurementParams = {
-      origin: worldToAnnotationLocal(record.origin.worldPos, dtxLayerRef),
-      corner: worldToAnnotationLocal(record.corner.worldPos, dtxLayerRef),
-      target: worldToAnnotationLocal(record.target.worldPos, dtxLayerRef),
-      ...common,
-      visible,
-      originVisible: measurementStyle.state.angleShowMarkers,
-      cornerVisible: measurementStyle.state.angleShowMarkers && (isDraft && isAngleDraft(record)
-        ? record.stage === 'finding_first_arm'
-          ? visible
-          : visible
-        : visible),
-      targetVisible: measurementStyle.state.angleShowMarkers && (isDraft && isAngleDraft(record)
-        ? record.stage === 'finding_second_arm'
-          ? visible
-          : false
-        : visible),
-      originWireVisible: isDraft && isAngleDraft(record)
-        ? record.stage === 'finding_second_arm'
-          ? visible
-          : true
-        : visible,
-      targetWireVisible: isDraft && isAngleDraft(record)
-        ? record.stage === 'finding_second_arm'
-          ? visible
-          : false
-        : visible,
-      angleVisible: measurementStyle.state.angleShowLabel && (isDraft && isAngleDraft(record)
-        ? record.stage === 'finding_second_arm'
-          ? visible
-          : false
-        : visible),
-    };
-
-    if (existing instanceof XeokitAngleMeasurement) {
-      existing.userData.pickable = !isDraft;
-      existing.setParams(params);
-      if (existing.parent !== annotationSystem.annotationGroup) {
-        annotationSystem.annotationGroup.add(existing);
-      }
-      return;
-    }
-
-    if (existing) removeAnnotationById(annotationId);
-    const next = new XeokitAngleMeasurement(annotationSystem.materials, params);
-    next.userData.pickable = !isDraft;
-    next.userData.draggable = false;
-    annotationSystem.annotationGroup.add(next);
-    annotations.set(annotationId, next);
-    annotationSystem.registerExternalAnnotation(annotationId, next);
-  }
-
   function syncFromStore(): void {
-    const annotationSystem = options.annotationSystemRef?.value ?? null;
-    if (!annotationSystem) return;
+    const dimensionSystem = options.getDimensionSystem?.() ?? null;
+    if (!dimensionSystem) return;
+    const records: ExternalDimensionRecord[] = [];
+    const addRecord = (record: XeokitMeasurementRecord, isDraft = false) => {
+      const external = xeokitMeasurementToExternalRecord(
+        record,
+        unitSettings.displayUnit.value,
+        unitSettings.precision.value,
+        options.sceneWorldToDesignMetres,
+        isDraft,
+      );
+      if (external) records.push(external);
+    };
 
-    if (suppressStoreMeasurements) {
-      clearHoverFeedback();
-      for (const id of Array.from(annotations.keys())) {
-        removeAnnotationById(id);
-      }
-      requestRender?.();
-      return;
-    }
+    if (!suppressStoreMeasurements) {
+      for (const record of store.xeokitDistanceMeasurements.value) addRecord(record);
+      for (const record of store.xeokitAngleMeasurements.value) addRecord(record);
+      for (const record of store.xeokitElevationPointMeasurements.value) addRecord(record);
+      for (const record of store.xeokitElevationDeltaMeasurements.value) addRecord(record);
 
-    const nextIds = new Set<string>();
-    for (const record of store.xeokitDistanceMeasurements.value) {
-      const annotationId = buildMeasurementAnnotationId(record.id);
-      nextIds.add(annotationId);
-      syncRecordAnnotation(annotationId, record, false);
-    }
-    for (const record of store.xeokitAngleMeasurements.value) {
-      const annotationId = buildMeasurementAnnotationId(record.id);
-      nextIds.add(annotationId);
-      syncRecordAnnotation(annotationId, record, false);
-    }
-    for (const record of store.xeokitElevationPointMeasurements.value) {
-      const annotationId = buildMeasurementAnnotationId(record.id);
-      nextIds.add(annotationId);
-      syncRecordAnnotation(annotationId, record, false);
-    }
-    for (const record of store.xeokitElevationDeltaMeasurements.value) {
-      const annotationId = buildMeasurementAnnotationId(record.id);
-      nextIds.add(annotationId);
-      syncRecordAnnotation(annotationId, record, false);
-    }
-
-    // 仅在 Xeokit 测量模式激活时渲染草稿；否则列表/工具状态已切走，草稿不应留在场景里。
-    if (isActiveMode()) {
-      const draftDistance = store.currentXeokitDistanceDraft.value;
-      if (draftDistance) {
-        nextIds.add(XEOKIT_DISTANCE_DRAFT_ID);
-        syncRecordAnnotation(XEOKIT_DISTANCE_DRAFT_ID, draftDistance, true);
-      }
-
-      const draftAngle = store.currentXeokitAngleDraft.value;
-      if (draftAngle) {
-        nextIds.add(XEOKIT_ANGLE_DRAFT_ID);
-        syncRecordAnnotation(XEOKIT_ANGLE_DRAFT_ID, draftAngle, true);
-      }
-
-      const draftElevationPoint = store.currentXeokitElevationPointDraft.value;
-      if (draftElevationPoint) {
-        nextIds.add(XEOKIT_ELEVATION_POINT_DRAFT_ID);
-        syncRecordAnnotation(XEOKIT_ELEVATION_POINT_DRAFT_ID, draftElevationPoint, true);
-      }
-
-      const draftElevationDelta = store.currentXeokitElevationDeltaDraft.value;
-      if (draftElevationDelta) {
-        nextIds.add(XEOKIT_ELEVATION_DELTA_DRAFT_ID);
-        syncRecordAnnotation(XEOKIT_ELEVATION_DELTA_DRAFT_ID, draftElevationDelta, true);
+      if (isActiveMode()) {
+        const draftDistance = store.currentXeokitDistanceDraft.value;
+        const draftAngle = store.currentXeokitAngleDraft.value;
+        const draftElevationPoint = store.currentXeokitElevationPointDraft.value;
+        const draftElevationDelta = store.currentXeokitElevationDeltaDraft.value;
+        if (draftDistance) addRecord(draftDistance, true);
+        if (draftAngle) addRecord(draftAngle, true);
+        if (draftElevationPoint) addRecord(draftElevationPoint, true);
+        if (draftElevationDelta) addRecord(draftElevationDelta, true);
       }
     }
 
-    for (const id of Array.from(annotations.keys())) {
-      if (!nextIds.has(id)) {
-        removeAnnotationById(id);
-      }
-    }
-
+    dimensionSystem.replaceExternalSource('xeokit-measurement', records);
     requestRender?.();
   }
 
   function updateSelectionBinding(id: string | null): void {
-    const annotationSystem = options.annotationSystemRef?.value ?? null;
-    if (!annotationSystem) return;
-    annotationSystem.selectAnnotation(id ? buildMeasurementAnnotationId(id) : null);
+    const dimensionSystem = options.getDimensionSystem?.() ?? null;
+    if (dimensionSystem) {
+      dimensionSystem.viewport.setSelection(id ? `${DIMENSION_XEOKIT_PREFIX}${id}` : null);
+      return;
+    }
   }
 
   function flyToMeasurement(id: string): void {
@@ -2145,9 +1988,6 @@ export function useXeokitMeasurementTools(options: {
       pointerLensEl.remove();
       pointerLensEl = null;
     }
-    for (const id of Array.from(annotations.keys())) {
-      removeAnnotationById(id);
-    }
   }
 
   watch(
@@ -2161,6 +2001,7 @@ export function useXeokitMeasurementTools(options: {
       store.currentXeokitElevationPointDraft.value,
       store.currentXeokitElevationDeltaDraft.value,
       options.annotationSystemRef?.value ?? null,
+      options.getDimensionSystem?.() ?? null,
     ],
     () => {
       syncFromStore();
@@ -2172,28 +2013,6 @@ export function useXeokitMeasurementTools(options: {
     () => store.activeXeokitMeasurementId.value,
     (id) => {
       updateSelectionBinding(id);
-    },
-  );
-
-  watch(
-    () => options.annotationSystemRef?.value?.selectedId?.value ?? null,
-    (selectedId) => {
-      if (!selectedId?.startsWith(XEOKIT_PREFIX)) {
-        if (store.activeXeokitMeasurementId.value !== null) {
-          store.activeXeokitMeasurementId.value = null;
-        }
-        return;
-      }
-      const nextId = selectedId.slice(XEOKIT_PREFIX.length);
-      if (
-        nextId === 'draft_distance' ||
-        nextId === 'draft_angle' ||
-        nextId === 'draft_elevation_point' ||
-        nextId === 'draft_elevation_delta'
-      ) return;
-      if (store.activeXeokitMeasurementId.value !== nextId) {
-        store.activeXeokitMeasurementId.value = nextId;
-      }
     },
   );
 

@@ -20,8 +20,6 @@ export { AnnotationBase, type AnnotationOptions, type AnnotationInteractionState
 export { AnnotationMaterials, type AnnotationMaterialSet } from './core/AnnotationMaterials';
 
 // Annotations
-export { AlignedDimension, type AlignedDimensionParams } from './annotations/AlignedDimension';
-export { AngleDimension, type AngleDimensionParams } from './annotations/AngleDimension';
 export { LeaderAnnotation, type LeaderAnnotationParams } from './annotations/LeaderAnnotation';
 export { WeldAnnotation, type WeldAnnotationParams } from './annotations/WeldAnnotation';
 export { WeldAnnotation3D, type WeldAnnotation3DParams } from './annotations/WeldAnnotation3D';

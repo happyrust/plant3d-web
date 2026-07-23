@@ -181,6 +181,7 @@ function baseRecordFields(
   archivedAt: number,
   context: LegacyDimensionMigrationContext,
 ): Readonly<{
+  labelPinned: false;
   authorId: string;
   authorRole: string;
   createdAt: number;
@@ -189,6 +190,7 @@ function baseRecordFields(
   const createdAt = finiteNumber(raw.createdAt) ?? archivedAt;
   const updatedAt = finiteNumber(raw.updatedAt) ?? createdAt;
   return {
+    labelPinned: false,
     authorId: context.actorId,
     authorRole: context.actorRole,
     createdAt,

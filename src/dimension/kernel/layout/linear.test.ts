@@ -78,6 +78,18 @@ describe('layoutLinear', () => {
         styleRole: 'normal',
       },
     ]);
+    expect(result.scenePrimitives.filter(
+      primitive => primitive.kind === 'scene-triangle',
+    )).toHaveLength(2);
+    expect(result.scenePrimitives.find(
+      primitive => primitive.kind === 'scene-glyph-run',
+    )).toMatchObject({
+      at: {
+        anchor: [0.5, 0, 0],
+        offsetPx: [0, -20],
+      },
+      rotationRad: 0,
+    });
     expect(result.hitRegions).toHaveLength(result.primitives.length);
   });
 

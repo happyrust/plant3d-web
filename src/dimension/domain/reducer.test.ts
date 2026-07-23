@@ -141,7 +141,11 @@ describe('reduceDimensionDocument', () => {
   });
 
   it('replaces matching placement immutably and updates the audit time', () => {
-    const record = linearRecord({ id: 'd1', updatedAt: 1 });
+    const record = linearRecord({
+      id: 'd1',
+      labelPinned: false,
+      updatedAt: 1,
+    });
     const placement = { offsetM: 2, labelT: 0.25, side: -1 as const };
     const state = emptyDimensionDocument([record]);
     const result = reduceDimensionDocument(state, {
@@ -152,6 +156,7 @@ describe('reduceDimensionDocument', () => {
       at: 30,
       dimensionId: record.id,
       placement,
+      labelPinned: true,
     });
 
     expect(result.ok).toBe(true);
@@ -160,12 +165,47 @@ describe('reduceDimensionDocument', () => {
       expect(result.state.records[0]).toEqual({
         ...record,
         placement,
+        labelPinned: true,
         updatedAt: 30,
       });
       expect(result.inverse).toEqual({
         type: 'replace-placement',
         dimensionId: record.id,
         placement: record.placement,
+        labelPinned: false,
+      });
+    }
+  });
+
+  it('restores automatic layout without changing anchors or placement', () => {
+    const record = linearRecord({
+      id: 'd1',
+      labelPinned: true,
+    });
+    const result = reduceDimensionDocument(
+      emptyDimensionDocument([record]),
+      {
+        type: 'set-label-pinned',
+        commandId: 'c-auto-layout',
+        actorId: record.authorId,
+        actorRole: record.authorRole,
+        at: 31,
+        dimensionId: record.id,
+        labelPinned: false,
+      },
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.state.records[0]).toEqual({
+        ...record,
+        labelPinned: false,
+        updatedAt: 31,
+      });
+      expect(result.inverse).toEqual({
+        type: 'set-label-pinned',
+        dimensionId: record.id,
+        labelPinned: true,
       });
     }
   });

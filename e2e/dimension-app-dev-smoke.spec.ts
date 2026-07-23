@@ -10,7 +10,11 @@ test('dimension_demo mounts the dimension system and starts a typed creation ses
     () => (window as any).__dimensionSystemError ?? null,
   )).toBeNull();
 
-  await expect(page.locator('.dimension-viewport-overlay')).toBeVisible();
+  await expect.poll(() => page.evaluate(() => {
+    const scene = (window as any).__dtxViewer?.scene;
+    const group = scene?.getObjectByName?.('dimension-scene-overlay');
+    return Boolean(group?.visible);
+  })).toBe(true);
   await page.getByText('尺寸标注', { exact: true }).click();
   const linearButton = page.getByTestId('dimension.create.linear');
   await expect(linearButton).toBeVisible();

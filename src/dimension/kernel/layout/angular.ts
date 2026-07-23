@@ -1,13 +1,19 @@
 import { formatDimensionLabel } from '../format';
-import { makeOpenArrow } from '../geometry/arrow';
 import {
   expandRect,
-  makeCenteredGlyphRun,
   makeGlyphHitRegion,
   makeLineHitRegion,
-  makeScreenLine,
 } from '../geometry/screenGeometry';
-import { trimLineAgainstRect } from '../geometry/trimLineAgainstRect';
+import {
+  engineeringTextRotation,
+  makeFilledSceneArrow,
+  makeSceneLine,
+  projectScenePrimitives,
+  sceneGlyph,
+  sceneVertex,
+  sceneVertexAtScreen,
+} from '../geometry/sceneGeometry';
+import { trimLineAgainstRotatedRect } from '../geometry/trimLineAgainstRect';
 import { resolveDimensionStyleRole } from '../theme';
 import { deriveDimensionValue } from '../value';
 import {
@@ -18,6 +24,7 @@ import {
   EPSILON,
   length2,
   length3,
+  lerp3,
   normalize3,
   scale2,
   scale3,
@@ -31,6 +38,9 @@ import type { LayoutContext } from './context';
 import type {
   LayoutResult,
   NormalizedDimensionInput,
+  SceneLine,
+  ScenePrimitive,
+  ScreenGlyphRun,
   ScreenLine,
   Vec2,
   Vec3,
@@ -90,16 +100,30 @@ export function layoutAngular(
   }
 
   const labelAngle = sweep * input.placement.labelT;
-  const labelCenter = toScreen(pointAt(labelAngle), context);
+  const labelAnchor = pointAt(labelAngle);
+  const labelCenter = toScreen(labelAnchor, context);
   const styleRole = resolveDimensionStyleRole(input.role, context.interaction);
-  const glyph = makeCenteredGlyphRun(
-    context.font,
+  const tangentScreen = toScreen(
+    pointAt(labelAngle + Math.sign(sweep || 1) * 1e-4),
+    context,
+  );
+  const glyphScene = sceneGlyph(
     formatted.text,
-    labelCenter,
+    sceneVertexAtScreen(labelAnchor, labelCenter, context.projector),
     context.theme.textHeightPx,
     styleRole,
+    engineeringTextRotation(labelCenter, tangentScreen),
   );
+  const glyph = projectScenePrimitives(
+    [glyphScene],
+    context.projector,
+    context.font,
+  )[0] as ScreenGlyphRun;
   const labelBounds = expandRect(glyph.bounds, context.theme.labelPaddingPx / 2);
+  const trimBounds = expandRect(
+    glyph.unrotatedBounds ?? glyph.bounds,
+    context.theme.labelPaddingPx / 2,
+  );
   const outside = input.placement.labelT < 0 || input.placement.labelT > 1;
   const arcStartT = Math.min(0, input.placement.labelT);
   const arcEndT = Math.max(1, input.placement.labelT);
@@ -107,32 +131,63 @@ export function layoutAngular(
   const arcEnd = sweep * arcEndT;
   const arcSweep = arcEnd - arcStart;
   const segmentCount = Math.max(1, Math.ceil(Math.abs(arcSweep) / MAX_ARC_STEP_RAD));
-  const lines: ScreenLine[] = [];
+  const sceneLines: SceneLine[] = [];
 
   const extensionRadiusM = radiusM + 5 * worldPerPixel;
-  lines.push(
-    makeScreenLine(
-      vertexScreen,
-      toScreen(pointAt(0, extensionRadiusM), context),
+  sceneLines.push(
+    makeSceneLine(
+      sceneVertex(input.vertex),
+      sceneVertex(pointAt(0, extensionRadiusM)),
       'extension',
       styleRole,
     ),
-    makeScreenLine(
-      vertexScreen,
-      toScreen(pointAt(sweep, extensionRadiusM), context),
+    makeSceneLine(
+      sceneVertex(input.vertex),
+      sceneVertex(pointAt(sweep, extensionRadiusM)),
       'extension',
       styleRole,
     ),
   );
 
-  let previous = toScreen(pointAt(arcStart), context);
+  let previousWorld = pointAt(arcStart);
+  let previous = toScreen(previousWorld, context);
   for (let index = 1; index <= segmentCount; index += 1) {
     const angle = arcStart + (arcSweep * index) / segmentCount;
-    const current = toScreen(pointAt(angle), context);
-    const trimmed = trimLineAgainstRect(previous, current, labelBounds, false);
+    const currentWorld = pointAt(angle);
+    const current = toScreen(currentWorld, context);
+    const trimmed = trimLineAgainstRotatedRect(
+      previous,
+      current,
+      trimBounds,
+      glyph.rotationCenter ?? labelCenter,
+      glyph.rotationRad ?? 0,
+      false,
+    );
+    const dx = current[0] - previous[0];
+    const dy = current[1] - previous[1];
+    const lengthSquared = dx * dx + dy * dy;
+    const vertexOnChord = (point: Vec2) => {
+      const t = lengthSquared <= EPSILON
+        ? 0
+        : (
+          (point[0] - previous[0]) * dx
+          + (point[1] - previous[1]) * dy
+        ) / lengthSquared;
+      return sceneVertexAtScreen(
+        lerp3(previousWorld, currentWorld, t),
+        point,
+        context.projector,
+      );
+    };
     for (const segment of trimmed.segments) {
-      lines.push(makeScreenLine(segment.from, segment.to, 'arc', styleRole));
+      sceneLines.push(makeSceneLine(
+        vertexOnChord(segment.from),
+        vertexOnChord(segment.to),
+        'arc',
+        styleRole,
+      ));
     }
+    previousWorld = currentWorld;
     previous = current;
   }
 
@@ -149,30 +204,43 @@ export function layoutAngular(
   if (length2(inwardA) <= EPSILON || length2(inwardB) <= EPSILON) {
     return emptyLayout(input.id, input.labelPinned, formatted.text);
   }
-  lines.push(
-    ...makeOpenArrow(
-      arrowA,
+  const scenePrimitives: ScenePrimitive[] = [
+    ...sceneLines,
+    makeFilledSceneArrow(
+      sceneVertexAtScreen(pointAt(0), arrowA, context.projector),
       inwardA,
       context.theme.arrowLengthPx,
       context.theme.arrowHalfAngleDeg,
       styleRole,
     ),
-    ...makeOpenArrow(
-      arrowB,
+    makeFilledSceneArrow(
+      sceneVertexAtScreen(pointAt(sweep), arrowB, context.projector),
       inwardB,
       context.theme.arrowLengthPx,
       context.theme.arrowHalfAngleDeg,
       styleRole,
     ),
+    glyphScene,
+  ];
+  const primitives = projectScenePrimitives(
+    scenePrimitives,
+    context.projector,
+    context.font,
   );
-
-  const primitives = [...lines, glyph];
+  const lines = primitives.filter(
+    (primitive): primitive is ScreenLine => primitive.kind === 'line',
+  );
+  const projectedGlyph = primitives.find(
+    (primitive): primitive is ScreenGlyphRun =>
+      primitive.kind === 'glyph-run',
+  )!;
   return {
     dimensionId: input.id,
+    scenePrimitives,
     primitives,
     hitRegions: [
       ...lines.map((line) => makeLineHitRegion(line, context.theme.lineWidthPx)),
-      makeGlyphHitRegion(glyph),
+      makeGlyphHitRegion(projectedGlyph),
     ],
     labelBounds,
     labelPinned: input.labelPinned,

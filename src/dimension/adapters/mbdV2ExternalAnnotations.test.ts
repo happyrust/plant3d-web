@@ -208,12 +208,47 @@ describe('mbdV2ToExternalRecords', () => {
     );
 
     expect(batch.layouts).toHaveLength(result.records.length);
-    expect(batch.layouts.every(layout => layout.labelPinned)).toBe(true);
     const weldLayout = batch.layouts.find(
       layout => layout.dimensionId === 'weld-field-2',
     )!;
     expect(
+      batch.layouts.find(layout => layout.dimensionId === 'dim-segment-1')
+        ?.labelPinned,
+    ).toBe(false);
+    expect(weldLayout.labelPinned).toBe(true);
+    expect(
       weldLayout.primitives.filter(primitive => primitive.kind === 'marker'),
     ).toHaveLength(2);
+  });
+
+  it('lets the shared kernel separate overlapping MBD dimension labels', () => {
+    const data = fixtureData();
+    const source = data.primitives.find(
+      primitive => primitive.kind === 'linear_dim',
+    );
+    if (!source) throw new Error('linear_dim fixture missing');
+    const result = mbdV2ToExternalRecords({
+      ...data,
+      primitives: [source, { ...source, id: `${source.id}-copy` }],
+    });
+    const layouts = layoutViewport(
+      result.records.map(normalizeExternalDimension),
+      {
+        projector: createTestProjector(),
+        font: createTestFont(),
+        theme: SOLVESPACE_DIMENSION_THEME,
+        format: DEFAULT_DIMENSION_FORMAT,
+      },
+      new Map(),
+    ).layouts;
+    const [a, b] = layouts.map(layout => layout.labelBounds);
+
+    expect(layouts.every(layout => !layout.labelPinned)).toBe(true);
+    expect(
+      a.x + a.width <= b.x
+      || b.x + b.width <= a.x
+      || a.y + a.height <= b.y
+      || b.y + b.height <= a.y,
+    ).toBe(true);
   });
 });

@@ -50,56 +50,42 @@ export type RadialPlacementIntent = Readonly<{
   labelDistanceM: number;
 }>;
 
+type UserDimensionCommon = Readonly<{
+  id: string;
+  labelPinned: boolean;
+  authorId: string;
+  authorRole: string;
+  createdAt: number;
+  updatedAt: number;
+  validity: DimensionValidity;
+}>;
+
 export type UserDimensionRecord =
-  | Readonly<{
-    id: string;
+  | Readonly<UserDimensionCommon & {
     kind: 'linear';
     a: DimensionAnchor;
     b: DimensionAnchor;
     placement: LinearPlacementIntent;
-    authorId: string;
-    authorRole: string;
-    createdAt: number;
-    updatedAt: number;
-    validity: DimensionValidity;
   }>
-  | Readonly<{
-    id: string;
+  | Readonly<UserDimensionCommon & {
     kind: 'projected';
     a: DimensionAnchor;
     b: DimensionAnchor;
     axis: ProjectionAxisRef;
     placement: LinearPlacementIntent;
-    authorId: string;
-    authorRole: string;
-    createdAt: number;
-    updatedAt: number;
-    validity: DimensionValidity;
   }>
-  | Readonly<{
-    id: string;
+  | Readonly<UserDimensionCommon & {
     kind: 'angular';
     vertex: DimensionAnchor;
     rayA: DimensionAnchor;
     rayB: DimensionAnchor;
     placement: AngularPlacementIntent;
-    authorId: string;
-    authorRole: string;
-    createdAt: number;
-    updatedAt: number;
-    validity: DimensionValidity;
   }>
-  | Readonly<{
-    id: string;
+  | Readonly<UserDimensionCommon & {
     kind: 'radial';
     center: DimensionAnchor;
     rim: DimensionAnchor;
     normal: ProjectionAxisRef;
     display: RadialDisplay;
     placement: RadialPlacementIntent;
-    authorId: string;
-    authorRole: string;
-    createdAt: number;
-    updatedAt: number;
-    validity: DimensionValidity;
   }>;

@@ -5,7 +5,7 @@ import { expect, test, type Page } from '@playwright/test';
 
 /**
  * 默认 CI 门禁：用 rs-mbd CLI 真实生成物打通
- * `HTTP 装载 → V2 契约 → source_mm→design_m → externalRegistry → Canvas2D → SVG`
+ * `HTTP 装载 → V2 契约 → source_mm→design_m → externalRegistry → scene painter → SVG`
  * 纵向链路，不依赖 rs-mbd 或任何后端进程（page.route 注入 JSON）。
  * 错误负载走 ADR 0046 原子失败：整包拒绝、清空来源、诊断可见。
  */
@@ -44,10 +44,11 @@ async function routeMbdPipeApi(page: Page): Promise<void> {
 }
 
 async function waitForDimensionSystem(page: Page): Promise<void> {
+  await page.getByText('三维查看器', { exact: true }).click();
   await page.waitForFunction(() => (
     (window as any).__viewerContext?.dimensionSystem?.value
     || typeof (window as any).__dimensionSystemError === 'string'
-  ));
+  ), null, { timeout: 90_000 });
   expect(await page.evaluate(
     () => (window as any).__dimensionSystemError ?? null,
   )).toBeNull();
@@ -70,7 +71,7 @@ async function mbdRecords(page: Page): Promise<readonly any[]> {
   ));
 }
 
-test('CLI linear fixture loads through contract, registry, canvas, and SVG export', async ({ page }, testInfo) => {
+test('CLI linear fixture loads through contract, registry, scene painter, and SVG export', async ({ page }, testInfo) => {
   await routeMbdPipeApi(page);
   const response = page.waitForResponse(candidate => (
     candidate.url().includes(`/api/mbd/v2/pipe/${FIXTURE_REFNO}`)
@@ -158,28 +159,25 @@ test('CLI linear fixture loads through contract, registry, canvas, and SVG expor
     await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
   });
 
-  // 可见布局：标签边界落在视口内，Canvas 存在非透明像素。
+  // 可见布局：标签边界落在视口内，并由 Three 场景画家批处理绘制。
   await expect.poll(() => page.evaluate((dimensionId) => {
     const system = (window as any).__viewerContext.dimensionSystem.value;
-    const canvas = document.querySelector<HTMLCanvasElement>('.dimension-viewport-overlay');
-    if (!canvas) return false;
+    const viewerCanvas = document.querySelector<HTMLCanvasElement>('canvas.viewer');
+    if (!viewerCanvas) return false;
     const layout = system.viewport.getLayouts()
       .find((candidate: any) => candidate.dimensionId === dimensionId);
     if (!layout) return false;
     return layout.labelBounds.x >= 0
       && layout.labelBounds.y >= 0
-      && layout.labelBounds.x + layout.labelBounds.width <= canvas.clientWidth
-      && layout.labelBounds.y + layout.labelBounds.height <= canvas.clientHeight;
+      && layout.labelBounds.x + layout.labelBounds.width <= viewerCanvas.clientWidth
+      && layout.labelBounds.y + layout.labelBounds.height <= viewerCanvas.clientHeight;
   }, DIMENSION_ID)).toBe(true);
   await expect.poll(() => page.evaluate(() => {
-    const canvas = document.querySelector<HTMLCanvasElement>('.dimension-viewport-overlay');
-    const context = canvas?.getContext('2d');
-    if (!canvas || !context || canvas.width === 0 || canvas.height === 0) return false;
-    const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
-    for (let alpha = 3; alpha < pixels.length; alpha += 16) {
-      if (pixels[alpha] !== 0) return true;
-    }
-    return false;
+    const scene = (window as any).__dtxViewer?.scene;
+    const group = scene?.getObjectByName?.('dimension-scene-overlay');
+    const lineMesh = group?.getObjectByName?.('dimension-scene-lines');
+    const arrowMesh = group?.getObjectByName?.('dimension-scene-arrows');
+    return Boolean(group?.visible && lineMesh?.visible && arrowMesh?.visible);
   }), { timeout: 30_000 }).toBe(true);
 
   // 外部尺寸进入同一 SVG 导出布局（线段 + LFF path）。

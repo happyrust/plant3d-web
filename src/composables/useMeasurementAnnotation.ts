@@ -4,18 +4,21 @@
  * 将 useToolStore 中的测量记录转换为三维标注系统的标注对象
  */
 
-import * as THREE from 'three';
-
 import type { UseAnnotationThreeReturn } from './useAnnotationThree';
-import type { MeasurementRecord, DistanceMeasurementRecord, AngleMeasurementRecord } from './useToolStore';
-
-import {
-  AlignedDimension,
-  AngleDimension,
-} from '@/utils/three/annotation';
+import type {
+  MeasurementPoint,
+  MeasurementRecord,
+  Vec3,
+} from './useToolStore';
+import type { DimensionSystem, ExternalDimensionRecord } from '@/dimension';
 
 /** 测量标注 ID 前缀 */
-const MEASUREMENT_PREFIX = 'meas_';
+const DIMENSION_MEASUREMENT_PREFIX = 'measurement:';
+
+type MeasurementAnnotationManagerOptions = Readonly<{
+  getDimensionSystem?: () => DimensionSystem | null | undefined;
+  sceneWorldToDesignMetres?: (point: Vec3) => readonly [number, number, number];
+}>;
 
 /** 格式化长度值 */
 function formatLength(meters: number, unit: string, precision: number): string {
@@ -39,49 +42,109 @@ function formatLength(meters: number, unit: string, precision: number): string {
   return `${value.toFixed(precision)} ${suffix}`;
 }
 
-/** 创建距离测量标注 */
-function createDistanceAnnotation(
-  annotationSystem: UseAnnotationThreeReturn,
-  rec: DistanceMeasurementRecord,
-  unit: string,
-  precision: number
-): void {
-  const id = MEASUREMENT_PREFIX + rec.id;
-  const start = new THREE.Vector3(...rec.origin.worldPos);
-  const end = new THREE.Vector3(...rec.target.worldPos);
-  const distance = start.distanceTo(end);
-
-  const dim = new AlignedDimension(annotationSystem.materials, {
-    start,
-    end,
-    text: formatLength(distance, unit, precision),
-  });
-
-  dim.visible = rec.visible;
-  annotationSystem.addAnnotation(id, dim);
+function distance(
+  a: readonly [number, number, number],
+  b: readonly [number, number, number],
+): number {
+  return Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
 }
 
-/** 创建角度测量标注 */
-function createAngleAnnotation(
-  annotationSystem: UseAnnotationThreeReturn,
-  rec: AngleMeasurementRecord,
-  precision: number
-): void {
-  const id = MEASUREMENT_PREFIX + rec.id;
-  const origin = new THREE.Vector3(...rec.origin.worldPos);
-  const corner = new THREE.Vector3(...rec.corner.worldPos);
-  const target = new THREE.Vector3(...rec.target.worldPos);
+function toDesignPoint(
+  point: MeasurementPoint,
+  fallback?: (point: Vec3) => readonly [number, number, number],
+): readonly [number, number, number] {
+  return point.designWorldPos ?? fallback?.(point.worldPos) ?? point.worldPos;
+}
 
-  const angle = new AngleDimension(annotationSystem.materials, {
-    vertex: corner,
-    point1: origin,
-    point2: target,
-    arcRadius: 0.5,
-    decimals: precision,
-  });
-
-  angle.visible = rec.visible;
-  annotationSystem.addAnnotation(id, angle);
+function measurementToExternalRecord(
+  rec: MeasurementRecord,
+  unit: string,
+  precision: number,
+  sceneWorldToDesignMetres?: (point: Vec3) => readonly [number, number, number],
+): ExternalDimensionRecord | null {
+  if (!rec.visible) return null;
+  const id = `${DIMENSION_MEASUREMENT_PREFIX}${rec.id}`;
+  if (rec.kind === 'distance') {
+    const a = toDesignPoint(rec.origin, sceneWorldToDesignMetres);
+    const b = toDesignPoint(rec.target, sceneWorldToDesignMetres);
+    return {
+      id,
+      source: 'measurement',
+      sourceLabel: 'Measurement',
+      role: 'external',
+      layout: {
+        id,
+        kind: 'linear',
+        role: 'external',
+        labelPinned: false,
+        authoritativeText: formatLength(distance(a, b), unit, precision),
+        a,
+        b,
+        placement: { offsetM: 0.2, labelT: 0.5, side: 1 },
+      },
+    };
+  }
+  if (rec.kind === 'angle') {
+    return {
+      id,
+      source: 'measurement',
+      sourceLabel: 'Measurement',
+      role: 'external',
+      layout: {
+        id,
+        kind: 'angular',
+        role: 'external',
+        labelPinned: false,
+        vertex: toDesignPoint(rec.corner, sceneWorldToDesignMetres),
+        rayA: toDesignPoint(rec.origin, sceneWorldToDesignMetres),
+        rayB: toDesignPoint(rec.target, sceneWorldToDesignMetres),
+        placement: { radiusM: 0.5, labelT: 0.5, arcChoice: 'minor' },
+      },
+    };
+  }
+  if (rec.kind === 'elevation_delta') {
+    const a = toDesignPoint(rec.origin, sceneWorldToDesignMetres);
+    const b = toDesignPoint(rec.target, sceneWorldToDesignMetres);
+    return {
+      id,
+      source: 'measurement',
+      sourceLabel: 'Measurement',
+      role: 'external',
+      layout: {
+        id,
+        kind: 'linear',
+        role: 'external',
+        labelPinned: false,
+        authoritativeText: formatLength(rec.deltaElevation, unit, precision),
+        a,
+        b,
+        placement: { offsetM: 0.2, labelT: 0.5, side: 1 },
+      },
+    };
+  }
+  const at = toDesignPoint(rec.point, sceneWorldToDesignMetres);
+  return {
+    id,
+    source: 'measurement',
+    sourceLabel: 'Measurement',
+    role: 'external',
+    category: 'annotation',
+    layout: {
+      id,
+      role: 'external',
+      labelPinned: false,
+      formattedLabel: formatLength(rec.absoluteElevation, unit, precision),
+      lines: [],
+      labelAnchor: at,
+      arrowLines: [],
+      markers: [{ at, shape: 'circle', radiusPx: 4 }],
+      texts: [{
+        text: `REL ${formatLength(rec.relativeElevation, unit, precision)}`,
+        anchor: at,
+        stackIndex: 1,
+      }],
+    },
+  };
 }
 
 /**
@@ -90,13 +153,20 @@ function createAngleAnnotation(
  * 负责将测量记录同步到标注系统
  */
 export class MeasurementAnnotationManager {
-  private annotationSystem: UseAnnotationThreeReturn;
-  private currentIds = new Set<string>();
+  private getDimensionSystem: (() => DimensionSystem | null | undefined) | null;
+  private sceneWorldToDesignMetres:
+    | ((point: Vec3) => readonly [number, number, number])
+    | undefined;
   private unit = 'm';
   private precision = 2;
 
-  constructor(annotationSystem: UseAnnotationThreeReturn) {
-    this.annotationSystem = annotationSystem;
+  constructor(
+    annotationSystem: UseAnnotationThreeReturn,
+    options: MeasurementAnnotationManagerOptions = {},
+  ) {
+    void annotationSystem;
+    this.getDimensionSystem = options.getDimensionSystem ?? null;
+    this.sceneWorldToDesignMetres = options.sceneWorldToDesignMetres;
   }
 
   /** 设置显示单位 */
@@ -111,66 +181,35 @@ export class MeasurementAnnotationManager {
 
   /** 同步测量记录到标注系统 */
   sync(records: MeasurementRecord[]): void {
-    const newIds = new Set<string>();
-
-    for (const rec of records) {
-      const id = MEASUREMENT_PREFIX + rec.id;
-      newIds.add(id);
-
-      // 检查是否已存在
-      const existing = this.annotationSystem.getAnnotation(id);
-      if (existing) {
-        existing.visible = rec.visible;
-        continue;
-      }
-
-      // 创建新标注
-      if (rec.kind === 'distance') {
-        createDistanceAnnotation(
-          this.annotationSystem,
-          rec,
-          this.unit,
-          this.precision
-        );
-      } else if (rec.kind === 'angle') {
-        createAngleAnnotation(
-          this.annotationSystem,
-          rec,
-          this.precision
-        );
-      }
-    }
-
-    // 移除不再存在的标注
-    for (const id of this.currentIds) {
-      if (!newIds.has(id)) {
-        this.annotationSystem.removeAnnotation(id);
-      }
-    }
-
-    this.currentIds = newIds;
+    const dimensionSystem = this.getDimensionSystem?.() ?? null;
+    const externalRecords = records
+      .map(record => measurementToExternalRecord(
+        record,
+        this.unit,
+        this.precision,
+        this.sceneWorldToDesignMetres,
+      ))
+      .filter((record): record is ExternalDimensionRecord => record !== null);
+    dimensionSystem?.replaceExternalSource('measurement', externalRecords);
   }
 
   /** 清空所有测量标注 */
   clear(): void {
-    for (const id of this.currentIds) {
-      this.annotationSystem.removeAnnotation(id);
-    }
-    this.currentIds.clear();
+    this.getDimensionSystem?.()?.replaceExternalSource('measurement', []);
   }
 
   /** 高亮指定测量 */
   highlight(measurementId: string | null): void {
-    const id = measurementId ? MEASUREMENT_PREFIX + measurementId : null;
-    this.annotationSystem.highlightAnnotation(id);
+    this.getDimensionSystem?.()?.viewport.setSelection(
+      measurementId ? `${DIMENSION_MEASUREMENT_PREFIX}${measurementId}` : null,
+    );
   }
 
   /** 更新可见性 */
   setVisible(measurementId: string, visible: boolean): void {
-    const id = MEASUREMENT_PREFIX + measurementId;
-    const annotation = this.annotationSystem.getAnnotation(id);
-    if (annotation) {
-      annotation.visible = visible;
-    }
+    this.getDimensionSystem?.()?.externalRegistry.setHidden(
+      `${DIMENSION_MEASUREMENT_PREFIX}${measurementId}`,
+      !visible,
+    );
   }
 }

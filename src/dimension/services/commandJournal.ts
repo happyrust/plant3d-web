@@ -95,7 +95,12 @@ function isDimensionCommand(value: unknown): value is DimensionCommand {
       return isNonEmptyString(command.dimensionId);
     case 'replace-placement':
       return isNonEmptyString(command.dimensionId)
-        && asObject(command.placement) !== null;
+        && asObject(command.placement) !== null
+        && (command.labelPinned === undefined
+          || typeof command.labelPinned === 'boolean');
+    case 'set-label-pinned':
+      return isNonEmptyString(command.dimensionId)
+        && typeof command.labelPinned === 'boolean';
     case 'set-angle-arc':
       return isNonEmptyString(command.dimensionId)
         && (command.arcChoice === 'minor' || command.arcChoice === 'major');

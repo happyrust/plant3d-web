@@ -96,3 +96,40 @@ export function trimLineAgainstRect(
 
   return { segments: [], outsideSide: 0 };
 }
+
+function rotateAround(point: Vec2, center: Vec2, angle: number): Vec2 {
+  const dx = point[0] - center[0];
+  const dy = point[1] - center[1];
+  const cos = Math.cos(angle);
+  const sin = Math.sin(angle);
+  return [
+    center[0] + dx * cos - dy * sin,
+    center[1] + dx * sin + dy * cos,
+  ];
+}
+
+export function trimLineAgainstRotatedRect(
+  from: Vec2,
+  to: Vec2,
+  rect: ScreenRect,
+  center: Vec2,
+  rotationRad: number,
+  extend: boolean,
+): TrimResult {
+  if (Math.abs(rotationRad) <= EPSILON) {
+    return trimLineAgainstRect(from, to, rect, extend);
+  }
+  const local = trimLineAgainstRect(
+    rotateAround(from, center, -rotationRad),
+    rotateAround(to, center, -rotationRad),
+    rect,
+    extend,
+  );
+  return {
+    ...local,
+    segments: local.segments.map(segment => ({
+      from: rotateAround(segment.from, center, rotationRad),
+      to: rotateAround(segment.to, center, rotationRad),
+    })),
+  };
+}

@@ -69,6 +69,9 @@ export type ScreenGlyphRun = Readonly<{
   origin: Vec2;
   capHeightPx: number;
   bounds: ScreenRect;
+  unrotatedBounds?: ScreenRect;
+  rotationRad?: number;
+  rotationCenter?: Vec2;
   styleRole: string;
 }>;
 
@@ -77,6 +80,67 @@ export type LayoutPrimitive =
   | ScreenPath
   | ScreenMarker
   | ScreenGlyphRun;
+
+/**
+ * One design-space anchor plus a constant view-plane offset. The shader
+ * projects the anchor with the active camera, then applies the CSS-pixel
+ * offset in clip space, matching SolveSpace's view-facing presentation.
+ */
+export type SceneVertex = Readonly<{
+  anchor: Vec3;
+  offsetPx: Vec2;
+}>;
+
+export type SceneLine = Readonly<{
+  kind: 'scene-line';
+  from: SceneVertex;
+  to: SceneVertex;
+  part: ScreenLinePart;
+  styleRole: string;
+  lineStyle?: DimensionLineStyle;
+}>;
+
+export type ScenePath = Readonly<{
+  kind: 'scene-path';
+  points: readonly SceneVertex[];
+  closed: boolean;
+  part: ScreenLinePart;
+  styleRole: string;
+  lineStyle?: DimensionLineStyle;
+}>;
+
+export type SceneTriangle = Readonly<{
+  kind: 'scene-triangle';
+  points: readonly [SceneVertex, SceneVertex, SceneVertex];
+  part: 'arrow';
+  styleRole: string;
+}>;
+
+export type SceneMarker = Readonly<{
+  kind: 'scene-marker';
+  at: SceneVertex;
+  shape: ScreenMarkerShape;
+  radiusPx: number;
+  part: string;
+  styleRole: string;
+  lineStyle?: DimensionLineStyle;
+}>;
+
+export type SceneGlyphRun = Readonly<{
+  kind: 'scene-glyph-run';
+  text: string;
+  at: SceneVertex;
+  capHeightPx: number;
+  rotationRad: number;
+  styleRole: string;
+}>;
+
+export type ScenePrimitive =
+  | SceneLine
+  | ScenePath
+  | SceneTriangle
+  | SceneMarker
+  | SceneGlyphRun;
 
 export type HitRegion =
   | Readonly<{
@@ -94,6 +158,9 @@ export type HitRegion =
 
 export type LayoutResult = Readonly<{
   dimensionId: string;
+  /** Authoritative 3D/view-plane representation consumed by the scene painter. */
+  scenePrimitives: readonly ScenePrimitive[];
+  /** Projected compatibility snapshot for collision, hit testing, and SVG. */
   primitives: readonly LayoutPrimitive[];
   hitRegions: readonly HitRegion[];
   labelBounds: ScreenRect;
@@ -182,7 +249,7 @@ export type ExplicitTextInput = Readonly<{
 export type ExplicitLayoutInput = Readonly<{
   id: string;
   role: DimensionSemanticRole;
-  labelPinned: true;
+  labelPinned: boolean;
   formattedLabel: string;
   lines: readonly Readonly<{
     from: Vec3;

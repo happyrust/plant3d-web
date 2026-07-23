@@ -85,6 +85,7 @@ describe('dimension edit sessions', () => {
       record: {
         id: 'dimension-new',
         kind: 'linear',
+        labelPinned: false,
         a: { snapshot: [0, 0, 0], accuracy: 'exact' },
         b: { snapshot: [1, 0, 0], accuracy: 'approximate' },
       },
@@ -240,6 +241,7 @@ describe('dimension edit sessions', () => {
 
     expect(onPreview).toHaveBeenCalledWith(expect.objectContaining({
       kind: 'linear',
+      labelPinned: true,
       placement: { offsetM: 0.4, labelT: 0.75, side: 1 },
     }));
     expect(command).toEqual({
@@ -250,6 +252,7 @@ describe('dimension edit sessions', () => {
       at: 200,
       dimensionId: 'linear-edit',
       placement: { offsetM: 0.4, labelT: 0.75, side: 1 },
+      labelPinned: true,
     });
   });
 

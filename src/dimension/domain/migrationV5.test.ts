@@ -57,7 +57,7 @@ describe('migrateLegacyDimensionArchives', () => {
 
     expect(result.diagnostics).toEqual([]);
     expect(result.state).toMatchObject({
-      schemaVersion: 1,
+      schemaVersion: 2,
       documentId: 'dimension-document-1',
       taskId: 'task-1',
       baseVersion: 0,
@@ -93,6 +93,7 @@ describe('migrateLegacyDimensionArchives', () => {
       authorRole: 'designer',
       createdAt: 1700000000000,
       updatedAt: 1700000000000,
+      labelPinned: false,
       validity: 'valid',
     });
   });
@@ -193,6 +194,7 @@ describe('migrateLegacyDimensionArchives', () => {
       authorRole: 'designer',
       createdAt: 123,
       updatedAt: 123,
+      labelPinned: false,
       validity: 'valid',
     });
     expect(result.state.records[0]).not.toHaveProperty('displayUnit');

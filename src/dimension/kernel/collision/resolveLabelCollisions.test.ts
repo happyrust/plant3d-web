@@ -21,6 +21,26 @@ function layout(
   };
   return {
     dimensionId: id,
+    scenePrimitives: [
+      {
+        kind: 'scene-line',
+        from: { anchor: [0, 0, 0], offsetPx: [-10, 20] },
+        to: { anchor: [0, 0, 0], offsetPx: [10, 20] },
+        part: 'extension',
+        styleRole: 'normal',
+      },
+      {
+        kind: 'scene-glyph-run',
+        text: id,
+        at: {
+          anchor: [0, 0, 0],
+          offsetPx: [x + size / 2, y + size / 2],
+        },
+        capHeightPx: size,
+        rotationRad: 0,
+        styleRole: 'normal',
+      },
+    ],
     primitives: [
       {
         kind: 'line',
@@ -76,7 +96,7 @@ describe('resolveLabelCollisions', () => {
     expect(moved.labelBounds).toEqual({ x: 16, y: 0, width: 4, height: 4 });
   });
 
-  it('uses exactly eight ordered candidates in 8 px increments through 64 px', () => {
+  it('keeps searching when the first eight label positions are occupied', () => {
     const blockers = [layout('center', 0, 0, true, 2)];
     const directions = [
       [0, -1],
@@ -91,7 +111,7 @@ describe('resolveLabelCollisions', () => {
     }
     const result = resolveLabelCollisions([...blockers, layout('auto', 0, 0, false, 2)]).at(-1)!;
 
-    expect(result.labelBounds).toEqual({ x: 0, y: 0, width: 2, height: 2 });
+    expect(result.labelBounds).toEqual({ x: 0, y: -72, width: 2, height: 2 });
   });
 
   it('moves only label geometry and adds a connecting leader', () => {
@@ -106,6 +126,17 @@ describe('resolveLabelCollisions', () => {
         (primitive) => primitive.kind === 'line' && primitive.part === 'leader',
       ),
     ).toBe(true);
+    expect(
+      moved.scenePrimitives.some(
+        primitive => primitive.kind === 'scene-line'
+          && primitive.part === 'leader',
+      ),
+    ).toBe(true);
+    expect(
+      moved.scenePrimitives.find(
+        primitive => primitive.kind === 'scene-glyph-run',
+      ),
+    ).toMatchObject({ at: { offsetPx: [2, -6] } });
   });
 
   it('is byte-identical across repeated calls', () => {

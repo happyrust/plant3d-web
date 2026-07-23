@@ -54,7 +54,8 @@ const annotationVis = usePipeDistanceAnnotationThree(
   computed(() => ctx.viewerRef.value),
   store.visibleResults,
   store.showAnnotations,
-  computed(() => ctx.annotationSystem.value)
+  computed(() => ctx.annotationSystem.value),
+  computed(() => ctx.dimensionSystem.value)
 );
 
 onUnmounted(() => {

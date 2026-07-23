@@ -8,7 +8,7 @@ import type { DimensionDocumentState } from '../domain/document';
 import type { UserDimensionRecord } from '../domain/types';
 
 export type SnapshotDimensionDocument = Readonly<{
-  schemaVersion: 1;
+  schemaVersion: 2;
   documentId: string;
   records: readonly UserDimensionRecord[];
 }>;
@@ -48,7 +48,10 @@ export function validateDimensionDocumentSnapshot(
       'dimension document snapshot must be an object',
     );
   }
-  if (value.schemaVersion !== DIMENSION_DOCUMENT_SCHEMA_VERSION) {
+  if (
+    value.schemaVersion !== 1
+    && value.schemaVersion !== DIMENSION_DOCUMENT_SCHEMA_VERSION
+  ) {
     throw new DimensionSnapshotValidationError(
       `unsupported dimension document schemaVersion: ${String(value.schemaVersion)}`,
     );
@@ -70,13 +73,24 @@ export function validateDimensionDocumentSnapshot(
   for (let index = 0; index < value.records.length; index += 1) {
     const candidate = value.records[index];
     const candidateObject = isObject(candidate) ? candidate : null;
+    if (
+      value.schemaVersion === DIMENSION_DOCUMENT_SCHEMA_VERSION
+      && typeof candidateObject?.labelPinned !== 'boolean'
+    ) {
+      throw new DimensionSnapshotValidationError(
+        `dimension document snapshot contains invalid record at index ${index}`,
+      );
+    }
+    const migratedCandidate = value.schemaVersion === 1 && candidateObject
+      ? { ...candidateObject, labelPinned: false }
+      : candidate;
     const result = reduceDimensionDocument(validatedState, {
       type: 'create',
       commandId: `snapshot-validate-${index}`,
       actorId: candidateObject?.authorId as string,
       actorRole: candidateObject?.authorRole as string,
       at: 0,
-      record: candidate as UserDimensionRecord,
+      record: migratedCandidate as UserDimensionRecord,
     });
     if (!result.ok) {
       const detail = result.reason === 'duplicate-id'

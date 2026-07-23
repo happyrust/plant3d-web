@@ -26,7 +26,7 @@ describe('useXeokitMeasurementTools', () => {
     vi.resetModules();
   });
 
-  it('会把 xeokit 测量对象挂进 annotationGroup，并在清理时移除', async () => {
+  it('有 dimension system 时把 xeokit 测量写入外部尺寸快照，不再创建旧 Object3D', async () => {
     const [{ useToolStore }, { useXeokitMeasurementTools }, { AnnotationMaterials }] = await Promise.all([
       import('@/composables/useToolStore'),
       import('@/composables/useXeokitMeasurementTools'),
@@ -38,13 +38,15 @@ describe('useXeokitMeasurementTools', () => {
     store.clearCurrentXeokitDraft();
 
     const annotationGroup = new THREE.Group();
-    const registerExternalAnnotation = vi.fn();
-    const unregisterExternalAnnotation = vi.fn();
+    const dimensionSystem = {
+      replaceExternalSource: vi.fn(),
+      viewport: { setSelection: vi.fn() },
+    } as any;
     const annotationSystem = {
       materials: new AnnotationMaterials(),
       annotationGroup,
-      registerExternalAnnotation,
-      unregisterExternalAnnotation,
+      registerExternalAnnotation: vi.fn(),
+      unregisterExternalAnnotation: vi.fn(),
       selectedId: ref<string | null>(null),
       selectAnnotation: vi.fn(),
     } as any;
@@ -55,6 +57,8 @@ describe('useXeokitMeasurementTools', () => {
       selectionRef: ref(null),
       overlayContainerRef: ref(document.createElement('div')),
       annotationSystemRef: shallowRef(annotationSystem),
+      getDimensionSystem: () => dimensionSystem,
+      sceneWorldToDesignMetres: (point) => [point[0] + 10, point[1], point[2]],
       store,
       compatViewerRef: ref(null),
       requestRender: null,
@@ -73,70 +77,25 @@ describe('useXeokitMeasurementTools', () => {
     tools.syncFromStore();
     await nextTick();
 
-    expect(registerExternalAnnotation).toHaveBeenCalledWith('xmeas_dist-1', expect.anything());
-    expect(annotationGroup.children).toHaveLength(1);
-    expect((annotationGroup.children[0] as THREE.Object3D).parent).toBe(annotationGroup);
-
-    store.clearXeokitMeasurements();
-    tools.syncFromStore();
-    await nextTick();
-
-    expect(unregisterExternalAnnotation).toHaveBeenCalledWith('xmeas_dist-1');
-    expect(annotationGroup.children).toHaveLength(0);
-  });
-
-  it('会在存在 globalModelMatrix 时把世界坐标还原为 annotation local 坐标', async () => {
-    const [{ useToolStore }, { useXeokitMeasurementTools }, { AnnotationMaterials }] = await Promise.all([
-      import('@/composables/useToolStore'),
-      import('@/composables/useXeokitMeasurementTools'),
-      import('@/utils/three/annotation/core/AnnotationMaterials'),
+    expect(dimensionSystem.replaceExternalSource).toHaveBeenLastCalledWith('xeokit-measurement', [
+      expect.objectContaining({
+        id: 'xeokit-measurement:dist-1',
+        source: 'xeokit-measurement',
+        layout: expect.objectContaining({
+          kind: 'linear',
+          a: [10, 0, 0],
+          b: [11, 2, 3],
+        }),
+      }),
     ]);
+    expect(annotationGroup.children).toHaveLength(0);
+    expect(annotationSystem.registerExternalAnnotation).not.toHaveBeenCalled();
 
-    const store = useToolStore();
     store.clearXeokitMeasurements();
-    store.clearCurrentXeokitDraft();
-
-    const annotationGroup = new THREE.Group();
-    const annotationSystem = {
-      materials: new AnnotationMaterials(),
-      annotationGroup,
-      registerExternalAnnotation: vi.fn(),
-      unregisterExternalAnnotation: vi.fn(),
-      selectedId: ref<string | null>(null),
-      selectAnnotation: vi.fn(),
-    } as any;
-
-    const dtxLayer = {
-      getGlobalModelMatrix: () => new THREE.Matrix4().makeTranslation(10, 20, 30),
-    } as any;
-
-    const tools = useXeokitMeasurementTools({
-      dtxViewerRef: ref(null),
-      dtxLayerRef: ref(dtxLayer),
-      selectionRef: ref(null),
-      overlayContainerRef: ref(document.createElement('div')),
-      annotationSystemRef: shallowRef(annotationSystem),
-      store,
-      compatViewerRef: ref(null),
-      requestRender: null,
-    });
-
-    store.addXeokitDistanceMeasurement({
-      id: 'dist-world',
-      kind: 'distance',
-      origin: { entityId: 'a', worldPos: [10, 20, 30] },
-      target: { entityId: 'b', worldPos: [11, 22, 33] },
-      visible: true,
-      approximate: false,
-      createdAt: 1,
-    });
-
     tools.syncFromStore();
     await nextTick();
 
-    const measurement = annotationGroup.children[0] as any;
-    expect(measurement.originMarker.position.toArray()).toEqual([0, 0, 0]);
-    expect(measurement.targetMarker.position.toArray()).toEqual([1, 2, 3]);
+    expect(dimensionSystem.replaceExternalSource).toHaveBeenLastCalledWith('xeokit-measurement', []);
   });
 
   it('创建测量点时应记录排除 recenter 后的工程 World 米制坐标', async () => {
@@ -243,62 +202,6 @@ describe('useXeokitMeasurementTools', () => {
         distancePx: 0,
       }),
     ]);
-  });
-
-  it('长度测量默认应只显示总长，不显示 XYZ 分解线与分量标签', async () => {
-    const [{ useToolStore }, { useXeokitMeasurementTools }, { AnnotationMaterials }] = await Promise.all([
-      import('@/composables/useToolStore'),
-      import('@/composables/useXeokitMeasurementTools'),
-      import('@/utils/three/annotation/core/AnnotationMaterials'),
-    ]);
-
-    const store = useToolStore();
-    store.clearXeokitMeasurements();
-    store.clearCurrentXeokitDraft();
-
-    const annotationGroup = new THREE.Group();
-    const annotationSystem = {
-      materials: new AnnotationMaterials(),
-      annotationGroup,
-      registerExternalAnnotation: vi.fn(),
-      unregisterExternalAnnotation: vi.fn(),
-      selectedId: ref<string | null>(null),
-      selectAnnotation: vi.fn(),
-    } as any;
-
-    const tools = useXeokitMeasurementTools({
-      dtxViewerRef: ref(null),
-      dtxLayerRef: ref(null),
-      selectionRef: ref(null),
-      overlayContainerRef: ref(document.createElement('div')),
-      annotationSystemRef: shallowRef(annotationSystem),
-      store,
-      compatViewerRef: ref(null),
-      requestRender: null,
-    });
-
-    store.addXeokitDistanceMeasurement({
-      id: 'dist-style-default',
-      kind: 'distance',
-      origin: { entityId: 'a', worldPos: [0, 0, 0] },
-      target: { entityId: 'b', worldPos: [1, 2, 3] },
-      visible: true,
-      approximate: false,
-      createdAt: 1,
-    });
-
-    tools.syncFromStore();
-    await nextTick();
-
-    const measurement = annotationGroup.children[0] as any;
-    expect(measurement.mainLine.visible).toBe(true);
-    expect(measurement.mainLabel.visible).toBe(true);
-    expect(measurement.xLine.visible).toBe(false);
-    expect(measurement.yLine.visible).toBe(false);
-    expect(measurement.zLine.visible).toBe(false);
-    expect(measurement.xLabel.visible).toBe(false);
-    expect(measurement.yLabel.visible).toBe(false);
-    expect(measurement.zLabel.visible).toBe(false);
   });
 
   it('应提供 xeokit 测量的当前与全量显隐辅助能力', async () => {

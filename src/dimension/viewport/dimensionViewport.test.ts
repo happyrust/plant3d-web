@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { Group } from 'three';
 
 import { normalizeExternalDimension } from '../adapters/normalizeExternalDimensions';
 import { normalizeUserDimension } from '../adapters/normalizeUserDimensions';
@@ -14,52 +15,13 @@ import { SOLVESPACE_DIMENSION_THEME } from '../kernel/theme';
 import { DimensionViewport } from './dimensionViewport';
 
 import type { ExternalDimensionRecord } from '../adapters/normalizeExternalDimensions';
-import type { ViewportProjector } from '../kernel/projector';
-
-function translatedProjector(offsetX: number): ViewportProjector {
-  const base = createTestProjector();
-  return {
-    ...base,
-    project(point) {
-      const projected = base.project(point);
-      return { ...projected, x: projected.x + offsetX };
-    },
-    unproject(point) {
-      return base.unproject({ ...point, x: point.x - offsetX });
-    },
-  };
-}
-
-function createCanvas() {
-  const operations: string[] = [];
-  const context = {
-    strokeStyle: '',
-    lineWidth: 0,
-    setTransform: vi.fn(() => operations.push('setTransform')),
-    clearRect: vi.fn(() => operations.push('clearRect')),
-    beginPath: vi.fn(),
-    moveTo: vi.fn(),
-    lineTo: vi.fn(),
-    stroke: vi.fn(() => operations.push('stroke')),
-    save: vi.fn(),
-    restore: vi.fn(),
-    setLineDash: vi.fn(),
-  };
-  const canvas = {
-    width: 0,
-    height: 0,
-    style: { width: '', height: '' },
-    getContext: vi.fn(() => context),
-  } as unknown as HTMLCanvasElement;
-  return { canvas, context, operations };
-}
-
 function createViewport() {
-  const { canvas, context, operations } = createCanvas();
+  const scene = new Group();
   const callbacks: FrameRequestCallback[] = [];
   const cancelled: number[] = [];
+  const requestRender = vi.fn();
   const viewport = new DimensionViewport({
-    canvas,
+    scene,
     font: createTestFont(),
     theme: SOLVESPACE_DIMENSION_THEME,
     format: DEFAULT_DIMENSION_FORMAT,
@@ -68,15 +30,15 @@ function createViewport() {
       return callbacks.length;
     },
     cancelFrame: id => cancelled.push(id),
+    requestRender,
   });
   const flush = () => callbacks.shift()?.(performance.now());
   return {
-    canvas,
     callbacks,
     cancelled,
-    context,
     flush,
-    operations,
+    requestRender,
+    scene,
     viewport,
   };
 }
@@ -165,7 +127,8 @@ describe('DimensionViewport', () => {
 
     expect(harness.viewport.getLayouts().map(layout => layout.dimensionId))
       .toEqual(['linear-1']);
-    expect(harness.operations).toContain('stroke');
+    expect(harness.scene.children).toHaveLength(1);
+    expect(harness.requestRender).toHaveBeenCalled();
     expect(harness.callbacks).toHaveLength(0);
   });
 
@@ -214,30 +177,7 @@ describe('DimensionViewport', () => {
     harness.viewport.invalidate('camera');
     harness.viewport.dispose();
     expect(harness.cancelled).toEqual([1]);
-    expect(harness.canvas.width).toBe(0);
-    expect(harness.canvas.height).toBe(0);
-  });
-
-  it('reuses translation-invariant layout while keeping export and hit geometry current', () => {
-    const harness = createViewport();
-    harness.viewport.setProjector(translatedProjector(0));
-    harness.viewport.setDocument(emptyDimensionDocument([linearRecord()]));
-    harness.flush();
-    const initial = harness.viewport.getLayouts()[0];
-    const initialRegion = initial.hitRegions[0];
-    const initialPoint = initialRegion.kind === 'segment'
-      ? initialRegion.from
-      : [initialRegion.rect.x, initialRegion.rect.y] as const;
-
-    harness.viewport.setProjector(translatedProjector(12));
-    harness.flush();
-    const translated = harness.viewport.getLayouts()[0];
-
-    expect(translated.labelBounds.x).toBeCloseTo(initial.labelBounds.x + 12);
-    expect(harness.viewport.hitTest(
-      [initialPoint[0] + 12, initialPoint[1]],
-      3,
-    )?.dimensionId).toBe('linear-1');
+    expect(harness.scene.children).toHaveLength(0);
   });
 
   it('converts a screen drag into a semantic linear placement', () => {

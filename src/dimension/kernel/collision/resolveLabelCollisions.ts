@@ -4,6 +4,9 @@ import type {
   HitRegion,
   LayoutPrimitive,
   LayoutResult,
+  SceneGlyphRun,
+  ScenePrimitive,
+  SceneVertex,
   ScreenLine,
   ScreenRect,
   Vec2,
@@ -12,6 +15,7 @@ import type {
 const GRID_SIZE_PX = 64;
 const CANDIDATE_STEP_PX = 8;
 const CANDIDATE_COUNT = 8;
+const EXTENDED_SEARCH_MAX_LABELS = 64;
 const DIRECTIONS: readonly Vec2[] = [
   [0, -1],
   [1, 0],
@@ -93,6 +97,63 @@ function pointInRect(point: Vec2, rect: ScreenRect): boolean {
 
 function movePoint(point: Vec2, offset: Vec2): Vec2 {
   return [point[0] + offset[0], point[1] + offset[1]];
+}
+
+function moveSceneVertex(vertex: SceneVertex, offset: Vec2): SceneVertex {
+  return {
+    ...vertex,
+    offsetPx: movePoint(vertex.offsetPx, offset),
+  };
+}
+
+function moveSceneLabel(
+  result: LayoutResult,
+  originalBounds: ScreenRect,
+  offset: Vec2,
+): readonly ScenePrimitive[] {
+  const source = result.scenePrimitives ?? [];
+  let projectedIndex = 0;
+  let connectedLeader = false;
+  let primaryGlyph: SceneGlyphRun | null = null;
+  const moved = source.map((primitive): ScenePrimitive => {
+    if (primitive.kind === 'scene-triangle') {
+      projectedIndex += 3;
+      return primitive;
+    }
+    const projected = result.primitives[projectedIndex];
+    projectedIndex += 1;
+    if (primitive.kind === 'scene-glyph-run') {
+      primaryGlyph ??= primitive;
+      return { ...primitive, at: moveSceneVertex(primitive.at, offset) };
+    }
+    if (
+      primitive.kind === 'scene-line'
+      && primitive.part === 'leader'
+      && projected?.kind === 'line'
+    ) {
+      const moveFrom = pointInRect(projected.from, originalBounds);
+      const moveTo = pointInRect(projected.to, originalBounds);
+      if (moveFrom || moveTo) connectedLeader = true;
+      return {
+        ...primitive,
+        from: moveFrom ? moveSceneVertex(primitive.from, offset) : primitive.from,
+        to: moveTo ? moveSceneVertex(primitive.to, offset) : primitive.to,
+      };
+    }
+    return primitive;
+  });
+  if (connectedLeader || !primaryGlyph) return moved;
+  const glyphIndex = moved.findIndex(
+    primitive => primitive.kind === 'scene-glyph-run',
+  );
+  moved.splice(glyphIndex < 0 ? moved.length : glyphIndex, 0, {
+    kind: 'scene-line',
+    from: primaryGlyph.at,
+    to: moveSceneVertex(primaryGlyph.at, offset),
+    part: 'leader',
+    styleRole: primaryGlyph.styleRole,
+  });
+  return moved;
 }
 
 function moveConnectedLine(line: ScreenLine, originalBounds: ScreenRect, offset: Vec2): ScreenLine {
@@ -178,6 +239,7 @@ function moveLabel(result: LayoutResult, offset: Vec2): LayoutResult {
 
   return {
     ...result,
+    scenePrimitives: moveSceneLabel(result, originalBounds, offset),
     primitives,
     hitRegions,
     labelBounds: translateRect(originalBounds, offset),
@@ -187,6 +249,11 @@ function moveLabel(result: LayoutResult, offset: Vec2): LayoutResult {
 export function resolveLabelCollisions(
   inputs: readonly LayoutResult[],
 ): readonly LayoutResult[] {
+  // ponytail: one extra probe for small overlays; use adaptive search if large
+  // MBD batches need the same density without exceeding the performance budget.
+  const candidateCount = inputs.length <= EXTENDED_SEARCH_MAX_LABELS
+    ? CANDIDATE_COUNT + 1
+    : CANDIDATE_COUNT;
   const occupancy = new LabelOccupancy();
   const results = [...inputs];
   for (const result of inputs) {
@@ -205,7 +272,7 @@ export function resolveLabelCollisions(
     }
 
     let resolved: LayoutResult | undefined;
-    for (let candidate = 0; candidate < CANDIDATE_COUNT; candidate += 1) {
+    for (let candidate = 0; candidate < candidateCount; candidate += 1) {
       const direction = DIRECTIONS[candidate % DIRECTIONS.length];
       const distance = (candidate + 1) * CANDIDATE_STEP_PX;
       const offset = [direction[0] * distance, direction[1] * distance] as const;

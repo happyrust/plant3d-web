@@ -25,6 +25,12 @@ export type DimensionCommandIntent =
       | LinearPlacementIntent
       | AngularPlacementIntent
       | RadialPlacementIntent;
+    labelPinned?: boolean;
+  }>
+  | Readonly<{
+    type: 'set-label-pinned';
+    dimensionId: string;
+    labelPinned: boolean;
   }>
   | Readonly<{
     type: 'set-angle-arc';
@@ -68,6 +74,15 @@ export type DimensionEvent =
     dimensionId: string;
     previous: UserDimensionRecord['placement'];
     next: UserDimensionRecord['placement'];
+    previousLabelPinned: boolean;
+    nextLabelPinned: boolean;
+  }>
+  | Readonly<{
+    type: 'label-pinned-set';
+    commandId: string;
+    dimensionId: string;
+    previous: boolean;
+    next: boolean;
   }>
   | Readonly<{
     type: 'angle-arc-set';

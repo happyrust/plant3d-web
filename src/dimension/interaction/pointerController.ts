@@ -40,6 +40,7 @@ type KeyboardLikeEvent = Readonly<{
 
 type DimensionPointerViewport = Readonly<{
   hitTest(point: KernelVec2, tolerancePx: number): HitTarget | null;
+  flushProjection?: () => void;
   setHover(id: string | null): void;
   setSelection(id: string | null): void;
   setPreview(input: null): void;
@@ -114,6 +115,7 @@ export class DimensionPointerController {
       return CONSUMED;
     }
 
+    this.input.viewport.flushProjection?.();
     const hit = this.input.viewport.hitTest(
       [screen.x, screen.y],
       this.input.hitTolerancePx ?? 6,

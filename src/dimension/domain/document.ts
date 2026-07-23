@@ -1,9 +1,9 @@
 import type { UserDimensionRecord } from './types';
 
-export const DIMENSION_DOCUMENT_SCHEMA_VERSION = 1 as const;
+export const DIMENSION_DOCUMENT_SCHEMA_VERSION = 2 as const;
 
 export type DimensionDocumentState = Readonly<{
-  schemaVersion: 1;
+  schemaVersion: 2;
   documentId: string;
   taskId?: string;
   formId?: string;

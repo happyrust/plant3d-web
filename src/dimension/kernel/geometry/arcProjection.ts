@@ -23,6 +23,12 @@ export type ProjectedArc = Readonly<{
   closed: boolean;
 }>;
 
+export type SampledDesignArc = Readonly<{
+  designPoints: readonly Vec3[];
+  screenPoints: readonly Vec2[];
+  closed: boolean;
+}>;
+
 function isFiniteVec2(point: Vec2): boolean {
   return Number.isFinite(point[0]) && Number.isFinite(point[1]);
 }
@@ -34,11 +40,11 @@ function isFiniteVec2(point: Vec2): boolean {
  * count), so perspective distortion is followed without a fixed segment
  * count. Returns null for degenerate arcs or non-finite projections.
  */
-export function projectArcToScreenPath(
+export function sampleArcToDesignAndScreenPath(
   arc: DesignArc,
   projector: ViewportProjector,
   tolerancePx = DEFAULT_CHORD_TOLERANCE_PX,
-): ProjectedArc | null {
+): SampledDesignArc | null {
   if (!Number.isFinite(arc.radiusM) || arc.radiusM <= 0) return null;
   const basis = stablePlaneBasis(arc.normal);
   if (!basis) return null;
@@ -72,6 +78,7 @@ export function projectArcToScreenPath(
   const first = projectAt(startAngle);
   if (!isFiniteVec2(first)) return null;
   const points: Vec2[] = [first];
+  const designPoints: Vec3[] = [pointAt(startAngle)];
   let nonFinite = false;
 
   const subdivide = (
@@ -112,6 +119,7 @@ export function projectArcToScreenPath(
       }
     }
     points.push(point1);
+    designPoints.push(pointAt(angle1));
   };
 
   for (let index = 0; index < initialSegments; index += 1) {
@@ -129,7 +137,19 @@ export function projectArcToScreenPath(
       Math.hypot(last[0] - first[0], last[1] - first[1]) < tolerancePx
     ) {
       points.pop();
+      designPoints.pop();
     }
   }
-  return { points, closed };
+  return { designPoints, screenPoints: points, closed };
+}
+
+export function projectArcToScreenPath(
+  arc: DesignArc,
+  projector: ViewportProjector,
+  tolerancePx = DEFAULT_CHORD_TOLERANCE_PX,
+): ProjectedArc | null {
+  const sampled = sampleArcToDesignAndScreenPath(arc, projector, tolerancePx);
+  return sampled
+    ? { points: sampled.screenPoints, closed: sampled.closed }
+    : null;
 }

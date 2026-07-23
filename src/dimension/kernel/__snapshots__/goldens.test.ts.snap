@@ -393,15 +393,54 @@ exports[`canonical dimension structural goldens > 'angular-right-angle-major' 1`
       "kind": "segment",
       "part": "arc",
       "to": [
-        190.261797,
-        228.356706,
+        189.16275,
+        227.974167,
       ],
       "widthPx": 1,
     },
     {
       "from": [
-        171.264751,
-        208.588203,
+        189.16275,
+        227.974167,
+      ],
+      "kind": "segment",
+      "part": "arc",
+      "to": [
+        188.526354,
+        227.70191,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        172.298188,
+        211.473874,
+      ],
+      "kind": "segment",
+      "part": "arc",
+      "to": [
+        172.025833,
+        210.83725,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        172.025833,
+        210.83725,
+      ],
+      "kind": "segment",
+      "part": "arc",
+      "to": [
+        171.34256,
+        208.874184,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        171.34256,
+        208.874184,
       ],
       "kind": "segment",
       "part": "arc",
@@ -764,14 +803,27 @@ exports[`canonical dimension structural goldens > 'angular-right-angle-major' 1`
     },
     {
       "from": [
-        230,
-        200,
+        225.775394,
+        212.999789,
       ],
       "kind": "segment",
       "part": "arrow",
       "to": [
         234.223306,
         213.000211,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        234.223306,
+        213.000211,
+      ],
+      "kind": "segment",
+      "part": "arrow",
+      "to": [
+        230,
+        200,
       ],
       "widthPx": 1,
     },
@@ -790,14 +842,27 @@ exports[`canonical dimension structural goldens > 'angular-right-angle-major' 1`
     },
     {
       "from": [
-        200,
-        170,
+        186.999789,
+        165.776694,
       ],
       "kind": "segment",
       "part": "arrow",
       "to": [
         187.000211,
         174.224606,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        187.000211,
+        174.224606,
+      ],
+      "kind": "segment",
+      "part": "arrow",
+      "to": [
+        200,
+        170,
       ],
       "widthPx": 1,
     },
@@ -805,27 +870,27 @@ exports[`canonical dimension structural goldens > 'angular-right-angle-major' 1`
       "kind": "rect",
       "part": "label",
       "rect": {
-        "height": 17.25,
-        "width": 14.95,
-        "x": 171.311797,
-        "y": 212.588203,
+        "height": 22.768757,
+        "width": 22.76892,
+        "x": 167.402337,
+        "y": 209.828825,
       },
     },
   ],
   "labelBounds": {
-    "height": 25.25,
-    "width": 22.95,
-    "x": 167.311797,
-    "y": 208.588203,
+    "height": 30.768757,
+    "width": 30.76892,
+    "x": 163.402337,
+    "y": 205.828825,
   },
   "labelPinned": false,
   "primitives": [
     {
       "bounds": {
-        "height": 17.25,
-        "width": 14.95,
-        "x": 171.311797,
-        "y": 212.588203,
+        "height": 22.768757,
+        "width": 22.76892,
+        "x": 167.402337,
+        "y": 209.828825,
       },
       "capHeightPx": 11.5,
       "kind": "glyph-run",
@@ -833,8 +898,19 @@ exports[`canonical dimension structural goldens > 'angular-right-angle-major' 1`
         171.311797,
         226.388203,
       ],
+      "rotationCenter": [
+        178.786797,
+        221.213203,
+      ],
+      "rotationRad": 0.785448,
       "styleRole": "normal",
       "text": "270.00°",
+      "unrotatedBounds": {
+        "height": 17.25,
+        "width": 14.95,
+        "x": 171.311797,
+        "y": 212.588203,
+      },
     },
     {
       "from": [
@@ -1196,14 +1272,53 @@ exports[`canonical dimension structural goldens > 'angular-right-angle-major' 1`
       "part": "arc",
       "styleRole": "normal",
       "to": [
-        190.261797,
-        228.356706,
+        189.16275,
+        227.974167,
       ],
     },
     {
       "from": [
-        171.264751,
-        208.588203,
+        189.16275,
+        227.974167,
+      ],
+      "kind": "line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": [
+        188.526354,
+        227.70191,
+      ],
+    },
+    {
+      "from": [
+        172.298188,
+        211.473874,
+      ],
+      "kind": "line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": [
+        172.025833,
+        210.83725,
+      ],
+    },
+    {
+      "from": [
+        172.025833,
+        210.83725,
+      ],
+      "kind": "line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": [
+        171.34256,
+        208.874184,
+      ],
+    },
+    {
+      "from": [
+        171.34256,
+        208.874184,
       ],
       "kind": "line",
       "part": "arc",
@@ -1566,8 +1681,8 @@ exports[`canonical dimension structural goldens > 'angular-right-angle-major' 1`
     },
     {
       "from": [
-        230,
-        200,
+        225.775394,
+        212.999789,
       ],
       "kind": "line",
       "part": "arrow",
@@ -1575,6 +1690,19 @@ exports[`canonical dimension structural goldens > 'angular-right-angle-major' 1`
       "to": [
         234.223306,
         213.000211,
+      ],
+    },
+    {
+      "from": [
+        234.223306,
+        213.000211,
+      ],
+      "kind": "line",
+      "part": "arrow",
+      "styleRole": "normal",
+      "to": [
+        230,
+        200,
       ],
     },
     {
@@ -1592,8 +1720,8 @@ exports[`canonical dimension structural goldens > 'angular-right-angle-major' 1`
     },
     {
       "from": [
-        200,
-        170,
+        186.999789,
+        165.776694,
       ],
       "kind": "line",
       "part": "arrow",
@@ -1601,6 +1729,19 @@ exports[`canonical dimension structural goldens > 'angular-right-angle-major' 1`
       "to": [
         187.000211,
         174.224606,
+      ],
+    },
+    {
+      "from": [
+        187.000211,
+        174.224606,
+      ],
+      "kind": "line",
+      "part": "arrow",
+      "styleRole": "normal",
+      "to": [
+        200,
+        170,
       ],
     },
     {
@@ -1628,6 +1769,1726 @@ exports[`canonical dimension structural goldens > 'angular-right-angle-major' 1`
         200,
         165,
       ],
+    },
+  ],
+  "sceneTopology": [
+    {
+      "from": {
+        "anchor": [
+          0,
+          0,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+      "kind": "scene-line",
+      "part": "extension",
+      "styleRole": "normal",
+      "to": {
+        "anchor": [
+          0.35,
+          0,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+    },
+    {
+      "from": {
+        "anchor": [
+          0,
+          0,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+      "kind": "scene-line",
+      "part": "extension",
+      "styleRole": "normal",
+      "to": {
+        "anchor": [
+          -0,
+          0.35,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+    },
+    {
+      "from": {
+        "anchor": [
+          0.3,
+          0,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+      "kind": "scene-line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": {
+        "anchor": [
+          0.29928,
+          -0.020773,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+    },
+    {
+      "from": {
+        "anchor": [
+          0.29928,
+          -0.020773,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+      "kind": "scene-line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": {
+        "anchor": [
+          0.297123,
+          -0.041447,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+    },
+    {
+      "from": {
+        "anchor": [
+          0.297123,
+          -0.041447,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+      "kind": "scene-line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": {
+        "anchor": [
+          0.29354,
+          -0.061922,
+          0,
+        ],
+        "offsetPx": [
+          -0,
+          0,
+        ],
+      },
+    },
+    {
+      "from": {
+        "anchor": [
+          0.29354,
+          -0.061922,
+          0,
+        ],
+        "offsetPx": [
+          -0,
+          0,
+        ],
+      },
+      "kind": "scene-line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": {
+        "anchor": [
+          0.288548,
+          -0.082099,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+    },
+    {
+      "from": {
+        "anchor": [
+          0.288548,
+          -0.082099,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+      "kind": "scene-line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": {
+        "anchor": [
+          0.28217,
+          -0.101882,
+          0,
+        ],
+        "offsetPx": [
+          -0,
+          0,
+        ],
+      },
+    },
+    {
+      "from": {
+        "anchor": [
+          0.28217,
+          -0.101882,
+          0,
+        ],
+        "offsetPx": [
+          -0,
+          0,
+        ],
+      },
+      "kind": "scene-line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": {
+        "anchor": [
+          0.274438,
+          -0.121176,
+          0,
+        ],
+        "offsetPx": [
+          -0,
+          0,
+        ],
+      },
+    },
+    {
+      "from": {
+        "anchor": [
+          0.274438,
+          -0.121176,
+          0,
+        ],
+        "offsetPx": [
+          -0,
+          -0,
+        ],
+      },
+      "kind": "scene-line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": {
+        "anchor": [
+          0.265389,
+          -0.139889,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+    },
+    {
+      "from": {
+        "anchor": [
+          0.265389,
+          -0.139889,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+      "kind": "scene-line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": {
+        "anchor": [
+          0.255065,
+          -0.15793,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+    },
+    {
+      "from": {
+        "anchor": [
+          0.255065,
+          -0.15793,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+      "kind": "scene-line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": {
+        "anchor": [
+          0.243517,
+          -0.175212,
+          0,
+        ],
+        "offsetPx": [
+          -0,
+          -0,
+        ],
+      },
+    },
+    {
+      "from": {
+        "anchor": [
+          0.243517,
+          -0.175212,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          -0,
+        ],
+      },
+      "kind": "scene-line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": {
+        "anchor": [
+          0.2308,
+          -0.191654,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          -0,
+        ],
+      },
+    },
+    {
+      "from": {
+        "anchor": [
+          0.2308,
+          -0.191654,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          -0,
+        ],
+      },
+      "kind": "scene-line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": {
+        "anchor": [
+          0.216975,
+          -0.207176,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+    },
+    {
+      "from": {
+        "anchor": [
+          0.216975,
+          -0.207176,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+      "kind": "scene-line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": {
+        "anchor": [
+          0.202109,
+          -0.221703,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+    },
+    {
+      "from": {
+        "anchor": [
+          0.202109,
+          -0.221703,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+      "kind": "scene-line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": {
+        "anchor": [
+          0.186272,
+          -0.235165,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+    },
+    {
+      "from": {
+        "anchor": [
+          0.186272,
+          -0.235165,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+      "kind": "scene-line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": {
+        "anchor": [
+          0.169541,
+          -0.247499,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+    },
+    {
+      "from": {
+        "anchor": [
+          0.169541,
+          -0.247499,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+      "kind": "scene-line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": {
+        "anchor": [
+          0.151996,
+          -0.258645,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          -0,
+        ],
+      },
+    },
+    {
+      "from": {
+        "anchor": [
+          0.151996,
+          -0.258645,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          -0,
+        ],
+      },
+      "kind": "scene-line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": {
+        "anchor": [
+          0.133722,
+          -0.268549,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+    },
+    {
+      "from": {
+        "anchor": [
+          0.133722,
+          -0.268549,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+      "kind": "scene-line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": {
+        "anchor": [
+          0.114805,
+          -0.277164,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          -0,
+        ],
+      },
+    },
+    {
+      "from": {
+        "anchor": [
+          0.114805,
+          -0.277164,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          -0,
+        ],
+      },
+      "kind": "scene-line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": {
+        "anchor": [
+          0.095337,
+          -0.284448,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+    },
+    {
+      "from": {
+        "anchor": [
+          0.095337,
+          -0.284448,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+      "kind": "scene-line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": {
+        "anchor": [
+          0.075412,
+          -0.290367,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+    },
+    {
+      "from": {
+        "anchor": [
+          0.075412,
+          -0.290367,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+      "kind": "scene-line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": {
+        "anchor": [
+          0.055125,
+          -0.294892,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+    },
+    {
+      "from": {
+        "anchor": [
+          0.055125,
+          -0.294892,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+      "kind": "scene-line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": {
+        "anchor": [
+          0.034573,
+          -0.298001,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          -0,
+        ],
+      },
+    },
+    {
+      "from": {
+        "anchor": [
+          0.034573,
+          -0.298001,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          -0,
+        ],
+      },
+      "kind": "scene-line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": {
+        "anchor": [
+          0.013855,
+          -0.29968,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+    },
+    {
+      "from": {
+        "anchor": [
+          0.013855,
+          -0.29968,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+      "kind": "scene-line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": {
+        "anchor": [
+          -0.006929,
+          -0.29992,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+    },
+    {
+      "from": {
+        "anchor": [
+          -0.006929,
+          -0.29992,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+      "kind": "scene-line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": {
+        "anchor": [
+          -0.027681,
+          -0.29872,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+    },
+    {
+      "from": {
+        "anchor": [
+          -0.027681,
+          -0.29872,
+          0,
+        ],
+        "offsetPx": [
+          -0,
+          0,
+        ],
+      },
+      "kind": "scene-line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": {
+        "anchor": [
+          -0.048299,
+          -0.296087,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+    },
+    {
+      "from": {
+        "anchor": [
+          -0.048299,
+          -0.296087,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+      "kind": "scene-line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": {
+        "anchor": [
+          -0.068685,
+          -0.292031,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          -0,
+        ],
+      },
+    },
+    {
+      "from": {
+        "anchor": [
+          -0.068685,
+          -0.292031,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          -0,
+        ],
+      },
+      "kind": "scene-line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": {
+        "anchor": [
+          -0.088742,
+          -0.286574,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+    },
+    {
+      "from": {
+        "anchor": [
+          -0.088742,
+          -0.286574,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+      "kind": "scene-line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": {
+        "anchor": [
+          -0.108372,
+          -0.279742,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+    },
+    {
+      "from": {
+        "anchor": [
+          -0.108372,
+          -0.279742,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+      "kind": "scene-line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": {
+        "anchor": [
+          -0.114736,
+          -0.277019,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+    },
+    {
+      "from": {
+        "anchor": [
+          -0.277018,
+          -0.114739,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+      "kind": "scene-line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": {
+        "anchor": [
+          -0.279742,
+          -0.108372,
+          0,
+        ],
+        "offsetPx": [
+          -0,
+          0,
+        ],
+      },
+    },
+    {
+      "from": {
+        "anchor": [
+          -0.279742,
+          -0.108372,
+          0,
+        ],
+        "offsetPx": [
+          -0,
+          0,
+        ],
+      },
+      "kind": "scene-line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": {
+        "anchor": [
+          -0.286574,
+          -0.088742,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+    },
+    {
+      "from": {
+        "anchor": [
+          -0.286574,
+          -0.088742,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+      "kind": "scene-line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": {
+        "anchor": [
+          -0.292031,
+          -0.068685,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+    },
+    {
+      "from": {
+        "anchor": [
+          -0.292031,
+          -0.068685,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+      "kind": "scene-line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": {
+        "anchor": [
+          -0.296087,
+          -0.048299,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+    },
+    {
+      "from": {
+        "anchor": [
+          -0.296087,
+          -0.048299,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+      "kind": "scene-line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": {
+        "anchor": [
+          -0.29872,
+          -0.027681,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+    },
+    {
+      "from": {
+        "anchor": [
+          -0.29872,
+          -0.027681,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+      "kind": "scene-line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": {
+        "anchor": [
+          -0.29992,
+          -0.006929,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+    },
+    {
+      "from": {
+        "anchor": [
+          -0.29992,
+          -0.006929,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+      "kind": "scene-line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": {
+        "anchor": [
+          -0.29968,
+          0.013855,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+    },
+    {
+      "from": {
+        "anchor": [
+          -0.29968,
+          0.013855,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+      "kind": "scene-line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": {
+        "anchor": [
+          -0.298001,
+          0.034573,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+    },
+    {
+      "from": {
+        "anchor": [
+          -0.298001,
+          0.034573,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+      "kind": "scene-line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": {
+        "anchor": [
+          -0.294892,
+          0.055125,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+    },
+    {
+      "from": {
+        "anchor": [
+          -0.294892,
+          0.055125,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+      "kind": "scene-line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": {
+        "anchor": [
+          -0.290367,
+          0.075412,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+    },
+    {
+      "from": {
+        "anchor": [
+          -0.290367,
+          0.075412,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+      "kind": "scene-line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": {
+        "anchor": [
+          -0.284448,
+          0.095337,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+    },
+    {
+      "from": {
+        "anchor": [
+          -0.284448,
+          0.095337,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+      "kind": "scene-line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": {
+        "anchor": [
+          -0.277164,
+          0.114805,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          -0,
+        ],
+      },
+    },
+    {
+      "from": {
+        "anchor": [
+          -0.277164,
+          0.114805,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          -0,
+        ],
+      },
+      "kind": "scene-line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": {
+        "anchor": [
+          -0.268549,
+          0.133722,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+    },
+    {
+      "from": {
+        "anchor": [
+          -0.268549,
+          0.133722,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+      "kind": "scene-line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": {
+        "anchor": [
+          -0.258645,
+          0.151996,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+    },
+    {
+      "from": {
+        "anchor": [
+          -0.258645,
+          0.151996,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+      "kind": "scene-line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": {
+        "anchor": [
+          -0.247499,
+          0.169541,
+          0,
+        ],
+        "offsetPx": [
+          -0,
+          -0,
+        ],
+      },
+    },
+    {
+      "from": {
+        "anchor": [
+          -0.247499,
+          0.169541,
+          0,
+        ],
+        "offsetPx": [
+          -0,
+          -0,
+        ],
+      },
+      "kind": "scene-line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": {
+        "anchor": [
+          -0.235165,
+          0.186272,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+    },
+    {
+      "from": {
+        "anchor": [
+          -0.235165,
+          0.186272,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+      "kind": "scene-line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": {
+        "anchor": [
+          -0.221703,
+          0.202109,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+    },
+    {
+      "from": {
+        "anchor": [
+          -0.221703,
+          0.202109,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+      "kind": "scene-line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": {
+        "anchor": [
+          -0.207176,
+          0.216975,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+    },
+    {
+      "from": {
+        "anchor": [
+          -0.207176,
+          0.216975,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+      "kind": "scene-line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": {
+        "anchor": [
+          -0.191654,
+          0.2308,
+          0,
+        ],
+        "offsetPx": [
+          -0,
+          0,
+        ],
+      },
+    },
+    {
+      "from": {
+        "anchor": [
+          -0.191654,
+          0.2308,
+          0,
+        ],
+        "offsetPx": [
+          -0,
+          0,
+        ],
+      },
+      "kind": "scene-line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": {
+        "anchor": [
+          -0.175212,
+          0.243517,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+    },
+    {
+      "from": {
+        "anchor": [
+          -0.175212,
+          0.243517,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+      "kind": "scene-line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": {
+        "anchor": [
+          -0.15793,
+          0.255065,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+    },
+    {
+      "from": {
+        "anchor": [
+          -0.15793,
+          0.255065,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+      "kind": "scene-line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": {
+        "anchor": [
+          -0.139889,
+          0.265389,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+    },
+    {
+      "from": {
+        "anchor": [
+          -0.139889,
+          0.265389,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+      "kind": "scene-line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": {
+        "anchor": [
+          -0.121176,
+          0.274438,
+          0,
+        ],
+        "offsetPx": [
+          -0,
+          -0,
+        ],
+      },
+    },
+    {
+      "from": {
+        "anchor": [
+          -0.121176,
+          0.274438,
+          0,
+        ],
+        "offsetPx": [
+          -0,
+          -0,
+        ],
+      },
+      "kind": "scene-line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": {
+        "anchor": [
+          -0.101882,
+          0.28217,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+    },
+    {
+      "from": {
+        "anchor": [
+          -0.101882,
+          0.28217,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+      "kind": "scene-line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": {
+        "anchor": [
+          -0.082099,
+          0.288548,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+    },
+    {
+      "from": {
+        "anchor": [
+          -0.082099,
+          0.288548,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+      "kind": "scene-line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": {
+        "anchor": [
+          -0.061922,
+          0.29354,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+    },
+    {
+      "from": {
+        "anchor": [
+          -0.061922,
+          0.29354,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+      "kind": "scene-line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": {
+        "anchor": [
+          -0.041447,
+          0.297123,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+    },
+    {
+      "from": {
+        "anchor": [
+          -0.041447,
+          0.297123,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+      "kind": "scene-line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": {
+        "anchor": [
+          -0.020773,
+          0.29928,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+    },
+    {
+      "from": {
+        "anchor": [
+          -0.020773,
+          0.29928,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+      "kind": "scene-line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": {
+        "anchor": [
+          -0,
+          0.3,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+    },
+    {
+      "kind": "scene-triangle",
+      "part": "arrow",
+      "points": [
+        {
+          "anchor": [
+            0.3,
+            0,
+            0,
+          ],
+          "offsetPx": [
+            0,
+            0,
+          ],
+        },
+        {
+          "anchor": [
+            0.3,
+            0,
+            0,
+          ],
+          "offsetPx": [
+            -4.224606,
+            12.999789,
+          ],
+        },
+        {
+          "anchor": [
+            0.3,
+            0,
+            0,
+          ],
+          "offsetPx": [
+            4.223306,
+            13.000211,
+          ],
+        },
+      ],
+      "styleRole": "normal",
+    },
+    {
+      "kind": "scene-triangle",
+      "part": "arrow",
+      "points": [
+        {
+          "anchor": [
+            -0,
+            0.3,
+            0,
+          ],
+          "offsetPx": [
+            0,
+            0,
+          ],
+        },
+        {
+          "anchor": [
+            -0,
+            0.3,
+            0,
+          ],
+          "offsetPx": [
+            -13.000211,
+            -4.223306,
+          ],
+        },
+        {
+          "anchor": [
+            -0,
+            0.3,
+            0,
+          ],
+          "offsetPx": [
+            -12.999789,
+            4.224606,
+          ],
+        },
+      ],
+      "styleRole": "normal",
+    },
+    {
+      "at": {
+        "anchor": [
+          -0.212132,
+          -0.212132,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+      "capHeightPx": 11.5,
+      "kind": "scene-glyph-run",
+      "rotationRad": 0.785448,
+      "styleRole": "normal",
+      "text": "270.00°",
     },
   ],
 }
@@ -1727,15 +3588,54 @@ exports[`canonical dimension structural goldens > 'angular-right-angle-minor' 1`
       "kind": "segment",
       "part": "arc",
       "to": [
-        228.730635,
-        191.411797,
+        228.267828,
+        189.953612,
       ],
       "widthPx": 1,
     },
     {
       "from": [
-        210.888203,
-        172.064141,
+        228.267828,
+        189.953612,
+      ],
+      "kind": "segment",
+      "part": "arc",
+      "to": [
+        227.516339,
+        188.047967,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        227.516339,
+        188.047967,
+      ],
+      "kind": "segment",
+      "part": "arc",
+      "to": [
+        227.206151,
+        187.395735,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        212.604442,
+        172.793933,
+      ],
+      "kind": "segment",
+      "part": "arc",
+      "to": [
+        211.952033,
+        172.483661,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        211.952033,
+        172.483661,
       ],
       "kind": "segment",
       "part": "arc",
@@ -1825,14 +3725,27 @@ exports[`canonical dimension structural goldens > 'angular-right-angle-minor' 1`
     },
     {
       "from": [
-        230,
-        200,
+        234.223306,
+        186.999789,
       ],
       "kind": "segment",
       "part": "arrow",
       "to": [
         225.775394,
         187.000211,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        225.775394,
+        187.000211,
+      ],
+      "kind": "segment",
+      "part": "arrow",
+      "to": [
+        230,
+        200,
       ],
       "widthPx": 1,
     },
@@ -1851,14 +3764,27 @@ exports[`canonical dimension structural goldens > 'angular-right-angle-minor' 1`
     },
     {
       "from": [
-        200,
-        170,
+        212.999789,
+        174.224606,
       ],
       "kind": "segment",
       "part": "arrow",
       "to": [
         213.000211,
         165.776694,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        213.000211,
+        165.776694,
+      ],
+      "kind": "segment",
+      "part": "arrow",
+      "to": [
+        200,
+        170,
       ],
       "widthPx": 1,
     },
@@ -1866,27 +3792,27 @@ exports[`canonical dimension structural goldens > 'angular-right-angle-minor' 1`
       "kind": "rect",
       "part": "label",
       "rect": {
-        "height": 17.25,
-        "width": 12.65,
-        "x": 214.888203,
-        "y": 170.161797,
+        "height": 21.142655,
+        "width": 21.14233,
+        "x": 210.642038,
+        "y": 168.215469,
       },
     },
   ],
   "labelBounds": {
-    "height": 25.25,
-    "width": 20.65,
-    "x": 210.888203,
-    "y": 166.161797,
+    "height": 29.142655,
+    "width": 29.14233,
+    "x": 206.642038,
+    "y": 164.215469,
   },
   "labelPinned": false,
   "primitives": [
     {
       "bounds": {
-        "height": 17.25,
-        "width": 12.65,
-        "x": 214.888203,
-        "y": 170.161797,
+        "height": 21.142655,
+        "width": 21.14233,
+        "x": 210.642038,
+        "y": 168.215469,
       },
       "capHeightPx": 11.5,
       "kind": "glyph-run",
@@ -1894,8 +3820,19 @@ exports[`canonical dimension structural goldens > 'angular-right-angle-minor' 1`
         214.888203,
         183.961797,
       ],
+      "rotationCenter": [
+        221.213203,
+        178.786797,
+      ],
+      "rotationRad": 0.785348,
       "styleRole": "normal",
       "text": "90.00°",
+      "unrotatedBounds": {
+        "height": 17.25,
+        "width": 12.65,
+        "x": 214.888203,
+        "y": 170.161797,
+      },
     },
     {
       "from": [
@@ -1958,14 +3895,53 @@ exports[`canonical dimension structural goldens > 'angular-right-angle-minor' 1`
       "part": "arc",
       "styleRole": "normal",
       "to": [
-        228.730635,
-        191.411797,
+        228.267828,
+        189.953612,
       ],
     },
     {
       "from": [
-        210.888203,
-        172.064141,
+        228.267828,
+        189.953612,
+      ],
+      "kind": "line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": [
+        227.516339,
+        188.047967,
+      ],
+    },
+    {
+      "from": [
+        227.516339,
+        188.047967,
+      ],
+      "kind": "line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": [
+        227.206151,
+        187.395735,
+      ],
+    },
+    {
+      "from": [
+        212.604442,
+        172.793933,
+      ],
+      "kind": "line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": [
+        211.952033,
+        172.483661,
+      ],
+    },
+    {
+      "from": [
+        211.952033,
+        172.483661,
       ],
       "kind": "line",
       "part": "arc",
@@ -2055,8 +4031,8 @@ exports[`canonical dimension structural goldens > 'angular-right-angle-minor' 1`
     },
     {
       "from": [
-        230,
-        200,
+        234.223306,
+        186.999789,
       ],
       "kind": "line",
       "part": "arrow",
@@ -2064,6 +4040,19 @@ exports[`canonical dimension structural goldens > 'angular-right-angle-minor' 1`
       "to": [
         225.775394,
         187.000211,
+      ],
+    },
+    {
+      "from": [
+        225.775394,
+        187.000211,
+      ],
+      "kind": "line",
+      "part": "arrow",
+      "styleRole": "normal",
+      "to": [
+        230,
+        200,
       ],
     },
     {
@@ -2081,8 +4070,8 @@ exports[`canonical dimension structural goldens > 'angular-right-angle-minor' 1`
     },
     {
       "from": [
-        200,
-        170,
+        212.999789,
+        174.224606,
       ],
       "kind": "line",
       "part": "arrow",
@@ -2090,6 +4079,19 @@ exports[`canonical dimension structural goldens > 'angular-right-angle-minor' 1`
       "to": [
         213.000211,
         165.776694,
+      ],
+    },
+    {
+      "from": [
+        213.000211,
+        165.776694,
+      ],
+      "kind": "line",
+      "part": "arrow",
+      "styleRole": "normal",
+      "to": [
+        200,
+        170,
       ],
     },
     {
@@ -2117,6 +4119,538 @@ exports[`canonical dimension structural goldens > 'angular-right-angle-minor' 1`
         200,
         165,
       ],
+    },
+  ],
+  "sceneTopology": [
+    {
+      "from": {
+        "anchor": [
+          0,
+          0,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+      "kind": "scene-line",
+      "part": "extension",
+      "styleRole": "normal",
+      "to": {
+        "anchor": [
+          0.35,
+          0,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+    },
+    {
+      "from": {
+        "anchor": [
+          0,
+          0,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+      "kind": "scene-line",
+      "part": "extension",
+      "styleRole": "normal",
+      "to": {
+        "anchor": [
+          0,
+          0.35,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+    },
+    {
+      "from": {
+        "anchor": [
+          0.3,
+          0,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+      "kind": "scene-line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": {
+        "anchor": [
+          0.299301,
+          0.020473,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+    },
+    {
+      "from": {
+        "anchor": [
+          0.299301,
+          0.020473,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+      "kind": "scene-line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": {
+        "anchor": [
+          0.297206,
+          0.04085,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+    },
+    {
+      "from": {
+        "anchor": [
+          0.297206,
+          0.04085,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+      "kind": "scene-line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": {
+        "anchor": [
+          0.293725,
+          0.061037,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+    },
+    {
+      "from": {
+        "anchor": [
+          0.293725,
+          0.061037,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+      "kind": "scene-line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": {
+        "anchor": [
+          0.288875,
+          0.080939,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+    },
+    {
+      "from": {
+        "anchor": [
+          0.288875,
+          0.080939,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+      "kind": "scene-line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": {
+        "anchor": [
+          0.282678,
+          0.100464,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+    },
+    {
+      "from": {
+        "anchor": [
+          0.282678,
+          0.100464,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+      "kind": "scene-line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": {
+        "anchor": [
+          0.275163,
+          0.11952,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+    },
+    {
+      "from": {
+        "anchor": [
+          0.275163,
+          0.11952,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+      "kind": "scene-line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": {
+        "anchor": [
+          0.272062,
+          0.126043,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+    },
+    {
+      "from": {
+        "anchor": [
+          0.126044,
+          0.272061,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+      "kind": "scene-line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": {
+        "anchor": [
+          0.11952,
+          0.275163,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          -0,
+        ],
+      },
+    },
+    {
+      "from": {
+        "anchor": [
+          0.11952,
+          0.275163,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          -0,
+        ],
+      },
+      "kind": "scene-line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": {
+        "anchor": [
+          0.100464,
+          0.282678,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+    },
+    {
+      "from": {
+        "anchor": [
+          0.100464,
+          0.282678,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+      "kind": "scene-line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": {
+        "anchor": [
+          0.080939,
+          0.288875,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          -0,
+        ],
+      },
+    },
+    {
+      "from": {
+        "anchor": [
+          0.080939,
+          0.288875,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          -0,
+        ],
+      },
+      "kind": "scene-line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": {
+        "anchor": [
+          0.061037,
+          0.293725,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+    },
+    {
+      "from": {
+        "anchor": [
+          0.061037,
+          0.293725,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+      "kind": "scene-line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": {
+        "anchor": [
+          0.04085,
+          0.297206,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+    },
+    {
+      "from": {
+        "anchor": [
+          0.04085,
+          0.297206,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+      "kind": "scene-line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": {
+        "anchor": [
+          0.020473,
+          0.299301,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+    },
+    {
+      "from": {
+        "anchor": [
+          0.020473,
+          0.299301,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+      "kind": "scene-line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": {
+        "anchor": [
+          -0,
+          0.3,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          -0,
+        ],
+      },
+    },
+    {
+      "kind": "scene-triangle",
+      "part": "arrow",
+      "points": [
+        {
+          "anchor": [
+            0.3,
+            0,
+            0,
+          ],
+          "offsetPx": [
+            0,
+            0,
+          ],
+        },
+        {
+          "anchor": [
+            0.3,
+            0,
+            0,
+          ],
+          "offsetPx": [
+            4.223306,
+            -13.000211,
+          ],
+        },
+        {
+          "anchor": [
+            0.3,
+            0,
+            0,
+          ],
+          "offsetPx": [
+            -4.224606,
+            -12.999789,
+          ],
+        },
+      ],
+      "styleRole": "normal",
+    },
+    {
+      "kind": "scene-triangle",
+      "part": "arrow",
+      "points": [
+        {
+          "anchor": [
+            0,
+            0.3,
+            0,
+          ],
+          "offsetPx": [
+            0,
+            0,
+          ],
+        },
+        {
+          "anchor": [
+            0,
+            0.3,
+            0,
+          ],
+          "offsetPx": [
+            12.999789,
+            4.224606,
+          ],
+        },
+        {
+          "anchor": [
+            0,
+            0.3,
+            0,
+          ],
+          "offsetPx": [
+            13.000211,
+            -4.223306,
+          ],
+        },
+      ],
+      "styleRole": "normal",
+    },
+    {
+      "at": {
+        "anchor": [
+          0.212132,
+          0.212132,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+      "capHeightPx": 11.5,
+      "kind": "scene-glyph-run",
+      "rotationRad": 0.785348,
+      "styleRole": "normal",
+      "text": "90.00°",
     },
   ],
 }
@@ -2197,8 +4731,8 @@ exports[`canonical dimension structural goldens > 'linear' 1`] = `
     },
     {
       "from": [
-        200,
-        185,
+        213,
+        189.223956,
       ],
       "kind": "segment",
       "part": "arrow",
@@ -2210,6 +4744,19 @@ exports[`canonical dimension structural goldens > 'linear' 1`] = `
     },
     {
       "from": [
+        213,
+        180.776044,
+      ],
+      "kind": "segment",
+      "part": "arrow",
+      "to": [
+        200,
+        185,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
         300,
         185,
       ],
@@ -2223,14 +4770,27 @@ exports[`canonical dimension structural goldens > 'linear' 1`] = `
     },
     {
       "from": [
-        300,
-        185,
+        287,
+        180.776044,
       ],
       "kind": "segment",
       "part": "arrow",
       "to": [
         287,
         189.223956,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        287,
+        189.223956,
+      ],
+      "kind": "segment",
+      "part": "arrow",
+      "to": [
+        300,
+        185,
       ],
       "widthPx": 1,
     },
@@ -2284,8 +4844,8 @@ exports[`canonical dimension structural goldens > 'linear' 1`] = `
     },
     {
       "from": [
-        200,
-        185,
+        213,
+        189.223956,
       ],
       "kind": "line",
       "part": "arrow",
@@ -2297,6 +4857,19 @@ exports[`canonical dimension structural goldens > 'linear' 1`] = `
     },
     {
       "from": [
+        213,
+        180.776044,
+      ],
+      "kind": "line",
+      "part": "arrow",
+      "styleRole": "normal",
+      "to": [
+        200,
+        185,
+      ],
+    },
+    {
+      "from": [
         300,
         185,
       ],
@@ -2310,8 +4883,8 @@ exports[`canonical dimension structural goldens > 'linear' 1`] = `
     },
     {
       "from": [
-        300,
-        185,
+        287,
+        180.776044,
       ],
       "kind": "line",
       "part": "arrow",
@@ -2319,6 +4892,19 @@ exports[`canonical dimension structural goldens > 'linear' 1`] = `
       "to": [
         287,
         189.223956,
+      ],
+    },
+    {
+      "from": [
+        287,
+        189.223956,
+      ],
+      "kind": "line",
+      "part": "arrow",
+      "styleRole": "normal",
+      "to": [
+        300,
+        185,
       ],
     },
     {
@@ -2372,6 +4958,214 @@ exports[`canonical dimension structural goldens > 'linear' 1`] = `
         300,
         175,
       ],
+    },
+  ],
+  "sceneTopology": [
+    {
+      "from": {
+        "anchor": [
+          0,
+          0,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+      "kind": "scene-line",
+      "part": "extension",
+      "styleRole": "normal",
+      "to": {
+        "anchor": [
+          0,
+          0,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          -25,
+        ],
+      },
+    },
+    {
+      "from": {
+        "anchor": [
+          1,
+          0,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+      "kind": "scene-line",
+      "part": "extension",
+      "styleRole": "normal",
+      "to": {
+        "anchor": [
+          1,
+          0,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          -25,
+        ],
+      },
+    },
+    {
+      "from": {
+        "anchor": [
+          0,
+          0,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          -15,
+        ],
+      },
+      "kind": "scene-line",
+      "part": "dimension",
+      "styleRole": "normal",
+      "to": {
+        "anchor": [
+          0.38525,
+          0,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          -15,
+        ],
+      },
+    },
+    {
+      "from": {
+        "anchor": [
+          0.61475,
+          0,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          -15,
+        ],
+      },
+      "kind": "scene-line",
+      "part": "dimension",
+      "styleRole": "normal",
+      "to": {
+        "anchor": [
+          1,
+          0,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          -15,
+        ],
+      },
+    },
+    {
+      "kind": "scene-triangle",
+      "part": "arrow",
+      "points": [
+        {
+          "anchor": [
+            0,
+            0,
+            0,
+          ],
+          "offsetPx": [
+            0,
+            -15,
+          ],
+        },
+        {
+          "anchor": [
+            0,
+            0,
+            0,
+          ],
+          "offsetPx": [
+            13,
+            -10.776044,
+          ],
+        },
+        {
+          "anchor": [
+            0,
+            0,
+            0,
+          ],
+          "offsetPx": [
+            13,
+            -19.223956,
+          ],
+        },
+      ],
+      "styleRole": "normal",
+    },
+    {
+      "kind": "scene-triangle",
+      "part": "arrow",
+      "points": [
+        {
+          "anchor": [
+            1,
+            0,
+            0,
+          ],
+          "offsetPx": [
+            0,
+            -15,
+          ],
+        },
+        {
+          "anchor": [
+            1,
+            0,
+            0,
+          ],
+          "offsetPx": [
+            -13,
+            -19.223956,
+          ],
+        },
+        {
+          "anchor": [
+            1,
+            0,
+            0,
+          ],
+          "offsetPx": [
+            -13,
+            -10.776044,
+          ],
+        },
+      ],
+      "styleRole": "normal",
+    },
+    {
+      "at": {
+        "anchor": [
+          0.5,
+          0,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          -15,
+        ],
+      },
+      "capHeightPx": 11.5,
+      "kind": "scene-glyph-run",
+      "rotationRad": 0,
+      "styleRole": "normal",
+      "text": "1000.00",
     },
   ],
 }
@@ -2478,8 +5272,8 @@ exports[`canonical dimension structural goldens > 'projected' 1`] = `
     },
     {
       "from": [
-        300,
-        220,
+        287,
+        215.776044,
       ],
       "kind": "segment",
       "part": "arrow",
@@ -2491,6 +5285,19 @@ exports[`canonical dimension structural goldens > 'projected' 1`] = `
     },
     {
       "from": [
+        287,
+        224.223956,
+      ],
+      "kind": "segment",
+      "part": "arrow",
+      "to": [
+        300,
+        220,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
         200,
         220,
       ],
@@ -2504,14 +5311,27 @@ exports[`canonical dimension structural goldens > 'projected' 1`] = `
     },
     {
       "from": [
-        200,
-        220,
+        213,
+        224.223956,
       ],
       "kind": "segment",
       "part": "arrow",
       "to": [
         213,
         215.776044,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        213,
+        215.776044,
+      ],
+      "kind": "segment",
+      "part": "arrow",
+      "to": [
+        200,
+        220,
       ],
       "widthPx": 1,
     },
@@ -2565,8 +5385,8 @@ exports[`canonical dimension structural goldens > 'projected' 1`] = `
     },
     {
       "from": [
-        300,
-        220,
+        287,
+        215.776044,
       ],
       "kind": "line",
       "part": "arrow",
@@ -2578,6 +5398,19 @@ exports[`canonical dimension structural goldens > 'projected' 1`] = `
     },
     {
       "from": [
+        287,
+        224.223956,
+      ],
+      "kind": "line",
+      "part": "arrow",
+      "styleRole": "normal",
+      "to": [
+        300,
+        220,
+      ],
+    },
+    {
+      "from": [
         200,
         220,
       ],
@@ -2591,8 +5424,8 @@ exports[`canonical dimension structural goldens > 'projected' 1`] = `
     },
     {
       "from": [
-        200,
-        220,
+        213,
+        224.223956,
       ],
       "kind": "line",
       "part": "arrow",
@@ -2600,6 +5433,19 @@ exports[`canonical dimension structural goldens > 'projected' 1`] = `
       "to": [
         213,
         215.776044,
+      ],
+    },
+    {
+      "from": [
+        213,
+        215.776044,
+      ],
+      "kind": "line",
+      "part": "arrow",
+      "styleRole": "normal",
+      "to": [
+        200,
+        220,
       ],
     },
     {
@@ -2681,6 +5527,268 @@ exports[`canonical dimension structural goldens > 'projected' 1`] = `
       ],
     },
   ],
+  "sceneTopology": [
+    {
+      "from": {
+        "anchor": [
+          1,
+          0,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+      "kind": "scene-line",
+      "part": "projection",
+      "styleRole": "normal",
+      "to": {
+        "anchor": [
+          0,
+          0,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+    },
+    {
+      "from": {
+        "anchor": [
+          0,
+          0.6,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+      "kind": "scene-line",
+      "part": "projection",
+      "styleRole": "normal",
+      "to": {
+        "anchor": [
+          0,
+          0,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+    },
+    {
+      "from": {
+        "anchor": [
+          1,
+          0,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+      "kind": "scene-line",
+      "part": "extension",
+      "styleRole": "normal",
+      "to": {
+        "anchor": [
+          1,
+          0,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          30,
+        ],
+      },
+    },
+    {
+      "from": {
+        "anchor": [
+          0,
+          0,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+      "kind": "scene-line",
+      "part": "extension",
+      "styleRole": "normal",
+      "to": {
+        "anchor": [
+          0,
+          0,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          30,
+        ],
+      },
+    },
+    {
+      "from": {
+        "anchor": [
+          1,
+          0,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          20,
+        ],
+      },
+      "kind": "scene-line",
+      "part": "dimension",
+      "styleRole": "normal",
+      "to": {
+        "anchor": [
+          0.61475,
+          0,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          20,
+        ],
+      },
+    },
+    {
+      "from": {
+        "anchor": [
+          0.38525,
+          0,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          20,
+        ],
+      },
+      "kind": "scene-line",
+      "part": "dimension",
+      "styleRole": "normal",
+      "to": {
+        "anchor": [
+          0,
+          0,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          20,
+        ],
+      },
+    },
+    {
+      "kind": "scene-triangle",
+      "part": "arrow",
+      "points": [
+        {
+          "anchor": [
+            1,
+            0,
+            0,
+          ],
+          "offsetPx": [
+            0,
+            20,
+          ],
+        },
+        {
+          "anchor": [
+            1,
+            0,
+            0,
+          ],
+          "offsetPx": [
+            -13,
+            15.776044,
+          ],
+        },
+        {
+          "anchor": [
+            1,
+            0,
+            0,
+          ],
+          "offsetPx": [
+            -13,
+            24.223956,
+          ],
+        },
+      ],
+      "styleRole": "normal",
+    },
+    {
+      "kind": "scene-triangle",
+      "part": "arrow",
+      "points": [
+        {
+          "anchor": [
+            0,
+            0,
+            0,
+          ],
+          "offsetPx": [
+            0,
+            20,
+          ],
+        },
+        {
+          "anchor": [
+            0,
+            0,
+            0,
+          ],
+          "offsetPx": [
+            13,
+            24.223956,
+          ],
+        },
+        {
+          "anchor": [
+            0,
+            0,
+            0,
+          ],
+          "offsetPx": [
+            13,
+            15.776044,
+          ],
+        },
+      ],
+      "styleRole": "normal",
+    },
+    {
+      "at": {
+        "anchor": [
+          0.5,
+          0,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          20,
+        ],
+      },
+      "capHeightPx": 11.5,
+      "kind": "scene-glyph-run",
+      "rotationRad": 0,
+      "styleRole": "normal",
+      "text": "1000.00",
+    },
+  ],
 }
 `;
 
@@ -2700,8 +5808,8 @@ exports[`canonical dimension structural goldens > 'radial-500mm-diameter' 1`] = 
       "kind": "segment",
       "part": "leader",
       "to": [
-        240.408009,
-        159.591991,
+        244.105785,
+        155.894215,
       ],
       "widthPx": 1,
     },
@@ -2709,27 +5817,27 @@ exports[`canonical dimension structural goldens > 'radial-500mm-diameter' 1`] = 
       "kind": "rect",
       "part": "label",
       "rect": {
-        "height": 17.25,
-        "width": 17.25,
-        "x": 244.408009,
-        "y": 138.341991,
+        "height": 24.395184,
+        "width": 24.395184,
+        "x": 240.835417,
+        "y": 134.769399,
       },
     },
   ],
   "labelBounds": {
-    "height": 25.25,
-    "width": 25.25,
-    "x": 240.408009,
-    "y": 134.341991,
+    "height": 32.395184,
+    "width": 32.395184,
+    "x": 236.835417,
+    "y": 130.769399,
   },
   "labelPinned": false,
   "primitives": [
     {
       "bounds": {
-        "height": 17.25,
-        "width": 17.25,
-        "x": 244.408009,
-        "y": 138.341991,
+        "height": 24.395184,
+        "width": 24.395184,
+        "x": 240.835417,
+        "y": 134.769399,
       },
       "capHeightPx": 11.5,
       "kind": "glyph-run",
@@ -2737,8 +5845,19 @@ exports[`canonical dimension structural goldens > 'radial-500mm-diameter' 1`] = 
         244.408009,
         152.141991,
       ],
+      "rotationCenter": [
+        253.033009,
+        146.966991,
+      ],
+      "rotationRad": -0.785398,
       "styleRole": "normal",
       "text": "⌀1000.00",
+      "unrotatedBounds": {
+        "height": 17.25,
+        "width": 17.25,
+        "x": 244.408009,
+        "y": 138.341991,
+      },
     },
     {
       "from": [
@@ -2749,9 +5868,56 @@ exports[`canonical dimension structural goldens > 'radial-500mm-diameter' 1`] = 
       "part": "leader",
       "styleRole": "normal",
       "to": [
-        240.408009,
-        159.591991,
+        244.105785,
+        155.894215,
       ],
+    },
+  ],
+  "sceneTopology": [
+    {
+      "from": {
+        "anchor": [
+          0.353553,
+          0.353553,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+      "kind": "scene-line",
+      "part": "leader",
+      "styleRole": "normal",
+      "to": {
+        "anchor": [
+          0.441058,
+          0.441058,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+    },
+    {
+      "at": {
+        "anchor": [
+          0.53033,
+          0.53033,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+      "capHeightPx": 11.5,
+      "kind": "scene-glyph-run",
+      "rotationRad": -0.785398,
+      "styleRole": "normal",
+      "text": "⌀1000.00",
     },
   ],
 }
@@ -2773,8 +5939,8 @@ exports[`canonical dimension structural goldens > 'radial-500mm-radius' 1`] = `
       "kind": "segment",
       "part": "leader",
       "to": [
-        241.558009,
-        158.441991,
+        244.918958,
+        155.081042,
       ],
       "widthPx": 1,
     },
@@ -2782,27 +5948,27 @@ exports[`canonical dimension structural goldens > 'radial-500mm-radius' 1`] = `
       "kind": "rect",
       "part": "label",
       "rect": {
-        "height": 17.25,
-        "width": 14.95,
-        "x": 245.558009,
-        "y": 138.341991,
+        "height": 22.768838,
+        "width": 22.768838,
+        "x": 241.648589,
+        "y": 135.582572,
       },
     },
   ],
   "labelBounds": {
-    "height": 25.25,
-    "width": 22.95,
-    "x": 241.558009,
-    "y": 134.341991,
+    "height": 30.768838,
+    "width": 30.768838,
+    "x": 237.648589,
+    "y": 131.582572,
   },
   "labelPinned": false,
   "primitives": [
     {
       "bounds": {
-        "height": 17.25,
-        "width": 14.95,
-        "x": 245.558009,
-        "y": 138.341991,
+        "height": 22.768838,
+        "width": 22.768838,
+        "x": 241.648589,
+        "y": 135.582572,
       },
       "capHeightPx": 11.5,
       "kind": "glyph-run",
@@ -2810,8 +5976,19 @@ exports[`canonical dimension structural goldens > 'radial-500mm-radius' 1`] = `
         245.558009,
         152.141991,
       ],
+      "rotationCenter": [
+        253.033009,
+        146.966991,
+      ],
+      "rotationRad": -0.785398,
       "styleRole": "normal",
       "text": "R500.00",
+      "unrotatedBounds": {
+        "height": 17.25,
+        "width": 14.95,
+        "x": 245.558009,
+        "y": 138.341991,
+      },
     },
     {
       "from": [
@@ -2822,9 +5999,56 @@ exports[`canonical dimension structural goldens > 'radial-500mm-radius' 1`] = `
       "part": "leader",
       "styleRole": "normal",
       "to": [
-        241.558009,
-        158.441991,
+        244.918958,
+        155.081042,
       ],
+    },
+  ],
+  "sceneTopology": [
+    {
+      "from": {
+        "anchor": [
+          0.353553,
+          0.353553,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+      "kind": "scene-line",
+      "part": "leader",
+      "styleRole": "normal",
+      "to": {
+        "anchor": [
+          0.44919,
+          0.44919,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          -0,
+        ],
+      },
+    },
+    {
+      "at": {
+        "anchor": [
+          0.53033,
+          0.53033,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+      "capHeightPx": 11.5,
+      "kind": "scene-glyph-run",
+      "rotationRad": -0.785398,
+      "styleRole": "normal",
+      "text": "R500.00",
     },
   ],
 }
@@ -3720,6 +6944,248 @@ exports[`explicit annotation structural goldens > explicit-annotation 1`] = `
         ],
       ],
       "styleRole": "external",
+    },
+  ],
+  "sceneTopology": [
+    {
+      "from": {
+        "anchor": [
+          0,
+          0,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+      "kind": "scene-line",
+      "lineStyle": "dash-dot",
+      "part": "leader",
+      "styleRole": "external",
+      "to": {
+        "anchor": [
+          1,
+          0,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+    },
+    {
+      "from": {
+        "anchor": [
+          0,
+          0,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+      "kind": "scene-line",
+      "lineStyle": "dashed",
+      "part": "extension",
+      "styleRole": "external",
+      "to": {
+        "anchor": [
+          0,
+          0.4,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+    },
+    {
+      "from": {
+        "anchor": [
+          0,
+          0,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+      "kind": "scene-line",
+      "part": "arrow",
+      "styleRole": "external",
+      "to": {
+        "anchor": [
+          0.1,
+          0.05,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+    },
+    {
+      "closed": true,
+      "kind": "scene-path",
+      "part": "arc",
+      "points": {
+        "count": 32,
+        "first": {
+          "anchor": [
+            0.5,
+            -0.25,
+            0,
+          ],
+          "offsetPx": [
+            0,
+            0,
+          ],
+        },
+        "last": {
+          "anchor": [
+            0.451227,
+            -0.245196,
+            0,
+          ],
+          "offsetPx": [
+            0,
+            0,
+          ],
+        },
+        "middle": {
+          "anchor": [
+            0.5,
+            0.25,
+            0,
+          ],
+          "offsetPx": [
+            0,
+            0,
+          ],
+        },
+      },
+      "styleRole": "external",
+    },
+    {
+      "closed": false,
+      "kind": "scene-path",
+      "lineStyle": "dashed",
+      "part": "arc",
+      "points": {
+        "count": 9,
+        "first": {
+          "anchor": [
+            0.5,
+            -0.45,
+            0,
+          ],
+          "offsetPx": [
+            0,
+            0,
+          ],
+        },
+        "last": {
+          "anchor": [
+            0.95,
+            -0,
+            0,
+          ],
+          "offsetPx": [
+            0,
+            0,
+          ],
+        },
+        "middle": {
+          "anchor": [
+            0.818198,
+            -0.318198,
+            0,
+          ],
+          "offsetPx": [
+            0,
+            0,
+          ],
+        },
+      },
+      "styleRole": "external",
+    },
+    {
+      "at": {
+        "anchor": [
+          0.5,
+          0,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+      "kind": "scene-marker",
+      "part": "marker",
+      "radiusPx": 5,
+      "shape": "circle",
+      "styleRole": "external",
+    },
+    {
+      "at": {
+        "anchor": [
+          1,
+          0,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+      "kind": "scene-marker",
+      "part": "marker",
+      "radiusPx": 4,
+      "shape": "cross",
+      "styleRole": "external",
+    },
+    {
+      "at": {
+        "anchor": [
+          0.5,
+          0.3,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+      "capHeightPx": 11.5,
+      "kind": "scene-glyph-run",
+      "rotationRad": 0,
+      "styleRole": "external",
+      "text": "A",
+    },
+    {
+      "at": {
+        "anchor": [
+          0.5,
+          -0.35,
+          0,
+        ],
+        "offsetPx": [
+          0,
+          0,
+        ],
+      },
+      "capHeightPx": 11.5,
+      "kind": "scene-glyph-run",
+      "rotationRad": 0,
+      "styleRole": "external",
+      "text": "h",
     },
   ],
 }

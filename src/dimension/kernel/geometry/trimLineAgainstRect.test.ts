@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
-import { trimLineAgainstRect } from './trimLineAgainstRect';
+import {
+  trimLineAgainstRect,
+  trimLineAgainstRotatedRect,
+} from './trimLineAgainstRect';
 
 const rect = { x: 4, y: -1, width: 2, height: 2 };
 
@@ -42,5 +45,20 @@ describe('trimLineAgainstRect', () => {
       segments: [],
       outsideSide: 0,
     });
+  });
+
+  it('trims against the oriented glyph rectangle instead of its larger AABB', () => {
+    const result = trimLineAgainstRotatedRect(
+      [0, 0],
+      [10, 0],
+      rect,
+      [5, 0],
+      Math.PI / 4,
+      true,
+    );
+
+    expect(result.segments).toHaveLength(2);
+    expect(result.segments[0]?.to[0]).toBeCloseTo(3.585786, 5);
+    expect(result.segments[1]?.from[0]).toBeCloseTo(6.414214, 5);
   });
 });

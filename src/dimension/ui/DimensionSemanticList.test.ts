@@ -71,6 +71,16 @@ describe('getDimensionBoundActions', () => {
       id: 'owner',
       role: 'designer',
     })).toEqual(['select', 'rebind:a', 'rebind:b', 'delete']);
+    expect(getDimensionBoundActions(linearRecord({ labelPinned: true }), {
+      id: 'owner',
+      role: 'designer',
+    })).toEqual([
+      'select',
+      'rebind:a',
+      'rebind:b',
+      'restore-auto-layout',
+      'delete',
+    ]);
   });
 });
 

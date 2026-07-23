@@ -6,7 +6,12 @@ import { SOLVESPACE_DIMENSION_THEME } from '../theme';
 
 import { layoutAngular } from './angular';
 
-import type { NormalizedDimensionInput, ScreenLine } from '../types';
+import type {
+  NormalizedDimensionInput,
+  ScreenGlyphRun,
+  ScreenLine,
+  Vec2,
+} from '../types';
 import type { LayoutContext } from './context';
 
 const context: LayoutContext = {
@@ -102,11 +107,25 @@ describe('layoutAngular', () => {
       (primitive): primitive is ScreenLine =>
         primitive.kind === 'line' && primitive.part === 'arc',
     );
-    const isStrictlyInside = (point: readonly [number, number]) =>
-      point[0] > result.labelBounds.x &&
-      point[0] < result.labelBounds.x + result.labelBounds.width &&
-      point[1] > result.labelBounds.y &&
-      point[1] < result.labelBounds.y + result.labelBounds.height;
+    const glyph = result.primitives.find(
+      (primitive): primitive is ScreenGlyphRun =>
+        primitive.kind === 'glyph-run',
+    )!;
+    const isStrictlyInside = (point: Vec2) => {
+      const center = glyph.rotationCenter!;
+      const rotation = -(glyph.rotationRad ?? 0);
+      const dx = point[0] - center[0];
+      const dy = point[1] - center[1];
+      const local: Vec2 = [
+        center[0] + dx * Math.cos(rotation) - dy * Math.sin(rotation),
+        center[1] + dx * Math.sin(rotation) + dy * Math.cos(rotation),
+      ];
+      const bounds = glyph.unrotatedBounds ?? glyph.bounds;
+      return local[0] > bounds.x
+        && local[0] < bounds.x + bounds.width
+        && local[1] > bounds.y
+        && local[1] < bounds.y + bounds.height;
+    };
 
     expect(
       arcLines.every((line) => {
