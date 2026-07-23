@@ -8,7 +8,6 @@ import {
   EyeOff,
   Focus,
   GitCompare,
-  RefreshCw,
   Ruler,
   ScanEye,
   Search,
@@ -130,11 +129,13 @@ import {
   collectModelUnitTargetObjectIds,
   DEFAULT_MODEL_UNIT_COMPARE_SIDE,
   DEFAULT_MODEL_UNIT_COMPARE_VIEW_MODE,
-  formatModelUnitVersionTime,
   getModelUnitCompareRenderPasses,
   MODEL_UNIT_VERSION_COMPARE_EVENT,
+  MODEL_UNIT_VERSION_COMPARE_STATE_EVENT,
   type ModelUnitCompareViewMode,
   type ModelUnitVersionCompareEventDetail,
+  type ModelUnitVersionCompareOpenDetail,
+  type ModelUnitVersionCompareRuntimeState,
 } from '@/utils/modelUnitVersionCompare';
 import { parseGlbGeometry } from '@/utils/parseGlbGeometry';
 import { SlopeAnnotation3D, WeldAnnotation3D } from '@/utils/three/annotation';
@@ -1197,21 +1198,18 @@ const dtxViewerRef = shallowRef<DtxViewer | null>(null);
 const dtxLayerRef = shallowRef<DTXLayer | null>(null);
 const showDbnumExtraDtxLayers: DTXLayer[] = [];
 const attachedShowDbnumExtraDtxLayers = new WeakSet<DTXLayer>();
-type ModelUnitCompareOpenDetail = Extract<ModelUnitVersionCompareEventDetail, { action: 'open' }>;
-type ModelUnitCompareRuntimeState = {
-  detail: ModelUnitCompareOpenDetail;
-  status: 'loading' | 'ready' | 'error';
-  activeSide: 'before' | 'after';
-  viewMode: ModelUnitCompareViewMode;
-  environment?: {
-    generatedAt?: string;
-    loadedRefnos: number;
-    refreshing: boolean;
-    error?: string;
-  };
-  error?: string;
-};
-const modelUnitCompareState = ref<ModelUnitCompareRuntimeState | null>(null);
+const modelUnitCompareState = ref<ModelUnitVersionCompareRuntimeState | null>(null);
+function publishModelUnitCompareState(): void {
+  const state = modelUnitCompareState.value;
+  const detail: ModelUnitVersionCompareRuntimeState | null = state
+    ? {
+      ...state,
+      environment: state.environment ? { ...state.environment } : undefined,
+    }
+    : null;
+  window.dispatchEvent(new CustomEvent(MODEL_UNIT_VERSION_COMPARE_STATE_EVENT, { detail }));
+}
+watch(modelUnitCompareState, publishModelUnitCompareState, { deep: true });
 let modelUnitCompareLayers: DTXLayer[] = [];
 let modelUnitCompareOriginalVisibility = new Map<string, boolean>();
 let modelUnitCompareTargetRefnos: string[] = [];
@@ -2514,7 +2512,7 @@ function collectLoadedRefnoVisibility(primaryLayer: DTXLayer, dbnum: number): Ma
 }
 
 async function refreshModelUnitCompareEnvironment(
-  detail: ModelUnitCompareOpenDetail,
+  detail: ModelUnitVersionCompareOpenDetail,
   runId: number,
 ): Promise<{ generatedAt: string; loadedRefnos: number; refreshing: false }> {
   const primaryLayer = dtxLayerRef.value;
@@ -2563,6 +2561,9 @@ function setModelUnitCompareSide(side: 'before' | 'after'): void {
   const [beforeLayer, afterLayer] = modelUnitCompareLayers;
   applyModelUnitVersionSide(beforeLayer, afterLayer, side);
   state.activeSide = side;
+  if (isDev && typeof window !== 'undefined' && (window as any).__modelUnitVersionCompare) {
+    (window as any).__modelUnitVersionCompare.activeSide = side;
+  }
   requestRender();
 }
 
@@ -2578,6 +2579,9 @@ function setModelUnitCompareViewMode(viewMode: ModelUnitCompareViewMode): void {
     pivotControllerRef.value?.handleMouseUp();
   }
   state.viewMode = viewMode;
+  if (isDev && typeof window !== 'undefined' && (window as any).__modelUnitVersionCompare) {
+    (window as any).__modelUnitVersionCompare.viewMode = viewMode;
+  }
   requestRender();
 }
 
@@ -2690,12 +2694,6 @@ function clearModelUnitVersionCompare(): void {
   requestRender();
 }
 
-function requestCloseModelUnitVersionCompare(): void {
-  window.dispatchEvent(new CustomEvent(MODEL_UNIT_VERSION_COMPARE_EVENT, {
-    detail: { action: 'close' } satisfies ModelUnitVersionCompareEventDetail,
-  }));
-}
-
 function focusModelUnitVersionCompare(refno: string): void {
   const viewer = dtxViewerRef.value;
   const normalized = normalizeCompareRefno(refno);
@@ -2727,7 +2725,7 @@ function focusModelUnitVersionCompare(refno: string): void {
   requestRender();
 }
 
-async function openModelUnitVersionCompare(detail: ModelUnitCompareOpenDetail): Promise<void> {
+async function openModelUnitVersionCompare(detail: ModelUnitVersionCompareOpenDetail): Promise<void> {
   clearModelUnitVersionCompare();
   closeIncrementalCompareOverlay();
   const viewer = dtxViewerRef.value;
@@ -2902,6 +2900,22 @@ function handleModelUnitVersionCompare(event: Event): void {
   }
   if (detail.action === 'focus') {
     focusModelUnitVersionCompare(detail.refno);
+    return;
+  }
+  if (detail.action === 'set-side') {
+    setModelUnitCompareSide(detail.side);
+    return;
+  }
+  if (detail.action === 'set-view-mode') {
+    setModelUnitCompareViewMode(detail.viewMode);
+    return;
+  }
+  if (detail.action === 'refresh-environment') {
+    void requestRefreshModelUnitCompareEnvironment();
+    return;
+  }
+  if (detail.action === 'request-state') {
+    publishModelUnitCompareState();
     return;
   }
   void openModelUnitVersionCompare(detail);
@@ -5734,117 +5748,6 @@ onUnmounted(() => {
 
     <!-- 管道间距离标注控制面板 -->
     <PipeDistanceDrawer v-model:open="pipeDistDrawerOpen" />
-
-    <div v-if="modelUnitCompareState"
-      class="pointer-events-auto absolute right-3 top-3 w-[320px] max-w-[calc(100%-1.5rem)] rounded-lg border border-indigo-200 bg-background/95 p-3 text-sm text-foreground shadow-lg backdrop-blur"
-      style="z-index: 957"
-      data-testid="viewer-model-unit-version-compare-overlay"
-      @pointerdown.stop
-      @wheel.stop>
-      <div class="flex items-start justify-between gap-2">
-        <div class="min-w-0">
-          <div class="flex items-center gap-2">
-            <GitCompare class="h-4 w-4 shrink-0 text-indigo-600" />
-            <div class="truncate font-semibold">最小交付单元版本对比</div>
-          </div>
-          <div class="mt-1 truncate font-mono text-[11px] text-muted-foreground">
-            {{ modelUnitCompareState.detail.unitRefno }} · DB {{ modelUnitCompareState.detail.dbnum }}
-          </div>
-        </div>
-        <button type="button"
-          class="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded border border-input bg-background hover:bg-muted"
-          title="退出版本对比"
-          @click="requestCloseModelUnitVersionCompare">
-          <X class="h-4 w-4" />
-        </button>
-      </div>
-
-      <div class="mt-2 grid grid-cols-2 gap-1 rounded-md bg-muted p-1 text-xs">
-        <button type="button"
-          class="rounded px-2 py-1.5"
-          :class="modelUnitCompareState.viewMode === 'single' ? 'bg-background font-semibold shadow-sm' : 'text-muted-foreground hover:text-foreground'"
-          :aria-pressed="modelUnitCompareState.viewMode === 'single'"
-          data-testid="viewer-model-unit-compare-single-mode"
-          :disabled="modelUnitCompareState.status !== 'ready'"
-          @click="setModelUnitCompareViewMode('single')">
-          单视口切换
-        </button>
-        <button type="button"
-          class="rounded px-2 py-1.5"
-          :class="modelUnitCompareState.viewMode === 'split' ? 'bg-background font-semibold shadow-sm' : 'text-muted-foreground hover:text-foreground'"
-          :aria-pressed="modelUnitCompareState.viewMode === 'split'"
-          data-testid="viewer-model-unit-compare-split-mode"
-          :disabled="modelUnitCompareState.status !== 'ready'"
-          @click="setModelUnitCompareViewMode('split')">
-          双视口分屏
-        </button>
-      </div>
-
-      <div class="mt-2 grid grid-cols-2 gap-2 text-xs">
-        <button type="button"
-          class="rounded-md border border-blue-200 bg-blue-50 px-2 py-1.5 text-left text-blue-700 transition-opacity"
-          :class="modelUnitCompareState.activeSide === 'before' ? 'ring-2 ring-blue-500' : 'opacity-60'"
-          data-testid="viewer-model-unit-compare-before"
-          :disabled="modelUnitCompareState.status !== 'ready'"
-          @click="setModelUnitCompareSide('before')">
-          <div class="font-semibold">A · sesno {{ modelUnitCompareState.detail.before.sesno }}</div>
-          <div class="mt-0.5 text-[10px] opacity-75">{{ formatModelUnitVersionTime(modelUnitCompareState.detail.before.generatedAt) }}</div>
-          <div v-if="modelUnitCompareState.detail.before.manifestUrl" class="mt-0.5 text-[10px] opacity-75">artifact {{ modelUnitCompareState.detail.before.artifactSesno }}</div>
-          <div v-else class="mt-1 text-[10px] font-semibold">该版本单元已删除</div>
-        </button>
-        <button type="button"
-          class="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1.5 text-left text-emerald-700 transition-opacity"
-          :class="modelUnitCompareState.activeSide === 'after' ? 'ring-2 ring-emerald-500' : 'opacity-60'"
-          data-testid="viewer-model-unit-compare-after"
-          :disabled="modelUnitCompareState.status !== 'ready'"
-          @click="setModelUnitCompareSide('after')">
-          <div class="font-semibold">B · sesno {{ modelUnitCompareState.detail.after.sesno }}</div>
-          <div class="mt-0.5 text-[10px] opacity-75">{{ formatModelUnitVersionTime(modelUnitCompareState.detail.after.generatedAt) }}</div>
-          <div v-if="modelUnitCompareState.detail.after.manifestUrl" class="mt-0.5 text-[10px] opacity-75">artifact {{ modelUnitCompareState.detail.after.artifactSesno }}</div>
-          <div v-else class="mt-1 text-[10px] font-semibold">该版本单元已删除</div>
-        </button>
-      </div>
-
-      <div v-if="modelUnitCompareState.environment" class="mt-2 rounded-md border border-amber-200 bg-amber-50/80 p-2 text-[10px] text-amber-900">
-        <div class="flex items-start justify-between gap-2">
-          <div>
-            <div class="font-semibold">
-              {{ modelUnitCompareState.environment.error ? '当前环境（刷新失败）' : '最新环境' }}
-              <template v-if="modelUnitCompareState.environment.generatedAt">
-                · {{ formatModelUnitVersionTime(modelUnitCompareState.environment.generatedAt) }}
-              </template>
-            </div>
-            <div class="mt-0.5 opacity-80">已固定当前加载范围：{{ modelUnitCompareState.environment.loadedRefnos }} 个 refno</div>
-          </div>
-          <button type="button"
-            class="inline-flex shrink-0 items-center gap-1 rounded border border-amber-300 bg-background px-1.5 py-1 font-medium disabled:opacity-50"
-            data-testid="viewer-model-unit-compare-refresh-environment"
-            :disabled="modelUnitCompareState.environment.refreshing"
-            @click="requestRefreshModelUnitCompareEnvironment">
-            <RefreshCw class="h-3 w-3" :class="{ 'animate-spin': modelUnitCompareState.environment.refreshing }" />
-            刷新
-          </button>
-        </div>
-        <div class="mt-1 border-t border-amber-200 pt-1">
-          {{ modelUnitCompareState.environment.error
-            ? '整库最新环境不可用；当前仅显示两个所选最小交付单元。'
-            : '混合时间视图：环境始终取 dbnum 最新模型，目标单元取所选 sesno。' }}
-        </div>
-        <div v-if="modelUnitCompareState.environment.error" class="mt-1 text-destructive">{{ modelUnitCompareState.environment.error }}</div>
-      </div>
-
-      <div v-if="modelUnitCompareState.status === 'loading'" class="mt-2 text-xs text-muted-foreground">
-        正在加载两个精确版本…
-      </div>
-      <div v-else-if="modelUnitCompareState.status === 'error'" class="mt-2 rounded border border-destructive/30 bg-destructive/5 p-2 text-xs text-destructive">
-        {{ modelUnitCompareState.error }}
-      </div>
-      <div v-else class="mt-2 text-[11px] text-muted-foreground">
-        {{ modelUnitCompareState.viewMode === 'split'
-          ? '左侧固定 A、右侧固定 B；两侧共享最新环境和同步相机。'
-          : 'A/B 在原坐标重叠显示，默认显示 B；切换版本不会重载模型或移动相机。' }}
-      </div>
-    </div>
 
     <div v-if="incrementalCompareState"
       class="pointer-events-auto absolute right-3 top-3 w-[300px] max-w-[calc(100%-1.5rem)] rounded-lg border border-blue-200 bg-background/95 p-2.5 text-sm text-foreground shadow-lg backdrop-blur"

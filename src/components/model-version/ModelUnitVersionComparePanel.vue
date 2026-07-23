@@ -14,10 +14,14 @@ import {
   formatModelUnitVersionTime,
   geometrySnapshotsFromInstanceEntries,
   MODEL_UNIT_VERSION_COMPARE_EVENT,
+  MODEL_UNIT_VERSION_COMPARE_STATE_EVENT,
   orderModelUnitVersionPair,
+  type ModelUnitCompareSide,
+  type ModelUnitCompareViewMode,
   type ModelUnitGeometryDiff,
   type ModelUnitGeometryStatus,
   type ModelUnitVersionCompareEventDetail,
+  type ModelUnitVersionCompareRuntimeState,
 } from '@/utils/modelUnitVersionCompare';
 
 const ROOT_NOUNS = new Set(['BRAN', 'HANG', 'EQUI', 'WALL', 'FLOOR']);
@@ -34,6 +38,7 @@ const rows = ref<ModelUnitGeometryDiff[]>([]);
 const statusFilter = ref<'all' | Exclude<ModelUnitGeometryStatus, 'unchanged'>>('all');
 const includeUnchanged = ref(false);
 const compareActive = ref(false);
+const compareRuntime = ref<ModelUnitVersionCompareRuntimeState | null>(null);
 const compareCompleted = ref(false);
 let requestId = 0;
 
@@ -191,21 +196,47 @@ function focusRow(refno: string): void {
   dispatch({ action: 'focus', refno });
 }
 
+function setCompareSide(side: ModelUnitCompareSide): void {
+  dispatch({ action: 'set-side', side });
+}
+
+function setCompareViewMode(viewMode: ModelUnitCompareViewMode): void {
+  dispatch({ action: 'set-view-mode', viewMode });
+}
+
+function refreshCompareEnvironment(): void {
+  dispatch({ action: 'refresh-environment' });
+}
+
 function closeCompare(): void {
-  if (compareActive.value) dispatch({ action: 'close' });
+  if (compareActive.value || compareRuntime.value) dispatch({ action: 'close' });
   compareActive.value = false;
+  compareRuntime.value = null;
 }
 
 function handleCompareLifecycle(event: Event): void {
   const detail = (event as CustomEvent<ModelUnitVersionCompareEventDetail>).detail;
-  if (detail?.action === 'close') compareActive.value = false;
+  if (detail?.action === 'close') {
+    compareActive.value = false;
+    compareRuntime.value = null;
+  }
 }
 
-onMounted(() => window.addEventListener(MODEL_UNIT_VERSION_COMPARE_EVENT, handleCompareLifecycle));
+function handleCompareRuntime(event: Event): void {
+  compareRuntime.value = (event as CustomEvent<ModelUnitVersionCompareRuntimeState | null>).detail ?? null;
+  compareActive.value = compareRuntime.value !== null;
+}
+
+onMounted(() => {
+  window.addEventListener(MODEL_UNIT_VERSION_COMPARE_EVENT, handleCompareLifecycle);
+  window.addEventListener(MODEL_UNIT_VERSION_COMPARE_STATE_EVENT, handleCompareRuntime);
+  dispatch({ action: 'request-state' });
+});
 onBeforeUnmount(() => {
   requestId += 1;
   closeCompare();
   window.removeEventListener(MODEL_UNIT_VERSION_COMPARE_EVENT, handleCompareLifecycle);
+  window.removeEventListener(MODEL_UNIT_VERSION_COMPARE_STATE_EVENT, handleCompareRuntime);
 });
 </script>
 
@@ -271,14 +302,121 @@ onBeforeUnmount(() => {
             @click="runCompare">
             {{ comparing ? '正在比较…' : '在三维中对比' }}
           </button>
-          <button v-if="compareActive"
-            class="inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-2 text-xs text-foreground"
-            data-testid="model-unit-compare-close"
-            @click="closeCompare">
-            <X class="h-3.5 w-3.5" />退出
-          </button>
         </div>
       </template>
+
+      <section v-if="compareRuntime"
+        class="mt-3 rounded-md border border-indigo-200 bg-indigo-50/30 p-2.5"
+        data-testid="model-unit-compare-runtime">
+        <div class="flex items-center justify-between gap-2">
+          <div class="min-w-0">
+            <div class="text-xs font-semibold text-foreground">三维查看</div>
+            <div class="truncate font-mono text-[10px] text-muted-foreground">
+              {{ compareRuntime.detail.unitRefno }} · DB {{ compareRuntime.detail.dbnum }}
+            </div>
+          </div>
+          <button type="button"
+            class="inline-flex shrink-0 items-center gap-1 rounded-md border border-border bg-background px-2 py-1 text-[11px] text-foreground"
+            data-testid="model-unit-compare-close"
+            @click="closeCompare">
+            <X class="h-3 w-3" />退出
+          </button>
+        </div>
+
+        <div v-if="compareRuntime.status === 'loading'" class="mt-2 text-xs text-muted-foreground">
+          正在加载两个精确版本…
+        </div>
+        <div v-else-if="compareRuntime.status === 'error'"
+          class="mt-2 rounded border border-destructive/30 bg-destructive/5 p-2 text-xs text-destructive">
+          {{ compareRuntime.error }}
+        </div>
+        <template v-else>
+          <div class="mt-2 grid grid-cols-2 gap-1 rounded-md bg-muted p-1 text-xs">
+            <button type="button"
+              class="rounded px-2 py-1.5"
+              :class="compareRuntime.viewMode === 'single' ? 'bg-background font-semibold shadow-sm' : 'text-muted-foreground hover:text-foreground'"
+              :aria-pressed="compareRuntime.viewMode === 'single'"
+              data-testid="model-unit-compare-single-mode"
+              @click="setCompareViewMode('single')">
+              单视口切换
+            </button>
+            <button type="button"
+              class="rounded px-2 py-1.5"
+              :class="compareRuntime.viewMode === 'split' ? 'bg-background font-semibold shadow-sm' : 'text-muted-foreground hover:text-foreground'"
+              :aria-pressed="compareRuntime.viewMode === 'split'"
+              data-testid="model-unit-compare-split-mode"
+              @click="setCompareViewMode('split')">
+              双视口分屏
+            </button>
+          </div>
+
+          <div v-if="compareRuntime.viewMode === 'single'" class="mt-2 grid grid-cols-2 gap-2 text-xs">
+            <button type="button"
+              class="rounded-md border border-blue-200 bg-blue-50 px-2 py-1.5 text-left text-blue-700 transition-opacity"
+              :class="compareRuntime.activeSide === 'before' ? 'ring-2 ring-blue-500' : 'opacity-60'"
+              data-testid="model-unit-compare-show-before"
+              @click="setCompareSide('before')">
+              <div class="font-semibold">A · sesno {{ compareRuntime.detail.before.sesno }}</div>
+              <div class="mt-0.5 text-[10px] opacity-75">{{ formatModelUnitVersionTime(compareRuntime.detail.before.generatedAt) }}</div>
+              <div v-if="compareRuntime.detail.before.manifestUrl" class="mt-0.5 text-[10px] opacity-75">
+                artifact {{ compareRuntime.detail.before.artifactSesno }}
+              </div>
+              <div v-else class="mt-0.5 text-[10px] opacity-75">该版本单元已删除</div>
+            </button>
+            <button type="button"
+              class="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1.5 text-left text-emerald-700 transition-opacity"
+              :class="compareRuntime.activeSide === 'after' ? 'ring-2 ring-emerald-500' : 'opacity-60'"
+              data-testid="model-unit-compare-show-after"
+              @click="setCompareSide('after')">
+              <div class="font-semibold">B · sesno {{ compareRuntime.detail.after.sesno }}</div>
+              <div class="mt-0.5 text-[10px] opacity-75">{{ formatModelUnitVersionTime(compareRuntime.detail.after.generatedAt) }}</div>
+              <div v-if="compareRuntime.detail.after.manifestUrl" class="mt-0.5 text-[10px] opacity-75">
+                artifact {{ compareRuntime.detail.after.artifactSesno }}
+              </div>
+              <div v-else class="mt-0.5 text-[10px] opacity-75">该版本单元已删除</div>
+            </button>
+          </div>
+          <div v-else
+            class="mt-2 rounded-md border border-border bg-background px-2 py-1.5 text-[11px] text-muted-foreground"
+            data-testid="model-unit-compare-split-summary">
+            左 A · sesno {{ compareRuntime.detail.before.sesno }}
+            <span class="px-1">·</span>
+            右 B · sesno {{ compareRuntime.detail.after.sesno }}
+          </div>
+        </template>
+
+        <div v-if="compareRuntime.environment"
+          class="mt-2 rounded-md border border-amber-200 bg-amber-50/80 p-2 text-[10px] text-amber-900"
+          data-testid="model-unit-compare-environment">
+          <div class="flex items-start justify-between gap-2">
+            <div>
+              <div class="font-semibold">
+                {{ compareRuntime.environment.error ? '当前环境（刷新失败）' : '最新环境' }}
+                <template v-if="compareRuntime.environment.generatedAt">
+                  · {{ formatModelUnitVersionTime(compareRuntime.environment.generatedAt) }}
+                </template>
+              </div>
+              <div class="mt-0.5 opacity-80">已固定当前加载范围：{{ compareRuntime.environment.loadedRefnos }} 个 refno</div>
+            </div>
+            <button type="button"
+              class="inline-flex shrink-0 items-center gap-1 rounded border border-amber-300 bg-background px-1.5 py-1 font-medium disabled:opacity-50"
+              data-testid="model-unit-compare-refresh-environment"
+              :disabled="compareRuntime.environment.refreshing"
+              @click="refreshCompareEnvironment">
+              <RefreshCw class="h-3 w-3" :class="{ 'animate-spin': compareRuntime.environment.refreshing }" />
+              刷新
+            </button>
+          </div>
+          <div class="mt-1 border-t border-amber-200 pt-1">
+            {{ compareRuntime.environment.error
+              ? '整库最新环境不可用；当前仅显示两个所选最小交付单元。'
+              : '混合时间视图：环境始终取 dbnum 最新模型，目标单元取所选 sesno。' }}
+          </div>
+          <div v-if="compareRuntime.environment.error" class="mt-1 text-destructive">
+            {{ compareRuntime.environment.error }}
+          </div>
+        </div>
+      </section>
 
       <template v-if="compareCompleted">
         <div class="mt-3 rounded-md border border-border bg-muted/20 p-2" data-testid="model-unit-compare-summary">

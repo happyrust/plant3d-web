@@ -10,7 +10,7 @@ test.setTimeout(120_000);
 
 type ModelUnitCommitResponse = {
   success: boolean;
-  data: Array<{
+  data: {
     commit: {
       dbnum: number;
       unit_noun: string;
@@ -21,7 +21,7 @@ type ModelUnitCommitResponse = {
       generated_at: string;
     };
     manifest_url: string;
-  }>;
+  }[];
 };
 
 async function waitForDimensionSystem(page: Page): Promise<void> {
@@ -164,7 +164,6 @@ test('AMS 7997 BRAN 24381_145018 loads minimal delivery unit versions 791 and 89
     afterRefnos,
   });
 
-  await expect(page.getByTestId('viewer-model-unit-version-compare-overlay')).toBeVisible({ timeout: 120_000 });
   await expect.poll(() => page.evaluate(() => (window as any).__modelUnitVersionCompare ?? null), {
     timeout: 120_000,
   }).toMatchObject({
@@ -173,13 +172,64 @@ test('AMS 7997 BRAN 24381_145018 loads minimal delivery unit versions 791 and 89
     afterSesno: 898,
   });
 
+  await page.evaluate(async () => {
+    const { emitCommand } = await import('/src/ribbon/commandBus.ts');
+    emitCommand('panel.modelVersionCompare');
+  });
+  await expect(page.getByTestId('model-unit-version-compare-panel')).toBeVisible();
+  await expect(page.getByTestId('model-unit-compare-runtime')).toBeVisible();
+  await expect(page.getByTestId('viewer-model-unit-version-compare-overlay')).toHaveCount(0);
+
   const debug = await page.evaluate(() => (window as any).__modelUnitVersionCompare);
   expect(debug.beforeObjects).toBeGreaterThan(0);
   expect(debug.afterObjects).toBeGreaterThan(0);
   expect(debug.environmentLoadedRefnos).toBeGreaterThanOrEqual(0);
 
-  await page.getByTestId('viewer-model-unit-compare-split-mode').click();
+  await expect(page.getByTestId('model-unit-compare-show-before')).toContainText('A · sesno 791');
+  await expect(page.getByTestId('model-unit-compare-show-after')).toContainText('B · sesno 898');
+
+  await page.getByTestId('model-unit-compare-show-before').click();
+  await expect.poll(() => page.evaluate(() => (
+    (window as any).__modelUnitVersionCompare?.activeSide
+  ))).toBe('before');
+  await page.getByTestId('model-unit-compare-show-after').click();
+  await expect.poll(() => page.evaluate(() => (
+    (window as any).__modelUnitVersionCompare?.activeSide
+  ))).toBe('after');
+
+  await page.getByTestId('model-unit-compare-split-mode').click();
   await expect(page.getByTestId('viewer-model-unit-split-overlay')).toBeVisible();
-  await expect(page.getByTestId('viewer-model-unit-compare-before')).toContainText('A · sesno 791');
-  await expect(page.getByTestId('viewer-model-unit-compare-after')).toContainText('B · sesno 898');
+  await expect(page.getByTestId('model-unit-compare-split-summary'))
+    .toContainText('左 A · sesno 791');
+  await expect(page.getByTestId('model-unit-compare-split-summary'))
+    .toContainText('右 B · sesno 898');
+
+  const canvas = page.locator('canvas.viewer');
+  const box = await canvas.boundingBox();
+  expect(box).not.toBeNull();
+  const interactionPoint = {
+    x: box!.x + box!.width * 0.75,
+    y: box!.y + box!.height * 0.25,
+  };
+  expect(await page.evaluate(({ x, y }) => (
+    document.elementFromPoint(x, y)?.tagName
+  ), interactionPoint)).toBe('CANVAS');
+
+  const cameraBefore = await page.evaluate(() => (
+    (window as any).__dtxViewer.camera.position.toArray() as number[]
+  ));
+  await page.mouse.move(interactionPoint.x, interactionPoint.y);
+  await page.mouse.down();
+  await page.mouse.move(interactionPoint.x + 60, interactionPoint.y + 40, { steps: 10 });
+  await page.mouse.up();
+  await expect.poll(async () => {
+    const cameraAfter = await page.evaluate(() => (
+      (window as any).__dtxViewer.camera.position.toArray() as number[]
+    ));
+    return cameraAfter.some((value, index) => Math.abs(value - cameraBefore[index]!) > 1e-6);
+  }).toBe(true);
+
+  await page.getByTestId('model-unit-compare-close').click();
+  await expect(page.getByTestId('model-unit-compare-runtime')).toHaveCount(0);
+  await expect(page.getByTestId('viewer-model-unit-split-overlay')).toHaveCount(0);
 });

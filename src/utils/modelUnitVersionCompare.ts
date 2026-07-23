@@ -15,6 +15,7 @@ export type ModelUnitGeometryDiff = {
 }
 
 export const MODEL_UNIT_VERSION_COMPARE_EVENT = 'plant3d:model-unit-version-compare';
+export const MODEL_UNIT_VERSION_COMPARE_STATE_EVENT = 'plant3d:model-unit-version-compare-state';
 export type ModelUnitCompareSide = 'before' | 'after'
 export const DEFAULT_MODEL_UNIT_COMPARE_SIDE: ModelUnitCompareSide = 'after';
 export type ModelUnitCompareViewMode = 'single' | 'split'
@@ -100,18 +101,40 @@ export function formatModelUnitVersionTime(generatedAt: string): string {
     });
 }
 
+export type ModelUnitVersionCompareOpenDetail = {
+  action: 'open'
+  dbnum: number
+  unitRefno: string
+  before: ModelUnitVersionSide
+  after: ModelUnitVersionSide
+  refnos: string[]
+  rows: ModelUnitGeometryDiff[]
+}
+
+export type ModelUnitVersionCompareEnvironment = {
+  generatedAt?: string
+  loadedRefnos: number
+  refreshing: boolean
+  error?: string
+}
+
+export type ModelUnitVersionCompareRuntimeState = {
+  detail: ModelUnitVersionCompareOpenDetail
+  status: 'loading' | 'ready' | 'error'
+  activeSide: ModelUnitCompareSide
+  viewMode: ModelUnitCompareViewMode
+  environment?: ModelUnitVersionCompareEnvironment
+  error?: string
+}
+
 export type ModelUnitVersionCompareEventDetail =
-  | {
-      action: 'open'
-      dbnum: number
-      unitRefno: string
-      before: ModelUnitVersionSide
-      after: ModelUnitVersionSide
-      refnos: string[]
-      rows: ModelUnitGeometryDiff[]
-    }
+  | ModelUnitVersionCompareOpenDetail
   | { action: 'focus'; refno: string }
   | { action: 'close' }
+  | { action: 'set-side'; side: ModelUnitCompareSide }
+  | { action: 'set-view-mode'; viewMode: ModelUnitCompareViewMode }
+  | { action: 'refresh-environment' }
+  | { action: 'request-state' }
 
 type GeometryEntryLike = {
   geo_hash?: unknown
