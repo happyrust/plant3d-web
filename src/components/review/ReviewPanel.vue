@@ -10,6 +10,7 @@ import {
   ClipboardList,
   Database,
   Download,
+  Eye,
   FileCheck,
   FileText,
   Filter,
@@ -82,6 +83,10 @@ import { saveAnnotationBasicFields, saveAnnotationSeverity } from '@/composables
 import { ensurePanelAndActivate } from '@/composables/useDockApi';
 import { useNavigationStatePersistence } from '@/composables/useNavigationStatePersistence';
 import { useOnboardingGuide } from '@/composables/useOnboardingGuide';
+import {
+  getReviewAttachmentPreviewKind,
+  openReviewAttachmentPreview,
+} from '@/composables/useReviewAttachmentPreview';
 import { useReviewStore } from '@/composables/useReviewStore';
 import { useSelectionStore } from '@/composables/useSelectionStore';
 import { useToolStore, type AnnotationType } from '@/composables/useToolStore';
@@ -367,6 +372,11 @@ function downloadAttachment(attachment: ReviewAttachment) {
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
+}
+
+function previewAttachment(attachment: ReviewAttachment) {
+  const taskId = currentTask.value?.id;
+  if (taskId) openReviewAttachmentPreview(taskId, attachment);
 }
 
 // 模型过滤相关
@@ -1768,8 +1778,7 @@ function flyToAnnotationItem(item: AnnotationWorkspaceItem) {
           </div>
           <div class="max-h-48 space-y-1.5 overflow-y-auto">
             <div v-for="attachment in currentTask.attachments" :key="attachment.id"
-              class="flex cursor-pointer items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 hover:bg-slate-50"
-              @click="downloadAttachment(attachment)">
+              class="flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2">
               <Paperclip class="h-4 w-4 shrink-0 text-slate-400" />
               <div class="min-w-0 flex-1">
                 <div class="truncate text-sm font-medium text-slate-800">{{ attachment.name }}</div>
@@ -1777,7 +1786,21 @@ function flyToAnnotationItem(item: AnnotationWorkspaceItem) {
                   {{ formatFileSize(attachment.size) }} · {{ formatDate(attachment.uploadedAt) }}
                 </div>
               </div>
-              <Download class="h-4 w-4 shrink-0 text-slate-400" />
+              <button v-if="getReviewAttachmentPreviewKind(attachment)"
+                type="button"
+                :data-testid="`review-attachment-preview-${attachment.id}`"
+                class="inline-flex items-center gap-1 rounded px-2 py-1 text-xs text-sky-700 hover:bg-sky-50"
+                @click="previewAttachment(attachment)">
+                <Eye class="h-3.5 w-3.5" />
+                查看
+              </button>
+              <button type="button"
+                :data-testid="`review-attachment-download-${attachment.id}`"
+                class="inline-flex items-center gap-1 rounded px-2 py-1 text-xs text-slate-600 hover:bg-slate-100"
+                @click="downloadAttachment(attachment)">
+                <Download class="h-3.5 w-3.5" />
+                下载
+              </button>
             </div>
           </div>
         </section>
@@ -2229,8 +2252,7 @@ function flyToAnnotationItem(item: AnnotationWorkspaceItem) {
           <div class="mt-2 max-h-48 space-y-2 overflow-y-auto">
             <div v-for="attachment in currentTask.attachments"
               :key="attachment.id"
-              class="flex cursor-pointer items-center gap-2 rounded-md bg-white p-2 hover:bg-muted"
-              @click="downloadAttachment(attachment)">
+              class="flex items-center gap-2 rounded-md bg-white p-2">
               <Paperclip class="h-4 w-4 text-gray-500" />
               <div class="min-w-0 flex-1">
                 <div class="truncate text-sm font-medium">{{ attachment.name }}</div>
@@ -2238,7 +2260,21 @@ function flyToAnnotationItem(item: AnnotationWorkspaceItem) {
                   {{ formatFileSize(attachment.size) }} · {{ formatDate(attachment.uploadedAt) }}
                 </div>
               </div>
-              <Download class="h-4 w-4 text-gray-400" />
+              <button v-if="getReviewAttachmentPreviewKind(attachment)"
+                type="button"
+                :data-testid="`review-attachment-preview-${attachment.id}`"
+                class="inline-flex items-center gap-1 rounded px-2 py-1 text-xs text-sky-700 hover:bg-sky-50"
+                @click="previewAttachment(attachment)">
+                <Eye class="h-3.5 w-3.5" />
+                查看
+              </button>
+              <button type="button"
+                :data-testid="`review-attachment-download-${attachment.id}`"
+                class="inline-flex items-center gap-1 rounded px-2 py-1 text-xs text-slate-600 hover:bg-slate-100"
+                @click="downloadAttachment(attachment)">
+                <Download class="h-3.5 w-3.5" />
+                下载
+              </button>
             </div>
           </div>
         </section>

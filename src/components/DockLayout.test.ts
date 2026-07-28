@@ -84,7 +84,11 @@ function createPanel(id: string): PanelStub {
 
 function createDockApi() {
   const dockApi = {
-    addPanel: vi.fn((options: { id: string }) => {
+    addPanel: vi.fn((options: {
+      id: string;
+      component?: string;
+      position?: { referencePanel?: PanelStub; direction?: string };
+    }) => {
       const failure = addPanelFailures.get(options.id);
       if (failure) throw failure;
       const panel = createPanel(options.id);
@@ -655,6 +659,34 @@ describe('DockLayout embed bootstrap', () => {
     const mounted = await mountDockLayout();
 
     expect(lastDockApi?.fromJSON).toHaveBeenCalledWith(savedLayout);
+
+    mounted.unmount();
+  });
+
+  it('按需在三维查看器右侧创建单例文档预览面板', async () => {
+    const mounted = await mountDockLayout();
+    expect(ribbonCommandHandler).toBeTypeOf('function');
+
+    ribbonCommandHandler?.('panel.reviewAttachmentPreview');
+
+    const previewCalls = lastDockApi?.addPanel.mock.calls
+      .map(([options]) => options)
+      .filter((options) => options.id === 'reviewAttachmentPreview') ?? [];
+    expect(previewCalls).toHaveLength(1);
+    expect(previewCalls[0]).toEqual(expect.objectContaining({
+      component: 'ReviewAttachmentPreviewPanel',
+      position: expect.objectContaining({
+        referencePanel: expect.objectContaining({ id: 'viewer' }),
+        direction: 'right',
+      }),
+    }));
+
+    ribbonCommandHandler?.('panel.reviewAttachmentPreview');
+    const repeatedCalls = lastDockApi?.addPanel.mock.calls
+      .map(([options]) => options)
+      .filter((options) => options.id === 'reviewAttachmentPreview') ?? [];
+    expect(repeatedCalls).toHaveLength(1);
+    expect(activatedPanels).toContain('reviewAttachmentPreview');
 
     mounted.unmount();
   });

@@ -27,6 +27,7 @@ import ParquetDebugPanelDock from '@/components/dock_panels/ParquetDebugPanelDoc
 import PropertiesPanelDock from '@/components/dock_panels/PropertiesPanelDock.vue';
 import PtsetPanelDock from '@/components/dock_panels/PtsetPanelDock.vue';
 import ResubmissionTaskListPanelDock from '@/components/dock_panels/ResubmissionTaskListPanelDock.vue';
+import ReviewAttachmentPreviewPanelDock from '@/components/dock_panels/ReviewAttachmentPreviewPanelDock.vue';
 import ReviewerTaskListPanelDock from '@/components/dock_panels/ReviewerTaskListPanelDock.vue';
 import ReviewPanelDock from '@/components/dock_panels/ReviewPanelDock.vue';
 import RoomInfoPanelDock from '@/components/dock_panels/RoomInfoPanelDock.vue';
@@ -63,6 +64,7 @@ app.component('TaskMonitorPanel', TaskMonitorPanelDock);
 app.component('TaskCreationPanel', TaskCreationPanelDock);
 app.component('ModelExportPanel', ModelExportPanelDock);
 app.component('ModelVersionComparePanel', ModelVersionComparePanelDock);
+app.component('ReviewAttachmentPreviewPanel', ReviewAttachmentPreviewPanelDock);
 app.component('ConsolePanel', ConsolePanelDock);
 app.component('ParquetDebugPanel', ParquetDebugPanelDock);
 app.component('RoomInfoPanel', RoomInfoPanelDock);

@@ -148,12 +148,27 @@ const dockApiMock = vi.hoisted(() => ({
   ensurePanelAndActivate: vi.fn(),
 }));
 
+const reviewAttachmentPreviewMock = vi.hoisted(() => ({
+  getKind: vi.fn((attachment: { name?: string; mimeType?: string }) => {
+    const name = attachment.name?.toLowerCase() ?? '';
+    if (attachment.mimeType === 'application/pdf' || name.endsWith('.pdf')) return 'pdf';
+    if (attachment.mimeType?.startsWith('image/') || /\.(png|jpe?g)$/.test(name)) return 'image';
+    return null;
+  }),
+  open: vi.fn(() => true),
+}));
+
 const commandBusMock = vi.hoisted(() => ({
   emitCommand: vi.fn(),
 }));
 
 vi.mock('@/composables/useDockApi', () => ({
   ensurePanelAndActivate: dockApiMock.ensurePanelAndActivate,
+}));
+
+vi.mock('@/composables/useReviewAttachmentPreview', () => ({
+  getReviewAttachmentPreviewKind: reviewAttachmentPreviewMock.getKind,
+  openReviewAttachmentPreview: reviewAttachmentPreviewMock.open,
 }));
 
 vi.mock('@/ribbon/commandBus', () => ({
@@ -378,6 +393,8 @@ describe('ReviewPanel', () => {
     toolStoreMock.getAnnotationComments.mockReturnValue([]);
     viewerWaitForReadyMock.mockClear();
     viewerWaitForReadyMock.mockResolvedValue(false);
+    reviewAttachmentPreviewMock.getKind.mockClear();
+    reviewAttachmentPreviewMock.open.mockClear();
     showModelByRefnosWithAckMock.mockClear();
     showModelByRefnosWithAckMock.mockResolvedValue({ ok: [], fail: [], error: null });
     dockApiMock.ensurePanelAndActivate.mockClear();
@@ -818,6 +835,54 @@ describe('ReviewPanel', () => {
     expect(document.body.textContent).toContain('历史流转');
     expect(document.body.textContent).toContain('审核记录');
     expect(document.body.textContent).toContain('附件材料');
+    mounted.unmount();
+  });
+
+  it('opens previewable attachments in the dock and keeps downloads explicit', async () => {
+    currentTask.value = createTask({
+      attachments: [
+        {
+          id: 'attachment-pdf',
+          name: 'drawing.pdf',
+          url: '/files/review_attachments/drawing.pdf',
+          mimeType: 'application/pdf',
+          uploadedAt: 1710000001000,
+        },
+        {
+          id: 'attachment-docx',
+          name: 'notes.docx',
+          url: '/files/review_attachments/notes.docx',
+          mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          uploadedAt: 1710000002000,
+        },
+      ],
+    });
+    const anchorClick = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined);
+    const mounted = await mountReviewPanel();
+    await settleVue();
+
+    const previewButton = document.querySelector(
+      '[data-testid="review-attachment-preview-attachment-pdf"]',
+    ) as HTMLButtonElement | null;
+    expect(previewButton).not.toBeNull();
+    expect(document.querySelector(
+      '[data-testid="review-attachment-preview-attachment-docx"]',
+    )).toBeNull();
+
+    previewButton?.click();
+    expect(reviewAttachmentPreviewMock.open).toHaveBeenCalledWith(
+      'task-1',
+      expect.objectContaining({ id: 'attachment-pdf' }),
+    );
+    expect(anchorClick).not.toHaveBeenCalled();
+
+    const downloadButton = document.querySelector(
+      '[data-testid="review-attachment-download-attachment-pdf"]',
+    ) as HTMLButtonElement | null;
+    downloadButton?.click();
+    expect(anchorClick).toHaveBeenCalledTimes(1);
+
+    anchorClick.mockRestore();
     mounted.unmount();
   });
 

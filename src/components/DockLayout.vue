@@ -42,6 +42,7 @@ import {
   resetZoneState,
   type ZoneName,
 } from '@/composables/usePanelZones';
+import { clearReviewAttachmentPreview } from '@/composables/useReviewAttachmentPreview';
 import { useReviewStore } from '@/composables/useReviewStore';
 import { setGlobalSelectedRefno } from '@/composables/useSelectionStore';
 import { useTaskCreationStore } from '@/composables/useTaskCreationStore';
@@ -504,6 +505,7 @@ function saveLayout() {
 }
 
 function createDefaultLayout(dockApi: DockApi) {
+  clearReviewAttachmentPreview();
   closePanelIfExists(dockApi, 'properties');
   closePanelIfExists(dockApi, 'manager');
   closePanelIfExists(dockApi, 'hydraulic');
@@ -518,6 +520,7 @@ function createDefaultLayout(dockApi: DockApi) {
   closePanelIfExists(dockApi, 'console');
   closePanelIfExists(dockApi, 'dashboard');
   closePanelIfExists(dockApi, 'modelVersionCompare');
+  closePanelIfExists(dockApi, 'reviewAttachmentPreview');
   closePanelIfExists(dockApi, 'roomInfo');
   closePanelIfExists(dockApi, 'spatialCompute');
 
@@ -598,6 +601,7 @@ function createEmbedFocusedLayout(
   dockApi: DockApi,
   options: { primaryPanelId?: 'review' | 'initiateReview' | 'designerCommentHandling' } = {},
 ) {
+  clearReviewAttachmentPreview();
   [
     'properties',
     'manager',
@@ -622,6 +626,7 @@ function createEmbedFocusedLayout(
     'taskCreation',
     'incrementalUpdate',
     'modelVersionCompare',
+    'reviewAttachmentPreview',
     'modelExport',
     'materialConfig',
     'roomInfo',
@@ -902,6 +907,16 @@ function ensurePanel(panelId: string) {
       id: 'modelVersionCompare',
       component: 'ModelVersionComparePanel',
       title: '版本对比',
+      position: viewerPanel
+        ? { referencePanel: viewerPanel, direction: 'right' }
+        : undefined,
+    });
+  }
+  if (normalizedPanelId === 'reviewAttachmentPreview') {
+    return addPanelSafely(dockApi, {
+      id: 'reviewAttachmentPreview',
+      component: 'ReviewAttachmentPreviewPanel',
+      title: '文档预览',
       position: viewerPanel
         ? { referencePanel: viewerPanel, direction: 'right' }
         : undefined,
@@ -1302,6 +1317,9 @@ function handleRibbonCommand(commandId: string) {
       return;
     case 'panel.modelVersionCompare':
       togglePanel('modelVersionCompare');
+      return;
+    case 'panel.reviewAttachmentPreview':
+      openPanel('reviewAttachmentPreview');
       return;
     case 'panel.parquetDebug':
       togglePanel('parquetDebug');
