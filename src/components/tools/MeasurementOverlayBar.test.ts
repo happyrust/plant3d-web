@@ -43,7 +43,6 @@ describe('MeasurementOverlayBar', () => {
         store: shallowRef(null),
         viewerError: shallowRef(null),
         ptsetVis: shallowRef(null),
-        mbdPipeVis: shallowRef(null),
         annotationSystem: shallowRef({
           selectAnnotation,
           selectedId: ref<string | null>(null),
@@ -51,12 +50,22 @@ describe('MeasurementOverlayBar', () => {
       }),
     }));
 
-    const [{ default: MeasurementOverlayBar }, { useToolStore }] = await Promise.all([
+    const [
+      { default: MeasurementOverlayBar },
+      { useToolStore },
+      { useXeokitMeasurementStyleStore },
+    ] = await Promise.all([
       import('./MeasurementOverlayBar.vue'),
       import('@/composables/useToolStore'),
+      import('@/composables/useXeokitMeasurementStyleStore'),
     ]);
 
     const store = useToolStore() as any;
+    const measurementStyle = useXeokitMeasurementStyleStore();
+    measurementStyle.resetStyle();
+    measurementStyle.updateMeasurementPickSource('ptset', { show: true, snap: true });
+    measurementStyle.updateMeasurementPickSource('position', { show: true, snap: true });
+    measurementStyle.updateMeasurementPickSource('mesh_pick_point', { show: false, snap: false });
     store.clearXeokitMeasurements();
     store.setToolMode('xeokit_measure_distance');
     store.addXeokitDistanceMeasurement({
@@ -120,6 +129,40 @@ describe('MeasurementOverlayBar', () => {
     expect(allVisibilityButton?.title).toBe('全部显示');
     expect(exitButton?.textContent?.trim()).toBe('');
     expect(exitButton?.title).toBe('退出测量');
+    expect(host.querySelector('[data-testid="measurement-overlay-source-picker"]')?.textContent).toContain('P-Point');
+    expect(host.querySelector('[data-testid="measurement-overlay-source-picker"]')?.textContent).toContain('实例原点');
+    expect(host.querySelector('[data-testid="measurement-overlay-source-picker"]')?.textContent).toContain('模型表面点');
+
+    const pointSetInput = host.querySelector('[data-testid="measurement-overlay-source-ptset"]') as HTMLInputElement | null;
+    const centerPointInput = host.querySelector('[data-testid="measurement-overlay-source-position"]') as HTMLInputElement | null;
+    const meshInput = host.querySelector('[data-testid="measurement-overlay-source-mesh"]') as HTMLInputElement | null;
+    expect(pointSetInput?.checked).toBe(true);
+    expect(centerPointInput?.checked).toBe(true);
+    expect(meshInput?.checked).toBe(false);
+
+    if (meshInput) {
+      meshInput.checked = true;
+      meshInput.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+    await nextTick();
+    expect(measurementStyle.state.measurementPickSources.mesh_pick_point.show).toBe(false);
+    expect(measurementStyle.state.measurementPickSources.mesh_pick_point.snap).toBe(true);
+
+    if (centerPointInput) {
+      centerPointInput.checked = false;
+      centerPointInput.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+    await nextTick();
+    expect(measurementStyle.state.measurementPickSources.position.show).toBe(true);
+    expect(measurementStyle.state.measurementPickSources.position.snap).toBe(false);
+
+    if (pointSetInput) {
+      pointSetInput.checked = false;
+      pointSetInput.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+    await nextTick();
+    expect(measurementStyle.state.measurementPickSources.ptset.show).toBe(true);
+    expect(measurementStyle.state.measurementPickSources.ptset.snap).toBe(false);
 
     (host.querySelector('[data-testid="measurement-overlay-details-toggle"]') as HTMLButtonElement)?.click();
     await nextTick();
@@ -152,7 +195,6 @@ describe('MeasurementOverlayBar', () => {
         store: shallowRef(null),
         viewerError: shallowRef(null),
         ptsetVis: shallowRef(null),
-        mbdPipeVis: shallowRef(null),
         annotationSystem: shallowRef({
           selectAnnotation: vi.fn(),
           selectedId: ref<string | null>(null),
@@ -219,7 +261,6 @@ describe('MeasurementOverlayBar', () => {
         store: shallowRef(null),
         viewerError: shallowRef(null),
         ptsetVis: shallowRef(null),
-        mbdPipeVis: shallowRef(null),
         annotationSystem: shallowRef({
           selectAnnotation: vi.fn(),
           selectedId: ref<string | null>(null),
@@ -258,6 +299,156 @@ describe('MeasurementOverlayBar', () => {
     expect((host.querySelector('[data-testid="measurement-overlay-fly-current"]') as HTMLButtonElement | null)?.disabled).toBe(true);
     expect((host.querySelector('[data-testid="measurement-overlay-current-visibility"]') as HTMLButtonElement | null)?.disabled).toBe(true);
     expect((host.querySelector('[data-testid="measurement-overlay-delete-current"]') as HTMLButtonElement | null)?.disabled).toBe(true);
+
+    app.unmount();
+    host.remove();
+    host = null;
+  });
+
+  it('取点模式切换应写入样式 store 并联动表面点捕捉', async () => {
+    let host: HTMLDivElement | null = document.createElement('div');
+    document.body.appendChild(host);
+
+    vi.doMock('@/composables/useDockApi', () => ({
+      ensurePanelAndActivate: vi.fn(),
+    }));
+
+    vi.doMock('@/composables/useViewerContext', () => ({
+      useViewerContext: () => ({
+        viewerRef: shallowRef(null),
+        overlayContainerRef: shallowRef(null),
+        tools: shallowRef(null),
+        xeokitMeasurementTools: shallowRef(null),
+        store: shallowRef(null),
+        viewerError: shallowRef(null),
+        ptsetVis: shallowRef(null),
+        annotationSystem: shallowRef({
+          selectAnnotation: vi.fn(),
+          selectedId: ref<string | null>(null),
+        }),
+      }),
+    }));
+
+    const [
+      { default: MeasurementOverlayBar },
+      { useToolStore },
+      { useXeokitMeasurementStyleStore },
+    ] = await Promise.all([
+      import('./MeasurementOverlayBar.vue'),
+      import('@/composables/useToolStore'),
+      import('@/composables/useXeokitMeasurementStyleStore'),
+    ]);
+
+    const store = useToolStore() as any;
+    const measurementStyle = useXeokitMeasurementStyleStore();
+    measurementStyle.resetStyle();
+    store.clearXeokitMeasurements();
+    store.setToolMode('xeokit_measure_distance');
+
+    const app = createApp(MeasurementOverlayBar, {
+      tools: {
+        ready: ref(true),
+        statusText: ref('ready'),
+        currentMeasurement: ref(null),
+        hasVisibleMeasurements: ref(false),
+        hasHiddenMeasurements: ref(false),
+        flyToMeasurement: vi.fn(),
+        setMeasurementVisible: vi.fn(),
+        setAllMeasurementsVisible: vi.fn(),
+        removeMeasurement: vi.fn(),
+        clearMeasurements: vi.fn(),
+        deactivate: vi.fn(),
+      },
+    });
+    app.mount(host);
+    await nextTick();
+
+    expect(host.querySelector('[data-testid="measurement-overlay-pick-mode"]')).toBeTruthy();
+
+    (host.querySelector('[data-testid="measurement-overlay-mode-free"]') as HTMLButtonElement | null)?.click();
+    await nextTick();
+    expect(measurementStyle.state.measurementPickMode).toBe('free_surface');
+    expect(measurementStyle.state.measurementPickSources.mesh_pick_point.snap).toBe(true);
+    expect((host.querySelector('[data-testid="measurement-overlay-source-mesh"]') as HTMLInputElement | null)?.checked).toBe(true);
+
+    (host.querySelector('[data-testid="measurement-overlay-mode-e3d"]') as HTMLButtonElement | null)?.click();
+    await nextTick();
+    expect(measurementStyle.state.measurementPickMode).toBe('e3d');
+    expect(measurementStyle.state.measurementPickSources.mesh_pick_point.snap).toBe(false);
+    expect(measurementStyle.state.measurementPickSources.ptset.snap).toBe(true);
+    expect(measurementStyle.state.measurementPickSources.position.snap).toBe(true);
+
+    app.unmount();
+    host.remove();
+    host = null;
+  });
+
+  it('连续测量开关仅在距离模式显示，切换后写入 store 状态', async () => {
+    let host: HTMLDivElement | null = document.createElement('div');
+    document.body.appendChild(host);
+
+    vi.doMock('@/composables/useDockApi', () => ({
+      ensurePanelAndActivate: vi.fn(),
+    }));
+
+    vi.doMock('@/composables/useViewerContext', () => ({
+      useViewerContext: () => ({
+        viewerRef: shallowRef(null),
+        overlayContainerRef: shallowRef(null),
+        tools: shallowRef(null),
+        xeokitMeasurementTools: shallowRef(null),
+        store: shallowRef(null),
+        viewerError: shallowRef(null),
+        ptsetVis: shallowRef(null),
+        annotationSystem: shallowRef({
+          selectAnnotation: vi.fn(),
+          selectedId: ref<string | null>(null),
+        }),
+      }),
+    }));
+
+    const [{ default: MeasurementOverlayBar }, { useToolStore }] = await Promise.all([
+      import('./MeasurementOverlayBar.vue'),
+      import('@/composables/useToolStore'),
+    ]);
+
+    const store = useToolStore() as any;
+    store.clearXeokitMeasurements();
+    store.continuousDistanceMeasureEnabled.value = false;
+    store.setToolMode('xeokit_measure_distance');
+
+    const app = createApp(MeasurementOverlayBar, {
+      tools: {
+        ready: ref(true),
+        statusText: ref('ready'),
+        currentMeasurement: ref(null),
+        hasVisibleMeasurements: ref(false),
+        hasHiddenMeasurements: ref(false),
+        flyToMeasurement: vi.fn(),
+        setMeasurementVisible: vi.fn(),
+        setAllMeasurementsVisible: vi.fn(),
+        removeMeasurement: vi.fn(),
+        clearMeasurements: vi.fn(),
+        deactivate: vi.fn(),
+      },
+    });
+    app.mount(host);
+    await nextTick();
+
+    const checkbox = host.querySelector('[data-testid="measurement-overlay-continuous"]') as HTMLInputElement | null;
+    expect(checkbox).toBeTruthy();
+    expect(checkbox?.checked).toBe(false);
+
+    if (checkbox) {
+      checkbox.checked = true;
+      checkbox.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+    await nextTick();
+    expect(store.continuousDistanceMeasureEnabled.value).toBe(true);
+
+    store.setToolMode('xeokit_measure_angle');
+    await nextTick();
+    expect(host.querySelector('[data-testid="measurement-overlay-continuous"]')).toBeNull();
 
     app.unmount();
     host.remove();

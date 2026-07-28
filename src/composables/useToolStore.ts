@@ -1,6 +1,7 @@
 import { computed, ref, watch } from 'vue';
 
 import type { MeasurementPickSourceId } from './useMeasurementPickSources';
+import { combineMeasurements } from './unifiedMeasurement';
 import type {
   AnnotationComment,
   AnnotationReviewAction,
@@ -1038,6 +1039,8 @@ const currentXeokitDistanceDraft = ref<XeokitDistanceDraft | null>(null);
 const currentXeokitAngleDraft = ref<XeokitAngleDraft | null>(null);
 const currentXeokitElevationPointDraft = ref<XeokitElevationPointDraft | null>(null);
 const currentXeokitElevationDeltaDraft = ref<XeokitElevationDeltaDraft | null>(null);
+/** E3D 风格连续距离测量：完成 A-B 后自动以 B 为起点继续下一段。 */
+const continuousDistanceMeasureEnabled = ref(false);
 const xeokitHoverState = ref<XeokitHoverState>({
   visible: false,
   snapped: false,
@@ -2432,6 +2435,11 @@ const allXeokitMeasurements = computed<XeokitMeasurementRecord[]>(() => {
     ...xeokitElevationDeltaMeasurements.value,
   ];
 });
+const unifiedMeasurements = computed(() => combineMeasurements(
+  measurements.value,
+  xeokitDistanceMeasurements.value,
+  xeokitAngleMeasurements.value,
+));
 
 const allItems = computed(() => {
   return {
@@ -2481,6 +2489,7 @@ export function useToolStore() {
     rectAnnotationCount,
     allItems,
     allXeokitMeasurements,
+    unifiedMeasurements,
     activeAnnotationContext,
 
     setToolMode,
@@ -2513,6 +2522,7 @@ export function useToolStore() {
     currentXeokitAngleDraft,
     currentXeokitElevationPointDraft,
     currentXeokitElevationDeltaDraft,
+    continuousDistanceMeasureEnabled,
     setCurrentXeokitDistanceDraft,
     setCurrentXeokitAngleDraft,
     setCurrentXeokitElevationPointDraft,

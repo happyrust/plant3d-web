@@ -41,7 +41,6 @@ describe('XeokitMeasurementPanel', () => {
         store: shallowRef(null),
         viewerError: shallowRef(null),
         ptsetVis: shallowRef(null),
-        mbdPipeVis: shallowRef(null),
         annotationSystem: shallowRef({
           selectAnnotation,
           selectedId,
@@ -137,7 +136,6 @@ describe('XeokitMeasurementPanel', () => {
         store: shallowRef(null),
         viewerError: shallowRef(null),
         ptsetVis: shallowRef(null),
-        mbdPipeVis: shallowRef(null),
         annotationSystem: shallowRef({
           selectAnnotation: vi.fn(),
           selectedId: ref<string | null>(null),

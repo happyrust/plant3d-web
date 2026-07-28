@@ -1,5 +1,42 @@
 # 更新日志
 
+## 2026-07-28
+
+### 测量工作流对齐 AVEVA E3D：连续测量、取点模式契约、右键菜单与图形直接点选
+
+- 连续距离测量与 Repeat：`useToolStore` 新增 `continuousDistanceMeasureEnabled`；完成 A-B 后自动以
+  B 为起点续测；`空格` 触发 Repeat，取点语义为**选中优先**（active 测量终点 → createdAt 最新兜底）。
+- 取点模式契约：`useXeokitMeasurementStyleStore` 新增 `measurementPickMode: 'e3d' | 'free_surface'`；
+  E3D 模式下 P-Point pending 期间不落表面点；浮动条提供「E3D 捕捉 / 自由表面」切换。
+- 尺寸图形直接点选（P1-6）：dimension viewport 选中态反向绑定 `activeXeokitMeasurementId`，
+  场景中左键点选尺寸即选中测量，与列表/面板选中互通；测量草稿进行中通过
+  `DimensionPointerController.setInteractionGate` 暂停尺寸悬停/选中，保证落点优先；
+  清空测量选中不再覆盖用户尺寸/批注测量的视口选中态。
+- 测量右键菜单（P1-1）：新增 `MeasurementContextMenu.vue`，canvas `contextmenu` + 尺寸
+  hitTest 接入，按测量类型自适应显示 Display Axis / 单位切换（全局）/ 复制值 / 复制轴向分量 /
+  Repeat / 定位 / 隐藏当前 / 删除；新增 `buildMeasurementValueText` 与
+  `buildMeasurementComponentsText` 复制格式化工具。
+- 评审记录：`docs/plans/2026-07-28-e3d-measurement-gap-review.md`（r2）与
+  `docs/plans/2026-07-28-e3d-measurement-gap-review-r3.md`（r3，含 grilling 决策记录）。
+- 测试：`pointerController`（门控）、`useXeokitMeasurementTools`（Repeat 选中优先 / 反向选择
+  绑定 / 选中态互不干扰）、`MeasurementContextMenu`、`xeokitMeasurementFormat`（复制文本）；
+  `npm run type-check` 通过。
+
+## 2026-07-20
+
+### 三维校审批注单统一为表格行内处理
+
+- `ReviewPanel.vue` 与 `DesignerCommentHandlingPanel.vue` 统一使用
+  `AnnotationSheetWorkspace`：单击表格行后在原位展开完整处理卡，同时只挂载一条评论时间线。
+- 行内处理卡集中展示问题详情、截图、讨论、角色处理动作与测量证据；模型定位改为显式按钮，
+  标题和错误类型继续在表格行内编辑。
+- 处理动作成功后按当前角色和筛选排序自动展开下一条可处理批注，支持跨页；队列完成后自动收起。
+- 移除“卡片列表 / 批注表格”双模式及其 view-mode 总线。兼容命令
+  `panel.annotationTable` 保留，显示名称改为“批注单”，并继续按角色和外部单据上下文选择面板。
+- 双胞胎回归守护改为 `ReviewPanel`、`DesignerCommentHandlingPanel`、`AnnotationTableView`、
+  `AnnotationSheetWorkspace` 与 `ReviewCommentsTimeline` 五套测试；编码前基线为
+  90 例中 57 pass / 33 fail，交付验证结果见本次变更说明。
+
 ## 2026-05-19
 
 ### 教程向导：按当前工作流角色直达对应向导

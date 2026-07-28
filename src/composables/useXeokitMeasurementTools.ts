@@ -37,8 +37,8 @@ import { useXeokitMeasurementStyleStore } from './useXeokitMeasurementStyleStore
 import { getXeokitOverlayPalette } from './xeokitMeasurementUi';
 
 import type { UseAnnotationThreeReturn } from './useAnnotationThree';
-import type { DimensionSystem, ExternalDimensionRecord } from '@/dimension';
 import type { PtsetResponse } from '@/api/genModelPdmsAttrApi';
+import type { DimensionSystem, ExternalDimensionRecord } from '@/dimension';
 import type { DTXLayer, DTXSelectionController } from '@/utils/three/dtx';
 import type { DtxCompatViewer } from '@/viewer/dtx/DtxCompatViewer';
 import type { DtxViewer } from '@/viewer/dtx/DtxViewer';
@@ -97,7 +97,7 @@ type PtsetPickResult = {
 type PtsetLoadState = 'debouncing' | 'loading' | 'ready' | 'empty' | 'error';
 
 const XEOKIT_PREFIX = 'xmeas_';
-const DIMENSION_XEOKIT_PREFIX = 'xeokit-measurement:';
+export const DIMENSION_XEOKIT_PREFIX = 'xeokit-measurement:';
 const CLICK_TOLERANCE = 20;
 
 function nowId(prefix: string): string {
@@ -510,6 +510,8 @@ export function useXeokitMeasurementTools(options: {
 
   function isPtsetPickPending(refno: string | null): boolean {
     if (!refno || !measurementStyle.state.measurementPickSources.ptset.snap) return false;
+    // 仅 E3D 模式拦截 pending：自由表面模式允许直接落表面点。
+    if (measurementStyle.state.measurementPickMode !== 'e3d') return false;
     const state = ptsetLoadStateByRefno.get(refno);
     return state === 'debouncing' || state === 'loading';
   }
@@ -803,6 +805,42 @@ export function useXeokitMeasurementTools(options: {
 
   function hasApproximatePoint(...points: MeasurementPoint[]): boolean {
     return points.some((point) => point.sourceInfo?.source === 'mesh_pick_point');
+  }
+
+  /** 以已有测量点为起点创建新的距离草稿（连续测量 / Repeat 共用）。 */
+  function startDistanceDraftFrom(point: MeasurementPoint): void {
+    addLockedMeasurementPoint(point);
+    store.setCurrentXeokitDistanceDraft({
+      id: nowId('xdist'),
+      kind: 'distance',
+      origin: point,
+      target: point,
+      visible: true,
+      approximate: true,
+      createdAt: Date.now(),
+    });
+  }
+
+  /**
+   * E3D Repeat Measure：以「选中优先」的距离测量终点为起点继续下一段；
+   * 未选中（或选中的不是距离测量）时回落到 createdAt 最新一条。
+   */
+  function repeatLastDistanceMeasurement(): boolean {
+    if (suppressStoreMeasurements) return false;
+    if (store.toolMode.value !== 'xeokit_measure_distance') return false;
+    if (store.currentXeokitDistanceDraft.value) return false;
+    const records = store.xeokitDistanceMeasurements.value;
+    if (records.length === 0) return false;
+    const activeId = store.activeXeokitMeasurementId.value;
+    const active = activeId
+      ? records.find((record) => record.id === activeId) ?? null
+      : null;
+    const source = active
+      ?? records.reduce((a, b) => (b.createdAt >= a.createdAt ? b : a));
+    startDistanceDraftFrom(source.target);
+    syncFromStore();
+    requestRender?.();
+    return true;
   }
 
   const currentMeasurement = computed(() => {
@@ -1482,10 +1520,28 @@ export function useXeokitMeasurementTools(options: {
 
   function updateSelectionBinding(id: string | null): void {
     const dimensionSystem = options.getDimensionSystem?.() ?? null;
-    if (dimensionSystem) {
-      dimensionSystem.viewport.setSelection(id ? `${DIMENSION_XEOKIT_PREFIX}${id}` : null);
+    if (!dimensionSystem) return;
+    if (id) {
+      dimensionSystem.viewport.setSelection(`${DIMENSION_XEOKIT_PREFIX}${id}`);
       return;
     }
+    // 清空测量选中时不打断其他来源（用户尺寸 / 批注测量）的选中态。
+    const current = dimensionSystem.viewport.getSelection();
+    if (current && !current.startsWith(DIMENSION_XEOKIT_PREFIX)) return;
+    dimensionSystem.viewport.setSelection(null);
+  }
+
+  /**
+   * 反向选择绑定：dimension viewport 里点选尺寸图形后，把 xeokit 测量
+   * id 回写到 store（P1-6 图形直接点选）。选中非 xeokit 尺寸或取消选中
+   * 时清空当前测量选中态，保持视口与面板一致。
+   */
+  function handleDimensionSelectionChange(dimensionId: string | null): void {
+    const id = dimensionId?.startsWith(DIMENSION_XEOKIT_PREFIX)
+      ? dimensionId.slice(DIMENSION_XEOKIT_PREFIX.length)
+      : null;
+    if (store.activeXeokitMeasurementId.value === id) return;
+    store.activeXeokitMeasurementId.value = id;
   }
 
   function flyToMeasurement(id: string): void {
@@ -1808,6 +1864,10 @@ export function useXeokitMeasurementTools(options: {
       store.addXeokitDistanceMeasurement(rec);
       store.clearCurrentXeokitDraft();
       clearMeasurementVisualAssists();
+      if (store.continuousDistanceMeasureEnabled.value) {
+        // E3D 连续测量：以刚完成的终点作为下一段起点。
+        startDistanceDraftFrom(target);
+      }
       syncFromStore();
       updateSelectionBinding(rec.id);
       requestRender?.();
@@ -2087,6 +2147,8 @@ export function useXeokitMeasurementTools(options: {
     setAllMeasurementsVisible,
     removeMeasurement,
     clearMeasurements,
+    repeatLastDistanceMeasurement,
+    handleDimensionSelectionChange,
     onCanvasPointerDown,
     onCanvasPointerMove,
     onCanvasPointerUp,

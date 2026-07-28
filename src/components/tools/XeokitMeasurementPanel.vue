@@ -40,16 +40,16 @@ const draftHint = computed(() => {
     return '距离草稿已创建，移动鼠标预览后第二击完成。';
   }
   if (store.currentXeokitElevationPointDraft.value) {
-    return '点标高 hover 预览中，单击即可完成。';
+    return '位置/标高 hover 预览中，单击即可完成。';
   }
   if (store.currentXeokitElevationDeltaDraft.value) {
     return '高差起点已锁定，请选择终点。';
   }
   const angleDraft = store.currentXeokitAngleDraft.value;
   if (!angleDraft) return '尚未创建草稿。';
-  return angleDraft.stage === 'finding_corner'
-    ? '角度草稿已创建，请锁定拐点。'
-    : '拐点已锁定，请选择终点。';
+  return angleDraft.stage === 'finding_first_arm'
+    ? '角度顶点已锁定，请选择第一边点。'
+    : '第一边点已锁定，请选择第二边点。';
 });
 const hoverHint = computed(() => {
   return formatXeokitHoverHint({

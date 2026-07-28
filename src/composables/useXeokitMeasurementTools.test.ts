@@ -40,7 +40,7 @@ describe('useXeokitMeasurementTools', () => {
     const annotationGroup = new THREE.Group();
     const dimensionSystem = {
       replaceExternalSource: vi.fn(),
-      viewport: { setSelection: vi.fn() },
+      viewport: { setSelection: vi.fn(), getSelection: vi.fn(() => null) },
     } as any;
     const annotationSystem = {
       materials: new AnnotationMaterials(),
@@ -818,6 +818,79 @@ describe('useXeokitMeasurementTools', () => {
     vi.useRealTimers();
   });
 
+  it('自由表面模式下 P-Point 加载中应允许直接落模型表面点', async () => {
+    vi.useFakeTimers();
+    const pendingPtset = new Promise(() => {
+      // 永不 resolve，模拟 P-Point 数据仍在加载。
+    });
+    vi.doMock('@/composables/useDbMetaInfo', () => ({
+      getDbnumByRefno: vi.fn(() => 250160),
+    }));
+    vi.doMock('@/composables/useDbnoInstancesDtxLoader', () => ({
+      getDtxRefnoTransform: vi.fn(() => null),
+    }));
+    vi.doMock('@/composables/useDbnoInstancesParquetLoader', () => ({
+      useDbnoInstancesParquetLoader: () => ({
+        queryPtsetByRefnoFromParquet: vi.fn(() => pendingPtset),
+      }),
+    }));
+
+    const [{ useToolStore }, { useXeokitMeasurementTools }, { useXeokitMeasurementStyleStore }] = await Promise.all([
+      import('@/composables/useToolStore'),
+      import('@/composables/useXeokitMeasurementTools'),
+      import('@/composables/useXeokitMeasurementStyleStore'),
+    ]);
+    const store = useToolStore();
+    store.clearAll();
+    store.setToolMode('xeokit_measure_distance');
+    const measurementStyle = useXeokitMeasurementStyleStore();
+    measurementStyle.resetStyle();
+    measurementStyle.updateMeasurementPickSource('ptset', { show: true, snap: true, thresholdPx: 40 });
+    measurementStyle.updateMeasurementPickSource('position', { show: false, snap: false });
+    measurementStyle.updateMeasurementPickSource('mesh_pick_point', { show: true, snap: true, thresholdPx: 40 });
+    measurementStyle.setMeasurementPickMode('free_surface');
+
+    const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 10);
+    camera.position.set(0, 0, 1);
+    camera.lookAt(0, 0, 0);
+    camera.updateMatrixWorld(true);
+    camera.updateProjectionMatrix();
+    const canvas = document.createElement('canvas');
+    Object.defineProperty(canvas, 'getBoundingClientRect', {
+      value: () => ({ left: 0, top: 0, width: 200, height: 200 }),
+    });
+    const tools = useXeokitMeasurementTools({
+      dtxViewerRef: ref({ camera, canvas, scene: new THREE.Scene() } as any),
+      dtxLayerRef: ref({
+        _totalObjects: 1,
+        getGlobalModelMatrix: () => new THREE.Matrix4(),
+      } as any),
+      selectionRef: ref({
+        pickPoint: vi.fn(() => ({
+          objectId: 'o:24381_145018:0',
+          point: new THREE.Vector3(0, 0, 0),
+        })),
+      } as any),
+      overlayContainerRef: ref(document.createElement('div')),
+      store,
+      compatViewerRef: ref(null),
+      requestRender: null,
+    });
+    const event = new PointerEvent('pointerup', {
+      clientX: 100,
+      clientY: 100,
+      button: 0,
+    });
+
+    tools.onCanvasPointerMove(canvas, event);
+    tools.onCanvasPointerUp(canvas, event);
+
+    expect(store.currentXeokitDistanceDraft.value?.origin.sourceInfo?.source).toBe('mesh_pick_point');
+
+    tools.dispose();
+    vi.useRealTimers();
+  });
+
   it('完成混合 PTSET 到 Mesh 距离测量时应保留两个端点各自的 sourceInfo', async () => {
     vi.useFakeTimers();
     vi.doMock('@/composables/useDbMetaInfo', () => ({
@@ -984,5 +1057,267 @@ describe('useXeokitMeasurementTools', () => {
 
     tools.dispose();
     vi.useRealTimers();
+  });
+
+  it('连续测量开启时完成 A-B 应立即以 B 为起点创建下一段草稿', async () => {
+    const [{ useToolStore }, { useXeokitMeasurementTools }, { useXeokitMeasurementStyleStore }] = await Promise.all([
+      import('@/composables/useToolStore'),
+      import('@/composables/useXeokitMeasurementTools'),
+      import('@/composables/useXeokitMeasurementStyleStore'),
+    ]);
+
+    const store = useToolStore();
+    store.clearAll();
+    store.setToolMode('xeokit_measure_distance');
+    store.continuousDistanceMeasureEnabled.value = true;
+    const measurementStyle = useXeokitMeasurementStyleStore();
+    measurementStyle.resetStyle();
+    measurementStyle.updateMeasurementPickSource('ptset', { show: false, snap: false });
+    measurementStyle.updateMeasurementPickSource('position', { show: false, snap: false });
+    measurementStyle.updateMeasurementPickSource('mesh_pick_point', { show: true, snap: true, thresholdPx: 40 });
+
+    const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 10);
+    camera.position.set(0, 0, 7);
+    camera.lookAt(0, 0, 6);
+    camera.updateMatrixWorld(true);
+    camera.updateProjectionMatrix();
+
+    const canvas = document.createElement('canvas');
+    Object.defineProperty(canvas, 'getBoundingClientRect', {
+      value: () => ({ left: 0, top: 0, width: 200, height: 200 }),
+    });
+    const pickPoint = vi.fn()
+      .mockReturnValueOnce({ objectId: 'o:24381_145018:0', point: new THREE.Vector3(0, 0, 6) })
+      .mockReturnValueOnce({ objectId: 'o:24381_145018:0', point: new THREE.Vector3(0.5, 0, 6) })
+      .mockReturnValueOnce({ objectId: 'o:24381_145018:0', point: new THREE.Vector3(0.5, 0.5, 6) });
+
+    const tools = useXeokitMeasurementTools({
+      dtxViewerRef: ref({ camera, canvas } as any),
+      dtxLayerRef: ref({
+        _totalObjects: 1,
+        getGlobalModelMatrix: () => new THREE.Matrix4(),
+      } as any),
+      selectionRef: ref({ pickPoint } as any),
+      overlayContainerRef: ref(document.createElement('div')),
+      store,
+      compatViewerRef: ref(null),
+      requestRender: null,
+    });
+
+    const clickAt = (x: number, y: number) => {
+      tools.onCanvasPointerUp(canvas, new PointerEvent('pointerup', {
+        clientX: x,
+        clientY: y,
+        button: 0,
+      }));
+    };
+
+    clickAt(100, 100);
+    expect(store.currentXeokitDistanceDraft.value?.origin.worldPos).toEqual([0, 0, 6]);
+
+    clickAt(150, 100);
+    expect(store.xeokitDistanceMeasurements.value).toHaveLength(1);
+    expect(store.xeokitDistanceMeasurements.value[0].origin.worldPos).toEqual([0, 0, 6]);
+    expect(store.xeokitDistanceMeasurements.value[0].target.worldPos).toEqual([0.5, 0, 6]);
+    expect(store.currentXeokitDistanceDraft.value?.origin.worldPos).toEqual([0.5, 0, 6]);
+
+    clickAt(150, 50);
+    expect(store.xeokitDistanceMeasurements.value).toHaveLength(2);
+    expect(store.xeokitDistanceMeasurements.value[1].origin.worldPos).toEqual([0.5, 0, 6]);
+    expect(store.xeokitDistanceMeasurements.value[1].target.worldPos).toEqual([0.5, 0.5, 6]);
+    expect(store.currentXeokitDistanceDraft.value?.origin.worldPos).toEqual([0.5, 0.5, 6]);
+
+    tools.dispose();
+  });
+
+  it('repeatLastDistanceMeasurement 应以最近距离终点重启草稿，且非距离模式不生效', async () => {
+    const [{ useToolStore }, { useXeokitMeasurementTools }] = await Promise.all([
+      import('@/composables/useToolStore'),
+      import('@/composables/useXeokitMeasurementTools'),
+    ]);
+
+    const store = useToolStore();
+    store.clearAll();
+
+    const tools = useXeokitMeasurementTools({
+      dtxViewerRef: ref(null),
+      dtxLayerRef: ref(null),
+      selectionRef: ref(null),
+      overlayContainerRef: ref(document.createElement('div')),
+      store,
+      compatViewerRef: ref(null),
+      requestRender: null,
+    });
+
+    store.setToolMode('xeokit_measure_angle');
+    expect(tools.repeatLastDistanceMeasurement()).toBe(false);
+    expect(store.currentXeokitDistanceDraft.value).toBeNull();
+
+    store.setToolMode('xeokit_measure_distance');
+    expect(tools.repeatLastDistanceMeasurement()).toBe(false);
+
+    store.addXeokitDistanceMeasurement({
+      id: 'dist-old',
+      kind: 'distance',
+      origin: { entityId: 'a', worldPos: [0, 0, 0] },
+      target: { entityId: 'b', worldPos: [1, 0, 0] },
+      visible: true,
+      approximate: false,
+      createdAt: 5,
+    });
+    store.addXeokitDistanceMeasurement({
+      id: 'dist-new',
+      kind: 'distance',
+      origin: { entityId: 'c', worldPos: [2, 0, 0] },
+      target: { entityId: 'd', worldPos: [3, 4, 5] },
+      visible: true,
+      approximate: false,
+      createdAt: 9,
+    });
+
+    expect(tools.repeatLastDistanceMeasurement()).toBe(true);
+    expect(store.currentXeokitDistanceDraft.value?.origin.worldPos).toEqual([3, 4, 5]);
+    expect(store.currentXeokitDistanceDraft.value?.origin.entityId).toBe('d');
+    expect(store.xeokitDistanceMeasurements.value).toHaveLength(2);
+
+    expect(tools.repeatLastDistanceMeasurement()).toBe(false);
+
+    tools.dispose();
+  });
+
+  it('repeatLastDistanceMeasurement 选中优先：active 测量的终点优先于 createdAt 最新', async () => {
+    const [{ useToolStore }, { useXeokitMeasurementTools }] = await Promise.all([
+      import('@/composables/useToolStore'),
+      import('@/composables/useXeokitMeasurementTools'),
+    ]);
+
+    const store = useToolStore();
+    store.clearAll();
+    store.setToolMode('xeokit_measure_distance');
+
+    const tools = useXeokitMeasurementTools({
+      dtxViewerRef: ref(null),
+      dtxLayerRef: ref(null),
+      selectionRef: ref(null),
+      overlayContainerRef: ref(document.createElement('div')),
+      store,
+      compatViewerRef: ref(null),
+      requestRender: null,
+    });
+
+    store.addXeokitDistanceMeasurement({
+      id: 'dist-old',
+      kind: 'distance',
+      origin: { entityId: 'a', worldPos: [0, 0, 0] },
+      target: { entityId: 'b', worldPos: [1, 0, 0] },
+      visible: true,
+      approximate: false,
+      createdAt: 5,
+    });
+    store.addXeokitDistanceMeasurement({
+      id: 'dist-new',
+      kind: 'distance',
+      origin: { entityId: 'c', worldPos: [2, 0, 0] },
+      target: { entityId: 'd', worldPos: [3, 4, 5] },
+      visible: true,
+      approximate: false,
+      createdAt: 9,
+    });
+
+    // 用户在列表/图形中选中旧测量后 Repeat，应从旧测量的终点续测。
+    store.activeXeokitMeasurementId.value = 'dist-old';
+    expect(tools.repeatLastDistanceMeasurement()).toBe(true);
+    expect(store.currentXeokitDistanceDraft.value?.origin.entityId).toBe('b');
+    expect(store.currentXeokitDistanceDraft.value?.origin.worldPos).toEqual([1, 0, 0]);
+
+    // 选中的不是距离测量（或 id 不存在）时回落到 createdAt 最新。
+    store.clearCurrentXeokitDraft();
+    store.activeXeokitMeasurementId.value = 'not-a-distance';
+    expect(tools.repeatLastDistanceMeasurement()).toBe(true);
+    expect(store.currentXeokitDistanceDraft.value?.origin.entityId).toBe('d');
+
+    tools.dispose();
+  });
+
+  it('handleDimensionSelectionChange 把尺寸图形选中回写为 xeokit 测量选中', async () => {
+    const [{ useToolStore }, { useXeokitMeasurementTools }] = await Promise.all([
+      import('@/composables/useToolStore'),
+      import('@/composables/useXeokitMeasurementTools'),
+    ]);
+
+    const store = useToolStore();
+    store.clearAll();
+
+    const tools = useXeokitMeasurementTools({
+      dtxViewerRef: ref(null),
+      dtxLayerRef: ref(null),
+      selectionRef: ref(null),
+      overlayContainerRef: ref(document.createElement('div')),
+      store,
+      compatViewerRef: ref(null),
+      requestRender: null,
+    });
+
+    tools.handleDimensionSelectionChange('xeokit-measurement:m1');
+    expect(store.activeXeokitMeasurementId.value).toBe('m1');
+
+    // 选中非 xeokit 尺寸（用户尺寸/批注测量）时清空测量选中，保持视口一致。
+    tools.handleDimensionSelectionChange('dimension-user-9');
+    expect(store.activeXeokitMeasurementId.value).toBeNull();
+
+    tools.handleDimensionSelectionChange('xeokit-measurement:m2');
+    expect(store.activeXeokitMeasurementId.value).toBe('m2');
+
+    tools.handleDimensionSelectionChange(null);
+    expect(store.activeXeokitMeasurementId.value).toBeNull();
+
+    tools.dispose();
+  });
+
+  it('清空测量选中时不打断非 xeokit 来源的尺寸选中态', async () => {
+    const [{ useToolStore }, { useXeokitMeasurementTools }] = await Promise.all([
+      import('@/composables/useToolStore'),
+      import('@/composables/useXeokitMeasurementTools'),
+    ]);
+
+    const store = useToolStore();
+    store.clearAll();
+
+    const setSelection = vi.fn();
+    let currentSelection: string | null = null;
+    const dimensionSystem = {
+      replaceExternalSource: vi.fn(),
+      viewport: {
+        setSelection: setSelection.mockImplementation((id: string | null) => {
+          currentSelection = id;
+        }),
+        getSelection: vi.fn(() => currentSelection),
+      },
+    } as any;
+
+    const tools = useXeokitMeasurementTools({
+      dtxViewerRef: ref(null),
+      dtxLayerRef: ref(null),
+      selectionRef: ref(null),
+      overlayContainerRef: ref(document.createElement('div')),
+      getDimensionSystem: () => dimensionSystem,
+      store,
+      compatViewerRef: ref(null),
+      requestRender: null,
+    });
+
+    // xeokit 测量被选中：正常前向同步。
+    store.activeXeokitMeasurementId.value = 'm1';
+    await nextTick();
+    expect(setSelection).toHaveBeenLastCalledWith('xeokit-measurement:m1');
+
+    // 视口选中被其他来源接管（如用户尺寸）后，清空测量选中不应覆盖它。
+    currentSelection = 'dimension-user-9';
+    store.activeXeokitMeasurementId.value = null;
+    await nextTick();
+    expect(setSelection).not.toHaveBeenLastCalledWith(null);
+    expect(currentSelection).toBe('dimension-user-9');
+
+    tools.dispose();
   });
 });

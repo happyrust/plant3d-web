@@ -263,4 +263,42 @@ describe('DimensionPointerController', () => {
     expect(flip).toHaveBeenCalledTimes(1);
     expect(selectDesignAxis).toHaveBeenCalledWith('y');
   });
+
+  it('interaction gate suppresses hover/selection while closed and restores them when open', () => {
+    const target = {
+      dimensionId: 'xeokit-measurement:m1',
+      part: 'label',
+      distancePx: 0,
+    };
+    const viewport = {
+      hitTest: vi.fn(() => target),
+      setHover: vi.fn(),
+      setSelection: vi.fn(),
+      setPreview: vi.fn(),
+    };
+    const controller = new DimensionPointerController({
+      canvas: createCanvas(),
+      viewport,
+      applyCommand: vi.fn(() => ({ ok: true as const })),
+    });
+    let gateOpen = false;
+    controller.setInteractionGate(() => gateOpen);
+
+    expect(controller.pointerMove(event(20, 30))).toEqual({ consumed: false });
+    expect(controller.pointerDown(event(20, 30))).toEqual({ consumed: false });
+    expect(viewport.hitTest).not.toHaveBeenCalled();
+    expect(viewport.setSelection).not.toHaveBeenCalled();
+
+    gateOpen = true;
+    expect(controller.pointerMove(event(20, 30))).toEqual({
+      consumed: true,
+      requestRender: true,
+    });
+    expect(viewport.setHover).toHaveBeenCalledWith('xeokit-measurement:m1');
+    expect(controller.pointerDown(event(20, 30))).toEqual({
+      consumed: true,
+      requestRender: true,
+    });
+    expect(viewport.setSelection).toHaveBeenCalledWith('xeokit-measurement:m1');
+  });
 });

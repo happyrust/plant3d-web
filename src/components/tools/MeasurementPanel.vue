@@ -16,6 +16,7 @@ import { useUnitSettingsStore } from '@/composables/useUnitSettingsStore';
 import { useViewerContext } from '@/composables/useViewerContext';
 import { useXeokitMeasurementStyleStore } from '@/composables/useXeokitMeasurementStyleStore';
 import { emitCommand } from '@/ribbon/commandBus';
+import { convertLength } from '@/utils/unitFormat';
 import {
   formatMeasurementKindLabel,
   formatMeasurementSummary,
@@ -45,15 +46,15 @@ const measurementPickSourceRows: {
 }[] = [
   {
     id: 'ptset',
-    description: 'PTSET Keypoint，显示控制绿色标记，捕捉控制能否登记测量端点。',
+    description: 'P-Point 设计关键点，显示控制绿色标记，捕捉控制能否登记测量端点。',
   },
   {
     id: 'mesh_pick_point',
-    description: 'Model Surface Point，来自光标射线命中的模型表面，默认只显示候选，需手动启用捕捉。',
+    description: '模型表面点，来自光标射线命中的模型表面；默认仅显示候选，开启捕捉后作为自由点登记。',
   },
   {
     id: 'position',
-    description: '实例位置/原点；当前阶段无数据时会提示不可用。',
+    description: '模型实例变换定义的实例原点；不等同于 E3D Item 端点或几何中心。',
   },
   {
     id: 'primitive_key_point',
@@ -96,6 +97,7 @@ const selectedMeasurementId = computed(() =>
 const canShowStyleSettings = computed(() => !!xeokitTools.value);
 const distanceStylePreview = computed(() => {
   const items: string[] = [];
+  if (measurementStyle.state.distanceKeepDimensions) items.push('保留历史尺寸');
   if (measurementStyle.state.distanceShowTotalLabel) items.push('总长标签');
   if (measurementStyle.state.distanceShowMarkers) items.push('端点');
   if (measurementStyle.state.distanceShowAxisBreakdown) items.push('XYZ 分解');
@@ -128,6 +130,11 @@ const distanceStyleNote = computed(() => {
     ? '当前会同时显示总长和 X / Y / Z 分量标签。'
     : '开启后会额外显示 X / Y / Z 三段分量线和标签。';
 });
+const elevationDatumDisplayValue = computed(() => convertLength(
+  measurementStyle.state.elevationDatum,
+  'm',
+  unitSettings.displayUnit.value,
+));
 const pipeDistanceStatusText = computed(() => {
   if (pipeDistanceStore.isDetecting.value) return '正在检测管道间净距';
   if (pipeDistanceStore.detectError.value) return pipeDistanceStore.detectError.value;
@@ -261,6 +268,7 @@ function openPipeDistanceTool(): void {
 function updateMeasurementStyle(
   key:
     | 'distanceShowTotalLabel'
+    | 'distanceKeepDimensions'
     | 'distanceShowMarkers'
     | 'distanceShowAxisBreakdown'
     | 'angleShowLabel'
@@ -298,7 +306,9 @@ function resetMeasurementStyle() {
 function updateDatumElevation(raw: string): void {
   const parsed = Number(raw);
   measurementStyle.updateStyle({
-    elevationDatum: Number.isFinite(parsed) ? parsed : 0,
+    elevationDatum: Number.isFinite(parsed)
+      ? convertLength(parsed, unitSettings.displayUnit.value, 'm')
+      : 0,
   });
 }
 
@@ -351,7 +361,7 @@ watch(
           :class="store.toolMode.value === 'xeokit_measure_elevation_point' ? 'bg-muted' : ''"
           :disabled="!isMeasurementReady"
           @click="setMode('measure_elevation_point')">
-          点标高
+          位置/标高
         </button>
 
         <button type="button"
@@ -376,7 +386,7 @@ watch(
 
         <div class="mt-2 text-muted-foreground">
           <template v-if="isMeasurementReady">
-            模型加载完成后可用；测量点按下方已启用的点源捕捉，Mesh Pick Point 需手动启用。
+            模型加载完成后可用；测量点按下方已启用的点源捕捉。
           </template>
           <template v-else>
             当前未满足测量条件，请先排除上面的 Viewer / DTX 初始化问题。
@@ -387,9 +397,10 @@ watch(
           <div class="flex flex-wrap items-center gap-2">
             <div class="text-xs font-medium text-foreground">标高基准</div>
             <input type="number"
+              data-testid="measurement-elevation-datum"
               step="0.001"
               class="h-7 w-24 rounded-md border border-input bg-background px-2"
-              :value="measurementStyle.state.elevationDatum"
+              :value="elevationDatumDisplayValue"
               @change="updateDatumElevation(($event.target as HTMLInputElement).value)" />
             <span class="text-xs text-muted-foreground">{{ unitSettings.displayUnit.value }}</span>
             <button type="button"
@@ -468,12 +479,6 @@ watch(
                     <td class="py-2 pr-3 align-top">
                       <div class="font-medium text-foreground">
                         {{ MEASUREMENT_PICK_SOURCE_LABELS[row.id] }}
-                        <span v-if="row.id === 'ptset'" class="text-muted-foreground">
-                          Keypoint
-                        </span>
-                        <span v-else-if="row.id === 'mesh_pick_point'" class="text-muted-foreground">
-                          / Model Surface Point
-                        </span>
                       </div>
                       <div class="mt-0.5 text-muted-foreground">{{ row.description }}</div>
                     </td>
@@ -527,6 +532,13 @@ watch(
             </div>
             <div class="mt-2 flex flex-col gap-2">
               <label class="flex items-center gap-2">
+                <input data-testid="measurement-style-distance-keep"
+                  type="checkbox"
+                  :checked="measurementStyle.state.distanceKeepDimensions"
+                  @change="updateMeasurementStyle('distanceKeepDimensions', ($event.target as HTMLInputElement).checked)" />
+                <span>保留已完成尺寸图形（Keep Dimensions）</span>
+              </label>
+              <label class="flex items-center gap-2">
                 <input data-testid="measurement-style-distance-total-label"
                   type="checkbox"
                   :checked="measurementStyle.state.distanceShowTotalLabel"
@@ -579,7 +591,7 @@ watch(
           </div>
 
           <div class="rounded-md border border-border bg-background/80 p-2">
-            <div class="font-medium">点标高</div>
+            <div class="font-medium">位置/标高</div>
             <div class="mt-1 text-xs text-muted-foreground">
               同时控制绝对标高、相对基准、点标记与引线显示。
             </div>

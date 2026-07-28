@@ -51,6 +51,7 @@ import ReviewConfirmation from '@/components/review/ReviewConfirmation.vue';
 import { buildReviewConfirmSnapshotPayload } from '@/components/review/reviewPanelActions';
 import SpatialQueryDrawer from '@/components/spatial-query/SpatialQueryDrawer.vue';
 import AnnotationOverlayBar from '@/components/tools/AnnotationOverlayBar.vue';
+import MeasurementContextMenu from '@/components/tools/MeasurementContextMenu.vue';
 import MeasurementOverlayBar from '@/components/tools/MeasurementOverlayBar.vue';
 import MeasurementWizard from '@/components/tools/MeasurementWizard.vue';
 import ObjectMeasureDrawer from '@/components/tools/ObjectMeasureDrawer.vue';
@@ -92,10 +93,14 @@ import { useSelectionStore } from '@/composables/useSelectionStore';
 import { useSpatialCompute } from '@/composables/useSpatialCompute';
 import { initializeSpatialQueryFromUrl, useSpatialQuery } from '@/composables/useSpatialQuery';
 import { useToolStore } from '@/composables/useToolStore';
-import { useUnitSettingsStore } from '@/composables/useUnitSettingsStore';
+import { useUnitSettingsStore, type LengthUnit } from '@/composables/useUnitSettingsStore';
 import { useUserStore } from '@/composables/useUserStore';
 import { useViewerContext } from '@/composables/useViewerContext';
-import { useXeokitMeasurementTools } from '@/composables/useXeokitMeasurementTools';
+import { useXeokitMeasurementStyleStore } from '@/composables/useXeokitMeasurementStyleStore';
+import {
+  DIMENSION_XEOKIT_PREFIX,
+  useXeokitMeasurementTools,
+} from '@/composables/useXeokitMeasurementTools';
 import {
   branClearanceToExternalDimensions,
   canEditUserDimension,
@@ -109,7 +114,6 @@ import {
   createRadialEditSession,
   DtxDimensionAnchorResolver,
   DtxDimensionSnapPort,
-  isDimensionFlagEnabled,
   loadArchivedDimensionArchives,
   localDimensionDocumentId,
   LocalStorageDimensionCommandJournal,
@@ -143,6 +147,10 @@ import { DTXLayer, DTXSelectionController, DTXViewCullController } from '@/utils
 import { DynamicPivotController } from '@/utils/three/dtx/DynamicPivotController';
 import { loadModelDisplayConfig } from '@/utils/three/dtx/materialConfig';
 import { DTXOverlayHighlighter } from '@/utils/three/dtx/selection/DTXOverlayHighlighter';
+import {
+  buildMeasurementComponentsText,
+  buildMeasurementValueText,
+} from '@/utils/xeokitMeasurementFormat';
 import { CadGrid } from '@/viewer/dtx/dtxCadGrid';
 import { DtxCompatViewer } from '@/viewer/dtx/DtxCompatViewer';
 import { loadDtxPrimitiveDemo } from '@/viewer/dtx/dtxPrimitiveDemo';
@@ -161,8 +169,6 @@ defineProps<{
 const containerRef = ref<HTMLDivElement | null>(null);
 const mainCanvas = ref<HTMLCanvasElement>();
 const overlayContainer = ref<HTMLElement | null>(null);
-const dimensionDevEnabled = isDimensionFlagEnabled('DIMENSION_V2_DEV')
-  || isDimensionFlagEnabled('DIMENSION_V2_CUTOVER');
 
 const store = useToolStore();
 const userStore = useUserStore();
@@ -170,6 +176,7 @@ const reviewStore = useReviewStore();
 const consoleStore = useConsoleStore();
 const modelLoadStatus = useModelLoadStatus();
 const unitSettings = useUnitSettingsStore();
+const measurementStyle = useXeokitMeasurementStyleStore();
 const selectionStore = useSelectionStore();
 const spatialQueryStore = useSpatialQuery();
 const spatialComputeStore = useSpatialCompute();
@@ -1240,6 +1247,7 @@ const modelGenerationRef = shallowRef<ReturnType<
 > | null>(null);
 let dimensionSystem: DimensionSystem | null = null;
 let offDimensionReviewBinding: (() => void) | null = null;
+let offDimensionSelectionBinding: (() => void) | null = null;
 let offLocalDimensionAutosave: (() => void) | null = null;
 let localDimensionAutosaveTimer: ReturnType<typeof setTimeout> | null = null;
 let localDimensionAutosaveRunning = false;
@@ -3327,7 +3335,6 @@ function handleMbdLocationChange(): void {
 }
 
 async function initializeDimensionViewport(): Promise<void> {
-  if (!dimensionDevEnabled) return;
   const initializationVersion = ++dimensionInitializationVersion;
   const inputCanvas = mainCanvas.value;
   const container = containerRef.value;
@@ -3338,6 +3345,8 @@ async function initializeDimensionViewport(): Promise<void> {
   stopLocalDimensionAutosave();
   offDimensionReviewBinding?.();
   offDimensionReviewBinding = null;
+  offDimensionSelectionBinding?.();
+  offDimensionSelectionBinding = null;
   viewerContext.dimensionSystem.value = null;
 
   const context = getDimensionDocumentContext();
@@ -3458,9 +3467,132 @@ async function initializeDimensionViewport(): Promise<void> {
   offDimensionReviewBinding =
     useReviewStore().bindDimensionDocumentSession(result.system.document);
   if (!context.taskId) bindLocalDimensionAutosave(result.system);
+  // 测量草稿进行中落点优先：暂停尺寸的悬停/左键选中（E3D 心智）。
+  result.system.pointer.setInteractionGate(
+    () => !xeokitMeasurementToolsRef.value?.currentMeasurement.value,
+  );
+  // 反向选择绑定：场景中点选尺寸图形 → 选中对应 xeokit 测量记录。
+  offDimensionSelectionBinding = result.system.viewport.subscribeSelection((id) => {
+    xeokitMeasurementToolsRef.value?.handleDimensionSelectionChange(id);
+  });
   viewerContext.dimensionSystem.value = result.system;
   result.system.notifyViewerChanged();
   syncBranClearanceDimensions();
+}
+
+const measurementContextMenu = ref<{ x: number; y: number; id: string } | null>(null);
+const measurementContextMenuRecord = computed(() => {
+  const state = measurementContextMenu.value;
+  if (!state) return null;
+  return store.allXeokitMeasurements.value.find((item) => item.id === state.id) ?? null;
+});
+
+function closeMeasurementContextMenu(): void {
+  measurementContextMenu.value = null;
+}
+
+/** 右键测量尺寸图形（canvas contextmenu + dimension hitTest）打开菜单。 */
+function onViewerContextMenu(ev: MouseEvent): void {
+  const system = viewerContext.dimensionSystem.value;
+  const canvas = mainCanvas.value;
+  const container = containerRef.value;
+  if (!system || !canvas || !container) return;
+  if (isModelUnitSplitCompareReady()) return;
+
+  const rect = canvas.getBoundingClientRect();
+  system.viewport.flushProjection();
+  const hit = system.viewport.hitTest(
+    [ev.clientX - rect.left, ev.clientY - rect.top],
+    8,
+  );
+  const dimensionId = hit?.dimensionId ?? null;
+  if (!dimensionId?.startsWith(DIMENSION_XEOKIT_PREFIX)) return;
+
+  ev.preventDefault();
+  ev.stopImmediatePropagation();
+  system.viewport.setSelection(dimensionId);
+  const containerRect = container.getBoundingClientRect();
+  measurementContextMenu.value = {
+    x: Math.min(ev.clientX - containerRect.left, Math.max(0, containerRect.width - 240)),
+    y: Math.min(ev.clientY - containerRect.top, Math.max(0, containerRect.height - 340)),
+    id: dimensionId.slice(DIMENSION_XEOKIT_PREFIX.length),
+  };
+  requestRender();
+}
+
+async function copyMeasurementText(text: string | null, successMessage: string): Promise<void> {
+  if (!text) {
+    emitToast({ message: '当前测量缺少可复制的数据', level: 'warning' });
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(text);
+    emitToast({ message: successMessage, level: 'success' });
+  } catch {
+    emitToast({ message: '复制失败：浏览器未授权剪贴板访问', level: 'error' });
+  }
+}
+
+function onMeasurementMenuToggleAxis(): void {
+  measurementStyle.updateStyle({
+    distanceShowAxisBreakdown: !measurementStyle.state.distanceShowAxisBreakdown,
+  });
+}
+
+function onMeasurementMenuChangeUnit(unit: LengthUnit): void {
+  unitSettings.setDisplayUnit(unit);
+}
+
+function onMeasurementMenuCopyValue(): void {
+  const record = measurementContextMenuRecord.value;
+  if (!record) return;
+  void copyMeasurementText(
+    buildMeasurementValueText(record, unitSettings.displayUnit.value, unitSettings.precision.value),
+    '测量值已复制',
+  );
+  closeMeasurementContextMenu();
+}
+
+function onMeasurementMenuCopyComponents(): void {
+  const record = measurementContextMenuRecord.value;
+  if (!record) return;
+  void copyMeasurementText(
+    buildMeasurementComponentsText(record, unitSettings.displayUnit.value, unitSettings.precision.value),
+    '轴向分量已复制',
+  );
+  closeMeasurementContextMenu();
+}
+
+function onMeasurementMenuRepeat(): void {
+  const repeated = xeokitMeasurementToolsRef.value?.repeatLastDistanceMeasurement() ?? false;
+  if (!repeated) {
+    emitToast({
+      message: '无法继续测量：请先进入距离测量模式，且当前没有进行中的草稿',
+      level: 'warning',
+    });
+  }
+  closeMeasurementContextMenu();
+  requestRender();
+}
+
+function onMeasurementMenuLocate(): void {
+  const record = measurementContextMenuRecord.value;
+  if (record) xeokitMeasurementToolsRef.value?.flyToMeasurement(record.id);
+  closeMeasurementContextMenu();
+}
+
+function onMeasurementMenuToggleVisible(): void {
+  const record = measurementContextMenuRecord.value;
+  if (record) {
+    xeokitMeasurementToolsRef.value?.setMeasurementVisible(record.id, !record.visible);
+  }
+  closeMeasurementContextMenu();
+}
+
+function onMeasurementMenuRemove(): void {
+  const record = measurementContextMenuRecord.value;
+  if (record) xeokitMeasurementToolsRef.value?.removeMeasurement(record.id);
+  closeMeasurementContextMenu();
 }
 
 watch(
@@ -3469,7 +3601,6 @@ watch(
     reviewStore.currentTask.value?.formId ?? null,
   ],
   () => {
-    if (!dimensionDevEnabled) return;
     void initializeDimensionViewport();
   },
   { flush: 'post' },
@@ -3696,6 +3827,8 @@ onMounted(async () => {
   const canvas = mainCanvas.value;
   const container = containerRef.value;
   if (!canvas || !container) return;
+
+  canvas.addEventListener('contextmenu', onViewerContextMenu, true);
 
   initError.value = null;
   needsRender = true;
@@ -5091,6 +5224,18 @@ onMounted(async () => {
       }
     }
 
+    if (ev.key === ' ' || ev.code === 'Space') {
+      // E3D Repeat Measure：空格以上一条距离的终点为起点继续测量
+      if (store.toolMode.value === 'xeokit_measure_distance') {
+        const repeated = xeokitMeasurementToolsRef.value?.repeatLastDistanceMeasurement?.();
+        if (repeated) {
+          ev.preventDefault();
+          requestRender();
+          return;
+        }
+      }
+    }
+
     if (ev.key === 'Delete' || ev.key === 'Backspace') {
       const xeokitMid = store.activeXeokitMeasurementId.value;
       if (xeokitMid) {
@@ -5141,7 +5286,10 @@ onUnmounted(() => {
   stopLocalDimensionAutosave();
   offDimensionReviewBinding?.();
   offDimensionReviewBinding = null;
-  viewerContext.dimensionSystem.value = null;
+  offDimensionSelectionBinding?.();
+  offDimensionSelectionBinding = null;
+  mainCanvas.value?.removeEventListener('contextmenu', onViewerContextMenu, true);
+  closeMeasurementContextMenu();
   if (rafId !== null) {
     window.cancelAnimationFrame(rafId);
     rafId = null;
@@ -5845,6 +5993,22 @@ onUnmounted(() => {
     <AnnotationOverlayBar v-if="toolsRef && modelUnitCompareState?.viewMode !== 'split'" :tools="toolsRef" />
 
     <MeasurementOverlayBar v-if="isXeokitMeasureMode && xeokitMeasurementToolsRef && modelUnitCompareState?.viewMode !== 'split'" :tools="xeokitMeasurementToolsRef" />
+
+    <MeasurementContextMenu v-if="measurementContextMenu && measurementContextMenuRecord"
+      :x="measurementContextMenu.x"
+      :y="measurementContextMenu.y"
+      :record="measurementContextMenuRecord"
+      :axis-breakdown-enabled="measurementStyle.state.distanceShowAxisBreakdown"
+      :display-unit="unitSettings.displayUnit.value"
+      @close="closeMeasurementContextMenu"
+      @toggle-axis="onMeasurementMenuToggleAxis"
+      @change-unit="onMeasurementMenuChangeUnit"
+      @copy-value="onMeasurementMenuCopyValue"
+      @copy-components="onMeasurementMenuCopyComponents"
+      @repeat="onMeasurementMenuRepeat"
+      @locate="onMeasurementMenuLocate"
+      @toggle-visible="onMeasurementMenuToggleVisible"
+      @remove="onMeasurementMenuRemove" />
 
     <ReviewConfirmation />
   </div>

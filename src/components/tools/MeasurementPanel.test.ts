@@ -70,7 +70,6 @@ describe('MeasurementPanel', () => {
         store: shallowRef(null),
         viewerError: shallowRef(null),
         ptsetVis: shallowRef(null),
-        mbdPipeVis: shallowRef(null),
         annotationSystem: shallowRef({
           selectAnnotation,
           selectedId,
@@ -199,7 +198,6 @@ describe('MeasurementPanel', () => {
         store: shallowRef(null),
         viewerError: shallowRef(null),
         ptsetVis: shallowRef(null),
-        mbdPipeVis: shallowRef(null),
         annotationSystem: shallowRef(null),
       }),
     }));
@@ -279,7 +277,6 @@ describe('MeasurementPanel', () => {
         store: shallowRef(null),
         viewerError: shallowRef(null),
         ptsetVis: shallowRef(null),
-        mbdPipeVis: shallowRef(null),
         annotationSystem: shallowRef({
           selectAnnotation,
           selectedId,
@@ -369,7 +366,6 @@ describe('MeasurementPanel', () => {
         store: shallowRef(null),
         viewerError: shallowRef(null),
         ptsetVis: shallowRef(null),
-        mbdPipeVis: shallowRef(null),
         annotationSystem: shallowRef({
           selectAnnotation,
           selectedId,
@@ -458,7 +454,6 @@ describe('MeasurementPanel', () => {
         store: shallowRef(null),
         viewerError: shallowRef(null),
         ptsetVis: shallowRef(null),
-        mbdPipeVis: shallowRef(null),
         annotationSystem: shallowRef({
           selectAnnotation: vi.fn(),
           selectedId,
@@ -539,7 +534,6 @@ describe('MeasurementPanel', () => {
         store: shallowRef(null),
         viewerError: shallowRef(null),
         ptsetVis: shallowRef(null),
-        mbdPipeVis: shallowRef(null),
         annotationSystem: shallowRef({
           selectAnnotation,
           selectedId,
@@ -629,7 +623,6 @@ describe('MeasurementPanel', () => {
         store: shallowRef(null),
         viewerError: shallowRef(null),
         ptsetVis: shallowRef(null),
-        mbdPipeVis: shallowRef(null),
         annotationSystem: shallowRef({
           selectAnnotation,
           selectedId,
@@ -714,7 +707,6 @@ describe('MeasurementPanel', () => {
         store: shallowRef(null),
         viewerError: shallowRef(null),
         ptsetVis: shallowRef(null),
-        mbdPipeVis: shallowRef(null),
         annotationSystem: shallowRef({
           selectAnnotation: vi.fn(),
           selectedId,
@@ -722,18 +714,26 @@ describe('MeasurementPanel', () => {
       }),
     }));
 
-    const [{ default: MeasurementPanel }, { useToolStore }, { useXeokitMeasurementStyleStore }] = await Promise.all([
+    const [
+      { default: MeasurementPanel },
+      { useToolStore },
+      { useUnitSettingsStore },
+      { useXeokitMeasurementStyleStore },
+    ] = await Promise.all([
       import('./MeasurementPanel.vue'),
       import('@/composables/useToolStore'),
+      import('@/composables/useUnitSettingsStore'),
       import('@/composables/useXeokitMeasurementStyleStore'),
     ]);
 
     const store = useToolStore() as any;
     store.clearXeokitMeasurements();
     store.setToolMode('xeokit_measure_distance');
+    useUnitSettingsStore().setDisplayUnit('mm');
     useXeokitMeasurementStyleStore().updateStyle({
       distanceShowAxisBreakdown: true,
       distanceShowMarkers: false,
+      elevationDatum: 1.25,
     });
 
     const app = createApp(MeasurementPanel, {
@@ -748,6 +748,17 @@ describe('MeasurementPanel', () => {
     await nextTick();
 
     expect(host.textContent).toContain('默认仅显示总长');
+
+    const datumInput = host.querySelector(
+      '[data-testid="measurement-elevation-datum"]',
+    ) as HTMLInputElement | null;
+    expect(datumInput?.value).toBe('1250');
+    if (datumInput) {
+      datumInput.value = '2500';
+      datumInput.dispatchEvent(new Event('change'));
+    }
+    await nextTick();
+    expect(useXeokitMeasurementStyleStore().state.elevationDatum).toBe(2.5);
 
     const resetButton = host.querySelector('[data-testid="measurement-style-reset"]') as HTMLButtonElement | null;
     expect(resetButton).toBeTruthy();
@@ -784,7 +795,6 @@ describe('MeasurementPanel', () => {
         store: shallowRef(null),
         viewerError: shallowRef(null),
         ptsetVis: shallowRef(null),
-        mbdPipeVis: shallowRef(null),
         annotationSystem: shallowRef({
           selectAnnotation: vi.fn(),
           selectedId,
@@ -855,7 +865,6 @@ describe('MeasurementPanel', () => {
         store: shallowRef(null),
         viewerError: shallowRef(null),
         ptsetVis: shallowRef(null),
-        mbdPipeVis: shallowRef(null),
         annotationSystem: shallowRef({
           selectAnnotation: vi.fn(),
           selectedId,
@@ -938,7 +947,6 @@ describe('MeasurementPanel', () => {
         store: shallowRef(null),
         viewerError: shallowRef(null),
         ptsetVis: shallowRef(null),
-        mbdPipeVis: shallowRef(null),
         annotationSystem: shallowRef({
           selectAnnotation: vi.fn(),
           selectedId,
@@ -1013,7 +1021,7 @@ describe('MeasurementPanel', () => {
     host = null;
   });
 
-  it('测量点源 UI 文案和状态应区分 PTSET 显示、PTSET 捕捉与 Mesh 捕捉', async () => {
+  it('测量点源 UI 文案和状态应区分 P-Point、实例原点与模型表面点捕捉', async () => {
     const selectedId = ref<string | null>(null);
     let host: HTMLDivElement | null = document.createElement('div');
     document.body.appendChild(host);
@@ -1035,7 +1043,6 @@ describe('MeasurementPanel', () => {
         store: shallowRef(null),
         viewerError: shallowRef(null),
         ptsetVis: shallowRef(null),
-        mbdPipeVis: shallowRef(null),
         annotationSystem: shallowRef({
           selectAnnotation: vi.fn(),
           selectedId,
@@ -1079,6 +1086,9 @@ describe('MeasurementPanel', () => {
     const ptsetThreshold = host.querySelector(
       '[data-testid="measurement-source-ptset-threshold"]',
     ) as HTMLInputElement | null;
+    const positionSnap = host.querySelector(
+      '[data-testid="measurement-source-position-snap"]',
+    ) as HTMLInputElement | null;
     const meshShow = host.querySelector(
       '[data-testid="measurement-source-mesh_pick_point-show"]',
     ) as HTMLInputElement | null;
@@ -1089,14 +1099,17 @@ describe('MeasurementPanel', () => {
       '[data-testid="measurement-source-mesh_pick_point-threshold"]',
     ) as HTMLInputElement | null;
 
-    expect(sourceSection?.textContent).toContain('PTSET Keypoint');
-    expect(sourceSection?.textContent).toContain('Model Surface Point');
+    expect(sourceSection?.textContent).toContain('P-Point 设计关键点');
+    expect(sourceSection?.textContent).toContain('实例原点');
+    expect(sourceSection?.textContent).toContain('不等同于 E3D Item 端点');
+    expect(sourceSection?.textContent).toContain('模型表面点');
     expect(sourceSection?.textContent).toContain('屏幕像素');
     expect(sourceSection?.textContent).toContain('小于或等于阈值时可捕捉');
     expect(ptsetShow?.checked).toBe(true);
     expect(ptsetSnap?.checked).toBe(true);
     expect(ptsetThreshold?.disabled).toBe(false);
     expect(ptsetThreshold?.value).toBe('12');
+    expect(positionSnap?.checked).toBe(true);
     expect(meshShow?.checked).toBe(true);
     expect(meshSnap?.checked).toBe(false);
     expect(meshThreshold?.disabled).toBe(true);
@@ -1151,7 +1164,6 @@ describe('MeasurementPanel', () => {
         store: shallowRef(null),
         viewerError: shallowRef(null),
         ptsetVis: shallowRef(null),
-        mbdPipeVis: shallowRef(null),
         annotationSystem: shallowRef({
           selectAnnotation: vi.fn(),
           selectedId,

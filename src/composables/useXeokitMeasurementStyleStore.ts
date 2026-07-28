@@ -12,6 +12,13 @@ import {
 import { DEFAULT_PTSET_SNAP_PX } from '@/composables/usePtsetSnap';
 import { getOutputProjectFromUrl } from '@/lib/filesOutput';
 
+/**
+ * 测量取点模式契约：
+ * - `e3d`：设计点捕捉心智，P-Point 加载中一律不落点（即使表面点捕捉被手动开启）。
+ * - `free_surface`：自由表面测量心智，表面点参与捕捉且不受 P-Point pending 拦截。
+ */
+export type MeasurementPickMode = 'e3d' | 'free_surface';
+
 export type XeokitMeasurementStyleConfig = {
   distanceKeepDimensions: boolean;
   distanceShowTotalLabel: boolean;
@@ -32,6 +39,8 @@ export type XeokitMeasurementStyleConfig = {
   keypointSnapEnabled: boolean;
   /** 关键点捕捉的屏幕像素阈值。 */
   keypointSnapPx: number;
+  /** 测量取点模式（E3D 设计捕捉 / 自由表面测量）。 */
+  measurementPickMode: MeasurementPickMode;
   /** 测量点源显示/捕捉配置。 */
   measurementPickSources: MeasurementPickSourceSettings;
 };
@@ -61,6 +70,7 @@ export const DEFAULT_XEOKIT_MEASUREMENT_STYLE: Readonly<XeokitMeasurementStyleCo
   elevationDeltaShowMarkers: true,
   keypointSnapEnabled: false,
   keypointSnapPx: DEFAULT_PTSET_SNAP_PX,
+  measurementPickMode: 'e3d',
   measurementPickSources: cloneMeasurementPickSourceSettings(),
 };
 
@@ -142,6 +152,7 @@ function loadPersisted(scope = getCurrentStorageScope()): XeokitMeasurementStyle
       elevationDeltaShowMarkers: parsed.elevationDeltaShowMarkers ?? DEFAULT_XEOKIT_MEASUREMENT_STYLE.elevationDeltaShowMarkers,
       keypointSnapEnabled: ptsetSetting.snap,
       keypointSnapPx: ptsetSetting.thresholdPx,
+      measurementPickMode: parsed.measurementPickMode === 'free_surface' ? 'free_surface' : 'e3d',
       measurementPickSources,
     };
   } catch {
@@ -188,7 +199,28 @@ function updateStyle(patch: Partial<XeokitMeasurementStyleConfig>): void {
     next.keypointSnapPx = next.measurementPickSources.ptset.thresholdPx;
   }
 
+  // 自由表面模式依赖表面点捕捉；表面点捕捉被关掉时回落到 E3D 模式。
+  if (next.measurementPickSources) {
+    const nextMode = next.measurementPickMode ?? state.measurementPickMode;
+    if (nextMode === 'free_surface' && !next.measurementPickSources.mesh_pick_point.snap) {
+      next.measurementPickMode = 'e3d';
+    }
+  }
+
   Object.assign(state, next);
+}
+
+/** 切换测量取点模式，并应用该模式的 snap 契约。 */
+function setMeasurementPickMode(mode: MeasurementPickMode): void {
+  const sources = cloneMeasurementPickSourceSettings(state.measurementPickSources);
+  if (mode === 'e3d') {
+    sources.ptset = { ...sources.ptset, snap: true };
+    sources.position = { ...sources.position, snap: true };
+    sources.mesh_pick_point = { ...sources.mesh_pick_point, snap: false };
+  } else {
+    sources.mesh_pick_point = { ...sources.mesh_pick_point, show: true, snap: true };
+  }
+  updateStyle({ measurementPickMode: mode, measurementPickSources: sources });
 }
 
 function updateMeasurementPickSource(
@@ -214,6 +246,7 @@ export function useXeokitMeasurementStyleStore() {
     state,
     updateStyle,
     updateMeasurementPickSource,
+    setMeasurementPickMode,
     resetStyle,
   };
 }

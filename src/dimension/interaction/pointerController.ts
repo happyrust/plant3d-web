@@ -59,6 +59,7 @@ export class DimensionPointerController {
   private commitResultHandler:
     | ((outcome: DimensionCommitOutcome) => void)
     | null = null;
+  private interactionGate: (() => boolean) | null = null;
   private hoverId: string | null = null;
   private disposed = false;
 
@@ -85,6 +86,16 @@ export class DimensionPointerController {
     this.editSessionFactory = factory;
   }
 
+  /**
+   * 宿主可注入的交互门控：返回 false 时暂停尺寸的悬停/左键选中
+   * （例如测量草稿进行中，落点必须优先于尺寸图形）。
+   * 进行中的编辑会话不受门控影响。
+   */
+  setInteractionGate(gate: (() => boolean) | null): void {
+    this.interactionGate = gate;
+    if (gate && !gate()) this.setHover(null);
+  }
+
   setCommitResultHandler(
     handler: ((outcome: DimensionCommitOutcome) => void) | null,
   ): void {
@@ -97,6 +108,10 @@ export class DimensionPointerController {
     if (this.activeSession) {
       this.activeSession.pointerMove(screen);
       return CONSUMED;
+    }
+    if (this.interactionGate && !this.interactionGate()) {
+      this.setHover(null);
+      return NOT_CONSUMED;
     }
 
     const hit = this.input.viewport.hitTest(
@@ -113,6 +128,9 @@ export class DimensionPointerController {
     if (this.activeSession) {
       this.activeSession.pointerDown(screen);
       return CONSUMED;
+    }
+    if (this.interactionGate && !this.interactionGate()) {
+      return NOT_CONSUMED;
     }
 
     this.input.viewport.flushProjection?.();

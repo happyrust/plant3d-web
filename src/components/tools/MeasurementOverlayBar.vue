@@ -17,6 +17,7 @@ import {
   type XeokitMeasurementRecord,
   useToolStore,
 } from '@/composables/useToolStore';
+import { useXeokitMeasurementStyleStore } from '@/composables/useXeokitMeasurementStyleStore';
 import { formatMeasurementKindLabel } from '@/utils/xeokitMeasurementFormat';
 
 type ToolsApi = {
@@ -38,6 +39,7 @@ const props = defineProps<{
 }>();
 
 const store = useToolStore();
+const measurementStyle = useXeokitMeasurementStyleStore();
 
 const isVisible = computed(() => {
   return (
@@ -68,6 +70,21 @@ const allVisibilityLabel = computed(() => {
 
 const hasAnyMeasurements = computed(() => sorted.value.length > 0);
 const currentActionDisabled = computed(() => !activeMeasurement.value);
+const pointSetSourceEnabled = computed(() => {
+  const source = measurementStyle.state.measurementPickSources.ptset;
+  return source.snap;
+});
+const centerPointSourceEnabled = computed(() => {
+  const source = measurementStyle.state.measurementPickSources.position;
+  return source.snap;
+});
+const meshPointSourceEnabled = computed(() => {
+  const source = measurementStyle.state.measurementPickSources.mesh_pick_point;
+  return source.snap;
+});
+const isDistanceMode = computed(() => store.toolMode.value === 'xeokit_measure_distance');
+const continuousMeasureEnabled = computed(() => store.continuousDistanceMeasureEnabled.value);
+const pickMode = computed(() => measurementStyle.state.measurementPickMode);
 const modeLabel = computed(() => {
   const modeToKind: Record<string, XeokitMeasurementKind> = {
     xeokit_measure_distance: 'distance',
@@ -77,6 +94,18 @@ const modeLabel = computed(() => {
   };
   return formatMeasurementKindLabel(modeToKind[store.toolMode.value] ?? 'distance');
 });
+
+function setMeasurementSource(source: 'ptset' | 'position' | 'mesh_pick_point', checked: boolean): void {
+  measurementStyle.updateMeasurementPickSource(source, { snap: checked });
+}
+
+function setContinuousMeasure(checked: boolean): void {
+  store.continuousDistanceMeasureEnabled.value = checked;
+}
+
+function setPickMode(mode: 'e3d' | 'free_surface'): void {
+  measurementStyle.setMeasurementPickMode(mode);
+}
 
 function openMeasurementPanel(): void {
   ensurePanelAndActivate('measurement');
@@ -134,6 +163,72 @@ watch(
           <span class="font-medium text-foreground">{{ modeLabel }}</span>
           <span>共 {{ sorted.length }} 条</span>
         </div>
+
+        <div data-testid="measurement-overlay-pick-mode"
+          class="flex items-center overflow-hidden rounded-xl border border-border text-xs">
+          <button type="button"
+            data-testid="measurement-overlay-mode-e3d"
+            class="h-8 px-2.5"
+            :class="pickMode === 'e3d' ? 'bg-primary text-primary-foreground' : 'bg-background text-muted-foreground hover:bg-muted'"
+            title="E3D 设计点捕捉：P-Point / Item 原点，P-Point 加载中不落点"
+            @click="setPickMode('e3d')">
+            E3D 捕捉
+          </button>
+          <button type="button"
+            data-testid="measurement-overlay-mode-free"
+            class="h-8 px-2.5"
+            :class="pickMode === 'free_surface' ? 'bg-primary text-primary-foreground' : 'bg-background text-muted-foreground hover:bg-muted'"
+            title="自由表面测量：模型表面点参与捕捉，不等待 P-Point"
+            @click="setPickMode('free_surface')">
+            自由表面
+          </button>
+        </div>
+
+        <div data-testid="measurement-overlay-source-picker"
+          class="flex items-center gap-1 rounded-xl border border-border bg-muted/40 px-2 py-1 text-xs text-foreground">
+          <label class="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-lg px-2 hover:bg-background/70">
+            <input type="checkbox"
+              data-testid="measurement-overlay-source-ptset"
+              class="h-3.5 w-3.5 accent-primary"
+              :checked="pointSetSourceEnabled"
+              aria-label="启用 P-Point 捕捉"
+              title="P-Point"
+              @change="setMeasurementSource('ptset', ($event.target as HTMLInputElement).checked)" />
+            <span>P-Point</span>
+          </label>
+          <label class="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-lg px-2 hover:bg-background/70">
+            <input type="checkbox"
+              data-testid="measurement-overlay-source-position"
+              class="h-3.5 w-3.5 accent-primary"
+              :checked="centerPointSourceEnabled"
+              aria-label="启用实例原点捕捉"
+              title="实例原点"
+              @change="setMeasurementSource('position', ($event.target as HTMLInputElement).checked)" />
+            <span>实例原点</span>
+          </label>
+          <label class="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-lg px-2 hover:bg-background/70">
+            <input type="checkbox"
+              data-testid="measurement-overlay-source-mesh"
+              class="h-3.5 w-3.5 accent-primary"
+              :checked="meshPointSourceEnabled"
+              aria-label="启用模型表面点测量"
+              title="模型表面点"
+              @change="setMeasurementSource('mesh_pick_point', ($event.target as HTMLInputElement).checked)" />
+            <span>模型表面点</span>
+          </label>
+        </div>
+
+        <label v-if="isDistanceMode"
+          class="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-xl border border-border bg-muted/40 px-2 text-xs text-foreground hover:bg-background/70">
+          <input type="checkbox"
+            data-testid="measurement-overlay-continuous"
+            class="h-3.5 w-3.5 accent-primary"
+            :checked="continuousMeasureEnabled"
+            aria-label="启用连续距离测量"
+            title="完成一段后自动以终点为起点继续测量（空格键重复上一段）"
+            @change="setContinuousMeasure(($event.target as HTMLInputElement).checked)" />
+          <span>连续测量</span>
+        </label>
 
         <button type="button"
           data-testid="measurement-overlay-details-toggle"
