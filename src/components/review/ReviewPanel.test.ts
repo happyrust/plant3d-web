@@ -394,7 +394,8 @@ describe('ReviewPanel', () => {
     viewerWaitForReadyMock.mockClear();
     viewerWaitForReadyMock.mockResolvedValue(false);
     reviewAttachmentPreviewMock.getKind.mockClear();
-    reviewAttachmentPreviewMock.open.mockClear();
+    reviewAttachmentPreviewMock.open.mockReset();
+    reviewAttachmentPreviewMock.open.mockReturnValue(true);
     showModelByRefnosWithAckMock.mockClear();
     showModelByRefnosWithAckMock.mockResolvedValue({ ok: [], fail: [], error: null });
     dockApiMock.ensurePanelAndActivate.mockClear();
@@ -875,6 +876,13 @@ describe('ReviewPanel', () => {
       expect.objectContaining({ id: 'attachment-pdf' }),
     );
     expect(anchorClick).not.toHaveBeenCalled();
+
+    reviewAttachmentPreviewMock.open.mockReturnValueOnce(false);
+    previewButton?.click();
+    expect(emitToastMock).toHaveBeenCalledWith({
+      message: '附件地址无效，无法预览',
+      level: 'warning',
+    });
 
     const downloadButton = document.querySelector(
       '[data-testid="review-attachment-download-attachment-pdf"]',

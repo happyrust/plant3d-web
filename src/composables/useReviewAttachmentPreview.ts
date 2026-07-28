@@ -57,7 +57,10 @@ export function openReviewAttachmentPreview(
   const normalizedTaskId = taskId.trim();
   const kind = getReviewAttachmentPreviewKind(attachment);
   const url = resolveSafeAttachmentUrl(attachment.url);
-  if (!normalizedTaskId || !kind || !url) return false;
+  if (!normalizedTaskId || !kind || !url) {
+    previewTarget.value = null;
+    return false;
+  }
 
   previewTarget.value = { taskId: normalizedTaskId, attachment, kind, url };
   ensurePanelAndActivate('reviewAttachmentPreview');

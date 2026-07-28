@@ -74,6 +74,7 @@ describe('useReviewAttachmentPreview', () => {
   });
 
   it('rejects unsupported files and unsafe URL protocols', () => {
+    expect(openReviewAttachmentPreview('task-1', attachment())).toBe(true);
     expect(openReviewAttachmentPreview('task-1', attachment({
       name: 'notes.docx',
       mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
@@ -88,6 +89,6 @@ describe('useReviewAttachmentPreview', () => {
       url: '   ',
     }))).toBe(false);
     expect(activeReviewAttachmentPreview.value).toBeNull();
-    expect(ensurePanelAndActivateMock).not.toHaveBeenCalled();
+    expect(ensurePanelAndActivateMock).toHaveBeenCalledTimes(1);
   });
 });

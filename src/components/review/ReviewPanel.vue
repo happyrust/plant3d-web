@@ -376,7 +376,12 @@ function downloadAttachment(attachment: ReviewAttachment) {
 
 function previewAttachment(attachment: ReviewAttachment) {
   const taskId = currentTask.value?.id;
-  if (taskId) openReviewAttachmentPreview(taskId, attachment);
+  if (taskId && !openReviewAttachmentPreview(taskId, attachment)) {
+    emitToast({
+      message: '附件地址无效，无法预览',
+      level: 'warning',
+    });
+  }
 }
 
 // 模型过滤相关

@@ -1549,6 +1549,16 @@ function persistEmbedLandingState(state: EmbedLandingState | null) {
   window.dispatchEvent(new CustomEvent(EMBED_LANDING_STATE_UPDATED_EVENT, { detail: state }));
 }
 
+let previewEmbedFormId = getVerifiedEmbedFormId(embedModeParams.value);
+
+function handleEmbedFormFocusChanged(event: Event) {
+  const nextFormId = (event as CustomEvent<EmbedLandingState>).detail?.formId?.trim() || null;
+  if (nextFormId === previewEmbedFormId) return;
+  previewEmbedFormId = nextFormId;
+  clearReviewAttachmentPreview();
+  if (api.value) closePanelIfExists(api.value, 'reviewAttachmentPreview');
+}
+
 async function applyInitialLanding() {
   await bootstrapEmbedSession();
   closeBlockedReviewPanels();
@@ -1819,6 +1829,7 @@ onMounted(() => {
   if (!offCommand) {
     offCommand = onCommand(handleRibbonCommand);
   }
+  window.addEventListener(EMBED_LANDING_STATE_UPDATED_EVENT, handleEmbedFormFocusChanged);
 });
 
 onUnmounted(() => {
@@ -1837,6 +1848,7 @@ onUnmounted(() => {
     offWorkflowSyncBridge = null;
   }
 
+  window.removeEventListener(EMBED_LANDING_STATE_UPDATED_EVENT, handleEmbedFormFocusChanged);
   disposePanelZones();
   setDockApi(null);
 });

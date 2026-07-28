@@ -50,12 +50,14 @@ function openInNewWindow(): void {
       </span>
       <button type="button"
         class="rounded p-1.5 text-slate-300 hover:bg-slate-800 hover:text-white"
+        aria-label="下载附件"
         title="下载"
         @click="downloadAttachment">
         <Download class="h-4 w-4" />
       </button>
       <button type="button"
         class="rounded p-1.5 text-slate-300 hover:bg-slate-800 hover:text-white"
+        aria-label="在新窗口打开附件"
         title="在新窗口打开"
         @click="openInNewWindow">
         <ExternalLink class="h-4 w-4" />

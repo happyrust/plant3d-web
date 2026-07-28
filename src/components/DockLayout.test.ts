@@ -688,6 +688,12 @@ describe('DockLayout embed bootstrap', () => {
     expect(repeatedCalls).toHaveLength(1);
     expect(activatedPanels).toContain('reviewAttachmentPreview');
 
+    const previewPanel = dockPanels.get('reviewAttachmentPreview');
+    window.dispatchEvent(new CustomEvent('plant3d:embed-landing-state-updated', {
+      detail: { formId: 'FORM-NEXT' },
+    }));
+    expect(previewPanel?.api.close).toHaveBeenCalledTimes(1);
+
     mounted.unmount();
   });
 
