@@ -34,15 +34,17 @@ describe('useToolStore.startBoxPickRefno', () => {
     expect(store.pickRefnoFilter.value).toEqual([]);
   });
 
-  it('cancelPickRefno 清空 pickedRefnos 且不触发 callback', () => {
+  it('cancelPickRefno 清空 pickedRefnos，触发取消回调且不触发确认回调', () => {
     const store = useToolStore();
     const cb = vi.fn();
-    store.startBoxPickRefno(['BRAN'], cb);
+    const onCancel = vi.fn();
+    store.startBoxPickRefno(['BRAN'], cb, onCancel);
     store.addPickedRefno('BRAN/9');
 
     store.cancelPickRefno();
 
     expect(cb).not.toHaveBeenCalled();
+    expect(onCancel).toHaveBeenCalledOnce();
     expect(store.toolMode.value).toBe('none');
     expect(store.pickedRefnos.value).toEqual([]);
   });

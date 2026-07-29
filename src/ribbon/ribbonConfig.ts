@@ -2,13 +2,10 @@ import type { RibbonTabConfig } from '@/ribbon/ribbonTypes';
 
 import { isReviewDebugUiEnabled } from '@/components/review/debugUiGate';
 import { isMyTasksAvailableInWorkflowMode } from '@/components/review/workflowMode';
-import { isDimensionFlagEnabled } from '@/dimension';
 import { UserRole } from '@/types/auth';
 
 const showDebugUi = isReviewDebugUiEnabled();
 const showMyTasksEntry = isMyTasksAvailableInWorkflowMode();
-const showDimensionEntry = isDimensionFlagEnabled('DIMENSION_V2_DEV')
-  || isDimensionFlagEnabled('DIMENSION_V2_CUTOVER');
 
 const ALL_RIBBON_TABS: RibbonTabConfig[] = [
   {
@@ -71,15 +68,13 @@ const ALL_RIBBON_TABS: RibbonTabConfig[] = [
           { kind: 'button', id: 'panel.measurement', label: '测量', icon: 'ruler', commandId: 'panel.measurement' },
         ],
       },
-      ...(showDimensionEntry
-        ? [{
-          id: 'view.panel.dimension',
-          label: '尺寸标注',
-          items: [
-            { kind: 'button' as const, id: 'panel.dimension', label: '尺寸标注', icon: 'ruler', commandId: 'panel.dimension' },
-          ],
-        }]
-        : []),
+      {
+        id: 'view.panel.dimension',
+        label: '尺寸标注',
+        items: [
+          { kind: 'button', id: 'panel.dimension', label: '尺寸标注', icon: 'ruler', commandId: 'panel.dimension' },
+        ],
+      },
       {
         id: 'view.panel.annotation',
         label: '批注',
@@ -223,7 +218,7 @@ const ALL_RIBBON_TABS: RibbonTabConfig[] = [
           {
             kind: 'button',
             id: 'panel.annotationTable',
-            label: '批注表格',
+            label: '批注单',
             icon: 'table',
             commandId: 'panel.annotationTable',
             roles: [

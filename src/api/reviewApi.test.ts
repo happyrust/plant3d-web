@@ -1,10 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  authGetToken,
   authVerifyToken,
   getReviewUserWebSocketUrl,
   getReviewWebSocketUrl,
   reviewAnnotationCheck,
+  reviewAttachmentUpload,
   reviewCommentDelete,
   reviewCommentUpdate,
   reviewGetEmbedUrl,
@@ -41,6 +43,26 @@ describe('reviewApi base url defaults', () => {
       removeItem: vi.fn(),
       clear: vi.fn(),
     });
+  });
+
+  it('normalizes and stores standalone auth token responses', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({
+        success: true,
+        token: 'standalone-token',
+        expires_in: 3600,
+      }), { status: 200 })
+    ));
+
+    const response = await authGetToken({
+      projectId: 'AvevaMarineSample',
+      userId: 'SJ',
+      role: 'sj',
+    });
+
+    expect(response.code).toBe(0);
+    expect(response.data?.token).toBe('standalone-token');
+    expect(localStorage.setItem).toHaveBeenCalledWith('review_auth_token', 'standalone-token');
   });
 
   it('disables review websocket urls when no explicit websocket base is configured', () => {
@@ -122,6 +144,110 @@ describe('reviewApi base url defaults', () => {
     expect(fetchMock.mock.calls[0][0]).toEqual(
       expect.stringMatching(/\/api\/review\/tasks\?form_id=FORM-FB4EF9F13DF1$/),
     );
+  });
+
+  it('normalizes standalone review task lists returned in data', async () => {
+    const task = {
+      id: 'review_tasks:`task-standalone`',
+      logical_id: 'task-standalone',
+      form_id: 'FORM-STANDALONE',
+    };
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({
+        success: true,
+        data: [task],
+        total: 1,
+      }), { status: 200 })
+    ));
+
+    const response = await reviewTaskGetList({ formId: 'FORM-STANDALONE' });
+
+    expect(response.tasks).toEqual([
+      expect.objectContaining({
+        id: 'task-standalone',
+        formId: 'FORM-STANDALONE',
+      }),
+    ]);
+  });
+
+  it('normalizes standalone confirmed-record create responses', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({
+        success: true,
+        data: {
+          id: 'review_records:`record-standalone`',
+          logical_id: 'record-standalone',
+          taskId: 'task-standalone',
+          formId: 'FORM-STANDALONE',
+          type: 'batch',
+          annotations: [],
+          cloudAnnotations: [{
+            id: 'cloud-1',
+            screenshot: {
+              attachmentId: 'attachment-1',
+              url: 'data:image/png;base64,iVBORw0KGgo=',
+              mimeType: 'image/png',
+            },
+          }],
+          rectAnnotations: [],
+          obbAnnotations: [],
+          measurements: [],
+          created_at: '2026-07-28T20:23:43.956Z',
+        },
+      }), { status: 200 })
+    ));
+
+    const response = await reviewRecordCreate({
+      taskId: 'task-standalone',
+      formId: 'FORM-STANDALONE',
+      type: 'batch',
+      annotations: [],
+      cloudAnnotations: [],
+      rectAnnotations: [],
+      measurements: [],
+      note: '',
+    });
+
+    expect(response.record).toEqual(expect.objectContaining({
+      id: 'record-standalone',
+      taskId: 'task-standalone',
+      confirmedAt: Date.parse('2026-07-28T20:23:43.956Z'),
+      cloudAnnotations: [expect.objectContaining({ id: 'cloud-1' })],
+    }));
+  });
+
+  it('retries standalone attachment uploads as JSON with PNG content', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(
+        'Expected request with `Content-Type: application/json`',
+        { status: 400 },
+      ))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        success: true,
+        data: {
+          logical_id: 'attachment-1',
+          name: 'cloud.png',
+          mimeType: 'image/png',
+          url: 'data:image/png;base64,iVBORw0KGgo=',
+          uploadedAt: 123,
+        },
+      }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const response = await reviewAttachmentUpload(
+      'task-1',
+      new File([new Uint8Array([137, 80, 78, 71])], 'cloud.png', { type: 'image/png' }),
+      { fileType: 'annotation_screenshot', sourceAnnotationId: 'cloud-1' },
+    );
+
+    expect(response.attachment).toEqual(expect.objectContaining({
+      id: 'attachment-1',
+      mimeType: 'image/png',
+    }));
+    expect(fetchMock.mock.calls[1][1]).toEqual(expect.objectContaining({
+      headers: expect.objectContaining({ 'Content-Type': 'application/json' }),
+      body: expect.stringContaining('"contentBase64"'),
+    }));
   });
 
   it('adds form_id when loading task confirmed records with form scope', async () => {

@@ -211,6 +211,139 @@ describe('AnnotationOverlayBar', () => {
     host = null;
   });
 
+  it('云线模式支持使用当前选择、点选/框选追加、移除和取消返回', async () => {
+    vi.doMock('@/composables/useDockApi', () => ({
+      ensurePanelAndActivate: vi.fn(),
+    }));
+    vi.doMock('@/composables/useReviewStore', () => ({
+      useReviewStore: () => ({
+        currentTask: ref(null),
+      }),
+    }));
+    vi.doMock('@/composables/useUserStore', () => ({
+      useUserStore: () => ({
+        currentUser: ref({ id: 'reviewer-1', role: 'reviewer', name: 'R' }),
+      }),
+    }));
+
+    let host: HTMLDivElement | null = document.createElement('div');
+    document.body.appendChild(host);
+
+    const [
+      { default: AnnotationOverlayBar },
+      { useToolStore },
+    ] = await Promise.all([
+      import('./AnnotationOverlayBar.vue'),
+      import('@/composables/useToolStore'),
+    ]);
+
+    const store = useToolStore() as any;
+    store.clearAll();
+    const selectedRefnos = ref(['REF/A', 'REF/B']);
+    store.setToolMode('annotation_cloud');
+
+    const app = createApp(AnnotationOverlayBar, {
+      tools: {
+        ready: ref(true), statusText: ref('云线批注'),
+        flyToAnnotation: vi.fn(), removeAnnotation: vi.fn(),
+        flyToCloudAnnotation: vi.fn(), flyToRectAnnotation: vi.fn(),
+        removeCloudAnnotation: vi.fn(), removeRectAnnotation: vi.fn(),
+        selectionStore: { selectedRefnos },
+      },
+    });
+    app.mount(host);
+    await nextTick();
+
+    (host.querySelector('[data-testid="annotation-cloud-target-current"]') as HTMLButtonElement).click();
+    await nextTick();
+    expect(store.cloudTargetRefnos.value).toEqual(['REF/A', 'REF/B']);
+
+    (host.querySelector('[data-testid="annotation-cloud-target-remove-REF/A"]') as HTMLButtonElement).click();
+    await nextTick();
+    expect(store.cloudTargetRefnos.value).toEqual(['REF/B']);
+
+    (host.querySelector('[data-testid="annotation-cloud-target-pick"]') as HTMLButtonElement).click();
+    await nextTick();
+    expect(store.toolMode.value).toBe('pick_refno');
+    expect(host.querySelector('[data-testid="annotation-cloud-targets"]')).toBeTruthy();
+    store.addPickedRefno('REF/C');
+    store.confirmPickRefno();
+    await nextTick();
+    expect(store.toolMode.value).toBe('annotation_cloud');
+    expect(store.cloudTargetRefnos.value).toEqual(['REF/B', 'REF/C']);
+
+    (host.querySelector('[data-testid="annotation-cloud-target-box"]') as HTMLButtonElement).click();
+    await nextTick();
+    expect(store.toolMode.value).toBe('pick_refno_box');
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    await nextTick();
+    expect(store.toolMode.value).toBe('annotation_cloud');
+    expect(store.cloudTargetRefnos.value).toEqual(['REF/B', 'REF/C']);
+
+    (host.querySelector('[data-testid="annotation-cloud-target-clear"]') as HTMLButtonElement).click();
+    await nextTick();
+    expect(store.cloudTargetRefnos.value).toEqual([]);
+
+    app.unmount();
+    host.remove();
+    host = null;
+  });
+
+  it('选择模型元素后反向显示关联云线，并支持激活定位', async () => {
+    let host: HTMLDivElement | null = document.createElement('div');
+    document.body.appendChild(host);
+
+    const [{ default: AnnotationOverlayBar }, { useToolStore }] = await Promise.all([
+      import('./AnnotationOverlayBar.vue'),
+      import('@/composables/useToolStore'),
+    ]);
+
+    const store = useToolStore() as any;
+    store.clearAll();
+    store.setToolMode('none');
+    store.addCloudAnnotation({
+      id: 'cloud-related',
+      objectIds: ['REF/A'],
+      anchorWorldPos: [0, 0, 0],
+      visible: true,
+      title: '阀门问题',
+      description: '',
+      createdAt: 1,
+      bindings: [
+        { refno: 'REF/ANCHOR', role: 'anchor', createdAt: 1 },
+        { refno: 'REF/A', role: 'member', noun: 'VALV', createdAt: 1 },
+      ],
+    });
+    const selectedRefnos = ref(['REF/ANCHOR']);
+    const flyToCloudAnnotation = vi.fn();
+    const app = createApp(AnnotationOverlayBar, {
+      tools: {
+        ready: ref(true), statusText: ref(''),
+        flyToAnnotation: vi.fn(), removeAnnotation: vi.fn(),
+        flyToCloudAnnotation, flyToRectAnnotation: vi.fn(),
+        removeCloudAnnotation: vi.fn(), removeRectAnnotation: vi.fn(),
+        selectionStore: { selectedRefnos },
+      },
+    });
+    app.mount(host);
+    await nextTick();
+
+    expect(host.querySelector('[data-testid="annotation-related-clouds"]')).toBeFalsy();
+
+    selectedRefnos.value = ['REF/A'];
+    await nextTick();
+    expect(host.querySelector('[data-testid="annotation-related-clouds"]')?.textContent).toContain('阀门问题');
+
+    (host.querySelector('[data-testid="annotation-related-cloud-cloud-related"]') as HTMLButtonElement).click();
+    await nextTick();
+    expect(store.activeCloudAnnotationId.value).toBe('cloud-related');
+    expect(flyToCloudAnnotation).toHaveBeenCalledWith('cloud-related');
+
+    app.unmount();
+    host.remove();
+    host = null;
+  });
+
   it('按 Escape 或点击退出后，应退出批注模式；若仍有 active 批注则 toolbar 继续显示', async () => {
     vi.doMock('@/composables/useDockApi', () => ({
       ensurePanelAndActivate: vi.fn(),

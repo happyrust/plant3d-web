@@ -26,6 +26,7 @@ import {
   type SpatialQueryAabb,
   type SpatialQueryCenterSource,
   type SpatialQueryDraft,
+  type SpatialQueryFilterOptions,
   type SpatialQueryFilters,
   type SpatialQueryMode,
   type SpatialQueryPoint,
@@ -107,10 +108,37 @@ function createDefaultDraft(): SpatialQueryDraft {
     keyword: '',
     onlyLoaded: false,
     onlyVisible: false,
+    includeNegative: false,
     specValues: [],
     limit: 100,
   };
 }
+
+const NEGATIVE_NOUNS = new Set([
+  'NBOX',
+  'NCYL',
+  'NLCY',
+  'NSBO',
+  'NCON',
+  'NSNO',
+  'NPYR',
+  'NDIS',
+  'NXTR',
+  'NCTO',
+  'NRTO',
+  'NREV',
+  'NSCY',
+  'NSCO',
+  'NLSN',
+  'NSSP',
+  'NSCT',
+  'NSRT',
+  'NSDS',
+  'NSSL',
+  'NLPY',
+  'NSEX',
+  'NSRE',
+]);
 
 export type SpatialQueryUrlConfig = {
   refno: string;
@@ -354,6 +382,7 @@ function makeFilters(draft: SpatialQueryDraft): SpatialQueryFilters {
     keyword: draft.keyword.trim(),
     onlyLoaded: draft.onlyLoaded,
     onlyVisible: draft.onlyVisible,
+    includeNegative: draft.includeNegative,
     specValues: draft.specValues.slice(),
   };
 }
@@ -381,6 +410,7 @@ function parseRequestMode(draft: SpatialQueryDraft): { centerSource: SpatialQuer
 function matchFilters(item: { refno: string; noun: string; specValue: number; loaded: boolean; visible: boolean }, filters: SpatialQueryFilters): boolean {
   if (filters.onlyLoaded && !item.loaded) return false;
   if (filters.onlyVisible && !item.visible) return false;
+  if (!filters.includeNegative && NEGATIVE_NOUNS.has(item.noun.toUpperCase())) return false;
   if (filters.nouns.length > 0 && !filters.nouns.includes(item.noun.toUpperCase())) return false;
   if (filters.specValues.length > 0 && !filters.specValues.includes(item.specValue)) return false;
   if (!includesKeyword(item.refno, item.noun, filters.keyword)) return false;
@@ -435,6 +465,24 @@ function queryBBoxFromResponse(serverResp: ApiSpatialQueryResult | null): Spatia
       max: { ...serverResp.query_bbox.max },
     }
     : null;
+}
+
+function normalizeServerFilterOptions(serverResp: ApiSpatialQueryResult | null): SpatialQueryFilterOptions | null {
+  const raw = serverResp?.filter_options;
+  if (!raw) return null;
+  return {
+    nouns: raw.nouns.map((option) => ({
+      value: option.value,
+      count: option.count,
+      isNegative: Boolean(option.is_negative),
+    })),
+    specValues: raw.spec_values.map((option) => ({
+      value: option.value,
+      count: option.count,
+      label: toSpecName(option.value),
+    })),
+    includeNegative: Boolean(raw.include_negative),
+  };
 }
 
 function syncResultSetSummary(current: SpatialQueryResultSet): SpatialQueryResultSet {
@@ -1015,6 +1063,7 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
     return {
       request,
       items,
+      filterOptions: normalizeServerFilterOptions(serverResp),
       center: serverCenter,
       queryBBox: queryBBoxFromResponse(serverResp),
       serverRadius: typeof serverResp?.radius === 'number' ? serverResp.radius : null,
@@ -1089,6 +1138,7 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
         page,
         per_page: request.limit,
         shape: request.shape,
+        include_negative: request.filters.includeNegative,
       };
 
       if (request.centerSource === 'refno' && request.refno) {
@@ -1099,6 +1149,7 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
           page: serverOptions.page,
           per_page: serverOptions.per_page,
           shape: serverOptions.shape,
+          include_negative: serverOptions.include_negative,
         });
       } else {
         serverResp = await queryNearbyPosition(request.center.x, request.center.y, request.center.z, request.radius, serverOptions);

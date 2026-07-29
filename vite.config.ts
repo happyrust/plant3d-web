@@ -1,6 +1,7 @@
 import { execSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { copyFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
+import type { IncomingMessage, ServerResponse } from 'node:http';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath, URL } from 'node:url';
 
@@ -70,6 +71,36 @@ const DUCKDB_EXTENSION_ASSET_FILES = [
   'v1.5.3/wasm_mvp/parquet.duckdb_extension.wasm',
   'v1.5.3/wasm_threads/parquet.duckdb_extension.wasm',
 ] as const;
+
+const MBD_FIXTURES_DIR = resolve(__dirname, 'src/fixtures/mbd-v2');
+const MBD_SAFE_REFNO = /^[A-Za-z0-9_-]+$/;
+
+/**
+ * Dev-only mock for the MBD V2 pipe API. Serves a hand-authored / CLI-generated
+ * `MbdV2PipeData` fixture from `src/fixtures/mbd-v2/<refno>.json` for
+ * `GET /api/mbd/v2/pipe/<refno>`, so `?dimension_demo=1&mbd_refno=<refno>`
+ * renders simulated 3D dimension annotations with no backend running. It is
+ * wired through the `/api` proxy `bypass` hook (which runs ahead of the proxy),
+ * and returns `false` for any refno without a matching fixture so real MBD
+ * traffic still reaches the backend untouched. Returns `true` once it has fully
+ * answered the request.
+ */
+function tryServeMbdV2Fixture(
+  req: IncomingMessage,
+  res: ServerResponse,
+): boolean {
+  const match = (req.url ?? '').match(/^\/api\/mbd\/v2\/pipe\/([^/?]+)/);
+  if (!match) return false;
+  const refno = decodeURIComponent(match[1]);
+  if (!MBD_SAFE_REFNO.test(refno)) return false;
+  const fixturePath = resolve(MBD_FIXTURES_DIR, `${refno}.json`);
+  if (!existsSync(fixturePath)) return false;
+  res.statusCode = 200;
+  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.end(readFileSync(fixturePath));
+  return true;
+}
 
 function duckDBAssetSourceDir(): string {
   return fileURLToPath(
@@ -167,7 +198,7 @@ export default defineConfig(({ mode }) => {
   const inferredPort = inferBackendPortFromApiBase(env.VITE_GEN_MODEL_API_BASE_URL);
   const isLikelyMisconfiguredBackendPort = inferredPort === '8080' || inferredPort === '3000' || inferredPort === '3001';
   const backendPort = env.VITE_BACKEND_PORT || (isLikelyMisconfiguredBackendPort ? '3100' : inferredPort || '3100');
-  const backendTarget = `http://localhost:${backendPort}`;
+  const backendTarget = (env.VITE_BACKEND_URL || env.VITE_API_BASE_URL || `http://localhost:${backendPort}`).replace(/\/$/, '');
   // 使用北京时间构建前端
   const now = new Date();
   const beijingTime = new Date(now.getTime() + 8 * 60 * 60 * 1000);
@@ -200,6 +231,18 @@ export default defineConfig(({ mode }) => {
         '/api': {
           target: backendTarget,
           changeOrigin: true,
+          // Dev-only MBD fixture channel: `/api/mbd/v2/pipe/<refno>` with a
+          // matching `src/fixtures/mbd-v2/<refno>.json` is answered locally so
+          // simulated dimension annotations render with no backend. Any other
+          // refno / `/api` request falls through to the real backend.
+          bypass(req, res) {
+            if (res && tryServeMbdV2Fixture(req, res)) {
+              // Response already ended; returning a string makes Vite short-
+              // circuit (it checks res.writableEnded) instead of proxying.
+              return req.url;
+            }
+            return undefined;
+          },
         },
         '/files': {
           target: backendTarget,
@@ -208,6 +251,14 @@ export default defineConfig(({ mode }) => {
           // 说明：此前存在“若 public/files 下存在同名文件则由前端静态服务返回”的旁路逻辑，
           // 会造成数据源不一致（本地文件意外覆盖后端 output 目录）。
           // 按项目约定，/files 始终对应后端 output 根目录。
+        },
+        '/static/xeokit-sdk.es.js': {
+          target: backendTarget,
+          changeOrigin: true,
+        },
+        '/model-version': {
+          target: backendTarget,
+          changeOrigin: true,
         },
       },
     },

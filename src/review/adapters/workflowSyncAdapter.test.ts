@@ -60,8 +60,14 @@ function makeTextItem(id: string) {
 function makeCloudItem(id: string) {
   return {
     id,
-    objectIds: [],
+    objectIds: [`member-${id}`],
     anchorWorldPos: [0, 0, 0],
+    anchorRefno: `anchor-${id}`,
+    refnos: [`member-${id}`],
+    bindings: [
+      { refno: `anchor-${id}`, role: 'anchor' as const, createdAt: 1 },
+      { refno: `member-${id}`, role: 'member' as const, noun: 'PIPE', createdAt: 1 },
+    ],
     visible: true,
     title: `c-${id}`,
     description: '',
@@ -222,6 +228,8 @@ describe('buildSnapshotFromWorkflowSync', () => {
       | undefined;
     expect(textPayload?.comments).toBeDefined();
     expect(textPayload?.comments).toHaveLength(1);
+    expect(snapshot.annotations.find((a) => a.annotationId === 'c0')?.payload.bindings)
+      .toEqual(makeCloudItem('c0').bindings);
   });
 
   it('keeps order across records and types when comments missing', () => {
@@ -281,12 +289,12 @@ describe('buildSnapshotFromWorkflowSync', () => {
 
   it('copies the latest workflow dimension document without changing replay JSON', () => {
     const older: SnapshotDimensionDocument = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       documentId: 'workflow-dimensions',
       records: [],
     };
     const latest: SnapshotDimensionDocument = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       documentId: 'workflow-dimensions',
       records: [],
     };

@@ -1,5 +1,7 @@
 # Dimension Layout Kernel Implementation Plan
 
+> **输出契约已被取代：** 数值、格式化、LFF 和已验证布局规则继续复用；屏幕空间权威 `LayoutResult` 改由 [`2026-07-23-solvespace-scene-dimension-renderer.md`](./2026-07-23-solvespace-scene-dimension-renderer.md) 的三维布局结果取代。
+
 > **Status:** Gate 2 implemented and verified on 2026-07-19. All kernel tests, dependency scan, type-check, scoped lint, build, and the isolated ADR 0040 benchmark pass.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.

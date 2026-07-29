@@ -9,6 +9,7 @@ const loadInstancesMock = vi.fn();
 const getSubtreeRefnosMock = vi.fn();
 const isParquetAvailableMock = vi.fn();
 const isDtxRefnoLoadedMock = vi.fn();
+const regenerateByRefnoMock = vi.fn();
 
 vi.mock('@/api/genModelE3dApi', () => ({
   e3dGetSubtreeRefnos: getSubtreeRefnosMock,
@@ -20,6 +21,7 @@ vi.mock('@/api/genModelRealtimeApi', () => ({
 }));
 
 vi.mock('@/api/genModelTaskApi', () => ({
+  modelRegenerateByRefno: regenerateByRefnoMock,
   modelShowByRefno: vi.fn(),
 }));
 
@@ -79,6 +81,7 @@ describe('useModelGeneration', () => {
       truncated: false,
     });
     isParquetAvailableMock.mockResolvedValue(true);
+    regenerateByRefnoMock.mockResolvedValue({ success: true, message: 'ok' });
     loadInstancesMock.mockResolvedValue({
       loadedRefnos: 0,
       skippedRefnos: 1,
@@ -186,5 +189,54 @@ describe('useModelGeneration', () => {
 
     expect(gen.isModelActuallyLoaded('24381/145019')).toBe(true);
     expect(viewer.__dtxLayer.hasObject).not.toHaveBeenCalled();
+  });
+
+  it('显式重新生成完成后应从 backend 强制替换旧对象与几何', async () => {
+    loadInstancesMock.mockResolvedValueOnce({
+      loadedRefnos: 1,
+      skippedRefnos: 0,
+      loadedObjects: 2,
+      missingRefnos: [],
+      missingBreakdown: {
+        noGeoRowsRefnos: [],
+        mesh404Refnos: [],
+        mesh404GeoHashes: [],
+      },
+      sceneBoundingBox: null,
+    });
+    const viewer = {
+      scene: {
+        objects: { '24381_76692': {} },
+        getAABB: vi.fn(() => ({ min: [0, 0, 0], max: [1, 1, 1] })),
+      },
+      __dtxLayer: {
+        hasObject: vi.fn(() => true),
+      },
+      cameraFlight: { flyTo: vi.fn() },
+    } as any;
+
+    const { useModelGeneration } = await import('./useModelGeneration');
+    const gen = useModelGeneration({ viewer, db_num: 7997 });
+    const ok = await gen.showModelByRefno('24381_76692', {
+      flyTo: true,
+      regenerate: true,
+    });
+
+    expect(ok).toBe(true);
+    expect(regenerateByRefnoMock).toHaveBeenCalledWith({
+      refnos: ['24381/76692'],
+      db_num: 7997,
+      gen_parquet: false,
+    });
+    expect(loadInstancesMock).toHaveBeenCalledWith(
+      viewer.__dtxLayer,
+      7997,
+      expect.any(Array),
+      expect.objectContaining({
+        dataSource: 'backend',
+        replaceExistingObjects: true,
+        forceRefreshGeometries: true,
+      })
+    );
   });
 });

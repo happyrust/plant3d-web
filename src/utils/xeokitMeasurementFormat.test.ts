@@ -52,8 +52,8 @@ describe('xeokitMeasurementFormat', () => {
     }, 'm', 2)).toContain('点 24381/145018');
   });
 
-  it('shows World distance and signed axis deltas for new measurement points', () => {
-    expect(formatMeasurementSummary({
+  it('shows World distance and signed E/N/U axis deltas for new measurement points', () => {
+    const record = {
       id: 'x2',
       kind: 'distance',
       origin: {
@@ -69,9 +69,16 @@ describe('xeokitMeasurementFormat', () => {
       visible: true,
       approximate: false,
       createdAt: 1,
-    }, 'cm', 1)).toContain(
-      '距离 180.3cm · ΔX +100.0cm · ΔY -150.0cm · ΔZ +0.0cm',
+    } satisfies Parameters<typeof formatMeasurementSummary>[0];
+
+    expect(formatMeasurementSummary(record, 'cm', 1)).toContain(
+      '距离 180.3cm · E +100.0cm · N -150.0cm · U +0.0cm',
     );
+
+    // 关闭轴向分量时只保留总长与端点信息。
+    const compact = formatMeasurementSummary(record, 'cm', 1, { showAxisBreakdown: false });
+    expect(compact).toContain('距离 180.3cm');
+    expect(compact).not.toContain('E +100.0cm');
   });
 
   it('shows engineering World XYZ for new position measurements', () => {
@@ -149,7 +156,7 @@ describe('xeokitMeasurementFormat', () => {
       visible: true,
       approximate: false,
       createdAt: 1,
-    }, 'mm', 0)).toBe('ΔX +1200mm\nΔY -300mm\nΔZ +50mm');
+    }, 'mm', 0)).toBe('E +1200mm\nN -300mm\nU +50mm');
 
     expect(buildMeasurementComponentsText({
       id: 'e1',

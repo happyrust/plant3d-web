@@ -1,5 +1,7 @@
 # Dimension Document and Review Persistence Implementation Plan
 
+> **继续有效但由新计划扩展：** 领域与评审持久化任务保留；`labelPinned` schema 与迁移执行 [`2026-07-23-solvespace-scene-dimension-renderer.md`](./2026-07-23-solvespace-scene-dimension-renderer.md) 的 MDU 1。
+
 > **Status:** Foundation Tasks 1–4 implemented and verified on 2026-07-19. Review/frontend integration Tasks 5–8 remain.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.

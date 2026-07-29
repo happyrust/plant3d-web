@@ -86,6 +86,8 @@ function mountTable(setup: {
   canEditItem?: (item: AnnotationWorkspaceItem) => boolean;
   savingSeverityKeys?: string[];
   savingTitleKeys?: string[];
+  isItemActionable?: (item: AnnotationWorkspaceItem) => boolean;
+  renderExpandedRow?: boolean;
 } & Record<string, unknown>): {
   host: HTMLElement;
   selectSpy: ReturnType<typeof vi.fn>;
@@ -94,6 +96,8 @@ function mountTable(setup: {
   copySpy: ReturnType<typeof vi.fn>;
   updateSeveritySpy: ReturnType<typeof vi.fn>;
   updateTitleSpy: ReturnType<typeof vi.fn>;
+  reviewActionCompletedSpy: ReturnType<typeof vi.fn>;
+  queueCompletedSpy: ReturnType<typeof vi.fn>;
   itemsRef: ReturnType<typeof ref<AnnotationWorkspaceItem[]>>;
   destroy: () => void;
 } {
@@ -106,24 +110,50 @@ function mountTable(setup: {
   const copySpy = vi.fn();
   const updateSeveritySpy = vi.fn();
   const updateTitleSpy = vi.fn();
+  const reviewActionCompletedSpy = vi.fn();
+  const queueCompletedSpy = vi.fn();
 
   const app = createApp({
-    render: () => h(AnnotationTableView, {
-      items: itemsRef.value,
-      currentAnnotationId: setup.currentAnnotationId ?? null,
-      currentAnnotationType: setup.currentAnnotationType ?? null,
-      taskKey: setup.taskKey ?? null,
-      pageSize: setup.pageSize ?? 10,
-      canEditItem: setup.canEditItem ?? (() => false),
-      savingSeverityKeys: setup.savingSeverityKeys ?? [],
-      savingTitleKeys: setup.savingTitleKeys ?? [],
-      onSelectAnnotation: selectSpy,
-      onOpenAnnotation: openSpy,
-      onLocateAnnotation: locateSpy,
-      onCopyFeedback: copySpy,
-      onUpdateSeverity: updateSeveritySpy,
-      onUpdateTitle: updateTitleSpy,
-    }),
+    render: () => h(
+      AnnotationTableView,
+      {
+        items: itemsRef.value,
+        currentAnnotationId: setup.currentAnnotationId ?? null,
+        currentAnnotationType: setup.currentAnnotationType ?? null,
+        taskKey: setup.taskKey ?? null,
+        pageSize: setup.pageSize ?? 10,
+        canEditItem: setup.canEditItem ?? (() => false),
+        isItemActionable: setup.isItemActionable ?? (() => false),
+        savingSeverityKeys: setup.savingSeverityKeys ?? [],
+        savingTitleKeys: setup.savingTitleKeys ?? [],
+        onSelectAnnotation: selectSpy,
+        onOpenAnnotation: openSpy,
+        onLocateAnnotation: locateSpy,
+        onCopyFeedback: copySpy,
+        onUpdateSeverity: updateSeveritySpy,
+        onUpdateTitle: updateTitleSpy,
+        onReviewActionCompleted: reviewActionCompletedSpy,
+        onQueueCompleted: queueCompletedSpy,
+      },
+      setup.renderExpandedRow
+        ? {
+          'expanded-row': ({
+            item,
+            onReviewActionCompleted,
+          }: {
+              item: AnnotationWorkspaceItem;
+              onReviewActionCompleted: (result: unknown) => void;
+            }) => h('div', {
+            'data-testid': `expanded-slot-${item.id}`,
+          }, [
+            h('button', {
+              'data-testid': `complete-${item.id}`,
+              onClick: () => onReviewActionCompleted({ action: 'fixed' }),
+            }, '完成处理'),
+          ]),
+        }
+        : undefined,
+    ),
   });
   app.mount(host);
 
@@ -135,6 +165,8 @@ function mountTable(setup: {
     copySpy,
     updateSeveritySpy,
     updateTitleSpy,
+    reviewActionCompletedSpy,
+    queueCompletedSpy,
     itemsRef,
     destroy: () => {
       app.unmount();
@@ -218,8 +250,7 @@ describe('AnnotationTableView', () => {
     destroy();
   });
 
-  it('3. 单击行 · 延迟 220ms 后 emit select-annotation', async () => {
-    vi.useFakeTimers();
+  it('3. 单击行立即 emit select-annotation', async () => {
     const { host, selectSpy, openSpy, destroy } = mountTable({
       items: [createItem({ id: 'click-target', title: 'DN800' })],
     });
@@ -227,11 +258,6 @@ describe('AnnotationTableView', () => {
 
     const row = host.querySelector<HTMLElement>('[role="row"]');
     row?.click();
-
-    // 单击刚触发，定时器还没跑
-    expect(selectSpy).not.toHaveBeenCalled();
-
-    vi.advanceTimersByTime(250);
     await nextTick();
 
     expect(selectSpy).toHaveBeenCalledTimes(1);
@@ -241,23 +267,21 @@ describe('AnnotationTableView', () => {
     destroy();
   });
 
-  it('4. 双击行 · emit open-annotation · 不 emit select', async () => {
-    vi.useFakeTimers();
+  it('4. 快速双击行只按第一次 click 展开，不会再次收起或触发旧详情事件', async () => {
     const { host, selectSpy, openSpy, destroy } = mountTable({
       items: [createItem({ id: 'dbl-target', title: 'DN800' })],
     });
     await nextTick();
 
     const row = host.querySelector<HTMLElement>('[role="row"]');
-    row?.click();
+    row?.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }));
+    row?.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 2 }));
     row?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
-
-    vi.advanceTimersByTime(300);
     await nextTick();
 
-    expect(openSpy).toHaveBeenCalledTimes(1);
-    expect(openSpy.mock.calls[0][0].id).toBe('dbl-target');
-    expect(selectSpy).not.toHaveBeenCalled();
+    expect(selectSpy).toHaveBeenCalledTimes(1);
+    expect(selectSpy.mock.calls[0][0].id).toBe('dbl-target');
+    expect(openSpy).not.toHaveBeenCalled();
 
     destroy();
   });
@@ -414,21 +438,17 @@ describe('AnnotationTableView', () => {
     destroy();
   });
 
-  it('9b. 操作列详情按钮直接打开处理详情 · 不只选中行', async () => {
-    vi.useFakeTimers();
+  it('9b. 操作列详情按钮直接选择并展开当前行', async () => {
     const item = createItem({ id: 'comment-open-target' });
     const { host, selectSpy, openSpy, destroy } = mountTable({ items: [item] });
     await nextTick();
 
     const commentBtn = host.querySelector<HTMLButtonElement>(`[data-testid="annotation-table-comment-${item.id}"]`);
     commentBtn?.click();
-
-    vi.advanceTimersByTime(300);
     await nextTick();
 
-    expect(openSpy).toHaveBeenCalledTimes(1);
-    expect(openSpy.mock.calls[0][0].id).toBe('comment-open-target');
-    expect(selectSpy).not.toHaveBeenCalled();
+    expect(selectSpy).toHaveBeenCalledWith(expect.objectContaining({ id: 'comment-open-target' }));
+    expect(openSpy).not.toHaveBeenCalled();
 
     destroy();
   });
@@ -534,6 +554,135 @@ describe('AnnotationTableView', () => {
     destroy();
   });
 
+  it('10b. 只在当前选中行下挂载 expanded-row，重复单击当前行会收起', async () => {
+    const { host, selectSpy, destroy } = mountTable({
+      items: [
+        createItem({ id: 'expanded-a' }),
+        createItem({ id: 'expanded-b' }),
+      ],
+      currentAnnotationId: 'expanded-a',
+      currentAnnotationType: 'text',
+      renderExpandedRow: true,
+    });
+    await nextTick();
+
+    expect(host.querySelector('[data-testid="expanded-slot-expanded-a"]')).not.toBeNull();
+    expect(host.querySelector('[data-testid="expanded-slot-expanded-b"]')).toBeNull();
+    host.querySelector<HTMLElement>('[data-testid="annotation-table-row-expanded-a"]')?.click();
+    await nextTick();
+
+    expect(selectSpy).toHaveBeenCalledWith(null);
+
+    destroy();
+  });
+
+  it('10c. Enter 展开或收起，Esc 仅收起当前行', async () => {
+    const { host, selectSpy, destroy } = mountTable({
+      items: [createItem({ id: 'keyboard-expand' })],
+      currentAnnotationId: 'keyboard-expand',
+      currentAnnotationType: 'text',
+      renderExpandedRow: true,
+    });
+    await nextTick();
+
+    const row = host.querySelector<HTMLElement>('[role="row"]');
+    row?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    row?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    await nextTick();
+
+    expect(selectSpy).toHaveBeenNthCalledWith(1, null);
+    expect(selectSpy).toHaveBeenNthCalledWith(2, null);
+
+    destroy();
+  });
+
+  it('10d. 处理成功后按筛选排序结果自动跨页选择下一条', async () => {
+    const items = Array.from({ length: 6 }, (_, index) => createItem({
+      id: `advance-${index}`,
+      statusKey: 'pending',
+    }));
+    const {
+      host,
+      selectSpy,
+      reviewActionCompletedSpy,
+      queueCompletedSpy,
+      destroy,
+    } = mountTable({
+      items,
+      pageSize: 5,
+      currentAnnotationId: 'advance-4',
+      currentAnnotationType: 'text',
+      isItemActionable: (item: AnnotationWorkspaceItem) => item.statusKey === 'pending',
+      renderExpandedRow: true,
+    });
+    await nextTick();
+
+    host.querySelector<HTMLButtonElement>('[data-testid="complete-advance-4"]')?.click();
+    await nextTick();
+
+    expect(reviewActionCompletedSpy).toHaveBeenCalledWith({
+      item: expect.objectContaining({ id: 'advance-4' }),
+      result: { action: 'fixed' },
+    });
+    expect(selectSpy).toHaveBeenCalledWith(expect.objectContaining({ id: 'advance-5' }));
+    expect(queueCompletedSpy).not.toHaveBeenCalled();
+    expect(host.textContent).toContain('当前 6-6');
+
+    destroy();
+  });
+
+  it('10e. 队列没有其他可处理批注时收起并发出 queue-completed', async () => {
+    const {
+      host,
+      selectSpy,
+      reviewActionCompletedSpy,
+      queueCompletedSpy,
+      destroy,
+    } = mountTable({
+      items: [
+        createItem({ id: 'queue-current', statusKey: 'pending' }),
+        createItem({ id: 'queue-done', statusKey: 'approved' }),
+      ],
+      currentAnnotationId: 'queue-current',
+      currentAnnotationType: 'text',
+      isItemActionable: (item: AnnotationWorkspaceItem) => item.statusKey === 'pending',
+      renderExpandedRow: true,
+    });
+    await nextTick();
+
+    host.querySelector<HTMLButtonElement>('[data-testid="complete-queue-current"]')?.click();
+    await nextTick();
+
+    expect(reviewActionCompletedSpy).toHaveBeenCalledTimes(1);
+    expect(selectSpy).toHaveBeenCalledWith(null);
+    expect(queueCompletedSpy).toHaveBeenCalledTimes(1);
+
+    destroy();
+  });
+
+  it('10f. 筛选排除当前展开项时自动收起', async () => {
+    const { host, selectSpy, destroy } = mountTable({
+      items: [
+        createItem({ id: 'filter-current', statusKey: 'fixed' }),
+        createItem({ id: 'filter-pending', statusKey: 'pending' }),
+      ],
+      currentAnnotationId: 'filter-current',
+      currentAnnotationType: 'text',
+      renderExpandedRow: true,
+    });
+    await nextTick();
+
+    const status = host.querySelector<HTMLSelectElement>('[data-testid="annotation-table-status-filter"]');
+    status!.value = 'pending';
+    status!.dispatchEvent(new Event('change'));
+    await nextTick();
+
+    expect(selectSpy).toHaveBeenCalledWith(null);
+    expect(host.querySelector('[data-testid="expanded-slot-filter-current"]')).toBeNull();
+
+    destroy();
+  });
+
   it('11. > pageSize 时显示分页 footer · 点 next 跳下一页', async () => {
     const items = Array.from({ length: 12 }, (_, i) =>
       createItem({ id: `p-${i}`, title: `批注 ${i + 1}` }),
@@ -601,6 +750,25 @@ describe('AnnotationTableView', () => {
 
     // Table 行不应再存在（compact 模式下无 role="row"）
     expect(host.querySelectorAll('[role="row"]').length).toBe(0);
+
+    destroy();
+  });
+
+  it('13b. Compact 模式在当前卡片内部挂载 expanded-row', async () => {
+    const { host, destroy } = mountTable({
+      items: [createItem({ id: 'compact-expanded' })],
+      currentAnnotationId: 'compact-expanded',
+      currentAnnotationType: 'text',
+      renderExpandedRow: true,
+    });
+    await nextTick();
+
+    const root = host.querySelector<HTMLElement>('[data-testid="annotation-table-view"]');
+    fireContainerResize(root!, 400);
+    await nextTick();
+
+    const card = host.querySelector<HTMLElement>('[data-testid="annotation-table-row-compact-expanded"]');
+    expect(card?.querySelector('[data-testid="expanded-slot-compact-expanded"]')).not.toBeNull();
 
     destroy();
   });
@@ -746,8 +914,7 @@ describe('AnnotationTableView', () => {
     destroy();
   });
 
-  it('20. 菜单"打开处理详情"触发 open-annotation · 不触发 select-annotation', async () => {
-    vi.useFakeTimers();
+  it('20. 菜单"打开处理详情"选择当前行并关闭菜单', async () => {
     const items = [createItem({ id: 'ctx-open', title: 'DN800' })];
     const { host, selectSpy, openSpy, destroy } = mountTable({ items });
     await nextTick();
@@ -762,12 +929,10 @@ describe('AnnotationTableView', () => {
     expect(openBtn?.textContent).not.toContain('drawer');
 
     openBtn?.click();
-    await vi.runAllTimersAsync();
     await nextTick();
 
-    expect(openSpy).toHaveBeenCalledTimes(1);
-    expect(openSpy.mock.calls[0][0].id).toBe('ctx-open');
-    expect(selectSpy).not.toHaveBeenCalled();
+    expect(selectSpy).toHaveBeenCalledWith(expect.objectContaining({ id: 'ctx-open' }));
+    expect(openSpy).not.toHaveBeenCalled();
     expect(document.querySelector('[data-testid="annotation-table-context-menu"]')).toBeNull();
 
     destroy();

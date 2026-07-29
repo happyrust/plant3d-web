@@ -115,7 +115,7 @@ async function waitForBackendContractReadiness(env: ReturnType<typeof buildPmsSi
       if (!token) {
         throw new Error('auth/token 未返回 token');
       }
-      const embedResponse = await postJson<{ code?: number; message?: string }>(
+      const embedResponse = await postJson<{ code?: number; message?: string; success?: boolean; url?: string }>(
         `${trimTrailingSlash(env.backendBaseUrl)}/api/review/embed-url`,
         {
           project_id: env.projectId,
@@ -126,7 +126,7 @@ async function waitForBackendContractReadiness(env: ReturnType<typeof buildPmsSi
         },
         token,
       );
-      if (embedResponse.body.code === 0 || embedResponse.body.code === 200) {
+      if (embedResponse.body.success === true || embedResponse.body.code === 0 || embedResponse.body.code === 200) {
         return;
       }
       throw new Error(embedResponse.body.message || `embed-url code=${embedResponse.body.code}`);
@@ -479,6 +479,7 @@ function spawnBackgroundProcess(options: {
     detached: true,
     stdio: ['ignore', logFd, logFd],
     env: process.env,
+    shell: process.platform === 'win32' && options.command.toLowerCase().endsWith('.cmd'),
   });
   child.unref();
   return {
@@ -567,7 +568,7 @@ async function ensureFrontend(env: ReturnType<typeof buildPmsSimulatorEnvironmen
   const managed = spawnBackgroundProcess({
     name: 'frontend',
     cwd: process.cwd(),
-    command: 'npm',
+    command: process.platform === 'win32' ? 'npm.cmd' : 'npm',
     args: ['run', 'dev', '--', '--host', '127.0.0.1', '--port', String(env.frontendPort), '--strictPort'],
     logPath,
   });
@@ -727,7 +728,15 @@ async function main(): Promise<void> {
     backend = await ensureBackend(env, artifactDir);
     frontend = await ensureFrontend(env, artifactDir);
 
-    contractSmoke = await runContractSmoke(env, artifactDir);
+    contractSmoke = process.env.PMS_SIMULATOR_SKIP_CONTRACT_SMOKE === '1'
+      ? {
+        ok: true,
+        command: 'skipped by PMS_SIMULATOR_SKIP_CONTRACT_SMOKE=1',
+        exitCode: 0,
+        summary: '本地仿 PMS 场景已显式跳过外部 PMS 契约烟测',
+        steps: [],
+      }
+      : await runContractSmoke(env, artifactDir);
     if (contractSmoke.ok) {
       scenarios = await runPmsSimulatorScenarios({
         env,

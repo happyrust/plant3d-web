@@ -173,6 +173,12 @@ describe('VersionTimelinePanel', () => {
         'codex-ams1112-physical-896',
         'codex-ams1112-physical-791',
       ]);
+      const viewTree = q(
+        cardOf(root, 'codex-ams1112-physical-897'),
+        'version-card-view-tree',
+      ) as HTMLButtonElement;
+      expect(viewTree.disabled).toBe(false);
+      expect(viewTree.title).toContain('sesno 897');
 
       const days = qa(root, 'version-timeline-day');
       expect(days).toHaveLength(2);
@@ -358,7 +364,7 @@ describe('VersionTimelinePanel', () => {
   });
 
   describe('粒度切换与锚点节点（T010·FR-007）', () => {
-    it('含会话锚点渲染 anchor-node 小刻度（去重已覆盖 sesno），快照入口 disabled，可切回', async () => {
+    it('含会话锚点渲染 anchor-node 小刻度（去重已覆盖 sesno），可查看历史树并切回', async () => {
       api.listReleases.mockResolvedValue([R_MID, R_NEW]);
       api.listAnchors.mockResolvedValue({
         dbnum: 1112,
@@ -380,10 +386,10 @@ describe('VersionTimelinePanel', () => {
       const anchors = qa(root, 'anchor-node');
       expect(anchors).toHaveLength(1);
       expect(anchors[0]?.textContent).toContain('900');
-      // 锚点节点仅保留快照入口（Phase 2 占位），无 A/B 钉选
+      // 锚点节点提供历史树入口，但不参与 A/B 钉选
       const snapshotButton = anchors[0]?.querySelector<HTMLButtonElement>('[data-testid="anchor-node-snapshot"]');
-      expect(snapshotButton?.disabled).toBe(true);
-      expect(snapshotButton?.getAttribute('title')).toBe('Phase 2 历史快照');
+      expect(snapshotButton?.disabled).toBe(false);
+      expect(snapshotButton?.getAttribute('title')).toContain('sesno 900');
       expect(anchors[0]?.querySelector('[data-testid="version-card-pin-a"]')).toBeNull();
       expect(anchors[0]?.querySelector('[data-testid="version-card-pin-b"]')).toBeNull();
 

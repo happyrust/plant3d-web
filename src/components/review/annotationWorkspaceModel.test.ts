@@ -49,6 +49,39 @@ describe('annotationWorkspaceModel', () => {
     });
   });
 
+  it('projects cloud members and anchor separately from bindings', async () => {
+    const { buildAnnotationWorkspaceItems } = await import('./annotationWorkspaceModel');
+
+    const [item] = buildAnnotationWorkspaceItems({
+      annotations: [],
+      rectAnnotations: [],
+      obbAnnotations: [],
+      cloudAnnotations: [{
+        id: 'cloud-bindings',
+        objectIds: ['legacy'],
+        anchorWorldPos: [1, 2, 3],
+        anchorRefno: 'legacy-anchor',
+        refnos: ['legacy-member'],
+        bindings: [
+          { refno: 'REF/A', role: 'anchor', noun: 'PIPE', createdAt: 1 },
+          { refno: 'REF/A', role: 'member', noun: 'PIPE', createdAt: 1 },
+          { refno: 'REF/B', role: 'member', noun: 'VALV', createdAt: 1 },
+        ],
+        visible: true,
+        title: '绑定云线',
+        description: '',
+        createdAt: 1,
+      }],
+    });
+
+    expect(item.refnos).toEqual(['REF/A', 'REF/B']);
+    expect(item.cloudBindings).toEqual([
+      { refno: 'REF/A', role: 'anchor', noun: 'PIPE', createdAt: 1 },
+      { refno: 'REF/A', role: 'member', noun: 'PIPE', createdAt: 1 },
+      { refno: 'REF/B', role: 'member', noun: 'VALV', createdAt: 1 },
+    ]);
+  });
+
   it('formats linked measurement summaries with user-readable refnos', async () => {
     const { buildLinkedMeasurementItems } = await import('./annotationWorkspaceModel');
 

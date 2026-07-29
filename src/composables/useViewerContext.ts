@@ -72,12 +72,35 @@ export type ShowModelByRefnosResult = {
 export type ShowModelByRefnosOptions = {
   refnos: string[];
   flyTo?: boolean;
+  highlight?: boolean;
   requestId?: string;
   timeoutMs?: number;
   ensureViewerReady?: boolean;
   readyTimeoutMs?: number;
   viewerRef?: Ref<unknown | null>;
 };
+
+export function applyLoadedModelHighlight(options: {
+  viewer: DtxCompatViewer;
+  refnos: string[];
+  flyTo: boolean;
+  setSelectedRefnos: (refnos: string[]) => void;
+}): boolean {
+  const refnos = [...new Set(options.refnos.map((refno) => refno.trim()).filter(Boolean))];
+  if (refnos.length === 0) return false;
+
+  const previous = [...options.viewer.scene.selectedObjectIds];
+  if (previous.length > 0) options.viewer.scene.setObjectsSelected(previous, false);
+  options.viewer.scene.ensureRefnos(refnos);
+  options.setSelectedRefnos(refnos);
+  options.viewer.scene.setObjectsSelected(refnos, true);
+
+  const aabb = options.viewer.scene.getAABB(refnos);
+  if (options.flyTo && aabb) {
+    options.viewer.cameraFlight.flyTo({ aabb, duration: 0.8, fit: true });
+  }
+  return true;
+}
 
 function createRequestId(prefix: string): string {
   const randomSuffix = Math.random().toString(36).slice(2, 8);
@@ -88,6 +111,7 @@ export async function showModelByRefnosWithAck(options: ShowModelByRefnosOptions
   const {
     refnos,
     flyTo = true,
+    highlight = false,
     timeoutMs = 10_000,
     requestId = createRequestId('show-model-by-refnos'),
     ensureViewerReady = true,
@@ -140,6 +164,7 @@ export async function showModelByRefnosWithAck(options: ShowModelByRefnosOptions
       detail: {
         refnos,
         flyTo,
+        highlight,
         requestId,
       },
     }));

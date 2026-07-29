@@ -95,7 +95,7 @@ import { initializeSpatialQueryFromUrl, useSpatialQuery } from '@/composables/us
 import { useToolStore } from '@/composables/useToolStore';
 import { useUnitSettingsStore, type LengthUnit } from '@/composables/useUnitSettingsStore';
 import { useUserStore } from '@/composables/useUserStore';
-import { useViewerContext } from '@/composables/useViewerContext';
+import { applyLoadedModelHighlight, useViewerContext } from '@/composables/useViewerContext';
 import { useXeokitMeasurementStyleStore } from '@/composables/useXeokitMeasurementStyleStore';
 import {
   DIMENSION_XEOKIT_PREFIX,
@@ -4918,6 +4918,7 @@ onMounted(async () => {
 
     const unique = Array.from(new Set(refnos));
     const flyTo = !!(detail as any)?.flyTo;
+    const highlight = !!(detail as any)?.highlight;
     const versionDbnum = Number((detail as any)?.dbnum);
     const versionSesno = Number((detail as any)?.sesno);
     const loadUnitVersion = Number.isInteger(versionDbnum)
@@ -4935,11 +4936,12 @@ onMounted(async () => {
       unique_refno_count: unique.length,
       regenModel: !!(detail as any)?.regenModel,
       flyTo,
+      highlight,
       requestId: hasRequestId ? requestId : undefined,
     });
     consoleStore.addLog(
       'info',
-      `[vis][event] showModelByRefnos raw_refno_count=${refnos.length} unique_refno_count=${unique.length} regenModel=${(detail as any)?.regenModel ? 1 : 0} flyTo=${flyTo ? 1 : 0}`,
+      `[vis][event] showModelByRefnos raw_refno_count=${refnos.length} unique_refno_count=${unique.length} regenModel=${(detail as any)?.regenModel ? 1 : 0} flyTo=${flyTo ? 1 : 0} highlight=${highlight ? 1 : 0}`,
     );
     const mg = modelGenerationRef.value;
     if (!mg) return;
@@ -4985,10 +4987,10 @@ onMounted(async () => {
                         (dtxLayer as any)?.getStats?.() ?? null;
           const ok = loadUnitVersion
             ? await mg.showModelUnitVersion(r, versionDbnum, versionSesno, {
-              flyTo: flyTo && unique.length === 1,
+              flyTo: !highlight && flyTo && unique.length === 1,
             })
             : await mg.showModelByRefno(r, {
-              flyTo: flyTo && unique.length === 1,
+              flyTo: !highlight && flyTo && unique.length === 1,
               regenerate: !!(detail as any)?.regenModel,
             });
           const loadDebug = mg.lastLoadDebug?.value ?? null;
@@ -5012,6 +5014,23 @@ onMounted(async () => {
             dtxStatsBefore,
             dtxStatsAfter,
           });
+        }
+
+        if (highlight && debugState.ok.length > 0) {
+          const compat = compatViewerRef.value;
+          if (compat) {
+            applyLoadedModelHighlight({
+              viewer: compat,
+              refnos: debugState.ok,
+              flyTo,
+              setSelectedRefnos: (refnos) => selectionStore.setSelectedRefnos(refnos),
+            });
+          }
+        }
+        if (highlight && debugState.fail.length > 0) {
+          debugState.error = debugState.ok.length > 0
+            ? `${debugState.fail.length} 个关联元素加载失败，已高亮其余元素`
+            : '关联元素全部加载失败';
         }
       })
       .catch((e) => {
@@ -5182,8 +5201,8 @@ onMounted(async () => {
     }
 
     if (ev.key === 'Escape') {
-      // 在 pick_refno 模式中，Escape 取消拾取
-      if (store.toolMode.value === 'pick_refno') {
+      // 在点选/框选 refno 模式中，Escape 取消当前拾取步骤
+      if (store.toolMode.value === 'pick_refno' || store.toolMode.value === 'pick_refno_box') {
         store.cancelPickRefno();
         return;
       }

@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue';
 
 import { Database, ExternalLink, Eye } from 'lucide-vue-next';
+
 import { ensurePanelAndActivate } from '@/composables/useDockApi';
 
 const props = withDefaults(defineProps<{

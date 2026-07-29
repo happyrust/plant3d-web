@@ -4,6 +4,7 @@ import { computed, watch, type Ref } from 'vue';
 import { useToolStore } from '@/composables/useToolStore';
 import { useUnitSettingsStore } from '@/composables/useUnitSettingsStore';
 import { useViewerContext } from '@/composables/useViewerContext';
+import { useXeokitMeasurementStyleStore } from '@/composables/useXeokitMeasurementStyleStore';
 import { formatXeokitHoverHint } from '@/composables/xeokitMeasurementUi';
 import {
   formatMeasurementKindLabel,
@@ -29,6 +30,7 @@ const props = defineProps<{
 const store = useToolStore();
 const ctx = useViewerContext();
 const unitSettings = useUnitSettingsStore();
+const measurementStyle = useXeokitMeasurementStyleStore();
 
 const sorted = computed(() => {
   return [...store.allXeokitMeasurements.value].sort((a, b) => b.createdAt - a.createdAt);
@@ -171,7 +173,7 @@ watch(
                 <span v-if="m.approximate" class="ml-2 text-xs text-muted-foreground">草稿</span>
               </div>
               <div class="mt-0.5 truncate text-xs text-muted-foreground">
-                {{ formatMeasurementSummary(m, unitSettings.displayUnit.value, unitSettings.precision.value) }}
+                {{ formatMeasurementSummary(m, unitSettings.displayUnit.value, unitSettings.precision.value, { showAxisBreakdown: measurementStyle.state.distanceShowAxisBreakdown }) }}
               </div>
             </div>
             <div class="flex shrink-0 items-center gap-1">

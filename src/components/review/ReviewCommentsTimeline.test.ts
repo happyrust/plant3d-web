@@ -116,16 +116,19 @@ async function mountTimeline(props: Record<string, unknown> = {}) {
   const { default: ReviewCommentsTimeline } = await import('./ReviewCommentsTimeline.vue');
   const host = document.createElement('div');
   document.body.appendChild(host);
+  const reviewActionCompletedSpy = vi.fn();
   const app = createApp({
     render: () => h(ReviewCommentsTimeline, {
       annotationType: 'text',
       annotationId: 'annot-1',
       annotationLabel: '文字批注 / 主评论线程',
+      onReviewActionCompleted: reviewActionCompletedSpy,
       ...props,
     }),
   });
   app.mount(host);
   return {
+    reviewActionCompletedSpy,
     unmount: () => {
       app.unmount();
       host.remove();
@@ -398,6 +401,7 @@ describe('ReviewCommentsTimeline', () => {
       message: '请填写不需解决原因',
       level: 'warning',
     }));
+    expect(mounted.reviewActionCompletedSpy).not.toHaveBeenCalled();
 
     mounted.unmount();
   });
@@ -430,6 +434,7 @@ describe('ReviewCommentsTimeline', () => {
       message: '请填写驳回原因',
       level: 'warning',
     }));
+    expect(mounted.reviewActionCompletedSpy).not.toHaveBeenCalled();
 
     const textarea = document.querySelector<HTMLTextAreaElement>('textarea');
     expect(textarea).toBeTruthy();
@@ -446,6 +451,43 @@ describe('ReviewCommentsTimeline', () => {
       action: 'reject',
       note: '仍需补充碰撞说明',
     }));
+
+    mounted.unmount();
+  });
+
+  it('无正式单据时本地处理成功也会发出处理完成事件', async () => {
+    currentUser.value = { id: 'designer-1', name: '设计甲', role: UserRole.DESIGNER };
+    const localState = {
+      resolutionStatus: 'fixed',
+      decisionStatus: 'pending',
+      updatedAt: 1710000000000,
+      history: [],
+    };
+    applyAnnotationReviewActionMock.mockReturnValueOnce(localState);
+
+    const mounted = await mountTimeline({
+      designerOnly: true,
+      contextFormId: null,
+      contextTaskId: null,
+    });
+    await flushUi();
+
+    const fixedButton = Array.from(document.querySelectorAll<HTMLButtonElement>('button'))
+      .find((button) => button.textContent?.includes('已修改'));
+    fixedButton?.click();
+    await flushUi();
+    const submitButton = Array.from(document.querySelectorAll<HTMLButtonElement>('button'))
+      .find((button) => button.textContent?.includes('提交处理结果'));
+    submitButton?.click();
+    await flushUi();
+
+    expect(annotationReviewStateApplyMock).not.toHaveBeenCalled();
+    expect(mounted.reviewActionCompletedSpy).toHaveBeenCalledWith({
+      action: 'fixed',
+      annotationId: 'annot-1',
+      annotationType: 'text',
+      state: localState,
+    });
 
     mounted.unmount();
   });
@@ -511,6 +553,15 @@ describe('ReviewCommentsTimeline', () => {
       }),
     );
     expect(applyAnnotationReviewActionMock).not.toHaveBeenCalled();
+    expect(mounted.reviewActionCompletedSpy).toHaveBeenCalledWith({
+      action: 'fixed',
+      annotationId: 'annot-1',
+      annotationType: 'text',
+      state: expect.objectContaining({
+        resolutionStatus: 'fixed',
+        decisionStatus: 'pending',
+      }),
+    });
 
     mounted.unmount();
   });

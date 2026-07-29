@@ -35,7 +35,7 @@ import {
 } from '../scripts/pms-plant3d-initiate-flow';
 
 const enabled = process.env.PMS_E2E_ENABLED === '1' || process.env.PMS_E2E_ENABLED === 'true';
-const password = process.env.PMS_E2E_PASSWORD?.trim();
+const password = process.env.PMS_E2E_PASSWORD?.trim() || 'Admin@1234';
 const fullFlowEnabled =
   process.env.PMS_E2E_FULL_FLOW === '1' || process.env.PMS_E2E_FULL_FLOW === 'true';
 const submitReviewEnabled =
@@ -53,7 +53,7 @@ function embedUrlSubstring(): string | null {
 }
 
 function rolesToRun(): string[] {
-  const raw = process.env.PMS_E2E_ROLES?.trim();
+  const raw = process.env.PMS_E2E_ROLES?.trim() || 'SJ,JD,JH,SH,PZ';
   if (raw) {
     const list = raw.split(',').map((s) => s.trim().toUpperCase()).filter(Boolean);
     if (list.length) return list;

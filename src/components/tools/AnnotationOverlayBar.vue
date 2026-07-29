@@ -29,7 +29,10 @@ import { useReviewStore } from '@/composables/useReviewStore';
 import {
   type ActiveAnnotationContext,
   type AnnotationType,
+  findCloudAnnotationsByMemberRefnos,
+  getCloudMemberRefnos,
   useToolStore,
+  type CloudAnnotationRecord,
 } from '@/composables/useToolStore';
 import { useUserStore } from '@/composables/useUserStore';
 import {
@@ -49,6 +52,9 @@ type ToolsApi = {
   flyToRectAnnotation?: (id: string) => void;
   removeCloudAnnotation?: (id: string) => void;
   removeRectAnnotation?: (id: string) => void;
+  selectionStore?: {
+    selectedRefnos: Ref<string[]>;
+  };
 };
 
 const props = defineProps<{
@@ -111,16 +117,28 @@ const annotationModes = new Set([
 ]);
 
 const isAnnotationMode = computed(() => annotationModes.has(store.toolMode.value));
+const cloudTargetPicking = ref(false);
+const isCloudCreationContext = computed(() => (
+  store.toolMode.value === 'annotation_cloud' || cloudTargetPicking.value
+));
 
 const currentAnnotation = computed<ActiveAnnotationContext | null>(() => {
   return store.activeAnnotationContext.value;
 });
+const selectedModelRefnos = computed(() => props.tools.selectionStore?.selectedRefnos.value ?? []);
+const relatedCloudAnnotations = computed(() => (
+  findCloudAnnotationsByMemberRefnos(store.cloudAnnotations.value, selectedModelRefnos.value)
+));
 
 const isVisible = computed(() => {
-  return isAnnotationMode.value || !!currentAnnotation.value;
+  return isAnnotationMode.value ||
+    cloudTargetPicking.value ||
+    !!currentAnnotation.value ||
+    relatedCloudAnnotations.value.length > 0;
 });
 
 const currentType = computed<AnnotationType | null>(() => {
+  if (cloudTargetPicking.value) return 'cloud';
   switch (store.toolMode.value) {
     case 'annotation':
       return 'text';
@@ -129,7 +147,8 @@ const currentType = computed<AnnotationType | null>(() => {
     case 'annotation_rect':
       return 'rect';
     default:
-      return currentAnnotation.value?.type ?? null;
+      return currentAnnotation.value?.type ??
+        (relatedCloudAnnotations.value.length > 0 ? 'cloud' : null);
   }
 });
 
@@ -190,7 +209,41 @@ const allVisibilityLabel = computed(() => {
 });
 
 function setMode(mode: 'annotation' | 'annotation_cloud' | 'annotation_rect') {
+  if (mode !== 'annotation_cloud' && cloudTargetPicking.value) {
+    cloudTargetPicking.value = false;
+    store.clearCloudTargetRefnos();
+  }
   store.setToolMode(store.toolMode.value === mode ? 'none' : mode);
+}
+
+function resumeCloudCreation(refnos: string[] = []): void {
+  if (refnos.length > 0) store.addCloudTargetRefnos(refnos);
+  cloudTargetPicking.value = false;
+  store.setToolMode('annotation_cloud');
+}
+
+function useCurrentCloudTargets(): void {
+  store.addCloudTargetRefnos(props.tools.selectionStore?.selectedRefnos.value ?? []);
+}
+
+function getMatchedCloudMemberRefnos(annotation: CloudAnnotationRecord): string[] {
+  const selected = new Set(selectedModelRefnos.value);
+  return getCloudMemberRefnos(annotation).filter((refno) => selected.has(refno));
+}
+
+function activateRelatedCloud(annotation: CloudAnnotationRecord): void {
+  store.activeAnnotationId.value = null;
+  store.activeObbAnnotationId.value = null;
+  store.activeRectAnnotationId.value = null;
+  store.activeCloudAnnotationId.value = annotation.id;
+  store.updateCloudAnnotationVisible(annotation.id, true);
+  props.tools.flyToCloudAnnotation?.(annotation.id);
+}
+
+function startCloudTargetPick(mode: 'point' | 'box'): void {
+  cloudTargetPicking.value = true;
+  const start = mode === 'box' ? store.startBoxPickRefno : store.startPickRefno;
+  start([], resumeCloudCreation, () => resumeCloudCreation());
 }
 
 function openAnnotationPanel(): void {
@@ -360,6 +413,7 @@ async function batchSetCurrentTypeSeverity(next: AnnotationSeverity | undefined)
 }
 
 function exitAnnotation(): void {
+  cloudTargetPicking.value = false;
   store.setToolMode('none');
 }
 
@@ -457,6 +511,12 @@ function handleWindowKeydown(event: KeyboardEvent): void {
     closeDrawer();
     return;
   }
+  if (event.key === 'Escape' && cloudTargetPicking.value) {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    store.cancelPickRefno();
+    return;
+  }
   if (event.key !== 'Escape' || !isAnnotationMode.value) return;
   const target = event.target as HTMLElement | null;
   const tag = target?.tagName?.toLowerCase() ?? '';
@@ -530,6 +590,90 @@ onUnmounted(() => {
         <span>{{ currentTypeRecords.length }} 条</span>
         <span class="opacity-40">·</span>
         <span>共 {{ store.annotationCount.value + store.cloudAnnotationCount.value + store.rectAnnotationCount.value }}</span>
+      </div>
+
+      <div v-if="relatedCloudAnnotations.length > 0"
+        data-testid="annotation-related-clouds"
+        class="w-[min(34rem,calc(100vw-2rem))] rounded-xl border border-border bg-background/95 p-2.5 shadow-lg backdrop-blur">
+        <div class="mb-2 flex items-center justify-between gap-2">
+          <span class="text-xs font-semibold">当前模型关联云线</span>
+          <span class="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] text-primary">
+            {{ relatedCloudAnnotations.length }} 条
+          </span>
+        </div>
+        <div class="max-h-40 space-y-1 overflow-auto">
+          <button v-for="annotation in relatedCloudAnnotations"
+            :key="annotation.id"
+            type="button"
+            :data-testid="`annotation-related-cloud-${annotation.id}`"
+            class="flex w-full items-center gap-2 rounded-lg border border-transparent px-2 py-1.5 text-left hover:border-border hover:bg-muted"
+            :title="`定位并查看 ${annotation.title || '未命名云线'}`"
+            @click="activateRelatedCloud(annotation)">
+            <Cloud class="h-3.5 w-3.5 shrink-0 text-primary" />
+            <span class="min-w-0 flex-1">
+              <span class="block truncate text-xs font-medium">{{ annotation.title || '未命名云线' }}</span>
+              <span class="block truncate font-mono text-[10px] text-muted-foreground">
+                {{ getMatchedCloudMemberRefnos(annotation).join('、') }}
+              </span>
+            </span>
+            <Focus class="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+          </button>
+        </div>
+      </div>
+
+      <div v-if="isCloudCreationContext"
+        data-testid="annotation-cloud-targets"
+        class="w-[min(34rem,calc(100vw-2rem))] rounded-xl border border-border bg-background/95 p-2.5 shadow-lg backdrop-blur">
+        <div class="flex flex-wrap items-center gap-1.5">
+          <span class="mr-1 text-xs font-semibold">关联元素 {{ store.cloudTargetRefnos.value.length }}</span>
+          <button type="button"
+            data-testid="annotation-cloud-target-current"
+            class="rounded-md border border-input px-2 py-1 text-[11px] hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+            :disabled="(props.tools.selectionStore?.selectedRefnos.value.length ?? 0) === 0"
+            @click="useCurrentCloudTargets">
+            使用当前选择
+          </button>
+          <button type="button"
+            data-testid="annotation-cloud-target-pick"
+            class="rounded-md border border-input px-2 py-1 text-[11px] hover:bg-muted"
+            @click="startCloudTargetPick('point')">
+            点选目标
+          </button>
+          <button type="button"
+            data-testid="annotation-cloud-target-box"
+            class="rounded-md border border-input px-2 py-1 text-[11px] hover:bg-muted"
+            @click="startCloudTargetPick('box')">
+            框选目标
+          </button>
+          <button type="button"
+            data-testid="annotation-cloud-target-clear"
+            class="ml-auto rounded-md px-2 py-1 text-[11px] text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-40"
+            :disabled="store.cloudTargetRefnos.value.length === 0"
+            @click="store.clearCloudTargetRefnos">
+            清空
+          </button>
+        </div>
+        <div v-if="store.cloudTargetRefnos.value.length > 0" class="mt-2 flex max-h-20 flex-wrap gap-1 overflow-auto">
+          <span v-for="refno in store.cloudTargetRefnos.value"
+            :key="refno"
+            class="inline-flex max-w-full items-center gap-1 rounded-md bg-primary/10 px-1.5 py-1 font-mono text-[10px] text-primary"
+            :title="refno">
+            <span class="truncate">{{ refno }}</span>
+            <button type="button"
+              :data-testid="`annotation-cloud-target-remove-${refno}`"
+              class="rounded p-0.5 hover:bg-primary/15"
+              :aria-label="`移除 ${refno}`"
+              @click="store.removeCloudTargetRefno(refno)">
+              <X class="h-3 w-3" />
+            </button>
+          </span>
+        </div>
+        <p v-else class="mt-2 text-[11px] text-amber-600">
+          请先关联至少一个目标元素，再点击模型选择锚点。
+        </p>
+        <p v-if="cloudTargetPicking" class="mt-2 text-[11px] text-muted-foreground">
+          {{ store.toolMode.value === 'pick_refno_box' ? '拖框选择目标' : '连续点选目标，按 Enter 确认' }}；Esc 返回云线工具。
+        </p>
       </div>
 
       <!-- 主工具栏（跟随主题色，可拖拽） -->

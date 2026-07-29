@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 
-test('dimension Canvas2D demo renders four types and exports deterministic SVG', async ({ page }) => {
+test('dimension WebGL scene demo renders four types plus MBD and exports SVG', async ({ page }) => {
   await page.goto('/dimension-kernel-demo.html');
   await page.waitForFunction(() => (
     (window as any).__dimensionDemo?.ready === true
@@ -19,7 +19,11 @@ test('dimension Canvas2D demo renders four types and exports deterministic SVG',
     'demo-projected',
     'demo-angular',
     'demo-radial',
+    'demo-mbd-explicit',
   ]);
+  expect(await page.evaluate(
+    () => (window as any).__dimensionDemo.getSceneObjectCount(),
+  )).toBe(2);
 
   const size = await page.evaluate(() => (window as any).__dimensionDemo.getCanvasSize());
   expect(size.width).toBe(Math.round(size.cssWidth * size.dpr));

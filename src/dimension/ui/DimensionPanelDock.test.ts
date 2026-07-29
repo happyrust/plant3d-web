@@ -21,9 +21,6 @@ const mocks = vi.hoisted(() => ({
   emitToast: vi.fn(),
 }));
 
-vi.mock('../flags', () => ({
-  isDimensionFlagEnabled: () => true,
-}));
 vi.mock('@/composables/useUserStore', () => ({
   useUserStore: () => ({ currentUser: mocks.currentUser }),
 }));

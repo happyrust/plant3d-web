@@ -34,7 +34,29 @@ export type {
 
 type E3dSource = 'backend' | 'parquet';
 
+function getTreeSesno(): number | undefined {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const raw = params.get('tree_sesno') ?? params.get('sesno');
+    if (!raw) return undefined;
+    const value = Number(raw);
+    if (!Number.isInteger(value) || value < 0) return undefined;
+    return value;
+  } catch {
+    return undefined;
+  }
+}
+
+function withTreeVersion(path: string): string {
+  const sesno = getTreeSesno();
+  if (sesno === undefined) return path;
+  const url = new URL(path, 'http://localhost');
+  url.searchParams.set('sesno', String(sesno));
+  return `${url.pathname}${url.search}`;
+}
+
 function getE3dSource(): E3dSource {
+  if (getTreeSesno() !== undefined) return 'backend';
   try {
     const v = new URLSearchParams(window.location.search).get('e3d_source') || '';
     const s = v.trim().toLowerCase();
@@ -74,13 +96,15 @@ async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
 export async function e3dGetWorldRoot(): Promise<NodeResponse> {
   const source = getE3dSource();
   if (source === 'parquet') return await e3dParquetGetWorldRoot();
-  return await fetchJson<NodeResponse>('/api/e3d/world-root');
+  return await fetchJson<NodeResponse>(withTreeVersion('/api/e3d/world-root'));
 }
 
 export async function e3dGetNode(refno: string): Promise<NodeResponse> {
   const source = getE3dSource();
   if (source === 'parquet') return await e3dParquetGetNode(refno);
-  return await fetchJson<NodeResponse>(`/api/e3d/node/${encodeURIComponent(refno)}`);
+  return await fetchJson<NodeResponse>(
+    withTreeVersion(`/api/e3d/node/${encodeURIComponent(refno)}`),
+  );
 }
 
 export async function e3dGetChildren(refno: string, limit?: number): Promise<ChildrenResponse> {
@@ -95,11 +119,13 @@ export async function e3dGetChildren(refno: string, limit?: number): Promise<Chi
   if (source === 'parquet') {
     return await e3dParquetGetChildren(refno, limit);
   }
-  return await fetchJson<ChildrenResponse>(`${url.pathname}${url.search}`);
+  return await fetchJson<ChildrenResponse>(withTreeVersion(`${url.pathname}${url.search}`));
 }
 
 async function backendE3dGetAncestors(refno: string): Promise<AncestorsResponse> {
-  const resp = await fetchJson<AncestorsResponse>(`/api/e3d/ancestors/${encodeURIComponent(refno)}`);
+  const resp = await fetchJson<AncestorsResponse>(
+    withTreeVersion(`/api/e3d/ancestors/${encodeURIComponent(refno)}`),
+  );
   console.info('[vis][api] /api/e3d/ancestors', {
     refno,
     refno_count: Array.isArray(resp.refnos) ? resp.refnos.length : 0,
@@ -143,7 +169,9 @@ async function backendE3dGetSubtreeRefnos(
     url.searchParams.set('limit', String(params.limit));
   }
 
-  const resp = await fetchJson<SubtreeRefnosResponse>(`${url.pathname}${url.search}`);
+  const resp = await fetchJson<SubtreeRefnosResponse>(
+    withTreeVersion(`${url.pathname}${url.search}`),
+  );
   console.info('[vis][api] /api/e3d/subtree-refnos', {
     refno,
     include_self: params?.includeSelf,

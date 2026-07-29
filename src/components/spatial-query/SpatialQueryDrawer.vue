@@ -594,8 +594,8 @@ import { computed, ref, watch } from 'vue';
 import { ArrowUpRight, Eye, EyeOff, Loader2, MapPinned, MousePointerClick, Ruler, Search, X } from 'lucide-vue-next';
 import { Vector3, type Matrix4 } from 'three';
 
-import type { Vec3 } from '@/types/vec3';
 import type { SpatialQueryMode, SpatialQueryResultGroup, SpatialQueryResultItem } from '@/types/spatialQuery';
+import type { Vec3 } from '@/types/vec3';
 
 import { findNounByRefnoAcrossAllDbnos } from '@/composables/useDbnoInstancesDtxLoader';
 import { usePipeDistanceStore } from '@/composables/usePipeDistanceStore';

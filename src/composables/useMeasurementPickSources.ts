@@ -61,7 +61,7 @@ export const MEASUREMENT_PICK_SOURCE_IDS: readonly MeasurementPickSourceId[] = [
 export const MEASUREMENT_PICK_SOURCE_LABELS: Record<MeasurementPickSourceId, string> = {
   mesh_pick_point: '模型表面点',
   ptset: 'P-Point',
-  position: '实例原点',
+  position: 'Item 原点',
   primitive_key_point: '基本体关键点',
 };
 
@@ -187,7 +187,7 @@ export function buildPositionPickCandidate(input: {
     entityId: `position:${refno}`,
     objectId: input.objectId,
     worldPos: position,
-    label: `实例原点 ${refno}`,
+    label: `Item 原点 ${refno}`,
   };
 }
 

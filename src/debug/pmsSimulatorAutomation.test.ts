@@ -59,7 +59,7 @@ describe('buildPmsSimulatorEnvironmentConfig', () => {
       backendPort: 3200,
       frontendBaseUrl: 'http://127.0.0.1:3201',
       backendBaseUrl: 'http://127.0.0.1:3200',
-      simulatorUrl: 'http://127.0.0.1:3201/pms-review-simulator.html?debug_ui=1&auth_strict=0&project=TEST_PROJECT',
+      simulatorUrl: 'http://127.0.0.1:3201/pms-review-simulator.html?debug_ui=1&auth_strict=0&project=TEST_PROJECT&backend=http%3A%2F%2F127.0.0.1%3A3200',
       caseIds: ['approved', 'gate-block'],
       headless: false,
       outputPath: 'artifacts/custom-report.json',

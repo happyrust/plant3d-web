@@ -121,7 +121,7 @@ describe('useMeasurementPickSources', () => {
       id: 'position:24381_145018',
       source: 'position',
       entityId: 'position:24381_145018',
-      label: '实例原点 24381_145018',
+      label: 'Item 原点 24381_145018',
     });
   });
 

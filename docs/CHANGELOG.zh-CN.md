@@ -18,9 +18,19 @@
   `buildMeasurementComponentsText` 复制格式化工具。
 - 评审记录：`docs/plans/2026-07-28-e3d-measurement-gap-review.md`（r2）与
   `docs/plans/2026-07-28-e3d-measurement-gap-review-r3.md`（r3，含 grilling 决策记录）。
+- 结果语义（Phase B）：距离结果默认显示轴向分量，标签由 ΔX/ΔY/ΔZ 改为 **E/N/U**（E=ΔX、
+  N=ΔY、U=ΔZ，映射待 E3D 实机验证）；测量列表/复制文本随样式开关联动；`position` 点源
+  文案统一为「Item 原点」；全局默认显示单位切为 **mm + 0 位小数**（`useUnitSettingsStore`
+  V2 一次性迁移，可改回）；measurement style store 升级 **V6**（老用户一次性强开轴向分量，
+  其余偏好保留）。
+- 模式契约（Phase C）：每个取点模式记住用户上次的 snap 偏好，切回时恢复、首次进入才用
+  模式默认值；free_surface 关闭表面点捕捉**不再静默回落** e3d，浮动条显示「表面点捕捉已关」
+  提示角标；连续测量完成一条后保留链节点辅助态（P-Point 十字/X-ray 不再闪断）；
+  「点空白取消」提示统一为「点空白取消当前点选」。
 - 测试：`pointerController`（门控）、`useXeokitMeasurementTools`（Repeat 选中优先 / 反向选择
-  绑定 / 选中态互不干扰）、`MeasurementContextMenu`、`xeokitMeasurementFormat`（复制文本）；
-  `npm run type-check` 通过。
+  绑定 / 选中态互不干扰）、`MeasurementContextMenu`、`xeokitMeasurementFormat`（E/N/U 与复制
+  文本）、`useXeokitMeasurementStyleStore`（V6 迁移 / 模式记忆 / 不回落）、
+  `useUnitSettingsStore`（V2 迁移）；`npm run type-check` 通过。
 
 ## 2026-07-20
 

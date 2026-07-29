@@ -278,7 +278,7 @@ describe('restoreEmbedWorkbenchContext', () => {
     expect(result.restoreStatus).toBe('matched');
   });
 
-  it('designer passive restore keeps initiate-review landing when the matched form is not returned', async () => {
+  it('designer passive restore keeps the viewer focused when the matched form is not returned', async () => {
     const task = createTask({
       id: 'task-designer-passive',
       formId: 'FORM-D-PASSIVE',
@@ -303,8 +303,8 @@ describe('restoreEmbedWorkbenchContext', () => {
     });
 
     expect(setCurrentTask).toHaveBeenCalledWith(task);
-    expect(openPanel.mock.calls.map(([panelId]) => panelId)).toEqual(['initiateReview']);
-    expect(activatePanel).toHaveBeenLastCalledWith('initiateReview');
+    expect(openPanel.mock.calls.map(([panelId]) => panelId)).toEqual(['viewer']);
+    expect(activatePanel).toHaveBeenLastCalledWith('viewer');
     expect(result.restoreStatus).toBe('matched');
   });
 
@@ -340,7 +340,7 @@ describe('restoreEmbedWorkbenchContext', () => {
     expect(result.restoreStatus).toBe('matched');
   });
 
-  it('designer passive restore without matched task falls back to initiate-review workspace', async () => {
+  it('designer passive restore without matched task falls back to the viewer', async () => {
     const openPanel = vi.fn();
     const activatePanel = vi.fn();
     const setCurrentTask = vi.fn(async () => undefined);
@@ -359,8 +359,8 @@ describe('restoreEmbedWorkbenchContext', () => {
     });
 
     expect(setCurrentTask).toHaveBeenCalledWith(null);
-    expect(openPanel.mock.calls.map(([panelId]) => panelId)).toEqual(['initiateReview']);
-    expect(activatePanel).toHaveBeenLastCalledWith('initiateReview');
+    expect(openPanel.mock.calls.map(([panelId]) => panelId)).toEqual(['viewer']);
+    expect(activatePanel).toHaveBeenLastCalledWith('viewer');
     expect(result.restoreStatus).toBe('missing');
   });
 

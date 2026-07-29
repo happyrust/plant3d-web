@@ -8,6 +8,7 @@ import { useViewerContext } from './useViewerContext';
 import type { ReviewAttachment } from '@/types/auth';
 
 import {
+  reviewAttachmentUpload,
   reviewAttachmentUploadWithProgress,
   type ReviewAttachmentUploadOptions,
 } from '@/api/reviewApi';
@@ -57,7 +58,9 @@ function buildUploadOptions(opts: CaptureOptions): ReviewAttachmentUploadOptions
   }
   const fileType = opts.fileType
     || options.fileType
-    || (opts.kind === 'annotation_shot' ? 'annotation_screenshot' : undefined);
+    || (opts.kind === 'annotation_shot' || opts.kind === 'auto_cloud_finish'
+      ? 'annotation_screenshot'
+      : undefined);
   if (fileType) {
     options.fileType = fileType;
   }
@@ -74,17 +77,21 @@ export function useScreenshot() {
    */
   function getCanvas(): HTMLCanvasElement | null {
     const viewer = viewerRef.value;
-    if (!viewer) return null;
+    if (viewer) {
+      const canvas = (viewer as unknown as { canvas?: HTMLCanvasElement }).canvas;
+      if (canvas instanceof HTMLCanvasElement) {
+        return canvas;
+      }
 
-    const canvas = (viewer as unknown as { canvas?: HTMLCanvasElement }).canvas;
-    if (canvas instanceof HTMLCanvasElement) {
-      return canvas;
+      const scene = viewer.scene as unknown as {
+        canvas?: { canvas?: HTMLCanvasElement };
+      };
+      if (scene.canvas?.canvas) return scene.canvas.canvas;
     }
 
-    const scene = viewer.scene as unknown as {
-      canvas?: { canvas?: HTMLCanvasElement };
-    };
-    return scene.canvas?.canvas || null;
+    return typeof document === 'undefined'
+      ? null
+      : document.querySelector<HTMLCanvasElement>('canvas.viewer, [data-panel="viewer"] canvas');
   }
 
   /**
@@ -227,14 +234,17 @@ export function useScreenshot() {
       const name = resolved.filename || buildDefaultFilename(resolved, capturedAt, ext);
       const file = new File([blob], name, { type: format });
 
-      const response = await reviewAttachmentUploadWithProgress(
-        taskId,
-        file,
-        (percent) => {
-          uploadProgress.value = percent;
-        },
-        buildUploadOptions(resolved),
-      );
+      const uploadOptions = buildUploadOptions(resolved);
+      const response = resolved.kind === 'auto_cloud_finish'
+        ? await reviewAttachmentUpload(taskId || '', file, uploadOptions)
+        : await reviewAttachmentUploadWithProgress(
+          taskId,
+          file,
+          (percent) => {
+            uploadProgress.value = percent;
+          },
+          uploadOptions,
+        );
 
       if (response.success && response.attachment) {
         return {

@@ -65,6 +65,7 @@ export function formatMeasurementSummary(
   measurement: MeasurementLike,
   unit: LengthUnit,
   precision: number,
+  opts?: { showAxisBreakdown?: boolean },
 ): string {
   switch (measurement.kind) {
     case 'distance': {
@@ -72,10 +73,19 @@ export function formatMeasurementSummary(
       const target = measurement.target.designWorldPos;
       const points = `起点 ${formatMeasurementPoint(measurement.origin)} -> 终点 ${formatMeasurementPoint(measurement.target)}`;
       if (!origin || !target) return points;
-      const dx = target[0] - origin[0];
-      const dy = target[1] - origin[1];
-      const dz = target[2] - origin[2];
-      return `距离 ${formatLengthMeters(Math.hypot(dx, dy, dz), unit, precision)} · ΔX ${formatSignedLengthMeters(dx, unit, precision)} · ΔY ${formatSignedLengthMeters(dy, unit, precision)} · ΔZ ${formatSignedLengthMeters(dz, unit, precision)} · ${points}`;
+      const deltas = [
+        target[0] - origin[0],
+        target[1] - origin[1],
+        target[2] - origin[2],
+      ];
+      const total = `距离 ${formatLengthMeters(Math.hypot(deltas[0], deltas[1], deltas[2]), unit, precision)}`;
+      if (opts?.showAxisBreakdown === false) return `${total} · ${points}`;
+      const axisParts = deltas
+        .map((delta, index) => (
+          `${DISTANCE_AXIS_LABELS[index]} ${formatSignedLengthMeters(delta, unit, precision)}`
+        ))
+        .join(' · ');
+      return `${total} · ${axisParts} · ${points}`;
     }
     case 'angle':
       return `起点 ${formatMeasurementPoint(measurement.origin)} -> 拐点 ${formatMeasurementPoint(measurement.corner)} -> 终点 ${formatMeasurementPoint(measurement.target)}`;
@@ -90,8 +100,11 @@ export function formatMeasurementSummary(
   }
 }
 
-/** 距离轴向分量的展示标签（Phase B 切 E/N/U 时只改这里与 summary）。 */
-const DISTANCE_AXIS_LABELS: readonly [string, string, string] = ['ΔX', 'ΔY', 'ΔZ'];
+/**
+ * 距离轴向分量的展示标签，按 E3D 工程坐标语义 E/N/U（东/北/高）。
+ * 映射假设 E=ΔX、N=ΔY、U=ΔZ（PDMS 设计坐标惯例），待 E3D 实机验证后如不符只改这里。
+ */
+export const DISTANCE_AXIS_LABELS: readonly [string, string, string] = ['E', 'N', 'U'];
 
 function measurementPointDesignPos(point: MeasurementPoint): Vec3 | null {
   return point.designWorldPos ?? point.worldPos ?? null;

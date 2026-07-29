@@ -109,15 +109,15 @@ describe('embed role landing', () => {
     });
   });
 
-  it('routes designers to the initiate-review workspace with a unique CTA landing', () => {
+  it('routes designers to the viewer without opening the initiate-review workspace by default', () => {
     expect(resolveEmbedLandingTarget({
       isEmbedMode: true,
       isDesigner: true,
       isReviewer: false,
     })).toBe('designer');
 
-    expect(getEmbedLandingPanelIds('designer')).toEqual(['initiateReview']);
-    expect(getEmbedLandingPanelIdsWithOptions('designer', { passiveWorkflowMode: true })).toEqual(['initiateReview']);
+    expect(getEmbedLandingPanelIds('designer')).toEqual(['viewer']);
+    expect(getEmbedLandingPanelIdsWithOptions('designer', { passiveWorkflowMode: true })).toEqual(['viewer']);
   });
 
   it('omits myTasks from designer landing when workflow is externally driven', () => {
@@ -138,15 +138,15 @@ describe('embed role landing', () => {
 
     expect(result).toEqual({
       target: 'designer',
-      primaryPanelId: 'initiateReview',
-      visiblePanelIds: ['initiateReview'],
+      primaryPanelId: 'viewer',
+      visiblePanelIds: ['viewer'],
     });
 
     expect(JSON.parse(sessionStorage.getItem('embed_landing_state') || '{}')).toEqual({
       target: 'designer',
       formId: 'FORM-EXT-1',
-      primaryPanelId: 'initiateReview',
-      visiblePanelIds: ['initiateReview'],
+      primaryPanelId: 'viewer',
+      visiblePanelIds: ['viewer'],
     });
   });
 
@@ -162,7 +162,7 @@ describe('embed role landing', () => {
       workflowRole: 'sj',
       passiveWorkflowMode: true,
       formId: 'FORM-SJ-RETURNED',
-    })).toEqual(['initiateReview']);
+    })).toEqual(['viewer']);
 
     const result = applyEmbedLandingState({
       ensurePanel: () => ({ api: { setActive: () => undefined } }),
@@ -183,14 +183,14 @@ describe('embed role landing', () => {
 
     expect(result).toEqual({
       target: 'designer',
-      primaryPanelId: 'initiateReview',
-      visiblePanelIds: ['initiateReview'],
+      primaryPanelId: 'viewer',
+      visiblePanelIds: ['viewer'],
     });
     expect(JSON.parse(sessionStorage.getItem('embed_landing_state') || '{}')).toEqual({
       target: 'designer',
       formId: 'FORM-SJ-RETURNED',
-      primaryPanelId: 'initiateReview',
-      visiblePanelIds: ['initiateReview'],
+      primaryPanelId: 'viewer',
+      visiblePanelIds: ['viewer'],
     });
   });
 
@@ -447,8 +447,8 @@ describe('embed role landing', () => {
     expect(JSON.parse(sessionStorage.getItem('embed_landing_state') || '{}')).toEqual({
       target: 'designer',
       formId: 'FORM-XYZ',
-      primaryPanelId: 'initiateReview',
-      visiblePanelIds: ['initiateReview'],
+      primaryPanelId: 'viewer',
+      visiblePanelIds: ['viewer'],
     });
 
     applyEmbedLandingState({
@@ -507,11 +507,11 @@ describe('embed role landing', () => {
     });
 
     expect(switchedProjectId).toBe('AvevaMarineSample');
-    expect(activatedPanelId).toBe('initiateReview');
+    expect(activatedPanelId).toBe('viewer');
     expect(result).toEqual({
       target: 'designer',
-      primaryPanelId: 'initiateReview',
-      visiblePanelIds: ['initiateReview'],
+      primaryPanelId: 'viewer',
+      visiblePanelIds: ['viewer'],
     });
   });
 

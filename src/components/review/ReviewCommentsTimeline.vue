@@ -30,6 +30,7 @@ import {
   type AnnotationComment,
   type AnnotationReviewAction,
   type AnnotationReviewEvent,
+  type AnnotationReviewState,
   type AnnotationScreenshot,
   getAnnotationReviewActionLabel,
   getAnnotationReviewDisplay,
@@ -74,7 +75,15 @@ const props = withDefaults(defineProps<{
   density: 'normal',
 });
 
-const emit = defineEmits<(e: 'close') => void>();
+const emit = defineEmits<{
+  (e: 'close'): void;
+  (e: 'review-action-completed', payload: {
+    action: AnnotationReviewAction;
+    annotationType: AnnotationType;
+    annotationId: string;
+    state: AnnotationReviewState;
+  }): void;
+}>();
 
 const store = useToolStore();
 const reviewStore = useReviewStore();
@@ -600,6 +609,12 @@ async function applyReviewAction(action: AnnotationReviewAction) {
   emitToast({
     message: successMessageMap[action],
     level: 'success',
+  });
+  emit('review-action-completed', {
+    action,
+    annotationType: props.annotationType,
+    annotationId: props.annotationId,
+    state: nextState,
   });
 }
 

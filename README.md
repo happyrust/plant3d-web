@@ -1,6 +1,10 @@
 # plant3d-web
 
-Example with vue3, vuetify, typescript and xeokit-sdk for Plant 3D visualization
+Plant3D-Web is a Vue 3, Vuetify, TypeScript, and Three.js application for Plant 3D visualization, measurement, annotation, and review.
+
+## PTSET Measurement Consistency
+
+PTSET measurement uses parquet package data as the source of truth for BRAN `2013286704/476` from `aps250160_0001`. PTSET display, snap, and capture share transform semantics; measurement endpoints preserve source metadata for PTSET and mesh picks; measurement UI labels and threshold controls are aligned for validation.
 
 ## Recommended IDE Setup
 
@@ -38,6 +42,24 @@ npm install
 
 ```sh
 npm run dev
+```
+
+### Test
+
+```sh
+npm test
+```
+
+Scoped PTSET measurement checks:
+
+```sh
+npx vitest run src/utils/three/ptsetTransform.test.ts src/composables/useMeasurementPickSources.test.ts src/composables/useToolStore.measurementSourceInfo.test.ts src/composables/useXeokitMeasurementTools.test.ts src/components/tools/MeasurementPanel.test.ts src/utils/xeokitMeasurementFormat.test.ts
+```
+
+Direct browser validation URL pattern:
+
+```txt
+http://127.0.0.1:<frontend-port>/?output_project=ptset-bran-2013286704-476&show_dbnum=250160&show_refno=2013286704_476&data_source=parquet&backendPort=<generated-site-port>
 ```
 
 ### Type-Check, Compile and Minify for Production

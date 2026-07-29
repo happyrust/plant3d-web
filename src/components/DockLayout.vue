@@ -6,7 +6,6 @@ import { DockviewVue, type DockviewReadyEvent, themeLight } from 'dockview-vue';
 import type { ReviewTask } from '@/types/auth';
 
 import { authVerifyToken, clearAuthToken, setAuthToken } from '@/api/reviewApi';
-import { requestDesignerCommentViewMode } from '@/components/review/designerCommentViewModeBus';
 import { restoreEmbedWorkbenchContext } from '@/components/review/embedContextRestore';
 import { restoreEmbedFormSnapshotContext } from '@/components/review/embedFormSnapshotRestore';
 import { attachEmbedPostMessageBridge } from '@/components/review/embedPostMessageBridge';
@@ -29,7 +28,6 @@ import {
   type EmbedLandingState,
   type EmbedModeParams,
 } from '@/components/review/embedRoleLanding';
-import { requestReviewerWorkbenchViewMode } from '@/components/review/reviewerWorkbenchViewModeBus';
 import { isCanonicalReturnedTask } from '@/components/review/reviewTaskFilters';
 import { resolvePassiveWorkflowMode } from '@/components/review/workflowMode';
 import { dockPanelExists, ensurePanelAndActivate, setDockApi, notifyDockLayoutChange } from '@/composables/useDockApi';
@@ -49,7 +47,6 @@ import { useTaskCreationStore } from '@/composables/useTaskCreationStore';
 import { useToolStore } from '@/composables/useToolStore';
 import { useUserStore } from '@/composables/useUserStore';
 import { showModelByRefnosWithAck, useViewerContext, waitForViewerReady } from '@/composables/useViewerContext';
-import { isDimensionFlagEnabled } from '@/dimension';
 import { onCommand } from '@/ribbon/commandBus';
 
 const embedModeParams = ref<EmbedModeParams>(readEmbedModeParamsFromSearch(window.location.search));
@@ -57,8 +54,6 @@ const embedModeParams = ref<EmbedModeParams>(readEmbedModeParamsFromSearch(windo
 const LAYOUT_STORAGE_KEY = 'plant3d-web-dock-layout-v3';
 const LAYOUT_MIGRATION_PROPERTIES_KEY = 'plant3d-web-dock-layout-v3-migrated-properties';
 const popoutUrl = `${import.meta.env.BASE_URL}popout.html`;
-const dimensionPanelEnabled = isDimensionFlagEnabled('DIMENSION_V2_DEV')
-  || isDimensionFlagEnabled('DIMENSION_V2_CUTOVER');
 
 type DockviewGroupLike = {
   api: {
@@ -546,14 +541,12 @@ function createDefaultLayout(dockApi: DockApi) {
     position: { referencePanel: viewerPanel, direction: 'right' },
   });
 
-  if (dimensionPanelEnabled) {
-    dockApi.addPanel({
-      id: 'dimension',
-      component: 'DimensionPanel',
-      title: '尺寸标注',
-      position: { referencePanel: measurementPanel, direction: 'within' },
-    });
-  }
+  dockApi.addPanel({
+    id: 'dimension',
+    component: 'DimensionPanel',
+    title: '尺寸标注',
+    position: { referencePanel: measurementPanel, direction: 'within' },
+  });
 
   dockApi.addPanel({
     id: 'annotation',
@@ -708,7 +701,7 @@ function ensurePanel(panelId: string) {
       position: viewerPanel ? { referencePanel: viewerPanel, direction: 'right' } : undefined,
     });
   }
-  if (normalizedPanelId === 'dimension' && dimensionPanelEnabled) {
+  if (normalizedPanelId === 'dimension') {
     const measurementPanel = dockApi.getPanel('measurement')
       ?? ensurePanel(dockApi, 'measurement');
     return addPanelSafely(dockApi, {
@@ -1078,11 +1071,7 @@ function resetLayout() {
       formId: getVerifiedEmbedFormId(embedModeParams.value),
     });
     createEmbedFocusedLayout(api.value, {
-      primaryPanelId: effectiveLandingTarget === 'designer'
-        ? 'initiateReview'
-        : effectiveLandingTarget === 'reviewer'
-          ? 'review'
-          : undefined,
+      primaryPanelId: effectiveLandingTarget === 'reviewer' ? 'review' : undefined,
     });
     return;
   }
@@ -1203,7 +1192,7 @@ function handleRibbonCommand(commandId: string) {
       togglePanel('measurement');
       return;
     case 'panel.dimension':
-      if (dimensionPanelEnabled) togglePanel('dimension');
+      togglePanel('dimension');
       return;
     case 'panel.annotation':
       togglePanel('annotation');
@@ -1275,28 +1264,23 @@ function handleRibbonCommand(commandId: string) {
       return;
     case 'panel.annotationTable': {
       if (shouldCollapseExternalFormPanelsToReview()) {
-        // 外部 form_id 模式确认需要审核侧处理时，强制走 review 面板的批注表格视图。
+        // 外部 form_id 模式确认需要审核侧处理时，强制走 review 面板的统一批注单。
         ensurePanelAndActivate('review');
-        requestReviewerWorkbenchViewMode('table');
         return;
       }
       if (dockPanelExists('review')) {
         ensurePanelAndActivate('review');
-        requestReviewerWorkbenchViewMode('table');
         return;
       }
       if (dockPanelExists('designerCommentHandling')) {
         ensurePanelAndActivate('designerCommentHandling');
-        requestDesignerCommentViewMode('table');
         return;
       }
       const preferReviewer = userStore.isReviewer.value && !userStore.isDesigner.value;
       if (preferReviewer) {
         ensurePanelAndActivate('review');
-        requestReviewerWorkbenchViewMode('table');
       } else {
         ensurePanelAndActivate('designerCommentHandling');
-        requestDesignerCommentViewMode('table');
       }
       return;
     }
@@ -1770,15 +1754,17 @@ function onReady(event: DockviewReadyEvent) {
       passiveWorkflowMode,
       formId: getVerifiedEmbedFormId(embedModeParams.value),
     });
-    const primaryPanelId = landingTarget
+    const landingPanelId = landingTarget
       ? getEmbedLandingPanelIdsWithOptions(landingTarget, {
         passiveWorkflowMode,
         formId: getVerifiedEmbedFormId(embedModeParams.value),
         workflowRole: embedModeParams.value.workflowRole,
-      })[0] as 'review' | 'initiateReview' | 'designerCommentHandling' | undefined
+      })[0]
       : undefined;
     createEmbedFocusedLayout(api.value, {
-      primaryPanelId: effectiveLandingTarget ? primaryPanelId : undefined,
+      primaryPanelId: effectiveLandingTarget && landingPanelId !== 'viewer'
+        ? landingPanelId as 'review' | 'initiateReview' | 'designerCommentHandling'
+        : undefined,
     });
   } else {
     const savedLayout = localStorage.getItem(LAYOUT_STORAGE_KEY);

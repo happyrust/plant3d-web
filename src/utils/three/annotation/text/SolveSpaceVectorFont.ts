@@ -199,7 +199,7 @@ export class SolveSpaceVectorFont {
   private descender = 0.0;
 
   static async loadFromGzipUrl(
-    url = '/fonts/unicode.lff.gz',
+    url = '/fonts/unicode.lff.bin',
   ): Promise<SolveSpaceVectorFont> {
     const resp = await fetch(url);
     if (!resp.ok)
@@ -473,10 +473,10 @@ let _builtinFontUrl: string | null = null;
 function getDefaultSolveSpaceFontUrl(): string {
   const baseUrl = String((import.meta as any).env?.BASE_URL ?? '/');
   const normalizedBase = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
-  return `${normalizedBase}fonts/unicode.lff.gz`;
+  return `${normalizedBase}fonts/unicode.lff.bin`;
 }
 
-/** Load (and cache) SolveSpace `unicode.lff.gz` from `public/fonts/`. */
+/** Load (and cache) the gzip-compressed SolveSpace font through an encoding-neutral `.bin` URL. */
 export function getSolveSpaceBuiltinVectorFont(
   url = getDefaultSolveSpaceFontUrl(),
 ): Promise<SolveSpaceVectorFont> {

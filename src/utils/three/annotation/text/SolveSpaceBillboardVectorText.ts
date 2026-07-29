@@ -31,7 +31,7 @@ export type SolveSpaceBillboardVectorTextParams = {
    * SolveSpace defaults to 11.5px text height; we keep that as default.
    */
   capHeightPx?: number;
-  /** Provide a loaded font or leave empty to auto-load builtin `/fonts/unicode.lff.gz`. */
+  /** Provide a loaded font or leave empty to auto-load builtin `/fonts/unicode.lff.bin`. */
   font?: SolveSpaceVectorFont | Promise<SolveSpaceVectorFont>;
 
   materialNormal: LineMaterial;

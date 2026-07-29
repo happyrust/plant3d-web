@@ -343,6 +343,52 @@ export async function modelShowByRefno(params: {
   }
 }
 
+/**
+ * 强制重新生成指定 refno 子树。
+ * POST /api/model/regenerate-by-refno
+ */
+export async function modelRegenerateByRefno(params: {
+  refnos: string[];
+  db_num?: number;
+  gen_parquet?: boolean;
+}): Promise<{
+  success: boolean;
+  bundle_url?: string;
+  message: string;
+  metadata?: {
+    refno_count: number;
+    generation_refno_count?: number;
+    dbno: number;
+    temp_id?: string;
+  };
+  parquet_files?: string[];
+}> {
+  const refnoCount = Array.isArray(params.refnos) ? params.refnos.length : 0;
+  const { addLog } = useConsoleStore();
+  addLog(
+    'info',
+    `[vis][api] /api/model/regenerate-by-refno refno_count=${refnoCount} db_num=${params.db_num ?? ''}`
+  );
+
+  try {
+    const resp = await fetchJson('/api/model/regenerate-by-refno', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    });
+    addLog(
+      'info',
+      `[vis][api] /api/model/regenerate-by-refno resp success=${(resp as any)?.success ? 1 : 0} generation_refno_count=${(resp as any)?.metadata?.generation_refno_count ?? ''}`
+    );
+    return resp;
+  } catch (e) {
+    addLog(
+      'error',
+      `[vis][api] /api/model/regenerate-by-refno failed refno_count=${refnoCount} db_num=${params.db_num ?? ''} err=${e instanceof Error ? e.message : String(e)}`
+    );
+    throw e;
+  }
+}
+
 // ============ 延迟删除 ============
 
 /**

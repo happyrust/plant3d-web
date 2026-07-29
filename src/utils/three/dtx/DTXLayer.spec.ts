@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { BoxGeometry, BufferAttribute, BufferGeometry, Matrix4, Quaternion, Vector3 } from 'three';
+import { BoxGeometry, BufferAttribute, BufferGeometry, Matrix4, Quaternion, Scene, Vector3 } from 'three';
 
 import { DTXLayer } from './DTXLayer';
 
@@ -106,5 +106,23 @@ describe('DTXLayer.getObjectGeometryData', () => {
     layer.addObject('o:bad:0', 'bad-tri', new Matrix4());
 
     expect(layer.getObjectGeometryData('o:bad:0')).toBeNull();
+  });
+});
+
+describe('DTXLayer render passes', () => {
+  it('does not draw the transparent pass when every object is opaque', () => {
+    const layer = new DTXLayer({ maxVertices: 16, maxIndices: 16, maxObjects: 4 });
+    const scene = new Scene();
+    layer.addGeometry('tri', createTriangleGeometry());
+    layer.addObject('o:test:0', 'tri', new Matrix4());
+    layer.compile();
+    layer.addToScene(scene);
+
+    expect(scene.getObjectByName('DTXLayer')?.visible).toBe(true);
+    expect(scene.getObjectByName('DTXLayerTransparent')?.visible).toBe(false);
+
+    layer.setObjectsOpacity(['o:test:0'], 0.5);
+    expect(scene.getObjectByName('DTXLayer')?.visible).toBe(false);
+    expect(scene.getObjectByName('DTXLayerTransparent')?.visible).toBe(true);
   });
 });

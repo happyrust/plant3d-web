@@ -169,6 +169,7 @@ export function useAnnotationThree(
 
   /** 添加标注 */
   function addAnnotation(id: string, annotation: AnnotationBase): void {
+    ensureGroupAttached();
     if (annotations.value.has(id)) {
       removeAnnotation(id);
     }

@@ -1,0 +1,15 @@
+# Generated or duplicated project trees that should not enter the code graph.
+wiki/**
+.worktrees/**
+.factory/**
+
+# Local test and browser artifacts.
+artifacts/**
+test-results/**
+playwright-report/**
+
+# Tool-managed state.
+.code-review-graph/**
+.cursor/kc-mcp/**
+.cursor/kc-mcp-messages/**
+.cursor/kc-chat-exports/**

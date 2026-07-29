@@ -2,7 +2,6 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 
 import {
-  ArrowRight,
   Box,
   CheckCircle,
   ChevronDown,
@@ -12,7 +11,6 @@ import {
   Download,
   Eye,
   FileCheck,
-  FileText,
   Filter,
   HelpCircle,
   History,
@@ -26,11 +24,12 @@ import {
   XCircle,
 } from 'lucide-vue-next';
 
-import AnnotationTableView from './AnnotationTableView.vue';
+import AnnotationSheetWorkspace from './AnnotationSheetWorkspace.vue';
 import {
   buildAnnotationWorkspaceItems,
   scopeAnnotationWorkspaceItemsByFormId,
   type AnnotationWorkspaceItem,
+  type LinkedMeasurementItem,
 } from './annotationWorkspaceModel';
 import CollisionResultList from './CollisionResultList.vue';
 import { createConfirmedRecordsRestorer } from './confirmedRecordsRestore';
@@ -45,12 +44,7 @@ import {
 } from './embedRoleLanding';
 import LogDrawer from './LogDrawer.vue';
 import ReviewAuxData from './ReviewAuxData.vue';
-import ReviewCommentsTimeline from './ReviewCommentsTimeline.vue';
 import ReviewDataSync from './ReviewDataSync.vue';
-import {
-  clearReviewerWorkbenchViewModeRequest,
-  useReviewerWorkbenchViewModeRequest,
-} from './reviewerWorkbenchViewModeBus';
 import {
   buildSubmitBlockingReviewConfirmPayload,
   buildReviewConfirmSnapshotPayload,
@@ -81,7 +75,6 @@ import {
 import { syncAnnotationReviewStates } from '@/composables/useAnnotationReviewStateSync';
 import { saveAnnotationBasicFields, saveAnnotationSeverity } from '@/composables/useAnnotationSeveritySync';
 import { ensurePanelAndActivate } from '@/composables/useDockApi';
-import { useNavigationStatePersistence } from '@/composables/useNavigationStatePersistence';
 import { useOnboardingGuide } from '@/composables/useOnboardingGuide';
 import {
   getReviewAttachmentPreviewKind,
@@ -89,7 +82,11 @@ import {
 } from '@/composables/useReviewAttachmentPreview';
 import { useReviewStore } from '@/composables/useReviewStore';
 import { useSelectionStore } from '@/composables/useSelectionStore';
-import { useToolStore, type AnnotationType } from '@/composables/useToolStore';
+import {
+  useToolStore,
+  type AnnotationType,
+  type MeasurementRecord,
+} from '@/composables/useToolStore';
 import { useUnitSettingsStore } from '@/composables/useUnitSettingsStore';
 import { useUserStore } from '@/composables/useUserStore';
 import { showModelByRefnosWithAck, useViewerContext, waitForViewerReady } from '@/composables/useViewerContext';
@@ -98,9 +95,7 @@ import { emitCommand } from '@/ribbon/commandBus';
 import { emitToast } from '@/ribbon/toastBus';
 import {
   canEditAnnotationSeverity,
-  getAnnotationReviewDisplay,
   getAnnotationSeverityDisplay,
-  getRoleDisplayName,
   getTaskStatusDisplayName,
   WORKFLOW_NODE_NAMES,
   type AnnotationSeverity,
@@ -1229,6 +1224,21 @@ onMounted(() => {
       getAnnotationCount() {
         return pendingAnnotationCount.value;
       },
+      getCloudScreenshot(annotationId: string) {
+        const screenshot = toolStore.cloudAnnotations.value
+          .find((annotation) => annotation.id === annotationId)
+          ?.screenshot;
+        if (!screenshot?.attachmentId || !screenshot.url) return null;
+        return {
+          annotationId,
+          attachmentId: screenshot.attachmentId,
+          url: screenshot.url,
+          mimeType: screenshot.mimeType,
+          size: screenshot.size,
+          width: screenshot.width,
+          height: screenshot.height,
+        };
+      },
       getMeasurementCount() {
         return pendingMeasurementCount.value;
       },
@@ -1371,42 +1381,13 @@ const expandedExtras = ref(false);
 const workflowHistoryCount = computed(() => workflow.value?.history?.length ?? 0);
 const confirmedRecordListCount = computed(() => reviewStore.sortedConfirmedRecords.value.length);
 
-// ============ 批注列表 / 批注表格 视图模式 ============
-
-type AnnotationListViewMode = 'split' | 'table';
-const annotationListViewMode = ref<AnnotationListViewMode>('split');
-
-const reviewerNavigationState = useNavigationStatePersistence(
-  'plant3d-web-nav-state-reviewer-workbench-v1',
-);
-reviewerNavigationState.bindRef<AnnotationListViewMode>(
-  'annotationListViewMode',
-  annotationListViewMode,
-  'split',
-);
-
-const reviewerWorkbenchViewModeRequest = useReviewerWorkbenchViewModeRequest();
-watch(reviewerWorkbenchViewModeRequest, (request) => {
-  if (!request) return;
-  annotationListViewMode.value = request.mode;
-  clearReviewerWorkbenchViewModeRequest();
-});
-
-// ============ 批注列表（详情 + 评论线程） ============
-// 数据源已统一为 scopedReviewerItems（AnnotationWorkspaceItem[]），
-// split 视图（卡片列表）与 table 视图（批注表格）共享同一份基于
-// buildAnnotationWorkspaceItems + scopeAnnotationWorkspaceItemsByFormId 的源。
-// 详见 docs/plans/2026-05-18-reviewer-split-table-data-source-unification-plan.md
+// ============ 统一批注单（表格 + 单行完整处理卡） ============
 
 const expandedAnnotationId = ref<string | null>(null);
 const expandedAnnotationType = ref<AnnotationType | null>(null);
 const savingSeverityKeys = ref<string[]>([]);
 const savingTitleKeys = ref<string[]>([]);
 
-const totalAnnotationItemCount = computed(() => scopedReviewerItems.value.length);
-
-// 单一原始来源：split 视图（卡片列表）与 table 视图（批注表格）共享。
-// 详见 docs/plans/2026-05-18-reviewer-split-table-data-source-unification-plan.md
 const reviewerAnnotationItems = computed<AnnotationWorkspaceItem[]>(() =>
   buildAnnotationWorkspaceItems({
     annotations: toolStore.annotations.value,
@@ -1432,16 +1413,13 @@ const scopedReviewerItems = computed<AnnotationWorkspaceItem[]>(() => {
   return scopeAnnotationWorkspaceItemsByFormId(reviewerAnnotationItems.value, activeReviewFormId.value);
 });
 
-const annotationWorkspaceItems = scopedReviewerItems;
-
 watch(
   () => ({
     externalFormFocused: isExternalFormFocused.value,
-    viewMode: annotationListViewMode.value,
     itemKeys: scopedReviewerItems.value.map((item) => `${item.type}:${item.id}`).join('|'),
   }),
   () => {
-    if (!isExternalFormFocused.value || annotationListViewMode.value !== 'split') return;
+    if (!isExternalFormFocused.value) return;
     if (scopedReviewerItems.value.length !== 1) return;
 
     const [item] = scopedReviewerItems.value;
@@ -1511,16 +1489,6 @@ function handleTableSelectAnnotation(item: AnnotationWorkspaceItem | null) {
   expandedAnnotationType.value = item.type;
 }
 
-async function handleTableOpenAnnotation(item: AnnotationWorkspaceItem) {
-  annotationListViewMode.value = 'split';
-  await nextTick();
-  handleTableSelectAnnotation(item);
-  // 数据源已统一为 AnnotationWorkspaceItem（参见
-  // docs/plans/2026-05-18-reviewer-split-table-data-source-unification-plan.md），
-  // 不再需要从 workspace item 反向找 list item。
-  flyToAnnotationItem(item);
-}
-
 function handleTableCopyFeedback(payload: { kind: 'refno' | 'row'; result: 'copied' | 'fallback' | 'failed' }) {
   const label = payload.kind === 'refno' ? 'RefNo' : '批注行';
   if (payload.result === 'failed') {
@@ -1531,42 +1499,6 @@ function handleTableCopyFeedback(payload: { kind: 'refno' | 'row'; result: 'copi
     message: payload.result === 'fallback' ? `已复制${label}（降级）` : `已复制${label}`,
     level: 'success',
   });
-}
-
-function getAnnotationTypeBadge(type: AnnotationType): { label: string; colorClass: string } {
-  switch (type) {
-    case 'text': return { label: '文字', colorClass: 'bg-brand-subtle text-brand' };
-    case 'cloud': return { label: '云线', colorClass: 'bg-brand-subtle text-brand' };
-    case 'rect': return { label: '矩形', colorClass: 'bg-warning-subtle text-warning' };
-    case 'obb': return { label: '包围盒', colorClass: 'bg-fuchsia-100 text-fuchsia-700' };
-    default: return { label: '批注', colorClass: 'bg-slate-100 text-slate-700' };
-  }
-}
-
-function getAnnotationReviewBadge(item: AnnotationWorkspaceItem): { label: string; detail: string; color: string } {
-  return getAnnotationReviewDisplay(item.reviewState);
-}
-
-function formatAnnotationTime(timestamp: number): string {
-  const now = Date.now();
-  const diff = now - timestamp;
-  if (diff < 60_000) return '刚刚';
-  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}分钟前`;
-  if (diff < 86_400_000) {
-    return new Date(timestamp).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
-  }
-  return new Date(timestamp).toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' }) +
-    ' ' + new Date(timestamp).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
-}
-
-function toggleAnnotationDetail(item: AnnotationWorkspaceItem) {
-  if (expandedAnnotationId.value === item.id) {
-    expandedAnnotationId.value = null;
-    expandedAnnotationType.value = null;
-  } else {
-    expandedAnnotationId.value = item.id;
-    expandedAnnotationType.value = item.type;
-  }
 }
 
 function flyToAnnotationItem(item: AnnotationWorkspaceItem) {
@@ -1591,6 +1523,60 @@ function flyToAnnotationItem(item: AnnotationWorkspaceItem) {
     toolStore.activeCloudAnnotationId.value = null;
     toolStore.activeRectAnnotationId.value = null;
   }
+}
+
+async function locateWorkspaceAnnotation(item: AnnotationWorkspaceItem, refnos = item.refnos) {
+  flyToAnnotationItem(item);
+  ensurePanelAndActivate('viewer');
+  if (refnos.length === 0) return;
+  const result = await showModelByRefnosWithAck({
+    refnos,
+    highlight: true,
+    viewerRef: viewerContext.viewerRef,
+  });
+  if (result.error) {
+    emitToast({ message: result.error, level: 'warning' });
+  }
+}
+
+function locateWorkspaceElements(payload: { item: AnnotationWorkspaceItem; refnos: string[] }) {
+  return locateWorkspaceAnnotation(payload.item, payload.refnos);
+}
+
+function startWorkspaceMeasurement(
+  kind: MeasurementRecord['kind'],
+  item: AnnotationWorkspaceItem,
+) {
+  handleTableSelectAnnotation(item);
+  flyToAnnotationItem(item);
+  ensurePanelAndActivate('viewer');
+  emitCommand(
+    kind === 'distance'
+      ? 'measurement.distance'
+      : kind === 'angle'
+        ? 'measurement.angle'
+        : kind === 'elevation_point'
+          ? 'measurement.elevation_point'
+          : 'measurement.elevation_delta',
+  );
+}
+
+function locateWorkspaceMeasurement(item: LinkedMeasurementItem) {
+  ensurePanelAndActivate('viewer');
+  if (item.engine === 'xeokit') {
+    toolStore.activeXeokitMeasurementId.value = item.id;
+    viewerContext.xeokitMeasurementTools.value?.flyToMeasurement(item.id);
+    return;
+  }
+  toolStore.activeMeasurementId.value = item.id;
+  viewerContext.tools.value?.flyToMeasurement(item.id);
+}
+
+function handleAnnotationQueueCompleted() {
+  emitToast({
+    message: '当前筛选范围内已没有下一条待处理批注',
+    level: 'success',
+  });
 }
 </script>
 
@@ -1909,155 +1895,39 @@ function flyToAnnotationItem(item: AnnotationWorkspaceItem) {
       </div>
     </div>
 
-    <!-- ═══════ C2.0. 视图模式切换：卡片列表 / 批注表格 ═══════ -->
-    <!-- 显示条件：进入校审任务后即可见（即使暂无批注），允许提前/预切到表格视图等待批注加载；
-         否则若仅依赖 totalAnnotationItemCount > 0，ribbon「批注表格」按钮在无批注时会"按了无反应"。 -->
-    <div v-if="currentTask || annotationListViewMode === 'table'"
-      class="inline-flex items-center gap-1 self-start rounded-xl border border-slate-200 bg-white p-1 shadow-sm"
-      role="tablist"
-      aria-label="批注视图切换"
-      data-testid="reviewer-annotation-list-view-mode-tabs">
-      <button type="button"
-        role="tab"
-        :aria-selected="annotationListViewMode === 'split'"
-        class="inline-flex h-7 items-center rounded-lg px-2.5 text-xs font-semibold transition"
-        :class="annotationListViewMode === 'split'
-          ? 'bg-slate-900 text-white shadow-sm'
-          : 'text-slate-600 hover:bg-slate-100'"
-        data-testid="reviewer-annotation-list-view-mode-split"
-        @click="annotationListViewMode = 'split'">
-        卡片列表
-      </button>
-      <button type="button"
-        role="tab"
-        :aria-selected="annotationListViewMode === 'table'"
-        class="inline-flex h-7 items-center rounded-lg px-2.5 text-xs font-semibold transition"
-        :class="annotationListViewMode === 'table'
-          ? 'bg-slate-900 text-white shadow-sm'
-          : 'text-slate-600 hover:bg-slate-100'"
-        data-testid="reviewer-annotation-list-view-mode-table"
-        @click="annotationListViewMode = 'table'">
-        批注表格
-      </button>
-    </div>
-
-    <!-- ═══════ C2. 批注列表（每条批注详情 + 评论线程） ═══════ -->
-    <div v-if="totalAnnotationItemCount > 0 && annotationListViewMode === 'split'"
-      class="rounded-lg border border-slate-200 bg-white"
-      data-guide="annotation-list-zone"
-      data-testid="reviewer-annotation-card-list">
-      <div class="flex items-center justify-between px-4 py-3">
-        <div class="flex items-center gap-2">
-          <FileText class="h-4 w-4 text-warning" />
-          <span class="text-sm font-semibold text-slate-900">批注列表</span>
-          <span class="rounded-full bg-warning-subtle px-2 py-0.5 text-[10px] font-semibold text-warning">
-            {{ totalAnnotationItemCount }}
-          </span>
-        </div>
-      </div>
-
-      <div class="flex flex-col gap-0.5 border-t border-slate-100 px-3 py-2">
-        <div v-for="item in scopedReviewerItems" :key="item.id">
-          <!-- 批注卡片 -->
-          <div class="cursor-pointer rounded-lg border p-3 transition-colors"
-            :class="expandedAnnotationId === item.id
-              ? 'border-warning bg-warning-subtle/50 shadow-sm'
-              : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'"
-            @click="toggleAnnotationDetail(item)">
-            <!-- 头部：标题 + 类型标签 + 时间 -->
-            <div class="flex items-start justify-between gap-2">
-              <div class="min-w-0 flex-1">
-                <div class="flex items-center gap-1.5">
-                  <span class="truncate text-sm font-semibold text-slate-900">{{ item.title }}</span>
-                  <span class="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium"
-                    :class="getAnnotationTypeBadge(item.type).colorClass">
-                    {{ getAnnotationTypeBadge(item.type).label }}
-                  </span>
-                  <span class="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium"
-                    :class="getAnnotationReviewBadge(item).color">
-                    {{ getAnnotationReviewBadge(item).label }}
-                  </span>
-                </div>
-                <p v-if="item.description" class="mt-0.5 truncate text-xs text-slate-500">{{ item.description }}</p>
-                <div v-if="item.refnos.length > 0" class="mt-1">
-                  <span class="rounded bg-brand-subtle px-1.5 py-0.5 font-mono text-[10px] text-brand">{{ item.refnos[0] }}</span>
-                </div>
-                <div v-if="item.reviewState?.updatedByName" class="mt-1 text-[11px] text-slate-400">
-                  {{ item.reviewState.updatedByName }}
-                  <span v-if="item.reviewState.updatedByRole"> · {{ getRoleDisplayName(item.reviewState.updatedByRole) }}</span>
-                  <span v-if="item.reviewState.updatedAt"> · {{ formatAnnotationTime(item.reviewState.updatedAt) }}</span>
-                </div>
-                <div v-if="item.reviewState?.note"
-                  class="mt-1 line-clamp-2 rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] leading-5 text-slate-700"
-                  :data-testid="`reviewer-annotation-card-note-${item.id}`"
-                  :title="item.reviewState.note">
-                  <span class="mr-1 text-[10px] font-semibold text-slate-500">处理回复：</span>{{ item.reviewState.note }}
-                </div>
-              </div>
-              <span class="shrink-0 text-[11px] text-slate-400">{{ formatAnnotationTime(item.createdAt) }}</span>
-            </div>
-
-            <!-- 底部：评论数 + 操作 -->
-            <div class="mt-2 flex items-center justify-between">
-              <div class="flex items-center gap-2 text-[11px] text-slate-400">
-                <div class="truncate">{{ getAnnotationReviewBadge(item).detail }}</div>
-                <div v-if="item.commentCount > 0" class="flex items-center gap-1 text-warning">
-                  <MessageSquare class="h-3 w-3" />
-                  <span class="font-medium">{{ item.commentCount }} 条意见</span>
-                </div>
-                <div v-else class="text-slate-400">暂无意见</div>
-              </div>
-              <div class="flex items-center gap-0.5">
-                <button type="button"
-                  class="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-brand"
-                  title="在场景中定位此批注"
-                  @click.stop="flyToAnnotationItem(item)">
-                  <ArrowRight class="h-3.5 w-3.5" />
-                </button>
-                <ChevronDown class="h-3.5 w-3.5 text-slate-400 transition-transform"
-                  :class="{ 'rotate-180': expandedAnnotationId === item.id }" />
-              </div>
-            </div>
-          </div>
-
-          <!-- 展开的评论线程 -->
-          <div v-if="expandedAnnotationId === item.id && expandedAnnotationType"
-            class="mt-1 mb-2">
-            <ReviewCommentsTimeline :annotation-type="expandedAnnotationType"
-              :annotation-id="item.id"
-              :annotation-label="`${getAnnotationTypeBadge(item.type).label}批注 / ${item.title}`"
-              :designer-only="isExternalSjFormFocused"
-              :context-form-id="activeReviewFormId"
-              :context-task-id="resolveAnnotationActionTaskId(item)"
-              @close="expandedAnnotationId = null; expandedAnnotationType = null" />
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- ═══════ C2.table. 批注表格视图（只读浏览） ═══════ -->
-    <!-- 表格区不依赖 totalAnnotationItemCount > 0：AnnotationTableView 自带 empty state，
-         保证用户切到 table 视图后即使暂无批注也能看到容器和提示。 -->
-    <div v-else-if="annotationListViewMode === 'table'"
+    <!-- ═══════ C2. 统一批注单：表格行内展开完整处理卡 ═══════ -->
+    <div v-if="currentTask || isExternalFormFocused"
       class="min-h-[480px]"
-      data-testid="reviewer-annotation-table-view-container">
-      <AnnotationTableView :items="annotationWorkspaceItems"
+      data-guide="annotation-list-zone"
+      data-testid="reviewer-annotation-sheet-container">
+      <AnnotationSheetWorkspace :items="scopedReviewerItems"
         :current-annotation-id="expandedAnnotationId"
         :current-annotation-type="expandedAnnotationType"
-        :task-key="currentTask?.id ?? null"
+        :current-user-role="userStore.currentUser.value?.role ?? null"
+        :form-id="activeReviewFormId"
+        :task-id="currentTask?.id ?? null"
+        :task-key="currentTask?.id ?? activeReviewFormId"
         :subtitle="currentTask?.title ?? null"
+        :measurements="toolStore.measurements.value"
+        :xeokit-measurements="[
+          ...toolStore.xeokitDistanceMeasurements.value,
+          ...toolStore.xeokitAngleMeasurements.value,
+        ]"
         :can-edit-item="canEditWorkspaceItem"
+        :resolve-action-task-id="resolveAnnotationActionTaskId"
         :saving-severity-keys="savingSeverityKeys"
         :saving-title-keys="savingTitleKeys"
         empty-title="当前任务下还没有可浏览的批注"
         empty-description="批注创建后会自动出现在这里。"
-        data-testid="annotation-table-view"
         @select-annotation="handleTableSelectAnnotation"
-        @open-annotation="(item) => void handleTableOpenAnnotation(item)"
-        @locate-annotation="(item) => void handleTableOpenAnnotation(item)"
+        @locate-annotation="(item) => void locateWorkspaceAnnotation(item)"
+        @locate-elements="(payload) => void locateWorkspaceElements(payload)"
+        @start-measurement="startWorkspaceMeasurement"
+        @locate-measurement="locateWorkspaceMeasurement"
         @copy-feedback="handleTableCopyFeedback"
         @update-severity="(payload) => void handleWorkspaceSeverityUpdate(payload)"
-        @update-title="(payload) => void handleWorkspaceTitleUpdate(payload)" />
+        @update-title="(payload) => void handleWorkspaceTitleUpdate(payload)"
+        @queue-completed="handleAnnotationQueueCompleted" />
     </div>
 
     <!-- 弹窗组件 -->

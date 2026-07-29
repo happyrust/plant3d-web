@@ -130,7 +130,7 @@ describe('MeasurementOverlayBar', () => {
     expect(exitButton?.textContent?.trim()).toBe('');
     expect(exitButton?.title).toBe('退出测量');
     expect(host.querySelector('[data-testid="measurement-overlay-source-picker"]')?.textContent).toContain('P-Point');
-    expect(host.querySelector('[data-testid="measurement-overlay-source-picker"]')?.textContent).toContain('实例原点');
+    expect(host.querySelector('[data-testid="measurement-overlay-source-picker"]')?.textContent).toContain('Item 原点');
     expect(host.querySelector('[data-testid="measurement-overlay-source-picker"]')?.textContent).toContain('模型表面点');
 
     const pointSetInput = host.querySelector('[data-testid="measurement-overlay-source-ptset"]') as HTMLInputElement | null;
@@ -370,6 +370,17 @@ describe('MeasurementOverlayBar', () => {
     expect(measurementStyle.state.measurementPickMode).toBe('free_surface');
     expect(measurementStyle.state.measurementPickSources.mesh_pick_point.snap).toBe(true);
     expect((host.querySelector('[data-testid="measurement-overlay-source-mesh"]') as HTMLInputElement | null)?.checked).toBe(true);
+    expect(host.querySelector('[data-testid="measurement-overlay-free-surface-hint"]')).toBeNull();
+
+    // 自由表面下关掉表面点捕捉：不静默回落模式，显示提示角标。
+    const meshCheckbox = host.querySelector('[data-testid="measurement-overlay-source-mesh"]') as HTMLInputElement | null;
+    if (meshCheckbox) {
+      meshCheckbox.checked = false;
+      meshCheckbox.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+    await nextTick();
+    expect(measurementStyle.state.measurementPickMode).toBe('free_surface');
+    expect(host.querySelector('[data-testid="measurement-overlay-free-surface-hint"]')).toBeTruthy();
 
     (host.querySelector('[data-testid="measurement-overlay-mode-e3d"]') as HTMLButtonElement | null)?.click();
     await nextTick();
@@ -377,6 +388,7 @@ describe('MeasurementOverlayBar', () => {
     expect(measurementStyle.state.measurementPickSources.mesh_pick_point.snap).toBe(false);
     expect(measurementStyle.state.measurementPickSources.ptset.snap).toBe(true);
     expect(measurementStyle.state.measurementPickSources.position.snap).toBe(true);
+    expect(host.querySelector('[data-testid="measurement-overlay-free-surface-hint"]')).toBeNull();
 
     app.unmount();
     host.remove();

@@ -48,6 +48,16 @@ async function setToolMode(
   }, mode);
 }
 
+async function setCloudTargets(page: Page, refnos: string[]) {
+  await page.evaluate((targets) => {
+    const store = (window as any).__viewerToolStore;
+    if (!store) {
+      throw new Error('viewer tool store is not ready');
+    }
+    store.setCloudTargetRefnos(targets);
+  }, refnos);
+}
+
 async function readAnnotationState(page: Page) {
   return page.evaluate(() => {
     const store = (window as any).__viewerToolStore;
@@ -148,7 +158,9 @@ test.describe('DTX 批注真实创建', () => {
 
   test('云线批注应能通过屏幕框选创建', async ({ page }) => {
     const point = await findPickablePoint(page);
+    const memberRefnos = [point.objectId, 'MISSING/TARGET'];
 
+    await setCloudTargets(page, memberRefnos);
     await setToolMode(page, 'annotation_cloud');
     await page.mouse.click(point.x, point.y);
     await drag(
@@ -165,6 +177,93 @@ test.describe('DTX 批注真实创建', () => {
 
     const state = await readAnnotationState(page);
     expect(state.firstCloud?.anchorRefno).toBe(point.objectId);
-    expect(state.firstCloud?.refnos.length ?? 0).toBeGreaterThan(0);
+    expect(state.firstCloud?.refnos).toEqual(memberRefnos);
+    expect(state.firstCloud?.objectIds).toEqual(memberRefnos);
+    expect(state.firstCloud?.bindings).toEqual([
+      expect.objectContaining({ refno: point.objectId, role: 'anchor' }),
+      expect.objectContaining({ refno: point.objectId, role: 'member' }),
+      expect.objectContaining({ refno: 'MISSING/TARGET', role: 'member' }),
+    ]);
+
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await waitForDtxReady(page);
+    await waitForToolStoreReady(page);
+    const restored = await readAnnotationState(page);
+    expect(restored.firstCloud?.refnos).toEqual(memberRefnos);
+    expect(restored.firstCloud?.bindings).toHaveLength(3);
+  });
+
+  test('云线批注创建后应自动上传 PNG 并保存截图信息', async ({ page }) => {
+    let uploadBody = '';
+    await page.route('**/api/review/attachments', async (route) => {
+      if (route.request().method() !== 'POST') {
+        await route.continue();
+        return;
+      }
+      uploadBody = route.request().postData() ?? '';
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          success: true,
+          attachment: {
+            id: 'att-auto-cloud',
+            url: '/uploads/att-auto-cloud.png',
+            name: 'att-auto-cloud.png',
+            mimeType: 'image/png',
+            size: 1024,
+            uploadedAt: Date.now(),
+          },
+        }),
+      });
+    });
+
+    await page.evaluate(async () => {
+      const modulePath = '/src/composables/useReviewStore.ts';
+      const { useReviewStore } = await import(/* @vite-ignore */ modulePath);
+      useReviewStore().currentTask.value = {
+        id: 'task-auto-cloud',
+        title: '自动截图测试',
+        description: '',
+        modelName: 'AvevaMarineSample',
+        status: 'in_review',
+        priority: 'medium',
+        requesterId: 'tester',
+        requesterName: 'Tester',
+        reviewerId: 'reviewer',
+        reviewerName: 'Reviewer',
+        components: [],
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+    });
+
+    const point = await findPickablePoint(page);
+    await setCloudTargets(page, [point.objectId]);
+    await setToolMode(page, 'annotation_cloud');
+    await page.mouse.click(point.x, point.y);
+    await drag(
+      page,
+      { x: point.x - 70, y: point.y - 70 },
+      { x: point.x + 70, y: point.y + 70 },
+    );
+
+    await expect
+      .poll(() => readAnnotationState(page), { timeout: 10_000 })
+      .toMatchObject({
+        cloudCount: 1,
+        firstCloud: {
+          screenshot: {
+            attachmentId: 'att-auto-cloud',
+            url: '/uploads/att-auto-cloud.png',
+            mimeType: 'image/png',
+          },
+        },
+      });
+    expect(uploadBody).toContain('name="taskId"');
+    expect(uploadBody).toContain('task-auto-cloud');
+    expect(uploadBody).toContain('name="sourceAnnotationId"');
+    expect(uploadBody).toContain('name="type"');
+    expect(uploadBody).toContain('annotation_screenshot');
+    expect(uploadBody).toContain('Content-Type: image/png');
   });
 });

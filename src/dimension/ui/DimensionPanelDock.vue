@@ -8,7 +8,6 @@ import {
 } from 'vue';
 
 import { externalDimensionCategory } from '../adapters/normalizeExternalDimensions';
-import { isDimensionFlagEnabled } from '../flags';
 import { createRebindEditSession } from '../interaction/editSession';
 import { DEFAULT_DIMENSION_FORMAT } from '../kernel/format';
 
@@ -42,8 +41,6 @@ defineProps<{
   };
 }>();
 
-const enabled = isDimensionFlagEnabled('DIMENSION_V2_DEV')
-  || isDimensionFlagEnabled('DIMENSION_V2_CUTOVER');
 const viewerContext = useViewerContext();
 const userStore = useUserStore();
 const documentState = shallowRef(
@@ -296,7 +293,7 @@ function act(
 </script>
 
 <template>
-  <div v-if="enabled" class="flex h-full w-full flex-col overflow-hidden">
+  <div class="flex h-full w-full flex-col overflow-hidden">
     <DimensionToolbar :disabled="!viewerContext.dimensionSystem.value"
       :can-undo="viewerContext.dimensionSystem.value?.document.canUndo ?? false"
       :can-redo="viewerContext.dimensionSystem.value?.document.canRedo ?? false"

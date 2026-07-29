@@ -39,6 +39,7 @@ export type SpatialQueryFilters = {
   keyword: string;
   onlyLoaded: boolean;
   onlyVisible: boolean;
+  includeNegative: boolean;
   specValues: number[];
 };
 
@@ -77,9 +78,24 @@ export type SpatialQueryResultGroup = {
   items: SpatialQueryResultItem[];
 };
 
+export type SpatialQueryFilterOptions = {
+  nouns: {
+    value: string;
+    count: number;
+    isNegative: boolean;
+  }[];
+  specValues: {
+    value: number;
+    count: number;
+    label: string;
+  }[];
+  includeNegative: boolean;
+};
+
 export type SpatialQueryResultSet = {
   request: SpatialQueryRequest;
   items: SpatialQueryResultItem[];
+  filterOptions?: SpatialQueryFilterOptions | null;
   center?: SpatialQueryServerCenter | null;
   queryBBox?: SpatialQueryAabb | null;
   serverRadius?: number | null;
@@ -114,6 +130,7 @@ export type SpatialQueryDraft = {
   keyword: string;
   onlyLoaded: boolean;
   onlyVisible: boolean;
+  includeNegative: boolean;
   specValues: number[];
   limit: number;
 };

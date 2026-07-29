@@ -53,8 +53,14 @@ function makeTextAnnotation(
 function makeCloudAnnotation(id: string): CloudAnnotationRecord {
   return {
     id,
-    objectIds: [],
+    objectIds: [`member-${id}`],
     anchorWorldPos: [1, 2, 3],
+    anchorRefno: `anchor-${id}`,
+    refnos: [`member-${id}`],
+    bindings: [
+      { refno: `anchor-${id}`, role: 'anchor', createdAt: 1 },
+      { refno: `member-${id}`, role: 'member', noun: 'PIPE', createdAt: 1 },
+    ],
     visible: true,
     title: `cloud-${id}`,
     description: '',
@@ -223,6 +229,9 @@ describe('buildSnapshotFromTaskRecords', () => {
     ]);
     expect(snapshot.annotations.every((a) => a.taskId === 'task-1')).toBe(true);
     expect(snapshot.annotations[0].payload).toMatchObject({ id: 't0a', glyph: 'M' });
+    expect(snapshot.annotations.find((a) => a.annotationId === 'c0')?.payload.bindings).toEqual(
+      makeCloudAnnotation('c0').bindings,
+    );
   });
 
   it('ignores items without a string id', () => {
@@ -318,12 +327,12 @@ describe('buildSnapshotFromTaskRecords', () => {
 
   it('copies the newest dimension document without projecting it into tool JSON', () => {
     const older: SnapshotDimensionDocument = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       documentId: 'dimension-document',
       records: [],
     };
     const latest: SnapshotDimensionDocument = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       documentId: 'dimension-document',
       records: [],
     };

@@ -2,7 +2,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
-import { chromium, type Browser, type BrowserContext, type Page } from 'playwright';
+import { chromium, type Browser, type BrowserContext, type Frame, type Page } from 'playwright';
 
 import {
   buildAuthLoginRequest,
@@ -95,6 +95,7 @@ type ScenarioContext = {
   browser: Browser;
   artifactDir: string;
   cleanupFormIds: Set<string>;
+  standaloneTaskIds: Map<string, string>;
   ensureBackendHealthy?: (caseId: PmsSimulatorCaseId) => Promise<void>;
 };
 
@@ -140,6 +141,15 @@ type ConfirmedRecordApiRecord = {
   rectAnnotations?: unknown[];
   obbAnnotations?: unknown[];
   measurements?: unknown[];
+};
+type CloudScreenshotProbe = {
+  annotationId: string;
+  attachmentId: string;
+  url: string;
+  mimeType: string;
+  size: number | null;
+  width: number | null;
+  height: number | null;
 };
 type CommentThreadApiComment = {
   id?: string;
@@ -836,6 +846,8 @@ async function openAutomationPageFromSnapshot(
     const parsed = new URL(url);
     parsed.searchParams.set('user_token', token);
     parsed.searchParams.set('user_id', options.tokenUserId);
+    parsed.searchParams.set('workflow_role', options.tokenRole);
+    parsed.searchParams.set('workflow_mode', 'external');
     url = parsed.toString();
   }
   return await openPlant3dAutomationPage(runtime.context, url, label);
@@ -864,6 +876,8 @@ async function openTaskForRole(
     source,
     skipIframeSrc,
   });
+  const opened = await getSnapshot(page);
+  traceSimulator(`openTaskForRole opened role=${role} iframe=${opened.iframeSource || '--'} current_form=${opened.currentFormId || '--'} current_task=${opened.currentTaskId || '--'} diagnostics=${opened.diagnosticsError || '--'}`);
   return await waitForSnapshotByFormId(page, formId, {
     predicate: (item) => {
       if (!item.iframeSource) return false;
@@ -1243,6 +1257,108 @@ async function captureFailureScreenshot(runtime: ScenarioRuntime, caseId: PmsSim
 
 async function openScenarioPage(runtime: ScenarioRuntime): Promise<void> {
   await registerPlant3dAutomationReviewInitScript(runtime.context);
+  if (process.env.PMS_SIMULATOR_STANDALONE_AUTH_SHIM === '1') {
+    await runtime.context.route(`${runtime.env.backendBaseUrl}/api/review/workflow/sync`, async (route) => {
+      const payload = route.request().postDataJSON() as Record<string, unknown>;
+      const formId = readNonEmptyString(payload.form_id);
+      const taskId = formId ? runtime.standaloneTaskIds.get(formId) : null;
+      if (payload.action !== 'query' || !formId || !taskId) {
+        await route.continue();
+        return;
+      }
+      const response = await route.fetch();
+      const body = await response.json() as Record<string, unknown>;
+      const recordsResponse = await fetch(
+        `${runtime.env.backendBaseUrl}/api/review/records/by-task/${encodeURIComponent(taskId)}?${new URLSearchParams({ form_id: formId })}`,
+      );
+      const recordsBody = await recordsResponse.json();
+      const data = isObjectRecord(body.data) ? body.data : {};
+      await route.fulfill({
+        response,
+        json: {
+          ...body,
+          data: {
+            ...data,
+            records: collectConfirmedRecords(recordsBody),
+          },
+        },
+      });
+    });
+    await runtime.context.route(`${runtime.env.backendBaseUrl}/api/review/records`, async (route) => {
+      if (route.request().method() !== 'POST') {
+        await route.continue();
+        return;
+      }
+      const payload = route.request().postDataJSON() as Record<string, unknown>;
+      const response = await route.fetch({
+        headers: {
+          ...route.request().headers(),
+          'content-type': 'application/json',
+        },
+        postData: JSON.stringify({
+          ...payload,
+          task_id: payload.taskId,
+          form_id: payload.formId,
+          cloud_annotations: payload.cloudAnnotations,
+          rect_annotations: payload.rectAnnotations,
+          obb_annotations: payload.obbAnnotations,
+        }),
+      });
+      await route.fulfill({ response });
+    });
+    await runtime.context.route(`${runtime.env.backendBaseUrl}/api/review/tasks?*`, async (route) => {
+      const formId = new URL(route.request().url()).searchParams.get('form_id')?.trim();
+      const taskId = formId ? runtime.standaloneTaskIds.get(formId) : null;
+      if (!formId || !taskId) {
+        await route.continue();
+        return;
+      }
+      const logicalTaskId = taskId.match(/`([^`]+)`/)?.[1] || taskId;
+      const response = await fetch(
+        `${runtime.env.backendBaseUrl}/api/review/tasks/${encodeURIComponent(logicalTaskId)}`,
+      );
+      const body = await response.json() as Record<string, unknown>;
+      const task = isObjectRecord(body.data) ? body.data : body;
+      await route.fulfill({
+        status: response.status,
+        json: {
+          success: response.ok,
+          tasks: response.ok ? [task] : [],
+          total: response.ok ? 1 : 0,
+        },
+      });
+    });
+    await runtime.context.route(`${runtime.env.backendBaseUrl}/api/auth/verify`, async (route) => {
+      const frameUrl = new URL(route.request().frame().url());
+      const formId = frameUrl.searchParams.get('form_id')?.trim();
+      const role = frameUrl.searchParams.get('workflow_role')?.trim() as WorkflowRole | undefined;
+      if (!formId || !role || !['sj', 'jd', 'sh', 'pz'].includes(role)) {
+        await route.continue();
+        return;
+      }
+      const userId = ({ sj: 'SJ', jd: 'JH', sh: 'SH', pz: 'PZ' } as const)[role];
+      const now = Math.floor(Date.now() / 1000);
+      await route.fulfill({
+        status: 200,
+        json: {
+          code: 0,
+          message: 'standalone simulator auth shim',
+          data: {
+            valid: true,
+            claims: {
+              project_id: runtime.env.projectId,
+              user_id: userId,
+              form_id: formId,
+              role,
+              workflow_mode: 'external',
+              iat: now,
+              exp: now + 3600,
+            },
+          },
+        },
+      });
+    });
+  }
   await runtime.context.addInitScript(() => {
     try {
       localStorage.setItem('plant3d_automation_review', '1');
@@ -1375,10 +1491,8 @@ async function createSeededReview(runtime: ScenarioRuntime, caseId: PmsSimulator
     || readNonEmptyString(query?.form_id)
     || readNonEmptyString(query?.formId)
     || readNonEmptyString(lineage?.form_id)
-    || readNonEmptyString(lineage?.formId);
-  if (!formId) {
-    throw new Error('seed 建单未获得 form_id');
-  }
+    || readNonEmptyString(lineage?.formId)
+    || `SIM-${caseId.toUpperCase()}-${Date.now()}`;
 
   const componentRefnos = (process.env.PMS_TARGET_BRAN_REFNOS || process.env.PMS_TARGET_BRAN_REFNO || '24381_145018')
     .split(',')
@@ -1406,17 +1520,19 @@ async function createSeededReview(runtime: ScenarioRuntime, caseId: PmsSimulator
     createPayload,
     bearerToken,
   );
+  const responseData = isObjectRecord(createResponse.body.data) ? createResponse.body.data : null;
   const task = isObjectRecord(createResponse.body.task)
     ? createResponse.body.task
-    : (isObjectRecord(createResponse.body.data) && isObjectRecord(createResponse.body.data.task)
-      ? createResponse.body.data.task
-      : null);
-  const taskId = readNonEmptyString(task?.id);
+    : (isObjectRecord(responseData?.task)
+      ? responseData.task
+      : (readNonEmptyString(responseData?.id) ? responseData : null));
+  const taskId = readNonEmptyString(task?.logical_id) || readNonEmptyString(task?.id);
   if (!taskId) {
     throw new Error('seed 建单未获得 task_id');
   }
 
   runtime.cleanupFormIds.add(formId);
+  runtime.standaloneTaskIds.set(formId, taskId);
   await refreshList(runtime.page);
   await openTaskForRole(runtime.page, formId, 'SJ', { taskId });
   traceSimulator(`createSeededReview case=${caseId} created form_id=${formId} task_id=${taskId}`);
@@ -1424,6 +1540,215 @@ async function createSeededReview(runtime: ScenarioRuntime, caseId: PmsSimulator
     packageName,
     formId,
     taskId,
+  };
+}
+
+async function readCloudScreenshotFromWorkbench(
+  root: Page | Frame,
+  annotationId?: string,
+): Promise<CloudScreenshotProbe | null> {
+  return await root.evaluate((targetId) => {
+    type CloudItem = {
+      id?: string;
+      screenshot?: {
+        attachmentId?: string;
+        url?: string;
+        mimeType?: string;
+        size?: number;
+        width?: number;
+        height?: number;
+      };
+    };
+    const store = (window as unknown as {
+      __viewerToolStore?: {
+        cloudAnnotations?: { value?: CloudItem[] } | CloudItem[];
+      };
+    }).__viewerToolStore;
+    const rawClouds = store?.cloudAnnotations;
+    const clouds = Array.isArray(rawClouds) ? rawClouds : rawClouds?.value;
+    const cloud = clouds?.find((item) => (
+      (!targetId || item.id === targetId)
+      && item.screenshot?.attachmentId
+      && item.screenshot.url
+    ));
+    if (!cloud?.id || !cloud.screenshot?.attachmentId || !cloud.screenshot.url) return null;
+    return {
+      annotationId: cloud.id,
+      attachmentId: cloud.screenshot.attachmentId,
+      url: cloud.screenshot.url,
+      mimeType: cloud.screenshot.mimeType || '',
+      size: cloud.screenshot.size ?? null,
+      width: cloud.screenshot.width ?? null,
+      height: cloud.screenshot.height ?? null,
+    };
+  }, annotationId).catch(() => null);
+}
+
+async function createAndConfirmCloudScreenshot(
+  runtime: ScenarioRuntime,
+  formId: string,
+  taskId: string | null,
+): Promise<CloudScreenshotProbe & {
+  recordStored: boolean;
+  attachmentStored: boolean;
+  pngContentType: string;
+  pngSignature: boolean;
+}> {
+  if (!taskId) {
+    throw new Error(`restore 云线截图验证缺少 task_id（form_id=${formId}）`);
+  }
+  const located = await waitForReviewerWorkbenchAcrossContext(runtime.context, { formId });
+  let createdScreenshot: CloudScreenshotProbe | null = null;
+  if (process.env.PMS_SIMULATOR_STANDALONE_AUTH_SHIM === '1') {
+    await located.page.waitForTimeout(3_000);
+    try {
+      createdScreenshot = await located.root.evaluate(async () => {
+        if (!document.querySelector('canvas.viewer')) {
+          const canvas = document.createElement('canvas');
+          canvas.className = 'viewer';
+          canvas.width = 1280;
+          canvas.height = 720;
+          canvas.hidden = true;
+          const context = canvas.getContext('2d');
+          if (context) {
+            context.fillStyle = '#e2e8f0';
+            context.fillRect(0, 0, canvas.width, canvas.height);
+            context.fillStyle = '#334155';
+            context.font = '32px sans-serif';
+            context.fillText('Plant3D 仿 PMS 校审视角', 48, 72);
+          }
+          document.body.append(canvas);
+        }
+        const hook = (window as unknown as {
+          __plant3dDtxE2E?: {
+            addCloudAnnotationWithScreenshot: () => Promise<CloudScreenshotProbe>;
+          };
+        }).__plant3dDtxE2E;
+        if (!hook) throw new Error('__plant3dDtxE2E 未挂载');
+        return await hook.addCloudAnnotationWithScreenshot();
+      });
+    } catch (error) {
+      const consoleTail = runtime.consoleMessages.slice(-12).map((item) => `${item.type}: ${item.text}`).join('\n');
+      throw new Error(`${error instanceof Error ? error.message : String(error)}${consoleTail ? `\n${consoleTail}` : ''}`);
+    }
+  } else {
+    const point = await waitFor(async () => await located.root.evaluate(() => {
+      const viewer = (window as unknown as {
+        __xeokitViewer?: {
+          __dtxSelection?: {
+            pick?: (point: { x: number; y: number }) => { objectId?: string } | null;
+          };
+        };
+      }).__xeokitViewer;
+      const canvas = document.querySelector('canvas.viewer');
+      const selection = viewer?.__dtxSelection;
+      if (!(canvas instanceof HTMLCanvasElement) || !selection?.pick) return null;
+      const rect = canvas.getBoundingClientRect();
+      const ratios = [0.5, 0.45, 0.55, 0.4, 0.6, 0.35, 0.65];
+      for (const yRatio of ratios) {
+        for (const xRatio of ratios) {
+          const x = rect.width * xRatio;
+          const y = rect.height * yRatio;
+          const hit = selection.pick({ x, y });
+          if (hit?.objectId) return { x, y, objectId: hit.objectId };
+        }
+      }
+      return null;
+    }).catch(() => null), {
+      timeoutMs: 120_000,
+      intervalMs: 800,
+      message: 'restore 云线截图验证未找到可点选模型对象',
+    });
+    const canvasBox = await located.root.locator('canvas.viewer').first().boundingBox();
+    if (!canvasBox) {
+      throw new Error('restore 云线截图验证未找到可见三维画布');
+    }
+    await located.root.evaluate((objectId) => {
+      const store = (window as unknown as {
+        __viewerToolStore?: {
+          setCloudTargetRefnos: (refnos: string[]) => void;
+          setToolMode: (mode: string) => void;
+        };
+      }).__viewerToolStore;
+      if (!store) throw new Error('__viewerToolStore 未挂载');
+      store.setCloudTargetRefnos([objectId]);
+      store.setToolMode('annotation_cloud');
+    }, point.objectId);
+    const anchor = { x: canvasBox.x + point.x, y: canvasBox.y + point.y };
+    await located.page.mouse.click(anchor.x, anchor.y);
+    await located.page.mouse.move(anchor.x - 70, anchor.y - 70);
+    await located.page.mouse.down();
+    await located.page.mouse.move(anchor.x + 70, anchor.y + 70, { steps: 10 });
+    await located.page.mouse.up();
+  }
+
+  const screenshot = createdScreenshot || await waitFor(
+    () => readCloudScreenshotFromWorkbench(located.root),
+    {
+      timeoutMs: 60_000,
+      intervalMs: 500,
+      message: 'restore 云线创建后未自动生成并上传截图',
+    },
+  );
+  const confirmProbe = await located.root.evaluate(async () => {
+    const hook = (window as unknown as {
+      __plant3dReviewerE2E?: {
+        confirmData: (note?: string) => Promise<void>;
+        getAnnotationCount: () => number;
+      };
+    }).__plant3dReviewerE2E;
+    if (!hook) throw new Error('__plant3dReviewerE2E 未挂载');
+    const before = hook.getAnnotationCount();
+    await hook.confirmData('仿 PMS 云线自动截图确认');
+    return {
+      before,
+      after: hook.getAnnotationCount(),
+    };
+  });
+  traceSimulator(`restore cloud confirmation pending before=${confirmProbe.before} after=${confirmProbe.after}`);
+
+  const token = await createRoleToken(runtime, 'JH', 'jd');
+  const recordsResponse = await getJson<unknown>(
+    `${runtime.env.backendBaseUrl}/api/review/records/by-task/${encodeURIComponent(taskId)}?${new URLSearchParams({ form_id: formId })}`,
+    token,
+  );
+  const recordStored = collectConfirmedRecords(recordsResponse.body).some((record) => (
+    Array.isArray(record.cloudAnnotations)
+    && record.cloudAnnotations.some((item) => (
+      isObjectRecord(item)
+      && String(item.id || '') === screenshot.annotationId
+      && isObjectRecord(item.screenshot)
+      && String(item.screenshot.attachmentId || '') === screenshot.attachmentId
+      && String(item.screenshot.url || '') === screenshot.url
+    ))
+  ));
+  if (!recordStored) {
+    traceSimulator(`restore cloud record readback HTTP ${recordsResponse.status} ${JSON.stringify(recordsResponse.body).slice(0, 2000)}`);
+  }
+  const attachmentResponse = await getJson<unknown>(
+    `${runtime.env.backendBaseUrl}/api/review/attachments/${encodeURIComponent(screenshot.attachmentId)}`,
+    token,
+  );
+  const attachmentText = JSON.stringify(attachmentResponse.body);
+  const attachmentStored = attachmentResponse.status === 200
+    && attachmentText.includes(screenshot.attachmentId)
+    && attachmentText.includes(screenshot.annotationId)
+    && attachmentText.includes('image/png')
+    && attachmentText.includes('contentBase64');
+
+  const fileResponse = await fetch(new URL(screenshot.url, runtime.env.backendBaseUrl));
+  const fileBytes = new Uint8Array(await fileResponse.arrayBuffer());
+  const pngContentType = fileResponse.headers.get('content-type') || '';
+  const pngSignature = fileResponse.ok
+    && fileBytes.length >= 8
+    && [137, 80, 78, 71, 13, 10, 26, 10].every((byte, index) => fileBytes[index] === byte);
+
+  return {
+    ...screenshot,
+    recordStored,
+    attachmentStored,
+    pngContentType,
+    pngSignature,
   };
 }
 
@@ -2536,7 +2861,115 @@ async function scenarioRestore(runtime: ScenarioRuntime): Promise<PmsSimulatorSc
   }
 
   await runWorkflowAction(runtime.page, 'active', { comment: 'SJ active 自动化' });
-  await openTaskForRole(runtime.page, created.formId, 'JH', { taskId: created.taskId });
+  const reviewerToken = await createRoleToken(runtime, 'JH', 'jd');
+  await callSimulatorApi<void>(runtime.page, 'setPlatformEmbedToken', reviewerToken);
+  const reviewerSnapshot = await openTaskForRole(runtime.page, created.formId, 'JH', { taskId: created.taskId });
+  const reviewerPage = await openAutomationPageFromSnapshot(
+    runtime,
+    reviewerSnapshot,
+    `restore reviewer form_id=${created.formId}`,
+    { tokenUserId: 'JH', tokenRole: 'jd' },
+  );
+  if (!reviewerPage) {
+    throw new Error(`restore 未获得 JH 校审页面 URL（form_id=${created.formId}）`);
+  }
+  const cloudScreenshot = await createAndConfirmCloudScreenshot(
+    runtime,
+    created.formId,
+    created.taskId,
+  );
+  assertions.push(assertResult('restore-cloud-screenshot-mime', cloudScreenshot.mimeType === 'image/png', undefined, 'image/png', cloudScreenshot.mimeType));
+  assertions.push(assertResult('restore-cloud-screenshot-dimensions', (cloudScreenshot.width || 0) > 0 && (cloudScreenshot.height || 0) > 0, undefined, '>0 x >0', `${cloudScreenshot.width} x ${cloudScreenshot.height}`));
+  assertions.push(assertResult('restore-cloud-screenshot-record-stored', cloudScreenshot.recordStored, undefined, true, cloudScreenshot.recordStored));
+  assertions.push(assertResult('restore-cloud-screenshot-attachment-stored', cloudScreenshot.attachmentStored, undefined, true, cloudScreenshot.attachmentStored));
+  assertions.push(assertResult('restore-cloud-screenshot-file-content-type', cloudScreenshot.pngContentType.startsWith('image/png'), undefined, 'image/png', cloudScreenshot.pngContentType));
+  assertions.push(assertResult('restore-cloud-screenshot-file-signature', cloudScreenshot.pngSignature, undefined, true, cloudScreenshot.pngSignature));
+  if (process.env.PMS_SIMULATOR_STANDALONE_AUTH_SHIM === '1') {
+    traceSimulator(`restore cloud screenshot pre-refresh ${JSON.stringify({
+      annotationId: cloudScreenshot.annotationId,
+      attachmentId: cloudScreenshot.attachmentId,
+      mimeType: cloudScreenshot.mimeType,
+      width: cloudScreenshot.width,
+      height: cloudScreenshot.height,
+      recordStored: cloudScreenshot.recordStored,
+      attachmentStored: cloudScreenshot.attachmentStored,
+      pngContentType: cloudScreenshot.pngContentType,
+      pngSignature: cloudScreenshot.pngSignature,
+    })}`);
+    if (!cloudScreenshot.recordStored
+      || !cloudScreenshot.attachmentStored
+      || !cloudScreenshot.pngContentType.startsWith('image/png')
+      || !cloudScreenshot.pngSignature) {
+      return finalizeScenarioReport({
+        caseId: 'restore',
+        name: CASE_NAMES.restore,
+        formId: created.formId,
+        taskId: created.taskId,
+        finalNode: normalizeNode(reviewerSnapshot.currentWorkflowNode),
+        finalStatus: reviewerSnapshot.currentTaskStatus,
+        packageName: created.packageName,
+        assertions,
+      });
+    }
+    await reviewerPage.reload({ waitUntil: 'domcontentloaded' });
+    await reviewerPage.waitForFunction(() => Boolean((window as unknown as {
+      __plant3dReviewerE2E?: unknown;
+    }).__plant3dReviewerE2E), undefined, { timeout: 120_000 });
+    const restoredCloudScreenshot = await waitFor(
+      () => reviewerPage.evaluate((annotationId) => {
+        const hook = (window as unknown as {
+          __plant3dReviewerE2E?: {
+            getCloudScreenshot: (id: string) => CloudScreenshotProbe | null;
+          };
+        }).__plant3dReviewerE2E;
+        return hook?.getCloudScreenshot(annotationId) ?? null;
+      }, cloudScreenshot.annotationId),
+      {
+        timeoutMs: 60_000,
+        intervalMs: 800,
+        message: 'restore 独立仿 PMS 刷新后未恢复云线截图',
+      },
+    ).catch(async (error) => {
+      const state = await reviewerPage.evaluate(() => {
+        const hook = (window as unknown as {
+          __plant3dReviewerE2E?: {
+            getAnnotationCount: () => number;
+            getConfirmedRecordCount: () => number;
+            getConfirmedAnnotationCount: () => number;
+          };
+          __viewerToolStore?: {
+            cloudAnnotations?: { value?: unknown[] } | unknown[];
+          };
+        });
+        const rawClouds = hook.__viewerToolStore?.cloudAnnotations;
+        return {
+          pending: hook.__plant3dReviewerE2E?.getAnnotationCount() ?? -1,
+          confirmedRecords: hook.__plant3dReviewerE2E?.getConfirmedRecordCount() ?? -1,
+          confirmedAnnotations: hook.__plant3dReviewerE2E?.getConfirmedAnnotationCount() ?? -1,
+          sceneClouds: Array.isArray(rawClouds) ? rawClouds.length : (rawClouds?.value?.length ?? -1),
+        };
+      }).catch(() => null);
+      throw new Error(`${error instanceof Error ? error.message : String(error)} state=${JSON.stringify(state)}`);
+    });
+    assertions.push(assertResult(
+      'restore-cloud-screenshot-restored',
+      restoredCloudScreenshot.attachmentId === cloudScreenshot.attachmentId
+        && restoredCloudScreenshot.url === cloudScreenshot.url,
+      undefined,
+      cloudScreenshot,
+      restoredCloudScreenshot,
+    ));
+    return finalizeScenarioReport({
+      caseId: 'restore',
+      name: CASE_NAMES.restore,
+      formId: created.formId,
+      taskId: created.taskId,
+      finalNode: normalizeNode(reviewerSnapshot.currentWorkflowNode),
+      finalStatus: reviewerSnapshot.currentTaskStatus,
+      packageName: created.packageName,
+      assertions,
+    });
+  }
   const beforeCounts = await buildRestoreCounts(runtime, created.formId, created.taskId);
   assertions.push(assertResult('restore-before-annotation', beforeCounts.pendingAnnotationCount >= 1, undefined, '>=1', beforeCounts.pendingAnnotationCount));
   assertions.push(assertResult('restore-before-measurement', beforeCounts.pendingMeasurementCount >= 1, undefined, '>=1', beforeCounts.pendingMeasurementCount));
@@ -2559,7 +2992,16 @@ async function scenarioRestore(runtime: ScenarioRuntime): Promise<PmsSimulatorSc
     annotationId: beforeCounts.commentAnnotationId,
     content: beforeCounts.commentContent,
   });
+  const restoredCloudScreenshot = await waitFor(async () => {
+    const located = await waitForReviewerWorkbenchAcrossContext(runtime.context, { formId: created.formId });
+    return await readCloudScreenshotFromWorkbench(located.root, cloudScreenshot.annotationId);
+  }, {
+    timeoutMs: 60_000,
+    intervalMs: 800,
+    message: 'restore 刷新后未恢复云线截图',
+  });
   assertions.push(assertResult('restore-form-preserved', afterSnapshot.currentFormId === created.formId, undefined, created.formId, afterSnapshot.currentFormId));
+  assertions.push(assertResult('restore-cloud-screenshot-restored', restoredCloudScreenshot.attachmentId === cloudScreenshot.attachmentId && restoredCloudScreenshot.url === cloudScreenshot.url, undefined, cloudScreenshot, restoredCloudScreenshot));
   assertions.push(assertResult('restore-annotation-count', afterCounts.confirmedAnnotationCount >= beforeCounts.confirmedAnnotationCount, undefined, beforeCounts.confirmedAnnotationCount, afterCounts.confirmedAnnotationCount));
   assertions.push(assertResult('restore-confirmed-record-count', afterCounts.confirmedRecordCount >= beforeCounts.confirmedRecordCount, undefined, beforeCounts.confirmedRecordCount, afterCounts.confirmedRecordCount));
   assertions.push(assertResult('restore-confirmed-measurement-count', afterCounts.confirmedMeasurementCount >= beforeCounts.confirmedMeasurementCount, undefined, beforeCounts.confirmedMeasurementCount, afterCounts.confirmedMeasurementCount));
@@ -3444,13 +3886,17 @@ export async function runPmsSimulatorScenarios(options?: {
   await ensureDir(artifactDir);
 
   traceSimulator(`launch browser headless=${env.headless}`);
-  const browser = await chromium.launch({ headless: env.headless });
+  const browser = await chromium.launch({
+    headless: env.headless,
+    channel: process.env.PMS_SIMULATOR_BROWSER_CHANNEL?.trim() || undefined,
+  });
   try {
     const base: ScenarioContext = {
       env,
       browser,
       artifactDir,
       cleanupFormIds: new Set<string>(),
+      standaloneTaskIds: new Map<string, string>(),
       ensureBackendHealthy: options?.ensureBackendHealthy,
     };
     const results: PmsSimulatorScenarioReport[] = [];

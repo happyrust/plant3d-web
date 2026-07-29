@@ -58,8 +58,12 @@ e2e/*
 !e2e/dimension-mbd-v2-fixture.spec.ts
 !e2e/helpers/
 !e2e/helpers/spatialQueryRealBran.ts
+!e2e/fixtures/
+!e2e/fixtures/*.json
 !e2e/spatial-query-real-bran.spec.ts
 !e2e/mbd-real-bran-standalone.spec.ts
+!e2e/mbd-interactive-ui.spec.ts
+!e2e/mbd-branch-corpus.spec.ts
 !e2e/dimension-app-dev-smoke.spec.ts
 !e2e/dimension-canvas-smoke.spec.ts
 !e2e/dimension-perf.spec.ts
@@ -82,3 +86,11 @@ scripts/*
 bin/business-review
 state/
 .claude/
+
+# KC-Chat 运行时产物（插件自动生成，请勿入库）
+.cursor/mcp.json
+.cursor/kc-mcp/
+.cursor/kc-mcp-messages/
+.cursor/kc-chat-exports/
+# Added by code-review-graph
+.code-review-graph/

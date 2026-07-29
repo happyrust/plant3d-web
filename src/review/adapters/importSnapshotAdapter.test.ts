@@ -9,7 +9,11 @@ describe('buildSnapshotFromImportPayload', () => {
       version: 5,
       measurements: [{ id: 'legacy-m', kind: 'legacy' }],
       annotations: [{ id: 'text-1', title: 'text' }],
-      cloudAnnotations: [{ id: 'cloud-1', title: 'cloud' }],
+      cloudAnnotations: [{
+        id: 'cloud-1',
+        title: 'cloud',
+        bindings: [{ refno: 'REF/A', role: 'member', noun: 'PIPE', createdAt: 1 }],
+      }],
       rectAnnotations: [{ id: 'rect-1', title: 'rect' }],
       obbAnnotations: [{ id: 'obb-1', title: 'obb' }],
       xeokitDistanceMeasurements: [{ id: 'dist-1', visible: true }],
@@ -49,7 +53,11 @@ describe('buildSnapshotFromImportPayload', () => {
       version: 5,
       measurements: [{ id: 'legacy-m', kind: 'legacy' }],
       annotations: [{ id: 'text-1', title: 'text' }],
-      cloudAnnotations: [{ id: 'cloud-1', title: 'cloud' }],
+      cloudAnnotations: [{
+        id: 'cloud-1',
+        title: 'cloud',
+        bindings: [{ refno: 'REF/A', role: 'member', noun: 'PIPE', createdAt: 1 }],
+      }],
       rectAnnotations: [{ id: 'rect-1', title: 'rect' }],
       obbAnnotations: [{ id: 'obb-1', title: 'obb' }],
       xeokitDistanceMeasurements: [{ id: 'dist-1', visible: true }],
@@ -63,7 +71,11 @@ describe('buildSnapshotFromImportPayload', () => {
       measurements: [{ id: 'legacy-m', kind: 'legacy' }],
       annotations: [{ id: 'text-1', title: 'text' }],
       obbAnnotations: [{ id: 'obb-1', title: 'obb' }],
-      cloudAnnotations: [{ id: 'cloud-1', title: 'cloud' }],
+      cloudAnnotations: [{
+        id: 'cloud-1',
+        title: 'cloud',
+        bindings: [{ refno: 'REF/A', role: 'member', noun: 'PIPE', createdAt: 1 }],
+      }],
       rectAnnotations: [{ id: 'rect-1', title: 'rect' }],
       xeokitDistanceMeasurements: [{ id: 'dist-1', visible: true }],
       xeokitAngleMeasurements: [{ id: 'angle-1', visible: true }],
@@ -74,7 +86,7 @@ describe('buildSnapshotFromImportPayload', () => {
 
   it('copies a dimension document without restoring the removed legacy dimensions field', () => {
     const dimensionDocument = {
-      schemaVersion: 1 as const,
+      schemaVersion: 2 as const,
       documentId: 'imported-dimension-document',
       records: [],
     };

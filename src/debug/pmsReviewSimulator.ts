@@ -210,6 +210,8 @@ type WorkflowDialogState = {
 type EmbedUrlApiResponse = {
   code?: number;
   message?: string;
+  mode?: string;
+  success?: boolean;
   data?: {
     relative_path?: string;
     relativePath?: string;
@@ -417,6 +419,7 @@ type SimulatorTestApi = {
   openNew: () => Promise<void>;
   reopenLast: () => Promise<void>;
   switchRole: (role: SimulatorPmsUser) => Promise<void>;
+  setPlatformEmbedToken: (token: string) => void;
   refreshList: () => Promise<void>;
   listRows: () => SimulatorTestRowSummary[];
   selectTask: (taskId: string) => void;
@@ -869,6 +872,9 @@ function exposeSimulatorTestApi(): void {
     },
     switchRole: async (role: SimulatorPmsUser) => {
       await handleRoleSwitch(role);
+    },
+    setPlatformEmbedToken: (token: string) => {
+      state.platformEmbedToken = token.trim();
     },
     refreshList: async () => {
       await refreshList();
@@ -2426,7 +2432,7 @@ async function refreshList(): Promise<void> {
 
   try {
     await ensureRoleAuth();
-    const response = await reviewTaskGetList({ limit: 5000, offset: 0 });
+    const response = await reviewTaskGetList({ limit: 500, offset: 0 });
     if (!response.success) {
       throw new Error(response.error_message || '接口返回 success=false');
     }
@@ -3170,20 +3176,33 @@ async function buildPmsLaunchPlan(preferredFormId?: string | null): Promise<PmsL
 
   const directUrl = response.url ? new URL(response.url, window.location.origin) : null;
   const data = response.data;
-  const relativePathRaw = data?.relative_path || data?.relativePath || directUrl?.pathname || '';
+  const standaloneAdminUrl = response.success === true
+    && response.mode === 'surrealdb'
+    && directUrl?.pathname.startsWith('/admin/');
+  const relativePathRaw = data?.relative_path
+    || data?.relativePath
+    || (standaloneAdminUrl ? '/' : directUrl?.pathname)
+    || '';
   if (!relativePathRaw) {
     throw new Error('embed-url 返回缺少 relative_path');
   }
 
   const modelUrlPath = relativePathRaw.startsWith('/') ? relativePathRaw : `/${relativePathRaw}`;
   const directQuery = directUrl ? new URLSearchParams(directUrl.search) : new URLSearchParams();
+  const backendOverride = new URLSearchParams(window.location.search).get('backend')?.trim();
+  if (backendOverride && !directQuery.has('backend')) {
+    directQuery.set('backend', backendOverride);
+  }
 
   const query = data?.query || {};
   const queryFormId = (query.form_id || query.formId || '').trim() || null;
   const preferred = preferredFormId?.trim() || null;
   const directFormId = directQuery.get('form_id')?.trim() || null;
 
-  const token = data?.token?.trim() || directQuery.get('user_token')?.trim() || '';
+  const token = data?.token?.trim()
+    || directQuery.get('user_token')?.trim()
+    || state.platformEmbedToken.trim()
+    || getAuthToken();
   if (!token) {
     throw new Error('embed-url 返回缺少 token');
   }

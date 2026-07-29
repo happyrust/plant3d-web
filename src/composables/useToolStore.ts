@@ -1,7 +1,8 @@
 import { computed, ref, watch } from 'vue';
 
-import type { MeasurementPickSourceId } from './useMeasurementPickSources';
 import { combineMeasurements } from './unifiedMeasurement';
+
+import type { MeasurementPickSourceId } from './useMeasurementPickSources';
 import type {
   AnnotationComment,
   AnnotationReviewAction,
@@ -370,6 +371,23 @@ export type ObbAnnotationRecord = {
   collapsed?: boolean;
 };
 
+/** 云线关联元素的角色：`anchor` 为图钉参考中心，`member` 为问题目标元素。 */
+export type CloudBindingRole = 'anchor' | 'member';
+
+/**
+ * 云线与模型元素的工程语义绑定。
+ *
+ * 同一 refno 既是锚点又是目标时会产生两条记录（role 各一），
+ * 以保证与旧字段 `anchorRefno` / `refnos` 的双向换算无损。
+ */
+export type CloudElementBinding = {
+  refno: string;
+  role: CloudBindingRole;
+  /** 创建时的 noun 快照，供列表显示与分组过滤使用 */
+  noun?: string;
+  createdAt: number;
+};
+
 export type CloudAnnotationRecord = {
   id: string;
   objectIds: string[];
@@ -381,6 +399,8 @@ export type CloudAnnotationRecord = {
   screenOffset?: { x: number; y: number };
   cloudSize?: { width: number; height: number };
   visible: boolean;
+  /** 带角色的关联结构；缺失时由 `refnos` / `anchorRefno` 推导，读取后恒存在 */
+  bindings?: CloudElementBinding[];
   /**
    * 与 `AnnotationRecord.collapsed` 对齐：true 时只渲染图钉标记，
    * 不渲染文字框 / 引线。双击图钉切换。
@@ -792,13 +812,114 @@ function normalizeObbAnnotationRecord(rec: ObbAnnotationRecord): ObbAnnotationRe
   };
 }
 
+/**
+ * 推导云线的 `bindings`。
+ *
+ * 已有 `bindings` 时按 `refno + role` 去重后保留；缺失时由旧字段推导——
+ * `anchorRefno` → `role='anchor'`，`refnos[]` → `role='member'`。
+ *
+ * 这是全部恢复链路的唯一入口：localStorage 各版本分支、以及
+ * task_records / workflow_sync / import_package 三条校审链路
+ * 都经 `normalizeCloudAnnotationRecord` 汇入此处，因此无需升级持久化容器版本。
+ */
+export function deriveCloudBindings(rec: CloudAnnotationRecord): CloudElementBinding[] {
+  const fallbackCreatedAt = typeof rec.createdAt === 'number' ? rec.createdAt : 0;
+  const legacyMembers = Array.isArray(rec.refnos) && rec.refnos.length > 0
+    ? rec.refnos
+    : rec.objectIds;
+  const source: CloudElementBinding[] = Array.isArray(rec.bindings) && rec.bindings.length > 0
+    ? rec.bindings
+    : [
+      ...(rec.anchorRefno
+        ? [{ refno: rec.anchorRefno, role: 'anchor' as const, createdAt: fallbackCreatedAt }]
+        : []),
+      ...(Array.isArray(legacyMembers)
+        ? legacyMembers.map((refno) => ({ refno, role: 'member' as const, createdAt: fallbackCreatedAt }))
+        : []),
+    ];
+
+  const seen = new Set<string>();
+  const bindings: CloudElementBinding[] = [];
+  let hasAnchor = false;
+  for (const binding of source) {
+    const refno = typeof binding?.refno === 'string' ? binding.refno.trim() : '';
+    if (!refno) continue;
+    const role: CloudBindingRole = binding.role === 'anchor' ? 'anchor' : 'member';
+    if (role === 'anchor' && hasAnchor) continue;
+    const key = `${refno}::${role}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    if (role === 'anchor') hasAnchor = true;
+    const noun = typeof binding.noun === 'string' ? binding.noun.trim() : '';
+    bindings.push({
+      refno,
+      role,
+      ...(noun ? { noun } : {}),
+      createdAt: typeof binding.createdAt === 'number' ? binding.createdAt : fallbackCreatedAt,
+    });
+  }
+  return bindings;
+}
+
+/**
+ * 由目标元素集合与锚点组装 `bindings`（锚点在前，目标按给定顺序）。
+ *
+ * `nounOf` 由调用方注入，避免 store 依赖模型查询能力。
+ */
+export function buildCloudBindings(params: {
+  memberRefnos: string[];
+  anchorRefno?: string;
+  createdAt: number;
+  nounOf?: (refno: string) => string | undefined;
+}): CloudElementBinding[] {
+  const { memberRefnos, anchorRefno, createdAt, nounOf } = params;
+  const withNoun = (refno: string, role: CloudBindingRole): CloudElementBinding => {
+    const noun = nounOf?.(refno);
+    return noun ? { refno, role, noun, createdAt } : { refno, role, createdAt };
+  };
+  return deriveCloudBindings({
+    createdAt,
+    bindings: [
+      ...(anchorRefno ? [withNoun(anchorRefno, 'anchor')] : []),
+      ...memberRefnos.map((refno) => withNoun(refno, 'member')),
+    ],
+  } as CloudAnnotationRecord);
+}
+
+/** 云线的目标元素 refno 列表（不含仅作视觉参考中心的锚点）。 */
+export function getCloudMemberRefnos(rec: CloudAnnotationRecord): string[] {
+  return deriveCloudBindings(rec)
+    .filter((binding) => binding.role === 'member')
+    .map((binding) => binding.refno);
+}
+
+/** 根据模型元素反查关联云线；锚点不属于问题关联元素。 */
+export function findCloudAnnotationsByMemberRefnos(
+  annotations: CloudAnnotationRecord[],
+  refnos: string[],
+): CloudAnnotationRecord[] {
+  const selected = new Set(refnos.map((refno) => refno.trim()).filter(Boolean));
+  if (selected.size === 0) return [];
+  return annotations.filter((annotation) =>
+    getCloudMemberRefnos(annotation).some((refno) => selected.has(refno)));
+}
+
 function normalizeCloudAnnotationRecord(rec: CloudAnnotationRecord): CloudAnnotationRecord {
+  const bindings = deriveCloudBindings(rec);
+  const memberRefnos = bindings
+    .filter((binding) => binding.role === 'member')
+    .map((binding) => binding.refno);
+  const anchorRefno = bindings.find((binding) => binding.role === 'anchor')?.refno;
   return {
     ...rec,
+    objectIds: memberRefnos,
+    anchorRefno,
+    refnos: memberRefnos,
     collapsed: rec.collapsed === true,
     reviewState: normalizeAnnotationReviewState(rec.reviewState),
     severity: normalizeAnnotationSeverity(rec.severity),
     screenshot: normalizeAnnotationScreenshot(rec.screenshot),
+    bindings,
   };
 }
 
@@ -1029,6 +1150,14 @@ const ptsetVisualizationRequest = ref<PtsetVisualizationRequest | null>(null);
 const pickRefnoFilter = ref<string[]>([]);       // noun 过滤列表（如 ['BRAN']），空=不过滤
 const pickedRefnos = ref<string[]>([]);           // 已拾取的 refno 列表
 const pickRefnoCallback = ref<((refnos: string[]) => void) | null>(null); // 确认回调
+const pickRefnoCancelCallback = ref<(() => void) | null>(null); // 取消回调
+
+/**
+ * 云线创建的目标元素集合。绘制前必须非空——闸门在 `useDtxTools.beginMarquee`，
+ * 覆盖批注面板 / 浮动工具条 / 校审工作台 / 校审面板四个工具入口。
+ * 生命周期由 useDtxTools 的创建状态机负责，setToolMode 不自动清理。
+ */
+const cloudTargetRefnos = ref<string[]>([]);
 
 const pendingObbEditId = ref<string | null>(null);
 const pendingTextAnnotationEditId = ref<string | null>(null);
@@ -1076,6 +1205,8 @@ function resetTransientUiState() {
   pickRefnoFilter.value = [];
   pickedRefnos.value = [];
   pickRefnoCallback.value = null;
+  pickRefnoCancelCallback.value = null;
+  cloudTargetRefnos.value = [];
   pendingObbEditId.value = null;
   pendingTextAnnotationEditId.value = null;
   pendingCloudAnnotationEditId.value = null;
@@ -1199,6 +1330,7 @@ function setToolMode(mode: ToolMode) {
   if (mode !== 'pick_refno' && mode !== 'pick_refno_box') {
     pickRefnoFilter.value = [];
     pickRefnoCallback.value = null;
+    pickRefnoCancelCallback.value = null;
     // 注意：pickedRefnos 不在此处清理，由调用方决定
   }
 }
@@ -1208,10 +1340,15 @@ function setToolMode(mode: ToolMode) {
  * @param nounFilter noun 类型过滤数组（如 ['BRAN']），空数组=不过滤
  * @param onConfirm  用户按 Enter 确认后的回调
  */
-function startPickRefno(nounFilter: string[], onConfirm?: (refnos: string[]) => void) {
+function startPickRefno(
+  nounFilter: string[],
+  onConfirm?: (refnos: string[]) => void,
+  onCancel?: () => void,
+) {
   pickedRefnos.value = [];
   pickRefnoFilter.value = nounFilter.map(n => n.toUpperCase());
   pickRefnoCallback.value = onConfirm ?? null;
+  pickRefnoCancelCallback.value = onCancel ?? null;
   toolMode.value = 'pick_refno';
 }
 
@@ -1225,10 +1362,15 @@ function startPickRefno(nounFilter: string[], onConfirm?: (refnos: string[]) => 
  * @param nounFilter noun 类型过滤数组（如 ['BRAN']），空数组=不过滤
  * @param onConfirm  框选完成后的回调
  */
-function startBoxPickRefno(nounFilter: string[], onConfirm?: (refnos: string[]) => void) {
+function startBoxPickRefno(
+  nounFilter: string[],
+  onConfirm?: (refnos: string[]) => void,
+  onCancel?: () => void,
+) {
   pickedRefnos.value = [];
   pickRefnoFilter.value = nounFilter.map(n => n.toUpperCase());
   pickRefnoCallback.value = onConfirm ?? null;
+  pickRefnoCancelCallback.value = onCancel ?? null;
   toolMode.value = 'pick_refno_box';
 }
 
@@ -1250,8 +1392,34 @@ function confirmPickRefno() {
 }
 
 function cancelPickRefno() {
+  const cb = pickRefnoCancelCallback.value;
   pickedRefnos.value = [];
   setToolMode('none');
+  cb?.();
+}
+
+// ── 云线目标元素集合 ──
+
+function addCloudTargetRefnos(refnos: string[]) {
+  const next = [...cloudTargetRefnos.value];
+  for (const raw of refnos) {
+    const refno = typeof raw === 'string' ? raw.trim() : '';
+    if (refno && !next.includes(refno)) next.push(refno);
+  }
+  cloudTargetRefnos.value = next;
+}
+
+function removeCloudTargetRefno(refno: string) {
+  cloudTargetRefnos.value = cloudTargetRefnos.value.filter((r) => r !== refno);
+}
+
+function setCloudTargetRefnos(refnos: string[]) {
+  cloudTargetRefnos.value = [];
+  addCloudTargetRefnos(refnos);
+}
+
+function clearCloudTargetRefnos() {
+  cloudTargetRefnos.value = [];
 }
 
 function setAttributeDisplayMode(mode: AttributeDisplayMode) {
@@ -1521,7 +1689,9 @@ function addCloudAnnotation(rec: CloudAnnotationRecord) {
 }
 
 function updateCloudAnnotation(id: string, patch: Partial<CloudAnnotationRecord>) {
-  cloudAnnotations.value = cloudAnnotations.value.map((a) => (a.id === id ? { ...a, ...patch } : a));
+  cloudAnnotations.value = cloudAnnotations.value.map((a) => (
+    a.id === id ? normalizeCloudAnnotationRecord({ ...a, ...patch }) : a
+  ));
 }
 
 function updateCloudAnnotationVisible(id: string, visible: boolean) {
@@ -2613,5 +2783,12 @@ export function useToolStore() {
     removePickedRefno,
     confirmPickRefno,
     cancelPickRefno,
+
+    // ── 云线目标元素集合 ──
+    cloudTargetRefnos,
+    addCloudTargetRefnos,
+    removeCloudTargetRefno,
+    setCloudTargetRefnos,
+    clearCloudTargetRefnos,
   };
 }

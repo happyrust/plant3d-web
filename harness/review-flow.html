@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="zh">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Review Flow Harness</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Noto+Sans+SC:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <style>
+      body { margin: 0; background: #eef1f5; font-family: 'Noto Sans SC', system-ui, sans-serif; }
+      .stage { display: flex; gap: 40px; padding: 40px; align-items: flex-start; flex-wrap: wrap; }
+      .panel-host { background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; overflow: visible; box-shadow: 0 8px 30px rgba(15,23,42,.10); position: relative; padding: 12px; }
+      .cap { font: 600 13px 'Noto Sans SC'; color: #475569; margin: 0 0 10px 2px; }
+    </style>
+  </head>
+  <body>
+    <div class="stage">
+      <div>
+        <div class="cap">WorkflowTimeline · 多状态节点</div>
+        <div class="panel-host" style="width: 360px;" data-host="timeline"><div id="app-timeline"></div></div>
+      </div>
+      <div>
+        <div class="cap">RoleSwitcher · 角色身份色</div>
+        <div class="panel-host" style="width: 300px; min-height: 320px;" data-host="role"><div id="app-role"></div></div>
+      </div>
+      <div>
+        <div class="cap">CollisionResultList · 碰撞状态</div>
+        <div class="panel-host" style="width: 460px;" data-host="collision"><div id="app-collision"></div></div>
+      </div>
+      <div>
+        <div class="cap">TaskContextSection · 优先级徽章</div>
+        <div class="panel-host" style="width: 400px; padding: 0;" data-host="context"><div id="app-context"></div></div>
+      </div>
+      <div>
+        <div class="cap">DesignerTaskList · 状态卡片</div>
+        <div class="panel-host" style="width: 860px; height: 980px; overflow: hidden; padding: 0;" data-host="designer"><div id="app-designer" style="height: 100%;"></div></div>
+      </div>
+    </div>
+    <script type="module" src="/src/harness/reviewFlow.ts"></script>
+  </body>
+</html>

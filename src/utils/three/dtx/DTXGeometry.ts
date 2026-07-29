@@ -7,7 +7,7 @@
  * 3. 设置正确的绘制范围
  */
 
-import { BufferGeometry, BufferAttribute } from 'three';
+import { BufferGeometry, Sphere, Vector3 } from 'three';
 
 /**
  * DTXGeometry - 数据纹理层专用几何体
@@ -29,11 +29,9 @@ export class DTXGeometry extends BufferGeometry {
 
     this._totalIndices = totalIndices;
 
-    // 创建虚拟顶点属性
-    // 实际位置在 shader 中从纹理获取
-    // gl_VertexID 会从 0 到 totalIndices-1
-    const dummyPositions = new Float32Array(totalIndices * 3);
-    this.setAttribute('position', new BufferAttribute(dummyPositions, 3));
+    // Shader 只依赖 gl_VertexID。没有 position 属性时 Three.js 会直接使用
+    // drawRange 作为 drawArrays 顶点数，无需按顶点分配占位缓冲。
+    this.boundingSphere = new Sphere(new Vector3(), 1e12);
 
     // 不使用索引缓冲区，直接用 gl_VertexID
     this.setDrawRange(0, totalIndices);

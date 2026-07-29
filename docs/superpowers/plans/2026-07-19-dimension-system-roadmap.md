@@ -1,5 +1,7 @@
 # Dimension Annotation System Rebuild Roadmap
 
+> **已于 2026-07-23 被取代：** 后续绘制底层工作统一执行 [`2026-07-23-solvespace-scene-dimension-renderer.md`](./2026-07-23-solvespace-scene-dimension-renderer.md)。本文保留为已完成领域/持久化工作的历史记录，不得继续执行其中的屏幕 `LayoutResult`、Canvas2D viewport 或 Canvas 切换任务。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Remove the legacy dimension subsystem without breaking unrelated viewer features, then deliver a framework-neutral, testable dimension document/layout/viewport system and cut it over only after all four first-release dimension types satisfy persistence, accessibility, export, and performance gates.

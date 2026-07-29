@@ -136,7 +136,7 @@ export function buildPmsSimulatorEnvironmentConfig(
   const projectId = env.PMS_SIMULATOR_PROJECT_ID?.trim()
     || env.PMS_CONTRACT_PROJECT_ID?.trim()
     || 'AvevaMarineSample';
-  const simulatorUrl = `${frontendBaseUrl}/pms-review-simulator.html?debug_ui=1&auth_strict=0&project=${encodeURIComponent(projectId)}`;
+  const simulatorUrl = `${frontendBaseUrl}/pms-review-simulator.html?debug_ui=1&auth_strict=0&project=${encodeURIComponent(projectId)}&backend=${encodeURIComponent(backendBaseUrl)}`;
 
   return {
     projectId,

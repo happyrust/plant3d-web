@@ -23,6 +23,8 @@ const {
   waitForViewerReadyMock,
   showModelByRefnosWithAckMock,
   onCommandMock,
+  ensurePanelAndActivateMock,
+  dockPanelExistsMock,
 } = vi.hoisted(() => ({
   authVerifyTokenMock: vi.fn(),
   clearAuthTokenMock: vi.fn(),
@@ -43,7 +45,11 @@ const {
   waitForViewerReadyMock: vi.fn(async () => true),
   showModelByRefnosWithAckMock: vi.fn(async () => ({ ok: [], fail: [], error: null })),
   onCommandMock: vi.fn(() => () => undefined),
+  ensurePanelAndActivateMock: vi.fn(),
+  dockPanelExistsMock: vi.fn(() => false),
 }));
+
+let ribbonCommandHandler: ((commandId: string) => void) | null = null;
 
 type PanelStub = {
   id: string;
@@ -144,7 +150,8 @@ vi.mock('@/components/review/embedFormSnapshotRestore', () => ({
 }));
 
 vi.mock('@/composables/useDockApi', () => ({
-  ensurePanelAndActivate: vi.fn(),
+  dockPanelExists: (...args: unknown[]) => dockPanelExistsMock(...args),
+  ensurePanelAndActivate: (...args: unknown[]) => ensurePanelAndActivateMock(...args),
   setDockApi: (...args: unknown[]) => setDockApiMock(...args),
   notifyDockLayoutChange: (...args: unknown[]) => notifyDockLayoutChangeMock(...args),
 }));
@@ -168,6 +175,8 @@ const pendingReviewTasksRef = ref<ReviewTask[]>([]);
 const myInitiatedTasksRef = ref<ReviewTask[]>([]);
 const returnedInitiatedTasksRef = ref<ReviewTask[]>([]);
 const reviewTasksRef = ref<ReviewTask[]>([]);
+const isReviewerRef = ref(false);
+const isDesignerRef = ref(true);
 
 vi.mock('@/composables/useReviewStore', () => ({
   useReviewStore: () => ({
@@ -221,6 +230,8 @@ vi.mock('@/composables/useUserStore', () => ({
     reviewTasks: reviewTasksRef,
     currentUser: ref({ id: 'local-user', role: 'designer' }),
     currentUserId: ref('local-user'),
+    isReviewer: isReviewerRef,
+    isDesigner: isDesignerRef,
   }),
 }));
 
@@ -343,11 +354,16 @@ describe('DockLayout embed bootstrap', () => {
     waitForViewerReadyMock.mockReset();
     showModelByRefnosWithAckMock.mockReset();
     onCommandMock.mockReset();
+    ensurePanelAndActivateMock.mockReset();
+    dockPanelExistsMock.mockReset();
+    ribbonCommandHandler = null;
 
     pendingReviewTasksRef.value = [createTask()];
     myInitiatedTasksRef.value = [];
     returnedInitiatedTasksRef.value = [];
     reviewTasksRef.value = [createTask()];
+    isReviewerRef.value = false;
+    isDesignerRef.value = true;
 
     switchProjectByIdMock.mockReturnValue(true);
     initializeMock.mockResolvedValue(undefined);
@@ -369,7 +385,11 @@ describe('DockLayout embed bootstrap', () => {
     });
     waitForViewerReadyMock.mockResolvedValue(true);
     showModelByRefnosWithAckMock.mockResolvedValue({ ok: [], fail: [], error: null });
-    onCommandMock.mockReturnValue(() => undefined);
+    dockPanelExistsMock.mockReturnValue(false);
+    onCommandMock.mockImplementation((handler: (commandId: string) => void) => {
+      ribbonCommandHandler = handler;
+      return () => undefined;
+    });
     window.history.replaceState({}, '', '/');
   });
 
@@ -634,11 +654,11 @@ describe('DockLayout embed bootstrap', () => {
     mounted.unmount();
   });
 
-  it('默认布局不创建尺寸面板', async () => {
+  it('默认布局创建尺寸面板（V2 cutover 后常驻）', async () => {
     const mounted = await mountDockLayout();
 
-    expect(dockPanels.has('dimension')).toBe(false);
-    expect(lastDockApi?.addPanel).not.toHaveBeenCalledWith(expect.objectContaining({
+    expect(dockPanels.has('dimension')).toBe(true);
+    expect(lastDockApi?.addPanel).toHaveBeenCalledWith(expect.objectContaining({
       component: 'DimensionPanel',
     }));
 
@@ -659,6 +679,29 @@ describe('DockLayout embed bootstrap', () => {
     const mounted = await mountDockLayout();
 
     expect(lastDockApi?.fromJSON).toHaveBeenCalledWith(savedLayout);
+
+    mounted.unmount();
+  });
+
+  it('panel.annotationTable 兼容命令只激活对应角色的统一批注单面板', async () => {
+    const mounted = await mountDockLayout();
+    expect(ribbonCommandHandler).toBeTypeOf('function');
+
+    ensurePanelAndActivateMock.mockClear();
+    ribbonCommandHandler?.('panel.annotationTable');
+    expect(ensurePanelAndActivateMock).toHaveBeenLastCalledWith('designerCommentHandling');
+
+    ensurePanelAndActivateMock.mockClear();
+    dockPanelExistsMock.mockImplementation((panelId: string) => panelId === 'review');
+    ribbonCommandHandler?.('panel.annotationTable');
+    expect(ensurePanelAndActivateMock).toHaveBeenLastCalledWith('review');
+
+    ensurePanelAndActivateMock.mockClear();
+    dockPanelExistsMock.mockReturnValue(false);
+    isReviewerRef.value = true;
+    isDesignerRef.value = false;
+    ribbonCommandHandler?.('panel.annotationTable');
+    expect(ensurePanelAndActivateMock).toHaveBeenLastCalledWith('review');
 
     mounted.unmount();
   });

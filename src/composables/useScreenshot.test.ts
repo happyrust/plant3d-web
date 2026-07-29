@@ -37,9 +37,27 @@ const uploadMock = vi.hoisted(() =>
   }))
 );
 
+const directUploadMock = vi.hoisted(() =>
+  vi.fn(async (
+    _taskId: string,
+    _file: File,
+    _options?: UploadMockOptions,
+  ): Promise<UploadMockResponse> => ({
+    success: true,
+    attachment: {
+      id: 'att-1',
+      url: 'https://example.com/att-1.png',
+      name: 'uploaded.png',
+      size: 123,
+      uploadedAt: 1777041600000,
+    },
+  }))
+);
+
 const viewerRef = shallowRef<unknown | null>(null);
 
 vi.mock('@/api/reviewApi', () => ({
+  reviewAttachmentUpload: directUploadMock,
   reviewAttachmentUploadWithProgress: uploadMock,
 }));
 
@@ -78,6 +96,7 @@ function clearCanvas() {
 describe('useScreenshot', () => {
   beforeEach(() => {
     uploadMock.mockClear();
+    directUploadMock.mockClear();
     clearCanvas();
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-04-24T12:00:00Z'));
@@ -169,8 +188,14 @@ describe('useScreenshot', () => {
         sourceAnnotationId: 'cloud-7',
       });
 
-      const file = uploadMock.mock.calls[0]?.[1];
+      const file = directUploadMock.mock.calls[0]?.[1];
+      const uploadOptions = directUploadMock.mock.calls[0]?.[2];
       expect((file as File).name).toMatch(/^cloud-cloud-7-\d+\.png$/);
+      expect((file as File).type).toBe('image/png');
+      expect(uploadOptions).toMatchObject({
+        fileType: 'annotation_screenshot',
+        sourceAnnotationId: 'cloud-7',
+      });
     });
 
     it('kind=manual → screenshot-<ts>.png（兜底）', async () => {

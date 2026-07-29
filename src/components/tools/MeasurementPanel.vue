@@ -54,7 +54,7 @@ const measurementPickSourceRows: {
   },
   {
     id: 'position',
-    description: '模型实例变换定义的实例原点；不等同于 E3D Item 端点或几何中心。',
+    description: 'Item 原点（Item Origin，元素原点）：模型实例变换定义的原点；不等同于 E3D Item 端点或几何中心。',
   },
   {
     id: 'primitive_key_point',
@@ -100,7 +100,7 @@ const distanceStylePreview = computed(() => {
   if (measurementStyle.state.distanceKeepDimensions) items.push('保留历史尺寸');
   if (measurementStyle.state.distanceShowTotalLabel) items.push('总长标签');
   if (measurementStyle.state.distanceShowMarkers) items.push('端点');
-  if (measurementStyle.state.distanceShowAxisBreakdown) items.push('XYZ 分解');
+  if (measurementStyle.state.distanceShowAxisBreakdown) items.push('E/N/U 分量');
   return items.length > 0 ? items.join(' · ') : '仅保留主线';
 });
 const angleStylePreview = computed(() => {
@@ -127,8 +127,8 @@ const elevationDeltaStylePreview = computed(() => {
 });
 const distanceStyleNote = computed(() => {
   return measurementStyle.state.distanceShowAxisBreakdown
-    ? '当前会同时显示总长和 X / Y / Z 分量标签。'
-    : '开启后会额外显示 X / Y / Z 三段分量线和标签。';
+    ? '当前距离结果会同时显示总长和 E / N / U 轴向分量（E3D 默认）。'
+    : '开启后距离结果会额外显示 E / N / U 轴向分量。';
 });
 const elevationDatumDisplayValue = computed(() => convertLength(
   measurementStyle.state.elevationDatum,
@@ -151,6 +151,7 @@ function getMeasurementSummary(record: MeasurementRecord | XeokitMeasurementReco
     record,
     unitSettings.displayUnit.value,
     unitSettings.precision.value,
+    { showAxisBreakdown: measurementStyle.state.distanceShowAxisBreakdown },
   );
 }
 
@@ -520,7 +521,7 @@ watch(
               </button>
             </div>
             <div class="mt-1 text-xs text-muted-foreground">
-              默认仅显示总长；需要时可再打开端点和 XYZ 分解。
+              默认显示总长与 E/N/U 轴向分量（E3D 默认）；可按需关闭。
             </div>
             <div data-testid="measurement-style-distance-note"
               class="mt-2 rounded-md bg-muted/60 px-2 py-1 text-xs text-muted-foreground">
@@ -557,7 +558,7 @@ watch(
                   type="checkbox"
                   :checked="measurementStyle.state.distanceShowAxisBreakdown"
                   @change="updateMeasurementStyle('distanceShowAxisBreakdown', ($event.target as HTMLInputElement).checked)" />
-                <span>显示 XYZ 分解</span>
+                <span>显示 E/N/U 轴向分量</span>
               </label>
             </div>
           </div>

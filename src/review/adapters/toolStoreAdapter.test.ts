@@ -44,8 +44,14 @@ function makeText(id: string): AnnotationRecord {
 function makeCloud(id: string): CloudAnnotationRecord {
   return {
     id,
-    objectIds: [],
+    objectIds: [`member-${id}`],
     anchorWorldPos: [1, 2, 3],
+    anchorRefno: `anchor-${id}`,
+    refnos: [`member-${id}`],
+    bindings: [
+      { refno: `anchor-${id}`, role: 'anchor', createdAt: 1 },
+      { refno: `member-${id}`, role: 'member', noun: 'PIPE', createdAt: 1 },
+    ],
     visible: true,
     title: `c-${id}`,
     description: '',

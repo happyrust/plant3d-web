@@ -142,7 +142,7 @@ export type DTXLayerOptions = {
 /** 位置纹理宽度 */
 const POSITIONS_TEXTURE_WIDTH = 1024;
 /** 索引纹理宽度 */
-const INDICES_TEXTURE_WIDTH = 4096;
+const INDICES_TEXTURE_WIDTH = 8192;
 /** 对象纹理宽度 */
 const OBJECTS_TEXTURE_WIDTH = 512;
 /** 每个对象在颜色/标志纹理中占用的像素数 (从8减少到4) */
@@ -237,6 +237,10 @@ export class DTXLayer {
   private _objectsArray: DTXObject[] = [];
   /** 当前对象数量 */
   private _objectCount = 0;
+  /** 预分配容量上限 */
+  private _maxVertices = 0;
+  private _maxIndices = 0;
+  private _maxObjects = 0;
   /** 对象可见性/结构变更版本（用于上层按需同步边线等派生视图） */
   private _visibilityRevision = 0;
 
@@ -311,6 +315,9 @@ export class DTXLayer {
     const maxObjects = options.maxObjects || 100000;
     this._debug = options.debug || false;
     this._renderer = options.renderer ?? null;
+    this._maxVertices = maxVertices;
+    this._maxIndices = maxIndices;
+    this._maxObjects = maxObjects;
 
     // 预分配几何数据缓冲区
     this._positionsBuffer = new Float32Array(maxVertices * 3);
@@ -360,6 +367,7 @@ export class DTXLayer {
 
     const vertexCount = positionAttr.count;
     const vertexBase = this._currentVertexOffset;
+    this._ensureVertexCapacity(vertexBase + vertexCount);
 
     // 复制顶点位置
     for (let i = 0; i < vertexCount; i++) {
@@ -395,6 +403,7 @@ export class DTXLayer {
 
     if (indexAttr) {
       indexCount = indexAttr.count;
+      this._ensureIndexCapacity(indexBase + indexCount);
       let maxIndex = 0;
       let minIndex = Number.POSITIVE_INFINITY;
       for (let i = 0; i < indexCount; i++) {
@@ -421,6 +430,7 @@ export class DTXLayer {
     } else {
       // 非索引几何体，生成顺序索引
       indexCount = vertexCount;
+      this._ensureIndexCapacity(indexBase + indexCount);
       for (let i = 0; i < indexCount; i++) {
         this._indicesBuffer[indexBase + i] = i;
       }
@@ -462,6 +472,15 @@ export class DTXLayer {
     }
 
     return handle;
+  }
+
+  /**
+   * 为相同 geoHash 追加新几何并更新注册表。旧对象仍引用旧 handle，调用方可先将其隐藏；
+   * 后续新增对象会使用新 handle，适合显式重新生成后的热替换。
+   */
+  replaceGeometry(geoHash: string, geometry: BufferGeometry): GeometryHandle {
+    this._geometries.delete(geoHash);
+    return this.addGeometry(geoHash, geometry);
   }
 
   // ========== 对象管理 ==========
@@ -515,6 +534,60 @@ export class DTXLayer {
     return index;
   }
 
+  private _ensureVertexCapacity(requiredVertices: number): void {
+    if (requiredVertices <= this._maxVertices) return;
+    const nextMax = Math.max(requiredVertices, Math.ceil(Math.max(1, this._maxVertices) * 1.5));
+
+    const nextPositions = new Float32Array(nextMax * 3);
+    nextPositions.set(this._positionsBuffer.subarray(0, this._currentVertexOffset * 3));
+    this._positionsBuffer = nextPositions;
+
+    const nextNormals = new Float32Array(nextMax * 3);
+    nextNormals.set(this._normalsBuffer.subarray(0, this._currentVertexOffset * 3));
+    this._normalsBuffer = nextNormals;
+
+    this._maxVertices = nextMax;
+    if (this._debug) {
+      console.warn(`DTXLayer 顶点容量扩展到 ${nextMax}`);
+    }
+  }
+
+  private _ensureIndexCapacity(requiredIndices: number): void {
+    if (requiredIndices <= this._maxIndices) return;
+    const nextMax = Math.max(requiredIndices, Math.ceil(Math.max(1, this._maxIndices) * 1.5));
+
+    const nextIndices = new Uint32Array(nextMax);
+    nextIndices.set(this._indicesBuffer.subarray(0, this._currentIndexOffset));
+    this._indicesBuffer = nextIndices;
+
+    this._maxIndices = nextMax;
+    if (this._debug) {
+      console.warn(`DTXLayer 索引容量扩展到 ${nextMax}`);
+    }
+  }
+
+  private _ensureObjectCapacity(requiredObjects: number): void {
+    if (requiredObjects <= this._maxObjects) return;
+    const nextMax = Math.max(requiredObjects, Math.ceil(Math.max(1, this._maxObjects) * 1.5));
+
+    const nextMatrices = new Float32Array(nextMax * 16);
+    nextMatrices.set(this._matricesBuffer.subarray(0, this._objectCount * 16));
+    this._matricesBuffer = nextMatrices;
+
+    const nextColorsAndFlags = new Uint8Array(nextMax * 16);
+    nextColorsAndFlags.set(this._colorsAndFlagsBuffer.subarray(0, this._objectCount * 16));
+    this._colorsAndFlagsBuffer = nextColorsAndFlags;
+
+    const nextColorOverride = new Uint8Array(nextMax * 4);
+    nextColorOverride.set(this._colorOverrideBuffer.subarray(0, this._objectCount * 4));
+    this._colorOverrideBuffer = nextColorOverride;
+
+    this._maxObjects = nextMax;
+    if (this._debug) {
+      console.warn(`DTXLayer 对象容量扩展到 ${nextMax}`);
+    }
+  }
+
   /**
    * 添加对象实例
    * @param objectId 对象唯一标识
@@ -539,6 +612,7 @@ export class DTXLayer {
     }
 
     const objectIndex = this._objectCount;
+    this._ensureObjectCapacity(objectIndex + 1);
     const metalness = pbr.metalness ?? 0.5;
     const roughness = pbr.roughness ?? 0.5;
     const opacity = Math.min(1, Math.max(0, pbr.opacity ?? 1));
@@ -1191,6 +1265,8 @@ export class DTXLayer {
     this._transparentMesh.name = 'DTXLayerTransparent';
     this._transparentMesh.renderOrder = 1;
 
+    this._syncRenderPassVisibility();
+
     // 创建 GPU Picking 材质与网格
     this._pickingMaterial = new DTXPickingMaterial({
       positionsTexture: this._positionsTexture,
@@ -1208,6 +1284,17 @@ export class DTXLayer {
     this._pickingMesh = new Mesh(this._geometry, this._pickingMaterial);
     this._pickingMesh.frustumCulled = false;
     this._pickingMesh.name = 'DTXLayerPicking';
+  }
+
+  private _syncRenderPassVisibility(): void {
+    if (this._mesh) {
+      this._mesh.visible = this._objectsArray.some((obj) => obj.opacity >= 0.999);
+    }
+    if (this._transparentMesh) {
+      this._transparentMesh.visible = this._objectsArray.some(
+        (obj) => obj.opacity > 0.001 && obj.opacity < 0.999,
+      );
+    }
   }
 
   // ========== 渲染 ==========
@@ -1704,6 +1791,7 @@ export class DTXLayer {
     for (const materialIndex of updatedMaterialIndices) {
       this._syncMaterialPaletteTexture(materialIndex);
     }
+    this._syncRenderPassVisibility();
   }
 
   /**
@@ -2312,6 +2400,13 @@ export class DTXLayer {
   }
 
   /**
+   * 检查几何体是否已经注册到当前 layer。
+   */
+  hasGeometry(geoHash: string): boolean {
+    return this._geometries.has(geoHash);
+  }
+
+  /**
    * 获取对象数量
    */
   get objectCount(): number {
@@ -2334,6 +2429,11 @@ export class DTXLayer {
     totalVertices: number;
     totalIndices: number;
     totalObjects: number;
+    drawIndexCount: number;
+    drawTriangleCount: number;
+    maxVertices: number;
+    maxIndices: number;
+    maxObjects: number;
     uniqueGeometries: number;
     uniqueMaterials: number;
     compiled: boolean;
@@ -2342,6 +2442,11 @@ export class DTXLayer {
       totalVertices: this._totalVertices,
       totalIndices: this._totalIndices,
       totalObjects: this._totalObjects,
+      drawIndexCount: this._drawIndexCount,
+      drawTriangleCount: this._drawTriangleCount,
+      maxVertices: this._maxVertices,
+      maxIndices: this._maxIndices,
+      maxObjects: this._maxObjects,
       uniqueGeometries: this._geometries.size,
       uniqueMaterials: this._materialCount,
       compiled: this._compiled

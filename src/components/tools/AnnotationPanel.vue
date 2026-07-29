@@ -18,6 +18,7 @@ import { useReviewStore } from '@/composables/useReviewStore';
 import { useScreenshot } from '@/composables/useScreenshot';
 import {
   getAnnotationRefnos,
+  getCloudMemberRefnos,
   useToolStore,
   type AnnotationType,
 } from '@/composables/useToolStore';
@@ -395,7 +396,12 @@ function flyText(id: string) {
 }
 
 function flyCloud(id: string) {
-  dispatchShowModelByAnnotation(store.cloudAnnotations.value.find((a) => a.id === id));
+  const record = store.cloudAnnotations.value.find((a) => a.id === id);
+  const refnos = record ? getCloudMemberRefnos(record) : [];
+  if (refnos.length > 0) {
+    highlightCloudRefnos(refnos);
+    return;
+  }
   props.tools.flyToCloudAnnotation?.(id);
 }
 
@@ -1040,9 +1046,9 @@ function formatCommentTime(timestamp: number): string {
               定位
             </button>
 
-            <button v-if="a.refnos && a.refnos.length > 0" type="button"
+            <button v-if="getCloudMemberRefnos(a).length > 0" type="button"
               class="h-8 rounded-md border border-input bg-background px-2 text-xs hover:bg-muted"
-              @click.stop="highlightCloudRefnos(a.refnos)">
+              @click.stop="highlightCloudRefnos(getCloudMemberRefnos(a))">
               高亮
             </button>
 

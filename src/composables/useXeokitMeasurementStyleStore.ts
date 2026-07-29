@@ -2,6 +2,7 @@ import { reactive, watch } from 'vue';
 
 import {
   DEFAULT_POSITION_SNAP_PX,
+  MEASUREMENT_PICK_SOURCE_IDS,
   cloneMeasurementPickSourceSettings,
   measurementPickSettingsFromLegacy,
   type MeasurementPickSourceId,
@@ -18,6 +19,11 @@ import { getOutputProjectFromUrl } from '@/lib/filesOutput';
  * - `free_surface`：自由表面测量心智，表面点参与捕捉且不受 P-Point pending 拦截。
  */
 export type MeasurementPickMode = 'e3d' | 'free_surface';
+
+/** 每个取点模式记住的用户 snap 偏好（按点源）。 */
+export type MeasurementPickModeSnapMemory = Partial<
+  Record<MeasurementPickMode, Partial<Record<MeasurementPickSourceId, boolean>>>
+>;
 
 export type XeokitMeasurementStyleConfig = {
   distanceKeepDimensions: boolean;
@@ -43,6 +49,8 @@ export type XeokitMeasurementStyleConfig = {
   measurementPickMode: MeasurementPickMode;
   /** 测量点源显示/捕捉配置。 */
   measurementPickSources: MeasurementPickSourceSettings;
+  /** 各取点模式记住的 snap 偏好；首次进入某模式才应用该模式默认值。 */
+  measurementPickModeSnapMemory: MeasurementPickModeSnapMemory;
 };
 
 const STORAGE_KEY_V1 = 'plant3d-web-xeokit-measurement-style-v1';
@@ -50,13 +58,15 @@ const STORAGE_KEY_V2 = 'plant3d-web-xeokit-measurement-style-v2';
 const STORAGE_KEY_V3 = 'plant3d-web-xeokit-measurement-style-v3';
 const STORAGE_KEY_V4 = 'plant3d-web-xeokit-measurement-style-v4';
 const STORAGE_KEY_V5 = 'plant3d-web-xeokit-measurement-style-v5';
+const STORAGE_KEY_V6 = 'plant3d-web-xeokit-measurement-style-v6';
 const DEFAULT_STORAGE_SCOPE = '__default__';
 
 export const DEFAULT_XEOKIT_MEASUREMENT_STYLE: Readonly<XeokitMeasurementStyleConfig> = {
   distanceKeepDimensions: true,
   distanceShowTotalLabel: true,
   distanceShowMarkers: true,
-  distanceShowAxisBreakdown: false,
+  // E3D 默认体验：距离结果默认显示 E/N/U 轴向分量。
+  distanceShowAxisBreakdown: true,
   angleShowLabel: true,
   angleShowMarkers: true,
   elevationDatum: 0,
@@ -72,13 +82,32 @@ export const DEFAULT_XEOKIT_MEASUREMENT_STYLE: Readonly<XeokitMeasurementStyleCo
   keypointSnapPx: DEFAULT_PTSET_SNAP_PX,
   measurementPickMode: 'e3d',
   measurementPickSources: cloneMeasurementPickSourceSettings(),
+  measurementPickModeSnapMemory: {},
 };
 
 function createDefaultMeasurementStyle(): XeokitMeasurementStyleConfig {
   return {
     ...DEFAULT_XEOKIT_MEASUREMENT_STYLE,
     measurementPickSources: cloneMeasurementPickSourceSettings(),
+    measurementPickModeSnapMemory: {},
   };
+}
+
+function cloneSnapMemory(input: unknown): MeasurementPickModeSnapMemory {
+  if (!input || typeof input !== 'object') return {};
+  const out: MeasurementPickModeSnapMemory = {};
+  for (const mode of ['e3d', 'free_surface'] as const) {
+    const entry = (input as Record<string, unknown>)[mode];
+    if (!entry || typeof entry !== 'object') continue;
+    const snapBySource: Partial<Record<MeasurementPickSourceId, boolean>> = {};
+    for (const [source, snap] of Object.entries(entry)) {
+      if (typeof snap === 'boolean') {
+        snapBySource[source as MeasurementPickSourceId] = snap;
+      }
+    }
+    out[mode] = snapBySource;
+  }
+  return out;
 }
 
 function getCurrentStorageScope(): string {
@@ -103,8 +132,10 @@ function loadPersisted(scope = getCurrentStorageScope()): XeokitMeasurementStyle
   }
 
   try {
+    const rawV6 = localStorage.getItem(withStorageScope(STORAGE_KEY_V6, scope));
     const rawV5 = localStorage.getItem(withStorageScope(STORAGE_KEY_V5, scope));
-    const raw = rawV5
+    const raw = rawV6
+      ?? rawV5
       ?? localStorage.getItem(withStorageScope(STORAGE_KEY_V4, scope))
       ?? localStorage.getItem(withStorageScope(STORAGE_KEY_V3, scope))
       ?? localStorage.getItem(withStorageScope(STORAGE_KEY_V2, scope))
@@ -122,7 +153,7 @@ function loadPersisted(scope = getCurrentStorageScope()): XeokitMeasurementStyle
         keypointSnapEnabled: legacySnapEnabled,
         keypointSnapPx: legacySnapPx,
       });
-    if (!rawV5) {
+    if (!rawV6 && !rawV5) {
       measurementPickSources.position = {
         ...measurementPickSources.position,
         show: true,
@@ -133,12 +164,16 @@ function loadPersisted(scope = getCurrentStorageScope()): XeokitMeasurementStyle
         ),
       };
     }
+    // V6 迁移：老用户一次性切到 E3D 默认的轴向分量显示，之后可自行关闭并持久化。
+    const distanceShowAxisBreakdown = rawV6
+      ? parsed.distanceShowAxisBreakdown ?? DEFAULT_XEOKIT_MEASUREMENT_STYLE.distanceShowAxisBreakdown
+      : true;
     const ptsetSetting = measurementPickSources.ptset;
     return {
       distanceKeepDimensions: parsed.distanceKeepDimensions ?? DEFAULT_XEOKIT_MEASUREMENT_STYLE.distanceKeepDimensions,
       distanceShowTotalLabel: parsed.distanceShowTotalLabel ?? DEFAULT_XEOKIT_MEASUREMENT_STYLE.distanceShowTotalLabel,
       distanceShowMarkers: parsed.distanceShowMarkers ?? DEFAULT_XEOKIT_MEASUREMENT_STYLE.distanceShowMarkers,
-      distanceShowAxisBreakdown: parsed.distanceShowAxisBreakdown ?? DEFAULT_XEOKIT_MEASUREMENT_STYLE.distanceShowAxisBreakdown,
+      distanceShowAxisBreakdown,
       angleShowLabel: parsed.angleShowLabel ?? DEFAULT_XEOKIT_MEASUREMENT_STYLE.angleShowLabel,
       angleShowMarkers: parsed.angleShowMarkers ?? DEFAULT_XEOKIT_MEASUREMENT_STYLE.angleShowMarkers,
       elevationDatum: Number.isFinite(parsed.elevationDatum) ? Number(parsed.elevationDatum) : DEFAULT_XEOKIT_MEASUREMENT_STYLE.elevationDatum,
@@ -154,6 +189,7 @@ function loadPersisted(scope = getCurrentStorageScope()): XeokitMeasurementStyle
       keypointSnapPx: ptsetSetting.thresholdPx,
       measurementPickMode: parsed.measurementPickMode === 'free_surface' ? 'free_surface' : 'e3d',
       measurementPickSources,
+      measurementPickModeSnapMemory: cloneSnapMemory(parsed.measurementPickModeSnapMemory),
     };
   } catch {
     return createDefaultMeasurementStyle();
@@ -167,7 +203,7 @@ watch(
   (next) => {
     if (typeof localStorage === 'undefined') return;
     try {
-      localStorage.setItem(withStorageScope(STORAGE_KEY_V5), JSON.stringify(next));
+      localStorage.setItem(withStorageScope(STORAGE_KEY_V6), JSON.stringify(next));
     } catch {
       // ignore storage failures
     }
@@ -199,28 +235,60 @@ function updateStyle(patch: Partial<XeokitMeasurementStyleConfig>): void {
     next.keypointSnapPx = next.measurementPickSources.ptset.thresholdPx;
   }
 
-  // 自由表面模式依赖表面点捕捉；表面点捕捉被关掉时回落到 E3D 模式。
-  if (next.measurementPickSources) {
-    const nextMode = next.measurementPickMode ?? state.measurementPickMode;
-    if (nextMode === 'free_surface' && !next.measurementPickSources.mesh_pick_point.snap) {
-      next.measurementPickMode = 'e3d';
-    }
-  }
-
+  // 模式与 snap 配置可以自由组合：关闭表面点捕捉不再静默切换模式
+  // （隐式状态变更会让浮动条按钮"自己跳变"，见 r3 评审 §1 #3）。
   Object.assign(state, next);
 }
 
-/** 切换测量取点模式，并应用该模式的 snap 契约。 */
-function setMeasurementPickMode(mode: MeasurementPickMode): void {
-  const sources = cloneMeasurementPickSourceSettings(state.measurementPickSources);
+/** 模式默认 snap 契约（仅首次进入该模式、无记忆时应用）。 */
+function applyModeDefaultSnap(
+  mode: MeasurementPickMode,
+  sources: MeasurementPickSourceSettings,
+): void {
   if (mode === 'e3d') {
     sources.ptset = { ...sources.ptset, snap: true };
     sources.position = { ...sources.position, snap: true };
     sources.mesh_pick_point = { ...sources.mesh_pick_point, snap: false };
-  } else {
-    sources.mesh_pick_point = { ...sources.mesh_pick_point, show: true, snap: true };
+    return;
   }
-  updateStyle({ measurementPickMode: mode, measurementPickSources: sources });
+  sources.mesh_pick_point = { ...sources.mesh_pick_point, show: true, snap: true };
+}
+
+/**
+ * 切换测量取点模式：记住当前模式的 snap 偏好；目标模式有记忆则恢复记忆，
+ * 首次进入才应用该模式的默认契约（模式=默认策略，而非强制覆盖用户配置）。
+ */
+function setMeasurementPickMode(mode: MeasurementPickMode): void {
+  const previousMode = state.measurementPickMode;
+  if (mode === previousMode) return;
+  const sources = cloneMeasurementPickSourceSettings(state.measurementPickSources);
+  const memory: MeasurementPickModeSnapMemory = {
+    ...state.measurementPickModeSnapMemory,
+    [previousMode]: Object.fromEntries(
+      MEASUREMENT_PICK_SOURCE_IDS.map((id) => [id, sources[id].snap]),
+    ),
+  };
+
+  const remembered = memory[mode];
+  if (remembered) {
+    for (const id of MEASUREMENT_PICK_SOURCE_IDS) {
+      const snap = remembered[id];
+      if (typeof snap === 'boolean') {
+        sources[id] = { ...sources[id], snap };
+      }
+    }
+    if (mode === 'free_surface' && sources.mesh_pick_point.snap) {
+      sources.mesh_pick_point = { ...sources.mesh_pick_point, show: true };
+    }
+  } else {
+    applyModeDefaultSnap(mode, sources);
+  }
+
+  updateStyle({
+    measurementPickMode: mode,
+    measurementPickSources: sources,
+    measurementPickModeSnapMemory: memory,
+  });
 }
 
 function updateMeasurementPickSource(

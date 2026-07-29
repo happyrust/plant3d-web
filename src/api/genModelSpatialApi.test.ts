@@ -61,6 +61,7 @@ describe('genModelSpatialApi', () => {
       include_self: false,
       nouns: 'PIPE,EQUI',
       spec_values: '1,3',
+      include_negative: true,
       max_results: 25,
       page: 2,
       per_page: 10,
@@ -75,6 +76,7 @@ describe('genModelSpatialApi', () => {
     expect(url.searchParams.get('refno')).toBe('24381_145018');
     expect(url.searchParams.get('radius')).toBe('5000');
     expect(url.searchParams.get('include_self')).toBe('false');
+    expect(url.searchParams.get('include_negative')).toBe('true');
     expect(url.searchParams.get('nouns')).toBe('PIPE,EQUI');
     expect(url.searchParams.get('spec_values')).toBe('1,3');
     expect(url.searchParams.get('max_results')).toBe('25');
@@ -97,6 +99,7 @@ describe('genModelSpatialApi', () => {
     await queryNearbyByPosition(10, 20, 30, 40, {
       nouns: 'PIPE,EQUI',
       spec_values: '2',
+      include_negative: false,
       max_results: 25,
       page: 3,
       per_page: 20,
@@ -114,6 +117,7 @@ describe('genModelSpatialApi', () => {
     expect(url.searchParams.get('radius')).toBe('40');
     expect(url.searchParams.get('nouns')).toBe('PIPE,EQUI');
     expect(url.searchParams.get('spec_values')).toBe('2');
+    expect(url.searchParams.get('include_negative')).toBe('false');
     expect(url.searchParams.get('max_results')).toBe('25');
     expect(url.searchParams.get('page')).toBe('3');
     expect(url.searchParams.get('per_page')).toBe('20');

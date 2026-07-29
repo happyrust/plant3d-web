@@ -1,5 +1,7 @@
 # Dimension Integration, Performance, and Cutover Implementation Plan
 
+> **已于 2026-07-23 被取代：** 不得继续执行 Canvas2D 生产切换。新的来源迁移、版本对比、性能门槛和原子删除见 [`2026-07-23-solvespace-scene-dimension-renderer.md`](./2026-07-23-solvespace-scene-dimension-renderer.md)。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Connect the completed document/kernel/viewport system to real viewer snapping, review workflows, BRAN/MBD external dimensions, production UI, automated performance gates, and finally enable it in one controlled cutover.

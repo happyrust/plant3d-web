@@ -1,4 +1,4 @@
-import { computed, ref, watch, type Ref } from 'vue';
+import { computed, nextTick, ref, watch, type Ref } from 'vue';
 
 import { MeshLine, MeshLineGeometry, MeshLineMaterial } from '@lume/three-meshline';
 import {
@@ -20,6 +20,7 @@ import type { DtxCompatViewer } from '@/viewer/dtx/DtxCompatViewer';
 import type { DtxViewer } from '@/viewer/dtx/DtxViewer';
 
 import { queryPipeWallDistanceCandidates, type PipeWallDistanceCandidate } from '@/api/genModelSpatialApi';
+import { reviewAttachmentDelete } from '@/api/reviewApi';
 import { setAnnotationProcessingEntryTarget } from '@/components/review/annotationProcessingEntry';
 import { isExternalSjFormFocusedMode, readPersistedEmbedModeParams } from '@/components/review/embedRoleLanding';
 import { isCanonicalReturnedTask } from '@/components/review/reviewTaskFilters';
@@ -32,8 +33,9 @@ import {
 } from '@/composables/useDbnoInstancesDtxLoader';
 import { ensurePanelAndActivate } from '@/composables/useDockApi';
 import { useReviewStore } from '@/composables/useReviewStore';
+import { useScreenshot } from '@/composables/useScreenshot';
 import { useSelectionStore } from '@/composables/useSelectionStore';
-import { useToolStore, type AnnotationRecord, type CloudAnnotationRecord, type DistanceMeasurementRecord, type MeasurementPoint, type Obb, type ObbAnnotationRecord, type RectAnnotationRecord, type Vec3 } from '@/composables/useToolStore';
+import { buildCloudBindings, getCloudMemberRefnos, useToolStore, type AnnotationRecord, type CloudAnnotationRecord, type CloudElementBinding, type DistanceMeasurementRecord, type MeasurementPoint, type Obb, type ObbAnnotationRecord, type RectAnnotationRecord, type Vec3 } from '@/composables/useToolStore';
 import { useUnitSettingsStore } from '@/composables/useUnitSettingsStore';
 import { useUserStore } from '@/composables/useUserStore';
 import { emitToast } from '@/ribbon/toastBus';
@@ -865,8 +867,10 @@ export function createCloudAnnotationRecordFromAnchorAndMarquee(params: {
   description?: string
   createdAt?: number
   projectOverlayToWorld: (x: number, y: number, ndcZ: number) => Vec3
-  /** 框选构件合并 AABB，供三维包围盒云线使用 */
+  /** 目标元素合并 AABB，供三维包围盒云线使用 */
   selectionBbox?: { min: Vec3; max: Vec3 }
+  /** 带角色的关联结构；缺省时由 refnos / anchorRefno 归一推导 */
+  bindings?: CloudElementBinding[]
 }): CloudAnnotationRecord {
   const marqueeCenter = {
     x: (params.rect.x1 + params.rect.x2) * 0.5,
@@ -903,6 +907,7 @@ export function createCloudAnnotationRecordFromAnchorAndMarquee(params: {
     description: params.description ?? '',
     createdAt: params.createdAt ?? Date.now(),
     refnos: params.refnos ? [...params.refnos] : [...params.objectIds],
+    bindings: params.bindings ? [...params.bindings] : undefined,
   };
 }
 
@@ -1686,6 +1691,7 @@ export function useDtxTools(options: {
 
   const selectionStore = useSelectionStore();
   const reviewStore = useReviewStore();
+  const { captureAndUpload } = useScreenshot();
   const userStore = useUserStore();
   const unitSettings = useUnitSettingsStore();
   const annotationStyleStore = useAnnotationStyleStore();
@@ -2786,9 +2792,11 @@ export function useDtxTools(options: {
       return `拾取模式${filterText}：点击选择构件 [已选 ${count}] — Enter 确认 / ESC 取消`;
     }
     if (mode === 'annotation_cloud') {
+      const targetCount = store.cloudTargetRefnos.value.length;
+      if (targetCount === 0) return '云线批注：请先选择目标元素';
       return pendingCloudAnchor.value
-        ? '云线批注：锚点已就绪，请拖拽框选关联构件并生成屏幕云线'
-        : '云线批注：请先点击模型选择锚点，再拖拽框选关联构件';
+        ? `云线批注：已选 ${targetCount} 个目标元素，锚点已就绪，请拖拽绘制云线轮廓`
+        : `云线批注：已选 ${targetCount} 个目标元素，请点击模型选择锚点`;
     }
     if (mode === 'annotation_rect') {
       return '矩形批注：点击对象生成 OBB 包围框批注';
@@ -2858,6 +2866,108 @@ export function useDtxTools(options: {
 
   function clearPendingCloudAnchor() {
     pendingCloudAnchor.value = null;
+  }
+
+  /**
+   * 云线绘制闸门：目标元素集合为空时，既不允许 pick 锚点也不允许拖框。
+   *
+   * 刻意集中在工具层——进入 `annotation_cloud` 的入口有四处（批注面板、
+   * 视口浮动工具条、校审工作台、校审面板），逐个面板校验必然漏网。
+   */
+  function canDrawCloudAnnotation(): boolean {
+    return store.cloudTargetRefnos.value.length > 0;
+  }
+
+  /** 云线创建的统一回退入口：清掉锚点、拖框预览与目标集合。 */
+  function cancelCloudCreation() {
+    clearPendingCloudAnchor();
+    hideMarquee();
+    store.clearCloudTargetRefnos();
+  }
+
+  async function captureCreatedCloudScreenshot(rec: CloudAnnotationRecord) {
+    const taskId = reviewStore.currentTask.value?.id;
+    if (!taskId) return null;
+
+    await nextTick();
+    const attachment = await captureAndUpload(taskId, {
+      kind: 'auto_cloud_finish',
+      sourceAnnotationId: rec.id,
+      description: rec.title,
+    });
+    if (!attachment) {
+      emitToast({ message: '云线已创建，但自动截图失败，可在批注面板重拍', level: 'warning' });
+      return null;
+    }
+
+    const attached = store.setAnnotationScreenshot('cloud', rec.id, {
+      url: attachment.url,
+      attachmentId: attachment.id,
+      name: attachment.name,
+      capturedAt: attachment.capturedAt,
+      mimeType: attachment.mimeType,
+      size: attachment.size,
+      width: attachment.width,
+      height: attachment.height,
+      uploadedAt: attachment.uploadedAt,
+    });
+    if (!attached) {
+      void reviewAttachmentDelete(attachment.id).catch((error) => {
+        console.warn('[annotation] Failed to clean orphan cloud screenshot:', error);
+      });
+      return null;
+    }
+    return attachment;
+  }
+
+  try {
+    if (localStorage.getItem('plant3d_automation_review') === '1') {
+      (window as unknown as {
+        __plant3dDtxE2E?: {
+          addCloudAnnotationWithScreenshot: () => Promise<{
+            annotationId: string;
+            attachmentId: string;
+            url: string;
+            mimeType?: string;
+            size?: number;
+            width?: number;
+            height?: number;
+          }>;
+        };
+      }).__plant3dDtxE2E = {
+        addCloudAnnotationWithScreenshot: async () => {
+          const createdAt = Date.now();
+          const rec: CloudAnnotationRecord = {
+            id: `cloud-e2e-${createdAt}`,
+            objectIds: ['24381_145018'],
+            refnos: ['24381_145018'],
+            anchorWorldPos: [0, 0, 0],
+            visible: true,
+            title: '云线批注（仿 PMS 自动化）',
+            description: '',
+            createdAt,
+          };
+          store.addCloudAnnotation(rec);
+          const attachment = await captureCreatedCloudScreenshot(rec);
+          if (!attachment) throw new Error('云线自动截图上传未返回附件');
+          const screenshot = store.cloudAnnotations.value.find((item) => item.id === rec.id)?.screenshot;
+          if (!screenshot?.attachmentId || !screenshot.url) {
+            throw new Error('云线自动截图未写回批注');
+          }
+          return {
+            annotationId: rec.id,
+            attachmentId: screenshot.attachmentId,
+            url: screenshot.url,
+            mimeType: screenshot.mimeType,
+            size: screenshot.size,
+            width: screenshot.width,
+            height: screenshot.height,
+          };
+        },
+      };
+    }
+  } catch {
+    // 自动化钩子不可用时不影响正式云线工具。
   }
 
   function refreshReadyState() {
@@ -3574,7 +3684,7 @@ export function useDtxTools(options: {
     if (!viewer) return;
     const rec = store.cloudAnnotations.value.find((a) => a.id === id);
     if (!rec) return;
-    const refnos = (rec.refnos && rec.refnos.length > 0) ? rec.refnos : rec.objectIds;
+    const refnos = getCloudMemberRefnos(rec);
     const aabb = viewer.scene.getAABB(refnos);
     if (!aabb) return;
     viewer.cameraFlight.flyTo({ aabb, fit: true, duration: 0.8 });
@@ -3621,25 +3731,10 @@ export function useDtxTools(options: {
   }
 
   function highlightAnnotationTargets(refnos: string[]) {
-    const viewer = compatViewerRef.value;
-    if (!viewer) return;
-
-    if (refnos.length > 0) {
-      window.dispatchEvent(new CustomEvent('showModelByRefnos', { detail: { refnos, regenModel: false } }));
-    }
-
-    const prev = viewer.scene.selectedObjectIds;
-    if (prev.length > 0) {
-      viewer.scene.setObjectsSelected(prev, false);
-    }
-
-    viewer.scene.ensureRefnos(refnos);
-    viewer.scene.setObjectsSelected(refnos, true);
-
-    const aabb = viewer.scene.getAABB(refnos);
-    if (aabb) {
-      viewer.cameraFlight.flyTo({ aabb, fit: true, duration: 0.8 });
-    }
+    if (refnos.length === 0) return;
+    window.dispatchEvent(new CustomEvent('showModelByRefnos', {
+      detail: { refnos, regenModel: false, flyTo: true, highlight: true },
+    }));
   }
 
   function highlightAnnotationTarget(refno: string) {
@@ -3808,6 +3903,7 @@ export function useDtxTools(options: {
   function beginMarquee(canvas: HTMLCanvasElement, e: PointerEvent, mode: 'annotation_cloud' | 'annotation_obb' | 'pick_refno_box') {
     if (!ready.value) return;
     if (e.button !== 0) return;
+    if (mode === 'annotation_cloud' && !canDrawCloudAnnotation()) return;
     if (mode === 'annotation_cloud' && !pendingCloudAnchor.value) return;
     const start = getCanvasPos(canvas, e);
     marqueeState.value = {
@@ -3888,46 +3984,66 @@ export function useDtxTools(options: {
       return;
     }
 
-    if (selectedRefnos.length === 0) return;
-
-    // 计算 combined bbox
     const compat = compatViewerRef.value;
     if (!compat) return;
-    const aabb = compat.scene.getAABB(selectedRefnos);
-    if (!aabb) return;
-    const box = new Box3(new Vector3(aabb[0], aabb[1], aabb[2]), new Vector3(aabb[3], aabb[4], aabb[5]));
 
     if (mode === 'annotation_cloud') {
+      // 关联来自目标元素集合；拖框只决定屏幕轮廓，bbox3d 亦用目标集合合并 AABB。
+      const targetRefnos = [...store.cloudTargetRefnos.value];
+      if (targetRefnos.length === 0) return;
       const viewer = dtxViewerRef.value;
       const overlay = overlayContainerRef.value;
       const anchorState = pendingCloudAnchor.value;
       if (!viewer || !overlay || !anchorState) return;
+      const targetAabb = compat.scene.getAABB(targetRefnos);
+      if (annotationStyleStore.cloudDrawMode.value === 'bbox3d' && !targetAabb) {
+        emitToast({ message: '目标元素尚未加载，无法绘制三维包围盒云线', level: 'warning' });
+        return;
+      }
       const n = store.cloudAnnotations.value.length + 1;
       const anchor = new Vector3(...anchorState.worldPos);
       const anchorScreen = worldToOverlayPoint(viewer.camera, canvas, overlay, anchor);
+      const createdAt = Date.now();
       const rec = createCloudAnnotationRecordFromAnchorAndMarquee({
         id: nowId('cloud'),
-        objectIds: [...selectedRefnos],
-        refnos: [...selectedRefnos],
+        objectIds: targetRefnos,
+        refnos: targetRefnos,
         anchorWorldPos: anchorState.worldPos,
         anchorRefno: anchorState.refno,
         anchorScreen,
         rect,
         title: `云线批注 ${n}`,
         description: '',
-        createdAt: Date.now(),
-        selectionBbox: {
-          min: [box.min.x, box.min.y, box.min.z],
-          max: [box.max.x, box.max.y, box.max.z],
-        },
+        createdAt,
+        selectionBbox: targetAabb
+          ? {
+            min: [targetAabb[0], targetAabb[1], targetAabb[2]],
+            max: [targetAabb[3], targetAabb[4], targetAabb[5]],
+          }
+          : undefined,
+        bindings: buildCloudBindings({
+          memberRefnos: targetRefnos,
+          anchorRefno: anchorState.refno,
+          createdAt,
+          nounOf: (refno) => findNounByRefnoAcrossAllDbnos(refno) ?? undefined,
+        }),
         projectOverlayToWorld: (x, y, ndcZ) => vec3ToTuple(
           overlayToWorld(viewer.camera, canvas, overlay, x, y, ndcZ),
         ),
       });
       store.addCloudAnnotation(rec);
       clearPendingCloudAnchor();
+      store.clearCloudTargetRefnos();
+      void captureCreatedCloudScreenshot(rec);
       return;
     }
+
+    if (selectedRefnos.length === 0) return;
+
+    // 计算 combined bbox
+    const aabb = compat.scene.getAABB(selectedRefnos);
+    if (!aabb) return;
+    const box = new Box3(new Vector3(aabb[0], aabb[1], aabb[2]), new Vector3(aabb[3], aabb[4], aabb[5]));
 
     const obb = computeAabbObbFromBox3(box);
     if (mode === 'annotation_obb') {
@@ -4027,6 +4143,7 @@ export function useDtxTools(options: {
         return;
       }
       clickTracker.value = { down: null, moved: false };
+      if (!canDrawCloudAnnotation()) return;
       const hit = pickSurfacePoint(canvas, e);
       if (!hit) return;
       setPendingCloudAnchor({
@@ -4359,13 +4476,27 @@ export function useDtxTools(options: {
   );
 
   watch(
+    () => store.cloudTargetRefnos.value.join('|'),
+    () => {
+      clearPendingCloudAnchor();
+      hideMarquee();
+    },
+  );
+
+  watch(
     () => store.toolMode.value,
     (mode, prev) => {
       if (mode !== prev) {
         resetProgress();
       }
-      if (mode !== 'annotation_cloud' && prev === 'annotation_cloud') {
-        clearPendingCloudAnchor();
+      const pickingCloudTargets = mode === 'pick_refno' || mode === 'pick_refno_box';
+      const wasPickingCloudTargets = prev === 'pick_refno' || prev === 'pick_refno_box';
+      if (
+        !pickingCloudTargets &&
+        mode !== 'annotation_cloud' &&
+        (prev === 'annotation_cloud' || wasPickingCloudTargets)
+      ) {
+        cancelCloudCreation();
       }
       if (mode === 'none' && prev !== 'none') {
         hideMarquee();
@@ -4414,6 +4545,11 @@ export function useDtxTools(options: {
 
     highlightAnnotationTarget,
     highlightAnnotationTargets,
+
+    // 云线创建：目标先行
+    pendingCloudAnchor,
+    canDrawCloudAnnotation,
+    cancelCloudCreation,
 
     clearAllInScene,
     dispose,

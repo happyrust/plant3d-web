@@ -1,5 +1,7 @@
 # Legacy Dimension Subsystem Removal Implementation Plan
 
+> **历史计划：** Gate 1 结果继续有效；不要重新执行删除。后续绘制底层替换见 [`2026-07-23-solvespace-scene-dimension-renderer.md`](./2026-07-23-solvespace-scene-dimension-renderer.md)。
+
 > **Status:** Gate 1 implemented and verified on 2026-07-19. Type-check, build, targeted archive/replay/removal guards pass; unrelated full-suite baseline drift is recorded in `src/fixtures/dimensions/README.md`.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.

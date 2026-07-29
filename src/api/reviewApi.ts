@@ -1009,7 +1009,16 @@ export async function reviewTaskGetList(options?: {
 
   const query = params.toString();
   const path = query ? `/api/review/tasks?${query}` : '/api/review/tasks';
-  return await fetchJson<ReviewTaskListResponse>(path);
+  const response = await fetchJson<ReviewTaskListResponse & { data?: ReviewTask[] }>(path);
+  const rawTasks = Array.isArray(response.tasks)
+    ? response.tasks
+    : Array.isArray(response.data)
+      ? response.data
+      : [];
+  return {
+    ...response,
+    tasks: rawTasks.map((task) => normalizeReviewTask(task as unknown as Record<string, unknown>)),
+  };
 }
 
 /**
@@ -1314,6 +1323,52 @@ export async function reviewPreloadCache(
 
 // ============ 确认记录 API ============
 
+function normalizeConfirmedRecord(raw: Record<string, unknown>): ConfirmedRecordData & {
+  id: string;
+  confirmedAt: number;
+} {
+  return {
+    id: String(raw.logical_id || raw.id || ''),
+    taskId: String(raw.taskId || raw.task_id || ''),
+    formId: raw.formId ? String(raw.formId) : (raw.form_id ? String(raw.form_id) : undefined),
+    type: 'batch',
+    annotations: Array.isArray(raw.annotations) ? raw.annotations as ReviewSnapshotAnnotationPayload[] : [],
+    cloudAnnotations: Array.isArray(raw.cloudAnnotations)
+      ? raw.cloudAnnotations as ReviewSnapshotAnnotationPayload[]
+      : (Array.isArray(raw.cloud_annotations) ? raw.cloud_annotations as ReviewSnapshotAnnotationPayload[] : []),
+    rectAnnotations: Array.isArray(raw.rectAnnotations)
+      ? raw.rectAnnotations as ReviewSnapshotAnnotationPayload[]
+      : (Array.isArray(raw.rect_annotations) ? raw.rect_annotations as ReviewSnapshotAnnotationPayload[] : []),
+    obbAnnotations: Array.isArray(raw.obbAnnotations)
+      ? raw.obbAnnotations as ReviewSnapshotAnnotationPayload[]
+      : (Array.isArray(raw.obb_annotations) ? raw.obb_annotations as ReviewSnapshotAnnotationPayload[] : []),
+    measurements: Array.isArray(raw.measurements) ? raw.measurements as ReviewSnapshotMeasurementPayload[] : [],
+    dimensionDocument: (raw.dimensionDocument || raw.dimension_document) as SnapshotDimensionDocument | undefined,
+    dimensionDocumentVersion: typeof (raw.dimensionDocumentVersion || raw.dimension_document_version) === 'number'
+      ? Number(raw.dimensionDocumentVersion || raw.dimension_document_version)
+      : undefined,
+    note: String(raw.note || ''),
+    confirmedAt: normalizeTimestamp(raw.confirmedAt || raw.confirmed_at || raw.created_at) || Date.now(),
+  };
+}
+
+function normalizeConfirmedRecordResponse(raw: Record<string, unknown>): ConfirmedRecordResponse {
+  const recordRaw = isPlainObject(raw.record)
+    ? raw.record
+    : (isPlainObject(raw.data) ? raw.data : (isPlainObject(raw.item) ? raw.item : undefined));
+  const recordsRaw = Array.isArray(raw.records)
+    ? raw.records
+    : (Array.isArray(raw.data) ? raw.data : (Array.isArray(raw.items) ? raw.items : undefined));
+  return {
+    success: raw.success === true,
+    record: recordRaw ? normalizeConfirmedRecord(recordRaw) : undefined,
+    records: recordsRaw
+      ?.filter(isPlainObject)
+      .map(normalizeConfirmedRecord),
+    error_message: raw.error_message ? String(raw.error_message) : undefined,
+  };
+}
+
 /**
  * 保存确认记录
  * POST /api/review/records
@@ -1321,10 +1376,11 @@ export async function reviewPreloadCache(
 export async function reviewRecordCreate(
   record: ConfirmedRecordData
 ): Promise<ConfirmedRecordResponse> {
-  return await fetchJson<ConfirmedRecordResponse>('/api/review/records', {
+  const raw = await fetchJson<Record<string, unknown>>('/api/review/records', {
     method: 'POST',
     body: JSON.stringify(record),
   });
+  return normalizeConfirmedRecordResponse(raw);
 }
 
 /**
@@ -1341,9 +1397,10 @@ export async function reviewRecordGetByTaskId(
     params.set('form_id', formId);
   }
   const query = params.toString();
-  return await fetchJson<ConfirmedRecordResponse>(
+  const raw = await fetchJson<Record<string, unknown>>(
     `/api/review/records/by-task/${encodeURIComponent(taskId)}${query ? `?${query}` : ''}`
   );
+  return normalizeConfirmedRecordResponse(raw);
 }
 
 /**
@@ -1720,6 +1777,65 @@ export type ReviewAttachmentUploadOptions = {
   sourceAnnotationId?: string;
 };
 
+async function uploadStandaloneReviewAttachment(
+  base: string,
+  taskId: string | null,
+  file: File,
+  options?: ReviewAttachmentUploadOptions,
+): Promise<{ success: boolean; attachment?: ReviewAttachment; error_message?: string }> {
+  const dataUrl = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(reader.error || new Error('Failed to read attachment'));
+    reader.readAsDataURL(file);
+  });
+  const token = getAuthToken();
+  const resp = await fetch(`${base}/api/review/attachments`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({
+      taskId,
+      formId: options?.formId || null,
+      modelRefnos: options?.modelRefnos || [],
+      name: file.name,
+      size: file.size,
+      type: options?.fileType || file.type,
+      mimeType: file.type,
+      description: options?.description || '',
+      sourceAnnotationId: options?.sourceAnnotationId || null,
+      url: dataUrl,
+      contentBase64: dataUrl.split(',', 2)[1] || '',
+      uploadedAt: Date.now(),
+    }),
+  });
+  if (!resp.ok) {
+    throw new Error(`Upload failed: HTTP ${resp.status} ${resp.statusText}`);
+  }
+  const body = await resp.json() as Record<string, unknown>;
+  const raw = (body.data && typeof body.data === 'object' ? body.data : body) as Record<string, unknown>;
+  const id = String(raw.logical_id || raw.id || '');
+  const uploadedAtRaw = raw.uploadedAt || raw.uploaded_at;
+  const uploadedAt = typeof uploadedAtRaw === 'number'
+    ? uploadedAtRaw
+    : Date.parse(String(uploadedAtRaw || '')) || Date.now();
+  return {
+    success: Boolean(id),
+    attachment: id ? {
+      id,
+      name: String(raw.name || file.name),
+      url: String(raw.url || dataUrl),
+      size: Number(raw.size || file.size),
+      type: String(raw.type || options?.fileType || file.type),
+      mimeType: String(raw.mimeType || raw.mime_type || file.type),
+      uploadedAt,
+    } : undefined,
+    error_message: id ? undefined : 'Standalone attachment response missing id',
+  };
+}
+
 /**
  * 上传附件
  * POST /api/review/attachments
@@ -1758,6 +1874,9 @@ export async function reviewAttachmentUpload(
 
   if (!resp.ok) {
     const text = await resp.text().catch(() => '');
+    if (text.includes('Expected request with `Content-Type: application/json`')) {
+      return await uploadStandaloneReviewAttachment(base, taskId, file, options);
+    }
     throw new Error(`Upload failed: HTTP ${resp.status} ${resp.statusText}: ${text}`);
   }
 
@@ -1820,6 +1939,8 @@ export function reviewAttachmentUploadWithProgress(
         } catch {
           reject(new Error('Invalid JSON response'));
         }
+      } else if (xhr.responseText.includes('Expected request with `Content-Type: application/json`')) {
+        void uploadStandaloneReviewAttachment(base, taskId, file, options).then(resolve, reject);
       } else {
         reject(new Error(`Upload failed: HTTP ${xhr.status} ${xhr.statusText}`));
       }
@@ -1889,7 +2010,7 @@ export function normalizeReviewTask(raw: Record<string, unknown>): ReviewTask {
   const approverName = String(raw.approver_name || raw.approverName || '');
 
   return {
-    id: String(raw.id || ''),
+    id: String(raw.logical_id || raw.id || ''),
     formId: raw.formId ? String(raw.formId) : (raw.form_id ? String(raw.form_id) : undefined),
     title: String(raw.title || ''),
     description: String(raw.description || ''),
@@ -2031,6 +2152,13 @@ export type TokenResponse = {
   };
 };
 
+type RawTokenResponse = Partial<TokenResponse> & {
+  success?: boolean;
+  token?: string;
+  access_token?: string;
+  expires_in?: number;
+};
+
 export type VerifyResponse = {
   code: number;
   message: string;
@@ -2127,7 +2255,28 @@ export async function authGetToken(request: TokenRequest): Promise<TokenResponse
     throw new Error(`HTTP ${resp.status} ${resp.statusText}`);
   }
 
-  const data = await resp.json() as TokenResponse;
+  const raw = await resp.json() as RawTokenResponse;
+  const standaloneToken = raw.token || raw.access_token;
+  const data: TokenResponse = raw.data?.token
+    ? {
+      code: raw.code ?? 0,
+      message: raw.message || '',
+      data: raw.data,
+    }
+    : standaloneToken
+      ? {
+        code: 0,
+        message: raw.message || '',
+        data: {
+          token: standaloneToken,
+          expiresAt: Date.now() + Math.max(0, raw.expires_in || 0) * 1000,
+          formId: request.formId || '',
+        },
+      }
+      : {
+        code: raw.code ?? -1,
+        message: raw.message || 'Token missing',
+      };
 
   // 自动保存 token
   if (data.code === 0 && data.data?.token) {

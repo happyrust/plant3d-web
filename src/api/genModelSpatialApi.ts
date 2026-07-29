@@ -50,6 +50,19 @@ export type SpatialNearbyCenter = {
   refno?: string;
 };
 
+export type SpatialQueryFilterOptions = {
+  nouns: {
+    value: string;
+    count: number;
+    is_negative?: boolean;
+  }[];
+  spec_values: {
+    value: number;
+    count: number;
+  }[];
+  include_negative?: boolean;
+};
+
 export type SpatialNearbyParams = {
   refno?: string;
   x?: number;
@@ -64,6 +77,8 @@ export type SpatialNearbyParams = {
   spec_values?: string;
   /** 是否包含自身（refno 模式有效） */
   include_self?: boolean;
+  /** 是否包含负实体 */
+  include_negative?: boolean;
   /** 分页页码，从 1 开始 */
   page?: number;
   /** 每页数量 */
@@ -108,6 +123,8 @@ export type SpatialQueryResult = {
     min: { x: number; y: number; z: number };
     max: { x: number; y: number; z: number };
   };
+  /** 本次查询结果可用的过滤选项 */
+  filter_options?: SpatialQueryFilterOptions;
   error?: string;
 };
 
@@ -140,6 +157,8 @@ export type SpatialQueryParams = {
   spec_values?: string;
   /** 是否包含自身（mode=refno 时有效，默认 true） */
   include_self?: boolean;
+  /** 是否包含负实体 */
+  include_negative?: boolean;
   /** 查询形状：cube（立方体，默认）| sphere（球体） */
   shape?: 'cube' | 'sphere';
 };
@@ -413,6 +432,7 @@ export async function querySpatialIndex(params: SpatialQueryParams): Promise<Spa
   if (params.nouns) sp.set('nouns', params.nouns);
   if (params.spec_values) sp.set('spec_values', params.spec_values);
   if (params.include_self !== undefined) sp.set('include_self', String(params.include_self));
+  if (params.include_negative !== undefined) sp.set('include_negative', String(params.include_negative));
   if (params.shape) sp.set('shape', params.shape);
 
   const query = sp.toString();
@@ -430,6 +450,7 @@ function appendNearbySearchParams(sp: URLSearchParams, params: SpatialNearbyPara
   if (params.nouns) sp.set('nouns', params.nouns);
   if (params.spec_values) sp.set('spec_values', params.spec_values);
   if (params.include_self !== undefined) sp.set('include_self', String(params.include_self));
+  if (params.include_negative !== undefined) sp.set('include_negative', String(params.include_negative));
   if (params.page !== undefined) sp.set('page', String(params.page));
   if (params.per_page !== undefined) sp.set('per_page', String(params.per_page));
   if (params.max_results !== undefined) sp.set('max_results', String(params.max_results));

@@ -302,7 +302,7 @@ export function getEmbedLandingPanelIdsWithOptions(
     formId: options.formId,
   });
   if (effectiveTarget === 'designer') {
-    return ['initiateReview'];
+    return ['viewer'];
   }
 
   return ['review'];

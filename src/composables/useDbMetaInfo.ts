@@ -128,14 +128,19 @@ export async function ensureDbMetaInfoLoaded(): Promise<void> {
   loadedProjectKey = projectKey;
 
   loadPromise = (async () => {
-    // 1) 尝试从 IndexedDB 预热（加速启动）
-    const cached = await getJson<unknown>(IDB_STORE, cacheKey);
-    if (cached) {
-      try {
-        applyDbMetaInfoJson(cached);
-      } catch {
-        // 缓存损坏：忽略预热，继续强制拉新
+    // 1) 尝试从 IndexedDB 预热（加速启动）。
+    // IndexedDB 读写失败不得阻断 viewer / 模型树初始化（常见：transaction aborted / 多 tab 锁库）。
+    try {
+      const cached = await getJson<unknown>(IDB_STORE, cacheKey);
+      if (cached) {
+        try {
+          applyDbMetaInfoJson(cached);
+        } catch {
+          // 缓存损坏：忽略预热，继续强制拉新
+        }
       }
+    } catch (e) {
+      console.warn('[db_meta] IndexedDB 预热失败，继续拉取远端 meta', e);
     }
 
     // 2) 强制刷新；AMS 1112 增量演示允许用内置 ref0 映射兜底，避免无后端文件时 viewer 直接初始化失败。
@@ -151,7 +156,12 @@ export async function ensureDbMetaInfoLoaded(): Promise<void> {
     }
     const fresh = (await resp.json()) as unknown;
     applyDbMetaInfoJson(fresh);
-    await setJson(IDB_STORE, cacheKey, fresh);
+    try {
+      await setJson(IDB_STORE, cacheKey, fresh);
+    } catch (e) {
+      // 内存映射已就绪；缓存写失败只影响下次启动预热，不应让 viewer 初始化失败。
+      console.warn('[db_meta] IndexedDB 写入失败，已使用内存 meta 继续', e);
+    }
   })();
 
   try {

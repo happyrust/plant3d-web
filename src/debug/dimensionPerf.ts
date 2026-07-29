@@ -1,12 +1,23 @@
-import type { ExternalDimensionRecord } from '@/dimension/adapters/normalizeExternalDimensions';
-import type { UserDimensionRecord } from '@/dimension/domain/types';
-import type { ViewportProjector } from '@/dimension/kernel/projector';
+import {
+  Matrix4,
+  OrthographicCamera,
+  Scene,
+  WebGLRenderer,
+} from 'three';
 
-import { createEmptyDimensionDocument } from '@/dimension/domain/document';
 import { DEFAULT_DIMENSION_FORMAT } from '@/dimension/kernel/format';
+import { buildHitIndex, type HitIndex } from '@/dimension/kernel/hit/hitIndex';
 import { SOLVESPACE_DIMENSION_THEME } from '@/dimension/kernel/theme';
-import { DimensionViewport } from '@/dimension/viewport/dimensionViewport';
+import { layoutViewport } from '@/dimension/kernel/viewport/layoutViewport';
 import { loadDimensionFont } from '@/dimension/viewport/loadDimensionFont';
+import { ThreeSceneDimensionPainter } from '@/dimension/viewport/scenePainter';
+import { ThreeViewportProjector } from '@/dimension/viewport/threeViewportProjector';
+
+import type {
+  ExplicitLayoutInput,
+  LayoutResult,
+  NormalizedDimensionInput,
+} from '@/dimension/kernel/types';
 
 type PerfResult = {
   loaded: number;
@@ -19,6 +30,7 @@ type PerfResult = {
   paintP95Ms: number;
   hitP95Ms: number;
   observedFps: number;
+  sceneObjectCount: number;
 };
 
 declare global {
@@ -42,7 +54,7 @@ function percentile(values: readonly number[], quantile: number): number {
   return sorted[Math.max(0, Math.ceil(sorted.length * quantile) - 1)] ?? 0;
 }
 
-function records(): readonly UserDimensionRecord[] {
+function userInputs(): readonly NormalizedDimensionInput[] {
   return Array.from({ length: VISIBLE_USER }, (_, index) => {
     const column = index % 50;
     const row = Math.floor(index / 50);
@@ -51,24 +63,20 @@ function records(): readonly UserDimensionRecord[] {
     return {
       id: `perf-${index}`,
       kind: 'linear',
-      a: { snapshot: [x, y, 0], accuracy: 'exact' },
-      b: { snapshot: [x + 0.12, y, 0], accuracy: 'exact' },
+      role: 'normal',
+      labelPinned: false,
+      a: [x, y, 0],
+      b: [x + 0.12, y, 0],
       placement: { offsetM: 0.025, labelT: 0.5, side: 1 },
-      authorId: 'perf',
-      authorRole: 'designer',
-      createdAt: 1,
-      updatedAt: 1,
-      validity: 'valid',
     };
   });
 }
 
 /**
  * External MBD-style annotation primitives: weld markers, full-circle arcs
- * and multi-line labels take the arc/marker/text code paths introduced for
- * the V2 contract (ADR 0041/0042).
+ * and multi-line labels take the scene path/marker/vector-glyph code paths.
  */
-function externalRecords(): readonly ExternalDimensionRecord[] {
+function externalInputs(): readonly ExplicitLayoutInput[] {
   return Array.from({ length: VISIBLE_EXTERNAL }, (_, index) => {
     const column = index % 50;
     const row = Math.floor(index / 50);
@@ -78,135 +86,154 @@ function externalRecords(): readonly ExternalDimensionRecord[] {
     const variant = index % 3;
     return {
       id,
-      source: 'mbd' as const,
-      sourceLabel: `MBD: ${id}`,
-      role: 'external' as const,
-      category: 'annotation' as const,
-      layout: {
-        id,
-        role: 'external' as const,
-        labelPinned: true as const,
-        formattedLabel: variant === 2 ? `W${index}` : '',
-        lines: [],
-        labelAnchor: [x, y, 0] as const,
-        arrowLines: [],
-        ...(variant === 0
-          ? {
-            arcs: [{
-              center: [x, y, 0] as const,
-              normal: [0, 0, 1] as const,
-              radiusM: 0.04,
-            }],
-          }
-          : {}),
-        ...(variant === 1
-          ? {
-            markers: [
-              { at: [x, y, 0] as const, shape: 'circle' as const, radiusPx: 5 },
-              { at: [x, y, 0] as const, shape: 'cross' as const, radiusPx: 5 },
-            ],
-          }
-          : {}),
-        ...(variant === 2
-          ? {
-            texts: [{
-              text: `L${index}`,
-              anchor: [x, y, 0] as const,
-              stackIndex: 1,
-            }],
-          }
-          : {}),
-      },
+      role: 'external',
+      labelPinned: true,
+      formattedLabel: variant === 2 ? `W${index}` : '',
+      lines: [],
+      labelAnchor: [x, y, 0],
+      arrowLines: [],
+      ...(variant === 0
+        ? {
+          arcs: [{
+            center: [x, y, 0] as const,
+            normal: [0, 0, 1] as const,
+            radiusM: 0.04,
+          }],
+        }
+        : {}),
+      ...(variant === 1
+        ? {
+          markers: [
+            {
+              at: [x, y, 0] as const,
+              shape: 'circle' as const,
+              radiusPx: 5,
+            },
+            {
+              at: [x, y, 0] as const,
+              shape: 'cross' as const,
+              radiusPx: 5,
+            },
+          ],
+        }
+        : {}),
+      ...(variant === 2
+        ? {
+          texts: [{
+            text: `L${index}`,
+            anchor: [x, y, 0] as const,
+            stackIndex: 1,
+          }],
+        }
+        : {}),
     };
   });
 }
 
-function projector(
-  widthCssPx: number,
-  heightCssPx: number,
-  dpr: number,
-  cameraOffset: number,
-): ViewportProjector {
-  const scale = 150;
-  return {
-    widthCssPx,
-    heightCssPx,
-    dpr,
-    right: [1, 0, 0],
-    up: [0, 1, 0],
-    forward: [0, 0, -1],
-    project(point) {
-      return {
-        x: widthCssPx / 2 + (point[0] + cameraOffset) * scale,
-        y: heightCssPx / 2 - point[1] * scale,
-        depth: point[2],
-      };
-    },
-    unproject(point) {
-      return [
-        (point.x - widthCssPx / 2) / scale - cameraOffset,
-        (heightCssPx / 2 - point.y) / scale,
-        point.depth,
-      ];
-    },
-    worldPerPixelAt() {
-      return 1 / scale;
-    },
-  };
+async function nextFrame(): Promise<void> {
+  await new Promise<void>(resolve => window.requestAnimationFrame(() => resolve()));
 }
 
 async function main(): Promise<void> {
-  const canvas = document.querySelector<HTMLCanvasElement>('#dimension-perf-canvas');
+  const canvas = document.querySelector<HTMLCanvasElement>(
+    '#dimension-perf-canvas',
+  );
   if (!canvas) throw new Error('Dimension performance canvas is missing');
+
   const font = await loadDimensionFont();
-  const frameDurations: number[] = [];
-  const layoutDurations: number[] = [];
-  const paintDurations: number[] = [];
-  let frameResolved: (() => void) | null = null;
-  const viewport = new DimensionViewport({
-    canvas,
-    font,
-    theme: SOLVESPACE_DIMENSION_THEME,
-    format: DEFAULT_DIMENSION_FORMAT,
-    requestFrame: callback => window.requestAnimationFrame(callback),
-    cancelFrame: id => window.cancelAnimationFrame(id),
-    onFrame(durationMs, breakdown) {
-      frameDurations.push(durationMs);
-      layoutDurations.push(breakdown.layoutMs);
-      paintDurations.push(breakdown.paintMs);
-      frameResolved?.();
-      frameResolved = null;
-    },
-  });
   const rect = canvas.getBoundingClientRect();
   const dpr = window.devicePixelRatio || 1;
-  viewport.setDocument({
-    ...createEmptyDimensionDocument({ documentId: 'dimension-perf' }),
-    records: records(),
+  const renderer = new WebGLRenderer({
+    canvas,
+    antialias: false,
+    alpha: false,
   });
-  viewport.setExternalDimensions(externalRecords());
+  renderer.setPixelRatio(dpr);
+  renderer.setSize(rect.width, rect.height, false);
+  renderer.setClearColor(0xf3f4f6, 1);
 
-  const renderAt = (offset: number) => new Promise<void>((resolve) => {
-    frameResolved = resolve;
-    viewport.setProjector(projector(rect.width, rect.height, dpr, offset));
-  });
-  await renderAt(0);
-  frameDurations.length = 0;
-  layoutDurations.length = 0;
-  paintDurations.length = 0;
+  const scene = new Scene();
+  const halfWidth = 6.4;
+  const halfHeight = halfWidth * (rect.height / rect.width);
+  const camera = new OrthographicCamera(
+    -halfWidth,
+    halfWidth,
+    halfHeight,
+    -halfHeight,
+    0.1,
+    100,
+  );
+  camera.position.set(0, 0, 10);
+  camera.lookAt(0, 0, 0);
+  camera.updateProjectionMatrix();
+  camera.updateMatrixWorld(true);
+
+  const designToWorld = new Matrix4();
+  const painter = new ThreeSceneDimensionPainter(scene, font);
+  painter.resize(rect.width, rect.height);
+  painter.setDesignToWorld(designToWorld);
+  const inputs = [...userInputs(), ...externalInputs()];
+  let layouts: readonly LayoutResult[] = [];
+  let hitIndex: HitIndex = buildHitIndex([]);
+
+  const settleLayout = (): Readonly<{
+    layoutMs: number;
+    paintMs: number;
+  }> => {
+    const projector = new ThreeViewportProjector({
+      camera,
+      designToWorld,
+      widthCssPx: rect.width,
+      heightCssPx: rect.height,
+      dpr,
+    });
+    const layoutStartedAt = performance.now();
+    const batch = layoutViewport(inputs, {
+      projector,
+      font,
+      theme: SOLVESPACE_DIMENSION_THEME,
+      format: DEFAULT_DIMENSION_FORMAT,
+    }, new Map());
+    const layoutCompletedAt = performance.now();
+    layouts = batch.layouts;
+    hitIndex = batch.hitIndex;
+    painter.paint(layouts, SOLVESPACE_DIMENSION_THEME);
+    const paintCompletedAt = performance.now();
+    return {
+      layoutMs: layoutCompletedAt - layoutStartedAt,
+      paintMs: paintCompletedAt - layoutCompletedAt,
+    };
+  };
+
+  settleLayout();
+  renderer.render(scene, camera);
 
   window.__dimensionPerf = {
     ready: true,
     async run() {
+      const frameDurations: number[] = [];
       const startedAt = performance.now();
       for (let index = 0; index < 60; index += 1) {
-        await renderAt((index % 10) * 0.001);
+        await nextFrame();
+        const offset = (index % 10) * 0.001;
+        camera.position.set(offset, 0, 10);
+        camera.lookAt(offset, 0, 0);
+        camera.updateMatrixWorld(true);
+        const frameStartedAt = performance.now();
+        renderer.render(scene, camera);
+        frameDurations.push(performance.now() - frameStartedAt);
       }
       const elapsed = performance.now() - startedAt;
+
+      // Camera motion keeps the last stable hit snapshot and never uploads
+      // buffers. One settle pass refreshes projection/collision afterwards.
+      const settled = settleLayout();
+      renderer.render(scene, camera);
+
       const hitSamples: number[] = [];
       for (let index = 0; index < 1_000; index += 1) {
         const hitStartedAt = performance.now();
-        viewport.hitTest(
+        hitIndex.hitTest(
           [index % Math.max(1, rect.width), index % Math.max(1, rect.height)],
           2,
         );
@@ -219,13 +246,19 @@ async function main(): Promise<void> {
         samples: frameDurations.length,
         updateP50Ms: percentile(frameDurations, 0.5),
         updateP95Ms: percentile(frameDurations, 0.95),
-        layoutP95Ms: percentile(layoutDurations, 0.95),
-        paintP95Ms: percentile(paintDurations, 0.95),
+        layoutP95Ms: settled.layoutMs,
+        paintP95Ms: settled.paintMs,
         hitP95Ms: percentile(hitSamples, 0.95),
         observedFps: (60 * 1_000) / elapsed,
+        sceneObjectCount: painter.getStats().sceneObjectCount,
       };
     },
   };
+
+  window.addEventListener('beforeunload', () => {
+    painter.dispose();
+    renderer.dispose();
+  }, { once: true });
 }
 
 void main().catch((error) => {

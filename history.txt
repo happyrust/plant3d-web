@@ -1,90 +1,101 @@
 #V2
-SELECT * FROM inst_relate_bool:`17496_106028`;
-LET $refs = ["17496_142306","17496_142305","17496_125330","17496_106029","17496_106030","17496_106028"]; 
-RETURN array::map($refs, |$r| { refno: $r, ngmr_cnt: (SELECT count() AS c FROM ngmr_relate WHERE out = type::record('pe', $r) GROUP ALL)[0].c ?? 0, bool_status: type::record('inst_relate_bool', $r).status });
-SELECT in, out.d as aabb FROM inst_relate_aabb LIMIT 2
-SELECT in FROM inst_relate_aabb WHERE in.dbnum = 1112 LIMIT 5
-SELECT in.id as refno FROM inst_relate WHERE in.dbnum = 1112 AND owner_type IN ['BRAN', 'HANG', 'EQUI'] LIMIT 5
-SELECT count() FROM inst_relate_aabb WHERE in IN (SELECT in FROM inst_relate WHERE in.dbnum = 1112 AND owner_type IN ['BRAN', 'HANG', 'EQUI']) GROUP ALL
-SELECT in.dbnum as dbnum, count() as cnt FROM inst_relate_aabb GROUP BY in.dbnum LIMIT 10
-SELECT in FROM inst_relate_aabb WHERE in.dbnum = 1112
-SELECT in FROM inst_relate WHERE in IN [pe:`17496_272065`, pe:`17496_272066`, pe:`17496_272067`]
-SELECT in, owner_type FROM inst_relate WHERE in IN [pe:`17496_272065`, pe:`17496_272066`, pe:`17496_272067`]
-SELECT owner_type, count() as cnt FROM inst_relate WHERE in.dbnum = 1112 GROUP BY owner_type
-SELECT in, out, out.geo, out.geo_trans FROM inst_relate WHERE in.dbnum = 1112 LIMIT 3
-SELECT * FROM inst_relate WHERE in.dbnum = 1112 LIMIT 1
-SELECT * FROM inst_info:`2`
-SELECT out FROM inst_relate WHERE in.dbnum = 1112 LIMIT 5
-SELECT * FROM inst_info LIMIT 3
-SELECT * FROM review_tasks ORDER BY created_at DESC LIMIT 5;
-SELECT count() as cnt FROM tubi_relate:[pe:`24381_145712`, 0]..[pe:`24381_145712`, ..] GROUP ALL;
-SELECT id[0] as owner_refno, in as leave_refno, out as arrive_refno, start_pt.d as start_pt, end_pt.d as end_pt, world_trans.d as world_trans, id[1] as idx FROM tubi_relate:[pe:`24381_145712`, 0]..[pe:`24381_145712`, ..];
-SELECT id[0] as owner_refno, in as leave_refno, out as arrive_refno, start_pt.d as start_pt, end_pt.d as end_pt, world_trans.d as world_trans, id[1] as idx FROM tubi_relate:[pe:`24381_145565`, 0]..[pe:`24381_145565`, ..];
-SELECT refno, noun, owner, old_pe, world_transform.d as world_transform, local_transform.d as local_transform FROM pe:`24381_145712`;
-SELECT id[0] as owner_refno, in as leave_refno, out as arrive_refno, start_pt.d as start_pt, end_pt.d as end_pt, world_trans.d as world_trans, id[1] as idx FROM tubi_relate:[pe:`24381_145712`, 0]..[pe:`24381_145712`, ..];
-SELECT id[1] as idx, start_pt.d as start_pt, end_pt.d as end_pt, world_trans.d as world_trans FROM tubi_relate:[pe:`24381_145712`, 0]..[pe:`24381_145712`, ..];
-SELECT count() AS cnt FROM inst_relate WHERE dbnum = 7997;
-SELECT VALUE in FROM inst_relate WHERE in.dbnum = 24381 AND in.id = 145018 LIMIT 5;
-SELECT VALUE in FROM inst_relate WHERE in.dbnum = 24381 AND in.id IN [144975,145018,145019,145020,145021,145022] LIMIT 20;
-SELECT VALUE in FROM inst_relate WHERE in.dbnum = 24381 AND in.id = 145018 LIMIT 5;
-SELECT VALUE count() FROM inst_relate WHERE in = NONE GROUP ALL;
-SELECT VALUE count() FROM inst_relate GROUP ALL;
-SELECT in, owner_refno, owner_type FROM [pe:⟨24381_101797⟩]->inst_relate;
-SELECT VALUE count() FROM [pe:⟨24381_101797⟩]->inst_relate GROUP ALL;
-SELECT in, owner_refno, owner_type FROM [pe:⟨24381_145018⟩]->inst_relate;
-SELECT VALUE count() FROM [pe:⟨24381_145018⟩]->inst_relate GROUP ALL;
-SELECT owner_refno, owner_type, in as refno, in.noun as noun, fn::default_full_name(in) as name, spec_value FROM [pe:⟨24381_101797⟩]->inst_relate;
-SELECT owner_refno, owner_type, in as refno, in.noun as noun, fn::default_full_name(in) as name, spec_value FROM [pe:⟨24381_145018⟩]->inst_relate;
-SELECT owner_refno, owner_type, in as refno, in.noun as noun, fn::default_full_name(in) as name, spec_value FROM [pe:⟨24381_999999999⟩]->inst_relate;
-SELECT owner_refno, owner_type, in as refno, in.noun as noun, NONE as name, spec_value FROM [pe:⟨24381_999999999⟩]->inst_relate;
-SELECT VALUE count() FROM inst_relate WHERE in != NONE AND !record::exists(in) GROUP ALL;
-SELECT id, in, owner_refno FROM inst_relate WHERE in != NONE AND !record::exists(in) LIMIT 5;
-SELECT if in != NONE { fn::default_full_name(in) } else { NONE } as name FROM [pe:⟨24381_145018⟩]->inst_relate;
-SELECT world_trans.d as world_trans FROM pe_transform:⟨24381_145018⟩ WHERE world_trans != NONE;
-SELECT in as refno, owner_refno, owner_type, spec_value FROM inst_relate WHERE in IN [pe:⟨24381_145018⟩, pe:⟨24381_145019⟩, pe:⟨24381_145020⟩, pe:⟨24381_145021⟩, pe:⟨24381_145022⟩, pe:⟨24381_145023⟩, pe:⟨24381_145024⟩, pe:⟨24381_145025⟩, pe:⟨24381_145026⟩, pe:⟨24381_145027⟩, pe:⟨24381_145028⟩, pe:⟨24381_145029⟩, pe:⟨24381_145030⟩, pe:⟨24381_145031⟩, pe:⟨24381_145032⟩, pe:⟨24381_145033⟩, pe:⟨24381_145034⟩, pe:⟨24381_145035⟩];
-SELECT VALUE count() FROM inst_relate WHERE in IN [pe:⟨24381_145018⟩, pe:⟨24381_145019⟩, pe:⟨24381_145020⟩, pe:⟨24381_145021⟩, pe:⟨24381_145022⟩, pe:⟨24381_145023⟩, pe:⟨24381_145024⟩, pe:⟨24381_145025⟩, pe:⟨24381_145026⟩, pe:⟨24381_145027⟩, pe:⟨24381_145028⟩, pe:⟨24381_145029⟩, pe:⟨24381_145030⟩, pe:⟨24381_145031⟩, pe:⟨24381_145032⟩, pe:⟨24381_145033⟩, pe:⟨24381_145034⟩, pe:⟨24381_145035⟩] GROUP ALL;
-SELECT in as refno, owner_refno, owner_type FROM inst_relate WHERE in IN [pe:⟨24381_145018⟩, pe:⟨24381_145019⟩, pe:⟨24381_145020⟩, pe:⟨24381_145021⟩, pe:⟨24381_145022⟩, pe:⟨24381_145023⟩, pe:⟨24381_145024⟩, pe:⟨24381_145025⟩, pe:⟨24381_145026⟩, pe:⟨24381_145027⟩, pe:⟨24381_145028⟩, pe:⟨24381_145029⟩, pe:⟨24381_145030⟩, pe:⟨24381_145031⟩, pe:⟨24381_145032⟩, pe:⟨24381_145033⟩, pe:⟨24381_145034⟩, pe:⟨24381_145035⟩];
-SELECT VALUE count() FROM tubi_relate:[pe:⟨24381_145018⟩, 0]..[pe:⟨24381_145018⟩, ..] GROUP ALL;
-SELECT id[0] as owner_refno, in as leave_refno, out as arrive_refno, record::id(geo) as geo_hash FROM tubi_relate:[pe:⟨24381_145018⟩, 0]..[pe:⟨24381_145018⟩, ..] LIMIT 10;
-SELECT VALUE id FROM pe WHERE noun = 'HANG' LIMIT 20;
-SELECT VALUE noun FROM pe:`24381_145565` LIMIT 1;
-SELECT VALUE id FROM pe WHERE noun = 'HANG' AND id.dbnum = 24381 LIMIT 30;
-SELECT VALUE id FROM pe WHERE noun = 'HANG' LIMIT 100;
-SELECT id, owner, refno.HREF as href, refno.TREF as tref, noun, name FROM pe:`17496_161510`;
-SELECT id, noun, owner, refno.HREF as href, refno.TREF as tref FROM pe WHERE noun = 'HANG' AND (refno.HREF != pe:`0_0` OR refno.TREF != pe:`0_0`) LIMIT 50;
-SELECT id, refno.HREF as href, refno.TREF as tref, owner FROM pe:`23584_7466`;
-SELECT id, noun, name, owner FROM pe:`23584_6783`;
-SELECT id, noun, name, owner FROM pe:`23584_6491`;
-SELECT id, noun, name, owner, refno.HREF as href, refno.TREF as tref FROM pe:`23584_7465`;
-RETURN {  hang: pe:`23584_7466`,  href_tubi_to: fn::query_tubi_to(pe:`23584_6783`),  href_tubi_from: fn::query_tubi_from(pe:`23584_6783`),  tref_tubi_to: fn::query_tubi_to(pe:`23584_6491`),  tref_tubi_from: fn::query_tubi_from(pe:`23584_6491`)};
-SELECT id, refno.HREF as href, refno.TREF as tref FROM pe WHERE noun = 'HANG' AND (refno.HREF != pe:`0_0` OR refno.TREF != pe:`0_0`) LIMIT 50;
-SELECT id, refno.HREF as href, refno.TREF as tref FROM pe WHERE noun = 'HANG' AND (fn::query_tubi_to(refno.HREF) != NONE OR fn::query_tubi_from(refno.HREF) != NONE OR fn::query_tubi_to(refno.TREF) != NONE OR fn::query_tubi_from(refno.TREF) != NONE) LIMIT 50;
-SELECT id, noun, owner FROM pe:`23584_6491`;
-SELECT VALUE id FROM fn::ancestor(pe:`23584_6491`);
-SELECT VALUE id FROM fn::ancestor(pe:`23584_6783`);
-SELECT VALUE id FROM fn::ancestor(pe:`23584_6491`);
-SELECT id, noun FROM [pe:`23584_6783`, pe:`23584_6782`, pe:`23584_6781`, pe:`23584_6731`, pe:`23584_6481`, pe:`23584_6419`, pe:`23584_6326`, pe:`23584_6325`, pe:`23584_6100`, pe:`23584_30`];
-SELECT id, noun FROM [pe:23584_6783, pe:23584_6782, pe:23584_6781, pe:23584_6731, pe:23584_6481, pe:23584_6419, pe:23584_6326, pe:23584_6325, pe:23584_6100, pe:23584_30];
-SELECT id, start_pt.d, end_pt.d, world_trans.d FROM tubi_relate:[24381_145712, 0]..[24381_145712, ..] LIMIT 10;
-SELECT id, start_pt.d, end_pt.d, world_trans.d FROM tubi_relate WHERE id[0] = pe:⟨24381_145712⟩ LIMIT 5;
--- Check TUBI children of this BRAN
-SELECT refno, noun, name, attrs.LLEN, attrs.TEFR, attrs.TOFR, attrs.BORE, attrs.AOD FROM pe WHERE owner = pe:⟨24381_145712⟩ AND noun IN ['TUBI', 'ELBO', 'BEND', 'TEE'] ORDER BY refno LIMIT 20;
+SELECT * FROM pe:`15192_230410`;
+SELECT id, noun, refno FROM pe WHERE id IN [pe:`15192_230325`, pe:`15192_230332`, pe:`15192_230410`, pe:`15192_230584`, pe:`15192_229699`, pe:`15192_229493`, pe:`15192_230797`, pe:`15192_229419`, pe:`15192_229421`];
+SELECT id, refno.TYPE AS TYPE, refno.CATR AS CATR, refno.NAME AS NAME FROM SPREF WHERE id IN [SPREF:`15192_230325`, SPREF:`15192_230332`, SPREF:`15192_230410`, SPREF:`15192_230584`, SPREF:`15192_229699`, SPREF:`15192_229493`, SPREF:`15192_230797`, SPREF:`15192_229419`, SPREF:`15192_229421`];
+SELECT id, refno.TYPE AS TYPE, refno.CATR AS CATR, refno.NAME AS NAME FROM SPCO WHERE id IN [SPCO:`15192_230325`, SPCO:`15192_230332`, SPCO:`15192_230410`, SPCO:`15192_230584`, SPCO:`15192_229699`, SPCO:`15192_229493`, SPCO:`15192_230797`, SPCO:`15192_229419`, SPCO:`15192_229421`];
 INFO FOR DB;
-SELECT count() AS total FROM review_tasks GROUP ALL;
-INFO FOR NS;
-SELECT count() AS total FROM review_tasks GROUP ALL;
-SELECT count() AS total FROM review_forms GROUP ALL;
--- 直接查 review_tasks 看是否快
-SELECT id, formId, status, currentNode FROM review_tasks LIMIT 5;
-SELECT count() FROM review_records GROUP ALL;
-SELECT count() FROM review_annotation_states GROUP ALL;
-SELECT count() FROM review_tasks WHERE (deleted IS NONE OR deleted = false) GROUP ALL;
--- 1. 查最近 30 个 review_workflow_history 中 action=return 的 task_id + 时间
-SELECT task_id, action, operator_id, timestamp FROM review_workflow_history WHERE action = 'return' ORDER BY timestamp DESC LIMIT 10;
--- 2. 看 review_tasks 里这些 task 的 form_id / current_node / status
-SELECT count() AS history_returns FROM review_workflow_history WHERE action = 'return' GROUP ALL;
-SELECT count() AS distinct_returned_tasks FROM (SELECT VALUE task_id FROM review_workflow_history WHERE action = 'return' GROUP BY task_id) GROUP ALL;
-SELECT count() AS records_total FROM review_records GROUP ALL;
-SELECT count() AS distinct_records_tasks FROM (SELECT VALUE task_id FROM review_records GROUP BY task_id) GROUP ALL;
-SELECT count() AS annotation_states_total FROM review_annotation_states GROUP ALL;
-SELECT count() FROM pe GROUP ALL;
+SELECT count() FROM tubi_relate GROUP ALL;
+SELECT id, noun, name, record::id(id) as rid FROM pe WHERE id IN [pe:`2013286704_476`, pe:`24381_145018`, pe:`24381_100817`, pe:`24381_100833`, pe:`24381_100840`, pe:`24381_100847`, pe:`24381_100854`] LIMIT 20;
+SELECT array::len(record::id(id)) AS id_len, count() AS cnt FROM tubi_relate GROUP BY id_len;
+SELECT count() AS cnt FROM tubi_relate WHERE id = tubi_relate:[pe:`2013286704_476`, 0] GROUP ALL;
+SELECT count() AS cnt FROM tubi_relate WHERE id = tubi_relate:[pe:`24381_145018`, 0] GROUP ALL;
+SELECT count() AS cnt FROM tubi_relate WHERE id = tubi_relate:[pe:`24381_100817`, 0] GROUP ALL;
+SELECT count() AS cnt FROM tubi_relate:[24381,100817,0,NONE]..=[24381,100817,0,..] GROUP ALL;
+SELECT id, in, out, start_pt.d as start_pt, end_pt.d as end_pt FROM tubi_relate WHERE id = tubi_relate:[pe:`2013286704_476`, 0] OR in = pe:`2013286704_476` OR out = pe:`2013286704_476` LIMIT 5;
+SELECT id, in, out, start_pt.d as start_pt, end_pt.d as end_pt FROM tubi_relate WHERE id = tubi_relate:[pe:`24381_145018`, 0] OR in = pe:`24381_145018` OR out = pe:`24381_145018` LIMIT 5;
+SELECT count() AS cnt FROM tubi_relate WHERE id >= tubi_relate:[0, NONE] GROUP ALL;
+SELECT count() AS cnt FROM tubi_relate WHERE id >= tubi_relate:[pe:`0_0`, NONE] GROUP ALL;
+SELECT count() AS cnt FROM tubi_relate WHERE record::id(id)[0] = pe:`24381_145018` GROUP ALL;
+SELECT count() AS cnt FROM tubi_relate WHERE record::id(id)[0] = 24381 GROUP ALL;
+SELECT in.noun AS in_noun, out.noun AS out_noun, count() AS cnt FROM tubi_relate GROUP BY in_noun, out_noun ORDER BY cnt DESC;
+SELECT count() AS hang_count FROM tubi_relate WHERE in.noun = 'HANG' OR out.noun = 'HANG' GROUP ALL;
+SELECT count() AS bran_count FROM tubi_relate WHERE in.noun = 'BRAN' OR out.noun = 'BRAN' GROUP ALL;
+SELECT id,noun,name FROM pe:`2013286704_476`;
+SELECT id,noun,name FROM pe:`24381_145018`;
+SELECT count() AS total, array::len(record::id(id)) AS id_len FROM tubi_relate GROUP BY id_len;
+SELECT count() AS rows_24381_145018_legacy FROM tubi_relate WHERE record::id(id)[0] = pe:`24381_145018` GROUP ALL;
+SELECT count() AS rows_24381_145018_new_numeric FROM tubi_relate WHERE id = tubi_relate:[24381,145018,0,0] GROUP ALL;
+SELECT count() AS rows_2013286704_476_legacy FROM tubi_relate WHERE record::id(id)[0] = pe:`2013286704_476` GROUP ALL;
+SELECT count() AS pe_2013286704_476 FROM pe:`2013286704_476` GROUP ALL;
+SELECT id, in, out, start_pt.d AS start_pt, end_pt.d AS end_pt FROM tubi_relate WHERE record::id(id)[0] = pe:`24381_145018` LIMIT 1;
+SELECT count() AS count FROM tubi_relate GROUP ALL;
+SELECT id, in, out, world_trans, start_pt, end_pt FROM tubi_relate LIMIT 5;
+SELECT count() AS count FROM tubi_relate GROUP ALL;
+SELECT id, in, out, world_trans, start_pt, end_pt FROM tubi_relate LIMIT 5;
+SELECT record::id(id)[0] AS branch, count() AS segments FROM tubi_relate GROUP BY branch ORDER BY segments DESC LIMIT 30;
+SELECT record::id(id)[0] AS branch, count() AS segments FROM tubi_relate GROUP BY branch ORDER BY segments DESC LIMIT 100;
+SELECT id, in, out, world_trans.d AS world_trans, start_pt.d AS start_pt, end_pt.d AS end_pt FROM tubi_relate:[pe:`2013286704_476`, 0]..=[pe:`2013286704_476`, ..];
+SELECT record::id(id) AS rid, count() AS segments FROM tubi_relate GROUP BY rid ORDER BY segments DESC LIMIT 20;
+SELECT id, record::id(id) AS rid FROM tubi_relate LIMIT 20;
+SELECT <string> record::id(id)[0] AS branch, count() AS segments FROM tubi_relate GROUP BY branch ORDER BY segments DESC LIMIT 50;
+SELECT id, noun FROM pe WHERE id IN [pe:`24381_145018`, pe:`24381_100817`, pe:`24381_100833`, pe:`24381_104748`] ;
+SELECT count() AS total FROM tubi_relate GROUP ALL;
+SELECT record::id(id)[0] AS branch, count() AS segments FROM tubi_relate GROUP BY branch ORDER BY segments DESC LIMIT 10;
+SELECT id, in, out, world_trans.d AS world_trans, start_pt.d AS start_pt, end_pt.d AS end_pt FROM tubi_relate:[pe:`24381_145018`, 0]..=[pe:`24381_145018`, ..];
+SELECT record::id(id)[0] AS branch, count() AS segments FROM tubi_relate GROUP BY branch ORDER BY segments DESC LIMIT 1000;
+SELECT string::concat(record::id(id)[0], "_", record::id(id)[1]) AS branch, count() AS segments FROM tubi_relate GROUP BY branch ORDER BY segments DESC LIMIT 1000;
+SELECT count() AS cnt FROM tubi_relate GROUP ALL; SELECT id, in, out, start_pt, end_pt FROM tubi_relate LIMIT 5;
+SELECT id, in.owner as in_owner, out.owner as out_owner, in.refno as in_refno, out.refno as out_refno, in.noun as in_noun FROM tubi_relate LIMIT 20;
+SELECT id, id[0] AS owner, id[1] AS idx, in AS leave_refno, start_pt.d AS start_pt, end_pt.d AS end_pt FROM tubi_relate LIMIT 3;
+SELECT id, id[0] AS owner, id[1] AS idx, in AS leave_refno, start_pt.d AS start_pt, end_pt.d AS end_pt FROM tubi_relate;
+SELECT id, noun, owner FROM pe:24381_105996; SELECT id, noun, owner FROM pe:24381_145854; SELECT id, noun, owner FROM pe:24381_104101; SELECT id, noun, owner FROM pe:24381_104705;
+SELECT meta::id(id) AS pe, noun FROM pe WHERE meta::id(id) IN ["24381_145032","24381_145035"];
+SELECT in, count() AS n FROM geo_relate WHERE record::id(id)[0] = 24381 AND record::id(id)[1] IN [145032, 145035] GROUP BY in;
+SELECT id, geom_refno, meta::id(out) AS geo_id, array::len(geos) AS n FROM geo_relate WHERE in = inst_info:`13869606247212843247`;
+SELECT id, geos FROM inst_info:`13869606247212843247`;
+SELECT id, world_trans_hash, world_aabb_hash, has_neg FROM inst_relate WHERE in IN [pe:`24381_145032`, pe:`24381_145035`];
+SELECT * FROM geo_relate WHERE record::id(id)[0] = 24381 AND record::id(id)[1] = 145035;
+SELECT * FROM geo_relate WHERE record::id(id)[0] = 24381 AND record::id(id)[1] = 145032;
+SELECT * FROM geo_relate WHERE in = inst_info:`13869606247212843247` LIMIT 20;
+SELECT count() AS n FROM geo_relate WHERE in = inst_info:`13869606247212843247` GROUP ALL;
+SELECT id, ->geo_relate.{id, out, geom_refno} AS geos FROM inst_relate WHERE id = inst_relate:[24381, 145035];
+SELECT id, ->geo_relate.{id, out, geom_refno} AS geos FROM pe:`24381_145035`->inst_relate;
+SELECT * FROM pe:`24381_145035`;
+SELECT * FROM pe:`24381_145032`;
+SELECT * FROM pe:`13246_371152`;
+SELECT meta::id(id) AS id, noun, name, owner FROM pe WHERE meta::id(id) IN ["13246_371151","13246_371152","13246_368855"];
+SELECT meta::id(id) AS id, noun, name, owner FROM pe WHERE owner = pe:`13246_371151`;
+SELECT meta::id(in) AS parent, meta::id(out) AS child FROM pe_owner WHERE in = pe:`13246_371151` OR out = pe:`13246_371151` LIMIT 50;
+SELECT meta::id(id) AS id, noun, name FROM pe WHERE owner = pe:`13246_368855` LIMIT 30;
+SELECT meta::id(id) AS id, noun, name, cata_hash FROM pe WHERE meta::id(id) IN ["24381_145032","24381_145035","24381_145019"];
+-- pe_ref / references
+SELECT * FROM pe_ref WHERE in = pe:`24381_145035` LIMIT 20;
+SELECT * FROM pe_ref WHERE in = pe:`24381_145032` LIMIT 20;
+SELECT * FROM att WHERE owner = pe:`24381_145035` LIMIT 40;
+SELECT * FROM pe_att WHERE in = pe:`24381_145035` LIMIT 40;
+SELECT * FROM pe_att WHERE out = pe:`24381_145035` LIMIT 40;
+INFO FOR DB;
+SELECT meta::id(id) AS id, noun, name, cata_hash, type::string(refno.SPRE) AS spre, refno.SPRE.name AS spre_name, refno.DESP AS desp FROM pe:`24381_145032`;
+SELECT meta::id(id) AS id, noun, name, cata_hash, type::string(refno.SPRE) AS spre, refno.SPRE.name AS spre_name, refno.DESP AS desp FROM pe:`24381_145035`;
+SELECT meta::id(id) AS id, noun, name, cata_hash, type::string(refno.SPRE) AS spre, refno.SPRE.name AS spre_name, refno.DESP AS desp FROM pe:`24381_145019`;
+SELECT meta::id(id) AS id, noun, name FROM pe:`13246_368855`;
+SELECT meta::id(id) AS id, noun, name, owner FROM pe WHERE owner = pe:`13246_371151`;
+SELECT meta::id(id) AS id, noun, name FROM pe:`13246_465874`;
+SELECT meta::id(id) AS id, noun, name, owner FROM pe WHERE owner = pe:`13246_465874` OR meta::id(owner) = "13246_465874" LIMIT 30;
+SELECT meta::id(id) AS id, noun, name FROM pe:`13246_465938`;
+-- follow SPCO -> CATR -> SCOM for VALV
+SELECT type::string(refno.CATR) AS catr, refno.CATR.name AS catr_name, type::string(refno.CATR.refno) AS catr_ref FROM pe:`13246_465874`;
+SELECT type::string(refno.CATR) AS catr, refno.CATR.name AS catr_name FROM pe:`13246_465938`;
+-- VALV SPCO 13246_465874 follow CATR / GMSE
+SELECT meta::id(id) AS id, noun, name, type::string(refno.CATR) AS catr, refno.CATR.name AS catr_name FROM pe:`13246_465874`;
+SELECT meta::id(id) AS id, noun, name FROM pe WHERE owner = pe:`13246_465874`;
+-- OLET SPCO
+SELECT meta::id(id) AS id, noun, name, type::string(refno.CATR) AS catr, refno.CATR.name AS catr_name FROM pe:`13246_465938`;
+SELECT meta::id(id) AS id, noun, name FROM pe WHERE owner = pe:`13246_465938`;
+SELECT meta::id(id) AS id, noun, name FROM pe:`13246_243978`;
+SELECT meta::id(id) AS id, noun, name FROM pe WHERE owner = pe:`13246_243978`;
+SELECT meta::id(in) AS parent, meta::id(out) AS child FROM pe_owner WHERE in = pe:`13246_243978` LIMIT 40;
+SELECT meta::id(in) AS parent, meta::id(out) AS child FROM pe_owner WHERE out = pe:`13246_243978` LIMIT 20;
+SELECT meta::id(id) AS id, noun, name, owner FROM pe:`13246_243868`;
+SELECT meta::id(in) AS parent, meta::id(out) AS child FROM pe_owner WHERE in = pe:`13246_243868` LIMIT 50;
+SELECT meta::id(id) AS id, noun, name FROM pe WHERE meta::id(id) IN ["13246_243868","13246_243869","13246_243870","13246_243871","13246_243872"];

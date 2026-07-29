@@ -18,7 +18,6 @@ export * from './domain/reducer';
 export * from './domain/types';
 export * from './export/svgOverlay';
 export * from './facade/createDimensionSystem';
-export * from './flags';
 export * from './interaction/editSession';
 export * from './ports/anchorResolver';
 export * from './ports/repository';

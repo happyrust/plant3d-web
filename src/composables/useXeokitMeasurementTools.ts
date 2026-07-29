@@ -580,6 +580,23 @@ export function useXeokitMeasurementTools(options: {
     requestRender?.();
   }
 
+  /**
+   * 连续测量链节点保持：只清掉与下一段起点无关的锁定/X-ray 辅助态，
+   * 避免「全清再重锁」导致 P-Point 十字与构件透明态闪断。
+   */
+  function retainMeasurementVisualAssistsFor(point: MeasurementPoint): void {
+    const keepRefno = refnoFromMeasurementPoint(point);
+    const keepXrayRefno = xrayRefnoFromMeasurementPoint(point);
+    for (const refno of Array.from(lockedMeasurementRefnos)) {
+      if (refno !== keepRefno) lockedMeasurementRefnos.delete(refno);
+    }
+    for (const refno of Array.from(lockedMeasurementXrayRefnos)) {
+      if (refno !== keepXrayRefno) lockedMeasurementXrayRefnos.delete(refno);
+    }
+    updateTemporaryXray([...lockedMeasurementXrayRefnos]);
+    renderMeasurementPtsets(currentHoverRefno);
+  }
+
   function ensurePrimitiveKeypointsForRefno(refno: string | null): void {
     if (!sourceNeedsHoverData(measurementStyle.state.measurementPickSources.primitive_key_point) || !refno) return;
     if (requestedPrimitiveKeypointRefnos.has(refno) || primitiveKeypointsByRefno.has(refno)) return;
@@ -893,23 +910,23 @@ export function useXeokitMeasurementTools(options: {
 
     if (mode === 'xeokit_measure_distance') {
       return store.currentXeokitDistanceDraft.value
-        ? `距离测量：捕捉终点（${sourceText}）；点空白取消`
+        ? `距离测量：捕捉终点（${sourceText}）；点空白取消当前点选`
         : `距离测量：捕捉起点（${sourceText}）`;
     }
 
     if (mode === 'xeokit_measure_angle') {
       const draft = store.currentXeokitAngleDraft.value;
       if (!draft) return `角度测量：捕捉角度顶点（${sourceText}）`;
-      if (draft.stage === 'finding_first_arm') return `角度测量：捕捉第一边点（${sourceText}）；点空白取消`;
-      return `角度测量：捕捉第二边点（${sourceText}）；点空白取消`;
+      if (draft.stage === 'finding_first_arm') return `角度测量：捕捉第一边点（${sourceText}）；点空白取消当前点选`;
+      return `角度测量：捕捉第二边点（${sourceText}）；点空白取消当前点选`;
     }
 
     if (mode === 'xeokit_measure_elevation_point') {
-      return `位置/标高：捕捉测量点（${sourceText}），单击完成；点空白取消`;
+      return `位置/标高：捕捉测量点（${sourceText}），单击完成；点空白取消当前点选`;
     }
 
     return store.currentXeokitElevationDeltaDraft.value
-      ? `高差测量：捕捉终点（${sourceText}）；点空白取消`
+      ? `高差测量：捕捉终点（${sourceText}）；点空白取消当前点选`
       : `高差测量：捕捉起点（${sourceText}），第二点 hover 预览`;
   });
 
@@ -1863,10 +1880,12 @@ export function useXeokitMeasurementTools(options: {
       }
       store.addXeokitDistanceMeasurement(rec);
       store.clearCurrentXeokitDraft();
-      clearMeasurementVisualAssists();
       if (store.continuousDistanceMeasureEnabled.value) {
-        // E3D 连续测量：以刚完成的终点作为下一段起点。
+        // E3D 连续测量：以刚完成的终点作为下一段起点；链节点辅助态保持不闪断。
+        retainMeasurementVisualAssistsFor(target);
         startDistanceDraftFrom(target);
+      } else {
+        clearMeasurementVisualAssists();
       }
       syncFromStore();
       updateSelectionBinding(rec.id);

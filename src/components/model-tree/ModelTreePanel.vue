@@ -1473,6 +1473,29 @@ function onSearchEnter(value: string) {
     searchPopoverOpen.value = false;
   }
 }
+
+const treeVersionContext = (() => {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const rawSesno = params.get('tree_sesno') ?? params.get('sesno');
+    if (!rawSesno) return null;
+    const sesno = Number(rawSesno);
+    if (!Number.isInteger(sesno) || sesno < 0) return null;
+    return {
+      sesno,
+      dbnum: params.get('dbnum') ?? params.get('show_dbnum'),
+    };
+  } catch {
+    return null;
+  }
+})();
+
+function returnToLatestTree() {
+  const url = new URL(window.location.href);
+  url.searchParams.delete('sesno');
+  url.searchParams.delete('tree_sesno');
+  window.location.assign(url.toString());
+}
 </script>
 
 <template>
@@ -1774,6 +1797,20 @@ function onSearchEnter(value: string) {
           </div>
         </template>
       </div>
+    </div>
+
+    <div v-if="treeVersionContext && activeTree === 'pdms'"
+      class="flex items-center gap-2 border-b border-warning/40 bg-warning-subtle px-3 py-1.5 text-[11px] text-warning"
+      data-testid="model-tree-version-banner">
+      <span class="font-medium">历史模型树</span>
+      <span v-if="treeVersionContext.dbnum">DB {{ treeVersionContext.dbnum }}</span>
+      <span>sesno {{ treeVersionContext.sesno }}</span>
+      <button type="button"
+        class="ml-auto shrink-0 underline underline-offset-2"
+        data-testid="model-tree-return-latest"
+        @click="returnToLatestTree">
+        回到最新
+      </button>
     </div>
 
     <!-- 版本差异模式工具条：版本对胶囊 + 差异筛选 chips -->

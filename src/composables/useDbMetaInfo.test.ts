@@ -92,4 +92,20 @@ describe('useDbMetaInfo', () => {
       })
     );
   });
+
+  it('continues when IndexedDB read/write fails after remote meta is available', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(buildDbMetaResponse());
+    vi.stubGlobal('fetch', fetchMock);
+    getJsonMock.mockRejectedValue(new Error('The transaction was aborted, so the request cannot be fulfilled.'));
+    setJsonMock.mockRejectedValue(new Error('The transaction was aborted, so the request cannot be fulfilled.'));
+
+    const filesOutput = await import('@/lib/filesOutput');
+    filesOutput.setCurrentProjectPath('ams-model');
+
+    const dbMeta = await import('./useDbMetaInfo');
+
+    await expect(dbMeta.ensureDbMetaInfoLoaded()).resolves.toBeUndefined();
+    expect(dbMeta.getDbnumByRefno('24381_1')).toBe(1);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
 });

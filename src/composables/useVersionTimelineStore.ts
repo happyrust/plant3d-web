@@ -14,6 +14,7 @@ import {
   listAnchors,
   listReleases,
   type ModelHistoryAnchor,
+  type ModelReleaseDiffRow,
   type ModelReleasePairReadiness,
   type ModelReleaseRecord,
 } from '@/api/modelVersionApi';
@@ -177,6 +178,68 @@ export function toAnchorView(anchor: ModelHistoryAnchor): AnchorView {
 
 function pairKeyOf(aKey: string, bKey: string): string {
   return `${aKey}->${bKey}`;
+}
+
+// ---------------------------------------------------------------------------
+// 进入对比派发（T017·FR-009 主链路）：detail 契约与 ModelVersionComparePanel 组装
+// 语义一致（contracts/version-timeline-ui-contract.md「只增不改」），新增可选
+// source/pairKey 字段标识派发来源。
+// ---------------------------------------------------------------------------
+
+export const INCREMENTAL_COMPARE_EVENT = 'plant3d:incremental-version-compare';
+
+export type CompareDispatchModel = {
+  refno: string;
+  componentKey: string;
+  refnoU64?: number;
+  category: string;
+  status: string;
+  beforeState: string;
+  afterState: string;
+  sourceChangeCount: number;
+  sourceNouns: string;
+};
+
+export type CompareDispatchDetail = {
+  project: string;
+  dbnum: number;
+  fromReleaseId: string;
+  toReleaseId: string;
+  fromSesno: number;
+  toSesno: number;
+  mode: 'dtx';
+  compare: true;
+  componentKey: string;
+  refnos: string[];
+  models: CompareDispatchModel[];
+  source: 'versionTimeline';
+  pairKey: string;
+};
+
+/** refno 归一化沿用 ModelVersionComparePanel.rowRefno：refno_str 的 `/`→`_`，缺省回退 component_key 尾段 */
+export function diffRowRefno(row: ModelReleaseDiffRow): string {
+  if (row.refno_str) return String(row.refno_str).replace(/\//g, '_');
+  if (row.component_key) return String(row.component_key).split(':').pop() || '';
+  return '';
+}
+
+function diffRowStatus(row: ModelReleaseDiffRow): string {
+  if (row.change_type === 'changed') return 'modified';
+  return row.change_type || 'modified';
+}
+
+function diffRowToModel(row: ModelReleaseDiffRow): CompareDispatchModel {
+  return {
+    refno: diffRowRefno(row),
+    componentKey: row.component_key || '',
+    refnoU64: row.refno_u64,
+    category: row.noun || '',
+    status: diffRowStatus(row),
+    beforeState: row.change_type === 'added' ? 'missing' : 'present',
+    afterState: row.change_type === 'deleted' ? 'missing' : 'present',
+    sourceChangeCount: 1,
+    sourceNouns: row.noun || '',
+  };
 }
 
 // ---------------------------------------------------------------------------

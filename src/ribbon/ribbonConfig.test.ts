@@ -99,7 +99,7 @@ describe('RIBBON_TABS', () => {
     )))).toBe(true);
   });
 
-  it('不导出任何尺寸面板或尺寸命令入口', async () => {
+  it('尺寸面板与命令入口在 cutover 后常驻导出', async () => {
     vi.resetModules();
     window.history.replaceState({}, '', '/?output_project=AvevaMarineSample');
 
@@ -113,9 +113,8 @@ describe('RIBBON_TABS', () => {
     )));
 
     expect(RIBBON_TABS.flatMap((tab) => tab.groups.map((group) => group.id)))
-      .not.toContain('view.panel.dimension');
-    expect(commandIds).not.toContain('panel.dimension');
-    expect(commandIds.some((commandId) => commandId.startsWith('dimension.'))).toBe(false);
+      .toContain('view.panel.dimension');
+    expect(commandIds).toContain('panel.dimension');
   });
 
   it('任务页签提供版本时间线入口，且与版本对比同组', async () => {

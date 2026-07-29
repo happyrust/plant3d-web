@@ -1,5 +1,7 @@
 # Dimension Viewport, Interaction, and Export Implementation Plan
 
+> **已于 2026-07-23 被取代：** 不得继续实现 Canvas2D viewport。执行 [`2026-07-23-solvespace-scene-dimension-renderer.md`](./2026-07-23-solvespace-scene-dimension-renderer.md) 的三维场景画家、交互和导出任务。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Render dimension documents and external dimensions through one invalidation-driven Canvas2D viewport, support semantic snapping and transactional pointer edits, expose an accessible list, and include dimensions in PNG/SVG output.

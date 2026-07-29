@@ -85,6 +85,10 @@ const meshPointSourceEnabled = computed(() => {
 const isDistanceMode = computed(() => store.toolMode.value === 'xeokit_measure_distance');
 const continuousMeasureEnabled = computed(() => store.continuousDistanceMeasureEnabled.value);
 const pickMode = computed(() => measurementStyle.state.measurementPickMode);
+/** 自由表面模式但表面点捕捉被关：合法组合，给出提示而不是静默切模式。 */
+const freeSurfaceWithoutMeshSnap = computed(() => (
+  pickMode.value === 'free_surface' && !meshPointSourceEnabled.value
+));
 const modeLabel = computed(() => {
   const modeToKind: Record<string, XeokitMeasurementKind> = {
     xeokit_measure_distance: 'distance',
@@ -170,7 +174,7 @@ watch(
             data-testid="measurement-overlay-mode-e3d"
             class="h-8 px-2.5"
             :class="pickMode === 'e3d' ? 'bg-primary text-primary-foreground' : 'bg-background text-muted-foreground hover:bg-muted'"
-            title="E3D 设计点捕捉：P-Point / Item 原点，P-Point 加载中不落点"
+            title="E3D 设计点捕捉：P-Point / Item 原点（Item Origin），P-Point 加载中不落点"
             @click="setPickMode('e3d')">
             E3D 捕捉
           </button>
@@ -183,6 +187,13 @@ watch(
             自由表面
           </button>
         </div>
+
+        <span v-if="freeSurfaceWithoutMeshSnap"
+          data-testid="measurement-overlay-free-surface-hint"
+          class="inline-flex h-8 items-center rounded-xl border border-amber-500/50 bg-amber-500/10 px-2 text-xs text-amber-600"
+          title="自由表面模式下表面点捕捉已关闭，当前不会登记表面点；可在下方点源中重新开启">
+          表面点捕捉已关
+        </span>
 
         <div data-testid="measurement-overlay-source-picker"
           class="flex items-center gap-1 rounded-xl border border-border bg-muted/40 px-2 py-1 text-xs text-foreground">
@@ -201,10 +212,10 @@ watch(
               data-testid="measurement-overlay-source-position"
               class="h-3.5 w-3.5 accent-primary"
               :checked="centerPointSourceEnabled"
-              aria-label="启用实例原点捕捉"
-              title="实例原点"
+              aria-label="启用 Item 原点捕捉"
+              title="Item Origin（元素原点）"
               @change="setMeasurementSource('position', ($event.target as HTMLInputElement).checked)" />
-            <span>实例原点</span>
+            <span>Item 原点</span>
           </label>
           <label class="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-lg px-2 hover:bg-background/70">
             <input type="checkbox"

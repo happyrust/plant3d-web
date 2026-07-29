@@ -326,15 +326,16 @@ describe('MeasurementPanel', () => {
 
     const styleAxis = host.querySelector('[data-testid="measurement-style-distance-axis"]') as HTMLInputElement | null;
     expect(styleAxis).toBeTruthy();
-    expect(styleAxis?.checked).toBe(false);
+    // E3D 默认体验：轴向分量默认开启。
+    expect(styleAxis?.checked).toBe(true);
     if (styleAxis) {
-      styleAxis.checked = true;
+      styleAxis.checked = false;
       styleAxis.dispatchEvent(new Event('change'));
     }
     await nextTick();
 
     const { useXeokitMeasurementStyleStore } = await import('@/composables/useXeokitMeasurementStyleStore');
-    expect(useXeokitMeasurementStyleStore().state.distanceShowAxisBreakdown).toBe(true);
+    expect(useXeokitMeasurementStyleStore().state.distanceShowAxisBreakdown).toBe(false);
 
     app.unmount();
     host.remove();
@@ -731,7 +732,7 @@ describe('MeasurementPanel', () => {
     store.setToolMode('xeokit_measure_distance');
     useUnitSettingsStore().setDisplayUnit('mm');
     useXeokitMeasurementStyleStore().updateStyle({
-      distanceShowAxisBreakdown: true,
+      distanceShowAxisBreakdown: false,
       distanceShowMarkers: false,
       elevationDatum: 1.25,
     });
@@ -747,7 +748,7 @@ describe('MeasurementPanel', () => {
     app.mount(host);
     await nextTick();
 
-    expect(host.textContent).toContain('默认仅显示总长');
+    expect(host.textContent).toContain('默认显示总长与 E/N/U 轴向分量');
 
     const datumInput = host.querySelector(
       '[data-testid="measurement-elevation-datum"]',
@@ -765,7 +766,8 @@ describe('MeasurementPanel', () => {
     resetButton?.click();
     await nextTick();
 
-    expect(useXeokitMeasurementStyleStore().state.distanceShowAxisBreakdown).toBe(false);
+    // 恢复默认 = E3D 默认：轴向分量开启。
+    expect(useXeokitMeasurementStyleStore().state.distanceShowAxisBreakdown).toBe(true);
     expect(useXeokitMeasurementStyleStore().state.distanceShowMarkers).toBe(true);
 
     app.unmount();
@@ -827,16 +829,17 @@ describe('MeasurementPanel', () => {
     const preview = host.querySelector('[data-testid="measurement-style-distance-preview"]') as HTMLElement | null;
     expect(preview?.textContent).toContain('总长标签');
     expect(preview?.textContent).toContain('端点');
-    expect(preview?.textContent).not.toContain('XYZ 分解');
+    // E3D 默认开启轴向分量。
+    expect(preview?.textContent).toContain('E/N/U 分量');
 
     const styleAxis = host.querySelector('[data-testid="measurement-style-distance-axis"]') as HTMLInputElement | null;
     if (styleAxis) {
-      styleAxis.checked = true;
+      styleAxis.checked = false;
       styleAxis.dispatchEvent(new Event('change'));
     }
     await nextTick();
 
-    expect(preview?.textContent).toContain('XYZ 分解');
+    expect(preview?.textContent).not.toContain('E/N/U 分量');
 
     app.unmount();
     host.remove();
@@ -907,18 +910,19 @@ describe('MeasurementPanel', () => {
 
     expect(distanceSection).toBeTruthy();
     expect(angleSection).toBeTruthy();
-    expect(distanceNote?.textContent).toContain('开启后会额外显示 X / Y / Z 三段分量线和标签');
+    // E3D 默认开启轴向分量。
+    expect(distanceNote?.textContent).toContain('当前距离结果会同时显示总长和 E / N / U 轴向分量');
 
     const styleAxis = host.querySelector(
       '[data-testid="measurement-style-distance-axis"]',
     ) as HTMLInputElement | null;
     if (styleAxis) {
-      styleAxis.checked = true;
+      styleAxis.checked = false;
       styleAxis.dispatchEvent(new Event('change'));
     }
     await nextTick();
 
-    expect(distanceNote?.textContent).toContain('当前会同时显示总长和 X / Y / Z 分量标签');
+    expect(distanceNote?.textContent).toContain('开启后距离结果会额外显示 E / N / U 轴向分量');
 
     app.unmount();
     host.remove();
@@ -1021,7 +1025,7 @@ describe('MeasurementPanel', () => {
     host = null;
   });
 
-  it('测量点源 UI 文案和状态应区分 P-Point、实例原点与模型表面点捕捉', async () => {
+  it('测量点源 UI 文案和状态应区分 P-Point、Item 原点与模型表面点捕捉', async () => {
     const selectedId = ref<string | null>(null);
     let host: HTMLDivElement | null = document.createElement('div');
     document.body.appendChild(host);
@@ -1100,7 +1104,7 @@ describe('MeasurementPanel', () => {
     ) as HTMLInputElement | null;
 
     expect(sourceSection?.textContent).toContain('P-Point 设计关键点');
-    expect(sourceSection?.textContent).toContain('实例原点');
+    expect(sourceSection?.textContent).toContain('Item 原点');
     expect(sourceSection?.textContent).toContain('不等同于 E3D Item 端点');
     expect(sourceSection?.textContent).toContain('模型表面点');
     expect(sourceSection?.textContent).toContain('屏幕像素');

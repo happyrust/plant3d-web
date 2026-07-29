@@ -5,13 +5,18 @@ import type {
   AnnotationRecord,
   AnnotationType,
   CloudAnnotationRecord,
+  CloudElementBinding,
   MeasurementRecord,
   ObbAnnotationRecord,
   RectAnnotationRecord,
   XeokitMeasurementRecord,
 } from '@/composables/useToolStore';
 
-import { getAnnotationRefnos } from '@/composables/useToolStore';
+import {
+  deriveCloudBindings,
+  getAnnotationRefnos,
+  getCloudMemberRefnos,
+} from '@/composables/useToolStore';
 import {
   compareAnnotationSeverity,
   getAnnotationReviewDisplay,
@@ -38,6 +43,7 @@ export type AnnotationWorkspaceItem = {
   activityAt: number;
   visible: boolean;
   refnos: string[];
+  cloudBindings?: CloudElementBinding[];
   formId?: string;
   commentCount: number;
   reviewState?: AnnotationReviewState;
@@ -176,6 +182,8 @@ function createWorkspaceItem(
   const status = resolveWorkspaceStatus(reviewState);
   const priorityDisplay = getAnnotationWorkspacePriorityDisplay(record.severity);
   const screenshot = resolveAnnotationScreenshot(record);
+  const cloudRecord = type === 'cloud' ? record as CloudAnnotationRecord : null;
+  const cloudBindings = cloudRecord ? deriveCloudBindings(cloudRecord) : undefined;
 
   return {
     id: record.id,
@@ -185,7 +193,8 @@ function createWorkspaceItem(
     createdAt: record.createdAt,
     activityAt: reviewState.updatedAt || record.createdAt,
     visible: record.visible,
-    refnos: getAnnotationRefnos(record),
+    refnos: cloudRecord ? getCloudMemberRefnos(cloudRecord) : getAnnotationRefnos(record),
+    cloudBindings,
     formId: normalizeFormId((record as { formId?: string }).formId),
     commentCount: getCommentCount ? getCommentCount(type, record.id) : 0,
     reviewState,

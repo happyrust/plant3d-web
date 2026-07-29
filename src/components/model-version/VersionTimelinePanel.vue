@@ -240,6 +240,50 @@ function formatTime(timestamp: number): string {
   return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
 }
 
+function releaseTreeSesno(node: ReleaseView): number | undefined {
+  if (!node.sesnoHint) return undefined;
+  const sesno = Number(node.sesnoHint);
+  return Number.isInteger(sesno) && sesno >= 0 ? sesno : undefined;
+}
+
+function releaseTreeTitle(node: ReleaseView): string {
+  const sesno = releaseTreeSesno(node);
+  return sesno === undefined
+    ? '该发布记录没有可用的 sesno'
+    : `查看 sesno ${sesno} 的历史模型树`;
+}
+
+function viewTreeAt(sesno: number, dbnum?: number): void {
+  if (!Number.isInteger(sesno) || sesno < 0) return;
+
+  const url = new URL(window.location.href);
+  url.searchParams.delete('sesno');
+  url.searchParams.set('tree_sesno', String(sesno));
+  url.searchParams.set('e3d_source', 'backend');
+
+  const project = store.filters.project ?? projectInput.value.trim();
+  if (project) {
+    url.searchParams.set('project', project);
+    url.searchParams.set('output_project', project);
+  }
+
+  const targetDbnum = Number.isInteger(dbnum)
+    ? dbnum
+    : (store.filters.dbnum ?? parseDbnum(dbnumInput.value));
+  if (targetDbnum !== undefined) {
+    url.searchParams.set('dbnum', String(targetDbnum));
+    url.searchParams.set('show_dbnum', String(targetDbnum));
+  }
+
+  window.location.assign(url.toString());
+}
+
+function viewReleaseTree(node: ReleaseView): void {
+  const sesno = releaseTreeSesno(node);
+  if (sesno === undefined) return;
+  viewTreeAt(sesno, node.record.dbnum);
+}
+
 // ---------------------------------------------------------------------------
 // A/B 钉选与进入对比（T012，FR-027/FR-032）
 // ---------------------------------------------------------------------------
@@ -505,10 +549,11 @@ function formatIssue(issue: unknown): string {
 
               <div class="mt-2 flex flex-wrap items-center gap-1">
                 <button type="button"
-                  class="rounded border border-input px-1.5 py-0.5 text-[11px] leading-4 text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50"
-                  disabled
-                  title="Phase 2 历史快照（US3）提供"
-                  data-testid="version-card-view-tree">
+                  class="rounded border border-input px-1.5 py-0.5 text-[11px] leading-4 text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
+                  :disabled="releaseTreeSesno(item.node) === undefined"
+                  :title="releaseTreeTitle(item.node)"
+                  data-testid="version-card-view-tree"
+                  @click="viewReleaseTree(item.node)">
                   查看此版本树
                 </button>
                 <button type="button"
@@ -545,10 +590,10 @@ function formatIssue(issue: unknown): string {
               <span class="truncate">会话锚点 sesno {{ item.node.sesno }} · {{ formatTime(item.node.timestamp) }}</span>
               <span v-if="item.node.source" class="truncate">· {{ item.node.source }}</span>
               <button type="button"
-                class="ml-auto shrink-0 rounded border border-input px-1.5 py-0.5 text-[11px] leading-4 disabled:cursor-not-allowed disabled:opacity-50"
-                disabled
-                title="Phase 2 历史快照"
-                data-testid="anchor-node-snapshot">
+                class="ml-auto shrink-0 rounded border border-input px-1.5 py-0.5 text-[11px] leading-4 text-foreground transition-colors hover:bg-muted"
+                :title="`查看 sesno ${item.node.sesno} 的历史模型树`"
+                data-testid="anchor-node-snapshot"
+                @click="viewTreeAt(item.node.sesno, item.node.dbnum)">
                 查看此时刻树
               </button>
             </div>

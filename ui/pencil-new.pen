@@ -284,6 +284,7 @@
                   "name": "Count",
                   "fill": "$text-secondary",
                   "content": "12 个版本 · 3 个锚点",
+                  "fontFamily": "Inter",
                   "fontSize": 10,
                   "fontWeight": "normal"
                 }
@@ -503,6 +504,7 @@
                       "name": "Meta",
                       "fill": "$text-secondary",
                       "content": "16:42 · sesno 897 · 王工 · label: 结构补强",
+                      "fontFamily": "Inter",
                       "fontSize": 10,
                       "fontWeight": "normal"
                     },
@@ -599,6 +601,7 @@
                       "id": "hdx9I",
                       "name": "Actions",
                       "width": "fill_container",
+                      "layout": "vertical",
                       "gap": 6,
                       "padding": [
                         2,
@@ -611,6 +614,7 @@
                           "type": "frame",
                           "id": "aTHSw",
                           "name": "Btn 查看此版本树",
+                          "width": "fill_container",
                           "fill": "$ink",
                           "cornerRadius": 6,
                           "gap": 4,
@@ -618,6 +622,7 @@
                             4,
                             8
                           ],
+                          "justifyContent": "center",
                           "alignItems": "center",
                           "children": [
                             {
@@ -640,9 +645,7 @@
                               "fontSize": 11,
                               "fontWeight": "normal"
                             }
-                          ],
-                          "width": "fill_container",
-                          "justifyContent": "center"
+                          ]
                         },
                         {
                           "type": "frame",
@@ -734,8 +737,7 @@
                             }
                           ]
                         }
-                      ],
-                      "layout": "vertical"
+                      ]
                     }
                   ]
                 }
@@ -876,6 +878,7 @@
                       "name": "Meta",
                       "fill": "$text-secondary",
                       "content": "11:08 · sesno 896 · 李工",
+                      "fontFamily": "Inter",
                       "fontSize": 10,
                       "fontWeight": "normal"
                     },
@@ -1019,6 +1022,7 @@
                   "name": "AnchorText",
                   "fill": "$text-secondary",
                   "content": "会话锚点 sesno 894 · 15:20 · 可查快照",
+                  "fontFamily": "Inter",
                   "fontSize": 10,
                   "fontWeight": "normal"
                 }
@@ -1216,6 +1220,7 @@
                       "name": "Meta",
                       "fill": "$text-secondary",
                       "content": "18:30 · sesno 791 · 赵工",
+                      "fontFamily": "Inter",
                       "fontSize": 10,
                       "fontWeight": "normal"
                     },
@@ -1474,6 +1479,7 @@
                       "name": "Meta",
                       "fill": "$text-secondary",
                       "content": "09:12 · sesno 790 · 李工 · staged",
+                      "fontFamily": "Inter",
                       "fontSize": 10,
                       "fontWeight": "normal"
                     },
@@ -1843,6 +1849,7 @@
                       "name": "DiffChipText",
                       "fill": "$primary",
                       "content": "896 → 897 差异模式",
+                      "fontFamily": "Inter",
                       "fontSize": 10,
                       "fontWeight": "normal"
                     }
@@ -2109,6 +2116,7 @@
                       "name": "CntText",
                       "fill": "$text-secondary",
                       "content": "20 处变更",
+                      "fontFamily": "Inter",
                       "fontSize": 10,
                       "fontWeight": "normal"
                     }
@@ -2800,6 +2808,7 @@
                   "name": "AttrTitle",
                   "fill": "$text-primary",
                   "content": "属性差异 · PIPE-100-B-1",
+                  "fontFamily": "Inter",
                   "fontSize": 12,
                   "fontWeight": "600"
                 },
@@ -2867,6 +2876,7 @@
                       "name": "LocateText",
                       "fill": "$primary",
                       "content": "在 3D 中定位",
+                      "fontFamily": "Inter",
                       "fontSize": 10,
                       "fontWeight": "normal"
                     }
@@ -2933,6 +2943,7 @@
                           "name": "CText",
                           "fill": "$text-secondary",
                           "content": "变更前 · 896",
+                          "fontFamily": "Inter",
                           "fontSize": 10,
                           "fontWeight": "600"
                         }
@@ -2956,6 +2967,7 @@
                           "name": "CText",
                           "fill": "$text-secondary",
                           "content": "变更后 · 897",
+                          "fontFamily": "Inter",
                           "fontSize": 10,
                           "fontWeight": "600"
                         }
@@ -3229,6 +3241,7 @@
                   "name": "HintText",
                   "fill": "$text-secondary",
                   "content": "点击带徽章节点查看属性差异；幽灵节点仅展示、不可定位 3D",
+                  "fontFamily": "Inter",
                   "fontSize": 10,
                   "fontWeight": "normal"
                 }
@@ -3315,6 +3328,7 @@
                   "name": "VerText",
                   "fill": "$text-primary",
                   "content": "版本：physical-791",
+                  "fontFamily": "Inter",
                   "fontSize": 11,
                   "fontWeight": "normal"
                 },
@@ -3388,6 +3402,7 @@
                   "textGrowth": "fixed-width",
                   "width": "fill_container",
                   "content": "正在查看历史版本 physical-791（只读）",
+                  "fontFamily": "Inter",
                   "fontSize": 11,
                   "fontWeight": "600"
                 },
@@ -3399,6 +3414,7 @@
                   "textGrowth": "fixed-width",
                   "width": "fill_container",
                   "content": "2026-07-17 18:30 · sesno 791 · 编辑/生成已禁用",
+                  "fontFamily": "Inter",
                   "fontSize": 10,
                   "fontWeight": "normal"
                 }
@@ -5497,6 +5513,7 @@
               "name": "StripNote",
               "fill": "$text-secondary",
               "content": "3D 并排分色渲染差异构件，选中行联动定位",
+              "fontFamily": "Inter",
               "fontSize": 10,
               "fontWeight": "normal"
             },
@@ -5598,6 +5615,7 @@
                   "name": "ViewportText",
                   "fill": "$border",
                   "content": "3D 视口 · 当前加载 physical-896",
+                  "fontFamily": "Inter",
                   "fontSize": 10,
                   "fontWeight": "normal"
                 }
@@ -5817,6 +5835,7 @@
                       "name": "TipText",
                       "fill": "$dark-text",
                       "content": "physical-896 · 07-18 11:08 · 降级",
+                      "fontFamily": "Inter",
                       "fontSize": 10,
                       "fontWeight": "normal"
                     }
@@ -6036,6 +6055,7 @@
               "name": "Label",
               "fill": "$text-secondary",
               "content": "空态(FR-008)",
+              "fontFamily": "Inter",
               "fontSize": 11,
               "fontWeight": "normal"
             },
@@ -6194,6 +6214,7 @@
               "name": "Label",
               "fill": "$text-secondary",
               "content": "加载中(FR-008)",
+              "fontFamily": "Inter",
               "fontSize": 11,
               "fontWeight": "normal"
             },
@@ -6444,6 +6465,7 @@
               "name": "Label",
               "fill": "$text-secondary",
               "content": "加载失败(FR-008/FR-033)",
+              "fontFamily": "Inter",
               "fontSize": 11,
               "fontWeight": "normal"
             },
@@ -7076,456 +7098,6 @@
           "fill": "$border",
           "width": "fill_container",
           "height": 1
-        },
-        {
-          "type": "frame",
-          "id": "aBMRH",
-          "name": "Body",
-          "width": "fill_container",
-          "layout": "vertical",
-          "gap": 4,
-          "padding": [
-            8,
-            12,
-            14,
-            12
-          ],
-          "children": [
-            {
-              "type": "frame",
-              "id": "PUjz4",
-              "name": "AnchorRow 选中",
-              "width": "fill_container",
-              "fill": "$primary-bg",
-              "cornerRadius": 6,
-              "stroke": "$primary-line",
-              "strokeWidth": 1,
-              "gap": 10,
-              "padding": [
-                4,
-                6
-              ],
-              "alignItems": "center",
-              "children": [
-                {
-                  "type": "frame",
-                  "id": "SMMLM",
-                  "name": "AnchorGutter",
-                  "width": 14,
-                  "layout": "vertical",
-                  "alignItems": "center",
-                  "children": [
-                    {
-                      "type": "ellipse",
-                      "id": "h7glu",
-                      "name": "AnchorDot",
-                      "fill": "$bg",
-                      "width": 6,
-                      "height": 6,
-                      "stroke": "$primary",
-                      "strokeWidth": 1.5
-                    }
-                  ]
-                },
-                {
-                  "type": "icon",
-                  "id": "kEpD3",
-                  "name": "AnchorIcon",
-                  "width": 10,
-                  "height": 10,
-                  "icon": "anchor",
-                  "library": "lucide",
-                  "fill": "$primary"
-                },
-                {
-                  "type": "text",
-                  "id": "q2skBD",
-                  "name": "AnchorText",
-                  "fill": "$text-primary",
-                  "content": "会话锚点 sesno 894 · 07-18 15:20",
-                  "fontFamily": "$mono",
-                  "fontSize": 10,
-                  "fontWeight": "normal"
-                },
-                {
-                  "type": "frame",
-                  "id": "wYezz",
-                  "name": "ASp",
-                  "width": "fill_container",
-                  "height": 1
-                },
-                {
-                  "type": "icon",
-                  "id": "Y4vJ2",
-                  "name": "More",
-                  "width": 12,
-                  "height": 12,
-                  "icon": "ellipsis",
-                  "library": "lucide",
-                  "fill": "$text-secondary"
-                }
-              ]
-            },
-            {
-              "type": "frame",
-              "id": "Yoncf",
-              "name": "MenuWrap",
-              "width": "fill_container",
-              "padding": [
-                2,
-                0,
-                0,
-                24
-              ],
-              "children": [
-                {
-                  "type": "frame",
-                  "id": "f6c1z",
-                  "name": "AnchorMenu",
-                  "clip": true,
-                  "width": 230,
-                  "fill": "$bg",
-                  "cornerRadius": 8,
-                  "stroke": "$border",
-                  "strokeWidth": 1,
-                  "effect": {
-                    "type": "shadow",
-                    "shadowType": "outer",
-                    "color": "#0F172A22",
-                    "offset": {
-                      "x": 0,
-                      "y": 4
-                    },
-                    "blur": 16
-                  },
-                  "layout": "vertical",
-                  "children": [
-                    {
-                      "type": "frame",
-                      "id": "p3SCFl",
-                      "name": "MenuHead",
-                      "width": "fill_container",
-                      "fill": "$bg-muted",
-                      "padding": [
-                        6,
-                        10
-                      ],
-                      "children": [
-                        {
-                          "type": "text",
-                          "id": "Yse0o",
-                          "name": "MenuHeadText",
-                          "fill": "$text-secondary",
-                          "content": "锚点 sesno 894",
-                          "fontFamily": "$mono",
-                          "fontSize": 10,
-                          "fontWeight": "600"
-                        }
-                      ]
-                    },
-                    {
-                      "type": "frame",
-                      "id": "Y6VM8",
-                      "name": "MI 查看此时刻模型树快照",
-                      "width": "fill_container",
-                      "fill": "$bg",
-                      "gap": 8,
-                      "padding": [
-                        7,
-                        10
-                      ],
-                      "alignItems": "center",
-                      "children": [
-                        {
-                          "type": "icon",
-                          "id": "xV8Fs",
-                          "name": "MIcon",
-                          "width": 12,
-                          "height": 12,
-                          "icon": "list-tree",
-                          "library": "lucide",
-                          "fill": "$text-secondary"
-                        },
-                        {
-                          "type": "frame",
-                          "id": "oTxEo",
-                          "name": "MTextWrap",
-                          "width": "fill_container",
-                          "layout": "vertical",
-                          "gap": 1,
-                          "children": [
-                            {
-                              "type": "text",
-                              "id": "bi8Eg",
-                              "name": "MLabel",
-                              "fill": "$text-primary",
-                              "content": "查看此时刻模型树快照",
-                              "fontFamily": "$font",
-                              "fontSize": 11,
-                              "fontWeight": "normal"
-                            },
-                            {
-                              "type": "text",
-                              "id": "pfiqD",
-                              "name": "MSub",
-                              "fill": "$text-secondary",
-                              "content": "只读 · 先解析锚点再取快照（FR-018）",
-                              "fontFamily": "$mono",
-                              "fontSize": 10,
-                              "fontWeight": "normal"
-                            }
-                          ]
-                        }
-                      ]
-                    },
-                    {
-                      "type": "frame",
-                      "id": "XL8wk",
-                      "name": "MI 查看选中元素属性快照",
-                      "width": "fill_container",
-                      "fill": "$bg",
-                      "gap": 8,
-                      "padding": [
-                        7,
-                        10
-                      ],
-                      "alignItems": "center",
-                      "children": [
-                        {
-                          "type": "icon",
-                          "id": "Swiop",
-                          "name": "MIcon",
-                          "width": 12,
-                          "height": 12,
-                          "icon": "file-clock",
-                          "library": "lucide",
-                          "fill": "$text-secondary"
-                        },
-                        {
-                          "type": "frame",
-                          "id": "OJ7uM",
-                          "name": "MTextWrap",
-                          "width": "fill_container",
-                          "layout": "vertical",
-                          "gap": 1,
-                          "children": [
-                            {
-                              "type": "text",
-                              "id": "V0tQY",
-                              "name": "MLabel",
-                              "fill": "$text-primary",
-                              "content": "查看选中元素属性快照",
-                              "fontFamily": "$font",
-                              "fontSize": 11,
-                              "fontWeight": "normal"
-                            },
-                            {
-                              "type": "text",
-                              "id": "IYZrl",
-                              "name": "MSub",
-                              "fill": "$text-secondary",
-                              "content": "需先在树/3D 选中元素",
-                              "fontFamily": "$mono",
-                              "fontSize": 10,
-                              "fontWeight": "normal"
-                            }
-                          ]
-                        }
-                      ]
-                    },
-                    {
-                      "type": "rectangle",
-                      "id": "ciu7B",
-                      "name": "MDiv",
-                      "fill": "$border",
-                      "width": "fill_container",
-                      "height": 1
-                    },
-                    {
-                      "type": "frame",
-                      "id": "OUg0C",
-                      "name": "MI 设为对比 A",
-                      "width": "fill_container",
-                      "fill": "$bg",
-                      "gap": 8,
-                      "padding": [
-                        7,
-                        10
-                      ],
-                      "alignItems": "center",
-                      "children": [
-                        {
-                          "type": "icon",
-                          "id": "NjaI0",
-                          "name": "MIcon",
-                          "width": 12,
-                          "height": 12,
-                          "icon": "git-compare",
-                          "library": "lucide",
-                          "fill": "$text-secondary"
-                        },
-                        {
-                          "type": "frame",
-                          "id": "y4KuQw",
-                          "name": "MTextWrap",
-                          "width": "fill_container",
-                          "layout": "vertical",
-                          "gap": 1,
-                          "children": [
-                            {
-                              "type": "text",
-                              "id": "YvKOP",
-                              "name": "MLabel",
-                              "fill": "$text-primary",
-                              "content": "设为对比 A",
-                              "fontFamily": "$font",
-                              "fontSize": 11,
-                              "fontWeight": "normal"
-                            }
-                          ]
-                        }
-                      ]
-                    },
-                    {
-                      "type": "frame",
-                      "id": "b5k7Q8",
-                      "name": "MI 设为对比 B",
-                      "width": "fill_container",
-                      "fill": "$bg",
-                      "gap": 8,
-                      "padding": [
-                        7,
-                        10
-                      ],
-                      "alignItems": "center",
-                      "children": [
-                        {
-                          "type": "icon",
-                          "id": "Kar5h",
-                          "name": "MIcon",
-                          "width": 12,
-                          "height": 12,
-                          "icon": "git-compare",
-                          "library": "lucide",
-                          "fill": "$text-secondary"
-                        },
-                        {
-                          "type": "frame",
-                          "id": "D3H3LX",
-                          "name": "MTextWrap",
-                          "width": "fill_container",
-                          "layout": "vertical",
-                          "gap": 1,
-                          "children": [
-                            {
-                              "type": "text",
-                              "id": "vDg2t",
-                              "name": "MLabel",
-                              "fill": "$text-primary",
-                              "content": "设为对比 B",
-                              "fontFamily": "$font",
-                              "fontSize": 11,
-                              "fontWeight": "normal"
-                            }
-                          ]
-                        }
-                      ]
-                    },
-                    {
-                      "type": "frame",
-                      "id": "WrTTQ",
-                      "name": "MI 复制 sesno",
-                      "width": "fill_container",
-                      "fill": "$bg",
-                      "gap": 8,
-                      "padding": [
-                        7,
-                        10
-                      ],
-                      "alignItems": "center",
-                      "children": [
-                        {
-                          "type": "icon",
-                          "id": "p2J4bo",
-                          "name": "MIcon",
-                          "width": 12,
-                          "height": 12,
-                          "icon": "copy",
-                          "library": "lucide",
-                          "fill": "$text-secondary"
-                        },
-                        {
-                          "type": "frame",
-                          "id": "nBfMR",
-                          "name": "MTextWrap",
-                          "width": "fill_container",
-                          "layout": "vertical",
-                          "gap": 1,
-                          "children": [
-                            {
-                              "type": "text",
-                              "id": "oHUOr",
-                              "name": "MLabel",
-                              "fill": "$text-primary",
-                              "content": "复制 sesno",
-                              "fontFamily": "$font",
-                              "fontSize": 11,
-                              "fontWeight": "normal"
-                            }
-                          ]
-                        }
-                      ]
-                    },
-                    {
-                      "type": "rectangle",
-                      "id": "ndC4Y",
-                      "name": "MDiv2",
-                      "fill": "$border",
-                      "width": "fill_container",
-                      "height": 1
-                    },
-                    {
-                      "type": "frame",
-                      "id": "y4PAo",
-                      "name": "MenuFoot",
-                      "width": "fill_container",
-                      "fill": "$amber-bg",
-                      "gap": 4,
-                      "padding": [
-                        6,
-                        10
-                      ],
-                      "alignItems": "center",
-                      "children": [
-                        {
-                          "type": "icon",
-                          "id": "BlGNJ",
-                          "name": "FootIcon",
-                          "width": 10,
-                          "height": 10,
-                          "icon": "info",
-                          "library": "lucide",
-                          "fill": "$amber"
-                        },
-                        {
-                          "type": "text",
-                          "id": "lTW6I",
-                          "name": "FootText",
-                          "fill": "$amber",
-                          "textGrowth": "fixed-width",
-                          "width": "fill_container",
-                          "content": "仅 versioned 站点可用；历史过期将提示降级（FR-019/020）",
-                          "fontFamily": "$mono",
-                          "fontSize": 10,
-                          "fontWeight": "normal"
-                        }
-                      ]
-                    }
-                  ]
-                }
-              ]
-            }
-          ]
         }
       ]
     },
@@ -7920,6 +7492,7 @@
               "id": "SZPYI",
               "name": "Actions",
               "width": "fill_container",
+              "layout": "vertical",
               "gap": 6,
               "alignItems": "center",
               "children": [
@@ -7927,6 +7500,7 @@
                   "type": "frame",
                   "id": "YwNgF",
                   "name": "BtnRepick",
+                  "width": "fill_container",
                   "fill": "$ink",
                   "cornerRadius": 6,
                   "gap": 4,
@@ -7934,6 +7508,7 @@
                     5,
                     10
                   ],
+                  "justifyContent": "center",
                   "alignItems": "center",
                   "children": [
                     {
@@ -7956,13 +7531,11 @@
                       "fontSize": 11,
                       "fontWeight": "normal"
                     }
-                  ],
-                  "width": "fill_container",
-                  "justifyContent": "center"
+                  ]
                 },
                 {
                   "type": "frame",
-                  "id": "ActRow2",
+                  "id": "K7Oi30",
                   "name": "ActionsRow2",
                   "width": "fill_container",
                   "gap": 6,
@@ -8041,8 +7614,7 @@
                     }
                   ]
                 }
-              ],
-              "layout": "vertical"
+              ]
             }
           ]
         }
@@ -8780,6 +8352,7 @@
           "name": "SecText",
           "fill": "$dark-text",
           "content": "US1 版本时间线：常态 / 三态 / 大量版本折叠",
+          "fontFamily": "Inter",
           "fontSize": 13,
           "fontWeight": "600"
         }
@@ -8816,6 +8389,7 @@
           "name": "SecText",
           "fill": "$dark-text",
           "content": "US2 树内差异 · US3 历史快照 · 锚点菜单",
+          "fontFamily": "Inter",
           "fontSize": 13,
           "fontWeight": "600"
         }
@@ -8852,6 +8426,7 @@
           "name": "SecText",
           "fill": "$dark-text",
           "content": "US4 双版本对比：可比 / 阻断两态",
+          "fontFamily": "Inter",
           "fontSize": 13,
           "fontWeight": "600"
         }
@@ -8888,8 +8463,461 @@
           "name": "SecText",
           "fill": "$dark-text",
           "content": "US5 3D 时间刻度条：常态 / 隔离警示",
+          "fontFamily": "Inter",
           "fontSize": 13,
           "fontWeight": "600"
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "aBMRH",
+      "x": 6313,
+      "y": -1551,
+      "name": "Body",
+      "width": "fill_container(380)",
+      "layout": "vertical",
+      "gap": 4,
+      "padding": [
+        8,
+        12,
+        14,
+        12
+      ],
+      "children": [
+        {
+          "type": "frame",
+          "id": "PUjz4",
+          "name": "AnchorRow 选中",
+          "width": "fill_container",
+          "fill": "$primary-bg",
+          "cornerRadius": 6,
+          "stroke": "$primary-line",
+          "strokeWidth": 1,
+          "gap": 10,
+          "padding": [
+            4,
+            6
+          ],
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "frame",
+              "id": "SMMLM",
+              "name": "AnchorGutter",
+              "width": 14,
+              "layout": "vertical",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "ellipse",
+                  "id": "h7glu",
+                  "name": "AnchorDot",
+                  "fill": "$bg",
+                  "width": 6,
+                  "height": 6,
+                  "stroke": "$primary",
+                  "strokeWidth": 1.5
+                }
+              ]
+            },
+            {
+              "type": "icon",
+              "id": "kEpD3",
+              "name": "AnchorIcon",
+              "width": 10,
+              "height": 10,
+              "icon": "anchor",
+              "library": "lucide",
+              "fill": "$primary"
+            },
+            {
+              "type": "text",
+              "id": "q2skBD",
+              "name": "AnchorText",
+              "fill": "$text-primary",
+              "content": "会话锚点 sesno 894 · 07-18 15:20",
+              "fontFamily": "$mono",
+              "fontSize": 10,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "frame",
+              "id": "wYezz",
+              "name": "ASp",
+              "width": "fill_container",
+              "height": 1
+            },
+            {
+              "type": "icon",
+              "id": "Y4vJ2",
+              "name": "More",
+              "width": 12,
+              "height": 12,
+              "icon": "ellipsis",
+              "library": "lucide",
+              "fill": "$text-secondary"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "Yoncf",
+          "name": "MenuWrap",
+          "width": "fill_container",
+          "padding": [
+            2,
+            0,
+            0,
+            24
+          ],
+          "children": [
+            {
+              "type": "frame",
+              "id": "f6c1z",
+              "name": "AnchorMenu",
+              "clip": true,
+              "width": 230,
+              "fill": "$bg",
+              "cornerRadius": 8,
+              "stroke": "$border",
+              "strokeWidth": 1,
+              "effect": {
+                "type": "shadow",
+                "shadowType": "outer",
+                "color": "#0F172A22",
+                "offset": {
+                  "x": 0,
+                  "y": 4
+                },
+                "blur": 16
+              },
+              "layout": "vertical",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "p3SCFl",
+                  "name": "MenuHead",
+                  "width": "fill_container",
+                  "fill": "$bg-muted",
+                  "padding": [
+                    6,
+                    10
+                  ],
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "Yse0o",
+                      "name": "MenuHeadText",
+                      "fill": "$text-secondary",
+                      "content": "锚点 sesno 894",
+                      "fontFamily": "$mono",
+                      "fontSize": 10,
+                      "fontWeight": "600"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "Y6VM8",
+                  "name": "MI 查看此时刻模型树快照",
+                  "width": "fill_container",
+                  "fill": "$bg",
+                  "gap": 8,
+                  "padding": [
+                    7,
+                    10
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon",
+                      "id": "xV8Fs",
+                      "name": "MIcon",
+                      "width": 12,
+                      "height": 12,
+                      "icon": "list-tree",
+                      "library": "lucide",
+                      "fill": "$text-secondary"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "oTxEo",
+                      "name": "MTextWrap",
+                      "width": "fill_container",
+                      "layout": "vertical",
+                      "gap": 1,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "bi8Eg",
+                          "name": "MLabel",
+                          "fill": "$text-primary",
+                          "content": "查看此时刻模型树快照",
+                          "fontFamily": "$font",
+                          "fontSize": 11,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "pfiqD",
+                          "name": "MSub",
+                          "fill": "$text-secondary",
+                          "content": "只读 · 先解析锚点再取快照（FR-018）",
+                          "fontFamily": "$mono",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "XL8wk",
+                  "name": "MI 查看选中元素属性快照",
+                  "width": "fill_container",
+                  "fill": "$bg",
+                  "gap": 8,
+                  "padding": [
+                    7,
+                    10
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon",
+                      "id": "Swiop",
+                      "name": "MIcon",
+                      "width": 12,
+                      "height": 12,
+                      "icon": "file-clock",
+                      "library": "lucide",
+                      "fill": "$text-secondary"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "OJ7uM",
+                      "name": "MTextWrap",
+                      "width": "fill_container",
+                      "layout": "vertical",
+                      "gap": 1,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "V0tQY",
+                          "name": "MLabel",
+                          "fill": "$text-primary",
+                          "content": "查看选中元素属性快照",
+                          "fontFamily": "$font",
+                          "fontSize": 11,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "IYZrl",
+                          "name": "MSub",
+                          "fill": "$text-secondary",
+                          "content": "需先在树/3D 选中元素",
+                          "fontFamily": "$mono",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "rectangle",
+                  "id": "ciu7B",
+                  "name": "MDiv",
+                  "fill": "$border",
+                  "width": "fill_container",
+                  "height": 1
+                },
+                {
+                  "type": "frame",
+                  "id": "OUg0C",
+                  "name": "MI 设为对比 A",
+                  "width": "fill_container",
+                  "fill": "$bg",
+                  "gap": 8,
+                  "padding": [
+                    7,
+                    10
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon",
+                      "id": "NjaI0",
+                      "name": "MIcon",
+                      "width": 12,
+                      "height": 12,
+                      "icon": "git-compare",
+                      "library": "lucide",
+                      "fill": "$text-secondary"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "y4KuQw",
+                      "name": "MTextWrap",
+                      "width": "fill_container",
+                      "layout": "vertical",
+                      "gap": 1,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "YvKOP",
+                          "name": "MLabel",
+                          "fill": "$text-primary",
+                          "content": "设为对比 A",
+                          "fontFamily": "$font",
+                          "fontSize": 11,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "b5k7Q8",
+                  "name": "MI 设为对比 B",
+                  "width": "fill_container",
+                  "fill": "$bg",
+                  "gap": 8,
+                  "padding": [
+                    7,
+                    10
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon",
+                      "id": "Kar5h",
+                      "name": "MIcon",
+                      "width": 12,
+                      "height": 12,
+                      "icon": "git-compare",
+                      "library": "lucide",
+                      "fill": "$text-secondary"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "D3H3LX",
+                      "name": "MTextWrap",
+                      "width": "fill_container",
+                      "layout": "vertical",
+                      "gap": 1,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "vDg2t",
+                          "name": "MLabel",
+                          "fill": "$text-primary",
+                          "content": "设为对比 B",
+                          "fontFamily": "$font",
+                          "fontSize": 11,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "WrTTQ",
+                  "name": "MI 复制 sesno",
+                  "width": "fill_container",
+                  "fill": "$bg",
+                  "gap": 8,
+                  "padding": [
+                    7,
+                    10
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon",
+                      "id": "p2J4bo",
+                      "name": "MIcon",
+                      "width": 12,
+                      "height": 12,
+                      "icon": "copy",
+                      "library": "lucide",
+                      "fill": "$text-secondary"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "nBfMR",
+                      "name": "MTextWrap",
+                      "width": "fill_container",
+                      "layout": "vertical",
+                      "gap": 1,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "oHUOr",
+                          "name": "MLabel",
+                          "fill": "$text-primary",
+                          "content": "复制 sesno",
+                          "fontFamily": "$font",
+                          "fontSize": 11,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "rectangle",
+                  "id": "ndC4Y",
+                  "name": "MDiv2",
+                  "fill": "$border",
+                  "width": "fill_container",
+                  "height": 1
+                },
+                {
+                  "type": "frame",
+                  "id": "y4PAo",
+                  "name": "MenuFoot",
+                  "width": "fill_container",
+                  "fill": "$amber-bg",
+                  "gap": 4,
+                  "padding": [
+                    6,
+                    10
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon",
+                      "id": "BlGNJ",
+                      "name": "FootIcon",
+                      "width": 10,
+                      "height": 10,
+                      "icon": "info",
+                      "library": "lucide",
+                      "fill": "$amber"
+                    },
+                    {
+                      "type": "text",
+                      "id": "lTW6I",
+                      "name": "FootText",
+                      "fill": "$amber",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "仅 versioned 站点可用；历史过期将提示降级（FR-019/020）",
+                      "fontFamily": "$mono",
+                      "fontSize": 10,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
         }
       ]
     }

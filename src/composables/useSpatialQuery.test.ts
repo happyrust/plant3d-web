@@ -101,6 +101,17 @@ describe('createSpatialQueryStore', () => {
       page: 1,
       per_page: 100,
       has_more: false,
+      filter_options: {
+        include_negative: false,
+        nouns: [
+          { value: 'PIPE', count: 1 },
+          { value: 'EQUI', count: 1 },
+        ],
+        spec_values: [
+          { value: 1, count: 1 },
+          { value: 2, count: 1 },
+        ],
+      },
       results: [
         { refno: 'loaded_a', noun: 'PIPE', spec_value: 1, distance: 5 },
         { refno: 'server_only', noun: 'EQUI', spec_value: 2, distance: 18 },
@@ -130,6 +141,17 @@ describe('createSpatialQueryStore', () => {
       ['loaded_a', true],
       ['server_only', false],
     ]);
+    expect(store.resultSet.value?.filterOptions).toEqual({
+      includeNegative: false,
+      nouns: [
+        { value: 'PIPE', count: 1, isNegative: false },
+        { value: 'EQUI', count: 1, isNegative: false },
+      ],
+      specValues: [
+        { value: 1, count: 1, label: '管道系统' },
+        { value: 2, count: 1, label: '电气系统' },
+      ],
+    });
   });
 
   it('范围查询应透传 specValues 并按专业过滤结果', async () => {
@@ -170,6 +192,110 @@ describe('createSpatialQueryStore', () => {
     expect(queryNearbyByPosition.mock.calls[0]?.[4]).not.toHaveProperty('max_results');
     expect(store.resultSet.value?.items.map((item) => item.refno)).toEqual(['loaded_a']);
     expect(store.resultSet.value?.groups.map((group) => group.specValue)).toEqual([1]);
+  });
+
+  it('默认应隐藏服务端和本地负实体结果且向后端传 include_negative=false', async () => {
+    const viewer = createViewerStub();
+    viewer.scene.objects.loaded_neg = {
+      id: 'loaded_neg',
+      visible: true,
+      aabb: [20, 0, 0, 30, 10, 10],
+      noun: 'NBOX',
+    } as any;
+    viewer.scene.objectIds.push('loaded_neg');
+    viewer.scene.getLoadedRefnos = () => ['loaded_a', 'loaded_neg'];
+    viewer.scene.getAABB = vi.fn((ids: string[]) => {
+      const first = ids[0];
+      if (first === 'loaded_a') return [0, 0, 0, 10, 10, 10];
+      if (first === 'loaded_neg') return [20, 0, 0, 30, 10, 10];
+      return null;
+    });
+    const queryNearbyByPosition = vi.fn(async (): Promise<SpatialQueryResult> => ({
+      success: true,
+      total_count: 3,
+      returned_count: 3,
+      page: 1,
+      per_page: 100,
+      has_more: false,
+      results: [
+        { refno: 'loaded_a', noun: 'PIPE', spec_value: 1, distance: 5 },
+        { refno: 'loaded_neg', noun: 'NBOX', spec_value: 1, distance: 18 },
+        { refno: 'server_neg', noun: 'NCYL', spec_value: 1, distance: 20 },
+      ],
+    }));
+
+    const store = createSpatialQueryStore({
+      viewerRef: { value: viewer },
+      selection: { selectedRefno: { value: 'loaded_a' } } as any,
+      toolStore: { pickedQueryCenter: { value: null }, setToolMode: vi.fn(), setPickedQueryCenter: vi.fn() } as any,
+      queryNearbyByPosition,
+    });
+
+    store.draft.mode = 'range';
+    store.draft.rangeCenterSource = 'selected';
+    store.draft.radius = 50;
+
+    await store.submitQuery();
+
+    expect(queryNearbyByPosition.mock.calls[0]?.[4]).toEqual(expect.objectContaining({
+      include_negative: false,
+    }));
+    expect(store.resultSet.value?.items.map((item) => item.refno)).toEqual(['loaded_a']);
+    expect(store.resultSet.value?.request.filters.includeNegative).toBe(false);
+  });
+
+  it('开启负实体后应包含负实体结果并透传 include_negative', async () => {
+    const viewer = createViewerStub();
+    viewer.scene.objects.loaded_neg = {
+      id: 'loaded_neg',
+      visible: true,
+      aabb: [20, 0, 0, 30, 10, 10],
+      noun: 'NBOX',
+    } as any;
+    viewer.scene.objectIds.push('loaded_neg');
+    viewer.scene.getLoadedRefnos = () => ['loaded_a', 'loaded_neg'];
+    viewer.scene.getAABB = vi.fn((ids: string[]) => {
+      const first = ids[0];
+      if (first === 'loaded_a') return [0, 0, 0, 10, 10, 10];
+      if (first === 'loaded_neg') return [20, 0, 0, 30, 10, 10];
+      return null;
+    });
+    const queryNearbyByPosition = vi.fn(async (): Promise<SpatialQueryResult> => ({
+      success: true,
+      total_count: 3,
+      returned_count: 3,
+      page: 1,
+      per_page: 100,
+      has_more: false,
+      results: [
+        { refno: 'loaded_a', noun: 'PIPE', spec_value: 1, distance: 5 },
+        { refno: 'loaded_neg', noun: 'NBOX', spec_value: 1, distance: 18 },
+        { refno: 'server_neg', noun: 'NCYL', spec_value: 1, distance: 20 },
+      ],
+    }));
+
+    const store = createSpatialQueryStore({
+      viewerRef: { value: viewer },
+      selection: { selectedRefno: { value: 'loaded_a' } } as any,
+      toolStore: { pickedQueryCenter: { value: null }, setToolMode: vi.fn(), setPickedQueryCenter: vi.fn() } as any,
+      queryNearbyByPosition,
+    });
+
+    store.draft.mode = 'range';
+    store.draft.rangeCenterSource = 'selected';
+    store.draft.radius = 50;
+    store.draft.includeNegative = true;
+
+    await store.submitQuery();
+
+    expect(queryNearbyByPosition.mock.calls[0]?.[4]).toEqual(expect.objectContaining({
+      include_negative: true,
+    }));
+    expect(store.resultSet.value?.items.map((item) => item.refno)).toEqual([
+      'loaded_a',
+      'loaded_neg',
+      'server_neg',
+    ]);
   });
 
   it('翻页查询应把 page 和 per_page 传给服务端并保留总数', async () => {
@@ -283,6 +409,7 @@ describe('createSpatialQueryStore', () => {
       page: 2,
       per_page: 10,
       shape: 'cube',
+      include_negative: false,
     }));
     expect(queryNearbyByRefno.mock.calls[0]?.[2]).not.toHaveProperty('max_results');
     expect(queryNearbyByPosition).not.toHaveBeenCalled();
@@ -368,6 +495,7 @@ describe('createSpatialQueryStore', () => {
       page: 1,
       per_page: 25,
       shape: 'sphere',
+      include_negative: false,
     }));
     expect(queryNearbyByPosition.mock.calls[0]?.[4]).not.toHaveProperty('max_results');
     expect(queryNearbyByRefno).not.toHaveBeenCalled();
@@ -401,7 +529,7 @@ describe('createSpatialQueryStore', () => {
         center: { x: 0, y: 0, z: 0 },
         radius: 100,
         shape: 'sphere',
-        filters: { nouns: [], keyword: '', onlyLoaded: false, onlyVisible: false, specValues: [] },
+        filters: { nouns: [], keyword: '', onlyLoaded: false, onlyVisible: false, includeNegative: false, specValues: [] },
         limit: 100,
         sortBy: 'specThenDistance',
       },
@@ -472,7 +600,7 @@ describe('createSpatialQueryStore', () => {
         center: { x: 0, y: 0, z: 0 },
         radius: 100,
         shape: 'sphere',
-        filters: { nouns: [], keyword: '', onlyLoaded: false, onlyVisible: false, specValues: [] },
+        filters: { nouns: [], keyword: '', onlyLoaded: false, onlyVisible: false, includeNegative: false, specValues: [] },
         limit: 100,
         sortBy: 'distanceAsc',
       },
@@ -551,7 +679,7 @@ describe('createSpatialQueryStore', () => {
         center: { x: 0, y: 0, z: 0 },
         radius: 100,
         shape: 'sphere',
-        filters: { nouns: [], keyword: '', onlyLoaded: false, onlyVisible: false, specValues: [] },
+        filters: { nouns: [], keyword: '', onlyLoaded: false, onlyVisible: false, includeNegative: false, specValues: [] },
         limit: 100,
         sortBy: 'distanceAsc',
       },
@@ -624,7 +752,7 @@ describe('createSpatialQueryStore', () => {
         center: { x: 0, y: 0, z: 0 },
         radius: 100,
         shape: 'sphere',
-        filters: { nouns: [], keyword: '', onlyLoaded: false, onlyVisible: false, specValues: [] },
+        filters: { nouns: [], keyword: '', onlyLoaded: false, onlyVisible: false, includeNegative: false, specValues: [] },
         limit: 100,
         sortBy: 'distanceAsc',
       },
@@ -705,7 +833,7 @@ describe('createSpatialQueryStore', () => {
         center: { x: 0, y: 0, z: 0 },
         radius: 100,
         shape: 'sphere',
-        filters: { nouns: [], keyword: '', onlyLoaded: false, onlyVisible: false, specValues: [] },
+        filters: { nouns: [], keyword: '', onlyLoaded: false, onlyVisible: false, includeNegative: false, specValues: [] },
         limit: 100,
         sortBy: 'distanceAsc',
       },
@@ -789,6 +917,7 @@ describe('createSpatialQueryStore', () => {
         keyword: 'old',
         onlyLoaded: true,
         onlyVisible: true,
+        includeNegative: false,
         specValues: [1],
         limit: 5,
       },
@@ -850,6 +979,7 @@ describe('createSpatialQueryStore', () => {
         keyword: '',
         onlyLoaded: false,
         onlyVisible: false,
+        includeNegative: false,
         specValues: [],
         limit: 100,
       },

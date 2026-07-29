@@ -282,6 +282,7 @@ describe('useDtxTools object measure tree flow', () => {
     expect(store).not.toHaveProperty('dimensions');
     expect(tools.statusText.value).toContain('尺寸标注正在重构，净距计算结果暂不创建尺寸');
     expect(tools.statusText.value).toContain('24381_1001 ↔ 24381_1002');
-    expect(tools.statusText.value).toContain('净距 2.00m');
+    // 全局默认显示单位为 mm + 0 位小数（E3D 惯例，V2 迁移）。
+    expect(tools.statusText.value).toContain('净距 2000mm');
   });
 });
