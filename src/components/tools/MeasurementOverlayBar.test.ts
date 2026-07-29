@@ -24,7 +24,7 @@ describe('MeasurementOverlayBar', () => {
     vi.resetModules();
   });
 
-  it('应在测量模式下显示底部操作条，并支持打开 dock 测量面板与删除当前测量', async () => {
+  it('应显示紧凑单行工具条，并支持打开设置、测量面板与删除当前测量', async () => {
     const selectAnnotation = vi.fn();
     const ensurePanelAndActivate = vi.fn();
     let host: HTMLDivElement | null = document.createElement('div');
@@ -92,23 +92,8 @@ describe('MeasurementOverlayBar', () => {
     const tools = {
       ready: ref(true),
       statusText: ref('距离测量：第一击创建测量，随后 hover 预览'),
-      currentMeasurement: ref(null),
-      hasVisibleMeasurements: ref(true),
-      hasHiddenMeasurements: ref(true),
-      flyToMeasurement: vi.fn(),
-      setMeasurementVisible: vi.fn((id: string, visible: boolean) => {
-        store.updateXeokitMeasurementVisible(id, visible);
-      }),
-      setAllMeasurementsVisible: vi.fn((visible: boolean) => {
-        store.allXeokitMeasurements.value.forEach((item: any) => {
-          store.updateXeokitMeasurementVisible(item.id, visible);
-        });
-      }),
       removeMeasurement: vi.fn((id: string) => {
         store.removeXeokitMeasurement(id);
-      }),
-      clearMeasurements: vi.fn(() => {
-        store.clearXeokitMeasurements();
       }),
       deactivate: vi.fn(() => {
         store.setToolMode('none');
@@ -119,14 +104,27 @@ describe('MeasurementOverlayBar', () => {
     app.mount(host);
     await nextTick();
 
-    expect(host.querySelector('[data-testid="measurement-overlay-bar"]')).toBeTruthy();
-    const currentVisibilityButton = host.querySelector('[data-testid="measurement-overlay-current-visibility"]') as HTMLButtonElement | null;
-    const allVisibilityButton = host.querySelector('[data-testid="measurement-overlay-all-visibility"]') as HTMLButtonElement | null;
+    const bar = host.querySelector('[data-testid="measurement-overlay-bar"]');
+    expect(bar).toBeTruthy();
+    expect(bar?.getAttribute('class')).toContain('flex-nowrap');
+    expect(bar?.getAttribute('class')).toContain('h-12');
+    expect(bar?.getAttribute('class')).toContain('max-w-[360px]');
+    expect(host.querySelector('[data-testid="measurement-overlay-status"]')?.textContent).toContain('距离');
+    expect(host.querySelector('[data-testid="measurement-overlay-fly-current"]')).toBeNull();
+    expect(host.querySelector('[data-testid="measurement-overlay-current-visibility"]')).toBeNull();
+    expect(host.querySelector('[data-testid="measurement-overlay-all-visibility"]')).toBeNull();
+    expect(host.querySelector('[data-testid="measurement-overlay-clear-all"]')).toBeNull();
+
+    const settingsTrigger = host.querySelector(
+      '[data-testid="measurement-overlay-settings-trigger"]',
+    ) as HTMLButtonElement | null;
+    expect(settingsTrigger?.getAttribute('aria-expanded')).toBe('false');
+    settingsTrigger?.click();
+    await nextTick();
+    expect(settingsTrigger?.getAttribute('aria-expanded')).toBe('true');
+    expect(host.querySelector('[data-testid="measurement-overlay-settings-popover"]')).toBeTruthy();
+
     const exitButton = host.querySelector('[data-testid="measurement-overlay-exit"]') as HTMLButtonElement | null;
-    expect(currentVisibilityButton?.textContent?.trim()).toBe('');
-    expect(currentVisibilityButton?.title).toBe('隐藏当前');
-    expect(allVisibilityButton?.textContent?.trim()).toBe('');
-    expect(allVisibilityButton?.title).toBe('全部显示');
     expect(exitButton?.textContent?.trim()).toBe('');
     expect(exitButton?.title).toBe('退出测量');
     expect(host.querySelector('[data-testid="measurement-overlay-source-picker"]')?.textContent).toContain('P-Point');
@@ -219,14 +217,7 @@ describe('MeasurementOverlayBar', () => {
       tools: {
         ready: ref(true),
         statusText: ref('ready'),
-        currentMeasurement: ref(null),
-        hasVisibleMeasurements: ref(false),
-        hasHiddenMeasurements: ref(false),
-        flyToMeasurement: vi.fn(),
-        setMeasurementVisible: vi.fn(),
-        setAllMeasurementsVisible: vi.fn(),
         removeMeasurement: vi.fn(),
-        clearMeasurements: vi.fn(),
         deactivate,
       },
     });
@@ -244,7 +235,72 @@ describe('MeasurementOverlayBar', () => {
     host = null;
   });
 
-  it('无当前选中测量时，应禁用当前项操作按钮', async () => {
+  it('设置弹层应支持点击外部和 Escape 收起', async () => {
+    let host: HTMLDivElement | null = document.createElement('div');
+    document.body.appendChild(host);
+
+    vi.doMock('@/composables/useDockApi', () => ({
+      ensurePanelAndActivate: vi.fn(),
+    }));
+    vi.doMock('@/composables/useViewerContext', () => ({
+      useViewerContext: () => ({
+        viewerRef: shallowRef(null),
+        overlayContainerRef: shallowRef(null),
+        tools: shallowRef(null),
+        xeokitMeasurementTools: shallowRef(null),
+        store: shallowRef(null),
+        viewerError: shallowRef(null),
+        ptsetVis: shallowRef(null),
+        annotationSystem: shallowRef(null),
+      }),
+    }));
+
+    const [{ default: MeasurementOverlayBar }, { useToolStore }] = await Promise.all([
+      import('./MeasurementOverlayBar.vue'),
+      import('@/composables/useToolStore'),
+    ]);
+
+    const store = useToolStore() as any;
+    store.setToolMode('xeokit_measure_distance');
+    const app = createApp(MeasurementOverlayBar, {
+      tools: {
+        ready: ref(true),
+        statusText: ref('距离测量：捕捉起点'),
+        removeMeasurement: vi.fn(),
+        deactivate: vi.fn(),
+      },
+    });
+    app.mount(host);
+    await nextTick();
+
+    const trigger = host.querySelector(
+      '[data-testid="measurement-overlay-settings-trigger"]',
+    ) as HTMLButtonElement | null;
+    trigger?.click();
+    await nextTick();
+    expect(host.querySelector('[data-testid="measurement-overlay-settings-popover"]')).toBeTruthy();
+    expect(document.activeElement).toBe(
+      host.querySelector('[data-testid="measurement-overlay-mode-e3d"]'),
+    );
+
+    document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+    await nextTick();
+    expect(host.querySelector('[data-testid="measurement-overlay-settings-popover"]')).toBeNull();
+
+    trigger?.click();
+    await nextTick();
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    await nextTick();
+    expect(host.querySelector('[data-testid="measurement-overlay-settings-popover"]')).toBeNull();
+    expect(trigger?.getAttribute('aria-expanded')).toBe('false');
+    expect(document.activeElement).toBe(trigger);
+
+    app.unmount();
+    host.remove();
+    host = null;
+  });
+
+  it('无当前选中测量时，应禁用删除当前按钮', async () => {
     let host: HTMLDivElement | null = document.createElement('div');
     document.body.appendChild(host);
 
@@ -282,22 +338,13 @@ describe('MeasurementOverlayBar', () => {
       tools: {
         ready: ref(true),
         statusText: ref('ready'),
-        currentMeasurement: ref(null),
-        hasVisibleMeasurements: ref(false),
-        hasHiddenMeasurements: ref(false),
-        flyToMeasurement: vi.fn(),
-        setMeasurementVisible: vi.fn(),
-        setAllMeasurementsVisible: vi.fn(),
         removeMeasurement: vi.fn(),
-        clearMeasurements: vi.fn(),
         deactivate: vi.fn(),
       },
     });
     app.mount(host);
     await nextTick();
 
-    expect((host.querySelector('[data-testid="measurement-overlay-fly-current"]') as HTMLButtonElement | null)?.disabled).toBe(true);
-    expect((host.querySelector('[data-testid="measurement-overlay-current-visibility"]') as HTMLButtonElement | null)?.disabled).toBe(true);
     expect((host.querySelector('[data-testid="measurement-overlay-delete-current"]') as HTMLButtonElement | null)?.disabled).toBe(true);
 
     app.unmount();
@@ -349,20 +396,15 @@ describe('MeasurementOverlayBar', () => {
       tools: {
         ready: ref(true),
         statusText: ref('ready'),
-        currentMeasurement: ref(null),
-        hasVisibleMeasurements: ref(false),
-        hasHiddenMeasurements: ref(false),
-        flyToMeasurement: vi.fn(),
-        setMeasurementVisible: vi.fn(),
-        setAllMeasurementsVisible: vi.fn(),
         removeMeasurement: vi.fn(),
-        clearMeasurements: vi.fn(),
         deactivate: vi.fn(),
       },
     });
     app.mount(host);
     await nextTick();
 
+    (host.querySelector('[data-testid="measurement-overlay-settings-trigger"]') as HTMLButtonElement | null)?.click();
+    await nextTick();
     expect(host.querySelector('[data-testid="measurement-overlay-pick-mode"]')).toBeTruthy();
 
     (host.querySelector('[data-testid="measurement-overlay-mode-free"]') as HTMLButtonElement | null)?.click();
@@ -381,6 +423,14 @@ describe('MeasurementOverlayBar', () => {
     await nextTick();
     expect(measurementStyle.state.measurementPickMode).toBe('free_surface');
     expect(host.querySelector('[data-testid="measurement-overlay-free-surface-hint"]')).toBeTruthy();
+    expect(
+      host.querySelector('[data-testid="measurement-overlay-settings-trigger"]')
+        ?.getAttribute('aria-label'),
+    ).toContain('表面点捕捉已关闭');
+    expect(
+      host.querySelector('[data-testid="measurement-overlay-warning-dot"]')
+        ?.getAttribute('aria-hidden'),
+    ).toBe('true');
 
     (host.querySelector('[data-testid="measurement-overlay-mode-e3d"]') as HTMLButtonElement | null)?.click();
     await nextTick();
@@ -428,25 +478,21 @@ describe('MeasurementOverlayBar', () => {
     store.clearXeokitMeasurements();
     store.continuousDistanceMeasureEnabled.value = false;
     store.setToolMode('xeokit_measure_distance');
+    const statusText = ref('距离测量：捕捉起点（E3D）');
 
     const app = createApp(MeasurementOverlayBar, {
       tools: {
         ready: ref(true),
-        statusText: ref('ready'),
-        currentMeasurement: ref(null),
-        hasVisibleMeasurements: ref(false),
-        hasHiddenMeasurements: ref(false),
-        flyToMeasurement: vi.fn(),
-        setMeasurementVisible: vi.fn(),
-        setAllMeasurementsVisible: vi.fn(),
+        statusText,
         removeMeasurement: vi.fn(),
-        clearMeasurements: vi.fn(),
         deactivate: vi.fn(),
       },
     });
     app.mount(host);
     await nextTick();
 
+    (host.querySelector('[data-testid="measurement-overlay-settings-trigger"]') as HTMLButtonElement | null)?.click();
+    await nextTick();
     const checkbox = host.querySelector('[data-testid="measurement-overlay-continuous"]') as HTMLInputElement | null;
     expect(checkbox).toBeTruthy();
     expect(checkbox?.checked).toBe(false);
@@ -459,8 +505,29 @@ describe('MeasurementOverlayBar', () => {
     expect(store.continuousDistanceMeasureEnabled.value).toBe(true);
 
     store.setToolMode('xeokit_measure_angle');
+    statusText.value = '角度测量：捕捉第一边点（E3D）；点空白取消当前点选';
     await nextTick();
     expect(host.querySelector('[data-testid="measurement-overlay-continuous"]')).toBeNull();
+    expect(host.querySelector('[data-testid="measurement-overlay-status"]')?.textContent)
+      .toContain('捕捉第一边点');
+
+    store.setToolMode('xeokit_measure_elevation_point');
+    statusText.value = '位置/标高：捕捉测量点（E3D），单击完成';
+    await nextTick();
+    expect(host.querySelector('[data-testid="measurement-overlay-bar"]')).toBeTruthy();
+    expect(host.querySelector('[data-testid="measurement-overlay-status"]')?.textContent)
+      .toContain('捕捉测量点');
+
+    store.setToolMode('xeokit_measure_elevation_delta');
+    statusText.value = '高差测量：捕捉终点（E3D）；点空白取消当前点选';
+    await nextTick();
+    expect(host.querySelector('[data-testid="measurement-overlay-bar"]')).toBeTruthy();
+    expect(host.querySelector('[data-testid="measurement-overlay-status"]')?.textContent)
+      .toContain('捕捉终点');
+
+    store.setToolMode('none');
+    await nextTick();
+    expect(host.querySelector('[data-testid="measurement-overlay-bar"]')).toBeNull();
 
     app.unmount();
     host.remove();
