@@ -23,6 +23,7 @@ describe('MeasurementPanel', () => {
     localStorage.clear();
     vi.resetModules();
     vi.doUnmock('@/composables/usePipeDistanceStore');
+    vi.doUnmock('@/composables/useConfirmDialogStore');
     vi.doUnmock('@/ribbon/commandBus');
     vi.doMock('@/components/review/measurementPathLookup', () => {
       const normalize = (raw: unknown) => {
@@ -54,6 +55,7 @@ describe('MeasurementPanel', () => {
   });
 
   it('应支持列表选中、外部选中回写和清空测量', async () => {
+    const confirmOpen = vi.fn(async () => true);
     const selectedId = ref<string | null>(null);
     const selectAnnotation = vi.fn((id: string | null) => {
       selectedId.value = id;
@@ -74,6 +76,11 @@ describe('MeasurementPanel', () => {
           selectAnnotation,
           selectedId,
         }),
+      }),
+    }));
+    vi.doMock('@/composables/useConfirmDialogStore', () => ({
+      useConfirmDialogStore: () => ({
+        open: confirmOpen,
       }),
     }));
 
@@ -98,20 +105,22 @@ describe('MeasurementPanel', () => {
       origin: { entityId: 'e1', worldPos: [0, 0, 0] },
       corner: { entityId: 'e2', worldPos: [1, 0, 0] },
       target: { entityId: 'e3', worldPos: [1, 1, 0] },
-      visible: true,
+      visible: false,
       createdAt: 2,
     });
     store.activeMeasurementId.value = null;
     await nextTick();
+    const flyToMeasurement = vi.fn();
+    const removeMeasurement = vi.fn((id: string) => {
+      store.removeMeasurement(id);
+    });
 
     const app = createApp(MeasurementPanel, {
       tools: {
         ready: ref(true),
         statusText: ref('ready'),
-        flyToMeasurement: vi.fn(),
-        removeMeasurement: vi.fn((id: string) => {
-          store.removeMeasurement(id);
-        }),
+        flyToMeasurement,
+        removeMeasurement,
       },
     });
     app.mount(host);
@@ -136,14 +145,115 @@ describe('MeasurementPanel', () => {
     const row2 = host.querySelector('[data-testid="measurement-row-m2"]') as HTMLElement | null;
     expect(row2?.getAttribute('data-selected')).toBe('true');
 
+    const visibilityButton = host.querySelector(
+      '[data-testid="measurement-toggle-all-visible"]',
+    ) as HTMLButtonElement | null;
+    expect(visibilityButton?.textContent).toContain('全部显示');
+    visibilityButton?.click();
+    await nextTick();
+    expect(store.measurements.value.every((item: any) => item.visible)).toBe(true);
+    expect(visibilityButton?.textContent).toContain('全部隐藏');
+
+    visibilityButton?.click();
+    await nextTick();
+    expect(store.measurements.value.every((item: any) => !item.visible)).toBe(true);
+
+    (host.querySelector('[data-testid="measurement-fly-button-m1"]') as HTMLButtonElement | null)
+      ?.click();
+    expect(flyToMeasurement).toHaveBeenCalledWith('m1');
+
+    (host.querySelector('[data-testid="measurement-visibility-button-m1"]') as HTMLButtonElement | null)
+      ?.click();
+    await nextTick();
+    expect(store.measurements.value.find((item: any) => item.id === 'm1')?.visible).toBe(true);
+
+    const deleteButton = Array.from(row2?.querySelectorAll('button') ?? [])
+      .find((button) => button.textContent?.trim() === '删除');
+    deleteButton?.click();
+    await nextTick();
+    expect(removeMeasurement).toHaveBeenCalledWith('m2');
+    expect(store.measurements.value.map((item: any) => item.id)).toEqual(['m1']);
+
     const clearButton = host.querySelector('[data-testid="measurement-clear-all"]') as HTMLButtonElement | null;
     expect(clearButton).toBeTruthy();
     clearButton?.click();
+    await Promise.resolve();
     await nextTick();
 
+    expect(confirmOpen).toHaveBeenCalledWith({
+      title: '清空全部测量',
+      message: '将删除全部 1 条测量，此操作不可撤销。',
+      confirmText: '清空',
+    });
     expect(store.measurements.value).toEqual([]);
     expect(store.activeMeasurementId.value).toBeNull();
     expect(selectAnnotation).toHaveBeenLastCalledWith(null);
+    expect(clearButton?.disabled).toBe(true);
+    clearButton?.click();
+    await Promise.resolve();
+    expect(confirmOpen).toHaveBeenCalledTimes(1);
+
+    app.unmount();
+    host.remove();
+    host = null;
+  });
+
+  it('取消清空确认时应保留现有测量', async () => {
+    const confirmOpen = vi.fn(async () => false);
+    let host: HTMLDivElement | null = document.createElement('div');
+    document.body.appendChild(host);
+
+    vi.doMock('@/composables/useViewerContext', () => ({
+      useViewerContext: () => ({
+        viewerRef: shallowRef(null),
+        overlayContainerRef: shallowRef(null),
+        tools: shallowRef(null),
+        xeokitMeasurementTools: shallowRef(null),
+        store: shallowRef(null),
+        viewerError: shallowRef(null),
+        ptsetVis: shallowRef(null),
+        annotationSystem: shallowRef(null),
+      }),
+    }));
+    vi.doMock('@/composables/useConfirmDialogStore', () => ({
+      useConfirmDialogStore: () => ({
+        open: confirmOpen,
+      }),
+    }));
+
+    const [{ default: MeasurementPanel }, { useToolStore }] = await Promise.all([
+      import('./MeasurementPanel.vue'),
+      import('@/composables/useToolStore'),
+    ]);
+
+    const store = useToolStore() as any;
+    store.clearMeasurements();
+    store.addMeasurement({
+      id: 'm-keep',
+      kind: 'distance',
+      origin: { entityId: 'e1', worldPos: [0, 0, 0] },
+      target: { entityId: 'e2', worldPos: [1, 0, 0] },
+      visible: true,
+      createdAt: 1,
+    });
+
+    const app = createApp(MeasurementPanel, {
+      tools: {
+        ready: ref(true),
+        statusText: ref('ready'),
+        flyToMeasurement: vi.fn(),
+        removeMeasurement: vi.fn(),
+      },
+    });
+    app.mount(host);
+    await nextTick();
+
+    (host.querySelector('[data-testid="measurement-clear-all"]') as HTMLButtonElement | null)?.click();
+    await Promise.resolve();
+    await nextTick();
+
+    expect(confirmOpen).toHaveBeenCalledTimes(1);
+    expect(store.measurements.value.map((item: any) => item.id)).toEqual(['m-keep']);
 
     app.unmount();
     host.remove();
@@ -257,6 +367,7 @@ describe('MeasurementPanel', () => {
     const selectAnnotation = vi.fn((id: string | null) => {
       selectedId.value = id;
     });
+    const setAllMeasurementsVisible = vi.fn();
     let host: HTMLDivElement | null = document.createElement('div');
     document.body.appendChild(host);
 
@@ -273,6 +384,7 @@ describe('MeasurementPanel', () => {
           flyToMeasurement: vi.fn(),
           removeMeasurement: vi.fn(),
           clearMeasurements: vi.fn(),
+          setAllMeasurementsVisible,
         }),
         store: shallowRef(null),
         viewerError: shallowRef(null),
@@ -323,6 +435,10 @@ describe('MeasurementPanel', () => {
 
     expect(store.activeXeokitMeasurementId.value).toBe('x1');
     expect(selectAnnotation).toHaveBeenLastCalledWith('xmeas_x1');
+
+    (host.querySelector('[data-testid="measurement-toggle-all-visible"]') as HTMLButtonElement | null)
+      ?.click();
+    expect(setAllMeasurementsVisible).toHaveBeenCalledWith(false);
 
     const styleAxis = host.querySelector('[data-testid="measurement-style-distance-axis"]') as HTMLInputElement | null;
     expect(styleAxis).toBeTruthy();

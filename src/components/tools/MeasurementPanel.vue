@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch, type Ref } from 'vue';
 
+import { useConfirmDialogStore } from '@/composables/useConfirmDialogStore';
 import {
   MEASUREMENT_PICK_SOURCE_LABELS,
   clampMeasurementPickThreshold,
@@ -39,6 +40,7 @@ const ctx = useViewerContext();
 const xeokitTools = computed(() => ctx.xeokitMeasurementTools.value);
 const measurementStyle = useXeokitMeasurementStyleStore();
 const unitSettings = useUnitSettingsStore();
+const confirmDialog = useConfirmDialogStore();
 const measurementRowEls = ref(new Map<string, HTMLElement>());
 const measurementPickSourceRows: {
   id: MeasurementPickSourceId;
@@ -94,6 +96,11 @@ const measurementStatusText = computed(() => {
 const selectedMeasurementId = computed(() =>
   isXeokitMode.value ? store.activeXeokitMeasurementId.value : store.activeMeasurementId.value,
 );
+const hasAnyMeasurements = computed(() => sorted.value.length > 0);
+const hasHiddenMeasurements = computed(() => sorted.value.some((item) => !item.visible));
+const allVisibilityLabel = computed(() => (
+  hasHiddenMeasurements.value ? '全部显示' : '全部隐藏'
+));
 const canShowStyleSettings = computed(() => !!xeokitTools.value);
 const distanceStylePreview = computed(() => {
   const items: string[] = [];
@@ -206,6 +213,17 @@ function toggleVisible(id: string, current: boolean) {
   store.updateMeasurementVisible(id, !current);
 }
 
+function toggleAllVisible() {
+  const visible = hasHiddenMeasurements.value;
+  if (isXeokitMode.value) {
+    xeokitTools.value?.setAllMeasurementsVisible(visible);
+    return;
+  }
+  for (const item of sorted.value) {
+    store.updateMeasurementVisible(item.id, visible);
+  }
+}
+
 function remove(id: string) {
   if (isXeokitMode.value) {
     xeokitTools.value?.removeMeasurement(id);
@@ -254,7 +272,15 @@ function selectMeasurement(id: string) {
   store.activeMeasurementId.value = id;
 }
 
-function clearMeasurements() {
+async function clearMeasurements() {
+  if (!hasAnyMeasurements.value) return;
+  const confirmed = await confirmDialog.open({
+    title: '清空全部测量',
+    message: `将删除全部 ${sorted.value.length} 条测量，此操作不可撤销。`,
+    confirmText: '清空',
+  });
+  if (!confirmed) return;
+
   if (isXeokitMode.value) {
     xeokitTools.value?.clearMeasurements();
     return;
@@ -747,10 +773,18 @@ watch(
         </div>
       </div>
 
-      <div class="mt-2 flex justify-end">
+      <div class="mt-2 flex justify-end gap-2">
+        <button type="button"
+          data-testid="measurement-toggle-all-visible"
+          class="h-10 rounded-md border border-input bg-background px-3 hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+          :disabled="!hasAnyMeasurements"
+          @click="toggleAllVisible">
+          {{ allVisibilityLabel }}
+        </button>
         <button type="button"
           data-testid="measurement-clear-all"
-          class="h-7 rounded-md border border-input bg-background px-2 text-destructive hover:bg-muted"
+          class="h-10 rounded-md border border-input bg-background px-3 text-destructive hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+          :disabled="!hasAnyMeasurements"
           @click="clearMeasurements()">
           清空测量
         </button>
