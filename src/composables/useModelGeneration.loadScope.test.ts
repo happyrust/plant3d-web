@@ -40,18 +40,23 @@ describe('queryLoadScopeRefnos', () => {
     expect(e3dGetSubtreeRefnosMock).not.toHaveBeenCalled();
   }, 15_000);
 
-  it('visible-insts 成功但为空时，直接返回空，不回退 subtree-refnos', async () => {
+  it('visible-insts 成功但为空时，回退 scoped subtree-refnos', async () => {
     e3dGetVisibleInstsMock.mockResolvedValue({ success: true, refnos: [] });
+    e3dGetSubtreeRefnosMock.mockResolvedValue({
+      success: true,
+      refnos: ['24381_145018', '24381_145019'],
+      truncated: false,
+    });
 
     const { queryLoadScopeRefnos } = await import('@/composables/useModelGeneration');
     const result = await queryLoadScopeRefnos('24381_145018');
 
     expect(result).toEqual({
-      refnos: [],
-      source: 'visible-insts',
+      refnos: ['24381_145018', '24381_145019'],
+      source: 'subtree-refnos',
       truncated: false,
     });
-    expect(e3dGetSubtreeRefnosMock).not.toHaveBeenCalled();
+    expect(e3dGetSubtreeRefnosMock).toHaveBeenCalledWith('24381_145018', { includeSelf: true, limit: 200_000 });
   }, 15_000);
 
   it('visible-insts 失败时，回退 subtree-refnos', async () => {

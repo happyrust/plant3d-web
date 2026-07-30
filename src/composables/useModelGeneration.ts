@@ -215,19 +215,19 @@ export async function queryLoadScopeRefnos(refno: string): Promise<{
       throw new Error(resp.error_message || 'e3d visible-insts 查询失败');
     }
     const list = Array.isArray(resp.refnos) ? resp.refnos : [];
-    return {
-      refnos: uniqStrings(list.map((r) => normalizeRefnoString(String(r || '')))).filter(Boolean),
-      source: 'visible-insts',
-      truncated: false,
-    };
+    const refnos = uniqStrings(list.map((r) => normalizeRefnoString(String(r || '')))).filter(Boolean);
+    if (refnos.length > 0) {
+      return { refnos, source: 'visible-insts', truncated: false };
+    }
   } catch {
-    const subtree = await querySubtreeRefnos(normalized);
-    return {
-      refnos: subtree.refnos,
-      source: 'subtree-refnos',
-      truncated: subtree.truncated,
-    };
+    // 继续使用同一 root 的受限 subtree 范围。
   }
+  const subtree = await querySubtreeRefnos(normalized);
+  return {
+    refnos: subtree.refnos,
+    source: 'subtree-refnos',
+    truncated: subtree.truncated,
+  };
 }
 
 export async function resolveActualModelLoadScope(
@@ -798,75 +798,73 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         return true;
       }
 
-      if (AUTO_GENERATION_ENABLED) {
-        try {
-          const loadRefnos = loadScope.actualLoadRefnos;
-          statusMessage.value = `从后端实时数据加载 dbno=${dbno}...`;
-          progress.value = 20;
-          syncGlobalLoadStatus();
+      try {
+        const loadRefnos = loadScope.actualLoadRefnos;
+        statusMessage.value = `从后端实时数据加载 dbno=${dbno}...`;
+        progress.value = 20;
+        syncGlobalLoadStatus();
 
-          const backendResult = await loadDbnoInstancesForVisibleRefnosDtx(dtxLayer, dbno, loadRefnos, {
-            lodAssetKey: 'L1',
-            debug: false,
-            dataSource: 'backend',
-            forceReloadRefnos: loadRefnos,
-          });
-          anyViewer.__dtxAfterInstancesLoaded?.(dbno, loadRefnos);
+        const backendResult = await loadDbnoInstancesForVisibleRefnosDtx(dtxLayer, dbno, loadRefnos, {
+          lodAssetKey: 'L1',
+          debug: false,
+          dataSource: 'backend',
+          forceReloadRefnos: loadRefnos,
+        });
+        anyViewer.__dtxAfterInstancesLoaded?.(dbno, loadRefnos);
 
-          if (typeof anyViewer.scene?.ensureRefnos === 'function') {
-            anyViewer.scene.ensureRefnos(loadRefnos, { computeAabb: false });
-          }
-
-          if (loadOptions?.flyTo) {
-            try {
-              const flyTargets = loadRefnos.length > 5000 ? loadRefnos.slice(0, 5000) : loadRefnos;
-              const aabb = anyViewer.scene?.getAABB?.(flyTargets) ?? null;
-              if (aabb) {
-                anyViewer.cameraFlight?.flyTo?.({ aabb, duration: 0.8, fit: true });
-              }
-            } catch {
-              // ignore flyTo errors
-            }
-          }
-
-          lastLoadDebug.value = {
-            refno: normalizedRoot,
-            dbno,
-            visibleInsts: { ok: visibleOk, count: visibleRefnos.length, error: visibleErr },
-            componentRefnos: { count: loadScope.componentRefnos.length, sample: loadScope.componentRefnos.slice(0, 10) },
-            loadRefnos: { count: loadRefnos.length, sample: loadRefnos.slice(0, 10) },
-            scopeDecision: {
-              rootNoun: loadScope.rootNoun,
-              branHangRootInjected: loadScope.branHangRootInjected,
-              typeInfoError: loadScope.typeInfoError,
-            },
-            result: {
-              loadedRefnos: backendResult.loadedRefnos,
-              skippedRefnos: backendResult.skippedRefnos,
-              loadedObjects: backendResult.loadedObjects,
-            },
-            ms: Date.now() - startedAt,
-          };
-
-          if (backendResult.loadedObjects > 0) {
-            loadedRoots.add(normalizedRoot);
-            statusMessage.value = '加载完成 (Backend)';
-            progress.value = 100;
-            syncGlobalLoadStatus();
-            emitToast({ message: `[成功] 已通过后端实时数据加载 ${backendResult.loadedObjects} 个几何实例`, level: 'success' });
-            return true;
-          }
-
-          consoleStore.addLog(
-            'warning',
-            `[model-load] 后端实时数据未返回可绘制实例 refno=${normalizedRoot} dbno=${dbno}，继续尝试 Parquet/JSON`
-          );
-        } catch (backendError) {
-          consoleStore.addLog(
-            'warning',
-            `[model-load] 后端实时加载失败，继续尝试 Parquet/JSON dbno=${dbno} err=${backendError instanceof Error ? backendError.message : String(backendError)}`
-          );
+        if (typeof anyViewer.scene?.ensureRefnos === 'function') {
+          anyViewer.scene.ensureRefnos(loadRefnos, { computeAabb: false });
         }
+
+        if (loadOptions?.flyTo) {
+          try {
+            const flyTargets = loadRefnos.length > 5000 ? loadRefnos.slice(0, 5000) : loadRefnos;
+            const aabb = anyViewer.scene?.getAABB?.(flyTargets) ?? null;
+            if (aabb) {
+              anyViewer.cameraFlight?.flyTo?.({ aabb, duration: 0.8, fit: true });
+            }
+          } catch {
+            // ignore flyTo errors
+          }
+        }
+
+        lastLoadDebug.value = {
+          refno: normalizedRoot,
+          dbno,
+          visibleInsts: { ok: visibleOk, count: visibleRefnos.length, error: visibleErr },
+          componentRefnos: { count: loadScope.componentRefnos.length, sample: loadScope.componentRefnos.slice(0, 10) },
+          loadRefnos: { count: loadRefnos.length, sample: loadRefnos.slice(0, 10) },
+          scopeDecision: {
+            rootNoun: loadScope.rootNoun,
+            branHangRootInjected: loadScope.branHangRootInjected,
+            typeInfoError: loadScope.typeInfoError,
+          },
+          result: {
+            loadedRefnos: backendResult.loadedRefnos,
+            skippedRefnos: backendResult.skippedRefnos,
+            loadedObjects: backendResult.loadedObjects,
+          },
+          ms: Date.now() - startedAt,
+        };
+
+        if (backendResult.loadedObjects > 0) {
+          loadedRoots.add(normalizedRoot);
+          statusMessage.value = '加载完成 (Backend)';
+          progress.value = 100;
+          syncGlobalLoadStatus();
+          emitToast({ message: `[成功] 已通过后端实时数据加载 ${backendResult.loadedObjects} 个几何实例`, level: 'success' });
+          return true;
+        }
+
+        consoleStore.addLog(
+          'warning',
+          `[model-load] 后端实时数据未返回可绘制实例 refno=${normalizedRoot} dbno=${dbno}，继续尝试 Parquet/JSON`
+        );
+      } catch (backendError) {
+        consoleStore.addLog(
+          'warning',
+          `[model-load] 后端实时加载失败，继续尝试 Parquet/JSON dbno=${dbno} err=${backendError instanceof Error ? backendError.message : String(backendError)}`
+        );
       }
 
       // ========== Parquet 优先路径（不可用时自动导出） ==========
