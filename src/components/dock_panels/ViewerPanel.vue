@@ -4466,6 +4466,9 @@ onMounted(async () => {
             updatedAt: new Date().toISOString(),
             ...payload,
           };
+          document.documentElement.dataset.dtxShowDbnumLoad = JSON.stringify(
+            (window as any).__dtxLastShowDbnumLoadResult,
+          );
         };
 
         try {
