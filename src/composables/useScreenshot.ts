@@ -104,7 +104,28 @@ export function useScreenshot() {
   async function ensureFreshFrame(): Promise<void> {
     const viewer = viewerRef.value as unknown as {
       requestRender?: (() => void) | null;
+      __dtxViewer?: {
+        renderer: { render: (scene: unknown, camera: unknown) => void };
+        scene: unknown;
+        camera: unknown;
+        gizmo?: { render: () => void } | null;
+      };
+      __dtxSelection?: {
+        hasOutline: () => boolean;
+        renderOutline: () => void;
+      } | null;
     } | null;
+    const dtxViewer = viewer?.__dtxViewer;
+    if (dtxViewer) {
+      if (viewer?.__dtxSelection?.hasOutline()) {
+        viewer.__dtxSelection.renderOutline();
+      } else {
+        dtxViewer.renderer.render(dtxViewer.scene, dtxViewer.camera);
+      }
+      dtxViewer.gizmo?.render();
+      return;
+    }
+
     const requestRender = viewer?.requestRender;
     if (typeof requestRender !== 'function') return;
 

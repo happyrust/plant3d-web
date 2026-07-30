@@ -220,6 +220,31 @@ describe('useScreenshot', () => {
   });
 
   describe('captureAndUpload — 竞态与错误', () => {
+    it('在读取 preserveDrawingBuffer=false 的画布前同步渲染当前帧', async () => {
+      const canvas = installCanvas();
+      const render = vi.fn();
+      const scene = {};
+      const camera = {};
+      viewerRef.value = {
+        ...(viewerRef.value as object),
+        __dtxViewer: {
+          renderer: { render },
+          scene,
+          camera,
+          gizmo: null,
+        },
+        __dtxSelection: null,
+      };
+
+      const { captureAndUpload } = useScreenshot();
+      await captureAndUpload('task-1');
+
+      expect(render).toHaveBeenCalledWith(scene, camera);
+      expect(render.mock.invocationCallOrder[0]).toBeLessThan(
+        (canvas.toBlob as unknown as ReturnType<typeof vi.fn>).mock.invocationCallOrder[0]!,
+      );
+    });
+
     it('并发调用：第二次命中 isCapturing 门禁立即返回 null', async () => {
       installCanvas({
         toBlobBlob: new Blob([new Uint8Array([1])], { type: 'image/png' }),
