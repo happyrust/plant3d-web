@@ -42,15 +42,22 @@ type ZoneState = {
   collapsed: boolean;
   /** Panel IDs that were open when the zone was collapsed (used for restore) */
   hiddenPanelIds: string[];
+  /** Width (left/right) or height (bottom) before the zone was collapsed */
+  size: number;
 }
 
 const STORAGE_KEY = 'plant3d-web-zone-state';
+const DEFAULT_ZONE_SIZE: Record<ZoneName, number> = {
+  left: 350,
+  right: 350,
+  bottom: 200,
+};
 
 function loadState(): Record<ZoneName, ZoneState> {
   const defaults: Record<ZoneName, ZoneState> = {
-    left: { collapsed: false, hiddenPanelIds: [] },
-    right: { collapsed: false, hiddenPanelIds: [] },
-    bottom: { collapsed: false, hiddenPanelIds: [] },
+    left: { collapsed: false, hiddenPanelIds: [], size: DEFAULT_ZONE_SIZE.left },
+    right: { collapsed: false, hiddenPanelIds: [], size: DEFAULT_ZONE_SIZE.right },
+    bottom: { collapsed: false, hiddenPanelIds: [], size: DEFAULT_ZONE_SIZE.bottom },
   };
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -63,6 +70,9 @@ function loadState(): Record<ZoneName, ZoneState> {
             hiddenPanelIds: Array.isArray(parsed[z].hiddenPanelIds)
               ? parsed[z].hiddenPanelIds
               : [],
+            size: Number.isFinite(parsed[z].size) && parsed[z].size > 0
+              ? parsed[z].size
+              : DEFAULT_ZONE_SIZE[z],
           };
         }
       }
@@ -92,10 +102,21 @@ const zoneState = reactive<Record<ZoneName, ZoneState>>(loadState());
 // ---------------------------------------------------------------------------
 
 type DockApiLike = {
-  getPanel: (id: string) => { api: { close: () => void; setActive: () => void } } | undefined;
+  getPanel: (id: string) => PanelLike | undefined;
 };
 
-type EnsurePanelFn = (panelId: string) => { api: { setActive: () => void } } | undefined;
+type PanelLike = {
+  api: { close: () => void; setActive: () => void };
+  group?: {
+    api: {
+      width: number;
+      height: number;
+      setSize: (size: { width?: number; height?: number }) => void;
+    };
+  };
+};
+
+type EnsurePanelFn = (panelId: string) => PanelLike | undefined;
 
 let _dockApi: DockApiLike | null = null;
 let _ensurePanel: EnsurePanelFn | null = null;
@@ -145,6 +166,8 @@ export function toggleZone(zone: ZoneName) {
     for (const panelId of ZONE_PANELS[zone]) {
       const panel = _dockApi.getPanel(panelId);
       if (panel) {
+        const size = zone === 'bottom' ? panel.group?.api.height : panel.group?.api.width;
+        if (size && size > 0) zoneState[zone].size = size;
         openIds.push(panelId);
         panel.api.close();
       }
@@ -160,8 +183,17 @@ export function toggleZone(zone: ZoneName) {
     saveState(zoneState);
 
     if (_ensurePanel && toRestore.length > 0) {
+      let restoredPanel: PanelLike | undefined;
       for (const panelId of toRestore) {
-        _ensurePanel(panelId);
+        const panel = _ensurePanel(panelId);
+        restoredPanel ??= panel;
+      }
+      if (restoredPanel?.group) {
+        restoredPanel.group.api.setSize(
+          zone === 'bottom'
+            ? { height: zoneState[zone].size }
+            : { width: zoneState[zone].size },
+        );
       }
     }
   }

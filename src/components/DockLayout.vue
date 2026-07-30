@@ -57,6 +57,8 @@ const popoutUrl = `${import.meta.env.BASE_URL}popout.html`;
 
 type DockviewGroupLike = {
   api: {
+    readonly width: number;
+    readonly height: number;
     setSize: (size: { width?: number; height?: number }) => void;
   };
   id: string;
@@ -1741,8 +1743,8 @@ function onReady(event: DockviewReadyEvent) {
 
   // Initialize panel zone management
   initPanelZones(
-    api.value as unknown as { getPanel: (id: string) => { api: { close: () => void; setActive: () => void } } | undefined },
-    ensurePanel as (panelId: string) => { api: { setActive: () => void } } | undefined,
+    api.value,
+    ensurePanel,
   );
 
   if (isEmbedLayoutMode()) {
