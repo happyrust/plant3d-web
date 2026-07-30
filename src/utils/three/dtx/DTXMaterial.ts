@@ -99,6 +99,11 @@ void main() {
   uint materialIndex = pixel0.r;
   bool hasColorOverride = pixel0.g > 0u;
   uint visibleFlag = pixel0.b;
+  vFlags = visibleFlag;
+  if (visibleFlag == 0u) {
+    gl_Position = vec4(0.0, 0.0, -999999.0, 1.0);
+    return;
+  }
 
   // pixel 1: [primitiveOffset] (packed as 4 bytes)
   uvec4 primitiveOffsetData = texelFetch(colorsAndFlagsTexture, ivec2(flagsBaseX + 1, objY), 0);
@@ -133,7 +138,6 @@ void main() {
   vColor = vec4(baseColor, opacity);
   vMetalness = metalness;
   vRoughness = roughness;
-  vFlags = visibleFlag;
 
   // 3.4 几何参数 (已在上方读取)
 
@@ -173,17 +177,10 @@ void main() {
   mat3 normalMatrix = mat3(worldModelMatrix);
   vWorldNormal = normalize(normalMatrix * localNormal);
 
-  // 10. 可见性检查
-  if (vFlags == 0u) {
-    // 不可见对象，移到裁剪空间外
-    gl_Position = vec4(0.0, 0.0, -999999.0, 1.0);
-    return;
-  }
-
-  // 11. 投影
+  // 10. 投影
   gl_Position = projectionMatrix * viewMatrix * worldPosition;
 
-  // 12. 对数深度缓冲 + per-object depth bias
+  // 11. 对数深度缓冲 + per-object depth bias
   #ifdef USE_LOGDEPTHBUF
     vFragDepth = 1.0 + gl_Position.w;
     // 用 objectIndex 低 3 位生成 8 级微小深度偏移，

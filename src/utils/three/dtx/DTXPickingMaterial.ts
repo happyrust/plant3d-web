@@ -74,6 +74,12 @@ void main() {
   int flagsBaseX = objX * 4;
   uvec4 pixel0 = texelFetch(colorsAndFlagsTexture, ivec2(flagsBaseX + 0, objY), 0);
   uint visibleFlag = pixel0.b;
+  vObjectIndex = objectIndex;
+  vVisibleFlag = visibleFlag;
+  if (visibleFlag == 0u) {
+    gl_Position = vec4(0.0, 0.0, -999999.0, 1.0);
+    return;
+  }
 
   uvec4 primitiveOffsetData = texelFetch(colorsAndFlagsTexture, ivec2(flagsBaseX + 1, objY), 0);
   uint primitiveOffset = unpack32(primitiveOffsetData);
@@ -107,11 +113,7 @@ void main() {
 
   vec4 worldPosition = (globalModelMatrix * modelMatrix) * vec4(localPosition, 1.0);
 
-  if (visibleFlag == 0u) {
-    gl_Position = vec4(0.0, 0.0, -999999.0, 1.0);
-  } else {
-    gl_Position = projectionMatrix * viewMatrix * worldPosition;
-  }
+  gl_Position = projectionMatrix * viewMatrix * worldPosition;
 
   #ifdef USE_LOGDEPTHBUF
     vFragDepth = 1.0 + gl_Position.w;

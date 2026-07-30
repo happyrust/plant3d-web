@@ -126,3 +126,22 @@ describe('DTXLayer render passes', () => {
     expect(scene.getObjectByName('DTXLayerTransparent')?.visible).toBe(true);
   });
 });
+
+describe('DTXLayer frustum visibility', () => {
+  it('keeps user visibility separate from the frustum mask', () => {
+    const layer = new DTXLayer({ maxVertices: 16, maxIndices: 16, maxObjects: 4 });
+    layer.addGeometry('tri', createTriangleGeometry());
+    layer.addObject('o:test:0', 'tri', new Matrix4());
+
+    layer.setObjectsFrustumVisible(['o:test:0'], false);
+    expect(layer.isObjectVisible('o:test:0')).toBe(true);
+    expect((layer as any)._colorsAndFlagsBuffer[2]).toBe(0);
+
+    layer.setObjectVisible('o:test:0', false);
+    layer.setObjectsFrustumVisible(['o:test:0'], true);
+    expect((layer as any)._colorsAndFlagsBuffer[2]).toBe(0);
+
+    layer.setObjectVisible('o:test:0', true);
+    expect((layer as any)._colorsAndFlagsBuffer[2]).toBe(1);
+  });
+});

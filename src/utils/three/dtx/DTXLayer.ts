@@ -81,7 +81,10 @@ type DTXObject = {
   /** 独立颜色覆盖值 */
   colorOverride: Color;
   opacity: number;
+  /** 业务显隐（隐藏/隔离/材质配置） */
   visible: boolean;
+  /** 视锥区域显隐；不覆盖业务显隐 */
+  frustumVisible: boolean;
   selected: boolean;
   highlighted: boolean;
   /** 包围盒 (局部) */
@@ -637,6 +640,7 @@ export class DTXLayer {
       colorOverride: new Color(0xffffff),
       opacity,
       visible: true,
+      frustumVisible: true,
       selected: false,
       highlighted: false,
       boundingBox: new Box3(), // 后面计算
@@ -1656,8 +1660,9 @@ export class DTXLayer {
 
     obj.visible = visible;
 
+    const effectiveVisible = visible && obj.frustumVisible;
     const flagsOffset = obj.objectIndex * 16 + 2; // pixel 0, byte 2
-    this._colorsAndFlagsBuffer[flagsOffset] = visible ? 1 : 0;
+    this._colorsAndFlagsBuffer[flagsOffset] = effectiveVisible ? 1 : 0;
 
     // 同步更新纹理数据
     if (this._colorsAndFlagsTexture) {
@@ -1666,7 +1671,7 @@ export class DTXLayer {
       const objY = Math.floor(obj.objectIndex / OBJECTS_TEXTURE_WIDTH);
       const dstOffset = (objY * pixelsPerRow + objX) * 4 + 2; // pixel 0, byte 2
       const texData = this._colorsAndFlagsTexture.image.data as Uint8Array;
-      texData[dstOffset] = visible ? 1 : 0;
+      texData[dstOffset] = effectiveVisible ? 1 : 0;
       this._colorsAndFlagsTexture.needsUpdate = true;
     }
 
@@ -1680,7 +1685,6 @@ export class DTXLayer {
   setObjectsVisible(objectIds: string[], visible: boolean): void {
     if (!objectIds || objectIds.length === 0) return;
 
-    const flag = visible ? 1 : 0;
     let any = false;
     let changed = false;
 
@@ -1697,6 +1701,7 @@ export class DTXLayer {
       if (obj.visible === visible) continue;
 
       obj.visible = visible;
+      const flag = visible && obj.frustumVisible ? 1 : 0;
       const bufferOffset = obj.objectIndex * 16 + 2; // pixel 0, byte 2
       this._colorsAndFlagsBuffer[bufferOffset] = flag;
 
@@ -1716,6 +1721,43 @@ export class DTXLayer {
     }
     if (changed) {
       this._visibilityRevision++;
+    }
+  }
+
+  /**
+   * 批量更新视锥显隐；最终 GPU 显隐 = 业务显隐 && 视锥显隐。
+   */
+  setObjectsFrustumVisible(objectIds: string[], visible: boolean): void {
+    if (!objectIds || objectIds.length === 0) return;
+
+    let any = false;
+    let pixelsPerRow = 0;
+    let texData: Uint8Array | null = null;
+    if (this._colorsAndFlagsTexture) {
+      pixelsPerRow = OBJECTS_TEXTURE_WIDTH * PIXELS_PER_OBJECT;
+      texData = this._colorsAndFlagsTexture.image.data as Uint8Array;
+    }
+
+    for (const objectId of objectIds) {
+      const obj = this._objects.get(objectId);
+      if (!obj || obj.frustumVisible === visible) continue;
+
+      obj.frustumVisible = visible;
+      const flag = obj.visible && visible ? 1 : 0;
+      const bufferOffset = obj.objectIndex * 16 + 2;
+      this._colorsAndFlagsBuffer[bufferOffset] = flag;
+
+      if (texData) {
+        const objX = (obj.objectIndex % OBJECTS_TEXTURE_WIDTH) * PIXELS_PER_OBJECT;
+        const objY = Math.floor(obj.objectIndex / OBJECTS_TEXTURE_WIDTH);
+        const dstOffset = (objY * pixelsPerRow + objX) * 4 + 2;
+        texData[dstOffset] = flag;
+      }
+      any = true;
+    }
+
+    if (any && this._colorsAndFlagsTexture) {
+      this._colorsAndFlagsTexture.needsUpdate = true;
     }
   }
 
@@ -1798,7 +1840,6 @@ export class DTXLayer {
    * 批量设置所有对象的可见性
    */
   setAllVisible(visible: boolean): void {
-    const flag = visible ? 1 : 0;
     let changed = false;
 
     // 更新内部缓冲区
@@ -1807,6 +1848,7 @@ export class DTXLayer {
         changed = true;
       }
       obj.visible = visible;
+      const flag = visible && obj.frustumVisible ? 1 : 0;
       const flagsOffset = obj.objectIndex * 16 + 2;
       this._colorsAndFlagsBuffer[flagsOffset] = flag;
     }
@@ -1820,7 +1862,7 @@ export class DTXLayer {
         const objX = (obj.objectIndex % OBJECTS_TEXTURE_WIDTH) * PIXELS_PER_OBJECT;
         const objY = Math.floor(obj.objectIndex / OBJECTS_TEXTURE_WIDTH);
         const dstOffset = (objY * pixelsPerRow + objX) * 4 + 2; // pixel 0, byte 2
-        texData[dstOffset] = flag;
+        texData[dstOffset] = obj.visible && obj.frustumVisible ? 1 : 0;
       }
 
       this._colorsAndFlagsTexture.needsUpdate = true;
@@ -2147,7 +2189,7 @@ export class DTXLayer {
         vertexBase: obj.vertexBase,
         indexOffset: obj.indexOffset,
         indexCount: obj.indexCount,
-        visible: obj.visible,
+        visible: obj.visible && obj.frustumVisible,
         materialIndex: obj.materialIndex,
         hasColorOverride: obj.hasColorOverride
       };

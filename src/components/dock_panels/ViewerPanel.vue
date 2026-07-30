@@ -1205,6 +1205,7 @@ const dtxViewerRef = shallowRef<DtxViewer | null>(null);
 const dtxLayerRef = shallowRef<DTXLayer | null>(null);
 const showDbnumExtraDtxLayers: DTXLayer[] = [];
 const attachedShowDbnumExtraDtxLayers = new WeakSet<DTXLayer>();
+const showDbnumExtraViewCullControllers = new Map<DTXLayer, DTXViewCullController>();
 const modelUnitCompareState = ref<ModelUnitVersionCompareRuntimeState | null>(null);
 function publishModelUnitCompareState(): void {
   const state = modelUnitCompareState.value;
@@ -1398,7 +1399,7 @@ const SHOW_DBNUM_DTX_LAYER_OPTIONS = {
   maxIndices: 6000000,
   maxObjects: 260000,
 };
-const SHOW_DBNUM_LOAD_BATCH_SIZE = 100;
+const SHOW_DBNUM_LOAD_BATCH_SIZE = 5_000;
 const SHOW_DBNUM_LAYER_MAX_OBJECTS = 180000;
 const SHOW_DBNUM_LAYER_MAX_TRIANGLES = 32000000;
 
@@ -2459,6 +2460,7 @@ function createShowDbnumDtxLayer(dtxViewer: DtxViewer, sourceLayer: DTXLayer): D
   layer.setRenderer(dtxViewer.renderer);
   layer.setGlobalModelMatrix(sourceLayer.getGlobalModelMatrix());
   showDbnumExtraDtxLayers.push(layer);
+  showDbnumExtraViewCullControllers.set(layer, new DTXViewCullController({ dtxLayer: layer }));
   if (typeof window !== 'undefined') {
     (window as any).__dtxShowDbnumExtraLayers = showDbnumExtraDtxLayers;
   }
@@ -2476,6 +2478,7 @@ function updateShowDbnumExtraLayers(dtxViewer: DtxViewer): void {
   for (const layer of showDbnumExtraDtxLayers) {
     ensureShowDbnumExtraLayerAttached(layer, dtxViewer);
     layer.update(dtxViewer.camera);
+    showDbnumExtraViewCullControllers.get(layer)?.update(dtxViewer.camera);
   }
 }
 
@@ -2487,6 +2490,8 @@ function disposeModelUnitCompareLayer(layer: DTXLayer): void {
   const index = showDbnumExtraDtxLayers.indexOf(layer);
   if (index >= 0) showDbnumExtraDtxLayers.splice(index, 1);
   attachedShowDbnumExtraDtxLayers.delete(layer);
+  showDbnumExtraViewCullControllers.get(layer)?.dispose();
+  showDbnumExtraViewCullControllers.delete(layer);
   try {
     layer.dispose();
   } catch {
@@ -4564,6 +4569,9 @@ onMounted(async () => {
             if (activeShowDbnumLayer !== dtxLayer) {
               activeShowDbnumLayer.setGlobalModelMatrix(dtxLayer.getGlobalModelMatrix());
               ensureShowDbnumExtraLayerAttached(activeShowDbnumLayer, dtxViewer);
+              const culler = showDbnumExtraViewCullControllers.get(activeShowDbnumLayer);
+              culler?.refreshSpatialIndex();
+              culler?.update(dtxViewer.camera);
             }
 
             loadedRefnos += batchResult.loadedRefnos;
@@ -5415,6 +5423,7 @@ onUnmounted(() => {
     // ignore
   }
   tileLodControllerRef.value = null;
+  viewCullControllerRef.value?.dispose();
   viewCullControllerRef.value = null;
 
   try {
@@ -5439,6 +5448,8 @@ onUnmounted(() => {
   dtxLayerRef.value = null;
 
   for (const layer of showDbnumExtraDtxLayers.splice(0)) {
+    showDbnumExtraViewCullControllers.get(layer)?.dispose();
+    showDbnumExtraViewCullControllers.delete(layer);
     try {
       layer.dispose();
     } catch {
