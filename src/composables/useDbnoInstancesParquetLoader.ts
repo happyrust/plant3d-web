@@ -1774,7 +1774,7 @@ export function useDbnoInstancesParquetLoader() {
     const debug = options?.debug === true;
     const normalized = Array.from(new Set(refnoKeys.map(normalizeRefnoKey))).filter(Boolean);
     if (normalized.length === 0) return new Map();
-    const timing = createParquetQueryTiming(normalized.length, Math.ceil(normalized.length / 5_000));
+    const timing = createParquetQueryTiming(normalized.length, Math.ceil(normalized.length / 1_000));
     const totalStartedAt = Date.now();
 
     const duckdbInitStartedAt = Date.now();
@@ -1798,7 +1798,7 @@ export function useDbnoInstancesParquetLoader() {
     const cataHashSelect = reg.manifest.tables.ptsets?.file ? 'i.cata_hash' : 'NULL AS cata_hash';
     const includeOwnedTubings = options?.includeOwnedTubings !== false;
 
-    const CHUNK = 5_000;
+    const CHUNK = 1_000;
     for (let i = 0; i < normalized.length; i += CHUNK) {
       const chunkKeys = normalized.slice(i, i + CHUNK);
       const chunkRefnoStr = chunkKeys.map(toRefnoStr);
