@@ -4,9 +4,11 @@ import { computed, ref } from 'vue';
 import {
   Camera,
   ChevronUp,
+  Eye,
   LocateFixed,
   MessageSquareText,
   Ruler,
+  X,
 } from 'lucide-vue-next';
 
 import { getAnnotationWorkspaceTypeDisplay } from './annotationWorkspaceModel';
@@ -84,9 +86,15 @@ const toolStore = useToolStore();
 const { captureAndUpload, isCapturing } = useScreenshot();
 /** 本卡片是否正在截图（isCapturing 是全局的，用本地 ref 区分是哪张卡在拍） */
 const capturingScreenshot = ref(false);
+const screenshotPreviewUrl = ref<string | null>(null);
+const screenshotUrl = computed(() => props.item.screenshot?.url || props.item.thumbnailUrl || null);
 
 /** 需要任务上下文才能上传附件；无任务时隐藏拍摄入口 */
 const canCaptureScreenshot = computed(() => !!props.taskId);
+
+function openScreenshotPreview() {
+  screenshotPreviewUrl.value = screenshotUrl.value;
+}
 
 /**
  * 校审时为当前批注拍摄 3D 视角作为代表截图。
@@ -255,24 +263,39 @@ function formatDateTime(timestamp: number): string {
           </div>
         </div>
 
-        <figure v-if="item.screenshot?.url || item.thumbnailUrl"
+        <figure v-if="screenshotUrl"
           class="overflow-hidden rounded-lg border border-slate-200 bg-white">
-          <img data-testid="annotation-detail-screenshot"
-            :src="item.screenshot?.url || item.thumbnailUrl"
-            :alt="`${item.title} 批注截图`"
-            class="max-h-64 w-full object-contain" />
+          <button data-testid="annotation-detail-screenshot-preview-trigger"
+            type="button"
+            class="block w-full cursor-zoom-in bg-slate-50"
+            title="预览问题截图"
+            @click="openScreenshotPreview">
+            <img data-testid="annotation-detail-screenshot"
+              :src="screenshotUrl"
+              :alt="`${item.title} 批注截图`"
+              class="max-h-64 w-full object-contain" />
+          </button>
           <figcaption class="flex items-center justify-between gap-2 border-t border-slate-100 px-3 py-2 text-xs text-slate-500">
             问题截图
-            <button v-if="canCaptureScreenshot"
-              data-testid="annotation-detail-screenshot-retake"
-              type="button"
-              class="inline-flex shrink-0 items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-medium text-slate-600 hover:border-brand/40 hover:text-brand disabled:cursor-not-allowed disabled:opacity-50"
-              :disabled="capturingScreenshot"
-              title="重新拍摄当前视角并替换截图"
-              @click="void captureItemScreenshot()">
-              <Camera class="h-3 w-3" />
-              {{ capturingScreenshot ? '截图中…' : '重拍' }}
-            </button>
+            <span class="flex items-center gap-1.5">
+              <button data-testid="annotation-detail-screenshot-preview-button"
+                type="button"
+                class="inline-flex shrink-0 items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-medium text-slate-600 hover:border-brand/40 hover:text-brand"
+                @click="openScreenshotPreview">
+                <Eye class="h-3 w-3" />
+                预览
+              </button>
+              <button v-if="canCaptureScreenshot"
+                data-testid="annotation-detail-screenshot-retake"
+                type="button"
+                class="inline-flex shrink-0 items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-medium text-slate-600 hover:border-brand/40 hover:text-brand disabled:cursor-not-allowed disabled:opacity-50"
+                :disabled="capturingScreenshot"
+                title="重新拍摄当前视角并替换截图"
+                @click="void captureItemScreenshot()">
+                <Camera class="h-3 w-3" />
+                {{ capturingScreenshot ? '截图中…' : '重拍' }}
+              </button>
+            </span>
           </figcaption>
         </figure>
         <button v-else-if="canCaptureScreenshot"
@@ -372,4 +395,26 @@ function formatDateTime(timestamp: number): string {
       </div>
     </div>
   </section>
+
+  <Teleport v-if="screenshotPreviewUrl" to="body">
+    <div data-testid="annotation-detail-screenshot-preview"
+      role="dialog"
+      aria-modal="true"
+      aria-label="问题截图预览"
+      class="fixed inset-0 z-[1300] flex items-center justify-center bg-slate-950/80 p-6"
+      @click="screenshotPreviewUrl = null">
+      <button data-testid="annotation-detail-screenshot-preview-close"
+        type="button"
+        class="absolute right-5 top-5 inline-flex items-center gap-1 rounded-lg bg-white/95 px-3 py-2 text-xs font-semibold text-slate-700 shadow"
+        @click.stop="screenshotPreviewUrl = null">
+        <X class="h-4 w-4" />
+        关闭
+      </button>
+      <img data-testid="annotation-detail-screenshot-preview-image"
+        :src="screenshotPreviewUrl"
+        alt="问题截图预览"
+        class="max-h-full max-w-full rounded-lg bg-white object-contain shadow-2xl"
+        @click.stop />
+    </div>
+  </Teleport>
 </template>

@@ -138,6 +138,32 @@ describe('AnnotationInlineDetailCard', () => {
     mounted.unmount();
   });
 
+  it('从批注单据预览并关闭问题截图', async () => {
+    const mounted = await mountCard();
+
+    mounted.host
+      .querySelector<HTMLButtonElement>('[data-testid="annotation-detail-screenshot-preview-button"]')
+      ?.click();
+    await nextTick();
+
+    const preview = document.body.querySelector<HTMLElement>(
+      '[data-testid="annotation-detail-screenshot-preview"]'
+    );
+    expect(preview).not.toBeNull();
+    expect(preview?.querySelector<HTMLImageElement>(
+      '[data-testid="annotation-detail-screenshot-preview-image"]'
+    )?.src).toContain('data:image/png;base64,abc');
+
+    preview
+      ?.querySelector<HTMLButtonElement>('[data-testid="annotation-detail-screenshot-preview-close"]')
+      ?.click();
+    await nextTick();
+    expect(document.body.querySelector('[data-testid="annotation-detail-screenshot-preview"]'))
+      .toBeNull();
+
+    mounted.unmount();
+  });
+
   it('展示关联测量并转发定位与新增测量事件', async () => {
     const mounted = await mountCard();
 

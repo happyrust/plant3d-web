@@ -1,3 +1,5 @@
+import { resolveReviewAssetUrl } from '@/utils/reviewAssetUrl';
+
 // 用户认证和角色管理类型定义
 
 // 批注意见/评论类型 - 用于多角色意见管理
@@ -66,11 +68,11 @@ export function normalizeAnnotationScreenshot(value: unknown): AnnotationScreens
   if (!value || typeof value !== 'object') return undefined;
 
   const record = value as Record<string, unknown>;
-  const url = readStringField(record, 'url') || readStringField(record, 'thumbnailUrl');
-  if (!url) return undefined;
+  const rawUrl = readStringField(record, 'url') || readStringField(record, 'thumbnailUrl');
+  if (!rawUrl) return undefined;
 
   return {
-    url,
+    url: resolveReviewAssetUrl(rawUrl),
     attachmentId: readStringField(record, 'attachmentId'),
     name: readStringField(record, 'name'),
     capturedAt: readNumberField(record, 'capturedAt'),

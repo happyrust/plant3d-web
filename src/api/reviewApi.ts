@@ -16,6 +16,7 @@ import {
   UserRole,
 } from '@/types/auth';
 import { getBackendApiBaseUrl } from '@/utils/apiBase';
+import { resolveReviewAssetUrl } from '@/utils/reviewAssetUrl';
 
 // ============ 基础配置 ============
 
@@ -2049,7 +2050,9 @@ export function normalizeReviewAttachment(raw: Record<string, unknown>): ReviewA
   return {
     id: String(raw.id || raw.file_id || ''),
     name: String(raw.name || raw.file_name || raw.description || '未命名附件'),
-    url: String(raw.url || raw.download_url || raw.public_url || raw.route_url || ''),
+    url: resolveReviewAssetUrl(String(
+      raw.url || raw.download_url || raw.public_url || raw.route_url || ''
+    )),
     size: typeof raw.size === 'number'
       ? raw.size
       : (typeof raw.file_size === 'number' ? raw.file_size : undefined),
