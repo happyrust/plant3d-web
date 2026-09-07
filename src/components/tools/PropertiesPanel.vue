@@ -199,6 +199,27 @@ const stats = computed(() => {
   return { total, filtered };
 });
 
+/** gen-model-v1 直读源的诊断提示（旧后端没有这一格，返回 null 不渲染） */
+const diagnosticsHint = computed<{ text: string; title: string } | null>(() => {
+  const d = sel.propertiesDiagnostics.value;
+  if (!d) return null;
+  const undecoded = d.undecoded ?? [];
+  const conflicts = d.shape_conflicts ?? [];
+  if (undecoded.length === 0 && conflicts.length === 0 && d.complete !== false) return null;
+  const parts: string[] = [];
+  if (undecoded.length > 0) parts.push(`${undecoded.length} 个属性未解码`);
+  if (conflicts.length > 0) parts.push(`${conflicts.length} 个属性形状与声明不符`);
+  if (d.complete === false && parts.length === 0) parts.push('属性表不完整');
+  const source = d.source ? `${d.source} 直读` : '直读';
+  return {
+    text: `${source}：${parts.join('，')}`,
+    title: [
+      undecoded.length > 0 ? `未解码：${undecoded.join(', ')}` : '',
+      conflicts.length > 0 ? `形状冲突：${conflicts.join(', ')}` : '',
+    ].filter(Boolean).join('\n'),
+  };
+});
+
 function toggleGroup(groupId: string) {
   if (collapsedGroups.value.has(groupId)) {
     collapsedGroups.value.delete(groupId);
@@ -361,6 +382,12 @@ function handleBlur(row: PropertyRow) {
             </tbody>
           </table>
         </div>
+      </div>
+      <div v-if="diagnosticsHint"
+        data-testid="properties-diagnostics-hint"
+        class="border-t border-border/60 px-2 py-1 text-[10px] text-muted-foreground"
+        :title="diagnosticsHint.title">
+        {{ diagnosticsHint.text }}
       </div>
     </ScrollArea>
   </div>

@@ -2,9 +2,19 @@ import { computed, ref } from 'vue';
 
 import { useQuery } from '@tanstack/vue-query';
 
-import { pdmsGetUiAttr } from '@/api/genModelPdmsAttrApi';
+import type { PdmsUiAttrResponse } from '@/api/genModelPdmsAttrApi';
 
 const selectedRefno = ref<string | null>(null);
+
+/**
+ * 属性取数经数据源端口（plan 2026-09-06 P4-1）：legacy = `pdmsGetUiAttr`（旧后端 /api/pdms/ui-attr），
+ * gen-model-v1 = `POST /api/v1/element/attributes`。动态引入是为了不把整套适配器（含 DuckDB）拖进每一个
+ * 引用了 selection store 的组件。
+ */
+async function fetchUiAttr(refno: string): Promise<PdmsUiAttrResponse> {
+  const { getModelSource } = await import('@/model-source');
+  return getModelSource().attributes.uiAttr(refno);
+}
 const selectedRefnos = ref<string[]>([]);
 
 function normalizeSelection(refnos: (string | null | undefined)[]): string[] {
@@ -41,7 +51,7 @@ export function setGlobalSelectedRefno(refno: string | null) {
 function usePdmsUiAttrQuery(refno: { value: string | null }) {
   return useQuery({
     queryKey: computed(() => ['pdms', 'ui-attr', refno.value]),
-    queryFn: () => pdmsGetUiAttr(refno.value!),
+    queryFn: () => fetchUiAttr(refno.value!),
     enabled: computed(() => !!refno.value),
     staleTime: 5 * 60 * 1000, // 5 minutes
     gcTime: 30 * 60 * 1000, // 30 minutes
@@ -73,6 +83,8 @@ export function useSelectionStore() {
     if (data.value && !data.value.success) return data.value.error_message || '属性查询失败';
     return null;
   });
+  // 属性来源的诊断（gen-model-v1 直读源才有：未解码 / 形状冲突 / 是否完整），面板尾部给一行提示。
+  const propertiesDiagnostics = computed(() => (data.value?.success ? data.value.diagnostics ?? null : null));
 
   async function loadProperties(refno: string) {
     setSelectionState([refno], refno);
@@ -114,6 +126,7 @@ export function useSelectionStore() {
     propertiesLoading,
     propertiesError,
     propertiesData,
+    propertiesDiagnostics,
     fullName,
     refFullNames,
     loadProperties,

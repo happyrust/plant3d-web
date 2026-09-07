@@ -1,7 +1,7 @@
 # plant3d-web 接入 gen-model `/api/v1`：模型树与三维模型加载重构方案
 
 - 日期：2026-09-06
-- 状态：**已拍板**（2026-09-06，D1–D7 全按推荐项）。进度：P0 已落地（gen-model 提交 `1eefbd577`，2026-09-07 对 `:18082` 运行实例 live 验证通过，见 §8.1）；P1 已落地（本仓，见 §8.2）；P2 已落地（见 §8.3，P2-4 徽标未做）；P3 已落地（见 §8.4，D6 对拍 ≤ 0.002 mm；P3-c 进度弹窗与 `show_dbnum` 整库入口未做）；P4 起待做
+- 状态：**已拍板**（2026-09-06，D1–D7 全按推荐项）。进度：P0 已落地（gen-model 提交 `1eefbd577`，2026-09-07 对 `:18082` 运行实例 live 验证通过，见 §8.1）；P1 已落地（本仓，见 §8.2）；P2 已落地（见 §8.3，P2-4 徽标未做）；P3 已落地（见 §8.4，D6 对拍 ≤ 0.002 mm；P3-c 进度弹窗与 `show_dbnum` 整库入口未做）；P4 已落地（见 §8.5）；P5 / P6 待做
 - 范围：`D:\work\plant-code\old\plant3d-web`（前端，主战场）+ `D:\work\plant-code\old\gen-model`（后端，只做最小增补）
 - 术语以两仓 `CONTEXT.md` 为准：plant3d-web 的「显式显示操作 / 按需模型生成 / 模型资产补齐 / 模型加载」，gen-model 的「生成根 / 最小交付单元 / 模型面 / 库一致性判决」。
 
@@ -364,6 +364,13 @@ curl -I  http://localhost:8022/api/v1/meshes/1.glb
   - `vitest` 全量 baseline 1860/1829/31 → after 1912/1881/31，**新增 fail 0**，失败文件集合与基线**完全相同**（新增 12 条：`instanceMapping.test.ts` 8——含手算一条 90° 旋转 + 缩放 + 局部平移的样例与直管样例、`modelRecordSource.test.ts` 4）；
   - **D6 对拍（live，`127.0.0.1:18082`，一次性 vitest 文件已删）**：BRAN `24381/145018` `ensure → records` 22 条记录（11 个构件 ELBO/OLET/VALV + 11 条直管），每条记录用 P3-b 合成矩阵把真实 GLB 顶点（内容寻址网格 `e3d_baked_*` / 直管 `175598…`，经 `/api/v1/meshes/{hash}.glb`）变到世界系再取 AABB，与服务端 `world_aabb` 逐轴比：**22/22 每条 Δmax ≤ 0.002 mm，整根 union Δ = 0.0006 mm**（server `[1510.3,8099.8,13236.1]..[10417.3,11844.6,19867.8]`，尺寸 `8907 × 3745 × 6632` mm）。矩阵合成 / 四元数顺序 / 列主序 / mm 单位四件事一次证完，D6 的推断成立。
   - **未验证**：浏览器里两个 tab 的 legacy vs gen-model-v1 截图对拍（`:3100` 旧后端此刻没起；上面的 server/client 对拍是同一数据源的自洽，不是两源对拍）；EQUI / SUPPO / ZONE 三类的对拍；树勾选眼睛 → 几何出现的浏览器交互。
+
+### 8.5 P4 落地记录（2026-09-07）
+
+- P4-1 `genModelV1/attributeSource.ts`（`createGenModelV1AttributeSource`）：`uiAttr(refno)` → `POST /api/v1/element/attributes` → `PdmsUiAttrResponse`：`attributes[]` 摊成 `attrs`，`is_unset` 不进（E3D 的 unset 就是没有值，BRAN 上 23 条 unset 挤进面板只会淹掉有值的）；UDA 名加 `:` 前缀（面板按 `:` 分到「UDA属性」组，`uiAttrKey`）；`bool` / `real` / `int` 转 JS 布尔 / 数值，其余保留 `display` 原文（`ref` 是 `a/b`）；`full_name` 取以 `/` 开头的 `NAME`；`ref_full_names` 不给（要逐个回查，本期不做）。`PdmsUiAttrResponse` 加可选 `diagnostics {source, complete, undecoded[], shape_conflicts[]}`，`useSelectionStore.propertiesDiagnostics` 透出，`PropertiesPanel.vue` 尾部一行「e3d-io 直读：43 个属性未解码，2 个属性形状与声明不符」（悬停列名字；旧后端没有这一格，不渲染）。
+- `useSelectionStore` 的属性查询改经 `getModelSource().attributes.uiAttr`（动态引入，不把整套适配器拖进每个引用 selection store 的组件）；legacy 下仍是 `pdmsGetUiAttr` 一次转发。其它直接调 `pdmsGetUiAttr` 的地方（`ViewerPanel` ptset / 校审 / 房间面板）不属于「模型树 + 三维显示」，未动。
+- P4-2 `typeInfo` 走树节点两跳（P3 已做，本轮挪进 `attributeSource.ts`）；P4-3 搜索按 noun 过滤（P2 已做）。
+- **P4 验证**（2026-09-07 16:45）：`npm run type-check` 通过；触及文件 ESLint 0 问题；`vitest` 全量 baseline 1860/1829/31 → 1917/1886/31，失败文件集合与基线相同（新增 5 条：`attributeSource.test.ts`）；live（`:18082`，一次性文件已删）`uiAttr(24381_145018)`：70 条有值属性（含 `:H-*` / `:MDS*` / `:PSIWEIGHT` 等 UDA 带 `:` 前缀，`AEXCES=0`、`BUIL=false` 已转型，`DUTY="反应堆冷却剂"`），`full_name=/Copy-of-RCS0014-1R43012新`，`diagnostics = {source:e3d-io, complete:false, undecoded:43, shape_conflicts:[TYPEX,SPAMAP]}`；`typeInfo(24381_145018)` → `BRAN`，owner `24381_144975` `PIPE`。**未验证**：属性面板在浏览器里的实际渲染（含尾部诊断行）。
 
 ## 9. 交付物清单
 

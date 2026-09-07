@@ -1,5 +1,17 @@
 import { getBackendApiBaseUrl } from '@/utils/apiBase';
 
+/** 属性来源的诊断（只有 gen-model-v1 直读源给；旧后端没有这一格） */
+export type PdmsUiAttrDiagnostics = {
+  /** `e3d-io` 等 */
+  source?: string;
+  /** 服务端是否认为这一份属性表完整 */
+  complete?: boolean;
+  /** 读不出来的属性名（服务端 `diagnostics.undecoded[].name`） */
+  undecoded?: string[];
+  /** 声明类型与实际形状不符的属性名 */
+  shape_conflicts?: string[];
+};
+
 export type PdmsUiAttrResponse = {
   success: boolean;
   refno: string;
@@ -9,6 +21,7 @@ export type PdmsUiAttrResponse = {
   /** 引用类属性（值形如 pe:<refno>，如 OWNER/REFNO）解析出的 full_name，键为属性名 */
   ref_full_names?: Record<string, string> | null;
   error_message?: string | null;
+  diagnostics?: PdmsUiAttrDiagnostics | null;
 };
 
 /**
