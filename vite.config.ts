@@ -49,6 +49,25 @@ function inferBackendPortFromApiBase(apiBase: string | undefined): string {
   }
 }
 
+const GEN_MODEL_V1_DEFAULT_TARGET = 'http://localhost:8022';
+
+/** `/gm` 代理的上游：只接受 http(s) 绝对地址；`/gm` 一类相对写法不能当上游，跳过。 */
+function resolveGenModelV1ProxyTarget(...candidates: (string | undefined)[]): string {
+  for (const candidate of candidates) {
+    const trimmed = candidate?.trim();
+    if (!trimmed) continue;
+    try {
+      const parsed = new URL(trimmed);
+      if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+        return trimmed.replace(/\/$/, '');
+      }
+    } catch {
+      // 相对前缀或非法 URL：不是上游，看下一个候选
+    }
+  }
+  return GEN_MODEL_V1_DEFAULT_TARGET;
+}
+
 function normalizeBasePath(basePath: string | undefined): string {
   const trimmed = basePath?.trim();
   if (!trimmed) return '/';
@@ -199,6 +218,13 @@ export default defineConfig(({ mode }) => {
   const isLikelyMisconfiguredBackendPort = inferredPort === '8080' || inferredPort === '3000' || inferredPort === '3001';
   const backendPort = env.VITE_BACKEND_PORT || (isLikelyMisconfiguredBackendPort ? '3100' : inferredPort || '3100');
   const backendTarget = (env.VITE_BACKEND_URL || env.VITE_API_BASE_URL || `http://localhost:${backendPort}`).replace(/\/$/, '');
+  // gen-model `/api/v1`（模型树 + 三维模型新数据源）：默认前端直连 :8022（CORS 已放开）；
+  // 不想跨域时把 VITE_GEN_MODEL_V1_BASE_URL 写成 `/gm`，请求就落到下面这条同源代理上。
+  // 代理上游优先取 VITE_GEN_MODEL_V1_PROXY_TARGET，再取绝对形式的 VITE_GEN_MODEL_V1_BASE_URL。
+  const genModelV1Target = resolveGenModelV1ProxyTarget(
+    env.VITE_GEN_MODEL_V1_PROXY_TARGET,
+    env.VITE_GEN_MODEL_V1_BASE_URL,
+  );
   // 使用北京时间构建前端
   const now = new Date();
   const beijingTime = new Date(now.getTime() + 8 * 60 * 60 * 1000);
@@ -259,6 +285,14 @@ export default defineConfig(({ mode }) => {
         '/model-version': {
           target: backendTarget,
           changeOrigin: true,
+        },
+        // gen-model /api/v1 同源代理：`/gm/api/v1/tree/roots` → `${genModelV1Target}/api/v1/tree/roots`。
+        // 与上面 `/api` 那条（旧后端 :3100）是两个后端，前缀不重叠，不能合并。
+        '/gm': {
+          target: genModelV1Target,
+          changeOrigin: true,
+          ws: true,
+          rewrite: (path) => path.replace(/^\/gm(?=\/|$)/, ''),
         },
       },
     },

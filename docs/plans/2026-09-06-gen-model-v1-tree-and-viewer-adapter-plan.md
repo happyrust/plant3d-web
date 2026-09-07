@@ -1,7 +1,7 @@
 # plant3d-web 接入 gen-model `/api/v1`：模型树与三维模型加载重构方案
 
 - 日期：2026-09-06
-- 状态：草案，待 Plannotator 批注 / 拍板
+- 状态：**已拍板**（2026-09-06，D1–D7 全按推荐项）。进度：P0 已落地（gen-model 提交 `1eefbd577`，2026-09-07 对 `:18082` 运行实例 live 验证通过，见 §8.1）；P1 已落地（本仓，见 §8.2）；P2 起待做
 - 范围：`D:\work\plant-code\old\plant3d-web`（前端，主战场）+ `D:\work\plant-code\old\gen-model`（后端，只做最小增补）
 - 术语以两仓 `CONTEXT.md` 为准：plant3d-web 的「显式显示操作 / 按需模型生成 / 模型资产补齐 / 模型加载」，gen-model 的「生成根 / 最小交付单元 / 模型面 / 库一致性判决」。
 
@@ -305,6 +305,31 @@ curl -I  http://localhost:8022/api/v1/meshes/1.glb
 | Q1 | 树里要不要显示 ISOD 库（`membership.element_databases()` 含 ISOD）？ | 待定；默认显示，可加过滤 |
 | Q2 | `is_invalid_tubi` 的实例怎么画？plant-ui 用专用 WGSL 画虚线 | 先用告警色实体，后续再议 |
 | Q3 | 版本对比 / `model/history/*` 何时迁 | 另立计划 |
+
+### 8.1 P0 落地记录与 P0-5 单位几何对表结论（2026-09-07）
+
+- P0-1/2/3/5 全部在 gen-model 提交 `1eefbd577` 落地（`src/web_service/mesh_glb.rs` 新模块 + `handlers.rs` / `mod.rs` / `direct_tree.rs`），`docs/specs/web-service-api.md` 同步 §4.7 `ref0s`、新增 §4.10 / §4.11；P0-4（`preview`）按 D5-A 未做。gen-model 侧单测 `cargo test --lib -- web_service` 36 passed。
+- **live 验证**（2026-09-07 15:50，对 plant-1 `run5-7997-bounded` 的运行实例 `127.0.0.1:18082`，`AvevaMarineSample//ALL`，只读 GET）：
+  - `GET /api/v1/tree/roots` → 37 个 SITE，节点带 `dbnum`（如 `9304_2 /1RS-CIVI dbnum=1112`）；
+  - `GET /api/v1/search?query=PIPE&limit=3` → `total=306`，items 带 `noun`（ZONE / SITE）与 `dbnum`；
+  - `GET /api/v1/dbnums` → 41 行，DESI 行带 `ref0s`（如 `1112 → [9304,17496,25688]`）；
+  - `GET /api/v1/meshes/12240963882128803248.glb` → 200 `model/gltf-binary`，`Cache-Control: public, max-age=31536000, immutable`，`ETag: "12240963882128803248"`，GLB 头 `glTF`/总长一致，`POSITION`+`NORMAL`+u32 indices，372 顶点；
+  - 错误分型：缺文件 `1.glb` → 404 `{"code":"not_found"}`（该运行实例的 `meshes_path` 下没有 `1.mesh`，仓内 `assets/meshes/1|2|3.mesh` 才有）；后缀不对 `1.mesh` → 400 `bad_request`；`../1.glb` → 404（路径归一后进不了 handler）。
+- **P0-5 结论**（`cargo test -- --nocapture` 实测包围盒）：`1.mesh` 单位盒 `[-0.5,-0.5,-0.5]..[0.5,0.5,0.5]`；`2.mesh` 单位圆柱 `[-0.5,-0.5,0]..[0.5,0.5,1]`（半径 0.5、高 1、Z 轴、底面在 z=0）；`3.mesh` 单位球 `[-0.5,-0.5,-0.5]..[0.5,0.5,0.5]`（半径 0.5、原点居中）。与本仓 `useDbnoInstancesDtxLoader.ts` 的 `getUnitBoxGeometry()` / `getUnitTubiGeometry()`（`CylinderGeometry(0.5,0.5,1)` → `rotateX(π/2)` → `translate(0,0,0.5)`）/ `getUnitSphereGeometry()`（`SphereGeometry(0.5)`）在半径、高度、轴向、原点上**逐项一致**，前端本地造几何**不必改参数**；只有细分数不同（前端 16 段，仓内 `2.mesh` 124 面、`3.mesh` 1080 面），那是光滑度不是位置。
+- 注意：内容寻址的烘焙网格（如上面的 `12240963882128803248`）包围盒是 `[-1,-1,0]..[1,1,1]`——它们是真实几何、由 `insts[].transform` 缩放到位，与 `1/2/3` 三份单位几何不是一回事，前端不要拿它们套 `getUnit*Geometry()`。
+
+### 8.2 P1 落地记录（2026-09-07）
+
+- D7：本仓 `git init`，基线提交为改动前的目录原样（`tmp/` 补进 `.gitignore`——138 MB 的一次性日志与验证残留，与已忽略的 `.tmp/` 同类）。
+- P1-1 `src/api/genModelV1Api.ts`（+ `genModelV1Api.test.ts`）：`fetchJson` 基座、`GenModelV1ApiError{code,status,message,detail}` 分型（服务端 `{code,message,detail}` 信封原样透出；网络层失败 `code='network'`；202 `generation_pending` 也走 error 通道，`retryAfterMs` 取自 `Retry-After`）、身份三元组按需附加、refno 双向转换 `toV1Refno("a_b")→"a/b"` / `fromV1Refno("a/b")→"a_b"`、`genModelV1MeshUrl(hash)`。
+- P1-2：`VITE_GEN_MODEL_V1_BASE_URL`（默认 `http://localhost:8022`，直连不走代理——gen-model CORS 已放开）、`?gm_backend=<url|/prefix|port>` / `?gm_backend_port=<port>` 覆盖、写 `/gm` 走 dev 代理（`vite.config.ts` 新增 `/gm` → `VITE_GEN_MODEL_V1_PROXY_TARGET`（缺省取绝对形式的 `VITE_GEN_MODEL_V1_BASE_URL`，再缺省 `:8022`），rewrite 去前缀，`ws:true`）；`apiBase.ts` 新增 `resolveGenModelV1BaseUrl()` / `getGenModelV1BaseUrl()` / `buildGenModelV1Url()`，既有函数一行没动。一条与旧后端同口径的保护：从局域网 IP 打开页面时，环境变量 / 默认值给的 loopback 地址折到 `/gm`（否则请求打到访问者自己的电脑）；URL 参数明确要的 loopback 不折。生产构建没配环境变量时退到同源 `/gm`。
+- P1-3：`src/model-source/{ports.ts,index.ts,legacy/index.ts}`：四个端口 `TreeSource / ModelRecordSource / MeshSource / AttributeSource`；`resolveModelSourceKind()` 读 `?model_source=` → `VITE_MODEL_SOURCE` → 默认 `legacy`；`legacy` 适配器原样委托 `genModelE3dApi` / `useDbnoInstancesParquetLoader` / `/files/meshes/lod_*` URL / `genModelPdmsAttrApi`。`genModelV1` 适配器留给 P2/P3（`index.ts` 里 `gen-model-v1` 目前回退到 legacy 并 `console.warn`，开关先能切、行为不变）。`usePdmsOwnerTree` / `useDbnoInstancesDtxLoader` 此时**未改**。
+- P1-4：`useGenModelV1Health.ts`（进程内单例 store：`GET /api/v1/health` → `project / mdb / namespace / version / delivery_unit_types / initialization.{data_ready, model_ready, model_phase_open} / data_face`，60 s 轮询，状态 `idle / loading / ok / error`，失败时保留上一次身份）+ `GenModelV1HealthBadge.vue`（状态点 + 摘要「已连接 gen-model :8022 · AvevaMarineSample /ALL · 模型门 开」，点击重探）挂在 `ModelTreePanel.vue` 顶部工具条 PDMS/ROOM 页签右侧；只在 `model_source=gen-model-v1` 或显式 `?gm_health=1` 时渲染，`legacy` 下不发请求、DOM 不变。
+- **P1 验证**（2026-09-07 16:06）：
+  - `npm run type-check` 通过；ESLint 对本轮触及的全部文件 0 问题（仓内既有 18 个文件的 86 个 lint 问题全在 `harness/` / `scripts/` / 根目录脚本等，与本轮无关，未动）；
+  - `npx vitest run` 全量：baseline（基线提交 `328ca8b`）1860 tests / 1829 passed / 31 failed / 18 failed files → after 1885 / 1859 / 26 / 14，**新增 fail 0**（新增 25 条全绿：`genModelV1Api.test.ts` 12、`model-source/index.test.ts` 7、`apiBase.test.ts` +6；基线里 4 个 review/annotation store 测试文件本轮转绿属既有偶发，与本轮无关）；
+  - live 冒烟（一次性 vitest 文件，跑完已删；对 `127.0.0.1:18082`）：用 P1-1 客户端实调 `health`（`AvevaMarineSample /ALL`，`model_ready=true`、`model_phase_open=true`）、`tree/roots`（37 SITE，全部带 `dbnum`）、`tree/children?refno=9304_2`（`a_b` 写法被服务端接受，回 `parent:"9304/2"`，3 个 ZONE 带 `dbnum=1112`）、`tree/ancestors?refno=17496_8518` → `["17496_8518","9304_2","9304_0"]`、`search?query=PIPE&limit=5`（306 命中，items 带 `noun`/`dbnum`）、`dbnums`（41 行，28 行带 `ref0s`）、`meshes/12240963882128803248.glb`（200 / `model/gltf-binary` / `immutable` / `glTF` 魔数 11148 B）、`meshes/1.glb` → 404 `not_found` 分型。
+  - **顺手发现（gen-model 侧，未改）**：`tree/children?refno=1/1`（Ref0 不在 MDB）回 **500 `internal`**「ref0 1 反查不到 dbnum」，按 spec §4.5 的口径这应是 404 `not_found`（或 503 `ref0_affiliation_unavailable`）；客户端现在把它归为不可负缓存的 `internal`。建议 P2 前在 gen-model `tree_*` handler 里把 `DirectStoreError` 之外的「Ref0 不在骨架」分型出来。
 
 ## 9. 交付物清单
 

@@ -7,6 +7,7 @@ import { Filter, GitCompare, Plus, Search, X } from 'lucide-vue-next';
 import type { DtxCompatViewer } from '@/viewer/dtx/DtxCompatViewer';
 
 import { pdmsSearch, type PdmsSearchItem } from '@/api/genModelSearchApi';
+import GenModelV1HealthBadge from '@/components/model-tree/GenModelV1HealthBadge.vue';
 import ModelGenerationProgressModal from '@/components/model-tree/ModelGenerationProgressModal.vue';
 import ModelTreeAttrDiffPanel from '@/components/model-tree/ModelTreeAttrDiffPanel.vue';
 import ModelTreeRow from '@/components/model-tree/ModelTreeRow.vue';
@@ -26,10 +27,24 @@ import {
   type TreeDiffModel,
 } from '@/composables/useTreeVersionDiff';
 import { cn } from '@/lib/utils';
+import { isGenModelV1Source } from '@/model-source';
 
 const props = defineProps<{
   viewer: DtxCompatViewer | null;
 }>();
+
+/**
+ * gen-model 连接徽标（plan 2026-09-06 P1-4）：只在数据源切到 gen-model-v1（`?model_source=gen-model-v1`）
+ * 或显式 `?gm_health=1` 时挂出来；legacy 下不渲染、也不发探针请求。
+ */
+const showGenModelV1Badge = computed(() => {
+  if (isGenModelV1Source()) return true;
+  try {
+    return new URLSearchParams(window.location.search).get('gm_health') === '1';
+  } catch {
+    return false;
+  }
+});
 
 const activeTree = ref<'pdms' | 'room'>('pdms');
 
@@ -1519,6 +1534,8 @@ function returnToLatestTree() {
             ROOM
           </button>
         </div>
+
+        <GenModelV1HealthBadge v-if="showGenModelV1Badge" />
 
         <div class="flex-1" />
 
