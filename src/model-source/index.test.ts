@@ -106,17 +106,22 @@ describe('legacy 适配器：零逻辑委托', () => {
     expect(getModelSource('legacy').meshes.meshUrl('abc123', 'L1')).toBe(legacyMeshUrl('abc123', 'L1'));
   });
 
-  it('gen-model-v1：树与网格走 /api/v1，几何记录与属性在 P3/P4 前仍委托 legacy；同种类只建一份', async () => {
+  it('gen-model-v1：树 / 几何记录 / 网格 / typeInfo 走 /api/v1，只有 uiAttr 在 P4 前仍委托 legacy；同种类只建一份', async () => {
     const source = getModelSource('gen-model-v1');
+    const legacy = getModelSource('legacy');
     expect(source.kind).toBe('gen-model-v1');
     expect(getModelSource('gen-model-v1')).toBe(source);
     expect(source.meshes.meshUrl('12240963882128803248', 'L1')).toMatch(/\/api\/v1\/meshes\/12240963882128803248\.glb$/);
 
-    await source.records.instanceEntriesByRefnos(7997, ['24381_145018']);
-    await source.attributes.typeInfo('24381_145018');
-    expect(legacyMocks.queryInstanceEntriesByRefnos).toHaveBeenCalledTimes(1);
-    expect(legacyMocks.pdmsGetTypeInfo).toHaveBeenCalledWith('24381_145018');
+    // 几何记录与 typeInfo 不再是 legacy 那份函数
+    expect(source.records.instanceEntriesByRefnos).not.toBe(legacy.records.instanceEntriesByRefnos);
+    expect(source.attributes.typeInfo).not.toBe(legacy.attributes.typeInfo);
+    // uiAttr 仍原样转发
+    await source.attributes.uiAttr('24381_145018');
+    expect(legacyMocks.pdmsGetUiAttr).toHaveBeenCalledWith('24381_145018');
     // 树不再碰旧后端
     expect(legacyMocks.e3dGetWorldRoot).not.toHaveBeenCalled();
+    expect(legacyMocks.queryInstanceEntriesByRefnos).not.toHaveBeenCalled();
+    expect(legacyMocks.pdmsGetTypeInfo).not.toHaveBeenCalled();
   });
 });

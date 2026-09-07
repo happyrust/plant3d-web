@@ -6,7 +6,7 @@ import {
   useDbnoInstancesParquetLoader,
 } from '@/composables/useDbnoInstancesParquetLoader';
 import { useDisplayThemeStore, type DisplayTheme } from '@/composables/useDisplayThemeStore';
-import { buildBackendUrl } from '@/utils/apiBase';
+import { getModelSource } from '@/model-source';
 import { type InstanceEntry } from '@/utils/instances/instanceManifest';
 import { parseGlbGeometry } from '@/utils/parseGlbGeometry';
 import { DTXLayer } from '@/utils/three/dtx';
@@ -32,8 +32,12 @@ type LoaderOptions = {
    * 数据源选择：
    * - 'parquet'：默认，DuckDB WASM 查 parquet（失败则抛错）
    * - 'backend'：实时查库（用于 parquet miss 回填）
+   * - 'gen-model-v1'：gen-model `/api/v1`（ensure → records，plan 2026-09-06 P3-e）
+   *
+   * 页面级开关 `?model_source=gen-model-v1` 生效时，前两种会被**改写**成第三种（同一页面只该有一个几何数据源），
+   * 只有调用方自带 `instanceEntriesByRefno` / `parquetManifestUrl`（不可变清单，版本对比）时不改。
    */
-  dataSource?: 'parquet' | 'backend'
+  dataSource?: 'parquet' | 'backend' | 'gen-model-v1'
   includeOwnedTubings?: boolean
   /** 不可变最小交付单元提交的 manifest URL；提供后不读取 dbno 当前包。 */
   parquetManifestUrl?: string
@@ -284,7 +288,8 @@ async function ensureGeometryForGeoHash(
       return { status: 'ok' as const, notFoundNew: false };
     }
 
-    const glbUrl = buildBackendUrl(`/files/meshes/lod_${lodAssetKey}/${geoHash}_${lodAssetKey}.glb`);
+    // URL 模板由数据源给：legacy = `/files/meshes/lod_{L}/{hash}_{L}.glb`（逐字同前），gen-model-v1 = `/api/v1/meshes/{hash}.glb`
+    const glbUrl = getModelSource().meshes.meshUrl(geoHash, lodAssetKey);
     let geometry: BufferGeometry | null = null;
     let notFound = false;
     let notFoundNew = false;
@@ -716,12 +721,24 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
   const { currentTheme } = useDisplayThemeStore();
   const currentLoadTheme: DisplayTheme = currentTheme.value;
 
-  // 根据 dataSource 选项决定数据源
-  const dataSource = options.dataSource || 'parquet';
+  // 根据 dataSource 选项决定数据源；页面级开关切到 gen-model-v1 时改写（不可变清单的调用除外）
+  const modelSource = getModelSource();
+  const pinnedByCaller = !!options.instanceEntriesByRefno || !!options.parquetManifestUrl || !!options.parquetManifest;
+  const dataSource: 'parquet' | 'backend' | 'gen-model-v1' =
+    !pinnedByCaller && modelSource.kind === 'gen-model-v1' ? 'gen-model-v1' : (options.dataSource || 'parquet');
   let index: Map<string, InstanceEntry[]>;
 
   if (options.instanceEntriesByRefno) {
     index = options.instanceEntriesByRefno;
+  } else if (dataSource === 'gen-model-v1') {
+    const source = modelSource.kind === 'gen-model-v1' ? modelSource : getModelSource('gen-model-v1');
+    index = await source.records.instanceEntriesByRefnos(dbno, toLoad, {
+      debug,
+      forceRefresh: normalizedForceReload !== null,
+      includeOwnedTubings: options.includeOwnedTubings,
+      expectedRootRefno: options.expectedRootRefno,
+    });
+    if (debug) console.log('[dtx][instances] using gen-model-v1', { dbno, refnos: toLoad.length, indexSize: index.size });
   } else if (dataSource === 'backend') {
     const resp = await realtimeInstancesByRefnos(dbno, toLoad, {
       includeTubings: true,

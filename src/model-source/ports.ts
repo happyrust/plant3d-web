@@ -61,6 +61,8 @@ export type InstanceEntryQueryOptions = {
   includeOwnedTubings?: boolean;
   manifestUrl?: string;
   expectedRootRefno?: string;
+  /** 人明确要求重生成（gen-model 源下 = `ensure(force=true)`）；legacy 源忽略 */
+  forceRegenerate?: boolean;
 };
 
 /** 几何实例取数：`dbno` 是 DTX 缓存 / 可见性 / 选中的分桶键（D3），gen-model 源下由 `ref0s` 表解出。 */

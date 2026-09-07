@@ -39,7 +39,6 @@ import {
   WebGLRenderer,
 } from 'three';
 
-import { e3dGetChildren, e3dGetVisibleInsts } from '@/api/genModelE3dApi';
 import { pdmsGetUiAttr, type PtsetResponse } from '@/api/genModelPdmsAttrApi';
 import { fetchMbdV2PipeData } from '@/api/mbdV2Api';
 import {
@@ -123,6 +122,7 @@ import {
   type DimensionSystem,
 } from '@/dimension';
 import { getOutputProjectFromUrl } from '@/lib/filesOutput';
+import { getModelSource } from '@/model-source';
 import { onCommand } from '@/ribbon/commandBus';
 import { emitToast } from '@/ribbon/toastBus';
 import { buildBackendUrl } from '@/utils/apiBase';
@@ -1898,7 +1898,7 @@ async function collectDescendantRefnos(rootRefno: string, maxDepth = 3, maxTotal
     if (item.depth >= maxDepth) continue;
 
     try {
-      const resp = await e3dGetChildren(item.refno, 200);
+      const resp = await getModelSource().tree.children(item.refno, 200);
       if (resp.success && resp.children) {
         for (const child of resp.children) {
           const childRefno = String(child.refno || '').trim().replace('/', '_');
@@ -1918,7 +1918,7 @@ async function collectDescendantRefnos(rootRefno: string, maxDepth = 3, maxTotal
 async function getTargetRefnos(refno: string): Promise<string[]> {
   let targetRefnos = [refno];
   try {
-    const resp = await e3dGetVisibleInsts(refno);
+    const resp = await getModelSource().tree.visibleInsts(refno);
     if (resp.success && resp.refnos && resp.refnos.length > 0) {
       targetRefnos = resp.refnos.map(r => String(r));
     }
@@ -4397,7 +4397,7 @@ onMounted(async () => {
         let visibleInstsUserHint: string | null = null;
         let noGeometryReason: string | null = null;
         try {
-          const visResp = await e3dGetVisibleInsts(showRefno);
+          const visResp = await getModelSource().tree.visibleInsts(showRefno);
           const visRefnos = visResp?.refnos ?? [];
           if (visRefnos.length > 0) {
             loadRefnos = mergeRootRefnoWithVisibleRefnos(showRefno, visRefnos);
@@ -4736,8 +4736,8 @@ onMounted(async () => {
         }
         console.log(`[debug_refno] refno=${refnoStr} → dbnum=${dbno}`);
 
-        // 2. 查询该 refno 下的可见实例
-        const visResp = await e3dGetVisibleInsts(refnoStr);
+        // 2. 查询该 refno 下的可见实例（经数据源端口：legacy = /api/e3d/visible-insts，gen-model-v1 = ensure → records）
+        const visResp = await getModelSource().tree.visibleInsts(refnoStr);
         const refnos = mergeRootRefnoWithVisibleRefnos(refnoStr, visResp?.refnos ?? []);
         console.log(`[debug_refno] visible-insts 合并根节点后返回 ${refnos.length} 个 refno`, refnos.slice(0, 10));
         if (refnos.length === 0) {

@@ -1,8 +1,6 @@
 import { ref } from 'vue';
 import type { Ref } from 'vue';
 
-import { e3dGetSubtreeRefnos, e3dGetVisibleInsts } from '@/api/genModelE3dApi';
-import { pdmsGetTypeInfo } from '@/api/genModelPdmsAttrApi';
 import { enqueueParquetIncremental, getParquetVersion } from '@/api/genModelRealtimeApi';
 import { triggerBatchGenerateSse } from '@/api/genModelStreamGenerateApi';
 import { modelRegenerateByRefno, modelShowByRefno } from '@/api/genModelTaskApi';
@@ -13,6 +11,7 @@ import { ensureDbMetaInfoLoaded, tryGetDbnumByRefno } from '@/composables/useDbM
 import { isDtxRefnoLoaded, loadDbnoInstancesForVisibleRefnosDtx } from '@/composables/useDbnoInstancesDtxLoader';
 import { useDbnoInstancesParquetLoader } from '@/composables/useDbnoInstancesParquetLoader';
 import { useModelLoadStatus } from '@/composables/useModelLoadStatus';
+import { getModelSource } from '@/model-source';
 import { emitToast } from '@/ribbon/toastBus';
 
 /**
@@ -153,8 +152,8 @@ async function querySubtreeRefnos(refno: string): Promise<{ refnos: string[]; tr
   const normalized = normalizeRefnoString(refno);
   if (!normalized) return { refnos: [], truncated: false };
 
-  // 约定：后端返回“子孙可见 refnos”（此处用 subtree-refnos 承接）
-  const resp = await e3dGetSubtreeRefnos(normalized, { includeSelf: true, limit: 200_000 });
+  // 约定：后端返回“子孙可见 refnos”（此处用 subtree-refnos 承接）；经数据源端口取数（plan 2026-09-06 P3-f）
+  const resp = await getModelSource().tree.subtreeRefnos(normalized, { includeSelf: true, limit: 200_000 });
   if (!resp.success) {
     throw new Error(resp.error_message || 'e3d subtree-refnos 查询失败');
   }
@@ -174,7 +173,7 @@ export async function queryLoadScopeRefnos(refno: string): Promise<{
   }
 
   try {
-    const resp = await e3dGetVisibleInsts(normalized);
+    const resp = await getModelSource().tree.visibleInsts(normalized);
     if (!resp.success) {
       throw new Error(resp.error_message || 'e3d visible-insts 查询失败');
     }
@@ -211,7 +210,7 @@ export async function resolveActualModelLoadScope(
   }
 
   try {
-    const resp = await pdmsGetTypeInfo(normalizedRoot);
+    const resp = await getModelSource().attributes.typeInfo(normalizedRoot);
     const noun = resp.success ? String(resp.noun || '').trim().toUpperCase() : '';
     const isBranHang = noun === 'BRAN' || noun === 'HANG';
     const actualLoadRefnos = isBranHang
@@ -703,6 +702,82 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         syncGlobalLoadStatus();
         consoleStore.addLog('warning', `[model-load] refno=${normalizedRoot} 当前无可见实例，无需回退全量加载`);
         return true;
+      }
+
+      // ========== gen-model-v1（plan 2026-09-06 P3-f）==========
+      // 显式显示 = ensure(force=false) → records（D5-A），已在 visibleInsts 里做过一遍并进了记录缓存，这里只是把
+      // 缓存里的实例装进 DTX；重生成 = ensure(force=true)。旧后端的 realtime / parquet / SSE 那几条路一律不走。
+      if (getModelSource().kind === 'gen-model-v1') {
+        const loadRefnos = loadScope.actualLoadRefnos;
+        const regenerate = loadOptions?.regenerate === true;
+        statusMessage.value = regenerate ? `正在重新生成 ${normalizedRoot}（gen-model）...` : `从 gen-model 加载 ${loadRefnos.length} 个 refno...`;
+        progress.value = 30;
+        syncGlobalLoadStatus();
+        const v1Result = await loadDbnoInstancesForVisibleRefnosDtx(dtxLayer, dbno, loadRefnos, {
+          lodAssetKey: 'L1',
+          debug: false,
+          dataSource: 'gen-model-v1',
+          forceReloadRefnos: regenerate ? loadRefnos : undefined,
+          replaceExistingObjects: regenerate,
+          forceRefreshGeometries: regenerate,
+        });
+        anyViewer.__dtxAfterInstancesLoaded?.(dbno, loadRefnos);
+        if (typeof anyViewer.scene?.ensureRefnos === 'function') {
+          anyViewer.scene.ensureRefnos(loadRefnos, { computeAabb: false });
+        }
+        if (loadOptions?.flyTo) {
+          try {
+            const flyTargets = loadRefnos.length > 5000 ? loadRefnos.slice(0, 5000) : loadRefnos;
+            const aabb = anyViewer.scene?.getAABB?.(flyTargets) ?? null;
+            if (aabb) anyViewer.cameraFlight?.flyTo?.({ aabb, duration: 0.8, fit: true });
+          } catch {
+            // ignore flyTo errors
+          }
+        }
+        lastLoadDebug.value = {
+          refno: normalizedRoot,
+          dbno,
+          visibleInsts: { ok: visibleOk, count: visibleRefnos.length, error: visibleErr },
+          componentRefnos: { count: loadScope.componentRefnos.length, sample: loadScope.componentRefnos.slice(0, 10) },
+          loadRefnos: { count: loadRefnos.length, sample: loadRefnos.slice(0, 10) },
+          scopeDecision: {
+            rootNoun: loadScope.rootNoun,
+            branHangRootInjected: loadScope.branHangRootInjected,
+            typeInfoError: loadScope.typeInfoError,
+          },
+          result: {
+            loadedRefnos: v1Result.loadedRefnos,
+            skippedRefnos: v1Result.skippedRefnos,
+            loadedObjects: v1Result.loadedObjects,
+          },
+          ms: Date.now() - startedAt,
+        };
+        const mesh404 = v1Result.missingBreakdown.mesh404Refnos.length;
+        const noGeo = v1Result.missingBreakdown.noGeoRowsRefnos.length;
+        consoleStore.addLog(
+          'info',
+          `[model-load] gen-model-v1 root=${normalizedRoot} dbno=${dbno} loaded_refnos=${v1Result.loadedRefnos} skipped=${v1Result.skippedRefnos} objects=${v1Result.loadedObjects} mesh404=${mesh404} no_geo=${noGeo} ms=${Date.now() - startedAt}`
+        );
+        progress.value = 100;
+        if (v1Result.loadedObjects > 0) {
+          loadedRoots.add(normalizedRoot);
+          statusMessage.value = regenerate ? '重新生成完成 (gen-model)' : '加载完成 (gen-model)';
+          syncGlobalLoadStatus();
+          emitToast({ message: `[成功] 已从 gen-model 加载 ${v1Result.loadedObjects} 个几何实例`, level: 'success' });
+          return true;
+        }
+        if (v1Result.skippedRefnos > 0 && v1Result.loadedRefnos === 0) {
+          // 全部已在场景里（缓存命中），不是失败
+          statusMessage.value = '已加载 (gen-model)';
+          syncGlobalLoadStatus();
+          return true;
+        }
+        statusMessage.value = '无可见几何实例 (gen-model)';
+        syncGlobalLoadStatus();
+        const hint = mesh404 > 0 ? `网格缺失 ${mesh404} 个 refno` : noGeo > 0 ? `${noGeo} 个 refno 没有几何记录` : '服务端未返回可绘制实例';
+        consoleStore.addLog('warning', `[model-load] gen-model-v1 未绘制实例 refno=${normalizedRoot}：${hint}`);
+        emitToast({ message: `[警告] 加载结束但未绘制实例（refno=${normalizedRoot}）：${hint}`, level: 'warning' });
+        return false;
       }
 
       if (loadOptions?.regenerate) {

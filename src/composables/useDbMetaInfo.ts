@@ -1,4 +1,7 @@
+import { genModelV1Dbnums } from '@/api/genModelV1Api';
 import { buildFilesOutputUrl, getOutputProjectFromUrl } from '@/lib/filesOutput';
+import { isGenModelV1Source } from '@/model-source/kind';
+import { getGenModelV1BaseUrl } from '@/utils/apiBase';
 import { getJson, setJson } from '@/utils/storage/indexedDbCache';
 
 type DbMetaFileEntry = {
@@ -19,7 +22,23 @@ let loadPromise: Promise<void> | null = null;
 let loadedProjectKey: string | null = null;
 
 function getActiveProjectKey(): string {
+  // gen-model-v1 源下 ref0→dbnum 来自 /api/v1/dbnums 的 ref0s（plan 2026-09-06 P3-g），
+  // 键带上 base URL：换后端就是另一张表，不能拿旧后端项目名下的缓存顶。
+  if (isGenModelV1Source()) return `gm-v1:${getGenModelV1BaseUrl()}`;
   return getOutputProjectFromUrl() ?? DEFAULT_PROJECT_KEY;
+}
+
+/**
+ * `/api/v1/dbnums` → 与 `db_meta_info.json` 同形的 `{ db_files }`，复用同一套校验与 IndexedDB 缓存。
+ * 骨架没预热过的形态服务端**整格不写** `ref0s`——那种行跳过，不当「这个库一个 Ref0 都没有」。
+ */
+export function dbnumsToDbMetaInfoJson(rows: { dbnum: number; ref0s?: number[] }[]): DbMetaInfoJson {
+  const dbFiles: Record<string, DbMetaFileEntry> = {};
+  for (const row of rows) {
+    if (!Array.isArray(row.ref0s) || row.ref0s.length === 0) continue;
+    dbFiles[String(row.dbnum)] = { dbnum: row.dbnum, ref0s: [...row.ref0s] };
+  }
+  return { db_files: dbFiles };
 }
 
 function getDbMetaCacheKey(projectKey = getActiveProjectKey()): string {
@@ -143,7 +162,20 @@ export async function ensureDbMetaInfoLoaded(): Promise<void> {
       console.warn('[db_meta] IndexedDB 预热失败，继续拉取远端 meta', e);
     }
 
-    // 2) 强制刷新；AMS 1112 增量演示允许用内置 ref0 映射兜底，避免无后端文件时 viewer 直接初始化失败。
+    // 2) gen-model-v1：`/api/v1/dbnums` 的 ref0s（服务端骨架解出，D3-A），不读旧后端的 db_meta_info.json
+    if (isGenModelV1Source()) {
+      const dbnums = await genModelV1Dbnums({ timeoutMs: 60_000 });
+      const fresh = dbnumsToDbMetaInfoJson(dbnums.dbnums);
+      applyDbMetaInfoJson(fresh);
+      try {
+        await setJson(IDB_STORE, cacheKey, fresh);
+      } catch (e) {
+        console.warn('[db_meta] IndexedDB 写入失败，已使用内存 meta 继续', e);
+      }
+      return;
+    }
+
+    // 3) 强制刷新；AMS 1112 增量演示允许用内置 ref0 映射兜底，避免无后端文件时 viewer 直接初始化失败。
     const resp = await fetch(metaUrl);
     if (!resp.ok) {
       if (ref0ToDbnum && ref0ToDbnum.size > 0) return;

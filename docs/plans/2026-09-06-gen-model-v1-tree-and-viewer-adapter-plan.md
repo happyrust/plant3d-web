@@ -1,7 +1,7 @@
 # plant3d-web 接入 gen-model `/api/v1`：模型树与三维模型加载重构方案
 
 - 日期：2026-09-06
-- 状态：**已拍板**（2026-09-06，D1–D7 全按推荐项）。进度：P0 已落地（gen-model 提交 `1eefbd577`，2026-09-07 对 `:18082` 运行实例 live 验证通过，见 §8.1）；P1 已落地（本仓，见 §8.2）；P2 已落地（见 §8.3，P2-4 徽标未做）；P3 起待做
+- 状态：**已拍板**（2026-09-06，D1–D7 全按推荐项）。进度：P0 已落地（gen-model 提交 `1eefbd577`，2026-09-07 对 `:18082` 运行实例 live 验证通过，见 §8.1）；P1 已落地（本仓，见 §8.2）；P2 已落地（见 §8.3，P2-4 徽标未做）；P3 已落地（见 §8.4，D6 对拍 ≤ 0.002 mm；P3-c 进度弹窗与 `show_dbnum` 整库入口未做）；P4 起待做
 - 范围：`D:\work\plant-code\old\plant3d-web`（前端，主战场）+ `D:\work\plant-code\old\gen-model`（后端，只做最小增补）
 - 术语以两仓 `CONTEXT.md` 为准：plant3d-web 的「显式显示操作 / 按需模型生成 / 模型资产补齐 / 模型加载」，gen-model 的「生成根 / 最小交付单元 / 模型面 / 库一致性判决」。
 
@@ -349,6 +349,21 @@ curl -I  http://localhost:8022/api/v1/meshes/1.glb
   - `vitest` 全量 baseline 1860/1829/31 → after 1900/1870/30，**新增 fail 0**（新增 15 条：`treeSource.test.ts` 10、`modelRecords.test.ts` 5；`index.test.ts` 改为断言 v1 的树不再碰旧后端、records/attributes 仍委托 legacy）；
   - live（一次性 vitest 文件，跑完已删；`127.0.0.1:18082`，注入 baseUrl 的真 API）：`worldRoot` → `gm-root:AvevaMarineSample:ALL`（37 SITE，全部带 `dbnum`）→ `children(/1WCC-PIPE)` → `ancestors(24381_145018)` 末尾是虚拟根 → `search 1WCC nouns=[SITE,ZONE]` 只回 SITE/ZONE → `node(24381_145018)` 两跳定位到 BRAN `/Copy-of-RCS0014-1R43012新`（owner `24381_144975`，17 子）→ `visibleInsts(BRAN 24381_145018)` 22 条记录 / 12 个构件 refno，1.2 s → `visibleInsts(ZONE 24381_101410)` 成功 11 条 / 7 个 refno，1.1 s（该实例是摄入形态，ZONE 直接被 ensure 接受）。
   - **未验证**：浏览器里 `?model_source=gen-model-v1` 的树面板实际交互（展开 / 搜索 / 勾选眼睛）——勾选后几何仍走 parquet（P3 前预期为空），这一步留给 P3 一起在浏览器对拍。
+
+### 8.4 P3 落地记录（2026-09-07）
+
+- P3-b `genModelV1/instanceMapping.ts`：`GeomInstQuery → InstanceEntry[]`。`matrix = compose(world_trans) × compose(inst.transform)`（three `Matrix4.compose`，T·R·S，四元数 `[x,y,z,w]`，`toArray()` 列主序）；`uniforms = { refno(a_b), noun: generic | 'TUBI'(is_tubi), owner_refno: 生成根, owner_noun: 同批记录里认（认不出直管给 BRAN）, generic, is_tubi, is_invalid_tubi, has_neg }`；`aabb = {min: mins, max: maxs}`；`lod_mask = 1`；`refno_transform = compose(world_trans)` 只给非直管（直管的 `world_trans` 折进了缩放，不是刚体位姿）。非法 / 缺失字段退回单位量，不产出 NaN。
+- P3-a/e `genModelV1/modelRecordSource.ts`（`createGenModelV1ModelRecordSource`）：`instanceEntriesByRefnos(dbno, refnos)` **按根收、按构件缓存**——第一个构件的 `ensure` 让服务端解到根、`records` 回整根记录并映射进缓存，同根其它构件直接命中（一根一次）；请求到但整根记录里没有的构件记空数组；`forceRefresh` 清掉请求到的构件再问；`forceRegenerate` 只让**第一次** ensure 带 `force=true`；`invalidate()` / `peek()` 给外部用。`dbno` 只是调用方的分桶键。
+- P3-d/e `useDbnoInstancesDtxLoader.ts`：`ensureGeometryForGeoHash` 的 GLB URL 改经 `getModelSource().meshes.meshUrl(geoHash, lod)`（legacy 逐字同前）；`dataSource` 加 `'gen-model-v1'` 分支；**页面开关 `model_source=gen-model-v1` 生效时把 `parquet` / `backend` 改写成 `gen-model-v1`**（同一页面只该有一个几何数据源），调用方自带 `instanceEntriesByRefno` / `parquetManifestUrl` / `parquetManifest`（不可变清单 / 版本对比）时不改写。
+- P3-f 三处入口：`useModelGeneration.showModelByRefno`（树勾选眼睛 / 定位的那条）加 v1 分支——范围查询（`queryLoadScopeRefnos`→`tree.visibleInsts`/`subtreeRefnos`，`resolveActualModelLoadScope`→`attributes.typeInfo`）已经过端口，v1 下直接 `loadDbnoInstancesForVisibleRefnosDtx(..., {dataSource:'gen-model-v1'})`，`regenerate` = `forceReloadRefnos + replaceExistingObjects + forceRefreshGeometries`（记录源侧 = `ensure(force=true)`），不再走 realtime / parquet / 自动导出 / SSE；`ViewerPanel.vue` 的 `show_refno` / `debug_refno` / `getTargetRefnos` / `collectDescendantRefnos` 四处 `e3dGetVisibleInsts` / `e3dGetChildren` 改经 `getModelSource().tree.*`（`ds` 不用改，加载器会改写）。
+- P3-g `useDbMetaInfo.ts`：v1 下 `ensureDbMetaInfoLoaded()` 从 `GET /api/v1/dbnums` 的 `ref0s` 建 `ref0 → dbnum`（`dbnumsToDbMetaInfoJson` 转成与 `db_meta_info.json` 同形的 `{db_files}`，复用同一套校验与 IndexedDB 缓存；缓存键带 gen-model base URL，换后端不串表；没 `ref0s` 的行跳过）。
+- 顺带：`typeInfo` 的 v1 实现 `typeInfoFromTree`（`tree.node()` 两跳，noun / owner / owner_noun 都在节点上；P4-2 提前）；`model-source/kind.ts` 把「现在是哪个源」拆成不带适配器依赖的轻模块（`useDbMetaInfo` / `ModelTreePanel` 引它，别把 DuckDB 拖进来）。
+- **未做**：P3-c 的进度弹窗（`ModelGenerationProgressModal` 接 `ensureAndCollectRecords.onRootDone`）与 `show_dbnum` 整库入口（v1 下 = 该库全部 SITE 逐个 ensure，要分批 + 进度）；`is_invalid_tubi` 的告警色（uniforms 里已带，材质层未接，Q2）。
+- **P3 验证**（2026-09-07 16:36）：
+  - `npm run type-check` 通过；触及文件 ESLint 0 问题；
+  - `vitest` 全量 baseline 1860/1829/31 → after 1912/1881/31，**新增 fail 0**，失败文件集合与基线**完全相同**（新增 12 条：`instanceMapping.test.ts` 8——含手算一条 90° 旋转 + 缩放 + 局部平移的样例与直管样例、`modelRecordSource.test.ts` 4）；
+  - **D6 对拍（live，`127.0.0.1:18082`，一次性 vitest 文件已删）**：BRAN `24381/145018` `ensure → records` 22 条记录（11 个构件 ELBO/OLET/VALV + 11 条直管），每条记录用 P3-b 合成矩阵把真实 GLB 顶点（内容寻址网格 `e3d_baked_*` / 直管 `175598…`，经 `/api/v1/meshes/{hash}.glb`）变到世界系再取 AABB，与服务端 `world_aabb` 逐轴比：**22/22 每条 Δmax ≤ 0.002 mm，整根 union Δ = 0.0006 mm**（server `[1510.3,8099.8,13236.1]..[10417.3,11844.6,19867.8]`，尺寸 `8907 × 3745 × 6632` mm）。矩阵合成 / 四元数顺序 / 列主序 / mm 单位四件事一次证完，D6 的推断成立。
+  - **未验证**：浏览器里两个 tab 的 legacy vs gen-model-v1 截图对拍（`:3100` 旧后端此刻没起；上面的 server/client 对拍是同一数据源的自洽，不是两源对拍）；EQUI / SUPPO / ZONE 三类的对拍；树勾选眼睛 → 几何出现的浏览器交互。
 
 ## 9. 交付物清单
 

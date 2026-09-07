@@ -27,7 +27,7 @@ import {
   type TreeDiffModel,
 } from '@/composables/useTreeVersionDiff';
 import { cn } from '@/lib/utils';
-import { isGenModelV1Source } from '@/model-source';
+import { isGenModelV1Source } from '@/model-source/kind';
 
 const props = defineProps<{
   viewer: DtxCompatViewer | null;

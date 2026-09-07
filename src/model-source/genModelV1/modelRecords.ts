@@ -36,6 +36,8 @@ export const defaultModelRecordsApi: ModelRecordsApi = {
 };
 
 export type EnsureAndCollectOptions = GenModelV1RequestOptions & {
+  /** 只给「人明确要求重生成」用（spec §4.5）：显示补齐**不要**传，否则每显示一次都提交新的重生成工作 */
+  force?: boolean;
   /** 容器展开的最大层数（默认 3：SITE → ZONE → 生成根一般够了） */
   maxContainerDepth?: number;
   /** 一次调用最多 ensure 多少个根（默认 128）；超出的记进 `truncatedRoots` */
@@ -103,7 +105,7 @@ export async function ensureAndCollectRecords(
   options: EnsureAndCollectOptions = {},
   api: ModelRecordsApi = defaultModelRecordsApi,
 ): Promise<EnsureAndCollectResult> {
-  const { maxContainerDepth = 3, maxRoots = 128, pageSize = 5000, onRootDone, ...requestOptions } = options;
+  const { force, maxContainerDepth = 3, maxRoots = 128, pageSize = 5000, onRootDone, ...requestOptions } = options;
   const start = fromV1Refno(refno);
   const result: EnsureAndCollectResult = {
     refno: start,
@@ -133,7 +135,7 @@ export async function ensureAndCollectRecords(
 
     let ensured: ModelEnsureResponse;
     try {
-      ensured = await api.ensure({ refno: current }, requestOptions);
+      ensured = await api.ensure(force ? { refno: current, force: true } : { refno: current }, requestOptions);
     } catch (error) {
       if (!isGenModelV1ApiError(error)) throw error;
       if (error.isContainer) {
