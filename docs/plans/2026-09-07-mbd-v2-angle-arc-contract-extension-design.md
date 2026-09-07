@@ -1,7 +1,8 @@
 # 设计稿：MBD V2 契约补齐 `angle_dim` / `aid_arc` / `aid_circle` 几何（plant-mbd Phase 5 ⑤）
 
-> 状态：**§7 七条 2026-09-07 全按建议拍板；§6 第 ① 步（本仓契约 + 映射 + fixtures + 测试 + ADR 0055）已落地**，
-> 第 ② ③ 步（plant-mbd `contract.rs` 同步、`angle.rs` + `PPoint.bore`）待做。
+> 状态：**§7 七条 2026-09-07 全按建议拍板；§6 第 ① 步（本仓契约 + 映射 + fixtures + 测试 + ADR 0055，`40dd2e5`）与
+> 第 ② 步（plant-mbd `contract.rs` 同步 + `fixtures/contract/full-coverage.json` + `contract_guard` 回环，ADR-0011，`b6f6583`）已落地**；
+> 第 ③ 步（`angle.rs` + `PPoint.bore` + toy 金样）待 plant-mbd ⑥′ polar-lite（`occupancy.rs`）先落地。
 > 上游计划：gen-model `.planning/2026-09-06-plant-mbd-pipe-dimension/task_plan.md` Phase 5 ⑤（D2 契约 1:1、D7 两侧同版）。
 > 本仓依据：ADR 0041（经内核渲染）、ADR 0042（内核只新增弧与点原语）、ADR 0043（只经冻结契约形状）、ADR 0046（fail-closed）、
 > ADR 0044（外部文字按屏幕像素高）；审计 `2026-07-29-mbd-dimension-annotation-capability-audit.md` G1 与
