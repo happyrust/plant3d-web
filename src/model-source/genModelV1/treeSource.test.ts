@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { createGenModelV1TreeSource, eleTreeNodeToDto, isVirtualRootId, makeVirtualRootId, type GenModelV1TreeApi } from './treeSource';
+import { createGenModelV1TreeSource, eleTreeNodeToDto, isVirtualRootId, makeVirtualRootId, SUBTREE_CONCURRENCY, type GenModelV1TreeApi } from './treeSource';
 
 import type { ModelRecordsApi } from './modelRecords';
 
@@ -172,6 +172,34 @@ describe('createGenModelV1TreeSource', () => {
 
     const root = await tree.subtreeRefnos(ROOT_ID);
     expect(root.success).toBe(false);
+  });
+
+  it('subtreeRefnos：同一层的 children 并发请求（≤ SUBTREE_CONCURRENCY），层内顺序不变', async () => {
+    let inFlight = 0;
+    let maxInFlight = 0;
+    const zones: EleTreeNodeDto[] = Array.from({ length: 20 }, (_, i) => ({
+      refno: `5_${i + 1}`, noun: 'ZONE', name: `/Z${i + 1}`, owner: '5_0', order: i, children_count: 1, dbnum: 5,
+    }));
+    const api = fakeApi({
+      children: vi.fn(async (raw: string) => {
+        inFlight++;
+        maxInFlight = Math.max(maxInFlight, inFlight);
+        await new Promise((resolve) => setTimeout(resolve, 2));
+        inFlight--;
+        const parent = toV1Refno(raw);
+        if (parent === '5/0') return { source: 'direct', parent, nodes: zones };
+        const n = Number(parent.split('/')[1]);
+        return { source: 'direct', parent, nodes: [{ refno: `5_${100 + n}`, noun: 'BRAN', name: `/B${n}`, owner: `5_${n}`, order: 0, children_count: 0, dbnum: 5 }] };
+      }),
+    });
+    const tree = createGenModelV1TreeSource({ api });
+    const resp = await tree.subtreeRefnos('5_0', { includeSelf: false });
+    expect(resp.success).toBe(true);
+    expect(resp.truncated).toBe(false);
+    expect(resp.refnos).toEqual([...zones.map((z) => z.refno), ...zones.map((_, i) => `5_${101 + i}`)]);
+    expect(api.children).toHaveBeenCalledTimes(21);
+    expect(maxInFlight).toBeGreaterThan(1);
+    expect(maxInFlight).toBeLessThanOrEqual(SUBTREE_CONCURRENCY);
   });
 
   it('visibleInsts = ensure → records → 构件 refno 去重；容器 422 展开一层逐个 ensure', async () => {

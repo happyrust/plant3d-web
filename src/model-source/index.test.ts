@@ -122,4 +122,15 @@ describe('legacy 适配器：零逻辑委托', () => {
     expect(legacyMocks.pdmsGetTypeInfo).not.toHaveBeenCalled();
     expect(legacyMocks.pdmsGetUiAttr).not.toHaveBeenCalled();
   });
+
+  it('gen-model-v1：树的 visibleInsts 与几何加载共用记录源缓存（一次显示只 ensure 一次）', async () => {
+    const source = getModelSource('gen-model-v1');
+    const records = source.records as { ensureAndCollect: (refno: string) => Promise<unknown>; peek: (refno: string) => unknown };
+    const spy = vi.spyOn(records, 'ensureAndCollect').mockResolvedValue({
+      refno: '24381_145018', generationRoots: ['24381_145018'], items: [], pending: [], empty: [], truncatedRoots: [], errors: {}, statuses: {},
+    });
+    await source.tree.visibleInsts('24381_145018');
+    expect(spy).toHaveBeenCalledWith('24381_145018', expect.anything());
+    spy.mockRestore();
+  });
 });

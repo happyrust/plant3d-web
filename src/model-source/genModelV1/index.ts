@@ -21,12 +21,14 @@ const meshes: MeshSource = {
 };
 
 export function createGenModelV1ModelSource(): ModelSource {
-  const tree = createGenModelV1TreeSource();
+  const records = createGenModelV1ModelRecordSource();
+  // 树的 visibleInsts 与几何加载共用一份 ensure → records 缓存：一次显示只打一次 ensure + 一次 records
+  const tree = createGenModelV1TreeSource({ ensureAndCollect: (refno, options) => records.ensureAndCollect(refno, options) });
   return {
     kind: 'gen-model-v1',
     tree,
     meshes,
-    records: createGenModelV1ModelRecordSource(),
+    records,
     attributes: createGenModelV1AttributeSource({ tree }),
   };
 }

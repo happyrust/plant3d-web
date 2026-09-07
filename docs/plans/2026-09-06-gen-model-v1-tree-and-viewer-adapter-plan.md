@@ -1,7 +1,7 @@
 # plant3d-web 接入 gen-model `/api/v1`：模型树与三维模型加载重构方案
 
 - 日期：2026-09-06
-- 状态：**已拍板**（2026-09-06，D1–D7 全按推荐项）。进度：P0 已落地（gen-model 提交 `1eefbd577`，2026-09-07 对 `:18082` 运行实例 live 验证通过，见 §8.1）；P1 已落地（本仓，见 §8.2）；P2 已落地（见 §8.3，P2-4 徽标未做）；P3 已落地（见 §8.4，D6 对拍 ≤ 0.002 mm；P3-c 进度弹窗与 `show_dbnum` 整库入口未做）；P4 已落地（见 §8.5）；P5 已落地（见 §8.6，WS 已连、drain 对齐走 REST——服务端今天不发 `model_drain` 事件）；P6 文档与脚本已落地（见 §8.7），**默认开关未翻**（等浏览器两源对拍）
+- 状态：**已拍板**（2026-09-06，D1–D7 全按推荐项）。进度：P0 已落地（gen-model 提交 `1eefbd577`，2026-09-07 对 `:18082` 运行实例 live 验证通过，见 §8.1）；P1 已落地（本仓，见 §8.2）；P2 已落地（见 §8.3，P2-4 徽标未做）；P3 已落地（见 §8.4，D6 对拍 ≤ 0.002 mm；P3-c 进度弹窗与 `show_dbnum` 整库入口未做）；P4 已落地（见 §8.5）；P5 已落地（见 §8.6，WS 已连、drain 对齐走 REST——服务端今天不发 `model_drain` 事件）；P6 文档与脚本已落地（见 §8.7）；P7 浏览器实跑通过 + 一次显示一次 ensure（见 §8.8），**默认开关未翻**（等 `:3100` 起来做两源对拍）
 - 范围：`D:\work\plant-code\old\plant3d-web`（前端，主战场）+ `D:\work\plant-code\old\gen-model`（后端，只做最小增补）
 - 术语以两仓 `CONTEXT.md` 为准：plant3d-web 的「显式显示操作 / 按需模型生成 / 模型资产补齐 / 模型加载」，gen-model 的「生成根 / 最小交付单元 / 模型面 / 库一致性判决」。
 
@@ -394,9 +394,27 @@ curl -I  http://localhost:8022/api/v1/meshes/1.glb
 - **默认开关不翻**：`VITE_MODEL_SOURCE` 仍缺省 `legacy`（D2 说的「对拍通过后翻默认」——两源对拍要 `:3100` 旧后端在跑，见 §8.4 未验证项）。
 - **P6 验证**（2026-09-07 17:10）：`pwsh scripts/verify-gen-model-v1.ps1 -BaseUrl http://127.0.0.1:18082 -Refno 24381/145018 -Ensure` **10/10 通过，exit 0**（health `AvevaMarineSample /ALL` model_ready；roots 37 SITE 全带 dbnum；children(9304/2) 3 ZONE；ancestors 链到 `16189_0`；search PIPE total 306 全带 noun；dbnums 41 行 / DESI 29 / 28 带 ref0s / verdict in_sync=1 not_judged=28；`1.glb` 404（该运行目录无 1.mesh，端点在）；ensure `AlreadyAvailable` 1 根 22 实例；records 1 页 22 条 12 构件 11 直管 `source=model-database`；10 个 geo_hash HEAD 全 200）；无后端时 7 步失败、**exit 1**。文档三件是文字，未另验。
 
+### 8.8 P7 浏览器实跑 + 一次显示一次 ensure（2026-09-07）
+
+- 起因：P6 之后第一次在浏览器里跑 `?model_source=gen-model-v1`，ZONE 级显示明显慢——`subtreeRefnos` 逐节点串行 BFS（一个 ZONE 几百次请求）、一次 ensure 解出多根后 `records` 串行、树的 `visibleInsts` 与几何加载各自 ensure 一遍同一个根。
+- 改动（全在 v1 适配器内，legacy 路径未动）：
+  - `genModelV1/modelRecords.ts`：`mapWithConcurrency`（有界并发、结果按输入顺序）；一次 ensure 解出的多根**并发**取 `records`（`recordsConcurrency` 默认 6），结果仍按根顺序拼回，409 → pending、其它错误各归各的分型不变；`onRootDone` 每根一次。
+  - `genModelV1/treeSource.ts`：`subtreeRefnos` 改**按层 BFS**，一层内并发 `SUBTREE_CONCURRENCY = 8` 路 `tree/children`；`limit` / `maxDepth` / `SUBTREE_MAX_REQUESTS` 截断语义与层内顺序不变。
+  - `genModelV1/index.ts` + `modelRecordSource.ts`：树的 `visibleInsts` 复用记录源的 `ensureAndCollect`（同一份缓存）；`ensureAndCollect` 在结果干净（无 pending、无错误）时给**请求的节点与生成根**各记一笔空数组——`show_refno` / 选中显示都会把「根 + 构件」一起交给 `instanceEntriesByRefnos`，ZONE 自己不是任何记录的 refno，原本会为它再 ensure 一遍同一个根。浏览器 trace：ZONE 的一次显示从 **2×ensure + 2×records → 1 + 1**。
+  - `useModelGeneration.showModelByRefno`：v1 下、目标未真加载（树占位）时不再为 flyTo 先做子树 BFS，直接落到加载路（加载完自会 flyTo）；legacy 一次请求，照旧。
+- **浏览器验证**（2026-09-07 18:24–18:33；Playwright 1.58 + 本机 Chrome headless；dev server 由一次性脚本起停，脚本不进仓；gen-model `127.0.0.1:18082`，`data_face=ingest`）：
+  - `?model_source=gen-model-v1&gm_backend_port=18082&show_refno=24381_145018`（BRAN）：树自动展开到 `ZONE › PIPE › BRAN Copy-of-RCS0014-1R43012新`，三维里 12 refno / 10 个 GLB 绘出（弯头 + 阀门 + 直管），属性面板 54/54（NAME / REFNO / TYPE / OWNER + 元件属性 38 + UDA），徽标「已连接 gen-model :18082 · AvevaMarineSample /ALL · 模型门 开 · 库 同步 1 · 滞后 0 · 未判 0」+ WS 已连；`:18082` 请求：health 1、tasks 1、dbnums 2、tree/roots 1、tree/children 3、tree/ancestors 1、model/ensure **1**、model/records **1**、element/attributes 1、meshes 10；`pageerror` 0；**零** `/files/**.parquet` / `db_meta_info.json` / 旧 `/api/e3d/*` 请求。
+  - `show_refno=24381_101410`（ZONE `/1PCS-LX-PIPE`）：8 refno / 11 对象，toast「[成功] 对象 11（已加载 8，跳过 0，mesh 缺失 0，无几何 1）」（无几何的 1 个是 ZONE 自己），属性 43 条（元件 9 + UDA 30）；修复前 ensure 2 / records 2，修复后 **1 / 1**。
+  - 树交互：放大镜 → 输入 `1WCC` → `search?query=1WCC&limit=100` 50 命中（`/1WCC-PIPE-RX ZONE · 24383_66457`、`/1WCC-PIPEBJ SITE`、STRU / HANG / REST…）→ 双击第一条 → 树定位并选中 `SITE 1WCC-PIPEBJ › ZONE 1WCC-PIPE-RX`（ancestors + children 各 1 次）。
+  - 不带参数（缺省 legacy）：**零** `:18082` 请求，树走 `world_sites.parquet` / `db_meta_info.json`（`:3100` 没起 → 500，属预期），无徽标——默认开关确实还在 legacy。
+  - 页面上其余 500（`/api/projects` / `/api/users*` / `/api/review/*`）都是旧后端 `:3100` 未起，与本计划无关。
+- 观察（未改）：每次页面加载 `/dbnums` 至少两次（`useDbMetaInfo` 的 ref0→dbnum 一次——之后有 IndexedDB 缓存；徽标三态一次），单次 1.3–8.9 s，是 v1 首屏最慢的一段，可合并成一次并共享；`records` 单根 1.7 s 在服务端。
+- **P7 验证**：`npm run type-check` 通过；触及文件 ESLint 0；新增单测 6 条全绿（`mapWithConcurrency` 2、records 并发 1、`subtreeRefnos` 层内并发 1、记录源记空 / pending 不记 2）；`vitest` 全量 baseline 1860/1829/31 → 1936/1904/32，唯一多出的 fail 仍是 §8.6 记过的 `AnnotationPanel.test.ts › reviewer path…` 临界超时（本轮与浏览器脚本并行、5016 ms；单跑 1497 ms 通过）。
+- **仍未验证**：两源对拍（要 `:3100`）；EQUI / SUPPO 两类；`model_drain` 收口时的端到端重载（该实例空闲）。
+
 ## 9. 交付物清单
 
 - gen-model：P0-1/2/3（+可选 P0-4），`docs/specs/web-service-api.md` 同步，`changelog.md` 一条；——**已交**（`1eefbd577`；P0-4 未做）
 - plant3d-web：`src/api/genModelV1Api.ts`、`src/model-source/**`、`usePdmsOwnerTree.ts` / `useDbnoInstancesDtxLoader.ts` / `useDbMetaInfo.ts` / `ViewerPanel.vue` 的取数点改动、`vite.config.ts` / `.env.*`、`scripts/verify-gen-model-v1.ps1`、ADR 0054、联调指南；——**已交**（`3f1c2e2` → `65cb31a` → `be0da07` → `a920c82` → `b7dafa2` → P6 提交；另加 `src/api/genModelV1Ws.ts`、`useGenModelV1Health.ts`、`useGenModelV1ModelSync.ts`、`GenModelV1HealthBadge.vue`、`useModelGeneration.ts` / `useSelectionStore.ts` / `PropertiesPanel.vue` 的取数点）
 - 本计划按批注修订后作为 `docs/plans/` 的执行基线。——§8 是逐阶段的落地与验证记录。
-- **仍欠**：默认开关翻到 `gen-model-v1`（等两源对拍）、P3-c 进度弹窗 + `show_dbnum` 整库入口、P2-4 行尾 `dbnum` 徽标、`is_invalid_tubi` 告警色；gen-model 侧两条建议（`model_drain` WS 事件、`tree/*` 的 Ref0-不在-MDB 分型）。
+- **仍欠**：默认开关翻到 `gen-model-v1`（等 `:3100` 起来做两源对拍；单源浏览器实跑已过，见 §8.8）、P3-c 进度弹窗 + `show_dbnum` 整库入口、P2-4 行尾 `dbnum` 徽标、`is_invalid_tubi` 告警色、`/dbnums` 首屏两次合一；gen-model 侧两条建议（`model_drain` WS 事件、`tree/*` 的 Ref0-不在-MDB 分型）。

@@ -38,6 +38,8 @@ export const defaultModelRecordsApi: ModelRecordsApi = {
 export type EnsureAndCollectOptions = GenModelV1RequestOptions & {
   /** 只给「人明确要求重生成」用（spec §4.5）：显示补齐**不要**传，否则每显示一次都提交新的重生成工作 */
   force?: boolean;
+  /** 同一次 ensure 解出多根时，并发取 `records` 的路数（默认 6）；一个 ZONE 上百根串行要几十秒 */
+  recordsConcurrency?: number;
   /** 容器展开的最大层数（默认 3：SITE → ZONE → 生成根一般够了） */
   maxContainerDepth?: number;
   /** 一次调用最多 ensure 多少个根（默认 128）；超出的记进 `truncatedRoots` */
@@ -69,6 +71,21 @@ export type EnsureAndCollectResult = {
 
 function pushUnique(list: string[], value: string): void {
   if (!list.includes(value)) list.push(value);
+}
+
+/** 有界并发的 map，结果按输入顺序回。 */
+export async function mapWithConcurrency<T, R>(items: T[], concurrency: number, fn: (item: T, index: number) => Promise<R>): Promise<R[]> {
+  const out: R[] = new Array(items.length);
+  let next = 0;
+  const workers = Array.from({ length: Math.max(1, Math.min(concurrency, items.length)) }, async () => {
+    for (;;) {
+      const index = next++;
+      if (index >= items.length) return;
+      out[index] = await fn(items[index]!, index);
+    }
+  });
+  await Promise.all(workers);
+  return out;
 }
 
 function rootsOf(ensured: ModelEnsureResponse, fallback: string): string[] {
@@ -105,7 +122,7 @@ export async function ensureAndCollectRecords(
   options: EnsureAndCollectOptions = {},
   api: ModelRecordsApi = defaultModelRecordsApi,
 ): Promise<EnsureAndCollectResult> {
-  const { force, maxContainerDepth = 3, maxRoots = 128, pageSize = 5000, onRootDone, ...requestOptions } = options;
+  const { force, maxContainerDepth = 3, maxRoots = 128, pageSize = 5000, recordsConcurrency = 6, onRootDone, ...requestOptions } = options;
   const start = fromV1Refno(refno);
   const result: EnsureAndCollectResult = {
     refno: start,
@@ -172,24 +189,37 @@ export async function ensureAndCollectRecords(
       pushUnique(result.empty, current);
       continue;
     }
-    const roots = rootsOf(ensured, current);
-    for (const root of roots) {
-      if (collected.has(root)) continue;
+    const roots = rootsOf(ensured, current).filter((root) => {
+      if (collected.has(root)) return false;
       collected.add(root);
       pushUnique(result.generationRoots, root);
+      return true;
+    });
+    // 一次 ensure 解出的多根并发取 records（结果按根的顺序拼回，去重与缓存都不受并发影响）
+    let done = 0;
+    const perRoot = await mapWithConcurrency(roots, recordsConcurrency, async (root) => {
       try {
         const items = await collectRootRecords(api, root, pageSize, requestOptions);
-        if (items.length === 0) pushUnique(result.empty, root);
-        result.items.push(...items);
+        return { root, items, error: null as unknown };
       } catch (error) {
+        return { root, items: [] as GeomInstQuery[], error };
+      } finally {
+        done++;
+        onRootDone?.({ done, total: roots.length + queue.length, root });
+      }
+    });
+    for (const { root, items, error } of perRoot) {
+      if (error) {
         if (isGenModelV1ApiError(error) && error.code === 'conflict') {
           // 409 not_generated：这根还没进投影（并发被别人的 ensure 抢先又没收口）；当 pending 处理
           pushUnique(result.pending, root);
         } else {
           result.errors[root] = error instanceof Error ? error.message : String(error);
         }
+        continue;
       }
-      onRootDone?.({ done: result.generationRoots.length, total: result.generationRoots.length + queue.length, root });
+      if (items.length === 0) pushUnique(result.empty, root);
+      result.items.push(...items);
     }
   }
   return result;

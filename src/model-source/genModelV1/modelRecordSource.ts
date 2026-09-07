@@ -43,7 +43,8 @@ export function createGenModelV1ModelRecordSource(options: GenModelV1ModelRecord
   const leavesByRoot = new Map<string, Set<string>>();
 
   async function ensureAndCollect(refno: string, extra: EnsureAndCollectOptions = {}): Promise<EnsureAndCollectResult> {
-    const result = await ensureAndCollectRecords(refno, { ...options.ensureOptions, ...extra }, api);
+    const requested = fromV1Refno(refno);
+    const result = await ensureAndCollectRecords(requested, { ...options.ensureOptions, ...extra }, api);
     for (const [key, entries] of groupInstanceEntriesByRefno(result.items)) {
       entriesByRefno.set(key, entries);
       // records 的 owner 就是生成根（不是直接属主），按它归档
@@ -64,6 +65,14 @@ export function createGenModelV1ModelRecordSource(options: GenModelV1ModelRecord
     // 明确知道没有几何的根也记一笔空数组，下一次同一个 refno 不再 ensure
     for (const key of result.empty) {
       if (!entriesByRefno.has(key)) entriesByRefno.set(key, []);
+    }
+    // 请求的节点自己（ZONE / SITE，或直管不挂在它名下的生成根）通常不是任何一条记录的 refno。整根记录已经进了缓存，
+    // 就给它记一笔空数组：调用方紧接着把「根 + 构件」一起交给 instanceEntriesByRefnos 时，不会为它再 ensure 一遍
+    // 同一个根（浏览器里 ZONE 的一次显示原本要打两次 ensure + 两次 records）。有根还在 pending / 出错的不记，下次显示还要再问。
+    if (result.pending.length === 0 && Object.keys(result.errors).length === 0) {
+      for (const key of [requested, ...result.generationRoots]) {
+        if (key && !entriesByRefno.has(key)) entriesByRefno.set(key, []);
+      }
     }
     return result;
   }

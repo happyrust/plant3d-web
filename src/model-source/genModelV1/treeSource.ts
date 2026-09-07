@@ -13,7 +13,7 @@
  * - 一切 `GenModelV1ApiError` 都折成 `{ success:false, error_message }`——现有调用方按 `success` 分支，
  *   抛错反而会绕开它们的重试 / 提示逻辑。
  */
-import { ensureAndCollectRecords, refnosOfRecords, type EnsureAndCollectOptions, type ModelRecordsApi } from './modelRecords';
+import { ensureAndCollectRecords, mapWithConcurrency, refnosOfRecords, type EnsureAndCollectOptions, type EnsureAndCollectResult, type ModelRecordsApi } from './modelRecords';
 
 import type { SubtreeRefnosParams, TreeSource } from '../ports';
 import type {
@@ -46,6 +46,8 @@ export const SEARCH_SCAN_CAP = 2000;
 
 /** `subtreeRefnos` 的 BFS 上限：每次最多请求这么多个节点的 children（一个节点一次请求）。 */
 export const SUBTREE_MAX_REQUESTS = 512;
+/** BFS 每一层并发请求的路数。 */
+export const SUBTREE_CONCURRENCY = 8;
 
 export function makeVirtualRootId(project: string, mdb: string): string {
   const clean = (value: string) => value.trim().replace(/^\/+/, '').replace(/[/,<>⟨⟩\s]+/g, '_');
@@ -99,6 +101,12 @@ export const defaultGenModelV1TreeApi: GenModelV1TreeApi = {
 export type GenModelV1TreeSourceOptions = {
   api?: GenModelV1TreeApi;
   recordsApi?: ModelRecordsApi;
+  /**
+   * `visibleInsts` 用哪一份 ensure → records。组装时传记录源的 `ensureAndCollect`，树查「有几何的构件」那一次
+   * 就把整根记录写进记录源缓存，紧接着的几何加载直接命中——一次显示只打一次 ensure + 一次 records。
+   * 缺省用无缓存的 `ensureAndCollectRecords(…, recordsApi)`。
+   */
+  ensureAndCollect?: (refno: string, options: EnsureAndCollectOptions) => Promise<EnsureAndCollectResult>;
   /** `tree/roots` 结果复用窗口（`worldRoot()` 紧接着 `children(root)`，不必打两次） */
   rootsCacheMs?: number;
   /** 传给 `visibleInsts` 的 ensure/records 上限 */
@@ -114,6 +122,8 @@ function errorMessage(error: unknown): string {
 export function createGenModelV1TreeSource(options: GenModelV1TreeSourceOptions = {}): TreeSource {
   const api = options.api ?? defaultGenModelV1TreeApi;
   const recordsApi = options.recordsApi;
+  const ensureAndCollect = options.ensureAndCollect
+    ?? ((refno: string, ensureOptions: EnsureAndCollectOptions) => ensureAndCollectRecords(refno, ensureOptions, recordsApi));
   const rootsCacheMs = options.rootsCacheMs ?? 60_000;
   const now = options.now ?? (() => Date.now());
 
@@ -249,33 +259,42 @@ export function createGenModelV1TreeSource(options: GenModelV1TreeSourceOptions 
     const limit = params?.limit ?? 200_000;
     const out: string[] = includeSelf ? [root] : [];
     const seen = new Set<string>([root]);
-    const queue: { refno: string; depth: number }[] = [{ refno: root, depth: 0 }];
+    // 按层 BFS，每一层并发拿 children；一层结束再决定要不要继续（上限一到就停）
+    let frontier: string[] = [root];
+    let depth = 0;
     let requests = 0;
     let truncated = false;
     try {
-      while (queue.length > 0) {
+      while (frontier.length > 0) {
         if (out.length >= limit || requests >= SUBTREE_MAX_REQUESTS) {
           truncated = true;
           break;
         }
-        const { refno: current, depth } = queue.shift()!;
         if (depth >= maxDepth) {
           truncated = true;
-          continue;
+          break;
         }
-        requests++;
-        const resp = await api.children(current);
-        for (const child of resp.nodes) {
-          const key = fromV1Refno(child.refno);
-          if (!key || seen.has(key)) continue;
-          seen.add(key);
-          out.push(key);
-          if (out.length >= limit) {
-            truncated = true;
-            break;
+        const batch = frontier.slice(0, Math.max(0, SUBTREE_MAX_REQUESTS - requests));
+        if (batch.length < frontier.length) truncated = true;
+        requests += batch.length;
+        const responses = await mapWithConcurrency(batch, SUBTREE_CONCURRENCY, (refno) => api.children(refno));
+        const next: string[] = [];
+        for (const resp of responses) {
+          for (const child of resp.nodes) {
+            const key = fromV1Refno(child.refno);
+            if (!key || seen.has(key)) continue;
+            seen.add(key);
+            out.push(key);
+            if (out.length >= limit) {
+              truncated = true;
+              break;
+            }
+            if ((child.children_count ?? 0) > 0) next.push(key);
           }
-          if ((child.children_count ?? 0) > 0) queue.push({ refno: key, depth: depth + 1 });
+          if (out.length >= limit) break;
         }
+        frontier = next;
+        depth++;
       }
       return { success: true, refnos: out, truncated };
     } catch (error) {
@@ -293,7 +312,7 @@ export function createGenModelV1TreeSource(options: GenModelV1TreeSourceOptions 
       return { success: false, refno, refnos: [], error_message: '虚拟根不支持整体显示：请按 SITE / ZONE 操作' };
     }
     try {
-      const result = await ensureAndCollectRecords(key, { ...options.ensureOptions }, recordsApi);
+      const result = await ensureAndCollect(key, { ...options.ensureOptions });
       const refnos = refnosOfRecords(result.items);
       const failed = Object.keys(result.errors);
       if (refnos.length === 0 && failed.length > 0 && result.generationRoots.length === 0) {

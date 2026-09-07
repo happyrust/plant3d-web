@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { ensureAndCollectRecords, refnosOfRecords, type ModelRecordsApi } from './modelRecords';
+import { ensureAndCollectRecords, mapWithConcurrency, refnosOfRecords, type ModelRecordsApi } from './modelRecords';
 
 import { GenModelV1ApiError, toV1Refno, type GeomInstQuery } from '@/api/genModelV1Api';
 
@@ -124,5 +124,62 @@ describe('ensureAndCollectRecords', () => {
     expect(result.empty).toEqual(['1_401']);
     expect(result.generationRoots).toEqual([]);
     expect(records).not.toHaveBeenCalled();
+  });
+
+  it('一次 ensure 解出多根：records 并发不超过 recordsConcurrency，结果按根顺序拼回，pending / 错误各归各，onRootDone 每根一次', async () => {
+    let inFlight = 0;
+    let maxInFlight = 0;
+    const records = vi.fn(async ({ generationRoot }: { generationRoot: string }) => {
+      inFlight++;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      const root = v1(generationRoot);
+      // 第一根最慢：后面的根先回，拼回时仍要按根的顺序
+      await new Promise((resolve) => setTimeout(resolve, root === '1/1' ? 25 : 1));
+      inFlight--;
+      if (root === '1/3') throw new GenModelV1ApiError({ code: 'conflict', status: 409, path: '', message: 'not_generated' });
+      if (root === '1/4') throw new GenModelV1ApiError({ code: 'internal', status: 500, path: '', message: 'boom' });
+      return { source: 'model-memory', items: [item(`1_9${root.split('/')[1]}`, generationRoot)], total: 1, truncated: false, next_cursor: null };
+    });
+    const ensure = vi.fn(async () => ({ status: 'Generated', generation_roots: ['1/1', '1/2', '1/3', '1/4', '1/5'] }));
+    const progress: { done: number; total: number }[] = [];
+    const result = await ensureAndCollectRecords(
+      '1_0',
+      { recordsConcurrency: 2, onRootDone: ({ done, total }) => progress.push({ done, total }) },
+      api({ ensure: ensure as never, records: records as never }),
+    );
+
+    expect(records).toHaveBeenCalledTimes(5);
+    expect(maxInFlight).toBe(2);
+    expect(result.generationRoots).toEqual(['1_1', '1_2', '1_3', '1_4', '1_5']);
+    expect(refnosOfRecords(result.items)).toEqual(['1_91', '1_92', '1_95']);
+    expect(result.pending).toEqual(['1_3']);
+    expect(result.errors).toEqual({ '1_4': 'boom' });
+    expect(progress.map((p) => p.done)).toEqual([1, 2, 3, 4, 5]);
+    expect(progress.every((p) => p.total === 5)).toBe(true);
+  });
+});
+
+describe('mapWithConcurrency', () => {
+  it('结果按输入顺序回；同时在飞的不超过 concurrency', async () => {
+    let inFlight = 0;
+    let maxInFlight = 0;
+    const delays = [30, 5, 20, 1, 10, 15, 2];
+    const out = await mapWithConcurrency(delays, 3, async (ms, index) => {
+      inFlight++;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      await new Promise((resolve) => setTimeout(resolve, ms));
+      inFlight--;
+      return `${index}:${ms}`;
+    });
+    expect(out).toEqual(delays.map((ms, index) => `${index}:${ms}`));
+    expect(maxInFlight).toBe(3);
+  });
+
+  it('空输入回空数组；concurrency 超过条数只开条数那么多路；一路抛错整体拒绝', async () => {
+    expect(await mapWithConcurrency([], 4, async () => 1)).toEqual([]);
+    let started = 0;
+    await mapWithConcurrency([1, 2], 8, async (n) => { started++; return n; });
+    expect(started).toBe(2);
+    await expect(mapWithConcurrency([1, 2, 3], 2, async (n) => { if (n === 2) throw new Error('x'); return n; })).rejects.toThrow('x');
   });
 });

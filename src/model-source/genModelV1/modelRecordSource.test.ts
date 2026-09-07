@@ -86,6 +86,36 @@ describe('createGenModelV1ModelRecordSource', () => {
     expect(api.ensure).toHaveBeenCalledTimes(2);
   });
 
+  it('ensureAndCollect 后请求的节点与生成根都记空数组：树 visibleInsts(ZONE) 之后「根 + 构件」一起加载不再 ensure 第二次', async () => {
+    // ZONE 24381/101410 → 生成根 24381/101412（BRAN），记录里没有 ZONE 自己
+    const ensure = vi.fn(async () => ({ status: 'AlreadyAvailable', generation_root: '24381/101412', generation_roots: ['24381/101412'] }));
+    const records = vi.fn(async () => ({
+      source: 'model-memory', items: [item('24381_101413', '24381_101412'), item('24381_101414', '24381_101412')], total: 2, truncated: false, next_cursor: null,
+    }));
+    const source = createGenModelV1ModelRecordSource({ api: { ensure: ensure as never, records: records as never, children: vi.fn() as never } });
+
+    const collected = await source.ensureAndCollect('24381_101410');
+    expect(collected.generationRoots).toEqual(['24381_101412']);
+    expect(source.peek('24381_101410')).toEqual([]);
+    expect(source.peek('24381_101412')).toEqual([]);
+
+    const out = await source.instanceEntriesByRefnos(7997, ['24381_101410', '24381_101413', '24381_101414']);
+    expect(ensure).toHaveBeenCalledTimes(1);
+    expect(records).toHaveBeenCalledTimes(1);
+    expect(out.get('24381_101410')).toEqual([]);
+    expect(out.get('24381_101413')).toHaveLength(1);
+  });
+
+  it('ensureAndCollect 有根 pending 时不给请求的节点记空：下次显示还要再问', async () => {
+    const ensure = vi.fn(async () => {
+      throw new GenModelV1ApiError({ code: 'generation_pending', status: 202, path: '', message: 'pending' });
+    });
+    const source = createGenModelV1ModelRecordSource({ api: { ensure: ensure as never, records: vi.fn() as never, children: vi.fn() as never } });
+    const collected = await source.ensureAndCollect('24381_101410');
+    expect(collected.pending).toEqual(['24381_101410']);
+    expect(source.peek('24381_101410')).toBeUndefined();
+  });
+
   it('invalidate() 不带参数清全部', async () => {
     const api = branApi();
     const source = createGenModelV1ModelRecordSource({ api });

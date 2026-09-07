@@ -546,7 +546,10 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         try {
           const anyViewer = viewer as any;
           let aabb = anyViewer?.scene?.getAABB?.([normalizedRoot]) ?? null;
-          if (!aabb) {
+          // gen-model-v1 下子树 refno 集是逐节点 BFS（一个 ZONE 几百次请求），而这里只是给「已加载的东西」飞一下；
+          // 不是真加载过的（树占位）直接落到下面的加载路，加载完自会 flyTo。legacy 一次请求，照旧。
+          const subtreeLookupWorthIt = genuinelyLoaded || getModelSource().kind !== 'gen-model-v1';
+          if (!aabb && subtreeLookupWorthIt) {
             try {
               const { refnos } = await querySubtreeRefnos(normalizedRoot);
               if (refnos && refnos.length > 0) {
