@@ -1,4 +1,4 @@
-import { genModelV1Dbnums } from '@/api/genModelV1Api';
+import { getGenModelV1Dbnums } from '@/composables/useGenModelV1Dbnums';
 import { buildFilesOutputUrl, getOutputProjectFromUrl } from '@/lib/filesOutput';
 import { isGenModelV1Source } from '@/model-source/kind';
 import { getGenModelV1BaseUrl } from '@/utils/apiBase';
@@ -162,9 +162,10 @@ export async function ensureDbMetaInfoLoaded(): Promise<void> {
       console.warn('[db_meta] IndexedDB 预热失败，继续拉取远端 meta', e);
     }
 
-    // 2) gen-model-v1：`/api/v1/dbnums` 的 ref0s（服务端骨架解出，D3-A），不读旧后端的 db_meta_info.json
+    // 2) gen-model-v1：`/api/v1/dbnums` 的 ref0s（服务端骨架解出，D3-A），不读旧后端的 db_meta_info.json；
+    //    与徽标三态共用同一次 /dbnums（useGenModelV1Dbnums），首屏只打一次
     if (isGenModelV1Source()) {
-      const dbnums = await genModelV1Dbnums({ timeoutMs: 60_000 });
+      const dbnums = await getGenModelV1Dbnums({ timeoutMs: 60_000 });
       const fresh = dbnumsToDbMetaInfoJson(dbnums.dbnums);
       applyDbMetaInfoJson(fresh);
       try {

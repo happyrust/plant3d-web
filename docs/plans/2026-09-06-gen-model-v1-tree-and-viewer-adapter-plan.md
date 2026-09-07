@@ -423,11 +423,17 @@ curl -I  http://localhost:8022/api/v1/meshes/1.glb
   - 树勾眼睛 `SITE 1RB-CIVI`（24381_42520）：弹窗「正在生成模型 3/17 · 当前: 24381_44280 · gen-model 生成 / 取回记录：2/17 个生成根 · 已完成 2 / 17 个」→ 7/17 → 加载完自动关闭；24 refno / 48 对象，ensure **1** / records 17；`tree/children` 180 次是树可见性传播的子树 BFS（8 路并发，每次 ~10 ms）。
 - **P3-c 验证**：`npm run type-check` 通过；触及文件 ESLint 0；新增单测 15 条全绿（`collectDbnum.test.ts` 6、`useModelGeneration.genModelV1.test.ts` 9、`modelRecordSource.test.ts` +2、`modelRecords.test.ts` +1、`index.test.ts` +1）；`vitest` 全量 baseline 1860/1829/31 → **1955/1925/30**，新增 fail 0。
 - **给 gen-model 的第三条建议**：整库 / 大 SITE 的瓶颈不在前端而在「一根一次 `model/records`」——加一个按库或按多根批量取记录的端点（或让 `records` 接受 `generation_roots[]`），v1 整库才能从「安全概览」变成真正可用的整库。
-- **未做**：`show_dbnum` 的 v1 路没有 legacy 那套「分层 / 三角形预算 / Tile LOD」（DTX 单层装几千对象在本样本上没问题，大库要再看）；`/dbnums` 轮询每 60 s 一次 31 s 的请求（见 §8.8 观察）。
+- **未做**：`show_dbnum` 的 v1 路没有 legacy 那套「分层 / 三角形预算 / Tile LOD」（DTX 单层装几千对象在本样本上没问题，大库要再看）。
+
+### 8.10 `/dbnums` 首屏合一 + 三态五分钟一次（2026-09-07）
+
+- `src/composables/useGenModelV1Dbnums.ts`：`GET /api/v1/dbnums` 的进程内共享缓存——在飞的共用、拉回来的按 gen-model base URL 缓存一段新鲜度窗口（`DBNUMS_DEFAULT_MAX_AGE_MS = 5 min`），`force` 重拉（在飞的仍共用），`peekGenModelV1Dbnums()` 只看不拉。不是 store，没有响应式。
+- `useDbMetaInfo`（ref0→dbnum）与 `useGenModelV1Health`（库三态）都改走它：首屏两处并发要同一份 → **一次请求**。`useGenModelV1Health.start()`：`/health` 仍每 60 s（便宜、连接态要及时），三态每 `DEFAULT_VERDICT_POLL_INTERVAL_MS = 5 min` 且 `force`（用 `/health` 的节拍数，一张表；`/health` 之前没通导致三态没拿到的，通了下一拍就补）；首屏那次不 `force`（与 `useDbMetaInfo` 共用）；人点徽标「重探」两者都 `force`。
+- 验证：`useGenModelV1Dbnums.test.ts` 3 条（并发合一 / 窗口 / force / 失败不写缓存 / 换 base URL 不认旧缓存）、`useGenModelV1Health.test.ts` +2（假时钟：60 s 节拍、5 min 三态、首屏不 force、重探 force、/health 不通不问）；浏览器（`show_refno=24381_145018`）首屏 `:18082` 请求 `dbnums` **1**（此前 2），徽标三态照常「库 同步 1 · 滞后 0 · 未判 0」。
 
 ## 9. 交付物清单
 
 - gen-model：P0-1/2/3（+可选 P0-4），`docs/specs/web-service-api.md` 同步，`changelog.md` 一条；——**已交**（`1eefbd577`；P0-4 未做）
 - plant3d-web：`src/api/genModelV1Api.ts`、`src/model-source/**`、`usePdmsOwnerTree.ts` / `useDbnoInstancesDtxLoader.ts` / `useDbMetaInfo.ts` / `ViewerPanel.vue` 的取数点改动、`vite.config.ts` / `.env.*`、`scripts/verify-gen-model-v1.ps1`、ADR 0054、联调指南；——**已交**（`3f1c2e2` → `65cb31a` → `be0da07` → `a920c82` → `b7dafa2` → P6 提交；另加 `src/api/genModelV1Ws.ts`、`useGenModelV1Health.ts`、`useGenModelV1ModelSync.ts`、`GenModelV1HealthBadge.vue`、`useModelGeneration.ts` / `useSelectionStore.ts` / `PropertiesPanel.vue` 的取数点）
 - 本计划按批注修订后作为 `docs/plans/` 的执行基线。——§8 是逐阶段的落地与验证记录。
-- **仍欠**：默认开关翻到 `gen-model-v1`（等 `:3100` 起来做两源对拍；单源浏览器实跑已过，见 §8.8 / §8.9）、P2-4 行尾 `dbnum` 徽标、`is_invalid_tubi` 告警色、`/dbnums` 首屏两次合一 + 轮询减频；gen-model 侧三条建议（`model_drain` WS 事件、`tree/*` 的 Ref0-不在-MDB 分型、按库 / 多根批量 `records`）。
+- **仍欠**：默认开关翻到 `gen-model-v1`（等 `:3100` 起来做两源对拍；单源浏览器实跑已过，见 §8.8 / §8.9）、P2-4 行尾 `dbnum` 徽标、`is_invalid_tubi` 告警色；gen-model 侧三条建议（`model_drain` WS 事件、`tree/*` 的 Ref0-不在-MDB 分型、按库 / 多根批量 `records`）。

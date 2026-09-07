@@ -1,8 +1,21 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { applyGenModelV1Health, shortGenModelV1Host, summarizeVerdicts, useGenModelV1Health, verdictSummaryText } from './useGenModelV1Health';
 
 import type { DbnumRow } from '@/api/genModelV1Api';
+
+const healthMock = vi.hoisted(() => vi.fn());
+const dbnumsMock = vi.hoisted(() => vi.fn());
+
+vi.mock('@/api/genModelV1Api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/api/genModelV1Api')>()),
+  genModelV1Health: healthMock,
+}));
+
+vi.mock('@/composables/useGenModelV1Dbnums', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/composables/useGenModelV1Dbnums')>()),
+  getGenModelV1Dbnums: dbnumsMock,
+}));
 
 function row(dbnum: number, verdict: string | undefined, extra: Partial<DbnumRow> = {}): DbnumRow {
   return { dbnum, db_type: 'DESI', model_verdict: verdict, ...extra };
@@ -31,6 +44,72 @@ describe('summarizeVerdicts（/dbnums model_verdict 三态）', () => {
     expect(summary.inSync).toBe(1);
     expect(verdictSummaryText(summarizeVerdicts([]))).toBe('');
     expect(verdictSummaryText({ ...summarizeVerdicts([]), error: 'timeout' })).toBe('库状态未取到');
+  });
+});
+
+describe('start()：/health 每分钟、/dbnums 三态每五分钟；首屏那次不 force（与 useDbMetaInfo 共用一次请求）', () => {
+  afterEach(() => {
+    useGenModelV1Health().__reset();
+    vi.useRealTimers();
+    vi.clearAllMocks();
+  });
+
+  it('节拍与 force 标志', async () => {
+    vi.useFakeTimers();
+    const health = useGenModelV1Health();
+    health.__reset();
+    healthMock.mockResolvedValue({
+      status: 'ok', project: 'AvevaMarineSample', mdb: '/ALL',
+      initialization: { status: 'model_ready', data_ready: true, model_ready: true, model_phase_open: true },
+    });
+    dbnumsMock.mockResolvedValue({ dbnums: [row(7997, 'in_sync'), row(7998, 'lagging')] });
+
+    health.start();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(healthMock).toHaveBeenCalledTimes(1);
+    expect(dbnumsMock).toHaveBeenCalledTimes(1);
+    expect(dbnumsMock).toHaveBeenLastCalledWith({ timeoutMs: 60_000, force: false });
+    expect(health.state.status).toBe('ok');
+    expect(health.verdictText.value).toBe('库 同步 1 · 滞后 1 · 未判 0');
+
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(healthMock).toHaveBeenCalledTimes(2);
+    expect(dbnumsMock).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(3 * 60_000);
+    expect(healthMock).toHaveBeenCalledTimes(5);
+    expect(dbnumsMock).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(healthMock).toHaveBeenCalledTimes(6);
+    expect(dbnumsMock).toHaveBeenCalledTimes(2);
+    expect(dbnumsMock).toHaveBeenLastCalledWith({ timeoutMs: 60_000, force: true });
+
+    // 人点「重探」：身份与三态都强制
+    await health.refresh();
+    expect(healthMock).toHaveBeenCalledTimes(7);
+    expect(dbnumsMock).toHaveBeenCalledTimes(3);
+    expect(dbnumsMock).toHaveBeenLastCalledWith({ timeoutMs: 60_000, force: true });
+    health.stop();
+  });
+
+  it('/health 没通就不问 /dbnums；通了之后下一拍立刻补一次三态', async () => {
+    vi.useFakeTimers();
+    const health = useGenModelV1Health();
+    health.__reset();
+    healthMock.mockRejectedValueOnce(new Error('ECONNREFUSED'));
+    healthMock.mockResolvedValue({ status: 'ok', project: 'P', mdb: '/ALL', initialization: {} });
+    dbnumsMock.mockResolvedValue({ dbnums: [row(7997, 'in_sync')] });
+
+    health.start();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(health.state.status).toBe('error');
+    expect(dbnumsMock).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(health.state.status).toBe('ok');
+    expect(dbnumsMock).toHaveBeenCalledTimes(1);
+    health.stop();
   });
 });
 

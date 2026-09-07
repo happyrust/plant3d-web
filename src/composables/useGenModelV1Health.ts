@@ -10,7 +10,8 @@
  */
 import { computed, reactive, readonly } from 'vue';
 
-import { genModelV1Dbnums, genModelV1Health, isGenModelV1ApiError, type DbnumRow, type HealthResponse } from '@/api/genModelV1Api';
+import { genModelV1Health, isGenModelV1ApiError, type DbnumRow, type HealthResponse } from '@/api/genModelV1Api';
+import { DBNUMS_DEFAULT_MAX_AGE_MS, getGenModelV1Dbnums } from '@/composables/useGenModelV1Dbnums';
 import { getGenModelV1BaseUrl } from '@/utils/apiBase';
 
 export type GenModelV1HealthStatus = 'idle' | 'loading' | 'ok' | 'error';
@@ -52,7 +53,10 @@ export type GenModelV1HealthState = {
   verdict: GenModelV1VerdictSummary;
 };
 
+/** `/health` 便宜（~0.4 s），一分钟一次让「连上 / 断了」及时 */
 export const DEFAULT_HEALTH_POLL_INTERVAL_MS = 60_000;
+/** `/dbnums` 贵（1.3–30 s），三态五分钟看一次；与 `useGenModelV1Dbnums` 的缓存窗口同一个数 */
+export const DEFAULT_VERDICT_POLL_INTERVAL_MS = DBNUMS_DEFAULT_MAX_AGE_MS;
 
 function emptyVerdict(): GenModelV1VerdictSummary {
   return { inSync: 0, lagging: 0, notJudged: 0, total: 0, byDbnum: {}, laggingDbnums: [], lastCheckedAt: null, error: null };
@@ -186,13 +190,16 @@ async function refresh(): Promise<void> {
 /**
  * `/dbnums` 的三态（P5）。它比 `/health` 慢得多（初始化中的实例可能几十秒），所以单独一条线、单独的失败格，
  * 不拖累身份探针；`/health` 没通就不问它。
+ *
+ * 走 `useGenModelV1Dbnums` 的共享缓存：首屏那一次与 `useDbMetaInfo` 的 ref0→dbnum 合成同一个请求；
+ * 定时轮询与人点「重探」才 `force` 重拉。
  */
-async function refreshVerdict(): Promise<void> {
+async function refreshVerdict(options: { force?: boolean } = {}): Promise<void> {
   if (verdictInflight) return verdictInflight;
   if (state.status !== 'ok') return;
   verdictInflight = (async () => {
     try {
-      const resp = await genModelV1Dbnums({ timeoutMs: 60_000 });
+      const resp = await getGenModelV1Dbnums({ timeoutMs: 60_000, force: options.force === true });
       state.verdict = summarizeVerdicts(resp.dbnums ?? []);
     } catch (error) {
       state.verdict = {
@@ -207,16 +214,33 @@ async function refreshVerdict(): Promise<void> {
   return verdictInflight;
 }
 
+/** 人点徽标「重探」：身份与三态都强制重拉。 */
 async function refreshAll(): Promise<void> {
   await refresh();
-  await refreshVerdict();
+  await refreshVerdict({ force: true });
 }
 
-function start(intervalMs = DEFAULT_HEALTH_POLL_INTERVAL_MS): void {
+/**
+ * 起表：`/health` 每 `intervalMs`，`/dbnums` 三态每 `verdictIntervalMs`（用 `/health` 的节拍数出来，一张表）。
+ * 首次不 force——与 `useDbMetaInfo` 首屏的 /dbnums 共用同一次请求。
+ */
+function start(intervalMs = DEFAULT_HEALTH_POLL_INTERVAL_MS, verdictIntervalMs = DEFAULT_VERDICT_POLL_INTERVAL_MS): void {
   if (timer) return;
-  void refreshAll();
+  void (async () => {
+    await refresh();
+    await refreshVerdict();
+  })();
+  let lastVerdictTick = Date.now();
   timer = setInterval(() => {
-    void refreshAll();
+    void (async () => {
+      await refresh();
+      const now = Date.now();
+      // 三态上次没拿到（/health 当时没通）也补一次，不用等满一个周期
+      if (now - lastVerdictTick >= verdictIntervalMs || state.verdict.lastCheckedAt === null) {
+        lastVerdictTick = now;
+        await refreshVerdict({ force: true });
+      }
+    })();
   }, intervalMs);
 }
 
@@ -262,7 +286,7 @@ export function useGenModelV1Health() {
     summary,
     verdictText,
     refresh: refreshAll,
-    refreshVerdict,
+    refreshVerdict: () => refreshVerdict({ force: true }),
     start,
     stop,
     /** 测试用：回到初始态并停表。 */
