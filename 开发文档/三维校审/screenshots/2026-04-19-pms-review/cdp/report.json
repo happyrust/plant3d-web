@@ -1,0 +1,56 @@
+{
+  "base": "http://localhost:3101",
+  "iframeSrc": "http://localhost:3101/review/3d-view?output_project=AvevaMarineSample&user_token=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJwcm9qZWN0X2lkIjoiQXZldmFNYXJpbmVTYW1wbGUiLCJ1c2VyX2lkIjoiU0oiLCJ1c2VyX25hbWUiOiJTSiIsInJvbGUiOiJzaiIsImV4cCI6MTc3OTE2NDg2MywiaWF0IjoxNzc5MDc4NDYzfQ.5WiJi2pZcNJp8RMwgYd3R7VgUYqBPrYV5h0HnAoMvAY&form_id=FORM-984C2D80137B",
+  "consoleErrors": [
+    "console.error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)"
+  ],
+  "stages": [
+    {
+      "stage": "open-simulator",
+      "ok": true,
+      "elapsedMs": 1414,
+      "value": {
+        "title": "三维校审单"
+      }
+    },
+    {
+      "stage": "seed-tasks-present",
+      "ok": false,
+      "elapsedMs": 21,
+      "note": "expected seed tasks >= 1, got 0"
+    },
+    {
+      "stage": "click-add",
+      "ok": true,
+      "elapsedMs": 540,
+      "value": {
+        "embedFrameUrl": "http://localhost:3101/review/3d-view?output_project=AvevaMarineSample&user_token=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJwcm9qZWN0X2lkIjoiQXZldmFNYXJpbmVTYW1wbGUiLCJ1c2VyX2lkIjoiU0oiLCJ1c2VyX25hbWUiOiJTSiIsInJvbGUiOiJzaiIsImV4cCI6MTc3OTE2NDg2MywiaWF0IjoxNzc5MDc4NDYzfQ.5WiJi2pZcNJp8RMwgYd3R7VgUYqBPrYV5h0HnAoMvAY&form_id=FORM-984C2D80137B"
+      }
+    },
+    {
+      "stage": "embed-url-contract",
+      "ok": true,
+      "elapsedMs": 0,
+      "value": {
+        "pathname": "/review/3d-view",
+        "formId": "FORM-984C2D80137B",
+        "userId": null,
+        "outputProject": "AvevaMarineSample",
+        "pmsLikeUserIdPresent": false,
+        "userTokenLen": 231
+      }
+    },
+    {
+      "stage": "embed-plant3d-ready",
+      "ok": false,
+      "elapsedMs": 20004,
+      "note": "frame.waitForSelector: Timeout 20000ms exceeded.\nCall log:\n  - waiting for locator('body') to be visible\n    43 × locator resolved to hidden <body>…</body>\n"
+    },
+    {
+      "stage": "refresh-list",
+      "ok": false,
+      "elapsedMs": 847,
+      "note": "after refresh expected seed rows >= 1, got 0"
+    }
+  ]
+}

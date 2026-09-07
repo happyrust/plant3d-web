@@ -1,0 +1,580 @@
+{
+  "version": "2.8",
+  "children": [
+    {
+      "type": "frame",
+      "id": "canvas4",
+      "x": 0,
+      "y": 0,
+      "name": "Frame",
+      "clip": true,
+      "width": 800,
+      "height": 1100,
+      "fill": "#FFFFFF",
+      "layout": "none"
+    },
+    {
+      "type": "frame",
+      "id": "slRoot",
+      "x": 0,
+      "y": 0,
+      "name": "管道坡度面板",
+      "width": 360,
+      "fill": "#FFFFFF",
+      "cornerRadius": 8,
+      "stroke": {
+        "align": "inside",
+        "thickness": 1,
+        "fill": "#E5E7EB"
+      },
+      "effect": {
+        "type": "shadow",
+        "shadowType": "outer",
+        "color": "#0000000f",
+        "offset": { "x": 0, "y": 4 },
+        "blur": 16
+      },
+      "layout": "vertical",
+      "gap": 0,
+      "padding": 0,
+      "children": [
+        {
+          "type": "frame",
+          "id": "slHeader",
+          "name": "header",
+          "width": "fill_container",
+          "fill": "#FAFAFA",
+          "padding": [16, 20],
+          "justifyContent": "space_between",
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "text",
+              "id": "slTitle",
+              "name": "title",
+              "fill": "#111827",
+              "content": "管道坡度",
+              "fontFamily": "Fira Sans",
+              "fontSize": 16,
+              "fontWeight": "600"
+            },
+            {
+              "type": "frame",
+              "id": "slUndoRedoGroup",
+              "name": "undoRedoGroup",
+              "gap": 4,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "slUndoBtn",
+                  "name": "undoBtn",
+                  "width": 32,
+                  "height": 32,
+                  "fill": "#00000000",
+                  "cornerRadius": 6,
+                  "stroke": { "align": "inside", "thickness": 1, "fill": "#E5E7EB" },
+                  "justifyContent": "center",
+                  "alignItems": "center",
+                  "children": [
+                    { "type": "icon_font", "id": "slUndoIcon", "name": "undoIcon", "width": 14, "height": 14, "iconFontName": "undo-2", "iconFontFamily": "lucide", "fill": "#6B7280" }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "slRedoBtn",
+                  "name": "redoBtn",
+                  "width": 32,
+                  "height": 32,
+                  "fill": "#00000000",
+                  "cornerRadius": 6,
+                  "stroke": { "align": "inside", "thickness": 1, "fill": "#E5E7EB" },
+                  "justifyContent": "center",
+                  "alignItems": "center",
+                  "children": [
+                    { "type": "icon_font", "id": "slRedoIcon", "name": "redoIcon", "width": 14, "height": 14, "iconFontName": "redo-2", "iconFontFamily": "lucide", "fill": "#6B7280" }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "line",
+          "id": "slDivH",
+          "name": "dividerHeader",
+          "width": "fill_container",
+          "height": 1,
+          "stroke": { "align": "center", "thickness": 1, "fill": "#E5E7EB" }
+        },
+        {
+          "type": "frame",
+          "id": "slInfoBar",
+          "name": "infoBar",
+          "width": "fill_container",
+          "fill": "#F9FAFB",
+          "padding": [10, 20],
+          "gap": 16,
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "frame",
+              "id": "slInfoPipe",
+              "name": "infoPipe",
+              "gap": 6,
+              "alignItems": "center",
+              "children": [
+                { "type": "text", "id": "slInfoPipeLabel", "name": "infoPipeLabel", "fill": "#6B7280", "content": "管道", "fontFamily": "Fira Sans", "fontSize": 11, "fontWeight": "500" },
+                {
+                  "type": "frame",
+                  "id": "slInfoPipeBadge",
+                  "name": "infoPipeBadge",
+                  "fill": "#FFF0E6",
+                  "cornerRadius": 4,
+                  "padding": [2, 6],
+                  "children": [
+                    { "type": "text", "id": "slInfoPipeVal", "name": "infoPipeVal", "fill": "#FF6B00", "content": "/PIPE-001", "fontFamily": "Fira Code", "fontSize": 11, "fontWeight": "600" }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "slInfoBranches",
+              "name": "infoBranches",
+              "gap": 6,
+              "alignItems": "center",
+              "children": [
+                { "type": "text", "id": "slInfoBranchLabel", "name": "infoBranchLabel", "fill": "#6B7280", "content": "分支数", "fontFamily": "Fira Sans", "fontSize": 11, "fontWeight": "500" },
+                { "type": "text", "id": "slInfoBranchVal", "name": "infoBranchVal", "fill": "#111827", "content": "3", "fontFamily": "Fira Code", "fontSize": 11, "fontWeight": "600" }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "line",
+          "id": "slDiv0",
+          "name": "divider0",
+          "width": "fill_container",
+          "height": 1,
+          "stroke": { "align": "center", "thickness": 1, "fill": "#E5E7EB" }
+        },
+        {
+          "type": "frame",
+          "id": "slBody",
+          "name": "body",
+          "width": "fill_container",
+          "layout": "vertical",
+          "gap": 20,
+          "padding": 20,
+          "children": [
+            {
+              "type": "frame",
+              "id": "slSlopeParamSec",
+              "name": "slopeParamSection",
+              "width": "fill_container",
+              "layout": "vertical",
+              "gap": 12,
+              "children": [
+                {
+                  "type": "text",
+                  "id": "slSlopeParamTitle",
+                  "name": "slopeParamTitle",
+                  "fill": "#111827",
+                  "content": "坡度参数",
+                  "fontFamily": "Fira Sans",
+                  "fontSize": 14,
+                  "fontWeight": "600"
+                },
+                {
+                  "type": "frame",
+                  "id": "slSlopeRow1",
+                  "name": "slopeRow1",
+                  "width": "fill_container",
+                  "gap": 12,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "slSlopeFormatGroup",
+                      "name": "slopeFormatGroup",
+                      "width": "fill_container",
+                      "layout": "vertical",
+                      "gap": 6,
+                      "children": [
+                        { "type": "text", "id": "slSlopeFormatLabel", "name": "slopeFormatLabel", "fill": "#6B7280", "content": "坡度格式", "fontFamily": "Fira Sans", "fontSize": 12, "fontWeight": "500" },
+                        {
+                          "type": "frame",
+                          "id": "slSlopeFormatSelect",
+                          "name": "slopeFormatSelect",
+                          "width": "fill_container",
+                          "cornerRadius": 6,
+                          "stroke": { "align": "inside", "thickness": 1, "fill": "#E5E7EB" },
+                          "padding": [8, 12],
+                          "justifyContent": "space_between",
+                          "alignItems": "center",
+                          "children": [
+                            { "type": "text", "id": "slSlopeFormatVal", "name": "slopeFormatVal", "fill": "#111827", "content": "角度 (Angle)", "fontFamily": "Fira Sans", "fontSize": 13, "fontWeight": "normal" },
+                            { "type": "icon_font", "id": "slSlopeFormatChevron", "name": "chevron", "width": 14, "height": 14, "iconFontName": "chevron-down", "iconFontFamily": "lucide", "fill": "#9CA3AF" }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "slSlopeValueGroup",
+                      "name": "slopeValueGroup",
+                      "width": 120,
+                      "layout": "vertical",
+                      "gap": 6,
+                      "children": [
+                        { "type": "text", "id": "slSlopeValueLabel", "name": "slopeValueLabel", "fill": "#6B7280", "content": "坡度值", "fontFamily": "Fira Sans", "fontSize": 12, "fontWeight": "500" },
+                        {
+                          "type": "frame",
+                          "id": "slSlopeValueInput",
+                          "name": "slopeValueInput",
+                          "width": "fill_container",
+                          "cornerRadius": 6,
+                          "stroke": { "align": "inside", "thickness": 1, "fill": "#E5E7EB" },
+                          "padding": [8, 12],
+                          "justifyContent": "space_between",
+                          "alignItems": "center",
+                          "children": [
+                            { "type": "text", "id": "slSlopeValueVal", "name": "slopeValueVal", "fill": "#111827", "content": "1.5", "fontFamily": "Fira Code", "fontSize": 13, "fontWeight": "normal" },
+                            { "type": "text", "id": "slSlopeValueSuffix", "name": "slopeValueSuffix", "fill": "#6B7280", "content": "°", "fontFamily": "Fira Sans", "fontSize": 13, "fontWeight": "normal" }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "slSlopeRow2",
+                  "name": "slopeRow2",
+                  "width": "fill_container",
+                  "gap": 12,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "slSlopeDirGroup",
+                      "name": "slopeDirGroup",
+                      "width": "fill_container",
+                      "layout": "vertical",
+                      "gap": 6,
+                      "children": [
+                        { "type": "text", "id": "slSlopeDirLabel", "name": "slopeDirLabel", "fill": "#6B7280", "content": "坡度方向", "fontFamily": "Fira Sans", "fontSize": 12, "fontWeight": "500" },
+                        {
+                          "type": "frame",
+                          "id": "slSlopeDirSelect",
+                          "name": "slopeDirSelect",
+                          "width": "fill_container",
+                          "cornerRadius": 6,
+                          "stroke": { "align": "inside", "thickness": 1, "fill": "#E5E7EB" },
+                          "padding": [8, 12],
+                          "justifyContent": "space_between",
+                          "alignItems": "center",
+                          "children": [
+                            { "type": "text", "id": "slSlopeDirVal", "name": "slopeDirVal", "fill": "#111827", "content": "顺流向下坡", "fontFamily": "Fira Sans", "fontSize": 13, "fontWeight": "normal" },
+                            { "type": "icon_font", "id": "slSlopeDirChevron", "name": "chevron", "width": 14, "height": 14, "iconFontName": "chevron-down", "iconFontFamily": "lucide", "fill": "#9CA3AF" }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "slSlopeRefGroup",
+                      "name": "slopeRefGroup",
+                      "width": "fill_container",
+                      "layout": "vertical",
+                      "gap": 6,
+                      "children": [
+                        { "type": "text", "id": "slSlopeRefLabel", "name": "slopeRefLabel", "fill": "#6B7280", "content": "坡度基准", "fontFamily": "Fira Sans", "fontSize": 12, "fontWeight": "500" },
+                        {
+                          "type": "frame",
+                          "id": "slSlopeRefSelect",
+                          "name": "slopeRefSelect",
+                          "width": "fill_container",
+                          "cornerRadius": 6,
+                          "stroke": { "align": "inside", "thickness": 1, "fill": "#E5E7EB" },
+                          "padding": [8, 12],
+                          "justifyContent": "space_between",
+                          "alignItems": "center",
+                          "children": [
+                            { "type": "text", "id": "slSlopeRefVal", "name": "slopeRefVal", "fill": "#111827", "content": "管底 (BOP)", "fontFamily": "Fira Sans", "fontSize": 13, "fontWeight": "normal" },
+                            { "type": "icon_font", "id": "slSlopeRefChevron", "name": "chevron", "width": 14, "height": 14, "iconFontName": "chevron-down", "iconFontFamily": "lucide", "fill": "#9CA3AF" }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "line",
+              "id": "slDiv1",
+              "name": "divider1",
+              "width": "fill_container",
+              "height": 1,
+              "stroke": { "align": "center", "thickness": 1, "fill": "#E5E7EB" }
+            },
+            {
+              "type": "frame",
+              "id": "slBranchLegSec",
+              "name": "branchLegSection",
+              "width": "fill_container",
+              "layout": "vertical",
+              "gap": 12,
+              "children": [
+                {
+                  "type": "text",
+                  "id": "slBranchLegTitle",
+                  "name": "branchLegTitle",
+                  "fill": "#111827",
+                  "content": "分支腿列表",
+                  "fontFamily": "Fira Sans",
+                  "fontSize": 14,
+                  "fontWeight": "600"
+                },
+                {
+                  "type": "frame",
+                  "id": "slLegTableHeader",
+                  "name": "legTableHeader",
+                  "width": "fill_container",
+                  "fill": "#F9FAFB",
+                  "cornerRadius": [6, 6, 0, 0],
+                  "stroke": { "align": "inside", "thickness": 1, "fill": "#E5E7EB" },
+                  "padding": [8, 12],
+                  "children": [
+                    { "type": "text", "id": "slLegColName", "name": "colName", "width": 80, "fill": "#6B7280", "content": "分支腿", "fontFamily": "Fira Sans", "fontSize": 11, "fontWeight": "600" },
+                    { "type": "text", "id": "slLegColDir", "name": "colDir", "width": 70, "fill": "#6B7280", "content": "方向", "fontFamily": "Fira Sans", "fontSize": 11, "fontWeight": "600" },
+                    { "type": "text", "id": "slLegColSlope", "name": "colSlope", "width": 60, "fill": "#6B7280", "content": "坡度", "fontFamily": "Fira Sans", "fontSize": 11, "fontWeight": "600" },
+                    { "type": "text", "id": "slLegColFall", "name": "colFall", "width": 60, "fill": "#6B7280", "content": "落差", "fontFamily": "Fira Sans", "fontSize": 11, "fontWeight": "600" }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "slLegListContainer",
+                  "name": "legListContainer",
+                  "width": "fill_container",
+                  "stroke": { "align": "inside", "thickness": 1, "fill": "#E5E7EB" },
+                  "cornerRadius": [0, 0, 6, 6],
+                  "layout": "vertical",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "slLegRow1",
+                      "name": "legRow1",
+                      "width": "fill_container",
+                      "fill": "#FFF0E6",
+                      "padding": [10, 12],
+                      "alignItems": "center",
+                      "children": [
+                        { "type": "text", "id": "slLeg1Name", "name": "leg1Name", "width": 80, "fill": "#FF6B00", "content": "B1-Leg1", "fontFamily": "Fira Code", "fontSize": 11, "fontWeight": "600" },
+                        { "type": "text", "id": "slLeg1Dir", "name": "leg1Dir", "width": 70, "fill": "#111827", "content": "Down", "fontFamily": "Fira Sans", "fontSize": 11, "fontWeight": "normal" },
+                        { "type": "text", "id": "slLeg1Slope", "name": "leg1Slope", "width": 60, "fill": "#111827", "content": "1.5°", "fontFamily": "Fira Code", "fontSize": 11, "fontWeight": "normal" },
+                        { "type": "text", "id": "slLeg1Fall", "name": "leg1Fall", "width": 60, "fill": "#111827", "content": "62 mm", "fontFamily": "Fira Code", "fontSize": 11, "fontWeight": "normal" }
+                      ]
+                    },
+                    {
+                      "type": "line",
+                      "id": "slLegRowDiv1",
+                      "name": "legRowDivider1",
+                      "width": "fill_container",
+                      "height": 1,
+                      "stroke": { "align": "center", "thickness": 1, "fill": "#F3F4F6" }
+                    },
+                    {
+                      "type": "frame",
+                      "id": "slLegRow2",
+                      "name": "legRow2",
+                      "width": "fill_container",
+                      "fill": "#00000000",
+                      "padding": [10, 12],
+                      "alignItems": "center",
+                      "children": [
+                        { "type": "text", "id": "slLeg2Name", "name": "leg2Name", "width": 80, "fill": "#374151", "content": "B1-Leg2", "fontFamily": "Fira Code", "fontSize": 11, "fontWeight": "normal" },
+                        { "type": "text", "id": "slLeg2Dir", "name": "leg2Dir", "width": 70, "fill": "#6B7280", "content": "Down", "fontFamily": "Fira Sans", "fontSize": 11, "fontWeight": "normal" },
+                        { "type": "text", "id": "slLeg2Slope", "name": "leg2Slope", "width": 60, "fill": "#6B7280", "content": "1.5°", "fontFamily": "Fira Code", "fontSize": 11, "fontWeight": "normal" },
+                        { "type": "text", "id": "slLeg2Fall", "name": "leg2Fall", "width": 60, "fill": "#6B7280", "content": "38 mm", "fontFamily": "Fira Code", "fontSize": 11, "fontWeight": "normal" }
+                      ]
+                    },
+                    {
+                      "type": "line",
+                      "id": "slLegRowDiv2",
+                      "name": "legRowDivider2",
+                      "width": "fill_container",
+                      "height": 1,
+                      "stroke": { "align": "center", "thickness": 1, "fill": "#F3F4F6" }
+                    },
+                    {
+                      "type": "frame",
+                      "id": "slLegRow3",
+                      "name": "legRow3",
+                      "width": "fill_container",
+                      "fill": "#00000000",
+                      "padding": [10, 12],
+                      "alignItems": "center",
+                      "children": [
+                        { "type": "text", "id": "slLeg3Name", "name": "leg3Name", "width": 80, "fill": "#374151", "content": "B2-Leg1", "fontFamily": "Fira Code", "fontSize": 11, "fontWeight": "normal" },
+                        { "type": "text", "id": "slLeg3Dir", "name": "leg3Dir", "width": 70, "fill": "#6B7280", "content": "Up", "fontFamily": "Fira Sans", "fontSize": 11, "fontWeight": "normal" },
+                        { "type": "text", "id": "slLeg3Slope", "name": "leg3Slope", "width": 60, "fill": "#6B7280", "content": "2.0°", "fontFamily": "Fira Code", "fontSize": 11, "fontWeight": "normal" },
+                        { "type": "text", "id": "slLeg3Fall", "name": "leg3Fall", "width": 60, "fill": "#6B7280", "content": "105 mm", "fontFamily": "Fira Code", "fontSize": 11, "fontWeight": "normal" }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "line",
+              "id": "slDiv2",
+              "name": "divider2",
+              "width": "fill_container",
+              "height": 1,
+              "stroke": { "align": "center", "thickness": 1, "fill": "#E5E7EB" }
+            },
+            {
+              "type": "frame",
+              "id": "slAnchorSec",
+              "name": "anchorSection",
+              "width": "fill_container",
+              "layout": "vertical",
+              "gap": 12,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "slAnchorHeader",
+                  "name": "anchorHeader",
+                  "width": "fill_container",
+                  "justifyContent": "space_between",
+                  "alignItems": "center",
+                  "children": [
+                    { "type": "text", "id": "slAnchorTitle", "name": "anchorTitle", "fill": "#111827", "content": "锚点", "fontFamily": "Fira Sans", "fontSize": 14, "fontWeight": "600" },
+                    {
+                      "type": "frame",
+                      "id": "slAnchorActions",
+                      "name": "anchorActions",
+                      "gap": 4,
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "slAnchorAddBtn",
+                          "name": "anchorAddBtn",
+                          "fill": "#FF6B00",
+                          "cornerRadius": 6,
+                          "gap": 4,
+                          "padding": [5, 10],
+                          "alignItems": "center",
+                          "children": [
+                            { "type": "icon_font", "id": "slAnchorAddIcon", "name": "anchorAddIcon", "width": 12, "height": 12, "iconFontName": "plus", "iconFontFamily": "lucide", "fill": "#FFFFFF" },
+                            { "type": "text", "id": "slAnchorAddText", "name": "anchorAddText", "fill": "#FFFFFF", "content": "添加", "fontFamily": "Fira Sans", "fontSize": 12, "fontWeight": "500" }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "slAnchorDelBtn",
+                          "name": "anchorDelBtn",
+                          "fill": "#00000000",
+                          "cornerRadius": 6,
+                          "stroke": { "align": "inside", "thickness": 1, "fill": "#E5E7EB" },
+                          "gap": 4,
+                          "padding": [5, 10],
+                          "alignItems": "center",
+                          "children": [
+                            { "type": "icon_font", "id": "slAnchorDelIcon", "name": "anchorDelIcon", "width": 12, "height": 12, "iconFontName": "trash-2", "iconFontFamily": "lucide", "fill": "#6B7280" },
+                            { "type": "text", "id": "slAnchorDelText", "name": "anchorDelText", "fill": "#374151", "content": "删除", "fontFamily": "Fira Sans", "fontSize": 12, "fontWeight": "500" }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "slAnchorTableHeader",
+                  "name": "anchorTableHeader",
+                  "width": "fill_container",
+                  "fill": "#F9FAFB",
+                  "cornerRadius": [6, 6, 0, 0],
+                  "stroke": { "align": "inside", "thickness": 1, "fill": "#E5E7EB" },
+                  "padding": [8, 12],
+                  "children": [
+                    { "type": "text", "id": "slAnchorColType", "name": "colType", "width": 80, "fill": "#6B7280", "content": "类型", "fontFamily": "Fira Sans", "fontSize": 11, "fontWeight": "600" },
+                    { "type": "text", "id": "slAnchorColComp", "name": "colComp", "width": 100, "fill": "#6B7280", "content": "管件", "fontFamily": "Fira Sans", "fontSize": 11, "fontWeight": "600" },
+                    { "type": "text", "id": "slAnchorColDist", "name": "colDist", "width": 70, "fill": "#6B7280", "content": "距离", "fontFamily": "Fira Sans", "fontSize": 11, "fontWeight": "600" },
+                    { "type": "text", "id": "slAnchorColOffset", "name": "colOffset", "width": 60, "fill": "#6B7280", "content": "偏移", "fontFamily": "Fira Sans", "fontSize": 11, "fontWeight": "600" }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "slAnchorListContainer",
+                  "name": "anchorListContainer",
+                  "width": "fill_container",
+                  "stroke": { "align": "inside", "thickness": 1, "fill": "#E5E7EB" },
+                  "cornerRadius": [0, 0, 6, 6],
+                  "layout": "vertical",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "slAnchorRow1",
+                      "name": "anchorRow1",
+                      "width": "fill_container",
+                      "fill": "#FFF0E6",
+                      "padding": [10, 12],
+                      "alignItems": "center",
+                      "children": [
+                        { "type": "text", "id": "slAnchor1Type", "name": "anchor1Type", "width": 80, "fill": "#FF6B00", "content": "Fixed", "fontFamily": "Fira Sans", "fontSize": 11, "fontWeight": "600" },
+                        { "type": "text", "id": "slAnchor1Comp", "name": "anchor1Comp", "width": 100, "fill": "#111827", "content": "ELBO /B1-E1", "fontFamily": "Fira Code", "fontSize": 11, "fontWeight": "normal" },
+                        { "type": "text", "id": "slAnchor1Dist", "name": "anchor1Dist", "width": 70, "fill": "#111827", "content": "0 mm", "fontFamily": "Fira Code", "fontSize": 11, "fontWeight": "normal" },
+                        { "type": "text", "id": "slAnchor1Offset", "name": "anchor1Offset", "width": 60, "fill": "#111827", "content": "0 mm", "fontFamily": "Fira Code", "fontSize": 11, "fontWeight": "normal" }
+                      ]
+                    },
+                    {
+                      "type": "line",
+                      "id": "slAnchorRowDiv1",
+                      "name": "anchorRowDivider1",
+                      "width": "fill_container",
+                      "height": 1,
+                      "stroke": { "align": "center", "thickness": 1, "fill": "#F3F4F6" }
+                    },
+                    {
+                      "type": "frame",
+                      "id": "slAnchorRow2",
+                      "name": "anchorRow2",
+                      "width": "fill_container",
+                      "fill": "#00000000",
+                      "padding": [10, 12],
+                      "alignItems": "center",
+                      "children": [
+                        { "type": "text", "id": "slAnchor2Type", "name": "anchor2Type", "width": 80, "fill": "#374151", "content": "Floating", "fontFamily": "Fira Sans", "fontSize": 11, "fontWeight": "normal" },
+                        { "type": "text", "id": "slAnchor2Comp", "name": "anchor2Comp", "width": 100, "fill": "#6B7280", "content": "TEE /B1-T2", "fontFamily": "Fira Code", "fontSize": 11, "fontWeight": "normal" },
+                        { "type": "text", "id": "slAnchor2Dist", "name": "anchor2Dist", "width": 70, "fill": "#6B7280", "content": "1800 mm", "fontFamily": "Fira Code", "fontSize": 11, "fontWeight": "normal" },
+                        { "type": "text", "id": "slAnchor2Offset", "name": "anchor2Offset", "width": 60, "fill": "#6B7280", "content": "0 mm", "fontFamily": "Fira Code", "fontSize": 11, "fontWeight": "normal" }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "slApplyBtn",
+              "name": "applyBtn",
+              "width": "fill_container",
+              "fill": "#FF6B00",
+              "cornerRadius": 6,
+              "gap": 8,
+              "padding": [10, 16],
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                { "type": "icon_font", "id": "slApplyIcon", "name": "applyIcon", "width": 14, "height": 14, "iconFontName": "check", "iconFontFamily": "lucide", "fill": "#FFFFFF" },
+                { "type": "text", "id": "slApplyText", "name": "applyText", "fill": "#FFFFFF", "content": "应用坡度", "fontFamily": "Fira Sans", "fontSize": 14, "fontWeight": "500" }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

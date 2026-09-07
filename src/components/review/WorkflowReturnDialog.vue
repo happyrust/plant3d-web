@@ -1,0 +1,134 @@
+<script setup lang="ts">
+import { computed, ref, watch } from 'vue';
+
+import { ArrowLeft, CornerDownLeft } from 'lucide-vue-next';
+
+import type { WorkflowNode } from '@/types/auth';
+
+import Button from '@/components/ui/Button.vue';
+import Dialog from '@/components/ui/Dialog.vue';
+import { WORKFLOW_NODE_NAMES } from '@/types/auth';
+
+const props = defineProps<{
+  visible: boolean;
+  currentNode: WorkflowNode;
+  loading?: boolean;
+}>();
+
+const emit = defineEmits<{
+  (e: 'update:visible', value: boolean): void;
+  (e: 'confirm', targetNode: WorkflowNode, reason: string): void;
+}>();
+
+const targetNode = ref<WorkflowNode>('sj');
+const reason = ref('');
+
+// 只显示当前环节之前的节点
+const availableTargetNodes = computed<{ value: WorkflowNode; label: string }[]>(() => {
+  const order: WorkflowNode[] = ['sj', 'jd', 'sh', 'pz'];
+  const currentIdx = order.indexOf(props.currentNode);
+  return order
+    .slice(0, currentIdx)
+    .map((n) => ({ value: n, label: WORKFLOW_NODE_NAMES[n] }));
+});
+
+const canConfirm = computed(() => {
+  return reason.value.trim().length > 0 && availableTargetNodes.value.some((n) => n.value === targetNode.value);
+});
+
+const targetNodeLabel = computed(() => WORKFLOW_NODE_NAMES[targetNode.value]);
+
+watch(
+  () => props.visible,
+  (visible) => {
+    if (!visible) {
+      reason.value = '';
+      targetNode.value = 'sj';
+    }
+  }
+);
+
+function handleConfirm() {
+  if (!canConfirm.value) return;
+  emit('confirm', targetNode.value, reason.value.trim());
+  reason.value = '';
+  targetNode.value = 'sj';
+}
+
+function handleClose() {
+  emit('update:visible', false);
+  reason.value = '';
+  targetNode.value = 'sj';
+}
+</script>
+
+<template>
+  <Dialog :open="visible"
+    title="确认驳回流转"
+    panel-class="max-w-[30rem]"
+    body-class="space-y-5 px-6 py-5"
+    @update:open="(open) => emit('update:visible', open)">
+    <div class="flex items-center gap-2 text-sm font-medium text-danger">
+      <CornerDownLeft class="h-4 w-4" />
+      <span>确认驳回流转并填写流转驳回原因</span>
+    </div>
+
+    <div class="rounded-2xl border border-danger/30 bg-danger-subtle p-4" data-testid="workflow-return-flow">
+      <div class="flex items-center justify-between gap-3">
+        <div class="min-w-0 flex-1 rounded-xl bg-danger px-4 py-3 text-danger-foreground shadow-sm">
+          <div class="text-xs font-medium uppercase tracking-[0.16em] text-danger-foreground/80">目标环节</div>
+          <div class="mt-2 text-sm font-semibold">{{ targetNodeLabel }}</div>
+        </div>
+        <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-danger-subtle text-danger">
+          <ArrowLeft class="h-4 w-4" />
+        </div>
+        <div class="min-w-0 flex-1 rounded-xl border border-danger/30 bg-white px-4 py-3">
+          <div class="text-xs font-medium uppercase tracking-[0.16em] text-danger/70">当前环节</div>
+          <div class="mt-2 text-sm font-semibold text-danger">{{ WORKFLOW_NODE_NAMES[currentNode] }}</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="space-y-2">
+      <label class="block text-sm font-medium text-slate-700">目标环节</label>
+      <div class="flex gap-2">
+        <button v-for="node in availableTargetNodes"
+          :key="node.value"
+          type="button"
+          class="flex-1 rounded-xl border px-3 py-2 text-sm font-medium transition-colors"
+          :class="
+            targetNode === node.value
+              ? 'border-danger bg-danger-subtle text-danger'
+              : 'border-slate-300 bg-white text-slate-600 hover:bg-slate-50'
+          "
+          @click="targetNode = node.value">
+          {{ node.label }}
+        </button>
+      </div>
+    </div>
+
+    <div class="space-y-2">
+      <label for="workflow-return-reason" class="block text-sm font-medium text-slate-700">
+        流转驳回原因（必填）
+      </label>
+      <textarea id="workflow-return-reason"
+        v-model="reason"
+        data-testid="workflow-return-reason"
+        class="min-h-[112px] w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-danger focus:outline-none focus:ring-4 focus:ring-danger-subtle"
+        rows="4"
+        placeholder="请输入流转驳回原因（必填）" />
+      <p v-if="reason.trim().length === 0" class="text-xs text-danger">流转驳回原因为必填项</p>
+    </div>
+
+    <template #footer>
+      <Button variant="secondary" :disabled="loading" @click="handleClose">取消</Button>
+      <Button variant="danger"
+        :disabled="!canConfirm"
+        :loading="loading"
+        data-testid="workflow-return-confirm"
+        @click="handleConfirm">
+        确认驳回流转
+      </Button>
+    </template>
+  </Dialog>
+</template>

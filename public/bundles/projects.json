@@ -1,0 +1,12 @@
+[
+  {
+    "id": "ams-model",
+    "name": "AMS 项目",
+    "description": "Aveva Marine Sample 系统模型",
+    "path": "AvevaMarineSample",
+    "showDbnum": 7997,
+    "thumbnail": "/favicon.ico",
+    "updatedAt": "2026-03-10",
+    "default": true
+  }
+]

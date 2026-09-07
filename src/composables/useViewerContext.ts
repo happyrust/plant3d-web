@@ -1,0 +1,172 @@
+import { shallowRef, type Ref, type ShallowRef } from 'vue';
+
+import type { UseAnnotationThreeReturn } from './useAnnotationThree';
+import type { useDtxTools } from './useDtxTools';
+import type { UsePtsetVisualizationThreeReturn } from './usePtsetVisualizationThree';
+import type { useToolStore } from './useToolStore';
+import type { useXeokitMeasurementTools } from './useXeokitMeasurementTools';
+import type { DimensionSystem } from '@/dimension';
+import type { DtxCompatViewer } from '@/viewer/dtx/DtxCompatViewer';
+
+export type ViewerContext = {
+  viewerRef: ShallowRef<DtxCompatViewer | null>;
+  overlayContainerRef: ShallowRef<HTMLElement | null>;
+  tools: ShallowRef<ReturnType<typeof useDtxTools> | null>;
+  xeokitMeasurementTools: ShallowRef<ReturnType<typeof useXeokitMeasurementTools> | null>;
+  store: ShallowRef<ReturnType<typeof useToolStore> | null>;
+  viewerError: ShallowRef<string | null>;
+  ptsetVis: ShallowRef<UsePtsetVisualizationThreeReturn | null>;
+  annotationSystem: ShallowRef<UseAnnotationThreeReturn | null>;
+  dimensionSystem: ShallowRef<DimensionSystem | null>;
+};
+
+const globalViewerContext: ViewerContext = {
+  viewerRef: shallowRef(null),
+  overlayContainerRef: shallowRef(null),
+  tools: shallowRef(null),
+  xeokitMeasurementTools: shallowRef(null),
+  store: shallowRef(null),
+  viewerError: shallowRef(null),
+  ptsetVis: shallowRef(null),
+  annotationSystem: shallowRef(null),
+  dimensionSystem: shallowRef(null),
+};
+
+export function useViewerContext(): ViewerContext {
+  return globalViewerContext;
+}
+
+export type WaitForViewerReadyOptions = {
+  timeoutMs?: number;
+  intervalMs?: number;
+  viewerRef?: Ref<unknown | null>;
+};
+
+export async function waitForViewerReady(options: WaitForViewerReadyOptions = {}): Promise<boolean> {
+  const timeoutMs = options.timeoutMs ?? 4000;
+  const intervalMs = options.intervalMs ?? 50;
+  const viewerRef = options.viewerRef ?? globalViewerContext.viewerRef;
+  const startedAt = Date.now();
+
+  while (Date.now() - startedAt < timeoutMs) {
+    if (viewerRef.value) {
+      return true;
+    }
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  }
+
+  return false;
+}
+
+export type ShowModelByRefnosFailItem = {
+  refno: string;
+  error: string | null;
+};
+
+export type ShowModelByRefnosResult = {
+  ok: string[];
+  fail: ShowModelByRefnosFailItem[];
+  error: string | null;
+};
+
+export type ShowModelByRefnosOptions = {
+  refnos: string[];
+  flyTo?: boolean;
+  highlight?: boolean;
+  requestId?: string;
+  timeoutMs?: number;
+  ensureViewerReady?: boolean;
+  readyTimeoutMs?: number;
+  viewerRef?: Ref<unknown | null>;
+};
+
+export function applyLoadedModelHighlight(options: {
+  viewer: DtxCompatViewer;
+  refnos: string[];
+  flyTo: boolean;
+  setSelectedRefnos: (refnos: string[]) => void;
+}): boolean {
+  const refnos = [...new Set(options.refnos.map((refno) => refno.trim()).filter(Boolean))];
+  if (refnos.length === 0) return false;
+
+  const previous = [...options.viewer.scene.selectedObjectIds];
+  if (previous.length > 0) options.viewer.scene.setObjectsSelected(previous, false);
+  options.viewer.scene.ensureRefnos(refnos);
+  options.setSelectedRefnos(refnos);
+  options.viewer.scene.setObjectsSelected(refnos, true);
+
+  const aabb = options.viewer.scene.getAABB(refnos);
+  if (options.flyTo && aabb) {
+    options.viewer.cameraFlight.flyTo({ aabb, duration: 0.8, fit: true });
+  }
+  return true;
+}
+
+function createRequestId(prefix: string): string {
+  const randomSuffix = Math.random().toString(36).slice(2, 8);
+  return `${prefix}-${Date.now()}-${randomSuffix}`;
+}
+
+export async function showModelByRefnosWithAck(options: ShowModelByRefnosOptions): Promise<ShowModelByRefnosResult> {
+  const {
+    refnos,
+    flyTo = true,
+    highlight = false,
+    timeoutMs = 10_000,
+    requestId = createRequestId('show-model-by-refnos'),
+    ensureViewerReady = true,
+    readyTimeoutMs = 4_000,
+    viewerRef,
+  } = options;
+
+  if (!Array.isArray(refnos) || refnos.length === 0) {
+    return { ok: [], fail: [], error: '缺少 refnos' };
+  }
+
+  if (ensureViewerReady) {
+    const ready = await waitForViewerReady({ timeoutMs: readyTimeoutMs, viewerRef });
+    if (!ready) {
+      return { ok: [], fail: [], error: 'Viewer panel did not become ready in time' };
+    }
+  }
+
+  if (typeof window === 'undefined') {
+    return { ok: [], fail: [], error: 'window is unavailable' };
+  }
+
+  return await new Promise<ShowModelByRefnosResult>((resolve) => {
+    const onDone = (event: Event) => {
+      const detail = (event as CustomEvent<{
+        requestId?: string;
+        ok?: string[];
+        fail?: ShowModelByRefnosFailItem[];
+        error?: string | null;
+      }>).detail;
+      if (detail?.requestId !== requestId) {
+        return;
+      }
+      window.clearTimeout(timeout);
+      window.removeEventListener('showModelByRefnosDone', onDone as EventListener);
+      resolve({
+        ok: Array.isArray(detail?.ok) ? detail.ok : [],
+        fail: Array.isArray(detail?.fail) ? detail.fail : [],
+        error: detail?.error ?? null,
+      });
+    };
+
+    const timeout = window.setTimeout(() => {
+      window.removeEventListener('showModelByRefnosDone', onDone as EventListener);
+      resolve({ ok: [], fail: [], error: 'Viewer load timed out' });
+    }, timeoutMs);
+
+    window.addEventListener('showModelByRefnosDone', onDone as EventListener);
+    window.dispatchEvent(new CustomEvent('showModelByRefnos', {
+      detail: {
+        refnos,
+        flyTo,
+        highlight,
+        requestId,
+      },
+    }));
+  });
+}

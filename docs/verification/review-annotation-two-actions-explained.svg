@@ -1,0 +1,146 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 760" width="1280" height="760">
+  <style>
+    text { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; }
+    .title { font-size: 25px; font-weight: 700; fill: #111827; }
+    .subtitle { font-size: 13px; fill: #6b7280; }
+    .section { font-size: 16px; font-weight: 700; fill: #111827; }
+    .label { font-size: 13px; font-weight: 700; fill: #111827; }
+    .sub { font-size: 11px; fill: #6b7280; }
+    .note { font-size: 12px; fill: #374151; }
+    .small { font-size: 10px; fill: #6b7280; }
+    .box { fill: #ffffff; stroke: #d1d5db; stroke-width: 1.5; rx: 12; ry: 12; }
+    .blue { fill: #eff6ff; stroke: #bfdbfe; }
+    .orange { fill: #fff7ed; stroke: #fed7aa; }
+    .green { fill: #f0fdf4; stroke: #bbf7d0; }
+    .red { fill: #fef2f2; stroke: #fecaca; }
+    .purple { fill: #faf5ff; stroke: #e9d5ff; }
+    .gray { fill: #f9fafb; stroke: #e5e7eb; }
+  </style>
+  <defs>
+    <marker id="arrow-blue" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#2563eb"/>
+    </marker>
+    <marker id="arrow-orange" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#ea580c"/>
+    </marker>
+    <marker id="arrow-green" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#059669"/>
+    </marker>
+    <marker id="arrow-red" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#dc2626"/>
+    </marker>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="130%">
+      <feDropShadow dx="0" dy="4" stdDeviation="5" flood-color="#111827" flood-opacity="0.10"/>
+    </filter>
+  </defs>
+
+  <rect width="1280" height="760" fill="#ffffff"/>
+  <text x="640" y="42" text-anchor="middle" class="title">Why annotation handling feels like two operations</text>
+  <text x="640" y="66" text-anchor="middle" class="subtitle">The domain model is split correctly, but the UI exposes storage boundaries as extra user work.</text>
+
+  <rect x="44" y="96" width="578" height="590" rx="18" ry="18" fill="#ffffff" stroke="#e5e7eb"/>
+  <text x="72" y="128" class="section">Current flow: visible double action</text>
+
+  <rect x="88" y="164" width="196" height="70" class="box blue" filter="url(#shadow)"/>
+  <text x="186" y="190" text-anchor="middle" class="label">1. Per annotation action</text>
+  <text x="186" y="209" text-anchor="middle" class="sub">Fixed / Won't fix / Agree / Reject</text>
+  <text x="186" y="224" text-anchor="middle" class="small">ReviewCommentsTimeline.vue</text>
+
+  <rect x="378" y="164" width="198" height="70" class="box orange" filter="url(#shadow)"/>
+  <text x="477" y="190" text-anchor="middle" class="label">Backend state table</text>
+  <text x="477" y="209" text-anchor="middle" class="sub">annotation-states/apply</text>
+  <text x="477" y="224" text-anchor="middle" class="small">already persisted</text>
+
+  <path d="M 284 199 L 378 199" stroke="#2563eb" stroke-width="2" fill="none" marker-end="url(#arrow-blue)"/>
+  <rect x="312" y="187" width="40" height="18" rx="4" fill="#ffffff"/>
+  <text x="332" y="200" text-anchor="middle" class="small">save</text>
+
+  <rect x="88" y="294" width="196" height="70" class="box red" filter="url(#shadow)"/>
+  <text x="186" y="320" text-anchor="middle" class="label">2. Local reviewState</text>
+  <text x="186" y="339" text-anchor="middle" class="sub">frontend synthesizes history</text>
+  <text x="186" y="354" text-anchor="middle" class="small">useToolStore.apply...</text>
+
+  <rect x="378" y="294" width="198" height="70" class="box red" filter="url(#shadow)"/>
+  <text x="477" y="320" text-anchor="middle" class="label">Unsaved diff appears</text>
+  <text x="477" y="339" text-anchor="middle" class="sub">hasUnsavedPendingData=true</text>
+  <text x="477" y="354" text-anchor="middle" class="small">blocks task submit</text>
+
+  <path d="M 186 234 L 186 294" stroke="#dc2626" stroke-width="2" fill="none" marker-end="url(#arrow-red)"/>
+  <rect x="119" y="255" width="134" height="18" rx="4" fill="#ffffff"/>
+  <text x="186" y="268" text-anchor="middle" class="small">extra local mutation</text>
+  <path d="M 284 329 L 378 329" stroke="#dc2626" stroke-width="2" fill="none" marker-end="url(#arrow-red)"/>
+
+  <rect x="88" y="424" width="196" height="70" class="box purple" filter="url(#shadow)"/>
+  <text x="186" y="450" text-anchor="middle" class="label">3. Confirm current data</text>
+  <text x="186" y="469" text-anchor="middle" class="sub">user clicks another CTA</text>
+  <text x="186" y="484" text-anchor="middle" class="small">reviewRecordCreate</text>
+
+  <rect x="378" y="424" width="198" height="70" class="box green" filter="url(#shadow)"/>
+  <text x="477" y="450" text-anchor="middle" class="label">4. Submit task</text>
+  <text x="477" y="469" text-anchor="middle" class="sub">workflow moves next</text>
+  <text x="477" y="484" text-anchor="middle" class="small">submitTaskToNextNode</text>
+
+  <path d="M 477 364 L 284 424" stroke="#ea580c" stroke-width="2" fill="none" marker-end="url(#arrow-orange)"/>
+  <rect x="341" y="386" width="86" height="18" rx="4" fill="#ffffff"/>
+  <text x="384" y="399" text-anchor="middle" class="small">must confirm</text>
+  <path d="M 284 459 L 378 459" stroke="#059669" stroke-width="2" fill="none" marker-end="url(#arrow-green)"/>
+
+  <rect x="88" y="552" width="488" height="88" rx="14" ry="14" fill="#fff7ed" stroke="#fed7aa"/>
+  <text x="112" y="579" class="label">User perception</text>
+  <text x="112" y="603" class="note">"I already handled this annotation. Why must I confirm or submit again?"</text>
+  <text x="112" y="625" class="sub">Reason: backend state, confirmation snapshot, and workflow transition are exposed as separate manual steps.</text>
+
+  <rect x="658" y="96" width="578" height="590" rx="18" ry="18" fill="#ffffff" stroke="#e5e7eb"/>
+  <text x="686" y="128" class="section">Recommended flow: one user-level path</text>
+
+  <rect x="704" y="164" width="220" height="72" class="box blue" filter="url(#shadow)"/>
+  <text x="814" y="190" text-anchor="middle" class="label">One primary CTA</text>
+  <text x="814" y="209" text-anchor="middle" class="sub">Submit handling result</text>
+  <text x="814" y="224" text-anchor="middle" class="small">result + note in one form</text>
+
+  <rect x="980" y="164" width="210" height="72" class="box green" filter="url(#shadow)"/>
+  <text x="1085" y="190" text-anchor="middle" class="label">Persist truth</text>
+  <text x="1085" y="209" text-anchor="middle" class="sub">use backend returned state</text>
+  <text x="1085" y="224" text-anchor="middle" class="small">no synthetic local truth</text>
+
+  <path d="M 924 200 L 980 200" stroke="#2563eb" stroke-width="2" fill="none" marker-end="url(#arrow-blue)"/>
+
+  <rect x="704" y="296" width="220" height="72" class="box purple" filter="url(#shadow)"/>
+  <text x="814" y="322" text-anchor="middle" class="label">Only if evidence changed</text>
+  <text x="814" y="341" text-anchor="middle" class="sub">save geometry / measures</text>
+  <text x="814" y="356" text-anchor="middle" class="small">rename: Save evidence</text>
+
+  <rect x="980" y="296" width="210" height="72" class="box gray" filter="url(#shadow)"/>
+  <text x="1085" y="322" text-anchor="middle" class="label">No extra confirm</text>
+  <text x="1085" y="341" text-anchor="middle" class="sub">if only status changed</text>
+  <text x="1085" y="356" text-anchor="middle" class="small">state already persisted</text>
+
+  <path d="M 814 236 L 814 296" stroke="#7c3aed" stroke-width="1.8" stroke-dasharray="5 3" fill="none" marker-end="url(#arrow-orange)"/>
+  <rect x="760" y="256" width="108" height="18" rx="4" fill="#ffffff"/>
+  <text x="814" y="269" text-anchor="middle" class="small">optional branch</text>
+  <path d="M 1085 236 L 1085 296" stroke="#059669" stroke-width="2" fill="none" marker-end="url(#arrow-green)"/>
+
+  <rect x="842" y="430" width="220" height="76" class="box green" filter="url(#shadow)"/>
+  <text x="952" y="456" text-anchor="middle" class="label">Task submit / flow</text>
+  <text x="952" y="475" text-anchor="middle" class="sub">gate checks backend states</text>
+  <text x="952" y="491" text-anchor="middle" class="small">workflow only, not annotation saving</text>
+
+  <path d="M 1085 368 C 1085 420 1032 430 952 430" stroke="#059669" stroke-width="2" fill="none" marker-end="url(#arrow-green)"/>
+  <path d="M 814 368 C 814 420 872 430 952 430" stroke="#ea580c" stroke-width="1.8" stroke-dasharray="5 3" fill="none" marker-end="url(#arrow-orange)"/>
+
+  <rect x="704" y="552" width="486" height="88" rx="14" ry="14" fill="#f0fdf4" stroke="#bbf7d0"/>
+  <text x="728" y="579" class="label">User perception</text>
+  <text x="728" y="603" class="note">"I handled the annotation. Extra saving appears only when I added evidence."</text>
+  <text x="728" y="625" class="sub">Keep backend separation, but make the UI path match the user's mental model.</text>
+
+  <g transform="translate(78, 710)">
+    <line x1="0" y1="0" x2="36" y2="0" stroke="#2563eb" stroke-width="2" marker-end="url(#arrow-blue)"/>
+    <text x="46" y="4" class="small">primary action</text>
+    <line x1="160" y1="0" x2="196" y2="0" stroke="#dc2626" stroke-width="2" marker-end="url(#arrow-red)"/>
+    <text x="206" y="4" class="small">problem path</text>
+    <line x1="326" y1="0" x2="362" y2="0" stroke="#059669" stroke-width="2" marker-end="url(#arrow-green)"/>
+    <text x="372" y="4" class="small">recommended persisted truth</text>
+    <line x1="572" y1="0" x2="608" y2="0" stroke="#ea580c" stroke-width="1.8" stroke-dasharray="5 3" marker-end="url(#arrow-orange)"/>
+    <text x="618" y="4" class="small">optional evidence path</text>
+  </g>
+</svg>

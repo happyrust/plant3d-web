@@ -1,0 +1,354 @@
+{
+  "version": "2.0",
+  "description": "模型显示与材质配置文件 - E3D 风格配色（类型基色 + 专业着色 + 重点构件强调）",
+  "lastModified": "2026-08-03",
+  "disciplineOverrides": {
+    "1": "#4682B4",
+    "2": "#E8A33D",
+    "3": "#2FA8C6",
+    "4": "#7CB342",
+    "5": "#A8A29E",
+    "6": "#64748B"
+  },
+  "displaySettings": {
+    "hiddenNouns": [],
+    "defaultVisible": true,
+    "comments": {
+      "hiddenNouns": "列表中的类型默认不显示",
+      "defaultVisible": "未在列表中的类型默认是否可见",
+      "disciplineOverrides": "default 主题下管路元素按专业覆盖颜色；键为 spec_value：1=PIPE 2=ELEC 3=INST 4=HVAC 5=CIVIL 6=STRU（0=未分类不覆盖）"
+    },
+    "hiddenRefnos": []
+  },
+  "defaultMaterial": {
+    "color": "#90a4ae",
+    "metalness": 0.1,
+    "roughness": 0.55,
+    "emissive": "#000000",
+    "emissiveIntensity": 0,
+    "opacity": 1,
+    "clearcoat": 0.3,
+    "clearcoatRoughness": 0.3,
+    "reflectivity": 0.5,
+    "envMapIntensity": 0.8
+  },
+  "materialConfigs": {
+    "EQUI": {
+      "name": "设备",
+      "color": "#C8B27A",
+      "metalness": 0.15,
+      "roughness": 0.5,
+      "clearcoat": 0.2,
+      "clearcoatRoughness": 0.3
+    },
+    "VALV": {
+      "name": "阀门",
+      "color": "#F0C24A",
+      "metalness": 0.45,
+      "roughness": 0.35,
+      "clearcoat": 0.2,
+      "clearcoatRoughness": 0.1
+    },
+    "TUBI": {
+      "name": "直管",
+      "color": "#4682B4",
+      "metalness": 0.18,
+      "roughness": 0.55,
+      "clearcoat": 0.2
+    },
+    "ELBO": {
+      "name": "弯头",
+      "color": "#4682B4",
+      "metalness": 0.18,
+      "roughness": 0.55,
+      "clearcoat": 0.2
+    },
+    "BEND": {
+      "name": "弯管",
+      "color": "#4682B4",
+      "metalness": 0.18,
+      "roughness": 0.55
+    },
+    "TEE": {
+      "name": "三通",
+      "color": "#4682B4",
+      "metalness": 0.18,
+      "roughness": 0.55
+    },
+    "CROS": {
+      "name": "四通",
+      "color": "#4682B4",
+      "metalness": 0.18,
+      "roughness": 0.55
+    },
+    "REDU": {
+      "name": "变径管",
+      "color": "#4682B4",
+      "metalness": 0.18,
+      "roughness": 0.55
+    },
+    "CAP": {
+      "name": "管帽",
+      "color": "#4682B4",
+      "metalness": 0.18,
+      "roughness": 0.55
+    },
+    "PCOM": {
+      "name": "管件组件",
+      "color": "#4682B4",
+      "metalness": 0.18,
+      "roughness": 0.55
+    },
+    "FTUB": {
+      "name": "扁管",
+      "color": "#4682B4",
+      "metalness": 0.18,
+      "roughness": 0.55
+    },
+    "CTOR": {
+      "name": "连接器",
+      "color": "#4682B4",
+      "metalness": 0.18,
+      "roughness": 0.55
+    },
+    "BRAN": {
+      "name": "分支管",
+      "color": "#4682B4",
+      "metalness": 0.18,
+      "roughness": 0.55
+    },
+    "FLAN": {
+      "name": "法兰",
+      "color": "#C9CED6",
+      "metalness": 0.65,
+      "roughness": 0.3,
+      "clearcoat": 0.2
+    },
+    "GASK": {
+      "name": "垫片",
+      "color": "#8D99A6",
+      "metalness": 0.3,
+      "roughness": 0.5
+    },
+    "INST": {
+      "name": "仪表",
+      "color": "#29B8CE",
+      "metalness": 0.35,
+      "roughness": 0.4,
+      "clearcoat": 0.2,
+      "clearcoatRoughness": 0.2
+    },
+    "FILT": {
+      "name": "过滤器",
+      "color": "#93B2C9",
+      "metalness": 0.4,
+      "roughness": 0.45,
+      "clearcoat": 0.2,
+      "clearcoatRoughness": 0.3
+    },
+    "ATTA": {
+      "name": "附件",
+      "color": "#78909C",
+      "metalness": 0.1,
+      "roughness": 0.6
+    },
+    "FIXING": {
+      "name": "固定件",
+      "color": "#78909C",
+      "metalness": 0.2,
+      "roughness": 0.6
+    },
+    "SCTN": {
+      "name": "型钢",
+      "color": "#5D6B7A",
+      "metalness": 0.4,
+      "roughness": 0.55,
+      "clearcoat": 0.1
+    },
+    "STWALL": {
+      "name": "钢墙",
+      "color": "#9AA3AB",
+      "metalness": 0.05,
+      "roughness": 0.8
+    },
+    "FLOOR": {
+      "name": "楼板",
+      "color": "#ABA79F",
+      "metalness": 0,
+      "roughness": 0.85,
+      "opacity": 1
+    },
+    "PANE": {
+      "name": "面板",
+      "color": "#8FA3B8",
+      "metalness": 0.05,
+      "roughness": 0.8,
+      "opacity": 0.45
+    },
+    "BOX": {
+      "name": "箱体",
+      "color": "#C9BE9C",
+      "metalness": 0.12,
+      "roughness": 0.55
+    },
+    "CYLI": {
+      "name": "圆柱",
+      "color": "#C9BE9C",
+      "metalness": 0.12,
+      "roughness": 0.55
+    },
+    "DISH": {
+      "name": "封头",
+      "color": "#C9BE9C",
+      "metalness": 0.12,
+      "roughness": 0.55
+    },
+    "SLCY": {
+      "name": "斜圆柱",
+      "color": "#C9BE9C",
+      "metalness": 0.12,
+      "roughness": 0.55
+    },
+    "CONE": {
+      "name": "锥体",
+      "color": "#C9BE9C",
+      "metalness": 0.12,
+      "roughness": 0.55
+    },
+    "PYRA": {
+      "name": "金字塔形",
+      "color": "#C9BE9C",
+      "metalness": 0.12,
+      "roughness": 0.55
+    },
+    "POHE": {
+      "name": "多面体",
+      "color": "#C9BE9C",
+      "metalness": 0.12,
+      "roughness": 0.55
+    }
+  },
+  "themes": {
+    "e3d": {
+      "name": "E3D",
+      "disciplineMaterials": {
+        "1": {
+          "name": "管道 PIPE",
+          "color": "#4682B4",
+          "metalness": 0.18,
+          "roughness": 0.55,
+          "opacity": 1
+        },
+        "2": {
+          "name": "电气 ELEC",
+          "color": "#E8A33D",
+          "metalness": 0.2,
+          "roughness": 0.5,
+          "opacity": 1
+        },
+        "3": {
+          "name": "仪表 INST",
+          "color": "#2FA8C6",
+          "metalness": 0.22,
+          "roughness": 0.45,
+          "opacity": 1
+        },
+        "4": {
+          "name": "暖通 HVAC",
+          "color": "#7CB342",
+          "metalness": 0.12,
+          "roughness": 0.55,
+          "opacity": 1
+        },
+        "5": {
+          "name": "土建 CIVIL",
+          "color": "#A8A29E",
+          "metalness": 0.05,
+          "roughness": 0.8,
+          "opacity": 1
+        },
+        "6": {
+          "name": "结构 STRU",
+          "color": "#64748B",
+          "metalness": 0.3,
+          "roughness": 0.6,
+          "opacity": 1
+        }
+      },
+      "nounAccents": {
+        "VALV": {
+          "name": "阀门",
+          "color": "#F0C24A",
+          "metalness": 0.45,
+          "roughness": 0.35,
+          "opacity": 1
+        },
+        "FLAN": {
+          "name": "法兰",
+          "color": "#C9CED6",
+          "metalness": 0.65,
+          "roughness": 0.3,
+          "opacity": 1
+        },
+        "GASK": {
+          "name": "垫片",
+          "color": "#8D99A6",
+          "metalness": 0.3,
+          "roughness": 0.5,
+          "opacity": 1
+        },
+        "INST": {
+          "name": "仪表",
+          "color": "#29B8CE",
+          "metalness": 0.35,
+          "roughness": 0.4,
+          "opacity": 1
+        },
+        "ATTA": {
+          "name": "附件",
+          "color": "#78909C",
+          "metalness": 0.1,
+          "roughness": 0.6,
+          "opacity": 1
+        }
+      }
+    },
+    "design3d": {
+      "name": "三维设计",
+      "ownerOverrides": {
+        "BRAN": {
+          "name": "BRAN 下统一配色",
+          "color": "#315CF2",
+          "metalness": 0.25,
+          "roughness": 0.35,
+          "opacity": 1
+        }
+      },
+      "ownerSpecOverrides": {
+        "BRAN": {
+          "PIPE": {
+            "name": "BRAN-PIPE 默认配色",
+            "color": "#315CF2",
+            "metalness": 0.25,
+            "roughness": 0.35,
+            "opacity": 1
+          },
+          "HVAC": {
+            "name": "BRAN-HVAC 默认配色",
+            "color": "#A7C84A",
+            "metalness": 0.25,
+            "roughness": 0.35,
+            "opacity": 1
+          },
+          "UNKNOWN": {
+            "name": "BRAN-UNKNOWN 默认配色",
+            "color": "#315CF2",
+            "metalness": 0.25,
+            "roughness": 0.35,
+            "opacity": 1
+          }
+        }
+      }
+    }
+  }
+}

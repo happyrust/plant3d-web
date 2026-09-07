@@ -1,0 +1,29 @@
+{
+  "id": "angular-right-angle",
+  "kind": "angular",
+  "anchors": {
+    "vertex": [0, 0, 0],
+    "rayA": [1, 0, 0],
+    "rayB": [0, 1, 0]
+  },
+  "variants": [
+    {
+      "id": "angular-right-angle-minor",
+      "placement": {
+        "radiusM": 0.3,
+        "labelT": 0.5,
+        "arcChoice": "minor"
+      },
+      "expectedValueRad": 1.5707963267948966
+    },
+    {
+      "id": "angular-right-angle-major",
+      "placement": {
+        "radiusM": 0.3,
+        "labelT": 0.5,
+        "arcChoice": "major"
+      },
+      "expectedValueRad": 4.71238898038469
+    }
+  ]
+}

@@ -1,0 +1,117 @@
+import { describe, expect, it } from 'vitest';
+
+import {
+  applyTokenPrimaryPmsLaunchUrl,
+  buildTokenPrimaryPmsLaunchSearch,
+  resolveDefaultSimulatorProjectId,
+  resolvePmsLaunchFormId,
+} from './pmsReviewSimulatorLaunchPlan';
+
+describe('resolvePmsLaunchFormId', () => {
+  it('优先保留调用方显式传入的 form_id，避免被 embed query 覆盖', () => {
+    expect(resolvePmsLaunchFormId({
+      preferredFormId: 'FORM-PREFERRED',
+      queryFormId: 'FORM-QUERY',
+      directFormId: 'FORM-DIRECT',
+    })).toBe('FORM-PREFERRED');
+  });
+
+  it('调用方未给 preferred 时，优先使用已验签 token claims.form_id', () => {
+    expect(resolvePmsLaunchFormId({
+      preferredFormId: null,
+      queryFormId: 'FORM-QUERY',
+      directFormId: 'FORM-DIRECT',
+      tokenClaimFormId: 'FORM-TOKEN',
+    })).toBe('FORM-TOKEN');
+  });
+
+  it('falls back to preferred form_id when no backend lineage is available', () => {
+    expect(resolvePmsLaunchFormId({
+      preferredFormId: 'FORM-PREFERRED',
+      queryFormId: null,
+      directFormId: null,
+      tokenClaimFormId: null,
+    })).toBe('FORM-PREFERRED');
+  });
+
+  it('preferred 为空时，再按 direct -> query 回退', () => {
+    expect(resolvePmsLaunchFormId({
+      preferredFormId: null,
+      queryFormId: 'FORM-QUERY',
+      directFormId: 'FORM-DIRECT',
+      tokenClaimFormId: null,
+    })).toBe('FORM-DIRECT');
+  });
+
+  it('仅在 preferred / token / direct 都缺失时，才回退到 query form_id', () => {
+    expect(resolvePmsLaunchFormId({
+      preferredFormId: null,
+      queryFormId: 'FORM-QUERY',
+      directFormId: null,
+      tokenClaimFormId: null,
+    })).toBe('FORM-QUERY');
+  });
+
+  it('builds a token-primary simulator launch query without legacy identity params and reattaches selected output_project', () => {
+    const search = buildTokenPrimaryPmsLaunchSearch({
+      directQuery: new URLSearchParams(
+        'form_id=FORM-DIRECT&workflow_mode=external&project_id=query-project&output_project=query-output&user_id=JH&workflow_role=sh&role=jd&user_role=pz&foo=bar&user_token=should-strip'
+      ),
+      outputProject: 'AvevaMarineSample',
+    });
+
+    expect(search.get('form_id')).toBe('FORM-DIRECT');
+    expect(search.get('output_project')).toBe('AvevaMarineSample');
+    expect(search.get('workflow_mode')).toBeNull();
+    expect(search.get('foo')).toBe('bar');
+    expect(search.has('project_id')).toBe(false);
+    expect(search.has('user_id')).toBe(false);
+    expect(search.has('role')).toBe(false);
+    expect(search.has('workflow_role')).toBe(false);
+    expect(search.has('user_role')).toBe(false);
+    expect(search.has('user_token')).toBe(false);
+  });
+
+  it('always keeps form_id in token-primary final url, and only adds user_id in PMS-like mode', () => {
+    const baseUrl = new URL('http://127.0.0.1:3101/review/3d-view?output_project=AvevaMarineSample');
+
+    const tokenPrimaryUrl = applyTokenPrimaryPmsLaunchUrl(new URL(baseUrl.toString()), {
+      token: 'token-1',
+      formId: 'FORM-123',
+      pmsUserId: 'SJ',
+      includePmsUserId: false,
+    });
+
+    expect(tokenPrimaryUrl.searchParams.get('user_token')).toBe('token-1');
+    expect(tokenPrimaryUrl.searchParams.get('form_id')).toBe('FORM-123');
+    expect(tokenPrimaryUrl.searchParams.get('user_id')).toBeNull();
+
+    const pmsLikeUrl = applyTokenPrimaryPmsLaunchUrl(new URL(baseUrl.toString()), {
+      token: 'token-1',
+      formId: 'FORM-123',
+      pmsUserId: 'SJ',
+      includePmsUserId: true,
+    });
+
+    expect(pmsLikeUrl.searchParams.get('form_id')).toBe('FORM-123');
+    expect(pmsLikeUrl.searchParams.get('user_id')).toBe('SJ');
+  });
+});
+
+describe('resolveDefaultSimulatorProjectId', () => {
+  it('prefers output_project over legacy project_id when resolving simulator project path', () => {
+    expect(resolveDefaultSimulatorProjectId('?project_id=legacy-project&output_project=OutputPath&project=OtherProject', ['OutputPath', 'AvevaMarineSample'])).toBe('OutputPath');
+  });
+
+  it('falls back to the real default project when URL project is not present in backend project list', () => {
+    expect(resolveDefaultSimulatorProjectId('?project=PROJECT-EMBED-001', ['AvevaMarineSample', 'OtherProject'])).toBe('AvevaMarineSample');
+  });
+
+  it('falls back to first available project when stable default project is absent', () => {
+    expect(resolveDefaultSimulatorProjectId('?project=PROJECT-EMBED-001', ['OtherProject', 'FallbackProject'])).toBe('OtherProject');
+  });
+
+  it('still supports explicit project fallback when project list is not available yet', () => {
+    expect(resolveDefaultSimulatorProjectId('?project=NamedProject')).toBe('NamedProject');
+  });
+});

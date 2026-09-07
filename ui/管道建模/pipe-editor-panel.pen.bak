@@ -1,0 +1,1757 @@
+{
+  "version": "2.8",
+  "children": [
+    {
+      "type": "frame",
+      "id": "canvas0",
+      "x": 0,
+      "y": 0,
+      "name": "Frame",
+      "clip": true,
+      "width": 800,
+      "height": 1200,
+      "fill": "#FFFFFF",
+      "layout": "none"
+    },
+    {
+      "type": "frame",
+      "id": "pipeEditorRoot",
+      "x": 0,
+      "y": 0,
+      "name": "管道编辑器面板",
+      "width": 360,
+      "fill": "#FFFFFF",
+      "cornerRadius": 8,
+      "stroke": {
+        "align": "inside",
+        "thickness": 1,
+        "fill": "#E5E7EB"
+      },
+      "effect": {
+        "type": "shadow",
+        "shadowType": "outer",
+        "color": "#0000000f",
+        "offset": { "x": 0, "y": 4 },
+        "blur": 16
+      },
+      "layout": "vertical",
+      "gap": 0,
+      "padding": 0,
+      "children": [
+        {
+          "type": "frame",
+          "id": "peHeader",
+          "name": "header",
+          "width": "fill_container",
+          "fill": "#FAFAFA",
+          "padding": [16, 20],
+          "justifyContent": "space_between",
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "text",
+              "id": "peTitle",
+              "name": "title",
+              "fill": "#111827",
+              "content": "管道编辑器",
+              "fontFamily": "Fira Sans",
+              "fontSize": 16,
+              "fontWeight": "600"
+            },
+            {
+              "type": "frame",
+              "id": "peHeaderActions",
+              "name": "headerActions",
+              "gap": 8,
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "peSetPipeBtn",
+                  "name": "setPipeBtn",
+                  "fill": "#00000000",
+                  "cornerRadius": 6,
+                  "stroke": {
+                    "align": "inside",
+                    "thickness": 1,
+                    "fill": "#E5E7EB"
+                  },
+                  "gap": 6,
+                  "padding": [6, 10],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon_font",
+                      "id": "peSetPipeIcon",
+                      "name": "setPipeIcon",
+                      "width": 14,
+                      "height": 14,
+                      "iconFontName": "mouse-pointer-2",
+                      "iconFontFamily": "lucide",
+                      "fill": "#6B7280"
+                    },
+                    {
+                      "type": "text",
+                      "id": "peSetPipeText",
+                      "name": "setPipeText",
+                      "fill": "#374151",
+                      "content": "选择管道",
+                      "fontFamily": "Fira Sans",
+                      "fontSize": 12,
+                      "fontWeight": "500"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "line",
+          "id": "peDivH",
+          "name": "dividerHeader",
+          "width": "fill_container",
+          "height": 1,
+          "stroke": { "align": "center", "thickness": 1, "fill": "#E5E7EB" }
+        },
+        {
+          "type": "frame",
+          "id": "peBody",
+          "name": "body",
+          "width": "fill_container",
+          "layout": "vertical",
+          "gap": 20,
+          "padding": 20,
+          "children": [
+            {
+              "type": "frame",
+              "id": "pePipeInfoSec",
+              "name": "pipeInfoSection",
+              "width": "fill_container",
+              "layout": "vertical",
+              "gap": 12,
+              "children": [
+                {
+                  "type": "text",
+                  "id": "pePipeInfoTitle",
+                  "name": "pipeInfoTitle",
+                  "fill": "#111827",
+                  "content": "管道信息",
+                  "fontFamily": "Fira Sans",
+                  "fontSize": 14,
+                  "fontWeight": "600"
+                },
+                {
+                  "type": "frame",
+                  "id": "pePipeNameRow",
+                  "name": "pipeNameRow",
+                  "width": "fill_container",
+                  "layout": "vertical",
+                  "gap": 6,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "pePipeNameLabel",
+                      "name": "pipeNameLabel",
+                      "fill": "#6B7280",
+                      "content": "管道名称",
+                      "fontFamily": "Fira Sans",
+                      "fontSize": 12,
+                      "fontWeight": "500"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "pePipeNameInput",
+                      "name": "pipeNameInput",
+                      "width": "fill_container",
+                      "cornerRadius": 6,
+                      "stroke": {
+                        "align": "inside",
+                        "thickness": 1,
+                        "fill": "#E5E7EB"
+                      },
+                      "padding": [8, 12],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "pePipeNameVal",
+                          "name": "pipeNameVal",
+                          "fill": "#111827",
+                          "content": "/PIPE-001",
+                          "fontFamily": "Fira Code",
+                          "fontSize": 13,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "pePipeSystemRow",
+                  "name": "pipeSystemRow",
+                  "width": "fill_container",
+                  "layout": "vertical",
+                  "gap": 6,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "pePipeSystemLabel",
+                      "name": "pipeSystemLabel",
+                      "fill": "#6B7280",
+                      "content": "主系统",
+                      "fontFamily": "Fira Sans",
+                      "fontSize": 12,
+                      "fontWeight": "500"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "pePipeSystemSelect",
+                      "name": "pipeSystemSelect",
+                      "width": "fill_container",
+                      "cornerRadius": 6,
+                      "stroke": {
+                        "align": "inside",
+                        "thickness": 1,
+                        "fill": "#E5E7EB"
+                      },
+                      "padding": [8, 12],
+                      "justifyContent": "space_between",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "pePipeSystemVal",
+                          "name": "pipeSystemVal",
+                          "fill": "#111827",
+                          "content": "No System",
+                          "fontFamily": "Fira Sans",
+                          "fontSize": 13,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "icon_font",
+                          "id": "pePipeSystemChevron",
+                          "name": "chevron",
+                          "width": 14,
+                          "height": 14,
+                          "iconFontName": "chevron-down",
+                          "iconFontFamily": "lucide",
+                          "fill": "#9CA3AF"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "line",
+              "id": "peDiv1",
+              "name": "divider1",
+              "width": "fill_container",
+              "height": 1,
+              "stroke": { "align": "center", "thickness": 1, "fill": "#E5E7EB" }
+            },
+            {
+              "type": "frame",
+              "id": "peSpecSec",
+              "name": "specSection",
+              "width": "fill_container",
+              "layout": "vertical",
+              "gap": 12,
+              "children": [
+                {
+                  "type": "text",
+                  "id": "peSpecTitle",
+                  "name": "specTitle",
+                  "fill": "#111827",
+                  "content": "规格设置",
+                  "fontFamily": "Fira Sans",
+                  "fontSize": 14,
+                  "fontWeight": "600"
+                },
+                {
+                  "type": "frame",
+                  "id": "peSpecPiping",
+                  "name": "specPipingRow",
+                  "width": "fill_container",
+                  "layout": "vertical",
+                  "gap": 6,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "peSpecPipingLabel",
+                      "name": "specPipingLabel",
+                      "fill": "#6B7280",
+                      "content": "管道规格",
+                      "fontFamily": "Fira Sans",
+                      "fontSize": 12,
+                      "fontWeight": "500"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "peSpecPipingSelect",
+                      "name": "specPipingSelect",
+                      "width": "fill_container",
+                      "cornerRadius": 6,
+                      "stroke": {
+                        "align": "inside",
+                        "thickness": 1,
+                        "fill": "#E5E7EB"
+                      },
+                      "padding": [8, 12],
+                      "justifyContent": "space_between",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "peSpecPipingVal",
+                          "name": "specPipingVal",
+                          "fill": "#111827",
+                          "content": "CS150 (Carbon Steel 150#)",
+                          "fontFamily": "Fira Sans",
+                          "fontSize": 13,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "icon_font",
+                          "id": "peSpecPipingChevron",
+                          "name": "chevron",
+                          "width": 14,
+                          "height": 14,
+                          "iconFontName": "chevron-down",
+                          "iconFontFamily": "lucide",
+                          "fill": "#9CA3AF"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "peSpecInsuRow",
+                  "name": "specInsulationRow",
+                  "width": "fill_container",
+                  "gap": 12,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "peSpecInsuGroup",
+                      "name": "specInsulationGroup",
+                      "width": "fill_container",
+                      "layout": "vertical",
+                      "gap": 6,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "peSpecInsuLabel",
+                          "name": "specInsuLabel",
+                          "fill": "#6B7280",
+                          "content": "保温规格",
+                          "fontFamily": "Fira Sans",
+                          "fontSize": 12,
+                          "fontWeight": "500"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "peSpecInsuSelect",
+                          "name": "specInsuSelect",
+                          "width": "fill_container",
+                          "cornerRadius": 6,
+                          "stroke": {
+                            "align": "inside",
+                            "thickness": 1,
+                            "fill": "#E5E7EB"
+                          },
+                          "padding": [8, 12],
+                          "justifyContent": "space_between",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "peSpecInsuVal",
+                              "name": "specInsuVal",
+                              "fill": "#6B7280",
+                              "content": "Off",
+                              "fontFamily": "Fira Sans",
+                              "fontSize": 13,
+                              "fontWeight": "normal"
+                            },
+                            {
+                              "type": "icon_font",
+                              "id": "peSpecInsuChevron",
+                              "name": "chevron",
+                              "width": 14,
+                              "height": 14,
+                              "iconFontName": "chevron-down",
+                              "iconFontFamily": "lucide",
+                              "fill": "#9CA3AF"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "peSpecTraceGroup",
+                      "name": "specTracingGroup",
+                      "width": "fill_container",
+                      "layout": "vertical",
+                      "gap": 6,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "peSpecTraceLabel",
+                          "name": "specTraceLabel",
+                          "fill": "#6B7280",
+                          "content": "伴热规格",
+                          "fontFamily": "Fira Sans",
+                          "fontSize": 12,
+                          "fontWeight": "500"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "peSpecTraceSelect",
+                          "name": "specTraceSelect",
+                          "width": "fill_container",
+                          "cornerRadius": 6,
+                          "stroke": {
+                            "align": "inside",
+                            "thickness": 1,
+                            "fill": "#E5E7EB"
+                          },
+                          "padding": [8, 12],
+                          "justifyContent": "space_between",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "peSpecTraceVal",
+                              "name": "specTraceVal",
+                              "fill": "#6B7280",
+                              "content": "Off",
+                              "fontFamily": "Fira Sans",
+                              "fontSize": 13,
+                              "fontWeight": "normal"
+                            },
+                            {
+                              "type": "icon_font",
+                              "id": "peSpecTraceChevron",
+                              "name": "chevron",
+                              "width": 14,
+                              "height": 14,
+                              "iconFontName": "chevron-down",
+                              "iconFontFamily": "lucide",
+                              "fill": "#9CA3AF"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "line",
+              "id": "peDiv2",
+              "name": "divider2",
+              "width": "fill_container",
+              "height": 1,
+              "stroke": { "align": "center", "thickness": 1, "fill": "#E5E7EB" }
+            },
+            {
+              "type": "frame",
+              "id": "peBranchSec",
+              "name": "branchSection",
+              "width": "fill_container",
+              "layout": "vertical",
+              "gap": 12,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "peBranchHeader",
+                  "name": "branchHeader",
+                  "width": "fill_container",
+                  "justifyContent": "space_between",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "peBranchTitle",
+                      "name": "branchTitle",
+                      "fill": "#111827",
+                      "content": "分支列表",
+                      "fontFamily": "Fira Sans",
+                      "fontSize": 14,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "peBranchActions",
+                      "name": "branchActions",
+                      "gap": 6,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "peNewBranchBtn",
+                          "name": "newBranchBtn",
+                          "fill": "#FF6B00",
+                          "cornerRadius": 6,
+                          "gap": 4,
+                          "padding": [5, 10],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon_font",
+                              "id": "peNewBranchIcon",
+                              "name": "newBranchIcon",
+                              "width": 12,
+                              "height": 12,
+                              "iconFontName": "plus",
+                              "iconFontFamily": "lucide",
+                              "fill": "#FFFFFF"
+                            },
+                            {
+                              "type": "text",
+                              "id": "peNewBranchText",
+                              "name": "newBranchText",
+                              "fill": "#FFFFFF",
+                              "content": "新建分支",
+                              "fontFamily": "Fira Sans",
+                              "fontSize": 12,
+                              "fontWeight": "500"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "peAutoRouteBtn",
+                          "name": "autoRouteBtn",
+                          "fill": "#00000000",
+                          "cornerRadius": 6,
+                          "stroke": {
+                            "align": "inside",
+                            "thickness": 1,
+                            "fill": "#E5E7EB"
+                          },
+                          "gap": 4,
+                          "padding": [5, 10],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon_font",
+                              "id": "peAutoRouteIcon",
+                              "name": "autoRouteIcon",
+                              "width": 12,
+                              "height": 12,
+                              "iconFontName": "route",
+                              "iconFontFamily": "lucide",
+                              "fill": "#6B7280"
+                            },
+                            {
+                              "type": "text",
+                              "id": "peAutoRouteText",
+                              "name": "autoRouteText",
+                              "fill": "#374151",
+                              "content": "自动路由",
+                              "fontFamily": "Fira Sans",
+                              "fontSize": 12,
+                              "fontWeight": "500"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "peBranchTableHeader",
+                  "name": "branchTableHeader",
+                  "width": "fill_container",
+                  "fill": "#F9FAFB",
+                  "cornerRadius": [6, 6, 0, 0],
+                  "stroke": {
+                    "align": "inside",
+                    "thickness": 1,
+                    "fill": "#E5E7EB"
+                  },
+                  "padding": [8, 12],
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "peBranchColName",
+                      "name": "colName",
+                      "width": 100,
+                      "fill": "#6B7280",
+                      "content": "分支",
+                      "fontFamily": "Fira Sans",
+                      "fontSize": 11,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "peBranchColHead",
+                      "name": "colHead",
+                      "width": 90,
+                      "fill": "#6B7280",
+                      "content": "Head",
+                      "fontFamily": "Fira Sans",
+                      "fontSize": 11,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "peBranchColTail",
+                      "name": "colTail",
+                      "width": 90,
+                      "fill": "#6B7280",
+                      "content": "Tail",
+                      "fontFamily": "Fira Sans",
+                      "fontSize": 11,
+                      "fontWeight": "600"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "peBranchListContainer",
+                  "name": "branchListContainer",
+                  "width": "fill_container",
+                  "stroke": {
+                    "align": "inside",
+                    "thickness": 1,
+                    "fill": "#E5E7EB"
+                  },
+                  "cornerRadius": [0, 0, 6, 6],
+                  "layout": "vertical",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "peBranchRow1",
+                      "name": "branchRow1",
+                      "width": "fill_container",
+                      "fill": "#FFF0E6",
+                      "padding": [10, 12],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "peBranch1Name",
+                          "name": "branch1Name",
+                          "width": 100,
+                          "fill": "#FF6B00",
+                          "content": "/B1",
+                          "fontFamily": "Fira Code",
+                          "fontSize": 12,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "text",
+                          "id": "peBranch1Head",
+                          "name": "branch1Head",
+                          "width": 90,
+                          "fill": "#111827",
+                          "content": "N1-PUMP",
+                          "fontFamily": "Fira Sans",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "peBranch1Tail",
+                          "name": "branch1Tail",
+                          "width": 90,
+                          "fill": "#111827",
+                          "content": "N2-TANK",
+                          "fontFamily": "Fira Sans",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "line",
+                      "id": "peBranchRowDiv1",
+                      "name": "rowDivider1",
+                      "width": "fill_container",
+                      "height": 1,
+                      "stroke": { "align": "center", "thickness": 1, "fill": "#F3F4F6" }
+                    },
+                    {
+                      "type": "frame",
+                      "id": "peBranchRow2",
+                      "name": "branchRow2",
+                      "width": "fill_container",
+                      "fill": "#00000000",
+                      "padding": [10, 12],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "peBranch2Name",
+                          "name": "branch2Name",
+                          "width": 100,
+                          "fill": "#374151",
+                          "content": "/B2",
+                          "fontFamily": "Fira Code",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "peBranch2Head",
+                          "name": "branch2Head",
+                          "width": 90,
+                          "fill": "#6B7280",
+                          "content": "TEE-B1",
+                          "fontFamily": "Fira Sans",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "peBranch2Tail",
+                          "name": "branch2Tail",
+                          "width": 90,
+                          "fill": "#6B7280",
+                          "content": "Open",
+                          "fontFamily": "Fira Sans",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "line",
+              "id": "peDiv3",
+              "name": "divider3",
+              "width": "fill_container",
+              "height": 1,
+              "stroke": { "align": "center", "thickness": 1, "fill": "#E5E7EB" }
+            },
+            {
+              "type": "frame",
+              "id": "peBranchDetailSec",
+              "name": "branchDetailSection",
+              "width": "fill_container",
+              "layout": "vertical",
+              "gap": 12,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "peBranchDetailHeader",
+                  "name": "branchDetailHeader",
+                  "width": "fill_container",
+                  "justifyContent": "space_between",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "peBranchDetailTitleGroup",
+                      "name": "branchDetailTitleGroup",
+                      "gap": 8,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "peBranchDetailTitle",
+                          "name": "branchDetailTitle",
+                          "fill": "#111827",
+                          "content": "分支详情",
+                          "fontFamily": "Fira Sans",
+                          "fontSize": 14,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "peBranchBadge",
+                          "name": "branchBadge",
+                          "fill": "#FFF0E6",
+                          "cornerRadius": 4,
+                          "padding": [2, 8],
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "peBranchBadgeText",
+                              "name": "branchBadgeText",
+                              "fill": "#FF6B00",
+                              "content": "/B1",
+                              "fontFamily": "Fira Code",
+                              "fontSize": 11,
+                              "fontWeight": "600"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "peComponentBtn",
+                      "name": "componentEditorBtn",
+                      "fill": "#00000000",
+                      "cornerRadius": 6,
+                      "stroke": {
+                        "align": "inside",
+                        "thickness": 1.5,
+                        "fill": "#FF6B00"
+                      },
+                      "gap": 4,
+                      "padding": [5, 10],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon_font",
+                          "id": "peCompIcon",
+                          "name": "compIcon",
+                          "width": 12,
+                          "height": 12,
+                          "iconFontName": "puzzle",
+                          "iconFontFamily": "lucide",
+                          "fill": "#FF6B00"
+                        },
+                        {
+                          "type": "text",
+                          "id": "peCompText",
+                          "name": "compText",
+                          "fill": "#FF6B00",
+                          "content": "创建管件",
+                          "fontFamily": "Fira Sans",
+                          "fontSize": 12,
+                          "fontWeight": "500"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "peBranchSpecRow",
+                  "name": "branchSpecRow",
+                  "width": "fill_container",
+                  "gap": 12,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "peBranchSpecGroup",
+                      "name": "branchSpecGroup",
+                      "width": "fill_container",
+                      "layout": "vertical",
+                      "gap": 6,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "peBranchSpecLabel",
+                          "name": "branchSpecLabel",
+                          "fill": "#6B7280",
+                          "content": "分支规格",
+                          "fontFamily": "Fira Sans",
+                          "fontSize": 12,
+                          "fontWeight": "500"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "peBranchSpecSelect",
+                          "name": "branchSpecSelect",
+                          "width": "fill_container",
+                          "cornerRadius": 6,
+                          "stroke": {
+                            "align": "inside",
+                            "thickness": 1,
+                            "fill": "#E5E7EB"
+                          },
+                          "padding": [8, 12],
+                          "justifyContent": "space_between",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "peBranchSpecVal",
+                              "name": "branchSpecVal",
+                              "fill": "#111827",
+                              "content": "CS150",
+                              "fontFamily": "Fira Sans",
+                              "fontSize": 13,
+                              "fontWeight": "normal"
+                            },
+                            {
+                              "type": "icon_font",
+                              "id": "peBranchSpecChevron",
+                              "name": "chevron",
+                              "width": 14,
+                              "height": 14,
+                              "iconFontName": "chevron-down",
+                              "iconFontFamily": "lucide",
+                              "fill": "#9CA3AF"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "peBranchBoreGroup",
+                      "name": "branchBoreGroup",
+                      "width": 100,
+                      "layout": "vertical",
+                      "gap": 6,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "peBranchBoreLabel",
+                          "name": "branchBoreLabel",
+                          "fill": "#6B7280",
+                          "content": "口径",
+                          "fontFamily": "Fira Sans",
+                          "fontSize": 12,
+                          "fontWeight": "500"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "peBranchBoreInput",
+                          "name": "branchBoreInput",
+                          "width": "fill_container",
+                          "cornerRadius": 6,
+                          "stroke": {
+                            "align": "inside",
+                            "thickness": 1,
+                            "fill": "#E5E7EB"
+                          },
+                          "padding": [8, 12],
+                          "justifyContent": "space_between",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "peBranchBoreVal",
+                              "name": "branchBoreVal",
+                              "fill": "#111827",
+                              "content": "150",
+                              "fontFamily": "Fira Code",
+                              "fontSize": 13,
+                              "fontWeight": "normal"
+                            },
+                            {
+                              "type": "text",
+                              "id": "peBranchBoreSuffix",
+                              "name": "branchBoreSuffix",
+                              "fill": "#6B7280",
+                              "content": "mm",
+                              "fontFamily": "Fira Sans",
+                              "fontSize": 12,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "peHeadTailTabs",
+                  "name": "headTailTabs",
+                  "width": "fill_container",
+                  "layout": "vertical",
+                  "gap": 0,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "peTabBar",
+                      "name": "tabBar",
+                      "width": "fill_container",
+                      "fill": "#F9FAFB",
+                      "cornerRadius": [6, 6, 0, 0],
+                      "stroke": {
+                        "align": "inside",
+                        "thickness": 1,
+                        "fill": "#E5E7EB"
+                      },
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "peTabHead",
+                          "name": "tabHead",
+                          "width": "fill_container",
+                          "fill": "#FFFFFF",
+                          "cornerRadius": [6, 0, 0, 0],
+                          "padding": [10, 0],
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "stroke": {
+                            "align": "inside",
+                            "thickness": 1,
+                            "fill": "#E5E7EB"
+                          },
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "peTabHeadText",
+                              "name": "tabHeadText",
+                              "fill": "#FF6B00",
+                              "content": "Head 端",
+                              "fontFamily": "Fira Sans",
+                              "fontSize": 13,
+                              "fontWeight": "600"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "peTabTail",
+                          "name": "tabTail",
+                          "width": "fill_container",
+                          "fill": "#F9FAFB",
+                          "cornerRadius": [0, 6, 0, 0],
+                          "padding": [10, 0],
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "peTabTailText",
+                              "name": "tabTailText",
+                              "fill": "#6B7280",
+                              "content": "Tail 端",
+                              "fontFamily": "Fira Sans",
+                              "fontSize": 13,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "peTabContent",
+                      "name": "tabContent",
+                      "width": "fill_container",
+                      "stroke": {
+                        "align": "inside",
+                        "thickness": 1,
+                        "fill": "#E5E7EB"
+                      },
+                      "cornerRadius": [0, 0, 6, 6],
+                      "layout": "vertical",
+                      "gap": 12,
+                      "padding": 14,
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "peConnRow",
+                          "name": "connectionRow",
+                          "width": "fill_container",
+                          "layout": "vertical",
+                          "gap": 6,
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "peConnLabel",
+                              "name": "connLabel",
+                              "fill": "#6B7280",
+                              "content": "连接目标",
+                              "fontFamily": "Fira Sans",
+                              "fontSize": 12,
+                              "fontWeight": "500"
+                            },
+                            {
+                              "type": "frame",
+                              "id": "peConnInputRow",
+                              "name": "connInputRow",
+                              "width": "fill_container",
+                              "gap": 8,
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "frame",
+                                  "id": "peConnInput",
+                                  "name": "connInput",
+                                  "width": "fill_container",
+                                  "cornerRadius": 6,
+                                  "stroke": {
+                                    "align": "inside",
+                                    "thickness": 1,
+                                    "fill": "#E5E7EB"
+                                  },
+                                  "padding": [8, 12],
+                                  "alignItems": "center",
+                                  "children": [
+                                    {
+                                      "type": "text",
+                                      "id": "peConnVal",
+                                      "name": "connVal",
+                                      "fill": "#111827",
+                                      "content": "/N1-PUMP",
+                                      "fontFamily": "Fira Code",
+                                      "fontSize": 12,
+                                      "fontWeight": "normal"
+                                    }
+                                  ]
+                                },
+                                {
+                                  "type": "frame",
+                                  "id": "peConnPickBtn",
+                                  "name": "connPickBtn",
+                                  "fill": "#00000000",
+                                  "cornerRadius": 6,
+                                  "stroke": {
+                                    "align": "inside",
+                                    "thickness": 1,
+                                    "fill": "#FF6B00"
+                                  },
+                                  "padding": [7, 8],
+                                  "children": [
+                                    {
+                                      "type": "icon_font",
+                                      "id": "peConnPickIcon",
+                                      "name": "connPickIcon",
+                                      "width": 14,
+                                      "height": 14,
+                                      "iconFontName": "crosshair",
+                                      "iconFontFamily": "lucide",
+                                      "fill": "#FF6B00"
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "peConnActions",
+                          "name": "connActions",
+                          "width": "fill_container",
+                          "gap": 8,
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "peDisconnectBtn",
+                              "name": "disconnectBtn",
+                              "fill": "#00000000",
+                              "cornerRadius": 6,
+                              "stroke": {
+                                "align": "inside",
+                                "thickness": 1,
+                                "fill": "#E5E7EB"
+                              },
+                              "gap": 4,
+                              "padding": [5, 10],
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "icon_font",
+                                  "id": "peDisconnIcon",
+                                  "name": "disconnIcon",
+                                  "width": 12,
+                                  "height": 12,
+                                  "iconFontName": "unlink",
+                                  "iconFontFamily": "lucide",
+                                  "fill": "#6B7280"
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "peDisconnText",
+                                  "name": "disconnText",
+                                  "fill": "#374151",
+                                  "content": "断开",
+                                  "fontFamily": "Fira Sans",
+                                  "fontSize": 12,
+                                  "fontWeight": "500"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "peReconnectBtn",
+                              "name": "reconnectBtn",
+                              "fill": "#00000000",
+                              "cornerRadius": 6,
+                              "stroke": {
+                                "align": "inside",
+                                "thickness": 1,
+                                "fill": "#E5E7EB"
+                              },
+                              "gap": 4,
+                              "padding": [5, 10],
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "icon_font",
+                                  "id": "peReconnIcon",
+                                  "name": "reconnIcon",
+                                  "width": 12,
+                                  "height": 12,
+                                  "iconFontName": "link",
+                                  "iconFontFamily": "lucide",
+                                  "fill": "#6B7280"
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "peReconnText",
+                                  "name": "reconnText",
+                                  "fill": "#374151",
+                                  "content": "重连",
+                                  "fontFamily": "Fira Sans",
+                                  "fontSize": 12,
+                                  "fontWeight": "500"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "line",
+                          "id": "peConnDiv",
+                          "name": "connDivider",
+                          "width": "fill_container",
+                          "height": 1,
+                          "stroke": { "align": "center", "thickness": 1, "fill": "#F3F4F6" }
+                        },
+                        {
+                          "type": "frame",
+                          "id": "pePosRow",
+                          "name": "positionRow",
+                          "width": "fill_container",
+                          "layout": "vertical",
+                          "gap": 6,
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "pePosLabelRow",
+                              "name": "posLabelRow",
+                              "width": "fill_container",
+                              "justifyContent": "space_between",
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "pePosLabel",
+                                  "name": "posLabel",
+                                  "fill": "#6B7280",
+                                  "content": "位置 (E / N / U)",
+                                  "fontFamily": "Fira Sans",
+                                  "fontSize": 12,
+                                  "fontWeight": "500"
+                                },
+                                {
+                                  "type": "frame",
+                                  "id": "pePosPickBtn",
+                                  "name": "posPickBtn",
+                                  "fill": "#00000000",
+                                  "cornerRadius": 4,
+                                  "stroke": {
+                                    "align": "inside",
+                                    "thickness": 1,
+                                    "fill": "#E5E7EB"
+                                  },
+                                  "padding": [4, 6],
+                                  "children": [
+                                    {
+                                      "type": "icon_font",
+                                      "id": "pePosPickIcon",
+                                      "name": "posPickIcon",
+                                      "width": 12,
+                                      "height": 12,
+                                      "iconFontName": "move-3d",
+                                      "iconFontFamily": "lucide",
+                                      "fill": "#6B7280"
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "pePosInputs",
+                              "name": "posInputs",
+                              "width": "fill_container",
+                              "gap": 6,
+                              "children": [
+                                {
+                                  "type": "frame",
+                                  "id": "pePosE",
+                                  "name": "posE",
+                                  "width": "fill_container",
+                                  "cornerRadius": 6,
+                                  "stroke": {
+                                    "align": "inside",
+                                    "thickness": 1,
+                                    "fill": "#E5E7EB"
+                                  },
+                                  "padding": [8, 10],
+                                  "justifyContent": "space_between",
+                                  "alignItems": "center",
+                                  "children": [
+                                    {
+                                      "type": "text",
+                                      "id": "pePosEVal",
+                                      "name": "posEVal",
+                                      "fill": "#111827",
+                                      "content": "1200",
+                                      "fontFamily": "Fira Code",
+                                      "fontSize": 12,
+                                      "fontWeight": "normal"
+                                    },
+                                    {
+                                      "type": "text",
+                                      "id": "pePosELabel",
+                                      "name": "posELabel",
+                                      "fill": "#9CA3AF",
+                                      "content": "E",
+                                      "fontFamily": "Fira Sans",
+                                      "fontSize": 11,
+                                      "fontWeight": "500"
+                                    }
+                                  ]
+                                },
+                                {
+                                  "type": "frame",
+                                  "id": "pePosN",
+                                  "name": "posN",
+                                  "width": "fill_container",
+                                  "cornerRadius": 6,
+                                  "stroke": {
+                                    "align": "inside",
+                                    "thickness": 1,
+                                    "fill": "#E5E7EB"
+                                  },
+                                  "padding": [8, 10],
+                                  "justifyContent": "space_between",
+                                  "alignItems": "center",
+                                  "children": [
+                                    {
+                                      "type": "text",
+                                      "id": "pePosNVal",
+                                      "name": "posNVal",
+                                      "fill": "#111827",
+                                      "content": "3400",
+                                      "fontFamily": "Fira Code",
+                                      "fontSize": 12,
+                                      "fontWeight": "normal"
+                                    },
+                                    {
+                                      "type": "text",
+                                      "id": "pePosNLabel",
+                                      "name": "posNLabel",
+                                      "fill": "#9CA3AF",
+                                      "content": "N",
+                                      "fontFamily": "Fira Sans",
+                                      "fontSize": 11,
+                                      "fontWeight": "500"
+                                    }
+                                  ]
+                                },
+                                {
+                                  "type": "frame",
+                                  "id": "pePosU",
+                                  "name": "posU",
+                                  "width": "fill_container",
+                                  "cornerRadius": 6,
+                                  "stroke": {
+                                    "align": "inside",
+                                    "thickness": 1,
+                                    "fill": "#E5E7EB"
+                                  },
+                                  "padding": [8, 10],
+                                  "justifyContent": "space_between",
+                                  "alignItems": "center",
+                                  "children": [
+                                    {
+                                      "type": "text",
+                                      "id": "pePosUVal",
+                                      "name": "posUVal",
+                                      "fill": "#111827",
+                                      "content": "5600",
+                                      "fontFamily": "Fira Code",
+                                      "fontSize": 12,
+                                      "fontWeight": "normal"
+                                    },
+                                    {
+                                      "type": "text",
+                                      "id": "pePosULabel",
+                                      "name": "posULabel",
+                                      "fill": "#9CA3AF",
+                                      "content": "U",
+                                      "fontFamily": "Fira Sans",
+                                      "fontSize": 11,
+                                      "fontWeight": "500"
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "peDirRow",
+                          "name": "directionRow",
+                          "width": "fill_container",
+                          "layout": "vertical",
+                          "gap": 6,
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "peDirLabel",
+                              "name": "dirLabel",
+                              "fill": "#6B7280",
+                              "content": "方向",
+                              "fontFamily": "Fira Sans",
+                              "fontSize": 12,
+                              "fontWeight": "500"
+                            },
+                            {
+                              "type": "frame",
+                              "id": "peDirInput",
+                              "name": "dirInput",
+                              "width": "fill_container",
+                              "cornerRadius": 6,
+                              "stroke": {
+                                "align": "inside",
+                                "thickness": 1,
+                                "fill": "#E5E7EB"
+                              },
+                              "padding": [8, 12],
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "peDirVal",
+                                  "name": "dirVal",
+                                  "fill": "#111827",
+                                  "content": "N 0  E 0  U 1",
+                                  "fontFamily": "Fira Code",
+                                  "fontSize": 12,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "peConnTypeRow",
+                          "name": "connTypeRow",
+                          "width": "fill_container",
+                          "gap": 12,
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "peConnTypeGroup",
+                              "name": "connTypeGroup",
+                              "width": "fill_container",
+                              "layout": "vertical",
+                              "gap": 6,
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "peConnTypeLabel",
+                                  "name": "connTypeLabel",
+                                  "fill": "#6B7280",
+                                  "content": "连接类型",
+                                  "fontFamily": "Fira Sans",
+                                  "fontSize": 12,
+                                  "fontWeight": "500"
+                                },
+                                {
+                                  "type": "frame",
+                                  "id": "peConnTypeSelect",
+                                  "name": "connTypeSelect",
+                                  "width": "fill_container",
+                                  "cornerRadius": 6,
+                                  "stroke": {
+                                    "align": "inside",
+                                    "thickness": 1,
+                                    "fill": "#E5E7EB"
+                                  },
+                                  "padding": [8, 12],
+                                  "justifyContent": "space_between",
+                                  "alignItems": "center",
+                                  "children": [
+                                    {
+                                      "type": "text",
+                                      "id": "peConnTypeVal",
+                                      "name": "connTypeVal",
+                                      "fill": "#111827",
+                                      "content": "BUTT WELD",
+                                      "fontFamily": "Fira Sans",
+                                      "fontSize": 13,
+                                      "fontWeight": "normal"
+                                    },
+                                    {
+                                      "type": "icon_font",
+                                      "id": "peConnTypeChevron",
+                                      "name": "chevron",
+                                      "width": 14,
+                                      "height": 14,
+                                      "iconFontName": "chevron-down",
+                                      "iconFontFamily": "lucide",
+                                      "fill": "#9CA3AF"
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "peBoreGroup",
+                              "name": "headBoreGroup",
+                              "width": 80,
+                              "layout": "vertical",
+                              "gap": 6,
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "peHeadBoreLabel",
+                                  "name": "headBoreLabel",
+                                  "fill": "#6B7280",
+                                  "content": "口径",
+                                  "fontFamily": "Fira Sans",
+                                  "fontSize": 12,
+                                  "fontWeight": "500"
+                                },
+                                {
+                                  "type": "frame",
+                                  "id": "peHeadBoreInput",
+                                  "name": "headBoreInput",
+                                  "width": "fill_container",
+                                  "cornerRadius": 6,
+                                  "stroke": {
+                                    "align": "inside",
+                                    "thickness": 1,
+                                    "fill": "#E5E7EB"
+                                  },
+                                  "padding": [8, 12],
+                                  "alignItems": "center",
+                                  "children": [
+                                    {
+                                      "type": "text",
+                                      "id": "peHeadBoreVal",
+                                      "name": "headBoreVal",
+                                      "fill": "#111827",
+                                      "content": "150",
+                                      "fontFamily": "Fira Code",
+                                      "fontSize": 13,
+                                      "fontWeight": "normal"
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "line",
+              "id": "peDiv4",
+              "name": "divider4",
+              "width": "fill_container",
+              "height": 1,
+              "stroke": { "align": "center", "thickness": 1, "fill": "#E5E7EB" }
+            },
+            {
+              "type": "frame",
+              "id": "peProcessSec",
+              "name": "processDataSection",
+              "width": "fill_container",
+              "layout": "vertical",
+              "gap": 12,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "peProcessHeader",
+                  "name": "processHeader",
+                  "width": "fill_container",
+                  "justifyContent": "space_between",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "peProcessTitle",
+                      "name": "processTitle",
+                      "fill": "#111827",
+                      "content": "工艺参数",
+                      "fontFamily": "Fira Sans",
+                      "fontSize": 14,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "icon_font",
+                      "id": "peProcessChevron",
+                      "name": "processChevron",
+                      "width": 16,
+                      "height": 16,
+                      "iconFontName": "chevron-down",
+                      "iconFontFamily": "lucide",
+                      "fill": "#9CA3AF"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "peProcessGrid",
+                  "name": "processGrid",
+                  "width": "fill_container",
+                  "gap": 12,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "peTempGroup",
+                      "name": "tempGroup",
+                      "width": "fill_container",
+                      "layout": "vertical",
+                      "gap": 6,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "peTempLabel",
+                          "name": "tempLabel",
+                          "fill": "#6B7280",
+                          "content": "温度",
+                          "fontFamily": "Fira Sans",
+                          "fontSize": 12,
+                          "fontWeight": "500"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "peTempInput",
+                          "name": "tempInput",
+                          "width": "fill_container",
+                          "cornerRadius": 6,
+                          "stroke": {
+                            "align": "inside",
+                            "thickness": 1,
+                            "fill": "#E5E7EB"
+                          },
+                          "padding": [8, 12],
+                          "justifyContent": "space_between",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "peTempVal",
+                              "name": "tempVal",
+                              "fill": "#111827",
+                              "content": "120",
+                              "fontFamily": "Fira Code",
+                              "fontSize": 13,
+                              "fontWeight": "normal"
+                            },
+                            {
+                              "type": "text",
+                              "id": "peTempSuffix",
+                              "name": "tempSuffix",
+                              "fill": "#6B7280",
+                              "content": "°C",
+                              "fontFamily": "Fira Sans",
+                              "fontSize": 12,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "pePressGroup",
+                      "name": "pressGroup",
+                      "width": "fill_container",
+                      "layout": "vertical",
+                      "gap": 6,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "pePressLabel",
+                          "name": "pressLabel",
+                          "fill": "#6B7280",
+                          "content": "压力",
+                          "fontFamily": "Fira Sans",
+                          "fontSize": 12,
+                          "fontWeight": "500"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "pePressInput",
+                          "name": "pressInput",
+                          "width": "fill_container",
+                          "cornerRadius": 6,
+                          "stroke": {
+                            "align": "inside",
+                            "thickness": 1,
+                            "fill": "#E5E7EB"
+                          },
+                          "padding": [8, 12],
+                          "justifyContent": "space_between",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "pePressVal",
+                              "name": "pressVal",
+                              "fill": "#111827",
+                              "content": "1.6",
+                              "fontFamily": "Fira Code",
+                              "fontSize": 13,
+                              "fontWeight": "normal"
+                            },
+                            {
+                              "type": "text",
+                              "id": "pePressSuffix",
+                              "name": "pressSuffix",
+                              "fill": "#6B7280",
+                              "content": "MPa",
+                              "fontFamily": "Fira Sans",
+                              "fontSize": 12,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "peApplyBtn",
+              "name": "applyBtn",
+              "width": "fill_container",
+              "fill": "#FF6B00",
+              "cornerRadius": 6,
+              "padding": [10, 16],
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "peApplyText",
+                  "name": "applyText",
+                  "fill": "#FFFFFF",
+                  "content": "应用",
+                  "fontFamily": "Fira Sans",
+                  "fontSize": 14,
+                  "fontWeight": "500"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="zh">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Review Attachment Harness</title>
+    <style>
+      body { margin: 0; background: #eef1f5; font-family: 'Noto Sans SC', system-ui, sans-serif; }
+      .stage { display: flex; gap: 24px; padding: 28px; align-items: flex-start; }
+      .col { display: flex; flex-direction: column; gap: 10px; }
+      .cap { font: 600 13px 'Noto Sans SC', system-ui, sans-serif; color: #475569; margin-left: 2px; }
+      .panel-host { background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; box-shadow: 0 8px 30px rgba(15,23,42,.10); padding: 16px; }
+      .panel-host.flush { padding: 0; overflow: hidden; }
+    </style>
+  </head>
+  <body>
+    <div class="stage">
+      <div class="col">
+        <div class="cap">FileUploadSection · 补充附件（自动上传）</div>
+        <div class="panel-host" style="width: 480px;" data-host="upload"><div id="app-upload"></div></div>
+      </div>
+      <div class="col">
+        <div class="cap">AssociatedFilesList · 附件材料</div>
+        <div class="panel-host flush" style="width: 560px;" data-host="files"><div id="app-files"></div></div>
+      </div>
+      <div class="col">
+        <div class="cap">ReviewAttachmentPreviewPanelDock · 文档预览</div>
+        <div class="panel-host flush" style="width: 640px; height: 760px;" data-host="preview"><div id="app-preview" style="height: 100%;"></div></div>
+      </div>
+    </div>
+    <script type="module" src="/src/harness/reviewAttachment.ts"></script>
+  </body>
+</html>

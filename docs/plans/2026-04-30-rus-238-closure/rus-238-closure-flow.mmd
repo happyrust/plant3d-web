@@ -1,0 +1,40 @@
+flowchart TD
+  A([开始：RUS-238 闭环]) --> B{验收输入是否齐全}
+  B -- 否 --> B1[记录阻塞输入到 progress.md]
+  B1 --> B2[等待 BRAN / 包名 / 角色 / 入口]
+  B -- 是 --> C[本地真实模型验收]
+
+  C --> C1[创建距离与角度测量]
+  C1 --> C2[关联批注并保存确认记录]
+  C2 --> D{重新进入后是否恢复}
+
+  D -- 否 --> E[进入缺口诊断]
+  E --> E1[检查 useReviewStore 记录读取]
+  E1 --> E2[检查 confirmedRecordsRestore 场景恢复]
+  E2 --> E3[检查 reviewRecordReplay 测量回放]
+  E3 --> E4[检查右侧 workspace/formId 过滤]
+  E4 --> F[先写 RED 测试再修复]
+  F --> G[运行目标测试 / type-check / lint]
+  G --> C
+
+  D -- 是 --> H[PMS / 编校审流程验收]
+  H --> H1[JH 关闭后从列表重新进入]
+  H1 --> H2[SJ 打开退回任务查看]
+  H2 --> I{三处展示是否一致}
+
+  I -- 否 --> E
+  I -- 是 --> J{是否仍暴露内部 object id}
+  J -- 是 --> E
+  J -- 否 --> K[更新 findings.md 与 progress.md]
+  K --> L[回填 Linear / PR 验收证据]
+  L --> M([建议关闭 RUS-238])
+
+  classDef gate fill:#fff7ed,stroke:#ea580c,color:#111827
+  classDef fix fill:#eff6ff,stroke:#2563eb,color:#111827
+  classDef verify fill:#f0fdf4,stroke:#16a34a,color:#111827
+  classDef block fill:#fef2f2,stroke:#dc2626,color:#111827
+
+  class B,D,I,J gate
+  class E,E1,E2,E3,E4,F fix
+  class C,H,K,L,M verify
+  class B1,B2 block

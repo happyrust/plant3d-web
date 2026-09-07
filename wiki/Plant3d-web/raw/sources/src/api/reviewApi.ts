@@ -1,0 +1,1841 @@
+// 校审管理 API 模块
+// 提供编校审单、审核任务、确认记录的 CRUD 操作
+
+import {
+  fromBackendRole,
+  type AnnotationComment,
+  type AnnotationSeverity,
+  type ReviewAttachment,
+  type ReviewComponent,
+  type ReviewTask,
+  type User,
+  UserRole,
+} from '@/types/auth';
+import { getBackendApiBaseUrl } from '@/utils/apiBase';
+
+// ============ 基础配置 ============
+
+function getBaseUrl(): string {
+  return getBackendApiBaseUrl({ fallbackUrl: 'http://localhost:3100' });
+}
+
+function getReviewWebBaseUrl(): string {
+  const envBase = (import.meta.env as unknown as { VITE_REVIEW_WEB_BASE_URL?: string })
+    .VITE_REVIEW_WEB_BASE_URL;
+  if (envBase && envBase.trim()) return envBase.trim();
+  if (typeof window !== 'undefined' && window.location?.origin) {
+    return window.location.origin;
+  }
+  return getBaseUrl();
+}
+
+const LEGACY_EMBED_IDENTITY_QUERY_KEYS = [
+  'output_project',
+  'project_id',
+  'user_id',
+  'role',
+  'user_role',
+  'workflow_role',
+  'workflow_mode',
+  'landing_role',
+];
+
+function buildTokenPrimaryEmbedUrl(options: {
+  rawUrl?: string | null;
+  relativePath?: string | null;
+  token?: string | null;
+  formId?: string | null;
+}): string {
+  const baseUrl = getReviewWebBaseUrl().replace(/\/$/, '');
+  const fallbackPath = options.relativePath?.trim()
+    ? (options.relativePath.startsWith('/') ? options.relativePath : `/${options.relativePath}`)
+    : '/review/3d-view';
+  const url = new URL(options.rawUrl?.trim() || fallbackPath, baseUrl);
+  const params = new URLSearchParams(url.search);
+
+  for (const key of LEGACY_EMBED_IDENTITY_QUERY_KEYS) {
+    params.delete(key);
+  }
+
+  if (options.token?.trim()) {
+    params.set('user_token', options.token.trim());
+  }
+  if (options.formId?.trim()) {
+    params.set('form_id', options.formId.trim());
+  }
+
+  url.search = params.toString();
+  return url.toString();
+}
+
+function getReviewWebSocketBaseUrl(): string | null {
+  const env = import.meta.env as unknown as {
+    VITE_REVIEW_WS_BASE_URL?: string;
+    VITE_REVIEW_WEB_BASE_URL?: string;
+  };
+
+  const explicitWsBase = env.VITE_REVIEW_WS_BASE_URL?.trim();
+  if (explicitWsBase) return explicitWsBase;
+
+  const reviewWebBase = env.VITE_REVIEW_WEB_BASE_URL?.trim();
+  if (reviewWebBase) return reviewWebBase;
+
+  return null;
+}
+
+function toWebSocketBaseUrl(base: string): string {
+  const normalized = base.replace(/\/$/, '');
+  return normalized.startsWith('ws') ? normalized : normalized.replace(/^http/, 'ws');
+}
+
+// Token 存储 key
+const TOKEN_STORAGE_KEY = 'review_auth_token';
+
+/**
+ * 获取存储的 JWT Token
+ */
+export function getAuthToken(): string | null {
+  return localStorage.getItem(TOKEN_STORAGE_KEY);
+}
+
+/**
+ * 设置 JWT Token
+ */
+export function setAuthToken(token: string): void {
+  localStorage.setItem(TOKEN_STORAGE_KEY, token);
+}
+
+/**
+ * 清除 JWT Token
+ */
+export function clearAuthToken(): void {
+  localStorage.removeItem(TOKEN_STORAGE_KEY);
+}
+
+async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
+  const base = getBaseUrl().replace(/\/$/, '');
+  const url = `${base}${path.startsWith('/') ? '' : '/'}${path}`;
+
+  // 自动添加 Authorization Header（如果有 token）
+  const token = getAuthToken();
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...(init?.headers as Record<string, string> || {}),
+  };
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  const resp = await fetch(url, {
+    ...init,
+    headers,
+  });
+
+  if (!resp.ok) {
+    const text = await resp.text().catch(() => '');
+    throw new Error(`HTTP ${resp.status} ${resp.statusText}: ${text}`);
+  }
+
+  return (await resp.json()) as T;
+}
+
+// ============ 类型定义 ============
+
+export type ReviewTaskCreateRequest = {
+  title: string;
+  description?: string;
+  modelName: string;
+  /** 校核人（第二段） */
+  checkerId: string;
+  /** 审核人（第三段） */
+  approverId: string;
+  /** 兼容旧接口字段（语义同 checkerId） */
+  reviewerId?: string;
+  /** 外部已创建单据时传入，后端会沿用；不传则由后端生成 */
+  formId?: string;
+  priority: ReviewTask['priority'];
+  components: ReviewComponent[];
+  dueDate?: number;
+  attachments?: ReviewAttachment[];
+};
+
+export type ReviewTaskUpdateRequest = {
+  title?: string;
+  description?: string;
+  priority?: ReviewTask['priority'];
+  components?: ReviewComponent[];
+  dueDate?: number | null;
+  attachments?: ReviewAttachment[];
+};
+
+export type ReviewTaskListResponse = {
+  success: boolean;
+  tasks: ReviewTask[];
+  total: number;
+  error_message?: string;
+};
+
+export type ReviewTaskResponse = {
+  success: boolean;
+  task?: ReviewTask;
+  error_message?: string;
+};
+
+export type ReviewActionResponse = {
+  success: boolean;
+  message?: string;
+  error_message?: string;
+};
+
+export type EmbedUrlResponse = {
+  code: number;
+  message: string;
+  data?: {
+    relative_path?: string;
+    relativePath?: string;
+    token?: string;
+    query?: {
+      form_id?: string;
+      formId?: string;
+      is_reviewer?: boolean;
+      isReviewer?: boolean;
+    };
+  };
+  url?: string;
+};
+
+export type CachePreloadResponse = {
+  code: number;
+  message: string;
+  data?: {
+    task_id?: string;
+  };
+};
+
+// 确认记录类型
+export type ConfirmedRecordData = {
+  id?: string;
+  taskId: string;
+  formId?: string;
+  type: 'batch';
+  annotations: unknown[];
+  cloudAnnotations: unknown[];
+  rectAnnotations: unknown[];
+  obbAnnotations?: unknown[];
+  measurements: unknown[];
+  note: string;
+};
+
+export type ConfirmedRecordResponse = {
+  success: boolean;
+  record?: ConfirmedRecordData & { id: string; confirmedAt: number };
+  records?: (ConfirmedRecordData & { id: string; confirmedAt: number })[];
+  error_message?: string;
+};
+
+// 审核历史类型
+export type ReviewHistoryItem = {
+  id: string;
+  taskId: string;
+  action: 'created' | 'submitted' | 'in_review' | 'approved' | 'rejected' | 'cancelled';
+  userId: string;
+  userName: string;
+  comment?: string;
+  timestamp: number;
+};
+
+export type ReviewHistoryResponse = {
+  success: boolean;
+  history: ReviewHistoryItem[];
+  error_message?: string;
+};
+
+// 工作流历史响应类型
+export type WorkflowHistoryResponse = {
+  success: boolean;
+  currentNode: string;
+  currentNodeName: string;
+  history: {
+    node: string;
+    action: string;
+    operatorId: string;
+    operatorName: string;
+    comment?: string;
+    timestamp: number;
+  }[];
+  error_message?: string;
+};
+
+export type WorkflowSyncActor = {
+  id: string;
+  name: string;
+  roles: string;
+};
+
+export type WorkflowAnnotationCommentData = {
+  id: string;
+  annotationId: string;
+  annotationType: string;
+  authorId: string;
+  authorName: string;
+  authorRole: string;
+  content: string;
+  replyToId?: string;
+  createdAt: string;
+};
+
+export type WorkflowRecordData = {
+  id: string;
+  taskId: string;
+  type: string;
+  annotations: unknown[];
+  cloudAnnotations: unknown[];
+  rectAnnotations: unknown[];
+  obbAnnotations: unknown[];
+  measurements: unknown[];
+  note: string;
+  confirmedAt: string;
+};
+
+export type WorkflowSyncData = {
+  title?: string;
+  models: (string | Record<string, unknown>)[];
+  taskId?: string;
+  records: WorkflowRecordData[];
+  annotationComments: WorkflowAnnotationCommentData[];
+  attachments: ReviewAttachment[];
+  formExists?: boolean;
+  formStatus?: string;
+  taskCreated?: boolean;
+  currentNode?: string;
+  taskStatus?: string;
+};
+
+export type WorkflowSyncResponse = {
+  code: number;
+  message: string;
+  title?: string;
+  data?: WorkflowSyncData;
+};
+
+export type ReviewAnnotationCheckRequest = {
+  taskId?: string;
+  formId?: string;
+  currentNode?: string;
+  intent?: 'submit_next';
+  includedTypes?: ('text' | 'cloud' | 'rect')[];
+  token?: string;
+};
+
+export type ReviewAnnotationCheckSummary = {
+  total: number;
+  open: number;
+  pendingReview: number;
+  approved: number;
+  rejected: number;
+};
+
+export type ReviewAnnotationCheckBlocker = {
+  annotationId: string;
+  annotationType: 'text' | 'cloud' | 'rect';
+  title?: string;
+  description?: string;
+  stateCode: 'open' | 'pending_review' | 'approved' | 'rejected';
+  stateLabel: string;
+  refnos: string[];
+  updatedAt?: number;
+  updatedByName?: string;
+  updatedByRole?: string;
+  note?: string;
+};
+
+export type ReviewAnnotationCheckResult = {
+  passed: boolean;
+  recommendedAction: 'submit' | 'return' | 'block';
+  currentNode: string;
+  summary: ReviewAnnotationCheckSummary;
+  blockers: ReviewAnnotationCheckBlocker[];
+  message: string;
+};
+
+export type ReviewAnnotationCheckResponse = {
+  success: boolean;
+  data?: ReviewAnnotationCheckResult;
+  errorCode?: string;
+  errorMessage?: string;
+};
+
+export type WorkflowSyncQueryRequest = {
+  formId: string;
+  token: string;
+  actor: WorkflowSyncActor;
+};
+
+type RawWorkflowAnnotationCommentData = {
+  id?: string;
+  annotation_id?: string;
+  annotationId?: string;
+  annotation_type?: string;
+  annotationType?: string;
+  author_id?: string;
+  authorId?: string;
+  author_name?: string;
+  authorName?: string;
+  author_role?: string;
+  authorRole?: string;
+  content?: string;
+  reply_to_id?: string;
+  replyToId?: string;
+  created_at?: string;
+  createdAt?: string;
+};
+
+type RawWorkflowRecordData = {
+  id?: string;
+  task_id?: string;
+  taskId?: string;
+  type?: string;
+  annotations?: unknown[];
+  cloud_annotations?: unknown[];
+  cloudAnnotations?: unknown[];
+  rect_annotations?: unknown[];
+  rectAnnotations?: unknown[];
+  obb_annotations?: unknown[];
+  obbAnnotations?: unknown[];
+  measurements?: unknown[];
+  note?: string;
+  confirmed_at?: string;
+  confirmedAt?: string;
+};
+
+type RawWorkflowSyncData = {
+  title?: string;
+  models?: (string | Record<string, unknown>)[];
+  task_id?: string;
+  taskId?: string;
+  records?: RawWorkflowRecordData[];
+  annotation_comments?: RawWorkflowAnnotationCommentData[];
+  annotationComments?: RawWorkflowAnnotationCommentData[];
+  attachments?: (Partial<ReviewAttachment> & Record<string, unknown>)[];
+  form_exists?: boolean;
+  formExists?: boolean;
+  form_status?: string;
+  formStatus?: string;
+  task_created?: boolean;
+  taskCreated?: boolean;
+  current_node?: string;
+  currentNode?: string;
+  task_status?: string;
+  taskStatus?: string;
+};
+
+type RawWorkflowSyncResponse = {
+  code?: number;
+  message?: string;
+  title?: string;
+  data?: RawWorkflowSyncData;
+};
+
+type RawReviewAnnotationCheckSummary = {
+  total?: number;
+  open?: number;
+  pending_review?: number;
+  pendingReview?: number;
+  approved?: number;
+  rejected?: number;
+};
+
+type RawReviewAnnotationCheckBlocker = {
+  annotation_id?: string;
+  annotationId?: string;
+  annotation_type?: 'text' | 'cloud' | 'rect';
+  annotationType?: 'text' | 'cloud' | 'rect';
+  title?: string;
+  description?: string;
+  state_code?: 'open' | 'pending_review' | 'approved' | 'rejected';
+  stateCode?: 'open' | 'pending_review' | 'approved' | 'rejected';
+  state_label?: string;
+  stateLabel?: string;
+  refnos?: string[];
+  updated_at?: number;
+  updatedAt?: number;
+  updated_by_name?: string;
+  updatedByName?: string;
+  updated_by_role?: string;
+  updatedByRole?: string;
+  note?: string;
+};
+
+type RawReviewAnnotationCheckResult = {
+  passed?: boolean;
+  recommended_action?: 'submit' | 'return' | 'block';
+  recommendedAction?: 'submit' | 'return' | 'block';
+  current_node?: string;
+  currentNode?: string;
+  summary?: RawReviewAnnotationCheckSummary;
+  blockers?: RawReviewAnnotationCheckBlocker[];
+  message?: string;
+};
+
+type RawReviewAnnotationCheckResponse = {
+  success?: boolean;
+  data?: RawReviewAnnotationCheckResult;
+  error_code?: string;
+  errorCode?: string;
+  error_message?: string;
+  errorMessage?: string;
+};
+
+function normalizeWorkflowAttachment(raw: Partial<ReviewAttachment> & Record<string, unknown>): ReviewAttachment {
+  return normalizeReviewAttachment(raw as Record<string, unknown>);
+}
+
+function normalizeReviewAnnotationCheckResponse(
+  raw: RawReviewAnnotationCheckResponse
+): ReviewAnnotationCheckResponse {
+  const summary = raw.data?.summary;
+  return {
+    success: raw.success === true,
+    data: raw.data ? {
+      passed: raw.data.passed === true,
+      recommendedAction: raw.data.recommendedAction || raw.data.recommended_action || 'block',
+      currentNode: raw.data.currentNode || raw.data.current_node || '',
+      summary: {
+        total: typeof summary?.total === 'number' ? summary.total : 0,
+        open: typeof summary?.open === 'number' ? summary.open : 0,
+        pendingReview: typeof summary?.pendingReview === 'number'
+          ? summary.pendingReview
+          : typeof summary?.pending_review === 'number'
+            ? summary.pending_review
+            : 0,
+        approved: typeof summary?.approved === 'number' ? summary.approved : 0,
+        rejected: typeof summary?.rejected === 'number' ? summary.rejected : 0,
+      },
+      blockers: Array.isArray(raw.data.blockers)
+        ? raw.data.blockers.map((blocker) => ({
+          annotationId: blocker.annotationId || blocker.annotation_id || '',
+          annotationType: blocker.annotationType || blocker.annotation_type || 'text',
+          title: blocker.title?.trim() || undefined,
+          description: blocker.description?.trim() || undefined,
+          stateCode: blocker.stateCode || blocker.state_code || 'open',
+          stateLabel: blocker.stateLabel || blocker.state_label || '',
+          refnos: Array.isArray(blocker.refnos) ? blocker.refnos : [],
+          updatedAt: typeof blocker.updatedAt === 'number'
+            ? blocker.updatedAt
+            : typeof blocker.updated_at === 'number'
+              ? blocker.updated_at
+              : undefined,
+          updatedByName: blocker.updatedByName || blocker.updated_by_name || undefined,
+          updatedByRole: blocker.updatedByRole || blocker.updated_by_role || undefined,
+          note: blocker.note?.trim() || undefined,
+        }))
+        : [],
+      message: raw.data.message || '',
+    } : undefined,
+    errorCode: raw.errorCode || raw.error_code || undefined,
+    errorMessage: raw.errorMessage || raw.error_message || undefined,
+  };
+}
+
+function normalizeWorkflowSyncResponse(raw: RawWorkflowSyncResponse): WorkflowSyncResponse {
+  const data = raw.data;
+  return {
+    code: typeof raw.code === 'number' ? raw.code : 0,
+    message: raw.message || '',
+    title: raw.title,
+    data: data ? {
+      title: data.title,
+      models: Array.isArray(data.models) ? data.models : [],
+      taskId: data.taskId || data.task_id,
+      records: Array.isArray(data.records)
+        ? data.records.map((record) => ({
+          id: String(record.id || ''),
+          taskId: String(record.taskId || record.task_id || ''),
+          type: String(record.type || 'batch'),
+          annotations: Array.isArray(record.annotations) ? record.annotations : [],
+          cloudAnnotations: Array.isArray(record.cloudAnnotations)
+            ? record.cloudAnnotations
+            : Array.isArray(record.cloud_annotations)
+              ? record.cloud_annotations
+              : [],
+          rectAnnotations: Array.isArray(record.rectAnnotations)
+            ? record.rectAnnotations
+            : Array.isArray(record.rect_annotations)
+              ? record.rect_annotations
+              : [],
+          obbAnnotations: Array.isArray(record.obbAnnotations)
+            ? record.obbAnnotations
+            : Array.isArray(record.obb_annotations)
+              ? record.obb_annotations
+              : [],
+          measurements: Array.isArray(record.measurements) ? record.measurements : [],
+          note: String(record.note || ''),
+          confirmedAt: String(record.confirmedAt || record.confirmed_at || ''),
+        }))
+        : [],
+      annotationComments: Array.isArray(data.annotationComments)
+        ? data.annotationComments.map((comment) => ({
+          id: String(comment.id || ''),
+          annotationId: String(comment.annotationId || comment.annotation_id || ''),
+          annotationType: String(comment.annotationType || comment.annotation_type || ''),
+          authorId: String(comment.authorId || comment.author_id || ''),
+          authorName: String(comment.authorName || comment.author_name || ''),
+          authorRole: String(comment.authorRole || comment.author_role || ''),
+          content: String(comment.content || ''),
+          replyToId: comment.replyToId || comment.reply_to_id,
+          createdAt: String(comment.createdAt || comment.created_at || ''),
+        }))
+        : Array.isArray(data.annotation_comments)
+          ? data.annotation_comments.map((comment) => ({
+            id: String(comment.id || ''),
+            annotationId: String(comment.annotationId || comment.annotation_id || ''),
+            annotationType: String(comment.annotationType || comment.annotation_type || ''),
+            authorId: String(comment.authorId || comment.author_id || ''),
+            authorName: String(comment.authorName || comment.author_name || ''),
+            authorRole: String(comment.authorRole || comment.author_role || ''),
+            content: String(comment.content || ''),
+            replyToId: comment.replyToId || comment.reply_to_id,
+            createdAt: String(comment.createdAt || comment.created_at || ''),
+          }))
+          : [],
+      attachments: Array.isArray(data.attachments)
+        ? data.attachments.map((attachment) => normalizeWorkflowAttachment(attachment))
+        : [],
+      formExists: data.formExists ?? data.form_exists,
+      formStatus: data.formStatus || data.form_status,
+      taskCreated: data.taskCreated ?? data.task_created,
+      currentNode: data.currentNode || data.current_node,
+      taskStatus: data.taskStatus || data.task_status,
+    } : undefined,
+  };
+}
+
+// 用户列表响应
+export type UserListResponse = {
+  success: boolean;
+  users: User[];
+  error_message?: string;
+};
+
+// ============ 编校审单 API ============
+
+/**
+ * 创建编校审单
+ * POST /api/review/tasks
+ */
+export async function reviewTaskCreate(
+  request: ReviewTaskCreateRequest
+): Promise<ReviewTaskResponse> {
+  return await fetchJson<ReviewTaskResponse>('/api/review/tasks', {
+    method: 'POST',
+    body: JSON.stringify(request),
+  });
+}
+
+/**
+ * 获取编校审单列表
+ * GET /api/review/tasks
+ * 支持筛选参数
+ */
+export async function reviewTaskGetList(options?: {
+  status?: ReviewTask['status'] | 'all';
+  priority?: ReviewTask['priority'] | 'all';
+  requesterId?: string;
+  checkerId?: string;
+  approverId?: string;
+  reviewerId?: string;
+  limit?: number;
+  offset?: number;
+}): Promise<ReviewTaskListResponse> {
+  const params = new URLSearchParams();
+  if (options?.status && options.status !== 'all') params.set('status', options.status);
+  if (options?.priority && options.priority !== 'all') params.set('priority', options.priority);
+  if (options?.requesterId) params.set('requester_id', options.requesterId);
+  if (options?.checkerId) params.set('checker_id', options.checkerId);
+  if (options?.approverId) params.set('approver_id', options.approverId);
+  if (options?.reviewerId) params.set('reviewer_id', options.reviewerId);
+  if (options?.limit) params.set('limit', String(options.limit));
+  if (options?.offset) params.set('offset', String(options.offset));
+
+  const query = params.toString();
+  const path = query ? `/api/review/tasks?${query}` : '/api/review/tasks';
+  return await fetchJson<ReviewTaskListResponse>(path);
+}
+
+/**
+ * 获取单个编校审单详情
+ * GET /api/review/tasks/{taskId}
+ */
+export async function reviewTaskGetById(taskId: string): Promise<ReviewTaskResponse> {
+  const response = await fetchJson<ReviewTaskResponse>(`/api/review/tasks/${encodeURIComponent(taskId)}`);
+  const normalizedTask = response.task && typeof response.task === 'object'
+    ? normalizeReviewTask(response.task as Record<string, unknown>)
+    : response.task;
+  return {
+    ...response,
+    task: normalizedTask,
+  };
+}
+
+/**
+ * 更新编校审单
+ * PATCH /api/review/tasks/{taskId}
+ */
+export async function reviewTaskUpdate(
+  taskId: string,
+  request: ReviewTaskUpdateRequest
+): Promise<ReviewTaskResponse> {
+  return await fetchJson<ReviewTaskResponse>(`/api/review/tasks/${encodeURIComponent(taskId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(request),
+  });
+}
+
+/**
+ * 删除编校审单
+ * DELETE /api/review/tasks/{taskId}
+ */
+export async function reviewTaskDelete(taskId: string): Promise<ReviewActionResponse> {
+  return await fetchJson<ReviewActionResponse>(`/api/review/tasks/${encodeURIComponent(taskId)}`, {
+    method: 'DELETE',
+  });
+}
+
+// ============ 审核操作 API ============
+
+/**
+ * 开始审核
+ * POST /api/review/tasks/{taskId}/start-review
+ */
+export async function reviewTaskStartReview(taskId: string): Promise<ReviewActionResponse> {
+  return await fetchJson<ReviewActionResponse>(
+    `/api/review/tasks/${encodeURIComponent(taskId)}/start-review`,
+    { method: 'POST' }
+  );
+}
+
+/**
+ * 通过审核
+ * POST /api/review/tasks/{taskId}/approve
+ */
+export async function reviewTaskApprove(
+  taskId: string,
+  comment?: string
+): Promise<ReviewActionResponse> {
+  return await fetchJson<ReviewActionResponse>(
+    `/api/review/tasks/${encodeURIComponent(taskId)}/approve`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ comment }),
+    }
+  );
+}
+
+/**
+ * 驳回审核
+ * POST /api/review/tasks/{taskId}/reject
+ */
+export async function reviewTaskReject(
+  taskId: string,
+  comment: string
+): Promise<ReviewActionResponse> {
+  return await fetchJson<ReviewActionResponse>(
+    `/api/review/tasks/${encodeURIComponent(taskId)}/reject`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ comment }),
+    }
+  );
+}
+
+/**
+ * 取消编校审单
+ * POST /api/review/tasks/{taskId}/cancel
+ */
+export async function reviewTaskCancel(
+  taskId: string,
+  reason?: string
+): Promise<ReviewActionResponse> {
+  return await fetchJson<ReviewActionResponse>(
+    `/api/review/tasks/${encodeURIComponent(taskId)}/cancel`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    }
+  );
+}
+
+// ============ 多级审批流程 API ============
+
+/**
+ * 提交到下一节点
+ * POST /api/review/tasks/{taskId}/submit
+ */
+export async function reviewTaskSubmitToNext(
+  taskId: string,
+  comment?: string
+): Promise<ReviewActionResponse> {
+  return await fetchJson<ReviewActionResponse>(
+    `/api/review/tasks/${encodeURIComponent(taskId)}/submit`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ comment }),
+    }
+  );
+}
+
+/**
+ * 驳回到指定节点
+ * POST /api/review/tasks/{taskId}/return
+ */
+export async function reviewTaskReturn(
+  taskId: string,
+  targetNode: string,
+  reason: string
+): Promise<ReviewActionResponse> {
+  return await fetchJson<ReviewActionResponse>(
+    `/api/review/tasks/${encodeURIComponent(taskId)}/return`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ targetNode, reason }),
+    }
+  );
+}
+
+/**
+ * 获取工作流历史
+ * GET /api/review/tasks/{taskId}/workflow
+ */
+export async function reviewTaskGetWorkflow(
+  taskId: string
+): Promise<WorkflowHistoryResponse> {
+  return await fetchJson<WorkflowHistoryResponse>(
+    `/api/review/tasks/${encodeURIComponent(taskId)}/workflow`
+  );
+}
+
+// ============ 外部校审集成 API ============
+
+/**
+ * 向模型中心申请嵌入页地址。
+ * @param workflowRole 本单据上为当前用户指定的工作流角色（sj/jd/sh/pz/admin），非账号固定角色
+ */
+export async function reviewGetEmbedUrl(
+  projectId: string,
+  userId: string,
+  workflowRole?: string | null,
+): Promise<{ url: string }> {
+  const payload: Record<string, string> = {
+    project_id: projectId,
+    user_id: userId,
+  };
+  const normalizedRole = workflowRole?.trim();
+  if (normalizedRole) {
+    payload.workflow_role = normalizedRole;
+    payload.role = normalizedRole;
+  }
+  const response = await fetchJson<EmbedUrlResponse>('/api/review/embed-url', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+
+  if (response.url) {
+    return {
+      url: buildTokenPrimaryEmbedUrl({
+        rawUrl: response.url,
+        formId: response.data?.query?.form_id || response.data?.query?.formId || null,
+      }),
+    };
+  }
+
+  if (response.code !== 200 && response.code !== 0) {
+    throw new Error(response.message || '获取校审地址失败');
+  }
+
+  const data = response.data;
+  if (!data?.token) {
+    throw new Error('校审地址缺少凭证信息');
+  }
+
+  const relativePath = data.relative_path || data.relativePath || '';
+  if (!relativePath) {
+    throw new Error('校审地址缺少路径信息');
+  }
+
+  return {
+    url: buildTokenPrimaryEmbedUrl({
+      relativePath,
+      token: data.token,
+      formId: data.query?.form_id || data.query?.formId || null,
+    }),
+  };
+}
+
+export async function reviewWorkflowSyncQuery(
+  request: WorkflowSyncQueryRequest,
+): Promise<WorkflowSyncResponse> {
+  const raw = await fetchJson<RawWorkflowSyncResponse>('/api/review/workflow/sync', {
+    method: 'POST',
+    body: JSON.stringify({
+      form_id: request.formId,
+      token: request.token,
+      action: 'query',
+      actor: request.actor,
+    }),
+  });
+  return normalizeWorkflowSyncResponse(raw);
+}
+
+export async function reviewAnnotationCheck(
+  request: ReviewAnnotationCheckRequest
+): Promise<ReviewAnnotationCheckResponse> {
+  const raw = await fetchJson<RawReviewAnnotationCheckResponse>('/api/review/annotations/check', {
+    method: 'POST',
+    body: JSON.stringify({
+      task_id: request.taskId,
+      form_id: request.formId,
+      current_node: request.currentNode,
+      intent: request.intent,
+      included_types: request.includedTypes,
+      token: request.token,
+    }),
+  });
+
+  return normalizeReviewAnnotationCheckResponse(raw);
+}
+
+export async function reviewPreloadCache(
+  projectId: string,
+  initiator: string
+): Promise<CachePreloadResponse> {
+  return await fetchJson<CachePreloadResponse>('/api/review/cache/preload', {
+    method: 'POST',
+    body: JSON.stringify({ project_id: projectId, initiator }),
+  });
+}
+
+// ============ 确认记录 API ============
+
+/**
+ * 保存确认记录
+ * POST /api/review/records
+ */
+export async function reviewRecordCreate(
+  record: ConfirmedRecordData
+): Promise<ConfirmedRecordResponse> {
+  return await fetchJson<ConfirmedRecordResponse>('/api/review/records', {
+    method: 'POST',
+    body: JSON.stringify(record),
+  });
+}
+
+/**
+ * 获取任务的确认记录
+ * GET /api/review/records/by-task/{taskId}
+ */
+export async function reviewRecordGetByTaskId(taskId: string): Promise<ConfirmedRecordResponse> {
+  return await fetchJson<ConfirmedRecordResponse>(
+    `/api/review/records/by-task/${encodeURIComponent(taskId)}`
+  );
+}
+
+/**
+ * 删除确认记录
+ * DELETE /api/review/records/item/{recordId}
+ */
+export async function reviewRecordDelete(recordId: string): Promise<ReviewActionResponse> {
+  return await fetchJson<ReviewActionResponse>(
+    `/api/review/records/item/${encodeURIComponent(recordId)}`,
+    { method: 'DELETE' }
+  );
+}
+
+/**
+ * 清空任务的所有确认记录
+ * DELETE /api/review/records/clear-task/{taskId}
+ */
+export async function reviewRecordClearByTaskId(taskId: string): Promise<ReviewActionResponse> {
+  return await fetchJson<ReviewActionResponse>(
+    `/api/review/records/clear-task/${encodeURIComponent(taskId)}`,
+    { method: 'DELETE' }
+  );
+}
+
+// ============ 审核历史 API ============
+
+/**
+ * 获取审核历史
+ * GET /api/review/tasks/{taskId}/history
+ */
+export async function reviewTaskGetHistory(taskId: string): Promise<ReviewHistoryResponse> {
+  return await fetchJson<ReviewHistoryResponse>(
+    `/api/review/tasks/${encodeURIComponent(taskId)}/history`
+  );
+}
+
+// ============ 评论 API ============
+
+/**
+ * 添加批注评论
+ * POST /api/review/comments
+ */
+export async function reviewCommentCreate(
+  comment: Omit<AnnotationComment, 'id' | 'createdAt'>
+): Promise<{ success: boolean; comment?: AnnotationComment; error_message?: string }> {
+  return await fetchJson('/api/review/comments', {
+    method: 'POST',
+    body: JSON.stringify(comment),
+  });
+}
+
+/**
+ * 更新批注评论
+ * PATCH /api/review/comments/item/{commentId}
+ */
+export async function reviewCommentUpdate(
+  commentId: string,
+  content: string
+): Promise<{ success: boolean; comment?: AnnotationComment; error_message?: string }> {
+  return await fetchJson(`/api/review/comments/item/${encodeURIComponent(commentId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ content }),
+  });
+}
+
+/**
+ * 获取批注评论
+ * GET /api/review/comments/by-annotation/{annotationId}
+ */
+export async function reviewCommentGetByAnnotation(
+  annotationId: string,
+  annotationType: AnnotationComment['annotationType']
+): Promise<{ success: boolean; comments: AnnotationComment[]; error_message?: string }> {
+  const params = new URLSearchParams({ type: annotationType });
+  return await fetchJson(`/api/review/comments/by-annotation/${encodeURIComponent(annotationId)}?${params}`);
+}
+
+/**
+ * 删除评论
+ * DELETE /api/review/comments/item/{commentId}
+ */
+export async function reviewCommentDelete(commentId: string): Promise<ReviewActionResponse> {
+  return await fetchJson(`/api/review/comments/item/${encodeURIComponent(commentId)}`, {
+    method: 'DELETE',
+  });
+}
+
+// ============ 批注严重度 API ============
+
+export type AnnotationSeverityUpdateResponse = {
+  success: boolean;
+  severity?: AnnotationSeverity | null;
+  updatedAt?: number;
+  error_message?: string;
+};
+
+/**
+ * 更新批注的严重度（问题严重程度）。
+ * 后端约定：PATCH /api/review/annotations/{annotationId}/severity?type={annotationType}
+ *
+ * Body: { severity: 'suggestion' | 'normal' | 'severe' | 'critical' | null }
+ * - 传 null 表示清空。
+ *
+ * 调用方需自行做权限校验（canEditAnnotationSeverity），并在失败时降级到本地 store。
+ */
+export async function annotationSeverityUpdate(
+  annotationId: string,
+  annotationType: AnnotationComment['annotationType'],
+  severity: AnnotationSeverity | null
+): Promise<AnnotationSeverityUpdateResponse> {
+  const params = new URLSearchParams({ type: annotationType });
+  return await fetchJson(
+    `/api/review/annotations/${encodeURIComponent(annotationId)}/severity?${params}`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify({ severity }),
+    }
+  );
+}
+
+// ============ 用户 API ============
+
+/**
+ * 获取用户列表
+ * GET /api/users
+ */
+export async function userGetList(options?: {
+  role?: string;
+  status?: string;
+}): Promise<UserListResponse> {
+  const params = new URLSearchParams();
+  if (options?.role) params.set('role', options.role);
+  if (options?.status) params.set('status', options.status);
+
+  const query = params.toString();
+  const path = query ? `/api/users?${query}` : '/api/users';
+  return await fetchJson<UserListResponse>(path);
+}
+
+/**
+ * 获取当前用户
+ * GET /api/users/me
+ */
+export async function userGetCurrent(): Promise<{ success: boolean; user?: User; error_message?: string }> {
+  return await fetchJson('/api/users/me');
+}
+
+/**
+ * 获取可用审核人员列表
+ * GET /api/users/reviewers
+ */
+export async function userGetReviewers(): Promise<UserListResponse> {
+  return await fetchJson<UserListResponse>('/api/users/reviewers');
+}
+
+// ============ 附件 API ============
+
+export type ReviewAttachmentUploadOptions = {
+  formId?: string | null;
+  modelRefnos?: string[];
+  fileType?: string;
+  description?: string;
+};
+
+/**
+ * 上传附件
+ * POST /api/review/attachments
+ */
+export async function reviewAttachmentUpload(
+  taskId: string,
+  file: File,
+  options?: ReviewAttachmentUploadOptions
+): Promise<{ success: boolean; attachment?: ReviewAttachment; error_message?: string }> {
+  const base = getBaseUrl().replace(/\/$/, '');
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('taskId', taskId);
+  if (options?.formId) {
+    formData.append('formId', options.formId);
+  }
+  if (options?.modelRefnos?.length) {
+    formData.append('modelRefnos', JSON.stringify(options.modelRefnos));
+  }
+  if (options?.fileType) {
+    formData.append('type', options.fileType);
+  }
+  if (options?.description) {
+    formData.append('description', options.description);
+  }
+
+  const token = getAuthToken();
+  const resp = await fetch(`${base}/api/review/attachments`, {
+    method: 'POST',
+    body: formData,
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+  });
+
+  if (!resp.ok) {
+    const text = await resp.text().catch(() => '');
+    throw new Error(`Upload failed: HTTP ${resp.status} ${resp.statusText}: ${text}`);
+  }
+
+  return (await resp.json()) as { success: boolean; attachment?: ReviewAttachment; error_message?: string };
+}
+
+/**
+ * 上传附件（支持进度回调）
+ * POST /api/review/attachments
+ * @param taskId 任务ID（可选，创建任务前上传时为空）
+ * @param file 要上传的文件
+ * @param onProgress 进度回调函数，参数为 0-100 的百分比
+ */
+export function reviewAttachmentUploadWithProgress(
+  taskId: string | null,
+  file: File,
+  onProgress?: (percent: number) => void,
+  options?: ReviewAttachmentUploadOptions
+): Promise<{ success: boolean; attachment?: ReviewAttachment; error_message?: string }> {
+  return new Promise((resolve, reject) => {
+    const base = getBaseUrl().replace(/\/$/, '');
+    const formData = new FormData();
+    formData.append('file', file);
+    if (taskId) {
+      formData.append('taskId', taskId);
+    }
+    if (options?.formId) {
+      formData.append('formId', options.formId);
+    }
+    if (options?.modelRefnos?.length) {
+      formData.append('modelRefnos', JSON.stringify(options.modelRefnos));
+    }
+    if (options?.fileType) {
+      formData.append('type', options.fileType);
+    }
+    if (options?.description) {
+      formData.append('description', options.description);
+    }
+
+    const xhr = new XMLHttpRequest();
+    const token = getAuthToken();
+
+    // 进度事件
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable && onProgress) {
+        const percent = Math.round((event.loaded / event.total) * 100);
+        onProgress(percent);
+      }
+    };
+
+    // 完成事件
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          const response = JSON.parse(xhr.responseText);
+          resolve(response);
+        } catch {
+          reject(new Error('Invalid JSON response'));
+        }
+      } else {
+        reject(new Error(`Upload failed: HTTP ${xhr.status} ${xhr.statusText}`));
+      }
+    };
+
+    // 错误事件
+    xhr.onerror = () => {
+      reject(new Error('Network error during upload'));
+    };
+
+    // 中止事件
+    xhr.onabort = () => {
+      reject(new Error('Upload aborted'));
+    };
+
+    xhr.open('POST', `${base}/api/review/attachments`);
+    if (token) {
+      xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+    }
+    xhr.send(formData);
+  });
+}
+
+/**
+ * 删除附件
+ * DELETE /api/review/attachments/{attachmentId}
+ */
+export async function reviewAttachmentDelete(attachmentId: string): Promise<ReviewActionResponse> {
+  return await fetchJson(`/api/review/attachments/${encodeURIComponent(attachmentId)}`, {
+    method: 'DELETE',
+  });
+}
+
+// ============ WebSocket URL 构建 ============
+
+/**
+ * 获取审核通知 WebSocket URL
+ * WebSocket 端点: /ws/review
+ */
+export function getReviewWebSocketUrl(): string | null {
+  const base = getReviewWebSocketBaseUrl();
+  if (!base) return null;
+
+  return `${toWebSocketBaseUrl(base)}/ws/review`;
+}
+
+/**
+ * 获取用户专属审核通知 WebSocket URL
+ * WebSocket 端点: /ws/review/user/{userId}
+ */
+export function getReviewUserWebSocketUrl(userId: string): string | null {
+  const base = getReviewWebSocketBaseUrl();
+  if (!base) return null;
+
+  return `${toWebSocketBaseUrl(base)}/ws/review/user/${encodeURIComponent(userId)}`;
+}
+
+// ============ 辅助函数 ============
+
+/**
+ * 规范化审核任务数据
+ */
+export function normalizeReviewTask(raw: Record<string, unknown>): ReviewTask {
+  const checkerId = String(raw.checker_id || raw.checkerId || raw.reviewer_id || raw.reviewerId || '');
+  const checkerName = String(raw.checker_name || raw.checkerName || raw.reviewer_name || raw.reviewerName || '');
+  const approverId = String(raw.approver_id || raw.approverId || '');
+  const approverName = String(raw.approver_name || raw.approverName || '');
+
+  return {
+    id: String(raw.id || ''),
+    formId: raw.formId ? String(raw.formId) : (raw.form_id ? String(raw.form_id) : undefined),
+    title: String(raw.title || ''),
+    description: String(raw.description || ''),
+    modelName: String(raw.model_name || raw.modelName || ''),
+    status: normalizeReviewStatus(raw.status),
+    priority: normalizeReviewPriority(raw.priority),
+    requesterId: String(raw.requester_id || raw.requesterId || ''),
+    requesterName: String(raw.requester_name || raw.requesterName || ''),
+    checkerId,
+    checkerName,
+    approverId,
+    approverName,
+    // reviewer 字段兼容旧数据与旧界面语义（映射到校核人）
+    reviewerId: checkerId,
+    reviewerName: checkerName,
+    components: Array.isArray(raw.components) ? raw.components as ReviewComponent[] : [],
+    attachments: Array.isArray(raw.attachments)
+      ? (raw.attachments as Record<string, unknown>[]).map(normalizeReviewAttachment)
+      : undefined,
+    reviewComment: raw.review_comment ? String(raw.review_comment) : undefined,
+    createdAt: normalizeTimestamp(raw.created_at || raw.createdAt) || Date.now(),
+    updatedAt: normalizeTimestamp(raw.updated_at || raw.updatedAt) || Date.now(),
+    dueDate: raw.due_date ? normalizeTimestamp(raw.due_date) : undefined,
+    // 多级审批流程字段
+    currentNode: normalizeWorkflowNode(raw.current_node || raw.currentNode),
+    workflowHistory: Array.isArray(raw.workflow_history || raw.workflowHistory)
+      ? (raw.workflow_history || raw.workflowHistory) as ReviewTask['workflowHistory']
+      : undefined,
+    returnReason: raw.return_reason || raw.returnReason
+      ? String(raw.return_reason || raw.returnReason)
+      : undefined,
+  };
+}
+
+export function normalizeReviewAttachment(raw: Record<string, unknown>): ReviewAttachment {
+  return {
+    id: String(raw.id || raw.file_id || ''),
+    name: String(raw.name || raw.file_name || raw.description || '未命名附件'),
+    url: String(raw.url || raw.download_url || raw.public_url || raw.route_url || ''),
+    size: typeof raw.size === 'number'
+      ? raw.size
+      : (typeof raw.file_size === 'number' ? raw.file_size : undefined),
+    type: raw.type ? String(raw.type) : undefined,
+    mimeType: raw.mimeType ? String(raw.mimeType) : (raw.mime_type ? String(raw.mime_type) : undefined),
+    uploadedAt: normalizeTimestamp(raw.uploaded_at || raw.uploadedAt || raw.created_at) || Date.now(),
+  };
+}
+
+export function normalizeAnnotationComment(raw: Record<string, unknown>): AnnotationComment {
+  return {
+    id: String(raw.id || ''),
+    annotationId: String(raw.annotationId || raw.annotation_id || ''),
+    annotationType: normalizeAnnotationType(raw.annotationType || raw.annotation_type),
+    authorId: String(raw.authorId || raw.author_id || ''),
+    authorName: String(raw.authorName || raw.author_name || ''),
+    authorRole: normalizeUserRole(raw.authorRole || raw.author_role),
+    content: String(raw.content || ''),
+    replyToId: raw.replyToId
+      ? String(raw.replyToId)
+      : (raw.reply_to_id ? String(raw.reply_to_id) : undefined),
+    createdAt: normalizeTimestamp(raw.created_at || raw.createdAt) || Date.now(),
+    updatedAt: normalizeTimestamp(raw.updated_at || raw.updatedAt),
+  };
+}
+
+function normalizeAnnotationType(value: unknown): AnnotationComment['annotationType'] {
+  const type = String(value || 'text').toLowerCase();
+  const allowed: AnnotationComment['annotationType'][] = ['text', 'cloud', 'rect', 'obb'];
+  return allowed.includes(type as AnnotationComment['annotationType'])
+    ? (type as AnnotationComment['annotationType'])
+    : 'text';
+}
+
+function normalizeUserRole(value: unknown): UserRole {
+  const role = String(value || '').toLowerCase();
+  const roleValues = Object.values(UserRole) as string[];
+  if (roleValues.includes(role)) {
+    return role as UserRole;
+  }
+  return fromBackendRole(role);
+}
+
+function normalizeWorkflowNode(node: unknown): ReviewTask['currentNode'] {
+  const nodeStr = String(node || 'sj').toLowerCase();
+  const validNodes = ['sj', 'jd', 'sh', 'pz'];
+  return validNodes.includes(nodeStr)
+    ? (nodeStr as ReviewTask['currentNode'])
+    : 'sj';
+}
+
+function normalizeReviewStatus(status: unknown): ReviewTask['status'] {
+  const statusStr = String(status || 'draft').toLowerCase();
+  const validStatuses: ReviewTask['status'][] = [
+    'draft', 'submitted', 'in_review', 'approved', 'rejected', 'cancelled'
+  ];
+  return validStatuses.includes(statusStr as ReviewTask['status'])
+    ? (statusStr as ReviewTask['status'])
+    : 'draft';
+}
+
+function normalizeReviewPriority(priority: unknown): ReviewTask['priority'] {
+  const priorityStr = String(priority || 'medium').toLowerCase();
+  const validPriorities: ReviewTask['priority'][] = ['low', 'medium', 'high', 'urgent'];
+  return validPriorities.includes(priorityStr as ReviewTask['priority'])
+    ? (priorityStr as ReviewTask['priority'])
+    : 'medium';
+}
+
+function normalizeTimestamp(value: unknown): number | undefined {
+  if (!value) return undefined;
+  if (typeof value === 'number') {
+    return value < 1e12 ? value * 1000 : value;
+  }
+  if (typeof value === 'string') {
+    const date = new Date(value);
+    if (!isNaN(date.getTime())) {
+      return date.getTime();
+    }
+  }
+  return undefined;
+}
+
+// ============ 认证 API ============
+
+export type TokenRequest = {
+  projectId: string;
+  userId: string;
+  formId?: string;
+  role?: string;
+  workflowMode?: string;
+};
+
+export type TokenResponse = {
+  code: number;
+  message: string;
+  data?: {
+    token: string;
+    expiresAt: number;
+    formId: string;
+  };
+};
+
+export type VerifyResponse = {
+  code: number;
+  message: string;
+  data?: {
+    valid: boolean;
+    claims?: {
+      projectId: string;
+      userId: string;
+      userName?: string;
+      formId?: string;
+      role?: string;
+      workflowMode?: string;
+      exp: number;
+      iat: number;
+    };
+    error?: string;
+  };
+};
+
+type RawVerifyClaims = {
+  projectId?: string;
+  project_id?: string;
+  userId?: string;
+  user_id?: string;
+  userName?: string;
+  user_name?: string;
+  formId?: string;
+  form_id?: string;
+  role?: string;
+  workflowMode?: string;
+  workflow_mode?: string;
+  exp?: number;
+  iat?: number;
+};
+
+type RawVerifyResponse = {
+  code?: number;
+  message?: string;
+  data?: {
+    valid?: boolean;
+    claims?: RawVerifyClaims | null;
+    error?: string | null;
+  };
+};
+
+function normalizeVerifyClaims(raw?: RawVerifyClaims | null): VerifyResponse['data']['claims'] | undefined {
+  if (!raw) return undefined;
+  const projectId = raw.projectId || raw.project_id;
+  const userId = raw.userId || raw.user_id;
+  if (!projectId || !userId) return undefined;
+
+  return {
+    projectId,
+    userId,
+    userName: raw.userName || raw.user_name,
+    formId: raw.formId || raw.form_id,
+    role: raw.role,
+    workflowMode: raw.workflowMode || raw.workflow_mode,
+    exp: typeof raw.exp === 'number' ? raw.exp : 0,
+    iat: typeof raw.iat === 'number' ? raw.iat : 0,
+  };
+}
+
+function normalizeVerifyResponse(raw: RawVerifyResponse): VerifyResponse {
+  return {
+    code: typeof raw.code === 'number' ? raw.code : 0,
+    message: raw.message || '',
+    data: raw.data ? {
+      valid: raw.data.valid === true,
+      claims: normalizeVerifyClaims(raw.data.claims),
+      error: raw.data.error || undefined,
+    } : undefined,
+  };
+}
+
+/**
+ * 获取 JWT Token
+ * POST /api/auth/token
+ */
+export async function authGetToken(request: TokenRequest): Promise<TokenResponse> {
+  const base = getBaseUrl().replace(/\/$/, '');
+  const resp = await fetch(`${base}/api/auth/token`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      project_id: request.projectId,
+      user_id: request.userId,
+      form_id: request.formId,
+      role: request.role,
+      workflow_mode: request.workflowMode,
+    }),
+  });
+
+  if (!resp.ok) {
+    throw new Error(`HTTP ${resp.status} ${resp.statusText}`);
+  }
+
+  const data = await resp.json() as TokenResponse;
+
+  // 自动保存 token
+  if (data.code === 0 && data.data?.token) {
+    setAuthToken(data.data.token);
+  }
+
+  return data;
+}
+
+/**
+ * 验证 JWT Token
+ * POST /api/auth/verify
+ */
+export async function authVerifyToken(token?: string): Promise<VerifyResponse> {
+  const tokenToVerify = token || getAuthToken();
+  if (!tokenToVerify) {
+    return {
+      code: -1,
+      message: 'No token provided',
+      data: { valid: false, error: 'No token' },
+    };
+  }
+
+  const base = getBaseUrl().replace(/\/$/, '');
+  const resp = await fetch(`${base}/api/auth/verify`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      token: tokenToVerify,
+    }),
+  });
+
+  if (!resp.ok) {
+    throw new Error(`HTTP ${resp.status} ${resp.statusText}`);
+  }
+
+  return normalizeVerifyResponse((await resp.json()) as RawVerifyResponse);
+}
+
+/**
+ * 登录并获取 Token（便捷方法）
+ */
+export async function login(
+  projectId: string,
+  userId: string,
+  role?: string
+): Promise<boolean> {
+  try {
+    const resp = await authGetToken({ projectId, userId, role });
+    return resp.code === 0 && !!resp.data?.token;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * 登出（清除 Token）
+ */
+export function logout(): void {
+  clearAuthToken();
+}
+
+/**
+ * 检查是否已登录
+ */
+export function isLoggedIn(): boolean {
+  return !!getAuthToken();
+}
+
+// ============ 同步 API ============
+
+export type ExportRequest = {
+  taskIds?: string[];
+  includeAttachments?: boolean;
+  includeComments?: boolean;
+  includeRecords?: boolean;
+};
+
+export type ExportResponse = {
+  success: boolean;
+  tasks: ReviewTask[];
+  comments?: unknown[];
+  records?: unknown[];
+  error_message?: string;
+};
+
+export type ImportRequest = {
+  tasks: ReviewTask[];
+  overwrite?: boolean;
+};
+
+export type ImportResponse = {
+  success: boolean;
+  importedCount: number;
+  skippedCount: number;
+  error_message?: string;
+};
+
+/**
+ * 导出校审数据
+ * POST /api/review/sync/export
+ */
+export async function reviewSyncExport(
+  request: ExportRequest = {}
+): Promise<ExportResponse> {
+  return await fetchJson<ExportResponse>('/api/review/sync/export', {
+    method: 'POST',
+    body: JSON.stringify(request),
+  });
+}
+
+/**
+ * 导入校审数据
+ * POST /api/review/sync/import
+ */
+export async function reviewSyncImport(
+  request: ImportRequest
+): Promise<ImportResponse> {
+  return await fetchJson<ImportResponse>('/api/review/sync/import', {
+    method: 'POST',
+    body: JSON.stringify(request),
+  });
+}
+
+// ============ 辅助校审数据 API ============
+
+export const AUX_DATA_DEFAULT_AUTH = {
+  uCode: 'ZY',
+  uKey: 'swbz-token-e74fbea2427981f918d314d6583c3d24',
+} as const;
+
+export type CollisionQueryParams = {
+  project_id?: string;
+  refno?: string;
+  limit?: number;
+  offset?: number;
+};
+
+/** PMS 碰撞数据（PascalCase，与 PMS /HD/QueryAssistReview 响应一致） */
+export type PmsCollisionItem = {
+  FirstOwner: string;
+  First: string;
+  SecondOwner: string;
+  Second: string;
+  FirstModTime: string;
+  SecondModTime: string;
+  FirstSpeciality: string;
+  SecondSpeciality: string;
+  TypeDesc: string;
+  Position: string;
+  FirstResSpeciality: string;
+  SecondResSpeciality: string;
+  ResPerson: string;
+  CheckTime: string;
+  Suggestion: string;
+  HandleUser: string;
+  Processing: string;
+  StatusDesc: string;
+  IsFinished: string;
+  IsInsuClashed: string;
+  Remarks: string;
+  Versions: string;
+  [key: `RedundantField${number}`]: string;
+};
+
+/** 内部碰撞数据（兼容旧格式） */
+export type CollisionItem = {
+  ObjectOneLoc: string;
+  ObjectOne: string;
+  ObjectTowLoc: string;
+  ObjectTow: string;
+  ErrorMsg: string;
+  ObjectOneMajor: string;
+  ObjectTwoMajor: string;
+  CheckUsr: string;
+  CheckDate: string;
+  UpUsr?: string;
+  UpTime?: string;
+  ErrorStatus: string;
+};
+
+/** PMS 质量校验数据 */
+export type PmsQualityItem = {
+  BranchName: string;
+  ElementName: string;
+  RuleName: string;
+  RuleDescription: string;
+  ProfessionalName: string;
+  RuleType: string;
+  ErrorMessage: string;
+  CheckUser: string;
+  CheckTime: string;
+  ModifyUser: string;
+  ModifyTime: string;
+  ErrorStatus: string;
+  [key: `RedundantField${number}`]: string;
+};
+
+/** PMS 二三维校验数据 */
+export type PmsOtVerificationItem = {
+  BranchName: string;
+  Department: string;
+  E3DElement: string;
+  PIDElement: string;
+  E3DValue: string;
+  PIDValue: string;
+  Message: string;
+  CheckUser: string;
+  CheckTime: string;
+  ModifyUser: string;
+  ModifyTime: string;
+  Status: string;
+  [key: `RedundantField${number}`]: string;
+};
+
+/** PMS 规则校验数据 */
+export type PmsRuleItem = {
+  ChkElmOwnerName: string;
+  ChkElmName: string;
+  Department: string;
+  Message: string;
+  CheckUser: string;
+  CheckTime: string;
+  ModifyUser: string;
+  ModifyTime: string;
+  Status: string;
+  [key: `RedundantField${number}`]: string;
+};
+
+export type CollisionDataResponse = {
+  success: boolean;
+  data: CollisionItem[];
+  total: number;
+  error_message?: string;
+};
+
+/**
+ * 查询碰撞数据
+ * GET /api/review/collision-data
+ */
+export async function reviewGetCollisionData(params: CollisionQueryParams = {}): Promise<CollisionDataResponse> {
+  const search = new URLSearchParams();
+  if (params.project_id) search.set('project_id', params.project_id);
+  if (params.refno) search.set('refno', params.refno);
+  if (params.limit != null) search.set('limit', String(params.limit));
+  if (params.offset != null) search.set('offset', String(params.offset));
+  const qs = search.toString();
+  const path = qs ? `/api/review/collision-data?${qs}` : '/api/review/collision-data';
+  return await fetchJson<CollisionDataResponse>(path, { method: 'GET' });
+}
+
+export type AuxDataRequest = {
+  project_id: string;
+  model_refnos: string[];
+  major: string;
+  requester_id: string;
+  page: number | string;
+  page_size: number | string;
+  form_id: string;
+  new_search?: boolean | string;
+};
+
+/** 后端代理响应格式 */
+export type AuxDataResponse = {
+  code: number;
+  message: string;
+  page: number;
+  page_size: number;
+  total: number;
+  data: {
+    collision: (CollisionItem | PmsCollisionItem)[];
+    quality: PmsQualityItem[];
+    otverification: PmsOtVerificationItem[];
+    rules: PmsRuleItem[];
+  };
+};
+
+/** PMS 原始响应格式（POST /HD/QueryAssistReview） */
+export type PmsAuxDataResponse = {
+  code: number;
+  message: string;
+  pagination: {
+    page: number;
+    total: number;
+    page_size: number;
+  };
+  data: {
+    collision: PmsCollisionItem[];
+    quality: PmsQualityItem[];
+    otverification: PmsOtVerificationItem[];
+    rules: PmsRuleItem[];
+  };
+};
+
+/**
+ * 获取辅助校审数据（后端代理 → PMS /HD/QueryAssistReview）
+ * POST /api/review/aux-data
+ */
+export async function reviewGetAuxData(
+  request: AuxDataRequest,
+  auth: { uCode: string; uKey: string } = AUX_DATA_DEFAULT_AUTH,
+): Promise<AuxDataResponse> {
+  return await fetchJson<AuxDataResponse>('/api/review/aux-data', {
+    method: 'POST',
+    headers: {
+      UCode: auth.uCode,
+      UKey: auth.uKey,
+    },
+    body: JSON.stringify(request),
+  });
+}
+
+/**
+ * 直接调用 PMS 辅助校审数据接口（跳过后端代理）
+ * 仅用于调试/联调，生产环境应走后端代理
+ */
+export async function reviewGetAuxDataFromPms(
+  pmsBaseUrl: string,
+  request: AuxDataRequest,
+  auth: { uCode: string; uKey: string } = AUX_DATA_DEFAULT_AUTH,
+): Promise<PmsAuxDataResponse> {
+  const url = `${pmsBaseUrl.replace(/\/$/, '')}/HD/QueryAssistReview`;
+  const resp = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      UCode: auth.uCode,
+      UKey: auth.uKey,
+    },
+    body: JSON.stringify(request),
+  });
+  if (!resp.ok) throw new Error(`PMS 接口返回 ${resp.status}`);
+  return await resp.json() as PmsAuxDataResponse;
+}

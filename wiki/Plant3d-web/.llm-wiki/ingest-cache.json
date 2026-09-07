@@ -1,0 +1,828 @@
+{
+  "entries": {
+    "App.vue": {
+      "hash": "707bbaa51fb8840927cf3735c12a09aaf80d721dcfc085b663d9519d1a4f4649",
+      "timestamp": 1776695482135,
+      "filesWritten": [
+        "wiki/concepts/app-vue.md",
+        "wiki/sources/app-vue.md"
+      ]
+    },
+    "dashboardApi.ts": {
+      "hash": "6c4a62b1eccdbbdeb75cae7eac1a41ca9633e4909e56ac4be90eaec6991f5c66",
+      "timestamp": 1776695482237,
+      "filesWritten": [
+        "wiki/concepts/dashboardapi-ts.md",
+        "wiki/sources/dashboardapi-ts.md"
+      ]
+    },
+    "genModelE3dApi.ts": {
+      "hash": "aa4fe662e0194c047fc12732246f3c929b6cbdc4fdb6bd415a94861bf1cc5483",
+      "timestamp": 1776695482439,
+      "filesWritten": [
+        "wiki/concepts/genmodele3dapi-ts.md",
+        "wiki/sources/genmodele3dapi-ts.md"
+      ]
+    },
+    "genModelE3dParquetApi.ts": {
+      "hash": "dea153d17b9fcc09c7af1772733e5193dccd701f5e3d6db1c2a509b87154875c",
+      "timestamp": 1776695482654,
+      "filesWritten": [
+        "wiki/concepts/genmodele3dparquetapi-ts.md",
+        "wiki/sources/genmodele3dparquetapi-ts.md"
+      ]
+    },
+    "genModelE3dTypes.ts": {
+      "hash": "7cde077b0230d6752456410288f81273cb27c2f04d287a6ca4e3e395ac472ea4",
+      "timestamp": 1776695482946,
+      "filesWritten": [
+        "wiki/concepts/genmodele3dtypes-ts.md",
+        "wiki/sources/genmodele3dtypes-ts.md"
+      ]
+    },
+    "genModelIndexTreeApi.ts": {
+      "hash": "639df13f930ea9c6c7db4ac666fb0f1a404b3b273736de50fa870dd74ff54a47",
+      "timestamp": 1776695483070,
+      "filesWritten": [
+        "wiki/concepts/genmodelindextreeapi-ts.md",
+        "wiki/sources/genmodelindextreeapi-ts.md"
+      ]
+    },
+    "genModelPdmsAttrApi.ts": {
+      "hash": "783ed467456af35d1c83108a5d176f30c51f765d55f86566c3fdba669c25e07f",
+      "timestamp": 1776695483275,
+      "filesWritten": [
+        "wiki/concepts/genmodelpdmsattrapi-ts.md",
+        "wiki/sources/genmodelpdmsattrapi-ts.md"
+      ]
+    },
+    "genModelRealtimeApi.ts": {
+      "hash": "a213b6bd5c54915ae2195dad49500d7b2b070b18ea530739f450d37364dbb1fa",
+      "timestamp": 1776695483525,
+      "filesWritten": [
+        "wiki/concepts/genmodelrealtimeapi-ts.md",
+        "wiki/sources/genmodelrealtimeapi-ts.md"
+      ]
+    },
+    "genModelRoomComputeApi.ts": {
+      "hash": "5c68b8ce86450c3a5ba72eb8986a663738a14d0c71de664024151dcefa711077",
+      "timestamp": 1776695483735,
+      "filesWritten": [
+        "wiki/concepts/genmodelroomcomputeapi-ts.md",
+        "wiki/sources/genmodelroomcomputeapi-ts.md"
+      ]
+    },
+    "genModelRoomTreeApi.ts": {
+      "hash": "ca7683f378b379403ed63dba6a72f5fcfc057101feaf7cc288ee900fafd00495",
+      "timestamp": 1776695483844,
+      "filesWritten": [
+        "wiki/concepts/genmodelroomtreeapi-ts.md",
+        "wiki/sources/genmodelroomtreeapi-ts.md"
+      ]
+    },
+    "genModelSearchApi.ts": {
+      "hash": "137e5cf9ebead2db44d2ad9e232502d221c9c558cc85ceaecf3ab313d08af5bc",
+      "timestamp": 1776695484027,
+      "filesWritten": [
+        "wiki/concepts/genmodelsearchapi-ts.md",
+        "wiki/sources/genmodelsearchapi-ts.md"
+      ]
+    },
+    "genModelSpatialApi.ts": {
+      "hash": "4e480013072297f8ec13b54d782aa4dc75280fd938e0cae28253305e4a0ee184",
+      "timestamp": 1776695484166,
+      "filesWritten": [
+        "wiki/concepts/genmodelspatialapi-ts.md",
+        "wiki/sources/genmodelspatialapi-ts.md"
+      ]
+    },
+    "genModelTaskApi.ts": {
+      "hash": "83297da40c645adfc5c2cc284eb12cd93778520b4297f38c01bb1eb880f5474c",
+      "timestamp": 1776695484313,
+      "filesWritten": [
+        "wiki/concepts/genmodeltaskapi-ts.md",
+        "wiki/sources/genmodeltaskapi-ts.md"
+      ]
+    },
+    "mbdPipeApi.ts": {
+      "hash": "1e619736aa831f6796df87ee3e6e9d47319b0227977b454dae326fecb76b4025",
+      "timestamp": 1776695484467,
+      "filesWritten": [
+        "wiki/concepts/mbdpipeapi-ts.md",
+        "wiki/sources/mbdpipeapi-ts.md"
+      ]
+    },
+    "pipelineAnnotationApi.ts": {
+      "hash": "dd3fc1ba713d2f762c7ef64ba9dc13513b7e4bb133979fe61bb37cdc2db7f550",
+      "timestamp": 1776695484576,
+      "filesWritten": [
+        "wiki/concepts/pipelineannotationapi-ts.md",
+        "wiki/sources/pipelineannotationapi-ts.md"
+      ]
+    },
+    "reviewApi.ts": {
+      "hash": "dc94dbc717d21fb3317d3de5abc1875f0e88b9d0b20c4123fceb8934931fb301",
+      "timestamp": 1776695484734,
+      "filesWritten": [
+        "wiki/concepts/reviewapi-ts.md",
+        "wiki/sources/reviewapi-ts.md"
+      ]
+    },
+    "siteRegistryApi.ts": {
+      "hash": "faab20c8f3132afc18a0701d56dac98c66d6899ecea3ee0359d41d8b52faffe2",
+      "timestamp": 1776695484896,
+      "filesWritten": [
+        "wiki/concepts/siteregistryapi-ts.md",
+        "wiki/sources/siteregistryapi-ts.md"
+      ]
+    },
+    "tailwind.css": {
+      "hash": "27c8e285673f87ba26661fd25007f64ed1650ea5952318f1221c720457900745",
+      "timestamp": 1776695485134,
+      "filesWritten": [
+        "wiki/concepts/tailwind-css.md",
+        "wiki/sources/tailwind-css.md"
+      ]
+    },
+    "surreal_sync_benchmark.ts": {
+      "hash": "3d8c02ecae0d6813bda5a13419653bf1d09b445eb6aadb5fa45302eeb53b107d",
+      "timestamp": 1776695485306,
+      "filesWritten": [
+        "wiki/concepts/surreal-sync-benchmark-ts.md",
+        "wiki/sources/surreal-sync-benchmark-ts.md"
+      ]
+    },
+    "AboutDialog.vue": {
+      "hash": "9b773ac8288a05f39f568f49b1fcf60f2f2e9234203fc51c1f8318e0355e1915",
+      "timestamp": 1776695485548,
+      "filesWritten": [
+        "wiki/concepts/aboutdialog-vue.md",
+        "wiki/sources/aboutdialog-vue.md"
+      ]
+    },
+    "DockLayout.vue": {
+      "hash": "68e9d8698c2f1d1bbe7a0a5387bca3a47b5d8eb97ab95aec39838085a9d66bbf",
+      "timestamp": 1776695485730,
+      "filesWritten": [
+        "wiki/concepts/docklayout-vue.md",
+        "wiki/sources/docklayout-vue.md"
+      ]
+    },
+    "ReleaseNotesDialog.vue": {
+      "hash": "fb0908e682bda995e85ca58bed8c8b77c4122a1c39c2cc77defebcda48d7965d",
+      "timestamp": 1776695485990,
+      "filesWritten": [
+        "wiki/concepts/releasenotesdialog-vue.md",
+        "wiki/sources/releasenotesdialog-vue.md"
+      ]
+    },
+    "DashboardLayout.vue": {
+      "hash": "552ecaad908f04f36f3d94087384713e82c8bf8b6323f5629bcc4ea3dffa017f",
+      "timestamp": 1776695486141,
+      "filesWritten": [
+        "wiki/concepts/dashboardlayout-vue.md",
+        "wiki/sources/dashboardlayout-vue.md"
+      ]
+    },
+    "DashboardOverview.vue": {
+      "hash": "aab7f04c332bd5b84b2e94011d7a889ce3daee955606750dbcbbd064b216d474",
+      "timestamp": 1776695486328,
+      "filesWritten": [
+        "wiki/concepts/dashboardoverview-vue.md",
+        "wiki/sources/dashboardoverview-vue.md"
+      ]
+    },
+    "DashboardPanel.vue": {
+      "hash": "1b4988eb05c07724196bc334921cb8c9e1c49241c9d017cc7f833143502f692b",
+      "timestamp": 1776695486544,
+      "filesWritten": [
+        "wiki/concepts/dashboardpanel-vue.md",
+        "wiki/sources/dashboardpanel-vue.md"
+      ]
+    },
+    "DashboardReviewsPanel.vue": {
+      "hash": "760891d5b282fa760e377086609bd01750136fe2418bbd4612d488c567faa40f",
+      "timestamp": 1776695486745,
+      "filesWritten": [
+        "wiki/concepts/dashboardreviewspanel-vue.md",
+        "wiki/sources/dashboardreviewspanel-vue.md"
+      ]
+    },
+    "BenchmarkView.vue": {
+      "hash": "895585b9adc5b6feeeca477b53d6fe7f80d0a3a9ac96cc0a049c2700cef7e8b5",
+      "timestamp": 1776695486897,
+      "filesWritten": [
+        "wiki/concepts/benchmarkview-vue.md",
+        "wiki/sources/benchmarkview-vue.md"
+      ]
+    },
+    "AnnotationPanelDock.vue": {
+      "hash": "2b943be197054ce248774b6b1f0fbdd024cbad79b238374a14ee78d63f4fff16",
+      "timestamp": 1776695487070,
+      "filesWritten": [
+        "wiki/concepts/annotationpaneldock-vue.md",
+        "wiki/sources/annotationpaneldock-vue.md"
+      ]
+    },
+    "AnnotationStylePanelDock.vue": {
+      "hash": "b751981dddb8588c61041ff20ea14560c82b1778e980f88521bce96f3e6c0b33",
+      "timestamp": 1776695487232,
+      "filesWritten": [
+        "wiki/concepts/annotationstylepaneldock-vue.md",
+        "wiki/sources/annotationstylepaneldock-vue.md"
+      ]
+    },
+    "ConsolePanelDock.vue": {
+      "hash": "74e639ba18d64559c2c087bae8221aaa024960771c731c88be50dd4122e527a6",
+      "timestamp": 1776695487506,
+      "filesWritten": [
+        "wiki/concepts/consolepaneldock-vue.md",
+        "wiki/sources/consolepaneldock-vue.md"
+      ]
+    },
+    "DashboardPanelDock.vue": {
+      "hash": "b7a4fb9911ce29a23d77e37b192c6a58329be6ae5647dd1e158a5346ccbef979",
+      "timestamp": 1776695487668,
+      "filesWritten": [
+        "wiki/concepts/dashboardpaneldock-vue.md",
+        "wiki/sources/dashboardpaneldock-vue.md"
+      ]
+    },
+    "DesignerTaskListPanelDock.vue": {
+      "hash": "5fa11e7fa336df99bcdf4e10c67a18abde3f02da7a262b5730f1810c42738d97",
+      "timestamp": 1776695487900,
+      "filesWritten": [
+        "wiki/concepts/designertasklistpaneldock-vue.md",
+        "wiki/sources/designertasklistpaneldock-vue.md"
+      ]
+    },
+    "DimensionPanelDock.vue": {
+      "hash": "75c81eba0aeb221acf2ebb014d797f66da2b557442ba291fe1d547635d5836bb",
+      "timestamp": 1776695488052,
+      "filesWritten": [
+        "wiki/concepts/dimensionpaneldock-vue.md",
+        "wiki/sources/dimensionpaneldock-vue.md"
+      ]
+    },
+    "DimensionStylePanelDock.vue": {
+      "hash": "a38ff13e9474f161f4339277bea283b472fea698a3300327d7cc4341d2929845",
+      "timestamp": 1776695488168,
+      "filesWritten": [
+        "wiki/concepts/dimensionstylepaneldock-vue.md",
+        "wiki/sources/dimensionstylepaneldock-vue.md"
+      ]
+    },
+    "DtxMaterialConfigPanelDock.vue": {
+      "hash": "69d87a5fbe1b1dce2a52e947083f71d706140fa6f05008ff599930a5a81a9b32",
+      "timestamp": 1776695488366,
+      "filesWritten": [
+        "wiki/concepts/dtxmaterialconfigpaneldock-vue.md",
+        "wiki/sources/dtxmaterialconfigpaneldock-vue.md"
+      ]
+    },
+    "HydraulicPanelDock.vue": {
+      "hash": "a292fd4c1028cdaafc00ce83b080d9d3cbb38669b56aab5e134893d8633ab2d1",
+      "timestamp": 1776695488537,
+      "filesWritten": [
+        "wiki/concepts/hydraulicpaneldock-vue.md",
+        "wiki/sources/hydraulicpaneldock-vue.md"
+      ]
+    },
+    "InitiateReviewPanelDock.vue": {
+      "hash": "6fe1901d54f762e06d5d40221c39916ae1f71e8bcf10176125cf587d755459f0",
+      "timestamp": 1776695488699,
+      "filesWritten": [
+        "wiki/concepts/initiatereviewpaneldock-vue.md",
+        "wiki/sources/initiatereviewpaneldock-vue.md"
+      ]
+    },
+    "ManagerPanelDock.vue": {
+      "hash": "95d2ab50383181e64fc76b6659966ef9fbb72166e66b52f2442273739a17185c",
+      "timestamp": 1776695488837,
+      "filesWritten": [
+        "wiki/concepts/managerpaneldock-vue.md",
+        "wiki/sources/managerpaneldock-vue.md"
+      ]
+    },
+    "MbdPipePanelDock.vue": {
+      "hash": "54336436e2184f40060a9c47d7d5e34ed4372efac643c45e771d16a9b36cc672",
+      "timestamp": 1776695488974,
+      "filesWritten": [
+        "wiki/concepts/mbdpipepaneldock-vue.md",
+        "wiki/sources/mbdpipepaneldock-vue.md"
+      ]
+    },
+    "MeasurementPanelDock.vue": {
+      "hash": "fcdcf74c61e0c38ac3dc442cf14f413e221088c8faffe4c85f203dacc607ead9",
+      "timestamp": 1776695489105,
+      "filesWritten": [
+        "wiki/concepts/measurementpaneldock-vue.md",
+        "wiki/sources/measurementpaneldock-vue.md"
+      ]
+    },
+    "ModelExportPanelDock.vue": {
+      "hash": "0912c7cb9e3345f9b426d1e318f037390d5f981a8d0f4d400478ebaf846c62ef",
+      "timestamp": 1776695489349,
+      "filesWritten": [
+        "wiki/concepts/modelexportpaneldock-vue.md",
+        "wiki/sources/modelexportpaneldock-vue.md"
+      ]
+    },
+    "ModelTreePanelDock.vue": {
+      "hash": "0714d87bb7fcd8fa75b61b48addad7407a33a8fad34a85ea2e6afd15682c5b8c",
+      "timestamp": 1776695489754,
+      "filesWritten": [
+        "wiki/concepts/modeltreepaneldock-vue.md",
+        "wiki/sources/modeltreepaneldock-vue.md"
+      ]
+    },
+    "ParquetDebugPanelDock.vue": {
+      "hash": "4fb985804e57894221b3115d7c1dff608ce7dcb186e3a882e1b1990c2f3c5b43",
+      "timestamp": 1776695490811,
+      "filesWritten": [
+        "wiki/concepts/parquetdebugpaneldock-vue.md",
+        "wiki/sources/parquetdebugpaneldock-vue.md"
+      ]
+    },
+    "PropertiesPanelDock.vue": {
+      "hash": "c4fb44383b44bc57c2271769cab8f570ae4c40aba6ffe9104b01d8700195026e",
+      "timestamp": 1776696379171,
+      "filesWritten": [
+        "wiki/concepts/propertiespaneldock-vue.md",
+        "wiki/sources/propertiespaneldock-vue.md"
+      ]
+    },
+    "PtsetPanelDock.vue": {
+      "hash": "0feb49d2200694199e971daef74ce6c4f434a3b7155200bd9a15aa35505a4b26",
+      "timestamp": 1776696380449,
+      "filesWritten": [
+        "wiki/concepts/ptsetpaneldock-vue.md",
+        "wiki/sources/ptsetpaneldock-vue.md"
+      ]
+    },
+    "ResubmissionTaskListPanelDock.vue": {
+      "hash": "3caab3ee6174e8f85675294a18b47b1b5cc3f2f7a0ba37c40397a3d274c2db90",
+      "timestamp": 1776696380952,
+      "filesWritten": [
+        "wiki/concepts/resubmissiontasklistpaneldock-vue.md",
+        "wiki/sources/resubmissiontasklistpaneldock-vue.md"
+      ]
+    },
+    "ReviewPanelDock.vue": {
+      "hash": "526abd81fc34a16194aea17e2272aec9591cc5aeef0631e8fdd8b300d20311de",
+      "timestamp": 1776696381516,
+      "filesWritten": [
+        "wiki/concepts/reviewpaneldock-vue.md",
+        "wiki/sources/reviewpaneldock-vue.md"
+      ]
+    },
+    "ReviewerTaskListPanelDock.vue": {
+      "hash": "4b6aaee03f14a4a56a794b591f4cfc99bbbad6b09b876b5e9fc354644f9c6448",
+      "timestamp": 1776696381890,
+      "filesWritten": [
+        "wiki/concepts/reviewertasklistpaneldock-vue.md",
+        "wiki/sources/reviewertasklistpaneldock-vue.md"
+      ]
+    },
+    "RoomStatusPanelDock.vue": {
+      "hash": "7a1cab81a8a4a4ddd0cc8e426ed5a3d363aa284622d32bd9074d8b280e659716",
+      "timestamp": 1776696382184,
+      "filesWritten": [
+        "wiki/concepts/roomstatuspaneldock-vue.md",
+        "wiki/sources/roomstatuspaneldock-vue.md"
+      ]
+    },
+    "SpatialComputePanelDock.vue": {
+      "hash": "d07a26912f99bdbb8398c68ecf485f20276d1941aab50d12fb60c5b213fbe65d",
+      "timestamp": 1776696383747,
+      "filesWritten": [
+        "wiki/concepts/spatialcomputepaneldock-vue.md",
+        "wiki/sources/spatialcomputepaneldock-vue.md"
+      ]
+    },
+    "TaskCreationPanelDock.vue": {
+      "hash": "1a4a7b039d04b954e56f5e7095d7c197cc3a65e20195a559f218076cbcb582ac",
+      "timestamp": 1776696384379,
+      "filesWritten": [
+        "wiki/concepts/taskcreationpaneldock-vue.md",
+        "wiki/sources/taskcreationpaneldock-vue.md"
+      ]
+    },
+    "TaskMonitorPanelDock.vue": {
+      "hash": "4f877eb496c7a9cf7703cbef8a63f50ee28b05f94eef2e89d825857bfe79503d",
+      "timestamp": 1776696387030,
+      "filesWritten": [
+        "wiki/concepts/taskmonitorpaneldock-vue.md",
+        "wiki/sources/taskmonitorpaneldock-vue.md"
+      ]
+    },
+    "ToolbarPanel.vue": {
+      "hash": "b1ac431591761a266b621105b8fdeed48f3bbfcc0711184c6216be1e834d9b55",
+      "timestamp": 1776696411935,
+      "filesWritten": [
+        "wiki/concepts/toolbarpanel-vue.md",
+        "wiki/sources/toolbarpanel-vue.md"
+      ]
+    },
+    "ViewerPanel.vue": {
+      "hash": "cf6d2d40e87789501eecef19474d7e446944f1d021ba38771ed9df2a18fd60fe",
+      "timestamp": 1776696414180,
+      "filesWritten": [
+        "wiki/concepts/viewerpanel-vue.md",
+        "wiki/sources/viewerpanel-vue.md"
+      ]
+    },
+    "XeokitMeasurementPanelDock.vue": {
+      "hash": "e342c34fbb26b8283e5a28078665bc5a903215c8794f075f075a712ae6d60b45",
+      "timestamp": 1776696415014,
+      "filesWritten": [
+        "wiki/concepts/xeokitmeasurementpaneldock-vue.md",
+        "wiki/sources/xeokitmeasurementpaneldock-vue.md"
+      ]
+    },
+    "viewerToolbarSelection.ts": {
+      "hash": "3390312c93be12b3731a3f2f7cd99abf3f768cc273a7ddb94de297e5badec093",
+      "timestamp": 1776696415443,
+      "filesWritten": [
+        "wiki/concepts/viewertoolbarselection-ts.md",
+        "wiki/sources/viewertoolbarselection-ts.md"
+      ]
+    },
+    "ModelProjectSelector.vue": {
+      "hash": "639853ef4d1088b44ed838a032a25d2840b11f8616556cd0dc555a1544fefc02",
+      "timestamp": 1776696466885,
+      "filesWritten": [
+        "wiki/concepts/modelprojectselector-vue.md",
+        "wiki/sources/modelprojectselector-vue.md"
+      ]
+    },
+    "ProjectCardList.vue": {
+      "hash": "eb041a943d80d3921dd1f00afe7e6d9670746b0369e87350c060455d1711315b",
+      "timestamp": 1776696536638,
+      "filesWritten": [
+        "wiki/concepts/projectcardlist-vue.md",
+        "wiki/sources/projectcardlist-vue.md"
+      ]
+    },
+    "ModelGenerationProgressModal.vue": {
+      "hash": "f3d29e220720ceeae9fce1971d025bbca66920be1d3727033266d3aec0d1bdc9",
+      "timestamp": 1776696541604,
+      "filesWritten": [
+        "wiki/concepts/modelgenerationprogressmodal-vue.md",
+        "wiki/sources/modelgenerationprogressmodal-vue.md"
+      ]
+    },
+    "ModelTreePanel.vue": {
+      "hash": "01bbeb31ea38900b0a30e810667d3b4d5fabe68508c1d579c5c2a9403cf33808",
+      "timestamp": 1776696602223,
+      "filesWritten": [
+        "wiki/concepts/modeltreepanel-vue.md",
+        "wiki/sources/modeltreepanel-vue.md"
+      ]
+    },
+    "ModelTreeRow.vue": {
+      "hash": "a74896355ba070b92778f6a2dc924380d792de47567908693b68ff6b45235ef4",
+      "timestamp": 1776696631475,
+      "filesWritten": [
+        "wiki/concepts/modeltreerow-vue.md",
+        "wiki/sources/modeltreerow-vue.md"
+      ]
+    },
+    "OnboardingOverlay.vue": {
+      "hash": "c65c93b8879d2d46269cbfe8da42dfc62f81a5763cfc423b09717a73feb52247",
+      "timestamp": 1776696660039,
+      "filesWritten": [
+        "wiki/concepts/onboardingoverlay-vue.md",
+        "wiki/sources/onboardingoverlay-vue.md"
+      ]
+    },
+    "ReviewGuideCenter.vue": {
+      "hash": "9d31e2d46ea95eb8ad0038780fdd0e056a3d8b811acf27f4721e23e106601a27",
+      "timestamp": 1776696660966,
+      "filesWritten": [
+        "wiki/concepts/reviewguidecenter-vue.md",
+        "wiki/sources/reviewguidecenter-vue.md"
+      ]
+    },
+    "hierarchicalMenuGuide.ts": {
+      "hash": "6a2102f6218e7c823073c88b212ce28cff9b24eb424d6d313f44a94567d5ef1f",
+      "timestamp": 1776696661466,
+      "filesWritten": [
+        "wiki/concepts/hierarchicalmenuguide-ts.md",
+        "wiki/sources/hierarchicalmenuguide-ts.md"
+      ]
+    },
+    "designerGuide.ts": {
+      "hash": "e813853d1a861db27063d4a2a2772e0fad035e06e4c90a6cc1b251f1085c9eff",
+      "timestamp": 1776696661942,
+      "filesWritten": [
+        "wiki/concepts/designerguide-ts.md",
+        "wiki/sources/designerguide-ts.md"
+      ]
+    },
+    "reviewerGuide.ts": {
+      "hash": "842619ad4ba86a6b5a5f29eb73d572c26dfbab410058810300c469013b53bf97",
+      "timestamp": 1776696662455,
+      "filesWritten": [
+        "wiki/concepts/reviewerguide-ts.md",
+        "wiki/sources/reviewerguide-ts.md"
+      ]
+    },
+    "types.ts": {
+      "hash": "6ca5e3ba496727e972b727809a88b060f656a648ee47719602b6c9f2800ca771",
+      "timestamp": 1776696662734,
+      "filesWritten": [
+        "wiki/concepts/types-ts.md",
+        "wiki/sources/types-ts.md"
+      ]
+    },
+    "PipeDistanceDrawer.vue": {
+      "hash": "dcaa83bb818fe2892ae0b9c9de9badf2f9b46a237ac222177f691dfa193e9e74",
+      "timestamp": 1776696663074,
+      "filesWritten": [
+        "wiki/concepts/pipedistancedrawer-vue.md",
+        "wiki/sources/pipedistancedrawer-vue.md"
+      ]
+    },
+    "AssociatedFilesList.vue": {
+      "hash": "9ea79474ec5434f24c8c232761949d9fbf398620fa2684b503d569ee69564834",
+      "timestamp": 1776696663992,
+      "filesWritten": [
+        "wiki/concepts/associatedfileslist-vue.md",
+        "wiki/sources/associatedfileslist-vue.md"
+      ]
+    },
+    "CollisionResultList.vue": {
+      "hash": "89b4aa9a6905264a06659f7efda1bd2e8a9953d818cffe7cadfe4954eef32709",
+      "timestamp": 1776696664888,
+      "filesWritten": [
+        "wiki/concepts/collisionresultlist-vue.md",
+        "wiki/sources/collisionresultlist-vue.md"
+      ]
+    },
+    "DesignerTaskList.vue": {
+      "hash": "b57466d5cbe71af5b205ee257eaae0c2cc594be9ac800a6dcac5e07fb11e9a64",
+      "timestamp": 1776696665284,
+      "filesWritten": [
+        "wiki/concepts/designertasklist-vue.md",
+        "wiki/sources/designertasklist-vue.md"
+      ]
+    },
+    "ExternalReviewViewer.vue": {
+      "hash": "22dc6c35fe8d45c94d2419169722afe573581b94c35627a081bfd351a13e6510",
+      "timestamp": 1776696666307,
+      "filesWritten": [
+        "wiki/concepts/externalreviewviewer-vue.md",
+        "wiki/sources/externalreviewviewer-vue.md"
+      ]
+    },
+    "FileUploadSection.vue": {
+      "hash": "9968cf2e54bf5632dc8d8021f11bfd8b5411e977dfe5d45939eb262f4adfdecc",
+      "timestamp": 1776696667037,
+      "filesWritten": [
+        "wiki/concepts/fileuploadsection-vue.md",
+        "wiki/sources/fileuploadsection-vue.md"
+      ]
+    },
+    "InitiateReviewPanel.vue": {
+      "hash": "18d5696f48bbc7620e0c4c0348b62af051f3429e7aeb0ba8a221bb9d2e97d0cf",
+      "timestamp": 1776696668221,
+      "filesWritten": [
+        "wiki/concepts/initiatereviewpanel-vue.md",
+        "wiki/sources/initiatereviewpanel-vue.md"
+      ]
+    },
+    "ResubmissionTaskList.vue": {
+      "hash": "20cfc7a91f3def0d0a5321002a652f016a307c2b0a548db48b1105a50c39cac8",
+      "timestamp": 1776696669368,
+      "filesWritten": [
+        "wiki/concepts/resubmissiontasklist-vue.md",
+        "wiki/sources/resubmissiontasklist-vue.md"
+      ]
+    },
+    "ReviewAuxData.vue": {
+      "hash": "ad160f7c40e82c4ddcacf296163f5347fc89b9cd94ff8584fab242cac9dc483b",
+      "timestamp": 1776696669823,
+      "filesWritten": [
+        "wiki/concepts/reviewauxdata-vue.md",
+        "wiki/sources/reviewauxdata-vue.md"
+      ]
+    },
+    "ReviewCommentsPanel.vue": {
+      "hash": "899e1d8842cfaf9c87b9558350a0e0f9dc540d32960b0e38642ec475eca0f0ca",
+      "timestamp": 1776696670448,
+      "filesWritten": [
+        "wiki/concepts/reviewcommentspanel-vue.md",
+        "wiki/sources/reviewcommentspanel-vue.md"
+      ]
+    },
+    "ReviewCommentsTimeline.vue": {
+      "hash": "1a98fe9f59bf38759d79f1e60739d8aae838f76a4d1f8f5c8c55a706a74b56db",
+      "timestamp": 1776696670999,
+      "filesWritten": [
+        "wiki/concepts/reviewcommentstimeline-vue.md",
+        "wiki/sources/reviewcommentstimeline-vue.md"
+      ]
+    },
+    "ReviewConfirmation.vue": {
+      "hash": "688b7b2f6ddec6416e12fc940fd171089419d3cafb44f6d550a0aceb5c84e39a",
+      "timestamp": 1776696671341,
+      "filesWritten": [
+        "wiki/concepts/reviewconfirmation-vue.md",
+        "wiki/sources/reviewconfirmation-vue.md"
+      ]
+    },
+    "ReviewDataSync.vue": {
+      "hash": "89edd2acf619cfb3eff376b8e207f268268119bb9e69a2a5f7060890f4865676",
+      "timestamp": 1776696671898,
+      "filesWritten": [
+        "wiki/concepts/reviewdatasync-vue.md",
+        "wiki/sources/reviewdatasync-vue.md"
+      ]
+    },
+    "ReviewPanel.vue": {
+      "hash": "c0ba233149e51090eff4db79735a2649ef786d60b5d24032fb47ebefe0890f0e",
+      "timestamp": 1776696672308,
+      "filesWritten": [
+        "wiki/concepts/reviewpanel-vue.md",
+        "wiki/sources/reviewpanel-vue.md"
+      ]
+    },
+    "ReviewerTaskList.vue": {
+      "hash": "3a03abb32340f41df3dc1707ed3676502bbc638f53a989f4571d01619f94dd6b",
+      "timestamp": 1776696672740,
+      "filesWritten": [
+        "wiki/concepts/reviewertasklist-vue.md",
+        "wiki/sources/reviewertasklist-vue.md"
+      ]
+    },
+    "RoleSwitcher.vue": {
+      "hash": "da5f7a7d0fd11f30ffa54438ac8d1c5894d748ec9316057c4f22cc09cafa678e",
+      "timestamp": 1776696673057,
+      "filesWritten": [
+        "wiki/concepts/roleswitcher-vue.md",
+        "wiki/sources/roleswitcher-vue.md"
+      ]
+    },
+    "TaskReviewDetail.vue": {
+      "hash": "f1b5306337a1a6b510e2b8580cf8cd9bea78380f89a674e852977e3e5b6292a7",
+      "timestamp": 1776696673425,
+      "filesWritten": [
+        "wiki/concepts/taskreviewdetail-vue.md",
+        "wiki/sources/taskreviewdetail-vue.md"
+      ]
+    },
+    "WorkflowReturnDialog.vue": {
+      "hash": "815785168774b72890b656c71d04685f116aa22134c0a6c6049f8893031742ed",
+      "timestamp": 1776696674193,
+      "filesWritten": [
+        "wiki/concepts/workflowreturndialog-vue.md",
+        "wiki/sources/workflowreturndialog-vue.md"
+      ]
+    },
+    "WorkflowStepBar.vue": {
+      "hash": "dcc77072066e3d3f2ba6dfe6c9cfd600ccfc773007d7bc4152df74d5cbb77921",
+      "timestamp": 1776696675064,
+      "filesWritten": [
+        "wiki/concepts/workflowstepbar-vue.md",
+        "wiki/sources/workflowstepbar-vue.md"
+      ]
+    },
+    "WorkflowSubmitDialog.vue": {
+      "hash": "a86ffc48a4d19b227d6dafc513712f9eeda0800b55baff792e69199346a538c7",
+      "timestamp": 1776696676648,
+      "filesWritten": [
+        "wiki/concepts/workflowsubmitdialog-vue.md",
+        "wiki/sources/workflowsubmitdialog-vue.md"
+      ]
+    },
+    "WorkflowTimeline.vue": {
+      "hash": "3d88104ca57bd401e767676e74a04daedb2c46aafbc58928dc069f32f09ddeb0",
+      "timestamp": 1776696677415,
+      "filesWritten": [
+        "wiki/concepts/workflowtimeline-vue.md",
+        "wiki/sources/workflowtimeline-vue.md"
+      ]
+    },
+    "confirmedRecordsRestore.ts": {
+      "hash": "8f5c54034b0ed603a8df7dde68ba27def799f34af6943ce74eee59160c0a372c",
+      "timestamp": 1776696677958,
+      "filesWritten": [
+        "wiki/concepts/confirmedrecordsrestore-ts.md",
+        "wiki/sources/confirmedrecordsrestore-ts.md"
+      ]
+    },
+    "debugUiGate.ts": {
+      "hash": "1d08fdafa81ef3aa8b9004339ca8262a2177ec23143719dcead86f935346856e",
+      "timestamp": 1776696678895,
+      "filesWritten": [
+        "wiki/concepts/debuguigate-ts.md",
+        "wiki/sources/debuguigate-ts.md"
+      ]
+    },
+    "embedContextRestore.ts": {
+      "hash": "5b41db0f49d741725549d9144e488a6a845e784098ec2dafd2d5b424e9958363",
+      "timestamp": 1776696683704,
+      "filesWritten": [
+        "wiki/concepts/embedcontextrestore-ts.md",
+        "wiki/sources/embedcontextrestore-ts.md"
+      ]
+    },
+    "embedFormSnapshotRestore.ts": {
+      "hash": "e88c4c04f958e5a343393fd443329f47553988d38050de49a5b7e6ff47637cf0",
+      "timestamp": 1776696684923,
+      "filesWritten": [
+        "wiki/concepts/embedformsnapshotrestore-ts.md",
+        "wiki/sources/embedformsnapshotrestore-ts.md"
+      ]
+    },
+    "embedRoleLanding.ts": {
+      "hash": "f7be6d4e06d86b98a5247312cfc03d9171233639346e423a0975671fae97749f",
+      "timestamp": 1776696685492,
+      "filesWritten": [
+        "wiki/concepts/embedrolelanding-ts.md",
+        "wiki/sources/embedrolelanding-ts.md"
+      ]
+    },
+    "reviewAttachmentFlow.ts": {
+      "hash": "d2c8c90b5088fdb115dfc5ef95ed4d58e871002eb024933312e8674b1723f236",
+      "timestamp": 1776696685818,
+      "filesWritten": [
+        "wiki/concepts/reviewattachmentflow-ts.md",
+        "wiki/sources/reviewattachmentflow-ts.md"
+      ]
+    },
+    "reviewPanelActions.ts": {
+      "hash": "68751d82cb117433714938dacc68e9d332523f13536d0559d80146577c358270",
+      "timestamp": 1776696686117,
+      "filesWritten": [
+        "wiki/concepts/reviewpanelactions-ts.md",
+        "wiki/sources/reviewpanelactions-ts.md"
+      ]
+    },
+    "reviewRecordReplay.ts": {
+      "hash": "f24276bf1f73c2c611d6f1f309720e49225c0ec6f0131093d8721b33ac69e888",
+      "timestamp": 1776696686554,
+      "filesWritten": [
+        "wiki/concepts/reviewrecordreplay-ts.md",
+        "wiki/sources/reviewrecordreplay-ts.md"
+      ]
+    },
+    "reviewTaskFilters.ts": {
+      "hash": "e09310ca94710b78635f4aa0234164a71acce5f7543b573684e88520cdcec085",
+      "timestamp": 1776696687183,
+      "filesWritten": [
+        "wiki/concepts/reviewtaskfilters-ts.md",
+        "wiki/sources/reviewtaskfilters-ts.md"
+      ]
+    },
+    "reviewerTaskListActions.ts": {
+      "hash": "f85c727bccbec6aa2fdad9d0d9b50e9b0eefccfbf66bf1276e5c024f7df2b8c4",
+      "timestamp": 1776696687775,
+      "filesWritten": [
+        "wiki/concepts/reviewertasklistactions-ts.md",
+        "wiki/sources/reviewertasklistactions-ts.md"
+      ]
+    },
+    "AuxiliaryDataSection.vue": {
+      "hash": "2c7a2fd2cadbe913ca5665475543c3b404b3259a6e672614d115de22c6e2e691",
+      "timestamp": 1776696688331,
+      "filesWritten": [
+        "wiki/concepts/auxiliarydatasection-vue.md",
+        "wiki/sources/auxiliarydatasection-vue.md"
+      ]
+    },
+    "ConfirmedRecordsSection.vue": {
+      "hash": "3950893beabf70232a5a9de8ab8ad883938ddaa63fac8b780c6aa8fec9759395",
+      "timestamp": 1776696688726,
+      "filesWritten": [
+        "wiki/concepts/confirmedrecordssection-vue.md",
+        "wiki/sources/confirmedrecordssection-vue.md"
+      ]
+    },
+    "DataSyncSection.vue": {
+      "hash": "2b625ad70c085b21dfbf292144ca1e571b8f46b32d466dcb61335fdd16e4d7f2",
+      "timestamp": 1776696689151,
+      "filesWritten": [
+        "wiki/concepts/datasyncsection-vue.md",
+        "wiki/sources/datasyncsection-vue.md"
+      ]
+    },
+    "TaskContextSection.vue": {
+      "hash": "14c72197d5dcbc3139a6c32c34e90dffa7999206475d2febf11560e1a0f9de37",
+      "timestamp": 1776696689762,
+      "filesWritten": [
+        "wiki/concepts/taskcontextsection-vue.md",
+        "wiki/sources/taskcontextsection-vue.md"
+      ]
+    },
+    "WorkflowActionSection.vue": {
+      "hash": "2b541fbf529beb2ce2bd28b6afcb80f92e33d3997f0989d6b6cda12863c6949e",
+      "timestamp": 1776696690376,
+      "filesWritten": [
+        "wiki/concepts/workflowactionsection-vue.md",
+        "wiki/sources/workflowactionsection-vue.md"
+      ]
+    }
+  }
+}

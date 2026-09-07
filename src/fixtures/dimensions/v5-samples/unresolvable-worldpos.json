@@ -1,0 +1,34 @@
+{
+  "version": 5,
+  "dimensions": [
+    {
+      "id": "legacy-linear-world-only",
+      "kind": "linear_distance",
+      "origin": {
+        "entityId": "C",
+        "worldPos": [110, 220, 330],
+        "sourceInfo": {
+          "source": "ptset",
+          "candidateId": "P2",
+          "refno": "C"
+        }
+      },
+      "target": {
+        "entityId": "D",
+        "worldPos": [410, 520, 630],
+        "sourceInfo": {
+          "source": "primitive_key_point",
+          "candidateId": "K2",
+          "refno": "D"
+        }
+      },
+      "offset": 0.25,
+      "direction": [0, 1, 0],
+      "labelT": 0.5,
+      "isReference": true,
+      "textOverride": "999.0 mm",
+      "visible": true,
+      "createdAt": 1700000001000
+    }
+  ]
+}

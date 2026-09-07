@@ -1,0 +1,313 @@
+# plant3d-web 接入 gen-model `/api/v1`：模型树与三维模型加载重构方案
+
+- 日期：2026-09-06
+- 状态：草案，待 Plannotator 批注 / 拍板
+- 范围：`D:\work\plant-code\old\plant3d-web`（前端，主战场）+ `D:\work\plant-code\old\gen-model`（后端，只做最小增补）
+- 术语以两仓 `CONTEXT.md` 为准：plant3d-web 的「显式显示操作 / 按需模型生成 / 模型资产补齐 / 模型加载」，gen-model 的「生成根 / 最小交付单元 / 模型面 / 库一致性判决」。
+
+---
+
+## 0. 一句话
+
+把 plant3d-web 里「模型树」与「三维模型」两条数据链的**数据源**从旧后端 `plant-model-gen`（`:3100`，`/api/e3d/*` + parquet/DuckDB-WASM + `/files/meshes/**.glb`）切到本仓 gen-model 的 `/api/v1`（`:8022`，`tree/*` + `model/ensure` + `model/records` + `/assets/meshes/*.mesh`），方式是**在前端加一层数据源端口（port）+ 两个适配器（legacy / gen-model-v1）**，旧链路保留在开关后面直到对拍通过；gen-model 侧只补三个小接口缺口。
+
+## 1. 目标 / 非目标
+
+**目标**
+
+1. 模型树面板（`ModelTreePanel.vue` → `usePdmsOwnerTree.ts`）能以 gen-model `/api/v1/tree/*` + `/api/v1/search` 为数据源完成：根节点、按需展开子节点、搜索、按 refno 定位（祖先链展开）。
+2. 三维视口（`ViewerPanel.vue` → `useDbnoInstancesDtxLoader.ts` → DTX 层）能以 `/api/v1/model/ensure` + `/api/v1/model/records` + 网格文件为数据源加载并显示任意树节点（SITE/ZONE/BRAN/EQUI/…）范围内的几何实例。
+3. 属性面板改读 `/api/v1/element/attributes`（顺手，否则树能显示但点开属性是空的）。
+4. 旧链路（parquet / `/api/e3d/*`）**不删**，放在数据源开关后面，直到 §7 对拍全绿；删除另立计划。
+
+**非目标（本期不做）**
+
+- 尺寸标注 / MBD / 测量 / 校审批注等其它 `/api/*` 依赖的迁移（它们不属于「模型树 + 三维模型显示」）。
+- 版本对比（`model-version`、`modelUnitVersionApi`）迁移——gen-model 的 `model/history/*` 存在但契约与前端现有版本视图差距大，另立计划。
+- 鉴权、多租户、生产部署拓扑。
+- 把 DuckDB-WASM / parquet 整条链从 bundle 里拿掉。
+
+## 2. 现状盘点（两边各自的形状）
+
+### 2.1 plant3d-web 现在怎么拿数据
+
+| 关注点 | 现状 | 代码位置 |
+| --- | --- | --- |
+| 后端地址 | `VITE_GEN_MODEL_API_BASE_URL=http://localhost:3100`，dev 走 Vite 代理 `/api`、`/files`、`/model-version` → `:3100`；`?backendPort=` / `?backend=` 可覆盖 | `vite.config.ts`、`src/utils/apiBase.ts` |
+| 模型树 | `e3dGetWorldRoot / e3dGetChildren / e3dGetAncestors / e3dSearch / e3dGetSubtreeRefnos / e3dGetVisibleInsts / e3dGetSiteNodes`；默认 `e3d_source=parquet`（DuckDB-WASM 直接查 `/files/output/<project>/parquet/*.parquet`），`e3d_source=backend` 走 `/api/e3d/*` | `src/api/genModelE3dApi.ts`、`genModelE3dParquetApi.ts`、`genModelE3dTypes.ts` |
+| 树状态机 | 懒加载 children、勾选态、过滤、搜索、按 refno 定位、可见实例缓存 | `src/composables/usePdmsOwnerTree.ts`（1109 行） |
+| 几何实例 | `useDbnoInstancesParquetLoader.queryInstanceEntriesByRefnos(dbno, refnos)` → `InstanceEntry { geo_hash, matrix[16], uniforms{refno,noun,owner_refno…}, aabb }` | `useDbnoInstancesParquetLoader.ts`（2353 行）、`src/utils/instances/instanceManifest.ts` |
+| 网格 | 按 `geo_hash` 拉 `/files/meshes/lod_{L1}/{geo_hash}_{L1}.glb` → `parseGlbGeometry` → three `BufferGeometry`；`geo_hash` 为 `1/2/3` 与 `tubi_*/t_*` 在前端本地造单位盒 / 单位圆柱 / 单位球 | `useDbnoInstancesDtxLoader.ts` `ensureGeometryForGeoHash` |
+| 场景对象 | `dtxLayer.addObject(objectId="o:<refno>:<n>", geoHash, matrix, color, material, aabb)`；相机 `up=(0,0,1)`（Z-up，坐标原样用） | `useDbnoInstancesDtxLoader.ts` `loadDbnoInstancesForVisibleRefnosDtx`、`DtxViewer.ts` |
+| dbnum 归属 | `useDbMetaInfo.ts` 读 `/files/output/.../scene_tree/db_meta_info.json` 建 `ref0 → dbnum`；DTX 缓存、可见性、选中都按 dbno 分桶 | `useDbMetaInfo.ts`、`cachesByDbno` |
+| 按需生成 | `useModelGeneration.ts`（1249 行）：SSE 批量生成、parquet 增量导出、`modelShowByRefno` 等旧后端任务接口 | `useModelGeneration.ts`、`genModelStreamGenerateApi.ts`、`genModelTaskApi.ts`、`genModelRealtimeApi.ts` |
+| refno 键 | 前端内部统一 `dbno_seqno`（`17496_106028`），发旧后端时转 `a/b` | `normalizeRefnoKey`、`toBackendRefno` |
+
+其它事实：plant3d-web 目录**不是 git 仓库**（`git status` 报 not a repository）；SurrealDB 直连（`useSurrealDB.ts` / `useSurrealModelQuery.ts`）是更早一代的遗留路径，本期不碰。
+
+### 2.2 gen-model 现在提供什么（`src/web_service/`，spec：`docs/specs/web-service-api.md`）
+
+默认形态（共识 d-581）：`store_mode=spawned-mem` + `data_face=read-through`（零摄入）——**SurrealDB 里没有 `pe`/`pe_owner` 行**，树和属性只能从 e3d-io 直读接口来；模型投影在进程内存（`model/records` 回 `source:"model-memory"`）。`DbOption.toml`：`http_api_addr="0.0.0.0:8022"`、`http_api_cors=["*"]`、`project_name="AvevaMarineSample"`、`mdb_name="ALL"`、`surreal_ns=1516`。
+
+| 端点 | 请求 | 响应要点 | 备注 |
+| --- | --- | --- | --- |
+| `GET /api/v1/health` | — | `project`、`delivery_unit_types`、`initialization`、`model_update_pending`、`sul_db` … | 服务身份与就绪探针 |
+| `GET /api/v1/tree/roots` | `?project&mdb&namespace`（可省） | `{source:"direct", project, mdb, nodes: EleTreeNode[]}`；节点 = 每个 DESI 库 WORL 下的 **SITE** | 没有单一 WORL 根；多库多 SITE 平铺 |
+| `GET /api/v1/tree/children?refno=a/b` | refno 必须 `a/b` | `{source, parent:"a/b", nodes: EleTreeNode[]}`，按成员表存储顺序 | |
+| `GET /api/v1/tree/ancestors?refno=a/b` | | `{source, refnos:["a_b",…]}`，**自己在前、向上到库顶** | |
+| `GET /api/v1/search?query=&limit=&cursor=` | NAME 子串 | `{items:[{name, refno:"a/b", dbnum}], total, truncated, next_cursor, epoch, session_vector}` | **没有 `noun`** |
+| `POST /api/v1/element/attributes` | `{refno:"a/b"}` | `{source:"e3d-io", complete, attributes:[{name, value_type, display, is_unset, editable, is_uda}], diagnostics}` | 属性面板数据源 |
+| `POST /api/v1/model/ensure` | `{refno:"a/b", force?:bool}` | `OnDemandModelResult` + 读透形态附 `generation_roots:[…]`、`snapshot_epoch`、`publication_status`；`status ∈ Generated / AlreadyAvailable / NoRenderableGeometry` | 直读模式下对任意节点（含 SITE/ZONE）按子树解全部生成根并逐根 ensure；同步等待 **120 s**，超时回 504（后台继续）；忙根 409、无此元素 404、Ref0 归属 503/409 |
+| `POST /api/v1/model/records` | `{generation_root:"a/b", limit≤5000, cursor}` | `{source:"model-memory"\|"model-database", items: GeomInstQuery[], total, truncated, next_cursor, snapshot_epoch, session_vector}` | 一根一页游标 |
+| `GET /assets/meshes/{geo_hash}.mesh` | 静态 `ServeDir` | **rkyv 0.7 归档的 `PlantMesh`**（`indices:Vec<u32>, vertices:Vec<Vec3>, normals:Vec<Vec3>, wire_vertices:Vec<Vec<Vec3>>, aabb:Option<Aabb>`） | 浏览器不能直接用；`1/2/3.mesh` 是单位盒 / 单位圆柱 / 单位球 |
+| `GET /api/v1/ws` | `subscribe {topics:["tasks"]}` | `task_started / task_progress / task_finished`（`kind=data_batch / model_drain / room_recalc`） | 只有 `tasks` 主题，没有「模型变更通告」 |
+| `GET /api/v1/dbnums` | | 每库水位 + `model_verdict`（in_sync / lagging / not_judged） | 面板用 |
+| `POST /api/v1/query` | `{tool, arguments}` | 固定只读工具集：`e3d.element.identity / owner_chain / attributes / members / transform`、`e3d.geometry.parameters`、`model.generation_root`… | 部分依赖 E3D TTY |
+
+**`EleTreeNode` JSON 形状**（`RefU64` 序列化为 `"a_b"`，`RefnoEnum` untagged → 同样 `"a_b"`）：
+
+```json
+{ "refno": "24381_2", "noun": "SITE", "name": "/1WCC-PIPE", "owner": "24381_1",
+  "order": 0, "children_count": 12, "op": "…", "mod_cnt": null,
+  "children_updated": null, "status_code": null }
+```
+
+**`GeomInstQuery` JSON 形状**（每条 = 一个构件下的一个几何实例；`world_trans` / `insts[].transform` 是 bevy `Transform`，`world_aabb` 是 parry `Aabb`）：
+
+```json
+{ "refno": "24381_100817", "old_refno": null, "owner": "24381_100677",
+  "world_aabb": { "mins": [x,y,z], "maxs": [x,y,z] },
+  "world_trans": { "translation": [x,y,z], "rotation": [x,y,z,w], "scale": [sx,sy,sz] },
+  "insts": [ { "geo_hash": "10000256467819498479", "transform": { "translation": […], "rotation": […], "scale": […] },
+              "is_tubi": false, "is_invalid_tubi": false } ],
+  "has_neg": false, "generic": "ELBO", "pts": null, "date": null }
+```
+
+- 普通规范原语：最终矩阵 = `world_trans × insts[i].transform`；直管（`is_tubi`）：`insts[i].transform` 恒为单位阵，`world_trans` 已折进全部姿态与缩放。
+- `owner` 字段填的是**生成根**（不是直接属主）——`model_records` 就是按根投影出来的。
+
+参考消费者：`plant-ui`（Rust/egui/Bevy 桌面端，`D:\work\plant-code\old\plant-ui`）已经用同一套接口跑通「树 → ensure → records → assets/meshes」，`crates/plant-ui-app/src/model_update_api.rs` 与 `data.rs` 是可照抄的调用序列（ensure(force=false) 拿 `generation_roots` → 逐根分页 `model/records` → 合并 → 按 `geo_hash` 取网格）。
+
+## 3. 契约映射：旧 → 新
+
+| 前端现有调用 | 旧后端 | gen-model `/api/v1` 对应 | 差距 / 处理 |
+| --- | --- | --- | --- |
+| `e3dGetWorldRoot()` | `/api/e3d/world-root` → 单个 WORL | `tree/roots` → 多个 SITE | 前端合成**虚拟根**（一个「项目 / MDB」根，或按 dbnum 分组两层），见 D4 |
+| `e3dGetChildren(refno, limit)` | `/api/e3d/children/{refno}` → `{children: TreeNodeDto[], truncated}` | `tree/children?refno=a/b` → `nodes: EleTreeNode[]` | 字段映射：`refno("a_b")→id`、`noun→type`、`name`、`children_count`；服务端不截断，前端自己按 `limit` 截 |
+| `e3dGetAncestors(refno)` | `/api/e3d/ancestors/{refno}` | `tree/ancestors?refno=a/b`（自己在前） | 现有定位算法已声明「不依赖顺序」，只需 `"a_b"` 归一 |
+| `e3dSearch({keyword, nouns, limit})` | `/api/e3d/search` → 带 `noun` | `search?query=&limit=&cursor=` → **无 `noun`** | **缺口 G1**：gen-model 给 `items[].noun`（骨架里有），否则前端按类型过滤搜索结果做不了 |
+| `e3dGetSubtreeRefnos(refno)` | `/api/e3d/subtree-refnos/{refno}` | 无直接端点 | 现只用于「勾选一棵子树 → 算要加载/隐藏哪些 refno」。新链路下**改用 `model/records` 返回的 refno 集**（即「这棵子树下有几何的构件」）替代，语义更准；纯树遍历需求用 `tree/children` BFS 兜底 |
+| `e3dGetVisibleInsts(refno)` | `/api/e3d/visible-insts/{refno}` → 有几何的叶子 refno 列表 | `model/ensure(force=false)` 的 `generation_roots` + `model/records` | 语义变化：旧的是「已生成的可见实例」，新的是「补齐后的全部实例」（显式显示操作 ⇒ 模型资产补齐），与 CONTEXT「显式显示操作」一致 |
+| `e3dGetSiteNodes(site)` | `/api/e3d/site-nodes/{refno}` → 带 AABB 的层级 | 无 | 只在 xeokit 旧层级构建里用，本期不迁 |
+| `queryInstanceEntriesByRefnos(dbno, refnos)` | parquet | `model/records` × 生成根 | 新增适配：`GeomInstQuery → InstanceEntry`（§5 P3） |
+| `/files/meshes/lod_L1/{hash}_L1.glb` | GLB | `/assets/meshes/{hash}.mesh`（rkyv） | **缺口 G2**：格式不可直接用，见 D1；无 LOD 概念，`lodAssetKey` 固定一档 |
+| `useDbMetaInfo`（ref0→dbnum） | `db_meta_info.json` | 无 | **缺口 G3**：树节点与 records 里都没有 `dbnum`；`search` 有。见 D3 |
+| `pdmsGetUiAttr / pdmsGetTypeInfo` | `/api/pdms/*` | `element/attributes` | 形状不同，写一个 `AttributeSource` 适配 |
+| `useModelGeneration`（SSE 批量生成、parquet 导出、任务轮询） | 多个旧任务接口 | `model/ensure`（同步 ≤120 s；504/202 后台继续）+ WS `tasks` | 大幅简化：一个显式显示操作 = 一次 ensure；容器过大时按子节点拆批（§5 P3-c） |
+| `?show_dbnum=` 整库显示 | parquet 整库 | `tree/roots` 里该库的 SITE → 逐 SITE ensure/records | 整库 ensure 可能远超 120 s，需要分批与进度 |
+
+## 4. 需要拍板的设计决策
+
+> 每条给出推荐项（**加粗**）。批注时直接改这一节即可。
+
+### D1 网格怎么到浏览器（缺口 G2）
+
+| 方案 | 做法 | 优点 | 缺点 |
+| --- | --- | --- | --- |
+| **A. gen-model 新增 `GET /api/v1/meshes/{geo_hash}.glb`** | 读 `meshes_path/{hash}.mesh` → `PlantMesh` → 现场拼 GLB（POSITION/NORMAL f32 + indices u32；`wire_vertices` 可选作第二个 LINES primitive）；`Cache-Control: public, max-age=31536000, immutable`（geo_hash 是内容寻址，永不变）；可选落 `{hash}.glb` 旁路缓存 | 前端零改动复用 `parseGlbGeometry` 与整条 DTX 网格缓存；rkyv 版本变化对前端不可见；plant-ui 不受影响 | gen-model 多 ~150 行 Rust + 测试；首拉一次 CPU |
+| B. 前端解 rkyv | 按 rkyv 0.7 布局手写解码（根在缓冲区尾部，`ArchivedVec{ptr:i32 相对偏移, len:u32}`） | 后端零改动 | 与 rkyv 0.7.42 / glam 布局强耦合，任何一边升级就静默读歪；`unsafe archived_root` 那套校验前端没有 |
+| C. gen-model 落盘时旁写 `.glb` | 生成期同时写两份 | 静态即可服务 | 磁盘翻倍；历史 48k 个网格要回填；耦合进模型发布队列的持久边界（`verify_meshes`） |
+
+推荐 **A**。plant3d-web 侧只改 URL 模板 `buildBackendUrl('/api/v1/meshes/${hash}.glb')`；保留 `1/2/3`、`tubi_*` 本地造几何的分支（gen-model 侧 `1/2/3.mesh` 语义一致：单位盒 / 单位圆柱 / 单位球——**P0 要用 `2.mesh` 与前端 `getUnitTubiGeometry()` 对一次半径/高度/轴向**）。
+
+### D2 数据源切换与回退
+
+| 方案 | 说明 |
+| --- | --- |
+| **A. 端口 + 适配器 + 开关** | 新建 `src/model-source/` 定义 `TreeSource / ModelRecordSource / MeshSource / AttributeSource` 四个接口；`legacy` 适配器包住现有 parquet / `/api/e3d/*` 代码，`genModelV1` 适配器包新接口；开关 `?model_source=gen-model-v1|legacy` + `VITE_MODEL_SOURCE`，默认先 `legacy`，对拍通过后翻默认 |
+| B. 直接改写 | 在 `genModelE3dApi.ts` / `useDbnoInstancesDtxLoader.ts` 里就地替换 | 快，但没有回退，也没法并排对拍 |
+
+推荐 **A**。plant3d-web 有大量 `*.test.ts` 依赖旧函数签名，端口层让这些测试不动。
+
+### D3 dbnum 归属（缺口 G3）
+
+DTX 缓存、可见性、选中、材质配置全按 `dbno` 分桶，短期不可能去掉。来源候选：
+
+| 方案 | 说明 |
+| --- | --- |
+| **A. gen-model 在 `tree/roots`、`tree/children`、`search` 的节点上加 `dbnum` 字段，并在 `GET /api/v1/dbnums` 每行加 `ref0s:[…]`** | 服务端本来就有 `skeleton.dbnum_of_ref0()`；`EleTreeNode` 是 aios_core 类型，不动它——在 handler 里 `json!` 外包一层 `{…node, dbnum}`（plant-ui 用 serde 解 `EleTreeNode`，多余字段被忽略，兼容） |
+| B. 前端用 `search` 的 `dbnum` 慢慢学 | 不完整，首屏拿不到 |
+| C. 前端把「dbno」退化成「项目/MDB 一个桶」 | 触及 `cachesByDbno` 及十几个 `resolveDtx*ByRefno(dbno, …)` 调用点，改动面比 A 大得多 |
+
+推荐 **A**；前端 `useDbMetaInfo` 新增一个 `genModelV1` 装载分支：从 `/api/v1/dbnums` 的 `ref0s` 建 `ref0→dbnum` 表（与现有 IndexedDB 缓存兼容）。
+
+### D4 模型树根的形状
+
+`tree/roots` 给的是多库多 SITE 平铺。选一种呈现：
+
+| 方案 | 说明 |
+| --- | --- |
+| **A. 一层虚拟根**：`<project>/<mdb>` 作为唯一根（id 形如 `root:AvevaMarineSample:/ALL`，不是 refno），children = 全部 SITE | 与现有 `usePdmsOwnerTree` 的「单根」假设零冲突；祖先链定位时把虚拟根当终点 |
+| B. 两层：项目根 → 每个 dbnum 一个库节点 → SITE | 多库时更清楚，但树里多一层非 refno 节点要在勾选/过滤/定位处处特判 |
+
+推荐 **A**（库信息用 D3 的 `dbnum` 字段在行尾显示徽标即可）。
+
+### D5 「显示一个节点」在新链路下的语义
+
+| 方案 | 说明 |
+| --- | --- |
+| **A. 显式显示 = `ensure(force=false)` → `records`**（照抄 plant-ui） | 与 CONTEXT「显式显示操作 → 模型资产补齐（幂等）」一致；已生成的根服务端零成本命中 `AlreadyAvailable` |
+| B. 先只读 `records`，缺了再 `ensure` | 需要「列生成根但不生成」的接口（gen-model 现在没有，**可选缺口 G4**：`model/ensure` 加 `preview:true` 或新端点 `model/roots?refno=`），前端多一轮；换来的是「生成预检 / 需确认生成」能落地 |
+
+推荐 **A** 起步，G4 列为 P0 的可选项——只有当用户确认要「大范围显示前先弹确认」时再做。
+
+### D6 坐标与单位
+
+gen-model 的 `world_trans` / 网格顶点是 E3D 原生 **mm、Z-up**；plant3d-web 视口 `camera.up=(0,0,1)`，现有 parquet 链路也未见换算，推断两边同一口径。**但这是推断不是证据**：P3 第一件事是用 BRAN `24381/145018`（两仓多处夹具用它）对拍 `world_aabb` 与旧链路 `aabb`，差异 > 1 mm 就停下来查。
+
+### D7 版本控制
+
+plant3d-web 不是 git 仓库。建议在 P1 动第一行代码前 `git init` + 首次提交（否则 Plannotator `review`、回退、对拍差异都无从谈起）。**需用户确认**——这是对目录状态的改变。
+
+## 5. 目标架构与分阶段实施
+
+```
+components/model-tree/ModelTreePanel.vue      components/dock_panels/ViewerPanel.vue
+            │                                             │
+   composables/usePdmsOwnerTree.ts            composables/useDbnoInstancesDtxLoader.ts
+            │ TreeSource                                  │ ModelRecordSource + MeshSource
+            ▼                                             ▼
+   src/model-source/index.ts  ── resolveModelSource(): 'legacy' | 'gen-model-v1'
+        ├── ports.ts          TreeSource / ModelRecordSource / MeshSource / AttributeSource（纯类型）
+        ├── legacy/           包住 genModelE3dApi + genModelE3dParquetApi + /files/meshes glb
+        └── genModelV1/       api client + 映射（EleTreeNode→TreeNodeDto, GeomInstQuery→InstanceEntry）
+                    │
+                    ▼  src/api/genModelV1Api.ts（fetch + 身份 + 错误码分型）
+              gen-model :8022  /api/v1/*  /api/v1/meshes/*.glb
+```
+
+### P0 · gen-model 侧最小增补（后端仓，独立可交付）
+
+| # | 改动 | 文件 | 验收 |
+| --- | --- | --- | --- |
+| P0-1 | `GET /api/v1/meshes/{geo_hash}.glb`（D1-A）：读 `meshes_path` → `PlantMesh::des_mesh_file` → GLB；`immutable` 缓存头；缺文件 404 `not_found`；hash 只允许 `[0-9a-zA-Z_]+`（防目录穿越） | `src/web_service/handlers.rs`、`mod.rs`（route）、新 `src/web_service/mesh_glb.rs` | 单测：`1.mesh` 转出的 GLB 头部 magic/长度合法、顶点数 = `vertices.len()`；`cargo test --lib web_service`；`curl -I` 200 + 缓存头 |
+| P0-2 | `tree/roots` / `tree/children` 节点外包 `dbnum`；`search` items 加 `noun`（D3-A / G1） | `handlers.rs` `tree_*`、`search`；`direct_tree.rs` `search_names` 返回 noun | 单测：JSON 含新字段；plant-ui 既有 serde 反序列化不受影响（多余字段忽略） |
+| P0-3 | `GET /api/v1/dbnums` 每行加 `ref0s:[u32]`（D3-A） | `handlers.rs` `dbnums`（从 `mdb_memory_store` 骨架 `locator_parts()` 取） | 单测 + `docs/specs/web-service-api.md` §4.7 同步一行 |
+| P0-4（可选，G4） | `model/ensure` 加 `preview:bool`：只解生成根、统计 cached/uncached，不生成 | `handlers.rs` `model_ensure`、`on_demand_model` | 只在 D5 选 B 或要「需确认生成」时做 |
+| P0-5 | 校验 `2.mesh` / `3.mesh` 的单位几何参数与前端 `getUnitTubiGeometry()` / `getUnitSphereGeometry()` 一致（半径、高度、轴向） | 一次性脚本，结论写进本计划 §8 | 不一致则前端造几何改参数，不改服务端 |
+
+P0 全部是**加字段 / 加端点**，不改既有响应形状；写锁范围只在 `src/web_service/`。
+
+### P1 · 前端接入底座
+
+| # | 改动 | 文件 |
+| --- | --- | --- |
+| P1-1 | `src/api/genModelV1Api.ts`：`fetchJson` 基座、身份三元组（`project/mdb/namespace`，来自 `/health` 或 env，可省）、`ApiError{code,status,message}` 分型（`not_found / container / precondition / ref0_affiliation_* / generation_pending / timeout`）、refno 双向转换（`a_b ⇄ a/b`） | 新文件 + `genModelV1Api.test.ts`（fixture JSON 即 §2.2 的样例） |
+| P1-2 | 地址：新增 `VITE_GEN_MODEL_V1_BASE_URL`（默认 `http://localhost:8022`）与 `?gm_backend=` 覆盖；gen-model CORS 已放开，**直连不走代理**；dev 额外加一个 `/gm` 前缀代理（rewrite 去前缀）供不想跨域时用 | `vite.config.ts`、`src/utils/apiBase.ts`（新增 `getGenModelV1BaseUrl()`，不动现有函数）、`.env.example`、`.env.development` |
+| P1-3 | `src/model-source/ports.ts` + `index.ts`（`resolveModelSource()` 读 `?model_source=` / `VITE_MODEL_SOURCE`，默认 `legacy`）；`legacy/` 适配器原样委托现有函数 | 新目录；`usePdmsOwnerTree` / `useDbnoInstancesDtxLoader` 此时**还不改** |
+| P1-4 | 健康探针：启动时 `GET /health`，把 `project / delivery_unit_types / initialization.model_ready` 放进一个 `useGenModelV1Health` store，供树面板顶部显示「已连接 gen-model :8022 · AvevaMarineSample · 模型门 开/关」 | 新 composable + 小组件 |
+
+验收：`npm run type-check && npm run lint && npm test` 全绿；`model_source=legacy` 下行为与今天逐字节相同（对拍：同一 URL 两个 tab）。
+
+### P2 · 模型树接 `tree/*` + `search`
+
+| # | 改动 | 文件 |
+| --- | --- | --- |
+| P2-1 | `genModelV1/treeSource.ts`：`worldRoot()` 合成虚拟根（D4-A）；`children(id, limit)` → `tree/children`（虚拟根 → `tree/roots`）；`ancestors(id)` → `tree/ancestors`；`search({keyword, nouns, limit})` → `search`（noun 过滤在前端做，依赖 P0-2）；节点映射 `EleTreeNode → TreeNodeDto`（`refno "a_b"` 直接当 id；`children_count` 透传，0 视为叶子） | 新文件 + 单测（fixture） |
+| P2-2 | `usePdmsOwnerTree.ts` 改为通过 `TreeSource` 取数：替换 7 处直接调用（`initTree` / `loadChildren` / 搜索 watch / `querySubtreeRefnos` / `queryVisibleInstRefnos` / 两处 `e3dGetAncestors`）；`querySubtreeRefnos` 在 v1 源下改为「`ModelRecordSource.recordsOf(node)` 的 refno 集 ∪ BFS children」 | 只改取数，不改状态机 |
+| P2-3 | 定位（`locateRefno`）：祖先链到虚拟根为止；`"a_b"` 归一沿用 `normalizeRefnoKey` | 同上 |
+| P2-4 | `ModelTreeRow.vue`：行尾 `dbnum` 徽标（可选） | |
+
+验收：CLI 先证接口——
+
+```powershell
+curl "http://localhost:8022/api/v1/tree/roots"
+curl "http://localhost:8022/api/v1/tree/children?refno=24381/2"
+curl "http://localhost:8022/api/v1/tree/ancestors?refno=24381/145018"
+curl "http://localhost:8022/api/v1/search?query=PIPE&limit=20"
+```
+
+再开 `http://127.0.0.1:3101/?model_source=gen-model-v1`：根展开可见全部 SITE；展开三层不报错；搜索 `1WCC` 有结果且能定位；`ModelTreePanel.test.ts` / `versionDiff.test.ts` 不新增 fail。
+
+### P3 · 三维模型接 `model/ensure` + `model/records` + GLB
+
+| # | 改动 | 文件 |
+| --- | --- | --- |
+| P3-a | `genModelV1/modelRecordSource.ts`：`ensureAndCollect(rootRefno)`：`POST model/ensure {refno, force:false}` → `generation_roots`（空则用自身）→ 逐根 `POST model/records` 翻页（`limit 5000`）→ 合并去重（同 refno+geo_hash+matrix） | 新文件 + 单测 |
+| P3-b | 映射 `GeomInstQuery → InstanceEntry[]`：`matrix = compose(world_trans) × compose(inst.transform)`（three `Matrix4.compose(translation, quaternion, scale)`，列主序 `toArray()`）；`uniforms = {refno:"a_b", noun: generic, owner_refno: owner(生成根), is_tubi}`；`aabb = {min: mins, max: maxs}`；`lod_mask=1`；`is_invalid_tubi` 的实例给一个可配置的告警色 | `genModelV1/instanceMapping.ts` + 单测（手算一条 90° 旋转 + 缩放的样例） |
+| P3-c | 大范围与超时：ensure 超 120 s 服务端回 504 `timeout` / 202 `generation_pending` → 前端**不重试同一 refno**，改为「展开一层，对子节点逐个 ensure」（服务端契约 §4.5：容器展开一层）；进度用现有 `ModelGenerationProgressModal.vue`（done/total = 已处理子节点数） | `modelRecordSource.ts` + `useModelGeneration.ts` 新分支 |
+| P3-d | `MeshSource`：v1 源下 URL 模板换成 `/api/v1/meshes/${geoHash}.glb`（P0-1）；`1/2/3`、`tubi_*` 本地分支保留；`lodAssetKey` 忽略 | `useDbnoInstancesDtxLoader.ts` `ensureGeometryForGeoHash` 提取 URL 构造为可注入函数 |
+| P3-e | `loadDbnoInstancesForVisibleRefnosDtx` 增加 `dataSource: 'gen-model-v1'`：跳过 parquet 可用性检查，`index = await modelRecordSource.instanceEntriesByRefnos(dbno, refnos)`；其余（材质、objectId、AABB、缓存）不动 | 同文件 |
+| P3-f | `ViewerPanel.vue` 的 `show_refno` / `show_dbnum` / 树勾选三条入口：把 `e3dGetVisibleInsts` 换成 `ModelRecordSource.ensureAndCollect`；`show_dbnum` 在 v1 源下 = 该库全部 SITE 逐个走 P3-c | `ViewerPanel.vue`（只动 3 处调用点） |
+| P3-g | `useDbMetaInfo.ts` 新装载分支：`/api/v1/dbnums` 的 `ref0s`（P0-3） | |
+
+验收（对拍，CLI 先行）：
+
+```powershell
+curl -X POST http://localhost:8022/api/v1/model/ensure -H "content-type: application/json" -d '{"refno":"24381/145018"}'
+curl -X POST http://localhost:8022/api/v1/model/records -H "content-type: application/json" -d '{"generation_root":"24381/145018","limit":5000}'
+curl -I  http://localhost:8022/api/v1/meshes/1.glb
+```
+
+浏览器：`?model_source=gen-model-v1&show_refno=24381_145018` 与 `?model_source=legacy&show_refno=24381_145018&data_source=parquet` 两个 tab：实例数、场景 AABB（`sceneBoundingBox`）逐轴差 ≤ 1 mm、截图肉眼一致；再取一个 EQUI、一个 SUPPO、一个 ZONE 重复。`useModelGeneration.*.test.ts`、`useDbnoInstancesParquetLoader.test.ts` 不新增 fail。
+
+### P4 · 属性与搜索收口
+
+| # | 改动 |
+| --- | --- |
+| P4-1 | `AttributeSource`：v1 源下 `pdmsGetUiAttr(refno)` → `POST element/attributes`，映射为现有属性面板行（`name / display / value_type / is_uda`），`diagnostics.undecoded` 非空时面板尾部给一行提示 |
+| P4-2 | `pdmsGetTypeInfo(refno)`（`useModelGeneration` 用它判 BRAN/HANG 根注入）在 v1 源下直接用 `TreeSource` 已缓存的 `noun`，不再请求 |
+| P4-3 | 搜索结果按 `noun` 过滤（依赖 P0-2） |
+
+### P5 · 实时与状态（可选，独立交付）
+
+- WS `/api/v1/ws` 订阅 `tasks`：`task_finished` 且 `kind=model_drain` 时，对 `detail.roots[]` ∩ 已加载生成根做 `forceReloadRefnos`（复用现有 `forceRetryNotFound` 路径）；
+- 树面板顶部显示 `/dbnums` 的 `model_verdict`（in_sync / lagging / not_judged 三态，**不判不画成告警**——共识 d-594）。
+
+### P6 · 收尾
+
+- 默认开关翻到 `gen-model-v1`；`legacy` 保留一个发布周期；
+- `CONTEXT.md` 补词条：「模型数据源 (Model Source)」「生成根投影 (Generation-Root Projection)」；
+- 写 ADR `docs/adr/0054-load-model-tree-and-geometry-from-gen-model-v1.md`（决策 = D1–D5 的拍板结果）；
+- `docs/guides/` 加一页「本地联调：gen-model :8022 + plant3d-web :3101」。
+
+## 6. 工作量与顺序
+
+| 阶段 | 估算 | 依赖 |
+| --- | --- | --- |
+| P0 | 1–1.5 天（P0-1 占大半） | 无；可与 P1 并行 |
+| P1 | 0.5 天 | 无 |
+| P2 | 1 天 | P0-2（noun/dbnum）、P1 |
+| P3 | 2 天（含对拍） | P0-1、P0-3、P1 |
+| P4 | 0.5 天 | P2 |
+| P5 | 0.5 天 | P3 |
+| P6 | 0.5 天 | 全部 |
+
+关键路径：P0-1（GLB 端点）→ P3。P0-1 没落地之前，P3 可以先用**前端临时 rkyv 解码器**（D1-B）打通链路做对拍，但不合并。
+
+## 7. 验证策略（按 AGENTS.md：CLI + 真实数据优先，不为联调新增独立测试）
+
+1. **接口层**：§5 各阶段的 `curl` 序列写成 `scripts/verify-gen-model-v1.ps1`（只读，不改任何数据），输出节点数 / 根数 / 实例数 / 网格 200 数；
+2. **对拍**：同一 refno 在 legacy 与 gen-model-v1 两源下的 `loadedObjects`、`sceneBoundingBox`、截图；用 `24381_145018`（BRAN）、一个 EQUI、一个 ZONE；
+3. **回归**：`npm run type-check`、`npm run lint`、`npm test`；触及 `ViewerPanel.vue` 的 PR 附截图；
+4. **不做**：不为一次性联调新增 `*.test.ts`；只有映射函数（`instanceMapping.ts`、`treeSource.ts` 的 DTO 映射）这类纯函数补最小单测，因为 CLI 覆盖不到矩阵合成的正确性。
+
+## 8. 风险与开放问题
+
+| # | 风险 / 问题 | 缓解 |
+| --- | --- | --- |
+| R1 | 整库 / 大 ZONE 的 ensure 远超 120 s，且服务端「忙根 409 不排队」 | P3-c 分批 + 进度；必要时 P0-4 预检先算根数再决定要不要弹确认 |
+| R2 | `model/records` 在 `store_mode` 持久形态下走 SurrealDB（`source:"model-database"`），与内存形态可能有细微差异（`owner` 语义、`pts`） | 对拍时两种形态各跑一次；前端只依赖 `refno / owner / world_trans / insts / generic / world_aabb` 六个字段 |
+| R3 | 单位 / 轴向推断错误（D6） | P3 第一步就对拍 AABB，错了立刻停 |
+| R4 | `search` 是 NAME 子串 + 全库扫描，大库慢 | 前端 300 ms 防抖 + `limit 50` 已有；不够再谈服务端索引 |
+| R5 | 旧后端与 gen-model 同时被同一页面用（尺寸、MBD 走 :3100，树/模型走 :8022） | 这是过渡期形态，明确写进联调指南；两套 base URL 变量名不重叠 |
+| R6 | plant3d-web 无 git，重构途中无回退点 | D7：先 `git init` |
+| Q1 | 树里要不要显示 ISOD 库（`membership.element_databases()` 含 ISOD）？ | 待定；默认显示，可加过滤 |
+| Q2 | `is_invalid_tubi` 的实例怎么画？plant-ui 用专用 WGSL 画虚线 | 先用告警色实体，后续再议 |
+| Q3 | 版本对比 / `model/history/*` 何时迁 | 另立计划 |
+
+## 9. 交付物清单
+
+- gen-model：P0-1/2/3（+可选 P0-4），`docs/specs/web-service-api.md` 同步，`changelog.md` 一条；
+- plant3d-web：`src/api/genModelV1Api.ts`、`src/model-source/**`、`usePdmsOwnerTree.ts` / `useDbnoInstancesDtxLoader.ts` / `useDbMetaInfo.ts` / `ViewerPanel.vue` 的取数点改动、`vite.config.ts` / `.env.*`、`scripts/verify-gen-model-v1.ps1`、ADR 0054、联调指南；
+- 本计划按批注修订后作为 `docs/plans/` 的执行基线。

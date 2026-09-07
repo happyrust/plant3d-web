@@ -1,0 +1,260 @@
+import { getBackendApiBaseUrl } from '@/utils/apiBase';
+
+export type PdmsUiAttrResponse = {
+  success: boolean;
+  refno: string;
+  attrs: Record<string, unknown>;
+  /** 构件完整路径名称（层级路径） */
+  full_name?: string | null;
+  /** 引用类属性（值形如 pe:<refno>，如 OWNER/REFNO）解析出的 full_name，键为属性名 */
+  ref_full_names?: Record<string, string> | null;
+  error_message?: string | null;
+};
+
+/**
+ * 点集(ptset)中单个点的信息
+ */
+export type PtsetPoint = {
+  /** 点编号 */
+  number: number;
+  /** 3D 坐标 [x, y, z] */
+  pt: [number, number, number];
+  /** 方向向量 [x, y, z]（可选） */
+  dir: [number, number, number] | null;
+  /** 方向标志 */
+  dir_flag: number;
+  /** 参考方向 [x, y, z]（可选） */
+  ref_dir: [number, number, number] | null;
+  /** 管道外径 */
+  pbore: number;
+  /** 宽度 */
+  pwidth: number;
+  /** 高度 */
+  pheight: number;
+  /** 连接信息 */
+  pconnect: string;
+}
+
+/**
+ * ptset 查询响应
+ */
+export type PtsetResponse = {
+  success: boolean;
+  refno: string;
+  /** 点集数据列表 */
+  ptset: PtsetPoint[];
+  /** 世界坐标变换矩阵（4x4） */
+  world_transform: number[] | number[][] | null;
+  /** 单位转换信息 */
+  unit_info?: {
+    source_unit: string;
+    target_unit: string;
+    conversion_factor: number;
+  } | null;
+  error_code?:
+    | 'PTSET_REFNO_EMPTY'
+    | 'PTSET_INSTANCE_MISSING'
+    | 'PTSET_TABLE_MISSING'
+    | 'PTSET_CATA_HASH_MISSING'
+    | 'PTSET_TRANSFORM_MISSING'
+    | 'PTSET_POINTS_MISSING'
+    | 'PTSET_QUERY_FAILED'
+    | null;
+  error_message?: string | null;
+}
+
+export type PtsetQueryContext = {
+  dbno?: number;
+  batchId?: string | null;
+}
+
+export type PtsetBatchItemResponse = {
+  input_refno: string;
+  refno?: string | null;
+  success: boolean;
+  ptset: PtsetPoint[];
+  world_transform?: number[] | number[][] | null;
+  batch_id?: string | null;
+  unit_info?: {
+    source_unit: string;
+    target_unit: string;
+    conversion_factor: number;
+  } | null;
+  error_message?: string | null;
+}
+
+export type PtsetBatchQueryResponse = {
+  success: boolean;
+  results: PtsetBatchItemResponse[];
+  total_count: number;
+  success_count: number;
+  failed_count: number;
+}
+
+export type PtsetChildrenResponse = PtsetBatchQueryResponse & {
+  refno: string;
+  error_message?: string | null;
+}
+
+function getBaseUrl(): string {
+  return getBackendApiBaseUrl();
+}
+
+async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
+  const base = getBaseUrl().replace(/\/$/, '');
+  const url = `${base}${path.startsWith('/') ? '' : '/'}${path}`;
+
+  const resp = await fetch(url, {
+    ...init,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(init?.headers || {}),
+    },
+  });
+
+  if (!resp.ok) {
+    const text = await resp.text().catch(() => '');
+
+    if (resp.status === 404 && !text.trim()) {
+      const message =
+        `HTTP 404 at ${url}\n` +
+        '后端可能没有挂载这个 API（例如 web_server 路由装配遗漏），或请求路径拼写错误。\n' +
+        '请优先检查 plant-model-gen 的路由装配。';
+      console.warn('[pdms-api]', message);
+      throw new Error(message);
+    }
+
+    const message = `HTTP ${resp.status} ${resp.statusText} at ${url}: ${text}`;
+    if (resp.status >= 500) {
+      console.error('[pdms-api]', message);
+    }
+
+    throw new Error(message);
+  }
+
+  return (await resp.json()) as T;
+}
+
+export async function pdmsGetUiAttr(refno: string): Promise<PdmsUiAttrResponse> {
+  return await fetchJson<PdmsUiAttrResponse>(`/api/pdms/ui-attr/${encodeURIComponent(refno)}`);
+}
+
+/**
+ * 获取指定元件的 ptset（点集）数据
+ * @param refno 元件参考号，格式为 "24383_84631"
+ * @returns 包含点集信息的响应
+ */
+export async function pdmsGetPtset(refno: string): Promise<PtsetResponse> {
+  return await fetchJson<PtsetResponse>(`/api/pdms/ptset/${encodeURIComponent(refno)}`);
+}
+
+/**
+ * 获取 ptset（带上下文）
+ *
+ * 说明：当前后端 ptset 接口不依赖 dbno/batch_id；这里保留签名以便与 ViewerPanel 的“快照一致性”逻辑对齐。
+ */
+export async function pdmsGetPtsetWithContext(
+  refno: string,
+  ctx?: PtsetQueryContext,
+): Promise<PtsetResponse> {
+  const search = new URLSearchParams();
+  if (ctx?.dbno !== undefined) {
+    search.set('dbno', String(ctx.dbno));
+  }
+  if (ctx?.batchId) {
+    search.set('batch_id', String(ctx.batchId));
+  }
+  const qs = search.toString();
+  return await fetchJson<PtsetResponse>(
+    `/api/pdms/ptset/${encodeURIComponent(refno)}${qs ? `?${qs}` : ''}`,
+  );
+}
+
+export async function pdmsBatchGetPtsetWithContext(
+  refnos: string[],
+  ctx?: PtsetQueryContext,
+): Promise<PtsetBatchQueryResponse> {
+  return await fetchJson<PtsetBatchQueryResponse>('/api/pdms/ptset/batch-query', {
+    method: 'POST',
+    body: JSON.stringify({
+      refnos,
+      dbno: ctx?.dbno,
+      batch_id: ctx?.batchId ?? undefined,
+    }),
+  });
+}
+
+export async function pdmsGetPtsetChildrenWithContext(
+  refno: string,
+  ctx?: PtsetQueryContext,
+): Promise<PtsetChildrenResponse> {
+  const search = new URLSearchParams();
+  if (ctx?.dbno !== undefined) {
+    search.set('dbno', String(ctx.dbno));
+  }
+  if (ctx?.batchId) {
+    search.set('batch_id', String(ctx.batchId));
+  }
+  const qs = search.toString();
+  return await fetchJson<PtsetChildrenResponse>(
+    `/api/pdms/ptset/children/${encodeURIComponent(refno)}${qs ? `?${qs}` : ''}`,
+  );
+}
+
+/**
+ * 变换矩阵查询响应
+ */
+export type TransformResponse = {
+  success: boolean;
+  refno: string;
+  /** 世界变换矩阵 (4x4 列主序) */
+  world_transform: number[] | null;
+  /** Owner refno */
+  owner: string | null;
+  error_message?: string | null;
+}
+
+/**
+ * 获取指定元件的变换矩阵和 owner
+ * @param refno 元件参考号，格式为 "24383_84631"
+ * @returns 包含变换矩阵和 owner 的响应
+ */
+export async function pdmsGetTransform(refno: string): Promise<TransformResponse> {
+  return await fetchJson<TransformResponse>(`/api/pdms/transform/${encodeURIComponent(refno)}`);
+}
+
+// ========================
+// PDMS 模型查询辅助（后端 SurrealDB）
+// ========================
+
+export type PdmsTypeInfoResponse = {
+  success: boolean;
+  refno: string;
+  noun?: string | null;
+  owner_refno?: string | null;
+  owner_noun?: string | null;
+  error_message?: string | null;
+}
+
+export type PdmsChildrenResponse = {
+  success: boolean;
+  refno: string;
+  children: string[];
+  error_message?: string | null;
+}
+
+/**
+ * 获取 noun / owner_noun（用于 BRAN/HANG 规则；后端查询 SurrealDB）
+ */
+export async function pdmsGetTypeInfo(refno: string): Promise<PdmsTypeInfoResponse> {
+  const qs = new URLSearchParams({ refno: String(refno || '') }).toString();
+  return await fetchJson<PdmsTypeInfoResponse>(`/api/pdms/type-info?${qs}`);
+}
+
+/**
+ * 获取 pe->owns 子节点（用于 BRAN/HANG children；后端查询 SurrealDB）
+ */
+export async function pdmsGetOwnsChildren(refno: string): Promise<PdmsChildrenResponse> {
+  const qs = new URLSearchParams({ refno: String(refno || '') }).toString();
+  return await fetchJson<PdmsChildrenResponse>(`/api/pdms/children?${qs}`);
+}

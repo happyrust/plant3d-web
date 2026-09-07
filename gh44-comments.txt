@@ -1,0 +1,75 @@
+## 总体验收摘要（2026-07-19 终审计）
+
+### 已落地提交链（本地分支 002-bran-flow-direction，未 push）
+
+token 层 `d16b86a3` → 参考实现 `248c1954`(#42) → pipe-distance `4755a521` → dashboard `e99b4eee` → task 散件 `c5b8bc89` → 安全子集 12 面板 `e29c2132` → dark 组 `a16bb9d2` → spatial `aefc3363` → harness `572718f8`(#45 已关) → 批注呈现面 `9077a6a4`(#46/#47) → 散件 `e09f089a` → 批注工具 `6b33dca0`(#48 已关) → 流程剩余件 `7f52d0d5`(#46/#47) → misc harness `7b0f2285` → 激活行小票 `233970d3`(#46) → model-version `a2b4ebb1`+`e298fce9`(#49)。
+
+### 验收标准逐条对照
+
+- **设计色 token grep**：已迁移面板复扫 `FF6B00|EA580C|orange-*` 设计色 0 遗留；全仓残余 amber 命中已逐处分类（功能色白名单 / 漏迁候选已报总指挥 / 他人 WIP 阻塞 3 文件：ViewerPanel、MeasurementPanel、双胞胎面板在途）。
+- **功能色白名单完整**：AnnotationColorPicker 色板（含 `#F97316`）零改动、severity 映射色（AnnotationPanel/AnnotationOverlayBar buckets）原样、getRoleTheme/getActionTone/UserAvatar 角色身份色原样、ModelTreeRow 版本 diff 徽章（增=emerald/删=rose/改=amber）为功能语义色且无品牌橙混入。
+- **双胞胎守护不新增 fail**：终审计复跑 4 文件套件 = 33F/54P == 基线（0 新增）；tools+Button 47/47 绿；model-version 声明测试 78/78 绿。
+- **截图人工确认**：harness 前后对静态证据齐备——`scripts/pen-preview/out-annot-tools/{baseline,after}`、`out-review-annot/`、`out-review-flow/`、`out-misc/`、`out-mvc/`、`out-vt/`。**运行时（真实 app 内）视觉证据待补**：由另一在途任务产出，完成后在此补链接。
+
+### 剩余敞口
+
+1. 双胞胎面板（ReviewPanel/DesignerCommentHandlingPanel）DEFER 残余迁移在途（#46/#47 保持开放）。
+2. 终审计残色分类发现的漏迁候选与从未入批次文件（OnboardingOverlay/SiteDashboardPanel/SiteDetailDrawer 等）已列清单报总指挥裁决。
+3. 他人 WIP 阻塞 2 文件（ViewerPanel、MeasurementPanel）待其 WIP 落地后补扫。
+
+## 运行时视觉证据已落地（三家族 harness 截图）
+
+前期迁移只有 grep+diff 验证的三个家族，现已用 #45 的 visual-baseline harness 补上**真实组件运行时**证据：
+
+- `a3226df` — pipe-distance + dashboard 两家族 harness（页 + 入口 + 场景）
+- `3913fac` — spatial-query 家族 harness 收编（entry 为组员工作区验证产物，含 VueQueryPlugin 挂载）+ README 踩坑经验归档
+
+## 截图清单（`scripts/*` gitignore 区，本地留存；runner 可随时复现）
+
+```
+scripts/pen-preview/out-spatial-query/01-query-drawer-full.png
+scripts/pen-preview/out-spatial-query/02-query-drawer-results.png
+scripts/pen-preview/out-spatial-query/03-query-drawer-mini.png
+scripts/pen-preview/out-spatial-query/04-compute-panel.png
+scripts/pen-preview/out-pipe-distance/01-pipe-distance-drawer.png
+scripts/pen-preview/out-pipe-distance/02-pipe-distance-results.png
+scripts/pen-preview/out-dashboard/01-overview-top.png
+scripts/pen-preview/out-dashboard/02-overview-my-tasks.png
+scripts/pen-preview/out-dashboard/03-overview-projects.png
+```
+
+复现命令（端口 5195）：
+
+```bash
+node scripts/visual-baseline/shot.mjs harness/spatial-query.html --port 5195 --out scripts/pen-preview/out-spatial-query
+node scripts/visual-baseline/shot.mjs harness/pipe-distance.html --port 5195 --out scripts/pen-preview/out-pipe-distance
+node scripts/visual-baseline/shot.mjs harness/dashboard.html     --port 5195 --out scripts/pen-preview/out-dashboard
+```
+
+## 验证结论
+
+三家族 token 化在真实组件运行时全部成立，未改任何组件源码：
+
+- **spatial-query**：结果激活行 `brand-subtle`+brand 边、已加载/未加载状态 chips、warning 横幅、主按钮 primary（近黑 ink）、迷你模式半径值 brand + `font-mono`；
+- **pipe-distance**：点选/拖框选 brand 按钮、refno chips `font-mono`、「重新检测」primary、清空 danger、激活结果行 brand 高亮；
+- **dashboard**：快捷操作 brand/success/warning/danger token 色块、任务状态/优先级徽章、系统 bot 头像 brand、指标卡。
+
+**#44 暂不关**：等 twin 面板（ReviewPanel / DesignerCommentHandlingPanel）迁移落地后统一收官。
+
+## 实施汇总（终审计，21 个相关提交）
+
+**本轮交付（自 token 基础 d16b86a 起，累计 25 个 scoped 提交）**
+- Token 基础：tailwind.css 语义变量（brand/success/warning/danger + subtle/foreground）、tailwind.config 映射、Fira Code + Noto Sans SC
+- 面板迁移（全部完成）：spatial-query（含 SpatialComputePanel）、pipe-distance、dashboard×4、task、12 个 review-workflow、ExternalReviewViewer/ReviewCommentsPanel、批注工具家族×4（#48）、批注呈现面×3、流程剩余件×7、散件×6（Button 原语 + 测试同步）、双胞胎 ReviewPanel/DesignerCommentHandlingPanel、model-tree 版本差异色
+- spec-004 model-version 特性入库（#49：a2b4ebb1 + e298fce9）
+- 视觉基线设施（#45）：harness/ 目录 + scripts/visual-baseline/shot.mjs 通用 runner + 8 个面板 harness 页（vt/mvc/annot-tools/review-annot/review-flow/review-twins/misc/spatial-query/pipe-distance/dashboard）+ 前后截图证据
+
+**质量门（终审计复核）**
+- 残色扫描：src/components 旧设计色 0 遗留；仅存功能色白名单（AnnotationColorPicker 用户色板、severity 域映射〔原则×红/一般△橙/图面○蓝〕、UserAvatar 角色色板）
+- 双胞胎 5 套：33F/54P 与迁移前基线逐条一致（0 新增 fail；33 个既有失败源自工作区 WIP，与本轮无关）
+- spec-004：41/41 绿 + versionDiff 10/10
+- 提交卫生：13 个新提交逐个 show --stat 核验，零无关 WIP 卷入
+
+**剩余（需环境，非代码阻塞）**
+- 整 app 连真实后端（localhost:3100）的运行时视觉基线——mock harness 已就绪，后端可用时可直接扩展
+- 管道建模 7 面板仍无代码实现（#41 已裁定划出本 spec 范围）

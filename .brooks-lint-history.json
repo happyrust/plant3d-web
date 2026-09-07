@@ -1,0 +1,30 @@
+[
+  {
+    "date": "2026-07-20",
+    "mode": "PR Review",
+    "score": 75,
+    "findings": { "critical": 0, "warning": 4, "suggestion": 5 },
+    "scope": "src/dimension subsystem (~108 files) + viewer/review integration points"
+  },
+  {
+    "date": "2026-07-20",
+    "mode": "PR Review",
+    "score": 61,
+    "findings": { "critical": 0, "warning": 6, "suggestion": 9 },
+    "scope": "src/dimension deep pass 2: kernel math (projector/layout/collision), export, font loading, deployment config (cumulative with pass 1)"
+  },
+  {
+    "date": "2026-07-20",
+    "mode": "PR Review",
+    "score": 47,
+    "findings": { "critical": 0, "warning": 8, "suggestion": 13 },
+    "scope": "src/dimension pass 3: time/clock/timeout usage audit (command.at, updatedAt, journal TTL, save lifecycle, fetch timeouts) (cumulative)"
+  },
+  {
+    "date": "2026-07-20",
+    "mode": "PR Review",
+    "score": 78,
+    "findings": { "critical": 0, "warning": 4, "suggestion": 2 },
+    "scope": "MBD external annotation primitives M1-M5 change set (9 new + 25 modified files: kernel primitives, V2 contract adapters, dual data channel, panel diagnostics, perf scenario)"
+  }
+]

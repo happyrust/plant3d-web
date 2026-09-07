@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>RUS-239 驳回后重新流转诊断流程</title>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --paper: #eef2f6;
+      --paper-2: #f8fbfe;
+      --ink: #21364d;
+      --muted: #6b7f95;
+      --soft: #8aa0b6;
+      --rule: rgba(33, 54, 77, 0.12);
+      --rule-solid: rgba(33, 54, 77, 0.24);
+      --accent: #2d67b2;
+      --accent-tint: rgba(45, 103, 178, 0.10);
+      --link: #1f4f8d;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: var(--paper);
+      color: var(--ink);
+      font-family: "Geist", system-ui, sans-serif;
+    }
+
+    main {
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 48px 32px 40px;
+    }
+
+    .eyebrow {
+      margin: 0 0 8px;
+      color: var(--muted);
+      font-family: "Geist Mono", monospace;
+      font-size: 12px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      margin: 0;
+      font-family: "Instrument Serif", serif;
+      font-size: 36px;
+      font-weight: 400;
+      letter-spacing: -0.02em;
+    }
+
+    .subtitle {
+      max-width: 720px;
+      margin: 12px 0 28px;
+      color: var(--muted);
+      font-size: 15px;
+      line-height: 1.7;
+    }
+
+    .diagram {
+      overflow-x: auto;
+      border: 1px solid var(--rule);
+      border-radius: 8px;
+      background: var(--paper-2);
+    }
+
+    svg {
+      display: block;
+      min-width: 1040px;
+      width: 100%;
+      height: auto;
+    }
+
+    .node-name {
+      fill: var(--ink);
+      font-family: "Geist", system-ui, sans-serif;
+      font-size: 12px;
+      font-weight: 600;
+      text-anchor: middle;
+    }
+
+    .sub {
+      fill: var(--muted);
+      font-family: "Geist Mono", monospace;
+      font-size: 9px;
+      text-anchor: middle;
+    }
+
+    .tag {
+      fill: var(--muted);
+      font-family: "Geist Mono", monospace;
+      font-size: 8px;
+      letter-spacing: 0.12em;
+      text-anchor: middle;
+    }
+
+    .arrow-label {
+      fill: var(--muted);
+      font-family: "Geist Mono", monospace;
+      font-size: 8px;
+      letter-spacing: 0.06em;
+      text-anchor: middle;
+    }
+
+    .cards {
+      display: grid;
+      grid-template-columns: 1.1fr 1fr 0.9fr;
+      gap: 16px;
+      margin-top: 20px;
+    }
+
+    .card {
+      border: 1px solid var(--rule);
+      border-radius: 6px;
+      background: #fff;
+      padding: 18px;
+    }
+
+    .card h2 {
+      margin: 0 0 10px;
+      font-size: 15px;
+    }
+
+    .card p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.7;
+    }
+
+    footer {
+      margin-top: 24px;
+      padding-top: 16px;
+      border-top: 1px solid var(--rule);
+      color: var(--soft);
+      font-family: "Geist Mono", monospace;
+      font-size: 11px;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <p class="eyebrow">RUS-239 / FLOWCHART</p>
+    <h1>驳回后重新流转诊断流程</h1>
+    <p class="subtitle">
+      这张图把 RUS-239 拆成两个阶段：先恢复最小可执行反馈环，再判断重新流转失败来自 UI 入口、后端状态机还是批注门禁。
+    </p>
+
+    <section class="diagram" aria-label="RUS-239 诊断流程图">
+      <svg viewBox="0 0 1040 720" role="img">
+        <defs>
+          <pattern id="dots" width="22" height="22" patternUnits="userSpaceOnUse">
+            <circle cx="1" cy="1" r="0.9" fill="rgba(33,54,77,0.10)" />
+          </pattern>
+          <marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#6b7f95" />
+          </marker>
+          <marker id="arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#2d67b2" />
+          </marker>
+          <marker id="arrow-link" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#1f4f8d" />
+          </marker>
+        </defs>
+
+        <rect width="1040" height="720" fill="#f8fbfe" />
+        <rect width="1040" height="720" fill="url(#dots)" opacity="0.48" />
+
+        <!-- Arrows -->
+        <path d="M520 92 L520 136" fill="none" stroke="#6b7f95" stroke-width="1.2" marker-end="url(#arrow)" />
+        <path d="M520 216 L520 260" fill="none" stroke="#6b7f95" stroke-width="1.2" marker-end="url(#arrow)" />
+        <path d="M520 340 L520 388" fill="none" stroke="#2d67b2" stroke-width="1.4" marker-end="url(#arrow-accent)" />
+        <path d="M456 460 L280 520" fill="none" stroke="#6b7f95" stroke-width="1.2" marker-end="url(#arrow)" />
+        <path d="M584 460 L760 520" fill="none" stroke="#1f4f8d" stroke-width="1.2" marker-end="url(#arrow-link)" />
+        <path d="M280 596 L432 640" fill="none" stroke="#6b7f95" stroke-width="1.2" marker-end="url(#arrow)" />
+        <path d="M760 596 L608 640" fill="none" stroke="#1f4f8d" stroke-width="1.2" marker-end="url(#arrow-link)" />
+
+        <rect x="492" y="108" width="56" height="14" rx="2" fill="#f8fbfe" />
+        <text x="520" y="118" class="arrow-label">START</text>
+        <rect x="492" y="232" width="56" height="14" rx="2" fill="#f8fbfe" />
+        <text x="520" y="242" class="arrow-label">REPRO</text>
+        <rect x="488" y="356" width="64" height="14" rx="2" fill="#f8fbfe" />
+        <text x="520" y="366" class="arrow-label">DECIDE</text>
+        <rect x="324" y="492" width="48" height="14" rx="2" fill="#f8fbfe" />
+        <text x="348" y="502" class="arrow-label">TIMEOUT</text>
+        <rect x="668" y="492" width="48" height="14" rx="2" fill="#f8fbfe" />
+        <text x="692" y="502" class="arrow-label">BUSINESS</text>
+
+        <!-- Start -->
+        <rect x="408" y="32" width="224" height="60" rx="20" fill="#eef2f6" stroke="#6b7f95" stroke-width="1" />
+        <text x="520" y="58" class="node-name">RUS-239 复现目标</text>
+        <text x="520" y="76" class="sub">return -> handle -> active</text>
+
+        <!-- Step 1 -->
+        <rect x="396" y="136" width="248" height="80" rx="6" fill="#fff" stroke="#21364d" stroke-width="1" />
+        <rect x="408" y="148" width="44" height="14" rx="2" fill="transparent" stroke="rgba(33,54,77,0.40)" stroke-width="0.8" />
+        <text x="430" y="158" class="tag">BASE</text>
+        <text x="520" y="174" class="node-name">跑最小反馈环</text>
+        <text x="520" y="194" class="sub">bran-mixed + HTTP active/return/active</text>
+
+        <!-- Step 2 -->
+        <rect x="388" y="260" width="264" height="80" rx="6" fill="rgba(45,103,178,0.10)" stroke="#2d67b2" stroke-width="1.2" />
+        <rect x="400" y="272" width="44" height="14" rx="2" fill="transparent" stroke="rgba(45,103,178,0.55)" stroke-width="0.8" />
+        <text x="422" y="282" class="tag">GATE</text>
+        <text x="520" y="298" class="node-name">接口是否仍超时？</text>
+        <text x="520" y="318" class="sub">annotation apply / task create</text>
+
+        <!-- Diamond -->
+        <polygon points="520,388 632,460 520,532 408,460" fill="#fff" stroke="#21364d" stroke-width="1" />
+        <text x="520" y="456" class="node-name">是否进入第二次 active？</text>
+        <text x="520" y="476" class="sub">verify/sync gives result</text>
+
+        <!-- Left -->
+        <rect x="160" y="520" width="240" height="76" rx="6" fill="rgba(33,54,77,0.05)" stroke="#6b7f95" stroke-width="1" />
+        <rect x="172" y="532" width="44" height="14" rx="2" fill="transparent" stroke="rgba(107,127,149,0.55)" stroke-width="0.8" />
+        <text x="194" y="542" class="tag">DB</text>
+        <text x="280" y="558" class="node-name">先修后端超时</text>
+        <text x="280" y="578" class="sub">SurrealDB await / UPSERT / round</text>
+
+        <!-- Right -->
+        <rect x="640" y="520" width="240" height="76" rx="6" fill="#fff" stroke="#1f4f8d" stroke-width="1" />
+        <rect x="652" y="532" width="44" height="14" rx="2" fill="transparent" stroke="rgba(31,79,141,0.55)" stroke-width="0.8" />
+        <text x="674" y="542" class="tag">API</text>
+        <text x="760" y="558" class="node-name">核对业务语义</text>
+        <text x="760" y="578" class="sub">UI entry / workflow/sync / gate</text>
+
+        <!-- End -->
+        <rect x="400" y="628" width="240" height="60" rx="20" fill="#eef2f6" stroke="#2d67b2" stroke-width="1.2" />
+        <text x="520" y="654" class="node-name">修复并回归</text>
+        <text x="520" y="672" class="sub">bran-mixed reaches re-active</text>
+
+        <!-- Legend -->
+        <line x1="40" y1="704" x2="1000" y2="704" stroke="rgba(33,54,77,0.12)" stroke-width="0.8" />
+        <text x="40" y="692" fill="#6b7f95" font-family="'Geist Mono', monospace" font-size="8" letter-spacing="0.14em">LEGEND</text>
+        <rect x="120" y="684" width="16" height="10" rx="2" fill="rgba(45,103,178,0.10)" stroke="#2d67b2" />
+        <text x="144" y="692" fill="#6b7f95" font-family="'Geist Mono', monospace" font-size="9">当前关键门</text>
+        <rect x="260" y="684" width="16" height="10" rx="2" fill="rgba(33,54,77,0.05)" stroke="#6b7f95" />
+        <text x="284" y="692" fill="#6b7f95" font-family="'Geist Mono', monospace" font-size="9">后端稳定性</text>
+        <rect x="420" y="684" width="16" height="10" rx="2" fill="#fff" stroke="#1f4f8d" />
+        <text x="444" y="692" fill="#6b7f95" font-family="'Geist Mono', monospace" font-size="9">工作流语义</text>
+      </svg>
+    </section>
+
+    <section class="cards">
+      <article class="card">
+        <p class="eyebrow">FIRST</p>
+        <h2>先解除超时阻塞</h2>
+        <p>`annotation-states/apply` 和任务创建挂起会让回归场景无法进入重新提交节点，因此优先定位后端 await 或数据库写入卡点。</p>
+      </article>
+      <article class="card">
+        <p class="eyebrow">THEN</p>
+        <h2>再核对流转入口</h2>
+        <p>外部 PMS 上下文应以 `workflow/sync active` 为事实源；旧 `submitTaskToNextNode()` 只适合内部平台任务推进。</p>
+      </article>
+      <article class="card">
+        <p class="eyebrow">DONE</p>
+        <h2>以 bran-mixed 收口</h2>
+        <p>完成标准是设计侧处理批注后，仿 PMS 能跑过第二次 `active` 并回到 `jd` 校核节点。</p>
+      </article>
+    </section>
+
+    <footer>
+      plant3d-web · docs/plans/2026-04-30-rus-239-reflow-after-return · generated 2026-04-30
+    </footer>
+  </main>
+</body>
+</html>

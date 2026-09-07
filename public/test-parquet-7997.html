@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>测试 Parquet 7997 加载</title>
+  <script type="module">
+    function log(msg) {
+      const output = document.getElementById('output');
+      output.innerHTML += `<div>${new Date().toLocaleTimeString()}: ${msg}</div>`;
+      console.log(msg);
+    }
+
+    async function testParquet7997() {
+      log('此调试页已禁用旧版 CDN DuckDB 加载。');
+      log('请通过主应用打开模型视图；主应用会从同源 /duckdb/ 加载 DuckDB-WASM 离线资源。');
+
+      try {
+        const manifestResp = await fetch('/files/output/AvevaMarineSample/parquet/manifest_7997.json');
+        if (!manifestResp.ok) {
+          log(`manifest_7997.json 不可访问: HTTP ${manifestResp.status}`);
+          return;
+        }
+        const manifest = await manifestResp.json();
+        log(`manifest_7997.json 可访问: ${JSON.stringify(manifest.tables, null, 2)}`);
+      } catch (error) {
+        log(`manifest 检查失败: ${error.message}`);
+      }
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+      document.getElementById('testBtn').addEventListener('click', testParquet7997);
+    });
+  </script>
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      max-width: 1200px;
+      margin: 40px auto;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+    h1 {
+      color: #333;
+    }
+    button {
+      background: #4CAF50;
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      font-size: 16px;
+      cursor: pointer;
+      border-radius: 4px;
+    }
+    button:hover {
+      background: #45a049;
+    }
+    #output {
+      margin-top: 20px;
+      padding: 20px;
+      background: white;
+      border-radius: 4px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      font-family: 'Courier New', monospace;
+      font-size: 14px;
+      max-height: 600px;
+      overflow-y: auto;
+    }
+    #output div {
+      padding: 4px 0;
+      border-bottom: 1px solid #eee;
+    }
+  </style>
+</head>
+<body>
+  <h1>🧪 测试 Parquet 7997 数据加载</h1>
+  <p>点击按钮测试从 plant3d-web 加载 7997 的 parquet 模型数据</p>
+  <button id="testBtn">开始测试</button>
+  <div id="output"></div>
+</body>
+</html>

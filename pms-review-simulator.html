@@ -1,0 +1,1456 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PMS 三维校审调试模拟器</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family: 'Microsoft YaHei', 'PingFang SC', 'SimSun', sans-serif;
+        --page-bg: #eef2f6;
+        --panel-bg: #ffffff;
+        --line-strong: #b9c7d8;
+        --line-soft: #d7e0ea;
+        --line-faint: #e7edf4;
+        --text-main: #21364d;
+        --text-muted: #6b7f95;
+        --nav-bg: #0d2740;
+        --nav-text: #d7e6f4;
+        --nav-active: #204d7a;
+        --nav-active-border: #6fa2d6;
+        --toolbar-bg: #f8fbfe;
+        --table-head: #e9eff6;
+        --primary: #2d67b2;
+        --primary-strong: #1f4f8d;
+        --success: #2f7f48;
+        --warning: #a95d10;
+        --danger: #b33d3d;
+        --dialog-mask: rgba(14, 24, 37, 0.58);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        width: 100%;
+        height: 100%;
+        background: var(--page-bg);
+        color: var(--text-main);
+      }
+
+      body.modal-open {
+        overflow: hidden;
+      }
+
+      [hidden] {
+        display: none !important;
+      }
+
+      textarea,
+      input,
+      select,
+      button {
+        font: inherit;
+      }
+
+      button {
+        cursor: pointer;
+      }
+
+      button:disabled {
+        cursor: not-allowed;
+        opacity: 0.6;
+      }
+
+      #app {
+        width: 100%;
+        height: 100%;
+        display: grid;
+        grid-template-columns: 216px minmax(0, 1fr);
+      }
+
+      .sidebar {
+        background: linear-gradient(180deg, #102a43 0%, #0a2135 100%);
+        color: var(--nav-text);
+        border-right: 1px solid #071623;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .brand {
+        padding: 16px 18px;
+        font-size: 17px;
+        font-weight: 700;
+        letter-spacing: 0.4px;
+        border-bottom: 1px solid rgba(215, 230, 244, 0.14);
+      }
+
+      .menu-group {
+        padding: 16px 10px 8px;
+      }
+
+      .menu-title {
+        margin: 0 8px 8px;
+        font-size: 12px;
+        color: #86a6c3;
+      }
+
+      .menu-item {
+        margin: 3px 0;
+        padding: 8px 10px;
+        border: 1px solid transparent;
+        border-radius: 2px;
+        font-size: 13px;
+        user-select: none;
+      }
+
+      .menu-item.active {
+        background: linear-gradient(180deg, rgba(44, 88, 136, 0.95), rgba(28, 63, 104, 0.95));
+        border-color: var(--nav-active-border);
+        color: #fff;
+      }
+
+      .main {
+        min-width: 0;
+        display: grid;
+        grid-template-rows: auto auto 1fr;
+      }
+
+      .topbar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        padding: 10px 16px;
+        background: var(--panel-bg);
+        border-bottom: 1px solid var(--line-soft);
+      }
+
+      .breadcrumbs {
+        font-size: 13px;
+        color: var(--text-muted);
+      }
+
+      .header-meta {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        font-size: 12px;
+      }
+
+      .topbar-btn {
+        padding: 4px 10px;
+        height: 26px;
+        border: 1px solid var(--line-strong);
+        border-radius: 4px;
+        background: linear-gradient(180deg, #ffffff, #eef4f9);
+        color: var(--primary-strong);
+        font-size: 12px;
+        line-height: 1;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+      }
+
+      .topbar-btn:hover {
+        background: linear-gradient(180deg, #edf4ff, #d8e7fb);
+      }
+
+      .topbar-btn[aria-pressed='true'] {
+        border-color: #6b96cc;
+        background: linear-gradient(180deg, #edf4ff, #dce9f9);
+      }
+
+      .roles {
+        padding: 8px 16px;
+        border-bottom: 1px solid var(--line-soft);
+        background: #f7fafc;
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 8px 10px;
+        font-size: 12px;
+      }
+
+      .role-buttons {
+        display: inline-flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+
+      .role-btn,
+      .mini-btn,
+      .tool-btn,
+      .panel-btn,
+      .dialog-btn,
+      .modal-btn {
+        border: 1px solid var(--line-strong);
+        border-radius: 2px;
+        background: linear-gradient(180deg, #ffffff, #eef4f9);
+        color: var(--text-main);
+      }
+
+      .role-btn {
+        min-width: 48px;
+        padding: 5px 10px;
+        font-size: 12px;
+      }
+
+      .role-btn.active {
+        border-color: var(--primary);
+        background: linear-gradient(180deg, #edf4ff, #d8e7fb);
+        color: var(--primary-strong);
+        font-weight: 700;
+      }
+
+      .mini-btn {
+        padding: 4px 10px;
+        font-size: 12px;
+      }
+
+      .workspace {
+        min-height: 0;
+        display: grid;
+        grid-template-rows: auto auto minmax(240px, 1fr) minmax(260px, 36%);
+        gap: 10px;
+        padding: 10px 14px 14px;
+      }
+
+      .toolbar {
+        background: var(--toolbar-bg);
+        border: 1px solid var(--line-strong);
+        border-radius: 2px;
+        padding: 8px 10px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .toolbar-actions,
+      .toolbar-meta {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+
+      .tool-btn {
+        padding: 5px 14px;
+        font-size: 12px;
+      }
+
+      .tool-btn.danger {
+        color: #8a2222;
+      }
+
+      .toolbar-meta {
+        font-size: 12px;
+      }
+
+      .toolbar-meta input,
+      .toolbar-meta select {
+        width: 220px;
+        border: 1px solid var(--line-strong);
+        border-radius: 2px;
+        background: #fff;
+        padding: 5px 8px;
+      }
+
+      .toolbar-meta-status {
+        max-width: 360px;
+        color: var(--text-muted);
+        font-size: 11px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .table-panel,
+      .bottom-panel {
+        min-height: 0;
+        background: var(--panel-bg);
+        border: 1px solid var(--line-strong);
+        border-radius: 2px;
+        display: grid;
+        grid-template-rows: auto 1fr;
+      }
+
+      .panel-title {
+        padding: 8px 10px;
+        background: linear-gradient(180deg, #f8fbfe, #eff4f9);
+        border-bottom: 1px solid var(--line-soft);
+        color: #42586f;
+        font-size: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+      }
+
+      .table-wrap,
+      .diag-content {
+        min-height: 0;
+        overflow: auto;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 12px;
+      }
+
+      thead tr {
+        background: var(--table-head);
+      }
+
+      th,
+      td {
+        padding: 7px 8px;
+        border-right: 1px solid var(--line-faint);
+        border-bottom: 1px solid var(--line-faint);
+        text-align: left;
+        white-space: nowrap;
+        vertical-align: middle;
+      }
+
+      th:last-child,
+      td:last-child {
+        border-right: none;
+      }
+
+      .checkbox-cell {
+        width: 44px;
+        text-align: center;
+      }
+
+      .checkbox-cell input {
+        width: 14px;
+        height: 14px;
+        accent-color: var(--primary);
+      }
+
+      tbody tr {
+        cursor: pointer;
+      }
+
+      tbody tr:hover {
+        background: #f4f8fd;
+      }
+
+      tbody tr.selected {
+        background: #deebfb;
+      }
+
+      .status-badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 2px 8px;
+        border-radius: 999px;
+        border: 1px solid transparent;
+        font-size: 11px;
+        line-height: 1.4;
+      }
+
+      .status-draft {
+        color: #5b6b7b;
+        background: #f2f4f7;
+        border-color: #ccd6e2;
+      }
+
+      .status-submitted {
+        color: #8b5a10;
+        background: #fff5d8;
+        border-color: #e7c46b;
+      }
+
+      .status-in_review {
+        color: #205ea5;
+        background: #e1edfb;
+        border-color: #93b9e9;
+      }
+
+      .status-approved {
+        color: #256f3d;
+        background: #e1f5e7;
+        border-color: #93d3a6;
+      }
+
+      .status-rejected {
+        color: #a53a3a;
+        background: #fce7e7;
+        border-color: #ebb1b1;
+      }
+
+      .status-cancelled {
+        color: #66798f;
+        background: #eef2f6;
+        border-color: #c9d4df;
+      }
+
+      .empty,
+      .error,
+      .loading {
+        padding: 16px;
+        font-size: 12px;
+      }
+
+      .error {
+        color: #9f2f2f;
+        background: #fff1f1;
+      }
+
+      .diag-box {
+        min-height: 0;
+        display: grid;
+        grid-template-rows: auto auto 1fr;
+      }
+
+      .diag-head,
+      .diag-summary {
+        padding: 8px 10px;
+        border-bottom: 1px solid var(--line-soft);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        font-size: 12px;
+      }
+
+      .diag-head {
+        background: #f9fbfd;
+      }
+
+      .diag-summary {
+        background: #fcfdff;
+        color: var(--text-muted);
+      }
+
+      .diag-actions {
+        display: inline-flex;
+        gap: 6px;
+      }
+
+      .diag-content {
+        padding: 10px;
+        font-size: 12px;
+        line-height: 1.65;
+      }
+
+      .diag-card {
+        margin-bottom: 8px;
+        padding: 8px 10px;
+        border: 1px solid var(--line-soft);
+        border-radius: 2px;
+        background: #f8fbfe;
+      }
+
+      .diag-grid {
+        display: grid;
+        grid-template-columns: 108px 1fr;
+        gap: 4px 8px;
+      }
+
+      .diag-key {
+        color: var(--text-muted);
+      }
+
+      .diag-value {
+        color: #1d2e40;
+        font-weight: 600;
+        word-break: break-all;
+      }
+
+      .diag-list {
+        margin: 6px 0 0;
+        padding-left: 18px;
+      }
+
+      .diag-list li {
+        margin-bottom: 2px;
+        word-break: break-all;
+      }
+
+      .modal {
+        position: fixed;
+        inset: 0;
+        display: none;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .modal.show {
+        display: flex;
+      }
+
+      .modal-mask {
+        position: absolute;
+        inset: 0;
+        background: var(--dialog-mask);
+      }
+
+      .modal-window {
+        position: relative;
+        z-index: 1;
+        display: flex;
+        flex-direction: column;
+        background: #fff;
+        border: 1px solid #879ab0;
+        box-shadow: 0 18px 44px rgba(18, 35, 53, 0.34);
+        overflow: hidden;
+      }
+
+      .main-modal-window {
+        width: min(1480px, 94vw);
+        height: min(920px, 90vh);
+      }
+
+      .modal-header {
+        padding: 10px 14px;
+        background: linear-gradient(180deg, #f7fafc, #e8eef5);
+        border-bottom: 1px solid var(--line-soft);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+
+      .modal-title-wrap {
+        display: grid;
+        gap: 4px;
+        min-width: 0;
+      }
+
+      .modal-title {
+        font-size: 14px;
+        font-weight: 700;
+        color: #26405b;
+      }
+
+      .modal-subtitle {
+        font-size: 12px;
+        color: var(--text-muted);
+        min-height: 18px;
+      }
+
+      .modal-actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .modal-btn {
+        padding: 5px 12px;
+        font-size: 12px;
+      }
+
+      .modal-btn.primary {
+        border-color: #6b96cc;
+        background: linear-gradient(180deg, #edf4ff, #dce9f9);
+        color: var(--primary-strong);
+      }
+
+      .modal-btn.danger {
+        border-color: #c89b9b;
+        background: linear-gradient(180deg, #fff5f5, #f7dddd);
+        color: #973636;
+      }
+
+      .modal-btn.ghost {
+        border-color: #b6c3d4;
+        background: #fff;
+        color: #34506e;
+      }
+
+      .modal-btn.ghost[aria-pressed='true'] {
+        border-color: #6b96cc;
+        background: linear-gradient(180deg, #edf4ff, #dce9f9);
+        color: var(--primary-strong);
+      }
+
+      .main-modal-window.fullscreen {
+        width: 100vw !important;
+        height: 100vh !important;
+        max-width: 100vw;
+        max-height: 100vh;
+        border-radius: 0;
+        border: none;
+        box-shadow: none;
+      }
+
+      .main-modal-window.fullscreen .simulator-layout {
+        grid-template-columns: minmax(0, 1fr);
+      }
+
+      .main-modal-window.fullscreen .side-panel {
+        display: none;
+      }
+
+      .main-modal-window.fullscreen .side-panel.drawer-open {
+        display: flex;
+        position: absolute;
+        top: 0;
+        right: 0;
+        width: min(420px, 40vw);
+        height: 100%;
+        z-index: 200;
+        box-shadow: -4px 0 24px rgba(0, 0, 0, 0.18);
+        border-left: 1px solid var(--line-soft);
+        animation: drawer-slide-in 0.22s ease-out;
+        overflow-y: auto;
+      }
+
+      @keyframes drawer-slide-in {
+        from { transform: translateX(100%); }
+        to   { transform: translateX(0); }
+      }
+
+      .drawer-backdrop {
+        display: none;
+        position: absolute;
+        inset: 0;
+        z-index: 190;
+        background: rgba(0, 0, 0, 0.08);
+      }
+
+      .drawer-backdrop.visible {
+        display: block;
+      }
+
+      .floating-workflow-btn {
+        position: absolute;
+        bottom: 24px;
+        right: 24px;
+        z-index: 100;
+        padding: 10px 22px;
+        border-radius: 8px;
+        background: linear-gradient(180deg, #2d67b2, #1f4f8d);
+        color: #fff;
+        border: 1px solid #1a4278;
+        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.28);
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+        letter-spacing: 0.3px;
+        transition: box-shadow 0.15s, transform 0.15s;
+      }
+
+      .floating-workflow-btn:hover {
+        box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+        transform: translateY(-1px);
+      }
+
+      .floating-workflow-btn:active {
+        transform: translateY(0);
+      }
+
+      .floating-workflow-btn[hidden] {
+        display: none !important;
+      }
+
+      .main-modal-window.fullscreen .iframe-region {
+        border-right: none;
+      }
+
+      .modal-body {
+        position: relative;
+        flex: 1;
+        min-height: 0;
+      }
+
+      .simulator-layout {
+        --side-panel-width: 360px;
+        height: 100%;
+        min-height: 0;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) var(--side-panel-width);
+        transition: grid-template-columns 0.18s ease;
+      }
+
+      .simulator-layout.side-collapsed {
+        --side-panel-width: 0px;
+      }
+
+      .simulator-layout.side-collapsed > .side-panel {
+        display: none;
+      }
+
+      .simulator-layout.side-collapsed .iframe-region {
+        border-right: none;
+      }
+
+      .iframe-region {
+        position: relative;
+        min-width: 0;
+        min-height: 0;
+        background: #dfe7ef;
+        border-right: 1px solid var(--line-soft);
+      }
+
+      .iframe-edge-handle {
+        position: absolute;
+        top: 50%;
+        right: 0;
+        transform: translateY(-50%);
+        width: 22px;
+        padding: 14px 0;
+        border: 1px solid var(--line-strong);
+        border-right: none;
+        border-top-left-radius: 4px;
+        border-bottom-left-radius: 4px;
+        background: linear-gradient(180deg, #ffffff, #eef4f9);
+        color: var(--primary-strong);
+        font-size: 14px;
+        line-height: 1;
+        cursor: pointer;
+        z-index: 3;
+        box-shadow: -2px 0 4px rgba(18, 35, 53, 0.08);
+      }
+
+      .iframe-edge-handle:hover {
+        background: linear-gradient(180deg, #edf4ff, #d8e7fb);
+      }
+
+      .side-panel-collapse-btn {
+        margin-left: auto;
+        padding: 0 8px;
+        height: 22px;
+        border: 1px solid var(--line-strong);
+        border-radius: 2px;
+        background: linear-gradient(180deg, #ffffff, #eef4f9);
+        color: #34506e;
+        font-size: 14px;
+        line-height: 1;
+        cursor: pointer;
+      }
+
+      .side-panel-collapse-btn:hover {
+        background: linear-gradient(180deg, #edf4ff, #d8e7fb);
+      }
+
+      .iframe-region iframe {
+        width: 100%;
+        height: 100%;
+        border: none;
+        background: #fff;
+      }
+
+      .iframe-blocker {
+        position: absolute;
+        inset: 0;
+        background: rgba(13, 21, 31, 0.22);
+        backdrop-filter: blur(1px);
+        z-index: 2;
+      }
+
+      .side-panel {
+        min-width: 0;
+        min-height: 0;
+        overflow: hidden;
+        display: grid;
+        grid-template-rows: auto auto minmax(0, 1fr) auto;
+        background: linear-gradient(180deg, #f9fbfd 0%, #f1f5f9 100%);
+      }
+
+      .side-panel-header,
+      .side-panel-footer {
+        padding: 12px 14px;
+        border-bottom: 1px solid var(--line-soft);
+      }
+
+      .side-panel-footer {
+        border-top: 1px solid var(--line-soft);
+        border-bottom: none;
+        background: #f8fbff;
+      }
+
+      .panel-heading {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 8px;
+      }
+
+      .panel-title-main {
+        font-size: 14px;
+        font-weight: 700;
+        color: #24405e;
+      }
+
+      .panel-badge {
+        font-size: 11px;
+        color: var(--primary-strong);
+        background: #dfeafb;
+        border: 1px solid #9ebbe5;
+        border-radius: 999px;
+        padding: 2px 8px;
+      }
+
+      .panel-subtitle {
+        margin-top: 4px;
+        font-size: 12px;
+        color: var(--text-muted);
+      }
+
+      .panel-meta {
+        display: grid;
+        grid-template-columns: 84px 1fr;
+        gap: 6px 8px;
+        font-size: 12px;
+      }
+
+      .panel-meta-key {
+        color: var(--text-muted);
+      }
+
+      .panel-meta-value {
+        color: #17304a;
+        font-weight: 600;
+        word-break: break-all;
+      }
+
+      .side-panel-scroll {
+        min-height: 0;
+        overflow: auto;
+        padding: 12px 14px;
+        display: grid;
+        gap: 12px;
+      }
+
+      .panel-section {
+        border: 1px solid var(--line-soft);
+        background: #fff;
+        border-radius: 2px;
+      }
+
+      .panel-section-header {
+        padding: 8px 10px;
+        border-bottom: 1px solid var(--line-faint);
+        background: #f8fbfe;
+        font-size: 12px;
+        font-weight: 700;
+        color: #41586f;
+      }
+
+      .panel-section-body {
+        padding: 10px;
+        display: grid;
+        gap: 8px;
+      }
+
+      .panel-field {
+        display: grid;
+        gap: 4px;
+        font-size: 12px;
+      }
+
+      .panel-field label {
+        color: #465d75;
+        font-weight: 700;
+      }
+
+      .panel-input,
+      .panel-textarea,
+      .dialog-select,
+      .dialog-textarea {
+        width: 100%;
+        border: 1px solid var(--line-strong);
+        border-radius: 2px;
+        background: #fff;
+        color: #21364d;
+      }
+
+      .panel-input,
+      .dialog-select {
+        min-height: 32px;
+        padding: 6px 8px;
+      }
+
+      .panel-textarea,
+      .dialog-textarea {
+        min-height: 88px;
+        padding: 8px;
+        resize: vertical;
+        line-height: 1.55;
+      }
+
+      .panel-textarea.readonly,
+      .dialog-textarea.readonly {
+        background: #f6f8fb;
+      }
+
+      .component-list,
+      .attachment-list {
+        margin: 0;
+        padding-left: 18px;
+        display: grid;
+        gap: 4px;
+        font-size: 12px;
+      }
+
+      .component-list li,
+      .attachment-list li {
+        word-break: break-all;
+      }
+
+      .panel-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .panel-btn,
+      .dialog-btn {
+        padding: 6px 14px;
+        font-size: 12px;
+      }
+
+      .panel-btn.primary,
+      .dialog-btn.primary {
+        border-color: #6b96cc;
+        background: linear-gradient(180deg, #edf4ff, #dbe8f8);
+        color: var(--primary-strong);
+      }
+
+      .panel-btn.success,
+      .dialog-btn.success {
+        border-color: #8fbda0;
+        background: linear-gradient(180deg, #eefaf1, #dff0e4);
+        color: #245c34;
+      }
+
+      .panel-btn.warn,
+      .dialog-btn.warn {
+        border-color: #d7b083;
+        background: linear-gradient(180deg, #fff8ef, #f8ead8);
+        color: #8c4e13;
+      }
+
+      .panel-btn.danger,
+      .dialog-btn.danger {
+        border-color: #d4a0a0;
+        background: linear-gradient(180deg, #fff3f3, #f6dddd);
+        color: #9c3737;
+      }
+
+      .panel-muted,
+      .dialog-muted {
+        color: var(--text-muted);
+        font-size: 12px;
+        line-height: 1.6;
+      }
+
+      .panel-feedback {
+        font-size: 12px;
+        line-height: 1.6;
+        color: #41586f;
+      }
+
+      .panel-feedback.ok,
+      .dialog-feedback.ok {
+        color: var(--success);
+      }
+
+      .panel-feedback.fail,
+      .dialog-feedback.fail {
+        color: var(--danger);
+      }
+
+      .dialog-modal {
+        z-index: 1100;
+      }
+
+      .dialog-window {
+        width: min(560px, calc(100vw - 32px));
+        max-height: min(680px, calc(100vh - 32px));
+      }
+
+      .dialog-body {
+        padding: 14px;
+        display: grid;
+        gap: 12px;
+        overflow: auto;
+      }
+
+      .dialog-warning {
+        padding: 10px 12px;
+        border: 1px solid #e0c1a0;
+        background: #fff6ea;
+        color: #8b4d16;
+        font-size: 12px;
+        line-height: 1.65;
+      }
+
+      .dialog-footer {
+        padding: 10px 14px;
+        border-top: 1px solid var(--line-soft);
+        background: #f8fbff;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+      }
+
+      .dialog-feedback {
+        font-size: 12px;
+        line-height: 1.5;
+        color: #435970;
+        flex: 1;
+      }
+
+      .dialog-actions {
+        display: inline-flex;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+
+      @media (max-width: 1180px) {
+        #app {
+          grid-template-columns: 180px minmax(0, 1fr);
+        }
+
+        .simulator-layout {
+          --side-panel-width: 320px;
+        }
+      }
+
+      @media (max-width: 900px) {
+        #app {
+          grid-template-columns: 1fr;
+        }
+
+        .sidebar {
+          display: none;
+        }
+
+        .workspace {
+          grid-template-rows: auto minmax(220px, 1fr) minmax(260px, 40%);
+          padding: 8px;
+        }
+
+        .main-modal-window {
+          width: calc(100vw - 16px);
+          height: calc(100vh - 16px);
+        }
+
+        .simulator-layout {
+          grid-template-columns: 1fr;
+          grid-template-rows: minmax(260px, 1fr) minmax(280px, 44%);
+        }
+
+        .iframe-region {
+          border-right: none;
+          border-bottom: 1px solid var(--line-soft);
+        }
+
+        /* 窄视口已是上下布局；折叠相关 UI 在该断点下不再适用 */
+        .side-panel-collapse-btn,
+        .iframe-edge-handle {
+          display: none !important;
+        }
+
+        .simulator-layout.side-collapsed > .side-panel {
+          display: grid;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <aside class="sidebar">
+        <div class="brand">PowerPMS · 调试模拟器</div>
+        <div class="menu-group">
+          <div class="menu-title">设计交付</div>
+          <div class="menu-item active">三维校审单</div>
+        </div>
+        <div class="menu-group">
+          <div class="menu-title">系统管理</div>
+          <div class="menu-item">平台管理</div>
+        </div>
+      </aside>
+
+      <main class="main">
+        <section class="topbar">
+          <div class="breadcrumbs">当前位置：设计交付 / 三维校审单（PMS 调试模式）</div>
+          <div class="header-meta">
+            <span id="current-user-label">当前用户：SJ</span>
+            <span id="current-role-label">当前工作流角色：sj（编制）</span>
+            <button
+              id="app-fullscreen-btn"
+              class="topbar-btn"
+              type="button"
+              title="将整个浏览器进入全屏（按 Esc 退出）"
+              aria-pressed="false">⛶ 全屏</button>
+          </div>
+        </section>
+
+        <section class="roles">
+          <span>PMS 用户切换：</span>
+          <div id="role-buttons" class="role-buttons">
+            <button class="role-btn active" data-role="SJ">SJ</button>
+            <button class="role-btn" data-role="JH">JH</button>
+            <button class="role-btn" data-role="SH">SH</button>
+            <button class="role-btn" data-role="PZ">PZ</button>
+          </div>
+          <button id="reopen-last-btn" class="mini-btn" disabled>重开最近 form_id</button>
+          <span id="last-form-label">最近打开：--</span>
+        </section>
+
+        <section class="workspace">
+          <div class="toolbar">
+            <div class="toolbar-actions">
+              <button id="tool-create" class="tool-btn">新增</button>
+              <button id="tool-delete" class="tool-btn danger" disabled>删除 / 清空</button>
+              <button id="tool-edit" class="tool-btn" disabled>编辑</button>
+              <button id="tool-view" class="tool-btn" disabled>查看</button>
+              <button id="tool-reopen" class="tool-btn" disabled>重开当前</button>
+              <button id="tool-refresh" class="tool-btn">刷新</button>
+            </div>
+            <div class="toolbar-meta">
+              <label for="project-id-input">项目号</label>
+              <select id="project-id-input"></select>
+              <span id="project-id-status" class="toolbar-meta-status">项目列表加载中…</span>
+            </div>
+          </div>
+
+          <section id="platform-params-panel" class="bottom-panel" style="grid-template-rows: auto auto; min-height: 0;">
+            <div class="panel-title" style="cursor: pointer; user-select: none;" id="platform-params-toggle">
+              <span>▸ 平台 API 参数（types.rs 对齐）</span>
+              <span style="font-size: 11px; color: var(--text-muted);">embed-url / workflow/sync / cache / delete</span>
+            </div>
+            <div id="platform-params-body" style="display: none; padding: 10px 12px; gap: 10px; font-size: 12px;" class="panel-section-body">
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                <div class="panel-field">
+                  <label for="platform-workflow-mode">workflow_mode（embed-url）</label>
+                  <select id="platform-workflow-mode" class="dialog-select" style="min-height: 28px;">
+                    <option value="external" selected>external（真实 PMS 默认）</option>
+                    <option value="manual">manual（仅 plant3d 内部流）</option>
+                    <option value="internal">internal</option>
+                    <option value="">（不传，使用后端默认）</option>
+                  </select>
+                </div>
+                <div class="panel-field">
+                  <label for="platform-embed-token">token（embed-url 续流程 JWT）</label>
+                  <input id="platform-embed-token" class="panel-input" type="text" placeholder="留空则由后端签发新 token" style="min-height: 28px;" />
+                </div>
+              </div>
+              <label style="display: flex; align-items: flex-start; gap: 8px; font-size: 12px; cursor: pointer; user-select: none; line-height: 1.55;">
+                <input id="pms-like-iframe-query" type="checkbox" checked style="accent-color: var(--primary); margin-top: 2px;" />
+                <span><b>真实 PMS 拼链</b>：iframe URL 附带 <code>user_id</code>（当前 PMS 用户，等同 HumanCode）与 <code>form_id</code>（与 embed 血缘 / ModelUrl 一致）；关闭则仅用 token-primary（user_token + output_project）</span>
+              </label>
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                <div class="panel-field">
+                  <label for="platform-extra-params">extra_parameters（embed-url JSON）</label>
+                  <textarea id="platform-extra-params" class="panel-textarea" style="min-height: 56px; font-family: monospace; font-size: 11px;" placeholder='例：{"is_reviewer": true}'></textarea>
+                </div>
+                <div class="panel-field">
+                  <label for="platform-workflow-metadata">metadata（workflow/sync JSON）</label>
+                  <textarea id="platform-workflow-metadata" class="panel-textarea" style="min-height: 56px; font-family: monospace; font-size: 11px;" placeholder='例：{"integration_version": "1.0"}'></textarea>
+                </div>
+              </div>
+              <div id="platform-mode-warning" hidden
+                style="padding: 8px 10px; border: 1px solid #e0c1a0; background: #fff6ea; color: #8b4d16; font-size: 12px; line-height: 1.55; border-radius: 2px;">
+              </div>
+              <div style="display: flex; gap: 8px; align-items: center; padding-top: 4px; border-top: 1px solid var(--line-faint);">
+                <span style="color: var(--text-muted); margin-right: 4px;">平台侧 API：</span>
+                <button id="platform-cache-preload-btn" class="tool-btn" type="button" disabled>cache/preload</button>
+                <button id="platform-delete-btn" class="tool-btn danger" type="button" disabled>delete（需二次确认）</button>
+                <span id="platform-api-feedback" style="color: var(--text-muted); font-size: 11px; margin-left: auto;">token 可用后启用</span>
+              </div>
+              <div style="padding-top: 6px; border-top: 1px solid var(--line-faint);">
+                <div style="font-weight: 700; color: #41586f; margin-bottom: 6px;">SOP 操作清单（对齐 test:pms:cdp:full）</div>
+                <div style="display: grid; gap: 3px; font-size: 12px; line-height: 1.6;">
+                  <label style="display: flex; align-items: baseline; gap: 6px; cursor: pointer;">
+                    <input type="checkbox" class="sop-check" data-step="login" style="accent-color: var(--primary);" />
+                    <span><b>1. 选择 PMS 用户</b>（等价于 PMS 登录）— 顶部「PMS 用户切换」按钮</span>
+                  </label>
+                  <label style="display: flex; align-items: baseline; gap: 6px; cursor: pointer;">
+                    <input type="checkbox" class="sop-check" data-step="project" style="accent-color: var(--primary);" />
+                    <span><b>2. 选择项目号</b> — 工具栏「项目号」下拉</span>
+                  </label>
+                  <label style="display: flex; align-items: baseline; gap: 6px; cursor: pointer;">
+                    <input type="checkbox" class="sop-check" data-step="new" style="accent-color: var(--primary);" />
+                    <span><b>3. 点击「新增」</b> → 调 embed-url → 打开 iframe（等价于 PMS 新增按钮）</span>
+                  </label>
+                  <label style="display: flex; align-items: baseline; gap: 6px; cursor: pointer;">
+                    <input type="checkbox" class="sop-check" data-step="fill-data" style="accent-color: var(--primary);" />
+                    <span><b>4. 在 iframe 中填写编校审数据</b>（包名、BRAN、构件清单等）→ 点击「创建编校审数据」</span>
+                  </label>
+                  <label style="display: flex; align-items: baseline; gap: 6px; cursor: pointer;">
+                    <input type="checkbox" class="sop-check" data-step="submit" style="accent-color: var(--primary);" />
+                    <span><b>5. 回到 PMS 面板执行 workflow/sync active</b>（送审提交）</span>
+                  </label>
+                  <label style="display: flex; align-items: baseline; gap: 6px; cursor: pointer;">
+                    <input type="checkbox" class="sop-check" data-step="verify-list" style="accent-color: var(--primary);" />
+                    <span><b>6. 刷新列表</b>，确认新记录出现（对应 CDP 的 PMS JSON 嗅探断言）</span>
+                  </label>
+                  <label style="display: flex; align-items: baseline; gap: 6px; cursor: pointer;">
+                    <input type="checkbox" class="sop-check" data-step="checker" style="accent-color: var(--primary);" />
+                    <span><b>7.（Extended）切换校核用户 JH</b> → 打开同一记录 → 查看/批注 → 同意/驳回</span>
+                  </label>
+                </div>
+              </div>
+              <div style="padding-top: 6px; border-top: 1px solid var(--line-faint);">
+                <div style="font-weight: 700; color: #41586f; margin-bottom: 6px;">CDP 环境变量预置（query / localStorage）</div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; font-size: 12px;">
+                  <div class="panel-field">
+                    <label for="platform-env-bran">PMS_TARGET_BRAN_REFNO</label>
+                    <input id="platform-env-bran" class="panel-input" type="text" placeholder="24381_145018（默认）" style="min-height: 26px; font-size: 11px;" />
+                  </div>
+                  <div class="panel-field">
+                    <label for="platform-env-package">PMS_MOCK_PACKAGE_NAME</label>
+                    <input id="platform-env-package" class="panel-input" type="text" placeholder="自动生成或手填包名" style="min-height: 26px; font-size: 11px;" />
+                  </div>
+                  <div class="panel-field">
+                    <label for="platform-env-embed-site">PMS_EMBEDDED_SITE_SUBSTRING</label>
+                    <input id="platform-env-embed-site" class="panel-input" type="text" placeholder="嵌入站点域名片段" style="min-height: 26px; font-size: 11px;" />
+                  </div>
+                  <div class="panel-field">
+                    <label for="platform-env-cdp-mode">PMS_CDP_WORKFLOW_MODE</label>
+                    <input id="platform-env-cdp-mode" class="panel-input" type="text" placeholder="manual / external" style="min-height: 26px; font-size: 11px;" readonly />
+                  </div>
+                </div>
+                <div style="margin-top: 4px; color: var(--text-muted); font-size: 11px;">
+                  以上字段通过 <code>?bran_refno=…&amp;package_name=…</code> URL 参数或 <code>localStorage</code> 预设时自动填入，与 CDP 脚本共享语义。
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="table-panel">
+            <div class="panel-title">
+              <span>三维校审单（真实任务列表）</span>
+              <span id="table-summary">--</span>
+            </div>
+            <div id="table-wrap" class="table-wrap"></div>
+          </section>
+
+          <section class="bottom-panel">
+            <div class="panel-title">调试工作区（诊断）</div>
+            <section class="diag-box">
+              <div class="diag-head">
+                <span>form_id 诊断区</span>
+                <div class="diag-actions">
+                  <button id="diag-task-btn" class="mini-btn" disabled>查任务详情</button>
+                  <button id="diag-workflow-btn" class="mini-btn" disabled>查 form_id 聚合</button>
+                </div>
+              </div>
+              <div class="diag-summary">
+                <span>诊断区仅展示任务上下文、聚合快照、最近一次流程请求结果与后端提示。</span>
+                <span id="workflow-action-hint">请选择记录后查看诊断信息。</span>
+              </div>
+              <div id="diag-content" class="diag-content"></div>
+            </section>
+          </section>
+        </section>
+      </main>
+    </div>
+
+    <div id="iframe-modal" class="modal" aria-hidden="true">
+      <div class="modal-mask" data-close="iframe-modal"></div>
+      <div class="modal-window main-modal-window" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+        <div class="modal-header">
+          <div class="modal-title-wrap">
+            <div id="modal-title" class="modal-title">未打开校审页面</div>
+            <div id="modal-subtitle" class="modal-subtitle">请从任务列表或新增入口打开校审页面。</div>
+          </div>
+          <div class="modal-actions">
+            <button id="modal-fullscreen-btn" class="modal-btn ghost" type="button" title="将嵌入页面全屏（按 Esc 退出全屏）" aria-pressed="false">⤢ 全屏</button>
+            <button id="modal-reopen-btn" class="modal-btn primary" disabled>刷新重开</button>
+            <button id="modal-close-btn" class="modal-btn danger">关闭</button>
+          </div>
+        </div>
+        <div class="modal-body">
+          <div id="simulator-layout" class="simulator-layout">
+            <section class="iframe-region">
+              <iframe id="review-iframe" title="PMS 三维校审 iframe" src="about:blank"></iframe>
+              <div id="iframe-blocker" class="iframe-blocker" hidden></div>
+              <button
+                id="side-panel-expand-handle"
+                class="iframe-edge-handle"
+                type="button"
+                title="展开送审信息面板"
+                aria-label="展开送审信息面板"
+                hidden>‹</button>
+              <button id="floating-workflow-btn" class="floating-workflow-btn" type="button" hidden>📋 流转操作</button>
+            </section>
+            <div id="drawer-backdrop" class="drawer-backdrop"></div>
+
+            <aside class="side-panel">
+              <div class="side-panel-header">
+                <div class="panel-heading">
+                  <span id="side-panel-title" class="panel-title-main">流程单据面板</span>
+                  <span id="side-panel-badge" class="panel-badge">只读</span>
+                  <button
+                    id="side-panel-collapse-btn"
+                    class="side-panel-collapse-btn"
+                    type="button"
+                    title="收起送审信息面板"
+                    aria-label="收起送审信息面板">›</button>
+                </div>
+                <div id="side-panel-subtitle" class="panel-subtitle">打开单据后显示当前流程节点、意见及最近提交结果。</div>
+              </div>
+
+              <div class="side-panel-header">
+                <div class="panel-meta">
+                  <div class="panel-meta-key">任务编号</div>
+                  <div id="panel-meta-task-id" class="panel-meta-value">--</div>
+                  <div class="panel-meta-key">form_id</div>
+                  <div id="panel-meta-form-id" class="panel-meta-value">--</div>
+                  <div class="panel-meta-key">当前节点</div>
+                  <div id="panel-meta-node" class="panel-meta-value">--</div>
+                  <div class="panel-meta-key">状态</div>
+                  <div id="panel-meta-status" class="panel-meta-value">--</div>
+                  <div class="panel-meta-key">打开来源</div>
+                  <div id="panel-meta-source" class="panel-meta-value">--</div>
+                  <div class="panel-meta-key">当前角色</div>
+                  <div id="panel-meta-role" class="panel-meta-value">--</div>
+                </div>
+              </div>
+
+              <div class="side-panel-scroll">
+                <section class="panel-section">
+                  <div class="panel-section-header">包信息</div>
+                  <div class="panel-section-body panel-meta">
+                    <div class="panel-meta-key">项目号</div>
+                    <div id="panel-project-id" class="panel-meta-value">--</div>
+                    <div class="panel-meta-key">标题</div>
+                    <div id="panel-title-text" class="panel-meta-value">--</div>
+                    <div class="panel-meta-key">说明</div>
+                    <div id="panel-note-text" class="panel-meta-value">--</div>
+                    <div class="panel-meta-key">录入人</div>
+                    <div id="panel-requester-text" class="panel-meta-value">--</div>
+                    <div class="panel-meta-key">录入日期</div>
+                    <div id="panel-created-text" class="panel-meta-value">--</div>
+                  </div>
+                </section>
+
+                <section class="panel-section">
+                  <div class="panel-section-header">构件与附件</div>
+                  <div class="panel-section-body">
+                    <div class="panel-field">
+                      <label>构件清单</label>
+                      <ul id="panel-component-list" class="component-list"></ul>
+                    </div>
+                    <div class="panel-field">
+                      <label>附件占位</label>
+                      <ul id="panel-attachment-list" class="attachment-list"></ul>
+                    </div>
+                  </div>
+                </section>
+
+                <section id="panel-initiate-section" class="panel-section" hidden>
+                  <div class="panel-section-header">送审信息</div>
+                  <div class="panel-section-body">
+                    <div class="panel-field">
+                      <label for="side-panel-comment-input">送审说明 / 意见</label>
+                      <textarea
+                        id="side-panel-comment-input"
+                        class="panel-textarea"
+                        placeholder="请输入送审说明、校审意见或补充说明"></textarea>
+                    </div>
+                    <div class="panel-actions">
+                      <button id="panel-action-active-btn" class="panel-btn primary" type="button">送审提交</button>
+                    </div>
+                    <div class="panel-muted">请先在嵌入页保存编校审数据；保存完成并拿到 form_id 后，再回到此处执行送审提交。</div>
+                  </div>
+                </section>
+
+                <section id="panel-workflow-section" class="panel-section" hidden>
+                  <div class="panel-section-header">流程处理</div>
+                  <div class="panel-section-body">
+                    <div class="panel-field">
+                      <label for="side-panel-comment-workflow">处理意见</label>
+                      <textarea
+                        id="side-panel-comment-workflow"
+                        class="panel-textarea"
+                        placeholder="请输入同意、退回或终止原因"></textarea>
+                    </div>
+                    <div class="panel-actions">
+                      <button id="panel-action-agree-btn" class="panel-btn success" type="button">同意</button>
+                      <button id="panel-action-return-btn" class="panel-btn warn" type="button">驳回</button>
+                      <button id="panel-action-stop-btn" class="panel-btn danger" type="button">终止</button>
+                    </div>
+                  </div>
+                </section>
+
+                <section id="panel-readonly-section" class="panel-section" hidden>
+                  <div class="panel-section-header">只读说明</div>
+                  <div class="panel-section-body">
+                    <div class="panel-field">
+                      <label for="side-panel-readonly-comment">当前上下文</label>
+                      <textarea id="side-panel-readonly-comment" class="panel-textarea readonly" readonly></textarea>
+                    </div>
+                    <div class="panel-muted">当前状态不可直接发起流程动作，可使用关闭、刷新重开、重开当前等入口继续排查。</div>
+                  </div>
+                </section>
+
+                <section class="panel-section">
+                  <div class="panel-section-header">最近提交与结果</div>
+                  <div class="panel-section-body">
+                    <div class="panel-meta">
+                      <div class="panel-meta-key">最近动作</div>
+                      <div id="panel-last-action" class="panel-meta-value">--</div>
+                      <div class="panel-meta-key">回退目标</div>
+                      <div id="panel-last-target" class="panel-meta-value">--</div>
+                      <div class="panel-meta-key">最终 payload</div>
+                      <div id="panel-last-payload" class="panel-meta-value">--</div>
+                      <div class="panel-meta-key">最近结果</div>
+                      <div id="panel-last-result" class="panel-meta-value">--</div>
+                    </div>
+                    <div id="panel-feedback" class="panel-feedback">尚未发起 workflow/sync。</div>
+                  </div>
+                </section>
+              </div>
+
+              <div class="side-panel-footer">
+                <div id="panel-footer-text" class="panel-muted">右侧面板作为 authoritative workflow 输入，底部诊断区仅做结果镜像。</div>
+              </div>
+            </aside>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="workflow-dialog" class="modal dialog-modal" aria-hidden="true">
+      <div class="modal-mask" data-close="workflow-dialog"></div>
+      <div class="modal-window dialog-window" role="dialog" aria-modal="true" aria-labelledby="workflow-dialog-title">
+        <div class="modal-header">
+          <div class="modal-title-wrap">
+            <div id="workflow-dialog-title" class="modal-title">流程确认</div>
+            <div id="workflow-dialog-subtitle" class="modal-subtitle">请确认本次 workflow/sync 提交内容。</div>
+          </div>
+        </div>
+        <div class="dialog-body">
+          <div id="workflow-dialog-warning" class="dialog-warning" hidden></div>
+          <div class="panel-field" id="workflow-dialog-target-field" hidden>
+            <label for="workflow-dialog-target-select">退回目标节点</label>
+            <select id="workflow-dialog-target-select" class="dialog-select"></select>
+          </div>
+          <div class="panel-field">
+            <label for="workflow-dialog-comment">确认意见</label>
+            <textarea id="workflow-dialog-comment" class="dialog-textarea"></textarea>
+          </div>
+          <div class="panel-field">
+            <label for="workflow-dialog-payload">最终 comments payload</label>
+            <textarea id="workflow-dialog-payload" class="dialog-textarea readonly" readonly></textarea>
+          </div>
+        </div>
+        <div class="dialog-footer">
+          <div id="workflow-dialog-feedback" class="dialog-feedback">确认后才会执行真实 workflow/sync 请求。</div>
+          <div class="dialog-actions">
+            <button id="workflow-dialog-cancel-btn" class="dialog-btn" type="button">取消</button>
+            <button id="workflow-dialog-confirm-btn" class="dialog-btn primary" type="button">确认提交</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script type="module" src="/src/debug/pmsReviewSimulator.ts"></script>
+  </body>
+</html>

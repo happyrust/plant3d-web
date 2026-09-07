@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="zh">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PipeDistance Harness</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Noto+Sans+SC:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <style>
+      body { margin: 0; background: #eef1f5; font-family: 'Noto Sans SC', system-ui, sans-serif; }
+      .stage { display: flex; gap: 40px; padding: 40px; align-items: flex-start; }
+      .panel-host { position: relative; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; overflow: hidden; box-shadow: 0 8px 30px rgba(15,23,42,.10); }
+      .cap { font: 600 13px 'Noto Sans SC'; color: #475569; margin: 0 0 10px 2px; }
+    </style>
+  </head>
+  <body>
+    <div class="stage">
+      <div>
+        <div class="cap">PipeDistanceDrawer · mock 两管距离结果</div>
+        <!-- drawer 自身 absolute right-0 inset-y-0 w-80，宿主需 relative -->
+        <div id="host-drawer" class="panel-host" style="width: 360px; height: 860px;"><div id="app-drawer"></div></div>
+      </div>
+    </div>
+    <script type="module" src="/src/harness/pipeDistance.ts"></script>
+  </body>
+</html>

@@ -1,0 +1,417 @@
+{
+  "version": "2.8",
+  "children": [
+    {
+      "type": "frame",
+      "id": "canvas5",
+      "x": 0,
+      "y": 0,
+      "name": "Frame",
+      "clip": true,
+      "width": 800,
+      "height": 700,
+      "fill": "#FFFFFF",
+      "layout": "none"
+    },
+    {
+      "type": "frame",
+      "id": "specRoot",
+      "x": 0,
+      "y": 0,
+      "name": "规格选择器面板",
+      "width": 340,
+      "fill": "#FFFFFF",
+      "cornerRadius": 8,
+      "stroke": {
+        "align": "inside",
+        "thickness": 1,
+        "fill": "#E5E7EB"
+      },
+      "effect": {
+        "type": "shadow",
+        "shadowType": "outer",
+        "color": "#0000000f",
+        "offset": { "x": 0, "y": 4 },
+        "blur": 16
+      },
+      "layout": "vertical",
+      "gap": 0,
+      "padding": 0,
+      "children": [
+        {
+          "type": "frame",
+          "id": "specHeader",
+          "name": "header",
+          "width": "fill_container",
+          "fill": "#FAFAFA",
+          "padding": [16, 20],
+          "justifyContent": "space_between",
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "text",
+              "id": "specTitle",
+              "name": "title",
+              "fill": "#111827",
+              "content": "默认管道规格",
+              "fontFamily": "Fira Sans",
+              "fontSize": 16,
+              "fontWeight": "600"
+            }
+          ]
+        },
+        {
+          "type": "line",
+          "id": "specDivH",
+          "name": "dividerHeader",
+          "width": "fill_container",
+          "height": 1,
+          "stroke": { "align": "center", "thickness": 1, "fill": "#E5E7EB" }
+        },
+        {
+          "type": "frame",
+          "id": "specBody",
+          "name": "body",
+          "width": "fill_container",
+          "layout": "vertical",
+          "gap": 20,
+          "padding": 20,
+          "children": [
+            {
+              "type": "frame",
+              "id": "specPipingSec",
+              "name": "pipingSpecSection",
+              "width": "fill_container",
+              "layout": "vertical",
+              "gap": 8,
+              "children": [
+                {
+                  "type": "text",
+                  "id": "specPipingLabel",
+                  "name": "pipingLabel",
+                  "fill": "#111827",
+                  "content": "管道规格",
+                  "fontFamily": "Fira Sans",
+                  "fontSize": 14,
+                  "fontWeight": "600"
+                },
+                {
+                  "type": "frame",
+                  "id": "specPipingSearch",
+                  "name": "pipingSearch",
+                  "width": "fill_container",
+                  "cornerRadius": 6,
+                  "stroke": { "align": "inside", "thickness": 1, "fill": "#E5E7EB" },
+                  "padding": [8, 12],
+                  "gap": 8,
+                  "alignItems": "center",
+                  "children": [
+                    { "type": "icon_font", "id": "specPipingSearchIcon", "name": "searchIcon", "width": 14, "height": 14, "iconFontName": "search", "iconFontFamily": "lucide", "fill": "#9CA3AF" },
+                    { "type": "text", "id": "specPipingSearchText", "name": "searchText", "fill": "#9CA3AF", "content": "搜索规格...", "fontFamily": "Fira Sans", "fontSize": 13, "fontWeight": "normal" }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "specPipingList",
+                  "name": "pipingList",
+                  "width": "fill_container",
+                  "height": 160,
+                  "cornerRadius": 6,
+                  "stroke": { "align": "inside", "thickness": 1, "fill": "#E5E7EB" },
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "specPipingListInner",
+                      "name": "pipingListInner",
+                      "clip": true,
+                      "width": "fill_container",
+                      "height": "fill_container",
+                      "fill": "#FAFAFA",
+                      "layout": "vertical",
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "specItem1",
+                          "name": "specItem1",
+                          "width": "fill_container",
+                          "fill": "#FFF0E6",
+                          "padding": [10, 12],
+                          "gap": 10,
+                          "alignItems": "center",
+                          "children": [
+                            { "type": "icon_font", "id": "specItem1Check", "name": "check1", "width": 14, "height": 14, "iconFontName": "check", "iconFontFamily": "lucide", "fill": "#FF6B00" },
+                            {
+                              "type": "frame",
+                              "id": "specItem1Info",
+                              "name": "specItem1Info",
+                              "width": "fill_container",
+                              "layout": "vertical",
+                              "gap": 2,
+                              "children": [
+                                { "type": "text", "id": "specItem1Name", "name": "specItem1Name", "fill": "#111827", "content": "CS150", "fontFamily": "Fira Code", "fontSize": 12, "fontWeight": "600" },
+                                { "type": "text", "id": "specItem1Desc", "name": "specItem1Desc", "fill": "#6B7280", "content": "Carbon Steel 150# ANSI B16.5", "fontFamily": "Fira Sans", "fontSize": 10, "fontWeight": "normal" }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "specItem2",
+                          "name": "specItem2",
+                          "width": "fill_container",
+                          "fill": "#00000000",
+                          "padding": [10, 12],
+                          "gap": 10,
+                          "alignItems": "center",
+                          "children": [
+                            { "type": "frame", "id": "specItem2Spacer", "name": "spacer2", "width": 14, "height": 14 },
+                            {
+                              "type": "frame",
+                              "id": "specItem2Info",
+                              "name": "specItem2Info",
+                              "width": "fill_container",
+                              "layout": "vertical",
+                              "gap": 2,
+                              "children": [
+                                { "type": "text", "id": "specItem2Name", "name": "specItem2Name", "fill": "#374151", "content": "CS300", "fontFamily": "Fira Code", "fontSize": 12, "fontWeight": "normal" },
+                                { "type": "text", "id": "specItem2Desc", "name": "specItem2Desc", "fill": "#9CA3AF", "content": "Carbon Steel 300# ANSI B16.5", "fontFamily": "Fira Sans", "fontSize": 10, "fontWeight": "normal" }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "specItem3",
+                          "name": "specItem3",
+                          "width": "fill_container",
+                          "fill": "#00000000",
+                          "padding": [10, 12],
+                          "gap": 10,
+                          "alignItems": "center",
+                          "children": [
+                            { "type": "frame", "id": "specItem3Spacer", "name": "spacer3", "width": 14, "height": 14 },
+                            {
+                              "type": "frame",
+                              "id": "specItem3Info",
+                              "name": "specItem3Info",
+                              "width": "fill_container",
+                              "layout": "vertical",
+                              "gap": 2,
+                              "children": [
+                                { "type": "text", "id": "specItem3Name", "name": "specItem3Name", "fill": "#374151", "content": "SS150", "fontFamily": "Fira Code", "fontSize": 12, "fontWeight": "normal" },
+                                { "type": "text", "id": "specItem3Desc", "name": "specItem3Desc", "fill": "#9CA3AF", "content": "Stainless Steel 150# ANSI B16.5", "fontFamily": "Fira Sans", "fontSize": 10, "fontWeight": "normal" }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "specItem4",
+                          "name": "specItem4",
+                          "width": "fill_container",
+                          "fill": "#00000000",
+                          "padding": [10, 12],
+                          "gap": 10,
+                          "alignItems": "center",
+                          "children": [
+                            { "type": "frame", "id": "specItem4Spacer", "name": "spacer4", "width": 14, "height": 14 },
+                            {
+                              "type": "frame",
+                              "id": "specItem4Info",
+                              "name": "specItem4Info",
+                              "width": "fill_container",
+                              "layout": "vertical",
+                              "gap": 2,
+                              "children": [
+                                { "type": "text", "id": "specItem4Name", "name": "specItem4Name", "fill": "#374151", "content": "CU150", "fontFamily": "Fira Code", "fontSize": 12, "fontWeight": "normal" },
+                                { "type": "text", "id": "specItem4Desc", "name": "specItem4Desc", "fill": "#9CA3AF", "content": "Copper 150# Solder Joint", "fontFamily": "Fira Sans", "fontSize": 10, "fontWeight": "normal" }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "line",
+              "id": "specDiv1",
+              "name": "divider1",
+              "width": "fill_container",
+              "height": 1,
+              "stroke": { "align": "center", "thickness": 1, "fill": "#E5E7EB" }
+            },
+            {
+              "type": "frame",
+              "id": "specInsuTraceSec",
+              "name": "insuTraceSection",
+              "width": "fill_container",
+              "layout": "vertical",
+              "gap": 12,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "specInsuGroup",
+                  "name": "insuGroup",
+                  "width": "fill_container",
+                  "layout": "vertical",
+                  "gap": 6,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "specInsuLabelRow",
+                      "name": "insuLabelRow",
+                      "width": "fill_container",
+                      "justifyContent": "space_between",
+                      "alignItems": "center",
+                      "children": [
+                        { "type": "text", "id": "specInsuLabel", "name": "insuLabel", "fill": "#111827", "content": "保温规格", "fontFamily": "Fira Sans", "fontSize": 14, "fontWeight": "600" },
+                        {
+                          "type": "frame",
+                          "id": "specInsuToggle",
+                          "name": "insuToggle",
+                          "gap": 6,
+                          "alignItems": "center",
+                          "children": [
+                            { "type": "text", "id": "specInsuToggleLabel", "name": "insuToggleLabel", "fill": "#6B7280", "content": "启用", "fontFamily": "Fira Sans", "fontSize": 11, "fontWeight": "500" },
+                            {
+                              "type": "frame",
+                              "id": "specInsuToggleTrack",
+                              "name": "insuToggleTrack",
+                              "width": 36,
+                              "height": 20,
+                              "fill": "#D1D5DB",
+                              "cornerRadius": 10,
+                              "layout": "none",
+                              "children": [
+                                {
+                                  "type": "frame",
+                                  "id": "specInsuToggleThumb",
+                                  "name": "insuToggleThumb",
+                                  "x": 2,
+                                  "y": 2,
+                                  "width": 16,
+                                  "height": 16,
+                                  "fill": "#FFFFFF",
+                                  "cornerRadius": 8,
+                                  "effect": { "type": "shadow", "shadowType": "outer", "color": "#00000026", "offset": { "x": 0, "y": 1 }, "blur": 2 }
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "specInsuSelect",
+                      "name": "insuSelect",
+                      "width": "fill_container",
+                      "cornerRadius": 6,
+                      "fill": "#F9FAFB",
+                      "stroke": { "align": "inside", "thickness": 1, "fill": "#E5E7EB" },
+                      "padding": [8, 12],
+                      "justifyContent": "space_between",
+                      "alignItems": "center",
+                      "children": [
+                        { "type": "text", "id": "specInsuVal", "name": "insuVal", "fill": "#9CA3AF", "content": "Off — 未启用", "fontFamily": "Fira Sans", "fontSize": 13, "fontWeight": "normal" },
+                        { "type": "icon_font", "id": "specInsuChevron", "name": "chevron", "width": 14, "height": 14, "iconFontName": "chevron-down", "iconFontFamily": "lucide", "fill": "#D1D5DB" }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "specTraceGroup",
+                  "name": "traceGroup",
+                  "width": "fill_container",
+                  "layout": "vertical",
+                  "gap": 6,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "specTraceLabelRow",
+                      "name": "traceLabelRow",
+                      "width": "fill_container",
+                      "justifyContent": "space_between",
+                      "alignItems": "center",
+                      "children": [
+                        { "type": "text", "id": "specTraceLabel", "name": "traceLabel", "fill": "#111827", "content": "伴热规格", "fontFamily": "Fira Sans", "fontSize": 14, "fontWeight": "600" },
+                        {
+                          "type": "frame",
+                          "id": "specTraceToggle",
+                          "name": "traceToggle",
+                          "gap": 6,
+                          "alignItems": "center",
+                          "children": [
+                            { "type": "text", "id": "specTraceToggleLabel", "name": "traceToggleLabel", "fill": "#6B7280", "content": "启用", "fontFamily": "Fira Sans", "fontSize": 11, "fontWeight": "500" },
+                            {
+                              "type": "frame",
+                              "id": "specTraceToggleTrack",
+                              "name": "traceToggleTrack",
+                              "width": 36,
+                              "height": 20,
+                              "fill": "#D1D5DB",
+                              "cornerRadius": 10,
+                              "layout": "none",
+                              "children": [
+                                {
+                                  "type": "frame",
+                                  "id": "specTraceToggleThumb",
+                                  "name": "traceToggleThumb",
+                                  "x": 2,
+                                  "y": 2,
+                                  "width": 16,
+                                  "height": 16,
+                                  "fill": "#FFFFFF",
+                                  "cornerRadius": 8,
+                                  "effect": { "type": "shadow", "shadowType": "outer", "color": "#00000026", "offset": { "x": 0, "y": 1 }, "blur": 2 }
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "specTraceSelect",
+                      "name": "traceSelect",
+                      "width": "fill_container",
+                      "cornerRadius": 6,
+                      "fill": "#F9FAFB",
+                      "stroke": { "align": "inside", "thickness": 1, "fill": "#E5E7EB" },
+                      "padding": [8, 12],
+                      "justifyContent": "space_between",
+                      "alignItems": "center",
+                      "children": [
+                        { "type": "text", "id": "specTraceVal", "name": "traceVal", "fill": "#9CA3AF", "content": "Off — 未启用", "fontFamily": "Fira Sans", "fontSize": 13, "fontWeight": "normal" },
+                        { "type": "icon_font", "id": "specTraceChevron", "name": "chevron", "width": 14, "height": 14, "iconFontName": "chevron-down", "iconFontFamily": "lucide", "fill": "#D1D5DB" }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "specApplyBtn",
+              "name": "applyBtn",
+              "width": "fill_container",
+              "fill": "#FF6B00",
+              "cornerRadius": 6,
+              "padding": [10, 16],
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                { "type": "text", "id": "specApplyText", "name": "applyText", "fill": "#FFFFFF", "content": "设为默认规格", "fontFamily": "Fira Sans", "fontSize": 14, "fontWeight": "500" }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

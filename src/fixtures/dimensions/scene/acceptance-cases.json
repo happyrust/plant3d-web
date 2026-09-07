@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 1,
+  "referenceRenderer": {
+    "name": "SolveSpace",
+    "revision": "9aeb715",
+    "behavior": [
+      "scene-geometry",
+      "view-facing",
+      "constant-screen-size",
+      "front-layer"
+    ]
+  },
+  "cameras": [
+    {
+      "id": "perspective-front",
+      "projection": "perspective",
+      "viewportPx": [1920, 1080],
+      "devicePixelRatio": 2
+    },
+    {
+      "id": "orthographic-front",
+      "projection": "orthographic",
+      "viewportPx": [1920, 1080],
+      "devicePixelRatio": 2
+    }
+  ],
+  "realModel": {
+    "project": "AvevaMarineSample",
+    "dbnum": 7997,
+    "rootRefno": "24381_145018",
+    "noun": "BRAN",
+    "mbdV2": {
+      "primitiveCount": 11,
+      "primitiveKinds": {
+        "linear_dim": 11
+      },
+      "geometrySpace": "source_mm",
+      "sourceToDesignScale": 0.001
+    }
+  },
+  "versionPair": {
+    "source": {
+      "requestedSesno": 897,
+      "artifactSesno": 791,
+      "manifest": "/files/output/AvevaMarineSample/model_units/7997/24381_145018/791/manifest.json"
+    },
+    "target": {
+      "requestedSesno": 898,
+      "artifactSesno": 898,
+      "manifest": "/files/output/AvevaMarineSample/model_units/7997/24381_145018/898/manifest.json"
+    },
+    "simulation": {
+      "kind": "position_shift",
+      "movedRefno": "24381_145019",
+      "deltaMm": [1000, 0, 0]
+    }
+  },
+  "performanceGate": {
+    "loadedDimensions": 10000,
+    "visibleDimensions": 2000,
+    "updateP95Ms": 16,
+    "hitTestP95Ms": 2,
+    "targetFps": 60
+  }
+}

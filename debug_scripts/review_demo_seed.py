@@ -1,0 +1,1074 @@
+#!/usr/bin/env python3
+"""Deterministic review seed pack generator.
+
+The script has two modes:
+- `--print-plan` produces the canonical demo pack inventory without touching the backend.
+- default execution attempts to seed the local backend via the existing review APIs and
+  then prints the resulting inventory plus discoverability hints.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+import urllib.error
+import urllib.parse
+import urllib.request
+from copy import deepcopy
+from dataclasses import dataclass
+from typing import Any
+
+
+SEED_KEY = 'review-demo-pack-v2'
+DEFAULT_BASE_URL = 'http://127.0.0.1:3100'
+DEFAULT_PROJECT_ID = 'debug-project'
+ATTACHMENT_SOURCE = 'debug_scripts/review_demo_seed.py'
+
+
+ROLES: dict[str, dict[str, str]] = {
+    'designer': {
+        'frontendUserId': 'designer_001',
+        'backendUserId': 'designer_001',
+        'role': 'sj',
+        'displayName': '王设计师',
+    },
+    'reviewer': {
+        'frontendUserId': 'reviewer_001',
+        'backendUserId': 'user-002',
+        'role': 'sh',
+        'displayName': '李审核员',
+    },
+    'approver': {
+        'frontendUserId': 'manager_001',
+        'backendUserId': 'manager_001',
+        'role': 'pz',
+        'displayName': '陈经理',
+    },
+}
+
+
+def build_workflow_history() -> list[dict[str, Any]]:
+    return [
+        {
+            'node': 'sj',
+            'action': 'submit',
+            'operatorId': ROLES['designer']['backendUserId'],
+            'operatorName': ROLES['designer']['displayName'],
+            'comment': 'Seeded handoff for review validation',
+            'timestamp': 1763539200000,
+        },
+    ]
+
+
+SCENARIOS: list[dict[str, Any]] = [
+    {
+        'key': 'm2-reviewer-confirmed-restore',
+        'taskId': 'seed-m2-reviewer-confirmed',
+        'formId': 'FORM-M2-RESTORE-001',
+        'title': 'M2 Seed / Reviewer Confirmed Restore',
+        'description': 'Reviewer task-select restore fixture with confirmed records ready for direct workbench replay.',
+        'modelName': 'M2 Restore Demo / Confirmed',
+        'status': 'submitted',
+        'priority': 'high',
+        'currentNode': 'jd',
+        'components': [
+            {'id': 'cmp-m2-confirmed-001', 'refNo': 'M2-CONFIRMED-001', 'name': 'Confirmed Restore Anchor', 'type': 'Pipe'},
+        ],
+        'attachments': [
+            {
+                'id': 'seed-att-m2-confirmed',
+                'name': 'm2-reviewer-confirmed-restore.json',
+                'url': f'/{ATTACHMENT_SOURCE}',
+                'type': 'seed-note',
+                'mimeType': 'application/json',
+                'uploadedAt': 1763539199000,
+            },
+        ],
+        'confirmedRecord': {
+            'id': 'seed-record-m2-confirmed',
+            'taskId': 'seed-m2-reviewer-confirmed',
+            'type': 'batch',
+            'annotations': [
+                {
+                    'id': 'seed-m2-text-annotation-1',
+                    'entityId': 'M2-CONFIRMED-001',
+                    'worldPos': [10.0, 2.5, 1.0],
+                    'visible': True,
+                    'glyph': 'M2-1',
+                    'title': 'Reviewer confirmed restore anchor',
+                    'description': 'Used to validate task-context replay after selecting the reviewer seeded task.',
+                    'createdAt': 1763539200500,
+                },
+            ],
+            'cloudAnnotations': [],
+            'rectAnnotations': [],
+            'obbAnnotations': [],
+            'measurements': [
+                {
+                    'id': 'seed-m2-measurement-1',
+                    'kind': 'distance',
+                    'label': 'Confirmed replay clearance',
+                    'value': 1.618,
+                    'unit': 'm',
+                    'start': [0.0, 0.0, 0.0],
+                    'end': [1.618, 0.0, 0.0],
+                    'createdAt': 1763539200600,
+                },
+            ],
+            'note': 'M2 reviewer confirmed restore baseline',
+            'confirmedAt': 1763539200700,
+        },
+        'comments': [],
+        'tags': ['m2', 'restore', 'reviewer-confirmed', 'task-context'],
+        'validationScenarios': ['reviewer-confirmed-restore', 'embed-form-restore'],
+    },
+    {
+        'key': 'm2-empty-task-clear',
+        'taskId': 'seed-m2-empty-after-confirmed',
+        'formId': 'FORM-M2-RESTORE-EMPTY-001',
+        'title': 'M2 Seed / Empty Task Clear',
+        'description': 'Reviewer task with no confirmed records used immediately after the populated M2 fixture to validate stale-state clearing.',
+        'modelName': 'M2 Restore Demo / Empty',
+        'status': 'submitted',
+        'priority': 'medium',
+        'currentNode': 'jd',
+        'components': [],
+        'attachments': [],
+        'confirmedRecord': None,
+        'comments': [],
+        'tags': ['m2', 'restore', 'empty-task', 'clear-scene'],
+        'skipComponentHydration': True,
+        'validationScenarios': ['empty-task-clearing'],
+    },
+    {
+        'key': 'm2-embed-form-restore',
+        'taskId': 'seed-m2-embed-restore',
+        'formId': 'FORM-M2-EMBED-001',
+        'title': 'M2 Seed / Embed Form Restore',
+        'description': 'Workflow-sync fixture keyed by formId so validators can open the reviewer embed restore path directly.',
+        'modelName': 'M2 Restore Demo / Embed',
+        'status': 'submitted',
+        'priority': 'high',
+        'currentNode': 'jd',
+        'components': [
+            {'id': 'cmp-m2-embed-001', 'refNo': 'M2-EMBED-001', 'name': 'Embed Restore Anchor', 'type': 'Pipe'},
+        ],
+        'attachments': [
+            {
+                'id': 'seed-att-m2-embed',
+                'name': 'm2-embed-restore.txt',
+                'url': f'/{ATTACHMENT_SOURCE}',
+                'type': 'seed-note',
+                'mimeType': 'text/plain',
+                'uploadedAt': 1763539200750,
+            },
+        ],
+        'confirmedRecord': {
+            'id': 'seed-record-m2-embed',
+            'taskId': 'seed-m2-embed-restore',
+            'type': 'batch',
+            'annotations': [],
+            'cloudAnnotations': [
+                {
+                    'id': 'seed-m2-cloud-annotation-1',
+                    'anchorWorldPos': [15.0, 5.0, 2.0],
+                    'screenSpacePoints': [[100, 100], [160, 140], [120, 180]],
+                    'visible': True,
+                    'title': 'Embed restore cloud fixture',
+                    'description': 'Used to validate workflow-sync -> ReviewSnapshot -> scene replay.',
+                    'createdAt': 1763539200800,
+                },
+            ],
+            'rectAnnotations': [],
+            'obbAnnotations': [],
+            'measurements': [],
+            'note': 'M2 embed restore baseline',
+            'confirmedAt': 1763539200900,
+        },
+        'comments': [],
+        'tags': ['m2', 'restore', 'embed', 'workflow-sync'],
+        'validationScenarios': ['embed-form-restore'],
+    },
+    {
+        'key': 'text-annotation',
+        'taskId': 'seed-m6-text-annotation',
+        'formId': 'FORM-M6-TEXT-001',
+        'title': 'M6 Seed / Text Annotation Review',
+        'description': 'Canonical text annotation path for seeded reviewer validation.',
+        'modelName': 'M6 Demo / Annotation',
+        'status': 'submitted',
+        'priority': 'high',
+        'currentNode': 'jd',
+        'components': [
+            {'id': 'cmp-text-001', 'refNo': 'PIPE-TEXT-001', 'name': 'Text Anchor Spool', 'type': 'Pipe'},
+        ],
+        'attachments': [
+            {
+                'id': 'seed-att-text',
+                'name': 'm6-text-annotation-seed.md',
+                'url': f'/{ATTACHMENT_SOURCE}',
+                'type': 'seed-note',
+                'mimeType': 'text/markdown',
+                'uploadedAt': 1763539200000,
+            },
+        ],
+        'confirmedRecord': {
+            'id': 'seed-record-text',
+            'taskId': 'seed-m6-text-annotation',
+            'type': 'batch',
+            'annotations': [
+                {
+                    'id': 'seed-text-annotation-1',
+                    'entityId': 'PIPE-TEXT-001',
+                    'worldPos': [12.0, 4.2, 1.0],
+                    'visible': True,
+                    'glyph': 'A1',
+                    'title': 'Check nozzle clearance label',
+                    'description': 'Canonical text annotation seeded for reviewer direct-launch replay.',
+                    'createdAt': 1763539201000,
+                },
+            ],
+            'cloudAnnotations': [],
+            'rectAnnotations': [],
+            'obbAnnotations': [],
+            'measurements': [],
+            'note': 'Seeded canonical text annotation confirmation',
+            'confirmedAt': 1763539202000,
+        },
+        'comments': [],
+        'tags': ['text', 'canonical-annotation'],
+    },
+    {
+        'key': 'cloud-annotation',
+        'taskId': 'seed-m6-cloud-annotation',
+        'formId': 'FORM-M6-CLOUD-001',
+        'title': 'M6 Seed / Cloud Annotation Review',
+        'description': 'Canonical cloud annotation path for seeded reviewer validation.',
+        'modelName': 'M6 Demo / Annotation',
+        'status': 'submitted',
+        'priority': 'high',
+        'currentNode': 'jd',
+        'components': [
+            {'id': 'cmp-cloud-001', 'refNo': 'PIPE-CLOUD-001', 'name': 'Cloud Mark Area', 'type': 'Pipe'},
+        ],
+        'attachments': [],
+        'confirmedRecord': {
+            'id': 'seed-record-cloud',
+            'taskId': 'seed-m6-cloud-annotation',
+            'type': 'batch',
+            'annotations': [],
+            'cloudAnnotations': [
+                {
+                    'id': 'seed-cloud-annotation-1',
+                    'anchorWorldPos': [22.4, 6.0, 3.0],
+                    'screenSpacePoints': [[120, 140], [200, 180], [240, 160]],
+                    'visible': True,
+                    'title': 'Inspect branch support interference',
+                    'description': 'Seeded cloud annotation to validate canonical reviewer semantics.',
+                    'createdAt': 1763539203000,
+                },
+            ],
+            'rectAnnotations': [],
+            'obbAnnotations': [],
+            'measurements': [],
+            'note': 'Seeded canonical cloud annotation confirmation',
+            'confirmedAt': 1763539204000,
+        },
+        'comments': [],
+        'tags': ['cloud', 'canonical-annotation'],
+    },
+    {
+        'key': 'rectangle-annotation',
+        'taskId': 'seed-m6-rectangle-annotation',
+        'formId': 'FORM-M6-RECT-001',
+        'title': 'M6 Seed / Rectangle Annotation Review',
+        'description': 'Canonical rectangle annotation path replacing legacy reviewer-visible OBB terms.',
+        'modelName': 'M6 Demo / Annotation',
+        'status': 'submitted',
+        'priority': 'high',
+        'currentNode': 'jd',
+        'components': [
+            {'id': 'cmp-rect-001', 'refNo': 'PIPE-RECT-001', 'name': 'Rectangle Review Zone', 'type': 'Pipe'},
+        ],
+        'attachments': [],
+        'confirmedRecord': {
+            'id': 'seed-record-rect',
+            'taskId': 'seed-m6-rectangle-annotation',
+            'type': 'batch',
+            'annotations': [],
+            'cloudAnnotations': [],
+            'rectAnnotations': [
+                {
+                    'id': 'seed-rectangle-annotation-1',
+                    'anchorWorldPos': [18.0, 8.0, 2.5],
+                    'visible': True,
+                    'title': 'Rectangle focus for canonical reviewer flow',
+                    'description': 'Seeded rectangle annotation replacing legacy OBB naming.',
+                    'createdAt': 1763539205000,
+                    'obb': {
+                        'center': [18.0, 8.0, 2.5],
+                        'axes': [[1, 0, 0], [0, 1, 0], [0, 0, 1]],
+                        'halfSize': [1.2, 0.6, 0.4],
+                        'corners': [
+                            [16.8, 7.4, 2.1],
+                            [19.2, 7.4, 2.1],
+                            [16.8, 8.6, 2.1],
+                            [19.2, 8.6, 2.1],
+                            [16.8, 7.4, 2.9],
+                            [19.2, 7.4, 2.9],
+                            [16.8, 8.6, 2.9],
+                            [19.2, 8.6, 2.9],
+                        ],
+                    },
+                },
+            ],
+            'obbAnnotations': [],
+            'measurements': [],
+            'note': 'Seeded canonical rectangle annotation confirmation',
+            'confirmedAt': 1763539206000,
+        },
+        'comments': [],
+        'tags': ['rectangle', 'canonical-annotation'],
+    },
+    {
+        'key': 'measurement-replay',
+        'taskId': 'seed-m6-measurement-replay',
+        'formId': 'FORM-M6-MEASURE-001',
+        'title': 'M6 Seed / Measurement Replay Review',
+        'description': 'Confirmed measurement replay path shared between reviewer and designer surfaces.',
+        'modelName': 'M6 Demo / Measurement',
+        'status': 'submitted',
+        'priority': 'urgent',
+        'currentNode': 'jd',
+        'components': [
+            {'id': 'cmp-measure-001', 'refNo': 'PIPE-MEASURE-001', 'name': 'Measurement Span', 'type': 'Pipe'},
+        ],
+        'attachments': [],
+        'confirmedRecord': {
+            'id': 'seed-record-measure',
+            'taskId': 'seed-m6-measurement-replay',
+            'type': 'batch',
+            'annotations': [],
+            'cloudAnnotations': [],
+            'rectAnnotations': [],
+            'obbAnnotations': [],
+            'measurements': [
+                {
+                    'id': 'seed-measurement-1',
+                    'kind': 'distance',
+                    'label': 'North rack clearance',
+                    'value': 4.275,
+                    'unit': 'm',
+                    'start': [0.0, 0.0, 0.0],
+                    'end': [4.275, 0.0, 0.0],
+                    'createdAt': 1763539207000,
+                },
+            ],
+            'note': 'Seeded confirmed measurement replay batch',
+            'confirmedAt': 1763539208000,
+        },
+        'comments': [],
+        'tags': ['measurement', 'replay'],
+    },
+    {
+        'key': 'task-thread-collaboration',
+        'taskId': 'seed-m7-task-thread',
+        'formId': 'FORM-M7-TASK-THREAD-001',
+        'title': 'M7 Seed / Task Thread Collaboration',
+        'description': 'Whole-task collaboration scenario for reviewer/designer continuity.',
+        'modelName': 'M7 Demo / Collaboration',
+        'status': 'submitted',
+        'priority': 'high',
+        'currentNode': 'jd',
+        'components': [
+            {'id': 'cmp-thread-001', 'refNo': 'THREAD-TASK-001', 'name': 'Task Thread Fixture', 'type': 'Pipe'},
+        ],
+        'attachments': [
+            {
+                'id': 'seed-att-thread',
+                'name': 'task-thread-context.txt',
+                'url': f'/{ATTACHMENT_SOURCE}',
+                'type': 'comment-attachment',
+                'mimeType': 'text/plain',
+                'uploadedAt': 1763539209000,
+            },
+        ],
+        'confirmedRecord': None,
+        'comments': [
+            {
+                'id': 'seed-task-thread-root',
+                'annotationId': 'seed-m7-task-thread:task',
+                'annotationType': 'text',
+                'authorId': ROLES['reviewer']['backendUserId'],
+                'authorName': ROLES['reviewer']['displayName'],
+                'authorRole': 'reviewer',
+                'content': '@designer_001 Please verify the whole task thread fixture is ready for resubmit.',
+                'createdAt': 1763539210000,
+                'updatedAt': 1763539211000,
+            },
+            {
+                'id': 'seed-task-thread-reply',
+                'annotationId': 'seed-m7-task-thread:task',
+                'annotationType': 'text',
+                'authorId': ROLES['designer']['backendUserId'],
+                'authorName': ROLES['designer']['displayName'],
+                'authorRole': 'designer',
+                'content': 'Designer reply seeded for task-thread continuity.',
+                'replyToId': 'seed-task-thread-root',
+                'createdAt': 1763539212000,
+                'updatedAt': 1763539213000,
+            },
+        ],
+        'tags': ['task-thread', 'collaboration'],
+    },
+    {
+        'key': 'annotation-thread-collaboration',
+        'taskId': 'seed-m7-annotation-thread',
+        'formId': 'FORM-M7-ANNOTATION-THREAD-001',
+        'title': 'M7 Seed / Annotation Thread Collaboration',
+        'description': 'Per-annotation collaboration scenario anchored to canonical text annotation identity.',
+        'modelName': 'M7 Demo / Collaboration',
+        'status': 'submitted',
+        'priority': 'high',
+        'currentNode': 'jd',
+        'components': [
+            {'id': 'cmp-thread-anno-001', 'refNo': 'THREAD-ANNOTATION-001', 'name': 'Annotation Thread Fixture', 'type': 'Pipe'},
+        ],
+        'attachments': [],
+        'confirmedRecord': {
+            'id': 'seed-record-annotation-thread',
+            'taskId': 'seed-m7-annotation-thread',
+            'type': 'batch',
+            'annotations': [
+                {
+                    'id': 'seed-annotation-thread-anchor',
+                    'entityId': 'THREAD-ANNOTATION-001',
+                    'worldPos': [30.0, 12.0, 2.0],
+                    'visible': True,
+                    'glyph': 'B2',
+                    'title': 'Thread anchor annotation',
+                    'description': 'Canonical anchor used for annotation-thread collaboration seeding.',
+                    'createdAt': 1763539214000,
+                },
+            ],
+            'cloudAnnotations': [],
+            'rectAnnotations': [],
+            'obbAnnotations': [],
+            'measurements': [],
+            'note': 'Seeded annotation-thread anchor',
+            'confirmedAt': 1763539215000,
+        },
+        'comments': [
+            {
+                'id': 'seed-annotation-thread-root',
+                'annotationId': 'seed-annotation-thread-anchor',
+                'annotationType': 'text',
+                'authorId': ROLES['reviewer']['backendUserId'],
+                'authorName': ROLES['reviewer']['displayName'],
+                'authorRole': 'reviewer',
+                'content': 'Seeded reviewer annotation-thread comment with explicit lineage.',
+                'createdAt': 1763539216000,
+                'updatedAt': 1763539217000,
+            },
+            {
+                'id': 'seed-annotation-thread-reply',
+                'annotationId': 'seed-annotation-thread-anchor',
+                'annotationType': 'text',
+                'authorId': ROLES['designer']['backendUserId'],
+                'authorName': ROLES['designer']['displayName'],
+                'authorRole': 'designer',
+                'content': 'Seeded designer reply for annotation-thread continuity.',
+                'replyToId': 'seed-annotation-thread-root',
+                'createdAt': 1763539218000,
+                'updatedAt': 1763539219000,
+            },
+        ],
+        'tags': ['annotation-thread', 'collaboration'],
+    },
+    {
+        'key': 'return-resubmit-reopen',
+        'taskId': 'seed-m6m7-return-resubmit',
+        'formId': 'FORM-M6M7-LOOP-001',
+        'title': 'M6+M7 Seed / Return Resubmit Reopen Loop',
+        'description': 'Closed-loop reviewer -> designer -> reviewer fixture preserving records and thread lineage.',
+        'modelName': 'M6M7 Demo / Closed Loop',
+        'status': 'submitted',
+        'priority': 'urgent',
+        'currentNode': 'jd',
+        'components': [
+            {'id': 'cmp-loop-001', 'refNo': 'LOOP-001', 'name': 'Loop Fixture Primary', 'type': 'Pipe'},
+            {'id': 'cmp-loop-002', 'refNo': 'LOOP-002', 'name': 'Loop Fixture Secondary', 'type': 'Support'},
+        ],
+        'attachments': [],
+        'confirmedRecord': {
+            'id': 'seed-record-loop',
+            'taskId': 'seed-m6m7-return-resubmit',
+            'type': 'batch',
+            'annotations': [
+                {
+                    'id': 'seed-loop-annotation',
+                    'entityId': 'LOOP-001',
+                    'worldPos': [40.0, 16.0, 2.0],
+                    'visible': True,
+                    'glyph': 'L1',
+                    'title': 'Loop lineage anchor',
+                    'description': 'Seeded annotation that should survive return/resubmit/reopen.',
+                    'createdAt': 1763539220000,
+                },
+            ],
+            'cloudAnnotations': [],
+            'rectAnnotations': [],
+            'obbAnnotations': [],
+            'measurements': [
+                {
+                    'id': 'seed-loop-measurement',
+                    'kind': 'distance',
+                    'label': 'Return loop clearance',
+                    'value': 2.118,
+                    'unit': 'm',
+                    'start': [1.0, 1.0, 0.0],
+                    'end': [3.118, 1.0, 0.0],
+                    'createdAt': 1763539221000,
+                },
+            ],
+            'note': 'Seeded return/resubmit/reopen replay pack',
+            'confirmedAt': 1763539222000,
+        },
+        'comments': [
+            {
+                'id': 'seed-loop-task-thread',
+                'annotationId': 'seed-m6m7-return-resubmit:task',
+                'annotationType': 'text',
+                'authorId': ROLES['reviewer']['backendUserId'],
+                'authorName': ROLES['reviewer']['displayName'],
+                'authorRole': 'reviewer',
+                'content': 'Seeded task-thread root for the return/resubmit loop.',
+                'createdAt': 1763539223000,
+                'updatedAt': 1763539224000,
+            },
+        ],
+        'tags': ['closed-loop', 'return-resubmit-reopen'],
+        'workflowHistory': [
+            {
+                'node': 'sj',
+                'action': 'submit',
+                'operatorId': ROLES['designer']['backendUserId'],
+                'operatorName': ROLES['designer']['displayName'],
+                'comment': 'Initial seeded submit',
+                'timestamp': 1763539225000,
+            },
+            {
+                'node': 'jd',
+                'action': 'return',
+                'operatorId': ROLES['reviewer']['backendUserId'],
+                'operatorName': ROLES['reviewer']['displayName'],
+                'comment': 'Seeded reviewer return for loop continuity.',
+                'timestamp': 1763539226000,
+            },
+            {
+                'node': 'sj',
+                'action': 'submit',
+                'operatorId': ROLES['designer']['backendUserId'],
+                'operatorName': ROLES['designer']['displayName'],
+                'comment': 'Seeded designer resubmit for loop continuity.',
+                'timestamp': 1763539227000,
+            },
+        ],
+    },
+    {
+        'key': 'qa-t6-task-only-components',
+        'taskId': 'seed-qat6-type2',
+        'formId': 'FORM-QAT6-TYPE2',
+        'title': 'QA-T6 Seed / Task Components Only',
+        'description': 'QA-T6 type2 fixture: task components exist but workflow models are intentionally empty.',
+        'modelName': 'QA-T6 Fixture',
+        'status': 'submitted',
+        'priority': 'medium',
+        'currentNode': 'jd',
+        # 导入阶段保持空 components，后续通过 hydration patch 制造“task 有 / workflow 空”的稳定样本。
+        'components': [],
+        'hydrateComponents': [
+            {'id': 'cmp-qat6-type2', 'refNo': 'QAT6-T2-REF', 'name': 'QA Type2 Ref', 'type': 'Pipe'},
+        ],
+        'attachments': [],
+        'confirmedRecord': None,
+        'comments': [],
+        'tags': ['qa-t6', 'type2', 'task-only-components'],
+    },
+    {
+        'key': 'qa-t6-no-persisted-components',
+        'taskId': 'seed-qat6-type3',
+        'formId': 'FORM-QAT6-TYPE3',
+        'title': 'QA-T6 Seed / No Persisted Components',
+        'description': 'QA-T6 type3 fixture: both task components and workflow models stay empty.',
+        'modelName': 'QA-T6 Fixture',
+        'status': 'submitted',
+        'priority': 'medium',
+        'currentNode': 'jd',
+        'components': [],
+        # type3 需要保持后端双视角都为空，避免 patch 回灌。
+        'skipComponentHydration': True,
+        'attachments': [],
+        'confirmedRecord': None,
+        'comments': [],
+        'tags': ['qa-t6', 'type3', 'no-persisted-components'],
+    },
+]
+
+
+def clone_task_payload(scenario: dict[str, Any]) -> dict[str, Any]:
+    payload = {
+        'id': scenario['taskId'],
+        'formId': scenario['formId'],
+        'title': scenario['title'],
+        'description': scenario['description'],
+        'modelName': scenario['modelName'],
+        'status': scenario['status'],
+        'priority': scenario['priority'],
+        'requesterId': ROLES['designer']['backendUserId'],
+        'requesterName': ROLES['designer']['displayName'],
+        'checkerId': ROLES['reviewer']['backendUserId'],
+        'checkerName': ROLES['reviewer']['displayName'],
+        'approverId': ROLES['approver']['backendUserId'],
+        'approverName': ROLES['approver']['displayName'],
+        'reviewerId': ROLES['reviewer']['backendUserId'],
+        'reviewerName': ROLES['reviewer']['displayName'],
+        'components': deepcopy(scenario['components']),
+        'attachments': deepcopy(scenario['attachments']),
+        'createdAt': 1763539200000,
+        'updatedAt': 1763539200000,
+        'currentNode': scenario['currentNode'],
+        'workflowHistory': deepcopy(scenario.get('workflowHistory') or build_workflow_history()),
+    }
+    return payload
+
+
+def expected_task_ids() -> set[str]:
+    return {scenario['taskId'] for scenario in SCENARIOS}
+
+
+def build_plan(base_url: str) -> dict[str, Any]:
+    return {
+        'seedKey': SEED_KEY,
+        'projectId': DEFAULT_PROJECT_ID,
+        'baseUrl': base_url.rstrip('/'),
+        'roles': deepcopy(ROLES),
+        'trackedAssetPaths': {
+            'seedScript': 'debug_scripts/review_demo_seed.py',
+            'seedTest': 'debug_scripts/review_demo_seed_test.py',
+                'seedDoc': 'docs/verification/m6-m7-demo-seed-pack.md',
+                'm2BootstrapDoc': 'docs/verification/m2-restore-bootstrap.md',
+        },
+        'scenarios': [
+            {
+                'key': scenario['key'],
+                'taskId': scenario['taskId'],
+                'formId': scenario['formId'],
+                'title': scenario['title'],
+                'currentNode': scenario['currentNode'],
+                'status': scenario['status'],
+                'tags': deepcopy(scenario['tags']),
+                'discoverability': {
+                    'reviewerInbox': True,
+                    'designerRequesterId': ROLES['designer']['backendUserId'],
+                    'reviewerCheckerId': ROLES['reviewer']['backendUserId'],
+                },
+                'validationScenarios': deepcopy(scenario.get('validationScenarios') or []),
+                'seededPayload': {
+                    'task': clone_task_payload(scenario),
+                    'confirmedRecord': deepcopy(scenario['confirmedRecord']),
+                    'comments': deepcopy(scenario['comments']),
+                },
+            }
+            for scenario in SCENARIOS
+        ],
+        'discoverability': {
+            'reviewerTaskQuery': f"{base_url.rstrip('/')}/api/review/tasks?checker_id={urllib.parse.quote(ROLES['reviewer']['backendUserId'])}",
+            'designerTaskQuery': f"{base_url.rstrip('/')}/api/review/tasks?requester_id={urllib.parse.quote(ROLES['designer']['backendUserId'])}",
+            'approverTaskQuery': f"{base_url.rstrip('/')}/api/review/tasks?approver_id={urllib.parse.quote(ROLES['approver']['backendUserId'])}",
+            'frontendReviewerAlias': ROLES['reviewer']['frontendUserId'],
+            'frontendDesignerAlias': ROLES['designer']['frontendUserId'],
+            'm2Restore': {
+                'reviewerConfirmedTaskId': 'seed-m2-reviewer-confirmed',
+                'emptyTaskId': 'seed-m2-empty-after-confirmed',
+                'embedTaskId': 'seed-m2-embed-restore',
+                'reviewerConfirmedFormId': 'FORM-M2-RESTORE-001',
+                'emptyTaskFormId': 'FORM-M2-RESTORE-EMPTY-001',
+                'embedFormId': 'FORM-M2-EMBED-001',
+                'embedMintRequest': {
+                    'projectId': DEFAULT_PROJECT_ID,
+                    'userId': ROLES['reviewer']['backendUserId'],
+                    'workflowRole': 'jd',
+                    'workflowMode': 'external',
+                    'formId': 'FORM-M2-EMBED-001',
+                },
+                'embedRouteHint': '/?user_token=<token>&workflow_role=jd&workflow_mode=external&form_id=FORM-M2-EMBED-001',
+            },
+        },
+    }
+
+
+class BackendClient:
+    def __init__(self, base_url: str, timeout: float) -> None:
+        self.base_url = base_url.rstrip('/')
+        self.timeout = timeout
+
+    def request_json(self, method: str, path: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+        body = None
+        headers = {'Content-Type': 'application/json'}
+        if payload is not None:
+            body = json.dumps(payload).encode('utf-8')
+        request = urllib.request.Request(f'{self.base_url}{path}', data=body, headers=headers, method=method)
+        try:
+            with urllib.request.urlopen(request, timeout=self.timeout) as response:
+                content = response.read().decode('utf-8')
+        except urllib.error.HTTPError as exc:
+            detail = exc.read().decode('utf-8', 'replace')
+            raise RuntimeError(f'{method} {path} failed with HTTP {exc.code}: {detail}') from exc
+        except urllib.error.URLError as exc:
+            raise RuntimeError(f'{method} {path} failed: {exc.reason}') from exc
+        return json.loads(content) if content else {}
+
+    def healthcheck(self) -> dict[str, Any]:
+        return self.request_json('GET', '/api/health')
+
+    def review_task_list(self, query_name: str, query_value: str) -> dict[str, Any]:
+        qs = urllib.parse.urlencode({query_name: query_value})
+        return self.request_json('GET', f'/api/review/tasks?{qs}')
+
+    def review_task_detail(self, task_id: str) -> dict[str, Any]:
+        encoded = urllib.parse.quote(task_id, safe='')
+        return self.request_json('GET', f'/api/review/tasks/{encoded}')
+
+    def review_task_patch(self, task_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        encoded = urllib.parse.quote(task_id, safe='')
+        return self.request_json('PATCH', f'/api/review/tasks/{encoded}', payload)
+
+    def mint_embed_url(
+        self,
+        *,
+        project_id: str,
+        user_id: str,
+        workflow_role: str,
+        workflow_mode: str,
+        form_id: str,
+    ) -> dict[str, Any]:
+        return self.request_json(
+            'POST',
+            '/api/review/embed-url',
+            {
+                'project_id': project_id,
+                'user_id': user_id,
+                'workflow_role': workflow_role,
+                'workflow_mode': workflow_mode,
+                'form_id': form_id,
+            },
+        )
+
+    def workflow_sync_query(self, *, form_id: str, token: str, actor_id: str, actor_name: str, actor_roles: str) -> dict[str, Any]:
+        return self.request_json(
+            'POST',
+            '/api/review/workflow/sync',
+            {
+                'action': 'query',
+                'form_id': form_id,
+                'token': token,
+                'actor': {
+                    'id': actor_id,
+                    'name': actor_name,
+                    'roles': actor_roles,
+                },
+            },
+        )
+
+
+@dataclass
+class SeedResult:
+    task_id: str
+    form_id: str
+    title: str
+    scenario_key: str
+    created: bool
+    components_hydrated: bool
+    synced_record: bool
+    synced_comments: int
+
+
+def hydrate_task_components(client: BackendClient, scenario: dict[str, Any]) -> bool:
+    patch_payload = {
+        'components': deepcopy(scenario.get('hydrateComponents') or scenario.get('components') or []),
+    }
+    patch_response = client.review_task_patch(scenario['taskId'], patch_payload)
+    if not patch_response.get('success', False):
+        return False
+
+    detail_response = client.review_task_detail(scenario['taskId'])
+    task = detail_response.get('task') if isinstance(detail_response, dict) else None
+    components = task.get('components') if isinstance(task, dict) else None
+    return isinstance(components, list) and len(components) > 0
+
+
+def sync_task_inventory(client: BackendClient) -> tuple[list[SeedResult], list[str]]:
+    warnings: list[str] = []
+    results: list[SeedResult] = []
+
+    for scenario in SCENARIOS:
+        task_payload = {'tasks': [clone_task_payload(scenario)], 'overwrite': True}
+        response = client.request_json('POST', '/api/review/sync/import', task_payload)
+        if not response.get('success', False):
+            raise RuntimeError(response.get('error_message') or f"Failed to import task {scenario['taskId']}")
+
+        skip_component_hydration = bool(scenario.get('skipComponentHydration'))
+        components_hydrated = False if skip_component_hydration else hydrate_task_components(client, scenario)
+        if not skip_component_hydration and not components_hydrated:
+            warnings.append(
+                f"Task components for {scenario['taskId']} were not hydrated after sync/import; QA-T6 may miss component lineage."
+            )
+
+        record_synced = False
+        if scenario['confirmedRecord'] is not None:
+            record_response = client.request_json('POST', '/api/review/records', deepcopy(scenario['confirmedRecord']))
+            if not record_response.get('success', False):
+                warnings.append(
+                    f"Confirmed record for {scenario['taskId']} was not stored: {record_response.get('error_message', 'unknown error')}"
+                )
+            else:
+                record_synced = True
+
+        comment_count = 0
+        for comment in scenario['comments']:
+            comment_payload = deepcopy(comment)
+            comment_payload.pop('id', None)
+            comment_payload.pop('updatedAt', None)
+            response_comment = client.request_json('POST', '/api/review/comments', comment_payload)
+            if response_comment.get('success', False):
+                comment_count += 1
+            else:
+                warnings.append(
+                    f"Comment for {scenario['taskId']} was not stored: {response_comment.get('error_message', 'unknown error')}"
+                )
+
+        results.append(
+            SeedResult(
+                task_id=scenario['taskId'],
+                form_id=scenario['formId'],
+                title=scenario['title'],
+                scenario_key=scenario['key'],
+                created=bool(response.get('importedCount', 0)),
+                components_hydrated=components_hydrated,
+                synced_record=record_synced,
+                synced_comments=comment_count,
+            )
+        )
+
+    return results, warnings
+
+
+def normalize_task_rows(response: dict[str, Any]) -> list[dict[str, Any]]:
+    rows = response.get('tasks')
+    if isinstance(rows, list):
+        return [row for row in rows if isinstance(row, dict)]
+    data = response.get('data')
+    if isinstance(data, list):
+        return [row for row in data if isinstance(row, dict)]
+    return []
+
+
+def summarize_discoverability(response: dict[str, Any], query_name: str, query_value: str) -> dict[str, Any]:
+    tasks = normalize_task_rows(response)
+    task_ids = sorted({str(task.get('id') or task.get('taskId') or '') for task in tasks if task.get('id') or task.get('taskId')})
+    seeded_ids = sorted(task_id for task_id in task_ids if task_id in expected_task_ids())
+    total = response.get('total')
+    if not isinstance(total, int):
+        total = len(tasks)
+    return {
+        'query': {'name': query_name, 'value': query_value},
+        'total': total,
+        'returnedTaskIds': task_ids,
+        'seededTaskIds': seeded_ids,
+        'missingSeededTaskIds': sorted(expected_task_ids() - set(seeded_ids)),
+        'extraTaskIds': sorted(set(task_ids) - expected_task_ids()),
+    }
+
+
+def collect_discoverability(client: BackendClient) -> dict[str, Any]:
+    reviewer = summarize_discoverability(
+        client.review_task_list('checker_id', ROLES['reviewer']['backendUserId']),
+        'checker_id',
+        ROLES['reviewer']['backendUserId'],
+    )
+    designer = summarize_discoverability(
+        client.review_task_list('requester_id', ROLES['designer']['backendUserId']),
+        'requester_id',
+        ROLES['designer']['backendUserId'],
+    )
+    approver = summarize_discoverability(
+        client.review_task_list('approver_id', ROLES['approver']['backendUserId']),
+        'approver_id',
+        ROLES['approver']['backendUserId'],
+    )
+    consistency = {
+        'reviewerVsDesignerSeededIdsMatch': reviewer['seededTaskIds'] == designer['seededTaskIds'],
+        'reviewerVsDesignerSeededCountMatch': len(reviewer['seededTaskIds']) == len(designer['seededTaskIds']),
+        'approverSeesSameSeededIds': approver['seededTaskIds'] == reviewer['seededTaskIds'],
+    }
+    return {
+        'reviewer': reviewer,
+        'designer': designer,
+        'approver': approver,
+        'consistency': consistency,
+    }
+
+
+def build_m2_embed_runtime(client: BackendClient, base_url: str) -> dict[str, Any]:
+    request_payload = {
+        'projectId': DEFAULT_PROJECT_ID,
+        'userId': ROLES['reviewer']['backendUserId'],
+        'workflowRole': 'jd',
+        'workflowMode': 'external',
+        'formId': 'FORM-M2-EMBED-001',
+    }
+    response = client.mint_embed_url(
+        project_id=request_payload['projectId'],
+        user_id=request_payload['userId'],
+        workflow_role=request_payload['workflowRole'],
+        workflow_mode=request_payload['workflowMode'],
+        form_id=request_payload['formId'],
+    )
+    data = response.get('data') if isinstance(response, dict) else None
+    if not isinstance(data, dict):
+        raise RuntimeError('Embed URL response missing data payload')
+
+    token = str(data.get('token') or '').strip()
+    query = data.get('query') if isinstance(data.get('query'), dict) else {}
+    query_form_id = str(query.get('form_id') or '').strip()
+    lineage = data.get('lineage') if isinstance(data.get('lineage'), dict) else {}
+    task_snapshot = data.get('task') if isinstance(data.get('task'), dict) else {}
+    full_url = str(response.get('url') or '').strip()
+
+    route_url = data.get('relative_path')
+    route_path = str(route_url or '/review/3d-view').strip() or '/review/3d-view'
+    route_path = route_path if route_path.startswith('/') else f'/{route_path}'
+
+    relative_open_url = f"{route_path}?{urllib.parse.urlencode({
+        'user_token': token,
+        'workflow_role': request_payload['workflowRole'],
+        'workflow_mode': request_payload['workflowMode'],
+        'form_id': request_payload['formId'],
+    })}"
+    local_open_url = f"http://127.0.0.1:3101{relative_open_url}"
+
+    workflow_sync = client.workflow_sync_query(
+        form_id=request_payload['formId'],
+        token=token,
+        actor_id=request_payload['userId'],
+        actor_name=ROLES['reviewer']['displayName'],
+        actor_roles=request_payload['workflowRole'],
+    )
+    workflow_data = workflow_sync.get('data') if isinstance(workflow_sync, dict) else {}
+    workflow_data = workflow_data if isinstance(workflow_data, dict) else {}
+
+    return {
+        'request': request_payload,
+        'response': {
+            'queryFormId': query_form_id,
+            'lineageTaskId': lineage.get('task_id'),
+            'lineageCurrentNode': lineage.get('current_node'),
+            'lineageStatus': lineage.get('status'),
+            'responseTaskId': task_snapshot.get('id'),
+            'responseTaskCheckerId': task_snapshot.get('checkerId'),
+            'token': token,
+            'relativeOpenUrl': relative_open_url,
+            'localOpenUrl': local_open_url,
+            'publicUrl': full_url or None,
+        },
+        'workflowSyncProbe': {
+            'code': workflow_sync.get('code'),
+            'message': workflow_sync.get('message'),
+            'formExists': workflow_data.get('form_exists'),
+            'taskCreated': workflow_data.get('task_created'),
+            'taskId': workflow_data.get('task_id'),
+            'currentNode': workflow_data.get('current_node'),
+            'taskStatus': workflow_data.get('task_status'),
+            'models': workflow_data.get('models'),
+            'recordCount': len(workflow_data.get('records') or []),
+            'commentCount': len(workflow_data.get('annotation_comments') or []),
+        },
+    }
+
+
+def build_runtime_output(
+    base_url: str,
+    results: list[SeedResult],
+    warnings: list[str],
+    discoverability: dict[str, Any],
+    m2_embed_runtime: dict[str, Any],
+) -> dict[str, Any]:
+    payload = build_plan(base_url)
+    payload['execution'] = {
+        'seeded': [
+            {
+                'scenarioKey': result.scenario_key,
+                'taskId': result.task_id,
+                'formId': result.form_id,
+                'title': result.title,
+                'createdOrUpdated': result.created,
+                'taskComponentsHydrated': result.components_hydrated,
+                'confirmedRecordSynced': result.synced_record,
+                'commentsSynced': result.synced_comments,
+            }
+            for result in results
+        ],
+        'warnings': warnings,
+        'discoverability': discoverability,
+        'm2EmbedRuntime': m2_embed_runtime,
+    }
+    return payload
+
+
+def parse_args(argv: list[str]) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description='Seed deterministic review demo data, including M2 restore bootstrap scenarios.')
+    parser.add_argument('--base-url', default=DEFAULT_BASE_URL, help='Backend base URL, default: %(default)s')
+    parser.add_argument('--timeout', type=float, default=5.0, help='HTTP timeout in seconds')
+    parser.add_argument('--print-plan', action='store_true', help='Print the deterministic seed plan without calling the backend')
+    parser.add_argument('--pretty', action='store_true', help='Pretty-print JSON output')
+    return parser.parse_args(argv)
+
+
+def dump_json(payload: dict[str, Any], pretty: bool) -> None:
+    json.dump(payload, sys.stdout, ensure_ascii=True, indent=2 if pretty else None, sort_keys=True)
+    sys.stdout.write('\n')
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = parse_args(argv or sys.argv[1:])
+    plan = build_plan(args.base_url)
+    if args.print_plan:
+        dump_json(plan, args.pretty)
+        return 0
+
+    client = BackendClient(args.base_url, args.timeout)
+    try:
+        client.healthcheck()
+        results, warnings = sync_task_inventory(client)
+        discoverability = collect_discoverability(client)
+        m2_embed_runtime = build_m2_embed_runtime(client, args.base_url)
+        dump_json(build_runtime_output(args.base_url, results, warnings, discoverability, m2_embed_runtime), args.pretty)
+        return 0
+    except Exception as exc:
+        error_payload = {
+            'seedKey': SEED_KEY,
+            'baseUrl': args.base_url.rstrip('/'),
+            'error': str(exc),
+            'hint': 'Ensure the shared backend on 3100 is reachable before running the live seed command.',
+        }
+        dump_json(error_payload, True)
+        return 1
+
+    dump_json(build_runtime_output(args.base_url, results, warnings, discoverability), args.pretty)
+    return 0
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())

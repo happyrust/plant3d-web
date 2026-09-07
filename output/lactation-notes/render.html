@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: #ddd; }
+  body { font-family: "Microsoft YaHei", "PingFang SC", sans-serif; color: #3d2623; }
+  .page { position: relative; width: 1024px; height: 1536px; overflow: hidden; background-size: cover; }
+  .num { position: absolute; left: 54px; top: 53px; width: 76px; text-align: center; color: #fff8ed; font: 800 30px/76px Georgia, serif; }
+  .title { position: absolute; color: #fff9ef; font-size: 38px; line-height: 1.25; font-weight: 800; letter-spacing: 1px; text-align: center; }
+  .ink { color: #8f251f; font-weight: 800; }
+  .body { font-size: 27px; line-height: 1.65; }
+  .small { font-size: 22px; line-height: 1.55; }
+  .tiny { font-size: 18px; line-height: 1.45; }
+  .muted { color: #6e504a; }
+  .center { text-align: center; }
+  .label { color: #8f251f; font-weight: 800; }
+  .pill { padding: 12px 18px; border: 1.5px solid #b76355; border-radius: 16px; background: rgba(255,249,239,.82); }
+  ul { margin: 10px 0 0 0; padding-left: 1.25em; }
+  li { margin: 8px 0; }
+  .step-no { position: absolute; width: 70px; text-align: center; color: #8f251f; font: 800 29px/70px Georgia, serif; }
+  .footer { position: absolute; left: 70px; right: 70px; bottom: 23px; color: #fff8ed; text-align: center; font-size: 17px; letter-spacing: .5px; }
+
+  /* 01 */
+  .p1 .num { color:#8f251f; }
+  .p1 .cover-title { position:absolute; left:70px; right:70px; top:95px; color:#8f251f; text-align:center; font:800 66px/1.25 "Microsoft YaHei"; letter-spacing:5px; }
+  .p1 .cover-sub { position:absolute; left:145px; right:145px; top:395px; color:#fff8ed; text-align:center; font-size:31px; font-weight:800; }
+  .p1 .cover-points { position:absolute; left:575px; top:650px; width:365px; font-size:26px; line-height:2.05; }
+
+  /* 02 */
+  .p2 .title { left:225px; right:180px; top:117px; }
+  .p2 .col { position:absolute; top:640px; width:355px; height:535px; padding:38px 30px; }
+  .p2 .left { left:100px; }
+  .p2 .right { left:570px; }
+  .p2 .col h2 { margin:0 0 15px; color:#8f251f; text-align:center; font-size:30px; }
+  .p2 .col .key { margin-top:24px; text-align:center; font-size:24px; font-weight:800; }
+  .p2 .remind { position:absolute; left:180px; right:180px; top:1260px; text-align:center; font-size:23px; line-height:1.6; }
+
+  /* 03 */
+  .p3 .title { left:205px; right:160px; top:89px; }
+  .p3 .step { position:absolute; left:195px; width:335px; font-size:23px; line-height:1.45; }
+  .p3 .s1 { top:373px; } .p3 .s2 { top:646px; } .p3 .s3 { top:920px; } .p3 .s4 { top:1190px; }
+  .p3 .n1 { left:83px; top:352px; } .p3 .n2 { left:83px; top:625px; } .p3 .n3 { left:83px; top:899px; } .p3 .n4 { left:83px; top:1169px; }
+  .p3 .tip { position:absolute; left:600px; top:1040px; width:335px; padding:20px; font-size:21px; line-height:1.55; text-align:center; }
+
+  /* 04 */
+  .p4 .title { left:245px; right:195px; top:92px; }
+  .p4 .step { position:absolute; left:120px; width:390px; padding:15px 24px; font-size:21px; line-height:1.45; }
+  .p4 .s1 { top:290px; } .p4 .s2 { top:505px; } .p4 .s3 { top:720px; } .p4 .s4 { top:935px; }
+  .p4 .n1 { left:48px; top:268px; } .p4 .n2 { left:48px; top:483px; } .p4 .n3 { left:48px; top:698px; } .p4 .n4 { left:48px; top:913px; }
+  .p4 .card { position:absolute; top:1222px; width:335px; padding:20px 22px; font-size:20px; line-height:1.5; }
+  .p4 .c1 { left:115px; } .p4 .c2 { left:570px; }
+
+  /* 05 */
+  .p5 .title { left:215px; right:205px; top:158px; }
+  .p5 .wrong { position:absolute; left:100px; top:505px; width:400px; text-align:center; font-size:27px; font-weight:800; }
+  .p5 .right { position:absolute; left:545px; top:505px; width:390px; text-align:center; font-size:27px; font-weight:800; }
+  .p5 .card { position:absolute; top:870px; width:350px; padding:26px; text-align:center; font-size:24px; line-height:1.65; }
+  .p5 .c1 { left:105px; } .p5 .c2 { left:575px; }
+  .p5 .core { position:absolute; left:130px; right:130px; top:1330px; color:#fff8ed; text-align:center; font-size:31px; font-weight:800; }
+
+  /* 06 */
+  .p6 .title { left:205px; right:145px; top:62px; }
+  .p6 .box { position:absolute; left:340px; width:440px; text-align:center; font-size:27px; font-weight:800; }
+  .p6 .b1 { top:275px; } .p6 .b2 { top:515px; } .p6 .b3 { top:755px; } .p6 .b4 { top:995px; }
+  .p6 .out { position:absolute; top:1245px; width:315px; text-align:center; font-size:23px; line-height:1.55; font-weight:700; }
+  .p6 .o1 { left:145px; } .p6 .o2 { left:640px; }
+
+  /* 07 */
+  .p7 .title { left:245px; right:175px; top:72px; }
+  .p7 .faq { position:absolute; left:295px; width:630px; font-size:23px; line-height:1.55; }
+  .p7 .f1 { top:265px; } .p7 .f2 { top:500px; } .p7 .f3 { top:735px; } .p7 .f4 { top:970px; } .p7 .f5 { top:1205px; width:500px; }
+  .p7 .q { color:#8f251f; font-weight:800; font-size:26px; }
+
+  /* 08 */
+  .p8 .title { left:180px; right:330px; top:57px; }
+  .p8 .warn { position:absolute; left:215px; width:600px; font-size:25px; font-weight:700; }
+  .p8 .w1 { top:235px; } .p8 .w2 { top:370px; } .p8 .w3 { top:505px; } .p8 .w4 { top:640px; } .p8 .w5 { top:775px; }
+  .p8 .note { position:absolute; left:180px; top:965px; width:675px; padding:35px 40px; font-size:24px; line-height:1.65; }
+  .p8 .end { position:absolute; left:450px; right:70px; top:1375px; text-align:center; color:#8f251f; font-size:25px; font-weight:800; line-height:1.5; }
+</style>
+<body>
+  <section class="page p1" style="background-image:url('bg-01.png')">
+    <div class="num">01</div>
+    <div class="cover-title">生理性乳房胀满<br>处理笔记</div>
+    <div class="cover-sub">产后乳房胀满护理思路</div>
+    <div class="cover-points">✓ 先判断，再处理<br>✓ 温和护理，减少刺激<br>✓ 按需哺乳，不追求“排空”<br>✓ 持续观察，及时求助</div>
+  </section>
+
+  <section class="page p2" style="background-image:url('bg-02.png')">
+    <div class="num">02</div><div class="title">先判断：主要问题在哪里？</div>
+    <div class="col left body"><h2>局部不适为主</h2><ul><li>局部硬结或压痛</li><li>可能轻度发红</li><li>常集中在单一区域</li><li>通常无全身症状</li></ul><div class="key">关键词：局部炎症<br>→ 选择方案 A</div></div>
+    <div class="col right body"><h2>整体胀满为主</h2><ul><li>双侧普遍胀硬</li><li>乳晕水肿、变紧</li><li>多见于产后第 3–5 天</li><li>可能影响宝宝含接</li></ul><div class="key">关键词：整体水肿<br>→ 选择方案 B</div></div>
+    <div class="remind pill"><b class="label">提醒：</b>乳房变硬不等于有“奶块”。先看是局部炎症还是整体胀满，再选择护理顺序。</div>
+  </section>
+
+  <section class="page p3" style="background-image:url('bg-03.png')">
+    <div class="num">03</div><div class="title">方案 A：乳晕水肿、含接困难</div>
+    <div class="step-no n1">1</div><div class="step s1"><b class="label">反向压力软化（RPS）</b><br>洗净双手，指腹围绕乳头基部，向胸壁方向持续轻压。</div>
+    <div class="step-no n2">2</div><div class="step s2"><b class="label">轻压至乳晕变软</b><br>通常约 1–3 分钟；过程应轻柔、无明显疼痛。</div>
+    <div class="step-no n3">3</div><div class="step s3"><b class="label">尝试深含接、按需亲喂</b><br>让宝宝含住更多乳晕，不追求把乳房“排空”。</div>
+    <div class="step-no n4">4</div><div class="step s4"><b class="label">必要时少量手挤</b><br>仅挤到舒适或够宝宝所需，随后可隔布冷敷。</div>
+    <div class="tip pill"><b class="label">RPS 要点</b><br>围绕乳头基部均匀轻压<br>把水肿暂时推离乳晕<br>方便宝宝更深地含接</div>
+    <div class="footer">健康教育资料｜反向压力软化用于乳晕水肿</div>
+  </section>
+
+  <section class="page p4" style="background-image:url('bg-04.png')">
+    <div class="num">04</div><div class="title">方案 B：整体胀满明显</div>
+    <div class="step-no n1">1</div><div class="step s1"><b class="label">隔布冷敷</b><br>按舒适度进行，帮助减轻肿胀与疼痛。</div>
+    <div class="step-no n2">2</div><div class="step s2"><b class="label">轻柔淋巴回流</b><br>先放松锁骨上与腋窝附近，再轻扫皮肤。</div>
+    <div class="step-no n3">3</div><div class="step s3"><b class="label">按需亲喂</b><br>跟随宝宝饥饿信号，不额外反复吸乳。</div>
+    <div class="step-no n4">4</div><div class="step s4"><b class="label">只少量排乳</b><br>宝宝暂时含接困难时，仅排到乳晕变软、身体舒适。</div>
+    <div class="card c1"><b class="label">轻扫方向</b><br>如抚摸皮肤般轻柔<br>由乳房向腋窝、锁骨方向<br>避免深压与揉捏</div>
+    <div class="card c2"><b class="label">注意</b><br>动作轻、按压浅<br>不追求排空<br>疼痛加重立即停下</div>
+  </section>
+
+  <section class="page p5" style="background-image:url('bg-05.png')">
+    <div class="num">05</div><div class="title">科学排乳：不按固定时长轮换</div>
+    <div class="wrong"><span class="label">✕ 误区</span><br><span class="small">左右各 5 分钟，反复轮换；<br>或为了“排空”不断延长。</span></div>
+    <div class="right"><span class="label">✓ 推荐</span><br><span class="small">优先按需亲喂；需要排乳时，<br>以舒适和宝宝所需量为准。</span></div>
+    <div class="card c1"><b class="label">亲喂优先</b><br>观察宝宝的饥饿信号、吞咽和尿量，不以固定分钟数判断是否“吃够”。</div>
+    <div class="card c2"><b class="label">使用吸奶器</b><br>法兰尺寸要合适，吸力从低开始；频率和奶量尽量模拟宝宝的实际需要。</div>
+    <div class="core">核心：规律不等于过度　｜　按需优先于定时</div>
+  </section>
+
+  <section class="page p6" style="background-image:url('bg-06.png')">
+    <div class="num">06</div><div class="title">为什么强调“按需”哺乳？</div>
+    <div class="box b1">宝宝有效吸吮</div><div class="box b2">神经信号传递</div><div class="box b3">催乳素与催产素参与</div><div class="box b4">母乳生成与排出</div>
+    <div class="out o1"><span class="label">按需哺乳</span><br>供应逐渐匹配<br>宝宝的真实需要</div>
+    <div class="out o2"><span class="label">过度吸乳</span><br>可能刺激供过于求<br>加重胀满与炎症</div>
+  </section>
+
+  <section class="page p7" style="background-image:url('bg-07.png')">
+    <div class="num">07</div><div class="title">母乳喂养常见问题</div>
+    <div class="faq f1"><div class="q">乳晕硬，宝宝含接困难？</div>先做反向压力软化，再尝试深含接。</div>
+    <div class="faq f2"><div class="q">吸奶器吸不出来？</div>检查法兰尺寸与位置，吸力从低开始；不要硬拉乳头。</div>
+    <div class="faq f3"><div class="q">排乳很多，仍反复胀满？</div>评估是否过度刺激或乳汁移出无效，不要盲目加时加量。</div>
+    <div class="faq f4"><div class="q">局部硬结怎么办？</div>冷敷、按需哺乳、轻扫皮肤；避免深层揉按和震动按摩。</div>
+    <div class="faq f5"><div class="q">乳头持续疼痛？</div>检查含接和吸奶器法兰；若破损或疼痛不缓解，尽快求助专业人员。</div>
+  </section>
+
+  <section class="page p8" style="background-image:url('bg-08.png')">
+    <div class="num">08</div><div class="title">这些情况需要进一步评估</div>
+    <div class="warn w1">发热、寒战或全身明显不适</div>
+    <div class="warn w2">单侧红、肿、热、痛持续加重</div>
+    <div class="warn w3">局部硬结或肿块 24–48 小时不缓解</div>
+    <div class="warn w4">出现脓性分泌物、明显皮损</div>
+    <div class="warn w5">保守护理约 24 小时仍无改善，或症状反复</div>
+    <div class="note pill"><b class="label">提醒：</b><br>出现以上情况，请及时联系产科、乳腺科、全科医生或专业哺乳支持人员。症状严重或迅速恶化时，应尽快就医。<br><br><span class="muted">不要用力揉按，也不要自行开始或停用药物。</span></div>
+    <div class="end">从产房到家庭<br>温柔、科学地度过产后哺乳适应期</div>
+  </section>
+</body>
+</html>

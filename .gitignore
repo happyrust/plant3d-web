@@ -1,0 +1,97 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+.DS_Store
+dist
+dist-ssr
+coverage
+*.local
+
+# Environment files (contain sensitive credentials)
+.env
+.env.local
+.env.*.local
+.env.production
+.env.development
+
+/cypress/videos/
+/cypress/screenshots/
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+*.tsbuildinfo
+.ace-tool/
+
+# Playwright / local screenshots
+artifacts/
+test-results/
+playwright-report/
+.worktrees/
+
+# Local sqlite caches
+deployment_sites.sqlite
+
+npm-cache
+
+# AI CEO business advisor state
+/state/
+
+# 本地大量 e2e 不入库；PMS 外网联调用例单独跟踪
+e2e/*
+!e2e/pms-powerpms-review-new.spec.ts
+!e2e/output-project-direct-entry.spec.ts
+!e2e/dimension-mbd-v2-fixture.spec.ts
+!e2e/helpers/
+!e2e/helpers/spatialQueryRealBran.ts
+!e2e/fixtures/
+!e2e/fixtures/*.json
+!e2e/spatial-query-real-bran.spec.ts
+!e2e/mbd-real-bran-standalone.spec.ts
+!e2e/mbd-interactive-ui.spec.ts
+!e2e/mbd-branch-corpus.spec.ts
+!e2e/dimension-app-dev-smoke.spec.ts
+!e2e/dimension-canvas-smoke.spec.ts
+!e2e/dimension-perf.spec.ts
+scripts/*
+!scripts/run-dimension-browser-perf.mjs
+!scripts/pms-chrome-devtools-flow.ts
+!scripts/pms-plant3d-initiate-flow.ts
+!scripts/pms-contract-sequence.ts
+!scripts/pms-simulator-bootstrap.ts
+!scripts/pms-simulator-runner.ts
+!scripts/deploy-ubuntu.sh
+!scripts/v3-verify-matrix.ts
+
+# Agent Memory (跨会话记忆)
+.agent-memory/
+.gstack/
+
+# 本地临时实验产物 / agent skill 残留
+.tmp/
+tmp/
+bin/business-review
+state/
+.claude/
+
+# KC-Chat 运行时产物（插件自动生成，请勿入库）
+.cursor/mcp.json
+.cursor/kc-mcp/
+.cursor/kc-mcp-messages/
+.cursor/kc-chat-exports/
+# Added by code-review-graph
+.code-review-graph/

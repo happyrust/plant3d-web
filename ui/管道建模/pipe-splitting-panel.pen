@@ -1,0 +1,860 @@
+{
+  "version": "2.8",
+  "children": [
+    {
+      "type": "frame",
+      "id": "canvas3",
+      "x": 0,
+      "y": 0,
+      "name": "Frame",
+      "clip": true,
+      "width": 800,
+      "height": 1000,
+      "fill": "#ffffff",
+      "layout": "none"
+    },
+    {
+      "type": "frame",
+      "id": "spRoot",
+      "x": 0,
+      "y": 0,
+      "name": "管道分割面板",
+      "width": 340,
+      "fill": "#ffffff",
+      "cornerRadius": 8,
+      "stroke": {
+        "align": "inside",
+        "thickness": 1,
+        "fill": "#e2e8f0"
+      },
+      "effect": {
+        "type": "shadow",
+        "shadowType": "outer",
+        "color": "#0000000f",
+        "offset": {
+          "x": 0,
+          "y": 4
+        },
+        "blur": 16
+      },
+      "layout": "vertical",
+      "gap": 0,
+      "padding": 0,
+      "children": [
+        {
+          "type": "frame",
+          "id": "spHeader",
+          "name": "header",
+          "width": "fill_container",
+          "fill": "#f8fafc",
+          "padding": [
+            16,
+            20
+          ],
+          "justifyContent": "space_between",
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "text",
+              "id": "spTitle",
+              "name": "title",
+              "fill": "#0f172a",
+              "content": "管道分割 / 合并",
+              "fontFamily": "Noto Sans SC",
+              "fontSize": 16,
+              "fontWeight": "600"
+            }
+          ]
+        },
+        {
+          "type": "line",
+          "id": "spDivH",
+          "name": "dividerHeader",
+          "width": "fill_container",
+          "height": 1,
+          "stroke": {
+            "align": "center",
+            "thickness": 1,
+            "fill": "#e2e8f0"
+          }
+        },
+        {
+          "type": "frame",
+          "id": "spBody",
+          "name": "body",
+          "width": "fill_container",
+          "layout": "vertical",
+          "gap": 20,
+          "padding": 20,
+          "children": [
+            {
+              "type": "frame",
+              "id": "spModeTabs",
+              "name": "modeTabs",
+              "width": "fill_container",
+              "fill": "#f1f5f9",
+              "cornerRadius": 8,
+              "padding": 3,
+              "gap": 3,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "spTabSplit",
+                  "name": "tabSplit",
+                  "width": "fill_container",
+                  "fill": "#ffffff",
+                  "cornerRadius": 6,
+                  "padding": [
+                    8,
+                    0
+                  ],
+                  "justifyContent": "center",
+                  "alignItems": "center",
+                  "effect": {
+                    "type": "shadow",
+                    "shadowType": "outer",
+                    "color": "#0000000d",
+                    "offset": {
+                      "x": 0,
+                      "y": 1
+                    },
+                    "blur": 3
+                  },
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "spTabSplitText",
+                      "name": "tabSplitText",
+                      "fill": "#0f172a",
+                      "content": "分割",
+                      "fontFamily": "Noto Sans SC",
+                      "fontSize": 13,
+                      "fontWeight": "600"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "spTabMerge",
+                  "name": "tabMerge",
+                  "width": "fill_container",
+                  "fill": "#00000000",
+                  "cornerRadius": 6,
+                  "padding": [
+                    8,
+                    0
+                  ],
+                  "justifyContent": "center",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "spTabMergeText",
+                      "name": "tabMergeText",
+                      "fill": "#64748b",
+                      "content": "合并",
+                      "fontFamily": "Noto Sans SC",
+                      "fontSize": 13,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "spTabPlane",
+                  "name": "tabPlane",
+                  "width": "fill_container",
+                  "fill": "#00000000",
+                  "cornerRadius": 6,
+                  "padding": [
+                    8,
+                    0
+                  ],
+                  "justifyContent": "center",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "spTabPlaneText",
+                      "name": "tabPlaneText",
+                      "fill": "#64748b",
+                      "content": "平面分割",
+                      "fontFamily": "Noto Sans SC",
+                      "fontSize": 13,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "spPickSec",
+              "name": "pickSection",
+              "width": "fill_container",
+              "layout": "vertical",
+              "gap": 12,
+              "children": [
+                {
+                  "type": "text",
+                  "id": "spPickTitle",
+                  "name": "pickTitle",
+                  "fill": "#0f172a",
+                  "content": "元素选择",
+                  "fontFamily": "Noto Sans SC",
+                  "fontSize": 14,
+                  "fontWeight": "600"
+                },
+                {
+                  "type": "frame",
+                  "id": "spPickBtn",
+                  "name": "pickBtn",
+                  "width": "fill_container",
+                  "fill": "#00000000",
+                  "cornerRadius": 6,
+                  "stroke": {
+                    "align": "inside",
+                    "thickness": 1.5,
+                    "fill": "#2563eb"
+                  },
+                  "gap": 8,
+                  "padding": [
+                    9,
+                    14
+                  ],
+                  "justifyContent": "center",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon_font",
+                      "id": "spPickIcon",
+                      "name": "pickIcon",
+                      "width": 14,
+                      "height": 14,
+                      "iconFontName": "mouse-pointer-2",
+                      "iconFontFamily": "lucide",
+                      "fill": "#2563eb"
+                    },
+                    {
+                      "type": "text",
+                      "id": "spPickText",
+                      "name": "pickText",
+                      "fill": "#2563eb",
+                      "content": "拾取分割元素",
+                      "fontFamily": "Noto Sans SC",
+                      "fontSize": 13,
+                      "fontWeight": "500"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "spElementList",
+                  "name": "elementList",
+                  "width": "fill_container",
+                  "height": 120,
+                  "cornerRadius": 6,
+                  "stroke": {
+                    "align": "inside",
+                    "thickness": 1,
+                    "fill": "#e2e8f0"
+                  },
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "spElementListInner",
+                      "name": "elementListInner",
+                      "clip": true,
+                      "width": "fill_container",
+                      "height": "fill_container",
+                      "fill": "#f8fafc",
+                      "layout": "vertical",
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "spElem1",
+                          "name": "elem1",
+                          "width": "fill_container",
+                          "fill": "#eff6ff",
+                          "padding": [
+                            8,
+                            12
+                          ],
+                          "gap": 10,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon_font",
+                              "id": "spElem1Icon",
+                              "name": "elem1Icon",
+                              "width": 14,
+                              "height": 14,
+                              "iconFontName": "scissors",
+                              "iconFontFamily": "lucide",
+                              "fill": "#2563eb"
+                            },
+                            {
+                              "type": "frame",
+                              "id": "spElem1Info",
+                              "name": "elem1Info",
+                              "width": "fill_container",
+                              "layout": "vertical",
+                              "gap": 2,
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "spElem1Name",
+                                  "name": "elem1Name",
+                                  "fill": "#0f172a",
+                                  "content": "TUBE /B1-T3",
+                                  "fontFamily": "Fira Code",
+                                  "fontSize": 12,
+                                  "fontWeight": "500"
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "spElem1Desc",
+                                  "name": "elem1Desc",
+                                  "fill": "#94a3b8",
+                                  "content": "Length: 2400mm  Bore: 150mm",
+                                  "fontFamily": "Fira Code",
+                                  "fontSize": 10,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "spElem2",
+                          "name": "elem2",
+                          "width": "fill_container",
+                          "fill": "#00000000",
+                          "padding": [
+                            8,
+                            12
+                          ],
+                          "gap": 10,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon_font",
+                              "id": "spElem2Icon",
+                              "name": "elem2Icon",
+                              "width": 14,
+                              "height": 14,
+                              "iconFontName": "minus",
+                              "iconFontFamily": "lucide",
+                              "fill": "#cbd5e1"
+                            },
+                            {
+                              "type": "frame",
+                              "id": "spElem2Info",
+                              "name": "elem2Info",
+                              "width": "fill_container",
+                              "layout": "vertical",
+                              "gap": 2,
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "spElem2Name",
+                                  "name": "elem2Name",
+                                  "fill": "#64748b",
+                                  "content": "ELBO /B1-E2",
+                                  "fontFamily": "Fira Code",
+                                  "fontSize": 12,
+                                  "fontWeight": "normal"
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "spElem2Desc",
+                                  "name": "elem2Desc",
+                                  "fill": "#94a3b8",
+                                  "content": "Angle: 90°  Bore: 150mm",
+                                  "fontFamily": "Fira Code",
+                                  "fontSize": 10,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "spListActions",
+                  "name": "listActions",
+                  "width": "fill_container",
+                  "gap": 8,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "spRemoveBtn",
+                      "name": "removeBtn",
+                      "fill": "#00000000",
+                      "cornerRadius": 6,
+                      "stroke": {
+                        "align": "inside",
+                        "thickness": 1,
+                        "fill": "#e2e8f0"
+                      },
+                      "gap": 4,
+                      "padding": [
+                        5,
+                        10
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon_font",
+                          "id": "spRemoveIcon",
+                          "name": "removeIcon",
+                          "width": 12,
+                          "height": 12,
+                          "iconFontName": "x",
+                          "iconFontFamily": "lucide",
+                          "fill": "#64748b"
+                        },
+                        {
+                          "type": "text",
+                          "id": "spRemoveText",
+                          "name": "removeText",
+                          "fill": "#334155",
+                          "content": "移除",
+                          "fontFamily": "Noto Sans SC",
+                          "fontSize": 12,
+                          "fontWeight": "500"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "spClearBtn",
+                      "name": "clearBtn",
+                      "fill": "#00000000",
+                      "cornerRadius": 6,
+                      "stroke": {
+                        "align": "inside",
+                        "thickness": 1,
+                        "fill": "#e2e8f0"
+                      },
+                      "gap": 4,
+                      "padding": [
+                        5,
+                        10
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon_font",
+                          "id": "spClearIcon",
+                          "name": "clearIcon",
+                          "width": 12,
+                          "height": 12,
+                          "iconFontName": "trash-2",
+                          "iconFontFamily": "lucide",
+                          "fill": "#64748b"
+                        },
+                        {
+                          "type": "text",
+                          "id": "spClearText",
+                          "name": "clearText",
+                          "fill": "#334155",
+                          "content": "全部清除",
+                          "fontFamily": "Noto Sans SC",
+                          "fontSize": 12,
+                          "fontWeight": "500"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "line",
+              "id": "spDiv1",
+              "name": "divider1",
+              "width": "fill_container",
+              "height": 1,
+              "stroke": {
+                "align": "center",
+                "thickness": 1,
+                "fill": "#e2e8f0"
+              }
+            },
+            {
+              "type": "frame",
+              "id": "spSplitOptionsSec",
+              "name": "splitOptionsSection",
+              "width": "fill_container",
+              "layout": "vertical",
+              "gap": 12,
+              "children": [
+                {
+                  "type": "text",
+                  "id": "spSplitOptionsTitle",
+                  "name": "splitOptionsTitle",
+                  "fill": "#0f172a",
+                  "content": "分割选项",
+                  "fontFamily": "Noto Sans SC",
+                  "fontSize": 14,
+                  "fontWeight": "600"
+                },
+                {
+                  "type": "frame",
+                  "id": "spSplitTypeRow",
+                  "name": "splitTypeRow",
+                  "width": "fill_container",
+                  "layout": "vertical",
+                  "gap": 6,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "spSplitTypeLabel",
+                      "name": "splitTypeLabel",
+                      "fill": "#64748b",
+                      "content": "分割方式",
+                      "fontFamily": "Noto Sans SC",
+                      "fontSize": 12,
+                      "fontWeight": "500"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "spSplitTypeSelect",
+                      "name": "splitTypeSelect",
+                      "width": "fill_container",
+                      "cornerRadius": 6,
+                      "stroke": {
+                        "align": "inside",
+                        "thickness": 1,
+                        "fill": "#e2e8f0"
+                      },
+                      "padding": [
+                        8,
+                        12
+                      ],
+                      "justifyContent": "space_between",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "spSplitTypeVal",
+                          "name": "splitTypeVal",
+                          "fill": "#0f172a",
+                          "content": "在选中元素处分割",
+                          "fontFamily": "Noto Sans SC",
+                          "fontSize": 13,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "icon_font",
+                          "id": "spSplitTypeChevron",
+                          "name": "chevron",
+                          "width": 14,
+                          "height": 14,
+                          "iconFontName": "chevron-down",
+                          "iconFontFamily": "lucide",
+                          "fill": "#94a3b8"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "spSplitPosRow",
+                  "name": "splitPosRow",
+                  "width": "fill_container",
+                  "layout": "vertical",
+                  "gap": 6,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "spSplitPosLabel",
+                      "name": "splitPosLabel",
+                      "fill": "#64748b",
+                      "content": "分割位置",
+                      "fontFamily": "Noto Sans SC",
+                      "fontSize": 12,
+                      "fontWeight": "500"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "spSplitPosInput",
+                      "name": "splitPosInput",
+                      "width": "fill_container",
+                      "cornerRadius": 6,
+                      "stroke": {
+                        "align": "inside",
+                        "thickness": 1,
+                        "fill": "#e2e8f0"
+                      },
+                      "padding": [
+                        8,
+                        12
+                      ],
+                      "justifyContent": "space_between",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "spSplitPosVal",
+                          "name": "splitPosVal",
+                          "fill": "#0f172a",
+                          "content": "1200",
+                          "fontFamily": "Fira Code",
+                          "fontSize": 13,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "spSplitPosSuffix",
+                          "name": "splitPosSuffix",
+                          "fill": "#64748b",
+                          "content": "mm",
+                          "fontFamily": "Fira Code",
+                          "fontSize": 13,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "spInsertAssyToggle",
+                  "name": "insertAssyToggle",
+                  "gap": 8,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "spInsertAssyCb",
+                      "name": "insertAssyCb",
+                      "width": 16,
+                      "height": 16,
+                      "fill": "#00000000",
+                      "cornerRadius": 4,
+                      "stroke": {
+                        "align": "inside",
+                        "thickness": 1.5,
+                        "fill": "#cbd5e1"
+                      }
+                    },
+                    {
+                      "type": "text",
+                      "id": "spInsertAssyText",
+                      "name": "insertAssyText",
+                      "fill": "#64748b",
+                      "content": "在分割点插入装配体",
+                      "fontFamily": "Noto Sans SC",
+                      "fontSize": 12,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "line",
+              "id": "spDiv2",
+              "name": "divider2",
+              "width": "fill_container",
+              "height": 1,
+              "stroke": {
+                "align": "center",
+                "thickness": 1,
+                "fill": "#e2e8f0"
+              }
+            },
+            {
+              "type": "frame",
+              "id": "spMeasureSec",
+              "name": "measureSection",
+              "width": "fill_container",
+              "layout": "vertical",
+              "gap": 10,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "spMeasureHeader",
+                  "name": "measureHeader",
+                  "width": "fill_container",
+                  "justifyContent": "space_between",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "spMeasureTitle",
+                      "name": "measureTitle",
+                      "fill": "#0f172a",
+                      "content": "测量信息",
+                      "fontFamily": "Noto Sans SC",
+                      "fontSize": 13,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "spMeasureBtn",
+                      "name": "measureBtn",
+                      "fill": "#00000000",
+                      "cornerRadius": 4,
+                      "stroke": {
+                        "align": "inside",
+                        "thickness": 1,
+                        "fill": "#e2e8f0"
+                      },
+                      "gap": 4,
+                      "padding": [
+                        4,
+                        8
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon_font",
+                          "id": "spMeasureIcon",
+                          "name": "measureIcon",
+                          "width": 12,
+                          "height": 12,
+                          "iconFontName": "ruler",
+                          "iconFontFamily": "lucide",
+                          "fill": "#64748b"
+                        },
+                        {
+                          "type": "text",
+                          "id": "spMeasureText",
+                          "name": "measureText",
+                          "fill": "#334155",
+                          "content": "测量",
+                          "fontFamily": "Noto Sans SC",
+                          "fontSize": 11,
+                          "fontWeight": "500"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "spMeasureResult",
+                  "name": "measureResult",
+                  "width": "fill_container",
+                  "fill": "#f8fafc",
+                  "cornerRadius": 6,
+                  "padding": [
+                    10,
+                    12
+                  ],
+                  "gap": 16,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "spMeasureDistGroup",
+                      "name": "measureDistGroup",
+                      "layout": "vertical",
+                      "gap": 2,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "spMeasureDistLabel",
+                          "name": "measureDistLabel",
+                          "fill": "#94a3b8",
+                          "content": "距离",
+                          "fontFamily": "Noto Sans SC",
+                          "fontSize": 10,
+                          "fontWeight": "500"
+                        },
+                        {
+                          "type": "text",
+                          "id": "spMeasureDistVal",
+                          "name": "measureDistVal",
+                          "fill": "#2563eb",
+                          "content": "2400 mm",
+                          "fontFamily": "Fira Code",
+                          "fontSize": 13,
+                          "fontWeight": "600"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "spMeasureCompGroup",
+                      "name": "measureCompGroup",
+                      "layout": "vertical",
+                      "gap": 2,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "spMeasureCompLabel",
+                          "name": "measureCompLabel",
+                          "fill": "#94a3b8",
+                          "content": "管件数量",
+                          "fontFamily": "Noto Sans SC",
+                          "fontSize": 10,
+                          "fontWeight": "500"
+                        },
+                        {
+                          "type": "text",
+                          "id": "spMeasureCompVal",
+                          "name": "measureCompVal",
+                          "fill": "#0f172a",
+                          "content": "5",
+                          "fontFamily": "Fira Code",
+                          "fontSize": 13,
+                          "fontWeight": "600"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "spApplyBtn",
+              "name": "applyBtn",
+              "width": "fill_container",
+              "fill": "#0f172a",
+              "cornerRadius": 6,
+              "gap": 8,
+              "padding": [
+                10,
+                16
+              ],
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "icon_font",
+                  "id": "spApplyIcon",
+                  "name": "applyIcon",
+                  "width": 14,
+                  "height": 14,
+                  "iconFontName": "scissors",
+                  "iconFontFamily": "lucide",
+                  "fill": "#ffffff"
+                },
+                {
+                  "type": "text",
+                  "id": "spApplyText",
+                  "name": "applyText",
+                  "fill": "#ffffff",
+                  "content": "执行分割",
+                  "fontFamily": "Noto Sans SC",
+                  "fontSize": 14,
+                  "fontWeight": "500"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
