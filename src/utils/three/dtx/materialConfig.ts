@@ -42,6 +42,11 @@ export type ModelDisplayConfig = {
    * spec_value: 0=未分类（不覆盖） 1=PIPE 2=ELEC 3=INST 4=HVAC 5=CIVIL 6=STRU
    */
   disciplineOverrides?: Record<string, string>
+  /**
+   * 无效直管的告警材质（gen-model `is_invalid_tubi`：长度 ≤ 0 / 两端重合等，plant-ui 画虚线，这里先画告警色实体，
+   * plan 2026-09-06 Q2）。缺省琥珀色；不受主题 / 专业 / 类型基色影响，只让 instanceConfigs 的显式覆盖压过。
+   */
+  invalidTubiMaterial?: MaterialConfigEntry
   themes?: Record<string, ThemeConfig>
 }
 
@@ -428,6 +433,26 @@ function resolveEntryMaterial(config: ModelDisplayConfig, entry: MaterialConfigE
   };
 }
 
+/** 无效直管告警材质的缺省：琥珀色实体（Tailwind amber-500），与任何主题的管路色都拉得开 */
+export const DEFAULT_INVALID_TUBI_MATERIAL: MaterialConfigEntry = {
+  name: '无效直管（告警）',
+  color: '#f59e0b',
+  metalness: 0.1,
+  roughness: 0.5,
+  opacity: 1,
+};
+
+/**
+ * 无效直管的材质：`instanceConfigs[refno]` 显式覆盖仍最高（人指定了颜色就听人的），否则 `invalidTubiMaterial`
+ * 合并缺省告警材质——不看主题、专业、类型基色（告警就是要跳出来）。
+ */
+export function resolveInvalidTubiMaterial(config: ModelDisplayConfig, refno?: string): ResolvedMaterial {
+  const refnoKey = refno ? normalizeRefnoKey(refno) : '';
+  const instConfig = refnoKey ? config.instanceConfigs?.[refnoKey] : undefined;
+  if (instConfig) return resolveEntryMaterial(config, instConfig);
+  return resolveEntryMaterial(config, { ...DEFAULT_INVALID_TUBI_MATERIAL, ...(config.invalidTubiMaterial ?? {}) });
+}
+
 export function resolveThemeOwnerOverride(
   config: ModelDisplayConfig,
   theme: DisplayTheme,
@@ -577,6 +602,17 @@ export function buildExportConfig(config: ModelDisplayConfig): ModelDisplayConfi
     materialConfigs: exportedMaterialConfigs,
     ...(config.disciplineOverrides && Object.keys(config.disciplineOverrides).length > 0
       ? { disciplineOverrides: { ...config.disciplineOverrides } }
+      : {}),
+    // 无效直管告警材质是文件级配置（没有本地编辑入口），导出时原样带上，否则一轮「导出 → 覆盖文件」就把它丢了
+    ...(config.invalidTubiMaterial
+      ? {
+        invalidTubiMaterial: {
+          ...config.invalidTubiMaterial,
+          ...(config.invalidTubiMaterial.color !== undefined
+            ? { color: normalizeColorString(config.invalidTubiMaterial.color, DEFAULT_INVALID_TUBI_MATERIAL.color as string) }
+            : {}),
+        },
+      }
       : {}),
     ...(Object.keys(exportedThemes).length > 0 ? { themes: exportedThemes } : {}),
   };

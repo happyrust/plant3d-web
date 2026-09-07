@@ -1,7 +1,7 @@
 # plant3d-web 接入 gen-model `/api/v1`：模型树与三维模型加载重构方案
 
 - 日期：2026-09-06
-- 状态：**已拍板**（2026-09-06，D1–D7 全按推荐项）。进度：P0 已落地（gen-model 提交 `1eefbd577`，2026-09-07 对 `:18082` 运行实例 live 验证通过，见 §8.1）；P1 已落地（本仓，见 §8.2）；P2 已落地（见 §8.3；P2-4 徽标后补于 §8.11）；P3 已落地（见 §8.4，D6 对拍 ≤ 0.002 mm；P3-c 进度弹窗与 `show_dbnum` 整库入口后补于 §8.9）；P4 已落地（见 §8.5）；P5 已落地（见 §8.6，WS 已连、drain 对齐走 REST——服务端今天不发 `model_drain` 事件）；P6 文档与脚本已落地（见 §8.7）；P7 浏览器实跑通过 + 一次显示一次 ensure（见 §8.8）；P3-c 进度弹窗 + `show_dbnum` 整库入口已落地并在浏览器里实跑（见 §8.9），**默认开关未翻**（等 `:3100` 起来做两源对拍）
+- 状态：**已拍板**（2026-09-06，D1–D7 全按推荐项）。进度：P0 已落地（gen-model 提交 `1eefbd577`，2026-09-07 对 `:18082` 运行实例 live 验证通过，见 §8.1）；P1 已落地（本仓，见 §8.2）；P2 已落地（见 §8.3；P2-4 徽标后补于 §8.11）；P3 已落地（见 §8.4，D6 对拍 ≤ 0.002 mm；P3-c 进度弹窗与 `show_dbnum` 整库入口后补于 §8.9）；P4 已落地（见 §8.5）；P5 已落地（见 §8.6，WS 已连、drain 对齐走 REST——服务端今天不发 `model_drain` 事件）；P6 文档与脚本已落地（见 §8.7）；P7 浏览器实跑通过 + 一次显示一次 ensure（见 §8.8）；P3-c 进度弹窗 + `show_dbnum` 整库入口已落地并在浏览器里实跑（见 §8.9）；Q2 `is_invalid_tubi` 告警色已落地（见 §8.12），**默认开关未翻**（等 `:3100` 起来做两源对拍）
 - 范围：`D:\work\plant-code\old\plant3d-web`（前端，主战场）+ `D:\work\plant-code\old\gen-model`（后端，只做最小增补）
 - 术语以两仓 `CONTEXT.md` 为准：plant3d-web 的「显式显示操作 / 按需模型生成 / 模型资产补齐 / 模型加载」，gen-model 的「生成根 / 最小交付单元 / 模型面 / 库一致性判决」。
 
@@ -303,7 +303,7 @@ curl -I  http://localhost:8022/api/v1/meshes/1.glb
 | R5 | 旧后端与 gen-model 同时被同一页面用（尺寸、MBD 走 :3100，树/模型走 :8022） | 这是过渡期形态，明确写进联调指南；两套 base URL 变量名不重叠 |
 | R6 | plant3d-web 无 git，重构途中无回退点 | D7：先 `git init` |
 | Q1 | 树里要不要显示 ISOD 库（`membership.element_databases()` 含 ISOD）？ | 待定；默认显示，可加过滤 |
-| Q2 | `is_invalid_tubi` 的实例怎么画？plant-ui 用专用 WGSL 画虚线 | 先用告警色实体，后续再议 |
+| Q2 | `is_invalid_tubi` 的实例怎么画？plant-ui 用专用 WGSL 画虚线 | 先用告警色实体，后续再议——**已落地**（§8.12：琥珀色实体，`invalidTubiMaterial` 可调） |
 | Q3 | 版本对比 / `model/history/*` 何时迁 | 另立计划 |
 
 ### 8.1 P0 落地记录与 P0-5 单位几何对表结论（2026-09-07）
@@ -437,9 +437,19 @@ curl -I  http://localhost:8022/api/v1/meshes/1.glb
 - `ModelTreeRow.vue`：眼睛按钮之前一枚小徽标 `data-testid="model-tree-dbnum-badge"`（`row.dbnum !== undefined && !ghost` 才渲染，悬停「所属库 dbnum 7997」）。
 - 验证：`ModelTreeRow.dbnum.test.ts` 2 条（v1 行画、legacy 行与幽灵不画、位置在眼睛之前）；浏览器（`:18082`）v1 树 40 行 39 枚徽标（虚拟根没有），SITE `9304_2 → 1112`、其余 SITE / ZONE `→ 7997`；缺省 legacy 页面 DOM 里徽标 **0**。截图 `%TEMP%\gm-v1-badge-tree.png`。
 
+### 8.12 Q2 `is_invalid_tubi` 告警色（2026-09-08）
+
+- 口径（Q2「先用告警色实体」）：服务端判定的无效直管（长度 ≤ 0 / 两端重合等，`GeomInstQuery.insts[].is_invalid_tubi`，P3-b 已透进 `uniforms.is_invalid_tubi`）画成**琥珀色实体**（Tailwind amber-500 `#f59e0b`），不跟主题 / 专业 / 类型基色走——告警就是要跳出来；plant-ui 的 WGSL 虚线不搬。
+- `materialConfig.ts`：`ModelDisplayConfig.invalidTubiMaterial?: MaterialConfigEntry`（文件级显示配置里可改颜色 / 透明度）、`DEFAULT_INVALID_TUBI_MATERIAL`、`resolveInvalidTubiMaterial(config, refno?)`——`instanceConfigs[refno]` 的显式覆盖仍最高（人指定了颜色就听人的），否则缺省告警材质与 `invalidTubiMaterial` 合并；`buildExportConfig` 把 `invalidTubiMaterial` 一并导出（它是逐字段拼的，不带就会在「导出 → 覆盖 `model-display.config.json`」这一轮丢掉；`mergeConfigs` 用展开、不受影响）。
+- `useDbnoInstancesDtxLoader.ts`：装入时 `uniforms.is_invalid_tubi === true` 走 `resolveInvalidTubiMaterial`（`hiddenNouns` / `hiddenRefnos` 与 owner 映射、objectId 规则不变），对象 id 记进 `DbnoRuntimeCache.invalidTubiObjectIds`；`applyMaterialConfigToLoadedDtx`（换主题 / 改配置重刷）对这些对象继续用告警材质；`replaceExistingObjects` 的快照 / 回滚把这张集合一起带上；返回值新增 `invalidTubiObjects`（legacy 源的记录没有这个字段 → 永远 0）。
+- `useModelGeneration.ts`：v1 分批装入把 `invalidTubi` 计进总数，`[model-load]` 两条日志加 `invalid_tubi=N`，单根显示 N>0 时另记一条 warning「有 N 段无效直管（is_invalid_tubi），已画成告警色」。
+- **验证**（2026-09-08 01:32）：`npm run type-check` 通过；触及 5 个文件 ESLint 0；新增单测 5 条全绿——`materialConfig.test.ts` +2（缺省琥珀 / 不看主题 / `invalidTubiMaterial` 可改 / `instanceConfigs` 最高；`buildExportConfig` 带上并归一颜色、没配不出现）、`useDbnoInstancesDtxLoader.invalidTubi.test.ts` 3（装入告警色 + 同批普通直管照主题 + `invalidTubiObjects` 计数；legacy 形状永远 0；重刷保住告警色且 `invalidTubiMaterial` 生效）。
+- **复核与收口**（2026-09-08 02:55，接班会话）：`vitest` 全量 **1970 / 1945 passed / 25 failed（13 个文件）**，失败文件集合相对 P2-4 那次（`vitest-after-p24.json`）**没有新增**（少了 5 个——`useReviewStore.*` / `useAnnotationStyleStore`，是别的会话修的）。`useDbnoInstancesDtxLoader.test.ts` 在工作树里只有行尾差异（编辑器把混合行尾统一成 CRLF，`git diff -w` 为空），已 `git checkout` 还原、不进本次提交。**`npm run type-check` 是空转**：脚本是 `vue-tsc --noEmit`，而根 `tsconfig.json` 是 `files: []` + `references`，这样调 vue-tsc 一个文件都不查（注入 `const x: number = "s"` 也回 exit 0）——此前各阶段的「type-check 通过」都是这个空转。真查要 `npx vue-tsc --build --force`：全仓 **642 条既有错误**（`ViewerPanel.vue` 33、`useSpatialQuery.test.ts` 23…），落在本轮 5 个触及文件里的 6 条（`materialConfig.ts:375`、`useDbnoInstancesDtxLoader.ts:351`、`useModelGeneration.ts:1324/1508`、`useDbnoInstancesDtxLoader.test.ts:243/530`）**在 HEAD 里逐条同文（只是行号平移）**，本轮新增 0。脚本要不要改成 `--build`、642 条怎么消，另立一件事。**未验证**：浏览器里的实际颜色——本轮 `:18082` / `:8022` 都没有 gen-model 在听，也没查到样本里有没有 `is_invalid_tubi=true` 的记录；要一条真的无效直管才能肉眼对一次（`scripts/verify-gen-model-v1.ps1 -Ensure` 的 records 输出里数 `is_invalid_tubi`）。
+- 过程记一笔：本轮开工时同一工作树里还有上一段会话（fable-5-1-78）在收尾同一件事（01:22 新建独立测试文件、01:25 写 §8.12 与指南，01:27 又全部撤回），两边只差几分钟——共用一棵工作树时先看 `git status` 与 mtime 再动手。
+
 ## 9. 交付物清单
 
 - gen-model：P0-1/2/3（+可选 P0-4），`docs/specs/web-service-api.md` 同步，`changelog.md` 一条；——**已交**（`1eefbd577`；P0-4 未做）
 - plant3d-web：`src/api/genModelV1Api.ts`、`src/model-source/**`、`usePdmsOwnerTree.ts` / `useDbnoInstancesDtxLoader.ts` / `useDbMetaInfo.ts` / `ViewerPanel.vue` 的取数点改动、`vite.config.ts` / `.env.*`、`scripts/verify-gen-model-v1.ps1`、ADR 0054、联调指南；——**已交**（`3f1c2e2` → `65cb31a` → `be0da07` → `a920c82` → `b7dafa2` → P6 提交；另加 `src/api/genModelV1Ws.ts`、`useGenModelV1Health.ts`、`useGenModelV1ModelSync.ts`、`GenModelV1HealthBadge.vue`、`useModelGeneration.ts` / `useSelectionStore.ts` / `PropertiesPanel.vue` 的取数点）
 - 本计划按批注修订后作为 `docs/plans/` 的执行基线。——§8 是逐阶段的落地与验证记录。
-- **仍欠**：默认开关翻到 `gen-model-v1`（等 `:3100` 起来做两源对拍；单源浏览器实跑已过，见 §8.8 / §8.9）、`is_invalid_tubi` 告警色；gen-model 侧三条建议（`model_drain` WS 事件、`tree/*` 的 Ref0-不在-MDB 分型、按库 / 多根批量 `records`）。
+- **仍欠**：默认开关翻到 `gen-model-v1`（等 `:3100` 起来做两源对拍；单源浏览器实跑已过，见 §8.8 / §8.9）；`is_invalid_tubi` 告警色的浏览器肉眼核对（§8.12，要一条真的无效直管）；gen-model 侧三条建议（`model_drain` WS 事件、`tree/*` 的 Ref0-不在-MDB 分型、按库 / 多根批量 `records`）。

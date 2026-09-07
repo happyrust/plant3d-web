@@ -3,7 +3,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   buildExportConfig,
   clearModelDisplayConfigCache,
+  DEFAULT_INVALID_TUBI_MATERIAL,
   loadModelDisplayConfig,
+  resolveInvalidTubiMaterial,
   resolveMaterialWithTheme,
   saveLocalMaterialConfig,
   type ModelDisplayConfig,
@@ -237,5 +239,28 @@ describe('materialConfig', () => {
     const loaded = await loadModelDisplayConfig({ force: true });
 
     expect(loaded.themes?.design3d?.ownerSpecOverrides?.BRAN?.HVAC?.color).toBe('#a7c84a');
+  });
+
+  it('无效直管告警材质：缺省琥珀色、不看主题；invalidTubiMaterial 可改；instanceConfigs 的显式覆盖仍最高', () => {
+    const fallback = resolveInvalidTubiMaterial(config, '24381_145018');
+    expect(fallback.color.getHexString()).toBe('f59e0b');
+    expect(DEFAULT_INVALID_TUBI_MATERIAL.color).toBe('#f59e0b');
+    expect(fallback).toMatchObject({ metalness: 0.1, roughness: 0.5, opacity: 1, hidden: false });
+    // 同一段直管按主题解出来是别的颜色——告警材质不跟它走
+    expect(resolveMaterialWithTheme(config, '24381_145018', 'TUBI', 'BRAN', 'default').color.getHexString()).not.toBe('f59e0b');
+
+    const tuned = resolveInvalidTubiMaterial({ ...config, invalidTubiMaterial: { color: '#ff0000', opacity: 0.6 } });
+    expect(tuned.color.getHexString()).toBe('ff0000');
+    expect(tuned.opacity).toBe(0.6);
+
+    const pinned = resolveInvalidTubiMaterial({ ...config, instanceConfigs: { '24381_145018': { color: '#00ff00' } } }, '24381/145018');
+    expect(pinned.color.getHexString()).toBe('00ff00');
+  });
+
+  it('buildExportConfig 带上 invalidTubiMaterial（颜色归一成 #rrggbb），没配就不出现这一格', () => {
+    expect(buildExportConfig(config)).not.toHaveProperty('invalidTubiMaterial');
+
+    const exported = buildExportConfig({ ...config, invalidTubiMaterial: { color: 0xff0000, opacity: 0.6 } });
+    expect(exported.invalidTubiMaterial).toEqual({ color: '#ff0000', opacity: 0.6 });
   });
 });

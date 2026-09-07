@@ -289,6 +289,8 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
     loadedRefnos: number
     skippedRefnos: number
     loadedObjects: number
+    /** 画成告警色的无效直管（gen-model `is_invalid_tubi`） */
+    invalidTubi: number
     mesh404: number
     noGeo: number
   }
@@ -307,7 +309,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
     progressRange: [number, number],
     label: string,
   ): Promise<GenModelV1LoadTotals> {
-    const totals: GenModelV1LoadTotals = { loadedRefnos: 0, skippedRefnos: 0, loadedObjects: 0, mesh404: 0, noGeo: 0 };
+    const totals: GenModelV1LoadTotals = { loadedRefnos: 0, skippedRefnos: 0, loadedObjects: 0, invalidTubi: 0, mesh404: 0, noGeo: 0 };
     const batchSize = mode.replace ? Math.max(1, refnos.length) : VISIBLE_REFNOS_PAGE_SIZE;
     const batches = Math.max(1, Math.ceil(refnos.length / batchSize));
     for (let index = 0; index < batches; index++) {
@@ -333,6 +335,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
       totals.loadedRefnos += result.loadedRefnos;
       totals.skippedRefnos += result.skippedRefnos;
       totals.loadedObjects += result.loadedObjects;
+      totals.invalidTubi += result.invalidTubiObjects ?? 0;
       totals.mesh404 += result.missingBreakdown.mesh404Refnos.length;
       totals.noGeo += result.missingBreakdown.noGeoRowsRefnos.length;
       if (index + 1 < batches) await sleep(0);
@@ -847,8 +850,11 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         const noGeo = v1Result.noGeo;
         consoleStore.addLog(
           'info',
-          `[model-load] gen-model-v1 root=${normalizedRoot} dbno=${dbno} loaded_refnos=${v1Result.loadedRefnos} skipped=${v1Result.skippedRefnos} objects=${v1Result.loadedObjects} mesh404=${mesh404} no_geo=${noGeo} ms=${Date.now() - startedAt}`
+          `[model-load] gen-model-v1 root=${normalizedRoot} dbno=${dbno} loaded_refnos=${v1Result.loadedRefnos} skipped=${v1Result.skippedRefnos} objects=${v1Result.loadedObjects} invalid_tubi=${v1Result.invalidTubi} mesh404=${mesh404} no_geo=${noGeo} ms=${Date.now() - startedAt}`
         );
+        if (v1Result.invalidTubi > 0) {
+          consoleStore.addLog('warning', `[model-load] refno=${normalizedRoot} 有 ${v1Result.invalidTubi} 段无效直管（is_invalid_tubi），已画成告警色`);
+        }
         progress.value = 100;
         if (v1Result.loadedObjects > 0) {
           loadedRoots.add(normalizedRoot);
@@ -1296,7 +1302,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
     syncGlobalLoadStatus();
     consoleStore.addLog(
       'info',
-      `[model-load] gen-model-v1 dbnum=${dbno} sites=${collected.sites.length} roots=${collected.generationRoots.length} refno_count=${collected.refnos.length} loaded_refnos=${totals.loadedRefnos} skipped_refnos=${totals.skippedRefnos} instance_count=${totals.loadedObjects} mesh404=${totals.mesh404} no_geo=${totals.noGeo} pending=${collected.pending.length} truncated_roots=${collected.truncatedRoots.length} skipped_sites=${collected.skippedSites.length} errors=${failedRoots.length} ms=${Date.now() - startedAt}`
+      `[model-load] gen-model-v1 dbnum=${dbno} sites=${collected.sites.length} roots=${collected.generationRoots.length} refno_count=${collected.refnos.length} loaded_refnos=${totals.loadedRefnos} skipped_refnos=${totals.skippedRefnos} instance_count=${totals.loadedObjects} invalid_tubi=${totals.invalidTubi} mesh404=${totals.mesh404} no_geo=${totals.noGeo} pending=${collected.pending.length} truncated_roots=${collected.truncatedRoots.length} skipped_sites=${collected.skippedSites.length} errors=${failedRoots.length} ms=${Date.now() - startedAt}`
     );
     const summary =
       `${collected.budgetLimited ? '安全概览 ' : ''}dbnum=${dbno}：${collected.sites.length} 个 SITE / ${collected.generationRoots.length} 个生成根，` +

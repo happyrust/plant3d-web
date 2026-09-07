@@ -60,6 +60,8 @@ http://127.0.0.1:3101/?model_source=gen-model-v1&gm_backend_port=8022&show_refno
 
 期望：树顶部徽标显示「已连接 gen-model :8022 · AvevaMarineSample /ALL · 模型门 开 · 库 同步 n · 滞后 n · 未判 n」，右侧小点绿色（WS 已连）；树根是 `AvevaMarineSample / ALL`，展开是全部 SITE，行数据带 `dbnum`；BRAN `24381_145018` 的 11 个构件 + 直管出现在视口；点构件，属性面板底部有一行「e3d-io 直读：N 个属性未解码 …」。
 
+视口里**琥珀色（`#f59e0b`）的直管**不是主题色：那是服务端判定的无效直管（`model/records` 的 `insts[].is_invalid_tubi`，长度 ≤ 0 / 两端重合等），画成告警色实体、不跟主题走；控制台同时有一条「有 N 段无效直管（is_invalid_tubi），已画成告警色」，`[model-load]` 日志里也有 `invalid_tubi=N`。颜色可在 `public/config/model-display.config.json` 的 `invalidTubiMaterial` 里改，`instanceConfigs[refno]` 的显式覆盖仍最高。
+
 ## 4. 先用脚本证接口，再开浏览器
 
 ```powershell

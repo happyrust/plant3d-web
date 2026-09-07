@@ -16,6 +16,7 @@ import {
   loadModelDisplayConfig,
   normalizeNounKey,
   normalizeRefnoKey,
+  resolveInvalidTubiMaterial,
   resolveMaterialWithTheme,
   type ModelDisplayConfig,
 } from '@/utils/three/dtx/materialConfig';
@@ -85,6 +86,8 @@ type DbnoRuntimeCache = {
   refnoToOwnerNoun: Map<string, string>
   refnoToOwnerRefno: Map<string, string>
   refnoToSpecValue: Map<string, number | null>
+  /** 画成告警色的无效直管对象（gen-model `is_invalid_tubi`）；重刷材质时保住告警色 */
+  invalidTubiObjectIds: Set<string>
 }
 
 const cachesByDbno = new Map<number, DbnoRuntimeCache>();
@@ -107,6 +110,7 @@ function createRuntimeCache(): DbnoRuntimeCache {
     refnoToOwnerNoun: new Map(),
     refnoToOwnerRefno: new Map(),
     refnoToSpecValue: new Map(),
+    invalidTubiObjectIds: new Set(),
   };
 }
 
@@ -116,6 +120,7 @@ function getCache(dbno: number): DbnoRuntimeCache {
     if (!existing.objectIdToSpecValue) existing.objectIdToSpecValue = new Map();
     if (!existing.geometryByGeoHash) existing.geometryByGeoHash = new Map();
     if (!existing.failedGeoHash) existing.failedGeoHash = new Set();
+    if (!existing.invalidTubiObjectIds) existing.invalidTubiObjectIds = new Set();
     return existing;
   }
   const created = createRuntimeCache();
@@ -530,7 +535,10 @@ export function applyMaterialConfigToLoadedDtx(
 
     for (const objectId of objectIds) {
       const objectSpecValue = cache.objectIdToSpecValue.get(objectId) ?? cache.refnoToSpecValue.get(refno) ?? null;
-      const resolved = resolveMaterialWithTheme(config, refnoKey, noun, ownerNoun, theme, objectSpecValue);
+      // 无效直管保持告警色，不跟主题 / 专业色走
+      const resolved = cache.invalidTubiObjectIds?.has(objectId)
+        ? resolveInvalidTubiMaterial(config, refnoKey)
+        : resolveMaterialWithTheme(config, refnoKey, noun, ownerNoun, theme, objectSpecValue);
       if (isHidden || resolved.hidden) {
         dtxLayer.setObjectVisible(objectId, false);
         continue;
@@ -666,6 +674,8 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
   loadedRefnos: number
   skippedRefnos: number
   loadedObjects: number
+  /** 这次画成告警色的无效直管对象数（gen-model `is_invalid_tubi`；legacy 源永远 0） */
+  invalidTubiObjects?: number
   missingRefnos: string[]
   missingBreakdown: DtxMissingBreakdown
   sceneBoundingBox: Box3
@@ -777,6 +787,7 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
   }
 
   let loadedObjects = 0;
+  let invalidTubiObjects = 0;
   const missingRefnos: string[] = [];
   const noGeoRowsRefnos = new Set<string>();
   const mesh404Refnos = new Set<string>();
@@ -852,6 +863,7 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
       refnoToOwnerRefno: new Map(cache.refnoToOwnerRefno),
       refnoToSpecValue: new Map(cache.refnoToSpecValue),
       loadedRefnos: new Set(cache.loadedRefnos),
+      invalidTubiObjectIds: new Set(cache.invalidTubiObjectIds),
     }
     : null;
   if (replaceExistingObjects) {
@@ -936,7 +948,11 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
           }
           return raw;
         })();
-        const resolved = resolveMaterialWithTheme(displayConfig, refnoKey, noun, instOwnerNoun, currentLoadTheme, specValue);
+        // 无效直管（gen-model is_invalid_tubi）画告警色实体，其余照主题走；隐藏规则两边一样
+        const invalidTubi = (inst as any).uniforms?.is_invalid_tubi === true;
+        const resolved = invalidTubi
+          ? resolveInvalidTubiMaterial(displayConfig, refnoKey)
+          : resolveMaterialWithTheme(displayConfig, refnoKey, noun, instOwnerNoun, currentLoadTheme, specValue);
         if (resolved.hidden) {
           continue;
         }
@@ -979,6 +995,10 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
         objectIdsByMappedRefno.set(mappedRefnoKey, mappedObjectIds);
         cache.objectIdToRefno.set(objectId, mappedRefnoKey);
         cache.objectIdToSpecValue.set(objectId, specValue);
+        if (invalidTubi) {
+          cache.invalidTubiObjectIds.add(objectId);
+          invalidTubiObjects++;
+        }
         loadedObjects++;
 
         const refnoTransform = (inst as any).refno_transform;
@@ -1058,6 +1078,7 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
       cache.refnoToOwnerRefno = replacementSnapshot.refnoToOwnerRefno;
       cache.refnoToSpecValue = replacementSnapshot.refnoToSpecValue;
       cache.loadedRefnos = replacementSnapshot.loadedRefnos;
+      cache.invalidTubiObjectIds = replacementSnapshot.invalidTubiObjectIds;
       try {
         dtxLayer.recompile();
       } catch {
@@ -1071,6 +1092,7 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
     loadedRefnos: toLoad.length,
     skippedRefnos: refnos.length - toLoad.length,
     loadedObjects,
+    invalidTubiObjects,
     missingRefnos,
     missingBreakdown: {
       noGeoRowsRefnos: Array.from(noGeoRowsRefnos),
