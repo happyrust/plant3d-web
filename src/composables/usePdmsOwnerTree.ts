@@ -51,13 +51,16 @@ function shouldRetryWithWrappedId(errorMessage: string | null | undefined): bool
 }
 
 function dtoToTreeNode(dto: TreeNodeDto, parentId: string | null): TreeNode {
-  return {
+  const node: TreeNode = {
     id: normalizeRefnoKey(dto.refno),
     name: dto.name,
     type: dto.noun,
     parentId,
     childrenIds: [],
   };
+  // 只有 gen-model-v1 的 DTO 带 dbnum；legacy 的节点对象与从前逐字段相同
+  if (typeof dto.dbnum === 'number' && Number.isFinite(dto.dbnum)) node.dbnum = dto.dbnum;
+  return node;
 }
 
 export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
@@ -228,13 +231,15 @@ export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
 
       if (filterActive && !subtreeMatches(id)) return;
 
-      out.push({
+      const row: FlatRow = {
         id: node.id,
         name: node.name,
         type: node.type,
         depth,
         hasChildren: hasChildren(id, node),
-      });
+      };
+      if (node.dbnum !== undefined) row.dbnum = node.dbnum;
+      out.push(row);
 
       const shouldExpand = filterActive || expandedIds.value.has(id);
       if (!shouldExpand) return;

@@ -1,7 +1,7 @@
 # plant3d-web 接入 gen-model `/api/v1`：模型树与三维模型加载重构方案
 
 - 日期：2026-09-06
-- 状态：**已拍板**（2026-09-06，D1–D7 全按推荐项）。进度：P0 已落地（gen-model 提交 `1eefbd577`，2026-09-07 对 `:18082` 运行实例 live 验证通过，见 §8.1）；P1 已落地（本仓，见 §8.2）；P2 已落地（见 §8.3，P2-4 徽标未做）；P3 已落地（见 §8.4，D6 对拍 ≤ 0.002 mm；P3-c 进度弹窗与 `show_dbnum` 整库入口后补于 §8.9）；P4 已落地（见 §8.5）；P5 已落地（见 §8.6，WS 已连、drain 对齐走 REST——服务端今天不发 `model_drain` 事件）；P6 文档与脚本已落地（见 §8.7）；P7 浏览器实跑通过 + 一次显示一次 ensure（见 §8.8）；P3-c 进度弹窗 + `show_dbnum` 整库入口已落地并在浏览器里实跑（见 §8.9），**默认开关未翻**（等 `:3100` 起来做两源对拍）
+- 状态：**已拍板**（2026-09-06，D1–D7 全按推荐项）。进度：P0 已落地（gen-model 提交 `1eefbd577`，2026-09-07 对 `:18082` 运行实例 live 验证通过，见 §8.1）；P1 已落地（本仓，见 §8.2）；P2 已落地（见 §8.3；P2-4 徽标后补于 §8.11）；P3 已落地（见 §8.4，D6 对拍 ≤ 0.002 mm；P3-c 进度弹窗与 `show_dbnum` 整库入口后补于 §8.9）；P4 已落地（见 §8.5）；P5 已落地（见 §8.6，WS 已连、drain 对齐走 REST——服务端今天不发 `model_drain` 事件）；P6 文档与脚本已落地（见 §8.7）；P7 浏览器实跑通过 + 一次显示一次 ensure（见 §8.8）；P3-c 进度弹窗 + `show_dbnum` 整库入口已落地并在浏览器里实跑（见 §8.9），**默认开关未翻**（等 `:3100` 起来做两源对拍）
 - 范围：`D:\work\plant-code\old\plant3d-web`（前端，主战场）+ `D:\work\plant-code\old\gen-model`（后端，只做最小增补）
 - 术语以两仓 `CONTEXT.md` 为准：plant3d-web 的「显式显示操作 / 按需模型生成 / 模型资产补齐 / 模型加载」，gen-model 的「生成根 / 最小交付单元 / 模型面 / 库一致性判决」。
 
@@ -431,9 +431,15 @@ curl -I  http://localhost:8022/api/v1/meshes/1.glb
 - `useDbMetaInfo`（ref0→dbnum）与 `useGenModelV1Health`（库三态）都改走它：首屏两处并发要同一份 → **一次请求**。`useGenModelV1Health.start()`：`/health` 仍每 60 s（便宜、连接态要及时），三态每 `DEFAULT_VERDICT_POLL_INTERVAL_MS = 5 min` 且 `force`（用 `/health` 的节拍数，一张表；`/health` 之前没通导致三态没拿到的，通了下一拍就补）；首屏那次不 `force`（与 `useDbMetaInfo` 共用）；人点徽标「重探」两者都 `force`。
 - 验证：`useGenModelV1Dbnums.test.ts` 3 条（并发合一 / 窗口 / force / 失败不写缓存 / 换 base URL 不认旧缓存）、`useGenModelV1Health.test.ts` +2（假时钟：60 s 节拍、5 min 三态、首屏不 force、重探 force、/health 不通不问）；浏览器（`show_refno=24381_145018`）首屏 `:18082` 请求 `dbnums` **1**（此前 2），徽标三态照常「库 同步 1 · 滞后 0 · 未判 0」。
 
+### 8.11 P2-4 行尾 dbnum 徽标（2026-09-07）
+
+- `useModelTree.ts`：`TreeNode` / `FlatRow` 加可选 `dbnum?: number`；`usePdmsOwnerTree.dtoToTreeNode` 只在 DTO 的 `dbnum` 是有限数时写这一格（legacy 的 DTO 没有 → 节点对象与从前逐字段相同），`flatRows` 透传。
+- `ModelTreeRow.vue`：眼睛按钮之前一枚小徽标 `data-testid="model-tree-dbnum-badge"`（`row.dbnum !== undefined && !ghost` 才渲染，悬停「所属库 dbnum 7997」）。
+- 验证：`ModelTreeRow.dbnum.test.ts` 2 条（v1 行画、legacy 行与幽灵不画、位置在眼睛之前）；浏览器（`:18082`）v1 树 40 行 39 枚徽标（虚拟根没有），SITE `9304_2 → 1112`、其余 SITE / ZONE `→ 7997`；缺省 legacy 页面 DOM 里徽标 **0**。截图 `%TEMP%\gm-v1-badge-tree.png`。
+
 ## 9. 交付物清单
 
 - gen-model：P0-1/2/3（+可选 P0-4），`docs/specs/web-service-api.md` 同步，`changelog.md` 一条；——**已交**（`1eefbd577`；P0-4 未做）
 - plant3d-web：`src/api/genModelV1Api.ts`、`src/model-source/**`、`usePdmsOwnerTree.ts` / `useDbnoInstancesDtxLoader.ts` / `useDbMetaInfo.ts` / `ViewerPanel.vue` 的取数点改动、`vite.config.ts` / `.env.*`、`scripts/verify-gen-model-v1.ps1`、ADR 0054、联调指南；——**已交**（`3f1c2e2` → `65cb31a` → `be0da07` → `a920c82` → `b7dafa2` → P6 提交；另加 `src/api/genModelV1Ws.ts`、`useGenModelV1Health.ts`、`useGenModelV1ModelSync.ts`、`GenModelV1HealthBadge.vue`、`useModelGeneration.ts` / `useSelectionStore.ts` / `PropertiesPanel.vue` 的取数点）
 - 本计划按批注修订后作为 `docs/plans/` 的执行基线。——§8 是逐阶段的落地与验证记录。
-- **仍欠**：默认开关翻到 `gen-model-v1`（等 `:3100` 起来做两源对拍；单源浏览器实跑已过，见 §8.8 / §8.9）、P2-4 行尾 `dbnum` 徽标、`is_invalid_tubi` 告警色；gen-model 侧三条建议（`model_drain` WS 事件、`tree/*` 的 Ref0-不在-MDB 分型、按库 / 多根批量 `records`）。
+- **仍欠**：默认开关翻到 `gen-model-v1`（等 `:3100` 起来做两源对拍；单源浏览器实跑已过，见 §8.8 / §8.9）、`is_invalid_tubi` 告警色；gen-model 侧三条建议（`model_drain` WS 事件、`tree/*` 的 Ref0-不在-MDB 分型、按库 / 多根批量 `records`）。
