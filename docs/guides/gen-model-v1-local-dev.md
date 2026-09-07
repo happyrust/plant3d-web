@@ -99,7 +99,7 @@ pwsh scripts/verify-gen-model-v1.ps1 -BaseUrl http://127.0.0.1:18082 -Refno 2438
 | 勾选眼睛后提示「N 个 refno 没有几何记录」 | ensure 回 `NoRenderableGeometry`（无子件的 BRAN、纯层级的 STRU）或 `generation_pending`（生成还在后台，别重试同一 refno，稍后再点） |
 | 网格全是兜底方块 | `/api/v1/meshes/{hash}.glb` 404：服务端 `meshes_path` 下没有这个 `.mesh`（换过运行目录 / 网格目录没分家） |
 | `tree/children?refno=…` 回 500 `internal` | Ref0 不在本 MDB（gen-model 侧今天没分型成 404 / 503，见 plan §8.2 顺手发现） |
-| 模型重算后场景没刷新 | 同步靠 15 s 一次的 `GET /tasks?kind=model_drain` 对齐（服务端今天不为 `model_drain` 发 WS 事件）；徽标悬停看「模型同步」那一行有没有 `已重载 n 根` |
+| 模型重算后场景没刷新 | 同步靠 15 s 一次的 `GET /tasks?kind=model_drain` 对齐，另外任何 WS `task_finished` 也会立刻触发一次对齐——gen-model `80b0f330c`（2026-09-08）起 drain 页收口会发 `task_finished {kind:"model_drain", detail.roots[]}`，更老的服务端不发、只能等轮询；徽标悬停看「模型同步」那一行有没有 `已重载 n 根`，WS 小点是不是绿的 |
 | 属性面板底部一行「N 个属性未解码」 | 正常：`element/attributes` 直读 e3d-io，`diagnostics.undecoded` 是服务端解不出的属性，不是前端错 |
 
 ## 8. 回退
