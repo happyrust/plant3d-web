@@ -44,6 +44,11 @@ export type EnsureAndCollectOptions = GenModelV1RequestOptions & {
   maxContainerDepth?: number;
   /** 一次调用最多 ensure 多少个根（默认 128）；超出的记进 `truncatedRoots` */
   maxRoots?: number;
+  /**
+   * 一次调用最多为多少个生成根取 `records`（默认不限）。摄入形态的 SITE 一次 ensure 就能解出几百个根，每根一次 `records`
+   * 要 0.5–10 s——整库入口拿它做「安全概览」预算；超出的根记进 `truncatedRoots`，不取。
+   */
+  maxRecordsRoots?: number;
   /** `model/records` 的页大小（服务端上限 5000） */
   pageSize?: number;
   /** 每处理完一个根回调一次（进度） */
@@ -122,7 +127,10 @@ export async function ensureAndCollectRecords(
   options: EnsureAndCollectOptions = {},
   api: ModelRecordsApi = defaultModelRecordsApi,
 ): Promise<EnsureAndCollectResult> {
-  const { force, maxContainerDepth = 3, maxRoots = 128, pageSize = 5000, recordsConcurrency = 6, onRootDone, ...requestOptions } = options;
+  const {
+    force, maxContainerDepth = 3, maxRoots = 128, maxRecordsRoots = Number.POSITIVE_INFINITY, pageSize = 5000, recordsConcurrency = 6, onRootDone,
+    ...requestOptions
+  } = options;
   const start = fromV1Refno(refno);
   const result: EnsureAndCollectResult = {
     refno: start,
@@ -144,7 +152,7 @@ export async function ensureAndCollectRecords(
     const { refno: current, depth } = queue.shift()!;
     if (seenRoots.has(current)) continue;
     seenRoots.add(current);
-    if (ensureCalls >= maxRoots) {
+    if (ensureCalls >= maxRoots || collected.size >= maxRecordsRoots) {
       pushUnique(result.truncatedRoots, current);
       continue;
     }
@@ -191,6 +199,10 @@ export async function ensureAndCollectRecords(
     }
     const roots = rootsOf(ensured, current).filter((root) => {
       if (collected.has(root)) return false;
+      if (collected.size >= maxRecordsRoots) {
+        pushUnique(result.truncatedRoots, root);
+        return false;
+      }
       collected.add(root);
       pushUnique(result.generationRoots, root);
       return true;

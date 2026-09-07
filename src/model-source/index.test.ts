@@ -2,7 +2,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { legacyMeshUrl } from './legacy';
 
-import { __resetModelSourceForTests, getModelSource, parseModelSourceKind, resolveModelSourceKind } from './index';
+import {
+  __resetModelSourceForTests,
+  getGenModelV1ModelSource,
+  getModelSource,
+  parseModelSourceKind,
+  resolveModelSourceKind,
+  subscribeModelSourceProgress,
+} from './index';
 
 const legacyMocks = vi.hoisted(() => ({
   e3dGetWorldRoot: vi.fn(async () => ({ success: true, node: { refno: '24381_1', name: 'WORL', noun: 'WORL' } })),
@@ -132,5 +139,24 @@ describe('legacy 适配器：零逻辑委托', () => {
     await source.tree.visibleInsts('24381_145018');
     expect(spy).toHaveBeenCalledWith('24381_145018', expect.anything());
     spy.mockRestore();
+  });
+
+  it('getGenModelV1ModelSource / subscribeModelSourceProgress：缺省 legacy 下是 null 与空订阅；v1 下给带 collectDbnum 的那份源', () => {
+    // 测试环境没有 ?model_source=，缺省 legacy
+    expect(getGenModelV1ModelSource()).toBeNull();
+    const unsubscribe = subscribeModelSourceProgress(() => {});
+    expect(typeof unsubscribe).toBe('function');
+    unsubscribe();
+
+    window.history.replaceState({}, '', '?model_source=gen-model-v1');
+    try {
+      const source = getGenModelV1ModelSource();
+      expect(source).not.toBeNull();
+      expect(source).toBe(getModelSource('gen-model-v1'));
+      expect(typeof source!.collectDbnum).toBe('function');
+      expect(typeof source!.records.subscribeProgress).toBe('function');
+    } finally {
+      window.history.replaceState({}, '', '/');
+    }
   });
 });

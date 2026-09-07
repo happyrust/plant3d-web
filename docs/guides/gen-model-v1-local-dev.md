@@ -50,6 +50,7 @@ VITE_GEN_MODEL_V1_BASE_URL=http://localhost:8022   # 直连；写 /gm 走 Vite �
 | `gm_health=1` | 在 legacy 下也把树顶部的 gen-model 徽标挂出来（只看健康与库三态，不动场景、不起同步） |
 | `show_refno=24381_145018` | 启动即显示这个节点（v1 下 = `ensure → records`） |
 | `debug_refno=24381_145018` | 同上，但强制重载并替换旧对象 |
+| `show_dbnum=7997` | 整库：v1 下 = `tree/roots` 里该库的全部 SITE 逐个 `ensure → records`，进度在视口左下角；缺省只装**安全概览**（前 200 个生成根，toast 会说「预算外未取 N 根」），加 `show_dbnum_full=1` 才整库全量。每个生成根一次 `records`（0.5–10 s），几千根的库全量要几十分钟 |
 
 典型联调 URL：
 

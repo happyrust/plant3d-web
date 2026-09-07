@@ -16,9 +16,25 @@ import type { InstanceEntry } from '@/utils/instances/instanceManifest';
 
 import { fromV1Refno } from '@/api/genModelV1Api';
 
+/** 一次 ensure → records 里每处理完一个生成根发一条（P3-c 进度弹窗接它）。 */
+export type GenModelV1EnsureProgress = {
+  /** 这次 ensureAndCollect 请求的节点（`a_b`） */
+  refno: string;
+  /** 刚收完记录的生成根（`a_b`） */
+  root: string;
+  /** 已处理 / 目前已知总数（容器还在展开时总数会长） */
+  done: number;
+  total: number;
+};
+
 export type GenModelV1ModelRecordSource = ModelRecordSource & {
   /** 对一个节点做「显式显示」并把整根记录映射进缓存；给 P3-c 的分批 / 进度用。 */
   ensureAndCollect(refno: string, options?: EnsureAndCollectOptions): Promise<EnsureAndCollectResult>;
+  /**
+   * 订阅所有 ensureAndCollect 的逐根进度（不论谁发起：树的 visibleInsts、几何加载、整库入口）。
+   * 显示流程拿不到 visibleInsts 内部那次 ensure 的回调，只能从这里听。返回退订函数。
+   */
+  subscribeProgress(listener: (progress: GenModelV1EnsureProgress) => void): () => void;
   /** 缓存里某构件的实例（不发请求）。 */
   peek(refno: string): InstanceEntry[] | undefined;
   /** 清缓存：不传清全部，传了只清这些 refno。 */
@@ -41,10 +57,32 @@ export function createGenModelV1ModelRecordSource(options: GenModelV1ModelRecord
   const entriesByRefno = new Map<string, InstanceEntry[]>();
   /** 生成根（a_b）→ 它这次 records 里出现过的构件 refno（含根自己） */
   const leavesByRoot = new Map<string, Set<string>>();
+  /**
+   * 请求节点（a_b）→ 上一次干净的 ensureAndCollect 结果。树勾一次眼睛会让 `visibleInsts(节点)` 被问两遍
+   * （加载范围 + 可见性传播），第二遍直接回这份，不再对同一个 SITE 重打一轮 ensure + 几十次 records。
+   * 任何 invalidate 都把它整个清掉（只是个备忘，最坏多一轮请求）。
+   */
+  const resultsByRequested = new Map<string, EnsureAndCollectResult>();
+  const progressListeners = new Set<(progress: GenModelV1EnsureProgress) => void>();
+
+  function subscribeProgress(listener: (progress: GenModelV1EnsureProgress) => void): () => void {
+    progressListeners.add(listener);
+    return () => { progressListeners.delete(listener); };
+  }
 
   async function ensureAndCollect(refno: string, extra: EnsureAndCollectOptions = {}): Promise<EnsureAndCollectResult> {
     const requested = fromV1Refno(refno);
-    const result = await ensureAndCollectRecords(requested, { ...options.ensureOptions, ...extra }, api);
+    const remembered = !extra.force && !extra.maxRecordsRoots ? resultsByRequested.get(requested) : undefined;
+    if (remembered) return remembered;
+    const onRootDone: EnsureAndCollectOptions['onRootDone'] = (progress) => {
+      extra.onRootDone?.(progress);
+      if (progressListeners.size === 0) return;
+      const event: GenModelV1EnsureProgress = { refno: requested, root: progress.root, done: progress.done, total: progress.total };
+      for (const listener of progressListeners) {
+        try { listener(event); } catch { /* 监听方的异常不影响取数 */ }
+      }
+    };
+    const result = await ensureAndCollectRecords(requested, { ...options.ensureOptions, ...extra, onRootDone }, api);
     for (const [key, entries] of groupInstanceEntriesByRefno(result.items)) {
       entriesByRefno.set(key, entries);
       // records 的 owner 就是生成根（不是直接属主），按它归档
@@ -73,6 +111,8 @@ export function createGenModelV1ModelRecordSource(options: GenModelV1ModelRecord
       for (const key of [requested, ...result.generationRoots]) {
         if (key && !entriesByRefno.has(key)) entriesByRefno.set(key, []);
       }
+      // 有截断的结果不备忘：下次带更宽的预算再问要拿得到全的
+      if (result.truncatedRoots.length === 0) resultsByRequested.set(requested, result);
     }
     return result;
   }
@@ -104,6 +144,7 @@ export function createGenModelV1ModelRecordSource(options: GenModelV1ModelRecord
   }
 
   function invalidate(refnos?: string[]): void {
+    resultsByRequested.clear();
     if (!refnos) {
       entriesByRefno.clear();
       leavesByRoot.clear();
@@ -121,6 +162,7 @@ export function createGenModelV1ModelRecordSource(options: GenModelV1ModelRecord
   }
 
   function invalidateRoot(root: string): string[] {
+    resultsByRequested.clear();
     const key = fromV1Refno(root);
     const leaves = leavesOfRoot(key);
     for (const leaf of leaves) entriesByRefno.delete(leaf);
@@ -129,5 +171,5 @@ export function createGenModelV1ModelRecordSource(options: GenModelV1ModelRecord
     return leaves.includes(key) ? leaves : [key, ...leaves];
   }
 
-  return { instanceEntriesByRefnos, ensureAndCollect, peek, invalidate, collectedRoots, leavesOfRoot, invalidateRoot };
+  return { instanceEntriesByRefnos, ensureAndCollect, subscribeProgress, peek, invalidate, collectedRoots, leavesOfRoot, invalidateRoot };
 }

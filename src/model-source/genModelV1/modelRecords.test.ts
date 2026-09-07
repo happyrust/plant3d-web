@@ -107,6 +107,28 @@ describe('ensureAndCollectRecords', () => {
     expect(result.truncatedRoots).toEqual(['1_203']);
   });
 
+  it('maxRecordsRoots：一次 ensure 解出的根超出预算的不取 records、记 truncatedRoots；预算用完后队列里剩下的也不再 ensure', async () => {
+    const ensure = vi.fn(async ({ refno: raw }: { refno: string }) => {
+      const refno = v1(raw);
+      if (refno === '1/1') throw container();
+      // SITE 展开出两个 ZONE：第一个 ZONE 解出 3 根，第二个 ZONE 解出 1 根
+      if (refno === '1/10') return { status: 'Generated', generation_roots: ['1/101', '1/102', '1/103'] };
+      return { status: 'Generated', generation_roots: ['1/201'] };
+    });
+    const children = vi.fn(async () => ({ source: 'direct', parent: '1/1', nodes: [node('1_10', 'ZONE', '1_1', 3), node('1_20', 'ZONE', '1_1', 1)] }));
+    const records = vi.fn(async ({ generationRoot }: { generationRoot: string }) => ({
+      source: 'model-memory', items: [item(`1_9${v1(generationRoot).split('/')[1]}`, generationRoot)], total: 1, truncated: false, next_cursor: null,
+    }));
+    const result = await ensureAndCollectRecords('1_1', { maxRecordsRoots: 2 }, api({ ensure: ensure as never, children: children as never, records: records as never }));
+
+    expect(result.generationRoots).toEqual(['1_101', '1_102']);
+    expect(records).toHaveBeenCalledTimes(2);
+    expect(refnosOfRecords(result.items)).toEqual(['1_9101', '1_9102']);
+    // 1/103 是预算外的根；1/20 是预算用完后没再 ensure 的容器子节点
+    expect(result.truncatedRoots).toEqual(['1_103', '1_20']);
+    expect(ensure).toHaveBeenCalledTimes(2); // 1/1 + 1/10
+  });
+
   it('records 回 409（还没进投影）当 pending，不当错误', async () => {
     const records = vi.fn(async () => {
       throw new GenModelV1ApiError({ code: 'conflict', status: 409, path: '', message: 'not_generated' });

@@ -11,7 +11,7 @@ import { ensureDbMetaInfoLoaded, tryGetDbnumByRefno } from '@/composables/useDbM
 import { isDtxRefnoLoaded, loadDbnoInstancesForVisibleRefnosDtx } from '@/composables/useDbnoInstancesDtxLoader';
 import { useDbnoInstancesParquetLoader } from '@/composables/useDbnoInstancesParquetLoader';
 import { useModelLoadStatus } from '@/composables/useModelLoadStatus';
-import { getModelSource } from '@/model-source';
+import { getGenModelV1ModelSource, getModelSource, subscribeModelSourceProgress, type GenModelV1ModelSource } from '@/model-source';
 import { emitToast } from '@/ribbon/toastBus';
 
 /**
@@ -44,6 +44,16 @@ function preferredDataSourceFromUrl(): 'json' | 'parquet' | 'backend' | null {
     // ignore
   }
   return null;
+}
+
+/** `?show_dbnum_full=1`：整库入口不做「安全概览」预算，全量装（与 ViewerPanel 的 parquet 整库同一开关）。 */
+function isShowDbnumFullRequested(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    return new URLSearchParams(window.location.search).get('show_dbnum_full') === '1';
+  } catch {
+    return false;
+  }
 }
 
 function isViewerDebugToastEnabled(): boolean {
@@ -237,7 +247,7 @@ export async function resolveActualModelLoadScope(
 
 export function useModelGeneration(options: ModelGenerationOptions): ModelGenerationState & {
   generateAndLoadModel: (refno: string) => Promise<boolean>
-  showModelByDbnum: (dbno: number, options?: { flyTo?: boolean; manifestUrl?: string; replaceRefnos?: string[] }) => Promise<{ loaded: boolean; instanceCount: number; refnoCount: number; refnos: string[] }>
+  showModelByDbnum: (dbno: number, options?: { flyTo?: boolean; manifestUrl?: string; replaceRefnos?: string[] }) => Promise<{ loaded: boolean; instanceCount: number; refnoCount: number; refnos: string[]; budgetLimited?: boolean }>
   showModelByRefno: (refno: string, options?: { flyTo?: boolean; regenerate?: boolean; reload?: boolean }) => Promise<boolean>
   showModelUnitVersion: (unitRefno: string, dbno: number, sesno: number, options?: { flyTo?: boolean }) => Promise<boolean>
   isModelActuallyLoaded: (refno: string) => boolean
@@ -273,6 +283,61 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
 
   function sleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  type GenModelV1LoadTotals = {
+    loadedRefnos: number
+    skippedRefnos: number
+    loadedObjects: number
+    mesh404: number
+    noGeo: number
+  }
+
+  /**
+   * gen-model-v1：把记录源缓存里的构件装进 DTX。超过一页（`VISIBLE_REFNOS_PAGE_SIZE`）就分批，进度在 `progressRange` 里走，
+   * 每批之间让出一帧（P3-c 分批 + 进度）。`replace`（重生成 / 重载）**不分批**：它要 forceRefresh，分了批每一批都会把同一个根
+   * 再 ensure 一遍（重生成还会再提交一次生成）。
+   */
+  async function loadGenModelV1Refnos(
+    dtxLayer: any,
+    dbno: number,
+    refnos: string[],
+    anyViewer: { __dtxAfterInstancesLoaded?: (dbno: number, loadedRefnos: string[]) => void },
+    mode: { regenerate: boolean; replace: boolean },
+    progressRange: [number, number],
+    label: string,
+  ): Promise<GenModelV1LoadTotals> {
+    const totals: GenModelV1LoadTotals = { loadedRefnos: 0, skippedRefnos: 0, loadedObjects: 0, mesh404: 0, noGeo: 0 };
+    const batchSize = mode.replace ? Math.max(1, refnos.length) : VISIBLE_REFNOS_PAGE_SIZE;
+    const batches = Math.max(1, Math.ceil(refnos.length / batchSize));
+    for (let index = 0; index < batches; index++) {
+      const batch = refnos.slice(index * batchSize, (index + 1) * batchSize);
+      if (batches > 1) {
+        totalCount.value = refnos.length;
+        currentIndex.value = Math.min(refnos.length, (index + 1) * batchSize);
+        currentRefno.value = '';
+        statusMessage.value = `${label}：装入第 ${index + 1}/${batches} 批（${currentIndex.value}/${refnos.length} 个 refno）...`;
+        progress.value = progressRange[0] + Math.floor((index / batches) * (progressRange[1] - progressRange[0]));
+        syncGlobalLoadStatus();
+      }
+      const result = await loadDbnoInstancesForVisibleRefnosDtx(dtxLayer, dbno, batch, {
+        lodAssetKey: 'L1',
+        debug: false,
+        dataSource: 'gen-model-v1',
+        forceRegenerate: mode.regenerate,
+        forceReloadRefnos: mode.replace ? batch : undefined,
+        replaceExistingObjects: mode.replace,
+        forceRefreshGeometries: mode.replace,
+      });
+      anyViewer.__dtxAfterInstancesLoaded?.(dbno, batch);
+      totals.loadedRefnos += result.loadedRefnos;
+      totals.skippedRefnos += result.skippedRefnos;
+      totals.loadedObjects += result.loadedObjects;
+      totals.mesh404 += result.missingBreakdown.mesh404Refnos.length;
+      totals.noGeo += result.missingBreakdown.noGeoRowsRefnos.length;
+      if (index + 1 < batches) await sleep(0);
+    }
+    return totals;
   }
 
   async function loadGeneratedRefnos(
@@ -604,6 +669,18 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
       currentRefno: currentRefno.value,
     });
 
+    // gen-model-v1（P3-c）：范围查询里 visibleInsts 那次 ensure → records 的逐根进度只能从记录源听；
+    // 容器（SITE / ZONE）展开出多根时把进度弹窗挂出来，单根 BRAN 不弹。legacy 下这是个空订阅。
+    const unsubscribeProgress = subscribeModelSourceProgress(({ done, total, root }) => {
+      totalCount.value = total;
+      currentIndex.value = Math.min(total, done + 1);
+      currentRefno.value = root;
+      statusMessage.value = `gen-model 生成 / 取回记录：${done}/${total} 个生成根`;
+      progress.value = 10 + Math.floor((done / Math.max(1, total)) * 20);
+      if (total > 1) showProgressModal.value = true;
+      syncGlobalLoadStatus();
+    });
+
     try {
       const startedAt = Date.now();
       let dbno: number;
@@ -727,16 +804,15 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
             : `从 gen-model 加载 ${loadRefnos.length} 个 refno...`;
         progress.value = 30;
         syncGlobalLoadStatus();
-        const v1Result = await loadDbnoInstancesForVisibleRefnosDtx(dtxLayer, dbno, loadRefnos, {
-          lodAssetKey: 'L1',
-          debug: false,
-          dataSource: 'gen-model-v1',
-          forceRegenerate: regenerate,
-          forceReloadRefnos: replace ? loadRefnos : undefined,
-          replaceExistingObjects: replace,
-          forceRefreshGeometries: replace,
-        });
-        anyViewer.__dtxAfterInstancesLoaded?.(dbno, loadRefnos);
+        const v1Result = await loadGenModelV1Refnos(
+          dtxLayer,
+          dbno,
+          loadRefnos,
+          anyViewer,
+          { regenerate, replace },
+          [30, 95],
+          `从 gen-model 加载 ${normalizedRoot}`,
+        );
         if (typeof anyViewer.scene?.ensureRefnos === 'function') {
           anyViewer.scene.ensureRefnos(loadRefnos, { computeAabb: false });
         }
@@ -767,8 +843,8 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
           },
           ms: Date.now() - startedAt,
         };
-        const mesh404 = v1Result.missingBreakdown.mesh404Refnos.length;
-        const noGeo = v1Result.missingBreakdown.noGeoRowsRefnos.length;
+        const mesh404 = v1Result.mesh404;
+        const noGeo = v1Result.noGeo;
         consoleStore.addLog(
           'info',
           `[model-load] gen-model-v1 root=${normalizedRoot} dbno=${dbno} loaded_refnos=${v1Result.loadedRefnos} skipped=${v1Result.skippedRefnos} objects=${v1Result.loadedObjects} mesh404=${mesh404} no_geo=${noGeo} ms=${Date.now() - startedAt}`
@@ -1112,6 +1188,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
       emitToast({ message: `[错误] 模型加载失败：${msg}`, level: 'error' });
       return false;
     } finally {
+      unsubscribeProgress();
       isGenerating.value = false;
       showProgressModal.value = false;
       modelLoadStatus.finish({
@@ -1121,10 +1198,131 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
     }
   }
 
+  /**
+   * gen-model-v1 的整库显示（plan P3-c / P3-f `show_dbnum`）：该库全部 SITE 逐个 ensure → records（进度弹窗按 SITE / 生成根走，
+   * 记录进记录源缓存），再把构件分批装进 DTX。由 `showModelByDbnum` 在 v1 源下调用，错误与收尾都由它的 try/finally 兜住。
+   */
+  async function showModelByDbnumGenModelV1(
+    source: GenModelV1ModelSource,
+    dbno: number,
+    loadOptions?: { flyTo?: boolean },
+  ): Promise<{ loaded: boolean; instanceCount: number; refnoCount: number; refnos: string[] }> {
+    const anyViewer = viewer as unknown as {
+      __dtxLayer?: unknown
+      __dtxAfterInstancesLoaded?: (dbno: number, loadedRefnos: string[]) => void
+      scene?: { getAABB?: (ids: string[]) => unknown }
+      cameraFlight?: { flyTo?: (options: { aabb?: unknown; duration?: number; fit?: boolean }) => void }
+    };
+    const dtxLayer = anyViewer.__dtxLayer as any;
+    if (!dtxLayer) {
+      throw new Error('DTXLayer 未初始化，无法加载模型');
+    }
+
+    const startedAt = Date.now();
+    showProgressModal.value = true;
+    statusMessage.value = `gen-model：查找 dbnum=${dbno} 的 SITE...`;
+    progress.value = 5;
+    syncGlobalLoadStatus();
+
+    // 与 legacy show_dbnum 同一口径：缺省只装「安全概览」（前 N 个生成根），?show_dbnum_full=1 才整库
+    const fullLoad = isShowDbnumFullRequested();
+
+    // 收集阶段占 5 → 55：SITE 之间按个数走，SITE 内按已收完的生成根走
+    const collected = await source.collectDbnum(dbno, {
+      maxTotalRoots: fullLoad ? Number.POSITIVE_INFINITY : undefined,
+      onProgress: ({ phase, siteIndex, siteCount, site, rootsDone, rootsTotal, root }) => {
+        totalCount.value = siteCount;
+        currentIndex.value = siteIndex;
+        currentRefno.value = phase === 'roots' && root ? `${site.name} › ${root}` : site.name;
+        statusMessage.value = phase === 'roots'
+          ? `gen-model：SITE ${siteIndex}/${siteCount} ${site.name}，生成根 ${rootsDone}/${rootsTotal}`
+          : `gen-model：SITE ${siteIndex}/${siteCount} ${site.name}，正在 ensure...`;
+        const withinSite = rootsTotal > 0 ? rootsDone / rootsTotal : 0;
+        progress.value = 5 + Math.floor(((siteIndex - 1 + withinSite) / Math.max(1, siteCount)) * 50);
+        syncGlobalLoadStatus();
+      },
+    });
+
+    const failedRoots = Object.keys(collected.errors);
+    const tail =
+      (collected.pending.length ? `，生成中 ${collected.pending.length} 根` : '') +
+      (collected.truncatedRoots.length ? `，预算外未取 ${collected.truncatedRoots.length} 根` : '') +
+      (collected.skippedSites.length ? `，未轮到 ${collected.skippedSites.length} 个 SITE` : '') +
+      (failedRoots.length ? `，出错 ${failedRoots.length} 根` : '');
+
+    if (collected.sites.length === 0) {
+      statusMessage.value = `dbnum=${dbno} 在当前 MDB 里没有 SITE`;
+      progress.value = 100;
+      syncGlobalLoadStatus();
+      const message = `[警告] dbnum=${dbno} 在 gen-model 当前 MDB 的 tree/roots 里没有 SITE，无法整库加载`;
+      consoleStore.addLog('warning', `[model-load] ${message}`);
+      emitToast({ message, level: 'warning' });
+      return { loaded: true, instanceCount: 0, refnoCount: 0, refnos: [] };
+    }
+    if (collected.refnos.length === 0) {
+      statusMessage.value = 'Model is empty (0 instances)';
+      progress.value = 100;
+      syncGlobalLoadStatus();
+      const message = `[警告] dbnum=${dbno} 的 ${collected.sites.length} 个 SITE 没有任何几何记录${tail}`;
+      consoleStore.addLog('warning', `[model-load] gen-model-v1 ${message}`);
+      emitToast({ message, level: 'warning' });
+      return { loaded: true, instanceCount: 0, refnoCount: 0, refnos: [] };
+    }
+
+    const totals = await loadGenModelV1Refnos(
+      dtxLayer,
+      dbno,
+      collected.refnos,
+      anyViewer,
+      { regenerate: false, replace: false },
+      [55, 95],
+      `gen-model 整库 dbnum=${dbno}`,
+    );
+
+    if (loadOptions?.flyTo) {
+      try {
+        const flyTargets = collected.refnos.length > 5000 ? collected.refnos.slice(0, 5000) : collected.refnos;
+        const aabb = anyViewer.scene?.getAABB?.(flyTargets) ?? null;
+        if (aabb) {
+          anyViewer.cameraFlight?.flyTo?.({ aabb, duration: 0.8, fit: true });
+        }
+      } catch {
+        // ignore flyTo errors
+      }
+    }
+
+    progress.value = 100;
+    statusMessage.value = totals.loadedObjects > 0 ? 'Model loaded (gen-model)' : 'Model is empty (0 instances)';
+    syncGlobalLoadStatus();
+    consoleStore.addLog(
+      'info',
+      `[model-load] gen-model-v1 dbnum=${dbno} sites=${collected.sites.length} roots=${collected.generationRoots.length} refno_count=${collected.refnos.length} loaded_refnos=${totals.loadedRefnos} skipped_refnos=${totals.skippedRefnos} instance_count=${totals.loadedObjects} mesh404=${totals.mesh404} no_geo=${totals.noGeo} pending=${collected.pending.length} truncated_roots=${collected.truncatedRoots.length} skipped_sites=${collected.skippedSites.length} errors=${failedRoots.length} ms=${Date.now() - startedAt}`
+    );
+    const summary =
+      `${collected.budgetLimited ? '安全概览 ' : ''}dbnum=${dbno}：${collected.sites.length} 个 SITE / ${collected.generationRoots.length} 个生成根，` +
+      `已加载 ${totals.loadedObjects} 个实例（${totals.loadedRefnos} 个 refno）${tail}`;
+    if (totals.loadedObjects === 0) {
+      emitToast({ message: `[警告] ${summary}，未绘制实例（可能全部被跳过或几何缺失）`, level: 'warning' });
+    } else if (collected.budgetLimited) {
+      emitToast({ message: `[提示] ${summary}。请从模型树按需加载；整库全量可加 show_dbnum_full=1。`, level: 'warning' });
+    } else if (tail) {
+      emitToast({ message: `[提示] ${summary}`, level: 'warning' });
+    } else {
+      emitToast({ message: `[成功] ${summary}`, level: 'success' });
+    }
+    return {
+      loaded: true,
+      instanceCount: totals.loadedObjects,
+      refnoCount: collected.refnos.length,
+      refnos: collected.refnos,
+      budgetLimited: collected.budgetLimited,
+    };
+  }
+
   async function showModelByDbnum(
     dbno: number,
     loadOptions?: { flyTo?: boolean; manifestUrl?: string; replaceRefnos?: string[] }
-  ): Promise<{ loaded: boolean; instanceCount: number; refnoCount: number; refnos: string[] }> {
+  ): Promise<{ loaded: boolean; instanceCount: number; refnoCount: number; refnos: string[]; budgetLimited?: boolean }> {
     isGenerating.value = true;
     error.value = null;
     lastLoadDebug.value = null;
@@ -1140,6 +1338,12 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
     try {
       if (!Number.isFinite(dbno) || dbno <= 0) {
         throw new Error(`Invalid dbnum: ${dbno}`);
+      }
+
+      // gen-model-v1（P3-c）：整库 = 该库全部 SITE 逐个 ensure。带 manifestUrl 的是版本对比（不可变清单），仍走 parquet（Q3）。
+      const genModelV1 = loadOptions?.manifestUrl ? null : getGenModelV1ModelSource();
+      if (genModelV1) {
+        return await showModelByDbnumGenModelV1(genModelV1, dbno, { flyTo: loadOptions?.flyTo });
       }
 
       const parquetLoader = useDbnoInstancesParquetLoader();

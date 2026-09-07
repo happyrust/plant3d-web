@@ -4478,6 +4478,26 @@ onMounted(async () => {
             mesh404GeoHashes: 0,
             noGeoRowsRefnos: 0,
           });
+
+          // gen-model-v1（plan P3-c / P3-f）：整库 = 该库全部 SITE 逐个 ensure → records，分批装入；进度与收尾在 useModelGeneration 里。
+          // 下面的 parquet 分层 / 预算 / Tile LOD 都是 parquet 全量加载的事，v1 不走。
+          if (getModelSource().kind === 'gen-model-v1') {
+            const generation = modelGenerationRef.value;
+            if (!generation) throw new Error('模型加载器未初始化');
+            emitToast({ message: `[信息] 正在从 gen-model 加载 dbnum=${dbno} 的全部 SITE…`, level: 'info' });
+            const v1Result = await generation.showModelByDbnum(dbno, { flyTo: true });
+            requestRender();
+            publishShowDbnumLoadResult({
+              status: !v1Result.loaded ? 'error' : v1Result.instanceCount === 0 ? 'empty' : v1Result.budgetLimited ? 'partial' : 'loaded',
+              source: 'gen-model-v1',
+              refnoCount: v1Result.refnoCount,
+              loadedRefnos: v1Result.refnoCount,
+              loadedObjects: v1Result.instanceCount,
+              budgetLimited: v1Result.budgetLimited === true,
+            });
+            return;
+          }
+
           emitToast({ message: `[信息] 正在加载 dbnum=${dbno} 的 Parquet 模型…`, level: 'info' });
           const autoFitKey = `dtx_autofit_dbno_${dbno}`;
           let shouldAutoFit = true;

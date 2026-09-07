@@ -106,6 +106,35 @@ describe('createGenModelV1ModelRecordSource', () => {
     expect(out.get('24381_101413')).toHaveLength(1);
   });
 
+  it('同一节点再问一遍 ensureAndCollect 直接回上次的干净结果（树勾一次眼睛会问两遍）；invalidate / force 之后重新问；有截断的不备忘', async () => {
+    const ensure = vi.fn(async () => ({ status: 'AlreadyAvailable', generation_root: '24381/101412', generation_roots: ['24381/101412', '24381/101413'] }));
+    const records = vi.fn(async ({ generationRoot }: { generationRoot: string }) => ({
+      source: 'model-memory', items: [item(`${toV1Refno(generationRoot).replace('/', '_')}9`, generationRoot)], total: 1, truncated: false, next_cursor: null,
+    }));
+    const source = createGenModelV1ModelRecordSource({ api: { ensure: ensure as never, records: records as never, children: vi.fn() as never } });
+
+    const first = await source.ensureAndCollect('24381_101410');
+    const second = await source.ensureAndCollect('24381/101410');
+    expect(second).toBe(first);
+    expect(ensure).toHaveBeenCalledTimes(1);
+    expect(records).toHaveBeenCalledTimes(2);
+
+    // 预算截断的结果不备忘：带预算问一次 → 再不带预算问要拿到全的
+    const budgeted = await source.ensureAndCollect('24381_101411', { maxRecordsRoots: 1 });
+    expect(budgeted.truncatedRoots).toEqual(['24381_101413']);
+    const full = await source.ensureAndCollect('24381_101411');
+    expect(full.truncatedRoots).toEqual([]);
+    expect(ensure).toHaveBeenCalledTimes(3);
+
+    source.invalidateRoot('24381_101412');
+    await source.ensureAndCollect('24381_101410');
+    expect(ensure).toHaveBeenCalledTimes(4);
+
+    await source.ensureAndCollect('24381_101410', { force: true });
+    expect(ensure).toHaveBeenCalledTimes(5);
+    expect(ensure).toHaveBeenLastCalledWith({ refno: '24381_101410', force: true }, expect.anything());
+  });
+
   it('ensureAndCollect 有根 pending 时不给请求的节点记空：下次显示还要再问', async () => {
     const ensure = vi.fn(async () => {
       throw new GenModelV1ApiError({ code: 'generation_pending', status: 202, path: '', message: 'pending' });
@@ -114,6 +143,26 @@ describe('createGenModelV1ModelRecordSource', () => {
     const collected = await source.ensureAndCollect('24381_101410');
     expect(collected.pending).toEqual(['24381_101410']);
     expect(source.peek('24381_101410')).toBeUndefined();
+  });
+
+  it('subscribeProgress：任何一次 ensureAndCollect 的逐根进度都能听到，调用方自带的 onRootDone 照样触发，退订后不再收', async () => {
+    const ensure = vi.fn(async () => ({ status: 'Generated', generation_roots: ['1/1', '1/2'] }));
+    const records = vi.fn(async ({ generationRoot }: { generationRoot: string }) => ({
+      source: 'model-memory', items: [item(`${toV1Refno(generationRoot).replace('/', '_')}9`, generationRoot)], total: 1, truncated: false, next_cursor: null,
+    }));
+    const source = createGenModelV1ModelRecordSource({ api: { ensure: ensure as never, records: records as never, children: vi.fn() as never } });
+
+    const heard: string[] = [];
+    const unsubscribe = source.subscribeProgress((p) => heard.push(`${p.refno}:${p.root}:${p.done}/${p.total}`));
+    const own: number[] = [];
+    await source.ensureAndCollect('1_0', { recordsConcurrency: 1, onRootDone: ({ done }) => own.push(done) });
+    expect(heard).toEqual(['1_0:1_1:1/2', '1_0:1_2:2/2']);
+    expect(own).toEqual([1, 2]);
+
+    unsubscribe();
+    source.invalidate();
+    await source.instanceEntriesByRefnos(7997, ['1_19']);
+    expect(heard).toHaveLength(2);
   });
 
   it('invalidate() 不带参数清全部', async () => {

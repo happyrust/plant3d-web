@@ -1,7 +1,7 @@
 # plant3d-web 接入 gen-model `/api/v1`：模型树与三维模型加载重构方案
 
 - 日期：2026-09-06
-- 状态：**已拍板**（2026-09-06，D1–D7 全按推荐项）。进度：P0 已落地（gen-model 提交 `1eefbd577`，2026-09-07 对 `:18082` 运行实例 live 验证通过，见 §8.1）；P1 已落地（本仓，见 §8.2）；P2 已落地（见 §8.3，P2-4 徽标未做）；P3 已落地（见 §8.4，D6 对拍 ≤ 0.002 mm；P3-c 进度弹窗与 `show_dbnum` 整库入口未做）；P4 已落地（见 §8.5）；P5 已落地（见 §8.6，WS 已连、drain 对齐走 REST——服务端今天不发 `model_drain` 事件）；P6 文档与脚本已落地（见 §8.7）；P7 浏览器实跑通过 + 一次显示一次 ensure（见 §8.8），**默认开关未翻**（等 `:3100` 起来做两源对拍）
+- 状态：**已拍板**（2026-09-06，D1–D7 全按推荐项）。进度：P0 已落地（gen-model 提交 `1eefbd577`，2026-09-07 对 `:18082` 运行实例 live 验证通过，见 §8.1）；P1 已落地（本仓，见 §8.2）；P2 已落地（见 §8.3，P2-4 徽标未做）；P3 已落地（见 §8.4，D6 对拍 ≤ 0.002 mm；P3-c 进度弹窗与 `show_dbnum` 整库入口后补于 §8.9）；P4 已落地（见 §8.5）；P5 已落地（见 §8.6，WS 已连、drain 对齐走 REST——服务端今天不发 `model_drain` 事件）；P6 文档与脚本已落地（见 §8.7）；P7 浏览器实跑通过 + 一次显示一次 ensure（见 §8.8）；P3-c 进度弹窗 + `show_dbnum` 整库入口已落地并在浏览器里实跑（见 §8.9），**默认开关未翻**（等 `:3100` 起来做两源对拍）
 - 范围：`D:\work\plant-code\old\plant3d-web`（前端，主战场）+ `D:\work\plant-code\old\gen-model`（后端，只做最小增补）
 - 术语以两仓 `CONTEXT.md` 为准：plant3d-web 的「显式显示操作 / 按需模型生成 / 模型资产补齐 / 模型加载」，gen-model 的「生成根 / 最小交付单元 / 模型面 / 库一致性判决」。
 
@@ -412,9 +412,22 @@ curl -I  http://localhost:8022/api/v1/meshes/1.glb
 - **P7 验证**：`npm run type-check` 通过；触及文件 ESLint 0；新增单测 6 条全绿（`mapWithConcurrency` 2、records 并发 1、`subtreeRefnos` 层内并发 1、记录源记空 / pending 不记 2）；`vitest` 全量 baseline 1860/1829/31 → 1936/1904/32，唯一多出的 fail 仍是 §8.6 记过的 `AnnotationPanel.test.ts › reviewer path…` 临界超时（本轮与浏览器脚本并行、5016 ms；单跑 1497 ms 通过）。
 - **仍未验证**：两源对拍（要 `:3100`）；EQUI / SUPPO 两类；`model_drain` 收口时的端到端重载（该实例空闲）。
 
+### 8.9 P3-c 进度弹窗 + `show_dbnum` 整库入口（2026-09-07）
+
+- **进度**：记录源 `GenModelV1ModelRecordSource.subscribeProgress(listener)`——任何一次 `ensureAndCollect`（树的 `visibleInsts`、几何加载、整库入口）每收完一个生成根发一条 `{refno, root, done, total}`；`model-source/index.ts` 导出 `subscribeModelSourceProgress`（legacy 下空订阅）与 `getGenModelV1ModelSource()`（legacy 下 `null`）。`useModelGeneration.showModelByRefno` 在整个显示流程期间订阅：`totalCount / currentIndex / currentRefno / statusMessage / progress(10→30)` 跟着走，**多于一个生成根才把 `ModelGenerationProgressModal` 挂出来**（单根 BRAN 不弹），结束或出错都退订并关掉。构件超过一页（1000）时 DTX 装入也分批（进度 30→95，每批让出一帧）；重生成 / 重载**不分批**——它们要 forceRefresh，分了批每批都会把同一个根再 ensure 一遍（重生成还会再提交一次生成）。
+- **整库**：`genModelV1/collectDbnum.ts` `collectDbnumRefnos(tree, records, dbnum)`：虚拟根下 `dbnum` 相等的 SITE（`listSitesOfDbnum`）逐个（串行）`ensureAndCollect`（每 SITE 上限根 4096 / 深 4），回构件 refno 集 + 生成根 / pending / 截断 / 错误 / 跳过的 SITE，进度两级（`sites` / `roots`）。`GenModelV1ModelSource.collectDbnum()` 组装在 `genModelV1/index.ts`。`useModelGeneration.showModelByDbnum` 在 v1 源下（且不带 `manifestUrl`——版本对比仍走 parquet，Q3）转到 `showModelByDbnumGenModelV1`：收集阶段进度 5→55（SITE 之间按个数、SITE 内按生成根），装入阶段 55→95 分批，汇总 toast。`ViewerPanel` 的 `show_dbnum` 处理分支：v1 下调 `showModelByDbnum` 后就返回（parquet 的分层 / 三角形预算 / Tile LOD 不走），`window.__dtxLastShowDbnumLoadResult` 带 `source:'gen-model-v1'`、`status: loaded | partial | empty | error`、`budgetLimited`。
+- **安全概览预算**（浏览器里跑出来的事实逼出来的）：摄入形态的服务端对 SITE 一次 ensure 就直接解出几百个生成根（`/SSC测试` 335 根，dbnum 7997 的 13 个 SITE 合计上千），每根一次 `model/records` 0.5–10 s、服务端忙时单次能到 2–4 分钟——不设预算的整库跑了 8 分钟只走到 SITE 4/13（356 次 records）。于是 `EnsureAndCollectOptions.maxRecordsRoots`（一次调用最多为多少个根取 records，超出记 `truncatedRoots`、预算用完后队列里的容器子节点也不再 ensure；缺省不限）+ `CollectDbnumOptions.maxTotalRoots`（跨 SITE 累计，缺省 `DEFAULT_DBNUM_ROOTS_BUDGET = 200`，`?show_dbnum_full=1` → 不限），撞预算 `budgetLimited=true`，toast「[提示] 安全概览 dbnum=7997：13 个 SITE / 200 个生成根，已加载 4203 个实例（2100 个 refno），预算外未取 179 根，未轮到 9 个 SITE。请从模型树按需加载；整库全量可加 show_dbnum_full=1。」——与 legacy `show_dbnum` 的「安全概览 + `show_dbnum_full=1`」同一口径。
+- **顺手修掉的第二处双 ensure**：树勾一次眼睛 `visibleInsts(节点)` 会被问两遍（`showModelByRefno` 的加载范围 + 树的可见性传播），SITE 1RB-CIVI 一次点击原本 2×ensure + 23×records。记录源给 `ensureAndCollect` 加了按请求节点的**结果备忘**（干净且无截断的结果才记；任何 `invalidate` / `invalidateRoot` 清掉；`force` 绕过；带 `maxRecordsRoots` 的不查），第二遍零请求 → 1×ensure + 17×records（浏览器 trace 实证）。
+- **浏览器验证**（2026-09-07 19:01–19:10；同 §8.8 的一次性脚本 + Chrome headless；`:18082`）：
+  - `?model_source=gen-model-v1&gm_backend_port=18082&show_dbnum=7997`：左下角覆盖层「gen-model：SITE 1/13 /1RB-CIVI，正在 ensure… 5%」→「SITE 4/13 /SSC测试，生成根 N/335」；结束 `[model-load] gen-model-v1 dbnum=7997 sites=13 roots=200 refno_count=2100 loaded_refnos=2100 instance_count=4203 mesh404=0 no_geo=0 pending=0 truncated_roots=179 skipped_sites=9 errors=0 ms=269039`，三维里 1RB-CIVI / 1RC-CIVI / 仪控 / SSC 的土建与设备几何绘出，`__dtxLastShowDbnumLoadResult = {status:'partial', source:'gen-model-v1', refnoCount:2100, loadedObjects:4203, budgetLimited:true}`；请求 ensure 4、records **200**（预算精确）、DTX 分 3 批（1000/1000/100）。269 s 里绝大部分是服务端 `records` 的长尾（205 s / 143 s / 44 s 三次）。
+  - 树勾眼睛 `SITE 1RB-CIVI`（24381_42520）：弹窗「正在生成模型 3/17 · 当前: 24381_44280 · gen-model 生成 / 取回记录：2/17 个生成根 · 已完成 2 / 17 个」→ 7/17 → 加载完自动关闭；24 refno / 48 对象，ensure **1** / records 17；`tree/children` 180 次是树可见性传播的子树 BFS（8 路并发，每次 ~10 ms）。
+- **P3-c 验证**：`npm run type-check` 通过；触及文件 ESLint 0；新增单测 15 条全绿（`collectDbnum.test.ts` 6、`useModelGeneration.genModelV1.test.ts` 9、`modelRecordSource.test.ts` +2、`modelRecords.test.ts` +1、`index.test.ts` +1）；`vitest` 全量 baseline 1860/1829/31 → **1955/1925/30**，新增 fail 0。
+- **给 gen-model 的第三条建议**：整库 / 大 SITE 的瓶颈不在前端而在「一根一次 `model/records`」——加一个按库或按多根批量取记录的端点（或让 `records` 接受 `generation_roots[]`），v1 整库才能从「安全概览」变成真正可用的整库。
+- **未做**：`show_dbnum` 的 v1 路没有 legacy 那套「分层 / 三角形预算 / Tile LOD」（DTX 单层装几千对象在本样本上没问题，大库要再看）；`/dbnums` 轮询每 60 s 一次 31 s 的请求（见 §8.8 观察）。
+
 ## 9. 交付物清单
 
 - gen-model：P0-1/2/3（+可选 P0-4），`docs/specs/web-service-api.md` 同步，`changelog.md` 一条；——**已交**（`1eefbd577`；P0-4 未做）
 - plant3d-web：`src/api/genModelV1Api.ts`、`src/model-source/**`、`usePdmsOwnerTree.ts` / `useDbnoInstancesDtxLoader.ts` / `useDbMetaInfo.ts` / `ViewerPanel.vue` 的取数点改动、`vite.config.ts` / `.env.*`、`scripts/verify-gen-model-v1.ps1`、ADR 0054、联调指南；——**已交**（`3f1c2e2` → `65cb31a` → `be0da07` → `a920c82` → `b7dafa2` → P6 提交；另加 `src/api/genModelV1Ws.ts`、`useGenModelV1Health.ts`、`useGenModelV1ModelSync.ts`、`GenModelV1HealthBadge.vue`、`useModelGeneration.ts` / `useSelectionStore.ts` / `PropertiesPanel.vue` 的取数点）
 - 本计划按批注修订后作为 `docs/plans/` 的执行基线。——§8 是逐阶段的落地与验证记录。
-- **仍欠**：默认开关翻到 `gen-model-v1`（等 `:3100` 起来做两源对拍；单源浏览器实跑已过，见 §8.8）、P3-c 进度弹窗 + `show_dbnum` 整库入口、P2-4 行尾 `dbnum` 徽标、`is_invalid_tubi` 告警色、`/dbnums` 首屏两次合一；gen-model 侧两条建议（`model_drain` WS 事件、`tree/*` 的 Ref0-不在-MDB 分型）。
+- **仍欠**：默认开关翻到 `gen-model-v1`（等 `:3100` 起来做两源对拍；单源浏览器实跑已过，见 §8.8 / §8.9）、P2-4 行尾 `dbnum` 徽标、`is_invalid_tubi` 告警色、`/dbnums` 首屏两次合一 + 轮询减频；gen-model 侧三条建议（`model_drain` WS 事件、`tree/*` 的 Ref0-不在-MDB 分型、按库 / 多根批量 `records`）。

@@ -8,7 +8,8 @@
  */
 
 import { createGenModelV1AttributeSource } from './attributeSource';
-import { createGenModelV1ModelRecordSource } from './modelRecordSource';
+import { collectDbnumRefnos, type CollectDbnumOptions, type CollectDbnumResult } from './collectDbnum';
+import { createGenModelV1ModelRecordSource, type GenModelV1ModelRecordSource } from './modelRecordSource';
 import { createGenModelV1TreeSource } from './treeSource';
 
 import type { MeshSource, ModelSource } from '../ports';
@@ -20,7 +21,15 @@ const meshes: MeshSource = {
   meshUrl: (geoHash) => genModelV1MeshUrl(geoHash),
 };
 
-export function createGenModelV1ModelSource(): ModelSource {
+/** v1 源在四个端口之外多出来的能力：记录源的缓存 / 进度，以及 `show_dbnum` 整库收集（P3-c）。 */
+export type GenModelV1ModelSource = ModelSource & {
+  readonly kind: 'gen-model-v1';
+  readonly records: GenModelV1ModelRecordSource;
+  /** 该库全部 SITE 逐个 ensure → records（进记录源缓存），回构件 refno 集；调用方再分批装进 DTX */
+  collectDbnum(dbnum: number, options?: CollectDbnumOptions): Promise<CollectDbnumResult>;
+};
+
+export function createGenModelV1ModelSource(): GenModelV1ModelSource {
   const records = createGenModelV1ModelRecordSource();
   // 树的 visibleInsts 与几何加载共用一份 ensure → records 缓存：一次显示只打一次 ensure + 一次 records
   const tree = createGenModelV1TreeSource({ ensureAndCollect: (refno, options) => records.ensureAndCollect(refno, options) });
@@ -30,9 +39,11 @@ export function createGenModelV1ModelSource(): ModelSource {
     meshes,
     records,
     attributes: createGenModelV1AttributeSource({ tree }),
+    collectDbnum: (dbnum, options) => collectDbnumRefnos(tree, records, dbnum, options),
   };
 }
 
+export * from './collectDbnum';
 export * from './treeSource';
 export * from './modelRecords';
 export * from './modelRecordSource';
