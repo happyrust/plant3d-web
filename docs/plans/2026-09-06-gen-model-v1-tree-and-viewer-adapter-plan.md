@@ -1,7 +1,7 @@
 # plant3d-web 接入 gen-model `/api/v1`：模型树与三维模型加载重构方案
 
 - 日期：2026-09-06
-- 状态：**已拍板**（2026-09-06，D1–D7 全按推荐项）。进度：P0 已落地（gen-model 提交 `1eefbd577`，2026-09-07 对 `:18082` 运行实例 live 验证通过，见 §8.1）；P1 已落地（本仓，见 §8.2）；P2 已落地（见 §8.3，P2-4 徽标未做）；P3 已落地（见 §8.4，D6 对拍 ≤ 0.002 mm；P3-c 进度弹窗与 `show_dbnum` 整库入口未做）；P4 已落地（见 §8.5）；P5 已落地（见 §8.6，WS 已连、drain 对齐走 REST——服务端今天不发 `model_drain` 事件）；P6 待做
+- 状态：**已拍板**（2026-09-06，D1–D7 全按推荐项）。进度：P0 已落地（gen-model 提交 `1eefbd577`，2026-09-07 对 `:18082` 运行实例 live 验证通过，见 §8.1）；P1 已落地（本仓，见 §8.2）；P2 已落地（见 §8.3，P2-4 徽标未做）；P3 已落地（见 §8.4，D6 对拍 ≤ 0.002 mm；P3-c 进度弹窗与 `show_dbnum` 整库入口未做）；P4 已落地（见 §8.5）；P5 已落地（见 §8.6，WS 已连、drain 对齐走 REST——服务端今天不发 `model_drain` 事件）；P6 文档与脚本已落地（见 §8.7），**默认开关未翻**（等浏览器两源对拍）
 - 范围：`D:\work\plant-code\old\plant3d-web`（前端，主战场）+ `D:\work\plant-code\old\gen-model`（后端，只做最小增补）
 - 术语以两仓 `CONTEXT.md` 为准：plant3d-web 的「显式显示操作 / 按需模型生成 / 模型资产补齐 / 模型加载」，gen-model 的「生成根 / 最小交付单元 / 模型面 / 库一致性判决」。
 
@@ -385,8 +385,18 @@ curl -I  http://localhost:8022/api/v1/meshes/1.glb
 - **未验证**：真的有一页 `model_drain` 收口时端到端重载（该实例空闲、别的实例是别的会话的，不去触发重算）；浏览器里徽标三态与 WS 小点的实际渲染。
 - **建议（gen-model 侧）**：给 `model_drain` 补 `task_started` / `task_finished` WS 事件，payload 带 `kind` 与 `detail.roots`（或至少 `task_id`），第一条线就能独立工作、REST 轮询可以拉长到分钟级。
 
+### 8.7 P6 落地记录（2026-09-07）
+
+- ADR `docs/adr/0054-load-model-tree-and-geometry-from-gen-model-v1.md`：决策 = D1–D5 的拍板结果（端口 + 两个适配器 + 页面级开关、服务端只加字段 / 加端点、虚拟根、显式显示 = ensure + records、mm/Z-up 不换算），否决的备选各一句。
+- `CONTEXT.md` 新增「模型数据源」一节五个词条：模型数据源 (Model Source)、数据源端口 (Model Source Port)、虚拟根 (Virtual Root)、生成根投影 (Generation-Root Projection)、模型变更同步 (Model Change Sync)，每条带 _Avoid_。
+- `docs/guides/gen-model-v1-local-dev.md`：起 gen-model（`http_api_addr` / `http_api_cors`）→ 起 plant3d-web → URL 开关表（`model_source` / `gm_backend(_port)` / `gm_health` / `show_refno` / `debug_refno`）→ 先脚本证接口再开浏览器 → 两种 `data_face` 形态的差别 → 两源对拍步骤（翻默认开关的前提）→ 常见故障表 → 回退。
+- `scripts/verify-gen-model-v1.ps1`（`.gitignore` 的 `scripts/*` 白名单加了它）：默认只读 GET 七步；`-Ensure` 才 `POST model/ensure(force=false)` + 逐根分页 `records` + 记录里每个 `geo_hash` `HEAD .glb`；每步一行「端点 → 状态 / 条数 / 关键字段」，任何一步失败以 1 退出。
+- **默认开关不翻**：`VITE_MODEL_SOURCE` 仍缺省 `legacy`（D2 说的「对拍通过后翻默认」——两源对拍要 `:3100` 旧后端在跑，见 §8.4 未验证项）。
+- **P6 验证**（2026-09-07 17:10）：`pwsh scripts/verify-gen-model-v1.ps1 -BaseUrl http://127.0.0.1:18082 -Refno 24381/145018 -Ensure` **10/10 通过，exit 0**（health `AvevaMarineSample /ALL` model_ready；roots 37 SITE 全带 dbnum；children(9304/2) 3 ZONE；ancestors 链到 `16189_0`；search PIPE total 306 全带 noun；dbnums 41 行 / DESI 29 / 28 带 ref0s / verdict in_sync=1 not_judged=28；`1.glb` 404（该运行目录无 1.mesh，端点在）；ensure `AlreadyAvailable` 1 根 22 实例；records 1 页 22 条 12 构件 11 直管 `source=model-database`；10 个 geo_hash HEAD 全 200）；无后端时 7 步失败、**exit 1**。文档三件是文字，未另验。
+
 ## 9. 交付物清单
 
-- gen-model：P0-1/2/3（+可选 P0-4），`docs/specs/web-service-api.md` 同步，`changelog.md` 一条；
-- plant3d-web：`src/api/genModelV1Api.ts`、`src/model-source/**`、`usePdmsOwnerTree.ts` / `useDbnoInstancesDtxLoader.ts` / `useDbMetaInfo.ts` / `ViewerPanel.vue` 的取数点改动、`vite.config.ts` / `.env.*`、`scripts/verify-gen-model-v1.ps1`、ADR 0054、联调指南；
-- 本计划按批注修订后作为 `docs/plans/` 的执行基线。
+- gen-model：P0-1/2/3（+可选 P0-4），`docs/specs/web-service-api.md` 同步，`changelog.md` 一条；——**已交**（`1eefbd577`；P0-4 未做）
+- plant3d-web：`src/api/genModelV1Api.ts`、`src/model-source/**`、`usePdmsOwnerTree.ts` / `useDbnoInstancesDtxLoader.ts` / `useDbMetaInfo.ts` / `ViewerPanel.vue` 的取数点改动、`vite.config.ts` / `.env.*`、`scripts/verify-gen-model-v1.ps1`、ADR 0054、联调指南；——**已交**（`3f1c2e2` → `65cb31a` → `be0da07` → `a920c82` → `b7dafa2` → P6 提交；另加 `src/api/genModelV1Ws.ts`、`useGenModelV1Health.ts`、`useGenModelV1ModelSync.ts`、`GenModelV1HealthBadge.vue`、`useModelGeneration.ts` / `useSelectionStore.ts` / `PropertiesPanel.vue` 的取数点）
+- 本计划按批注修订后作为 `docs/plans/` 的执行基线。——§8 是逐阶段的落地与验证记录。
+- **仍欠**：默认开关翻到 `gen-model-v1`（等两源对拍）、P3-c 进度弹窗 + `show_dbnum` 整库入口、P2-4 行尾 `dbnum` 徽标、`is_invalid_tubi` 告警色；gen-model 侧两条建议（`model_drain` WS 事件、`tree/*` 的 Ref0-不在-MDB 分型）。

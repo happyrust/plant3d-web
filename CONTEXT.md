@@ -238,6 +238,28 @@ _Avoid_: 强制重新生成、管理员重建
 即使已有可用模型资产，也明确要求重新生产并替换它的受控操作。它与面向普通查看者的模型资产补齐具有不同的权限和风险。
 _Avoid_: 按需模型生成、模型资产补齐
 
+## 模型数据源
+
+**模型数据源 (Model Source)**:
+模型树、三维几何、网格与构件属性四条取数链共同指向的那一个后端口径；一个页面同一时刻只有一个，由 `?model_source=` → `VITE_MODEL_SOURCE` → 默认 `legacy` 决定。两个种类：`legacy`（旧后端 `:3100` + parquet / DuckDB-WASM）与 `gen-model-v1`（gen-model `/api/v1`）。它是页面级开关，不是某次加载的参数。
+_Avoid_: `data_source`（那是 legacy 内部 parquet | backend 的选择）、后端地址、数据库
+
+**数据源端口 (Model Source Port)**:
+取数点与数据源之间的四个接口：`TreeSource`（根 / 子节点 / 祖先 / 搜索 / 子树 / 可见实例）、`ModelRecordSource`（`refno → InstanceEntry[]`）、`MeshSource`（`geo_hash → GLB URL`）、`AttributeSource`（属性面板 / 类型）。接口形状等于 legacy 函数的形状，所以 legacy 适配器是零逻辑委托；gen-model-v1 适配器负责把 `EleTreeNode` / `GeomInstQuery` / `element/attributes` 映射成这些形状。
+_Avoid_: API 客户端、fetch 封装
+
+**虚拟根 (Virtual Root)**:
+gen-model-v1 源下模型树合成的唯一根 `gm-root:<project>:<mdb>`，children 是该 MDB 全部 DESI / ISOD 库的 SITE。它不是 refno，不能 ensure、不能整体显示；祖先链以它为终点。id 里不含 `/` `,` `<` `>`——树的 refno 归一化会改写这些字符。
+_Avoid_: WORL、树根 refno
+
+**生成根投影 (Generation-Root Projection)**:
+gen-model 的几何记录（`model/records`）按生成根组织：记录上的 `owner` 是生成根而不是直接属主，一个构件的几何要经它所在的根整体取回。前端因此「按根收、按构件缓存」——对任一构件 ensure，服务端解到根、整根记录写进缓存，同根其它构件直接命中。
+_Avoid_: 直接属主、按 refno 单条查询、parquet 分桶
+
+**模型变更同步 (Model Change Sync)**:
+gen-model-v1 源下把服务端已重算的生成根重新装进场景的机制：WS `tasks` 主题的 `task_finished` 与重连触发一次对齐，15 s 定时对齐兜底；对齐 = 读 `GET /tasks?kind=model_drain` 里水位之后收口的任务的 `detail.roots`，与已加载根求交，清缓存后以 `reload`（替换旧对象、不带 `force`）重载。它不是模型重新生成，也不会把没加载过的根拉进场景。
+_Avoid_: 模型重新生成、自动加载、全量刷新
+
 ## 三维校审批注
 
 **批注锚点**:
