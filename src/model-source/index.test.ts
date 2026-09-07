@@ -106,14 +106,17 @@ describe('legacy 适配器：零逻辑委托', () => {
     expect(getModelSource('legacy').meshes.meshUrl('abc123', 'L1')).toBe(legacyMeshUrl('abc123', 'L1'));
   });
 
-  it('gen-model-v1 在 P2/P3 接线前回退到 legacy 取数，只告警一次，kind 仍报 gen-model-v1', async () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  it('gen-model-v1：树与网格走 /api/v1，几何记录与属性在 P3/P4 前仍委托 legacy；同种类只建一份', async () => {
     const source = getModelSource('gen-model-v1');
     expect(source.kind).toBe('gen-model-v1');
-    await source.tree.worldRoot();
-    expect(legacyMocks.e3dGetWorldRoot).toHaveBeenCalledTimes(1);
     expect(getModelSource('gen-model-v1')).toBe(source);
-    expect(warn).toHaveBeenCalledTimes(1);
-    warn.mockRestore();
+    expect(source.meshes.meshUrl('12240963882128803248', 'L1')).toMatch(/\/api\/v1\/meshes\/12240963882128803248\.glb$/);
+
+    await source.records.instanceEntriesByRefnos(7997, ['24381_145018']);
+    await source.attributes.typeInfo('24381_145018');
+    expect(legacyMocks.queryInstanceEntriesByRefnos).toHaveBeenCalledTimes(1);
+    expect(legacyMocks.pdmsGetTypeInfo).toHaveBeenCalledWith('24381_145018');
+    // 树不再碰旧后端
+    expect(legacyMocks.e3dGetWorldRoot).not.toHaveBeenCalled();
   });
 });

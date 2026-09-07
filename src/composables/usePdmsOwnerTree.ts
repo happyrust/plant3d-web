@@ -1,18 +1,11 @@
 import { computed, ref, shallowRef, watch } from 'vue';
 
+import type { TreeNodeDto } from '@/api/genModelE3dApi';
 import type { CheckState, FlatRow, TreeNode } from '@/composables/useModelTree';
 import type { DtxCompatViewer } from '@/viewer/dtx/DtxCompatViewer';
 
-import {
-  e3dGetAncestors,
-  e3dGetChildren,
-  e3dSearch,
-  e3dGetWorldRoot,
-  e3dGetSubtreeRefnos,
-  e3dGetVisibleInsts,
-  type TreeNodeDto,
-} from '@/api/genModelE3dApi';
 import { collectLoadedSubtreeIds, useSceneGraphOps } from '@/composables/useSceneGraph';
+import { getModelSource } from '@/model-source';
 
 export const NOUN_TYPES = [
   'PIPE', 'BRAN', 'EQUI', 'SUPP', 'STRU', 'WALL', 'SWALL', 'GWALL',
@@ -69,6 +62,9 @@ function dtoToTreeNode(dto: TreeNodeDto, parentId: string | null): TreeNode {
 
 export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
   const sceneGraph = useSceneGraphOps(viewerRef);
+  // 取数一律经数据源端口（plan 2026-09-06 P2-2）：`legacy` 下每个方法就是原来那个 e3d* 函数的一次转发，
+  // `gen-model-v1` 下换成 /api/v1 适配器（虚拟根 + 节点映射）。状态机本身不动。
+  const treeSource = getModelSource().tree;
 
   const nodesById = shallowRef<Record<string, TreeNode>>({});
   const rootIds = ref<string[]>([]);
@@ -261,9 +257,9 @@ export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
 
     childrenLoadingById.add(parentKey);
     try {
-      let resp = await e3dGetChildren(parentKey, 2000);
+      let resp = await treeSource.children(parentKey, 2000);
       if (!resp.success && shouldRetryWithWrappedId(resp.error_message)) {
-        resp = await e3dGetChildren(wrapSurrealThingId(parentKey), 2000);
+        resp = await treeSource.children(wrapSurrealThingId(parentKey), 2000);
       }
       if (!resp.success) throw new Error(resp.error_message || 'children api failed');
 
@@ -356,7 +352,7 @@ export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
           searchError.value = null;
           try {
             const nouns = types.size > 0 ? Array.from(types) : undefined;
-            const resp = await e3dSearch({ keyword: q, nouns, limit: 50 });
+            const resp = await treeSource.search({ keyword: q, nouns, limit: 50 });
             if (seq !== searchSeq) return;
             if (!resp.success) {
               searchItems.value = [];
@@ -442,9 +438,9 @@ export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
   async function querySubtreeRefnos(refno: string): Promise<string[]> {
     try {
       const normalizedRefno = normalizeRefnoKey(refno);
-      let resp = await e3dGetSubtreeRefnos(normalizedRefno, { includeSelf: true });
+      let resp = await treeSource.subtreeRefnos(normalizedRefno, { includeSelf: true });
       if (!resp.success && shouldRetryWithWrappedId(resp.error_message)) {
-        resp = await e3dGetSubtreeRefnos(wrapSurrealThingId(normalizedRefno), { includeSelf: true });
+        resp = await treeSource.subtreeRefnos(wrapSurrealThingId(normalizedRefno), { includeSelf: true });
       }
       
       if (!resp.success) {
@@ -466,9 +462,9 @@ export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
   async function queryVisibleInstRefnos(refno: string): Promise<string[]> {
     try {
       const normalizedRefno = normalizeRefnoKey(refno);
-      let resp = await e3dGetVisibleInsts(normalizedRefno);
+      let resp = await treeSource.visibleInsts(normalizedRefno);
       if (!resp.success && shouldRetryWithWrappedId(resp.error_message)) {
-        resp = await e3dGetVisibleInsts(wrapSurrealThingId(normalizedRefno));
+        resp = await treeSource.visibleInsts(wrapSurrealThingId(normalizedRefno));
       }
       if (!resp.success) {
         console.error('[pdms-tree] queryVisibleInstRefnos failed:', resp.error_message);
@@ -871,9 +867,9 @@ export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
     }
 
     try {
-      let resp = await e3dGetAncestors(key);
+      let resp = await treeSource.ancestors(key);
       if (!resp.success && shouldRetryWithWrappedId(resp.error_message)) {
-        resp = await e3dGetAncestors(wrapSurrealThingId(key));
+        resp = await treeSource.ancestors(wrapSurrealThingId(key));
       }
       if (!resp.success) return false;
 
@@ -932,9 +928,9 @@ export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
     if (!isPdmsRefnoKey(key)) {
       throw new Error(`非法 refno（期望 17496/171640 或 17496_171640）: ${formatBadRefno(refno)}`);
     }
-    let resp = await e3dGetAncestors(key);
+    let resp = await treeSource.ancestors(key);
     if (!resp.success && shouldRetryWithWrappedId(resp.error_message)) {
-      resp = await e3dGetAncestors(wrapSurrealThingId(key));
+      resp = await treeSource.ancestors(wrapSurrealThingId(key));
     }
     if (!resp.success) throw new Error(resp.error_message || 'ancestors failed');
 
@@ -1020,7 +1016,7 @@ export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
 
   async function initTree(seq: number) {
     try {
-      const resp = await e3dGetWorldRoot();
+      const resp = await treeSource.worldRoot();
       if (!resp.success || !resp.node) throw new Error(resp.error_message || 'world-root api failed');
       if (seq !== initSeq) return;
 

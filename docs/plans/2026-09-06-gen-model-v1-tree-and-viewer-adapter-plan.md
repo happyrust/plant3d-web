@@ -1,7 +1,7 @@
 # plant3d-web 接入 gen-model `/api/v1`：模型树与三维模型加载重构方案
 
 - 日期：2026-09-06
-- 状态：**已拍板**（2026-09-06，D1–D7 全按推荐项）。进度：P0 已落地（gen-model 提交 `1eefbd577`，2026-09-07 对 `:18082` 运行实例 live 验证通过，见 §8.1）；P1 已落地（本仓，见 §8.2）；P2 起待做
+- 状态：**已拍板**（2026-09-06，D1–D7 全按推荐项）。进度：P0 已落地（gen-model 提交 `1eefbd577`，2026-09-07 对 `:18082` 运行实例 live 验证通过，见 §8.1）；P1 已落地（本仓，见 §8.2）；P2 已落地（见 §8.3，P2-4 徽标未做）；P3 起待做
 - 范围：`D:\work\plant-code\old\plant3d-web`（前端，主战场）+ `D:\work\plant-code\old\gen-model`（后端，只做最小增补）
 - 术语以两仓 `CONTEXT.md` 为准：plant3d-web 的「显式显示操作 / 按需模型生成 / 模型资产补齐 / 模型加载」，gen-model 的「生成根 / 最小交付单元 / 模型面 / 库一致性判决」。
 
@@ -330,6 +330,25 @@ curl -I  http://localhost:8022/api/v1/meshes/1.glb
   - `npx vitest run` 全量：baseline（基线提交 `328ca8b`）1860 tests / 1829 passed / 31 failed / 18 failed files → after 1885 / 1859 / 26 / 14，**新增 fail 0**（新增 25 条全绿：`genModelV1Api.test.ts` 12、`model-source/index.test.ts` 7、`apiBase.test.ts` +6；基线里 4 个 review/annotation store 测试文件本轮转绿属既有偶发，与本轮无关）；
   - live 冒烟（一次性 vitest 文件，跑完已删；对 `127.0.0.1:18082`）：用 P1-1 客户端实调 `health`（`AvevaMarineSample /ALL`，`model_ready=true`、`model_phase_open=true`）、`tree/roots`（37 SITE，全部带 `dbnum`）、`tree/children?refno=9304_2`（`a_b` 写法被服务端接受，回 `parent:"9304/2"`，3 个 ZONE 带 `dbnum=1112`）、`tree/ancestors?refno=17496_8518` → `["17496_8518","9304_2","9304_0"]`、`search?query=PIPE&limit=5`（306 命中，items 带 `noun`/`dbnum`）、`dbnums`（41 行，28 行带 `ref0s`）、`meshes/12240963882128803248.glb`（200 / `model/gltf-binary` / `immutable` / `glTF` 魔数 11148 B）、`meshes/1.glb` → 404 `not_found` 分型。
   - **顺手发现（gen-model 侧，未改）**：`tree/children?refno=1/1`（Ref0 不在 MDB）回 **500 `internal`**「ref0 1 反查不到 dbnum」，按 spec §4.5 的口径这应是 404 `not_found`（或 503 `ref0_affiliation_unavailable`）；客户端现在把它归为不可负缓存的 `internal`。建议 P2 前在 gen-model `tree_*` handler 里把 `DirectStoreError` 之外的「Ref0 不在骨架」分型出来。
+
+### 8.3 P2 落地记录（2026-09-07）
+
+- P2-1 `src/model-source/genModelV1/treeSource.ts`（`createGenModelV1TreeSource`，API 可注入）：
+  - 虚拟根 id `gm-root:<project>:<mdb>`（D4-A；`/` `,` `<` `>` 一律替换成 `_`——`usePdmsOwnerTree.normalizeRefnoKey` 会改写这些字符，含了就对不上），`worldRoot()` 合成它，`children(虚拟根)` 复用同一份 `tree/roots`（60 s 缓存），children = 全部 SITE；
+  - `eleTreeNodeToDto`：`refno`/`owner` 归一 `a_b`，空名退回 noun，`dbnum` 透传（`TreeNodeDto` 加了可选 `dbnum`，legacy 源不填）；`children(refno, limit)` 服务端不截断、这里按 limit 截并置 `truncated`；
+  - `ancestors`：服务端链（自己在前到库顶 WORL）末尾补虚拟根；`node(refno)`：gen-model 没有单节点端点，用「祖先链第二项 = 属主 → 属主 children 里捞自己」两跳实现；
+  - `search`：NAME 子串在服务端，`nouns` 过滤在客户端（靠 P0-2 的 `noun`），不够一页翻下一页，扫描上限 2000；
+  - `subtreeRefnos`：BFS `tree/children`（一个节点一次请求，上限 512 次请求，`children_count=0` 不再请求），撞上限置 `truncated`；虚拟根拒绝；
+  - `visibleInsts` = **D5-A**：`ensureAndCollectRecords`（见下）→ 记录里构件 refno 去重；虚拟根拒绝（整 MDB 的 ensure 不是一次点击该做的事，P3-c 另开入口）。
+  - 一切 `GenModelV1ApiError` 折成 `{ success:false, error_message }`——现有调用方按 `success` 分支。
+- P3-a 提前：`src/model-source/genModelV1/modelRecords.ts` `ensureAndCollectRecords(refno)`：`ensure(force=false)` → `generation_roots`（缺省用自身）→ 逐根分页 `records`（页 5000）→ 拼接；容器 `422 container` 按契约展开一层递归（`maxContainerDepth` 默认 3，`maxRoots` 默认 128，超出进 `truncatedRoots`）；`202 generation_pending` / `504 timeout` 进 `pending` 不重试；`not_found` / `precondition` / `NoRenderableGeometry` 进 `empty`；`records` 409（还没进投影）当 pending。只收记录，`InstanceEntry` 映射留给 P3-b。
+- P2-2 `usePdmsOwnerTree.ts`：7 处取数（`initTree` / `ensureChildrenLoaded` / 搜索 watch / `querySubtreeRefnos` / `queryVisibleInstRefnos` / 两处 ancestors）改为 `getModelSource().tree.*`，状态机一行没动；`legacy` 下每个方法就是原函数的一次转发。`genModelV1/index.ts` 组装：`tree` v1、`meshes` v1（`/api/v1/meshes/{hash}.glb`）、`records` / `attributes` 仍委托 legacy（P3-b / P4 再换，此刻没人经端口读它们）。
+- 未做：P2-3 定位无需改（现有「从根向下逐层找」不依赖顺序，虚拟根即终点，live 已证）；P2-4 行尾 `dbnum` 徽标（可选）未做。
+- **P2 验证**（2026-09-07 16:22）：
+  - `npm run type-check` 通过；触及文件 ESLint 0 问题；
+  - `vitest` 全量 baseline 1860/1829/31 → after 1900/1870/30，**新增 fail 0**（新增 15 条：`treeSource.test.ts` 10、`modelRecords.test.ts` 5；`index.test.ts` 改为断言 v1 的树不再碰旧后端、records/attributes 仍委托 legacy）；
+  - live（一次性 vitest 文件，跑完已删；`127.0.0.1:18082`，注入 baseUrl 的真 API）：`worldRoot` → `gm-root:AvevaMarineSample:ALL`（37 SITE，全部带 `dbnum`）→ `children(/1WCC-PIPE)` → `ancestors(24381_145018)` 末尾是虚拟根 → `search 1WCC nouns=[SITE,ZONE]` 只回 SITE/ZONE → `node(24381_145018)` 两跳定位到 BRAN `/Copy-of-RCS0014-1R43012新`（owner `24381_144975`，17 子）→ `visibleInsts(BRAN 24381_145018)` 22 条记录 / 12 个构件 refno，1.2 s → `visibleInsts(ZONE 24381_101410)` 成功 11 条 / 7 个 refno，1.1 s（该实例是摄入形态，ZONE 直接被 ensure 接受）。
+  - **未验证**：浏览器里 `?model_source=gen-model-v1` 的树面板实际交互（展开 / 搜索 / 勾选眼睛）——勾选后几何仍走 parquet（P3 前预期为空），这一步留给 P3 一起在浏览器对拍。
 
 ## 9. 交付物清单
 

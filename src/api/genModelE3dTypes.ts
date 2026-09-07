@@ -4,6 +4,8 @@ export type TreeNodeDto = {
   noun: string;
   owner?: string | null;
   children_count?: number | null;
+  /** 所属库号；只有 gen-model-v1 数据源给（服务端骨架解出），legacy 源没有这一格 */
+  dbnum?: number | null;
 };
 
 export type NodeResponse = {

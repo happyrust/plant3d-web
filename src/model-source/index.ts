@@ -4,9 +4,9 @@
  * `resolveModelSourceKind()`：`?model_source=` → `VITE_MODEL_SOURCE` → 默认 `legacy`。
  * `getModelSource()`：按当前开关给一份 `ModelSource`（进程内每种一份，惰性建）。
  *
- * P1 只有 `legacy` 适配器；`gen-model-v1` 在 P2（树）/ P3（几何）落地之前**回退到 legacy** 并告警一次——
- * 开关先能切、行为不变，对拍脚本与 URL 约定可以先定下来。
+ * `gen-model-v1` 目前接了树（P2）与网格 URL（P0-1）；几何记录（P3）与属性（P4）仍委托 legacy，见 `genModelV1/index.ts`。
  */
+import { createGenModelV1ModelSource } from './genModelV1';
 import { createLegacyModelSource } from './legacy';
 import { DEFAULT_MODEL_SOURCE_KIND, MODEL_SOURCE_KINDS, type ModelSource, type ModelSourceKind } from './ports';
 
@@ -53,17 +53,9 @@ export function isGenModelV1Source(): boolean {
 }
 
 const instances = new Map<ModelSourceKind, ModelSource>();
-let warnedV1Fallback = false;
 
 function createModelSource(kind: ModelSourceKind): ModelSource {
-  if (kind === 'gen-model-v1') {
-    // P2 / P3 落地前先回退：树与几何仍走 legacy，只有健康探针（P1-4）已经指向 gen-model。
-    if (!warnedV1Fallback) {
-      warnedV1Fallback = true;
-      console.warn('[model-source] gen-model-v1 适配器尚未接线（P2/P3），本次回退到 legacy 取数；健康探针仍指向 gen-model');
-    }
-    return { ...createLegacyModelSource(), kind: 'gen-model-v1' };
-  }
+  if (kind === 'gen-model-v1') return createGenModelV1ModelSource();
   return createLegacyModelSource();
 }
 
@@ -77,8 +69,7 @@ export function getModelSource(kind: ModelSourceKind = getModelSourceKind()): Mo
   return source;
 }
 
-/** 测试用：清掉已建实例与告警标记。 */
+/** 测试用：清掉已建实例。 */
 export function __resetModelSourceForTests(): void {
   instances.clear();
-  warnedV1Fallback = false;
 }
