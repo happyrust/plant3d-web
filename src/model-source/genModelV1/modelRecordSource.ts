@@ -23,6 +23,12 @@ export type GenModelV1ModelRecordSource = ModelRecordSource & {
   peek(refno: string): InstanceEntry[] | undefined;
   /** 清缓存：不传清全部，传了只清这些 refno。 */
   invalidate(refnos?: string[]): void;
+  /** 已经收过记录的生成根（`a_b`）——P5 拿它与 `model_drain` 的根做交集。 */
+  collectedRoots(): string[];
+  /** 某根下缓存过的全部构件 refno（含根自己），P5 重载时按它 forceReload。 */
+  leavesOfRoot(root: string): string[];
+  /** 把一根连同它的构件从缓存里清掉；返回被清掉的构件 refno。 */
+  invalidateRoot(root: string): string[];
 };
 
 export type GenModelV1ModelRecordSourceOptions = {
@@ -33,11 +39,27 @@ export type GenModelV1ModelRecordSourceOptions = {
 export function createGenModelV1ModelRecordSource(options: GenModelV1ModelRecordSourceOptions = {}): GenModelV1ModelRecordSource {
   const api = options.api ?? defaultModelRecordsApi;
   const entriesByRefno = new Map<string, InstanceEntry[]>();
+  /** 生成根（a_b）→ 它这次 records 里出现过的构件 refno（含根自己） */
+  const leavesByRoot = new Map<string, Set<string>>();
 
   async function ensureAndCollect(refno: string, extra: EnsureAndCollectOptions = {}): Promise<EnsureAndCollectResult> {
     const result = await ensureAndCollectRecords(refno, { ...options.ensureOptions, ...extra }, api);
     for (const [key, entries] of groupInstanceEntriesByRefno(result.items)) {
       entriesByRefno.set(key, entries);
+      // records 的 owner 就是生成根（不是直接属主），按它归档
+      const root = entries[0] ? String(entries[0].uniforms?.owner_refno ?? '') : '';
+      if (root) {
+        let leaves = leavesByRoot.get(root);
+        if (!leaves) {
+          leaves = new Set<string>();
+          leavesByRoot.set(root, leaves);
+        }
+        leaves.add(key);
+      }
+    }
+    for (const root of result.generationRoots) {
+      if (!leavesByRoot.has(root)) leavesByRoot.set(root, new Set<string>());
+      leavesByRoot.get(root)!.add(root);
     }
     // 明确知道没有几何的根也记一笔空数组，下一次同一个 refno 不再 ensure
     for (const key of result.empty) {
@@ -75,10 +97,28 @@ export function createGenModelV1ModelRecordSource(options: GenModelV1ModelRecord
   function invalidate(refnos?: string[]): void {
     if (!refnos) {
       entriesByRefno.clear();
+      leavesByRoot.clear();
       return;
     }
     for (const refno of refnos) entriesByRefno.delete(fromV1Refno(refno));
   }
 
-  return { instanceEntriesByRefnos, ensureAndCollect, peek, invalidate };
+  function collectedRoots(): string[] {
+    return Array.from(leavesByRoot.keys());
+  }
+
+  function leavesOfRoot(root: string): string[] {
+    return Array.from(leavesByRoot.get(fromV1Refno(root)) ?? []);
+  }
+
+  function invalidateRoot(root: string): string[] {
+    const key = fromV1Refno(root);
+    const leaves = leavesOfRoot(key);
+    for (const leaf of leaves) entriesByRefno.delete(leaf);
+    entriesByRefno.delete(key);
+    leavesByRoot.delete(key);
+    return leaves.includes(key) ? leaves : [key, ...leaves];
+  }
+
+  return { instanceEntriesByRefnos, ensureAndCollect, peek, invalidate, collectedRoots, leavesOfRoot, invalidateRoot };
 }

@@ -10,10 +10,25 @@
  */
 import { computed, reactive, readonly } from 'vue';
 
-import { genModelV1Health, isGenModelV1ApiError, type HealthResponse } from '@/api/genModelV1Api';
+import { genModelV1Dbnums, genModelV1Health, isGenModelV1ApiError, type DbnumRow, type HealthResponse } from '@/api/genModelV1Api';
 import { getGenModelV1BaseUrl } from '@/utils/apiBase';
 
 export type GenModelV1HealthStatus = 'idle' | 'loading' | 'ok' | 'error';
+
+/** `/dbnums` 的 `model_verdict` 三态汇总（共识 d-594：`not_judged` 是「没判」，不画成告警）。 */
+export type GenModelV1VerdictSummary = {
+  inSync: number;
+  lagging: number;
+  notJudged: number;
+  /** 参与统计的库（本 MDB 内、未排除的 DESI） */
+  total: number;
+  /** `dbnum → verdict` */
+  byDbnum: Record<number, string>;
+  /** 滞后库的 dbnum（悬停列出来） */
+  laggingDbnums: number[];
+  lastCheckedAt: number | null;
+  error: string | null;
+};
 
 export type GenModelV1HealthState = {
   status: GenModelV1HealthStatus;
@@ -34,9 +49,37 @@ export type GenModelV1HealthState = {
   lastOkAt: number | null;
   error: string | null;
   raw: HealthResponse | null;
+  verdict: GenModelV1VerdictSummary;
 };
 
 export const DEFAULT_HEALTH_POLL_INTERVAL_MS = 60_000;
+
+function emptyVerdict(): GenModelV1VerdictSummary {
+  return { inSync: 0, lagging: 0, notJudged: 0, total: 0, byDbnum: {}, laggingDbnums: [], lastCheckedAt: null, error: null };
+}
+
+/**
+ * `/dbnums` 行 → 三态汇总。只数本 MDB 内、未排除的 DESI 行（`not_in_project` / `excluded` 的不是本服务的活）；
+ * 一行都不剩时退回全部 DESI 行，免得面板一个数字都说不出。认不出的 verdict 归 `not_judged`。
+ */
+export function summarizeVerdicts(rows: DbnumRow[], now = Date.now()): GenModelV1VerdictSummary {
+  const desi = rows.filter((row) => String(row.db_type ?? '').toUpperCase() === 'DESI');
+  const scoped = desi.filter((row) => row.not_in_project !== true && row.excluded !== true);
+  const counted = scoped.length > 0 ? scoped : desi;
+  const summary = emptyVerdict();
+  summary.lastCheckedAt = now;
+  for (const row of counted) {
+    const verdict = String(row.model_verdict ?? 'not_judged').toLowerCase();
+    summary.byDbnum[row.dbnum] = verdict;
+    summary.total++;
+    if (verdict === 'in_sync') summary.inSync++;
+    else if (verdict === 'lagging') {
+      summary.lagging++;
+      summary.laggingDbnums.push(row.dbnum);
+    } else summary.notJudged++;
+  }
+  return summary;
+}
 
 function initialState(): GenModelV1HealthState {
   return {
@@ -57,6 +100,7 @@ function initialState(): GenModelV1HealthState {
     lastOkAt: null,
     error: null,
     raw: null,
+    verdict: emptyVerdict(),
   };
 }
 
@@ -64,6 +108,7 @@ const state = reactive<GenModelV1HealthState>(initialState());
 
 let timer: ReturnType<typeof setInterval> | null = null;
 let inflight: Promise<void> | null = null;
+let verdictInflight: Promise<void> | null = null;
 
 function asString(value: unknown): string | null {
   return typeof value === 'string' && value.trim() ? value : null;
@@ -138,11 +183,40 @@ async function refresh(): Promise<void> {
   return inflight;
 }
 
+/**
+ * `/dbnums` 的三态（P5）。它比 `/health` 慢得多（初始化中的实例可能几十秒），所以单独一条线、单独的失败格，
+ * 不拖累身份探针；`/health` 没通就不问它。
+ */
+async function refreshVerdict(): Promise<void> {
+  if (verdictInflight) return verdictInflight;
+  if (state.status !== 'ok') return;
+  verdictInflight = (async () => {
+    try {
+      const resp = await genModelV1Dbnums({ timeoutMs: 60_000 });
+      state.verdict = summarizeVerdicts(resp.dbnums ?? []);
+    } catch (error) {
+      state.verdict = {
+        ...state.verdict,
+        lastCheckedAt: Date.now(),
+        error: isGenModelV1ApiError(error) ? `${error.code}: ${error.message}` : error instanceof Error ? error.message : String(error),
+      };
+    } finally {
+      verdictInflight = null;
+    }
+  })();
+  return verdictInflight;
+}
+
+async function refreshAll(): Promise<void> {
+  await refresh();
+  await refreshVerdict();
+}
+
 function start(intervalMs = DEFAULT_HEALTH_POLL_INTERVAL_MS): void {
   if (timer) return;
-  void refresh();
+  void refreshAll();
   timer = setInterval(() => {
-    void refresh();
+    void refreshAll();
   }, intervalMs);
 }
 
@@ -174,17 +248,28 @@ const summary = computed(() => {
   }
 });
 
+/** 三态那一小段：「库 同步 1 · 滞后 0 · 未判 28」；没数据就空串。`not_judged` 只是陈述，不是告警。 */
+export const verdictSummaryText = (verdict: GenModelV1VerdictSummary): string => {
+  if (verdict.total === 0) return verdict.error ? '库状态未取到' : '';
+  return `库 同步 ${verdict.inSync} · 滞后 ${verdict.lagging} · 未判 ${verdict.notJudged}`;
+};
+
+const verdictText = computed(() => verdictSummaryText(state.verdict));
+
 export function useGenModelV1Health() {
   return {
     state: readonly(state),
     summary,
-    refresh,
+    verdictText,
+    refresh: refreshAll,
+    refreshVerdict,
     start,
     stop,
     /** 测试用：回到初始态并停表。 */
     __reset(): void {
       stop();
       inflight = null;
+      verdictInflight = null;
       Object.assign(state, initialState());
     },
   };

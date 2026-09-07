@@ -597,6 +597,46 @@ export function genModelV1Dbnums(options?: GenModelV1RequestOptions): Promise<Db
   return genModelV1Fetch<DbnumsResponse>('/api/v1/dbnums', options);
 }
 
+/** `GET /api/v1/tasks` 的一行（spec §4.4）；`detail` / `result` 按 kind 各不相同，只声明 P5 要读的。 */
+export type TaskEntryDto = {
+  task_id: string;
+  /** `data_batch` / `model_drain` / `model_rebuild` / `model_history` / `room_recalc` */
+  kind: string;
+  /** `queued` / `running` / `succeeded` / `partial` / `failed` / `yielded` … */
+  state: string;
+  project?: string;
+  created_at?: string;
+  started_at?: string | null;
+  finished_at?: string | null;
+  dbnum?: number | null;
+  units_done?: number | null;
+  total_units?: number | null;
+  /** `model_drain`：`{ epoch_id, roots: [{ dbnum, target_refno: "a/b", action, revision }], root_samples_truncated }` */
+  detail?: {
+    epoch_id?: number;
+    roots?: { dbnum?: number; target_refno?: string; action?: string; revision?: number }[];
+    root_samples_truncated?: number;
+    [key: string]: unknown;
+  } | null;
+  result?: unknown;
+  [key: string]: unknown;
+};
+
+export type TasksResponse = { tasks: TaskEntryDto[] };
+
+export type GenModelV1TasksQuery = {
+  state?: string;
+  kind?: string;
+  limit?: number;
+};
+
+export function genModelV1Tasks(query: GenModelV1TasksQuery = {}, options?: GenModelV1RequestOptions): Promise<TasksResponse> {
+  return genModelV1Fetch<TasksResponse>('/api/v1/tasks', {
+    ...options,
+    query: { state: query.state, kind: query.kind, limit: query.limit },
+  });
+}
+
 /**
  * `GET /api/v1/meshes/{geo_hash}.glb` 的 URL（spec §4.11）。不发请求——网格由现有 DTX 加载链
  * 自己 fetch + `parseGlbGeometry`。字符集不合法直接抛（服务端也会 400，这里省一次往返）。

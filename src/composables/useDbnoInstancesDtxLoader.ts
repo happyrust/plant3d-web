@@ -38,6 +38,8 @@ type LoaderOptions = {
    * 只有调用方自带 `instanceEntriesByRefno` / `parquetManifestUrl`（不可变清单，版本对比）时不改。
    */
   dataSource?: 'parquet' | 'backend' | 'gen-model-v1'
+  /** 人明确要求重生成（gen-model-v1 = `ensure(force=true)`）；其它数据源忽略 */
+  forceRegenerate?: boolean
   includeOwnedTubings?: boolean
   /** 不可变最小交付单元提交的 manifest URL；提供后不读取 dbno 当前包。 */
   parquetManifestUrl?: string
@@ -735,6 +737,7 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
     index = await source.records.instanceEntriesByRefnos(dbno, toLoad, {
       debug,
       forceRefresh: normalizedForceReload !== null,
+      forceRegenerate: options.forceRegenerate === true,
       includeOwnedTubings: options.includeOwnedTubings,
       expectedRootRefno: options.expectedRootRefno,
     });

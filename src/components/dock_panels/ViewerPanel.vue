@@ -4986,6 +4986,8 @@ onMounted(async () => {
             : await mg.showModelByRefno(r, {
               flyTo: !highlight && flyTo && unique.length === 1,
               regenerate: !!(detail as any)?.regenModel,
+              // gen-model-v1 同步（P5）：服务端已重算，替换旧对象即可，不要求再生成
+              reload: !!(detail as any)?.reload,
             });
           const loadDebug = mg.lastLoadDebug?.value ?? null;
           const dtxStatsAfter =

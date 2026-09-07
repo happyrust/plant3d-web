@@ -1,7 +1,7 @@
 # plant3d-web 接入 gen-model `/api/v1`：模型树与三维模型加载重构方案
 
 - 日期：2026-09-06
-- 状态：**已拍板**（2026-09-06，D1–D7 全按推荐项）。进度：P0 已落地（gen-model 提交 `1eefbd577`，2026-09-07 对 `:18082` 运行实例 live 验证通过，见 §8.1）；P1 已落地（本仓，见 §8.2）；P2 已落地（见 §8.3，P2-4 徽标未做）；P3 已落地（见 §8.4，D6 对拍 ≤ 0.002 mm；P3-c 进度弹窗与 `show_dbnum` 整库入口未做）；P4 已落地（见 §8.5）；P5 / P6 待做
+- 状态：**已拍板**（2026-09-06，D1–D7 全按推荐项）。进度：P0 已落地（gen-model 提交 `1eefbd577`，2026-09-07 对 `:18082` 运行实例 live 验证通过，见 §8.1）；P1 已落地（本仓，见 §8.2）；P2 已落地（见 §8.3，P2-4 徽标未做）；P3 已落地（见 §8.4，D6 对拍 ≤ 0.002 mm；P3-c 进度弹窗与 `show_dbnum` 整库入口未做）；P4 已落地（见 §8.5）；P5 已落地（见 §8.6，WS 已连、drain 对齐走 REST——服务端今天不发 `model_drain` 事件）；P6 待做
 - 范围：`D:\work\plant-code\old\plant3d-web`（前端，主战场）+ `D:\work\plant-code\old\gen-model`（后端，只做最小增补）
 - 术语以两仓 `CONTEXT.md` 为准：plant3d-web 的「显式显示操作 / 按需模型生成 / 模型资产补齐 / 模型加载」，gen-model 的「生成根 / 最小交付单元 / 模型面 / 库一致性判决」。
 
@@ -371,6 +371,19 @@ curl -I  http://localhost:8022/api/v1/meshes/1.glb
 - `useSelectionStore` 的属性查询改经 `getModelSource().attributes.uiAttr`（动态引入，不把整套适配器拖进每个引用 selection store 的组件）；legacy 下仍是 `pdmsGetUiAttr` 一次转发。其它直接调 `pdmsGetUiAttr` 的地方（`ViewerPanel` ptset / 校审 / 房间面板）不属于「模型树 + 三维显示」，未动。
 - P4-2 `typeInfo` 走树节点两跳（P3 已做，本轮挪进 `attributeSource.ts`）；P4-3 搜索按 noun 过滤（P2 已做）。
 - **P4 验证**（2026-09-07 16:45）：`npm run type-check` 通过；触及文件 ESLint 0 问题；`vitest` 全量 baseline 1860/1829/31 → 1917/1886/31，失败文件集合与基线相同（新增 5 条：`attributeSource.test.ts`）；live（`:18082`，一次性文件已删）`uiAttr(24381_145018)`：70 条有值属性（含 `:H-*` / `:MDS*` / `:PSIWEIGHT` 等 UDA 带 `:` 前缀，`AEXCES=0`、`BUIL=false` 已转型，`DUTY="反应堆冷却剂"`），`full_name=/Copy-of-RCS0014-1R43012新`，`diagnostics = {source:e3d-io, complete:false, undecoded:43, shape_conflicts:[TYPEX,SPAMAP]}`；`typeInfo(24381_145018)` → `BRAN`，owner `24381_144975` `PIPE`。**未验证**：属性面板在浏览器里的实际渲染（含尾部诊断行）。
+
+### 8.6 P5 落地记录（2026-09-07）
+
+- **服务端事实（改变了 P5 的形状）**：读 gen-model 源码，`model_drain` 任务只进 `TaskRegistry`（`insert_running_model_drain` / `finish`），**不发 WS 事件**——`task_started` / `task_finished` 只有 `data_batch`（`batch_worker.rs`）、`room_recalc`、`batch_scheduler` 在发，且 `task_finished` 的 payload 是 `{task_id, state, result}`，**没有 `kind`、没有根列表**；根只在任务的 `detail.roots[].target_refno`（`a/b`）里，要 `GET /api/v1/tasks` 读。所以计划里「`task_finished` 且 `kind=model_drain` → `detail.roots[]`」今天在服务端不存在。
+- 落地成两条线合一条（`useGenModelV1ModelSync.ts`）：
+  1. `src/api/genModelV1Ws.ts`：WS 客户端按 spec §5——信封 `{type, seq, ts, task_id, payload}`、连上即 `subscribe {topics:['tasks']}`、30 s `ping`、`pong` 过滤、`seq` 空洞回调 `onGap`、断线 1 s→30 s 指数退避重连、`stop()` 后不重连、`WebSocket` 可注入；`toGenModelV1WsUrl` 把 `http(s)://…` / `/gm` 换成 `ws(s)://…/api/v1/ws`。任何 `task_finished`（数据批次收口通常紧跟一页模型消化）与重连成功都触发一次对齐。
+  2. REST 对齐（默认 15 s）：`GET /api/v1/tasks?kind=model_drain&limit=100` → 水位之后、没处理过、已收口（`succeeded/partial/failed/yielded`）的 drain → `detail.roots[].target_refno` 归一 `a_b` → ∩ 记录源 `collectedRoots()`（P3 的记录源新增 `collectedRoots / leavesOfRoot / invalidateRoot`，按生成根归档构件）→ `invalidateRoot` → 派 `showModelByRefnos {refnos, reload:true, flyTo:false}` → `ViewerPanel` 接住 → `showModelByRefno(root, {reload:true})`。首次连上只推水位（之前收口的 drain 与本页面无关；水位 `''` 表示推过但还没有 drain）。
+  - `showModelByRefno` 新增 `reload` 选项：跳过「已在场景」的早退，v1 分支 `forceReloadRefnos + replaceExistingObjects + forceRefreshGeometries` 但 **不带 force**（服务端已重算，`ensure(force=false)` 回 `AlreadyAvailable` + 新记录）；`regenerate` 现在真的带 `force`（P3 时 `forceRegenerate` 没从 `LoaderOptions` 传到记录源，本轮补上）。
+- 徽标（`GenModelV1HealthBadge.vue`）：`useGenModelV1Health` 新增 `/dbnums` 三态汇总 `verdict {inSync, lagging, notJudged, total, byDbnum, laggingDbnums}`（只数本 MDB 内未排除的 DESI，一行不剩退回全部 DESI；`/dbnums` 慢、单独一条线、`/health` 没通不问），文本「库 同步 1 · 滞后 0 · 未判 28」，`lagging>0` 才把状态点画成 warning，`not_judged` 只陈述（d-594）；右侧再一个小点表示 WS 连接态；悬停列滞后库、同步状态与最近重载的根。同步只在数据源真的是 gen-model-v1 时起，`?gm_health=1` 只看不动场景。
+- **P5 验证**（2026-09-07 17:00）：`npm run type-check` 通过；触及文件 ESLint 0 问题；新增单测 16 条全绿（`genModelV1Ws.test.ts` 4：subscribe/ping/pong 过滤/事件、seq 空洞、退避重连与 stop；`useGenModelV1ModelSync.test.ts` 4：水位 null/''/值、seen、非终态与别的 kind 不算、根归一去重；`useGenModelV1Health.test.ts` 3；`modelRecordSource.test.ts` +1 按根归档/清根）；live（`:18082`，一次性文件已删）：Node 26 原生 `WebSocket` 连上 `ws://127.0.0.1:18082/api/v1/ws`，`connecting → open`，subscribe 与 ping 无错、pong 被过滤；`GET /tasks?kind=model_drain` 读通（该实例此刻 0 条 drain、13 条 data_batch 全 succeeded）。
+- `vitest` 全量 baseline 1860/1829/31 → after 1929/1897/32：**多出的 1 条是 `AnnotationPanel.test.ts › reviewer path hides legacy OBB affordances`**——它在基线里就要 4.3 s（默认超时 5 s），P4 那轮 4.99 s 险过，本轮两次全量都 5.02 s 超时；单独跑 HEAD（P4）与工作树各 1.30 / 1.34 s 一样快，`AnnotationPanel` 也不引本轮任何模块（只引 review store / screenshot / user store）。判定为**机器负载下的既有临界超时**（同机还有别的会话在 `cargo build`），不是本轮引入；不改它的超时（不属于本计划范围），记在这里。
+- **未验证**：真的有一页 `model_drain` 收口时端到端重载（该实例空闲、别的实例是别的会话的，不去触发重算）；浏览器里徽标三态与 WS 小点的实际渲染。
+- **建议（gen-model 侧）**：给 `model_drain` 补 `task_started` / `task_finished` WS 事件，payload 带 `kind` 与 `detail.roots`（或至少 `task_id`），第一条线就能独立工作、REST 轮询可以拉长到分钟级。
 
 ## 9. 交付物清单
 

@@ -71,6 +71,21 @@ describe('createGenModelV1ModelRecordSource', () => {
     expect(api.ensure.mock.calls[1]![0]).toEqual({ refno: '24381_145019', force: true });
   });
 
+  it('collectedRoots / leavesOfRoot / invalidateRoot：按根归档，清一根连带清它的构件（P5 用）', async () => {
+    const api = branApi();
+    const source = createGenModelV1ModelRecordSource({ api });
+    await source.instanceEntriesByRefnos(7997, ['24381_145019']);
+    expect(source.collectedRoots()).toEqual(['24381_145018']);
+    expect(source.leavesOfRoot('24381/145018').sort()).toEqual(['24381_145018', '24381_145019', '24381_145021', '24381_145023']);
+
+    const cleared = source.invalidateRoot('24381_145018');
+    expect(cleared.sort()).toEqual(['24381_145018', '24381_145019', '24381_145021', '24381_145023']);
+    expect(source.collectedRoots()).toEqual([]);
+    expect(source.peek('24381_145021')).toBeUndefined();
+    await source.instanceEntriesByRefnos(7997, ['24381_145021']);
+    expect(api.ensure).toHaveBeenCalledTimes(2);
+  });
+
   it('invalidate() 不带参数清全部', async () => {
     const api = branApi();
     const source = createGenModelV1ModelRecordSource({ api });
