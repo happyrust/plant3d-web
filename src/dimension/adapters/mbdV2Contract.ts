@@ -1,8 +1,11 @@
 /**
  * TypeScript mirror of the frozen rs-mbd V2 contract
- * (`rs-mbd/crates/rs-mbd/src/contract.rs`, Phase 0, 2026-07). `kind` values
+ * (`rs-mbd/crates/rs-mbd/src/contract.rs`, Phase 0, 2026-07; since 2026-09
+ * maintained as `plant-mbd/crates/plant-mbd/src/contract.rs`). `kind` values
  * are stable; fields grow as the upstream algorithm porting progresses
- * (ADR 0043).
+ * (ADR 0043). The arc kinds (`angle_dim` / `aid_arc` / `aid_circle`) got
+ * their geometry on 2026-09-07 (ADR 0055), so every kind now has explicit
+ * geometry.
  *
  * Payload coordinates use `meta.geometry_space`. The mapper converts
  * `source_mm` through `source_to_design` before records enter Design Space
@@ -70,11 +73,38 @@ export type MbdV2LinearDim = Readonly<{
   reference?: boolean;
 }>;
 
+/**
+ * Shared arc frame, PML `AIDARC` 1:1 (`pos / ori(x, z) / radius / stangle /
+ * sweepAngle`, ADR 0055). Angles are degrees; a positive sweep turns from
+ * `x_axis` towards `normal × x_axis` (right-handed about `normal`). `x_axis`
+ * travels explicitly so the wire contract never depends on the kernel's
+ * private reference-axis rule (`stablePlaneBasis`); the mapper converts the
+ * start angle into that basis. `radius` shares the payload's length unit.
+ */
+export type MbdV2ArcFrame = Readonly<{
+  center: MbdV2Vec3;
+  x_axis: MbdV2Vec3;
+  normal: MbdV2Vec3;
+  radius: number;
+  start_angle_deg: number;
+  sweep_angle_deg: number;
+}>;
+
+/**
+ * Installation angle (PML `isombdangle` → `isoline.drawangle`): the arc, the
+ * two legs from the arc centre along each direction, and the value text at
+ * its centre anchor. Explicit geometry like `linear_dim`: the solver decides
+ * every position, the mapper draws 1:1. `sub_kind` is a free solver label
+ * (`tilt` = angle to the pipe axis, `rotation` = turn about the pipe axis).
+ */
 export type MbdV2AngleDim = Readonly<{
   kind: 'angle_dim';
   id: string;
   text: string;
-}>;
+  leg_lines: readonly MbdV2LineSegment[];
+  label_anchor: MbdV2Vec3;
+  sub_kind?: string;
+}> & MbdV2ArcFrame;
 
 export type MbdV2Label = Readonly<{
   kind: 'label';
@@ -101,11 +131,17 @@ export type MbdV2AidLine = Readonly<{
 export type MbdV2AidArc = Readonly<{
   kind: 'aid_arc';
   id: string;
-}>;
+  style?: MbdV2AidLineStyle;
+}> & MbdV2ArcFrame;
 
+/** Full circle (PML `AIDCIR`): no in-plane reference axis is needed. */
 export type MbdV2AidCircle = Readonly<{
   kind: 'aid_circle';
   id: string;
+  center: MbdV2Vec3;
+  normal: MbdV2Vec3;
+  radius: number;
+  style?: MbdV2AidLineStyle;
 }>;
 
 export type MbdV2AidPoint = Readonly<{
@@ -188,23 +224,6 @@ const ISSUE_CATEGORIES: readonly MbdV2IssueCategory[] = [
   'other',
 ];
 
-/**
- * Kinds the frozen Phase 0 contract names but gives no geometry. They are
- * rejected like any other unrenderable primitive (ADR 0046), but the reason
- * has to say so instead of implying the payload is malformed.
- *
- * Single source of truth: `mbdV2ExternalAnnotations.ts` reuses this list for
- * its defensive per-primitive skip, so the two layers cannot drift apart.
- */
-export const CONTRACT_INCOMPLETE_KINDS = [
-  'angle_dim',
-  'aid_arc',
-  'aid_circle',
-] as const satisfies readonly MbdPrimitiveKind[];
-
-export type MbdContractIncompleteKind =
-  (typeof CONTRACT_INCOMPLETE_KINDS)[number];
-
 function isObject(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
@@ -221,6 +240,31 @@ function isVec3(value: unknown): value is MbdV2Vec3 {
   return Array.isArray(value)
     && value.length === 3
     && value.every(item => typeof item === 'number' && Number.isFinite(item));
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value);
+}
+
+/** Axis vectors: finite and not the zero vector (unit length is the mapper's job). */
+function isAxisVec3(value: unknown): value is MbdV2Vec3 {
+  return isVec3(value) && (value[0] !== 0 || value[1] !== 0 || value[2] !== 0);
+}
+
+function isPositiveRadius(value: unknown): value is number {
+  return isFiniteNumber(value) && value > 0;
+}
+
+/** Structure and finiteness only (ADR 0046); perpendicularity is re-derived by the mapper. */
+function isArcFrame(value: Record<string, unknown>): boolean {
+  return isVec3(value.center)
+    && isAxisVec3(value.x_axis)
+    && isAxisVec3(value.normal)
+    && isPositiveRadius(value.radius)
+    && isFiniteNumber(value.start_angle_deg)
+    && isFiniteNumber(value.sweep_angle_deg)
+    && value.sweep_angle_deg > 0
+    && value.sweep_angle_deg <= 360;
 }
 
 function isLineSegmentArray(
@@ -252,7 +296,11 @@ function isPrimitive(value: unknown): value is MbdPrimitive {
         && value.offset === undefined
         && value.suppressed_reason === undefined;
     case 'angle_dim':
-      return false;
+      return typeof value.text === 'string'
+        && isArcFrame(value)
+        && isLineSegmentArray(value.leg_lines)
+        && isVec3(value.label_anchor)
+        && isOptionalString(value.sub_kind);
     case 'label':
       return typeof value.text === 'string'
         && isVec3(value.position);
@@ -263,8 +311,12 @@ function isPrimitive(value: unknown): value is MbdPrimitive {
         && isVec3(value.end)
         && isOptionalString(value.style);
     case 'aid_arc':
+      return isArcFrame(value) && isOptionalString(value.style);
     case 'aid_circle':
-      return false;
+      return isVec3(value.center)
+        && isAxisVec3(value.normal)
+        && isPositiveRadius(value.radius)
+        && isOptionalString(value.style);
     case 'aid_point':
       return isVec3(value.position);
     case 'aid_text':
@@ -290,16 +342,7 @@ function describeEntry(value: unknown, index: number): string {
 }
 
 function primitiveRejection(value: unknown, index: number): string {
-  const described = describeEntry(value, index);
-  if (
-    isObject(value)
-    && typeof value.kind === 'string'
-    && (CONTRACT_INCOMPLETE_KINDS as readonly string[]).includes(value.kind)
-  ) {
-    return `MBD V2 payload rejected: primitive ${described} has no geometry in `
-      + 'the frozen V2 contract, so this branch cannot be rendered completely';
-  }
-  return `MBD V2 payload has an invalid primitive ${described}`;
+  return `MBD V2 payload has an invalid primitive ${describeEntry(value, index)}`;
 }
 
 function parseIssue(value: unknown): MbdV2Issue | null {

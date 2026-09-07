@@ -18,6 +18,11 @@ rs-mbd CLI 真实生成物（勿手改；契约漂移守卫 `mbdV2Contract.test.
 
 手工编写的 mapper 全 kind 覆盖样本（非线上契约权威，仅测 `mbdV2ExternalAnnotations` 的映射分支）。
 
+- 2026-09-07（ADR 0055）起 `angle_dim` / `aid_arc` / `aid_circle` 三条带上了几何：共用 PML `AIDARC` 1:1 的弧框架
+  `center / x_axis / normal / radius / start_angle_deg / sweep_angle_deg`（度；正扫角从 `x_axis` 转向 `normal × x_axis`），
+  `angle_dim` 另带 `leg_lines` / `label_anchor` / `sub_kind`，`aid_circle` 只有 `center / normal / radius`。
+  plant-mbd `fixtures/contract/` 的回环 fixture 以本文件为源。
+
 ## `source-to-design-translation.json`
 
 手工编写的 `source_to_design` **列主序约定钉子**（`mbdV2ExternalAnnotations.test.ts` 加载）。
@@ -29,3 +34,5 @@ rs-mbd CLI 真实生成物（勿手改；契约漂移守卫 `mbdV2Contract.test.
 - 任何生产侧（plant-model-gen manifest、plant-web-server 透传、rs-mbd
   `LayoutRequest.source_to_design`）引入非对角矩阵时，必须按列主序序列化；
   约定同步记录于 rs-mbd `docs/field-dictionary.md`。
+- `trans-arc`（2026-09-07）钉弧框架的变换：`center` 走点变换、`x_axis` / `normal` 只旋转不平移、`radius` 乘缩放
+  （`x_axis = E` 经 `Rz(90°)` 变成 `N`，起始角在内核基底里由适配层换算）。

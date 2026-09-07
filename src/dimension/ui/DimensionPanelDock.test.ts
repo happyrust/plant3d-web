@@ -171,7 +171,7 @@ describe('DimensionPanelDock', () => {
         message: 'missing tubi geometry',
         refno: '24381/145712',
       }],
-      skipped: [{ id: 'angle-1', reason: 'contract-incomplete' }],
+      skipped: [{ id: 'dup-1', reason: 'Duplicate primitive id within MBD payload' }],
     });
 
     const host = mountPanel();
@@ -185,7 +185,7 @@ describe('DimensionPanelDock', () => {
     expect(panel).not.toBeNull();
     expect(panel?.textContent).toContain('MBD 诊断（2）');
     expect(panel?.textContent).toContain('missing tubi geometry');
-    expect(panel?.textContent).toContain('angle-1：contract-incomplete');
+    expect(panel?.textContent).toContain('dup-1：Duplicate primitive id within MBD payload');
 
     const locateEvents: string[][] = [];
     const onLocate = (event: Event) => {

@@ -1,13 +1,25 @@
 import { Matrix4, Vector3 } from 'three';
 
-import { stablePerpendicular } from '../kernel/geometry/planeBasis';
-import { length3, lerp3, sub3, tryNormalize3 } from '../kernel/vec';
-
-import { CONTRACT_INCOMPLETE_KINDS } from './mbdV2Contract';
+import {
+  stablePerpendicular,
+  stablePlaneBasis,
+} from '../kernel/geometry/planeBasis';
+import {
+  add3,
+  dot3,
+  length3,
+  lerp3,
+  scale3,
+  sub3,
+  tryNormalize3,
+} from '../kernel/vec';
 
 import type {
-  MbdContractIncompleteKind,
   MbdPrimitive,
+  MbdV2AidArc,
+  MbdV2AidCircle,
+  MbdV2AngleDim,
+  MbdV2ArcFrame,
   MbdV2LinearDim,
   MbdV2PipeData,
   MbdV2Vec3,
@@ -19,6 +31,7 @@ import type {
 import type { Vec3 } from '../domain/types';
 import type {
   DimensionLineStyle,
+  ExplicitArcInput,
   ExplicitArrowInput,
   ExplicitLayoutInput,
   ExplicitMarkerInput,
@@ -44,15 +57,35 @@ type ExplicitLine = Readonly<{
 
 type TransformPoint = (point: MbdV2Vec3) => Vec3;
 
-function pointTransformer(data: MbdV2PipeData): TransformPoint | null {
+/**
+ * Payload → Design Space. Points take the full affine matrix; axis vectors
+ * take its upper 3×3 and come back unit length (or null when they collapse),
+ * so `source_to_design` rotation reaches arc frames while translation and
+ * scale do not.
+ */
+type FrameTransform = Readonly<{
+  point: TransformPoint;
+  direction: (direction: MbdV2Vec3) => Vec3 | null;
+}>;
+
+function frameTransformer(data: MbdV2PipeData): FrameTransform | null {
   if (data.meta.geometry_space === 'design_m') {
-    return point => [point[0], point[1], point[2]];
+    return {
+      point: point => [point[0], point[1], point[2]],
+      direction: direction => tryNormalize3(direction),
+    };
   }
   if (!data.meta.source_to_design) return null;
   const matrix = new Matrix4().fromArray([...data.meta.source_to_design]);
-  return (point) => {
-    const transformed = new Vector3(...point).applyMatrix4(matrix);
-    return [transformed.x, transformed.y, transformed.z];
+  return {
+    point: (point) => {
+      const transformed = new Vector3(...point).applyMatrix4(matrix);
+      return [transformed.x, transformed.y, transformed.z];
+    },
+    direction: (direction) => {
+      const transformed = new Vector3(...direction).transformDirection(matrix);
+      return tryNormalize3([transformed.x, transformed.y, transformed.z]);
+    },
   };
 }
 
@@ -116,25 +149,6 @@ function multiLineTexts(
   };
 }
 
-type ContractIncompletePrimitive = Extract<
-  MbdPrimitive,
-  { kind: MbdContractIncompleteKind }
->;
-
-/**
- * Defensive twin of the parse-time whole-payload rejection: live payloads are
- * already rejected by `parseMbdV2PipeData`, but internally constructed
- * payloads (parquet conversion, tests) still route through here. The kind
- * list is shared with the contract so the two layers cannot drift.
- */
-function isContractIncomplete(
-  primitive: MbdPrimitive,
-): primitive is ContractIncompletePrimitive {
-  return (CONTRACT_INCOMPLETE_KINDS as readonly string[]).includes(
-    primitive.kind,
-  );
-}
-
 type ExplicitParts = Readonly<{
   formattedLabel: string;
   labelAnchor: Vec3;
@@ -142,6 +156,7 @@ type ExplicitParts = Readonly<{
   lines?: readonly ExplicitLine[];
   arrowLines?: readonly Readonly<{ from: Vec3; to: Vec3 }>[];
   arrows?: readonly ExplicitArrowInput[];
+  arcs?: readonly ExplicitArcInput[];
   markers?: readonly ExplicitMarkerInput[];
   texts?: readonly ExplicitTextInput[];
 }>;
@@ -164,6 +179,7 @@ function explicitRecord(
     ...(parts.arrows && parts.arrows.length > 0
       ? { arrows: parts.arrows }
       : {}),
+    ...(parts.arcs && parts.arcs.length > 0 ? { arcs: parts.arcs } : {}),
     ...(parts.markers && parts.markers.length > 0
       ? { markers: parts.markers }
       : {}),
@@ -217,12 +233,164 @@ function mapLinearDim(
   }, role);
 }
 
+const DEGREES_TO_RADIANS = Math.PI / 180;
+
+/** Kernel arc with both angles resolved, plus the basis they are measured in. */
+type MappedArc = Readonly<{
+  arc: ExplicitArcInput & Readonly<{ startAngle: number; endAngle: number }>;
+  basis: Readonly<{ u: Vec3; v: Vec3 }>;
+}>;
+
+const ARC_KINDS: ReadonlySet<string> = new Set(['angle_dim', 'aid_arc', 'aid_circle']);
+const DEGENERATE_ARC_REASON = 'degenerate arc frame: normal or x_axis collapses '
+  + 'or they are parallel after source_to_design';
+
+/**
+ * Contract arc frame → kernel arc. The contract measures angles from its own
+ * `x_axis`; the kernel measures from `stablePlaneBasis(normal).u`, so the
+ * start angle is re-expressed in that basis (ADR 0055). `x_axis` is
+ * re-orthogonalised against `normal` to absorb float noise; the radius is
+ * the Design Space length of the transformed radius vector, so a uniform
+ * `source_to_design` scale reaches it while translation does not.
+ */
+function mappedArc(
+  frame: MbdV2ArcFrame,
+  transform: FrameTransform,
+  part: ScreenLinePart,
+  style?: DimensionLineStyle,
+): MappedArc | null {
+  const center = transform.point(frame.center);
+  const normal = transform.direction(frame.normal);
+  const xAxisRaw = transform.direction(frame.x_axis);
+  if (!normal || !xAxisRaw) return null;
+  const xAxis = tryNormalize3(
+    sub3(xAxisRaw, scale3(normal, dot3(xAxisRaw, normal))),
+  );
+  const basis = stablePlaneBasis(normal);
+  if (!xAxis || !basis) return null;
+  const unitXAxis = tryNormalize3(frame.x_axis);
+  if (!unitXAxis) return null;
+  const rim = transform.point(
+    add3(frame.center, scale3(unitXAxis, frame.radius)),
+  );
+  const radiusM = length3(sub3(rim, center));
+  if (!(radiusM > 0)) return null;
+  const startAngle = Math.atan2(dot3(xAxis, basis.v), dot3(xAxis, basis.u))
+    + frame.start_angle_deg * DEGREES_TO_RADIANS;
+  const endAngle = startAngle + frame.sweep_angle_deg * DEGREES_TO_RADIANS;
+  return {
+    arc: {
+      center,
+      normal,
+      radiusM,
+      startAngle,
+      endAngle,
+      part,
+      ...(style ? { style } : {}),
+    },
+    basis,
+  };
+}
+
+function arcPoint(mapped: MappedArc, angle: number): Vec3 {
+  const { arc, basis } = mapped;
+  return add3(
+    arc.center,
+    add3(
+      scale3(basis.u, Math.cos(angle) * arc.radiusM),
+      scale3(basis.v, Math.sin(angle) * arc.radiusM),
+    ),
+  );
+}
+
+/** Counter-clockwise tangent (about `normal`) at `angle`. */
+function arcTangent(mapped: MappedArc, angle: number): Vec3 {
+  const { basis } = mapped;
+  return add3(
+    scale3(basis.u, -Math.sin(angle)),
+    scale3(basis.v, Math.cos(angle)),
+  );
+}
+
+/**
+ * PML `isoline.drawangle`: arc + two legs + the value text. The value runs
+ * along the arc, so its baseline is the tangent at mid-sweep (the same
+ * 「工程文字朝向」 rule `mapLinearDim` applies along its dimension line).
+ */
+function mapAngleDim(
+  primitive: MbdV2AngleDim,
+  transform: FrameTransform,
+): ExternalDimensionRecord | null {
+  const mapped = mappedArc(primitive, transform, 'dimension');
+  if (!mapped) return null;
+  const lines: ExplicitLine[] = primitive.leg_lines.map(line => ({
+    from: transform.point(line.from),
+    to: transform.point(line.to),
+    part: 'extension' as const,
+  }));
+  const midAngle = (mapped.arc.startAngle + mapped.arc.endAngle) / 2;
+  return explicitRecord(primitive, 'dimension', {
+    formattedLabel: primitive.text,
+    labelAnchor: transform.point(primitive.label_anchor),
+    labelAlong: arcTangent(mapped, midAngle),
+    lines,
+    arcs: [mapped.arc],
+  });
+}
+
+function mapAidArc(
+  primitive: MbdV2AidArc,
+  transform: FrameTransform,
+): ExternalDimensionRecord | null {
+  const mapped = mappedArc(
+    primitive,
+    transform,
+    'arc',
+    lineStyleFrom(primitive.style),
+  );
+  if (!mapped) return null;
+  return explicitRecord(primitive, 'annotation', {
+    formattedLabel: '',
+    // Like `aid_line` anchors on its start point.
+    labelAnchor: arcPoint(mapped, mapped.arc.startAngle),
+    arcs: [mapped.arc],
+  });
+}
+
+/** Full circle: no angles, radius measured along any in-plane direction. */
+function mapAidCircle(
+  primitive: MbdV2AidCircle,
+  transform: FrameTransform,
+): ExternalDimensionRecord | null {
+  const center = transform.point(primitive.center);
+  const normal = transform.direction(primitive.normal);
+  const inPlane = stablePerpendicular(primitive.normal);
+  if (!normal || !inPlane) return null;
+  const rim = transform.point(
+    add3(primitive.center, scale3(inPlane, primitive.radius)),
+  );
+  const radiusM = length3(sub3(rim, center));
+  if (!(radiusM > 0)) return null;
+  const style = lineStyleFrom(primitive.style);
+  return explicitRecord(primitive, 'annotation', {
+    formattedLabel: '',
+    labelAnchor: center,
+    arcs: [{
+      center,
+      normal,
+      radiusM,
+      part: 'arc',
+      ...(style ? { style } : {}),
+    }],
+  });
+}
+
 /**
  * Map frozen-contract primitives onto read-only external records rendered by
  * the shared dimension kernel (ADR 0041). Weld and slope symbols are
  * assembled from arcs/lines/markers/text instead of dedicated primitives
- * (ADR 0042); angle/arc/circle primitives are diagnosed until the upstream
- * contract defines their geometry.
+ * (ADR 0042); angle dims, aid arcs and aid circles carry PML `AIDARC`
+ * frames and map onto the kernel's native arc (ADR 0055).
  */
 export function mbdV2ToExternalRecords(
   data: MbdV2PipeData,
@@ -230,9 +398,9 @@ export function mbdV2ToExternalRecords(
   const records: ExternalDimensionRecord[] = [];
   const skipped: { id: string; reason: string }[] = [];
   const seenIds = new Set<string>();
-  const transformPoint = pointTransformer(data);
+  const transform = frameTransformer(data);
 
-  if (!transformPoint) {
+  if (!transform) {
     return {
       records,
       skipped: data.primitives.map(primitive => ({
@@ -241,6 +409,7 @@ export function mbdV2ToExternalRecords(
       })),
     };
   }
+  const transformPoint = transform.point;
 
   for (const primitive of data.primitives) {
     if (seenIds.has(primitive.id)) {
@@ -250,18 +419,19 @@ export function mbdV2ToExternalRecords(
       });
       continue;
     }
-    if (isContractIncomplete(primitive)) {
-      skipped.push({
-        id: primitive.id,
-        reason: `contract-incomplete: ${primitive.kind} geometry is not yet `
-          + 'defined by the rs-mbd Phase 0 contract',
-      });
-      continue;
-    }
     let record: ExternalDimensionRecord | null = null;
     switch (primitive.kind) {
       case 'linear_dim':
         record = mapLinearDim(primitive, transformPoint);
+        break;
+      case 'angle_dim':
+        record = mapAngleDim(primitive, transform);
+        break;
+      case 'aid_arc':
+        record = mapAidArc(primitive, transform);
+        break;
+      case 'aid_circle':
+        record = mapAidCircle(primitive, transform);
         break;
       case 'label':
       case 'aid_text': {
@@ -351,6 +521,16 @@ export function mbdV2ToExternalRecords(
     if (record) {
       seenIds.add(primitive.id);
       records.push(record);
+    } else {
+      // Parse already checked structure, so the arc kinds are the only ones
+      // that can fail here (axes collapsing under the transform). Diagnose it
+      // like a duplicate id instead of letting the primitive vanish.
+      skipped.push({
+        id: primitive.id,
+        reason: ARC_KINDS.has(primitive.kind)
+          ? DEGENERATE_ARC_REASON
+          : `unsupported primitive kind ${primitive.kind}`,
+      });
     }
   }
 

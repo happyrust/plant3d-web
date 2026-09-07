@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import fullCoverageFixture from '../../fixtures/mbd-v2/full-coverage.json';
 import cliLinearFixture from '../../fixtures/mbd-v2/rs-mbd-cli-linear.json';
 
 import { parseMbdV2PipeData } from './mbdV2Contract';
@@ -137,25 +138,73 @@ describe('parseMbdV2PipeData', () => {
     expect(parseMbdV2PipeData(legacy)).toMatchObject({ ok: false });
   });
 
-  it('rejects primitive kinds whose explicit geometry is not in the V2 contract', () => {
-    for (const kind of ['angle_dim', 'aid_arc', 'aid_circle']) {
-      const result = parseMbdV2PipeData({
-        version: 'v2',
-        input_refno: 'unsupported',
-        branch_refno: 'unsupported',
-        primitives: [{ kind, id: `unsupported-${kind}`, text: 'x' }],
-        meta: { geometry_space: 'design_m', notes: [] },
-        issues: [],
-      });
+  it('accepts the arc kinds with a PML AIDARC frame (ADR 0055)', () => {
+    const result = parseMbdV2PipeData(fullCoverageFixture);
 
-      expect(result.ok).toBe(false);
-      if (result.ok) return;
-      // ADR 0046 still rejects the payload, but the reason has to name the
-      // kind and id so the panel can locate it instead of implying bad data.
-      expect(result.error).toContain(kind);
-      expect(result.error).toContain(`unsupported-${kind}`);
-      expect(result.error).toContain('frozen V2 contract');
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.data.primitives.map(primitive => primitive.kind)).toContain('angle_dim');
+    expect(result.data.primitives.map(primitive => primitive.kind)).toContain('aid_arc');
+    expect(result.data.primitives.map(primitive => primitive.kind)).toContain('aid_circle');
+  });
+
+  it('rejects arc kinds whose frame is structurally invalid, naming the primitive', () => {
+    const frame = {
+      center: [0, 0, 0],
+      x_axis: [1, 0, 0],
+      normal: [0, 0, 1],
+      radius: 0.2,
+      start_angle_deg: 0,
+      sweep_angle_deg: 90,
+    };
+    const payload = (primitive: Record<string, unknown>) => ({
+      version: 'v2',
+      input_refno: 'arc',
+      branch_refno: 'arc',
+      primitives: [primitive],
+      meta: { geometry_space: 'design_m', notes: [] },
+      issues: [],
+    });
+    const angle = {
+      kind: 'angle_dim',
+      id: 'angle-bad',
+      text: '90°',
+      leg_lines: [],
+      label_anchor: [0.1, 0.1, 0],
+      ...frame,
+    };
+
+    // The pre-2026-09 id/text-only shape is now simply invalid.
+    for (const kind of ['angle_dim', 'aid_arc', 'aid_circle']) {
+      const legacy = parseMbdV2PipeData(payload({ kind, id: `legacy-${kind}`, text: 'x' }));
+      expect(legacy.ok).toBe(false);
+      if (legacy.ok) return;
+      expect(legacy.error).toContain(`${kind} "legacy-${kind}"`);
+      expect(legacy.error).not.toContain('frozen V2 contract');
     }
+    for (const broken of [
+      { ...angle, radius: 0 },
+      { ...angle, radius: Number.NaN },
+      { ...angle, sweep_angle_deg: 0 },
+      { ...angle, sweep_angle_deg: 361 },
+      { ...angle, x_axis: [0, 0, 0] },
+      { ...angle, normal: [0, 0] },
+      { ...angle, leg_lines: [{ from: [0, 0, 0] }] },
+      { ...angle, label_anchor: undefined },
+    ]) {
+      expect(parseMbdV2PipeData(payload(broken))).toMatchObject({ ok: false });
+    }
+    expect(parseMbdV2PipeData(payload({
+      kind: 'aid_arc', id: 'arc-bad', ...frame, style: 7,
+    }))).toMatchObject({ ok: false });
+    expect(parseMbdV2PipeData(payload({
+      kind: 'aid_circle', id: 'circle-bad', center: [0, 0, 0], normal: [0, 0, 1], radius: -1,
+    }))).toMatchObject({ ok: false });
+
+    // A full sweep is the closed-arc limit; the solver uses aid_circle for circles.
+    expect(parseMbdV2PipeData(payload({
+      kind: 'aid_arc', id: 'arc-full', ...frame, sweep_angle_deg: 360,
+    }))).toMatchObject({ ok: true });
   });
 
   it('names the offending primitive and issue in rejection reasons', () => {

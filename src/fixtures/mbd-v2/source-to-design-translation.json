@@ -32,6 +32,16 @@
       ],
       "arrow_lines": [],
       "label_anchor": [1500.0, 2000.0, 3000.0]
+    },
+    {
+      "kind": "aid_arc",
+      "id": "trans-arc",
+      "center": [1000.0, 2000.0, 3000.0],
+      "x_axis": [1.0, 0.0, 0.0],
+      "normal": [0.0, 0.0, 1.0],
+      "radius": 500.0,
+      "start_angle_deg": 0.0,
+      "sweep_angle_deg": 90.0
     }
   ]
 }

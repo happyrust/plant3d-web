@@ -1,0 +1,7 @@
+# MBD 弧类图元几何按 PML AIDARC 字段定型，起始角自带参考轴
+
+V2 契约里 `angle_dim` / `aid_arc` / `aid_circle` 三个 kind 补上几何，从此每个 kind 都可画，`CONTRACT_INCOMPLETE_KINDS` 及其「契约无几何」拒收话术退役。三个 kind 共用一套与 PML `AIDARC`（`pos / ori(x, z) / radius / stangle / sweepAngle`）1:1 的扁平弧框架 `center / x_axis / normal / radius / start_angle_deg / sweep_angle_deg`：角度用度、正扫角从 `x_axis` 转向 `normal × x_axis`、`0 < sweep ≤ 360`；`aid_circle` 只带 `center / normal / radius`。契约**显式携带 `x_axis`**，起始角相对它量，由适配层换算到内核 `stablePlaneBasis(normal)` 的基底——内核的 0° 参考轴是可随 goldens 调整的私有规则，不得成为对外契约的一部分。`angle_dim` 与 `linear_dim` 同一路线（显式几何）：弧 + 两条腿 `leg_lines` + `text` + `label_anchor`（文字中心），求解器决定一切位置，前端 1:1 画、文字沿弧切向；PML 的两个方向小字走现成的 `aid_text`。适配层对 `source_to_design` 的处理：`center` 走点变换，`x_axis` / `normal` 只取左上 3×3 并归一，`radius` 取变换后半径向量的长度；非均匀缩放不在契约内。解析层只校验结构与有限性（`radius > 0`、扫角范围、轴非零），轴的正交性由适配层重做 Gram-Schmidt，退化帧作为 `skipped` 诊断而不是无声消失。
+
+被否决的替代：三点弧（`start / end / center`，扫角 ≥ 180° 歧义且与 PML 字段不对应）；嵌套 `arc` 子对象（与 `linear_dim` 的扁平风格不一致，两侧各多一层校验）；只给 `normal`、起始角相对内核参考轴（把私有规则钉进契约）；`angle_dim` 用 `vertex / dir1 / dir2 / radius` 的语义式让前端算腿与文字（前端做摆位，违反 ADR 0043 与求解器侧的确定性排版）；复用用户尺寸的 `angular` 归一化尺寸（它自己选优 / 劣弧与半径，外部尺寸必须 1:1）；弧度（PML / DB / 文字全是度）。
+
+依据：ADR 0042（内核只新增弧与点原语，`ExplicitArcInput`）、ADR 0043（只经冻结契约形状）、ADR 0046（fail-closed 与可定位诊断）、ADR 0044（外部文字屏幕像素高）；设计稿 `docs/plans/2026-09-07-mbd-v2-angle-arc-contract-extension-design.md`；plant-mbd Phase 5 ⑤（gen-model `.planning/2026-09-06-plant-mbd-pipe-dimension`）。求解器侧同版跟进：plant-mbd `contract.rs` 三个变体补字段、`fixtures/contract/` 以本仓 `full-coverage.json` 为源。

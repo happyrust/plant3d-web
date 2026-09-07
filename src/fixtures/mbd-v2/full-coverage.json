@@ -32,7 +32,23 @@
       "label_anchor": [0, 0.4, 0],
       "reference": true
     },
-    { "kind": "angle_dim", "id": "angle-1", "text": "90.00°" },
+    {
+      "kind": "angle_dim",
+      "id": "angle-1",
+      "text": "90°",
+      "center": [1.25, 0, 0],
+      "x_axis": [1, 0, 0],
+      "normal": [0, 0, 1],
+      "radius": 0.2,
+      "start_angle_deg": 0,
+      "sweep_angle_deg": 90,
+      "leg_lines": [
+        { "from": [1.25, 0, 0], "to": [1.5, 0, 0] },
+        { "from": [1.25, 0, 0], "to": [1.25, 0.25, 0] }
+      ],
+      "label_anchor": [1.4, 0.15, 0],
+      "sub_kind": "tilt"
+    },
     {
       "kind": "label",
       "id": "label-1",
@@ -52,8 +68,24 @@
       "end": [0, 0, 1],
       "style": "dash_dot"
     },
-    { "kind": "aid_arc", "id": "aid-arc-1" },
-    { "kind": "aid_circle", "id": "aid-circle-1" },
+    {
+      "kind": "aid_arc",
+      "id": "aid-arc-1",
+      "center": [0.5, 0.5, 0],
+      "x_axis": [0, 1, 0],
+      "normal": [0, 0, 1],
+      "radius": 0.1,
+      "start_angle_deg": 0,
+      "sweep_angle_deg": 180,
+      "style": "dashed"
+    },
+    {
+      "kind": "aid_circle",
+      "id": "aid-circle-1",
+      "center": [0.9, 0.3, 0],
+      "normal": [0, 0, 1],
+      "radius": 0.05
+    },
     { "kind": "aid_point", "id": "aid-point-1", "position": [0.5, 0, 0] },
     {
       "kind": "aid_text",
