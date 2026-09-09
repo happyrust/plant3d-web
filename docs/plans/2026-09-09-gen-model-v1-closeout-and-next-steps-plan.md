@@ -1,7 +1,7 @@
 # gen-model v1 接入：收口与下一步计划（两源对拍翻默认 · 批量 records · type-check 修复）
 
 - 日期：2026-09-09
-- 状态：D8 **已拍（B）并落地**（2026-09-09 晚，见 §10；翻后 live 整链 §11 已补齐）；D10 **已拍（A）并落地**（P10-1，§11）；D9 **已拍（A）**，契约草案已写进 gen-model spec §4.5.2（P9-1，§11），P9-2 / P9-3 等 gen-model 侧认可后动代码
+- 状态：D8 **已拍（B）并落地**（2026-09-09 晚，见 §10；翻后 live 整链 §11 已补齐）；D10 **已拍（A）并落地**（P10-1，§11）；D9 **已拍（A）**：P9-1 契约 spec §4.5.2（§11）、**P9-2 服务端已落地**（gen-model `2e9d65e91`，§13），P9-3 前端多根打包待做；P5 模型变更同步已按用户口径整条下线（§12）
 - 前置：`docs/plans/2026-09-06-gen-model-v1-tree-and-viewer-adapter-plan.md`（下称「母计划」，P0–P7 + P3-c + P2-4 + Q2 全部落地）
 - 范围：plant3d-web（主）+ gen-model `src/web_service/`（P9 最小增补；该仓正被别的会话密集重构，见 §7 R1）
 
@@ -41,7 +41,7 @@
 | # | 任务 | 验收 |
 | --- | --- | --- |
 | P9-1 | 定契约（D9）：推荐 `POST /api/v1/model/records` 请求体加可选 `generation_roots: ["a/b", …]`（≤64 根/次，与单根 `generation_root` 互斥），响应 items 平铺（`owner` 本来就是生成根，天然可分组），分页游标跨根连续；写进 `docs/specs/web-service-api.md` 草案段 | **草案已写**（2026-09-09 晚，D9 按 A，决策 d-181）：gen-model spec 新增 §4.5.2（单根现状补齐 + 批量草案，见 §11）；gen-model 侧会话/用户认可契约再动代码 |
-| P9-2 | gen-model 实现 + 单测（写锁范围只在 `src/web_service/`，与在改会话协调，见 R1） | `cargo test --lib -- web_service` 全绿；单根旧调用不受影响 |
+| P9-2 | gen-model 实现 + 单测（写锁范围只在 `src/web_service/`，与在改会话协调，见 R1） | **过**（2026-09-09 深夜，gen-model `2e9d65e91`，见 §13）：`cargo test --lib -- web_service` 62 passed（+2）；单根请求 / 响应形状一字不改；**未 live**（本机 `:9099` 是 0.1.21 出厂包） |
 | P9-3 | 前端 `genModelV1/modelRecords.ts`：多根打包分批取，`recordsConcurrency` 语义改为「在飞批数」；整库预算 `DEFAULT_DBNUM_ROOTS_BUDGET` 从 200 提到不限（或大幅上调），`show_dbnum_full` 语义收编 | 同一整库 `show_dbnum=7997` 相对 §8.9 的 269 s 显著下降（目标 <60 s，服务端侧长尾另计）；新增 fail 0 |
 
 ## 4. P10 · type-check 修复（独立，可并行）
@@ -217,3 +217,15 @@ runtime/release 两条 GLB 链路不动。
 **验证**：`npm run type-check` 646 / 基线 646 / 新增 0 / 已消失 0（删掉的文件本来就无基线错误）；触及 4 个源文件 ESLint 0 错；受影响 vitest 13 文件 101 条全绿（`useModelGeneration*`、`model-source/genModelV1/*`、`genModelV1Api`、`model-source/index`、`useGenModelV1Health`）；`e2e/model-source-default.spec.ts` 与全量 vitest 结果见下一行追记。
 
 **不动的**：`useGenModelV1Health`（`/health` + `/dbnums` 三态徽标）保留——它只说「连上了没、库同步/滞后几个」，不驱动任何加载；gen-model 侧 `model_drain` WS 事件（`80b0f330c`）保留给其它客户端；legacy 链路一行未动。
+
+## 13. 追记（2026-09-09 深夜）：P9-2 服务端落地——`POST /model/records` 收 `generation_roots[]`
+
+用户拿定 spec §4.5.2 后开工。gen-model `2e9d65e91`（写锁只在 `src/web_service/handlers.rs`，`mod.rs` 路由未动；同文件里别的会话两处未提交 hunk 用反向 apply 从索引里摘出，没带进这笔）：
+
+- `ModelRecordsReq`：`generation_root` 改 `Option`，新增 `generation_roots: Option<Vec<String>>`；`requested_generation_roots()` 判二选一 / 1..=64（`MAX_MODEL_RECORDS_ROOTS`）/ 不重复，违者 400。
+- 所属库逐根解（`dbnum_for_roots`），跨库 400；一次 `route_for(dbnum)`；内存形态先把缺 receipt 的根收齐再**整批** 409 `not_generated:`（消息列出全部缺的根；单根消息原文不变）；逐根取记录（库形态 `records_of_root(SUL_DB)`，内存形态投影 → `GeomInstQuery`，映射抽成 `projection_record_to_query`，逐字搬自原闭包）；`page_records_across_roots()` 平铺切页——单根就是一根的特例，`skip/take` 语义与原来逐字相同。
+- 响应：批量回显 `generation_roots` + `roots:[{generation_root,total}]`；单根仍只回 `generation_root`，其余字段两种形态相同。
+- 单测 2 条：请求形态与上限（含 64 正好放行 / 65 拒、重复根拒）；跨根平铺切页（空根显式在 `roots` 里、一页跨根边界、末页 `next_cursor=null`、越界空页、单根特例）。`cargo test --lib -- web_service` **62 passed**（原 60）；`rustfmt --check` 干净；aios-database 自身 0 警告。
+- spec §4.5.2 从「草案」改「已实现」，补不重复规则与实现说明。
+- **未 live**：`:9099` 上是 0.1.21 出厂包，没有这段代码。起新构建后：`curl -X POST http://127.0.0.1:8022/api/v1/model/records -H 'content-type: application/json' -d '{"generation_roots":["24381/145018","24381/145052"],"limit":5}'` 应回 `generation_roots` + `roots[]` + 平铺 `items`、`next_cursor=5`；同库两根之外再塞一个别库的根应 400；单根请求回执与之前逐字段相同。
+- **下一步 P9-3**（前端）：`modelRecords.ts` 多根打包分批（≤64/批）、`recordsConcurrency` 改「在飞批数」、`DEFAULT_DBNUM_ROOTS_BUDGET` 上调；`genModelV1Api.ts` 的 `genModelV1ModelRecords` 加 `generationRoots?: string[]`；`verify-gen-model-v1.ps1 -Ensure` 顺手加一步批量口径。
