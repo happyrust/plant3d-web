@@ -97,7 +97,21 @@ Step 'GET /api/v1/dbnums' {
   "rows=$($dbnums.dbnums.Count) desi=$($desi.Count) with_ref0s=$withRef0s data_face=$($dbnums.data_face) verdict[$verdicts]"
 }
 
-Step 'GET /api/v1/meshes/1.glb (单位盒；运行目录没有 1.mesh 时 404 也算通)' {
+Step 'GET /api/v1/meshes/1.mesh (单位盒 rkyv 直连；运行目录没有 1.mesh 时 404 也算通)' {
+  try {
+    $r = Invoke-WebRequest -Uri "$base/api/v1/meshes/1.mesh" -Method Get -TimeoutSec $TimeoutSec -SkipHttpErrorCheck
+  } catch { $r = Invoke-WebRequest -Uri "$base/api/v1/meshes/1.mesh" -Method Get -TimeoutSec $TimeoutSec }
+  if ($r.StatusCode -eq 200) {
+    # rkyv 归档没有魔数：验根结构可读——文件尾 60 字节是根，长度必须 4 对齐且装得下根
+    $len = $r.Content.Length
+    if ($len -lt 60 -or ($len % 4) -ne 0) { throw "非法 .mesh 长度 $len" }
+    "200 bytes=$len cache-control=$($r.Headers['Cache-Control'])"
+  } elseif ($r.StatusCode -eq 404) {
+    "404（运行目录 meshes_path 下没有 1.mesh，端点在）"
+  } else { throw "HTTP $($r.StatusCode)" }
+}
+
+Step 'GET /api/v1/meshes/1.glb (转换口径，留一个发布周期；同一份 1.mesh 现场转 glTF)' {
   try {
     $r = Invoke-WebRequest -Uri "$base/api/v1/meshes/1.glb" -Method Get -TimeoutSec $TimeoutSec -SkipHttpErrorCheck
   } catch { $r = Invoke-WebRequest -Uri "$base/api/v1/meshes/1.glb" -Method Get -TimeoutSec $TimeoutSec }
@@ -139,12 +153,12 @@ if ($Ensure) {
     "pages=$pages records=$($items.Count) constructs=$($refnos.Count) tubi_records=$tubi source=$($page.source)"
   }
 
-  Step 'HEAD /api/v1/meshes/{geo_hash}.glb (记录里的每个 geo_hash)' {
+  Step 'HEAD /api/v1/meshes/{geo_hash}.mesh (记录里的每个 geo_hash，前端直连口径)' {
     $hashes = @($items | ForEach-Object { $_.insts } | ForEach-Object { $_.geo_hash } | Where-Object { $_ -and $_ -notin @('1','2','3') } | Sort-Object -Unique)
     $ok = 0; $missing = @()
     foreach ($h in $hashes) {
       try {
-        $r = Invoke-WebRequest -Uri "$base/api/v1/meshes/$h.glb" -Method Head -TimeoutSec $TimeoutSec -SkipHttpErrorCheck
+        $r = Invoke-WebRequest -Uri "$base/api/v1/meshes/$h.mesh" -Method Head -TimeoutSec $TimeoutSec -SkipHttpErrorCheck
       } catch { $r = $null }
       if ($r -and $r.StatusCode -eq 200) { $ok++ } else { $missing += $h }
     }

@@ -638,8 +638,10 @@ export function genModelV1Tasks(query: GenModelV1TasksQuery = {}, options?: GenM
 }
 
 /**
- * `GET /api/v1/meshes/{geo_hash}.glb` 的 URL（spec §4.11）。不发请求——网格由现有 DTX 加载链
- * 自己 fetch + `parseGlbGeometry`。字符集不合法直接抛（服务端也会 400，这里省一次往返）。
+ * `GET /api/v1/meshes/{geo_hash}.mesh` 的 URL（spec §4.11）。不发请求——网格由现有 DTX
+ * 加载链自己 fetch + `parseMeshGeometry`（rkyv 原样直连，2026-09-09 拍板：不再经服务端
+ * 转 GLB；`.glb` 口径服务端保留一个发布周期）。字符集不合法直接抛（服务端也会 400，
+ * 这里省一次往返）。
  */
 export function genModelV1MeshUrl(geoHash: string, baseUrl?: string): string {
   if (!isValidGeoHash(geoHash)) {
@@ -650,6 +652,6 @@ export function genModelV1MeshUrl(geoHash: string, baseUrl?: string): string {
       message: `geo_hash 只允许字母、数字与下划线（1–128 位）: ${geoHash}`,
     });
   }
-  const path = `/api/v1/meshes/${geoHash}.glb`;
+  const path = `/api/v1/meshes/${geoHash}.mesh`;
   return baseUrl !== undefined ? joinUrl(baseUrl, path) : buildGenModelV1Url(path);
 }

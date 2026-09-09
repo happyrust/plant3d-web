@@ -118,7 +118,7 @@ describe('legacy 适配器：零逻辑委托', () => {
     const legacy = getModelSource('legacy');
     expect(source.kind).toBe('gen-model-v1');
     expect(getModelSource('gen-model-v1')).toBe(source);
-    expect(source.meshes.meshUrl('12240963882128803248', 'L1')).toMatch(/\/api\/v1\/meshes\/12240963882128803248\.glb$/);
+    expect(source.meshes.meshUrl('12240963882128803248', 'L1')).toMatch(/\/api\/v1\/meshes\/12240963882128803248\.mesh$/);
 
     expect(source.tree.worldRoot).not.toBe(legacy.tree.worldRoot);
     expect(source.records.instanceEntriesByRefnos).not.toBe(legacy.records.instanceEntriesByRefnos);

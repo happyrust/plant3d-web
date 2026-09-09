@@ -69,7 +69,7 @@ pwsh scripts/verify-gen-model-v1.ps1                       # 默认 http://local
 pwsh scripts/verify-gen-model-v1.ps1 -BaseUrl http://127.0.0.1:18082 -Refno 24381/145018 -Ensure
 ```
 
-不带 `-Ensure` 只跑 `health / tree/roots / children / ancestors / search / dbnums / meshes`（全是 GET，不改任何数据）；带 `-Ensure` 才 `POST model/ensure(force=false)` + 逐根分页 `model/records`，并把记录里的 `geo_hash` 逐个 `HEAD /api/v1/meshes/{hash}.glb`。脚本每一步打一行「端点 → 状态 / 条数 / 关键字段」，任何一步非 2xx 以非零退出。
+不带 `-Ensure` 只跑 `health / tree/roots / children / ancestors / search / dbnums / meshes`（全是 GET，不改任何数据；meshes 两种口径各验一步：`.mesh` rkyv 直连 + `.glb` 过渡转换）；带 `-Ensure` 才 `POST model/ensure(force=false)` + 逐根分页 `model/records`，并把记录里的 `geo_hash` 逐个 `HEAD /api/v1/meshes/{hash}.mesh`（前端直连口径）。脚本每一步打一行「端点 → 状态 / 条数 / 关键字段」，任何一步非 2xx 以非零退出。
 
 ## 5. 两种形态的差别
 
@@ -97,7 +97,7 @@ pwsh scripts/verify-gen-model-v1.ps1 -BaseUrl http://127.0.0.1:18082 -Refno 2438
 | 徽标红点「连接失败」 | gen-model 没起或端口不对：`curl /api/v1/health`；LAN 地址打开页面时环境变量的 `localhost` 会自动折到 `/gm`，此时要配 `VITE_GEN_MODEL_V1_PROXY_TARGET` |
 | 树是空的 / 根展开没有 SITE | `tree/roots` 回 0 个节点：MDB 里没有可读的 DESI 文件；看 `/health.initialization` 与 `/dbnums.warnings` |
 | 勾选眼睛后提示「N 个 refno 没有几何记录」 | ensure 回 `NoRenderableGeometry`（无子件的 BRAN、纯层级的 STRU）或 `generation_pending`（生成还在后台，别重试同一 refno，稍后再点） |
-| 网格全是兜底方块 | `/api/v1/meshes/{hash}.glb` 404：服务端 `meshes_path` 下没有这个 `.mesh`（换过运行目录 / 网格目录没分家） |
+| 网格全是兜底方块 | `/api/v1/meshes/{hash}.mesh` 404：服务端 `meshes_path` 下没有这个 `.mesh`（换过运行目录 / 网格目录没分家）。`.mesh` 直连自 2026-09-09 起是默认口径（`parseMeshGeometry` 解 rkyv），`.glb` 转换口径留一个发布周期 |
 | `tree/children?refno=…` 回 500 `internal` | Ref0 不在本 MDB（gen-model 侧今天没分型成 404 / 503，见 plan §8.2 顺手发现） |
 | 模型重算后场景没刷新 | 同步靠 15 s 一次的 `GET /tasks?kind=model_drain` 对齐，另外任何 WS `task_finished` 也会立刻触发一次对齐——gen-model `80b0f330c`（2026-09-08）起 drain 页收口会发 `task_finished {kind:"model_drain", detail.roots[]}`，更老的服务端不发、只能等轮询；徽标悬停看「模型同步」那一行有没有 `已重载 n 根`，WS 小点是不是绿的 |
 | 属性面板底部一行「N 个属性未解码」 | 正常：`element/attributes` 直读 e3d-io，`diagnostics.undecoded` 是服务端解不出的属性，不是前端错 |

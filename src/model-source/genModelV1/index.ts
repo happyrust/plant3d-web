@@ -3,7 +3,8 @@
  *
  * - `tree`：`treeSource.ts`（P2，含 D5-A 的 `visibleInsts`）；
  * - `records`：`modelRecordSource.ts`（P3：ensure → records → `InstanceEntry`，按根收、按构件缓存）；
- * - `meshes`：`/api/v1/meshes/{hash}.glb`（P0-1）；
+ * - `meshes`：`/api/v1/meshes/{hash}.mesh`（rkyv 原样直连，`parseMeshGeometry` 解；
+ *   2026-09-09 拍板替代 P0-1 的服务端转 GLB，`.glb` 口径留一个发布周期）；
  * - `attributes`：`attributeSource.ts`（P4：`uiAttr` → `element/attributes`，`typeInfo` → 树节点两跳）。
  */
 
@@ -17,7 +18,8 @@ import type { MeshSource, ModelSource } from '../ports';
 import { genModelV1MeshUrl } from '@/api/genModelV1Api';
 
 const meshes: MeshSource = {
-  // gen-model 只有一档网格，legacy 的 LOD 键在这里没有意义
+  // gen-model 只有一档网格，legacy 的 LOD 键在这里没有意义。
+  // URL 以 .mesh 收尾，DTX 加载链据此选 parseMeshGeometry（legacy 的 .glb 仍走 parseGlbGeometry）。
   meshUrl: (geoHash) => genModelV1MeshUrl(geoHash),
 };
 

@@ -601,7 +601,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
     loadOptions?: {
       flyTo?: boolean
       regenerate?: boolean
-      /** 服务端已经重算过（gen-model model_drain 收口）：替换旧对象、重拉记录与 GLB，但**不**要求服务端再生成 */
+      /** 服务端已经重算过（gen-model model_drain 收口）：替换旧对象、重拉记录与网格（.mesh 直连），但**不**要求服务端再生成 */
       reload?: boolean
     }
   ): Promise<boolean> {

@@ -9,6 +9,7 @@ import { useDisplayThemeStore, type DisplayTheme } from '@/composables/useDispla
 import { getModelSource } from '@/model-source';
 import { type InstanceEntry } from '@/utils/instances/instanceManifest';
 import { parseGlbGeometry } from '@/utils/parseGlbGeometry';
+import { parseMeshGeometry } from '@/utils/parseMeshGeometry';
 import { DTXLayer } from '@/utils/three/dtx';
 import {
   buildHiddenNounSet,
@@ -295,22 +296,26 @@ async function ensureGeometryForGeoHash(
       return { status: 'ok' as const, notFoundNew: false };
     }
 
-    // URL 模板由数据源给：legacy = `/files/meshes/lod_{L}/{hash}_{L}.glb`（逐字同前），gen-model-v1 = `/api/v1/meshes/{hash}.glb`
-    const glbUrl = getModelSource().meshes.meshUrl(geoHash, lodAssetKey);
+    // URL 模板由数据源给：legacy = `/files/meshes/lod_{L}/{hash}_{L}.glb`（逐字同前），
+    // gen-model-v1 = `/api/v1/meshes/{hash}.mesh`（rkyv 原样直连，2026-09-09 拍板）。
+    // 两种线上形态解析出同一份 {positions, indices, normals?}，按后缀选解析器。
+    const meshUrl = getModelSource().meshes.meshUrl(geoHash, lodAssetKey);
     let geometry: BufferGeometry | null = null;
     let notFound = false;
     let notFoundNew = false;
 
     try {
-      const resp = await fetch(glbUrl);
+      const resp = await fetch(meshUrl);
       if (resp.status === 404) {
         notFound = true;
         notFoundNew = !cache.notFoundGeoHash.has(geoHash);
         cache.notFoundGeoHash.add(geoHash);
       }
       if (resp.ok) {
-        const glbData = await resp.arrayBuffer();
-        const parsed = await parseGlbGeometry(glbData);
+        const meshData = await resp.arrayBuffer();
+        const parsed = meshUrl.endsWith('.mesh')
+          ? parseMeshGeometry(meshData)
+          : await parseGlbGeometry(meshData);
         if (parsed) {
           const g = new BufferGeometry();
           g.setAttribute('position', new BufferAttribute(new Float32Array(parsed.positions), 3));
@@ -323,7 +328,7 @@ async function ensureGeometryForGeoHash(
         }
       }
     } catch (e) {
-      if (debug) console.warn('[dtx][instances-json] load glb failed', { geoHash, glbUrl, e });
+      if (debug) console.warn('[dtx][instances-json] load mesh failed', { geoHash, meshUrl, e });
     }
 
     if (geometry) {

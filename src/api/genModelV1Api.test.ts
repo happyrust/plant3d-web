@@ -141,9 +141,9 @@ describe('genModelV1Fetch 基座', () => {
 });
 
 describe('genModelV1MeshUrl / isValidGeoHash（与服务端 mesh_glb::is_valid_geo_hash 同一道门）', () => {
-  it('内容寻址键放行，拼成 /api/v1/meshes/{hash}.glb', () => {
-    expect(genModelV1MeshUrl('12240963882128803248', BASE)).toBe(`${BASE}/api/v1/meshes/12240963882128803248.glb`);
-    expect(genModelV1MeshUrl('e3d_baked_v2_deadbeef', '/gm')).toBe('/gm/api/v1/meshes/e3d_baked_v2_deadbeef.glb');
+  it('内容寻址键放行，拼成 /api/v1/meshes/{hash}.mesh（rkyv 直连口径）', () => {
+    expect(genModelV1MeshUrl('12240963882128803248', BASE)).toBe(`${BASE}/api/v1/meshes/12240963882128803248.mesh`);
+    expect(genModelV1MeshUrl('e3d_baked_v2_deadbeef', '/gm')).toBe('/gm/api/v1/meshes/e3d_baked_v2_deadbeef.mesh');
   });
 
   it('路径花招与非法字符在客户端就拦下', () => {

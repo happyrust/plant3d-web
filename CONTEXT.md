@@ -245,7 +245,7 @@ _Avoid_: 按需模型生成、模型资产补齐
 _Avoid_: `data_source`（那是 legacy 内部 parquet | backend 的选择）、后端地址、数据库
 
 **数据源端口 (Model Source Port)**:
-取数点与数据源之间的四个接口：`TreeSource`（根 / 子节点 / 祖先 / 搜索 / 子树 / 可见实例）、`ModelRecordSource`（`refno → InstanceEntry[]`）、`MeshSource`（`geo_hash → GLB URL`）、`AttributeSource`（属性面板 / 类型）。接口形状等于 legacy 函数的形状，所以 legacy 适配器是零逻辑委托；gen-model-v1 适配器负责把 `EleTreeNode` / `GeomInstQuery` / `element/attributes` 映射成这些形状。
+取数点与数据源之间的四个接口：`TreeSource`（根 / 子节点 / 祖先 / 搜索 / 子树 / 可见实例）、`ModelRecordSource`（`refno → InstanceEntry[]`）、`MeshSource`（`geo_hash → 网格 URL`：legacy 给 `.glb`，gen-model-v1 给 `.mesh` rkyv 直连，DTX 加载链按后缀选解析器）、`AttributeSource`（属性面板 / 类型）。接口形状等于 legacy 函数的形状，所以 legacy 适配器是零逻辑委托；gen-model-v1 适配器负责把 `EleTreeNode` / `GeomInstQuery` / `element/attributes` 映射成这些形状。
 _Avoid_: API 客户端、fetch 封装
 
 **虚拟根 (Virtual Root)**:
