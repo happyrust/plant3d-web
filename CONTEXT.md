@@ -256,9 +256,9 @@ _Avoid_: WORL、树根 refno
 gen-model 的几何记录（`model/records`）按生成根组织：记录上的 `owner` 是生成根而不是直接属主，一个构件的几何要经它所在的根整体取回。前端因此「按根收、按构件缓存」——对任一构件 ensure，服务端解到根、整根记录写进缓存，同根其它构件直接命中。
 _Avoid_: 直接属主、按 refno 单条查询、parquet 分桶
 
-**模型变更同步 (Model Change Sync)**:
-gen-model-v1 源下把服务端已重算的生成根重新装进场景的机制：WS `tasks` 主题的 `task_finished` 与重连触发一次对齐，15 s 定时对齐兜底；对齐 = 读 `GET /tasks?kind=model_drain` 里水位之后收口的任务的 `detail.roots`，与已加载根求交，清缓存后以 `reload`（替换旧对象、不带 `force`）重载。它不是模型重新生成，也不会把没加载过的根拉进场景。
-_Avoid_: 模型重新生成、自动加载、全量刷新
+**即时生成数据 (On-Demand Data)**:
+gen-model-v1 源下前端拿到的树与三维模型**全部是 API 即时给出的**：树读 `/tree/*`（内存里的 MDB 骨架），几何走 `model/ensure`（当场生成）→ `model/records` → `/meshes/{hash}.mesh`。前端不依赖服务端库里的持久数据、不看 `model-memory` / `model-database` 之分、不订阅 `model_drain` / WS 任务事件、不做被动重载——要新几何就再显示一次或「重新生成」。原「模型变更同步」（WS + 15 s 轮询 `GET /tasks?kind=model_drain` → reload）2026-09-09 按用户口径整条下线（收口计划 §12，决策见共享决策库）。
+_Avoid_: 模型变更同步、被动重载、库侧水位、等 drain
 
 ## 三维校审批注
 

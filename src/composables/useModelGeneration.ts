@@ -248,7 +248,7 @@ export async function resolveActualModelLoadScope(
 export function useModelGeneration(options: ModelGenerationOptions): ModelGenerationState & {
   generateAndLoadModel: (refno: string) => Promise<boolean>
   showModelByDbnum: (dbno: number, options?: { flyTo?: boolean; manifestUrl?: string; replaceRefnos?: string[] }) => Promise<{ loaded: boolean; instanceCount: number; refnoCount: number; refnos: string[]; budgetLimited?: boolean }>
-  showModelByRefno: (refno: string, options?: { flyTo?: boolean; regenerate?: boolean; reload?: boolean }) => Promise<boolean>
+  showModelByRefno: (refno: string, options?: { flyTo?: boolean; regenerate?: boolean }) => Promise<boolean>
   showModelUnitVersion: (unitRefno: string, dbno: number, sesno: number, options?: { flyTo?: boolean }) => Promise<boolean>
   isModelActuallyLoaded: (refno: string) => boolean
   checkRefnoExists: (refno: string) => boolean
@@ -601,15 +601,13 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
     loadOptions?: {
       flyTo?: boolean
       regenerate?: boolean
-      /** 服务端已经重算过（gen-model model_drain 收口）：替换旧对象、重拉记录与网格（.mesh 直连），但**不**要求服务端再生成 */
-      reload?: boolean
     }
   ): Promise<boolean> {
     const normalizedRoot = normalizeRefnoString(refno);
     if (!normalizedRoot) return false;
 
     const genuinelyLoaded = loadedRoots.has(normalizedRoot);
-    if (!loadOptions?.regenerate && !loadOptions?.reload && checkRefnoExists(normalizedRoot)) {
+    if (!loadOptions?.regenerate && checkRefnoExists(normalizedRoot)) {
       if (loadOptions?.flyTo) {
         try {
           const anyViewer = viewer as any;
@@ -797,14 +795,12 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
       // 缓存里的实例装进 DTX；重生成 = ensure(force=true)。旧后端的 realtime / parquet / SSE 那几条路一律不走。
       if (getModelSource().kind === 'gen-model-v1') {
         const loadRefnos = loadScope.actualLoadRefnos;
+        // regenerate（人要求重算）= ensure(force=true) 并替换场景里的旧对象。前端只吃自己 ensure 出来的数据，
+        // 没有「服务端替你重算了、这里被动重载」这一路（2026-09-09 用户口径，收口计划 §12）。
         const regenerate = loadOptions?.regenerate === true;
-        // reload（服务端已重算，P5 同步）与 regenerate（人要求重算）都要替换场景里的旧对象；只有后者带 force
-        const replace = regenerate || loadOptions?.reload === true;
         statusMessage.value = regenerate
           ? `正在重新生成 ${normalizedRoot}（gen-model）...`
-          : replace
-            ? `gen-model 已重算，正在重载 ${normalizedRoot}...`
-            : `从 gen-model 加载 ${loadRefnos.length} 个 refno...`;
+          : `从 gen-model 加载 ${loadRefnos.length} 个 refno...`;
         progress.value = 30;
         syncGlobalLoadStatus();
         const v1Result = await loadGenModelV1Refnos(
@@ -812,7 +808,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
           dbno,
           loadRefnos,
           anyViewer,
-          { regenerate, replace },
+          { regenerate, replace: regenerate },
           [30, 95],
           `从 gen-model 加载 ${normalizedRoot}`,
         );
@@ -858,11 +854,9 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         progress.value = 100;
         if (v1Result.loadedObjects > 0) {
           loadedRoots.add(normalizedRoot);
-          statusMessage.value = regenerate ? '重新生成完成 (gen-model)' : replace ? '重载完成 (gen-model)' : '加载完成 (gen-model)';
+          statusMessage.value = regenerate ? '重新生成完成 (gen-model)' : '加载完成 (gen-model)';
           syncGlobalLoadStatus();
-          if (!replace || regenerate) {
-            emitToast({ message: `[成功] 已从 gen-model 加载 ${v1Result.loadedObjects} 个几何实例`, level: 'success' });
-          }
+          emitToast({ message: `[成功] 已从 gen-model 加载 ${v1Result.loadedObjects} 个几何实例`, level: 'success' });
           return true;
         }
         if (v1Result.skippedRefnos > 0 && v1Result.loadedRefnos === 0) {

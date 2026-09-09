@@ -2,17 +2,14 @@
 import { computed, onMounted, onUnmounted } from 'vue';
 
 import { useGenModelV1Health } from '@/composables/useGenModelV1Health';
-import { useGenModelV1ModelSync } from '@/composables/useGenModelV1ModelSync';
-import { isGenModelV1Source } from '@/model-source/kind';
 
 /**
- * 树面板顶部的 gen-model 连接徽标（plan P1-4 / P5）：一个状态点 + 身份摘要 + 库三态，点一下重探。
- * 只在 `model_source=gen-model-v1`（或 `?gm_health=1`）时被父组件挂出来；挂上才开始轮询 / 订阅 WS，卸掉就停。
- * 模型变更同步（P5）只在数据源真的是 gen-model-v1 时起——`?gm_health=1` 只看不动场景。
+ * 树面板顶部的 gen-model 连接徽标（plan P1-4）：一个状态点 + 身份摘要 + 库三态，点一下重探。
+ * 只在 `model_source=gen-model-v1`（或 `?gm_health=1`）时被父组件挂出来；挂上才开始轮询，卸掉就停。
+ * 这里只探 `/health` 与 `/dbnums`——前端只吃自己 ensure 出来的数据，不订阅服务端任务、不做被动重载
+ * （原 P5 模型变更同步 2026-09-09 按用户口径整条下线，见收口计划 §12）。
  */
 const health = useGenModelV1Health();
-const sync = useGenModelV1ModelSync();
-const syncEnabled = isGenModelV1Source();
 
 const dotClass = computed(() => {
   switch (health.state.status) {
@@ -48,10 +45,6 @@ const title = computed(() => {
     if (s.verdict.laggingDbnums.length) lines.push(`滞后库：${s.verdict.laggingDbnums.join(', ')}`);
   }
   if (s.verdict.error) lines.push(`/dbnums：${s.verdict.error}`);
-  if (syncEnabled) {
-    lines.push(`模型同步：${sync.summary.value}${sync.state.lastReloaded.length ? `（最近 ${sync.state.lastReloaded.join(', ')}）` : ''}`);
-    if (sync.state.error) lines.push(`同步：${sync.state.error}`);
-  }
   if (s.error) lines.push(s.error);
   if (s.lastCheckedAt) lines.push(`上次探测 ${new Date(s.lastCheckedAt).toLocaleTimeString()}`);
   lines.push('点击重探');
@@ -60,11 +53,9 @@ const title = computed(() => {
 
 onMounted(() => {
   health.start();
-  if (syncEnabled) sync.start();
 });
 onUnmounted(() => {
   health.stop();
-  if (syncEnabled) sync.stop();
 });
 </script>
 
@@ -78,9 +69,5 @@ onUnmounted(() => {
     <span class="inline-block h-2 w-2 shrink-0 rounded-full"
       :class="dotClass" />
     <span class="truncate">{{ text }}</span>
-    <span v-if="syncEnabled"
-      class="inline-block h-1.5 w-1.5 shrink-0 rounded-full"
-      :class="sync.state.socket === 'open' ? 'bg-success' : sync.state.socket === 'connecting' || sync.state.socket === 'closed' ? 'bg-warning animate-pulse' : 'bg-muted-foreground/40'"
-      :title="`WS ${sync.state.socket}`" />
   </button>
 </template>

@@ -29,10 +29,10 @@
 | P8-1 | 起环境：`:3100`（`plant-model-gen`）+ gen-model `:8022`（仓内 `DbOption.toml` 现成）。**长驻服务由用户在自己终端起**（会话内不跑长驻命令），本计划附启动命令清单 | 两端口在听；`scripts/verify-gen-model-v1.ps1` 11/11（§8 P11 给 meshes 加了 `.mesh` 直连一步，`-Ensure` 的逐 hash HEAD 也改走 `.mesh`） |
 | P8-2 | 两源对拍：`?model_source=gen-model-v1` vs `?model_source=legacy&data_source=parquet` 两 tab，四类节点 BRAN `24381_145018` + EQUI + SUPPO + ZONE（后三个从树里现选），比 `loadedObjects`、`sceneBoundingBox` 逐轴 ≤ 1 mm、截图肉眼一致 | 结果记进母计划 §8.13；差异 >1 mm 停下查（先核两边数据是否同一代，见 R2） |
 | P8-3 | `is_invalid_tubi` 样本：`verify-gen-model-v1.ps1 -Ensure` 的 records 输出里扫 `is_invalid_tubi=true`；有 → 浏览器肉眼核对琥珀色；没有 → 在 E3D 里造一条坏直管（两端重合）再验，或记「样本缺失维持未验证」 | 母计划 §8.12 的「未验证」销账或明确挂起 |
-| P8-4 | live 验证 gen-model 两笔：`tree/children?refno=1/1` → 404 `not_found`（原 500）；触发一次真实 drain → WS `task_finished{kind:"model_drain"}` → 前端 15 s 内自动重载对应根 | 浏览器 network/console 证据记 §8.13 |
+| P8-4 | live 验证 gen-model 两笔：`tree/children?refno=1/1` → 404 `not_found`（原 500）；~~触发一次真实 drain → WS `task_finished{kind:"model_drain"}` → 前端 15 s 内自动重载对应根~~（**不适用**，2026-09-09 深夜：前端不再订阅 drain / WS，见 §12） | 浏览器 network/console 证据记 §8.13 |
 | P8-5 | 全绿后翻默认：`resolveModelSourceKind()` 缺省值 + `.env.development` / `.env.example` 改 `gen-model-v1`；legacy 开关保留一个发布周期；联调指南与 CONTEXT 各改一句 | 不带参数打开页面走 v1；`?model_source=legacy` 仍可回旧链路；vitest 全量新增 fail 0 |
 
-P8-4 可选顺手项（拍板 D8 后定）：`useGenModelV1ModelSync` 按 `payload.kind === 'model_drain'` 直取 `detail.roots` 重载，REST 轮询从 15 s 拉长到分钟级（服务端 `80b0f330c` 已给事件，前端现在是「任何 task_finished 都触发一次 REST 对齐」，能用但粗）。
+~~P8-4 可选顺手项（拍板 D8 后定）：`useGenModelV1ModelSync` 按 `payload.kind === 'model_drain'` 直取 `detail.roots` 重载，REST 轮询从 15 s 拉长到分钟级。~~ → 作废：`useGenModelV1ModelSync` 已整条下线（§12）。
 
 ## 3. P9 · gen-model 批量 records（跨仓，契约先行）
 
@@ -145,7 +145,7 @@ runtime/release 两条 GLB 链路不动。
 | P8-1 | **过** | 用户口径 legacy = plant-server（`:3100`，detached runtime，静态目录 `plant-model-gen/output`）；gen-model 0.1.21 `:8022`；`verify-gen-model-v1.ps1 -Ensure` 11/11 |
 | P8-2 | **跑了，但 legacy 不能当参照** | 输出目录没有 `scene_tree_parquet/`（legacy 树与 `visible-insts` 空转，容器展不开）、parquet 只覆盖 ZONE 144870 的管道（EQUI 0 几何）、dbnum 7997 没有 SUPPO。数据级对拍：BRAN 对象数 22=22、构件集相同；ZONE legacy 1287 构件全在 v1 里（v1 多 54 个 legacy 无几何的构件），直管差 263 段是 legacy 原点到原点的画法伪影；EQUI v1 40 = 全部基本体。v1 浏览器 ↔ records 三类节点逐条相等（22/2024/40） |
 | P8-3 | 样本缺失 | 2024 条记录里 `is_invalid_tubi=true` 0 条，维持「未验证」 |
-| P8-4 | 半 | `tree/children?refno=1/1` → 404 `not_found` 已 live；drain → WS → 自动重载未触发 |
+| P8-4 | 过（a）/ 不适用（b） | `tree/children?refno=1/1` → 404 `not_found` 已 live；drain → WS → 自动重载 **不适用**（前端不再订阅，§12） |
 | P8-5 | **已翻**（D8 按 B，见 §10） | 闸门 A（浏览器两源全绿）在本机做不到——要先用旧导出链给 7997 补 `scene_tree_parquet`（而旧链路 plant-model-gen 已不再是用户的路线）；闸门 B 的证据比拍板时多了一层：数据级 v1 ⊇ legacy + 浏览器/records 互证 |
 
 `e2e/gen-model-v1-two-source-parity.spec.ts` 入库（`.gitignore` 白名单）：用例一先 HEAD legacy 的树 parquet，缺就带原因 skip；
@@ -181,7 +181,7 @@ runtime/release 两条 GLB 链路不动。
   - `gen-model-v1-two-source-parity.spec.ts`：用例一按设计 skip（legacy 无 `scene_tree_parquet/`）；用例二过——BRAN 22=22=22、ZONE 2024=2024=2024、EQUI 40=40=40（records = DTX 登记 = toast loadedObjects），bbox 有限。
   - 3101 跑完已释放；临时环境变量已清。
 - 本机要不带参数直接打开页面连上 `:9099`：`.env.development`（git 忽略）里 `VITE_GEN_MODEL_V1_BASE_URL=http://localhost:9099`（22:5x 已改），或 URL 带 `?gm_backend_port=9099`；联调指南 §1 那句「端口不是 8022 时」已经覆盖这一情形，不另改文档。
-- 仍未验证（口径不变）：P8-3 `is_invalid_tubi` 样本缺失；P8-4b drain → WS → 自动重载——0.1.21 这份配置 `gen_model=false`，不会自然触发 drain。
+- 仍未验证：P8-3 `is_invalid_tubi` 样本缺失。~~P8-4b drain → WS → 自动重载~~ → 随即按用户口径改记「不适用」（§12）。
 
 **2. P10-1 落地（D10 按 A，决策 d-179）**
 
@@ -196,3 +196,24 @@ runtime/release 两条 GLB 链路不动。
 - 下一步：gen-model 侧会话 / 用户认可 §4.5.2 后，P9-2（服务端，写锁 `src/web_service/`）→ P9-3（前端 `modelRecords.ts` 多根打包分批、`recordsConcurrency` 改「在飞批数」、整库预算上调）。
 
 **未提交物 / 环境备注**：工作树里 `useDbnoInstancesDtxLoader.test.ts` / `useModelGeneration.loadScope.test.ts` 有两处纯行尾（CRLF）改动与 `docs/issues/mbd-*` 是别的会话的，本笔提交不带。
+
+## 12. 追记（2026-09-09 深夜）：用户口径「树与三维数据全走 API 即时生成，不用库里的数据」——P5 模型变更同步整条下线
+
+用户原话：「这里面的节点树和三维模型数据全部都是以 API 的数据形式提供。也就是说都是即时生成的。不需要去用数据库里面的数据。」随后拍板：**整条 `useGenModelV1ModelSync` 下线（轮询和 WS 都不要），前端只靠自己的 ensure**；P8-4b 记不适用；spec 草案去掉 rocksdb 字眼；记一条决策。
+
+**对照现状**：前端取数链本来就是 `tree/*`（内存 MDB 骨架）→ `model/ensure`（即时生成）→ `model/records`（六个字段）→ `/meshes/{hash}.mesh`，从不区分 `model-memory` / `model-database`、不读库侧水位；唯一带「等库侧」味道的就是 P5：WS `tasks` + 15 s 轮询 `GET /tasks?kind=model_drain` → 与已加载根求交 → `reload`。
+
+**改动（plant3d-web）**
+- 删：`src/composables/useGenModelV1ModelSync.ts` + `.test.ts`、`src/api/genModelV1Ws.ts` + `.test.ts`（WS 客户端只有它一个用户）。
+- `src/api/genModelV1Api.ts`：去掉 `GET /api/v1/tasks` 绑定（`TaskEntryDto` / `TasksResponse` / `GenModelV1TasksQuery` / `genModelV1Tasks`），留一行注释指回本节。
+- `GenModelV1HealthBadge.vue`：去掉 sync 的挂起/停止、悬停「模型同步」行、右侧 WS 小点；只剩 `/health` + `/dbnums`。
+- `useModelGeneration.ts`：`showModelByRefno` 去掉 `reload` 选项（它只有 P5 一个派发方）——早退条件只看 `regenerate`，v1 分支 `replace = regenerate`，状态文案 / toast 相应收拢；`ViewerPanel.vue` 去掉 `reload: detail.reload` 透传。
+- `modelRecordSource.ts`：`collectedRoots / leavesOfRoot / invalidateRoot` 作为通用缓存操作**保留**（有单测、无 P5 依赖），只把注释里的 P5 / `model_drain` 字眼去掉。
+- 文档：CONTEXT.md「模型变更同步」词条改写为「即时生成数据 (On-Demand Data)」；联调指南 §3 期望、§7 故障表「模型重算后场景没刷新」改为「这是设计」、§8 源码清单；母计划 §8.6 头注 + §8.13 P8-4b 改「不适用」；本计划 §2 P8-4 行、P8-4 顺手项作废、§9 P8-4 行、§11。
+- e2e `model-source-default.spec.ts` 不用改：它只断言 v1 请求 > 0 且旧链路 0（首批现在是 `/health` + `/dbnums` 两发，少了 `/tasks`）。
+
+**改动（gen-model，只动文档）**：spec §4.5.2 批量草案去掉 rocksdb / 内存形态的分叉措辞——同库约束保留（一个响应一个 `source`），加一句 plant3d-web 口径「只吃 ensure 即时生成、records 原样回的数据，不对存储形态作承诺」；`not_generated` 409 改为形态无关的表述。§5.3 `task_finished` 行加括注：plant3d-web 自 2026-09-09 起不消费该事件、不轮询 `/tasks`，事件保留给其它客户端。
+
+**验证**：`npm run type-check` 646 / 基线 646 / 新增 0 / 已消失 0（删掉的文件本来就无基线错误）；触及 4 个源文件 ESLint 0 错；受影响 vitest 13 文件 101 条全绿（`useModelGeneration*`、`model-source/genModelV1/*`、`genModelV1Api`、`model-source/index`、`useGenModelV1Health`）；`e2e/model-source-default.spec.ts` 与全量 vitest 结果见下一行追记。
+
+**不动的**：`useGenModelV1Health`（`/health` + `/dbnums` 三态徽标）保留——它只说「连上了没、库同步/滞后几个」，不驱动任何加载；gen-model 侧 `model_drain` WS 事件（`80b0f330c`）保留给其它客户端；legacy 链路一行未动。

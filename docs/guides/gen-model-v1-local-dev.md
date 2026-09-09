@@ -60,7 +60,7 @@ VITE_GEN_MODEL_V1_BASE_URL=http://localhost:8022   # 直连；写 /gm 走 Vite �
 http://127.0.0.1:3101/?model_source=gen-model-v1&gm_backend_port=8022&show_refno=24381_145018
 ```
 
-期望：树顶部徽标显示「已连接 gen-model :8022 · AvevaMarineSample /ALL · 模型门 开 · 库 同步 n · 滞后 n · 未判 n」，右侧小点绿色（WS 已连）；树根是 `AvevaMarineSample / ALL`，展开是全部 SITE，行数据带 `dbnum`；BRAN `24381_145018` 的 11 个构件 + 直管出现在视口；点构件，属性面板底部有一行「e3d-io 直读：N 个属性未解码 …」。
+期望：树顶部徽标显示「已连接 gen-model :8022 · AvevaMarineSample /ALL · 模型门 开 · 库 同步 n · 滞后 n · 未判 n」（徽标只探 `/health` 与 `/dbnums`，不再有 WS 小点——前端只吃自己 ensure 出来的数据，2026-09-09 起不订阅服务端任务）；树根是 `AvevaMarineSample / ALL`，展开是全部 SITE，行数据带 `dbnum`；BRAN `24381_145018` 的 11 个构件 + 直管出现在视口；点构件，属性面板底部有一行「e3d-io 直读：N 个属性未解码 …」。
 
 视口里**琥珀色（`#f59e0b`）的直管**不是主题色：那是服务端判定的无效直管（`model/records` 的 `insts[].is_invalid_tubi`，长度 ≤ 0 / 两端重合等），画成告警色实体、不跟主题走；控制台同时有一条「有 N 段无效直管（is_invalid_tubi），已画成告警色」，`[model-load]` 日志里也有 `invalid_tubi=N`。颜色可在 `public/config/model-display.config.json` 的 `invalidTubiMaterial` 里改，`instanceConfigs[refno]` 的显式覆盖仍最高。
 
@@ -103,9 +103,9 @@ pwsh scripts/verify-gen-model-v1.ps1 -BaseUrl http://127.0.0.1:18082 -Refno 2438
 | 勾选眼睛后提示「N 个 refno 没有几何记录」 | ensure 回 `NoRenderableGeometry`（无子件的 BRAN、纯层级的 STRU）或 `generation_pending`（生成还在后台，别重试同一 refno，稍后再点） |
 | 网格全是兜底方块 | `/api/v1/meshes/{hash}.mesh` 404：服务端 `meshes_path` 下没有这个 `.mesh`（换过运行目录 / 网格目录没分家）。`.mesh` 直连自 2026-09-09 起是默认口径（`parseMeshGeometry` 解 rkyv），`.glb` 转换口径留一个发布周期 |
 | `tree/children?refno=…` 回 500 `internal` | Ref0 不在本 MDB（gen-model 侧今天没分型成 404 / 503，见 plan §8.2 顺手发现） |
-| 模型重算后场景没刷新 | 同步靠 15 s 一次的 `GET /tasks?kind=model_drain` 对齐，另外任何 WS `task_finished` 也会立刻触发一次对齐——gen-model `80b0f330c`（2026-09-08）起 drain 页收口会发 `task_finished {kind:"model_drain", detail.roots[]}`，更老的服务端不发、只能等轮询；徽标悬停看「模型同步」那一行有没有 `已重载 n 根`，WS 小点是不是绿的 |
+| 服务端重算过、场景没自动刷新 | **这是设计**（2026-09-09 用户口径，收口计划 §12）：前端只吃自己 `ensure` 出来的数据，不订阅 `model_drain` / WS、不做被动重载。要新几何就对那个节点再显示一次（`ensure(force=false)` 会拿到服务端当前的结果），或右键「重新生成」（`force=true`） |
 | 属性面板底部一行「N 个属性未解码」 | 正常：`element/attributes` 直读 e3d-io，`diagnostics.undecoded` 是服务端解不出的属性，不是前端错 |
 
 ## 8. 回退
 
-任何时候加 `?model_source=legacy`（或整站 `VITE_MODEL_SOURCE=legacy`）就回到旧链路——两套代码都在，legacy 路径没有改过一行行为；2026-09-09 之前缺省就是 legacy，现在要显式写。相关源码：`src/model-source/**`、`src/api/genModelV1Api.ts`、`src/api/genModelV1Ws.ts`、`src/composables/useGenModelV1Health.ts`、`src/composables/useGenModelV1ModelSync.ts`。
+任何时候加 `?model_source=legacy`（或整站 `VITE_MODEL_SOURCE=legacy`）就回到旧链路——两套代码都在，legacy 路径没有改过一行行为；2026-09-09 之前缺省就是 legacy，现在要显式写。相关源码：`src/model-source/**`、`src/api/genModelV1Api.ts`、`src/composables/useGenModelV1Health.ts`（`genModelV1Ws.ts` / `useGenModelV1ModelSync.ts` 已于 2026-09-09 下线）。

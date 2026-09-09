@@ -39,9 +39,9 @@ export type GenModelV1ModelRecordSource = ModelRecordSource & {
   peek(refno: string): InstanceEntry[] | undefined;
   /** 清缓存：不传清全部，传了只清这些 refno。 */
   invalidate(refnos?: string[]): void;
-  /** 已经收过记录的生成根（`a_b`）——P5 拿它与 `model_drain` 的根做交集。 */
+  /** 已经收过记录的生成根（`a_b`）。 */
   collectedRoots(): string[];
-  /** 某根下缓存过的全部构件 refno（含根自己），P5 重载时按它 forceReload。 */
+  /** 某根下缓存过的全部构件 refno（含根自己）。 */
   leavesOfRoot(root: string): string[];
   /** 把一根连同它的构件从缓存里清掉；返回被清掉的构件 refno。 */
   invalidateRoot(root: string): string[];
