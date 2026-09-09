@@ -133,3 +133,21 @@ runtime/release 两条 GLB 链路不动。
 目前只是格式能力、不是现成数据；aabb=None 占 10,332/48,590。
 
 **对 §2–§4 的影响**：P8 流程不变（对拍在新形态上跑）；P9/P10 无影响。
+
+## 9. 追记（2026-09-09 晚）：P8 跑完的实际形态——legacy 参照不成立，D8 待拍板
+
+细节全在母计划 §8.13，这里只记对本计划各行的影响：
+
+| # | 状态 | 一句话 |
+| --- | --- | --- |
+| P8-1 | **过** | 用户口径 legacy = plant-server（`:3100`，detached runtime，静态目录 `plant-model-gen/output`）；gen-model 0.1.21 `:8022`；`verify-gen-model-v1.ps1 -Ensure` 11/11 |
+| P8-2 | **跑了，但 legacy 不能当参照** | 输出目录没有 `scene_tree_parquet/`（legacy 树与 `visible-insts` 空转，容器展不开）、parquet 只覆盖 ZONE 144870 的管道（EQUI 0 几何）、dbnum 7997 没有 SUPPO。数据级对拍：BRAN 对象数 22=22、构件集相同；ZONE legacy 1287 构件全在 v1 里（v1 多 54 个 legacy 无几何的构件），直管差 263 段是 legacy 原点到原点的画法伪影；EQUI v1 40 = 全部基本体。v1 浏览器 ↔ records 三类节点逐条相等（22/2024/40） |
+| P8-3 | 样本缺失 | 2024 条记录里 `is_invalid_tubi=true` 0 条，维持「未验证」 |
+| P8-4 | 半 | `tree/children?refno=1/1` → 404 `not_found` 已 live；drain → WS → 自动重载未触发 |
+| P8-5 | **等 D8** | 闸门 A（浏览器两源全绿）在本机做不到——要先用旧导出链给 7997 补 `scene_tree_parquet`（而旧链路 plant-model-gen 已不再是用户的路线）；闸门 B 的证据比拍板时多了一层：数据级 v1 ⊇ legacy + 浏览器/records 互证 |
+
+`e2e/gen-model-v1-two-source-parity.spec.ts` 入库（`.gitignore` 白名单）：用例一先 HEAD legacy 的树 parquet，缺就带原因 skip；
+用例二「v1 浏览器对象数 == records 逐根条数」不依赖 legacy，是翻默认后可以一直跑的回归钉子。
+
+**D8 建议**：按 B 翻——legacy 在本机既没有树也没有 EQUI/SUPPO 几何，A 口径的「全绿」在它上面永远拿不到；
+真要 A，只能再起一遍 plant-model-gen 的导出链补树 parquet，那是回头维护已放弃的路线。翻的内容不变（P8-5 那一行）。
