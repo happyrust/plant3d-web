@@ -1,4 +1,9 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+
+// 这个文件测的是 legacy 链路（`/api/e3d/subtree-refnos` + parquet / backend 加载）；
+// 缺省数据源自 2026-09-09 起是 gen-model-v1，这里显式钉回 legacy。
+beforeAll(() => window.history.replaceState({}, '', '?model_source=legacy'));
+afterAll(() => window.history.replaceState({}, '', '/'));
 
 const emitToastMock = vi.fn();
 const addLogMock = vi.fn();

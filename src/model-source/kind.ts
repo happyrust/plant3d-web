@@ -1,7 +1,8 @@
 /**
  * 数据源种类的解析（不带任何适配器依赖，谁都能引）。
  *
- * `?model_source=` → `VITE_MODEL_SOURCE` → 默认 `legacy`。适配器本体在 `./index.ts`，它把这里的函数再导出一遍。
+ * `?model_source=` → `VITE_MODEL_SOURCE` → 默认 `gen-model-v1`（2026-09-09 起；`legacy` 仍可显式切回）。
+ * 适配器本体在 `./index.ts`，它把这里的函数再导出一遍。
  */
 import { DEFAULT_MODEL_SOURCE_KIND, MODEL_SOURCE_KINDS, type ModelSourceKind } from './ports';
 

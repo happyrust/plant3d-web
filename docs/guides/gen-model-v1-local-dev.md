@@ -2,6 +2,8 @@
 
 模型树与三维几何从 gen-model `/api/v1` 取数的联调步骤、URL 开关、验证脚本与常见故障。设计见 `docs/adr/0054-load-model-tree-and-geometry-from-gen-model-v1.md`，落地记录见 `docs/plans/2026-09-06-gen-model-v1-tree-and-viewer-adapter-plan.md` §8。
 
+**2026-09-09 起 `gen-model-v1` 是缺省数据源**：不带参数打开页面就走 gen-model，所以 gen-model 不在时树是空的、徽标红点（见 §7）；要回旧链路写 `?model_source=legacy`（或 `VITE_MODEL_SOURCE=legacy`），legacy 开关保留一个发布周期。
+
 ## 1. 起 gen-model
 
 在 gen-model 仓（`D:\work\plant-code\old\gen-model`）的运行目录里，`DbOption.toml` 至少要有：
@@ -36,7 +38,7 @@ npm run dev          # http://127.0.0.1:3101
 ```ini
 VITE_GEN_MODEL_V1_BASE_URL=http://localhost:8022   # 直连；写 /gm 走 Vite 同源代理
 # VITE_GEN_MODEL_V1_PROXY_TARGET=http://localhost:8022   # /gm 代理的上游（仅 dev）
-# VITE_MODEL_SOURCE=legacy                               # 默认 legacy；写 gen-model-v1 整站切过去
+# VITE_MODEL_SOURCE=gen-model-v1                         # 缺省 gen-model-v1（2026-09-09 起）；写 legacy 整站回旧链路
 ```
 
 旧后端 `VITE_GEN_MODEL_API_BASE_URL=http://localhost:3100` 那一行**不要动**：尺寸标注、MBD、校审等还在 `:3100`；过渡期一个页面同时挂两个后端是预期形态。
@@ -45,7 +47,7 @@ VITE_GEN_MODEL_V1_BASE_URL=http://localhost:8022   # 直连；写 /gm 走 Vite �
 
 | 参数 | 作用 |
 | --- | --- |
-| `model_source=gen-model-v1` | 本页面模型树 / 几何 / 网格 / 属性全部走 gen-model；缺省或 `legacy` = 旧链路（逐字节同前） |
+| `model_source=gen-model-v1` | 本页面模型树 / 几何 / 网格 / 属性全部走 gen-model；**2026-09-09 起这就是缺省**，不写也一样。`model_source=legacy` = 旧链路（逐字节同前，保留一个发布周期） |
 | `gm_backend_port=18082` / `gm_backend=http://10.0.0.5:8022` / `gm_backend=/gm` | 本页面 gen-model 地址，压过环境变量；`/gm` 走同源代理 |
 | `gm_health=1` | 在 legacy 下也把树顶部的 gen-model 徽标挂出来（只看健康与库三态，不动场景、不起同步） |
 | `show_refno=24381_145018` | 启动即显示这个节点（v1 下 = `ensure → records`） |
@@ -79,7 +81,7 @@ pwsh scripts/verify-gen-model-v1.ps1 -BaseUrl http://127.0.0.1:18082 -Refno 2438
 | `/dbnums` 的 `ref0s` | 骨架预热过，每行都有 | 骨架预热过才有；没有的行整格不写，`useDbMetaInfo` 跳过它 |
 | `model/records` 的 `source` | `model-memory` | 库就绪了 `model-database`，否则 `model-memory` |
 
-## 6. 两源对拍（翻默认开关的前提）
+## 6. 两源对拍（翻默认开关时的证据链）
 
 同一 refno 开两个 tab：
 
@@ -88,7 +90,9 @@ pwsh scripts/verify-gen-model-v1.ps1 -BaseUrl http://127.0.0.1:18082 -Refno 2438
 ?model_source=gen-model-v1&show_refno=24381_145018
 ```
 
-比 `loadedObjects`、场景 AABB（控制台 `__dtxViewer` 的 `sceneBoundingBox`）逐轴差 ≤ 1 mm、截图肉眼一致；再取一个 EQUI、一个 SUPPO、一个 ZONE 重复。legacy 那边需要 `:3100` 旧后端在跑。2026-09-07 只做过同源自洽对拍（P3-b 合成矩阵 × GLB 顶点 vs 服务端 `world_aabb`，22/22 ≤ 0.002 mm），两源对拍还没做，所以 `VITE_MODEL_SOURCE` 默认仍是 `legacy`。
+比 `loadedObjects`、场景 AABB（控制台 `__dtxViewer` 的 `sceneBoundingBox`）逐轴差 ≤ 1 mm、截图肉眼一致；再取一个 EQUI、一个 SUPPO、一个 ZONE 重复。legacy 那边需要 `:3100` 旧后端在跑。自动化版本是 `e2e/gen-model-v1-two-source-parity.spec.ts`：第一条用例就是这组对拍（legacy 输出目录缺 `scene_tree_parquet/` 时带原因 skip），第二条「v1 浏览器对象数 == `model/records` 逐根条数」不依赖 legacy，翻默认后当回归钉子一直跑。
+
+2026-09-09 翻默认的依据（收口计划 D8 按 B 口径，母计划 §8.13）：本机 legacy 输出目录没有树 parquet、EQUI 无几何、dbnum 7997 无 SUPPO，浏览器两源全绿在它上面拿不到；改记数据级对拍——BRAN 对象数 22 = 22 且构件集相同、ZONE legacy 的 1287 个有几何构件全部在 v1 里（差异是 legacy 直管画法伪影与覆盖缺口）、EQUI v1 40 个基本体；再加 v1 浏览器 ↔ records 三类节点逐条相等（22 / 2024 / 40）与 D6 数值对拍 ≤ 0.002 mm。
 
 ## 7. 常见故障
 
@@ -104,4 +108,4 @@ pwsh scripts/verify-gen-model-v1.ps1 -BaseUrl http://127.0.0.1:18082 -Refno 2438
 
 ## 8. 回退
 
-任何时候把 URL 参数去掉（或 `?model_source=legacy`）就回到旧链路——两套代码都在，legacy 路径没有改过一行行为。相关源码：`src/model-source/**`、`src/api/genModelV1Api.ts`、`src/api/genModelV1Ws.ts`、`src/composables/useGenModelV1Health.ts`、`src/composables/useGenModelV1ModelSync.ts`。
+任何时候加 `?model_source=legacy`（或整站 `VITE_MODEL_SOURCE=legacy`）就回到旧链路——两套代码都在，legacy 路径没有改过一行行为；2026-09-09 之前缺省就是 legacy，现在要显式写。相关源码：`src/model-source/**`、`src/api/genModelV1Api.ts`、`src/api/genModelV1Ws.ts`、`src/composables/useGenModelV1Health.ts`、`src/composables/useGenModelV1ModelSync.ts`。

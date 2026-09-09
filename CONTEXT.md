@@ -241,7 +241,7 @@ _Avoid_: 按需模型生成、模型资产补齐
 ## 模型数据源
 
 **模型数据源 (Model Source)**:
-模型树、三维几何、网格与构件属性四条取数链共同指向的那一个后端口径；一个页面同一时刻只有一个，由 `?model_source=` → `VITE_MODEL_SOURCE` → 默认 `legacy` 决定。两个种类：`legacy`（旧后端 `:3100` + parquet / DuckDB-WASM）与 `gen-model-v1`（gen-model `/api/v1`）。它是页面级开关，不是某次加载的参数。
+模型树、三维几何、网格与构件属性四条取数链共同指向的那一个后端口径；一个页面同一时刻只有一个，由 `?model_source=` → `VITE_MODEL_SOURCE` → 默认 `gen-model-v1`（2026-09-09 起；此前默认 `legacy`）决定。两个种类：`legacy`（旧后端 `:3100` + parquet / DuckDB-WASM，开关保留一个发布周期）与 `gen-model-v1`（gen-model `/api/v1`）。它是页面级开关，不是某次加载的参数。
 _Avoid_: `data_source`（那是 legacy 内部 parquet | backend 的选择）、后端地址、数据库
 
 **数据源端口 (Model Source Port)**:

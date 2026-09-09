@@ -6,7 +6,7 @@ interface ImportMetaEnv {
   readonly VITE_GEN_MODEL_V1_BASE_URL?: string;
   /** dev `/gm` 代理的上游（仅 vite.config.ts 读） */
   readonly VITE_GEN_MODEL_V1_PROXY_TARGET?: string;
-  /** 模型树 / 三维模型数据源：`legacy`（默认）| `gen-model-v1`；URL `?model_source=` 可覆盖 */
+  /** 模型树 / 三维模型数据源：`gen-model-v1`（默认，2026-09-09 起）| `legacy`（旧链路，保留一个发布周期）；URL `?model_source=` 可覆盖 */
   readonly VITE_MODEL_SOURCE?: string;
 }
 

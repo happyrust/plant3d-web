@@ -55,6 +55,7 @@ npm-cache
 e2e/*
 !e2e/gen-model-v1-mesh-direct.spec.ts
 !e2e/gen-model-v1-two-source-parity.spec.ts
+!e2e/model-source-default.spec.ts
 !e2e/pms-powerpms-review-new.spec.ts
 !e2e/output-project-direct-entry.spec.ts
 !e2e/dimension-mbd-v2-fixture.spec.ts

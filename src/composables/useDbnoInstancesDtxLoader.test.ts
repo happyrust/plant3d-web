@@ -1,4 +1,9 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+
+// 这个文件测的是 legacy 链路（parquet / backend 记录源 + `/files/meshes/**.glb`）；
+// 缺省数据源自 2026-09-09 起是 gen-model-v1（会把 `dataSource: 'parquet'` 改写成 v1），这里显式钉回 legacy。
+beforeAll(() => window.history.replaceState({}, '', '?model_source=legacy'));
+afterAll(() => window.history.replaceState({}, '', '/'));
 
 const parquetLoaderMocks = vi.hoisted(() => ({
   isParquetAvailable: vi.fn(async () => true),

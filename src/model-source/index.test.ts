@@ -4,6 +4,7 @@ import { legacyMeshUrl } from './legacy';
 
 import {
   __resetModelSourceForTests,
+  DEFAULT_MODEL_SOURCE_KIND,
   getGenModelV1ModelSource,
   getModelSource,
   parseModelSourceKind,
@@ -50,10 +51,17 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
-describe('resolveModelSourceKind（?model_source= → VITE_MODEL_SOURCE → legacy）', () => {
-  it('默认 legacy：旧链路一个字节都不变', () => {
-    expect(resolveModelSourceKind({})).toBe('legacy');
-    expect(resolveModelSourceKind({ search: '?show_refno=24381_145018' })).toBe('legacy');
+describe('resolveModelSourceKind（?model_source= → VITE_MODEL_SOURCE → gen-model-v1）', () => {
+  it('默认 gen-model-v1（2026-09-09 D8 翻默认）：不带参数、不设环境变量就走 v1', () => {
+    expect(DEFAULT_MODEL_SOURCE_KIND).toBe('gen-model-v1');
+    expect(resolveModelSourceKind({})).toBe('gen-model-v1');
+    expect(resolveModelSourceKind({ search: '?show_refno=24381_145018' })).toBe('gen-model-v1');
+  });
+
+  it('legacy 开关保留一个发布周期：URL 参数或环境变量任一写 legacy 就回旧链路', () => {
+    expect(resolveModelSourceKind({ search: '?model_source=legacy' })).toBe('legacy');
+    expect(resolveModelSourceKind({ envValue: 'legacy' })).toBe('legacy');
+    expect(resolveModelSourceKind({ search: '?show_refno=24381_145018', envValue: 'legacy' })).toBe('legacy');
   });
 
   it('URL 参数压过环境变量', () => {
@@ -62,12 +70,13 @@ describe('resolveModelSourceKind（?model_source= → VITE_MODEL_SOURCE → lega
     expect(resolveModelSourceKind({ envValue: 'gen-model-v1' })).toBe('gen-model-v1');
   });
 
-  it('接受几种顺手写法，认不出的值忽略', () => {
+  it('接受几种顺手写法，认不出的值忽略（落回缺省 gen-model-v1）', () => {
     expect(parseModelSourceKind('V1')).toBe('gen-model-v1');
     expect(parseModelSourceKind('gen_model_v1')).toBe('gen-model-v1');
     expect(parseModelSourceKind('parquet')).toBe('legacy');
     expect(parseModelSourceKind('surreal')).toBeNull();
-    expect(resolveModelSourceKind({ search: '?model_source=surreal' })).toBe('legacy');
+    expect(resolveModelSourceKind({ search: '?model_source=surreal' })).toBe('gen-model-v1');
+    expect(resolveModelSourceKind({ search: '?model_source=surreal', envValue: 'legacy' })).toBe('legacy');
   });
 });
 
@@ -141,22 +150,22 @@ describe('legacy 适配器：零逻辑委托', () => {
     spy.mockRestore();
   });
 
-  it('getGenModelV1ModelSource / subscribeModelSourceProgress：缺省 legacy 下是 null 与空订阅；v1 下给带 collectDbnum 的那份源', () => {
-    // 测试环境没有 ?model_source=，缺省 legacy
-    expect(getGenModelV1ModelSource()).toBeNull();
-    const unsubscribe = subscribeModelSourceProgress(() => {});
-    expect(typeof unsubscribe).toBe('function');
-    unsubscribe();
-
-    window.history.replaceState({}, '', '?model_source=gen-model-v1');
+  it('getGenModelV1ModelSource / subscribeModelSourceProgress：legacy 下是 null 与空订阅；缺省（v1）下给带 collectDbnum 的那份源', () => {
+    window.history.replaceState({}, '', '?model_source=legacy');
     try {
-      const source = getGenModelV1ModelSource();
-      expect(source).not.toBeNull();
-      expect(source).toBe(getModelSource('gen-model-v1'));
-      expect(typeof source!.collectDbnum).toBe('function');
-      expect(typeof source!.records.subscribeProgress).toBe('function');
+      expect(getGenModelV1ModelSource()).toBeNull();
+      const unsubscribe = subscribeModelSourceProgress(() => {});
+      expect(typeof unsubscribe).toBe('function');
+      unsubscribe();
     } finally {
       window.history.replaceState({}, '', '/');
     }
+
+    // 测试环境没有 ?model_source=，缺省 gen-model-v1（2026-09-09 起）
+    const source = getGenModelV1ModelSource();
+    expect(source).not.toBeNull();
+    expect(source).toBe(getModelSource('gen-model-v1'));
+    expect(typeof source!.collectDbnum).toBe('function');
+    expect(typeof source!.records.subscribeProgress).toBe('function');
   });
 });

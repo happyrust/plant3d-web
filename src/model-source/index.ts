@@ -1,7 +1,7 @@
 /**
  * 模型数据源开关与入口（plan P1-3）。
  *
- * `resolveModelSourceKind()`（见 `./kind.ts`）：`?model_source=` → `VITE_MODEL_SOURCE` → 默认 `legacy`。
+ * `resolveModelSourceKind()`（见 `./kind.ts`）：`?model_source=` → `VITE_MODEL_SOURCE` → 默认 `gen-model-v1`（2026-09-09 起）。
  * `getModelSource()`：按当前开关给一份 `ModelSource`（进程内每种一份，惰性建）。
  *
  * `gen-model-v1` 接了树（P2）、几何记录（P3）、网格 URL（P0-1）与 `typeInfo`；`uiAttr` 仍委托 legacy（P4-1），见 `genModelV1/index.ts`。

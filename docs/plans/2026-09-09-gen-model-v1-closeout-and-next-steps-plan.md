@@ -1,7 +1,7 @@
 # gen-model v1 接入：收口与下一步计划（两源对拍翻默认 · 批量 records · type-check 修复）
 
 - 日期：2026-09-09
-- 状态：**待拍板**（D8–D10）
+- 状态：D8 **已拍（B）并落地**（2026-09-09 晚，见 §10）；D9–D10 **待拍板**
 - 前置：`docs/plans/2026-09-06-gen-model-v1-tree-and-viewer-adapter-plan.md`（下称「母计划」，P0–P7 + P3-c + P2-4 + Q2 全部落地）
 - 范围：plant3d-web（主）+ gen-model `src/web_service/`（P9 最小增补；该仓正被别的会话密集重构，见 §7 R1）
 
@@ -15,7 +15,7 @@
 
 | # | 欠项 | 卡在哪 |
 | --- | --- | --- |
-| 1 | 默认开关仍 `legacy`（`.env.development` 里 `VITE_MODEL_SOURCE` 注释着） | 闸门 = 两源对拍，需要旧后端 `:3100` 在跑；当前 `:3100` / `:8022` / `:18082` 都没有服务在听。旧后端仓在 `D:\work\plant-code\plant-model-gen`（不在 `old\` 下），起得来 |
+| 1 | ~~默认开关仍 `legacy`~~ **已翻 `gen-model-v1`**（2026-09-09 晚，D8 按 B，见 §10） | 闸门 = 两源对拍，需要旧后端 `:3100` 在跑；当前 `:3100` / `:8022` / `:18082` 都没有服务在听。旧后端仓在 `D:\work\plant-code\plant-model-gen`（不在 `old\` 下），起得来 |
 | 2 | EQUI / SUPPO 两类从未对拍（BRAN / ZONE 只做过单源自洽） | 同上 |
 | 3 | `is_invalid_tubi` 告警色浏览器肉眼核对 | 需要一条真实无效直管样本，样本里有没有还未知 |
 | 4 | gen-model `97e819a5a` / `80b0f330c` 未 live 验证；model_drain 收口 → 前端自动重载的端到端一次没跑过 | 需要一个跑新代码的 gen-model 实例 + 触发一次真实 drain |
@@ -144,10 +144,23 @@ runtime/release 两条 GLB 链路不动。
 | P8-2 | **跑了，但 legacy 不能当参照** | 输出目录没有 `scene_tree_parquet/`（legacy 树与 `visible-insts` 空转，容器展不开）、parquet 只覆盖 ZONE 144870 的管道（EQUI 0 几何）、dbnum 7997 没有 SUPPO。数据级对拍：BRAN 对象数 22=22、构件集相同；ZONE legacy 1287 构件全在 v1 里（v1 多 54 个 legacy 无几何的构件），直管差 263 段是 legacy 原点到原点的画法伪影；EQUI v1 40 = 全部基本体。v1 浏览器 ↔ records 三类节点逐条相等（22/2024/40） |
 | P8-3 | 样本缺失 | 2024 条记录里 `is_invalid_tubi=true` 0 条，维持「未验证」 |
 | P8-4 | 半 | `tree/children?refno=1/1` → 404 `not_found` 已 live；drain → WS → 自动重载未触发 |
-| P8-5 | **等 D8** | 闸门 A（浏览器两源全绿）在本机做不到——要先用旧导出链给 7997 补 `scene_tree_parquet`（而旧链路 plant-model-gen 已不再是用户的路线）；闸门 B 的证据比拍板时多了一层：数据级 v1 ⊇ legacy + 浏览器/records 互证 |
+| P8-5 | **已翻**（D8 按 B，见 §10） | 闸门 A（浏览器两源全绿）在本机做不到——要先用旧导出链给 7997 补 `scene_tree_parquet`（而旧链路 plant-model-gen 已不再是用户的路线）；闸门 B 的证据比拍板时多了一层：数据级 v1 ⊇ legacy + 浏览器/records 互证 |
 
 `e2e/gen-model-v1-two-source-parity.spec.ts` 入库（`.gitignore` 白名单）：用例一先 HEAD legacy 的树 parquet，缺就带原因 skip；
 用例二「v1 浏览器对象数 == records 逐根条数」不依赖 legacy，是翻默认后可以一直跑的回归钉子。
 
 **D8 建议**：按 B 翻——legacy 在本机既没有树也没有 EQUI/SUPPO 几何，A 口径的「全绿」在它上面永远拿不到；
 真要 A，只能再起一遍 plant-model-gen 的导出链补树 parquet，那是回头维护已放弃的路线。翻的内容不变（P8-5 那一行）。
+
+## 10. 追记（2026-09-09 晚）：D8 按 B 落地——缺省数据源翻到 `gen-model-v1`
+
+用户以「继续未完的部分，不必重问」接过 §9 的 D8 建议，按 B 口径翻默认。改动与证据全文在母计划 §8.13 末条，这里记对本计划各行的影响：
+
+| # | 状态 | 一句话 |
+| --- | --- | --- |
+| P8-5 | **过** | `DEFAULT_MODEL_SOURCE_KIND='gen-model-v1'`；`.env.example` / `.env.development` / `env.d.ts` / 三处头注 / 联调指南 / CONTEXT / ADR 0054 追记同步；legacy 开关保留一个发布周期，legacy 路径代码一行未动 |
+| 验收「不带参数走 v1；`?model_source=legacy` 仍回旧链路」 | **过** | 新钉子 `e2e/model-source-default.spec.ts`（不依赖任何后端在跑）：`/` → kind `gen-model-v1`、`/api/v1/{health,tasks,dbnums}` 3 发、旧链路 0 发；`?model_source=legacy` → kind `legacy`、`/files/output/…/{db_meta_info.json,world_sites.parquet}` 2 发、`/api/v1` 0 发；2 passed |
+| 验收「vitest 全量新增 fail 0」 | **过** | 翻后第一跑新增 28 fail 全出自 5 个测 legacy 链路、靠缺省隐式成立的文件，文件头显式钉 `?model_source=legacy` 后：1977 / 1952 passed / 25 failed，失败集 ⊆ HEAD 基线（1976 / 1946 / 30），新增 0 |
+| 未验证 | 挂起 | 翻后带 gen-model 在跑的整链：本轮 `:8022` 无实例（`:9099` 是别的会话的出厂包实例，`model_ready=false`），gen-model 起来后跑一次 `gen-model-v1-two-source-parity.spec.ts` 第二条用例即补齐 |
+
+**对 §1 / §2 的影响**：§1 表第 1 行「默认开关仍 legacy」销账；P8 全部行有归宿（P8-3 样本缺失、P8-4b 未触发仍如 §9）。**下一步**只剩 D9（批量 records 契约）与 D10（type-check 修复）两件待拍板，互不阻塞。

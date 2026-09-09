@@ -1,7 +1,10 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // gen-model `is_invalid_tubi` 告警色（plan 2026-09-06 §8 Q2）：装入时画琥珀色、计数，重刷材质时保住。
 // 记录源只是把 uniforms 交给加载链，所以这里借 parquet 的 mock 形状喂实例即可——标记在 uniforms 上，与数据源无关。
+// 缺省数据源自 2026-09-09 起是 gen-model-v1（会把 `dataSource: 'parquet'` 改写成 v1），这里显式钉回 legacy 才走得到 parquet mock。
+beforeAll(() => window.history.replaceState({}, '', '?model_source=legacy'));
+afterAll(() => window.history.replaceState({}, '', '/'));
 
 const parquetLoaderMocks = vi.hoisted(() => ({
   isParquetAvailable: vi.fn(async () => true),

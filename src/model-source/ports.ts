@@ -30,7 +30,12 @@ export type ModelSourceKind = 'legacy' | 'gen-model-v1';
 
 export const MODEL_SOURCE_KINDS: readonly ModelSourceKind[] = ['legacy', 'gen-model-v1'];
 
-export const DEFAULT_MODEL_SOURCE_KIND: ModelSourceKind = 'legacy';
+/**
+ * 缺省数据源。2026-09-09 起为 `gen-model-v1`（收口计划 2026-09-09 D8：数据级对拍 v1 ⊇ legacy + 浏览器 / records
+ * 三类节点逐条相等，母计划 §8.13）；`legacy` 经 `?model_source=legacy` / `VITE_MODEL_SOURCE=legacy` 仍可切回，
+ * 开关保留一个发布周期。
+ */
+export const DEFAULT_MODEL_SOURCE_KIND: ModelSourceKind = 'gen-model-v1';
 
 export type SubtreeRefnosParams = {
   includeSelf?: boolean;

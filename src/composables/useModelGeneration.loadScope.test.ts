@@ -1,4 +1,9 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+
+// 这个文件测的是 legacy 链路（`/api/e3d/visible-insts` / `subtree-refnos` / `pdms/type-info`）；
+// 缺省数据源自 2026-09-09 起是 gen-model-v1，这里显式钉回 legacy。
+beforeAll(() => window.history.replaceState({}, '', '?model_source=legacy'));
+afterAll(() => window.history.replaceState({}, '', '/'));
 
 const e3dGetVisibleInstsMock = vi.fn();
 const e3dGetSubtreeRefnosMock = vi.fn();
