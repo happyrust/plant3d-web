@@ -114,9 +114,20 @@ runtime/release 两条 GLB 链路不动。
   `repository_unit_meshes_convert_end_to_end --nocapture` 打印的单位网格
   （36 顶点/12 三角、629/1080、包围盒 ±0.5）与 TS 解析器金样逐项一致——两个独立
   实现对同一批字节读数相同，布局契约两头钉死。
-- 未验证（挂到 P8 一起）：浏览器实跑 `.mesh` 直连整链（起 gen-model 后走一次
-  `?model_source=gen-model-v1`）；P8-2 两源对拍在 `.mesh` 直连的最终形态上跑一次即可，
-  比的是 loadedObjects/包围盒，天然覆盖新解析器。
+- **live 验证（2026-09-09 19:2x，用户起 gen-model `:8022` 后补齐）**：
+  - `verify-gen-model-v1.ps1 -Ensure` **11/11 全过**（`1.mesh` 200/1068 B/immutable、
+    `1.glb` 200/glTF 魔数、ensure Generated 22 实例、records 22 条、逐 hash HEAD
+    `.mesh` 10/10）；
+  - **位级对拍**（`tmp/verify-mesh-parity.mjs`）：BRAN 24381/145018 全部 10 个真实
+    geo_hash，`.mesh` 手解 vs `.glb` accessor 两条解码路径 positions/indices/normals
+    **逐 f32 位一致**（10/10，全带 normals）；
+  - **浏览器整链 e2e**（`e2e/gen-model-v1-mesh-direct.spec.ts`，playwright 自起自停
+    dev server）：`?model_source=gen-model-v1&show_refno=24381_145018` → 10 发
+    `.mesh` 全 200、**0 发 `.glb`**、`__dtxLastLoadedDbno=7997`、无 pageerror；
+    画面证据 `e2e/screenshots/gen-model-v1-mesh-direct.png`（22 对象、mesh 缺失 0）。
+    gen-model 不在时该 e2e 自动 skip，不误报回归。
+- P8-2 两源对拍在 `.mesh` 直连的最终形态上跑一次即可，比的是 loadedObjects/包围盒，
+  天然覆盖新解析器。
 
 **顺带发现**：当前语料 `wire_vertices` 全为空（探针全量扫描），「直连白拿硬边线」
 目前只是格式能力、不是现成数据；aabb=None 占 10,332/48,590。
