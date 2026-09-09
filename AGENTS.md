@@ -18,7 +18,7 @@
 - `npm run build`：先 `type-check` 再 `vite build` 产出 `dist/`  
 - `npm run preview`：本地预览生产构建  
 - `npm run lint`：运行 ESLint 并自动修复可修复问题  
-- `npm run type-check`：仅做类型检查（不产出文件）  
+- `npm run type-check`：真·类型检查（`vue-tsc --build --force`，不产出文件）并与 `scripts/type-check-baseline.txt` 比对，**只对基线之外的新增错误报红**（既有六百多条错误另立计划消化）；修掉一批既有错误后用 `npm run type-check:update-baseline` 收紧基线——不得为放行新错误改基线。脚本：`scripts/type-check.mjs`  
 - `npm test` / `npm run test:watch`：运行 Vitest（一次性/监听）  
 - `npm run test:e2e`：运行 Playwright（默认使用 `http://127.0.0.1:3101` 的 `webServer` 配置）
 

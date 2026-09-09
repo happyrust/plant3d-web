@@ -1,7 +1,7 @@
 # gen-model v1 接入：收口与下一步计划（两源对拍翻默认 · 批量 records · type-check 修复）
 
 - 日期：2026-09-09
-- 状态：D8 **已拍（B）并落地**（2026-09-09 晚，见 §10）；D9–D10 **待拍板**
+- 状态：D8 **已拍（B）并落地**（2026-09-09 晚，见 §10；翻后 live 整链 §11 已补齐）；D10 **已拍（A）并落地**（P10-1，§11）；D9 **已拍（A）**，契约草案已写进 gen-model spec §4.5.2（P9-1，§11），P9-2 / P9-3 等 gen-model 侧认可后动代码
 - 前置：`docs/plans/2026-09-06-gen-model-v1-tree-and-viewer-adapter-plan.md`（下称「母计划」，P0–P7 + P3-c + P2-4 + Q2 全部落地）
 - 范围：plant3d-web（主）+ gen-model `src/web_service/`（P9 最小增补；该仓正被别的会话密集重构，见 §7 R1）
 
@@ -20,7 +20,7 @@
 | 3 | `is_invalid_tubi` 告警色浏览器肉眼核对 | 需要一条真实无效直管样本，样本里有没有还未知 |
 | 4 | gen-model `97e819a5a` / `80b0f330c` 未 live 验证；model_drain 收口 → 前端自动重载的端到端一次没跑过 | 需要一个跑新代码的 gen-model 实例 + 触发一次真实 drain |
 | 5 | 整库入口只是「安全概览」（200 根预算，13 SITE 跑 269 s，长尾全在一根一次 `model/records`） | gen-model 缺批量取 records 的口子，契约未定 |
-| 6 | 仓级发现：`npm run type-check` 空转（`vue-tsc --noEmit` 对 `files:[]` 的根 tsconfig 一个文件不查），真查 `npx vue-tsc --build --force` 全仓 642 条既有错误 | 不属于母计划，但每轮「type-check 通过」都是假绿灯，该修 |
+| 6 | ~~仓级发现：`npm run type-check` 空转~~ **已修**（P10-1，§11）：`vue-tsc --build --force` + 基线比对，只对新增错误报红 | 既有 646 条（2026-09-09 基线）的消化另立计划（P10-2，清单 = `scripts/type-check-baseline.txt`） |
 
 ## 2. P8 · 两源对拍与翻默认（收官，前端仓为主）
 
@@ -40,7 +40,7 @@ P8-4 可选顺手项（拍板 D8 后定）：`useGenModelV1ModelSync` 按 `paylo
 
 | # | 任务 | 验收 |
 | --- | --- | --- |
-| P9-1 | 定契约（D9）：推荐 `POST /api/v1/model/records` 请求体加可选 `generation_roots: ["a/b", …]`（≤64 根/次，与单根 `generation_root` 互斥），响应 items 平铺（`owner` 本来就是生成根，天然可分组），分页游标跨根连续；写进 `docs/specs/web-service-api.md` 草案段 | gen-model 侧会话/用户认可契约再动代码 |
+| P9-1 | 定契约（D9）：推荐 `POST /api/v1/model/records` 请求体加可选 `generation_roots: ["a/b", …]`（≤64 根/次，与单根 `generation_root` 互斥），响应 items 平铺（`owner` 本来就是生成根，天然可分组），分页游标跨根连续；写进 `docs/specs/web-service-api.md` 草案段 | **草案已写**（2026-09-09 晚，D9 按 A，决策 d-181）：gen-model spec 新增 §4.5.2（单根现状补齐 + 批量草案，见 §11）；gen-model 侧会话/用户认可契约再动代码 |
 | P9-2 | gen-model 实现 + 单测（写锁范围只在 `src/web_service/`，与在改会话协调，见 R1） | `cargo test --lib -- web_service` 全绿；单根旧调用不受影响 |
 | P9-3 | 前端 `genModelV1/modelRecords.ts`：多根打包分批取，`recordsConcurrency` 语义改为「在飞批数」；整库预算 `DEFAULT_DBNUM_ROOTS_BUDGET` 从 200 提到不限（或大幅上调），`show_dbnum_full` 语义收编 | 同一整库 `show_dbnum=7997` 相对 §8.9 的 269 s 显著下降（目标 <60 s，服务端侧长尾另计）；新增 fail 0 |
 
@@ -48,8 +48,8 @@ P8-4 可选顺手项（拍板 D8 后定）：`useGenModelV1ModelSync` 按 `paylo
 
 | # | 任务 | 验收 |
 | --- | --- | --- |
-| P10-1 | `package.json` 的 `type-check` 改 `vue-tsc --build --force`（真查 642 条会全红，所以同步给一条基线策略：错误清单落 `tmp/`或基线文件，脚本先比对「不新增」） | 注入一处故意类型错，脚本能红；HEAD 现状跑完不红（基线相等） |
-| P10-2 | 642 条按文件分桶列清单，消化**另立计划**（本计划不消化） | 清单进 docs/plans 新档或 issue |
+| P10-1 | `package.json` 的 `type-check` 改 `vue-tsc --build --force`（真查 642 条会全红，所以同步给一条基线策略：错误清单落 `tmp/`或基线文件，脚本先比对「不新增」） | **过**（2026-09-09 晚，D10 按 A，决策 d-179，见 §11）：`scripts/type-check.mjs` + `scripts/type-check-baseline.txt`；注入故意类型错→红、HEAD→绿、两跑基线逐字相同 |
+| P10-2 | 642 条按文件分桶列清单，消化**另立计划**（本计划不消化） | 清单 = 入库的基线文件本身（646 条，按文件排序、可 grep）+ §11 的分桶摘要；消化另立计划 |
 
 ## 5. 需要拍板
 
@@ -58,6 +58,8 @@ P8-4 可选顺手项（拍板 D8 后定）：`useGenModelV1ModelSync` 按 `paylo
 - **D8 翻默认的闸门**：**A. 按母计划 D2 原口径——P8-2 两源对拍全绿才翻**（旧后端就在本机，起得来，证据链完整）；B. 以已有证据（D6 数值对拍 ≤0.002 mm + P7/P3-c 浏览器实跑）直接翻，省一次起旧后端——但 EQUI/SUPPO 两类从没对过，legacy 在 `:3100` 不起时本来就是坏的，翻错也看不出来。
 - **D9 批量 records 契约**：**A. `model/records` 请求体加 `generation_roots[]`（≤64/次），响应平铺**（改动最小，plant-ui 单根调用零影响）；B. 新端点 `model/records/batch`（契约更干净但多一套分页/错误分型）；C. 服务端不动，前端继续按根并发（现状，长尾吃满服务端仍是一根一算，不解决）。
 - **D10 type-check**：**A. P10-1 改脚本 + 基线比对，642 条消化另立**；B. 本计划不动 type-check（继续假绿灯，但少一件事）。
+
+> **已拍**（2026-09-09 23:1x，用户「按推荐继续下一步」）：D9 按 A（决策 d-181）、D10 按 A（决策 d-179）。落地记录见 §11。
 
 ## 6. 顺序与工作量
 
@@ -161,6 +163,36 @@ runtime/release 两条 GLB 链路不动。
 | P8-5 | **过** | `DEFAULT_MODEL_SOURCE_KIND='gen-model-v1'`；`.env.example` / `.env.development` / `env.d.ts` / 三处头注 / 联调指南 / CONTEXT / ADR 0054 追记同步；legacy 开关保留一个发布周期，legacy 路径代码一行未动 |
 | 验收「不带参数走 v1；`?model_source=legacy` 仍回旧链路」 | **过** | 新钉子 `e2e/model-source-default.spec.ts`（不依赖任何后端在跑）：`/` → kind `gen-model-v1`、`/api/v1/{health,tasks,dbnums}` 3 发、旧链路 0 发；`?model_source=legacy` → kind `legacy`、`/files/output/…/{db_meta_info.json,world_sites.parquet}` 2 发、`/api/v1` 0 发；2 passed |
 | 验收「vitest 全量新增 fail 0」 | **过** | 翻后第一跑新增 28 fail 全出自 5 个测 legacy 链路、靠缺省隐式成立的文件，文件头显式钉 `?model_source=legacy` 后：1977 / 1952 passed / 25 failed，失败集 ⊆ HEAD 基线（1976 / 1946 / 30），新增 0 |
-| 未验证 | 挂起 | 翻后带 gen-model 在跑的整链：本轮 `:8022` 无实例（`:9099` 是别的会话的出厂包实例，`model_ready=false`），gen-model 起来后跑一次 `gen-model-v1-two-source-parity.spec.ts` 第二条用例即补齐 |
+| ~~未验证~~ **已补齐** | **过** | 翻后带 gen-model 在跑的整链——见 §11 第一条：`:9099` 上的 0.1.21 出厂包实例到 22:5x 已有数据（`/dbnums` 有行、`model_publish_queue` generated 2908），拿它跑 `model-source-default` + `mesh-direct` + `two-source-parity`：4 passed / 1 skipped（skip 是 legacy 缺树 parquet 的设计内 skip） |
 
-**对 §1 / §2 的影响**：§1 表第 1 行「默认开关仍 legacy」销账；P8 全部行有归宿（P8-3 样本缺失、P8-4b 未触发仍如 §9）。**下一步**只剩 D9（批量 records 契约）与 D10（type-check 修复）两件待拍板，互不阻塞。
+**对 §1 / §2 的影响**：§1 表第 1 行「默认开关仍 legacy」销账；P8 全部行有归宿（P8-3 样本缺失、P8-4b 未触发仍如 §9）。~~**下一步**只剩 D9（批量 records 契约）与 D10（type-check 修复）两件待拍板，互不阻塞。~~ → D9 / D10 已拍并推进，见 §11。
+
+## 11. 追记（2026-09-09 深夜）：翻后 live 整链补齐；D10 按 A 落地（P10-1）；D9 按 A 出契约草案（P9-1）
+
+用户以「按推荐继续下一步」接过 §10 末句，D9 / D10 均按推荐项 A 生效（决策 d-181 / d-179）。三件事：
+
+**1. 翻默认后的 live 整链（§10「未验证」行销账）**
+
+- 环境：legacy = plant-web-server `:3100`；gen-model = `D:\ams-local-0.1.21` 出厂包 `aios-database.exe serve`，**听 `:9099`**（出厂模板端口，`:8022` 无人听），`gen_model=false / gen_mesh=false`、`store_mode=spawned-rocksdb`，此刻 `/api/v1/health` 200、`/dbnums` 有行、`model_publish_queue` generated=handed_off=db_committed=2908。
+- 跑法：playwright 自起自停 dev server `:3101`；Node 侧探针 `GEN_MODEL_V1_BASE_URL=http://127.0.0.1:9099`、页面侧 `VITE_GEN_MODEL_V1_BASE_URL=http://localhost:9099` 压过 `.env`（两个 e2e 的探针硬码默认 8022，不带就静默 skip——这是环境事实，不是回归）。
+- 结果 **4 passed / 1 skipped（35.7 s）**：
+  - `model-source-default.spec.ts` 2/2：`/` → kind `gen-model-v1`、只发 `/api/v1`；`?model_source=legacy` → 旧链路、`/api/v1` 0 发。
+  - `gen-model-v1-mesh-direct.spec.ts` 1/1：`.mesh` 10 发全 200、`.glb` 0 发。
+  - `gen-model-v1-two-source-parity.spec.ts`：用例一按设计 skip（legacy 无 `scene_tree_parquet/`）；用例二过——BRAN 22=22=22、ZONE 2024=2024=2024、EQUI 40=40=40（records = DTX 登记 = toast loadedObjects），bbox 有限。
+  - 3101 跑完已释放；临时环境变量已清。
+- 本机要不带参数直接打开页面连上 `:9099`：`.env.development`（git 忽略）里 `VITE_GEN_MODEL_V1_BASE_URL=http://localhost:9099`（22:5x 已改），或 URL 带 `?gm_backend_port=9099`；联调指南 §1 那句「端口不是 8022 时」已经覆盖这一情形，不另改文档。
+- 仍未验证（口径不变）：P8-3 `is_invalid_tubi` 样本缺失；P8-4b drain → WS → 自动重载——0.1.21 这份配置 `gen_model=false`，不会自然触发 drain。
+
+**2. P10-1 落地（D10 按 A，决策 d-179）**
+
+- `scripts/type-check.mjs`：跑 `vue-tsc --build --force --pretty false`，每条错误归一为 `文件|TS码|首行消息`（去行列号——挪一行代码不算新错），与 `scripts/type-check-baseline.txt` 的多重集合比：任一签名条数超基线 → 红（exit 1，列出具体行列）；基线里的错误消失 → 只提示收紧；没有基线文件、或 vue-tsc 报错却一条都解析不出 → 红（宁红勿绿）。vue-tsc 自己的噪音（`@vue/language-core` 3.1.6 在 2 个模板上抛 `TypeError … walkObjectLiteral`，非致命）按非错误行忽略。
+- `package.json`：`type-check` → `node scripts/type-check.mjs`；新增 `type-check:update-baseline`。`build` 仍是 `run-p type-check build-only`，所以 **`npm run build` 现在会被新增类型错误挡下**（多 ~26 s）。`.gitignore` 白名单加两行；`AGENTS.md` 的 `type-check` 一句改口。
+- **基线（2026-09-09，HEAD `c5aeaa5`）：646 条 / 172 文件**（比 09-08 记的 642 多 4）。分桶：`*.test.ts` 359、`src` 非测试 `.ts` 167、`.vue` 107、`scripts/` 10、`e2e/` 3；按目录 `components` 225 / `composables` 150 / `dimension` 122 / `utils` 52 / `debug` 25 / `review` 24 / `api` 12 / `types` 9；码 TS2322 133 / TS2532 105 / TS18048 87 / TS2345 86 / TS2339 53；最多的文件 `ViewerPanel.vue` 33、`useSpatialQuery.test.ts` 23、`lffParser.ts` 22、`pmsReviewSimulator.ts` 18、`ReviewPanel.vue` 17、`useDtxTools.ts` 16。这就是 P10-2 的清单（基线文件按文件排序、可 grep），消化另立计划。
+- 验收（本轮跑过）：无基线 → 红；`--update-baseline` 建基线 646/172；HEAD 对基线 → 绿；**连跑两次基线逐字相同**（确定性）；注入一个故意类型错（临时新文件）→ 红并指到 `(1,14)`；删掉 → 绿；`eslint scripts/type-check.mjs` 0 错。
+
+**3. P9-1 契约草案（D9 按 A，决策 d-181）**
+
+- 写进 gen-model `docs/specs/web-service-api.md` 新增 **§4.5.2**（只动文档，`handlers.rs` 未碰——它正被别的会话改）：前半把今天在跑的单根 `model/records` 契约补齐（此前只散见 §4.12），后半是批量草案：`generation_roots[]`（1..=64、同库、与 `generation_root` 互斥，违者 400）；`items` 平铺、顺序 = 请求根序 × 每根稳定序、按 `owner` 分组；`cursor` 跨根连续、`limit` 仍是总条数；响应回显 `generation_roots` 并多一格 `roots:[{generation_root,total}]`（整批逐根总数，让「这根 0 条」显式可见）；内存形态任一根未 ensure → 整批 409 `not_generated:` 并列出缺的根；不开新端点。
+- 下一步：gen-model 侧会话 / 用户认可 §4.5.2 后，P9-2（服务端，写锁 `src/web_service/`）→ P9-3（前端 `modelRecords.ts` 多根打包分批、`recordsConcurrency` 改「在飞批数」、整库预算上调）。
+
+**未提交物 / 环境备注**：工作树里 `useDbnoInstancesDtxLoader.test.ts` / `useModelGeneration.loadScope.test.ts` 有两处纯行尾（CRLF）改动与 `docs/issues/mbd-*` 是别的会话的，本笔提交不带。
