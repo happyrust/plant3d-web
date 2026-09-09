@@ -21,10 +21,11 @@ describe('versionInfo', () => {
       })
     ));
 
+    // 10:00 UTC = 当天 18:00 北京时间（UTC+8）；格式化按 Asia/Shanghai 墙钟，与运行机器时区无关
     await expect(loadVersionInfo('/version.json')).resolves.toEqual({
       version: '1.2.3',
       commit: 'abc123',
-      buildDate: '2026-03-17 02:00:00 北京时间',
+      buildDate: '2026-03-16 18:00:00 北京时间',
     });
   });
 

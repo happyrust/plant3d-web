@@ -362,13 +362,6 @@ src/composables/useToolStore.persistence.test.ts|TS2322|Type '"designer"' is not
 src/composables/useToolStore.persistence.test.ts|TS2322|Type '"designer"' is not assignable to type 'UserRole'.
 src/composables/useToolStore.persistence.test.ts|TS2322|Type '"designer"' is not assignable to type 'UserRole'.
 src/composables/useToolStore.persistence.test.ts|TS2322|Type '"designer"' is not assignable to type 'UserRole'.
-src/composables/useToolStore.severity.test.ts|TS2345|Argument of type '"critical"' is not assignable to parameter of type 'AnnotationSeverity | undefined'.
-src/composables/useToolStore.severity.test.ts|TS2345|Argument of type '"critical"' is not assignable to parameter of type 'AnnotationSeverity | undefined'.
-src/composables/useToolStore.severity.test.ts|TS2345|Argument of type '"normal"' is not assignable to parameter of type 'AnnotationSeverity | undefined'.
-src/composables/useToolStore.severity.test.ts|TS2345|Argument of type '"severe"' is not assignable to parameter of type 'AnnotationSeverity | undefined'.
-src/composables/useToolStore.severity.test.ts|TS2345|Argument of type '"severe"' is not assignable to parameter of type 'AnnotationSeverity | undefined'.
-src/composables/useToolStore.severity.test.ts|TS2345|Argument of type '"severe"' is not assignable to parameter of type 'AnnotationSeverity | undefined'.
-src/composables/useToolStore.severity.test.ts|TS2345|Argument of type '"suggestion"' is not assignable to parameter of type 'AnnotationSeverity | undefined'.
 src/composables/useToolStore.unifiedMeasurements.test.ts|TS2532|Object is possibly 'undefined'.
 src/composables/useToolStore.unifiedMeasurements.test.ts|TS2532|Object is possibly 'undefined'.
 src/composables/useToolStore.unifiedMeasurements.test.ts|TS2532|Object is possibly 'undefined'.
@@ -586,14 +579,6 @@ src/ribbon/ribbonConfig.test.ts|TS7006|Parameter 'subItem' implicitly has an 'an
 src/ribbon/ribbonConfig.ts|TS2322|Type '{ groups: { items: unknown[]; id: string; label: string; }[]; id: string; label: string; }[]' is not assignable to type 'RibbonTabConfig[]'.
 src/ribbon/ribbonConfig.ts|TS2345|Argument of type '(this: undefined, item: RibbonItem) => RibbonButtonItem[] | RibbonSeparatorItem[] | { items: RibbonButtonItem[]; kind: "stack"; id: string; }[]' is not assignable to parameter of type '(this: undefined, value: RibbonItem, index: number, array: RibbonItem[]) => RibbonButtonItem | readonly RibbonButtonItem[]'.
 src/testing/spatialQueryRealBranHelper.test.ts|TS6307|File 'D:/work/plant-code/old/plant3d-web/e2e/helpers/spatialQueryRealBran.ts' is not listed within the file list of project 'D:/work/plant-code/old/plant3d-web/tsconfig.app.json'. Projects must list all files or use an 'include' pattern.
-src/types/auth.severity.test.ts|TS2322|Type '"critical"' is not assignable to type 'AnnotationSeverity | undefined'.
-src/types/auth.severity.test.ts|TS2322|Type '"normal"' is not assignable to type 'AnnotationSeverity | undefined'.
-src/types/auth.severity.test.ts|TS2322|Type '"severe"' is not assignable to type 'AnnotationSeverity | undefined'.
-src/types/auth.severity.test.ts|TS2322|Type '"suggestion"' is not assignable to type 'AnnotationSeverity | undefined'.
-src/types/auth.severity.test.ts|TS2345|Argument of type '"critical"' is not assignable to parameter of type 'AnnotationSeverity | null | undefined'.
-src/types/auth.severity.test.ts|TS2345|Argument of type '"normal"' is not assignable to parameter of type 'AnnotationSeverity | null | undefined'.
-src/types/auth.severity.test.ts|TS2345|Argument of type '"severe"' is not assignable to parameter of type 'AnnotationSeverity | null | undefined'.
-src/types/auth.severity.test.ts|TS2345|Argument of type '"suggestion"' is not assignable to parameter of type 'AnnotationSeverity | null | undefined'.
 src/types/spec.ts|TS7053|Element implicitly has an 'any' type because expression of type 'number' can't be used to index type 'Record<SiteSpecValue, SpecBadgeStyle>'.
 src/utils/modelUnitVersionCompare.test.ts|TS18048|'movedSnapshot' is possibly 'undefined'.
 src/utils/modelUnitVersionCompare.test.ts|TS18048|'oldSnapshot' is possibly 'undefined'.

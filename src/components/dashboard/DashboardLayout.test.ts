@@ -111,7 +111,7 @@ describe('DashboardLayout', () => {
     const sidebar = host.querySelector('aside');
     const navButtons = sidebar?.querySelectorAll('button') ?? [];
 
-    expect(root?.className).toContain('bg-[#F3F4F6]');
+    expect(root?.className).toContain('bg-[#F1F5F9]');
     expect(sidebar?.className).toContain('w-[280px]');
     expect(sidebar?.textContent).toContain('Plant3D Web');
     expect(navButtons).toHaveLength(4);

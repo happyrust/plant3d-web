@@ -27,16 +27,20 @@ function makeUser(partial: Partial<User> = {}): User {
   };
 }
 
+// 批注错误类型现为三档（auth.ts）：原则错误 principle（×）> 一般错误 general（△）> 图面错误 drawing（○）。
+// 旧的四档 critical/severe/normal/suggestion 已不存在，这里按现行三档钉。
 describe('AnnotationSeverity helpers', () => {
-  it('ANNOTATION_SEVERITY_VALUES 按严重度由高到低排列，恰好 4 档', () => {
-    expect(ANNOTATION_SEVERITY_VALUES).toEqual(['critical', 'severe', 'normal', 'suggestion']);
+  it('ANNOTATION_SEVERITY_VALUES 按严重度由高到低排列，恰好 3 档', () => {
+    expect(ANNOTATION_SEVERITY_VALUES).toEqual(['principle', 'general', 'drawing']);
   });
 
-  it('isAnnotationSeverity 只接受 4 种合法值', () => {
-    expect(isAnnotationSeverity('critical')).toBe(true);
-    expect(isAnnotationSeverity('severe')).toBe(true);
-    expect(isAnnotationSeverity('normal')).toBe(true);
-    expect(isAnnotationSeverity('suggestion')).toBe(true);
+  it('isAnnotationSeverity 只接受 3 种合法值', () => {
+    expect(isAnnotationSeverity('principle')).toBe(true);
+    expect(isAnnotationSeverity('general')).toBe(true);
+    expect(isAnnotationSeverity('drawing')).toBe(true);
+    // 旧四档与其它任意值都不再合法
+    expect(isAnnotationSeverity('critical')).toBe(false);
+    expect(isAnnotationSeverity('severe')).toBe(false);
     expect(isAnnotationSeverity('urgent')).toBe(false);
     expect(isAnnotationSeverity('')).toBe(false);
     expect(isAnnotationSeverity(null)).toBe(false);
@@ -44,35 +48,43 @@ describe('AnnotationSeverity helpers', () => {
   });
 
   it('normalizeAnnotationSeverity 非法值返回 undefined，合法值原样保留', () => {
-    expect(normalizeAnnotationSeverity('critical')).toBe('critical');
+    expect(normalizeAnnotationSeverity('principle')).toBe('principle');
+    expect(normalizeAnnotationSeverity('drawing')).toBe('drawing');
+    expect(normalizeAnnotationSeverity('critical')).toBeUndefined();
     expect(normalizeAnnotationSeverity('low')).toBeUndefined();
     expect(normalizeAnnotationSeverity(undefined)).toBeUndefined();
     expect(normalizeAnnotationSeverity(null)).toBeUndefined();
   });
 
-  it('getAnnotationSeverityDisplay 返回 label/color/dot/rank，rank 满足严重度递增', () => {
-    const critical = getAnnotationSeverityDisplay('critical');
-    const severe = getAnnotationSeverityDisplay('severe');
-    const normal = getAnnotationSeverityDisplay('normal');
-    const suggestion = getAnnotationSeverityDisplay('suggestion');
+  it('getAnnotationSeverityDisplay 返回 label/color/dot/rank/symbol，rank 满足严重度递增', () => {
+    const principle = getAnnotationSeverityDisplay('principle');
+    const general = getAnnotationSeverityDisplay('general');
+    const drawing = getAnnotationSeverityDisplay('drawing');
     const unset = getAnnotationSeverityDisplay(undefined);
 
-    expect(critical.label).toBe('致命');
-    expect(severe.label).toBe('严重');
-    expect(normal.label).toBe('一般');
-    expect(suggestion.label).toBe('建议');
+    expect(principle.label).toBe('原则错误');
+    expect(general.label).toBe('一般错误');
+    expect(drawing.label).toBe('图面错误');
     expect(unset.label).toBe('未设置');
 
-    expect(critical.rank).toBeGreaterThan(severe.rank);
-    expect(severe.rank).toBeGreaterThan(normal.rank);
-    expect(normal.rank).toBeGreaterThan(suggestion.rank);
-    expect(suggestion.rank).toBeGreaterThan(unset.rank);
+    expect(principle.symbol).toBe('×');
+    expect(general.symbol).toBe('△');
+    expect(drawing.symbol).toBe('○');
+    expect(unset.symbol).toBe('');
+
+    expect(principle.rank).toBeGreaterThan(general.rank);
+    expect(general.rank).toBeGreaterThan(drawing.rank);
+    expect(drawing.rank).toBeGreaterThan(unset.rank);
+    for (const display of [principle, general, drawing, unset]) {
+      expect(display.color).toBeTruthy();
+      expect(display.dot).toBeTruthy();
+    }
   });
 
-  it('compareAnnotationSeverity 用于列表降序：致命 > 严重 > 一般 > 建议 > 未设置', () => {
-    const list: (AnnotationSeverity | undefined)[] = ['normal', undefined, 'critical', 'suggestion', 'severe'];
+  it('compareAnnotationSeverity 用于列表降序：原则错误 > 一般错误 > 图面错误 > 未设置', () => {
+    const list: (AnnotationSeverity | undefined)[] = ['general', undefined, 'principle', 'drawing'];
     const sorted = [...list].sort(compareAnnotationSeverity);
-    expect(sorted).toEqual(['critical', 'severe', 'normal', 'suggestion', undefined]);
+    expect(sorted).toEqual(['principle', 'general', 'drawing', undefined]);
   });
 
   describe('canEditAnnotationSeverity', () => {

@@ -229,3 +229,19 @@ runtime/release 两条 GLB 链路不动。
 - spec §4.5.2 从「草案」改「已实现」，补不重复规则与实现说明。
 - **未 live**：`:9099` 上是 0.1.21 出厂包，没有这段代码。起新构建后：`curl -X POST http://127.0.0.1:8022/api/v1/model/records -H 'content-type: application/json' -d '{"generation_roots":["24381/145018","24381/145052"],"limit":5}'` 应回 `generation_roots` + `roots[]` + 平铺 `items`、`next_cursor=5`；同库两根之外再塞一个别库的根应 400；单根请求回执与之前逐字段相同。
 - **下一步 P9-3**（前端）：`modelRecords.ts` 多根打包分批（≤64/批）、`recordsConcurrency` 改「在飞批数」、`DEFAULT_DBNUM_ROOTS_BUDGET` 上调；`genModelV1Api.ts` 的 `genModelV1ModelRecords` 加 `generationRoots?: string[]`；`verify-gen-model-v1.ps1 -Ensure` 顺手加一步批量口径。
+
+## 14. 追记（2026-09-10 凌晨）：全量 vitest 的既有失败——用户授权修测试文件，第一批落地
+
+背景：全量 vitest 一直有一批与本计划无关的既有失败（review / dashboard / duckdb / pms 域），此前各轮都以「对 HEAD 基线新增 fail 0」交账。用户 2026-09-10 授权直接修这 19 个失败文件（只改测试与 vitest 配置，源码不动），随后拍板**验收口径 = 对 HEAD 基线新增 fail 0**、本趟按 done 收尾；已修完的照收。
+
+**根因分两类**：
+- **确定性失败 13 文件 / 25 条**——全是测试钉在旧行为上，源码早已改口：
+  - 批注错误类型（`auth.severity.test.ts` 5、`useToolStore.severity.test.ts` 2）：源码是三档 `principle / general / drawing`（原则错误 × / 一般错误 △ / 图面错误 ○），测试还钉四档 `critical/severe/normal/suggestion` → 按三档重钉（含 symbol、rank 递增、旧四档当非法值）。顺带：源码 `compareAnnotationSeverity` 的注释仍写「致命 > 严重 > 一般 > 建议」，未动。
+  - `versionInfo.test.ts` 1：期望值算错——10:00 UTC 是当天 18:00 北京时间，不是次日 02:00。
+  - `duckdbBundles.test.ts` 1：`__DUCKDB_ASSET_VERSION__` 是 `vite.config.ts` 的 `define`，vitest 用独立的 `vitest.config.ts`、没有这个全局 → ReferenceError；测试还期望不带 `?v=` 的旧 URL。改为 `vi.stubGlobal` + 期望带内容哈希 `?v=` 的完整同源 URL，另加 extension repository 钉子。DuckDB 本体不动（legacy parquet 链路的底座，d-155 留一个发布周期）。
+  - `DashboardLayout.test.ts` 1：背景色早已 `#F3F4F6 → #F1F5F9`。
+  - `pmsSimulatorAutomation.test.ts` 1：场景清单 7 → 15 条，测试硬码旧快照；改钉「等于导出的 `PMS_SIMULATOR_CASE_ORDER`」+ 前 7 条主链不变。顺带发现源码常量里 `'bran-mixed'` 出现两次（第 3 与第 8 项），未动。
+  - 其余 7 文件 / 14 条（`genModelE3dParquetApi` 2、`useUserStore.createReviewTask` 3、`useUserStore.pendingReviewTasks` 1、`reviewerTaskListActions` 1、`DockLayout` 3、`TaskReviewDetail` 3、`InitiateReviewPanel.minDeliveryUnit` 1）：review 域工作流 / 组件契约变了（Checker 从 `users.value` 解、jd/sj 节点过滤规则、embed bootstrap 载荷、测量端点文案、最小交付单元归一），修法同上，分派三路并行处理，结果另记。
+- **超时型 flaky 6 文件 / 7 条**（`useReviewStore.*` 4、`useAnnotationStyleStore` 1、`AnnotationPanel` 1 ……）：每个文件的**首条**用例单跑就 1.1–1.2 s（冷加载 store / 组件），全量并行时被 5 s 缺省超时误杀；单跑全绿、与本仓任何改动无关。`vitest.config.ts` 加 `testTimeout / hookTimeout = 20_000`，不改用例。
+
+**本批结果**（6 文件 + 配置）：6 文件 29/29 绿、eslint 0 错；全量 vitest **1970 / 1956 passed / 14 failed**——失败只剩上面那 7 个 review/parquet 文件（另一路在修），flaky 7 条全部转绿。type-check 门顺带收紧：三档重钉后基线里 15 条类型错误消失，`update-baseline` → **631 条 / 170 文件**。

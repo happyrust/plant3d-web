@@ -3,22 +3,18 @@ import { describe, expect, it } from 'vitest';
 import {
   buildPmsSimulatorEnvironmentConfig,
   formatPmsSimulatorConsoleSummary,
+  PMS_SIMULATOR_CASE_ORDER,
   resolvePmsSimulatorCaseSelection,
   type PmsSimulatorRunReport,
 } from './pmsSimulatorAutomation';
 
 describe('resolvePmsSimulatorCaseSelection', () => {
-  it('默认返回全部场景', () => {
-    expect(resolvePmsSimulatorCaseSelection()).toEqual([
-      'approved',
-      'return',
-      'bran-mixed',
-      'stop',
-      'restore',
-      'gate-block',
-      'gate-return',
-    ]);
-    expect(resolvePmsSimulatorCaseSelection('all')).toEqual([
+  it('默认返回全部场景（按 PMS_SIMULATOR_CASE_ORDER 的顺序，不硬编码清单）', () => {
+    // 场景清单随回归用例增长（rus-244 / resubmit / returned-sj 等），钉「等于导出的全序」而不是某一刻的快照
+    expect(resolvePmsSimulatorCaseSelection()).toEqual([...PMS_SIMULATOR_CASE_ORDER]);
+    expect(resolvePmsSimulatorCaseSelection('all')).toEqual([...PMS_SIMULATOR_CASE_ORDER]);
+    // 最早那批主链场景必须仍在，且顺序在前
+    expect(PMS_SIMULATOR_CASE_ORDER.slice(0, 7)).toEqual([
       'approved',
       'return',
       'bran-mixed',
