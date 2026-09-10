@@ -6,12 +6,18 @@
   默认只跑 GET：health / tree/roots / tree/children / tree/ancestors / search / dbnums / meshes。
   加 -Ensure 才 POST model/ensure(force=false) + 逐根分页 model/records + 同一批根的多根批量 model/records（spec §4.5.2，
   条数须与逐根之和相同；旧服务端不认识 generation_roots 只记一句不算失败），并对记录里的 geo_hash 逐个 HEAD .mesh。
+  加 -Dbnum 7997 才跑整库口径（spec §4.5.3，读透 / kv-mem 形态；收口计划 §17）：GET dbnums/{dbnum}/model/roots 探能力并拿权威根清单
+  → POST dbnums/{dbnum}/model/ensure 起任务（202）→ 轮询 GET tasks/{task_id} 到终态（打进度、计时、前后 RSS）→ 全部根按 ≤64 一批
+  POST model/records。旧构建没有整库入口（404）、该库以 rocksdb 为准（409）都只记一句不算失败——前端在这两种情况下退回逐 SITE。
+  这一段就是前端 show_dbnum 走的四发，也是 plan 2026-09-10 S0 摸底要的三个数（耗时 / 根数 / RSS）的出处。
   每一步打一行「端点 → 状态 / 条数 / 关键字段」；任何一步非 2xx（或形状不对）以非零退出。
-  不改任何数据（ensure(force=false) 对已生成的根是零成本命中；对没生成的根会触发一次按需生成——这是显式显示的语义）。
+  不改任何数据（ensure(force=false) 对已生成的根是零成本命中；对没生成的根会触发一次按需生成——这是显式显示的语义；
+  整库 ensure 同理，只是把「没生成的根」摊到整个库）。
 
 .EXAMPLE
   pwsh scripts/verify-gen-model-v1.ps1
   pwsh scripts/verify-gen-model-v1.ps1 -BaseUrl http://127.0.0.1:18082 -Refno 24381/145018 -Ensure
+  pwsh scripts/verify-gen-model-v1.ps1 -BaseUrl http://127.0.0.1:8022 -Dbnum 7997
 #>
 [CmdletBinding()]
 param(
@@ -20,6 +26,10 @@ param(
   [string]$Refno = '24381/145018',
   [string]$SearchQuery = 'PIPE',
   [switch]$Ensure,
+  # 整库口径：>0 才跑（spec §4.5.3）。
+  [int]$Dbnum = 0,
+  # 整库任务最多等多久（秒），缺省 2 小时——整库生成按分钟到小时计；与前端 taskWaitTimeoutMs 同量级。
+  [int]$DbnumWaitSec = 7200,
   [int]$TimeoutSec = 60
 )
 
@@ -200,6 +210,124 @@ if ($Ensure) {
     }
     if ($missing.Count -gt 0) { throw "缺 $($missing.Count) 个: $($missing[0..([Math]::Min(4, $missing.Count - 1))] -join ',')" }
     "hashes=$($hashes.Count) ok=$ok"
+  }
+}
+
+if ($Dbnum -gt 0) {
+  # 整库口径（spec §4.5.3，读透 / kv-mem 形态；收口计划 §17）：前端 show_dbnum 走的就是下面这四发，顺序与
+  # src/model-source/genModelV1/collectDbnum.ts 的 collectDbnumViaServer 一致，只是这里先用只读的 roots 探一次能力——
+  # 旧构建整条路由不存在（404）就记一句、后面三步跳过，不算失败（前端此时退回逐 SITE 老路）。
+  $terminalStates = @('succeeded', 'partial', 'failed', 'yielded')
+  $dbnumRoots = $null
+  $dbnumEntry = $true
+
+  Step "GET /api/v1/dbnums/$Dbnum/model/roots (整库权威根清单，只读不生成)" {
+    try {
+      $script:dbnumRoots = GetJson "/api/v1/dbnums/$Dbnum/model/roots"
+    } catch {
+      $resp = $_.Exception.Response
+      if ($resp -and [int]$resp.StatusCode -eq 404) {
+        $script:dbnumEntry = $false
+        return '服务端没有整库入口（HTTP 404，旧构建；前端退回逐 SITE）'
+      }
+      throw
+    }
+    $list = @($dbnumRoots.roots)
+    if ($list.Count -eq 0) { throw 'roots 为空（该库不在本 MDB，或没有 SITE）' }
+    if ([int]$dbnumRoots.total -ne $list.Count) { throw "total=$($dbnumRoots.total) != roots.Count=$($list.Count)" }
+    $nouns = ($list | Group-Object noun | Sort-Object Count -Descending | ForEach-Object { "$($_.Name)=$($_.Count)" }) -join ' '
+    "source=$($dbnumRoots.source) dbnum=$($dbnumRoots.dbnum) total=$($dbnumRoots.total) nouns[$nouns] first=$($list[0].generation_root) $($list[0].name)"
+  }
+
+  $receipt = $null
+  $rssBefore = 0
+  Step "POST /api/v1/dbnums/$Dbnum/model/ensure (202 起整库生成任务；服务端先同步枚举根)" {
+    if (-not $dbnumEntry) { return '跳过（没有整库入口）' }
+    $script:rssBefore = [long](GetJson '/api/v1/health').model_concurrency.process_rss_bytes
+    try {
+      # 202 之前服务端要同步把根枚举完，大库几秒到几十秒——超时与前端 ENSURE_TIMEOUT_MS 同为 130 s
+      $script:receipt = PostJson "/api/v1/dbnums/$Dbnum/model/ensure" @{} 130
+    } catch {
+      $resp = $_.Exception.Response
+      if ($resp -and [int]$resp.StatusCode -eq 409) {
+        $script:dbnumEntry = $false
+        return '该库以 rocksdb 为准（HTTP 409，database 形态，整库重建走 rebuild）；前端退回逐 SITE'
+      }
+      throw
+    }
+    if (-not $receipt.task_id) { throw '回执缺 task_id' }
+    if ([int]$receipt.expected_roots -ne [int]$dbnumRoots.total) { throw "expected_roots=$($receipt.expected_roots) != roots.total=$($dbnumRoots.total)" }
+    "task_id=$($receipt.task_id) state=$($receipt.state) expected_roots=$($receipt.expected_roots) model_source=$($receipt.model_source) durable=$($receipt.durable) rss_before=$([math]::Round($rssBefore / 1MB)) MB"
+  }
+
+  $task = $null
+  Step "GET /api/v1/tasks/{task_id} 轮询到终态（2 s 一次，最多 $DbnumWaitSec s；只查自己刚发起的这一个）" {
+    if (-not $dbnumEntry) { return '跳过' }
+    if (-not $receipt) { throw 'ensure 未通过' }
+    $sw = [Diagnostics.Stopwatch]::StartNew()
+    $lastDone = -1
+    do {
+      Start-Sleep -Seconds 2
+      try {
+        $script:task = GetJson "/api/v1/tasks/$([uri]::EscapeDataString($receipt.task_id))"
+      } catch {
+        $resp = $_.Exception.Response
+        if ($resp -and [int]$resp.StatusCode -eq 404) { return '任务查不到（HTTP 404：服务端重启过，任务只活在进程内）；按现状取记录' }
+        throw
+      }
+      if ([int]$task.units_done -ne $lastDone) {
+        $lastDone = [int]$task.units_done
+        Write-Host ('       {0,7:N0} s  {1}/{2}  failed={3}  state={4}' -f $sw.Elapsed.TotalSeconds, $task.units_done, $task.total_units, $task.detail.failed, $task.state)
+      }
+    } while (($task.state -notin $terminalStates) -and ($sw.Elapsed.TotalSeconds -lt $DbnumWaitSec))
+    $rssAfter = [long](GetJson '/api/v1/health').model_concurrency.process_rss_bytes
+    if ($task.state -eq 'failed' -and [int]$task.units_done -eq 0) { throw "整库生成失败、一根都没成: $($task.result.error)" }
+    if ($task.state -notin $terminalStates) { throw "等了 $([int]$sw.Elapsed.TotalSeconds) s 仍未终态（state=$($task.state) $($task.units_done)/$($task.total_units)）" }
+    "state=$($task.state) kind=$($task.kind) completed=$($task.units_done)/$($task.total_units) failed=$($task.detail.failed) elapsed=$([math]::Round($sw.Elapsed.TotalSeconds, 1)) s rss=$([math]::Round($rssBefore / 1MB))->$([math]::Round($rssAfter / 1MB)) MB"
+  }
+
+  Step 'POST /api/v1/model/records {generation_roots[]} 整库全部根（≤64 根一批，前端整库口径）' {
+    if (-not $dbnumEntry) { return '跳过' }
+    if (-not $dbnumRoots) { throw 'roots 未取到' }
+    $all = @($dbnumRoots.roots | ForEach-Object { $_.generation_root })
+    $sw = [Diagnostics.Stopwatch]::StartNew()
+    $records = 0; $pages = 0; $batches = 0; $badRoots = @(); $source = $null; $constructs = @{}
+    for ($i = 0; $i -lt $all.Count; $i += 64) {
+      $batch = @($all[$i..([Math]::Min($i + 63, $all.Count - 1))])
+      $batches++
+      $cursor = $null
+      try {
+        do {
+          $body = @{ generation_roots = $batch; limit = 5000 }
+          if ($null -ne $cursor) { $body.cursor = $cursor }
+          $page = PostJson '/api/v1/model/records' $body 130
+          $pages++
+          $records += @($page.items).Count
+          foreach ($item in @($page.items)) { $constructs[$item.refno] = 1 }
+          $source = $page.source
+          $cursor = if ($page.truncated) { $page.next_cursor } else { $null }
+        } while ($null -ne $cursor)
+      } catch {
+        # 整批被拒（典型是 409 not_generated：任务 partial 时没成的那几根）→ 与前端同口径退回逐根，记下坏根、不停在半路
+        foreach ($root in $batch) {
+          $cursor = $null
+          try {
+            do {
+              $body = @{ generation_root = $root; limit = 5000 }
+              if ($null -ne $cursor) { $body.cursor = $cursor }
+              $page = PostJson '/api/v1/model/records' $body 130
+              $pages++
+              $records += @($page.items).Count
+              foreach ($item in @($page.items)) { $constructs[$item.refno] = 1 }
+              $cursor = if ($page.truncated) { $page.next_cursor } else { $null }
+            } while ($null -ne $cursor)
+          } catch { $badRoots += $root }
+        }
+      }
+    }
+    if ($records -eq 0) { throw "整库 0 条记录（roots=$($all.Count)，坏根 $($badRoots.Count)）" }
+    $bad = if ($badRoots.Count -gt 0) { " bad_roots=$($badRoots.Count) [$($badRoots[0..([Math]::Min(2, $badRoots.Count - 1))] -join ',')]" } else { '' }
+    "roots=$($all.Count) batches=$batches pages=$pages records=$records constructs=$($constructs.Count) source=$source elapsed=$([math]::Round($sw.Elapsed.TotalSeconds, 1)) s$bad"
   }
 }
 

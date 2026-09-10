@@ -260,6 +260,10 @@ _Avoid_: 直接属主、按 refno 单条查询、parquet 分桶、逐根一次�
 gen-model-v1 源下前端拿到的树与三维模型**全部是 API 即时给出的**：树读 `/tree/*`（内存里的 MDB 骨架），几何走 `model/ensure`（当场生成）→ `model/records` → `/meshes/{hash}.mesh`。前端不依赖服务端库里的持久数据、不看 `model-memory` / `model-database` 之分、不订阅 `model_drain` / WS 任务事件、不做被动重载——要新几何就再显示一次或「重新生成」。原「模型变更同步」（WS + 15 s 轮询 `GET /tasks?kind=model_drain` → reload）2026-09-09 按用户口径整条下线（收口计划 §12，决策见共享决策库）。
 _Avoid_: 模型变更同步、被动重载、库侧水位、等 drain
 
+**整库入口 (Whole-Dbnum Entry)**:
+`show_dbnum` 整库显示在 gen-model 读透 / kv-mem 形态下的取数路（spec §4.5.3，收口计划 §17，2026-09-10 起）：`POST dbnums/{dbnum}/model/ensure`（服务端自己枚举该库全部生成根、202 回 `task_id` + 真数 `expected_roots`、后台生成进进程内投影）→ 只查**自己刚发起的这一个** `task_id` 到终态 → `GET dbnums/{dbnum}/model/roots` 权威根清单 → 多根 `records`。生成的编排全在服务端，前端一根也不催。旧构建没有这条路由（404）按 api 对象记一次、以后直接走逐 SITE 老路；该库以 rocksdb 为准（409）只退这一次。任务与投影都只活在服务端进程内，重启后要重新点显示。它不是 `dbnums/{dbnum}/model/rebuild`——那是摄入形态、durable 队列的强制整库重建，前端不用。
+_Avoid_: rebuild、整库重建、`/tasks` 列表轮询、订阅任务、把逐 SITE ensure 当成整库的契约
+
 ## 三维校审批注
 
 **批注锚点**:

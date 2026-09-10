@@ -134,7 +134,28 @@ D1 按 **B**、D2 **认可**（边界写死：只查自己发起的那一个 `ta
 
 - **S1（gen-model）已落**：worktree `D:\work\plant-code\old\gen-model-kvmem`、分支 `kvmem-dbnum-model-ensure`、提交 `dadbd821d`（主树正被别的会话密集改，一行没碰）。新模块 `model_dbnum_ensure` + 两个端点 + `TaskRegistry` 新 kind + spec §4.5.3。`cargo check --lib` 干净、`cargo test --lib -- web_service model_dbnum_ensure model_rebuild task_registry` 83 passed、`cargo fmt --check` 干净、diff 纯增 422 行零删除。
 - **P12-1 / P12-2（plant3d-web）已落**：三个 API 绑定、`collectRecordsForRoots`、记录源 `collectRoots`（进同一份缓存）、`collectDbnumViaServer` + 自动退回逐 SITE、进度加 `generate` 档。受影响 5 文件 60/60 绿；`type-check` 631 / 基线 631 / 新增 0；eslint 0 错；全量 vitest **264 文件 / 1985 条 / 0 failed**。
-- **仍未做**：S0 摸底（要用户起一份 kv-mem 形态的 gen-model）、P12-3 的 `verify-gen-model-v1.ps1` 整库口径、live 计时。
+- **P12-3 已落**（2026-09-10 17:0x，接班会话）：`scripts/verify-gen-model-v1.ps1` 加 `-Dbnum <n>`（`GET …/model/roots` 探能力 → `POST …/model/ensure` 202 且 `expected_roots == roots.total` → 轮询 `tasks/{id}` 到终态、打进度、计**耗时**与任务前后 **RSS** → 全部根 ≤64 一批 `records`，整批被拒退回逐根记坏根；404 / 409 只记一句不算失败）——S0 要的三个数（耗时 / 根数 / RSS）就从它的终态那行读。对本机 `:9099`（0.1.21 摄入形态）真跑一次：四步分别「404 记一句 / 跳过 ×3」，与 `collectDbnumViaServer` 的退回判据一致。`docs/guides/gen-model-v1-local-dev.md` 补 kv-mem 读透形态的起法（`AIOS_STORE_MODE=embedded-mem`）、`show_dbnum` 两条路、`-Dbnum` 用法、§5 两行；`CONTEXT.md` 加「整库入口」词条。决策库落 §17 口径一条（见共享决策库 `arch`）。
+- **S0 的构建已备**：`kvmem-dbnum-model-ensure`@`dadbd821d` 的 release 构建落在**独立** target（`D:\Rust\target-kvmem\release\aios-database.exe`，不碰共享的 `D:\Rust\target`——别的会话正从那里出包）。运行目录用 worktree 根（`DbOption.toml` 已是 `http_api_addr=0.0.0.0:8022`、`http_api_cors=["*"]`、AvevaMarineSample /ALL）；`store_mode` 走环境变量 `AIOS_STORE_MODE=embedded-mem`（本机 `v_port=8009` 已被主树的 surreal 占着，`spawned-mem` 会撞）。**长驻进程仍由用户起**，命令见 §11。
+- **仍未做**：S0 三个数与 live 计时（要用户起服务）。
+
+## 11. S0 起服务与量数（用户在自己的终端跑）
+
+```powershell
+cd D:\work\plant-code\old\gen-model-kvmem
+$env:AIOS_STORE_MODE = 'embedded-mem'          # kv-mem 读透形态；/health 应见 data_face=read-through
+D:\Rust\target-kvmem\release\aios-database.exe serve
+```
+
+另开一个终端量数（整库 ensure 会真的把 7997 全生成一遍，按分钟到小时计）：
+
+```powershell
+cd D:\work\plant-code\old\plant3d-web
+pwsh scripts/verify-gen-model-v1.ps1 -BaseUrl http://127.0.0.1:8022 -Dbnum 7997
+```
+
+看终态那行：`elapsed`（耗时）、`completed/expected_roots`（根数）、`rss=前->后 MB`。然后浏览器
+`http://127.0.0.1:3101/?gm_backend_port=8022&show_dbnum=7997`，network 第一发应是 `dbnums/7997/model/ensure`，
+控制台 `[model-load]` 的 ms 与 §15 的「<60 s」目标对齐（第二次点显示才是「已有投影」的成绩；第一次含整库生成）。
 
 ## 10. 明确不做
 
