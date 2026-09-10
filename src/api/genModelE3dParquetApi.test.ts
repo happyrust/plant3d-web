@@ -43,10 +43,15 @@ function jsonResponse(payload: unknown): Response {
   });
 }
 
+// DuckDB 资产 URL（`utils/duckdbBundles.ts`）带 `?v=__DUCKDB_ASSET_VERSION__` 缓存戳，这个常量是 vite.config.ts 的 `define`；
+// vitest 不注入 define 全局，不顶上就 ReferenceError → 每个 parquet 查询都 success:false（2026-09-10，与 duckdbBundles.test.ts 同一处理）。
+const DUCKDB_ASSET_VERSION = 'test-asset-version';
+
 describe('genModelE3dParquetApi project switching', () => {
   beforeEach(() => {
     vi.resetModules();
     vi.clearAllMocks();
+    vi.stubGlobal('__DUCKDB_ASSET_VERSION__', DUCKDB_ASSET_VERSION);
 
     queryMock.mockResolvedValue({
       toArray: () => [
@@ -137,6 +142,7 @@ describe('e3dParquetGetVisibleInsts', () => {
   beforeEach(() => {
     vi.resetModules();
     vi.clearAllMocks();
+    vi.stubGlobal('__DUCKDB_ASSET_VERSION__', DUCKDB_ASSET_VERSION);
     registerFileURLMock.mockResolvedValue(undefined);
 
     const toId = (refno: string): string => {
@@ -149,6 +155,11 @@ describe('e3dParquetGetVisibleInsts', () => {
     const branBId = toId('24381_145018');
 
     queryMock.mockImplementation(async (sql: string) => {
+      // 连接建好先钉 DuckDB 扩展仓库到同源 /duckdb/extensions（`configureLocalDuckDBExtensions`，2026-09 起），不是取数 SQL
+      if (sql.startsWith('SET custom_extension_repository')) {
+        return { toArray: () => [] };
+      }
+
       if (sql.includes('world_refno_str') && sql.includes('site_count')) {
         return {
           toArray: () => [{

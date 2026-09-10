@@ -448,7 +448,10 @@ describe('InitiateReviewPanel 最小交付单元约束', () => {
     expect(getComponentListText()).toContain('无法归并到最小交付单元');
   });
 
-  it('automation addMockComponent 也走最小交付单元归一化', async () => {
+  it('automation addMockComponent 直接注入模拟构件：只做 a/b → a_b 字符归一，不查类型、不归并到最小交付单元', async () => {
+    // 2026-09-10 重钉到源码现行为：E2E 钩子 `__plant3dInitiateReviewE2E.addMockComponent` 是「无三维选区时注入一条模拟构件」
+    // 的旁路（InitiateReviewPanel 注释：不替代真实校审流程）——`ensureComponentSelected(normalizeReviewDeliveryRefno(ref), name)`
+    // 直接按 BRAN 入列，不打 pdmsGetTypeInfo / pdmsGetUiAttr；最小交付单元归并只在真实的「添加构件」路径上做（上面几条用例）。
     enableAutomationReviewHook();
     mocks.pdmsGetTypeInfo.mockResolvedValue({
       success: true,
@@ -468,12 +471,19 @@ describe('InitiateReviewPanel 最小交付单元约束', () => {
     }).__plant3dInitiateReviewE2E;
 
     expect(hook).toBeTruthy();
-    await hook?.addMockComponent('24381_145999');
+    await hook?.addMockComponent('24381/145999');
     await flushUi();
 
-    expect(mocks.pdmsGetUiAttr).toHaveBeenCalledWith('24381_145018');
-    expect(getComponentListText()).toContain('24381_145018');
-    expect(getComponentListText()).not.toContain('24381_145999');
+    expect(mocks.pdmsGetTypeInfo).not.toHaveBeenCalled();
+    expect(mocks.pdmsGetUiAttr).not.toHaveBeenCalled();
+    expect(getComponentListText()).toContain('24381_145999');
+    expect(getComponentListText()).not.toContain('24381_145018');
+
+    // 同一 refno（另一种写法）再注入一次不重复入列
+    const countBefore = (getComponentListText().match(/24381_145999/g) ?? []).length;
+    await hook?.addMockComponent('24381_145999');
+    await flushUi();
+    expect((getComponentListText().match(/24381_145999/g) ?? []).length).toBe(countBefore);
   });
 
   it('点击已添加构件后会高亮并联动三维定位，再次点击会取消高亮', async () => {

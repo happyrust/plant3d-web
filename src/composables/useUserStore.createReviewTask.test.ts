@@ -100,6 +100,9 @@ describe('useUserStore.createReviewTask', () => {
     expect(store.reviewTasks.value).toHaveLength(0);
   });
 
+  // 本地回退（buildLocalTask）从本地 mock 名册 `users.value` 解 checker / approver，名册 id 现在是 SJ / JH / SH / PZ
+  // （张校对员 = JH、李审核员 = SH），不再是 proofreader_001 / reviewer_001；查不到直接抛「Checker not found」。
+  // 下面三条走回退路的用例改用名册 id（2026-09-10 重钉到源码现行为）；走后端的用例不查名册，id 随意。
   it('后端网络异常时应回退到本地任务', async () => {
     reviewTaskCreateMock.mockRejectedValue(new Error('network broken'));
 
@@ -110,9 +113,9 @@ describe('useUserStore.createReviewTask', () => {
       title: 'task-2',
       description: 'desc',
       modelName: 'model',
-      checkerId: 'proofreader_001',
-      approverId: 'reviewer_001',
-      reviewerId: 'reviewer_001',
+      checkerId: 'JH',
+      approverId: 'SH',
+      reviewerId: 'SH',
       priority: 'medium',
       components: [{ id: 'c1', name: 'Comp', refNo: '100_1' }],
     });
@@ -123,8 +126,12 @@ describe('useUserStore.createReviewTask', () => {
     expect(store.reviewTasks.value[0]).toMatchObject({
       title: 'task-2',
       status: 'draft',
-      checkerId: 'proofreader_001',
-      approverId: 'reviewer_001',
+      checkerId: 'JH',
+      checkerName: '张校对员',
+      approverId: 'SH',
+      approverName: '李审核员',
+      // 本地任务的 reviewerId 兼容位 = checker
+      reviewerId: 'JH',
     });
   });
 
@@ -139,9 +146,9 @@ describe('useUserStore.createReviewTask', () => {
       title: 'task-submit-fallback',
       description: 'desc',
       modelName: 'model',
-      checkerId: 'proofreader_001',
-      approverId: 'reviewer_001',
-      reviewerId: 'reviewer_001',
+      checkerId: 'JH',
+      approverId: 'SH',
+      reviewerId: 'SH',
       priority: 'medium',
       components: [{ id: 'c1', name: 'Comp', refNo: '100_1' }],
     });
@@ -169,9 +176,9 @@ describe('useUserStore.createReviewTask', () => {
       title: 'task-attachment-fallback',
       description: 'desc',
       modelName: 'model',
-      checkerId: 'proofreader_001',
-      approverId: 'reviewer_001',
-      reviewerId: 'reviewer_001',
+      checkerId: 'JH',
+      approverId: 'SH',
+      reviewerId: 'SH',
       priority: 'medium',
       components: [{ id: 'c1', name: 'Comp', refNo: '100_1' }],
     });

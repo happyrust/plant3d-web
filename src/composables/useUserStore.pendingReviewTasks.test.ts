@@ -62,7 +62,10 @@ describe('useUserStore pendingReviewTasks', () => {
     const { useUserStore } = await import('./useUserStore');
     const store = useUserStore();
 
-    await store.switchUser('proofreader_001');
+    // 2026-09-10 重钉：本地 mock 名册的 id 是 SJ / JH / SH / PZ（张校对员 = JH，PROOFREADER；李审核员 = SH），
+    // `switchUser` 对名册里没有的 id（旧的 proofreader_001）直接返回、当前用户不变，收件箱自然是空的。
+    await store.switchUser('JH');
+    expect(store.currentUser.value?.id).toBe('JH');
     store.reviewTasks.value = [
       {
         id: 'task-rejected-at-sj',
@@ -71,13 +74,13 @@ describe('useUserStore pendingReviewTasks', () => {
         modelName: 'Hull',
         status: 'rejected',
         priority: 'medium',
-        requesterId: 'designer_001',
+        requesterId: 'SJ',
         requesterName: '王设计师',
-        checkerId: 'proofreader_001',
+        checkerId: 'JH',
         checkerName: '张校对员',
-        approverId: 'reviewer_001',
+        approverId: 'SH',
         approverName: '李审核员',
-        reviewerId: 'proofreader_001',
+        reviewerId: 'JH',
         reviewerName: '张校对员',
         currentNode: 'sj',
         components: [],

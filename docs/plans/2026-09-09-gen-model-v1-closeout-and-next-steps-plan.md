@@ -1,7 +1,7 @@
 # gen-model v1 接入：收口与下一步计划（两源对拍翻默认 · 批量 records · type-check 修复）
 
 - 日期：2026-09-09
-- 状态：D8 **已拍（B）并落地**（2026-09-09 晚，见 §10；翻后 live 整链 §11 已补齐）；D10 **已拍（A）并落地**（P10-1，§11）；D9 **已拍（A）并落地**：P9-1 契约 spec §4.5.2（§11）、P9-2 服务端（gen-model `2e9d65e91`，§13）、**P9-3 前端多根打包**（2026-09-10，§15；单测 / type-check / eslint 过，**live 提速未验**——本机没有跑新构建的 gen-model）；P5 模型变更同步已按用户口径整条下线（§12）；全量 vitest 既有失败第一批已修（§14）
+- 状态：D8 **已拍（B）并落地**（2026-09-09 晚，见 §10；翻后 live 整链 §11 已补齐）；D10 **已拍（A）并落地**（P10-1，§11）；D9 **已拍（A）并落地**：P9-1 契约 spec §4.5.2（§11）、P9-2 服务端（gen-model `2e9d65e91`，§13）、**P9-3 前端多根打包**（2026-09-10，§15；单测 / type-check / eslint 过，**live 提速未验**——本机没有跑新构建的 gen-model）；P5 模型变更同步已按用户口径整条下线（§12）；全量 vitest 既有失败已**全部修完**（第一批 §14、第二批 §16；2026-09-10 下午 **264 文件 / 1977 条 / 0 failed**）
 - 前置：`docs/plans/2026-09-06-gen-model-v1-tree-and-viewer-adapter-plan.md`（下称「母计划」，P0–P7 + P3-c + P2-4 + Q2 全部落地）
 - 范围：plant3d-web（主）+ gen-model `src/web_service/`（P9 最小增补；该仓正被别的会话密集重构，见 §7 R1）
 
@@ -241,7 +241,7 @@ runtime/release 两条 GLB 链路不动。
   - `duckdbBundles.test.ts` 1：`__DUCKDB_ASSET_VERSION__` 是 `vite.config.ts` 的 `define`，vitest 用独立的 `vitest.config.ts`、没有这个全局 → ReferenceError；测试还期望不带 `?v=` 的旧 URL。改为 `vi.stubGlobal` + 期望带内容哈希 `?v=` 的完整同源 URL，另加 extension repository 钉子。DuckDB 本体不动（legacy parquet 链路的底座，d-155 留一个发布周期）。
   - `DashboardLayout.test.ts` 1：背景色早已 `#F3F4F6 → #F1F5F9`。
   - `pmsSimulatorAutomation.test.ts` 1：场景清单 7 → 15 条，测试硬码旧快照；改钉「等于导出的 `PMS_SIMULATOR_CASE_ORDER`」+ 前 7 条主链不变。顺带发现源码常量里 `'bran-mixed'` 出现两次（第 3 与第 8 项），未动。
-  - 其余 7 文件 / 14 条（`genModelE3dParquetApi` 2、`useUserStore.createReviewTask` 3、`useUserStore.pendingReviewTasks` 1、`reviewerTaskListActions` 1、`DockLayout` 3、`TaskReviewDetail` 3、`InitiateReviewPanel.minDeliveryUnit` 1）：review 域工作流 / 组件契约变了（Checker 从 `users.value` 解、jd/sj 节点过滤规则、embed bootstrap 载荷、测量端点文案、最小交付单元归一），修法同上，分派三路并行处理，结果另记。
+  - 其余 7 文件 / 14 条（`genModelE3dParquetApi` 2、`useUserStore.createReviewTask` 3、`useUserStore.pendingReviewTasks` 1、`reviewerTaskListActions` 1、`DockLayout` 3、`TaskReviewDetail` 3、`InitiateReviewPanel.minDeliveryUnit` 1）：review 域工作流 / 组件契约变了（Checker 从 `users.value` 解、jd/sj 节点过滤规则、embed bootstrap 载荷、测量端点文案、最小交付单元归一），修法同上，分派三路并行处理，结果见 §16。
 - **超时型 flaky 6 文件 / 7 条**（`useReviewStore.*` 4、`useAnnotationStyleStore` 1、`AnnotationPanel` 1 ……）：每个文件的**首条**用例单跑就 1.1–1.2 s（冷加载 store / 组件），全量并行时被 5 s 缺省超时误杀；单跑全绿、与本仓任何改动无关。`vitest.config.ts` 加 `testTimeout / hookTimeout = 20_000`，不改用例。
 
 **本批结果**（6 文件 + 配置）：6 文件 29/29 绿、eslint 0 错；全量 vitest **1970 / 1956 passed / 14 failed**——失败只剩上面那 7 个 review/parquet 文件（另一路在修），flaky 7 条全部转绿。type-check 门顺带收紧：三档重钉后基线里 15 条类型错误消失，`update-baseline` → **631 条 / 170 文件**。
@@ -277,3 +277,23 @@ runtime/release 两条 GLB 链路不动。
   2. 浏览器 `http://localhost:3101/?show_dbnum=7997&gm_backend_port=8022`（或 `.env.development` 改指 8022）→ network 面板 `model/records` 请求体带 `generation_roots`（≤64 根一发）、控制台 `[model-load] gen-model-v1 dbnum=7997 … roots=N … ms=…`：与 §8.9 的 `roots=200 … ms=269039` 对比——**目标 <60 s**；现在缺省不限根数，roots 会是整库全部（§8.9 估「合计上千」），构件 ≤ 50 000；
   3. 服务端侧逐根长尾（单根 records 205 s 那种）批量救不了，仍「另计」。
 - 整库跑出来太慢的话，可回退的旋钮都在 options：`recordsBatchSize`（批大小）、`recordsConcurrency`（在飞批数）、`collectDbnum` 的 `maxTotalRoots`（调用方传有限值就回到「安全概览」）——不用改契约。
+
+## 16. 追记（2026-09-10 下午）：全量 vitest 既有失败第二批——7 个 review/parquet 文件重钉，全量 0 failed
+
+接 §14「其余 7 文件 / 14 条 …… 结果另记」。用户 2026-09-10 确认口径：**源码当前行为就是契约**，只改测试、源码一行不动（含 §14 已点名的 `compareAnnotationSeverity` 旧注释与 `'bran-mixed'` 重复，只记不改）、不改 vitest 超时配置；每处改动在测试里注一句改了什么、为什么。
+
+**逐文件根因与重钉**（7 文件 / 14 条，全是测试钉在旧行为上）
+
+- `src/api/genModelE3dParquetApi.test.ts` 2：与 §14 `duckdbBundles` 同源——DuckDB 资产 URL 带 `?v=__DUCKDB_ASSET_VERSION__`，vitest 没有 vite `define` 全局 → ReferenceError → 每条 parquet 查询 `success:false`；另外连接建好后源码先发 `SET custom_extension_repository …`（`duckdbBundles.configureLocalDuckDBExtensions`），假 `query` 不认识这条 SQL。改：两个 describe 的 `beforeEach` 里 `vi.stubGlobal('__DUCKDB_ASSET_VERSION__', …)`，假 `query` 对 `SET custom_extension_repository` 回空。
+- `src/composables/useUserStore.createReviewTask.test.ts` 3 / `useUserStore.pendingReviewTasks.test.ts` 1：本地回退（`buildLocalTask`）与 `switchUser` 都从本地 mock 名册 `users.value` 解人，名册 id 早已是 `SJ / JH / SH / PZ`（张校对员 = JH、李审核员 = SH），测试还用 `proofreader_001 / reviewer_001` → 「Checker not found」/ `switchUser` 直接返回、收件箱空。改：走回退路的用例改用名册 id，顺带钉住 `checkerName / approverName` 与「本地任务 `reviewerId` 兼容位 = checker」；走后端的用例不查名册，未动。
+- `src/components/review/reviewerTaskListActions.test.ts` 1：`useUserStore.resolveEffectiveUserId` 现在原样回传 id（`reviewer_001 ↔ user-002` 本地别名映射已删）。改：用例改钉「收件匹配 = checkerId === 精确 user id；用别名 id 问什么都看不到」。
+- `src/components/review/TaskReviewDetail.test.ts` 3：① 测量端点文案原样打 `entityId`（`formatMeasurementSummary` 不再把 DTX 对象 id / refno 归一成 `a/b`）；② `handleResubmit` 只走 `userStore.submitTaskToNextNode`，不再 import `./workflowBridge`（父窗口通知由 ReviewPanel / DesignerCommentHandlingPanel 负责）——用例反转为「桥接方即便声称接管也不许有一次桥接调用」；③ 退回信息卡只剩「退回节点 / 退回原因 + 再次提交」，原「当前单据已回到设计节点，可再次提交。」提示句已删。
+- `src/components/DockLayout.test.ts` 3：`embedRoleLanding.resolveExternalFormFocusedLandingTarget` 原样回角色落点、不再把 SJ 强推到 reviewer——SJ + 外部流程 + `form_id` → `landingTarget = 'designer'`、`returnedDesignerTaskPanel = 'review'`；恢复出的任务是规范退回态（`isCanonicalReturnedTask`）才关 initiateReview / DCH、只开 review（落点状态 `primaryPanelId` 记 review，`target` 仍 designer）；单据没匹配到时 DCH 与 review 都不开、落点留 viewer。第三条「按需在三维查看器右侧创建单例文档预览面板」（`close` 期望 1 次实得 3 次）是前两条的连带：它们在 `mounted.unmount()` 之前断言失败，留下两个未卸载的 DockLayout 一起响应了 `FORM-NEXT`——前两条重钉后自绿，本身未改。顺带：该文件索引里原是 CRLF / LF 混排（`git ls-files --eol` = `i/mixed`，44 行裸 LF），这次编辑器统一成 CRLF，原始 diff 因此显得比实际大（实际 +34 / −10）。
+- `src/components/review/InitiateReviewPanel.minDeliveryUnit.test.ts` 1：E2E 钩子 `__plant3dInitiateReviewE2E.addMockComponent` 是「无三维选区时注入一条模拟构件」的旁路——`ensureComponentSelected(normalizeReviewDeliveryRefno(ref), name)` 直接按 BRAN 入列，不查 `pdmsGetTypeInfo / pdmsGetUiAttr`、不做最小交付单元归并（归并只在真实「添加构件」路径上，同文件其余用例仍钉着）。改：用例改钉「只做 `a/b → a_b` 字符归一、同 refno 重复注入不重复入列」。
+
+**验证（本轮跑过）**
+
+- 7 文件单跑 **58/58 绿**；全量 vitest **264 文件 / 1977 passed / 0 failed**（HEAD `5ac41df` 是 1977 / 1963 / 14）。
+- `npm run type-check`：631 / 基线 631 / 新增 0 / 消失 0；触及 7 个测试文件 eslint 0 错。
+- 源码 0 改动、`vitest.config.ts` 未动：`git status` 里除这 7 个测试文件与本文档，只剩别的会话的 `useDbnoInstancesDtxLoader.test.ts` / `useModelGeneration.loadScope.test.ts`（纯 CRLF 归一）与 `docs/issues/mbd-*`，未带进提交。
+- §14 顺带发现的两处源码瑕疵（`compareAnnotationSeverity` 注释仍写四档、`PMS_SIMULATOR_CASE_ORDER` 里 `'bran-mixed'` 出现两次）按口径仍**只记不改**。

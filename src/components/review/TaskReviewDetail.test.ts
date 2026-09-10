@@ -179,7 +179,8 @@ describe('TaskReviewDetail', () => {
     expect(document.body.textContent).toContain('已确认测量回放');
     expect(document.body.textContent).toContain('1 条测量');
     expect(document.body.textContent).toContain('距离测量');
-    expect(document.body.textContent).toContain('起点 24381/145018 -> 终点 24381/145019');
+    // 2026-09-10 重钉：测量端点文案原样打 `entityId`（DTX 对象 id / refno 都不再归一成 a/b）——formatMeasurementSummary
+    expect(document.body.textContent).toContain('起点 o:24381_145018:0 -> 终点 24381_145019');
     expect(document.body.textContent).toContain('保留确认后的测量回放');
     expect(document.body.textContent).toContain('提交');
     expect(document.body.textContent).toContain('驳回');
@@ -401,7 +402,10 @@ describe('TaskReviewDetail', () => {
     expect(reviewRecordGetByTaskIdMock).toHaveBeenCalledTimes(2);
   });
 
-  it('notifies parent workflow bridge instead of internal submit in external embedded workflow', async () => {
+  it('resubmit always goes through the internal submitTaskToNextNode; TaskReviewDetail no longer talks to the parent workflow bridge', async () => {
+    // 2026-09-10 重钉：TaskReviewDetail.handleResubmit 只走 userStore.submitTaskToNextNode，不再 import ./workflowBridge——
+    // 外部流程的父窗口通知现在由 ReviewPanel / DesignerCommentHandlingPanel 负责（notifyParentWorkflowAction 只剩那两处调用）。
+    // 即便桥接方声称已接管（mock 回 true），这里也不该有任何一次桥接调用。
     notifyParentWorkflowActionMock.mockReturnValue(true);
     reviewTaskGetWorkflowMock.mockResolvedValue({
       success: true,
@@ -410,6 +414,7 @@ describe('TaskReviewDetail', () => {
       history: [],
     });
     reviewRecordGetByTaskIdMock.mockResolvedValue({ success: true, records: [] });
+    submitTaskToNextNodeMock.mockResolvedValue(undefined);
 
     await mountComponent(createTask({
       status: 'draft',
@@ -418,18 +423,15 @@ describe('TaskReviewDetail', () => {
     }));
 
     const button = Array.from(document.querySelectorAll('button')).find((item) => item.textContent?.includes('再次提交'));
+    expect(button).toBeTruthy();
     button?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     await nextTick();
     await Promise.resolve();
+    await Promise.resolve();
     await nextTick();
 
-    expect(notifyParentWorkflowActionMock).toHaveBeenCalledWith(expect.objectContaining({
-      action: 'active',
-      taskId: 'task-1',
-      formId: 'FORM-DETAIL-1',
-      source: 'task-review-detail',
-    }));
-    expect(submitTaskToNextNodeMock).not.toHaveBeenCalled();
+    expect(notifyParentWorkflowActionMock).not.toHaveBeenCalled();
+    expect(submitTaskToNextNodeMock).toHaveBeenCalledWith('task-1');
   });
 
   it('shows an empty measurement replay state when no confirmed measurements are available', async () => {
@@ -483,7 +485,11 @@ describe('TaskReviewDetail', () => {
 
     const button = Array.from(document.querySelectorAll('button')).find((item) => item.textContent?.includes('再次提交'));
     expect(button).toBeTruthy();
-    expect(document.body.textContent).toContain('当前单据已回到设计节点，可再次提交。');
+    // 2026-09-10 重钉：退回信息卡只剩「退回节点 / 退回原因 + 再次提交」按钮，原「当前单据已回到设计节点，可再次提交。」提示句已删
+    expect(document.body.textContent).toContain('退回节点：');
+    expect(document.body.textContent).toContain('退回原因：');
+    expect(document.body.textContent).toContain('请补充碰撞说明。');
+    expect(document.body.textContent).not.toContain('当前单据已回到设计节点，可再次提交。');
   });
 
   it('does not show resubmit button once returned task has re-entered review flow', async () => {

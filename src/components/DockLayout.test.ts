@@ -446,12 +446,18 @@ describe('DockLayout embed bootstrap', () => {
     mounted.unmount();
   });
 
-  it('SJ 外部 form_id 被动恢复时只打开校审面板并使用 returnedInitiatedTasks 匹配任务', async () => {
+  it('SJ 外部 form_id 被动恢复：落点是设计端（designer），用 returnedInitiatedTasks 匹配；单据确认已退回才切到 review 面板', async () => {
+    // 2026-09-10 重钉到源码现行为（embedRoleLanding.resolveExternalFormFocusedLandingTarget 现在原样回角色落点，不再把 SJ 强推到 reviewer）：
+    // SJ + 外部流程 + form_id → landingTarget = 'designer'，restoreEmbedWorkbenchContext 收 target 'designer'、
+    // reviewerTasks = returnedInitiatedTasks、returnedDesignerTaskPanel = 'review'；恢复出的任务是「规范退回态」
+    // （isCanonicalReturnedTask：rejected，或 draft@sj 且带退回原因 / 退回记录）时关掉 initiateReview / DCH、只开 review，
+    // 落点状态 primaryPanelId / visiblePanelIds 改记 review，target 仍是 designer。
     const returnedTask = createTask({
       id: 'task-returned-1',
       formId: 'FORM-RETURNED-1',
       status: 'draft',
       currentNode: 'sj',
+      returnReason: '请补充碰撞说明。',
     });
     returnedInitiatedTasksRef.value = [returnedTask];
     reviewTasksRef.value = [createTask({
@@ -461,7 +467,7 @@ describe('DockLayout embed bootstrap', () => {
       currentNode: 'jd',
     })];
     restoreEmbedWorkbenchContextMock.mockResolvedValue({
-      target: 'reviewer',
+      target: 'designer',
       restoreStatus: 'matched',
       restoredTaskId: returnedTask.id,
       restoredTaskSummary: {
@@ -471,6 +477,14 @@ describe('DockLayout embed bootstrap', () => {
       },
       restoredTaskDraft: null,
       restoredTask: returnedTask,
+    });
+    // workflow/sync 快照恢复会把 restoredTask 换成它回的那份，这里让它回同一份退回单
+    restoreEmbedFormSnapshotContextMock.mockResolvedValue({
+      modelRefnos: [],
+      recordCount: 0,
+      attachmentCount: 0,
+      attachments: [],
+      task: returnedTask,
     });
 
     window.history.replaceState({}, '', '/?user_token=jwt-designer&workflow_mode=external&form_id=FORM-RETURNED-1');
@@ -494,16 +508,20 @@ describe('DockLayout embed bootstrap', () => {
     const mounted = await mountDockLayout();
 
     expect(restoreEmbedWorkbenchContextMock).toHaveBeenCalledWith(expect.objectContaining({
-      target: 'reviewer',
+      target: 'designer',
       formId: 'FORM-RETURNED-1',
       passiveWorkflowMode: true,
+      returnedDesignerTaskPanel: 'review',
     }));
     const restoreArgs = restoreEmbedWorkbenchContextMock.mock.calls.at(-1)?.[0] as {
       reviewerTasks: () => ReviewTask[];
     };
     expect(restoreArgs.reviewerTasks()).toEqual([returnedTask]);
+    expect(dockPanels.has('review')).toBe(true);
+    expect(activatedPanels).toContain('review');
+    expect(dockPanels.has('designerCommentHandling')).toBe(false);
     expect(JSON.parse(sessionStorage.getItem('embed_landing_state') || '{}')).toMatchObject({
-      target: 'reviewer',
+      target: 'designer',
       formId: 'FORM-RETURNED-1',
       primaryPanelId: 'review',
       visiblePanelIds: ['review'],
@@ -512,15 +530,18 @@ describe('DockLayout embed bootstrap', () => {
     mounted.unmount();
   });
 
-  it('SJ 外部 form_id 被动恢复未匹配内部任务但 workflow/sync 有批注记录时，仍统一落到 review 面板，不再单独开 DCH', async () => {
+  it('SJ 外部 form_id 被动恢复未匹配内部任务但 workflow/sync 有批注记录时，不单独开 DCH，落点留在设计端 viewer', async () => {
     // 2026-05-18 产品策略更新：SJ 经 PMS 外部流程打开带 form_id 单据时，
     // 所有批注处理统一在 review 面板内完成，不再单独开「批注处理」（DCH）面板。
     // 详见 .plannotator/plan-sj-reject-ui.md §2 / §5 与
     // 开发文档/三维校审/审核面板批注表格视图回归事故复盘-2026-05-17.md §13。
+    // 2026-09-10 重钉到源码现行为：SJ 的落点是 designer（viewer），review 面板只在恢复出的单据确认为退回态时才开；
+    // 单据没匹配到（restoredTask 为空）时 DCH 与 review 都不开，落点状态保持 viewer——
+    // 「有批注记录就开 DCH」那一支现在只对非外部 SJ 聚焦生效（DockLayout.applyInitialLanding）。
     returnedInitiatedTasksRef.value = [];
     reviewTasksRef.value = [];
     restoreEmbedWorkbenchContextMock.mockResolvedValue({
-      target: 'reviewer',
+      target: 'designer',
       restoreStatus: 'missing',
       restoredTaskId: null,
       restoredTaskSummary: null,
@@ -556,17 +577,20 @@ describe('DockLayout embed bootstrap', () => {
     const mounted = await mountDockLayout();
 
     expect(restoreEmbedWorkbenchContextMock).toHaveBeenCalledWith(expect.objectContaining({
-      target: 'reviewer',
+      target: 'designer',
       formId: 'FORM-FB4EF9F13DF1',
       passiveWorkflowMode: true,
+      returnedDesignerTaskPanel: 'review',
     }));
     expect(dockPanels.has('designerCommentHandling')).toBe(false);
     expect(activatedPanels).not.toContain('designerCommentHandling');
+    expect(dockPanels.has('review')).toBe(false);
     expect(JSON.parse(sessionStorage.getItem('embed_landing_state') || '{}')).toMatchObject({
-      target: 'reviewer',
+      target: 'designer',
       formId: 'FORM-FB4EF9F13DF1',
-      primaryPanelId: 'review',
-      visiblePanelIds: ['review'],
+      primaryPanelId: 'viewer',
+      visiblePanelIds: ['viewer'],
+      restoreStatus: 'missing',
     });
 
     mounted.unmount();

@@ -243,16 +243,18 @@ describe('reviewerTaskListActions', () => {
     expect(isApproverRole('reviewer' as never)).toBe(false);
   });
 
-  it('aliased reviewer inbox matches backend jd-stage checker tasks after local switching', () => {
+  it('reviewer inbox matches backend jd-stage checker tasks by exact user id（本地别名映射已下线，reviewer_001 不再等同 user-002）', () => {
+    // 2026-09-10 重钉：`resolveEffectiveUserId` 现在原样回传 id（源码里 reviewer_001 ↔ user-002 那套本地别名已删），
+    // 收件匹配就是 checkerId === 当前用户 id；用别名 id 来问什么都看不到。
     const tasks = [
       createTask({ id: 'backend-checker', checkerId: 'user-002', reviewerId: 'user-002', currentNode: 'jd', status: 'submitted' }),
       createTask({ id: 'wrong-node', checkerId: 'user-002', reviewerId: 'user-002', currentNode: 'sh', status: 'submitted' }),
       createTask({ id: 'other-checker', checkerId: 'user-003', reviewerId: 'user-003', currentNode: 'jd', status: 'submitted' }),
     ];
 
-    const visible = filterPendingReviewTasks(tasks, 'reviewer_001', 'checker');
-
-    expect(visible.map((task) => task.id)).toEqual(['backend-checker']);
+    expect(resolveEffectiveUserId({ id: 'reviewer_001' })).toBe('reviewer_001');
+    expect(filterPendingReviewTasks(tasks, 'user-002', 'checker').map((task) => task.id)).toEqual(['backend-checker']);
+    expect(filterPendingReviewTasks(tasks, 'reviewer_001', 'checker')).toEqual([]);
   });
 
   it('legacy reviewer payload normalizes into explicit checker semantics', () => {
