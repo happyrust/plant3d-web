@@ -1,6 +1,6 @@
 # 开发计划：`show_dbnum` 整库显示由服务端拉起（kv-mem 读透形态 + e3d-io 树）
 
-> 状态：**第 2 稿，待评审**（2026-09-10 下午）。第 1 稿走 `dbnums/{dbnum}/model/rebuild`，评审标注推翻了它的底座，见 §0。
+> 状态：**第 2 稿 approved 并已落地（§9）；第 3 稿 §12 待评审**（2026-09-10 17:1x）——用户口径「按 e3d-model 的方式去生成模型，实时生成」把 S1 的生成内核与前端的等待方式各改一处，端点不动。第 1 稿走 `dbnums/{dbnum}/model/rebuild`，评审标注推翻了它的底座，见 §0。
 > 上游背景：`2026-09-09-gen-model-v1-closeout-and-next-steps-plan.md` §12 / §15 / §16。
 
 ## 0. 评审回执与本稿的改动
@@ -164,3 +164,58 @@ pwsh scripts/verify-gen-model-v1.ps1 -BaseUrl http://127.0.0.1:8022 -Dbnum 7997
 - 不碰摄入形态的 `dbnums/{dbnum}/model/rebuild` 与 durable 队列。
 - 不动 legacy parquet 整库链路（版本对比仍走 `manifestUrl`）。
 - 不改 §4.5.2 多根批量 `records` 契约。
+
+## 12. 第 3 稿（待评审）：「按 e3d-model 的方式去生成模型，实时生成」
+
+**用户口径（2026-09-10 17:0x）**：「按 e3d-model 的方式去生成模型，实时生成。」
+
+### 12.1 我的读法（请确认）
+
+两个词各指一处，端点与契约都不必动：
+
+- **「按 e3d-model 的方式」**指服务端的生成内核：整库那一发应当走 e3d-model / Core.dll 式的**生产者—消费者流水线**（`E3dModelService::generate_and_persist_roots`：常驻 worker 并行领根、按片提交进投影），而不是第 2 稿 S1 实际落成的「把 2720 根一根一根塞进按需 `ensure` 的机器」。
+- **「实时生成」**指前端的等待方式：几何**边生成边进视口**——哪根的投影提交了，前端就取哪根的 `records` 装 DTX；而不是第 2 稿的「轮询到任务终态才开始取第一条记录」（整库几十分钟里视口一直是空的）。
+
+另一种读法是「连投影都不要，`records` 每次现算」——每次刷新页面都把 2720 根重算一遍，`/meshes/{hash}.mesh` 也得先落盘才有 URL，我不推荐；如果你要的是这一种，说一声，方案另出。
+
+### 12.2 本轮真查到的事实（第 2 稿落地后的实际形态）
+
+| # | 事实 | 出处 |
+| --- | --- | --- |
+| F13 | S1 的 worker 按 16 根一组调 `ensure_model_scope_generated_from_roots`，它内部 **`for root in roots { … .await }` 逐根串行**，每根走 `ensure_exact_generation_root` → `generate_unit_model` → `ModelRefreshPolicy::generate_roots(mgr, [这一根])` → **每根新建一次** `E3dModelService::from_current()` → `generate_and_persist_roots(dbnum, [这一根])`。也就是说整库 2720 根 = 2720 次「建服务 + 起 1 个 worker + 1 片提交」，**全程无并行** | `model_dbnum_ensure.rs` `spawn_worker`；`on_demand_model.rs:397–412`、`:238–305`；`manual_update.rs:2816`；`model_refresh.rs:82–177` |
+| F14 | `generate_and_persist_roots(dbnum, roots)` 一次给全部根时是真正的 Core.dll 式流水线：`produce_slices` 起 `resident_workers = min(geometry_workers 额度, 待领根数)` 个常驻 worker 动态领根（本机 `/health` 的 `geometry_concurrency.quota = 16`），片按 `model_regen_execution_group = 16` 根或 `model_memory_slice_elements = 8000` 个元素封口，消费者 `persist_memory_batch` **每片一提交**进 `ModelMemoryStore`；生产与消费隔一条深度 1 的通道并行跑（ADR-041 §8）。一组失败只记 `failed`，不拖整页 | `e3d_model_service.rs:660–768`、`:773–813`、`:908–943`；`concurrency.rs:375–384`；`DbOption.toml:308/313` |
+| F15 | 「这根好了没」在投影里就是**有没有回执**：`ModelMemoryStore::receipt(Current, root)`——`ensure` 判缓存命中用的就是它（`memory_root_current`）；`roots(scope)` 一次列出全部有回执的根。片一提交，这些根立刻可被 `model/records` 读到（`source = model-memory`） | `model_memory_store.rs:484–508`；`on_demand_model.rs:535–545`；spec §4.12 |
+| F16 | 前端 `collectDbnumViaServer` 今天**先 `waitForDbnumTask` 到终态**，再 `dbnumRoots` → `collectRoots`：终态之前一条记录都不取 | `collectDbnum.ts:216–237` |
+| F17 | 规模：spec 举例 7997 = 2720 根；母计划 §8.9 逐根口径 200 根 269 s（≈1.3 s/根，含 HTTP 往返）。按 F13 的串行形态整库量级是**小时**；按 F14 的 16 路并行量级是**分钟**（几何长尾另计） | spec §4.5.1；母计划 §8.9 |
+
+### 12.3 改法
+
+**S1b · gen-model（worktree `gen-model-kvmem`，在 `dadbd821d` 之上；写锁 `src/data_interface/model_dbnum_ensure.rs`、`src/web_service/handlers.rs`、spec）**
+
+1. `spawn_worker` 改成**一发**：过滤掉已有回执的根（与 `ensure` 同一缓存判据，重显示零成本），剩下的整批交给 `E3dModelService::from_current()` 一次建好的服务 → `scope_memory_only(dbnum, svc.generate_and_persist_roots(dbnum, roots, Lenient))`。不再经 `ensure_model_scope_generated_from_roots` / 根锁 / 逐根建服务。
+2. 进度不再靠「一组一记」：worker 旁挂一个 1 s 的 ticker，`units_done = expected ∩ 有回执的根数`（F15，2720 次 map 查找），`detail` 同步 `completed / failed`；终态由 `E3dPersistReport` 收口（`failed` 来自生产者死信 + 消费失败）。
+3. `GET /dbnums/{dbnum}/model/roots` 每行加 **`ready: bool`**（= 有回执），并接 `?ready=1` 只回就绪的——前端的增量取数靶子。只读、不生成，语义不变。
+4. spec §4.5.3 补两句（内核换成流水线、`ready`）；单测：源码钉「`spawn_worker` 调 `generate_and_persist_roots` 且不含 `ensure_model_scope_generated_from_roots`」、`ready` 与回执一致。`cargo test --lib -- web_service model_dbnum_ensure`、`cargo fmt --check`。
+
+**P12b · plant3d-web（`collectDbnum.ts` + `modelRecordSource.ts`；`useModelGeneration.ts` 文案）**
+
+1. `collectDbnumViaServer` 不再等终态：每个轮询拍子（2 s）读一次 `tasks/{id}`（进度）+ `roots?ready=1`，把**新就绪**的根立刻 `records.collectRoots(newRoots)`（≤64 一批，进同一份缓存）并把构件 refno **增量回给调用方装 DTX**；任务终态后再收一次尾（剩余就绪根），结束。`maxTotalRoots` / `maxRefnos` 预算在增量边界上判。
+2. `collectDbnumRefnos` 的返回形状不够用了——加 `onRootsReady?(refnos)` 增量回调（或改成 async iterator），`useModelGeneration` 的整库路径按批 `loadRefnos`；退回逐 SITE 老路时行为不变。
+3. 进度文案：`generate` 档从「生成 N/M」改成「生成 N/M · 已进视口 K 根」。
+4. 单测：`collectDbnum.test.ts` 加「就绪根分两拍到达、两拍各取一次 records」「终态前先有构件回调」「`ready=1` 不认识（旧 §4.5.3 构建）→ 退回等终态再整取」；全量 vitest 0 failed 基线；type-check 631 新增 0。
+
+**不动**：三个端点的路径与 202 回执、d-195 边界（仍只查自己那一个 `task_id`）、§4.5.2 `records` 契约、`?show_dbnum_full=1` / `maxRefnos` 语义、逐 SITE 退路、rebuild 不碰。
+
+### 12.4 验证
+
+- 单测两仓如上；`verify-gen-model-v1.ps1 -Dbnum` 的轮询行里能看到 `units_done` 按片跳而不是按 16 根一格、`roots?ready=1` 条数随之增长。
+- live（用户起 §11 的服务）：`?show_dbnum=7997&gm_backend_port=8022`，**第一批几何应在几秒到几十秒内进视口**（第一片 16 根提交即可见），整库收尾时间与 S0 的 `elapsed` 对齐；`/health.geometry_concurrency.active` 生成期间应接近 16。
+
+### 12.5 风险
+
+| 风险 | 处置 |
+| --- | --- |
+| 16 路并行生成把 RSS 顶高（F10 只增不减） | S0 先量；`geometry_workers` 是现成旋钮，必要时整库入口另给一个上限 |
+| 生成中的库同时被单根 `ensure` 打 | `persist_memory_batch` 在 `db_generation_lock(dbnum)` 下提交，单根路径同一把锁，串行安全；只是慢，不冲突 |
+| 旧 §4.5.3 构建（`dadbd821d`）不认 `ready` | 前端按「响应行里没有 `ready` 字段」退回等终态整取，不报错 |
+| 增量装 DTX 让 `budgetLimited` 判在半路 | 预算判在每批边界，超出的根记 `truncatedRoots`、任务照常跑完（服务端不知道预算） |
