@@ -5,7 +5,7 @@
 | 上报日期 | 2026-09-09 |
 | 严重度 | P3（不影响 3D 视口视觉；契约字段与消费方不一致，语义/下游隐患） |
 | 影响范围 | MBD V2 `linear_dim` 图元的箭头呈现；`exportSvg` 及任何以契约 `arrow_lines` 为准的消费方 |
-| 修复状态 | 📝 Open（待评估：是否让前端改为消费契约几何） |
+| 修复状态 | ✅ 已定方案 **A** 并落地（2026-09-10：`483d1eb` 内核 `arrowLines` 像素下限、`4cd9a13` 适配层消费 `arrow_lines`；ADR 0056）。**live 未验**——等真 gen-model `:8022` 起来后按 §7 看点核对 |
 | 责任文件 | `src/dimension/adapters/mbdV2ExternalAnnotations.ts`（`mapLinearDim`）、`src/dimension/adapters/mbdV2Contract.ts`（契约类型） |
 
 ## 1. 现象描述
@@ -18,7 +18,8 @@ MBD V2 契约里，`linear_dim` 图元自带 `arrow_lines: MbdV2LineSegment[]`�
 结果：
 - 契约里的 `arrow_lines` 在 `linear_dim` 通道被静默丢弃；只有 `slope_mark` 那类走 `arrowLines`（`slopeArrowLines`）。
 - 求解器端在 `arrow_lines` 上做的任何几何决策（长度、宽度、随字高缩放）对 3D 视口的 `linear_dim` **不可见**。
-- 唯一以契约 `arrow_lines` 为准的消费方是「契约开头承诺的前端 1:1 画」语义、以及从 wire 几何直接渲染的下游（如离线对拍、`exportSvg` 校对）。
+- 唯一以契约 `arrow_lines` 为准的消费方是「契约开头承诺的前端 1:1 画」语义、以及从 wire 几何直接渲染的下游（如离线对拍、~~`exportSvg` 校对~~）。
+  > 订正（2026-09-10）：`exportSvg`（`src/dimension/export/svgOverlay.ts` 的 `layoutResultsToSvg`）吃的是内核 `LayoutResult`，与 3D 视口同源，**不**以 wire 为准；仓内没有以 wire `arrow_lines` 为准的消费方，wire 消费方都在仓外（plant-mbd 金样 / 离线对拍图）。
 
 > 触发这条 issue 的上下文：plant-mbd（算法单源仓）刚把 `linear_dim` 的箭头几何从写死的 24/7 mm
 > 改成随组字高缩放（`0.96 / 0.28 · cheight`，提交 `f888a50`）。在真 gen-model 服务（8022）+ plant3d-web
@@ -85,7 +86,8 @@ return explicitRecord(primitive, 'dimension', {
 
 - 3D 视口视觉：无影响（前端本来就自绘）。
 - 契约语义：`linear_dim.arrow_lines` 成了「产出但无人消费」的字段——求解器为它花的算力与校准（本次的随字高缩放）在主渲染路径上打了水漂。
-- 下游一致性：以 wire 几何为准的路径（离线渲染、`exportSvg` 的几何校对、第三方消费方）与 3D 视口呈现不一致——同一条尺寸，一边随字高缩放、一边固定像素。
+- 下游一致性：以 wire 几何为准的路径（离线渲染、~~`exportSvg` 的几何校对~~、第三方消费方）与 3D 视口呈现不一致——同一条尺寸，一边随字高缩放、一边固定像素。（`exportSvg` 一项见 §1 订正：它与视口同源。）
+- **补记（2026-09-10）**：ADR 0048 §35 早已写明「外部 MBD 已明确提供箭头线段时尊重源数据，不重复生成箭头」，ADR 0007 也允许显式来源提供箭头——所以现状不只是「既定设计」，而是**与已记录的 ADR 相悖**。这一条是选 A 的决定性依据。
 
 ## 4. 待评估的方案（本 issue 不预设结论）
 
@@ -122,6 +124,22 @@ return explicitRecord(primitive, 'dimension', {
 
 ## 6. 参考
 
+- ADR 0056 `docs/adr/0056-draw-mbd-arrow-strokes-from-contract-geometry-with-a-pixel-floor.md`：本 issue 的裁决。
+- 方案 `docs/plans/2026-09-10-mbd-linear-dim-consume-contract-arrow-lines-plan.md`（D1–D4 全按推荐拍板）。
 - plant-mbd 提交 `f888a50` `feat(isodim): 箭头随组字高缩放`：本 issue 的直接触发点。
 - plant-mbd `crates/plant-mbd/src/isodim.rs` 模块头「与 PML 的已知差别」箭头条：记了「PML 不画箭头、线上只带 cheight、本库把箭头显式化进契约」。
 - 契约另一半：`src/dimension/adapters/mbdV2Contract.ts` 与 plant-mbd `crates/plant-mbd/src/contract.rs` 同形。
+
+## 7. 处置记录（2026-09-10）
+
+用户拍板 **A**（D1 按 wire 画 V 形描边 / D2 只设下限 / D3 主题级作用域 / D4 退化翼不画）。落地三笔：
+
+| 提交 | 内容 | 验证 |
+|------|------|------|
+| `483d1eb` | 内核：`DimensionTheme.arrowLineMinLengthPx`（13）；`layoutExplicit` 对每条 `arrowLines` 投影后 `L < 13` 绕 tip 屏幕拉伸、方向不变，`≥ 13` 1:1，`≈ 0` 不画；重钉 `explicit.test`（fixture 翼 11.18→13 px）与 `goldens` 快照（diff 仅那一条翼） | 全量 vitest 264 / 1994 / 0 failed；type-check 新增 0 |
+| `4cd9a13` | 适配层：`mapLinearDim` 把 `arrow_lines` 4 段 1:1 进 `arrowLines`，不再自造 `arrows`、不再看 `sub_kind`；`arrow_lines` 为空退回屏幕实心头。新增退回用例 + rs-mbd 端到端（4 翼停在 13 px、小段翼朝外） | 全量 vitest 264 / 1996 / 0 failed；type-check 新增 0 |
+| 本笔 | 契约注释、ADR 0056、CONTEXT「三维尺寸呈现」、本记录、共享决策库 | 文档 |
+
+**live 看点**（等真 gen-model `:8022` + web `:3101`）：`?mbd_refno=24383_100028&mbdBackendPort=8022`（小管 cheight 7）与 `24381_145018`（大管 cheight 27）——近景翼长随管径不同、拉远后两者都停在 13 px；控制台 `rec.layout.arrowLines.length === 4`、`rec.layout.arrows === undefined`；导出一次 SVG 与视口一致。截图补进本文档。
+
+plant-mbd 侧待同步一句：`contract.rs` `arrow_lines` 注释加「3D 视口 1:1 消费、低于像素下限时屏幕拉伸」（契约形状与金样不动）。

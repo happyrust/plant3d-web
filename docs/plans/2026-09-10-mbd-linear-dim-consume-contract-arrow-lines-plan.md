@@ -1,7 +1,7 @@
 # 开发计划：MBD `linear_dim` 消费契约 `arrow_lines`（内核 `arrowLines` 加最小像素钳制）
 
 - 日期：2026-09-10
-- 状态：**待评审**（用户 2026-09-10 拍板走 A：「给内核 arrowLines 加最小像素钳制后消费契约几何，先出一页方案」）
+- 状态：**已落地**（用户 2026-09-10 拍板走 A，D1–D4 全按推荐；§3.1 `483d1eb`、§3.2 `4cd9a13`、§3.3 本笔含 ADR 0056）。**live 未验**——等真 gen-model `:8022`，看点见 §5
 - 来源：`docs/issues/mbd-linear-dim-ignores-wire-arrow-lines-2026-09-09.md`（P3）
 - 范围：plant3d-web `src/dimension/`（内核 + 适配层 + 契约注释 + ADR）；plant-mbd **不动**（契约形状与金样不变，只同步一句注释）
 

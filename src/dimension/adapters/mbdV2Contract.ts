@@ -68,6 +68,15 @@ export type MbdV2LinearDim = Readonly<{
   text: string;
   sub_kind?: string;
   extension_lines: readonly MbdV2LineSegment[];
+  /**
+   * Arrow strokes, one segment per wing: `from` is the tip on the dimension
+   * line, `to` the wing base (plant-mbd `isodim::make_segment`: length
+   * `0.96 · cheight`, half width `0.28 · cheight`, pointing outwards for
+   * `sub_kind: "small"`). Source geometry drawn 1:1 by the 3D viewport; a
+   * wing that projects shorter than the theme's `arrowLineMinLengthPx` is
+   * stretched on screen about its tip (ADR 0048 §35, ADR 0056). Empty ⇒ the
+   * kernel draws its own screen-scaled heads at both ends.
+   */
   arrow_lines: readonly MbdV2LineSegment[];
   label_anchor: MbdV2Vec3;
   reference?: boolean;
