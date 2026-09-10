@@ -4,8 +4,10 @@
  * 两条路，优先走第一条：
  *
  * 1. **服务端整库入口**（`collectDbnumViaServer`，spec §4.5.3，读透 / kv-mem 形态）：
- *    `POST dbnums/{dbnum}/model/ensure` 起任务 → 轮询 `GET tasks/{id}` 到终态 →
- *    `GET dbnums/{dbnum}/model/roots` 拿权威根清单 → 只取 `records`。生成的编排全在服务端。
+ *    `POST dbnums/{dbnum}/model/ensure` 起任务 → 每拍轮询 `GET tasks/{id}`（进度）+ `GET dbnums/{dbnum}/model/roots?ready=1`
+ *    （哪些根的投影已提交）→ 新就绪的根**立刻**取 `records` 并经 `onRefnosReady` 交给调用方装进视口 → 任务终态后收尾。
+ *    生成的编排全在服务端（e3d-model 流水线按片提交），前端边就绪边取——**实时**（plan 2026-09-10 §12）。
+ *    旧 §4.5.3 构建（roots 行没有 `ready`）退化为「等终态再整取」。
  * 2. **逐 SITE 老路**（服务端没有那条路由、或这个库以 rocksdb 为准时自动退回）：下面这段。
  *
  * 逐 SITE 老路 = `tree/roots` 里该库（`dbnum`）的全部 SITE 逐个 `ensureAndCollect`（走记录源，进同一份缓存），
@@ -24,6 +26,7 @@ import { refnosOfRecords } from './modelRecords';
 
 import type { GenModelV1ModelRecordSource } from './modelRecordSource';
 import type { TreeSource } from '../ports';
+import type { DbnumModelRootsResponse } from '@/api/genModelV1Api';
 
 import {
   fromV1Refno,
@@ -57,8 +60,25 @@ export const DEFAULT_DBNUM_ROOTS_BUDGET = Number.POSITIVE_INFINITY;
 /** 整库缺省的构件预算：一次点击最多装这么多构件 refno；`?show_dbnum_full=1` 传 `Infinity` 才全量。 */
 export const DEFAULT_DBNUM_REFNOS_BUDGET = 50_000;
 
+/** 服务端整库入口每收完一批就绪根就交给调用方的一包（plan 2026-09-10 §12「实时生成」的客户端半边）。 */
+export type CollectDbnumReadyBatch = {
+  /** 这一批刚收完记录的生成根（`a_b`） */
+  roots: string[];
+  /** 其中有几何记录的构件 refno（`a_b`，与之前批次去重、已按 `maxRefnos` 切过），调用方拿去装 DTX */
+  refnos: string[];
+  /** 累计已收记录的根数 / 该库预期根数 */
+  rootsDone: number;
+  rootsTotal: number;
+};
+
 export type CollectDbnumOptions = {
   onProgress?: (progress: CollectDbnumProgress) => void;
+  /**
+   * 服务端整库入口的实时回调：服务端流水线每提交一片，这边就取那些根的记录并把构件交给调用方，**不等任务终态**。
+   * 会被 await——调用方装完这一批再取下一批，DTX 装载不重叠。收尾那一批（含旧 §4.5.3 构建「等终态整取」的那一份）
+   * 也从这里给；逐 SITE 老路不发，那条路的构件只在结果的 `refnos` 里。调用方装完要以结果的 `refnos` 对一遍账。
+   */
+  onRefnosReady?: (batch: CollectDbnumReadyBatch) => void | Promise<void>;
   maxRoots?: number;
   maxContainerDepth?: number;
   /** 收够这么多构件 refno 就停（缺省 `DEFAULT_DBNUM_REFNOS_BUDGET`）；`Infinity` = 全量 */
@@ -138,47 +158,33 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => { setTimeout(resolve, Math.max(0, ms)); });
 }
 
-/**
- * 等服务端那一发整库生成跑完（spec §4.4 的任务终态），一边把 `completed/expected_roots` 报成进度。
- *
- * 只查**自己刚发起的那一个 `task_id`**（收口计划 §12 禁的是 `/tasks` 列表轮询与 WS 订阅，不是这个）。
- * 任务查不到（服务端重启过、任务只活在进程内）就不再等：手里已经生成的那部分照样能取记录。
- */
-async function waitForDbnumTask(
-  api: DbnumServerEntryApi,
-  taskId: string,
-  expectedRoots: number,
-  pollIntervalMs: number,
-  waitTimeoutMs: number,
-  onProgress: CollectDbnumOptions['onProgress'],
-): Promise<{ state: string; completed: number; error: string | null }> {
-  const deadline = Date.now() + waitTimeoutMs;
-  let state = 'running';
-  let completed = 0;
-  for (;;) {
-    await sleep(pollIntervalMs);
-    let entry;
-    try {
-      entry = await api.task(taskId);
-    } catch (error) {
-      if (isGenModelV1ApiError(error) && error.code === 'not_found') return { state: 'unknown', completed, error: null };
-      throw error;
-    }
-    state = String(entry.state ?? '');
-    completed = Number(entry.units_done ?? 0) || 0;
-    const total = Number(entry.total_units ?? expectedRoots) || expectedRoots;
-    onProgress?.({ phase: 'generate', siteIndex: 1, siteCount: 1, site: null, rootsDone: completed, rootsTotal: total, root: null });
-    if (TERMINAL_TASK_STATES.has(state)) {
-      const failure = entry.result && typeof entry.result === 'object' ? (entry.result as Record<string, unknown>).error : null;
-      return { state, completed, error: typeof failure === 'string' ? failure : null };
-    }
-    if (Date.now() >= deadline) return { state, completed, error: null };
+type RootsRow = DbnumModelRootsResponse['roots'][number];
+
+/** 服务端 `roots` 的一行 → `a_b`；空的丢掉。 */
+function rootKeys(rows: RootsRow[] | undefined): string[] {
+  const keys: string[] = [];
+  for (const row of rows ?? []) {
+    const key = fromV1Refno(String(row?.generation_root ?? ''));
+    if (key && !keys.includes(key)) keys.push(key);
   }
+  return keys;
+}
+
+/** 这个服务端的 `roots` 认不认 `ready`（spec §4.5.3 第 3 稿）：行上有布尔 `ready`，或回显了 `only_ready`。 */
+function rootsSupportReady(listed: DbnumModelRootsResponse): boolean {
+  return listed.only_ready === true || (listed.roots ?? []).some((row) => typeof row?.ready === 'boolean');
 }
 
 /**
- * 服务端整库入口（spec §4.5.3，读透 / kv-mem 形态）：`dbnums/{dbnum}/model/ensure` 起任务 → 轮询到终态 →
- * `dbnums/{dbnum}/model/roots` 拿权威根清单 → 只取 `records`。生成的编排全在服务端，前端一根也不催。
+ * 服务端整库入口（spec §4.5.3，读透 / kv-mem 形态；plan 2026-09-10 §12「实时生成」）：
+ * `dbnums/{dbnum}/model/ensure` 起任务 → 每拍 `tasks/{id}`（进度，只查自己这一个）+ `roots?ready=1`（哪些根的投影已提交）
+ * → 新就绪的根**立刻**取 `records`、经 `onRefnosReady` 交给调用方装视口 → 任务终态后收尾。生成的编排全在服务端，
+ * 前端一根也不催，也不等整库生成完才开始画。
+ *
+ * - 旧 §4.5.3 构建（`roots` 行没有 `ready`）：退化为等终态再整取，探能力那一发回的就是全清单，不再多打。
+ * - 任务查不到（服务端重启过、任务只活在进程内）：不再等，按现状取记录。
+ * - 预算：`maxTotalRoots` 在每批边界上判、`maxRefnos` 在构件上判，撞到就不再取后面的根，其余根记 `truncatedRoots`。
+ * - 终态时仍没就绪的根：任务 `failed / partial` 记进 `errors`，超时未终态记进 `pending`。
  *
  * 服务端没有这条路（旧构建 404）或这个库以 rocksdb 为准（409）时回 `null`，由 `collectDbnumRefnos` 退回逐 SITE 老路。
  */
@@ -190,7 +196,7 @@ export async function collectDbnumViaServer(
   api: DbnumServerEntryApi = defaultDbnumServerEntryApi,
 ): Promise<CollectDbnumResult | null> {
   const {
-    onProgress, maxRefnos = DEFAULT_DBNUM_REFNOS_BUDGET, maxTotalRoots = DEFAULT_DBNUM_ROOTS_BUDGET,
+    onProgress, onRefnosReady, maxRefnos = DEFAULT_DBNUM_REFNOS_BUDGET, maxTotalRoots = DEFAULT_DBNUM_ROOTS_BUDGET,
     taskPollIntervalMs = 2_000, taskWaitTimeoutMs = 2 * 60 * 60 * 1_000,
   } = options;
   if (dbnumServerEntrySupport(api) === 'no') return null;
@@ -213,31 +219,115 @@ export async function collectDbnumViaServer(
   serverEntrySupportByApi.set(api, 'yes');
 
   const expectedRoots = Number(receipt.expected_roots) || 0;
-  onProgress?.({ phase: 'generate', siteIndex: 1, siteCount: 1, site: null, rootsDone: 0, rootsTotal: expectedRoots, root: null });
-  const task = await waitForDbnumTask(
-    api, String(receipt.task_id), expectedRoots, taskPollIntervalMs, taskWaitTimeoutMs, onProgress,
-  );
-  if (task.state === 'failed' && task.completed === 0) {
-    throw new Error(`gen-model 整库生成失败 dbnum=${dbnum}${task.error ? `: ${task.error}` : ''}`);
+  const taskId = String(receipt.task_id);
+  const rootBudget = Number.isFinite(maxTotalRoots) ? Math.max(0, Math.floor(maxTotalRoots)) : Number.POSITIVE_INFINITY;
+  const refnoBudget = Number.isFinite(maxRefnos) ? Math.max(0, Math.floor(maxRefnos)) : Number.POSITIVE_INFINITY;
+  const report = (phase: 'generate' | 'roots', rootsDone: number, root: string | null, rootsTotal = expectedRoots) =>
+    onProgress?.({ phase, siteIndex: 1, siteCount: 1, site: null, rootsDone, rootsTotal, root });
+
+  const collectedRoots = new Set<string>();
+  const generationRoots: string[] = [];
+  const pending: string[] = [];
+  const empty: string[] = [];
+  const errors: Record<string, string> = {};
+  const refnos: string[] = [];
+  const seenRefnos = new Set<string>();
+  let refnoBudgetHit = false;
+  const budgetExhausted = () => refnoBudgetHit || collectedRoots.size >= rootBudget;
+
+  /** 一批就绪根：按根预算切 → 取记录进缓存 → 构件按 refno 预算切 → 交给调用方。 */
+  async function collectReady(readyRoots: string[]): Promise<void> {
+    if (budgetExhausted()) return;
+    const fresh = readyRoots.filter((root) => !collectedRoots.has(root));
+    const take = fresh.slice(0, Math.max(0, rootBudget - collectedRoots.size));
+    if (take.length === 0) return;
+    const result = await records.collectRoots(take, {
+      onRootDone: ({ done, root }) => report('roots', collectedRoots.size + done, root),
+    });
+    for (const root of take) collectedRoots.add(root);
+    pushAllUnique(generationRoots, result.generationRoots);
+    pushAllUnique(pending, result.pending);
+    pushAllUnique(empty, result.empty);
+    Object.assign(errors, result.errors);
+    const batchRefnos: string[] = [];
+    for (const refno of refnosOfRecords(result.items)) {
+      if (seenRefnos.has(refno)) continue;
+      if (refnos.length >= refnoBudget) {
+        refnoBudgetHit = true;
+        break;
+      }
+      seenRefnos.add(refno);
+      refnos.push(refno);
+      batchRefnos.push(refno);
+    }
+    if (onRefnosReady) {
+      await onRefnosReady({ roots: take, refnos: batchRefnos, rootsDone: collectedRoots.size, rootsTotal: expectedRoots });
+    }
   }
 
-  const listed = await api.dbnumRoots(dbnum);
-  const allRoots: string[] = [];
-  for (const row of listed.roots ?? []) {
-    const key = fromV1Refno(String(row?.generation_root ?? ''));
-    if (key && !allRoots.includes(key)) allRoots.push(key);
+  report('generate', 0, null);
+  const deadline = Date.now() + taskWaitTimeoutMs;
+  let state = 'running';
+  let completed = 0;
+  let taskError: string | null = null;
+  // 服务端认不认 `ready`：第一次问过就知道；不认的话那一发回的就是全清单，收尾直接用，不再多打一次
+  let readyMode: 'unknown' | 'yes' | 'no' = 'unknown';
+  let fullList: DbnumModelRootsResponse | null = null;
+  for (;;) {
+    await sleep(taskPollIntervalMs);
+    let terminal = false;
+    try {
+      const entry = await api.task(taskId);
+      state = String(entry.state ?? '');
+      completed = Number(entry.units_done ?? 0) || 0;
+      report('generate', completed, null, Number(entry.total_units ?? expectedRoots) || expectedRoots);
+      if (TERMINAL_TASK_STATES.has(state)) {
+        terminal = true;
+        const failure = entry.result && typeof entry.result === 'object' ? (entry.result as Record<string, unknown>).error : null;
+        taskError = typeof failure === 'string' ? failure : null;
+      }
+    } catch (error) {
+      if (!(isGenModelV1ApiError(error) && error.code === 'not_found')) throw error;
+      state = 'unknown';
+      terminal = true;
+    }
+    if (Date.now() >= deadline) terminal = true;
+    // 实时半边：服务端报了进度（或任务已经查不到）才去问哪些根就绪，一根都没成时不白打
+    if (readyMode !== 'no' && !budgetExhausted() && (completed > 0 || state === 'unknown')) {
+      const listed = await api.dbnumRoots(dbnum, { ready: true });
+      if (rootsSupportReady(listed)) {
+        readyMode = 'yes';
+        await collectReady(rootKeys((listed.roots ?? []).filter((row) => row?.ready !== false)));
+      } else {
+        readyMode = 'no';
+        fullList = listed;
+      }
+    }
+    if (terminal) break;
   }
-  const rootBudget = Number.isFinite(maxTotalRoots) ? Math.max(0, Math.floor(maxTotalRoots)) : allRoots.length;
-  const roots = allRoots.slice(0, rootBudget);
-  const truncatedRoots = allRoots.slice(roots.length);
+  if (state === 'failed' && completed === 0 && collectedRoots.size === 0) {
+    throw new Error(`gen-model 整库生成失败 dbnum=${dbnum}${taskError ? `: ${taskError}` : ''}`);
+  }
 
-  const collected = await records.collectRoots(roots, {
-    onRootDone: ({ done, total, root }) =>
-      onProgress?.({ phase: 'roots', siteIndex: 1, siteCount: 1, site: null, rootsDone: done, rootsTotal: total, root }),
-  });
+  // 收尾：全清单对账。认 `ready` 的服务端把最后就绪的那批收掉；不认的（旧构建）整份当就绪，records 自己会对没生成的根
+  // 409 → 退回逐根 → 记 errors。
+  const listed = fullList ?? await api.dbnumRoots(dbnum);
+  const allRoots = rootKeys(listed.roots);
+  const readyRows = readyMode === 'yes' ? (listed.roots ?? []).filter((row) => row?.ready !== false) : listed.roots;
+  await collectReady(rootKeys(readyRows));
 
-  const allRefnos = refnosOfRecords(collected.items);
-  const refnos = Number.isFinite(maxRefnos) ? allRefnos.slice(0, Math.max(0, Math.floor(maxRefnos))) : allRefnos;
+  const truncatedRoots: string[] = [];
+  for (const root of allRoots) {
+    if (collectedRoots.has(root)) continue;
+    if (budgetExhausted()) {
+      truncatedRoots.push(root);
+    } else if (TERMINAL_TASK_STATES.has(state)) {
+      errors[root] = `gen-model 整库生成没有产出这根（任务 ${state}）`;
+    } else if (!pending.includes(root)) {
+      pending.push(root);
+    }
+  }
+
   // SITE 清单只用来给汇总文案报个数：这一路不按 SITE 推进，树读不出来也不该让整库显示失败
   let sites: CollectDbnumSite[] = [];
   try {
@@ -249,13 +339,13 @@ export async function collectDbnumViaServer(
     dbnum,
     sites,
     refnos,
-    generationRoots: collected.generationRoots,
-    pending: collected.pending,
-    empty: collected.empty,
+    generationRoots,
+    pending,
+    empty,
     truncatedRoots,
-    errors: collected.errors,
+    errors,
     skippedSites: [],
-    budgetLimited: truncatedRoots.length > 0 || refnos.length < allRefnos.length,
+    budgetLimited: truncatedRoots.length > 0 || refnoBudgetHit,
   };
 }
 

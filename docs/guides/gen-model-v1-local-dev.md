@@ -61,7 +61,7 @@ VITE_GEN_MODEL_V1_BASE_URL=http://localhost:8022   # 直连；写 /gm 走 Vite �
 | `gm_health=1` | 在 legacy 下也把树顶部的 gen-model 徽标挂出来（只看健康与库三态，不动场景、不起同步） |
 | `show_refno=24381_145018` | 启动即显示这个节点（v1 下 = `ensure → records`） |
 | `debug_refno=24381_145018` | 同上，但强制重载并替换旧对象 |
-| `show_dbnum=7997` | 整库，两条路自动选（收口计划 §17，2026-09-10 起）。**服务端整库入口**（读透 / kv-mem 形态、且服务端含 spec §4.5.3 的构建）：`POST dbnums/7997/model/ensure` 起任务（202，服务端自己枚举全部生成根并后台生成进投影）→ 只查这一个 `task_id` 到终态（进度条第一段是 `completed/expected_roots`）→ `GET dbnums/7997/model/roots` 权威根清单 → 多根 `records`；前端一根也不催。**逐 SITE 老路**（服务端没有那条路由 404 → 记一次以后不再试；该库以 rocksdb 为准 409 → 只退这一次）：`tree/roots` 里该库的全部 SITE 逐个 `ensure → records`，进度按 SITE。两条路的 `records` 都按**多根批量**取（一次 ≤64 根，spec §4.5.2），生成根数不设预算，缺省只守 50 000 个构件（撞到 toast 会说「未轮到 N 个 SITE」），加 `show_dbnum_full=1` 连构件数也不限。服务端是不认识 `generation_roots` 的旧版（如 0.1.21 出厂包）时前端自动退回逐根（每根一次 `records`，0.5–10 s，几千根的库要几十分钟）——network 面板里第一发是 `dbnums/{dbnum}/model/ensure` 还是 `model/ensure`、`model/records` 的请求体有没有 `generation_roots`，走的哪条路一眼可辨 |
+| `show_dbnum=7997` | 整库，两条路自动选（收口计划 §17，2026-09-10 起）。**服务端整库入口**（读透 / kv-mem 形态、且服务端含 spec §4.5.3 的构建）：`POST dbnums/7997/model/ensure` 起任务（202，服务端自己枚举全部生成根，e3d-model 流水线 16 路并行、按片提交进投影）→ 每 2 s 只查这一个 `task_id`（进度「服务端生成 N/M」）+ `GET dbnums/7997/model/roots?ready=1`，**新就绪的根立刻取 `records` 装进视口**（「已进视口 K 根」）——几何边生成边出现，第一片 16 根提交就能看见，不等整库生成完（plan 2026-09-10 §12「实时」）。服务端是 `dadbd821d` 那版（roots 行没有 `ready`）时退化为等终态再整取。前端一根也不催。**逐 SITE 老路**（服务端没有那条路由 404 → 记一次以后不再试；该库以 rocksdb 为准 409 → 只退这一次）：`tree/roots` 里该库的全部 SITE 逐个 `ensure → records`，进度按 SITE。两条路的 `records` 都按**多根批量**取（一次 ≤64 根，spec §4.5.2），生成根数不设预算，缺省只守 50 000 个构件（撞到 toast 会说「未轮到 N 个 SITE」），加 `show_dbnum_full=1` 连构件数也不限。服务端是不认识 `generation_roots` 的旧版（如 0.1.21 出厂包）时前端自动退回逐根（每根一次 `records`，0.5–10 s，几千根的库要几十分钟）——network 面板里第一发是 `dbnums/{dbnum}/model/ensure` 还是 `model/ensure`、`model/records` 的请求体有没有 `generation_roots`，走的哪条路一眼可辨 |
 
 典型联调 URL：
 
@@ -90,7 +90,7 @@ pwsh scripts/verify-gen-model-v1.ps1 -BaseUrl http://127.0.0.1:8022 -Dbnum 7997 
 | | `data_face=read-through` | `data_face=ingest`（如 plant-1 的实例） |
 | --- | --- | --- |
 | SITE / ZONE 勾选眼睛 | 服务端解出全部生成根，`generation_roots` 直接给 | `422 container` → 前端展开一层对子节点逐个 ensure（深度 3 / 128 根上限，超出计 `truncatedRoots`） |
-| `show_dbnum` 整库显示 | 服务端整库入口：`dbnums/{dbnum}/model/ensure` 起任务 → 只查自己那一个 `task_id` → `…/model/roots` → 多根 `records`（spec §4.5.3，服务端含 2026-09-10 之后的构建） | 已初始化的库 `409` → 逐 SITE 老路（每个 SITE 一发 `ensure`，串行）；旧构建 `404` 同样走老路且只试一次 |
+| `show_dbnum` 整库显示 | 服务端整库入口：`dbnums/{dbnum}/model/ensure` 起任务 → 每拍只查自己那一个 `task_id` + `…/model/roots?ready=1` → 新就绪的根立刻多根 `records` 进视口（spec §4.5.3，服务端含 2026-09-10 之后的构建） | 已初始化的库 `409` → 逐 SITE 老路（每个 SITE 一发 `ensure`，串行）；旧构建 `404` 同样走老路且只试一次 |
 | `/dbnums` 的 `ref0s` | 骨架预热过，每行都有 | 骨架预热过才有；没有的行整格不写，`useDbMetaInfo` 跳过它 |
 | `model/records` 的 `source` | `model-memory` | 库就绪了 `model-database`，否则 `model-memory` |
 | 服务重启后 | 投影全没：再点显示会重新生成（整库任务也只活在进程内） | 已初始化的库以 rocksdb 为准，重启即接上 |

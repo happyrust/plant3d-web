@@ -1199,8 +1199,12 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
   }
 
   /**
-   * gen-model-v1 的整库显示（plan P3-c / P3-f `show_dbnum`）：该库全部 SITE 逐个 ensure → records（进度弹窗按 SITE / 生成根走，
-   * 记录进记录源缓存），再把构件分批装进 DTX。由 `showModelByDbnum` 在 v1 源下调用，错误与收尾都由它的 try/finally 兜住。
+   * gen-model-v1 的整库显示（plan P3-c / P3-f `show_dbnum`）。两条路（`collectDbnum` 自己选）：
+   * - 服务端整库入口（收口计划 §17；plan 2026-09-10 §12 **实时**）：服务端流水线每提交一片，`onRefnosReady` 就把那些根的构件
+   *   装进 DTX——几何边生成边进视口，不等整库生成完；进度弹窗第一段是服务端的 `completed/expected_roots`。
+   * - 逐 SITE 老路：该库全部 SITE 逐个 ensure → records（进度按 SITE / 生成根走），收完再把构件分批装进 DTX。
+   * 两条路收尾都以 `collected.refnos` 对账：还没进视口的构件在这里补装。由 `showModelByDbnum` 在 v1 源下调用，
+   * 错误与收尾都由它的 try/finally 兜住。
    */
   async function showModelByDbnumGenModelV1(
     source: GenModelV1ModelSource,
@@ -1228,7 +1232,25 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
     // ?show_dbnum_full=1 连它也不设——与 legacy show_dbnum 的同名开关同义：全量，不做「安全概览」
     const fullLoad = isShowDbnumFullRequested();
 
-    // 收集阶段占 5 → 55：SITE 之间按个数走，SITE 内按已收完的生成根走
+    // 实时装载（服务端整库入口）：每批就绪根的构件立刻进 DTX，总数在这里累计；进度条只往前走
+    const totals: GenModelV1LoadTotals = { loadedRefnos: 0, skippedRefnos: 0, loadedObjects: 0, invalidTubi: 0, mesh404: 0, noGeo: 0 };
+    const addTotals = (part: GenModelV1LoadTotals) => {
+      totals.loadedRefnos += part.loadedRefnos;
+      totals.skippedRefnos += part.skippedRefnos;
+      totals.loadedObjects += part.loadedObjects;
+      totals.invalidTubi += part.invalidTubi;
+      totals.mesh404 += part.mesh404;
+      totals.noGeo += part.noGeo;
+    };
+    const loadedRefnos = new Set<string>();
+    let loadedRootCount = 0;
+    let liveBatches = 0;
+    const bumpProgress = (value: number) => {
+      progress.value = Math.max(progress.value, Math.min(95, Math.floor(value)));
+    };
+
+    // 逐 SITE 老路：收集阶段占 5 → 55，SITE 之间按个数走，SITE 内按已收完的生成根走；
+    // 服务端整库入口：没有 SITE 维度，`generate` 是服务端流水线的进度（占到 50），`roots` 是这边已收记录的根（占到 95）
     const collected = await source.collectDbnum(dbno, {
       maxTotalRoots: fullLoad ? Number.POSITIVE_INFINITY : undefined,
       maxRefnos: fullLoad ? Number.POSITIVE_INFINITY : undefined,
@@ -1236,15 +1258,41 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         totalCount.value = siteCount;
         currentIndex.value = siteIndex;
         const scope = site?.name ?? `dbnum=${dbno}`;
-        // 服务端整库入口（收口计划 §17）没有 SITE 维度：`generate` 是服务端在生成，`roots` 是这边在取记录
         currentRefno.value = root ? `${scope} › ${root}` : scope;
-        statusMessage.value = phase === 'generate'
-          ? `gen-model：服务端生成 ${scope}，已完成 ${rootsDone}/${rootsTotal} 根`
-          : phase === 'roots'
-            ? `gen-model：${site ? `SITE ${siteIndex}/${siteCount} ` : ''}${scope}，生成根 ${rootsDone}/${rootsTotal}`
+        if (!site) {
+          const viewport = loadedRootCount > 0 ? ` · 已进视口 ${loadedRootCount} 根` : '';
+          statusMessage.value = phase === 'generate'
+            ? `gen-model：服务端生成 ${scope}，已完成 ${rootsDone}/${rootsTotal} 根${viewport}`
+            : `gen-model：${scope}，已收记录 ${rootsDone}/${rootsTotal} 根${viewport}`;
+          const fraction = rootsTotal > 0 ? rootsDone / rootsTotal : 0;
+          bumpProgress(5 + fraction * (phase === 'generate' ? 45 : 90));
+        } else {
+          statusMessage.value = phase === 'roots'
+            ? `gen-model：SITE ${siteIndex}/${siteCount} ${scope}，生成根 ${rootsDone}/${rootsTotal}`
             : `gen-model：SITE ${siteIndex}/${siteCount} ${scope}，正在 ensure...`;
-        const withinSite = rootsTotal > 0 ? rootsDone / rootsTotal : 0;
-        progress.value = 5 + Math.floor(((siteIndex - 1 + withinSite) / Math.max(1, siteCount)) * 50);
+          const withinSite = rootsTotal > 0 ? rootsDone / rootsTotal : 0;
+          progress.value = 5 + Math.floor(((siteIndex - 1 + withinSite) / Math.max(1, siteCount)) * 50);
+        }
+        syncGlobalLoadStatus();
+      },
+      onRefnosReady: async ({ refnos, rootsDone, rootsTotal }) => {
+        loadedRootCount = rootsDone;
+        if (refnos.length === 0) return;
+        liveBatches += 1;
+        const from = progress.value;
+        const to = Math.max(from, Math.min(95, 5 + Math.floor((rootsDone / Math.max(1, rootsTotal)) * 90)));
+        addTotals(await loadGenModelV1Refnos(
+          dtxLayer,
+          dbno,
+          refnos,
+          anyViewer,
+          { regenerate: false, replace: false },
+          [from, to],
+          `gen-model 整库 dbnum=${dbno} 第 ${liveBatches} 批`,
+        ));
+        for (const refno of refnos) loadedRefnos.add(refno);
+        statusMessage.value = `gen-model：dbnum=${dbno} 已进视口 ${rootsDone}/${rootsTotal} 根（${totals.loadedObjects} 个实例）`;
+        bumpProgress(to);
         syncGlobalLoadStatus();
       },
     });
@@ -1275,15 +1323,19 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
       return { loaded: true, instanceCount: 0, refnoCount: 0, refnos: [] };
     }
 
-    const totals = await loadGenModelV1Refnos(
-      dtxLayer,
-      dbno,
-      collected.refnos,
-      anyViewer,
-      { regenerate: false, replace: false },
-      [55, 95],
-      `gen-model 整库 dbnum=${dbno}`,
-    );
+    // 对账：还没进视口的构件在这里补装（逐 SITE 老路 = 全部；实时那一路正常为 0）
+    const remaining = collected.refnos.filter((refno) => !loadedRefnos.has(refno));
+    if (remaining.length > 0) {
+      addTotals(await loadGenModelV1Refnos(
+        dtxLayer,
+        dbno,
+        remaining,
+        anyViewer,
+        { regenerate: false, replace: false },
+        [Math.max(55, progress.value), 95],
+        `gen-model 整库 dbnum=${dbno}`,
+      ));
+    }
 
     if (loadOptions?.flyTo) {
       try {
@@ -1302,7 +1354,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
     syncGlobalLoadStatus();
     consoleStore.addLog(
       'info',
-      `[model-load] gen-model-v1 dbnum=${dbno} sites=${collected.sites.length} roots=${collected.generationRoots.length} refno_count=${collected.refnos.length} loaded_refnos=${totals.loadedRefnos} skipped_refnos=${totals.skippedRefnos} instance_count=${totals.loadedObjects} invalid_tubi=${totals.invalidTubi} mesh404=${totals.mesh404} no_geo=${totals.noGeo} pending=${collected.pending.length} truncated_roots=${collected.truncatedRoots.length} skipped_sites=${collected.skippedSites.length} errors=${failedRoots.length} ms=${Date.now() - startedAt}`
+      `[model-load] gen-model-v1 dbnum=${dbno} sites=${collected.sites.length} roots=${collected.generationRoots.length} refno_count=${collected.refnos.length} loaded_refnos=${totals.loadedRefnos} skipped_refnos=${totals.skippedRefnos} instance_count=${totals.loadedObjects} invalid_tubi=${totals.invalidTubi} mesh404=${totals.mesh404} no_geo=${totals.noGeo} pending=${collected.pending.length} truncated_roots=${collected.truncatedRoots.length} skipped_sites=${collected.skippedSites.length} errors=${failedRoots.length} live_batches=${liveBatches} ms=${Date.now() - startedAt}`
     );
     const summary =
       `${collected.budgetLimited ? '安全概览 ' : ''}dbnum=${dbno}：${collected.sites.length} 个 SITE / ${collected.generationRoots.length} 个生成根，` +

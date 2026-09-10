@@ -1,7 +1,7 @@
 # gen-model v1 接入：收口与下一步计划（两源对拍翻默认 · 批量 records · type-check 修复）
 
 - 日期：2026-09-09
-- 状态（2026-09-10 下午追加）：**§17 整库显示改由服务端拉起**——用户口径「show_dbnum 走 gen-model 的库级入口、前端只取 records」+ 评审标注「gen-model 用 kv-mem 形态、模型树由 e3d-io 提供」；服务端 S1 已落（gen-model worktree `gen-model-kvmem` 分支 `kvmem-dbnum-model-ensure`，提交 `dadbd821d`），前端 P12-1/P12-2 已落（`323c0d6`），P12-3 收尾已落（verify 脚本 `-Dbnum` 整库口径 + 指南 / CONTEXT / 决策），S0 用的 release 构建已出在 `D:\Rust\target-kvmem`；**live 未验**（等用户按 plan 2026-09-10 §11 起 kv-mem 形态的服务）
+- 状态（2026-09-10 下午追加）：**§17 整库显示改由服务端拉起**——用户口径「show_dbnum 走 gen-model 的库级入口、前端只取 records」+ 评审标注「gen-model 用 kv-mem 形态、模型树由 e3d-io 提供」；服务端 S1 已落（gen-model worktree `gen-model-kvmem` 分支 `kvmem-dbnum-model-ensure`，提交 `dadbd821d`），前端 P12-1/P12-2 已落（`323c0d6`），P12-3 收尾已落（verify 脚本 `-Dbnum` 整库口径 + 指南 / CONTEXT / 决策）；**第 3 稿「按 e3d-model 的方式去生成模型，实时生成」已落**（gen-model `d6a5d49ac`：内核换 e3d-model 流水线一发 + roots `ready`；前端本笔：边就绪边取边画，plan 2026-09-10 §12.6），release 构建在 `D:\Rust\target-kvmem`；**live 未验**（等用户按 plan 2026-09-10 §11 起 kv-mem 形态的服务）
 - 状态：D8 **已拍（B）并落地**（2026-09-09 晚，见 §10；翻后 live 整链 §11 已补齐）；D10 **已拍（A）并落地**（P10-1，§11）；D9 **已拍（A）并落地**：P9-1 契约 spec §4.5.2（§11）、P9-2 服务端（gen-model `2e9d65e91`，§13）、**P9-3 前端多根打包**（2026-09-10，§15；单测 / type-check / eslint 过，**live 提速未验**——本机没有跑新构建的 gen-model）；P5 模型变更同步已按用户口径整条下线（§12）；全量 vitest 既有失败已**全部修完**（第一批 §14、第二批 §16；2026-09-10 下午 **264 文件 / 1977 条 / 0 failed**）
 - 前置：`docs/plans/2026-09-06-gen-model-v1-tree-and-viewer-adapter-plan.md`（下称「母计划」，P0–P7 + P3-c + P2-4 + Q2 全部落地）
 - 范围：plant3d-web（主）+ gen-model `src/web_service/`（P9 最小增补；该仓正被别的会话密集重构，见 §7 R1）
@@ -325,3 +325,5 @@ runtime/release 两条 GLB 链路不动。
 **未验证**：live。本机 `:9099` 是 0.1.21 出厂包且 `data_face=ingest`，两个新端点在它上面根本没有；要真跑得先按计划 §6 的 **S0** 把 gen-model 切到 kv-mem 形态起一份新构建（长驻进程由用户自己起），再量「耗时 / 根数 / RSS」三个数。
 
 **P12-3 · 收尾**（2026-09-10 17:0x，接班会话）：`scripts/verify-gen-model-v1.ps1` 加 `-Dbnum <n>` 整库口径（roots 探能力 → ensure 202 → 轮询到终态并打耗时 / 进度 / 前后 RSS → 全部根 ≤64 一批 records；404 / 409 只记一句），对 `:9099` 真跑一次四步按预期「404 记一句 + 跳过 ×3」；联调指南补 kv-mem 起法（`AIOS_STORE_MODE=embedded-mem`）、`show_dbnum` 两条路与 `-Dbnum` 用法；`CONTEXT.md` 加「整库入口」词条；决策库落一条。S0 用的构建已出在独立 target `D:\Rust\target-kvmem\release\aios-database.exe`（`dadbd821d`），起服务与量数的命令在计划 §11——**仍等用户起**。
+
+**第 3 稿 · 实时**（2026-09-10 17:1x–17:4x，用户口径「按 e3d-model 的方式去生成模型，实时生成」，读法经用户确认；全文 plan 2026-09-10 §12）：查证第 2 稿的 S1 worker 经 `ensure_model_scope_generated_from_roots` **逐根串行**（每根各建一次 `E3dModelService`、各起一个 worker，整库无并行，量级小时），而 `E3dModelService::generate_and_persist_roots(dbnum, 全部根)` 才是 16 路常驻 worker + 按片提交的 Core.dll 式流水线。改法：gen-model `d6a5d49ac`——worker 一发交 `generate_roots_report` → 流水线，进度由 1 s ticker 数投影回执，`GET …/model/roots` 每行 `ready` + `?ready=1`（85 passed）；前端本笔——`collectDbnumViaServer` 每拍 `tasks/{id}` + `roots?ready=1`、新就绪的根立刻 `records` 并经 `onRefnosReady` 进 DTX，收尾对账；旧 `dadbd821d` 构建退化为等终态整取。全量 vitest 1991 / 0 failed；type-check 新增 0。release 构建换成 `d6a5d49ac`，起法不变。**live 仍等用户**。

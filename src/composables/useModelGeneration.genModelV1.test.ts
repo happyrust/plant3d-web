@@ -211,6 +211,53 @@ describe('showModelByDbnum（gen-model-v1 整库）', () => {
     }));
   });
 
+  it('服务端整库入口 · 实时：每批就绪根的构件立刻装入 DTX（不等 collectDbnum 结束），收尾只补装没进视口的，进度只往前走', async () => {
+    const { useModelGeneration } = await import('./useModelGeneration');
+    const viewer = makeViewer();
+    const gen = useModelGeneration({ viewer, db_num: 7997 });
+    const seen: string[] = [];
+    let loadsDuringCollect = 0;
+    collectDbnumMock.mockImplementation(async (
+      dbnum: number,
+      options: { onProgress?: (p: any) => void; onRefnosReady?: (b: any) => Promise<void> | void },
+    ) => {
+      const base = { siteIndex: 1, siteCount: 1, site: null, root: null };
+      options.onProgress?.({ phase: 'generate', ...base, rootsDone: 0, rootsTotal: 4 });
+      options.onProgress?.({ phase: 'generate', ...base, rootsDone: 2, rootsTotal: 4 });
+      seen.push(`${gen.statusMessage.value} | ${gen.progress.value}`);
+      options.onProgress?.({ phase: 'roots', ...base, rootsDone: 2, rootsTotal: 4, root: '24381_101412' });
+      await options.onRefnosReady?.({ roots: ['24381_101410', '24381_101412'], refnos: ['24381_1', '24381_2'], rootsDone: 2, rootsTotal: 4 });
+      loadsDuringCollect = loadInstancesMock.mock.calls.length;
+      seen.push(`${gen.statusMessage.value} | ${gen.progress.value}`);
+      // 服务端进度倒着报也不能让进度条回退
+      options.onProgress?.({ phase: 'generate', ...base, rootsDone: 3, rootsTotal: 4 });
+      seen.push(`${gen.statusMessage.value} | ${gen.progress.value}`);
+      await options.onRefnosReady?.({ roots: ['24381_101414'], refnos: ['24381_3'], rootsDone: 3, rootsTotal: 4 });
+      // 第四根没有构件：回调只更新计数
+      await options.onRefnosReady?.({ roots: ['24381_101416'], refnos: [], rootsDone: 4, rootsTotal: 4 });
+      return {
+        dbnum, sites: [{ refno: '24381_101405', name: '/1PTU-INST23' }], refnos: ['24381_1', '24381_2', '24381_3', '24381_9'],
+        generationRoots: ['24381_101410', '24381_101412', '24381_101414', '24381_101416'], pending: [], empty: [], truncatedRoots: [], errors: {}, skippedSites: [],
+      };
+    });
+
+    const result = await gen.showModelByDbnum(7997);
+
+    expect(collectDbnumMock).toHaveBeenCalledWith(7997, expect.objectContaining({ onRefnosReady: expect.any(Function) }));
+    // 两批实时装入在 collectDbnum 返回之前就发生了；收尾只补装 collectDbnum 结果里多出来的那一个构件
+    expect(loadsDuringCollect).toBe(1);
+    expect(loadInstancesMock).toHaveBeenCalledTimes(3);
+    expect(loadInstancesMock.mock.calls.map((c) => c[2])).toEqual([['24381_1', '24381_2'], ['24381_3'], ['24381_9']]);
+    expect(seen).toEqual([
+      'gen-model：服务端生成 dbnum=7997，已完成 2/4 根 | 27',
+      'gen-model：dbnum=7997 已进视口 2/4 根（4 个实例） | 50',
+      'gen-model：服务端生成 dbnum=7997，已完成 3/4 根 · 已进视口 2 根 | 50',
+    ]);
+    expect(result).toEqual({ loaded: true, instanceCount: 8, refnoCount: 4, refnos: ['24381_1', '24381_2', '24381_3', '24381_9'] });
+    expect(gen.progress.value).toBe(100);
+    expect(addLogMock).toHaveBeenCalledWith('info', expect.stringContaining('live_batches=2'));
+  });
+
   it('撞到安全概览预算：toast 提示从模型树按需加载 + show_dbnum_full=1，回 budgetLimited；带了 ?show_dbnum_full=1 就不设预算', async () => {
     const { useModelGeneration } = await import('./useModelGeneration');
     const gen = useModelGeneration({ viewer: makeViewer(), db_num: 7997 });

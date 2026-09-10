@@ -685,17 +685,37 @@ export function genModelV1DbnumModelEnsure(
 export type DbnumModelRootsResponse = {
   source: string;
   dbnum: number;
+  /** 该库全部根数（`?ready=1` 时也是全部，不是回了几条） */
   total: number;
-  /** `generation_root` 是 `a/b`（服务端口径），调用方自己 `fromV1Refno` */
-  roots: { generation_root: string; noun?: string; name?: string }[];
+  /** 其中已就绪（投影里有回执、`records` 现在就读得到）的根数；旧 §4.5.3 构建没有这一格 */
+  ready_total?: number;
+  /** 服务端回显：这次是不是只回了就绪的根；旧构建没有这一格 */
+  only_ready?: boolean;
+  /**
+   * `generation_root` 是 `a/b`（服务端口径），调用方自己 `fromV1Refno`。
+   * `ready`：投影里有这根的回执（判据与整库任务的进度同一个）；旧构建的行没有这一格。
+   */
+  roots: { generation_root: string; noun?: string; name?: string; ready?: boolean }[];
 };
 
-/** 该库的全部生成根（只读，不生成）：拿它直接喂多根 `records`，不必靠逐 SITE ensure 的回执凑清单。 */
+export type GenModelV1DbnumModelRootsOptions = GenModelV1RequestOptions & {
+  /** 只要就绪的根（`?ready=1`）——整库任务在飞时每拍问一次，新就绪的立刻去取 `records`（plan 2026-09-10 §12） */
+  ready?: boolean;
+};
+
+/**
+ * 该库的全部生成根（只读，不生成）：拿它直接喂多根 `records`，不必靠逐 SITE ensure 的回执凑清单。
+ * 每行的 `ready` 说这根的 `records` 现在读得到；`ready: true` 只回就绪的那些。
+ */
 export function genModelV1DbnumModelRoots(
   dbnum: number,
-  options?: GenModelV1RequestOptions,
+  options?: GenModelV1DbnumModelRootsOptions,
 ): Promise<DbnumModelRootsResponse> {
-  return genModelV1Fetch<DbnumModelRootsResponse>(`/api/v1/dbnums/${dbnum}/model/roots`, options);
+  const { ready, ...request } = options ?? {};
+  return genModelV1Fetch<DbnumModelRootsResponse>(`/api/v1/dbnums/${dbnum}/model/roots`, {
+    ...request,
+    ...(ready ? { query: { ready: '1' } } : {}),
+  });
 }
 
 export type TaskEntryDto = {

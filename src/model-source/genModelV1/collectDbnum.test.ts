@@ -40,7 +40,7 @@ function fakeTree(): TreeSource {
   } as unknown as TreeSource;
 }
 
-function fakeRecords(plan: Record<string, Partial<EnsureAndCollectResult> & { roots?: string[] }>): GenModelV1ModelRecordSource & { ensureAndCollect: ReturnType<typeof vi.fn> } {
+function fakeRecords(plan: Record<string, Partial<EnsureAndCollectResult> & { roots?: string[] }>): GenModelV1ModelRecordSource & { ensureAndCollect: ReturnType<typeof vi.fn>; collectRoots: ReturnType<typeof vi.fn> } {
   const ensureAndCollect = vi.fn(async (refno: string, options: EnsureAndCollectOptions = {}): Promise<EnsureAndCollectResult> => {
     const entry = plan[refno] ?? {};
     const allRoots = entry.roots ?? [];
@@ -314,5 +314,166 @@ describe('collectDbnumRefnos · 服务端整库入口', () => {
     const result = await collectDbnumRefnos(fakeTree(), records, 7997, { taskPollIntervalMs: 0 }, api);
     expect(result.generationRoots).toEqual(['24381_145018']);
     expect(result.refnos).toEqual(['24381_1', '24381_2']);
+  });
+
+  it('旧 §4.5.3 构建（roots 行没有 ready）：等终态整取，onRefnosReady 收尾时给一次、带全部构件', async () => {
+    const records = fakeRecords(plan);
+    const api = serverEntryApi({
+      expectedRoots: 2,
+      states: [{ state: 'succeeded', units_done: 2 }],
+      roots: ['24381/145018', '24383/9'],
+    });
+    const batches: { roots: string[]; refnos: string[]; rootsDone: number; rootsTotal: number }[] = [];
+    const result = await collectDbnumRefnos(
+      fakeTree(), records, 7997, { taskPollIntervalMs: 0, onRefnosReady: (batch) => { batches.push(batch); } }, api,
+    );
+    expect(batches).toEqual([{ roots: ['24381_145018', '24383_9'], refnos: ['24381_1', '24381_2', '24383_1'], rootsDone: 2, rootsTotal: 2 }]);
+    expect(result.refnos).toEqual(['24381_1', '24381_2', '24383_1']);
+    // 探能力那一发回的就是全清单，收尾不再多打
+    expect(api.dbnumRoots).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * 实时（plan 2026-09-10 §12）：服务端 `roots` 认 `ready`——流水线每提交一片，那些根就绪；前端每拍问 `?ready=1`，
+ * 新就绪的根立刻取记录并经 `onRefnosReady` 交给调用方，不等任务终态。
+ */
+describe('collectDbnumRefnos · 服务端整库入口 · 实时（roots 认 ready）', () => {
+  type Tick = { state: string; units_done: number; ready: string[] };
+
+  /** `roots?ready=1` 按当前拍回就绪子集（带 `ready:true` / `only_ready:true`）；不带 `ready` 回全清单并逐行标 `ready`。 */
+  function liveServerApi(options: { allRoots: string[]; ticks: Tick[]; expectedRoots?: number }) {
+    let poll = 0;
+    const expectedRoots = options.expectedRoots ?? options.allRoots.length;
+    const currentTick = () => options.ticks[Math.max(0, Math.min(poll - 1, options.ticks.length - 1))]!;
+    const dbnumRoots = vi.fn(async (dbnum: number, opts?: { ready?: boolean }) => {
+      const readyNow = new Set(currentTick().ready);
+      const rows = options.allRoots.map((root) => ({ generation_root: root, noun: 'EQUI', name: root, ready: readyNow.has(root) }));
+      const filtered = opts?.ready ? rows.filter((row) => row.ready) : rows;
+      return { source: 'direct', dbnum, total: options.allRoots.length, ready_total: readyNow.size, only_ready: opts?.ready === true, roots: filtered };
+    });
+    return {
+      ensureDbnum: vi.fn(async (dbnum: number) => ({
+        task_id: `dbnum-model-ensure-${dbnum}-1`, dbnum, expected_roots: expectedRoots, state: 'queued',
+        model_source: 'memory', model_source_reason: 'read-through', durable: false,
+      })),
+      task: vi.fn(async (taskId: string) => {
+        poll += 1;
+        const tick = currentTick();
+        return { task_id: taskId, kind: 'dbnum_model_ensure', state: tick.state, units_done: tick.units_done, total_units: expectedRoots, result: null };
+      }),
+      dbnumRoots,
+    } as unknown as DbnumServerEntryApi & { ensureDbnum: ReturnType<typeof vi.fn>; task: ReturnType<typeof vi.fn>; dbnumRoots: ReturnType<typeof vi.fn> };
+  }
+
+  const livePlan = {
+    all: { items: [item('101_1', '101_1'), item('101_2', '101_1'), item('102_1', '102_1'), item('103_1', '103_1')] },
+  };
+
+  it('每拍只取新就绪的根、立刻回调装视口；终态前就有构件回调；收尾不重取', async () => {
+    const records = fakeRecords(livePlan);
+    const api = liveServerApi({
+      allRoots: ['101/1', '102/1', '103/1'],
+      ticks: [
+        { state: 'running', units_done: 1, ready: ['101/1'] },
+        { state: 'running', units_done: 2, ready: ['101/1', '102/1'] },
+        { state: 'succeeded', units_done: 3, ready: ['101/1', '102/1', '103/1'] },
+      ],
+    });
+    const progress: CollectDbnumProgress[] = [];
+    const batches: { roots: string[]; refnos: string[]; rootsDone: number; rootsTotal: number }[] = [];
+    const result = await collectDbnumRefnos(
+      fakeTree(), records, 7997,
+      { taskPollIntervalMs: 0, onProgress: (p) => progress.push(p), onRefnosReady: (batch) => { batches.push(batch); } },
+      api,
+    );
+
+    expect(records.collectRoots.mock.calls.map((c) => c[0])).toEqual([['101_1'], ['102_1'], ['103_1']]);
+    expect(records.ensureAndCollect).not.toHaveBeenCalled();
+    expect(batches).toEqual([
+      { roots: ['101_1'], refnos: ['101_1', '101_2'], rootsDone: 1, rootsTotal: 3 },
+      { roots: ['102_1'], refnos: ['102_1'], rootsDone: 2, rootsTotal: 3 },
+      { roots: ['103_1'], refnos: ['103_1'], rootsDone: 3, rootsTotal: 3 },
+    ]);
+    // 第一批构件在任务终态（generate 3/3）之前就回来了——这就是「实时」
+    const flat = progress.map((p) => `${p.phase}:${p.rootsDone}/${p.rootsTotal}:${p.root ?? '-'}`);
+    expect(flat.indexOf('roots:1/3:101_1')).toBeLessThan(flat.indexOf('generate:3/3:-'));
+    expect(flat).toEqual([
+      'generate:0/3:-',
+      'generate:1/3:-', 'roots:1/3:101_1',
+      'generate:2/3:-', 'roots:2/3:102_1',
+      'generate:3/3:-', 'roots:3/3:103_1',
+    ]);
+    // 每拍一次 ?ready=1，收尾再拿一次全清单对账
+    expect(api.dbnumRoots.mock.calls.map((c) => c[1]?.ready === true)).toEqual([true, true, true, false]);
+
+    expect(result.generationRoots).toEqual(['101_1', '102_1', '103_1']);
+    expect(result.refnos).toEqual(['101_1', '101_2', '102_1', '103_1']);
+    expect(result.errors).toEqual({});
+    expect(result.pending).toEqual([]);
+    expect(result.budgetLimited).toBe(false);
+    expect(dbnumServerEntrySupport(api)).toBe('yes');
+  });
+
+  it('服务端一根都没完成时不问 ready；partial 收口后仍没就绪的根记 errors、不去取它的 records', async () => {
+    const records = fakeRecords(livePlan);
+    const api = liveServerApi({
+      allRoots: ['101/1', '102/1', '103/1'],
+      ticks: [
+        { state: 'running', units_done: 0, ready: [] },
+        { state: 'partial', units_done: 2, ready: ['101/1', '102/1'] },
+      ],
+    });
+    const result = await collectDbnumRefnos(fakeTree(), records, 7997, { taskPollIntervalMs: 0 }, api);
+    // 第一拍 units_done=0：没有就绪根可问；第二拍 + 收尾
+    expect(api.dbnumRoots).toHaveBeenCalledTimes(2);
+    expect(records.collectRoots.mock.calls.map((c) => c[0])).toEqual([['101_1', '102_1']]);
+    expect(result.refnos).toEqual(['101_1', '101_2', '102_1']);
+    expect(Object.keys(result.errors)).toEqual(['103_1']);
+    expect(result.errors['103_1']).toContain('partial');
+    expect(result.truncatedRoots).toEqual([]);
+    expect(result.budgetLimited).toBe(false);
+  });
+
+  it('预算在批边界上判：构件到 maxRefnos 就不再取后面的根，其余根记 truncatedRoots、budgetLimited', async () => {
+    const records = fakeRecords(livePlan);
+    const api = liveServerApi({
+      allRoots: ['101/1', '102/1', '103/1'],
+      ticks: [
+        { state: 'running', units_done: 1, ready: ['101/1'] },
+        { state: 'running', units_done: 2, ready: ['101/1', '102/1'] },
+        { state: 'succeeded', units_done: 3, ready: ['101/1', '102/1', '103/1'] },
+      ],
+    });
+    const result = await collectDbnumRefnos(fakeTree(), records, 7997, { taskPollIntervalMs: 0, maxRefnos: 2 }, api);
+    // a 的两个构件用完预算；b 那一批取到了记录但构件被切掉；预算已尽，第三拍不再问 ready、也不取 c
+    expect(records.collectRoots.mock.calls.map((c) => c[0])).toEqual([['101_1'], ['102_1']]);
+    expect(api.dbnumRoots.mock.calls.map((c) => c[1]?.ready === true)).toEqual([true, true, false]);
+    expect(result.refnos).toEqual(['101_1', '101_2']);
+    expect(result.truncatedRoots).toEqual(['103_1']);
+    expect(result.budgetLimited).toBe(true);
+
+    const limitedRoots = fakeRecords(livePlan);
+    const api2 = liveServerApi({
+      allRoots: ['101/1', '102/1', '103/1'],
+      ticks: [{ state: 'succeeded', units_done: 3, ready: ['101/1', '102/1', '103/1'] }],
+    });
+    const byRoots = await collectDbnumRefnos(fakeTree(), limitedRoots, 7997, { taskPollIntervalMs: 0, maxTotalRoots: 1 }, api2);
+    expect(limitedRoots.collectRoots.mock.calls.map((c) => c[0])).toEqual([['101_1']]);
+    expect(byRoots.truncatedRoots).toEqual(['102_1', '103_1']);
+    expect(byRoots.budgetLimited).toBe(true);
+  });
+
+  it('超时未终态：已就绪的照常进视口，其余根记 pending', async () => {
+    const records = fakeRecords(livePlan);
+    const api = liveServerApi({
+      allRoots: ['101/1', '102/1', '103/1'],
+      ticks: [{ state: 'running', units_done: 1, ready: ['101/1'] }],
+    });
+    const result = await collectDbnumRefnos(fakeTree(), records, 7997, { taskPollIntervalMs: 0, taskWaitTimeoutMs: 0 }, api);
+    expect(records.collectRoots.mock.calls.map((c) => c[0])).toEqual([['101_1']]);
+    expect(result.refnos).toEqual(['101_1', '101_2']);
+    expect(result.pending).toEqual(['102_1', '103_1']);
+    expect(result.errors).toEqual({});
   });
 });

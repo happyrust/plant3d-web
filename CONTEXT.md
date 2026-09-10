@@ -261,7 +261,7 @@ gen-model-v1 源下前端拿到的树与三维模型**全部是 API 即时给出
 _Avoid_: 模型变更同步、被动重载、库侧水位、等 drain
 
 **整库入口 (Whole-Dbnum Entry)**:
-`show_dbnum` 整库显示在 gen-model 读透 / kv-mem 形态下的取数路（spec §4.5.3，收口计划 §17，2026-09-10 起）：`POST dbnums/{dbnum}/model/ensure`（服务端自己枚举该库全部生成根、202 回 `task_id` + 真数 `expected_roots`、后台生成进进程内投影）→ 只查**自己刚发起的这一个** `task_id` 到终态 → `GET dbnums/{dbnum}/model/roots` 权威根清单 → 多根 `records`。生成的编排全在服务端，前端一根也不催。旧构建没有这条路由（404）按 api 对象记一次、以后直接走逐 SITE 老路；该库以 rocksdb 为准（409）只退这一次。任务与投影都只活在服务端进程内，重启后要重新点显示。它不是 `dbnums/{dbnum}/model/rebuild`——那是摄入形态、durable 队列的强制整库重建，前端不用。
+`show_dbnum` 整库显示在 gen-model 读透 / kv-mem 形态下的取数路（spec §4.5.3，收口计划 §17，2026-09-10 起）：`POST dbnums/{dbnum}/model/ensure`（服务端自己枚举该库全部生成根、202 回 `task_id` + 真数 `expected_roots`、e3d-model 流水线并行生成、按片提交进进程内投影）→ 每拍只查**自己刚发起的这一个** `task_id`（进度）+ `GET dbnums/{dbnum}/model/roots?ready=1`（哪些根的投影已提交）→ 新就绪的根**立刻**多根 `records` 进视口，不等终态——「实时」（plan 2026-09-10 §12）。生成的编排全在服务端，前端一根也不催。旧构建没有这条路由（404）按 api 对象记一次、以后直接走逐 SITE 老路；该库以 rocksdb 为准（409）只退这一次。任务与投影都只活在服务端进程内，重启后要重新点显示。它不是 `dbnums/{dbnum}/model/rebuild`——那是摄入形态、durable 队列的强制整库重建，前端不用。
 _Avoid_: rebuild、整库重建、`/tasks` 列表轮询、订阅任务、把逐 SITE ensure 当成整库的契约
 
 ## 三维校审批注

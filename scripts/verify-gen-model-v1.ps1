@@ -277,7 +277,13 @@ if ($Dbnum -gt 0) {
       }
       if ([int]$task.units_done -ne $lastDone) {
         $lastDone = [int]$task.units_done
-        Write-Host ('       {0,7:N0} s  {1}/{2}  failed={3}  state={4}' -f $sw.Elapsed.TotalSeconds, $task.units_done, $task.total_units, $task.detail.failed, $task.state)
+        # 实时半边（第 3 稿 §12）：认 ready 的服务端上，就绪根数应与 units_done 同步涨——前端就是按它边取边画的
+        $readyNote = ''
+        try {
+          $readyList = GetJson "/api/v1/dbnums/$Dbnum/model/roots?ready=1"
+          if ($null -ne $readyList.ready_total) { $readyNote = "  ready=$($readyList.ready_total)" }
+        } catch { $readyNote = '' }
+        Write-Host ('       {0,7:N0} s  {1}/{2}  failed={3}  state={4}{5}' -f $sw.Elapsed.TotalSeconds, $task.units_done, $task.total_units, $task.detail.failed, $task.state, $readyNote)
       }
     } while (($task.state -notin $terminalStates) -and ($sw.Elapsed.TotalSeconds -lt $DbnumWaitSec))
     $rssAfter = [long](GetJson '/api/v1/health').model_concurrency.process_rss_bytes

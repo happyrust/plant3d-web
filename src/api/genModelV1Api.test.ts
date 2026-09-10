@@ -126,6 +126,19 @@ describe('genModelV1Fetch 基座', () => {
     expect(String(roots.mock.calls[0]![0])).toBe(`${BASE}/api/v1/dbnums/7997/model/roots`);
     expect(roots.mock.calls[0]![1]?.method).toBe('GET');
 
+    // 实时半边（plan 2026-09-10 §12）：只要就绪的根 → `?ready=1`，行上带 `ready`
+    const readyRoots = fetchMockReturning(jsonResponse(200, {
+      source: 'direct', dbnum: 7997, total: 2720, ready_total: 1, only_ready: true,
+      roots: [{ generation_root: '24381/145018', noun: 'EQUI', name: '/PUMP-01', ready: true }],
+    }));
+    const ready = await genModelV1DbnumModelRoots(7997, { baseUrl: BASE, fetchImpl: readyRoots, ready: true, identity: { project: 'P' } });
+    expect(ready.only_ready).toBe(true);
+    expect(ready.roots[0]!.ready).toBe(true);
+    const readyUrl = new URL(String(readyRoots.mock.calls[0]![0]));
+    expect(readyUrl.pathname).toBe('/api/v1/dbnums/7997/model/roots');
+    expect(readyUrl.searchParams.get('ready')).toBe('1');
+    expect(readyUrl.searchParams.get('project')).toBe('P');
+
     const task = fetchMockReturning(jsonResponse(200, {
       task_id: 'dbnum-model-ensure-7997-1', kind: 'dbnum_model_ensure', state: 'running', units_done: 12, total_units: 2720,
     }));

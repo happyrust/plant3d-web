@@ -1,6 +1,6 @@
 # 开发计划：`show_dbnum` 整库显示由服务端拉起（kv-mem 读透形态 + e3d-io 树）
 
-> 状态：**第 2 稿 approved 并已落地（§9）；第 3 稿 §12 待评审**（2026-09-10 17:1x）——用户口径「按 e3d-model 的方式去生成模型，实时生成」把 S1 的生成内核与前端的等待方式各改一处，端点不动。第 1 稿走 `dbnums/{dbnum}/model/rebuild`，评审标注推翻了它的底座，见 §0。
+> 状态：**第 2 稿 approved 并已落地（§9）；第 3 稿 §12 用户 17:1x 确认读法、已落地（§12.6）**——用户口径「按 e3d-model 的方式去生成模型，实时生成」把 S1 的生成内核与前端的等待方式各改一处，端点不动。live 仍等用户起服务（§11）。第 1 稿走 `dbnums/{dbnum}/model/rebuild`，评审标注推翻了它的底座，见 §0。
 > 上游背景：`2026-09-09-gen-model-v1-closeout-and-next-steps-plan.md` §12 / §15 / §16。
 
 ## 0. 评审回执与本稿的改动
@@ -219,3 +219,35 @@ pwsh scripts/verify-gen-model-v1.ps1 -BaseUrl http://127.0.0.1:8022 -Dbnum 7997
 | 生成中的库同时被单根 `ensure` 打 | `persist_memory_batch` 在 `db_generation_lock(dbnum)` 下提交，单根路径同一把锁，串行安全；只是慢，不冲突 |
 | 旧 §4.5.3 构建（`dadbd821d`）不认 `ready` | 前端按「响应行里没有 `ready` 字段」退回等终态整取，不报错 |
 | 增量装 DTX 让 `budgetLimited` 判在半路 | 预算判在每批边界，超出的根记 `truncatedRoots`、任务照常跑完（服务端不知道预算） |
+
+### 12.6 落地记录（2026-09-10 17:1x–17:4x，用户「读法对，按 §12.3 开工」）
+
+**S1b · gen-model**（worktree `gen-model-kvmem`，提交 **`d6a5d49ac`**，在 `dadbd821d` 之上）
+
+- `model_dbnum_ensure::spawn_worker`：没就绪的根一次交给 `ModelRefreshPolicy::generate_roots_report`（→ `generate_and_persist_roots` 流水线），
+  仍包在 `scope_memory_only` 里；起任务时已有回执的根不重算。走 `generate_roots_report` 而不是直接调服务，是为了保住它里面的
+  frozen-source 钉版（Q9）与只写内存的分流——单根 `ensure` 最终也是这个函数，两条入口同一份口径。
+- 进度：1 s ticker 数「预期根 ∩ 有回执」；终态 `failed` = 预期根里最终没有回执的（不再用 `generate_roots_report` 一根死信整批记失败的粗口径）。
+  `detail` 加 `cached` / `pipeline`。
+- `GET …/model/roots` 每行 `ready`（`root_ready` = 投影回执）、`?ready=1`、`ready_total` / `only_ready`。spec §4.5.3 同步。
+- 源码钉：worker 一发交流水线且不含 `ensure_model_scope_generated_from_roots`、ticker 先于流水线起；`root_ready` 只认回执。
+- 验证：`cargo check --lib --tests` 干净；`cargo test --lib -- web_service model_dbnum_ensure model_rebuild task_registry` **85 passed**（83 + 2）；
+  `cargo fmt --check` 只剩 `handlers.rs:1311` 一处 HEAD 上就有的旧 diff（未动）。构建落 `D:\Rust\target-kvmem\release\aios-database.exe`。
+
+**P12b · plant3d-web**（本笔）
+
+- `genModelV1DbnumModelRoots(dbnum, { ready: true })` → `?ready=1`；响应类型加 `ready_total` / `only_ready` / 行 `ready`。
+- `collectDbnumViaServer` 改成每拍 `tasks/{id}` + `roots?ready=1`，新就绪的根立刻 `collectRoots` 并经新回调 **`onRefnosReady`** 交给调用方
+  （会被 await，DTX 装载不重叠）；服务端报了进度（或任务查不到）才开始问 `ready`；预算在批边界上判；收尾全清单对账——
+  终态仍没就绪的根记 `errors`（`failed / partial`）或 `pending`（超时）。旧 §4.5.3 构建（行没有 `ready`）退化为等终态整取，
+  探能力那一发就是全清单、不多打。
+- `useModelGeneration.showModelByDbnumGenModelV1`：`onRefnosReady` 每批就绪构件立刻 `loadGenModelV1Refnos`，收尾只补装
+  `collected.refnos` 里还没进视口的（逐 SITE 老路 = 全部）；进度条只往前走（服务端进度占到 50、已收记录占到 95）；
+  文案「服务端生成 N/M 根 · 已进视口 K 根」；日志加 `live_batches`。
+- 单测新增 6 条：实时两拍各取一次且终态前就有构件回调 / 一根未成不问 ready + partial 未就绪根记 errors / 预算在批边界（refnos 与 roots 两种）/
+  超时记 pending / 旧构建 `onRefnosReady` 收尾给一次 / api `?ready=1`；`useModelGeneration` 实时装载一条。
+- 验证：受影响 4 文件 51/51 绿；`npm run type-check` 631 / 基线 631 / 新增 0；eslint 0 错；全量 vitest **264 文件 / 1991 条 / 0 failed**。
+- `verify-gen-model-v1.ps1 -Dbnum` 的进度行加 `ready=N`（`roots?ready=1` 的 `ready_total`），认 ready 的服务端上它应与 `units_done` 同步涨。
+
+**仍未验**：live——等用户按 §11 起 kv-mem 形态的服务（构建已换成 `d6a5d49ac`，命令不变）。看点：第一片 16 根提交后视口是否就出几何、
+`/health.geometry_concurrency.active` 生成期间是否接近 16、`-Dbnum 7997` 终态那行的 `elapsed` 对比第 2 稿的串行量级。
