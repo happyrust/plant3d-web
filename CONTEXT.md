@@ -253,8 +253,8 @@ gen-model-v1 源下模型树合成的唯一根 `gm-root:<project>:<mdb>`，child
 _Avoid_: WORL、树根 refno
 
 **生成根投影 (Generation-Root Projection)**:
-gen-model 的几何记录（`model/records`）按生成根组织：记录上的 `owner` 是生成根而不是直接属主，一个构件的几何要经它所在的根整体取回。前端因此「按根收、按构件缓存」——对任一构件 ensure，服务端解到根、整根记录写进缓存，同根其它构件直接命中。
-_Avoid_: 直接属主、按 refno 单条查询、parquet 分桶
+gen-model 的几何记录（`model/records`）按生成根组织：记录上的 `owner` 是生成根而不是直接属主，一个构件的几何要经它所在的根整体取回。前端因此「按根收、按构件缓存」——对任一构件 ensure，服务端解到根、整根记录写进缓存，同根其它构件直接命中。一次 ensure 解出多根时 `records` **多根打包**取（`generation_roots[]`，同 Ref0 的根一批 ≤64，平铺响应按 `owner` 归根；spec §4.5.2，2026-09-10 起），旧服务端不认识该字段就自动退回逐根——批量只是传输形态，缓存与分型口径不变。
+_Avoid_: 直接属主、按 refno 单条查询、parquet 分桶、逐根一次请求当成契约
 
 **即时生成数据 (On-Demand Data)**:
 gen-model-v1 源下前端拿到的树与三维模型**全部是 API 即时给出的**：树读 `/tree/*`（内存里的 MDB 骨架），几何走 `model/ensure`（当场生成）→ `model/records` → `/meshes/{hash}.mesh`。前端不依赖服务端库里的持久数据、不看 `model-memory` / `model-database` 之分、不订阅 `model_drain` / WS 任务事件、不做被动重载——要新几何就再显示一次或「重新生成」。原「模型变更同步」（WS + 15 s 轮询 `GET /tasks?kind=model_drain` → reload）2026-09-09 按用户口径整条下线（收口计划 §12，决策见共享决策库）。

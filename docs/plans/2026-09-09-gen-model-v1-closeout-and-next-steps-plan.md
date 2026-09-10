@@ -1,7 +1,7 @@
 # gen-model v1 接入：收口与下一步计划（两源对拍翻默认 · 批量 records · type-check 修复）
 
 - 日期：2026-09-09
-- 状态：D8 **已拍（B）并落地**（2026-09-09 晚，见 §10；翻后 live 整链 §11 已补齐）；D10 **已拍（A）并落地**（P10-1，§11）；D9 **已拍（A）**：P9-1 契约 spec §4.5.2（§11）、**P9-2 服务端已落地**（gen-model `2e9d65e91`，§13），P9-3 前端多根打包待做；P5 模型变更同步已按用户口径整条下线（§12）
+- 状态：D8 **已拍（B）并落地**（2026-09-09 晚，见 §10；翻后 live 整链 §11 已补齐）；D10 **已拍（A）并落地**（P10-1，§11）；D9 **已拍（A）并落地**：P9-1 契约 spec §4.5.2（§11）、P9-2 服务端（gen-model `2e9d65e91`，§13）、**P9-3 前端多根打包**（2026-09-10，§15；单测 / type-check / eslint 过，**live 提速未验**——本机没有跑新构建的 gen-model）；P5 模型变更同步已按用户口径整条下线（§12）；全量 vitest 既有失败第一批已修（§14）
 - 前置：`docs/plans/2026-09-06-gen-model-v1-tree-and-viewer-adapter-plan.md`（下称「母计划」，P0–P7 + P3-c + P2-4 + Q2 全部落地）
 - 范围：plant3d-web（主）+ gen-model `src/web_service/`（P9 最小增补；该仓正被别的会话密集重构，见 §7 R1）
 
@@ -42,7 +42,7 @@
 | --- | --- | --- |
 | P9-1 | 定契约（D9）：推荐 `POST /api/v1/model/records` 请求体加可选 `generation_roots: ["a/b", …]`（≤64 根/次，与单根 `generation_root` 互斥），响应 items 平铺（`owner` 本来就是生成根，天然可分组），分页游标跨根连续；写进 `docs/specs/web-service-api.md` 草案段 | **草案已写**（2026-09-09 晚，D9 按 A，决策 d-181）：gen-model spec 新增 §4.5.2（单根现状补齐 + 批量草案，见 §11）；gen-model 侧会话/用户认可契约再动代码 |
 | P9-2 | gen-model 实现 + 单测（写锁范围只在 `src/web_service/`，与在改会话协调，见 R1） | **过**（2026-09-09 深夜，gen-model `2e9d65e91`，见 §13）：`cargo test --lib -- web_service` 62 passed（+2）；单根请求 / 响应形状一字不改；**未 live**（本机 `:9099` 是 0.1.21 出厂包） |
-| P9-3 | 前端 `genModelV1/modelRecords.ts`：多根打包分批取，`recordsConcurrency` 语义改为「在飞批数」；整库预算 `DEFAULT_DBNUM_ROOTS_BUDGET` 从 200 提到不限（或大幅上调），`show_dbnum_full` 语义收编 | 同一整库 `show_dbnum=7997` 相对 §8.9 的 269 s 显著下降（目标 <60 s，服务端侧长尾另计）；新增 fail 0 |
+| P9-3 | 前端 `genModelV1/modelRecords.ts`：多根打包分批取，`recordsConcurrency` 语义改为「在飞批数」；整库预算 `DEFAULT_DBNUM_ROOTS_BUDGET` 从 200 提到不限（或大幅上调），`show_dbnum_full` 语义收编 | **代码已落地**（2026-09-10，见 §15）：同 Ref0 切批 ≤64、旧服务端自动退回逐根、根预算不限 / 只守 50 000 构件、`show_dbnum_full=1` 全不设；新增 fail 0。**live 提速未验**（目标 <60 s，服务端侧长尾另计）——要起一个含 `2e9d65e91` 的 gen-model 才能量 |
 
 ## 4. P10 · type-check 修复（独立，可并行）
 
@@ -245,3 +245,35 @@ runtime/release 两条 GLB 链路不动。
 - **超时型 flaky 6 文件 / 7 条**（`useReviewStore.*` 4、`useAnnotationStyleStore` 1、`AnnotationPanel` 1 ……）：每个文件的**首条**用例单跑就 1.1–1.2 s（冷加载 store / 组件），全量并行时被 5 s 缺省超时误杀；单跑全绿、与本仓任何改动无关。`vitest.config.ts` 加 `testTimeout / hookTimeout = 20_000`，不改用例。
 
 **本批结果**（6 文件 + 配置）：6 文件 29/29 绿、eslint 0 错；全量 vitest **1970 / 1956 passed / 14 failed**——失败只剩上面那 7 个 review/parquet 文件（另一路在修），flaky 7 条全部转绿。type-check 门顺带收紧：三档重钉后基线里 15 条类型错误消失，`update-baseline` → **631 条 / 170 文件**。
+
+## 15. 追记（2026-09-10 中午）：P9-3 前端多根打包落地——`records` 按批取、整库根预算不限、旧服务端自动退回逐根
+
+接 §13 末行「下一步 P9-3」。只动 plant3d-web；gen-model 侧不碰（P9-2 已在 `2e9d65e91`）。
+
+**改动**
+
+- `src/api/genModelV1Api.ts`：`GenModelV1RecordsRequest` 改为 `generationRoot` / `generationRoots[]` **二选一**（两个都给、都不给、空数组、超 `MAX_MODEL_RECORDS_ROOTS = 64` 在客户端就抛 400 `bad_request`，不发请求）；批量体 `{ generation_roots: [a/b…], limit, cursor }`，单根体一字不改。`ModelRecordsResponse` 加回显字段 `generation_roots` / `roots[{generation_root,total}]`（上一会话已加）。新常量 `RECORDS_TIMEOUT_MS = 300_000`：`model/records` 此前吃 30 s 缺省超时，而服务端逐根长尾实测 0.5 s–4 min（母计划 §8.9），一批 64 根更长——30 s 会把慢根 / 大批误判成 `network` 错再逐根重打；调用方 `signal` 仍可提前取消。
+- `src/model-source/genModelV1/modelRecords.ts`：
+  - `planRecordsBatches(roots, batchSize, concurrency)`（导出）：**同 Ref0 才同批**（一个 Ref0 只属一个 dbnum，天然满足 spec「一批同库」；跨库 400 不会出现）；批大小 = `min(recordsBatchSize, ceil(根数 / recordsConcurrency))`——5 根 / 6 路仍是 5 个单根请求（与旧口径一字不差），17 根 → 6 批 3/3/3/3/3/2，335 根 → 6 批 ≤56，上千根才顶到 64 一批；小根集摊满并发路、进度也更细。
+  - `recordsConcurrency`（缺省 6）语义改为**同时在飞的批数**；新 option `recordsBatchSize`（缺省 64；`1` = 逐根旧口径）。
+  - 一批一次分页取完（`cursor` 跨根连续、翻页原样带同一批根），按 `owner`（= 生成根）归根；`owner` 不在批里的记录不丢（挂到批首根）。
+  - **整批失败一律退回逐根**（这一路串行，一根一根），分型仍由逐根结果定：409 → pending、其它 → errors——一根的问题不拖垮同批其它 63 根。旧服务端（0.1.21 出厂包）不认识 `generation_roots`：axum 在 JSON 反序列化就拒，422 纯文本「Failed to deserialize … missing field `generation_root`」、无信封（本机 `:9099` 实测）→ `isBatchRecordsUnsupportedError`（422/400 + 消息含 `generation_root` + `missing field|unknown field|deserialize`）→ 按 **api 对象**（`WeakMap`，生产只有 `defaultModelRecordsApi` 一个）记「不支持」，此后直接逐根、不再试；新服务端对越界 / 重复 / 跨库回的 400 信封不算能力问题，只退这一批。`batchRecordsSupport(api)` 导出给诊断 / 单测。
+  - `onRootDone` 仍每根一次（批成功后按批内顺序连发；逐根退路上每根一发），`total` 口径不变；结果仍按根顺序拼回。
+- `src/model-source/genModelV1/collectDbnum.ts`：`DEFAULT_DBNUM_ROOTS_BUDGET` **200 → `Infinity`**（生成根数不再是瓶颈），新 `DEFAULT_DBNUM_REFNOS_BUDGET = 50_000` 是缺省唯一的守门（一次点击不该把整个大库拖进浏览器）。`useModelGeneration.showModelByDbnumGenModelV1`：`?show_dbnum_full=1` 现在把 `maxTotalRoots` 与 `maxRefnos` **一起**设成不限——这就是「`show_dbnum_full` 语义收编」：缺省 = 整库（撞 50 000 构件才是「安全概览」），`full` = 什么预算都不设。toast 文案不变。
+- `scripts/verify-gen-model-v1.ps1 -Ensure`：逐根 `records` 之后加一步同一批根的多根批量 `records`——须回显 `generation_roots`、带 `roots[]`、平铺条数 == 逐根之和、`roots[].total` 之和 == 平铺条数；旧服务端 422「missing field」只记「服务端不支持多根批量（旧版）」不算失败。
+- 文档：联调指南 `show_dbnum` 行与 `-Ensure` 说明、CONTEXT.md「生成根投影」词条各加一句；本节。
+
+**验证（本轮跑过）**
+
+- 单测：`modelRecords.test.ts` 假 `records` 改成同时认识单根与多根（照 spec 平铺切页、回显 `roots[]`）；新增 5 条（多根批量 + 跨根翻页 + 0 条根归 empty、旧服务端 422 退回逐根并记住、整批 409 / 400 信封 / 5xx 退回逐根只有真出问题的根归 pending / errors、owner 不在批里不丢、`planRecordsBatches` 2 条）；原「并发不超过 recordsConcurrency」用例改钉 `recordsBatchSize=1` 的逐根口径。`genModelV1Api.test.ts` +1（两种请求体形状 + 客户端 400）。`collectDbnum.test.ts` / `useModelGeneration.genModelV1.test.ts` / `modelRecordSource.test.ts` 按新缺省改钉。受影响 9 文件 **86/86 绿**。
+- `npm run type-check`：631 / 基线 631 / 新增 0；触及 9 个源 / 测试文件 eslint 0 错。
+- 全量 vitest：**1977 / 1963 passed / 14 failed**——失败仍是 §14 那 7 个 review/parquet 文件（14 条一条不多），对 HEAD 基线**新增 fail 0**（多出的 7 条全是本轮新增且全绿）。
+- `verify-gen-model-v1.ps1 -BaseUrl http://127.0.0.1:9099 -Refno 24381/145018 -Ensure`：12 步全过，新步骤在 0.1.21 上打「服务端不支持多根批量（HTTP 422，旧版；前端退回逐根）」——退路的判据就是这条真实响应。
+
+**未验证（要一个跑着 `2e9d65e91` 的 gen-model）**
+
+- 本机此刻 `:9099` 是 0.1.21 出厂包（没有批量代码），`:8022` 没人听，会话内不起长驻服务。起新构建后（在 `D:\work\plant-code\old\gen-model` 运行目录 `aios-database.exe serve`，`DbOption.toml` 的 `http_api_addr` 指 `:8022`）：
+  1. `pwsh scripts/verify-gen-model-v1.ps1 -BaseUrl http://127.0.0.1:8022 -Refno 24381/145018 -Ensure` → 批量那步应打 `roots=1 … records=22 (== 逐根之和) roots_total=22`；
+  2. 浏览器 `http://localhost:3101/?show_dbnum=7997&gm_backend_port=8022`（或 `.env.development` 改指 8022）→ network 面板 `model/records` 请求体带 `generation_roots`（≤64 根一发）、控制台 `[model-load] gen-model-v1 dbnum=7997 … roots=N … ms=…`：与 §8.9 的 `roots=200 … ms=269039` 对比——**目标 <60 s**；现在缺省不限根数，roots 会是整库全部（§8.9 估「合计上千」），构件 ≤ 50 000；
+  3. 服务端侧逐根长尾（单根 records 205 s 那种）批量救不了，仍「另计」。
+- 整库跑出来太慢的话，可回退的旋钮都在 options：`recordsBatchSize`（批大小）、`recordsConcurrency`（在飞批数）、`collectDbnum` 的 `maxTotalRoots`（调用方传有限值就回到「安全概览」）——不用改契约。

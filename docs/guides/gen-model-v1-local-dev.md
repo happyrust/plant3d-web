@@ -52,7 +52,7 @@ VITE_GEN_MODEL_V1_BASE_URL=http://localhost:8022   # 直连；写 /gm 走 Vite �
 | `gm_health=1` | 在 legacy 下也把树顶部的 gen-model 徽标挂出来（只看健康与库三态，不动场景、不起同步） |
 | `show_refno=24381_145018` | 启动即显示这个节点（v1 下 = `ensure → records`） |
 | `debug_refno=24381_145018` | 同上，但强制重载并替换旧对象 |
-| `show_dbnum=7997` | 整库：v1 下 = `tree/roots` 里该库的全部 SITE 逐个 `ensure → records`，进度在视口左下角；缺省只装**安全概览**（前 200 个生成根，toast 会说「预算外未取 N 根」），加 `show_dbnum_full=1` 才整库全量。每个生成根一次 `records`（0.5–10 s），几千根的库全量要几十分钟 |
+| `show_dbnum=7997` | 整库：v1 下 = `tree/roots` 里该库的全部 SITE 逐个 `ensure → records`，进度在视口左下角。`records` 按**多根批量**取（一次 ≤64 根，spec §4.5.2；2026-09-10 起），生成根数不设预算，缺省只守 50 000 个构件（撞到 toast 会说「未轮到 N 个 SITE」），加 `show_dbnum_full=1` 连构件数也不限。服务端是不认识 `generation_roots` 的旧版（如 0.1.21 出厂包）时前端自动退回逐根（每根一次 `records`，0.5–10 s，几千根的库要几十分钟）——network 面板里 `model/records` 的请求体有没有 `generation_roots` 一眼可辨 |
 
 典型联调 URL：
 
@@ -71,7 +71,7 @@ pwsh scripts/verify-gen-model-v1.ps1                       # 默认 http://local
 pwsh scripts/verify-gen-model-v1.ps1 -BaseUrl http://127.0.0.1:18082 -Refno 24381/145018 -Ensure
 ```
 
-不带 `-Ensure` 只跑 `health / tree/roots / children / ancestors / search / dbnums / meshes`（全是 GET，不改任何数据；meshes 两种口径各验一步：`.mesh` rkyv 直连 + `.glb` 过渡转换）；带 `-Ensure` 才 `POST model/ensure(force=false)` + 逐根分页 `model/records`，并把记录里的 `geo_hash` 逐个 `HEAD /api/v1/meshes/{hash}.mesh`（前端直连口径）。脚本每一步打一行「端点 → 状态 / 条数 / 关键字段」，任何一步非 2xx 以非零退出。
+不带 `-Ensure` 只跑 `health / tree/roots / children / ancestors / search / dbnums / meshes`（全是 GET，不改任何数据；meshes 两种口径各验一步：`.mesh` rkyv 直连 + `.glb` 过渡转换）；带 `-Ensure` 才 `POST model/ensure(force=false)` + 逐根分页 `model/records` + 同一批根的多根批量 `model/records`（`generation_roots[]`，条数须与逐根之和相同、`roots[]` 总数须与平铺条数相同；旧服务端回 422「missing field」只记一句不算失败），并把记录里的 `geo_hash` 逐个 `HEAD /api/v1/meshes/{hash}.mesh`（前端直连口径）。脚本每一步打一行「端点 → 状态 / 条数 / 关键字段」，任何一步非 2xx 以非零退出。
 
 ## 5. 两种形态的差别
 

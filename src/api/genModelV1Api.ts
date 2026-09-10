@@ -470,6 +470,12 @@ export type ModelRecordsResponse = {
   next_cursor: number | null;
   snapshot_epoch?: number;
   session_vector?: SessionVectorEntry[];
+  /** 单根请求回显（`a/b`） */
+  generation_root?: string;
+  /** 批量请求回显（`a/b`，请求顺序）；spec §4.5.2 */
+  generation_roots?: string[];
+  /** 批量请求：整批逐根总数（每页都带），`total: 0` 的根显式在列 */
+  roots?: { generation_root: string; total: number }[];
 };
 
 export type DbnumRow = {
@@ -578,18 +584,61 @@ export function genModelV1ModelEnsure(req: GenModelV1EnsureRequest, options?: Ge
   });
 }
 
+/** spec §4.5.2：一次 `model/records` 最多打包几根（与服务端 `MAX_MODEL_RECORDS_ROOTS` 同值；多给 400）。 */
+export const MAX_MODEL_RECORDS_ROOTS = 64;
+
+/**
+ * `model/records` 的客户端超时。服务端逐根取记录的长尾实测 0.5 s–4 min（母计划 §8.9），一批最多 64 根还要再长；
+ * 缺省 30 s 会把慢根 / 大批误判成网络错误再逐根重打一遍。调用方仍可用 `signal` 提前取消。
+ */
+export const RECORDS_TIMEOUT_MS = 300_000;
+
 export type GenModelV1RecordsRequest = {
-  generationRoot: string;
-  /** 服务端夹在 1..=5000，默认 1000 */
+  /** 单根（`a_b` / `a/b`）；与 `generationRoots` 必须且只能给一个 */
+  generationRoot?: string;
+  /**
+   * 多根批量（spec §4.5.2，2026-09-09）：`1..=MAX_MODEL_RECORDS_ROOTS` 根、同库、不重复。响应 `items` **平铺**（按 `owner`
+   * 分组即是按根）、`cursor` 跨根连续、`limit` 仍是总条数；回显 `generation_roots` 并多一格 `roots[]`（逐根总数）。
+   * 旧服务端（如 0.1.21）不认识这个字段：JSON 反序列化就被拒（422，非信封），调用方据此退回逐根（`modelRecords.ts`）。
+   */
+  generationRoots?: string[];
+  /** 服务端夹在 1..=5000，默认 1000；批量时仍是这一页的总条数 */
   limit?: number;
   cursor?: number;
 };
 
-export function genModelV1ModelRecords(req: GenModelV1RecordsRequest, options?: GenModelV1RequestOptions): Promise<ModelRecordsResponse> {
-  return genModelV1Fetch<ModelRecordsResponse>('/api/v1/model/records', {
+export async function genModelV1ModelRecords(req: GenModelV1RecordsRequest, options?: GenModelV1RequestOptions): Promise<ModelRecordsResponse> {
+  const path = '/api/v1/model/records';
+  const single = typeof req.generationRoot === 'string' && req.generationRoot.trim() !== '';
+  const batch = Array.isArray(req.generationRoots);
+  if (single === batch) {
+    throw new GenModelV1ApiError({
+      code: 'bad_request',
+      status: 400,
+      path,
+      message: 'model/records 的 generationRoot 与 generationRoots 必须且只能给一个',
+    });
+  }
+  let body: Record<string, unknown>;
+  if (batch) {
+    const roots = req.generationRoots!;
+    if (roots.length < 1 || roots.length > MAX_MODEL_RECORDS_ROOTS) {
+      throw new GenModelV1ApiError({
+        code: 'bad_request',
+        status: 400,
+        path,
+        message: `model/records 一批只能 1..=${MAX_MODEL_RECORDS_ROOTS} 根，给了 ${roots.length}`,
+      });
+    }
+    body = { generation_roots: roots.map(toV1Refno), limit: req.limit, cursor: req.cursor };
+  } else {
+    body = { generation_root: toV1Refno(req.generationRoot!), limit: req.limit, cursor: req.cursor };
+  }
+  return genModelV1Fetch<ModelRecordsResponse>(path, {
     ...options,
+    timeoutMs: options?.timeoutMs ?? RECORDS_TIMEOUT_MS,
     method: 'POST',
-    body: { generation_root: toV1Refno(req.generationRoot), limit: req.limit, cursor: req.cursor },
+    body,
   });
 }
 

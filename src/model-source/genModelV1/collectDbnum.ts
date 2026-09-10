@@ -7,10 +7,11 @@
  * - 一个 SITE 一次 ensure：摄入形态的服务端直接把 SITE 解成几百个生成根（`generation_roots`），或回 `422 container` 由记录层
  *   展开 ZONE 逐个 ensure；读透形态服务端直接解出全部根。
  * - SITE 之间**串行**：每个 SITE 内部已经并发取 records，再并发 SITE 只会让服务端「忙根 409」（plan R1）。
- * - **安全概览预算** `maxTotalRoots`：整库几千个生成根、每根一次 `records`（0.5–10 s，服务端忙时更久），一次点击装不完。
- *   缺省只取前 200 个根（与 legacy `show_dbnum` 的「安全概览 + `show_dbnum_full=1` 全量」同一口径），超出的根记进
- *   `truncatedRoots`、没轮到的 SITE 记进 `skippedSites`，`budgetLimited=true` 让调用方提示「请从模型树按需加载」。
- * - 其它上限：每个 SITE 的 ensure 根数 / 深度比单节点显示宽（4096 / 4）；总构件数到 `maxRefnos` 也停。
+ * - **预算**：`maxTotalRoots`（跨 SITE 累计的生成根数）与 `maxRefnos`（构件数）。records 改成多根打包（收口计划 P9-3，≤64 根一次）
+ *   之后生成根数不再是瓶颈，`maxTotalRoots` 缺省**不限**（`DEFAULT_DBNUM_ROOTS_BUDGET = Infinity`；2026-09-07 起曾是 200 根的
+ *   「安全概览」），缺省只守 `maxRefnos = 50 000`——一次点击不该把整个大库拖进浏览器；`?show_dbnum_full=1` 连它也不设。
+ *   撞到任一预算：超出的根记进 `truncatedRoots`、没轮到的 SITE 记进 `skippedSites`，`budgetLimited=true` 让调用方提示。
+ * - 其它上限：每个 SITE 的 ensure 根数 / 深度比单节点显示宽（4096 / 4）。
  */
 import { refnosOfRecords } from './modelRecords';
 
@@ -31,15 +32,18 @@ export type CollectDbnumProgress = {
   root: string | null;
 };
 
-export const DEFAULT_DBNUM_ROOTS_BUDGET = 200;
+/** 整库缺省的生成根预算：records 多根打包之后不限（P9-3）；调用方要「安全概览」自己传一个有限的 `maxTotalRoots`。 */
+export const DEFAULT_DBNUM_ROOTS_BUDGET = Number.POSITIVE_INFINITY;
+/** 整库缺省的构件预算：一次点击最多装这么多构件 refno；`?show_dbnum_full=1` 传 `Infinity` 才全量。 */
+export const DEFAULT_DBNUM_REFNOS_BUDGET = 50_000;
 
 export type CollectDbnumOptions = {
   onProgress?: (progress: CollectDbnumProgress) => void;
   maxRoots?: number;
   maxContainerDepth?: number;
-  /** 收够这么多构件 refno 就停（缺省 50 000）；一次点击不该把整个大库都拖进浏览器 */
+  /** 收够这么多构件 refno 就停（缺省 `DEFAULT_DBNUM_REFNOS_BUDGET`）；`Infinity` = 全量 */
   maxRefnos?: number;
-  /** 整库最多为多少个生成根取 records（缺省 `DEFAULT_DBNUM_ROOTS_BUDGET`）；`Infinity` = 全量 */
+  /** 整库最多为多少个生成根取 records（缺省 `DEFAULT_DBNUM_ROOTS_BUDGET` = 不限）；有限值 = 「安全概览」 */
   maxTotalRoots?: number;
 };
 
@@ -82,7 +86,9 @@ export async function collectDbnumRefnos(
   dbnum: number,
   options: CollectDbnumOptions = {},
 ): Promise<CollectDbnumResult> {
-  const { onProgress, maxRoots = 4096, maxContainerDepth = 4, maxRefnos = 50_000, maxTotalRoots = DEFAULT_DBNUM_ROOTS_BUDGET } = options;
+  const {
+    onProgress, maxRoots = 4096, maxContainerDepth = 4, maxRefnos = DEFAULT_DBNUM_REFNOS_BUDGET, maxTotalRoots = DEFAULT_DBNUM_ROOTS_BUDGET,
+  } = options;
   const sites = await listSitesOfDbnum(tree, dbnum);
   const result: CollectDbnumResult = {
     dbnum, sites, refnos: [], generationRoots: [], pending: [], empty: [], truncatedRoots: [], errors: {}, skippedSites: [], budgetLimited: false,

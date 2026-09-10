@@ -222,7 +222,8 @@ describe('showModelByDbnum（gen-model-v1 整库）', () => {
 
     const limited = await gen.showModelByDbnum(7997);
     expect(limited.budgetLimited).toBe(true);
-    expect(collectDbnumMock.mock.calls[0]![1]).toMatchObject({ maxTotalRoots: undefined });
+    // 缺省不传预算：生成根由 collectDbnum 缺省不限（P9-3），构件数守它缺省的 50 000
+    expect(collectDbnumMock.mock.calls[0]![1]).toMatchObject({ maxTotalRoots: undefined, maxRefnos: undefined });
     expect(emitToastMock).toHaveBeenCalledWith(expect.objectContaining({
       level: 'warning',
       message: expect.stringMatching(/^\[提示\] 安全概览 dbnum=7997：2 个 SITE \/ 1 个生成根，已加载 2 个实例（1 个 refno），预算外未取 1 根，未轮到 1 个 SITE。请从模型树按需加载；整库全量可加 show_dbnum_full=1。$/),
@@ -231,7 +232,8 @@ describe('showModelByDbnum（gen-model-v1 整库）', () => {
     window.history.replaceState({}, '', '?show_dbnum_full=1');
     try {
       await gen.showModelByDbnum(7997);
-      expect(collectDbnumMock.mock.calls[1]![1]).toMatchObject({ maxTotalRoots: Number.POSITIVE_INFINITY });
+      // show_dbnum_full=1：根与构件两个预算都不设
+      expect(collectDbnumMock.mock.calls[1]![1]).toMatchObject({ maxTotalRoots: Number.POSITIVE_INFINITY, maxRefnos: Number.POSITIVE_INFINITY });
     } finally {
       window.history.replaceState({}, '', '/');
     }

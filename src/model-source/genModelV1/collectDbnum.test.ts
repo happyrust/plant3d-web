@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { collectDbnumRefnos, listSitesOfDbnum, type CollectDbnumProgress } from './collectDbnum';
+import { collectDbnumRefnos, DEFAULT_DBNUM_ROOTS_BUDGET, listSitesOfDbnum, type CollectDbnumProgress } from './collectDbnum';
 
 import type { EnsureAndCollectOptions, EnsureAndCollectResult } from './modelRecords';
 import type { GenModelV1ModelRecordSource } from './modelRecordSource';
@@ -86,9 +86,9 @@ describe('collectDbnumRefnos', () => {
 
     expect(records.ensureAndCollect).toHaveBeenCalledTimes(2);
     expect(records.ensureAndCollect.mock.calls.map((c) => c[0])).toEqual(['24381_2', '24383_2']);
-    // 每个 SITE 的 ensure 上限比单节点显示宽；records 预算 = 缺省 200 减去已收的根
-    expect(records.ensureAndCollect.mock.calls[0]![1]).toMatchObject({ maxRoots: 4096, maxContainerDepth: 4, maxRecordsRoots: 200 });
-    expect(records.ensureAndCollect.mock.calls[1]![1]).toMatchObject({ maxRecordsRoots: 198 });
+    // 每个 SITE 的 ensure 上限比单节点显示宽；生成根预算缺省不限（P9-3 之后 records 按批取），所以不给 maxRecordsRoots
+    expect(records.ensureAndCollect.mock.calls[0]![1]).toMatchObject({ maxRoots: 4096, maxContainerDepth: 4, maxRecordsRoots: undefined });
+    expect(records.ensureAndCollect.mock.calls[1]![1]).toMatchObject({ maxRecordsRoots: undefined });
 
     expect(result.sites.map((s) => s.refno)).toEqual(['24381_2', '24383_2']);
     expect(result.refnos).toEqual(['24381_1', '24381_2', '24381_3', '24383_1']);
@@ -121,23 +121,28 @@ describe('collectDbnumRefnos', () => {
     expect(result.budgetLimited).toBe(true);
   });
 
-  it('安全概览预算 maxTotalRoots：跨 SITE 累计，一个 SITE 里超出的根记 truncatedRoots、后面的 SITE 整个跳过；Infinity = 全量', async () => {
+  it('安全概览预算 maxTotalRoots（调用方显式给有限值）：跨 SITE 累计，一个 SITE 里超出的根记 truncatedRoots、后面的 SITE 整个跳过；缺省 = 不限 = 全量', async () => {
     const plan = {
       '24381_2': { roots: ['r1', 'r2', 'r3'], items: [item('24381_1', 'r1'), item('24381_2', 'r2'), item('24381_3', 'r3')] },
       '24383_2': { roots: ['r4'], items: [item('24383_1', 'r4')] },
     };
-    const limited = await collectDbnumRefnos(fakeTree(), fakeRecords(plan), 7997, { maxTotalRoots: 2 });
+    const budgeted = fakeRecords(plan);
+    const limited = await collectDbnumRefnos(fakeTree(), budgeted, 7997, { maxTotalRoots: 2 });
+    expect(budgeted.ensureAndCollect.mock.calls[0]![1]).toMatchObject({ maxRecordsRoots: 2 });
     expect(limited.generationRoots).toEqual(['r1', 'r2']);
     expect(limited.refnos).toEqual(['24381_1', '24381_2']);
     expect(limited.truncatedRoots).toEqual(['r3']);
     expect(limited.skippedSites).toEqual(['24383_2']);
     expect(limited.budgetLimited).toBe(true);
 
-    const records = fakeRecords(plan);
-    const full = await collectDbnumRefnos(fakeTree(), records, 7997, { maxTotalRoots: Number.POSITIVE_INFINITY });
-    expect(records.ensureAndCollect.mock.calls[0]![1]).toMatchObject({ maxRecordsRoots: undefined });
-    expect(full.generationRoots).toEqual(['r1', 'r2', 'r3', 'r4']);
-    expect(full.budgetLimited).toBe(false);
+    expect(DEFAULT_DBNUM_ROOTS_BUDGET).toBe(Number.POSITIVE_INFINITY);
+    for (const options of [{}, { maxTotalRoots: Number.POSITIVE_INFINITY }]) {
+      const records = fakeRecords(plan);
+      const full = await collectDbnumRefnos(fakeTree(), records, 7997, options);
+      expect(records.ensureAndCollect.mock.calls[0]![1]).toMatchObject({ maxRecordsRoots: undefined });
+      expect(full.generationRoots).toEqual(['r1', 'r2', 'r3', 'r4']);
+      expect(full.budgetLimited).toBe(false);
+    }
   });
 
   it('库里没有 SITE：不 ensure，回空', async () => {

@@ -4,7 +4,8 @@
 
 .DESCRIPTION
   默认只跑 GET：health / tree/roots / tree/children / tree/ancestors / search / dbnums / meshes。
-  加 -Ensure 才 POST model/ensure(force=false) + 逐根分页 model/records，并对记录里的 geo_hash 逐个 HEAD .glb。
+  加 -Ensure 才 POST model/ensure(force=false) + 逐根分页 model/records + 同一批根的多根批量 model/records（spec §4.5.2，
+  条数须与逐根之和相同；旧服务端不认识 generation_roots 只记一句不算失败），并对记录里的 geo_hash 逐个 HEAD .mesh。
   每一步打一行「端点 → 状态 / 条数 / 关键字段」；任何一步非 2xx（或形状不对）以非零退出。
   不改任何数据（ensure(force=false) 对已生成的根是零成本命中；对没生成的根会触发一次按需生成——这是显式显示的语义）。
 
@@ -151,6 +152,41 @@ if ($Ensure) {
     $refnos = @($items | ForEach-Object { $_.refno } | Sort-Object -Unique)
     $tubi = @($items | Where-Object { $_.insts | Where-Object { $_.is_tubi } }).Count
     "pages=$pages records=$($items.Count) constructs=$($refnos.Count) tubi_records=$tubi source=$($page.source)"
+  }
+
+  # 多根批量口径（spec §4.5.2，前端 P9-3 缺省走它）：同一批根一次请求、平铺分页，条数须与逐根之和相同。
+  # 旧服务端（0.1.21 出厂包）不认识 generation_roots，JSON 反序列化就拒（422「missing field `generation_root`」）——前端会退回逐根，这里也只记一句、不算失败。
+  Step 'POST /api/v1/model/records {generation_roots[]} (多根批量、平铺分页 limit=5000)' {
+    if (-not $ensured) { throw 'ensure 未通过' }
+    $rootsList = @(if ($ensured.generation_roots) { $ensured.generation_roots } elseif ($ensured.generation_root) { @($ensured.generation_root) } else { @($refno) })
+    $batch = @($rootsList | Select-Object -Unique -First 64)
+    $expected = @($items | Where-Object { (Normalize-Refno $_.owner) -in @($batch | ForEach-Object { Normalize-Refno $_ }) }).Count
+    $cursor = $null; $pages = 0; $got = 0; $first = $null
+    do {
+      $body = @{ generation_roots = $batch; limit = 5000 }
+      if ($null -ne $cursor) { $body.cursor = $cursor }
+      try {
+        $page = PostJson '/api/v1/model/records' $body
+      } catch {
+        $resp = $_.Exception.Response
+        $status = if ($resp -and $resp.StatusCode) { [int]$resp.StatusCode } else { 0 }
+        $text = $_.ErrorDetails.Message
+        if ($status -in 400, 422 -and $text -match 'generation_root' -and $text -match 'missing field|unknown field|deserialize') {
+          return "服务端不支持多根批量（HTTP $status，旧版；前端退回逐根）"
+        }
+        throw
+      }
+      if ($null -eq $first) { $first = $page }
+      $pages++
+      $got += @($page.items).Count
+      $cursor = if ($page.truncated) { $page.next_cursor } else { $null }
+    } while ($null -ne $cursor)
+    if (-not $first.generation_roots) { throw '响应缺 generation_roots 回显' }
+    if (-not $first.roots) { throw '响应缺 roots[]（逐根总数）' }
+    $rootsTotal = ($first.roots | Measure-Object -Property total -Sum).Sum
+    if ($got -ne $expected) { throw "批量 $got 条 != 逐根之和 $expected 条" }
+    if ($rootsTotal -ne $got) { throw "roots[].total 之和 $rootsTotal != 平铺条数 $got" }
+    "roots=$($batch.Count) pages=$pages records=$got (== 逐根之和) roots_total=$rootsTotal zero_roots=$(@($first.roots | Where-Object { $_.total -eq 0 }).Count) source=$($first.source)"
   }
 
   Step 'HEAD /api/v1/meshes/{geo_hash}.mesh (记录里的每个 geo_hash，前端直连口径)' {

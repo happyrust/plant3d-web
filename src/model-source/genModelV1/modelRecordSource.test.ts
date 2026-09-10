@@ -147,9 +147,12 @@ describe('createGenModelV1ModelRecordSource', () => {
 
   it('subscribeProgress：任何一次 ensureAndCollect 的逐根进度都能听到，调用方自带的 onRootDone 照样触发，退订后不再收', async () => {
     const ensure = vi.fn(async () => ({ status: 'Generated', generation_roots: ['1/1', '1/2'] }));
-    const records = vi.fn(async ({ generationRoot }: { generationRoot: string }) => ({
-      source: 'model-memory', items: [item(`${toV1Refno(generationRoot).replace('/', '_')}9`, generationRoot)], total: 1, truncated: false, next_cursor: null,
-    }));
+    // 两根 / 1 路 → 打成一批：假 records 照 spec §4.5.2 认多根（平铺、按 owner 归根）
+    const records = vi.fn(async ({ generationRoot, generationRoots }: { generationRoot?: string; generationRoots?: string[] }) => {
+      const roots = generationRoots ?? [generationRoot!];
+      const items = roots.map((root) => item(`${toV1Refno(root).replace('/', '_')}9`, root));
+      return { source: 'model-memory', items, total: items.length, truncated: false, next_cursor: null };
+    });
     const source = createGenModelV1ModelRecordSource({ api: { ensure: ensure as never, records: records as never, children: vi.fn() as never } });
 
     const heard: string[] = [];

@@ -1224,12 +1224,14 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
     progress.value = 5;
     syncGlobalLoadStatus();
 
-    // 与 legacy show_dbnum 同一口径：缺省只装「安全概览」（前 N 个生成根），?show_dbnum_full=1 才整库
+    // 预算（收口计划 P9-3 之后）：records 多根打包，生成根数缺省不限；缺省只守 collectDbnum 的构件预算（50 000 个 refno），
+    // ?show_dbnum_full=1 连它也不设——与 legacy show_dbnum 的同名开关同义：全量，不做「安全概览」
     const fullLoad = isShowDbnumFullRequested();
 
     // 收集阶段占 5 → 55：SITE 之间按个数走，SITE 内按已收完的生成根走
     const collected = await source.collectDbnum(dbno, {
       maxTotalRoots: fullLoad ? Number.POSITIVE_INFINITY : undefined,
+      maxRefnos: fullLoad ? Number.POSITIVE_INFINITY : undefined,
       onProgress: ({ phase, siteIndex, siteCount, site, rootsDone, rootsTotal, root }) => {
         totalCount.value = siteCount;
         currentIndex.value = siteIndex;

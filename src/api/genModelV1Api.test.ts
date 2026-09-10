@@ -6,9 +6,11 @@ import {
   genModelV1Fetch,
   genModelV1MeshUrl,
   genModelV1ModelEnsure,
+  genModelV1ModelRecords,
   genModelV1TreeChildren,
   isGenModelV1ApiError,
   isValidGeoHash,
+  MAX_MODEL_RECORDS_ROOTS,
   toV1Refno,
 } from './genModelV1Api';
 
@@ -70,6 +72,35 @@ describe('genModelV1Fetch 基座', () => {
     expect(String(url)).toBe(`${BASE}/api/v1/model/ensure`);
     expect(init?.method).toBe('POST');
     expect(JSON.parse(String(init?.body))).toEqual({ project: 'P', refno: '24381/145018' });
+  });
+
+  it('model/records：单根发 generation_root、多根发 generation_roots（spec §4.5.2），都转成 a/b；两个都给 / 都不给 / 超 64 根在客户端就 400', async () => {
+    const single = fetchMockReturning(jsonResponse(200, { source: 'model-memory', items: [], total: 0, truncated: false, next_cursor: null, generation_root: '24381/145018' }));
+    await genModelV1ModelRecords({ generationRoot: '24381_145018', limit: 5000 }, { baseUrl: BASE, fetchImpl: single });
+    expect(String(single.mock.calls[0]![0])).toBe(`${BASE}/api/v1/model/records`);
+    expect(JSON.parse(String(single.mock.calls[0]![1]?.body))).toEqual({ generation_root: '24381/145018', limit: 5000 });
+
+    const batch = fetchMockReturning(jsonResponse(200, {
+      source: 'model-memory', items: [], total: 0, truncated: false, next_cursor: null,
+      generation_roots: ['24381/145018', '24381/145052'], roots: [{ generation_root: '24381/145018', total: 0 }, { generation_root: '24381/145052', total: 0 }],
+    }));
+    const resp = await genModelV1ModelRecords({ generationRoots: ['24381_145018', '24381/145052'], limit: 5000, cursor: 5000 }, { baseUrl: BASE, fetchImpl: batch });
+    expect(JSON.parse(String(batch.mock.calls[0]![1]?.body))).toEqual({ generation_roots: ['24381/145018', '24381/145052'], limit: 5000, cursor: 5000 });
+    expect(resp.roots).toHaveLength(2);
+
+    const never = fetchMockReturning(jsonResponse(200, {}));
+    for (const req of [
+      {},
+      { generationRoot: '24381_145018', generationRoots: ['24381_145018'] },
+      { generationRoots: [] },
+      { generationRoots: Array.from({ length: MAX_MODEL_RECORDS_ROOTS + 1 }, (_, i) => `24381_${i}`) },
+    ]) {
+      const error = await genModelV1ModelRecords(req, { baseUrl: BASE, fetchImpl: never }).then(() => null, (e: unknown) => e);
+      expect(isGenModelV1ApiError(error)).toBe(true);
+      expect((error as GenModelV1ApiError).code).toBe('bad_request');
+    }
+    expect(never).not.toHaveBeenCalled();
+    expect(MAX_MODEL_RECORDS_ROOTS).toBe(64);
   });
 
   it('非 2xx 的 {code,message,detail} 信封原样透出为 GenModelV1ApiError', async () => {
