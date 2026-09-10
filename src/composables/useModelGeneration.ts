@@ -1235,10 +1235,14 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
       onProgress: ({ phase, siteIndex, siteCount, site, rootsDone, rootsTotal, root }) => {
         totalCount.value = siteCount;
         currentIndex.value = siteIndex;
-        currentRefno.value = phase === 'roots' && root ? `${site.name} › ${root}` : site.name;
-        statusMessage.value = phase === 'roots'
-          ? `gen-model：SITE ${siteIndex}/${siteCount} ${site.name}，生成根 ${rootsDone}/${rootsTotal}`
-          : `gen-model：SITE ${siteIndex}/${siteCount} ${site.name}，正在 ensure...`;
+        const scope = site?.name ?? `dbnum=${dbno}`;
+        // 服务端整库入口（收口计划 §17）没有 SITE 维度：`generate` 是服务端在生成，`roots` 是这边在取记录
+        currentRefno.value = root ? `${scope} › ${root}` : scope;
+        statusMessage.value = phase === 'generate'
+          ? `gen-model：服务端生成 ${scope}，已完成 ${rootsDone}/${rootsTotal} 根`
+          : phase === 'roots'
+            ? `gen-model：${site ? `SITE ${siteIndex}/${siteCount} ` : ''}${scope}，生成根 ${rootsDone}/${rootsTotal}`
+            : `gen-model：SITE ${siteIndex}/${siteCount} ${scope}，正在 ensure...`;
         const withinSite = rootsTotal > 0 ? rootsDone / rootsTotal : 0;
         progress.value = 5 + Math.floor(((siteIndex - 1 + withinSite) / Math.max(1, siteCount)) * 50);
         syncGlobalLoadStatus();

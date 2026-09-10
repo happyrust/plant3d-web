@@ -3,10 +3,13 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   fromV1Refno,
   GenModelV1ApiError,
+  genModelV1DbnumModelEnsure,
+  genModelV1DbnumModelRoots,
   genModelV1Fetch,
   genModelV1MeshUrl,
   genModelV1ModelEnsure,
   genModelV1ModelRecords,
+  genModelV1TaskGet,
   genModelV1TreeChildren,
   isGenModelV1ApiError,
   isValidGeoHash,
@@ -101,6 +104,34 @@ describe('genModelV1Fetch 基座', () => {
     }
     expect(never).not.toHaveBeenCalled();
     expect(MAX_MODEL_RECORDS_ROOTS).toBe(64);
+  });
+
+  it('整库入口三发（spec §4.5.3）：ensure 是 POST 空体 + 身份、roots 是 GET、tasks/{id} 按 id 取（只查自己发起的那一个）', async () => {
+    const ensure = fetchMockReturning(jsonResponse(202, {
+      task_id: 'dbnum-model-ensure-7997-1', dbnum: 7997, expected_roots: 2720, state: 'queued',
+      model_source: 'memory', model_source_reason: 'read-through', durable: false,
+    }));
+    const receipt = await genModelV1DbnumModelEnsure(7997, { baseUrl: BASE, fetchImpl: ensure, identity: { project: 'P' } });
+    expect(receipt.expected_roots).toBe(2720);
+    expect(receipt.durable).toBe(false);
+    expect(String(ensure.mock.calls[0]![0])).toBe(`${BASE}/api/v1/dbnums/7997/model/ensure`);
+    expect(ensure.mock.calls[0]![1]?.method).toBe('POST');
+    expect(JSON.parse(String(ensure.mock.calls[0]![1]?.body))).toEqual({ project: 'P' });
+
+    const roots = fetchMockReturning(jsonResponse(200, {
+      source: 'direct', dbnum: 7997, total: 1, roots: [{ generation_root: '24381/145018', noun: 'EQUI', name: '/PUMP-01' }],
+    }));
+    const listed = await genModelV1DbnumModelRoots(7997, { baseUrl: BASE, fetchImpl: roots });
+    expect(listed.roots[0]!.generation_root).toBe('24381/145018');
+    expect(String(roots.mock.calls[0]![0])).toBe(`${BASE}/api/v1/dbnums/7997/model/roots`);
+    expect(roots.mock.calls[0]![1]?.method).toBe('GET');
+
+    const task = fetchMockReturning(jsonResponse(200, {
+      task_id: 'dbnum-model-ensure-7997-1', kind: 'dbnum_model_ensure', state: 'running', units_done: 12, total_units: 2720,
+    }));
+    const entry = await genModelV1TaskGet('dbnum-model-ensure-7997-1', { baseUrl: BASE, fetchImpl: task });
+    expect(entry.units_done).toBe(12);
+    expect(String(task.mock.calls[0]![0])).toBe(`${BASE}/api/v1/tasks/dbnum-model-ensure-7997-1`);
   });
 
   it('非 2xx 的 {code,message,detail} 信封原样透出为 GenModelV1ApiError', async () => {

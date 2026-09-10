@@ -1,6 +1,7 @@
 # gen-model v1 接入：收口与下一步计划（两源对拍翻默认 · 批量 records · type-check 修复）
 
 - 日期：2026-09-09
+- 状态（2026-09-10 下午追加）：**§17 整库显示改由服务端拉起**——用户口径「show_dbnum 走 gen-model 的库级入口、前端只取 records」+ 评审标注「gen-model 用 kv-mem 形态、模型树由 e3d-io 提供」；服务端 S1 已落（gen-model worktree `gen-model-kvmem` 分支 `kvmem-dbnum-model-ensure`，提交 `dadbd821d`），前端 P12-1/P12-2 已落（本笔），**live 未验**（本机 `:9099` 是 0.1.21 且跑在摄入形态）
 - 状态：D8 **已拍（B）并落地**（2026-09-09 晚，见 §10；翻后 live 整链 §11 已补齐）；D10 **已拍（A）并落地**（P10-1，§11）；D9 **已拍（A）并落地**：P9-1 契约 spec §4.5.2（§11）、P9-2 服务端（gen-model `2e9d65e91`，§13）、**P9-3 前端多根打包**（2026-09-10，§15；单测 / type-check / eslint 过，**live 提速未验**——本机没有跑新构建的 gen-model）；P5 模型变更同步已按用户口径整条下线（§12）；全量 vitest 既有失败已**全部修完**（第一批 §14、第二批 §16；2026-09-10 下午 **264 文件 / 1977 条 / 0 failed**）
 - 前置：`docs/plans/2026-09-06-gen-model-v1-tree-and-viewer-adapter-plan.md`（下称「母计划」，P0–P7 + P3-c + P2-4 + Q2 全部落地）
 - 范围：plant3d-web（主）+ gen-model `src/web_service/`（P9 最小增补；该仓正被别的会话密集重构，见 §7 R1）
@@ -297,3 +298,28 @@ runtime/release 两条 GLB 链路不动。
 - `npm run type-check`：631 / 基线 631 / 新增 0 / 消失 0；触及 7 个测试文件 eslint 0 错。
 - 源码 0 改动、`vitest.config.ts` 未动：`git status` 里除这 7 个测试文件与本文档，只剩别的会话的 `useDbnoInstancesDtxLoader.test.ts` / `useModelGeneration.loadScope.test.ts`（纯 CRLF 归一）与 `docs/issues/mbd-*`，未带进提交。
 - §14 顺带发现的两处源码瑕疵（`compareAnnotationSeverity` 注释仍写四档、`PMS_SIMULATOR_CASE_ORDER` 里 `'bran-mixed'` 出现两次）按口径仍**只记不改**。
+
+## 17. 追记（2026-09-10 下午）：整库显示改由服务端拉起——kv-mem 形态的库级入口（S1 服务端 + P12 前端）
+
+用户 2026-09-10 14:53 定的方向：「`show_dbnum` 整库显示改成调 gen-model 的库级入口，由服务端拉起全库生成，前端只取 records」，并要求「先出一页方案再动手」。方案走 Plannotator 评审两轮，**第 2 稿 approved**，全文在 `docs/plans/2026-09-10-show-dbnum-server-side-rebuild-plan.md`。
+
+**评审标注换掉了底座**：第 1 稿接的是 §4.5.1 的 `dbnums/{dbnum}/model/rebuild`；用户批「让 gen-model 使用 kv-mem 模式来做模型数据支撑，模型树使用 e3d-io 提供」之后，那条路不成立——`rebuild` 要 applied watermark 并把根 seed 进 durable `model_update_pending`，而 kv-mem 读透形态水位从不建立、判成 `memory` 的库按设计也不进那条队列。反过来白赚两块：读透形态的 `ensure` 回执**本来就带 `generation_roots`**（根清单的缺口自动消失），而「模型树由 e3d-io 提供」早已是现状（spec §4.10，连 `ensure` 解生成根走的都是 e3d-io 骨架）。真正的缺口只剩一个：**一发 HTTP 只有 120 s，整库按分钟到小时计**，前端今天一超时就把整棵子树丢进 `pending`。
+
+**S1 · gen-model 服务端**（worktree `D:\work\plant-code\old\gen-model-kvmem`，分支 `kvmem-dbnum-model-ensure`，提交 `dadbd821d`；主树正被别的会话密集改，一行没碰）
+
+- 新模块 `src/data_interface/model_dbnum_ensure.rs`：先用 e3d-io 骨架把该库每个 SITE 展开成生成根去重，**拿到真实 `expected_roots` 再建任务**，随后后台按 `model_regen_execution_group` 分组走 `ensure_model_scope_generated_from_roots`，整段包在 `scope_memory_only` 里——不进 durable 队列、不落 rocksdb、不动水位；一组失败只记 `failed` 继续下一组。
+- `POST /api/v1/dbnums/{dbnum}/model/ensure` → 202 `{task_id, dbnum, expected_roots, state, model_source, durable:false}`；同库在飞回同一个 `task_id`；`database` 形态的库 409 并指路 `rebuild`；不查 `watch_scope`（与单根 `ensure` 同轴）。
+- `GET /api/v1/dbnums/{dbnum}/model/roots` → 只读的权威根清单，前端拿它直接喂 §4.5.2 的多根 `records`。
+- `TaskRegistry` 加 kind `dbnum_model_ensure`；spec 补 **§4.5.3**。验证：`cargo check --lib` 干净、`cargo test --lib -- web_service model_dbnum_ensure model_rebuild task_registry` **83 passed**、`cargo fmt --check` 干净、diff 纯增 422 行零删除。
+
+**P12 · plant3d-web**（本笔）
+
+- `genModelV1Api.ts`：`genModelV1DbnumModelEnsure` / `genModelV1DbnumModelRoots` / `genModelV1TaskGet` 三发。`/tasks/{id}` 是 §12 删掉后**重新加回来的一小块**，注释写死边界：只查本会话自己发起的那一个 `task_id`，不列表、不订阅 WS、不据此重载已加载的根——§12（d-195）禁的是「拿服务端任务反推别人改了什么」，不是「我按下的这一发完了没」。整库 ensure 的客户端超时给 `ENSURE_TIMEOUT_MS`：202 之前服务端要同步枚举完根。
+- `modelRecords.ts`：抽出 `collectRecordsForRoots(roots)`——根清单已知时只取记录，切批 / 退回逐根 / 分型与 `ensureAndCollectRecords` 共用同一套代码，两条入口结果口径一字不差。
+- `modelRecordSource.ts`：新 `collectRoots()`，缓存写入与 `ensureAndCollect` 共用抽出来的 `absorbRecords`——后续 `instanceEntriesByRefnos` 照常命中，不会为同一根再 ensure 一遍。
+- `collectDbnum.ts`：新 `collectDbnumViaServer()`（起任务 → 轮询到终态 → 取根清单 → 只取 records），`collectDbnumRefnos` 先试它、拿到 `null` 再走逐 SITE 老路。**退回判据**：旧构建 404 → 按 api 对象记一次「没有」，此后不再白打（与 §15「旧服务端不认识 `generation_roots`」同一套）；`database` 形态 409 → 只退这一次，不记（同进程别的库仍可能是 memory 形态）。任务 `failed` 且一根都没成 → 抛错，不把「0 条记录」当空库；任务查不到（服务端重启过）→ 不再等，按现状取记录。
+- 进度：`CollectDbnumProgress` 加 `generate` 档（`completed/expected_roots`，服务端给的真进度），`site` 改为可空；`useModelGeneration` 的文案跟着分三档。`?show_dbnum_full=1` 与 `maxRefnos` 语义**未动**（守的是浏览器装多少构件）。
+
+**验证（本轮跑过）**：受影响 5 文件 **60/60 绿**（含新增：服务端整库入口全链、404 退回并记住、409 只退一次、任务失败抛错、`maxTotalRoots` 切根清单、任务查不到、`collectRoots` 进缓存后不再 ensure、三个 API 绑定的请求形状）；`npm run type-check` 631 / 基线 631 / **新增 0**；触及 8 文件 eslint 0 错；全量 vitest 见下。
+
+**未验证**：live。本机 `:9099` 是 0.1.21 出厂包且 `data_face=ingest`，两个新端点在它上面根本没有；要真跑得先按计划 §6 的 **S0** 把 gen-model 切到 kv-mem 形态起一份新构建（长驻进程由用户自己起），再量「耗时 / 根数 / RSS」三个数。

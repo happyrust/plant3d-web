@@ -9,7 +9,16 @@
  * `dbno` 只是调用方的分桶键（服务端自己解库归属），这里不用它选数据。
  */
 import { groupInstanceEntriesByRefno } from './instanceMapping';
-import { ensureAndCollectRecords, defaultModelRecordsApi, type EnsureAndCollectOptions, type EnsureAndCollectResult, type ModelRecordsApi } from './modelRecords';
+import {
+  collectRecordsForRoots,
+  defaultModelRecordsApi,
+  ensureAndCollectRecords,
+  type CollectRootsOptions,
+  type CollectRootsResult,
+  type EnsureAndCollectOptions,
+  type EnsureAndCollectResult,
+  type ModelRecordsApi,
+} from './modelRecords';
 
 import type { InstanceEntryQueryOptions, ModelRecordSource } from '../ports';
 import type { InstanceEntry } from '@/utils/instances/instanceManifest';
@@ -30,6 +39,12 @@ export type GenModelV1EnsureProgress = {
 export type GenModelV1ModelRecordSource = ModelRecordSource & {
   /** 对一个节点做「显式显示」并把整根记录映射进缓存；给 P3-c 的分批 / 进度用。 */
   ensureAndCollect(refno: string, options?: EnsureAndCollectOptions): Promise<EnsureAndCollectResult>;
+  /**
+   * 根清单已知时只取记录并进同一份缓存（整库入口 spec §4.5.3 用）：服务端已经把该库生成完，
+   * 这一步没有 ensure 可打。缓存写法与 `ensureAndCollect` 逐字相同，后续 `instanceEntriesByRefnos`
+   * 照样命中，不会为同一根再 ensure 一遍。
+   */
+  collectRoots(roots: string[], options?: CollectRootsOptions): Promise<CollectRootsResult>;
   /**
    * 订阅所有 ensureAndCollect 的逐根进度（不论谁发起：树的 visibleInsts、几何加载、整库入口）。
    * 显示流程拿不到 visibleInsts 内部那次 ensure 的回调，只能从这里听。返回退订函数。
@@ -70,19 +85,8 @@ export function createGenModelV1ModelRecordSource(options: GenModelV1ModelRecord
     return () => { progressListeners.delete(listener); };
   }
 
-  async function ensureAndCollect(refno: string, extra: EnsureAndCollectOptions = {}): Promise<EnsureAndCollectResult> {
-    const requested = fromV1Refno(refno);
-    const remembered = !extra.force && !extra.maxRecordsRoots ? resultsByRequested.get(requested) : undefined;
-    if (remembered) return remembered;
-    const onRootDone: EnsureAndCollectOptions['onRootDone'] = (progress) => {
-      extra.onRootDone?.(progress);
-      if (progressListeners.size === 0) return;
-      const event: GenModelV1EnsureProgress = { refno: requested, root: progress.root, done: progress.done, total: progress.total };
-      for (const listener of progressListeners) {
-        try { listener(event); } catch { /* 监听方的异常不影响取数 */ }
-      }
-    };
-    const result = await ensureAndCollectRecords(requested, { ...options.ensureOptions, ...extra, onRootDone }, api);
+  /** 一次取数的结果进缓存：构件按 refno、生成根按 owner 归档、没几何的根记空数组。两条入口共用。 */
+  function absorbRecords(result: Pick<EnsureAndCollectResult, 'items' | 'generationRoots' | 'empty'>): void {
     for (const [key, entries] of groupInstanceEntriesByRefno(result.items)) {
       entriesByRefno.set(key, entries);
       // records 的 owner 就是生成根（不是直接属主），按它归档
@@ -104,6 +108,34 @@ export function createGenModelV1ModelRecordSource(options: GenModelV1ModelRecord
     for (const key of result.empty) {
       if (!entriesByRefno.has(key)) entriesByRefno.set(key, []);
     }
+  }
+
+  async function collectRoots(roots: string[], extra: CollectRootsOptions = {}): Promise<CollectRootsResult> {
+    const result = await collectRecordsForRoots(roots, { ...options.ensureOptions, ...extra }, api);
+    absorbRecords(result);
+    // 收干净的根记一笔空数组：调用方把「根 + 构件」一起交给 instanceEntriesByRefnos 时不会为它再 ensure 一遍。
+    // 还在 pending / 出错的那几根不记——下次显示要再问。
+    const unresolved = new Set([...result.pending, ...Object.keys(result.errors)]);
+    for (const root of result.generationRoots) {
+      if (!unresolved.has(root) && !entriesByRefno.has(root)) entriesByRefno.set(root, []);
+    }
+    return result;
+  }
+
+  async function ensureAndCollect(refno: string, extra: EnsureAndCollectOptions = {}): Promise<EnsureAndCollectResult> {
+    const requested = fromV1Refno(refno);
+    const remembered = !extra.force && !extra.maxRecordsRoots ? resultsByRequested.get(requested) : undefined;
+    if (remembered) return remembered;
+    const onRootDone: EnsureAndCollectOptions['onRootDone'] = (progress) => {
+      extra.onRootDone?.(progress);
+      if (progressListeners.size === 0) return;
+      const event: GenModelV1EnsureProgress = { refno: requested, root: progress.root, done: progress.done, total: progress.total };
+      for (const listener of progressListeners) {
+        try { listener(event); } catch { /* 监听方的异常不影响取数 */ }
+      }
+    };
+    const result = await ensureAndCollectRecords(requested, { ...options.ensureOptions, ...extra, onRootDone }, api);
+    absorbRecords(result);
     // 请求的节点自己（ZONE / SITE，或直管不挂在它名下的生成根）通常不是任何一条记录的 refno。整根记录已经进了缓存，
     // 就给它记一笔空数组：调用方紧接着把「根 + 构件」一起交给 instanceEntriesByRefnos 时，不会为它再 ensure 一遍
     // 同一个根（浏览器里 ZONE 的一次显示原本要打两次 ensure + 两次 records）。有根还在 pending / 出错的不记，下次显示还要再问。
@@ -171,5 +203,5 @@ export function createGenModelV1ModelRecordSource(options: GenModelV1ModelRecord
     return leaves.includes(key) ? leaves : [key, ...leaves];
   }
 
-  return { instanceEntriesByRefnos, ensureAndCollect, subscribeProgress, peek, invalidate, collectedRoots, leavesOfRoot, invalidateRoot };
+  return { instanceEntriesByRefnos, ensureAndCollect, collectRoots, subscribeProgress, peek, invalidate, collectedRoots, leavesOfRoot, invalidateRoot };
 }

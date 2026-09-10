@@ -168,6 +168,24 @@ describe('createGenModelV1ModelRecordSource', () => {
     expect(heard).toHaveLength(2);
   });
 
+  it('collectRoots：根清单已知时只取 records，进同一份缓存——后续 instanceEntriesByRefnos 一次 ensure 都不打', async () => {
+    const api = branApi();
+    const source = createGenModelV1ModelRecordSource({ api });
+    const result = await source.collectRoots(['24381/145018']);
+
+    expect(api.ensure).not.toHaveBeenCalled();
+    expect(api.records).toHaveBeenCalledTimes(1);
+    expect(result.generationRoots).toEqual(['24381_145018']);
+    expect(result.items).toHaveLength(4);
+    expect(source.collectedRoots()).toContain('24381_145018');
+
+    const out = await source.instanceEntriesByRefnos(7997, ['24381_145019', '24381_145021', '24381_145023']);
+    expect(api.ensure).not.toHaveBeenCalled();
+    expect(out.get('24381_145021')).toHaveLength(2);
+    // 根自己记一笔空数组：调用方把「根 + 构件」一起交上来时不会为它再 ensure 一遍同一根
+    expect(source.peek('24381_145018')).toEqual([]);
+  });
+
   it('invalidate() 不带参数清全部', async () => {
     const api = branApi();
     const source = createGenModelV1ModelRecordSource({ api });

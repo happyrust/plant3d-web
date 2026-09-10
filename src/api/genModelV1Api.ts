@@ -646,8 +646,81 @@ export function genModelV1Dbnums(options?: GenModelV1RequestOptions): Promise<Db
   return genModelV1Fetch<DbnumsResponse>('/api/v1/dbnums', options);
 }
 
-// `GET /api/v1/tasks` 与 WS `/api/v1/ws` 的绑定曾在这里（P5 模型变更同步用），2026-09-09 随该同步整条下线：
-// 前端只吃自己 ensure 出来的数据，不订阅服务端任务（收口计划 2026-09-09 §12）。
+// ---------------------------------------------------------------------------
+// 整库入口（读透 / kv-mem 形态，spec §4.5.3；收口计划 §17）
+// ---------------------------------------------------------------------------
+
+/** `POST /api/v1/dbnums/{dbnum}/model/ensure` 的 202 回执。`durable` 恒 false：投影活不过服务端进程重启。 */
+export type DbnumModelEnsureResponse = {
+  task_id: string;
+  dbnum: number;
+  /** 服务端真枚举出来的根数，不是估计——进度条的分母 */
+  expected_roots: number;
+  state: string;
+  model_source?: string;
+  model_source_reason?: string | null;
+  durable?: boolean;
+  [key: string]: unknown;
+};
+
+/**
+ * 整库按需生成：服务端解出该库全部生成根并投进进程内投影，202 先回、后台跑（spec §4.5.3）。
+ *
+ * 客户端超时按 `ENSURE_TIMEOUT_MS` 给：202 之前服务端要**同步**把根枚举完（大库几秒到几十秒），
+ * 30 s 缺省会把它误判成网络错误。
+ * 旧构建没有这条路由（404 `not_found`）、`database` 形态的库回 409——两者都由调用方退回逐 SITE ensure。
+ */
+export function genModelV1DbnumModelEnsure(
+  dbnum: number,
+  options?: GenModelV1RequestOptions,
+): Promise<DbnumModelEnsureResponse> {
+  return genModelV1Fetch<DbnumModelEnsureResponse>(`/api/v1/dbnums/${dbnum}/model/ensure`, {
+    ...options,
+    timeoutMs: options?.timeoutMs ?? ENSURE_TIMEOUT_MS,
+    method: 'POST',
+    body: {},
+  });
+}
+
+export type DbnumModelRootsResponse = {
+  source: string;
+  dbnum: number;
+  total: number;
+  /** `generation_root` 是 `a/b`（服务端口径），调用方自己 `fromV1Refno` */
+  roots: { generation_root: string; noun?: string; name?: string }[];
+};
+
+/** 该库的全部生成根（只读，不生成）：拿它直接喂多根 `records`，不必靠逐 SITE ensure 的回执凑清单。 */
+export function genModelV1DbnumModelRoots(
+  dbnum: number,
+  options?: GenModelV1RequestOptions,
+): Promise<DbnumModelRootsResponse> {
+  return genModelV1Fetch<DbnumModelRootsResponse>(`/api/v1/dbnums/${dbnum}/model/roots`, options);
+}
+
+export type TaskEntryDto = {
+  task_id: string;
+  kind: string;
+  /** `queued | running | succeeded | partial | yielded | failed` */
+  state: string;
+  units_done?: number | null;
+  total_units?: number | null;
+  current_stage?: string | null;
+  detail?: Record<string, unknown> | null;
+  result?: Record<string, unknown> | null;
+  [key: string]: unknown;
+};
+
+/**
+ * `GET /api/v1/tasks/{id}`。
+ *
+ * §12（决策 d-195）下线的是「拿服务端任务反推别人改了什么」那一套：`GET /tasks` 列表轮询、WS `model_drain`
+ * 订阅、与已加载根求交后重载。这里只查**本会话自己刚发起的那一个 `task_id`**，问的是「我按下的这一发完了没」，
+ * 不列表、不订阅、不据此重载任何已加载的根。
+ */
+export function genModelV1TaskGet(taskId: string, options?: GenModelV1RequestOptions): Promise<TaskEntryDto> {
+  return genModelV1Fetch<TaskEntryDto>(`/api/v1/tasks/${encodeURIComponent(taskId)}`, options);
+}
 
 /**
  * `GET /api/v1/meshes/{geo_hash}.mesh` 的 URL（spec §4.11）。不发请求——网格由现有 DTX

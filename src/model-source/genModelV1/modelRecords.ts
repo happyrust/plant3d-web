@@ -358,6 +358,74 @@ export async function ensureAndCollectRecords(
   return result;
 }
 
+export type CollectRootsOptions = GenModelV1RequestOptions & {
+  /** 同时在飞的 `records` 批数（默认 6） */
+  recordsConcurrency?: number;
+  /** 一批最多几根（默认 = 服务端上限 64）；`1` = 逐根 */
+  recordsBatchSize?: number;
+  /** `model/records` 的页大小（服务端上限 5000） */
+  pageSize?: number;
+  onRootDone?: (progress: { done: number; total: number; root: string }) => void;
+};
+
+export type CollectRootsResult = {
+  /** 实际取过记录的生成根（`a_b`，去重、保持传入顺序） */
+  generationRoots: string[];
+  items: GeomInstQuery[];
+  /** 409（这根服务端手里还没有）——几何暂时没有，稍后再问 */
+  pending: string[];
+  /** 一条记录都没有的根 */
+  empty: string[];
+  errors: Record<string, string>;
+};
+
+/**
+ * 根清单**已知**时只取记录：整库入口（spec §4.5.3）先让服务端把该库生成完、再 `…/model/roots` 拿清单，
+ * 到这一步已经没有 ensure 可打了。切批 / 退回逐根 / 分型与 `ensureAndCollectRecords` 共用同一套代码，
+ * 所以两条入口的结果口径一字不差。
+ */
+export async function collectRecordsForRoots(
+  roots: string[],
+  options: CollectRootsOptions = {},
+  api: ModelRecordsApi = defaultModelRecordsApi,
+): Promise<CollectRootsResult> {
+  const {
+    pageSize = 5000, recordsConcurrency = 6, recordsBatchSize = MAX_MODEL_RECORDS_ROOTS, onRootDone, ...requestOptions
+  } = options;
+  const unique: string[] = [];
+  const seen = new Set<string>();
+  for (const raw of roots) {
+    const root = fromV1Refno(String(raw ?? ''));
+    if (!root || seen.has(root)) continue;
+    seen.add(root);
+    unique.push(root);
+  }
+  const result: CollectRootsResult = { generationRoots: unique, items: [], pending: [], empty: [], errors: {} };
+  if (unique.length === 0) return result;
+
+  let done = 0;
+  const outcomes = new Map<string, RootRecordsOutcome>();
+  const batches = planRecordsBatches(unique, recordsBatchSize, recordsConcurrency);
+  await mapWithConcurrency(batches, recordsConcurrency, (batch) =>
+    collectBatchOrEachRoot(api, batch, pageSize, requestOptions, (outcome) => {
+      outcomes.set(outcome.root, outcome);
+      done++;
+      onRootDone?.({ done, total: unique.length, root: outcome.root });
+    }),
+  );
+  for (const root of unique) {
+    const { items, error } = outcomes.get(root) ?? { items: [], error: null };
+    if (error) {
+      if (isGenModelV1ApiError(error) && error.code === 'conflict') pushUnique(result.pending, root);
+      else result.errors[root] = error instanceof Error ? error.message : String(error);
+      continue;
+    }
+    if (items.length === 0) pushUnique(result.empty, root);
+    result.items.push(...items);
+  }
+  return result;
+}
+
 /** 记录里全部构件 refno（`a_b`，去重、保持首次出现顺序）。 */
 export function refnosOfRecords(items: GeomInstQuery[]): string[] {
   const seen = new Set<string>();
