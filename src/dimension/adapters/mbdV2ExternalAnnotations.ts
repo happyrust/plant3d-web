@@ -196,10 +196,14 @@ function explicitRecord(
 }
 
 /**
- * The contract sends arrowheads as millimetre strokes (24 mm long), which
- * shrink to a few pixels on a plant-wide view while the label stays at its
- * screen height. Rebuild them as the kernel's screen-scaled filled heads
- * instead, keeping the solver's outside-pointing choice for small dimensions.
+ * Arrowheads are the contract's `arrow_lines` — one stroke per wing, `from`
+ * on the dimension line — drawn 1:1 (ADR 0048: respect the source's arrow
+ * segments, do not regenerate them). The solver scales them with the group
+ * character height and already points them outwards for small dimensions,
+ * so no `sub_kind` heuristic is needed; the kernel's legibility floor
+ * (`arrowLineMinLengthPx`, ADR 0056) keeps them readable on a plant-wide
+ * view. Sources that carry no strokes (older parquet rows, hand-authored
+ * data) fall back to the kernel's screen-scaled filled heads.
  */
 function mapLinearDim(
   primitive: MbdV2LinearDim,
@@ -208,7 +212,6 @@ function mapLinearDim(
   const role = primitive.reference ? 'external-reference' : 'external';
   const start = transformPoint(primitive.start);
   const end = transformPoint(primitive.end);
-  const outside = primitive.sub_kind === 'small';
   const lines: ExplicitLine[] = [
     { from: start, to: end, part: 'dimension' },
     ...primitive.extension_lines.map(line => ({
@@ -217,6 +220,11 @@ function mapLinearDim(
       part: 'extension' as const,
     })),
   ];
+  const arrowLines = primitive.arrow_lines.map(line => ({
+    from: transformPoint(line.from),
+    to: transformPoint(line.to),
+  }));
+  const outside = primitive.sub_kind === 'small';
   return explicitRecord(primitive, 'dimension', {
     formattedLabel: primitive.text,
     labelAnchor: transformPoint(primitive.label_anchor),
@@ -226,10 +234,14 @@ function mapLinearDim(
     // horizontal until the contract declares PML's `ori`.
     labelAlong: sub3(end, start),
     lines,
-    arrows: [
-      { tip: start, towards: end, ...(outside ? { outside } : {}) },
-      { tip: end, towards: start, ...(outside ? { outside } : {}) },
-    ],
+    ...(arrowLines.length > 0
+      ? { arrowLines }
+      : {
+        arrows: [
+          { tip: start, towards: end, ...(outside ? { outside } : {}) },
+          { tip: end, towards: start, ...(outside ? { outside } : {}) },
+        ],
+      }),
   }, role);
 }
 

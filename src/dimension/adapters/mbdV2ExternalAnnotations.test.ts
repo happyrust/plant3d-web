@@ -6,7 +6,7 @@ import translationFixture
   from '../../fixtures/mbd-v2/source-to-design-translation.json';
 import { DEFAULT_DIMENSION_FORMAT } from '../kernel/format';
 import { stablePlaneBasis } from '../kernel/geometry/planeBasis';
-import { createTestFont, createTestProjector } from '../kernel/testUtils';
+import { createTestFont, createTestProjector, roundNumbers } from '../kernel/testUtils';
 import { SOLVESPACE_DIMENSION_THEME } from '../kernel/theme';
 import { layoutViewport } from '../kernel/viewport/layoutViewport';
 
@@ -177,17 +177,31 @@ describe('mbdV2ToExternalRecords', () => {
     ]);
     // The dimension value runs along its own dimension line.
     expect(rich.labelAlong).toEqual([1.25, 0, 0]);
-    // Millimetre arrow strokes are replaced by screen-scaled filled heads.
-    expect(rich.arrowLines).toEqual([]);
-    expect(rich.arrows).toEqual([
-      { tip: [0, 0, 0], towards: [1.25, 0, 0] },
-      { tip: [1.25, 0, 0], towards: [0, 0, 0] },
+    // The contract's arrow strokes are source geometry and enter the layout
+    // 1:1 (ADR 0048 / 0056); no filled heads are generated beside them.
+    expect(rich.arrowLines).toEqual([
+      { from: [0, 0.15, 0], to: [0.05, 0.13, 0] },
+      { from: [1.25, 0.15, 0], to: [1.2, 0.17, 0] },
     ]);
+    expect(rich.arrows).toBeUndefined();
 
     const reference = result.records.find(record => record.id === 'dim-ref-2')!;
     expect(reference.role).toBe('external-reference');
     const referenceLayout = reference.layout as ExplicitLayoutInput;
     expect(referenceLayout.labelAnchor).toEqual([0, 0.4, 0]);
+  });
+
+  it('falls back to screen-scaled filled heads when the source carries no arrow strokes', () => {
+    const result = mbdV2ToExternalRecords(fixtureData());
+
+    // `dim-ref-2` has `arrow_lines: []` (older parquet rows and hand-authored
+    // data look the same), so the kernel draws its own heads at both ends.
+    const layout = explicitLayout(result, 'dim-ref-2');
+    expect(layout.arrowLines).toEqual([]);
+    expect(layout.arrows).toEqual([
+      { tip: [0, 0, 0], towards: [0, 0.8, 0] },
+      { tip: [0, 0.8, 0], towards: [0, 0, 0] },
+    ]);
   });
 
   it('normalizes rs-mbd source millimetres before entering the registry', () => {
@@ -204,10 +218,14 @@ describe('mbdV2ToExternalRecords', () => {
       to: [0.08, -0.5, 0],
     });
     expect(layout.labelAnchor).toEqual([0.116, -0.5, 0]);
-    // sub_kind "small": the solver points both heads outwards.
-    expect(layout.arrows).toEqual([
-      { tip: [0, -0.5, 0], towards: [0.08, -0.5, 0], outside: true },
-      { tip: [0.08, -0.5, 0], towards: [0, -0.5, 0], outside: true },
+    // sub_kind "small": the solver's own strokes already point both wings
+    // outwards (24 mm wings at cheight 25), so no `outside` flag is derived.
+    expect(layout.arrows).toBeUndefined();
+    expect(roundNumbers(layout.arrowLines)).toEqual([
+      { from: [0, -0.5, 0], to: [-0.024, -0.507, 0] },
+      { from: [0, -0.5, 0], to: [-0.024, -0.493, 0] },
+      { from: [0.08, -0.5, 0], to: [0.104, -0.507, 0] },
+      { from: [0.08, -0.5, 0], to: [0.104, -0.493, 0] },
     ]);
   });
 
@@ -353,6 +371,40 @@ describe('mbdV2ToExternalRecords', () => {
     expect(
       weldLayout.primitives.filter(primitive => primitive.kind === 'marker'),
     ).toHaveLength(2);
+  });
+
+  it('carries rs-mbd arrow strokes to the viewport as arrow lines at the legibility floor', () => {
+    const parsed = parseMbdV2PipeData(cliLinearFixture);
+    if (!parsed.ok) throw new Error(parsed.error);
+    const result = mbdV2ToExternalRecords(parsed.data);
+    const layout = layoutViewport(
+      result.records.map(normalizeExternalDimension),
+      {
+        // 24 mm wings project to 2.5 px at 100 px/m: well under the floor.
+        projector: createTestProjector(),
+        font: createTestFont(),
+        theme: SOLVESPACE_DIMENSION_THEME,
+        format: DEFAULT_DIMENSION_FORMAT,
+      },
+      new Map(),
+    ).layouts.find(
+      item => item.dimensionId === 'linear-small-dimension:isoline:0:member:T-SMALL',
+    )!;
+
+    const wings = layout.primitives.filter(
+      primitive => primitive.kind === 'line' && primitive.part === 'arrow',
+    );
+    expect(wings).toHaveLength(4);
+    for (const wing of wings) {
+      if (wing.kind !== 'line') throw new Error('unreachable');
+      expect(Math.hypot(wing.to[0] - wing.from[0], wing.to[1] - wing.from[1]))
+        .toBeCloseTo(SOLVESPACE_DIMENSION_THEME.arrowLineMinLengthPx, 9);
+    }
+    // Small dimension: wings open away from the dimension line on both ends
+    // (tip x = 200 / 208 px; wing bases lie outside that span).
+    expect(wings.filter(wing => wing.kind === 'line' && wing.to[0] < 200)).toHaveLength(2);
+    expect(wings.filter(wing => wing.kind === 'line' && wing.to[0] > 208)).toHaveLength(2);
+    expect(layout.scenePrimitives.some(primitive => primitive.kind === 'scene-triangle')).toBe(false);
   });
 
   it('lets the shared kernel separate overlapping MBD dimension labels', () => {
