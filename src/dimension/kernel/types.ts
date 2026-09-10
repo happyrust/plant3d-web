@@ -237,8 +237,10 @@ export type ExplicitMarkerInput = Readonly<{
 
 /**
  * Screen-scaled filled arrowhead at `tip`, its body laid along the projected
- * direction from `tip` towards `towards`. External sources use this instead of
- * millimetre arrow strokes so arrowheads stay legible at any view distance.
+ * direction from `tip` towards `towards`. For external sources that carry no
+ * arrow geometry of their own; sources that do (MBD `arrow_lines`) go through
+ * `arrowLines`, which draws the source strokes with a legibility floor instead
+ * (ADR 0048, ADR 0056).
  */
 export type ExplicitArrowInput = Readonly<{
   tip: Vec3;
@@ -277,6 +279,12 @@ export type ExplicitLayoutInput = Readonly<{
   labelAnchor: Vec3;
   /** Design-space baseline direction for the primary label. */
   labelAlong?: Vec3;
+  /**
+   * Source arrow strokes, one segment per wing: `from` is the tip on the
+   * dimension line, `to` the wing base. Drawn 1:1; a wing that projects
+   * shorter than `theme.arrowLineMinLengthPx` is stretched on screen about
+   * `from`, keeping its projected direction (ADR 0056).
+   */
   arrowLines: readonly Readonly<{ from: Vec3; to: Vec3 }>[];
   arrows?: readonly ExplicitArrowInput[];
   arcs?: readonly ExplicitArcInput[];

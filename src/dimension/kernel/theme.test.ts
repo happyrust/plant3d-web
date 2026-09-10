@@ -11,6 +11,8 @@ describe('dimension theme', () => {
       textHeightPx: 13,
       arrowLengthPx: 13,
       arrowHalfAngleDeg: 18,
+      // 外部箭头笔画的可读下限与用户尺寸实心头同长（ADR 0056）。
+      arrowLineMinLengthPx: 13,
       extensionOvershootPx: 10,
       labelPaddingPx: 8,
       outsideExtensionPx: 18,

@@ -27,6 +27,12 @@ const input: ExplicitLayoutInput = {
   arrowLines: [{ from: [0, 0, 0], to: [0.1, 0.05, 0] }],
 };
 
+// The fixture wing projects to (10, -5) px = 11.18 px at 100 px/m, which is
+// under the 13 px legibility floor, so the layout stretches it about the tip
+// by this factor (ADR 0056). Direction is unchanged.
+const WING_STRETCH = SOLVESPACE_DIMENSION_THEME.arrowLineMinLengthPx
+  / Math.hypot(10, 5);
+
 describe('layoutExplicit', () => {
   it('keeps a clear dimension line whole and adds LFF bounds and hits', () => {
     const projector = createTestProjector();
@@ -42,8 +48,9 @@ describe('layoutExplicit', () => {
     const result = roundNumbers(layoutExplicit(input, context));
 
     // Supplied geometry plus the label box probe that decides whether the
-    // dimension line has to be broken.
-    expect(project).toHaveBeenCalledTimes(8);
+    // dimension line has to be broken, plus both ends of the arrow wing for
+    // the legibility-floor check.
+    expect(project).toHaveBeenCalledTimes(10);
     expect(result.labelPinned).toBe(true);
     expect(result.derived).toEqual({ formattedLabel: '25 REF' });
     expect(result.primitives).toEqual([
@@ -57,7 +64,7 @@ describe('layoutExplicit', () => {
       {
         kind: 'line',
         from: [200, 200],
-        to: [210, 195],
+        to: roundNumbers([200 + 10 * WING_STRETCH, 200 - 5 * WING_STRETCH]),
         part: 'arrow',
         styleRole: 'external-reference',
       },
@@ -77,9 +84,14 @@ describe('layoutExplicit', () => {
         to: { anchor: [1, 0, 0], offsetPx: [0, 0] },
       },
       {
+        // Stretched wing: the base stays anchored on the tip and carries the
+        // floor length as a pixel offset, so it follows the tip at any zoom.
         kind: 'scene-line',
         from: { anchor: [0, 0, 0], offsetPx: [0, 0] },
-        to: { anchor: [0.1, 0.05, 0], offsetPx: [0, 0] },
+        to: {
+          anchor: [0, 0, 0],
+          offsetPx: roundNumbers([10 * WING_STRETCH, -5 * WING_STRETCH]),
+        },
       },
       {
         kind: 'scene-glyph-run',
@@ -87,6 +99,82 @@ describe('layoutExplicit', () => {
       },
     ]);
     expect(result.hitRegions).toHaveLength(3);
+  });
+
+  it('draws arrow strokes 1:1 once they project at or above the floor', () => {
+    const context: LayoutContext = {
+      projector: createTestProjector(),
+      font: createTestFont(),
+      theme: SOLVESPACE_DIMENSION_THEME,
+      format: DEFAULT_DIMENSION_FORMAT,
+      interaction: 'normal',
+    };
+
+    const result = layoutExplicit({
+      ...input,
+      arrowLines: [
+        { from: [0, 0, 0], to: [0.2, 0, 0] },
+        { from: [0, 0, 0], to: [0.13, 0, 0] },
+      ],
+    }, context);
+    const arrows = result.primitives.filter(
+      (primitive): primitive is ScreenLine =>
+        primitive.kind === 'line' && primitive.part === 'arrow',
+    );
+    const sceneArrows = result.scenePrimitives.filter(
+      (primitive) => primitive.kind === 'scene-line' && primitive.part === 'arrow',
+    );
+
+    // 20 px and exactly 13 px: both are source geometry, untouched.
+    expect(roundNumbers(arrows.map(arrow => arrow.to))).toEqual([[220, 200], [213, 200]]);
+    expect(sceneArrows).toMatchObject([
+      { to: { anchor: [0.2, 0, 0], offsetPx: [0, 0] } },
+      { to: { anchor: [0.13, 0, 0], offsetPx: [0, 0] } },
+    ]);
+  });
+
+  it('holds short arrow strokes at the floor as the camera pulls away', () => {
+    const wingLengthPx = (pixelsPerMetre: number): number => {
+      const result = layoutExplicit(input, {
+        projector: createTestProjector(pixelsPerMetre),
+        font: createTestFont(),
+        theme: SOLVESPACE_DIMENSION_THEME,
+        format: DEFAULT_DIMENSION_FORMAT,
+        interaction: 'normal',
+      });
+      const arrow = result.primitives.find(
+        (primitive): primitive is ScreenLine =>
+          primitive.kind === 'line' && primitive.part === 'arrow',
+      )!;
+      // The stretched wing keeps the projected direction of the source wing.
+      expect((arrow.to[1] - arrow.from[1]) / (arrow.to[0] - arrow.from[0]))
+        .toBeCloseTo(-0.5, 9);
+      return Math.hypot(arrow.to[0] - arrow.from[0], arrow.to[1] - arrow.from[1]);
+    };
+
+    // 11.18 px, 1.12 px and 0.11 px of source geometry all read as 13 px.
+    expect(wingLengthPx(100)).toBeCloseTo(13, 9);
+    expect(wingLengthPx(10)).toBeCloseTo(13, 9);
+    expect(wingLengthPx(1)).toBeCloseTo(13, 9);
+  });
+
+  it('drops an arrow stroke that projects to a point', () => {
+    const result = layoutExplicit({
+      ...input,
+      // Along the view ray of the test projector: no screen direction to keep.
+      arrowLines: [{ from: [0, 0, 0], to: [0, 0, 0.1] }],
+    }, {
+      projector: createTestProjector(),
+      font: createTestFont(),
+      theme: SOLVESPACE_DIMENSION_THEME,
+      format: DEFAULT_DIMENSION_FORMAT,
+      interaction: 'normal',
+    });
+
+    expect(result.primitives.some(
+      (primitive) => primitive.kind === 'line' && primitive.part === 'arrow',
+    )).toBe(false);
+    expect(result.hitRegions).toHaveLength(2);
   });
 
   it('breaks the dimension line around a label anchored on it', () => {

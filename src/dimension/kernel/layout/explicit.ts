@@ -175,6 +175,47 @@ function explicitSceneLines(
   )));
 }
 
+type ExplicitArrowLine = ExplicitLayoutInput['arrowLines'][number];
+
+/**
+ * Source arrow strokes are geometry, not a hint (ADR 0048: respect the MBD
+ * arrow segments, do not regenerate them). They still need a legibility
+ * floor: a wing of `0.96 · cheight` shrinks to a few pixels on a plant-wide
+ * view while the label keeps its screen height. Below
+ * `theme.arrowLineMinLengthPx` the wing is stretched on screen about its tip
+ * (`from`), keeping the projected direction, so the stroke stays anchored to
+ * the dimension line at every distance; at or above the floor it draws 1:1.
+ * A wing that projects to a point (edge-on to the view) is dropped like any
+ * other edge-on segment (ADR 0056).
+ */
+function explicitArrowLine(
+  line: ExplicitArrowLine,
+  styleRole: string,
+  context: LayoutContext,
+): SceneLine[] {
+  const tip = sceneVertex(line.from);
+  const tipScreen = projectSceneVertex(tip, context.projector);
+  const baseScreen = projectSceneVertex(
+    sceneVertex(line.to),
+    context.projector,
+  );
+  const deltaX = baseScreen[0] - tipScreen[0];
+  const deltaY = baseScreen[1] - tipScreen[1];
+  const length = Math.hypot(deltaX, deltaY);
+  if (length <= EPSILON) return [];
+  const minLength = context.theme.arrowLineMinLengthPx;
+  if (length >= minLength) {
+    return [makeSceneLine(tip, sceneVertex(line.to), 'arrow', styleRole)];
+  }
+  const stretch = minLength / length;
+  return [makeSceneLine(
+    tip,
+    sceneVertex(line.from, [deltaX * stretch, deltaY * stretch]),
+    'arrow',
+    styleRole,
+  )];
+}
+
 function explicitArrow(
   arrow: ExplicitArrowInput,
   styleRole: string,
@@ -213,14 +254,8 @@ export function layoutExplicit(
   const sceneLines = [
     ...input.lines.flatMap(line =>
       explicitSceneLines(line, clearance, styleRole, context)),
-    ...input.arrowLines.map((line) =>
-      makeSceneLine(
-        sceneVertex(line.from),
-        sceneVertex(line.to),
-        'arrow',
-        styleRole,
-      ),
-    ),
+    ...input.arrowLines.flatMap(line =>
+      explicitArrowLine(line, styleRole, context)),
   ];
   const sceneArrows = (input.arrows ?? []).flatMap(arrow =>
     explicitArrow(arrow, styleRole, context));

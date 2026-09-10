@@ -12,6 +12,14 @@ export type DimensionTheme = Readonly<{
   textHeightPx: number;
   arrowLengthPx: number;
   arrowHalfAngleDeg: number;
+  /**
+   * Legibility floor for explicit arrow strokes (`ExplicitLayoutInput.arrowLines`,
+   * e.g. MBD `arrow_lines`): a wing whose projection is shorter than this is
+   * stretched on screen about its tip to this length; longer wings draw 1:1
+   * (ADR 0056). Defaults to `arrowLengthPx` so a clamped wing matches the
+   * filled heads of user dimensions.
+   */
+  arrowLineMinLengthPx: number;
   extensionOvershootPx: number;
   labelPaddingPx: number;
   outsideExtensionPx: number;
@@ -37,6 +45,7 @@ export const SOLVESPACE_DIMENSION_THEME: DimensionTheme = {
   textHeightPx: 13,
   arrowLengthPx: 13,
   arrowHalfAngleDeg: 18,
+  arrowLineMinLengthPx: 13,
   extensionOvershootPx: 10,
   labelPaddingPx: 8,
   outsideExtensionPx: 18,

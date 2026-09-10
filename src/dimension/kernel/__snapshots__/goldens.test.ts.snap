@@ -5883,8 +5883,8 @@ exports[`explicit annotation structural goldens > explicit-annotation 1`] = `
       "kind": "segment",
       "part": "arrow",
       "to": [
-        210,
-        195,
+        211.627553,
+        194.186223,
       ],
       "widthPx": 1.2,
     },
@@ -6498,8 +6498,8 @@ exports[`explicit annotation structural goldens > explicit-annotation 1`] = `
       "part": "arrow",
       "styleRole": "external",
       "to": [
-        210,
-        195,
+        211.627553,
+        194.186223,
       ],
     },
     {
@@ -6808,13 +6808,13 @@ exports[`explicit annotation structural goldens > explicit-annotation 1`] = `
       "styleRole": "external",
       "to": {
         "anchor": [
-          0.1,
-          0.05,
+          0,
+          0,
           0,
         ],
         "offsetPx": [
-          0,
-          0,
+          11.627553,
+          -5.813777,
         ],
       },
     },
