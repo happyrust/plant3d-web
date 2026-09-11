@@ -2,6 +2,7 @@
 // 提供编校审单、审核任务、确认记录的 CRUD 操作
 
 import type { SnapshotDimensionDocument } from '@/dimension';
+import type { ComputationProvenance } from '@/measurement/domain/computationProvenance';
 
 import {
   fromBackendRole,
@@ -263,12 +264,15 @@ export type ReviewSnapshotMeasurementPoint = {
 
 export type ReviewSnapshotMeasurementPayload = {
   id: string;
-  kind?: 'distance' | 'angle';
+  /** Historical records may carry retired or extension kinds. */
+  kind?: string;
   origin?: ReviewSnapshotMeasurementPoint;
   corner?: ReviewSnapshotMeasurementPoint;
   target?: ReviewSnapshotMeasurementPoint;
   visible?: boolean;
   approximate?: boolean;
+  source?: 'classic' | 'xeokit' | 'replay';
+  provenance?: ComputationProvenance;
   createdAt?: number;
   sourceAnnotationId?: string;
   sourceAnnotationType?: string;

@@ -3200,6 +3200,8 @@ function createViewerDimensionRepository() {
         obbAnnotations: [...store.obbAnnotations.value],
         measurements:
           [...store.measurements.value] as ReviewSnapshotMeasurementPayload[],
+        unifiedMeasurements: [...(store.unifiedMeasurements?.value ?? [])],
+        legacyMeasurements: [...(store.legacyMeasurements?.value ?? [])],
         xeokitDistanceMeasurements: [...store.xeokitDistanceMeasurements.value],
         xeokitAngleMeasurements: [...store.xeokitAngleMeasurements.value],
         xeokitElevationPointMeasurements: [...store.xeokitElevationPointMeasurements.value],

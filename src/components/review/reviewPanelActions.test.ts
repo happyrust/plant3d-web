@@ -22,6 +22,8 @@ import {
   submitTaskToNextNodeSafely,
 } from './reviewPanelActions';
 
+import { createComputationProvenance } from '@/measurement/domain/computationProvenance';
+
 function deferred<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void;
   let reject!: (reason?: unknown) => void;
@@ -211,6 +213,70 @@ describe('reviewPanelActions', () => {
       expect.objectContaining({ id: 'xeokit-angle-final', kind: 'angle' }),
     ]);
     expect(payload.measurements).not.toContainEqual(expect.objectContaining({ id: 'xeokit-distance-draft' }));
+  });
+
+  it('buildReviewConfirmSnapshotPayload 优先使用 unified records 并保留 provenance', () => {
+    const exactProvenance = createComputationProvenance({
+      method: 'semantic-point-pair',
+      accuracyClass: 'exact-semantic',
+      coordinateSpace: 'design-world',
+      sourceModelVersion: 'review-model-v7',
+      source: { entityId: 'source-exact' },
+      target: { entityId: 'target-exact' },
+    });
+    const unknownProvenance = createComputationProvenance({
+      method: 'legacy-unknown',
+      accuracyClass: 'legacy-unknown',
+      coordinateSpace: 'scene-world',
+      source: { entityId: 'source-legacy' },
+      target: { entityId: 'target-legacy' },
+    });
+    const payload = buildReviewConfirmSnapshotPayload({
+      measurements: [],
+      legacyMeasurements: [{ id: 'exact-result', kind: 'legacy' }],
+      unifiedMeasurements: [
+        {
+          id: 'exact-result',
+          kind: 'distance',
+          origin: { entityId: 'source-exact', worldPos: [0, 0, 0] },
+          target: { entityId: 'target-exact', worldPos: [1, 0, 0] },
+          visible: true,
+          approximate: false,
+          source: 'xeokit',
+          provenance: exactProvenance,
+          createdAt: 1,
+        },
+        {
+          id: 'legacy-result',
+          kind: 'distance',
+          origin: { entityId: 'source-legacy', worldPos: [0, 0, 0] },
+          target: { entityId: 'target-legacy', worldPos: [2, 0, 0] },
+          visible: true,
+          approximate: true,
+          source: 'classic',
+          provenance: unknownProvenance,
+          createdAt: 2,
+        },
+      ],
+      xeokitDistanceMeasurements: [{
+        id: 'compatibility-array-must-not-win',
+        kind: 'distance',
+        origin: { entityId: 'ignored-a', worldPos: [0, 0, 0] },
+        target: { entityId: 'ignored-b', worldPos: [3, 0, 0] },
+        visible: true,
+        approximate: false,
+        createdAt: 3,
+      }],
+    });
+
+    expect(payload.measurements).toEqual([
+      expect.objectContaining({
+        id: 'exact-result',
+        kind: 'distance',
+        provenance: exactProvenance,
+      }),
+      expect.objectContaining({ id: 'legacy-result', provenance: unknownProvenance }),
+    ]);
   });
 
   it('buildUnsavedReviewEvidencePayload 忽略纯 reviewState 状态变化', () => {

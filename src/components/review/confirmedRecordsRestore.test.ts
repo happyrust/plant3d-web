@@ -275,9 +275,14 @@ describe('createConfirmedRecordsRestorer', () => {
     expect(importJSON).toHaveBeenCalledTimes(1);
     expect(importJSON).toHaveBeenCalledWith(buildReviewRecordReplayPayload(confirmedRecords.value));
     expect(JSON.parse(importJSON.mock.calls[0][0] as string)).toEqual(expect.objectContaining({
-      measurements: [],
-      xeokitDistanceMeasurements: [
-        expect.objectContaining({ id: 'measure-1', approximate: false }),
+      version: 7,
+      measurements: [
+        expect.objectContaining({
+          id: 'measure-1',
+          source: 'replay',
+          approximate: true,
+          provenance: expect.objectContaining({ accuracyClass: 'legacy-unknown' }),
+        }),
       ],
     }));
   });

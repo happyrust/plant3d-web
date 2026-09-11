@@ -19,6 +19,8 @@ import type {
   XeokitElevationPointMeasurementRecord,
 } from './useToolStore';
 
+import { createComputationProvenance } from '@/measurement/domain/computationProvenance';
+
 const POINT_A = { entityId: 'entity-a', worldPos: [1, 2, 3] as [number, number, number] };
 const POINT_B = { entityId: 'entity-b', worldPos: [4, 5, 6] as [number, number, number] };
 const POINT_C = { entityId: 'entity-c', worldPos: [7, 8, 9] as [number, number, number] };
@@ -129,7 +131,7 @@ function makeXeokitElevationDelta(
 
 describe('unifiedMeasurement adapters', () => {
   describe('fromClassicMeasurement', () => {
-    it('distance：保留所有字段，approximate=false，source=classic', () => {
+    it('distance：无来源证据的 classic 记录保守迁移为 legacy-unknown', () => {
       const rec = makeClassicDistance({ sourceAnnotationId: 'ann-1' });
       const u = fromClassicMeasurement(rec);
 
@@ -139,11 +141,17 @@ describe('unifiedMeasurement adapters', () => {
         expect(u.origin).toBe(POINT_A);
       }
       expect(u.source).toBe('classic');
-      expect(u.approximate).toBe(false);
+      expect(u.approximate).toBe(true);
+      expect(u.provenance).toMatchObject({
+        method: 'legacy-unknown',
+        accuracyClass: 'legacy-unknown',
+        coordinateSpace: 'scene-world',
+        sourceModelVersion: null,
+      });
       expect(u.sourceAnnotationId).toBe('ann-1');
     });
 
-    it('angle：包含 corner 字段，source=classic', () => {
+    it('angle：包含 corner 字段并显式保留未知来源', () => {
       const rec = makeClassicAngle();
       const u = fromClassicMeasurement(rec);
 
@@ -152,27 +160,48 @@ describe('unifiedMeasurement adapters', () => {
         expect(u.corner).toBe(POINT_B);
       }
       expect(u.source).toBe('classic');
-      expect(u.approximate).toBe(false);
+      expect(u.approximate).toBe(true);
+      expect(u.provenance.accuracyClass).toBe('legacy-unknown');
     });
   });
 
   describe('fromXeokitMeasurement', () => {
-    it('distance：保留 approximate，source=xeokit', () => {
+    it('distance：旧 approximate 布尔值不能替代来源证据', () => {
       const rec = makeXeokitDistance({ approximate: true });
       const u = fromXeokitMeasurement(rec);
 
       expect(u.kind).toBe('distance');
       expect(u.approximate).toBe(true);
       expect(u.source).toBe('xeokit');
+      expect(u.provenance.accuracyClass).toBe('legacy-unknown');
     });
 
-    it('angle：approximate=false 也能正确透传', () => {
+    it('angle：旧 approximate=false 也不能被推断为 exact', () => {
       const rec = makeXeokitAngle({ approximate: false });
       const u = fromXeokitMeasurement(rec);
 
       expect(u.kind).toBe('angle');
-      expect(u.approximate).toBe(false);
+      expect(u.approximate).toBe(true);
       expect(u.source).toBe('xeokit');
+      expect(u.provenance.accuracyClass).toBe('legacy-unknown');
+    });
+
+    it('有完整 provenance 时按 accuracyClass 派生兼容 approximate', () => {
+      const provenance = createComputationProvenance({
+        method: 'semantic-point-pair',
+        accuracyClass: 'exact-semantic',
+        coordinateSpace: 'design-world',
+        sourceModelVersion: 'model-v9',
+        source: { entityId: POINT_A.entityId },
+        target: { entityId: POINT_B.entityId },
+      });
+      const u = fromXeokitMeasurement(makeXeokitDistance({
+        approximate: true,
+        provenance,
+      }));
+
+      expect(u.provenance).toBe(provenance);
+      expect(u.approximate).toBe(false);
     });
   });
 
@@ -197,6 +226,7 @@ describe('unifiedMeasurement adapters', () => {
       expect(back.sourceAnnotationId).toBe('ann-x');
       expect(back.sourceAnnotationType).toBe('cloud');
       expect(back.formId).toBe('form-1');
+      expect(back.provenance?.accuracyClass).toBe('legacy-unknown');
       expect('approximate' in back).toBe(false);
       expect('source' in back).toBe(false);
     });
@@ -223,13 +253,14 @@ describe('unifiedMeasurement adapters', () => {
       expect(back.approximate).toBe(true);
     });
 
-    it('classic → unified → xeokit 得到 approximate=false（classic 的默认值）', () => {
+    it('classic → unified → xeokit 对未知旧来源保持 approximate=true', () => {
       const rec = makeClassicDistance();
       const u = fromClassicMeasurement(rec);
       const back = toXeokitMeasurement(u);
 
       expect(back.kind).toBe('distance');
-      expect(back.approximate).toBe(false);
+      expect(back.approximate).toBe(true);
+      expect(back.provenance?.accuracyClass).toBe('legacy-unknown');
     });
   });
 
@@ -272,16 +303,21 @@ describe('unifiedMeasurement adapters', () => {
       expect(result.map((r) => r.id)).toEqual(['ep', 'ed']);
     });
 
-    it('classic 的 approximate 保持 false，xeokit 保持其原值', () => {
+    it('没有 provenance 的所有旧来源都保守映射为 approximate', () => {
       const classic = [makeClassicDistance()];
       const xdist = [makeXeokitDistance({ approximate: true })];
       const xang = [makeXeokitAngle({ approximate: false })];
 
       const result = combineMeasurements(classic, xdist, xang, [], []);
 
-      expect(result[0]?.approximate).toBe(false);
+      expect(result[0]?.approximate).toBe(true);
       expect(result[1]?.approximate).toBe(true);
-      expect(result[2]?.approximate).toBe(false);
+      expect(result[2]?.approximate).toBe(true);
+      expect(result.map((item) => item.provenance.accuracyClass)).toEqual([
+        'legacy-unknown',
+        'legacy-unknown',
+        'legacy-unknown',
+      ]);
     });
   });
 
@@ -296,21 +332,30 @@ describe('unifiedMeasurement adapters', () => {
       expect(u.datumElevation).toBe(2.5);
       expect(u.relativeElevation).toBe(10);
       expect(u.source).toBe('classic');
-      expect(u.approximate).toBe(false);
+      expect(u.approximate).toBe(true);
+      expect(u.provenance.accuracyClass).toBe('legacy-unknown');
     });
 
-    it('xeokit elevation_delta 往返不丢字段', () => {
+    it('xeokit elevation_delta 往返保留业务字段并补 provenance', () => {
       const rec = makeXeokitElevationDelta();
       const back = toXeokitMeasurement(fromXeokitMeasurement(rec));
 
-      expect(back).toEqual(rec);
+      expect(back).toMatchObject({
+        ...rec,
+        approximate: true,
+        provenance: expect.objectContaining({ accuracyClass: 'legacy-unknown' }),
+      });
     });
 
-    it('xeokit elevation_point 往返不丢字段', () => {
+    it('xeokit elevation_point 往返保留业务字段且不把旧 false 当 exact', () => {
       const rec = makeXeokitElevationPoint();
       const back = toXeokitMeasurement(fromXeokitMeasurement(rec));
 
-      expect(back).toEqual(rec);
+      expect(back).toMatchObject({
+        ...rec,
+        approximate: true,
+        provenance: expect.objectContaining({ accuracyClass: 'legacy-unknown' }),
+      });
     });
 
     it('taskId 在往返中保留（旧适配器只复制了三个来源字段）', () => {

@@ -195,11 +195,11 @@ describe('useToolStore legacy dimension archive bridge', () => {
     setSearch('?output_project=ArchiveDefault&show_dbnum=101');
   });
 
-  it('archives scoped V5 before the first V6 persistence write and leaves V5 untouched', async () => {
+  it('archives scoped V5 before the first V7 persistence write and leaves V5 untouched', async () => {
     const scope = 'project=ArchiveProject|db=202';
     const v5Key = `plant3d-web-tools-v5:${scope}`;
     const archiveKey = `plant3d-web-dimensions-v5-archive:${scope}`;
-    const v6Key = `plant3d-web-tools-v6:${scope}`;
+    const v7Key = `plant3d-web-tools-v7:${scope}`;
     const sourceRaw = JSON.stringify({
       version: 5,
       measurements: [],
@@ -236,16 +236,17 @@ describe('useToolStore legacy dimension archive bridge', () => {
       scope,
       records: [{ id: 'legacy-dimension', custom: true }],
     });
-    expect(JSON.parse(harness.values.get(v6Key)!)).toMatchObject({
-      version: 6,
+    expect(JSON.parse(harness.values.get(v7Key)!)).toMatchObject({
+      version: 7,
     });
-    expect(JSON.parse(harness.values.get(v6Key)!)).not.toHaveProperty('dimensions');
-    expect(harness.writes.indexOf(archiveKey)).toBeLessThan(harness.writes.indexOf(v6Key));
+    expect(JSON.parse(harness.values.get(v7Key)!)).not.toHaveProperty('dimensions');
+    expect(harness.writes.indexOf(archiveKey)).toBeLessThan(harness.writes.indexOf(v7Key));
   });
 
-  it('archives the latest V6 bridge dimensions before replacing the bridge with final V6', async () => {
+  it('archives the latest V6 bridge dimensions before writing V7', async () => {
     const scope = 'project=FreshProject|db=404';
     const v6Key = `plant3d-web-tools-v6:${scope}`;
+    const v7Key = `plant3d-web-tools-v7:${scope}`;
     const bridgeArchiveKey = `plant3d-web-dimensions-v6-bridge-archive:${scope}`;
     const bridgeRaw = JSON.stringify({
       version: 6,
@@ -277,9 +278,9 @@ describe('useToolStore legacy dimension archive bridge', () => {
     await nextTick();
 
     const archiveWrite = harness.writes.indexOf(bridgeArchiveKey);
-    const v6Write = harness.writes.indexOf(v6Key);
+    const v7Write = harness.writes.indexOf(v7Key);
     expect(archiveWrite).toBeGreaterThanOrEqual(0);
-    expect(archiveWrite).toBeLessThan(v6Write);
+    expect(archiveWrite).toBeLessThan(v7Write);
     expect(JSON.parse(harness.values.get(bridgeArchiveKey)!) satisfies LegacyDimensionBridgeArchive).toEqual({
       version: 1,
       sourceVersion: 'v6-bridge',
@@ -287,7 +288,8 @@ describe('useToolStore legacy dimension archive bridge', () => {
       archivedAt: expect.any(Number),
       records: [{ id: 'fresh-dimension', visible: false }],
     });
-    expect(JSON.parse(harness.values.get(v6Key)!)).not.toHaveProperty('dimensions');
+    expect(harness.values.get(v6Key)).toBe(bridgeRaw);
+    expect(JSON.parse(harness.values.get(v7Key)!)).not.toHaveProperty('dimensions');
   });
 
   it('keeps browser archives isolated by project and database scope', async () => {

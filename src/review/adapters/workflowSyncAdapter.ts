@@ -4,9 +4,8 @@
  * 输入：`WorkflowSyncData`（即 `WorkflowSyncResponse.data`，可能为 undefined）。
  *
  * 设计要点：
- *   1. 复用 `mergeWorkflowCommentsIntoRecords` 拼装 inline 评论，确保 SHADOW
- *      阶段 toolStoreAdapter 还原的 payload 与现行 `buildWorkflowSnapshotReplayPayload`
- *      字节一致。
+ *   1. 复用 `mergeWorkflowCommentsIntoRecords` 拼装 inline 评论；toolStoreAdapter
+ *      统一降为 V7 payload，并在恢复时保留 measurement provenance。
  *   2. 同时把评论独立沉到 `snapshot.comments`，为 M3 评论解耦提供数据基础。
  *   3. `WorkflowSyncData.currentNode` 仅在落到 `sj/jd/sh/pz` 枚举时写入
  *      `snapshot.workflowNode`，其余信息（formExists/formStatus 等）保留在

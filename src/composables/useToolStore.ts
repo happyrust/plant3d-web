@@ -1,15 +1,17 @@
 import { computed, ref, watch } from 'vue';
 
 import {
-  combineMeasurements,
   fromClassicMeasurement,
   fromXeokitMeasurement,
+  isUnifiedMeasurementRecord,
+  normalizeUnifiedMeasurementRecord,
   toClassicMeasurement,
   toXeokitMeasurement,
 } from './unifiedMeasurement';
 
 import type { UnifiedMeasurementRecord } from './unifiedMeasurement';
 import type { MeasurementPickSourceId } from './useMeasurementPickSources';
+import type { ComputationProvenance } from '@/measurement/domain/computationProvenance';
 import type {
   AnnotationComment,
   AnnotationReviewAction,
@@ -107,6 +109,7 @@ export type MeasurementSourceLink = {
   sourceAnnotationType?: AnnotationType;
   formId?: string;
   taskId?: string;
+  provenance?: ComputationProvenance;
 };
 
 export type DistanceMeasurementRecord = {
@@ -534,33 +537,43 @@ type PersistedStateV4 = {
 
 type PersistedStateV5 = {
   version: 5;
-  measurements: MeasurementRecord[];
+  measurements: unknown[];
   annotations: AnnotationRecord[];
   obbAnnotations: ObbAnnotationRecord[];
   cloudAnnotations: CloudAnnotationRecord[];
   rectAnnotations: RectAnnotationRecord[];
   dimensions: unknown[];
-  xeokitDistanceMeasurements: XeokitDistanceMeasurementRecord[];
-  xeokitAngleMeasurements: XeokitAngleMeasurementRecord[];
-  xeokitElevationPointMeasurements: XeokitElevationPointMeasurementRecord[];
-  xeokitElevationDeltaMeasurements: XeokitElevationDeltaMeasurementRecord[];
+  xeokitDistanceMeasurements: unknown[];
+  xeokitAngleMeasurements: unknown[];
+  xeokitElevationPointMeasurements: unknown[];
+  xeokitElevationDeltaMeasurements: unknown[];
 };
 
 type PersistedStateV6 = {
   version: 6;
-  measurements: MeasurementRecord[];
+  measurements: unknown[];
   annotations: AnnotationRecord[];
   obbAnnotations: ObbAnnotationRecord[];
   cloudAnnotations: CloudAnnotationRecord[];
   rectAnnotations: RectAnnotationRecord[];
-  xeokitDistanceMeasurements: XeokitDistanceMeasurementRecord[];
-  xeokitAngleMeasurements: XeokitAngleMeasurementRecord[];
-  xeokitElevationPointMeasurements: XeokitElevationPointMeasurementRecord[];
-  xeokitElevationDeltaMeasurements: XeokitElevationDeltaMeasurementRecord[];
+  xeokitDistanceMeasurements: unknown[];
+  xeokitAngleMeasurements: unknown[];
+  xeokitElevationPointMeasurements: unknown[];
+  xeokitElevationDeltaMeasurements: unknown[];
 };
 
 type PersistedStateV6Bridge = PersistedStateV6 & {
   dimensions?: unknown[];
+};
+
+type PersistedStateV7 = {
+  version: 7;
+  measurements: UnifiedMeasurementRecord[];
+  legacyMeasurements: unknown[];
+  annotations: AnnotationRecord[];
+  obbAnnotations: ObbAnnotationRecord[];
+  cloudAnnotations: CloudAnnotationRecord[];
+  rectAnnotations: RectAnnotationRecord[];
 };
 
 const STORAGE_KEY_V1 = 'plant3d-web-tools-v1';
@@ -569,6 +582,7 @@ const STORAGE_KEY_V3 = 'plant3d-web-tools-v3';
 const STORAGE_KEY_V4 = 'plant3d-web-tools-v4';
 const STORAGE_KEY_V5 = 'plant3d-web-tools-v5';
 const STORAGE_KEY_V6 = 'plant3d-web-tools-v6';
+const STORAGE_KEY_V7 = 'plant3d-web-tools-v7';
 const LEGACY_DIMENSION_ARCHIVE_KEY = 'plant3d-web-dimensions-v5-archive';
 const LEGACY_DIMENSION_BRIDGE_ARCHIVE_KEY = 'plant3d-web-dimensions-v6-bridge-archive';
 const LEGACY_DIMENSION_IMPORT_ARCHIVE_KEY = 'plant3d-web-dimensions-v5-import';
@@ -977,7 +991,7 @@ function normalizeRectAnnotationRecord(rec: RectAnnotationRecord): RectAnnotatio
 function normalizeV1(parsed: PersistedStateV1): PersistedStateV6 {
   return {
     version: 6,
-    measurements: Array.isArray(parsed.measurements) ? parsed.measurements.map(normalizeMeasurementRecord) : [],
+    measurements: Array.isArray(parsed.measurements) ? parsed.measurements : [],
     annotations: Array.isArray(parsed.annotations) ? parsed.annotations.map(normalizeAnnotationRecord) : [],
     obbAnnotations: [],
     cloudAnnotations: [],
@@ -992,7 +1006,7 @@ function normalizeV1(parsed: PersistedStateV1): PersistedStateV6 {
 function normalizeV2(parsed: PersistedStateV2): PersistedStateV6 {
   return {
     version: 6,
-    measurements: Array.isArray(parsed.measurements) ? parsed.measurements.map(normalizeMeasurementRecord) : [],
+    measurements: Array.isArray(parsed.measurements) ? parsed.measurements : [],
     annotations: Array.isArray(parsed.annotations) ? parsed.annotations.map(normalizeAnnotationRecord) : [],
     obbAnnotations: Array.isArray(parsed.obbAnnotations) ? parsed.obbAnnotations.map(normalizeObbAnnotationRecord) : [],
     cloudAnnotations: [],
@@ -1007,7 +1021,7 @@ function normalizeV2(parsed: PersistedStateV2): PersistedStateV6 {
 function normalizeV3(parsed: PersistedStateV3): PersistedStateV6 {
   return {
     version: 6,
-    measurements: Array.isArray(parsed.measurements) ? parsed.measurements.map(normalizeMeasurementRecord) : [],
+    measurements: Array.isArray(parsed.measurements) ? parsed.measurements : [],
     annotations: Array.isArray(parsed.annotations) ? parsed.annotations.map(normalizeAnnotationRecord) : [],
     obbAnnotations: Array.isArray(parsed.obbAnnotations) ? parsed.obbAnnotations.map(normalizeObbAnnotationRecord) : [],
     cloudAnnotations: Array.isArray(parsed.cloudAnnotations) ? parsed.cloudAnnotations.map(normalizeCloudAnnotationRecord) : [],
@@ -1022,7 +1036,7 @@ function normalizeV3(parsed: PersistedStateV3): PersistedStateV6 {
 function normalizeV4(parsed: PersistedStateV4): PersistedStateV6 {
   return {
     version: 6,
-    measurements: Array.isArray(parsed.measurements) ? parsed.measurements.map(normalizeMeasurementRecord) : [],
+    measurements: Array.isArray(parsed.measurements) ? parsed.measurements : [],
     annotations: Array.isArray(parsed.annotations) ? parsed.annotations.map(normalizeAnnotationRecord) : [],
     obbAnnotations: Array.isArray(parsed.obbAnnotations) ? parsed.obbAnnotations.map(normalizeObbAnnotationRecord) : [],
     cloudAnnotations: Array.isArray(parsed.cloudAnnotations) ? parsed.cloudAnnotations.map(normalizeCloudAnnotationRecord) : [],
@@ -1037,22 +1051,22 @@ function normalizeV4(parsed: PersistedStateV4): PersistedStateV6 {
 function normalizeV5(parsed: PersistedStateV5): PersistedStateV6 {
   return {
     version: 6,
-    measurements: Array.isArray(parsed.measurements) ? parsed.measurements.map(normalizeMeasurementRecord) : [],
+    measurements: Array.isArray(parsed.measurements) ? parsed.measurements : [],
     annotations: Array.isArray(parsed.annotations) ? parsed.annotations.map(normalizeAnnotationRecord) : [],
     obbAnnotations: Array.isArray(parsed.obbAnnotations) ? parsed.obbAnnotations.map(normalizeObbAnnotationRecord) : [],
     cloudAnnotations: Array.isArray(parsed.cloudAnnotations) ? parsed.cloudAnnotations.map(normalizeCloudAnnotationRecord) : [],
     rectAnnotations: Array.isArray(parsed.rectAnnotations) ? parsed.rectAnnotations.map(normalizeRectAnnotationRecord) : [],
     xeokitDistanceMeasurements: Array.isArray(parsed.xeokitDistanceMeasurements)
-      ? parsed.xeokitDistanceMeasurements.map(normalizeXeokitMeasurementRecord)
+      ? parsed.xeokitDistanceMeasurements
       : [],
     xeokitAngleMeasurements: Array.isArray(parsed.xeokitAngleMeasurements)
-      ? parsed.xeokitAngleMeasurements.map(normalizeXeokitMeasurementRecord)
+      ? parsed.xeokitAngleMeasurements
       : [],
     xeokitElevationPointMeasurements: Array.isArray(parsed.xeokitElevationPointMeasurements)
-      ? parsed.xeokitElevationPointMeasurements.map(normalizeXeokitMeasurementRecord)
+      ? parsed.xeokitElevationPointMeasurements
       : [],
     xeokitElevationDeltaMeasurements: Array.isArray(parsed.xeokitElevationDeltaMeasurements)
-      ? parsed.xeokitElevationDeltaMeasurements.map(normalizeXeokitMeasurementRecord)
+      ? parsed.xeokitElevationDeltaMeasurements
       : [],
   };
 }
@@ -1065,35 +1079,131 @@ function normalizeV6Bridge(parsed: PersistedStateV6Bridge): PersistedStateV6 {
   });
 }
 
-function loadPersisted(scope = getCurrentStorageScope()): PersistedStateV6 {
+function migrateV6StateToV7(state: PersistedStateV6): PersistedStateV7 {
+  const measurements: UnifiedMeasurementRecord[] = [];
+  const legacyMeasurements: unknown[] = [];
+  const append = (
+    items: readonly unknown[],
+    convert: (value: unknown) => UnifiedMeasurementRecord,
+  ) => {
+    for (const raw of items) {
+      try {
+        const record = convert(raw);
+        if (isUnifiedMeasurementRecord(record)) {
+          measurements.push(normalizeUnifiedMeasurementRecord(record));
+        } else {
+          legacyMeasurements.push(raw);
+        }
+      } catch {
+        legacyMeasurements.push(raw);
+      }
+    }
+  };
+  append(
+    Array.isArray(state.measurements) ? state.measurements : [],
+    value => fromClassicMeasurement(
+      normalizeMeasurementRecord(value as MeasurementRecord),
+    ),
+  );
+  append(
+    [
+      ...(Array.isArray(state.xeokitDistanceMeasurements)
+        ? state.xeokitDistanceMeasurements
+        : []),
+      ...(Array.isArray(state.xeokitAngleMeasurements)
+        ? state.xeokitAngleMeasurements
+        : []),
+      ...(Array.isArray(state.xeokitElevationPointMeasurements)
+        ? state.xeokitElevationPointMeasurements
+        : []),
+      ...(Array.isArray(state.xeokitElevationDeltaMeasurements)
+        ? state.xeokitElevationDeltaMeasurements
+        : []),
+    ],
+    value => fromXeokitMeasurement(
+      normalizeXeokitMeasurementRecord(value as XeokitMeasurementRecord),
+    ),
+  );
+  return {
+    version: 7,
+    measurements,
+    legacyMeasurements,
+    annotations: state.annotations,
+    obbAnnotations: state.obbAnnotations,
+    cloudAnnotations: state.cloudAnnotations,
+    rectAnnotations: state.rectAnnotations,
+  };
+}
+
+function normalizeV7(parsed: PersistedStateV7): PersistedStateV7 {
+  const measurements: UnifiedMeasurementRecord[] = [];
+  const legacyMeasurements = Array.isArray(parsed.legacyMeasurements)
+    ? [...parsed.legacyMeasurements]
+    : [];
+  for (const raw of Array.isArray(parsed.measurements) ? parsed.measurements : []) {
+    if (isUnifiedMeasurementRecord(raw)) {
+      measurements.push(normalizeUnifiedMeasurementRecord(raw));
+    } else {
+      legacyMeasurements.push(raw);
+    }
+  }
+  return {
+    version: 7,
+    measurements,
+    legacyMeasurements,
+    annotations: Array.isArray(parsed.annotations)
+      ? parsed.annotations.map(normalizeAnnotationRecord)
+      : [],
+    obbAnnotations: Array.isArray(parsed.obbAnnotations)
+      ? parsed.obbAnnotations.map(normalizeObbAnnotationRecord)
+      : [],
+    cloudAnnotations: Array.isArray(parsed.cloudAnnotations)
+      ? parsed.cloudAnnotations.map(normalizeCloudAnnotationRecord)
+      : [],
+    rectAnnotations: Array.isArray(parsed.rectAnnotations)
+      ? parsed.rectAnnotations.map(normalizeRectAnnotationRecord)
+      : [],
+  };
+}
+
+function emptyPersistedStateV7(): PersistedStateV7 {
+  return {
+    version: 7,
+    measurements: [],
+    legacyMeasurements: [],
+    annotations: [],
+    obbAnnotations: [],
+    cloudAnnotations: [],
+    rectAnnotations: [],
+  };
+}
+
+function loadPersisted(scope = getCurrentStorageScope()): PersistedStateV7 {
   if (typeof localStorage === 'undefined') {
-    return {
-      version: 6,
-      measurements: [],
-      annotations: [],
-      obbAnnotations: [],
-      cloudAnnotations: [],
-      rectAnnotations: [],
-      xeokitDistanceMeasurements: [],
-      xeokitAngleMeasurements: [],
-      xeokitElevationPointMeasurements: [],
-      xeokitElevationDeltaMeasurements: [],
-    };
+    return emptyPersistedStateV7();
   }
 
   try {
     archiveLegacyDimensionsForScope(localStorage, scope);
     archiveLegacyDimensionBridgeForScope(localStorage, scope);
   } catch {
-    // Keep loading available; the write path retries and refuses a V6 write if archiving throws.
+    // Keep loading available; the V7 write path retries legacy archiving.
   }
 
   try {
+    const rawV7 = localStorage.getItem(withStorageScope(STORAGE_KEY_V7, scope));
+    if (rawV7) {
+      const parsed = JSON.parse(rawV7) as PersistedStateV7;
+      if (parsed && parsed.version === 7) {
+        return normalizeV7(parsed);
+      }
+    }
+
     const rawV6 = localStorage.getItem(withStorageScope(STORAGE_KEY_V6, scope));
     if (rawV6) {
       const parsed = JSON.parse(rawV6) as PersistedStateV6Bridge;
       if (parsed && parsed.version === 6) {
-        return normalizeV6Bridge(parsed);
+        return migrateV6StateToV7(normalizeV6Bridge(parsed));
       }
     }
 
@@ -1101,7 +1211,7 @@ function loadPersisted(scope = getCurrentStorageScope()): PersistedStateV6 {
     if (rawV5) {
       const parsed = JSON.parse(rawV5) as PersistedStateV5;
       if (parsed && parsed.version === 5) {
-        return normalizeV5(parsed);
+        return migrateV6StateToV7(normalizeV5(parsed));
       }
     }
 
@@ -1109,7 +1219,7 @@ function loadPersisted(scope = getCurrentStorageScope()): PersistedStateV6 {
     if (rawV4) {
       const parsed = JSON.parse(rawV4) as PersistedStateV4;
       if (parsed && parsed.version === 4) {
-        return normalizeV4(parsed);
+        return migrateV6StateToV7(normalizeV4(parsed));
       }
     }
 
@@ -1117,7 +1227,7 @@ function loadPersisted(scope = getCurrentStorageScope()): PersistedStateV6 {
     if (rawV3) {
       const parsed = JSON.parse(rawV3) as PersistedStateV3;
       if (parsed && parsed.version === 3) {
-        return normalizeV3(parsed);
+        return migrateV6StateToV7(normalizeV3(parsed));
       }
     }
 
@@ -1125,7 +1235,7 @@ function loadPersisted(scope = getCurrentStorageScope()): PersistedStateV6 {
     if (rawV2) {
       const parsed = JSON.parse(rawV2) as PersistedStateV2;
       if (parsed && parsed.version === 2) {
-        return normalizeV2(parsed);
+        return migrateV6StateToV7(normalizeV2(parsed));
       }
     }
 
@@ -1133,25 +1243,14 @@ function loadPersisted(scope = getCurrentStorageScope()): PersistedStateV6 {
     if (rawV1) {
       const parsed = JSON.parse(rawV1) as PersistedStateV1;
       if (parsed && parsed.version === 1) {
-        return normalizeV1(parsed);
+        return migrateV6StateToV7(normalizeV1(parsed));
       }
     }
   } catch {
     // ignore
   }
 
-  return {
-    version: 6,
-    measurements: [],
-    annotations: [],
-    obbAnnotations: [],
-    cloudAnnotations: [],
-    rectAnnotations: [],
-    xeokitDistanceMeasurements: [],
-    xeokitAngleMeasurements: [],
-    xeokitElevationPointMeasurements: [],
-    xeokitElevationDeltaMeasurements: [],
-  };
+  return emptyPersistedStateV7();
 }
 
 const storageScope = ref(getCurrentStorageScope());
@@ -1165,15 +1264,10 @@ const persisted = loadPersisted(storageScope.value);
  * 下面五个旧字段降级为只读投影——生产代码里没有任何一处从外部给它们赋值
  * （核查过：唯一的外部赋值都在测试对 store mock 的操作上），所以降级是安全的。
  *
- * 本阶段**不动持久化格式**：落盘仍按 V6 的五个数组写，由投影提供。
+ * V7 直接持久化这个统一数组；下面五个旧字段只服务兼容调用者。
  */
-const unifiedMeasurementRecords = ref<UnifiedMeasurementRecord[]>(combineMeasurements(
-  persisted.measurements,
-  persisted.xeokitDistanceMeasurements,
-  persisted.xeokitAngleMeasurements,
-  persisted.xeokitElevationPointMeasurements,
-  persisted.xeokitElevationDeltaMeasurements,
-));
+const unifiedMeasurementRecords = ref<UnifiedMeasurementRecord[]>(persisted.measurements);
+const legacyMeasurementPayloads = ref<unknown[]>(persisted.legacyMeasurements);
 
 function projectClassic(): MeasurementRecord[] {
   return unifiedMeasurementRecords.value
@@ -1206,20 +1300,11 @@ const xeokitElevationDeltaMeasurements = computed<XeokitElevationDeltaMeasuremen
   () => projectXeokit('elevation_delta') as XeokitElevationDeltaMeasurementRecord[],
 );
 
-function setAllMeasurementsFrom(state: {
-  measurements: MeasurementRecord[];
-  xeokitDistanceMeasurements: XeokitDistanceMeasurementRecord[];
-  xeokitAngleMeasurements: XeokitAngleMeasurementRecord[];
-  xeokitElevationPointMeasurements: XeokitElevationPointMeasurementRecord[];
-  xeokitElevationDeltaMeasurements: XeokitElevationDeltaMeasurementRecord[];
-}) {
-  unifiedMeasurementRecords.value = combineMeasurements(
-    state.measurements,
-    state.xeokitDistanceMeasurements,
-    state.xeokitAngleMeasurements,
-    state.xeokitElevationPointMeasurements,
-    state.xeokitElevationDeltaMeasurements,
+function setAllMeasurementsFrom(state: PersistedStateV7) {
+  unifiedMeasurementRecords.value = state.measurements.map(
+    normalizeUnifiedMeasurementRecord,
   );
+  legacyMeasurementPayloads.value = [...state.legacyMeasurements];
 }
 
 /** 按 id 就地替换一条统一记录；`patch` 已是目标形态的部分字段。 */
@@ -1358,7 +1443,7 @@ function resetTransientUiState() {
   toolMode.value = 'none';
 }
 
-function applyPersistedState(state: PersistedStateV6) {
+function applyPersistedState(state: PersistedStateV7) {
   annotations.value = state.annotations;
   obbAnnotations.value = state.obbAnnotations;
   cloudAnnotations.value = state.cloudAnnotations;
@@ -1393,34 +1478,28 @@ if (typeof window !== 'undefined') {
 
 watch(
   () => ({
-    measurements: measurements.value,
+    measurements: unifiedMeasurementRecords.value,
+    legacyMeasurements: legacyMeasurementPayloads.value,
     annotations: annotations.value,
     obbAnnotations: obbAnnotations.value,
     cloudAnnotations: cloudAnnotations.value,
     rectAnnotations: rectAnnotations.value,
-    xeokitDistanceMeasurements: xeokitDistanceMeasurements.value,
-    xeokitAngleMeasurements: xeokitAngleMeasurements.value,
-    xeokitElevationPointMeasurements: xeokitElevationPointMeasurements.value,
-    xeokitElevationDeltaMeasurements: xeokitElevationDeltaMeasurements.value,
   }),
   (state) => {
     if (typeof localStorage === 'undefined') return;
-    const payload: PersistedStateV6 = {
-      version: 6,
+    const payload: PersistedStateV7 = {
+      version: 7,
       measurements: state.measurements,
+      legacyMeasurements: state.legacyMeasurements,
       annotations: state.annotations,
       obbAnnotations: state.obbAnnotations,
       cloudAnnotations: state.cloudAnnotations,
       rectAnnotations: state.rectAnnotations,
-      xeokitDistanceMeasurements: state.xeokitDistanceMeasurements,
-      xeokitAngleMeasurements: state.xeokitAngleMeasurements,
-      xeokitElevationPointMeasurements: state.xeokitElevationPointMeasurements,
-      xeokitElevationDeltaMeasurements: state.xeokitElevationDeltaMeasurements,
     };
     try {
       archiveLegacyDimensionsForScope(localStorage, storageScope.value);
       archiveLegacyDimensionBridgeForScope(localStorage, storageScope.value);
-      localStorage.setItem(withStorageScope(STORAGE_KEY_V6, storageScope.value), JSON.stringify(payload));
+      localStorage.setItem(withStorageScope(STORAGE_KEY_V7, storageScope.value), JSON.stringify(payload));
     } catch {
       // ignore
     }
@@ -2003,6 +2082,7 @@ function clearAllAnnotations() {
 function clearAll() {
   clearMeasurements();
   clearXeokitMeasurements();
+  legacyMeasurementPayloads.value = [];
   clearAllAnnotations();
   clearCurrentXeokitDraft();
   setXeokitHoverState({
@@ -2604,17 +2684,14 @@ function _getCommentsFromStore(
 }
 
 function exportJSON(): string {
-  const payload: PersistedStateV6 = {
-    version: 6,
-    measurements: measurements.value,
+  const payload: PersistedStateV7 = {
+    version: 7,
+    measurements: unifiedMeasurementRecords.value,
+    legacyMeasurements: legacyMeasurementPayloads.value,
     annotations: annotations.value,
     obbAnnotations: obbAnnotations.value,
     cloudAnnotations: cloudAnnotations.value,
     rectAnnotations: rectAnnotations.value,
-    xeokitDistanceMeasurements: xeokitDistanceMeasurements.value,
-    xeokitAngleMeasurements: xeokitAngleMeasurements.value,
-    xeokitElevationPointMeasurements: xeokitElevationPointMeasurements.value,
-    xeokitElevationDeltaMeasurements: xeokitElevationDeltaMeasurements.value,
   };
   return JSON.stringify(payload, null, 2);
 }
@@ -2629,7 +2706,8 @@ function importJSON(
     | PersistedStateV3
     | PersistedStateV4
     | PersistedStateV5
-    | PersistedStateV6Bridge;
+    | PersistedStateV6Bridge
+    | PersistedStateV7;
   if (
     !parsed ||
     (
@@ -2638,7 +2716,8 @@ function importJSON(
       parsed.version !== 3 &&
       parsed.version !== 4 &&
       parsed.version !== 5 &&
-      parsed.version !== 6
+      parsed.version !== 6 &&
+      parsed.version !== 7
     )
   ) {
     throw new Error('Unsupported tools JSON format');
@@ -2675,24 +2754,26 @@ function importJSON(
     }
   }
 
-  const v6 =
+  const v7 =
     parsed.version === 1
-      ? normalizeV1(parsed)
+      ? migrateV6StateToV7(normalizeV1(parsed))
       : parsed.version === 2
-        ? normalizeV2(parsed)
+        ? migrateV6StateToV7(normalizeV2(parsed))
         : parsed.version === 3
-          ? normalizeV3(parsed)
+          ? migrateV6StateToV7(normalizeV3(parsed))
           : parsed.version === 4
-            ? normalizeV4(parsed)
+            ? migrateV6StateToV7(normalizeV4(parsed))
             : parsed.version === 5
-              ? normalizeV5(parsed)
-              : normalizeV6Bridge(parsed);
+              ? migrateV6StateToV7(normalizeV5(parsed))
+              : parsed.version === 6
+                ? migrateV6StateToV7(normalizeV6Bridge(parsed))
+                : normalizeV7(parsed);
 
-  annotations.value = v6.annotations;
-  obbAnnotations.value = v6.obbAnnotations;
-  cloudAnnotations.value = v6.cloudAnnotations;
-  rectAnnotations.value = v6.rectAnnotations;
-  setAllMeasurementsFrom(v6);
+  annotations.value = v7.annotations;
+  obbAnnotations.value = v7.obbAnnotations;
+  cloudAnnotations.value = v7.cloudAnnotations;
+  rectAnnotations.value = v7.rectAnnotations;
+  setAllMeasurementsFrom(v7);
 
   activeAnnotationId.value = null;
   activeObbAnnotationId.value = null;
@@ -2768,6 +2849,7 @@ const allXeokitMeasurements = computed<XeokitMeasurementRecord[]>(() => {
   ];
 });
 const unifiedMeasurements = computed(() => unifiedMeasurementRecords.value);
+const legacyMeasurements = computed(() => legacyMeasurementPayloads.value);
 
 const allItems = computed(() => {
   return {
@@ -2818,6 +2900,7 @@ export function useToolStore() {
     allItems,
     allXeokitMeasurements,
     unifiedMeasurements,
+    legacyMeasurements,
     activeAnnotationContext,
 
     setToolMode,

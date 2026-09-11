@@ -1,18 +1,16 @@
 /**
  * 统一测量记录类型 — 测量体系统一 Phase B 的基础设施。
  *
- * 目标：合并 `MeasurementRecord`（classic）/ `XeokitMeasurementRecord`（xeokit）
- * 两套存储到单一类型，为后续 Phase B2–E 的 store 合并铺路。
+ * `UnifiedMeasurementRecord` 现在是内存写入与 V7 持久化的唯一真相。
+ * classic / xeokit 记录只作为兼容读写投影存在；新来源证据通过
+ * `ComputationProvenance` 无损往返，缺少证据的旧记录保守升级为
+ * `legacy-unknown`，不得由旧 `approximate=false` 反推成精确结果。
  *
- * 本模块当前仅提供：
+ * 本模块提供：
  *   1) 统一类型定义 `UnifiedMeasurementRecord`
  *   2) 正反向适配器（classic ↔ unified、xeokit ↔ unified）
- *   3) flag helper（`isUnifiedMeasurementStoreEnabled()`）
- *
- * 不做：
- *   - 运行时 UI 行为改变
- *   - 重新定义持久化格式
- *   - 修改 add/update/remove 写入路径
+ *   3) 旧记录 provenance 升级与 V7 runtime guard
+ *   4) 兼容期 flag helper（`isUnifiedMeasurementStoreEnabled()`）
  *
  * 参见 `docs/plans/2026-04-23-measurement-unification-plan.md` §4 Phase B。
  *
@@ -36,6 +34,13 @@ import type {
   MeasurementPoint,
 } from '@/composables/useToolStore';
 
+import {
+  createComputationProvenance,
+  isComputationProvenance,
+  toLegacyApproximate,
+  type ComputationProvenance,
+} from '@/measurement/domain/computationProvenance';
+
 export type MeasurementSource = 'classic' | 'xeokit' | 'replay';
 
 export type UnifiedMeasurementKind =
@@ -50,6 +55,7 @@ type UnifiedMeasurementBase = {
   createdAt: number;
   approximate: boolean;
   source: MeasurementSource;
+  provenance: ComputationProvenance;
 } & MeasurementSourceLink;
 
 export type UnifiedDistanceMeasurementRecord = UnifiedMeasurementBase & {
@@ -94,6 +100,80 @@ function assertNever(value: never): never {
   throw new Error(`未处理的测量类型: ${String(kind)}`);
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function isMeasurementPoint(value: unknown): value is MeasurementPoint {
+  if (!isRecord(value) || typeof value.entityId !== 'string' || !value.entityId.trim()) {
+    return false;
+  }
+  if (!isFinitePointTuple(value.worldPos)) return false;
+  return value.designWorldPos === undefined || isFinitePointTuple(value.designWorldPos);
+}
+
+function hasFiniteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value);
+}
+
+function finiteOr(value: unknown, fallback: number): number {
+  return hasFiniteNumber(value) ? value : fallback;
+}
+
+export function isUnifiedMeasurementRecord(
+  value: unknown,
+): value is UnifiedMeasurementRecord {
+  if (
+    !isRecord(value)
+    || typeof value.id !== 'string'
+    || !value.id.trim()
+    || typeof value.visible !== 'boolean'
+    || !hasFiniteNumber(value.createdAt)
+    || typeof value.approximate !== 'boolean'
+    || (
+      value.source !== 'classic'
+      && value.source !== 'xeokit'
+      && value.source !== 'replay'
+    )
+    || !isComputationProvenance(value.provenance)
+  ) {
+    return false;
+  }
+
+  switch (value.kind) {
+    case 'distance':
+      return isMeasurementPoint(value.origin) && isMeasurementPoint(value.target);
+    case 'angle':
+      return isMeasurementPoint(value.origin)
+        && isMeasurementPoint(value.corner)
+        && isMeasurementPoint(value.target);
+    case 'elevation_point':
+      return isMeasurementPoint(value.point)
+        && hasFiniteNumber(value.absoluteElevation)
+        && hasFiniteNumber(value.datumElevation)
+        && hasFiniteNumber(value.relativeElevation);
+    case 'elevation_delta':
+      return isMeasurementPoint(value.origin)
+        && isMeasurementPoint(value.target)
+        && hasFiniteNumber(value.originElevation)
+        && hasFiniteNumber(value.targetElevation)
+        && hasFiniteNumber(value.deltaElevation)
+        && hasFiniteNumber(value.datumElevation);
+    default:
+      return false;
+  }
+}
+
+export function normalizeUnifiedMeasurementRecord(
+  record: UnifiedMeasurementRecord,
+): UnifiedMeasurementRecord {
+  return {
+    ...record,
+    id: record.id.trim(),
+    approximate: toLegacyApproximate(record.provenance.accuracyClass),
+  };
+}
+
 function sourceLinkOf(
   rec: MeasurementRecord | XeokitMeasurementRecord,
 ): MeasurementSourceLink {
@@ -105,17 +185,82 @@ function sourceLinkOf(
   };
 }
 
+function isFinitePointTuple(value: unknown): value is readonly [number, number, number] {
+  return Array.isArray(value)
+    && value.length === 3
+    && value.every(item => typeof item === 'number' && Number.isFinite(item));
+}
+
+function measurementPoints(
+  rec: MeasurementRecord | XeokitMeasurementRecord,
+): readonly MeasurementPoint[] {
+  switch (rec.kind) {
+    case 'distance':
+    case 'elevation_delta':
+      return [rec.origin, rec.target];
+    case 'angle':
+      return [rec.origin, rec.corner, rec.target];
+    case 'elevation_point':
+      return [rec.point];
+    default:
+      return assertNever(rec);
+  }
+}
+
+function operandFromPoint(point: MeasurementPoint) {
+  const refno = point.sourceInfo?.refno?.trim() || undefined;
+  const candidateId = point.sourceInfo?.candidateId?.trim() || undefined;
+  return {
+    entityId: point.entityId,
+    ...(refno ? { refno } : {}),
+    ...(candidateId ? { candidateId } : {}),
+  };
+}
+
+export function createLegacyMeasurementProvenance(
+  rec: MeasurementRecord | XeokitMeasurementRecord,
+): ComputationProvenance {
+  const points = measurementPoints(rec);
+  const sourcePoint = points[0]!;
+  const targetPoint = points[points.length - 1]!;
+  const hasDesignCoordinates = points.every(
+    point => isFinitePointTuple(point.designWorldPos),
+  );
+  return createComputationProvenance({
+    method: 'legacy-unknown',
+    accuracyClass: 'legacy-unknown',
+    coordinateSpace: hasDesignCoordinates ? 'design-world' : 'scene-world',
+    sourceModelVersion: null,
+    source: operandFromPoint(sourcePoint),
+    target: operandFromPoint(targetPoint),
+    warnings: [{
+      code: 'LEGACY_PROVENANCE_UNKNOWN',
+      message: 'Legacy measurement did not record its computation method or accuracy.',
+    }],
+  });
+}
+
+function provenanceOf(
+  rec: MeasurementRecord | XeokitMeasurementRecord,
+): ComputationProvenance {
+  return isComputationProvenance(rec.provenance)
+    ? rec.provenance
+    : createLegacyMeasurementProvenance(rec);
+}
+
 /**
- * Classic 测量 → 统一记录。`approximate` 恒为 `false`（classic 侧不带该字段），
- * `source='classic'`。
+ * Classic 测量 → 统一记录。classic 没有可信的旧精度字段；缺少 provenance
+ * 时必须按 `legacy-unknown` 处理。
  */
 export function fromClassicMeasurement(rec: MeasurementRecord): UnifiedMeasurementRecord {
+  const provenance = provenanceOf(rec);
   const base = {
     id: rec.id,
     visible: rec.visible,
     createdAt: rec.createdAt,
-    approximate: false,
+    approximate: toLegacyApproximate(provenance.accuracyClass),
     source: 'classic' as const,
+    provenance,
     ...sourceLinkOf(rec),
   };
 
@@ -131,25 +276,40 @@ export function fromClassicMeasurement(rec: MeasurementRecord): UnifiedMeasureme
         target: rec.target,
       };
     case 'elevation_point':
+    {
+      const absoluteElevation = finiteOr(rec.absoluteElevation, 0);
+      const datumElevation = finiteOr(rec.datumElevation, 0);
+      const relativeElevation = finiteOr(
+        rec.relativeElevation,
+        absoluteElevation - datumElevation,
+      );
       return {
         ...base,
         kind: 'elevation_point',
         point: rec.point,
-        absoluteElevation: rec.absoluteElevation,
-        datumElevation: rec.datumElevation,
-        relativeElevation: rec.relativeElevation,
+        absoluteElevation,
+        datumElevation,
+        relativeElevation,
       };
+    }
     case 'elevation_delta':
+    {
+      const originElevation = finiteOr(rec.originElevation, 0);
+      const targetElevation = finiteOr(rec.targetElevation, originElevation);
       return {
         ...base,
         kind: 'elevation_delta',
         origin: rec.origin,
         target: rec.target,
-        originElevation: rec.originElevation,
-        targetElevation: rec.targetElevation,
-        deltaElevation: rec.deltaElevation,
-        datumElevation: rec.datumElevation,
+        originElevation,
+        targetElevation,
+        deltaElevation: finiteOr(
+          rec.deltaElevation,
+          targetElevation - originElevation,
+        ),
+        datumElevation: finiteOr(rec.datumElevation, 0),
       };
+    }
     default:
       return assertNever(rec);
   }
@@ -159,12 +319,14 @@ export function fromClassicMeasurement(rec: MeasurementRecord): UnifiedMeasureme
  * Xeokit 测量 → 统一记录。`source='xeokit'`，保留 `approximate`。
  */
 export function fromXeokitMeasurement(rec: XeokitMeasurementRecord): UnifiedMeasurementRecord {
+  const provenance = provenanceOf(rec);
   const base = {
     id: rec.id,
     visible: rec.visible,
     createdAt: rec.createdAt,
-    approximate: rec.approximate,
+    approximate: toLegacyApproximate(provenance.accuracyClass),
     source: 'xeokit' as const,
+    provenance,
     ...sourceLinkOf(rec),
   };
 
@@ -180,25 +342,39 @@ export function fromXeokitMeasurement(rec: XeokitMeasurementRecord): UnifiedMeas
         target: rec.target,
       };
     case 'elevation_point':
+    {
+      const absoluteElevation = finiteOr(rec.absoluteElevation, 0);
+      const datumElevation = finiteOr(rec.datumElevation, 0);
       return {
         ...base,
         kind: 'elevation_point',
         point: rec.point,
-        absoluteElevation: rec.absoluteElevation,
-        datumElevation: rec.datumElevation,
-        relativeElevation: rec.relativeElevation,
+        absoluteElevation,
+        datumElevation,
+        relativeElevation: finiteOr(
+          rec.relativeElevation,
+          absoluteElevation - datumElevation,
+        ),
       };
+    }
     case 'elevation_delta':
+    {
+      const originElevation = finiteOr(rec.originElevation, 0);
+      const targetElevation = finiteOr(rec.targetElevation, originElevation);
       return {
         ...base,
         kind: 'elevation_delta',
         origin: rec.origin,
         target: rec.target,
-        originElevation: rec.originElevation,
-        targetElevation: rec.targetElevation,
-        deltaElevation: rec.deltaElevation,
-        datumElevation: rec.datumElevation,
+        originElevation,
+        targetElevation,
+        deltaElevation: finiteOr(
+          rec.deltaElevation,
+          targetElevation - originElevation,
+        ),
+        datumElevation: finiteOr(rec.datumElevation, 0),
       };
+    }
     default:
       return assertNever(rec);
   }
@@ -217,6 +393,7 @@ export function toClassicMeasurement(u: UnifiedMeasurementRecord): MeasurementRe
     sourceAnnotationType: u.sourceAnnotationType,
     formId: u.formId,
     taskId: u.taskId,
+    provenance: u.provenance,
   };
 
   switch (u.kind) {
@@ -276,12 +453,13 @@ export function toXeokitMeasurement(u: UnifiedMeasurementRecord): XeokitMeasurem
   const base = {
     id: u.id,
     visible: u.visible,
-    approximate: u.approximate,
+    approximate: toLegacyApproximate(u.provenance.accuracyClass),
     createdAt: u.createdAt,
     sourceAnnotationId: u.sourceAnnotationId,
     sourceAnnotationType: u.sourceAnnotationType,
     formId: u.formId,
     taskId: u.taskId,
+    provenance: u.provenance,
   };
 
   switch (u.kind) {

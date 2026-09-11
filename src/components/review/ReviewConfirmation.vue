@@ -55,6 +55,8 @@ const currentDraftConfirmPayload = computed(() => {
     rectAnnotations: [...toolStore.rectAnnotations.value],
     obbAnnotations: [...toolStore.obbAnnotations.value],
     measurements: [...toolStore.measurements.value],
+    unifiedMeasurements: [...(toolStore.unifiedMeasurements?.value ?? [])],
+    legacyMeasurements: [...(toolStore.legacyMeasurements?.value ?? [])],
     xeokitDistanceMeasurements: [...toolStore.xeokitDistanceMeasurements.value],
     xeokitAngleMeasurements: [...toolStore.xeokitAngleMeasurements.value],
     xeokitElevationPointMeasurements: [...(toolStore.xeokitElevationPointMeasurements?.value ?? [])],

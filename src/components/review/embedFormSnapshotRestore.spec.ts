@@ -111,19 +111,24 @@ describe('restoreEmbedFormSnapshot', () => {
 
     const payload = JSON.parse(importTools.mock.calls[0][0] as string) as {
       annotations: { formId?: string; comments?: { authorRole: UserRole; content: string }[] }[];
-      measurements: unknown[];
-      xeokitDistanceMeasurements: { approximate?: boolean; formId?: string }[];
+      measurements: {
+        approximate?: boolean;
+        formId?: string;
+        provenance?: { accuracyClass?: string };
+      }[];
     };
-    expect(payload.measurements).toEqual([]);
-    expect(payload.xeokitDistanceMeasurements).toEqual([
-      expect.objectContaining({ approximate: false }),
+    expect(payload.measurements).toEqual([
+      expect.objectContaining({
+        approximate: true,
+        provenance: expect.objectContaining({ accuracyClass: 'legacy-unknown' }),
+      }),
     ]);
     expect(payload.annotations[0]?.comments?.[0]).toEqual(expect.objectContaining({
       authorRole: UserRole.PROOFREADER,
       content: '请复核',
     }));
     expect(payload.annotations[0]?.formId).toBe('FORM-1');
-    expect(payload.xeokitDistanceMeasurements[0]?.formId).toBe('FORM-1');
+    expect(payload.measurements[0]?.formId).toBe('FORM-1');
   });
 
   it('当新单据没有历史记录时，也会下发空快照以清空旧批注', async () => {
@@ -157,16 +162,13 @@ describe('restoreEmbedFormSnapshot', () => {
     expect(importTools).toHaveBeenCalledTimes(1);
     expect(syncTools).toHaveBeenCalledTimes(1);
     expect(JSON.parse(importTools.mock.calls[0][0] as string)).toEqual({
-      version: 6,
+      version: 7,
       measurements: [],
+      legacyMeasurements: [],
       annotations: [],
       obbAnnotations: [],
       cloudAnnotations: [],
       rectAnnotations: [],
-      xeokitDistanceMeasurements: [],
-      xeokitAngleMeasurements: [],
-      xeokitElevationPointMeasurements: [],
-      xeokitElevationDeltaMeasurements: [],
     });
   });
 
@@ -255,16 +257,13 @@ describe('restoreEmbedFormSnapshot', () => {
       ],
     }));
     expect(JSON.parse(importTools.mock.calls[1][0] as string)).toEqual({
-      version: 6,
+      version: 7,
       measurements: [],
+      legacyMeasurements: [],
       annotations: [],
       obbAnnotations: [],
       cloudAnnotations: [],
       rectAnnotations: [],
-      xeokitDistanceMeasurements: [],
-      xeokitAngleMeasurements: [],
-      xeokitElevationPointMeasurements: [],
-      xeokitElevationDeltaMeasurements: [],
     });
   });
 
@@ -294,16 +293,13 @@ describe('restoreEmbedFormSnapshot', () => {
     });
 
     expect(importTools).toHaveBeenCalledWith(JSON.stringify({
-      version: 6,
+      version: 7,
       measurements: [],
+      legacyMeasurements: [],
       annotations: [],
       obbAnnotations: [],
       cloudAnnotations: [],
       rectAnnotations: [],
-      xeokitDistanceMeasurements: [],
-      xeokitAngleMeasurements: [],
-      xeokitElevationPointMeasurements: [],
-      xeokitElevationDeltaMeasurements: [],
     }));
   });
 

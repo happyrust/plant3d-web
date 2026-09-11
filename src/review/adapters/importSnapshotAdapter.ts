@@ -19,6 +19,7 @@ export type BuildSnapshotFromImportPayloadOptions = {
 type ImportPayloadLike = {
   version?: unknown;
   measurements?: unknown[];
+  legacyMeasurements?: unknown[];
   annotations?: unknown[];
   obbAnnotations?: unknown[];
   cloudAnnotations?: unknown[];
@@ -130,6 +131,7 @@ export function buildSnapshotFromImportPayload(
   pushAnnotations(snapshot, payload.rectAnnotations, 'rect', options);
   pushAnnotations(snapshot, payload.obbAnnotations, 'obb', options);
   pushMeasurements(snapshot, payload.measurements, 'unknown');
+  pushMeasurements(snapshot, payload.legacyMeasurements, 'unknown');
   pushMeasurements(snapshot, payload.xeokitDistanceMeasurements, 'distance');
   pushMeasurements(snapshot, payload.xeokitAngleMeasurements, 'angle');
   pushMeasurements(snapshot, payload.xeokitElevationPointMeasurements, 'elevation_point');

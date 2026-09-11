@@ -7,8 +7,8 @@
  *
  * 设计要点：
  *   1. **不去重 / 不归一**：snapshot 是无损中间层；去重与 measurement 归一
- *      由 `toolStoreAdapter`（沿用旧 `buildReviewRecordReplayPayload`）负责，
- *      以便 SHADOW 阶段 payload 字节一致。
+ *      由 `toolStoreAdapter` / `buildReviewRecordReplayPayload` 统一负责，并输出
+ *      V7 unified records 或保守的 legacy 旁路。
  *   2. **按 record 顺序、按类别串行追加**：保证 `filter(annotationType==='text')`
  *      的结果与 `records.flatMap(r => r.annotations)` 顺序一致。
  *   3. **inline comments 下沉**：`AnnotationRecord.comments` 写入 snapshot.comments，

@@ -18,6 +18,7 @@ import type {
 } from '@/composables/useToolStore';
 import type { SnapshotDimensionDocument } from '@/dimension/adapters/reviewSnapshotAdapter';
 
+import { createComputationProvenance } from '@/measurement/domain/computationProvenance';
 import { UserRole, type AnnotationComment } from '@/types/auth';
 
 const FIXED_NOW = 1_700_000_000_000;
@@ -288,7 +289,15 @@ describe('buildSnapshotFromTaskRecords', () => {
   });
 
   it('normalizes measurement kind and preserves payload', () => {
-    const distance = makeDistance('d-1');
+    const provenance = createComputationProvenance({
+      method: 'semantic-point-pair',
+      accuracyClass: 'exact-semantic',
+      coordinateSpace: 'design-world',
+      sourceModelVersion: 'review-model-v1',
+      source: { entityId: 'a' },
+      target: { entityId: 'b' },
+    });
+    const distance = { ...makeDistance('d-1'), provenance };
     const angle = makeAngle('a-1');
     const r0 = makeRecord({
       id: 'r0',
@@ -297,7 +306,11 @@ describe('buildSnapshotFromTaskRecords', () => {
 
     const snapshot = buildSnapshotFromTaskRecords([r0]);
     expect(snapshot.measurements).toEqual([
-      { measurementId: 'd-1', kind: 'distance', payload: { ...distance } },
+      {
+        measurementId: 'd-1',
+        kind: 'distance',
+        payload: expect.objectContaining({ id: 'd-1', provenance }),
+      },
       { measurementId: 'a-1', kind: 'angle', payload: { ...angle } },
     ]);
   });

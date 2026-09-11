@@ -13,8 +13,8 @@
  *   1. 字段为 superset，不强制依赖 M4 才会上线的 `annotationKey/workflowNode/reviewRound`，
  *      adapter 在缺字段时直接置为 `undefined`。
  *   2. `payload` 字段保留原始 record 的全部信息，避免在中间层丢字段。
- *   3. M2 处于 SHADOW 阶段，UI 仍走旧 payload；toolStoreAdapter 必须能从 snapshot
- *      还原与 `buildReviewRecordReplayPayload` 字节一致的输出。
+ *   3. `toolStoreAdapter` 把三类来源统一降为 V7 tool payload；支持的测量进入
+ *      unified records，未知历史形状进入 `legacyMeasurements`，不得猜测精度。
  */
 
 import type { SnapshotDimensionDocument } from '@/dimension';

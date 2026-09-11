@@ -1,15 +1,13 @@
 /**
- * `ReviewSnapshot` → 旧 `useToolStore.importJSON` payload 适配器。
+ * `ReviewSnapshot` → `useToolStore.importJSON` V7 payload 适配器。
  *
- * 设计目的（M2 SHADOW 阶段）：
- *   - 让所有走 snapshot 中间层的恢复链路最终能产出**与现行 payload 字节一致**
- *     的 JSON，确保 SHADOW 阶段不影响 viewer 行为。
+ * 设计目的：
+ *   - 让 task/workflow/import 三条恢复链统一产出 V7 unified measurement；
+ *   - 为缺少几何或未知 kind 的历史记录保留 `legacyMeasurements` 旁路，
+ *     避免为了迁移而猜测其精度或形状。
  *   - 实现方式：将 snapshot.annotations 按 annotationType 重新分桶为伪
- *     `ReplayRecordLike`，再交给现有 `buildReviewRecordReplayPayload`。这样
- *     dedupe / measurement 归一行为完全沿用既有实现。
- *
- * 一旦 M2 进入 CUTOVER，UI 与 viewer 应直接消费 snapshot 自身，本适配器在
- * 后续阶段可以收敛或下线。
+ *     `ReplayRecordLike`，再交给 `buildReviewRecordReplayPayload`，使
+ *     dedupe、provenance 升级和 V7 序列化只有一个实现。
  */
 
 import type { ReviewSnapshot } from '../domain/reviewSnapshot';
@@ -24,13 +22,22 @@ type ReplayRecordLike = {
   measurements: unknown[];
 };
 
+function lowerSnapshotMeasurements(snapshot: ReviewSnapshot): unknown[] {
+  return snapshot.measurements.map((measurement) => ({
+    ...measurement.payload,
+    ...(typeof measurement.payload.kind === 'string' || measurement.kind === 'unknown'
+      ? {}
+      : { kind: measurement.kind }),
+  }));
+}
+
 export function buildReplayPayloadFromSnapshot(snapshot: ReviewSnapshot): string {
   const fakeRecord: ReplayRecordLike = {
     annotations: [],
     cloudAnnotations: [],
     rectAnnotations: [],
     obbAnnotations: [],
-    measurements: snapshot.measurements.map((m) => m.payload),
+    measurements: lowerSnapshotMeasurements(snapshot),
   };
 
   for (const annotation of snapshot.annotations) {
@@ -54,63 +61,5 @@ export function buildReplayPayloadFromSnapshot(snapshot: ReviewSnapshot): string
 }
 
 export function buildReplayPayloadFromImportSnapshot(snapshot: ReviewSnapshot): string {
-  const annotations: unknown[] = [];
-  const cloudAnnotations: unknown[] = [];
-  const rectAnnotations: unknown[] = [];
-  const obbAnnotations: unknown[] = [];
-  const measurements: unknown[] = [];
-  const xeokitDistanceMeasurements: unknown[] = [];
-  const xeokitAngleMeasurements: unknown[] = [];
-  const xeokitElevationPointMeasurements: unknown[] = [];
-  const xeokitElevationDeltaMeasurements: unknown[] = [];
-
-  for (const annotation of snapshot.annotations) {
-    switch (annotation.annotationType) {
-      case 'text':
-        annotations.push(annotation.payload);
-        break;
-      case 'cloud':
-        cloudAnnotations.push(annotation.payload);
-        break;
-      case 'rect':
-        rectAnnotations.push(annotation.payload);
-        break;
-      case 'obb':
-        obbAnnotations.push(annotation.payload);
-        break;
-    }
-  }
-
-  for (const measurement of snapshot.measurements) {
-    if (measurement.kind === 'distance') {
-      xeokitDistanceMeasurements.push(measurement.payload);
-      continue;
-    }
-    if (measurement.kind === 'angle') {
-      xeokitAngleMeasurements.push(measurement.payload);
-      continue;
-    }
-    if (measurement.kind === 'elevation_point') {
-      xeokitElevationPointMeasurements.push(measurement.payload);
-      continue;
-    }
-    if (measurement.kind === 'elevation_delta') {
-      xeokitElevationDeltaMeasurements.push(measurement.payload);
-      continue;
-    }
-    measurements.push(measurement.payload);
-  }
-
-  return JSON.stringify({
-    version: 6,
-    measurements,
-    annotations,
-    obbAnnotations,
-    cloudAnnotations,
-    rectAnnotations,
-    xeokitDistanceMeasurements,
-    xeokitAngleMeasurements,
-    xeokitElevationPointMeasurements,
-    xeokitElevationDeltaMeasurements,
-  });
+  return buildReplayPayloadFromSnapshot(snapshot);
 }

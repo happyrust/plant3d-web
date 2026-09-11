@@ -1,3 +1,4 @@
+import type { UnifiedMeasurementRecord } from '@/composables/unifiedMeasurement';
 import type {
   ElevationDeltaMeasurementRecord,
   ElevationPointMeasurementRecord,
@@ -97,6 +98,8 @@ type ReviewConfirmSnapshotRecordLike = {
 };
 
 type ReviewConfirmSnapshotPayloadInput = ReviewConfirmSnapshotRecordLike & {
+  unifiedMeasurements?: readonly UnifiedMeasurementRecord[];
+  legacyMeasurements?: readonly unknown[];
   xeokitDistanceMeasurements?: XeokitDistanceMeasurementRecord[];
   xeokitAngleMeasurements?: XeokitAngleMeasurementRecord[];
   xeokitElevationPointMeasurements?: XeokitElevationPointMeasurementRecord[];
@@ -122,6 +125,8 @@ function convertXeokitMeasurementToClassic(
       sourceAnnotationId: measurement.sourceAnnotationId,
       sourceAnnotationType: measurement.sourceAnnotationType,
       formId: measurement.formId,
+      taskId: measurement.taskId,
+      provenance: measurement.provenance,
     };
   }
 
@@ -137,6 +142,9 @@ function convertXeokitMeasurementToClassic(
       createdAt: measurement.createdAt,
       sourceAnnotationId: measurement.sourceAnnotationId,
       sourceAnnotationType: measurement.sourceAnnotationType,
+      formId: measurement.formId,
+      taskId: measurement.taskId,
+      provenance: measurement.provenance,
     };
     return converted;
   }
@@ -155,6 +163,9 @@ function convertXeokitMeasurementToClassic(
       createdAt: measurement.createdAt,
       sourceAnnotationId: measurement.sourceAnnotationId,
       sourceAnnotationType: measurement.sourceAnnotationType,
+      formId: measurement.formId,
+      taskId: measurement.taskId,
+      provenance: measurement.provenance,
     };
     return converted;
   }
@@ -169,6 +180,8 @@ function convertXeokitMeasurementToClassic(
     sourceAnnotationId: measurement.sourceAnnotationId,
     sourceAnnotationType: measurement.sourceAnnotationType,
     formId: measurement.formId,
+    taskId: measurement.taskId,
+    provenance: measurement.provenance,
   };
 }
 
@@ -196,27 +209,52 @@ function dedupeSnapshotCollection(items: unknown[]): unknown[] {
 export function buildReviewConfirmSnapshotPayload(
   payload: ReviewConfirmSnapshotPayloadInput,
 ): ReviewConfirmSnapshotPayload {
-  const xeokitMeasurements = [
-    ...(payload.xeokitDistanceMeasurements ?? [])
-      .filter((measurement) => !measurement.approximate)
-      .map(convertXeokitMeasurementToClassic),
-    ...(payload.xeokitAngleMeasurements ?? [])
-      .filter((measurement) => !measurement.approximate)
-      .map(convertXeokitMeasurementToClassic),
-    ...(payload.xeokitElevationPointMeasurements ?? [])
-      .filter((measurement) => !measurement.approximate)
-      .map(convertXeokitMeasurementToClassic),
-    ...(payload.xeokitElevationDeltaMeasurements ?? [])
-      .filter((measurement) => !measurement.approximate)
-      .map(convertXeokitMeasurementToClassic),
-  ];
+  const compatibilityXeokitCount =
+    (payload.xeokitDistanceMeasurements?.length ?? 0)
+    + (payload.xeokitAngleMeasurements?.length ?? 0)
+    + (payload.xeokitElevationPointMeasurements?.length ?? 0)
+    + (payload.xeokitElevationDeltaMeasurements?.length ?? 0);
+  const unifiedMeasurements = (
+    payload.unifiedMeasurements !== undefined
+    && (payload.unifiedMeasurements.length > 0 || compatibilityXeokitCount === 0)
+  )
+    ? payload.unifiedMeasurements.map(measurement => ({ ...measurement }))
+    : undefined;
+  const xeokitMeasurements = unifiedMeasurements === undefined
+    ? [
+      ...(payload.xeokitDistanceMeasurements ?? [])
+        .filter((measurement) => !measurement.approximate)
+        .map(convertXeokitMeasurementToClassic),
+      ...(payload.xeokitAngleMeasurements ?? [])
+        .filter((measurement) => !measurement.approximate)
+        .map(convertXeokitMeasurementToClassic),
+      ...(payload.xeokitElevationPointMeasurements ?? [])
+        .filter((measurement) => !measurement.approximate)
+        .map(convertXeokitMeasurementToClassic),
+      ...(payload.xeokitElevationDeltaMeasurements ?? [])
+        .filter((measurement) => !measurement.approximate)
+        .map(convertXeokitMeasurementToClassic),
+    ]
+    : [];
+  const legacyMeasurements = (payload.legacyMeasurements ?? []).filter(
+    (measurement): measurement is ReviewSnapshotMeasurementPayload => (
+      !!measurement
+      && typeof measurement === 'object'
+      && typeof (measurement as { id?: unknown }).id === 'string'
+    ),
+  );
 
   return {
     annotations: [...(payload.annotations ?? [])],
     cloudAnnotations: [...(payload.cloudAnnotations ?? [])],
     rectAnnotations: [...(payload.rectAnnotations ?? [])],
     obbAnnotations: [...(payload.obbAnnotations ?? [])],
-    measurements: dedupeSnapshotCollection([...(payload.measurements ?? []), ...xeokitMeasurements]),
+    measurements: dedupeSnapshotCollection([
+      ...(payload.measurements ?? []),
+      ...xeokitMeasurements,
+      ...legacyMeasurements,
+      ...(unifiedMeasurements ?? []),
+    ]) as ReviewSnapshotMeasurementPayload[],
     ...(payload.dimensionDocument
       ? { dimensionDocument: payload.dimensionDocument }
       : {}),

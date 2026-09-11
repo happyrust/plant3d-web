@@ -25,6 +25,17 @@ function setSearch(search: string) {
   window.history.replaceState({}, '', search);
 }
 
+function legacyDistance(id: string) {
+  return {
+    id,
+    kind: 'distance' as const,
+    origin: { entityId: `${id}-source`, worldPos: [0, 0, 0] as [number, number, number] },
+    target: { entityId: `${id}-target`, worldPos: [1, 0, 0] as [number, number, number] },
+    visible: true,
+    createdAt: 1,
+  };
+}
+
 async function loadStore() {
   const mod = await import('./useToolStore');
   return mod.useToolStore();
@@ -240,6 +251,117 @@ describe('useToolStore - persistence', () => {
     expect(reloaded.xeokitDistanceMeasurements.value).toHaveLength(1);
     expect(reloaded.xeokitAngleMeasurements.value).toHaveLength(1);
     expect(reloaded.currentXeokitDistanceDraft.value).toBeNull();
+  });
+
+  it('imports V1-V6 measurement payloads and deterministically upgrades them to V7', async () => {
+    const store = await loadStore();
+    const payloads = [
+      {
+        version: 1,
+        measurements: [legacyDistance('v1')],
+        annotations: [],
+      },
+      {
+        version: 2,
+        measurements: [legacyDistance('v2')],
+        annotations: [],
+        obbAnnotations: [],
+      },
+      {
+        version: 3,
+        measurements: [legacyDistance('v3')],
+        annotations: [],
+        obbAnnotations: [],
+        cloudAnnotations: [],
+        rectAnnotations: [],
+      },
+      {
+        version: 4,
+        measurements: [legacyDistance('v4')],
+        annotations: [],
+        obbAnnotations: [],
+        cloudAnnotations: [],
+        rectAnnotations: [],
+        dimensions: [],
+      },
+      {
+        version: 5,
+        measurements: [legacyDistance('v5')],
+        annotations: [],
+        obbAnnotations: [],
+        cloudAnnotations: [],
+        rectAnnotations: [],
+        dimensions: [],
+        xeokitDistanceMeasurements: [],
+        xeokitAngleMeasurements: [],
+        xeokitElevationPointMeasurements: [],
+        xeokitElevationDeltaMeasurements: [],
+      },
+      {
+        version: 6,
+        measurements: [legacyDistance('v6')],
+        annotations: [],
+        obbAnnotations: [],
+        cloudAnnotations: [],
+        rectAnnotations: [],
+        xeokitDistanceMeasurements: [],
+        xeokitAngleMeasurements: [],
+        xeokitElevationPointMeasurements: [],
+        xeokitElevationDeltaMeasurements: [],
+      },
+    ];
+
+    for (const payload of payloads) {
+      store.clearAll();
+      store.importJSON(JSON.stringify(payload));
+
+      const firstExport = store.exportJSON();
+      const parsed = JSON.parse(firstExport) as {
+        version: number;
+        measurements: {
+          id: string;
+          approximate: boolean;
+          provenance: { method: string; accuracyClass: string };
+        }[];
+      };
+      expect(parsed.version).toBe(7);
+      expect(parsed.measurements).toHaveLength(1);
+      expect(parsed.measurements[0]).toMatchObject({
+        id: `v${payload.version}`,
+        approximate: true,
+        provenance: {
+          method: 'legacy-unknown',
+          accuracyClass: 'legacy-unknown',
+        },
+      });
+
+      store.clearAll();
+      store.importJSON(firstExport);
+      expect(store.exportJSON()).toBe(firstExport);
+    }
+  });
+
+  it('keeps malformed legacy measurements in the V7 side channel without dropping valid records', async () => {
+    const store = await loadStore();
+    const malformed = { id: 'unsupported', kind: 'retired-kind', payload: { keep: true } };
+    store.importJSON(JSON.stringify({
+      version: 6,
+      measurements: [legacyDistance('valid-v6'), malformed],
+      annotations: [],
+      obbAnnotations: [],
+      cloudAnnotations: [],
+      rectAnnotations: [],
+      xeokitDistanceMeasurements: [],
+      xeokitAngleMeasurements: [],
+      xeokitElevationPointMeasurements: [],
+      xeokitElevationDeltaMeasurements: [],
+    }));
+
+    const exported = JSON.parse(store.exportJSON());
+    expect(exported.measurements).toEqual([
+      expect.objectContaining({ id: 'valid-v6' }),
+    ]);
+    expect(exported.legacyMeasurements).toEqual([malformed]);
   });
 
   it('should expose active annotation context using the current active type', async () => {

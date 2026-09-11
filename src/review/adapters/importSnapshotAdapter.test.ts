@@ -60,15 +60,28 @@ describe('buildSnapshotFromImportPayload', () => {
       }],
       rectAnnotations: [{ id: 'rect-1', title: 'rect' }],
       obbAnnotations: [{ id: 'obb-1', title: 'obb' }],
-      xeokitDistanceMeasurements: [{ id: 'dist-1', visible: true }],
-      xeokitAngleMeasurements: [{ id: 'angle-1', visible: true }],
+      xeokitDistanceMeasurements: [{
+        id: 'dist-1',
+        origin: { entityId: 'a', worldPos: [0, 0, 0] },
+        target: { entityId: 'b', worldPos: [1, 0, 0] },
+        visible: true,
+        createdAt: 1,
+      }],
+      xeokitAngleMeasurements: [{
+        id: 'angle-1',
+        origin: { entityId: 'a', worldPos: [0, 0, 0] },
+        corner: { entityId: 'b', worldPos: [1, 0, 0] },
+        target: { entityId: 'c', worldPos: [1, 1, 0] },
+        visible: true,
+        createdAt: 2,
+      }],
     };
 
     const snapshot = buildSnapshotFromImportPayload(payload);
+    const replay = JSON.parse(buildReplayPayloadFromImportSnapshot(snapshot));
 
-    expect(buildReplayPayloadFromImportSnapshot(snapshot)).toBe(JSON.stringify({
-      version: 6,
-      measurements: [{ id: 'legacy-m', kind: 'legacy' }],
+    expect(replay).toMatchObject({
+      version: 7,
       annotations: [{ id: 'text-1', title: 'text' }],
       obbAnnotations: [{ id: 'obb-1', title: 'obb' }],
       cloudAnnotations: [{
@@ -77,11 +90,26 @@ describe('buildSnapshotFromImportPayload', () => {
         bindings: [{ refno: 'REF/A', role: 'member', noun: 'PIPE', createdAt: 1 }],
       }],
       rectAnnotations: [{ id: 'rect-1', title: 'rect' }],
-      xeokitDistanceMeasurements: [{ id: 'dist-1', visible: true }],
-      xeokitAngleMeasurements: [{ id: 'angle-1', visible: true }],
-      xeokitElevationPointMeasurements: [],
-      xeokitElevationDeltaMeasurements: [],
-    }));
+      legacyMeasurements: [{ id: 'legacy-m', kind: 'legacy' }],
+    });
+    expect(replay.measurements).toEqual([
+      expect.objectContaining({
+        id: 'dist-1',
+        kind: 'distance',
+        source: 'replay',
+        approximate: true,
+        provenance: expect.objectContaining({ accuracyClass: 'legacy-unknown' }),
+      }),
+      expect.objectContaining({
+        id: 'angle-1',
+        kind: 'angle',
+        source: 'replay',
+        approximate: true,
+        provenance: expect.objectContaining({ accuracyClass: 'legacy-unknown' }),
+      }),
+    ]);
+    expect(replay).not.toHaveProperty('xeokitDistanceMeasurements');
+    expect(replay).not.toHaveProperty('xeokitAngleMeasurements');
   });
 
   it('copies a dimension document without restoring the removed legacy dimensions field', () => {

@@ -8,12 +8,15 @@ import type {
   ElevationPointMeasurementRecord,
   MeasurementRecord,
   MeasurementPoint,
-  XeokitAngleMeasurementRecord,
-  XeokitDistanceMeasurementRecord,
-  XeokitElevationDeltaMeasurementRecord,
-  XeokitElevationPointMeasurementRecord,
 } from '@/composables/useToolStore';
 
+import {
+  fromClassicMeasurement,
+  isUnifiedMeasurementRecord,
+  normalizeUnifiedMeasurementRecord,
+  type UnifiedMeasurementRecord,
+} from '@/composables/unifiedMeasurement';
+import { isComputationProvenance } from '@/measurement/domain/computationProvenance';
 import { fromBackendRole, type AnnotationComment } from '@/types/auth';
 
 type ReplayRecordLike = Pick<
@@ -195,9 +198,9 @@ function normalizeReplayMeasurement(value: unknown): MeasurementRecord | null {
   const record = value as Record<string, unknown>;
   const id = typeof record.id === 'string' ? record.id.trim() : '';
   const kind = typeof record.kind === 'string' ? record.kind.trim().toLowerCase() : '';
-  const origin = isMeasurementPoint(record.origin) ? record.origin : null;
-  const target = isMeasurementPoint(record.target) ? record.target : null;
-  const createdAt = typeof record.createdAt === 'number' ? record.createdAt : Date.now();
+  const createdAt = typeof record.createdAt === 'number' && Number.isFinite(record.createdAt)
+    ? record.createdAt
+    : 0;
   const visible = record.visible !== false;
   const sourceAnnotationId = typeof record.sourceAnnotationId === 'string'
     ? record.sourceAnnotationId
@@ -211,10 +214,16 @@ function normalizeReplayMeasurement(value: unknown): MeasurementRecord | null {
   const taskId = typeof record.taskId === 'string'
     ? record.taskId.trim() || undefined
     : undefined;
+  const provenance = isComputationProvenance(record.provenance)
+    ? record.provenance
+    : undefined;
 
-  if (!id || !origin || !target) return null;
+  if (!id) return null;
 
   if (kind === 'distance') {
+    const origin = isMeasurementPoint(record.origin) ? record.origin : null;
+    const target = isMeasurementPoint(record.target) ? record.target : null;
+    if (!origin || !target) return null;
     return {
       id,
       kind: 'distance',
@@ -226,6 +235,7 @@ function normalizeReplayMeasurement(value: unknown): MeasurementRecord | null {
       sourceAnnotationType,
       formId,
       taskId,
+      provenance,
     };
   }
 
@@ -247,12 +257,18 @@ function normalizeReplayMeasurement(value: unknown): MeasurementRecord | null {
       createdAt,
       sourceAnnotationId,
       sourceAnnotationType,
+      formId,
+      taskId,
+      provenance,
     };
     return normalized;
   }
 
-  const corner = isMeasurementPoint(record.corner) ? record.corner : null;
-  if (kind === 'angle' && corner) {
+  if (kind === 'angle') {
+    const origin = isMeasurementPoint(record.origin) ? record.origin : null;
+    const corner = isMeasurementPoint(record.corner) ? record.corner : null;
+    const target = isMeasurementPoint(record.target) ? record.target : null;
+    if (!origin || !corner || !target) return null;
     return {
       id,
       kind: 'angle',
@@ -265,10 +281,14 @@ function normalizeReplayMeasurement(value: unknown): MeasurementRecord | null {
       sourceAnnotationType,
       formId,
       taskId,
+      provenance,
     };
   }
 
   if (kind === 'elevation_delta') {
+    const origin = isMeasurementPoint(record.origin) ? record.origin : null;
+    const target = isMeasurementPoint(record.target) ? record.target : null;
+    if (!origin || !target) return null;
     const originElevation = typeof record.originElevation === 'number' ? record.originElevation : null;
     const targetElevation = typeof record.targetElevation === 'number' ? record.targetElevation : null;
     const datumElevation = typeof record.datumElevation === 'number' ? record.datumElevation : 0;
@@ -288,6 +308,9 @@ function normalizeReplayMeasurement(value: unknown): MeasurementRecord | null {
       createdAt,
       sourceAnnotationId,
       sourceAnnotationType,
+      formId,
+      taskId,
+      provenance,
     };
     return normalized;
   }
@@ -295,117 +318,32 @@ function normalizeReplayMeasurement(value: unknown): MeasurementRecord | null {
   return null;
 }
 
-function toXeokitMeasurement(
-  measurement: MeasurementRecord,
-): XeokitDistanceMeasurementRecord | XeokitAngleMeasurementRecord | XeokitElevationPointMeasurementRecord | XeokitElevationDeltaMeasurementRecord {
-  if (measurement.kind === 'angle') {
-    return {
-      id: measurement.id,
-      kind: 'angle',
-      origin: measurement.origin,
-      corner: measurement.corner,
-      target: measurement.target,
-      visible: measurement.visible,
-      approximate: false,
-      createdAt: measurement.createdAt,
-      sourceAnnotationId: measurement.sourceAnnotationId,
-      sourceAnnotationType: measurement.sourceAnnotationType,
-      formId: measurement.formId,
-      taskId: measurement.taskId,
-    };
-  }
-
-  if (measurement.kind === 'elevation_point') {
-    return {
-      id: measurement.id,
-      kind: 'elevation_point',
-      point: measurement.point,
-      absoluteElevation: measurement.absoluteElevation,
-      datumElevation: measurement.datumElevation,
-      relativeElevation: measurement.relativeElevation,
-      visible: measurement.visible,
-      approximate: false,
-      createdAt: measurement.createdAt,
-      sourceAnnotationId: measurement.sourceAnnotationId,
-      sourceAnnotationType: measurement.sourceAnnotationType,
-    };
-  }
-
-  if (measurement.kind === 'elevation_delta') {
-    return {
-      id: measurement.id,
-      kind: 'elevation_delta',
-      origin: measurement.origin,
-      target: measurement.target,
-      originElevation: measurement.originElevation,
-      targetElevation: measurement.targetElevation,
-      deltaElevation: measurement.deltaElevation,
-      datumElevation: measurement.datumElevation,
-      visible: measurement.visible,
-      approximate: false,
-      createdAt: measurement.createdAt,
-      sourceAnnotationId: measurement.sourceAnnotationId,
-      sourceAnnotationType: measurement.sourceAnnotationType,
-    };
-  }
-
-  return {
-    id: measurement.id,
-    kind: 'distance',
-    origin: measurement.origin,
-    target: measurement.target,
-    visible: measurement.visible,
-    approximate: false,
-    createdAt: measurement.createdAt,
-    sourceAnnotationId: measurement.sourceAnnotationId,
-    sourceAnnotationType: measurement.sourceAnnotationType,
-    formId: measurement.formId,
-    taskId: measurement.taskId,
-  };
-}
-
 function buildReplayMeasurements(measurements: ReviewSnapshotMeasurementPayload[]): {
-  measurements: ReviewSnapshotMeasurementPayload[];
-  xeokitDistanceMeasurements: XeokitDistanceMeasurementRecord[];
-  xeokitAngleMeasurements: XeokitAngleMeasurementRecord[];
-  xeokitElevationPointMeasurements: XeokitElevationPointMeasurementRecord[];
-  xeokitElevationDeltaMeasurements: XeokitElevationDeltaMeasurementRecord[];
+  measurements: UnifiedMeasurementRecord[];
+  legacyMeasurements: ReviewSnapshotMeasurementPayload[];
 } {
-  const fallbackMeasurements: ReviewSnapshotMeasurementPayload[] = [];
-  const xeokitDistanceMeasurements: XeokitDistanceMeasurementRecord[] = [];
-  const xeokitAngleMeasurements: XeokitAngleMeasurementRecord[] = [];
-  const xeokitElevationPointMeasurements: XeokitElevationPointMeasurementRecord[] = [];
-  const xeokitElevationDeltaMeasurements: XeokitElevationDeltaMeasurementRecord[] = [];
+  const unifiedMeasurements: UnifiedMeasurementRecord[] = [];
+  const legacyMeasurements: ReviewSnapshotMeasurementPayload[] = [];
 
   for (const measurement of measurements) {
+    if (isUnifiedMeasurementRecord(measurement)) {
+      unifiedMeasurements.push(normalizeUnifiedMeasurementRecord(measurement));
+      continue;
+    }
     const normalized = normalizeReplayMeasurement(measurement as unknown);
     if (!normalized) {
-      fallbackMeasurements.push(measurement);
+      legacyMeasurements.push(measurement);
       continue;
     }
-
-    const converted = toXeokitMeasurement(normalized);
-    if (converted.kind === 'angle') {
-      xeokitAngleMeasurements.push(converted);
-      continue;
-    }
-    if (converted.kind === 'elevation_point') {
-      xeokitElevationPointMeasurements.push(converted);
-      continue;
-    }
-    if (converted.kind === 'elevation_delta') {
-      xeokitElevationDeltaMeasurements.push(converted);
-      continue;
-    }
-    xeokitDistanceMeasurements.push(converted);
+    unifiedMeasurements.push({
+      ...fromClassicMeasurement(normalized),
+      source: 'replay',
+    });
   }
 
   return {
-    measurements: dedupeReplayItems(fallbackMeasurements) as ReviewSnapshotMeasurementPayload[],
-    xeokitDistanceMeasurements: dedupeReplayItems(xeokitDistanceMeasurements) as XeokitDistanceMeasurementRecord[],
-    xeokitAngleMeasurements: dedupeReplayItems(xeokitAngleMeasurements) as XeokitAngleMeasurementRecord[],
-    xeokitElevationPointMeasurements: dedupeReplayItems(xeokitElevationPointMeasurements) as XeokitElevationPointMeasurementRecord[],
-    xeokitElevationDeltaMeasurements: dedupeReplayItems(xeokitElevationDeltaMeasurements) as XeokitElevationDeltaMeasurementRecord[],
+    measurements: dedupeReplayItems(unifiedMeasurements) as UnifiedMeasurementRecord[],
+    legacyMeasurements: dedupeReplayItems(legacyMeasurements) as ReviewSnapshotMeasurementPayload[],
   };
 }
 
@@ -460,16 +398,13 @@ export function buildReviewRecordReplayPayload(
   const cloudAnnotations = dedupeReplayItems(normalizedRecords.flatMap((record) => record.cloudAnnotations ?? []));
   const rectAnnotations = dedupeReplayItems(normalizedRecords.flatMap((record) => record.rectAnnotations ?? []));
   return JSON.stringify({
-    version: 6,
+    version: 7,
     measurements: replayMeasurements.measurements,
+    legacyMeasurements: replayMeasurements.legacyMeasurements,
     annotations,
     obbAnnotations,
     cloudAnnotations,
     rectAnnotations,
-    xeokitDistanceMeasurements: replayMeasurements.xeokitDistanceMeasurements,
-    xeokitAngleMeasurements: replayMeasurements.xeokitAngleMeasurements,
-    xeokitElevationPointMeasurements: replayMeasurements.xeokitElevationPointMeasurements,
-    xeokitElevationDeltaMeasurements: replayMeasurements.xeokitElevationDeltaMeasurements,
   });
 }
 

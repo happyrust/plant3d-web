@@ -14,6 +14,7 @@ import type {
 import type { SnapshotDimensionDocument } from '@/dimension/adapters/reviewSnapshotAdapter';
 
 import { buildWorkflowSnapshotReplayPayload } from '@/components/review/reviewRecordReplay';
+import { createComputationProvenance } from '@/measurement/domain/computationProvenance';
 import { UserRole } from '@/types/auth';
 
 const FIXED_NOW = 1_700_000_000_000;
@@ -78,9 +79,9 @@ function makeCloudItem(id: string) {
 function makeDistanceItem(id: string) {
   return {
     id,
-    kind: 'distance',
-    origin: { entityId: 'a', worldPos: [0, 0, 0] },
-    target: { entityId: 'b', worldPos: [1, 1, 1] },
+    kind: 'distance' as const,
+    origin: { entityId: 'a', worldPos: [0, 0, 0] as [number, number, number] },
+    target: { entityId: 'b', worldPos: [1, 1, 1] as [number, number, number] },
     visible: true,
     createdAt: 1,
   };
@@ -89,10 +90,10 @@ function makeDistanceItem(id: string) {
 function makeAngleItem(id: string) {
   return {
     id,
-    kind: 'angle',
-    origin: { entityId: 'a', worldPos: [0, 0, 0] },
-    corner: { entityId: 'b', worldPos: [1, 0, 0] },
-    target: { entityId: 'c', worldPos: [1, 1, 0] },
+    kind: 'angle' as const,
+    origin: { entityId: 'a', worldPos: [0, 0, 0] as [number, number, number] },
+    corner: { entityId: 'b', worldPos: [1, 0, 0] as [number, number, number] },
+    target: { entityId: 'c', worldPos: [1, 1, 0] as [number, number, number] },
     visible: true,
     createdAt: 1,
   };
@@ -230,6 +231,44 @@ describe('buildSnapshotFromWorkflowSync', () => {
     expect(textPayload?.comments).toHaveLength(1);
     expect(snapshot.annotations.find((a) => a.annotationId === 'c0')?.payload.bindings)
       .toEqual(makeCloudItem('c0').bindings);
+  });
+
+  it('preserves unified measurement provenance through workflow snapshot and replay', () => {
+    const provenance = createComputationProvenance({
+      method: 'semantic-point-pair',
+      accuracyClass: 'exact-semantic',
+      coordinateSpace: 'design-world',
+      sourceModelVersion: 'workflow-model-v7',
+      source: { entityId: 'a' },
+      target: { entityId: 'b' },
+    });
+    const data: WorkflowSyncData = {
+      models: [],
+      records: [makeRecord({
+        id: 'record-v7',
+        measurements: [{
+          ...makeDistanceItem('distance-v7'),
+          source: 'xeokit',
+          approximate: false,
+          provenance,
+        }],
+      })],
+      annotationComments: [],
+      attachments: [],
+    };
+
+    const snapshot = buildSnapshotFromWorkflowSync(data, { now: () => FIXED_NOW });
+    expect(snapshot.measurements[0]?.payload.provenance).toEqual(provenance);
+
+    const replay = JSON.parse(buildReplayPayloadFromSnapshot(snapshot));
+    expect(replay.measurements).toEqual([
+      expect.objectContaining({
+        id: 'distance-v7',
+        source: 'xeokit',
+        approximate: false,
+        provenance,
+      }),
+    ]);
   });
 
   it('keeps order across records and types when comments missing', () => {
