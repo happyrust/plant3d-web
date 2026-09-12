@@ -36,6 +36,7 @@ export function emptyLayout(
   dimensionId: string,
   labelPinned: boolean,
   formattedLabel = '',
+  lodHidden?: LayoutResult['derived']['lodHidden'],
 ): LayoutResult {
   return {
     dimensionId,
@@ -44,7 +45,7 @@ export function emptyLayout(
     hitRegions: [],
     labelBounds: { x: 0, y: 0, width: 0, height: 0 },
     labelPinned,
-    derived: { formattedLabel },
+    derived: { formattedLabel, ...(lodHidden ? { lodHidden } : {}) },
   };
 }
 

@@ -13,6 +13,11 @@ describe('dimension theme', () => {
       arrowHalfAngleDeg: 18,
       // 外部箭头笔画的可读下限与用户尺寸实心头同长（ADR 0056）。
       arrowLineMinLengthPx: 13,
+      // 来源自报字高（MBD cheight）投影后的夹取区间（2026-09-12 S2）。
+      sourceTextHeightMinPx: 11,
+      sourceTextHeightMaxPx: 18,
+      // 尺寸线投影短于 1 个标签宽的显式尺寸按 LOD 隐藏（2026-09-12 S3）。
+      lodMinLineToLabelRatio: 1,
       extensionOvershootPx: 10,
       labelPaddingPx: 8,
       outsideExtensionPx: 18,
@@ -22,6 +27,13 @@ describe('dimension theme', () => {
       // 普通/外部标签文字用深色提升可读性；语义/交互角色回落 colors 保持高亮。
       textColors: { normal: '#111827', external: '#111827' },
     });
+  });
+
+  it('keeps external dimension lines apart from user magenta and the selection highlight', () => {
+    // 用户尺寸保持洋红；外部（MBD / 测量）尺寸线用深橙，与 DTX 选中高亮 0xff4fd8 和默认蓝色管体都拉开（QW2）。
+    expect(SOLVESPACE_DIMENSION_THEME.colors.normal).toBe('#ff1aff');
+    expect(SOLVESPACE_DIMENSION_THEME.colors.external).toBe('#c2410c');
+    expect(SOLVESPACE_DIMENSION_THEME.colors['external-reference']).toBe('#c2410c');
   });
 
   it('maps semantic and interaction roles through one theme', () => {

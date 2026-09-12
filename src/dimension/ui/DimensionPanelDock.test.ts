@@ -64,6 +64,7 @@ function createSystem() {
   const externalRegistry = new ExternalDimensionRegistry();
   externalRegistry.replaceSource('mbd', [external]);
   const setSelection = vi.fn();
+  const layoutListeners = new Set<(layouts: readonly unknown[]) => void>();
   return {
     externalRegistry,
     document: {
@@ -79,6 +80,15 @@ function createSystem() {
       getSelection: () => null,
       setSelection,
       subscribeSelection: () => vi.fn(),
+      getLayouts: () => [] as readonly unknown[],
+      subscribeLayouts(listener: (layouts: readonly unknown[]) => void) {
+        layoutListeners.add(listener);
+        return () => layoutListeners.delete(listener);
+      },
+    },
+    /** Test seam: push a layout batch as the real viewport would after a re-layout. */
+    emitLayouts(layouts: readonly unknown[]) {
+      layoutListeners.forEach(listener => listener(layouts));
     },
     pointer: { start: vi.fn() },
     snapPort: null,
@@ -240,6 +250,141 @@ describe('DimensionPanelDock', () => {
     expect(
       host.querySelector('[data-testid="mbd-layout-mode"]')?.textContent,
     ).toContain('linear_mvp');
+  });
+
+  it('turns the mbd_kinds URL filter into checkboxes and writes changes back through popstate', async () => {
+    mocks.dimensionSystem.value = createSystem();
+    window.history.replaceState({}, '', '/?mbd_refno=A&mbd_kinds=linear_dim');
+    useMbdDiagnosticsStore().set({
+      channel: 'api',
+      sourceId: 'A',
+      issues: [],
+      skipped: [],
+    });
+    const popstates: (string | null)[] = [];
+    const onPopstate = () => {
+      popstates.push(new URLSearchParams(window.location.search).get('mbd_kinds'));
+    };
+    window.addEventListener('popstate', onPopstate);
+    try {
+      const host = mountPanel();
+      await nextTick();
+
+      const filter = host.querySelector('[data-testid="mbd-kind-filter"]');
+      expect(filter).not.toBeNull();
+      expect(filter?.textContent).toContain('显示 1 条');
+      const linear = host.querySelector<HTMLInputElement>('[data-mbd-kind="linear_dim"]');
+      const label = host.querySelector<HTMLInputElement>('[data-mbd-kind="label"]');
+      expect(linear?.checked).toBe(true);
+      expect(label?.checked).toBe(false);
+      // 只剩一个类别时不允许再取消，避免写出空过滤。
+      expect(linear?.disabled).toBe(true);
+
+      label!.checked = true;
+      label!.dispatchEvent(new Event('change'));
+      await nextTick();
+      expect(popstates).toEqual(['linear_dim,label']);
+      expect(host.querySelector<HTMLInputElement>('[data-mbd-kind="label"]')?.checked).toBe(true);
+      expect(host.querySelector<HTMLInputElement>('[data-mbd-kind="linear_dim"]')?.disabled).toBe(false);
+
+      host.querySelector<HTMLButtonElement>('[data-testid="mbd-kind-all"]')!.click();
+      await nextTick();
+      expect(popstates).toEqual(['linear_dim,label', null]);
+      expect(host.querySelector<HTMLInputElement>('[data-mbd-kind="weld_mark"]')?.checked).toBe(true);
+      expect(host.querySelector<HTMLButtonElement>('[data-testid="mbd-kind-all"]')?.disabled).toBe(true);
+
+      host.querySelector<HTMLButtonElement>('[data-testid="mbd-kind-only-linear"]')!.click();
+      await nextTick();
+      expect(popstates.at(-1)).toBe('linear_dim');
+      expect(host.querySelector<HTMLInputElement>('[data-mbd-kind="weld_mark"]')?.checked).toBe(false);
+    } finally {
+      window.removeEventListener('popstate', onPopstate);
+      window.history.replaceState({}, '', '/');
+    }
+  });
+
+  it('reports LOD-hidden MBD dimensions per reason and toggles LOD through the URL', async () => {
+    const system = createSystem();
+    system.externalRegistry.replaceSource('mbd', ['a', 'b', 'c', 'd'].map(suffix => ({
+      id: `mbd-${suffix}`,
+      source: 'mbd' as const,
+      sourceLabel: 'MBD',
+      role: 'external' as const,
+      layout: {
+        id: `mbd-${suffix}`,
+        role: 'external' as const,
+        labelPinned: true,
+        formattedLabel: '100',
+        lines: [],
+        labelAnchor: [0, 0, 0] as const,
+        arrowLines: [],
+      },
+    })));
+    mocks.dimensionSystem.value = system;
+    window.history.replaceState({}, '', '/?mbd_refno=A');
+    useMbdDiagnosticsStore().set({
+      channel: 'api',
+      sourceId: 'A',
+      issues: [],
+      skipped: [],
+    });
+    const popstates: (string | null)[] = [];
+    const onPopstate = () => {
+      popstates.push(new URLSearchParams(window.location.search).get('mbd_lod'));
+    };
+    window.addEventListener('popstate', onPopstate);
+    try {
+      const host = mountPanel();
+      await nextTick();
+      const summary = () => host.querySelector('[data-testid="mbd-lod-hidden"]')?.textContent?.replace(/\s+/g, ' ').trim();
+      expect(summary()).toBe('LOD 隐藏 0 条（atta 远景 0 / 短段 0）');
+
+      const layout = (id: string, lodHidden?: string) => ({
+        dimensionId: id,
+        scenePrimitives: [],
+        primitives: [],
+        hitRegions: [],
+        labelBounds: { x: 0, y: 0, width: 0, height: 0 },
+        labelPinned: true,
+        derived: { formattedLabel: '100', ...(lodHidden ? { lodHidden } : {}) },
+      });
+      system.emitLayouts([
+        layout('mbd-a', 'secondary-far'),
+        layout('mbd-b', 'secondary-far'),
+        layout('mbd-c', 'short-line'),
+        layout('mbd-d'),
+        // A user dimension elided for whatever reason is not an MBD count.
+        layout('linear-1', 'short-line'),
+      ]);
+      await nextTick();
+      expect(summary()).toBe('LOD 隐藏 3 条（atta 远景 2 / 短段 1）');
+
+      const toggle = host.querySelector<HTMLInputElement>('[data-testid="mbd-lod-enabled"]')!;
+      expect(toggle.checked).toBe(true);
+      toggle.checked = false;
+      toggle.dispatchEvent(new Event('change'));
+      await nextTick();
+      expect(popstates).toEqual(['0']);
+      expect(summary()).toBe('已关闭，每条尺寸照常出图');
+      expect(host.querySelector<HTMLInputElement>('[data-testid="mbd-lod-enabled"]')?.checked).toBe(false);
+
+      const again = host.querySelector<HTMLInputElement>('[data-testid="mbd-lod-enabled"]')!;
+      again.checked = true;
+      again.dispatchEvent(new Event('change'));
+      await nextTick();
+      expect(popstates).toEqual(['0', null]);
+      expect(summary()).toBe('LOD 隐藏 3 条（atta 远景 2 / 短段 1）');
+    } finally {
+      window.removeEventListener('popstate', onPopstate);
+      window.history.replaceState({}, '', '/');
+    }
+  });
+
+  it('hides the kind filter until an MBD channel has been synced', async () => {
+    mocks.dimensionSystem.value = createSystem();
+    const host = mountPanel();
+    await nextTick();
+    expect(host.querySelector('[data-testid="mbd-kind-filter"]')).toBeNull();
   });
 
   it('keeps quiet when the solver declares no partial mode', async () => {

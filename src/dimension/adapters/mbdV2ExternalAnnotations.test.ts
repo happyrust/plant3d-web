@@ -346,6 +346,62 @@ describe('mbdV2ToExternalRecords', () => {
     ]);
   });
 
+  it('carries the group cheight into every record as a Design Space text height', () => {
+    const parsed = parseMbdV2PipeData(cliLinearFixture);
+    if (!parsed.ok) throw new Error(parsed.error);
+    // source_mm payload with S(0.001): 27 mm → 0.027 m on every record (S2).
+    const withCheight = mbdV2ToExternalRecords({
+      ...parsed.data,
+      meta: { ...parsed.data.meta, cheight_mm: 27 },
+    });
+    expect(withCheight.records).not.toHaveLength(0);
+    for (const record of withCheight.records) {
+      expect((record.layout as ExplicitLayoutInput).textHeightM).toBeCloseTo(0.027, 12);
+    }
+
+    // No cheight (or null): the kernel keeps its fixed text height.
+    const withoutCheight = mbdV2ToExternalRecords({
+      ...parsed.data,
+      meta: { ...parsed.data.meta, cheight_mm: null },
+    });
+    for (const record of withoutCheight.records) {
+      expect((record.layout as ExplicitLayoutInput).textHeightM).toBeUndefined();
+    }
+
+    // design_m payload still declares the height in millimetres.
+    const designSpace = mbdV2ToExternalRecords({
+      ...fixtureData(),
+      meta: { geometry_space: 'design_m', notes: [], cheight_mm: 27 },
+    });
+    expect((designSpace.records[0]!.layout as ExplicitLayoutInput).textHeightM)
+      .toBeCloseTo(0.027, 12);
+  });
+
+  it('tags linear dimensions with level-of-detail hints from sub_kind', () => {
+    const parsed = parseMbdV2PipeData(cliLinearFixture);
+    if (!parsed.ok) throw new Error(parsed.error);
+    const source = parsed.data.primitives[0]!;
+    if (source.kind !== 'linear_dim') throw new Error('linear_dim fixture missing');
+    const result = mbdV2ToExternalRecords({
+      ...parsed.data,
+      primitives: [
+        { ...source, id: 'main-1', sub_kind: 'main' },
+        { ...source, id: 'atta-1', sub_kind: 'atta' },
+        { ...source, id: 'small-1', sub_kind: 'small' },
+        { kind: 'label', id: 'tag-1', text: 'PIPE', position: [0, 0, 0] },
+      ],
+    });
+
+    // Main running dimensions: primary, hidden only when too short to read.
+    expect(explicitLayout(result, 'main-1').lod).toEqual({ tier: 'primary', hideShort: true });
+    // ATTA sub-dimensions drop out on a plant-wide view.
+    expect(explicitLayout(result, 'atta-1').lod).toEqual({ tier: 'secondary', hideShort: true });
+    // Small dims already carry their text outside the line: never hide them for length.
+    expect(explicitLayout(result, 'small-1').lod).toEqual({ tier: 'primary', hideShort: false });
+    // Non-dimension primitives carry no LOD hint (the kind filter handles them).
+    expect(explicitLayout(result, 'tag-1').lod).toBeUndefined();
+  });
+
   it('produces records the shared kernel can lay out end to end', () => {
     const result = mbdV2ToExternalRecords(fixtureData());
     const batch = layoutViewport(
@@ -363,10 +419,11 @@ describe('mbdV2ToExternalRecords', () => {
     const weldLayout = batch.layouts.find(
       layout => layout.dimensionId === 'weld-field-2',
     )!;
+    // Every MBD record is solver-placed, dimensions included (QW1, 2026-09-12).
     expect(
       batch.layouts.find(layout => layout.dimensionId === 'dim-segment-1')
         ?.labelPinned,
-    ).toBe(false);
+    ).toBe(true);
     expect(weldLayout.labelPinned).toBe(true);
     expect(
       weldLayout.primitives.filter(primitive => primitive.kind === 'marker'),
@@ -407,7 +464,7 @@ describe('mbdV2ToExternalRecords', () => {
     expect(layout.scenePrimitives.some(primitive => primitive.kind === 'scene-triangle')).toBe(false);
   });
 
-  it('lets the shared kernel separate overlapping MBD dimension labels', () => {
+  it('keeps overlapping MBD dimension labels on their solver anchors instead of decluttering them', () => {
     const data = fixtureData();
     const source = data.primitives.find(
       primitive => primitive.kind === 'linear_dim',
@@ -427,14 +484,17 @@ describe('mbdV2ToExternalRecords', () => {
       },
       new Map(),
     ).layouts;
-    const [a, b] = layouts.map(layout => layout.labelBounds);
+    const [a, b] = layouts;
 
-    expect(layouts.every(layout => !layout.labelPinned)).toBe(true);
-    expect(
-      a.x + a.width <= b.x
-      || b.x + b.width <= a.x
-      || a.y + a.height <= b.y
-      || b.y + b.height <= a.y,
-    ).toBe(true);
+    expect(layouts.every(layout => layout.labelPinned)).toBe(true);
+    // Same `label_anchor` → same label box: the Web kernel must not push
+    // either copy away from the solver's placement …
+    expect(b!.labelBounds).toEqual(a!.labelBounds);
+    // … nor invent a leader line to a relocated label.
+    for (const layout of layouts) {
+      expect(layout.primitives.some(
+        primitive => primitive.kind === 'line' && primitive.part === 'leader',
+      )).toBe(false);
+    }
   });
 });

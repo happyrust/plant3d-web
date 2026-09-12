@@ -1,6 +1,7 @@
 import type { MbdDiagnosticsStore } from './useMbdDiagnosticsStore';
 import type {
   DimensionSystem,
+  ExternalDimensionRecord,
   MbdDimensionDto,
   MbdV2Issue,
   MbdV2ParseResult,
@@ -68,6 +69,35 @@ class MbdAtomicRejectionError extends Error {
 }
 
 /**
+ * 调试过滤 `?mbd_kinds=linear_dim[,slope_mark,…]`：只把这些 kind 的图元送进画家
+ * （例如只看长度尺寸）。缺省 / 空值 = 不过滤。它作用在契约校验与原子拒绝之后，
+ * 所以既不掩盖负载问题，也不改变求解器输出本身；过滤事实写进诊断 notes。
+ */
+function parseMbdKindFilter(raw: string | null): ReadonlySet<string> | null {
+  const kinds = (raw ?? '')
+    .split(',')
+    .map(kind => kind.trim().toLowerCase())
+    .filter(kind => kind.length > 0);
+  return kinds.length > 0 ? new Set(kinds) : null;
+}
+
+/**
+ * 调试开关 `?mbd_lod=0`：关掉分级显示（S3）。mapper 给 `linear_dim` 打的 `lod` 提示在这里
+ * 被剥掉，内核就对每条尺寸照常出图；缺省 / 其它值 = 保留提示。
+ */
+function isMbdLodDisabled(raw: string | null): boolean {
+  return raw?.trim() === '0';
+}
+
+function withoutLod(record: ExternalDimensionRecord): ExternalDimensionRecord {
+  const layout = record.layout;
+  // `lod` only exists on explicit layouts, so the `in` check narrows the union.
+  if (!('lod' in layout)) return record;
+  const { lod: _lod, ...rest } = layout;
+  return { ...record, layout: rest };
+}
+
+/**
  * MBD 外部图元双通道同步（从 ViewerPanel 抽出以获得可测缝）：
  * 通道选择、竞态守卫、诊断写入、error toast 集中在此。
  */
@@ -131,14 +161,32 @@ export function createMbdExternalSync(
           );
         }
         if (cancelled()) return;
-        target.replaceExternalSource('mbd', mapped.records);
+        const kindFilter = parseMbdKindFilter(params.get('mbd_kinds'));
+        const kindById = new Map<string, string>(
+          payload.primitives.map(primitive => [primitive.id, primitive.kind]),
+        );
+        const lodDisabled = isMbdLodDisabled(params.get('mbd_lod'));
+        const filtered = kindFilter
+          ? mapped.records.filter(record => kindFilter.has(kindById.get(record.id) ?? ''))
+          : mapped.records;
+        const records = lodDisabled ? filtered.map(withoutLod) : filtered;
+        target.replaceExternalSource('mbd', records);
         deps.diagnostics.set({
           channel,
           sourceId,
           issues: payload.issues,
           skipped,
           layoutMode: payload.meta.layout_mode ?? null,
-          notes: payload.meta.notes,
+          notes: [
+            ...payload.meta.notes,
+            ...(kindFilter
+              ? [
+                `mbd_kinds=${[...kindFilter].join(',')}：调试过滤，仅显示 `
+                  + `${records.length}/${mapped.records.length} 个图元`,
+              ]
+              : []),
+            ...(lodDisabled ? ['mbd_lod=0：已关闭分级显示（LOD），每条尺寸照常出图'] : []),
+          ],
         });
         const errorCount = payload.issues.filter(
           issue => issue.severity === 'error',

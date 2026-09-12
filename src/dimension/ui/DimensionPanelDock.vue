@@ -20,8 +20,10 @@ import DimensionSemanticList from './DimensionSemanticList.vue';
 import DimensionToolbar from './DimensionToolbar.vue';
 
 import type { DimensionBoundAction } from './dimensionBoundActions';
+import type { MbdPrimitive } from '../adapters/mbdV2Contract';
 import type { ExternalDimensionRecord } from '../adapters/normalizeExternalDimensions';
 import type { UserDimensionRecord } from '../domain/types';
+import type { LayoutResult } from '../kernel/types';
 
 import {
   useMbdDiagnosticsStore,
@@ -60,9 +62,14 @@ const hiddenExternalIds = shallowRef<readonly string[]>(
   [...(viewerContext.dimensionSystem.value?.externalRegistry.snapshot.hiddenIds ?? [])],
 );
 const selectedId = ref<string | null>(null);
+/** 最近一次完整布局（`viewport.subscribeLayouts`），用来读 `derived.lodHidden` 这类逐帧结果。 */
+const viewportLayouts = shallowRef<readonly LayoutResult[]>(
+  viewerContext.dimensionSystem.value?.viewport.getLayouts() ?? [],
+);
 let unsubscribeDocument: (() => void) | null = null;
 let unsubscribeSelection: (() => void) | null = null;
 let unsubscribeExternal: (() => void) | null = null;
+let unsubscribeLayouts: (() => void) | null = null;
 
 watch(
   () => viewerContext.dimensionSystem.value,
@@ -73,12 +80,15 @@ watch(
     unsubscribeSelection = null;
     unsubscribeExternal?.();
     unsubscribeExternal = null;
+    unsubscribeLayouts?.();
+    unsubscribeLayouts = null;
     documentState.value = system?.document.state ?? null;
     externalRecords.value = system?.externalRegistry.snapshot.records ?? [];
     hiddenExternalIds.value = [
       ...(system?.externalRegistry.snapshot.hiddenIds ?? []),
     ];
     selectedId.value = system?.viewport.getSelection() ?? null;
+    viewportLayouts.value = system?.viewport.getLayouts() ?? [];
     if (system) {
       unsubscribeDocument = system.document.subscribe((state) => {
         documentState.value = state;
@@ -89,6 +99,9 @@ watch(
       unsubscribeExternal = system.externalRegistry.subscribe((snapshot) => {
         externalRecords.value = snapshot.records;
         hiddenExternalIds.value = [...snapshot.hiddenIds];
+      });
+      unsubscribeLayouts = system.viewport.subscribeLayouts((layouts) => {
+        viewportLayouts.value = layouts;
       });
     }
   },
@@ -102,6 +115,8 @@ onUnmounted(() => {
   unsubscribeSelection = null;
   unsubscribeExternal?.();
   unsubscribeExternal = null;
+  unsubscribeLayouts?.();
+  unsubscribeLayouts = null;
 });
 
 const items = computed(() => [
@@ -142,6 +157,121 @@ function locateIssueRefno(refno: string): void {
     detail: { refnos: [refno], flyTo: true },
   }));
 }
+
+/**
+ * MBD 图元类别过滤（2026-09-12 长度尺寸显示优化 QW3）。真正的过滤在
+ * `useMbdExternalSync` 读 URL `mbd_kinds`；这里只是把那个参数做成勾选框：
+ * 改 URL → 派发 `popstate` → ViewerPanel 走同一条 `handleMbdLocationChange`
+ * 重新同步。`Record` 钉住契约的全部 kind，契约新增 kind 时这里会编译失败。
+ */
+const MBD_KIND_LABELS: Readonly<Record<MbdPrimitive['kind'], string>> = {
+  linear_dim: '长度尺寸',
+  angle_dim: '安装角',
+  slope_mark: '坡度',
+  weld_mark: '焊缝',
+  label: '位号标签',
+  leader_line: '引线',
+  aid_line: '辅助线',
+  aid_arc: '辅助弧',
+  aid_circle: '辅助圆',
+  aid_point: '辅助点',
+  aid_text: '辅助文字',
+};
+const MBD_KINDS = Object.keys(MBD_KIND_LABELS) as readonly MbdPrimitive['kind'][];
+
+function readMbdKindFilter(): ReadonlySet<string> | null {
+  if (typeof window === 'undefined') return null;
+  const kinds = (new URLSearchParams(window.location.search).get('mbd_kinds') ?? '')
+    .split(',')
+    .map(kind => kind.trim().toLowerCase())
+    .filter(kind => kind.length > 0);
+  return kinds.length > 0 ? new Set(kinds) : null;
+}
+
+const mbdKindFilter = ref<ReadonlySet<string> | null>(readMbdKindFilter());
+const mbdRecordCount = computed(() =>
+  externalRecords.value.filter(record => record.source === 'mbd').length);
+const shownMbdKindCount = computed(() =>
+  MBD_KINDS.filter(kind => isMbdKindShown(kind)).length);
+
+function isMbdKindShown(kind: string): boolean {
+  return mbdKindFilter.value === null || mbdKindFilter.value.has(kind);
+}
+
+function writeMbdKinds(kinds: readonly string[] | null): void {
+  const url = new URL(window.location.href);
+  if (kinds === null) url.searchParams.delete('mbd_kinds');
+  else url.searchParams.set('mbd_kinds', kinds.join(','));
+  window.history.pushState({}, '', url);
+  window.dispatchEvent(new Event('popstate'));
+}
+
+function setMbdKindShown(kind: string, shown: boolean): void {
+  const next = new Set(mbdKindFilter.value ?? MBD_KINDS);
+  if (shown) next.add(kind);
+  else next.delete(kind);
+  if (next.size === 0) return;
+  writeMbdKinds(
+    next.size === MBD_KINDS.length ? null : MBD_KINDS.filter(item => next.has(item)),
+  );
+}
+
+function showOnlyMbdKind(kind: MbdPrimitive['kind']): void {
+  writeMbdKinds([kind]);
+}
+
+function showAllMbdKinds(): void {
+  writeMbdKinds(null);
+}
+
+/**
+ * 分级显示（LOD，S3）的面板开关与统计。开关同样只改 URL（`mbd_lod=0` = 关）并派发
+ * `popstate`，由同步层剥掉 `lod` 提示；统计读最近一次布局里 MBD 记录的 `derived.lodHidden`。
+ */
+function readMbdLodDisabled(): boolean {
+  if (typeof window === 'undefined') return false;
+  return new URLSearchParams(window.location.search).get('mbd_lod')?.trim() === '0';
+}
+
+const mbdLodDisabled = ref(readMbdLodDisabled());
+
+function setMbdLodEnabled(enabled: boolean): void {
+  const url = new URL(window.location.href);
+  if (enabled) url.searchParams.delete('mbd_lod');
+  else url.searchParams.set('mbd_lod', '0');
+  window.history.pushState({}, '', url);
+  window.dispatchEvent(new Event('popstate'));
+}
+
+const mbdLodHidden = computed(() => {
+  const mbdIds = new Set(
+    externalRecords.value.filter(record => record.source === 'mbd').map(record => record.id),
+  );
+  const summary = { total: 0, secondaryFar: 0, shortLine: 0 };
+  for (const layout of viewportLayouts.value) {
+    if (!mbdIds.has(layout.dimensionId)) continue;
+    const reason = layout.derived.lodHidden;
+    if (!reason) continue;
+    summary.total += 1;
+    if (reason === 'secondary-far') summary.secondaryFar += 1;
+    else summary.shortLine += 1;
+  }
+  return summary;
+});
+
+function syncMbdDebugStateFromLocation(): void {
+  mbdKindFilter.value = readMbdKindFilter();
+  mbdLodDisabled.value = readMbdLodDisabled();
+}
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('popstate', syncMbdDebugStateFromLocation);
+}
+onUnmounted(() => {
+  if (typeof window !== 'undefined') {
+    window.removeEventListener('popstate', syncMbdDebugStateFromLocation);
+  }
+});
 const recoveryPreview = computed(() => {
   void documentState.value;
   return viewerContext.dimensionSystem.value?.getRecoveryPreview() ?? null;
@@ -336,6 +466,56 @@ function act(
       <div class="mt-1">
         求解器以 {{ incompleteLayoutMode }} 模式产出，只覆盖部分标注类别。
         未产出的类别不会出现在下方诊断里，请勿据此判断标注已完整。
+      </div>
+    </div>
+    <div v-if="mbdDiagnostics.channel"
+      class="m-2 rounded border border-slate-200 bg-slate-50 p-2 text-xs text-slate-700"
+      data-testid="mbd-kind-filter">
+      <div class="flex items-center justify-between gap-2">
+        <span class="font-semibold">MBD 图元类别（显示 {{ mbdRecordCount }} 条）</span>
+        <span class="flex gap-1">
+          <button type="button"
+            class="rounded border px-1.5 py-0.5"
+            data-testid="mbd-kind-only-linear"
+            @click="showOnlyMbdKind('linear_dim')">
+            只看长度
+          </button>
+          <button type="button"
+            class="rounded border px-1.5 py-0.5 disabled:opacity-40"
+            data-testid="mbd-kind-all"
+            :disabled="mbdKindFilter === null"
+            @click="showAllMbdKinds()">
+            全部
+          </button>
+        </span>
+      </div>
+      <div class="mt-1 flex flex-wrap gap-x-3 gap-y-1">
+        <label v-for="kind in MBD_KINDS"
+          :key="kind"
+          class="flex items-center gap-1">
+          <input type="checkbox"
+            :data-mbd-kind="kind"
+            :checked="isMbdKindShown(kind)"
+            :disabled="isMbdKindShown(kind) && shownMbdKindCount === 1"
+            @change="setMbdKindShown(kind, ($event.target as HTMLInputElement).checked)" />
+          <span>{{ MBD_KIND_LABELS[kind] }}</span>
+        </label>
+      </div>
+      <div class="mt-1 flex flex-wrap items-center justify-between gap-2"
+        data-testid="mbd-lod">
+        <label class="flex items-center gap-1">
+          <input type="checkbox"
+            data-testid="mbd-lod-enabled"
+            :checked="!mbdLodDisabled"
+            @change="setMbdLodEnabled(($event.target as HTMLInputElement).checked)" />
+          <span>分级显示（LOD）</span>
+        </label>
+        <span data-testid="mbd-lod-hidden">
+          <template v-if="mbdLodDisabled">已关闭，每条尺寸照常出图</template>
+          <template v-else>
+            LOD 隐藏 {{ mbdLodHidden.total }} 条（atta 远景 {{ mbdLodHidden.secondaryFar }} / 短段 {{ mbdLodHidden.shortLine }}）
+          </template>
+        </span>
       </div>
     </div>
     <details v-if="diagnosticsVisible"

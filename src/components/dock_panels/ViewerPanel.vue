@@ -4303,6 +4303,9 @@ onMounted(async () => {
   const urlParams = new URLSearchParams(window.location.search);
   const showDbnum = urlParams.get('show_dbnum');
   const showRefno = normalizeRefnoKeyLike(urlParams.get('show_refno') || '');
+  // 调试入口（2026-09-12 MBD 长度尺寸显示优化 QW3）：`show_refno_select=0` 只加载该 BRAN、
+  // 不把它置为选中，免得选中高亮盖住 MBD 尺寸线；缺省仍选中，行为不变。
+  const showRefnoSelect = urlParams.get('show_refno_select') !== '0';
   const debugRefnoParam = urlParams.get('debug_refno');
   const showDbnumValue = (() => {
     const parsed = Number(showDbnum);
@@ -4371,7 +4374,7 @@ onMounted(async () => {
       try {
         emitToast({ message: `[信息] 正在加载 ${showRefno} …`, level: 'info' });
         console.log(`[show_refno] refno=${showRefno}`);
-        selectionStore.setSelectedRefno(showRefno);
+        if (showRefnoSelect) selectionStore.setSelectedRefno(showRefno);
 
         if (showDbnumValue === null) {
           await ensureDbMetaInfoLoaded();

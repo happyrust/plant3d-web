@@ -25,8 +25,7 @@ export function layoutViewport(
     interaction: 'normal',
   };
   const raw = new Array<LayoutResult>(inputs.length);
-  for (let index = 0; index < inputs.length; index += 1) {
-    const input = inputs[index];
+  for (const [index, input] of inputs.entries()) {
     const interaction = interactionById.get(input.id) ?? 'normal';
     raw[index] = layoutDimension(
       input,

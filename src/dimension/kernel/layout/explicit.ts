@@ -23,9 +23,12 @@ import { trimLineAgainstRotatedRect } from '../geometry/trimLineAgainstRect';
 import { resolveDimensionStyleRole } from '../theme';
 import { add3, EPSILON, lerp3 } from '../vec';
 
+import { emptyLayout } from './linear';
+
 import type {
   ExplicitArrowInput,
   ExplicitLayoutInput,
+  ExplicitLodHiddenReason,
   HitRegion,
   LayoutResult,
   SceneLine,
@@ -74,6 +77,76 @@ type LabelClearance = Readonly<{
 }>;
 
 /**
+ * Screen cap height for this input. A source that declares a design-space
+ * text height (`textHeightM`, e.g. the MBD group `cheight_mm`) gets it
+ * projected at the label anchor — depth-based and orientation-independent,
+ * the way PML `cheight` sits on the drawing sheet — and clamped to the
+ * theme's source range so a plant-wide view stays legible and a close-up does
+ * not fill the viewport with one label. Everything else keeps the fixed
+ * theme height.
+ */
+function projectedSourceTextHeightPx(
+  input: ExplicitLayoutInput,
+  context: LayoutContext,
+): number | null {
+  const heightM = input.textHeightM;
+  if (heightM === undefined || !(heightM > 0)) return null;
+  const metresPerPixel = context.projector.worldPerPixelAt(input.labelAnchor);
+  if (!Number.isFinite(metresPerPixel) || !(metresPerPixel > 0)) return null;
+  return heightM / metresPerPixel;
+}
+
+function resolveTextHeightPx(
+  projectedPx: number | null,
+  context: LayoutContext,
+): number {
+  if (projectedPx === null) return context.theme.textHeightPx;
+  return Math.min(
+    context.theme.sourceTextHeightMaxPx,
+    Math.max(context.theme.sourceTextHeightMinPx, projectedPx),
+  );
+}
+
+/**
+ * Level of detail for dense sources (S3): a `secondary` input disappears
+ * while its source text height projects below the theme floor (the view is
+ * too far out for sub-dimensions), and an input that asked for `hideShort`
+ * disappears when its dimension line projects shorter than
+ * `theme.lodMinLineToLabelRatio` label widths. Returns the reason, or null
+ * to draw normally. Both rules are camera-dependent by design and re-run on
+ * every layout, like every other screen-space decision in this kernel.
+ */
+function lodHiddenReason(
+  input: ExplicitLayoutInput,
+  projectedPx: number | null,
+  textHeightPx: number,
+  context: LayoutContext,
+): ExplicitLodHiddenReason | null {
+  const lod = input.lod;
+  if (!lod) return null;
+  if (
+    lod.tier === 'secondary'
+    && projectedPx !== null
+    && projectedPx < context.theme.sourceTextHeightMinPx
+  ) {
+    return 'secondary-far';
+  }
+  if (lod.hideShort && input.formattedLabel.length > 0) {
+    const dimensionLine = input.lines.find(line => line.part === 'dimension');
+    if (dimensionLine) {
+      const from = projectSceneVertex(sceneVertex(dimensionLine.from), context.projector);
+      const to = projectSceneVertex(sceneVertex(dimensionLine.to), context.projector);
+      const lineLengthPx = Math.hypot(to[0] - from[0], to[1] - from[1]);
+      const labelWidthPx = context.font.getWidth(textHeightPx, input.formattedLabel);
+      if (lineLengthPx < labelWidthPx * context.theme.lodMinLineToLabelRatio) {
+        return 'short-line';
+      }
+    }
+  }
+  return null;
+}
+
+/**
  * External sources anchor a dimension label on its own dimension line (rs-mbd
  * emits `label_anchor` at the line midpoint), so the line has to be broken
  * around the label box the same way the native linear layout does. Returns
@@ -83,6 +156,7 @@ function labelClearance(
   input: ExplicitLayoutInput,
   rotationRad: number,
   styleRole: string,
+  textHeightPx: number,
   context: LayoutContext,
 ): LabelClearance | null {
   if (input.formattedLabel.length === 0) return null;
@@ -95,7 +169,7 @@ function labelClearance(
     context.font,
     input.formattedLabel,
     center,
-    context.theme.textHeightPx,
+    textHeightPx,
     styleRole,
   );
   return {
@@ -181,16 +255,19 @@ type ExplicitArrowLine = ExplicitLayoutInput['arrowLines'][number];
  * Source arrow strokes are geometry, not a hint (ADR 0048: respect the MBD
  * arrow segments, do not regenerate them). They still need a legibility
  * floor: a wing of `0.96 · cheight` shrinks to a few pixels on a plant-wide
- * view while the label keeps its screen height. Below
- * `theme.arrowLineMinLengthPx` the wing is stretched on screen about its tip
- * (`from`), keeping the projected direction, so the stroke stays anchored to
- * the dimension line at every distance; at or above the floor it draws 1:1.
- * A wing that projects to a point (edge-on to the view) is dropped like any
- * other edge-on segment (ADR 0056).
+ * view while the label keeps its screen height. Below `minLength`
+ * (`theme.arrowLineMinLengthPx`, or the resolved label height when the source
+ * declares its own text height so wing and text keep the solver's ratio) the
+ * wing is stretched on screen about its tip (`from`), keeping the projected
+ * direction, so the stroke stays anchored to the dimension line at every
+ * distance; at or above the floor it draws 1:1. A wing that projects to a
+ * point (edge-on to the view) is dropped like any other edge-on segment
+ * (ADR 0056).
  */
 function explicitArrowLine(
   line: ExplicitArrowLine,
   styleRole: string,
+  minLength: number,
   context: LayoutContext,
 ): SceneLine[] {
   const tip = sceneVertex(line.from);
@@ -203,7 +280,6 @@ function explicitArrowLine(
   const deltaY = baseScreen[1] - tipScreen[1];
   const length = Math.hypot(deltaX, deltaY);
   if (length <= EPSILON) return [];
-  const minLength = context.theme.arrowLineMinLengthPx;
   if (length >= minLength) {
     return [makeSceneLine(tip, sceneVertex(line.to), 'arrow', styleRole)];
   }
@@ -245,17 +321,32 @@ export function layoutExplicit(
   context: LayoutContext,
 ): LayoutResult {
   const styleRole = resolveDimensionStyleRole(input.role, context.interaction);
+  const projectedTextHeightPx = projectedSourceTextHeightPx(input, context);
+  const textHeightPx = resolveTextHeightPx(projectedTextHeightPx, context);
+  const hidden = lodHiddenReason(input, projectedTextHeightPx, textHeightPx, context);
+  if (hidden) {
+    return emptyLayout(input.id, input.labelPinned, input.formattedLabel, hidden);
+  }
+  const arrowMinLengthPx = input.textHeightM !== undefined
+    ? textHeightPx
+    : context.theme.arrowLineMinLengthPx;
   const labelRotationRad = textRotation(
     input.labelAnchor,
     input.labelAlong,
     context,
   );
-  const clearance = labelClearance(input, labelRotationRad, styleRole, context);
+  const clearance = labelClearance(
+    input,
+    labelRotationRad,
+    styleRole,
+    textHeightPx,
+    context,
+  );
   const sceneLines = [
     ...input.lines.flatMap(line =>
       explicitSceneLines(line, clearance, styleRole, context)),
     ...input.arrowLines.flatMap(line =>
-      explicitArrowLine(line, styleRole, context)),
+      explicitArrowLine(line, styleRole, arrowMinLengthPx, context)),
   ];
   const sceneArrows = (input.arrows ?? []).flatMap(arrow =>
     explicitArrow(arrow, styleRole, context));
@@ -281,11 +372,11 @@ export function layoutExplicit(
   const glyphScene = sceneGlyph(
     input.formattedLabel,
     sceneVertex(input.labelAnchor),
-    context.theme.textHeightPx,
+    textHeightPx,
     styleRole,
     labelRotationRad,
   );
-  const lineAdvancePx = context.theme.textHeightPx * 1.5;
+  const lineAdvancePx = textHeightPx * 1.5;
   const extraGlyphScenes = (input.texts ?? []).map((text) =>
     sceneGlyph(
       text.text,
@@ -293,7 +384,7 @@ export function layoutExplicit(
         text.anchor,
         [0, (text.stackIndex ?? 0) * lineAdvancePx],
       ),
-      context.theme.textHeightPx,
+      textHeightPx,
       styleRole,
       textRotation(text.anchor, text.along, context),
     ));

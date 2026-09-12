@@ -14,6 +14,16 @@ const FIXTURE_REFNO = 'linear-small-dimension';
 const INVALID_REFNO = 'invalid-angle-dim';
 const DIMENSION_ID = 'linear-small-dimension:isoline:0:member:T-SMALL';
 
+/**
+ * 与模型数据源隔离的页面 URL。`dtx_demo=primitives` 让 ViewerPanel 跳过启动时的
+ * db_meta_info 预拉：否则默认 `gen-model-v1`（2026-09-09 起）会先向 gen-model 要 dbnums，
+ * 无后端 / 快照过期时以 `MDB_SNAPSHOT_STALE` 之类错误终止查看器初始化，尺寸系统根本不会创建。
+ * `model_source=legacy` 再把数据源钉住，gen-model 引导不进入本测试。demo 模式不施加全局
+ * 变换，designToWorld 仍是 scale(1000)。
+ */
+const FIXTURE_PAGE_URL = '/?dimension_demo=1&dtx_demo=primitives&dtx_demo_count=1'
+  + `&model_source=legacy&mbd_refno=${FIXTURE_REFNO}`;
+
 const fixturePayload = JSON.parse(readFileSync(
   fileURLToPath(new URL('../src/fixtures/mbd-v2/rs-mbd-cli-linear.json', import.meta.url)),
   'utf8',
@@ -76,7 +86,7 @@ test('CLI linear fixture loads through contract, registry, scene painter, and SV
   const response = page.waitForResponse(candidate => (
     candidate.url().includes(`/api/mbd/v2/pipe/${FIXTURE_REFNO}`)
   ));
-  await page.goto(`/?dimension_demo=1&mbd_refno=${FIXTURE_REFNO}`);
+  await page.goto(FIXTURE_PAGE_URL);
   expect((await response).status()).toBe(200);
   await waitForDimensionSystem(page);
 
@@ -198,7 +208,7 @@ test('CLI linear fixture loads through contract, registry, scene painter, and SV
 
 test('an invalid injected payload atomically clears the mbd source and surfaces diagnostics', async ({ page }) => {
   await routeMbdPipeApi(page);
-  await page.goto(`/?dimension_demo=1&mbd_refno=${FIXTURE_REFNO}`);
+  await page.goto(FIXTURE_PAGE_URL);
   await waitForDimensionSystem(page);
   await expect.poll(async () => (await mbdRecords(page)).length).toBe(1);
 

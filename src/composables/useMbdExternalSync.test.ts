@@ -312,6 +312,66 @@ describe('createMbdExternalSync', () => {
     }]);
   });
 
+  it('mbd_kinds keeps only the listed kinds and records the filter in diagnostics', async () => {
+    const payload = contractPayload({
+      primitives: [
+        contractPayload().primitives[0]!,
+        { kind: 'label', id: 'tag-1', text: 'PIPE-1', position: [0.5, 0.2, 0] },
+      ],
+    });
+    const harness = createHarness({
+      search: '?mbd_refno=A&mbd_kinds=linear_dim',
+      fetchPipeData: vi.fn(async () => ({ ok: true as const, data: payload, diagnostics: [] })),
+    });
+
+    await harness.sync.sync(harness.target);
+
+    const [, records] = (harness.target.replaceExternalSource as ReturnType<typeof vi.fn>)
+      .mock.calls[0]!;
+    expect(records.map((record: { id: string }) => record.id)).toEqual(['dim-1']);
+    expect(harness.diagnostics.set).toHaveBeenCalledWith(expect.objectContaining({
+      notes: [expect.stringContaining('mbd_kinds=linear_dim')],
+    }));
+  });
+
+  it('mbd_lod=0 strips the level-of-detail hints and says so in diagnostics', async () => {
+    const withLod = createHarness({ search: '?mbd_refno=A' });
+    await withLod.sync.sync(withLod.target);
+    const [, kept] = (withLod.target.replaceExternalSource as ReturnType<typeof vi.fn>)
+      .mock.calls[0]!;
+    expect(kept[0].layout.lod).toEqual({ tier: 'primary', hideShort: true });
+
+    const disabled = createHarness({ search: '?mbd_refno=A&mbd_lod=0' });
+    await disabled.sync.sync(disabled.target);
+    const [, stripped] = (disabled.target.replaceExternalSource as ReturnType<typeof vi.fn>)
+      .mock.calls[0]!;
+    expect(stripped.map((record: { id: string }) => record.id)).toEqual(['dim-1']);
+    expect(stripped[0].layout.lod).toBeUndefined();
+    expect(stripped[0].layout.labelAnchor).toEqual(kept[0].layout.labelAnchor);
+    expect(disabled.diagnostics.set).toHaveBeenCalledWith(expect.objectContaining({
+      notes: [expect.stringContaining('mbd_lod=0')],
+    }));
+  });
+
+  it('mbd_kinds does not bypass atomic rejection of a broken payload', async () => {
+    const good = contractPayload().primitives[0]!;
+    const harness = createHarness({
+      search: '?mbd_refno=A&mbd_kinds=label',
+      fetchPipeData: vi.fn(async () => ({
+        ok: true as const,
+        data: contractPayload({ primitives: [good, good] }),
+        diagnostics: [],
+      })),
+    });
+
+    await harness.sync.sync(harness.target);
+
+    expect(harness.target.replaceExternalSource).toHaveBeenCalledWith('mbd', []);
+    const diagnostics = (harness.diagnostics.set as ReturnType<typeof vi.fn>)
+      .mock.calls.at(-1)![0];
+    expect(diagnostics.loadError).toContain('整包拒绝');
+  });
+
   it('emits one error toast when backend issues contain error severity', async () => {
     const harness = createHarness({
       search: '?mbd_refno=A',

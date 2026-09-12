@@ -14,6 +14,7 @@ import type {
   ScreenLine,
   ScreenMarker,
   ScreenPath,
+  Vec3,
 } from '../types';
 import type { LayoutContext } from './context';
 
@@ -156,6 +157,131 @@ describe('layoutExplicit', () => {
     expect(wingLengthPx(100)).toBeCloseTo(13, 9);
     expect(wingLengthPx(10)).toBeCloseTo(13, 9);
     expect(wingLengthPx(1)).toBeCloseTo(13, 9);
+  });
+
+  it('scales a source-declared text height with depth and clamps it to the theme range', () => {
+    // MBD group cheight 27 mm → 0.027 m in Design Space (S2, 2026-09-12).
+    const sourceInput: ExplicitLayoutInput = { ...input, textHeightM: 0.027 };
+    const capHeightAt = (pixelsPerMetre: number): number => {
+      const result = layoutExplicit(sourceInput, {
+        projector: createTestProjector(pixelsPerMetre),
+        font: createTestFont(),
+        theme: SOLVESPACE_DIMENSION_THEME,
+        format: DEFAULT_DIMENSION_FORMAT,
+        interaction: 'normal',
+      });
+      const glyph = result.primitives.find(
+        (primitive): primitive is ScreenGlyphRun => primitive.kind === 'glyph-run',
+      )!;
+      return glyph.capHeightPx;
+    };
+
+    // 2.7 px projected → lifted to the 11 px floor; 13.5 px → as projected;
+    // 27 px → capped at 18 px.
+    expect(capHeightAt(100)).toBe(SOLVESPACE_DIMENSION_THEME.sourceTextHeightMinPx);
+    expect(capHeightAt(500)).toBeCloseTo(13.5, 9);
+    expect(capHeightAt(1000)).toBe(SOLVESPACE_DIMENSION_THEME.sourceTextHeightMaxPx);
+    // No declared height: the fixed theme height, unchanged by zoom.
+    expect(layoutExplicit(input, {
+      projector: createTestProjector(1000),
+      font: createTestFont(),
+      theme: SOLVESPACE_DIMENSION_THEME,
+      format: DEFAULT_DIMENSION_FORMAT,
+      interaction: 'normal',
+    }).primitives.find(
+      (primitive): primitive is ScreenGlyphRun => primitive.kind === 'glyph-run',
+    )!.capHeightPx).toBe(SOLVESPACE_DIMENSION_THEME.textHeightPx);
+  });
+
+  it('lets the arrow floor follow a source-declared text height', () => {
+    const wingLengthPx = (pixelsPerMetre: number, wing: Vec3): number => {
+      const result = layoutExplicit({
+        ...input,
+        textHeightM: 0.027,
+        arrowLines: [{ from: [0, 0, 0], to: wing }],
+      }, {
+        projector: createTestProjector(pixelsPerMetre),
+        font: createTestFont(),
+        theme: SOLVESPACE_DIMENSION_THEME,
+        format: DEFAULT_DIMENSION_FORMAT,
+        interaction: 'normal',
+      });
+      const arrow = result.primitives.find(
+        (primitive): primitive is ScreenLine =>
+          primitive.kind === 'line' && primitive.part === 'arrow',
+      )!;
+      return Math.hypot(arrow.to[0] - arrow.from[0], arrow.to[1] - arrow.from[1]);
+    };
+
+    // Solver wing 0.96·cheight = 25.9 mm: 2.6 px at 100 px/m is lifted to the
+    // 11 px label height (not the fixed 13 px floor); 13 px at 500 px/m is
+    // under the 13.5 px label height and lifted to it; 25.9 px at 1000 px/m
+    // exceeds the 18 px cap and draws 1:1.
+    expect(wingLengthPx(100, [0.0259, 0, 0])).toBeCloseTo(11, 9);
+    expect(wingLengthPx(500, [0.026, 0, 0])).toBeCloseTo(13.5, 9);
+    expect(wingLengthPx(1000, [0.0259, 0, 0])).toBeCloseTo(25.9, 9);
+  });
+
+  it('elides secondary inputs while the source text height projects below the floor', () => {
+    const secondary: ExplicitLayoutInput = {
+      ...input,
+      textHeightM: 0.027,
+      lod: { tier: 'secondary' },
+    };
+    const layoutAt = (pixelsPerMetre: number) => layoutExplicit(secondary, {
+      projector: createTestProjector(pixelsPerMetre),
+      font: createTestFont(),
+      theme: SOLVESPACE_DIMENSION_THEME,
+      format: DEFAULT_DIMENSION_FORMAT,
+      interaction: 'normal',
+    });
+
+    // 2.7 px projected (< 11 px floor): plant-wide view, sub-dimension elided.
+    const far = layoutAt(100);
+    expect(far.primitives).toEqual([]);
+    expect(far.scenePrimitives).toEqual([]);
+    expect(far.hitRegions).toEqual([]);
+    expect(far.labelPinned).toBe(true);
+    expect(far.derived).toEqual({ formattedLabel: '25 REF', lodHidden: 'secondary-far' });
+    // 13.5 px projected: drawn like any other input.
+    const near = layoutAt(500);
+    expect(near.derived.lodHidden).toBeUndefined();
+    expect(near.primitives.some(primitive => primitive.kind === 'glyph-run')).toBe(true);
+    // A primary input never takes this exit, however far the view.
+    expect(layoutExplicit({ ...secondary, lod: { tier: 'primary' } }, {
+      projector: createTestProjector(100),
+      font: createTestFont(),
+      theme: SOLVESPACE_DIMENSION_THEME,
+      format: DEFAULT_DIMENSION_FORMAT,
+      interaction: 'normal',
+    }).derived.lodHidden).toBeUndefined();
+  });
+
+  it('elides a dimension whose line projects shorter than its label when asked to', () => {
+    const font = createTestFont();
+    const labelWidthPx = font.getWidth(SOLVESPACE_DIMENSION_THEME.textHeightPx, input.formattedLabel);
+    const shortInput: ExplicitLayoutInput = {
+      ...input,
+      lod: { hideShort: true },
+      // Just under one label width at 100 px/m.
+      lines: [{ from: [0, 0, 0], to: [(labelWidthPx - 1) / 100, 0, 0], part: 'dimension' }],
+    };
+    const context = (pixelsPerMetre: number): LayoutContext => ({
+      projector: createTestProjector(pixelsPerMetre),
+      font,
+      theme: SOLVESPACE_DIMENSION_THEME,
+      format: DEFAULT_DIMENSION_FORMAT,
+      interaction: 'normal',
+    });
+
+    const hidden = layoutExplicit(shortInput, context(100));
+    expect(hidden.derived).toEqual({ formattedLabel: '25 REF', lodHidden: 'short-line' });
+    expect(hidden.primitives).toEqual([]);
+    // Zoom in 10×: the same line now spans ten label widths and draws again.
+    expect(layoutExplicit(shortInput, context(1000)).derived.lodHidden).toBeUndefined();
+    // Without opting in, the short line still draws (measurements, plain sources).
+    expect(layoutExplicit({ ...shortInput, lod: undefined }, context(100)).derived.lodHidden)
+      .toBeUndefined();
   });
 
   it('drops an arrow stroke that projects to a point', () => {

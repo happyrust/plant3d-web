@@ -114,6 +114,9 @@ export class DimensionViewport {
   private readonly selectionListeners = new Set<
     (dimensionId: string | null) => void
   >();
+  private readonly layoutListeners = new Set<
+    (layouts: readonly LayoutResult[]) => void
+  >();
   private readonly externalHidden = new Set<string>();
   private layouts: readonly LayoutResult[] = [];
   private hitIndex: HitIndex = buildHitIndex([]);
@@ -212,6 +215,19 @@ export class DimensionViewport {
   ): () => void {
     this.selectionListeners.add(listener);
     return () => this.selectionListeners.delete(listener);
+  }
+
+  /**
+   * Fires after every full re-layout (camera, document, external source,
+   * theme…) with the new `getLayouts()` batch — the seam UI uses to read
+   * per-frame outcomes such as `derived.lodHidden`. Style-only restyles do
+   * not fire; they never change what a layout contains.
+   */
+  subscribeLayouts(
+    listener: (layouts: readonly LayoutResult[]) => void,
+  ): () => void {
+    this.layoutListeners.add(listener);
+    return () => this.layoutListeners.delete(listener);
   }
 
   setHover(id: string | null): void {
@@ -360,6 +376,7 @@ export class DimensionViewport {
     this.normalizedUsers = [];
     this.normalizedExternal = [];
     this.selectionListeners.clear();
+    this.layoutListeners.clear();
     this.projector = null;
     this.preview = null;
     this.externalHidden.clear();
@@ -440,5 +457,6 @@ export class DimensionViewport {
       layoutMs: layoutCompletedAt - startedAt,
       paintMs: completedAt - layoutCompletedAt,
     });
+    this.layoutListeners.forEach(listener => listener(this.layouts));
   }
 }

@@ -20,6 +20,21 @@ export type DimensionTheme = Readonly<{
    * filled heads of user dimensions.
    */
   arrowLineMinLengthPx: number;
+  /**
+   * Clamp for source-declared text heights (`ExplicitLayoutInput.textHeightM`,
+   * e.g. MBD `meta.cheight_mm`): the projected height is lifted to the floor
+   * on a plant-wide view and capped at the ceiling on a close-up, so labels
+   * follow the model like PML `cheight` without becoming unreadable or
+   * filling the viewport. Fixed-height sources ignore both.
+   */
+  sourceTextHeightMinPx: number;
+  sourceTextHeightMaxPx: number;
+  /**
+   * Level of detail for explicit inputs that opt in (`lod.hideShort`): a
+   * dimension whose projected line is shorter than this many label widths is
+   * elided for the current view (S3).
+   */
+  lodMinLineToLabelRatio: number;
   extensionOvershootPx: number;
   labelPaddingPx: number;
   outsideExtensionPx: number;
@@ -46,6 +61,9 @@ export const SOLVESPACE_DIMENSION_THEME: DimensionTheme = {
   arrowLengthPx: 13,
   arrowHalfAngleDeg: 18,
   arrowLineMinLengthPx: 13,
+  sourceTextHeightMinPx: 11,
+  sourceTextHeightMaxPx: 18,
+  lodMinLineToLabelRatio: 1,
   extensionOvershootPx: 10,
   labelPaddingPx: 8,
   outsideExtensionPx: 18,
@@ -58,8 +76,14 @@ export const SOLVESPACE_DIMENSION_THEME: DimensionTheme = {
     selected: '#ff0000',
     invalid: '#f59e0b',
     approximate: '#f472b6',
-    external: '#ff1aff',
-    'external-reference': '#ff1aff',
+    // External (MBD / measurement) dimension lines: deep orange, deliberately
+    // apart from the user-dimension magenta, from the DTX selection highlight
+    // (0xff4fd8) and from the default blue pipe body, so a selected BRAN and
+    // its MBD dimensions stay distinguishable and the lines still read where
+    // they run over the pipe (QW2, 2026-09-12 linear-dim visual optimization
+    // plan; deep cyan #0e7490 was tried first and vanished against the pipe).
+    external: '#c2410c',
+    'external-reference': '#c2410c',
   },
   textColors: {
     normal: '#111827',

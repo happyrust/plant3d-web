@@ -169,7 +169,34 @@ export type LayoutResult = Readonly<{
     valueM?: number;
     valueRad?: number;
     formattedLabel: string;
+    /**
+     * Set when the explicit layout was elided by level-of-detail rules
+     * (`ExplicitLayoutInput.lod`): the primitives are empty on purpose, not
+     * because the geometry failed.
+     */
+    lodHidden?: ExplicitLodHiddenReason;
   }>;
+}>;
+
+export type ExplicitLodHiddenReason = 'secondary-far' | 'short-line';
+
+/**
+ * Level-of-detail hints for dense explicit sources (S3, 2026-09-12). Opt-in
+ * per input: sources that must always draw (measurements) simply omit it.
+ */
+export type ExplicitLodInput = Readonly<{
+  /**
+   * `secondary` (e.g. MBD ATTA sub-dimensions) is elided while the source
+   * text height (`textHeightM`) projects below `theme.sourceTextHeightMinPx`,
+   * i.e. on a plant-wide view where only the main running dimensions matter.
+   */
+  tier?: 'primary' | 'secondary';
+  /**
+   * Elide the whole dimension when its projected dimension line is shorter
+   * than `theme.lodMinLineToLabelRatio` label widths — the value could not be
+   * read against its own line anyway.
+   */
+  hideShort?: boolean;
 }>;
 
 export type NormalizedDimensionBase = Readonly<{
@@ -291,4 +318,14 @@ export type ExplicitLayoutInput = Readonly<{
   markers?: readonly ExplicitMarkerInput[];
   /** Additional glyph runs, e.g. extra lines of a multi-line label. */
   texts?: readonly ExplicitTextInput[];
+  /**
+   * Design-space text height (metres) declared by the source, e.g. the MBD
+   * group `cheight_mm` after `source_to_design`. When present, the label cap
+   * height and the arrow-stroke legibility floor follow its projection at the
+   * label anchor, clamped to `theme.sourceTextHeightMinPx..MaxPx`; absent
+   * means the fixed `theme.textHeightPx`.
+   */
+  textHeightM?: number;
+  /** Level-of-detail hints; omitted = always draw. */
+  lod?: ExplicitLodInput;
 }>;

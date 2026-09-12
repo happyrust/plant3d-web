@@ -34,6 +34,7 @@ import type {
   ExplicitArcInput,
   ExplicitArrowInput,
   ExplicitLayoutInput,
+  ExplicitLodInput,
   ExplicitMarkerInput,
   ExplicitTextInput,
   ScreenLinePart,
@@ -87,6 +88,28 @@ function frameTransformer(data: MbdV2PipeData): FrameTransform | null {
       return tryNormalize3([transformed.x, transformed.y, transformed.z]);
     },
   };
+}
+
+/**
+ * Group text height in Design Space: `meta.cheight_mm` (PML `isoline`
+ * character height, one value per payload) taken through the same transform
+ * as the geometry — the length of a cheight-long vector, so a uniform
+ * `source_to_design` scale reaches it while translation does not. A
+ * `design_m` payload still declares the height in millimetres. Undefined when
+ * the solver did not report one; the kernel then keeps its fixed text height.
+ */
+function groupTextHeightM(
+  data: MbdV2PipeData,
+  transform: FrameTransform,
+): number | undefined {
+  const cheight = data.meta.cheight_mm;
+  if (cheight === undefined || cheight === null || !(cheight > 0)) return undefined;
+  if (data.meta.geometry_space === 'design_m') return cheight / 1000;
+  const length = length3(sub3(
+    transform.point([cheight, 0, 0]),
+    transform.point([0, 0, 0]),
+  ));
+  return length > 0 ? length : undefined;
 }
 
 function lineStyleFrom(style: string | undefined): DimensionLineStyle | undefined {
@@ -159,6 +182,7 @@ type ExplicitParts = Readonly<{
   arcs?: readonly ExplicitArcInput[];
   markers?: readonly ExplicitMarkerInput[];
   texts?: readonly ExplicitTextInput[];
+  lod?: ExplicitLodInput;
 }>;
 
 function explicitRecord(
@@ -170,7 +194,13 @@ function explicitRecord(
   const layout: ExplicitLayoutInput = {
     id: primitive.id,
     role,
-    labelPinned: category !== 'dimension',
+    // The solver already placed every label (`label_anchor`, ADR 0003
+    // deterministic layout), so no MBD record takes part in the Web declutter:
+    // `resolveLabelCollisions` only lets pinned labels claim space, never moves
+    // them, and never invents a leader to a relocated label. This matches the
+    // parquet channel (`mbdExternalDimensions.ts`); PR6's `layoutAuthority`
+    // will carry the same decision explicitly.
+    labelPinned: true,
     formattedLabel: parts.formattedLabel,
     lines: parts.lines ?? [],
     labelAnchor: parts.labelAnchor,
@@ -184,6 +214,7 @@ function explicitRecord(
       ? { markers: parts.markers }
       : {}),
     ...(parts.texts && parts.texts.length > 0 ? { texts: parts.texts } : {}),
+    ...(parts.lod ? { lod: parts.lod } : {}),
   };
   return {
     id: primitive.id,
@@ -227,6 +258,15 @@ function mapLinearDim(
   const outside = primitive.sub_kind === 'small';
   return explicitRecord(primitive, 'dimension', {
     formattedLabel: primitive.text,
+    // Level of detail (S3): ATTA sub-dimensions are secondary and drop out on
+    // a plant-wide view; a running dimension hides once its line projects
+    // shorter than its own value text — except `small` ones, whose text the
+    // solver already moved outside the line (PML `sepSmallDim`), so they stay
+    // readable at any length. `sub_kind` is the solver's own label.
+    lod: {
+      tier: primitive.sub_kind === 'atta' ? 'secondary' : 'primary',
+      hideShort: !outside,
+    },
     labelAnchor: transformPoint(primitive.label_anchor),
     // 「工程文字朝向」: a dimension value runs along its dimension line. The
     // contract carries no orientation yet, but for a linear dim the direction
@@ -422,6 +462,7 @@ export function mbdV2ToExternalRecords(
     };
   }
   const transformPoint = transform.point;
+  const textHeightM = groupTextHeightM(data, transform);
 
   for (const primitive of data.primitives) {
     if (seenIds.has(primitive.id)) {
@@ -532,7 +573,15 @@ export function mbdV2ToExternalRecords(
 
     if (record) {
       seenIds.add(primitive.id);
-      records.push(record);
+      // Every record here comes from `explicitRecord`, so the layout is an
+      // `ExplicitLayoutInput`; the group text height rides along with it so
+      // the kernel can scale labels and the arrow floor with the model (S2).
+      records.push(textHeightM === undefined
+        ? record
+        : {
+          ...record,
+          layout: { ...(record.layout as ExplicitLayoutInput), textHeightM },
+        });
     } else {
       // Parse already checked structure, so the arc kinds are the only ones
       // that can fail here (axes collapsing under the transform). Diagnose it
