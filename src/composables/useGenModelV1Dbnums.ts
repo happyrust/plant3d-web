@@ -26,7 +26,13 @@ export type GetDbnumsOptions = Pick<GenModelV1RequestOptions, 'timeoutMs' | 'sig
 type CacheEntry = { baseUrl: string; fetchedAt: number; response: DbnumsResponse };
 
 let cached: CacheEntry | null = null;
-let inflight: { baseUrl: string; promise: Promise<DbnumsResponse> } | null = null;
+let cacheGeneration = 0;
+let inflight: {
+  baseUrl: string;
+  generation: number;
+  controller: AbortController;
+  promise: Promise<DbnumsResponse>;
+} | null = null;
 
 export async function getGenModelV1Dbnums(options: GetDbnumsOptions = {}): Promise<DbnumsResponse> {
   const baseUrl = getGenModelV1BaseUrl();
@@ -35,18 +41,29 @@ export async function getGenModelV1Dbnums(options: GetDbnumsOptions = {}): Promi
   if (!options.force && cached && cached.baseUrl === baseUrl && now - cached.fetchedAt < maxAgeMs) {
     return cached.response;
   }
-  if (inflight && inflight.baseUrl === baseUrl) return inflight.promise;
+  if (inflight && inflight.baseUrl === baseUrl && inflight.generation === cacheGeneration) {
+    return inflight.promise;
+  }
 
   const fetcher = options.fetcher ?? genModelV1Dbnums;
-  const promise = fetcher({ timeoutMs: options.timeoutMs ?? 60_000, signal: options.signal })
+  const generation = cacheGeneration;
+  const controller = new AbortController();
+  const onOuterAbort = () => controller.abort(options.signal?.reason);
+  if (options.signal?.aborted) onOuterAbort();
+  else options.signal?.addEventListener('abort', onOuterAbort, { once: true });
+  const promise = fetcher({ timeoutMs: options.timeoutMs ?? 60_000, signal: controller.signal })
     .then((response) => {
+      if (generation !== cacheGeneration) {
+        throw new Error('gen-model /dbnums 响应已跨服务代次，拒绝写回缓存');
+      }
       cached = { baseUrl, fetchedAt: options.now ? options.now() : Date.now(), response };
       return response;
     })
     .finally(() => {
+      options.signal?.removeEventListener('abort', onOuterAbort);
       if (inflight?.promise === promise) inflight = null;
     });
-  inflight = { baseUrl, promise };
+  inflight = { baseUrl, generation, controller, promise };
   return promise;
 }
 
@@ -56,8 +73,18 @@ export function peekGenModelV1Dbnums(): { fetchedAt: number; response: DbnumsRes
   return { fetchedAt: cached.fetchedAt, response: cached.response };
 }
 
+/** 服务代次变化：清正缓存、取消在飞请求，并用 generation fence 拒绝忽略 abort 的旧响应。 */
+export function invalidateGenModelV1Dbnums(): void {
+  cacheGeneration += 1;
+  cached = null;
+  inflight?.controller.abort(new Error('gen-model 服务代次变化，取消旧 /dbnums 请求'));
+  inflight = null;
+}
+
 /** 测试用。 */
 export function __resetGenModelV1DbnumsForTests(): void {
+  inflight?.controller.abort(new Error('test reset'));
   cached = null;
   inflight = null;
+  cacheGeneration = 0;
 }

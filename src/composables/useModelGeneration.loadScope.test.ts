@@ -40,6 +40,7 @@ describe('queryLoadScopeRefnos', () => {
       refnos: ['24381_145019', '24381_145020'],
       source: 'visible-insts',
       truncated: false,
+      incomplete: null,
     });
     expect(e3dGetVisibleInstsMock).toHaveBeenCalledWith('24381_145018');
     expect(e3dGetSubtreeRefnosMock).not.toHaveBeenCalled();
@@ -60,6 +61,7 @@ describe('queryLoadScopeRefnos', () => {
       refnos: ['24381_145018', '24381_145019'],
       source: 'subtree-refnos',
       truncated: false,
+      incomplete: null,
     });
     expect(e3dGetSubtreeRefnosMock).toHaveBeenCalledWith('24381_145018', { includeSelf: true, limit: 200_000 });
   }, 15_000);
@@ -79,6 +81,7 @@ describe('queryLoadScopeRefnos', () => {
       refnos: ['24381_145018', '24381_145019'],
       source: 'subtree-refnos',
       truncated: true,
+      incomplete: null,
     });
     expect(e3dGetVisibleInstsMock).toHaveBeenCalledWith('24381_145018');
     expect(e3dGetSubtreeRefnosMock).toHaveBeenCalledWith('24381_145018', { includeSelf: true, limit: 200_000 });

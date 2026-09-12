@@ -1,10 +1,12 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   collectDbnumRefnos,
   DEFAULT_DBNUM_ROOTS_BUDGET,
   dbnumServerEntrySupport,
   listSitesOfDbnum,
+  resetDbnumServerEntrySupport,
+  type CollectDbnumLifecycle,
   type CollectDbnumProgress,
   type DbnumServerEntryApi,
 } from './collectDbnum';
@@ -15,6 +17,10 @@ import type { TreeSource } from '../ports';
 import type { GeomInstQuery } from '@/api/genModelV1Api';
 
 import { GenModelV1ApiError } from '@/api/genModelV1Api';
+import {
+  __resetGenModelV1ServiceLifecycleForTests,
+  observeGenModelV1Health,
+} from '@/model-source/genModelV1/serviceLifecycle';
 
 function item(refno: string, owner: string): GeomInstQuery {
   return {
@@ -68,6 +74,22 @@ function fakeRecords(plan: Record<string, Partial<EnsureAndCollectResult> & { ro
 
 function apiError(code: string, status: number): GenModelV1ApiError {
   return new GenModelV1ApiError({ code, status, message: `${code} for test`, path: '/api/v1/dbnums/7997/model/ensure' });
+}
+
+function lifecycle(
+  capability: ReturnType<CollectDbnumLifecycle['capability']> = 'unknown',
+  refresh?: () => Promise<number>,
+): CollectDbnumLifecycle {
+  const generation = 0;
+  return {
+    capability: () => capability,
+    generation: () => generation,
+    assertGeneration: (captured) => {
+      if (captured !== generation) throw new Error(`service generation changed: ${captured} -> ${generation}`);
+    },
+    refreshAfterTaskNotFound: refresh ?? (async () => generation),
+    noteRequestFailure: () => {},
+  };
 }
 
 /**
@@ -180,6 +202,31 @@ describe('collectDbnumRefnos', () => {
     expect(result.budgetLimited).toBe(true);
   });
 
+  it('单个 SITE 返回的构件超过 maxRefnos 时在站点内部截断并标记 budgetLimited', async () => {
+    const records = fakeRecords({
+      '24381_2': {
+        roots: ['24381_145018'],
+        items: [
+          item('24381_1', '24381_145018'),
+          item('24381_2', '24381_145018'),
+          item('24381_3', '24381_145018'),
+        ],
+      },
+    });
+
+    const result = await collectDbnumRefnos(
+      fakeTree(),
+      records,
+      7997,
+      { maxRefnos: 2 },
+      legacyServerApi(),
+    );
+
+    expect(result.refnos).toEqual(['24381_1', '24381_2']);
+    expect(result.budgetLimited).toBe(true);
+    expect(result.skippedSites).toEqual(['24383_2']);
+  });
+
   it('安全概览预算 maxTotalRoots（调用方显式给有限值）：跨 SITE 累计，一个 SITE 里超出的根记 truncatedRoots、后面的 SITE 整个跳过；缺省 = 不限 = 全量', async () => {
     const plan = {
       '24381_2': { roots: ['r1', 'r2', 'r3'], items: [item('24381_1', 'r1'), item('24381_2', 'r2'), item('24381_3', 'r3')] },
@@ -215,6 +262,11 @@ describe('collectDbnumRefnos', () => {
 
 /** 服务端整库入口（spec §4.5.3，读透 / kv-mem 形态；收口计划 §17）。 */
 describe('collectDbnumRefnos · 服务端整库入口', () => {
+  beforeEach(() => {
+    __resetGenModelV1ServiceLifecycleForTests();
+    resetDbnumServerEntrySupport();
+  });
+
   const plan = {
     all: { items: [item('24381_1', '24381_145018'), item('24381_2', '24381_145018'), item('24383_1', '24383_9')] },
   };
@@ -234,6 +286,10 @@ describe('collectDbnumRefnos · 服务端整库入口', () => {
     expect(api.ensureDbnum).toHaveBeenCalledTimes(1);
     expect(api.task).toHaveBeenCalledTimes(2);
     expect(api.dbnumRoots).toHaveBeenCalledTimes(1);
+    expect(api.dbnumRoots).toHaveBeenCalledWith(
+      7997,
+      expect.objectContaining({ taskId: 'dbnum-model-ensure-7997-1' }),
+    );
     // 服务端已经把该库生成完了，前端一根也不催
     expect(records.ensureAndCollect).not.toHaveBeenCalled();
     // 根清单是服务端口径的 a/b，进缓存前统一成 a_b
@@ -257,11 +313,42 @@ describe('collectDbnumRefnos · 服务端整库入口', () => {
     expect(dbnumServerEntrySupport(api)).toBe('yes');
   });
 
+  it('服务端整库结果有效但 SITE 摘要读取失败时保留模型结果并显式标记摘要不可用', async () => {
+    const records = fakeRecords(plan);
+    const api = serverEntryApi({
+      expectedRoots: 1,
+      states: [{ state: 'succeeded', units_done: 1 }],
+      roots: ['24381/145018'],
+    });
+    const tree = {
+      ...fakeTree(),
+      worldRoot: vi.fn(async () => ({
+        success: false,
+        node: null,
+        error_message: 'tree temporarily unavailable',
+      })),
+    } as unknown as TreeSource;
+
+    const result = await collectDbnumRefnos(
+      tree,
+      records,
+      7997,
+      { taskPollIntervalMs: 0 },
+      api,
+    );
+
+    expect(result.siteSummaryAvailable).toBe(false);
+    expect(result.sites).toEqual([]);
+    expect(result.generationRoots).toEqual(['24381_145018']);
+    expect(result.refnos).toEqual(['24381_1', '24381_2']);
+  });
+
   it('旧服务端没有这条路由（404）：退回逐 SITE 老路，并记住——第二次整库显示不再白打一发', async () => {
     const records = fakeRecords({ '24381_2': { roots: ['24381_145018'], items: [item('24381_1', '24381_145018')] } });
     const api = legacyServerApi();
     const first = await collectDbnumRefnos(fakeTree(), records, 7997, {}, api);
     expect(first.refnos).toEqual(['24381_1']);
+    expect(first.fallback).toMatchObject({ reason: 'server_unsupported' });
     expect(records.ensureAndCollect).toHaveBeenCalled();
     expect(dbnumServerEntrySupport(api)).toBe('no');
 
@@ -269,16 +356,156 @@ describe('collectDbnumRefnos · 服务端整库入口', () => {
     expect(api.ensureDbnum).toHaveBeenCalledTimes(1);
   });
 
+  it('整库入口支持记忆绑定服务代次，started_at 变化后重新探测', async () => {
+    observeGenModelV1Health({ status: 'ok', started_at: 'old' }, '/gm');
+    const api = legacyServerApi();
+    await collectDbnumRefnos(fakeTree(), fakeRecords({}), 4242, {}, api);
+    expect(dbnumServerEntrySupport(api)).toBe('no');
+
+    observeGenModelV1Health({ status: 'ok', started_at: 'new' }, '/gm');
+    expect(dbnumServerEntrySupport(api)).toBe('unknown');
+  });
+
   it('这个库以 rocksdb 为准（409 指路 rebuild）：本次退回老路，但不把服务端记成「没有」——别的库仍可能是 memory 形态', async () => {
     const records = fakeRecords({ '24381_2': { roots: ['24381_145018'], items: [item('24381_1', '24381_145018')] } });
     const api = legacyServerApi();
     (api.ensureDbnum as ReturnType<typeof vi.fn>).mockImplementation(async () => { throw apiError('conflict', 409); });
-    await collectDbnumRefnos(fakeTree(), records, 7997, {}, api);
+    const first = await collectDbnumRefnos(fakeTree(), records, 7997, {}, api);
     expect(records.ensureAndCollect).toHaveBeenCalled();
+    expect(first.fallback).toMatchObject({ reason: 'database_routed' });
     expect(dbnumServerEntrySupport(api)).toBe('unknown');
 
     await collectDbnumRefnos(fakeTree(), records, 7997, {}, api);
     expect(api.ensureDbnum).toHaveBeenCalledTimes(2);
+  });
+
+  it('capabilities false 直接兼容；缺失时把固定 POST 的 405/501 识别为旧版本；true 时 404 不记永久 no', async () => {
+    const records = fakeRecords({
+      '24381_2': { roots: ['24381_145018'], items: [item('24381_1', '24381_145018')] },
+    });
+
+    const declaredNo = legacyServerApi();
+    const noResult = await collectDbnumRefnos(
+      fakeTree(),
+      records,
+      7997,
+      { lifecycle: lifecycle('unsupported') },
+      declaredNo,
+    );
+    expect(declaredNo.ensureDbnum).not.toHaveBeenCalled();
+    expect(noResult.fallback?.reason).toBe('server_unsupported');
+
+    for (const status of [405, 501]) {
+      const unknown = legacyServerApi();
+      (unknown.ensureDbnum as ReturnType<typeof vi.fn>).mockImplementation(async () => {
+        throw apiError('internal', status);
+      });
+      const result = await collectDbnumRefnos(
+        fakeTree(),
+        fakeRecords({
+          '24381_2': { roots: ['24381_145018'], items: [item('24381_1', '24381_145018')] },
+        }),
+        7997,
+        { lifecycle: lifecycle('unknown') },
+        unknown,
+      );
+      expect(result.fallback?.reason).toBe('server_unsupported');
+      expect(dbnumServerEntrySupport(unknown)).toBe('no');
+    }
+
+    const declaredYes = legacyServerApi();
+    await expect(
+      collectDbnumRefnos(
+        fakeTree(),
+        fakeRecords({}),
+        7997,
+        { lifecycle: lifecycle('supported') },
+        declaredYes,
+      ),
+    ).rejects.toMatchObject({ status: 404 });
+    expect(dbnumServerEntrySupport(declaredYes)).toBe('unknown');
+  });
+
+  it('POST 已创建任务后 roots 缺失：继续等任务终态才走兼容链，不并发重复生成', async () => {
+    const order: string[] = [];
+    const api = serverEntryApi({
+      expectedRoots: 1,
+      states: [
+        { state: 'running', units_done: 1 },
+        { state: 'succeeded', units_done: 1 },
+      ],
+      roots: ['24381/145018'],
+    });
+    (api.task as ReturnType<typeof vi.fn>).mockImplementationOnce(async () => {
+      order.push('task-running');
+      return { task_id: 't', state: 'running', units_done: 1, total_units: 1 };
+    }).mockImplementationOnce(async () => {
+      order.push('task-terminal');
+      return { task_id: 't', state: 'succeeded', units_done: 1, total_units: 1 };
+    });
+    (api.dbnumRoots as ReturnType<typeof vi.fn>).mockImplementation(async () => {
+      order.push('roots-missing');
+      throw new GenModelV1ApiError({
+        code: 'invalid_response',
+        status: 200,
+        path: '/api/v1/dbnums/7997/model/roots',
+        message: 'SPA fallback HTML',
+      });
+    });
+    const records = fakeRecords({
+      '24381_2': { roots: ['24381_145018'], items: [item('24381_1', '24381_145018')] },
+    });
+    const originalEnsure = records.ensureAndCollect.getMockImplementation() as (
+      refno: string,
+      options?: EnsureAndCollectOptions,
+    ) => Promise<EnsureAndCollectResult>;
+    records.ensureAndCollect.mockImplementation(async (refno: string, options?: EnsureAndCollectOptions) => {
+      order.push('site-fallback');
+      return originalEnsure(refno, options);
+    });
+
+    const result = await collectDbnumRefnos(
+      fakeTree(),
+      records,
+      7997,
+      { taskPollIntervalMs: 0, lifecycle: lifecycle('unknown') },
+      api,
+    );
+    expect(result.fallback?.reason).toBe('server_unsupported');
+    expect(order.slice(0, 3)).toEqual(['task-running', 'roots-missing', 'task-terminal']);
+    expect(order.slice(3)).toEqual(['site-fallback', 'site-fallback']);
+  });
+
+  it('任务 404 后强制 health：代次变化就终止旧收集，不拿新进程 roots 冒充旧任务', async () => {
+    let generation = 0;
+    const taskLifecycle: CollectDbnumLifecycle = {
+      capability: () => 'supported',
+      generation: () => generation,
+      assertGeneration: (captured) => {
+        if (captured !== generation) throw new Error(`service generation changed: ${captured} -> ${generation}`);
+      },
+      refreshAfterTaskNotFound: async () => {
+        generation = 1;
+        return generation;
+      },
+      noteRequestFailure: () => {},
+    };
+    const api = serverEntryApi({ expectedRoots: 1, states: [], roots: ['24381/145018'] });
+    (api.task as ReturnType<typeof vi.fn>).mockImplementation(async () => {
+      throw apiError('not_found', 404);
+    });
+    const records = fakeRecords({});
+    await expect(
+      collectDbnumRefnos(
+        fakeTree(),
+        records,
+        7997,
+        { taskPollIntervalMs: 0, lifecycle: taskLifecycle },
+        api,
+      ),
+    ).rejects.toThrow('service generation changed');
+    expect(api.dbnumRoots).not.toHaveBeenCalled();
+    expect(records.ensureAndCollect).not.toHaveBeenCalled();
   });
 
   it('任务失败且一根都没成：抛错，不把「0 条记录」当成空库', async () => {
@@ -314,6 +541,10 @@ describe('collectDbnumRefnos · 服务端整库入口', () => {
     const result = await collectDbnumRefnos(fakeTree(), records, 7997, { taskPollIntervalMs: 0 }, api);
     expect(result.generationRoots).toEqual(['24381_145018']);
     expect(result.refnos).toEqual(['24381_1', '24381_2']);
+    expect(api.dbnumRoots).toHaveBeenCalledWith(
+      7997,
+      expect.not.objectContaining({ taskId: expect.anything() }),
+    );
   });
 
   it('旧 §4.5.3 构建（roots 行没有 ready）：等终态整取，onRefnosReady 收尾时给一次、带全部构件', async () => {
@@ -346,7 +577,10 @@ describe('collectDbnumRefnos · 服务端整库入口 · 实时（roots 认 read
     let poll = 0;
     const expectedRoots = options.expectedRoots ?? options.allRoots.length;
     const currentTick = () => options.ticks[Math.max(0, Math.min(poll - 1, options.ticks.length - 1))]!;
-    const dbnumRoots = vi.fn(async (dbnum: number, opts?: { ready?: boolean }) => {
+    const dbnumRoots = vi.fn(async (
+      dbnum: number,
+      opts?: { ready?: boolean; taskId?: string; signal?: AbortSignal },
+    ) => {
       const readyNow = new Set(currentTick().ready);
       const rows = options.allRoots.map((root) => ({ generation_root: root, noun: 'EQUI', name: root, ready: readyNow.has(root) }));
       const filtered = opts?.ready ? rows.filter((row) => row.ready) : rows;
@@ -406,6 +640,7 @@ describe('collectDbnumRefnos · 服务端整库入口 · 实时（roots 认 read
     ]);
     // 每拍一次 ?ready=1，收尾再拿一次全清单对账
     expect(api.dbnumRoots.mock.calls.map((c) => c[1]?.ready === true)).toEqual([true, true, true, false]);
+    expect(api.dbnumRoots.mock.calls.every((c) => c[1]?.taskId === 'dbnum-model-ensure-7997-1')).toBe(true);
 
     expect(result.generationRoots).toEqual(['101_1', '102_1', '103_1']);
     expect(result.refnos).toEqual(['101_1', '101_2', '102_1', '103_1']);
@@ -474,6 +709,29 @@ describe('collectDbnumRefnos · 服务端整库入口 · 实时（roots 认 read
     expect(records.collectRoots.mock.calls.map((c) => c[0])).toEqual([['101_1']]);
     expect(result.refnos).toEqual(['101_1', '101_2']);
     expect(result.pending).toEqual(['102_1', '103_1']);
+    expect(result.errors).toEqual({});
+  });
+
+  it('零进度超时后不读取明确 ready:false 的根，也不触发逐根 ensure', async () => {
+    const records = fakeRecords(livePlan);
+    const api = liveServerApi({
+      allRoots: ['101/1'],
+      ticks: [{ state: 'running', units_done: 0, ready: [] }],
+    });
+
+    const result = await collectDbnumRefnos(
+      fakeTree(),
+      records,
+      7997,
+      { taskPollIntervalMs: 0, taskWaitTimeoutMs: 0 },
+      api,
+    );
+
+    expect(api.dbnumRoots).toHaveBeenCalledTimes(1);
+    expect(records.collectRoots).not.toHaveBeenCalled();
+    expect(records.ensureAndCollect).not.toHaveBeenCalled();
+    expect(result.generationRoots).toEqual([]);
+    expect(result.pending).toEqual(['101_1']);
     expect(result.errors).toEqual({});
   });
 });

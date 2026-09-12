@@ -30,6 +30,24 @@ function fetchMockReturning(response: Response) {
   return vi.fn<typeof fetch>(async () => response);
 }
 
+function fetchMockWithStalledJsonBody() {
+  let requestSignal: AbortSignal | null = null;
+  const fetchImpl = vi.fn<typeof fetch>(async (_input, init) => {
+    requestSignal = init?.signal ?? null;
+    const signal = requestSignal;
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('{"status":"ok"'));
+        const abort = () => controller.error(signal?.reason ?? new Error('request aborted'));
+        if (signal?.aborted) abort();
+        else signal?.addEventListener('abort', abort, { once: true });
+      },
+    });
+    return new Response(body, { status: 200, headers: { 'Content-Type': 'application/json' } });
+  });
+  return { fetchImpl, requestSignal: () => requestSignal };
+}
+
 describe('refno 双向转换（本仓 a_b ⇄ gen-model a/b）', () => {
   it('toV1Refno 把 a_b / a/b / 带空白的写法都压成 a/b', () => {
     expect(toV1Refno('24381_145018')).toBe('24381/145018');
@@ -131,12 +149,19 @@ describe('genModelV1Fetch 基座', () => {
       source: 'direct', dbnum: 7997, total: 2720, ready_total: 1, only_ready: true,
       roots: [{ generation_root: '24381/145018', noun: 'EQUI', name: '/PUMP-01', ready: true }],
     }));
-    const ready = await genModelV1DbnumModelRoots(7997, { baseUrl: BASE, fetchImpl: readyRoots, ready: true, identity: { project: 'P' } });
+    const ready = await genModelV1DbnumModelRoots(7997, {
+      baseUrl: BASE,
+      fetchImpl: readyRoots,
+      ready: true,
+      taskId: 'dbnum-model-ensure-7997-1',
+      identity: { project: 'P' },
+    });
     expect(ready.only_ready).toBe(true);
     expect(ready.roots[0]!.ready).toBe(true);
     const readyUrl = new URL(String(readyRoots.mock.calls[0]![0]));
     expect(readyUrl.pathname).toBe('/api/v1/dbnums/7997/model/roots');
     expect(readyUrl.searchParams.get('ready')).toBe('1');
+    expect(readyUrl.searchParams.get('task_id')).toBe('dbnum-model-ensure-7997-1');
     expect(readyUrl.searchParams.get('project')).toBe('P');
 
     const task = fetchMockReturning(jsonResponse(200, {
@@ -164,13 +189,23 @@ describe('genModelV1Fetch 基座', () => {
     expect(apiError.isNotFound).toBe(false);
   });
 
-  it('非 JSON 的错误页按 HTTP 状态兜一个 code（404 → not_found，504 → timeout）', async () => {
+  it('非 JSON 的错误页保留 HTTP 状态并兜 code（404 / 405 / 501 / 504）', async () => {
     const notFound = await genModelV1Fetch('/x', {
       baseUrl: BASE,
       fetchImpl: fetchMockReturning(new Response('<html>nginx 404</html>', { status: 404, statusText: 'Not Found' })),
     }).then(() => null, (e: unknown) => e as GenModelV1ApiError);
     expect(notFound?.code).toBe('not_found');
     expect(notFound?.isNotFound).toBe(true);
+
+    for (const status of [405, 501]) {
+      const unsupported = await genModelV1Fetch('/api/v1/dbnums/7997/model/ensure', {
+        baseUrl: BASE,
+        fetchImpl: fetchMockReturning(new Response('<html>fallback</html>', { status })),
+        method: 'POST',
+      }).then(() => null, (e: unknown) => e as GenModelV1ApiError);
+      expect(unsupported?.status).toBe(status);
+      expect(unsupported?.code).toBe('internal');
+    }
 
     const timeout = await genModelV1Fetch('/x', {
       baseUrl: BASE,
@@ -204,6 +239,42 @@ describe('genModelV1Fetch 基座', () => {
     expect(error?.status).toBe(0);
     expect(error?.isRetryable).toBe(true);
     expect(error?.message).toContain('Failed to fetch');
+  });
+
+  it('响应头已到但正文停滞时，请求超时仍会中止正文读取', async () => {
+    const stalled = fetchMockWithStalledJsonBody();
+    const error = await genModelV1Fetch('/api/v1/health', {
+      baseUrl: BASE,
+      fetchImpl: stalled.fetchImpl,
+      timeoutMs: 20,
+    }).then(() => null, (e: unknown) => e as GenModelV1ApiError);
+
+    expect(error?.code).toBe('network');
+    expect(error?.abortSource).toBe('timeout');
+    expect(error?.message).toContain('请求超时');
+    expect(stalled.requestSignal()?.aborted).toBe(true);
+  });
+
+  it('响应头已到但正文停滞时，外部 abort 仍会中止正文读取', async () => {
+    const stalled = fetchMockWithStalledJsonBody();
+    const outer = new AbortController();
+    const pending = genModelV1Fetch('/api/v1/health', {
+      baseUrl: BASE,
+      fetchImpl: stalled.fetchImpl,
+      signal: outer.signal,
+      timeoutMs: 5_000,
+    });
+    await vi.waitFor(() => expect(stalled.fetchImpl).toHaveBeenCalledTimes(1));
+
+    outer.abort(new Error('caller cancelled'));
+    const error = await pending.then(() => null, (e: unknown) => e as GenModelV1ApiError);
+
+    expect(error?.code).toBe('cancelled');
+    expect(error?.isCancelled).toBe(true);
+    expect(error?.isRetryable).toBe(false);
+    expect(error?.abortSource).toBe('caller');
+    expect(error?.message).toContain('caller cancelled');
+    expect(stalled.requestSignal()?.aborted).toBe(true);
   });
 
   it('2xx 但正文不是 JSON → invalid_response', async () => {

@@ -1,10 +1,21 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
-  batchRecordsSupport, ensureAndCollectRecords, mapWithConcurrency, planRecordsBatches, refnosOfRecords, type ModelRecordsApi,
+  batchRecordsSupport,
+  collectRecordsForRoots,
+  ensureAndCollectRecords,
+  mapWithConcurrency,
+  MAX_MODEL_RECORD_PAGES,
+  planRecordsBatches,
+  refnosOfRecords,
+  type ModelRecordsApi,
 } from './modelRecords';
 
-import { GenModelV1ApiError, toV1Refno, type GenModelV1RecordsRequest, type GeomInstQuery, type ModelRecordsResponse } from '@/api/genModelV1Api';
+import { GenModelV1ApiError, toV1Refno, type GenModelV1RecordsRequest, type GenModelV1RequestOptions, type GeomInstQuery, type ModelRecordsResponse } from '@/api/genModelV1Api';
+import {
+  __resetGenModelV1ServiceLifecycleForTests,
+  observeGenModelV1Health,
+} from '@/model-source/genModelV1/serviceLifecycle';
 
 // 真 API 会把 a_b 转成 a/b；这里的假 API 同样先归一再比，免得测试只测到一种写法。
 const v1 = toV1Refno;
@@ -83,6 +94,10 @@ function node(refno: string, noun: string, owner: string, childrenCount: number)
 }
 
 describe('ensureAndCollectRecords', () => {
+  beforeEach(() => {
+    __resetGenModelV1ServiceLifecycleForTests();
+  });
+
   it('读透形态：一次 ensure 给出多个生成根，逐根翻页收齐并去重', async () => {
     const records = vi.fn(async ({ generationRoot, cursor }: { generationRoot: string; cursor?: number }) => {
       const root = v1(generationRoot);
@@ -279,6 +294,47 @@ describe('ensureAndCollectRecords', () => {
     expect(batchRecordsSupport(fewApi)).toBe('unknown');
   });
 
+  it('批量分页达到护栏仍 truncated 时不干净收口，退回逐根取得完整结果', async () => {
+    let batchPages = 0;
+    let singleCalls = 0;
+    const records = vi.fn(async (req: GenModelV1RecordsRequest): Promise<ModelRecordsResponse> => {
+      if (req.generationRoots) {
+        batchPages += 1;
+        return {
+          source: 'model-memory',
+          items: [],
+          total: MAX_MODEL_RECORD_PAGES + 1,
+          truncated: true,
+          next_cursor: batchPages,
+          generation_roots: req.generationRoots,
+          roots: req.generationRoots.map((root) => ({ generation_root: root, total: 1 })),
+        };
+      }
+      singleCalls += 1;
+      return {
+        source: 'model-memory',
+        items: [item(`${req.generationRoot}_item`, req.generationRoot!)],
+        total: 1,
+        truncated: false,
+        next_cursor: null,
+        generation_root: req.generationRoot,
+      };
+    });
+    const recordsApi = api({ records: records as never });
+
+    const result = await collectRecordsForRoots(
+      ['1_1', '1_2'],
+      { pageSize: 1, recordsConcurrency: 1, recordsBatchSize: 2 },
+      recordsApi,
+    );
+
+    expect(batchPages).toBe(MAX_MODEL_RECORD_PAGES);
+    expect(singleCalls).toBe(2);
+    expect(result.errors).toEqual({});
+    expect(result.pending).toEqual([]);
+    expect(refnosOfRecords(result.items)).toEqual(['1_1_item', '1_2_item']);
+  });
+
   it('旧服务端不认识 generation_roots（422 missing field）：整批退回逐根、结果不变，并且这个 api 从此不再试批量', async () => {
     const roots = Array.from({ length: 12 }, (_, i) => `1/${i + 1}`);
     const records = legacyRecords();
@@ -302,6 +358,21 @@ describe('ensureAndCollectRecords', () => {
     expect(records).toHaveBeenCalledTimes(12);
   });
 
+  it('批量 records 能力记忆绑定服务代次，started_at 变化后回到 unknown', async () => {
+    observeGenModelV1Health({ status: 'ok', started_at: 'old' }, '/gm');
+    const roots = ['1/1', '1/2', '1/3', '1/4'];
+    const records = recordsServing();
+    const recordsApi = api({
+      ensure: vi.fn(async () => ({ status: 'Generated', generation_roots: roots })) as never,
+      records: records as never,
+    });
+    await ensureAndCollectRecords('1_0', { recordsConcurrency: 1 }, recordsApi);
+    expect(batchRecordsSupport(recordsApi)).toBe('yes');
+
+    observeGenModelV1Health({ status: 'ok', started_at: 'new' }, '/gm');
+    expect(batchRecordsSupport(recordsApi)).toBe('unknown');
+  });
+
   it('整批 409（有根未 ensure）/ 400 信封 / 5xx：退回逐根，只有真出问题的那根归 pending / errors，不记「不支持」', async () => {
     const roots = ['1/1', '1/2', '1/3', '1/4', '1/5', '1/6', '1/7', '1/8'];
     const records = recordsServing((root) => {
@@ -322,7 +393,108 @@ describe('ensureAndCollectRecords', () => {
     expect(batchRecordsSupport(recordsApi)).toBe('yes'); // 有一批成了；400 信封是这批的问题，不是能力问题
     const batchAttempts = records.mock.calls.filter((call) => (call[0] as GenModelV1RecordsRequest).generationRoots).length;
     expect(batchAttempts).toBe(4);
-    expect(records.mock.calls.length - batchAttempts).toBe(6); // 失败的三批 × 2 根逐根重取
+    expect(records.mock.calls.length - batchAttempts).toBe(7); // 失败的三批 × 2 根逐根重取，not_generated 根再 ensure + records 一次
+    expect(recordsApi.ensure).toHaveBeenCalledTimes(2); // 节点初始 ensure + 1/3 的单次恢复 ensure
+  });
+
+  it('调用方取消：批量 records 抛 cancelled 后不退回逐根、不进 errors / pending，整次读取直接以取消收口', async () => {
+    const cancelled = () => new GenModelV1ApiError({
+      code: 'cancelled', status: 0, path: '/api/v1/model/records', message: 'caller cancelled', abortSource: 'caller',
+    });
+    const records = vi.fn(async (req: GenModelV1RecordsRequest): Promise<ModelRecordsResponse> => {
+      if (req.generationRoots) throw cancelled();
+      // 退回逐根才会走到这里——取消后不该再有任何一发
+      return { source: 'model-memory', items: defaultItemsOf(req.generationRoot!), total: 1, truncated: false, next_cursor: null };
+    });
+    const onRequestFailure = vi.fn();
+    await expect(
+      collectRecordsForRoots(['1_1', '1_2', '1_3'], { recordsConcurrency: 1, recordsBatchSize: 3, onRequestFailure }, api({ records: records as never })),
+    ).rejects.toMatchObject({ code: 'cancelled', abortSource: 'caller' });
+    expect(records).toHaveBeenCalledTimes(1);
+    expect(requestedRoots(records.mock.calls[0]!)).toEqual(['1/1', '1/2', '1/3']);
+    expect(onRequestFailure).toHaveBeenCalledTimes(1);
+  });
+
+  it('逐根途中取消：后面的根不再打请求；ensure / children 抛 cancelled 也不折进 errors', async () => {
+    const controller = new AbortController();
+    const records = vi.fn(async (req: GenModelV1RecordsRequest): Promise<ModelRecordsResponse> => {
+      if (req.generationRoots) throw new GenModelV1ApiError({ code: 'internal', status: 500, path: '', message: 'boom' }); // 整批 5xx → 逐根
+      if (v1(req.generationRoot!) === '1/2') {
+        controller.abort(new Error('stop'));
+        throw new GenModelV1ApiError({ code: 'cancelled', status: 0, path: '', message: 'aborted', abortSource: 'caller' });
+      }
+      return { source: 'model-memory', items: defaultItemsOf(req.generationRoot!), total: 1, truncated: false, next_cursor: null };
+    });
+    await expect(
+      collectRecordsForRoots(['1_1', '1_2', '1_3'], { recordsConcurrency: 1, recordsBatchSize: 3, signal: controller.signal }, api({ records: records as never })),
+    ).rejects.toMatchObject({ code: 'cancelled' });
+    // 批量 1 发 + 逐根 1/1、1/2 各 1 发；1/3 不再打
+    expect(records).toHaveBeenCalledTimes(3);
+    expect(records.mock.calls.map(requestedRoots)).toEqual([['1/1', '1/2', '1/3'], ['1/1'], ['1/2']]);
+
+    const ensure = vi.fn(async () => {
+      throw new GenModelV1ApiError({ code: 'cancelled', status: 0, path: '/api/v1/model/ensure', message: 'aborted', abortSource: 'caller' });
+    });
+    await expect(ensureAndCollectRecords('1_1', {}, api({ ensure: ensure as never }))).rejects.toMatchObject({ code: 'cancelled' });
+
+    const children = vi.fn(async () => {
+      throw new GenModelV1ApiError({ code: 'cancelled', status: 0, path: '/api/v1/tree/children', message: 'aborted', abortSource: 'caller' });
+    });
+    const containerEnsure = vi.fn(async () => { throw container(); });
+    await expect(
+      ensureAndCollectRecords('1_1', {}, api({ ensure: containerEnsure as never, children: children as never })),
+    ).rejects.toMatchObject({ code: 'cancelled' });
+  });
+
+  it('多路并发逐根途中取消：已成功的根照常 report，取消那一路直接抛、不折进 errors/pending，未取消时的 5xx/409 分型不受影响', async () => {
+    const controller = new AbortController();
+    const done: string[] = [];
+    const records = vi.fn(({ generationRoot }: { generationRoot: string }, options?: GenModelV1RequestOptions) => new Promise<ModelRecordsResponse>((resolve, reject) => {
+      const root = v1(generationRoot);
+      if (root === '1/1') { resolve({ source: 'model-memory', items: defaultItemsOf(root), total: 1, truncated: false, next_cursor: null }); return; }
+      if (root === '1/2') {
+        queueMicrotask(() => {
+          controller.abort(new Error('stop'));
+          reject(new GenModelV1ApiError({ code: 'cancelled', status: 0, path: '', message: 'aborted', abortSource: 'caller' }));
+        });
+        return;
+      }
+      options?.signal?.addEventListener('abort', () => reject(options.signal!.reason), { once: true });
+    }));
+    // 这一层原样上抛先到的那个取消错误（1/3 听 signal 抛的裸 reason 或 1/2 的 cancelled 信封），统一分型在记录源的 guard 做
+    let thrown: unknown;
+    try {
+      await collectRecordsForRoots(
+        ['1_1', '1_2', '1_3'],
+        { recordsConcurrency: 3, recordsBatchSize: 1, signal: controller.signal, onRootDone: ({ root }) => done.push(root) },
+        api({ records: records as never }),
+      );
+    } catch (error) {
+      thrown = error;
+    }
+    expect(thrown).toBeInstanceOf(Error);
+    expect(
+      (thrown instanceof GenModelV1ApiError && thrown.code === 'cancelled') || (thrown as Error).message === 'stop',
+    ).toBe(true);
+    expect(records).toHaveBeenCalledTimes(3);
+    expect(done).toEqual(['1_1']);
+
+    // 对照：signal 没 abort 时，同样三路并发的 5xx / 409 仍按旧口径归 errors / pending，不会被当成取消
+    const quiet = new AbortController();
+    const plain = vi.fn(async ({ generationRoot }: { generationRoot: string }): Promise<ModelRecordsResponse> => {
+      const root = v1(generationRoot);
+      if (root === '1/2') throw new GenModelV1ApiError({ code: 'internal', status: 500, path: '', message: 'boom' });
+      if (root === '1/3') throw new GenModelV1ApiError({ code: 'conflict', status: 409, path: '', message: 'not_generated' });
+      return { source: 'model-memory', items: defaultItemsOf(root), total: 1, truncated: false, next_cursor: null };
+    });
+    const result = await collectRecordsForRoots(
+      ['1_1', '1_2', '1_3'],
+      { recordsConcurrency: 3, recordsBatchSize: 1, signal: quiet.signal },
+      api({ records: plain as never }),
+    );
+    expect(refnosOfRecords(result.items)).toEqual(['1_91']);
+    expect(result.errors).toEqual({ '1_2': 'boom' });
+    expect(result.pending).toEqual(['1_3']);
   });
 
   it('批量响应里 owner 不在批里的记录不丢', async () => {

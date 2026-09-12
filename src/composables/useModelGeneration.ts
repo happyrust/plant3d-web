@@ -1,6 +1,8 @@
 import { ref } from 'vue';
 import type { Ref } from 'vue';
 
+import type { VisibleInstsIncomplete, VisibleInstsResponse } from '@/api/genModelE3dTypes';
+
 import { enqueueParquetIncremental, getParquetVersion } from '@/api/genModelRealtimeApi';
 import { triggerBatchGenerateSse } from '@/api/genModelStreamGenerateApi';
 import { modelRegenerateByRefno, modelShowByRefno } from '@/api/genModelTaskApi';
@@ -123,6 +125,15 @@ export type ActualModelLoadScope = {
   typeInfoError: string | null
 }
 
+/** `showModelByDbnum` 的结果；`budgetLimited` 只有 gen-model-v1 整库撞到安全预算时为 true。 */
+export type ShowModelByDbnumResult = {
+  loaded: boolean
+  instanceCount: number
+  refnoCount: number
+  refnos: string[]
+  budgetLimited?: boolean
+}
+
 function normalizeRefnoString(refno: string): string {
   return String(refno || '').trim().replace('/', '_');
 }
@@ -172,25 +183,56 @@ async function querySubtreeRefnos(refno: string): Promise<{ refnos: string[]; tr
   return { refnos: out, truncated: !!resp.truncated };
 }
 
+/** `visibleInsts` 的收集明细归一成 `a_b`；三项都空 = 收齐 = `null`。 */
+function normalizeVisibleInstsIncomplete(raw: VisibleInstsResponse['incomplete']): VisibleInstsIncomplete | null {
+  if (!raw) return null;
+  const pending = uniqStrings((raw.pending ?? []).map((r) => normalizeRefnoString(String(r || ''))));
+  const truncated = uniqStrings((raw.truncated_roots ?? []).map((r) => normalizeRefnoString(String(r || ''))));
+  const errors: Record<string, string> = {};
+  for (const [root, message] of Object.entries(raw.errors ?? {})) {
+    const key = normalizeRefnoString(root);
+    if (key) errors[key] = String(message ?? '');
+  }
+  if (pending.length === 0 && truncated.length === 0 && Object.keys(errors).length === 0) return null;
+  return { pending, truncated_roots: truncated, errors };
+}
+
+/** 「生成中 2 根、预算外未取 1 根、出错 1 根」——给状态栏 / toast / 日志用。 */
+export function describeVisibleInstsIncomplete(incomplete: VisibleInstsIncomplete): string {
+  const failed = Object.keys(incomplete.errors).length;
+  return [
+    incomplete.pending.length ? `生成中 ${incomplete.pending.length} 根` : '',
+    incomplete.truncated_roots.length ? `预算外未取 ${incomplete.truncated_roots.length} 根` : '',
+    failed ? `出错 ${failed} 根` : '',
+  ].filter(Boolean).join('、');
+}
+
 export async function queryLoadScopeRefnos(refno: string): Promise<{
   refnos: string[]
   source: 'visible-insts' | 'subtree-refnos'
   truncated: boolean
+  /**
+   * gen-model-v1：visibleInsts 那次 ensure → records 没收齐的明细（pending / 截断 / 出错的根）；legacy 与收齐时为 `null`。
+   * 退到 subtree-refnos 时照样带着——范围虽换了来源，「这个节点还没生成完」这件事没变。
+   */
+  incomplete: VisibleInstsIncomplete | null
 }> {
   const normalized = normalizeRefnoString(refno);
   if (!normalized) {
-    return { refnos: [], source: 'visible-insts', truncated: false };
+    return { refnos: [], source: 'visible-insts', truncated: false, incomplete: null };
   }
 
+  let incomplete: VisibleInstsIncomplete | null = null;
   try {
     const resp = await getModelSource().tree.visibleInsts(normalized);
     if (!resp.success) {
       throw new Error(resp.error_message || 'e3d visible-insts 查询失败');
     }
+    incomplete = normalizeVisibleInstsIncomplete(resp.incomplete);
     const list = Array.isArray(resp.refnos) ? resp.refnos : [];
     const refnos = uniqStrings(list.map((r) => normalizeRefnoString(String(r || '')))).filter(Boolean);
     if (refnos.length > 0) {
-      return { refnos, source: 'visible-insts', truncated: false };
+      return { refnos, source: 'visible-insts', truncated: false, incomplete };
     }
   } catch {
     // 继续使用同一 root 的受限 subtree 范围。
@@ -200,6 +242,7 @@ export async function queryLoadScopeRefnos(refno: string): Promise<{
     refnos: subtree.refnos,
     source: 'subtree-refnos',
     truncated: subtree.truncated,
+    incomplete,
   };
 }
 
@@ -247,7 +290,7 @@ export async function resolveActualModelLoadScope(
 
 export function useModelGeneration(options: ModelGenerationOptions): ModelGenerationState & {
   generateAndLoadModel: (refno: string) => Promise<boolean>
-  showModelByDbnum: (dbno: number, options?: { flyTo?: boolean; manifestUrl?: string; replaceRefnos?: string[] }) => Promise<{ loaded: boolean; instanceCount: number; refnoCount: number; refnos: string[]; budgetLimited?: boolean }>
+  showModelByDbnum: (dbno: number, options?: { flyTo?: boolean; manifestUrl?: string; replaceRefnos?: string[] }) => Promise<ShowModelByDbnumResult>
   showModelByRefno: (refno: string, options?: { flyTo?: boolean; regenerate?: boolean }) => Promise<boolean>
   showModelUnitVersion: (unitRefno: string, dbno: number, sesno: number, options?: { flyTo?: boolean }) => Promise<boolean>
   isModelActuallyLoaded: (refno: string) => boolean
@@ -715,10 +758,13 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
       let visibleErr: string | null = null;
       let visibleRefnos: string[] = [];
       let visibleSource: 'visible-insts' | 'subtree-refnos' = 'visible-insts';
+      // gen-model-v1：这次 ensure → records 有没有收齐。没收齐的节点**不能**进 loadedRoots（B1）：下一次普通显示要能补齐
+      let scopeIncomplete: VisibleInstsIncomplete | null = null;
       try {
-        const { refnos, source, truncated } = await queryLoadScopeRefnos(normalizedRoot);
+        const { refnos, source, truncated, incomplete } = await queryLoadScopeRefnos(normalizedRoot);
         visibleRefnos = refnos;
         visibleSource = source;
+        scopeIncomplete = incomplete;
         if (source === 'subtree-refnos' && truncated) {
           consoleStore.addLog('error', `[model-load] subtree-refnos 返回被截断 refno=${normalizedRoot}（limit=200000）`);
           emitToast({
@@ -735,9 +781,11 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         visibleErr = e instanceof Error ? e.message : String(e);
         visibleRefnos = [];
       }
+      const incompleteTail = scopeIncomplete ? describeVisibleInstsIncomplete(scopeIncomplete) : '';
       consoleStore.addLog(
         'info',
         `[model-load] load_scope_refnos ok=${visibleOk ? 1 : 0} source=${visibleSource} refno=${normalizedRoot} dbno=${dbno} count=${visibleRefnos.length}` +
+          (scopeIncomplete ? ` incomplete=${incompleteTail}` : '') +
           (visibleErr ? ` err=${visibleErr}` : '')
       );
       if (!visibleOk && visibleErr) {
@@ -746,6 +794,10 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
           message: `[警告] 查询加载范围失败，将尝试从 Parquet 加载：${visibleErr}`,
           level: 'warning',
         });
+      } else if (visibleOk && visibleRefnos.length === 0 && scopeIncomplete) {
+        // 一个构件都没取到，但不是「没有」：根还在生成 / 出错 / 预算外——别说成「未查询到可见实例」
+        consoleStore.addLog('warning', `[model-load] refno=${normalizedRoot} 尚未取得可见实例：${incompleteTail}`);
+        emitToast({ message: `[提示] ${normalizedRoot} 尚未取得可见实例（${incompleteTail}），稍后再显示一次`, level: 'warning' });
       } else if (visibleOk && visibleRefnos.length === 0) {
         consoleStore.addLog(
           'warning',
@@ -783,11 +835,19 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
       if (!dtxLayer) throw new Error('DTXLayer 未初始化，无法加载模型');
 
       if (loadScope.actualLoadRefnos.length === 0) {
-        statusMessage.value = `refno=${normalizedRoot} 无可见实例`;
+        // 收集没完成而一个构件都没有（根全在生成中）：不是「无可见实例」，也不算显示成功——节点不进 loadedRoots，下次再问
+        statusMessage.value = scopeIncomplete
+          ? `refno=${normalizedRoot} 模型尚未就绪（${incompleteTail}）`
+          : `refno=${normalizedRoot} 无可见实例`;
         progress.value = 100;
         syncGlobalLoadStatus();
-        consoleStore.addLog('warning', `[model-load] refno=${normalizedRoot} 当前无可见实例，无需回退全量加载`);
-        return true;
+        consoleStore.addLog(
+          'warning',
+          scopeIncomplete
+            ? `[model-load] refno=${normalizedRoot} 收集未完成（${incompleteTail}），本次没有可装入的构件`
+            : `[model-load] refno=${normalizedRoot} 当前无可见实例，无需回退全量加载`,
+        );
+        return !scopeIncomplete;
       }
 
       // ========== gen-model-v1（plan 2026-09-06 P3-f）==========
@@ -852,7 +912,24 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
           consoleStore.addLog('warning', `[model-load] refno=${normalizedRoot} 有 ${v1Result.invalidTubi} 段无效直管（is_invalid_tubi），已画成告警色`);
         }
         progress.value = 100;
+        // 收集没完成（有根 pending / 预算外 / 出错）：已取得的构件照画，但这个节点**不**记进 loadedRoots——
+        // 记了就会被 genuinelyLoaded 短路，恰好恢复的那几根永远补不上。记录源那边同样不备忘未收齐的结果，
+        // 下一次普通显示会重新 ensure → records 把剩下的根补齐（B1）。
+        const collectionIncomplete = scopeIncomplete !== null;
         if (v1Result.loadedObjects > 0) {
+          if (collectionIncomplete) {
+            statusMessage.value = regenerate ? `重新生成部分完成 (gen-model，${incompleteTail})` : `部分加载 (gen-model，${incompleteTail})`;
+            syncGlobalLoadStatus();
+            consoleStore.addLog(
+              'warning',
+              `[model-load] gen-model-v1 refno=${normalizedRoot} 收集未完成（${incompleteTail}），已画 ${v1Result.loadedObjects} 个实例，未记为已加载；再显示一次可补齐`,
+            );
+            emitToast({
+              message: `[提示] 已从 gen-model 加载 ${v1Result.loadedObjects} 个几何实例，但 ${incompleteTail}；稍后再显示一次 ${normalizedRoot} 可补齐`,
+              level: 'warning',
+            });
+            return true;
+          }
           loadedRoots.add(normalizedRoot);
           statusMessage.value = regenerate ? '重新生成完成 (gen-model)' : '加载完成 (gen-model)';
           syncGlobalLoadStatus();
@@ -860,14 +937,19 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
           return true;
         }
         if (v1Result.skippedRefnos > 0 && v1Result.loadedRefnos === 0) {
-          // 全部已在场景里（缓存命中），不是失败
-          statusMessage.value = '已加载 (gen-model)';
+          // 全部已在场景里（缓存命中），不是失败；没收齐的照样不记 loadedRoots
+          statusMessage.value = collectionIncomplete ? `部分加载 (gen-model，${incompleteTail})` : '已加载 (gen-model)';
           syncGlobalLoadStatus();
+          if (collectionIncomplete) {
+            consoleStore.addLog('warning', `[model-load] gen-model-v1 refno=${normalizedRoot} 已取得的构件都在场景中，但收集未完成（${incompleteTail}）`);
+          }
           return true;
         }
-        statusMessage.value = '无可见几何实例 (gen-model)';
+        statusMessage.value = collectionIncomplete ? `模型尚未就绪 (gen-model，${incompleteTail})` : '无可见几何实例 (gen-model)';
         syncGlobalLoadStatus();
-        const hint = mesh404 > 0 ? `网格缺失 ${mesh404} 个 refno` : noGeo > 0 ? `${noGeo} 个 refno 没有几何记录` : '服务端未返回可绘制实例';
+        const hint = collectionIncomplete
+          ? incompleteTail
+          : mesh404 > 0 ? `网格缺失 ${mesh404} 个 refno` : noGeo > 0 ? `${noGeo} 个 refno 没有几何记录` : '服务端未返回可绘制实例';
         consoleStore.addLog('warning', `[model-load] gen-model-v1 未绘制实例 refno=${normalizedRoot}：${hint}`);
         emitToast({ message: `[警告] 加载结束但未绘制实例（refno=${normalizedRoot}）：${hint}`, level: 'warning' });
         return false;
@@ -1210,7 +1292,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
     source: GenModelV1ModelSource,
     dbno: number,
     loadOptions?: { flyTo?: boolean },
-  ): Promise<{ loaded: boolean; instanceCount: number; refnoCount: number; refnos: string[] }> {
+  ): Promise<ShowModelByDbnumResult> {
     const anyViewer = viewer as unknown as {
       __dtxLayer?: unknown
       __dtxAfterInstancesLoaded?: (dbno: number, loadedRefnos: string[]) => void
@@ -1254,6 +1336,11 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
     const collected = await source.collectDbnum(dbno, {
       maxTotalRoots: fullLoad ? Number.POSITIVE_INFINITY : undefined,
       maxRefnos: fullLoad ? Number.POSITIVE_INFINITY : undefined,
+      onFallback: ({ message }) => {
+        statusMessage.value = `gen-model：${message}`;
+        consoleStore.addLog('warning', `[model-load] gen-model-v1 dbnum=${dbno} ${message}`);
+        syncGlobalLoadStatus();
+      },
       onProgress: ({ phase, siteIndex, siteCount, site, rootsDone, rootsTotal, root }) => {
         totalCount.value = siteCount;
         currentIndex.value = siteIndex;
@@ -1297,18 +1384,48 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
       },
     });
 
+    const compatibility = collected.fallback ? `${collected.fallback.message}；` : '';
     const failedRoots = Object.keys(collected.errors);
     const tail =
       (collected.pending.length ? `，生成中 ${collected.pending.length} 根` : '') +
       (collected.truncatedRoots.length ? `，预算外未取 ${collected.truncatedRoots.length} 根` : '') +
       (collected.skippedSites.length ? `，未轮到 ${collected.skippedSites.length} 个 SITE` : '') +
       (failedRoots.length ? `，出错 ${failedRoots.length} 根` : '');
+    const collectionIncomplete =
+      collected.pending.length > 0
+      || collected.truncatedRoots.length > 0
+      || collected.skippedSites.length > 0
+      || failedRoots.length > 0
+      || collected.budgetLimited === true;
+    const incompleteStatus = failedRoots.length > 0
+      ? '模型加载未完成 (gen-model)'
+      : '模型尚未就绪 (gen-model)';
+    const siteSummary = collected.siteSummaryAvailable === false
+      ? 'SITE 摘要不可用'
+      : `${collected.sites.length} 个 SITE`;
 
-    if (collected.sites.length === 0) {
-      statusMessage.value = `dbnum=${dbno} 在当前 MDB 里没有 SITE`;
+    if (collected.refnos.length === 0 && collectionIncomplete) {
+      statusMessage.value = incompleteStatus;
       progress.value = 100;
       syncGlobalLoadStatus();
-      const message = `[警告] dbnum=${dbno} 在 gen-model 当前 MDB 的 tree/roots 里没有 SITE，无法整库加载`;
+      const detail = tail || '，受安全预算限制';
+      const message = `[提示] ${compatibility}dbnum=${dbno}（${siteSummary}）尚未取得可加载几何${detail}`;
+      consoleStore.addLog('warning', `[model-load] gen-model-v1 ${message}`);
+      emitToast({ message, level: 'warning' });
+      return { loaded: false, instanceCount: 0, refnoCount: 0, refnos: [] };
+    }
+
+    // 服务端整库入口不依赖 tree/roots 才能生成与取数；SITE 清单只是汇总信息。
+    // tree 摘要临时失败时 collectDbnum 会保留已收记录并把 sites 留空，不能把成功结果误判成空库。
+    if (
+      collected.siteSummaryAvailable !== false
+      && collected.sites.length === 0
+      && collected.refnos.length === 0
+    ) {
+      statusMessage.value = `${compatibility}dbnum=${dbno} 在当前 MDB 里没有 SITE`;
+      progress.value = 100;
+      syncGlobalLoadStatus();
+      const message = `[警告] ${compatibility}dbnum=${dbno} 在 gen-model 当前 MDB 的 tree/roots 里没有 SITE，无法整库加载`;
       consoleStore.addLog('warning', `[model-load] ${message}`);
       emitToast({ message, level: 'warning' });
       return { loaded: true, instanceCount: 0, refnoCount: 0, refnos: [] };
@@ -1317,7 +1434,9 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
       statusMessage.value = 'Model is empty (0 instances)';
       progress.value = 100;
       syncGlobalLoadStatus();
-      const message = `[警告] dbnum=${dbno} 的 ${collected.sites.length} 个 SITE 没有任何几何记录${tail}`;
+      const message = collected.siteSummaryAvailable === false
+        ? `[警告] ${compatibility}dbnum=${dbno} 的模型结果没有任何几何记录（SITE 摘要不可用）${tail}`
+        : `[警告] ${compatibility}dbnum=${dbno} 的 ${collected.sites.length} 个 SITE 没有任何几何记录${tail}`;
       consoleStore.addLog('warning', `[model-load] gen-model-v1 ${message}`);
       emitToast({ message, level: 'warning' });
       return { loaded: true, instanceCount: 0, refnoCount: 0, refnos: [] };
@@ -1349,27 +1468,56 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
       }
     }
 
+    const alreadyLoaded =
+      totals.loadedObjects === 0
+      && totals.loadedRefnos === 0
+      && totals.skippedRefnos === collected.refnos.length
+      && totals.mesh404 === 0
+      && totals.noGeo === 0;
+    // records 收齐、构件也交给了装载器，却因为网格取不到（404）一个实例都没画出来：这是**装载阶段**失败，
+    // 不是「权威空模型」——不能写 Model is empty，也不能回 loaded:true（I2）
+    const meshMissingWithoutRenderedObjects = totals.loadedObjects === 0 && totals.mesh404 > 0;
+    const incompleteWithoutRenderedObjects =
+      (collectionIncomplete || meshMissingWithoutRenderedObjects)
+      && totals.loadedObjects === 0
+      && !alreadyLoaded;
+    const loadTail = totals.mesh404 > 0 ? `，网格缺失 ${totals.mesh404} 个 refno` : '';
     progress.value = 100;
-    statusMessage.value = totals.loadedObjects > 0 ? 'Model loaded (gen-model)' : 'Model is empty (0 instances)';
+    statusMessage.value = totals.loadedObjects > 0
+      ? 'Model loaded (gen-model)'
+      : alreadyLoaded
+        ? '已加载 (gen-model，本次未新增)'
+        : incompleteWithoutRenderedObjects
+          ? (meshMissingWithoutRenderedObjects ? '模型加载未完成 (gen-model)' : incompleteStatus)
+          : 'Model is empty (0 instances)';
     syncGlobalLoadStatus();
     consoleStore.addLog(
       'info',
-      `[model-load] gen-model-v1 dbnum=${dbno} sites=${collected.sites.length} roots=${collected.generationRoots.length} refno_count=${collected.refnos.length} loaded_refnos=${totals.loadedRefnos} skipped_refnos=${totals.skippedRefnos} instance_count=${totals.loadedObjects} invalid_tubi=${totals.invalidTubi} mesh404=${totals.mesh404} no_geo=${totals.noGeo} pending=${collected.pending.length} truncated_roots=${collected.truncatedRoots.length} skipped_sites=${collected.skippedSites.length} errors=${failedRoots.length} live_batches=${liveBatches} ms=${Date.now() - startedAt}`
+      `[model-load] gen-model-v1 dbnum=${dbno} path=${collected.fallback?.reason ?? 'whole-dbnum'} sites=${collected.sites.length} roots=${collected.generationRoots.length} refno_count=${collected.refnos.length} loaded_refnos=${totals.loadedRefnos} skipped_refnos=${totals.skippedRefnos} instance_count=${totals.loadedObjects} invalid_tubi=${totals.invalidTubi} mesh404=${totals.mesh404} no_geo=${totals.noGeo} pending=${collected.pending.length} truncated_roots=${collected.truncatedRoots.length} skipped_sites=${collected.skippedSites.length} errors=${failedRoots.length} live_batches=${liveBatches} ms=${Date.now() - startedAt}`
     );
+    const loadedSummary = alreadyLoaded
+      ? `全部 ${collected.refnos.length} 个 refno 已在场景中，本次未新增实例`
+      : incompleteWithoutRenderedObjects
+        ? `已取得 ${collected.refnos.length} 个 refno，本次尚未绘制实例`
+        : `已加载 ${totals.loadedObjects} 个实例（${totals.loadedRefnos} 个 refno）`;
     const summary =
-      `${collected.budgetLimited ? '安全概览 ' : ''}dbnum=${dbno}：${collected.sites.length} 个 SITE / ${collected.generationRoots.length} 个生成根，` +
-      `已加载 ${totals.loadedObjects} 个实例（${totals.loadedRefnos} 个 refno）${tail}`;
-    if (totals.loadedObjects === 0) {
+      `${compatibility}${collected.budgetLimited ? '安全概览 ' : ''}dbnum=${dbno}：${siteSummary} / ${collected.generationRoots.length} 个生成根，` +
+      `${loadedSummary}${tail}${loadTail}`;
+    if (alreadyLoaded) {
+      emitToast({ message: `[信息] ${summary}`, level: 'info' });
+    } else if (incompleteWithoutRenderedObjects) {
+      emitToast({ message: `[提示] ${summary}`, level: 'warning' });
+    } else if (totals.loadedObjects === 0) {
       emitToast({ message: `[警告] ${summary}，未绘制实例（可能全部被跳过或几何缺失）`, level: 'warning' });
     } else if (collected.budgetLimited) {
       emitToast({ message: `[提示] ${summary}。请从模型树按需加载；整库全量可加 show_dbnum_full=1。`, level: 'warning' });
-    } else if (tail) {
+    } else if (tail || loadTail) {
       emitToast({ message: `[提示] ${summary}`, level: 'warning' });
     } else {
       emitToast({ message: `[成功] ${summary}`, level: 'success' });
     }
     return {
-      loaded: true,
+      loaded: !incompleteWithoutRenderedObjects,
       instanceCount: totals.loadedObjects,
       refnoCount: collected.refnos.length,
       refnos: collected.refnos,
@@ -1380,7 +1528,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
   async function showModelByDbnum(
     dbno: number,
     loadOptions?: { flyTo?: boolean; manifestUrl?: string; replaceRefnos?: string[] }
-  ): Promise<{ loaded: boolean; instanceCount: number; refnoCount: number; refnos: string[]; budgetLimited?: boolean }> {
+  ): Promise<ShowModelByDbnumResult> {
     isGenerating.value = true;
     error.value = null;
     lastLoadDebug.value = null;

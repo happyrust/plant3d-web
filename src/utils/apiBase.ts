@@ -165,11 +165,13 @@ function normalizeGenModelV1Base(raw: string): string | null {
  * 解析 gen-model `/api/v1` 的 base URL。优先级：URL 参数 > 环境变量 > 默认值。
  *
  * - 默认 **直连** `http://localhost:8022`（dev）——gen-model 的 CORS 是放开的，不必绕代理；
- *   生产构建没配环境变量时退到同源 `/gm`，由反向代理接。
+ *   生产构建没配环境变量时返回空串，直接请求同源 `/api/v1/*`。
  * - 显式写 `/gm`（或任何 `/` 开头的前缀）表示走 Vite 同源代理，给不想跨域的场景用。
  * - URL 参数是「人此刻明确要的」，原样用；环境变量 / 默认值给的 loopback 地址，在页面不是从
  *   loopback 打开时（局域网 IP 访问）折到 `/gm`——与旧后端 `resolveBackendApiBaseUrl` 同一条判据，
  *   否则请求会打到访问者自己的电脑。
+ * - 生产包若误注入 loopback 地址且页面本身不在 loopback，也退回空串；禁止把访问者自己的
+ *   `localhost:8022` 当生产服务。
  * - 与旧后端的 `?backend=` / `?backendPort=` 互不影响：两套地址各自独立。
  */
 export function resolveGenModelV1BaseUrl(options: ResolveGenModelV1BaseUrlOptions): string {
@@ -183,13 +185,20 @@ export function resolveGenModelV1BaseUrl(options: ResolveGenModelV1BaseUrlOption
       if (normalized) return normalized;
     }
   }
-  const resolved = (options.envBase && normalizeGenModelV1Base(options.envBase))
-    || (options.isDev ? GEN_MODEL_V1_DEFAULT_BASE_URL : GEN_MODEL_V1_PROXY_PREFIX);
+  const fromEnv = options.envBase && normalizeGenModelV1Base(options.envBase);
+  const resolved = fromEnv || (options.isDev ? GEN_MODEL_V1_DEFAULT_BASE_URL : '');
   if (options.isDev && options.browserOrigin && isLoopbackUrl(resolved)) {
     try {
       if (!isLoopbackHostname(new URL(options.browserOrigin).hostname)) return GEN_MODEL_V1_PROXY_PREFIX;
     } catch {
       // origin 解析不了就当作本机
+    }
+  }
+  if (!options.isDev && options.browserOrigin && isLoopbackUrl(resolved)) {
+    try {
+      if (!isLoopbackHostname(new URL(options.browserOrigin).hostname)) return '';
+    } catch {
+      // origin 解析不了就保留显式配置
     }
   }
   return resolved;

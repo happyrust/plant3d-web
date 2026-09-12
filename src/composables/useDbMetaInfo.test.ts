@@ -113,4 +113,17 @@ describe('useDbMetaInfo', () => {
     expect(dbMeta.getDbnumByRefno('24381_1')).toBe(1);
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
+
+  it('服务代次失效会清内存 ref0→dbnum 映射', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(buildDbMetaResponse());
+    vi.stubGlobal('fetch', fetchMock);
+    const filesOutput = await import('@/lib/filesOutput');
+    filesOutput.setCurrentProjectPath('ams-model');
+    const dbMeta = await import('./useDbMetaInfo');
+
+    await dbMeta.ensureDbMetaInfoLoaded();
+    expect(dbMeta.tryGetDbnumByRefno('24381_1')).toBe(1);
+    dbMeta.invalidateGenModelV1DbMetaInfo();
+    expect(dbMeta.tryGetDbnumByRefno('24381_1')).toBeNull();
+  });
 });

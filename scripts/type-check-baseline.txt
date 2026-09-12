@@ -295,7 +295,6 @@ src/composables/useMeasurementAnnotation.test.ts|TS2322|Type '{ value: Map<any, 
 src/composables/useMeasurementAnnotation.test.ts|TS2741|Property '[RefSymbol]' is missing in type '{ value: null; }' but required in type 'Ref<string | null, string | null>'.
 src/composables/useMeasurementAnnotation.test.ts|TS2741|Property '[RefSymbol]' is missing in type '{ value: null; }' but required in type 'Ref<string | null, string | null>'.
 src/composables/useModelGeneration.ts|TS2322|Type 'string | null' is not assignable to type 'string | undefined'.
-src/composables/useModelGeneration.ts|TS2353|Object literal may only specify known properties, and 'budgetLimited' does not exist in type '{ loaded: boolean; instanceCount: number; refnoCount: number; refnos: string[]; }'.
 src/composables/usePanelZones.test.ts|TS2322|Type 'unknown' is not assignable to type 'PanelLike | undefined'.
 src/composables/usePanelZones.test.ts|TS2769|No overload matches this call.
 src/composables/usePipeDistanceAnnotationThree.ts|TS2305|Module '"@/dimension"' has no exported member 'ExplicitLayoutInput'.

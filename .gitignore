@@ -55,6 +55,7 @@ npm-cache
 e2e/*
 !e2e/gen-model-v1-mesh-direct.spec.ts
 !e2e/gen-model-v1-two-source-parity.spec.ts
+!e2e/gen-model-v1-p5-live.spec.ts
 !e2e/model-source-default.spec.ts
 !e2e/pms-powerpms-review-new.spec.ts
 !e2e/output-project-direct-entry.spec.ts
@@ -72,6 +73,8 @@ e2e/*
 !e2e/dimension-perf.spec.ts
 scripts/*
 !scripts/run-dimension-browser-perf.mjs
+!scripts/run-gen-model-v1-frozen-source-live.ps1
+!scripts/run-gen-model-v1-p5-live.ps1
 !scripts/pms-chrome-devtools-flow.ts
 !scripts/pms-plant3d-initiate-flow.ts
 !scripts/pms-contract-sequence.ts
@@ -82,6 +85,9 @@ scripts/*
 !scripts/verify-gen-model-v1.ps1
 !scripts/type-check.mjs
 !scripts/type-check-baseline.txt
+
+# Local live-gate evidence (contains generated macros, logs, and root snapshots).
+output/gen-model-v1-frozen-source-live/
 
 # Agent Memory (跨会话记忆)
 .agent-memory/

@@ -8,14 +8,34 @@ describe('resolveGenModelV1BaseUrl（gen-model /api/v1，与旧后端地址互�
       .toBe('http://localhost:8022');
   });
 
-  it('生产构建没配环境变量时退到同源 /gm，交给反向代理', () => {
-    expect(resolveGenModelV1BaseUrl({ isDev: false })).toBe('/gm');
+  it('生产构建没配环境变量时走同源 /api/v1（base 为空），不生成 /gm 或 localhost', () => {
+    expect(resolveGenModelV1BaseUrl({ isDev: false })).toBe('');
+    const base = resolveGenModelV1BaseUrl({
+      isDev: false,
+      browserOrigin: 'https://plant.example.com',
+    });
+    expect(base).toBe('');
+    expect(`${base}/api/v1/health`).toBe('/api/v1/health');
   });
 
   it('环境变量可以是绝对地址（去尾斜杠）或 /gm 一类相对前缀', () => {
     expect(resolveGenModelV1BaseUrl({ isDev: true, envBase: 'http://10.0.0.5:8022/' })).toBe('http://10.0.0.5:8022');
     expect(resolveGenModelV1BaseUrl({ isDev: true, envBase: '/gm/' })).toBe('/gm');
     expect(resolveGenModelV1BaseUrl({ isDev: false, envBase: 'https://gm.example.com' })).toBe('https://gm.example.com');
+  });
+
+  it('生产环境误注入 loopback 时从非本机页面退回同源；URL 显式覆盖仍优先', () => {
+    expect(resolveGenModelV1BaseUrl({
+      isDev: false,
+      envBase: 'http://localhost:8022',
+      browserOrigin: 'https://plant.example.com',
+    })).toBe('');
+    expect(resolveGenModelV1BaseUrl({
+      isDev: false,
+      envBase: 'http://localhost:8022',
+      search: '?gm_backend_port=18082',
+      browserOrigin: 'https://plant.example.com',
+    })).toBe('http://localhost:18082');
   });
 
   it('URL 参数 gm_backend / gm_backend_port 压过环境变量，且不读旧后端的 backendPort', () => {

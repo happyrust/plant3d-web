@@ -1,6 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { __resetGenModelV1DbnumsForTests, DBNUMS_DEFAULT_MAX_AGE_MS, getGenModelV1Dbnums, peekGenModelV1Dbnums } from './useGenModelV1Dbnums';
+import {
+  __resetGenModelV1DbnumsForTests,
+  DBNUMS_DEFAULT_MAX_AGE_MS,
+  getGenModelV1Dbnums,
+  invalidateGenModelV1Dbnums,
+  peekGenModelV1Dbnums,
+} from './useGenModelV1Dbnums';
 
 import type { DbnumsResponse } from '@/api/genModelV1Api';
 
@@ -35,7 +41,7 @@ describe('getGenModelV1Dbnums（/dbnums 共享缓存）', () => {
     const a = getGenModelV1Dbnums({ fetcher, now: clock });
     const b = getGenModelV1Dbnums({ fetcher, now: clock, force: true }); // force 也共用在飞的
     expect(fetcher).toHaveBeenCalledTimes(1);
-    expect(fetcher).toHaveBeenCalledWith({ timeoutMs: 60_000, signal: undefined });
+    expect(fetcher).toHaveBeenCalledWith({ timeoutMs: 60_000, signal: expect.anything() });
     pending[0]!.resolve(response('first'));
     expect(await a).toBe(await b);
     expect(peekGenModelV1Dbnums()).toEqual({ fetchedAt: 1_000, response: response('first') });
@@ -85,5 +91,19 @@ describe('getGenModelV1Dbnums（/dbnums 共享缓存）', () => {
     expect(fetcher).toHaveBeenCalledTimes(2);
     pending[1]!.resolve(response('b'));
     expect(await b).toEqual(response('b'));
+  });
+
+  it('invalidate 后才完成的旧请求即使忽略 abort 也不能回填缓存', async () => {
+    const { fetcher, pending } = deferredFetcher();
+    const old = getGenModelV1Dbnums({ fetcher });
+    invalidateGenModelV1Dbnums();
+    pending[0]!.resolve(response('old'));
+    await expect(old).rejects.toThrow(/跨服务代次/);
+    expect(peekGenModelV1Dbnums()).toBeNull();
+
+    const fresh = getGenModelV1Dbnums({ fetcher });
+    pending[1]!.resolve(response('fresh'));
+    expect(await fresh).toEqual(response('fresh'));
+    expect(peekGenModelV1Dbnums()?.response).toEqual(response('fresh'));
   });
 });

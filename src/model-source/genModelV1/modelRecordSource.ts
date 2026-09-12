@@ -24,6 +24,7 @@ import type { InstanceEntryQueryOptions, ModelRecordSource } from '../ports';
 import type { InstanceEntry } from '@/utils/instances/instanceManifest';
 
 import { fromV1Refno } from '@/api/genModelV1Api';
+import { createGenModelV1GenerationGuard, type GenModelV1GenerationGuard } from '@/model-source/genModelV1/serviceLifecycle';
 
 /** 一次 ensure → records 里每处理完一个生成根发一条（P3-c 进度弹窗接它）。 */
 export type GenModelV1EnsureProgress = {
@@ -65,10 +66,15 @@ export type GenModelV1ModelRecordSource = ModelRecordSource & {
 export type GenModelV1ModelRecordSourceOptions = {
   api?: ModelRecordsApi;
   ensureOptions?: Pick<EnsureAndCollectOptions, 'maxContainerDepth' | 'maxRoots' | 'pageSize'>;
+  /** 生产组装点注入合并去重的 health freshness；低层单测缺省不发额外请求。 */
+  ensureFreshness?: () => Promise<unknown>;
+  noteRequestFailure?: (error: unknown) => void;
 };
 
 export function createGenModelV1ModelRecordSource(options: GenModelV1ModelRecordSourceOptions = {}): GenModelV1ModelRecordSource {
   const api = options.api ?? defaultModelRecordsApi;
+  const ensureFreshness = options.ensureFreshness ?? (() => Promise.resolve());
+  const noteRequestFailure = options.noteRequestFailure ?? ((error: unknown) => { void error; });
   const entriesByRefno = new Map<string, InstanceEntry[]>();
   /** 生成根（a_b）→ 它这次 records 里出现过的构件 refno（含根自己） */
   const leavesByRoot = new Map<string, Set<string>>();
@@ -111,21 +117,67 @@ export function createGenModelV1ModelRecordSource(options: GenModelV1ModelRecord
   }
 
   async function collectRoots(roots: string[], extra: CollectRootsOptions = {}): Promise<CollectRootsResult> {
-    const result = await collectRecordsForRoots(roots, { ...options.ensureOptions, ...extra }, api);
-    absorbRecords(result);
-    // 收干净的根记一笔空数组：调用方把「根 + 构件」一起交给 instanceEntriesByRefnos 时不会为它再 ensure 一遍。
-    // 还在 pending / 出错的那几根不记——下次显示要再问。
-    const unresolved = new Set([...result.pending, ...Object.keys(result.errors)]);
-    for (const root of result.generationRoots) {
-      if (!unresolved.has(root) && !entriesByRefno.has(root)) entriesByRefno.set(root, []);
+    await ensureFreshness();
+    const guard = createGenModelV1GenerationGuard(extra.signal);
+    try {
+      const externalNotGenerated = extra.onNotGenerated;
+      const externalRequestFailure = extra.onRequestFailure;
+      const result = await collectRecordsForRoots(roots, {
+        ...options.ensureOptions,
+        ...extra,
+        signal: guard.signal,
+        onNotGenerated: (root) => {
+          invalidateRoot(root);
+          externalNotGenerated?.(root);
+        },
+        onRequestFailure: (error) => {
+          noteRequestFailure(error);
+          externalRequestFailure?.(error);
+        },
+      }, api);
+      guard.assertCurrent();
+      absorbRecords(result);
+      // 收干净的根记一笔空数组：调用方把「根 + 构件」一起交给 instanceEntriesByRefnos 时不会为它再 ensure 一遍。
+      // 还在 pending / 出错的那几根不记——下次显示要再问。
+      const unresolved = new Set([...result.pending, ...Object.keys(result.errors)]);
+      for (const root of result.generationRoots) {
+        if (!unresolved.has(root) && !entriesByRefno.has(root)) entriesByRefno.set(root, []);
+      }
+      return result;
+    } catch (error) {
+      noteRequestFailure(error);
+      // 取消 / 换代盖过途中先抛出来的那个错：调用方拿到的分型只看这次读取的收口原因
+      guard.assertCurrent();
+      throw error;
+    } finally {
+      guard.dispose();
     }
-    return result;
   }
 
   async function ensureAndCollect(refno: string, extra: EnsureAndCollectOptions = {}): Promise<EnsureAndCollectResult> {
+    await ensureFreshness();
     const requested = fromV1Refno(refno);
-    const remembered = !extra.force && !extra.maxRecordsRoots ? resultsByRequested.get(requested) : undefined;
-    if (remembered) return remembered;
+    const guard = createGenModelV1GenerationGuard(extra.signal);
+    try {
+      // 取消要先于缓存命中：已经 abort 的 signal 不能拿着备忘结果「成功」返回
+      guard.assertCurrent();
+      const remembered = !extra.force && !extra.maxRecordsRoots ? resultsByRequested.get(requested) : undefined;
+      if (remembered) return remembered;
+      return await ensureAndCollectFresh(requested, extra, guard);
+    } catch (error) {
+      noteRequestFailure(error);
+      guard.assertCurrent();
+      throw error;
+    } finally {
+      guard.dispose();
+    }
+  }
+
+  async function ensureAndCollectFresh(
+    requested: string,
+    extra: EnsureAndCollectOptions,
+    guard: GenModelV1GenerationGuard,
+  ): Promise<EnsureAndCollectResult> {
     const onRootDone: EnsureAndCollectOptions['onRootDone'] = (progress) => {
       extra.onRootDone?.(progress);
       if (progressListeners.size === 0) return;
@@ -134,17 +186,36 @@ export function createGenModelV1ModelRecordSource(options: GenModelV1ModelRecord
         try { listener(event); } catch { /* 监听方的异常不影响取数 */ }
       }
     };
-    const result = await ensureAndCollectRecords(requested, { ...options.ensureOptions, ...extra, onRootDone }, api);
+    const externalNotGenerated = extra.onNotGenerated;
+    const externalRequestFailure = extra.onRequestFailure;
+    const result = await ensureAndCollectRecords(requested, {
+      ...options.ensureOptions,
+      ...extra,
+      signal: guard.signal,
+      onRootDone,
+      onNotGenerated: (root) => {
+        invalidateRoot(root);
+        externalNotGenerated?.(root);
+      },
+      onRequestFailure: (error) => {
+        noteRequestFailure(error);
+        externalRequestFailure?.(error);
+      },
+    }, api);
+    guard.assertCurrent();
     absorbRecords(result);
     // 请求的节点自己（ZONE / SITE，或直管不挂在它名下的生成根）通常不是任何一条记录的 refno。整根记录已经进了缓存，
     // 就给它记一笔空数组：调用方紧接着把「根 + 构件」一起交给 instanceEntriesByRefnos 时，不会为它再 ensure 一遍
     // 同一个根（浏览器里 ZONE 的一次显示原本要打两次 ensure + 两次 records）。有根还在 pending / 出错的不记，下次显示还要再问。
-    if (result.pending.length === 0 && Object.keys(result.errors).length === 0) {
+    if (
+      result.pending.length === 0
+      && result.truncatedRoots.length === 0
+      && Object.keys(result.errors).length === 0
+    ) {
       for (const key of [requested, ...result.generationRoots]) {
         if (key && !entriesByRefno.has(key)) entriesByRefno.set(key, []);
       }
-      // 有截断的结果不备忘：下次带更宽的预算再问要拿得到全的
-      if (result.truncatedRoots.length === 0) resultsByRequested.set(requested, result);
+      resultsByRequested.set(requested, result);
     }
     return result;
   }
@@ -154,21 +225,34 @@ export function createGenModelV1ModelRecordSource(options: GenModelV1ModelRecord
     refnos: string[],
     queryOptions: InstanceEntryQueryOptions = {},
   ): Promise<Map<string, InstanceEntry[]>> {
+    await ensureFreshness();
+    const guard = createGenModelV1GenerationGuard();
     const keys = Array.from(new Set(refnos.map((r) => fromV1Refno(String(r ?? ''))).filter(Boolean)));
-    if (queryOptions.forceRefresh) invalidate(keys);
-    const out = new Map<string, InstanceEntry[]>();
-    const force = queryOptions.forceRegenerate === true;
-    for (const key of keys) {
-      if (!entriesByRefno.has(key)) {
-        // 这一次 ensure 会把同根的其它构件一起写进缓存；后面的 key 多半就命中了。
-        // 重生成只对第一次 ensure 带 force：同根的其它构件已经在这次结果里，不该再触发一轮生成。
-        await ensureAndCollect(key, force ? { force: true } : {});
-        // 请求到但整根记录里没有它的构件，记空数组：本次不再为它再 ensure 一遍同一个根
-        if (!entriesByRefno.has(key)) entriesByRefno.set(key, []);
+    try {
+      if (queryOptions.forceRefresh) invalidate(keys);
+      const out = new Map<string, InstanceEntry[]>();
+      const force = queryOptions.forceRegenerate === true;
+      for (const key of keys) {
+        if (!entriesByRefno.has(key)) {
+          // 这一次 ensure 会把同根的其它构件一起写进缓存；后面的 key 多半就命中了。
+          // 重生成只对第一次 ensure 带 force：同根的其它构件已经在这次结果里，不该再触发一轮生成。
+          const collected = await ensureAndCollect(key, force ? { force: true } : {});
+          guard.assertCurrent();
+          const unresolved =
+            collected.pending.length > 0
+            || collected.truncatedRoots.length > 0
+            || Object.keys(collected.errors).length > 0;
+          // 只有完整收口后才能把“记录里没有该构件”负缓存为 []。pending、临时错误或截断
+          // 都必须保持未缓存，下一次显式显示才能重新 ensure。
+          if (!unresolved && !entriesByRefno.has(key)) entriesByRefno.set(key, []);
+        }
+        out.set(key, entriesByRefno.get(key) ?? []);
       }
-      out.set(key, entriesByRefno.get(key) ?? []);
+      guard.assertCurrent();
+      return out;
+    } finally {
+      guard.dispose();
     }
-    return out;
   }
 
   function peek(refno: string): InstanceEntry[] | undefined {

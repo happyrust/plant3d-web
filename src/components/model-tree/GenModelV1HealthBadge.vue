@@ -5,7 +5,8 @@ import { useGenModelV1Health } from '@/composables/useGenModelV1Health';
 
 /**
  * 树面板顶部的 gen-model 连接徽标（plan P1-4）：一个状态点 + 身份摘要 + 库三态，点一下重探。
- * 只在 `model_source=gen-model-v1`（或 `?gm_health=1`）时被父组件挂出来；挂上才开始轮询，卸掉就停。
+ * 只在 `model_source=gen-model-v1`（或 `?gm_health=1`）时被父组件挂出来；数据源本身持有轮询，
+ * 徽标挂载/卸载只增减自己的展示 owner，不再决定缓存正确性探针是否存活。
  * 这里只探 `/health` 与 `/dbnums`——前端只吃自己 ensure 出来的数据，不订阅服务端任务、不做被动重载
  * （原 P5 模型变更同步 2026-09-09 按用户口径整条下线，见收口计划 §12）。
  */
@@ -37,7 +38,9 @@ const title = computed(() => {
   const lines = [health.summary.value];
   if (s.namespace) lines.push(`namespace ${s.namespace}`);
   if (s.version) lines.push(`gen-model v${s.version}`);
+  if (s.startedAt) lines.push(`started_at ${s.startedAt} · generation ${s.serviceGeneration}`);
   if (s.dataFace) lines.push(`data_face ${s.dataFace}`);
+  if (s.sulDbMedium) lines.push(`sul_db ${s.sulDbMedium} · durable=${String(s.sulDbDurable)}`);
   if (s.deliveryUnitTypes.length) lines.push(`最小交付单元 ${s.deliveryUnitTypes.join('/')}`);
   if (s.initializationStatus) lines.push(`initialization ${s.initializationStatus}`);
   if (s.verdict.total > 0) {

@@ -27,6 +27,7 @@ import { refnosOfRecords } from './modelRecords';
 import type { GenModelV1ModelRecordSource } from './modelRecordSource';
 import type { TreeSource } from '../ports';
 import type { DbnumModelRootsResponse } from '@/api/genModelV1Api';
+import type { GenModelV1DbnumModelCapability } from '@/composables/useGenModelV1Health';
 
 import {
   fromV1Refno,
@@ -35,6 +36,9 @@ import {
   genModelV1TaskGet,
   isGenModelV1ApiError,
 } from '@/api/genModelV1Api';
+import {
+  getGenModelV1ServiceGeneration,
+} from '@/model-source/genModelV1/serviceLifecycle';
 
 export type CollectDbnumSite = { refno: string; name: string };
 
@@ -89,6 +93,25 @@ export type CollectDbnumOptions = {
   taskPollIntervalMs?: number;
   /** 轮询多久还没终态就不再等、按现状取记录（缺省 2 h：整库按小时计） */
   taskWaitTimeoutMs?: number;
+  signal?: AbortSignal;
+  onFallback?: (fallback: CollectDbnumFallback) => void;
+  /** 生产组装点注入；低层单测缺省保持能力 unknown、任务 404 视为同一服务内逐出。 */
+  lifecycle?: CollectDbnumLifecycle;
+};
+
+export type CollectDbnumFallbackReason = 'server_unsupported' | 'database_routed';
+
+export type CollectDbnumFallback = {
+  reason: CollectDbnumFallbackReason;
+  message: string;
+};
+
+export type CollectDbnumLifecycle = {
+  capability(): GenModelV1DbnumModelCapability;
+  generation(): number;
+  assertGeneration(captured: number): void;
+  refreshAfterTaskNotFound(): Promise<number>;
+  noteRequestFailure(error: unknown): void;
 };
 
 /** 服务端整库入口用到的三发（spec §4.5.3 + §4.4）；测试注入假实现。 */
@@ -111,19 +134,47 @@ type ServerEntrySupport = 'unknown' | 'yes' | 'no';
  * 之后每次整库显示直接走逐 SITE 老路、不再白打一发。做法与 `modelRecords` 记「认不认识
  * `generation_roots`」同一套（生产只有 `defaultDbnumServerEntryApi` 一个对象）。
  */
-const serverEntrySupportByApi = new WeakMap<DbnumServerEntryApi, ServerEntrySupport>();
+let serverEntrySupportByApi = new WeakMap<
+  DbnumServerEntryApi,
+  { generation: number; support: ServerEntrySupport }
+>();
 
 /** 诊断 / 单测用：这个 api 的服务端对整库入口的已知态。 */
 export function dbnumServerEntrySupport(api: DbnumServerEntryApi = defaultDbnumServerEntryApi): ServerEntrySupport {
-  return serverEntrySupportByApi.get(api) ?? 'unknown';
+  const remembered = serverEntrySupportByApi.get(api);
+  return remembered?.generation === getGenModelV1ServiceGeneration() ? remembered.support : 'unknown';
+}
+
+export function resetDbnumServerEntrySupport(): void {
+  serverEntrySupportByApi = new WeakMap();
 }
 
 /** `GET /tasks/{id}` 的终态（spec §4.4）。 */
 const TERMINAL_TASK_STATES = new Set(['succeeded', 'partial', 'failed', 'yielded']);
 
+const PASSIVE_LIFECYCLE: CollectDbnumLifecycle = {
+  capability: () => 'unknown',
+  generation: getGenModelV1ServiceGeneration,
+  assertGeneration: (captured) => {
+    if (captured !== getGenModelV1ServiceGeneration()) {
+      throw new Error(`gen-model 服务代次已变化（${captured} → ${getGenModelV1ServiceGeneration()}）`);
+    }
+  },
+  refreshAfterTaskNotFound: async () => getGenModelV1ServiceGeneration(),
+  noteRequestFailure: (error) => { void error; },
+};
+
+function isFixedRouteUnsupported(error: unknown, includeInvalidResponse = false): boolean {
+  if (!isGenModelV1ApiError(error)) return false;
+  if ([404, 405, 501].includes(error.status)) return true;
+  return includeInvalidResponse && error.code === 'invalid_response';
+}
+
 export type CollectDbnumResult = {
   dbnum: number;
   sites: CollectDbnumSite[];
+  /** `false` 表示整库模型结果有效，但用于汇总的 tree/SITE 摘要读取失败；不能解释成“确实没有 SITE”。 */
+  siteSummaryAvailable: boolean;
   /** 有几何记录的构件 refno（`a_b`，去重，按 SITE 顺序） */
   refnos: string[];
   generationRoots: string[];
@@ -135,6 +186,8 @@ export type CollectDbnumResult = {
   skippedSites: string[];
   /** 撞到 `maxTotalRoots` / `maxRefnos` 预算而停：结果是「安全概览」，不是整库 */
   budgetLimited: boolean;
+  /** 走逐 SITE 兼容链时说明原因；整库入口成功时缺省。 */
+  fallback?: CollectDbnumFallback;
 };
 
 function pushAllUnique(target: string[], values: string[]): void {
@@ -154,8 +207,23 @@ export async function listSitesOfDbnum(tree: TreeSource, dbnum: number): Promise
     .map((node) => ({ refno: node.refno, name: node.name || node.refno }));
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => { setTimeout(resolve, Math.max(0, ms)); });
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  if (signal?.aborted) {
+    return Promise.reject(signal.reason instanceof Error ? signal.reason : new Error('整库收集已取消'));
+  }
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(done, Math.max(0, ms));
+    const onAbort = () => {
+      clearTimeout(timer);
+      signal?.removeEventListener('abort', onAbort);
+      reject(signal?.reason instanceof Error ? signal.reason : new Error('整库收集已取消'));
+    };
+    function done(): void {
+      signal?.removeEventListener('abort', onAbort);
+      resolve();
+    }
+    signal?.addEventListener('abort', onAbort, { once: true });
+  });
 }
 
 type RootsRow = DbnumModelRootsResponse['roots'][number];
@@ -182,7 +250,7 @@ function rootsSupportReady(listed: DbnumModelRootsResponse): boolean {
  * 前端一根也不催，也不等整库生成完才开始画。
  *
  * - 旧 §4.5.3 构建（`roots` 行没有 `ready`）：退化为等终态再整取，探能力那一发回的就是全清单，不再多打。
- * - 任务查不到（服务端重启过、任务只活在进程内）：不再等，按现状取记录。
+ * - 任务查不到：立即强制 health；started_at/保守 legacy 代次已变就终止旧收集，同代才按任务被逐出收尾。
  * - 预算：`maxTotalRoots` 在每批边界上判、`maxRefnos` 在构件上判，撞到就不再取后面的根，其余根记 `truncatedRoots`。
  * - 终态时仍没就绪的根：任务 `failed / partial` 记进 `errors`，超时未终态记进 `pending`。
  *
@@ -198,28 +266,48 @@ export async function collectDbnumViaServer(
   const {
     onProgress, onRefnosReady, maxRefnos = DEFAULT_DBNUM_REFNOS_BUDGET, maxTotalRoots = DEFAULT_DBNUM_ROOTS_BUDGET,
     taskPollIntervalMs = 2_000, taskWaitTimeoutMs = 2 * 60 * 60 * 1_000,
+    signal, onFallback, lifecycle = PASSIVE_LIFECYCLE,
   } = options;
-  if (dbnumServerEntrySupport(api) === 'no') return null;
+  const capability = lifecycle.capability();
+  const fallback = (reason: CollectDbnumFallbackReason, message: string): null => {
+    onFallback?.({ reason, message });
+    return null;
+  };
+  if (capability === 'unsupported') {
+    return fallback('server_unsupported', '服务端明确声明不支持整库入口，已走逐 SITE 兼容路径');
+  }
+  if (capability !== 'supported' && dbnumServerEntrySupport(api) === 'no') {
+    return fallback('server_unsupported', '服务端版本不支持整库入口，已走逐 SITE 兼容路径');
+  }
 
   let receipt;
+  const supportGeneration = getGenModelV1ServiceGeneration();
   try {
-    receipt = await api.ensureDbnum(dbnum);
+    receipt = await api.ensureDbnum(dbnum, { signal });
   } catch (error) {
+    lifecycle.noteRequestFailure(error);
     if (!isGenModelV1ApiError(error)) throw error;
-    // 旧构建整条路由不存在：认一次，此后同一个 api 直接走老路
-    if (error.code === 'not_found') {
-      serverEntrySupportByApi.set(api, 'no');
-      return null;
+    // capabilities 明确 true 时，404 可能只是这个 dbnum 不存在，不能把整台服务永久记成 no。
+    if (isFixedRouteUnsupported(error) && capability !== 'supported') {
+      if (supportGeneration === getGenModelV1ServiceGeneration()) {
+        serverEntrySupportByApi.set(api, { generation: supportGeneration, support: 'no' });
+      }
+      return fallback('server_unsupported', '服务端版本不支持整库入口，已走逐 SITE 兼容路径');
     }
-    // 这个库以 rocksdb 为准（摄入形态，服务端 409 指路 rebuild）：本次退回逐 SITE，但**不**把服务端整体
+    // 这个库以 database 为准：本次退回逐 SITE，但**不**把服务端整体
     // 记成「没有」——同一进程里别的库仍可能是 memory 形态
-    if (error.code === 'conflict') return null;
+    if (error.code === 'conflict') {
+      return fallback('database_routed', '该库当前以 database 为准，已走逐 SITE 兼容路径');
+    }
     throw error;
   }
-  serverEntrySupportByApi.set(api, 'yes');
+  if (supportGeneration === getGenModelV1ServiceGeneration()) {
+    serverEntrySupportByApi.set(api, { generation: supportGeneration, support: 'yes' });
+  }
 
   const expectedRoots = Number(receipt.expected_roots) || 0;
   const taskId = String(receipt.task_id);
+  const taskGeneration = lifecycle.generation();
   const rootBudget = Number.isFinite(maxTotalRoots) ? Math.max(0, Math.floor(maxTotalRoots)) : Number.POSITIVE_INFINITY;
   const refnoBudget = Number.isFinite(maxRefnos) ? Math.max(0, Math.floor(maxRefnos)) : Number.POSITIVE_INFINITY;
   const report = (phase: 'generate' | 'roots', rootsDone: number, root: string | null, rootsTotal = expectedRoots) =>
@@ -242,8 +330,10 @@ export async function collectDbnumViaServer(
     const take = fresh.slice(0, Math.max(0, rootBudget - collectedRoots.size));
     if (take.length === 0) return;
     const result = await records.collectRoots(take, {
+      signal,
       onRootDone: ({ done, root }) => report('roots', collectedRoots.size + done, root),
     });
+    lifecycle.assertGeneration(taskGeneration);
     for (const root of take) collectedRoots.add(root);
     pushAllUnique(generationRoots, result.generationRoots);
     pushAllUnique(pending, result.pending);
@@ -270,37 +360,60 @@ export async function collectDbnumViaServer(
   let state = 'running';
   let completed = 0;
   let taskError: string | null = null;
+  let taskReachedTerminal = false;
+  let taskEvicted = false;
+  let rootsUnavailable = false;
   // 服务端认不认 `ready`：第一次问过就知道；不认的话那一发回的就是全清单，收尾直接用，不再多打一次
   let readyMode: 'unknown' | 'yes' | 'no' = 'unknown';
   let fullList: DbnumModelRootsResponse | null = null;
   for (;;) {
-    await sleep(taskPollIntervalMs);
+    await sleep(taskPollIntervalMs, signal);
     let terminal = false;
     try {
-      const entry = await api.task(taskId);
+      const entry = await api.task(taskId, { signal });
+      lifecycle.assertGeneration(taskGeneration);
       state = String(entry.state ?? '');
       completed = Number(entry.units_done ?? 0) || 0;
       report('generate', completed, null, Number(entry.total_units ?? expectedRoots) || expectedRoots);
       if (TERMINAL_TASK_STATES.has(state)) {
         terminal = true;
+        taskReachedTerminal = true;
         const failure = entry.result && typeof entry.result === 'object' ? (entry.result as Record<string, unknown>).error : null;
         taskError = typeof failure === 'string' ? failure : null;
       }
     } catch (error) {
+      lifecycle.noteRequestFailure(error);
       if (!(isGenModelV1ApiError(error) && error.code === 'not_found')) throw error;
+      await lifecycle.refreshAfterTaskNotFound();
+      lifecycle.assertGeneration(taskGeneration);
       state = 'unknown';
+      taskEvicted = true;
+      taskReachedTerminal = true;
       terminal = true;
     }
-    if (Date.now() >= deadline) terminal = true;
+    if (Date.now() >= deadline) {
+      terminal = true;
+    }
     // 实时半边：服务端报了进度（或任务已经查不到）才去问哪些根就绪，一根都没成时不白打
-    if (readyMode !== 'no' && !budgetExhausted() && (completed > 0 || state === 'unknown')) {
-      const listed = await api.dbnumRoots(dbnum, { ready: true });
-      if (rootsSupportReady(listed)) {
-        readyMode = 'yes';
-        await collectReady(rootKeys((listed.roots ?? []).filter((row) => row?.ready !== false)));
-      } else {
-        readyMode = 'no';
-        fullList = listed;
+    if (!rootsUnavailable && !taskEvicted && readyMode !== 'no' && !budgetExhausted() && completed > 0) {
+      try {
+        const listed = await api.dbnumRoots(dbnum, { ready: true, taskId, signal });
+        lifecycle.assertGeneration(taskGeneration);
+        if (rootsSupportReady(listed)) {
+          readyMode = 'yes';
+          await collectReady(rootKeys((listed.roots ?? []).filter((row) => row?.ready !== false)));
+        } else {
+          readyMode = 'no';
+          fullList = listed;
+        }
+      } catch (error) {
+        lifecycle.noteRequestFailure(error);
+        if (!isFixedRouteUnsupported(error, true)) throw error;
+        rootsUnavailable = true;
+        // POST 已经创建任务：这里只停止 roots 读取，继续等 task 终态，绝不并发起逐 SITE ensure。
+        if (capability !== 'supported' && supportGeneration === getGenModelV1ServiceGeneration()) {
+          serverEntrySupportByApi.set(api, { generation: supportGeneration, support: 'no' });
+        }
       }
     }
     if (terminal) break;
@@ -308,12 +421,54 @@ export async function collectDbnumViaServer(
   if (state === 'failed' && completed === 0 && collectedRoots.size === 0) {
     throw new Error(`gen-model 整库生成失败 dbnum=${dbnum}${taskError ? `: ${taskError}` : ''}`);
   }
+  if (rootsUnavailable) {
+    if (!taskReachedTerminal) {
+      throw new Error(
+        `gen-model 整库任务 ${taskId} 尚未终态，但 roots 路由不可用；为避免重复生成，未启动逐 SITE 兼容链`,
+      );
+    }
+    return fallback(
+      'server_unsupported',
+      '服务端 roots 能力不可用；已等待现有整库任务终态，再走逐 SITE 兼容路径',
+    );
+  }
 
   // 收尾：全清单对账。认 `ready` 的服务端把最后就绪的那批收掉；不认的（旧构建）整份当就绪，records 自己会对没生成的根
   // 409 → 退回逐根 → 记 errors。
-  const listed = fullList ?? await api.dbnumRoots(dbnum);
+  let listed = fullList;
+  if (!listed) {
+    try {
+      listed = await api.dbnumRoots(dbnum, {
+        ...(!taskEvicted ? { taskId } : {}),
+        signal,
+      });
+      lifecycle.assertGeneration(taskGeneration);
+    } catch (error) {
+      lifecycle.noteRequestFailure(error);
+      if (!isFixedRouteUnsupported(error, true)) throw error;
+      if (capability !== 'supported' && supportGeneration === getGenModelV1ServiceGeneration()) {
+        serverEntrySupportByApi.set(api, { generation: supportGeneration, support: 'no' });
+      }
+      if (!taskReachedTerminal) {
+        throw new Error(
+          `gen-model 整库任务 ${taskId} 尚未终态，但 roots 路由不可用；为避免重复生成，未启动逐 SITE 兼容链`,
+        );
+      }
+      return fallback(
+        'server_unsupported',
+        '服务端 roots 能力不可用；已等待现有整库任务终态，再走逐 SITE 兼容路径',
+      );
+    }
+  }
   const allRoots = rootKeys(listed.roots);
-  const readyRows = readyMode === 'yes' ? (listed.roots ?? []).filter((row) => row?.ready !== false) : listed.roots;
+  // 以这一次最终响应自己的 ready 形状为准。任务未终态且旧接口没有 ready 信息时，
+  // 不能把全根清单当成已就绪，否则 records 的 not_generated 退路会并发触发逐根 ensure。
+  const finalListSupportsReady = rootsSupportReady(listed);
+  const readyRows = finalListSupportsReady
+    ? (listed.roots ?? []).filter((row) => row?.ready !== false)
+    : taskReachedTerminal
+      ? listed.roots
+      : [];
   await collectReady(rootKeys(readyRows));
 
   const truncatedRoots: string[] = [];
@@ -330,14 +485,17 @@ export async function collectDbnumViaServer(
 
   // SITE 清单只用来给汇总文案报个数：这一路不按 SITE 推进，树读不出来也不该让整库显示失败
   let sites: CollectDbnumSite[] = [];
+  let siteSummaryAvailable = true;
   try {
     sites = await listSitesOfDbnum(tree, dbnum);
   } catch {
+    siteSummaryAvailable = false;
     sites = [];
   }
   return {
     dbnum,
     sites,
+    siteSummaryAvailable,
     refnos,
     generationRoots,
     pending,
@@ -356,14 +514,23 @@ export async function collectDbnumRefnos(
   options: CollectDbnumOptions = {},
   api: DbnumServerEntryApi = defaultDbnumServerEntryApi,
 ): Promise<CollectDbnumResult> {
-  const viaServer = await collectDbnumViaServer(tree, records, dbnum, options, api);
+  let fallback: CollectDbnumFallback | undefined;
+  const viaServer = await collectDbnumViaServer(tree, records, dbnum, {
+    ...options,
+    onFallback: (value) => {
+      fallback = value;
+      options.onFallback?.(value);
+    },
+  }, api);
   if (viaServer) return viaServer;
   const {
     onProgress, maxRoots = 4096, maxContainerDepth = 4, maxRefnos = DEFAULT_DBNUM_REFNOS_BUDGET, maxTotalRoots = DEFAULT_DBNUM_ROOTS_BUDGET,
   } = options;
   const sites = await listSitesOfDbnum(tree, dbnum);
   const result: CollectDbnumResult = {
-    dbnum, sites, refnos: [], generationRoots: [], pending: [], empty: [], truncatedRoots: [], errors: {}, skippedSites: [], budgetLimited: false,
+    dbnum, sites, siteSummaryAvailable: true,
+    refnos: [], generationRoots: [], pending: [], empty: [], truncatedRoots: [], errors: {}, skippedSites: [], budgetLimited: false,
+    ...(fallback ? { fallback } : {}),
   };
   const seen = new Set<string>();
   for (let index = 0; index < sites.length; index++) {
@@ -380,6 +547,7 @@ export async function collectDbnumRefnos(
       maxRoots,
       maxContainerDepth,
       maxRecordsRoots: Number.isFinite(rootsBudgetLeft) ? rootsBudgetLeft : undefined,
+      signal: options.signal,
       onRootDone: ({ done, total, root }) => onProgress?.({ phase: 'roots', ...base, rootsDone: done, rootsTotal: total, root }),
     });
     if (Number.isFinite(rootsBudgetLeft) && collected.generationRoots.length >= rootsBudgetLeft && collected.truncatedRoots.length > 0) {
@@ -387,6 +555,10 @@ export async function collectDbnumRefnos(
     }
     for (const refno of refnosOfRecords(collected.items)) {
       if (seen.has(refno)) continue;
+      if (result.refnos.length >= maxRefnos) {
+        result.budgetLimited = true;
+        break;
+      }
       seen.add(refno);
       result.refnos.push(refno);
     }

@@ -1,10 +1,14 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createGenModelV1TreeSource, eleTreeNodeToDto, isVirtualRootId, makeVirtualRootId, SUBTREE_CONCURRENCY, type GenModelV1TreeApi } from './treeSource';
 
 import type { ModelRecordsApi } from './modelRecords';
 
 import { GenModelV1ApiError, toV1Refno, type EleTreeNodeDto, type SearchResponse, type TreeRootsResponse } from '@/api/genModelV1Api';
+import {
+  __resetGenModelV1ServiceLifecycleForTests,
+  observeGenModelV1Health,
+} from '@/model-source/genModelV1/serviceLifecycle';
 
 // fixture：spec §2.2 / live :18082 的真实形状
 const SITE_A: EleTreeNodeDto = { refno: '9304_2', noun: 'SITE', name: '/1RS-CIVI', owner: '9304_0', order: 0, children_count: 3, dbnum: 1112 };
@@ -63,6 +67,10 @@ describe('EleTreeNode → TreeNodeDto', () => {
 });
 
 describe('createGenModelV1TreeSource', () => {
+  beforeEach(() => {
+    __resetGenModelV1ServiceLifecycleForTests();
+  });
+
   it('worldRoot 合成虚拟根，children(虚拟根) 复用同一份 tree/roots（不打第二次）', async () => {
     const api = fakeApi();
     const tree = createGenModelV1TreeSource({ api });
@@ -86,7 +94,7 @@ describe('createGenModelV1TreeSource', () => {
     const all = await tree.children('9304_2');
     expect(all.children.map((c) => c.refno)).toEqual(['17496_8518', '17496_8517']);
     expect(all.truncated).toBe(false);
-    expect(api.children).toHaveBeenLastCalledWith('9304_2');
+    expect(api.children).toHaveBeenLastCalledWith('9304_2', expect.objectContaining({ signal: expect.anything() }));
 
     const one = await tree.children('9304/2', 1);
     expect(one.children).toHaveLength(1);
@@ -118,8 +126,8 @@ describe('createGenModelV1TreeSource', () => {
     const resp = await tree.node('17496_8518');
     expect(resp.success).toBe(true);
     expect(resp.node).toMatchObject({ refno: '17496_8518', noun: 'ZONE', owner: '9304_2', dbnum: 1112 });
-    expect(api.ancestors).toHaveBeenCalledWith('17496_8518');
-    expect(api.children).toHaveBeenCalledWith('9304_2');
+    expect(api.ancestors).toHaveBeenCalledWith('17496_8518', expect.objectContaining({ signal: expect.anything() }));
+    expect(api.children).toHaveBeenCalledWith('9304_2', expect.objectContaining({ signal: expect.anything() }));
   });
 
   it('search：noun 过滤在客户端做，不够一页就翻页，达到 limit 停', async () => {
@@ -147,8 +155,16 @@ describe('createGenModelV1TreeSource', () => {
     expect(brans.success).toBe(true);
     expect(brans.items).toEqual([{ refno: '24381_145018', name: '/PIPE-B1', noun: 'BRAN', owner: null, children_count: null, dbnum: 7997 }]);
     expect(api.search).toHaveBeenCalledTimes(2);
-    expect(api.search).toHaveBeenNthCalledWith(1, { query: 'PIPE', limit: 100, cursor: undefined });
-    expect(api.search).toHaveBeenNthCalledWith(2, { query: 'PIPE', limit: 100, cursor: 2 });
+    expect(api.search).toHaveBeenNthCalledWith(
+      1,
+      { query: 'PIPE', limit: 100, cursor: undefined },
+      expect.objectContaining({ signal: expect.anything() }),
+    );
+    expect(api.search).toHaveBeenNthCalledWith(
+      2,
+      { query: 'PIPE', limit: 100, cursor: 2 },
+      expect.objectContaining({ signal: expect.anything() }),
+    );
 
     call = 0;
     const all = await tree.search({ keyword: 'PIPE', limit: 50 });
@@ -233,7 +249,69 @@ describe('createGenModelV1TreeSource', () => {
     expect(records).toHaveBeenCalledWith({ generationRoot: '17496_8518', limit: 5000, cursor: undefined }, expect.anything());
     expect(resp.debug?.source).toContain('roots=1');
     expect(resp.debug?.source).toContain('empty=1');
+    expect(resp.incomplete).toBeNull();
 
     expect((await tree.visibleInsts(ROOT_ID)).success).toBe(false);
+  });
+
+  it('visibleInsts 没收齐（有根 pending / 出错 / 预算外）时结构化地给 incomplete，已取得的 refnos 照回', async () => {
+    const ensure = vi.fn(async ({ refno: raw }: { refno: string }) => {
+      const refno = toV1Refno(raw);
+      if (refno === '9304/2') throw new GenModelV1ApiError({ code: 'container', status: 422, path: '/api/v1/model/ensure', message: 'SITE' });
+      if (refno === '17496/8517') throw new GenModelV1ApiError({ code: 'generation_pending', status: 202, path: '/api/v1/model/ensure', message: 'pending' });
+      return { status: 'Generated', generation_root: refno, generation_roots: [refno] };
+    });
+    const records = vi.fn(async ({ generationRoot }: { generationRoot: string }) => {
+      if (toV1Refno(generationRoot) === '17496/8518') {
+        return {
+          source: 'model-memory',
+          items: [{ refno: '17496_9001', old_refno: null, owner: generationRoot, world_aabb: null, world_trans: { translation: [0, 0, 0], rotation: [0, 0, 0, 1], scale: [1, 1, 1] }, insts: [], has_neg: false, generic: 'ELBO', pts: null, date: null }],
+          total: 1, truncated: false, next_cursor: null,
+        };
+      }
+      throw new GenModelV1ApiError({ code: 'internal', status: 500, path: '/api/v1/model/records', message: 'boom' });
+    });
+    const api = fakeApi({
+      children: vi.fn(async (refno: string) => {
+        const parent = toV1Refno(refno);
+        if (parent === '9304/2') return { source: 'direct', parent, nodes: [ZONE_A1, ZONE_A2, { ...BRAN, refno: '17496_8519', owner: '9304_2' }] };
+        return { source: 'direct', parent, nodes: [] };
+      }),
+    });
+    const recordsApi: ModelRecordsApi = { ensure: ensure as never, records: records as never, children: api.children };
+    const tree = createGenModelV1TreeSource({ api, recordsApi });
+
+    const resp = await tree.visibleInsts('9304_2');
+    expect(resp.success).toBe(true);
+    expect(resp.refnos).toEqual(['17496_9001']);
+    expect(resp.incomplete).toEqual({
+      pending: ['17496_8517'],
+      truncated_roots: [],
+      errors: { '17496_8519': 'boom' },
+    });
+  });
+
+  it('invalidate 清 roots Promise；代次变化后才返回的旧 roots 不能回填或交给调用方', async () => {
+    const freshRoots = { ...ROOTS, project: 'FreshProject' };
+    let resolveOld!: (value: TreeRootsResponse) => void;
+    const roots = vi.fn()
+      .mockImplementationOnce(() => new Promise<TreeRootsResponse>((resolve) => { resolveOld = resolve; }))
+      .mockResolvedValueOnce(freshRoots);
+    const tree = createGenModelV1TreeSource({ api: fakeApi({ roots }) });
+    observeGenModelV1Health({ status: 'ok', started_at: 'old' }, '/gm');
+
+    const pending = tree.worldRoot();
+    await vi.waitFor(() => expect(roots).toHaveBeenCalledTimes(1));
+    observeGenModelV1Health({ status: 'ok', started_at: 'new' }, '/gm');
+    tree.invalidate();
+    resolveOld(ROOTS);
+    const stale = await pending;
+    expect(stale.success).toBe(false);
+    expect(stale.error_message).toMatch(/服务实例已变化/);
+
+    const fresh = await tree.worldRoot();
+    expect(fresh.success).toBe(true);
+    expect(fresh.node?.name).toContain('FreshProject');
+    expect(roots).toHaveBeenCalledTimes(2);
   });
 });

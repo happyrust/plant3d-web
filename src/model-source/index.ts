@@ -21,7 +21,11 @@ export type { CollectDbnumProgress, CollectDbnumResult } from './genModelV1';
 const instances = new Map<ModelSourceKind, ModelSource>();
 
 function createModelSource(kind: ModelSourceKind): ModelSource {
-  if (kind === 'gen-model-v1') return createGenModelV1ModelSource();
+  if (kind === 'gen-model-v1') {
+    const source = createGenModelV1ModelSource();
+    source.activate();
+    return source;
+  }
   return createLegacyModelSource();
 }
 
@@ -57,5 +61,8 @@ export function subscribeModelSourceProgress(listener: (progress: GenModelV1Ensu
 
 /** 测试用：清掉已建实例。 */
 export function __resetModelSourceForTests(): void {
+  for (const source of instances.values()) {
+    if (source.kind === 'gen-model-v1') (source as GenModelV1ModelSource).dispose();
+  }
   instances.clear();
 }

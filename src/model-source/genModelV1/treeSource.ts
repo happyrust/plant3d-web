@@ -37,6 +37,10 @@ import {
   type EleTreeNodeDto,
   type TreeRootsResponse,
 } from '@/api/genModelV1Api';
+import {
+  createGenModelV1GenerationGuard,
+  type GenModelV1GenerationGuard,
+} from '@/model-source/genModelV1/serviceLifecycle';
 
 export const GEN_MODEL_V1_ROOT_PREFIX = 'gm-root:';
 
@@ -112,6 +116,14 @@ export type GenModelV1TreeSourceOptions = {
   /** 传给 `visibleInsts` 的 ensure/records 上限 */
   ensureOptions?: Pick<EnsureAndCollectOptions, 'maxContainerDepth' | 'maxRoots' | 'pageSize'>;
   now?: () => number;
+  /** 生产组装点注入 health freshness；低层单测缺省不发额外请求。 */
+  ensureFreshness?: () => Promise<unknown>;
+  noteRequestFailure?: (error: unknown) => void;
+};
+
+export type GenModelV1TreeSource = TreeSource & {
+  /** 服务代次变化时清 roots Promise；已在飞请求由 generation guard 取消并拒绝回填。 */
+  invalidate(): void;
 };
 
 function errorMessage(error: unknown): string {
@@ -119,49 +131,71 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-export function createGenModelV1TreeSource(options: GenModelV1TreeSourceOptions = {}): TreeSource {
+export function createGenModelV1TreeSource(options: GenModelV1TreeSourceOptions = {}): GenModelV1TreeSource {
   const api = options.api ?? defaultGenModelV1TreeApi;
   const recordsApi = options.recordsApi;
   const ensureAndCollect = options.ensureAndCollect
     ?? ((refno: string, ensureOptions: EnsureAndCollectOptions) => ensureAndCollectRecords(refno, ensureOptions, recordsApi));
   const rootsCacheMs = options.rootsCacheMs ?? 60_000;
   const now = options.now ?? (() => Date.now());
+  const ensureFreshness = options.ensureFreshness ?? (() => Promise.resolve());
+  const noteRequestFailure = options.noteRequestFailure ?? ((error: unknown) => { void error; });
 
-  let rootsCache: { at: number; value: Promise<TreeRootsResponse> } | null = null;
+  let rootsCache: { at: number; generation: number; value: Promise<TreeRootsResponse> } | null = null;
 
-  function loadRoots(): Promise<TreeRootsResponse> {
+  function loadRoots(guard: GenModelV1GenerationGuard): Promise<TreeRootsResponse> {
     const at = now();
-    if (rootsCache && at - rootsCache.at < rootsCacheMs) return rootsCache.value;
-    const value = api.roots().catch((error: unknown) => {
-      // 失败不缓存：下一次调用再打一次
-      if (rootsCache?.value === value) rootsCache = null;
-      throw error;
-    });
-    rootsCache = { at, value };
+    if (
+      rootsCache
+      && rootsCache.generation === guard.generation
+      && at - rootsCache.at < rootsCacheMs
+    ) return rootsCache.value;
+    const value = api.roots({ signal: guard.signal })
+      .then((response) => {
+        guard.assertCurrent();
+        return response;
+      })
+      .catch((error: unknown) => {
+        // 失败不缓存：下一次调用再打一次
+        if (rootsCache?.value === value) rootsCache = null;
+        throw error;
+      });
+    rootsCache = { at, generation: guard.generation, value };
     return value;
   }
 
   async function worldRoot(): Promise<NodeResponse> {
+    let guard: GenModelV1GenerationGuard | null = null;
     try {
-      const roots = await loadRoots();
+      await ensureFreshness();
+      guard = createGenModelV1GenerationGuard();
+      const roots = await loadRoots(guard);
+      guard.assertCurrent();
       return { success: true, node: virtualRootDto(roots) };
     } catch (error) {
+      noteRequestFailure(error);
       return { success: false, node: null, error_message: errorMessage(error) };
+    } finally {
+      guard?.dispose();
     }
   }
 
   async function children(refno: string, limit?: number): Promise<ChildrenResponse> {
+    let guard: GenModelV1GenerationGuard | null = null;
     try {
+      await ensureFreshness();
+      guard = createGenModelV1GenerationGuard();
       let parentId: string;
       let nodes: EleTreeNodeDto[];
       if (isVirtualRootId(refno)) {
-        const roots = await loadRoots();
+        const roots = await loadRoots(guard);
         parentId = makeVirtualRootId(roots.project, roots.mdb);
         nodes = roots.nodes;
       } else {
         parentId = fromV1Refno(refno);
-        nodes = (await api.children(parentId)).nodes;
+        nodes = (await api.children(parentId, { signal: guard.signal })).nodes;
       }
+      guard.assertCurrent();
       const truncated = typeof limit === 'number' && limit >= 0 && nodes.length > limit;
       const page = truncated ? nodes.slice(0, limit) : nodes;
       return {
@@ -171,21 +205,34 @@ export function createGenModelV1TreeSource(options: GenModelV1TreeSourceOptions 
         truncated,
       };
     } catch (error) {
+      noteRequestFailure(error);
       return { success: false, parent_refno: fromV1Refno(refno), children: [], truncated: false, error_message: errorMessage(error) };
+    } finally {
+      guard?.dispose();
     }
   }
 
   async function ancestors(refno: string): Promise<AncestorsResponse> {
     if (isVirtualRootId(refno)) return { success: true, refnos: [refno] };
+    let guard: GenModelV1GenerationGuard | null = null;
     try {
-      const [resp, roots] = await Promise.all([api.ancestors(fromV1Refno(refno)), loadRoots()]);
+      await ensureFreshness();
+      guard = createGenModelV1GenerationGuard();
+      const [resp, roots] = await Promise.all([
+        api.ancestors(fromV1Refno(refno), { signal: guard.signal }),
+        loadRoots(guard),
+      ]);
+      guard.assertCurrent();
       const chain = resp.refnos.map((item) => fromV1Refno(String(item))).filter(Boolean);
       const self = fromV1Refno(refno);
       if (!chain.includes(self)) chain.unshift(self);
       chain.push(makeVirtualRootId(roots.project, roots.mdb));
       return { success: true, refnos: chain };
     } catch (error) {
+      noteRequestFailure(error);
       return { success: false, refnos: [], error_message: errorMessage(error) };
+    } finally {
+      guard?.dispose();
     }
   }
 
@@ -195,32 +242,46 @@ export function createGenModelV1TreeSource(options: GenModelV1TreeSourceOptions 
    */
   async function node(refno: string): Promise<NodeResponse> {
     if (isVirtualRootId(refno)) return worldRoot();
+    let guard: GenModelV1GenerationGuard | null = null;
     try {
+      await ensureFreshness();
+      guard = createGenModelV1GenerationGuard();
       const self = fromV1Refno(refno);
-      const chain = await api.ancestors(self);
+      const chain = await api.ancestors(self, { signal: guard.signal });
       const owner = chain.refnos.map((item) => fromV1Refno(String(item))).find((item) => item !== self);
       if (!owner) return { success: false, node: null, error_message: `找不到 ${self} 的属主，无法定位节点` };
-      const siblings = await api.children(owner);
+      const siblings = await api.children(owner, { signal: guard.signal });
+      guard.assertCurrent();
       const hit = siblings.nodes.find((item) => fromV1Refno(item.refno) === self);
       if (!hit) return { success: false, node: null, error_message: `${owner} 的成员表里没有 ${self}` };
       return { success: true, node: eleTreeNodeToDto(hit, owner) };
     } catch (error) {
+      noteRequestFailure(error);
       return { success: false, node: null, error_message: errorMessage(error) };
+    } finally {
+      guard?.dispose();
     }
   }
 
   async function search(req: SearchRequest): Promise<SearchResponse> {
     const keyword = (req.keyword ?? '').trim();
     if (!keyword) return { success: true, items: [] };
+    let guard: GenModelV1GenerationGuard | null = null;
     const wanted = new Set((req.nouns ?? []).map((noun) => noun.trim().toUpperCase()).filter(Boolean));
     const limit = typeof req.limit === 'number' && req.limit > 0 ? req.limit : 50;
     const pageSize = Math.min(SEARCH_PAGE_SIZE, Math.max(limit, 100));
     const items: TreeNodeDto[] = [];
     try {
+      await ensureFreshness();
+      guard = createGenModelV1GenerationGuard();
       let cursor: number | undefined;
       let scanned = 0;
       for (let page = 0; page < 64 && items.length < limit && scanned < SEARCH_SCAN_CAP; page++) {
-        const resp = await api.search({ query: keyword, limit: pageSize, cursor });
+        const resp = await api.search(
+          { query: keyword, limit: pageSize, cursor },
+          { signal: guard.signal },
+        );
+        guard.assertCurrent();
         scanned += resp.items.length;
         for (const item of resp.items) {
           const noun = (item.noun ?? '').trim().toUpperCase();
@@ -240,7 +301,10 @@ export function createGenModelV1TreeSource(options: GenModelV1TreeSourceOptions 
       }
       return { success: true, items };
     } catch (error) {
+      noteRequestFailure(error);
       return { success: false, items, error_message: errorMessage(error) };
+    } finally {
+      guard?.dispose();
     }
   }
 
@@ -253,6 +317,7 @@ export function createGenModelV1TreeSource(options: GenModelV1TreeSourceOptions 
     if (isVirtualRootId(refno)) {
       return { success: false, refnos: [], truncated: true, error_message: '虚拟根不支持子树遍历：请按 SITE 操作' };
     }
+    let guard: GenModelV1GenerationGuard | null = null;
     const root = fromV1Refno(refno);
     const includeSelf = params?.includeSelf ?? true;
     const maxDepth = params?.maxDepth ?? 256;
@@ -265,6 +330,9 @@ export function createGenModelV1TreeSource(options: GenModelV1TreeSourceOptions 
     let requests = 0;
     let truncated = false;
     try {
+      await ensureFreshness();
+      guard = createGenModelV1GenerationGuard();
+      const activeGuard = guard;
       while (frontier.length > 0) {
         if (out.length >= limit || requests >= SUBTREE_MAX_REQUESTS) {
           truncated = true;
@@ -277,7 +345,12 @@ export function createGenModelV1TreeSource(options: GenModelV1TreeSourceOptions 
         const batch = frontier.slice(0, Math.max(0, SUBTREE_MAX_REQUESTS - requests));
         if (batch.length < frontier.length) truncated = true;
         requests += batch.length;
-        const responses = await mapWithConcurrency(batch, SUBTREE_CONCURRENCY, (refno) => api.children(refno));
+        const responses = await mapWithConcurrency(
+          batch,
+          SUBTREE_CONCURRENCY,
+          (refno) => api.children(refno, { signal: activeGuard.signal }),
+        );
+        activeGuard.assertCurrent();
         const next: string[] = [];
         for (const resp of responses) {
           for (const child of resp.nodes) {
@@ -298,7 +371,10 @@ export function createGenModelV1TreeSource(options: GenModelV1TreeSourceOptions 
       }
       return { success: true, refnos: out, truncated };
     } catch (error) {
+      noteRequestFailure(error);
       return { success: false, refnos: out, truncated: true, error_message: errorMessage(error) };
+    } finally {
+      guard?.dispose();
     }
   }
 
@@ -311,8 +387,12 @@ export function createGenModelV1TreeSource(options: GenModelV1TreeSourceOptions 
     if (isVirtualRootId(refno)) {
       return { success: false, refno, refnos: [], error_message: '虚拟根不支持整体显示：请按 SITE / ZONE 操作' };
     }
+    let guard: GenModelV1GenerationGuard | null = null;
     try {
+      await ensureFreshness();
+      guard = createGenModelV1GenerationGuard();
       const result = await ensureAndCollect(key, { ...options.ensureOptions });
+      guard.assertCurrent();
       const refnos = refnosOfRecords(result.items);
       const failed = Object.keys(result.errors);
       if (refnos.length === 0 && failed.length > 0 && result.generationRoots.length === 0) {
@@ -323,10 +403,15 @@ export function createGenModelV1TreeSource(options: GenModelV1TreeSourceOptions 
           error_message: failed.map((root) => `${root}: ${result.errors[root]}`).join('; '),
         };
       }
+      // 收集完整性要**结构化**地交给调用方（显示流程据此决定能不能把节点记成已加载），不能只写进 debug 文案
+      const incomplete = result.pending.length > 0 || result.truncatedRoots.length > 0 || failed.length > 0
+        ? { pending: [...result.pending], truncated_roots: [...result.truncatedRoots], errors: { ...result.errors } }
+        : null;
       return {
         success: true,
         refno: key,
         refnos,
+        incomplete,
         debug: {
           candidates_count: result.items.length,
           filtered_count: result.pending.length + result.truncatedRoots.length + failed.length,
@@ -335,9 +420,16 @@ export function createGenModelV1TreeSource(options: GenModelV1TreeSourceOptions 
         },
       };
     } catch (error) {
+      noteRequestFailure(error);
       return { success: false, refno: key, refnos: [], error_message: errorMessage(error) };
+    } finally {
+      guard?.dispose();
     }
   }
 
-  return { worldRoot, node, children, ancestors, search, subtreeRefnos, visibleInsts };
+  function invalidate(): void {
+    rootsCache = null;
+  }
+
+  return { worldRoot, node, children, ancestors, search, subtreeRefnos, visibleInsts, invalidate };
 }

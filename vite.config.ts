@@ -218,8 +218,9 @@ export default defineConfig(({ mode }) => {
   const isLikelyMisconfiguredBackendPort = inferredPort === '8080' || inferredPort === '3000' || inferredPort === '3001';
   const backendPort = env.VITE_BACKEND_PORT || (isLikelyMisconfiguredBackendPort ? '3100' : inferredPort || '3100');
   const backendTarget = (env.VITE_BACKEND_URL || env.VITE_API_BASE_URL || `http://localhost:${backendPort}`).replace(/\/$/, '');
-  // gen-model `/api/v1`（模型树 + 三维模型新数据源）：默认前端直连 :8022（CORS 已放开）；
-  // 不想跨域时把 VITE_GEN_MODEL_V1_BASE_URL 写成 `/gm`，请求就落到下面这条同源代理上。
+  // gen-model `/api/v1`（模型树 + 三维模型新数据源）：dev 默认直连 :8022（CORS 已放开）；
+  // dev 不想跨域时把 VITE_GEN_MODEL_V1_BASE_URL 写成 `/gm`，请求落到下面的代理。
+  // 生产无配置由 apiBase.ts 走空 base（同源 /api/v1），不会使用这条 Vite dev proxy。
   // 代理上游优先取 VITE_GEN_MODEL_V1_PROXY_TARGET，再取绝对形式的 VITE_GEN_MODEL_V1_BASE_URL。
   const genModelV1Target = resolveGenModelV1ProxyTarget(
     env.VITE_GEN_MODEL_V1_PROXY_TARGET,

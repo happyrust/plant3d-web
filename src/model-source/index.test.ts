@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import {
+  __resetGenModelV1ServiceLifecycleForTests,
+  observeGenModelV1Health,
+} from './genModelV1/serviceLifecycle';
 import { legacyMeshUrl } from './legacy';
 
 import {
@@ -10,6 +14,7 @@ import {
   parseModelSourceKind,
   resolveModelSourceKind,
   subscribeModelSourceProgress,
+  type GenModelV1ModelSource,
 } from './index';
 
 const legacyMocks = vi.hoisted(() => ({
@@ -23,6 +28,14 @@ const legacyMocks = vi.hoisted(() => ({
   pdmsGetUiAttr: vi.fn(async (refno: string) => ({ success: true, refno, attrs: {} })),
   pdmsGetTypeInfo: vi.fn(async (refno: string) => ({ success: true, refno, noun: 'BRAN' })),
   queryInstanceEntriesByRefnos: vi.fn(async () => new Map()),
+}));
+
+vi.mock('@/composables/useGenModelV1Health', () => ({
+  currentDbnumModelCapability: () => 'unknown',
+  ensureGenModelV1Freshness: vi.fn(async () => ({ generation: 0 })),
+  noteGenModelV1RequestFailure: vi.fn(),
+  refreshGenModelV1AfterTaskNotFound: vi.fn(async () => ({ generation: 0 })),
+  useGenModelV1Health: () => ({ activateDataSource: () => () => {} }),
 }));
 
 vi.mock('@/api/genModelE3dApi', () => ({
@@ -48,6 +61,7 @@ vi.mock('@/composables/useDbnoInstancesParquetLoader', () => ({
 
 beforeEach(() => {
   __resetModelSourceForTests();
+  __resetGenModelV1ServiceLifecycleForTests();
   vi.clearAllMocks();
 });
 
@@ -167,5 +181,19 @@ describe('legacy 适配器：零逻辑委托', () => {
     expect(source).toBe(getModelSource('gen-model-v1'));
     expect(typeof source!.collectDbnum).toBe('function');
     expect(typeof source!.records.subscribeProgress).toBe('function');
+  });
+
+  it('gen-model-v1 数据源订阅服务代次：重启时清 records 与 tree 缓存，但不替换数据源实例', () => {
+    const source = getModelSource('gen-model-v1') as GenModelV1ModelSource;
+    const recordsInvalidate = vi.spyOn(source.records, 'invalidate');
+    const treeInvalidate = vi.spyOn(
+      source.tree as typeof source.tree & { invalidate(): void },
+      'invalidate',
+    );
+    observeGenModelV1Health({ status: 'ok', started_at: 'old' }, '/gm');
+    observeGenModelV1Health({ status: 'ok', started_at: 'new' }, '/gm');
+    expect(recordsInvalidate).toHaveBeenCalledOnce();
+    expect(treeInvalidate).toHaveBeenCalledOnce();
+    expect(getModelSource('gen-model-v1')).toBe(source);
   });
 });

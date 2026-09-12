@@ -9,13 +9,35 @@
  */
 
 import { createGenModelV1AttributeSource } from './attributeSource';
-import { collectDbnumRefnos, type CollectDbnumOptions, type CollectDbnumResult } from './collectDbnum';
+import {
+  collectDbnumRefnos,
+  resetDbnumServerEntrySupport,
+  type CollectDbnumLifecycle,
+  type CollectDbnumOptions,
+  type CollectDbnumResult,
+} from './collectDbnum';
+import { resetBatchRecordsSupport } from './modelRecords';
 import { createGenModelV1ModelRecordSource, type GenModelV1ModelRecordSource } from './modelRecordSource';
 import { createGenModelV1TreeSource } from './treeSource';
 
 import type { MeshSource, ModelSource } from '../ports';
 
 import { genModelV1MeshUrl } from '@/api/genModelV1Api';
+import { invalidateGenModelV1DbMetaInfo } from '@/composables/useDbMetaInfo';
+import { invalidateGenModelV1Dbnums } from '@/composables/useGenModelV1Dbnums';
+import {
+  currentDbnumModelCapability,
+  ensureGenModelV1Freshness,
+  noteGenModelV1RequestFailure,
+  refreshGenModelV1AfterTaskNotFound,
+  useGenModelV1Health,
+} from '@/composables/useGenModelV1Health';
+import {
+  assertGenModelV1ServiceGeneration,
+  createGenModelV1GenerationGuard,
+  getGenModelV1ServiceGeneration,
+  subscribeGenModelV1GenerationChange,
+} from '@/model-source/genModelV1/serviceLifecycle';
 
 const meshes: MeshSource = {
   // gen-model 只有一档网格，legacy 的 LOD 键在这里没有意义。
@@ -29,19 +51,82 @@ export type GenModelV1ModelSource = ModelSource & {
   readonly records: GenModelV1ModelRecordSource;
   /** 该库全部 SITE 逐个 ensure → records（进记录源缓存），回构件 refno 集；调用方再分批装进 DTX */
   collectDbnum(dbnum: number, options?: CollectDbnumOptions): Promise<CollectDbnumResult>;
+  /** 由模型数据源注册表调用；启动 health owner 与服务代次失效订阅。 */
+  activate(): void;
+  dispose(): void;
 };
 
 export function createGenModelV1ModelSource(): GenModelV1ModelSource {
-  const records = createGenModelV1ModelRecordSource();
+  const records = createGenModelV1ModelRecordSource({
+    ensureFreshness: () => ensureGenModelV1Freshness(),
+    noteRequestFailure: noteGenModelV1RequestFailure,
+  });
   // 树的 visibleInsts 与几何加载共用一份 ensure → records 缓存：一次显示只打一次 ensure + 一次 records
-  const tree = createGenModelV1TreeSource({ ensureAndCollect: (refno, options) => records.ensureAndCollect(refno, options) });
+  const tree = createGenModelV1TreeSource({
+    ensureAndCollect: (refno, options) => records.ensureAndCollect(refno, options),
+    ensureFreshness: () => ensureGenModelV1Freshness(),
+    noteRequestFailure: noteGenModelV1RequestFailure,
+  });
+  const collectLifecycle: CollectDbnumLifecycle = {
+    capability: currentDbnumModelCapability,
+    generation: getGenModelV1ServiceGeneration,
+    assertGeneration: assertGenModelV1ServiceGeneration,
+    refreshAfterTaskNotFound: async () => (await refreshGenModelV1AfterTaskNotFound()).generation,
+    noteRequestFailure: noteGenModelV1RequestFailure,
+  };
+  let releaseHealth: (() => void) | null = null;
+  let unsubscribeGeneration: (() => void) | null = null;
+
+  function activate(): void {
+    if (releaseHealth) return;
+    unsubscribeGeneration = subscribeGenModelV1GenerationChange(() => {
+      records.invalidate();
+      tree.invalidate();
+      invalidateGenModelV1Dbnums();
+      invalidateGenModelV1DbMetaInfo();
+      resetDbnumServerEntrySupport();
+      resetBatchRecordsSupport();
+    });
+    releaseHealth = useGenModelV1Health().activateDataSource();
+  }
+
+  function dispose(): void {
+    unsubscribeGeneration?.();
+    unsubscribeGeneration = null;
+    releaseHealth?.();
+    releaseHealth = null;
+  }
+
+  async function collectDbnum(dbnum: number, options: CollectDbnumOptions = {}): Promise<CollectDbnumResult> {
+    await ensureGenModelV1Freshness();
+    const guard = createGenModelV1GenerationGuard(options.signal);
+    try {
+      const result = await collectDbnumRefnos(tree, records, dbnum, {
+        ...options,
+        signal: guard.signal,
+        lifecycle: collectLifecycle,
+      });
+      guard.assertCurrent();
+      return result;
+    } catch (error) {
+      noteGenModelV1RequestFailure(error);
+      // 调用方取消 / 服务换代盖过途中先抛出来的那个错（sleep 的裸 Error、某一发请求的 network…），分型统一
+      guard.assertCurrent();
+      throw error;
+    } finally {
+      guard.dispose();
+    }
+  }
+
   return {
     kind: 'gen-model-v1',
     tree,
     meshes,
     records,
     attributes: createGenModelV1AttributeSource({ tree }),
-    collectDbnum: (dbnum, options) => collectDbnumRefnos(tree, records, dbnum, options),
+    collectDbnum,
+    activate,
+    dispose,
   };
 }
 

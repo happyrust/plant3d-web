@@ -256,8 +256,11 @@ if ($Dbnum -gt 0) {
       throw
     }
     if (-not $receipt.task_id) { throw '回执缺 task_id' }
-    if ([int]$receipt.expected_roots -ne [int]$dbnumRoots.total) { throw "expected_roots=$($receipt.expected_roots) != roots.total=$($dbnumRoots.total)" }
-    "task_id=$($receipt.task_id) state=$($receipt.state) expected_roots=$($receipt.expected_roots) model_source=$($receipt.model_source) durable=$($receipt.durable) rss_before=$([math]::Round($rssBefore / 1MB)) MB"
+    $taskRootsPath = "/api/v1/dbnums/$Dbnum/model/roots?task_id=$([uri]::EscapeDataString($receipt.task_id))"
+    $taskRoots = GetJson $taskRootsPath
+    if ([int]$receipt.expected_roots -ne [int]$taskRoots.total) { throw "expected_roots=$($receipt.expected_roots) != task roots.total=$($taskRoots.total)" }
+    $script:dbnumRoots = $taskRoots
+    "task_id=$($receipt.task_id) state=$($receipt.state) expected_roots=$($receipt.expected_roots) source_sesno=$($taskRoots.source_sesno) model_source=$($receipt.model_source) durable=$($receipt.durable) rss_before=$([math]::Round($rssBefore / 1MB)) MB"
   }
 
   $task = $null
@@ -280,16 +283,18 @@ if ($Dbnum -gt 0) {
         # 实时半边（第 3 稿 §12）：认 ready 的服务端上，就绪根数应与 units_done 同步涨——前端就是按它边取边画的
         $readyNote = ''
         try {
-          $readyList = GetJson "/api/v1/dbnums/$Dbnum/model/roots?ready=1"
+          $readyList = GetJson "/api/v1/dbnums/$Dbnum/model/roots?task_id=$([uri]::EscapeDataString($receipt.task_id))&ready=1"
           if ($null -ne $readyList.ready_total) { $readyNote = "  ready=$($readyList.ready_total)" }
         } catch { $readyNote = '' }
-        Write-Host ('       {0,7:N0} s  {1}/{2}  failed={3}  state={4}{5}' -f $sw.Elapsed.TotalSeconds, $task.units_done, $task.total_units, $task.detail.failed, $task.state, $readyNote)
+        $failed = if ($null -ne $task.detail.failed_roots) { $task.detail.failed_roots } else { $task.detail.failed }
+        Write-Host ('       {0,7:N0} s  {1}/{2}  failed={3}  state={4}{5}' -f $sw.Elapsed.TotalSeconds, $task.units_done, $task.total_units, $failed, $task.state, $readyNote)
       }
     } while (($task.state -notin $terminalStates) -and ($sw.Elapsed.TotalSeconds -lt $DbnumWaitSec))
     $rssAfter = [long](GetJson '/api/v1/health').model_concurrency.process_rss_bytes
     if ($task.state -eq 'failed' -and [int]$task.units_done -eq 0) { throw "整库生成失败、一根都没成: $($task.result.error)" }
     if ($task.state -notin $terminalStates) { throw "等了 $([int]$sw.Elapsed.TotalSeconds) s 仍未终态（state=$($task.state) $($task.units_done)/$($task.total_units)）" }
-    "state=$($task.state) kind=$($task.kind) completed=$($task.units_done)/$($task.total_units) failed=$($task.detail.failed) elapsed=$([math]::Round($sw.Elapsed.TotalSeconds, 1)) s rss=$([math]::Round($rssBefore / 1MB))->$([math]::Round($rssAfter / 1MB)) MB"
+    $failed = if ($null -ne $task.detail.failed_roots) { $task.detail.failed_roots } else { $task.detail.failed }
+    "state=$($task.state) kind=$($task.kind) completed=$($task.units_done)/$($task.total_units) failed=$failed elapsed=$([math]::Round($sw.Elapsed.TotalSeconds, 1)) s rss=$([math]::Round($rssBefore / 1MB))->$([math]::Round($rssAfter / 1MB)) MB"
   }
 
   Step 'POST /api/v1/model/records {generation_roots[]} 整库全部根（≤64 根一批，前端整库口径）' {

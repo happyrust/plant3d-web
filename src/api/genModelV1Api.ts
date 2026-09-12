@@ -28,8 +28,8 @@ export type GenModelV1Identity = {
 };
 
 /**
- * 服务端已知的 `code` 集合（spec §3 / §4.5）。`network` / `invalid_response` 是客户端自己的两档：
- * 前者是连都没连上（fetch 抛错 / 超时），后者是 2xx 但正文不是合法 JSON。
+ * 服务端已知的 `code` 集合（spec §3 / §4.5）。`network` / `cancelled` / `invalid_response`
+ * 是客户端自己的三档：网络或请求预算失败、调用方主动取消、2xx 但正文不是合法 JSON。
  */
 export type GenModelV1ErrorCode =
   | 'bad_request'
@@ -47,8 +47,11 @@ export type GenModelV1ErrorCode =
   | 'generation_failed'
   | 'internal'
   | 'network'
+  | 'cancelled'
   | 'invalid_response'
   | (string & {});
+
+export type GenModelV1AbortSource = 'caller' | 'timeout' | null;
 
 export type GenModelV1ApiErrorInit = {
   code: GenModelV1ErrorCode;
@@ -58,6 +61,7 @@ export type GenModelV1ApiErrorInit = {
   detail?: unknown;
   retryAfterMs?: number | null;
   cause?: unknown;
+  abortSource?: GenModelV1AbortSource;
 };
 
 export class GenModelV1ApiError extends Error {
@@ -65,6 +69,8 @@ export class GenModelV1ApiError extends Error {
   readonly status: number;
   readonly path: string;
   readonly detail: unknown;
+  readonly cause: unknown;
+  readonly abortSource: GenModelV1AbortSource;
   /** 仅 `generation_pending` / `timeout` 一类带；毫秒，来自 `Retry-After` 响应头。 */
   readonly retryAfterMs: number | null;
 
@@ -75,6 +81,8 @@ export class GenModelV1ApiError extends Error {
     this.status = init.status;
     this.path = init.path;
     this.detail = init.detail;
+    this.cause = init.cause;
+    this.abortSource = init.abortSource ?? null;
     this.retryAfterMs = init.retryAfterMs ?? null;
   }
 
@@ -91,6 +99,11 @@ export class GenModelV1ApiError extends Error {
   /** 生成还在后台跑（202 `generation_pending` 或 504 `timeout`）；别对同一 refno 立刻重发。 */
   get isPending(): boolean {
     return this.code === 'generation_pending' || this.code === 'timeout';
+  }
+
+  /** 调用方主动取消；不是服务断线，不进入 legacy 重连失效账。 */
+  get isCancelled(): boolean {
+    return this.code === 'cancelled';
   }
 
   /** 稍后重试有意义的一档（依赖暂时不可用 / 归属暂时解不出 / 网络）；不得负缓存。 */
@@ -223,7 +236,7 @@ function readEnvelope(payload: unknown): ErrorEnvelope | null {
 }
 
 async function readBody(resp: Response): Promise<{ text: string; json: unknown | undefined }> {
-  const text = await resp.text().catch(() => '');
+  const text = await resp.text();
   if (!text) return { text, json: undefined };
   try {
     return { text, json: JSON.parse(text) as unknown };
@@ -259,14 +272,24 @@ export async function genModelV1Fetch<T>(path: string, request: InternalRequest 
 
   const controller = new AbortController();
   const timeoutMs = request.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-  const timer = setTimeout(() => controller.abort(new Error(`gen-model 请求超时 ${timeoutMs} ms: ${path}`)), timeoutMs);
-  const onOuterAbort = () => controller.abort(request.signal?.reason);
+  let abortSource: GenModelV1AbortSource = null;
+  const timer = setTimeout(() => {
+    if (controller.signal.aborted) return;
+    abortSource = 'timeout';
+    controller.abort(new Error(`gen-model 请求超时 ${timeoutMs} ms: ${path}`));
+  }, timeoutMs);
+  const onOuterAbort = () => {
+    if (controller.signal.aborted) return;
+    abortSource = 'caller';
+    controller.abort(request.signal?.reason);
+  };
   if (request.signal) {
     if (request.signal.aborted) onOuterAbort();
     else request.signal.addEventListener('abort', onOuterAbort, { once: true });
   }
 
   let resp: Response;
+  let body: { text: string; json: unknown | undefined };
   try {
     resp = await fetchImpl(url, {
       method,
@@ -274,20 +297,24 @@ export async function genModelV1Fetch<T>(path: string, request: InternalRequest 
       body: method === 'POST' ? JSON.stringify({ ...identity, ...(request.body ?? {}) }) : undefined,
       signal: controller.signal,
     });
+    // fetch 在响应头到达后就会 resolve；正文仍属于同一次请求预算，也必须继续响应外部 abort。
+    body = await readBody(resp);
   } catch (error) {
+    const cancelledByCaller = abortSource === 'caller';
     throw new GenModelV1ApiError({
-      code: 'network',
+      code: cancelledByCaller ? 'cancelled' : 'network',
       status: 0,
       path,
       message: `gen-model 请求失败 ${method} ${url}: ${error instanceof Error ? error.message : String(error)}`,
       cause: error,
+      abortSource,
     });
   } finally {
     clearTimeout(timer);
     request.signal?.removeEventListener('abort', onOuterAbort);
   }
 
-  const { text, json } = await readBody(resp);
+  const { text, json } = body;
   const envelope = readEnvelope(json);
 
   if (resp.status === 202 && envelope?.code === 'generation_pending') {
@@ -505,13 +532,30 @@ export type HealthInitialization = {
   [key: string]: unknown;
 };
 
+export type GenModelV1Capabilities = {
+  dbnum_model_ensure?: boolean;
+  dbnum_model_ready_roots?: boolean;
+  model_records_batch_max_roots?: number;
+  mesh_formats?: string[];
+  [key: string]: unknown;
+};
+
+export type GenModelV1SulDbHealth = {
+  medium?: string;
+  durable?: boolean;
+  [key: string]: unknown;
+};
+
 export type HealthResponse = {
   status: string;
   project?: string;
   mdb?: string;
   namespace?: string;
   version?: string;
+  started_at?: string;
   data_face?: string;
+  sul_db?: GenModelV1SulDbHealth;
+  capabilities?: GenModelV1Capabilities;
   delivery_unit_types?: string[];
   initialization?: HealthInitialization;
   static_assets?: boolean;
@@ -656,6 +700,8 @@ export type DbnumModelEnsureResponse = {
   dbnum: number;
   /** 服务端真枚举出来的根数，不是估计——进度条的分母 */
   expected_roots: number;
+  already_ready?: number;
+  source_sesno?: number;
   state: string;
   model_source?: string;
   model_source_reason?: string | null;
@@ -684,7 +730,9 @@ export function genModelV1DbnumModelEnsure(
 
 export type DbnumModelRootsResponse = {
   source: string;
+  task_id?: string | null;
   dbnum: number;
+  source_sesno?: number;
   /** 该库全部根数（`?ready=1` 时也是全部，不是回了几条） */
   total: number;
   /** 其中已就绪（投影里有回执、`records` 现在就读得到）的根数；旧 §4.5.3 构建没有这一格 */
@@ -701,6 +749,8 @@ export type DbnumModelRootsResponse = {
 export type GenModelV1DbnumModelRootsOptions = GenModelV1RequestOptions & {
   /** 只要就绪的根（`?ready=1`）——整库任务在飞时每拍问一次，新就绪的立刻去取 `records`（plan 2026-09-10 §12） */
   ready?: boolean;
+  /** 整库任务刚返回的 id；有它时 roots、进度与 expected_roots 消费同一冻结集合 */
+  taskId?: string;
 };
 
 /**
@@ -711,10 +761,10 @@ export function genModelV1DbnumModelRoots(
   dbnum: number,
   options?: GenModelV1DbnumModelRootsOptions,
 ): Promise<DbnumModelRootsResponse> {
-  const { ready, ...request } = options ?? {};
+  const { ready, taskId, ...request } = options ?? {};
   return genModelV1Fetch<DbnumModelRootsResponse>(`/api/v1/dbnums/${dbnum}/model/roots`, {
     ...request,
-    ...(ready ? { query: { ready: '1' } } : {}),
+    ...((ready || taskId) ? { query: { ...(ready ? { ready: '1' } : {}), ...(taskId ? { task_id: taskId } : {}) } } : {}),
   });
 }
 

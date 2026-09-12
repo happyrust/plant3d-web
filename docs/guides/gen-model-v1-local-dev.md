@@ -45,19 +45,32 @@ npm run dev          # http://127.0.0.1:3101
 `.env.development`（本地、不入库）里与 gen-model 相关的三行：
 
 ```ini
-VITE_GEN_MODEL_V1_BASE_URL=http://localhost:8022   # 直连；写 /gm 走 Vite 同源代理
+# VITE_GEN_MODEL_V1_BASE_URL=http://localhost:8022   # 可省：dev 缺省就是直连 :8022；写 /gm 走 Vite 代理
 # VITE_GEN_MODEL_V1_PROXY_TARGET=http://localhost:8022   # /gm 代理的上游（仅 dev）
 # VITE_MODEL_SOURCE=gen-model-v1                         # 缺省 gen-model-v1（2026-09-09 起）；写 legacy 整站回旧链路
 ```
 
 旧后端 `VITE_GEN_MODEL_API_BASE_URL=http://localhost:3100` 那一行**不要动**：尺寸标注、MBD、校审等还在 `:3100`；过渡期一个页面同时挂两个后端是预期形态。
 
+### 2.1 生产部署
+
+生产无 `VITE_GEN_MODEL_V1_BASE_URL` 时 base 为**空串**，浏览器直接请求同源
+`/api/v1/*`。这是由 `gen-model-refactor` 同一个 HTTP 服务托管 plant3d-web 包时的默认形态，
+不需要也不会生成 `/gm/api/v1/*`。
+
+- 由 gen-model-refactor 托管前端：变量留空；
+- 独立站点部署：显式写可从浏览器访问的 gen-model 绝对地址，如
+  `https://gm.example.com`；
+- 只有外部代理明确配置了 `/gm → gen-model` rewrite 时，生产变量才写 `/gm`；
+- 禁止把 `http://localhost:8022` 烘焙进生产包；它会指向每个访问者自己的电脑。运行时
+  `?gm_backend=` / `?gm_backend_port=` 仍可作人工覆盖。
+
 ## 3. URL 开关
 
 | 参数 | 作用 |
 | --- | --- |
 | `model_source=gen-model-v1` | 本页面模型树 / 几何 / 网格 / 属性全部走 gen-model；**2026-09-09 起这就是缺省**，不写也一样。`model_source=legacy` = 旧链路（逐字节同前，保留一个发布周期） |
-| `gm_backend_port=18082` / `gm_backend=http://10.0.0.5:8022` / `gm_backend=/gm` | 本页面 gen-model 地址，压过环境变量；`/gm` 走同源代理 |
+| `gm_backend_port=18082` / `gm_backend=http://10.0.0.5:8022` / `gm_backend=/gm` | 本页面 gen-model 地址，压过环境变量；`/gm` 仅在 dev Vite 或部署方显式 rewrite 时可用 |
 | `gm_health=1` | 在 legacy 下也把树顶部的 gen-model 徽标挂出来（只看健康与库三态，不动场景、不起同步） |
 | `show_refno=24381_145018` | 启动即显示这个节点（v1 下 = `ensure → records`） |
 | `debug_refno=24381_145018` | 同上，但强制重载并替换旧对象 |
@@ -112,7 +125,7 @@ pwsh scripts/verify-gen-model-v1.ps1 -BaseUrl http://127.0.0.1:8022 -Dbnum 7997 
 
 | 现象 | 原因 / 处理 |
 | --- | --- |
-| 徽标红点「连接失败」 | gen-model 没起或端口不对：`curl /api/v1/health`；LAN 地址打开页面时环境变量的 `localhost` 会自动折到 `/gm`，此时要配 `VITE_GEN_MODEL_V1_PROXY_TARGET` |
+| 徽标红点「连接失败」 | gen-model 没起或端口不对：`curl /api/v1/health`；dev 从 LAN 地址打开页面时环境变量的 `localhost` 会折到 Vite `/gm`，此时要配 `VITE_GEN_MODEL_V1_PROXY_TARGET`。production 默认同源 `/api/v1`，没有显式 rewrite 时不要配置 `/gm` |
 | 树是空的 / 根展开没有 SITE | `tree/roots` 回 0 个节点：MDB 里没有可读的 DESI 文件；看 `/health.initialization` 与 `/dbnums.warnings` |
 | 勾选眼睛后提示「N 个 refno 没有几何记录」 | ensure 回 `NoRenderableGeometry`（无子件的 BRAN、纯层级的 STRU）或 `generation_pending`（生成还在后台，别重试同一 refno，稍后再点） |
 | 网格全是兜底方块 | `/api/v1/meshes/{hash}.mesh` 404：服务端 `meshes_path` 下没有这个 `.mesh`（换过运行目录 / 网格目录没分家）。`.mesh` 直连自 2026-09-09 起是默认口径（`parseMeshGeometry` 解 rkyv），`.glb` 转换口径留一个发布周期 |

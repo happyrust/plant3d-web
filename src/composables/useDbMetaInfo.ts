@@ -20,6 +20,7 @@ const DEFAULT_PROJECT_KEY = '__default__' as const;
 let ref0ToDbnum: Map<number, number> | null = null;
 let loadPromise: Promise<void> | null = null;
 let loadedProjectKey: string | null = null;
+let stateGeneration = 0;
 
 function getActiveProjectKey(): string {
   // gen-model-v1 源下 ref0→dbnum 来自 /api/v1/dbnums 的 ref0s（plan 2026-09-06 P3-g），
@@ -63,9 +64,21 @@ function buildDemoDbMetaInfo(projectKey: string): DbMetaInfoJson | null {
 }
 
 function resetDbMetaState(): void {
+  stateGeneration += 1;
   ref0ToDbnum = null;
   loadPromise = null;
   loadedProjectKey = null;
+}
+
+function assertDbMetaGeneration(generation: number): void {
+  if (generation !== stateGeneration) {
+    throw new Error('[db_meta] gen-model 服务代次已变化，拒绝使用旧响应');
+  }
+}
+
+/** gen-model 服务重启/换地址时清掉内存 ref0→dbnum 与在飞加载。IndexedDB 只作预热，随后仍会拉新。 */
+export function invalidateGenModelV1DbMetaInfo(): void {
+  resetDbMetaState();
 }
 
 function ensureStateMatchesActiveProject(projectKey = getActiveProjectKey()): void {
@@ -141,43 +154,46 @@ export async function ensureDbMetaInfoLoaded(): Promise<void> {
   const projectKey = getActiveProjectKey();
   ensureStateMatchesActiveProject(projectKey);
   if (loadPromise && loadedProjectKey === projectKey) return await loadPromise;
+  const generation = stateGeneration;
 
   const metaUrl = getMetaUrl();
   const cacheKey = getDbMetaCacheKey(projectKey);
+  const genModelSource = isGenModelV1Source();
   loadedProjectKey = projectKey;
 
   loadPromise = (async () => {
-    // 1) 尝试从 IndexedDB 预热（加速启动）。
+    // 1) legacy 尝试从 IndexedDB 预热（加速启动）。gen-model 不跨服务代次持久化
+    // ref0 映射：同一个 base URL 重启后源文件集合可能已经变化，先读旧 IDB 会制造短暂错路由。
     // IndexedDB 读写失败不得阻断 viewer / 模型树初始化（常见：transaction aborted / 多 tab 锁库）。
-    try {
-      const cached = await getJson<unknown>(IDB_STORE, cacheKey);
-      if (cached) {
-        try {
-          applyDbMetaInfoJson(cached);
-        } catch {
-          // 缓存损坏：忽略预热，继续强制拉新
+    if (!genModelSource) {
+      try {
+        const cached = await getJson<unknown>(IDB_STORE, cacheKey);
+        assertDbMetaGeneration(generation);
+        if (cached) {
+          try {
+            applyDbMetaInfoJson(cached);
+          } catch {
+            // 缓存损坏：忽略预热，继续强制拉新
+          }
         }
+      } catch (e) {
+        console.warn('[db_meta] IndexedDB 预热失败，继续拉取远端 meta', e);
       }
-    } catch (e) {
-      console.warn('[db_meta] IndexedDB 预热失败，继续拉取远端 meta', e);
     }
 
     // 2) gen-model-v1：`/api/v1/dbnums` 的 ref0s（服务端骨架解出，D3-A），不读旧后端的 db_meta_info.json；
     //    与徽标三态共用同一次 /dbnums（useGenModelV1Dbnums），首屏只打一次
-    if (isGenModelV1Source()) {
+    if (genModelSource) {
       const dbnums = await getGenModelV1Dbnums({ timeoutMs: 60_000 });
+      assertDbMetaGeneration(generation);
       const fresh = dbnumsToDbMetaInfoJson(dbnums.dbnums);
       applyDbMetaInfoJson(fresh);
-      try {
-        await setJson(IDB_STORE, cacheKey, fresh);
-      } catch (e) {
-        console.warn('[db_meta] IndexedDB 写入失败，已使用内存 meta 继续', e);
-      }
       return;
     }
 
     // 3) 强制刷新；AMS 1112 增量演示允许用内置 ref0 映射兜底，避免无后端文件时 viewer 直接初始化失败。
     const resp = await fetch(metaUrl);
+    assertDbMetaGeneration(generation);
     if (!resp.ok) {
       if (ref0ToDbnum && ref0ToDbnum.size > 0) return;
       const demo = buildDemoDbMetaInfo(projectKey);
@@ -188,9 +204,11 @@ export async function ensureDbMetaInfoLoaded(): Promise<void> {
       throw new Error(`[db_meta] 加载失败: HTTP ${resp.status} ${resp.statusText} (${metaUrl})`);
     }
     const fresh = (await resp.json()) as unknown;
+    assertDbMetaGeneration(generation);
     applyDbMetaInfoJson(fresh);
     try {
       await setJson(IDB_STORE, cacheKey, fresh);
+      assertDbMetaGeneration(generation);
     } catch (e) {
       // 内存映射已就绪；缓存写失败只影响下次启动预热，不应让 viewer 初始化失败。
       console.warn('[db_meta] IndexedDB 写入失败，已使用内存 meta 继续', e);
@@ -200,7 +218,7 @@ export async function ensureDbMetaInfoLoaded(): Promise<void> {
   try {
     return await loadPromise;
   } catch (error) {
-    if (loadedProjectKey === projectKey) {
+    if (loadedProjectKey === projectKey && generation === stateGeneration) {
       resetDbMetaState();
     }
     throw error;
