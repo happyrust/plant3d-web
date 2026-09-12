@@ -353,6 +353,34 @@ describe('createMbdExternalSync', () => {
     }));
   });
 
+  it('mbd_3d=0 strips the 3D presentation and falls back to the solver geometry', async () => {
+    // The mapper only presents in 3D when the group declares a cheight.
+    const payload = contractPayload({
+      meta: { geometry_space: 'source_mm', source_to_design: IDENTITY, notes: [], cheight_mm: 27 },
+    });
+    const fetchPipeData = vi.fn(async () => ({ ok: true as const, data: payload, diagnostics: [] }));
+
+    const enabled = createHarness({ search: '?mbd_refno=A', fetchPipeData });
+    await enabled.sync.sync(enabled.target);
+    const [, kept] = (enabled.target.replaceExternalSource as ReturnType<typeof vi.fn>)
+      .mock.calls[0]!;
+    expect(kept[0].layout.dimension3d).toMatchObject({ from: [0, 0, 0], to: [1, 0, 0], row: 0 });
+
+    const disabled = createHarness({ search: '?mbd_refno=A&mbd_3d=0', fetchPipeData });
+    await disabled.sync.sync(disabled.target);
+    const [, stripped] = (disabled.target.replaceExternalSource as ReturnType<typeof vi.fn>)
+      .mock.calls[0]!;
+    expect(stripped.map((record: { id: string }) => record.id)).toEqual(['dim-1']);
+    expect(stripped[0].layout.dimension3d).toBeUndefined();
+    // Everything else (solver lines, LOD hints, cheight) is untouched.
+    expect(stripped[0].layout.lines).toEqual(kept[0].layout.lines);
+    expect(stripped[0].layout.lod).toEqual(kept[0].layout.lod);
+    expect(stripped[0].layout.textHeightM).toEqual(kept[0].layout.textHeightM);
+    expect(disabled.diagnostics.set).toHaveBeenCalledWith(expect.objectContaining({
+      notes: [expect.stringContaining('mbd_3d=0')],
+    }));
+  });
+
   it('mbd_kinds does not bypass atomic rejection of a broken payload', async () => {
     const good = contractPayload().primitives[0]!;
     const harness = createHarness({

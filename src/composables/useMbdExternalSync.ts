@@ -98,6 +98,22 @@ function withoutLod(record: ExternalDimensionRecord): ExternalDimensionRecord {
 }
 
 /**
+ * 调试开关 `?mbd_3d=0`：关掉长度尺寸的三维标注呈现（尺寸线沿 dim_dir 外移、数字在线上方、
+ * 实心箭头；2026-09-12 参考图风格）。mapper 打的 `dimension3d` 在这里被剥掉，内核回到
+ * 求解器原位几何的平面呈现；缺省 / 其它值 = 保留。
+ */
+function isMbd3dDisabled(raw: string | null): boolean {
+  return raw?.trim() === '0';
+}
+
+function withoutDimension3d(record: ExternalDimensionRecord): ExternalDimensionRecord {
+  const layout = record.layout;
+  if (!('dimension3d' in layout)) return record;
+  const { dimension3d: _dimension3d, ...rest } = layout;
+  return { ...record, layout: rest };
+}
+
+/**
  * MBD 外部图元双通道同步（从 ViewerPanel 抽出以获得可测缝）：
  * 通道选择、竞态守卫、诊断写入、error toast 集中在此。
  */
@@ -166,10 +182,12 @@ export function createMbdExternalSync(
           payload.primitives.map(primitive => [primitive.id, primitive.kind]),
         );
         const lodDisabled = isMbdLodDisabled(params.get('mbd_lod'));
+        const presentation3dDisabled = isMbd3dDisabled(params.get('mbd_3d'));
         const filtered = kindFilter
           ? mapped.records.filter(record => kindFilter.has(kindById.get(record.id) ?? ''))
           : mapped.records;
-        const records = lodDisabled ? filtered.map(withoutLod) : filtered;
+        const withLod = lodDisabled ? filtered.map(withoutLod) : filtered;
+        const records = presentation3dDisabled ? withLod.map(withoutDimension3d) : withLod;
         target.replaceExternalSource('mbd', records);
         deps.diagnostics.set({
           channel,
@@ -186,6 +204,9 @@ export function createMbdExternalSync(
               ]
               : []),
             ...(lodDisabled ? ['mbd_lod=0：已关闭分级显示（LOD），每条尺寸照常出图'] : []),
+            ...(presentation3dDisabled
+              ? ['mbd_3d=0：已关闭三维标注呈现，长度尺寸按求解器原位几何平面出图']
+              : []),
           ],
         });
         const errorCount = payload.issues.filter(

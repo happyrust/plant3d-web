@@ -247,21 +247,43 @@ const mbdLodHidden = computed(() => {
   const mbdIds = new Set(
     externalRecords.value.filter(record => record.source === 'mbd').map(record => record.id),
   );
-  const summary = { total: 0, secondaryFar: 0, shortLine: 0 };
+  const summary = { total: 0, secondaryFar: 0, shortLine: 0, overlap: 0 };
   for (const layout of viewportLayouts.value) {
     if (!mbdIds.has(layout.dimensionId)) continue;
     const reason = layout.derived.lodHidden;
     if (!reason) continue;
     summary.total += 1;
     if (reason === 'secondary-far') summary.secondaryFar += 1;
+    else if (reason === 'overlap') summary.overlap += 1;
     else summary.shortLine += 1;
   }
   return summary;
 });
 
+/**
+ * 三维标注呈现（2026-09-12 参考图风格：尺寸线沿 dim_dir 外移、数字在三维平面里置于线上方、
+ * 实心箭头）的面板开关。同样只改 URL（`mbd_3d=0` = 关）并派发 `popstate`，由同步层剥掉
+ * mapper 打的 `dimension3d`，内核回到求解器原位几何的平面呈现。
+ */
+function readMbd3dDisabled(): boolean {
+  if (typeof window === 'undefined') return false;
+  return new URLSearchParams(window.location.search).get('mbd_3d')?.trim() === '0';
+}
+
+const mbd3dDisabled = ref(readMbd3dDisabled());
+
+function setMbd3dEnabled(enabled: boolean): void {
+  const url = new URL(window.location.href);
+  if (enabled) url.searchParams.delete('mbd_3d');
+  else url.searchParams.set('mbd_3d', '0');
+  window.history.pushState({}, '', url);
+  window.dispatchEvent(new Event('popstate'));
+}
+
 function syncMbdDebugStateFromLocation(): void {
   mbdKindFilter.value = readMbdKindFilter();
   mbdLodDisabled.value = readMbdLodDisabled();
+  mbd3dDisabled.value = readMbd3dDisabled();
 }
 
 if (typeof window !== 'undefined') {
@@ -513,8 +535,22 @@ function act(
         <span data-testid="mbd-lod-hidden">
           <template v-if="mbdLodDisabled">已关闭，每条尺寸照常出图</template>
           <template v-else>
-            LOD 隐藏 {{ mbdLodHidden.total }} 条（atta 远景 {{ mbdLodHidden.secondaryFar }} / 短段 {{ mbdLodHidden.shortLine }}）
+            LOD 隐藏 {{ mbdLodHidden.total }} 条（atta 远景 {{ mbdLodHidden.secondaryFar }} / 短段 {{ mbdLodHidden.shortLine }} / 相压 {{ mbdLodHidden.overlap }}）
           </template>
+        </span>
+      </div>
+      <div class="mt-1 flex flex-wrap items-center justify-between gap-2"
+        data-testid="mbd-3d">
+        <label class="flex items-center gap-1">
+          <input type="checkbox"
+            data-testid="mbd-3d-enabled"
+            :checked="!mbd3dDisabled"
+            @change="setMbd3dEnabled(($event.target as HTMLInputElement).checked)" />
+          <span>三维标注呈现（尺寸线外移 / 数字在线上方 / 实心箭头）</span>
+        </label>
+        <span data-testid="mbd-3d-state">
+          <template v-if="mbd3dDisabled">已关闭，按求解器原位几何平面出图</template>
+          <template v-else>开</template>
         </span>
       </div>
     </div>

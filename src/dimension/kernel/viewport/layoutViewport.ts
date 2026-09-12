@@ -1,5 +1,6 @@
 import { resolveLabelCollisions } from '../collision/resolveLabelCollisions';
 import { buildHitIndex, type HitIndex } from '../hit/hitIndex';
+import { declutterOverlaps } from '../layout/declutterPolicy';
 import { layoutDimension } from '../layout/layoutDimension';
 
 import type { LayoutContext } from '../layout/context';
@@ -34,6 +35,8 @@ export function layoutViewport(
         : { ...normalContext, interaction },
     );
   }
-  const layouts = resolveLabelCollisions(raw);
+  // Solver-placed 3D dimension labels are elided pairwise before the moving
+  // declutter runs, so a hidden label neither moves anyone nor claims space.
+  const layouts = resolveLabelCollisions(declutterOverlaps(raw));
   return { layouts, hitIndex: buildHitIndex(layouts) };
 }

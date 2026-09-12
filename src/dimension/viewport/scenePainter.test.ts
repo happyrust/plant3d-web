@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { Color, Group, Matrix4, ShaderMaterial } from 'three';
 
-import { sceneGlyph, sceneMarker } from '../kernel/geometry/sceneGeometry';
+import { sceneGlyph, sceneGlyphInFrame, sceneMarker } from '../kernel/geometry/sceneGeometry';
 import { createTestFont } from '../kernel/testUtils';
 import { SOLVESPACE_DIMENSION_THEME } from '../kernel/theme';
 
@@ -126,6 +126,48 @@ describe('ThreeSceneDimensionPainter', () => {
     expect(material.depthWrite).toBe(false);
   });
 
+  it('draws framed (3D) text as design-space strokes under a halo pass', () => {
+    const parent = new Group();
+    const font = createTestFont();
+    const painter = new ThreeSceneDimensionPainter(parent, font);
+    painter.resize(800, 600);
+    // Test-font 'A': two strokes (0,0)→(1,10)→(2,0) over cap height 10, centred on the baseline.
+    const frame = { origin: [1, 2, 3] as const, xAxis: [0.2, 0, 0] as const, yAxis: [0, 0, 0.2] as const };
+    painter.paint(
+      [layout('framed', [sceneGlyphInFrame('A', frame, 13, 0, 'external')])],
+      SOLVESPACE_DIMENSION_THEME,
+    );
+
+    const lines = painter.group.children[0] as any;
+    const vertexCount = painter.getStats().lineVertexCount;
+    // Two strokes × two passes (halo, text) × 4 quad vertices.
+    expect(vertexCount).toBe(2 * 2 * 4);
+    const widths = Array.from(lines.geometry.getAttribute('strokeWidthPx').array.slice(0, vertexCount)) as number[];
+    const rules = SOLVESPACE_DIMENSION_THEME.dimension3d;
+    expect(widths.slice(0, 8).every(width => width === Math.fround(rules.textStrokeWidthPx + 2 * rules.textHaloWidthPx))).toBe(true);
+    expect(widths.slice(8).every(width => width === Math.fround(rules.textStrokeWidthPx))).toBe(true);
+    // Halo in the halo color, glyphs in the external text color.
+    const colors = Array.from(lines.geometry.getAttribute('batchColor').array.slice(0, vertexCount * 3)) as number[];
+    const halo = new Color(rules.textHaloColor);
+    const text = new Color(SOLVESPACE_DIMENSION_THEME.textColors.external!);
+    expect(colors[0]).toBeCloseTo(halo.r, 5);
+    expect(colors[8 * 3]).toBeCloseTo(text.r, 5);
+    expect(colors[8 * 3 + 1]).toBeCloseTo(text.g, 5);
+    // Every vertex anchors in Design Space with no pixel offset: the run's
+    // first stroke starts at origin − w/2·xAxis (glyph x = 0, y = 0).
+    const offsets = Array.from(lines.geometry.getAttribute('offsetPx').array.slice(0, vertexCount * 2)) as number[];
+    expect(offsets.every(value => value === 0)).toBe(true);
+    const position = Array.from(lines.geometry.getAttribute('position').array.slice(0, 3)) as number[];
+    const halfWidth = font.getWidth(1, 'A') / 2;
+    expect(position[0]).toBeCloseTo(1 - halfWidth * 0.2, 5);
+    expect(position[1]).toBeCloseTo(2, 5);
+    expect(position[2]).toBeCloseTo(3, 5);
+    // The stroke's far end (quad vertices 2–3 of the text pass) is one cap
+    // height up the frame's yAxis (glyph y = 10 = cap height).
+    const tip = Array.from(lines.geometry.getAttribute('position').array.slice(10 * 3, 10 * 3 + 3)) as number[];
+    expect(tip[2]).toBeCloseTo(3 + 0.2, 5);
+  });
+
   it('gives glyph strokes the text stroke width and label text color', () => {
     const parent = new Group();
     const painter = new ThreeSceneDimensionPainter(parent, createTestFont());
@@ -193,7 +235,11 @@ describe('ThreeSceneDimensionPainter', () => {
       new Set(['first']),
     )).toBe(true);
     expect(position.version).toBe(positionVersion);
-    expect(Array.from(color.array.slice(0, 3))).toEqual([1, 0, 0]);
+    const selectedColor = new Color(SOLVESPACE_DIMENSION_THEME.colors.selected);
+    const firstColor = Array.from(color.array.slice(0, 3)) as number[];
+    expect(firstColor[0]).toBeCloseTo(selectedColor.r, 5);
+    expect(firstColor[1]).toBeCloseTo(selectedColor.g, 5);
+    expect(firstColor[2]).toBeCloseTo(selectedColor.b, 5);
     expect(Array.from(
       color.array.slice(verticesPerLayout * 3, verticesPerLayout * 3 + 3),
     )).toEqual(secondColorBefore);

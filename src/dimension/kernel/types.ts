@@ -126,6 +126,21 @@ export type SceneMarker = Readonly<{
   lineStyle?: DimensionLineStyle;
 }>;
 
+/**
+ * Design-space frame for text that lies in a 3D plane instead of the view
+ * plane (「三维尺寸呈现」 running dimensions, 2026-09-12): glyph strokes are
+ * traced in cap-height units and mapped to `origin + x · xAxis + y · yAxis`,
+ * so the run takes the camera's perspective like any other scene geometry.
+ */
+export type SceneTextFrame = Readonly<{
+  /** Baseline centre of the run. */
+  origin: Vec3;
+  /** One cap height along the reading direction. */
+  xAxis: Vec3;
+  /** One cap height towards the top of the glyphs. */
+  yAxis: Vec3;
+}>;
+
 export type SceneGlyphRun = Readonly<{
   kind: 'scene-glyph-run';
   text: string;
@@ -133,6 +148,11 @@ export type SceneGlyphRun = Readonly<{
   capHeightPx: number;
   rotationRad: number;
   styleRole: string;
+  /**
+   * When set, the run is 3D text in this frame; `at`, `capHeightPx` and
+   * `rotationRad` are its view-plane approximation (SVG export, hit bounds).
+   */
+  frame?: SceneTextFrame;
 }>;
 
 export type ScenePrimitive =
@@ -175,10 +195,24 @@ export type LayoutResult = Readonly<{
      * because the geometry failed.
      */
     lodHidden?: ExplicitLodHiddenReason;
+    /**
+     * Set by the 3D dimension layout: the projected value-text quad and the
+     * rank `declutterOverlaps` uses to decide which of two overlapping labels
+     * stays (S1 pairwise declutter, 2026-09-12). Higher rank wins.
+     */
+    declutter?: Readonly<{
+      rank: number;
+      quad: readonly [Vec2, Vec2, Vec2, Vec2];
+    }>;
   }>;
 }>;
 
-export type ExplicitLodHiddenReason = 'secondary-far' | 'short-line';
+/**
+ * `overlap`: the label collided with a higher-ranked 3D dimension label and
+ * was elided by `declutterOverlaps` (not moved — solver placement stays
+ * authoritative).
+ */
+export type ExplicitLodHiddenReason = 'secondary-far' | 'short-line' | 'overlap';
 
 /**
  * Level-of-detail hints for dense explicit sources (S3, 2026-09-12). Opt-in
@@ -292,6 +326,35 @@ export type ExplicitTextInput = Readonly<{
   along?: Vec3;
 }>;
 
+/**
+ * A solver-authored running dimension presented as true 3D annotation
+ * (reference drawing style, 2026-09-12; design target in
+ * `docs/design/mbd-annotation-mockup-2026-09-12/README.md`). The kernel
+ * rebuilds the dimension line, extension lines, arrowheads and value text in
+ * Design Space, offset from the pipe along the solver's `dim_dir` in
+ * multiples of the text height `h`, so the annotation clears the pipe body
+ * and keeps drawing proportions at every camera distance. The solver's
+ * value, segmentation, main/atta row and along-line text position are kept;
+ * only the standoff from the pipe changes.
+ */
+export type ExplicitDimension3dInput = Readonly<{
+  /** Pipe centre-line points the extension lines start from, start end first. */
+  from: Vec3;
+  to: Vec3;
+  /** Unit direction from the pipe towards the dimension line (solver `dim_dir`). */
+  direction: Vec3;
+  /** Centre line → pipe surface along `direction` (Design metres). */
+  surfaceM: number;
+  /** Solver row, 0 = innermost. */
+  row: number;
+  /**
+   * The solver already placed the text outside the extension lines (PML
+   * `sepSmallDim`); which end it sits beyond. Omitted = the kernel decides
+   * from the projected sizes.
+   */
+  outside?: 'start' | 'end';
+}>;
+
 export type ExplicitLayoutInput = Readonly<{
   id: string;
   role: DimensionSemanticRole;
@@ -328,4 +391,10 @@ export type ExplicitLayoutInput = Readonly<{
   textHeightM?: number;
   /** Level-of-detail hints; omitted = always draw. */
   lod?: ExplicitLodInput;
+  /**
+   * Present the input as a 3D running dimension (see
+   * `ExplicitDimension3dInput`); `lines` / `arrowLines` / `labelAnchor` are
+   * then the solver's original geometry, kept for the legacy presentation.
+   */
+  dimension3d?: ExplicitDimension3dInput;
 }>;

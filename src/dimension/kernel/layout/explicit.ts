@@ -23,6 +23,7 @@ import { trimLineAgainstRotatedRect } from '../geometry/trimLineAgainstRect';
 import { resolveDimensionStyleRole } from '../theme';
 import { add3, EPSILON, lerp3 } from '../vec';
 
+import { layoutDimension3d } from './dimension3d';
 import { emptyLayout } from './linear';
 
 import type {
@@ -320,6 +321,9 @@ export function layoutExplicit(
   input: ExplicitLayoutInput,
   context: LayoutContext,
 ): LayoutResult {
+  // A running dimension presented in 3D rebuilds its own geometry from the
+  // solver's pipe points; the flat path below stays for every other input.
+  if (input.dimension3d) return layoutDimension3d(input, input.dimension3d, context);
   const styleRole = resolveDimensionStyleRole(input.role, context.interaction);
   const projectedTextHeightPx = projectedSourceTextHeightPx(input, context);
   const textHeightPx = resolveTextHeightPx(projectedTextHeightPx, context);

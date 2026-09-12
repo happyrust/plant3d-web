@@ -1,9 +1,10 @@
 # 自动 MBD 管道长度尺寸（linear_dim）三维显示效果优化方案
 
 日期：2026-09-12  
-状态：QW1 / QW2 / QW3、S2 第一步、S3 第一 + 第二步已于 2026-09-12 落地（各段内附实施与验证记录）；QW4、S1、S4、S5 待排期  
+状态：QW1 / QW2 / QW3、S2 第一步、S3 第一 + 第二步、S1 第一块（成对去重）与 **S6 三维标注呈现**（参考图风格，ADR 0057）已于 2026-09-12 落地（各段内附实施与验证记录）；QW4、S1 其余、S4、S5 待排期  
 关联：已批准开发计划（协同决策 d-438）的 PR3 结构化 coverage、PR4 `occupancy.rs`、PR6 布局权威收口  
-基线证据：`docs/verification/mbd-pipe-live-baseline-2026-09-12.md`（阶段 0 live 基线 PASS）
+基线证据：`docs/verification/mbd-pipe-live-baseline-2026-09-12.md`（阶段 0 live 基线 PASS）  
+后续评估：`docs/plans/2026-09-12-mbd-dimension-engineering-convention-review.md`（工程标注习惯对照，Oracle GPT-6 两轮 + 标准条款核实；S1 成对隐藏 / edge-on / 尺寸界线超出 / S4 inspection 的具体规则）
 
 ## 1. 现状与证据
 
@@ -211,11 +212,28 @@
 - MBD 显示三态：关 / 按 BRAN 显示 / 按 kind 过滤；与 PR2 自动同步控制器（选中 BRAN + 显式开关）合并设计，
   `mbd_refno` / `mbd_kinds` URL 参数保留为调试入口。
 
+**S6 · 三维标注呈现（参考图风格）** —— 2026-09-12 已落地（ADR 0057；PRD `2026-09-12-mbd-annotation-reference-style-prd.md` §9）
+
+- 用户 13:30 给出轴测出图参考图并要求「更美观的三维尺寸标注效果图，不是投影」；效果图 `docs/design/mbd-annotation-mockup-2026-09-12/`
+  经确认后按其规则落地：`linear_dim` 带 `dimension3d`（管中心点 / `dim_dir` / 管表面距离 / 行号），内核 `layoutDimension3d` 以
+  `h = max(cheight, 13 px · worldPerPixel)` 为单位在设计空间重建——尺寸线到管轴 `surface + 1.2h + row·1.7h`、尺寸界线
+  `surface + 0.15h → 线外 0.3h`、实心三维箭头 `0.9h`、数字在包含尺寸线且面向相机的平面内、线上方 `0.3h`、可读方向；文字放不下
+  时箭头翻外 / 数字外置；平面接近视线时回落屏幕水平文字。三维文字加粗 + 白色光晕。S3 规则原样适用；新增成对去重
+  `declutterOverlaps`（S1 第一块，`lodHidden: 'overlap'`）。主题 `external` 改图纸红 `#c81e1e`，`selected` 改绿 `#16a34a`。
+  `?mbd_3d=0` / 面板勾选回到原位平面呈现。这条**覆盖 O1 的处理方式**：贴管不再等 S4 / Polar-lite，而是沿求解器自己的
+  `dim_dir` 外移（方向与相机无关，见 §4.3 的修订）。
+- 验证：单测 53 文件 / 288 通过（新增 `dimension3d.test.ts`、`declutterPolicy.test.ts`），eslint 0，type-check 新增 0，
+  `e2e/dimension-mbd-v2-fixture.spec.ts` 2/2；Chrome 固定相机（同 S3 那套 fit，`mbd_kinds=linear_dim`）远景 11 绘 / 7 隐
+  （atta 远景 6 / 短段 1），11 条三维文字、22 个实心箭头，管轴→尺寸线 row 0 ≈ 241–298 mm / row 1 ≈ 426–543 mm（管表面 114 mm）；
+  近景 12 绘 / 6 隐、`173` 外置；同相机多次运行统计逐字相同。截图与统计归档 `docs/verification/mbd-3d-dimension-presentation-2026-09-12/`。
+- 未做：标签块 / 引线 / 方框（PRD T3）仍为平面呈现；SVG 导出的三维文字为平面近似。
+
 ### 4.3 不做（No-Go）
 
 - 不改 `isodim.rs` 行位 / 字高公式，不为截图效果重录六条 solver golden（ADR 0003 / 0006）。
-- 不在 Web 端按视向平移尺寸线（破坏确定性且与 solver 权威冲突）；贴管问题走 S1/S4 的呈现策略与后续
-  Polar-lite lane，而不是屏幕偏移。
+- 不在 Web 端**按视向**平移尺寸线（破坏确定性且与 solver 权威冲突）。2026-09-12 修订：沿求解器自己的 `dim_dir`
+  （设计空间、与相机无关）以字高为单位外移**不在此列**——那是 S6 三维标注呈现的口径（ADR 0057），方向由求解器决定，
+  随相机变的只有字高的屏幕下限。
 - 不把 Rust 求解逻辑移到前端；不让 MBD 进用户 `DimensionDocument`。
 
 ## 5. 最小改动清单（每条 ≤ 1 天）

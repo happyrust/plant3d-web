@@ -337,7 +337,7 @@ describe('DimensionPanelDock', () => {
       const host = mountPanel();
       await nextTick();
       const summary = () => host.querySelector('[data-testid="mbd-lod-hidden"]')?.textContent?.replace(/\s+/g, ' ').trim();
-      expect(summary()).toBe('LOD 隐藏 0 条（atta 远景 0 / 短段 0）');
+      expect(summary()).toBe('LOD 隐藏 0 条（atta 远景 0 / 短段 0 / 相压 0）');
 
       const layout = (id: string, lodHidden?: string) => ({
         dimensionId: id,
@@ -352,12 +352,13 @@ describe('DimensionPanelDock', () => {
         layout('mbd-a', 'secondary-far'),
         layout('mbd-b', 'secondary-far'),
         layout('mbd-c', 'short-line'),
-        layout('mbd-d'),
+        // Elided by the pairwise declutter (S1) — counted separately.
+        layout('mbd-d', 'overlap'),
         // A user dimension elided for whatever reason is not an MBD count.
         layout('linear-1', 'short-line'),
       ]);
       await nextTick();
-      expect(summary()).toBe('LOD 隐藏 3 条（atta 远景 2 / 短段 1）');
+      expect(summary()).toBe('LOD 隐藏 4 条（atta 远景 2 / 短段 1 / 相压 1）');
 
       const toggle = host.querySelector<HTMLInputElement>('[data-testid="mbd-lod-enabled"]')!;
       expect(toggle.checked).toBe(true);
@@ -373,7 +374,64 @@ describe('DimensionPanelDock', () => {
       again.dispatchEvent(new Event('change'));
       await nextTick();
       expect(popstates).toEqual(['0', null]);
-      expect(summary()).toBe('LOD 隐藏 3 条（atta 远景 2 / 短段 1）');
+      expect(summary()).toBe('LOD 隐藏 4 条（atta 远景 2 / 短段 1 / 相压 1）');
+    } finally {
+      window.removeEventListener('popstate', onPopstate);
+      window.history.replaceState({}, '', '/');
+    }
+  });
+
+  it('toggles the 3D dimension presentation through the URL', async () => {
+    const system = createSystem();
+    system.externalRegistry.replaceSource('mbd', [{
+      id: 'mbd-a',
+      source: 'mbd' as const,
+      sourceLabel: 'MBD',
+      role: 'external' as const,
+      layout: {
+        id: 'mbd-a',
+        role: 'external' as const,
+        labelPinned: true,
+        formattedLabel: '100',
+        lines: [],
+        labelAnchor: [0, 0, 0] as const,
+        arrowLines: [],
+      },
+    }]);
+    mocks.dimensionSystem.value = system;
+    window.history.replaceState({}, '', '/?mbd_refno=A');
+    useMbdDiagnosticsStore().set({
+      channel: 'api',
+      sourceId: 'A',
+      issues: [],
+      skipped: [],
+    });
+    const popstates: (string | null)[] = [];
+    const onPopstate = () => {
+      popstates.push(new URLSearchParams(window.location.search).get('mbd_3d'));
+    };
+    window.addEventListener('popstate', onPopstate);
+    try {
+      const host = mountPanel();
+      await nextTick();
+      const state = () => host.querySelector('[data-testid="mbd-3d-state"]')?.textContent?.trim();
+      const toggle = () => host.querySelector<HTMLInputElement>('[data-testid="mbd-3d-enabled"]')!;
+      expect(state()).toBe('开');
+      expect(toggle().checked).toBe(true);
+
+      // Off: only the URL changes (`mbd_3d=0`); the sync layer strips `dimension3d`.
+      toggle().checked = false;
+      toggle().dispatchEvent(new Event('change'));
+      await nextTick();
+      expect(popstates).toEqual(['0']);
+      expect(state()).toBe('已关闭，按求解器原位几何平面出图');
+      expect(toggle().checked).toBe(false);
+
+      toggle().checked = true;
+      toggle().dispatchEvent(new Event('change'));
+      await nextTick();
+      expect(popstates).toEqual(['0', null]);
+      expect(state()).toBe('开');
     } finally {
       window.removeEventListener('popstate', onPopstate);
       window.history.replaceState({}, '', '/');

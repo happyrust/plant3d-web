@@ -21,6 +21,7 @@ import type {
   LayoutResult,
   SceneGlyphRun,
   ScenePrimitive,
+  SceneTextFrame,
   SceneVertex,
   Vec2,
 } from '../kernel/types';
@@ -275,6 +276,89 @@ function glyphSegments(
     }));
 }
 
+/**
+ * Shortest glyph stroke of a framed run, in cap heights. The LFF period is a
+ * 0.5/9 cap-height hairline that all but vanishes under the heavier 3D text
+ * stroke and its halo; point-like strokes are lengthened symmetrically to
+ * this so decimal marks stay legible (≈ 1.6 px at the 13 px floor).
+ */
+const MIN_FRAMED_GLYPH_SEGMENT = 0.12;
+
+/**
+ * Glyph strokes of a framed (3D) run in cap-height units, baseline-centred:
+ * x runs along the baseline, y grows downwards as in `LffFont.trace`. They
+ * are mapped into the run's design-space frame at visit time.
+ */
+function unitGlyphSegments(
+  font: LffFont,
+  text: string,
+): readonly LocalGlyphSegment[] {
+  const segments = font.trace(1, text, [-font.getWidth(1, text) / 2, 0]);
+  // Only isolated strokes (neither end shared with another stroke) are
+  // lengthened: the short chords of a subdivided arc stay as they are.
+  const key = (point: Vec2): string => `${point[0].toFixed(6)},${point[1].toFixed(6)}`;
+  const endpointUses = new Map<string, number>();
+  for (const segment of segments) {
+    for (const point of [segment.from, segment.to]) {
+      endpointUses.set(key(point), (endpointUses.get(key(point)) ?? 0) + 1);
+    }
+  }
+  return segments.map((segment) => {
+    const dx = segment.to[0] - segment.from[0];
+    const dy = segment.to[1] - segment.from[1];
+    const length = Math.hypot(dx, dy);
+    const isolated = endpointUses.get(key(segment.from)) === 1
+      && endpointUses.get(key(segment.to)) === 1;
+    if (length >= MIN_FRAMED_GLYPH_SEGMENT || !isolated) return segment;
+    const [ux, uy] = length > 0 ? [dx / length, dy / length] : [0, -1];
+    const grow = (MIN_FRAMED_GLYPH_SEGMENT - length) / 2;
+    return {
+      from: [segment.from[0] - ux * grow, segment.from[1] - uy * grow],
+      to: [segment.to[0] + ux * grow, segment.to[1] + uy * grow],
+    };
+  });
+}
+
+function frameVertex(frame: SceneTextFrame, local: Vec2): SceneVertex {
+  const { origin, xAxis, yAxis } = frame;
+  // Trace y points down the glyph; the frame's yAxis points up.
+  return {
+    anchor: [
+      origin[0] + local[0] * xAxis[0] - local[1] * yAxis[0],
+      origin[1] + local[0] * xAxis[1] - local[1] * yAxis[1],
+      origin[2] + local[0] * xAxis[2] - local[1] * yAxis[2],
+    ],
+    offsetPx: [0, 0],
+  };
+}
+
+type GlyphCaches = Readonly<{
+  /** Screen-space runs keyed by cap height, rotation and text. */
+  screen: Map<string, readonly LocalGlyphSegment[]>;
+  /** Framed runs keyed by text only (the frame changes with the camera). */
+  unit: Map<string, readonly LocalGlyphSegment[]>;
+}>;
+
+/**
+ * How a stroke quad is styled: dimension lines by default, view-plane text,
+ * or the two passes of framed (3D) text — a contrasting halo underneath and
+ * the heavier glyph strokes on top (`theme.dimension3d`).
+ */
+type SegmentStroke = 'text' | 'text-3d' | 'halo-3d';
+
+function strokeWidthPx(theme: DimensionTheme, stroke: SegmentStroke | undefined): number {
+  switch (stroke) {
+    case 'text':
+      return theme.textStrokeWidthPx;
+    case 'text-3d':
+      return theme.dimension3d.textStrokeWidthPx;
+    case 'halo-3d':
+      return theme.dimension3d.textStrokeWidthPx + 2 * theme.dimension3d.textHaloWidthPx;
+    default:
+      return theme.dimensionStrokeWidthPx;
+  }
+}
+
 function offsetVertex(vertex: SceneVertex, offset: Vec2): SceneVertex {
   return {
     anchor: vertex.anchor,
@@ -302,13 +386,13 @@ type SegmentVisitor = (
   to: SceneVertex,
   styleRole: string,
   lineStyle?: DimensionLineStyle,
-  textStroke?: boolean,
+  stroke?: SegmentStroke,
 ) => void;
 
 function visitPrimitiveSegments(
   primitive: ScenePrimitive,
   font: LffFont,
-  glyphCache: Map<string, readonly LocalGlyphSegment[]>,
+  caches: GlyphCaches,
   visit: SegmentVisitor,
 ): void {
   switch (primitive.kind) {
@@ -372,15 +456,37 @@ function visitPrimitiveSegments(
       }
       return;
     case 'scene-glyph-run': {
+      if (primitive.frame) {
+        const frame = primitive.frame;
+        let unit = caches.unit.get(primitive.text);
+        if (!unit) {
+          unit = unitGlyphSegments(font, primitive.text);
+          caches.unit.set(primitive.text, unit);
+        }
+        // Halo first, glyphs on top, per run — so a stroke's halo never
+        // notches a neighbouring stroke of the same glyph.
+        for (const stroke of ['halo-3d', 'text-3d'] as const) {
+          for (const segment of unit) {
+            visit(
+              frameVertex(frame, segment.from),
+              frameVertex(frame, segment.to),
+              primitive.styleRole,
+              'solid',
+              stroke,
+            );
+          }
+        }
+        return;
+      }
       const cacheKey = [
         primitive.capHeightPx,
         primitive.rotationRad,
         primitive.text,
       ].join(':');
-      let segments = glyphCache.get(cacheKey);
+      let segments = caches.screen.get(cacheKey);
       if (!segments) {
         segments = glyphSegments(font, primitive);
-        glyphCache.set(cacheKey, segments);
+        caches.screen.set(cacheKey, segments);
       }
       for (const segment of segments) {
         // Glyph strokes stay solid: role dash patterns (external-reference,
@@ -390,7 +496,7 @@ function visitPrimitiveSegments(
           offsetVertex(primitive.at, segment.to),
           primitive.styleRole,
           'solid',
-          true,
+          'text',
         );
       }
       return;
@@ -403,12 +509,12 @@ function visitPrimitiveSegments(
 function visitSegments(
   layouts: readonly LayoutResult[],
   font: LffFont,
-  glyphCache: Map<string, readonly LocalGlyphSegment[]>,
+  caches: GlyphCaches,
   visit: SegmentVisitor,
 ): void {
   for (const layout of layouts) {
     for (const primitive of layout.scenePrimitives) {
-      visitPrimitiveSegments(primitive, font, glyphCache, visit);
+      visitPrimitiveSegments(primitive, font, caches, visit);
     }
   }
 }
@@ -416,10 +522,14 @@ function visitSegments(
 function colorComponents(
   theme: DimensionTheme,
   styleRole: string,
-  textStroke: boolean,
+  stroke: SegmentStroke | undefined,
 ): readonly [number, number, number] {
+  if (stroke === 'halo-3d') {
+    const halo = new Color(theme.dimension3d.textHaloColor);
+    return [halo.r, halo.g, halo.b];
+  }
   const roleKey = styleRole as keyof typeof theme.colors;
-  const textColor = textStroke ? theme.textColors[roleKey] : undefined;
+  const textColor = stroke !== undefined ? theme.textColors[roleKey] : undefined;
   const color = new Color(
     textColor ?? theme.colors[roleKey] ?? theme.colors.normal,
   );
@@ -430,12 +540,12 @@ function createColorResolver(theme: DimensionTheme) {
   const cache = new Map<string, readonly [number, number, number]>();
   return (
     styleRole: string,
-    textStroke: boolean,
+    stroke: SegmentStroke | undefined,
   ): readonly [number, number, number] => {
-    const key = textStroke ? `${styleRole}:text` : styleRole;
+    const key = stroke ? `${styleRole}:${stroke}` : styleRole;
     const cached = cache.get(key);
     if (cached) return cached;
-    const color = colorComponents(theme, styleRole, textStroke);
+    const color = colorComponents(theme, styleRole, stroke);
     cache.set(key, color);
     return color;
   };
@@ -527,10 +637,10 @@ export class ThreeSceneDimensionPainter {
     this.triangleBuffers.geometry,
     this.triangleMaterial,
   );
-  private readonly glyphCache = new Map<
-    string,
-    readonly LocalGlyphSegment[]
-  >();
+  private readonly glyphCaches: GlyphCaches = {
+    screen: new Map<string, readonly LocalGlyphSegment[]>(),
+    unit: new Map<string, readonly LocalGlyphSegment[]>(),
+  };
   private dimensionRanges = new Map<string, DimensionVertexRange>();
   private lineVertexCount = 0;
   private triangleVertexCount = 0;
@@ -581,7 +691,7 @@ export class ThreeSceneDimensionPainter {
     visitSegments(
       layouts,
       this.font,
-      this.glyphCache,
+      this.glyphCaches,
       () => { segmentCount += 1; },
     );
     const lineVertexCount = segmentCount * 4;
@@ -627,13 +737,11 @@ export class ThreeSceneDimensionPainter {
       visitSegments(
         [layout],
         this.font,
-        this.glyphCache,
-        (from, to, styleRole, lineStyle, textStroke) => {
+        this.glyphCaches,
+        (from, to, styleRole, lineStyle, stroke) => {
           const code = dashCode(styleRole, lineStyle);
-          const color = resolveColor(styleRole, Boolean(textStroke));
-          const widthPx = textStroke
-            ? theme.textStrokeWidthPx
-            : theme.dimensionStrokeWidthPx;
+          const color = resolveColor(styleRole, stroke);
+          const widthPx = strokeWidthPx(theme, stroke);
           // The screen normal flips with the projected direction, so the
           // vertices at the far end negate `side` to stay on the same
           // world-space edge of the quad.
@@ -679,7 +787,7 @@ export class ThreeSceneDimensionPainter {
       const triangleStart = triangleVertexIndex;
       for (const primitive of layout.scenePrimitives) {
         if (primitive.kind !== 'scene-triangle') continue;
-        const color = resolveColor(primitive.styleRole, false);
+        const color = resolveColor(primitive.styleRole, undefined);
         for (const point of primitive.points) {
           writeVec3(trianglePosition, triangleVertexIndex, point.anchor);
           writeVec2(triangleOffset, triangleVertexIndex, point.offsetPx);
@@ -720,7 +828,7 @@ export class ThreeSceneDimensionPainter {
       visitSegments(
         [layout],
         this.font,
-        this.glyphCache,
+        this.glyphCaches,
         () => { lineVertexCount += 4; },
       );
       let triangleVertexCount = 0;
@@ -747,10 +855,10 @@ export class ThreeSceneDimensionPainter {
       visitSegments(
         [layout],
         this.font,
-        this.glyphCache,
-        (_from, _to, styleRole, lineStyle, textStroke) => {
+        this.glyphCaches,
+        (_from, _to, styleRole, lineStyle, stroke) => {
           const code = dashCode(styleRole, lineStyle);
-          const color = resolveColor(styleRole, Boolean(textStroke));
+          const color = resolveColor(styleRole, stroke);
           for (let corner = 0; corner < 4; corner += 1) {
             writeVec3(lineColor, lineVertexIndex + corner, color);
             lineDashCode[lineVertexIndex + corner] = code;
@@ -761,7 +869,7 @@ export class ThreeSceneDimensionPainter {
       let triangleVertexIndex = range.triangleStart;
       for (const primitive of layout.scenePrimitives) {
         if (primitive.kind !== 'scene-triangle') continue;
-        const color = resolveColor(primitive.styleRole, false);
+        const color = resolveColor(primitive.styleRole, undefined);
         for (let index = 0; index < 3; index += 1) {
           writeVec3(triangleColor, triangleVertexIndex, color);
           triangleVertexIndex += 1;
@@ -800,7 +908,8 @@ export class ThreeSceneDimensionPainter {
     this.triangleBuffers.dispose();
     this.lineMaterial.dispose();
     this.triangleMaterial.dispose();
-    this.glyphCache.clear();
+    this.glyphCaches.screen.clear();
+    this.glyphCaches.unit.clear();
     this.disposed = true;
   }
 

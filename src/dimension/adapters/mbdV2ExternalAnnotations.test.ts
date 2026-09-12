@@ -470,31 +470,106 @@ describe('mbdV2ToExternalRecords', () => {
       primitive => primitive.kind === 'linear_dim',
     );
     if (!source) throw new Error('linear_dim fixture missing');
-    const result = mbdV2ToExternalRecords({
-      ...data,
-      primitives: [source, { ...source, id: `${source.id}-copy` }],
-    });
-    const layouts = layoutViewport(
-      result.records.map(normalizeExternalDimension),
-      {
-        projector: createTestProjector(),
-        font: createTestFont(),
-        theme: SOLVESPACE_DIMENSION_THEME,
-        format: DEFAULT_DIMENSION_FORMAT,
-      },
+    const context = {
+      projector: createTestProjector(),
+      font: createTestFont(),
+      theme: SOLVESPACE_DIMENSION_THEME,
+      format: DEFAULT_DIMENSION_FORMAT,
+    };
+    const layoutsOf = (payload: MbdV2PipeData) => layoutViewport(
+      mbdV2ToExternalRecords(payload).records.map(normalizeExternalDimension),
+      context,
       new Map(),
     ).layouts;
-    const [a, b] = layouts;
 
-    expect(layouts.every(layout => layout.labelPinned)).toBe(true);
-    // Same `label_anchor` → same label box: the Web kernel must not push
-    // either copy away from the solver's placement …
-    expect(b!.labelBounds).toEqual(a!.labelBounds);
+    // Flat presentation (no group cheight): same `label_anchor` → same label
+    // box. The Web kernel must not push either copy away from the solver's
+    // placement …
+    const flat = layoutsOf({
+      ...data,
+      meta: { ...data.meta, cheight_mm: null },
+      primitives: [source, { ...source, id: `${source.id}-copy` }],
+    });
+    expect(flat.every(layout => layout.labelPinned)).toBe(true);
+    expect(flat[1]!.labelBounds).toEqual(flat[0]!.labelBounds);
     // … nor invent a leader line to a relocated label.
-    for (const layout of layouts) {
+    for (const layout of flat) {
       expect(layout.primitives.some(
         primitive => primitive.kind === 'line' && primitive.part === 'leader',
       )).toBe(false);
     }
+
+    // 3D presentation: the pairwise declutter (S1) elides the lower-ranked
+    // copy for this view instead of moving it; the survivor is laid out
+    // exactly as it would be alone.
+    const alone = layoutsOf({ ...data, primitives: [source] });
+    const pair = layoutsOf({
+      ...data,
+      primitives: [source, { ...source, id: `${source.id}-copy` }],
+    });
+    expect(pair[0]!.labelBounds).toEqual(alone[0]!.labelBounds);
+    expect(pair[0]!.derived.lodHidden).toBeUndefined();
+    expect(pair[1]!.derived.lodHidden).toBe('overlap');
+    expect(pair[1]!.primitives).toEqual([]);
+    expect(pair.every(layout => layout.labelPinned)).toBe(true);
+  });
+
+  it('derives the 3D presentation from the extension lines when the group declares cheight', () => {
+    const parsed = parseMbdV2PipeData(cliLinearFixture);
+    if (!parsed.ok) throw new Error(parsed.error);
+    const source = parsed.data.primitives[0]!;
+    if (source.kind !== 'linear_dim') throw new Error('linear_dim fixture missing');
+    // Solver rows are 1.2·cheight apart: a second dimension one row further
+    // out shares the same pipe points.
+    const outerRow = {
+      ...source,
+      id: 'main-row-1',
+      sub_kind: 'main',
+      start: [0, -532.4, 0] as const,
+      end: [80, -532.4, 0] as const,
+      label_anchor: [40, -532.4, 0] as const,
+      extension_lines: [
+        { from: [0, 0, 0] as const, to: [0, -532.4, 0] as const },
+        { from: [80, 0, 0] as const, to: [80, -532.4, 0] as const },
+      ],
+    };
+    const result = mbdV2ToExternalRecords({
+      ...parsed.data,
+      meta: { ...parsed.data.meta, cheight_mm: 27 },
+      primitives: [source, outerRow],
+    });
+
+    // Pipe points are the extension lines' `from`, the standoff direction
+    // their direction (solver `dim_dir`), the surface distance the group's
+    // innermost row (500 mm → 0.5 m), all in Design Space.
+    const small = explicitLayout(result, source.id).dimension3d!;
+    expect(roundNumbers(small)).toEqual({
+      from: [0, 0, 0],
+      to: [0.08, 0, 0],
+      direction: [0, -1, 0],
+      surfaceM: 0.5,
+      row: 0,
+      // `small`: the solver put the text past the end (label_anchor x = 116 > 80).
+      outside: 'end',
+    });
+    const outer = explicitLayout(result, 'main-row-1').dimension3d!;
+    expect(outer.row).toBe(1);
+    expect(outer.outside).toBeUndefined();
+    expect(roundNumbers(outer.direction)).toEqual([0, -1, 0]);
+
+    // The flat geometry is still there for the `mbd_3d=0` fallback.
+    expect(explicitLayout(result, source.id).lines).toHaveLength(3);
+    expect(explicitLayout(result, source.id).arrowLines).toHaveLength(4);
+
+    // No group cheight → no 3D presentation; likewise without two extension lines.
+    const withoutCheight = mbdV2ToExternalRecords(parsed.data);
+    expect(explicitLayout(withoutCheight, source.id).dimension3d).toBeUndefined();
+    const bare = mbdV2ToExternalRecords({
+      ...parsed.data,
+      meta: { ...parsed.data.meta, cheight_mm: 27 },
+      primitives: [source, { ...source, id: 'no-extensions', extension_lines: [] }],
+    });
+    expect(explicitLayout(bare, source.id).dimension3d).toBeDefined();
+    expect(explicitLayout(bare, 'no-extensions').dimension3d).toBeUndefined();
   });
 });

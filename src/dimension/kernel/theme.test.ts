@@ -24,16 +24,36 @@ describe('dimension theme', () => {
       minArcRadiusPx: 15,
       textStrokeWidthPx: 1.5,
       dimensionStrokeWidthPx: 1.2,
+      // 三维长度尺寸（参考图风格，2026-09-12）：以字高 h 为单位的标注比例、字的屏幕下限与描边 / 光晕。
+      dimension3d: {
+        textFloorPx: 13,
+        standoffH: 1.2,
+        rowSpacingH: 1.7,
+        textGapH: 0.3,
+        extensionStartH: 0.15,
+        extensionOvershootH: 0.3,
+        arrowLengthH: 0.9,
+        outsideTailH: 0.4,
+        outsideClearancePx: 8,
+        foreshortenRatio: 0.35,
+        textStrokeWidthPx: 2,
+        textHaloWidthPx: 1.4,
+        textHaloColor: '#ffffff',
+      },
       // 普通/外部标签文字用深色提升可读性；语义/交互角色回落 colors 保持高亮。
       textColors: { normal: '#111827', external: '#111827' },
     });
   });
 
   it('keeps external dimension lines apart from user magenta and the selection highlight', () => {
-    // 用户尺寸保持洋红；外部（MBD / 测量）尺寸线用深橙，与 DTX 选中高亮 0xff4fd8 和默认蓝色管体都拉开（QW2）。
+    // 用户尺寸保持洋红；外部（MBD / 测量）尺寸线用图纸红（参考图风格），与 DTX 选中高亮 0xff4fd8
+    // 和默认蓝色管体都拉开（QW2 时曾用深橙 #c2410c）；选中态因此让出纯红、改用绿色。
     expect(SOLVESPACE_DIMENSION_THEME.colors.normal).toBe('#ff1aff');
-    expect(SOLVESPACE_DIMENSION_THEME.colors.external).toBe('#c2410c');
-    expect(SOLVESPACE_DIMENSION_THEME.colors['external-reference']).toBe('#c2410c');
+    expect(SOLVESPACE_DIMENSION_THEME.colors.external).toBe('#c81e1e');
+    expect(SOLVESPACE_DIMENSION_THEME.colors['external-reference']).toBe('#c81e1e');
+    expect(SOLVESPACE_DIMENSION_THEME.colors.selected).toBe('#16a34a');
+    expect(SOLVESPACE_DIMENSION_THEME.colors.selected)
+      .not.toBe(SOLVESPACE_DIMENSION_THEME.colors.external);
   });
 
   it('maps semantic and interaction roles through one theme', () => {

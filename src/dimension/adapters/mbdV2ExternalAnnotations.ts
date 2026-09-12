@@ -183,6 +183,7 @@ type ExplicitParts = Readonly<{
   markers?: readonly ExplicitMarkerInput[];
   texts?: readonly ExplicitTextInput[];
   lod?: ExplicitLodInput;
+  dimension3d?: ExplicitLayoutInput['dimension3d'];
 }>;
 
 function explicitRecord(
@@ -215,6 +216,7 @@ function explicitRecord(
       : {}),
     ...(parts.texts && parts.texts.length > 0 ? { texts: parts.texts } : {}),
     ...(parts.lod ? { lod: parts.lod } : {}),
+    ...(parts.dimension3d ? { dimension3d: parts.dimension3d } : {}),
   };
   return {
     id: primitive.id,
@@ -227,6 +229,96 @@ function explicitRecord(
 }
 
 /**
+ * Group facts the 3D presentation needs from the whole payload: the solver's
+ * row spacing is `1.2 · cheight` (plant-mbd `isodim.rs` row offset), and its
+ * innermost row sits `od` from the pipe centre line, so the shortest
+ * extension line in the branch reads as the pipe surface distance. The lower
+ * quartile rather than the minimum keeps one odd short line from pulling the
+ * whole branch inwards; on a branch with several pipe sizes the larger pipe's
+ * rows come out one or two rows further, which still clears its body.
+ */
+type Presentation3dContext = Readonly<{
+  cheightM: number;
+  surfaceM: number;
+}>;
+
+const SOLVER_ROW_SPACING_CHEIGHT = 1.2;
+
+function extensionLengthM(
+  primitive: MbdV2LinearDim,
+  transformPoint: TransformPoint,
+): number | null {
+  if (primitive.extension_lines.length === 0) return null;
+  const total = primitive.extension_lines.reduce((sum, line) =>
+    sum + length3(sub3(transformPoint(line.to), transformPoint(line.from))), 0);
+  return total / primitive.extension_lines.length;
+}
+
+function presentation3dContext(
+  data: MbdV2PipeData,
+  transformPoint: TransformPoint,
+  cheightM: number | undefined,
+): Presentation3dContext | null {
+  if (cheightM === undefined) return null;
+  const lengths = data.primitives
+    .flatMap(primitive => (primitive.kind === 'linear_dim'
+      ? [extensionLengthM(primitive, transformPoint)]
+      : []))
+    .filter((length): length is number => length !== null && length > 0)
+    .sort((a, b) => a - b);
+  if (lengths.length === 0) return null;
+  return {
+    cheightM,
+    surfaceM: lengths[Math.floor(lengths.length * 0.25)]!,
+  };
+}
+
+/**
+ * Per-dimension 3D presentation input (`ExplicitDimension3dInput`): the pipe
+ * centre-line points are the extension lines' `from`, `dim_dir` is their
+ * direction, and the solver row is read back from the extension length. A
+ * dimension without exactly two extension lines (nothing to stand off from)
+ * keeps the flat presentation.
+ */
+function dimension3dInput(
+  primitive: MbdV2LinearDim,
+  start: Vec3,
+  end: Vec3,
+  labelAnchor: Vec3,
+  transformPoint: TransformPoint,
+  context: Presentation3dContext,
+): ExplicitLayoutInput['dimension3d'] | undefined {
+  if (primitive.extension_lines.length !== 2) return undefined;
+  const [first, second] = primitive.extension_lines.map(line => ({
+    from: transformPoint(line.from),
+    to: transformPoint(line.to),
+  }));
+  const firstAtStart = length3(sub3(first!.to, start)) <= length3(sub3(second!.to, start));
+  const atStart = firstAtStart ? first! : second!;
+  const atEnd = firstAtStart ? second! : first!;
+  const direction = tryNormalize3(sub3(atStart.to, atStart.from));
+  if (!direction) return undefined;
+  const extension = (length3(sub3(atStart.to, atStart.from))
+    + length3(sub3(atEnd.to, atEnd.from))) / 2;
+  const row = Math.max(0, Math.round(
+    (extension - context.surfaceM) / (SOLVER_ROW_SPACING_CHEIGHT * context.cheightM),
+  ));
+  const span = sub3(end, start);
+  const spanLength = dot3(span, span);
+  const alongT = spanLength > 0 ? dot3(sub3(labelAnchor, start), span) / spanLength : 0.5;
+  return {
+    from: atStart.from,
+    to: atEnd.from,
+    direction,
+    surfaceM: context.surfaceM,
+    row,
+    ...(primitive.sub_kind === 'small'
+      ? { outside: alongT < 0.5 ? 'start' : 'end' }
+      : {}),
+  };
+}
+
+/**
  * Arrowheads are the contract's `arrow_lines` — one stroke per wing, `from`
  * on the dimension line — drawn 1:1 (ADR 0048: respect the source's arrow
  * segments, do not regenerate them). The solver scales them with the group
@@ -235,14 +327,21 @@ function explicitRecord(
  * (`arrowLineMinLengthPx`, ADR 0056) keeps them readable on a plant-wide
  * view. Sources that carry no strokes (older parquet rows, hand-authored
  * data) fall back to the kernel's screen-scaled filled heads.
+ *
+ * With a group `cheight` the record also carries `dimension3d`, and the
+ * kernel presents it as true 3D annotation standing off the pipe (reference
+ * drawing style, 2026-09-12); the flat geometry below stays as the fallback
+ * the `mbd_3d=0` debug switch returns to.
  */
 function mapLinearDim(
   primitive: MbdV2LinearDim,
   transformPoint: TransformPoint,
+  presentation3d: Presentation3dContext | null,
 ): ExternalDimensionRecord {
   const role = primitive.reference ? 'external-reference' : 'external';
   const start = transformPoint(primitive.start);
   const end = transformPoint(primitive.end);
+  const labelAnchor = transformPoint(primitive.label_anchor);
   const lines: ExplicitLine[] = [
     { from: start, to: end, part: 'dimension' },
     ...primitive.extension_lines.map(line => ({
@@ -256,6 +355,9 @@ function mapLinearDim(
     to: transformPoint(line.to),
   }));
   const outside = primitive.sub_kind === 'small';
+  const dimension3d = presentation3d
+    ? dimension3dInput(primitive, start, end, labelAnchor, transformPoint, presentation3d)
+    : undefined;
   return explicitRecord(primitive, 'dimension', {
     formattedLabel: primitive.text,
     // Level of detail (S3): ATTA sub-dimensions are secondary and drop out on
@@ -267,13 +369,14 @@ function mapLinearDim(
       tier: primitive.sub_kind === 'atta' ? 'secondary' : 'primary',
       hideShort: !outside,
     },
-    labelAnchor: transformPoint(primitive.label_anchor),
+    labelAnchor,
     // 「工程文字朝向」: a dimension value runs along its dimension line. The
     // contract carries no orientation yet, but for a linear dim the direction
     // is the line itself, so this needs no guess. Tag/aid text keeps viewport
     // horizontal until the contract declares PML's `ori`.
     labelAlong: sub3(end, start),
     lines,
+    ...(dimension3d ? { dimension3d } : {}),
     ...(arrowLines.length > 0
       ? { arrowLines }
       : {
@@ -463,6 +566,7 @@ export function mbdV2ToExternalRecords(
   }
   const transformPoint = transform.point;
   const textHeightM = groupTextHeightM(data, transform);
+  const presentation3d = presentation3dContext(data, transformPoint, textHeightM);
 
   for (const primitive of data.primitives) {
     if (seenIds.has(primitive.id)) {
@@ -475,7 +579,7 @@ export function mbdV2ToExternalRecords(
     let record: ExternalDimensionRecord | null = null;
     switch (primitive.kind) {
       case 'linear_dim':
-        record = mapLinearDim(primitive, transformPoint);
+        record = mapLinearDim(primitive, transformPoint, presentation3d);
         break;
       case 'angle_dim':
         record = mapAngleDim(primitive, transform);
