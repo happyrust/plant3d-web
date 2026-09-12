@@ -25,6 +25,7 @@ import { add3, EPSILON, lerp3 } from '../vec';
 
 import { layoutDimension3d } from './dimension3d';
 import { emptyLayout } from './linear';
+import { layoutTagBillboard } from './tagBillboard';
 
 import type {
   ExplicitArrowInput,
@@ -131,6 +132,14 @@ function lodHiddenReason(
     && projectedPx < context.theme.sourceTextHeightMinPx
   ) {
     return 'secondary-far';
+  }
+  // Detail tier (slope marks, skew aids, branch name): a close-up only.
+  if (
+    lod.tier === 'detail'
+    && projectedPx !== null
+    && projectedPx < context.theme.sourceTextHeightMaxPx
+  ) {
+    return 'detail-far';
   }
   if (lod.hideShort && input.formattedLabel.length > 0) {
     const dimensionLine = input.lines.find(line => line.part === 'dimension');
@@ -322,8 +331,10 @@ export function layoutExplicit(
   context: LayoutContext,
 ): LayoutResult {
   // A running dimension presented in 3D rebuilds its own geometry from the
-  // solver's pipe points; the flat path below stays for every other input.
+  // solver's pipe points, a tag presented as a billboard builds its body
+  // from its text; the flat path below stays for every other input.
   if (input.dimension3d) return layoutDimension3d(input, input.dimension3d, context);
+  if (input.tag) return layoutTagBillboard(input, input.tag, context);
   const styleRole = resolveDimensionStyleRole(input.role, context.interaction);
   const projectedTextHeightPx = projectedSourceTextHeightPx(input, context);
   const textHeightPx = resolveTextHeightPx(projectedTextHeightPx, context);

@@ -2,7 +2,12 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { Color, Group, Matrix4, ShaderMaterial } from 'three';
 
-import { sceneGlyph, sceneGlyphInFrame, sceneMarker } from '../kernel/geometry/sceneGeometry';
+import {
+  sceneFill,
+  sceneGlyph,
+  sceneGlyphInFrame,
+  sceneMarker,
+} from '../kernel/geometry/sceneGeometry';
 import { createTestFont } from '../kernel/testUtils';
 import { SOLVESPACE_DIMENSION_THEME } from '../kernel/theme';
 
@@ -73,7 +78,7 @@ const primitives: readonly ScenePrimitive[] = [
 ];
 
 describe('ThreeSceneDimensionPainter', () => {
-  it('keeps a constant two draw objects for 100 and 2000 dimensions', () => {
+  it('keeps a constant three draw objects for 100 and 2000 dimensions', () => {
     const parent = new Group();
     const painter = new ThreeSceneDimensionPainter(parent, createTestFont());
     painter.resize(800, 600);
@@ -92,12 +97,52 @@ describe('ThreeSceneDimensionPainter', () => {
     );
     const large = painter.getStats();
 
-    expect(small.sceneObjectCount).toBe(2);
+    // Stroke quads, filled arrowheads, filled tag bodies.
+    expect(small.sceneObjectCount).toBe(3);
     expect(large.sceneObjectCount).toBe(small.sceneObjectCount);
     expect(large.lineVertexCount).toBe(small.lineVertexCount * 20);
     expect(large.triangleVertexCount).toBe(
       small.triangleVertexCount * 20,
     );
+    expect(large.fillVertexCount).toBe(small.fillVertexCount * 20);
+  });
+
+  it('fans a scene fill into the fills mesh under the strokes, in the tag tone colour', () => {
+    const parent = new Group();
+    const painter = new ThreeSceneDimensionPainter(parent, createTestFont());
+    painter.resize(800, 600);
+    // A five-vertex tag body: three triangles.
+    const body = sceneFill(
+      [[0, 0], [10, 0], [12, 5], [10, 10], [0, 10]].map(
+        ([x, y]) => ({ anchor: [1, 2, 3] as const, offsetPx: [x!, y!] as const }),
+      ),
+      'tag',
+      'external',
+      'tag-fill',
+    );
+    painter.paint([layout('tag', [body, ...primitives])], SOLVESPACE_DIMENSION_THEME);
+
+    const fills = painter.group.getObjectByName('dimension-scene-fills') as any;
+    const lines = painter.group.getObjectByName('dimension-scene-lines') as any;
+    expect(fills.renderOrder).toBeLessThan(lines.renderOrder);
+    expect(painter.getStats().fillVertexCount).toBe(3 * 3);
+    // Fan: every triangle starts at the first outline vertex.
+    const offsets = Array.from(fills.geometry.getAttribute('offsetPx').array.slice(0, 18)) as number[];
+    expect(offsets.slice(0, 2)).toEqual([0, 0]);
+    expect(offsets.slice(6, 8)).toEqual([0, 0]);
+    expect(offsets.slice(12, 14)).toEqual([0, 0]);
+    expect(offsets.slice(14, 18)).toEqual([10, 10, 0, 10]);
+    expect(Array.from(fills.geometry.getAttribute('position').array.slice(0, 3))).toEqual([1, 2, 3]);
+    const color = Array.from(fills.geometry.getAttribute('batchColor').array.slice(0, 3)) as number[];
+    const expected = new Color(SOLVESPACE_DIMENSION_THEME.tag.fillColor);
+    expect(color[0]).toBeCloseTo(expected.r, 5);
+    expect(color[1]).toBeCloseTo(expected.g, 5);
+    expect(color[2]).toBeCloseTo(expected.b, 5);
+    // The fill adds no stroke quads.
+    const reference = new ThreeSceneDimensionPainter(new Group(), createTestFont());
+    reference.resize(800, 600);
+    reference.paint([layout('plain', primitives)], SOLVESPACE_DIMENSION_THEME);
+    expect(painter.getStats().lineVertexCount).toBe(reference.getStats().lineVertexCount);
   });
 
   it('stores design anchors separately from CSS-pixel offsets', () => {

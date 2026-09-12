@@ -52,11 +52,22 @@
 `kernel/layout/declutterPolicy.ts`（规则 5 的成对去重）、`viewport/scenePainter.ts`（三维字形 + 光晕）、
 `adapters/mbdV2ExternalAnnotations.ts`（`dimension3d` 输入）；`?mbd_3d=0` 回到原位平面呈现。与本文的差异：字高下限
 用主题 `textHeightPx`（13 px，同本文）；箭头半角取主题 `arrowHalfAngleDeg`（18°，本文 0.3/0.9 ≈ 18.4°）；数字从两端
-放不下时统一放到**终点**外侧（本文同）。规则 6（卡片 / 药丸 / 方框）与「已知问题」里的卡片避让**未实现**，标签仍是原位
-平面文字。实机截图与统计：`docs/verification/mbd-3d-dimension-presentation-2026-09-12/`。
+放不下时统一放到**终点**外侧（本文同）。
+
+规则 6（同日稍后，ADR 0058）已落地：`kernel/layout/tagBillboard.ts` 把 `label` 呈现为屏幕定尺的 billboard——端点
+connection tag = 白底圆角卡片 + 灰色引线 + 管端圆点，元件 name tag = 黑框方框，弯头 tag / 分支名 = 无边框药丸；
+`adapters/mbdV2ExternalAnnotations.ts` 把每条 `leader_line` 配进它的 `label` 记录（先按 `<label id>:leader` 命名、再按引线起点
+配对），引线始终指回管上的点、随标签一起隐藏 / 选中。三级 LOD：坐标卡片与位号任何距离都显示；弯头药丸从中景起（`secondary`，
+投影字高 ≥ `sourceTextHeightMinPx`）、角度行只在近景（`detail`，≥ `sourceTextHeightMaxPx`）；分支名、坡度、skew 辅助线 / 文字
+均为 `detail`。「已知问题」里的卡片避让做了一半：标签体在首选位（沿管外 `away` 方向、带向上偏置）被尺寸数字或别的标签压住时，
+按卡片 → 方框 → 药丸、同类按 id 的确定顺序依次换到下一个候选位（绕首选方向 ±30° / ±60° / ±90° / ±135° / 180°，再放大 1.6 倍
+standoff；先试整块在屏内的位置），全部被占则回首选位；**不避让管件几何**（卡片仍可能压在阀体上），也不避让三维尺寸线本身。
+与本文的差异：字高用主题 `theme.tag`（卡片 / 方框 11 px、药丸 10 px）、drawing 风格的 standoff 也是主题常量；`mbd_3d=0` 同时
+剥掉 `tag`，标签回到原位平面文字。实机截图与统计：`docs/verification/mbd-3d-dimension-presentation-2026-09-12/`（`tags-*.png`）。
 
 ## 对应文档
 
 - ADR 0057：`docs/adr/0057-present-mbd-running-dimensions-as-3d-annotation-standing-off-the-pipe.md`
+- ADR 0058：`docs/adr/0058-present-mbd-tags-as-screen-sized-billboards-with-3d-anchors.md`
 - PRD：`docs/plans/2026-09-12-mbd-annotation-reference-style-prd.md`
 - 标准条款核实与 S1 / S4 规则：`docs/plans/2026-09-12-mbd-dimension-engineering-convention-review.md`

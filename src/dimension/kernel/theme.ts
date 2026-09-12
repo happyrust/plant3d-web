@@ -2,6 +2,7 @@ import type {
   DimensionLineStyle,
   DimensionSemanticRole,
   InteractionState,
+  SceneTone,
 } from './types';
 
 export type DimensionStyleRole =
@@ -81,6 +82,49 @@ export type DimensionTheme = Readonly<{
     textHaloWidthPx: number;
     textHaloColor: string;
   }>;
+  /**
+   * Billboard tags (`ExplicitLayoutInput.tag`, reference drawing style
+   * 2026-09-12): screen-sized bodies hanging off a 3D anchor. All lengths are
+   * CSS px — a tag is a sheet-like element, so it keeps its size at every
+   * camera distance while the pipe and the 3D dimensions scale.
+   */
+  tag: Readonly<{
+    /** Cap height of card / frame text and of pill text. */
+    textHeightPx: number;
+    pillTextHeightPx: number;
+    /** Line advance as a multiple of the cap height. */
+    lineAdvance: number;
+    /** Inner padding of a card / frame body and of a pill body. */
+    paddingPx: number;
+    pillPaddingPx: number;
+    /** Corner radius of a card / frame body (a pill is fully rounded). */
+    cornerRadiusPx: number;
+    /**
+     * Anchor → body centre distance per style, before the size-dependent
+     * share (`standoffSizeRatio · max(width, height)`) that keeps a large
+     * card clear of the pipe.
+     */
+    standoffPx: Readonly<Record<'card' | 'frame' | 'pill', number>>;
+    standoffSizeRatio: number;
+    /**
+     * Upward bias (screen) blended into the anchor → body direction per
+     * style: tags sit above the pipe like drawing call-outs.
+     */
+    upwardBias: Readonly<Record<'card' | 'frame' | 'pill', number>>;
+    /** Stroke widths. */
+    leaderWidthPx: number;
+    borderWidthPx: number;
+    frameWidthPx: number;
+    /** Radius of the dot marking the leader target. */
+    dotRadiusPx: number;
+    /** Palette: body fill, card border, frame, leader / dot, text, pill text. */
+    fillColor: string;
+    borderColor: string;
+    frameColor: string;
+    leaderColor: string;
+    textColor: string;
+    mutedTextColor: string;
+  }>;
   colors: Readonly<Record<DimensionStyleRole, string>>;
   /**
    * Label text colors per role; roles not listed fall back to `colors`, so
@@ -120,6 +164,27 @@ export const SOLVESPACE_DIMENSION_THEME: DimensionTheme = {
     textHaloWidthPx: 1.4,
     textHaloColor: '#ffffff',
   },
+  tag: {
+    textHeightPx: 11,
+    pillTextHeightPx: 10,
+    lineAdvance: 1.5,
+    paddingPx: 7,
+    pillPaddingPx: 4,
+    cornerRadiusPx: 4,
+    standoffPx: { card: 96, frame: 64, pill: 34 },
+    standoffSizeRatio: 0.35,
+    upwardBias: { card: 1, frame: 1, pill: 0.5 },
+    leaderWidthPx: 0.9,
+    borderWidthPx: 1,
+    frameWidthPx: 1.2,
+    dotRadiusPx: 2.4,
+    fillColor: '#ffffff',
+    borderColor: '#94a3b8',
+    frameColor: '#0f172a',
+    leaderColor: '#64748b',
+    textColor: '#0f172a',
+    mutedTextColor: '#334155',
+  },
   colors: {
     normal: '#ff1aff',
     hovered: '#ffff00',
@@ -157,6 +222,54 @@ export function resolveDimensionColor(
   interaction: InteractionState,
 ): string {
   return theme.colors[resolveDimensionStyleRole(role, interaction)];
+}
+
+/**
+ * Colour of a tag stroke / fill: the fill is always the tag body colour, an
+ * interaction role (hovered / selected) keeps its highlight on every stroke,
+ * and otherwise the tag palette decides. Shared by the scene painter and the
+ * SVG export so both draw the same tag.
+ */
+export function resolveTagToneColor(
+  theme: DimensionTheme,
+  styleRole: string,
+  tone: SceneTone,
+): string {
+  if (tone === 'tag-fill') return theme.tag.fillColor;
+  if (styleRole === 'hovered' || styleRole === 'selected') {
+    return theme.colors[styleRole];
+  }
+  switch (tone) {
+    case 'tag-text':
+      return theme.tag.textColor;
+    case 'tag-muted-text':
+      return theme.tag.mutedTextColor;
+    case 'tag-border':
+      return theme.tag.borderColor;
+    case 'tag-frame':
+      return theme.tag.frameColor;
+    case 'tag-leader':
+      return theme.tag.leaderColor;
+  }
+}
+
+export function resolveTagToneStrokeWidth(
+  theme: DimensionTheme,
+  tone: SceneTone,
+): number {
+  switch (tone) {
+    case 'tag-text':
+    case 'tag-muted-text':
+      return theme.textStrokeWidthPx;
+    case 'tag-border':
+      return theme.tag.borderWidthPx;
+    case 'tag-frame':
+      return theme.tag.frameWidthPx;
+    case 'tag-leader':
+      return theme.tag.leaderWidthPx;
+    case 'tag-fill':
+      return 0;
+  }
 }
 
 const ROLE_LINE_DASH: Readonly<Record<string, readonly number[]>> = {

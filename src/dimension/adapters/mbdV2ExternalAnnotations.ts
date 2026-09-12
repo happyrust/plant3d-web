@@ -20,6 +20,8 @@ import type {
   MbdV2AidCircle,
   MbdV2AngleDim,
   MbdV2ArcFrame,
+  MbdV2Label,
+  MbdV2LeaderLine,
   MbdV2LinearDim,
   MbdV2PipeData,
   MbdV2Vec3,
@@ -36,6 +38,8 @@ import type {
   ExplicitLayoutInput,
   ExplicitLodInput,
   ExplicitMarkerInput,
+  ExplicitTagInput,
+  ExplicitTagStyle,
   ExplicitTextInput,
   ScreenLinePart,
 } from '../kernel/types';
@@ -184,6 +188,7 @@ type ExplicitParts = Readonly<{
   texts?: readonly ExplicitTextInput[];
   lod?: ExplicitLodInput;
   dimension3d?: ExplicitLayoutInput['dimension3d'];
+  tag?: ExplicitTagInput;
 }>;
 
 function explicitRecord(
@@ -217,6 +222,7 @@ function explicitRecord(
     ...(parts.texts && parts.texts.length > 0 ? { texts: parts.texts } : {}),
     ...(parts.lod ? { lod: parts.lod } : {}),
     ...(parts.dimension3d ? { dimension3d: parts.dimension3d } : {}),
+    ...(parts.tag ? { tag: parts.tag } : {}),
   };
   return {
     id: primitive.id,
@@ -226,6 +232,152 @@ function explicitRecord(
     category,
     layout,
   };
+}
+
+/** Two Design Space points closer than this (0.1 mm) count as the same point. */
+const SAME_POINT_TOLERANCE_M = 1e-4;
+
+function samePoint(a: Vec3, b: Vec3): boolean {
+  return length3(sub3(a, b)) <= SAME_POINT_TOLERANCE_M;
+}
+
+/**
+ * Pair every `label` with the `leader_line` that starts on it: by the
+ * producer's id convention (`<label id>:leader`, plant-mbd tags) first, else
+ * by geometry (the leader starts at the label position). Each leader is
+ * spent once. The pair becomes one record — the text plus its leader — so
+ * the billboard presentation can move the body while the leader keeps
+ * pointing at the pipe, and hiding / selecting the tag takes the leader
+ * along.
+ */
+function pairLeaders(
+  data: MbdV2PipeData,
+  transformPoint: TransformPoint,
+): ReadonlyMap<string, MbdV2LeaderLine> {
+  const leaders = data.primitives.filter(
+    (primitive): primitive is MbdV2LeaderLine => primitive.kind === 'leader_line',
+  );
+  const labels = data.primitives.filter(
+    (primitive): primitive is MbdV2Label => primitive.kind === 'label',
+  );
+  const spent = new Set<string>();
+  const byLabel = new Map<string, MbdV2LeaderLine>();
+  for (const label of labels) {
+    const named = leaders.find(leader =>
+      !spent.has(leader.id) && leader.id === `${label.id}:leader`);
+    const leader = named ?? leaders.find(leader =>
+      !spent.has(leader.id)
+      && samePoint(transformPoint(leader.start), transformPoint(label.position)));
+    if (!leader) continue;
+    spent.add(leader.id);
+    byLabel.set(label.id, leader);
+  }
+  return byLabel;
+}
+
+type TagClass = Readonly<{
+  style: ExplicitTagStyle;
+  dot: boolean;
+  lod?: ExplicitLodInput;
+  /** Lines matching this pattern stay on a mid-range view; the rest are close-up detail. */
+  primaryLine?: RegExp;
+}>;
+
+/**
+ * What kind of drawing call-out a solver tag is. plant-mbd names its tags
+ * (`…:tag:connection:<end>` end-point coordinate blocks, `…:tag:elbo:<refno>`
+ * elbow angle + elevation, `…:tag:name:<refno>` component name,
+ * `…:tag:branch-name`); a label from another producer is classified by its
+ * text — a coordinate block (`X … / Y … / PE …`) reads as a card, anything
+ * else as a framed name. The reference drawing style keeps coordinate blocks
+ * and names at every distance, shows elbow elevations from mid range (the
+ * angle only on a close-up) and the branch name only on a close-up.
+ */
+function classifyTag(primitive: MbdV2Label): TagClass {
+  const id = primitive.id;
+  if (id.includes(':tag:connection:')) return { style: 'card', dot: true };
+  if (id.includes(':tag:name:')) return { style: 'frame', dot: false };
+  if (id.includes(':tag:elbo:')) {
+    return { style: 'pill', dot: false, lod: { tier: 'secondary' }, primaryLine: /^PE\b/ };
+  }
+  if (id.includes(':tag:branch-name')) {
+    return { style: 'pill', dot: false, lod: { tier: 'detail' } };
+  }
+  const coordinateBlock = splitTextLines(primitive.text)
+    .some(line => /^(?:X|Y|PE)\s/.test(line));
+  return coordinateBlock ? { style: 'card', dot: true } : { style: 'frame', dot: false };
+}
+
+/**
+ * Direction out of the pipe at `point`, from the running dimensions: when
+ * exactly one dimension has an extension line rooted there the point is an
+ * open end and the pipe runs in from the dimension's other root. A point
+ * shared by two dimensions (a connection inside the branch) has no single
+ * outward direction.
+ */
+function awayFromPipe(
+  point: Vec3,
+  dimensions: readonly MbdV2LinearDim[],
+  transformPoint: TransformPoint,
+): Vec3 | undefined {
+  let touching = 0;
+  let away: Vec3 | undefined;
+  for (const dimension of dimensions) {
+    const roots = dimension.extension_lines.map(line => transformPoint(line.from));
+    const index = roots.findIndex(root => samePoint(root, point));
+    if (index < 0) continue;
+    touching += 1;
+    const other = roots.find((_, otherIndex) => otherIndex !== index);
+    if (other) away = tryNormalize3(sub3(point, other)) ?? undefined;
+  }
+  return touching === 1 ? away : undefined;
+}
+
+/**
+ * Tag (`label`, optionally with its `leader_line`): the flat presentation is
+ * the solver's text at its position plus the leader as drawn; with `tag`
+ * the kernel presents it as a billboard call-out (card / frame / pill) that
+ * keeps its leader on the pipe point (reference drawing style, 2026-09-12).
+ * The `mbd_3d=0` switch strips `tag` and gets the flat presentation back.
+ */
+function mapLabel(
+  primitive: MbdV2Label,
+  leader: MbdV2LeaderLine | undefined,
+  dimensions: readonly MbdV2LinearDim[],
+  transformPoint: TransformPoint,
+): ExternalDimensionRecord {
+  const position = transformPoint(primitive.position);
+  const { formattedLabel, texts } = multiLineTexts(primitive.text, position);
+  const target = leader ? transformPoint(leader.end) : undefined;
+  const tagClass = classifyTag(primitive);
+  const tag: ExplicitTagInput = {
+    style: tagClass.style,
+    lines: splitTextLines(primitive.text).map(text => ({
+      text,
+      ...(tagClass.primaryLine && !tagClass.primaryLine.test(text) ? { detail: true } : {}),
+    })),
+    ...(target ? { target } : {}),
+    ...(target && tagClass.style === 'card'
+      ? (() => {
+        const away = awayFromPipe(target, dimensions, transformPoint);
+        return away ? { away } : {};
+      })()
+      : {}),
+    ...(tagClass.dot ? { dot: true } : {}),
+  };
+  return explicitRecord(primitive, 'annotation', {
+    formattedLabel,
+    labelAnchor: position,
+    texts,
+    ...(target ? { lines: [{ from: position, to: target, part: 'leader' as const }] } : {}),
+    ...(tagClass.lod ? { lod: tagClass.lod } : {}),
+    tag,
+  });
+}
+
+/** Slope marks and skew aids are close-up detail in the reference drawing style. */
+function isDetailAid(id: string): boolean {
+  return id.includes(':slope:') || id.includes(':skew:');
 }
 
 /**
@@ -567,6 +719,11 @@ export function mbdV2ToExternalRecords(
   const transformPoint = transform.point;
   const textHeightM = groupTextHeightM(data, transform);
   const presentation3d = presentation3dContext(data, transformPoint, textHeightM);
+  const leaderByLabel = pairLeaders(data, transformPoint);
+  const pairedLeaderIds = new Set([...leaderByLabel.values()].map(leader => leader.id));
+  const linearDims = data.primitives.filter(
+    (primitive): primitive is MbdV2LinearDim => primitive.kind === 'linear_dim',
+  );
 
   for (const primitive of data.primitives) {
     if (seenIds.has(primitive.id)) {
@@ -574,6 +731,11 @@ export function mbdV2ToExternalRecords(
         id: primitive.id,
         reason: 'Duplicate primitive id within MBD payload',
       });
+      continue;
+    }
+    if (primitive.kind === 'leader_line' && pairedLeaderIds.has(primitive.id)) {
+      // Drawn as part of its label's record (see `pairLeaders`).
+      seenIds.add(primitive.id);
       continue;
     }
     let record: ExternalDimensionRecord | null = null;
@@ -591,6 +753,13 @@ export function mbdV2ToExternalRecords(
         record = mapAidCircle(primitive, transform);
         break;
       case 'label':
+        record = mapLabel(
+          primitive,
+          leaderByLabel.get(primitive.id),
+          linearDims,
+          transformPoint,
+        );
+        break;
       case 'aid_text': {
         const position = transformPoint(primitive.position);
         const { formattedLabel, texts } = multiLineTexts(
@@ -601,6 +770,7 @@ export function mbdV2ToExternalRecords(
           formattedLabel,
           labelAnchor: position,
           texts,
+          ...(isDetailAid(primitive.id) ? { lod: { tier: 'detail' } } : {}),
         });
         break;
       }
@@ -628,6 +798,7 @@ export function mbdV2ToExternalRecords(
               ? { style: lineStyleFrom(primitive.style) }
               : {}),
           }],
+          ...(isDetailAid(primitive.id) ? { lod: { tier: 'detail' } } : {}),
         });
         break;
       }
@@ -670,6 +841,8 @@ export function mbdV2ToExternalRecords(
           labelAnchor: midpoint(start, end),
           lines: [{ from: start, to: end, part: 'dimension' }],
           arrowLines: slopeArrowLines(start, end),
+          // Slopes are close-up detail in the reference drawing style.
+          lod: { tier: 'detail' },
         });
         break;
       }

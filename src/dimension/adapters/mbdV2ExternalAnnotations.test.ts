@@ -39,12 +39,13 @@ describe('mbdV2ToExternalRecords', () => {
   it('maps every primitive kind of the V2 contract', () => {
     const result = mbdV2ToExternalRecords(fixtureData());
 
+    // `leader-1` starts on `label-1` and travels inside that record (see
+    // "pairs a label with the leader that starts on it").
     expect(result.records.map(record => record.id)).toEqual([
       'dim-segment-1',
       'dim-ref-2',
       'angle-1',
       'label-1',
-      'leader-1',
       'aid-line-1',
       'aid-arc-1',
       'aid-circle-1',
@@ -72,7 +73,6 @@ describe('mbdV2ToExternalRecords', () => {
     expect(byCategory.get('angle-1')).toBe('dimension');
     for (const id of [
       'label-1',
-      'leader-1',
       'aid-line-1',
       'aid-arc-1',
       'aid-circle-1',
@@ -295,6 +295,140 @@ describe('mbdV2ToExternalRecords', () => {
         stackIndex: 1,
       },
     ]);
+  });
+
+  it('pairs a label with the leader that starts on it and presents the pair as a billboard tag', () => {
+    const data = fixtureData();
+    const result = mbdV2ToExternalRecords(data);
+
+    // `leader-1` starts at `label-1`'s position (ids follow no convention
+    // here, so the pairing is geometric): one record carries the text, the
+    // solver's leader as its flat presentation and the billboard spec.
+    const label = explicitLayout(result, 'label-1');
+    expect(result.records.some(record => record.id === 'leader-1')).toBe(false);
+    expect(label.lines).toEqual([{ from: [1.4, 0.3, 0], to: [1.25, 0, 0], part: 'leader' }]);
+    expect(label.formattedLabel).toBe('BRAN /24381-145712');
+    expect(label.tag).toEqual({
+      // Not a coordinate block → a framed name.
+      style: 'frame',
+      lines: [{ text: 'BRAN /24381-145712' }, { text: 'DN100 PSPEC A1A' }],
+      target: [1.25, 0, 0],
+    });
+    expect(label.lod).toBeUndefined();
+
+    // A leader that starts nowhere near a label stays its own record; a
+    // leader is spent on one label only.
+    const loose = mbdV2ToExternalRecords({
+      ...data,
+      primitives: [
+        { kind: 'label', id: 'tag-a', text: 'A', position: [0, 0, 0] },
+        { kind: 'label', id: 'tag-b', text: 'B', position: [0, 0, 0] },
+        { kind: 'leader_line', id: 'shared', start: [0, 0, 0], end: [0, -1, 0] },
+        { kind: 'leader_line', id: 'loose', start: [5, 5, 5], end: [6, 5, 5] },
+      ],
+    });
+    expect(loose.records.map(record => record.id)).toEqual(['tag-a', 'tag-b', 'loose']);
+    expect(explicitLayout(loose, 'tag-a').tag?.target).toEqual([0, -1, 0]);
+    expect(explicitLayout(loose, 'tag-b').tag?.target).toBeUndefined();
+    expect(explicitLayout(loose, 'tag-b').lines).toEqual([]);
+    expect(explicitLayout(loose, 'loose').lines).toEqual([
+      { from: [5, 5, 5], to: [6, 5, 5], part: 'leader' },
+    ]);
+    expect(loose.skipped).toEqual([]);
+  });
+
+  it('classifies plant-mbd tags into cards, frames and pills with the drawing LOD', () => {
+    const data = fixtureData();
+    // One running dimension rooted at the open end P = (0,0,0) and at Q = (1,0,0);
+    // a second one shares Q with a third, so Q is an inner connection.
+    const dimension = (id: string, from: readonly [number, number, number], to: readonly [number, number, number]) => ({
+      kind: 'linear_dim' as const,
+      id,
+      start: [from[0], from[1] + 0.1, from[2]] as const,
+      end: [to[0], to[1] + 0.1, to[2]] as const,
+      text: '1000',
+      sub_kind: 'main',
+      extension_lines: [
+        { from, to: [from[0], from[1] + 0.1, from[2]] as const },
+        { from: to, to: [to[0], to[1] + 0.1, to[2]] as const },
+      ],
+      arrow_lines: [],
+      label_anchor: [(from[0] + to[0]) / 2, from[1] + 0.1, from[2]] as const,
+    });
+    const result = mbdV2ToExternalRecords({
+      ...data,
+      primitives: [
+        dimension('d-1', [0, 0, 0], [1, 0, 0]),
+        dimension('d-2', [1, 0, 0], [1, 1, 0]),
+        { kind: 'label', id: 'b:isoline:0:tag:connection:Head', text: 'X 1516\nY 8157\nPE 13293', position: [-0.1, 0.2, 0] },
+        { kind: 'leader_line', id: 'b:isoline:0:tag:connection:Head:leader', start: [-0.1, 0.2, 0], end: [0, 0, 0] },
+        { kind: 'label', id: 'b:isoline:1:tag:connection:mid', text: 'X 1\nY 2\nPE 3', position: [1.1, 0.2, 0] },
+        { kind: 'leader_line', id: 'b:isoline:1:tag:connection:mid:leader', start: [1.1, 0.2, 0], end: [1, 0, 0] },
+        { kind: 'label', id: 'b:isoline:0:tag:elbo:r1', text: '89.75°\nPE +13301', position: [0.5, 0.3, 0] },
+        { kind: 'leader_line', id: 'b:isoline:0:tag:elbo:r1:leader', start: [0.5, 0.3, 0], end: [0.5, 0, 0] },
+        { kind: 'label', id: 'b:isoline:1:tag:name:r2', text: 'Copy-of-1RCS002VP', position: [1.2, 0.5, 0] },
+        { kind: 'leader_line', id: 'b:isoline:1:tag:name:r2:leader', start: [1.2, 0.5, 0], end: [1, 0.5, 0] },
+        { kind: 'label', id: 'b:tag:branch-name', text: 'Copy', position: [0.5, -0.3, 0] },
+        { kind: 'leader_line', id: 'b:tag:branch-name:leader', start: [0.5, -0.3, 0], end: [0.5, 0, 0] },
+      ],
+    });
+    expect(result.skipped).toEqual([]);
+    expect(result.records.filter(record => record.id.endsWith(':leader'))).toEqual([]);
+
+    // End-point coordinate block: a card with a dot, standing off along the
+    // pipe out of its open end (P is rooted by exactly one dimension: away = P − Q).
+    const head = explicitLayout(result, 'b:isoline:0:tag:connection:Head');
+    expect(head.tag).toEqual({
+      style: 'card',
+      lines: [{ text: 'X 1516' }, { text: 'Y 8157' }, { text: 'PE 13293' }],
+      target: [0, 0, 0],
+      away: [-1, 0, 0],
+      dot: true,
+    });
+    expect(head.lod).toBeUndefined();
+    // A connection inside the branch (rooted by two dimensions) has no single outward direction.
+    expect(explicitLayout(result, 'b:isoline:1:tag:connection:mid').tag?.away).toBeUndefined();
+
+    // Elbow tag: a pill from mid range on, the angle only on a close-up.
+    const elbow = explicitLayout(result, 'b:isoline:0:tag:elbo:r1');
+    expect(elbow.tag).toEqual({
+      style: 'pill',
+      lines: [{ text: '89.75°', detail: true }, { text: 'PE +13301' }],
+      target: [0.5, 0, 0],
+    });
+    expect(elbow.lod).toEqual({ tier: 'secondary' });
+
+    // Component name: framed, always shown.
+    const name = explicitLayout(result, 'b:isoline:1:tag:name:r2');
+    expect(name.tag).toMatchObject({ style: 'frame', lines: [{ text: 'Copy-of-1RCS002VP' }] });
+    expect(name.tag?.dot).toBeUndefined();
+    expect(name.lod).toBeUndefined();
+
+    // Branch name: close-up detail.
+    const branch = explicitLayout(result, 'b:tag:branch-name');
+    expect(branch.tag?.style).toBe('pill');
+    expect(branch.lod).toEqual({ tier: 'detail' });
+  });
+
+  it('marks slopes and skew aids as close-up detail', () => {
+    const data = fixtureData();
+    const result = mbdV2ToExternalRecords({
+      ...data,
+      primitives: [
+        { kind: 'slope_mark', id: 'b:isoline:0:slope:mark:a~b', text: 'slope 0.4%', start: [0, 0, 0], end: [1, 0.004, 0] },
+        { kind: 'aid_line', id: 'b:isoline:0:slope:rise:a~b', start: [0, 0, 0], end: [0, 0.1, 0] },
+        { kind: 'aid_text', id: 'b:isoline:4:skew:x-text', text: 'X:2002', position: [0, 0, 0] },
+        { kind: 'aid_line', id: 'b:isoline:4:skew:x', start: [0, 0, 0], end: [1, 0, 0] },
+        { kind: 'aid_line', id: 'plain-aid', start: [0, 0, 0], end: [1, 0, 0] },
+        { kind: 'aid_text', id: 'plain-text', text: 'EL +1', position: [0, 0, 0] },
+      ],
+    });
+    for (const id of ['b:isoline:0:slope:mark:a~b', 'b:isoline:0:slope:rise:a~b', 'b:isoline:4:skew:x-text', 'b:isoline:4:skew:x']) {
+      expect(explicitLayout(result, id).lod).toEqual({ tier: 'detail' });
+    }
+    for (const id of ['plain-aid', 'plain-text']) {
+      expect(explicitLayout(result, id).lod).toBeUndefined();
+    }
   });
 
   it('assembles weld and slope symbols from kernel primitives (ADR 0042)', () => {

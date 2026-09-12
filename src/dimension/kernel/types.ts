@@ -25,7 +25,23 @@ export type ScreenLinePart =
   | 'projection'
   | 'leader'
   | 'arc'
-  | 'arrow';
+  | 'arrow'
+  /** Billboard tag body (card / frame / pill) and its fill. */
+  | 'tag';
+
+/**
+ * Palette hint for the strokes and fills of a billboard tag (「标签卡片」,
+ * 2026-09-12): the painter and the SVG export take colour and stroke width
+ * from `theme.tag` instead of the role colour. Interaction roles
+ * (hovered / selected) still win, so a highlighted tag reads as such.
+ */
+export type SceneTone =
+  | 'tag-text'
+  | 'tag-muted-text'
+  | 'tag-border'
+  | 'tag-frame'
+  | 'tag-leader'
+  | 'tag-fill';
 
 export type ScreenLine = Readonly<{
   kind: 'line';
@@ -34,6 +50,7 @@ export type ScreenLine = Readonly<{
   part: ScreenLinePart;
   styleRole: string;
   lineStyle?: DimensionLineStyle;
+  tone?: SceneTone;
 }>;
 
 /**
@@ -48,6 +65,7 @@ export type ScreenPath = Readonly<{
   part: ScreenLinePart;
   styleRole: string;
   lineStyle?: DimensionLineStyle;
+  tone?: SceneTone;
 }>;
 
 export type ScreenMarkerShape = 'circle' | 'cross';
@@ -73,6 +91,7 @@ export type ScreenGlyphRun = Readonly<{
   rotationRad?: number;
   rotationCenter?: Vec2;
   styleRole: string;
+  tone?: SceneTone;
 }>;
 
 export type LayoutPrimitive =
@@ -98,6 +117,7 @@ export type SceneLine = Readonly<{
   part: ScreenLinePart;
   styleRole: string;
   lineStyle?: DimensionLineStyle;
+  tone?: SceneTone;
 }>;
 
 export type ScenePath = Readonly<{
@@ -107,6 +127,7 @@ export type ScenePath = Readonly<{
   part: ScreenLinePart;
   styleRole: string;
   lineStyle?: DimensionLineStyle;
+  tone?: SceneTone;
 }>;
 
 export type SceneTriangle = Readonly<{
@@ -114,6 +135,20 @@ export type SceneTriangle = Readonly<{
   points: readonly [SceneVertex, SceneVertex, SceneVertex];
   part: 'arrow';
   styleRole: string;
+}>;
+
+/**
+ * Filled convex polygon (triangle fan over `points`, ≥ 3 vertices) painted
+ * underneath every stroke — the body of a billboard tag card or the dot that
+ * marks the point its leader points at. Projects to one closed path for the
+ * collision / SVG snapshot.
+ */
+export type SceneFill = Readonly<{
+  kind: 'scene-fill';
+  points: readonly SceneVertex[];
+  part: ScreenLinePart;
+  styleRole: string;
+  tone: SceneTone;
 }>;
 
 export type SceneMarker = Readonly<{
@@ -153,12 +188,14 @@ export type SceneGlyphRun = Readonly<{
    * `rotationRad` are its view-plane approximation (SVG export, hit bounds).
    */
   frame?: SceneTextFrame;
+  tone?: SceneTone;
 }>;
 
 export type ScenePrimitive =
   | SceneLine
   | ScenePath
   | SceneTriangle
+  | SceneFill
   | SceneMarker
   | SceneGlyphRun;
 
@@ -204,15 +241,30 @@ export type LayoutResult = Readonly<{
       rank: number;
       quad: readonly [Vec2, Vec2, Vec2, Vec2];
     }>;
+    /**
+     * Set by the billboard tag layout: the body rectangle on screen and the
+     * placement candidate it took (0 = preferred position; the viewport's
+     * placement pass picks a later one to clear dimension values and other
+     * tags).
+     */
+    tag?: Readonly<{
+      candidate: number;
+      body: ScreenRect;
+    }>;
   }>;
 }>;
 
 /**
  * `overlap`: the label collided with a higher-ranked 3D dimension label and
  * was elided by `declutterOverlaps` (not moved — solver placement stays
- * authoritative).
+ * authoritative). `detail-far`: a `detail` tier input on a view that is not
+ * a close-up yet.
  */
-export type ExplicitLodHiddenReason = 'secondary-far' | 'short-line' | 'overlap';
+export type ExplicitLodHiddenReason =
+  | 'secondary-far'
+  | 'detail-far'
+  | 'short-line'
+  | 'overlap';
 
 /**
  * Level-of-detail hints for dense explicit sources (S3, 2026-09-12). Opt-in
@@ -220,11 +272,15 @@ export type ExplicitLodHiddenReason = 'secondary-far' | 'short-line' | 'overlap'
  */
 export type ExplicitLodInput = Readonly<{
   /**
-   * `secondary` (e.g. MBD ATTA sub-dimensions) is elided while the source
-   * text height (`textHeightM`) projects below `theme.sourceTextHeightMinPx`,
-   * i.e. on a plant-wide view where only the main running dimensions matter.
+   * `secondary` (e.g. MBD ATTA sub-dimensions, elbow elevation tags) is
+   * elided while the source text height (`textHeightM`) projects below
+   * `theme.sourceTextHeightMinPx`, i.e. on a plant-wide view where only the
+   * main running dimensions matter. `detail` (slope marks, skew aids, the
+   * branch name) only appears on a close-up, once the source text height
+   * projects at `theme.sourceTextHeightMaxPx` or above — the three tiers
+   * are the far / mid / near levels of the reference drawing style.
    */
-  tier?: 'primary' | 'secondary';
+  tier?: 'primary' | 'secondary' | 'detail';
   /**
    * Elide the whole dimension when its projected dimension line is shorter
    * than `theme.lodMinLineToLabelRatio` label widths — the value could not be
@@ -355,6 +411,49 @@ export type ExplicitDimension3dInput = Readonly<{
   outside?: 'start' | 'end';
 }>;
 
+/**
+ * Body of a billboard tag: `card` = white rounded card with a grey border
+ * (end-point coordinate blocks), `frame` = white box with a dark frame
+ * (component name tags), `pill` = borderless white pill with muted text
+ * (elbow elevations, branch name).
+ */
+export type ExplicitTagStyle = 'card' | 'frame' | 'pill';
+
+export type ExplicitTagLine = Readonly<{
+  text: string;
+  /** Only shown on a close-up (source text height ≥ `theme.sourceTextHeightMaxPx`) when the input carries `lod`. */
+  detail?: boolean;
+}>;
+
+/**
+ * A solver-authored text tag presented as a screen-facing billboard with a
+ * 3D anchor (reference drawing style, 2026-09-12; design target in
+ * `docs/design/mbd-annotation-mockup-2026-09-12/README.md` rule 6). The
+ * kernel sizes the body from its text lines, stands it off the anchor on
+ * screen (away from the pipe, biased upwards) and draws a leader from the
+ * anchor to the nearest body edge. The viewport's placement pass may move
+ * the body to another candidate position to keep it clear of dimension
+ * values and other tags; the anchor and the text never change.
+ */
+export type ExplicitTagInput = Readonly<{
+  style: ExplicitTagStyle;
+  /** Text lines, top to bottom, left-aligned. */
+  lines: readonly ExplicitTagLine[];
+  /**
+   * Design-space point the leader points at (the pipe feature the tag
+   * describes); omitted = the tag hangs off `labelAnchor` without a leader.
+   */
+  target?: Vec3;
+  /**
+   * Unit direction (Design Space) away from the pipe body at `target`, e.g.
+   * along the pipe out of its open end. Omitted = the kernel uses the
+   * direction from `target` to the solver's `labelAnchor`.
+   */
+  away?: Vec3;
+  /** Mark `target` with a filled dot. */
+  dot?: boolean;
+}>;
+
 export type ExplicitLayoutInput = Readonly<{
   id: string;
   role: DimensionSemanticRole;
@@ -397,4 +496,10 @@ export type ExplicitLayoutInput = Readonly<{
    * then the solver's original geometry, kept for the legacy presentation.
    */
   dimension3d?: ExplicitDimension3dInput;
+  /**
+   * Present the input as a billboard tag (see `ExplicitTagInput`);
+   * `formattedLabel` / `texts` / `lines` / `labelAnchor` are then the solver's
+   * flat text and leader, kept for the legacy presentation.
+   */
+  tag?: ExplicitTagInput;
 }>;

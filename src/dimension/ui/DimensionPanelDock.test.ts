@@ -305,7 +305,7 @@ describe('DimensionPanelDock', () => {
 
   it('reports LOD-hidden MBD dimensions per reason and toggles LOD through the URL', async () => {
     const system = createSystem();
-    system.externalRegistry.replaceSource('mbd', ['a', 'b', 'c', 'd'].map(suffix => ({
+    system.externalRegistry.replaceSource('mbd', ['a', 'b', 'c', 'd', 'e'].map(suffix => ({
       id: `mbd-${suffix}`,
       source: 'mbd' as const,
       sourceLabel: 'MBD',
@@ -337,7 +337,7 @@ describe('DimensionPanelDock', () => {
       const host = mountPanel();
       await nextTick();
       const summary = () => host.querySelector('[data-testid="mbd-lod-hidden"]')?.textContent?.replace(/\s+/g, ' ').trim();
-      expect(summary()).toBe('LOD 隐藏 0 条（atta 远景 0 / 短段 0 / 相压 0）');
+      expect(summary()).toBe('LOD 隐藏 0 条（atta 远景 0 / 短段 0 / 相压 0 / 细节 0）');
 
       const layout = (id: string, lodHidden?: string) => ({
         dimensionId: id,
@@ -354,11 +354,13 @@ describe('DimensionPanelDock', () => {
         layout('mbd-c', 'short-line'),
         // Elided by the pairwise declutter (S1) — counted separately.
         layout('mbd-d', 'overlap'),
+        // Close-up detail (slopes, skew aids, branch name) on a wider view.
+        layout('mbd-e', 'detail-far'),
         // A user dimension elided for whatever reason is not an MBD count.
         layout('linear-1', 'short-line'),
       ]);
       await nextTick();
-      expect(summary()).toBe('LOD 隐藏 4 条（atta 远景 2 / 短段 1 / 相压 1）');
+      expect(summary()).toBe('LOD 隐藏 5 条（atta 远景 2 / 短段 1 / 相压 1 / 细节 1）');
 
       const toggle = host.querySelector<HTMLInputElement>('[data-testid="mbd-lod-enabled"]')!;
       expect(toggle.checked).toBe(true);
@@ -374,7 +376,7 @@ describe('DimensionPanelDock', () => {
       again.dispatchEvent(new Event('change'));
       await nextTick();
       expect(popstates).toEqual(['0', null]);
-      expect(summary()).toBe('LOD 隐藏 4 条（atta 远景 2 / 短段 1 / 相压 1）');
+      expect(summary()).toBe('LOD 隐藏 5 条（atta 远景 2 / 短段 1 / 相压 1 / 细节 1）');
     } finally {
       window.removeEventListener('popstate', onPopstate);
       window.history.replaceState({}, '', '/');

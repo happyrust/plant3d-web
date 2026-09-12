@@ -1,8 +1,8 @@
 # PRD · 三维 MBD 管道标注对齐参考图效果
 
 日期：2026-09-12  
-作者：协同组「标注」指挥官 / 产品经理（fable-5-1-17）；实施 fable-5-1-31  
-状态：**T1 / T2 + S1 成对去重已于 2026-09-12 落地**（ADR 0057；D1–D4 按效果图取 a，用户「继续未完的部分，不必重问」授权）；T0 以 `%TEMP%` 脚本 + `docs/verification/mbd-3d-dimension-presentation-2026-09-12/` 归档代替；**T3（标签块 / 引线 / 方框）未做**。实施与验证记录见 §9。  
+作者：协同组「标注」指挥官 / 产品经理（fable-5-1-17）；实施 fable-5-1-31（T1 / T2 / S1）、T3 收尾 fable-5-1-95  
+状态：**T1 / T2 + S1 成对去重已于 2026-09-12 落地**（ADR 0057；D1–D4 按效果图取 a，用户「继续未完的部分，不必重问」授权）；T0 以 `%TEMP%` 脚本 + `docs/verification/mbd-3d-dimension-presentation-2026-09-12/` 归档代替；**T3（标签块 / 引线 / 方框）同日落地**（ADR 0058，§9.2）。实施与验证记录见 §9。  
 上游约束：协同决策 d-438（架构固定：gen-model 供事实、plant-mbd 纯 Rust 求解器单源、plant3d-web 只读 external source 经现有 `ThreeSceneDimensionPainter` 呈现；不重写画家；MBD 不进用户 DimensionDocument）  
 相关文档：`2026-09-12-mbd-linear-dim-visual-optimization-plan.md`（QW1–QW3 / S2 / S3 已落地）、`2026-09-12-mbd-dimension-engineering-convention-review.md`（标准条款核实与 S1 / S4 规则）
 
@@ -95,7 +95,9 @@
 
 文件冲突预防：T1 只改 mapper 的 `mapLinearDim` 与 `explicit.ts` 的 extension 段；T2 改 `explicit.ts` 的 label / arrow 段与 theme；T3 改 mapper 的 label / leader 段。T1 与 T3 同文件不同函数，按写锁顺序串行提交；T2 与 T1 在 `explicit.ts` 上有交集——由 T2 统一持有 `explicit.ts`，T1 的尺寸界线超出量以 `theme.extensionOvershootPx` 常量交给 T2 实现。依赖：T1–T3 均依赖 T0 的基线工具（T0 先行 ≤ 半天，其间 T1–T3 可先读码与写单测）。
 
-## 9. 实施记录（2026-09-12，fable-5-1-31）
+## 9. 实施记录（2026-09-12）
+
+### 9.1 T0–T2 + S1（fable-5-1-31）
 
 原协同组成员已下线，T0–T2 与 S1 成对去重由接手会话一并实施（未拆活）。口径与效果图 README 逐条一致，细节见 ADR 0057。
 
@@ -106,4 +108,16 @@
 - **适配层** `mbdV2ExternalAnnotations.ts`：有组 `cheight` 且恰有两条尺寸界线的 `linear_dim` 带 `dimension3d`（管中心点 = 尺寸界线 `from`，方向 = 尺寸界线方向，`surfaceM` = 本分支尺寸界线长度下四分位，`row` 按 `1.2·cheight` 反推，`small` → `outside`）；原位几何与 `arrowLines` 保留。
 - **开关** `useMbdExternalSync.ts` `?mbd_3d=0` 剥掉 `dimension3d` 并写诊断 notes；`DimensionPanelDock.vue` 新增「三维标注呈现」勾选，LOD 统计增加「相压」。
 - **验证**：单测 53 文件 / 288 通过（新增 `dimension3d.test.ts` 7、`declutterPolicy.test.ts` 3、painter / mapper / sync / panel 各 +1）；eslint 0；type-check 新增 0；`e2e/dimension-mbd-v2-fixture.spec.ts` 2/2；Chrome 固定相机远 / 近景截图与统计见 `docs/verification/mbd-3d-dimension-presentation-2026-09-12/README.md`（远景 11 绘 / 7 隐，11 条三维文字、22 个实心箭头；近景 12 绘 / 6 隐；`mbd_3d=0` 回到原位平面呈现）。
-- **验收对照**：AC1 ✓（远景尺寸线到管轴 241–543 mm，管表面 114 mm）；AC2 ✓（文字在线上方 0.3h，行距 1.7h）；AC3 ✓ 视口（SVG 仍为三条描边，与用户尺寸一致）；AC4 ✓；AC5 ✗（T3 未做）；AC6 ✓（契约 / 数值 / 分段 / 沿线位置不变，golden 未动）；AC7 ✓（同相机多次运行统计逐字相同）；AC8 ✓；AC9 ✓（`docs/verification/…`）。
+- **验收对照**：AC1 ✓（远景尺寸线到管轴 241–543 mm，管表面 114 mm）；AC2 ✓（文字在线上方 0.3h，行距 1.7h）；AC3 ✓ 视口（SVG 仍为三条描边，与用户尺寸一致）；AC4 ✓；AC5 ✗（T3 未做，见 9.2）；AC6 ✓（契约 / 数值 / 分段 / 沿线位置不变，golden 未动）；AC7 ✓（同相机多次运行统计逐字相同）；AC8 ✓；AC9 ✓（`docs/verification/…`）。
+
+### 9.2 T3 标签块 / 引线 / 方框（代码为交接前遗留的未提交工作树，fable-5-1-95 复核、实机验证、补文档并提交）
+
+口径与效果图 README 规则 6 一致，细节见 ADR 0058。
+
+- **内核** `src/dimension/kernel/layout/tagBillboard.ts`（新）：`planTagBillboard` 按文字行数用 `theme.tag`（卡片 / 方框 11 px、药丸 10 px、行距 1.5、内边距 7 / 4 px）算出屏幕定尺的标签体，锚在三维点上（引线目标或求解器标签位置），首选方向 = 管外 `away` 方向（没有则取求解器引线方向）叠加向上偏置，standoff = 常量 + 0.35·max(宽, 高)；给出一圈候选位（0 / ±30° / ±60° / ±90° / ±135° / 180°，再 ×1.6 standoff），整块在屏内的排前面。`materialize` 生成 `scene-fill` 体 + 边框 / 方框描边 + 引线（到最近的体边）+ 圆点 + 逐行左对齐字形，全部挂在同一个三维锚点上带屏幕偏移，相机动时整块刚性跟随。`placeTagBillboards`（`layoutViewport` 在成对去重之后、移动式避让之前调用）把其它可见标签当障碍，按卡片 → 方框 → 药丸、同类按 id 依次取第一个不相压的候选位，全部被占回首选位；同一视图结果确定。
+- **类型 / 主题** `types.ts`：`ExplicitTagInput`（style / lines / target / away / dot）、`SceneFill`（三角扇填充，投影成一条闭合 path 保持场景↔投影图元 1:1）、`SceneTone`（`tag-fill / tag-text / tag-muted-text / tag-border / tag-frame / tag-leader`）、LOD 新增 `detail` 级与 `detail-far` 原因、`derived.tag`。`theme.ts`：`tag` 常量块、`resolveTagToneColor`（hovered / selected 仍用角色高亮色）、`resolveTagToneStrokeWidth`。
+- **画家** `scenePainter.ts`：第三个绘制对象 `dimension-scene-fills`（`renderOrder − 1`，画在所有描边之下），tone 决定颜色 / 线宽，`fillVertexCount` 进统计与局部重着色校验。`sceneGeometry.ts`：`sceneFill`、tone 透传。`svgOverlay.ts`：tone 走标签调色板，`tag-fill` 输出 `fill` 而非描边。
+- **适配层** `mbdV2ExternalAnnotations.ts`：`pairLeaders` 把每条 `leader_line` 配进它的 `label`（`<label id>:leader` 命名优先，再按引线起点 = 标签位置，每条只用一次），配对后的引线不再单独成记录（77 → 63 条）；`classifyTag` 按 plant-mbd 的 id 约定分类（`:tag:connection:` 卡片 + 圆点、`:tag:name:` 方框、`:tag:elbo:` 药丸 `secondary` 且只有 `PE` 行是中景行、`:tag:branch-name` 药丸 `detail`），其它生产者按文字（`X / Y / PE` 行 = 卡片，否则方框）；`awayFromPipe` 只在该点恰有一条尺寸的尺寸界线扎根时给出管外方向；坡度标记与 skew 辅助线 / 文字打 `detail`。
+- **开关 / 面板** `useMbdExternalSync.ts`：`mbd_3d=0` 同时剥掉 `tag`，notes 文案补「标签按原位文字出图」；`DimensionPanelDock.vue`：LOD 统计增加「细节」计数，开关文案补「标签卡片带引线」。
+- **验证**（本会话实跑）：单测 54 文件 / 299 通过（`tagBillboard.test.ts` 7、mapper +3、painter +1、面板 +1、facade 绘制对象 2 → 3）；eslint 16 个相关文件 0；`npm run type-check` 基线外唯一新增为他人未提交的 `src/measurement/kernel/pickDerivation.test.ts`；`e2e/dimension-mbd-v2-fixture.spec.ts` 2/2；真实 Chrome 全类别固定相机三视角统计与截图见 `docs/verification/mbd-3d-dimension-presentation-2026-09-12/README.md`「标签 billboard」段（远景 4 标签绘 / 10 隐、0 相压；中景 1 处换位；近景药丸与细节辅助出现；重复运行逐字相同）。
+- **验收对照**：AC5 ✓（connection tag 多行左对齐、行距一致、引线从体边指向管端并带圆点；name tag 黑框方框；弯头 PE 药丸远景按 LOD 隐藏、`mbd_lod=0` 可关，显示时与尺寸数字不相压——实测三视角标签↔尺寸数字相压 0）；AC6 / AC7 / AC8 保持 ✓（契约与 golden 未动；重复统计逐字相同；回归全绿）。**未覆盖**：标签体不避让管件几何与三维尺寸线本身；分支名药丸在本样本未到显示阈值。

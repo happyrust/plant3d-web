@@ -12,7 +12,11 @@ import {
   type Object3D,
 } from 'three';
 
-import { resolveDimensionLineDash } from '../kernel/theme';
+import {
+  resolveDimensionLineDash,
+  resolveTagToneColor,
+  resolveTagToneStrokeWidth,
+} from '../kernel/theme';
 
 import type { GlyphSegment, LffFont } from '../kernel/glyph/lffParser';
 import type { DimensionTheme } from '../kernel/theme';
@@ -22,6 +26,7 @@ import type {
   SceneGlyphRun,
   ScenePrimitive,
   SceneTextFrame,
+  SceneTone,
   SceneVertex,
   Vec2,
 } from '../kernel/types';
@@ -341,12 +346,18 @@ type GlyphCaches = Readonly<{
 
 /**
  * How a stroke quad is styled: dimension lines by default, view-plane text,
- * or the two passes of framed (3D) text — a contrasting halo underneath and
- * the heavier glyph strokes on top (`theme.dimension3d`).
+ * the two passes of framed (3D) text — a contrasting halo underneath and
+ * the heavier glyph strokes on top (`theme.dimension3d`) — or one of the
+ * billboard tag tones (`theme.tag`).
  */
-type SegmentStroke = 'text' | 'text-3d' | 'halo-3d';
+type SegmentStroke = 'text' | 'text-3d' | 'halo-3d' | SceneTone;
+
+function isTagTone(stroke: SegmentStroke | undefined): stroke is SceneTone {
+  return stroke !== undefined && stroke.startsWith('tag-');
+}
 
 function strokeWidthPx(theme: DimensionTheme, stroke: SegmentStroke | undefined): number {
+  if (isTagTone(stroke)) return resolveTagToneStrokeWidth(theme, stroke);
   switch (stroke) {
     case 'text':
       return theme.textStrokeWidthPx;
@@ -402,6 +413,7 @@ function visitPrimitiveSegments(
         primitive.to,
         primitive.styleRole,
         primitive.lineStyle,
+        primitive.tone,
       );
       return;
     case 'scene-path':
@@ -411,6 +423,7 @@ function visitPrimitiveSegments(
           primitive.points[index]!,
           primitive.styleRole,
           primitive.lineStyle,
+          primitive.tone,
         );
       }
       if (primitive.closed && primitive.points.length > 2) {
@@ -419,6 +432,7 @@ function visitPrimitiveSegments(
           primitive.points[0]!,
           primitive.styleRole,
           primitive.lineStyle,
+          primitive.tone,
         );
       }
       return;
@@ -496,14 +510,21 @@ function visitPrimitiveSegments(
           offsetVertex(primitive.at, segment.to),
           primitive.styleRole,
           'solid',
-          'text',
+          primitive.tone ?? 'text',
         );
       }
       return;
     }
     case 'scene-triangle':
+    case 'scene-fill':
+      // Filled primitives go through the triangle / fill buffers.
       return;
   }
+}
+
+/** Triangle-fan vertex count of a fill (n − 2 triangles). */
+function fillVertexCount(pointCount: number): number {
+  return pointCount >= 3 ? (pointCount - 2) * 3 : 0;
 }
 
 function visitSegments(
@@ -527,6 +548,10 @@ function colorComponents(
   if (stroke === 'halo-3d') {
     const halo = new Color(theme.dimension3d.textHaloColor);
     return [halo.r, halo.g, halo.b];
+  }
+  if (isTagTone(stroke)) {
+    const tone = new Color(resolveTagToneColor(theme, styleRole, stroke));
+    return [tone.r, tone.g, tone.b];
   }
   const roleKey = styleRole as keyof typeof theme.colors;
   const textColor = stroke !== undefined ? theme.textColors[roleKey] : undefined;
@@ -596,6 +621,7 @@ export type SceneDimensionPainterStats = Readonly<{
   sceneObjectCount: number;
   lineVertexCount: number;
   triangleVertexCount: number;
+  fillVertexCount: number;
 }>;
 
 type DimensionVertexRange = Readonly<{
@@ -603,15 +629,18 @@ type DimensionVertexRange = Readonly<{
   lineEnd: number;
   triangleStart: number;
   triangleEnd: number;
+  fillStart: number;
+  fillEnd: number;
 }>;
 
 /**
- * One scene group, one stroke-quad draw object and one triangle draw object
- * for every dimension in the viewport. Design-space anchors remain in the
- * vertex buffers; CSS-pixel offsets are applied after projection in the
- * shader. Each stroke segment expands to a 4-vertex screen-space quad so
- * text and dimension lines get real, DPR-independent stroke widths
- * (GL_LINES rasterizes at a fixed 1 device pixel and cannot).
+ * One scene group and three draw objects for every dimension in the
+ * viewport: filled tag bodies underneath, stroke quads, then filled
+ * arrowheads on top. Design-space anchors remain in the vertex buffers;
+ * CSS-pixel offsets are applied after projection in the shader. Each stroke
+ * segment expands to a 4-vertex screen-space quad so text and dimension
+ * lines get real, DPR-independent stroke widths (GL_LINES rasterizes at a
+ * fixed 1 device pixel and cannot).
  */
 export class ThreeSceneDimensionPainter {
   readonly group = new Group();
@@ -619,12 +648,18 @@ export class ThreeSceneDimensionPainter {
   private readonly viewportCssPx = new Vector2(1, 1);
   private readonly lineBuffers = new ReusableGeometry(STROKE_ATTRIBUTES, true);
   private readonly triangleBuffers = new ReusableGeometry(TRIANGLE_ATTRIBUTES);
+  private readonly fillBuffers = new ReusableGeometry(TRIANGLE_ATTRIBUTES);
   private readonly lineMaterial = createMaterial(
     STROKE_VERTEX_SHADER,
     STROKE_FRAGMENT_SHADER,
     this.viewportCssPx,
   );
   private readonly triangleMaterial = createMaterial(
+    TRIANGLE_VERTEX_SHADER,
+    TRIANGLE_FRAGMENT_SHADER,
+    this.viewportCssPx,
+  );
+  private readonly fillMaterial = createMaterial(
     TRIANGLE_VERTEX_SHADER,
     TRIANGLE_FRAGMENT_SHADER,
     this.viewportCssPx,
@@ -637,6 +672,10 @@ export class ThreeSceneDimensionPainter {
     this.triangleBuffers.geometry,
     this.triangleMaterial,
   );
+  private readonly fills = new Mesh(
+    this.fillBuffers.geometry,
+    this.fillMaterial,
+  );
   private readonly glyphCaches: GlyphCaches = {
     screen: new Map<string, readonly LocalGlyphSegment[]>(),
     unit: new Map<string, readonly LocalGlyphSegment[]>(),
@@ -644,6 +683,7 @@ export class ThreeSceneDimensionPainter {
   private dimensionRanges = new Map<string, DimensionVertexRange>();
   private lineVertexCount = 0;
   private triangleVertexCount = 0;
+  private fillVertexCount = 0;
   private disposed = false;
 
   constructor(
@@ -660,7 +700,11 @@ export class ThreeSceneDimensionPainter {
     this.triangles.name = 'dimension-scene-arrows';
     this.triangles.frustumCulled = false;
     this.triangles.renderOrder = renderOrder + 1;
-    this.group.add(this.lines, this.triangles);
+    // Tag bodies draw before every stroke so text and borders stay on top.
+    this.fills.name = 'dimension-scene-fills';
+    this.fills.frustumCulled = false;
+    this.fills.renderOrder = renderOrder - 1;
+    this.group.add(this.lines, this.triangles, this.fills);
     this.parent.add(this.group);
   }
 
@@ -765,6 +809,8 @@ export class ThreeSceneDimensionPainter {
         lineEnd: lineVertexIndex,
         triangleStart: 0,
         triangleEnd: 0,
+        fillStart: 0,
+        fillEnd: 0,
       });
     }
     this.lineBuffers.finish(lineVertexCount);
@@ -804,6 +850,47 @@ export class ThreeSceneDimensionPainter {
     }
     this.triangleBuffers.finish(triangleVertexCount);
     this.triangleVertexCount = triangleVertexCount;
+
+    // Fills: one triangle fan per convex polygon, in the tone's colour.
+    let fillVertexTotal = 0;
+    for (const layout of layouts) {
+      for (const primitive of layout.scenePrimitives) {
+        if (primitive.kind === 'scene-fill') {
+          fillVertexTotal += fillVertexCount(primitive.points.length);
+        }
+      }
+    }
+    if (this.fillBuffers.ensureCapacity(fillVertexTotal)) {
+      this.fills.geometry = this.fillBuffers.geometry;
+    }
+    const fillPosition = this.fillBuffers.array('position');
+    const fillOffset = this.fillBuffers.array('offsetPx');
+    const fillColor = this.fillBuffers.array('batchColor');
+    let fillVertexIndex = 0;
+    for (const layout of layouts) {
+      const fillStart = fillVertexIndex;
+      for (const primitive of layout.scenePrimitives) {
+        if (primitive.kind !== 'scene-fill') continue;
+        const color = resolveColor(primitive.styleRole, primitive.tone);
+        const [first, ...rest] = primitive.points;
+        for (let index = 1; index < rest.length; index += 1) {
+          for (const point of [first!, rest[index - 1]!, rest[index]!]) {
+            writeVec3(fillPosition, fillVertexIndex, point.anchor);
+            writeVec2(fillOffset, fillVertexIndex, point.offsetPx);
+            writeVec3(fillColor, fillVertexIndex, color);
+            fillVertexIndex += 1;
+          }
+        }
+      }
+      const range = ranges.get(layout.dimensionId)!;
+      ranges.set(layout.dimensionId, {
+        ...range,
+        fillStart,
+        fillEnd: fillVertexIndex,
+      });
+    }
+    this.fillBuffers.finish(fillVertexTotal);
+    this.fillVertexCount = fillVertexTotal;
     this.dimensionRanges = ranges;
   }
 
@@ -832,13 +919,18 @@ export class ThreeSceneDimensionPainter {
         () => { lineVertexCount += 4; },
       );
       let triangleVertexCount = 0;
+      let fillVertexTotal = 0;
       for (const primitive of layout.scenePrimitives) {
         if (primitive.kind === 'scene-triangle') triangleVertexCount += 3;
+        if (primitive.kind === 'scene-fill') {
+          fillVertexTotal += fillVertexCount(primitive.points.length);
+        }
       }
       if (
         lineVertexCount !== range.lineEnd - range.lineStart
         || triangleVertexCount
           !== range.triangleEnd - range.triangleStart
+        || fillVertexTotal !== range.fillEnd - range.fillStart
       ) {
         return false;
       }
@@ -847,6 +939,7 @@ export class ThreeSceneDimensionPainter {
     const lineColor = this.lineBuffers.array('batchColor');
     const lineDashCode = this.lineBuffers.array('dashCode');
     const triangleColor = this.triangleBuffers.array('batchColor');
+    const fillColor = this.fillBuffers.array('batchColor');
     const resolveColor = createColorResolver(theme);
 
     for (const layout of changed) {
@@ -867,18 +960,28 @@ export class ThreeSceneDimensionPainter {
         },
       );
       let triangleVertexIndex = range.triangleStart;
+      let fillVertexIndex = range.fillStart;
       for (const primitive of layout.scenePrimitives) {
-        if (primitive.kind !== 'scene-triangle') continue;
-        const color = resolveColor(primitive.styleRole, undefined);
-        for (let index = 0; index < 3; index += 1) {
-          writeVec3(triangleColor, triangleVertexIndex, color);
-          triangleVertexIndex += 1;
+        if (primitive.kind === 'scene-triangle') {
+          const color = resolveColor(primitive.styleRole, undefined);
+          for (let index = 0; index < 3; index += 1) {
+            writeVec3(triangleColor, triangleVertexIndex, color);
+            triangleVertexIndex += 1;
+          }
+        } else if (primitive.kind === 'scene-fill') {
+          const color = resolveColor(primitive.styleRole, primitive.tone);
+          const count = fillVertexCount(primitive.points.length);
+          for (let index = 0; index < count; index += 1) {
+            writeVec3(fillColor, fillVertexIndex, color);
+            fillVertexIndex += 1;
+          }
         }
       }
     }
     if (changed.length > 0) {
       this.lineBuffers.markUpdated(['batchColor', 'dashCode']);
       this.triangleBuffers.markUpdated(['batchColor']);
+      this.fillBuffers.markUpdated(['batchColor']);
     }
     return true;
   }
@@ -886,9 +989,11 @@ export class ThreeSceneDimensionPainter {
   clear(): void {
     this.lineBuffers.clear();
     this.triangleBuffers.clear();
+    this.fillBuffers.clear();
     this.dimensionRanges.clear();
     this.lineVertexCount = 0;
     this.triangleVertexCount = 0;
+    this.fillVertexCount = 0;
   }
 
   getStats(): SceneDimensionPainterStats {
@@ -896,6 +1001,7 @@ export class ThreeSceneDimensionPainter {
       sceneObjectCount: this.group.children.length,
       lineVertexCount: this.lineVertexCount,
       triangleVertexCount: this.triangleVertexCount,
+      fillVertexCount: this.fillVertexCount,
     };
   }
 
@@ -906,8 +1012,10 @@ export class ThreeSceneDimensionPainter {
     this.group.clear();
     this.lineBuffers.dispose();
     this.triangleBuffers.dispose();
+    this.fillBuffers.dispose();
     this.lineMaterial.dispose();
     this.triangleMaterial.dispose();
+    this.fillMaterial.dispose();
     this.glyphCaches.screen.clear();
     this.glyphCaches.unit.clear();
     this.disposed = true;

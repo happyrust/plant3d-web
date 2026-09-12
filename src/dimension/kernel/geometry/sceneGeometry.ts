@@ -6,12 +6,14 @@ import type { LffFont } from '../glyph/lffParser';
 import type { ViewportProjector } from '../projector';
 import type {
   LayoutPrimitive,
+  SceneFill,
   SceneGlyphRun,
   SceneLine,
   SceneMarker,
   ScenePath,
   ScenePrimitive,
   SceneTextFrame,
+  SceneTone,
   SceneTriangle,
   SceneVertex,
   ScreenGlyphRun,
@@ -68,6 +70,7 @@ export function makeSceneLine(
   part: SceneLine['part'],
   styleRole: string,
   lineStyle?: SceneLine['lineStyle'],
+  tone?: SceneTone,
 ): SceneLine {
   return {
     kind: 'scene-line',
@@ -76,6 +79,7 @@ export function makeSceneLine(
     part,
     styleRole,
     ...(lineStyle ? { lineStyle } : {}),
+    ...(tone ? { tone } : {}),
   };
 }
 
@@ -264,6 +268,7 @@ function projectGlyph(
         rotationCenter: center,
       }
       : {}),
+    ...(primitive.tone ? { tone: primitive.tone } : {}),
   };
 }
 
@@ -281,6 +286,7 @@ export function projectScenePrimitive(
         part: primitive.part,
         styleRole: primitive.styleRole,
         ...(primitive.lineStyle ? { lineStyle: primitive.lineStyle } : {}),
+        ...(primitive.tone ? { tone: primitive.tone } : {}),
       }];
     case 'scene-path':
       return [{
@@ -291,6 +297,19 @@ export function projectScenePrimitive(
         part: primitive.part,
         styleRole: primitive.styleRole,
         ...(primitive.lineStyle ? { lineStyle: primitive.lineStyle } : {}),
+        ...(primitive.tone ? { tone: primitive.tone } : {}),
+      }];
+    case 'scene-fill':
+      // One closed path per fill keeps the scene ↔ projected primitive
+      // correspondence 1:1 (the collision pass walks both lists in step).
+      return [{
+        kind: 'path',
+        points: primitive.points.map(point =>
+          projectSceneVertex(point, projector)),
+        closed: true,
+        part: primitive.part,
+        styleRole: primitive.styleRole,
+        tone: primitive.tone,
       }];
     case 'scene-triangle': {
       const points = primitive.points.map(point =>
@@ -333,6 +352,7 @@ export function sceneGlyph(
   capHeightPx: number,
   styleRole: string,
   rotationRad = 0,
+  tone?: SceneTone,
 ): SceneGlyphRun {
   return {
     kind: 'scene-glyph-run',
@@ -341,7 +361,21 @@ export function sceneGlyph(
     capHeightPx,
     rotationRad,
     styleRole,
+    ...(tone ? { tone } : {}),
   };
+}
+
+/** Filled convex polygon painted under every stroke (tag bodies, leader dots). */
+export function sceneFill(
+  points: readonly SceneVertex[],
+  part: SceneFill['part'],
+  styleRole: string,
+  tone: SceneTone,
+): SceneFill {
+  if (points.length < 3) {
+    throw new RangeError('A scene fill needs at least three vertices');
+  }
+  return { kind: 'scene-fill', points, part, styleRole, tone };
 }
 
 /**
@@ -373,6 +407,7 @@ export function scenePath(
   part: ScenePath['part'],
   styleRole: string,
   lineStyle?: ScenePath['lineStyle'],
+  tone?: SceneTone,
 ): ScenePath {
   return {
     kind: 'scene-path',
@@ -381,6 +416,7 @@ export function scenePath(
     part,
     styleRole,
     ...(lineStyle ? { lineStyle } : {}),
+    ...(tone ? { tone } : {}),
   };
 }
 

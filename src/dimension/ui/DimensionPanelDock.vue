@@ -247,13 +247,14 @@ const mbdLodHidden = computed(() => {
   const mbdIds = new Set(
     externalRecords.value.filter(record => record.source === 'mbd').map(record => record.id),
   );
-  const summary = { total: 0, secondaryFar: 0, shortLine: 0, overlap: 0 };
+  const summary = { total: 0, secondaryFar: 0, detailFar: 0, shortLine: 0, overlap: 0 };
   for (const layout of viewportLayouts.value) {
     if (!mbdIds.has(layout.dimensionId)) continue;
     const reason = layout.derived.lodHidden;
     if (!reason) continue;
     summary.total += 1;
     if (reason === 'secondary-far') summary.secondaryFar += 1;
+    else if (reason === 'detail-far') summary.detailFar += 1;
     else if (reason === 'overlap') summary.overlap += 1;
     else summary.shortLine += 1;
   }
@@ -262,8 +263,9 @@ const mbdLodHidden = computed(() => {
 
 /**
  * 三维标注呈现（2026-09-12 参考图风格：尺寸线沿 dim_dir 外移、数字在三维平面里置于线上方、
- * 实心箭头）的面板开关。同样只改 URL（`mbd_3d=0` = 关）并派发 `popstate`，由同步层剥掉
- * mapper 打的 `dimension3d`，内核回到求解器原位几何的平面呈现。
+ * 实心箭头；标签按卡片 / 方框 / 药丸式 billboard 带引线出图）的面板开关。同样只改 URL
+ * （`mbd_3d=0` = 关）并派发 `popstate`，由同步层剥掉 mapper 打的 `dimension3d` / `tag`，
+ * 内核回到求解器原位几何的平面呈现。
  */
 function readMbd3dDisabled(): boolean {
   if (typeof window === 'undefined') return false;
@@ -535,7 +537,7 @@ function act(
         <span data-testid="mbd-lod-hidden">
           <template v-if="mbdLodDisabled">已关闭，每条尺寸照常出图</template>
           <template v-else>
-            LOD 隐藏 {{ mbdLodHidden.total }} 条（atta 远景 {{ mbdLodHidden.secondaryFar }} / 短段 {{ mbdLodHidden.shortLine }} / 相压 {{ mbdLodHidden.overlap }}）
+            LOD 隐藏 {{ mbdLodHidden.total }} 条（atta 远景 {{ mbdLodHidden.secondaryFar }} / 短段 {{ mbdLodHidden.shortLine }} / 相压 {{ mbdLodHidden.overlap }} / 细节 {{ mbdLodHidden.detailFar }}）
           </template>
         </span>
       </div>
@@ -546,7 +548,7 @@ function act(
             data-testid="mbd-3d-enabled"
             :checked="!mbd3dDisabled"
             @change="setMbd3dEnabled(($event.target as HTMLInputElement).checked)" />
-          <span>三维标注呈现（尺寸线外移 / 数字在线上方 / 实心箭头）</span>
+          <span>三维标注呈现（尺寸线外移 / 数字在线上方 / 实心箭头 / 标签卡片带引线）</span>
         </label>
         <span data-testid="mbd-3d-state">
           <template v-if="mbd3dDisabled">已关闭，按求解器原位几何平面出图</template>

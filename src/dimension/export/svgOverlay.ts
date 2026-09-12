@@ -1,4 +1,8 @@
-import { resolveDimensionLineDash } from '../kernel/theme';
+import {
+  resolveDimensionLineDash,
+  resolveTagToneColor,
+  resolveTagToneStrokeWidth,
+} from '../kernel/theme';
 
 import type { DimensionFormatPolicy } from '../kernel/format';
 import type { LffFont } from '../kernel/glyph/lffParser';
@@ -62,22 +66,30 @@ export function layoutResultsToSvg(
   const groups = layouts.map((layout) => {
     const primitives = layout.primitives.map((primitive) => {
       const isGlyphRun = primitive.kind === 'glyph-run';
+      const tone = primitive.kind === 'marker' ? undefined : primitive.tone;
       // Glyph strokes stay solid, slightly heavier, and use the label text
-      // color, mirroring the scene painter.
-      const stroke = escapeXml(strokeFor(theme, primitive.styleRole, isGlyphRun));
-      const dash = isGlyphRun
+      // color, mirroring the scene painter; tag tones take the tag palette.
+      const stroke = escapeXml(tone
+        ? resolveTagToneColor(theme, primitive.styleRole, tone)
+        : strokeFor(theme, primitive.styleRole, isGlyphRun));
+      const dash = isGlyphRun || tone
         ? []
         : resolveDimensionLineDash(primitive.styleRole, primitive.lineStyle);
-      const strokeWidthPx = isGlyphRun
-        ? theme.textStrokeWidthPx
-        : theme.dimensionStrokeWidthPx;
+      const strokeWidthPx = tone
+        ? resolveTagToneStrokeWidth(theme, tone)
+        : isGlyphRun
+          ? theme.textStrokeWidthPx
+          : theme.dimensionStrokeWidthPx;
+      // A tag body fill is the one filled primitive: paint it, no outline.
+      const filled = tone === 'tag-fill';
       const common = [
-        `stroke="${stroke}"`,
+        `stroke="${filled ? 'none' : stroke}"`,
         `stroke-width="${coordinate(strokeWidthPx)}"`,
-        'fill="none"',
+        `fill="${filled ? stroke : 'none'}"`,
         'stroke-linecap="round"',
         'stroke-linejoin="round"',
         `data-style-role="${escapeXml(primitive.styleRole)}"`,
+        ...(tone ? [`data-tone="${escapeXml(tone)}"`] : []),
         ...(dash.length > 0
           ? [`stroke-dasharray="${dash.map(coordinate).join(' ')}"`]
           : []),

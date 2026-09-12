@@ -72,6 +72,8 @@ class MbdAtomicRejectionError extends Error {
  * 调试过滤 `?mbd_kinds=linear_dim[,slope_mark,…]`：只把这些 kind 的图元送进画家
  * （例如只看长度尺寸）。缺省 / 空值 = 不过滤。它作用在契约校验与原子拒绝之后，
  * 所以既不掩盖负载问题，也不改变求解器输出本身；过滤事实写进诊断 notes。
+ * 已配对进标签记录的 `leader_line`（见 mapper `pairLeaders`）随 `label` 一起过滤；
+ * `leader_line` 单独勾选只剩没有标签可配的引线。
  */
 function parseMbdKindFilter(raw: string | null): ReadonlySet<string> | null {
   const kinds = (raw ?? '')
@@ -98,18 +100,20 @@ function withoutLod(record: ExternalDimensionRecord): ExternalDimensionRecord {
 }
 
 /**
- * 调试开关 `?mbd_3d=0`：关掉长度尺寸的三维标注呈现（尺寸线沿 dim_dir 外移、数字在线上方、
- * 实心箭头；2026-09-12 参考图风格）。mapper 打的 `dimension3d` 在这里被剥掉，内核回到
- * 求解器原位几何的平面呈现；缺省 / 其它值 = 保留。
+ * 调试开关 `?mbd_3d=0`：关掉三维标注呈现（长度尺寸：尺寸线沿 dim_dir 外移、数字在线上方、
+ * 实心箭头；标签：卡片 / 方框 / 药丸式 billboard 带引线；2026-09-12 参考图风格）。mapper 打的
+ * `dimension3d` 与 `tag` 在这里被剥掉，内核回到求解器原位几何的平面呈现；缺省 / 其它值 = 保留。
  */
 function isMbd3dDisabled(raw: string | null): boolean {
   return raw?.trim() === '0';
 }
 
-function withoutDimension3d(record: ExternalDimensionRecord): ExternalDimensionRecord {
+function withoutPresentation3d(record: ExternalDimensionRecord): ExternalDimensionRecord {
   const layout = record.layout;
-  if (!('dimension3d' in layout)) return record;
-  const { dimension3d: _dimension3d, ...rest } = layout;
+  // Only explicit layouts carry the presentation hints.
+  if (!('lines' in layout)) return record;
+  if (layout.dimension3d === undefined && layout.tag === undefined) return record;
+  const { dimension3d: _dimension3d, tag: _tag, ...rest } = layout;
   return { ...record, layout: rest };
 }
 
@@ -187,7 +191,7 @@ export function createMbdExternalSync(
           ? mapped.records.filter(record => kindFilter.has(kindById.get(record.id) ?? ''))
           : mapped.records;
         const withLod = lodDisabled ? filtered.map(withoutLod) : filtered;
-        const records = presentation3dDisabled ? withLod.map(withoutDimension3d) : withLod;
+        const records = presentation3dDisabled ? withLod.map(withoutPresentation3d) : withLod;
         target.replaceExternalSource('mbd', records);
         deps.diagnostics.set({
           channel,
@@ -205,7 +209,7 @@ export function createMbdExternalSync(
               : []),
             ...(lodDisabled ? ['mbd_lod=0：已关闭分级显示（LOD），每条尺寸照常出图'] : []),
             ...(presentation3dDisabled
-              ? ['mbd_3d=0：已关闭三维标注呈现，长度尺寸按求解器原位几何平面出图']
+              ? ['mbd_3d=0：已关闭三维标注呈现，长度尺寸按求解器原位几何平面出图，标签按原位文字出图']
               : []),
           ],
         });
