@@ -11,7 +11,7 @@
     plant3d-web `8127bcb`（P2）、`12c66fe`（P3）、`610581f`（P4）、`fb8b841`（P0 / P1 备注）、`0152256`（P5 = 教程 §9 + 状态行）、
     `cd05652` / `73f8ce8`（§7 联调记录）、`00beb54`（B4 修复 + 6 条单测）、`d521332`（B4 修复记录）、
     `2578ca8`（「加载当前页」改为只动当前页）、`05d5b5f`（「只加载未加载」改回全集）、`73b8d8c`（跨页三按钮 > 200 项弹确认）、
-    其记录 = 本提交
+    `11d21e8`（`getSubtreeAABB`：「当前选中」取子树盒）、其记录 = 本提交
   - 进度：**P2 已完成**（2026-09-13 11:45，plant3d-web `8127bcb`）；**P3 代码与单测已完成**（11:53，`12c66fe`；真服务联调等 P1）；
     **P4 已完成，「整库生成」入口除外**（12:05，单独一提交，见 §4 P4 备注——入口怎么接需要拍板；用户 12:13 拍板：先不接入口）；
     **P0 已完成**（old-aios-core `8758023`，21:03；代码 20:40 已在工作树、本轮验证后提交）；**P1 已完成**（gen-model-refactor
@@ -184,6 +184,8 @@ fn aabb_point_distance(a: &Aabb, p: &Point<f32>) -> f32
 - 单位 mm、f32、世界坐标；`__dtxLayer.getGlobalModelMatrix()` 非单位阵时拾取点与 `center` 回显的偏差需在真实站点核一次
   （上一版分析 B4，本计划 §7 验收项 6）。**已核实为真并修复（`00beb54`）**：`useSpatialQuery.ts` 新增 `resolveSceneWorldTransform`，
   `draft.center` / 请求 / 结果项一律 mm，只在读查看器（选中盒、拾取点、本地扫描的盒 → mm）与写查看器（飞行盒、代理盒 → 场景）两个边界换算。
+- 「一个 refno 的盒」口径：查看器 `getAABB([refno])` 只并该 refno 自己的对象（BRAN 即隐含管子，成员各有 refno），服务端 refno 模式是子树并集；
+  「当前选中」为与服务端同口径改走 `getSubtreeAABB`（`11d21e8`，见 §7 B4 修复记录末条）。
 - 覆盖面是「已生成过模型的构件」：gen-model-v1 按需生成，没 `ensure` 过的构件不在树里。前端在 v1 源下于结果区提示
   「结果仅含已生成模型的构件」，并给「整库生成」入口（`collectDbnum` 已有）。
 
@@ -499,8 +501,17 @@ createPipeDistanceSceneTransformPoint` 已有反向那一半可对照），服�
   选中 BRAN `24381_145018` 请求 `x=5668.6&y=9972.2&z=15979.0`（改前 `-0.295 / 0 / -0.573`），中心摘要「5669, 9972, 15979」，
   10 项全在盒中心旁——BRAN 本身不会出现在自己的结果里，因为树只存 BOX / CYLI / PANE 等叶子（`filter_options.nouns` 里没有 BRAN），
   不是前端问题。
-- 顺带核出的差异（未处理）：BRAN 在查看器里的盒中心（`5668.6, 9972.2, 15979.0`）与树里 `refno_aabb_center`（`5963.8, 9972.2, 16552.0`）
-  相差 295 / 573 mm——前者是已加载几何（含管子）算出来的盒，后者是服务端记录的 AABB，两者口径本就不同，「当前选中」用的是查看器盒。
+- 顺带核出的差异：BRAN 在查看器里的盒中心（`5668.6, 9972.2, 15979.0`）与树里 `refno_aabb_center`（`5963.8, 9972.2, 16552.0`）
+  相差 295 / 573 mm。**追查结果（2026-09-14 00:49）**：不是换算错，是「一个 BRAN 的盒」两套口径——`DtxCompatScene.getAABB([refno])` 只并
+  objectId 为 `o:<refno>:n` 的对象，而 DTX loader 把隐含管子 TUBI 挂在 owner BRAN 的 refno 下、ELBO / VALV / OLET 成员各用自己的 refno，
+  所以查看器里 BRAN 的盒 = 管子盒；服务端 refno 模式并的是「目标或祖先链含目标」的全部记录（spec §4.13）= 子树并集。
+  `/api/v1/model/records {generation_root: 24381/145018}` 22 条 = 11 TUBI（refno 即 BRAN）+ 9 ELBO + OLET + VALV：11 条 TUBI 的并集中心
+  = 查看器盒中心，22 条并集中心 = 服务端中心，差的正是 VALV `24381_145035`（x 到 10417 / z 到 19868）那一块的一半；叶子构件两边一致。
+  **处置（用户拍板方案 2，`11d21e8`）**：查看器加 `DtxCompatScene.getSubtreeAABB(refnos)`（自己的对象 ∪ loader `resolveDtxObjectIdsByUnitRefno`
+  沿 owner 链落到该 refno 的对象），`applyCurrentSelection` 先取子树盒、取不到退回 `getAABB`；`getAABB` 语义不动。单测：新文件
+  `src/viewer/dtx/DtxCompatScene.getSubtreeAABB.test.ts` 4 条（真机盒数据，中心差恰为 (295, 0, 573)）+ store 1 条。真机：选中 BRAN 查 1 m 请求
+  `x=5963.7737&y=9972.2395&z=16551.9712`，与 `nearby?refno=24381_145018` 的 `refno_aabb_center` 逐位相等，中心摘要「5964, 9972, 16552」。
+  残余：成员没加载时子树盒仍不全（部分加载时会偏）；PIPE / ZONE 这类自身与成员都没加载的 owner 仍报「无法解析当前选中构件的位置」。
 
 ## 8. 关键位置速查
 
