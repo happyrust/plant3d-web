@@ -1802,16 +1802,18 @@ describe('useXeokitMeasurementTools', () => {
       return { store, measurementStyle, dimensionSystem, tools, click };
     }
 
-    it('statusText 分步命令提示：第 1/2 步 → 第 2/2 步（含 Snap 槽位）', async () => {
+    it('statusText 分步命令提示：第 1/2 步 → 第 2/2 步（E3D `<命令> <步> (<拾取类型>) Snap :` 结构）', async () => {
       const { store, tools, click } = await setupDistanceTools({
         keepMeasurementAnnotation: true,
       });
-      expect(tools.statusText.value).toContain('第 1/2 步');
-      expect(tools.statusText.value).toContain('Snap:');
+      // E3D `EDGSTATE.prompt()`：括号里是拾取类型（缺省 Snap），尾巴的 Snap 是 Significant Snaps
+      // 开着的标志，冒号后是当前 Snap 目标；拾取过滤器不进提示。
+      expect(tools.statusText.value).toMatch(/^距离测量 · 第 1\/2 步 选择起点 \(Snap\) Snap : /);
 
       click();
       expect(store.currentXeokitDistanceDraft.value).not.toBeNull();
-      expect(tools.statusText.value).toContain('第 2/2 步');
+      expect(tools.statusText.value).toMatch(/^距离测量 · 第 2\/2 步 选择终点 \(Snap\) Snap : /);
+      expect(tools.statusText.value).toContain('点空白取消当前点选');
 
       tools.dispose();
     });

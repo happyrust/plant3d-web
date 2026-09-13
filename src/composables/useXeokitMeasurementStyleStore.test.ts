@@ -106,16 +106,16 @@ describe('useXeokitMeasurementStyleStore · measurementPickMode', () => {
   });
 
   it('V5 老用户迁移时一次性强开轴向分量，其余用户值保留', async () => {
-    // 先写一次持久化，取得实际的 scoped V8 key，从而推导同 scope 的 V5 key。
+    // 先写一次持久化，取得实际的 scoped V9 key，从而推导同 scope 的 V5 key。
     {
       const { useXeokitMeasurementStyleStore } = await import('@/composables/useXeokitMeasurementStyleStore');
       useXeokitMeasurementStyleStore().updateStyle({ distanceShowMarkers: false });
       await nextTick();
     }
     const keys = Array.from({ length: localStorage.length }, (_, i) => localStorage.key(i)!);
-    const v8Key = keys.find((key) => key.includes('measurement-style-v8'))!;
-    expect(v8Key).toBeTruthy();
-    const v5Key = v8Key.replace('measurement-style-v8', 'measurement-style-v5');
+    const v9Key = keys.find((key) => key.includes('measurement-style-v9'))!;
+    expect(v9Key).toBeTruthy();
+    const v5Key = v9Key.replace('measurement-style-v9', 'measurement-style-v5');
 
     localStorage.clear();
     localStorage.setItem(v5Key, JSON.stringify({
@@ -130,7 +130,7 @@ describe('useXeokitMeasurementStyleStore · measurementPickMode', () => {
       expect(style.state.distanceShowAxisBreakdown).toBe(true);
       expect(style.state.distanceShowMarkers).toBe(false);
 
-      // 用户关掉后写入 V8，重载后不再被强开。
+      // 用户关掉后写入 V9，重载后不再被强开。
       style.updateStyle({ distanceShowAxisBreakdown: false });
       await nextTick();
     }
@@ -140,7 +140,7 @@ describe('useXeokitMeasurementStyleStore · measurementPickMode', () => {
     expect(useXeokitMeasurementStyleStore().state.distanceShowAxisBreakdown).toBe(false);
   });
 
-  it('V6 老配置升级到 V8 后默认保留标注，用户显式关闭后可持久化', async () => {
+  it('V6 老配置升级到 V9 后默认保留标注，用户显式关闭后可持久化', async () => {
     // 推导同 scope 的 V6 key，模拟 V6 老用户（无旧 persistDimension 字段）。
     {
       const { useXeokitMeasurementStyleStore } = await import('@/composables/useXeokitMeasurementStyleStore');
@@ -148,8 +148,8 @@ describe('useXeokitMeasurementStyleStore · measurementPickMode', () => {
       await nextTick();
     }
     const keys = Array.from({ length: localStorage.length }, (_, i) => localStorage.key(i)!);
-    const v8Key = keys.find((key) => key.includes('measurement-style-v8'))!;
-    const v6Key = v8Key.replace('measurement-style-v8', 'measurement-style-v6');
+    const v9Key = keys.find((key) => key.includes('measurement-style-v9'))!;
+    const v6Key = v9Key.replace('measurement-style-v9', 'measurement-style-v6');
 
     localStorage.clear();
     localStorage.setItem(v6Key, JSON.stringify({
@@ -180,7 +180,7 @@ describe('useXeokitMeasurementStyleStore · measurementPickMode', () => {
     expect(style.state.showDirectLinearDimension).toBe(false);
   });
 
-  it('Perpendicular to 默认关闭；开启后持久化到 V8 并在重载后恢复，脏值不会误开', async () => {
+  it('Perpendicular to 默认关闭；开启后持久化到 V9 并在重载后恢复，脏值不会误开', async () => {
     {
       const { useXeokitMeasurementStyleStore } = await import('@/composables/useXeokitMeasurementStyleStore');
       const style = useXeokitMeasurementStyleStore();
@@ -196,8 +196,8 @@ describe('useXeokitMeasurementStyleStore · measurementPickMode', () => {
     }
 
     const keys = Array.from({ length: localStorage.length }, (_, i) => localStorage.key(i)!);
-    const v8Key = keys.find((key) => key.includes('measurement-style-v8'))!;
-    localStorage.setItem(v8Key, JSON.stringify({ perpendicularTo: 'yes' }));
+    const v9Key = keys.find((key) => key.includes('measurement-style-v9'))!;
+    localStorage.setItem(v9Key, JSON.stringify({ perpendicularTo: 'yes' }));
     vi.resetModules();
     const { useXeokitMeasurementStyleStore } = await import('@/composables/useXeokitMeasurementStyleStore');
     expect(useXeokitMeasurementStyleStore().state.perpendicularTo).toBe(false);
@@ -210,8 +210,8 @@ describe('useXeokitMeasurementStyleStore · measurementPickMode', () => {
       await nextTick();
     }
     const keys = Array.from({ length: localStorage.length }, (_, i) => localStorage.key(i)!);
-    const v8Key = keys.find((key) => key.includes('measurement-style-v8'))!;
-    const v7Key = v8Key.replace('measurement-style-v8', 'measurement-style-v7');
+    const v9Key = keys.find((key) => key.includes('measurement-style-v9'))!;
+    const v7Key = v9Key.replace('measurement-style-v9', 'measurement-style-v7');
 
     localStorage.clear();
     localStorage.setItem(v7Key, JSON.stringify({
@@ -225,5 +225,80 @@ describe('useXeokitMeasurementStyleStore · measurementPickMode', () => {
     expect(style.state.keepMeasurementAnnotation).toBe(false);
     expect(style.state.showDirectLinearDimension).toBe(true);
     expect(style.state.distanceShowMarkers).toBe(false);
+  });
+
+  it('V8 老配置升级到 V9：拾取层按 E3D 缺省起步（Any × Snap，Significant Snaps 开），其余字段原样保留', async () => {
+    {
+      const { useXeokitMeasurementStyleStore } = await import('@/composables/useXeokitMeasurementStyleStore');
+      useXeokitMeasurementStyleStore().updateStyle({ distanceShowMarkers: false });
+      await nextTick();
+    }
+    const keys = Array.from({ length: localStorage.length }, (_, i) => localStorage.key(i)!);
+    const v9Key = keys.find((key) => key.includes('measurement-style-v9'))!;
+    const v8Key = v9Key.replace('measurement-style-v9', 'measurement-style-v8');
+
+    localStorage.clear();
+    localStorage.setItem(v8Key, JSON.stringify({
+      distanceShowMarkers: false,
+      perpendicularTo: true,
+      keepMeasurementAnnotation: false,
+    }));
+
+    vi.resetModules();
+    const { useXeokitMeasurementStyleStore } = await import('@/composables/useXeokitMeasurementStyleStore');
+    const style = useXeokitMeasurementStyleStore();
+    expect(style.state.distanceShowMarkers).toBe(false);
+    expect(style.state.perpendicularTo).toBe(true);
+    expect(style.state.keepMeasurementAnnotation).toBe(false);
+    expect(style.state.measurementPickLayer).toEqual({
+      filter: 'any',
+      pickType: 'snap',
+      values: { distanceMm: 0, fraction: 2, proportion: 0.5 },
+      significantSnaps: true,
+    });
+  });
+
+  it('拾取层：改过滤器 / 拾取类型 / 取值后持久化到 V9 并在重载后恢复；不可用项与脏值回 E3D 缺省', async () => {
+    {
+      const { useXeokitMeasurementStyleStore } = await import('@/composables/useXeokitMeasurementStyleStore');
+      const style = useXeokitMeasurementStyleStore();
+      style.updateMeasurementPickLayer({ filter: 'ppoint', pickType: 'fraction', values: { fraction: 3 } });
+      style.updateMeasurementPickLayer({ significantSnaps: false });
+      await nextTick();
+      expect(style.state.measurementPickLayer.filter).toBe('ppoint');
+      expect(style.state.measurementPickLayer.pickType).toBe('fraction');
+      expect(style.state.measurementPickLayer.values).toEqual({ distanceMm: 0, fraction: 3, proportion: 0.5 });
+      expect(style.state.measurementPickLayer.significantSnaps).toBe(false);
+    }
+
+    vi.resetModules();
+    {
+      const { useXeokitMeasurementStyleStore } = await import('@/composables/useXeokitMeasurementStyleStore');
+      const layer = useXeokitMeasurementStyleStore().state.measurementPickLayer;
+      expect(layer.filter).toBe('ppoint');
+      expect(layer.pickType).toBe('fraction');
+      expect(layer.values.fraction).toBe(3);
+      expect(layer.significantSnaps).toBe(false);
+    }
+
+    // 不可用的过滤器（Aid）/ 类型（Intersect）与非法取值：读回时回 E3D 缺省，Fraction 取整且 ≥ 1。
+    const keys = Array.from({ length: localStorage.length }, (_, i) => localStorage.key(i)!);
+    const v9Key = keys.find((key) => key.includes('measurement-style-v9'))!;
+    localStorage.setItem(v9Key, JSON.stringify({
+      measurementPickLayer: {
+        filter: 'aid',
+        pickType: 'intersect',
+        values: { distanceMm: 'abc', fraction: 0.4, proportion: 0.25 },
+        significantSnaps: 'yes',
+      },
+    }));
+    vi.resetModules();
+    const { useXeokitMeasurementStyleStore } = await import('@/composables/useXeokitMeasurementStyleStore');
+    expect(useXeokitMeasurementStyleStore().state.measurementPickLayer).toEqual({
+      filter: 'any',
+      pickType: 'snap',
+      values: { distanceMm: 0, fraction: 1, proportion: 0.25 },
+      significantSnaps: true,
+    });
   });
 });
