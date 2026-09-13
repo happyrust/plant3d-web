@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { nextTick } from 'vue';
+import { nextTick, ref } from 'vue';
 
 const dtxLoaderMocks = vi.hoisted(() => ({
   loadDtxAabbProxyRefnos: vi.fn(),
@@ -8,6 +8,36 @@ const dtxLoaderMocks = vi.hoisted(() => ({
 const dbMetaMocks = vi.hoisted(() => ({
   ensureDbMetaInfoLoaded: vi.fn(async () => undefined),
   getDbnumByRefno: vi.fn(() => 7997),
+}));
+
+/** 不注入取数函数时 store 走 `getModelSource().spatial`；缺省实现回「没有」，与改前真 fetch 打不通的效果一致。 */
+const spatialSourceMocks = vi.hoisted(() => ({
+  nearby: vi.fn(async (_params: SpatialNearbyParams): Promise<SpatialNearbyResult> => ({
+    success: false,
+    error: 'spatial source not mocked',
+  })),
+  nearbyRefnos: vi.fn(async (_params: SpatialNearbyParams): Promise<SpatialNearbyRefnosResult> => ({
+    success: false,
+    refnos: [],
+    by_dbnum: {},
+    by_spec_value: {},
+    total_count: 0,
+    truncated: false,
+    cap: 0,
+  })),
+  negativeNouns: vi.fn(async (): Promise<NegativeNounsResult> => ({ success: false, nouns: [] })),
+}));
+
+vi.mock('@/model-source', () => ({
+  getModelSource: () => ({
+    kind: 'legacy',
+    spatial: {
+      nearby: spatialSourceMocks.nearby,
+      nearbyRefnos: spatialSourceMocks.nearbyRefnos,
+      negativeNouns: spatialSourceMocks.negativeNouns,
+      capabilities: { specValues: true },
+    },
+  }),
 }));
 
 vi.mock('@/composables/useDbnoInstancesDtxLoader', async (importOriginal) => {
@@ -25,12 +55,19 @@ vi.mock('@/composables/useDbMetaInfo', () => ({
 }));
 
 import {
+  __resetNegativeNounRegistryForTests,
   createSpatialQueryStore,
   initializeSpatialQueryFromUrl,
   parseSpatialQueryUrlParams,
 } from './useSpatialQuery';
 
-import type { SpatialQueryResult } from '@/api/genModelSpatialApi';
+import type {
+  NegativeNounsResult,
+  SpatialNearbyParams,
+  SpatialNearbyRefnosResult,
+  SpatialNearbyResult,
+  SpatialQueryResult,
+} from '@/api/genModelSpatialApi';
 
 function createViewerStub() {
   const selected = new Set<string>();
@@ -81,6 +118,7 @@ function createViewerStub() {
 describe('createSpatialQueryStore', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    __resetNegativeNounRegistryForTests();
     dbMetaMocks.ensureDbMetaInfoLoaded.mockResolvedValue(undefined);
     dbMetaMocks.getDbnumByRefno.mockReturnValue(7997);
     dtxLoaderMocks.loadDtxAabbProxyRefnos.mockImplementation((_layer, _dbno, entries) => ({
@@ -635,6 +673,96 @@ describe('createSpatialQueryStore', () => {
       z: 30,
       source: 'point_input',
     });
+  });
+
+  it('不注入取数函数时，四个取数点都经 getModelSource().spatial：nearby / nearbyRefnos / negativeNouns', async () => {
+    const viewer = createViewerStub();
+    spatialSourceMocks.negativeNouns.mockResolvedValueOnce({ success: true, nouns: ['NBOX'] });
+    spatialSourceMocks.nearby.mockResolvedValueOnce({
+      success: true,
+      total_count: 3,
+      returned_count: 2,
+      page: 1,
+      per_page: 2,
+      has_more: true,
+      results: [
+        { refno: 'loaded_a', noun: 'PIPE', spec_value: 1, distance: 5 },
+        { refno: 'server_only', noun: 'EQUI', spec_value: 2, distance: 18 },
+      ],
+    } satisfies SpatialQueryResult);
+    spatialSourceMocks.nearbyRefnos.mockResolvedValueOnce({
+      success: true,
+      refnos: ['loaded_a', 'server_only', 'server_page2'],
+      by_dbnum: { '7997': ['loaded_a', 'server_only', 'server_page2'] },
+      by_spec_value: {},
+      total_count: 3,
+      truncated: false,
+      cap: 100000,
+    });
+
+    const store = createSpatialQueryStore({
+      viewerRef: ref(viewer),
+      selection: { selectedRefno: { value: 'loaded_a' } } as any,
+      toolStore: { pickedQueryCenter: { value: null }, setToolMode: vi.fn(), setPickedQueryCenter: vi.fn() } as any,
+    });
+
+    // 范围查询（点模式）：nearby 收到的是 queryNearbyByPosition 便捷函数展开后的同一份参数
+    store.draft.mode = 'range';
+    store.draft.rangeCenterSource = 'selected';
+    store.draft.radius = 50;
+    store.draft.limit = 2;
+    await store.submitQuery();
+
+    expect(store.status.value).toBe('ready');
+    expect(spatialSourceMocks.negativeNouns).toHaveBeenCalledTimes(1);
+    expect(spatialSourceMocks.nearby).toHaveBeenCalledTimes(1);
+    expect(spatialSourceMocks.nearby).toHaveBeenCalledWith(expect.objectContaining({
+      x: 5,
+      y: 5,
+      z: 5,
+      radius: 50,
+      page: 1,
+      per_page: 2,
+      shape: 'sphere',
+      include_negative: false,
+    }));
+    expect(spatialSourceMocks.nearby.mock.calls[0]?.[0]).not.toHaveProperty('refno');
+    // 有下一页才取全集，且全集经 nearbyRefnos 而不是再打一次 nearby
+    expect(spatialSourceMocks.nearbyRefnos).toHaveBeenCalledTimes(1);
+    expect(spatialSourceMocks.nearbyRefnos).toHaveBeenCalledWith(expect.objectContaining({ x: 5, y: 5, z: 5, radius: 50 }));
+    expect(store.resultSet.value?.fullMatches?.refnos).toEqual(['loaded_a', 'server_only', 'server_page2']);
+    expect(store.resultSet.value?.fullMatches?.byDbnum).toEqual({ '7997': ['loaded_a', 'server_only', 'server_page2'] });
+
+    // 距离查询（refno 模式）：同一个 nearby，参数带 refno 与 include_self
+    spatialSourceMocks.nearby.mockResolvedValueOnce({
+      success: true,
+      center: { x: 1, y: 2, z: 3, source: 'refno_aabb_center' },
+      total_count: 0,
+      returned_count: 0,
+      page: 1,
+      per_page: 2,
+      has_more: false,
+      results: [],
+    } satisfies SpatialQueryResult);
+    store.draft.mode = 'distance';
+    store.draft.distanceCenterSource = 'refno';
+    store.draft.refno = '24381_145018';
+    store.draft.radius = 800;
+    await store.submitQuery();
+
+    expect(spatialSourceMocks.nearby).toHaveBeenCalledTimes(2);
+    expect(spatialSourceMocks.nearby.mock.calls[1]?.[0]).toEqual(expect.objectContaining({
+      refno: '24381_145018',
+      radius: 800,
+      include_self: false,
+      page: 1,
+      per_page: 2,
+    }));
+    expect(spatialSourceMocks.nearby.mock.calls[1]?.[0]).not.toHaveProperty('x');
+    // 负实体清单只拉一次，第二次查询不再打
+    expect(spatialSourceMocks.negativeNouns).toHaveBeenCalledTimes(1);
+    // 没有下一页就不取全集
+    expect(spatialSourceMocks.nearbyRefnos).toHaveBeenCalledTimes(1);
   });
 
   it('批量加载当前筛选结果时应走精确 refno 批量加载并刷新统计', async () => {

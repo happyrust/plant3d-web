@@ -5,6 +5,7 @@
  * `getModelSource()`：按当前开关给一份 `ModelSource`（进程内每种一份，惰性建）。
  *
  * `gen-model-v1` 接了树（P2）、几何记录（P3）、网格 URL（P0-1）与 `typeInfo`；`uiAttr` 仍委托 legacy（P4-1），见 `genModelV1/index.ts`。
+ * `spatial`（抽屉范围 / 距离查询）2026-09-13 起进端口：legacy 委托 `/api/sqlite-spatial/*`，v1 适配器另计划的 P3 接入。
  * 只想判「现在是哪个源」的模块请引 `./kind`，别把整套适配器（含 DuckDB）拖进来。
  */
 import { createGenModelV1ModelSource, type GenModelV1EnsureProgress, type GenModelV1ModelSource } from './genModelV1';

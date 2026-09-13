@@ -1,18 +1,19 @@
 import { computed, reactive, ref, watch, type Ref } from 'vue';
 
-import { enqueueParquetIncremental } from '@/api/genModelRealtimeApi';
-import {
+import type {
   fetchNegativeNouns,
   queryNearbyByRefno,
   queryNearbyByPosition,
   queryNearbyRefnos,
   querySpatialIndex,
-  type SpatialNearbyParams as ApiSpatialNearbyParams,
-  type SpatialNearbyResult as ApiSpatialNearbyResult,
-  type SpatialQueryResult as ApiSpatialQueryResult,
-  type SpatialQueryResultItem as ApiSpatialQueryResultItem,
-  type SpatialQuerySortParam,
+  SpatialNearbyParams as ApiSpatialNearbyParams,
+  SpatialNearbyResult as ApiSpatialNearbyResult,
+  SpatialQueryResult as ApiSpatialQueryResult,
+  SpatialQueryResultItem as ApiSpatialQueryResultItem,
+  SpatialQuerySortParam,
 } from '@/api/genModelSpatialApi';
+
+import { enqueueParquetIncremental } from '@/api/genModelRealtimeApi';
 import { triggerBatchGenerateSse } from '@/api/genModelStreamGenerateApi';
 import { ensureDbMetaInfoLoaded, getDbnumByRefno } from '@/composables/useDbMetaInfo';
 import {
@@ -26,6 +27,7 @@ import { AUTO_GENERATION_ENABLED } from '@/composables/useModelGeneration';
 import { useSelectionStore } from '@/composables/useSelectionStore';
 import { useToolStore } from '@/composables/useToolStore';
 import { showModelByRefnosWithAck, useViewerContext, waitForViewerReady } from '@/composables/useViewerContext';
+import { getModelSource } from '@/model-source';
 import {
   type SpatialQueryAabb,
   type SpatialQueryCenterSource,
@@ -89,12 +91,18 @@ type BatchLoadResult = {
 
 type BatchLoadRefnosFn = (refnos: string[], options?: BatchLoadOptions) => Promise<BatchLoadResult>;
 
+/**
+ * 四个取数点都可注入（测试 / 宿主替换）；不注入时一律经 `getModelSource().spatial` 取——
+ * legacy 下与直接调 `genModelSpatialApi.ts` 逐字相同，gen-model-v1 下由其适配器接 `/api/v1/spatial/*`
+ * （plan 2026-09-13 空间范围查询 P2 立端口、P3 接 v1）。函数签名保持旧 API 便捷函数的形状，既有调用方 / 用例不改。
+ */
 type SpatialQueryStoreOptions = {
   viewerRef?: Ref<ViewerLike | null>;
   selection?: SelectionLike;
   toolStore?: ToolStoreLike;
   queryNearbyByPosition?: typeof queryNearbyByPosition;
   queryNearbyByRefno?: typeof queryNearbyByRefno;
+  queryNearbyRefnos?: typeof queryNearbyRefnos;
   querySpatialIndex?: typeof querySpatialIndex;
   fetchNegativeNouns?: FetchNegativeNounsFn;
   createRequestId?: () => string;
@@ -169,6 +177,13 @@ async function ensureNegativeNounsLoaded(fetcher: FetchNegativeNounsFn): Promise
     }
   })();
   await negativeNounsFetching;
+}
+
+/** 测试用：清掉进程内的负实体注册表与「已拉过清单」标记，让下一次查询重新走 `negativeNouns()`。 */
+export function __resetNegativeNounRegistryForTests(): void {
+  negativeNounRegistry.clear();
+  negativeNounsFetched = false;
+  negativeNounsFetching = null;
 }
 
 function learnNegativeNounsFromFilterOptions(
@@ -911,9 +926,16 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
   const viewerRef = options.viewerRef ?? useViewerContext().viewerRef;
   const selection = options.selection ?? useSelectionStore();
   const toolStore = options.toolStore ?? useToolStore();
-  const queryNearbyPosition = options.queryNearbyByPosition ?? queryNearbyByPosition;
-  const queryNearbyRefno = options.queryNearbyByRefno ?? queryNearbyByRefno;
-  const negativeNounsFetcher = options.fetchNegativeNouns ?? fetchNegativeNouns;
+  // 数据源按调用时刻解析（`getModelSource()` 每次读 URL 开关），不在建 store 时钉死
+  const spatialSource = () => getModelSource().spatial;
+  const queryNearbyPosition: typeof queryNearbyByPosition = options.queryNearbyByPosition
+    ?? ((x, y, z, radius, nearbyOptions) => spatialSource().nearby({ x, y, z, radius, ...nearbyOptions }));
+  const queryNearbyRefno: typeof queryNearbyByRefno = options.queryNearbyByRefno
+    ?? ((refno, radius, nearbyOptions) => spatialSource().nearby({ refno, radius, ...nearbyOptions }));
+  const fetchNearbyRefnos: typeof queryNearbyRefnos = options.queryNearbyRefnos
+    ?? ((params) => spatialSource().nearbyRefnos(params));
+  const negativeNounsFetcher: FetchNegativeNounsFn = options.fetchNegativeNouns
+    ?? (() => spatialSource().negativeNouns());
   const nextRequestId = options.createRequestId ?? createRequestId;
   const batchLoadRefnos = options.batchLoadRefnos ?? ((refnos: string[], loadOptions?: BatchLoadOptions) => {
     return batchLoadSpatialQueryRefnos(viewerRef, refnos, loadOptions);
@@ -1238,7 +1260,7 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
     }
 
     try {
-      const resp = await queryNearbyRefnos(toNearbyParams(request));
+      const resp = await fetchNearbyRefnos(toNearbyParams(request));
       if (!resp.success) return null;
 
       const localOnly = resultSetValue.items

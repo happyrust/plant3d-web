@@ -5,7 +5,9 @@
  * - `TreeSource`：根 / 子节点 / 祖先链 / 搜索 / 子树 refno 集 / 可见实例集（`usePdmsOwnerTree` 的 7 处取数）；
  * - `ModelRecordSource`：`refno → InstanceEntry[]`（`useDbnoInstancesDtxLoader` 喂给 DTX 层的形状）；
  * - `MeshSource`：`geo_hash → GLB URL`（`ensureGeometryForGeoHash` 的 URL 模板）；
- * - `AttributeSource`：属性面板 / BRAN-HANG 规则要的 `uiAttr` / `typeInfo`。
+ * - `AttributeSource`：属性面板 / BRAN-HANG 规则要的 `uiAttr` / `typeInfo`；
+ * - `KeypointSource`：测量捕捉的 P-Point / 基本体关键点（2026-09-12 加入）；
+ * - `SpatialSource`：抽屉「范围 / 距离查询」的邻近查询（2026-09-13 加入，见下）。
  *
  * 接口形状**故意等于**现有 legacy 函数的形状（`NodeResponse` / `ChildrenResponse` / `Map<string, InstanceEntry[]>` …），
  * 这样 `legacy` 适配器是零逻辑的委托，大量 `*.test.ts` 依赖的旧函数签名一个都不动；`genModelV1` 适配器
@@ -28,6 +30,12 @@ import type {
   PtsetChildrenResponse,
   PtsetResponse,
 } from '@/api/genModelPdmsAttrApi';
+import type {
+  NegativeNounsResult,
+  SpatialNearbyParams,
+  SpatialNearbyRefnosResult,
+  SpatialNearbyResult,
+} from '@/api/genModelSpatialApi';
 import type { PrimitiveKeyPointCandidate } from '@/composables/useDbnoInstancesParquetLoader';
 import type { InstanceEntry } from '@/utils/instances/instanceManifest';
 
@@ -127,6 +135,33 @@ export type KeypointSource = {
   primitiveKeypoints(dbno: number, refno: string, options?: KeypointQueryOptions): Promise<PrimitiveKeypointsResult>;
 };
 
+/** 空间查询源在两种后端下的能力差异，抽屉据此增减 UI。 */
+export type SpatialSourceCapabilities = {
+  /** 结果带专业（`spec_value`）维度：legacy 有；gen-model-v1 的几何投影里没有这一列（plan §5-1 按 (a)：隐藏专业筛选 / 分组，改按 dbnum）。 */
+  readonly specValues: boolean;
+};
+
+/**
+ * 抽屉「范围查询 / 距离查询」的邻近查询取数（plan `docs/plans/2026-09-13-spatial-range-query-gen-model-v1-memory-tree-plan.md`
+ * §3.4，P2 起随 gen-model-v1 加入端口）。
+ *
+ * 三个方法的形状**故意等于**`genModelSpatialApi.ts` 现有的 `queryNearbySpatial` / `queryNearbyRefnos` / `fetchNegativeNouns`，
+ * `useSpatialQuery` 的合并 / 翻页 / 全部显示 / 隔离语义一行不改：
+ * - `legacy`：零逻辑委托旧后端 `/api/sqlite-spatial/{nearby, nearby/refnos, negative-nouns}`；
+ * - `gen-model-v1`：`GET /api/v1/spatial/{nearby, nearby/refnos, negative-nouns}`，候选来自服务进程内的 `GLOBAL_AABB_TREE`
+ *   （只含已生成过模型的构件），refno 归一 `a_b`、`spec_value` 缺省 0、`groups` 直接透传 dbnum 分组（P3）。
+ * 参数里 `refno` 与 `x,y,z` 二选一由调用方保证；`page / per_page` 对 `nearbyRefnos` 无意义，适配器负责忽略。
+ */
+export type SpatialSource = {
+  /** 按 refno 或点 + 半径查周边构件，服务端分页前排序 / 过滤；`filter_options` / `groups` 是全集口径。 */
+  nearby(params: SpatialNearbyParams): Promise<SpatialNearbyResult>;
+  /** 同一组条件下的完整命中 refno 集（不分页）；「全部显示 / 隔离 / 加载全部」按它作用于整个结果集。 */
+  nearbyRefnos(params: SpatialNearbyParams): Promise<SpatialNearbyRefnosResult>;
+  /** 负实体 noun 全量清单；唯一事实源在服务端（`TOTAL_NEG_NOUN_NAMES`），前端不自带硬编码。 */
+  negativeNouns(): Promise<NegativeNounsResult>;
+  readonly capabilities: SpatialSourceCapabilities;
+};
+
 export type ModelSource = {
   readonly kind: ModelSourceKind;
   readonly tree: TreeSource;
@@ -134,4 +169,5 @@ export type ModelSource = {
   readonly meshes: MeshSource;
   readonly attributes: AttributeSource;
   readonly keypoints: KeypointSource;
+  readonly spatial: SpatialSource;
 };

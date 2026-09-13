@@ -28,6 +28,9 @@ const legacyMocks = vi.hoisted(() => ({
   pdmsGetUiAttr: vi.fn(async (refno: string) => ({ success: true, refno, attrs: {} })),
   pdmsGetTypeInfo: vi.fn(async (refno: string) => ({ success: true, refno, noun: 'BRAN' })),
   queryInstanceEntriesByRefnos: vi.fn(async () => new Map()),
+  queryNearbySpatial: vi.fn(async () => ({ success: true, results: [] })),
+  queryNearbyRefnos: vi.fn(async () => ({ success: true, refnos: [], by_dbnum: {}, by_spec_value: {}, total_count: 0, truncated: false, cap: 0 })),
+  fetchNegativeNouns: vi.fn(async () => ({ success: true, nouns: ['NBOX'] })),
 }));
 
 vi.mock('@/composables/useGenModelV1Health', () => ({
@@ -57,6 +60,12 @@ vi.mock('@/composables/useDbnoInstancesParquetLoader', () => ({
   useDbnoInstancesParquetLoader: () => ({
     queryInstanceEntriesByRefnos: legacyMocks.queryInstanceEntriesByRefnos,
   }),
+}));
+
+vi.mock('@/api/genModelSpatialApi', () => ({
+  queryNearbySpatial: legacyMocks.queryNearbySpatial,
+  queryNearbyRefnos: legacyMocks.queryNearbyRefnos,
+  fetchNegativeNouns: legacyMocks.fetchNegativeNouns,
 }));
 
 beforeEach(() => {
@@ -129,6 +138,23 @@ describe('legacy 适配器：零逻辑委托', () => {
     );
     expect(legacyMocks.pdmsGetUiAttr).toHaveBeenCalledWith('24381_145018');
     expect(legacyMocks.pdmsGetTypeInfo).toHaveBeenCalledWith('24381_145018');
+  });
+
+  it('spatial 三个方法原样转发到 genModelSpatialApi（参数不动、结果不改），并声明带专业维度', async () => {
+    const source = getModelSource('legacy');
+    const params = { refno: '24381_145018', radius: 5000, shape: 'cube' as const, nouns: 'EQUI,PIPE', page: 2, per_page: 50 };
+
+    const nearby = await source.spatial.nearby(params);
+    const refnos = await source.spatial.nearbyRefnos(params);
+    const negative = await source.spatial.negativeNouns();
+
+    expect(legacyMocks.queryNearbySpatial).toHaveBeenCalledWith(params);
+    expect(legacyMocks.queryNearbyRefnos).toHaveBeenCalledWith(params);
+    expect(legacyMocks.fetchNegativeNouns).toHaveBeenCalledTimes(1);
+    expect(nearby).toEqual({ success: true, results: [] });
+    expect(refnos.total_count).toBe(0);
+    expect(negative).toEqual({ success: true, nouns: ['NBOX'] });
+    expect(source.spatial.capabilities).toEqual({ specValues: true });
   });
 
   it('网格 URL 模板与 useDbnoInstancesDtxLoader 现有写法逐字相同', () => {

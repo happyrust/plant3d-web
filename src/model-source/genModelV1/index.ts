@@ -7,8 +7,12 @@
  *   2026-09-09 拍板替代 P0-1 的服务端转 GLB，`.glb` 口径留一个发布周期）；
  * - `attributes`：`attributeSource.ts`（P4：`uiAttr` → `element/attributes`，`typeInfo` → 树节点两跳）；
  * - `keypoints`：`keypointSource.ts`（2026-09-12：测量 P-Point → `element/ptset`，成员点集 `include_members`；
- *   基本体关键点服务端无接口，回空带原因）。
+ *   基本体关键点服务端无接口，回空带原因）；
+ * - `spatial`：空间范围查询计划（2026-09-13）P2 只把端口立起来，v1 源暂时沿用改前行为——直连旧后端
+ *   `/api/sqlite-spatial/*`（与 `useSpatialQuery` 改成经端口取数之前一模一样）；P3 换成 `/api/v1/spatial/*` 适配器。
  */
+
+import { legacySpatialSource } from '../legacy/spatialSource';
 
 import { createGenModelV1AttributeSource } from './attributeSource';
 import {
@@ -128,6 +132,8 @@ export function createGenModelV1ModelSource(): GenModelV1ModelSource {
     records,
     attributes: createGenModelV1AttributeSource({ tree }),
     keypoints: createGenModelV1KeypointSource(),
+    // P2 过渡：沿用改前的旧后端链路，P3 换成 /api/v1/spatial 适配器（见文件头）
+    spatial: legacySpatialSource,
     collectDbnum,
     activate,
     dispose,

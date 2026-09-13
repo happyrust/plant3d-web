@@ -4,6 +4,8 @@
  * 这一层存在的意义是让 `usePdmsOwnerTree` / `useDbnoInstancesDtxLoader` 在 P2 / P3 改成通过端口取数时，
  * `model_source=legacy` 下的行为与今天**逐字节相同**——每个方法就是一次转发，不加缓存、不改参数、不吞错误。
  */
+import { legacySpatialSource } from './spatialSource';
+
 import type {
   AttributeSource,
   KeypointSource,
@@ -91,5 +93,5 @@ const keypoints: KeypointSource = {
 };
 
 export function createLegacyModelSource(): ModelSource {
-  return { kind: 'legacy', tree, records, meshes, attributes, keypoints };
+  return { kind: 'legacy', tree, records, meshes, attributes, keypoints, spatial: legacySpatialSource };
 }

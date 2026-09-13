@@ -2,6 +2,9 @@
 
 - 日期：2026-09-13
 - 状态：**已批准（Plannotator 第 2 轮 `approved`，2026-09-13 10:38）**；实施中，§5 六项按推荐项 (a) 执行
+  - 进度：**P2 已完成**（2026-09-13 11:45，plant3d-web 单独一提交，见 §4 P2 备注）；P0 / P1 仍等并行会话的迁移改动收口
+    （gen-model-refactor 到 11:26 还在连续提交 `7bacdb81f` 等，`verification/migration-baseline-20260913/` 2 万余文件未跟踪）；
+    P3 / P4 可在 P2 之上继续
   - 第 1 轮（09:36）唯一批注落在后端基线行：「先提交这个」。已落实：后端原 83 个在飞改动已由并行会话提交为
     `f888e9dc2 refactor: retire publish stage and complete lazy data routing`（10:10，215 文件），其后又有
     `b82d6fbbb fix(room)` / `8f99cbc64 fix(api)` 两条（10:25 / 10:26）；分支 10:21 改名
@@ -236,6 +239,22 @@ P2 只碰 plant3d-web，可以先行。P1 的新代码集中在新模块 `spatia
 - 验收：`useSpatialQuery.test.ts` 17 个用例不改断言全绿；新增 1 个用例钉「默认值来自 `getModelSource().spatial`」；
   `pnpm vitest run src/composables/useSpatialQuery.test.ts src/model-source`；`vue-tsc --noEmit` 干净。
 - 文件：`src/model-source/{ports.ts, index.ts, legacy/index.ts, legacy/spatialSource.ts}`、`src/composables/useSpatialQuery.ts`。
+- **完成备注（2026-09-13）**：
+  - `negativeNouns()` 回 `NegativeNounsResult`（`{success, nouns}`）而不是本节草案的 `string[]`——沿用 `ports.ts` 文头的既定原则
+    「端口形状等于现有 legacy 函数的形状，legacy 适配器零逻辑」，`useSpatialQuery.ensureNegativeNounsLoaded` 也因此一行不改；
+    v1 适配器（P3）把 `{nouns}` 包成 `{success:true, nouns}` 即可。
+  - store 里四个默认值按**调用时刻**解析 `getModelSource().spatial`（`getModelSource()` 每次读 URL 开关），函数签名保持
+    `queryNearbyByPosition(x,y,z,r,opts)` / `queryNearbyByRefno(refno,r,opts)` 的便捷形状，参数展开与 `genModelSpatialApi.ts`
+    的两个便捷函数逐字相同；新增 `options.queryNearbyRefnos` 注入点，`fetchFullMatches` 改走它。
+  - `ModelSource.spatial` 是必填端口，P2 阶段 `genModelV1/index.ts` 先挂 `legacySpatialSource`（= 改前 v1 源下抽屉直连旧后端
+    `/api/sqlite-spatial/*` 的行为，**零行为变化**），P3 换成 `/api/v1/spatial` 适配器。
+  - 顺带导出 `__resetNegativeNounRegistryForTests()`：负实体注册表是模块级单例，新增用例要断言 `negativeNouns()` 被调用、
+    既有 17 个用例之间也不再靠执行顺序共享注册表。
+  - 验证：`npx vitest run src/composables/useSpatialQuery.test.ts src/model-source src/components/spatial-query` → 11 文件 149 用例全绿
+    （`useSpatialQuery.test.ts` 17 → 18，`model-source/index.test.ts` 11 → 12，新增「legacy `spatial` 三方法原样转发 + `specValues:true`」）；
+    `node scripts/type-check.mjs` 前后同为「587 条 / 基线 620 / 新增 7 / 消失 40」，7 条新增全部来自 HEAD `9d34701` 快照里的
+    测量 / DTX 文件（`useDtxTools.*.test.ts`、`useXeokitMeasurementTools.ts`、`pickDerivation.test.ts`），stash 掉本切片后重跑数字一致，
+    与本切片无关；`npx eslint` 改动文件 0 错。
 
 ### P3 — gen-model-v1 适配器（plant3d-web）
 
