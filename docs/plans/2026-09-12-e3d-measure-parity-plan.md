@@ -83,7 +83,7 @@
 | 12 | 拾取过滤器：Element（noun 显著点） | ◐ | `primitive_key_point`（基本体 / PLINE 关键点）——legacy parquet 有，**gen-model-v1 无 API**；`position`（Item 原点）≈ 元素原点 |
 | 13 | 拾取过滤器：Pline | ◐ | legacy `semantic_snap_points`（PLINE start/end）；v1 无 |
 | 14 | 拾取过滤器：Graphics（facet 边 / 面）、Screen、Aid、External | ◐ | **Graphics ✓（2026-09-13）**：`mesh_graphics` 点源从已加载网格派生绘制边（线）/ 面（平面），只在 Graphics 过滤器下参与；实机 `面 → 边` 距离走通（golden MD §12）。Screen ✓（= `mesh_pick_point`）。Aid / External 占位灰掉 |
-| 15 | TUBING 轴线点、DPOINT | ◐ | **TUBING ✓（2026-09-13）**：`tubing_axis` 点源从直管对象的局部包围盒 × 放置矩阵派生管身轴线，两端吸到邻接 P-Point（`src/measurement/tubing/tubingAxis.ts`），按 E3D `EDGTUBING` 走线候选（Snap 近端 / Cursor 交点 / Mid-Point 等沿线 / Intersect 转 LINE），Any / Element 放行；实机 `轴线 → 轴线` Snap 与 Mid-Point 两条距离走通、校正端点与 E3D ELBO 145031 P1 差 0.001 mm（golden MD §14）。ATTA 处直管不合并（与 E3D `line()` 跳 ATTA 不同）。DPOINT ✗ |
+| 15 | TUBING 轴线点、DPOINT | ◐ | **TUBING ✓（2026-09-13）**：`tubing_axis` 点源从直管对象的局部包围盒 × 放置矩阵派生管身轴线，两端吸到邻接 P-Point（`src/measurement/tubing/tubingAxis.ts`），按 E3D `EDGTUBING` 走线候选（Snap 近端 / Cursor 交点 / Mid-Point 等沿线 / Intersect 转 LINE），Any / Element 放行；实机 `轴线 → 轴线` Snap 与 Mid-Point 两条距离走通、校正端点与 E3D ELBO 145031 P1 差 0.001 mm（golden MD §14）。ATTA 按 E3D `line()` 跳过：gen-model 本就不在非 SPKBRK 的 ATTA 处断管，SPKBRK 断开的两段前端合并（`mergeTubingAxisAcrossPassThrough`，golden MD §15）。DPOINT ✗ |
 | 16 | 拾取类型：Snap / Exact | ✓ | 拾取层 `pickType` Snap / Cursor；点候选、线候选（`GMFLINE` 近端 / 控制点）、面候选（射线 ∩ 平面）三类几何均接内核 |
 | 17 | 拾取类型：Distance / Mid-Point / Fraction / Proportion / Intersect | ◐ | 全部已接：Distance / Mid-Point / Fraction / Proportion 走 `pickDerivation.ts`（PLINE 线、Graphics 边、P-Point Distance 偏移）；Intersect 走 `intersectPickSession.ts` 两 / 三次子拾取（线 × 线 / 线 × 面 / 面 × 面 × 第三项，E3D 2,870 / 2,874 分型），实机 `ELBO 边 × VALV 边` 出交点（golden MD §13）；**◐ 只因 G8 运行时 golden 未采** |
 | 18 | Significant Snaps 开关 | ◐ | 拾取层 `significantSnaps`（覆盖条开关 + 提示尾巴 `Snap`），线候选带 `intermediates` 时按段派生；无 E3D 实机对照 |
@@ -119,7 +119,12 @@
 - 切片 4（2026-09-13）：TUBING 轴线前端派生——纯内核 `src/measurement/tubing/tubingAxis.ts`（局部包围盒 × 放置矩阵 → 轴线；两端吸邻接 P-Point）
   + `tubing_axis` 点源（特征类 `tubing`，Any / Element 放行，`rayHit` 按孔径边缘入围）+ loader 的直管登记（noun `TUBI` / `is_tubi`）+ 轴线高亮。
   实机 `轴线 → 轴线` Snap 4568 mm / Mid-Point 3242 mm，校正端点 = E3D ELBO 145031 P1（golden MD §14）。
-- **未完**：`element/keypoints` / `element/plines` 服务端；ATTA 处直管轴线合并（E3D `EDGTUBING.line` 跳 ATTA）；G7 / G8 / G9 运行时 golden（E3D 需在跑）。
+- 切片 4 补（2026-09-13 22:49）：TUBING 轴线跨 ATTA——`mergeTubingAxisAcrossPassThrough` 把在 ATTA 处断开的共线直管段接成 E3D `EDGTUBING.line`
+  的一条线（OLET 等非 ATTA 零长构件不穿过）；点集响应透传构件 noun（`PtsetResponse.noun` → `PtsetSceneCandidate.noun`）以认出没有几何的 ATTA。
+  实机核对：gen-model 本就跳过非 SPKBRK 的 ATTA / STIF / BRCO（`cata_model.rs`），BRAN 24381_145018 的 6 个 ATTA 全在直管轴线内部、本库 169 个 ATTA
+  无 SPKBRK——合并只在预制分段处起作用，以单测 + 页内内核实机坐标复算为证；跨 ATTA 直管 Snap / Mid-Point 与 E3D 线端点 / 中点差 0.000 mm（golden MD §15）。
+- **未完**：`element/keypoints` / `element/plines` 服务端；STIF / BRCO 处按 E3D 截断（gen-model 穿过它们、E3D `line()` 不跳，本库无样本）；
+  G7 / G8 / G9 运行时 golden（E3D 需在跑）。
 
 **前端**
 - `useMeasurementPickSources` 重构成两维：**过滤器**（对齐 E3D：Any / Element / Ppoint / Pline / Graphics / Screen；Aid / External 先占位灰掉）× **拾取类型**（Snap / Exact / Mid-Point / Fraction / Proportion / Distance / Intersect）。现有 4 个点源映射：`ptset`→Ppoint、`position`+`primitive_key_point`→Element、PLINE 关键点→Pline、`mesh_pick_point`→Screen/Exact；新增 Graphics。

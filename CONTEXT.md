@@ -125,7 +125,7 @@ _Avoid_: 点源开关、捕捉模式
 
 ## 管身轴线
 
-直管（TUBI）对象的中心线段，作为一条线参与测量取点：Snap 取近端、Cursor 取轴线上离光标最近处、Mid-Point 等沿线派生、Intersect 当直线。它从画出来的直管对象的局部包围盒与放置矩阵派生，两端再吸到邻接构件的 P-Point，对应 E3D `EDGTUBING.line` 的 leave → arrive 口径；在 ATTA 处直管是断开的两段，不合并。
+直管（TUBI）对象的中心线段，作为一条线参与测量取点：Snap 取近端、Cursor 取轴线上离光标最近处、Mid-Point 等沿线派生、Intersect 当直线。它从画出来的直管对象的局部包围盒与放置矩阵派生，两端再吸到邻接构件的 P-Point，对应 E3D `EDGTUBING.line` 的 leave → arrive 口径；ATTA 是穿过点——管线越过它到下一个非 ATTA 构件，在 ATTA 处断开的两段直管算同一条轴线；OLET 这类非 ATTA 的零长构件不穿过。
 _Avoid_: 管道中心线（MBD 尺寸的走向线）、PLINE
 
 ## P-Point

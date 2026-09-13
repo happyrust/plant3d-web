@@ -410,11 +410,66 @@ Playwright 真指针；临时 spec 已删）：测量 → `距离`（缺省 `Any
   `scale.z = 2.3376` 一致（gen-model 画的直管已经落在 P-Point 上，端点校正位移 < 2 mm 容差）。
 
 **已知偏离 / 未做**：
-- E3D `line()` 跳过 ATTA（管线从构件 leave 直到下一个非 ATTA 构件的 arrive），Web 的直管对象在 ATTA 处是断开的两段，各自派生轴线；
-  Snap / Cursor 不受影响，**Mid-Point / Fraction / Proportion 在带 ATTA 的一段上与 E3D 不同**（未合并）。
+- ~~E3D `line()` 跳过 ATTA（管线从构件 leave 直到下一个非 ATTA 构件的 arrive），Web 的直管对象在 ATTA 处是断开的两段，各自派生轴线；
+  Snap / Cursor 不受影响，Mid-Point / Fraction / Proportion 在带 ATTA 的一段上与 E3D 不同（未合并）。~~ **2026-09-13 22:48 实机核对后撤回**：
+  gen-model 画直管时本就跳过非 SPKBRK 的 ATTA（§15），这根 BRAN 的 6 个 ATTA 全在直管轴线内部；SPKBRK 断开的两段现由前端合并（§15）。
 - BRAN HEAD 管（`hPosition → 首个非 ATTA 成员 aPosition`）与 LEAVE 管同一处理，无区别对待。
 - 测量列表条目的「近似」徽标来自 xeokit 记录缺 `provenance`（`legacy-unknown` → approximate），不是 TUBING 的精度判定（`tubing_axis` 在
   `dtxDimensionSnapPort` 归 exact）；该徽标对所有 xeokit 记录都亮，属既有行为。
 - 完成一条测量后，尺寸系统在 capture 阶段接管其描边上的 `pointermove`（`viewerBindings.ts` `stopImmediatePropagation`），悬停在刚量过的
   轴线上不再刷新捕捉提示；走查时先删记录再进下一场景。
 - G7-02 TUBING 运行时 golden 未采；`element/keypoints` / `element/plines` 服务端仍未做。
+
+## 15. 拾取层 Phase A · TUBING 轴线 × ATTA（`EDGTUBING.line` 跳 ATTA：断开的直管段合成一条线）实机走查（2026-09-13 22:48）
+
+**改动口径**（`edfb0b0`；决策 `d-331` 取代 `d-318`，ADR 0060（4）同步）：E3D `EDGTUBING.line(dbRef, 'LEAVE')` 找管线远端时 `skip if(!component.type inset('ATTA'))`——管线从构件 `lPosition`
+直到**下一个非 ATTA 成员**的 `aPosition`，HEAD 管同理（`edgtubing.pmlobj` 182–228）。Web 的对应：
+
+- 内核 `src/measurement/tubing/tubingAxis.ts`：`TubingAxisEndPoint.noun`；`TUBING_PASS_THROUGH_NOUNS = {ATTA}` / `isTubingPassThroughPoint`；
+  `mergeTubingAxisAcrossPassThrough(hit, others, {tolerance, minCos = cos 0.5°, isPassThrough})`——拾中段某端校正到穿过点时，在同构件其余共线段里
+  找端点相接（容差内）且伸向远侧的一段接上，从其远端继续，双向，直到端点是真构件点或无段可接（保留 ATTA 端，同 E3D 回落 `tPosition`）；
+  段只用一次、多段相接取端点最近者；**非 ATTA 的零长构件（OLET arrive = leave）不穿过**——E3D 的线在它那里停。返回 `pieces`（起→止）与 `passThrough`。
+- 接线 `useXeokitMeasurementTools.buildTubingAxisCandidates`：拾中段某端落在 ATTA 上才去列同构件其它直管（`listTubingObjectIds` 注入点，缺省
+  loader `listDtxTubiObjectIdsForRefno`）、逐段派生 + 校正后合并；候选 id / objectId 仍是拾中段，`segment` 是合并后整条线（高亮随之整条）。
+- **认出 ATTA 靠点集响应透传的 noun**：ATTA 没有几何、不在 DTX 登记里，`nounForRefno` 原先对它回 null。现在 gen-model-v1 `element/ptset`
+  的 `noun` 一路带到 `PtsetResponse.noun` / `results[].noun` / `PtsetSceneCandidate.noun`，端点 noun 优先取它；`nounForRefno` 也回落到
+  `ptsetResponseByRefno` 里的 noun——Ppoint 过滤器正对 ATTA 的提示从「P-Point #1」变成「ATTA P-Point #1」（E3D `Snap :ATTA`）。legacy 源为 null。
+
+**事实核对（改变了 §14 的一条「已知偏离」）**：gen-model 画直管时**本就跳过 ATTA**——`gen-model-ptset-api/src/fast_model/cata_model.rs` ~1548：
+`skip = (arrive_type == "ATTA" || "STIF" || "BRCO") && !SPKBRK`，即非预制分段（SPKBRK）的 ATTA / STIF / BRCO 不断管。实机 BRAN 24381_145018
+（成员序 `ELBO ATTA ELBO ATTA ELBO ATTA ELBO ELBO ATTA ELBO ELBO ATTA ELBO OLET ELBO ATTA VALV`）：11 根直管两端全部落在**非 ATTA** 构件的 P-Point 上
+（≤ 0.01 mm；HEAD 管 `o:…:8` 一端是 ELBO#1 P1、另一端 1682.9 mm 外无 P-Point = 分支 head），**6 个 ATTA 全部在某根直管轴线内部**（t 0.271–0.616，
+点到轴线 ≤ 1.96 mm），落在 ATTA 上的直管端点 0 个；OLET#14 两侧是两根直管（`o:…:2` / `o:…:3`，与 E3D 一致：OLET 不跳）。本库 `search?query=ATTA`
+的 169 个 ATTA 逐个查 `element/attributes`，**无一 SPKBRK = true**——运行时没有「ATTA 处断开」的样本，§14 写的「Web 直管在 ATTA 处是断开的两段」
+是当时未经实机核对的假设，撤回。合并路径只在 SPKBRK 断管处起作用，证据 = 单测 + 下面「页内内核复算」。
+
+**证据等级**：`static_expectation`（`edgtubing.pmlobj` 182–228 的 ATTA 跳过；`cata_model.rs` 的断管规则）；G7-02 TUBING 运行时 golden 仍未采。
+
+**Web 实机走查**（dev `:3101` + gen-model `:8023`，`?show_refno=24381_145018&gm_backend_port=8023`，Playwright 真指针；临时 spec 已删）：
+走查对象 = 跨 ATTA 的最长直管 `o:24381_145018:1`（2555.621 mm，轴线 ELBO#7 P1 → ELBO#5 P2，ATTA 145024 在 t = 0.616 处），悬停点取 t = 0.416
+（正对 ATTA 时 ATTA 的 P-Point 在孔径内会赢，见 Ppoint 一条）。
+
+- **Any × Snap**：悬停 → `TUBI 轴线（ELBO P-Point #1 → ELBO P-Point #2） · Snap`（标签两端都是 ELBO，ATTA 不出现；`web-tubing-atta-live-01-hover-axis-at-atta.png`）；
+  点击 → 起点 `7739.697 / 10343.156 / 14082.127 mm` = 近端 ELBO#7 P1（**0.000 mm**），离 ATTA 1573.3 mm；终点取直管 `o:…:7` 中段 Snap →
+  `Distance 4743mm / Offset X +110mm / Y +1293mm / Z +4562mm / Direction X +0.0232 · Y +0.2726 · Z +0.9618`（`-02-snap-result.png`），
+  终点 `7849.850 / 11636.248 / 18644.385 mm`（= §14 的 ELBO 145031 侧端点）。
+- **Any × Mid-Point**：同一悬停点点击 → `6812.809 / 9463.575 / 14078.142 mm` = **整条线**（ELBO#7 P1 ↔ ELBO#5 P2）的中点（**0.000 mm**），
+  离「起点—ATTA」半段中点 491.2 mm、离「ATTA—终点」半段中点 786.6 mm（`-03-hover-midpoint-at-atta.png`）；终点直管 `o:…:7` 中点 →
+  `Distance 4794mm / Offset X +1037mm / Y +1004mm / Z +4572mm / Direction X +0.2163 · Y +0.2094 · Z +0.9536`（`-04-midpoint-result.png`）。
+- **Ppoint × Snap 正对 ATTA**：`Snap : ATTA P-Point #1`（`hoverSnapTarget.refno = 24381_145024`；`-05-ppoint-filter-atta.png`）——noun 透传生效。
+- **页内内核复算**（`import('/src/measurement/tubing/tubingAxis.ts')`，实机场景坐标 + 全部成员 P-Point 带 noun）：容差 2.858 mm（5 % × 57.15）；
+  把 `o:…:1` 的轴线在 ATTA 处切成两段 → 校正后 A = `ELBO P-Point #1 → ATTA P-Point #2`（noun ATTA）、B = `ATTA P-Point #2 → ELBO P-Point #2` →
+  合并 `pieces ["a","b"]`、`passThrough ["ATTA P-Point #2"]`、两端与整条轴线 Δ **0.0000 mm**；OLET 两侧的 `o:…:2` / `o:…:3` 经同一函数
+  **不合并**（`pieces` 只有自己，端点 `ELBO P-Point #2 → OLET P-Point #1`）。
+- 记录 `web-tubing-atta-live-records.json`（成员点、11 根直管两端归属与跨越的 ATTA、两条记录、内核复算），扫描日志 `web-tubing-atta-live-scan.txt`；页面错误 0。
+
+**独立复算**：
+- Snap：Δ = (110.153, 1293.092, 4562.258) mm → 4743.25 mm，方向 (0.0232, 0.2726, 0.9618)——与面板一致。
+- Mid-Point：起点 = ((7739.697 + 5885.922) / 2, (10343.156 + 8583.994) / 2, (14082.127 + 14074.156) / 2) = (6812.809, 9463.575, 14078.142)，
+  与记录逐位相同；Δ = (1037.041, 1003.863, 4572.072) mm → 4794.5 mm，方向 (0.2163, 0.2094, 0.9536)——一致。
+
+**残余偏离 / 未做**：
+- gen-model 还跳过非 SPKBRK 的 **STIF / BRCO**，而 E3D 3.1 `line()` 只跳 ATTA：在这两类构件处 Web 的直管（因而轴线）比 E3D 的管线长；本库未见样本，未处理
+  （要做是「按 P-Point 截断」，与本节的合并相反）。
+- SPKBRK ATTA 的运行时样本缺（本库 0 个），合并只有单测与内核复算证据；G7-02 未采。
+- BRAN HEAD 管与 LEAVE 管同一处理，不区分。

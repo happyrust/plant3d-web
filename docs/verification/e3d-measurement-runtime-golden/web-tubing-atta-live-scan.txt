@@ -1,0 +1,34 @@
+# TUBING 轴线 × ATTA 实机走查 2026-09-13 22:48（dev :3101 + gen-model :8023，?show_refno=24381_145018&gm_backend_port=8023，Playwright 真指针，临时 spec 已删）
+# 每行 = 一步操作后的覆盖条提示 / 记录摘要；坐标为画布像素，长度 mm；「kernel」段是页内 import 内核用实机坐标复算。
+members: 1:ELBO 2:ATTA 3:ELBO 4:ATTA 5:ELBO 6:ATTA 7:ELBO 8:ELBO 9:ATTA 10:ELBO 11:ELBO 12:ATTA 13:ELBO 14:OLET 15:ELBO 16:ATTA 17:VALV
+objects loaded: 22; tube objects: 11; gm scale: 0.001
+tube o:24381_145018:0 len=456.4mm: start ↔ ELBO#3 P1 0.00mm ; end ↔ ELBO#1 P2 0.00mm ; spans ATTA: 24381/145020(t=0.280, d=0.00mm)
+tube o:24381_145018:1 len=2555.6mm: start ↔ ELBO#7 P1 0.00mm ; end ↔ ELBO#5 P2 0.00mm ; spans ATTA: 24381/145024(t=0.616, d=0.00mm)
+tube o:24381_145018:2 len=415.9mm: start ↔ ELBO#15 P2 0.00mm ; end ↔ OLET#14 P1 0.00mm ; spans ATTA: -
+tube o:24381_145018:3 len=1200.0mm: start ↔ OLET#14 P1 0.00mm ; end ↔ ELBO#13 P2 0.00mm ; spans ATTA: -
+tube o:24381_145018:4 len=2310.8mm: start ↔ ELBO#5 P1 0.00mm ; end ↔ ELBO#3 P2 0.00mm ; spans ATTA: 24381/145022(t=0.521, d=0.01mm)
+tube o:24381_145018:5 len=1599.9mm: start ↔ ELBO#11 P1 0.00mm ; end ↔ ELBO#10 P2 0.00mm ; spans ATTA: -
+tube o:24381_145018:6 len=2349.2mm: start ↔ ELBO#8 P1 0.00mm ; end ↔ ELBO#7 P2 0.00mm ; spans ATTA: -
+tube o:24381_145018:7 len=2337.6mm: start ↔ ELBO#13 P1 0.00mm ; end ↔ ELBO#11 P2 0.00mm ; spans ATTA: 24381/145030(t=0.359, d=1.96mm)
+tube o:24381_145018:8 len=1682.9mm: start ↔ ELBO#1 P1 0.00mm ; end ↔ ELBO#1 P1 1682.86mm ; spans ATTA: -
+tube o:24381_145018:9 len=575.5mm: start ↔ VALV#17 P1 0.00mm ; end ↔ ELBO#15 P1 0.00mm ; spans ATTA: 24381/145034(t=0.566, d=0.01mm)
+tube o:24381_145018:10 len=1037.6mm: start ↔ ELBO#10 P1 0.00mm ; end ↔ ELBO#8 P2 0.00mm ; spans ATTA: 24381/145027(t=0.271, d=0.00mm)
+tubes ending on an ATTA P-Point: 0; ATTAs inside a tube axis: 6 / 6
+status after activate: 距离· 第 1/2 步 选择起点 (Snap) Snap : 等待捕捉（P-Point / Item 原点 / 管身轴线（TUBING））
+hover o:24381_145018:1 at t=0.416 (ATTA 24381/145024 at t=0.616) @(265,290) → 距离测量 · 第 1/2 步 选择起点 (Snap) Snap : TUBI 轴线（ELBO P-Point #1 → ELBO P-Point #2） · Snap
+hover point t=0.416 along o:24381_145018:1
+chosen o:24381_145018:1: E3D line ELBO#7 P1 → ELBO#5 P2, length 2555.621 mm (drawn 2555.621 mm), ATTA 24381/145024 (seq 6) inside at t=0.616
+Any×Snap hover at ATTA: 距离测量 · 第 1/2 步 选择起点 (Snap) Snap : TUBI 轴线（ELBO P-Point #1 → ELBO P-Point #2） · Snap | {"label":"轴线（ELBO P-Point #1 → ELBO P-Point #2） · Snap","refno":"24381_145018"}
+Any×Snap click near ATTA (t=0.416) → origin 7739.697/10343.156/14082.127 "轴线（ELBO P-Point #1 → ELBO P-Point #2） · Snap"; vs nearer ELBO end 0.000 mm; vs ATTA 1573.275 mm
+hover second tube o:24381_145018:7: 距离测量 · 第 2/2 步 选择终点 (Snap) Snap : TUBI 轴线（ELBO P-Point #1 → ELBO P-Point #2） · Snap；点空白取消当前点选
+snap result rows: ["Distance4743mm","OffsetX+110mm","OffsetY+1293mm","OffsetZ+4562mm","DirectionX+0.0232·Y+0.2726·Z+0.9618"]
+snap record: origin=[7.739696842065991,10.34315639242201,14.082126956386688] "轴线（ELBO P-Point #1 → ELBO P-Point #2） · Snap" target=[7.849850097656254,11.636248430183132,18.644385282589266] "轴线（ELBO P-Point #1 → ELBO P-Point #2） · Snap"
+Any×Mid-Point hover at ATTA: 距离测量 · 第 1/2 步 选择起点 (Mid-Point) Snap : TUBI 轴线（ELBO P-Point #1 → ELBO P-Point #2） · Mid-Point
+Any×Mid-Point click → 6812.809/9463.575/14078.142; vs E3D line mid 0.000 mm; vs (start,ATTA) mid 491.2 mm; vs (ATTA,end) mid 786.6 mm
+midpoint result rows: ["Distance4794mm","OffsetX+1037mm","OffsetY+1004mm","OffsetZ+4572mm","DirectionX+0.2163·Y+0.2094·Z+0.9536"]
+Ppoint×Snap hover at ATTA: 距离测量 · 第 1/2 步 选择起点 (Snap) Snap : ATTA P-Point #1 | {"label":"P-Point #1","refno":"24381_145024"}
+kernel tol 2.858 mm; whole axis ELBO P-Point #1 → ELBO P-Point #2
+kernel cut at ATTA: piece A ELBO P-Point #1 → ATTA P-Point #2 (noun ATTA); piece B ATTA P-Point #2 → ELBO P-Point #2
+kernel merged: pieces ["a","b"] passThrough ["ATTA P-Point #2"] ELBO P-Point #1 → ELBO P-Point #2; start Δ 0.0000 mm, end Δ 0.0000 mm
+kernel OLET pair: pieces ["o:24381_145018:2"] ELBO P-Point #2 → OLET P-Point #1
+page errors: 0
