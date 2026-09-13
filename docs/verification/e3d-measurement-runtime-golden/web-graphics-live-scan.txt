@@ -1,0 +1,12 @@
+status(initial) = 距离· 第 1/2 步 选择起点 (Snap) Snap : 等待捕捉（P-Point / Item 原点）
+facet samples: 4, edge samples: 4, other targets: VALV 边 · Snap | ELBO 边 · Snap | TUBI 边 · Snap
+  facet @611,289: 距离· 第 1/2 步 选择起点 (Snap) Snap : TUBI 面
+  facet @631,299: 距离· 第 1/2 步 选择起点 (Snap) Snap : TUBI 面
+  facet @651,329: 距离· 第 1/2 步 选择起点 (Snap) Snap : TUBI 面
+  edge  @661,309: 距离· 第 1/2 步 选择起点 (Snap) Snap : TUBI 边
+  edge  @651,319: 距离· 第 1/2 步 选择起点 (Snap) Snap : TUBI 边
+  edge  @651,339: 距离· 第 1/2 步 选择起点 (Snap) Snap : TUBI 边
+status(after 1st click) = 距离· 第 2/2 步 选择终点 (Snap) Snap : TUBI 面
+status(hover 2nd) = 距离· 第 2/2 步 选择终点 (Snap) Snap : TUBI 边
+records mention mesh_graphics: true
+records mention graphics-plane/line ids: true

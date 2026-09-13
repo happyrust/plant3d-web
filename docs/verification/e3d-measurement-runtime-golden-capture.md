@@ -332,7 +332,7 @@ E3D 的方向字串（如 `S 11.7755 W 66.1215 D`）在用例里按 PDMS 罗盘�
   列表条目带 `近似`（`mesh_graphics` 归 `model-surface` / approximate，网格是渲染细分不是设计曲面）。
   独立复算：Δ = (−85.62, +1444.13, −1802.15) mm，|Δ| = 2311.0 mm，方向 (−0.0371, 0.6249, −0.7798)——与面板一致。
 - 截图 `web-graphics-live-01-pick-layer-popover.png`（弹层控件）、`-02-hover-facet.png`、`-03-hover-edge.png`、`-04-result.png`；
-  扫描日志 `web-graphics-live.log`。
+  扫描日志 `web-graphics-live-scan.txt`。
 - 单测：`meshFeatureGraphics.test.ts` 13 条（盒 12 棱 / 矩阵 / 共线合并 / 非流形不合并 / 8 段圆柱母线 vs 36 段只剩圆周 / 面片 / 退化）、
   `pickLayerModel.test.ts` 8 条（Any / Graphics / Element+Cursor 放行表、提示 token、归一化）、`buildGraphicsPickCandidates` 3 条、
   `MeasurementOverlayBar.test.ts` 拾取层控件 1 条；测量相关 vitest 30 文件 / 322 用例过。
