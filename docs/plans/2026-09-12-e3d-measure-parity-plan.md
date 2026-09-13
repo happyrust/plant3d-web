@@ -85,7 +85,7 @@
 | 14 | 拾取过滤器：Graphics（facet 边 / 面）、Screen、Aid、External | ◐ | **Graphics ✓（2026-09-13）**：`mesh_graphics` 点源从已加载网格派生绘制边（线）/ 面（平面），只在 Graphics 过滤器下参与；实机 `面 → 边` 距离走通（golden MD §12）。Screen ✓（= `mesh_pick_point`）。Aid / External 占位灰掉 |
 | 15 | TUBING 轴线点、DPOINT | ✗ | — |
 | 16 | 拾取类型：Snap / Exact | ✓ | 拾取层 `pickType` Snap / Cursor；点候选、线候选（`GMFLINE` 近端 / 控制点）、面候选（射线 ∩ 平面）三类几何均接内核 |
-| 17 | 拾取类型：Distance / Mid-Point / Fraction / Proportion / Intersect | ◐ | Distance / Mid-Point / Fraction / Proportion：内核 `pickDerivation.ts` + UI 取值输入已接（PLINE 线、Graphics 边、P-Point Distance 偏移）；**Intersect 内核就位、两次拾取流程未接**；G8 未采 |
+| 17 | 拾取类型：Distance / Mid-Point / Fraction / Proportion / Intersect | ◐ | 全部已接：Distance / Mid-Point / Fraction / Proportion 走 `pickDerivation.ts`（PLINE 线、Graphics 边、P-Point Distance 偏移）；Intersect 走 `intersectPickSession.ts` 两 / 三次子拾取（线 × 线 / 线 × 面 / 面 × 面 × 第三项，E3D 2,870 / 2,874 分型），实机 `ELBO 边 × VALV 边` 出交点（golden MD §13）；**◐ 只因 G8 运行时 golden 未采** |
 | 18 | Significant Snaps 开关 | ◐ | 拾取层 `significantSnaps`（覆盖条开关 + 提示尾巴 `Snap`），线候选带 `intermediates` 时按段派生；无 E3D 实机对照 |
 | 19 | 提示文案结构 `<命令> <步> (<拾取类型>) <过滤器> :` | ◐ | `formatMeasurementPrompt`：`距离测量 · 第 2/2 步 选择终点 (Mid-Point) Snap : ELBO P-Point #1`（E3D `EDGSTATE.prompt()` 结构，过滤器不进提示与 E3D 一致）；文案矩阵（Phase E）未对照 |
 | 20 | 窗体常驻 / 连续测量 / Repeat / ESC 分层 / 右键 | ◐ | 有连续测量、Esc 分层、右键菜单；ESC / 右键 / 关窗的 E3D 分层行为未采（上一计划 M3 gate） |
@@ -112,8 +112,10 @@
 - 切片 2（`001b302`）：Graphics provider `src/measurement/graphics/meshFeatureGraphics.ts` + `mesh_graphics` 点源；`Any` 改按
   E3D `stdAny`「Element, Ppoint or Pline」口径；Perpendicular `facet-plane` provider；拾中细节高亮。实机走通 `面 → 边`（golden MD §12）。
 - 切片 2b（`6ca770a`）：覆盖条设置弹层的过滤器 × 拾取类型 radio 组、取值输入、Significant snaps 控件（切片 1 漏掉的模板）。
-- **未完**：Intersect 两次拾取流程；`element/keypoints` / `element/plines` 服务端；TUBING 轴线点前端派生；G7 / G8 / G9 运行时 golden
-  （E3D 需在跑）；ADR「测量拾取层对齐 E3D Positioning Control」。
+- 切片 3（`e91b30e`）：Intersect 两 / 三次子拾取状态机 `src/measurement/kernel/intersectPickSession.ts` + 工具接线（子拾取、交点预览、
+  `Intersection[n]` 提示、Esc 第一档、换类型重置）。实机 `ELBO 边 × VALV 边` 出交点（golden MD §13）。
+- **未完**：`element/keypoints` / `element/plines` 服务端；TUBING 轴线点前端派生；G7 / G8 / G9 运行时 golden（E3D 需在跑）；
+  ADR「测量拾取层对齐 E3D Positioning Control」。
 
 **前端**
 - `useMeasurementPickSources` 重构成两维：**过滤器**（对齐 E3D：Any / Element / Ppoint / Pline / Graphics / Screen；Aid / External 先占位灰掉）× **拾取类型**（Snap / Exact / Mid-Point / Fraction / Proportion / Distance / Intersect）。现有 4 个点源映射：`ptset`→Ppoint、`position`+`primitive_key_point`→Element、PLINE 关键点→Pline、`mesh_pick_point`→Screen/Exact；新增 Graphics。

@@ -337,5 +337,26 @@ E3D 的方向字串（如 `S 11.7755 W 66.1215 D`）在用例里按 PDMS 罗盘�
   `pickLayerModel.test.ts` 8 条（Any / Graphics / Element+Cursor 放行表、提示 token、归一化）、`buildGraphicsPickCandidates` 3 条、
   `MeasurementOverlayBar.test.ts` 拾取层控件 1 条；测量相关 vitest 30 文件 / 322 用例过。
 
-未做：Intersect 两次拾取流程（内核 `intersectPicks` 已就位，UI 未接）；`element/keypoints` / `element/plines` 服务端接口
-（gen-model-v1 下 Element 显著点 / PLINE 仍无供给）；TUBING 轴线点前端派生；G7 / G8 / G9 运行时 golden。
+未做：`element/keypoints` / `element/plines` 服务端接口（gen-model-v1 下 Element 显著点 / PLINE 仍无供给）；TUBING 轴线点前端派生；
+G7 / G8 / G9 运行时 golden。Intersect 流程见 §13。
+
+## 13. 拾取层 Phase A · Intersect 拾取类型（两 / 三次子拾取求交）实机走查（2026-09-13 12:47）
+
+**改动口径**（提交 `e91b30e`）：E3D `EDGPICKTYPE.intersect` + `EDGSTATE.minor`——一个测量位置由多次子拾取求交得到。
+纯状态机 `src/measurement/kernel/intersectPickSession.ts`：子拾取按 E3D 分型转 LINE / PLANE（段 → 线、面 → 平面、P-Point /
+基本体轴 → POINTVECTOR 线、裸点 → 拒收不消耗）；首项入栈、提示推到 `Intersection[2]`；两项求交，两面要第三项（`Intersection[3]`）；
+线 × 线 / 线 × 面平行 → `(2,870)` 只丢失败那一击；三面无唯一交点 → `(2,874)` 会话清空；异面直线取第一条线上最近点（`LINE.intersection`）。
+工具侧：`pointerup` 走子拾取，凑齐才把交点（label「交点」，几何字段清空）当成这一击的测量点；已有子拾取时悬停用当前项试算交点做预览；
+Esc 分层第一档「先放弃进行中的子拾取」；换拾取类型 / 过滤器重置。
+
+**证据等级**：`static_expectation`（`edgpicktype.pmlobj` 616–960、`edgstate.pmlobj` 455–500）；**G8 Intersect 运行时 golden 未采**（E3D 未在跑）。
+
+**Web 实机走查**（同 §12 环境，Playwright 真指针；临时 spec 已删）：设置弹层 → 过滤器 `Graphics` + 拾取类型 `Intersect`（摘要 `Graphics · Intersect`）。
+
+- 提示条：`距离测量 · 第 1/2 步 选择起点 (Intersection[1]) Snap : 等待捕捉（网格边 / 面（Graphics））`。
+- 子拾取 1 点 `ELBO 边` → **不落点**，提示变 `… 第 1/2 步 … (Intersection[2]) Snap : ELBO 边`（`web-intersect-live-02-after-subpick-1.png`）。
+- 悬停另一条 `VALV 边` → 透镜 / 提示给 `VALV 交点（预览）`；点击 → 交点成为起点，提示 `… 第 2/2 步 选择终点 (Intersection[1]) Snap : …`
+  （`web-intersect-live-03-intersection-start.png`），下一测量点的子拾取序号回到 1。
+- 扫描日志 `web-intersect-live-scan.txt`（16 个边像素样本）。
+- 单测：`intersectPickSession.test.ts` 12 条；`useXeokitMeasurementTools.test.ts` 新增 3 条（Graphics 边 / 面落点 + Any 不放行、线 × 线两次子拾取
+  出角点 + `(2,870)` 保留首项 + Esc 分层、面 × 面 × 线 `(2,874)` 清空 + 换类型重置）。

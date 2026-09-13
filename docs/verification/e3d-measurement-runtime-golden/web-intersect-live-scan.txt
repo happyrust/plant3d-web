@@ -1,0 +1,6 @@
+status(initial) = 距离· 第 1/2 步 选择起点 (Intersection[1]) Snap : 等待捕捉（网格边 / 面（Graphics））
+edge samples: 16
+status(after sub-pick 1) = 距离· 第 1/2 步 选择起点 (Intersection[2]) Snap : ELBO 边
+hover @551,292: 距离· 第 1/2 步 选择起点 (Intersection[2]) Snap : VALV 交点（预览）
+  after click: 距离· 第 2/2 步 选择终点 (Intersection[1]) Snap : VALV 交点（预览）
+store mentions 交点: false
