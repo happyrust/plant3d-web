@@ -42,8 +42,9 @@ export type DimensionTheme = Readonly<{
   minArcRadiusPx: number;
   /**
    * Stroke widths (CSS px) for the screen-space stroke-quad renderer, hit
-   * regions, and SVG export. Text strokes stay slightly heavier than
-   * dimension lines (CAD practice).
+   * regions, and SVG export. Text strokes stay heavier than dimension lines
+   * (CAD practice); 1.8 px keeps 10–13 px LFF glyphs legible once their
+   * edges are feathered (user's call, 2026-09-14).
    */
   textStrokeWidthPx: number;
   dimensionStrokeWidthPx: number;
@@ -175,7 +176,7 @@ export const SOLVESPACE_DIMENSION_THEME: DimensionTheme = {
   labelPaddingPx: 8,
   outsideExtensionPx: 18,
   minArcRadiusPx: 15,
-  textStrokeWidthPx: 1.5,
+  textStrokeWidthPx: 1.8,
   dimensionStrokeWidthPx: 1.2,
   dimension3d: {
     textFloorPx: 13,
@@ -194,7 +195,9 @@ export const SOLVESPACE_DIMENSION_THEME: DimensionTheme = {
   },
   tag: {
     textHeightPx: 11,
-    pillTextHeightPx: 10,
+    // Pill text (elbow angle / elevation) at the card height: 10 px read too
+    // thin next to the frames and cards (user's call, 2026-09-14).
+    pillTextHeightPx: 11,
     lineAdvance: 1.5,
     paddingPx: 7,
     pillPaddingPx: 4,

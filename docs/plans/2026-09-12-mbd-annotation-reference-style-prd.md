@@ -150,3 +150,10 @@
 - **验证**：单测 59 文件 / 338 通过；eslint 0；type-check 本改动新增 0；e2e fixture 2/2；真实 Chrome 无后端链路把 demo 立方体放大挡在相机与 `2084` 之间：inspection 只有 `2084` 淡到 0.35、其余 0.65，对面看回 0.65，切回 engineering 复原，切换不重拉 payload（验证 README「inspection 显示模式」段，`inspection-*.png`）。
 - **实机对照（同日补，三轮）**：BRAN 24381_145018 + live gen-model `:18122`，三个相机：正面淡 `900.51`、背面淡 `1834.19` 与阀门位号 `Copy-of-1RCS002VP`（阀门原点被直管 `o:24381_145018:5` 挡住）、阀门簇中景淡 `900.51` / `173`（尺寸都是数值文字在管子另一侧的三维尺寸），再布局逐条相同，inspection 完整布局 3–5 ms。标签取法：裸探锚点误标（第一轮）→ 一律探卡片一张不淡（第二轮 `9de9e60`）→ 探锚点但排除被点名构件（第三轮，现口径），独立射线复核 6/6 与内核一致；ELBO 近景补验 9 弯头 × 14 方向 124 个视图，自己的 piece 挡在锚点前的 46 个里 26 个亮 / 20 个被别的 piece 挡住而淡，独立复核 124/124 一致（验证 README「实机对照」小节，`inspection-real-*.png`、`inspection-real-b-probe.json`、`inspection-real-elbo-probe.json`）。单测 59 文件 / 343 通过。
 - **未覆盖**：2k 记录的分帧预算；SVG 导出不带 α（导出仍是工程图样）；「包着锚点的体」用「锚点前 ε 处向前再发一条射线能穿出」判定，凹体（弯头、绕回来的管段）在锚点前后各穿一次时会被当成包着锚点而不算遮挡，本样本没有这种相机。
+
+### 9.6 文字绘制：胶囊 SDF 解析抗锯齿 + 圆头接头 + 深度去重（2026-09-14，fable-5-1-54；用户「把文字的绘制改得更清晰」，拍板 A + B）
+
+- **画家** `viewport/scenePainter.ts`（ADR 0062）：每段描边四边形向四周多伸 w/2 + 1 设备像素，片元按胶囊距离算覆盖率、羽化 1 设备像素（`uFeatherPx = 1 / dpr`，`dimensionViewport` 把 `projector.dpr` 传给 `resize`）——LFF 折线接头因此圆润无缺口，边缘平滑且不依赖 MSAA（选中构件走 OutlinePass 时整帧在 `gl.SAMPLES = 0` 的 render target 里，此前文字全是硬边）。实心（覆盖率 ≥ 0.999）与羽化两遍共享几何：`dimension-scene-lines` / `dimension-scene-line-edges`，都用 `gl_FragDepth` 写近平面常量深度（描边 1e-5、三维文字白边 2e-5）并以 LESS 测试，对模型恒通过、对自身只画第一次——inspection 的 α < 1 不再在接头叠成深色斑点。
+- **主题** `kernel/theme.ts`：`textStrokeWidthPx` 1.5 → 1.8，`tag.pillTextHeightPx` 10 → 11。
+- **验证**：单测 59 文件 / 344 通过（painter +1，四个绘制对象）；eslint 0；type-check 本改动 0；实机同位置 3× 放大前后对照（卡片 / 三维数字 / 药丸 / inspection 淡化）见验证 README「文字绘制」小节，`text-aa-before-*.png` / `text-aa-after-*.png`。
+- **顺带核出、未改**：inspection 的 α 0.65 在线性空间混合 + ACES 后视觉上接近 α 0.2（旧画家亦然），要不要调 `theme.inspection` 的 α 是 d-354 的口径问题。

@@ -170,4 +170,24 @@
 | `inspection-real-result.json` | 第三轮逐相机原始读数（相机位姿、engineering / inspection 两态、耗时、签名） |
 | `inspection-real-b-probe.json` | 第三轮独立射线复核：逐相机、逐标签的候选命中（距离、subject、encloses、hides）与独立结论 |
 
+### 文字绘制：胶囊 SDF 解析抗锯齿 + 圆头接头 + 深度去重（2026-09-14 00:5x–01:4x，ADR 0062）
+
+起因：用户看第三轮截图觉得文字发糙。把原图按像素放大 3×（`crop.ps1`，NearestNeighbor）看到三件事：笔画边缘只有锯齿、没有过渡；LFF 折线接头是平头对平头，外角缺一块、弧线上每个接头一个小缺口；药丸 10 px 字 + 1.5 px 笔画偏细。顺带核出（`pw-text-aa-debug8-54.mjs` 在 `onAfterRender` 里读 GL 状态）：URL 带 `show_refno` 时选中构件走 OutlinePass，整帧渲染进 `gl.SAMPLES = 0` 的 render target——**这条路径上根本没有 MSAA**，`antialias: true` 不起作用，所以文字全是硬边。
+
+改法见 ADR 0062：每段描边的四边形向四周多伸出 w/2 + 1 设备像素，片元按胶囊距离算覆盖率并羽化 1 设备像素（`uFeatherPx = 1 / dpr`）；实心（覆盖率 ≥ 0.999）与羽化两遍共享几何，都用 `gl_FragDepth` 写近平面常量深度（描边 1e-5 / 白边 2e-5）并以 LESS 测试，对模型恒通过、对自身只画第一次。主题：文字笔画 1.5 → 1.8 px，药丸字高 10 → 11 px。
+
+同相机、同位置、同 3× 放大的前后（`pw-text-aa-54.mjs` → `%TEMP%\plant3d-mbd-debug\text-aa-54c`；真实 Chrome + RX590，2× DPR，OutlinePass 路径）：
+
+| 文件 | 说明 |
+| --- | --- |
+| `text-aa-before-card.png` / `text-aa-after-card.png` | 背面相机 · 尾端坐标卡片：锯齿 + 接头缺口 → 圆润均匀的笔画 |
+| `text-aa-before-dim758.png` / `text-aa-after-dim758.png` | 弯头近景 · 三维数字 `758.89`（2 px + 白边）：「9」「8」外圈的接头缺口没了 |
+| `text-aa-before-pill.png` / `text-aa-after-pill.png` | 弯头近景 · 药丸 `89.75° / PE +13301`：10 px / 1.5 px → 11 px / 1.8 px |
+| `text-aa-before-inspection-dim2760.png` / `text-aa-after-inspection-dim2760.png` | inspection α 0.65 · `2760.31`：旧画家接头处叠成深色斑点 → 均匀浅灰 |
+| `text-aa-after-inspection-dim758.png` | inspection α 0.65 · `758.89`：三维文字（两端 w 不同）也均匀，这是改成 `gl_FragDepth` 写字面量之后的结果 |
+
+- 单测 `npx vitest run src/dimension src/composables/useMbdExternalSync.test.ts` → **59 文件 / 344 通过**；eslint 0；type-check 本改动 0；`pageerror` 0，着色器编译无告警（控制台里那条 `Sample Bias` 告警来自别的程序，改动前就在）。
+- 调试记录（都在 `%TEMP%\plant3d-mbd-debug\text-aa-54\debug*`）：第一版用 `gl_Position.z` 写常量深度，engineering 正常、inspection 下三维文字出现随机深色斑点；逐项可视化四边形几何、覆盖率、沿 / 横坐标、半宽、羽化宽、插值 w 全部正确，最后确认是两端 w 不同的段插值出的 z/w 在 24 位深度里差 1–2 个单位、去重靠的相等被破坏；改为片元里写 `gl_FragDepthEXT` 字面量后消失。
+- 一并核出但**不属于本改动、未改**：inspection 的 α 0.65 在这条管线里看起来比数字浅得多（旧画家亦然，卡片文字实测亮度 ≈ 190 / 255，像 α 0.2）——混合发生在线性空间、再经 ACES 色调映射与 sRGB 编码；要不要把 `theme.inspection` 的两个 α 往上调，是另一条口径（d-354）。
+
 **未覆盖**：2k 记录时每条一次射线的耗时未量（本样本 63 条记录 / 15–16 条画出，inspection 完整布局 3–5 ms）；「包着锚点的体」用「锚点前 ε 处向前再发一条射线能穿出」判定，凹体（弯头、绕回来的管段）在锚点前后各穿一次时会被当成包着锚点而不算遮挡，本样本三个标准相机与 124 个 ELBO 近景视图都没有出现这种情形（ELBO 上「包着锚点的体」为 0）；`buildHitIndex` 的近景溢出（见上）未修。

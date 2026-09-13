@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { Color, Group, Matrix4, ShaderMaterial } from 'three';
+import { Color, Group, LessDepth, Matrix4, ShaderMaterial } from 'three';
 
 import {
   sceneFill,
@@ -78,7 +78,7 @@ const primitives: readonly ScenePrimitive[] = [
 ];
 
 describe('ThreeSceneDimensionPainter', () => {
-  it('keeps a constant three draw objects for 100 and 2000 dimensions', () => {
+  it('keeps a constant four draw objects for 100 and 2000 dimensions', () => {
     const parent = new Group();
     const painter = new ThreeSceneDimensionPainter(parent, createTestFont());
     painter.resize(800, 600);
@@ -97,8 +97,8 @@ describe('ThreeSceneDimensionPainter', () => {
     );
     const large = painter.getStats();
 
-    // Stroke quads, filled arrowheads, filled tag bodies.
-    expect(small.sceneObjectCount).toBe(3);
+    // Stroke cores, stroke edges, filled arrowheads, filled tag bodies.
+    expect(small.sceneObjectCount).toBe(4);
     expect(large.sceneObjectCount).toBe(small.sceneObjectCount);
     expect(large.lineVertexCount).toBe(small.lineVertexCount * 20);
     expect(large.triangleVertexCount).toBe(
@@ -167,8 +167,52 @@ describe('ThreeSceneDimensionPainter', () => {
 
     const material = (lines as any).material as ShaderMaterial;
     expect(material.vertexShader).toContain('clip.xy += clipOffset * clip.w');
-    expect(material.depthTest).toBe(false);
-    expect(material.depthWrite).toBe(false);
+  });
+
+  it('shades strokes as feathered capsules in a core pass and an edge pass over one geometry', () => {
+    const parent = new Group();
+    const painter = new ThreeSceneDimensionPainter(parent, createTestFont());
+    painter.resize(800, 600, 2);
+    painter.paint([layout('one', primitives)], SOLVESPACE_DIMENSION_THEME);
+
+    const cores = painter.group.getObjectByName('dimension-scene-lines') as any;
+    const edges = painter.group.getObjectByName('dimension-scene-line-edges') as any;
+    const arrows = painter.group.getObjectByName('dimension-scene-arrows') as any;
+    expect(edges.geometry).toBe(cores.geometry);
+    // Cores first, then every edge (tested against all cores), arrowheads on top.
+    expect(edges.renderOrder).toBe(cores.renderOrder + 1);
+    expect(arrows.renderOrder).toBeGreaterThan(edges.renderOrder);
+
+    // Both passes write the overlay's constant near-plane depth and test
+    // with LESS: a stroke always passes against the model, cores dedupe
+    // against each other, edges never paint over a core and dedupe too.
+    const core = cores.material as ShaderMaterial;
+    const edge = edges.material as ShaderMaterial;
+    for (const material of [core, edge]) {
+      expect(material.depthTest).toBe(true);
+      expect(material.depthWrite).toBe(true);
+      expect(material.depthFunc).toBe(LessDepth);
+      expect(material.fragmentShader).toContain('gl_FragDepthEXT = vStrokeLayer > 0.5 ? 0.00002 : 0.00001');
+      expect(material.fragmentShader).toContain('float overshootPx = max(max(-capsule.x, capsule.x - segmentLengthPx), 0.0)');
+    }
+    expect(core.uniforms.uPass!.value).toBe(0);
+    expect(core.transparent).toBe(false);
+    expect(edge.uniforms.uPass!.value).toBe(1);
+    expect(edge.transparent).toBe(true);
+    // The edge ramp is one device pixel: half a CSS px on a 2× display, shared by both passes.
+    expect(core.uniforms.uFeatherPx!.value).toBe(0.5);
+    expect(edge.uniforms.uFeatherPx).toBe(core.uniforms.uFeatherPx);
+    painter.resize(800, 600);
+    expect(core.uniforms.uFeatherPx!.value).toBe(1);
+
+    // Ordinary strokes sit on layer 0; only the 3D-text halo goes to layer 1.
+    const layers = Array.from(cores.geometry.getAttribute('strokeLayer').array.slice(0, painter.getStats().lineVertexCount)) as number[];
+    expect(layers.every(layer => layer === 0)).toBe(true);
+    const frame = { origin: [1, 2, 3] as const, xAxis: [0.2, 0, 0] as const, yAxis: [0, 0, 0.2] as const };
+    painter.paint([layout('framed', [sceneGlyphInFrame('A', frame, 13, 0, 'external')])], SOLVESPACE_DIMENSION_THEME);
+    const framedLayers = Array.from(cores.geometry.getAttribute('strokeLayer').array.slice(0, 16)) as number[];
+    expect(framedLayers.slice(0, 8)).toEqual(Array(8).fill(1));
+    expect(framedLayers.slice(8)).toEqual(Array(8).fill(0));
   });
 
   it('draws framed (3D) text as design-space strokes under a halo pass', () => {
@@ -238,7 +282,7 @@ describe('ThreeSceneDimensionPainter', () => {
       ),
     );
     expect(widths.length).toBeGreaterThan(0);
-    expect(widths.every(width => width === 1.5)).toBe(true);
+    expect(widths.every(width => width === Math.fround(SOLVESPACE_DIMENSION_THEME.textStrokeWidthPx))).toBe(true);
 
     // 普通角色标签文字使用 textColors.normal (#111827)，而非尺寸品红。
     const color = Array.from(
@@ -318,7 +362,9 @@ describe('ThreeSceneDimensionPainter', () => {
       Array.from(mesh.geometry.getAttribute('batchAlpha').array.slice(0, count));
     const distinct = (values: number[]) => [...new Set(values.map(v => Number(v.toFixed(6))))];
 
-    // Engineering (default argument): every vertex alpha 1, materials opaque as before.
+    // Engineering (default argument): every vertex alpha 1, materials opaque
+    // as before — except the stroke edge pass, whose fragments are partial
+    // coverage by definition and always blend.
     painter.paint([behind, front], SOLVESPACE_DIMENSION_THEME);
     const stats = painter.getStats();
     const perLayoutLines = stats.lineVertexCount / 2;
@@ -330,6 +376,8 @@ describe('ThreeSceneDimensionPainter', () => {
     for (const mesh of Object.values(meshes())) {
       expect((mesh.material as ShaderMaterial).transparent).toBe(false);
     }
+    const edges = painter.group.getObjectByName('dimension-scene-line-edges') as any;
+    expect((edges.material as ShaderMaterial).transparent).toBe(true);
 
     // Inspection: the occluded record at 0.35, the visible one at 0.65, on
     // every buffer (strokes, arrowheads, tag fills); materials blend.
@@ -356,10 +404,11 @@ describe('ThreeSceneDimensionPainter', () => {
     expect(painter.updateStyles([hovered, front], SOLVESPACE_DIMENSION_THEME, new Set(['behind']), 'inspection')).toBe(true);
     expect(distinct(alphas(meshes().lines, perLayoutLines))).toEqual([inspection.occludedAlpha]);
 
-    // Back to engineering: opaque again.
+    // Back to engineering: opaque again (the edge pass keeps blending).
     painter.paint([behind, front], SOLVESPACE_DIMENSION_THEME, 'engineering');
     expect(distinct(alphas(meshes().lines, stats.lineVertexCount))).toEqual([1]);
     expect((meshes().lines.material as ShaderMaterial).transparent).toBe(false);
+    expect((edges.material as ShaderMaterial).transparent).toBe(true);
   });
 
   it('keeps glyph strokes solid for roles with dashed line styles', () => {

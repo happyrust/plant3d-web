@@ -166,6 +166,7 @@ export class DimensionViewport {
     this.scenePainter.resize(
       projector.widthCssPx,
       projector.heightCssPx,
+      projector.dpr,
     );
     const sizeChanged = (
       !previous

@@ -5,10 +5,12 @@ import {
   DoubleSide,
   DynamicDrawUsage,
   Group,
+  LessDepth,
   Matrix4,
   Mesh,
   ShaderMaterial,
   Vector2,
+  type IUniform,
   type Object3D,
 } from 'three';
 
@@ -36,6 +38,28 @@ import type {
 const MARKER_CIRCLE_SEGMENTS = 20;
 const DEFAULT_RENDER_ORDER = 1000;
 
+/**
+ * Window-space depth every stroke fragment writes (`gl_FragDepth`): a hair
+ * past the near plane, so a stroke always passes the depth test against the
+ * model (the overlay stays depth-free towards the scene, ADR 0057) while
+ * strokes of the same layer fail it against each other — with `LessDepth`
+ * the first fragment at a pixel wins and overlapping quads (round joins of a
+ * glyph, a dimension line under its own extension) paint a pixel exactly
+ * once, so a faded record in inspection mode shows no darker beads where its
+ * segments meet. The 3D-text halo lives one step farther so glyph strokes
+ * pass over it. Written as literals from the fragment shader rather than
+ * through `gl_Position.z`: 3D (framed) text has a different w at each end
+ * of a segment and the interpolated z/w is off by a unit or two in a 24-bit
+ * buffer, which is enough to break the equality the dedupe relies on. Both
+ * values are far below any model fragment (≥ 2e-4 within 0.1 mm of the
+ * near plane, ≥ 0.03 with the log depth buffer) and 160+ units apart.
+ */
+const STROKE_DEPTH = 0.00001;
+const STROKE_HALO_DEPTH = 0.00002;
+
+/** Coverage at or above this is a stroke's solid core; below it, its feathered edge. */
+const STROKE_CORE_COVERAGE = 0.999;
+
 const VERTEX_OFFSET_FUNCTION = `
 vec4 projectSceneVertex(vec3 anchor, vec2 offsetPx) {
   vec4 clip = projectionMatrix * modelViewMatrix * vec4(anchor, 1.0);
@@ -48,8 +72,18 @@ vec4 projectSceneVertex(vec3 anchor, vec2 offsetPx) {
 }
 `;
 
+/**
+ * Every stroke segment is a screen-space quad reaching half a width plus the
+ * feather beyond the segment on all four sides; the fragment shader shades
+ * it as a capsule (round caps, so consecutive glyph strokes join without
+ * notches) with an analytic 1-device-pixel edge ramp, independent of MSAA.
+ * The capsule coordinates travel pre-multiplied by clip.w so the
+ * rasteriser's perspective-correct interpolation comes out linear in
+ * screen space for 3D (framed) text whose two ends sit at different depths.
+ */
 const STROKE_VERTEX_SHADER = `
 uniform vec2 uViewportCssPx;
+uniform float uFeatherPx;
 
 attribute vec2 offsetPx;
 attribute vec3 otherAnchor;
@@ -57,6 +91,7 @@ attribute vec2 otherOffsetPx;
 attribute float segmentT;
 attribute float side;
 attribute float strokeWidthPx;
+attribute float strokeLayer;
 attribute vec3 batchColor;
 attribute float batchAlpha;
 attribute float dashCode;
@@ -64,7 +99,9 @@ attribute float dashCode;
 varying vec3 vBatchColor;
 varying float vBatchAlpha;
 varying float vDashCode;
-varying float vLineDistancePx;
+varying float vStrokeLayer;
+varying vec3 vCapsuleW;
+varying vec2 vCapsuleSizePx;
 
 ${VERTEX_OFFSET_FUNCTION}
 
@@ -85,7 +122,11 @@ void main() {
     ? deltaCss / segmentLengthPx
     : vec2(1.0, 0.0);
   vec2 normalCss = vec2(-dir.y, dir.x);
-  vec2 expandPx = normalCss * (strokeWidthPx * 0.5) * side;
+  float halfWidthPx = strokeWidthPx * 0.5;
+  float reachPx = halfWidthPx + uFeatherPx;
+  // Across by the reach on this vertex's side; along by the reach away from
+  // the other end (dir always points own -> other), for the cap.
+  vec2 expandPx = normalCss * reachPx * side - dir * reachPx;
   vec2 expandClip = vec2(
     expandPx.x * 2.0 / uViewportCssPx.x,
     -expandPx.y * 2.0 / uViewportCssPx.y
@@ -93,19 +134,38 @@ void main() {
   vec4 clip = ownClip;
   clip.xy += expandClip * clip.w;
 
+  // Capsule frame of the segment: along from its first end, across from its
+  // axis. The far end's vertices carry a negated side (see the painter), so
+  // the across sign is flipped back there to stay constant along each edge.
+  float alongPx = segmentT < 0.5 ? -reachPx : segmentLengthPx + reachPx;
+  float acrossPx = reachPx * side * (segmentT < 0.5 ? 1.0 : -1.0);
+  vCapsuleW = vec3(alongPx, acrossPx, 1.0) * clip.w;
+  vCapsuleSizePx = vec2(segmentLengthPx, halfWidthPx);
+
   vBatchColor = batchColor;
   vBatchAlpha = batchAlpha;
   vDashCode = dashCode;
-  vLineDistancePx = segmentT < 0.5 ? 0.0 : segmentLengthPx;
+  vStrokeLayer = strokeLayer;
   gl_Position = clip;
 }
 `;
 
+/**
+ * \`uPass\` 0 keeps the solid core (coverage 1), 1 keeps the feathered edge
+ * (blended). Both write the layer's overlay depth (\`gl_FragDepthEXT\`, a
+ * WebGL2 built-in three.js aliases), so overlapping quads paint a pixel once
+ * and an edge never darkens a neighbouring core.
+ */
 const STROKE_FRAGMENT_SHADER = `
+uniform float uFeatherPx;
+uniform float uPass;
+
 varying vec3 vBatchColor;
 varying float vBatchAlpha;
 varying float vDashCode;
-varying float vLineDistancePx;
+varying float vStrokeLayer;
+varying vec3 vCapsuleW;
+varying vec2 vCapsuleSizePx;
 
 bool dashVisible(float code, float distancePx) {
   if (code < 0.5) return true;
@@ -119,8 +179,22 @@ bool dashVisible(float code, float distancePx) {
 }
 
 void main() {
-  if (!dashVisible(vDashCode, vLineDistancePx)) discard;
-  gl_FragColor = vec4(vBatchColor, vBatchAlpha);
+  vec2 capsule = vCapsuleW.xy / vCapsuleW.z;
+  float segmentLengthPx = vCapsuleSizePx.x;
+  float halfWidthPx = vCapsuleSizePx.y;
+  float overshootPx = max(max(-capsule.x, capsule.x - segmentLengthPx), 0.0);
+  float distancePx = length(vec2(overshootPx, capsule.y));
+  float coverage = clamp(
+    (halfWidthPx + 0.5 * uFeatherPx - distancePx) / uFeatherPx,
+    0.0,
+    1.0
+  );
+  if (coverage <= 0.0) discard;
+  if (!dashVisible(vDashCode, clamp(capsule.x, 0.0, segmentLengthPx))) discard;
+  bool core = coverage >= ${STROKE_CORE_COVERAGE};
+  if (uPass < 0.5 ? !core : core) discard;
+  gl_FragDepthEXT = vStrokeLayer > 0.5 ? ${STROKE_HALO_DEPTH.toFixed(5)} : ${STROKE_DEPTH.toFixed(5)};
+  gl_FragColor = vec4(vBatchColor, vBatchAlpha * coverage);
 }
 `;
 
@@ -165,6 +239,7 @@ const STROKE_ATTRIBUTES: readonly AttributeSpec[] = [
   { name: 'segmentT', itemSize: 1 },
   { name: 'side', itemSize: 1 },
   { name: 'strokeWidthPx', itemSize: 1 },
+  { name: 'strokeLayer', itemSize: 1 },
   { name: 'batchColor', itemSize: 3 },
   { name: 'batchAlpha', itemSize: 1 },
   { name: 'dashCode', itemSize: 1 },
@@ -586,12 +661,10 @@ export function layoutAlpha(
 function createMaterial(
   vertexShader: string,
   fragmentShader: string,
-  viewportCssPx: Vector2,
+  uniforms: Record<string, IUniform>,
 ): ShaderMaterial {
   const material = new ShaderMaterial({
-    uniforms: {
-      uViewportCssPx: { value: viewportCssPx },
-    },
+    uniforms,
     vertexShader,
     fragmentShader,
     depthTest: false,
@@ -600,6 +673,29 @@ function createMaterial(
     toneMapped: false,
   });
   material.side = DoubleSide;
+  return material;
+}
+
+/**
+ * The two stroke materials share one geometry and the constant overlay
+ * depth (`STROKE_DEPTH_NDC`), both writing it and testing with `LessDepth`:
+ * cores dedupe against cores; edges, drawn after every core, are rejected
+ * where a core already painted the pixel and dedupe against each other, so
+ * the feathered rims of two segments meeting at a joint never blend twice
+ * (first one wins — the same rule as the cores, not max coverage).
+ */
+function createStrokeMaterial(
+  uniforms: Record<string, IUniform>,
+  pass: 'core' | 'edge',
+): ShaderMaterial {
+  const material = createMaterial(STROKE_VERTEX_SHADER, STROKE_FRAGMENT_SHADER, {
+    ...uniforms,
+    uPass: { value: pass === 'core' ? 0 : 1 },
+  });
+  material.depthTest = true;
+  material.depthFunc = LessDepth;
+  material.depthWrite = true;
+  material.transparent = pass === 'edge';
   return material;
 }
 
@@ -620,39 +716,51 @@ type DimensionVertexRange = Readonly<{
 }>;
 
 /**
- * One scene group and three draw objects for every dimension in the
- * viewport: filled tag bodies underneath, stroke quads, then filled
- * arrowheads on top. Design-space anchors remain in the vertex buffers;
- * CSS-pixel offsets are applied after projection in the shader. Each stroke
- * segment expands to a 4-vertex screen-space quad so text and dimension
- * lines get real, DPR-independent stroke widths (GL_LINES rasterizes at a
- * fixed 1 device pixel and cannot).
+ * One scene group and four draw objects for every dimension in the
+ * viewport: filled tag bodies underneath, stroke cores, stroke edges, then
+ * filled arrowheads on top. Design-space anchors remain in the vertex
+ * buffers; CSS-pixel offsets are applied after projection in the shader.
+ * Each stroke segment expands to a 4-vertex screen-space quad so text and
+ * dimension lines get real, DPR-independent stroke widths (GL_LINES
+ * rasterizes at a fixed 1 device pixel and cannot); the quad is shaded as a
+ * capsule with a one-device-pixel analytic edge (round joins, smooth at any
+ * angle and without MSAA — the OutlinePass path has none), drawn in two
+ * passes over the same geometry: opaque cores that dedupe through the depth
+ * buffer, then blended edges tested against those cores.
  */
 export class ThreeSceneDimensionPainter {
   readonly group = new Group();
 
   private readonly viewportCssPx = new Vector2(1, 1);
+  private readonly featherPx: IUniform<number> = { value: 1 };
   private readonly lineBuffers = new ReusableGeometry(STROKE_ATTRIBUTES, true);
   private readonly triangleBuffers = new ReusableGeometry(TRIANGLE_ATTRIBUTES);
   private readonly fillBuffers = new ReusableGeometry(TRIANGLE_ATTRIBUTES);
-  private readonly lineMaterial = createMaterial(
-    STROKE_VERTEX_SHADER,
-    STROKE_FRAGMENT_SHADER,
-    this.viewportCssPx,
+  private readonly lineMaterial = createStrokeMaterial(
+    { uViewportCssPx: { value: this.viewportCssPx }, uFeatherPx: this.featherPx },
+    'core',
+  );
+  private readonly lineEdgeMaterial = createStrokeMaterial(
+    { uViewportCssPx: { value: this.viewportCssPx }, uFeatherPx: this.featherPx },
+    'edge',
   );
   private readonly triangleMaterial = createMaterial(
     TRIANGLE_VERTEX_SHADER,
     TRIANGLE_FRAGMENT_SHADER,
-    this.viewportCssPx,
+    { uViewportCssPx: { value: this.viewportCssPx } },
   );
   private readonly fillMaterial = createMaterial(
     TRIANGLE_VERTEX_SHADER,
     TRIANGLE_FRAGMENT_SHADER,
-    this.viewportCssPx,
+    { uViewportCssPx: { value: this.viewportCssPx } },
   );
   private readonly lines = new Mesh(
     this.lineBuffers.geometry,
     this.lineMaterial,
+  );
+  private readonly lineEdges = new Mesh(
+    this.lineBuffers.geometry,
+    this.lineEdgeMaterial,
   );
   private readonly triangles = new Mesh(
     this.triangleBuffers.geometry,
@@ -683,18 +791,27 @@ export class ThreeSceneDimensionPainter {
     this.lines.name = 'dimension-scene-lines';
     this.lines.frustumCulled = false;
     this.lines.renderOrder = renderOrder;
+    // Edges after every core, so they are tested against all of them.
+    this.lineEdges.name = 'dimension-scene-line-edges';
+    this.lineEdges.frustumCulled = false;
+    this.lineEdges.renderOrder = renderOrder + 1;
     this.triangles.name = 'dimension-scene-arrows';
     this.triangles.frustumCulled = false;
-    this.triangles.renderOrder = renderOrder + 1;
+    this.triangles.renderOrder = renderOrder + 2;
     // Tag bodies draw before every stroke so text and borders stay on top.
     this.fills.name = 'dimension-scene-fills';
     this.fills.frustumCulled = false;
     this.fills.renderOrder = renderOrder - 1;
-    this.group.add(this.lines, this.triangles, this.fills);
+    this.group.add(this.lines, this.lineEdges, this.triangles, this.fills);
     this.parent.add(this.group);
   }
 
-  resize(widthCssPx: number, heightCssPx: number): void {
+  /**
+   * Viewport size in CSS px and the device pixel ratio: the stroke edge
+   * ramp is one device pixel wide, so it stays crisp on a 2× display
+   * instead of softening to two device pixels.
+   */
+  resize(widthCssPx: number, heightCssPx: number, pixelRatio = 1): void {
     if (
       !Number.isFinite(widthCssPx)
       || !Number.isFinite(heightCssPx)
@@ -704,6 +821,8 @@ export class ThreeSceneDimensionPainter {
       throw new RangeError('Scene dimension viewport size must be positive');
     }
     this.viewportCssPx.set(widthCssPx, heightCssPx);
+    const ratio = Number.isFinite(pixelRatio) && pixelRatio > 0 ? pixelRatio : 1;
+    this.featherPx.value = 1 / Math.min(Math.max(ratio, 0.5), 8);
   }
 
   setDesignToWorld(matrix: Matrix4): void {
@@ -729,6 +848,7 @@ export class ThreeSceneDimensionPainter {
     const lineVertexCount = segmentCount * 4;
     if (this.lineBuffers.ensureCapacity(lineVertexCount)) {
       this.lines.geometry = this.lineBuffers.geometry;
+      this.lineEdges.geometry = this.lineBuffers.geometry;
     }
 
     const linePosition = this.lineBuffers.array('position');
@@ -738,6 +858,7 @@ export class ThreeSceneDimensionPainter {
     const lineSegmentT = this.lineBuffers.array('segmentT');
     const lineSide = this.lineBuffers.array('side');
     const lineStrokeWidth = this.lineBuffers.array('strokeWidthPx');
+    const lineStrokeLayer = this.lineBuffers.array('strokeLayer');
     const lineColor = this.lineBuffers.array('batchColor');
     const lineAlpha = this.lineBuffers.array('batchAlpha');
     const lineDashCode = this.lineBuffers.array('dashCode');
@@ -749,6 +870,7 @@ export class ThreeSceneDimensionPainter {
       segmentT: 0 | 1,
       side: -1 | 1,
       widthPx: number,
+      layer: 0 | 1,
       color: readonly [number, number, number],
       alpha: number,
       code: number,
@@ -760,6 +882,7 @@ export class ThreeSceneDimensionPainter {
       lineSegmentT[vertexIndex] = segmentT;
       lineSide[vertexIndex] = side;
       lineStrokeWidth[vertexIndex] = widthPx;
+      lineStrokeLayer[vertexIndex] = layer;
       writeVec3(lineColor, vertexIndex, color);
       lineAlpha[vertexIndex] = alpha;
       lineDashCode[vertexIndex] = code;
@@ -778,20 +901,23 @@ export class ThreeSceneDimensionPainter {
           const code = dashCode(styleRole, lineStyle);
           const color = resolveColor(styleRole, stroke);
           const widthPx = strokeWidthPx(theme, stroke);
+          // The 3D-text halo sits on the farther depth layer so the glyph
+          // strokes drawn over it pass the depth test.
+          const layer = stroke === 'halo-3d' ? 1 : 0;
           // The screen normal flips with the projected direction, so the
           // vertices at the far end negate `side` to stay on the same
           // world-space edge of the quad.
           writeStrokeVertex(
-            lineVertexIndex, from, to, 0, -1, widthPx, color, alpha, code,
+            lineVertexIndex, from, to, 0, -1, widthPx, layer, color, alpha, code,
           );
           writeStrokeVertex(
-            lineVertexIndex + 1, from, to, 0, 1, widthPx, color, alpha, code,
+            lineVertexIndex + 1, from, to, 0, 1, widthPx, layer, color, alpha, code,
           );
           writeStrokeVertex(
-            lineVertexIndex + 2, to, from, 1, 1, widthPx, color, alpha, code,
+            lineVertexIndex + 2, to, from, 1, 1, widthPx, layer, color, alpha, code,
           );
           writeStrokeVertex(
-            lineVertexIndex + 3, to, from, 1, -1, widthPx, color, alpha, code,
+            lineVertexIndex + 3, to, from, 1, -1, widthPx, layer, color, alpha, code,
           );
           lineVertexIndex += 4;
         },
@@ -993,15 +1119,18 @@ export class ThreeSceneDimensionPainter {
   }
 
   /**
-   * Inspection fades records, so its three materials blend; engineering
-   * keeps them opaque, exactly as before the mode existed. `transparent` is
-   * render state, not a shader define — toggling it recompiles nothing.
+   * Inspection fades records, so stroke cores, arrowheads and tag fills
+   * blend; engineering keeps those three opaque, exactly as before the mode
+   * existed. The stroke edge pass always blends — its fragments are the
+   * partial-coverage rim of a stroke. `transparent` is render state, not a
+   * shader define — toggling it recompiles nothing.
    */
   private setBlending(displayMode: DimensionDisplayMode): void {
     const transparent = displayMode === 'inspection';
     for (const material of [this.lineMaterial, this.triangleMaterial, this.fillMaterial]) {
       material.transparent = transparent;
     }
+    this.lineEdgeMaterial.transparent = true;
   }
 
   clear(): void {
@@ -1032,6 +1161,7 @@ export class ThreeSceneDimensionPainter {
     this.triangleBuffers.dispose();
     this.fillBuffers.dispose();
     this.lineMaterial.dispose();
+    this.lineEdgeMaterial.dispose();
     this.triangleMaterial.dispose();
     this.fillMaterial.dispose();
     this.glyphCaches.screen.clear();

@@ -22,7 +22,8 @@ describe('dimension theme', () => {
       labelPaddingPx: 8,
       outsideExtensionPx: 18,
       minArcRadiusPx: 15,
-      textStrokeWidthPx: 1.5,
+      // 文字笔画 1.8 px（2026-09-14 边缘羽化后加重，用户拍板）；尺寸线 1.2 px。
+      textStrokeWidthPx: 1.8,
       dimensionStrokeWidthPx: 1.2,
       // 三维长度尺寸（参考图风格，2026-09-12）：以字高 h 为单位的标注比例、字的屏幕下限与描边 / 光晕。
       dimension3d: {

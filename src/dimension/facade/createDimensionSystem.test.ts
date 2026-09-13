@@ -146,8 +146,8 @@ describe('createDimensionSystem', () => {
     system.notifyViewerChanged();
     harness.flush();
     expect(harness.scene?.children).toHaveLength(1);
-    // Stroke quads, filled arrowheads, filled tag bodies.
-    expect(harness.scene?.children[0]?.children).toHaveLength(3);
+    // Stroke cores, stroke edges, filled arrowheads, filled tag bodies.
+    expect(harness.scene?.children[0]?.children).toHaveLength(4);
   });
 
   it('reports a typed document failure without mounting a canvas', async () => {
