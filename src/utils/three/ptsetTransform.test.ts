@@ -55,6 +55,7 @@ describe('ptsetTransform', () => {
     expect(out).toEqual([
       {
         refno: '24381_145714',
+        noun: null,
         number: 1,
         worldPos: [111, 22, 30],
         pbore: 100,

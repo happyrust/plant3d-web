@@ -25,6 +25,17 @@
  * `lineExtended` is the plain `line` (no in-line component skipping), so the
  * Significant Snaps flag changes nothing for tubing — no `intermediates` here.
  *
+ * `EDGTUBING.line` **skips attachment points**: the leave tube runs from the
+ * component's `lPosition` to the arrive position of the next member whose type is
+ * not `ATTA` (`skip if(!component.type inset('ATTA'))`, likewise for the HEAD tube).
+ * gen-model draws one tube object per implied-tube stretch and breaks it at every
+ * ATTA, so the Web has two (or more) collinear pieces where E3D has one line.
+ * `mergeTubingAxisAcrossPassThrough` stitches them back: starting from the picked
+ * piece, whenever a refined end sits on a pass-through point (`noun === 'ATTA'`),
+ * the collinear piece touching that point is appended and the walk continues
+ * from its far end. Non-ATTA zero-length components (an OLET's arrive = leave, a
+ * zero-length coupling) are *not* passed through — E3D stops the line there.
+ *
  * Evidence status: `static_expectation` from `edgtubing.pmlobj` / `edgpicktype.pmlobj`
  * (`TUBING` branches of `snap()` / `exact()` / `distance()` / `proportion()` /
  * `fraction()` / `intersect()`); runtime golden G7-02 (TUBING capture geometry) is
@@ -49,6 +60,11 @@ export type TubingAxisEndPoint = Readonly<{
   position: TubingVec3;
   /** Caller's handle for the point (e.g. `ELBO P-Point #2`), echoed back on the refined end. */
   label?: string | null;
+  /**
+   * E3D noun of the component owning the point. `ATTA` marks a pass-through point:
+   * `EDGTUBING.line` runs the tube line through attachment points to the next component.
+   */
+  noun?: string | null;
 }>;
 
 export type RefinedTubingAxis = TubingAxis & Readonly<{
@@ -64,6 +80,20 @@ export const DEFAULT_TUBING_LOCAL_AXIS: TubingLocalAxis = 'z';
 
 /** Tolerance for snapping an axis end onto an adjacent P-Point, as a fraction of the tube radius. */
 export const DEFAULT_TUBING_END_TOLERANCE_RATIO = 0.05;
+
+/**
+ * Component types `EDGTUBING.line` skips when looking for the far end of a tube
+ * (`skip if(!component.type inset('ATTA'))` — E3D 3.1 lists only ATTA).
+ */
+export const TUBING_PASS_THROUGH_NOUNS: ReadonlySet<string> = new Set(['ATTA']);
+
+/**
+ * Two tube pieces count as one straight run when their axes are within 0.5° of
+ * each other. gen-model places the pieces on either side of an ATTA from the same
+ * branch geometry, so the real deviation is numerical noise; the tolerance only
+ * has to reject genuine direction changes.
+ */
+export const DEFAULT_TUBING_MERGE_MIN_COS = Math.cos((0.5 * Math.PI) / 180);
 
 const DEGENERATE_LENGTH_SQ = 1e-24;
 
@@ -186,4 +216,126 @@ export function refineTubingAxisEnds(
   if (lengthSq(sub(end, start)) <= DEGENERATE_LENGTH_SQ) return unrefined;
 
   return { start, end, radius: axis.radius, startPoint, endPoint };
+}
+
+/** Whether a refined end sits on a component `EDGTUBING.line` passes through (ATTA). */
+export function isTubingPassThroughPoint(point: TubingAxisEndPoint | null | undefined): boolean {
+  const noun = point?.noun?.trim().toUpperCase();
+  return Boolean(noun && TUBING_PASS_THROUGH_NOUNS.has(noun));
+}
+
+/** One drawn tube object with its (refined) axis; `id` is the caller's handle (DTX object id). */
+export type TubingAxisPiece = Readonly<{
+  id: string;
+  axis: RefinedTubingAxis;
+}>;
+
+export type MergedTubingAxis = RefinedTubingAxis & Readonly<{
+  /** Piece ids in start → end order; just the picked piece when nothing was merged. */
+  pieces: readonly string[];
+  /** Pass-through points the merged line runs through (ATTA arrive / leave), in start → end order. */
+  passThrough: readonly TubingAxisEndPoint[];
+}>;
+
+function normalize(v: TubingVec3): TubingVec3 | null {
+  const length = Math.sqrt(lengthSq(v));
+  return length > 0 && Number.isFinite(length) ? [v[0] / length, v[1] / length, v[2] / length] : null;
+}
+
+function dot(a: TubingVec3, b: TubingVec3): number {
+  return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+}
+
+/**
+ * E3D `EDGTUBING.line` semantics over gen-model's per-stretch tube objects: the
+ * picked piece is extended through every end that rests on a pass-through point
+ * (`isPassThrough`, default: `noun === 'ATTA'`) by appending the unused, collinear
+ * piece that touches that point (either of its ends within `tolerance`) and lies
+ * beyond it; the walk continues from the appended piece's far end, in both
+ * directions, until an end is a real component point (or nothing continues —
+ * then the ATTA point stays as the end, like E3D falling back to the branch tail).
+ *
+ * The picked piece's orientation and radius are kept. Pieces are consumed at most
+ * once; when several touch the same point, the one whose end is nearest wins
+ * (then the earlier one in `others`). Nothing is merged across points that are
+ * not pass-through: an OLET with arrive = leave, a zero-length coupling — E3D
+ * stops the line at those components.
+ */
+export function mergeTubingAxisAcrossPassThrough(
+  hit: TubingAxisPiece,
+  others: readonly TubingAxisPiece[],
+  options: Readonly<{
+    tolerance: number;
+    minCos?: number;
+    isPassThrough?: (point: TubingAxisEndPoint) => boolean;
+  }>,
+): MergedTubingAxis {
+  const unmerged: MergedTubingAxis = { ...hit.axis, pieces: [hit.id], passThrough: [] };
+  const hitDirection = normalize(sub(hit.axis.end, hit.axis.start));
+  if (!hitDirection || !(options.tolerance > 0) || others.length === 0) return unmerged;
+  const direction: TubingVec3 = hitDirection;
+  const isPassThrough = options.isPassThrough ?? isTubingPassThroughPoint;
+  const minCos = options.minCos ?? DEFAULT_TUBING_MERGE_MIN_COS;
+
+  const used = new Set<string>([hit.id]);
+  const collinear = others.filter((piece) => {
+    if (used.has(piece.id) || piece.id === hit.id) return false;
+    const pieceDirection = normalize(sub(piece.axis.end, piece.axis.start));
+    return pieceDirection !== null && Math.abs(dot(pieceDirection, direction)) >= minCos;
+  });
+
+  /** The unused collinear piece touching `at` whose far end lies on the `sign` side of `at`. */
+  function continuation(at: TubingVec3, sign: 1 | -1): Readonly<{ id: string; far: TubingVec3; farPoint: TubingAxisEndPoint | null }> | null {
+    let best: { id: string; far: TubingVec3; farPoint: TubingAxisEndPoint | null; distance: number } | null = null;
+    for (const piece of collinear) {
+      if (used.has(piece.id)) continue;
+      const orientations = [
+        { near: piece.axis.start, far: piece.axis.end, farPoint: piece.axis.endPoint },
+        { near: piece.axis.end, far: piece.axis.start, farPoint: piece.axis.startPoint },
+      ];
+      for (const { near, far, farPoint } of orientations) {
+        const distance = distanceBetween(near, at);
+        if (distance > options.tolerance) continue;
+        if (dot(sub(far, at), direction) * sign <= 0) continue;
+        if (!best || distance < best.distance) best = { id: piece.id, far, farPoint, distance };
+      }
+    }
+    return best;
+  }
+
+  let { start, end, startPoint, endPoint } = hit.axis;
+  const pieces: string[] = [hit.id];
+  const forward: TubingAxisEndPoint[] = [];
+  const backward: TubingAxisEndPoint[] = [];
+
+  while (endPoint && isPassThrough(endPoint)) {
+    const next = continuation(end, 1);
+    if (!next) break;
+    used.add(next.id);
+    pieces.push(next.id);
+    forward.push(endPoint);
+    end = next.far;
+    endPoint = next.farPoint;
+  }
+  while (startPoint && isPassThrough(startPoint)) {
+    const previous = continuation(start, -1);
+    if (!previous) break;
+    used.add(previous.id);
+    pieces.unshift(previous.id);
+    backward.unshift(startPoint);
+    start = previous.far;
+    startPoint = previous.farPoint;
+  }
+
+  if (pieces.length === 1) return unmerged;
+  if (lengthSq(sub(end, start)) <= DEGENERATE_LENGTH_SQ) return unmerged;
+  return {
+    start,
+    end,
+    radius: hit.axis.radius,
+    startPoint,
+    endPoint,
+    pieces,
+    passThrough: [...backward, ...forward],
+  };
 }

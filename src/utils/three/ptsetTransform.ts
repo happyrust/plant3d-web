@@ -11,6 +11,8 @@ export type Vec3 = [number, number, number];
  */
 export type PtsetSceneCandidate = {
   refno: string;
+  /** 点所属构件的元素类型（gen-model-v1 随点集带回；旧后端为 null）。 */
+  noun?: string | null;
   /** ptset 点编号 */
   number: number;
   /** 场景坐标 [x, y, z] */
@@ -176,6 +178,7 @@ export function ptsetResponseToSceneCandidates(
 
     out.push({
       refno,
+      noun: response.noun ?? null,
       number: point.number,
       worldPos: transformed.scenePt,
       pbore: point.pbore,

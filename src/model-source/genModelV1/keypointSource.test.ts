@@ -95,10 +95,13 @@ describe('gen-model-v1 keypointSource', () => {
     expect(children.total_count).toBe(2);
     expect(children.success_count).toBe(1);
     expect(children.failed_count).toBe(1);
-    expect(children.results[0]).toMatchObject({ refno: '24381_145031', success: true });
+    expect(children.results[0]).toMatchObject({ refno: '24381_145031', noun: 'ELBO', success: true });
     expect(children.results[0]!.ptset).toHaveLength(2);
-    expect(children.results[1]).toMatchObject({ refno: '24381_145032', success: false });
+    // 成员 noun 透传：ATTA 没有几何、不在 DTX 登记里，测量拾取层只能从这里认出 ATTA 的 P-Point（EDGTUBING.line 跳过它）。
+    expect(children.results[1]).toMatchObject({ refno: '24381_145032', noun: 'ATTA', success: false });
     expect(children.results[1]!.error_message).toContain('没有目录 P 点');
+    expect(elementPtsetToPtsetResponse(elbo()).noun).toBe('ELBO');
+    expect(elementPtsetToPtsetResponse(elbo({ noun: '  ' })).noun).toBeNull();
   });
 
   it('适配器：ptset 用 a/b 打接口、not_found 折成 success:false 不抛；memberPtsets 带 include_members', async () => {

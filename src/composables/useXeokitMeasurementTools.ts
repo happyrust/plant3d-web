@@ -23,6 +23,7 @@ import {
   getDtxRefnoTransform,
   isDtxTubiObject,
   isDtxTubiObjectAcrossAllDbnos,
+  listDtxTubiObjectIdsForRefno,
   resolveDtxNounByRefno,
   resolveDtxObjectIdsByRefno,
 } from './useDbnoInstancesDtxLoader';
@@ -111,10 +112,14 @@ import {
   type MeasurementPickTypeId,
 } from '@/measurement/pick/pickLayerModel';
 import {
+  isTubingPassThroughPoint,
+  mergeTubingAxisAcrossPassThrough,
   refineTubingAxisEnds,
   tubingAxisFromBounds,
   tubingEndTolerance,
+  type TubingAxis,
   type TubingAxisEndPoint,
+  type TubingAxisPiece,
   type TubingVec3,
 } from '@/measurement/tubing/tubingAxis';
 import { getModelSource } from '@/model-source';
@@ -460,6 +465,11 @@ export function useXeokitMeasurementTools(options: {
    * （noun `TUBI` / gen-model `is_tubi`）；测试注入。
    */
   isTubingObject?: (objectId: string, refno: string | null) => boolean;
+  /**
+   * 同一构件（refno）下全部直管对象的 id。ATTA 处断开的两段直管要按 E3D `EDGTUBING.line`
+   * 跳过 ATTA 合成一条轴线时用它找另一段。默认查 `useDbnoInstancesDtxLoader` 的直管登记；测试注入。
+   */
+  listTubingObjectIds?: (refno: string) => readonly string[];
 }) {
   const {
     dtxViewerRef,
@@ -481,6 +491,13 @@ export function useXeokitMeasurementTools(options: {
       return isDtxTubiObjectAcrossAllDbnos(objectId);
     } catch {
       return false;
+    }
+  });
+  const listTubingObjectIds = options.listTubingObjectIds ?? ((refno: string): readonly string[] => {
+    try {
+      return listDtxTubiObjectIdsForRefno(refno);
+    } catch {
+      return [];
     }
   });
   const measurementStyle = useXeokitMeasurementStyleStore();
@@ -839,6 +856,7 @@ export function useXeokitMeasurementTools(options: {
       const childResp: PtsetResponse = {
         success: true,
         refno: childRefno,
+        noun: item.noun ?? null,
         ptset: item.ptset,
         world_transform: item.world_transform ?? null,
         unit_info: item.unit_info ?? null,
@@ -1281,6 +1299,10 @@ export function useXeokitMeasurementTools(options: {
    * 管线，而不是用隐含管长）。产出一条线候选：控制点 = 轴线上离射线最近处（`EDGTUBING.exact`），
    * `segment` = 整条轴线（Snap 取近端、Mid-Point / Fraction / Proportion / Distance 沿线派生、Intersect 转 LINE）。
    * 只在拾取过滤器放行 TUBING（Any / Element）时分析。
+   *
+   * E3D `EDGTUBING.line` 跳过 ATTA（管线从构件 leave 直到下一个非 ATTA 构件的 arrive），而 gen-model 在每个
+   * ATTA 处把直管断成两段对象：拾中段的某一端校正到了 ATTA 的 P-Point 时，把同一构件下与之共线、
+   * 端点相接的另一段（们）接上，合成 E3D 那一条线（`mergeTubingAxisAcrossPassThrough`）。
    */
   function buildTubingAxisCandidates(
     base: PickHit | null,
@@ -1295,33 +1317,38 @@ export function useXeokitMeasurementTools(options: {
     if (!measurementPickFilterAdmits(layer.filter, layer.pickType, 'tubing')) return [];
     const refno = refnoFromObjectId(base.objectId);
     if (!isTubingObject(base.objectId, refno)) return [];
-    const data = dtxLayerRef.value?.getObjectGeometryData?.(base.objectId);
-    if (!data) return [];
-    if (!data.geometry.boundingBox) data.geometry.computeBoundingBox();
-    const bounds = data.geometry.boundingBox;
-    if (!bounds) return [];
-    const axis = tubingAxisFromBounds({
-      bounds: { min: bounds.min.toArray() as unknown as TubingVec3, max: bounds.max.toArray() as unknown as TubingVec3 },
-      matrix: data.matrix.elements,
-    });
+    const axis = tubingAxisForObject(base.objectId);
     if (!axis) return [];
     if (!(rect.width > 0) || !(rect.height > 0)) return [];
 
     // 邻接 P-Point：ptset 缓存里离轴线两端在容差内的点（hover 分支时成员点集已经在缓存里）。
+    // noun 优先取点集响应带回的（ATTA 没有几何、不在 DTX 登记里），再回落 refno → noun 查找。
     const points: TubingAxisEndPoint[] = ptsetSnap.getCandidates().map((candidate) => {
-      const noun = nounForRefno(candidate.refno);
+      const noun = candidate.noun ?? nounForRefno(candidate.refno);
       return {
         position: [candidate.worldPos[0], candidate.worldPos[1], candidate.worldPos[2]] as TubingVec3,
         label: `${noun ? `${noun} ` : ''}P-Point #${candidate.number}`,
+        noun,
       };
     });
     const origin = designMetersToSceneWorld(new Vector3(0, 0, 0), dtxLayerRef);
     const sceneUnitsPerDesignMetre = designMetersToSceneWorld(new Vector3(1, 0, 0), dtxLayerRef).distanceTo(origin) || 1;
-    const refined = refineTubingAxisEnds(
-      axis,
-      points,
-      tubingEndTolerance(axis, TUBING_END_TOLERANCE_DESIGN_M * sceneUnitsPerDesignMetre),
-    );
+    const minimumTolerance = TUBING_END_TOLERANCE_DESIGN_M * sceneUnitsPerDesignMetre;
+    const tolerance = tubingEndTolerance(axis, minimumTolerance);
+    const refined = refineTubingAxisEnds(axis, points, tolerance);
+
+    // 某一端落在 ATTA 上才去找同一构件的其它直管段；其余情形不读别的对象的几何。
+    const hit: TubingAxisPiece = { id: base.objectId, axis: refined };
+    const others: TubingAxisPiece[] = isTubingPassThroughPoint(refined.startPoint) || isTubingPassThroughPoint(refined.endPoint)
+      ? (refno ? listTubingObjectIds(refno) : [])
+        .filter((objectId) => objectId !== base.objectId)
+        .flatMap((objectId) => {
+          const pieceAxis = tubingAxisForObject(objectId);
+          if (!pieceAxis) return [];
+          return [{ id: objectId, axis: refineTubingAxisEnds(pieceAxis, points, tubingEndTolerance(pieceAxis, minimumTolerance)) }];
+        })
+      : [];
+    const merged = mergeTubingAxisAcrossPassThrough(hit, others, { tolerance });
 
     const raycaster = new Raycaster();
     raycaster.setFromCamera(
@@ -1331,10 +1358,23 @@ export function useXeokitMeasurementTools(options: {
     const candidate = buildTubingAxisCandidate({
       objectId: base.objectId,
       entityId: base.entityId,
-      axis: refined,
+      axis: merged,
       ray: { origin: raycaster.ray.origin, direction: raycaster.ray.direction },
     });
     return candidate ? [candidate] : [];
+  }
+
+  /** 直管对象的管身轴线：局部包围盒 × 放置矩阵（`tubingAxisFromBounds`）；不是已加载对象或几何退化时为 null。 */
+  function tubingAxisForObject(objectId: string): TubingAxis | null {
+    const data = dtxLayerRef.value?.getObjectGeometryData?.(objectId);
+    if (!data) return null;
+    if (!data.geometry.boundingBox) data.geometry.computeBoundingBox();
+    const bounds = data.geometry.boundingBox;
+    if (!bounds) return null;
+    return tubingAxisFromBounds({
+      bounds: { min: bounds.min.toArray() as unknown as TubingVec3, max: bounds.max.toArray() as unknown as TubingVec3 },
+      matrix: data.matrix.elements,
+    });
   }
 
   /** 当前 E3D 拾取层（过滤器 × 拾取类型），喂给候选解析做准入。 */
@@ -1729,6 +1769,9 @@ export function useXeokitMeasurementTools(options: {
     } catch {
       // dbnum 未知时只依赖异步缓存
     }
+    // 点集响应随点带回的 noun：没有几何、不在 DTX 登记里的构件（ATTA）只有这里知道它是什么。
+    const fromPtset = ptsetResponseByRefno.get(refno.replace(/\//g, '_'))?.noun?.trim();
+    if (fromPtset) return fromPtset;
     return getCachedNounForRefno(refno);
   }
 

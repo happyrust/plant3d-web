@@ -6,7 +6,9 @@
  *   `unit_info` mm→mm 因子 1——`usePtsetSnap` / `usePtsetVisualizationThree` 一行不改。
  *   `bore` 进 `pbore`（吸附优先级 / 显示要它）；`dir_flag` / `ref_dir` / `pwidth` / `pheight` / `pconnect`
  *   是旧 SurrealDB 契约里的格，前端没有任何一处读它们，这里填缺省。
- * - `memberPtsets(owner)` → 同一端点 `include_members=true`，`members[]` 摊成 `PtsetChildrenResponse.results`。
+ * - `memberPtsets(owner)` → 同一端点 `include_members=true`，`members[]` 摊成 `PtsetChildrenResponse.results`；
+ *   两条都把构件 `noun` 透传进响应（`PtsetResponse.noun` / `results[].noun`）——ATTA 没有几何、不在 DTX 登记里，
+ *   测量拾取层只能从这里知道某个 P-Point 属于 ATTA（E3D `EDGTUBING.line` 跳过的穿过点）。
  * - `primitiveKeypoints`：gen-model-v1 的读透形态只存烘好的网格，没有基本体分解，服务端也没有这条接口；
  *   回空并把原因放进 `errors`，测量工具据此提示（不是静默无候选）。
  *
@@ -81,11 +83,13 @@ export function emptyPtsetReason(item: ElementPtsetItem): string {
 /** `element/ptset` 的一个构件 → 旧后端 `PtsetResponse`。 */
 export function elementPtsetToPtsetResponse(item: ElementPtsetItem): PtsetResponse {
   const refno = fromV1Refno(item.refno);
+  const noun = typeof item.noun === 'string' && item.noun.trim() ? item.noun.trim() : null;
   const ptset = (item.points ?? []).map(toPtsetPoint);
   if (ptset.length === 0) {
     return {
       success: false,
       refno,
+      noun,
       ptset: [],
       world_transform: worldTransformOf(item),
       unit_info: MM_UNIT_INFO,
@@ -96,6 +100,7 @@ export function elementPtsetToPtsetResponse(item: ElementPtsetItem): PtsetRespon
   return {
     success: true,
     refno,
+    noun,
     ptset,
     world_transform: worldTransformOf(item),
     unit_info: MM_UNIT_INFO,
@@ -111,6 +116,7 @@ export function elementPtsetToChildrenResponse(ownerRefno: string, resp: Element
     return {
       input_refno: mapped.refno,
       refno: mapped.refno,
+      noun: mapped.noun ?? null,
       success: mapped.success,
       ptset: mapped.ptset,
       world_transform: mapped.world_transform,

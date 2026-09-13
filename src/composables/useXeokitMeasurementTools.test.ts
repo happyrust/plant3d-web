@@ -2345,5 +2345,219 @@ describe('useXeokitMeasurementTools', () => {
 
       tools.dispose();
     });
+
+    /**
+     * ATTA 处断开的两段直管：A 从 (1.4, 4, 6) 到 (2.0, 4, 6)，B 从 (2.0, 4, 6) 到 (2.6, 4, 6)，同一 BRAN、共线、
+     * 在 (2.0, 4, 6) 端点相接。BRAN 自身无 P-Point，成员点集（legacy 源 `/api/pdms/ptset/children` 形状）给
+     * ELBO 145019 P2 = A 起点、结点构件 145020（ATTA 或 OLET）P1 = P2 = 相接点、ELBO 145021 P1 = B 终点。
+     * 相机 / 画布同 `setupTubingTools`：px = 100 + (x − 2) × 100。
+     */
+    async function setupSplitTubingTools(junctionNoun: 'ATTA' | 'OLET') {
+      vi.useFakeTimers();
+      const branRefno = '24381_145018';
+      // 场景 = 0.001 × 设计(mm) + (−10, −20, −30)：设计 mm = (场景 − 平移) / 0.001。
+      const designMm = (scene: readonly [number, number, number]): [number, number, number] => [
+        (scene[0] + 10) / 0.001,
+        (scene[1] + 20) / 0.001,
+        (scene[2] + 30) / 0.001,
+      ];
+      const ptsetPoint = (number: number, scene: readonly [number, number, number]) => ({
+        number,
+        pt: designMm(scene),
+        dir: null,
+        dir_flag: 0,
+        ref_dir: null,
+        pbore: 114.3,
+        pwidth: 0,
+        pheight: 0,
+        pconnect: '',
+      });
+      const unitInfo = { source_unit: 'mm', target_unit: 'mm', conversion_factor: 1 };
+      const noPoints = (refno: string) => ({
+        success: false,
+        refno,
+        ptset: [],
+        world_transform: null,
+        unit_info: unitInfo,
+        error_code: 'PTSET_POINTS_MISSING',
+        error_message: 'BRAN 自身无 P-Point',
+      });
+      vi.doMock('@/composables/useDbMetaInfo', () => ({
+        getDbnumByRefno: vi.fn(() => 7997),
+      }));
+      vi.doMock('@/composables/useDbnoInstancesDtxLoader', () => ({
+        getDtxRefnoTransform: vi.fn(() => null),
+      }));
+      vi.doMock('@/composables/useDbnoInstancesParquetLoader', () => ({
+        useDbnoInstancesParquetLoader: () => ({
+          queryPtsetByRefnoFromParquet: vi.fn(async (_dbno: number, refno: string) => noPoints(refno)),
+        }),
+      }));
+      vi.doMock('@/api/genModelPdmsAttrApi', () => ({
+        pdmsGetPtsetWithContext: vi.fn(async (refno: string) => noPoints(refno)),
+        pdmsGetPtsetChildrenWithContext: vi.fn(async () => {
+          const results = [
+            { refno: '24381_145019', noun: 'ELBO', ptset: [ptsetPoint(1, [1.4, 3.7, 6]), ptsetPoint(2, [1.4, 4, 6])] },
+            { refno: '24381_145020', noun: junctionNoun, ptset: [ptsetPoint(3, [2.0, 4, 6.0457]), ptsetPoint(2, [2.0, 4, 6]), ptsetPoint(1, [2.0, 4, 6])] },
+            { refno: '24381_145021', noun: 'ELBO', ptset: [ptsetPoint(1, [2.6, 4, 6]), ptsetPoint(2, [2.6, 4.3, 6])] },
+          ].map((item) => ({
+            input_refno: item.refno,
+            refno: item.refno,
+            noun: item.noun,
+            success: true,
+            ptset: item.ptset,
+            world_transform: null,
+            unit_info: unitInfo,
+            error_message: null,
+          }));
+          return {
+            success: true,
+            refno: branRefno,
+            results,
+            total_count: results.length,
+            success_count: results.length,
+            failed_count: 0,
+            error_message: null,
+          };
+        }),
+      }));
+
+      const [{ useToolStore }, { useXeokitMeasurementTools }, { useXeokitMeasurementStyleStore }] = await Promise.all([
+        import('@/composables/useToolStore'),
+        import('@/composables/useXeokitMeasurementTools'),
+        import('@/composables/useXeokitMeasurementStyleStore'),
+      ]);
+
+      const store = useToolStore();
+      store.clearAll();
+      store.setToolMode('xeokit_measure_distance');
+      const measurementStyle = useXeokitMeasurementStyleStore();
+      measurementStyle.resetStyle();
+      // 要拉成员点集（端点校正 / 认 ATTA），但 1 px 孔径让 P-Point 不在悬停处抢吸附。
+      measurementStyle.updateMeasurementPickSource('ptset', { show: false, snap: true, thresholdPx: 1 });
+      measurementStyle.updateMeasurementPickSource('position', { show: false, snap: false });
+      measurementStyle.updateStyle({ keepMeasurementAnnotation: true });
+
+      const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 10);
+      camera.position.set(2, 4, 7);
+      camera.lookAt(2, 4, 6);
+      camera.updateMatrixWorld(true);
+      camera.updateProjectionMatrix();
+      const canvas = document.createElement('canvas');
+      Object.defineProperty(canvas, 'getBoundingClientRect', {
+        value: () => ({ left: 0, top: 0, width: 200, height: 200 }),
+      });
+
+      const geometry = new THREE.BoxGeometry(1, 1, 1).translate(0, 0, 0.5);
+      const alongX = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), new THREE.Vector3(1, 0, 0));
+      const pieceA = `o:${branRefno}:3`;
+      const pieceB = `o:${branRefno}:4`;
+      const placements: Record<string, THREE.Matrix4> = {
+        [pieceA]: new THREE.Matrix4().compose(new THREE.Vector3(1.4, 4, 6), alongX, new THREE.Vector3(0.4, 0.4, 0.6)),
+        [pieceB]: new THREE.Matrix4().compose(new THREE.Vector3(2.0, 4, 6), alongX, new THREE.Vector3(0.4, 0.4, 0.6)),
+      };
+      const pickPoint = vi.fn((pos: { x: number; y: number }) => {
+        const x = 2 + (pos.x - 100) / 100;
+        return { objectId: x < 2 ? pieceA : pieceB, point: new THREE.Vector3(x, 4 - (pos.y - 100) / 100, 6.2), distance: 0.8 };
+      });
+      const globalModelMatrix = new THREE.Matrix4().makeScale(0.001, 0.001, 0.001);
+      globalModelMatrix.setPosition(-10, -20, -30);
+      const getObjectGeometryData = vi.fn((objectId: string) => (
+        placements[objectId] ? { geometry, matrix: placements[objectId]!.clone() } : null
+      ));
+      const listTubingObjectIds = vi.fn((refno: string) => (refno === branRefno ? [pieceA, pieceB] : []));
+      const tools = useXeokitMeasurementTools({
+        dtxViewerRef: ref({ camera, canvas, scene: new THREE.Scene() } as any),
+        dtxLayerRef: ref({
+          _totalObjects: 2,
+          getGlobalModelMatrix: () => globalModelMatrix.clone(),
+          getObjectGeometryData,
+        } as any),
+        selectionRef: ref({ pickPoint } as any),
+        overlayContainerRef: ref(document.createElement('div')),
+        getDimensionSystem: () => ({
+          replaceExternalSource: vi.fn(),
+          viewport: { setSelection: vi.fn(), getSelection: vi.fn(() => null) },
+        }) as any,
+        store,
+        compatViewerRef: ref(null),
+        requestRender: null,
+        isTubingObject: (objectId) => objectId === pieceA || objectId === pieceB,
+        listTubingObjectIds,
+      });
+
+      const hoverAt = (x: number, y: number) => tools.onCanvasPointerMove(canvas, new PointerEvent('pointermove', { clientX: x, clientY: y }));
+      const clickAt = (x: number, y: number) => tools.onCanvasPointerUp(canvas, new PointerEvent('pointerup', { clientX: x, clientY: y, button: 0 }));
+      // 悬停一次触发 BRAN 点集拉取（80 ms 防抖 → BRAN 无点 → 成员点集落缓存）。
+      hoverAt(125, 92);
+      await vi.advanceTimersByTimeAsync(200);
+      await Promise.resolve();
+      return { store, measurementStyle, tools, hoverAt, clickAt, getObjectGeometryData, listTubingObjectIds, pieceA, pieceB };
+    }
+
+    it('ATTA 处断开的两段直管合成一条轴线（EDGTUBING.line 跳 ATTA）：Snap 近端越过 ATTA 取远端 ELBO，Mid-Point 是合并后的中点，标签两端都是 ELBO', async () => {
+      const { store, measurementStyle, tools, hoverAt, clickAt, getObjectGeometryData, listTubingObjectIds, pieceA, pieceB } = await setupSplitTubingTools('ATTA');
+      try {
+        // 悬停 B 段 x = 2.25：只看 B 段时近端是 ATTA (2.0)；合并后轴线 1.4 → 2.6，近端是 2.6 的 ELBO。
+        hoverAt(125, 92);
+        expect(tools.hoverSnapTarget.value?.label).toBe('轴线（ELBO P-Point #2 → ELBO P-Point #1） · Snap');
+        expect(listTubingObjectIds).toHaveBeenCalledWith('24381_145018');
+        // 两段的几何都读过（拾中段 + 同构件另一段）。
+        expect(getObjectGeometryData).toHaveBeenCalledWith(pieceA);
+        expect(getObjectGeometryData).toHaveBeenCalledWith(pieceB);
+
+        clickAt(125, 92);
+        const snap = store.currentXeokitDistanceDraft.value!;
+        expect(snap.origin.sourceInfo?.source).toBe('tubing_axis');
+        expect(snap.origin.sourceInfo?.candidateId).toBe(`tubing:${pieceB}`);
+        expect(snap.origin.worldPos[0]).toBeCloseTo(2.6, 6);
+        expect(snap.origin.worldPos[1]).toBeCloseTo(4, 6);
+        store.clearCurrentXeokitDraft();
+
+        // Mid-Point：合并后中点 x = 2.0（恰是 ATTA 位置），不是 B 段自己的中点 2.3。
+        measurementStyle.updateMeasurementPickLayer({ pickType: 'midpoint' });
+        await nextTick();
+        clickAt(125, 92);
+        expect(store.currentXeokitDistanceDraft.value!.origin.worldPos[0]).toBeCloseTo(2.0, 6);
+        store.clearCurrentXeokitDraft();
+
+        // 从 A 段进来也是同一条线：Mid-Point 仍是 2.0；Snap 在 x = 1.75 取 1.4 的 ELBO。
+        clickAt(75, 92);
+        expect(store.currentXeokitDistanceDraft.value!.origin.sourceInfo?.candidateId).toBe(`tubing:${pieceA}`);
+        expect(store.currentXeokitDistanceDraft.value!.origin.worldPos[0]).toBeCloseTo(2.0, 6);
+        store.clearCurrentXeokitDraft();
+        measurementStyle.updateMeasurementPickLayer({ pickType: 'snap' });
+        await nextTick();
+        clickAt(75, 92);
+        expect(store.currentXeokitDistanceDraft.value!.origin.worldPos[0]).toBeCloseTo(1.4, 6);
+      } finally {
+        tools.dispose();
+        vi.useRealTimers();
+      }
+    });
+
+    it('结点不是 ATTA（OLET arrive = leave）时不合并：轴线到 OLET 就停，Mid-Point 是本段中点，标签带 OLET', async () => {
+      const { store, measurementStyle, tools, hoverAt, clickAt, getObjectGeometryData, listTubingObjectIds, pieceA } = await setupSplitTubingTools('OLET');
+      try {
+        getObjectGeometryData.mockClear();
+        hoverAt(125, 92);
+        expect(tools.hoverSnapTarget.value?.label).toBe('轴线（OLET P-Point #2 → ELBO P-Point #1） · Snap');
+        // 两端都不是穿过点：不找别的段、不读别的对象的几何。
+        expect(listTubingObjectIds).not.toHaveBeenCalled();
+        expect(getObjectGeometryData).not.toHaveBeenCalledWith(pieceA);
+
+        clickAt(125, 92);
+        expect(store.currentXeokitDistanceDraft.value!.origin.worldPos[0]).toBeCloseTo(2.0, 6);
+        store.clearCurrentXeokitDraft();
+
+        measurementStyle.updateMeasurementPickLayer({ pickType: 'midpoint' });
+        await nextTick();
+        clickAt(125, 92);
+        expect(store.currentXeokitDistanceDraft.value!.origin.worldPos[0]).toBeCloseTo(2.3, 6);
+      } finally {
+        tools.dispose();
+        vi.useRealTimers();
+      }
+    });
   });
 });

@@ -487,6 +487,22 @@ export function isDtxTubiObjectAcrossAllDbnos(objectId: string): boolean {
   return false;
 }
 
+/**
+ * 同一 refno（BRAN / HANG）下已登记的全部直管对象 id（`o:<refno>:<n>`），跨库。
+ * 测量拾取层把 ATTA 处断开的两段直管按 E3D `EDGTUBING.line` 合成一条轴线时，用它找另一段。
+ */
+export function listDtxTubiObjectIdsForRefno(refno: string): string[] {
+  const prefix = `o:${String(refno ?? '').trim().replace(/\//g, '_')}:`;
+  if (prefix.length <= 3) return [];
+  const out: string[] = [];
+  for (const cache of cachesByDbno.values()) {
+    for (const objectId of cache.tubiObjectIds ?? []) {
+      if (objectId.startsWith(prefix)) out.push(objectId);
+    }
+  }
+  return out;
+}
+
 export function getDtxRefnoTransform(dbno: number, refno: string): number[] | undefined {
   const cache = cachesByDbno.get(dbno);
   return cache?.refnoTransform.get(refno);

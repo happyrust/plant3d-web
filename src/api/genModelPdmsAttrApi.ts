@@ -54,6 +54,11 @@ export type PtsetPoint = {
 export type PtsetResponse = {
   success: boolean;
   refno: string;
+  /**
+   * 该构件的元素类型（`ELBO` / `ATTA` …）。gen-model-v1 `element/ptset` 随点集带回；旧后端没有这一项。
+   * 测量拾取层靠它把 ATTA 的 P-Point 认成 E3D `EDGTUBING.line` 要跳过的穿过点。
+   */
+  noun?: string | null;
   /** 点集数据列表 */
   ptset: PtsetPoint[];
   /** 世界坐标变换矩阵（4x4） */
@@ -84,6 +89,8 @@ export type PtsetQueryContext = {
 export type PtsetBatchItemResponse = {
   input_refno: string;
   refno?: string | null;
+  /** 成员的元素类型；见 `PtsetResponse.noun`。 */
+  noun?: string | null;
   success: boolean;
   ptset: PtsetPoint[];
   world_transform?: number[] | number[][] | null;
