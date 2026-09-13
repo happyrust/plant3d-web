@@ -11,14 +11,16 @@ import type { PerpendicularPoint, PerpendicularTarget } from './perpendicularDis
  */
 export type PerpendicularTargetCandidate = Readonly<{
   point: PerpendicularPoint;
-  /** Axis direction through `point` (P-point dir, PLINE / primitive axis). */
+  /** Axis direction through `point` (P-point dir, PLINE / primitive axis, Graphics edge). */
   direction?: PerpendicularPoint | null;
   /** Circular face: its centre and normal define the target plane. */
   circle?: Readonly<{ center: PerpendicularPoint; normal: PerpendicularPoint }> | null;
   arc?: Readonly<{ center: PerpendicularPoint; normal: PerpendicularPoint }> | null;
+  /** Facet plane (E3D Graphics `getPlane()`): position and normal of the picked facet. */
+  plane?: Readonly<{ position: PerpendicularPoint; normal: PerpendicularPoint }> | null;
 }>;
 
-export type PerpendicularTargetProviderKind = 'axis-line' | 'circle-plane' | 'point';
+export type PerpendicularTargetProviderKind = 'axis-line' | 'circle-plane' | 'facet-plane' | 'point';
 
 export type ResolvedPerpendicularTarget = Readonly<{
   target: PerpendicularTarget;
@@ -38,8 +40,8 @@ function lengthSq(vector: PerpendicularPoint): number {
 /**
  * Mirrors the branch order of E3D `GMFARC.perpendicularToPoint`:
  * `getLine()` first (an axis-bearing pick becomes an infinite line), then
- * `getPlane()` (a circular face becomes an infinite plane), otherwise the pick
- * position itself.
+ * `getPlane()` (a Graphics facet or a circular face becomes an infinite plane),
+ * otherwise the pick position itself.
  */
 export function resolvePerpendicularTarget(
   candidate: PerpendicularTargetCandidate,
@@ -50,6 +52,18 @@ export function resolvePerpendicularTarget(
     return {
       provider: 'axis-line',
       target: { kind: 'line', start: candidate.point, end: [x + dx, y + dy, z + dz] },
+    };
+  }
+  const facet = candidate.plane ?? null;
+  if (
+    facet
+    && isFinitePoint(facet.position)
+    && isFinitePoint(facet.normal)
+    && lengthSq(facet.normal) > DEGENERATE_LENGTH_SQ
+  ) {
+    return {
+      provider: 'facet-plane',
+      target: { kind: 'plane', position: facet.position, normal: facet.normal },
     };
   }
   const circular = candidate.circle ?? candidate.arc ?? null;

@@ -11,6 +11,7 @@ import {
   Raycaster,
   Vector2,
   Vector3,
+  type Camera,
 } from 'three';
 
 import {
@@ -27,10 +28,13 @@ import {
   MEASUREMENT_PICK_SOURCE_IDS,
   MEASUREMENT_PICK_SOURCE_LABELS,
   attachPlineSegments,
+  buildGraphicsPickCandidates,
   buildPositionPickCandidate,
   resolveMeasurementPickCandidates,
   sourceNeedsHoverData,
   type MeasurementPickCandidate,
+  type MeasurementPickPlane,
+  type MeasurementPickSegment,
   type MeasurementPickSourceId,
   type MeasurementPickSourceSettings,
   type ProjectedMeasurementPickCandidate,
@@ -73,6 +77,10 @@ import {
   buildWorldDistanceAidPlan,
   type WorldDistanceAidPart,
 } from '@/measurement/aids/worldDistanceAidPlan';
+import {
+  analyseMeshGraphics,
+  type MeshGraphicsFeatures,
+} from '@/measurement/graphics/meshFeatureGraphics';
 import { computePerpendicularDistance } from '@/measurement/kernel/perpendicularDistance';
 import { resolvePerpendicularTarget } from '@/measurement/kernel/perpendicularTargetProvider';
 import {
@@ -85,7 +93,9 @@ import {
 } from '@/measurement/kernel/pickDerivation';
 import {
   formatMeasurementPrompt,
+  measurementPickFilterAdmits,
   measurementPickTypePromptToken,
+  type MeasurementPickFeature,
   type MeasurementPickLayerConfig,
   type MeasurementPickTypeId,
 } from '@/measurement/pick/pickLayerModel';
@@ -113,6 +123,11 @@ type PickHit = {
   direction?: Vector3;
   circle?: Readonly<{ center: Vector3; rim: Vector3; normal: Vector3 }>;
   arc?: Readonly<{ center: Vector3; rim: Vector3; normal: Vector3 }>;
+  /** 线 / 面候选自带的几何（场景坐标）：Graphics 边、PLINE 线；Graphics 面。 */
+  segment?: MeasurementPickSegment;
+  plane?: MeasurementPickPlane;
+  /** 网格表面命中的三角形（场景坐标），Graphics 面候选由它派生。 */
+  triangle?: readonly [Vector3, Vector3, Vector3];
   pixelDistance?: number;
   sourcePriority?: number;
   /**
@@ -153,7 +168,7 @@ function vec3ToTuple(v: Vector3): Vec3 {
   return [v.x, v.y, v.z];
 }
 
-function tupleToVector(v: Vec3): Vector3 {
+function tupleToVector(v: Vec3 | PickVec3): Vector3 {
   return new Vector3(v[0], v[1], v[2]);
 }
 
@@ -570,7 +585,36 @@ export function useXeokitMeasurementTools(options: {
     if (source === 'position') return 0xa855f7;
     if (source === 'mesh_pick_point') return 0x38bdf8;
     if (source === 'primitive_key_point') return 0xf97316;
+    if (source === 'mesh_graphics') return 0xfacc15;
     return 0x22c55e;
+  }
+
+  /**
+   * E3D `pickdetail` 高亮拾中的图形细节：Graphics 边画整条边，Graphics 面画共面片的轮廓。
+   * 只画当前胜出的候选（E3D 也只高亮拾中的那一个细节）。
+   */
+  function createGraphicsDetailHighlight(hit: ProjectedMeasurementPickCandidate): LineSegments | null {
+    const segments: readonly MeasurementPickSegment[] = hit.plane?.outline?.length
+      ? hit.plane.outline
+      : hit.segment
+        ? [hit.segment]
+        : [];
+    if (segments.length === 0) return null;
+    const positions = new Float32Array(segments.length * 6);
+    segments.forEach((segment, index) => {
+      positions.set(
+        [segment.start.x, segment.start.y, segment.start.z, segment.end.x, segment.end.y, segment.end.z],
+        index * 6,
+      );
+    });
+    const geometry = new BufferGeometry();
+    geometry.setAttribute('position', new BufferAttribute(positions, 3));
+    const material = new LineBasicMaterial({ color: sourceCandidateColor(hit.source) });
+    (material as any).depthTest = false;
+    const line = new LineSegments(geometry, material);
+    line.renderOrder = hoverPickCandidateGroup.renderOrder;
+    line.userData.noPick = true;
+    return line;
   }
 
   function createCandidateCross(pos: Vector3, source: MeasurementPickSourceId): LineSegments {
@@ -591,13 +635,20 @@ export function useXeokitMeasurementTools(options: {
     return line;
   }
 
-  function showHoverPickCandidates(candidates: readonly ProjectedMeasurementPickCandidate[]): void {
+  function showHoverPickCandidates(
+    candidates: readonly ProjectedMeasurementPickCandidate[],
+    hit: ProjectedMeasurementPickCandidate | null = null,
+  ): void {
     clearHoverPickCandidates();
     ensureHoverPickCandidateGroupAttached();
     if (!hoverPickCandidateGroup.parent) return;
     for (const candidate of candidates) {
       if (candidate.source === 'ptset') continue;
       hoverPickCandidateGroup.add(createCandidateCross(candidate.worldPos, candidate.source));
+    }
+    if (hit?.source === 'mesh_graphics') {
+      const detail = createGraphicsDetailHighlight(hit);
+      if (detail) hoverPickCandidateGroup.add(detail);
     }
     requestRender?.();
   }
@@ -933,9 +984,21 @@ export function useXeokitMeasurementTools(options: {
     return '请将光标靠近 Primitive Key Point 后再点击';
   }
 
+  /** E3D 特征类：每个点源可能给出的候选特征（拾取过滤器按它判断点源此刻能否参与）。 */
+  const SOURCE_FEATURES: Readonly<Record<MeasurementPickSourceId, readonly MeasurementPickFeature[]>> = {
+    ptset: ['ppoint'],
+    position: ['element'],
+    primitive_key_point: ['element', 'pline'],
+    mesh_pick_point: ['surface'],
+    mesh_graphics: ['graphics-line', 'graphics-plane'],
+  };
+
+  /** 已开捕捉、且当前拾取过滤器 × 拾取类型放行其特征的点源（E3D：过滤器不放行的点源等于没开）。 */
   function enabledSnapSources(): MeasurementPickSourceId[] {
+    const layer = measurementStyle.state.measurementPickLayer;
     return MEASUREMENT_PICK_SOURCE_IDS.filter((id) => (
       measurementStyle.state.measurementPickSources[id]?.snap
+      && SOURCE_FEATURES[id].some((feature) => measurementPickFilterAdmits(layer.filter, layer.pickType, feature))
     ));
   }
 
@@ -1090,9 +1153,85 @@ export function useXeokitMeasurementTools(options: {
       ...(candidate.direction ? { direction: candidate.direction.clone() } : {}),
       ...(candidate.circle ? { circle: candidate.circle } : {}),
       ...(candidate.arc ? { arc: candidate.arc } : {}),
+      ...(candidate.segment ? { segment: candidate.segment } : {}),
+      ...(candidate.plane ? { plane: candidate.plane } : {}),
       pixelDistance,
       sourcePriority: measurementStyle.state.measurementPickSources[candidate.source]?.priority,
     };
+  }
+
+  /**
+   * E3D Graphics 拾取（`stdGraphics` / `pickdetail`）的候选：从光标命中构件的已加载
+   * 网格派生绘制边（线候选）与面（平面候选）。网格特征按 objectId + 世界矩阵缓存；
+   * 只有拾取过滤器放行 Graphics 特征时才分析（`Any` 按 E3D `stdAny` 不拾细节图形）。
+   */
+  const GRAPHICS_FEATURE_CACHE_LIMIT = 32;
+  const graphicsFeatureCache = new Map<string, MeshGraphicsFeatures>();
+
+  function meshGraphicsFeaturesFor(objectId: string): MeshGraphicsFeatures | null {
+    const layer = dtxLayerRef.value;
+    const data = layer?.getObjectGeometryData?.(objectId);
+    if (!data) return null;
+    const matrix = data.matrix.elements;
+    const key = `${objectId}|${matrix.map((v) => v.toPrecision(9)).join(',')}`;
+    const cached = graphicsFeatureCache.get(key);
+    if (cached) {
+      graphicsFeatureCache.delete(key);
+      graphicsFeatureCache.set(key, cached);
+      return cached;
+    }
+    const position = data.geometry.getAttribute('position');
+    if (!position) return null;
+    const index = data.geometry.getIndex();
+    const features = analyseMeshGraphics({
+      positions: position.array as ArrayLike<number>,
+      indices: index ? (index.array as ArrayLike<number>) : null,
+      matrix,
+    });
+    graphicsFeatureCache.set(key, features);
+    if (graphicsFeatureCache.size > GRAPHICS_FEATURE_CACHE_LIMIT) {
+      const oldest = graphicsFeatureCache.keys().next().value;
+      if (oldest !== undefined) graphicsFeatureCache.delete(oldest);
+    }
+    return features;
+  }
+
+  function buildGraphicsCandidates(
+    base: PickHit | null,
+    cursor: Readonly<{ x: number; y: number }>,
+    camera: Camera,
+    rect: Readonly<{ width: number; height: number }>,
+  ): MeasurementPickCandidate[] {
+    if (!base || base.source !== 'mesh_pick_point') return [];
+    const setting = measurementStyle.state.measurementPickSources.mesh_graphics;
+    if (!sourceNeedsHoverData(setting)) return [];
+    const layer = measurementStyle.state.measurementPickLayer;
+    if (
+      !measurementPickFilterAdmits(layer.filter, layer.pickType, 'graphics-line')
+      && !measurementPickFilterAdmits(layer.filter, layer.pickType, 'graphics-plane')
+    ) {
+      return [];
+    }
+    const features = meshGraphicsFeaturesFor(base.objectId);
+    if (!features) return [];
+    if (!(rect.width > 0) || !(rect.height > 0)) return [];
+    const raycaster = new Raycaster();
+    raycaster.setFromCamera(
+      new Vector2((cursor.x / rect.width) * 2 - 1, -(cursor.y / rect.height) * 2 + 1),
+      camera,
+    );
+    return buildGraphicsPickCandidates({
+      objectId: base.objectId,
+      entityId: base.entityId,
+      features,
+      hitPoint: base.worldPos,
+      hitTriangle: base.triangle ?? null,
+      ray: { origin: raycaster.ray.origin, direction: raycaster.ray.direction },
+      cursor,
+      camera,
+      rect,
+      edgeThresholdPx: setting.thresholdPx,
+    });
   }
 
   /** 当前 E3D 拾取层（过滤器 × 拾取类型），喂给候选解析做准入。 */
@@ -1149,6 +1288,14 @@ export function useXeokitMeasurementTools(options: {
       if (!ray) return hit;
       const segment = selectSignificantSubSegment(candidate.segment, layer.significantSnaps, ray, toDesign);
       geometry = { kind: 'segment', start: toDesign(segment.start), end: toDesign(segment.end) };
+    } else if (candidate.plane) {
+      // 面候选（Graphics facet）：所有单击拾取类型都回 射线 ∩ 平面（E3D `GRAPHICS` PLANE 分支）。
+      if (!ray) return hit;
+      geometry = {
+        kind: 'plane',
+        position: toDesign(candidate.plane.position),
+        normal: vec3ToTuple(sceneDirectionToDesign(candidate.plane.position, candidate.plane.normal, dtxLayerRef)),
+      };
     } else {
       // 点候选：除 Distance 外所有拾取类型都回它自己（E3D PPOINT / DPOINT / Aid POSITION 口径）。
       if (kernelType !== 'distance') return hit;
@@ -1253,6 +1400,9 @@ export function useXeokitMeasurementTools(options: {
       circle: circular
         ? { center: designPosition(circular.center), normal: designDirection(circular.normal) }
         : null,
+      plane: hit.plane
+        ? { position: designPosition(hit.plane.position), normal: designDirection(hit.plane.normal) }
+        : null,
     });
     const result = computePerpendicularDistance(sourceDesign, resolved.target);
     if (!result.ok) return null;
@@ -1264,7 +1414,11 @@ export function useXeokitMeasurementTools(options: {
         info: { targetKind: 'point', targetLabel: baseLabel },
       };
     }
-    const providerLabel = resolved.provider === 'axis-line' ? '轴线' : '圆面';
+    const providerLabel = resolved.provider === 'axis-line'
+      ? '轴线'
+      : resolved.provider === 'facet-plane'
+        ? '所在平面'
+        : '圆面';
     const targetLabel = `${baseLabel ?? MEASUREMENT_PICK_SOURCE_LABELS[hit.source]} ${providerLabel}`;
     const footDesign: Vec3 = [result.value.foot[0], result.value.foot[1], result.value.foot[2]];
     const footScene = designMetersToSceneWorld(tupleToVector(footDesign), dtxLayerRef);
@@ -1506,6 +1660,7 @@ export function useXeokitMeasurementTools(options: {
           objectId: hit.objectId,
           worldPos: hit.point.clone(),
           source: 'mesh_pick_point',
+          ...(hit.triangle ? { triangle: hit.triangle } : {}),
         };
       }
     }
@@ -1618,21 +1773,23 @@ export function useXeokitMeasurementTools(options: {
 
     const cursor = getCanvasPos(canvas, e);
     const rect = canvas.getBoundingClientRect();
+    const rectSize = { width: rect.width, height: rect.height };
     const candidates: MeasurementPickCandidate[] = [
       ...buildPtsetCandidates(),
       ...buildMeshPickCandidate(base),
       ...buildPositionCandidates(base, surfaceRefno),
       ...buildPrimitiveKeyPointCandidates(base, surfaceRefno),
+      ...buildGraphicsCandidates(base, { x: cursor.x, y: cursor.y }, camera, rectSize),
     ];
     const resolution = resolveMeasurementPickCandidates({
       cursor: { x: cursor.x, y: cursor.y },
       camera,
-      rect: { width: rect.width, height: rect.height },
+      rect: rectSize,
       settings: measurementStyle.state.measurementPickSources,
       candidates,
       pickLayer: pickLayerGate(),
     });
-    showHoverPickCandidates(resolution.visibleCandidates);
+    showHoverPickCandidates(resolution.visibleCandidates, resolution.hit);
 
     const ptsetPending = isPtsetPickPending(surfaceRefno);
     if (ptsetPending) {

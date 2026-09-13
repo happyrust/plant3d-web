@@ -54,7 +54,7 @@ export const MEASUREMENT_PICK_FILTER_HINTS: Readonly<Record<MeasurementPickFilte
   pline: '型材 PLINE（E3D Pline）',
   ppoint: '目录 P-Point（E3D Ppoint）',
   screen: '屏幕位置 → 模型表面点（E3D Screen）',
-  graphics: '网格边 / 面（E3D Graphics）',
+  graphics: '网格边 / 面：光标附近的绘制边（相邻面夹角 ≥ 30° 或边界）吸成线，否则取光标下的面（E3D Graphics）',
   external: '外部几何 / 点云（E3D External）',
 };
 
@@ -133,7 +133,7 @@ export const MEASUREMENT_PICK_FILTER_AVAILABILITY: Readonly<
   pline: { available: true },
   ppoint: { available: true },
   screen: { available: true },
-  graphics: { available: false, reason: '网格边 / 面提供者尚未接入（Phase A 后续切片）' },
+  graphics: { available: true },
   external: { available: false, reason: '外部几何拾取不在本期范围' },
 };
 
@@ -293,9 +293,15 @@ export type MeasurementPickFeature =
 
 /**
  * Whether the active filter × pick type lets a candidate of `feature` be picked.
- * `Element` + `Cursor` is E3D's `edgTypes.attribute(noun).exact()` — the exact
- * point on the element under the cursor — hence the surface point is admitted
- * there and only there.
+ *
+ * - `Any` is E3D `EDGPICK.stdAny` — "Standard pick interpreter for **Element,
+ *   Ppoint or Pline**" (`inMode = 'pany'`). It does **not** pick detail graphics
+ *   (facet edges / facets need `stdGraphics`, `inMode = 'pickdetail'`), aids
+ *   (`stdAid`) or external geometry (`stdExternal`). The Web surface point is
+ *   admitted under `Any` as well: it is the Web stand-in for E3D's element pick
+ *   when no significant point is near (free-surface mode) and for `Element` +
+ *   `Cursor` (`edgTypes.attribute(noun).exact()`, the exact point on the element).
+ * - `Element` + `Cursor` admits the surface point for the same reason, and only there.
  */
 export function measurementPickFilterAdmits(
   filter: MeasurementPickFilterId,
@@ -304,7 +310,7 @@ export function measurementPickFilterAdmits(
 ): boolean {
   switch (filter) {
     case 'any':
-      return true;
+      return feature === 'element' || feature === 'ppoint' || feature === 'pline' || feature === 'surface';
     case 'element':
       return feature === 'element' || (feature === 'surface' && pickType === 'exact');
     case 'ppoint':

@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { Matrix4, OrthographicCamera, Vector3 } from 'three';
 
 import {
+  buildGraphicsPickCandidates,
   buildPositionPickCandidate,
   cloneMeasurementPickSourceSettings,
   measurementPickSettingsFromLegacy,
@@ -10,6 +11,8 @@ import {
   scenePositionFromTransform,
   type MeasurementPickCandidate,
 } from './useMeasurementPickSources';
+
+import { analyseMeshGraphics } from '@/measurement/graphics/meshFeatureGraphics';
 
 describe('useMeasurementPickSources', () => {
   function camera() {
@@ -290,5 +293,78 @@ describe('useMeasurementPickSources', () => {
 
     expect(resolved.snapCandidates.map((item) => item.id)).toEqual(['mesh:o:24381_145018:0']);
     expect(resolved.hit?.source).toBe('mesh_pick_point');
+  });
+
+  describe('buildGraphicsPickCandidates · E3D Graphics (pickdetail) on a mesh hit', () => {
+    // Flat unit square at z=0 facing the camera (two triangles, four boundary edges).
+    const square = {
+      positions: [-0.5, -0.5, 0, 0.5, -0.5, 0, 0.5, 0.5, 0, -0.5, 0.5, 0],
+      indices: [0, 1, 2, 0, 2, 3],
+    };
+    const features = analyseMeshGraphics(square);
+    const rect = { width: 200, height: 200 }; // orthographic camera: 100 px per world unit
+    const triangle0: [Vector3, Vector3, Vector3] = [
+      new Vector3(-0.5, -0.5, 0), new Vector3(0.5, -0.5, 0), new Vector3(0.5, 0.5, 0),
+    ];
+    const base = (x: number, y: number) => ({
+      objectId: 'o:24381_145018:0',
+      entityId: 'o:24381_145018:0',
+      features,
+      hitPoint: new Vector3(x, y, 0),
+      hitTriangle: triangle0,
+      ray: { origin: new Vector3(x, y, 1), direction: new Vector3(0, 0, -1) },
+      cursor: { x: 100 + x * 100, y: 100 - y * 100 },
+      camera: camera(),
+      rect,
+      edgeThresholdPx: 12,
+    });
+
+    it('far from any drawn edge → one facet PLANE candidate at the hit point with the patch outline', () => {
+      const candidates = buildGraphicsPickCandidates(base(0, 0));
+      expect(candidates).toHaveLength(1);
+      const facet = candidates[0]!;
+      expect(facet.source).toBe('mesh_graphics');
+      expect(facet.feature).toBe('graphics-plane');
+      expect(facet.label).toBe('面');
+      expect(facet.worldPos.toArray()).toEqual([0, 0, 0]);
+      expect(facet.plane?.normal.toArray().map((v) => Number(v.toFixed(9)))).toEqual([0, 0, 1]);
+      expect(facet.plane?.outline).toHaveLength(4);
+      expect(facet.segment).toBeUndefined();
+    });
+
+    it('within the edge aperture → the drawn edge becomes a LINE candidate snapped nearest the cursor ray, and the facet is not offered', () => {
+      // 2 px inside the right edge (x = 0.5).
+      const candidates = buildGraphicsPickCandidates(base(0.48, 0.1));
+      expect(candidates).toHaveLength(1);
+      const edge = candidates[0]!;
+      expect(edge.feature).toBe('graphics-line');
+      expect(edge.label).toBe('边');
+      expect(edge.worldPos.toArray().map((v) => Number(v.toFixed(9)))).toEqual([0.5, 0.1, 0]);
+      const [sx, sy] = [edge.segment!.start.x, edge.segment!.end.x];
+      expect(sx).toBeCloseTo(0.5, 12);
+      expect(sy).toBeCloseTo(0.5, 12);
+      expect(Math.abs(edge.segment!.end.y - edge.segment!.start.y)).toBeCloseTo(1, 12);
+      // Infinite line through the edge is the Perpendicular-to LINE provider.
+      expect(Math.abs(edge.direction!.normalize().y)).toBeCloseTo(1, 12);
+    });
+
+    it('is admitted only under the Graphics pick filter (E3D stdAny never picks detail graphics)', () => {
+      const settings = cloneMeasurementPickSourceSettings();
+      const candidates = buildGraphicsPickCandidates(base(0, 0));
+      const resolve = (filter: 'any' | 'graphics') => resolveMeasurementPickCandidates({
+        cursor: { x: 100, y: 100 },
+        camera: camera(),
+        rect,
+        settings,
+        candidates,
+        pickLayer: { filter, pickType: 'snap' },
+      });
+      expect(resolve('any').hit).toBeNull();
+      expect(resolve('any').visibleCandidates).toEqual([]);
+      const graphics = resolve('graphics');
+      expect(graphics.hit?.feature).toBe('graphics-plane');
+      // `show` is off by default: the picked detail is highlighted instead of drawing crosses.
+      expect(graphics.visibleCandidates).toEqual([]);
+    });
   });
 });

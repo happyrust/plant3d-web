@@ -65,6 +65,10 @@ const measurementPickSourceRows: {
     id: 'primitive_key_point',
     description: '基本体关键点；依赖模型包导出的关键点数据。',
   },
+  {
+    id: 'mesh_graphics',
+    description: 'E3D Graphics 拾取的等价物：从已加载网格派生的绘制边（吸成线）与面（吸成平面）；仅在拾取过滤器选 Graphics 时参与，拾中的边 / 面会在场景里高亮。',
+  },
 ];
 
 const isXeokitMode = computed(() => {

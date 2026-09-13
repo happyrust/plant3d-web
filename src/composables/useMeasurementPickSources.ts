@@ -10,6 +10,11 @@ import {
 import type { Camera } from 'three';
 
 import {
+  nearestPointOnSegmentToRay,
+  type GraphicsVec3,
+  type MeshGraphicsFeatures,
+} from '@/measurement/graphics/meshFeatureGraphics';
+import {
   measurementPickFilterAdmits,
   type MeasurementPickFeature,
   type MeasurementPickFilterId,
@@ -23,7 +28,9 @@ export type MeasurementPickSourceId =
   | 'mesh_pick_point'
   | 'ptset'
   | 'position'
-  | 'primitive_key_point';
+  | 'primitive_key_point'
+  /** E3D Graphics detail derived from the loaded mesh: drawn edges (lines) and facets (planes). */
+  | 'mesh_graphics';
 
 export type MeasurementPickSourceSetting = {
   show: boolean;
@@ -63,12 +70,25 @@ export type MeasurementPickCandidate = {
   feature?: MeasurementPickFeature;
   /** Present when the candidate is a line (pick types other than Snap / Cursor act on it). */
   segment?: MeasurementPickSegment;
+  /** Present when the candidate is a facet (E3D Graphics PLANE): every single-pick type returns ray ∩ plane. */
+  plane?: MeasurementPickPlane;
 };
+
+/**
+ * Plane-bearing geometry (E3D `GMFPLANE` from a Graphics facet, `getPlane()`).
+ * `outline` is the boundary of the coplanar patch for highlighting only.
+ */
+export type MeasurementPickPlane = Readonly<{
+  position: Vector3;
+  normal: Vector3;
+  outline?: readonly MeasurementPickSegment[];
+}>;
 
 /**
  * Default E3D feature class per Web point source (`EDGPOSITIONDATA.type`):
  * `ptset` is PPOINT, Item origin / primitive key points are ELEMENT significant
- * points, the mesh surface point is the exact cursor position (Screen / Element+Cursor).
+ * points, the mesh surface point is the exact cursor position (Screen / Element+Cursor),
+ * mesh graphics are GRAPHICS details (edge by default; facet candidates set `graphics-plane`).
  */
 export const MEASUREMENT_PICK_SOURCE_DEFAULT_FEATURE: Readonly<
   Record<MeasurementPickSourceId, MeasurementPickFeature>
@@ -77,6 +97,7 @@ export const MEASUREMENT_PICK_SOURCE_DEFAULT_FEATURE: Readonly<
   position: 'element',
   primitive_key_point: 'element',
   mesh_pick_point: 'surface',
+  mesh_graphics: 'graphics-line',
 };
 
 export function measurementPickCandidateFeature(
@@ -113,6 +134,7 @@ export const MEASUREMENT_PICK_SOURCE_IDS: readonly MeasurementPickSourceId[] = [
   'mesh_pick_point',
   'position',
   'primitive_key_point',
+  'mesh_graphics',
 ] as const;
 
 export const MEASUREMENT_PICK_SOURCE_LABELS: Record<MeasurementPickSourceId, string> = {
@@ -120,7 +142,11 @@ export const MEASUREMENT_PICK_SOURCE_LABELS: Record<MeasurementPickSourceId, str
   ptset: 'P-Point',
   position: 'Item 原点',
   primitive_key_point: '基本体 / PLINE 关键点',
+  mesh_graphics: '网格边 / 面（Graphics）',
 };
+
+/** Screen aperture inside which a drawn edge wins over the facet under the cursor (E3D `pickdetail`). */
+export const DEFAULT_GRAPHICS_EDGE_SNAP_PX = 12;
 
 export const DEFAULT_MEASUREMENT_PICK_SOURCE_SETTINGS: Readonly<MeasurementPickSourceSettings> = {
   primitive_key_point: {
@@ -146,6 +172,15 @@ export const DEFAULT_MEASUREMENT_PICK_SOURCE_SETTINGS: Readonly<MeasurementPickS
     snap: false,
     priority: 40,
     thresholdPx: DEFAULT_PTSET_SNAP_PX,
+  },
+  // Only reachable through the Graphics pick filter (E3D `stdAny` never picks detail
+  // graphics), so snapping on by default does not change Any / Element behaviour.
+  // Candidate crosses stay hidden: the picked edge / facet is highlighted instead.
+  mesh_graphics: {
+    show: false,
+    snap: true,
+    priority: 35,
+    thresholdPx: DEFAULT_GRAPHICS_EDGE_SNAP_PX,
   },
 };
 
@@ -237,6 +272,98 @@ export function attachPlineSegments(
     end.segment = segment;
   }
   return [...candidates];
+}
+
+export const GRAPHICS_EDGE_LABEL = '边';
+export const GRAPHICS_FACET_LABEL = '面';
+/** Most drawn edges offered around the cursor per hover (nearest first). */
+const GRAPHICS_EDGE_CANDIDATE_LIMIT = 6;
+
+function tupleToVector(v: GraphicsVec3): Vector3 {
+  return new Vector3(v[0], v[1], v[2]);
+}
+
+/**
+ * E3D Graphics filter (`stdGraphics`, `inMode = 'pickdetail'`) on a mesh hit: the
+ * drawn edges the cursor ray passes within `edgeThresholdPx` become **line**
+ * candidates (`3D_LINE`, snapped at the point nearest the ray so the pick-type
+ * kernel's control point lands on the edge); when no edge is that close, the
+ * facet under the cursor becomes one **plane** candidate (`PLANE`) positioned at
+ * the hit point, carrying the coplanar patch outline for highlighting.
+ *
+ * All geometry is in the frame of `features` (scene world).
+ */
+export function buildGraphicsPickCandidates(input: {
+  objectId: string;
+  entityId: string;
+  features: MeshGraphicsFeatures;
+  hitPoint: Vector3;
+  hitTriangle: readonly [Vector3, Vector3, Vector3] | null;
+  ray: Readonly<{ origin: Vector3; direction: Vector3 }>;
+  cursor: CanvasPosLike;
+  camera: Camera;
+  rect: CanvasRectLike;
+  edgeThresholdPx: number;
+}): MeasurementPickCandidate[] {
+  const ray = {
+    origin: [input.ray.origin.x, input.ray.origin.y, input.ray.origin.z] as GraphicsVec3,
+    direction: [input.ray.direction.x, input.ray.direction.y, input.ray.direction.z] as GraphicsVec3,
+  };
+
+  const edges: { candidate: MeasurementPickCandidate; pixelDistance: number }[] = [];
+  input.features.edges.forEach((edge, index) => {
+    const nearest = nearestPointOnSegmentToRay(edge, ray);
+    if (!nearest) return;
+    const projected = projectToCanvas([nearest.point[0], nearest.point[1], nearest.point[2]], input.camera, input.rect);
+    if (!projected.visible) return;
+    const pixelDistance = Math.hypot(projected.x - input.cursor.x, projected.y - input.cursor.y);
+    if (pixelDistance > input.edgeThresholdPx) return;
+    const start = tupleToVector(edge.start);
+    const end = tupleToVector(edge.end);
+    edges.push({
+      pixelDistance,
+      candidate: {
+        id: `graphics:${input.objectId}:edge:${index}`,
+        source: 'mesh_graphics',
+        entityId: input.entityId,
+        objectId: input.objectId,
+        worldPos: tupleToVector(nearest.point),
+        label: GRAPHICS_EDGE_LABEL,
+        feature: 'graphics-line',
+        segment: { start, end },
+        // The infinite line through the edge is the Perpendicular-to LINE provider (E3D `getLine()`).
+        direction: end.clone().sub(start),
+      },
+    });
+  });
+  if (edges.length > 0) {
+    edges.sort((a, b) => a.pixelDistance - b.pixelDistance || a.candidate.id.localeCompare(b.candidate.id));
+    return edges.slice(0, GRAPHICS_EDGE_CANDIDATE_LIMIT).map((entry) => entry.candidate);
+  }
+
+  if (!input.hitTriangle) return [];
+  const [a, b, c] = input.hitTriangle;
+  const triangle = input.features.findTriangle([a.x, a.y, a.z], [b.x, b.y, b.z], [c.x, c.y, c.z]);
+  if (triangle < 0) return [];
+  const patch = input.features.coplanarPatch(triangle);
+  if (!patch) return [];
+  return [{
+    id: `graphics:${input.objectId}:facet:${patch.triangles[0] ?? triangle}`,
+    source: 'mesh_graphics',
+    entityId: input.entityId,
+    objectId: input.objectId,
+    worldPos: input.hitPoint.clone(),
+    label: GRAPHICS_FACET_LABEL,
+    feature: 'graphics-plane',
+    plane: {
+      position: input.hitPoint.clone(),
+      normal: tupleToVector(patch.plane.normal),
+      outline: patch.outline.map((segment) => ({
+        start: tupleToVector(segment.start),
+        end: tupleToVector(segment.end),
+      })),
+    },
+  }];
 }
 
 function matrixFromColsArray(raw: unknown): Matrix4 | null {

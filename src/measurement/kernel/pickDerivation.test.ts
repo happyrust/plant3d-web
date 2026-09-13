@@ -35,7 +35,7 @@ function positionOf(result: ReturnType<typeof derivePickPosition>): PickVec3 {
 }
 
 function expectMm(actual: PickVec3, expected: readonly [number, number, number]): void {
-  expected.forEach((value, index) => expect(actual[index] * 1000).toBeCloseTo(value, 6));
+  expected.forEach((value, index) => expect((actual[index] ?? Number.NaN) * 1000).toBeCloseTo(value, 6));
 }
 
 /** A 4000 mm PLINE running east at N10000 U15000. */

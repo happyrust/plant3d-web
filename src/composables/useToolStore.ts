@@ -751,7 +751,8 @@ function normalizeMeasurementPointSourceInfo(value: unknown): MeasurementPointSo
     raw.source !== 'mesh_pick_point' &&
     raw.source !== 'ptset' &&
     raw.source !== 'position' &&
-    raw.source !== 'primitive_key_point'
+    raw.source !== 'primitive_key_point' &&
+    raw.source !== 'mesh_graphics'
   ) {
     return undefined;
   }
