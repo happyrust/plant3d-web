@@ -91,4 +91,20 @@
 - 管件障碍是包围盒 8 角点的投影凸包，不是网格轮廓：透视近景里凸包明显大于本体，标签可能压在凸包的空白边缘，或在没有零侵入位置时以最少重叠压在本体上；引线不是障碍、可以穿过阀体。
 - 分支名药丸（`detail` 级）在本样本三个视角都没到显示阈值。覆盖层只登记了坐标 gizmo；三维画布容器之外的浮层（工具条、面板）与标签不相压，不在其中。
 - `surfaceM` 取本分支尺寸界线的下四分位（= 求解器最内行 `od`）；本样本 DTX 管体视半径略大于该值，尺寸界线起点略在管体轮廓内。
-- SVG 导出把三维文字近似为按投影字高 / 基线角旋转的平面字形（无透视缩短）；实心箭头在 SVG 中仍为三条描边（与用户尺寸一致）。
+- ~~SVG 导出把三维文字近似为按投影字高 / 基线角旋转的平面字形（无透视缩短）；实心箭头在 SVG 中仍为三条描边（与用户尺寸一致）。~~ 2026-09-13 已补齐，见下「SVG 导出对齐视口」段。
+
+## SVG 导出对齐视口（2026-09-13 补验）
+
+`DimensionSystem.exportSvg()`（尺寸面板「导出 SVG」）此前对三维呈现只有平面近似：`scene-triangle` 实心箭头投影成三条边、SVG 里画成描边三角；三维文字用投影字高 + 基线角的平面字形旋转代替，没有透视缩短。改法（未改布局与画家的几何，只改投影快照的一格与导出）：
+
+- `kernel/geometry/sceneGeometry.ts::projectFramedGlyph` 在投影快照的 `glyph-run` 上多带一格 `perspective`：文字平面上 `(0,0) (1,0) (1,1) (0,1)`（字高单位，x 沿基线、y 向上）四个点的屏幕像。透视相机把一个平面映到屏幕就是一个单应（`kernel/geometry/homography.ts`，Heckbert 单位正方形 → 四边形；平行四边形退化为仿射），所以导出无需相机就能把字形笔画精确送到屏幕，直线仍是直线。
+- `kernel/glyph/glyphTrace.ts::traceFramedGlyphRun`：三维文字的单位字形笔画（含小数点拉长到 0.12 字高）从画家里搬进内核，画家与 SVG 共用，两边画的是同一批笔画。
+- `export/svgOverlay.ts`：按场景图元与投影图元的对应关系（`scene-triangle` ↔ 三条边，其余 1:1，与 `resolveLabelCollisions` 同一约定）逐条走：实心箭头输出一条闭合 `<path … Z>` 填充（`stroke="none"`，颜色 = 角色色），源自契约 `arrow_lines` 的开放 V 翼仍是描边；带 `perspective` 的文字先画白色光晕 `<path data-part="label-halo">`（宽 `textStrokeWidthPx + 2·textHaloWidthPx` = 4.8 px），再画 2 px 粗体笔画 `<path data-part="label" data-text-plane="3d">`，不再用 `transform="rotate(…)"`。快照里没有场景图元、或两列对不上时退回逐条序列化（与改前相同）。
+
+**实机**：gen-model（`:8022` / `:18084`）本轮都没在跑，改用 e2e 同一条无后端链路（`page.route` 注入 `src/fixtures/mbd-v2/pipe-iso-sample.json` + `meta.cheight_mm=60`，demo 页 `dimension_demo=1&dtx_demo=primitives&model_source=legacy`，真实 Chrome 1600×1000，斜视相机），脚本 `pw-svg-export-41.mjs`（`%TEMP%\plant3d-mbd-debug`）。23 条记录全部绘出：5 条 `dimension3d`（10 个实心箭头、5 条三维文字，投影快照 5 条带 `perspective`）、6 个标签 billboard（6 个填充体）、22 条平面文字。导出的 SVG（78.5 KB）：`filledArrows=10 / arrowStrokes=0 / text3d=5 / halos=5 / flatLabels=22 / rotated=0 / tagFills=6`，`pageerror` 0；`e2e/dimension-mbd-v2-fixture.spec.ts` 2/2。栅格化对照见下表：2084 竖排向上、900 / 1337 / 484 沿线并带与视口相同的透视缩短，箭头为实心三角。单测 `npx vitest run src/dimension src/composables/useMbdExternalSync.test.ts` → **58 文件 / 329 通过**（新增 `homography.test.ts` 4、`glyphTrace.test.ts` 3、`svgOverlay.test.ts` +4）；eslint 相关 9 文件 0；`npm run type-check` 基线外新增 5 条全在他人在飞文件（`useDtxTools.*.test.ts`），本改动 0。
+
+| 文件 | 说明 |
+| --- | --- |
+| `svg-export-viewer.png` | 视口（真实 Chrome，demo 页 + 注入样本）：实心箭头、三维文字、标签卡片 |
+| `svg-export-rasterized.png` | 同一帧 `exportSvg()` 的 SVG 在白底上栅格化：箭头填充、文字透视与视口一致 |
+| `svg-export-sample.svg` | 导出的 SVG 原文件（可直接打开 / 检查 `data-part` / `data-text-plane`） |

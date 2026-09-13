@@ -123,6 +123,16 @@ export type ScreenGlyphRun = Readonly<{
   rotationCenter?: Vec2;
   styleRole: string;
   tone?: SceneTone;
+  /**
+   * Set for 3D (framed) text: the screen images of the frame points
+   * `(0,0) (1,0) (1,1) (0,1)` in cap-height units — x along the baseline
+   * from its centre, y up — i.e. the run's perspective as the homography
+   * from frame coordinates to the screen. Consumers that can draw
+   * perspective text (SVG export) send the unit glyph strokes through it;
+   * `origin` / `capHeightPx` / `rotationRad` remain the view-plane
+   * approximation for those that cannot.
+   */
+  perspective?: readonly [Vec2, Vec2, Vec2, Vec2];
 }>;
 
 export type LayoutPrimitive =

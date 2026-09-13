@@ -202,8 +202,10 @@ export function projectTextFrameQuad(
 /**
  * A framed run projects to its exact glyph-box quad for bounds and hit
  * testing, plus a view-plane approximation (flat run of the projected cap
- * height, rotated to the projected baseline about the box centre) that SVG
- * export and the collision pass can consume unchanged.
+ * height, rotated to the projected baseline about the box centre) that the
+ * collision pass can consume unchanged, plus the frame's `perspective` —
+ * the four projected frame points the SVG export maps the glyph strokes
+ * through so the exported text keeps the viewport's foreshortening.
  */
 function projectFramedGlyph(
   primitive: SceneGlyphRun,
@@ -215,6 +217,10 @@ function projectFramedGlyph(
   const origin = projectedPoint(frame.origin, projector);
   const xEnd = projectedPoint(add3(frame.origin, frame.xAxis), projector);
   const yEnd = projectedPoint(add3(frame.origin, frame.yAxis), projector);
+  const xyEnd = projectedPoint(
+    add3(add3(frame.origin, frame.xAxis), frame.yAxis),
+    projector,
+  );
   const capHeightPx = Math.hypot(yEnd[0] - origin[0], yEnd[1] - origin[1]);
   const center: Vec2 = [
     (quad[0][0] + quad[2][0]) / 2,
@@ -239,6 +245,7 @@ function projectFramedGlyph(
         rotationCenter: center,
       }
       : {}),
+    perspective: [origin, xEnd, xyEnd, yEnd],
   };
 }
 

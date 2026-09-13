@@ -72,6 +72,9 @@ standoff；先试整块在屏内的位置），全部被占则回首选位；**�
 离开阀体；近景阀门凸包盖住半个画布时取最少侵入位、引线变长；远景位号方框让开 gizmo 落到画布顶部中央。仍不做：网格轮廓、引线避让。
 截图 `tags-obstacles-*.png`。
 
+SVG 导出（2026-09-13，PRD §9.4）：尺寸面板「导出 SVG」现在与视口一致——实心箭头是填充多边形，三维文字按文字平面的屏幕单应
+（`glyph-run.perspective`）精确导出并带白色光晕，不再是按投影字高旋转的平面近似。对照截图 `docs/verification/mbd-3d-dimension-presentation-2026-09-12/svg-export-*.png`。
+
 ## 对应文档
 
 - ADR 0057：`docs/adr/0057-present-mbd-running-dimensions-as-3d-annotation-standing-off-the-pipe.md`

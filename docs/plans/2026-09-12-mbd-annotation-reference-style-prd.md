@@ -2,7 +2,7 @@
 
 日期：2026-09-12  
 作者：协同组「标注」指挥官 / 产品经理（fable-5-1-17）；实施 fable-5-1-31（T1 / T2 / S1）、T3 收尾 fable-5-1-95  
-状态：**T1 / T2 + S1 成对去重已于 2026-09-12 落地**（ADR 0057；D1–D4 按效果图取 a，用户「继续未完的部分，不必重问」授权）；T0 以 `%TEMP%` 脚本 + `docs/verification/mbd-3d-dimension-presentation-2026-09-12/` 归档代替；**T3（标签块 / 引线 / 方框）同日落地**（ADR 0058，§9.2）；**标签体避让管件包围盒与三维尺寸线 2026-09-13 落地**（ADR 0059，§9.3）。实施与验证记录见 §9。  
+状态：**T1 / T2 + S1 成对去重已于 2026-09-12 落地**（ADR 0057；D1–D4 按效果图取 a，用户「继续未完的部分，不必重问」授权）；T0 以 `%TEMP%` 脚本 + `docs/verification/mbd-3d-dimension-presentation-2026-09-12/` 归档代替；**T3（标签块 / 引线 / 方框）同日落地**（ADR 0058，§9.2）；**标签体避让管件包围盒与三维尺寸线 2026-09-13 落地**（ADR 0059，§9.3）；**SVG 导出对齐视口（AC3 的 SVG 半边）2026-09-13 补齐**（§9.4）。实施与验证记录见 §9。  
 上游约束：协同决策 d-438（架构固定：gen-model 供事实、plant-mbd 纯 Rust 求解器单源、plant3d-web 只读 external source 经现有 `ThreeSceneDimensionPainter` 呈现；不重写画家；MBD 不进用户 DimensionDocument）  
 相关文档：`2026-09-12-mbd-linear-dim-visual-optimization-plan.md`（QW1–QW3 / S2 / S3 已落地）、`2026-09-12-mbd-dimension-engineering-convention-review.md`（标准条款核实与 S1 / S4 规则）
 
@@ -108,7 +108,7 @@
 - **适配层** `mbdV2ExternalAnnotations.ts`：有组 `cheight` 且恰有两条尺寸界线的 `linear_dim` 带 `dimension3d`（管中心点 = 尺寸界线 `from`，方向 = 尺寸界线方向，`surfaceM` = 本分支尺寸界线长度下四分位，`row` 按 `1.2·cheight` 反推，`small` → `outside`）；原位几何与 `arrowLines` 保留。
 - **开关** `useMbdExternalSync.ts` `?mbd_3d=0` 剥掉 `dimension3d` 并写诊断 notes；`DimensionPanelDock.vue` 新增「三维标注呈现」勾选，LOD 统计增加「相压」。
 - **验证**：单测 53 文件 / 288 通过（新增 `dimension3d.test.ts` 7、`declutterPolicy.test.ts` 3、painter / mapper / sync / panel 各 +1）；eslint 0；type-check 新增 0；`e2e/dimension-mbd-v2-fixture.spec.ts` 2/2；Chrome 固定相机远 / 近景截图与统计见 `docs/verification/mbd-3d-dimension-presentation-2026-09-12/README.md`（远景 11 绘 / 7 隐，11 条三维文字、22 个实心箭头；近景 12 绘 / 6 隐；`mbd_3d=0` 回到原位平面呈现）。
-- **验收对照**：AC1 ✓（远景尺寸线到管轴 241–543 mm，管表面 114 mm）；AC2 ✓（文字在线上方 0.3h，行距 1.7h）；AC3 ✓ 视口（SVG 仍为三条描边，与用户尺寸一致）；AC4 ✓；AC5 ✗（T3 未做，见 9.2）；AC6 ✓（契约 / 数值 / 分段 / 沿线位置不变，golden 未动）；AC7 ✓（同相机多次运行统计逐字相同）；AC8 ✓；AC9 ✓（`docs/verification/…`）。
+- **验收对照**：AC1 ✓（远景尺寸线到管轴 241–543 mm，管表面 114 mm）；AC2 ✓（文字在线上方 0.3h，行距 1.7h）；AC3 ✓ 视口（SVG 当日仍为三条描边，2026-09-13 补齐为填充多边形，见 §9.4）；AC4 ✓；AC5 ✗（T3 未做，见 9.2）；AC6 ✓（契约 / 数值 / 分段 / 沿线位置不变，golden 未动）；AC7 ✓（同相机多次运行统计逐字相同）；AC8 ✓；AC9 ✓（`docs/verification/…`）。
 
 ### 9.2 T3 标签块 / 引线 / 方框（代码为交接前遗留的未提交工作树，fable-5-1-95 复核、实机验证、补文档并提交）
 
@@ -130,3 +130,11 @@
 - **内核** `kernel/geometry/obstacleGeometry.ts`（新：凸包、多边形面积、矩形裁剪、矩形∩凸多边形面积、线段在矩形内长度）；`kernel/layout/tagBillboard.ts`：`tagObstacleRegion`（候选包络反投到锚点深度 ± 包络对角线）、`projectObstacleOutline`（8 角点投影凸包，相机后 / 远平面外丢弃）、`dimensionStrokes`（其它布局的 line / path 段）、`collectTagObstacles`；`placeTagBillboards` 先取零侵入的候选位，没有则取加权侵入面积最小者（数字 / 已放标签 / 视口覆盖层 4、描边 4 px 带 2、构件凸包 1 / px²，1e-6 px² 内先到者赢）；候选位扩为四圈（standoff × 1 / 1.6 / 2.4 / 3.4），有整块在屏内的候选位时只在其中挑（不为躲障碍出屏）。`layoutViewport.ts` / `dimensionViewport.ts` 透传 `obstacles`。
 - **验证**（本会话实跑）：单测 56 文件 / 317 通过（`obstacleGeometry.test.ts`、`tagBillboard.test.ts` 14、`dtxDimensionViewerAdapter.test.ts` 2、facade +1）；eslint 0；type-check 本改动新增 0；e2e fixture 2/2；真实 Chrome 三视角统计与截图见 `docs/verification/mbd-3d-dimension-presentation-2026-09-12/README.md`「标签避让管件包围盒、尺寸描边与视口覆盖层」段——中景尾端卡片与位号从阀体上换到手轮上方 / 阀体右侧（与构件凸包重叠 0），近景两者离开阀体本体（阀门凸包盖住右半画布，取最少侵入位），远景位号方框让开右上角 gizmo 落到画布顶部中央，三视角标签体内描边 0、标签↔数字 / 标签↔标签 / 标签↔gizmo 0，重复运行与宿主帧循环结果逐字相同。
 - **验收对照**：AC5 补齐「不压管件几何、不压坐标 gizmo」；AC6 / AC7 / AC8 保持 ✓。**未覆盖**：障碍是包围盒凸包而非网格轮廓（透视近景凸包大于本体）；引线不避让构件与覆盖层。
+
+### 9.4 SVG 导出对齐视口（2026-09-13，fable-5-1-41；接手 fable-5-1-17 交接记录后按「继续未完的部分」补 AC3 的 SVG 半边）
+
+- **投影快照** `kernel/geometry/sceneGeometry.ts`：带 `frame` 的三维文字投影时多带 `perspective`（文字平面 `(0,0) (1,0) (1,1) (0,1)` 字高单位四点的屏幕像）；`kernel/types.ts` `ScreenGlyphRun.perspective?`。透视相机把平面映到屏幕是单应，`kernel/geometry/homography.ts`（新，Heckbert 单位正方形 → 四边形，平行四边形退化为仿射）让导出无需相机即可精确复现透视文字。
+- **共用字形** `kernel/glyph/glyphTrace.ts::traceFramedGlyphRun`（从 `scenePainter.ts` 搬入内核）：画家与 SVG 用同一批单位笔画（含小数点拉长到 0.12 字高）。
+- **导出** `export/svgOverlay.ts`：按场景图元 ↔ 投影图元的对应（`scene-triangle` ↔ 三条边，其余 1:1）走一遍，实心箭头输出闭合填充 `<path>`（契约 `arrow_lines` 的开放 V 翼仍为描边），三维文字先光晕后 2 px 粗体笔画（`data-text-plane="3d"`），不再用平面旋转近似；对不上或无场景图元时退回逐条序列化。
+- **验证**：单测 58 文件 / 329 通过（`homography.test.ts` 4、`glyphTrace.test.ts` 3、`svgOverlay.test.ts` +4：填充箭头 / 开放翼保持描边 / 单应文字 + 光晕 / 透视缩短）；eslint 0；type-check 本改动新增 0；e2e fixture 2/2；真实 Chrome 无后端链路（gen-model 本轮未运行）注入 `pipe-iso-sample.json` + `cheight_mm=60`：5 条 `dimension3d` → SVG `filledArrows=10 / text3d=5 / halos=5 / rotated=0`，栅格化与视口对照见验证 README「SVG 导出对齐视口」段（`svg-export-*.png` / `.svg`）。
+- **验收对照**：AC3 ✓（视口 + SVG 均为填充多边形）；AC6 / AC7 / AC8 保持 ✓（布局与画家几何未变，goldens 未动）。**未覆盖**：SVG 里被遮挡 / 深度关系仍与视口一样穿透显示（S4 inspection 未做）。
