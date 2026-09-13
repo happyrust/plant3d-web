@@ -988,7 +988,7 @@ describe('createSpatialQueryStore', () => {
     expect(store.resultSet.value?.items.find((item) => item.refno === 'server_only')?.visible).toBe(true);
   });
 
-  it('「加载当前页 / 只加载未加载」（pages: current）只取当前页列出的条目；缺省 pages 的批量作用域仍是整个命中集合', async () => {
+  it('「加载当前页」（pages: current）只取当前页列出的条目；「只加载未加载」与缺省 pages 的批量作用域仍是整个命中集合', async () => {
     const viewer = createViewerStub();
     const batchLoadRefnos = vi.fn(async (refnos: string[]) => ({ ok: refnos, fail: [] }));
 
@@ -1035,18 +1035,18 @@ describe('createSpatialQueryStore', () => {
       groups: [],
     };
 
-    // 只加载未加载（当前页）：只有本页那条未加载的，第 2 页的不碰
-    await store.loadResults({ pages: 'current', onlyUnloaded: true, flyTo: true });
-    expect(batchLoadRefnos).toHaveBeenLastCalledWith(['server_only'], expect.objectContaining({ flyTo: true }));
+    // 加载当前页：本页两条，第 2 页的不碰（改前这里拿到的是 fullMatches 的 4 条）
+    await store.loadResults({ pages: 'current', flyTo: true });
+    expect(batchLoadRefnos).toHaveBeenLastCalledWith(['loaded_a', 'server_only'], expect.objectContaining({ flyTo: true }));
     expect(store.resultSet.value?.loadedCount).toBe(2);
     expect(store.resultSet.value?.unloadedCount).toBe(0);
     expect(store.error.value).toBeNull();
 
-    // 加载当前页：本页两条（改前这里拿到的是 fullMatches 的 4 条）
-    await store.loadResults({ pages: 'current', flyTo: true });
-    expect(batchLoadRefnos).toHaveBeenLastCalledWith(['loaded_a', 'server_only'], expect.objectContaining({ flyTo: true }));
+    // 只加载未加载（缺省 pages）：整个命中集合里还没加载的——本页刚加载完，剩第 2 页两条
+    await store.loadResults({ onlyUnloaded: true, flyTo: false });
+    expect(batchLoadRefnos).toHaveBeenLastCalledWith(['server_page2_a', 'server_page2_b'], expect.objectContaining({ flyTo: false }));
 
-    // 不指定 pages（分组按钮 / 全部显示那一路）：仍是整个命中集合
+    // 不指定 pages 也不限未加载（分组按钮 / 全部显示那一路）：整个命中集合
     await store.loadResults({ flyTo: false });
     expect(batchLoadRefnos).toHaveBeenLastCalledWith(
       ['loaded_a', 'server_only', 'server_page2_a', 'server_page2_b'],

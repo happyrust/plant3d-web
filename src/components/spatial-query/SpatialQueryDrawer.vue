@@ -1117,13 +1117,13 @@ function restoreAll() {
   restoreScene();
 }
 
-// 这两个按钮只动当前页：摘要行「当前页 N 项 / 未加载 M 项」数的就是这一页，跨页的整组加载走分组里的「加载本库 / 加载本专业」。
+// 「加载当前页」只动这一页；「只加载未加载」把整个命中集合里没加载的都补上（跨页，用户 2026-09-14 拍板保持全集语义）。
 function loadCurrentResults() {
   void loadResults({ pages: 'current', flyTo: true });
 }
 
 function loadUnloadedResults() {
-  void loadResults({ pages: 'current', onlyUnloaded: true, flyTo: true });
+  void loadResults({ onlyUnloaded: true, flyTo: true });
 }
 
 function loadDisplayGroup(group: DisplayGroup) {

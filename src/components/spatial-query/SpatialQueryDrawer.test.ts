@@ -579,7 +579,7 @@ describe('SpatialQueryDrawer (distance 模式)', () => {
     unmount();
   });
 
-  it('加载当前页与只加载未加载结果按钮只动当前页（pages: current），不再把全集拉下来', async () => {
+  it('加载当前页只动当前页（pages: current）；只加载未加载仍按整个命中集合补加载', async () => {
     stubState.resultSet.value = makeResultSet(2);
 
     const { host, unmount } = mountDrawer();
@@ -592,7 +592,7 @@ describe('SpatialQueryDrawer (distance 模式)', () => {
 
     allButtons.find((button) => button.textContent?.includes('只加载未加载'))?.click();
     await nextTick();
-    expect(loadResults).toHaveBeenCalledWith({ pages: 'current', onlyUnloaded: true, flyTo: true });
+    expect(loadResults).toHaveBeenCalledWith({ onlyUnloaded: true, flyTo: true });
 
     unmount();
   });
