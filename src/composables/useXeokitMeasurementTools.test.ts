@@ -1995,4 +1995,206 @@ describe('useXeokitMeasurementTools', () => {
       tools.dispose();
     });
   });
+
+  describe('E3D 拾取层 · Graphics 过滤器 × Intersect 拾取类型（Phase A）', () => {
+    /**
+     * 场景：单位立方体，中心 (2, 4, 6)，正交相机在 (2, 4, 7) 朝 -Z 看，画布 200px ↔ 2 世界单位
+     * （100 px / 单位）。+Z 面 z = 6.5 朝向相机；其四条棱是绘制边。`pickPoint` 返回 +Z 面上的命中点。
+     */
+    async function setupGraphicsTools() {
+      const [{ useToolStore }, { useXeokitMeasurementTools }, { useXeokitMeasurementStyleStore }] = await Promise.all([
+        import('@/composables/useToolStore'),
+        import('@/composables/useXeokitMeasurementTools'),
+        import('@/composables/useXeokitMeasurementStyleStore'),
+      ]);
+
+      const store = useToolStore();
+      store.clearAll();
+      store.setToolMode('xeokit_measure_distance');
+      const measurementStyle = useXeokitMeasurementStyleStore();
+      measurementStyle.resetStyle();
+      measurementStyle.updateMeasurementPickSource('ptset', { show: false, snap: false });
+      measurementStyle.updateMeasurementPickSource('position', { show: false, snap: false });
+      measurementStyle.updateStyle({ keepMeasurementAnnotation: true });
+
+      const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 10);
+      camera.position.set(2, 4, 7);
+      camera.lookAt(2, 4, 6);
+      camera.updateMatrixWorld(true);
+      camera.updateProjectionMatrix();
+
+      const canvas = document.createElement('canvas');
+      Object.defineProperty(canvas, 'getBoundingClientRect', {
+        value: () => ({ left: 0, top: 0, width: 200, height: 200 }),
+      });
+
+      // 单位立方体（6 面 × 2 三角形），顶点不焊接；场景坐标直接给，矩阵取单位阵。
+      const positions: number[] = [];
+      const indices: number[] = [];
+      const quad = (a: number[], b: number[], c: number[], d: number[]) => {
+        const base = positions.length / 3;
+        positions.push(...a, ...b, ...c, ...d);
+        indices.push(base, base + 1, base + 2, base, base + 2, base + 3);
+      };
+      const [x0, x1, y0, y1, z0, z1] = [1.5, 2.5, 3.5, 4.5, 5.5, 6.5];
+      quad([x0, y0, z0], [x0, y1, z0], [x1, y1, z0], [x1, y0, z0]);
+      quad([x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1]);
+      quad([x0, y0, z0], [x1, y0, z0], [x1, y0, z1], [x0, y0, z1]);
+      quad([x0, y1, z0], [x0, y1, z1], [x1, y1, z1], [x1, y1, z0]);
+      quad([x0, y0, z0], [x0, y0, z1], [x0, y1, z1], [x0, y1, z0]);
+      quad([x1, y0, z0], [x1, y1, z0], [x1, y1, z1], [x1, y0, z1]);
+      const geometry = new THREE.BufferGeometry();
+      geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(positions), 3));
+      geometry.setIndex(new THREE.BufferAttribute(new Uint32Array(indices), 1));
+      const topTriangle: [THREE.Vector3, THREE.Vector3, THREE.Vector3] = [
+        new THREE.Vector3(x0, y0, z1), new THREE.Vector3(x1, y0, z1), new THREE.Vector3(x1, y1, z1),
+      ];
+
+      const pickPoint = vi.fn((pos: { x: number; y: number }) => ({
+        objectId: 'o:24381_145018:0',
+        // 正交相机：画布 (px, py) ↔ 世界 (2 + (px-100)/100, 4 - (py-100)/100)，命中 +Z 面。
+        point: new THREE.Vector3(2 + (pos.x - 100) / 100, 4 - (pos.y - 100) / 100, z1),
+        distance: 0.5,
+        triangle: topTriangle,
+      }));
+      const dimensionSystem = {
+        replaceExternalSource: vi.fn(),
+        viewport: { setSelection: vi.fn(), getSelection: vi.fn(() => null) },
+      } as any;
+      const globalModelMatrix = new THREE.Matrix4().makeScale(0.001, 0.001, 0.001);
+      globalModelMatrix.setPosition(-10, -20, -30);
+      const tools = useXeokitMeasurementTools({
+        dtxViewerRef: ref({ camera, canvas } as any),
+        dtxLayerRef: ref({
+          _totalObjects: 1,
+          getGlobalModelMatrix: () => globalModelMatrix.clone(),
+          getObjectGeometryData: () => ({ geometry, matrix: new THREE.Matrix4() }),
+        } as any),
+        selectionRef: ref({ pickPoint } as any),
+        overlayContainerRef: ref(document.createElement('div')),
+        getDimensionSystem: () => dimensionSystem,
+        store,
+        compatViewerRef: ref(null),
+        requestRender: null,
+      });
+
+      const clickAt = (x: number, y: number) => tools.onCanvasPointerUp(canvas, new PointerEvent('pointerup', {
+        clientX: x,
+        clientY: y,
+        button: 0,
+      }));
+      const hoverAt = (x: number, y: number) => tools.onCanvasPointerMove(canvas, new PointerEvent('pointermove', {
+        clientX: x,
+        clientY: y,
+      }));
+      return { store, measurementStyle, tools, clickAt, hoverAt };
+    }
+
+    it('Graphics 过滤器：靠近棱吸到边（Snap 取近端），面中央取面；Any 过滤器下 Graphics 细节一个都不参与', async () => {
+      const { store, measurementStyle, tools, clickAt } = await setupGraphicsTools();
+      measurementStyle.updateMeasurementPickLayer({ filter: 'graphics', pickType: 'exact' });
+      await nextTick();
+      expect(tools.statusText.value).toMatch(/\(Cursor\) Snap : 等待捕捉（网格边 \/ 面（Graphics））$/);
+
+      // 画布 (148, 100) ↔ 世界 (2.48, 4) → 距棱 x = 2.5 仅 2 px：边候选，Cursor 取射线在边上的控制点。
+      clickAt(148, 100);
+      const draft = store.currentXeokitDistanceDraft.value!;
+      expect(draft).not.toBeNull();
+      expect(draft.origin.sourceInfo?.source).toBe('mesh_graphics');
+      expect(draft.origin.sourceInfo?.candidateId).toMatch(/^graphics:o:24381_145018:0:edge:/);
+      expect(draft.origin.worldPos[0]).toBeCloseTo(2.5, 6);
+      expect(draft.origin.worldPos[1]).toBeCloseTo(4, 6);
+      expect(draft.origin.worldPos[2]).toBeCloseTo(6.5, 6);
+
+      // 面中央 (100, 100) ↔ (2, 4)：离所有棱 50 px，落到面候选，位置 = 射线 ∩ 平面 = 命中点。
+      clickAt(100, 100);
+      const record = store.xeokitDistanceMeasurements.value.at(-1)!;
+      expect(record.target.sourceInfo?.candidateId).toMatch(/^graphics:o:24381_145018:0:facet:/);
+      expect(record.target.worldPos).toEqual([2, 4, 6.5]);
+
+      // Any 过滤器（E3D stdAny）：Graphics 细节不放行，同一击只剩没开捕捉的表面点 → 不落点。
+      store.clearCurrentXeokitDraft();
+      measurementStyle.updateMeasurementPickLayer({ filter: 'any', pickType: 'snap' });
+      await nextTick();
+      clickAt(148, 100);
+      expect(store.currentXeokitDistanceDraft.value).toBeNull();
+      expect(tools.pickPointMessage.value).toBeTruthy();
+
+      tools.dispose();
+    });
+
+    it('Intersect：两条棱（线 × 线）两次子拾取求出角点作为测量点；提示 Intersection[1]→[2]，Esc 先放弃子拾取', async () => {
+      const { store, measurementStyle, tools, clickAt, hoverAt } = await setupGraphicsTools();
+      measurementStyle.updateMeasurementPickLayer({ filter: 'graphics', pickType: 'intersect' });
+      await nextTick();
+      expect(tools.statusText.value).toContain('(Intersection[1]) Snap :');
+
+      // 子拾取 1：棱 x = 2.5（沿 Y）。不落测量点，只记下这条线。
+      clickAt(148, 100);
+      expect(store.currentXeokitDistanceDraft.value).toBeNull();
+      expect(tools.statusText.value).toContain('(Intersection[2]) Snap :');
+      expect(tools.pickPointMessage.value).toContain('求交已选 1.');
+      expect(tools.pickPointMessage.value).toContain('Intersection[2]');
+
+      // 悬停到棱 y = 4.5（沿 X）：预览交点 (2.5, 4.5, 6.5)。
+      hoverAt(100, 52);
+      expect(tools.hoverSnapTarget.value?.label).toBe('交点（预览）');
+
+      // 平行棱（x = 1.5，沿 Y）→ E3D (2,870)，第一条线保留。
+      clickAt(52, 100);
+      expect(store.currentXeokitDistanceDraft.value).toBeNull();
+      expect(tools.pickPointMessage.value).toContain('2,870');
+      expect(tools.statusText.value).toContain('(Intersection[2]) Snap :');
+
+      // 子拾取 2：棱 y = 4.5 → 交点 = 角点 (2.5, 4.5, 6.5) 成为起点。
+      clickAt(100, 52);
+      const draft = store.currentXeokitDistanceDraft.value!;
+      expect(draft).not.toBeNull();
+      expect(draft.origin.worldPos[0]).toBeCloseTo(2.5, 6);
+      expect(draft.origin.worldPos[1]).toBeCloseTo(4.5, 6);
+      expect(draft.origin.worldPos[2]).toBeCloseTo(6.5, 6);
+      expect(draft.origin.sourceInfo?.label).toBe('交点');
+      expect(tools.statusText.value).toContain('(Intersection[1]) Snap :');
+
+      // 第二个测量点也走求交：先选一条棱，Esc 只放弃这次子拾取（草稿保留），再 Esc 才取消草稿。
+      clickAt(148, 100);
+      expect(tools.statusText.value).toContain('(Intersection[2]) Snap :');
+      expect(tools.reset()).toBe(true);
+      expect(store.currentXeokitDistanceDraft.value).not.toBeNull();
+      expect(tools.statusText.value).toContain('(Intersection[1]) Snap :');
+      expect(tools.reset()).toBe(true);
+      expect(store.currentXeokitDistanceDraft.value).toBeNull();
+
+      tools.dispose();
+    });
+
+    it('Intersect：面 × 面要第三次子拾取（Intersection[3]）；面中的线与面平行被拒且不消耗', async () => {
+      const { store, measurementStyle, tools, clickAt } = await setupGraphicsTools();
+      measurementStyle.updateMeasurementPickLayer({ filter: 'graphics', pickType: 'intersect' });
+      await nextTick();
+
+      // 只有 +Z 面可见：面 × 面 = 同一平面重复两次 → 需要第三项。
+      clickAt(100, 100);
+      expect(tools.statusText.value).toContain('(Intersection[2]) Snap :');
+      clickAt(110, 110);
+      expect(tools.statusText.value).toContain('(Intersection[3]) Snap :');
+      // 第三项选 +Z 面上的棱：线在两个面里 → 无唯一交点（E3D 2,874），整个会话清空。
+      clickAt(148, 100);
+      expect(store.currentXeokitDistanceDraft.value).toBeNull();
+      expect(tools.pickPointMessage.value).toContain('2,874');
+      expect(tools.statusText.value).toContain('(Intersection[1]) Snap :');
+
+      // 换拾取类型即放弃进行中的子拾取。
+      clickAt(100, 100);
+      expect(tools.statusText.value).toContain('(Intersection[2]) Snap :');
+      measurementStyle.updateMeasurementPickLayer({ pickType: 'snap' });
+      await nextTick();
+      expect(tools.statusText.value).toContain('(Snap) Snap :');
+      measurementStyle.updateMeasurementPickLayer({ pickType: 'intersect' });
+      await nextTick();
+      expect(tools.statusText.value).toContain('(Intersection[1]) Snap :');
+
+      tools.dispose();
+    });
+  });
 });

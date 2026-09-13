@@ -93,9 +93,10 @@ describe('normalizeMeasurementPickLayer', () => {
       filter: 'graphics',
       pickType: 'exact',
     });
-    expect(normalizeMeasurementPickLayer({ filter: 'aid', pickType: 'intersect', significantSnaps: 'no' })).toEqual(
+    expect(normalizeMeasurementPickLayer({ filter: 'aid', pickType: 'bogus', significantSnaps: 'no' })).toEqual(
       DEFAULT_MEASUREMENT_PICK_LAYER,
     );
+    expect(normalizeMeasurementPickLayer({ pickType: 'intersect' }).pickType).toBe('intersect');
     expect(normalizeMeasurementPickLayer({ values: { fraction: 0.2, distanceMm: '', proportion: 'x' } }).values).toEqual({
       distanceMm: 0,
       fraction: 1,

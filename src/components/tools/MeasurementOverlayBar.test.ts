@@ -501,14 +501,14 @@ describe('MeasurementOverlayBar', () => {
     expect(host.querySelector('[data-testid="measurement-overlay-pick-layer"]')).toBeTruthy();
     expect(host.querySelector('[data-testid="measurement-overlay-pick-layer-summary"]')?.textContent?.trim()).toBe('Any · Snap');
 
-    // E3D 缺省 Any × Snap；Aid / External / Intersect 灰掉。
+    // E3D 缺省 Any × Snap；Aid / External 灰掉，7 种拾取类型全部可用。
     const filterButton = (id: string) => host!.querySelector(`[data-testid="measurement-overlay-pick-filter-${id}"]`) as HTMLButtonElement | null;
     const typeButton = (id: string) => host!.querySelector(`[data-testid="measurement-overlay-pick-type-${id}"]`) as HTMLButtonElement | null;
     expect(filterButton('any')?.getAttribute('aria-checked')).toBe('true');
     expect(filterButton('aid')?.disabled).toBe(true);
     expect(filterButton('external')?.disabled).toBe(true);
     expect(filterButton('graphics')?.disabled).toBe(false);
-    expect(typeButton('intersect')?.disabled).toBe(true);
+    expect(typeButton('intersect')?.disabled).toBe(false);
     expect(host.querySelector('[data-testid^="measurement-overlay-pick-type-value-"]')).toBeNull();
 
     filterButton('graphics')?.click();

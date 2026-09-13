@@ -81,6 +81,14 @@ import {
   analyseMeshGraphics,
   type MeshGraphicsFeatures,
 } from '@/measurement/graphics/meshFeatureGraphics';
+import {
+  EMPTY_INTERSECT_SESSION,
+  advanceIntersectPick,
+  intersectOperandFromGeometry,
+  intersectPickOrdinal,
+  type IntersectOperand,
+  type IntersectPickSession,
+} from '@/measurement/kernel/intersectPickSession';
 import { computePerpendicularDistance } from '@/measurement/kernel/perpendicularDistance';
 import { resolvePerpendicularTarget } from '@/measurement/kernel/perpendicularTargetProvider';
 import {
@@ -1329,6 +1337,83 @@ export function useXeokitMeasurementTools(options: {
     };
   }
 
+  // ── E3D Intersect 拾取类型：一个测量点 = 两（三）次子拾取求交 ──
+  /** 当前求交会话（设计 World 几何）；`intersectOrdinal` 是 `Intersection[n]` 的 n，响应式给提示条用。 */
+  let intersectSession: IntersectPickSession = EMPTY_INTERSECT_SESSION;
+  const intersectOrdinal = ref(1);
+
+  function setIntersectSession(next: IntersectPickSession): void {
+    intersectSession = next;
+    intersectOrdinal.value = intersectPickOrdinal(next);
+  }
+
+  function clearIntersectSession(): boolean {
+    const hadPending = intersectSession.operands.length > 0;
+    setIntersectSession(EMPTY_INTERSECT_SESSION);
+    return hadPending;
+  }
+
+  function isIntersectPickType(): boolean {
+    return measurementStyle.state.measurementPickLayer.pickType === 'intersect';
+  }
+
+  /** 把拾中候选的几何换到设计 World，按 `EDGPICKTYPE.intersect` 的分型转成 LINE / PLANE 操作数。 */
+  function intersectOperandFromHit(hit: PickHit): IntersectOperand | null {
+    const toDesign = (v: Vector3): PickVec3 => vec3ToTuple(sceneWorldToDesignMeters(v, dtxLayerRef));
+    const toDesignDir = (origin: Vector3, v: Vector3): PickVec3 => vec3ToTuple(sceneDirectionToDesign(origin, v, dtxLayerRef));
+    return intersectOperandFromGeometry({
+      segment: hit.segment ? { start: toDesign(hit.segment.start), end: toDesign(hit.segment.end) } : null,
+      plane: hit.plane
+        ? { position: toDesign(hit.plane.position), normal: toDesignDir(hit.plane.position, hit.plane.normal) }
+        : null,
+      position: toDesign(hit.worldPos),
+      direction: hit.direction ? toDesignDir(hit.worldPos, hit.direction) : null,
+    });
+  }
+
+  /** 交点作为测量点：位置换回场景坐标，几何字段清空（E3D 回的是 POSITION，不再带线 / 面）。 */
+  function intersectionHit(lastHit: PickHit, position: PickVec3): PickHit {
+    const worldPos = designMetersToSceneWorld(tupleToVector(position), dtxLayerRef);
+    const { direction: _d, circle: _c, arc: _a, segment: _s, plane: _p, triangle: _t, ...rest } = lastHit;
+    return {
+      ...rest,
+      worldPos,
+      label: '交点',
+      derived: { pickType: 'intersect', from: lastHit.worldPos.clone() },
+    };
+  }
+
+  function intersectPendingText(session: IntersectPickSession): string {
+    const items = session.labels.map((label, index) => `${index + 1}. ${label || '拾中项'}（${session.operands[index]?.kind === 'plane' ? '面' : '线'}）`);
+    return `求交已选 ${items.join('；')}，再选一项（Intersection[${intersectPickOrdinal(session)}]）`;
+  }
+
+  /**
+   * Intersect 子拾取（点击）：把这一击转成操作数喂给会话。返回交点命中 = 这一击产生测量点；
+   * 返回 null = 还在等下一次子拾取或这一击被拒（原因已写进 pickPointMessage）。
+   */
+  function consumeIntersectSubPick(hit: PickHit): PickHit | null {
+    const label = formatMeasurementSnapLabel({ label: hit.label, noun: nounForRefno(hit.refno ?? null), refno: hit.refno });
+    const step = advanceIntersectPick(intersectSession, intersectOperandFromHit(hit), label);
+    setIntersectSession(step.session);
+    if (step.status === 'resolved') {
+      pickPointMessage.value = null;
+      return intersectionHit(hit, step.position);
+    }
+    pickPointMessage.value = step.status === 'need-more'
+      ? intersectPendingText(step.session)
+      : `${step.message}${step.session.operands.length > 0 ? `；${intersectPendingText(step.session)}` : ''}`;
+    return null;
+  }
+
+  /** Intersect 悬停预览：已有操作数时，用当前悬停项试算交点，成了就把命中挪到交点上（不改会话）。 */
+  function previewIntersectHit(hit: PickHit): PickHit {
+    if (intersectSession.operands.length === 0) return hit;
+    const step = advanceIntersectPick(intersectSession, intersectOperandFromHit(hit));
+    if (step.status !== 'resolved') return hit;
+    return { ...intersectionHit(hit, step.position), label: '交点（预览）' };
+  }
+
   /**
    * E3D `intermediates`：线带中间显著点（如型材上的接头位置）且 Significant Snaps 开着时，
    * Snap / Distance / Proportion / Fraction 作用在控制点所在的那一小段上，而不是整条线。
@@ -1593,7 +1678,8 @@ export function useXeokitMeasurementTools(options: {
     // 括号里是拾取类型（Snap / Cursor / Mid-Point / Distance[d] …），尾巴的 Snap 是
     // Significant Snaps 开着的标志；拾取过滤器不进提示（与 E3D 一致）。
     const layer = measurementStyle.state.measurementPickLayer;
-    const pickTypeToken = measurementPickTypePromptToken(layer.pickType, layer.values);
+    // Intersect 的 token 带子拾取序号（E3D `Intersection[minor]`）。
+    const pickTypeToken = measurementPickTypePromptToken(layer.pickType, layer.values, intersectOrdinal.value);
     const CANCEL_TRAILER = '；点空白取消当前点选';
     const prompt = (
       command: string,
@@ -2428,15 +2514,23 @@ export function useXeokitMeasurementTools(options: {
   function activate(mode: 'xeokit_measure_distance' | 'xeokit_measure_angle' | 'xeokit_measure_elevation_point' | 'xeokit_measure_elevation_delta') {
     if (suppressStoreMeasurements) return;
     clearMeasurementVisualAssists();
+    clearIntersectSession();
     store.setMeasurementDetailsDrawerOpen(false);
     store.setToolMode(mode);
   }
 
   /**
-   * ESC 语义分层（r5 §3）：草稿进行中 → 取消草稿；无草稿但有临时结果
+   * ESC 语义分层（r5 §3）：Intersect 子拾取进行中 → 先只放弃已选的线 / 面（E3D
+   * "escape to abort the operation"）；草稿进行中 → 取消草稿；无草稿但有临时结果
    * （S3）→ 丢弃临时结果；两者皆无返回 false，由调用方退出测量模式。
    */
   function reset(): boolean {
+    if (clearIntersectSession()) {
+      pickPointMessage.value = null;
+      clearHoverFeedback();
+      requestRender?.();
+      return true;
+    }
     const hadDraft = currentMeasurement.value !== null;
     clickTracker.value = { down: null, moved: false };
     store.clearCurrentXeokitDraft();
@@ -2487,7 +2581,8 @@ export function useXeokitMeasurementTools(options: {
     }
 
     const pick = pickSurfacePoint(canvas, e);
-    const hit = pick.hit;
+    // Intersect：已有子拾取时悬停预览交点位置，否则照常显示候选。
+    const hit = pick.hit && isIntersectPickType() ? previewIntersectHit(pick.hit) : pick.hit;
     const hoverRefno = pick.surfaceRefno;
     currentHoverRefno = hoverRefno;
     syncMeasurementVisualAssists(hoverRefno, hit);
@@ -2600,8 +2695,19 @@ export function useXeokitMeasurementTools(options: {
     clickTracker.value = { down: null, moved: false };
 
     const pick = pickSurfacePoint(canvas, e);
-    const hit = pick.hit;
+    let hit = pick.hit;
     currentHoverRefno = pick.surfaceRefno;
+    if (hit && isIntersectPickType()) {
+      // E3D Intersect：这一击是子拾取。凑齐线 / 面求出交点才往下走成测量点；否则停在这一步等下一击。
+      const resolved = consumeIntersectSubPick(hit);
+      if (!resolved) {
+        syncMeasurementVisualAssists(pick.surfaceRefno, hit);
+        updateHoverFeedback(canvas, e, hit, pick.preview);
+        requestRender?.();
+        return;
+      }
+      hit = resolved;
+    }
     syncMeasurementVisualAssists(pick.surfaceRefno, hit);
     const missOnModelWithoutPick = !hit && !!pick.surfaceRefno;
     const toolMode = store.toolMode.value;
@@ -3038,9 +3144,23 @@ export function useXeokitMeasurementTools(options: {
     { deep: true },
   );
 
+  // 换拾取类型 / 拾取过滤器就放弃进行中的 Intersect 子拾取（E3D 切 pickType 会重置 numberOfPicks）。
+  watch(
+    () => [measurementStyle.state.measurementPickLayer.pickType, measurementStyle.state.measurementPickLayer.filter],
+    () => {
+      if (clearIntersectSession()) {
+        pickPointMessage.value = null;
+      }
+    },
+  );
+
   return {
     ready,
     statusText,
+    /** 拾取失败 / Intersect 子拾取进度等提示（只读）。 */
+    pickPointMessage: computed(() => pickPointMessage.value),
+    /** 当前悬停捕捉目标（只读）。 */
+    hoverSnapTarget: computed(() => hoverSnapTarget.value),
     currentMeasurement,
     selectedMeasurement,
     hasVisibleMeasurements,

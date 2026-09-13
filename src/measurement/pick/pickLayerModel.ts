@@ -88,7 +88,7 @@ export const MEASUREMENT_PICK_TYPE_HINTS: Readonly<Record<MeasurementPickTypeId,
   midpoint: '拾中线的中点（E3D Mid-Point = Proportion 0.5）',
   fraction: '把拾中线等分 n 段，吸到最近的分点（E3D Fraction）',
   proportion: '从近端按比例取点（E3D Proportion）',
-  intersect: '两次拾取的线 / 面交点（E3D Intersect）',
+  intersect: '两次拾取的线 / 面交点：先选一条边 / PLINE / P-Point 轴或一个面，再选另一个，两个面要再选第三项（E3D Intersect）',
   exact: '光标下的精确位置（E3D Cursor）',
 };
 
@@ -145,7 +145,7 @@ export const MEASUREMENT_PICK_TYPE_AVAILABILITY: Readonly<
   midpoint: { available: true },
   fraction: { available: true },
   proportion: { available: true },
-  intersect: { available: false, reason: '两次拾取求交的流程尚未接入（内核已就位）' },
+  intersect: { available: true },
   exact: { available: true },
 };
 

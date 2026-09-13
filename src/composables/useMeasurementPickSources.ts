@@ -310,7 +310,9 @@ export function buildGraphicsPickCandidates(input: {
     direction: [input.ray.direction.x, input.ray.direction.y, input.ray.direction.z] as GraphicsVec3,
   };
 
-  const edges: { candidate: MeasurementPickCandidate; pixelDistance: number }[] = [];
+  type EdgeEntry = { candidate: MeasurementPickCandidate; pixelDistance: number; depth: number; screen: { x: number; y: number } };
+  const edges: EdgeEntry[] = [];
+  const rayDirLengthSq = ray.direction[0] ** 2 + ray.direction[1] ** 2 + ray.direction[2] ** 2;
   input.features.edges.forEach((edge, index) => {
     const nearest = nearestPointOnSegmentToRay(edge, ray);
     if (!nearest) return;
@@ -318,10 +320,18 @@ export function buildGraphicsPickCandidates(input: {
     if (!projected.visible) return;
     const pixelDistance = Math.hypot(projected.x - input.cursor.x, projected.y - input.cursor.y);
     if (pixelDistance > input.edgeThresholdPx) return;
+    // Depth along the ray: a back edge that projects onto a front edge must lose to it (E3D picks the visible detail).
+    const depth = rayDirLengthSq > 0
+      ? ((nearest.point[0] - ray.origin[0]) * ray.direction[0]
+        + (nearest.point[1] - ray.origin[1]) * ray.direction[1]
+        + (nearest.point[2] - ray.origin[2]) * ray.direction[2]) / rayDirLengthSq
+      : 0;
     const start = tupleToVector(edge.start);
     const end = tupleToVector(edge.end);
     edges.push({
       pixelDistance,
+      depth,
+      screen: { x: projected.x, y: projected.y },
       candidate: {
         id: `graphics:${input.objectId}:edge:${index}`,
         source: 'mesh_graphics',
@@ -337,8 +347,16 @@ export function buildGraphicsPickCandidates(input: {
     });
   });
   if (edges.length > 0) {
-    edges.sort((a, b) => a.pixelDistance - b.pixelDistance || a.candidate.id.localeCompare(b.candidate.id));
-    return edges.slice(0, GRAPHICS_EDGE_CANDIDATE_LIMIT).map((entry) => entry.candidate);
+    // Edges whose control points coincide on screen (front / back edge of a box seen
+    // head-on) keep only the nearest to the camera; then nearest to the cursor first.
+    edges.sort((a, b) => a.depth - b.depth || a.pixelDistance - b.pixelDistance || a.candidate.id.localeCompare(b.candidate.id));
+    const kept: EdgeEntry[] = [];
+    for (const entry of edges) {
+      const occluded = kept.some((front) => Math.hypot(front.screen.x - entry.screen.x, front.screen.y - entry.screen.y) <= 1.5);
+      if (!occluded) kept.push(entry);
+    }
+    kept.sort((a, b) => a.pixelDistance - b.pixelDistance || a.depth - b.depth || a.candidate.id.localeCompare(b.candidate.id));
+    return kept.slice(0, GRAPHICS_EDGE_CANDIDATE_LIMIT).map((entry) => entry.candidate);
   }
 
   if (!input.hitTriangle) return [];
