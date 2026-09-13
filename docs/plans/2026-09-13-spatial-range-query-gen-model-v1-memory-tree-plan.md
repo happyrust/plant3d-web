@@ -11,7 +11,33 @@
     plant3d-web `8127bcb`（P2）、`12c66fe`（P3）、`610581f`（P4）、`fb8b841`（P0 / P1 备注）、`0152256`（P5 = 教程 §9 + 状态行）、
     `cd05652` / `73f8ce8`（§7 联调记录）、`00beb54`（B4 修复 + 6 条单测）、`d521332`（B4 修复记录）、
     `2578ca8`（「加载当前页」改为只动当前页）、`05d5b5f`（「只加载未加载」改回全集）、`73b8d8c`（跨页三按钮 > 200 项弹确认）、
-    `11d21e8`（`getSubtreeAABB`：「当前选中」取子树盒）、`12ac0f7`（没加载几何的 owner 发 refno 由服务端解中心）、其记录 = 本提交
+    `11d21e8`（`getSubtreeAABB`：「当前选中」取子树盒）、`12ac0f7`（没加载几何的 owner 发 refno 由服务端解中心）、
+    `d521332` / `ae5bfb6` / `6767ff7` / `9e1aaa6` / `0e36728` / `6533df1`（以上各步的计划 + 教程记录）、本交接说明 = 本提交
+  - **交接说明（2026-09-13 23:5x – 09-14 01:2x 这一段，plant3d-web 上 7 个代码提交 + 7 个文档提交，用户逐条拍板，全部真机复核）**：
+    1. **B4 修复**（`00beb54` + 记录 `d521332`）：`useSpatialQuery.ts` 新增 `resolveSceneWorldTransform(viewer)`（读 `__dtxLayer.getGlobalModelMatrix()`，
+       缺失 / 单位阵 / NaN / 不可逆退恒等）；口径定为 **store 内一律 E3D mm**，只在读查看器（选中盒、拾取 worldPos、本地扫描的盒 → mm）与写查看器
+       （飞向结果 bbox、代理盒缓存 → 场景）两个边界换算，抽屉不用改。单测 +6。真机：选中 FLOOR 17496_100380 查 1 m 请求 `x=0&y=0&z=450`、
+       `results[0]` 即自身（验收项 6 原文通过）。共识落库 zhimo `d-344`。
+    2. **「加载当前页」只动当前页**（`2578ca8` + `ae5bfb6`）：`loadResults` / `pickResultItems` / `resolveBatchRefnos` 加 `pages?: 'current' | 'all'`；
+       1387 项下 13 s 收工（改前 3 分钟没回来）。**「只加载未加载」先跟着改按页、随后按用户拍板改回全集**（`05d5b5f` + `6767ff7`）——
+       它的语义是「把命中集合里没加载的都补上」，跨页；分组「加载本库 / 本专业」、全部显示、隔离也都是全集。§2 目标 1 那句「加载本页语义不变」作废。
+    3. **大数量确认**（`73b8d8c` + `9e1aaa6`）：store 加 `countLoadTargets(options)`（与 `loadResults` 同一套取法）；抽屉里「只加载未加载」与分组
+       「加载本库 / 本专业」在 `count > 200` 时走全局 `ConfirmDialog`（「加载数量较多 / 「…」将加载 N 个模型（超过 200 个）… / 取消 · 加载 N 个」），
+       不超过同步直跑；「加载当前页」不设门。真机：1387 项弹「加载 1376 个」、取消 0 请求；库 7997 弹「加载 1346 个」；库 1112（41 项）不弹。
+    4. **BRAN 盒中心差 295 / 573 mm 的追查**（记录 `0e36728`，记忆 zhimo `mem-371`）：不是换算错——查看器 `getAABB([refno])` 只并该 refno 自己的对象，
+       DTX loader 把 TUBI 挂在 owner BRAN 的 refno 下、成员各有 refno，所以 BRAN 的盒 = 管子盒；服务端 refno 模式 = 子树并集（spec §4.13）。
+       `/api/v1/model/records` 22 条 = 11 TUBI + 9 ELBO + OLET + VALV，差的正是 VALV 24381_145035 那一块的一半。
+    5. **方案 2：`DtxCompatScene.getSubtreeAABB`**（`11d21e8`）：自己的对象 ∪ loader `resolveDtxObjectIdsByUnitRefno`（沿 owner 链）的盒并集，
+       `applyCurrentSelection` 先取它、取不到退回 `getAABB`；`getAABB` 语义不动。新测试文件 `src/viewer/dtx/DtxCompatScene.getSubtreeAABB.test.ts`
+       4 条 + store 1 条。真机：BRAN 当前选中请求 `x=5963.7737&y=9972.2395&z=16551.9712` = 服务端 `refno_aabb_center` 逐位相等。
+    6. **方案 3 作兜底：没加载几何的 owner 发 refno**（`12ac0f7` + `6533df1`）：`selectedCenterRefno` 标记，请求带 `refno` + `includeSelf:false`
+       走服务端 refno 模式（到源盒表面量距、剔自身子树），`center` 回来写回 `draft.center`；抽屉摘要「<refno> · 未加载几何，查询时由服务端解中心」。
+       真机：模型树点选 PIPE 24381_144975 → 200，center 同 BRAN 的子树中心，共 1753 项。
+    - **仍开着的**：§7 第 5 步 legacy 对拍要一台带 sqlite 空间索引的完整 `plant-web-server`（`:3100` 是 detached）；成员部分加载时子树盒仍不全；
+      子树里一个都没生成过的 owner 仍是服务端 404 折成的「…还没生成过模型」提示。真机脚本（选中中心 / 叶子 / owner 兜底 / 加载当前页 / 确认框 / BRAN 盒）
+      都在 `%TEMP%\spatial-ui-*.mjs`，没进仓；要作回归得整理成 `e2e/spatial-query-*.spec.ts`。别人的在飞文件（测量 / 尺寸系统）一个都没碰。
+    - 最终状态：`vitest` useSpatialQuery 29 / SpatialQueryDrawer 22 / getSubtreeAABB 4 / spatialSource 7 / realBranHelper 6 全绿；`eslint` 0；
+      `type-check` 基线之外只剩别处在飞改动带来的 5 条 `useDtxTools.*.test.ts`。
   - 进度：**P2 已完成**（2026-09-13 11:45，plant3d-web `8127bcb`）；**P3 代码与单测已完成**（11:53，`12c66fe`；真服务联调等 P1）；
     **P4 已完成，「整库生成」入口除外**（12:05，单独一提交，见 §4 P4 备注——入口怎么接需要拍板；用户 12:13 拍板：先不接入口）；
     **P0 已完成**（old-aios-core `8758023`，21:03；代码 20:40 已在工作树、本轮验证后提交）；**P1 已完成**（gen-model-refactor
