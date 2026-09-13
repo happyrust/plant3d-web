@@ -76,6 +76,13 @@ export type MeasurementPickCandidate = {
   /** Present when the candidate is a facet (E3D Graphics PLANE): every single-pick type returns ray ∩ plane. */
   plane?: MeasurementPickPlane;
   /**
+   * E3D `edgTypes.attribute(noun).line(item)`: the line the picked **element** stands for
+   * when it is an Intersect / Perpendicular-to operand (CYLI / DISH / SNOUT / NOZZ / PYRA:
+   * P-Point 1 → P-Point 2). Unlike `segment` it does not make the candidate a line for
+   * Snap / Mid-Point — E3D's ELEMENT `snap()` still falls back to the element origin.
+   */
+  elementLine?: MeasurementPickSegment;
+  /**
    * The cursor ray hit this candidate's object (E3D graphics pick on the element
    * itself, e.g. anywhere on a tube). Such a candidate is admitted for snapping
    * regardless of how far its control point projects from the cursor — but only at

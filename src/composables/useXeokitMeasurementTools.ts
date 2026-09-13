@@ -86,6 +86,12 @@ import {
   type MeshGraphicsFeatures,
 } from '@/measurement/graphics/meshFeatureGraphics';
 import {
+  elementHasE3dLine,
+  elementLineAcceptsLocalBounds,
+  elementLineBoundsRule,
+  elementLineFromPPoints,
+} from '@/measurement/kernel/elementLine';
+import {
   EMPTY_INTERSECT_SESSION,
   advanceIntersectPick,
   intersectOperandFromGeometry,
@@ -149,6 +155,8 @@ type PickHit = {
   /** 线 / 面候选自带的几何（场景坐标）：Graphics 边、PLINE 线；Graphics 面。 */
   segment?: MeasurementPickSegment;
   plane?: MeasurementPickPlane;
+  /** 拾中元素作为 Intersect / Perpendicular 操作数时的线（E3D `edgTypes.attribute(noun).line()`：P1 → P2，场景坐标）。 */
+  elementLine?: MeasurementPickSegment;
   /** 网格表面命中的三角形（场景坐标），Graphics 面候选由它派生。 */
   triangle?: readonly [Vector3, Vector3, Vector3];
   pixelDistance?: number;
@@ -1210,9 +1218,77 @@ export function useXeokitMeasurementTools(options: {
       ...(candidate.arc ? { arc: candidate.arc } : {}),
       ...(candidate.segment ? { segment: candidate.segment } : {}),
       ...(candidate.plane ? { plane: candidate.plane } : {}),
+      ...(candidate.elementLine ? { elementLine: candidate.elementLine } : {}),
       pixelDistance,
       sourcePriority: measurementStyle.state.measurementPickSources[candidate.source]?.priority,
     };
+  }
+
+  /**
+   * E3D `EDGTYPES.attribute(fullType).line(item)`：拾中的元素作为 Intersect / Perpendicular-to 操作数时
+   * 转成的线——CYLI / NCYL / SLCY / DISH / CONE / SNOU / NOZZ / PYRA 的 handler 都回 P1 → P2（World）。
+   * 点从 ptset 缓存取（hover 已按 refno 拉过）；noun 不在表内或缺 P1 / P2 时为 null。
+   * 它不改 Snap：E3D 的 ELEMENT `snap()` 对这些元素 `handle any` 回落元素原点。
+   */
+  function elementLineForRefno(refno: string | null, objectId: string): MeasurementPickSegment | null {
+    if (!refno) return null;
+    const noun = nounForRefno(refno);
+    if (!elementHasE3dLine(noun)) return null;
+    const line = elementLineFromPPoints(
+      noun,
+      ptsetSnap.getCandidates([refno]).map((candidate) => ({
+        number: candidate.number,
+        position: [candidate.worldPos[0], candidate.worldPos[1], candidate.worldPos[2]] as const,
+      })),
+    );
+    if (line) return { start: new Vector3(...line.start), end: new Vector3(...line.end) };
+    // gen-model-v1 的 element/ptset 只解目录 PTSE，设计基本体（CYLI / CONE / DISH / PYRA）没有点。它们在 DTX 里
+    // 画在自己的局部帧（CYLI 是单位圆柱实例，其余是局部帧烘好的网格）× 放置矩阵，E3D 的 P1 / P2 就在两端面中心：
+    // 截面对中于局部原点时，局部 z 向包围盒范围就是 P1 → P2（同 TUBING 的派生法）；带 XOFF / YOFF 的不对中，不派生。
+    if (!elementLineBoundsRule(noun)) return null;
+    const axis = tubingAxisForObject(objectId, { acceptBounds: (bounds) => elementLineAcceptsLocalBounds(noun, bounds) });
+    return axis ? { start: new Vector3(...axis.start), end: new Vector3(...axis.end) } : null;
+  }
+
+  /**
+   * 没有候选胜出时，把光标命中的元素当 E3D 的 ELEMENT 拾取转成线：只在要线的场合（Intersect 拾取类型，
+   * 或 Perpendicular to 正在等第二点）、元素类过滤器（Any / Element）放行、且元素有 `line()` 时成立。
+   * 命中点仍是表面点（Perpendicular 的 `picked`），`elementLine` 给操作数 / 目标线。
+   */
+  function elementPickAsLine(base: PickHit, refno: string | null): PickHit | null {
+    const layer = measurementStyle.state.measurementPickLayer;
+    if (layer.filter !== 'any' && layer.filter !== 'element') return null;
+    const wantsLine = layer.pickType === 'intersect'
+      || (measurementStyle.state.perpendicularTo && store.currentXeokitDistanceDraft.value !== null);
+    if (!wantsLine) return null;
+    const elementLine = elementLineForRefno(refno, base.objectId);
+    if (!elementLine) return null;
+    return {
+      ...base,
+      source: 'mesh_pick_point',
+      candidateId: `element-line:${refno}`,
+      refno,
+      label: ELEMENT_LINE_LABEL,
+      elementLine,
+      sourcePriority: measurementStyle.state.measurementPickSources.position?.priority,
+    };
+  }
+
+  /**
+   * 给同一元素的表面点 / Item 原点候选挂上 `elementLine`。Element 过滤器 × Intersect 下表面点本不放行，
+   * 但 E3D 在元素类拾取模式下拾中元素任意处都回 ELEMENT 再 `line()`，所以这时把表面点当元素拾取（特征类 `element`）。
+   */
+  function attachElementLine(candidates: MeasurementPickCandidate[], refno: string | null): MeasurementPickCandidate[] {
+    if (candidates.length === 0) return candidates;
+    const elementLine = elementLineForRefno(refno, candidates[0]!.objectId);
+    if (!elementLine) return candidates;
+    const layer = measurementStyle.state.measurementPickLayer;
+    const asElementPick = layer.pickType === 'intersect' && layer.filter === 'element';
+    return candidates.map((candidate) => ({
+      ...candidate,
+      elementLine,
+      ...(asElementPick && candidate.source === 'mesh_pick_point' ? { feature: 'element' as const } : {}),
+    }));
   }
 
   /**
@@ -1289,6 +1365,9 @@ export function useXeokitMeasurementTools(options: {
     });
   }
 
+  /** 元素当 Intersect / Perpendicular 操作数时的线名（E3D `line()` = P1 → P2）；命令条前缀元素类型 → `CYLI 轴线（P1 → P2）`。 */
+  const ELEMENT_LINE_LABEL = '轴线（P1 → P2）';
+
   /** 端点校正容差的下限：设计空间 2 mm，换成场景单位（全局模型矩阵可能带缩放）。 */
   const TUBING_END_TOLERANCE_DESIGN_M = 0.002;
 
@@ -1364,17 +1443,22 @@ export function useXeokitMeasurementTools(options: {
     return candidate ? [candidate] : [];
   }
 
-  /** 直管对象的管身轴线：局部包围盒 × 放置矩阵（`tubingAxisFromBounds`）；不是已加载对象或几何退化时为 null。 */
-  function tubingAxisForObject(objectId: string): TubingAxis | null {
+  /**
+   * 直管 / 基本体对象的轴线：局部包围盒 × 放置矩阵（`tubingAxisFromBounds`）；不是已加载对象或几何退化时为 null。
+   * `acceptBounds` 先审局部包围盒——不是基本体自己局部帧里的形状（例如烘在世界帧的实体）就不当轴线。
+   */
+  function tubingAxisForObject(
+    objectId: string,
+    options?: Readonly<{ acceptBounds?: (bounds: Readonly<{ min: TubingVec3; max: TubingVec3 }>) => boolean }>,
+  ): TubingAxis | null {
     const data = dtxLayerRef.value?.getObjectGeometryData?.(objectId);
     if (!data) return null;
     if (!data.geometry.boundingBox) data.geometry.computeBoundingBox();
     const bounds = data.geometry.boundingBox;
     if (!bounds) return null;
-    return tubingAxisFromBounds({
-      bounds: { min: bounds.min.toArray() as unknown as TubingVec3, max: bounds.max.toArray() as unknown as TubingVec3 },
-      matrix: data.matrix.elements,
-    });
+    const localBounds = { min: bounds.min.toArray() as unknown as TubingVec3, max: bounds.max.toArray() as unknown as TubingVec3 };
+    if (options?.acceptBounds && !options.acceptBounds(localBounds)) return null;
+    return tubingAxisFromBounds({ bounds: localBounds, matrix: data.matrix.elements });
   }
 
   /** 当前 E3D 拾取层（过滤器 × 拾取类型），喂给候选解析做准入。 */
@@ -1492,12 +1576,17 @@ export function useXeokitMeasurementTools(options: {
     return measurementStyle.state.measurementPickLayer.pickType === 'intersect';
   }
 
-  /** 把拾中候选的几何换到设计 World，按 `EDGPICKTYPE.intersect` 的分型转成 LINE / PLANE 操作数。 */
+  /**
+   * 把拾中候选的几何换到设计 World，按 `EDGPICKTYPE.intersect` 的分型转成 LINE / PLANE 操作数。
+   * 线候选自己的 `segment` 优先；没有时，拾中的元素按 E3D `edgTypes.attribute(noun).line(item)` 用它的
+   * P1 → P2（`elementLine`）当 LINE——这就是 E3D 里 ELEMENT 类型的 `intersect()` 分支。
+   */
   function intersectOperandFromHit(hit: PickHit): IntersectOperand | null {
     const toDesign = (v: Vector3): PickVec3 => vec3ToTuple(sceneWorldToDesignMeters(v, dtxLayerRef));
     const toDesignDir = (origin: Vector3, v: Vector3): PickVec3 => vec3ToTuple(sceneDirectionToDesign(origin, v, dtxLayerRef));
+    const line = hit.segment ?? hit.elementLine ?? null;
     return intersectOperandFromGeometry({
-      segment: hit.segment ? { start: toDesign(hit.segment.start), end: toDesign(hit.segment.end) } : null,
+      segment: line ? { start: toDesign(line.start), end: toDesign(line.end) } : null,
       plane: hit.plane
         ? { position: toDesign(hit.plane.position), normal: toDesignDir(hit.plane.position, hit.plane.normal) }
         : null,
@@ -1528,7 +1617,13 @@ export function useXeokitMeasurementTools(options: {
    * 返回 null = 还在等下一次子拾取或这一击被拒（原因已写进 pickPointMessage）。
    */
   function consumeIntersectSubPick(hit: PickHit): PickHit | null {
-    const label = formatMeasurementSnapLabel({ label: hit.label, noun: nounForRefno(hit.refno ?? null), refno: hit.refno });
+    // 元素当线用时，操作数标签写成它的轴线而不是「模型表面点」（E3D 这一击拾的是元素本身）。
+    const usesElementLine = !hit.segment && Boolean(hit.elementLine);
+    const label = formatMeasurementSnapLabel({
+      label: usesElementLine ? ELEMENT_LINE_LABEL : hit.label,
+      noun: nounForRefno(hit.refno ?? null),
+      refno: hit.refno,
+    });
     const step = advanceIntersectPick(intersectSession, intersectOperandFromHit(hit), label);
     setIntersectSession(step.session);
     if (step.status === 'resolved') {
@@ -1603,7 +1698,7 @@ export function useXeokitMeasurementTools(options: {
     origin: MeasurementPoint,
     hit: PickHit,
     picked: MeasurementPoint,
-  ): { target: MeasurementPoint; info: PerpendicularMeasurementInfo } | null {
+  ): { target: MeasurementPoint; info: PerpendicularMeasurementInfo; exactTarget: boolean } | null {
     const sourceDesign = origin.designWorldPos;
     const pointDesign = picked.designWorldPos;
     if (!sourceDesign || !pointDesign) return null;
@@ -1614,9 +1709,16 @@ export function useXeokitMeasurementTools(options: {
       vec3ToTuple(sceneWorldToDesignMeters(position, dtxLayerRef))
     );
     const circular = hit.circle ?? hit.arc ?? null;
+    // 拾中的是元素本身（表面点 / Item 原点）且元素有 E3D `line()` 时，目标线 = 它的 P1 → P2，
+    // 过 P1 而不是过拾中点（`edgpositiondata.line()` 对 ELEMENT 就是 `edgTypes.attribute(noun).line(item)`）。
+    const elementLine = !hit.direction && !hit.plane && !circular && hit.elementLine ? hit.elementLine : null;
     const resolved = resolvePerpendicularTarget({
-      point: pointDesign,
-      direction: hit.direction ? designDirection(hit.direction) : null,
+      point: elementLine ? designPosition(elementLine.start) : pointDesign,
+      direction: hit.direction
+        ? designDirection(hit.direction)
+        : elementLine
+          ? designDirection(elementLine.end.clone().sub(elementLine.start))
+          : null,
       circle: circular
         ? { center: designPosition(circular.center), normal: designDirection(circular.normal) }
         : null,
@@ -1632,6 +1734,7 @@ export function useXeokitMeasurementTools(options: {
       return {
         target: picked,
         info: { targetKind: 'point', targetLabel: baseLabel },
+        exactTarget: false,
       };
     }
     const providerLabel = resolved.provider === 'axis-line'
@@ -1639,7 +1742,9 @@ export function useXeokitMeasurementTools(options: {
       : resolved.provider === 'facet-plane'
         ? '所在平面'
         : '圆面';
-    const targetLabel = `${baseLabel ?? MEASUREMENT_PICK_SOURCE_LABELS[hit.source]} ${providerLabel}`;
+    const targetLabel = elementLine
+      ? formatMeasurementSnapLabel({ label: ELEMENT_LINE_LABEL, noun: nounForRefno(hit.refno ?? null), refno: hit.refno })
+      : `${baseLabel ?? MEASUREMENT_PICK_SOURCE_LABELS[hit.source]} ${providerLabel}`;
     const footDesign: Vec3 = [result.value.foot[0], result.value.foot[1], result.value.foot[2]];
     const footScene = designMetersToSceneWorld(tupleToVector(footDesign), dtxLayerRef);
     return {
@@ -1655,6 +1760,8 @@ export function useXeokitMeasurementTools(options: {
         },
       },
       info: { targetKind: resolved.target.kind, targetLabel },
+      // 垂足落在元素的 P1 → P2 上（ptset / 放置矩阵给的精确线）时，拾中它用的那个表面点不再决定「近似」。
+      exactTarget: Boolean(elementLine),
     };
   }
 
@@ -2000,8 +2107,7 @@ export function useXeokitMeasurementTools(options: {
     const rectSize = { width: rect.width, height: rect.height };
     const candidates: MeasurementPickCandidate[] = [
       ...buildPtsetCandidates(),
-      ...buildMeshPickCandidate(base),
-      ...buildPositionCandidates(base, surfaceRefno),
+      ...attachElementLine([...buildMeshPickCandidate(base), ...buildPositionCandidates(base, surfaceRefno)], surfaceRefno),
       ...buildPrimitiveKeyPointCandidates(base, surfaceRefno),
       ...buildGraphicsCandidates(base, { x: cursor.x, y: cursor.y }, camera, rectSize),
       ...buildTubingAxisCandidates(base, { x: cursor.x, y: cursor.y }, camera, rectSize),
@@ -2063,6 +2169,14 @@ export function useXeokitMeasurementTools(options: {
     if (!base) {
       pickPointMessage.value = '当前未命中模型实例，无法捕捉测量点';
       return { hit: null, preview: null, surfaceRefno: null, source: null, reason: pickPointMessage.value };
+    }
+
+    // E3D 元素类拾取：光标落在元素任意处就是拾中元素本身；要它当线用（Intersect 操作数 / Perpendicular 目标）时，
+    // 即便表面点源关着、也没有别的候选，拾中的元素仍按 `edgTypes.attribute(noun).line()` 给 P1 → P2。
+    const elementLinePick = elementPickAsLine(base, surfaceRefno);
+    if (elementLinePick) {
+      pickPointMessage.value = null;
+      return { hit: elementLinePick, preview: null, surfaceRefno, source: elementLinePick.source, reason: null };
     }
 
     const preview = resolution.visibleCandidates.find((candidate) => (
@@ -2362,7 +2476,8 @@ export function useXeokitMeasurementTools(options: {
     const source = hit?.source ?? null;
     const sourceLabel = source ? MEASUREMENT_PICK_SOURCE_LABELS[source] : '';
     const pickedLabel = hit?.label || sourceLabel;
-    const subtitle = source === 'mesh_pick_point'
+    // 表面点本身是近似的；拾中元素当线用（P1 → P2 由 ptset / 放置矩阵给出）时那条线是精确几何，不标近似。
+    const subtitle = source === 'mesh_pick_point' && hit?.label !== ELEMENT_LINE_LABEL
       ? `${pickedLabel}（近似）`
       : pickedLabel;
     if (mode === 'xeokit_measure_elevation_point') {
@@ -2943,6 +3058,7 @@ export function useXeokitMeasurementTools(options: {
       const pickedTarget = measurementPointFromHit(hit);
       let target = pickedTarget;
       let perpendicular: PerpendicularMeasurementInfo | undefined;
+      let exactTarget = false;
       if (measurementStyle.state.perpendicularTo) {
         const resolved = resolvePerpendicularTargetFromHit(draft.origin, hit, pickedTarget);
         if (!resolved) {
@@ -2956,8 +3072,9 @@ export function useXeokitMeasurementTools(options: {
         }
         target = resolved.target;
         perpendicular = resolved.info;
+        exactTarget = resolved.exactTarget;
       }
-      const approximate = hasApproximatePoint(draft.origin, pickedTarget);
+      const approximate = hasApproximatePoint(draft.origin) || (!exactTarget && hasApproximatePoint(pickedTarget));
       const resultValues = computeDistanceMeasurementResult(draft.origin, target);
       if (!resultValues) {
         pickPointMessage.value = '距离测量失败：起点或终点缺少有效的设计 World 坐标';

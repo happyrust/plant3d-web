@@ -2536,6 +2536,360 @@ describe('useXeokitMeasurementTools', () => {
       }
     });
 
+    /**
+     * 元素当 Intersect / Perpendicular 操作数（E3D `edgTypes.attribute(noun).line()` = P1 → P2）：
+     * CYLI A 轴 P1 (1, 4, 6) → P2 (3, 4, 6)（沿 +X），CYLI B 轴 P1 (2, 3, 6) → P2 (2, 5, 6)（沿 +Y），ELBO C 只有 arc、无 line()。
+     * 表面命中点都不在轴上（A：y = 4.15、B：x = 2.15，z = 6.2）。相机 / 画布同 `setupTubingTools`。
+     */
+    async function setupElementLineTools() {
+      vi.useFakeTimers();
+      const refnoA = '24381_200001';
+      const refnoB = '24381_200002';
+      const refnoC = '24381_200003';
+      // D：gen-model-v1 下的 CYLI 设计基本体——element/ptset 无点，只有单位圆柱实例几何；轴 (2.6, 3, 6) → (2.6, 5, 6)。
+      const refnoD = '24381_200004';
+      // E：CONE 设计基本体——无点，局部帧烘好的网格（截面对中、z ∓ HEIG/2）× 放置矩阵；轴 (1.4, 3, 6) → (1.4, 5, 6)。
+      const refnoE = '24381_200005';
+      // F：noun 也是 CONE，但几何烘在世界帧（包围盒不对中、矩阵单位）——不是基本体局部帧，不派生。
+      const refnoF = '24381_200006';
+      const nounByRefno: Record<string, string> = {
+        [refnoA]: 'CYLI', [refnoB]: 'CYLI', [refnoC]: 'ELBO', [refnoD]: 'CYLI', [refnoE]: 'CONE', [refnoF]: 'CONE',
+      };
+      const designMm = (scene: readonly [number, number, number]): [number, number, number] => [
+        (scene[0] + 10) / 0.001,
+        (scene[1] + 20) / 0.001,
+        (scene[2] + 30) / 0.001,
+      ];
+      const ptsetPoint = (number: number, scene: readonly [number, number, number]) => ({
+        number,
+        pt: designMm(scene),
+        dir: null,
+        dir_flag: 0,
+        ref_dir: null,
+        pbore: 100,
+        pwidth: 0,
+        pheight: 0,
+        pconnect: '',
+      });
+      const ptsetByRefno: Record<string, ReturnType<typeof ptsetPoint>[]> = {
+        [refnoA]: [ptsetPoint(1, [1, 4, 6]), ptsetPoint(2, [3, 4, 6])],
+        [refnoB]: [ptsetPoint(1, [2, 3, 6]), ptsetPoint(2, [2, 5, 6])],
+        [refnoC]: [ptsetPoint(1, [1.2, 3.4, 6]), ptsetPoint(2, [1.4, 3.2, 6])],
+        [refnoD]: [],
+        [refnoE]: [],
+        [refnoF]: [],
+      };
+      vi.doMock('@/composables/useDbMetaInfo', () => ({
+        getDbnumByRefno: vi.fn(() => 7997),
+      }));
+      vi.doMock('@/composables/useDbnoInstancesDtxLoader', () => ({
+        getDtxRefnoTransform: vi.fn(() => null),
+        resolveDtxNounByRefno: vi.fn((_dbno: number, refno: string) => nounByRefno[refno] ?? null),
+      }));
+      vi.doMock('@/composables/useDbnoInstancesParquetLoader', () => ({
+        useDbnoInstancesParquetLoader: () => ({
+          queryPtsetByRefnoFromParquet: vi.fn(async (_dbno: number, refno: string) => {
+            const ptset = ptsetByRefno[refno] ?? [];
+            return {
+              success: ptset.length > 0,
+              refno,
+              noun: nounByRefno[refno] ?? null,
+              ptset,
+              world_transform: null,
+              unit_info: { source_unit: 'mm', target_unit: 'mm', conversion_factor: 1 },
+              error_code: ptset.length > 0 ? null : 'PTSET_POINTS_MISSING',
+              error_message: ptset.length > 0 ? null : '设计基本体没有目录 P 点',
+            };
+          }),
+        }),
+      }));
+      vi.doMock('@/api/genModelPdmsAttrApi', () => ({
+        pdmsGetPtsetWithContext: vi.fn(async (refno: string) => ({
+          success: false, refno, ptset: [], world_transform: null, unit_info: null, error_code: 'PTSET_POINTS_MISSING', error_message: '无点',
+        })),
+        pdmsGetPtsetChildrenWithContext: vi.fn(async (refno: string) => ({
+          success: false, refno, results: [], total_count: 0, success_count: 0, failed_count: 0, error_message: '无子构件点集',
+        })),
+      }));
+
+      const [{ useToolStore }, { useXeokitMeasurementTools }, { useXeokitMeasurementStyleStore }] = await Promise.all([
+        import('@/composables/useToolStore'),
+        import('@/composables/useXeokitMeasurementTools'),
+        import('@/composables/useXeokitMeasurementStyleStore'),
+      ]);
+      const store = useToolStore();
+      store.clearAll();
+      store.setToolMode('xeokit_measure_distance');
+      const measurementStyle = useXeokitMeasurementStyleStore();
+      measurementStyle.resetStyle();
+      measurementStyle.updateMeasurementPickSource('ptset', { show: false, snap: true, thresholdPx: 1 });
+      measurementStyle.updateMeasurementPickSource('position', { show: false, snap: false });
+      // 表面点是「拾元素本身」在 Web 的替身，要开着才有元素拾取可转成 line()。
+      measurementStyle.updateMeasurementPickSource('mesh_pick_point', { show: true, snap: true, thresholdPx: 20 });
+      measurementStyle.updateStyle({ keepMeasurementAnnotation: true });
+
+      const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 10);
+      camera.position.set(2, 4, 7);
+      camera.lookAt(2, 4, 6);
+      camera.updateMatrixWorld(true);
+      camera.updateProjectionMatrix();
+      const canvas = document.createElement('canvas');
+      Object.defineProperty(canvas, 'getBoundingClientRect', {
+        value: () => ({ left: 0, top: 0, width: 200, height: 200 }),
+      });
+      // 画布 → 场景：x = 2 + (px − 100) / 100，y = 4 − (py − 100) / 100。
+      // A 占 y ≈ 4 的横带，B 占 x ≈ 2 的竖带，D 占 x ≈ 2.6 的竖带，E 占 x ≈ 1.4 的竖带，F 占 x ≈ 2.85 的竖带，C 在左下。
+      const pickPoint = vi.fn((pos: { x: number; y: number }) => {
+        const x = 2 + (pos.x - 100) / 100;
+        const y = 4 - (pos.y - 100) / 100;
+        if (Math.abs(pos.y - 100) <= 20 && pos.x > 105 && pos.x < 150) return { objectId: `o:${refnoA}:0`, point: new THREE.Vector3(x, 4.15, 6.2), distance: 0.8 };
+        if (Math.abs(pos.x - 100) <= 20 && pos.y < 95) return { objectId: `o:${refnoB}:0`, point: new THREE.Vector3(2.15, y, 6.2), distance: 0.8 };
+        if (Math.abs(pos.x - 160) <= 15 && pos.y < 95) return { objectId: `o:${refnoD}:0`, point: new THREE.Vector3(2.75, y, 6.2), distance: 0.8 };
+        if (Math.abs(pos.x - 40) <= 15 && pos.y < 95) return { objectId: `o:${refnoE}:0`, point: new THREE.Vector3(1.45, y, 6.2), distance: 0.8 };
+        if (Math.abs(pos.x - 185) <= 10 && pos.y < 95) return { objectId: `o:${refnoF}:0`, point: new THREE.Vector3(2.85, y, 6.2), distance: 0.8 };
+        if (pos.x < 60 && pos.y > 140) return { objectId: `o:${refnoC}:0`, point: new THREE.Vector3(x, y, 6.2), distance: 0.8 };
+        return null;
+      });
+      const globalModelMatrix = new THREE.Matrix4().makeScale(0.001, 0.001, 0.001);
+      globalModelMatrix.setPosition(-10, -20, -30);
+      // D 的 DTX 几何：gen-model 单位圆柱（半径 1、z ∈ [0, 1]）× 放置矩阵 T(2.6, 3, 6)·R(z→+y)·S(0.15, 0.15, 2)。
+      const unitCylinder = new THREE.BoxGeometry(2, 2, 1).translate(0, 0, 0.5);
+      const placementD = new THREE.Matrix4().compose(
+        new THREE.Vector3(2.6, 3, 6),
+        new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, 1, 0)),
+        new THREE.Vector3(0.15, 0.15, 2),
+      );
+      // E 的 DTX 几何：gen_snout 局部帧（截面对中、z ∈ ∓0.1）× 放置矩阵 T(1.4, 4, 6)·R(z→+y)·S(1, 1, 10) → 轴 y ∈ [3, 5]。
+      const localCone = new THREE.BoxGeometry(0.1, 0.1, 0.2);
+      const placementE = new THREE.Matrix4().compose(
+        new THREE.Vector3(1.4, 4, 6),
+        new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, 1, 0)),
+        new THREE.Vector3(1, 1, 10),
+      );
+      // F 的 DTX 几何：烘在世界帧的实体（包围盒 [5, 5, 5] → [6, 6, 7]）、单位矩阵。
+      const worldBaked = new THREE.BoxGeometry(1, 1, 2).translate(5.5, 5.5, 6);
+      const getObjectGeometryData = vi.fn((objectId: string) => {
+        if (objectId === `o:${refnoD}:0`) return { geometry: unitCylinder, matrix: placementD.clone() };
+        if (objectId === `o:${refnoE}:0`) return { geometry: localCone, matrix: placementE.clone() };
+        if (objectId === `o:${refnoF}:0`) return { geometry: worldBaked, matrix: new THREE.Matrix4() };
+        return null;
+      });
+      const dimensionSystem = {
+        replaceExternalSource: vi.fn(),
+        viewport: { setSelection: vi.fn(), getSelection: vi.fn(() => null) },
+      } as any;
+      const tools = useXeokitMeasurementTools({
+        dtxViewerRef: ref({ camera, canvas, scene: new THREE.Scene() } as any),
+        dtxLayerRef: ref({
+          _totalObjects: 4,
+          getGlobalModelMatrix: () => globalModelMatrix.clone(),
+          getObjectGeometryData,
+        } as any),
+        selectionRef: ref({ pickPoint } as any),
+        overlayContainerRef: ref(document.createElement('div')),
+        getDimensionSystem: () => dimensionSystem,
+        store,
+        compatViewerRef: ref(null),
+        requestRender: null,
+        isTubingObject: () => false,
+      });
+      const hoverAt = (x: number, y: number) => tools.onCanvasPointerMove(canvas, new PointerEvent('pointermove', { clientX: x, clientY: y }));
+      const clickAt = (x: number, y: number) => tools.onCanvasPointerUp(canvas, new PointerEvent('pointerup', { clientX: x, clientY: y, button: 0 }));
+      /** 悬停到某元素并等它的点集落缓存（80 ms 防抖）。 */
+      const hoverAndLoad = async (x: number, y: number) => {
+        hoverAt(x, y);
+        await vi.advanceTimersByTimeAsync(200);
+        await Promise.resolve();
+        hoverAt(x, y);
+      };
+      return { store, measurementStyle, tools, hoverAt, clickAt, hoverAndLoad, getObjectGeometryData, refnoA, refnoB, refnoC, refnoD, refnoE, refnoF };
+    }
+
+    it('Intersect：拾中 CYLI 元素（表面点）按 E3D line() 当 P1 → P2 线求交，Any 与 Element 过滤器都成；ELBO 无 line() 被拒不消耗；无点的 CYLI / CONE 用局部几何', async () => {
+      const { store, measurementStyle, tools, clickAt, hoverAndLoad, getObjectGeometryData, refnoD, refnoE, refnoF } = await setupElementLineTools();
+      try {
+        measurementStyle.updateMeasurementPickLayer({ filter: 'any', pickType: 'intersect' });
+        await nextTick();
+        expect(tools.statusText.value).toContain('(Intersection[1]) Snap :');
+
+        // 子拾取 1：CYLI A 表面 (2.4, 4.15, 6.2) → 操作数 = A 的轴 (1,4,6) → (3,4,6)，标签是元素轴线而不是表面点。
+        await hoverAndLoad(140, 100);
+        clickAt(140, 100);
+        expect(store.currentXeokitDistanceDraft.value).toBeNull();
+        expect(tools.statusText.value).toContain('(Intersection[2]) Snap :');
+        expect(tools.pickPointMessage.value).toContain('1. CYLI 轴线（P1 → P2）（线）');
+
+        // 子拾取 2：CYLI B 表面 (2.15, 4.6, 6.2) → B 的轴 x = 2、z = 6 沿 +Y；交点 (2, 4, 6)，不是两个表面点。
+        await hoverAndLoad(100, 40);
+        expect(tools.hoverSnapTarget.value?.label).toBe('交点（预览）');
+        clickAt(100, 40);
+        const draft = store.currentXeokitDistanceDraft.value!;
+        expect(draft).not.toBeNull();
+        expect(draft.origin.worldPos[0]).toBeCloseTo(2, 6);
+        expect(draft.origin.worldPos[1]).toBeCloseTo(4, 6);
+        expect(draft.origin.worldPos[2]).toBeCloseTo(6, 6);
+        expect(draft.origin.sourceInfo?.label).toBe('交点');
+        expect(tools.statusText.value).toContain('(Intersection[1]) Snap :');
+        store.clearCurrentXeokitDraft();
+
+        // ELBO 只有 arc()：E3D「Unable to convert item into a line or plane」，拒收且不消耗这一击。
+        await hoverAndLoad(40, 160);
+        clickAt(40, 160);
+        expect(store.currentXeokitDistanceDraft.value).toBeNull();
+        expect(tools.pickPointMessage.value).toContain('无法转成线 / 面');
+        expect(tools.statusText.value).toContain('(Intersection[1]) Snap :');
+
+        // Element 过滤器 × Intersect：表面点本不放行，但元素有 line() 时这一击就是元素拾取 → 同样求出 (2, 4, 6)。
+        measurementStyle.updateMeasurementPickLayer({ filter: 'element', pickType: 'intersect' });
+        await nextTick();
+        clickAt(140, 100);
+        expect(tools.statusText.value).toContain('(Intersection[2]) Snap :');
+        clickAt(100, 40);
+        const elementDraft = store.currentXeokitDistanceDraft.value!;
+        expect(elementDraft.origin.worldPos[0]).toBeCloseTo(2, 6);
+        expect(elementDraft.origin.worldPos[1]).toBeCloseTo(4, 6);
+        expect(elementDraft.origin.worldPos[2]).toBeCloseTo(6, 6);
+        store.clearCurrentXeokitDraft();
+
+        // Snap 不受影响：Element × Snap 拾 CYLI 表面既不落轴线端点也不成线（E3D 回落元素原点；这里无原点候选 → 无捕捉）。
+        measurementStyle.updateMeasurementPickLayer({ filter: 'element', pickType: 'snap' });
+        await nextTick();
+        clickAt(140, 100);
+        expect(store.currentXeokitDistanceDraft.value).toBeNull();
+
+        // gen-model-v1 的 CYLI 设计基本体没有 ptset 点：用它在 DTX 里的单位圆柱实例轴线（局部包围盒 × 放置矩阵）当 P1 → P2。
+        // A（ptset 线）× D（几何线 x = 2.6，沿 +Y）→ (2.6, 4, 6)。
+        measurementStyle.updateMeasurementPickLayer({ filter: 'any', pickType: 'intersect' });
+        await nextTick();
+        clickAt(140, 100);
+        expect(tools.statusText.value).toContain('(Intersection[2]) Snap :');
+        await hoverAndLoad(160, 40);
+        clickAt(160, 40);
+        const geometryDraft = store.currentXeokitDistanceDraft.value!;
+        expect(geometryDraft).not.toBeNull();
+        expect(getObjectGeometryData).toHaveBeenCalledWith(`o:${refnoD}:0`);
+        expect(geometryDraft.origin.worldPos[0]).toBeCloseTo(2.6, 6);
+        expect(geometryDraft.origin.worldPos[1]).toBeCloseTo(4, 6);
+        expect(geometryDraft.origin.worldPos[2]).toBeCloseTo(6, 6);
+        store.clearCurrentXeokitDraft();
+
+        // CONE 设计基本体（局部帧烘好的网格，截面对中、z ∓ HEIG/2）同样用局部 z 向包围盒当 P1 → P2：A × E（x = 1.4，沿 +Y）→ (1.4, 4, 6)。
+        clickAt(140, 100);
+        expect(tools.statusText.value).toContain('(Intersection[2]) Snap :');
+        await hoverAndLoad(40, 40);
+        expect(tools.hoverSnapTarget.value?.label).toBe('交点（预览）');
+        clickAt(40, 40);
+        const coneDraft = store.currentXeokitDistanceDraft.value!;
+        expect(coneDraft).not.toBeNull();
+        expect(getObjectGeometryData).toHaveBeenCalledWith(`o:${refnoE}:0`);
+        expect(coneDraft.origin.worldPos[0]).toBeCloseTo(1.4, 6);
+        expect(coneDraft.origin.worldPos[1]).toBeCloseTo(4, 6);
+        expect(coneDraft.origin.worldPos[2]).toBeCloseTo(6, 6);
+        store.clearCurrentXeokitDraft();
+
+        // noun 是 CONE 但几何烘在世界帧（包围盒不对中）：不是基本体局部帧，不派生 → 拒收不消耗。
+        clickAt(140, 100);
+        expect(tools.statusText.value).toContain('(Intersection[2]) Snap :');
+        await hoverAndLoad(185, 40);
+        clickAt(185, 40);
+        expect(store.currentXeokitDistanceDraft.value).toBeNull();
+        expect(getObjectGeometryData).toHaveBeenCalledWith(`o:${refnoF}:0`);
+        expect(tools.pickPointMessage.value).toContain('无法转成线 / 面');
+        expect(tools.statusText.value).toContain('(Intersection[2]) Snap :');
+      } finally {
+        tools.dispose();
+        vi.useRealTimers();
+      }
+    });
+
+    it('表面点源关着（无任何候选）时，Intersect / Perpendicular 下拾中元素仍按 E3D ELEMENT 拾取转成 P1 → P2 线；Snap 下不会', async () => {
+      const { store, measurementStyle, tools, clickAt, hoverAndLoad } = await setupElementLineTools();
+      try {
+        measurementStyle.updateMeasurementPickSource('mesh_pick_point', { show: false, snap: false });
+        measurementStyle.updateMeasurementPickLayer({ filter: 'any', pickType: 'snap' });
+        await nextTick();
+        // Snap：没有候选 → 没有测量点（E3D 回落元素原点，这里原点源也关着）。
+        await hoverAndLoad(140, 100);
+        clickAt(140, 100);
+        expect(store.currentXeokitDistanceDraft.value).toBeNull();
+
+        // Intersect：光标落在 CYLI 上就是元素拾取 → line()。
+        measurementStyle.updateMeasurementPickLayer({ filter: 'any', pickType: 'intersect' });
+        await nextTick();
+        await hoverAndLoad(140, 100);
+        expect(tools.hoverSnapTarget.value?.label).toBe('轴线（P1 → P2）');
+        clickAt(140, 100);
+        expect(tools.pickPointMessage.value).toContain('1. CYLI 轴线（P1 → P2）（线）');
+        await hoverAndLoad(100, 40);
+        clickAt(100, 40);
+        const draft = store.currentXeokitDistanceDraft.value!;
+        expect(draft.origin.worldPos[0]).toBeCloseTo(2, 6);
+        expect(draft.origin.worldPos[1]).toBeCloseTo(4, 6);
+        store.clearCurrentXeokitDraft();
+
+        // Ppoint 过滤器不是元素类拾取：不转线，照旧拒收。
+        measurementStyle.updateMeasurementPickLayer({ filter: 'ppoint', pickType: 'intersect' });
+        await nextTick();
+        clickAt(140, 100);
+        expect(tools.statusText.value).toContain('(Intersection[1]) Snap :');
+      } finally {
+        tools.dispose();
+        vi.useRealTimers();
+      }
+    });
+
+    it('Perpendicular to：第二点拾中 CYLI 元素（表面点）时目标线是它的 P1 → P2（过 P1，不过表面点），垂足落在轴上', async () => {
+      const { store, measurementStyle, tools, clickAt, hoverAndLoad } = await setupElementLineTools();
+      try {
+        measurementStyle.updateStyle({ perpendicularTo: true });
+        measurementStyle.updateMeasurementPickLayer({ filter: 'any', pickType: 'snap' });
+        await nextTick();
+
+        // 起点：ELBO C 表面 (1.4, 3.4, 6.2)（无 line()，普通表面点）。
+        await hoverAndLoad(40, 160);
+        clickAt(40, 160);
+        const origin = store.currentXeokitDistanceDraft.value!.origin;
+        expect(origin.sourceInfo?.source).toBe('mesh_pick_point');
+        expect(origin.worldPos[0]).toBeCloseTo(1.4, 6);
+        expect(origin.worldPos[1]).toBeCloseTo(3.4, 6);
+
+        // 终点：CYLI A 表面 (2.4, 4.15, 6.2) → 目标线 = A 的轴 (y = 4, z = 6，沿 X) → 垂足 (1.4, 4, 6)。
+        await hoverAndLoad(140, 100);
+        clickAt(140, 100);
+        const record = store.xeokitDistanceMeasurements.value[0]!;
+        expect(record.perpendicular).toEqual({ targetKind: 'line', targetLabel: 'CYLI 轴线（P1 → P2）' });
+        expect(record.target.worldPos[0]).toBeCloseTo(1.4, 6);
+        expect(record.target.worldPos[1]).toBeCloseTo(4, 6);
+        expect(record.target.worldPos[2]).toBeCloseTo(6, 6);
+        expect(record.target.sourceInfo?.label).toBe('CYLI 轴线（P1 → P2）垂足');
+        // 垂距 = |(1.4,3.4,6.2) − (1.4,4,6)| = √(0.6² + 0.2²)，设计米（gm 缩放 0.001 → 场景 1 单位 = 1 m）。
+        expect(store.measurementDraftResult.value!.distance).toBeCloseTo(Math.hypot(0.6, 0.2), 6);
+        // 起点是表面点 → 会话结果仍标近似（记录本身的 approximate 由 provenance 决定，与此无关）。
+        expect(store.measurementDraftResult.value!.approximate).toBe(true);
+        store.clearAll();
+        store.setToolMode('xeokit_measure_distance');
+        await nextTick();
+
+        // 起点吸到 ELBO C 的 P-Point #1 (1.2, 3.4, 6)（精确点），终点仍拾 CYLI A 表面：垂足在 A 的 P1 → P2 上是精确几何，
+        // 拾中它用的表面点不再让记录标「近似」。
+        await hoverAndLoad(20, 160);
+        clickAt(20, 160);
+        const exactOrigin = store.currentXeokitDistanceDraft.value!.origin;
+        expect(exactOrigin.sourceInfo?.source).toBe('ptset');
+        expect(exactOrigin.worldPos[0]).toBeCloseTo(1.2, 6);
+        await hoverAndLoad(140, 100);
+        clickAt(140, 100);
+        const exactRecord = store.xeokitDistanceMeasurements.value[0]!;
+        expect(exactRecord.perpendicular).toEqual({ targetKind: 'line', targetLabel: 'CYLI 轴线（P1 → P2）' });
+        expect(exactRecord.target.worldPos[0]).toBeCloseTo(1.2, 6);
+        expect(exactRecord.target.worldPos[1]).toBeCloseTo(4, 6);
+        expect(store.measurementDraftResult.value!.approximate).toBe(false);
+      } finally {
+        tools.dispose();
+        vi.useRealTimers();
+      }
+    });
+
     it('结点不是 ATTA（OLET arrive = leave）时不合并：轴线到 OLET 就停，Mid-Point 是本段中点，标签带 OLET', async () => {
       const { store, measurementStyle, tools, hoverAt, clickAt, getObjectGeometryData, listTubingObjectIds, pieceA } = await setupSplitTubingTools('OLET');
       try {
