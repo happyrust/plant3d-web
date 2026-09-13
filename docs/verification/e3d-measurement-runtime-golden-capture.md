@@ -473,3 +473,63 @@ Playwright 真指针；临时 spec 已删）：测量 → `距离`（缺省 `Any
   （要做是「按 P-Point 截断」，与本节的合并相反）。
 - SPKBRK ATTA 的运行时样本缺（本库 0 个），合并只有单测与内核复算证据；G7-02 未采。
 - BRAN HEAD 管与 LEAVE 管同一处理，不区分。
+
+## 16. 拾取层 Phase A · Element 元素当 Intersect / Perpendicular 操作数（E3D `line()` = P1 → P2）实机走查（2026-09-14 00:33）
+
+**改动口径**（`79b199c`；决策 `d-373`，Q5 拍板 `d-336` 的前端后续，ADR 0060（5）同步）：E3D `EDGPICKTYPE.intersect`（`edgpicktype.pmlobj` 631）与
+`edgpositiondata.line()` 对 **ELEMENT** 类型的拾取调 `edgTypes.attribute(fullType).line(item)`；实现 `line(DBREF)` 的 handler 只有
+`EDGCYLINDER`（CYLI / NCYL / SLCY / NSLC）、`EDGDISH`（DISH / NDIS）、`EDGSNOUT`（CONE / NCON / SNOU / NSNO）、`EDGNOZZLE`（NOZZ）、`EDGPYRAMID`
+（PYRA / NPYR），**全部回 `pPosition[1] → pPosition[2]`**（World）；ELBO / BEND / RTOR / CTOR 只有 `arc()`，BOX / VALV / FLAN / TEE 没有 handler →
+`handle any` 拒收（"Unable to convert item into a line or plane for intersection"）。Snap 不受影响——ELEMENT 的 `snap()` 对这些元素回落元素原点（§7 Q5 / `d-336`）。
+
+- 内核 `src/measurement/kernel/elementLine.ts`：`elementHasE3dLine` / `elementLineFromPPoints(noun, points)`（ptset 的 P1 → P2）；
+  `elementLineBoundsRule` / `elementLineAcceptsLocalBounds`——gen-model-v1 `element/ptset` 只解目录 PTSE，**设计基本体没有点**（本库 CYLI / CONE / DISH /
+  PYRA 全部 `points = 0`，无目录的 NOZZ 也是）。gen-model 把设计基本体画在**基本体自己的局部帧**（`fast_model/mesh_primitives.rs`：CYLI 单位圆柱实例
+  z ∈ [0, 1]；CONE / SNOU `gen_snout` 端环 z = ∓HEIG/2、XOFF / YOFF 两端各摊一半；DISH 底面 z = 0、顶点 z = HEIG；PYRA `gen_pyramid` 同 snout）× 放置矩阵，
+  E3D 的 P1 / P2 都在两端面中心，所以**截面对中于局部原点时局部 z 向包围盒范围就是 P1 → P2**：圆柱 / 锥 / 碟要「对中且圆」、棱锥只要「对中」（相对容差 1e-3）；
+  带 XOFF / YOFF 的 SNOU / PYRA 与烘在世界帧的实体（包围盒不对中）不派生。
+- 接线 `useXeokitMeasurementTools`：候选 / 命中新增 `elementLine`（**只做操作数**，不把候选变成 Snap / Mid-Point 的线）；ptset 缓存的 P1 / P2 优先，
+  否则按 bounds 规则从 DTX 局部包围盒 × 放置矩阵派生；同元素的表面点 / Item 原点候选挂线（Element × Intersect 下表面点当元素拾取）；没有候选胜出但要线
+  （Intersect 拾取类型，或 Perpendicular to 正在等第二点）且 Any / Element 放行时，光标命中的元素本身就是 E3D 的 ELEMENT 拾取 → 转线。Intersect 操作数
+  `segment` 优先、其次 `elementLine`，标签「CYLI 轴线（P1 → P2）（线）」；Perpendicular to 的目标线 = 元素 P1 → P2（过 P1，不过拾中点），
+  `targetLabel`「CYLI 轴线（P1 → P2）」，垂足在精确线上时会话结果不因拾中它的表面点而标近似。
+
+**证据等级**：`static_expectation`（`edgpicktype.pmlobj` 631 / `edgcylinder.pmlobj` 163 / `edgdish.pmlobj` 91 / `edgsnout.pmlobj` 177 / `edgnozzle.pmlobj` 164 /
+`edgpyramid.pmlobj` 57 的 `line()`；`edgtypes.pmlobj` 成员表）；G8 Intersect / G4 Perpendicular 的元素操作数运行时 golden 未采。
+
+**Web 实机走查**（dev `:3101` + gen-model `:8023`，`?show_refno=24381_159970&gm_backend_port=8023`（EQUI，1016 对象），Playwright 真指针；临时 spec 已删）：
+
+- **后端事实 → 页内派生对照**（`element/attributes` 的 HEIG / DIAM / DTOP / DBOT / XOFF … + `element/ptset.world_transform` 解析 P1 / P2，对照页内 DTX 局部包围盒
+  经 `elementLineAcceptsLocalBounds` 后的局部 z 向轴线）：SUBE 24381_160659 的 10 CYLI（HEIG 1440 / 69 / 25.4，单位圆柱 `[[-1,-1,0],[1,1,1]]`）、
+  4 CONE（HEIG 48，DTOP 93 / DBOT 73，局部 `[[-46.5,-46.5,-24],[46.5,46.5,24]]`）、DISH 24381_163319（HEIG 1218 / DIAM 2400 / RADI 2436，局部
+  `[[-1200,-1200,0],[1200,1200,1218]]`）、PYRA 24381_163627（HEIG 1200，XBOT 994 / YBOT 1730 / XTOP 0 楔形，局部 `[[-497,-865,-600],[497,865,600]]`）
+  **全部 accepts = true、轴线两端与解析 P1 / P2 Δ ≤ 0.001 mm、P1 → P2 序**；NOZZ 24381_163651（CATR 0/0、HEIG 300）**没有 DTX 对象**（gen-model 对无目录
+  的 NOZZ 不出几何），NOZZ 的 ptset 路径本库无样本。
+- **Any × Intersect · CYLI × CYLI**（A = 24381_160660 HEIG 1440 轴 (0.894, 0.448, 0)，B = 24381_160663 HEIG 69 轴 (0.448, −0.894, 0)，异面垂直）：
+  悬停 A → `Snap : CYLI Item 原点 24381_160660`（`web-element-line-live-01-hover-cyli-any-intersect.png`），点击 → `求交已选 1. CYLI 轴线（P1 → P2）（线），再选一项（Intersection[2]）`；
+  悬停 B → `交点（预览）`（`-02-preview-intersection.png`），点击 → 起点 `−7883.924 / 8782.810 / 9992.000 mm` = A 轴上离 B 轴最近点（解析 Δ **0.001 mm**，到 A 轴 0.001 mm、到 B 轴 331.000 mm = 异面距）；
+  再 B × A 反序求终点 → `−7883.924 / 8782.810 / 10323.000`（解析 Δ 0.001 mm），`Distance 331mm / Offset Z +331mm / Direction Z +1.0000`（`-03-intersect-result.png`）——两交点相距 331.000 mm = 两轴异面距。
+- **Element × Intersect**：同一对，A 悬停仍 `Item 原点`、点击转 `CYLI 轴线（P1 → P2）`，交点与 Any 下**同值**（Δ 0.001 mm）。
+- **Any × Intersect · CYLI × CONE**（CONE 24381_160671，烘好的局部帧网格、无 ptset 点）：悬停 CONE 即 `交点（预览）`（`-04-preview-cyli-x-cone.png`），
+  点击 → 交点 Δ **0.001 mm**（CONE 轴与 B 轴共线，解析交点相同）。
+- **单项操作数准入**：DISH 悬停 `轴线（P1 → P2）` → 点击 `求交已选 1. DISH 轴线（P1 → P2）（线）`（`-05-dish-operand.png`）；PYRA → `求交已选 1. PYRA 轴线（P1 → P2）（线）`；
+  BOX 24381_160662 → `所选项无法转成线 / 面参与求交…（E3D: Unable to convert item into a line or plane for intersection）`，仍在 `Intersection[1]`（拒收不消耗）。
+- **Perpendicular to · CYLI**：起点 B 的 `Item 原点 24381_160663`（离 A 轴 819.3 mm），终点悬停 A 表面（`-06-hover-perpendicular-target.png`）→
+  `perpendicular = {line, "CYLI 轴线（P1 → P2）"}`，终点标签 `CYLI 轴线（P1 → P2）垂足`，垂足 `−7883.924 / 8782.810 / 9992.000` 到解析轴 **0.001 mm**、
+  (垂足 − 起点)·轴向 0.000 mm，`Distance 819mm / Vertical 331mm / Horizontal 750mm`（解析垂距 819.336；`-07-perpendicular-result.png`）。
+- **Perpendicular to · DISH**：起点 PYRA 的 `Item 原点 24381_163627`（离 DISH 轴 600.0 mm），终点悬停 DISH 表面 `轴线（P1 → P2）`（`-08-hover-perpendicular-dish.png`）→
+  `perpendicular = {line, "DISH 轴线（P1 → P2）"}`，垂足 `−6708.450 / 9372.290 / 4390.000` 到 DISH 解析轴 **0.000 mm**，`Distance 600mm / Vertical 0mm / Horizontal 600mm`
+  （解析 600.005；不标近似；`-09-perpendicular-dish-result.png`）。
+- 记录 `web-element-line-live-records.json`（样本解析 P1 / P2、页内派生、四组交互），扫描日志 `web-element-line-live-scan.txt`；页面错误 0。
+
+**独立复算**：A 轴 P1 (−7995.7, 8726.8, 9992) 方向 (0.894, 0.448, 0)，B 轴 P1 (−7563.4, 8143.7, 10323) 方向 (0.448, −0.894, 0)：A 上离 B 最近点 =
+(−7883.924, 8782.810, 9992.000)，B 上离 A 最近点 = 同 xy、z 10323 → 异面距 331.000 mm——与两次交点逐位一致。Perpendicular：B 原点 (−7547.9, 8112.8, 10323)
+到 A 轴的垂足 = 同一点 (−7883.924, 8782.810, 9992)，垂距 √(335.9² + 670.3² + 331²) = 819.34 mm；PYRA 原点 (−6172.1, 9641.2, 4390) 到 DISH 竖直轴
+(x −6708.45, y 9372.29) 的垂距 √(536.3² + 268.9²) = 600.0 mm——与面板一致。
+
+**残余偏离 / 未做**：
+- 带 XOFF / YOFF 的 SNOU / PYRA：E3D 的 P1 → P2 是斜线（两端面中心），Web 从包围盒认不出偏移 → 不派生、当操作数被拒；要做需 `element/attributes`
+  的 XOFF / YOFF 或服务端在 `element/ptset` 给设计基本体合成 P1 / P2（本 EQUI 内未见 SNOU，抽查的 PYRA XOFF = YOFF = 0）。
+- NOZZ 只走 ptset 的 P1 / P2（目录件）；本库 NOZZ 均 CATR 0/0、无几何、无点，运行时未验。
+- 元素被布尔负体切掉端面时局部包围盒 z 范围会短于 HEIG（P1 / P2 随之内缩）；本库未见样本。
+- SCTN / GENSEC 的 `line()` 走 PLINE（`element/plines`），不在本节。

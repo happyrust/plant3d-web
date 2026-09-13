@@ -128,6 +128,11 @@ _Avoid_: 点源开关、捕捉模式
 直管（TUBI）对象的中心线段，作为一条线参与测量取点：Snap 取近端、Cursor 取轴线上离光标最近处、Mid-Point 等沿线派生、Intersect 当直线。它从画出来的直管对象的局部包围盒与放置矩阵派生，两端再吸到邻接构件的 P-Point，对应 E3D `EDGTUBING.line` 的 leave → arrive 口径；ATTA 是穿过点——管线越过它到下一个非 ATTA 构件，在 ATTA 处断开的两段直管算同一条轴线；OLET 这类非 ATTA 的零长构件不穿过。
 _Avoid_: 管道中心线（MBD 尺寸的走向线）、PLINE
 
+## 元素轴线
+
+元素类拾取拾中一个元素本身、而这一击要的是一条线（Intersect 的操作数、Perpendicular to 的目标）时，元素代表的那条线：P-Point 1 → P-Point 2，对应 E3D `edgTypes.attribute(noun).line(item)`；只有圆柱、锥 / 斗、碟、棱锥、管嘴有这条线，弯头 / 盒 / 阀没有（拒收）。它只当操作数——Snap / Mid-Point 拾这些元素仍落元素原点。目录件的 P1 / P2 来自点集；gen-model 的设计基本体没有点集，就从它画在自己局部帧里的几何（局部包围盒 × 放置矩阵）取两端面中心，截面不对中（带 XOFF / YOFF）时不取。
+_Avoid_: 管身轴线（直管才有）、显著点、P-Point 方向线（单个 P-Point 带方向的那条）
+
 ## P-Point
 
 来自模型点集数据的设计关键点，适合作为精确测量点。它不是模型表面任意射线命中点。

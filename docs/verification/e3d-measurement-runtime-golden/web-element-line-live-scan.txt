@@ -1,0 +1,65 @@
+# Element 元素 line() 操作数（CYLI / CONE / DISH / PYRA 的 P1 → P2）实机走查 2026-09-14 00:33（dev :3101 + gen-model :8023，?show_refno=24381_159970&gm_backend_port=8023，Playwright 真指针，临时 spec 已删）
+# 前半：后端事实（element/attributes + element/ptset.world_transform 解析的 P1 / P2）与页内 DTX 局部包围盒 → 内核 elementLineAcceptsLocalBounds → 局部 z 向轴线对照；后半：每行 = 一步操作后的命令条 / 记录摘要。坐标 mm，像素为画布坐标。
+CYLI 24381_160660 HEIG=1440 DIAM=100 origin=-7352.1/9049.5/9992.0 axis=0.894/0.448/0.000 ptset points=0 → analytic P1 -7995.7/8726.8/9992.0 P2 -6708.4/9372.3/9992.0
+CYLI 24381_160661 HEIG=1440 DIAM=100 origin=-6064.8/9695.0/9992.0 axis=0.894/0.448/0.000 ptset points=0 → analytic P1 -6708.4/9372.3/9992.0 P2 -5421.2/10017.8/9992.0
+CYLI 24381_160663 HEIG=69 DIAM=73 origin=-7547.9/8112.8/10323.0 axis=0.448/-0.894/0.000 ptset points=0 → analytic P1 -7563.4/8143.7/10323.0 P2 -7532.5/8082.0/10323.0
+CYLI 24381_160664 HEIG=69 DIAM=73 origin=-5197.0/9291.8/10323.0 axis=0.448/-0.894/0.000 ptset points=0 → analytic P1 -5212.5/9322.6/10323.0 P2 -5181.5/9261.0/10323.0
+CYLI 24381_160665 HEIG=69 DIAM=73 origin=-7547.9/8112.8/9661.0 axis=0.448/-0.894/0.000 ptset points=0 → analytic P1 -7563.4/8143.7/9661.0 P2 -7532.5/8082.0/9661.0
+CYLI 24381_160666 HEIG=69 DIAM=73 origin=-5197.0/9291.8/9661.0 axis=0.448/-0.894/0.000 ptset points=0 → analytic P1 -5212.5/9322.6/9661.0 P2 -5181.5/9261.0/9661.0
+CYLI 24381_160667 HEIG=25.4 DIAM=190 origin=-7505.3/8027.7/10323.0 axis=0.448/-0.894/0.000 ptset points=0 → analytic P1 -7511.0/8039.1/10323.0 P2 -7499.6/8016.4/10323.0
+CYLI 24381_160668 HEIG=25.4 DIAM=190 origin=-5154.3/9206.7/10323.0 axis=0.448/-0.894/0.000 ptset points=0 → analytic P1 -5160.0/9218.0/10323.0 P2 -5148.6/9195.3/10323.0
+CYLI 24381_160669 HEIG=25.4 DIAM=190 origin=-7505.3/8027.7/9661.0 axis=0.448/-0.894/0.000 ptset points=0 → analytic P1 -7511.0/8039.1/9661.0 P2 -7499.6/8016.4/9661.0
+CYLI 24381_160670 HEIG=25.4 DIAM=190 origin=-5154.3/9206.7/9661.0 axis=0.448/-0.894/0.000 ptset points=0 → analytic P1 -5160.0/9218.0/9661.0 P2 -5148.6/9195.3/9661.0
+CONE 24381_160671 HEIG=48 DTOP=93 DBOT=73 origin=-7521.7/8060.5/10323.0 axis=0.448/-0.894/0.000 ptset points=0 → analytic P1 -7532.5/8082.0/10323.0 P2 -7511.0/8039.1/10323.0
+CONE 24381_160672 HEIG=48 DTOP=93 DBOT=73 origin=-5170.8/9239.5/10323.0 axis=0.448/-0.894/0.000 ptset points=0 → analytic P1 -5181.5/9261.0/10323.0 P2 -5160.0/9218.0/10323.0
+CONE 24381_160673 HEIG=48 DTOP=93 DBOT=73 origin=-7521.7/8060.5/9661.0 axis=0.448/-0.894/0.000 ptset points=0 → analytic P1 -7532.5/8082.0/9661.0 P2 -7511.0/8039.1/9661.0
+CONE 24381_160674 HEIG=48 DTOP=93 DBOT=73 origin=-5170.8/9239.5/9661.0 axis=0.448/-0.894/0.000 ptset points=0 → analytic P1 -5181.5/9261.0/9661.0 P2 -5160.0/9218.0/9661.0
+SUBE 24381_160659: 32 members — CYLI 10, CONE 4, BOX 18
+DISH 24381_163319 HEIG=1218 DIAM=2400 RADI=2436 origin=-6708.4/9372.3/4324.0 axis=-0.000/0.000/-1.000 ptset points=0 → analytic P1 -6708.4/9372.3/4324.0 P2 -6708.4/9372.3/3106.0
+CYLI 24381_163322 HEIG=4 DIAM=797 origin=-6708.4/9372.3/2882.5 axis=0.000/0.000/1.000 ptset points=0 → analytic P1 -6708.4/9372.3/2880.5 P2 -6708.4/9372.3/2884.5
+PYRA 24381_163627 HEIG=1200 XOFF=0 YOFF=0 XBOT=994 YBOT=1730 XTOP=0 YTOP=1730 origin=-6172.1/9641.2/4390.0 axis=-0.894/-0.448/0.000 ptset points=0 → analytic P1 -5635.8/9910.2/4390.0 P2 -6708.4/9372.3/4390.0
+NOZZ 24381_163651 HEIG=300 RADI=0 origin=-7414.8/8554.7/5335.0 axis=0.000/0.000/1.000 ptset points=0 → analytic P1 -7414.8/8554.7/5335.0 P2 -7414.8/8554.7/5635.0
+objects loaded: 1016
+CYLI 24381_160660 o:24381_160660:368: rule=centred-round accepts=true localBounds=[[-1,-1,0],[1,1,1]] local-z axis vs analytic P1/P2: Δ=0.001 mm (P1→P2 order)
+CYLI 24381_160661 o:24381_160661:369: rule=centred-round accepts=true localBounds=[[-1,-1,0],[1,1,1]] local-z axis vs analytic P1/P2: Δ=0.000 mm (P1→P2 order)
+CYLI 24381_160663 o:24381_160663:371: rule=centred-round accepts=true localBounds=[[-1,-1,0],[1,1,1]] local-z axis vs analytic P1/P2: Δ=0.000 mm (P1→P2 order)
+CYLI 24381_160664 o:24381_160664:372: rule=centred-round accepts=true localBounds=[[-1,-1,0],[1,1,1]] local-z axis vs analytic P1/P2: Δ=0.001 mm (P1→P2 order)
+CYLI 24381_160665 o:24381_160665:373: rule=centred-round accepts=true localBounds=[[-1,-1,0],[1,1,1]] local-z axis vs analytic P1/P2: Δ=0.000 mm (P1→P2 order)
+CYLI 24381_160666 o:24381_160666:374: rule=centred-round accepts=true localBounds=[[-1,-1,0],[1,1,1]] local-z axis vs analytic P1/P2: Δ=0.001 mm (P1→P2 order)
+CYLI 24381_160667 o:24381_160667:375: rule=centred-round accepts=true localBounds=[[-1,-1,0],[1,1,1]] local-z axis vs analytic P1/P2: Δ=0.000 mm (P1→P2 order)
+CYLI 24381_160668 o:24381_160668:376: rule=centred-round accepts=true localBounds=[[-1,-1,0],[1,1,1]] local-z axis vs analytic P1/P2: Δ=0.001 mm (P1→P2 order)
+CYLI 24381_160669 o:24381_160669:377: rule=centred-round accepts=true localBounds=[[-1,-1,0],[1,1,1]] local-z axis vs analytic P1/P2: Δ=0.000 mm (P1→P2 order)
+CYLI 24381_160670 o:24381_160670:378: rule=centred-round accepts=true localBounds=[[-1,-1,0],[1,1,1]] local-z axis vs analytic P1/P2: Δ=0.001 mm (P1→P2 order)
+CONE 24381_160671 o:24381_160671:379: rule=centred-round accepts=true localBounds=[[-46.5,-46.5,-24],[46.5,46.5,24]] local-z axis vs analytic P1/P2: Δ=0.000 mm (P1→P2 order)
+CONE 24381_160672 o:24381_160672:380: rule=centred-round accepts=true localBounds=[[-46.5,-46.5,-24],[46.5,46.5,24]] local-z axis vs analytic P1/P2: Δ=0.000 mm (P1→P2 order)
+CONE 24381_160673 o:24381_160673:381: rule=centred-round accepts=true localBounds=[[-46.5,-46.5,-24],[46.5,46.5,24]] local-z axis vs analytic P1/P2: Δ=0.000 mm (P1→P2 order)
+CONE 24381_160674 o:24381_160674:382: rule=centred-round accepts=true localBounds=[[-46.5,-46.5,-24],[46.5,46.5,24]] local-z axis vs analytic P1/P2: Δ=0.000 mm (P1→P2 order)
+DISH 24381_163319 o:24381_163319:775: rule=centred-round accepts=true localBounds=[[-1200,-1200,0],[1200,1200,1218]] local-z axis vs analytic P1/P2: Δ=0.000 mm (P1→P2 order)
+CYLI 24381_163322 o:24381_163322:778: rule=centred-round accepts=true localBounds=[[-1,-1,0],[1,1,1]] local-z axis vs analytic P1/P2: Δ=0.000 mm (P1→P2 order)
+PYRA 24381_163627 o:24381_163627:1003: rule=centred accepts=true localBounds=[[-497,-865,-600],[497,865,600]] local-z axis vs analytic P1/P2: Δ=0.000 mm (P1→P2 order)
+NOZZ 24381_163651: no DTX object
+canvas rect at start: {"left":350,"top":83,"width":580,"height":450,"sx":0,"sy":0}
+pair: A = CYLI 24381_160660 (HEIG 1440), B = CYLI 24381_160663 (HEIG 69), axes dot = -0.0000
+status: 距离· 第 1/2 步 选择起点 (Intersection[1]) Snap : 等待捕捉（P-Point / Item 原点 / 管身轴线（TUBING））
+hover A @(290,225): 距离测量 · 第 1/2 步 选择起点 (Intersection[1]) Snap : CYLI Item 原点 24381_160660 | {"label":"Item 原点 24381_160660","refno":"24381_160660"}
+click A → 距离测量 · 第 1/2 步 选择起点 (Intersection[2]) Snap : CYLI Item 原点 24381_160660 | msg: 求交已选 1. CYLI 轴线（P1 → P2）（线），再选一项（Intersection[2]）
+hover B @(290,225): 距离测量 · 第 1/2 步 选择起点 (Intersection[2]) Snap : CYLI 交点（预览） | {"label":"交点（预览）","refno":"24381_160663"}
+click B → draft origin: [-7.883923910233381,8.782810440094705,9.992000000000003] label="交点"
+intersection vs analytic (A 轴上离 B 轴最近点) -7883.924/8782.810/9992.000: Δ 0.001 mm; 到 A 轴距离 0.001 mm; 到 B 轴距离 331.000 mm (两轴间距 = 异面距)
+second point (B × A) → record target [-7.883923910233381,8.782810440094705,10.323]; rows ["Distance331mm","OffsetX+0mm","OffsetY+0mm","OffsetZ+331mm","DirectionX+0.0000·Y+0.0000·Z+1.0000"]
+target vs analytic (B 轴上离 A 轴最近点) -7883.924/8782.810/10323.000: Δ 0.001 mm; |A×B 交点 − B×A 交点| = 331.000 mm = 两轴异面距 331.000 mm
+Element×Intersect hover A: 距离测量 · 第 1/2 步 选择起点 (Intersection[1]) Snap : CYLI Item 原点 24381_160660 | {"label":"Item 原点 24381_160660","refno":"24381_160660"}
+Element×Intersect click A → 求交已选 1. CYLI 轴线（P1 → P2）（线），再选一项（Intersection[2]）
+Element×Intersect click B → origin [-7.883923910233381,8.782810440094705,9.992000000000003]; Δ vs analytic 0.001 mm
+CONE 24381_160671 hover: {"label":"交点（预览）","refno":"24381_160671"} @ (291,225)
+A × CONE 24381_160671 → origin [-7.883923916383881,8.782810437010335,9.992000000000003] label="交点"; analytic -7883.924/8782.810/9992.000 Δ 0.001 mm; msg=null
+DISH 24381_163319 Any×Intersect: hover {"label":"轴线（P1 → P2）","refno":"24381_163319"} → click → 距离测量 · 第 1/2 步 选择起点 (Intersection[2]) Snap : DISH 轴线（P1 → P2） | msg: 求交已选 1. DISH 轴线（P1 → P2）（线），再选一项（Intersection[2]）
+PYRA 24381_163627 Any×Intersect: hover {"label":"Item 原点 24381_163627","refno":"24381_163627"} → click → 距离测量 · 第 1/2 步 选择起点 (Intersection[2]) Snap : PYRA Item 原点 24381_163627 | msg: 求交已选 1. PYRA 轴线（P1 → P2）（线），再选一项（Intersection[2]）
+NOZZ 24381_163651: not hoverable
+BOX 24381_160662 Any×Intersect click → 距离测量 · 第 1/2 步 选择起点 (Intersection[1]) Snap : BOX Item 原点 24381_160662 | msg: 所选项无法转成线 / 面参与求交，请改选其它项或按 Esc 取消（E3D: Unable to convert item into a line or plane for intersection）
+Perpendicular to toggle checked: true
+Perpendicular to CYLI: origin CYLI 24381_160663 → [-7.547942382812502,8.11283447265625,10.323] "Item 原点 24381_160663"
+Perpendicular to CYLI: hover target {"label":"Item 原点 24381_160660","refno":"24381_160660"}; perpendicular={"targetKind":"line","targetLabel":"CYLI 轴线（P1 → P2）"} target label="CYLI 轴线（P1 → P2）垂足"; 垂足 -7883.924/8782.810/9992.000 到解析轴距离 0.001 mm, (垂足−起点)·轴向 = 0.000 mm; 解析垂足 -7883.924/8782.810/9992.000 Δ 0.001 mm; 解析垂距 819.336 mm; rows ["Distance819mm","Vertical331mm","Horizontal750mm","DirectionX+0.4101·Y-0.8177·Z+0.4040"]
+Perpendicular to DISH: origin PYRA 24381_163627 → [-6.172103027343753,9.6412470703125,4.389999999999999] "Item 原点 24381_163627"
+Perpendicular to DISH: hover target {"label":"轴线（P1 → P2）","refno":"24381_163319"}; perpendicular={"targetKind":"line","targetLabel":"DISH 轴线（P1 → P2）"} target label="DISH 轴线（P1 → P2）垂足"; 垂足 -6708.450/9372.290/4390.000 到解析轴距离 0.000 mm, (垂足−起点)·轴向 = 0.000 mm; 解析垂足 -6708.450/9372.290/4390.000 Δ 0.000 mm; 解析垂距 600.005 mm; rows ["Distance600mm","Vertical0mm","Horizontal600mm","DirectionX+0.8939·Y+0.4483·Z+0.0000"]
+page errors: 0
