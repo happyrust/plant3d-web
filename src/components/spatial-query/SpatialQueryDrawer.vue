@@ -272,7 +272,7 @@
                 placeholder="例如：PIPE,EQUI,BRAN"
                 class="h-8 w-full rounded-md border border-gray-200 bg-white px-2.5 font-mono text-xs text-gray-900 outline-none focus:border-brand" />
             </label>
-            <div class="text-xs text-gray-500">
+            <div v-if="hasSpecDimension" class="text-xs text-gray-500" data-testid="spec-filter">
               <div class="mb-1 flex items-center justify-between">
                 <span>专业过滤</span>
                 <div class="flex items-center gap-2 text-[11px]">
@@ -493,7 +493,7 @@
           </div>
 
           <div v-if="!resultSet && !isQueryBusy" class="px-3 py-6 text-center text-xs text-gray-400">
-            暂无结果，执行一次空间查询后会在这里按专业分组显示。
+            暂无结果，执行一次空间查询后会在这里{{ groupDimensionLabel }}分组显示。
           </div>
 
           <div v-else-if="resultsExpanded && resultSet && resultSet.items.length === 0 && !isQueryBusy" class="px-3 py-6 text-center text-xs text-gray-400">
@@ -523,12 +523,18 @@
             </div>
           </div>
 
+          <div v-if="resultsExpanded && resultSet && resultSet.coverage === 'global-tree'"
+            class="border-b border-gray-100 bg-gray-50 px-3 py-2 text-[11px] text-gray-500"
+            data-testid="spatial-coverage-hint">
+            结果仅含已生成过模型的构件（空间索引只收已生成的包围盒）；从未显示过的构件不在其中，先显示它们再查会被纳入。
+          </div>
+
           <div v-if="resultsExpanded && resultSet && resultSet.items.length > 0" class="max-h-[280px] overflow-y-auto px-3 py-2.5">
-            <div v-for="group in pagedResultGroups" :key="group.specValue" class="mb-3 last:mb-0">
+            <div v-for="group in displayGroups" :key="`${group.kind}:${group.key}`" class="mb-3 last:mb-0" data-testid="spatial-result-group">
               <div class="mb-1.5 flex items-center justify-between">
                 <div>
-                  <div class="text-xs font-semibold uppercase tracking-wide text-gray-500">
-                    {{ group.specName }}
+                  <div class="text-xs font-semibold uppercase tracking-wide text-gray-500" data-testid="spatial-result-group-title">
+                    {{ group.label }}
                   </div>
                   <div class="mt-0.5 text-[11px] text-gray-400">{{ group.count }} 项</div>
                 </div>
@@ -536,13 +542,15 @@
                   <button type="button"
                     class="rounded-md border border-gray-200 px-2 py-1 text-[11px] text-gray-600 hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
                     :disabled="isQueryBusy"
-                    @click="loadSpecGroup(group.specValue)">
-                    加载本专业
+                    data-testid="spatial-result-group-load"
+                    @click="loadDisplayGroup(group)">
+                    加载本{{ groupUnitLabel }}
                   </button>
                   <button type="button"
                     class="rounded-md border border-gray-200 px-2 py-1 text-[11px] text-gray-600 hover:bg-white"
-                    @click="showOnlyGroup(group.specValue)">
-                    仅显示本专业
+                    data-testid="spatial-result-group-show-only"
+                    @click="showOnlyDisplayGroup(group)">
+                    仅显示本{{ groupUnitLabel }}
                   </button>
                 </div>
               </div>
@@ -610,7 +618,7 @@ import { computed, ref, watch } from 'vue';
 import { ArrowUpRight, Eye, EyeOff, Loader2, MapPinned, MousePointerClick, Ruler, Search, X } from 'lucide-vue-next';
 import { Vector3, type Matrix4 } from 'three';
 
-import type { SpatialQueryMode, SpatialQueryResultGroup, SpatialQueryResultItem, SpatialQuerySortBy } from '@/types/spatialQuery';
+import type { SpatialQueryMode, SpatialQueryResultItem, SpatialQuerySortBy } from '@/types/spatialQuery';
 import type { Vec3 } from '@/types/vec3';
 
 import { findNounByRefnoAcrossAllDbnos } from '@/composables/useDbnoInstancesDtxLoader';
@@ -650,6 +658,7 @@ const {
   resultSet,
   activeResultRefno,
   canSubmit,
+  spatialCapabilities,
   setMode: setSpatialQueryMode,
   applyCurrentSelection,
   startPickCenter,
@@ -658,11 +667,20 @@ const {
   activateResult,
   loadResults,
   showOnlySpecGroup,
+  showOnlyDbnumGroup,
   toggleResultVisible,
   setAllResultsVisible,
   isolateResults,
   restoreScene,
 } = spatialQuery;
+
+/**
+ * 当前源有没有专业维度（legacy 有，gen-model-v1 没有——plan 2026-09-13 空间范围查询 §5-1 按 (a)）：
+ * 没有就收起专业过滤 / 「按专业」排序，结果改按库（dbnum）分组。
+ */
+const hasSpecDimension = computed(() => spatialCapabilities.value.specValues);
+const groupDimensionLabel = computed(() => (hasSpecDimension.value ? '按专业' : '按库'));
+const groupUnitLabel = computed(() => (hasSpecDimension.value ? '专业' : '库'));
 
 const METERS_TO_MM = 1000;
 const DISTANCE_RADIUS_MIN_M = 0.1;
@@ -735,9 +753,13 @@ function clearSpecs(): void {
 
 const resultBreakdown = computed<string>(() => {
   if (!resultSet.value) return '';
-  const parts = resultSet.value.groups
-    .filter((group) => group.count > 0)
-    .map((group) => `${group.count} ${getSpecValueShortName(group.specValue)}`);
+  const parts = hasSpecDimension.value
+    ? resultSet.value.groups
+      .filter((group) => group.count > 0)
+      .map((group) => `${group.count} ${getSpecValueShortName(group.specValue)}`)
+    : (resultSet.value.dbnumGroups ?? [])
+      .filter((group) => group.count > 0)
+      .map((group) => `${group.count} 库${group.dbnum}`);
   if (parts.length === 0) {
     return `共 ${resultSet.value.total} 项`;
   }
@@ -783,7 +805,7 @@ const statusLabel = computed(() => {
 
 const summaryText = computed(() => {
   if (!resultSet.value) {
-    return '支持范围查询与距离查询，结果会按专业分组。';
+    return `支持范围查询与距离查询，结果会${groupDimensionLabel.value}分组。`;
   }
   return `共 ${resultSet.value.total} 项，当前页 ${resultSet.value.returnedCount} 项，已加载 ${resultSet.value.loadedCount} 项，未加载 ${resultSet.value.unloadedCount} 项`;
 });
@@ -804,33 +826,55 @@ const allReturnedRefnos = computed(() => {
   return uniqueRefnosInOrder(resultSet.value?.items ?? []);
 });
 
-const pagedResultGroups = computed<SpatialQueryResultGroup[]>(() => {
+/** 结果区的一组：legacy 按专业（`key` = spec_value），gen-model-v1 按库（`key` = dbnum）。 */
+type DisplayGroup = {
+  kind: 'spec' | 'dbnum';
+  key: number;
+  label: string;
+  count: number;
+  items: SpatialQueryResultItem[];
+};
+
+/** 没有库号的条目（legacy 结果、占位项）归到这一组，避免按库分组时把它们丢掉。 */
+const UNKNOWN_DBNUM_KEY = -1;
+
+const displayGroups = computed<DisplayGroup[]>(() => {
+  const byDbnum = !hasSpecDimension.value;
+  const keyOf = (item: SpatialQueryResultItem): number =>
+    byDbnum ? (typeof item.dbnum === 'number' ? item.dbnum : UNKNOWN_DBNUM_KEY) : item.specValue;
+
   const grouped = new Map<number, SpatialQueryResultItem[]>();
   for (const item of pagedResultItems.value) {
-    const list = grouped.get(item.specValue) ?? [];
+    const key = keyOf(item);
+    const list = grouped.get(key) ?? [];
     list.push(item);
-    grouped.set(item.specValue, list);
+    grouped.set(key, list);
   }
 
   // 分组小计取服务端的全量计数，条目仍只列当前页，否则小计和「共 N 项」对不上。
-  const globalCounts = new Map(
-    (resultSet.value?.groups ?? []).map((group) => [group.specValue, group.count]),
+  const globalCounts = new Map<number, number>(
+    byDbnum
+      ? (resultSet.value?.dbnumGroups ?? []).map((group) => [group.dbnum, group.count])
+      : (resultSet.value?.groups ?? []).map((group) => [group.specValue, group.count]),
   );
 
-  // 全量命中里存在、但当前页没有条目的专业也要露出组头（含小计与批量按钮），
-  // 否则翻页时整组"消失"，用户会以为该专业没有命中。
-  for (const specValue of globalCounts.keys()) {
-    if (!grouped.has(specValue)) {
-      grouped.set(specValue, []);
+  // 全量命中里存在、但当前页没有条目的组也要露出组头（含小计与批量按钮），
+  // 否则翻页时整组"消失"，用户会以为该专业 / 该库没有命中。
+  for (const key of globalCounts.keys()) {
+    if (!grouped.has(key)) {
+      grouped.set(key, []);
     }
   }
 
   return Array.from(grouped.entries())
     .sort((a, b) => a[0] - b[0])
-    .map(([specValue, items]) => ({
-      specValue,
-      specName: items[0]?.specName ?? getSpecValueShortName(specValue),
-      count: globalCounts.get(specValue) ?? items.length,
+    .map(([key, items]) => ({
+      kind: byDbnum ? 'dbnum' as const : 'spec' as const,
+      key,
+      label: byDbnum
+        ? (key === UNKNOWN_DBNUM_KEY ? '库未知' : `库 ${key}`)
+        : (items[0]?.specName ?? getSpecValueShortName(key)),
+      count: globalCounts.get(key) ?? items.length,
       items,
     }));
 });
@@ -949,11 +993,16 @@ function setResultPage(page: number) {
   void submitQuery(nextPage);
 }
 
-const sortOptions: { value: SpatialQuerySortBy; label: string; hint: string }[] = [
+const ALL_SORT_OPTIONS: { value: SpatialQuerySortBy; label: string; hint: string }[] = [
   { value: 'distanceAsc', label: '按距离', hint: '由近及远' },
   { value: 'specThenDistance', label: '按专业', hint: '先按专业分组，组内由近及远' },
   { value: 'nameAsc', label: '按名称', hint: '按构件名称升序' },
 ];
+
+/** 没有专业维度的源不给「按专业」这一档。 */
+const sortOptions = computed(() =>
+  hasSpecDimension.value ? ALL_SORT_OPTIONS : ALL_SORT_OPTIONS.filter((option) => option.value !== 'specThenDistance'),
+);
 
 function setSortBy(sortBy: SpatialQuerySortBy) {
   if (draft.sortBy === sortBy) return;
@@ -1076,12 +1125,22 @@ function loadUnloadedResults() {
   void loadResults({ onlyUnloaded: true, flyTo: true });
 }
 
-function loadSpecGroup(specValue: number) {
-  void loadResults({ specValue, flyTo: true });
+function loadDisplayGroup(group: DisplayGroup) {
+  if (group.kind === 'dbnum') {
+    if (group.key === UNKNOWN_DBNUM_KEY) return;
+    void loadResults({ dbnum: group.key, flyTo: true });
+    return;
+  }
+  void loadResults({ specValue: group.key, flyTo: true });
 }
 
-function showOnlyGroup(specValue: number) {
-  showOnlySpecGroup(specValue);
+function showOnlyDisplayGroup(group: DisplayGroup) {
+  if (group.kind === 'dbnum') {
+    if (group.key === UNKNOWN_DBNUM_KEY) return;
+    showOnlyDbnumGroup(group.key);
+    return;
+  }
+  showOnlySpecGroup(group.key);
 }
 
 function formatDistance(distance: number) {

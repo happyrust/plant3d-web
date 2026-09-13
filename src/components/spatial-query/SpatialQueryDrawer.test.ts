@@ -4,6 +4,7 @@ import { createApp, h, nextTick, reactive, ref, type Ref } from 'vue';
 import SpatialQueryDrawer from './SpatialQueryDrawer.vue';
 
 import type {
+  SpatialQueryCapabilities,
   SpatialQueryDraft,
   SpatialQueryResultItem,
   SpatialQueryResultSet,
@@ -19,6 +20,7 @@ const clearResults = vi.fn();
 const activateResult = vi.fn();
 const loadResults = vi.fn();
 const showOnlySpecGroup = vi.fn();
+const showOnlyDbnumGroup = vi.fn();
 const toggleResultVisible = vi.fn();
 const setAllResultsVisible = vi.fn();
 const isolateResults = vi.fn();
@@ -50,6 +52,8 @@ const stubState = {
   resultSet: ref<SpatialQueryResultSet | null>(null) as Ref<SpatialQueryResultSet | null>,
   activeResultRefno: ref<string | null>(null) as Ref<string | null>,
   canSubmit: ref(true) as Ref<boolean>,
+  /** legacy 源有专业维度；gen-model-v1 的用例把它翻成 false */
+  spatialCapabilities: ref<SpatialQueryCapabilities>({ specValues: true }) as Ref<SpatialQueryCapabilities>,
 };
 
 vi.mock('@/composables/useSpatialQuery', () => ({
@@ -63,6 +67,7 @@ vi.mock('@/composables/useSpatialQuery', () => ({
     activateResult,
     loadResults,
     showOnlySpecGroup,
+    showOnlyDbnumGroup,
     toggleResultVisible,
     setAllResultsVisible,
     isolateResults,
@@ -118,6 +123,7 @@ function resetDraft() {
   stubState.resultSet.value = null;
   stubState.activeResultRefno.value = null;
   stubState.canSubmit.value = true;
+  stubState.spatialCapabilities.value = { specValues: true };
 }
 
 function makeResultSet(count: number, options: { page?: number; perPage?: number; total?: number; hasMore?: boolean; startIndex?: number } = {}): SpatialQueryResultSet {
@@ -201,6 +207,7 @@ describe('SpatialQueryDrawer (distance 模式)', () => {
     activateResult.mockReset();
     loadResults.mockReset();
     showOnlySpecGroup.mockReset();
+    showOnlyDbnumGroup.mockReset();
     toggleResultVisible.mockReset();
     setAllResultsVisible.mockReset();
     isolateResults.mockReset();
@@ -651,6 +658,87 @@ describe('SpatialQueryDrawer (distance 模式)', () => {
 
     expect(toggleResultVisible).toHaveBeenCalledWith(stubState.resultSet.value.items[0]);
     expect(stubState.resultSet.value?.items.map((item) => item.refno)).toEqual(['24381_100001']);
+
+    unmount();
+  });
+
+  it('legacy（有专业维度）：专业过滤与「按专业」排序在，结果按专业分组，组按钮走 specValue 路径', async () => {
+    const { host, unmount } = mountDrawer();
+    await nextTick();
+    expect(host.textContent).toContain('结果会按专业分组');
+
+    (host.querySelector('[data-testid="spatial-advanced-toggle"]') as HTMLButtonElement | null)?.click();
+    await nextTick();
+    expect(host.querySelector('[data-testid="spec-filter"]')).toBeTruthy();
+    expect(host.querySelector('[data-testid="spatial-sort-specThenDistance"]')).toBeTruthy();
+
+    stubState.resultSet.value = makeResultSet(2);
+    await nextTick();
+    await expandResults(host);
+    expect(host.querySelector('[data-testid="spatial-coverage-hint"]')).toBeNull();
+    const titles = Array.from(host.querySelectorAll('[data-testid="spatial-result-group-title"]')).map((el) => el.textContent?.trim());
+    expect(titles).toEqual(['未知']);
+    expect(host.querySelector('[data-testid="spatial-result-group-load"]')?.textContent).toContain('加载本专业');
+
+    (host.querySelector('[data-testid="spatial-result-group-load"]') as HTMLButtonElement | null)?.click();
+    (host.querySelector('[data-testid="spatial-result-group-show-only"]') as HTMLButtonElement | null)?.click();
+    await nextTick();
+    expect(loadResults).toHaveBeenCalledWith({ specValue: 0, flyTo: true });
+    expect(showOnlySpecGroup).toHaveBeenCalledWith(0);
+    expect(showOnlyDbnumGroup).not.toHaveBeenCalled();
+
+    unmount();
+  });
+
+  it('gen-model-v1（无专业维度）：收起专业过滤与「按专业」排序，结果按库分组、组头用服务端全量计数、组按钮走 dbnum 路径，并提示覆盖面', async () => {
+    stubState.spatialCapabilities.value = { specValues: false };
+    const base = makeResultSet(3);
+    base.items[0]!.dbnum = 24381;
+    base.items[1]!.dbnum = 24383;
+    base.items[2]!.dbnum = 24381;
+    stubState.resultSet.value = {
+      ...base,
+      total: 9,
+      // 24390 在全集里有命中、当前页没有条目，也要露出组头
+      dbnumGroups: [{ dbnum: 24381, count: 5 }, { dbnum: 24383, count: 3 }, { dbnum: 24390, count: 1 }],
+      coverage: 'global-tree',
+    };
+
+    const { host, unmount } = mountDrawer();
+    await nextTick();
+
+    expect(host.textContent).toContain('共 9 项 · 5 库24381 · 3 库24383 · 1 库24390');
+    expect(host.textContent).not.toContain('按专业分组');
+
+    (host.querySelector('[data-testid="spatial-advanced-toggle"]') as HTMLButtonElement | null)?.click();
+    await nextTick();
+    expect(host.querySelector('[data-testid="spec-filter"]')).toBeNull();
+    expect(host.querySelector('[data-testid="spatial-sort-specThenDistance"]')).toBeNull();
+    expect(host.querySelector('[data-testid="spatial-sort-distanceAsc"]')).toBeTruthy();
+    expect(host.querySelector('[data-testid="spatial-sort-nameAsc"]')).toBeTruthy();
+
+    await expandResults(host);
+    expect(host.querySelector('[data-testid="spatial-coverage-hint"]')?.textContent).toContain('仅含已生成过模型的构件');
+    const titles = Array.from(host.querySelectorAll('[data-testid="spatial-result-group-title"]')).map((el) => el.textContent?.trim());
+    expect(titles).toEqual(['库 24381', '库 24383', '库 24390']);
+    const groups = Array.from(host.querySelectorAll('[data-testid="spatial-result-group"]'));
+    expect(groups[0]?.textContent).toContain('5 项');
+    expect(groups[1]?.textContent).toContain('3 项');
+    expect(groups[2]?.textContent).toContain('1 项');
+    expect(groups[0]?.textContent).toContain('24381_100001');
+    expect(groups[0]?.textContent).toContain('24381_100003');
+    expect(groups[0]?.textContent).not.toContain('24381_100002');
+    expect(groups[1]?.textContent).toContain('24381_100002');
+    expect(groups[2]?.textContent).not.toContain('24381_1000');
+
+    const loadButtons = Array.from(host.querySelectorAll('[data-testid="spatial-result-group-load"]')) as HTMLButtonElement[];
+    expect(loadButtons[1]?.textContent).toContain('加载本库');
+    loadButtons[1]?.click();
+    (host.querySelectorAll('[data-testid="spatial-result-group-show-only"]')[0] as HTMLButtonElement | undefined)?.click();
+    await nextTick();
+    expect(loadResults).toHaveBeenCalledWith({ dbnum: 24383, flyTo: true });
+    expect(showOnlyDbnumGroup).toHaveBeenCalledWith(24381);
+    expect(showOnlySpecGroup).not.toHaveBeenCalled();
 
     unmount();
   });

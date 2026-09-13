@@ -30,6 +30,7 @@ import { showModelByRefnosWithAck, useViewerContext, waitForViewerReady } from '
 import { getModelSource } from '@/model-source';
 import {
   type SpatialQueryAabb,
+  type SpatialQueryCapabilities,
   type SpatialQueryCenterSource,
   type SpatialQueryDraft,
   type SpatialQueryFilterOptions,
@@ -82,6 +83,8 @@ type ToolStoreLike = {
 
 type BatchLoadOptions = {
   flyTo?: boolean;
+  /** 结果自带的 refno → dbnum（gen-model-v1 服务端直接给）；有它就不再按 refno 查库号，缺失的才 `getDbnumByRefno` */
+  dbnumByRefno?: ReadonlyMap<string, number>;
 };
 
 type BatchLoadResult = {
@@ -524,6 +527,7 @@ function toSpatialItemFromApi(item: ApiSpatialQueryResultItem, loaded: boolean, 
     noun: item.noun || 'UNKNOWN',
     specValue: item.spec_value ?? 0,
     specName: toSpecName(item.spec_value ?? 0),
+    dbnum: typeof item.dbnum === 'number' ? item.dbnum : null,
     distance: typeof item.distance === 'number' ? item.distance : null,
     loaded,
     visible,
@@ -711,6 +715,9 @@ async function batchLoadSpatialQueryRefnos(
 
   const failMap = new Map<string, string | null>();
   const groupedByDbno = new Map<number, string[]>();
+  // gen-model-v1 下没有 parquet，也没有旧后端的 SSE 批量生成：`loadRefnosBySource(...,'backend')` 经 DTX 加载链
+  // 已改走 `records.instanceEntriesByRefnos`（内部 ensure → records），缺失就是「没有可渲染几何」，不再另起生成
+  const genModelV1 = getModelSource().kind === 'gen-model-v1';
 
   try {
     await ensureDbMetaInfoLoaded();
@@ -724,7 +731,8 @@ async function batchLoadSpatialQueryRefnos(
 
   for (const refno of normalizedRefnos) {
     try {
-      const dbno = getDbnumByRefno(refno);
+      // 结果自带 dbnum（v1 服务端直接给）优先，缺失才按 refno 查库号
+      const dbno = options.dbnumByRefno?.get(refno) ?? getDbnumByRefno(refno);
       const list = groupedByDbno.get(dbno) ?? [];
       list.push(refno);
       groupedByDbno.set(dbno, list);
@@ -733,7 +741,7 @@ async function batchLoadSpatialQueryRefnos(
     }
   }
 
-  const parquetLoader = useDbnoInstancesParquetLoader();
+  const parquetLoader = genModelV1 ? null : useDbnoInstancesParquetLoader();
   const okSet = new Set<string>();
 
   for (const [dbno, groupRefnos] of groupedByDbno.entries()) {
@@ -743,7 +751,7 @@ async function batchLoadSpatialQueryRefnos(
     let pending = normalizedGroup.slice();
     const groupOk = new Set<string>();
 
-    const parquetAvailable = await parquetLoader.isParquetAvailable(dbno);
+    const parquetAvailable = parquetLoader ? await parquetLoader.isParquetAvailable(dbno) : false;
     if (parquetAvailable) {
       try {
         const parquetResult = await loadRefnosBySource(viewer, dtxLayer, dbno, pending, 'parquet');
@@ -773,7 +781,7 @@ async function batchLoadSpatialQueryRefnos(
       }
     }
 
-    if (pending.length > 0 && AUTO_GENERATION_ENABLED) {
+    if (pending.length > 0 && AUTO_GENERATION_ENABLED && !genModelV1) {
       const generated = await generateMissingRefnos(viewer, dtxLayer, dbno, pending);
       generated.ok.forEach((refno) => {
         groupOk.add(refno);
@@ -936,6 +944,10 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
     ?? ((params) => spatialSource().nearbyRefnos(params));
   const negativeNounsFetcher: FetchNegativeNounsFn = options.fetchNegativeNouns
     ?? (() => spatialSource().negativeNouns());
+  /** 当前源的空间查询能力；v1 没有专业维度，抽屉据此收起专业 UI、改按库分组 */
+  const spatialCapabilities = computed<SpatialQueryCapabilities>(() => ({
+    specValues: spatialSource().capabilities.specValues,
+  }));
   const nextRequestId = options.createRequestId ?? createRequestId;
   const batchLoadRefnos = options.batchLoadRefnos ?? ((refnos: string[], loadOptions?: BatchLoadOptions) => {
     return batchLoadSpatialQueryRefnos(viewerRef, refnos, loadOptions);
@@ -950,10 +962,12 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
   // 切模式时把排序拉回该模式的默认口径，用户在当前模式内的手动选择保持不变。
   // 用 watch 而不是只在 setMode 里改，是因为直接给 draft.mode 赋值同样要生效；
   // sync 保证紧接着提交的查询读到的已经是新默认值。
+  // 范围查询默认「按专业」，但当前源没有专业维度（gen-model-v1）时退到由近及远。
   watch(
     () => draft.mode,
     (mode) => {
-      draft.sortBy = DEFAULT_SORT_BY_MODE[mode];
+      const preferred = DEFAULT_SORT_BY_MODE[mode];
+      draft.sortBy = preferred === 'specThenDistance' && !spatialCapabilities.value.specValues ? 'distanceAsc' : preferred;
     },
     { flush: 'sync' },
   );
@@ -1216,6 +1230,10 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
       truncated: Boolean(hasMore || serverResp?.truncated || serverResp?.truncated_candidates || serverResp?.truncated_results),
       warnings,
       groups: buildGroups(items, toGlobalGroupCounts(serverResp)),
+      dbnumGroups: serverResp?.dbnum_groups
+        ? serverResp.dbnum_groups.map((group) => ({ dbnum: group.dbnum, count: group.count }))
+        : null,
+      coverage: serverResp?.coverage ?? null,
     };
   }
 
@@ -1280,8 +1298,10 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
     }
   }
 
-  /** 批量操作的作用域：优先整个命中集合，取不到时回退当前页。 */
-  function resolveBatchRefnos(options: { specValue?: number } = {}): string[] {
+  type BatchScope = { specValue?: number; dbnum?: number };
+
+  /** 批量操作的作用域：优先整个命中集合，取不到时回退当前页；可按专业（legacy）或按库（gen-model-v1）取一组。 */
+  function resolveBatchRefnos(options: BatchScope = {}): string[] {
     const current = resultSet.value;
     if (!current) return [];
 
@@ -1290,6 +1310,9 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
       if (typeof options.specValue === 'number') {
         const grouped = full.bySpecValue[String(options.specValue)];
         if (grouped) return grouped;
+      } else if (typeof options.dbnum === 'number') {
+        const grouped = full.byDbnum[String(options.dbnum)];
+        if (grouped) return grouped;
       } else {
         return full.refnos;
       }
@@ -1297,7 +1320,22 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
 
     return current.items
       .filter((item) => typeof options.specValue !== 'number' || item.specValue === options.specValue)
+      .filter((item) => typeof options.dbnum !== 'number' || item.dbnum === options.dbnum)
       .map((item) => item.refno);
+  }
+
+  /** 结果自带的 refno → dbnum（v1 服务端给的），连同全集的 by_dbnum 一起交给批量加载，省掉逐个查库号。 */
+  function collectDbnumHints(items: SpatialQueryResultItem[]): Map<string, number> {
+    const hints = new Map<string, number>();
+    for (const [dbnum, refnos] of Object.entries(resultSet.value?.fullMatches?.byDbnum ?? {})) {
+      const parsed = Number(dbnum);
+      if (!Number.isFinite(parsed)) continue;
+      for (const refno of refnos) hints.set(normalizeRefno(refno), parsed);
+    }
+    for (const item of items) {
+      if (typeof item.dbnum === 'number') hints.set(normalizeRefno(item.refno), item.dbnum);
+    }
+    return hints;
   }
 
   async function resolveRequest(): Promise<{ request: SpatialQueryRequest }> {
@@ -1500,13 +1538,13 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
     }
   }
 
-  function pickResultItems(options: { onlyUnloaded?: boolean; specValue?: number } = {}): SpatialQueryResultItem[] {
+  function pickResultItems(options: { onlyUnloaded?: boolean } & BatchScope = {}): SpatialQueryResultItem[] {
     const byRefno = new Map((resultSet.value?.items ?? []).map((item) => [item.refno, item]));
     const loadedRefnos = new Set(
       viewerRef.value ? resolveLoadedRefnos(viewerRef.value) : [],
     );
 
-    return resolveBatchRefnos({ specValue: options.specValue }).map((refno) => {
+    return resolveBatchRefnos({ specValue: options.specValue, dbnum: options.dbnum }).map((refno) => {
       const existing = byRefno.get(refno);
       if (existing) return existing;
 
@@ -1516,6 +1554,7 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
         noun: 'UNKNOWN',
         specValue: options.specValue ?? 0,
         specName: toSpecName(options.specValue ?? 0),
+        dbnum: options.dbnum ?? null,
         distance: null,
         loaded: loadedRefnos.has(refno),
         visible: false,
@@ -1528,7 +1567,7 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
     }).filter((item) => !options.onlyUnloaded || !item.loaded);
   }
 
-  async function loadResults(options: { onlyUnloaded?: boolean; specValue?: number; flyTo?: boolean } = {}) {
+  async function loadResults(options: { onlyUnloaded?: boolean; flyTo?: boolean } & BatchScope = {}) {
     const targets = pickResultItems(options);
     if (targets.length === 0) {
       status.value = 'ready';
@@ -1538,9 +1577,10 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
     try {
       error.value = null;
       status.value = 'loading-results-batch';
+      const dbnumByRefno = collectDbnumHints(targets);
       const result = await batchLoadRefnos(
         targets.map((item) => item.refno),
-        { flyTo: options.flyTo }
+        { flyTo: options.flyTo, ...(dbnumByRefno.size > 0 ? { dbnumByRefno } : {}) }
       );
       const okSet = new Set(result.ok.map((item) => normalizeRefno(item)));
       const failSet = new Set(result.fail.map((item) => normalizeRefno(item.refno)));
@@ -1710,6 +1750,31 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
     }
   }
 
+  /** `showOnlySpecGroup` 的按库版：gen-model-v1 源下结果按 dbnum 分组，「仅显示本库」走这里。 */
+  function showOnlyDbnumGroup(dbnum: number) {
+    const viewer = viewerRef.value;
+    const items = resultSet.value?.items ?? [];
+    if (!viewer || items.length === 0) return;
+
+    const showRefnos = resolveBatchRefnos({ dbnum });
+    const showSet = new Set(showRefnos);
+    const hideRefnos = resolveBatchRefnos().filter((refno) => !showSet.has(refno));
+
+    if (showRefnos.length > 0) {
+      viewer.scene.setObjectsVisible(showRefnos, true);
+    }
+    if (hideRefnos.length > 0) {
+      viewer.scene.setObjectsVisible(hideRefnos, false);
+    }
+
+    items.forEach((item) => {
+      item.visible = item.dbnum === dbnum;
+    });
+    if (resultSet.value) {
+      commitResultSet(resultSet.value);
+    }
+  }
+
   return {
     draft,
     status,
@@ -1717,6 +1782,7 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
     resultSet,
     activeResultRefno,
     canSubmit,
+    spatialCapabilities,
     setMode,
     applyCurrentSelection,
     startPickCenter,
@@ -1726,6 +1792,7 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
     activateResult,
     loadResults,
     showOnlySpecGroup,
+    showOnlyDbnumGroup,
     toggleResultVisible,
     setAllResultsVisible,
     isolateResults,

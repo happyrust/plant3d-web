@@ -2,10 +2,9 @@
 
 - 日期：2026-09-13
 - 状态：**已批准（Plannotator 第 2 轮 `approved`，2026-09-13 10:38）**；实施中，§5 六项按推荐项 (a) 执行
-  - 进度：**P2 已完成**（2026-09-13 11:45，plant3d-web `8127bcb`，见 §4 P2 备注）；**P3 代码与单测已完成**（11:52，plant3d-web
-    单独一提交，见 §4 P3 备注；与真服务联调一项要等 P1）；P0 / P1 仍等并行会话的迁移改动收口
-    （gen-model-refactor 到 11:26 还在连续提交 `7bacdb81f` 等，`verification/migration-baseline-20260913/` 2 万余文件未跟踪）；
-    P4 可在 P3 之上继续
+  - 进度：**P2 已完成**（2026-09-13 11:45，plant3d-web `8127bcb`）；**P3 代码与单测已完成**（11:53，`12c66fe`；真服务联调等 P1）；
+    **P4 已完成，「整库生成」入口除外**（12:05，单独一提交，见 §4 P4 备注——入口怎么接需要拍板）；P0 / P1 仍等并行会话的迁移改动收口
+    （gen-model-refactor 到 11:26 还在连续提交 `7bacdb81f` 等，`verification/migration-baseline-20260913/` 2 万余文件未跟踪）
   - 第 1 轮（09:36）唯一批注落在后端基线行：「先提交这个」。已落实：后端原 83 个在飞改动已由并行会话提交为
     `f888e9dc2 refactor: retire publish stage and complete lazy data routing`（10:10，215 文件），其后又有
     `b82d6fbbb fix(room)` / `8f99cbc64 fix(api)` 两条（10:25 / 10:26）；分支 10:21 改名
@@ -289,6 +288,28 @@ P2 只碰 plant3d-web，可以先行。P1 的新代码集中在新模块 `spatia
 - 验收：既有批量加载用例（代理盒兜底、按 dbnum 分组）在 legacy 下不变；新增 v1 分支用例（不调 parquet / SSE，调
   `records.instanceEntriesByRefnos`）；抽屉在两种源下的快照或 DOM 断言各 1 个。
 - 文件：`src/composables/useSpatialQuery.ts`、`src/components/spatial-query/SpatialQueryDrawer.vue`、对应测试。
+- **完成备注（2026-09-13；「整库生成」入口未做，见末条）**：
+  - 批量加载 v1 分支**比本节草案少一步**：代码真值是 `loadDbnoInstancesForVisibleRefnosDtx`（`useDbnoInstancesDtxLoader.ts` L757-771）
+    在页面开关为 v1 时已把 `dataSource` 改写成 `gen-model-v1` 并自己调 `records.instanceEntriesByRefnos`（内部 ensure → records），
+    所以 store 里 `loadRefnosBySource(...,'backend')` 这一步就是 ensure → records，不必再单独调一次；v1 分支只需**跳过 parquet
+    探测与旧后端 SSE 生成**，backend 加载后仍缺的就是「没有可渲染几何」，交给既有的 AABB 代理兜底。
+  - 结果自带 `dbnum` 优先分桶：`BatchLoadOptions.dbnumByRefno`（store 从本页条目的 `dbnum` + 全集 `by_dbnum` 汇成，legacy 下
+    条目没有 dbnum 时只有全集那份），`batchLoadSpatialQueryRefnos` 先查它、缺失才 `getDbnumByRefno`。
+  - store 新增：`spatialCapabilities`（`getModelSource().spatial.capabilities`）、`resolveBatchRefnos / loadResults({dbnum})`、
+    `showOnlyDbnumGroup(dbnum)`；结果集带 `items[].dbnum`、`dbnumGroups`、`coverage`；范围查询默认排序在无专业维度时由
+    `specThenDistance` 退到 `distanceAsc`（否则 v1 下抽屉高亮着一个不存在的「按专业」）。
+  - 抽屉按 `spatialCapabilities.specValues`：隐藏专业过滤块与「按专业」排序档；结果分组抽象成 `DisplayGroup{kind:'spec'|'dbnum'}`，
+    v1 下按库分组（组头「库 24381」、小计取服务端 `dbnumGroups` 全量计数、全集有而本页无的库也露组头）、按钮改「加载本库 / 仅显示本库」；
+    摘要 / 空态文案随维度切换；`coverage === 'global-tree'` 时结果区顶部提示「结果仅含已生成过模型的构件…先显示它们再查会被纳入」。
+  - **未做：「整库生成」入口。** 整库显示的实现 `showModelByDbnum` 在 `useModelGeneration(options)` 里，实例由 `ViewerPanel.vue`
+    持有（`modelGenerationRef`），今天只有 URL `?show_dbnum=` 一条路触发；抽屉要接它，得要么走 `useViewerContext` 那种
+    `window` 事件 + ViewerPanel 侧 handler（照 `showModelByRefnos` 的先例，要改 4000 行的 ViewerPanel），要么在抽屉里直接
+    `getGenModelV1ModelSource().collectDbnum()` + 分批装 DTX（把 ViewerPanel 的整库装载策略再写一遍）。两条都不是本切片该自己定的，
+    先只给提示文字；入口按拍板结果另起一小切片。
+  - 验证：`npx vitest run src/composables/useSpatialQuery.test.ts src/model-source src/api/genModelV1Api.test.ts src/api/genModelSpatialApi.test.ts
+    src/components/spatial-query` → 14 文件 190 用例全绿（store 18 → 20：v1 结果集 / 默认排序 / 按库作用域 / 仅显示本库、v1 缺省批量加载
+    跳 parquet 与 SSE 且不逐个查库号；抽屉 18 → 20：legacy 与 v1 各一条 DOM 断言）；`node scripts/type-check.mjs` 本切片文件 0 新增
+    （剩余 5 条新增全在并行会话正在改的 `useDtxTools.*.test.ts`）；`npx eslint` 改动文件 0 错。真服务 / 浏览器（§7 第 5 步）**未验证**，等 P1。
 
 ### P5 — 文档与收口
 

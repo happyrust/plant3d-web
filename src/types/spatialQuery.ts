@@ -61,6 +61,8 @@ export type SpatialQueryResultItem = {
   noun: string;
   specValue: number;
   specName: string;
+  /** 所属库；gen-model-v1 源由服务端直接给，legacy 结果里没有（批量加载时按 refno 另查） */
+  dbnum?: number | null;
   distance: number | null;
   loaded: boolean;
   visible: boolean;
@@ -76,6 +78,20 @@ export type SpatialQueryResultGroup = {
   specName: string;
   count: number;
   items: SpatialQueryResultItem[];
+};
+
+/** 完整命中集合按库（dbnum）的计数，不受分页影响；gen-model-v1 源给（它没有专业维度），legacy 没有。 */
+export type SpatialQueryDbnumGroupCount = {
+  dbnum: number;
+  count: number;
+};
+
+/**
+ * 当前数据源在空间查询上的能力（来自 `getModelSource().spatial.capabilities`）。
+ * `specValues=false`（gen-model-v1）时抽屉隐藏专业筛选 / 专业排序 / 专业分组，结果改按库分组。
+ */
+export type SpatialQueryCapabilities = {
+  specValues: boolean;
 };
 
 export type SpatialQueryFilterOptions = {
@@ -132,6 +148,10 @@ export type SpatialQueryResultSet = {
   truncated: boolean;
   warnings: string[];
   groups: SpatialQueryResultGroup[];
+  /** 服务端给的按库分组计数（gen-model-v1）；legacy 为 null */
+  dbnumGroups?: SpatialQueryDbnumGroupCount[] | null;
+  /** gen-model-v1：结果覆盖的索引层（`global-tree` = 只含已生成过模型的构件）；legacy 为 null */
+  coverage?: string | null;
 };
 
 export type SpatialQueryDraft = {

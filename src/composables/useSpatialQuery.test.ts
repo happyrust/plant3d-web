@@ -26,18 +26,29 @@ const spatialSourceMocks = vi.hoisted(() => ({
     cap: 0,
   })),
   negativeNouns: vi.fn(async (): Promise<NegativeNounsResult> => ({ success: false, nouns: [] })),
+  /** 当前「数据源」：缺省 legacy（有专业维度）；v1 用例翻成 gen-model-v1 / specValues=false */
+  state: { kind: 'legacy' as 'legacy' | 'gen-model-v1', specValues: true },
 }));
 
 vi.mock('@/model-source', () => ({
   getModelSource: () => ({
-    kind: 'legacy',
+    kind: spatialSourceMocks.state.kind,
     spatial: {
       nearby: spatialSourceMocks.nearby,
       nearbyRefnos: spatialSourceMocks.nearbyRefnos,
       negativeNouns: spatialSourceMocks.negativeNouns,
-      capabilities: { specValues: true },
+      capabilities: { specValues: spatialSourceMocks.state.specValues },
     },
   }),
+}));
+
+const batchLoadDeps = vi.hoisted(() => ({
+  loadDbnoInstancesForVisibleRefnosDtx: vi.fn(async (_layer: unknown, _dbno: number, refnos: string[], _options?: Record<string, unknown>) => ({
+    loadedRefnos: refnos,
+    missingRefnos: [] as string[],
+  })),
+  isParquetAvailable: vi.fn(async () => false),
+  triggerBatchGenerateSse: vi.fn(async () => ({ failedRefnos: [] as string[] })),
 }));
 
 vi.mock('@/composables/useDbnoInstancesDtxLoader', async (importOriginal) => {
@@ -45,8 +56,17 @@ vi.mock('@/composables/useDbnoInstancesDtxLoader', async (importOriginal) => {
   return {
     ...actual,
     loadDtxAabbProxyRefnos: dtxLoaderMocks.loadDtxAabbProxyRefnos,
+    loadDbnoInstancesForVisibleRefnosDtx: batchLoadDeps.loadDbnoInstancesForVisibleRefnosDtx,
   };
 });
+
+vi.mock('@/composables/useDbnoInstancesParquetLoader', () => ({
+  useDbnoInstancesParquetLoader: () => ({ isParquetAvailable: batchLoadDeps.isParquetAvailable }),
+}));
+
+vi.mock('@/api/genModelStreamGenerateApi', () => ({
+  triggerBatchGenerateSse: batchLoadDeps.triggerBatchGenerateSse,
+}));
 
 vi.mock('@/composables/useDbMetaInfo', () => ({
   ensureDbMetaInfoLoaded: dbMetaMocks.ensureDbMetaInfoLoaded,
@@ -119,6 +139,8 @@ describe('createSpatialQueryStore', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     __resetNegativeNounRegistryForTests();
+    spatialSourceMocks.state.kind = 'legacy';
+    spatialSourceMocks.state.specValues = true;
     dbMetaMocks.ensureDbMetaInfoLoaded.mockResolvedValue(undefined);
     dbMetaMocks.getDbnumByRefno.mockReturnValue(7997);
     dtxLoaderMocks.loadDtxAabbProxyRefnos.mockImplementation((_layer, _dbno, entries) => ({
@@ -763,6 +785,135 @@ describe('createSpatialQueryStore', () => {
     expect(spatialSourceMocks.negativeNouns).toHaveBeenCalledTimes(1);
     // 没有下一页就不取全集
     expect(spatialSourceMocks.nearbyRefnos).toHaveBeenCalledTimes(1);
+  });
+
+  it('gen-model-v1：结果带 dbnum / dbnum_groups / coverage 进结果集；范围查询默认排序退到按距离；按库分组的批量作用域与「仅显示本库」', async () => {
+    spatialSourceMocks.state.kind = 'gen-model-v1';
+    spatialSourceMocks.state.specValues = false;
+    const viewer = createViewerStub();
+    spatialSourceMocks.nearby.mockResolvedValueOnce({
+      success: true,
+      total_count: 3,
+      returned_count: 3,
+      page: 1,
+      per_page: 100,
+      has_more: false,
+      results: [
+        { refno: 'loaded_a', noun: 'PIPE', spec_value: 0, dbnum: 24381, distance: 5 },
+        { refno: 'server_only', noun: 'EQUI', spec_value: 0, dbnum: 24383, distance: 18 },
+        { refno: 'server_b', noun: 'BRAN', spec_value: 0, dbnum: 24381, distance: 30 },
+      ],
+      dbnum_groups: [{ dbnum: 24381, count: 2 }, { dbnum: 24383, count: 1 }],
+      coverage: 'global-tree',
+      spatial_state: 'ready',
+    } satisfies SpatialQueryResult);
+    const batchLoadRefnos = vi.fn(
+      async (refnos: string[], _options?: { flyTo?: boolean; dbnumByRefno?: ReadonlyMap<string, number> }) => ({ ok: refnos, fail: [] }),
+    );
+
+    const store = createSpatialQueryStore({
+      viewerRef: ref(viewer),
+      selection: { selectedRefno: { value: 'loaded_a' } } as any,
+      toolStore: { pickedQueryCenter: { value: null }, setToolMode: vi.fn(), setPickedQueryCenter: vi.fn() } as any,
+      batchLoadRefnos,
+    });
+
+    expect(store.spatialCapabilities.value).toEqual({ specValues: false });
+    store.draft.mode = 'range';
+    // legacy 下范围查询默认「按专业」；v1 没有专业维度，退到由近及远
+    expect(store.draft.sortBy).toBe('distanceAsc');
+    store.draft.rangeCenterSource = 'selected';
+    store.draft.radius = 50;
+    await store.submitQuery();
+
+    expect(store.status.value).toBe('ready');
+    expect(store.resultSet.value?.items.map((item) => [item.refno, item.dbnum])).toEqual([
+      ['loaded_a', 24381],
+      ['server_only', 24383],
+      ['server_b', 24381],
+    ]);
+    expect(store.resultSet.value?.dbnumGroups).toEqual([{ dbnum: 24381, count: 2 }, { dbnum: 24383, count: 1 }]);
+    expect(store.resultSet.value?.coverage).toBe('global-tree');
+    // 没有专业维度：本地分组只剩 spec 0 一组，计数仍是全量
+    expect(store.resultSet.value?.groups.map((group) => [group.specValue, group.count])).toEqual([[0, 3]]);
+
+    // 按库加载：只取该库的 refno，并把结果自带的 dbnum 作为分桶提示交给批量加载
+    await store.loadResults({ dbnum: 24381, flyTo: false });
+    expect(batchLoadRefnos).toHaveBeenCalledTimes(1);
+    const [refnos, loadOptions] = batchLoadRefnos.mock.calls[0]!;
+    expect(refnos).toEqual(['loaded_a', 'server_b']);
+    expect(Array.from(loadOptions?.dbnumByRefno?.entries() ?? [])).toEqual([
+      ['loaded_a', 24381],
+      ['server_b', 24381],
+    ]);
+
+    // 仅显示本库：显示该库、隐藏其余，条目 visible 同步
+    viewer.scene.setObjectsVisible.mockClear();
+    store.showOnlyDbnumGroup(24383);
+    expect(viewer.scene.setObjectsVisible).toHaveBeenCalledWith(['server_only'], true);
+    expect(viewer.scene.setObjectsVisible).toHaveBeenCalledWith(['loaded_a', 'server_b'], false);
+    expect(store.resultSet.value?.items.map((item) => [item.refno, item.visible])).toEqual([
+      ['loaded_a', false],
+      ['server_only', true],
+      ['server_b', false],
+    ]);
+  });
+
+  it('gen-model-v1：缺省批量加载跳过 parquet 与旧后端 SSE 生成，按结果自带 dbnum 分桶直接走 backend 加载', async () => {
+    spatialSourceMocks.state.kind = 'gen-model-v1';
+    spatialSourceMocks.state.specValues = false;
+    const viewer = createViewerStub();
+    viewer.__dtxLayer = { id: 'dtx' };
+    spatialSourceMocks.nearby.mockResolvedValueOnce({
+      success: true,
+      total_count: 2,
+      returned_count: 2,
+      page: 1,
+      per_page: 100,
+      has_more: false,
+      results: [
+        { refno: 'server_only', noun: 'EQUI', spec_value: 0, dbnum: 24383, distance: 18, aabb: { min: { x: 20, y: 0, z: 0 }, max: { x: 30, y: 10, z: 10 } } },
+        { refno: 'server_b', noun: 'BRAN', spec_value: 0, dbnum: 24381, distance: 30, aabb: { min: { x: 40, y: 0, z: 0 }, max: { x: 50, y: 10, z: 10 } } },
+      ],
+    } satisfies SpatialQueryResult);
+    // 批量加载后 viewer 里要能看到这两个对象，否则会走 AABB 代理兜底
+    batchLoadDeps.loadDbnoInstancesForVisibleRefnosDtx.mockImplementation(async (_layer, _dbno, refnos, _options) => {
+      for (const refno of refnos) {
+        viewer.scene.objects[refno] = { id: refno, visible: true, aabb: [0, 0, 0, 1, 1, 1] };
+        viewer.scene.objectIds.push(refno);
+      }
+      return { loadedRefnos: refnos, missingRefnos: [] };
+    });
+
+    const store = createSpatialQueryStore({
+      viewerRef: ref(viewer),
+      selection: { selectedRefno: { value: 'loaded_a' } } as any,
+      toolStore: { pickedQueryCenter: { value: null }, setToolMode: vi.fn(), setPickedQueryCenter: vi.fn() } as any,
+    });
+    store.draft.mode = 'range';
+    store.draft.rangeCenterSource = 'selected';
+    store.draft.radius = 50;
+    await store.submitQuery();
+    expect(store.status.value).toBe('ready');
+
+    dbMetaMocks.getDbnumByRefno.mockClear();
+    await store.loadResults({ onlyUnloaded: true, flyTo: false });
+
+    expect(store.status.value).toBe('ready');
+    expect(store.error.value).toBeNull();
+    // 按服务端给的 dbnum 分桶，不再逐个查库号
+    expect(dbMetaMocks.getDbnumByRefno).not.toHaveBeenCalled();
+    const calls = batchLoadDeps.loadDbnoInstancesForVisibleRefnosDtx.mock.calls.map((call) => [call[1], call[2]]);
+    expect(calls).toEqual(expect.arrayContaining([[24383, ['server_only']], [24381, ['server_b']]]));
+    expect(calls).toHaveLength(2);
+    expect(batchLoadDeps.loadDbnoInstancesForVisibleRefnosDtx.mock.calls[0]![3]).toEqual(expect.objectContaining({ dataSource: 'backend' }));
+    // v1 下没有 parquet，也不再起旧后端的 SSE 批量生成
+    expect(batchLoadDeps.isParquetAvailable).not.toHaveBeenCalled();
+    expect(batchLoadDeps.triggerBatchGenerateSse).not.toHaveBeenCalled();
+    expect(store.resultSet.value?.items.map((item) => [item.refno, item.loaded])).toEqual([
+      ['server_only', true],
+      ['server_b', true],
+    ]);
   });
 
   it('批量加载当前筛选结果时应走精确 refno 批量加载并刷新统计', async () => {
