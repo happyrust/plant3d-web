@@ -5,12 +5,15 @@ import { Matrix4, OrthographicCamera, Vector3 } from 'three';
 import {
   buildGraphicsPickCandidates,
   buildPositionPickCandidate,
+  buildTubingAxisCandidate,
   cloneMeasurementPickSourceSettings,
   measurementPickSettingsFromLegacy,
   resolveMeasurementPickCandidates,
   scenePositionFromTransform,
   type MeasurementPickCandidate,
 } from './useMeasurementPickSources';
+
+import type { RefinedTubingAxis } from '@/measurement/tubing/tubingAxis';
 
 import { analyseMeshGraphics } from '@/measurement/graphics/meshFeatureGraphics';
 
@@ -365,6 +368,102 @@ describe('useMeasurementPickSources', () => {
       expect(graphics.hit?.feature).toBe('graphics-plane');
       // `show` is off by default: the picked detail is highlighted instead of drawing crosses.
       expect(graphics.visibleCandidates).toEqual([]);
+    });
+  });
+
+  describe('buildTubingAxisCandidate · E3D TUBING on a tube the ray hit', () => {
+    const rect = { width: 200, height: 200 }; // orthographic camera: 100 px per world unit
+    // Tube axis along +x at y = 0.3 (screen 70 px above centre), radius 0.3, from x = −0.8 to 0.6.
+    const axis: RefinedTubingAxis = {
+      start: [-0.8, 0.3, 0],
+      end: [0.6, 0.3, 0],
+      radius: 0.3,
+      startPoint: { position: [-0.8, 0.3, 0], label: 'ELBO P-Point #2' },
+      endPoint: null,
+    };
+    const rayAt = (x: number, y: number) => ({ origin: new Vector3(x, y, 1), direction: new Vector3(0, 0, -1) });
+    const cursorAt = (x: number, y: number) => ({ x: 100 + x * 100, y: 100 - y * 100 });
+
+    it('control point = axis point nearest the ray (EDGTUBING.exact); segment / direction carry the axis; refined end labels are echoed', () => {
+      const candidate = buildTubingAxisCandidate({
+        objectId: 'o:24381_145018:3',
+        entityId: 'o:24381_145018:3',
+        axis,
+        ray: rayAt(0.1, 0.05), // on the tube surface below the axis
+      })!;
+      expect(candidate).not.toBeNull();
+      expect(candidate.source).toBe('tubing_axis');
+      expect(candidate.feature).toBe('tubing');
+      expect(candidate.rayHit).toBe(true);
+      expect(candidate.id).toBe('tubing:o:24381_145018:3');
+      // Bare label like the Graphics '边' / '面': the command bar prefixes the noun → `TUBI 轴线（…）`.
+      expect(candidate.label).toBe('轴线（ELBO P-Point #2）');
+      expect(candidate.worldPos.toArray().map((v) => Number(v.toFixed(9)))).toEqual([0.1, 0.3, 0]);
+      expect(candidate.segment?.start.toArray()).toEqual([-0.8, 0.3, 0]);
+      expect(candidate.segment?.end.toArray()).toEqual([0.6, 0.3, 0]);
+      expect(candidate.direction!.clone().normalize().toArray().map((v) => Number(v.toFixed(9)))).toEqual([1, 0, 0]);
+      expect(candidate.plane).toBeUndefined();
+
+      // Beyond the end the control point clamps to the end (GMFLINE control on the segment).
+      const past = buildTubingAxisCandidate({ objectId: 'o:1', entityId: 'o:1', axis, ray: rayAt(0.9, 0.3) })!;
+      expect(past.worldPos.toArray().map((v) => Number(v.toFixed(9)))).toEqual([0.6, 0.3, 0]);
+      // No refined ends → plain label.
+      const bare = buildTubingAxisCandidate({
+        objectId: 'o:1', entityId: 'o:1', axis: { ...axis, startPoint: null, endPoint: null }, ray: rayAt(0, 0),
+      })!;
+      expect(bare.label).toBe('轴线');
+    });
+
+    it('rayHit admits the axis anywhere on the tube but only at the aperture edge: a P-Point inside its own aperture wins, a cursor near the axis line wins outright', () => {
+      const settings = cloneMeasurementPickSourceSettings();
+      const tube = buildTubingAxisCandidate({ objectId: 'o:1', entityId: 'o:1', axis, ray: rayAt(0.1, 0.05) })!;
+      // Cursor 25 px below the axis line (well outside the 18 px axis aperture) but on the tube.
+      const alone = resolveMeasurementPickCandidates({
+        cursor: cursorAt(0.1, 0.05), camera: camera(), rect, settings, candidates: [tube], pickLayer: { filter: 'any', pickType: 'snap' },
+      });
+      expect(alone.hit?.id).toBe('tubing:o:1');
+      expect(alone.hit?.pixelDistance).toBe(settings.tubing_axis.thresholdPx);
+
+      // A P-Point 8 px from the cursor (inside its 12 px aperture) beats the clamped tube.
+      const ppoint: MeasurementPickCandidate = {
+        id: 'ptset:24381_145030#1',
+        source: 'ptset',
+        entityId: 'ptset:24381_145030#1',
+        objectId: 'o:24381_145030:ptset',
+        worldPos: new Vector3(0.18, 0.05, 0),
+      };
+      const withPoint = resolveMeasurementPickCandidates({
+        cursor: cursorAt(0.1, 0.05), camera: camera(), rect, settings, candidates: [tube, ppoint], pickLayer: { filter: 'any', pickType: 'snap' },
+      });
+      expect(withPoint.snapCandidates.map((item) => item.id)).toEqual(['ptset:24381_145030#1', 'tubing:o:1']);
+
+      // Cursor 2 px from the axis line: the real projected distance is kept and the tube wins over a farther P-Point.
+      const near = buildTubingAxisCandidate({ objectId: 'o:1', entityId: 'o:1', axis, ray: rayAt(0.1, 0.28) })!;
+      const nearResolved = resolveMeasurementPickCandidates({
+        cursor: cursorAt(0.1, 0.28), camera: camera(), rect, settings, candidates: [near, ppoint], pickLayer: { filter: 'any', pickType: 'snap' },
+      });
+      expect(nearResolved.hit?.id).toBe('tubing:o:1');
+      expect(nearResolved.hit?.pixelDistance).toBeCloseTo(2, 6);
+
+      // Not a snap candidate without rayHit when the control point is outside the aperture.
+      const plain = { ...tube, rayHit: false };
+      expect(resolveMeasurementPickCandidates({
+        cursor: cursorAt(0.1, 0.05), camera: camera(), rect, settings, candidates: [plain], pickLayer: { filter: 'any', pickType: 'snap' },
+      }).hit).toBeNull();
+    });
+
+    it('is admitted under Any and Element (E3D element pick returns TUBING), never under Pline / Ppoint / Graphics / Screen', () => {
+      const settings = cloneMeasurementPickSourceSettings();
+      const tube = buildTubingAxisCandidate({ objectId: 'o:1', entityId: 'o:1', axis, ray: rayAt(0.1, 0.3) })!;
+      const hitUnder = (filter: 'any' | 'element' | 'pline' | 'ppoint' | 'graphics' | 'screen') => resolveMeasurementPickCandidates({
+        cursor: cursorAt(0.1, 0.3), camera: camera(), rect, settings, candidates: [tube], pickLayer: { filter, pickType: 'snap' },
+      }).hit?.id ?? null;
+      expect(hitUnder('any')).toBe('tubing:o:1');
+      expect(hitUnder('element')).toBe('tubing:o:1');
+      expect(hitUnder('pline')).toBeNull();
+      expect(hitUnder('ppoint')).toBeNull();
+      expect(hitUnder('graphics')).toBeNull();
+      expect(hitUnder('screen')).toBeNull();
     });
   });
 });

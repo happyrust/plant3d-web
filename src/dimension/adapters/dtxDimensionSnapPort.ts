@@ -44,6 +44,8 @@ const SOURCE_SEMANTICS: Readonly<Record<
   mesh_pick_point: { source: 'model-surface', accuracy: 'approximate' },
   // Drawn edges / facets come from the render tessellation, not the design surface.
   mesh_graphics: { source: 'model-surface', accuracy: 'approximate' },
+  // The tube axis is the placement matrix's z axis (the design centre-line), ends refined onto P-Points.
+  tubing_axis: { source: 'primitive-key-point', accuracy: 'exact' },
 };
 
 function subtract(a: Vec3, b: Vec3): Vec3 {

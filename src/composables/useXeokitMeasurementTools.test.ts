@@ -2197,4 +2197,153 @@ describe('useXeokitMeasurementTools', () => {
       tools.dispose();
     });
   });
+
+  describe('E3D 拾取层 · TUBING 轴线（Phase A，前端从直管放置矩阵派生）', () => {
+    /**
+     * 场景：gen-model 单位直管（局部 z ∈ [0, 1]，半径 ½）经放置矩阵 T·R·S 摆到场景里：
+     * 轴线从 (1.4, 4, 6) 沿 +X 到 (2.6, 4, 6)，外径 0.4。正交相机在 (2, 4, 7) 朝 −Z 看，
+     * 画布 200 px ↔ 2 世界单位（100 px / 单位）：轴线落在 py = 100、px ∈ [40, 160]。
+     * `pickPoint` 返回管顶面上的命中点（z = 6.2）；`isTubingObject` 只认这个对象。
+     */
+    async function setupTubingTools() {
+      const [{ useToolStore }, { useXeokitMeasurementTools }, { useXeokitMeasurementStyleStore }] = await Promise.all([
+        import('@/composables/useToolStore'),
+        import('@/composables/useXeokitMeasurementTools'),
+        import('@/composables/useXeokitMeasurementStyleStore'),
+      ]);
+
+      const store = useToolStore();
+      store.clearAll();
+      store.setToolMode('xeokit_measure_distance');
+      const measurementStyle = useXeokitMeasurementStyleStore();
+      measurementStyle.resetStyle();
+      measurementStyle.updateMeasurementPickSource('ptset', { show: false, snap: false });
+      measurementStyle.updateMeasurementPickSource('position', { show: false, snap: false });
+      measurementStyle.updateStyle({ keepMeasurementAnnotation: true });
+
+      const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 10);
+      camera.position.set(2, 4, 7);
+      camera.lookAt(2, 4, 6);
+      camera.updateMatrixWorld(true);
+      camera.updateProjectionMatrix();
+
+      const canvas = document.createElement('canvas');
+      Object.defineProperty(canvas, 'getBoundingClientRect', {
+        value: () => ({ left: 0, top: 0, width: 200, height: 200 }),
+      });
+
+      // 单位直管的局部几何只用到包围盒：min (−½, −½, 0) / max (½, ½, 1)。
+      const geometry = new THREE.BoxGeometry(1, 1, 1).translate(0, 0, 0.5);
+      const placement = new THREE.Matrix4().compose(
+        new THREE.Vector3(1.4, 4, 6),
+        new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), new THREE.Vector3(1, 0, 0)),
+        new THREE.Vector3(0.4, 0.4, 1.2),
+      );
+      const tubeObjectId = 'o:24381_145018:3';
+
+      const pickPoint = vi.fn((pos: { x: number; y: number }) => ({
+        objectId: tubeObjectId,
+        point: new THREE.Vector3(2 + (pos.x - 100) / 100, 4 - (pos.y - 100) / 100, 6.2),
+        distance: 0.8,
+      }));
+      const dimensionSystem = {
+        replaceExternalSource: vi.fn(),
+        viewport: { setSelection: vi.fn(), getSelection: vi.fn(() => null) },
+      } as any;
+      const globalModelMatrix = new THREE.Matrix4().makeScale(0.001, 0.001, 0.001);
+      globalModelMatrix.setPosition(-10, -20, -30);
+      const getObjectGeometryData = vi.fn((objectId: string) => (
+        objectId === tubeObjectId ? { geometry, matrix: placement.clone() } : null
+      ));
+      const tools = useXeokitMeasurementTools({
+        dtxViewerRef: ref({ camera, canvas } as any),
+        dtxLayerRef: ref({
+          _totalObjects: 1,
+          getGlobalModelMatrix: () => globalModelMatrix.clone(),
+          getObjectGeometryData,
+        } as any),
+        selectionRef: ref({ pickPoint } as any),
+        overlayContainerRef: ref(document.createElement('div')),
+        getDimensionSystem: () => dimensionSystem,
+        store,
+        compatViewerRef: ref(null),
+        requestRender: null,
+        isTubingObject: (objectId) => objectId === tubeObjectId,
+      });
+
+      const clickAt = (x: number, y: number) => tools.onCanvasPointerUp(canvas, new PointerEvent('pointerup', {
+        clientX: x,
+        clientY: y,
+        button: 0,
+      }));
+      const hoverAt = (x: number, y: number) => tools.onCanvasPointerMove(canvas, new PointerEvent('pointermove', {
+        clientX: x,
+        clientY: y,
+      }));
+      return { store, measurementStyle, tools, clickAt, hoverAt, getObjectGeometryData };
+    }
+
+    it('Any × Snap：光标落在直管上即拾到轴线（EDGTUBING.snap 取近端）；Cursor 取轴线上离射线最近处；Mid-Point 取中点', async () => {
+      const { store, measurementStyle, tools, clickAt, hoverAt } = await setupTubingTools();
+      expect(tools.statusText.value).toMatch(/\(Snap\) Snap : 等待捕捉（管身轴线（TUBING））$/);
+
+      // 画布 (140, 92) ↔ 管面 (2.4, 4.08)：离轴线 8 px，射线命中直管 → 轴线候选；标签裸给「轴线」，noun 由命令条补。
+      hoverAt(140, 92);
+      expect(tools.hoverSnapTarget.value?.label).toBe('轴线 · Snap');
+
+      // Snap：控制点 (2.4, 4, 6) 更靠近终点 (2.6, 4, 6) → 落终点。
+      clickAt(140, 92);
+      const draft = store.currentXeokitDistanceDraft.value!;
+      expect(draft).not.toBeNull();
+      expect(draft.origin.sourceInfo?.source).toBe('tubing_axis');
+      expect(draft.origin.sourceInfo?.candidateId).toBe('tubing:o:24381_145018:3');
+      expect(draft.origin.worldPos[0]).toBeCloseTo(2.6, 6);
+      expect(draft.origin.worldPos[1]).toBeCloseTo(4, 6);
+      expect(draft.origin.worldPos[2]).toBeCloseTo(6, 6);
+      store.clearCurrentXeokitDraft();
+
+      // Cursor（EDGTUBING.exact）：轴线上离射线最近处 (2.4, 4, 6)，不是管面命中点。
+      measurementStyle.updateMeasurementPickLayer({ pickType: 'exact' });
+      await nextTick();
+      clickAt(140, 92);
+      const exact = store.currentXeokitDistanceDraft.value!;
+      expect(exact.origin.worldPos[0]).toBeCloseTo(2.4, 6);
+      expect(exact.origin.worldPos[1]).toBeCloseTo(4, 6);
+      expect(exact.origin.worldPos[2]).toBeCloseTo(6, 6);
+      store.clearCurrentXeokitDraft();
+
+      // Mid-Point（GMFLINE.proportion 0.5）：轴线中点 (2, 4, 6)。
+      measurementStyle.updateMeasurementPickLayer({ pickType: 'midpoint' });
+      await nextTick();
+      clickAt(140, 92);
+      const mid = store.currentXeokitDistanceDraft.value!;
+      expect(mid.origin.worldPos[0]).toBeCloseTo(2, 6);
+      expect(mid.origin.worldPos[1]).toBeCloseTo(4, 6);
+      expect(mid.origin.worldPos[2]).toBeCloseTo(6, 6);
+
+      tools.dispose();
+    });
+
+    it('Pline / Ppoint / Graphics 过滤器不放行 TUBING（E3D 只在 Element 类拾取模式回 TUBING）；Element 放行', async () => {
+      const { store, measurementStyle, tools, clickAt, getObjectGeometryData } = await setupTubingTools();
+
+      for (const filter of ['pline', 'ppoint', 'graphics'] as const) {
+        store.clearCurrentXeokitDraft();
+        measurementStyle.updateMeasurementPickLayer({ filter, pickType: 'snap' });
+        await nextTick();
+        getObjectGeometryData.mockClear();
+        clickAt(140, 92);
+        expect(store.currentXeokitDistanceDraft.value?.origin.sourceInfo?.source ?? null, filter).not.toBe('tubing_axis');
+        // 不放行时连轴线都不派生（过滤器管准入，先于几何分析）；Graphics 过滤器下读几何的是网格边 / 面分析，不在此列。
+        if (filter !== 'graphics') expect(getObjectGeometryData, filter).not.toHaveBeenCalled();
+      }
+
+      measurementStyle.updateMeasurementPickLayer({ filter: 'element', pickType: 'snap' });
+      await nextTick();
+      clickAt(140, 92);
+      expect(store.currentXeokitDistanceDraft.value?.origin.sourceInfo?.source).toBe('tubing_axis');
+
+      tools.dispose();
+    });
+  });
 });

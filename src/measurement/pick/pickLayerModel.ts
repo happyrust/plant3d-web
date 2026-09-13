@@ -279,12 +279,14 @@ export function formatMeasurementPrompt(input: MeasurementPromptInput): string {
 
 /**
  * Feature class of a pick candidate — the E3D `EDGPOSITIONDATA.type` the filter
- * tests against (`PPOINT` / `PLINE` / `ELEMENT` / `GRAPHICS` / `DESIGNAID` / `3D_LINE`).
+ * tests against (`PPOINT` / `PLINE` / `ELEMENT` / `TUBING` / `GRAPHICS` / `DESIGNAID` / `3D_LINE`).
  */
 export type MeasurementPickFeature =
   | 'ppoint'
   | 'pline'
   | 'element'
+  /** Implied tube of a branch, picked as its centre-line (`EDGTUBING.line`). */
+  | 'tubing'
   | 'surface'
   | 'graphics-line'
   | 'graphics-plane'
@@ -302,6 +304,9 @@ export type MeasurementPickFeature =
  *   when no significant point is near (free-surface mode) and for `Element` +
  *   `Cursor` (`edgTypes.attribute(noun).exact()`, the exact point on the element).
  * - `Element` + `Cursor` admits the surface point for the same reason, and only there.
+ * - `TUBING` is what the element pick modes (`pany` / `pick`, `EDGPICKDATA.viewData`
+ *   `data[1]`) return when the cursor is on an implied tube, so the tube axis is
+ *   admitted under `Any` and `Element` — never under `Pline` / `Ppoint` / `Graphics`.
  */
 export function measurementPickFilterAdmits(
   filter: MeasurementPickFilterId,
@@ -310,9 +315,9 @@ export function measurementPickFilterAdmits(
 ): boolean {
   switch (filter) {
     case 'any':
-      return feature === 'element' || feature === 'ppoint' || feature === 'pline' || feature === 'surface';
+      return feature === 'element' || feature === 'ppoint' || feature === 'pline' || feature === 'tubing' || feature === 'surface';
     case 'element':
-      return feature === 'element' || (feature === 'surface' && pickType === 'exact');
+      return feature === 'element' || feature === 'tubing' || (feature === 'surface' && pickType === 'exact');
     case 'ppoint':
       return feature === 'ppoint';
     case 'pline':

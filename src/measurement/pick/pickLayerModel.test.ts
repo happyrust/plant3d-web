@@ -13,7 +13,7 @@ import {
 } from './pickLayerModel';
 
 const FEATURES: readonly MeasurementPickFeature[] = [
-  'ppoint', 'pline', 'element', 'surface', 'graphics-line', 'graphics-plane', 'aid', 'external',
+  'ppoint', 'pline', 'element', 'tubing', 'surface', 'graphics-line', 'graphics-plane', 'aid', 'external',
 ];
 
 function admitted(filter: (typeof MEASUREMENT_PICK_FILTER_IDS)[number], pickType: (typeof MEASUREMENT_PICK_TYPE_IDS)[number]) {
@@ -21,10 +21,10 @@ function admitted(filter: (typeof MEASUREMENT_PICK_FILTER_IDS)[number], pickType
 }
 
 describe('measurementPickFilterAdmits · E3D EDGPICK filters', () => {
-  it('Any = E3D stdAny "Element, Ppoint or Pline" (+ Web surface point); never detail graphics / aids / external', () => {
-    expect(admitted('any', 'snap')).toEqual(['ppoint', 'pline', 'element', 'surface']);
-    expect(admitted('any', 'exact')).toEqual(['ppoint', 'pline', 'element', 'surface']);
-    expect(admitted('any', 'midpoint')).toEqual(['ppoint', 'pline', 'element', 'surface']);
+  it('Any = E3D stdAny "Element, Ppoint or Pline" (+ Web surface point, + TUBING from the element pick); never detail graphics / aids / external', () => {
+    expect(admitted('any', 'snap')).toEqual(['ppoint', 'pline', 'element', 'tubing', 'surface']);
+    expect(admitted('any', 'exact')).toEqual(['ppoint', 'pline', 'element', 'tubing', 'surface']);
+    expect(admitted('any', 'midpoint')).toEqual(['ppoint', 'pline', 'element', 'tubing', 'surface']);
   });
 
   it('Graphics = E3D stdGraphics (pickdetail): facet edges and facets only', () => {
@@ -33,9 +33,13 @@ describe('measurementPickFilterAdmits · E3D EDGPICK filters', () => {
     }
   });
 
-  it('Element admits element significant points; the surface point only with Cursor (edgTypes.exact())', () => {
-    expect(admitted('element', 'snap')).toEqual(['element']);
-    expect(admitted('element', 'exact')).toEqual(['element', 'surface']);
+  it('Element admits element significant points and the implied tube (EDGPICKDATA data[1] = TUBING); the surface point only with Cursor (edgTypes.exact())', () => {
+    expect(admitted('element', 'snap')).toEqual(['element', 'tubing']);
+    expect(admitted('element', 'exact')).toEqual(['element', 'tubing', 'surface']);
+    // Pline / Ppoint / Graphics never see the tube axis.
+    expect(admitted('pline', 'snap')).not.toContain('tubing');
+    expect(admitted('ppoint', 'snap')).not.toContain('tubing');
+    expect(admitted('graphics', 'snap')).not.toContain('tubing');
   });
 
   it('Ppoint / Pline / Screen / Aid / External each admit their own feature class', () => {

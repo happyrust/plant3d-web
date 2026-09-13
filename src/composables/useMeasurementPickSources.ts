@@ -7,6 +7,7 @@ import {
   type CanvasRectLike,
 } from './usePtsetSnap';
 
+import type { RefinedTubingAxis, TubingVec3 } from '@/measurement/tubing/tubingAxis';
 import type { Camera } from 'three';
 
 import {
@@ -30,7 +31,9 @@ export type MeasurementPickSourceId =
   | 'position'
   | 'primitive_key_point'
   /** E3D Graphics detail derived from the loaded mesh: drawn edges (lines) and facets (planes). */
-  | 'mesh_graphics';
+  | 'mesh_graphics'
+  /** E3D TUBING: the implied tube's centre-line, derived from the drawn tube object (`tubingAxis.ts`). */
+  | 'tubing_axis';
 
 export type MeasurementPickSourceSetting = {
   show: boolean;
@@ -72,6 +75,14 @@ export type MeasurementPickCandidate = {
   segment?: MeasurementPickSegment;
   /** Present when the candidate is a facet (E3D Graphics PLANE): every single-pick type returns ray ∩ plane. */
   plane?: MeasurementPickPlane;
+  /**
+   * The cursor ray hit this candidate's object (E3D graphics pick on the element
+   * itself, e.g. anywhere on a tube). Such a candidate is admitted for snapping
+   * regardless of how far its control point projects from the cursor — but only at
+   * the **edge** of its source aperture, so anything nearer (a P-Point within its own
+   * aperture) still wins the cohort sort.
+   */
+  rayHit?: boolean;
 };
 
 /**
@@ -88,7 +99,8 @@ export type MeasurementPickPlane = Readonly<{
  * Default E3D feature class per Web point source (`EDGPOSITIONDATA.type`):
  * `ptset` is PPOINT, Item origin / primitive key points are ELEMENT significant
  * points, the mesh surface point is the exact cursor position (Screen / Element+Cursor),
- * mesh graphics are GRAPHICS details (edge by default; facet candidates set `graphics-plane`).
+ * mesh graphics are GRAPHICS details (edge by default; facet candidates set `graphics-plane`),
+ * the tube axis is TUBING.
  */
 export const MEASUREMENT_PICK_SOURCE_DEFAULT_FEATURE: Readonly<
   Record<MeasurementPickSourceId, MeasurementPickFeature>
@@ -98,6 +110,7 @@ export const MEASUREMENT_PICK_SOURCE_DEFAULT_FEATURE: Readonly<
   primitive_key_point: 'element',
   mesh_pick_point: 'surface',
   mesh_graphics: 'graphics-line',
+  tubing_axis: 'tubing',
 };
 
 export function measurementPickCandidateFeature(
@@ -135,6 +148,7 @@ export const MEASUREMENT_PICK_SOURCE_IDS: readonly MeasurementPickSourceId[] = [
   'position',
   'primitive_key_point',
   'mesh_graphics',
+  'tubing_axis',
 ] as const;
 
 export const MEASUREMENT_PICK_SOURCE_LABELS: Record<MeasurementPickSourceId, string> = {
@@ -143,10 +157,17 @@ export const MEASUREMENT_PICK_SOURCE_LABELS: Record<MeasurementPickSourceId, str
   position: 'Item 原点',
   primitive_key_point: '基本体 / PLINE 关键点',
   mesh_graphics: '网格边 / 面（Graphics）',
+  tubing_axis: '管身轴线（TUBING）',
 };
 
 /** Screen aperture inside which a drawn edge wins over the facet under the cursor (E3D `pickdetail`). */
 export const DEFAULT_GRAPHICS_EDGE_SNAP_PX = 12;
+/**
+ * Aperture for the tube axis control point. A ray hit on the tube admits the axis
+ * anyway (`rayHit`), so this only decides how strongly a cursor **near the axis line**
+ * competes with point snaps: at the aperture edge it loses to any P-Point inside its own.
+ */
+export const DEFAULT_TUBING_AXIS_SNAP_PX = DEFAULT_POSITION_SNAP_PX;
 
 export const DEFAULT_MEASUREMENT_PICK_SOURCE_SETTINGS: Readonly<MeasurementPickSourceSettings> = {
   primitive_key_point: {
@@ -181,6 +202,15 @@ export const DEFAULT_MEASUREMENT_PICK_SOURCE_SETTINGS: Readonly<MeasurementPickS
     snap: true,
     priority: 35,
     thresholdPx: DEFAULT_GRAPHICS_EDGE_SNAP_PX,
+  },
+  // E3D picks the tube whenever the element pick lands on it (Any / Element), so the
+  // axis snaps by default; it sits between P-Points (20) and Item origins (30) so a
+  // P-Point at the tube end still wins a tie. No crosses: the axis line is highlighted.
+  tubing_axis: {
+    show: false,
+    snap: true,
+    priority: 25,
+    thresholdPx: DEFAULT_TUBING_AXIS_SNAP_PX,
   },
 };
 
@@ -384,6 +414,54 @@ export function buildGraphicsPickCandidates(input: {
   }];
 }
 
+/** Bare label, like `GRAPHICS_EDGE_LABEL`: the command bar prefixes the element noun (`TUBI 轴线（…）`). */
+export const TUBING_AXIS_LABEL = '轴线';
+
+/**
+ * E3D TUBING pick on a tube the cursor ray hit: one **line** candidate whose control
+ * point is the point of the axis nearest the ray (`EDGTUBING.exact`: `tubeLine ∩
+ * pickLine`), carrying the whole axis as `segment` so Snap takes the nearer end
+ * (`EDGTUBING.snap`) and Mid-Point / Fraction / Proportion / Distance walk the line
+ * (`GMFLINE`). `direction` is the axis for the Perpendicular-to LINE provider and
+ * Intersect (`EDGTUBING.line`). The ends may already be refined onto the adjacent
+ * P-Points (`refineTubingAxisEnds`); their labels are echoed into the candidate label.
+ *
+ * Marked `rayHit`: E3D returns TUBING for a pick anywhere on the tube, not only near
+ * the axis line.
+ */
+export function buildTubingAxisCandidate(input: {
+  objectId: string;
+  entityId: string;
+  axis: RefinedTubingAxis;
+  ray: Readonly<{ origin: Vector3; direction: Vector3 }>;
+}): MeasurementPickCandidate | null {
+  const start = new Vector3(...input.axis.start);
+  const end = new Vector3(...input.axis.end);
+  const nearest = nearestPointOnSegmentToRay(
+    { start: input.axis.start, end: input.axis.end },
+    {
+      origin: [input.ray.origin.x, input.ray.origin.y, input.ray.origin.z] as TubingVec3,
+      direction: [input.ray.direction.x, input.ray.direction.y, input.ray.direction.z] as TubingVec3,
+    },
+  );
+  if (!nearest) return null;
+  const ends = [input.axis.startPoint?.label, input.axis.endPoint?.label]
+    .map((label) => label?.trim())
+    .filter((label): label is string => Boolean(label));
+  return {
+    id: `tubing:${input.objectId}`,
+    source: 'tubing_axis',
+    entityId: input.entityId,
+    objectId: input.objectId,
+    worldPos: new Vector3(nearest.point[0], nearest.point[1], nearest.point[2]),
+    label: ends.length > 0 ? `${TUBING_AXIS_LABEL}（${ends.join(' → ')}）` : TUBING_AXIS_LABEL,
+    feature: 'tubing',
+    segment: { start, end },
+    direction: end.clone().sub(start),
+    rayHit: true,
+  };
+}
+
 function matrixFromColsArray(raw: unknown): Matrix4 | null {
   if (!Array.isArray(raw) || raw.length !== 16) return null;
   const values = raw.map((value) => Number(value));
@@ -532,7 +610,14 @@ export function resolveMeasurementPickCandidates(input: {
       camera: input.camera,
       rect: input.rect,
     });
-    if (!projected || projected.pixelDistance > setting.thresholdPx) continue;
+    if (!projected) continue;
+    if (candidate.rayHit) {
+      // The ray hit the object itself: admitted, but never nearer than the aperture edge
+      // unless the control point really is nearer (see `MeasurementPickCandidate.rayHit`).
+      projected.pixelDistance = Math.min(projected.pixelDistance, setting.thresholdPx);
+    } else if (projected.pixelDistance > setting.thresholdPx) {
+      continue;
+    }
     snapCandidates.push(projected);
   }
 

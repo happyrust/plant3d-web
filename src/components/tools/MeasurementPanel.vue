@@ -69,6 +69,10 @@ const measurementPickSourceRows: {
     id: 'mesh_graphics',
     description: 'E3D Graphics 拾取的等价物：从已加载网格派生的绘制边（吸成线）与面（吸成平面）；仅在拾取过滤器选 Graphics 时参与，拾中的边 / 面会在场景里高亮。',
   },
+  {
+    id: 'tubing_axis',
+    description: 'E3D TUBING 拾取的等价物：光标落在直管上时按直管的放置矩阵派生管身轴线，两端吸到邻接构件的 P-Point；Snap 取近端、Cursor 取轴线上离光标最近处、Mid-Point / Fraction / Proportion / Distance 沿轴线派生；在拾取过滤器 Any / Element 下参与，拾中的轴线会在场景里高亮。',
+  },
 ];
 
 const isXeokitMode = computed(() => {

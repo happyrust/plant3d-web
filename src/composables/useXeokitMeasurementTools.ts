@@ -21,6 +21,8 @@ import {
 } from './measurementSnapLabel';
 import {
   getDtxRefnoTransform,
+  isDtxTubiObject,
+  isDtxTubiObjectAcrossAllDbnos,
   resolveDtxNounByRefno,
   resolveDtxObjectIdsByRefno,
 } from './useDbnoInstancesDtxLoader';
@@ -30,6 +32,7 @@ import {
   attachPlineSegments,
   buildGraphicsPickCandidates,
   buildPositionPickCandidate,
+  buildTubingAxisCandidate,
   resolveMeasurementPickCandidates,
   sourceNeedsHoverData,
   type MeasurementPickCandidate,
@@ -107,6 +110,13 @@ import {
   type MeasurementPickLayerConfig,
   type MeasurementPickTypeId,
 } from '@/measurement/pick/pickLayerModel';
+import {
+  refineTubingAxisEnds,
+  tubingAxisFromBounds,
+  tubingEndTolerance,
+  type TubingAxisEndPoint,
+  type TubingVec3,
+} from '@/measurement/tubing/tubingAxis';
 import { getModelSource } from '@/model-source';
 import { DTXOverlayHighlighter } from '@/utils/three/dtx/selection/DTXOverlayHighlighter';
 import {
@@ -445,6 +455,11 @@ export function useXeokitMeasurementTools(options: {
   compatViewerRef: Ref<DtxCompatViewer | null>;
   requestRender?: (() => void) | null;
   suppressStoreMeasurements?: boolean;
+  /**
+   * 该 DTX 对象是否是直管（E3D TUBING）。默认查 `useDbnoInstancesDtxLoader` 的直管登记
+   * （noun `TUBI` / gen-model `is_tubi`）；测试注入。
+   */
+  isTubingObject?: (objectId: string, refno: string | null) => boolean;
 }) {
   const {
     dtxViewerRef,
@@ -456,6 +471,18 @@ export function useXeokitMeasurementTools(options: {
   } = options;
   const requestRender = options.requestRender ?? null;
   const suppressStoreMeasurements = options.suppressStoreMeasurements === true;
+  const isTubingObject = options.isTubingObject ?? ((objectId: string, refno: string | null): boolean => {
+    try {
+      if (refno && isDtxTubiObject(getDbnumByRefno(refno), objectId)) return true;
+    } catch {
+      // dbno 不可知（gen-model-v1 源）：走跨库查找。
+    }
+    try {
+      return isDtxTubiObjectAcrossAllDbnos(objectId);
+    } catch {
+      return false;
+    }
+  });
   const measurementStyle = useXeokitMeasurementStyleStore();
   const unitSettings = useUnitSettingsStore();
   /**
@@ -594,12 +621,13 @@ export function useXeokitMeasurementTools(options: {
     if (source === 'mesh_pick_point') return 0x38bdf8;
     if (source === 'primitive_key_point') return 0xf97316;
     if (source === 'mesh_graphics') return 0xfacc15;
+    if (source === 'tubing_axis') return 0x2dd4bf;
     return 0x22c55e;
   }
 
   /**
-   * E3D `pickdetail` 高亮拾中的图形细节：Graphics 边画整条边，Graphics 面画共面片的轮廓。
-   * 只画当前胜出的候选（E3D 也只高亮拾中的那一个细节）。
+   * E3D `pickdetail` 高亮拾中的图形细节：Graphics 边画整条边，Graphics 面画共面片的轮廓；
+   * TUBING 画整条管身轴线。只画当前胜出的候选（E3D 也只高亮拾中的那一个细节）。
    */
   function createGraphicsDetailHighlight(hit: ProjectedMeasurementPickCandidate): LineSegments | null {
     const segments: readonly MeasurementPickSegment[] = hit.plane?.outline?.length
@@ -654,7 +682,7 @@ export function useXeokitMeasurementTools(options: {
       if (candidate.source === 'ptset') continue;
       hoverPickCandidateGroup.add(createCandidateCross(candidate.worldPos, candidate.source));
     }
-    if (hit?.source === 'mesh_graphics') {
+    if (hit?.source === 'mesh_graphics' || hit?.source === 'tubing_axis') {
       const detail = createGraphicsDetailHighlight(hit);
       if (detail) hoverPickCandidateGroup.add(detail);
     }
@@ -999,6 +1027,7 @@ export function useXeokitMeasurementTools(options: {
     primitive_key_point: ['element', 'pline'],
     mesh_pick_point: ['surface'],
     mesh_graphics: ['graphics-line', 'graphics-plane'],
+    tubing_axis: ['tubing'],
   };
 
   /** 已开捕捉、且当前拾取过滤器 × 拾取类型放行其特征的点源（E3D：过滤器不放行的点源等于没开）。 */
@@ -1240,6 +1269,72 @@ export function useXeokitMeasurementTools(options: {
       rect,
       edgeThresholdPx: setting.thresholdPx,
     });
+  }
+
+  /** 端点校正容差的下限：设计空间 2 mm，换成场景单位（全局模型矩阵可能带缩放）。 */
+  const TUBING_END_TOLERANCE_DESIGN_M = 0.002;
+
+  /**
+   * E3D TUBING 拾取：光标射线命中直管对象（noun `TUBI` / gen-model `is_tubi`）时，从对象的
+   * 局部包围盒 × 放置矩阵派生管身轴线（gen-model 单位圆柱：局部 z ∈ [0, 1]，缩放 (外径, 外径, 长度)），
+   * 再把两端吸到 ptset 缓存里邻接构件的 P-Point 上（E3D `EDGTUBING.line` 以 leave / arrive 位置定义
+   * 管线，而不是用隐含管长）。产出一条线候选：控制点 = 轴线上离射线最近处（`EDGTUBING.exact`），
+   * `segment` = 整条轴线（Snap 取近端、Mid-Point / Fraction / Proportion / Distance 沿线派生、Intersect 转 LINE）。
+   * 只在拾取过滤器放行 TUBING（Any / Element）时分析。
+   */
+  function buildTubingAxisCandidates(
+    base: PickHit | null,
+    cursor: Readonly<{ x: number; y: number }>,
+    camera: Camera,
+    rect: Readonly<{ width: number; height: number }>,
+  ): MeasurementPickCandidate[] {
+    if (!base || base.source !== 'mesh_pick_point') return [];
+    const setting = measurementStyle.state.measurementPickSources.tubing_axis;
+    if (!sourceNeedsHoverData(setting)) return [];
+    const layer = measurementStyle.state.measurementPickLayer;
+    if (!measurementPickFilterAdmits(layer.filter, layer.pickType, 'tubing')) return [];
+    const refno = refnoFromObjectId(base.objectId);
+    if (!isTubingObject(base.objectId, refno)) return [];
+    const data = dtxLayerRef.value?.getObjectGeometryData?.(base.objectId);
+    if (!data) return [];
+    if (!data.geometry.boundingBox) data.geometry.computeBoundingBox();
+    const bounds = data.geometry.boundingBox;
+    if (!bounds) return [];
+    const axis = tubingAxisFromBounds({
+      bounds: { min: bounds.min.toArray() as unknown as TubingVec3, max: bounds.max.toArray() as unknown as TubingVec3 },
+      matrix: data.matrix.elements,
+    });
+    if (!axis) return [];
+    if (!(rect.width > 0) || !(rect.height > 0)) return [];
+
+    // 邻接 P-Point：ptset 缓存里离轴线两端在容差内的点（hover 分支时成员点集已经在缓存里）。
+    const points: TubingAxisEndPoint[] = ptsetSnap.getCandidates().map((candidate) => {
+      const noun = nounForRefno(candidate.refno);
+      return {
+        position: [candidate.worldPos[0], candidate.worldPos[1], candidate.worldPos[2]] as TubingVec3,
+        label: `${noun ? `${noun} ` : ''}P-Point #${candidate.number}`,
+      };
+    });
+    const origin = designMetersToSceneWorld(new Vector3(0, 0, 0), dtxLayerRef);
+    const sceneUnitsPerDesignMetre = designMetersToSceneWorld(new Vector3(1, 0, 0), dtxLayerRef).distanceTo(origin) || 1;
+    const refined = refineTubingAxisEnds(
+      axis,
+      points,
+      tubingEndTolerance(axis, TUBING_END_TOLERANCE_DESIGN_M * sceneUnitsPerDesignMetre),
+    );
+
+    const raycaster = new Raycaster();
+    raycaster.setFromCamera(
+      new Vector2((cursor.x / rect.width) * 2 - 1, -(cursor.y / rect.height) * 2 + 1),
+      camera,
+    );
+    const candidate = buildTubingAxisCandidate({
+      objectId: base.objectId,
+      entityId: base.entityId,
+      axis: refined,
+      ray: { origin: raycaster.ray.origin, direction: raycaster.ray.direction },
+    });
+    return candidate ? [candidate] : [];
   }
 
   /** 当前 E3D 拾取层（过滤器 × 拾取类型），喂给候选解析做准入。 */
@@ -1866,6 +1961,7 @@ export function useXeokitMeasurementTools(options: {
       ...buildPositionCandidates(base, surfaceRefno),
       ...buildPrimitiveKeyPointCandidates(base, surfaceRefno),
       ...buildGraphicsCandidates(base, { x: cursor.x, y: cursor.y }, camera, rectSize),
+      ...buildTubingAxisCandidates(base, { x: cursor.x, y: cursor.y }, camera, rectSize),
     ];
     const resolution = resolveMeasurementPickCandidates({
       cursor: { x: cursor.x, y: cursor.y },

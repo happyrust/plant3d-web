@@ -89,6 +89,8 @@ type DbnoRuntimeCache = {
   refnoToSpecValue: Map<string, number | null>
   /** 画成告警色的无效直管对象（gen-model `is_invalid_tubi`）；重刷材质时保住告警色 */
   invalidTubiObjectIds: Set<string>
+  /** 直管对象（noun `TUBI` / gen-model `is_tubi`）：测量拾取层按它把对象当 E3D TUBING 拾成轴线 */
+  tubiObjectIds: Set<string>
 }
 
 const cachesByDbno = new Map<number, DbnoRuntimeCache>();
@@ -112,6 +114,7 @@ function createRuntimeCache(): DbnoRuntimeCache {
     refnoToOwnerRefno: new Map(),
     refnoToSpecValue: new Map(),
     invalidTubiObjectIds: new Set(),
+    tubiObjectIds: new Set(),
   };
 }
 
@@ -122,6 +125,7 @@ function getCache(dbno: number): DbnoRuntimeCache {
     if (!existing.geometryByGeoHash) existing.geometryByGeoHash = new Map();
     if (!existing.failedGeoHash) existing.failedGeoHash = new Set();
     if (!existing.invalidTubiObjectIds) existing.invalidTubiObjectIds = new Set();
+    if (!existing.tubiObjectIds) existing.tubiObjectIds = new Set();
     return existing;
   }
   const created = createRuntimeCache();
@@ -468,6 +472,19 @@ export function hasDtxDbnoCache(dbno: number): boolean {
 export function resolveDtxRefnoByObjectId(dbno: number, objectId: string): string | null {
   const cache = cachesByDbno.get(dbno);
   return cache?.objectIdToRefno.get(objectId) ?? null;
+}
+
+/** 该对象是否是直管（noun `TUBI` / gen-model `is_tubi`）：测量拾取层把它当 E3D TUBING 拾成轴线。 */
+export function isDtxTubiObject(dbno: number, objectId: string): boolean {
+  return cachesByDbno.get(dbno)?.tubiObjectIds.has(objectId) ?? false;
+}
+
+/** `isDtxTubiObject` 的跨库版本：gen-model-v1 源下调用方常常拿不到 dbno。 */
+export function isDtxTubiObjectAcrossAllDbnos(objectId: string): boolean {
+  for (const cache of cachesByDbno.values()) {
+    if (cache.tubiObjectIds?.has(objectId)) return true;
+  }
+  return false;
 }
 
 export function getDtxRefnoTransform(dbno: number, refno: string): number[] | undefined {
@@ -885,6 +902,7 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
       refnoToSpecValue: new Map(cache.refnoToSpecValue),
       loadedRefnos: new Set(cache.loadedRefnos),
       invalidTubiObjectIds: new Set(cache.invalidTubiObjectIds),
+      tubiObjectIds: new Set(cache.tubiObjectIds),
     }
     : null;
   if (replaceExistingObjects) {
@@ -1020,6 +1038,9 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
           cache.invalidTubiObjectIds.add(objectId);
           invalidTubiObjects++;
         }
+        if (noun === 'TUBI' || (inst as any).uniforms?.is_tubi === true) {
+          cache.tubiObjectIds.add(objectId);
+        }
         loadedObjects++;
 
         const refnoTransform = (inst as any).refno_transform;
@@ -1100,6 +1121,7 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
       cache.refnoToSpecValue = replacementSnapshot.refnoToSpecValue;
       cache.loadedRefnos = replacementSnapshot.loadedRefnos;
       cache.invalidTubiObjectIds = replacementSnapshot.invalidTubiObjectIds;
+      cache.tubiObjectIds = replacementSnapshot.tubiObjectIds;
       try {
         dtxLayer.recompile();
       } catch {
