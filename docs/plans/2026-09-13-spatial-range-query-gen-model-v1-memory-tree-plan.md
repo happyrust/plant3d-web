@@ -546,6 +546,26 @@ createPipeDistanceSceneTransformPoint` 已有反向那一半可对照），服�
   center (5963.7734, 9972.239, 16551.97) `refno_aabb_center`（该 PIPE 已生成的子树只有这根 BRAN），共 1753 项，无错误横幅。
   单测 store +1 / drawer +1。子树里一个都没生成过的 owner 仍会收到服务端 404 折成的「…还没生成过模型」提示（§5-3 口径不变）。
 
+**功能测试记录（2026-09-14 01:30，全部改动落地后在 plant3d-web 上走一遍）**：headless Chrome（SwiftShader）对着 `:3101` dev server +
+`:18122` v1 服务，`show_refno=24381_145018`，脚本 `%TEMP%\spatial-ui-suite.mjs`（不进仓），**32 / 32 项自动检查通过、1 项 headless 下无法验证**：
+- 范围 · 手输坐标：球形 2 m 请求带 x/y/z、`shape=sphere`、`per_page=20`，摘要「共 16 项」= `total_count`，结果行与服务端本页 refno 顺序一致，
+  v1 源显示覆盖面提示、无专业筛选；立方体 `shape=cube`，21 ≥ 16；排序按名称 `sort=name`、按距离 `sort=distance` 且距离非降。
+- 翻页（5 m / 20 → 1387 项）：下一页 `page=2` 首条变、总数不变；上一页回到 `page=1` 首条原值。
+- 过滤：`nouns=PANE` 透传、结果全 PANE、85 < 1387；`keyword=24381_110361` 只命中它；「显示负实体」`include_negative` false → true。
+- 当前选中：BRAN → 子树盒中心 (5963.8, 9972.2, 16552.0) 作 mm 发出；PIPE `24381_144975`（无几何）→ 摘要「… 未加载几何，查询时由服务端解中心」、
+  请求 `refno=24381/144975`、`center.source=refno_aabb_center`、查完摘要回到「5964, 9972, 16552」。
+- 结果动作（2 m / 16 项）：全部显示 1/1 → 16/16 可见；隔离结果其余 239/255 xray；恢复场景 xray 清零；单行眼睛隐藏一项可见 −1；飞行定位后目标被选中且可见；
+  复制当前页 Refno 剪贴板含 16 个；加载当前页 9 s「已加载 2 → 16，未加载 14 → 0」；全程无错误横幅。
+- 大数量确认：1387 项「只加载未加载」弹「将加载 1354 个模型（超过 200 个）…」（此时查看器里已加载 33 个）。
+- 距离 · 通过 Refno（BRAN 5 m）：`refno=24381/145018&include_self=false`，中心行「中心 5964, 9972, 16552 · refno_aabb_center · 24381_145018」，
+  结果不含源构件，每行带「按管径净距标注」按钮；通过坐标走点模式。
+- 错误路径：不存在的 `1_1` → 服务端 404 折成「构件 1_1 还没有生成过模型，空间索引里没有它的包围盒；请先显示该构件，再按距离查询」；refno 为空时
+  「执行空间查询」禁用；整轮无 pageerror。
+- URL 入口：`spatial_refno=24381_145018&spatial_radius=2&spatial_radius_unit=m&spatial_autorun=1` → 抽屉自动打开、自动发 `refno=24381/145018&radius=2000`。
+- **未验证（headless 限制）**：「拾取中心」——相机对准 BRAN 后 25 个采样点普通点击都没命中几何（点击确实到了拾取处理器：会清空选中集），SwiftShader 下
+  拾取无命中，摘要不变；worldPos → mm 的换算由单测钉住，需在真实浏览器手点一次。「仅显示本库」在 2 m 结果只有一个库时跳过（5 m 两库的分组按钮在
+  22:32 那轮已核）。legacy 源仍受 `:3100` detached 所限。
+
 ## 8. 关键位置速查
 
 后端（行号以 `gen-model-refactor@8f99cbc64` + 10:30 工作树为准）：`vendor/old-aios-core/src/room/room.rs` L12；
