@@ -5,11 +5,11 @@
   **§7 第 1–6 步已核**（第 2–3 步 22:03 在真服务 `127.0.0.1:18122` 上过；第 4 步的 503 信封以单测钉住，线上因树一直 Ready 复现不了；
   第 5 步后半 v1 源 22:32 在 headless Chrome 里对着 `:3101` dev server 走完，legacy 源因 `:3100` 是 detached 运行时（`sqlite-spatial` 404）
   做不了；**第 6 步 22:40 核出 B4 成立**——`当前选中` / `拾取中心` 把场景坐标（m、已重心化）当 mm 发给服务端，基线 `9d34701` 就如此，
-  见 §7 联调记录，待拍板修法）
+  见 §7 联调记录；**用户 22:49 拍板按建议修，23:57 已修（plant3d-web `00beb54`）并在真机复核通过**）
   - 提交清单：old-aios-core `8758023`（P0）；gen-model-refactor `12bf601e9`（P1 路由 + 模块 + 单测）、`69f732e6b`（spec §4.13）、
     `dec2c67d8`（§7 第 4 步：`spatial_not_ready` 503 信封单测）；
     plant3d-web `8127bcb`（P2）、`12c66fe`（P3）、`610581f`（P4）、`fb8b841`（P0 / P1 备注）、`0152256`（P5 = 教程 §9 + 状态行）、
-    §7 联调记录 = 本提交
+    `cd05652` / `73f8ce8`（§7 联调记录）、`00beb54`（B4 修复 + 6 条单测）、B4 修复记录 = 本提交
   - 进度：**P2 已完成**（2026-09-13 11:45，plant3d-web `8127bcb`）；**P3 代码与单测已完成**（11:53，`12c66fe`；真服务联调等 P1）；
     **P4 已完成，「整库生成」入口除外**（12:05，单独一提交，见 §4 P4 备注——入口怎么接需要拍板；用户 12:13 拍板：先不接入口）；
     **P0 已完成**（old-aios-core `8758023`，21:03；代码 20:40 已在工作树、本轮验证后提交）；**P1 已完成**（gen-model-refactor
@@ -179,7 +179,8 @@ fn aabb_point_distance(a: &Aabb, p: &Point<f32>) -> f32
 
 - 树无 tube：与旧 sqlite 索引同；前端 `queryLocal` 会把已加载的 tubi 当「已加载但不在索引」补入，行为不变。
 - 单位 mm、f32、世界坐标；`__dtxLayer.getGlobalModelMatrix()` 非单位阵时拾取点与 `center` 回显的偏差需在真实站点核一次
-  （上一版分析 B4，本计划 §7 验收项 6）。
+  （上一版分析 B4，本计划 §7 验收项 6）。**已核实为真并修复（`00beb54`）**：`useSpatialQuery.ts` 新增 `resolveSceneWorldTransform`，
+  `draft.center` / 请求 / 结果项一律 mm，只在读查看器（选中盒、拾取点、本地扫描的盒 → mm）与写查看器（飞行盒、代理盒 → 场景）两个边界换算。
 - 覆盖面是「已生成过模型的构件」：gen-model-v1 按需生成，没 `ensure` 过的构件不在树里。前端在 v1 源下于结果区提示
   「结果仅含已生成模型的构件」，并给「整库生成」入口（`collectDbnum` 已有）。
 
@@ -366,7 +367,7 @@ P2 只碰 plant3d-web，可以先行。P1 的新代码集中在新模块 `spatia
     **第 2–3 步 ✅（22:03，真服务，见 §7 联调记录）**；**第 4 步 ✅（单测口径）**：线上树一直 Ready，503 复现不了，改由
     gen-model-refactor `dec2c67d8` 的 `spatial_not_ready_is_a_503_with_retry_after_and_the_state_in_detail` 钉住六个非 Ready 状态的
     503 + `Retry-After: 5` + `detail.state`（门禁一侧原有 `scan_is_gated_by_the_spatial_state`）；**第 5 步后半 v1 ✅ / legacy ✗（环境）**、
-    **第 6 步 ✅（核出 B4 成立，待修）**——都见 §7 联调记录。
+    **第 6 步 ✅（核出 B4 成立，已修 `00beb54`，真机复核通过）**——都见 §7 联调记录。
 
 ## 5. 需要拍板的决策（推荐项在前）
 
@@ -466,6 +467,26 @@ pick watch 就没有矩阵处理**，legacy 源同样中招——不是本计划
 createPipeDistanceSceneTransformPoint` 已有反向那一半可对照），服务端回来的 `results[].aabb` / `center` 在飞行、本地合并时再正变换回场景；
 中心摘要按 mm 显示。
 
+**修复记录（2026-09-13 23:57，B4，plant3d-web `00beb54`）**：用户 22:49 拍板按上面的建议修。改动只在 `useSpatialQuery.ts`（两源共用）+ 其单测：
+- 新增 `resolveSceneWorldTransform(viewer)`：从 `viewer.__dtxLayer.getGlobalModelMatrix()` 读矩阵，给 point / aabb 的场景 ↔ mm 双向换算；
+  矩阵缺失、单位阵、含非数或不可逆一律退回恒等——没有 DTXLayer 的路径（单测桩、legacy 无矩阵）行为不变。
+- 读查看器 → mm：`applyCurrentSelection`（选中盒中心）、`pickedQueryCenter` watch 与 `resolveRequest` 的 pick 分支（拾取 `worldPos`）、
+  `queryLocal`（已加载盒先换回 mm 再量距离 / 判相交——改前本地扫描在缩放场景里对 mm 中心永远扫不到，已加载构件会被标成未加载）。
+- 写查看器 → 场景：`activateResult` 场景里拿不到盒时退回结果项 bbox（mm）飞行前正变换；`loadSpatialQueryAabbProxies` 缓存到
+  `scene.objects[refno].aabb` 的代理盒换到场景坐标（代理盒本身仍按 mm 交给 DTXLayer，渲染时它自己乘全局矩阵）。
+- 口径：`draft.center`、请求、结果项 `position` / `bbox` / `distance` 全部 mm，抽屉中心摘要随之按 mm 显示；「手输坐标」不受影响；
+  `SpatialQueryDrawer.vue` 不用改。
+- 单测 +6（`useSpatialQuery.test.ts`）：`resolveSceneWorldTransform` 恒等 / 0.001 缩放 + 重心化下点与盒互逆 / 奇异与 NaN 退回恒等；
+  store 下「当前选中」发 mm 且本地扫描按 mm 合并成 `merged`、「拾取中心」`worldPos` 换回 mm、飞向结果 bbox 前正变换。
+- 验证：`vitest` useSpatialQuery 26 passed（连带 drawer 20 / spatialSource 7 / realBranHelper 6）；eslint 0；type-check 本文件无新增错误。
+  真机（`:3101` dev server → `:18122`，headless Chrome，脚本在 `%TEMP%`）：选中 FLOOR `17496_100380` 查 1 m，请求 `x=0&y=0&z=450`、
+  服务端 `center` 回显 `(0, 0, 450)`、`results[0]` = `17496_100380` d=0、抽屉「共 51 项 … 已加载 1 项」（验收项 6 原文通过）；
+  选中 BRAN `24381_145018` 请求 `x=5668.6&y=9972.2&z=15979.0`（改前 `-0.295 / 0 / -0.573`），中心摘要「5669, 9972, 15979」，
+  10 项全在盒中心旁——BRAN 本身不会出现在自己的结果里，因为树只存 BOX / CYLI / PANE 等叶子（`filter_options.nouns` 里没有 BRAN），
+  不是前端问题。
+- 顺带核出的差异（未处理）：BRAN 在查看器里的盒中心（`5668.6, 9972.2, 15979.0`）与树里 `refno_aabb_center`（`5963.8, 9972.2, 16552.0`）
+  相差 295 / 573 mm——前者是已加载几何（含管子）算出来的盒，后者是服务端记录的 AABB，两者口径本就不同，「当前选中」用的是查看器盒。
+
 ## 8. 关键位置速查
 
 后端（行号以 `gen-model-refactor@8f99cbc64` + 10:30 工作树为准）：`vendor/old-aios-core/src/room/room.rs` L12；
@@ -475,5 +496,5 @@ createPipeDistanceSceneTransformPoint` 已有反向那一半可对照），服�
 `model_db_adapter.rs` L876 / L1579；`model_read_route.rs` L250；`options.rs` L895 / L1307；`docs/specs/web-service-api.md` §4.10-4.12。
 
 前端：`src/model-source/{ports.ts, index.ts, genModelV1/index.ts, legacy/index.ts}`；`src/api/genModelV1Api.ts`；
-`src/api/genModelSpatialApi.ts`；`src/composables/useSpatialQuery.ts` L92-102 / L584 / L672 / L914 / L1241；
+`src/api/genModelSpatialApi.ts`；`src/composables/useSpatialQuery.ts` L92-102 / L584 / L672 / L914 / L1241（`resolveSceneWorldTransform` 在 `00beb54` 后约 L330-401）；
 `src/components/spatial-query/SpatialQueryDrawer.vue`；`src/types/spatialQuery.ts`；`src/composables/useSpatialQuery.test.ts`。
