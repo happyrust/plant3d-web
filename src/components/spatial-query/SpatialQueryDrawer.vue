@@ -621,6 +621,7 @@ import { Vector3, type Matrix4 } from 'three';
 import type { SpatialQueryMode, SpatialQueryResultItem, SpatialQuerySortBy } from '@/types/spatialQuery';
 import type { Vec3 } from '@/types/vec3';
 
+import { useConfirmDialogStore } from '@/composables/useConfirmDialogStore';
 import { findNounByRefnoAcrossAllDbnos } from '@/composables/useDbnoInstancesDtxLoader';
 import { usePipeDistanceStore } from '@/composables/usePipeDistanceStore';
 import { resolveContainingRoomInfo, useRoomInfoPanel } from '@/composables/useRoomInfoPanel';
@@ -665,6 +666,7 @@ const {
   submitQuery,
   clearResults,
   activateResult,
+  countLoadTargets,
   loadResults,
   showOnlySpecGroup,
   showOnlyDbnumGroup,
@@ -673,6 +675,7 @@ const {
   isolateResults,
   restoreScene,
 } = spatialQuery;
+const confirmDialog = useConfirmDialogStore();
 
 /**
  * 当前源有没有专业维度（legacy 有，gen-model-v1 没有——plan 2026-09-13 空间范围查询 §5-1 按 (a)）：
@@ -1122,17 +1125,40 @@ function loadCurrentResults() {
   void loadResults({ pages: 'current', flyTo: true });
 }
 
+/** 跨页的批量加载超过这个数先弹确认并显示数量（用户 2026-09-14 拍板：> 200 项）；1387 项那次点下去 3 分钟没回来。 */
+const LARGE_BATCH_LOAD_CONFIRM_THRESHOLD = 200;
+
+/**
+ * 数量不大就直接跑；超过阈值先经全局确认框，用户点「加载 N 个」才跑。
+ * 小数量走同步路径（不多绕一次微任务），既有的点击 → `loadResults` 时序不变。
+ */
+function runAfterLargeBatchConfirm(count: number, what: string, run: () => void): void {
+  if (!(count > LARGE_BATCH_LOAD_CONFIRM_THRESHOLD)) {
+    run();
+    return;
+  }
+  void confirmDialog.open({
+    title: '加载数量较多',
+    message: `${what}将加载 ${count} 个模型（超过 ${LARGE_BATCH_LOAD_CONFIRM_THRESHOLD} 个），可能需要几分钟，期间查看器会持续加载。是否继续？`,
+    confirmText: `加载 ${count} 个`,
+  }).then((confirmed) => {
+    if (confirmed) run();
+  });
+}
+
 function loadUnloadedResults() {
-  void loadResults({ onlyUnloaded: true, flyTo: true });
+  const options = { onlyUnloaded: true, flyTo: true };
+  runAfterLargeBatchConfirm(countLoadTargets(options), '「只加载未加载」', () => {
+    void loadResults(options);
+  });
 }
 
 function loadDisplayGroup(group: DisplayGroup) {
-  if (group.kind === 'dbnum') {
-    if (group.key === UNKNOWN_DBNUM_KEY) return;
-    void loadResults({ dbnum: group.key, flyTo: true });
-    return;
-  }
-  void loadResults({ specValue: group.key, flyTo: true });
+  if (group.kind === 'dbnum' && group.key === UNKNOWN_DBNUM_KEY) return;
+  const options = group.kind === 'dbnum' ? { dbnum: group.key, flyTo: true } : { specValue: group.key, flyTo: true };
+  runAfterLargeBatchConfirm(countLoadTargets(options), `「加载本${groupUnitLabel.value}」（${group.label}）`, () => {
+    void loadResults(options);
+  });
 }
 
 function showOnlyDisplayGroup(group: DisplayGroup) {

@@ -1035,6 +1035,13 @@ describe('createSpatialQueryStore', () => {
       groups: [],
     };
 
+    // countLoadTargets 与 loadResults 同一套取法：抽屉靠它在大批量前弹确认并显示数量
+    expect(store.countLoadTargets({ pages: 'current', flyTo: true })).toBe(2);
+    expect(store.countLoadTargets({ onlyUnloaded: true, flyTo: true })).toBe(3);
+    expect(store.countLoadTargets({ dbnum: 7997, flyTo: true })).toBe(4);
+    expect(store.countLoadTargets()).toBe(4);
+    expect(batchLoadRefnos).not.toHaveBeenCalled();
+
     // 加载当前页：本页两条，第 2 页的不碰（改前这里拿到的是 fullMatches 的 4 条）
     await store.loadResults({ pages: 'current', flyTo: true });
     expect(batchLoadRefnos).toHaveBeenLastCalledWith(['loaded_a', 'server_only'], expect.objectContaining({ flyTo: true }));

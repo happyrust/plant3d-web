@@ -18,8 +18,11 @@ const startPickCenter = vi.fn();
 const submitQuery = vi.fn();
 const clearResults = vi.fn();
 const activateResult = vi.fn();
+const countLoadTargets = vi.fn((_options?: unknown) => 0);
 const loadResults = vi.fn();
 const showOnlySpecGroup = vi.fn();
+/** 全局确认框（`useConfirmDialogStore().open`）：缺省点「确认」 */
+const confirmOpen = vi.fn(async (_options: { title?: string; message: string; confirmText?: string }) => true);
 const showOnlyDbnumGroup = vi.fn();
 const toggleResultVisible = vi.fn();
 const setAllResultsVisible = vi.fn();
@@ -65,6 +68,7 @@ vi.mock('@/composables/useSpatialQuery', () => ({
     submitQuery,
     clearResults,
     activateResult,
+    countLoadTargets,
     loadResults,
     showOnlySpecGroup,
     showOnlyDbnumGroup,
@@ -74,6 +78,15 @@ vi.mock('@/composables/useSpatialQuery', () => ({
     restoreScene,
   }),
 }));
+
+vi.mock('@/composables/useConfirmDialogStore', () => ({
+  useConfirmDialogStore: () => ({
+    open: (options: { title?: string; message: string; confirmText?: string }) => confirmOpen(options),
+  }),
+}));
+
+/** 让 `confirmDialog.open(...).then(run)` 那条链跑完（mock 的 async 函数要几拍微任务）。 */
+const flushMicrotasks = () => new Promise<void>((resolve) => { setTimeout(resolve, 0); });
 
 vi.mock('@/composables/useRoomInfoPanel', () => ({
   resolveContainingRoomInfo: vi.fn(async () => null),
@@ -205,7 +218,11 @@ describe('SpatialQueryDrawer (distance 模式)', () => {
     submitQuery.mockReset();
     clearResults.mockReset();
     activateResult.mockReset();
+    countLoadTargets.mockReset();
+    countLoadTargets.mockReturnValue(0);
     loadResults.mockReset();
+    confirmOpen.mockReset();
+    confirmOpen.mockResolvedValue(true);
     showOnlySpecGroup.mockReset();
     showOnlyDbnumGroup.mockReset();
     toggleResultVisible.mockReset();
@@ -597,6 +614,48 @@ describe('SpatialQueryDrawer (distance 模式)', () => {
     unmount();
   });
 
+  it('「只加载未加载」超过 200 项先弹确认并显示数量：不超过直接加载，取消不加载，确认才加载', async () => {
+    stubState.resultSet.value = makeResultSet(2);
+
+    const { host, unmount } = mountDrawer();
+    await nextTick();
+    const clickUnloaded = () => {
+      (Array.from(host.querySelectorAll('button')) as HTMLButtonElement[])
+        .find((button) => button.textContent?.includes('只加载未加载'))?.click();
+    };
+
+    // 正好 200：不弹框，直接加载；数量按 loadResults 同一套取法算
+    countLoadTargets.mockReturnValue(200);
+    clickUnloaded();
+    await nextTick();
+    expect(countLoadTargets).toHaveBeenCalledWith({ onlyUnloaded: true, flyTo: true });
+    expect(confirmOpen).not.toHaveBeenCalled();
+    expect(loadResults).toHaveBeenCalledWith({ onlyUnloaded: true, flyTo: true });
+
+    // 1367：弹框、显示数量；取消 → 不加载
+    loadResults.mockClear();
+    countLoadTargets.mockReturnValue(1367);
+    confirmOpen.mockResolvedValueOnce(false);
+    clickUnloaded();
+    await flushMicrotasks();
+    expect(confirmOpen).toHaveBeenCalledTimes(1);
+    const dialog = confirmOpen.mock.calls[0]![0];
+    expect(dialog.title).toBe('加载数量较多');
+    expect(dialog.message).toContain('「只加载未加载」将加载 1367 个模型');
+    expect(dialog.message).toContain('超过 200 个');
+    expect(dialog.confirmText).toBe('加载 1367 个');
+    expect(loadResults).not.toHaveBeenCalled();
+
+    // 确认 → 加载
+    clickUnloaded();
+    await flushMicrotasks();
+    expect(confirmOpen).toHaveBeenCalledTimes(2);
+    expect(loadResults).toHaveBeenCalledTimes(1);
+    expect(loadResults).toHaveBeenCalledWith({ onlyUnloaded: true, flyTo: true });
+
+    unmount();
+  });
+
   it('查看器动作按钮可显示、隐藏、隔离、恢复当前结果集', async () => {
     stubState.resultSet.value = makeResultSet(2);
 
@@ -739,6 +798,23 @@ describe('SpatialQueryDrawer (distance 模式)', () => {
     expect(loadResults).toHaveBeenCalledWith({ dbnum: 24383, flyTo: true });
     expect(showOnlyDbnumGroup).toHaveBeenCalledWith(24381);
     expect(showOnlySpecGroup).not.toHaveBeenCalled();
+
+    // 分组「加载本库」跨页拿整组：超过 200 项先弹确认（数量按该库的批量作用域算），取消不加载、确认才加载
+    loadResults.mockClear();
+    countLoadTargets.mockReturnValue(3534);
+    confirmOpen.mockResolvedValueOnce(false);
+    loadButtons[0]?.click();
+    await flushMicrotasks();
+    expect(countLoadTargets).toHaveBeenLastCalledWith({ dbnum: 24381, flyTo: true });
+    expect(confirmOpen).toHaveBeenCalledTimes(1);
+    const dialog = confirmOpen.mock.calls[0]![0];
+    expect(dialog.message).toContain('「加载本库」（库 24381）将加载 3534 个模型');
+    expect(dialog.confirmText).toBe('加载 3534 个');
+    expect(loadResults).not.toHaveBeenCalled();
+    loadButtons[0]?.click();
+    await flushMicrotasks();
+    expect(loadResults).toHaveBeenCalledTimes(1);
+    expect(loadResults).toHaveBeenCalledWith({ dbnum: 24381, flyTo: true });
 
     unmount();
   });

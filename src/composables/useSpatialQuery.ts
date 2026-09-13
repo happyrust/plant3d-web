@@ -1665,7 +1665,17 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
     }).filter((item) => !options.onlyUnloaded || !item.loaded);
   }
 
-  async function loadResults(options: { onlyUnloaded?: boolean; flyTo?: boolean; pages?: BatchPages } & BatchScope = {}) {
+  type LoadResultsOptions = { onlyUnloaded?: boolean; flyTo?: boolean; pages?: BatchPages } & BatchScope;
+
+  /**
+   * `loadResults(options)` 会去加载多少个模型——与它同一套取法（全集 / 当前页、按库 / 按专业、只算未加载），
+   * 供抽屉在跨页的大批量加载前先弹确认（「只加载未加载」、分组「加载本库 / 本专业」超过阈值时显示数量，用户 2026-09-14 拍板）。
+   */
+  function countLoadTargets(options: LoadResultsOptions = {}): number {
+    return pickResultItems(options).length;
+  }
+
+  async function loadResults(options: LoadResultsOptions = {}) {
     const targets = pickResultItems(options);
     if (targets.length === 0) {
       status.value = 'ready';
@@ -1888,6 +1898,7 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
     resetQuery,
     clearResults,
     activateResult,
+    countLoadTargets,
     loadResults,
     showOnlySpecGroup,
     showOnlyDbnumGroup,
