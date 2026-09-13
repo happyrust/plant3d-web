@@ -54,10 +54,25 @@ function elided(id: string): LayoutResult {
 }
 
 describe('occlusionProbe', () => {
+  const projector = createTestProjector(100);
+
   it('prefers the value text anchor and falls back to the first stroke vertex', () => {
-    expect(occlusionProbe(drawn('a', [1, 2, 3]))).toEqual([1, 2, 3]);
-    expect(occlusionProbe(drawn('b', [1, 2, 3], false))).toEqual([0, 2, 3]);
-    expect(occlusionProbe(elided('c'))).toBeNull();
+    expect(occlusionProbe(drawn('a', [1, 2, 3]), projector)).toEqual([1, 2, 3]);
+    expect(occlusionProbe(drawn('b', [1, 2, 3], false), projector)).toEqual([0, 2, 3]);
+    expect(occlusionProbe(elided('c'), projector)).toBeNull();
+  });
+
+  it('probes a billboard tag where its body is, at the anchor depth, not at the anchor on the pipe', () => {
+    // Anchor on the pipe at (0, 0, 0.4); the card was placed 100 px right and
+    // 50 px up of the anchor's pixel (200, 200) → its centre is at (300, 150).
+    const tag: LayoutResult = {
+      ...drawn('tag', [0, 0, 0.4]),
+      derived: {
+        formattedLabel: 'tag',
+        tag: { candidate: 3, body: { x: 260, y: 130, width: 80, height: 40 } },
+      },
+    };
+    expect(occlusionProbe(tag, projector)).toEqual([1, 0.5, 0.4]);
   });
 });
 

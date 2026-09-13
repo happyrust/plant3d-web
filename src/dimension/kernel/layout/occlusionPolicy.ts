@@ -3,12 +3,11 @@ import type { DimensionTheme } from '../theme';
 import type { LayoutResult, OcclusionSource, Vec3 } from '../types';
 
 /**
- * The point the inspection pass tests a drawn layout at: the 3D anchor of
- * its first glyph run (the value text of a dimension, the anchor a billboard
- * tag hangs off), else its first scene vertex. Null for an elided layout —
- * there is nothing to fade.
+ * The 3D anchor a drawn layout hangs off: its first glyph run's anchor (the
+ * value text of a dimension, the pipe point a billboard tag's leader points
+ * at), else its first scene vertex. Null for an elided layout.
  */
-export function occlusionProbe(layout: LayoutResult): Vec3 | null {
+function layoutAnchor(layout: LayoutResult): Vec3 | null {
   if (layout.primitives.length === 0) return null;
   for (const primitive of layout.scenePrimitives) {
     if (primitive.kind === 'scene-glyph-run') return primitive.at.anchor;
@@ -29,6 +28,33 @@ export function occlusionProbe(layout: LayoutResult): Vec3 | null {
     }
   }
   return null;
+}
+
+/**
+ * The point the inspection pass tests a drawn layout at. A dimension is
+ * probed at its value text (the 3D anchor above). A billboard tag is probed
+ * where its body is: the body's screen centre unprojected at the anchor's
+ * depth — the tag's anchor itself sits on or inside the component it names
+ * (a valve's origin, a pipe end's centre), so a ray to the anchor would hit
+ * that very component from every direction and the tag would always fade;
+ * what matters for a call-out card is whether something nearer than its
+ * anchor is drawn where the card is. Null for an elided layout.
+ */
+export function occlusionProbe(
+  layout: LayoutResult,
+  projector: ViewportProjector,
+): Vec3 | null {
+  const anchor = layoutAnchor(layout);
+  if (!anchor) return null;
+  const tag = layout.derived.tag;
+  if (!tag) return anchor;
+  const depth = projector.project(anchor).depth;
+  const probe = projector.unproject({
+    x: tag.body.x + tag.body.width / 2,
+    y: tag.body.y + tag.body.height / 2,
+    depth,
+  });
+  return probe.every(Number.isFinite) ? probe : anchor;
 }
 
 /**
@@ -74,7 +100,7 @@ export function markOcclusion(
   theme: DimensionTheme,
 ): LayoutResult[] {
   return layouts.map((layout) => {
-    const probe = occlusionProbe(layout);
+    const probe = occlusionProbe(layout, projector);
     if (!probe) return layout;
     const origin = rayOrigin(probe, projector);
     if (!origin) return layout;

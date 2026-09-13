@@ -130,4 +130,30 @@
 | `inspection-occluded-2084.png` | inspection：`2084` 整条（数字 / 尺寸线 / 箭头 / 尺寸界线）淡到 0.35，其余 0.65 |
 | `inspection-near-side.png` | inspection · 对面看：立方体在 `2084` 背后，`2084` 回到 0.65 |
 
-**未覆盖**：真实模型（BRAN 24381_145018）的实机对照——gen-model `:8022` / `:18084` 本轮都没在跑；2k 记录时每条一次射线的耗时未量（本样本 23 条一帧内完成）。
+### 实机对照：BRAN 24381_145018（2026-09-13 21:44 / 22:0x 补验）
+
+后端：live gen-model `http://127.0.0.1:18122`（`aios-database.exe` debug 构建，从 `gen-model-model-cache` 工作树起，分支 `codex/model-projection-cache` = gen-model-refactor `655285ce8` 合入的那条线；gen-model-refactor 自己的工作树没有实例在跑，`:8022` DOWN），项目 AvevaMarineSample，页面 `?output_project=AvevaMarineSample&show_refno=24381_145018&mbd_refno=24381_145018&gm_backend=…18122&mbdBackend=…18122`，真实 Chrome 1920×1080 @2x，脚本 `pw-inspection-real-41.mjs`（`%TEMP%\plant3d-mbd-debug`，复用 `tag-probe.js` 的相机助手）。63 条 MBD 记录、22 个 DTX 对象；三个相机：远景（`fitBox(sceneBox, 1.7)`）、同一距离从背面看、阀门簇中景（`fitBox(valveCluster, 2.8)`）；每个相机 engineering → inspection → 同相机再布局一次 → 截图。
+
+**第一轮（探测点 = 第一条字形的三维锚点，提交 `02bbb8e` 的取法）**暴露一个系统性误判：标签 billboard 的锚点就在它点名的构件上或构件里（阀门原点、管端中心），射线从任何方向过去都先打到那个构件自己，所以 `Copy-of-1RCS002VP`（阀门位号）从正面、背面都被标遮挡，`X 1516 …` / `接 Copy-of-RCS0014-1R43013新` 这些坐标卡片也一样——卡片明明浮在空白处（`inspection-real-far-anchor-probe.png`）。ε 只能吸收「锚点恰在管面上」的浮点差，吸收不了「锚点在构件体内」的半个构件。
+
+**第二轮（`occlusionProbe` 对标签改探卡片：卡片屏幕中心在锚点深度上的反投影点；尺寸不变）**：
+
+| 相机 | 画出 | 第一轮 `occluded=true` | 第二轮 `occluded=true` | α 集合 | 再布局逐条相同 | inspection 布局耗时（3 次，ms） |
+| --- | --- | --- | --- | --- | --- | --- |
+| 远景 | 15 | `900.51`、`X 1516`(卡片)、`Copy-of-1RCS002VP`、`接 Copy-of-RCS0014-1R43013新` | **`900.51`** | {0.35, 0.65} | 是 | 4.3 / 4.3 / 5.2 |
+| 背面 | 13 | `1834.19`、`X 9201`(卡片)、`Copy-of-1RCS002VP` | **`1834.19`** | {0.35, 0.65} | 是 | 3.7 / 3.6 / 3.0 |
+| 阀门簇中景 | 16 | `900.51`、`173`、`X 1516`(卡片)、`Copy-of-1RCS002VP`、`接 Copy-of-RCS0014-1R43013新` | **`900.51`、`173`** | {0.35, 0.65} | 是 | 5.2 / 5.1 / 4.0 |
+
+- 被淡化的都是数值文字站在管子另一侧的三维尺寸：`900.51` 是阀前那段（正面看文字在管后，背面看就亮了），`1834.19` 是尾段（正面亮、背面被管体挡），`173` 是阀门法兰处的短尺寸（中景里文字在法兰后）。正面 / 背面各自淡掉的是不同的一组——这正是「背面尺寸淡化、不隐藏」要的结果。
+- engineering 三个相机全部 α = 1、三种材质 `transparent=false`、`occluded` 全无；切回 engineering 复原（`restored.alphas=[1]`）；全程 `/api/mbd/v2/pipe/**` 请求 2 次（第一轮同样 2 次；三个相机来回切模式一次都没多拉）；`pageerror` 0。
+- 标签在第二轮里没有一条被淡化。这是取法决定的：ADR 0059 的放置本来就让卡片避开可见构件的包围盒凸包，卡片中心几乎总在空白处，只有 `least-intrusion` 回退（卡片被迫压在构件上）且那个构件比锚点近时才会淡。若校审想要的是「**被点名的构件本身**被别的几何挡住时标签淡化」，要把标签的对象身份（id 里的 `tag:elbo:24381_145019` / 阀门 refno）传过 `isSegmentBlocked` 缝、射线仍打锚点但忽略该构件自己的命中——那是另一条口径，未做，待拍板。
+
+| 文件 | 说明 |
+| --- | --- |
+| `inspection-real-far.png` | 第二轮 · 远景 inspection：只有 `900.51` 淡到 0.35，四张卡片 0.65 |
+| `inspection-real-far-anchor-probe.png` | 第一轮 · 同一相机：`Copy-of-1RCS002VP` / `X 1516` / `接 …` 卡片被误标遮挡 |
+| `inspection-real-behind.png` | 第二轮 · 背面：`1834.19` 淡到 0.35（尾段在管体后），其余 0.65 |
+| `inspection-real-valve-mid.png` | 第二轮 · 阀门簇中景：`900.51`、`173` 淡到 0.35 |
+| `inspection-real-result.json` | 第二轮逐相机原始读数（相机位姿、engineering / inspection 两态、耗时、签名） |
+
+**未覆盖**：2k 记录时每条一次射线的耗时未量（本样本 63 条记录 / 15–16 条画出，inspection 完整布局 3–5 ms）；标签「被点名构件被挡」这一口径（见上）。

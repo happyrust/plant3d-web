@@ -1,0 +1,218 @@
+{
+ "url": "http://127.0.0.1:3101/?output_project=AvevaMarineSample&show_refno=24381_145018&show_refno_select=0&mbd_refno=24381_145018&gm_backend=http%3A%2F%2F127.0.0.1%3A18122&mbdBackend=http%3A%2F%2F127.0.0.1%3A18122",
+ "payloadFetches": 2,
+ "cluster": {
+  "valveId": "o:24381_145035:21",
+  "members": [
+   "o:24381_145018:9",
+   "o:24381_145035:21"
+  ]
+ },
+ "results": {
+  "far": {
+   "camera": {
+    "position": [
+     8.061287469648434,
+     -10.993544496423311,
+     6.5903202482960195
+    ],
+    "target": [
+     0,
+     8.881784197001252e-16,
+     1.7763568394002505e-15
+    ]
+   },
+   "engineering": {
+    "mode": "engineering",
+    "records": 63,
+    "drawn": 15,
+    "occluded": [],
+    "visible": 0,
+    "unflagged": 15,
+    "transparent": [
+     false,
+     false,
+     false
+    ],
+    "alphas": [
+     1
+    ],
+    "signature": "[[\"24381_145018:isoline:0:slope:mark:Head~24381_145019\",0,null],[\"24381_145018:isoline:0:slope:rise:Head~24381_145019\",0,null],[\"24381_145018:isoline:0:slope:base:Head~24381_145019\",0,null],[\"24381_145018:isoline:0:main:Head--24381_145019\",10,null],[\"24381_145018:isoline:1:main:24381_145019--24381_145021\",12,null],[\"24381_145018:isoline:1:atta:24381_145019--24381_145020\",0,null],[\"24381_145018:isoline:2:slope:mark:24381_145021~24381_145023\",0,null],[\"24381_145018:isoline:2:slope:rise:24381_145021~24381_145023\",0,null],[\"24381_145018:isoline:2:slope:base:24381_145021~24381_145023\",0,null],[\"24381_145018:isoline:2:main:24381_145021--24381_145023\",10,null],[\"24381_145018:isoline:2:atta:24381_145021--24381_145022\",0,null],[\"24381_145018:isoline:4:slope:mark:24381_145023~24381_145025\",0,null],[\"24381_145018:isoline:4:slope:rise:24381_145023~24381_145025\",0,null],[\"24381_145018:isoline:4:slope:base:24381_145023~24381_145025\",0,null],[\"24381_145018:isoline:4:skew:z-leg\",0,null],[\"24381_145018:isoline:4:skew:z-text\",0,null],[\"24381_145018:isoline:4:skew:z-rightangle:1\",0,null],[\"24381_145018:isoline:4:skew:z-rightangle:2\",0,null],[\"24381_145018:isoline:4:skew:x-leg\",0,null],[\"24381_145018:isoline:4:skew:x-text\",0,null],[\"24381_145018:isoline:4:skew:y-leg\",0,null],[\"24381_145018:isoline:4:skew:y-text\",0,null],[\"24381_145018:isoline:4:skew:xy-rightangle:1\",0,null],[\"24381_145018:isoline:4:skew:xy-rightangle:2\",0,null],[\"24381_145018:isoline:4:main:24381_145023--24381_145025\",10,null],[\"24381_145018:isoline:4:atta:24381_145023--24381_145024\",0,null],[\"24381_145018:isoline:5:main:24381_145025--24381_145026\",10,null],[\"24381_145018:isoline:6:slope:mark:24381_145026~24381_145028\",0,null],[\"24381_145018:isoline:6:slope:rise:24381_145026~24381_145028\",0,null],[\"24381_145018:isoline:6:slope:base:24381_145026~24381_145028\",0,null],[\"24381_145018:isoline:6:main:24381_145026--24381_145028\",12,null],[\"24381_145018:isoline:6:atta:24381_145026--24381_145027\",0,null],[\"24381_145018:isoline:7:main:24381_145028--24381_145029\",10,null],[\"24381_145018:isoline:8:slope:mark:24381_145029~24381_145031\",0,null],[\"24381_145018:isoline:8:slope:rise:24381_145029~24381_145031\",0,null],[\"24381_145018:isoline:8:slope:base:24381_145029~24381_145031\",0,null],[\"24381_145018:isoline:8:main:24381_145029--24381_145031\",10,null],[\"24381_145018:isoline:8:atta:24381_145029--24381_145030\",0,null],[\"24381_145018:isoline:9:slope:mark:24381_145031~24381_145032\",0,null],[\"24381_145018:isoline:9:slope:rise:24381_145031~24381_145032\",0,null],[\"24381_145018:isoline:9:slope:base:24381_145031~24381_145032\",0,null],[\"24381_145018:isoline:9:slope:mark:24381_145032~24381_145033\",0,null],[\"24381_145018:isoline:9:slope:rise:24381_145032~24381_145033\",0,null],[\"24381_145018:isoline:9:slope:base:24381_145032~24381_145033\",0,null],[\"24381_145018:isoline:9:main:24381_145031--24381_145032\",10,null],[\"24381_145018:isoline:9:main:24381_145032--24381_145033\",12,null],[\"24381_145018:isoline:10:main:24381_145033--24381_145035\",12,null],[\"24381_145018:isoline:10:main:24381_145035--Tail\",0,null],[\"24381_145018:isoline:10:atta:24381_145033--24381_145034\",0,null],[\"24381_145018:isoline:0:tag:connection:Head\",7,null],[\"24381_145018:isoline:0:tag:elbo:24381_145019\",0,null],[\"24381_145018:isoline:2:tag:elbo:24381_145021\",0,null],[\"24381_145018:isoline:3:tag:elbo:24381_145023\",0,null],[\"24381_145018:isoline:4:tag:elbo:24381_145025\",0,null],[\"24381_145018:isoline:6:tag:elbo:24381_145026\",0,null],[\"24381_145018:isoline:6:tag:elbo:24381_145028\",0,null],[\"24381_145018:isoline:8:tag:elbo:24381_145029\",0,null],[\"24381_145018:isoline:9:tag:elbo:24381_145031\",0,null],[\"24381_145018:isoline:9:tag:connection:24381_145032\",7,null],[\"24381_145018:isoline:10:tag:elbo:24381_145033\",0,null],[\"24381_145018:isoline:10:tag:name:24381_145035\",4,null],[\"24381_145018:isoline:10:tag:connection:Tail\",8,null],[\"24381_145018:tag:branch-name\",0,null]]",
+    "panelState": null
+   },
+   "inspection": {
+    "mode": "inspection",
+    "records": 63,
+    "drawn": 15,
+    "occluded": [
+     "900.51"
+    ],
+    "visible": 14,
+    "unflagged": 0,
+    "transparent": [
+     true,
+     true,
+     true
+    ],
+    "alphas": [
+     0.35,
+     0.65
+    ],
+    "signature": "[[\"24381_145018:isoline:0:slope:mark:Head~24381_145019\",0,null],[\"24381_145018:isoline:0:slope:rise:Head~24381_145019\",0,null],[\"24381_145018:isoline:0:slope:base:Head~24381_145019\",0,null],[\"24381_145018:isoline:0:main:Head--24381_145019\",10,false],[\"24381_145018:isoline:1:main:24381_145019--24381_145021\",12,false],[\"24381_145018:isoline:1:atta:24381_145019--24381_145020\",0,null],[\"24381_145018:isoline:2:slope:mark:24381_145021~24381_145023\",0,null],[\"24381_145018:isoline:2:slope:rise:24381_145021~24381_145023\",0,null],[\"24381_145018:isoline:2:slope:base:24381_145021~24381_145023\",0,null],[\"24381_145018:isoline:2:main:24381_145021--24381_145023\",10,false],[\"24381_145018:isoline:2:atta:24381_145021--24381_145022\",0,null],[\"24381_145018:isoline:4:slope:mark:24381_145023~24381_145025\",0,null],[\"24381_145018:isoline:4:slope:rise:24381_145023~24381_145025\",0,null],[\"24381_145018:isoline:4:slope:base:24381_145023~24381_145025\",0,null],[\"24381_145018:isoline:4:skew:z-leg\",0,null],[\"24381_145018:isoline:4:skew:z-text\",0,null],[\"24381_145018:isoline:4:skew:z-rightangle:1\",0,null],[\"24381_145018:isoline:4:skew:z-rightangle:2\",0,null],[\"24381_145018:isoline:4:skew:x-leg\",0,null],[\"24381_145018:isoline:4:skew:x-text\",0,null],[\"24381_145018:isoline:4:skew:y-leg\",0,null],[\"24381_145018:isoline:4:skew:y-text\",0,null],[\"24381_145018:isoline:4:skew:xy-rightangle:1\",0,null],[\"24381_145018:isoline:4:skew:xy-rightangle:2\",0,null],[\"24381_145018:isoline:4:main:24381_145023--24381_145025\",10,false],[\"24381_145018:isoline:4:atta:24381_145023--24381_145024\",0,null],[\"24381_145018:isoline:5:main:24381_145025--24381_145026\",10,false],[\"24381_145018:isoline:6:slope:mark:24381_145026~24381_145028\",0,null],[\"24381_145018:isoline:6:slope:rise:24381_145026~24381_145028\",0,null],[\"24381_145018:isoline:6:slope:base:24381_145026~24381_145028\",0,null],[\"24381_145018:isoline:6:main:24381_145026--24381_145028\",12,false],[\"24381_145018:isoline:6:atta:24381_145026--24381_145027\",0,null],[\"24381_145018:isoline:7:main:24381_145028--24381_145029\",10,false],[\"24381_145018:isoline:8:slope:mark:24381_145029~24381_145031\",0,null],[\"24381_145018:isoline:8:slope:rise:24381_145029~24381_145031\",0,null],[\"24381_145018:isoline:8:slope:base:24381_145029~24381_145031\",0,null],[\"24381_145018:isoline:8:main:24381_145029--24381_145031\",10,false],[\"24381_145018:isoline:8:atta:24381_145029--24381_145030\",0,null],[\"24381_145018:isoline:9:slope:mark:24381_145031~24381_145032\",0,null],[\"24381_145018:isoline:9:slope:rise:24381_145031~24381_145032\",0,null],[\"24381_145018:isoline:9:slope:base:24381_145031~24381_145032\",0,null],[\"24381_145018:isoline:9:slope:mark:24381_145032~24381_145033\",0,null],[\"24381_145018:isoline:9:slope:rise:24381_145032~24381_145033\",0,null],[\"24381_145018:isoline:9:slope:base:24381_145032~24381_145033\",0,null],[\"24381_145018:isoline:9:main:24381_145031--24381_145032\",10,false],[\"24381_145018:isoline:9:main:24381_145032--24381_145033\",12,false],[\"24381_145018:isoline:10:main:24381_145033--24381_145035\",12,true],[\"24381_145018:isoline:10:main:24381_145035--Tail\",0,null],[\"24381_145018:isoline:10:atta:24381_145033--24381_145034\",0,null],[\"24381_145018:isoline:0:tag:connection:Head\",7,false],[\"24381_145018:isoline:0:tag:elbo:24381_145019\",0,null],[\"24381_145018:isoline:2:tag:elbo:24381_145021\",0,null],[\"24381_145018:isoline:3:tag:elbo:24381_145023\",0,null],[\"24381_145018:isoline:4:tag:elbo:24381_145025\",0,null],[\"24381_145018:isoline:6:tag:elbo:24381_145026\",0,null],[\"24381_145018:isoline:6:tag:elbo:24381_145028\",0,null],[\"24381_145018:isoline:8:tag:elbo:24381_145029\",0,null],[\"24381_145018:isoline:9:tag:elbo:24381_145031\",0,null],[\"24381_145018:isoline:9:tag:connection:24381_145032\",7,false],[\"24381_145018:isoline:10:tag:elbo:24381_145033\",0,null],[\"24381_145018:isoline:10:tag:name:24381_145035\",4,false],[\"24381_145018:isoline:10:tag:connection:Tail\",8,false],[\"24381_145018:tag:branch-name\",0,null]]",
+    "panelState": null
+   },
+   "engineeringMs": [
+    5.5,
+    5.9,
+    3.6
+   ],
+   "inspectionMs": [
+    4.3,
+    4.3,
+    5.2
+   ],
+   "deterministic": true
+  },
+  "behind": {
+   "camera": {
+    "position": [
+     -8.061287469648434,
+     10.993544496423313,
+     -6.590320248296016
+    ],
+    "target": [
+     0,
+     8.881784197001252e-16,
+     1.7763568394002505e-15
+    ]
+   },
+   "engineering": {
+    "mode": "engineering",
+    "records": 63,
+    "drawn": 13,
+    "occluded": [],
+    "visible": 0,
+    "unflagged": 13,
+    "transparent": [
+     false,
+     false,
+     false
+    ],
+    "alphas": [
+     1
+    ],
+    "signature": "[[\"24381_145018:isoline:0:slope:mark:Head~24381_145019\",0,null],[\"24381_145018:isoline:0:slope:rise:Head~24381_145019\",0,null],[\"24381_145018:isoline:0:slope:base:Head~24381_145019\",0,null],[\"24381_145018:isoline:0:main:Head--24381_145019\",10,null],[\"24381_145018:isoline:1:main:24381_145019--24381_145021\",12,null],[\"24381_145018:isoline:1:atta:24381_145019--24381_145020\",0,null],[\"24381_145018:isoline:2:slope:mark:24381_145021~24381_145023\",0,null],[\"24381_145018:isoline:2:slope:rise:24381_145021~24381_145023\",0,null],[\"24381_145018:isoline:2:slope:base:24381_145021~24381_145023\",0,null],[\"24381_145018:isoline:2:main:24381_145021--24381_145023\",10,null],[\"24381_145018:isoline:2:atta:24381_145021--24381_145022\",0,null],[\"24381_145018:isoline:4:slope:mark:24381_145023~24381_145025\",0,null],[\"24381_145018:isoline:4:slope:rise:24381_145023~24381_145025\",0,null],[\"24381_145018:isoline:4:slope:base:24381_145023~24381_145025\",0,null],[\"24381_145018:isoline:4:skew:z-leg\",0,null],[\"24381_145018:isoline:4:skew:z-text\",0,null],[\"24381_145018:isoline:4:skew:z-rightangle:1\",0,null],[\"24381_145018:isoline:4:skew:z-rightangle:2\",0,null],[\"24381_145018:isoline:4:skew:x-leg\",0,null],[\"24381_145018:isoline:4:skew:x-text\",0,null],[\"24381_145018:isoline:4:skew:y-leg\",0,null],[\"24381_145018:isoline:4:skew:y-text\",0,null],[\"24381_145018:isoline:4:skew:xy-rightangle:1\",0,null],[\"24381_145018:isoline:4:skew:xy-rightangle:2\",0,null],[\"24381_145018:isoline:4:main:24381_145023--24381_145025\",10,null],[\"24381_145018:isoline:4:atta:24381_145023--24381_145024\",0,null],[\"24381_145018:isoline:5:main:24381_145025--24381_145026\",10,null],[\"24381_145018:isoline:6:slope:mark:24381_145026~24381_145028\",0,null],[\"24381_145018:isoline:6:slope:rise:24381_145026~24381_145028\",0,null],[\"24381_145018:isoline:6:slope:base:24381_145026~24381_145028\",0,null],[\"24381_145018:isoline:6:main:24381_145026--24381_145028\",10,null],[\"24381_145018:isoline:6:atta:24381_145026--24381_145027\",0,null],[\"24381_145018:isoline:7:main:24381_145028--24381_145029\",10,null],[\"24381_145018:isoline:8:slope:mark:24381_145029~24381_145031\",0,null],[\"24381_145018:isoline:8:slope:rise:24381_145029~24381_145031\",0,null],[\"24381_145018:isoline:8:slope:base:24381_145029~24381_145031\",0,null],[\"24381_145018:isoline:8:main:24381_145029--24381_145031\",10,null],[\"24381_145018:isoline:8:atta:24381_145029--24381_145030\",0,null],[\"24381_145018:isoline:9:slope:mark:24381_145031~24381_145032\",0,null],[\"24381_145018:isoline:9:slope:rise:24381_145031~24381_145032\",0,null],[\"24381_145018:isoline:9:slope:base:24381_145031~24381_145032\",0,null],[\"24381_145018:isoline:9:slope:mark:24381_145032~24381_145033\",0,null],[\"24381_145018:isoline:9:slope:rise:24381_145032~24381_145033\",0,null],[\"24381_145018:isoline:9:slope:base:24381_145032~24381_145033\",0,null],[\"24381_145018:isoline:9:main:24381_145031--24381_145032\",10,null],[\"24381_145018:isoline:9:main:24381_145032--24381_145033\",0,null],[\"24381_145018:isoline:10:main:24381_145033--24381_145035\",0,null],[\"24381_145018:isoline:10:main:24381_145035--Tail\",0,null],[\"24381_145018:isoline:10:atta:24381_145033--24381_145034\",0,null],[\"24381_145018:isoline:0:tag:connection:Head\",7,null],[\"24381_145018:isoline:0:tag:elbo:24381_145019\",0,null],[\"24381_145018:isoline:2:tag:elbo:24381_145021\",0,null],[\"24381_145018:isoline:3:tag:elbo:24381_145023\",0,null],[\"24381_145018:isoline:4:tag:elbo:24381_145025\",0,null],[\"24381_145018:isoline:6:tag:elbo:24381_145026\",0,null],[\"24381_145018:isoline:6:tag:elbo:24381_145028\",0,null],[\"24381_145018:isoline:8:tag:elbo:24381_145029\",0,null],[\"24381_145018:isoline:9:tag:elbo:24381_145031\",0,null],[\"24381_145018:isoline:9:tag:connection:24381_145032\",7,null],[\"24381_145018:isoline:10:tag:elbo:24381_145033\",0,null],[\"24381_145018:isoline:10:tag:name:24381_145035\",4,null],[\"24381_145018:isoline:10:tag:connection:Tail\",8,null],[\"24381_145018:tag:branch-name\",0,null]]",
+    "panelState": null
+   },
+   "inspection": {
+    "mode": "inspection",
+    "records": 63,
+    "drawn": 13,
+    "occluded": [
+     "1834.19"
+    ],
+    "visible": 12,
+    "unflagged": 0,
+    "transparent": [
+     true,
+     true,
+     true
+    ],
+    "alphas": [
+     0.35,
+     0.65
+    ],
+    "signature": "[[\"24381_145018:isoline:0:slope:mark:Head~24381_145019\",0,null],[\"24381_145018:isoline:0:slope:rise:Head~24381_145019\",0,null],[\"24381_145018:isoline:0:slope:base:Head~24381_145019\",0,null],[\"24381_145018:isoline:0:main:Head--24381_145019\",10,true],[\"24381_145018:isoline:1:main:24381_145019--24381_145021\",12,false],[\"24381_145018:isoline:1:atta:24381_145019--24381_145020\",0,null],[\"24381_145018:isoline:2:slope:mark:24381_145021~24381_145023\",0,null],[\"24381_145018:isoline:2:slope:rise:24381_145021~24381_145023\",0,null],[\"24381_145018:isoline:2:slope:base:24381_145021~24381_145023\",0,null],[\"24381_145018:isoline:2:main:24381_145021--24381_145023\",10,false],[\"24381_145018:isoline:2:atta:24381_145021--24381_145022\",0,null],[\"24381_145018:isoline:4:slope:mark:24381_145023~24381_145025\",0,null],[\"24381_145018:isoline:4:slope:rise:24381_145023~24381_145025\",0,null],[\"24381_145018:isoline:4:slope:base:24381_145023~24381_145025\",0,null],[\"24381_145018:isoline:4:skew:z-leg\",0,null],[\"24381_145018:isoline:4:skew:z-text\",0,null],[\"24381_145018:isoline:4:skew:z-rightangle:1\",0,null],[\"24381_145018:isoline:4:skew:z-rightangle:2\",0,null],[\"24381_145018:isoline:4:skew:x-leg\",0,null],[\"24381_145018:isoline:4:skew:x-text\",0,null],[\"24381_145018:isoline:4:skew:y-leg\",0,null],[\"24381_145018:isoline:4:skew:y-text\",0,null],[\"24381_145018:isoline:4:skew:xy-rightangle:1\",0,null],[\"24381_145018:isoline:4:skew:xy-rightangle:2\",0,null],[\"24381_145018:isoline:4:main:24381_145023--24381_145025\",10,false],[\"24381_145018:isoline:4:atta:24381_145023--24381_145024\",0,null],[\"24381_145018:isoline:5:main:24381_145025--24381_145026\",10,false],[\"24381_145018:isoline:6:slope:mark:24381_145026~24381_145028\",0,null],[\"24381_145018:isoline:6:slope:rise:24381_145026~24381_145028\",0,null],[\"24381_145018:isoline:6:slope:base:24381_145026~24381_145028\",0,null],[\"24381_145018:isoline:6:main:24381_145026--24381_145028\",10,false],[\"24381_145018:isoline:6:atta:24381_145026--24381_145027\",0,null],[\"24381_145018:isoline:7:main:24381_145028--24381_145029\",10,false],[\"24381_145018:isoline:8:slope:mark:24381_145029~24381_145031\",0,null],[\"24381_145018:isoline:8:slope:rise:24381_145029~24381_145031\",0,null],[\"24381_145018:isoline:8:slope:base:24381_145029~24381_145031\",0,null],[\"24381_145018:isoline:8:main:24381_145029--24381_145031\",10,false],[\"24381_145018:isoline:8:atta:24381_145029--24381_145030\",0,null],[\"24381_145018:isoline:9:slope:mark:24381_145031~24381_145032\",0,null],[\"24381_145018:isoline:9:slope:rise:24381_145031~24381_145032\",0,null],[\"24381_145018:isoline:9:slope:base:24381_145031~24381_145032\",0,null],[\"24381_145018:isoline:9:slope:mark:24381_145032~24381_145033\",0,null],[\"24381_145018:isoline:9:slope:rise:24381_145032~24381_145033\",0,null],[\"24381_145018:isoline:9:slope:base:24381_145032~24381_145033\",0,null],[\"24381_145018:isoline:9:main:24381_145031--24381_145032\",10,false],[\"24381_145018:isoline:9:main:24381_145032--24381_145033\",0,null],[\"24381_145018:isoline:10:main:24381_145033--24381_145035\",0,null],[\"24381_145018:isoline:10:main:24381_145035--Tail\",0,null],[\"24381_145018:isoline:10:atta:24381_145033--24381_145034\",0,null],[\"24381_145018:isoline:0:tag:connection:Head\",7,false],[\"24381_145018:isoline:0:tag:elbo:24381_145019\",0,null],[\"24381_145018:isoline:2:tag:elbo:24381_145021\",0,null],[\"24381_145018:isoline:3:tag:elbo:24381_145023\",0,null],[\"24381_145018:isoline:4:tag:elbo:24381_145025\",0,null],[\"24381_145018:isoline:6:tag:elbo:24381_145026\",0,null],[\"24381_145018:isoline:6:tag:elbo:24381_145028\",0,null],[\"24381_145018:isoline:8:tag:elbo:24381_145029\",0,null],[\"24381_145018:isoline:9:tag:elbo:24381_145031\",0,null],[\"24381_145018:isoline:9:tag:connection:24381_145032\",7,false],[\"24381_145018:isoline:10:tag:elbo:24381_145033\",0,null],[\"24381_145018:isoline:10:tag:name:24381_145035\",4,false],[\"24381_145018:isoline:10:tag:connection:Tail\",8,false],[\"24381_145018:tag:branch-name\",0,null]]",
+    "panelState": null
+   },
+   "engineeringMs": [
+    3.3,
+    4.7,
+    3.7
+   ],
+   "inspectionMs": [
+    3.7,
+    3.6,
+    3
+   ],
+   "deterministic": true
+  },
+  "valve-mid": {
+   "camera": {
+    "position": [
+     6.395605989555092,
+     -3.4510717082737155,
+     4.462469212994151
+    ],
+    "target": [
+     4.017226318359375,
+     -0.20756713867187404,
+     2.518079589843751
+    ]
+   },
+   "engineering": {
+    "mode": "engineering",
+    "records": 63,
+    "drawn": 16,
+    "occluded": [],
+    "visible": 0,
+    "unflagged": 16,
+    "transparent": [
+     false,
+     false,
+     false
+    ],
+    "alphas": [
+     1
+    ],
+    "signature": "[[\"24381_145018:isoline:0:slope:mark:Head~24381_145019\",0,null],[\"24381_145018:isoline:0:slope:rise:Head~24381_145019\",0,null],[\"24381_145018:isoline:0:slope:base:Head~24381_145019\",0,null],[\"24381_145018:isoline:0:main:Head--24381_145019\",10,null],[\"24381_145018:isoline:1:main:24381_145019--24381_145021\",10,null],[\"24381_145018:isoline:1:atta:24381_145019--24381_145020\",0,null],[\"24381_145018:isoline:2:slope:mark:24381_145021~24381_145023\",0,null],[\"24381_145018:isoline:2:slope:rise:24381_145021~24381_145023\",0,null],[\"24381_145018:isoline:2:slope:base:24381_145021~24381_145023\",0,null],[\"24381_145018:isoline:2:main:24381_145021--24381_145023\",10,null],[\"24381_145018:isoline:2:atta:24381_145021--24381_145022\",0,null],[\"24381_145018:isoline:4:slope:mark:24381_145023~24381_145025\",0,null],[\"24381_145018:isoline:4:slope:rise:24381_145023~24381_145025\",0,null],[\"24381_145018:isoline:4:slope:base:24381_145023~24381_145025\",0,null],[\"24381_145018:isoline:4:skew:z-leg\",0,null],[\"24381_145018:isoline:4:skew:z-text\",0,null],[\"24381_145018:isoline:4:skew:z-rightangle:1\",0,null],[\"24381_145018:isoline:4:skew:z-rightangle:2\",0,null],[\"24381_145018:isoline:4:skew:x-leg\",0,null],[\"24381_145018:isoline:4:skew:x-text\",0,null],[\"24381_145018:isoline:4:skew:y-leg\",0,null],[\"24381_145018:isoline:4:skew:y-text\",0,null],[\"24381_145018:isoline:4:skew:xy-rightangle:1\",0,null],[\"24381_145018:isoline:4:skew:xy-rightangle:2\",0,null],[\"24381_145018:isoline:4:main:24381_145023--24381_145025\",10,null],[\"24381_145018:isoline:4:atta:24381_145023--24381_145024\",0,null],[\"24381_145018:isoline:5:main:24381_145025--24381_145026\",10,null],[\"24381_145018:isoline:6:slope:mark:24381_145026~24381_145028\",0,null],[\"24381_145018:isoline:6:slope:rise:24381_145026~24381_145028\",0,null],[\"24381_145018:isoline:6:slope:base:24381_145026~24381_145028\",0,null],[\"24381_145018:isoline:6:main:24381_145026--24381_145028\",10,null],[\"24381_145018:isoline:6:atta:24381_145026--24381_145027\",0,null],[\"24381_145018:isoline:7:main:24381_145028--24381_145029\",10,null],[\"24381_145018:isoline:8:slope:mark:24381_145029~24381_145031\",0,null],[\"24381_145018:isoline:8:slope:rise:24381_145029~24381_145031\",0,null],[\"24381_145018:isoline:8:slope:base:24381_145029~24381_145031\",0,null],[\"24381_145018:isoline:8:main:24381_145029--24381_145031\",10,null],[\"24381_145018:isoline:8:atta:24381_145029--24381_145030\",0,null],[\"24381_145018:isoline:9:slope:mark:24381_145031~24381_145032\",0,null],[\"24381_145018:isoline:9:slope:rise:24381_145031~24381_145032\",0,null],[\"24381_145018:isoline:9:slope:base:24381_145031~24381_145032\",0,null],[\"24381_145018:isoline:9:slope:mark:24381_145032~24381_145033\",0,null],[\"24381_145018:isoline:9:slope:rise:24381_145032~24381_145033\",0,null],[\"24381_145018:isoline:9:slope:base:24381_145032~24381_145033\",0,null],[\"24381_145018:isoline:9:main:24381_145031--24381_145032\",10,null],[\"24381_145018:isoline:9:main:24381_145032--24381_145033\",10,null],[\"24381_145018:isoline:10:main:24381_145033--24381_145035\",10,null],[\"24381_145018:isoline:10:main:24381_145035--Tail\",12,null],[\"24381_145018:isoline:10:atta:24381_145033--24381_145034\",0,null],[\"24381_145018:isoline:0:tag:connection:Head\",7,null],[\"24381_145018:isoline:0:tag:elbo:24381_145019\",0,null],[\"24381_145018:isoline:2:tag:elbo:24381_145021\",0,null],[\"24381_145018:isoline:3:tag:elbo:24381_145023\",0,null],[\"24381_145018:isoline:4:tag:elbo:24381_145025\",0,null],[\"24381_145018:isoline:6:tag:elbo:24381_145026\",0,null],[\"24381_145018:isoline:6:tag:elbo:24381_145028\",0,null],[\"24381_145018:isoline:8:tag:elbo:24381_145029\",0,null],[\"24381_145018:isoline:9:tag:elbo:24381_145031\",0,null],[\"24381_145018:isoline:9:tag:connection:24381_145032\",7,null],[\"24381_145018:isoline:10:tag:elbo:24381_145033\",0,null],[\"24381_145018:isoline:10:tag:name:24381_145035\",4,null],[\"24381_145018:isoline:10:tag:connection:Tail\",8,null],[\"24381_145018:tag:branch-name\",0,null]]",
+    "panelState": null
+   },
+   "inspection": {
+    "mode": "inspection",
+    "records": 63,
+    "drawn": 16,
+    "occluded": [
+     "900.51",
+     "173"
+    ],
+    "visible": 14,
+    "unflagged": 0,
+    "transparent": [
+     true,
+     true,
+     true
+    ],
+    "alphas": [
+     0.35,
+     0.65
+    ],
+    "signature": "[[\"24381_145018:isoline:0:slope:mark:Head~24381_145019\",0,null],[\"24381_145018:isoline:0:slope:rise:Head~24381_145019\",0,null],[\"24381_145018:isoline:0:slope:base:Head~24381_145019\",0,null],[\"24381_145018:isoline:0:main:Head--24381_145019\",10,false],[\"24381_145018:isoline:1:main:24381_145019--24381_145021\",10,false],[\"24381_145018:isoline:1:atta:24381_145019--24381_145020\",0,null],[\"24381_145018:isoline:2:slope:mark:24381_145021~24381_145023\",0,null],[\"24381_145018:isoline:2:slope:rise:24381_145021~24381_145023\",0,null],[\"24381_145018:isoline:2:slope:base:24381_145021~24381_145023\",0,null],[\"24381_145018:isoline:2:main:24381_145021--24381_145023\",10,false],[\"24381_145018:isoline:2:atta:24381_145021--24381_145022\",0,null],[\"24381_145018:isoline:4:slope:mark:24381_145023~24381_145025\",0,null],[\"24381_145018:isoline:4:slope:rise:24381_145023~24381_145025\",0,null],[\"24381_145018:isoline:4:slope:base:24381_145023~24381_145025\",0,null],[\"24381_145018:isoline:4:skew:z-leg\",0,null],[\"24381_145018:isoline:4:skew:z-text\",0,null],[\"24381_145018:isoline:4:skew:z-rightangle:1\",0,null],[\"24381_145018:isoline:4:skew:z-rightangle:2\",0,null],[\"24381_145018:isoline:4:skew:x-leg\",0,null],[\"24381_145018:isoline:4:skew:x-text\",0,null],[\"24381_145018:isoline:4:skew:y-leg\",0,null],[\"24381_145018:isoline:4:skew:y-text\",0,null],[\"24381_145018:isoline:4:skew:xy-rightangle:1\",0,null],[\"24381_145018:isoline:4:skew:xy-rightangle:2\",0,null],[\"24381_145018:isoline:4:main:24381_145023--24381_145025\",10,false],[\"24381_145018:isoline:4:atta:24381_145023--24381_145024\",0,null],[\"24381_145018:isoline:5:main:24381_145025--24381_145026\",10,false],[\"24381_145018:isoline:6:slope:mark:24381_145026~24381_145028\",0,null],[\"24381_145018:isoline:6:slope:rise:24381_145026~24381_145028\",0,null],[\"24381_145018:isoline:6:slope:base:24381_145026~24381_145028\",0,null],[\"24381_145018:isoline:6:main:24381_145026--24381_145028\",10,false],[\"24381_145018:isoline:6:atta:24381_145026--24381_145027\",0,null],[\"24381_145018:isoline:7:main:24381_145028--24381_145029\",10,false],[\"24381_145018:isoline:8:slope:mark:24381_145029~24381_145031\",0,null],[\"24381_145018:isoline:8:slope:rise:24381_145029~24381_145031\",0,null],[\"24381_145018:isoline:8:slope:base:24381_145029~24381_145031\",0,null],[\"24381_145018:isoline:8:main:24381_145029--24381_145031\",10,false],[\"24381_145018:isoline:8:atta:24381_145029--24381_145030\",0,null],[\"24381_145018:isoline:9:slope:mark:24381_145031~24381_145032\",0,null],[\"24381_145018:isoline:9:slope:rise:24381_145031~24381_145032\",0,null],[\"24381_145018:isoline:9:slope:base:24381_145031~24381_145032\",0,null],[\"24381_145018:isoline:9:slope:mark:24381_145032~24381_145033\",0,null],[\"24381_145018:isoline:9:slope:rise:24381_145032~24381_145033\",0,null],[\"24381_145018:isoline:9:slope:base:24381_145032~24381_145033\",0,null],[\"24381_145018:isoline:9:main:24381_145031--24381_145032\",10,false],[\"24381_145018:isoline:9:main:24381_145032--24381_145033\",10,false],[\"24381_145018:isoline:10:main:24381_145033--24381_145035\",10,true],[\"24381_145018:isoline:10:main:24381_145035--Tail\",12,true],[\"24381_145018:isoline:10:atta:24381_145033--24381_145034\",0,null],[\"24381_145018:isoline:0:tag:connection:Head\",7,false],[\"24381_145018:isoline:0:tag:elbo:24381_145019\",0,null],[\"24381_145018:isoline:2:tag:elbo:24381_145021\",0,null],[\"24381_145018:isoline:3:tag:elbo:24381_145023\",0,null],[\"24381_145018:isoline:4:tag:elbo:24381_145025\",0,null],[\"24381_145018:isoline:6:tag:elbo:24381_145026\",0,null],[\"24381_145018:isoline:6:tag:elbo:24381_145028\",0,null],[\"24381_145018:isoline:8:tag:elbo:24381_145029\",0,null],[\"24381_145018:isoline:9:tag:elbo:24381_145031\",0,null],[\"24381_145018:isoline:9:tag:connection:24381_145032\",7,false],[\"24381_145018:isoline:10:tag:elbo:24381_145033\",0,null],[\"24381_145018:isoline:10:tag:name:24381_145035\",4,false],[\"24381_145018:isoline:10:tag:connection:Tail\",8,false],[\"24381_145018:tag:branch-name\",0,null]]",
+    "panelState": null
+   },
+   "engineeringMs": [
+    3.2,
+    3.7,
+    4.8
+   ],
+   "inspectionMs": [
+    5.2,
+    5.1,
+    4
+   ],
+   "deterministic": true
+  }
+ },
+ "restored": {
+  "mode": "engineering",
+  "alphas": [
+   1
+  ],
+  "transparent": [
+   false,
+   false,
+   false
+  ]
+ },
+ "pageErrors": []
+}
