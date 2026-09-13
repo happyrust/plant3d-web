@@ -299,3 +299,43 @@ E3D 的方向字串（如 `S 11.7755 W 66.1215 D`）在用例里按 PDMS 罗盘�
 
 未做：Primitive Key Point / PLINE 语义关键点在 gen-model-v1 下仍无 API（服务端只存烘好的网格、无基本体分解），
 提示条显示原因；legacy 源照旧读 parquet。
+
+## 12. 拾取层 Phase A · Graphics 过滤器（网格派生边 / 面）实机走查（2026-09-13 12:11）
+
+**改动口径**（方案 `2026-09-12-e3d-measure-parity-plan.md` Phase A 切片 2，提交 `001b302` / `6ca770a`）：
+
+- E3D `EDGPICK.stdGraphics`（`inMode = 'pickdetail'`）拾的是绘制细节：facet 边 → `3D_LINE`（`getLine()`）、facet → `PLANE`（`getPlane()`）。
+  Web 从 DTX 已加载的三角网格派生（`src/measurement/graphics/meshFeatureGraphics.ts`）：边界边 / 非流形边 / 二面角 ≥ 30° 的边
+  判为绘制边，度 2 顶点处的共线段合并；面取命中三角形所在平面 + BFS 共面片轮廓。新点源 `mesh_graphics`（缺省 show=false /
+  snap=true / 12px）：射线 12px 内有绘制边 → 边候选（worldPos 落在边上离射线最近处，`segment` + `direction`）；否则一个面候选
+  （worldPos = 命中点，`plane` + `outline`）。
+- 拾取过滤器 `Any` 改按 E3D `stdAny` 口径「Standard pick interpreter for **Element, Ppoint or Pline**」（+ Web 表面点），不放行
+  graphics / aid / external；Graphics 细节只在 Graphics 过滤器下参与。`Graphics` 过滤器改为可用；覆盖条设置弹层补上
+  过滤器 × 拾取类型 radio 组、取值输入与 Significant snaps。
+- 拾取类型内核对面候选走 `plane` 分支（所有单击类型回 射线 ∩ 平面）；Perpendicular to 新增 `facet-plane` provider（E3D `getPlane()` 分支）。
+
+**证据等级**：以下 Web 行为均为 `static_expectation`（依据 `edgpick.pmlobj` `stdAny` / `stdGraphics` 注释与 `edgpicktype.pmlobj` `snap()`
+的 `GRAPHICS` 分支）；E3D 运行时 golden **G7-02（EDGE / PLANE 实际捕捉几何）与 G8（拾取类型）本轮未采——E3D 3.1 进程不在运行**，
+不得据此宣称「与 E3D 一致」。
+
+**Web 实机走查**（dev `:3101` + gen-model `:8023`，`?show_refno=24381_145018&gm_backend_port=8023`，Playwright 真指针；
+临时 spec 已删）：测量 Dock → `距离` → 设置弹层 → 拾取过滤器 `Graphics`（摘要行 `Graphics · Snap`）→ 10px 步长扫描模型区 →
+以覆盖条提示文字确认捕捉目标 → 点面、点边。
+
+- 提示条：切 Graphics 前 `距离测量 · 第 1/2 步 选择起点 (Snap) Snap : 等待捕捉（P-Point / Item 原点）`，切后
+  `… : 等待捕捉（网格边 / 面（Graphics））`——过滤器不放行的点源不再算「已开」。
+- 扫描 132 个像素：面候选 4（`TUBI 面`）、边候选 4（`TUBI 边`）、另见 `VALV 边 · Snap` / `ELBO 边 · Snap`（Snap 把控制点吸到边的近端，
+  派生标记 `· Snap`）；P-Point / Item 原点在 Graphics 过滤器下**一次都没出现**（`Any` 不放行 graphics、`Graphics` 不放行 ppoint / element 的对偶）。
+- 记录（`web-graphics-live-records.json`）：起点 `graphics:o:24381_145018:7:facet:0`（`mesh_graphics` / `面`，设计坐标
+  `7885.979 / 10314.785 / 18694.671 mm`），终点 `graphics:o:24381_145018:5:edge:43`（`边`，`7800.357 / 11758.915 / 16892.524 mm`）。
+- 结果表：`Distance 2311mm / Offset X -86mm / Y +1444mm / Z -1802mm / Direction X -0.0371 · Y +0.6249 · Z -0.7798 / 起点 → 终点 面 → 边`，
+  列表条目带 `近似`（`mesh_graphics` 归 `model-surface` / approximate，网格是渲染细分不是设计曲面）。
+  独立复算：Δ = (−85.62, +1444.13, −1802.15) mm，|Δ| = 2311.0 mm，方向 (−0.0371, 0.6249, −0.7798)——与面板一致。
+- 截图 `web-graphics-live-01-pick-layer-popover.png`（弹层控件）、`-02-hover-facet.png`、`-03-hover-edge.png`、`-04-result.png`；
+  扫描日志 `web-graphics-live.log`。
+- 单测：`meshFeatureGraphics.test.ts` 13 条（盒 12 棱 / 矩阵 / 共线合并 / 非流形不合并 / 8 段圆柱母线 vs 36 段只剩圆周 / 面片 / 退化）、
+  `pickLayerModel.test.ts` 8 条（Any / Graphics / Element+Cursor 放行表、提示 token、归一化）、`buildGraphicsPickCandidates` 3 条、
+  `MeasurementOverlayBar.test.ts` 拾取层控件 1 条；测量相关 vitest 30 文件 / 322 用例过。
+
+未做：Intersect 两次拾取流程（内核 `intersectPicks` 已就位，UI 未接）；`element/keypoints` / `element/plines` 服务端接口
+（gen-model-v1 下 Element 显著点 / PLINE 仍无供给）；TUBING 轴线点前端派生；G7 / G8 / G9 运行时 golden。

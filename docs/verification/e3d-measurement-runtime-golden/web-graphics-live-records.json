@@ -1,0 +1,85 @@
+[
+  {
+    "key": "plant3d-web-tools-v7:project=AvevaMarineSample|db=__all__",
+    "xeokit": {
+      "version": 7,
+      "measurements": [
+        {
+          "id": "xdist_1789272688310_nmy1gr",
+          "visible": true,
+          "createdAt": 1789272688310,
+          "approximate": true,
+          "source": "xeokit",
+          "provenance": {
+            "method": "legacy-unknown",
+            "accuracyClass": "legacy-unknown",
+            "coordinateSpace": "design-world",
+            "lengthUnit": "m",
+            "sourceModelVersion": null,
+            "source": {
+              "entityId": "o:24381_145018:7",
+              "refno": "24381_145018",
+              "candidateId": "graphics:o:24381_145018:7:facet:0"
+            },
+            "target": {
+              "entityId": "o:24381_145018:5",
+              "refno": "24381_145018",
+              "candidateId": "graphics:o:24381_145018:5:edge:43"
+            },
+            "warnings": [
+              {
+                "code": "LEGACY_PROVENANCE_UNKNOWN",
+                "message": "Legacy measurement did not record its computation method or accuracy."
+              }
+            ],
+            "errorBoundM": null
+          },
+          "kind": "distance",
+          "origin": {
+            "entityId": "o:24381_145018:7",
+            "worldPos": [
+              1.9222052946815342,
+              0.34254594047232345,
+              2.1426999814157632
+            ],
+            "designWorldPos": [
+              7.885978976322161,
+              10.31478544242545,
+              18.694671172822016
+            ],
+            "sourceInfo": {
+              "source": "mesh_graphics",
+              "candidateId": "graphics:o:24381_145018:7:facet:0",
+              "refno": "24381_145018",
+              "label": "面"
+            }
+          },
+          "target": {
+            "entityId": "o:24381_145018:5",
+            "worldPos": [
+              1.8365830637390186,
+              1.7866756366297194,
+              0.34055285814315495
+            ],
+            "designWorldPos": [
+              7.800356745379645,
+              11.758915138582845,
+              16.892524049549404
+            ],
+            "sourceInfo": {
+              "source": "mesh_graphics",
+              "candidateId": "graphics:o:24381_145018:5:edge:43",
+              "refno": "24381_145018",
+              "label": "边"
+            }
+          }
+        }
+      ],
+      "legacyMeasurements": [],
+      "annotations": [],
+      "obbAnnotations": [],
+      "cloudAnnotations": [],
+      "rectAnnotations": []
+    }
+  }
+]

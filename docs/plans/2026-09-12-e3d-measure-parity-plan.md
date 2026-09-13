@@ -82,12 +82,12 @@
 | 11 | 拾取过滤器：Ppoint | ✓ | `ptset` 源；2026-09-12 起经 `ModelSource.keypoints` 走 gen-model `element/ptset`（d-559），实机 表面点 → P-Point 轴线 走通 |
 | 12 | 拾取过滤器：Element（noun 显著点） | ◐ | `primitive_key_point`（基本体 / PLINE 关键点）——legacy parquet 有，**gen-model-v1 无 API**；`position`（Item 原点）≈ 元素原点 |
 | 13 | 拾取过滤器：Pline | ◐ | legacy `semantic_snap_points`（PLINE start/end）；v1 无 |
-| 14 | 拾取过滤器：Graphics（facet 边 / 面）、Screen、Aid、External | ✗ | Web 只有 `mesh_pick_point`（表面任意点，近似） |
+| 14 | 拾取过滤器：Graphics（facet 边 / 面）、Screen、Aid、External | ◐ | **Graphics ✓（2026-09-13）**：`mesh_graphics` 点源从已加载网格派生绘制边（线）/ 面（平面），只在 Graphics 过滤器下参与；实机 `面 → 边` 距离走通（golden MD §12）。Screen ✓（= `mesh_pick_point`）。Aid / External 占位灰掉 |
 | 15 | TUBING 轴线点、DPOINT | ✗ | — |
-| 16 | 拾取类型：Snap / Exact | ✓ | E3D 模式 = Snap，自由表面 = Exact |
-| 17 | 拾取类型：Distance / Mid-Point / Fraction / Proportion / Intersect | ✗ | — |
-| 18 | Significant Snaps 开关 | ◐ | 各点源 show / snap / 阈值开关等价，但没有「显著点 vs 任意点」这一档语义 |
-| 19 | 提示文案结构 `<命令> <步> (<拾取类型>) <过滤器> :` | ◐ | 有分步提示 + Snap 目标名（`垂距测量 · 第 2/2 步 … · Snap: ELBO P-Point #1`），无拾取类型段 |
+| 16 | 拾取类型：Snap / Exact | ✓ | 拾取层 `pickType` Snap / Cursor；点候选、线候选（`GMFLINE` 近端 / 控制点）、面候选（射线 ∩ 平面）三类几何均接内核 |
+| 17 | 拾取类型：Distance / Mid-Point / Fraction / Proportion / Intersect | ◐ | Distance / Mid-Point / Fraction / Proportion：内核 `pickDerivation.ts` + UI 取值输入已接（PLINE 线、Graphics 边、P-Point Distance 偏移）；**Intersect 内核就位、两次拾取流程未接**；G8 未采 |
+| 18 | Significant Snaps 开关 | ◐ | 拾取层 `significantSnaps`（覆盖条开关 + 提示尾巴 `Snap`），线候选带 `intermediates` 时按段派生；无 E3D 实机对照 |
+| 19 | 提示文案结构 `<命令> <步> (<拾取类型>) <过滤器> :` | ◐ | `formatMeasurementPrompt`：`距离测量 · 第 2/2 步 选择终点 (Mid-Point) Snap : ELBO P-Point #1`（E3D `EDGSTATE.prompt()` 结构，过滤器不进提示与 E3D 一致）；文案矩阵（Phase E）未对照 |
 | 20 | 窗体常驻 / 连续测量 / Repeat / ESC 分层 / 右键 | ◐ | 有连续测量、Esc 分层、右键菜单；ESC / 右键 / 关窗的 E3D 分层行为未采（上一计划 M3 gate） |
 | 21 | 标高点 / 高差 | Web 独有 | E3D Measure 无此模式（用 Query），保留，不列 parity |
 
@@ -104,6 +104,16 @@
 ### Phase A · 拾取层对齐（拾取过滤器 × 拾取类型）
 
 **范围**：#12 #13 #14 #16 #17 #18 #19。
+
+**进度（2026-09-13）**
+- 切片 1（快照 `9d34701`，用例对齐 `51b6933`）：两维模型 `src/measurement/pick/pickLayerModel.ts`（过滤器 8 / 类型 7、可用性、
+  E3D 提示结构）、拾取类型内核 `src/measurement/kernel/pickDerivation.ts`、样式仓 V9 持久化、候选准入 `measurementPickLayerAdmits`、
+  PLINE 端点配成线（`attachPlineSegments`）、提示条 `formatMeasurementPrompt`。
+- 切片 2（`001b302`）：Graphics provider `src/measurement/graphics/meshFeatureGraphics.ts` + `mesh_graphics` 点源；`Any` 改按
+  E3D `stdAny`「Element, Ppoint or Pline」口径；Perpendicular `facet-plane` provider；拾中细节高亮。实机走通 `面 → 边`（golden MD §12）。
+- 切片 2b（`6ca770a`）：覆盖条设置弹层的过滤器 × 拾取类型 radio 组、取值输入、Significant snaps 控件（切片 1 漏掉的模板）。
+- **未完**：Intersect 两次拾取流程；`element/keypoints` / `element/plines` 服务端；TUBING 轴线点前端派生；G7 / G8 / G9 运行时 golden
+  （E3D 需在跑）；ADR「测量拾取层对齐 E3D Positioning Control」。
 
 **前端**
 - `useMeasurementPickSources` 重构成两维：**过滤器**（对齐 E3D：Any / Element / Ppoint / Pline / Graphics / Screen；Aid / External 先占位灰掉）× **拾取类型**（Snap / Exact / Mid-Point / Fraction / Proportion / Distance / Intersect）。现有 4 个点源映射：`ptset`→Ppoint、`position`+`primitive_key_point`→Element、PLINE 关键点→Pline、`mesh_pick_point`→Screen/Exact；新增 Graphics。
