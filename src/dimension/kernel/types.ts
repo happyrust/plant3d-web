@@ -24,13 +24,19 @@ export type LayoutObstacle = Readonly<{
 }>;
 
 /**
- * Host seam the viewport layout asks for the component boxes around the
- * billboard tags of one view (「标签避让管件」, 2026-09-13): `query` answers
- * with every box intersecting the Design Space region, in any order; the
- * kernel projects them and keeps the tag bodies clear.
+ * Host seam the viewport layout asks what the billboard tags of one view
+ * must keep clear of besides labels and dimension strokes (「标签避让管件」,
+ * 2026-09-13). Both parts are optional:
+ * - `query` answers with every component box intersecting the Design Space
+ *   region, in any order; the kernel projects them and keeps the tag bodies
+ *   clear of their outlines.
+ * - `overlays` answers with the screen rectangles fixed on the viewport (an
+ *   axis gizmo, a legend), in the projector's CSS px; a tag body under one
+ *   of them would be as unreadable as one over a value.
  */
 export type LayoutObstacleSource = Readonly<{
-  query(region: DesignBox): readonly LayoutObstacle[];
+  query?(region: DesignBox): readonly LayoutObstacle[];
+  overlays?(): readonly ScreenRect[];
 }>;
 
 export type InteractionState = 'normal' | 'hovered' | 'selected';

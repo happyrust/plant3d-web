@@ -1,7 +1,7 @@
 import { Box3, Matrix4, Vector3, type Camera, type Object3D } from 'three';
 
 import type { DimensionViewerAdapter } from '../facade/createDimensionSystem';
-import type { DesignBox, LayoutObstacle, Vec3 } from '../kernel/types';
+import type { DesignBox, LayoutObstacle, ScreenRect, Vec3 } from '../kernel/types';
 
 /**
  * The part of the DTX layer the adapter reads component boxes from: objects
@@ -42,6 +42,11 @@ function tuple(vector: Vector3): Vec3 {
  * box meets it, and each box's eight local (millimetre) corners come back in
  * Design Space — through the same two matrices, so a rotated model matrix
  * yields the box's true corners rather than a re-fitted, looser AABB.
+ *
+ * With `getOverlayElements` it answers `getLayoutOverlays`: each element's
+ * client rectangle, re-based on the container's top-left so it lives in the
+ * same CSS px space as the projector (elements missing or without an area
+ * are skipped).
  */
 export function createDtxDimensionViewerAdapter(input: Readonly<{
   getCamera: () => Camera | null | undefined;
@@ -52,6 +57,8 @@ export function createDtxDimensionViewerAdapter(input: Readonly<{
   getDpr?: () => number;
   /** Loaded model objects; omitted = billboard tags do not know about component boxes. */
   getDtxLayer?: () => DtxObjectBoundsSource | null | undefined;
+  /** DOM overlays fixed on the viewport (axis gizmo …); omitted = none. */
+  getOverlayElements?: () => readonly (Element | null | undefined)[];
 }>): DimensionViewerAdapter {
   const getMillimetresToScene = (): Matrix4 =>
     input.getMillimetresToScene()?.clone() ?? new Matrix4();
@@ -78,6 +85,22 @@ export function createDtxDimensionViewerAdapter(input: Readonly<{
           .map(corner => tuple(corner.applyMatrix4(millimetresToDesign))),
       }));
   };
+  const getLayoutOverlays = (): readonly ScreenRect[] => {
+    const origin = input.getContainer()?.getBoundingClientRect();
+    if (!origin) return [];
+    const rects: ScreenRect[] = [];
+    for (const element of input.getOverlayElements?.() ?? []) {
+      const rect = element?.getBoundingClientRect();
+      if (!rect || rect.width <= 0 || rect.height <= 0) continue;
+      rects.push({
+        x: rect.left - origin.left,
+        y: rect.top - origin.top,
+        width: rect.width,
+        height: rect.height,
+      });
+    }
+    return rects;
+  };
   return {
     getCamera: () => input.getCamera() ?? null,
     getScene: () => input.getScene() ?? null,
@@ -94,5 +117,6 @@ export function createDtxDimensionViewerAdapter(input: Readonly<{
     },
     requestRender: input.requestRender,
     ...(input.getDtxLayer ? { queryLayoutObstacles } : {}),
+    ...(input.getOverlayElements ? { getLayoutOverlays } : {}),
   };
 }

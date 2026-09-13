@@ -45,6 +45,13 @@ export type ViewportGizmoOptions = {
   offset?: { left?: number; top?: number; right?: number; bottom?: number };
 };
 
+/**
+ * Class the ViewportGizmo's DOM hit area carries (the library creates a
+ * `size × size` div at the placement inside the canvas's parent), so hosts
+ * can find its screen rectangle without reaching into the library.
+ */
+export const DTX_VIEWPORT_GIZMO_CLASS = 'dtx-viewport-gizmo';
+
 export class DtxViewer {
   readonly canvas: HTMLCanvasElement;
   readonly renderer: WebGLRenderer;
@@ -117,6 +124,7 @@ export class DtxViewer {
         placement: gizmoConfig.placement,
         size: gizmoConfig.size,
         offset: gizmoConfig.offset,
+        className: DTX_VIEWPORT_GIZMO_CLASS,
       });
       this.gizmo.target = this.controls.target;
       // 与 OrbitControls 协作（库内部会处理交互状态/同步更新）
@@ -131,6 +139,17 @@ export class DtxViewer {
     if (options.skybox) {
       this.loadCrossSkybox(options.skybox);
     }
+  }
+
+  /**
+   * The gizmo's DOM hit area — the screen footprint of the overlay in the
+   * corner of the viewport (null when the gizmo is disabled). Overlays that
+   * must not be covered (dimension tags) read their rectangle from it.
+   */
+  getGizmoElement(): HTMLElement | null {
+    if (!this.gizmo) return null;
+    const container = this.canvas.parentElement ?? this.canvas;
+    return container.querySelector<HTMLElement>(`.${DTX_VIEWPORT_GIZMO_CLASS}`);
   }
 
   private _parseGizmoOptions(

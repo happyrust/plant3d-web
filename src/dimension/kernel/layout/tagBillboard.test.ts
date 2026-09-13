@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { DEFAULT_DIMENSION_FORMAT } from '../format';
-import { rectPolygonOverlapArea, segmentLengthInsideRect } from '../geometry/obstacleGeometry';
+import { rectPolygonOverlapArea, rectsOverlapArea, segmentLengthInsideRect } from '../geometry/obstacleGeometry';
 import { createTestFont, createTestProjector } from '../testUtils';
 import { SOLVESPACE_DIMENSION_THEME } from '../theme';
 
@@ -407,6 +407,15 @@ describe('placeTagBillboards', () => {
       { segments: [alongEdge] },
     );
     expect(touched!.derived.tag!.candidate).toBe(0);
+
+    // A viewport overlay (axis gizmo) over the preferred body.
+    const [underOverlay] = placeTagBillboards(
+      [placeholder('tag')],
+      [{ index: 0, id: 'tag', plan }],
+      { overlays: [preferred] },
+    );
+    expect(underOverlay!.derived.tag!.candidate).toBeGreaterThan(0);
+    expect(rectsOverlapArea(underOverlay!.labelBounds, preferred)).toBe(0);
   });
 
   it('takes the least intruding candidate when none is clear, values weighing more than boxes', () => {
@@ -436,6 +445,14 @@ describe('placeTagBillboards', () => {
       { polygons: [everywhere] },
     );
     expect(moved!.derived.tag!.candidate).toBe(1);
+
+    // An overlay weighs like a value: the same half-body overlay tips it too.
+    const [underOverlay] = placeTagBillboards(
+      [placeholder('tag')],
+      [{ index: 0, id: 'tag', plan }],
+      { polygons: [everywhere], overlays: [{ ...preferred, width: preferred.width / 2 }] },
+    );
+    expect(underOverlay!.derived.tag!.candidate).toBe(1);
   });
 
   it('never leaves the screen to dodge an obstacle while it has a candidate on it', () => {
@@ -569,24 +586,36 @@ describe('tag obstacles', () => {
       dimensionId: 'tag',
       primitives: [{ kind: 'line', from: [0, 0], to: [1, 1], part: 'leader', styleRole: 'external' }],
     };
+    const gizmo: ScreenRect = { x: 300, y: 0, width: 100, height: 100 };
     const source: LayoutObstacleSource = {
       query: vi.fn(() => [
         { corners: [[-0.5, -0.5, -0.5], [0.5, 0.5, 0.5], [0.5, -0.5, 0], [-0.5, 0.5, 0]] as const },
         { corners: [[0, 0, 5], [1, 1, 5], [1, 0, 5]] as const }, // beyond the far plane
       ]),
+      overlays: vi.fn(() => [gizmo, { x: 0, y: 0, width: 0, height: 40 }]), // the flat one is no obstacle
     };
     const planned = [{ index: 1, id: 'tag', plan }];
     const obstacles = collectTagObstacles([strokes, tagSlot], planned, projector, source);
     // The tag's own slot contributes no strokes.
     expect(obstacles.segments).toHaveLength(6);
     expect(obstacles.polygons).toHaveLength(1);
+    expect(obstacles.overlays).toEqual([gizmo]);
     expect(source.query).toHaveBeenCalledTimes(1);
     expect(source.query).toHaveBeenCalledWith(tagObstacleRegion([plan], projector));
+
+    // A host with overlays only is never asked for a region.
+    const overlaysOnly: LayoutObstacleSource = { overlays: () => [gizmo] };
+    expect(collectTagObstacles([strokes, tagSlot], planned, projector, overlaysOnly)).toEqual({
+      polygons: [],
+      segments: dimensionStrokes([strokes]),
+      overlays: [gizmo],
+    });
 
     // Without a host source: strokes only. Nothing planned: nothing to collect.
     expect(collectTagObstacles([strokes, tagSlot], planned, projector)).toEqual({
       polygons: [],
       segments: dimensionStrokes([strokes]),
+      overlays: [],
     });
     expect(collectTagObstacles([strokes], [], projector, source)).toEqual({});
   });

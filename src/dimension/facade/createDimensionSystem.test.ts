@@ -364,6 +364,43 @@ describe('createDimensionSystem', () => {
       .toEqual(['cmd-user']);
   });
 
+  it('hands the viewer\'s component boxes and overlays to the tag placement', async () => {
+    const viewer = createViewerAdapter({
+      queryLayoutObstacles: vi.fn(() => []),
+      getLayoutOverlays: vi.fn(() => [{ x: 300, y: 0, width: 100, height: 100 }]),
+    });
+    const harness = createHarness({ viewer });
+    const system = await createdSystem(harness);
+    const tagged: ExternalDimensionRecord = {
+      id: 'tag-1',
+      source: 'mbd',
+      sourceLabel: 'MBD',
+      role: 'external',
+      category: 'annotation',
+      layout: {
+        id: 'tag-1',
+        role: 'external',
+        labelPinned: true,
+        formattedLabel: 'A',
+        lines: [],
+        labelAnchor: [0, 0, 0],
+        arrowLines: [],
+        texts: [{ text: 'A', anchor: [0, 0, 0], stackIndex: 0 }],
+        tag: { style: 'card', lines: [{ text: 'A' }], target: [0, 0, 0] },
+      },
+    };
+
+    system.replaceExternalSource('mbd', [tagged]);
+    system.notifyViewerChanged();
+    for (let frames = 0; frames < 3 && system.viewport.getLayouts().length === 0; frames += 1) {
+      harness.flush();
+    }
+
+    expect(system.viewport.getLayouts().map(layout => layout.dimensionId)).toEqual(['tag-1']);
+    expect(viewer.queryLayoutObstacles).toHaveBeenCalledTimes(1);
+    expect(viewer.getLayoutOverlays).toHaveBeenCalledTimes(1);
+  });
+
   it('ignores viewer notifications while the camera is unavailable', async () => {
     const harness = createHarness({
       viewer: createViewerAdapter({ getCamera: () => null }),

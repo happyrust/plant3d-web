@@ -1283,6 +1283,8 @@ const dimensionViewerAdapter = createDtxDimensionViewerAdapter({
   requestRender,
   // 标签 billboard 避让管件包围盒：把标签周围的已加载构件交给尺寸内核。
   getDtxLayer: () => dtxLayerRef.value,
+  // 标签也让开视口右上角的坐标 gizmo 覆盖层（屏幕矩形）。
+  getOverlayElements: () => [dtxViewerRef.value?.getGizmoElement()],
 });
 
 function sceneWorldToDesignMetres(

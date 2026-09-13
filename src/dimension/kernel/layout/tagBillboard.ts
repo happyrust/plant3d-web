@@ -72,13 +72,15 @@ export type TagBillboardPlan = Readonly<{
 
 /**
  * What a tag body must not cover besides other labels: model components
- * (their projected bounding boxes, as convex screen polygons) and dimension
- * strokes (dimension / extension lines, arrowheads) on screen. Built by
+ * (their projected bounding boxes, as convex screen polygons), dimension
+ * strokes (dimension / extension lines, arrowheads) on screen, and the
+ * viewport's fixed overlays (an axis gizmo) as screen rectangles. Built by
  * `collectTagObstacles` for a view; empty = labels only.
  */
 export type TagObstacles = Readonly<{
   polygons?: readonly ScreenPolygon[];
   segments?: readonly ScreenSegment[];
+  overlays?: readonly ScreenRect[];
 }>;
 
 /** Rotations (degrees) about the preferred direction, tried in this order. */
@@ -96,11 +98,13 @@ const AWAY_PROBE_PX = 50;
 const BODY_MARGIN_PX = 2;
 /**
  * Intrusion weights (per px² covered) that rank the candidates when none is
- * clear: hiding a value or another tag is worst, cutting a dimension stroke
+ * clear: hiding a value or another tag is worst — and so is sliding under a
+ * viewport overlay, which hides the tag itself — cutting a dimension stroke
  * next, covering a component's bounding box least — the box overstates the
  * body and the tag is meant to sit over the model anyway.
  */
 const LABEL_INTRUSION_WEIGHT = 4;
+const OVERLAY_INTRUSION_WEIGHT = 4;
 const STROKE_INTRUSION_WEIGHT = 2;
 const BOX_INTRUSION_WEIGHT = 1;
 /** A covered stroke counts as a band this wide (px) so its length becomes an area. */
@@ -558,7 +562,8 @@ export function dimensionStrokes(layouts: readonly LayoutResult[]): ScreenSegmen
  * Everything besides labels the tags of one view keep clear of: the strokes
  * of every other layout in the batch, and — when the host can answer — the
  * component boxes found around the tags (`tagObstacleRegion`), projected to
- * their screen outlines.
+ * their screen outlines, and the viewport's fixed overlays (those with an
+ * area).
  */
 export function collectTagObstacles(
   layouts: readonly LayoutResult[],
@@ -569,25 +574,27 @@ export function collectTagObstacles(
   if (planned.length === 0) return {};
   const plannedIndices = new Set(planned.map(tag => tag.index));
   const segments = dimensionStrokes(layouts.filter((_, index) => !plannedIndices.has(index)));
-  const region = source ? tagObstacleRegion(planned.map(tag => tag.plan), projector) : null;
+  const region = source?.query ? tagObstacleRegion(planned.map(tag => tag.plan), projector) : null;
   const polygons: ScreenPolygon[] = [];
-  if (source && region) {
+  if (source?.query && region) {
     for (const obstacle of source.query(region)) {
       const outline = projectObstacleOutline(obstacle, projector);
       if (outline) polygons.push(outline);
     }
   }
-  return { polygons, segments };
+  const overlays = (source?.overlays?.() ?? []).filter(rect => rect.width > 0 && rect.height > 0);
+  return { polygons, segments, overlays };
 }
 
 /**
  * Placement pass for the tags of one view. Obstacles are every other visible
- * label (dimension values, flat annotations), the projected component boxes
- * and dimension strokes the viewport hands in, and the tags already placed.
- * Tags are placed one by one — cards, then frames, then pills, ties by id —
- * each taking its first candidate clear of everything; when no candidate is
- * clear, the one that intrudes least wins (weighted covered area: labels and
- * tags over strokes over component boxes), earlier candidates on a tie. A
+ * label (dimension values, flat annotations), the projected component boxes,
+ * dimension strokes and viewport overlays the viewport hands in, and the tags
+ * already placed. Tags are placed one by one — cards, then frames, then
+ * pills, ties by id — each taking its first candidate clear of everything;
+ * when no candidate is clear, the one that intrudes least wins (weighted
+ * covered area: labels, tags and overlays over strokes over component
+ * boxes), earlier candidates on a tie. A
  * tag with candidates whole on screen only competes among those: leaving the
  * screen (a clipped body) is never the way round an obstacle. The same view
  * always yields the same placement.
@@ -607,6 +614,7 @@ export function placeTagBillboards(
   }
   const boxes = (obstacles.polygons ?? []).map(polygon => ({ polygon, bounds: polygonBounds(polygon) }));
   const strokes = (obstacles.segments ?? []).map(segment => ({ segment, bounds: segmentBounds(segment) }));
+  const overlays = obstacles.overlays ?? [];
   const results = [...layouts];
   const order = [...planned].sort((a, b) =>
     a.plan.priority - b.plan.priority
@@ -618,10 +626,14 @@ export function placeTagBillboards(
     // A stroke's bounds have no area when it is axis-aligned; pad them so the
     // overlap test still sees it.
     const nearStrokes = strokes.filter(stroke => rectsOverlap(expandRect(stroke.bounds, 1), envelope));
+    const nearOverlays = overlays.filter(overlay => rectsOverlap(overlay, envelope));
     const intrusion = (candidate: ScreenRect): number => {
       let score = 0;
       for (const label of labels) {
         score += LABEL_INTRUSION_WEIGHT * rectsOverlapArea(candidate, label);
+      }
+      for (const overlay of nearOverlays) {
+        score += OVERLAY_INTRUSION_WEIGHT * rectsOverlapArea(candidate, overlay);
       }
       for (const stroke of nearStrokes) {
         score += STROKE_INTRUSION_WEIGHT * STROKE_BAND_PX
