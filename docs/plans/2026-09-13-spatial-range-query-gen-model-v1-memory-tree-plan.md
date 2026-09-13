@@ -11,7 +11,7 @@
     plant3d-web `8127bcb`（P2）、`12c66fe`（P3）、`610581f`（P4）、`fb8b841`（P0 / P1 备注）、`0152256`（P5 = 教程 §9 + 状态行）、
     `cd05652` / `73f8ce8`（§7 联调记录）、`00beb54`（B4 修复 + 6 条单测）、`d521332`（B4 修复记录）、
     `2578ca8`（「加载当前页」改为只动当前页）、`05d5b5f`（「只加载未加载」改回全集）、`73b8d8c`（跨页三按钮 > 200 项弹确认）、
-    `11d21e8`（`getSubtreeAABB`：「当前选中」取子树盒）、其记录 = 本提交
+    `11d21e8`（`getSubtreeAABB`：「当前选中」取子树盒）、`12ac0f7`（没加载几何的 owner 发 refno 由服务端解中心）、其记录 = 本提交
   - 进度：**P2 已完成**（2026-09-13 11:45，plant3d-web `8127bcb`）；**P3 代码与单测已完成**（11:53，`12c66fe`；真服务联调等 P1）；
     **P4 已完成，「整库生成」入口除外**（12:05，单独一提交，见 §4 P4 备注——入口怎么接需要拍板；用户 12:13 拍板：先不接入口）；
     **P0 已完成**（old-aios-core `8758023`，21:03；代码 20:40 已在工作树、本轮验证后提交）；**P1 已完成**（gen-model-refactor
@@ -511,7 +511,14 @@ createPipeDistanceSceneTransformPoint` 已有反向那一半可对照），服�
   沿 owner 链落到该 refno 的对象），`applyCurrentSelection` 先取子树盒、取不到退回 `getAABB`；`getAABB` 语义不动。单测：新文件
   `src/viewer/dtx/DtxCompatScene.getSubtreeAABB.test.ts` 4 条（真机盒数据，中心差恰为 (295, 0, 573)）+ store 1 条。真机：选中 BRAN 查 1 m 请求
   `x=5963.7737&y=9972.2395&z=16551.9712`，与 `nearby?refno=24381_145018` 的 `refno_aabb_center` 逐位相等，中心摘要「5964, 9972, 16552」。
-  残余：成员没加载时子树盒仍不全（部分加载时会偏）；PIPE / ZONE 这类自身与成员都没加载的 owner 仍报「无法解析当前选中构件的位置」。
+  残余：成员没加载时子树盒仍不全（部分加载时会偏）。
+  **PIPE / ZONE 这类自身与成员都没加载的 owner（方案 3 作兜底，用户拍板，`12ac0f7`）**：`applyCurrentSelection` 解不出盒时不再报
+  「无法解析当前选中构件的位置」，记下 `selectedCenterRefno`，提交时给请求带 `refno` + `includeSelf:false` 走服务端 refno 模式
+  （口径同距离查询「通过 Refno」：到源盒表面量距、默认剔自身子树），服务端 `center` 回来写回 `draft.center` 并清掉标记；抽屉中心摘要在
+  标记在时显示「<refno> · 未加载几何，查询时由服务端解中心」。有盒的选中、拾取、切手输坐标 / 换模式、resetQuery 都清标记。
+  真机：模型树点选 PIPE `24381_144975`（BRAN 的父级）→ 请求 `nearby?refno=24381/144975&radius=1000&…&include_self=false` → 200，
+  center (5963.7734, 9972.239, 16551.97) `refno_aabb_center`（该 PIPE 已生成的子树只有这根 BRAN），共 1753 项，无错误横幅。
+  单测 store +1 / drawer +1。子树里一个都没生成过的 owner 仍会收到服务端 404 折成的「…还没生成过模型」提示（§5-3 口径不变）。
 
 ## 8. 关键位置速查
 
