@@ -988,6 +988,72 @@ describe('createSpatialQueryStore', () => {
     expect(store.resultSet.value?.items.find((item) => item.refno === 'server_only')?.visible).toBe(true);
   });
 
+  it('「加载当前页 / 只加载未加载」（pages: current）只取当前页列出的条目；缺省 pages 的批量作用域仍是整个命中集合', async () => {
+    const viewer = createViewerStub();
+    const batchLoadRefnos = vi.fn(async (refnos: string[]) => ({ ok: refnos, fail: [] }));
+
+    const store = createSpatialQueryStore({
+      viewerRef: ref(viewer),
+      selection: { selectedRefno: { value: null } } as any,
+      toolStore: { pickedQueryCenter: { value: null }, setToolMode: vi.fn(), setPickedQueryCenter: vi.fn() } as any,
+      batchLoadRefnos,
+    });
+
+    // 第 1 页 2 条，全集 4 条（另两条在第 2 页）
+    store.resultSet.value = {
+      request: {
+        mode: 'range',
+        centerSource: 'coordinates',
+        center: { x: 0, y: 0, z: 0 },
+        radius: 100,
+        shape: 'sphere',
+        filters: { nouns: [], keyword: '', onlyLoaded: false, onlyVisible: false, includeNegative: false, specValues: [] },
+        limit: 2,
+        sortBy: 'distanceAsc',
+      },
+      items: [
+        { refno: 'loaded_a', noun: 'PIPE', specValue: 0, specName: '未知', dbnum: 7997, distance: 5, loaded: true, visible: true, matchedBy: 'merged' },
+        { refno: 'server_only', noun: 'EQUI', specValue: 0, specName: '未知', dbnum: 7997, distance: 20, loaded: false, visible: false, matchedBy: 'server-spatial-index' },
+      ],
+      fullMatches: {
+        refnos: ['loaded_a', 'server_only', 'server_page2_a', 'server_page2_b'],
+        byDbnum: { '7997': ['loaded_a', 'server_only', 'server_page2_a', 'server_page2_b'] },
+        bySpecValue: {},
+        total: 4,
+        truncated: false,
+      },
+      page: 1,
+      perPage: 2,
+      returnedCount: 2,
+      totalPages: 2,
+      hasMore: true,
+      total: 4,
+      loadedCount: 1,
+      unloadedCount: 1,
+      truncated: true,
+      warnings: [],
+      groups: [],
+    };
+
+    // 只加载未加载（当前页）：只有本页那条未加载的，第 2 页的不碰
+    await store.loadResults({ pages: 'current', onlyUnloaded: true, flyTo: true });
+    expect(batchLoadRefnos).toHaveBeenLastCalledWith(['server_only'], expect.objectContaining({ flyTo: true }));
+    expect(store.resultSet.value?.loadedCount).toBe(2);
+    expect(store.resultSet.value?.unloadedCount).toBe(0);
+    expect(store.error.value).toBeNull();
+
+    // 加载当前页：本页两条（改前这里拿到的是 fullMatches 的 4 条）
+    await store.loadResults({ pages: 'current', flyTo: true });
+    expect(batchLoadRefnos).toHaveBeenLastCalledWith(['loaded_a', 'server_only'], expect.objectContaining({ flyTo: true }));
+
+    // 不指定 pages（分组按钮 / 全部显示那一路）：仍是整个命中集合
+    await store.loadResults({ flyTo: false });
+    expect(batchLoadRefnos).toHaveBeenLastCalledWith(
+      ['loaded_a', 'server_only', 'server_page2_a', 'server_page2_b'],
+      expect.objectContaining({ flyTo: false }),
+    );
+  });
+
   it('批量加载失败但结果有服务端 AABB 时，应生成空间查询代理模型兜底显示', async () => {
     const viewer = createViewerStub();
     viewer.__dtxLayer = {};

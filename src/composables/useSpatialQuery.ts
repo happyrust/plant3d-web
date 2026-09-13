@@ -1392,13 +1392,19 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
   }
 
   type BatchScope = { specValue?: number; dbnum?: number };
+  /**
+   * 批量操作跨不跨页：`all` = 整个命中集合（取不到全集时退回当前页），分组按钮 / 全部显示 / 隔离用它——它们旁边的计数就是全量；
+   * `current` = 只动当前页列出的条目，「加载当前页 / 只加载未加载」用它——摘要行的「当前页 N 项 / 未加载 M 项」数的就是这一页。
+   * 改前两个按钮也走全集，1387 项的结果点「加载当前页」会把全集拉下来（plan 2026-09-13 空间范围查询 §7 联调记录）。
+   */
+  type BatchPages = 'current' | 'all';
 
-  /** 批量操作的作用域：优先整个命中集合，取不到时回退当前页；可按专业（legacy）或按库（gen-model-v1）取一组。 */
-  function resolveBatchRefnos(options: BatchScope = {}): string[] {
+  /** 批量操作的作用域：缺省整个命中集合、取不到时回退当前页，`pages: 'current'` 只取当前页；可按专业（legacy）或按库（gen-model-v1）取一组。 */
+  function resolveBatchRefnos(options: BatchScope & { pages?: BatchPages } = {}): string[] {
     const current = resultSet.value;
     if (!current) return [];
 
-    const full = current.fullMatches;
+    const full = options.pages === 'current' ? null : current.fullMatches;
     if (full) {
       if (typeof options.specValue === 'number') {
         const grouped = full.bySpecValue[String(options.specValue)];
@@ -1630,13 +1636,13 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
     }
   }
 
-  function pickResultItems(options: { onlyUnloaded?: boolean } & BatchScope = {}): SpatialQueryResultItem[] {
+  function pickResultItems(options: { onlyUnloaded?: boolean; pages?: BatchPages } & BatchScope = {}): SpatialQueryResultItem[] {
     const byRefno = new Map((resultSet.value?.items ?? []).map((item) => [item.refno, item]));
     const loadedRefnos = new Set(
       viewerRef.value ? resolveLoadedRefnos(viewerRef.value) : [],
     );
 
-    return resolveBatchRefnos({ specValue: options.specValue, dbnum: options.dbnum }).map((refno) => {
+    return resolveBatchRefnos({ specValue: options.specValue, dbnum: options.dbnum, pages: options.pages }).map((refno) => {
       const existing = byRefno.get(refno);
       if (existing) return existing;
 
@@ -1659,7 +1665,7 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
     }).filter((item) => !options.onlyUnloaded || !item.loaded);
   }
 
-  async function loadResults(options: { onlyUnloaded?: boolean; flyTo?: boolean } & BatchScope = {}) {
+  async function loadResults(options: { onlyUnloaded?: boolean; flyTo?: boolean; pages?: BatchPages } & BatchScope = {}) {
     const targets = pickResultItems(options);
     if (targets.length === 0) {
       status.value = 'ready';

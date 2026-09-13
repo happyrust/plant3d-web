@@ -579,7 +579,7 @@ describe('SpatialQueryDrawer (distance 模式)', () => {
     unmount();
   });
 
-  it('加载当前页与只加载未加载结果按钮传递正确参数', async () => {
+  it('加载当前页与只加载未加载结果按钮只动当前页（pages: current），不再把全集拉下来', async () => {
     stubState.resultSet.value = makeResultSet(2);
 
     const { host, unmount } = mountDrawer();
@@ -588,11 +588,11 @@ describe('SpatialQueryDrawer (distance 模式)', () => {
     const allButtons = Array.from(host.querySelectorAll('button')) as HTMLButtonElement[];
     allButtons.find((button) => button.textContent?.includes('加载当前页'))?.click();
     await nextTick();
-    expect(loadResults).toHaveBeenCalledWith({ flyTo: true });
+    expect(loadResults).toHaveBeenCalledWith({ pages: 'current', flyTo: true });
 
     allButtons.find((button) => button.textContent?.includes('只加载未加载'))?.click();
     await nextTick();
-    expect(loadResults).toHaveBeenCalledWith({ onlyUnloaded: true, flyTo: true });
+    expect(loadResults).toHaveBeenCalledWith({ pages: 'current', onlyUnloaded: true, flyTo: true });
 
     unmount();
   });
