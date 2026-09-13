@@ -2,9 +2,12 @@
 
 - 日期：2026-09-13
 - 状态：**已实施（2026-09-13 21:10；Plannotator 第 2 轮 `approved` 10:38）**，§5 六项均按推荐项 (a)；
-  **§7 第 2–6 步真服务 / 浏览器联调待补**（后端服务是长驻进程，须由用户在自己终端起；单测 / 类型 / lint 三仓全绿）
-  - 提交清单：old-aios-core `8758023`（P0）；gen-model-refactor `12bf601e9`（P1 路由 + 模块 + 单测）、`69f732e6b`（spec §4.13）；
-    plant3d-web `8127bcb`（P2）、`12c66fe`（P3）、`610581f`（P4）、`fb8b841`（P0 / P1 备注）、P5 = 教程 §9 + 本状态行（同一提交）
+  **§7 第 1–4 步已核**（第 2–3 步 22:03 在真服务 `127.0.0.1:18122` 上过，见 §7 联调记录；第 4 步的 503 信封以单测钉住，
+  线上因树一直 Ready 复现不了）；**第 5 步后半（两源浏览器操作）、第 6 步（真实站点 `getGlobalModelMatrix()`）待用户在浏览器走一遍**
+  - 提交清单：old-aios-core `8758023`（P0）；gen-model-refactor `12bf601e9`（P1 路由 + 模块 + 单测）、`69f732e6b`（spec §4.13）、
+    `dec2c67d8`（§7 第 4 步：`spatial_not_ready` 503 信封单测）；
+    plant3d-web `8127bcb`（P2）、`12c66fe`（P3）、`610581f`（P4）、`fb8b841`（P0 / P1 备注）、`0152256`（P5 = 教程 §9 + 状态行）、
+    §7 联调记录 = 本提交
   - 进度：**P2 已完成**（2026-09-13 11:45，plant3d-web `8127bcb`）；**P3 代码与单测已完成**（11:53，`12c66fe`；真服务联调等 P1）；
     **P4 已完成，「整库生成」入口除外**（12:05，单独一提交，见 §4 P4 备注——入口怎么接需要拍板；用户 12:13 拍板：先不接入口）；
     **P0 已完成**（old-aios-core `8758023`，21:03；代码 20:40 已在工作树、本轮验证后提交）；**P1 已完成**（gen-model-refactor
@@ -358,8 +361,10 @@ P2 只碰 plant3d-web，可以先行。P1 的新代码集中在新模块 `spatia
     + 「先显示再查 / 整库显示」的提示；§5 专业筛选与关键字两行、§6 分组、§7 分组按钮、注意事项各加一句指向 §9；目录加第 9 项。
   - spec §4.13 已在 gen-model-refactor `69f732e6b` 定稿（P1 备注）。
   - §7 打勾情况：第 1 步（`cargo test` / `cargo clippy`）✅（见 P1 备注）；第 5 步前半（`vitest` / 类型检查）✅（见 P2–P4 备注）；
-    第 2–4 步（起服务、`/model/ensure` 后 `GET /spatial/nearby`、未 Ready 回 503）、第 5 步后半（两源浏览器操作）、第 6 步
-    （`getGlobalModelMatrix()` 真实站点核对）**未验证**——服务是长驻进程，等用户起好后由会话发请求 / 用户在浏览器走一遍再补。
+    **第 2–3 步 ✅（22:03，真服务，见 §7 联调记录）**；**第 4 步 ✅（单测口径）**：线上树一直 Ready，503 复现不了，改由
+    gen-model-refactor `dec2c67d8` 的 `spatial_not_ready_is_a_503_with_retry_after_and_the_state_in_detail` 钉住六个非 Ready 状态的
+    503 + `Retry-After: 5` + `detail.state`（门禁一侧原有 `scan_is_gated_by_the_spatial_state`）；第 5 步后半（两源浏览器操作）、
+    第 6 步（`getGlobalModelMatrix()` 真实站点核对）**待用户在浏览器走一遍**。
 
 ## 5. 需要拍板的决策（推荐项在前）
 
@@ -399,6 +404,30 @@ P2 只碰 plant3d-web，可以先行。P1 的新代码集中在新模块 `spatia
 5. 前端：`pnpm vitest run src/composables/useSpatialQuery.test.ts src/model-source && pnpm vue-tsc --noEmit`；
    `?model_source=gen-model-v1` 下抽屉两 Tab 各查一次、翻页、全部显示 / 隔离 / 加载本页；`?model_source=legacy` 下同样操作结果与改前一致。
 6. 真实站点核 `getGlobalModelMatrix()`：拾取一构件表面点查 1 m，`center` 回显与该构件在结果首位。
+
+**联调记录（2026-09-13 22:03，第 2–3 步）**：对象是已在跑的 debug 服务 `D:\Rust\target\debug\aios-database.exe`
+（PID 62960，17:05 起、晚于 `12bf601e9`，`build_id 0.1.23+g0b73e51f6b04`，`127.0.0.1:18122`，AvevaMarineSample `/ALL`），
+`health.spatial_tree` = `ready`、54 979 条、`file_epoch = db_epoch = 129`。树里已有 1112 / 7997 / 8000 三库的盒，没再 `POST /model/ensure`
+（那台服务不是本会话起的，只发只读 GET）。脚本共 55 项断言、跑一遍 3 s，53 项直接通过，2 项是脚本假设写错
+（目标同距排第 4 而非第 1；epoch 变动来自服务自身），逐条核过后结论：
+
+- 点模式 sphere `(0,0,450) r=5000`：200 / 11 ms，`total_count 546 = candidate_count`，`groups` 1112:165 + 7997:379 + 8000:2 = 546，
+  按距离升序、全部 `within_radius`、`dbnum` 无空、refno 一律 `a_b`；同参 cube 1135 ≥ 546，角落条目 `within_radius=false` 只在 `distance > r` 时出现。
+- refno 模式 `17496/100380`（FLOOR，盒中心 `(0,0,450)`）：`a/b` 与 `a_b` 同 8057 条、`center.source = refno_aabb_center` 且坐标等于盒中心、
+  默认不含自身、`include_self=true` 多出恰好 1 条且目标距离 0（同距按 dbnum、refno 兜底，目标排第 4，符合 spec 的全序）。
+- `/nearby/refnos` 同参：546 条 = `/nearby` 的 `total_count`，`by_dbnum` 逐库计数 = `groups`，首条 = `results[0]`。
+- `sort=name`：翻页不重叠；本页 20 条 `name` 全为 `null`（这些 PANE / FLOOR 在样例库里本就没有 NAME，`name_of` 口径一致）。
+- 过滤：`nouns=pane` 大小写不敏感且 `total_count` = `filter_options` 里 PANE 的计数（235），`filter_options.nouns` 不因 `nouns` 收窄（20 = 20）；
+  `dbnums=7997` 379 条 = 全集 `groups[7997]`；`keyword=24381/782`（`a/b` 写法）命中 1 条；`include_negative` 两种取值同 54 979
+  （三库里没有负实体）；`per_page=5000` 钳到 1000。
+- 错误分型全部命中：8 种参数错都是 400 `bad_request` 且 `message` 直说哪一格；`refno=1/1` 与 SITE `9304/2` 都是 404 `not_found`
+  （「还没生成过模型」）；`project=Nope` 422 `identity_mismatch`；`negative-nouns` 23 个。
+- 上限与耗时：100 m cube 在原点覆盖整树，`candidate_count 54 979 = entries`、未截断，`/nearby` `per_page=1000` 373 ms、`/nearby/refnos`
+  54 979 条 434 ms。
+- 只读旁证：跑完后 `entries` / `last_rebuild_attempts` 不变；`db_epoch` 129→130 是服务自己的 `write_behind` 持久化
+  （`persist_attempts` 3→4、`initialization.epoch_id` 59→60、随后 `file_epoch` 也到 130、`drift=false`），epoch bump 只出现在
+  `model_db_adapter` / `fast_delete` / `aabb_refresh` / `helper` / `window_repair` 的事务里，`spatial_query` 无写点
+  （`spatial_query_never_writes_the_tree_or_takes_the_serial_lock` 钉住）。
 
 ## 8. 关键位置速查
 
