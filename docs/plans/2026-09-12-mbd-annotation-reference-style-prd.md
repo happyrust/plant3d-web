@@ -157,3 +157,9 @@
 - **主题** `kernel/theme.ts`：`textStrokeWidthPx` 1.5 → 1.8，`tag.pillTextHeightPx` 10 → 11。
 - **验证**：单测 59 文件 / 344 通过（painter +1，四个绘制对象）；eslint 0；type-check 本改动 0；实机同位置 3× 放大前后对照（卡片 / 三维数字 / 药丸 / inspection 淡化）见验证 README「文字绘制」小节，`text-aa-before-*.png` / `text-aa-after-*.png`。
 - **顺带核出**：inspection 的 α 0.65 在线性空间混合 + ACES 后视觉上接近 α 0.2（旧画家亦然）→ 同日用户拍板重定为 0.92 / 0.80（实机扫值反查，文字上呈现约 63 % / 36 % 的对比；ADR 0061「α 重定」段，验证 README「inspection α 重定」小节，决策 d-386 取代 d-354）。
+
+### 9.7 全管道扫描（2026-09-14，fable-5-1-54 起、61 接手；用户「继续测试其他管道的三维尺寸标注，把所有的管道都测一遍」）
+
+- **范围**：遍历项目树得 2693 个 BRAN，2469 个有 MBD payload（224 个 422 是后端按契约拒绝的非路由容器 / 无几何成员）。**内核全跑**（Node，临时 vitest 用例，跑完删除）：每条 payload 解析 → 映射 → 布局（far 1.7× / mid 0.6× / close 0.25× 三距离 × engineering / inspection × 再布局）→ SVG；**实机抽样** 52 条（真实 Chrome，far / behind 两相机 × 两模式，截图 + pageerror）。读数与文件见验证 README「全管道扫描」段（`all-pipes-*.json/png`）。
+- **结果**：far 2469 / 2469 全过（非有限数 0、SVG NaN 0、再布局逐条相同、屏内标签命中 26 070 / 26 070；解析诊断 0、原子拒绝 0；payload 3901 条 issue 全是后端 warning）；实机 52 条两模式 α / 确定性 / 复原全对，inspection 完整布局最大 37 ms（407 条记录）。
+- **撞出两件待拍板**：① `buildHitIndex` 与 `resolveLabelCollisions` 的 64 px 网格不裁视口——close 435 / 2469（17.6 %）、mid 33 条会爆格子（真机 = `RangeError` / 卡死 / OOM），且**每条管加载期**记录先于几何到达、在默认相机下布局的那一帧也会撞（实机 3 / 52 条 pageerror，一条拖了 30 s 一条尺寸都画不出）；② `weld_mark` 的探测点在管轴焊点上，inspection 下 27/27 判遮挡（抽样遮挡 flag 的 73 % 是焊缝标记，项目 334 个 BRAN / 1238 个焊缝标记受影响）。两项都记在 ADR 0061「已知边界」与验证 README，未改代码。

@@ -1,0 +1,9432 @@
+{
+ "generatedAt": "2026-09-13T19:38:15.421Z",
+ "dsf": 1,
+ "pipes": 52,
+ "ok": 49,
+ "flagged": 3,
+ "results": [
+  {
+   "refno": "24381_105860",
+   "name": "/Copy-(2)-of-1TFM063MN-TUBE/974VL",
+   "dbnum": 7997,
+   "primitives": 463,
+   "why": [
+    "largest payload",
+    "slope marks"
+   ],
+   "kernelExtentM": 18.872,
+   "loadMs": 21197,
+   "loadResult": "{loadedRefnos: 73, skippedRefnos: 0, loadedObjects: 113, invalidTubiObjects: 0, missingRefnos: Array(0)}",
+   "loadFailed": null,
+   "objects": 113,
+   "records": 419,
+   "boxSource": "dtx",
+   "extentWorldM": 18.88015087890625,
+   "views": {
+    "far": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 419,
+      "drawn": 52,
+      "onScreen": 52,
+      "tags": 43,
+      "hidden": {
+       "short-line": 34,
+       "detail-far": 301,
+       "secondary-far": 32
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 52,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        17.088,
+        -23.303,
+        13.97
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      30.9,
+      33.7,
+      32.5
+     ],
+     "inspection": {
+      "mode": "inspection",
+      "records": 419,
+      "drawn": 52,
+      "onScreen": 52,
+      "tags": 43,
+      "hidden": {
+       "short-line": 34,
+       "detail-far": 301,
+       "secondary-far": 32
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 52,
+      "unflagged": 0,
+      "alphas": [
+       0.92
+      ],
+      "camera": {
+       "position": [
+        17.088,
+        -23.303,
+        13.97
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspectionMs": [
+      30.2,
+      33.7,
+      27.8
+     ],
+     "deterministic": true
+    },
+    "behind": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 419,
+      "drawn": 53,
+      "onScreen": 53,
+      "tags": 43,
+      "hidden": {
+       "short-line": 33,
+       "detail-far": 301,
+       "secondary-far": 32
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 53,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        -17.088,
+        23.303,
+        -13.97
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      20.7,
+      28.9,
+      25.1
+     ],
+     "inspection": {
+      "mode": "inspection",
+      "records": 419,
+      "drawn": 53,
+      "onScreen": 53,
+      "tags": 43,
+      "hidden": {
+       "short-line": 33,
+       "detail-far": 301,
+       "secondary-far": 32
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 53,
+      "unflagged": 0,
+      "alphas": [
+       0.92
+      ],
+      "camera": {
+       "position": [
+        -17.088,
+        23.303,
+        -13.97
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspectionMs": [
+      41.4,
+      33.3,
+      30.7
+     ],
+     "deterministic": true
+    }
+   },
+   "restored": {
+    "mode": "engineering",
+    "alphas": [
+     1
+    ]
+   },
+   "ms": 30497,
+   "payloadFetches": 2,
+   "pageErrors": [],
+   "consoleErrors": [
+    "THREE.WebGLProgram: Program Info Log: (50,12-96): warning X4713: Sample Bias value is limited to the range [-16.00, 15.99], using -16.000000 instead of -100.000000\n(50,12-96): warning X4713: Sample Bias value is limited to the range [-16.00, 15.99], using -16.000000 instead of -100.000000\n(50,12-96): warning X4713: Sample Bias value is limited to the range [-16.00, 15.99], using -16.000000 instead"
+   ],
+   "showRefnoWarnings": []
+  },
+  {
+   "refno": "24381_105733",
+   "name": "/Copy-(2)-of-1TFM062MN-TUBE/954VL",
+   "dbnum": 7997,
+   "primitives": 450,
+   "why": [
+    "largest payload",
+    "slope marks"
+   ],
+   "kernelExtentM": 18.922,
+   "loadMs": 14209,
+   "loadResult": "{loadedRefnos: 65, skippedRefnos: 0, loadedObjects: 104, invalidTubiObjects: 0, missingRefnos: Array(0)}",
+   "loadFailed": null,
+   "objects": 104,
+   "records": 407,
+   "boxSource": "dtx",
+   "extentWorldM": 18.93015087890625,
+   "views": {
+    "far": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 407,
+      "drawn": 52,
+      "onScreen": 51,
+      "tags": 42,
+      "hidden": {
+       "short-line": 32,
+       "detail-far": 298,
+       "secondary-far": 25
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 52,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        17.133,
+        -23.365,
+        14.007
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      37.1,
+      36.5,
+      35.3
+     ],
+     "inspection": {
+      "mode": "inspection",
+      "records": 407,
+      "drawn": 52,
+      "onScreen": 51,
+      "tags": 42,
+      "hidden": {
+       "short-line": 32,
+       "detail-far": 298,
+       "secondary-far": 25
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 52,
+      "unflagged": 0,
+      "alphas": [
+       0.92
+      ],
+      "camera": {
+       "position": [
+        17.133,
+        -23.365,
+        14.007
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspectionMs": [
+      33.6,
+      38.9,
+      37.3
+     ],
+     "deterministic": true
+    },
+    "behind": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 407,
+      "drawn": 52,
+      "onScreen": 52,
+      "tags": 42,
+      "hidden": {
+       "short-line": 32,
+       "detail-far": 298,
+       "secondary-far": 25
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 52,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        -17.133,
+        23.365,
+        -14.007
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      34.6,
+      39.4,
+      43.2
+     ],
+     "inspection": {
+      "mode": "inspection",
+      "records": 407,
+      "drawn": 52,
+      "onScreen": 52,
+      "tags": 42,
+      "hidden": {
+       "short-line": 32,
+       "detail-far": 298,
+       "secondary-far": 25
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 52,
+      "unflagged": 0,
+      "alphas": [
+       0.92
+      ],
+      "camera": {
+       "position": [
+        -17.133,
+        23.365,
+        -14.007
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspectionMs": [
+      37.2,
+      40.4,
+      41
+     ],
+     "deterministic": true
+    }
+   },
+   "restored": {
+    "mode": "engineering",
+    "alphas": [
+     1
+    ]
+   },
+   "ms": 23762,
+   "payloadFetches": 2,
+   "pageErrors": [],
+   "consoleErrors": [],
+   "showRefnoWarnings": []
+  },
+  {
+   "refno": "24381_106191",
+   "name": "/Copy-of-1RCS008MN-TUBE/804VP",
+   "dbnum": 7997,
+   "primitives": 345,
+   "why": [
+    "largest payload"
+   ],
+   "kernelExtentM": 13.938,
+   "loadMs": 14080,
+   "loadResult": "{loadedRefnos: 66, skippedRefnos: 0, loadedObjects: 99, invalidTubiObjects: 0, missingRefnos: Array(0)}",
+   "loadFailed": null,
+   "objects": 99,
+   "records": 311,
+   "boxSource": "dtx",
+   "extentWorldM": 13.964765624999998,
+   "views": {
+    "far": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 311,
+      "drawn": 42,
+      "onScreen": 41,
+      "tags": 33,
+      "hidden": {
+       "short-line": 29,
+       "detail-far": 211,
+       "secondary-far": 29
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 42,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        12.639,
+        -17.236,
+        10.333
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      60.4,
+      28.2,
+      27
+     ],
+     "inspection": {
+      "mode": "inspection",
+      "records": 311,
+      "drawn": 42,
+      "onScreen": 41,
+      "tags": 33,
+      "hidden": {
+       "short-line": 29,
+       "detail-far": 211,
+       "secondary-far": 29
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 42,
+      "unflagged": 0,
+      "alphas": [
+       0.92
+      ],
+      "camera": {
+       "position": [
+        12.639,
+        -17.236,
+        10.333
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspectionMs": [
+      24.3,
+      28.3,
+      25.7
+     ],
+     "deterministic": true
+    },
+    "behind": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 311,
+      "drawn": 43,
+      "onScreen": 42,
+      "tags": 33,
+      "hidden": {
+       "short-line": 28,
+       "detail-far": 211,
+       "secondary-far": 29
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 43,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        -12.639,
+        17.236,
+        -10.333
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      30.2,
+      26,
+      27.2
+     ],
+     "inspection": {
+      "mode": "inspection",
+      "records": 311,
+      "drawn": 43,
+      "onScreen": 42,
+      "tags": 33,
+      "hidden": {
+       "short-line": 28,
+       "detail-far": 211,
+       "secondary-far": 29
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 43,
+      "unflagged": 0,
+      "alphas": [
+       0.92
+      ],
+      "camera": {
+       "position": [
+        -12.639,
+        17.236,
+        -10.333
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspectionMs": [
+      29.9,
+      25.9,
+      27
+     ],
+     "deterministic": true
+    }
+   },
+   "restored": {
+    "mode": "engineering",
+    "alphas": [
+     1
+    ]
+   },
+   "ms": 23350,
+   "payloadFetches": 2,
+   "pageErrors": [],
+   "consoleErrors": [],
+   "showRefnoWarnings": []
+  },
+  {
+   "refno": "24381_103920",
+   "name": "/Copy-of-1RCS098MN-YK/807vp",
+   "dbnum": 7997,
+   "primitives": 343,
+   "why": [
+    "largest payload"
+   ],
+   "kernelExtentM": 10.016,
+   "loadMs": 18034,
+   "loadResult": "{loadedRefnos: 55, skippedRefnos: 0, loadedObjects: 79, invalidTubiObjects: 0, missingRefnos: Array(0)}",
+   "loadFailed": null,
+   "objects": 79,
+   "records": 311,
+   "boxSource": "dtx",
+   "extentWorldM": 10.1143427734375,
+   "views": {
+    "far": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 311,
+      "drawn": 38,
+      "onScreen": 38,
+      "tags": 31,
+      "hidden": {
+       "detail-far": 222,
+       "short-line": 24,
+       "overlap": 1,
+       "secondary-far": 26
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 38,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        9.154,
+        -12.484,
+        7.484
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      16.1,
+      15.3,
+      15.8
+     ],
+     "inspection": {
+      "mode": "inspection",
+      "records": 311,
+      "drawn": 38,
+      "onScreen": 38,
+      "tags": 31,
+      "hidden": {
+       "detail-far": 222,
+       "short-line": 24,
+       "overlap": 1,
+       "secondary-far": 26
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 38,
+      "unflagged": 0,
+      "alphas": [
+       0.92
+      ],
+      "camera": {
+       "position": [
+        9.154,
+        -12.484,
+        7.484
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspectionMs": [
+      20.8,
+      19.6,
+      23.6
+     ],
+     "deterministic": true
+    },
+    "behind": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 311,
+      "drawn": 39,
+      "onScreen": 39,
+      "tags": 31,
+      "hidden": {
+       "detail-far": 222,
+       "short-line": 24,
+       "secondary-far": 26
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 39,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        -9.154,
+        12.484,
+        -7.484
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      16.6,
+      22.2,
+      16.4
+     ],
+     "inspection": {
+      "mode": "inspection",
+      "records": 311,
+      "drawn": 39,
+      "onScreen": 39,
+      "tags": 31,
+      "hidden": {
+       "detail-far": 222,
+       "short-line": 24,
+       "secondary-far": 26
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 39,
+      "unflagged": 0,
+      "alphas": [
+       0.92
+      ],
+      "camera": {
+       "position": [
+        -9.154,
+        12.484,
+        -7.484
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspectionMs": [
+      17.9,
+      17,
+      22.6
+     ],
+     "deterministic": true
+    }
+   },
+   "restored": {
+    "mode": "engineering",
+    "alphas": [
+     1
+    ]
+   },
+   "ms": 26930,
+   "payloadFetches": 2,
+   "pageErrors": [],
+   "consoleErrors": [],
+   "showRefnoWarnings": []
+  },
+  {
+   "refno": "24383_75125",
+   "name": "/1RCV0245A-60.3-VMB-R41-R520]R510",
+   "dbnum": 7999,
+   "primitives": 341,
+   "why": [
+    "largest payload",
+    "slope marks"
+   ],
+   "kernelExtentM": 29.355,
+   "loadMs": 16844,
+   "loadResult": "{loadedRefnos: 48, skippedRefnos: 0, loadedObjects: 77, invalidTubiObjects: 0, missingRefnos: Array(0)}",
+   "loadFailed": null,
+   "objects": 77,
+   "records": 297,
+   "boxSource": "dtx",
+   "extentWorldM": 29.29153125,
+   "views": {
+    "far": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 297,
+      "drawn": 49,
+      "onScreen": 49,
+      "tags": 37,
+      "hidden": {
+       "detail-far": 198,
+       "short-line": 24,
+       "secondary-far": 24,
+       "overlap": 2
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 49,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        26.51,
+        -36.154,
+        21.673
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      26.2,
+      25.5,
+      21.9
+     ],
+     "inspection": {
+      "mode": "inspection",
+      "records": 297,
+      "drawn": 49,
+      "onScreen": 49,
+      "tags": 37,
+      "hidden": {
+       "detail-far": 198,
+       "short-line": 24,
+       "secondary-far": 24,
+       "overlap": 2
+      },
+      "nonFinite": 0,
+      "occluded": [
+       "接 1RCV0408-21.3-VMC-R41-R520"
+      ],
+      "visible": 48,
+      "unflagged": 0,
+      "alphas": [
+       0.8,
+       0.92
+      ],
+      "camera": {
+       "position": [
+        26.51,
+        -36.154,
+        21.673
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspectionMs": [
+      23.4,
+      25.4,
+      22.3
+     ],
+     "deterministic": true
+    },
+    "behind": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 297,
+      "drawn": 49,
+      "onScreen": 49,
+      "tags": 37,
+      "hidden": {
+       "detail-far": 198,
+       "short-line": 26,
+       "secondary-far": 24
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 49,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        -26.51,
+        36.154,
+        -21.673
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      20.9,
+      25.9,
+      24
+     ],
+     "inspection": {
+      "mode": "inspection",
+      "records": 297,
+      "drawn": 49,
+      "onScreen": 49,
+      "tags": 37,
+      "hidden": {
+       "detail-far": 198,
+       "short-line": 26,
+       "secondary-far": 24
+      },
+      "nonFinite": 0,
+      "occluded": [
+       "mark:24383_75177",
+       "mark:24383_75181",
+       "1RCV073VP"
+      ],
+      "visible": 46,
+      "unflagged": 0,
+      "alphas": [
+       0.8,
+       0.92
+      ],
+      "camera": {
+       "position": [
+        -26.51,
+        36.154,
+        -21.673
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspectionMs": [
+      23.3,
+      28.2,
+      29.8
+     ],
+     "deterministic": true
+    }
+   },
+   "restored": {
+    "mode": "engineering",
+    "alphas": [
+     1
+    ]
+   },
+   "ms": 25951,
+   "payloadFetches": 2,
+   "pageErrors": [
+    "RangeError: Map maximum size exceeded"
+   ],
+   "consoleErrors": [],
+   "showRefnoWarnings": [],
+   "stage": "page",
+   "error": "pageerror: RangeError: Map maximum size exceeded"
+  },
+  {
+   "refno": "24381_104746",
+   "name": "/Copy-of-1RCS301MN-YK/B5",
+   "dbnum": 7997,
+   "primitives": 5,
+   "why": [
+    "smallest payload"
+   ],
+   "kernelExtentM": 0.197,
+   "loadMs": 17392,
+   "loadResult": "{loadedRefnos: 2, skippedRefnos: 0, loadedObjects: 1, invalidTubiObjects: 0, missingRefnos: Array(1)}",
+   "loadFailed": null,
+   "objects": 1,
+   "records": 3,
+   "boxSource": "dtx",
+   "extentWorldM": 0.02080078124999929,
+   "views": {
+    "far": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 3,
+      "drawn": 3,
+      "onScreen": 1,
+      "tags": 2,
+      "hidden": {},
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 3,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        0.019,
+        -0.026,
+        0.015
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      1.1,
+      0.7,
+      0.5
+     ],
+     "inspection": {
+      "mode": "inspection",
+      "records": 3,
+      "drawn": 3,
+      "onScreen": 1,
+      "tags": 2,
+      "hidden": {},
+      "nonFinite": 0,
+      "occluded": [
+       "X -3575"
+      ],
+      "visible": 2,
+      "unflagged": 0,
+      "alphas": [
+       0.8,
+       0.92
+      ],
+      "camera": {
+       "position": [
+        0.019,
+        -0.026,
+        0.015
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspectionMs": [
+      0.8,
+      0.7,
+      0.5
+     ],
+     "deterministic": true
+    },
+    "behind": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 3,
+      "drawn": 2,
+      "onScreen": 1,
+      "tags": 2,
+      "hidden": {
+       "short-line": 1
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 2,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        -0.019,
+        0.026,
+        -0.015
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      0.8,
+      0.5,
+      0.6
+     ],
+     "inspection": {
+      "mode": "inspection",
+      "records": 3,
+      "drawn": 2,
+      "onScreen": 1,
+      "tags": 2,
+      "hidden": {
+       "short-line": 1
+      },
+      "nonFinite": 0,
+      "occluded": [
+       "X -3575"
+      ],
+      "visible": 1,
+      "unflagged": 0,
+      "alphas": [
+       0.8,
+       0.92
+      ],
+      "camera": {
+       "position": [
+        -0.019,
+        0.026,
+        -0.015
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspectionMs": [
+      0.5,
+      0.8,
+      0.5
+     ],
+     "deterministic": true
+    }
+   },
+   "restored": {
+    "mode": "engineering",
+    "alphas": [
+     1
+    ]
+   },
+   "ms": 25589,
+   "payloadFetches": 2,
+   "pageErrors": [],
+   "consoleErrors": [],
+   "showRefnoWarnings": []
+  },
+  {
+   "refno": "24381_104806",
+   "name": "/Copy-of-1RCS301MN-YK/B4",
+   "dbnum": 7997,
+   "primitives": 5,
+   "why": [
+    "smallest payload"
+   ],
+   "kernelExtentM": 0.197,
+   "loadMs": 11935,
+   "loadResult": "{loadedRefnos: 2, skippedRefnos: 0, loadedObjects: 1, invalidTubiObjects: 0, missingRefnos: Array(1)}",
+   "loadFailed": null,
+   "objects": 1,
+   "records": 3,
+   "boxSource": "dtx",
+   "extentWorldM": 0.02080078124999929,
+   "views": {
+    "far": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 3,
+      "drawn": 3,
+      "onScreen": 1,
+      "tags": 2,
+      "hidden": {},
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 3,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        0.019,
+        -0.026,
+        0.015
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      1,
+      0.7,
+      0.8
+     ],
+     "inspection": {
+      "mode": "inspection",
+      "records": 3,
+      "drawn": 3,
+      "onScreen": 1,
+      "tags": 2,
+      "hidden": {},
+      "nonFinite": 0,
+      "occluded": [
+       "X -3523"
+      ],
+      "visible": 2,
+      "unflagged": 0,
+      "alphas": [
+       0.8,
+       0.92
+      ],
+      "camera": {
+       "position": [
+        0.019,
+        -0.026,
+        0.015
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspectionMs": [
+      1.1,
+      0.6,
+      0.7
+     ],
+     "deterministic": true
+    },
+    "behind": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 3,
+      "drawn": 2,
+      "onScreen": 1,
+      "tags": 2,
+      "hidden": {
+       "short-line": 1
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 2,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        -0.019,
+        0.026,
+        -0.015
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      0.7,
+      0.4,
+      0.5
+     ],
+     "inspection": {
+      "mode": "inspection",
+      "records": 3,
+      "drawn": 2,
+      "onScreen": 1,
+      "tags": 2,
+      "hidden": {
+       "short-line": 1
+      },
+      "nonFinite": 0,
+      "occluded": [
+       "X -3523"
+      ],
+      "visible": 1,
+      "unflagged": 0,
+      "alphas": [
+       0.8,
+       0.92
+      ],
+      "camera": {
+       "position": [
+        -0.019,
+        0.026,
+        -0.015
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspectionMs": [
+      0.7,
+      0.5,
+      0.7
+     ],
+     "deterministic": true
+    }
+   },
+   "restored": {
+    "mode": "engineering",
+    "alphas": [
+     1
+    ]
+   },
+   "ms": 20104,
+   "payloadFetches": 2,
+   "pageErrors": [],
+   "consoleErrors": [],
+   "showRefnoWarnings": []
+  },
+  {
+   "refno": "24381_105398",
+   "name": "BRAN",
+   "dbnum": 7997,
+   "primitives": 5,
+   "why": [
+    "smallest payload"
+   ],
+   "kernelExtentM": 0.022,
+   "loadMs": 12925,
+   "loadResult": "{loadedRefnos: 2, skippedRefnos: 0, loadedObjects: 2, invalidTubiObjects: 0, missingRefnos: Array(0)}",
+   "loadFailed": null,
+   "objects": 2,
+   "records": 3,
+   "boxSource": "dtx",
+   "extentWorldM": 0.03889990234374974,
+   "views": {
+    "far": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 3,
+      "drawn": 3,
+      "onScreen": 3,
+      "tags": 2,
+      "hidden": {},
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 3,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        0.035,
+        -0.048,
+        0.029
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      1.3,
+      1.1,
+      1.1
+     ],
+     "inspection": {
+      "mode": "inspection",
+      "records": 3,
+      "drawn": 3,
+      "onScreen": 3,
+      "tags": 2,
+      "hidden": {},
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 3,
+      "unflagged": 0,
+      "alphas": [
+       0.92
+      ],
+      "camera": {
+       "position": [
+        0.035,
+        -0.048,
+        0.029
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspectionMs": [
+      0.8,
+      0.7,
+      0.9
+     ],
+     "deterministic": true
+    },
+    "behind": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 3,
+      "drawn": 3,
+      "onScreen": 3,
+      "tags": 2,
+      "hidden": {},
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 3,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        -0.035,
+        0.048,
+        -0.029
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      1,
+      0.7,
+      1.1
+     ],
+     "inspection": {
+      "mode": "inspection",
+      "records": 3,
+      "drawn": 3,
+      "onScreen": 3,
+      "tags": 2,
+      "hidden": {},
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 3,
+      "unflagged": 0,
+      "alphas": [
+       0.92
+      ],
+      "camera": {
+       "position": [
+        -0.035,
+        0.048,
+        -0.029
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspectionMs": [
+      0.8,
+      1,
+      0.6
+     ],
+     "deterministic": true
+    }
+   },
+   "restored": {
+    "mode": "engineering",
+    "alphas": [
+     1
+    ]
+   },
+   "ms": 21135,
+   "payloadFetches": 2,
+   "pageErrors": [],
+   "consoleErrors": [],
+   "showRefnoWarnings": []
+  },
+  {
+   "refno": "24381_105400",
+   "name": "BRAN",
+   "dbnum": 7997,
+   "primitives": 5,
+   "why": [
+    "smallest extent"
+   ],
+   "kernelExtentM": 0.02,
+   "loadMs": 16953,
+   "loadResult": "{loadedRefnos: 2, skippedRefnos: 0, loadedObjects: 2, invalidTubiObjects: 0, missingRefnos: Array(0)}",
+   "loadFailed": null,
+   "objects": 2,
+   "records": 3,
+   "boxSource": "dtx",
+   "extentWorldM": 0.03699999999999948,
+   "views": {
+    "far": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 3,
+      "drawn": 3,
+      "onScreen": 3,
+      "tags": 2,
+      "hidden": {},
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 3,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        0.033,
+        -0.046,
+        0.027
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      0.9,
+      0.8,
+      0.8
+     ],
+     "inspection": {
+      "mode": "inspection",
+      "records": 3,
+      "drawn": 3,
+      "onScreen": 3,
+      "tags": 2,
+      "hidden": {},
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 3,
+      "unflagged": 0,
+      "alphas": [
+       0.92
+      ],
+      "camera": {
+       "position": [
+        0.033,
+        -0.046,
+        0.027
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspectionMs": [
+      0.9,
+      0.8,
+      0.9
+     ],
+     "deterministic": true
+    },
+    "behind": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 3,
+      "drawn": 3,
+      "onScreen": 3,
+      "tags": 2,
+      "hidden": {},
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 3,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        -0.033,
+        0.046,
+        -0.027
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      0.7,
+      0.5,
+      0.3
+     ],
+     "inspection": {
+      "mode": "inspection",
+      "records": 3,
+      "drawn": 3,
+      "onScreen": 3,
+      "tags": 2,
+      "hidden": {},
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 3,
+      "unflagged": 0,
+      "alphas": [
+       0.92
+      ],
+      "camera": {
+       "position": [
+        -0.033,
+        0.046,
+        -0.027
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspectionMs": [
+      0.6,
+      0.6,
+      0.8
+     ],
+     "deterministic": true
+    }
+   },
+   "restored": {
+    "mode": "engineering",
+    "alphas": [
+     1
+    ]
+   },
+   "ms": 25132,
+   "payloadFetches": 2,
+   "pageErrors": [],
+   "consoleErrors": [],
+   "showRefnoWarnings": []
+  },
+  {
+   "refno": "24381_105431",
+   "name": "BRAN",
+   "dbnum": 7997,
+   "primitives": 5,
+   "why": [
+    "smallest extent"
+   ],
+   "kernelExtentM": 0.02,
+   "loadMs": 18006,
+   "loadResult": "{loadedRefnos: 2, skippedRefnos: 0, loadedObjects: 2, invalidTubiObjects: 0, missingRefnos: Array(0)}",
+   "loadFailed": null,
+   "objects": 2,
+   "records": 3,
+   "boxSource": "dtx",
+   "extentWorldM": 0.03699999999999992,
+   "views": {
+    "far": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 3,
+      "drawn": 3,
+      "onScreen": 3,
+      "tags": 2,
+      "hidden": {},
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 3,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        0.033,
+        -0.046,
+        0.027
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      1.1,
+      1.1,
+      1.3
+     ],
+     "inspection": {
+      "mode": "inspection",
+      "records": 3,
+      "drawn": 3,
+      "onScreen": 3,
+      "tags": 2,
+      "hidden": {},
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 3,
+      "unflagged": 0,
+      "alphas": [
+       0.92
+      ],
+      "camera": {
+       "position": [
+        0.033,
+        -0.046,
+        0.027
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspectionMs": [
+      1.4,
+      0.7,
+      0.7
+     ],
+     "deterministic": true
+    },
+    "behind": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 3,
+      "drawn": 3,
+      "onScreen": 3,
+      "tags": 2,
+      "hidden": {},
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 3,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        -0.033,
+        0.046,
+        -0.027
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      0.6,
+      1.2,
+      0.8
+     ],
+     "inspection": {
+      "mode": "inspection",
+      "records": 3,
+      "drawn": 3,
+      "onScreen": 3,
+      "tags": 2,
+      "hidden": {},
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 3,
+      "unflagged": 0,
+      "alphas": [
+       0.92
+      ],
+      "camera": {
+       "position": [
+        -0.033,
+        0.046,
+        -0.027
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspectionMs": [
+      1,
+      0.8,
+      1.4
+     ],
+     "deterministic": true
+    }
+   },
+   "restored": {
+    "mode": "engineering",
+    "alphas": [
+     1
+    ]
+   },
+   "ms": 26210,
+   "payloadFetches": 2,
+   "pageErrors": [],
+   "consoleErrors": [],
+   "showRefnoWarnings": []
+  },
+  {
+   "refno": "24381_103500",
+   "name": "/Copy-of-1RCS284MP-YK/B5",
+   "dbnum": 7997,
+   "primitives": 7,
+   "why": [
+    "smallest extent"
+   ],
+   "kernelExtentM": 0.022,
+   "loadMs": 17447,
+   "loadResult": "{loadedRefnos: 2, skippedRefnos: 0, loadedObjects: 2, invalidTubiObjects: 0, missingRefnos: Array(0)}",
+   "loadFailed": null,
+   "objects": 2,
+   "records": 4,
+   "boxSource": "dtx",
+   "extentWorldM": 0.03200000000000003,
+   "views": {
+    "far": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 4,
+      "drawn": 4,
+      "onScreen": 4,
+      "tags": 3,
+      "hidden": {},
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 4,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        0.029,
+        -0.039,
+        0.024
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      1.4,
+      1.1,
+      1.1
+     ],
+     "inspection": {
+      "mode": "inspection",
+      "records": 4,
+      "drawn": 4,
+      "onScreen": 4,
+      "tags": 3,
+      "hidden": {},
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 4,
+      "unflagged": 0,
+      "alphas": [
+       0.92
+      ],
+      "camera": {
+       "position": [
+        0.029,
+        -0.039,
+        0.024
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspectionMs": [
+      0.9,
+      0.6,
+      0.5
+     ],
+     "deterministic": true
+    },
+    "behind": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 4,
+      "drawn": 4,
+      "onScreen": 4,
+      "tags": 3,
+      "hidden": {},
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 4,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        -0.029,
+        0.039,
+        -0.024
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      0.8,
+      0.7,
+      0.9
+     ],
+     "inspection": {
+      "mode": "inspection",
+      "records": 4,
+      "drawn": 4,
+      "onScreen": 4,
+      "tags": 3,
+      "hidden": {},
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 4,
+      "unflagged": 0,
+      "alphas": [
+       0.92
+      ],
+      "camera": {
+       "position": [
+        -0.029,
+        0.039,
+        -0.024
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspectionMs": [
+      1.1,
+      0.8,
+      0.8
+     ],
+     "deterministic": true
+    }
+   },
+   "restored": {
+    "mode": "engineering",
+    "alphas": [
+     1
+    ]
+   },
+   "ms": 25605,
+   "payloadFetches": 2,
+   "pageErrors": [],
+   "consoleErrors": [],
+   "showRefnoWarnings": []
+  },
+  {
+   "refno": "24381_147955",
+   "name": "/Copy-of-1RCS0626-1R80009",
+   "dbnum": 7997,
+   "primitives": 45,
+   "why": [
+    "largest extent"
+   ],
+   "kernelExtentM": 35.826,
+   "loadMs": 16471,
+   "loadResult": "{loadedRefnos: 12, skippedRefnos: 0, loadedObjects: 17, invalidTubiObjects: 0, missingRefnos: Array(0)}",
+   "loadFailed": null,
+   "objects": 17,
+   "records": 37,
+   "boxSource": "dtx",
+   "extentWorldM": 1.9764921874999999,
+   "views": {
+    "far": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 37,
+      "drawn": 18,
+      "onScreen": 18,
+      "tags": 7,
+      "hidden": {
+       "short-line": 1,
+       "detail-far": 17,
+       "secondary-far": 1
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 18,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        1.789,
+        -2.44,
+        1.462
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      3.8,
+      3.8,
+      3.6
+     ],
+     "inspection": {
+      "mode": "inspection",
+      "records": 37,
+      "drawn": 18,
+      "onScreen": 18,
+      "tags": 7,
+      "hidden": {
+       "short-line": 1,
+       "detail-far": 17,
+       "secondary-far": 1
+      },
+      "nonFinite": 0,
+      "occluded": [
+       "mark:24381_147956",
+       "mark:24381_147960",
+       "mark:24381_147962",
+       "mark:24381_147964",
+       "mark:24381_147966"
+      ],
+      "visible": 13,
+      "unflagged": 0,
+      "alphas": [
+       0.8,
+       0.92
+      ],
+      "camera": {
+       "position": [
+        1.789,
+        -2.44,
+        1.462
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspectionMs": [
+      4.6,
+      5.5,
+      4.4
+     ],
+     "deterministic": true
+    },
+    "behind": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 37,
+      "drawn": 18,
+      "onScreen": 16,
+      "tags": 7,
+      "hidden": {
+       "short-line": 1,
+       "detail-far": 17,
+       "secondary-far": 1
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 18,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        -1.789,
+        2.44,
+        -1.462
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      5.1,
+      3.2,
+      3.1
+     ],
+     "inspection": {
+      "mode": "inspection",
+      "records": 37,
+      "drawn": 18,
+      "onScreen": 16,
+      "tags": 7,
+      "hidden": {
+       "short-line": 1,
+       "detail-far": 17,
+       "secondary-far": 1
+      },
+      "nonFinite": 0,
+      "occluded": [
+       "mark:24381_147956",
+       "mark:24381_147960",
+       "mark:24381_147962",
+       "mark:24381_147964",
+       "mark:24381_147966",
+       "mark:24381_147967"
+      ],
+      "visible": 12,
+      "unflagged": 0,
+      "alphas": [
+       0.8,
+       0.92
+      ],
+      "camera": {
+       "position": [
+        -1.789,
+        2.44,
+        -1.462
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspectionMs": [
+      4.7,
+      3.3,
+      3.4
+     ],
+     "deterministic": true
+    }
+   },
+   "restored": {
+    "mode": "engineering",
+    "alphas": [
+     1
+    ]
+   },
+   "ms": 24843,
+   "payloadFetches": 2,
+   "pageErrors": [],
+   "consoleErrors": [],
+   "showRefnoWarnings": []
+  },
+  {
+   "refno": "24381_177530",
+   "name": "/1TFA005MP-IS/B1",
+   "dbnum": 7997,
+   "primitives": 37,
+   "why": [
+    "largest extent"
+   ],
+   "kernelExtentM": 35.769,
+   "loadMs": 12418,
+   "loadResult": "{loadedRefnos: 14, skippedRefnos: 0, loadedObjects: 21, invalidTubiObjects: 0, missingRefnos: Array(0)}",
+   "loadFailed": null,
+   "objects": 21,
+   "records": 24,
+   "boxSource": "dtx",
+   "extentWorldM": 1.6056445312500003,
+   "views": {
+    "far": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 24,
+      "drawn": 19,
+      "onScreen": 17,
+      "tags": 12,
+      "hidden": {
+       "secondary-far": 1,
+       "short-line": 2,
+       "overlap": 1,
+       "detail-far": 1
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 19,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        1.453,
+        -1.982,
+        1.188
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      4.3,
+      6.2,
+      5.7
+     ],
+     "inspection": {
+      "mode": "inspection",
+      "records": 24,
+      "drawn": 19,
+      "onScreen": 17,
+      "tags": 12,
+      "hidden": {
+       "secondary-far": 1,
+       "short-line": 2,
+       "overlap": 1,
+       "detail-far": 1
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 19,
+      "unflagged": 0,
+      "alphas": [
+       0.92
+      ],
+      "camera": {
+       "position": [
+        1.453,
+        -1.982,
+        1.188
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspectionMs": [
+      3.8,
+      5.5,
+      5.5
+     ],
+     "deterministic": true
+    },
+    "behind": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 24,
+      "drawn": 22,
+      "onScreen": 20,
+      "tags": 12,
+      "hidden": {
+       "secondary-far": 1,
+       "detail-far": 1
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 22,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        -1.453,
+        1.982,
+        -1.188
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      2.7,
+      3.4,
+      2.7
+     ],
+     "inspection": {
+      "mode": "inspection",
+      "records": 24,
+      "drawn": 22,
+      "onScreen": 20,
+      "tags": 12,
+      "hidden": {
+       "secondary-far": 1,
+       "detail-far": 1
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 22,
+      "unflagged": 0,
+      "alphas": [
+       0.92
+      ],
+      "camera": {
+       "position": [
+        -1.453,
+        1.982,
+        -1.188
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspectionMs": [
+      4.9,
+      3.9,
+      3.4
+     ],
+     "deterministic": true
+    }
+   },
+   "restored": {
+    "mode": "engineering",
+    "alphas": [
+     1
+    ]
+   },
+   "ms": 20801,
+   "payloadFetches": 2,
+   "pageErrors": [],
+   "consoleErrors": [],
+   "showRefnoWarnings": []
+  },
+  {
+   "refno": "24381_177515",
+   "name": "/1TFA004MP-IS/B1",
+   "dbnum": 7997,
+   "primitives": 50,
+   "why": [
+    "largest extent"
+   ],
+   "kernelExtentM": 35.019,
+   "loadMs": 16470,
+   "loadResult": "{loadedRefnos: 14, skippedRefnos: 0, loadedObjects: 22, invalidTubiObjects: 0, missingRefnos: Array(0)}",
+   "loadFailed": null,
+   "objects": 22,
+   "records": 36,
+   "boxSource": "dtx",
+   "extentWorldM": 1.5156445312500004,
+   "views": {
+    "far": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 36,
+      "drawn": 22,
+      "onScreen": 20,
+      "tags": 13,
+      "hidden": {
+       "short-line": 2,
+       "detail-far": 11,
+       "secondary-far": 1
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 22,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        1.372,
+        -1.871,
+        1.121
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      5.9,
+      5.2,
+      3.6
+     ],
+     "inspection": {
+      "mode": "inspection",
+      "records": 36,
+      "drawn": 22,
+      "onScreen": 20,
+      "tags": 13,
+      "hidden": {
+       "short-line": 2,
+       "detail-far": 11,
+       "secondary-far": 1
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 22,
+      "unflagged": 0,
+      "alphas": [
+       0.92
+      ],
+      "camera": {
+       "position": [
+        1.372,
+        -1.871,
+        1.121
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspectionMs": [
+      5.8,
+      5.4,
+      4.7
+     ],
+     "deterministic": true
+    },
+    "behind": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 36,
+      "drawn": 22,
+      "onScreen": 20,
+      "tags": 13,
+      "hidden": {
+       "short-line": 2,
+       "detail-far": 11,
+       "secondary-far": 1
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 22,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        -1.372,
+        1.871,
+        -1.121
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      5.7,
+      4.9,
+      5.8
+     ],
+     "inspection": {
+      "mode": "inspection",
+      "records": 36,
+      "drawn": 22,
+      "onScreen": 20,
+      "tags": 13,
+      "hidden": {
+       "short-line": 2,
+       "detail-far": 11,
+       "secondary-far": 1
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 22,
+      "unflagged": 0,
+      "alphas": [
+       0.92
+      ],
+      "camera": {
+       "position": [
+        -1.372,
+        1.871,
+        -1.121
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspectionMs": [
+      5.9,
+      6.1,
+      6
+     ],
+     "deterministic": true
+    }
+   },
+   "restored": {
+    "mode": "engineering",
+    "alphas": [
+     1
+    ]
+   },
+   "ms": 24907,
+   "payloadFetches": 2,
+   "pageErrors": [],
+   "consoleErrors": [],
+   "showRefnoWarnings": []
+  },
+  {
+   "refno": "24381_146979",
+   "name": "/Copy-of-1RCS0076-1R23004",
+   "dbnum": 7997,
+   "primitives": 178,
+   "why": [
+    "weld marks"
+   ],
+   "kernelExtentM": 2.951,
+   "loadMs": 17937,
+   "loadResult": "{loadedRefnos: 42, skippedRefnos: 0, loadedObjects: 58, invalidTubiObjects: 0, missingRefnos: Array(0)}",
+   "loadFailed": null,
+   "objects": 58,
+   "records": 166,
+   "boxSource": "dtx",
+   "extentWorldM": 2.9308125,
+   "views": {
+    "far": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 166,
+      "drawn": 48,
+      "onScreen": 46,
+      "tags": 3,
+      "hidden": {
+       "detail-far": 97,
+       "secondary-far": 14,
+       "overlap": 4,
+       "short-line": 3
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 48,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        2.653,
+        -3.617,
+        2.169
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      6.2,
+      5.9,
+      6.7
+     ],
+     "inspection": {
+      "mode": "inspection",
+      "records": 166,
+      "drawn": 48,
+      "onScreen": 46,
+      "tags": 3,
+      "hidden": {
+       "detail-far": 97,
+       "secondary-far": 14,
+       "overlap": 4,
+       "short-line": 3
+      },
+      "nonFinite": 0,
+      "occluded": [
+       "mark:24381_146980",
+       "mark:24381_146982",
+       "mark:24381_146984",
+       "mark:24381_146985",
+       "mark:24381_146987",
+       "mark:24381_146988",
+       "mark:24381_146990",
+       "mark:24381_146992",
+       "mark:24381_146994",
+       "mark:24381_146997",
+       "mark:24381_146999",
+       "mark:24381_147000",
+       "mark:24381_147002",
+       "mark:24381_147003",
+       "mark:24381_147005",
+       "mark:24381_147007",
+       "mark:24381_147009",
+       "mark:24381_147010",
+       "mark:24381_147012",
+       "mark:24381_147014",
+       "mark:24381_147016",
+       "mark:24381_147018",
+       "1032",
+       "mark:24381_147020",
+       "mark:24381_147021",
+       "mark:24381_147023",
+       "mark:24381_147026",
+       "mark:24381_147028"
+      ],
+      "visible": 20,
+      "unflagged": 0,
+      "alphas": [
+       0.8,
+       0.92
+      ],
+      "camera": {
+       "position": [
+        2.653,
+        -3.617,
+        2.169
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspectionMs": [
+      6,
+      4.8,
+      5.2
+     ],
+     "deterministic": true
+    },
+    "behind": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 166,
+      "drawn": 48,
+      "onScreen": 48,
+      "tags": 3,
+      "hidden": {
+       "detail-far": 97,
+       "secondary-far": 14,
+       "overlap": 2,
+       "short-line": 5
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 48,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        -2.653,
+        3.617,
+        -2.169
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      6,
+      3.5,
+      4.5
+     ],
+     "inspection": {
+      "mode": "inspection",
+      "records": 166,
+      "drawn": 48,
+      "onScreen": 48,
+      "tags": 3,
+      "hidden": {
+       "detail-far": 97,
+       "secondary-far": 14,
+       "overlap": 2,
+       "short-line": 5
+      },
+      "nonFinite": 0,
+      "occluded": [
+       "mark:24381_146982",
+       "mark:24381_146984",
+       "mark:24381_146985",
+       "mark:24381_146987",
+       "mark:24381_146988",
+       "mark:24381_146990",
+       "mark:24381_146992",
+       "mark:24381_146994",
+       "mark:24381_146997",
+       "mark:24381_146999",
+       "mark:24381_147000",
+       "mark:24381_147002",
+       "mark:24381_147003",
+       "mark:24381_147005",
+       "mark:24381_147007",
+       "mark:24381_147009",
+       "mark:24381_147010",
+       "mark:24381_147012",
+       "mark:24381_147014",
+       "mark:24381_147016",
+       "mark:24381_147018",
+       "mark:24381_147020",
+       "mark:24381_147021",
+       "mark:24381_147023",
+       "mark:24381_147026",
+       "mark:24381_147028"
+      ],
+      "visible": 22,
+      "unflagged": 0,
+      "alphas": [
+       0.8,
+       0.92
+      ],
+      "camera": {
+       "position": [
+        -2.653,
+        3.617,
+        -2.169
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspectionMs": [
+      5.6,
+      6.3,
+      6.3
+     ],
+     "deterministic": true
+    }
+   },
+   "restored": {
+    "mode": "engineering",
+    "alphas": [
+     1
+    ]
+   },
+   "ms": 26402,
+   "payloadFetches": 2,
+   "pageErrors": [],
+   "consoleErrors": [],
+   "showRefnoWarnings": []
+  },
+  {
+   "refno": "24381_146921",
+   "name": "/Copy-of-1RCS0076-1R23002",
+   "dbnum": 7997,
+   "primitives": 154,
+   "why": [
+    "weld marks"
+   ],
+   "kernelExtentM": 4.075,
+   "loadMs": 15410,
+   "loadResult": "{loadedRefnos: 25, skippedRefnos: 0, loadedObjects: 33, invalidTubiObjects: 0, missingRefnos: Array(0)}",
+   "loadFailed": null,
+   "objects": 33,
+   "records": 144,
+   "boxSource": "dtx",
+   "extentWorldM": 4.09498583984375,
+   "views": {
+    "far": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 144,
+      "drawn": 28,
+      "onScreen": 28,
+      "tags": 2,
+      "hidden": {
+       "detail-far": 101,
+       "secondary-far": 14,
+       "short-line": 1
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 28,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        3.706,
+        -5.054,
+        3.03
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      3.9,
+      3,
+      2
+     ],
+     "inspection": {
+      "mode": "inspection",
+      "records": 144,
+      "drawn": 28,
+      "onScreen": 28,
+      "tags": 2,
+      "hidden": {
+       "detail-far": 101,
+       "secondary-far": 14,
+       "short-line": 1
+      },
+      "nonFinite": 0,
+      "occluded": [
+       "3830",
+       "mark:24381_146922",
+       "mark:24381_146925",
+       "mark:24381_146927",
+       "mark:24381_146928",
+       "mark:24381_146930",
+       "mark:24381_146932",
+       "3334",
+       "mark:24381_146934",
+       "mark:24381_146936",
+       "mark:24381_146938",
+       "mark:24381_146939",
+       "mark:24381_146941",
+       "mark:24381_146943",
+       "mark:24381_146945",
+       "mark:24381_146947",
+       "mark:24381_146949",
+       "mark:24381_146951"
+      ],
+      "visible": 10,
+      "unflagged": 0,
+      "alphas": [
+       0.8,
+       0.92
+      ],
+      "camera": {
+       "position": [
+        3.706,
+        -5.054,
+        3.03
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspectionMs": [
+      3,
+      3,
+      4.6
+     ],
+     "deterministic": true
+    },
+    "behind": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 144,
+      "drawn": 27,
+      "onScreen": 27,
+      "tags": 2,
+      "hidden": {
+       "detail-far": 101,
+       "secondary-far": 14,
+       "short-line": 2
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 27,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        -3.706,
+        5.054,
+        -3.03
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      2,
+      1.7,
+      1.9
+     ],
+     "inspection": {
+      "mode": "inspection",
+      "records": 144,
+      "drawn": 27,
+      "onScreen": 27,
+      "tags": 2,
+      "hidden": {
+       "detail-far": 101,
+       "secondary-far": 14,
+       "short-line": 2
+      },
+      "nonFinite": 0,
+      "occluded": [
+       "mark:24381_146922",
+       "mark:24381_146925",
+       "mark:24381_146927",
+       "mark:24381_146928",
+       "mark:24381_146930",
+       "mark:24381_146932",
+       "mark:24381_146934",
+       "mark:24381_146936",
+       "mark:24381_146938",
+       "mark:24381_146939",
+       "mark:24381_146941",
+       "mark:24381_146943",
+       "mark:24381_146945",
+       "mark:24381_146947",
+       "mark:24381_146949",
+       "mark:24381_146951"
+      ],
+      "visible": 11,
+      "unflagged": 0,
+      "alphas": [
+       0.8,
+       0.92
+      ],
+      "camera": {
+       "position": [
+        -3.706,
+        5.054,
+        -3.03
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspectionMs": [
+      3.2,
+      3.4,
+      3.8
+     ],
+     "deterministic": true
+    }
+   },
+   "restored": {
+    "mode": "engineering",
+    "alphas": [
+     1
+    ]
+   },
+   "ms": 23801,
+   "payloadFetches": 2,
+   "pageErrors": [],
+   "consoleErrors": [],
+   "showRefnoWarnings": []
+  },
+  {
+   "refno": "24381_145423",
+   "name": "/Copy-of-1RCS0055-1R22009",
+   "dbnum": 7997,
+   "primitives": 84,
+   "why": [
+    "weld marks"
+   ],
+   "kernelExtentM": 6.987,
+   "loadMs": 11859,
+   "loadResult": "{loadedRefnos: 27, skippedRefnos: 0, loadedObjects: 35, invalidTubiObjects: 0, missingRefnos: Array(0)}",
+   "loadFailed": null,
+   "objects": 35,
+   "records": 71,
+   "boxSource": "dtx",
+   "extentWorldM": 6.9891103515625,
+   "views": {
+    "far": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 71,
+      "drawn": 30,
+      "onScreen": 22,
+      "tags": 9,
+      "hidden": {
+       "short-line": 7,
+       "secondary-far": 7,
+       "detail-far": 27
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 30,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        6.326,
+        -8.626,
+        5.171
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      3.5,
+      3.4,
+      4
+     ],
+     "inspection": {
+      "mode": "inspection",
+      "records": 71,
+      "drawn": 30,
+      "onScreen": 22,
+      "tags": 9,
+      "hidden": {
+       "short-line": 7,
+       "secondary-far": 7,
+       "detail-far": 27
+      },
+      "nonFinite": 0,
+      "occluded": [
+       "mark:24381_145426",
+       "mark:24381_145429",
+       "mark:24381_145431",
+       "mark:24381_145433",
+       "mark:24381_145435",
+       "mark:24381_145437",
+       "mark:24381_145438",
+       "mark:24381_145440",
+       "mark:24381_145442",
+       "mark:24381_145444",
+       "mark:24381_145446",
+       "mark:24381_145447",
+       "mark:24381_145449",
+       "mark:24381_145453"
+      ],
+      "visible": 16,
+      "unflagged": 0,
+      "alphas": [
+       0.8,
+       0.92
+      ],
+      "camera": {
+       "position": [
+        6.326,
+        -8.626,
+        5.171
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspectionMs": [
+      7.4,
+      4.7,
+      6.5
+     ],
+     "deterministic": true
+    },
+    "behind": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 71,
+      "drawn": 31,
+      "onScreen": 24,
+      "tags": 9,
+      "hidden": {
+       "short-line": 6,
+       "secondary-far": 7,
+       "detail-far": 27
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 31,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        -6.326,
+        8.626,
+        -5.171
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      4.4,
+      3.7,
+      3.3
+     ],
+     "inspection": {
+      "mode": "inspection",
+      "records": 71,
+      "drawn": 31,
+      "onScreen": 24,
+      "tags": 9,
+      "hidden": {
+       "short-line": 6,
+       "secondary-far": 7,
+       "detail-far": 27
+      },
+      "nonFinite": 0,
+      "occluded": [
+       "mark:24381_145424",
+       "mark:24381_145426",
+       "mark:24381_145429",
+       "mark:24381_145431",
+       "mark:24381_145433",
+       "mark:24381_145435",
+       "mark:24381_145437",
+       "mark:24381_145438",
+       "mark:24381_145440",
+       "mark:24381_145442",
+       "mark:24381_145444",
+       "mark:24381_145446",
+       "mark:24381_145447",
+       "mark:24381_145449",
+       "X 3011",
+       "X 3026",
+       "X 3507",
+       "X 6220"
+      ],
+      "visible": 13,
+      "unflagged": 0,
+      "alphas": [
+       0.8,
+       0.92
+      ],
+      "camera": {
+       "position": [
+        -6.326,
+        8.626,
+        -5.171
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspectionMs": [
+      5.7,
+      5.9,
+      5.1
+     ],
+     "deterministic": true
+    }
+   },
+   "restored": {
+    "mode": "engineering",
+    "alphas": [
+     1
+    ]
+   },
+   "ms": 20248,
+   "payloadFetches": 2,
+   "pageErrors": [],
+   "consoleErrors": [],
+   "showRefnoWarnings": []
+  },
+  {
+   "refno": "24383_84337",
+   "name": "/G2-BL-5RX134-A",
+   "dbnum": 7999,
+   "primitives": 286,
+   "why": [
+    "49 payload warnings"
+   ],
+   "kernelExtentM": 15.53,
+   "loadMs": 3697,
+   "loadResult": "{loadedRefnos: 55, skippedRefnos: 0, loadedObjects: 64, invalidTubiObjects: 0, missingRefnos: Array(0)}",
+   "loadFailed": null,
+   "objects": 64,
+   "records": 231,
+   "boxSource": "dtx",
+   "extentWorldM": 13.151311035156251,
+   "views": {
+    "far": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 231,
+      "drawn": 62,
+      "onScreen": 62,
+      "tags": 49,
+      "hidden": {
+       "detail-far": 139,
+       "secondary-far": 17,
+       "overlap": 1,
+       "short-line": 12
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 62,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        11.903,
+        -16.232,
+        9.731
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      29.3,
+      28,
+      39.4
+     ],
+     "inspection": {
+      "mode": "inspection",
+      "records": 231,
+      "drawn": 62,
+      "onScreen": 62,
+      "tags": 49,
+      "hidden": {
+       "detail-far": 139,
+       "secondary-far": 17,
+       "overlap": 1,
+       "short-line": 12
+      },
+      "nonFinite": 0,
+      "occluded": [
+       "556",
+       "556"
+      ],
+      "visible": 60,
+      "unflagged": 0,
+      "alphas": [
+       0.8,
+       0.92
+      ],
+      "camera": {
+       "position": [
+        11.903,
+        -16.232,
+        9.731
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspectionMs": [
+      36.8,
+      39.7,
+      36
+     ],
+     "deterministic": true
+    },
+    "behind": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 231,
+      "drawn": 59,
+      "onScreen": 59,
+      "tags": 49,
+      "hidden": {
+       "detail-far": 139,
+       "short-line": 15,
+       "secondary-far": 17,
+       "overlap": 1
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 59,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        -11.903,
+        16.232,
+        -9.731
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      38.2,
+      35.4,
+      39.6
+     ],
+     "inspection": {
+      "mode": "inspection",
+      "records": 231,
+      "drawn": 59,
+      "onScreen": 59,
+      "tags": 49,
+      "hidden": {
+       "detail-far": 139,
+       "short-line": 15,
+       "secondary-far": 17,
+       "overlap": 1
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 59,
+      "unflagged": 0,
+      "alphas": [
+       0.92
+      ],
+      "camera": {
+       "position": [
+        -11.903,
+        16.232,
+        -9.731
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspectionMs": [
+      32.3,
+      39.6,
+      38.6
+     ],
+     "deterministic": true
+    }
+   },
+   "restored": {
+    "mode": "engineering",
+    "alphas": [
+     1
+    ]
+   },
+   "ms": 13161,
+   "payloadFetches": 2,
+   "pageErrors": [],
+   "consoleErrors": [],
+   "showRefnoWarnings": []
+  },
+  {
+   "refno": "24383_84256",
+   "name": "/G3-RE-5RX134-A",
+   "dbnum": 7999,
+   "primitives": 125,
+   "why": [
+    "40 payload warnings"
+   ],
+   "kernelExtentM": 12.728,
+   "loadMs": 3216,
+   "loadResult": "{loadedRefnos: 26, skippedRefnos: 0, loadedObjects: 33, invalidTubiObjects: 0, missingRefnos: Array(0)}",
+   "loadFailed": null,
+   "objects": 33,
+   "records": 91,
+   "boxSource": "dtx",
+   "extentWorldM": 12.735641601562499,
+   "views": {
+    "far": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 91,
+      "drawn": 38,
+      "onScreen": 38,
+      "tags": 32,
+      "hidden": {
+       "detail-far": 43,
+       "short-line": 3,
+       "secondary-far": 7
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 38,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        11.526,
+        -15.719,
+        9.423
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      15.3,
+      12.5,
+      11
+     ],
+     "inspection": {
+      "mode": "inspection",
+      "records": 91,
+      "drawn": 38,
+      "onScreen": 38,
+      "tags": 32,
+      "hidden": {
+       "detail-far": 43,
+       "short-line": 3,
+       "secondary-far": 7
+      },
+      "nonFinite": 0,
+      "occluded": [
+       "1610.38"
+      ],
+      "visible": 37,
+      "unflagged": 0,
+      "alphas": [
+       0.8,
+       0.92
+      ],
+      "camera": {
+       "position": [
+        11.526,
+        -15.719,
+        9.423
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspectionMs": [
+      16.9,
+      16,
+      12.2
+     ],
+     "deterministic": true
+    },
+    "behind": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 91,
+      "drawn": 37,
+      "onScreen": 37,
+      "tags": 32,
+      "hidden": {
+       "detail-far": 43,
+       "short-line": 4,
+       "secondary-far": 7
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 37,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        -11.526,
+        15.719,
+        -9.423
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      26.9,
+      36.8,
+      15
+     ],
+     "inspection": {
+      "mode": "inspection",
+      "records": 91,
+      "drawn": 37,
+      "onScreen": 37,
+      "tags": 32,
+      "hidden": {
+       "detail-far": 43,
+       "short-line": 4,
+       "secondary-far": 7
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 37,
+      "unflagged": 0,
+      "alphas": [
+       0.92
+      ],
+      "camera": {
+       "position": [
+        -11.526,
+        15.719,
+        -9.423
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspectionMs": [
+      19.1,
+      17.9,
+      16.2
+     ],
+     "deterministic": true
+    }
+   },
+   "restored": {
+    "mode": "engineering",
+    "alphas": [
+     1
+    ]
+   },
+   "ms": 12053,
+   "payloadFetches": 2,
+   "pageErrors": [],
+   "consoleErrors": [],
+   "showRefnoWarnings": []
+  },
+  {
+   "refno": "24383_99558",
+   "name": "/LV-CO-1RX230-A",
+   "dbnum": 7999,
+   "primitives": 107,
+   "why": [
+    "26 payload warnings"
+   ],
+   "kernelExtentM": 14.003,
+   "loadMs": 17804,
+   "loadResult": "{loadedRefnos: 20, skippedRefnos: 0, loadedObjects: 27, invalidTubiObjects: 0, missingRefnos: Array(0)}",
+   "loadFailed": null,
+   "objects": 27,
+   "records": 80,
+   "boxSource": "dtx",
+   "extentWorldM": 14.03097705078125,
+   "views": {
+    "far": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 80,
+      "drawn": 32,
+      "onScreen": 32,
+      "tags": 26,
+      "hidden": {
+       "detail-far": 37,
+       "secondary-far": 7,
+       "short-line": 4
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 32,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        12.699,
+        -17.318,
+        10.382
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      17.5,
+      17.1,
+      16.4
+     ],
+     "inspection": {
+      "mode": "inspection",
+      "records": 80,
+      "drawn": 32,
+      "onScreen": 32,
+      "tags": 26,
+      "hidden": {
+       "detail-far": 37,
+       "secondary-far": 7,
+       "short-line": 4
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 32,
+      "unflagged": 0,
+      "alphas": [
+       0.92
+      ],
+      "camera": {
+       "position": [
+        12.699,
+        -17.318,
+        10.382
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspectionMs": [
+      12.9,
+      13,
+      10.5
+     ],
+     "deterministic": true
+    },
+    "behind": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 80,
+      "drawn": 31,
+      "onScreen": 31,
+      "tags": 26,
+      "hidden": {
+       "detail-far": 37,
+       "short-line": 5,
+       "secondary-far": 7
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 31,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        -12.699,
+        17.318,
+        -10.382
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      13.7,
+      11,
+      11.3
+     ],
+     "inspection": {
+      "mode": "inspection",
+      "records": 80,
+      "drawn": 31,
+      "onScreen": 31,
+      "tags": 26,
+      "hidden": {
+       "detail-far": 37,
+       "short-line": 5,
+       "secondary-far": 7
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 31,
+      "unflagged": 0,
+      "alphas": [
+       0.92
+      ],
+      "camera": {
+       "position": [
+        -12.699,
+        17.318,
+        -10.382
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspectionMs": [
+      14.7,
+      12.7,
+      13.7
+     ],
+     "deterministic": true
+    }
+   },
+   "restored": {
+    "mode": "engineering",
+    "alphas": [
+     1
+    ]
+   },
+   "ms": 26561,
+   "payloadFetches": 2,
+   "pageErrors": [
+    "RangeError: Map maximum size exceeded"
+   ],
+   "consoleErrors": [],
+   "showRefnoWarnings": [],
+   "stage": "page",
+   "error": "pageerror: RangeError: Map maximum size exceeded"
+  },
+  {
+   "refno": "24381_104101",
+   "name": "/Copy-of-1RCS180MP-YK/100VP",
+   "dbnum": 7997,
+   "primitives": 159,
+   "why": [
+    "mid-view grid blow-up in kernel sweep"
+   ],
+   "kernelExtentM": 5.639,
+   "loadMs": 15888,
+   "loadResult": "{loadedRefnos: 32, skippedRefnos: 0, loadedObjects: 50, invalidTubiObjects: 0, missingRefnos: Array(0)}",
+   "loadFailed": null,
+   "objects": 50,
+   "records": 137,
+   "boxSource": "dtx",
+   "extentWorldM": 5.653549804687499,
+   "views": {
+    "far": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 137,
+      "drawn": 33,
+      "onScreen": 33,
+      "tags": 21,
+      "hidden": {
+       "detail-far": 81,
+       "secondary-far": 12,
+       "overlap": 1,
+       "short-line": 10
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 33,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        5.117,
+        -6.978,
+        4.183
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      16.1,
+      13.3,
+      15.6
+     ],
+     "inspection": {
+      "mode": "inspection",
+      "records": 137,
+      "drawn": 33,
+      "onScreen": 33,
+      "tags": 21,
+      "hidden": {
+       "detail-far": 81,
+       "secondary-far": 12,
+       "overlap": 1,
+       "short-line": 10
+      },
+      "nonFinite": 0,
+      "occluded": [
+       "561.71"
+      ],
+      "visible": 32,
+      "unflagged": 0,
+      "alphas": [
+       0.8,
+       0.92
+      ],
+      "camera": {
+       "position": [
+        5.117,
+        -6.978,
+        4.183
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspectionMs": [
+      16,
+      19.2,
+      17.3
+     ],
+     "deterministic": true
+    },
+    "behind": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 137,
+      "drawn": 35,
+      "onScreen": 35,
+      "tags": 21,
+      "hidden": {
+       "short-line": 7,
+       "detail-far": 81,
+       "secondary-far": 12,
+       "overlap": 2
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 35,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        -5.117,
+        6.978,
+        -4.183
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      15.1,
+      16.5,
+      16.9
+     ],
+     "inspection": {
+      "mode": "inspection",
+      "records": 137,
+      "drawn": 35,
+      "onScreen": 35,
+      "tags": 21,
+      "hidden": {
+       "short-line": 7,
+       "detail-far": 81,
+       "secondary-far": 12,
+       "overlap": 2
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 35,
+      "unflagged": 0,
+      "alphas": [
+       0.92
+      ],
+      "camera": {
+       "position": [
+        -5.117,
+        6.978,
+        -4.183
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspectionMs": [
+      12.3,
+      11.2,
+      12.6
+     ],
+     "deterministic": true
+    }
+   },
+   "restored": {
+    "mode": "engineering",
+    "alphas": [
+     1
+    ]
+   },
+   "ms": 24642,
+   "payloadFetches": 2,
+   "pageErrors": [],
+   "consoleErrors": [],
+   "showRefnoWarnings": []
+  },
+  {
+   "refno": "24381_104168",
+   "name": "/Copy-of-1RCS181MP-YK/102VP",
+   "dbnum": 7997,
+   "primitives": 171,
+   "why": [
+    "mid-view grid blow-up in kernel sweep"
+   ],
+   "kernelExtentM": 6.73,
+   "loadMs": 14442,
+   "loadResult": "{loadedRefnos: 31, skippedRefnos: 0, loadedObjects: 50, invalidTubiObjects: 0, missingRefnos: Array(0)}",
+   "loadFailed": null,
+   "objects": 50,
+   "records": 148,
+   "boxSource": "dtx",
+   "extentWorldM": 6.787347290039063,
+   "views": {
+    "far": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 148,
+      "drawn": 35,
+      "onScreen": 35,
+      "tags": 22,
+      "hidden": {
+       "detail-far": 92,
+       "short-line": 10,
+       "secondary-far": 10,
+       "overlap": 1
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 35,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        6.143,
+        -8.377,
+        5.022
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      16.6,
+      13.1,
+      13.1
+     ],
+     "inspection": {
+      "mode": "inspection",
+      "records": 148,
+      "drawn": 35,
+      "onScreen": 35,
+      "tags": 22,
+      "hidden": {
+       "detail-far": 92,
+       "short-line": 10,
+       "secondary-far": 10,
+       "overlap": 1
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 35,
+      "unflagged": 0,
+      "alphas": [
+       0.92
+      ],
+      "camera": {
+       "position": [
+        6.143,
+        -8.377,
+        5.022
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspectionMs": [
+      14.8,
+      15.2,
+      16.1
+     ],
+     "deterministic": true
+    },
+    "behind": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 148,
+      "drawn": 34,
+      "onScreen": 34,
+      "tags": 22,
+      "hidden": {
+       "detail-far": 92,
+       "short-line": 12,
+       "secondary-far": 10
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 34,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        -6.143,
+        8.377,
+        -5.022
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      12.5,
+      12.3,
+      14.5
+     ],
+     "inspection": {
+      "mode": "inspection",
+      "records": 148,
+      "drawn": 34,
+      "onScreen": 34,
+      "tags": 22,
+      "hidden": {
+       "detail-far": 92,
+       "short-line": 12,
+       "secondary-far": 10
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 34,
+      "unflagged": 0,
+      "alphas": [
+       0.92
+      ],
+      "camera": {
+       "position": [
+        -6.143,
+        8.377,
+        -5.022
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspectionMs": [
+      13.8,
+      14.4,
+      14.9
+     ],
+     "deterministic": true
+    }
+   },
+   "restored": {
+    "mode": "engineering",
+    "alphas": [
+     1
+    ]
+   },
+   "ms": 23255,
+   "payloadFetches": 2,
+   "pageErrors": [],
+   "consoleErrors": [],
+   "showRefnoWarnings": []
+  },
+  {
+   "refno": "24381_105520",
+   "name": "/Copy-(2)-of-1RCS604MP-YK/844VP",
+   "dbnum": 7997,
+   "primitives": 216,
+   "why": [
+    "mid-view grid blow-up in kernel sweep"
+   ],
+   "kernelExtentM": 4.016,
+   "loadMs": 15398,
+   "loadResult": "{loadedRefnos: 24, skippedRefnos: 0, loadedObjects: 41, invalidTubiObjects: 0, missingRefnos: Array(0)}",
+   "loadFailed": null,
+   "objects": 41,
+   "records": 190,
+   "boxSource": "dtx",
+   "extentWorldM": 3.9958779296875004,
+   "views": {
+    "far": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 190,
+      "drawn": 33,
+      "onScreen": 33,
+      "tags": 25,
+      "hidden": {
+       "detail-far": 139,
+       "overlap": 6,
+       "short-line": 12
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 33,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        3.616,
+        -4.932,
+        2.957
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      12.3,
+      12.6,
+      12.5
+     ],
+     "inspection": {
+      "mode": "engineering",
+      "records": 0,
+      "drawn": 0,
+      "onScreen": 0,
+      "tags": 0,
+      "hidden": {},
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 0,
+      "alphas": [],
+      "camera": {
+       "position": [
+        -37.1,
+        13,
+        58.5
+       ],
+       "target": [
+        -21.93,
+        1.35,
+        29.45
+       ]
+      }
+     },
+     "inspectionMs": [
+      0,
+      0.1,
+      0
+     ],
+     "deterministic": true
+    },
+    "behind": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 190,
+      "drawn": 35,
+      "onScreen": 0,
+      "tags": 25,
+      "hidden": {
+       "detail-far": 139,
+       "short-line": 16
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 35,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        -3.616,
+        4.932,
+        -2.957
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      9.4,
+      4.7,
+      6
+     ],
+     "inspection": {
+      "mode": "inspection",
+      "records": 190,
+      "drawn": 35,
+      "onScreen": 0,
+      "tags": 25,
+      "hidden": {
+       "detail-far": 139,
+       "short-line": 16
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 35,
+      "unflagged": 0,
+      "alphas": [
+       0.92
+      ],
+      "camera": {
+       "position": [
+        -3.616,
+        4.932,
+        -2.957
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspectionMs": [
+      5.8,
+      7.2,
+      6.7
+     ],
+     "deterministic": true
+    }
+   },
+   "restored": {
+    "mode": "engineering",
+    "alphas": [
+     1
+    ]
+   },
+   "ms": 24008,
+   "payloadFetches": 3,
+   "pageErrors": [],
+   "consoleErrors": [],
+   "showRefnoWarnings": []
+  },
+  {
+   "refno": "24381_105677",
+   "name": "/Copy-(2)-of-1TFM061MN-TUBE/933VL",
+   "dbnum": 7997,
+   "primitives": 171,
+   "why": [
+    "mid-view grid blow-up in kernel sweep"
+   ],
+   "kernelExtentM": 8.502,
+   "loadMs": 19193,
+   "loadResult": "{loadedRefnos: 47, skippedRefnos: 0, loadedObjects: 72, invalidTubiObjects: 0, missingRefnos: Array(0)}",
+   "loadFailed": null,
+   "objects": 72,
+   "records": 142,
+   "boxSource": "dtx",
+   "extentWorldM": 8.534681640625,
+   "views": {
+    "far": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 142,
+      "drawn": 41,
+      "onScreen": 41,
+      "tags": 28,
+      "hidden": {
+       "short-line": 15,
+       "overlap": 1,
+       "detail-far": 66,
+       "secondary-far": 19
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 41,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        7.724,
+        -10.534,
+        6.315
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      26.6,
+      25.3,
+      23.6
+     ],
+     "inspection": {
+      "mode": "inspection",
+      "records": 142,
+      "drawn": 41,
+      "onScreen": 41,
+      "tags": 28,
+      "hidden": {
+       "short-line": 15,
+       "overlap": 1,
+       "detail-far": 66,
+       "secondary-far": 19
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 41,
+      "unflagged": 0,
+      "alphas": [
+       0.92
+      ],
+      "camera": {
+       "position": [
+        7.724,
+        -10.534,
+        6.315
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspectionMs": [
+      20.6,
+      23.9,
+      22.8
+     ],
+     "deterministic": true
+    },
+    "behind": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 142,
+      "drawn": 39,
+      "onScreen": 39,
+      "tags": 28,
+      "hidden": {
+       "short-line": 17,
+       "detail-far": 66,
+       "overlap": 1,
+       "secondary-far": 19
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 39,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        -7.724,
+        10.534,
+        -6.315
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      14.8,
+      16.4,
+      15.9
+     ],
+     "inspection": {
+      "mode": "inspection",
+      "records": 142,
+      "drawn": 39,
+      "onScreen": 39,
+      "tags": 28,
+      "hidden": {
+       "short-line": 17,
+       "detail-far": 66,
+       "overlap": 1,
+       "secondary-far": 19
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 39,
+      "unflagged": 0,
+      "alphas": [
+       0.92
+      ],
+      "camera": {
+       "position": [
+        -7.724,
+        10.534,
+        -6.315
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspectionMs": [
+      24.1,
+      23.5,
+      24
+     ],
+     "deterministic": true
+    }
+   },
+   "restored": {
+    "mode": "engineering",
+    "alphas": [
+     1
+    ]
+   },
+   "ms": 28258,
+   "payloadFetches": 4,
+   "pageErrors": [],
+   "consoleErrors": [],
+   "showRefnoWarnings": []
+  },
+  {
+   "refno": "23705_293",
+   "name": "/MDS-Standards-FT03-B1",
+   "dbnum": 7321,
+   "primitives": 10,
+   "why": [
+    "dbnum 7321 spread"
+   ],
+   "kernelExtentM": 2,
+   "loadMs": 4795,
+   "loadResult": "{loadedRefnos: 1, skippedRefnos: 0, loadedObjects: 2, invalidTubiObjects: 0, missingRefnos: Array(0)}",
+   "loadFailed": null,
+   "objects": 2,
+   "records": 6,
+   "boxSource": "dtx",
+   "extentWorldM": 2,
+   "views": {
+    "far": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 6,
+      "drawn": 6,
+      "onScreen": 6,
+      "tags": 4,
+      "hidden": {},
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 6,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        1.81,
+        -2.469,
+        1.48
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      1.6,
+      1,
+      0.8
+     ],
+     "inspection": {
+      "mode": "inspection",
+      "records": 6,
+      "drawn": 6,
+      "onScreen": 6,
+      "tags": 4,
+      "hidden": {},
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 6,
+      "unflagged": 0,
+      "alphas": [
+       0.92
+      ],
+      "camera": {
+       "position": [
+        1.81,
+        -2.469,
+        1.48
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspectionMs": [
+      1.3,
+      1.8,
+      1.5
+     ],
+     "deterministic": true
+    },
+    "behind": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 6,
+      "drawn": 5,
+      "onScreen": 5,
+      "tags": 3,
+      "hidden": {
+       "detail-far": 1
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 5,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        -1.81,
+        2.469,
+        -1.48
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      1.3,
+      1.2,
+      1.3
+     ],
+     "inspection": {
+      "mode": "inspection",
+      "records": 6,
+      "drawn": 5,
+      "onScreen": 5,
+      "tags": 3,
+      "hidden": {
+       "detail-far": 1
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 5,
+      "unflagged": 0,
+      "alphas": [
+       0.92
+      ],
+      "camera": {
+       "position": [
+        -1.81,
+        2.469,
+        -1.48
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspectionMs": [
+      1.1,
+      0.7,
+      0.9
+     ],
+     "deterministic": true
+    }
+   },
+   "restored": {
+    "mode": "engineering",
+    "alphas": [
+     1
+    ]
+   },
+   "ms": 13099,
+   "payloadFetches": 2,
+   "pageErrors": [],
+   "consoleErrors": [],
+   "showRefnoWarnings": []
+  },
+  {
+   "refno": "23705_402",
+   "name": "/MDS-Standards-FT17-B1",
+   "dbnum": 7321,
+   "primitives": 12,
+   "why": [
+    "dbnum 7321 spread"
+   ],
+   "kernelExtentM": 2,
+   "loadMs": 2645,
+   "loadResult": "{loadedRefnos: 1, skippedRefnos: 0, loadedObjects: 2, invalidTubiObjects: 0, missingRefnos: Array(0)}",
+   "loadFailed": null,
+   "objects": 2,
+   "records": 7,
+   "boxSource": "dtx",
+   "extentWorldM": 2,
+   "views": {
+    "far": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 7,
+      "drawn": 7,
+      "onScreen": 7,
+      "tags": 5,
+      "hidden": {},
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 7,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        1.81,
+        -2.469,
+        1.48
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      1.6,
+      1.5,
+      1.5
+     ],
+     "inspection": {
+      "mode": "inspection",
+      "records": 7,
+      "drawn": 7,
+      "onScreen": 7,
+      "tags": 5,
+      "hidden": {},
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 7,
+      "unflagged": 0,
+      "alphas": [
+       0.92
+      ],
+      "camera": {
+       "position": [
+        1.81,
+        -2.469,
+        1.48
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspectionMs": [
+      1.6,
+      1.6,
+      1.4
+     ],
+     "deterministic": true
+    },
+    "behind": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 7,
+      "drawn": 6,
+      "onScreen": 6,
+      "tags": 4,
+      "hidden": {
+       "detail-far": 1
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 6,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        -1.81,
+        2.469,
+        -1.48
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      1.5,
+      1.2,
+      1.2
+     ],
+     "inspection": {
+      "mode": "inspection",
+      "records": 7,
+      "drawn": 6,
+      "onScreen": 6,
+      "tags": 4,
+      "hidden": {
+       "detail-far": 1
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 6,
+      "unflagged": 0,
+      "alphas": [
+       0.92
+      ],
+      "camera": {
+       "position": [
+        -1.81,
+        2.469,
+        -1.48
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspectionMs": [
+      2.2,
+      1.5,
+      1.1
+     ],
+     "deterministic": true
+    }
+   },
+   "restored": {
+    "mode": "engineering",
+    "alphas": [
+     1
+    ]
+   },
+   "ms": 10924,
+   "payloadFetches": 2,
+   "pageErrors": [],
+   "consoleErrors": [],
+   "showRefnoWarnings": []
+  },
+  {
+   "refno": "23705_486",
+   "name": "/MDS-Standards-FT31-B1",
+   "dbnum": 7321,
+   "primitives": 12,
+   "why": [
+    "dbnum 7321 spread"
+   ],
+   "kernelExtentM": 2,
+   "loadMs": 2217,
+   "loadResult": "{loadedRefnos: 1, skippedRefnos: 0, loadedObjects: 2, invalidTubiObjects: 0, missingRefnos: Array(0)}",
+   "loadFailed": null,
+   "objects": 2,
+   "records": 7,
+   "boxSource": "dtx",
+   "extentWorldM": 2,
+   "views": {
+    "far": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 7,
+      "drawn": 7,
+      "onScreen": 7,
+      "tags": 5,
+      "hidden": {},
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 7,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        1.81,
+        -2.469,
+        1.48
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      1.7,
+      1.5,
+      1.9
+     ],
+     "inspection": {
+      "mode": "inspection",
+      "records": 7,
+      "drawn": 7,
+      "onScreen": 7,
+      "tags": 5,
+      "hidden": {},
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 7,
+      "unflagged": 0,
+      "alphas": [
+       0.92
+      ],
+      "camera": {
+       "position": [
+        1.81,
+        -2.469,
+        1.48
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspectionMs": [
+      1.7,
+      1.6,
+      1.3
+     ],
+     "deterministic": true
+    },
+    "behind": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 7,
+      "drawn": 6,
+      "onScreen": 6,
+      "tags": 4,
+      "hidden": {
+       "detail-far": 1
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 6,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        -1.81,
+        2.469,
+        -1.48
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      0.9,
+      0.9,
+      1
+     ],
+     "inspection": {
+      "mode": "inspection",
+      "records": 7,
+      "drawn": 6,
+      "onScreen": 6,
+      "tags": 4,
+      "hidden": {
+       "detail-far": 1
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 6,
+      "unflagged": 0,
+      "alphas": [
+       0.92
+      ],
+      "camera": {
+       "position": [
+        -1.81,
+        2.469,
+        -1.48
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspectionMs": [
+      2.8,
+      2.1,
+      1.6
+     ],
+     "deterministic": true
+    }
+   },
+   "restored": {
+    "mode": "engineering",
+    "alphas": [
+     1
+    ]
+   },
+   "ms": 10533,
+   "payloadFetches": 2,
+   "pageErrors": [],
+   "consoleErrors": [],
+   "showRefnoWarnings": []
+  },
+  {
+   "refno": "24381_101412",
+   "name": "/1PCS002MP-IS/B1",
+   "dbnum": 7997,
+   "primitives": 27,
+   "why": [
+    "dbnum 7997 spread"
+   ],
+   "kernelExtentM": 30.99,
+   "loadMs": 16465,
+   "loadResult": "{loadedRefnos: 7, skippedRefnos: 0, loadedObjects: 11, invalidTubiObjects: 0, missingRefnos: Array(0)}",
+   "loadFailed": null,
+   "objects": 11,
+   "records": 19,
+   "boxSource": "dtx",
+   "extentWorldM": 2.5823549804687502,
+   "views": {
+    "far": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 19,
+      "drawn": 11,
+      "onScreen": 10,
+      "tags": 7,
+      "hidden": {
+       "detail-far": 7,
+       "short-line": 1
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 11,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        2.337,
+        -3.187,
+        1.911
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      1.8,
+      1.8,
+      1.6
+     ],
+     "inspection": {
+      "mode": "inspection",
+      "records": 19,
+      "drawn": 11,
+      "onScreen": 10,
+      "tags": 7,
+      "hidden": {
+       "detail-far": 7,
+       "short-line": 1
+      },
+      "nonFinite": 0,
+      "occluded": [
+       "647.65"
+      ],
+      "visible": 10,
+      "unflagged": 0,
+      "alphas": [
+       0.8,
+       0.92
+      ],
+      "camera": {
+       "position": [
+        2.337,
+        -3.187,
+        1.911
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspectionMs": [
+      2.4,
+      2.2,
+      1.8
+     ],
+     "deterministic": true
+    },
+    "behind": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 19,
+      "drawn": 11,
+      "onScreen": 11,
+      "tags": 7,
+      "hidden": {
+       "detail-far": 7,
+       "short-line": 1
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 11,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        -2.337,
+        3.187,
+        -1.911
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      2.5,
+      2.2,
+      4.1
+     ],
+     "inspection": {
+      "mode": "inspection",
+      "records": 19,
+      "drawn": 11,
+      "onScreen": 11,
+      "tags": 7,
+      "hidden": {
+       "detail-far": 7,
+       "short-line": 1
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 11,
+      "unflagged": 0,
+      "alphas": [
+       0.92
+      ],
+      "camera": {
+       "position": [
+        -2.337,
+        3.187,
+        -1.911
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspectionMs": [
+      2.5,
+      2.2,
+      2.4
+     ],
+     "deterministic": true
+    }
+   },
+   "restored": {
+    "mode": "engineering",
+    "alphas": [
+     1
+    ]
+   },
+   "ms": 24787,
+   "payloadFetches": 2,
+   "pageErrors": [],
+   "consoleErrors": [],
+   "showRefnoWarnings": []
+  },
+  {
+   "refno": "24381_104705",
+   "name": "/Copy-of-1RCS301MN-YK/813VP",
+   "dbnum": 7997,
+   "primitives": 142,
+   "why": [
+    "dbnum 7997 spread"
+   ],
+   "kernelExtentM": 9.566,
+   "loadMs": 19495,
+   "loadResult": "{loadedRefnos: 41, skippedRefnos: 0, loadedObjects: 57, invalidTubiObjects: 0, missingRefnos: Array(0)}",
+   "loadFailed": null,
+   "objects": 57,
+   "records": 116,
+   "boxSource": "dtx",
+   "extentWorldM": 9.623760742187502,
+   "views": {
+    "far": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 116,
+      "drawn": 33,
+      "onScreen": 33,
+      "tags": 25,
+      "hidden": {
+       "short-line": 18,
+       "detail-far": 48,
+       "secondary-far": 17
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 33,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        8.71,
+        -11.878,
+        7.121
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      13.9,
+      11.6,
+      14.3
+     ],
+     "inspection": {
+      "mode": "inspection",
+      "records": 116,
+      "drawn": 33,
+      "onScreen": 33,
+      "tags": 25,
+      "hidden": {
+       "short-line": 18,
+       "detail-far": 48,
+       "secondary-far": 17
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 33,
+      "unflagged": 0,
+      "alphas": [
+       0.92
+      ],
+      "camera": {
+       "position": [
+        8.71,
+        -11.878,
+        7.121
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspectionMs": [
+      16.6,
+      15.7,
+      16
+     ],
+     "deterministic": true
+    },
+    "behind": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 116,
+      "drawn": 31,
+      "onScreen": 31,
+      "tags": 25,
+      "hidden": {
+       "short-line": 20,
+       "detail-far": 48,
+       "secondary-far": 17
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 31,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        -8.71,
+        11.878,
+        -7.121
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      17.9,
+      15,
+      13.4
+     ],
+     "inspection": {
+      "mode": "inspection",
+      "records": 116,
+      "drawn": 31,
+      "onScreen": 31,
+      "tags": 25,
+      "hidden": {
+       "short-line": 20,
+       "detail-far": 48,
+       "secondary-far": 17
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 31,
+      "unflagged": 0,
+      "alphas": [
+       0.92
+      ],
+      "camera": {
+       "position": [
+        -8.71,
+        11.878,
+        -7.121
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspectionMs": [
+      13.9,
+      13.5,
+      12.8
+     ],
+     "deterministic": true
+    }
+   },
+   "restored": {
+    "mode": "engineering",
+    "alphas": [
+     1
+    ]
+   },
+   "ms": 28312,
+   "payloadFetches": 2,
+   "pageErrors": [],
+   "consoleErrors": [],
+   "showRefnoWarnings": []
+  },
+  {
+   "refno": "24381_106257",
+   "name": "/Copy-of-1RCS008MN-TUBE/804VP-VENT",
+   "dbnum": 7997,
+   "primitives": 63,
+   "why": [
+    "dbnum 7997 spread"
+   ],
+   "kernelExtentM": 0.931,
+   "loadMs": 15887,
+   "loadResult": "{loadedRefnos: 15, skippedRefnos: 0, loadedObjects: 23, invalidTubiObjects: 0, missingRefnos: Array(0)}",
+   "loadFailed": null,
+   "objects": 23,
+   "records": 48,
+   "boxSource": "dtx",
+   "extentWorldM": 0.939931640624998,
+   "views": {
+    "far": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 48,
+      "drawn": 27,
+      "onScreen": 26,
+      "tags": 14,
+      "hidden": {
+       "detail-far": 20,
+       "secondary-far": 1
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 27,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        0.851,
+        -1.16,
+        0.695
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      4.3,
+      5.9,
+      5.8
+     ],
+     "inspection": {
+      "mode": "inspection",
+      "records": 48,
+      "drawn": 27,
+      "onScreen": 26,
+      "tags": 14,
+      "hidden": {
+       "detail-far": 20,
+       "secondary-far": 1
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 27,
+      "unflagged": 0,
+      "alphas": [
+       0.92
+      ],
+      "camera": {
+       "position": [
+        0.851,
+        -1.16,
+        0.695
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspectionMs": [
+      5.3,
+      5,
+      4.1
+     ],
+     "deterministic": true
+    },
+    "behind": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 48,
+      "drawn": 26,
+      "onScreen": 26,
+      "tags": 14,
+      "hidden": {
+       "detail-far": 20,
+       "secondary-far": 1,
+       "short-line": 1
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 26,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        -0.851,
+        1.16,
+        -0.695
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      5.3,
+      5.5,
+      5.7
+     ],
+     "inspection": {
+      "mode": "inspection",
+      "records": 48,
+      "drawn": 26,
+      "onScreen": 26,
+      "tags": 14,
+      "hidden": {
+       "detail-far": 20,
+       "secondary-far": 1,
+       "short-line": 1
+      },
+      "nonFinite": 0,
+      "occluded": [
+       "399.92"
+      ],
+      "visible": 25,
+      "unflagged": 0,
+      "alphas": [
+       0.8,
+       0.92
+      ],
+      "camera": {
+       "position": [
+        -0.851,
+        1.16,
+        -0.695
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspectionMs": [
+      4.6,
+      6.4,
+      4.5
+     ],
+     "deterministic": true
+    }
+   },
+   "restored": {
+    "mode": "engineering",
+    "alphas": [
+     1
+    ]
+   },
+   "ms": 24298,
+   "payloadFetches": 2,
+   "pageErrors": [],
+   "consoleErrors": [],
+   "showRefnoWarnings": []
+  },
+  {
+   "refno": "24381_107276",
+   "name": "/Copy-(2)-of-1TFM057MN-TUBE/981VL",
+   "dbnum": 7997,
+   "primitives": 220,
+   "why": [
+    "dbnum 7997 spread"
+   ],
+   "kernelExtentM": 5.234,
+   "loadMs": 18877,
+   "loadResult": "{loadedRefnos: 49, skippedRefnos: 0, loadedObjects: 77, invalidTubiObjects: 0, missingRefnos: Array(0)}",
+   "loadFailed": null,
+   "objects": 77,
+   "records": 187,
+   "boxSource": "dtx",
+   "extentWorldM": 5.2421503906249995,
+   "views": {
+    "far": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 187,
+      "drawn": 43,
+      "onScreen": 42,
+      "tags": 32,
+      "hidden": {
+       "detail-far": 108,
+       "short-line": 18,
+       "overlap": 1,
+       "secondary-far": 17
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 43,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        4.744,
+        -6.47,
+        3.879
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      14.1,
+      14.3,
+      14.8
+     ],
+     "inspection": {
+      "mode": "inspection",
+      "records": 187,
+      "drawn": 43,
+      "onScreen": 42,
+      "tags": 32,
+      "hidden": {
+       "detail-far": 108,
+       "short-line": 18,
+       "overlap": 1,
+       "secondary-far": 17
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 43,
+      "unflagged": 0,
+      "alphas": [
+       0.92
+      ],
+      "camera": {
+       "position": [
+        4.744,
+        -6.47,
+        3.879
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspectionMs": [
+      16.9,
+      15.8,
+      14.1
+     ],
+     "deterministic": true
+    },
+    "behind": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 187,
+      "drawn": 43,
+      "onScreen": 43,
+      "tags": 32,
+      "hidden": {
+       "overlap": 3,
+       "detail-far": 108,
+       "short-line": 16,
+       "secondary-far": 17
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 43,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        -4.744,
+        6.47,
+        -3.879
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      15.9,
+      15.7,
+      14.4
+     ],
+     "inspection": {
+      "mode": "inspection",
+      "records": 187,
+      "drawn": 43,
+      "onScreen": 43,
+      "tags": 32,
+      "hidden": {
+       "overlap": 3,
+       "detail-far": 108,
+       "short-line": 16,
+       "secondary-far": 17
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 43,
+      "unflagged": 0,
+      "alphas": [
+       0.92
+      ],
+      "camera": {
+       "position": [
+        -4.744,
+        6.47,
+        -3.879
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspectionMs": [
+      16.4,
+      18.7,
+      14.8
+     ],
+     "deterministic": true
+    }
+   },
+   "restored": {
+    "mode": "engineering",
+    "alphas": [
+     1
+    ]
+   },
+   "ms": 27713,
+   "payloadFetches": 2,
+   "pageErrors": [],
+   "consoleErrors": [],
+   "showRefnoWarnings": []
+  },
+  {
+   "refno": "24381_145565",
+   "name": "/Copy-of-1RCS0063-1R56001",
+   "dbnum": 7997,
+   "primitives": 17,
+   "why": [
+    "dbnum 7997 spread"
+   ],
+   "kernelExtentM": 0.841,
+   "loadMs": 32873,
+   "loadResult": "{loadedRefnos: 1, skippedRefnos: 0, loadedObjects: 2, invalidTubiObjects: 0, missingRefnos: Array(0)}",
+   "loadFailed": null,
+   "objects": 2,
+   "records": 13,
+   "boxSource": "dtx",
+   "extentWorldM": 0.7875225830078125,
+   "views": {
+    "far": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 13,
+      "drawn": 13,
+      "onScreen": 13,
+      "tags": 4,
+      "hidden": {},
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 13,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        0.713,
+        -0.972,
+        0.583
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      2.2,
+      1.7,
+      1.1
+     ],
+     "inspection": {
+      "mode": "inspection",
+      "records": 13,
+      "drawn": 13,
+      "onScreen": 13,
+      "tags": 4,
+      "hidden": {},
+      "nonFinite": 0,
+      "occluded": [
+       "589.2"
+      ],
+      "visible": 12,
+      "unflagged": 0,
+      "alphas": [
+       0.8,
+       0.92
+      ],
+      "camera": {
+       "position": [
+        0.713,
+        -0.972,
+        0.583
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspectionMs": [
+      1.8,
+      1.5,
+      1.6
+     ],
+     "deterministic": true
+    },
+    "behind": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 13,
+      "drawn": 13,
+      "onScreen": 12,
+      "tags": 4,
+      "hidden": {},
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 13,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        -0.713,
+        0.972,
+        -0.583
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      1.9,
+      2.2,
+      1.6
+     ],
+     "inspection": {
+      "mode": "inspection",
+      "records": 13,
+      "drawn": 13,
+      "onScreen": 12,
+      "tags": 4,
+      "hidden": {},
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 13,
+      "unflagged": 0,
+      "alphas": [
+       0.92
+      ],
+      "camera": {
+       "position": [
+        -0.713,
+        0.972,
+        -0.583
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspectionMs": [
+      1.8,
+      2.4,
+      1.8
+     ],
+     "deterministic": true
+    }
+   },
+   "restored": {
+    "mode": "engineering",
+    "alphas": [
+     1
+    ]
+   },
+   "ms": 41161,
+   "payloadFetches": 2,
+   "pageErrors": [
+    "RangeError: Map maximum size exceeded"
+   ],
+   "consoleErrors": [],
+   "showRefnoWarnings": [],
+   "stage": "page",
+   "error": "pageerror: RangeError: Map maximum size exceeded"
+  },
+  {
+   "refno": "24381_146547",
+   "name": "/Copy-of-1RCS0182B-1R70024",
+   "dbnum": 7997,
+   "primitives": 33,
+   "why": [
+    "dbnum 7997 spread"
+   ],
+   "kernelExtentM": 0.513,
+   "loadMs": 20535,
+   "loadResult": "{loadedRefnos: 6, skippedRefnos: 0, loadedObjects: 8, invalidTubiObjects: 0, missingRefnos: Array(0)}",
+   "loadFailed": null,
+   "objects": 8,
+   "records": 28,
+   "boxSource": "dtx",
+   "extentWorldM": 0.5194101562500002,
+   "views": {
+    "far": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 28,
+      "drawn": 11,
+      "onScreen": 11,
+      "tags": 4,
+      "hidden": {
+       "detail-far": 17
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 11,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        0.47,
+        -0.641,
+        0.384
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      1.4,
+      1.7,
+      1.5
+     ],
+     "inspection": {
+      "mode": "inspection",
+      "records": 28,
+      "drawn": 11,
+      "onScreen": 11,
+      "tags": 4,
+      "hidden": {
+       "detail-far": 17
+      },
+      "nonFinite": 0,
+      "occluded": [
+       "mark:24381_146548",
+       "290",
+       "145",
+       "mark:24381_146551",
+       "mark:24381_146553"
+      ],
+      "visible": 6,
+      "unflagged": 0,
+      "alphas": [
+       0.8,
+       0.92
+      ],
+      "camera": {
+       "position": [
+        0.47,
+        -0.641,
+        0.384
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspectionMs": [
+      1.6,
+      1.4,
+      1.2
+     ],
+     "deterministic": true
+    },
+    "behind": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 28,
+      "drawn": 11,
+      "onScreen": 11,
+      "tags": 4,
+      "hidden": {
+       "detail-far": 17
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 11,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        -0.47,
+        0.641,
+        -0.384
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      2.4,
+      2.1,
+      1.8
+     ],
+     "inspection": {
+      "mode": "inspection",
+      "records": 28,
+      "drawn": 11,
+      "onScreen": 11,
+      "tags": 4,
+      "hidden": {
+       "detail-far": 17
+      },
+      "nonFinite": 0,
+      "occluded": [
+       "mark:24381_146548",
+       "mark:24381_146551",
+       "mark:24381_146553"
+      ],
+      "visible": 8,
+      "unflagged": 0,
+      "alphas": [
+       0.8,
+       0.92
+      ],
+      "camera": {
+       "position": [
+        -0.47,
+        0.641,
+        -0.384
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspectionMs": [
+      1.6,
+      1.2,
+      2.1
+     ],
+     "deterministic": true
+    }
+   },
+   "restored": {
+    "mode": "engineering",
+    "alphas": [
+     1
+    ]
+   },
+   "ms": 28749,
+   "payloadFetches": 2,
+   "pageErrors": [],
+   "consoleErrors": [],
+   "showRefnoWarnings": []
+  },
+  {
+   "refno": "24381_147590",
+   "name": "/Copy-of-1RCS0693-1R43064",
+   "dbnum": 7997,
+   "primitives": 62,
+   "why": [
+    "dbnum 7997 spread"
+   ],
+   "kernelExtentM": 3.686,
+   "loadMs": 19035,
+   "loadResult": "{loadedRefnos: 12, skippedRefnos: 0, loadedObjects: 21, invalidTubiObjects: 0, missingRefnos: Array(0)}",
+   "loadFailed": null,
+   "objects": 21,
+   "records": 50,
+   "boxSource": "dtx",
+   "extentWorldM": 3.6864999999999988,
+   "views": {
+    "far": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 50,
+      "drawn": 23,
+      "onScreen": 23,
+      "tags": 11,
+      "hidden": {
+       "detail-far": 23,
+       "secondary-far": 4
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 23,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        3.336,
+        -4.55,
+        2.728
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      3.3,
+      3.8,
+      4.1
+     ],
+     "inspection": {
+      "mode": "inspection",
+      "records": 50,
+      "drawn": 23,
+      "onScreen": 23,
+      "tags": 11,
+      "hidden": {
+       "detail-far": 23,
+       "secondary-far": 4
+      },
+      "nonFinite": 0,
+      "occluded": [
+       "mark:24381_147594",
+       "mark:24381_147601"
+      ],
+      "visible": 21,
+      "unflagged": 0,
+      "alphas": [
+       0.8,
+       0.92
+      ],
+      "camera": {
+       "position": [
+        3.336,
+        -4.55,
+        2.728
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspectionMs": [
+      12.9,
+      11.5,
+      10.6
+     ],
+     "deterministic": true
+    },
+    "behind": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 50,
+      "drawn": 22,
+      "onScreen": 22,
+      "tags": 11,
+      "hidden": {
+       "overlap": 1,
+       "detail-far": 23,
+       "secondary-far": 4
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 22,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        -3.336,
+        4.55,
+        -2.728
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      4.4,
+      4,
+      4.4
+     ],
+     "inspection": {
+      "mode": "inspection",
+      "records": 50,
+      "drawn": 22,
+      "onScreen": 22,
+      "tags": 11,
+      "hidden": {
+       "overlap": 1,
+       "detail-far": 23,
+       "secondary-far": 4
+      },
+      "nonFinite": 0,
+      "occluded": [
+       "mark:24381_147594",
+       "mark:24381_147601"
+      ],
+      "visible": 20,
+      "unflagged": 0,
+      "alphas": [
+       0.8,
+       0.92
+      ],
+      "camera": {
+       "position": [
+        -3.336,
+        4.55,
+        -2.728
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspectionMs": [
+      5.9,
+      5.9,
+      2.7
+     ],
+     "deterministic": true
+    }
+   },
+   "restored": {
+    "mode": "engineering",
+    "alphas": [
+     1
+    ]
+   },
+   "ms": 27512,
+   "payloadFetches": 2,
+   "pageErrors": [],
+   "consoleErrors": [],
+   "showRefnoWarnings": []
+  },
+  {
+   "refno": "24383_100028",
+   "name": "/C-GR-1RX215-B1",
+   "dbnum": 7999,
+   "primitives": 73,
+   "why": [
+    "dbnum 7999 spread"
+   ],
+   "kernelExtentM": 4.969,
+   "loadMs": 2711,
+   "loadResult": "{loadedRefnos: 27, skippedRefnos: 0, loadedObjects: 30, invalidTubiObjects: 0, missingRefnos: Array(0)}",
+   "loadFailed": null,
+   "objects": 30,
+   "records": 58,
+   "boxSource": "dtx",
+   "extentWorldM": 4.994360351562499,
+   "views": {
+    "far": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 58,
+      "drawn": 15,
+      "onScreen": 15,
+      "tags": 10,
+      "hidden": {
+       "short-line": 6,
+       "detail-far": 33,
+       "secondary-far": 4
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 15,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        4.52,
+        -6.164,
+        3.695
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      3.7,
+      2.6,
+      4.9
+     ],
+     "inspection": {
+      "mode": "inspection",
+      "records": 58,
+      "drawn": 15,
+      "onScreen": 15,
+      "tags": 10,
+      "hidden": {
+       "short-line": 6,
+       "detail-far": 33,
+       "secondary-far": 4
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 15,
+      "unflagged": 0,
+      "alphas": [
+       0.92
+      ],
+      "camera": {
+       "position": [
+        4.52,
+        -6.164,
+        3.695
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspectionMs": [
+      4.3,
+      4.5,
+      4.8
+     ],
+     "deterministic": true
+    },
+    "behind": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 58,
+      "drawn": 17,
+      "onScreen": 17,
+      "tags": 10,
+      "hidden": {
+       "short-line": 4,
+       "detail-far": 33,
+       "secondary-far": 4
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 17,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        -4.52,
+        6.164,
+        -3.695
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      2.7,
+      2.4,
+      3.8
+     ],
+     "inspection": {
+      "mode": "inspection",
+      "records": 58,
+      "drawn": 17,
+      "onScreen": 17,
+      "tags": 10,
+      "hidden": {
+       "short-line": 4,
+       "detail-far": 33,
+       "secondary-far": 4
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 17,
+      "unflagged": 0,
+      "alphas": [
+       0.92
+      ],
+      "camera": {
+       "position": [
+        -4.52,
+        6.164,
+        -3.695
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspectionMs": [
+      2.6,
+      2.4,
+      3.8
+     ],
+     "deterministic": true
+    }
+   },
+   "restored": {
+    "mode": "engineering",
+    "alphas": [
+     1
+    ]
+   },
+   "ms": 11190,
+   "payloadFetches": 2,
+   "pageErrors": [],
+   "consoleErrors": [],
+   "showRefnoWarnings": []
+  },
+  {
+   "refno": "24383_66977",
+   "name": "/1WCC0346B-88.9-NADB-R90-R532",
+   "dbnum": 7999,
+   "primitives": 72,
+   "why": [
+    "dbnum 7999 spread"
+   ],
+   "kernelExtentM": 5.336,
+   "loadMs": 3650,
+   "loadResult": "{loadedRefnos: 19, skippedRefnos: 0, loadedObjects: 28, invalidTubiObjects: 0, missingRefnos: Array(0)}",
+   "loadFailed": null,
+   "objects": 28,
+   "records": 57,
+   "boxSource": "dtx",
+   "extentWorldM": 5.28323046875,
+   "views": {
+    "far": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 57,
+      "drawn": 22,
+      "onScreen": 22,
+      "tags": 9,
+      "hidden": {
+       "short-line": 7,
+       "detail-far": 19,
+       "secondary-far": 9
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 22,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        4.782,
+        -6.521,
+        3.909
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      5.2,
+      4.4,
+      3.8
+     ],
+     "inspection": {
+      "mode": "inspection",
+      "records": 57,
+      "drawn": 22,
+      "onScreen": 22,
+      "tags": 9,
+      "hidden": {
+       "short-line": 7,
+       "detail-far": 19,
+       "secondary-far": 9
+      },
+      "nonFinite": 0,
+      "occluded": [
+       "mark:24383_66985",
+       "1WCC116KD",
+       "1WCC081DI"
+      ],
+      "visible": 19,
+      "unflagged": 0,
+      "alphas": [
+       0.8,
+       0.92
+      ],
+      "camera": {
+       "position": [
+        4.782,
+        -6.521,
+        3.909
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspectionMs": [
+      6.2,
+      5.1,
+      5.4
+     ],
+     "deterministic": true
+    },
+    "behind": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 57,
+      "drawn": 22,
+      "onScreen": 22,
+      "tags": 9,
+      "hidden": {
+       "short-line": 7,
+       "detail-far": 19,
+       "secondary-far": 9
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 22,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        -4.782,
+        6.521,
+        -3.909
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      3.7,
+      2.9,
+      4
+     ],
+     "inspection": {
+      "mode": "inspection",
+      "records": 57,
+      "drawn": 22,
+      "onScreen": 22,
+      "tags": 9,
+      "hidden": {
+       "short-line": 7,
+       "detail-far": 19,
+       "secondary-far": 9
+      },
+      "nonFinite": 0,
+      "occluded": [
+       "mark:24383_66985",
+       "接 1WCC0552-21.3-NADB-R90-R532",
+       "1WCC116KD",
+       "1WCC081DI"
+      ],
+      "visible": 18,
+      "unflagged": 0,
+      "alphas": [
+       0.8,
+       0.92
+      ],
+      "camera": {
+       "position": [
+        -4.782,
+        6.521,
+        -3.909
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspectionMs": [
+      4.9,
+      3.7,
+      2.5
+     ],
+     "deterministic": true
+    }
+   },
+   "restored": {
+    "mode": "engineering",
+    "alphas": [
+     1
+    ]
+   },
+   "ms": 12055,
+   "payloadFetches": 2,
+   "pageErrors": [],
+   "consoleErrors": [],
+   "showRefnoWarnings": []
+  },
+  {
+   "refno": "24383_68374",
+   "name": "/1WCC0304-88.9-NADB-R70-R312",
+   "dbnum": 7999,
+   "primitives": 64,
+   "why": [
+    "dbnum 7999 spread"
+   ],
+   "kernelExtentM": 3.207,
+   "loadMs": 2643,
+   "loadResult": "{loadedRefnos: 18, skippedRefnos: 0, loadedObjects: 29, invalidTubiObjects: 0, missingRefnos: Array(0)}",
+   "loadFailed": null,
+   "objects": 29,
+   "records": 50,
+   "boxSource": "dtx",
+   "extentWorldM": 3.1597573242187504,
+   "views": {
+    "far": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 50,
+      "drawn": 21,
+      "onScreen": 21,
+      "tags": 10,
+      "hidden": {
+       "detail-far": 13,
+       "short-line": 6,
+       "overlap": 6,
+       "secondary-far": 4
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 21,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        2.86,
+        -3.9,
+        2.338
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      3.8,
+      4.3,
+      4.1
+     ],
+     "inspection": {
+      "mode": "inspection",
+      "records": 50,
+      "drawn": 21,
+      "onScreen": 21,
+      "tags": 10,
+      "hidden": {
+       "detail-far": 13,
+       "short-line": 6,
+       "overlap": 6,
+       "secondary-far": 4
+      },
+      "nonFinite": 0,
+      "occluded": [
+       "69.85",
+       "mark:24383_68377",
+       "1WCC151KD"
+      ],
+      "visible": 18,
+      "unflagged": 0,
+      "alphas": [
+       0.8,
+       0.92
+      ],
+      "camera": {
+       "position": [
+        2.86,
+        -3.9,
+        2.338
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspectionMs": [
+      4.3,
+      3.4,
+      5.9
+     ],
+     "deterministic": true
+    },
+    "behind": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 50,
+      "drawn": 22,
+      "onScreen": 22,
+      "tags": 10,
+      "hidden": {
+       "detail-far": 13,
+       "short-line": 6,
+       "overlap": 5,
+       "secondary-far": 4
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 22,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        -2.86,
+        3.9,
+        -2.338
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      5,
+      3.5,
+      4.1
+     ],
+     "inspection": {
+      "mode": "inspection",
+      "records": 50,
+      "drawn": 22,
+      "onScreen": 22,
+      "tags": 10,
+      "hidden": {
+       "detail-far": 13,
+       "short-line": 6,
+       "overlap": 5,
+       "secondary-far": 4
+      },
+      "nonFinite": 0,
+      "occluded": [
+       "mark:24383_68377",
+       "1WCC068DI"
+      ],
+      "visible": 20,
+      "unflagged": 0,
+      "alphas": [
+       0.8,
+       0.92
+      ],
+      "camera": {
+       "position": [
+        -2.86,
+        3.9,
+        -2.338
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspectionMs": [
+      4.5,
+      4.7,
+      3.9
+     ],
+     "deterministic": true
+    }
+   },
+   "restored": {
+    "mode": "engineering",
+    "alphas": [
+     1
+    ]
+   },
+   "ms": 11112,
+   "payloadFetches": 2,
+   "pageErrors": [],
+   "consoleErrors": [],
+   "showRefnoWarnings": []
+  },
+  {
+   "refno": "24383_75366",
+   "name": "/1RCV0406-21.3-NMC-R41-R520",
+   "dbnum": 7999,
+   "primitives": 13,
+   "why": [
+    "dbnum 7999 spread"
+   ],
+   "kernelExtentM": 0.25,
+   "loadMs": 4737,
+   "loadResult": "{loadedRefnos: 3, skippedRefnos: 0, loadedObjects: 4, invalidTubiObjects: 0, missingRefnos: Array(0)}",
+   "loadFailed": null,
+   "objects": 4,
+   "records": 8,
+   "boxSource": "dtx",
+   "extentWorldM": 0.26750000000000007,
+   "views": {
+    "far": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 8,
+      "drawn": 8,
+      "onScreen": 7,
+      "tags": 5,
+      "hidden": {},
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 8,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        0.242,
+        -0.33,
+        0.198
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      1.6,
+      1.1,
+      1.2
+     ],
+     "inspection": {
+      "mode": "inspection",
+      "records": 8,
+      "drawn": 8,
+      "onScreen": 7,
+      "tags": 5,
+      "hidden": {},
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 8,
+      "unflagged": 0,
+      "alphas": [
+       0.92
+      ],
+      "camera": {
+       "position": [
+        0.242,
+        -0.33,
+        0.198
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspectionMs": [
+      1.5,
+      1.2,
+      1.1
+     ],
+     "deterministic": true
+    },
+    "behind": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 8,
+      "drawn": 7,
+      "onScreen": 6,
+      "tags": 5,
+      "hidden": {
+       "short-line": 1
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 7,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        -0.242,
+        0.33,
+        -0.198
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      1,
+      1.5,
+      1.6
+     ],
+     "inspection": {
+      "mode": "inspection",
+      "records": 8,
+      "drawn": 7,
+      "onScreen": 6,
+      "tags": 5,
+      "hidden": {
+       "short-line": 1
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 7,
+      "unflagged": 0,
+      "alphas": [
+       0.92
+      ],
+      "camera": {
+       "position": [
+        -0.242,
+        0.33,
+        -0.198
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspectionMs": [
+      1.4,
+      1.6,
+      1.4
+     ],
+     "deterministic": true
+    }
+   },
+   "restored": {
+    "mode": "engineering",
+    "alphas": [
+     1
+    ]
+   },
+   "ms": 12950,
+   "payloadFetches": 2,
+   "pageErrors": [],
+   "consoleErrors": [],
+   "showRefnoWarnings": []
+  },
+  {
+   "refno": "24383_82723",
+   "name": "BRAN",
+   "dbnum": 7999,
+   "primitives": 29,
+   "why": [
+    "dbnum 7999 spread"
+   ],
+   "kernelExtentM": 3.67,
+   "loadMs": 3842,
+   "loadResult": "{loadedRefnos: 5, skippedRefnos: 0, loadedObjects: 4, invalidTubiObjects: 0, missingRefnos: Array(1)}",
+   "loadFailed": null,
+   "objects": 4,
+   "records": 25,
+   "boxSource": "dtx",
+   "extentWorldM": 3.8593330078125003,
+   "views": {
+    "far": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 25,
+      "drawn": 6,
+      "onScreen": 6,
+      "tags": 4,
+      "hidden": {
+       "detail-far": 18,
+       "short-line": 1
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 6,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        3.493,
+        -4.763,
+        2.856
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      1,
+      1.3,
+      1.2
+     ],
+     "inspection": {
+      "mode": "inspection",
+      "records": 25,
+      "drawn": 6,
+      "onScreen": 6,
+      "tags": 4,
+      "hidden": {
+       "detail-far": 18,
+       "short-line": 1
+      },
+      "nonFinite": 0,
+      "occluded": [
+       "2510.61",
+       "1906.64"
+      ],
+      "visible": 4,
+      "unflagged": 0,
+      "alphas": [
+       0.8,
+       0.92
+      ],
+      "camera": {
+       "position": [
+        3.493,
+        -4.763,
+        2.856
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspectionMs": [
+      1.2,
+      1.3,
+      1.6
+     ],
+     "deterministic": true
+    },
+    "behind": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 25,
+      "drawn": 6,
+      "onScreen": 6,
+      "tags": 4,
+      "hidden": {
+       "detail-far": 18,
+       "short-line": 1
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 6,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        -3.493,
+        4.763,
+        -2.856
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      1.6,
+      1.2,
+      2.4
+     ],
+     "inspection": {
+      "mode": "inspection",
+      "records": 25,
+      "drawn": 6,
+      "onScreen": 6,
+      "tags": 4,
+      "hidden": {
+       "detail-far": 18,
+       "short-line": 1
+      },
+      "nonFinite": 0,
+      "occluded": [
+       "2510.61",
+       "1906.64"
+      ],
+      "visible": 4,
+      "unflagged": 0,
+      "alphas": [
+       0.8,
+       0.92
+      ],
+      "camera": {
+       "position": [
+        -3.493,
+        4.763,
+        -2.856
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspectionMs": [
+      1.7,
+      1.4,
+      1
+     ],
+     "deterministic": true
+    }
+   },
+   "restored": {
+    "mode": "engineering",
+    "alphas": [
+     1
+    ]
+   },
+   "ms": 12157,
+   "payloadFetches": 2,
+   "pageErrors": [],
+   "consoleErrors": [],
+   "showRefnoWarnings": []
+  },
+  {
+   "refno": "24383_84709",
+   "name": "/M-OR-5RX112-BA",
+   "dbnum": 7999,
+   "primitives": 44,
+   "why": [
+    "dbnum 7999 spread"
+   ],
+   "kernelExtentM": 2.681,
+   "loadMs": 3070,
+   "loadResult": "{loadedRefnos: 6, skippedRefnos: 0, loadedObjects: 7, invalidTubiObjects: 0, missingRefnos: Array(0)}",
+   "loadFailed": null,
+   "objects": 7,
+   "records": 36,
+   "boxSource": "dtx",
+   "extentWorldM": 2.7234777832031254,
+   "views": {
+    "far": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 36,
+      "drawn": 7,
+      "onScreen": 7,
+      "tags": 5,
+      "hidden": {
+       "detail-far": 23,
+       "secondary-far": 5,
+       "short-line": 1
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 7,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        2.465,
+        -3.361,
+        2.015
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      1.7,
+      1.8,
+      1.2
+     ],
+     "inspection": {
+      "mode": "inspection",
+      "records": 36,
+      "drawn": 7,
+      "onScreen": 7,
+      "tags": 5,
+      "hidden": {
+       "detail-far": 23,
+       "secondary-far": 5,
+       "short-line": 1
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 7,
+      "unflagged": 0,
+      "alphas": [
+       0.92
+      ],
+      "camera": {
+       "position": [
+        2.465,
+        -3.361,
+        2.015
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspectionMs": [
+      1.4,
+      2.1,
+      1.8
+     ],
+     "deterministic": true
+    },
+    "behind": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 36,
+      "drawn": 8,
+      "onScreen": 8,
+      "tags": 5,
+      "hidden": {
+       "detail-far": 23,
+       "secondary-far": 5
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 8,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        -2.465,
+        3.361,
+        -2.015
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      1.7,
+      1.5,
+      1.8
+     ],
+     "inspection": {
+      "mode": "inspection",
+      "records": 36,
+      "drawn": 8,
+      "onScreen": 8,
+      "tags": 5,
+      "hidden": {
+       "detail-far": 23,
+       "secondary-far": 5
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 8,
+      "unflagged": 0,
+      "alphas": [
+       0.92
+      ],
+      "camera": {
+       "position": [
+        -2.465,
+        3.361,
+        -2.015
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspectionMs": [
+      1.6,
+      1.2,
+      1.3
+     ],
+     "deterministic": true
+    }
+   },
+   "restored": {
+    "mode": "engineering",
+    "alphas": [
+     1
+    ]
+   },
+   "ms": 11380,
+   "payloadFetches": 2,
+   "pageErrors": [],
+   "consoleErrors": [],
+   "showRefnoWarnings": []
+  },
+  {
+   "refno": "24383_92086",
+   "name": "/LV-OR-1RB-3050A",
+   "dbnum": 7999,
+   "primitives": 13,
+   "why": [
+    "dbnum 7999 spread"
+   ],
+   "kernelExtentM": 1.601,
+   "loadMs": 2226,
+   "loadResult": "{loadedRefnos: 2, skippedRefnos: 0, loadedObjects: 2, invalidTubiObjects: 0, missingRefnos: Array(0)}",
+   "loadFailed": null,
+   "objects": 2,
+   "records": 8,
+   "boxSource": "dtx",
+   "extentWorldM": 1.627541015624999,
+   "views": {
+    "far": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 8,
+      "drawn": 5,
+      "onScreen": 5,
+      "tags": 4,
+      "hidden": {
+       "secondary-far": 2,
+       "detail-far": 1
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 5,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        1.473,
+        -2.009,
+        1.204
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      1.4,
+      1,
+      0.8
+     ],
+     "inspection": {
+      "mode": "inspection",
+      "records": 8,
+      "drawn": 5,
+      "onScreen": 5,
+      "tags": 4,
+      "hidden": {
+       "secondary-far": 2,
+       "detail-far": 1
+      },
+      "nonFinite": 0,
+      "occluded": [
+       "1600"
+      ],
+      "visible": 4,
+      "unflagged": 0,
+      "alphas": [
+       0.8,
+       0.92
+      ],
+      "camera": {
+       "position": [
+        1.473,
+        -2.009,
+        1.204
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspectionMs": [
+      1.1,
+      1.1,
+      1.2
+     ],
+     "deterministic": true
+    },
+    "behind": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 8,
+      "drawn": 5,
+      "onScreen": 5,
+      "tags": 4,
+      "hidden": {
+       "secondary-far": 2,
+       "detail-far": 1
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 5,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        -1.473,
+        2.009,
+        -1.204
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      0.8,
+      1,
+      0.6
+     ],
+     "inspection": {
+      "mode": "inspection",
+      "records": 8,
+      "drawn": 5,
+      "onScreen": 5,
+      "tags": 4,
+      "hidden": {
+       "secondary-far": 2,
+       "detail-far": 1
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 5,
+      "unflagged": 0,
+      "alphas": [
+       0.92
+      ],
+      "camera": {
+       "position": [
+        -1.473,
+        2.009,
+        -1.204
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspectionMs": [
+      0.9,
+      1.2,
+      1.1
+     ],
+     "deterministic": true
+    }
+   },
+   "restored": {
+    "mode": "engineering",
+    "alphas": [
+     1
+    ]
+   },
+   "ms": 10484,
+   "payloadFetches": 2,
+   "pageErrors": [],
+   "consoleErrors": [],
+   "showRefnoWarnings": []
+  },
+  {
+   "refno": "24383_94463",
+   "name": "/M-YE-1RC-6AG7A",
+   "dbnum": 7999,
+   "primitives": 7,
+   "why": [
+    "dbnum 7999 spread"
+   ],
+   "kernelExtentM": 2.5,
+   "loadMs": 4255,
+   "loadResult": "{loadedRefnos: 2, skippedRefnos: 0, loadedObjects: 1, invalidTubiObjects: 0, missingRefnos: Array(1)}",
+   "loadFailed": null,
+   "objects": 1,
+   "records": 4,
+   "boxSource": "dtx",
+   "extentWorldM": 2.200000000000001,
+   "views": {
+    "far": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 4,
+      "drawn": 3,
+      "onScreen": 3,
+      "tags": 2,
+      "hidden": {
+       "detail-far": 1
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 3,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        1.991,
+        -2.715,
+        1.628
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      1.3,
+      1.3,
+      1.5
+     ],
+     "inspection": {
+      "mode": "inspection",
+      "records": 4,
+      "drawn": 3,
+      "onScreen": 3,
+      "tags": 2,
+      "hidden": {
+       "detail-far": 1
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 3,
+      "unflagged": 0,
+      "alphas": [
+       0.92
+      ],
+      "camera": {
+       "position": [
+        1.991,
+        -2.715,
+        1.628
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspectionMs": [
+      1.2,
+      1.1,
+      1.4
+     ],
+     "deterministic": true
+    },
+    "behind": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 4,
+      "drawn": 3,
+      "onScreen": 3,
+      "tags": 2,
+      "hidden": {
+       "detail-far": 1
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 3,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        -1.991,
+        2.715,
+        -1.628
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      1.8,
+      1.1,
+      0.6
+     ],
+     "inspection": {
+      "mode": "inspection",
+      "records": 4,
+      "drawn": 3,
+      "onScreen": 3,
+      "tags": 2,
+      "hidden": {
+       "detail-far": 1
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 3,
+      "unflagged": 0,
+      "alphas": [
+       0.92
+      ],
+      "camera": {
+       "position": [
+        -1.991,
+        2.715,
+        -1.628
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspectionMs": [
+      0.7,
+      0.8,
+      0.9
+     ],
+     "deterministic": true
+    }
+   },
+   "restored": {
+    "mode": "engineering",
+    "alphas": [
+     1
+    ]
+   },
+   "ms": 12499,
+   "payloadFetches": 2,
+   "pageErrors": [],
+   "consoleErrors": [],
+   "showRefnoWarnings": []
+  },
+  {
+   "refno": "24383_95438",
+   "name": "/LV-GR-1RB-6000A",
+   "dbnum": 7999,
+   "primitives": 19,
+   "why": [
+    "dbnum 7999 spread"
+   ],
+   "kernelExtentM": 1.231,
+   "loadMs": 3244,
+   "loadResult": "{loadedRefnos: 2, skippedRefnos: 0, loadedObjects: 2, invalidTubiObjects: 0, missingRefnos: Array(0)}",
+   "loadFailed": null,
+   "objects": 2,
+   "records": 14,
+   "boxSource": "dtx",
+   "extentWorldM": 1.4298544921875003,
+   "views": {
+    "far": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 14,
+      "drawn": 5,
+      "onScreen": 5,
+      "tags": 4,
+      "hidden": {
+       "detail-far": 7,
+       "secondary-far": 2
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 5,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        1.294,
+        -1.765,
+        1.058
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      1.1,
+      1.4,
+      1.2
+     ],
+     "inspection": {
+      "mode": "inspection",
+      "records": 14,
+      "drawn": 5,
+      "onScreen": 5,
+      "tags": 4,
+      "hidden": {
+       "detail-far": 7,
+       "secondary-far": 2
+      },
+      "nonFinite": 0,
+      "occluded": [
+       "1349.99"
+      ],
+      "visible": 4,
+      "unflagged": 0,
+      "alphas": [
+       0.8,
+       0.92
+      ],
+      "camera": {
+       "position": [
+        1.294,
+        -1.765,
+        1.058
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspectionMs": [
+      1.3,
+      1.1,
+      0.8
+     ],
+     "deterministic": true
+    },
+    "behind": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 14,
+      "drawn": 5,
+      "onScreen": 5,
+      "tags": 4,
+      "hidden": {
+       "detail-far": 7,
+       "secondary-far": 2
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 5,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        -1.294,
+        1.765,
+        -1.058
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      2.1,
+      1.6,
+      1.4
+     ],
+     "inspection": {
+      "mode": "inspection",
+      "records": 14,
+      "drawn": 5,
+      "onScreen": 5,
+      "tags": 4,
+      "hidden": {
+       "detail-far": 7,
+       "secondary-far": 2
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 5,
+      "unflagged": 0,
+      "alphas": [
+       0.92
+      ],
+      "camera": {
+       "position": [
+        -1.294,
+        1.765,
+        -1.058
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspectionMs": [
+      1.8,
+      1.7,
+      1.4
+     ],
+     "deterministic": true
+    }
+   },
+   "restored": {
+    "mode": "engineering",
+    "alphas": [
+     1
+    ]
+   },
+   "ms": 11523,
+   "payloadFetches": 2,
+   "pageErrors": [],
+   "consoleErrors": [],
+   "showRefnoWarnings": []
+  },
+  {
+   "refno": "24383_98531",
+   "name": "/M-CO-1RX210-EA",
+   "dbnum": 7999,
+   "primitives": 7,
+   "why": [
+    "dbnum 7999 spread"
+   ],
+   "kernelExtentM": 2.5,
+   "loadMs": 2673,
+   "loadResult": "{loadedRefnos: 2, skippedRefnos: 0, loadedObjects: 2, invalidTubiObjects: 0, missingRefnos: Array(0)}",
+   "loadFailed": null,
+   "objects": 2,
+   "records": 4,
+   "boxSource": "dtx",
+   "extentWorldM": 2.58,
+   "views": {
+    "far": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 4,
+      "drawn": 3,
+      "onScreen": 3,
+      "tags": 2,
+      "hidden": {
+       "detail-far": 1
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 3,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        2.335,
+        -3.184,
+        1.909
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      1,
+      0.8,
+      0.6
+     ],
+     "inspection": {
+      "mode": "inspection",
+      "records": 4,
+      "drawn": 3,
+      "onScreen": 3,
+      "tags": 2,
+      "hidden": {
+       "detail-far": 1
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 3,
+      "unflagged": 0,
+      "alphas": [
+       0.92
+      ],
+      "camera": {
+       "position": [
+        2.335,
+        -3.184,
+        1.909
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspectionMs": [
+      0.9,
+      0.7,
+      0.7
+     ],
+     "deterministic": true
+    },
+    "behind": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 4,
+      "drawn": 3,
+      "onScreen": 3,
+      "tags": 2,
+      "hidden": {
+       "detail-far": 1
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 3,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        -2.335,
+        3.184,
+        -1.909
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      0.5,
+      0.4,
+      0.6
+     ],
+     "inspection": {
+      "mode": "inspection",
+      "records": 4,
+      "drawn": 3,
+      "onScreen": 3,
+      "tags": 2,
+      "hidden": {
+       "detail-far": 1
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 3,
+      "unflagged": 0,
+      "alphas": [
+       0.92
+      ],
+      "camera": {
+       "position": [
+        -2.335,
+        3.184,
+        -1.909
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspectionMs": [
+      0.8,
+      0.8,
+      0.7
+     ],
+     "deterministic": true
+    }
+   },
+   "restored": {
+    "mode": "engineering",
+    "alphas": [
+     1
+    ]
+   },
+   "ms": 10877,
+   "payloadFetches": 2,
+   "pageErrors": [],
+   "consoleErrors": [],
+   "showRefnoWarnings": []
+  },
+  {
+   "refno": "24384_22402",
+   "name": "/C-IY-1R330-A",
+   "dbnum": 8000,
+   "primitives": 7,
+   "why": [
+    "dbnum 8000 spread"
+   ],
+   "kernelExtentM": 2.8,
+   "loadMs": 3732,
+   "loadResult": "{loadedRefnos: 2, skippedRefnos: 0, loadedObjects: 1, invalidTubiObjects: 0, missingRefnos: Array(1)}",
+   "loadFailed": null,
+   "objects": 1,
+   "records": 4,
+   "boxSource": "dtx",
+   "extentWorldM": 2.8,
+   "views": {
+    "far": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 4,
+      "drawn": 3,
+      "onScreen": 3,
+      "tags": 2,
+      "hidden": {
+       "detail-far": 1
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 3,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        2.534,
+        -3.456,
+        2.072
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      1.1,
+      1.2,
+      1
+     ],
+     "inspection": {
+      "mode": "inspection",
+      "records": 4,
+      "drawn": 3,
+      "onScreen": 3,
+      "tags": 2,
+      "hidden": {
+       "detail-far": 1
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 3,
+      "unflagged": 0,
+      "alphas": [
+       0.92
+      ],
+      "camera": {
+       "position": [
+        2.534,
+        -3.456,
+        2.072
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspectionMs": [
+      1.3,
+      1,
+      0.7
+     ],
+     "deterministic": true
+    },
+    "behind": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 4,
+      "drawn": 3,
+      "onScreen": 3,
+      "tags": 2,
+      "hidden": {
+       "detail-far": 1
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 3,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        -2.534,
+        3.456,
+        -2.072
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      1,
+      1,
+      0.8
+     ],
+     "inspection": {
+      "mode": "inspection",
+      "records": 4,
+      "drawn": 3,
+      "onScreen": 3,
+      "tags": 2,
+      "hidden": {
+       "detail-far": 1
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 3,
+      "unflagged": 0,
+      "alphas": [
+       0.92
+      ],
+      "camera": {
+       "position": [
+        -2.534,
+        3.456,
+        -2.072
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspectionMs": [
+      1.1,
+      0.9,
+      0.8
+     ],
+     "deterministic": true
+    }
+   },
+   "restored": {
+    "mode": "engineering",
+    "alphas": [
+     1
+    ]
+   },
+   "ms": 11961,
+   "payloadFetches": 2,
+   "pageErrors": [],
+   "consoleErrors": [],
+   "showRefnoWarnings": []
+  },
+  {
+   "refno": "24384_22941",
+   "name": "/M-CO-1R332-AC",
+   "dbnum": 8000,
+   "primitives": 16,
+   "why": [
+    "dbnum 8000 spread"
+   ],
+   "kernelExtentM": 1.45,
+   "loadMs": 5783,
+   "loadResult": "{loadedRefnos: 3, skippedRefnos: 0, loadedObjects: 2, invalidTubiObjects: 0, missingRefnos: Array(1)}",
+   "loadFailed": null,
+   "objects": 2,
+   "records": 12,
+   "boxSource": "dtx",
+   "extentWorldM": 1.5,
+   "views": {
+    "far": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 12,
+      "drawn": 5,
+      "onScreen": 5,
+      "tags": 3,
+      "hidden": {
+       "detail-far": 7
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 5,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        1.358,
+        -1.851,
+        1.11
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      1.3,
+      1.2,
+      0.9
+     ],
+     "inspection": {
+      "mode": "inspection",
+      "records": 12,
+      "drawn": 5,
+      "onScreen": 5,
+      "tags": 3,
+      "hidden": {
+       "detail-far": 7
+      },
+      "nonFinite": 0,
+      "occluded": [
+       "1450"
+      ],
+      "visible": 4,
+      "unflagged": 0,
+      "alphas": [
+       0.8,
+       0.92
+      ],
+      "camera": {
+       "position": [
+        1.358,
+        -1.851,
+        1.11
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspectionMs": [
+      1.3,
+      1.1,
+      0.9
+     ],
+     "deterministic": true
+    },
+    "behind": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 12,
+      "drawn": 5,
+      "onScreen": 4,
+      "tags": 3,
+      "hidden": {
+       "detail-far": 7
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 5,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        -1.358,
+        1.851,
+        -1.11
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      1.8,
+      0.9,
+      1
+     ],
+     "inspection": {
+      "mode": "inspection",
+      "records": 12,
+      "drawn": 5,
+      "onScreen": 4,
+      "tags": 3,
+      "hidden": {
+       "detail-far": 7
+      },
+      "nonFinite": 0,
+      "occluded": [
+       "350"
+      ],
+      "visible": 4,
+      "unflagged": 0,
+      "alphas": [
+       0.8,
+       0.92
+      ],
+      "camera": {
+       "position": [
+        -1.358,
+        1.851,
+        -1.11
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspectionMs": [
+      1.5,
+      1.2,
+      1.1
+     ],
+     "deterministic": true
+    }
+   },
+   "restored": {
+    "mode": "engineering",
+    "alphas": [
+     1
+    ]
+   },
+   "ms": 14027,
+   "payloadFetches": 2,
+   "pageErrors": [],
+   "consoleErrors": [],
+   "showRefnoWarnings": []
+  },
+  {
+   "refno": "24384_23303",
+   "name": "/M-CO-1R345-A",
+   "dbnum": 8000,
+   "primitives": 7,
+   "why": [
+    "dbnum 8000 spread"
+   ],
+   "kernelExtentM": 1,
+   "loadMs": 3723,
+   "loadResult": "{loadedRefnos: 2, skippedRefnos: 0, loadedObjects: 1, invalidTubiObjects: 0, missingRefnos: Array(1)}",
+   "loadFailed": null,
+   "objects": 1,
+   "records": 4,
+   "boxSource": "dtx",
+   "extentWorldM": 1,
+   "views": {
+    "far": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 4,
+      "drawn": 3,
+      "onScreen": 3,
+      "tags": 2,
+      "hidden": {
+       "detail-far": 1
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 3,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        0.905,
+        -1.234,
+        0.74
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      0.7,
+      0.7,
+      0.9
+     ],
+     "inspection": {
+      "mode": "inspection",
+      "records": 4,
+      "drawn": 3,
+      "onScreen": 3,
+      "tags": 2,
+      "hidden": {
+       "detail-far": 1
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 3,
+      "unflagged": 0,
+      "alphas": [
+       0.92
+      ],
+      "camera": {
+       "position": [
+        0.905,
+        -1.234,
+        0.74
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspectionMs": [
+      0.9,
+      0.8,
+      0.8
+     ],
+     "deterministic": true
+    },
+    "behind": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 4,
+      "drawn": 3,
+      "onScreen": 3,
+      "tags": 2,
+      "hidden": {
+       "detail-far": 1
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 3,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        -0.905,
+        1.234,
+        -0.74
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      1.4,
+      1.3,
+      1.5
+     ],
+     "inspection": {
+      "mode": "inspection",
+      "records": 4,
+      "drawn": 3,
+      "onScreen": 3,
+      "tags": 2,
+      "hidden": {
+       "detail-far": 1
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 3,
+      "unflagged": 0,
+      "alphas": [
+       0.92
+      ],
+      "camera": {
+       "position": [
+        -0.905,
+        1.234,
+        -0.74
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspectionMs": [
+      1.1,
+      1.4,
+      0.9
+     ],
+     "deterministic": true
+    }
+   },
+   "restored": {
+    "mode": "engineering",
+    "alphas": [
+     1
+    ]
+   },
+   "ms": 11944,
+   "payloadFetches": 2,
+   "pageErrors": [],
+   "consoleErrors": [],
+   "showRefnoWarnings": []
+  },
+  {
+   "refno": "24384_23739",
+   "name": "/C-CO-1R320-F",
+   "dbnum": 8000,
+   "primitives": 7,
+   "why": [
+    "dbnum 8000 spread"
+   ],
+   "kernelExtentM": 2.4,
+   "loadMs": 5699,
+   "loadResult": "{loadedRefnos: 2, skippedRefnos: 0, loadedObjects: 1, invalidTubiObjects: 0, missingRefnos: Array(1)}",
+   "loadFailed": null,
+   "objects": 1,
+   "records": 4,
+   "boxSource": "dtx",
+   "extentWorldM": 2.4000000000000004,
+   "views": {
+    "far": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 4,
+      "drawn": 3,
+      "onScreen": 3,
+      "tags": 2,
+      "hidden": {
+       "detail-far": 1
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 3,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        2.172,
+        -2.962,
+        1.776
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      0.9,
+      0.8,
+      0.6
+     ],
+     "inspection": {
+      "mode": "inspection",
+      "records": 4,
+      "drawn": 3,
+      "onScreen": 3,
+      "tags": 2,
+      "hidden": {
+       "detail-far": 1
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 3,
+      "unflagged": 0,
+      "alphas": [
+       0.92
+      ],
+      "camera": {
+       "position": [
+        2.172,
+        -2.962,
+        1.776
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspectionMs": [
+      1.2,
+      0.7,
+      0.8
+     ],
+     "deterministic": true
+    },
+    "behind": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 4,
+      "drawn": 3,
+      "onScreen": 3,
+      "tags": 2,
+      "hidden": {
+       "detail-far": 1
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 3,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        -2.172,
+        2.962,
+        -1.776
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      0.9,
+      0.9,
+      0.9
+     ],
+     "inspection": {
+      "mode": "inspection",
+      "records": 4,
+      "drawn": 3,
+      "onScreen": 3,
+      "tags": 2,
+      "hidden": {
+       "detail-far": 1
+      },
+      "nonFinite": 0,
+      "occluded": [
+       "2400"
+      ],
+      "visible": 2,
+      "unflagged": 0,
+      "alphas": [
+       0.8,
+       0.92
+      ],
+      "camera": {
+       "position": [
+        -2.172,
+        2.962,
+        -1.776
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspectionMs": [
+      1,
+      0.7,
+      0.7
+     ],
+     "deterministic": true
+    }
+   },
+   "restored": {
+    "mode": "engineering",
+    "alphas": [
+     1
+    ]
+   },
+   "ms": 13905,
+   "payloadFetches": 2,
+   "pageErrors": [],
+   "consoleErrors": [],
+   "showRefnoWarnings": []
+  },
+  {
+   "refno": "24384_24141",
+   "name": "/M-CO-1R310-TB",
+   "dbnum": 8000,
+   "primitives": 13,
+   "why": [
+    "dbnum 8000 spread"
+   ],
+   "kernelExtentM": 3.442,
+   "loadMs": 3599,
+   "loadResult": "{loadedRefnos: 3, skippedRefnos: 0, loadedObjects: 2, invalidTubiObjects: 0, missingRefnos: Array(1)}",
+   "loadFailed": null,
+   "objects": 2,
+   "records": 10,
+   "boxSource": "dtx",
+   "extentWorldM": 3.400988281250001,
+   "views": {
+    "far": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 10,
+      "drawn": 3,
+      "onScreen": 3,
+      "tags": 2,
+      "hidden": {
+       "detail-far": 7
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 3,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        3.078,
+        -4.198,
+        2.516
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      0.6,
+      0.5,
+      0.5
+     ],
+     "inspection": {
+      "mode": "inspection",
+      "records": 10,
+      "drawn": 3,
+      "onScreen": 3,
+      "tags": 2,
+      "hidden": {
+       "detail-far": 7
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 3,
+      "unflagged": 0,
+      "alphas": [
+       0.92
+      ],
+      "camera": {
+       "position": [
+        3.078,
+        -4.198,
+        2.516
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspectionMs": [
+      1.3,
+      0.9,
+      1.1
+     ],
+     "deterministic": true
+    },
+    "behind": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 10,
+      "drawn": 3,
+      "onScreen": 3,
+      "tags": 2,
+      "hidden": {
+       "detail-far": 7
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 3,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        -3.078,
+        4.198,
+        -2.516
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      0.9,
+      0.7,
+      0.7
+     ],
+     "inspection": {
+      "mode": "inspection",
+      "records": 10,
+      "drawn": 3,
+      "onScreen": 3,
+      "tags": 2,
+      "hidden": {
+       "detail-far": 7
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 3,
+      "unflagged": 0,
+      "alphas": [
+       0.92
+      ],
+      "camera": {
+       "position": [
+        -3.078,
+        4.198,
+        -2.516
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspectionMs": [
+      1.4,
+      0.9,
+      1
+     ],
+     "deterministic": true
+    }
+   },
+   "restored": {
+    "mode": "engineering",
+    "alphas": [
+     1
+    ]
+   },
+   "ms": 11919,
+   "payloadFetches": 2,
+   "pageErrors": [],
+   "consoleErrors": [],
+   "showRefnoWarnings": []
+  },
+  {
+   "refno": "24384_24526",
+   "name": "/M-BL-1R310-ZC",
+   "dbnum": 8000,
+   "primitives": 9,
+   "why": [
+    "dbnum 8000 spread"
+   ],
+   "kernelExtentM": 2.025,
+   "loadMs": 7203,
+   "loadResult": "{loadedRefnos: 3, skippedRefnos: 0, loadedObjects: 2, invalidTubiObjects: 0, missingRefnos: Array(1)}",
+   "loadFailed": null,
+   "objects": 2,
+   "records": 5,
+   "boxSource": "dtx",
+   "extentWorldM": 2.0300000000000002,
+   "views": {
+    "far": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 5,
+      "drawn": 3,
+      "onScreen": 3,
+      "tags": 2,
+      "hidden": {
+       "secondary-far": 1,
+       "detail-far": 1
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 3,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        1.837,
+        -2.506,
+        1.502
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      0.9,
+      0.9,
+      1.4
+     ],
+     "inspection": {
+      "mode": "inspection",
+      "records": 5,
+      "drawn": 3,
+      "onScreen": 3,
+      "tags": 2,
+      "hidden": {
+       "secondary-far": 1,
+       "detail-far": 1
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 3,
+      "unflagged": 0,
+      "alphas": [
+       0.92
+      ],
+      "camera": {
+       "position": [
+        1.837,
+        -2.506,
+        1.502
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspectionMs": [
+      1.4,
+      0.9,
+      0.6
+     ],
+     "deterministic": true
+    },
+    "behind": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 5,
+      "drawn": 3,
+      "onScreen": 3,
+      "tags": 2,
+      "hidden": {
+       "secondary-far": 1,
+       "detail-far": 1
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 3,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        -1.837,
+        2.506,
+        -1.502
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      0.6,
+      0.8,
+      0.5
+     ],
+     "inspection": {
+      "mode": "inspection",
+      "records": 5,
+      "drawn": 3,
+      "onScreen": 3,
+      "tags": 2,
+      "hidden": {
+       "secondary-far": 1,
+       "detail-far": 1
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 3,
+      "unflagged": 0,
+      "alphas": [
+       0.92
+      ],
+      "camera": {
+       "position": [
+        -1.837,
+        2.506,
+        -1.502
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspectionMs": [
+      0.7,
+      0.5,
+      1.1
+     ],
+     "deterministic": true
+    }
+   },
+   "restored": {
+    "mode": "engineering",
+    "alphas": [
+     1
+    ]
+   },
+   "ms": 15403,
+   "payloadFetches": 2,
+   "pageErrors": [],
+   "consoleErrors": [],
+   "showRefnoWarnings": []
+  },
+  {
+   "refno": "24384_2752",
+   "name": "/M-OR-1RX-3041E",
+   "dbnum": 8000,
+   "primitives": 32,
+   "why": [
+    "dbnum 8000 spread"
+   ],
+   "kernelExtentM": 3.36,
+   "loadMs": 8247,
+   "loadResult": "{loadedRefnos: 4, skippedRefnos: 0, loadedObjects: 4, invalidTubiObjects: 0, missingRefnos: Array(0)}",
+   "loadFailed": null,
+   "objects": 4,
+   "records": 25,
+   "boxSource": "dtx",
+   "extentWorldM": 3.6405888671875015,
+   "views": {
+    "far": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 25,
+      "drawn": 8,
+      "onScreen": 8,
+      "tags": 6,
+      "hidden": {
+       "detail-far": 13,
+       "short-line": 1,
+       "secondary-far": 3
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 8,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        3.295,
+        -4.493,
+        2.694
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      2.8,
+      5.7,
+      2.5
+     ],
+     "inspection": {
+      "mode": "inspection",
+      "records": 25,
+      "drawn": 8,
+      "onScreen": 8,
+      "tags": 6,
+      "hidden": {
+       "detail-far": 13,
+       "short-line": 1,
+       "secondary-far": 3
+      },
+      "nonFinite": 0,
+      "occluded": [
+       "2011",
+       "2587.34"
+      ],
+      "visible": 6,
+      "unflagged": 0,
+      "alphas": [
+       0.8,
+       0.92
+      ],
+      "camera": {
+       "position": [
+        3.295,
+        -4.493,
+        2.694
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspectionMs": [
+      2.8,
+      1.4,
+      1.7
+     ],
+     "deterministic": true
+    },
+    "behind": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 25,
+      "drawn": 8,
+      "onScreen": 8,
+      "tags": 6,
+      "hidden": {
+       "detail-far": 13,
+       "short-line": 1,
+       "secondary-far": 3
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 8,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        -3.295,
+        4.493,
+        -2.694
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      1.9,
+      1.8,
+      2.4
+     ],
+     "inspection": {
+      "mode": "inspection",
+      "records": 25,
+      "drawn": 8,
+      "onScreen": 8,
+      "tags": 6,
+      "hidden": {
+       "detail-far": 13,
+       "short-line": 1,
+       "secondary-far": 3
+      },
+      "nonFinite": 0,
+      "occluded": [
+       "2011",
+       "2587.34"
+      ],
+      "visible": 6,
+      "unflagged": 0,
+      "alphas": [
+       0.8,
+       0.92
+      ],
+      "camera": {
+       "position": [
+        -3.295,
+        4.493,
+        -2.694
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspectionMs": [
+      1.3,
+      1.1,
+      1.3
+     ],
+     "deterministic": true
+    }
+   },
+   "restored": {
+    "mode": "engineering",
+    "alphas": [
+     1
+    ]
+   },
+   "ms": 16599,
+   "payloadFetches": 2,
+   "pageErrors": [],
+   "consoleErrors": [],
+   "showRefnoWarnings": []
+  },
+  {
+   "refno": "24381_145018",
+   "name": "/Copy-of-RCS0014-1R43012新",
+   "dbnum": 7997,
+   "primitives": 77,
+   "why": [
+    "reference pipe of earlier rounds"
+   ],
+   "kernelExtentM": 8.343,
+   "loadMs": 24178,
+   "loadResult": "{loadedRefnos: 12, skippedRefnos: 0, loadedObjects: 22, invalidTubiObjects: 0, missingRefnos: Array(0)}",
+   "loadFailed": null,
+   "objects": 22,
+   "records": 63,
+   "boxSource": "dtx",
+   "extentWorldM": 8.906952636718751,
+   "views": {
+    "far": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 63,
+      "drawn": 15,
+      "onScreen": 15,
+      "tags": 4,
+      "hidden": {
+       "detail-far": 32,
+       "secondary-far": 15,
+       "short-line": 1
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 15,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        8.061,
+        -10.994,
+        6.59
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      4.2,
+      4.6,
+      2.9
+     ],
+     "inspection": {
+      "mode": "inspection",
+      "records": 63,
+      "drawn": 15,
+      "onScreen": 15,
+      "tags": 4,
+      "hidden": {
+       "detail-far": 32,
+       "secondary-far": 15,
+       "short-line": 1
+      },
+      "nonFinite": 0,
+      "occluded": [
+       "900.51"
+      ],
+      "visible": 14,
+      "unflagged": 0,
+      "alphas": [
+       0.8,
+       0.92
+      ],
+      "camera": {
+       "position": [
+        8.061,
+        -10.994,
+        6.59
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspectionMs": [
+      3.5,
+      3.5,
+      2.7
+     ],
+     "deterministic": true
+    },
+    "behind": {
+     "engineering": {
+      "mode": "engineering",
+      "records": 63,
+      "drawn": 13,
+      "onScreen": 13,
+      "tags": 4,
+      "hidden": {
+       "detail-far": 32,
+       "secondary-far": 15,
+       "short-line": 2,
+       "overlap": 1
+      },
+      "nonFinite": 0,
+      "occluded": [],
+      "visible": 0,
+      "unflagged": 13,
+      "alphas": [
+       1
+      ],
+      "camera": {
+       "position": [
+        -8.061,
+        10.994,
+        -6.59
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "engineeringMs": [
+      3.8,
+      2.3,
+      2.7
+     ],
+     "inspection": {
+      "mode": "inspection",
+      "records": 63,
+      "drawn": 13,
+      "onScreen": 13,
+      "tags": 4,
+      "hidden": {
+       "detail-far": 32,
+       "secondary-far": 15,
+       "short-line": 2,
+       "overlap": 1
+      },
+      "nonFinite": 0,
+      "occluded": [
+       "1834.19",
+       "Copy-of-1RCS002VP"
+      ],
+      "visible": 11,
+      "unflagged": 0,
+      "alphas": [
+       0.8,
+       0.92
+      ],
+      "camera": {
+       "position": [
+        -8.061,
+        10.994,
+        -6.59
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspectionMs": [
+      3.2,
+      2.4,
+      1.9
+     ],
+     "deterministic": true
+    }
+   },
+   "restored": {
+    "mode": "engineering",
+    "alphas": [
+     1
+    ]
+   },
+   "ms": 32559,
+   "payloadFetches": 2,
+   "pageErrors": [],
+   "consoleErrors": [],
+   "showRefnoWarnings": []
+  }
+ ]
+}

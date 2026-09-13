@@ -215,4 +215,42 @@
 
 - 单测 `theme.test.ts` 更新（钉住 0.92 / 0.80 并断言被遮挡 < 可见）；59 文件 / 344 通过；eslint 0。
 
-**未覆盖**：2k 记录时每条一次射线的耗时未量（本样本 63 条记录 / 15–16 条画出，inspection 完整布局 3–5 ms）；「包着锚点的体」用「锚点前 ε 处向前再发一条射线能穿出」判定，凹体（弯头、绕回来的管段）在锚点前后各穿一次时会被当成包着锚点而不算遮挡，本样本三个标准相机与 124 个 ELBO 近景视图都没有出现这种情形（ELBO 上「包着锚点的体」为 0）；`buildHitIndex` 的近景溢出（见上）未修。
+**未覆盖**：2k 记录时每条一次射线的耗时未量（本样本 63 条记录 / 15–16 条画出，inspection 完整布局 3–5 ms）；「包着锚点的体」用「锚点前 ε 处向前再发一条射线能穿出」判定，凹体（弯头、绕回来的管段）在锚点前后各穿一次时会被当成包着锚点而不算遮挡，本样本三个标准相机与 124 个 ELBO 近景视图都没有出现这种情形（ELBO 上「包着锚点的体」为 0）；`buildHitIndex` 的近景溢出（见上）未修——下一节全管道扫描量出了它的覆盖面。
+
+### 全管道扫描：2469 条 BRAN 内核全跑 + 52 条实机抽样（2026-09-14 02:0x–03:4x）
+
+**范围**。`list-brans-54.mjs`（`%TEMP%\plant3d-mbd-debug`）从 `/api/v1/tree/roots` 起按 `children` 遍历整个 AvevaMarineSample 树（53 941 个结点），得 **2693 个 BRAN**，逐个拉 `/api/mbd/v2/pipe/<refno>`：**2469 个 200**（primitives 5–463，中位 25；kinds 合计 `aid_line` 27 271 / `aid_text` 11 487 / `label` 19 144 / `leader_line` 19 144 / `linear_dim` 15 340 / `slope_mark` 1467 / `weld_mark` 1238；全部 `layout_mode=isodim_main`；分库 7321 ×44、7997 ×611、7999 ×1254、8000 ×560），**224 个 422**——218 个「不是派生隐式管身的路由容器，没有管道尺寸标注」、6 个「every branch member was skipped for missing geometry」，都是后端按契约拒绝，前端按 ADR 0046 走 `loadError` 诊断，不在本轮范围。列表 `all-pipes-brans.json`。
+
+**内核全跑**（Node，vitest 临时用例 `allPipes.sweep.test.ts`——跑完已从仓库删除，副本在 `%TEMP%\plant3d-mbd-debug`；`SWEEP_REFNOS / SWEEP_OFFSET / SWEEP_COUNT` 可切片重跑）。每条 payload 走 `parseMbdV2PipeData → mbdV2ToExternalRecords → normalizeExternalDimension → layoutViewport`（1220×806 @2x 透视相机 fov 30°，以尺寸输入的包围盒中心为目标、沿效果图同一斜视方向取 **far 1.7× / mid 0.6× / close 0.25×** 最大边长三个距离；每个相机 engineering、inspection（遮挡缝恒 `false`）、同相机再布局一次）→ `layoutResultsToSvg`。逐条检查：解析失败 / 原子拒绝 / 抛异常 / 图元、`labelBounds`、场景锚点里的非有限数 / SVG 含 `NaN|Infinity` / 再布局签名不同 / 屏内标签中心 `hitTest` 未命中。两处按 64 px 格子逐格登记的网格（`kernel/hit/hitIndex.ts::buildHitIndex`、`kernel/collision/resolveLabelCollisions.ts` 的 `LabelOccupancy`）在用例里包了一层预算护栏：先按同一公式预测格子数，> 1e6 就抛 `HitIndexBudget` / `LabelOccupancyBudget` 而不去真分配——**第一次试跑没有护栏，close 视图在 `24381_103506` 上把 4 GB 堆直接 OOM**（上一会话 02:12 起的那次全跑也是这样停在第 102 条的）。2469 条 312 s 跑完（`all-pipes-kernel-sweep.json`，逐管逐视图一行）：
+
+| 视图 | 相机距离 / 尺寸包围盒最大边 | 跑通 | 格子预算超限（= 真机会卡死 / `RangeError` / OOM） | 其他任何失败 |
+| --- | --- | --- | --- | --- |
+| far | 1.7× | **2469 / 2469** | 0 | 0 |
+| mid | 0.6× | 2436 | **33**（hitIndex 30、占用网格 3；尺寸范围 0.5–10 m 都有） | 0 |
+| close | 0.25× | 2034 | **435**（17.6 %；hitIndex 355、占用网格 80） | 0 |
+
+- far 视图（整条管子在视野里）：75 947 条记录，26 576 条画出（LOD 收起 `detail-far` 41 026 / `secondary-far` 4698 / `short-line` 3319 / `overlap` 328），非有限数 **0**，SVG `NaN` **0**（268 MB SVG），再布局 **2469 / 2469** 逐条相同，屏内标签中心命中 **26 070 / 26 070**；engineering 布局耗时 p50 0.4 ms / p90 1.4 ms / p99 7.2 ms / max 36 ms（`24381_103674`，142 条记录）。解析诊断 0；原子拒绝 0。
+- payload `issues` 全是 `warning`（3901 条，散在 1020 个 BRAN），无 `error`：前三类都是后端的「implied tube 与两端端口不共轴、E3D 不画 tube、不出 tube 长度」（2679 条），其余是 ATTA / BEND / ELBO / WELD 偏离等轴线、Tail 与邻点跨轴等 PML 层面的数据检查——只进面板诊断，不影响出图。
+- 格子超限就是上一节记的近景溢出，这次量出**它不只在近景**：mid（0.6×，整条管子基本在视野里）已有 33 条；跑通的视图里 hitIndex 格子数 close p99 67 万、max 97 万（视口本身只有 20×13 = 260 格），mid max 88 万。根因一处：布局对相机平面附近 / 相机背后的顶点不裁剪，投影坐标到 1e5–1e7 px 量级后两张网格按格子逐个登记。**未修**（见下）。
+
+**实机抽样**（真实 Chrome 1920×1080 @1x，RX590，`pw-all-pipes-61.mjs` → `all-pipes-browser-sweep.json`）。52 条 BRAN 分层抽样（`pick-sample-61.mjs`：4 个库按步长各取 3 / 7 / 10 / 7，payload 最大 5 / 最小 3，尺寸范围最小 3 / 最大 3，`slope_mark` / `weld_mark` 最多各 3，payload 警告最多 3，内核 mid 超限 4，参照管 `24381_145018`）。每条：`?show_refno=…&show_refno_select=0&mbd_refno=…` 加载 → 等几何 + MBD 记录 + 布局齐 → far（`fitBox(dtxBox, 1.7)`）与 behind（对面同距离）两相机 × engineering / inspection：读内核状态、3 次布局计时、截图、收 `pageerror` / console；每条 240 s 看门狗（没触发）。22 分钟。
+
+- 52 条全部加载出几何（1354 个 DTX 对象、4133 条记录），加载 p50 14 s / p90 19 s / max 33 s；`/api/mbd/v2/pipe/**` 每次加载 2 次（50 条）、3 次（1）、4 次（1）。
+- 两相机 × 两模式：非有限数 0；engineering α = {1}；inspection α = **{0.92, 0.80}**、`occluded` 无 `undefined`、再布局逐条相同 **52 / 52**；切回 engineering 复原 52 / 52。inspection 完整布局（含每条画出记录一条射线）p50 1.8 ms / p90 21 ms / **max 37 ms**（`24381_105733`：407 条记录 / 104 个对象 / 52 条画出）——最大的几条管子一次布局已经接近一帧。
+- **3 / 52 条 `pageerror: RangeError: Map maximum size exceeded`（`24383_75125`、`24383_99558`、`24381_145565`），全部在加载阶段**（复跑带阶段标记 + 相机轨迹，`all-pipes-load-camera-probe.json`）：MBD 记录比 DTX 几何先到，宿主帧循环在**默认相机** `[-37.1, 13, 58.5] → [-21.93, 1.35, 29.45]`、全局模型矩阵还没就位时就把记录布局了一遍，坐标落到相机平面附近，hitIndex 格子爆掉、整次布局抛出。几何到、`fitDtxViewerToFocusBox` 之后同一批记录布局正常（三条在最终相机下都是 `behind=0 / over1e4=0`，画出 46 / 32 / 4 条）。`24381_145565` 的一次复跑里几何拖了 30 s 才到，这 30 s 内每一帧布局都抛、**一条尺寸都画不出来**，payload 被重拉了 7 次——同一根因在加载期的表现，用户端可见为控制台报错 + 尺寸迟出。
+- **焊缝标记在 inspection 下全部被判遮挡**（`all-pipes-occlusion-probe-24381_146979.json`，`pw-occlusion-probe-61.mjs`）：`24381_146979`（58 个对象）far 相机画出 48 条、28 条 `occluded=true`，其中 **27 条是全部 27 个焊缝标记**（`isoline:n:weld:mark:<refno>`），第 28 条是数值文字站在管子背面的 `1032`（正确）。页内独立射线（`DTXLayer.raycastObject`，与内核 flag **48 / 48** 一致）：焊缝标记的探测点是管轴上的焊点，射线在锚点前 **24–80 mm** 先打到管壁——本管 piece（`o:24381_146979:n`）或相邻管件（弯头 `o:24381_146983:19` 等），正好一个管半径，ε（0.5 mm / 2 px）吸收不了。抽样里 far 的 95 条遮挡 flag 有 **69** 条、behind 的 91 条有 **71** 条是焊缝标记；项目里 **334 个 BRAN 带 1238 个焊缝标记**都会这样。这是第一轮标签误判（「锚点在构件体内」）的同类：`subject` 排除只挂在 `derived.tag` 上，焊缝标记不是 tag、没走它。截图 `all-pipes-weld-marks-engineering.png` / `-inspection.png`（同相机两模式：焊缝环 inspection 下全淡）。
+- 极端小管（几何 20 mm、卡片 100 px）：端点卡片「探卡片中心在锚点深度的反投影点」那一点仍落在构件体内，正反两面都判遮挡（`24381_104746` / `24381_104806`，各 1 个对象 3 条记录）；边界情形，记下未动。
+- 观感（都按规则画对了，未动）：管件多的长管远景是「药丸云」——`all-pipes-largest-24381_105860.png`（19 m 细管，419 条记录 / 52 条画出，几乎全是 `89.97° / 弯曲半径 / PE` 药丸 + 长引线），`all-pipes-24383_75125-behind-inspection.png`（29 m 弯管，10° 弯头药丸 + `R510.xxx-GL` 支架位号）。药丸密度没有 LOD 管。
+
+| 文件 | 说明 |
+| --- | --- |
+| `all-pipes-brans.json` | 2693 个 BRAN：refno / 名称 / 库 / 状态 / 拉取耗时 / primitives / kinds / 422 类别 |
+| `all-pipes-kernel-sweep.json` | 内核全跑逐管一行：记录数、范围、issue 计数、far LOD 隐藏原因，far / mid / close 各视图（错误、画出、屏内、tag、两模式耗时、hitIndex 格子数与最大坐标、命中测试、SVG 字节） |
+| `all-pipes-browser-sweep.json` | 52 条实机抽样逐管读数（加载、对象数、两相机两模式状态、耗时、遮挡记录标签、pageerror / console） |
+| `all-pipes-load-camera-probe.json` | 3 条 `RangeError` 管子的加载期复跑：相机轨迹（默认 → fit）、报错时刻的相机、最终相机下逐记录的独立投影（是否在相机背后 / 最大坐标） |
+| `all-pipes-occlusion-probe-24381_146979.json` | 焊缝标记管的独立射线复核：逐条画出记录的内核 flag、独立结论、挡在前面的 piece 与其距锚点的距离 |
+| `all-pipes-weld-marks-engineering.png` / `all-pipes-weld-marks-inspection.png` | `24381_146979` far 相机：engineering 全亮 → inspection 27 个焊缝环全部淡到 0.80 |
+| `all-pipes-largest-24381_105860.png` | payload 最大的管（463 primitives）far engineering：药丸云 |
+| `all-pipes-24383_75125-behind-inspection.png` | 29 m 弯管 behind inspection：3 条淡化，其余药丸 / 位号 0.92 |
+
+**结论与待拍板**：按 far / behind 两个正常观察距离，2469 条管的解析、映射、布局、SVG、命中与 52 条实机的两模式渲染没有一处失败或非确定；两件事要人定：① 两张 64 px 网格不裁视口——近景 17.6 % 的管、中景 1.3 %、以及**每条管加载期的默认相机那一帧**都会撞上，表现为控制台 `RangeError`、渲染进程卡死或整页 OOM，修法在 `hitIndex.ts` / `resolveLabelCollisions.ts` 各一处「格子范围先与视口（外扩容差）相交」，或更上游在布局前剔除相机背后 / 近平面前的记录；② 焊缝标记的遮挡探测要不要像 tag 一样带 `subject`（本管 + 被焊的两个构件都排除）、或改探焊缝环表面点、或干脆不参与淡化——这是 d-386 口径的边界，要你定。

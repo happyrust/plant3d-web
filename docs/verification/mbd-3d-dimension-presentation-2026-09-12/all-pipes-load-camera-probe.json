@@ -1,0 +1,494 @@
+{
+ "24383_75125": {
+  "loaded": true,
+  "payloadFetches": 2,
+  "errors": [
+   "+15457ms RangeError: Map maximum size exceeded"
+  ],
+  "cameraAtError": [
+   {
+    "t": 15459.200000047684,
+    "position": [
+     -37.1,
+     13,
+     58.5
+    ],
+    "target": [
+     -21.93,
+     1.35,
+     29.45
+    ],
+    "objects": 0
+   }
+  ],
+  "trajectory": [
+   {
+    "t": 1700,
+    "s": {
+     "position": [
+      -37.1,
+      13,
+      58.5
+     ],
+     "target": [
+      -21.93,
+      1.35,
+      29.45
+     ],
+     "objects": 0,
+     "records": 0,
+     "layouts": 0,
+     "drawn": 0
+    }
+   },
+   {
+    "t": 15459,
+    "s": {
+     "position": [
+      -37.1,
+      13,
+      58.5
+     ],
+     "target": [
+      -21.93,
+      1.35,
+      29.45
+     ],
+     "objects": 0,
+     "records": 297,
+     "layouts": 0,
+     "drawn": 0
+    }
+   },
+   {
+    "t": 16229,
+    "s": {
+     "position": [
+      58.58,
+      43.94,
+      58.58
+     ],
+     "target": [
+      0,
+      0,
+      0
+     ],
+     "objects": 77,
+     "records": 297,
+     "layouts": 297,
+     "drawn": 46
+    }
+   }
+  ],
+  "probe": {
+   "camera": {
+    "position": [
+     58.58,
+     43.94,
+     58.58
+    ],
+    "target": [
+     0,
+     0,
+     0
+    ],
+    "near": 0.1,
+    "far": 1000,
+    "fov": 30
+   },
+   "viewport": [
+    1220,
+    806
+   ],
+   "records": 297,
+   "layouts": 297,
+   "drawn": 46,
+   "worst": [
+    {
+     "id": "24383_75125:isoline:30:skew:y-leg",
+     "points": 3,
+     "behind": 0,
+     "minAbsW": 90.515,
+     "maxAbsPx": 843
+    },
+    {
+     "id": "24383_75125:isoline:30:main:24383_75183--Tail",
+     "points": 7,
+     "behind": 0,
+     "minAbsW": 90.224,
+     "maxAbsPx": 843
+    },
+    {
+     "id": "24383_75125:isoline:30:tag:connection:Tail",
+     "points": 4,
+     "behind": 0,
+     "minAbsW": 90.515,
+     "maxAbsPx": 843
+    },
+    {
+     "id": "24383_75125:isoline:30:skew:y-text",
+     "points": 1,
+     "behind": 0,
+     "minAbsW": 90.656,
+     "maxAbsPx": 839
+    },
+    {
+     "id": "24383_75125:isoline:30:slope:mark:24383_75183~Tail",
+     "points": 3,
+     "behind": 0,
+     "minAbsW": 90.347,
+     "maxAbsPx": 836
+    },
+    {
+     "id": "24383_75125:isoline:30:slope:base:24383_75183~Tail",
+     "points": 3,
+     "behind": 0,
+     "minAbsW": 90.356,
+     "maxAbsPx": 836
+    }
+   ],
+   "behindTotal": 0,
+   "over1e4": 0,
+   "box": {
+    "min": [
+     -3.85,
+     -14.65,
+     -1.94
+    ],
+    "max": [
+     3.85,
+     14.65,
+     1.94
+    ]
+   }
+  }
+ },
+ "24381_145565": {
+  "loaded": true,
+  "payloadFetches": 2,
+  "errors": [
+   "+14674ms RangeError: Map maximum size exceeded"
+  ],
+  "cameraAtError": [
+   {
+    "t": 14673.800000071526,
+    "position": [
+     -37.1,
+     13,
+     58.5
+    ],
+    "target": [
+     -21.93,
+     1.35,
+     29.45
+    ],
+    "objects": 0
+   }
+  ],
+  "trajectory": [
+   {
+    "t": 1450,
+    "s": {
+     "position": [
+      -37.1,
+      13,
+      58.5
+     ],
+     "target": [
+      -21.93,
+      1.35,
+      29.45
+     ],
+     "objects": 0,
+     "records": 0,
+     "layouts": 0,
+     "drawn": 0
+    }
+   },
+   {
+    "t": 14674,
+    "s": {
+     "position": [
+      -37.1,
+      13,
+      58.5
+     ],
+     "target": [
+      -21.93,
+      1.35,
+      29.45
+     ],
+     "objects": 0,
+     "records": 13,
+     "layouts": 0,
+     "drawn": 0
+    }
+   },
+   {
+    "t": 45288,
+    "s": {
+     "position": [
+      4,
+      3,
+      4
+     ],
+     "target": [
+      0,
+      0,
+      0
+     ],
+     "objects": 2,
+     "records": 13,
+     "layouts": 13,
+     "drawn": 4
+    }
+   }
+  ],
+  "probe": {
+   "camera": {
+    "position": [
+     4,
+     3,
+     4
+    ],
+    "target": [
+     0,
+     0,
+     0
+    ],
+    "near": 0.05,
+    "far": 100,
+    "fov": 30
+   },
+   "viewport": [
+    1220,
+    806
+   ],
+   "records": 13,
+   "layouts": 13,
+   "drawn": 4,
+   "worst": [
+    {
+     "id": "24381_145565:isoline:1:skew:x-leg",
+     "points": 3,
+     "behind": 0,
+     "minAbsW": 6.382,
+     "maxAbsPx": 675
+    },
+    {
+     "id": "24381_145565:isoline:1:skew:y-leg",
+     "points": 3,
+     "behind": 0,
+     "minAbsW": 6.646,
+     "maxAbsPx": 675
+    },
+    {
+     "id": "24381_145565:isoline:1:skew:xy-rightangle:2",
+     "points": 3,
+     "behind": 0,
+     "minAbsW": 6.623,
+     "maxAbsPx": 671
+    },
+    {
+     "id": "24381_145565:isoline:1:skew:xy-rightangle:1",
+     "points": 3,
+     "behind": 0,
+     "minAbsW": 6.64,
+     "maxAbsPx": 669
+    },
+    {
+     "id": "24381_145565:tag:branch-name",
+     "points": 4,
+     "behind": 0,
+     "minAbsW": 6.091,
+     "maxAbsPx": 662
+    },
+    {
+     "id": "24381_145565:isoline:1:skew:x-text",
+     "points": 1,
+     "behind": 0,
+     "minAbsW": 6.524,
+     "maxAbsPx": 643
+    }
+   ],
+   "behindTotal": 0,
+   "over1e4": 0,
+   "box": {
+    "min": [
+     -0.28,
+     -0.28,
+     -0.39
+    ],
+    "max": [
+     0.28,
+     0.28,
+     0.39
+    ]
+   }
+  }
+ },
+ "24383_99558": {
+  "loaded": true,
+  "payloadFetches": 2,
+  "errors": [
+   "+15947ms RangeError: Map maximum size exceeded"
+  ],
+  "cameraAtError": [
+   {
+    "t": 15946.399999976158,
+    "position": [
+     -37.1,
+     13,
+     58.5
+    ],
+    "target": [
+     -21.93,
+     1.35,
+     29.45
+    ],
+    "objects": 0
+   }
+  ],
+  "trajectory": [
+   {
+    "t": 1538,
+    "s": {
+     "position": [
+      -37.1,
+      13,
+      58.5
+     ],
+     "target": [
+      -21.93,
+      1.35,
+      29.45
+     ],
+     "objects": 0,
+     "records": 0,
+     "layouts": 0,
+     "drawn": 0
+    }
+   },
+   {
+    "t": 15948,
+    "s": {
+     "position": [
+      -37.1,
+      13,
+      58.5
+     ],
+     "target": [
+      -21.93,
+      1.35,
+      29.45
+     ],
+     "objects": 0,
+     "records": 80,
+     "layouts": 0,
+     "drawn": 0
+    }
+   },
+   {
+    "t": 18238,
+    "s": {
+     "position": [
+      28.06,
+      21.05,
+      28.06
+     ],
+     "target": [
+      0,
+      0,
+      0
+     ],
+     "objects": 27,
+     "records": 80,
+     "layouts": 80,
+     "drawn": 32
+    }
+   }
+  ],
+  "probe": {
+   "camera": {
+    "position": [
+     28.06,
+     21.05,
+     28.06
+    ],
+    "target": [
+     0,
+     0,
+     0
+    ],
+    "near": 0.1,
+    "far": 1000,
+    "fov": 30
+   },
+   "viewport": [
+    1220,
+    806
+   ],
+   "records": 80,
+   "layouts": 80,
+   "drawn": 32,
+   "worst": [
+    {
+     "id": "24383_99558:isoline:13:tag:connection:Tail",
+     "points": 4,
+     "behind": 0,
+     "minAbsW": 45.442,
+     "maxAbsPx": 915
+    },
+    {
+     "id": "24383_99558:isoline:13:tag:atta:24383_99611",
+     "points": 4,
+     "behind": 0,
+     "minAbsW": 45.493,
+     "maxAbsPx": 897
+    },
+    {
+     "id": "24383_99558:isoline:13:tag:atta:24383_99609",
+     "points": 4,
+     "behind": 0,
+     "minAbsW": 45.833,
+     "maxAbsPx": 848
+    },
+    {
+     "id": "24383_99558:isoline:11:skew:y-leg",
+     "points": 3,
+     "behind": 0,
+     "minAbsW": 45.977,
+     "maxAbsPx": 833
+    },
+    {
+     "id": "24383_99558:isoline:11:main:24383_99604--24383_99608",
+     "points": 7,
+     "behind": 0,
+     "minAbsW": 45.977,
+     "maxAbsPx": 833
+    },
+    {
+     "id": "24383_99558:isoline:11:tag:bend:24383_99608",
+     "points": 4,
+     "behind": 0,
+     "minAbsW": 45.96,
+     "maxAbsPx": 833
+    }
+   ],
+   "behindTotal": 0,
+   "over1e4": 0,
+   "box": {
+    "min": [
+     -6.06,
+     -7.02,
+     -0.03
+    ],
+    "max": [
+     6.06,
+     7.02,
+     0.03
+    ]
+   }
+  }
+ }
+}
