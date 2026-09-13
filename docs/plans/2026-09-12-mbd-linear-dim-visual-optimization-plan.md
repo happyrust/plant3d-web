@@ -201,7 +201,7 @@
   再 Rust 契约 mirror，再 producer；PR4 `occupancy.rs` 提供 solver 侧占位后，才考虑让 solver 输出分级建议。
 - 验收：fixture 扩 `full-coverage.json` 增 `importance`；固定相机远 / 中 / 近三帧记录数递增。
 
-**S4 · 画家双模式：engineering / inspection** —— 2026-09-13 已落地（ADR 0061；用户同日 21:1x 拍板 α 0.65 / 0.35、默认 engineering、入口放尺寸面板）
+**S4 · 画家双模式：engineering / inspection** —— 2026-09-13 已落地（ADR 0061；用户同日 21:1x 拍板 α 0.65 / 0.35、默认 engineering、入口放尺寸面板；2026-09-14 实机量出这两个线性混合因子上屏只剩约 20 % / 8 % 对比，拍板重定为 0.92 / 0.80 ≈ 65 % / 35 %，ADR 0061「α 重定」段）
 
 - 实施：`DimensionViewport.setDisplayMode('engineering' | 'inspection')`，默认 `engineering`（与之前逐像素一致，材质保持不透明、
   不做任何探测）。`inspection` 下每次完整布局后 `kernel/layout/occlusionPolicy.ts::markOcclusion` 对每条画出来的记录取探测点

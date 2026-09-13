@@ -156,4 +156,4 @@
 - **画家** `viewport/scenePainter.ts`（ADR 0062）：每段描边四边形向四周多伸 w/2 + 1 设备像素，片元按胶囊距离算覆盖率、羽化 1 设备像素（`uFeatherPx = 1 / dpr`，`dimensionViewport` 把 `projector.dpr` 传给 `resize`）——LFF 折线接头因此圆润无缺口，边缘平滑且不依赖 MSAA（选中构件走 OutlinePass 时整帧在 `gl.SAMPLES = 0` 的 render target 里，此前文字全是硬边）。实心（覆盖率 ≥ 0.999）与羽化两遍共享几何：`dimension-scene-lines` / `dimension-scene-line-edges`，都用 `gl_FragDepth` 写近平面常量深度（描边 1e-5、三维文字白边 2e-5）并以 LESS 测试，对模型恒通过、对自身只画第一次——inspection 的 α < 1 不再在接头叠成深色斑点。
 - **主题** `kernel/theme.ts`：`textStrokeWidthPx` 1.5 → 1.8，`tag.pillTextHeightPx` 10 → 11。
 - **验证**：单测 59 文件 / 344 通过（painter +1，四个绘制对象）；eslint 0；type-check 本改动 0；实机同位置 3× 放大前后对照（卡片 / 三维数字 / 药丸 / inspection 淡化）见验证 README「文字绘制」小节，`text-aa-before-*.png` / `text-aa-after-*.png`。
-- **顺带核出、未改**：inspection 的 α 0.65 在线性空间混合 + ACES 后视觉上接近 α 0.2（旧画家亦然），要不要调 `theme.inspection` 的 α 是 d-354 的口径问题。
+- **顺带核出**：inspection 的 α 0.65 在线性空间混合 + ACES 后视觉上接近 α 0.2（旧画家亦然）→ 同日用户拍板重定为 0.92 / 0.80（实机扫值反查，文字上呈现约 63 % / 36 % 的对比；ADR 0061「α 重定」段，验证 README「inspection α 重定」小节，决策 d-386 取代 d-354）。

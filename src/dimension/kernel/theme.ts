@@ -140,7 +140,12 @@ export type DimensionTheme = Readonly<{
    * but a record whose probe point lies behind model geometry from the
    * camera is faded to `occludedAlpha`, the rest to `visibleAlpha` (so the
    * two states differ while everything still reads). `engineering` mode
-   * paints at alpha 1 and never probes.
+   * paints at alpha 1 and never probes. The values are blend factors in
+   * linear light before the viewer's ACES tone mapping and sRGB encoding,
+   * so they read much lighter than the same number would in a 2D canvas:
+   * measured on the real pipeline (dark text over the light background),
+   * 0.92 shows as about 65 % and 0.80 as about 35 % of the opaque contrast
+   * (2026-09-14).
    */
   inspection: Readonly<{
     visibleAlpha: number;
@@ -218,8 +223,10 @@ export const SOLVESPACE_DIMENSION_THEME: DimensionTheme = {
     mutedTextColor: '#334155',
   },
   inspection: {
-    visibleAlpha: 0.65,
-    occludedAlpha: 0.35,
+    // Perceived ≈ 0.65 / 0.35 of the opaque contrast (see the type doc);
+    // the nominal 0.65 / 0.35 of 2026-09-13 read as ≈ 0.20 / 0.08.
+    visibleAlpha: 0.92,
+    occludedAlpha: 0.8,
     toleranceMm: 0.5,
     tolerancePx: 2,
   },

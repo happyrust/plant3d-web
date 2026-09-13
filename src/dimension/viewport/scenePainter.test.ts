@@ -379,8 +379,9 @@ describe('ThreeSceneDimensionPainter', () => {
     const edges = painter.group.getObjectByName('dimension-scene-line-edges') as any;
     expect((edges.material as ShaderMaterial).transparent).toBe(true);
 
-    // Inspection: the occluded record at 0.35, the visible one at 0.65, on
-    // every buffer (strokes, arrowheads, tag fills); materials blend.
+    // Inspection: the occluded record at the theme's occluded alpha, the
+    // visible one at its visible alpha, on every buffer (strokes,
+    // arrowheads, tag fills); materials blend.
     painter.paint([behind, front], SOLVESPACE_DIMENSION_THEME, 'inspection');
     const lineAlphas = alphas(meshes().lines, stats.lineVertexCount);
     expect(distinct(lineAlphas.slice(0, perLayoutLines))).toEqual([inspection.occludedAlpha]);
