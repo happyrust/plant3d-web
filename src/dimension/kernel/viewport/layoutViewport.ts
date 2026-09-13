@@ -3,6 +3,7 @@ import { buildHitIndex, type HitIndex } from '../hit/hitIndex';
 import { declutterOverlaps } from '../layout/declutterPolicy';
 import { layoutDimension } from '../layout/layoutDimension';
 import { emptyLayout } from '../layout/linear';
+import { markOcclusion } from '../layout/occlusionPolicy';
 import {
   collectTagObstacles,
   isTagBillboardPlan,
@@ -13,11 +14,13 @@ import {
 
 import type { LayoutContext } from '../layout/context';
 import type {
+  DimensionDisplayMode,
   ExplicitLayoutInput,
   InteractionState,
   LayoutObstacleSource,
   LayoutResult,
   NormalizedDimensionInput,
+  OcclusionSource,
 } from '../types';
 
 export type ViewportLayoutBatch = Readonly<{
@@ -31,6 +34,13 @@ export type ViewportLayoutOptions = Readonly<{
    * keep clear of labels and dimension strokes.
    */
   obstacles?: LayoutObstacleSource;
+  /**
+   * Ray-cast seam for the inspection pass; omitted = nothing is ever flagged
+   * occluded (inspection then paints everything at its visible alpha).
+   */
+  occlusion?: OcclusionSource;
+  /** Defaults to `engineering`: no occlusion probing at all. */
+  displayMode?: DimensionDisplayMode;
 }>;
 
 export function layoutViewport(
@@ -70,12 +80,17 @@ export function layoutViewport(
   // surviving labels, of the dimension strokes, of the component boxes the
   // host reports around them, and of each other.
   const decluttered = declutterOverlaps(raw);
-  const layouts = resolveLabelCollisions(
+  const placed = resolveLabelCollisions(
     placeTagBillboards(
       decluttered,
       tags,
       collectTagObstacles(decluttered, tags, baseContext.projector, options.obstacles),
     ),
   );
+  // Inspection (S4): once every record has its final geometry, ask the host
+  // which of them sit behind model geometry; the painter fades those.
+  const layouts = options.displayMode === 'inspection' && options.occlusion
+    ? markOcclusion(placed, baseContext.projector, options.occlusion, baseContext.theme)
+    : placed;
   return { layouts, hitIndex: buildHitIndex(layouts) };
 }

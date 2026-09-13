@@ -76,4 +76,56 @@ describe('createDtxDimensionViewerAdapter', () => {
     expect(worldBox.max.x).toBeCloseTo(6, 9);
     expect(worldBox.max.y).toBeCloseTo(5, 9);
   });
+
+  it('casts the inspection ray in scene world against the objects around the segment', () => {
+    // designToWorld = mmToScene · scale(1000) with mmToScene = scale(0.001):
+    // scene world equals Design Space here, shifted by +1 in X.
+    const millimetresToScene = new Matrix4().makeScale(0.001, 0.001, 0.001).setPosition(1, 0, 0);
+    const layer: DtxObjectBoundsSource = {
+      collectObjectBoundsIntersecting: vi.fn(() => [
+        { objectId: 'near', boundingBox: new Box3() },
+        { objectId: 'far', boundingBox: new Box3() },
+      ]),
+      raycastObject: vi.fn((objectId: string) => (
+        objectId === 'near' ? { distance: 4 } : { distance: 9.99 }
+      )),
+    };
+    const adapter = createDtxDimensionViewerAdapter({
+      ...baseInput(elementAt({ left: 0, top: 0, width: 100, height: 100 })),
+      getMillimetresToScene: () => millimetresToScene,
+      getDtxLayer: () => layer,
+    });
+
+    // 10 m segment along +X; a hit 4 m in blocks it.
+    expect(adapter.isSegmentBlocked!([0, 0, 0], [10, 0, 0], 0.02)).toBe(true);
+    const [segmentBox, options] = (layer.collectObjectBoundsIntersecting as ReturnType<typeof vi.fn>).mock.calls[0]!;
+    expect(options).toEqual({ visibleOnly: true });
+    expect(segmentBox.min.x).toBeCloseTo(1, 9);
+    expect(segmentBox.max.x).toBeCloseTo(11, 9);
+    const [id, origin, direction] = (layer.raycastObject as ReturnType<typeof vi.fn>).mock.calls[0]!;
+    expect(id).toBe('near');
+    expect([origin.x, origin.y, origin.z]).toEqual([1, 0, 0]);
+    expect([direction.x, direction.y, direction.z]).toEqual([1, 0, 0]);
+
+    // Only the far object: its hit at 9.99 is within the 0.02 tolerance of the
+    // 10 m end, i.e. the geometry the probe itself sits on — not a blocker.
+    (layer.collectObjectBoundsIntersecting as ReturnType<typeof vi.fn>).mockReturnValueOnce([
+      { objectId: 'far', boundingBox: new Box3() },
+    ]);
+    expect(adapter.isSegmentBlocked!([0, 0, 0], [10, 0, 0], 0.02)).toBe(false);
+    // … but with no tolerance it counts.
+    (layer.collectObjectBoundsIntersecting as ReturnType<typeof vi.fn>).mockReturnValueOnce([
+      { objectId: 'far', boundingBox: new Box3() },
+    ]);
+    expect(adapter.isSegmentBlocked!([0, 0, 0], [10, 0, 0], 0)).toBe(true);
+
+    // A degenerate segment never blocks; a layer without a ray cast neither.
+    expect(adapter.isSegmentBlocked!([2, 2, 2], [2, 2, 2], 0.02)).toBe(false);
+    const boundsOnly = createDtxDimensionViewerAdapter({
+      ...baseInput(elementAt({ left: 0, top: 0, width: 100, height: 100 })),
+      getDtxLayer: () => ({ collectObjectBoundsIntersecting: () => [] }),
+    });
+    expect(boundsOnly.isSegmentBlocked!([0, 0, 0], [1, 0, 0], 0.02)).toBe(false);
+    expect(createDtxDimensionViewerAdapter(baseInput(null)).isSegmentBlocked).toBeUndefined();
+  });
 });

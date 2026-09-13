@@ -45,6 +45,17 @@ describe('dimension theme', () => {
     });
   });
 
+  it('pins the inspection display mode alphas and occlusion tolerance (S4, 2026-09-13)', () => {
+    // 被遮挡尺寸淡化到 0.35、可见 0.65（两态可分且都还能读）；命中要比探测点近至少
+    // max(0.5 mm, 2 px) 才算遮挡，标签锚点所在的管面本身不算。
+    expect(SOLVESPACE_DIMENSION_THEME.inspection).toEqual({
+      visibleAlpha: 0.65,
+      occludedAlpha: 0.35,
+      toleranceMm: 0.5,
+      tolerancePx: 2,
+    });
+  });
+
   it('keeps external dimension lines apart from user magenta and the selection highlight', () => {
     // 用户尺寸保持洋红；外部（MBD / 测量）尺寸线用图纸红（参考图风格），与 DTX 选中高亮 0xff4fd8
     // 和默认蓝色管体都拉开（QW2 时曾用深橙 #c2410c）；选中态因此让出纯红、改用绿色。

@@ -2,7 +2,7 @@
 
 日期：2026-09-12  
 作者：协同组「标注」指挥官 / 产品经理（fable-5-1-17）；实施 fable-5-1-31（T1 / T2 / S1）、T3 收尾 fable-5-1-95  
-状态：**T1 / T2 + S1 成对去重已于 2026-09-12 落地**（ADR 0057；D1–D4 按效果图取 a，用户「继续未完的部分，不必重问」授权）；T0 以 `%TEMP%` 脚本 + `docs/verification/mbd-3d-dimension-presentation-2026-09-12/` 归档代替；**T3（标签块 / 引线 / 方框）同日落地**（ADR 0058，§9.2）；**标签体避让管件包围盒与三维尺寸线 2026-09-13 落地**（ADR 0059，§9.3）；**SVG 导出对齐视口（AC3 的 SVG 半边）2026-09-13 补齐**（§9.4）。实施与验证记录见 §9。  
+状态：**T1 / T2 + S1 成对去重已于 2026-09-12 落地**（ADR 0057；D1–D4 按效果图取 a，用户「继续未完的部分，不必重问」授权）；T0 以 `%TEMP%` 脚本 + `docs/verification/mbd-3d-dimension-presentation-2026-09-12/` 归档代替；**T3（标签块 / 引线 / 方框）同日落地**（ADR 0058，§9.2）；**标签体避让管件包围盒与三维尺寸线 2026-09-13 落地**（ADR 0059，§9.3）；**SVG 导出对齐视口（AC3 的 SVG 半边）2026-09-13 补齐**（§9.4）；**inspection 显示模式（用户路径第 5 步 / S4）2026-09-13 落地**（ADR 0061，§9.5）。实施与验证记录见 §9。  
 上游约束：协同决策 d-438（架构固定：gen-model 供事实、plant-mbd 纯 Rust 求解器单源、plant3d-web 只读 external source 经现有 `ThreeSceneDimensionPainter` 呈现；不重写画家；MBD 不进用户 DimensionDocument）  
 相关文档：`2026-09-12-mbd-linear-dim-visual-optimization-plan.md`（QW1–QW3 / S2 / S3 已落地）、`2026-09-12-mbd-dimension-engineering-convention-review.md`（标准条款核实与 S1 / S4 规则）
 
@@ -137,4 +137,15 @@
 - **共用字形** `kernel/glyph/glyphTrace.ts::traceFramedGlyphRun`（从 `scenePainter.ts` 搬入内核）：画家与 SVG 用同一批单位笔画（含小数点拉长到 0.12 字高）。
 - **导出** `export/svgOverlay.ts`：按场景图元 ↔ 投影图元的对应（`scene-triangle` ↔ 三条边，其余 1:1）走一遍，实心箭头输出闭合填充 `<path>`（契约 `arrow_lines` 的开放 V 翼仍为描边），三维文字先光晕后 2 px 粗体笔画（`data-text-plane="3d"`），不再用平面旋转近似；对不上或无场景图元时退回逐条序列化。
 - **验证**：单测 58 文件 / 329 通过（`homography.test.ts` 4、`glyphTrace.test.ts` 3、`svgOverlay.test.ts` +4：填充箭头 / 开放翼保持描边 / 单应文字 + 光晕 / 透视缩短）；eslint 0；type-check 本改动新增 0；e2e fixture 2/2；真实 Chrome 无后端链路（gen-model 本轮未运行）注入 `pipe-iso-sample.json` + `cheight_mm=60`：5 条 `dimension3d` → SVG `filledArrows=10 / text3d=5 / halos=5 / rotated=0`，栅格化与视口对照见验证 README「SVG 导出对齐视口」段（`svg-export-*.png` / `.svg`）。
-- **验收对照**：AC3 ✓（视口 + SVG 均为填充多边形）；AC6 / AC7 / AC8 保持 ✓（布局与画家几何未变，goldens 未动）。**未覆盖**：SVG 里被遮挡 / 深度关系仍与视口一样穿透显示（S4 inspection 未做）。
+- **验收对照**：AC3 ✓（视口 + SVG 均为填充多边形）；AC6 / AC7 / AC8 保持 ✓（布局与画家几何未变，goldens 未动）。**未覆盖**：SVG 里被遮挡 / 深度关系仍与视口一样穿透显示（→ §9.5 inspection 只作用于视口画家，SVG 导出不带 α）。
+
+### 9.5 inspection 显示模式（2026-09-13，fable-5-1-41；用户路径 §5 第 5 步「切换 engineering / inspection，被遮挡尺寸淡化（S4）」）
+
+用户 2026-09-13 21:1x 拍板：默认 engineering 不变，inspection 下被遮挡尺寸 α 0.35 / 可见 0.65，对 label_anchor 做相机射线求交，入口放尺寸面板。细节见 ADR 0061。
+
+- **内核** `kernel/layout/occlusionPolicy.ts`（新）：完整布局后对每条画出的记录取探测点（第一条字形的三维锚点），从其像素的近平面点向探测点发一条线段问宿主 `OcclusionSource.isSegmentBlocked(from, to, ε)`，ε = max(0.5 mm, 2 px·worldPerPixel)，结果写 `derived.occluded`；`layoutViewport` options 多 `occlusion` / `displayMode`，只在 inspection 下跑。
+- **画家 / 视口** `scenePainter.ts`：逐顶点 `batchAlpha`（描边 / 实心箭头 / 标签填充），`layoutAlpha` 按模式取 1 / 0.65 / 0.35，材质 `transparent` 只在 inspection 下打开；`dimensionViewport.ts` `setDisplayMode` / `getDisplayMode`（dirty reason `display-mode`）。
+- **宿主缝** `DimensionViewerAdapter.isSegmentBlocked?`；DTX 适配器用 `collectObjectBoundsIntersecting` 筛候选、`raycastObject` 逐三角求交（真实网格）。
+- **面板** `DimensionPanelDock.vue`：「显示模式」单选（Engineering / Inspection），URL `mbd_mode=inspection`，直接调 viewport、不派发 `popstate`；检视模式下显示「被遮挡 N 条 / 可见 M 条」。
+- **验证**：单测 59 文件 / 338 通过；eslint 0；type-check 本改动新增 0；e2e fixture 2/2；真实 Chrome 无后端链路把 demo 立方体放大挡在相机与 `2084` 之间：inspection 只有 `2084` 淡到 0.35、其余 0.65，对面看回 0.65，切回 engineering 复原，切换不重拉 payload（验证 README「inspection 显示模式」段，`inspection-*.png`）。
+- **未覆盖**：真实模型对照（gen-model 未运行）；2k 记录的分帧预算；SVG 导出不带 α（导出仍是工程图样）。

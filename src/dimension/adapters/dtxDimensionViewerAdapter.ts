@@ -5,13 +5,20 @@ import type { DesignBox, LayoutObstacle, ScreenRect, Vec3 } from '../kernel/type
 
 /**
  * The part of the DTX layer the adapter reads component boxes from: objects
- * whose local (millimetre) bounding box meets a scene-world box.
+ * whose local (millimetre) bounding box meets a scene-world box — and, for
+ * the inspection display mode, a per-object ray cast in scene world (the
+ * layer applies its global model matrix itself; hidden objects miss).
  */
 export type DtxObjectBoundsSource = Readonly<{
   collectObjectBoundsIntersecting(
     worldBox: Box3,
     options?: { visibleOnly?: boolean },
   ): readonly Readonly<{ objectId: string; boundingBox: Box3 }>[];
+  raycastObject?(
+    objectId: string,
+    origin: Vector3,
+    direction: Vector3,
+  ): Readonly<{ distance: number }> | null;
 }>;
 
 /** The eight corners of an axis-aligned box, as fresh vectors. */
@@ -47,6 +54,12 @@ function tuple(vector: Vector3): Vec3 {
  * client rectangle, re-based on the container's top-left so it lives in the
  * same CSS px space as the projector (elements missing or without an area
  * are skipped).
+ *
+ * With a layer that can `raycastObject` it also answers `isSegmentBlocked`
+ * for the inspection display mode: the Design Space segment goes to scene
+ * world, the visible objects whose box meets the segment's box are ray-cast
+ * one by one, and the first hit nearer than the segment end (less the
+ * tolerance, scaled the same way) blocks it.
  */
 export function createDtxDimensionViewerAdapter(input: Readonly<{
   getCamera: () => Camera | null | undefined;
@@ -85,6 +98,30 @@ export function createDtxDimensionViewerAdapter(input: Readonly<{
           .map(corner => tuple(corner.applyMatrix4(millimetresToDesign))),
       }));
   };
+  const isSegmentBlocked = (from: Vec3, to: Vec3, toleranceM: number): boolean => {
+    const layer = input.getDtxLayer?.();
+    if (!layer?.raycastObject) return false;
+    const designToWorld = getDesignToWorld();
+    if (designToWorld.determinant() === 0) return false;
+    const origin = new Vector3(...from).applyMatrix4(designToWorld);
+    const target = new Vector3(...to).applyMatrix4(designToWorld);
+    const segment = new Vector3().subVectors(target, origin);
+    const lengthWorld = segment.length();
+    const lengthDesign = Math.hypot(to[0] - from[0], to[1] - from[1], to[2] - from[2]);
+    if (lengthWorld <= 0 || lengthDesign <= 0) return false;
+    // A hit has to fall short of the target by the tolerance, expressed in
+    // scene units through the same segment (uniform scale assumed, as for
+    // every other length the adapter converts).
+    const reach = lengthWorld - toleranceM * (lengthWorld / lengthDesign);
+    if (reach <= 0) return false;
+    const direction = segment.divideScalar(lengthWorld);
+    const segmentBox = new Box3().setFromPoints([origin, target]);
+    for (const { objectId } of layer.collectObjectBoundsIntersecting(segmentBox, { visibleOnly: true })) {
+      const hit = layer.raycastObject(objectId, origin, direction);
+      if (hit && hit.distance < reach) return true;
+    }
+    return false;
+  };
   const getLayoutOverlays = (): readonly ScreenRect[] => {
     const origin = input.getContainer()?.getBoundingClientRect();
     if (!origin) return [];
@@ -116,7 +153,7 @@ export function createDtxDimensionViewerAdapter(input: Readonly<{
       };
     },
     requestRender: input.requestRender,
-    ...(input.getDtxLayer ? { queryLayoutObstacles } : {}),
+    ...(input.getDtxLayer ? { queryLayoutObstacles, isSegmentBlocked } : {}),
     ...(input.getOverlayElements ? { getLayoutOverlays } : {}),
   };
 }

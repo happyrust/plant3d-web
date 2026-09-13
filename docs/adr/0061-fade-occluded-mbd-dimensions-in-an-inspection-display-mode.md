@@ -1,0 +1,19 @@
+---
+status: accepted
+---
+
+# 尺寸系统增加 inspection 显示模式：被模型挡住的整条尺寸淡化到 α 0.35、其余 0.65，不隐藏；默认 engineering 全画；遮挡由宿主对每条记录的探测点做一次相机射线求交判定
+
+尺寸视口多一个显示模式 `DimensionDisplayMode = 'engineering' | 'inspection'`（`DimensionViewport.setDisplayMode`，默认 `engineering`，2026-09-13）。`engineering` 与本条之前完全一致：每条尺寸、标签在模型之上全画（画家 `depthTest=false` 的工程 overlay 约定不变，ADR 0057），轴测图阅读优先。`inspection` 给校审场景用：每次**完整布局**结束后（成对去重、标签 billboard 放置、移动式避让都做完，每条记录的几何已定），内核对每条**画出来的**记录取一个探测点——第一条字形的三维锚点，即长度尺寸的数值文字基线中心、标签 billboard 挂着的管上点；没有字形才取第一条描边的顶点——从该点像素在近平面上的反投影点向探测点发一条线段，问宿主「可见模型几何有没有在这条线段上、比探测点近至少 ε」；答是的记录写 `derived.occluded = true`，否则 `false`（`kernel/layout/occlusionPolicy.ts::markOcclusion`）。画家按记录整体着 α：`inspection` 下被遮挡 `theme.inspection.occludedAlpha = 0.35`、可见 `visibleAlpha = 0.65`（两态可分，且 0.35 仍读得出——背面尺寸在校审时也要能对）；`engineering` 下 α = 1 且三种材质保持不透明（`transparent=false`），不做任何探测。α 是逐顶点属性 `batchAlpha`（描边 quad、实心箭头、标签填充三套缓冲各一份），`updateStyles` 换色时一并重写，hover / selected 不会把淡化冲掉。
+
+ε = max(`toleranceMm` 0.5 mm, `tolerancePx` 2 px × 探测点处的 worldPerPixel)：标签锚点本来就在管面上，射线打到它所在的那一面时命中距离与探测点距离只差浮点噪声，不能算遮挡；2 px 那一档让远景不因像素级抖动翻转。射线从**近平面**而不是相机位置出发：近平面前的几何渲染器本来就裁掉了，不该当遮挡体。粒度是整条记录：一条尺寸要么整条淡、要么整条亮，不按图元拆——数值、尺寸线、箭头、尺寸界线分开淡化会把一条尺寸读成两条。
+
+宿主缝是 `DimensionViewerAdapter.isSegmentBlocked?(from, to, toleranceM)`（设计空间米；可选，没有它 inspection 只是把所有记录画成 0.65），facade 包成 `OcclusionSource` 交给 `DimensionViewport`，随 `displayMode` 一起进 `layoutViewport` 的 options。DTX 适配器用已有的 `getDtxLayer` 实现：线段两端经 designToWorld 到场景世界，`DTXLayer.collectObjectBoundsIntersecting(线段包围盒, { visibleOnly: true })` 取候选构件，逐个 `DTXLayer.raycastObject(objectId, origin, direction)`（图层自己乘全局矩阵、隐藏对象返回空、先做对象包围盒预检再逐三角求交），第一个命中距离 < 线段长 − ε（ε 按同一线段的设计 / 世界长度比换算）即阻挡。这是**真实网格**的求交（不是包围盒），所以判定对渲染出来的模型是精确的，同一相机 / 同一模型状态下结果逐条相同（探针实测两次布局与宿主帧循环签名一致）。
+
+入口在尺寸面板「MBD 图元类别」块下的「显示模式」单选（Engineering（工程）/ Inspection（检视：被模型挡住的尺寸淡化）），状态记在 URL `mbd_mode=inspection` 上，但**不派发 `popstate`**：模式只关系呈现，直接调 `viewport.setDisplayMode`，不像 `mbd_kinds` / `mbd_lod` / `mbd_3d` 那样让同步层重拉一次 payload（实测切换时 payload 请求数不变）。浏览器前进 / 后退带来的 `popstate` 仍会把 URL 里的模式同步回面板与视口；视口被重建时面板按 URL 校准。检视模式下面板显示「被遮挡 N 条 / 可见 M 条」（只数画出来的 MBD 记录）。
+
+不做的：不读深度缓冲（overlay 与模型 pass 的深度目标 / MSAA 不可控，且 GPU 回读破坏确定性）；不用包围盒判遮挡（弯头 / 阀门误判多，ADR 0059 的凸包只用于标签放置）；不隐藏被遮挡尺寸（校审要看背面）；不按图元淡化；不改布局几何、不搬动任何记录；不改契约、不改求解器；2k 记录的分帧预算暂不做——每条画出来的记录一次射线，候选构件先按线段包围盒筛，本样本 23 条记录一帧内完成。
+
+被否决的替代：直接开启 `depthTest`（尺寸会被管体吃掉，工程 overlay 约定就没了）；对整条尺寸线采样多点求交再投票（成本 × N，且中段被挡、两端露出时读数仍在，粒度反而更糊）；把模式做成两套主题（α 不是颜色，engineering 的材质本该保持不透明；模式与主题正交，切模式不该换色）；模式走 `popstate` 重同步（多拉一次 payload、闪一下，只为一个呈现开关）；把遮挡判定放进画家（画家没有布局后的探测点，也不该持有宿主射线缝）。
+
+依据：方案 `docs/plans/2026-09-12-mbd-linear-dim-visual-optimization-plan.md` §4.2 S4、§3 O6（背面穿透）；评估 `docs/plans/2026-09-12-mbd-dimension-engineering-convention-review.md` §3.4（Oracle 第二轮 + 本仓核对：对 label_anchor 做一次射线求交、不读深度缓冲、不用 AABB、α 0.65 / 0.35、默认 engineering）与 §5 第 3 条；用户 2026-09-13 21:1x 拍板「做 S4 inspection 模式：默认 engineering 不变，inspection 下被遮挡尺寸 α 0.35 / 可见 0.65，对 label_anchor 做相机射线求交，入口放尺寸面板」。落地：`kernel/types.ts`（`DimensionDisplayMode`、`OcclusionSource`、`derived.occluded`）、`kernel/theme.ts`（`inspection` 常量块）、`kernel/layout/occlusionPolicy.ts`（新）、`kernel/viewport/layoutViewport.ts`（options 多 `occlusion` / `displayMode`）、`viewport/dimensionViewport.ts`（`setDisplayMode` / `getDisplayMode`，dirty reason `display-mode`）、`viewport/scenePainter.ts`（`batchAlpha` 属性与着色器、`layoutAlpha`、按模式切 `transparent`）、`adapters/dtxDimensionViewerAdapter.ts`（`isSegmentBlocked`）、`facade/createDimensionSystem.ts`（缝与 `OcclusionSource`）、`ui/DimensionPanelDock.vue`（单选与统计）。实机验证：`docs/verification/mbd-3d-dimension-presentation-2026-09-12/README.md`「inspection 显示模式」段。

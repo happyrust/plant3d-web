@@ -134,6 +134,25 @@ export type DimensionTheme = Readonly<{
     textColor: string;
     mutedTextColor: string;
   }>;
+  /**
+   * Inspection display mode (S4, 2026-09-13): dimensions are never hidden,
+   * but a record whose probe point lies behind model geometry from the
+   * camera is faded to `occludedAlpha`, the rest to `visibleAlpha` (so the
+   * two states differ while everything still reads). `engineering` mode
+   * paints at alpha 1 and never probes.
+   */
+  inspection: Readonly<{
+    visibleAlpha: number;
+    occludedAlpha: number;
+    /**
+     * Occlusion tolerance: a hit has to be at least this much nearer the
+     * camera than the probe point — the larger of a model distance (mm) and
+     * a screen distance (px at the probe's depth) — so geometry the probe
+     * itself sits on (a tag anchor on the pipe surface) never counts.
+     */
+    toleranceMm: number;
+    tolerancePx: number;
+  }>;
   colors: Readonly<Record<DimensionStyleRole, string>>;
   /**
    * Label text colors per role; roles not listed fall back to `colors`, so
@@ -194,6 +213,12 @@ export const SOLVESPACE_DIMENSION_THEME: DimensionTheme = {
     leaderColor: '#64748b',
     textColor: '#0f172a',
     mutedTextColor: '#334155',
+  },
+  inspection: {
+    visibleAlpha: 0.65,
+    occludedAlpha: 0.35,
+    toleranceMm: 0.5,
+    tolerancePx: 2,
   },
   colors: {
     normal: '#ff1aff',

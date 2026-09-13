@@ -21,7 +21,9 @@ import type {
   DesignBox,
   LayoutObstacle,
   LayoutObstacleSource,
+  OcclusionSource,
   ScreenRect,
+  Vec3,
 } from '../kernel/types';
 import type { DimensionAnchorResolver } from '../ports/anchorResolver';
 import type {
@@ -64,6 +66,13 @@ export type DimensionViewerAdapter = Readonly<{
    * clear of. Optional: a host without one has no such overlays.
    */
   getLayoutOverlays?(): readonly ScreenRect[];
+  /**
+   * Whether visible model geometry meets the Design Space segment
+   * `from → to` more than `toleranceM` short of `to` — the ray cast the
+   * inspection display mode fades occluded dimensions by (S4, 2026-09-13).
+   * Optional: a host without one never fades anything in inspection mode.
+   */
+  isSegmentBlocked?(from: Vec3, to: Vec3, toleranceM: number): boolean;
 }>;
 
 export type DimensionAnchorRefreshReport = Readonly<{
@@ -184,6 +193,10 @@ export async function createDimensionSystem(
       ...(getLayoutOverlays ? { overlays: getLayoutOverlays } : {}),
     }
     : undefined;
+  const isSegmentBlocked = input.viewer.isSegmentBlocked?.bind(input.viewer);
+  const occlusion: OcclusionSource | undefined = isSegmentBlocked
+    ? { isSegmentBlocked }
+    : undefined;
   const viewport = new DimensionViewport({
     scene,
     font,
@@ -193,6 +206,7 @@ export async function createDimensionSystem(
     cancelFrame: input.cancelFrame,
     requestRender: () => input.viewer.requestRender(),
     ...(obstacles ? { obstacles } : {}),
+    ...(occlusion ? { occlusion } : {}),
   });
   viewport.setDocument(session.state);
   const externalRegistry = new ExternalDimensionRegistry();

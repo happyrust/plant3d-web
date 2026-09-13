@@ -1,7 +1,7 @@
 # 三维 MBD 管道尺寸标注 · 工程标注习惯对照评估（Oracle GPT-6 两轮 + 本仓核对）
 
 日期：2026-09-12  
-状态：评估结论，待用户拍板；未改业务代码  
+状态：评估结论；Q1（成对去重，ADR 0057）、Q2 / Q3 / Q6（随三维呈现落地，ADR 0057）、Q4（inspection，ADR 0061，2026-09-13）已落地；Q5 未排期  
 前置：`docs/plans/2026-09-12-mbd-linear-dim-visual-optimization-plan.md`（QW1–QW3 / S2 / S3 已落地，commit `597034f`）  
 评估对象：BRAN `24381_145018` 的 18 条 `linear_dim` 在自由相机三维视口里的当前效果（固定相机远景 / 近景截图，见 `%TEMP%\plant3d-mbd-debug\s3-panel-viewer-on.png`、`s3-k12-near.png`）
 
@@ -76,9 +76,11 @@
 - 验收：`24381_145018` 远景 `567.89 / 900.51` 只隐一条且 main 优先保留；两次布局隐藏集合与顺序完全一致；2k 记录 p95 ≤ 16 ms。
 - 本仓注记：现有 `resolveLabelCollisions.ts` 是「搬动 + 补引线」式避让，MBD 已 pinned 不参与；新规则应是独立的 `declutterPolicy`，不复用它的搬动逻辑。
 
-### 3.4 inspection 模式（S4）
+### 3.4 inspection 模式（S4） —— 2026-09-13 已按本节落地（ADR 0061；用户同日拍板 α 0.65 / 0.35、默认 engineering、入口放尺寸面板）
 
 - 遮挡判定：采纳「对 `label_anchor` 做一次相机射线求交」（方案 B）：`hit + ε < dist(camera, anchor)` 即遮挡，ε = max(0.5 mm, 2 px 的世界尺寸)；**不读深度缓冲**（overlay 与模型 pass 的深度目标 / MSAA 不可控）、**不用 AABB**（弯头 / 阀门误判多）；粒度 = 整条尺寸记录。
+  落地口径：探测点取记录第一条字形的三维锚点（三维尺寸 = 数值基线中心，标签 = 挂着的管上点），射线从该像素的近平面点出发；
+  宿主 `DimensionViewerAdapter.isSegmentBlocked` 由 DTX 适配器用 `collectObjectBoundsIntersecting` + `raycastObject`（真实网格逐三角）实现。
 - α：engineering 1.0（现状）；inspection 可见 0.65 / 被遮挡 0.35；不隐藏（校审时背面尺寸仍需确认）。默认 engineering（用户群是 E3D 校审工程师，轴测图阅读优先）。
 - 入口：与 S5 三态开关合并成「MBD 显示模式：Engineering / Inspection」。
 - 本仓注记：射线求交对象是 DTX 管体网格；每次相机 settle 后对 ≤ 数十条 MBD 记录各做一次 raycast 在性能门内，但 2k 记录时需要按帧预算分批。
@@ -108,5 +110,5 @@
 
 1. 是否接受「中断处」作为 engineering 默认（GB 允许、ASME 标准、ISO 偏离），把「上方」留作 Q6 可选模式。
 2. Q1–Q3 的实施顺序（建议 Q1 → Q2 → Q3，Q1 是 S1 的第一块）。
-3. inspection α（0.65 / 0.35）与默认模式（engineering）。
+3. inspection α（0.65 / 0.35）与默认模式（engineering）。—— **已定**（用户 2026-09-13 21:1x：α 0.65 / 0.35、默认 engineering、入口放尺寸面板；ADR 0061）。
 4. 尺寸界线超出量取 10 px 固定还是 0.3·cheight 投影取小。

@@ -64,6 +64,7 @@ function createSystem() {
   const externalRegistry = new ExternalDimensionRegistry();
   externalRegistry.replaceSource('mbd', [external]);
   const setSelection = vi.fn();
+  const setDisplayMode = vi.fn();
   const layoutListeners = new Set<(layouts: readonly unknown[]) => void>();
   return {
     externalRegistry,
@@ -79,6 +80,7 @@ function createSystem() {
     viewport: {
       getSelection: () => null,
       setSelection,
+      setDisplayMode,
       subscribeSelection: () => vi.fn(),
       getLayouts: () => [] as readonly unknown[],
       subscribeLayouts(listener: (layouts: readonly unknown[]) => void) {
@@ -86,6 +88,7 @@ function createSystem() {
         return () => layoutListeners.delete(listener);
       },
     },
+    setDisplayMode,
     /** Test seam: push a layout batch as the real viewport would after a re-layout. */
     emitLayouts(layouts: readonly unknown[]) {
       layoutListeners.forEach(listener => listener(layouts));
@@ -434,6 +437,92 @@ describe('DimensionPanelDock', () => {
       await nextTick();
       expect(popstates).toEqual(['0', null]);
       expect(state()).toBe('开');
+    } finally {
+      window.removeEventListener('popstate', onPopstate);
+      window.history.replaceState({}, '', '/');
+    }
+  });
+
+  it('switches the display mode on the viewport directly and reports occluded MBD dimensions', async () => {
+    const system = createSystem();
+    const mbdRecord = (id: string) => ({
+      id,
+      source: 'mbd' as const,
+      sourceLabel: 'MBD',
+      role: 'external' as const,
+      layout: {
+        id,
+        role: 'external' as const,
+        labelPinned: true,
+        formattedLabel: '100',
+        lines: [],
+        labelAnchor: [0, 0, 0] as const,
+        arrowLines: [],
+      },
+    });
+    system.externalRegistry.replaceSource('mbd', [mbdRecord('mbd-a'), mbdRecord('mbd-b'), mbdRecord('mbd-c')]);
+    mocks.dimensionSystem.value = system;
+    window.history.replaceState({}, '', '/?mbd_refno=A');
+    useMbdDiagnosticsStore().set({
+      channel: 'api',
+      sourceId: 'A',
+      issues: [],
+      skipped: [],
+    });
+    let popstates = 0;
+    const onPopstate = () => { popstates += 1; };
+    window.addEventListener('popstate', onPopstate);
+    try {
+      const host = mountPanel();
+      await nextTick();
+      // A viewport that shows up starts in engineering unless the URL says otherwise.
+      expect(system.setDisplayMode).toHaveBeenLastCalledWith('engineering');
+      const state = () => host.querySelector('[data-testid="mbd-mode-state"]')?.textContent?.replace(/\s+/g, ' ').trim();
+      const radio = (mode: string) => host.querySelector<HTMLInputElement>(`[data-testid="mbd-mode-${mode}"]`)!;
+      expect(state()).toBe('每条尺寸照工程图样全画');
+      expect(radio('engineering').checked).toBe(true);
+
+      // Inspection: the viewport is told directly, the URL only records it — no
+      // popstate, so the sync layer does not refetch the payload.
+      radio('inspection').checked = true;
+      radio('inspection').dispatchEvent(new Event('change'));
+      await nextTick();
+      expect(system.setDisplayMode).toHaveBeenLastCalledWith('inspection');
+      expect(new URLSearchParams(window.location.search).get('mbd_mode')).toBe('inspection');
+      expect(popstates).toBe(0);
+      expect(radio('inspection').checked).toBe(true);
+
+      const drawn = (id: string, occluded?: boolean) => ({
+        dimensionId: id,
+        scenePrimitives: [],
+        primitives: [{ kind: 'line', from: [0, 0], to: [1, 1], part: 'dimension', styleRole: 'external' }],
+        hitRegions: [],
+        labelBounds: { x: 0, y: 0, width: 0, height: 0 },
+        labelPinned: true,
+        derived: { formattedLabel: id, ...(occluded === undefined ? {} : { occluded }) },
+      });
+      system.emitLayouts([
+        drawn('mbd-a', true),
+        drawn('mbd-b', false),
+        { ...drawn('mbd-c'), primitives: [], derived: { formattedLabel: 'mbd-c', lodHidden: 'short-line' } },
+        drawn('user-1', true),
+      ]);
+      await nextTick();
+      expect(state()).toBe('被遮挡 1 条 / 可见 1 条');
+
+      radio('engineering').checked = true;
+      radio('engineering').dispatchEvent(new Event('change'));
+      await nextTick();
+      expect(system.setDisplayMode).toHaveBeenLastCalledWith('engineering');
+      expect(new URLSearchParams(window.location.search).get('mbd_mode')).toBeNull();
+      expect(state()).toBe('每条尺寸照工程图样全画');
+
+      // Browser navigation (popstate) brings the mode back in line with the URL.
+      window.history.replaceState({}, '', '/?mbd_refno=A&mbd_mode=inspection');
+      window.dispatchEvent(new Event('popstate'));
+      await nextTick();
+      expect(system.setDisplayMode).toHaveBeenLastCalledWith('inspection');
+      expect(radio('inspection').checked).toBe(true);
     } finally {
       window.removeEventListener('popstate', onPopstate);
       window.history.replaceState({}, '', '/');

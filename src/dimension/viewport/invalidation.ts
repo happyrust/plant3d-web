@@ -7,7 +7,8 @@ export type DimensionViewportDirtyReason =
   | 'theme'
   | 'format'
   | 'interaction'
-  | 'preview';
+  | 'preview'
+  | 'display-mode';
 
 export class InvalidationSet {
   private reasons = new Set<DimensionViewportDirtyReason>();

@@ -66,6 +66,19 @@ const selectedId = ref<string | null>(null);
 const viewportLayouts = shallowRef<readonly LayoutResult[]>(
   viewerContext.dimensionSystem.value?.viewport.getLayouts() ?? [],
 );
+
+/** 显示模式（见下「显示模式」段）；先于订阅声明，viewport 一出现就按 URL 校准。 */
+type MbdDisplayMode = 'engineering' | 'inspection';
+
+function readMbdDisplayMode(): MbdDisplayMode {
+  if (typeof window === 'undefined') return 'engineering';
+  return new URLSearchParams(window.location.search).get('mbd_mode')?.trim() === 'inspection'
+    ? 'inspection'
+    : 'engineering';
+}
+
+const mbdDisplayMode = ref<MbdDisplayMode>(readMbdDisplayMode());
+
 let unsubscribeDocument: (() => void) | null = null;
 let unsubscribeSelection: (() => void) | null = null;
 let unsubscribeExternal: (() => void) | null = null;
@@ -103,6 +116,9 @@ watch(
       unsubscribeLayouts = system.viewport.subscribeLayouts((layouts) => {
         viewportLayouts.value = layouts;
       });
+      // The display mode lives in the URL; a (re)created viewport starts in
+      // engineering and is brought in line here.
+      system.viewport.setDisplayMode(mbdDisplayMode.value);
     }
   },
   { immediate: true },
@@ -282,10 +298,45 @@ function setMbd3dEnabled(enabled: boolean): void {
   window.dispatchEvent(new Event('popstate'));
 }
 
+/**
+ * 显示模式（S4，2026-09-13）：`engineering`（默认）每条尺寸照工程图样全画；`inspection`
+ * 让内核在每次完整布局后对每条尺寸的探测点（数字 / 标签锚点）向相机做一次射线求交，
+ * 被模型挡住的整条淡化到 `theme.inspection.occludedAlpha`（0.35）、其余 0.65，不隐藏。
+ * 状态记在 URL `mbd_mode=inspection` 上，但**不走 `popstate` 重拉 payload**——模式只关系到
+ * 呈现，直接交给 `viewport.setDisplayMode`；浏览器前进 / 后退带来的 `popstate` 仍会把它同步回来。
+ */
+function setMbdDisplayMode(mode: MbdDisplayMode): void {
+  const url = new URL(window.location.href);
+  if (mode === 'engineering') url.searchParams.delete('mbd_mode');
+  else url.searchParams.set('mbd_mode', mode);
+  window.history.replaceState({}, '', url);
+  mbdDisplayMode.value = mode;
+  viewerContext.dimensionSystem.value?.viewport.setDisplayMode(mode);
+}
+
+/** 检视模式下最近一次布局里 MBD 记录的遮挡统计（只数画出来的）。 */
+const mbdOcclusion = computed(() => {
+  const mbdIds = new Set(
+    externalRecords.value.filter(record => record.source === 'mbd').map(record => record.id),
+  );
+  const summary = { occluded: 0, visible: 0 };
+  for (const layout of viewportLayouts.value) {
+    if (!mbdIds.has(layout.dimensionId) || layout.primitives.length === 0) continue;
+    if (layout.derived.occluded) summary.occluded += 1;
+    else summary.visible += 1;
+  }
+  return summary;
+});
+
 function syncMbdDebugStateFromLocation(): void {
   mbdKindFilter.value = readMbdKindFilter();
   mbdLodDisabled.value = readMbdLodDisabled();
   mbd3dDisabled.value = readMbd3dDisabled();
+  const mode = readMbdDisplayMode();
+  if (mode !== mbdDisplayMode.value) {
+    mbdDisplayMode.value = mode;
+    viewerContext.dimensionSystem.value?.viewport.setDisplayMode(mode);
+  }
 }
 
 if (typeof window !== 'undefined') {
@@ -553,6 +604,36 @@ function act(
         <span data-testid="mbd-3d-state">
           <template v-if="mbd3dDisabled">已关闭，按求解器原位几何平面出图</template>
           <template v-else>开</template>
+        </span>
+      </div>
+      <div class="mt-1 flex flex-wrap items-center justify-between gap-2"
+        data-testid="mbd-mode">
+        <span class="flex flex-wrap items-center gap-2">
+          <span>显示模式</span>
+          <label class="flex items-center gap-1">
+            <input type="radio"
+              name="mbd-display-mode"
+              value="engineering"
+              data-testid="mbd-mode-engineering"
+              :checked="mbdDisplayMode === 'engineering'"
+              @change="setMbdDisplayMode('engineering')" />
+            <span>Engineering（工程）</span>
+          </label>
+          <label class="flex items-center gap-1">
+            <input type="radio"
+              name="mbd-display-mode"
+              value="inspection"
+              data-testid="mbd-mode-inspection"
+              :checked="mbdDisplayMode === 'inspection'"
+              @change="setMbdDisplayMode('inspection')" />
+            <span>Inspection（检视：被模型挡住的尺寸淡化）</span>
+          </label>
+        </span>
+        <span data-testid="mbd-mode-state">
+          <template v-if="mbdDisplayMode === 'inspection'">
+            被遮挡 {{ mbdOcclusion.occluded }} 条 / 可见 {{ mbdOcclusion.visible }} 条
+          </template>
+          <template v-else>每条尺寸照工程图样全画</template>
         </span>
       </div>
     </div>

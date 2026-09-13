@@ -401,6 +401,63 @@ describe('createDimensionSystem', () => {
     expect(viewer.getLayoutOverlays).toHaveBeenCalledTimes(1);
   });
 
+  it('asks the viewer\'s ray cast only in inspection mode and fades what it blocks', async () => {
+    const viewer = createViewerAdapter({
+      isSegmentBlocked: vi.fn(() => true),
+    });
+    const harness = createHarness({ viewer });
+    const system = await createdSystem(harness);
+    const record: ExternalDimensionRecord = {
+      id: 'mbd-1',
+      source: 'mbd',
+      sourceLabel: 'MBD',
+      role: 'external',
+      layout: {
+        id: 'mbd-1',
+        role: 'external',
+        labelPinned: true,
+        formattedLabel: '100',
+        lines: [{ from: [-1, 0, 0], to: [1, 0, 0], part: 'dimension' }],
+        labelAnchor: [0, 0, 0],
+        arrowLines: [],
+      },
+    };
+    const settle = () => {
+      system.notifyViewerChanged();
+      for (let frames = 0; frames < 3 && !system.viewport.getLayouts().some(l => l.primitives.length > 0); frames += 1) {
+        harness.flush();
+      }
+    };
+
+    // Engineering (default): never probes, never flags.
+    system.replaceExternalSource('mbd', [record]);
+    settle();
+    expect(system.viewport.getDisplayMode()).toBe('engineering');
+    expect(system.viewport.getLayouts()[0]?.derived.occluded).toBeUndefined();
+    expect(viewer.isSegmentBlocked).not.toHaveBeenCalled();
+
+    // Inspection: one cast per drawn record, from the near plane to its value text.
+    system.viewport.setDisplayMode('inspection');
+    for (let frames = 0; frames < 3 && system.viewport.getLayouts()[0]?.derived.occluded === undefined; frames += 1) {
+      harness.flush();
+    }
+    expect(system.viewport.getLayouts()[0]?.derived.occluded).toBe(true);
+    expect(viewer.isSegmentBlocked).toHaveBeenCalledTimes(1);
+    const [from, to, toleranceM] = (viewer.isSegmentBlocked as ReturnType<typeof vi.fn>).mock.calls[0]!;
+    expect(to).toEqual([0, 0, 0]);
+    // The near-plane point of the label's pixel lies between the camera (z = 10) and the label.
+    expect(from[2]).toBeGreaterThan(0);
+    expect(from[2]).toBeLessThan(10);
+    expect(toleranceM).toBeGreaterThanOrEqual(0.0005);
+
+    // Back to engineering: the flag is gone again.
+    system.viewport.setDisplayMode('engineering');
+    for (let frames = 0; frames < 3 && system.viewport.getLayouts()[0]?.derived.occluded !== undefined; frames += 1) {
+      harness.flush();
+    }
+    expect(system.viewport.getLayouts()[0]?.derived.occluded).toBeUndefined();
+  });
+
   it('ignores viewer notifications while the camera is unavailable', async () => {
     const harness = createHarness({
       viewer: createViewerAdapter({ getCamera: () => null }),

@@ -1,7 +1,7 @@
 # 自动 MBD 管道长度尺寸（linear_dim）三维显示效果优化方案
 
 日期：2026-09-12  
-状态：QW1 / QW2 / QW3、S2 第一步、S3 第一 + 第二步、S1 第一块（成对去重）与 **S6 三维标注呈现**（参考图风格，ADR 0057）已于 2026-09-12 落地（各段内附实施与验证记录）；QW4、S1 其余、S4、S5 待排期  
+状态：QW1 / QW2 / QW3、S2 第一步、S3 第一 + 第二步、S1 第一块（成对去重）与 **S6 三维标注呈现**（参考图风格，ADR 0057）已于 2026-09-12 落地（各段内附实施与验证记录）；**S4 inspection 显示模式** 2026-09-13 落地（ADR 0061）；QW4、S1 其余、S5 待排期  
 关联：已批准开发计划（协同决策 d-438）的 PR3 结构化 coverage、PR4 `occupancy.rs`、PR6 布局权威收口  
 基线证据：`docs/verification/mbd-pipe-live-baseline-2026-09-12.md`（阶段 0 live 基线 PASS）  
 后续评估：`docs/plans/2026-09-12-mbd-dimension-engineering-convention-review.md`（工程标注习惯对照，Oracle GPT-6 两轮 + 标准条款核实；S1 成对隐藏 / edge-on / 尺寸界线超出 / S4 inspection 的具体规则）
@@ -201,11 +201,24 @@
   再 Rust 契约 mirror，再 producer；PR4 `occupancy.rs` 提供 solver 侧占位后，才考虑让 solver 输出分级建议。
 - 验收：fixture 扩 `full-coverage.json` 增 `importance`；固定相机远 / 中 / 近三帧记录数递增。
 
-**S4 · 画家双模式：engineering / inspection**
+**S4 · 画家双模式：engineering / inspection** —— 2026-09-13 已落地（ADR 0061；用户同日 21:1x 拍板 α 0.65 / 0.35、默认 engineering、入口放尺寸面板）
 
-- `ThreeSceneDimensionPainter` 增 `inspection` 模式：保持 `depthTest=false` 但按深度做淡化（被遮挡尺寸
+- 实施：`DimensionViewport.setDisplayMode('engineering' | 'inspection')`，默认 `engineering`（与之前逐像素一致，材质保持不透明、
+  不做任何探测）。`inspection` 下每次完整布局后 `kernel/layout/occlusionPolicy.ts::markOcclusion` 对每条画出来的记录取探测点
+  （第一条字形的三维锚点 = 数值文字基线中心 / 标签挂着的管上点），从其像素的近平面点向探测点发一条线段问宿主
+  `DimensionViewerAdapter.isSegmentBlocked(from, to, ε)`，ε = max(0.5 mm, 2 px·worldPerPixel)；DTX 适配器用
+  `collectObjectBoundsIntersecting` 筛候选、`raycastObject` 逐三角求交（真实网格，非包围盒）。结果写 `derived.occluded`，画家按记录
+  整体着 α（逐顶点 `batchAlpha`，描边 / 实心箭头 / 标签填充三套缓冲）：被遮挡 0.35、可见 0.65，不隐藏、不搬动。面板「显示模式」
+  单选 + URL `mbd_mode=inspection`（直接调 viewport，不走 `popstate` 重拉 payload），检视模式下显示「被遮挡 N 条 / 可见 M 条」。
+- 验证：单测 59 文件 / 338 通过（`occlusionPolicy.test.ts` 4、theme +1、painter +1（三套缓冲 α 与 `transparent` 切换、
+  `updateStyles` 保住淡化）、adapter +1（世界坐标射线、候选筛选、ε 内命中不算）、facade +1（只在 inspection 下调缝、切回即清）、
+  panel +1（单选 → viewport、URL、无 popstate、统计））；eslint 0；type-check 本改动新增 0；`e2e/dimension-mbd-v2-fixture.spec.ts` 2/2。
+  真实 Chrome（gen-model 本轮未运行，demo 页 + 注入 `pipe-iso-sample.json`，把 DTX demo 立方体放大到 0.5 m 挡在相机与 `2084` 之间）：
+  engineering 全部 α 1 / 材质不透明；inspection 只有 `2084` 被标遮挡（α 0.35），其余 22 条 0.65，重复布局逐条相同；换到对面看
+  `2084` 回到 0.65；切回 engineering 复原；切换过程 payload 请求数不变。截图见验证目录「inspection 显示模式」段。
+- 原设计：`ThreeSceneDimensionPainter` 增 `inspection` 模式：保持 `depthTest=false` 但按深度做淡化（被遮挡尺寸
   α 降到 0.35 左右），而不是直接开启深度测试（会让尺寸被管体吃掉）。默认仍为 engineering。
-- 验收：`dimension-canvas-smoke.spec.ts` 增模式切换断言；性能门。
+- 未做：2k 记录的分帧预算（本样本 23 条一帧内完成）；与 S5 三态开关的合并入口（S5 未排期，现为面板独立单选）。
 
 **S5 · 交互三态**
 

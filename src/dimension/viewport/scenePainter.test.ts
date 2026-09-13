@@ -290,6 +290,78 @@ describe('ThreeSceneDimensionPainter', () => {
     )).toEqual(secondColorBefore);
   });
 
+  it('fades occluded records in inspection mode and stays opaque in engineering mode', () => {
+    const parent = new Group();
+    const painter = new ThreeSceneDimensionPainter(parent, createTestFont());
+    painter.resize(800, 600);
+    const body = sceneFill(
+      [[0, 0], [10, 0], [10, 10]].map(([x, y]) => ({ anchor: [0, 0, 0] as const, offsetPx: [x!, y!] as const })),
+      'tag',
+      'external',
+      'tag-fill',
+    );
+    const behind: LayoutResult = {
+      ...layout('behind', [body, ...primitives]),
+      derived: { formattedLabel: 'behind', occluded: true },
+    };
+    const front: LayoutResult = {
+      ...layout('front', [body, ...primitives]),
+      derived: { formattedLabel: 'front', occluded: false },
+    };
+    const { inspection } = SOLVESPACE_DIMENSION_THEME;
+    const meshes = () => ({
+      lines: painter.group.getObjectByName('dimension-scene-lines') as any,
+      arrows: painter.group.getObjectByName('dimension-scene-arrows') as any,
+      fills: painter.group.getObjectByName('dimension-scene-fills') as any,
+    });
+    const alphas = (mesh: any, count: number): number[] =>
+      Array.from(mesh.geometry.getAttribute('batchAlpha').array.slice(0, count));
+    const distinct = (values: number[]) => [...new Set(values.map(v => Number(v.toFixed(6))))];
+
+    // Engineering (default argument): every vertex alpha 1, materials opaque as before.
+    painter.paint([behind, front], SOLVESPACE_DIMENSION_THEME);
+    const stats = painter.getStats();
+    const perLayoutLines = stats.lineVertexCount / 2;
+    const perLayoutArrows = stats.triangleVertexCount / 2;
+    const perLayoutFills = stats.fillVertexCount / 2;
+    expect(distinct(alphas(meshes().lines, stats.lineVertexCount))).toEqual([1]);
+    expect(distinct(alphas(meshes().arrows, stats.triangleVertexCount))).toEqual([1]);
+    expect(distinct(alphas(meshes().fills, stats.fillVertexCount))).toEqual([1]);
+    for (const mesh of Object.values(meshes())) {
+      expect((mesh.material as ShaderMaterial).transparent).toBe(false);
+    }
+
+    // Inspection: the occluded record at 0.35, the visible one at 0.65, on
+    // every buffer (strokes, arrowheads, tag fills); materials blend.
+    painter.paint([behind, front], SOLVESPACE_DIMENSION_THEME, 'inspection');
+    const lineAlphas = alphas(meshes().lines, stats.lineVertexCount);
+    expect(distinct(lineAlphas.slice(0, perLayoutLines))).toEqual([inspection.occludedAlpha]);
+    expect(distinct(lineAlphas.slice(perLayoutLines))).toEqual([inspection.visibleAlpha]);
+    const arrowAlphas = alphas(meshes().arrows, stats.triangleVertexCount);
+    expect(distinct(arrowAlphas.slice(0, perLayoutArrows))).toEqual([inspection.occludedAlpha]);
+    expect(distinct(arrowAlphas.slice(perLayoutArrows))).toEqual([inspection.visibleAlpha]);
+    const fillAlphas = alphas(meshes().fills, stats.fillVertexCount);
+    expect(distinct(fillAlphas.slice(0, perLayoutFills))).toEqual([inspection.occludedAlpha]);
+    expect(distinct(fillAlphas.slice(perLayoutFills))).toEqual([inspection.visibleAlpha]);
+    for (const mesh of Object.values(meshes())) {
+      expect((mesh.material as ShaderMaterial).transparent).toBe(true);
+    }
+
+    // A style-only update rewrites alpha with the colours, so a hover on a
+    // faded record keeps its fade.
+    const hovered: LayoutResult = {
+      ...behind,
+      scenePrimitives: behind.scenePrimitives.map(p => ({ ...p, styleRole: 'hovered' })),
+    };
+    expect(painter.updateStyles([hovered, front], SOLVESPACE_DIMENSION_THEME, new Set(['behind']), 'inspection')).toBe(true);
+    expect(distinct(alphas(meshes().lines, perLayoutLines))).toEqual([inspection.occludedAlpha]);
+
+    // Back to engineering: opaque again.
+    painter.paint([behind, front], SOLVESPACE_DIMENSION_THEME, 'engineering');
+    expect(distinct(alphas(meshes().lines, stats.lineVertexCount))).toEqual([1]);
+    expect((meshes().lines.material as ShaderMaterial).transparent).toBe(false);
+  });
+
   it('keeps glyph strokes solid for roles with dashed line styles', () => {
     const parent = new Group();
     const painter = new ThreeSceneDimensionPainter(parent, createTestFont());

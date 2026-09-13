@@ -18,12 +18,14 @@ import type { LffFont } from '../kernel/glyph/lffParser';
 import type { ViewportProjector } from '../kernel/projector';
 import type { DimensionTheme } from '../kernel/theme';
 import type {
+  DimensionDisplayMode,
   ExplicitLayoutInput,
   InteractionState,
   LayoutObstacleSource,
   LayoutPrimitive,
   LayoutResult,
   NormalizedDimensionInput,
+  OcclusionSource,
   ScenePrimitive,
   Vec2,
 } from '../kernel/types';
@@ -95,6 +97,11 @@ type DimensionViewportBaseInput = Readonly<{
   onFrame?: (durationMs: number, breakdown: DimensionFrameBreakdown) => void;
   /** Model component boxes billboard tags keep clear of; omitted = none known. */
   obstacles?: LayoutObstacleSource;
+  /**
+   * Ray-cast seam for the inspection display mode; omitted = inspection
+   * fades nothing (every record paints at its visible alpha).
+   */
+  occlusion?: OcclusionSource;
 }>;
 
 export type DimensionViewportInput = DimensionViewportBaseInput & Readonly<{
@@ -125,6 +132,7 @@ export class DimensionViewport {
   private hitIndex: HitIndex = buildHitIndex([]);
   private theme: DimensionTheme;
   private format: DimensionFormatPolicy;
+  private displayMode: DimensionDisplayMode = 'engineering';
   private cameraSettleTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly pendingStyleIds = new Set<string>();
   private disposed = false;
@@ -198,6 +206,22 @@ export class DimensionViewport {
   setFormat(format: DimensionFormatPolicy): void {
     this.format = format;
     this.invalidate('format');
+  }
+
+  /**
+   * Engineering (default) paints every dimension in full; inspection runs
+   * the occlusion pass on the next full layout and fades the records that
+   * sit behind model geometry (S4, 2026-09-13). Switching re-lays out, so
+   * the flags always belong to the current camera.
+   */
+  setDisplayMode(mode: DimensionDisplayMode): void {
+    if (this.displayMode === mode) return;
+    this.displayMode = mode;
+    this.invalidate('display-mode');
+  }
+
+  getDisplayMode(): DimensionDisplayMode {
+    return this.displayMode;
   }
 
   setSelection(id: string | null): void {
@@ -421,8 +445,13 @@ export class DimensionViewport {
       });
       const styleIds = new Set(this.pendingStyleIds);
       this.pendingStyleIds.clear();
-      if (!this.scenePainter.updateStyles(this.layouts, this.theme, styleIds)) {
-        this.scenePainter.paint(this.layouts, this.theme);
+      if (!this.scenePainter.updateStyles(
+        this.layouts,
+        this.theme,
+        styleIds,
+        this.displayMode,
+      )) {
+        this.scenePainter.paint(this.layouts, this.theme, this.displayMode);
       }
       this.input.requestRender?.();
       const completedAt = performance.now();
@@ -448,12 +477,16 @@ export class DimensionViewport {
       font: this.input.font,
       theme: this.theme,
       format: this.format,
-    }, interactions, { obstacles: this.input.obstacles });
+    }, interactions, {
+      obstacles: this.input.obstacles,
+      occlusion: this.input.occlusion,
+      displayMode: this.displayMode,
+    });
     const layoutCompletedAt = performance.now();
     this.layouts = batch.layouts;
     this.hitIndex = batch.hitIndex;
     this.pendingStyleIds.clear();
-    this.scenePainter.paint(this.layouts, this.theme);
+    this.scenePainter.paint(this.layouts, this.theme, this.displayMode);
     this.input.requestRender();
     const completedAt = performance.now();
     this.input.onFrame?.(completedAt - startedAt, {

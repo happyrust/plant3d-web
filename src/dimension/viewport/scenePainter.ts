@@ -22,6 +22,7 @@ import {
 import type { GlyphSegment, LffFont } from '../kernel/glyph/lffParser';
 import type { DimensionTheme } from '../kernel/theme';
 import type {
+  DimensionDisplayMode,
   DimensionLineStyle,
   LayoutResult,
   SceneGlyphRun,
@@ -57,9 +58,11 @@ attribute float segmentT;
 attribute float side;
 attribute float strokeWidthPx;
 attribute vec3 batchColor;
+attribute float batchAlpha;
 attribute float dashCode;
 
 varying vec3 vBatchColor;
+varying float vBatchAlpha;
 varying float vDashCode;
 varying float vLineDistancePx;
 
@@ -91,6 +94,7 @@ void main() {
   clip.xy += expandClip * clip.w;
 
   vBatchColor = batchColor;
+  vBatchAlpha = batchAlpha;
   vDashCode = dashCode;
   vLineDistancePx = segmentT < 0.5 ? 0.0 : segmentLengthPx;
   gl_Position = clip;
@@ -99,6 +103,7 @@ void main() {
 
 const STROKE_FRAGMENT_SHADER = `
 varying vec3 vBatchColor;
+varying float vBatchAlpha;
 varying float vDashCode;
 varying float vLineDistancePx;
 
@@ -115,7 +120,7 @@ bool dashVisible(float code, float distancePx) {
 
 void main() {
   if (!dashVisible(vDashCode, vLineDistancePx)) discard;
-  gl_FragColor = vec4(vBatchColor, 1.0);
+  gl_FragColor = vec4(vBatchColor, vBatchAlpha);
 }
 `;
 
@@ -124,22 +129,26 @@ uniform vec2 uViewportCssPx;
 
 attribute vec2 offsetPx;
 attribute vec3 batchColor;
+attribute float batchAlpha;
 
 varying vec3 vBatchColor;
+varying float vBatchAlpha;
 
 ${VERTEX_OFFSET_FUNCTION}
 
 void main() {
   vBatchColor = batchColor;
+  vBatchAlpha = batchAlpha;
   gl_Position = projectSceneVertex(position, offsetPx);
 }
 `;
 
 const TRIANGLE_FRAGMENT_SHADER = `
 varying vec3 vBatchColor;
+varying float vBatchAlpha;
 
 void main() {
-  gl_FragColor = vec4(vBatchColor, 1.0);
+  gl_FragColor = vec4(vBatchColor, vBatchAlpha);
 }
 `;
 
@@ -157,6 +166,7 @@ const STROKE_ATTRIBUTES: readonly AttributeSpec[] = [
   { name: 'side', itemSize: 1 },
   { name: 'strokeWidthPx', itemSize: 1 },
   { name: 'batchColor', itemSize: 3 },
+  { name: 'batchAlpha', itemSize: 1 },
   { name: 'dashCode', itemSize: 1 },
 ];
 
@@ -164,6 +174,7 @@ const TRIANGLE_ATTRIBUTES: readonly AttributeSpec[] = [
   { name: 'position', itemSize: 3 },
   { name: 'offsetPx', itemSize: 2 },
   { name: 'batchColor', itemSize: 3 },
+  { name: 'batchAlpha', itemSize: 1 },
 ];
 
 function nextCapacity(required: number): number {
@@ -556,6 +567,22 @@ function writeVec3(
   array[offset + 2] = value[2]!;
 }
 
+/**
+ * Alpha a whole record paints at: 1 in engineering mode; in inspection mode
+ * the theme's occluded alpha for records the layout pass flagged as sitting
+ * behind model geometry, its visible alpha for the rest (S4, 2026-09-13).
+ */
+export function layoutAlpha(
+  layout: LayoutResult,
+  theme: DimensionTheme,
+  displayMode: DimensionDisplayMode,
+): number {
+  if (displayMode !== 'inspection') return 1;
+  return layout.derived.occluded
+    ? theme.inspection.occludedAlpha
+    : theme.inspection.visibleAlpha;
+}
+
 function createMaterial(
   vertexShader: string,
   fragmentShader: string,
@@ -687,8 +714,10 @@ export class ThreeSceneDimensionPainter {
   paint(
     layouts: readonly LayoutResult[],
     theme: DimensionTheme,
+    displayMode: DimensionDisplayMode = 'engineering',
   ): void {
     if (this.disposed) return;
+    this.setBlending(displayMode);
 
     let segmentCount = 0;
     visitSegments(
@@ -710,6 +739,7 @@ export class ThreeSceneDimensionPainter {
     const lineSide = this.lineBuffers.array('side');
     const lineStrokeWidth = this.lineBuffers.array('strokeWidthPx');
     const lineColor = this.lineBuffers.array('batchColor');
+    const lineAlpha = this.lineBuffers.array('batchAlpha');
     const lineDashCode = this.lineBuffers.array('dashCode');
     const resolveColor = createColorResolver(theme);
     const writeStrokeVertex = (
@@ -720,6 +750,7 @@ export class ThreeSceneDimensionPainter {
       side: -1 | 1,
       widthPx: number,
       color: readonly [number, number, number],
+      alpha: number,
       code: number,
     ): void => {
       writeVec3(linePosition, vertexIndex, own.anchor);
@@ -730,6 +761,7 @@ export class ThreeSceneDimensionPainter {
       lineSide[vertexIndex] = side;
       lineStrokeWidth[vertexIndex] = widthPx;
       writeVec3(lineColor, vertexIndex, color);
+      lineAlpha[vertexIndex] = alpha;
       lineDashCode[vertexIndex] = code;
     };
 
@@ -737,6 +769,7 @@ export class ThreeSceneDimensionPainter {
     let lineVertexIndex = 0;
     for (const layout of layouts) {
       const lineStart = lineVertexIndex;
+      const alpha = layoutAlpha(layout, theme, displayMode);
       visitSegments(
         [layout],
         this.font,
@@ -749,16 +782,16 @@ export class ThreeSceneDimensionPainter {
           // vertices at the far end negate `side` to stay on the same
           // world-space edge of the quad.
           writeStrokeVertex(
-            lineVertexIndex, from, to, 0, -1, widthPx, color, code,
+            lineVertexIndex, from, to, 0, -1, widthPx, color, alpha, code,
           );
           writeStrokeVertex(
-            lineVertexIndex + 1, from, to, 0, 1, widthPx, color, code,
+            lineVertexIndex + 1, from, to, 0, 1, widthPx, color, alpha, code,
           );
           writeStrokeVertex(
-            lineVertexIndex + 2, to, from, 1, 1, widthPx, color, code,
+            lineVertexIndex + 2, to, from, 1, 1, widthPx, color, alpha, code,
           );
           writeStrokeVertex(
-            lineVertexIndex + 3, to, from, 1, -1, widthPx, color, code,
+            lineVertexIndex + 3, to, from, 1, -1, widthPx, color, alpha, code,
           );
           lineVertexIndex += 4;
         },
@@ -787,9 +820,11 @@ export class ThreeSceneDimensionPainter {
     const trianglePosition = this.triangleBuffers.array('position');
     const triangleOffset = this.triangleBuffers.array('offsetPx');
     const triangleColor = this.triangleBuffers.array('batchColor');
+    const triangleAlpha = this.triangleBuffers.array('batchAlpha');
     let triangleVertexIndex = 0;
     for (const layout of layouts) {
       const triangleStart = triangleVertexIndex;
+      const alpha = layoutAlpha(layout, theme, displayMode);
       for (const primitive of layout.scenePrimitives) {
         if (primitive.kind !== 'scene-triangle') continue;
         const color = resolveColor(primitive.styleRole, undefined);
@@ -797,6 +832,7 @@ export class ThreeSceneDimensionPainter {
           writeVec3(trianglePosition, triangleVertexIndex, point.anchor);
           writeVec2(triangleOffset, triangleVertexIndex, point.offsetPx);
           writeVec3(triangleColor, triangleVertexIndex, color);
+          triangleAlpha[triangleVertexIndex] = alpha;
           triangleVertexIndex += 1;
         }
       }
@@ -825,9 +861,11 @@ export class ThreeSceneDimensionPainter {
     const fillPosition = this.fillBuffers.array('position');
     const fillOffset = this.fillBuffers.array('offsetPx');
     const fillColor = this.fillBuffers.array('batchColor');
+    const fillAlpha = this.fillBuffers.array('batchAlpha');
     let fillVertexIndex = 0;
     for (const layout of layouts) {
       const fillStart = fillVertexIndex;
+      const alpha = layoutAlpha(layout, theme, displayMode);
       for (const primitive of layout.scenePrimitives) {
         if (primitive.kind !== 'scene-fill') continue;
         const color = resolveColor(primitive.styleRole, primitive.tone);
@@ -837,6 +875,7 @@ export class ThreeSceneDimensionPainter {
             writeVec3(fillPosition, fillVertexIndex, point.anchor);
             writeVec2(fillOffset, fillVertexIndex, point.offsetPx);
             writeVec3(fillColor, fillVertexIndex, color);
+            fillAlpha[fillVertexIndex] = alpha;
             fillVertexIndex += 1;
           }
         }
@@ -862,6 +901,7 @@ export class ThreeSceneDimensionPainter {
     layouts: readonly LayoutResult[],
     theme: DimensionTheme,
     dimensionIds: ReadonlySet<string>,
+    displayMode: DimensionDisplayMode = 'engineering',
   ): boolean {
     if (this.disposed) return false;
     const changed = layouts.filter(layout =>
@@ -896,13 +936,17 @@ export class ThreeSceneDimensionPainter {
     }
 
     const lineColor = this.lineBuffers.array('batchColor');
+    const lineAlpha = this.lineBuffers.array('batchAlpha');
     const lineDashCode = this.lineBuffers.array('dashCode');
     const triangleColor = this.triangleBuffers.array('batchColor');
+    const triangleAlpha = this.triangleBuffers.array('batchAlpha');
     const fillColor = this.fillBuffers.array('batchColor');
+    const fillAlpha = this.fillBuffers.array('batchAlpha');
     const resolveColor = createColorResolver(theme);
 
     for (const layout of changed) {
       const range = this.dimensionRanges.get(layout.dimensionId)!;
+      const alpha = layoutAlpha(layout, theme, displayMode);
       let lineVertexIndex = range.lineStart;
       visitSegments(
         [layout],
@@ -913,6 +957,7 @@ export class ThreeSceneDimensionPainter {
           const color = resolveColor(styleRole, stroke);
           for (let corner = 0; corner < 4; corner += 1) {
             writeVec3(lineColor, lineVertexIndex + corner, color);
+            lineAlpha[lineVertexIndex + corner] = alpha;
             lineDashCode[lineVertexIndex + corner] = code;
           }
           lineVertexIndex += 4;
@@ -925,6 +970,7 @@ export class ThreeSceneDimensionPainter {
           const color = resolveColor(primitive.styleRole, undefined);
           for (let index = 0; index < 3; index += 1) {
             writeVec3(triangleColor, triangleVertexIndex, color);
+            triangleAlpha[triangleVertexIndex] = alpha;
             triangleVertexIndex += 1;
           }
         } else if (primitive.kind === 'scene-fill') {
@@ -932,17 +978,30 @@ export class ThreeSceneDimensionPainter {
           const count = fillVertexCount(primitive.points.length);
           for (let index = 0; index < count; index += 1) {
             writeVec3(fillColor, fillVertexIndex, color);
+            fillAlpha[fillVertexIndex] = alpha;
             fillVertexIndex += 1;
           }
         }
       }
     }
     if (changed.length > 0) {
-      this.lineBuffers.markUpdated(['batchColor', 'dashCode']);
-      this.triangleBuffers.markUpdated(['batchColor']);
-      this.fillBuffers.markUpdated(['batchColor']);
+      this.lineBuffers.markUpdated(['batchColor', 'batchAlpha', 'dashCode']);
+      this.triangleBuffers.markUpdated(['batchColor', 'batchAlpha']);
+      this.fillBuffers.markUpdated(['batchColor', 'batchAlpha']);
     }
     return true;
+  }
+
+  /**
+   * Inspection fades records, so its three materials blend; engineering
+   * keeps them opaque, exactly as before the mode existed. `transparent` is
+   * render state, not a shader define — toggling it recompiles nothing.
+   */
+  private setBlending(displayMode: DimensionDisplayMode): void {
+    const transparent = displayMode === 'inspection';
+    for (const material of [this.lineMaterial, this.triangleMaterial, this.fillMaterial]) {
+      material.transparent = transparent;
+    }
   }
 
   clear(): void {

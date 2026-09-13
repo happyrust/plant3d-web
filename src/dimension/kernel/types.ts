@@ -39,6 +39,28 @@ export type LayoutObstacleSource = Readonly<{
   overlays?(): readonly ScreenRect[];
 }>;
 
+/**
+ * How the viewport presents dimensions relative to the model (S4,
+ * 2026-09-13). `engineering` (default) draws every dimension in full over
+ * the model, isometric-drawing style; `inspection` fades dimensions whose
+ * value sits behind model geometry from the current camera, so a reviewer
+ * can tell the near side from the far side without hiding anything.
+ */
+export type DimensionDisplayMode = 'engineering' | 'inspection';
+
+/**
+ * Host seam the inspection pass asks whether model geometry stands between
+ * the camera and a dimension (「inspection 淡化」, 2026-09-13): true when
+ * visible geometry meets the Design Space segment `from → to` more than
+ * `toleranceM` short of `to`. The kernel never reads a depth buffer or a
+ * bounding box for this — the host answers with a real ray cast, so the
+ * result is exact for the model it draws and identical for identical
+ * camera / model states.
+ */
+export type OcclusionSource = Readonly<{
+  isSegmentBlocked(from: Vec3, to: Vec3, toleranceM: number): boolean;
+}>;
+
 export type InteractionState = 'normal' | 'hovered' | 'selected';
 export type DimensionSemanticRole =
   | 'normal'
@@ -292,6 +314,14 @@ export type LayoutResult = Readonly<{
       candidate: number;
       body: ScreenRect;
     }>;
+    /**
+     * Set by the inspection pass (`markOcclusion`, display mode
+     * `inspection`): model geometry stands between the camera and the
+     * dimension's probe point (its value text / tag anchor), so the painter
+     * fades the whole record to `theme.inspection.occludedAlpha`. Absent in
+     * `engineering` mode.
+     */
+    occluded?: boolean;
   }>;
 }>;
 

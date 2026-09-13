@@ -108,3 +108,26 @@
 | `svg-export-viewer.png` | 视口（真实 Chrome，demo 页 + 注入样本）：实心箭头、三维文字、标签卡片 |
 | `svg-export-rasterized.png` | 同一帧 `exportSvg()` 的 SVG 在白底上栅格化：箭头填充、文字透视与视口一致 |
 | `svg-export-sample.svg` | 导出的 SVG 原文件（可直接打开 / 检查 `data-part` / `data-text-plane`） |
+
+## inspection 显示模式（2026-09-13 补验；ADR 0061）
+
+同一条无后端链路（demo 页 + 注入 `pipe-iso-sample.json`、`cheight_mm=60`，真实 Chrome 1600×1000），脚本 `pw-inspection-41.mjs`（`%TEMP%\plant3d-mbd-debug`）。遮挡体：demo 页自带的 DTX 立方体（`demo:0`，原本 1 mm）经 `setObjectMatrix` 放大到 0.5 m、放到相机与 `2084` 数值文字连线的 45% 处（对象包围盒同步改写、`recompile()` 后渲染出来），因此它只挡住 `2084` 的探测点，别的尺寸与标签都不在它后面。demo 页没有挂尺寸面板，模式经 `viewport.setDisplayMode` 直接切（面板单选 → viewport 的路径由 `DimensionPanelDock.test.ts` 钉住）。
+
+| 状态 | 画出 | `derived.occluded` | 描边缓冲里出现的 α | 三种材质 `transparent` |
+| --- | --- | --- | --- | --- |
+| engineering（默认） | 23 | 全部无 | {1} | false / false / false |
+| inspection · 立方体在相机与 `2084` 之间 | 23 | `2084` = true，其余 22 条 = false | {0.35, 0.65} | true / true / true |
+| inspection · 同相机再布局一次 | 23 | 逐条相同 | {0.35, 0.65} | — |
+| inspection · 相机换到对面（立方体在 `2084` 背后） | 23 | 全部 false | {0.65} | true |
+| 切回 engineering | 23 | 全部无 | {1} | false |
+
+- 切换全程 `/api/mbd/v2/pipe/**` 只请求了 1 次（模式不走 `popstate` 重同步）；`pageerror` 0。
+- 单测 `npx vitest run src/dimension src/composables/useMbdExternalSync.test.ts` → **59 文件 / 338 通过**（`occlusionPolicy.test.ts` 4：探测点取法 / ε 取大 / 每条画出的记录一条射线且从近平面出发 / 确定性；theme +1；painter +1：描边 / 箭头 / 填充三套缓冲的 α 与 `transparent` 随模式切换、`updateStyles` 保住淡化；adapter +1：设计→世界、候选按线段包围盒筛、ε 内命中不算、退化线段与无射线图层不阻挡；facade +1：只在 inspection 下调缝、切回即清 flag；panel +1：单选直接调 viewport、URL `mbd_mode`、不派发 popstate、遮挡统计只数画出的 MBD 记录）；eslint 相关 16 文件 0；`npm run type-check` 基线外新增 5 条仍全在他人在飞的 `useDtxTools.*.test.ts`，本改动 0；`e2e/dimension-mbd-v2-fixture.spec.ts` 2/2。
+
+| 文件 | 说明 |
+| --- | --- |
+| `inspection-engineering.png` | engineering：红色立方体挡在 `2084` 前，尺寸照旧全画、穿透 |
+| `inspection-occluded-2084.png` | inspection：`2084` 整条（数字 / 尺寸线 / 箭头 / 尺寸界线）淡到 0.35，其余 0.65 |
+| `inspection-near-side.png` | inspection · 对面看：立方体在 `2084` 背后，`2084` 回到 0.65 |
+
+**未覆盖**：真实模型（BRAN 24381_145018）的实机对照——gen-model `:8022` / `:18084` 本轮都没在跑；2k 记录时每条一次射线的耗时未量（本样本 23 条一帧内完成）。
