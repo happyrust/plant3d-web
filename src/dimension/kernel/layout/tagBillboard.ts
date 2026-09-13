@@ -55,6 +55,12 @@ import type { LayoutContext } from './context';
 export type TagBillboardPlan = Readonly<{
   /** Body rectangles (screen, with the collision margin) per candidate, preferred first. */
   candidates: readonly ScreenRect[];
+  /**
+   * How many leading candidates lie whole inside the viewport; 0 when none
+   * does (anchor near or beyond the edge). The placement pass never lets a
+   * tag leave the screen to dodge an obstacle while it has such a candidate.
+   */
+  onScreen: number;
   /** Screen rectangle every candidate lies in. */
   envelope: ScreenRect;
   /** Design Space point the body hangs off (leader target or solver position). */
@@ -77,8 +83,13 @@ export type TagObstacles = Readonly<{
 
 /** Rotations (degrees) about the preferred direction, tried in this order. */
 const CANDIDATE_ANGLES_DEG: readonly number[] = [0, 30, -30, 60, -60, 90, -90, 135, -135, 180];
-/** Standoff multipliers tried after the whole first ring is blocked. */
-const CANDIDATE_DISTANCE_SCALES: readonly number[] = [1, 1.6];
+/**
+ * Standoff multipliers, each ring tried only after the whole previous one is
+ * blocked. The outer rings exist for close-ups, where a component's
+ * projected box swallows the near rings (a valve filling half the view) and
+ * the tag has to lead out of it rather than sit on the body.
+ */
+const CANDIDATE_DISTANCE_SCALES: readonly number[] = [1, 1.6, 2.4, 3.4];
 /** Design-space probe length (px worth) used to project the `away` direction. */
 const AWAY_PROBE_PX = 50;
 /** Margin kept between a tag body and whatever it is placed against. */
@@ -199,8 +210,9 @@ function unionRects(rects: readonly ScreenRect[]): ScreenRect {
  *   there is none): the preferred direction is the pipe's `away` direction
  *   when the source knows it, else the solver's own leader direction, both
  *   blended with an upward bias so tags sit above the pipe like drawing
- *   call-outs; further candidates fan out around that direction and then a
- *   longer standoff, and positions inside the viewport are tried first.
+ *   call-outs; further candidates fan out around that direction and then
+ *   ring by ring at longer standoffs, and positions inside the viewport are
+ *   tried first.
  * - A leader runs from the target to the nearest body edge, with a dot on
  *   the target when asked for.
  * - Level of detail: `secondary` / `detail` tiers follow the source text
@@ -303,8 +315,9 @@ export function planTagBillboard(
     projector.widthCssPx,
     projector.heightCssPx,
   );
+  const onScreenBodies = bodies.filter(body => onScreen(body));
   const ordered = [
-    ...bodies.filter(body => onScreen(body)),
+    ...onScreenBodies,
     ...bodies.filter(body => !onScreen(body)),
   ];
   const candidates = ordered.map(body => expandRect(body, BODY_MARGIN_PX));
@@ -399,6 +412,7 @@ export function planTagBillboard(
 
   return {
     candidates,
+    onScreen: onScreenBodies.length,
     envelope,
     anchor: anchor3,
     priority: STYLE_PRIORITY[spec.style],
@@ -573,8 +587,10 @@ export function collectTagObstacles(
  * Tags are placed one by one — cards, then frames, then pills, ties by id —
  * each taking its first candidate clear of everything; when no candidate is
  * clear, the one that intrudes least wins (weighted covered area: labels and
- * tags over strokes over component boxes), earlier candidates on a tie. The
- * same view always yields the same placement.
+ * tags over strokes over component boxes), earlier candidates on a tie. A
+ * tag with candidates whole on screen only competes among those: leaving the
+ * screen (a clipped body) is never the way round an obstacle. The same view
+ * always yields the same placement.
  */
 export function placeTagBillboards(
   layouts: readonly LayoutResult[],
@@ -616,9 +632,12 @@ export function placeTagBillboards(
       }
       return score;
     };
+    const considered = tag.plan.onScreen > 0
+      ? tag.plan.candidates.slice(0, tag.plan.onScreen)
+      : tag.plan.candidates;
     let best = 0;
     let bestScore = Number.POSITIVE_INFINITY;
-    for (const [index, candidate] of tag.plan.candidates.entries()) {
+    for (const [index, candidate] of considered.entries()) {
       const score = intrusion(candidate);
       if (score === 0) {
         best = index;

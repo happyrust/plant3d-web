@@ -226,9 +226,18 @@ describe('layoutTagBillboard', () => {
   it('plans candidates fanning out around the preferred direction, on-screen ones first', () => {
     const planned = planTagBillboard(input, spec, context());
     if (!isTagBillboardPlan(planned)) throw new Error('expected a plan');
-    // 10 angles × 2 distances.
-    expect(planned.candidates).toHaveLength(20);
+    // 10 angles × 4 rings.
+    expect(planned.candidates).toHaveLength(40);
     expect(planned.priority).toBe(0);
+    // The leading `onScreen` candidates (margin included) lie whole inside the
+    // 400 × 400 viewport, none of the rest does: the near ring fits, the outer
+    // rings mostly leave it.
+    const inside = (rect: ScreenRect): boolean =>
+      rect.x >= 0 && rect.y >= 0 && rect.x + rect.width <= 400 && rect.y + rect.height <= 400;
+    expect(planned.onScreen).toBeGreaterThan(0);
+    expect(planned.onScreen).toBeLessThan(planned.candidates.length);
+    expect(planned.candidates.slice(0, planned.onScreen).every(inside)).toBe(true);
+    expect(planned.candidates.slice(planned.onScreen).some(inside)).toBe(false);
     const preferred = planned.materialize(0);
     const alternative = planned.materialize(1);
     expect(alternative.derived.tag!.candidate).toBe(1);
@@ -427,6 +436,68 @@ describe('placeTagBillboards', () => {
       { polygons: [everywhere] },
     );
     expect(moved!.derived.tag!.candidate).toBe(1);
+  });
+
+  it('never leaves the screen to dodge an obstacle while it has a candidate on it', () => {
+    const plan = planTagBillboard(input, spec, context());
+    if (!isTagBillboardPlan(plan)) throw new Error('expected plan');
+    // The whole viewport is one component box: every on-screen candidate is
+    // covered in full, the off-screen ones only in part …
+    const viewport = rectPolygon({ x: 0, y: 0, width: 400, height: 400 });
+    const [placed] = placeTagBillboards(
+      [placeholder('tag')],
+      [{ index: 0, id: 'tag', plan }],
+      { polygons: [viewport] },
+    );
+    // … yet the tag stays whole on screen, at its preferred position (a tie
+    // among the on-screen candidates).
+    expect(placed!.derived.tag!.candidate).toBe(0);
+    expect(plan.onScreen).toBeGreaterThan(0);
+
+    // An anchor far off screen has no on-screen candidate, so all of them compete.
+    const gone: ExplicitTagInput = { ...spec, target: [-9, 0, 0] };
+    const offPlan = planTagBillboard({ ...input, tag: gone, labelAnchor: [-9.1, 0.2, 0] }, gone, context());
+    if (!isTagBillboardPlan(offPlan)) throw new Error('expected plan');
+    expect(offPlan.onScreen).toBe(0);
+    const [off] = placeTagBillboards(
+      [placeholder('tag')],
+      [{ index: 0, id: 'tag', plan: offPlan }],
+      { polygons: [rectPolygon(offPlan.candidates[0]!)] },
+    );
+    expect(off!.derived.tag!.candidate).toBe(1);
+  });
+
+  it('leads out of a box that swallows the near rings instead of sitting on the component', () => {
+    // A wide viewport keeps the outer rings on screen; the anchor still projects to (200, 200).
+    const wide: LayoutContext = {
+      ...context(),
+      projector: { ...createTestProjector(), widthCssPx: 2000, heightCssPx: 2000 },
+    };
+    const plan = planTagBillboard(input, spec, wide);
+    if (!isTagBillboardPlan(plan)) throw new Error('expected plan');
+    const { body } = plan.materialize(0).derived.tag!;
+    const standoff = rules.standoffPx.card + rules.standoffSizeRatio * Math.max(body.width, body.height);
+    const diagonal = Math.hypot(body.width, body.height);
+    // A component box (a valve filling the view) covering everything up to
+    // and including the second ring's bodies, right of and below the anchor
+    // as well as the whole area left of / above it.
+    const box = rectPolygon({
+      x: -1000,
+      y: -1000,
+      width: 1200 + 1.6 * standoff + diagonal,
+      height: 1200 + 1.6 * standoff + diagonal,
+    });
+    const [placed] = placeTagBillboards(
+      [placeholder('tag')],
+      [{ index: 0, id: 'tag', plan }],
+      { polygons: [box] },
+    );
+    const chosen = placed!.derived.tag!.body;
+    expect(rectPolygonOverlapArea(placed!.labelBounds, box)).toBe(0);
+    // The first clear position is on the third ring, straight right of the anchor.
+    expect(chosen.x + chosen.width / 2 - 200).toBeCloseTo(2.4 * standoff, 6);
+    expect(chosen.y + chosen.height / 2 - 200).toBeCloseTo(0, 6);
+    expect(placed!.derived.tag!.candidate).toBeLessThan(plan.onScreen);
   });
 });
 

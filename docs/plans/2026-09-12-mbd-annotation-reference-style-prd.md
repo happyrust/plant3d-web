@@ -2,7 +2,7 @@
 
 日期：2026-09-12  
 作者：协同组「标注」指挥官 / 产品经理（fable-5-1-17）；实施 fable-5-1-31（T1 / T2 / S1）、T3 收尾 fable-5-1-95  
-状态：**T1 / T2 + S1 成对去重已于 2026-09-12 落地**（ADR 0057；D1–D4 按效果图取 a，用户「继续未完的部分，不必重问」授权）；T0 以 `%TEMP%` 脚本 + `docs/verification/mbd-3d-dimension-presentation-2026-09-12/` 归档代替；**T3（标签块 / 引线 / 方框）同日落地**（ADR 0058，§9.2）。实施与验证记录见 §9。  
+状态：**T1 / T2 + S1 成对去重已于 2026-09-12 落地**（ADR 0057；D1–D4 按效果图取 a，用户「继续未完的部分，不必重问」授权）；T0 以 `%TEMP%` 脚本 + `docs/verification/mbd-3d-dimension-presentation-2026-09-12/` 归档代替；**T3（标签块 / 引线 / 方框）同日落地**（ADR 0058，§9.2）；**标签体避让管件包围盒与三维尺寸线 2026-09-13 落地**（ADR 0059，§9.3）。实施与验证记录见 §9。  
 上游约束：协同决策 d-438（架构固定：gen-model 供事实、plant-mbd 纯 Rust 求解器单源、plant3d-web 只读 external source 经现有 `ThreeSceneDimensionPainter` 呈现；不重写画家；MBD 不进用户 DimensionDocument）  
 相关文档：`2026-09-12-mbd-linear-dim-visual-optimization-plan.md`（QW1–QW3 / S2 / S3 已落地）、`2026-09-12-mbd-dimension-engineering-convention-review.md`（标准条款核实与 S1 / S4 规则）
 
@@ -120,4 +120,13 @@
 - **适配层** `mbdV2ExternalAnnotations.ts`：`pairLeaders` 把每条 `leader_line` 配进它的 `label`（`<label id>:leader` 命名优先，再按引线起点 = 标签位置，每条只用一次），配对后的引线不再单独成记录（77 → 63 条）；`classifyTag` 按 plant-mbd 的 id 约定分类（`:tag:connection:` 卡片 + 圆点、`:tag:name:` 方框、`:tag:elbo:` 药丸 `secondary` 且只有 `PE` 行是中景行、`:tag:branch-name` 药丸 `detail`），其它生产者按文字（`X / Y / PE` 行 = 卡片，否则方框）；`awayFromPipe` 只在该点恰有一条尺寸的尺寸界线扎根时给出管外方向；坡度标记与 skew 辅助线 / 文字打 `detail`。
 - **开关 / 面板** `useMbdExternalSync.ts`：`mbd_3d=0` 同时剥掉 `tag`，notes 文案补「标签按原位文字出图」；`DimensionPanelDock.vue`：LOD 统计增加「细节」计数，开关文案补「标签卡片带引线」。
 - **验证**（本会话实跑）：单测 54 文件 / 299 通过（`tagBillboard.test.ts` 7、mapper +3、painter +1、面板 +1、facade 绘制对象 2 → 3）；eslint 16 个相关文件 0；`npm run type-check` 基线外唯一新增为他人未提交的 `src/measurement/kernel/pickDerivation.test.ts`；`e2e/dimension-mbd-v2-fixture.spec.ts` 2/2；真实 Chrome 全类别固定相机三视角统计与截图见 `docs/verification/mbd-3d-dimension-presentation-2026-09-12/README.md`「标签 billboard」段（远景 4 标签绘 / 10 隐、0 相压；中景 1 处换位；近景药丸与细节辅助出现；重复运行逐字相同）。
-- **验收对照**：AC5 ✓（connection tag 多行左对齐、行距一致、引线从体边指向管端并带圆点；name tag 黑框方框；弯头 PE 药丸远景按 LOD 隐藏、`mbd_lod=0` 可关，显示时与尺寸数字不相压——实测三视角标签↔尺寸数字相压 0）；AC6 / AC7 / AC8 保持 ✓（契约与 golden 未动；重复统计逐字相同；回归全绿）。**未覆盖**：标签体不避让管件几何与三维尺寸线本身；分支名药丸在本样本未到显示阈值。
+- **验收对照**：AC5 ✓（connection tag 多行左对齐、行距一致、引线从体边指向管端并带圆点；name tag 黑框方框；弯头 PE 药丸远景按 LOD 隐藏、`mbd_lod=0` 可关，显示时与尺寸数字不相压——实测三视角标签↔尺寸数字相压 0）；AC6 / AC7 / AC8 保持 ✓（契约与 golden 未动；重复统计逐字相同；回归全绿）。**未覆盖**：标签体不避让管件几何与三维尺寸线本身（→ §9.3 已补）；分支名药丸在本样本未到显示阈值。
+
+### 9.3 标签体避让管件包围盒与三维尺寸线（用户 2026-09-12 23:21「近景尾端卡片不再压在阀体上」；代码为交接链上遗留的工作树，2026-09-13 复核、补候选圈与不出屏规则、实机验证并提交）
+
+细节见 ADR 0059。
+
+- **宿主缝** `facade/createDimensionSystem.ts`：`DimensionViewerAdapter.queryLayoutObstacles?(region: DesignBox): LayoutObstacle[]`（可选；没有就只让开数字 / 标签 / 描边）。`adapters/dtxDimensionViewerAdapter.ts` 用 `getDtxLayer` 实现：设计空间区域 → 场景世界盒 → `DTXLayer.collectObjectBoundsIntersecting(worldBox, { visibleOnly: true })`（新，局部毫米 AABB 一次相交测试、只回可见对象）→ 每个盒子 8 角点经「毫米→场景」「设计→场景」同一对矩阵回到设计空间；`ViewerPanel.vue` 接 `getDtxLayer`。
+- **内核** `kernel/geometry/obstacleGeometry.ts`（新：凸包、多边形面积、矩形裁剪、矩形∩凸多边形面积、线段在矩形内长度）；`kernel/layout/tagBillboard.ts`：`tagObstacleRegion`（候选包络反投到锚点深度 ± 包络对角线）、`projectObstacleOutline`（8 角点投影凸包，相机后 / 远平面外丢弃）、`dimensionStrokes`（其它布局的 line / path 段）、`collectTagObstacles`；`placeTagBillboards` 先取零侵入的候选位，没有则取加权侵入面积最小者（数字 / 已放标签 4、描边 4 px 带 2、构件凸包 1 / px²，1e-6 px² 内先到者赢）；候选位扩为四圈（standoff × 1 / 1.6 / 2.4 / 3.4），有整块在屏内的候选位时只在其中挑（不为躲障碍出屏）。`layoutViewport.ts` / `dimensionViewport.ts` 透传 `obstacles`。
+- **验证**（本会话实跑）：单测 55 文件 / 314 通过（`obstacleGeometry.test.ts`、`tagBillboard.test.ts` 14）；eslint 0；type-check 本改动新增 0；e2e fixture 2/2；真实 Chrome 三视角统计与截图见 `docs/verification/mbd-3d-dimension-presentation-2026-09-12/README.md`「标签避让管件包围盒与尺寸描边」段——中景尾端卡片与位号从阀体上换到手轮上方 / 阀体右侧（与构件凸包重叠 0），近景两者离开阀体本体（阀门凸包盖住右半画布，取最少侵入位），三视角标签体内描边 0、标签↔数字 / 标签↔标签 0，重复运行与宿主帧循环结果逐字相同。
+- **验收对照**：AC5 补齐「不压管件几何」；AC6 / AC7 / AC8 保持 ✓。**未覆盖**：障碍是包围盒凸包而非网格轮廓（透视近景凸包大于本体）；引线不避让构件；坐标 gizmo 覆盖层。
