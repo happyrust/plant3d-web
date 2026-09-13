@@ -1,5 +1,7 @@
 import { computed, reactive, ref, watch, type Ref } from 'vue';
 
+import { Box3, Matrix4, Vector3 } from 'three';
+
 import type {
   fetchNegativeNouns,
   queryNearbyByRefno,
@@ -69,6 +71,13 @@ type ViewerLike = {
 type ViewerRuntimeLike = ViewerLike & {
   __dtxLayer?: unknown;
   __dtxAfterInstancesLoaded?: (dbno: number, loadedRefnos: string[]) => void;
+};
+
+type Aabb6 = [number, number, number, number, number, number];
+
+/** `DTXLayer.getGlobalModelMatrix()` 的最小形状（列主序 16 元素）；测试桩只需给这一个方法。 */
+type DtxLayerMatrixSource = {
+  getGlobalModelMatrix?: () => { elements: ArrayLike<number> } | null | undefined;
 };
 
 type SelectionLike = {
@@ -316,6 +325,79 @@ function isFiniteAabb6(aabb: [number, number, number, number, number, number] | 
     && aabb[3] >= aabb[0]
     && aabb[4] >= aabb[1]
     && aabb[5] >= aabb[2];
+}
+
+/**
+ * 场景坐标 ↔ E3D 世界 mm 的换算。
+ *
+ * 查看器里的一切几何读数（`scene.getAABB`、拾取 `hit.worldPos`）都在 `DTXLayer` 全局矩阵**之后**的场景坐标里——
+ * 缺省 `modelUnit=mm` 时该矩阵是 0.001 缩放 + 以首个加载模型盒中心重心化（`ViewerPanel.vue::applyDtxGlobalTransformOnce`），
+ * 也就是「米、已平移」；而 `/api/v1/spatial/*`、旧 `sqlite-spatial` 以及 `draft.center` 一律是 E3D 世界 mm。
+ * 两边不换算，「当前选中 / 拾取中心」就会把 `(-0.3, 0, -0.6)` 当 mm 发出去、落到 E3D 原点旁边
+ * （plan 2026-09-13 空间范围查询 §7 第 6 步核出的 B4）。
+ *
+ * 约定：`draft.center`、请求、结果项的 `position` / `bbox` / `distance` 全部是 mm；只在读查看器（→ mm）与
+ * 写查看器（飞行、代理盒 → 场景）两个边界换算。矩阵缺失或为单位阵时两套坐标相同，换算是恒等。
+ */
+export type SceneWorldTransform = {
+  /** 全局矩阵是否为单位阵（或根本没有）。 */
+  identity: boolean;
+  pointToWorldMm: (point: SpatialQueryPoint) => SpatialQueryPoint;
+  pointToScene: (point: SpatialQueryPoint) => SpatialQueryPoint;
+  aabbToWorldMm: (aabb: Aabb6) => Aabb6;
+  aabbToScene: (aabb: Aabb6) => Aabb6;
+};
+
+const IDENTITY_SCENE_WORLD_TRANSFORM: SceneWorldTransform = {
+  identity: true,
+  pointToWorldMm: (point) => ({ ...point }),
+  pointToScene: (point) => ({ ...point }),
+  aabbToWorldMm: (aabb) => [...aabb] as Aabb6,
+  aabbToScene: (aabb) => [...aabb] as Aabb6,
+};
+
+function isIdentityMatrixElements(elements: ArrayLike<number>): boolean {
+  if (elements.length !== 16) return false;
+  for (let i = 0; i < 16; i += 1) {
+    const expected = i % 5 === 0 ? 1 : 0;
+    if (Math.abs(elements[i]! - expected) > 1e-12) return false;
+  }
+  return true;
+}
+
+function transformPoint(point: SpatialQueryPoint, matrix: Matrix4): SpatialQueryPoint {
+  const v = new Vector3(point.x, point.y, point.z).applyMatrix4(matrix);
+  return { x: v.x, y: v.y, z: v.z };
+}
+
+function transformAabb(aabb: Aabb6, matrix: Matrix4): Aabb6 {
+  const box = new Box3(new Vector3(aabb[0], aabb[1], aabb[2]), new Vector3(aabb[3], aabb[4], aabb[5])).applyMatrix4(matrix);
+  return [box.min.x, box.min.y, box.min.z, box.max.x, box.max.y, box.max.z];
+}
+
+/** 从查看器上挂的 `__dtxLayer` 读全局矩阵；读不到、非法或不可逆都退回恒等换算。 */
+export function resolveSceneWorldTransform(viewer: ViewerLike | null | undefined): SceneWorldTransform {
+  const layer = (viewer as ViewerRuntimeLike | null | undefined)?.__dtxLayer as DtxLayerMatrixSource | null | undefined;
+  const elements = layer?.getGlobalModelMatrix?.()?.elements;
+  if (!elements || elements.length !== 16 || isIdentityMatrixElements(elements)) {
+    return IDENTITY_SCENE_WORLD_TRANSFORM;
+  }
+  const values = Array.from(elements);
+  if (values.some((value) => !Number.isFinite(value))) {
+    return IDENTITY_SCENE_WORLD_TRANSFORM;
+  }
+  const toScene = new Matrix4().fromArray(values);
+  if (toScene.determinant() === 0) {
+    return IDENTITY_SCENE_WORLD_TRANSFORM;
+  }
+  const toWorldMm = toScene.clone().invert();
+  return {
+    identity: false,
+    pointToWorldMm: (point) => transformPoint(point, toWorldMm),
+    pointToScene: (point) => transformPoint(point, toScene),
+    aabbToWorldMm: (aabb) => transformAabb(aabb, toWorldMm),
+    aabbToScene: (aabb) => transformAabb(aabb, toScene),
+  };
 }
 
 function hasRenderableSpatialResult(viewer: ViewerRuntimeLike, refno: string): boolean {
@@ -899,11 +981,13 @@ async function loadSpatialQueryAabbProxies(
     const loaded = uniqStrings(proxyResult.loadedRefnos);
     if (loaded.length > 0) {
       (viewer.scene.ensureRefnos as (refnos: string[], opts?: { computeAabb?: boolean }) => void)(loaded, { computeAabb: true });
+      // 代理盒本身按 mm 写进 DTXLayer（渲染时再乘全局矩阵）；这里缓存到 scene.objects 的盒要与 `getAABB` 同一套场景坐标。
+      const transform = resolveSceneWorldTransform(viewer);
       for (const refno of loaded) {
         const matched = group.find((entry) => entry.refno === refno);
         const aabb6 = bboxToAabb6(matched?.item.bbox);
         if (aabb6 && viewer.scene.objects[refno]) {
-          viewer.scene.objects[refno]!.aabb = aabb6;
+          viewer.scene.objects[refno]!.aabb = transform.aabbToScene(aabb6);
         }
       }
       viewer.scene.setObjectsVisible(loaded, true);
@@ -972,15 +1056,20 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
     { flush: 'sync' },
   );
 
+  /** 拾取到的 `worldPos` 是 three 场景坐标（已乘 DTX 全局矩阵），进 `draft.center` 前换回 E3D mm。 */
+  function pickedWorldPosToCenterMm(worldPos: [number, number, number]): SpatialQueryPoint {
+    return resolveSceneWorldTransform(viewerRef.value).pointToWorldMm({
+      x: worldPos[0],
+      y: worldPos[1],
+      z: worldPos[2],
+    });
+  }
+
   watch(
     () => toolStore.pickedQueryCenter.value,
     (picked) => {
       if (!picked) return;
-      draft.center = {
-        x: picked.worldPos[0],
-        y: picked.worldPos[1],
-        z: picked.worldPos[2],
-      };
+      draft.center = pickedWorldPosToCenterMm(picked.worldPos);
       draft.rangeCenterSource = 'pick';
     },
     { deep: true }
@@ -1030,7 +1119,8 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
       error.value = '无法解析当前选中构件的位置';
       return;
     }
-    draft.center = aabbToCenter(aabb);
+    // `getAABB` 给的是场景坐标；`draft.center` 一律 mm。
+    draft.center = resolveSceneWorldTransform(viewer).pointToWorldMm(aabbToCenter(aabb));
     draft.rangeCenterSource = 'selected';
     draft.refno = selectedRefno;
     error.value = null;
@@ -1061,6 +1151,8 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
   function queryLocal(viewer: ViewerLike, request: SpatialQueryRequest): SpatialQueryResultItem[] {
     const refnos = resolveLoadedRefnos(viewer);
     const results: SpatialQueryResultItem[] = [];
+    // 查看器盒是场景坐标，请求中心是 mm：盒先换回 mm，距离 / 相交才与服务端同口径。
+    const transform = resolveSceneWorldTransform(viewer);
     const radius = request.radius;
     const minx = request.center.x - radius;
     const miny = request.center.y - radius;
@@ -1073,8 +1165,9 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
       if (request.centerSource === 'refno' && request.includeSelf === false && request.refno && normalizeRefno(refno) === normalizeRefno(request.refno)) {
         continue;
       }
-      const aabb = viewer.scene.getAABB([refno]) || viewer.scene.objects[refno]?.aabb || null;
-      if (!aabb) continue;
+      const sceneAabb = viewer.scene.getAABB([refno]) || viewer.scene.objects[refno]?.aabb || null;
+      if (!sceneAabb) continue;
+      const aabb = transform.aabbToWorldMm(sceneAabb);
       const center = aabbToCenter(aabb);
       const distance = aabbMinDistanceToPoint(aabb, request.center);
       const intersectsCube =
@@ -1361,11 +1454,7 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
       if (!picked) {
         throw new Error('请先拾取查询中心点');
       }
-      draft.center = {
-        x: picked.worldPos[0],
-        y: picked.worldPos[1],
-        z: picked.worldPos[2],
-      };
+      draft.center = pickedWorldPosToCenterMm(picked.worldPos);
       return { request: normalizeRequestFromCenter(draft.center, centerSource) };
     }
 
@@ -1517,7 +1606,10 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
       viewer.scene.setObjectsVisible([item.refno], true);
       viewer.scene.setObjectsSelected([item.refno], true);
 
-      const aabb = viewer.scene.getAABB([item.refno]) ?? bboxToAabb6(item.bbox);
+      // 场景里拿不到盒时退回结果项的 bbox（mm），飞行前换到场景坐标。
+      const fallbackAabb = bboxToAabb6(item.bbox);
+      const aabb = viewer.scene.getAABB([item.refno])
+        ?? (fallbackAabb ? resolveSceneWorldTransform(viewer).aabbToScene(fallbackAabb) : null);
       if (aabb) {
         viewer.cameraFlight.flyTo({ aabb, fit: true, duration: 0.8 });
       }

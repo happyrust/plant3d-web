@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { nextTick, ref } from 'vue';
 
+import { Matrix4 } from 'three';
+
 const dtxLoaderMocks = vi.hoisted(() => ({
   loadDtxAabbProxyRefnos: vi.fn(),
 }));
@@ -79,6 +81,7 @@ import {
   createSpatialQueryStore,
   initializeSpatialQueryFromUrl,
   parseSpatialQueryUrlParams,
+  resolveSceneWorldTransform,
 } from './useSpatialQuery';
 
 import type {
@@ -1413,5 +1416,221 @@ describe('createSpatialQueryStore', () => {
       autoSubmit: false,
     });
     expect(store.submitQuery).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * DTX 缺省全局矩阵 = 0.001 缩放 + 重心化（`applyDtxGlobalTransformOnce`）：场景坐标是「米、已平移」，
+ * 服务端与 `draft.center` 是 E3D mm。这里用 t=(-1,-2,-3) 模拟：mm 盒 [0,0,0,10,10,10] 在场景里是 [-1,-2,-3,-0.99,-1.99,-2.99]。
+ */
+const MM_TO_SCENE_MATRIX = new Matrix4().makeScale(0.001, 0.001, 0.001).setPosition(-1, -2, -3);
+const LOADED_A_SCENE_AABB: [number, number, number, number, number, number] = [-1, -2, -3, -0.99, -1.99, -2.99];
+
+function expectPointClose(actual: { x: number; y: number; z: number } | undefined, expected: [number, number, number], digits = 6) {
+  expect(actual).toBeTruthy();
+  expect(actual!.x).toBeCloseTo(expected[0], digits);
+  expect(actual!.y).toBeCloseTo(expected[1], digits);
+  expect(actual!.z).toBeCloseTo(expected[2], digits);
+}
+
+function expectAabbClose(actual: ArrayLike<number> | null | undefined, expected: number[], digits = 6) {
+  expect(actual).toBeTruthy();
+  expect(actual!.length).toBe(expected.length);
+  expected.forEach((value, index) => expect(actual![index]).toBeCloseTo(value, digits));
+}
+
+describe('resolveSceneWorldTransform', () => {
+  it('没有 DTXLayer、没有矩阵方法或矩阵是单位阵时都是恒等换算', () => {
+    expect(resolveSceneWorldTransform(null).identity).toBe(true);
+    expect(resolveSceneWorldTransform({ __dtxLayer: {} } as any).identity).toBe(true);
+    expect(resolveSceneWorldTransform({ __dtxLayer: { getGlobalModelMatrix: () => null } } as any).identity).toBe(true);
+    const identity = resolveSceneWorldTransform({ __dtxLayer: { getGlobalModelMatrix: () => new Matrix4() } } as any);
+    expect(identity.identity).toBe(true);
+    expect(identity.pointToWorldMm({ x: 1, y: 2, z: 3 })).toEqual({ x: 1, y: 2, z: 3 });
+    expect(identity.aabbToScene([0, 0, 0, 1, 1, 1])).toEqual([0, 0, 0, 1, 1, 1]);
+  });
+
+  it('0.001 缩放 + 重心化矩阵：点与盒在场景 ↔ mm 之间互逆', () => {
+    const transform = resolveSceneWorldTransform({ __dtxLayer: { getGlobalModelMatrix: () => MM_TO_SCENE_MATRIX } } as any);
+    expect(transform.identity).toBe(false);
+    // 场景里选中盒的中心 (-0.995, -1.995, -2.995) 就是 mm 里的 (5, 5, 5)
+    expectPointClose(transform.pointToWorldMm({ x: -0.995, y: -1.995, z: -2.995 }), [5, 5, 5]);
+    expectPointClose(transform.pointToScene({ x: 5, y: 5, z: 5 }), [-0.995, -1.995, -2.995]);
+    expectAabbClose(transform.aabbToWorldMm(LOADED_A_SCENE_AABB), [0, 0, 0, 10, 10, 10]);
+    expectAabbClose(transform.aabbToScene([20, 0, 0, 30, 10, 10]), [-0.98, -2, -3, -0.97, -1.99, -2.99]);
+    const roundTrip = transform.aabbToWorldMm(transform.aabbToScene([123.4, -56.7, 8.9, 234.5, 0, 90.1]));
+    expectAabbClose(roundTrip, [123.4, -56.7, 8.9, 234.5, 0, 90.1], 6);
+  });
+
+  it('不可逆或含非数的矩阵退回恒等，不让查询带着 NaN 出门', () => {
+    const singular = new Matrix4().makeScale(0, 0, 0);
+    expect(resolveSceneWorldTransform({ __dtxLayer: { getGlobalModelMatrix: () => singular } } as any).identity).toBe(true);
+    const nan = { elements: new Array(16).fill(Number.NaN) };
+    expect(resolveSceneWorldTransform({ __dtxLayer: { getGlobalModelMatrix: () => nan } } as any).identity).toBe(true);
+  });
+});
+
+describe('createSpatialQueryStore · 场景坐标 ↔ mm（plan 2026-09-13 §7 第 6 步 B4）', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    __resetNegativeNounRegistryForTests();
+    spatialSourceMocks.state.kind = 'gen-model-v1';
+    spatialSourceMocks.state.specValues = false;
+    dbMetaMocks.ensureDbMetaInfoLoaded.mockResolvedValue(undefined);
+    dbMetaMocks.getDbnumByRefno.mockReturnValue(7997);
+    dtxLoaderMocks.loadDtxAabbProxyRefnos.mockImplementation((_layer, _dbno, entries) => ({
+      loadedRefnos: entries.filter((entry: any) => !!entry.aabb).map((entry: any) => String(entry.refno)),
+      missingRefnos: entries.filter((entry: any) => !entry.aabb).map((entry: any) => String(entry.refno)),
+      loadedObjects: entries.filter((entry: any) => !!entry.aabb).length,
+      skippedObjects: 0,
+    }));
+  });
+
+  /** 查看器桩：`getAABB` 回场景坐标（已乘全局矩阵），`__dtxLayer` 暴露那枚矩阵。 */
+  function createScaledViewerStub() {
+    const viewer = createViewerStub();
+    viewer.__dtxLayer = { getGlobalModelMatrix: () => MM_TO_SCENE_MATRIX.clone() };
+    viewer.scene.objects.loaded_a.aabb = LOADED_A_SCENE_AABB;
+    viewer.scene.getAABB = vi.fn((ids: string[]) => (ids[0] === 'loaded_a' ? LOADED_A_SCENE_AABB : null));
+    return viewer;
+  }
+
+  it('「当前选中」中心先换回 mm 再发服务端，本地扫描也按 mm 量距', async () => {
+    const viewer = createScaledViewerStub();
+    const queryNearbyByPosition = vi.fn(async (): Promise<SpatialQueryResult> => ({
+      success: true,
+      truncated: false,
+      total_count: 2,
+      returned_count: 2,
+      page: 1,
+      per_page: 100,
+      has_more: false,
+      center: { x: 5, y: 5, z: 5, source: 'position' },
+      filter_options: { include_negative: false, nouns: [{ value: 'PIPE', count: 1 }, { value: 'EQUI', count: 1 }], spec_values: [] },
+      results: [
+        { refno: 'loaded_a', noun: 'PIPE', spec_value: 0, distance: 0, aabb: { min: { x: 0, y: 0, z: 0 }, max: { x: 10, y: 10, z: 10 } } },
+        { refno: 'server_only', noun: 'EQUI', spec_value: 0, distance: 15, aabb: { min: { x: 20, y: 0, z: 0 }, max: { x: 30, y: 10, z: 10 } } },
+      ],
+    }));
+
+    const store = createSpatialQueryStore({
+      viewerRef: ref(viewer),
+      selection: { selectedRefno: { value: 'loaded_a' } } as any,
+      toolStore: { pickedQueryCenter: { value: null }, setToolMode: vi.fn(), setPickedQueryCenter: vi.fn() } as any,
+      queryNearbyByPosition,
+    });
+
+    store.draft.mode = 'range';
+    store.draft.rangeCenterSource = 'selected';
+    store.draft.radius = 50;
+
+    await store.submitQuery();
+
+    expect(store.status.value).toBe('ready');
+    expect(store.error.value).toBeNull();
+    // 改前这里发出去的是场景坐标 (-0.995, -1.995, -2.995)
+    const [x, y, z, radius] = queryNearbyByPosition.mock.calls[0]! as unknown as [number, number, number, number];
+    expect(x).toBeCloseTo(5, 6);
+    expect(y).toBeCloseTo(5, 6);
+    expect(z).toBeCloseTo(5, 6);
+    expect(radius).toBe(50);
+    expectPointClose(store.draft.center, [5, 5, 5]);
+
+    // 本地扫描按 mm 量距后命中 loaded_a，与服务端同一条合并成 merged（改前场景盒对 mm 中心相距上千 mm，本地扫不到）
+    const local = store.resultSet.value?.items.find((item) => item.refno === 'loaded_a');
+    expect(local?.matchedBy).toBe('merged');
+    expect(local?.distance).toBe(0);
+    expectPointClose(local?.position ?? undefined, [5, 5, 5]);
+    expect(local?.bbox?.min.x).toBeCloseTo(0, 6);
+    expect(local?.bbox?.max.x).toBeCloseTo(10, 6);
+    expect(store.resultSet.value?.items.map((item) => item.refno)).toEqual(['loaded_a', 'server_only']);
+  });
+
+  it('「拾取中心」的 worldPos 是场景坐标，进草稿时换回 mm', async () => {
+    const viewer = createScaledViewerStub();
+    const pickedQueryCenter = ref<{ entityId: string; worldPos: [number, number, number] } | null>(null);
+    const store = createSpatialQueryStore({
+      viewerRef: ref(viewer),
+      selection: { selectedRefno: { value: null } } as any,
+      toolStore: { pickedQueryCenter, setToolMode: vi.fn(), setPickedQueryCenter: vi.fn() } as any,
+    });
+
+    pickedQueryCenter.value = { entityId: 'loaded_a', worldPos: [-0.995, -1.995, -2.995] };
+    await nextTick();
+
+    expect(store.draft.rangeCenterSource).toBe('pick');
+    expectPointClose(store.draft.center, [5, 5, 5]);
+  });
+
+  it('场景里拿不到盒时，飞向结果项 bbox 要先从 mm 换到场景坐标', async () => {
+    const viewer = createScaledViewerStub();
+    viewer.__dtxAfterInstancesLoaded = vi.fn();
+    delete viewer.scene.objects.server_only;
+    const requestId = 'req-scaled';
+    const addEventListenerSpy = vi.spyOn(window, 'addEventListener');
+    const dispatchEventSpy = vi.spyOn(window, 'dispatchEvent');
+
+    const store = createSpatialQueryStore({
+      viewerRef: ref(viewer),
+      selection: { selectedRefno: { value: null } } as any,
+      toolStore: { pickedQueryCenter: { value: null }, setToolMode: vi.fn(), setPickedQueryCenter: vi.fn() } as any,
+      createRequestId: () => requestId,
+    });
+
+    store.resultSet.value = {
+      request: {
+        mode: 'range',
+        centerSource: 'coordinates',
+        center: { x: 5, y: 5, z: 5 },
+        radius: 100,
+        shape: 'sphere',
+        filters: { nouns: [], keyword: '', onlyLoaded: false, onlyVisible: false, includeNegative: false, specValues: [] },
+        limit: 100,
+        sortBy: 'distanceAsc',
+      },
+      items: [
+        {
+          refno: 'server_only',
+          noun: 'EQUI',
+          specValue: 0,
+          specName: '未知',
+          distance: 15,
+          loaded: false,
+          visible: false,
+          matchedBy: 'server-spatial-index',
+          bbox: { min: { x: 20, y: 0, z: 0 }, max: { x: 30, y: 10, z: 10 } },
+        },
+      ],
+      page: 1,
+      perPage: 100,
+      returnedCount: 1,
+      totalPages: 1,
+      hasMore: false,
+      total: 1,
+      loadedCount: 0,
+      unloadedCount: 1,
+      truncated: false,
+      warnings: [],
+      groups: [],
+    };
+
+    const activation = store.activateResult(store.resultSet.value.items[0]!);
+    await vi.waitFor(() => {
+      expect(dispatchEventSpy).toHaveBeenCalledWith(expect.objectContaining({ type: 'showModelByRefnos' }));
+    });
+    const listener = addEventListenerSpy.mock.calls.find(([eventName]) => eventName === 'showModelByRefnosDone')?.[1] as EventListener;
+    listener(new CustomEvent('showModelByRefnosDone', { detail: { requestId, ok: ['server_only'], fail: [], error: null } }));
+    await activation;
+
+    expect(store.error.value).toBeNull();
+    // 代理盒按 mm 交给 DTXLayer（它渲染时自己乘全局矩阵）
+    expect(dtxLoaderMocks.loadDtxAabbProxyRefnos).toHaveBeenCalledWith(
+      viewer.__dtxLayer,
+      7997,
+      [expect.objectContaining({ refno: 'server_only', aabb: { min: [20, 0, 0], max: [30, 10, 10] } })],
+    );
+    // 飞行走场景坐标：mm [20,0,0,30,10,10] → [-0.98,-2,-3,-0.97,-1.99,-2.99]
+    const flyCall = (viewer.cameraFlight.flyTo as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0] as { aabb: number[] };
+    expectAabbClose(flyCall.aabb, [-0.98, -2, -3, -0.97, -1.99, -2.99]);
   });
 });
