@@ -162,7 +162,7 @@ describe('legacy 适配器：零逻辑委托', () => {
     expect(getModelSource('legacy').meshes.meshUrl('abc123', 'L1')).toBe(legacyMeshUrl('abc123', 'L1'));
   });
 
-  it('gen-model-v1：树 / 几何记录 / 网格 / 属性全部走 /api/v1，一个旧后端函数都不碰；同种类只建一份', () => {
+  it('gen-model-v1：树 / 几何记录 / 网格 / 属性 / 空间查询全部走 /api/v1，一个旧后端函数都不碰；同种类只建一份', () => {
     const source = getModelSource('gen-model-v1');
     const legacy = getModelSource('legacy');
     expect(source.kind).toBe('gen-model-v1');
@@ -173,10 +173,14 @@ describe('legacy 适配器：零逻辑委托', () => {
     expect(source.records.instanceEntriesByRefnos).not.toBe(legacy.records.instanceEntriesByRefnos);
     expect(source.attributes.typeInfo).not.toBe(legacy.attributes.typeInfo);
     expect(source.attributes.uiAttr).not.toBe(legacy.attributes.uiAttr);
+    expect(source.spatial.nearby).not.toBe(legacy.spatial.nearby);
+    expect(source.spatial.capabilities).toEqual({ specValues: false });
+    expect(legacy.spatial.capabilities).toEqual({ specValues: true });
     expect(legacyMocks.e3dGetWorldRoot).not.toHaveBeenCalled();
     expect(legacyMocks.queryInstanceEntriesByRefnos).not.toHaveBeenCalled();
     expect(legacyMocks.pdmsGetTypeInfo).not.toHaveBeenCalled();
     expect(legacyMocks.pdmsGetUiAttr).not.toHaveBeenCalled();
+    expect(legacyMocks.queryNearbySpatial).not.toHaveBeenCalled();
   });
 
   it('gen-model-v1：树的 visibleInsts 与几何加载共用记录源缓存（一次显示只 ensure 一次）', async () => {

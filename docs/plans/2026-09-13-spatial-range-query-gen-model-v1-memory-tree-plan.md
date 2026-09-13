@@ -2,9 +2,10 @@
 
 - 日期：2026-09-13
 - 状态：**已批准（Plannotator 第 2 轮 `approved`，2026-09-13 10:38）**；实施中，§5 六项按推荐项 (a) 执行
-  - 进度：**P2 已完成**（2026-09-13 11:45，plant3d-web 单独一提交，见 §4 P2 备注）；P0 / P1 仍等并行会话的迁移改动收口
+  - 进度：**P2 已完成**（2026-09-13 11:45，plant3d-web `8127bcb`，见 §4 P2 备注）；**P3 代码与单测已完成**（11:52，plant3d-web
+    单独一提交，见 §4 P3 备注；与真服务联调一项要等 P1）；P0 / P1 仍等并行会话的迁移改动收口
     （gen-model-refactor 到 11:26 还在连续提交 `7bacdb81f` 等，`verification/migration-baseline-20260913/` 2 万余文件未跟踪）；
-    P3 / P4 可在 P2 之上继续
+    P4 可在 P3 之上继续
   - 第 1 轮（09:36）唯一批注落在后端基线行：「先提交这个」。已落实：后端原 83 个在飞改动已由并行会话提交为
     `f888e9dc2 refactor: retire publish stage and complete lazy data routing`（10:10，215 文件），其后又有
     `b82d6fbbb fix(room)` / `8f99cbc64 fix(api)` 两条（10:25 / 10:26）；分支 10:21 改名
@@ -262,6 +263,23 @@ P2 只碰 plant3d-web，可以先行。P1 的新代码集中在新模块 `spatia
 - 验收：映射用例（refno 归一、`spec_value` 缺省 0、`groups` 透传、`spatial_not_ready` 分型为 retryable、`not_found` 分型）；
   与 P1 真服务联调一次（§7）。
 - 文件：`src/api/genModelV1Api.ts`、`src/model-source/genModelV1/{index.ts, spatialSource.ts}` 及对应 `*.test.ts`。
+- **完成备注（2026-09-13，代码 + 单测；真服务联调待 P1）**：
+  - `genModelV1Api.ts`：`genModelV1SpatialNearby / genModelV1SpatialNearbyRefnos / genModelV1SpatialNegativeNouns`（GET，参数进 query，
+    refno 经 `toV1Refno`，`nouns / dbnums` 逗号拼接，`nearby/refnos` 不发 `page / per_page`）+ 响应 DTO（`SpatialNearbyResponse` 等，
+    与 §3.1 逐字段）；`GenModelV1ErrorCode` 新增 `spatial_not_ready`，并入 `isRetryable`。
+  - `genModelV1/spatialSource.ts`：入参 `x,y,z → position`、`nouns` 拆数组、`sort=spec_distance → distance`、`spec_values` 丢弃、
+    `per_page ?? max_results`；出参 refno 归一 `a_b`、`spec_value` 一律 0、`filter_options.spec_values = []`、盒三元组转 `{x,y,z}`。
+  - **专业 `groups` 不给**（v1 没有专业维度，store 现有 `buildGroups` 会把本页全部归到 spec 0「其他」一组，翻页计数仍以
+    `total_count` 为准）；服务端的 dbnum 分组放进 legacy 结果类型新加的可选格 `dbnum_groups`，连同 `results[].dbnum` /
+    `coverage` / `spatial_state` 一起带出——这四格是 `genModelSpatialApi.ts` 类型上的**可选新增**，legacy 服务端不给也不影响；
+    P4 按 `capabilities.specValues === false` 改按库分组、优先用 `results[].dbnum` 分桶、按 `coverage` 提示「仅含已生成模型的构件」。
+  - 错误：refno 模式 `not_found` 折成 `{success:false, error:"构件 X 还没有生成过模型…请先显示该构件"}`（§5-3 按 (a)，store 会把它当
+    查询失败显示）；其余 `GenModelV1ApiError` 原样抛出，`spatial_not_ready`（503 + `Retry-After`）`isRetryable === true`，P4 据此提示重试。
+  - 验证：`npx vitest run src/composables/useSpatialQuery.test.ts src/model-source src/api/genModelV1Api.test.ts src/api/genModelSpatialApi.test.ts
+    src/components/spatial-query` → 14 文件 186 用例全绿（新增 `spatialSource.test.ts` 7 例、`genModelV1Api.test.ts` +4 例、
+    `model-source/index.test.ts` 的 v1 用例补「spatial 不碰旧后端、specValues:false」）；`node scripts/type-check.mjs` 本切片文件 0 新增
+    （此刻工作树里并行会话正在改测量 / 尺寸标注文件，新增的 `dtxDimensionSnapPort.ts|TS2741` 等 8 条均在那些文件里，与本切片无关）；
+    `npx eslint` 改动文件 0 错。§7 第 3 / 5 步（真服务 + 浏览器）**未验证**，等 P1 落地后一并做。
 
 ### P4 — 批量加载与抽屉 UI（plant3d-web）
 

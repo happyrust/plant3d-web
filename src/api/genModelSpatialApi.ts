@@ -35,6 +35,8 @@ export type SpatialQueryResultItem = {
   refno: string;
   noun: string;
   spec_value: number;
+  /** 所属库；gen-model-v1 源服务端直接给（DTX 分桶键），legacy 没有这一格、调用方按 refno 查 */
+  dbnum?: number;
   /** 构件名称；索引未回填名称且模型库解析失败时缺省 */
   name?: string;
   aabb?: {
@@ -141,7 +143,18 @@ export type SpatialQueryResult = {
   filter_options?: SpatialQueryFilterOptions;
   /** 完整命中集合按专业分组的计数，不受分页影响 */
   groups?: SpatialQuerySpecGroup[];
+  /** 完整命中集合按库（dbnum）分组的计数，不受分页影响；gen-model-v1 源给（它没有专业维度），legacy 没有 */
+  dbnum_groups?: SpatialQueryDbnumGroup[];
+  /** gen-model-v1 源：结果只覆盖哪一层索引（第一版 `global-tree` = 已生成过模型的构件） */
+  coverage?: string;
+  /** gen-model-v1 源：服务端空间树状态字面值 */
+  spatial_state?: string;
   error?: string;
+};
+
+export type SpatialQueryDbnumGroup = {
+  dbnum: number;
+  count: number;
 };
 
 export type SpatialNearbyResult = SpatialQueryResult;

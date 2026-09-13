@@ -9,6 +9,9 @@ import {
   genModelV1MeshUrl,
   genModelV1ModelEnsure,
   genModelV1ModelRecords,
+  genModelV1SpatialNearby,
+  genModelV1SpatialNearbyRefnos,
+  genModelV1SpatialNegativeNouns,
   genModelV1TaskGet,
   genModelV1TreeChildren,
   isGenModelV1ApiError,
@@ -297,5 +300,66 @@ describe('genModelV1MeshUrl / isValidGeoHash（与服务端 mesh_glb::is_valid_g
       expect(isValidGeoHash(bad)).toBe(false);
       expect(() => genModelV1MeshUrl(bad, BASE)).toThrow(GenModelV1ApiError);
     }
+  });
+});
+
+describe('spatial/*（spec §4.13：GET，参数进 query）', () => {
+  it('nearby：refno 转 a/b，nouns / dbnums 逗号拼接，include_self=false 显式发出，没给的格不出现在 URL', async () => {
+    const fetchImpl = fetchMockReturning(jsonResponse(200, { results: [], center: { x: 0, y: 0, z: 0, source: 'refno_aabb_center' } }));
+    await genModelV1SpatialNearby(
+      { refno: '24381_145018', radius: 5000, shape: 'cube', nouns: ['PIPE', 'EQUI'], dbnums: [24381, 24383], includeSelf: false, sort: 'distance', page: 2, perPage: 500 },
+      { baseUrl: BASE, fetchImpl, identity: { project: 'P', mdb: 'M' } },
+    );
+    const parsed = new URL(String(fetchImpl.mock.calls[0]![0]));
+    expect(parsed.origin + parsed.pathname).toBe(`${BASE}/api/v1/spatial/nearby`);
+    expect(fetchImpl.mock.calls[0]![1]?.method).toBe('GET');
+    expect(Object.fromEntries(parsed.searchParams)).toEqual({
+      project: 'P',
+      mdb: 'M',
+      refno: '24381/145018',
+      radius: '5000',
+      shape: 'cube',
+      nouns: 'PIPE,EQUI',
+      dbnums: '24381,24383',
+      include_self: 'false',
+      sort: 'distance',
+      page: '2',
+      per_page: '500',
+    });
+  });
+
+  it('nearby 点模式：x/y/z 逐个进 query（0 也要发），refno 不出现', async () => {
+    const fetchImpl = fetchMockReturning(jsonResponse(200, { results: [] }));
+    await genModelV1SpatialNearby({ position: { x: 0, y: -12.5, z: 3000 }, radius: 100, includeNegative: true }, { baseUrl: BASE, fetchImpl });
+    const parsed = new URL(String(fetchImpl.mock.calls[0]![0]));
+    expect(Object.fromEntries(parsed.searchParams)).toEqual({ x: '0', y: '-12.5', z: '3000', radius: '100', include_negative: 'true' });
+  });
+
+  it('nearby/refnos 同参但不发 page / per_page；negative-nouns 不带参数', async () => {
+    const refnos = fetchMockReturning(jsonResponse(200, { refnos: [], by_dbnum: {}, total_count: 0, truncated_results: false, result_cap: 100000 }));
+    await genModelV1SpatialNearbyRefnos({ refno: '24381/145018', radius: 800, includeSelf: false, page: 3, perPage: 50 }, { baseUrl: BASE, fetchImpl: refnos });
+    const parsed = new URL(String(refnos.mock.calls[0]![0]));
+    expect(parsed.pathname).toBe('/api/v1/spatial/nearby/refnos');
+    expect(Object.fromEntries(parsed.searchParams)).toEqual({ refno: '24381/145018', radius: '800', include_self: 'false' });
+
+    const negative = fetchMockReturning(jsonResponse(200, { nouns: ['NBOX'] }));
+    const resp = await genModelV1SpatialNegativeNouns({ baseUrl: BASE, fetchImpl: negative });
+    expect(String(negative.mock.calls[0]![0])).toBe(`${BASE}/api/v1/spatial/negative-nouns`);
+    expect(resp.nouns).toEqual(['NBOX']);
+  });
+
+  it('503 spatial_not_ready 走错误信封：code 原样、isRetryable 为真、Retry-After 进 retryAfterMs', async () => {
+    const fetchImpl = fetchMockReturning(jsonResponse(
+      503,
+      { code: 'spatial_not_ready', message: 'spatial tree is loading', detail: { state: 'loading' } },
+      { 'Retry-After': '5' },
+    ));
+    const error = await genModelV1SpatialNearby({ refno: '24381_145018', radius: 800 }, { baseUrl: BASE, fetchImpl })
+      .then(() => null, (e: unknown) => e as GenModelV1ApiError);
+    expect(error?.code).toBe('spatial_not_ready');
+    expect(error?.status).toBe(503);
+    expect(error?.isRetryable).toBe(true);
+    expect(error?.retryAfterMs).toBe(5000);
+    expect(error?.detail).toEqual({ state: 'loading' });
   });
 });

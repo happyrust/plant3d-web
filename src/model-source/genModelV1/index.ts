@@ -8,11 +8,9 @@
  * - `attributes`：`attributeSource.ts`（P4：`uiAttr` → `element/attributes`，`typeInfo` → 树节点两跳）；
  * - `keypoints`：`keypointSource.ts`（2026-09-12：测量 P-Point → `element/ptset`，成员点集 `include_members`；
  *   基本体关键点服务端无接口，回空带原因）；
- * - `spatial`：空间范围查询计划（2026-09-13）P2 只把端口立起来，v1 源暂时沿用改前行为——直连旧后端
- *   `/api/sqlite-spatial/*`（与 `useSpatialQuery` 改成经端口取数之前一模一样）；P3 换成 `/api/v1/spatial/*` 适配器。
+ * - `spatial`：`spatialSource.ts`（2026-09-13 空间范围查询 P3：抽屉范围 / 距离查询 → `/api/v1/spatial/{nearby, nearby/refnos,
+ *   negative-nouns}`，候选来自服务进程内 `GLOBAL_AABB_TREE`；无专业维度，`capabilities.specValues = false`）。
  */
-
-import { legacySpatialSource } from '../legacy/spatialSource';
 
 import { createGenModelV1AttributeSource } from './attributeSource';
 import {
@@ -25,6 +23,7 @@ import {
 import { createGenModelV1KeypointSource } from './keypointSource';
 import { resetBatchRecordsSupport } from './modelRecords';
 import { createGenModelV1ModelRecordSource, type GenModelV1ModelRecordSource } from './modelRecordSource';
+import { createGenModelV1SpatialSource } from './spatialSource';
 import { createGenModelV1TreeSource } from './treeSource';
 
 import type { MeshSource, ModelSource } from '../ports';
@@ -132,8 +131,7 @@ export function createGenModelV1ModelSource(): GenModelV1ModelSource {
     records,
     attributes: createGenModelV1AttributeSource({ tree }),
     keypoints: createGenModelV1KeypointSource(),
-    // P2 过渡：沿用改前的旧后端链路，P3 换成 /api/v1/spatial 适配器（见文件头）
-    spatial: legacySpatialSource,
+    spatial: createGenModelV1SpatialSource(),
     collectDbnum,
     activate,
     dispose,
@@ -147,3 +145,4 @@ export * from './modelRecordSource';
 export * from './instanceMapping';
 export * from './attributeSource';
 export * from './keypointSource';
+export * from './spatialSource';

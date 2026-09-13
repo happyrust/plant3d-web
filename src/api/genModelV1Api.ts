@@ -45,6 +45,8 @@ export type GenModelV1ErrorCode =
   | 'ref0_affiliation_conflict'
   | 'model_dependency_unavailable'
   | 'generation_failed'
+  /** `spatial/*`：进程内空间树还没 Ready（Loading / Rebuilding / Degraded），503 + `Retry-After`（spec §4.13） */
+  | 'spatial_not_ready'
   | 'internal'
   | 'network'
   | 'cancelled'
@@ -106,12 +108,13 @@ export class GenModelV1ApiError extends Error {
     return this.code === 'cancelled';
   }
 
-  /** 稍后重试有意义的一档（依赖暂时不可用 / 归属暂时解不出 / 网络）；不得负缓存。 */
+  /** 稍后重试有意义的一档（依赖暂时不可用 / 归属暂时解不出 / 空间树未就绪 / 网络）；不得负缓存。 */
   get isRetryable(): boolean {
     return (
       this.code === 'ref0_affiliation_unavailable' ||
       this.code === 'model_dependency_unavailable' ||
       this.code === 'initialization_not_ready' ||
+      this.code === 'spatial_not_ready' ||
       this.code === 'network'
     );
   }
@@ -849,6 +852,146 @@ export type TaskEntryDto = {
  */
 export function genModelV1TaskGet(taskId: string, options?: GenModelV1RequestOptions): Promise<TaskEntryDto> {
   return genModelV1Fetch<TaskEntryDto>(`/api/v1/tasks/${encodeURIComponent(taskId)}`, options);
+}
+
+// ---------------------------------------------------------------------------
+// 空间邻近查询（spec §4.13；plan `docs/plans/2026-09-13-spatial-range-query-gen-model-v1-memory-tree-plan.md` §3.1）
+// ---------------------------------------------------------------------------
+
+export type SpatialShape = 'sphere' | 'cube';
+/** 服务端排序；v1 没有专业维度，legacy 的 `spec_distance` 由适配器折成 `distance`。 */
+export type SpatialSort = 'distance' | 'name';
+
+export type SpatialPosition = { x: number; y: number; z: number };
+
+export type GenModelV1SpatialNearbyRequest = {
+  /** 与 `position` 二选一；`a_b` / `a/b`，中心取该构件（含子树）的 AABB */
+  refno?: string;
+  /** 与 `refno` 二选一；mm，世界坐标 */
+  position?: SpatialPosition;
+  /** mm，服务端要求 `0 < r ≤ 100000` */
+  radius: number;
+  /** 默认 sphere */
+  shape?: SpatialShape;
+  /** 大写比较；服务端收逗号分隔 */
+  nouns?: string[];
+  /** 分页前匹配 refno / noun（不匹配 name，§5-2 按 (a)） */
+  keyword?: string;
+  sort?: SpatialSort;
+  /** refno 模式默认 false：剔除自身与 `ancestors` 含 target 的子树 */
+  includeSelf?: boolean;
+  /** 默认 false：按 `TOTAL_NEG_NOUN_NAMES` 过滤负实体 */
+  includeNegative?: boolean;
+  /** 限定库 */
+  dbnums?: number[];
+  /** 从 1 起 */
+  page?: number;
+  /** 默认 500，上限 1000 */
+  perPage?: number;
+};
+
+/** 一条命中：盒是 mm 世界坐标的 min / max 三元组；`distance` 是 AABB 到中心（点或目标盒）的最小表面距离。 */
+export type SpatialNearbyItem = {
+  /** `a_b` */
+  refno: string;
+  dbnum: number;
+  noun: string;
+  /** 只对本页补（§5-2），解不出为 null */
+  name: string | null;
+  aabb: { min: [number, number, number]; max: [number, number, number] };
+  distance: number;
+  within_radius: boolean;
+};
+
+export type SpatialCenter = SpatialPosition & {
+  source: 'position' | 'refno_aabb_center' | (string & {});
+};
+
+export type SpatialNearbyResponse = {
+  results: SpatialNearbyItem[];
+  center: SpatialCenter;
+  radius: number;
+  shape: SpatialShape | (string & {});
+  total_count: number;
+  returned_count: number;
+  page: number;
+  per_page: number;
+  has_more: boolean;
+  candidate_count: number;
+  truncated_candidates: boolean;
+  candidate_cap: number;
+  /** 全集按库分组的计数，不受分页影响 */
+  groups: { dbnum: number; count: number }[];
+  filter_options: { nouns: { value: string; count: number; is_negative: boolean }[] };
+  /** `spatial_state` 字面值（`ready` / `ready_empty`…） */
+  spatial_state: string;
+  /** 第一版只覆盖全局树里的盒（§5-5 按 (a)） */
+  coverage: 'global-tree' | (string & {});
+  [key: string]: unknown;
+};
+
+export type SpatialNearbyRefnosResponse = {
+  /** `a_b`，完整命中集合（未分页），上限 `result_cap` */
+  refnos: string[];
+  by_dbnum: Record<string, string[]>;
+  total_count: number;
+  truncated_results: boolean;
+  result_cap: number;
+  center: SpatialCenter;
+  radius: number;
+  shape: SpatialShape | (string & {});
+  [key: string]: unknown;
+};
+
+export type SpatialNegativeNounsResponse = {
+  nouns: string[];
+};
+
+function spatialNearbyQuery(req: GenModelV1SpatialNearbyRequest): Record<string, QueryValue> {
+  return {
+    refno: req.refno !== undefined && req.refno !== '' ? toV1Refno(req.refno) : undefined,
+    x: req.position?.x,
+    y: req.position?.y,
+    z: req.position?.z,
+    radius: req.radius,
+    shape: req.shape,
+    nouns: req.nouns && req.nouns.length > 0 ? req.nouns.join(',') : undefined,
+    keyword: req.keyword,
+    sort: req.sort,
+    include_self: req.includeSelf,
+    include_negative: req.includeNegative,
+    dbnums: req.dbnums && req.dbnums.length > 0 ? req.dbnums.join(',') : undefined,
+    page: req.page,
+    per_page: req.perPage,
+  };
+}
+
+/** `GET /api/v1/spatial/nearby`：按 refno 或点 + 半径在进程内 `GLOBAL_AABB_TREE` 里找周边构件，分页。 */
+export function genModelV1SpatialNearby(
+  req: GenModelV1SpatialNearbyRequest,
+  options?: GenModelV1RequestOptions,
+): Promise<SpatialNearbyResponse> {
+  return genModelV1Fetch<SpatialNearbyResponse>('/api/v1/spatial/nearby', {
+    ...options,
+    query: spatialNearbyQuery(req),
+  });
+}
+
+/** `GET /api/v1/spatial/nearby/refnos`：同参、不分页的完整命中 refno 集（`page / per_page` 不发）。 */
+export function genModelV1SpatialNearbyRefnos(
+  req: GenModelV1SpatialNearbyRequest,
+  options?: GenModelV1RequestOptions,
+): Promise<SpatialNearbyRefnosResponse> {
+  const { page: _page, perPage: _perPage, ...rest } = req;
+  return genModelV1Fetch<SpatialNearbyRefnosResponse>('/api/v1/spatial/nearby/refnos', {
+    ...options,
+    query: spatialNearbyQuery(rest),
+  });
+}
+
+/** `GET /api/v1/spatial/negative-nouns`：负实体 noun 全量清单（`TOTAL_NEG_NOUN_NAMES`）。 */
+export function genModelV1SpatialNegativeNouns(options?: GenModelV1RequestOptions): Promise<SpatialNegativeNounsResponse> {
+  return genModelV1Fetch<SpatialNegativeNounsResponse>('/api/v1/spatial/negative-nouns', options);
 }
 
 /**
