@@ -59,7 +59,7 @@
 
 - **拾取过滤器**（`EDGPICK`）：Any · Element · Aid · Pline · Ppoint · Screen · Graphics · External。
 - **拾取类型**（`EDGPICKTYPE`）：Snap · Distance（沿线走一段）· Mid-Point（Proportion 0.5）· Fraction（1/n）· Proportion（0–1）· Intersect · Exact（光标点）。缺省 Snap + Element。
-- `snap()` 按拾中类型派生位置：`3D_LINE` · `ELEMENT`（按 noun 的 `edgTypes` 显著点：盒角 / 圆柱轴端 / 面中心…）· `PLINE` · `PPOINT` · `DPOINT` · `TUBING`（管身轴线点）· `DESIGNAID`（POSITION / ARC / LINE / PLANE / 各类 grid）· `GRAPHICS`（facet 边 → 线、facet → 平面）· `PIN`。
+- `snap()` 按拾中类型派生位置：`3D_LINE` · `ELEMENT`（`edgTypes.attribute(noun).snap()`，**只有 SCTN / GENSEC / PANEL 等结构类实现了它，其余 `handle any` 回落元素原点**——2026-09-13 核对，d-336；早先写的「盒角 / 圆柱轴端 / 面中心」不是 E3D 行为）· `PLINE` · `PPOINT` · `DPOINT` · `TUBING`（管身轴线点）· `DESIGNAID`（POSITION / ARC / LINE / PLANE / 各类 grid）· `GRAPHICS`（facet 边 → 线、facet → 平面）· `PIN`。
 - `Significant Snaps` 开关（`intermediate`）：吸到显著点还是任意点。
 - 这一层同时喂 Perpendicular to（目标线 / 面来自 `getLine()/getPlane()`：PLINE / PPOINT 轴、GRAPHICS 边 / 面、Aid LINE / PLANE）与 Shortest（`stdGraphics` from / to）。
 
@@ -80,7 +80,7 @@
 | 9 | 两线夹角（LINEANGLE） | ✗ | 无 EDGE 拾取；G6-04 未采 |
 | 10 | Shortest（graphics × graphics） | ✗ | 现有 clearance / 最近点是采样近似（上一计划 §3.2），不是 `gmfLine.shortest` 语义；G5 未采 |
 | 11 | 拾取过滤器：Ppoint | ✓ | `ptset` 源；2026-09-12 起经 `ModelSource.keypoints` 走 gen-model `element/ptset`（d-559），实机 表面点 → P-Point 轴线 走通 |
-| 12 | 拾取过滤器：Element（noun 显著点） | ◐ | `primitive_key_point`（基本体 / PLINE 关键点）——legacy parquet 有，**gen-model-v1 无 API**；`position`（Item 原点）≈ 元素原点 |
+| 12 | 拾取过滤器：Element | ✓ | E3D 3.1 Element × Snap 对 CYLI / BOX / ELBO / VALV 等一律回落**元素原点**（`edgpicktype` ELEMENT 分支 `handle any → item.position`；只有 SCTN / GENSEC / PANEL 等结构类实现 `snap()`），Web 的 `position`（Item 原点）即是；`primitive_key_point`（盒角 / 轴端）是 legacy parquet 带来的 Web 增强，v1 **不补 API**（Q5 2026-09-13 拍板，d-336）。缺：SCTN / GENSEC 沿截面 PLINE 线（→ `element/plines`）、Element 拾中 CYLI / NOZZ 的 P1 → P2 `line()` 操作数（Intersect / Perpendicular） |
 | 13 | 拾取过滤器：Pline | ◐ | legacy `semantic_snap_points`（PLINE start/end）；v1 无 |
 | 14 | 拾取过滤器：Graphics（facet 边 / 面）、Screen、Aid、External | ◐ | **Graphics ✓（2026-09-13）**：`mesh_graphics` 点源从已加载网格派生绘制边（线）/ 面（平面），只在 Graphics 过滤器下参与；实机 `面 → 边` 距离走通（golden MD §12）。Screen ✓（= `mesh_pick_point`）。Aid / External 占位灰掉 |
 | 15 | TUBING 轴线点、DPOINT | ◐ | **TUBING ✓（2026-09-13）**：`tubing_axis` 点源从直管对象的局部包围盒 × 放置矩阵派生管身轴线，两端吸到邻接 P-Point（`src/measurement/tubing/tubingAxis.ts`），按 E3D `EDGTUBING` 走线候选（Snap 近端 / Cursor 交点 / Mid-Point 等沿线 / Intersect 转 LINE），Any / Element 放行；实机 `轴线 → 轴线` Snap 与 Mid-Point 两条距离走通、校正端点与 E3D ELBO 145031 P1 差 0.001 mm（golden MD §14）。ATTA 按 E3D `line()` 跳过：gen-model 本就不在非 SPKBRK 的 ATTA 处断管，SPKBRK 断开的两段前端合并（`mergeTubingAxisAcrossPassThrough`，golden MD §15）。DPOINT ✗ |
@@ -93,7 +93,7 @@
 
 ## 3. 差距分级
 
-- **P0（不补就不能说「E3D 有的我们都有」）**：#10 Shortest、#9 两线夹角、#17 拾取类型、#14 Graphics 边 / 面拾取（它同时解锁 Perpendicular 与 Shortest 的目标 provider）、#12/#13 在 gen-model-v1 下的 Element 显著点 / PLINE 供给。
+- **P0（不补就不能说「E3D 有的我们都有」）**：#10 Shortest、#9 两线夹角、#17 拾取类型、#14 Graphics 边 / 面拾取（它同时解锁 Perpendicular 与 Shortest 的目标 provider）、#13 在 gen-model-v1 下的 PLINE 供给（#12 Element 显著点 2026-09-13 核对为非 E3D 口径，撤出 P0，d-336）。
 - **P1（功能在、契约缺角）**：#4 Keep 生命周期、#5 Units 矩阵、#7 角度内核接线 + Direction1/2、#8 角度单位 / 小数位、#19 提示结构、#20 分层取消。
 - **P2（可选 / 需拍板）**：#15 DPOINT（TUBING 已于 2026-09-13 前端派生落地）、Aid 拾取、External。
 
@@ -123,7 +123,7 @@
   的一条线（OLET 等非 ATTA 零长构件不穿过）；点集响应透传构件 noun（`PtsetResponse.noun` → `PtsetSceneCandidate.noun`）以认出没有几何的 ATTA。
   实机核对：gen-model 本就跳过非 SPKBRK 的 ATTA / STIF / BRCO（`cata_model.rs`），BRAN 24381_145018 的 6 个 ATTA 全在直管轴线内部、本库 169 个 ATTA
   无 SPKBRK——合并只在预制分段处起作用，以单测 + 页内内核实机坐标复算为证；跨 ATTA 直管 Snap / Mid-Point 与 E3D 线端点 / 中点差 0.000 mm（golden MD §15）。
-- **未完**：`element/keypoints` / `element/plines` 服务端；STIF / BRCO 处按 E3D 截断（gen-model 穿过它们、E3D `line()` 不跳，本库无样本）；
+- **未完**：`element/plines` 服务端 + Element 拾中 CYLI / NOZZ 的 P1 → P2 `line()` 操作数（Q5 2026-09-13 拍板：`element/keypoints` 不做，d-336）；STIF / BRCO 处按 E3D 截断（gen-model 穿过它们、E3D `line()` 不跳，本库无样本）；
   G7 / G8 / G9 运行时 golden（E3D 需在跑）。
 
 **前端**
@@ -134,7 +134,10 @@
 - 覆盖条 / 面板：过滤器与拾取类型两组开关，`Significant snaps` 一档。
 
 **后端（gen-model，`feature/element-ptset-api` 之后）**
-- `POST /api/v1/element/keypoints`：Element 显著点（对齐 `edgTypes` 各 noun 的 snap 点：盒角 / 面中心 / 圆柱轴端 / 圆环轴点 …）。需要 e3d-model 吐出每个元素的**基本体清单 + 放置矩阵**（`GeneratedElement` 目前只保留烘好的 `solid` 与可选 `primitive_instance`），这是这条端点的主要工作量。
+- ~~`POST /api/v1/element/keypoints`：Element 显著点（对齐 `edgTypes` 各 noun 的 snap 点：盒角 / 面中心 / 圆柱轴端 / 圆环轴点 …）~~ **不做（Q5 2026-09-13 拍板，d-336）**：
+  E3D 3.1 Element × Snap 对基本体 / 管件一律 `handle any` 回落元素原点，「盒角 / 面中心 / 圆柱轴端」不是 E3D 口径；`GeneratedElement` 只有 `solid` / `parts`（逐基本体网格）/
+  `world` / `primitive_instance`（仅纯 BOX / CYLI），吐基本体清单 + 放置矩阵是 3–5 d 后端且与 d-536 RefNo 原生路由改同一批持久化面。要这体验另立 Web 增强，
+  走前端从 DTX 放置矩阵派生（BOX / CYLI 元素精确）。E3D 真多出来的两件排在后面：`element/plines`（下一条）与 Element 拾中 CYLI / NOZZ 的 P1 → P2 `line()` 操作数（前端，ptset 已有 P1 / P2）。
 - `POST /api/v1/element/plines`：型材 PLINE（`e3d-model::section` 已求 SPRO/SREC PLINE 位置，暴露 start/end + 方向）。
 - TUBING 轴线点：由前端从 records 的隐式管身（`is_tubi`）+ 邻接 P-Point 派生，或服务端在 `element/ptset` 的 `members` 里附管身端点——Phase A 先前端派生
   （**已落地 2026-09-13**：直管对象局部包围盒 × 放置矩阵给轴线，端点吸 ptset 缓存里的邻接 P-Point；服务端不需改）。
@@ -142,7 +145,7 @@
 **golden gate**
 - G7-01～04（重叠候选胜出、PLINE / EDGE / PLANE / TUBING 实际捕捉几何、约束后是否仍在 feature、相机变化后重算）。
 - 新增 **G8 拾取类型**：同一条 PLINE / 边上 Mid-Point / Fraction 3 / Proportion 0.25 / Distance 100mm 的位置字串；Intersect 两边交点。
-- 新增 **G9 Element 显著点**：BOX / CYLI / DISH / CTOR 各 noun `edgTypes` 的 snap 点集与 `element/keypoints` 逐点比对（同 §11 的 41 点方法）。
+- 新增 **G9 Element × Snap 回元素原点**（原「Element 显著点」按 d-336 改题）：对 BOX / CYLI / DISH / CTOR / ELBO / VALV 各做一次 Element × Snap，位置应等于 `Q POS`（元素原点）；SCTN 应落在截面 PLINE 线上。
 
 **验收**：vitest 内核 golden 全绿；实机走查「Mid-Point of PLINE → Graphics 面」一条距离、「Ppoint → Graphics 边」一条 Perpendicular。
 
@@ -188,7 +191,7 @@
 | 点源 | 现状 | 方案 |
 | --- | --- | --- |
 | P-Point（含成员） | ✓ `element/ptset`（今日落地，41 点 golden） | — |
-| Element 显著点 / 基本体关键点 | ✗ | `element/keypoints`（e3d-model 暴露基本体放置） |
+| Element 显著点 / 基本体关键点 | — 不做（d-336） | E3D Element × Snap = 元素原点，已有 `position`；显著点是 Web 增强，Q5 拍板不补后端 |
 | PLINE | ✗ | `element/plines`（e3d-model `section`） |
 | Graphics 边 / 面 | ✗ | 前端从网格派生，无后端 |
 | TUBING 轴线点 | ✓ 前端派生（2026-09-13，golden MD §14） | 无后端；直管放置矩阵 + `element/ptset` 邻接 P-Point |
@@ -203,7 +206,7 @@
 | G6 | 04 两线夹角入口 | 产品 UI 可达性 + `measureLineAngle` 注入 |
 | G7 | 01～04 拾取候选 | 真实鼠标拾取（重叠区）+ `!!edgCntrl.pickData` |
 | G8（新） | 拾取类型 Mid-Point / Fraction / Proportion / Distance / Intersect | `!!edgPosCntrl.setPickType(n)` 后真实拾取 |
-| G9（新） | Element 显著点 | 对 BOX / CYLI / DISH / CTOR 取 `edgTypes.attribute(noun).snap()` 全集 |
+| G9（新） | Element × Snap 回元素原点 | 对 BOX / CYLI / DISH / CTOR / ELBO / VALV 各做 Element × Snap，对照 `Q POS`；SCTN 对照截面 PLINE 线（d-336 改题） |
 | G10（新） | Units / Angle 格式矩阵 | 切 Unit type / Display Unit / Decimal Places 逐格读结果表 |
 
 采集方法沿用 §8 / §11：运行中 E3D（PID 32452）`exec_clr_method.py` 注入 `.pmlmac`，`printwindow-capture.ps1` 后台截图，trace 入 `e3d-measurement-runtime-golden/`，`capture-*.json` 加 case。
@@ -223,10 +226,12 @@
 - **Q3 Aid 拾取**：E3D 的 GPHLINE / GPHPLANE 设计辅助（G4-01/02 golden 就是靠它采的）在 Web 没有对应物。要不要做一个最小 Aid 系统（用户画辅助线 / 面供测量），还是明确不做？
 - **Q4 Imperial**：是否需要英制（ft-in 分数）显示？不需要则 Units 只做 Metric 矩阵 + Display Unit。
 - **Q5 后端排期**：`element/keypoints` 需要改 e3d-model 暴露基本体放置矩阵，是本方案最大的后端工作量；与 gen-model 当前 RefNo 原生路由计划（d-536）并行是否可接受？
+  **已拍板 2026-09-13（d-336）**：不做 `element/keypoints`——E3D 3.1 Element × Snap 对基本体 / 管件回落元素原点，显著点不是 E3D 口径；排 `element/plines`
+  （后端 ~1 d，只读 `section` 已有结果，不碰 GeneratedElement / 持久化、与 d-536 不撞）+ Element 拾中 CYLI / NOZZ 的 P1 → P2 `line()` 操作数（前端 ~0.5 d）。
 - **Q6 两线夹角**：若 G6-04 采出「产品 UI 不可达」，是否仍做（作为 Web 增强）？
 
 ## 8. 交付物
 
-- 代码：`src/measurement/kernel/{pickDerivation,shortestDistance}.ts` + golden 测试；`useMeasurementPickSources` 两维模型；Graphics provider；Inspector / OverlayBar 改动；gen-model `element/keypoints` / `element/plines`。
+- 代码：`src/measurement/kernel/{pickDerivation,shortestDistance}.ts` + golden 测试；`useMeasurementPickSources` 两维模型；Graphics provider；Inspector / OverlayBar 改动；gen-model `element/plines`（`element/keypoints` 不做，Q5 / d-336）。
 - 文档：本文件 §2 随阶段更新；golden MD 新增 §12+；`e3d-measure-prompt-matrix.md`；ADR「测量拾取层对齐 E3D Positioning Control」。
 - 决策：每阶段结束 `record_decision`，取代本方案里对应的开放问题。
