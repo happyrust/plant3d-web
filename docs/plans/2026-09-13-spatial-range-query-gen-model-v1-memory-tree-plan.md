@@ -2,8 +2,10 @@
 
 - 日期：2026-09-13
 - 状态：**已实施（2026-09-13 21:10；Plannotator 第 2 轮 `approved` 10:38）**，§5 六项均按推荐项 (a)；
-  **§7 第 1–4 步已核**（第 2–3 步 22:03 在真服务 `127.0.0.1:18122` 上过，见 §7 联调记录；第 4 步的 503 信封以单测钉住，
-  线上因树一直 Ready 复现不了）；**第 5 步后半（两源浏览器操作）、第 6 步（真实站点 `getGlobalModelMatrix()`）待用户在浏览器走一遍**
+  **§7 第 1–6 步已核**（第 2–3 步 22:03 在真服务 `127.0.0.1:18122` 上过；第 4 步的 503 信封以单测钉住，线上因树一直 Ready 复现不了；
+  第 5 步后半 v1 源 22:32 在 headless Chrome 里对着 `:3101` dev server 走完，legacy 源因 `:3100` 是 detached 运行时（`sqlite-spatial` 404）
+  做不了；**第 6 步 22:40 核出 B4 成立**——`当前选中` / `拾取中心` 把场景坐标（m、已重心化）当 mm 发给服务端，基线 `9d34701` 就如此，
+  见 §7 联调记录，待拍板修法）
   - 提交清单：old-aios-core `8758023`（P0）；gen-model-refactor `12bf601e9`（P1 路由 + 模块 + 单测）、`69f732e6b`（spec §4.13）、
     `dec2c67d8`（§7 第 4 步：`spatial_not_ready` 503 信封单测）；
     plant3d-web `8127bcb`（P2）、`12c66fe`（P3）、`610581f`（P4）、`fb8b841`（P0 / P1 备注）、`0152256`（P5 = 教程 §9 + 状态行）、
@@ -363,8 +365,8 @@ P2 只碰 plant3d-web，可以先行。P1 的新代码集中在新模块 `spatia
   - §7 打勾情况：第 1 步（`cargo test` / `cargo clippy`）✅（见 P1 备注）；第 5 步前半（`vitest` / 类型检查）✅（见 P2–P4 备注）；
     **第 2–3 步 ✅（22:03，真服务，见 §7 联调记录）**；**第 4 步 ✅（单测口径）**：线上树一直 Ready，503 复现不了，改由
     gen-model-refactor `dec2c67d8` 的 `spatial_not_ready_is_a_503_with_retry_after_and_the_state_in_detail` 钉住六个非 Ready 状态的
-    503 + `Retry-After: 5` + `detail.state`（门禁一侧原有 `scan_is_gated_by_the_spatial_state`）；第 5 步后半（两源浏览器操作）、
-    第 6 步（`getGlobalModelMatrix()` 真实站点核对）**待用户在浏览器走一遍**。
+    503 + `Retry-After: 5` + `detail.state`（门禁一侧原有 `scan_is_gated_by_the_spatial_state`）；**第 5 步后半 v1 ✅ / legacy ✗（环境）**、
+    **第 6 步 ✅（核出 B4 成立，待修）**——都见 §7 联调记录。
 
 ## 5. 需要拍板的决策（推荐项在前）
 
@@ -428,6 +430,41 @@ P2 只碰 plant3d-web，可以先行。P1 的新代码集中在新模块 `spatia
   （`persist_attempts` 3→4、`initialization.epoch_id` 59→60、随后 `file_epoch` 也到 130、`drift=false`），epoch bump 只出现在
   `model_db_adapter` / `fast_delete` / `aabb_refresh` / `helper` / `window_repair` 的事务里，`spatial_query` 无写点
   （`spatial_query_never_writes_the_tree_or_takes_the_serial_lock` 钉住）。
+
+**联调记录（2026-09-13 22:32，第 5 步后半）**：Playwright 1.58 + 本机 Chrome（headless，SwiftShader WebGL）对着已在跑的 Vite dev server
+`127.0.0.1:3101`（plant3d-web 工作树）；页面 `?model_source=gen-model-v1&gm_backend_port=18122&show_refno=24381_145018`，
+徽标「已连接 gen-model :18122」，`show_refno` 加载 12 refno / 22 对象。并行会话在改 plant3d-web，HMR 整页刷新会把查看器和抽屉一起拆掉，
+脚本把 dev server 的 HMR websocket mock 掉才跑完（前两遍都被刷新打断）。
+
+- **范围 Tab**（手输坐标 = BRAN 夹具盒中心 `(5642.7, 9188.4, 15979.0)`，5 m，每页 20）：请求
+  `GET /api/v1/spatial/nearby?x&y&z&radius=5000&shape=sphere&sort=distance&include_negative=false&page=1&per_page=20` +
+  `/nearby/refnos`（全集）+ `/negative-nouns`；结果区「共 1387 项，当前页 20 项」= 服务端 `total_count`，覆盖面提示可见，
+  `spec-filter` 0 个（专业维度隐藏），分组「库 1112 | 库 7997」各带「加载本库 / 仅显示本库」；下一页发 `page=2`、首条换了；
+  排序只剩「按距离 / 按名称」。
+- **全部显示 / 隔离结果 / 加载当前页**（改 2 m → 16 项，`groups 7997:16`）：全部显示后 16 个结果对象都进场景并可见（原 240 → 255）；
+  隔离结果后其余 239 个对象 xray、16 个保持可见；加载当前页 12 s 完成，「已加载 1 → 16，未加载 15 → 0」，无错误横幅；恢复场景可用。
+- **距离 Tab**（通过 Refno `24381_145018`，5 m）：请求 `…/nearby?refno=24381%2F145018&radius=5000&…&include_self=false`，
+  「共 6685 项」= 服务端，中心行「中心 5964, 9972, 16552 · refno_aabb_center · 24381_145018」，结果里不含源构件（页面上带
+  `data-refno=24381_145018` 的那一格是左侧模型树行）。
+- **legacy 源做不了**：`:3100` 的 `plant-web-server`（`D:\Rust\target\release`，09-09 起）是 **detached** 运行时——
+  `/api/sqlite-spatial/stats` 回兼容空壳、`/negative-nouns` / `/nearby` 404「route not available in detached plant-web-server runtime」，
+  `/api/mbd/pipe/24381_145018` 也是 `MODEL_REFNO_NOT_FOUND`；`show_refno` 在 legacy 下 128 s 后「无法解析 dbnum」。legacy 链路的
+  行为不变只由 P2 的委托单测保证，要真机对拍得起一台带 sqlite 空间索引的完整 `plant-web-server`。
+- 顺手看到的**既有口径**（基线 `328ca8b` 就有，不是本计划改的）：`加载当前页` 走 `loadResults({flyTo:true})` →
+  `resolveBatchRefnos()` 无范围时返回 `fullMatches.refnos`，即**加载的是全集**而不是当前页——1387 项那次点下去 3 分钟没回来。
+  标签与行为不符，要不要改另议。
+
+**联调记录（2026-09-13 22:40，第 6 步）——B4 成立**：本站 `__dtxLayer.getGlobalModelMatrix()` **不是单位阵**：缺省
+`modelUnit=mm` → `dtx_scale=0.001` 且 recenter，矩阵 = 缩放 0.001 + 平移 `(-5.964, -9.972, -16.552)`（首个加载模型盒中心的负值，单位 m）。
+`viewer.scene.getAABB()` 与拾取 `hit.worldPos` 都在这套**场景坐标（m、已重心化）**里，而 `useSpatialQuery.ts::applyCurrentSelection`
+（`draft.center = aabbToCenter(aabb)`）和 `pickedQueryCenter` 的 watch 原样塞进 `draft.center`、`normalizeRequestFromCenter` 直接发服务端：
+选中 BRAN `24381_145018` 用「当前选中」查 1 m，请求是 `x=-0.295&y=0&z=-0.573&radius=1000`，抽屉中心摘要显示「-0, 0, -1」，服务端回的
+是 E3D 原点旁的 `17496_100380 FLOOR` 等 52 项，BRAN 自己不在里面；正确的 mm 中心应是 `(5668.6, 9972.2, 15979.0)`。
+「手输坐标」不受影响；本地扫描 `queryLocal` 因两边都是场景坐标而自洽，只有服务端这一半错位。**基线 `9d34701` 的 `applyCurrentSelection` /
+pick watch 就没有矩阵处理**，legacy 源同样中招——不是本计划引入，但本计划 §3.3 明确把它列为 B4 待核项，现在核实为真。
+建议修法（待拍板）：进服务端请求前把 `draft.center` 经 `getGlobalModelMatrix().invert()` 换回 mm（`SpatialQueryDrawer.vue::
+createPipeDistanceSceneTransformPoint` 已有反向那一半可对照），服务端回来的 `results[].aabb` / `center` 在飞行、本地合并时再正变换回场景；
+中心摘要按 mm 显示。
 
 ## 8. 关键位置速查
 
