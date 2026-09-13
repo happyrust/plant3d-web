@@ -1,13 +1,14 @@
 # 「按范围查找」接 gen-model-refactor 内存空间树开发计划
 
 - 日期：2026-09-13
-- 状态：**草案，Plannotator 第 1 轮批注已处理，待第 2 轮评审 / 批准**；未实施
+- 状态：**已批准（Plannotator 第 2 轮 `approved`，2026-09-13 10:38）**；实施中，§5 六项按推荐项 (a) 执行
   - 第 1 轮（09:36）唯一批注落在后端基线行：「先提交这个」。已落实：后端原 83 个在飞改动已由并行会话提交为
     `f888e9dc2 refactor: retire publish stage and complete lazy data routing`（10:10，215 文件），其后又有
     `b82d6fbbb fix(room)` / `8f99cbc64 fix(api)` 两条（10:25 / 10:26）；分支 10:21 改名
     `refactor/retire-publish-stage → gen-model-refactor`，备份分支 `backup/refactor-before-migration-20260913 = f888e9dc2`。
-    本会话未替任何人提交。
-- 前端：`D:\work\plant-code\old\plant3d-web`（`main@0e8ee83`，工作树 109 个未提交改动，与本计划无关；本计划文件本身尚未跟踪）
+  - 第 2 轮前按用户要求把 plant3d-web 在飞改动也清零：`0a7eae4 docs(plan)`（本计划）+ `9d34701 chore(wip)`
+    （240 文件快照，10:39）；随后用户在 Plannotator 里 Approve，无新增批注。
+- 前端：`D:\work\plant-code\old\plant3d-web`（`main@9d34701`，工作树干净；本计划的前端改动从这里起算）
 - 后端：`D:\work\plant-code\old\gen-model-refactor`（`gen-model-refactor@8f99cbc64`）。**注意**：工作树里另有并行会话正在推进的
   「迁移基线」改动（`verification/migration-baseline-20260913/`、新文件 `src/data_interface/room_read_through.rs`、
   `query_service.rs::room` 的 read-through 分支、`direct_tree.rs::is_current` 放开可见性等，10:28–10:30 仍在改、在跑 lib 测试），
