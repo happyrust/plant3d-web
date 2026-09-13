@@ -469,7 +469,7 @@ function applyRestoredTaskDraft() {
   formData.description = draft.description || '';
   formData.checkerId = draft.checkerId || '';
   formData.approverId = draft.approverId || '';
-  formData.priority = draft.priority || 'medium';
+  formData.priority = draft.priority === 'urgent' ? 'high' : (draft.priority || 'medium');
   formData.dueDate = draft.dueDate || '';
   selectedComponents.value = [...(draft.draftComponents ?? draft.components ?? [])];
   selectedComponentRefno.value = null;

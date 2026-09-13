@@ -1,0 +1,21 @@
+!traceFile = object FILE('D:/work/plant-code/old/plant3d-web/docs/verification/e3d-measurement-runtime-golden/G3-04-gensec-probe.trace.txt')
+!trace = ARRAY()
+var !items collect all GENSEC
+handle any
+  !trace.append('blocked: collect GENSEC failed: ' & !!error.text)
+  !traceFile.writeFile('OVERWRITE', !trace)
+  return
+endhandle
+
+!trace.append('count=' & !items.size().string())
+if (!items.size() gt 0) then
+  !item = !items[1].dbref()
+  !trace.append('first_ref=' & !item.string())
+  !trace.append('first_name=' & !item.name)
+  !trace.append('first_type=' & !item.hardType)
+  !trace.append('first_ydir=' & !item.yDir.string())
+  !trace.append('first_zdir=' & !item.zDir.string())
+endif
+!trace.append('complete')
+!traceFile.writeFile('OVERWRITE', !trace)
+return

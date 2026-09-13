@@ -535,7 +535,9 @@ const modelLoading = ref(false);
 const attrLoading = ref(false);
 const error = ref<string | null>(null);
 const sourceMessage = ref<string | null>(null);
-const source = ref<SourceKind>('demo');
+// Until a response explicitly identifies itself as demo data, do not label an
+// empty/failed production panel as the DB1112 demo.
+const source = ref<SourceKind>('backend');
 const snapshot = ref<IncrementalMonitorSnapshot | null>(null);
 const monitorRecords = ref<IncrementalMonitorRecord[]>([]);
 const selectedRecordId = ref<string | null>(null);

@@ -22,7 +22,13 @@ import type {
   SubtreeRefnosResponse,
   VisibleInstsResponse,
 } from '@/api/genModelE3dTypes';
-import type { PdmsTypeInfoResponse, PdmsUiAttrResponse } from '@/api/genModelPdmsAttrApi';
+import type {
+  PdmsTypeInfoResponse,
+  PdmsUiAttrResponse,
+  PtsetChildrenResponse,
+  PtsetResponse,
+} from '@/api/genModelPdmsAttrApi';
+import type { PrimitiveKeyPointCandidate } from '@/composables/useDbnoInstancesParquetLoader';
 import type { InstanceEntry } from '@/utils/instances/instanceManifest';
 
 /** 数据源种类。`legacy` = 旧后端 `:3100` + parquet / DuckDB-WASM；`gen-model-v1` = gen-model `/api/v1`。 */
@@ -91,10 +97,41 @@ export type AttributeSource = {
   typeInfo(refno: string): Promise<PdmsTypeInfoResponse>;
 };
 
+export type KeypointQueryOptions = {
+  forceRefresh?: boolean;
+};
+
+/** `primitiveKeypoints` 的结果：候选与「为什么少 / 没有」的原因并列，由测量工具决定怎么提示。 */
+export type PrimitiveKeypointsResult = {
+  items: PrimitiveKeyPointCandidate[];
+  /** 每条来源各自的失败原因（parquet 表缺、接口不支持…）；有候选时也可能非空（部分来源失败） */
+  errors: string[];
+};
+
+/**
+ * 测量捕捉的关键点取数（2026-09-12 起随 gen-model-v1 加入端口）。
+ *
+ * 返回形状**故意等于**旧后端 `/api/pdms/ptset` 的契约（`PtsetResponse` / `PtsetChildrenResponse`）：
+ * `usePtsetSnap`、`usePtsetVisualizationThree`、`ptsetTransform` 全按它换算，两种源下测量工具一行不改。
+ * - `legacy`：`ptsets.parquet` 优先、`:3100 /api/pdms/ptset` 兜底（`usePtsetRuntimeLookup` 原样）；
+ *   基本体 / PLINE 关键点读 `primitive_keypoints.parquet` + 语义捕捉点表。
+ * - `gen-model-v1`：`POST /api/v1/element/ptset`（直读 dabacon 的目录 P 点集，mm + 列主序世界矩阵）；
+ *   成员点集用 `include_members`；基本体关键点服务端尚无接口，回空并说明原因。
+ */
+export type KeypointSource = {
+  /** 单构件 P-Point（E3D PTSET）。`dbno` 是 legacy parquet 分桶键，v1 源不需要。 */
+  ptset(dbno: number, refno: string, options?: KeypointQueryOptions): Promise<PtsetResponse>;
+  /** 直属成员的 P-Point（BRAN / EQUI 这类容器自身没有 P-Point 时悬停显示的是成员的点）。 */
+  memberPtsets(dbno: number, ownerRefno: string, options?: KeypointQueryOptions): Promise<PtsetChildrenResponse>;
+  /** 基本体 / PLINE 语义关键点候选（世界坐标已按 world_transform × geo_local 折叠）。 */
+  primitiveKeypoints(dbno: number, refno: string, options?: KeypointQueryOptions): Promise<PrimitiveKeypointsResult>;
+};
+
 export type ModelSource = {
   readonly kind: ModelSourceKind;
   readonly tree: TreeSource;
   readonly records: ModelRecordSource;
   readonly meshes: MeshSource;
   readonly attributes: AttributeSource;
+  readonly keypoints: KeypointSource;
 };

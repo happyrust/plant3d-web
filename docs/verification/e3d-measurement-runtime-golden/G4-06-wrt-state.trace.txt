@@ -1,0 +1,12 @@
+﻿step1_standard gadget_wrt=/Copy-of-RCS151MM gadget_active=TRUE dimension_wrt=/Copy-of-RCS151MM
+step1_offsets=-400.28mm / -1920.14mm / -4430.67mm
+step2_perpendicular gadget_wrt=/Copy-of-RCS151MM gadget_active=FALSE dimension_wrt=/*
+step3_result gadget_wrt=/Copy-of-RCS151MM dimension_wrt=/*
+step3_from=E 8000mm N 10500mm U 16500mm WRT /*
+step3_to=E 8000mm N 9000mm U 16500mm WRT /*
+step3_direction_form_expression=S
+step3_direction_in_equi_frame=E WRT /Copy-of-RCS151MM
+step4_after_toggle_back gadget_wrt=/Copy-of-RCS151MM gadget_active=TRUE dimension_wrt=/Copy-of-RCS151MM
+step4_after_setUpForm gadget_wrt=/Copy-of-RCS151MM dimension_wrt=/Copy-of-RCS151MM
+restored gadget_wrt=/* dimension_wrt=/* perpendicular=FALSE
+complete

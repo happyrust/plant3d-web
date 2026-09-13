@@ -28,6 +28,11 @@ import { getParquetVersion } from '@/api/genModelRealtimeApi';
 import { buildFilesOutputUrl } from '@/lib/filesOutput';
 import { buildBackendUrl } from '@/utils/apiBase';
 import { configureLocalDuckDBExtensions, selectLocalDuckDBBundle } from '@/utils/duckdbBundles';
+import {
+  describeValue,
+  failFileValidation,
+  parseJsonResponse,
+} from '@/utils/fileValidation';
 
 export type ParquetManifest = {
   version: number
@@ -387,9 +392,15 @@ async function tryFetchManifest(
   if (!resp.ok) {
     throw new Error(`加载 manifest 失败(${baseDir}): HTTP ${resp.status} ${resp.statusText}`);
   }
-  const json = (await resp.json()) as ParquetManifest;
+  const json = await parseJsonResponse<ParquetManifest>(resp, url);
   if (!json || typeof json !== 'object' || !json.tables?.instances?.file) {
-    throw new Error(`manifest 结构不符合预期(${baseDir})`);
+    failFileValidation({
+      source: url,
+      format: 'json',
+      reason: `manifest 结构不符合预期（${baseDir}）`,
+      expected: '包含 tables.instances.file 的 manifest 对象',
+      actual: describeValue(json),
+    });
   }
   return json;
 }
@@ -458,9 +469,15 @@ async function tryFetchBucketIndex(
   if (!resp.ok) {
     throw new Error(`加载 bucket manifest 失败(${baseDir}): HTTP ${resp.status} ${resp.statusText}`);
   }
-  const json = (await resp.json()) as ParquetBucketIndex;
+  const json = await parseJsonResponse<ParquetBucketIndex>(resp, url);
   if (!json || json.format !== 'parquet-buckets' || !Array.isArray(json.buckets)) {
-    throw new Error(`bucket manifest 结构不符合预期(${baseDir})`);
+    failFileValidation({
+      source: url,
+      format: 'json',
+      reason: `bucket manifest 结构不符合预期（${baseDir}）`,
+      expected: 'format="parquet-buckets" 且 buckets 为数组',
+      actual: describeValue(json),
+    });
   }
   if (json.dbnum !== dbno) {
     throw new Error(`bucket manifest dbnum=${json.dbnum} 与目标 dbnum=${dbno} 不匹配`);
@@ -951,7 +968,10 @@ async function fetchManifest(
       if (!resp.ok) {
         throw new Error(`加载模型提交 manifest 失败: HTTP ${resp.status} ${resp.statusText}`);
       }
-      const payload = await resp.json() as ParquetManifest | ParquetBucketIndex;
+      const payload = await parseJsonResponse<ParquetManifest | ParquetBucketIndex>(
+        resp,
+        resolvedManifestUrl,
+      );
       if (payload.format === 'parquet-buckets') {
         bucketIndex = payload;
         manifest = bucketIndexToSyntheticManifest(dbno, payload);
@@ -960,7 +980,13 @@ async function fetchManifest(
       }
     }
     if (!manifest || !manifest.tables?.instances?.file) {
-      throw new Error(`模型提交 manifest 与 dbno=${dbno} 不匹配或结构无效`);
+      failFileValidation({
+        source: resolvedManifestUrl,
+        format: 'json',
+        reason: `模型提交 manifest 与 dbno=${dbno} 不匹配或结构无效`,
+        expected: '包含 tables.instances.file 的 manifest 对象',
+        actual: describeValue(manifest),
+      });
     }
     assertManifestIdentity(manifest, dbno, { expectedRootRefno });
     const cleanUrl = resolvedManifestUrl.split(/[?#]/, 1)[0] || resolvedManifestUrl;
@@ -2309,7 +2335,7 @@ export function useDbnoInstancesParquetLoader() {
         // 同 manifest，缺失报告也需要实时读取最新内容。
         const resp = await fetch(reportUrl, { cache: 'no-store' });
         if (!resp.ok) return info;
-        const report = (await resp.json()) as MissingMeshReport;
+        const report = await parseJsonResponse<MissingMeshReport>(resp, reportUrl);
         info.reportGeneratedAt = report.generated_at ? String(report.generated_at) : null;
         const list = Array.isArray(report.missing_geo_hash_list) ? report.missing_geo_hash_list : [];
         info.topMissingGeoHashes = list
@@ -2321,8 +2347,13 @@ export function useDbnoInstancesParquetLoader() {
           .filter((x) => !!x.geoHash)
           .sort((a, b) => b.rowCount - a.rowCount || a.geoHash.localeCompare(b.geoHash))
           .slice(0, topN);
-      } catch {
-        // ignore report fetch errors; manifest-level stats are still useful
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        lastError.value = `网格缺失报告验证失败：${message}`;
+        console.warn('[useDbnoInstancesParquetLoader] mesh validation report rejected', {
+          reportFile: info.reportFile,
+          error,
+        });
       }
 
       return info;

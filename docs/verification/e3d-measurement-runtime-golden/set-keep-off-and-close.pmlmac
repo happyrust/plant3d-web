@@ -1,0 +1,9 @@
+if undefined(!!gphMeasure) then
+  return
+endif
+
+!!gphMeasure.keepAids.val = FALSE
+!!gphMeasure.keepAids()
+!!gphMeasure.close()
+hide !!gphMeasure
+return

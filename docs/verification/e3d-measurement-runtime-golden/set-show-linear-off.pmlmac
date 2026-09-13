@@ -1,0 +1,7 @@
+if undefined(!!gphMeasure) then
+  return
+endif
+
+!!gphMeasure.showLinear.val = FALSE
+!!gphMeasure.setUpForm()
+return

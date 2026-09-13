@@ -1,0 +1,104 @@
+{
+  "schema_version": 1,
+  "attempt_id": "e3d-dimension-golden-001-003-2026-09-11",
+  "started_at_local": "2026-09-11T18:27:00+08:00",
+  "finished_at_local": "2026-09-11T18:31:30+08:00",
+  "requested_cases": [
+    "E3D-GOLDEN-001",
+    "E3D-GOLDEN-002",
+    "E3D-GOLDEN-003"
+  ],
+  "result": "blocked",
+  "blocker": {
+    "code": "E3D_RUNTIME_STARTUP_FILE_LOAD_EXCEPTION",
+    "summary": "AVEVA Design and Draft both terminate before creating a top-level window.",
+    "stage": "runtime-startup",
+    "dimension_data_captured": false
+  },
+  "environment": {
+    "os": "Windows 10.0.26200",
+    "installation_root": "D:\\AVEVA\\Everything3D2.10",
+    "project": "ams",
+    "project_root": "D:\\AVEVA\\Projects\\E3D2.1",
+    "mdb": "/ALL",
+    "design_executable": {
+      "path": "D:\\AVEVA\\Everything3D2.10\\des.exe",
+      "file_version": "2.1.0.3"
+    },
+    "draft_executable": {
+      "path": "D:\\AVEVA\\Everything3D2.10\\dra.exe",
+      "file_version": "2.1.0.35"
+    }
+  },
+  "attempts": [
+    {
+      "id": "design-launch",
+      "launcher": "D:\\AVEVA\\Everything3D2.10\\launch.bat",
+      "arguments": [
+        "Design"
+      ],
+      "resolved_command": "des.exe ams <configured-user> /ALL",
+      "window_observation": "No des.exe top-level window appeared.",
+      "event_log": {
+        "time_local": "2026-09-11T18:27:15+08:00",
+        "provider": ".NET Runtime / Application Error",
+        "event_ids": [
+          1026,
+          1000
+        ],
+        "process_id_hex": "0x144C4",
+        "exception": "System.IO.FileLoadException",
+        "managed_entry": "Aveva.Model.Design.des.Main(System.String[])",
+        "faulting_module": "KERNELBASE.dll",
+        "exception_code": "0xe0434352",
+        "report_id": "c338df8e-0579-419c-a5ff-2da17f91083e"
+      }
+    },
+    {
+      "id": "draft-launch-with-evars",
+      "launcher": "D:\\AVEVA\\Everything3D2.10\\evars.bat",
+      "arguments": [
+        "dra.exe",
+        "ams",
+        "<configured-user>",
+        "/ALL"
+      ],
+      "window_observation": "No dra.exe top-level window appeared; the process exited.",
+      "event_log": {
+        "time_local": "2026-09-11T18:31:22+08:00",
+        "provider": ".NET Runtime / Application Error / Windows Error Reporting",
+        "event_ids": [
+          1026,
+          1000,
+          1001
+        ],
+        "process_id_hex": "0x7714",
+        "exception": "System.IO.FileLoadException",
+        "managed_entry": "Aveva.Pdms.Draft.dra.Main(System.String[])",
+        "faulting_module": "KERNELBASE.dll",
+        "exception_code": "0xe0434352",
+        "report_id": "ba8e20be-44c2-405f-8233-6edf4eeaadc5",
+        "wer_archive": "C:\\ProgramData\\Microsoft\\Windows\\WER\\ReportArchive\\AppCrash_dra.exe_5afb1d53ac7db34c718bee17abc94768b2844_46b3f3ec_f7c6e438-5a73-490b-9dde-50c52dba3a52\\Report.wer"
+      }
+    }
+  ],
+  "preserved_state": {
+    "preexisting_des_process": {
+      "pid": 49396,
+      "started_at_local": "2026-09-11T07:56:02+08:00",
+      "main_window_handle": 0,
+      "action_taken": "left_running"
+    },
+    "launcher_processes_created_by_this_attempt": "terminated_after-diagnostics"
+  },
+  "next_required_action": {
+    "owner": "E3D runtime maintainer",
+    "request": "Provide a launchable E3D Design or Draft environment, or repair the FileLoadException before resuming golden capture.",
+    "resume_from": "E3D-GOLDEN-001",
+    "do_not_do": [
+      "Do not treat the headless preexisting des.exe process as a captured GUI session.",
+      "Do not fabricate screenshots or expected geometry from plant3d-web.",
+      "Do not terminate the preexisting des.exe process without explicit approval."
+    ]
+  }
+}

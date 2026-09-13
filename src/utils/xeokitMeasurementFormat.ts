@@ -1,4 +1,4 @@
-import { formatLengthMeters, formatPdmsPos } from './unitFormat';
+import { convertLength, formatLengthMeters, formatPdmsPos } from './unitFormat';
 
 import type {
   MeasurementPoint,
@@ -9,6 +9,12 @@ import type {
 import type { LengthUnit } from '@/composables/useUnitSettingsStore';
 
 import { MEASUREMENT_PICK_SOURCE_LABELS } from '@/composables/useMeasurementPickSources';
+import {
+  designPointToFrame,
+  designVectorToFrame,
+  type ReferenceFrameAxisLabels,
+  type ResolvedReferenceFrame,
+} from '@/measurement/reference-frame';
 import { formatPdmsRef } from '@/utils/pdmsRefno';
 
 type MeasurementLike = MeasurementRecord | XeokitMeasurementRecord;
@@ -65,7 +71,10 @@ export function formatMeasurementSummary(
   measurement: MeasurementLike,
   unit: LengthUnit,
   precision: number,
-  opts?: { showAxisBreakdown?: boolean },
+  opts?: {
+    showAxisBreakdown?: boolean;
+    referenceFrame?: ResolvedReferenceFrame;
+  },
 ): string {
   switch (measurement.kind) {
     case 'distance': {
@@ -73,16 +82,25 @@ export function formatMeasurementSummary(
       const target = measurement.target.designWorldPos;
       const points = `起点 ${formatMeasurementPoint(measurement.origin)} -> 终点 ${formatMeasurementPoint(measurement.target)}`;
       if (!origin || !target) return points;
-      const deltas = [
+      const worldDeltas: Vec3 = [
         target[0] - origin[0],
         target[1] - origin[1],
         target[2] - origin[2],
       ];
-      const total = `距离 ${formatLengthMeters(Math.hypot(deltas[0], deltas[1], deltas[2]), unit, precision)}`;
+      const interpreted = opts?.referenceFrame
+        ? computeDistanceMeasurementResultInFrame(
+          measurement.origin,
+          measurement.target,
+          opts.referenceFrame,
+        )
+        : null;
+      const deltas = interpreted?.offsets.components ?? worldDeltas;
+      const labels = interpreted?.axisLabels ?? DISTANCE_AXIS_LABELS;
+      const total = `距离 ${formatLengthMeters(Math.hypot(...worldDeltas), unit, precision)}`;
       if (opts?.showAxisBreakdown === false) return `${total} · ${points}`;
       const axisParts = deltas
         .map((delta, index) => (
-          `${DISTANCE_AXIS_LABELS[index]} ${formatSignedLengthMeters(delta, unit, precision)}`
+          `${labels[index]} ${formatSignedLengthMeters(delta, unit, precision)}`
         ))
         .join(' · ');
       return `${total} · ${axisParts} · ${points}`;
@@ -90,36 +108,89 @@ export function formatMeasurementSummary(
     case 'angle':
       return `起点 ${formatMeasurementPoint(measurement.origin)} -> 拐点 ${formatMeasurementPoint(measurement.corner)} -> 终点 ${formatMeasurementPoint(measurement.target)}`;
     case 'elevation_point': {
-      const world = measurement.point.designWorldPos
-        ? ` · World ${formatPdmsPos(measurement.point.designWorldPos, unit, precision)}`
-        : '';
-      return `点 ${formatMeasurementPointSource(measurement.point)}${world} · 绝对 ${formatSignedLengthMeters(measurement.absoluteElevation, unit, precision)} · 相对基准 ${formatSignedLengthMeters(measurement.relativeElevation, unit, precision)}`;
+      const datumElevation = Number.isFinite(measurement.datumElevation)
+        ? measurement.datumElevation
+        : 0;
+      const interpreted = opts?.referenceFrame
+        ? computeElevationPointMeasurementResultInFrame(
+          measurement.point,
+          datumElevation,
+          opts.referenceFrame,
+        )
+        : null;
+      const position = interpreted
+        ? ` · ${formatFrameName(opts!.referenceFrame!)} ${formatFramePosition(
+          interpreted.position,
+          interpreted.axisLabels,
+          unit,
+          precision,
+        )}`
+        : measurement.point.designWorldPos
+          ? ` · World ${formatPdmsPos(measurement.point.designWorldPos, unit, precision)}`
+          : '';
+      const absoluteElevation = interpreted?.absoluteElevation ?? measurement.absoluteElevation;
+      const relativeElevation = interpreted?.relativeElevation ?? measurement.relativeElevation;
+      return `点 ${formatMeasurementPointSource(measurement.point)}${position} · 绝对 ${formatSignedLengthMeters(absoluteElevation, unit, precision)} · 相对基准 ${formatSignedLengthMeters(relativeElevation, unit, precision)}`;
     }
-    case 'elevation_delta':
-      return `起点 ${formatMeasurementPointSource(measurement.origin)} ${formatSignedLengthMeters(measurement.originElevation, unit, precision)} · 终点 ${formatMeasurementPointSource(measurement.target)} ${formatSignedLengthMeters(measurement.targetElevation, unit, precision)} · 高差 ${formatSignedLengthMeters(measurement.deltaElevation, unit, precision)}`;
+    case 'elevation_delta': {
+      const interpreted = opts?.referenceFrame
+        ? computeElevationDeltaMeasurementResultInFrame(
+          measurement.origin,
+          measurement.target,
+          opts.referenceFrame,
+        )
+        : null;
+      return `起点 ${formatMeasurementPointSource(measurement.origin)} ${formatSignedLengthMeters(interpreted?.originElevation ?? measurement.originElevation, unit, precision)} · 终点 ${formatMeasurementPointSource(measurement.target)} ${formatSignedLengthMeters(interpreted?.targetElevation ?? measurement.targetElevation, unit, precision)} · 高差 ${formatSignedLengthMeters(interpreted?.deltaElevation ?? measurement.deltaElevation, unit, precision)}`;
+    }
   }
 }
 
 /**
- * 距离轴向分量的展示标签，按 E3D 工程坐标语义 E/N/U（东/北/高）。
- * 映射假设 E=ΔX、N=ΔY、U=ΔZ（PDMS 设计坐标惯例），待 E3D 实机验证后如不符只改这里。
+ * P0 仅支持 World 笛卡尔参考系，因此使用中性的 X/Y/Z。
+ * E3D 的最终 X/Y/Z、E/N/U 或 U/V/W 文案受 COORD/UQCORD 与 wrt 影响，
+ * 应在 ReferenceFrameResolver 落地后由参考系提供，不能在这里假定。
  */
-export const DISTANCE_AXIS_LABELS: readonly [string, string, string] = ['E', 'N', 'U'];
+export const DISTANCE_AXIS_LABELS: readonly [string, string, string] = ['X', 'Y', 'Z'];
 
 /**
- * 距离测量结果模型（r5 §1 修正版）：wrt=World 时 Offset 就是 ENU 分量，
- * Direction 内部只存单位向量（显示格式待 E3D 实机验证）。
+ * 标准距离结果模型。P0 仅解析 World XYZ；后续由参考系解析器提供
+ * E3D COORD/WRT 对应的轴标签和局部分量。
  */
 export type DistanceMeasurementResultValues = {
   /** 两点真实三维距离（米，设计坐标）。 */
   distance: number;
-  /** Offset：两点偏移在 wrt 参考系下的分量（wrt=World 即 E/N/U = ΔX/ΔY/ΔZ，米）。 */
+  /** Offset：两点偏移在当前参考系下的分量（P0 为 World ΔX/ΔY/ΔZ，米）。 */
   offsets: { frame: 'world'; components: Vec3 };
   /** 两点连线方向单位向量；零距离时为 null。 */
   direction: { vector: Vec3 } | null;
   /** 结果解释参考系；第一阶段只有 world。 */
   wrt: 'world';
 };
+
+export type DistanceMeasurementFrameResultValues = Readonly<{
+  distance: number;
+  offsets: Readonly<{ components: Vec3 }>;
+  /** Unit direction components expressed in the resolved frame. */
+  direction: Readonly<{ vector: Vec3 }> | null;
+  axisLabels: ReferenceFrameAxisLabels;
+  frame: ResolvedReferenceFrame;
+}>;
+
+export type ElevationPointFrameResultValues = Readonly<{
+  position: Vec3;
+  absoluteElevation: number;
+  relativeElevation: number;
+  axisLabels: ReferenceFrameAxisLabels;
+  frame: ResolvedReferenceFrame;
+}>;
+
+export type ElevationDeltaFrameResultValues = Readonly<{
+  originElevation: number;
+  targetElevation: number;
+  deltaElevation: number;
+  verticalAxisLabel: string;
+  frame: ResolvedReferenceFrame;
+}>;
 
 /** 由起终点设计坐标派生距离结果模型；任一点缺坐标返回 null。 */
 export function computeDistanceMeasurementResult(
@@ -147,8 +218,192 @@ export function computeDistanceMeasurementResult(
   };
 }
 
+/**
+ * Reinterpret immutable design-world anchors in a resolved WRT frame.
+ * The three-dimensional distance is invariant; only components and labels change.
+ */
+export function computeDistanceMeasurementResultInFrame(
+  origin: MeasurementPoint,
+  target: MeasurementPoint,
+  frame: ResolvedReferenceFrame,
+): DistanceMeasurementFrameResultValues | null {
+  const from = measurementPointDesignPos(origin);
+  const to = measurementPointDesignPos(target);
+  if (!from || !to) return null;
+  const designDelta: Vec3 = [to[0] - from[0], to[1] - from[1], to[2] - from[2]];
+  const projected = designVectorToFrame(frame, designDelta);
+  if (!projected.ok) return null;
+  const components: Vec3 = [...projected.value];
+  const distance = Math.hypot(...designDelta);
+  return {
+    distance,
+    offsets: { components },
+    direction: distance > 0
+      ? {
+        vector: [
+          components[0] / distance,
+          components[1] / distance,
+          components[2] / distance,
+        ],
+      }
+      : null,
+    axisLabels: frame.axisLabels,
+    frame,
+  };
+}
+
+export function computeElevationPointMeasurementResultInFrame(
+  point: MeasurementPoint,
+  datumElevation: number,
+  frame: ResolvedReferenceFrame,
+): ElevationPointFrameResultValues | null {
+  const designPosition = measurementPointDesignPos(point);
+  if (!designPosition || !Number.isFinite(datumElevation)) return null;
+  const transformed = designPointToFrame(frame, designPosition);
+  if (!transformed.ok) return null;
+  const position: Vec3 = [...transformed.value];
+  return {
+    position,
+    absoluteElevation: position[2],
+    relativeElevation: position[2] - datumElevation,
+    axisLabels: frame.axisLabels,
+    frame,
+  };
+}
+
+export function computeElevationDeltaMeasurementResultInFrame(
+  origin: MeasurementPoint,
+  target: MeasurementPoint,
+  frame: ResolvedReferenceFrame,
+): ElevationDeltaFrameResultValues | null {
+  const from = measurementPointDesignPos(origin);
+  const to = measurementPointDesignPos(target);
+  if (!from || !to) return null;
+  const originResult = designPointToFrame(frame, from);
+  const targetResult = designPointToFrame(frame, to);
+  if (!originResult.ok || !targetResult.ok) return null;
+  return {
+    originElevation: originResult.value[2],
+    targetElevation: targetResult.value[2],
+    deltaElevation: targetResult.value[2] - originResult.value[2],
+    verticalAxisLabel: frame.axisLabels[2],
+    frame,
+  };
+}
+
+export type DistanceMeasurementResultRow = Readonly<{
+  key: 'distance' | 'offset-x' | 'offset-y' | 'offset-z' | 'direction';
+  label: string;
+  valueText: string;
+}>;
+
+type DistanceMeasurementRowsSource = Readonly<{
+  distance: number;
+  offsets: Readonly<{ components: readonly [number, number, number] }>;
+  direction: Readonly<{ vector: readonly [number, number, number] }> | null;
+  axisLabels?: ReferenceFrameAxisLabels;
+}>;
+
+function formatSignedScalar(value: number, precision = 4): string {
+  const normalized = Object.is(value, -0) ? 0 : value;
+  return `${normalized >= 0 ? '+' : '-'}${Math.abs(normalized).toFixed(precision)}`;
+}
+
+/** E3D 标准距离结果的五行结构；P0 的参考系固定为 World XYZ。 */
+export function buildDistanceMeasurementResultRows(
+  result: DistanceMeasurementRowsSource,
+  unit: LengthUnit,
+  precision: number,
+): DistanceMeasurementResultRow[] {
+  const [offsetX, offsetY, offsetZ] = result.offsets.components;
+  const labels = result.axisLabels ?? DISTANCE_AXIS_LABELS;
+  const offsetRows: DistanceMeasurementResultRow[] = [
+    {
+      key: 'offset-x',
+      label: `Offset ${labels[0]}`,
+      valueText: formatSignedLengthMeters(offsetX, unit, precision),
+    },
+    {
+      key: 'offset-y',
+      label: `Offset ${labels[1]}`,
+      valueText: formatSignedLengthMeters(offsetY, unit, precision),
+    },
+    {
+      key: 'offset-z',
+      label: `Offset ${labels[2]}`,
+      valueText: formatSignedLengthMeters(offsetZ, unit, precision),
+    },
+  ];
+  const directionText = result.direction
+    ? [
+      `${labels[0]} ${formatSignedScalar(result.direction.vector[0])}`,
+      `${labels[1]} ${formatSignedScalar(result.direction.vector[1])}`,
+      `${labels[2]} ${formatSignedScalar(result.direction.vector[2])}`,
+    ].join(' · ')
+    : '--';
+
+  return [
+    {
+      key: 'distance',
+      label: 'Distance',
+      valueText: formatLengthMeters(result.distance, unit, precision),
+    },
+    ...offsetRows,
+    {
+      key: 'direction',
+      label: 'Direction',
+      valueText: directionText,
+    },
+  ];
+}
+
+export type PerpendicularMeasurementResultRow = Readonly<{
+  key: 'distance' | 'vertical' | 'horizontal' | 'direction';
+  label: string;
+  valueText: string;
+}>;
+
+/**
+ * E3D「Perpendicular to」结果的四行结构（`gphmeasure.perpendicularSetup`）：
+ * Distance、Vertical = |Δup|（World）、Horizontal = √(Distance² − Vertical²)、
+ * Direction 从垂足指向源点并固定按 World 表达（golden G4-06）。
+ * `origin` 是源点，`target` 是垂足。
+ */
+export function buildPerpendicularMeasurementResultRows(
+  origin: MeasurementPoint,
+  target: MeasurementPoint,
+  unit: LengthUnit,
+  precision: number,
+): PerpendicularMeasurementResultRow[] {
+  const source = measurementPointDesignPos(origin);
+  const foot = measurementPointDesignPos(target);
+  if (!source || !foot) return [];
+  const delta: Vec3 = [source[0] - foot[0], source[1] - foot[1], source[2] - foot[2]];
+  const distance = Math.hypot(delta[0], delta[1], delta[2]);
+  const vertical = Math.abs(delta[2]);
+  const horizontal = Math.sqrt(Math.max(0, distance * distance - vertical * vertical));
+  const labels = DISTANCE_AXIS_LABELS;
+  const directionText = distance > 0
+    ? [
+      `${labels[0]} ${formatSignedScalar(delta[0] / distance)}`,
+      `${labels[1]} ${formatSignedScalar(delta[1] / distance)}`,
+      `${labels[2]} ${formatSignedScalar(delta[2] / distance)}`,
+    ].join(' · ')
+    : '--';
+  return [
+    { key: 'distance', label: 'Distance', valueText: formatLengthMeters(distance, unit, precision) },
+    { key: 'vertical', label: 'Vertical', valueText: formatLengthMeters(vertical, unit, precision) },
+    { key: 'horizontal', label: 'Horizontal', valueText: formatLengthMeters(horizontal, unit, precision) },
+    { key: 'direction', label: 'Direction', valueText: directionText },
+  ];
+}
+
 function measurementPointDesignPos(point: MeasurementPoint): Vec3 | null {
-  return point.designWorldPos ?? point.worldPos ?? null;
+  const value = point.designWorldPos;
+  if (!value || value.length !== 3 || value.some(component => !Number.isFinite(component))) {
+    return null;
+  }
+  return value;
 }
 
 function computeAngleDegrees(
@@ -174,6 +429,7 @@ export function buildMeasurementValueText(
   measurement: MeasurementLike,
   unit: LengthUnit,
   precision: number,
+  referenceFrame?: ResolvedReferenceFrame,
 ): string | null {
   switch (measurement.kind) {
     case 'distance': {
@@ -193,10 +449,34 @@ export function buildMeasurementValueText(
       );
       return degrees === null ? null : `${degrees.toFixed(1)}°`;
     }
-    case 'elevation_point':
-      return formatSignedLengthMeters(measurement.absoluteElevation, unit, precision);
-    case 'elevation_delta':
-      return formatSignedLengthMeters(measurement.deltaElevation, unit, precision);
+    case 'elevation_point': {
+      const interpreted = referenceFrame
+        ? computeElevationPointMeasurementResultInFrame(
+          measurement.point,
+          Number.isFinite(measurement.datumElevation) ? measurement.datumElevation : 0,
+          referenceFrame,
+        )
+        : null;
+      return formatSignedLengthMeters(
+        interpreted?.absoluteElevation ?? measurement.absoluteElevation,
+        unit,
+        precision,
+      );
+    }
+    case 'elevation_delta': {
+      const interpreted = referenceFrame
+        ? computeElevationDeltaMeasurementResultInFrame(
+          measurement.origin,
+          measurement.target,
+          referenceFrame,
+        )
+        : null;
+      return formatSignedLengthMeters(
+        interpreted?.deltaElevation ?? measurement.deltaElevation,
+        unit,
+        precision,
+      );
+    }
   }
 }
 
@@ -205,21 +485,46 @@ export function buildMeasurementComponentsText(
   measurement: MeasurementLike,
   unit: LengthUnit,
   precision: number,
+  referenceFrame?: ResolvedReferenceFrame,
 ): string | null {
   if (measurement.kind !== 'distance') return null;
   const origin = measurement.origin.designWorldPos;
   const target = measurement.target.designWorldPos;
   if (!origin || !target) return null;
-  const deltas = [
+  const interpreted = referenceFrame
+    ? computeDistanceMeasurementResultInFrame(
+      measurement.origin,
+      measurement.target,
+      referenceFrame,
+    )
+    : null;
+  const deltas = interpreted?.offsets.components ?? [
     target[0] - origin[0],
     target[1] - origin[1],
     target[2] - origin[2],
   ];
+  const labels = interpreted?.axisLabels ?? DISTANCE_AXIS_LABELS;
   return deltas
     .map((delta, index) => (
-      `${DISTANCE_AXIS_LABELS[index]} ${formatSignedLengthMeters(delta, unit, precision)}`
+      `${labels[index]} ${formatSignedLengthMeters(delta, unit, precision)}`
     ))
     .join('\n');
+}
+
+function formatFrameName(frame: ResolvedReferenceFrame): string {
+  return frame.kind === 'world' ? 'World' : `WRT ${formatPdmsRef(frame.refno)}`;
+}
+
+function formatFramePosition(
+  position: Vec3,
+  labels: ReferenceFrameAxisLabels,
+  unit: LengthUnit,
+  precision: number,
+): string {
+  const digits = Math.max(0, Math.min(6, Math.floor(Number(precision) || 0)));
+  return position.map((value, index) => (
+    `${labels[index]} ${convertLength(value, 'm', unit).toFixed(digits)}${unit}`
+  )).join(' ');
 }
 
 export function buildElevationPointLabelLines(input: {

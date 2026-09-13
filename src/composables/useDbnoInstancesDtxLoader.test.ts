@@ -25,7 +25,10 @@ vi.mock('@/api/genModelRealtimeApi', () => ({
 }));
 
 vi.mock('@/utils/parseGlbGeometry', () => ({
-  parseGlbGeometry: vi.fn(() => null),
+  parseGlbGeometryResult: vi.fn(() => ({
+    ok: false,
+    error: Object.assign(new Error('invalid test GLB'), { issue: null }),
+  })),
 }));
 
 vi.mock('@/composables/useDisplayThemeStore', () => ({

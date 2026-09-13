@@ -1208,6 +1208,22 @@ function handleRibbonCommand(commandId: string) {
     case 'panel.properties':
       togglePanel('properties');
       return;
+    case 'view.attr.all':
+      toolStore.setAttributeDisplayMode('all');
+      openPanel('properties');
+      return;
+    case 'view.attr.general':
+      toolStore.setAttributeDisplayMode('general');
+      openPanel('properties');
+      return;
+    case 'view.attr.component':
+      toolStore.setAttributeDisplayMode('component');
+      openPanel('properties');
+      return;
+    case 'view.attr.uda':
+      toolStore.setAttributeDisplayMode('uda');
+      openPanel('properties');
+      return;
     case 'panel.query':
     case 'panel.nearbyQuery':
     case 'panel.spatialQuery':

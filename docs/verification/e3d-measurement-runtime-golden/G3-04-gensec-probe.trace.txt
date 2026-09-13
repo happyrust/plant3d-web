@@ -1,0 +1,7 @@
+﻿count=6470
+first_ref==23406/14
+first_name==23406/14
+first_type=GENSEC
+first_ydir=S WRT =23406/10
+first_zdir=U WRT =23406/10
+complete

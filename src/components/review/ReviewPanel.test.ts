@@ -1,5 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createApp, h, nextTick } from 'vue';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createApp, h, nextTick, type Component } from 'vue';
 
 import type { ReviewTask } from '@/types/auth';
 
@@ -188,6 +188,8 @@ const commandBusMock = vi.hoisted(() => ({
   emitCommand: vi.fn(),
 }));
 
+let ReviewPanel: Component;
+
 vi.mock('@/composables/useDockApi', () => ({
   ensurePanelAndActivate: dockApiMock.ensurePanelAndActivate,
 }));
@@ -287,6 +289,10 @@ vi.mock('@/composables/useUserStore', () => ({
   }),
 }));
 
+beforeAll(async () => {
+  ReviewPanel = (await import('./ReviewPanel.vue')).default;
+});
+
 function createTask(overrides: Partial<ReviewTask> = {}): ReviewTask {
   return {
     id: 'task-1',
@@ -316,9 +322,9 @@ function createTask(overrides: Partial<ReviewTask> = {}): ReviewTask {
 }
 
 async function settlePanel() {
-  await vi.dynamicImportSettled();
   await nextTick();
   await Promise.resolve();
+  await new Promise((resolve) => setTimeout(resolve, 0));
   await nextTick();
 }
 
@@ -335,8 +341,6 @@ async function expandWorkflowTransfer() {
 }
 
 async function mountReviewPanel(props: Record<string, unknown> = {}) {
-  vi.resetModules();
-  const { default: ReviewPanel } = await import('./ReviewPanel.vue');
   const host = document.createElement('div');
   document.body.appendChild(host);
   const app = createApp({ render: () => h(ReviewPanel, props) });
@@ -468,7 +472,7 @@ describe('ReviewPanel', () => {
     vi.unstubAllEnvs();
   });
 
-  it('confirmed record counts only canonical reviewer annotations', { timeout: 10_000 }, async () => {
+  it('confirmed record counts only canonical reviewer annotations', async () => {
     sortedConfirmedRecords.value = [
       {
         id: 'record-canonical-1',
@@ -509,6 +513,24 @@ describe('ReviewPanel', () => {
     expect(document.body.textContent).toContain('审核记录');
     expect(document.body.textContent).toContain('当前任务下还没有可浏览的批注');
     expect(document.body.textContent).not.toContain('旧审核字段');
+    mounted.unmount();
+  });
+
+  it('does not block the review workbench while the Viewer is still starting', async () => {
+    let resolveViewer: ((ready: boolean) => void) | undefined;
+    viewerWaitForReadyMock.mockImplementationOnce(() => new Promise<boolean>((resolve) => {
+      resolveViewer = resolve;
+    }));
+
+    const mounted = await mountReviewPanel();
+    await settlePanel();
+
+    expect(document.querySelector('[data-testid="review-workbench-context-zone"]')).not.toBeNull();
+    expect(document.querySelector('[data-testid="review-workbench-workflow-zone"]')).not.toBeNull();
+    expect(document.body.textContent).toContain('任务详情');
+
+    resolveViewer?.(false);
+    await settlePanel();
     mounted.unmount();
   });
 

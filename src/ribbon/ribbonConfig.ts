@@ -9,41 +9,6 @@ const showMyTasksEntry = isMyTasksAvailableInWorkflowMode();
 
 const ALL_RIBBON_TABS: RibbonTabConfig[] = [
   {
-    id: 'file',
-    label: '文件',
-    groups: [
-      {
-        id: 'file.project',
-        label: '项目',
-        items: [
-          { kind: 'button', id: 'file.open', label: '打开', icon: 'folder_open', commandId: 'file.open' },
-          { kind: 'button', id: 'file.save', label: '保存', icon: 'file', commandId: 'file.save' },
-        ],
-      },
-      {
-        id: 'file.navigation',
-        label: '导航',
-        items: [
-          { kind: 'button', id: 'file.backToDashboard', label: '返回概览', icon: 'layout_dashboard', commandId: 'file.backToDashboard' },
-        ],
-      },
-    ],
-  },
-  {
-    id: 'edit',
-    label: '编辑',
-    groups: [
-      {
-        id: 'edit.basic',
-        label: '基础',
-        items: [
-          { kind: 'button', id: 'edit.undo', label: '撤销', icon: 'undo', commandId: 'edit.undo' },
-          { kind: 'button', id: 'edit.redo', label: '重做', icon: 'redo', commandId: 'edit.redo' },
-        ],
-      },
-    ],
-  },
-  {
     id: 'view',
     label: '视图',
     groups: [
@@ -122,14 +87,6 @@ const ALL_RIBBON_TABS: RibbonTabConfig[] = [
               { kind: 'button', id: 'view.attr.general', label: '通用属性', icon: 'file_text', commandId: 'view.attr.general' },
               { kind: 'button', id: 'view.attr.component', label: '元件属性', icon: 'component', commandId: 'view.attr.component' },
               { kind: 'button', id: 'view.attr.uda', label: 'UDA属性', icon: 'tag', commandId: 'view.attr.uda' },
-            ],
-          },
-          {
-            kind: 'stack',
-            id: 'view.attributes.compare',
-            items: [
-              { kind: 'button', id: 'view.attr.normal', label: '完整显示', icon: 'eye', commandId: 'view.attr.normal' },
-              { kind: 'button', id: 'view.attr.diff', label: '差异对比', icon: 'compare', commandId: 'view.attr.diff' },
             ],
           },
         ],
@@ -267,7 +224,6 @@ const ALL_RIBBON_TABS: RibbonTabConfig[] = [
           { kind: 'button', id: 'task.modelGen', label: '模型生成', icon: 'cube', commandId: 'task.createModelGeneration' },
           { kind: 'button', id: 'task.incrementalUpdate', label: '增量更新', icon: 'activity', commandId: 'panel.incrementalUpdate' },
           { kind: 'button', id: 'task.modelVersionCompare', label: '版本对比', icon: 'compare', commandId: 'panel.modelVersionCompare' },
-          { kind: 'button', id: 'task.versionTimeline', label: '版本时间线', icon: 'activity', commandId: 'panel.versionTimeline' },
           { kind: 'button', id: 'task.modelExport', label: '导出模型', icon: 'download', commandId: 'task.createModelExport' },
         ],
       },
@@ -304,7 +260,6 @@ const ALL_RIBBON_TABS: RibbonTabConfig[] = [
           { kind: 'button', id: 'help.reviewGuide', label: '校审导航', icon: 'help', commandId: 'help.reviewGuide' },
           { kind: 'button', id: 'help.about', label: '关于', icon: 'help', commandId: 'help.about' },
           { kind: 'button', id: 'help.releaseNotes', label: '更新说明', icon: 'help', commandId: 'help.releaseNotes' },
-          { kind: 'button', id: 'help.docs', label: '文档', icon: 'question', commandId: 'help.docs' },
         ],
       },
     ],

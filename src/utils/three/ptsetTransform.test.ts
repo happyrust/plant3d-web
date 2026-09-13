@@ -58,8 +58,47 @@ describe('ptsetTransform', () => {
         number: 1,
         worldPos: [111, 22, 30],
         pbore: 100,
+        sceneDir: null,
       },
     ]);
+  });
+
+  it('carries the P-point direction through the same chain as the position (Perpendicular to LINE provider)', () => {
+    const response: PtsetResponse = {
+      success: true,
+      refno: '24381_145714',
+      ptset: [
+        {
+          number: 2,
+          pt: [0, 0, 0],
+          dir: [1, 0, 0],
+          dir_flag: 1,
+          ref_dir: null,
+          pbore: 100,
+          pwidth: 0,
+          pheight: 0,
+          pconnect: '',
+        },
+      ],
+      world_transform: null,
+      unit_info: { source_unit: 'mm', target_unit: 'mm', conversion_factor: 1 },
+      error_message: null,
+    };
+    // world_transform rotates +X to +Y; the global matrix only translates.
+    const worldTransform = [
+      0, 1, 0, 0,
+      -1, 0, 0, 0,
+      0, 0, 1, 0,
+      10, 20, 30, 1,
+    ];
+    const out = ptsetResponseToSceneCandidates(
+      '24381_145714',
+      response,
+      worldTransform,
+      new Matrix4().makeTranslation(100, 0, 0),
+    );
+    expect(out[0]!.worldPos).toEqual([110, 20, 30]);
+    expect(out[0]!.sceneDir).toEqual([0, 1, 0]);
   });
 
   it('transforms direction vectors without applying translation', () => {

@@ -1,0 +1,55 @@
+﻿wrt_gadget_active=TRUE
+---- case wrt==24381/101439
+wrt_name=/Copy-of-RCS151MM
+wrt_type=EQUI
+wrt_ori_world=Y is E WRT /* and Z is U WRT /*
+wrt_pos_world=W 6696.92mm N 9656.05mm U 6133mm WRT /*
+resolved_wrt=/Copy-of-RCS151MM hardType=EQUI
+gadget_wrt_val=/Copy-of-RCS151MM
+label_type=XYZ
+from_in_wrt=W 391.13mm N 16466.67mm U 12531.8mm WRT /Copy-of-RCS151MM
+to_in_wrt=W 791.41mm N 14546.53mm U 8101.127mm WRT /Copy-of-RCS151MM
+distance_text=4845.41mm
+offset_1_text=-400.28mm
+offset_2_text=-1920.14mm
+offset_3_text=-4430.67mm
+offset_1_db=-400.279999999999mm
+offset_2_db=-1920.14mm
+offset_3_db=-4430.673mm
+direction_in_wrt=S 11.7755 W 66.1215 D WRT /Copy-of-RCS151MM
+direction_world=W 11.7755 N 66.1215 D WRT /*
+expected_axis_x=S WRT /*
+expected_axis_y=E WRT /*
+expected_axis_z=U WRT /*
+expected_offset_1=-400.279999999999mm
+expected_offset_2=-1920.14mm
+expected_offset_3=-4430.673mm
+expected_vs_actual_max_abs_diff=0mm
+---- case wrt==24381/101423
+wrt_name=/Copy-of-RCS616MD
+wrt_type=EQUI
+wrt_ori_world=Y is U WRT /* and Z is S 21 E WRT /*
+wrt_pos_world=W 6376.75mm N 16349.28mm U 2430mm WRT /*
+resolved_wrt=/Copy-of-RCS616MD hardType=EQUI
+gadget_wrt_val=/Copy-of-RCS616MD
+label_type=XYZ
+from_in_wrt=E 12815.586mm N 16234.8mm U 11669.905mm WRT /Copy-of-RCS616MD
+to_in_wrt=E 11166.428mm N 11804.127mm U 10608.095mm WRT /Copy-of-RCS616MD
+distance_text=4845.41mm
+offset_1_text=-1649.16mm
+offset_2_text=-4430.67mm
+offset_3_text=-1061.81mm
+offset_1_db=-1649.15759729034mm
+offset_2_db=-4430.673mm
+offset_3_db=-1061.81020775821mm
+direction_in_wrt=S 20.416 W 12.6584 D WRT /Copy-of-RCS616MD
+direction_world=W 11.7755 N 66.1215 D WRT /*
+expected_axis_x=E 21 N WRT /*
+expected_axis_y=U WRT /*
+expected_axis_z=S 21 E WRT /*
+expected_offset_1=-1649.15759729034mm
+expected_offset_2=-4430.673mm
+expected_offset_3=-1061.81020775821mm
+expected_vs_actual_max_abs_diff=0.227373675443232EX-12mm
+restored_wrt=/*
+complete

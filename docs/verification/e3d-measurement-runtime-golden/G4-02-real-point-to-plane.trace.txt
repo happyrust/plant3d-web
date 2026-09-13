@@ -1,0 +1,26 @@
+﻿case=G4-02 real pick
+provider=registered GPHPLANE picked through EDG on its outline; source picked on GPHPOSITION aid
+source_aid=10041
+target_aid=10021
+last_pick_type=DESIGNAID
+last_pick_aid_type=LINE
+last_pick_aid_number=10021
+position_data_type=DESIGNAID
+position_data_original_type=DESIGNAID
+position_data_position=Unset
+target_getLine_set=FALSE
+target_plane_status=set
+target_plane_position=E 8500mm N 10500mm U 17500mm WRT /*
+target_plane_normal=N WRT /*
+wrt=/*
+result_from=E 8000mm N 10500mm U 16500mm WRT /*
+result_to=E 8000mm N 9000mm U 16500mm WRT /*
+distance_db=1500
+distance_text=1500mm
+vertical_db=0
+vertical_text=0mm
+horizontal_db=1500
+horizontal_text=1500mm
+direction_text=S
+perpendicular=TRUE wrt_gadget_active=FALSE
+complete

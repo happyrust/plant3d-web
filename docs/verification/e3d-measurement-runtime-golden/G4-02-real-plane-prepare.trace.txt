@@ -1,0 +1,7 @@
+﻿source2_aid=10041
+source2_position=E 8000mm N 9000mm U 16500mm WRT /*
+plane_aid=10021
+plane_position=E 8500mm N 10500mm U 17500mm WRT /*
+plane_normal=N WRT /*
+perpendicular=TRUE dimension_wrt=/*
+complete

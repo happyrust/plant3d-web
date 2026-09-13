@@ -1,0 +1,42 @@
+-- Runtime golden for gen-model `POST /api/v1/element/ptset`: dump every P-point (world frame)
+-- of a few members of BRAN =24381/145018 straight from the running E3D session.
+!traceFile = object FILE('C:/Users/dpc/AppData/Local/Temp/ptset-api-run/e3d-ptset.trace.txt')
+!trace = ARRAY()
+!ce0 = !!ce
+
+!items = ARRAY()
+!items.append('=24381/145031')
+!items.append('=24381/145030')
+!items.append('=24381/145032')
+!items.append('=24381/145019')
+!items.append('=24381/145035')
+
+do !refnoString values !items
+  !item = object DBREF(!refnoString)
+  handle any
+    !trace.append('case ' & !refnoString & ' blocked: ' & !!error.text)
+    skip
+  endhandle
+  !trace.append('---- ' & !refnoString & ' type=' & !item.type)
+  !trace.append('pos_world=' & !item.pos.wrt(world).string())
+  !trace.append('ori_world=' & !item.ori.wrt(world).string())
+  !!ce = !item
+  do !n from 0 to 31
+    var !pos P$!n POS WRT /*
+    handle any
+      skip
+    endhandle
+    var !dir P$!n DIR WRT /*
+    handle any
+      !dir = 'n/a'
+    endhandle
+    var !bore P$!n BORE
+    handle any
+      !bore = 'n/a'
+    endhandle
+    !trace.append('P' & !n.string() & '|pos=' & !pos & '|dir=' & !dir & '|bore=' & !bore)
+  enddo
+enddo
+
+!!ce = !ce0
+!traceFile.writeFile('OVERWRITE', !trace)

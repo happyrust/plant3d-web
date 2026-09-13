@@ -1,0 +1,52 @@
+!traceFile = object FILE('D:/work/plant-code/old/plant3d-web/docs/verification/e3d-measurement-runtime-golden/G4-line-plane-kernel.trace.txt')
+!trace = ARRAY()
+
+!source = object POSITION('E 1000mm N 1000mm U 1000mm WRT /*')
+!lineA = object POSITION('E 0mm N 0mm U 0mm WRT /*')
+!lineB = object POSITION('E 2000mm N 0mm U 0mm WRT /*')
+!targetLine = object LINE(!lineA, !lineB)
+
+!first = object EDGPOSITIONDATA()
+!first.type = 'POSITION'
+!first.originalType = 'POSITION'
+!first.position = !source
+!secondLine = object EDGPOSITIONDATA()
+!secondLine.type = 'GRAPHICS'
+!secondLine.originalType = 'GRAPHICS'
+!secondLine.line = !targetLine
+!lineArc = !!appMathLib.gmfArc.perpendicularToPoint(!first, !secondLine)
+
+if (!lineArc.set()) then
+  !lineFrom = !lineArc.position
+  !lineTo = !lineArc.anglePosition(0)
+  !trace.append('line_status=ok')
+  !trace.append('line_from=' & !lineFrom.string())
+  !trace.append('line_to=' & !lineTo.string())
+  !trace.append('line_distance=' & !lineFrom.distance(!lineTo).dbUnits().value().string())
+else
+  !trace.append('line_status=unset')
+endif
+
+!planeOrigin = object POSITION('E 0mm N 0mm U 0mm WRT /*')
+!planeVector = object POINTVECTOR(!planeOrigin, object DIRECTION('U WRT WORLD'))
+!targetPlane = !planeVector.plane()
+!secondPlane = object EDGPOSITIONDATA()
+!secondPlane.type = 'GRAPHICS'
+!secondPlane.originalType = 'GRAPHICS'
+!secondPlane.plane = !targetPlane
+!planeArc = !!appMathLib.gmfArc.perpendicularToPoint(!first, !secondPlane)
+
+if (!planeArc.set()) then
+  !planeFrom = !planeArc.position
+  !planeTo = !planeArc.anglePosition(0)
+  !trace.append('plane_status=ok')
+  !trace.append('plane_from=' & !planeFrom.string())
+  !trace.append('plane_to=' & !planeTo.string())
+  !trace.append('plane_distance=' & !planeFrom.distance(!planeTo).dbUnits().value().string())
+else
+  !trace.append('plane_status=unset')
+endif
+
+!trace.append('complete')
+!traceFile.writeFile('OVERWRITE', !trace)
+return

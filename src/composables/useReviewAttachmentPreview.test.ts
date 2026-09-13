@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   activeReviewAttachmentPreview,
@@ -7,6 +7,8 @@ import {
   clearReviewAttachmentPreview,
   getReviewAttachmentPreviewKind,
   openReviewAttachmentPreview,
+  reviewAttachmentPreviewError,
+  reviewAttachmentPreviewStatus,
 } from './useReviewAttachmentPreview';
 
 import type { ReviewAttachment } from '@/types/auth';
@@ -32,6 +34,23 @@ describe('useReviewAttachmentPreview', () => {
   beforeEach(() => {
     clearReviewAttachmentPreview();
     ensurePanelAndActivateMock.mockClear();
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (/\.jpe?g(?:$|\?)/i.test(url)) {
+        return new Response(new Uint8Array([0xff, 0xd8, 0xff, 0xe0]), {
+          status: 206,
+          headers: { 'Content-Type': 'image/jpeg' },
+        });
+      }
+      return new Response(new TextEncoder().encode('%PDF-1.7'), {
+        status: 206,
+        headers: { 'Content-Type': 'application/pdf' },
+      });
+    }));
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
   it('recognizes only PDF and uploaded image formats', () => {
@@ -107,6 +126,32 @@ describe('useReviewAttachmentPreview', () => {
     expect(ensurePanelAndActivateMock).toHaveBeenCalledTimes(2);
     expect(ensurePanelAndActivateMock).toHaveBeenNthCalledWith(1, 'reviewAttachmentPreview');
     expect(ensurePanelAndActivateMock).toHaveBeenNthCalledWith(2, 'reviewAttachmentPreview');
+  });
+
+  it('validates the file signature before marking the preview ready', async () => {
+    expect(openReviewAttachmentPreview('task-1', attachment())).toBe(true);
+
+    await vi.waitFor(() => expect(reviewAttachmentPreviewStatus.value).toBe('ready'));
+    expect(reviewAttachmentPreviewError.value).toBeNull();
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/files/review_attachments/drawing.pdf'),
+      expect.objectContaining({
+        method: 'GET',
+        headers: { Range: 'bytes=0-1023' },
+      }),
+    );
+  });
+
+  it('rejects an HTML error page returned under a PDF file name', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(new Response('<html>', {
+      status: 200,
+      headers: { 'Content-Type': 'text/html' },
+    }));
+
+    expect(openReviewAttachmentPreview('task-1', attachment())).toBe(true);
+    await vi.waitFor(() => expect(reviewAttachmentPreviewStatus.value).toBe('error'));
+    expect(reviewAttachmentPreviewError.value).toContain('Content-Type');
+    expect(reviewAttachmentPreviewError.value).toContain('drawing.pdf');
   });
 
   it('rejects unsupported files and unsafe URL protocols', () => {

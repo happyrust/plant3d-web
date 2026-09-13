@@ -12,6 +12,11 @@ import {
 
 import { DEFAULT_PTSET_SNAP_PX } from '@/composables/usePtsetSnap';
 import { getOutputProjectFromUrl } from '@/lib/filesOutput';
+import {
+  DEFAULT_MEASUREMENT_PICK_LAYER,
+  normalizeMeasurementPickLayer,
+  type MeasurementPickLayerConfig,
+} from '@/measurement/pick/pickLayerModel';
 
 /**
  * 测量取点模式契约：
@@ -31,10 +36,18 @@ export type XeokitMeasurementStyleConfig = {
   distanceShowMarkers: boolean;
   distanceShowAxisBreakdown: boolean;
   /**
-   * E3D「Show linear dimension」：测量完成后是否生成持久线性标注。
-   * 关闭时第二击只产出临时结果（Result Inspector），不落 dimension。
+   * E3D「Show linear dimension」：是否显示两点间的直接斜线尺寸。
+   * 它是显示选项，不决定测量结果是否保留。
    */
-  persistDimension: boolean;
+  showDirectLinearDimension: boolean;
+  /**
+   * E3D「Perpendicular to」：第二击的点源若带轴向 / 圆面几何，测的是起点到该
+   * 无限线 / 无限面的垂距（结果表改为 Distance / Vertical / Horizontal / Direction，
+   * 参考系固定 World）；点源无几何时退化为点到点（golden G4）。
+   */
+  perpendicularTo: boolean;
+  /** Web 扩展：测量完成后是否把临时结果保留为可管理的测量标注。 */
+  keepMeasurementAnnotation: boolean;
   angleShowLabel: boolean;
   angleShowMarkers: boolean;
   elevationDatum: number;
@@ -56,6 +69,13 @@ export type XeokitMeasurementStyleConfig = {
   measurementPickSources: MeasurementPickSourceSettings;
   /** 各取点模式记住的 snap 偏好；首次进入某模式才应用该模式默认值。 */
   measurementPickModeSnapMemory: MeasurementPickModeSnapMemory;
+  /**
+   * E3D Positioning Control 拾取层：拾取过滤器（Any / Element / Ppoint …）×
+   * 拾取类型（Snap / Cursor / Mid-Point / Fraction / Proportion / Distance / Intersect）
+   * + Significant Snaps。与点源 show / snap 正交：点源决定候选从哪来，拾取层决定
+   * 哪些候选能被拾中、拾中后位置如何派生（方案 2026-09-12 Phase A）。
+   */
+  measurementPickLayer: MeasurementPickLayerConfig;
 };
 
 const STORAGE_KEY_V1 = 'plant3d-web-xeokit-measurement-style-v1';
@@ -65,16 +85,19 @@ const STORAGE_KEY_V4 = 'plant3d-web-xeokit-measurement-style-v4';
 const STORAGE_KEY_V5 = 'plant3d-web-xeokit-measurement-style-v5';
 const STORAGE_KEY_V6 = 'plant3d-web-xeokit-measurement-style-v6';
 const STORAGE_KEY_V7 = 'plant3d-web-xeokit-measurement-style-v7';
+const STORAGE_KEY_V8 = 'plant3d-web-xeokit-measurement-style-v8';
+const STORAGE_KEY_V9 = 'plant3d-web-xeokit-measurement-style-v9';
 const DEFAULT_STORAGE_SCOPE = '__default__';
 
 export const DEFAULT_XEOKIT_MEASUREMENT_STYLE: Readonly<XeokitMeasurementStyleConfig> = {
   distanceKeepDimensions: true,
   distanceShowTotalLabel: true,
   distanceShowMarkers: true,
-  // E3D 默认体验：距离结果默认显示 E/N/U 轴向分量。
+  // 当前 World 笛卡尔坐标下默认显示三个轴向分量。
   distanceShowAxisBreakdown: true,
-  // V7：默认 true 兼容现状（测量完成即落线性标注）；关闭后走临时结果态。
-  persistDimension: true,
+  showDirectLinearDimension: true,
+  perpendicularTo: false,
+  keepMeasurementAnnotation: true,
   angleShowLabel: true,
   angleShowMarkers: true,
   elevationDatum: 0,
@@ -91,6 +114,7 @@ export const DEFAULT_XEOKIT_MEASUREMENT_STYLE: Readonly<XeokitMeasurementStyleCo
   measurementPickMode: 'e3d',
   measurementPickSources: cloneMeasurementPickSourceSettings(),
   measurementPickModeSnapMemory: {},
+  measurementPickLayer: DEFAULT_MEASUREMENT_PICK_LAYER,
 };
 
 function createDefaultMeasurementStyle(): XeokitMeasurementStyleConfig {
@@ -98,6 +122,7 @@ function createDefaultMeasurementStyle(): XeokitMeasurementStyleConfig {
     ...DEFAULT_XEOKIT_MEASUREMENT_STYLE,
     measurementPickSources: cloneMeasurementPickSourceSettings(),
     measurementPickModeSnapMemory: {},
+    measurementPickLayer: normalizeMeasurementPickLayer(DEFAULT_MEASUREMENT_PICK_LAYER),
   };
 }
 
@@ -140,10 +165,15 @@ function loadPersisted(scope = getCurrentStorageScope()): XeokitMeasurementStyle
   }
 
   try {
+    const rawV9 = localStorage.getItem(withStorageScope(STORAGE_KEY_V9, scope));
+    const rawV8 = localStorage.getItem(withStorageScope(STORAGE_KEY_V8, scope));
     const rawV7 = localStorage.getItem(withStorageScope(STORAGE_KEY_V7, scope));
-    const rawV6 = rawV7 ?? localStorage.getItem(withStorageScope(STORAGE_KEY_V6, scope));
+    const persistedV6 = localStorage.getItem(withStorageScope(STORAGE_KEY_V6, scope));
+    // V9 只是多了 measurementPickLayer，V8 的字段语义不变。
+    const rawV8OrNewer = rawV9 ?? rawV8;
+    const rawV6OrNewer = rawV8OrNewer ?? rawV7 ?? persistedV6;
     const rawV5 = localStorage.getItem(withStorageScope(STORAGE_KEY_V5, scope));
-    const raw = rawV6
+    const raw = rawV6OrNewer
       ?? rawV5
       ?? localStorage.getItem(withStorageScope(STORAGE_KEY_V4, scope))
       ?? localStorage.getItem(withStorageScope(STORAGE_KEY_V3, scope))
@@ -151,7 +181,10 @@ function loadPersisted(scope = getCurrentStorageScope()): XeokitMeasurementStyle
       ?? localStorage.getItem(STORAGE_KEY_V1);
     if (!raw) return createDefaultMeasurementStyle();
 
-    const parsed = JSON.parse(raw) as Partial<XeokitMeasurementStyleConfig>;
+    const parsed = JSON.parse(raw) as Partial<XeokitMeasurementStyleConfig> & {
+      /** V7 legacy field; it meant Web retention despite the old E3D label. */
+      persistDimension?: boolean;
+    };
     const legacySnapEnabled = parsed.keypointSnapEnabled ?? DEFAULT_XEOKIT_MEASUREMENT_STYLE.keypointSnapEnabled;
     const legacySnapPx = Number.isFinite(parsed.keypointSnapPx)
       ? Number(parsed.keypointSnapPx)
@@ -162,7 +195,7 @@ function loadPersisted(scope = getCurrentStorageScope()): XeokitMeasurementStyle
         keypointSnapEnabled: legacySnapEnabled,
         keypointSnapPx: legacySnapPx,
       });
-    if (!rawV6 && !rawV5) {
+    if (!rawV6OrNewer && !rawV5) {
       measurementPickSources.position = {
         ...measurementPickSources.position,
         show: true,
@@ -173,21 +206,31 @@ function loadPersisted(scope = getCurrentStorageScope()): XeokitMeasurementStyle
         ),
       };
     }
-    // V6 迁移：老用户一次性切到 E3D 默认的轴向分量显示，之后可自行关闭并持久化。
-    const distanceShowAxisBreakdown = rawV6
+    // V6 迁移：老用户一次性开启 World 轴向分量显示，之后可自行关闭并持久化。
+    const distanceShowAxisBreakdown = rawV6OrNewer
       ? parsed.distanceShowAxisBreakdown ?? DEFAULT_XEOKIT_MEASUREMENT_STYLE.distanceShowAxisBreakdown
       : true;
-    // V7 迁移：persistDimension 默认 true 兼容现状（老配置升级后测量仍即刻落标注）。
-    const persistDimension = rawV7
-      ? parsed.persistDimension ?? DEFAULT_XEOKIT_MEASUREMENT_STYLE.persistDimension
+    // V8 把旧字段拆成 E3D 显示选项与 Web 结果保留选项。
+    const showDirectLinearDimension = rawV8OrNewer
+      ? parsed.showDirectLinearDimension
+        ?? DEFAULT_XEOKIT_MEASUREMENT_STYLE.showDirectLinearDimension
       : true;
+    const keepMeasurementAnnotation = rawV8OrNewer
+      ? parsed.keepMeasurementAnnotation
+        ?? DEFAULT_XEOKIT_MEASUREMENT_STYLE.keepMeasurementAnnotation
+      : rawV7
+        ? parsed.persistDimension
+          ?? DEFAULT_XEOKIT_MEASUREMENT_STYLE.keepMeasurementAnnotation
+        : true;
     const ptsetSetting = measurementPickSources.ptset;
     return {
       distanceKeepDimensions: parsed.distanceKeepDimensions ?? DEFAULT_XEOKIT_MEASUREMENT_STYLE.distanceKeepDimensions,
       distanceShowTotalLabel: parsed.distanceShowTotalLabel ?? DEFAULT_XEOKIT_MEASUREMENT_STYLE.distanceShowTotalLabel,
       distanceShowMarkers: parsed.distanceShowMarkers ?? DEFAULT_XEOKIT_MEASUREMENT_STYLE.distanceShowMarkers,
       distanceShowAxisBreakdown,
-      persistDimension,
+      showDirectLinearDimension,
+      perpendicularTo: parsed.perpendicularTo === true,
+      keepMeasurementAnnotation,
       angleShowLabel: parsed.angleShowLabel ?? DEFAULT_XEOKIT_MEASUREMENT_STYLE.angleShowLabel,
       angleShowMarkers: parsed.angleShowMarkers ?? DEFAULT_XEOKIT_MEASUREMENT_STYLE.angleShowMarkers,
       elevationDatum: Number.isFinite(parsed.elevationDatum) ? Number(parsed.elevationDatum) : DEFAULT_XEOKIT_MEASUREMENT_STYLE.elevationDatum,
@@ -204,6 +247,8 @@ function loadPersisted(scope = getCurrentStorageScope()): XeokitMeasurementStyle
       measurementPickMode: parsed.measurementPickMode === 'free_surface' ? 'free_surface' : 'e3d',
       measurementPickSources,
       measurementPickModeSnapMemory: cloneSnapMemory(parsed.measurementPickModeSnapMemory),
+      // V8 及更早没有这一格：按 E3D 缺省（Any × Snap，Significant Snaps 开）起步。
+      measurementPickLayer: normalizeMeasurementPickLayer(parsed.measurementPickLayer),
     };
   } catch {
     return createDefaultMeasurementStyle();
@@ -217,7 +262,7 @@ watch(
   (next) => {
     if (typeof localStorage === 'undefined') return;
     try {
-      localStorage.setItem(withStorageScope(STORAGE_KEY_V7), JSON.stringify(next));
+      localStorage.setItem(withStorageScope(STORAGE_KEY_V9), JSON.stringify(next));
     } catch {
       // ignore storage failures
     }
@@ -319,6 +364,25 @@ function updateMeasurementPickSource(
   updateStyle({ measurementPickSources: next });
 }
 
+/**
+ * 改拾取层（过滤器 / 拾取类型 / 类型取值 / Significant Snaps）。未知 id、不可用项
+ * 与非法数值一律回 E3D 缺省（`normalizeMeasurementPickLayer`），`values` 按字段合并。
+ */
+function updateMeasurementPickLayer(
+  patch: Partial<Omit<MeasurementPickLayerConfig, 'values'>> & {
+    values?: Partial<MeasurementPickLayerConfig['values']>;
+  },
+): void {
+  const current = state.measurementPickLayer;
+  const next = normalizeMeasurementPickLayer({
+    filter: patch.filter ?? current.filter,
+    pickType: patch.pickType ?? current.pickType,
+    significantSnaps: patch.significantSnaps ?? current.significantSnaps,
+    values: { ...current.values, ...(patch.values ?? {}) },
+  });
+  updateStyle({ measurementPickLayer: next });
+}
+
 function resetStyle(): void {
   Object.assign(state, createDefaultMeasurementStyle());
 }
@@ -328,6 +392,7 @@ export function useXeokitMeasurementStyleStore() {
     state,
     updateStyle,
     updateMeasurementPickSource,
+    updateMeasurementPickLayer,
     setMeasurementPickMode,
     resetStyle,
   };

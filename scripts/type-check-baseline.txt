@@ -120,8 +120,6 @@ src/components/review/FileUpload.test.ts|TS2769|No overload matches this call.
 src/components/review/FileUpload.test.ts|TS2769|No overload matches this call.
 src/components/review/FileUpload.test.ts|TS2769|No overload matches this call.
 src/components/review/FileUploadSection.vue|TS2345|Argument of type '{ 'data-testid': string; class: string; type: "button"; onClick: (lineage?: { taskId?: string | null; formId?: string | null; }) => Promise<void>; }' is not assignable to parameter of type 'ButtonHTMLAttributes & ReservedProps & Record<string, unknown>'.
-src/components/review/InitiateReviewPanel.vue|TS2322|Type '"high" | "low" | "medium" | undefined' is not assignable to type '"high" | "low" | "urgent" | "medium"'.
-src/components/review/InitiateReviewPanel.vue|TS2322|Type '"high" | "low" | "urgent" | "medium"' is not assignable to type '"high" | "low" | "medium"'.
 src/components/review/InitiateReviewPanel.vue|TS2339|Property 'launchInput' does not exist on type '{ formId: string | null; userToken: string | null; userId: string | null; projectId: string | null; isEmbedMode: boolean; }'.
 src/components/review/InitiateReviewPanel.vue|TS2339|Property 'launchInput' does not exist on type '{ formId: string | null; userToken: string | null; userId: string | null; projectId: string | null; isEmbedMode: boolean; }'.
 src/components/review/InitiateReviewPanel.vue|TS2345|Argument of type 'TreeNodeDto | undefined' is not assignable to parameter of type 'TreeNodeDto'.
@@ -225,7 +223,6 @@ src/components/review/reviewRecordReplay.ts|TS2345|Argument of type 'unknown[]' 
 src/components/review/sections/AuxiliaryDataSection.vue|TS2322|Type '{ ObjectOne: string; ObjectTow: string; Distance: number; }[]' is not assignable to type 'CollisionItem[]'.
 src/components/review/sections/AuxiliaryDataSection.vue|TS2769|No overload matches this call.
 src/components/review/sections/AuxiliaryDataSection.vue|TS2769|No overload matches this call.
-src/components/review/sections/TaskContextSection.vue|TS2678|Type '"normal"' is not comparable to type '"high" | "low" | "urgent" | "medium" | undefined'.
 src/components/review/useMeasurementPathSummaries.ts|TS18048|'corner' is possibly 'undefined'.
 src/components/review/useMeasurementPathSummaries.ts|TS18048|'origin' is possibly 'undefined'.
 src/components/review/useMeasurementPathSummaries.ts|TS18048|'targetPoint' is possibly 'undefined'.
@@ -367,10 +364,6 @@ src/composables/useToolStore.unifiedMeasurements.test.ts|TS2532|Object is possib
 src/composables/useToolStore.unifiedMeasurements.test.ts|TS2532|Object is possibly 'undefined'.
 src/composables/useToolStore.unifiedMeasurements.test.ts|TS2532|Object is possibly 'undefined'.
 src/composables/useUnitSettingsStore.ts|TS2367|This comparison appears to be unintentional because the types '2 | undefined' and '1' have no overlap.
-src/composables/useUserStore.createReviewTask.test.ts|TS2353|Object literal may only specify known properties, and 'reviewerId' does not exist in type '{ title: string; description: string; modelName: string; checkerId: string; approverId: string; priority: "high" | "low" | "urgent" | "medium"; components: ReviewComponent[]; dueDate?: number | undefined; formId?: string | undefined; attachments?: ReviewAttachment[] | undefined; }'.
-src/composables/useUserStore.createReviewTask.test.ts|TS2353|Object literal may only specify known properties, and 'reviewerId' does not exist in type '{ title: string; description: string; modelName: string; checkerId: string; approverId: string; priority: "high" | "low" | "urgent" | "medium"; components: ReviewComponent[]; dueDate?: number | undefined; formId?: string | undefined; attachments?: ReviewAttachment[] | undefined; }'.
-src/composables/useUserStore.createReviewTask.test.ts|TS2353|Object literal may only specify known properties, and 'reviewerId' does not exist in type '{ title: string; description: string; modelName: string; checkerId: string; approverId: string; priority: "high" | "low" | "urgent" | "medium"; components: ReviewComponent[]; dueDate?: number | undefined; formId?: string | undefined; attachments?: ReviewAttachment[] | undefined; }'.
-src/composables/useUserStore.createReviewTask.test.ts|TS2353|Object literal may only specify known properties, and 'reviewerId' does not exist in type '{ title: string; description: string; modelName: string; checkerId: string; approverId: string; priority: "high" | "low" | "urgent" | "medium"; components: ReviewComponent[]; dueDate?: number | undefined; formId?: string | undefined; attachments?: ReviewAttachment[] | undefined; }'.
 src/composables/useUserStore.createReviewTask.test.ts|TS2741|Property 'uploadedAt' is missing in type '{ id: string; name: string; url: string; size: number; mimeType: string; }' but required in type 'ReviewAttachment'.
 src/composables/useUserStore.createReviewTask.test.ts|TS2741|Property 'uploadedAt' is missing in type '{ id: string; name: string; url: string; size: number; mimeType: string; }' but required in type 'ReviewAttachment'.
 src/composables/useUserStore.test.ts|TS18047|'task' is possibly 'null'.
@@ -573,8 +566,6 @@ src/review/services/commentThreadStore.test.ts|TS2532|Object is possibly 'undefi
 src/review/services/commentThreadStore.test.ts|TS2532|Object is possibly 'undefined'.
 src/review/services/commentThreadStore.test.ts|TS2532|Object is possibly 'undefined'.
 src/review/services/commentThreadStore.test.ts|TS2532|Object is possibly 'undefined'.
-src/ribbon/ribbonConfig.test.ts|TS2339|Property 'items' does not exist on type 'RibbonStackItem | RibbonSeparatorItem'.
-src/ribbon/ribbonConfig.test.ts|TS7006|Parameter 'subItem' implicitly has an 'any' type.
 src/ribbon/ribbonConfig.ts|TS2322|Type '{ groups: { items: unknown[]; id: string; label: string; }[]; id: string; label: string; }[]' is not assignable to type 'RibbonTabConfig[]'.
 src/ribbon/ribbonConfig.ts|TS2345|Argument of type '(this: undefined, item: RibbonItem) => RibbonButtonItem[] | RibbonSeparatorItem[] | { items: RibbonButtonItem[]; kind: "stack"; id: string; }[]' is not assignable to parameter of type '(this: undefined, value: RibbonItem, index: number, array: RibbonItem[]) => RibbonButtonItem | readonly RibbonButtonItem[]'.
 src/testing/spatialQueryRealBranHelper.test.ts|TS6307|File 'D:/work/plant-code/old/plant3d-web/e2e/helpers/spatialQueryRealBran.ts' is not listed within the file list of project 'D:/work/plant-code/old/plant3d-web/tsconfig.app.json'. Projects must list all files or use an 'include' pattern.
@@ -587,7 +578,6 @@ src/utils/modelUnitVersionCompare.test.ts|TS2345|Argument of type '{ manifest_ur
 src/utils/parseMeshGeometry.test.ts|TS2345|Argument of type 'number | undefined' is not assignable to parameter of type 'number'.
 src/utils/parseMeshGeometry.test.ts|TS2345|Argument of type 'number | undefined' is not assignable to parameter of type 'number'.
 src/utils/parseMeshGeometry.test.ts|TS2345|Argument of type 'number | undefined' is not assignable to parameter of type 'number'.
-src/utils/parseMeshGeometry.ts|TS2532|Object is possibly 'undefined'.
 src/utils/three/annotation/annotations/LeaderAnnotation.ts|TS2345|Argument of type 'LineBasicMaterial' is not assignable to parameter of type 'LineMaterial'.
 src/utils/three/annotation/annotations/LeaderAnnotation.ts|TS2740|Type 'LineBasicMaterial' is missing the following properties from type 'LineMaterial': isLineMaterial, worldUnits, dashed, dashScale, and 18 more.
 src/utils/three/annotation/annotations/LeaderAnnotation.ts|TS2740|Type 'LineBasicMaterial' is missing the following properties from type 'LineMaterial': isLineMaterial, worldUnits, dashed, dashScale, and 18 more.

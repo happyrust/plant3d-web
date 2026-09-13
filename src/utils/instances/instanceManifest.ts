@@ -1,3 +1,5 @@
+import { describeValue, failFileValidation } from '@/utils/fileValidation';
+
 export type InstanceEntry = {
   geo_hash: string
   matrix: number[]
@@ -168,6 +170,81 @@ export type InstanceManifest = {
       uniforms?: Record<string, unknown> | null
     }[]
   }[]
+}
+
+const INSTANCE_COLLECTION_KEYS = [
+  'instances',
+  'groups',
+  'components',
+  'bran_groups',
+  'equi_groups',
+  'ungrouped',
+  'tubings',
+] as const;
+
+export function validateInstanceManifest(
+  value: unknown,
+  source = '<memory>.json',
+): asserts value is InstanceManifest {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    failFileValidation({
+      source,
+      format: 'json',
+      reason: 'instances manifest 根节点无效',
+      expected: '对象',
+      actual: describeValue(value),
+      line: 1,
+      column: 1,
+    });
+  }
+
+  const manifest = value as Record<string, unknown>;
+  if (
+    manifest.generated_at !== undefined
+    && (typeof manifest.generated_at !== 'string' || !manifest.generated_at.trim())
+  ) {
+    failFileValidation({
+      source,
+      format: 'json',
+      reason: 'generated_at 字段无效',
+      expected: '非空字符串',
+      actual: describeValue(manifest.generated_at),
+    });
+  }
+
+  const presentCollections = INSTANCE_COLLECTION_KEYS
+    .filter(key => manifest[key] !== undefined);
+  if (presentCollections.length === 0) {
+    failFileValidation({
+      source,
+      format: 'json',
+      reason: '未找到任何实例集合',
+      expected: INSTANCE_COLLECTION_KEYS.join(' / '),
+      actual: `顶层字段 ${Object.keys(manifest).join(', ') || '为空'}`,
+    });
+  }
+  const invalidCollection = presentCollections
+    .find(key => !Array.isArray(manifest[key]));
+  if (invalidCollection) {
+    failFileValidation({
+      source,
+      format: 'json',
+      reason: `${invalidCollection} 字段类型无效`,
+      expected: '数组',
+      actual: describeValue(manifest[invalidCollection]),
+    });
+  }
+
+  const version = manifest.version;
+  if (version !== undefined && (!Number.isInteger(version) || Number(version) < 0)) {
+    failFileValidation({
+      source,
+      format: 'json',
+      reason: 'version 字段无效',
+      expected: '非负整数',
+      actual: describeValue(version),
+    });
+  }
 }
 
 function isNewGroupsInstances(manifest: InstanceManifest): boolean {

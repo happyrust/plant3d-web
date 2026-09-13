@@ -42,6 +42,58 @@ describe('useDbMetaInfo', () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+  });
+
+  it('开发环境下 AMS 1112 演示项目拉不到 meta 时才用内置 ref0 映射兜底', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response('missing', { status: 404, statusText: 'Not Found' }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const filesOutput = await import('@/lib/filesOutput');
+    filesOutput.setCurrentProjectPath('AvevaMarineSample');
+
+    const dbMeta = await import('./useDbMetaInfo');
+
+    await expect(dbMeta.ensureDbMetaInfoLoaded()).resolves.toBeUndefined();
+    expect(dbMeta.tryGetDbnumByRefno('17496_1')).toBe(1112);
+  });
+
+  it('关闭演示回退后 meta 拉取失败直接报错，不再伪装成内置映射', async () => {
+    vi.stubEnv('VITE_INCREMENTAL_ALLOW_DEMO_FALLBACK', 'false');
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response('missing', { status: 404, statusText: 'Not Found' }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const filesOutput = await import('@/lib/filesOutput');
+    filesOutput.setCurrentProjectPath('AvevaMarineSample');
+
+    const dbMeta = await import('./useDbMetaInfo');
+
+    await expect(dbMeta.ensureDbMetaInfoLoaded()).rejects.toThrow(
+      '/files/output/AvevaMarineSample/scene_tree/db_meta_info.json'
+    );
+    expect(dbMeta.tryGetDbnumByRefno('17496_1')).toBeNull();
+  });
+
+  it('meta 正文不是 JSON 时先验证再报错，不带着无效映射继续', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response('<html>proxy error</html>', {
+        status: 200,
+        headers: { 'Content-Type': 'text/html' },
+      })
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const filesOutput = await import('@/lib/filesOutput');
+    filesOutput.setCurrentProjectPath('ams-model');
+
+    const dbMeta = await import('./useDbMetaInfo');
+
+    await expect(dbMeta.ensureDbMetaInfoLoaded()).rejects.toThrow('文件验证失败');
+    expect(dbMeta.tryGetDbnumByRefno('24381_1')).toBeNull();
   });
 
   it('uses the active project path when loading db meta info', async () => {

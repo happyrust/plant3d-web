@@ -17,6 +17,7 @@ import type { DimensionDocumentState } from '../domain/document';
 import type { DimensionFormatPolicy } from '../kernel/format';
 import type { LffFont } from '../kernel/glyph/lffParser';
 import type { DimensionTheme } from '../kernel/theme';
+import type { DesignBox, LayoutObstacle } from '../kernel/types';
 import type { DimensionAnchorResolver } from '../ports/anchorResolver';
 import type {
   DimensionDocumentRepository,
@@ -46,6 +47,12 @@ export type DimensionViewerAdapter = Readonly<{
     dpr: number;
   }>;
   requestRender(): void;
+  /**
+   * Model component boxes (Design Space corners, any orientation) that
+   * intersect `region`, for billboard tags to keep clear of. Optional: a host
+   * without one leaves the tags avoiding labels and dimension strokes only.
+   */
+  queryLayoutObstacles?(region: DesignBox): readonly LayoutObstacle[];
 }>;
 
 export type DimensionAnchorRefreshReport = Readonly<{
@@ -158,6 +165,7 @@ export async function createDimensionSystem(
 
   const theme = input.theme ?? SOLVESPACE_DIMENSION_THEME;
   const format = input.format ?? DEFAULT_DIMENSION_FORMAT;
+  const queryLayoutObstacles = input.viewer.queryLayoutObstacles?.bind(input.viewer);
   const viewport = new DimensionViewport({
     scene,
     font,
@@ -166,6 +174,7 @@ export async function createDimensionSystem(
     requestFrame: input.requestFrame,
     cancelFrame: input.cancelFrame,
     requestRender: () => input.viewer.requestRender(),
+    ...(queryLayoutObstacles ? { obstacles: { query: queryLayoutObstacles } } : {}),
   });
   viewport.setDocument(session.state);
   const externalRegistry = new ExternalDimensionRegistry();

@@ -17,6 +17,16 @@ const sampleTabs: RibbonTabConfig[] = [
   { id: 'review', label: '校审', groups: [] },
 ];
 
+function collectCommandIds(tabs: RibbonTabConfig[]): string[] {
+  return tabs.flatMap(tab => tab.groups.flatMap(group => (
+    group.items.flatMap(item => {
+      if (item.kind === 'button') return [item.commandId];
+      if (item.kind === 'stack') return item.items.map(subItem => subItem.commandId);
+      return [];
+    })
+  )));
+}
+
 describe('shouldHideAnnotationTabForReviewDock', () => {
   it('普通三维页面不隐藏批注 tab', () => {
     expect(shouldHideAnnotationTabForReviewDock(makeUrl('/?output_project=AvevaMarineSample'))).toBe(false);
@@ -104,43 +114,26 @@ describe('RIBBON_TABS', () => {
     window.history.replaceState({}, '', '/?output_project=AvevaMarineSample');
 
     const { RIBBON_TABS } = await import('./ribbonConfig');
-    const commandIds = RIBBON_TABS.flatMap((tab) => tab.groups.flatMap((group) => (
-      group.items.flatMap((item) => (
-        item.kind === 'button'
-          ? [item.commandId]
-          : item.items.map((subItem) => subItem.commandId)
-      ))
-    )));
+    const commandIds = collectCommandIds(RIBBON_TABS);
 
     expect(RIBBON_TABS.flatMap((tab) => tab.groups.map((group) => group.id)))
       .toContain('view.panel.dimension');
     expect(commandIds).toContain('panel.dimension');
   });
 
-  it('任务页签提供版本时间线入口，且与版本对比同组', async () => {
+  it('不导出尚未接线的版本时间线和空命令入口', async () => {
     vi.resetModules();
     window.history.replaceState({}, '', '/?output_project=AvevaMarineSample');
 
     const { RIBBON_TABS } = await import('./ribbonConfig');
-    const taskTab = RIBBON_TABS.find((tab) => tab.id === 'task');
+    const commandIds = collectCommandIds(RIBBON_TABS);
 
-    expect(taskTab).toBeDefined();
-
-    const versionGroup = taskTab?.groups.find((group) => group.items.some((item) => (
-      item.kind === 'button' && item.id === 'task.modelVersionCompare'
-    )));
-
-    expect(versionGroup).toBeDefined();
-
-    const timelineButton = versionGroup?.items.find((item) => (
-      item.kind === 'button' && item.id === 'task.versionTimeline'
-    ));
-
-    expect(timelineButton).toBeDefined();
-    expect(timelineButton?.kind).toBe('button');
-    if (timelineButton?.kind === 'button') {
-      expect(timelineButton.label).toBe('版本时间线');
-      expect(timelineButton.commandId).toBe('panel.versionTimeline');
-    }
+    expect(RIBBON_TABS.some((tab) => tab.id === 'file')).toBe(false);
+    expect(RIBBON_TABS.some((tab) => tab.id === 'edit')).toBe(false);
+    expect(commandIds).not.toContain('panel.versionTimeline');
+    expect(commandIds).not.toContain('view.attr.normal');
+    expect(commandIds).not.toContain('view.attr.diff');
+    expect(commandIds).not.toContain('help.docs');
+    expect(commandIds).toContain('panel.modelVersionCompare');
   });
 });

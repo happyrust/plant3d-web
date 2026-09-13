@@ -4,6 +4,12 @@ import { ensurePanelAndActivate } from './useDockApi';
 
 import type { ReviewAttachment } from '@/types/auth';
 
+import {
+  FileValidationError,
+  failFileValidation,
+  validateAttachmentBytes,
+} from '@/utils/fileValidation';
+
 export type ReviewAttachmentPreviewKind = 'pdf' | 'image';
 
 export type ReviewAttachmentPreviewStatus = 'idle' | 'loading' | 'ready' | 'error';
@@ -103,29 +109,84 @@ function resolveSafeAttachmentUrl(url: string): string | null {
   }
 }
 
-/**
- * 打开预览后先校验文件 URL 与响应状态。
- * 内容（iframe/img）与校验并行加载：校验只负责把失败态显式化，
- * 不阻塞正常场景的首帧渲染。
- */
+function attachmentValidationFormat(
+  target: ReviewAttachmentPreviewTarget,
+): 'pdf' | 'png' | 'jpeg' {
+  if (target.kind === 'pdf') return 'pdf';
+  const declared = (target.attachment.mimeType || target.attachment.type || '').toLowerCase();
+  const extension = target.attachment.name.split('.').pop()?.toLowerCase();
+  return declared.includes('png') || extension === 'png' ? 'png' : 'jpeg';
+}
+
+async function readResponsePrefix(response: Response, maxBytes = 1024): Promise<Uint8Array> {
+  if (!response.body) {
+    return new Uint8Array(await response.arrayBuffer()).subarray(0, maxBytes);
+  }
+  const reader = response.body.getReader();
+  const prefix = new Uint8Array(maxBytes);
+  let written = 0;
+  try {
+    while (written < maxBytes) {
+      const { done, value } = await reader.read();
+      if (done || !value) break;
+      const take = Math.min(value.byteLength, maxBytes - written);
+      prefix.set(value.subarray(0, take), written);
+      written += take;
+    }
+  } finally {
+    await reader.cancel().catch(() => undefined);
+  }
+  return prefix.subarray(0, written);
+}
+
+/** Validate status, declared media type and file signature before rendering. */
 async function validatePreviewTarget(target: ReviewAttachmentPreviewTarget): Promise<void> {
   const seq = ++validationSeq;
   previewStatus.value = 'loading';
   previewError.value = null;
 
   try {
-    const response = await fetch(target.url, { method: 'HEAD', cache: 'no-store' });
+    const format = attachmentValidationFormat(target);
+    const response = await fetch(target.url, {
+      method: 'GET',
+      headers: { Range: 'bytes=0-1023' },
+      cache: 'no-store',
+    });
     if (seq !== validationSeq) return;
     if (!response.ok) {
-      previewStatus.value = 'error';
-      previewError.value = `附件响应异常（HTTP ${response.status}）`;
-      return;
+      failFileValidation({
+        source: target.attachment.name,
+        format,
+        reason: '附件响应状态无效',
+        expected: 'HTTP 200 或 206',
+        actual: `HTTP ${response.status}`,
+      });
     }
+    const contentType = response.headers.get('content-type')?.split(';', 1)[0]?.trim().toLowerCase();
+    const expectedTypes = format === 'pdf'
+      ? ['application/pdf', 'application/octet-stream']
+      : format === 'png'
+        ? ['image/png', 'application/octet-stream']
+        : ['image/jpeg', 'application/octet-stream'];
+    if (contentType && !expectedTypes.includes(contentType)) {
+      failFileValidation({
+        source: target.attachment.name,
+        format,
+        reason: '附件 Content-Type 与声明类型不一致',
+        expected: expectedTypes.join(' 或 '),
+        actual: contentType,
+      });
+    }
+    const prefix = await readResponsePrefix(response);
+    if (seq !== validationSeq) return;
+    validateAttachmentBytes(prefix, target.attachment.name, format);
     previewStatus.value = 'ready';
-  } catch {
+  } catch (error) {
     if (seq !== validationSeq) return;
     previewStatus.value = 'error';
-    previewError.value = '附件加载失败，请检查网络连接';
+    previewError.value = error instanceof FileValidationError
+      ? error.message
+      : `附件加载失败：${error instanceof Error ? error.message : '请检查网络连接'}`;
   }
 }
 

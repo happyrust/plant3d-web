@@ -10,6 +10,10 @@ import { ref, shallowRef } from 'vue';
 import { AsyncDuckDB, ConsoleLogger } from '@duckdb/duckdb-wasm';
 
 import { configureLocalDuckDBExtensions, selectLocalDuckDBBundle } from '@/utils/duckdbBundles';
+import {
+  parseJsonResponse,
+  validateParquetBuffer,
+} from '@/utils/fileValidation';
 
 // DuckDB 实例单例（与 useParquetModelLoader 共享）
 let duckDbInstance: AsyncDuckDB | null = null;
@@ -141,7 +145,7 @@ export function useSceneTreeLoader() {
         return null;
       }
 
-      const result = await response.json();
+      const result = await parseJsonResponse<unknown>(response, '/api/query');
 
       // 解析结果
       if (!result || !Array.isArray(result) || result.length === 0) {
@@ -207,6 +211,7 @@ export function useSceneTreeLoader() {
       }
 
       const buffer = await response.arrayBuffer();
+      validateParquetBuffer(buffer, url);
       const uint8Array = new Uint8Array(buffer);
 
       const db = await ensureDuckDB();

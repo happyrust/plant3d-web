@@ -1,0 +1,36 @@
+!traceFile = object FILE('D:/work/plant-code/old/plant3d-web/docs/verification/e3d-measurement-runtime-golden/G4-current-perpendicular.trace.txt')
+!trace = ARRAY()
+
+if undefined(!!gphMeasure) then
+  !trace.append('blocked: !!gphMeasure is undefined')
+  !traceFile.writeFile('OVERWRITE', !trace)
+  return
+endif
+
+!dimension = !!gphMeasure.dimension
+!from = !dimension.from
+!to = !dimension.to
+!distance = !from.distance(!to)
+!vertical = abs(!from.wrt(world).up - !to.wrt(world).up)
+!horizontal = sqrt(!distance * !distance - !vertical * !vertical)
+!direction = !from.direction(!to).wrt(!dimension.wrt)
+
+!trace.append('product=E3D 3.1')
+!trace.append('project=AvevaMarineSample')
+!trace.append('mdb=/ALL')
+!trace.append('wrt=' & !dimension.wrt.name)
+!trace.append('from=' & !from.string())
+!trace.append('to=' & !to.string())
+!trace.append('distance_db=' & !distance.dbUnits().value().string())
+!trace.append('distance_text=' & !distance.string(!!gphMeasure.measureFormat))
+!trace.append('vertical_db=' & !vertical.dbUnits().value().string())
+!trace.append('vertical_text=' & !vertical.string(!!gphMeasure.measureFormat))
+!trace.append('horizontal_db=' & !horizontal.dbUnits().value().string())
+!trace.append('horizontal_text=' & !horizontal.string(!!gphMeasure.measureFormat))
+!trace.append('direction=' & !direction.string())
+!trace.append('show_linear=' & !!gphMeasure.showLinear.val.string())
+!trace.append('keep_dimensions=' & !!gphMeasure.keepAids.val.string())
+!trace.append('perpendicular=' & !!gphMeasure.perpendicularTo.val.string())
+!trace.append('complete')
+!traceFile.writeFile('OVERWRITE', !trace)
+return

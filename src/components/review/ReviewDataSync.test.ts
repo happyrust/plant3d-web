@@ -173,6 +173,29 @@ describe('ReviewDataSync', () => {
     mounted.unmount();
   });
 
+  it('validates JSON syntax and task shape before calling the import API', async () => {
+    const mounted = mountComponent();
+    await settle();
+
+    const fileInput = mounted.host.querySelector('input[type="file"]') as HTMLInputElement;
+    const file = new File(['{\n  "tasks": [\n}'], 'broken-sync.json', {
+      type: 'application/json',
+    });
+    Object.defineProperty(fileInput, 'files', {
+      value: [file],
+      configurable: true,
+    });
+
+    fileInput.dispatchEvent(new Event('change'));
+    await settle();
+
+    expect(reviewSyncImportMock).not.toHaveBeenCalled();
+    expect(mounted.host.textContent).toContain('broken-sync.json');
+    expect(mounted.host.textContent).toContain('文件验证失败');
+
+    mounted.unmount();
+  });
+
   it('falls back to formId matching when the imported task gets a new id', async () => {
     currentTask.value = createTask({ id: 'task-old', formId: 'FORM-KEEP' });
     reviewTasks.value = [createTask({ id: 'task-new', formId: 'FORM-KEEP', title: '替换后的任务' })];

@@ -1,0 +1,38 @@
+-- Puts the Measure Distance form and the 3D view back to the state before the 2026-09-12 visual captures.
+!traceFile = object FILE('D:/work/plant-code/old/plant3d-web/docs/verification/e3d-measurement-runtime-golden/restore-after-visuals.trace.txt')
+!trace = ARRAY()
+
+!!aidNumbers.hide(!!goldenPerpPlaneAid)
+handle any
+endhandle
+
+!!gphMeasure.perpendicularTo.val = FALSE
+!!gphMeasure.setPerpendicular()
+handle any
+  !trace.append('setPerpendicular_error=' & !!error.text)
+endhandle
+!!gphMeasure.showLinear.val = TRUE
+!!gphMeasure.wrt.val = 'World'
+!from = object POSITION('E 9769.75mm N 10047.18mm U 18664.8mm WRT /*')
+!to = object POSITION('E 7849.61mm N 10447.46mm U 14234.127mm WRT /*')
+!!gphMeasure.setMeasure(object LINE(!from, !to))
+handle any
+  !trace.append('setMeasure_error=' & !!error.text)
+endhandle
+
+!view = !!fmsys.currentDocument().view
+!saved = defined(!!goldenSavedLimits)
+if (!saved) then
+  !view.limits = !!goldenSavedLimits
+  handle any
+    !trace.append('limits_restore_error=' & !!error.text)
+  endhandle
+  !trace.append('limits_restored=TRUE')
+else
+  !trace.append('limits_restored=FALSE (no saved limits)')
+endif
+!!gphViews.refreshAllViews()
+!trace.append('form perpendicular=' & !!gphMeasure.perpendicularTo.val.string() & ' wrt=' & !!gphMeasure.dimension.wrt.name)
+!trace.append('complete')
+!traceFile.writeFile('OVERWRITE', !trace)
+return

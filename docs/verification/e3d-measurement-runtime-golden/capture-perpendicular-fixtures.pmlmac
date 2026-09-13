@@ -1,0 +1,145 @@
+!traceFile = object FILE('D:/work/plant-code/old/plant3d-web/docs/verification/e3d-measurement-runtime-golden/G4-02-point-to-plane.trace.txt')
+!trace = ARRAY()
+
+-- Perpendicular To: the EDG action is !!appMathLib.gmfArc.perpendicularToPoint(pick1, pick2) and
+-- the form callback is !!gphMeasure.setPerpendicularMeasure(ARC). The pick fixtures below mirror
+-- the EDGPOSITIONDATA shape captured from the real G4-01 aid pick
+-- (type=DESIGNAID, originalType=DESIGNAID, pPoint=aid number, position unset for the target).
+
+!haveSource = defined(!!goldenPerpSourceAid)
+!haveLine = defined(!!goldenPerpLineAid)
+!havePlane = defined(!!goldenPerpPlaneAid)
+!trace.append('aids_defined source=' & !haveSource.string() & ' line=' & !haveLine.string() & ' plane=' & !havePlane.string())
+if (!haveSource.not() or !haveLine.not() or !havePlane.not()) then
+  !trace.append('blocked: registered aids from prepare-real-perpendicular-aids.pmlmac are missing')
+  !traceFile.writeFile('OVERWRITE', !trace)
+  return
+endif
+
+!lineObj = !!aidNumbers.numbers[!!goldenPerpLineAid]
+!lineCore = !lineObj.coreObject()
+!trace.append('line_aid=' & !!goldenPerpLineAid.string() & ' object=' & !lineObj.objectType() & ' core=' & !lineCore.objectType())
+!trace.append('line_start=' & !lineCore.startPosition.string())
+!trace.append('line_end=' & !lineCore.endPosition.string())
+!planeObj = !!aidNumbers.numbers[!!goldenPerpPlaneAid]
+!planeCore = !planeObj.coreObject()
+!trace.append('plane_aid=' & !!goldenPerpPlaneAid.string() & ' object=' & !planeObj.objectType() & ' core=' & !planeCore.objectType())
+!trace.append('plane_position=' & !planeCore.position.string())
+!trace.append('plane_normal=' & !planeCore.direction().string())
+!trace.append('plane_patch_x=' & !planeObj.x.string() & ' patch_y=' & !planeObj.y.string())
+
+-- Put the live form into perpendicular mode through its own toggle callback.
+!!gphMeasure.perpendicularTo.val = TRUE
+!!gphMeasure.setPerpendicular()
+handle any
+  !trace.append('blocked: setPerpendicular(true) failed: ' & !!error.text)
+  !traceFile.writeFile('OVERWRITE', !trace)
+  return
+endhandle
+!trace.append('wrt_gadget_active=' & !!gphMeasure.wrt.active.string())
+
+!names = ARRAY()
+!sources = ARRAY()
+!targets = ARRAY()
+!names.append('G4-01 line, same source as the real pick (foot at line end)')
+!sources.append(object POSITION('E 11000mm N 9500mm U 17500mm WRT /*'))
+!targets.append(!!goldenPerpLineAid)
+!names.append('G4-01 line, foot inside the segment')
+!sources.append(object POSITION('E 9500mm N 9800mm U 17000mm WRT /*'))
+!targets.append(!!goldenPerpLineAid)
+!names.append('G4-04 line, foot beyond the segment end')
+!sources.append(object POSITION('E 12000mm N 9800mm U 17000mm WRT /*'))
+!targets.append(!!goldenPerpLineAid)
+!names.append('G4-02 plane, foot inside the drawn patch')
+!sources.append(object POSITION('E 8000mm N 9000mm U 16500mm WRT /*'))
+!targets.append(!!goldenPerpPlaneAid)
+!names.append('G4-02 plane, second sample (foot inside patch, source above plane centre)')
+!sources.append(object POSITION('E 8700mm N 12300mm U 18000mm WRT /*'))
+!targets.append(!!goldenPerpPlaneAid)
+!names.append('G4-04 plane, foot outside the drawn patch')
+!sources.append(object POSITION('E 12000mm N 9500mm U 17500mm WRT /*'))
+!targets.append(!!goldenPerpPlaneAid)
+!names.append('G4-04 plane, zero distance (source on plane)')
+!sources.append(object POSITION('E 8500mm N 10500mm U 17500mm WRT /*'))
+!targets.append(!!goldenPerpPlaneAid)
+!names.append('G4-04 line, zero distance (source on line)')
+!sources.append(object POSITION('E 9000mm N 9000mm U 15000mm WRT /*'))
+!targets.append(!!goldenPerpLineAid)
+
+!index = 0
+do !name values !names
+  !index = !index + 1
+  !sourcePos = !sources[!index]
+  !targetAid = !targets[!index]
+  !trace.append('---- case ' & !name)
+  !trace.append('source=' & !sourcePos.string())
+  !trace.append('target_aid=' & !targetAid.string())
+
+  !first = object EDGPOSITIONDATA()
+  !first.type = 'DESIGNAID'
+  !first.originalType = 'DESIGNAID'
+  !first.position = !sourcePos
+  !first.pPoint = !!goldenPerpSourceAid
+  !first.pLine = ''
+  !second = object EDGPOSITIONDATA()
+  !second.type = 'DESIGNAID'
+  !second.originalType = 'DESIGNAID'
+  !second.pPoint = !targetAid
+  !second.pLine = ''
+
+  !targetLine = !second.getLine()
+  handle any
+    !trace.append('target_getLine_error=' & !!error.text)
+  elsehandle none
+    !trace.append('target_getLine_set=' & !targetLine.set().string())
+  endhandle
+  !targetPlane = !second.getPlane()
+  handle any
+    !trace.append('target_getPlane_error=' & !!error.text)
+  elsehandle none
+    !trace.append('target_getPlane_set=' & !targetPlane.set().string())
+  endhandle
+
+  !arc = !!appMathLib.gmfArc.perpendicularToPoint(!first, !second)
+  handle any
+    !trace.append('perpendicularToPoint_error=' & !!error.text)
+    skip
+  endhandle
+  !trace.append('arc_set=' & !arc.set().string())
+
+  if (!arc.set()) then
+    !from = !arc.position
+    !to = !arc.anglePosition(0)
+    !distance = !from.distance(!to)
+    !vertical = abs(!from.wrt(world).up - !to.wrt(world).up)
+    !horizontal = sqrt(!distance * !distance - !vertical * !vertical)
+    !direction = !from.direction(!to).wrt(world)
+    !trace.append('arc_radius=' & !arc.radius.string())
+    !trace.append('arc_plane_normal=' & !arc.orientation.zDir().string())
+    !trace.append('foot_from=' & !from.string())
+    !trace.append('source_to=' & !to.string())
+    !trace.append('distance_db=' & !distance.string())
+    !trace.append('distance_text=' & !distance.string(!!gphMeasure.measureFormat))
+    !trace.append('vertical_db=' & !vertical.string())
+    !trace.append('vertical_text=' & !vertical.string(!!gphMeasure.measureFormat))
+    !trace.append('horizontal_db=' & !horizontal.string())
+    !trace.append('horizontal_text=' & !horizontal.string(!!gphMeasure.measureFormat))
+    !trace.append('direction_text=' & !direction.string().before('WRT').trim())
+
+    !!gphMeasure.setPerpendicularMeasure(!arc)
+    handle any
+      !trace.append('form_setPerpendicularMeasure_error=' & !!error.text)
+    elsehandle none
+      !trace.append('form_setPerpendicularMeasure=ok')
+      !trace.append('form_from=' & !!gphMeasure.dimension.from.string())
+      !trace.append('form_to=' & !!gphMeasure.dimension.to.string())
+      !trace.append('form_wrt=' & !!gphMeasure.dimension.wrt.name)
+    endhandle
+  else
+    !trace.append('form_path=setPerpendicularMeasure(unset ARC) would alert.warning Cannot draw dimension line. Perpendicular distance is 0 (form code, not invoked)')
+  endif
+enddo
+
+!trace.append('complete')
+!traceFile.writeFile('OVERWRITE', !trace)
+return

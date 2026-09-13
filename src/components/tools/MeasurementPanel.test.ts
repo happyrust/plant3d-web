@@ -442,7 +442,7 @@ describe('MeasurementPanel', () => {
 
     const styleAxis = host.querySelector('[data-testid="measurement-style-distance-axis"]') as HTMLInputElement | null;
     expect(styleAxis).toBeTruthy();
-    // E3D 默认体验：轴向分量默认开启。
+    // World 轴向分量默认开启。
     expect(styleAxis?.checked).toBe(true);
     if (styleAxis) {
       styleAxis.checked = false;
@@ -864,7 +864,7 @@ describe('MeasurementPanel', () => {
     app.mount(host);
     await nextTick();
 
-    expect(host.textContent).toContain('默认显示总长与 E/N/U 轴向分量');
+    expect(host.textContent).toContain('距离、标高和高差按结果面板当前 WRT 重算');
 
     const datumInput = host.querySelector(
       '[data-testid="measurement-elevation-datum"]',
@@ -882,7 +882,7 @@ describe('MeasurementPanel', () => {
     resetButton?.click();
     await nextTick();
 
-    // 恢复默认 = E3D 默认：轴向分量开启。
+    // 恢复默认：World 轴向分量开启。
     expect(useXeokitMeasurementStyleStore().state.distanceShowAxisBreakdown).toBe(true);
     expect(useXeokitMeasurementStyleStore().state.distanceShowMarkers).toBe(true);
 
@@ -945,8 +945,8 @@ describe('MeasurementPanel', () => {
     const preview = host.querySelector('[data-testid="measurement-style-distance-preview"]') as HTMLElement | null;
     expect(preview?.textContent).toContain('总长标签');
     expect(preview?.textContent).toContain('端点');
-    // E3D 默认开启轴向分量。
-    expect(preview?.textContent).toContain('E/N/U 分量');
+    // World 轴向分量默认开启。
+    expect(preview?.textContent).toContain('World X/Y/Z 分量');
 
     const styleAxis = host.querySelector('[data-testid="measurement-style-distance-axis"]') as HTMLInputElement | null;
     if (styleAxis) {
@@ -955,7 +955,7 @@ describe('MeasurementPanel', () => {
     }
     await nextTick();
 
-    expect(preview?.textContent).not.toContain('E/N/U 分量');
+    expect(preview?.textContent).not.toContain('World X/Y/Z 分量');
 
     app.unmount();
     host.remove();
@@ -1026,8 +1026,8 @@ describe('MeasurementPanel', () => {
 
     expect(distanceSection).toBeTruthy();
     expect(angleSection).toBeTruthy();
-    // E3D 默认开启轴向分量。
-    expect(distanceNote?.textContent).toContain('当前距离结果会同时显示总长和 E / N / U 轴向分量');
+    // World 轴向分量默认开启。
+    expect(distanceNote?.textContent).toContain('当前距离结果会同时显示总长和 World X/Y/Z 轴向分量');
 
     const styleAxis = host.querySelector(
       '[data-testid="measurement-style-distance-axis"]',
@@ -1038,7 +1038,7 @@ describe('MeasurementPanel', () => {
     }
     await nextTick();
 
-    expect(distanceNote?.textContent).toContain('开启后距离结果会额外显示 E / N / U 轴向分量');
+    expect(distanceNote?.textContent).toContain('开启后距离结果会额外显示 World X/Y/Z 轴向分量');
 
     app.unmount();
     host.remove();

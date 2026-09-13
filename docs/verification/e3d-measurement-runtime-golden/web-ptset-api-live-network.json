@@ -1,0 +1,113 @@
+{
+  "ptsetRequests": [
+    {
+      "url": "http://localhost:8023/api/v1/element/ptset",
+      "body": "{\"refno\":\"24381/145035\"}"
+    },
+    {
+      "url": "http://localhost:8023/api/v1/element/ptset",
+      "body": "{\"refno\":\"24381/145018\"}"
+    },
+    {
+      "url": "http://localhost:8023/api/v1/element/ptset",
+      "body": "{\"refno\":\"24381/145018\",\"include_members\":true}"
+    }
+  ],
+  "ptsetResponses": [
+    {
+      "url": "http://localhost:8023/api/v1/element/ptset",
+      "status": 200,
+      "points": 31,
+      "members": 0
+    },
+    {
+      "url": "http://localhost:8023/api/v1/element/ptset",
+      "status": 200,
+      "points": 0,
+      "members": 0
+    },
+    {
+      "url": "http://localhost:8023/api/v1/element/ptset",
+      "status": 200,
+      "points": 0,
+      "members": 17
+    }
+  ],
+  "perpendicular": {
+    "id": "xdist_1789193936218_ps0ota",
+    "visible": true,
+    "createdAt": 1789193936218,
+    "approximate": true,
+    "source": "xeokit",
+    "provenance": {
+      "method": "legacy-unknown",
+      "accuracyClass": "legacy-unknown",
+      "coordinateSpace": "design-world",
+      "lengthUnit": "m",
+      "sourceModelVersion": null,
+      "source": {
+        "entityId": "o:24381_145018:6",
+        "refno": "24381_145018",
+        "candidateId": "mesh:o:24381_145018:6"
+      },
+      "target": {
+        "entityId": "ptset:24381_145031#1",
+        "refno": "24381_145031",
+        "candidateId": "ptset:24381_145031#1"
+      },
+      "warnings": [
+        {
+          "code": "LEGACY_PROVENANCE_UNKNOWN",
+          "message": "Legacy measurement did not record its computation method or accuracy."
+        }
+      ],
+      "errorBoundM": null
+    },
+    "kind": "distance",
+    "origin": {
+      "entityId": "o:24381_145018:6",
+      "worldPos": [
+        1.9299827009299655,
+        0.5107635407388429,
+        -1.250298838413201
+      ],
+      "designWorldPos": [
+        7.893756382570592,
+        10.483003042691967,
+        15.30167235299305
+      ],
+      "sourceInfo": {
+        "source": "mesh_pick_point",
+        "candidateId": "mesh:o:24381_145018:6",
+        "refno": "24381_145018",
+        "label": "模型表面点"
+      }
+    },
+    "target": {
+      "entityId": "ptset:24381_145031#1",
+      "worldPos": [
+        1.886076416016813,
+        0.527465725035281,
+        2.0980802603625506
+      ],
+      "designWorldPos": [
+        7.849850097657439,
+        10.499705226988407,
+        18.6500514517688
+      ],
+      "sourceInfo": {
+        "source": "ptset",
+        "candidateId": "ptset:24381_145031#1",
+        "refno": "24381_145031",
+        "label": "P-Point #1 轴线垂足"
+      }
+    },
+    "perpendicular": {
+      "targetKind": "line",
+      "targetLabel": "P-Point #1 轴线"
+    }
+  },
+  "lens": [
+    "更新终点 P-Point #1"
+  ]
+}

@@ -1,0 +1,214 @@
+﻿perpendicular_mode=FALSE
+show_linear=TRUE
+from=E 10000mm N 10000mm U 15000mm WRT /*
+---- case dE=0.9EX-01 dN=2000 dU=1000
+to=E 10000.09mm N 12000mm U 16000mm WRT /*
+distance_text=2236.07mm
+distance_db=2236.067979311mm
+offset_1_db=0.900000000001455EX-01mm
+offset_1_text=0.09mm
+offset_2_text=2000mm
+offset_3_text=1000mm
+component_1_suppressed_between_pm0.1mm=TRUE
+component_2_suppressed_between_pm0.1mm=FALSE
+component_3_suppressed_between_pm0.1mm=FALSE
+int_sum=3000mm int_length=2236mm
+detail_block_drawn=TRUE
+direction=N 26.5651 U WRT /*
+---- case dE=0.1 dN=2000 dU=1000
+to=E 10000.1mm N 12000mm U 16000mm WRT /*
+distance_text=2236.07mm
+distance_db=2236.06797973586mm
+offset_1_db=0.100000000000364mm
+offset_1_text=0.1mm
+offset_2_text=2000mm
+offset_3_text=1000mm
+component_1_suppressed_between_pm0.1mm=FALSE
+component_2_suppressed_between_pm0.1mm=FALSE
+component_3_suppressed_between_pm0.1mm=FALSE
+int_sum=3000mm int_length=2236mm
+detail_block_drawn=TRUE
+direction=N 26.5651 U WRT /*
+---- case dE=0.11 dN=2000 dU=1000
+to=E 10000.11mm N 12000mm U 16000mm WRT /*
+distance_text=2236.07mm
+distance_db=2236.06798020543mm
+offset_1_db=0.110000000000582mm
+offset_1_text=0.11mm
+offset_2_text=2000mm
+offset_3_text=1000mm
+component_1_suppressed_between_pm0.1mm=FALSE
+component_2_suppressed_between_pm0.1mm=FALSE
+component_3_suppressed_between_pm0.1mm=FALSE
+int_sum=3000mm int_length=2236mm
+detail_block_drawn=TRUE
+direction=N 26.5651 U WRT /*
+---- case dE=-0.9EX-01 dN=2000 dU=1000
+to=E 9999.91mm N 12000mm U 16000mm WRT /*
+distance_text=2236.07mm
+distance_db=2236.067979311mm
+offset_1_db=-0.900000000001455EX-01mm
+offset_1_text=-0.09mm
+offset_2_text=2000mm
+offset_3_text=1000mm
+component_1_suppressed_between_pm0.1mm=TRUE
+component_2_suppressed_between_pm0.1mm=FALSE
+component_3_suppressed_between_pm0.1mm=FALSE
+int_sum=2999mm int_length=2236mm
+detail_block_drawn=TRUE
+direction=N 26.5651 U WRT /*
+---- case dE=-0.1 dN=2000 dU=1000
+to=E 9999.9mm N 12000mm U 16000mm WRT /*
+distance_text=2236.07mm
+distance_db=2236.06797973586mm
+offset_1_db=-0.100000000000364mm
+offset_1_text=-0.1mm
+offset_2_text=2000mm
+offset_3_text=1000mm
+component_1_suppressed_between_pm0.1mm=FALSE
+component_2_suppressed_between_pm0.1mm=FALSE
+component_3_suppressed_between_pm0.1mm=FALSE
+int_sum=2999mm int_length=2236mm
+detail_block_drawn=TRUE
+direction=N 26.5651 U WRT /*
+---- case dE=-0.11 dN=2000 dU=1000
+to=E 9999.89mm N 12000mm U 16000mm WRT /*
+distance_text=2236.07mm
+distance_db=2236.06798020543mm
+offset_1_db=-0.110000000000582mm
+offset_1_text=-0.11mm
+offset_2_text=2000mm
+offset_3_text=1000mm
+component_1_suppressed_between_pm0.1mm=FALSE
+component_2_suppressed_between_pm0.1mm=FALSE
+component_3_suppressed_between_pm0.1mm=FALSE
+int_sum=2999mm int_length=2236mm
+detail_block_drawn=TRUE
+direction=N 26.5651 U WRT /*
+---- case dE=0.1000001 dN=2000 dU=1000
+to=E 10000.1mm N 12000mm U 16000mm WRT /*
+distance_text=2236.07mm
+distance_db=2236.06797973586mm
+offset_1_db=0.100000099999306mm
+offset_1_text=0.1mm
+offset_2_text=2000mm
+offset_3_text=1000mm
+component_1_suppressed_between_pm0.1mm=FALSE
+component_2_suppressed_between_pm0.1mm=FALSE
+component_3_suppressed_between_pm0.1mm=FALSE
+int_sum=3000mm int_length=2236mm
+detail_block_drawn=TRUE
+direction=N 26.5651 U WRT /*
+---- case dE=0 dN=2000 dU=1000
+to=E 10000mm N 12000mm U 16000mm WRT /*
+distance_text=2236.07mm
+distance_db=2236.06797749979mm
+offset_1_db=0mm
+offset_1_text=0mm
+offset_2_text=2000mm
+offset_3_text=1000mm
+component_1_suppressed_between_pm0.1mm=TRUE
+component_2_suppressed_between_pm0.1mm=FALSE
+component_3_suppressed_between_pm0.1mm=FALSE
+int_sum=3000mm int_length=2236mm
+detail_block_drawn=TRUE
+direction=N 26.5651 U WRT /*
+---- case dE=0.4EX-02 dN=2000 dU=1000
+to=E 10000.004mm N 12000mm U 16000mm WRT /*
+distance_text=2236.07mm
+distance_db=2236.06797750337mm
+offset_1_db=0.400000000081491EX-02mm
+offset_1_text=0mm
+offset_2_text=2000mm
+offset_3_text=1000mm
+component_1_suppressed_between_pm0.1mm=TRUE
+component_2_suppressed_between_pm0.1mm=FALSE
+component_3_suppressed_between_pm0.1mm=FALSE
+int_sum=3000mm int_length=2236mm
+detail_block_drawn=TRUE
+direction=N 26.5651 U WRT /*
+---- case dE=-0.4EX-02 dN=2000 dU=1000
+to=E 9999.996mm N 12000mm U 16000mm WRT /*
+distance_text=2236.07mm
+distance_db=2236.06797750337mm
+offset_1_db=-0.400000000081491EX-02mm
+offset_1_text=0mm
+offset_2_text=2000mm
+offset_3_text=1000mm
+component_1_suppressed_between_pm0.1mm=TRUE
+component_2_suppressed_between_pm0.1mm=FALSE
+component_3_suppressed_between_pm0.1mm=FALSE
+int_sum=2999mm int_length=2236mm
+detail_block_drawn=TRUE
+direction=N 26.5651 U WRT /*
+---- case dE=-0.1EX-04 dN=2000 dU=1000
+to=E 10000mm N 12000mm U 16000mm WRT /*
+distance_text=2236.07mm
+distance_db=2236.06797749979mm
+offset_1_db=-0.999999974737875EX-05mm
+offset_1_text=0mm
+offset_2_text=2000mm
+offset_3_text=1000mm
+component_1_suppressed_between_pm0.1mm=TRUE
+component_2_suppressed_between_pm0.1mm=FALSE
+component_3_suppressed_between_pm0.1mm=FALSE
+int_sum=2999mm int_length=2236mm
+detail_block_drawn=TRUE
+direction=N 26.5651 U WRT /*
+---- case dE=0 dN=2000 dU=0
+to=E 10000mm N 12000mm U 15000mm WRT /*
+distance_text=2000mm
+distance_db=2000mm
+offset_1_db=0mm
+offset_1_text=0mm
+offset_2_text=2000mm
+offset_3_text=0mm
+component_1_suppressed_between_pm0.1mm=TRUE
+component_2_suppressed_between_pm0.1mm=FALSE
+component_3_suppressed_between_pm0.1mm=TRUE
+int_sum=2000mm int_length=2000mm
+detail_block_drawn=FALSE
+direction=N WRT /*
+---- case dE=0 dN=-2000 dU=0
+to=E 10000mm N 8000mm U 15000mm WRT /*
+distance_text=2000mm
+distance_db=2000mm
+offset_1_db=0mm
+offset_1_text=0mm
+offset_2_text=-2000mm
+offset_3_text=0mm
+component_1_suppressed_between_pm0.1mm=TRUE
+component_2_suppressed_between_pm0.1mm=FALSE
+component_3_suppressed_between_pm0.1mm=TRUE
+int_sum=-2000mm int_length=2000mm
+detail_block_drawn=TRUE
+direction=S WRT /*
+---- case dE=3000 dN=4000 dU=0
+to=E 13000mm N 14000mm U 15000mm WRT /*
+distance_text=5000mm
+distance_db=5000mm
+offset_1_db=3000mm
+offset_1_text=3000mm
+offset_2_text=4000mm
+offset_3_text=0mm
+component_1_suppressed_between_pm0.1mm=FALSE
+component_2_suppressed_between_pm0.1mm=FALSE
+component_3_suppressed_between_pm0.1mm=TRUE
+int_sum=7000mm int_length=5000mm
+detail_block_drawn=TRUE
+direction=N 36.8699 E WRT /*
+---- case dE=1000 dN=1000 dU=1000
+to=E 11000mm N 11000mm U 16000mm WRT /*
+distance_text=1732.05mm
+distance_db=1732.05080756888mm
+offset_1_db=1000mm
+offset_1_text=1000mm
+offset_2_text=1000mm
+offset_3_text=1000mm
+component_1_suppressed_between_pm0.1mm=FALSE
+component_2_suppressed_between_pm0.1mm=FALSE
+component_3_suppressed_between_pm0.1mm=FALSE
+int_sum=3000mm int_length=1732mm
+detail_block_drawn=TRUE
+direction=E 45 N 35.2644 U WRT /*
+complete

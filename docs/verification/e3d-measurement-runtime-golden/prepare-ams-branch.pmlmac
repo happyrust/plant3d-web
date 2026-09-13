@@ -1,0 +1,76 @@
+!hostTraceFile = object FILE('D:/AVEVA/Projects/E3D3.1/YCYK-E3D/acwmac/ycyk_fill_existing_view_sites_trace.txt')
+!goldenTraceFile = object FILE('D:/work/plant-code/old/plant3d-web/docs/verification/e3d-measurement-runtime-golden/prepare-ams-branch.trace.txt')
+!trace = ARRAY()
+!trace.append('begin ycyk_fill_existing_view_sites')
+!trace.append('begin prepare AMS measurement golden branch')
+!hostTraceFile.writeFile('OVERWRITE', !trace)
+!goldenTraceFile.writeFile('OVERWRITE', !trace)
+
+!bran = =24381/145018
+handle any
+  !trace.append('target 24381/145018 unavailable: ' & !!error.text)
+  !bran = =23705/5164
+  handle any
+    !trace.append('fallback 23705/5164 unavailable: ' & !!error.text)
+    !hostTraceFile.writeFile('OVERWRITE', !trace)
+    !goldenTraceFile.writeFile('OVERWRITE', !trace)
+    return
+  elsehandle none
+    !trace.append('using fallback refno 23705/5164')
+  endhandle
+elsehandle none
+  !trace.append('using target refno 24381/145018')
+endhandle
+
+!token = !!gphDrawlists.createDrawlist(true, true)
+!drawlist = !!gphDrawlists.drawlist(!token)
+!drawlist.centreLine(FALSE)
+!drawlist.tube(TRUE)
+!drawlist.pipeLevel(6)
+!drawlist.nozzLevel(6)
+!drawlist.struLevel(6)
+!drawlist.level(6)
+!drawlist.add(!bran)
+!drawlist.update()
+handle any
+  !trace.append('drawlist update failed: ' & !!error.text)
+  !hostTraceFile.writeFile('OVERWRITE', !trace)
+  !goldenTraceFile.writeFile('OVERWRITE', !trace)
+  return
+elsehandle none
+  !trace.append('drawlist update ok token=' & !token.string())
+endhandle
+
+!form = !!gph3DDesign1
+!!gphDrawlists.attachView(!token, !form.view)
+handle any
+  !trace.append('attach failed: ' & !!error.text)
+  !hostTraceFile.writeFile('OVERWRITE', !trace)
+  !goldenTraceFile.writeFile('OVERWRITE', !trace)
+  return
+elsehandle none
+  !trace.append('attach ok')
+endhandle
+
+!members = ARRAY()
+!members.append(!bran)
+!volume = object VOLUME(!members)
+!!gphViews.look(!form.view, object DIRECTION('S 45 W 35.264 D'))
+!!gphViews.limits(!form.view, !volume)
+!form.view.shaded = TRUE
+!form.view.refresh()
+!!gphViews.refreshAllViews()
+handle any
+  !trace.append('view refresh failed: ' & !!error.text)
+  !hostTraceFile.writeFile('OVERWRITE', !trace)
+  !goldenTraceFile.writeFile('OVERWRITE', !trace)
+  return
+elsehandle none
+  !trace.append('view refresh ok')
+endhandle
+
+!trace.append('complete prepare AMS measurement golden branch')
+!trace.append('complete ycyk_fill_existing_view_sites')
+!hostTraceFile.writeFile('OVERWRITE', !trace)
+!goldenTraceFile.writeFile('OVERWRITE', !trace)
+return

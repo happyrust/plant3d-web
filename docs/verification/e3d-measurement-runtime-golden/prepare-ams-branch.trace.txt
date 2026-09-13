@@ -1,0 +1,8 @@
+﻿begin ycyk_fill_existing_view_sites
+begin prepare AMS measurement golden branch
+using target refno 24381/145018
+drawlist update ok token=2
+attach ok
+view refresh ok
+complete prepare AMS measurement golden branch
+complete ycyk_fill_existing_view_sites

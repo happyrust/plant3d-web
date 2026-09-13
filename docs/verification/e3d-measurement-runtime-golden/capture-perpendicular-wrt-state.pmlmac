@@ -1,0 +1,84 @@
+!traceFile = object FILE('D:/work/plant-code/old/plant3d-web/docs/verification/e3d-measurement-runtime-golden/G4-06-wrt-state.trace.txt')
+!trace = ARRAY()
+
+-- G4-06: which reference frame does the perpendicular mode really use once the wrt gadget is disabled?
+!from = object POSITION('E 9769.75mm N 10047.18mm U 18664.8mm WRT /*')
+!to = object POSITION('E 7849.61mm N 10447.46mm U 14234.127mm WRT /*')
+
+-- 1. standard mode with a rotated ordinary WRT
+!!gphMeasure.perpendicularTo.val = FALSE
+!!gphMeasure.setPerpendicular()
+!!gphMeasure.dimension.setDimension(!from, !to)
+!!gphMeasure.wrt.val = '/Copy-of-RCS151MM'
+!!gphMeasure.setUpForm()
+handle any
+  !trace.append('blocked: standard setUpForm failed: ' & !!error.text)
+  !traceFile.writeFile('OVERWRITE', !trace)
+  return
+endhandle
+!trace.append('step1_standard gadget_wrt=' & !!gphMeasure.wrt.val & ' gadget_active=' & !!gphMeasure.wrt.active.string() & ' dimension_wrt=' & !!gphMeasure.dimension.wrt.name)
+!offset = !!gphMeasure.dimension.offsetType()
+!trace.append('step1_offsets=' & !offset[1].string(!!gphMeasure.measureFormat) & ' / ' & !offset[2].string(!!gphMeasure.measureFormat) & ' / ' & !offset[3].string(!!gphMeasure.measureFormat))
+
+-- 2. toggle Perpendicular to (same callback as the checkbox)
+!!gphMeasure.perpendicularTo.val = TRUE
+!!gphMeasure.setPerpendicular()
+handle any
+  !trace.append('blocked: setPerpendicular(true) failed: ' & !!error.text)
+  !traceFile.writeFile('OVERWRITE', !trace)
+  return
+endhandle
+!trace.append('step2_perpendicular gadget_wrt=' & !!gphMeasure.wrt.val & ' gadget_active=' & !!gphMeasure.wrt.active.string() & ' dimension_wrt=' & !!gphMeasure.dimension.wrt.name)
+
+-- 3. run one perpendicular fixture (plane) and record the frame used for Direction
+!first = object EDGPOSITIONDATA()
+!first.type = 'DESIGNAID'
+!first.originalType = 'DESIGNAID'
+!first.position = object POSITION('E 8000mm N 9000mm U 16500mm WRT /*')
+!first.pPoint = !!goldenPerpSourceAid
+!first.pLine = ''
+!second = object EDGPOSITIONDATA()
+!second.type = 'DESIGNAID'
+!second.originalType = 'DESIGNAID'
+!second.pPoint = !!goldenPerpPlaneAid
+!second.pLine = ''
+!arc = !!appMathLib.gmfArc.perpendicularToPoint(!first, !second)
+handle any
+  !trace.append('perpendicularToPoint_error=' & !!error.text)
+  !traceFile.writeFile('OVERWRITE', !trace)
+  return
+endhandle
+!!gphMeasure.setPerpendicularMeasure(!arc)
+handle any
+  !trace.append('setPerpendicularMeasure_error=' & !!error.text)
+  !traceFile.writeFile('OVERWRITE', !trace)
+  return
+endhandle
+!dim = !!gphMeasure.dimension
+!trace.append('step3_result gadget_wrt=' & !!gphMeasure.wrt.val & ' dimension_wrt=' & !dim.wrt.name)
+!trace.append('step3_from=' & !dim.from.string())
+!trace.append('step3_to=' & !dim.to.string())
+!trace.append('step3_direction_form_expression=' & !dim.from.direction(!dim.to).wrt(!dim.wrt).string().before('WRT').trim())
+!trace.append('step3_direction_in_equi_frame=' & !dim.from.direction(!dim.to).wrt(object DBREF('=24381/101439')).string())
+
+-- 4. toggle back to standard and see which WRT is resolved
+!!gphMeasure.perpendicularTo.val = FALSE
+!!gphMeasure.setPerpendicular()
+!trace.append('step4_after_toggle_back gadget_wrt=' & !!gphMeasure.wrt.val & ' gadget_active=' & !!gphMeasure.wrt.active.string() & ' dimension_wrt=' & !!gphMeasure.dimension.wrt.name)
+!!gphMeasure.dimension.setDimension(!from, !to)
+!!gphMeasure.setUpForm()
+handle any
+  !trace.append('step4_setUpForm_error=' & !!error.text)
+endhandle
+!trace.append('step4_after_setUpForm gadget_wrt=' & !!gphMeasure.wrt.val & ' dimension_wrt=' & !!gphMeasure.dimension.wrt.name)
+
+-- 5. restore World standard mode for later sessions
+!!gphMeasure.wrt.val = 'World'
+!!gphMeasure.setUpForm()
+handle any
+  !trace.append('restore_error=' & !!error.text)
+endhandle
+!trace.append('restored gadget_wrt=' & !!gphMeasure.wrt.val & ' dimension_wrt=' & !!gphMeasure.dimension.wrt.name & ' perpendicular=' & !!gphMeasure.perpendicularTo.val.string())
+!trace.append('complete')
+!traceFile.writeFile('OVERWRITE', !trace)
+return

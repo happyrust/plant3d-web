@@ -9,6 +9,12 @@ import { ref, shallowRef } from 'vue';
 import { AsyncDuckDB, ConsoleLogger, type AsyncDuckDBConnection } from '@duckdb/duckdb-wasm';
 
 import { configureLocalDuckDBExtensions, selectLocalDuckDBBundle } from '@/utils/duckdbBundles';
+import {
+  describeValue,
+  failFileValidation,
+  parseJsonResponse,
+  validateParquetBuffer,
+} from '@/utils/fileValidation';
 
 // DuckDB 实例（单例）
 let db: AsyncDuckDB | null = null;
@@ -121,7 +127,17 @@ async function listAvailableFiles(dbno: number): Promise<string[]> {
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}: ${response.statusText}`);
     }
-    const files: string[] = await response.json();
+    const payload = await parseJsonResponse<unknown>(response, `/api/model/${dbno}/files`);
+    if (!Array.isArray(payload) || !payload.every(file => typeof file === 'string')) {
+      failFileValidation({
+        source: `/api/model/${dbno}/files`,
+        format: 'json',
+        reason: 'Parquet 文件列表结构无效',
+        expected: '字符串数组',
+        actual: describeValue(payload),
+      });
+    }
+    const files = payload as string[];
     availableFiles.value = files;
     currentDbno.value = dbno;
     addLog('info', `找到 ${files.length} 个 Parquet 文件`);
@@ -187,6 +203,7 @@ async function loadParquetFile(filename: string): Promise<boolean> {
       const res = await fetch(url);
       if (!res.ok) throw new Error(`下载 ${fname} 失败: ${res.status}`);
       const buf = await res.arrayBuffer();
+      validateParquetBuffer(buf, fname);
       await db!.registerFileBuffer(fname, new Uint8Array(buf));
       await conn!.query(`CREATE OR REPLACE TABLE ${tname} AS SELECT * FROM parquet_scan('${fname}')`);
       return res.headers.get('content-length');

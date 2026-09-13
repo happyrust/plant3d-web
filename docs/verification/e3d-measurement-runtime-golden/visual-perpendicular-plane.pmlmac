@@ -1,0 +1,67 @@
+-- Frames the plane aid and injects the G4-02 point-to-plane fixture so the perpendicular aid can be captured.
+!traceFile = object FILE('D:/work/plant-code/old/plant3d-web/docs/verification/e3d-measurement-runtime-golden/visual-perpendicular-plane.trace.txt')
+!trace = ARRAY()
+
+!view = !!fmsys.currentDocument().view
+!saved = defined(!!goldenSavedLimits)
+if (!saved.not()) then
+  !!goldenSavedLimits = !view.limits
+endif
+!limits = ARRAY()
+!limits[1] = 7000
+!limits[2] = 12500
+!limits[3] = 8000
+!limits[4] = 13000
+!limits[5] = 14000
+!limits[6] = 19000
+!view.limits = !limits
+handle any
+  !trace.append('limits_error=' & !!error.text)
+endhandle
+
+-- declutter: hide the angle aid left by G6-03, show the plane aid again
+!!gphAngleMeasure.clearAids()
+handle any
+endhandle
+!!aidNumbers.draw(!!goldenPerpPlaneAid)
+handle any
+  !trace.append('plane_aid_draw_error=' & !!error.text)
+endhandle
+
+!!gphMeasure.perpendicularTo.val = TRUE
+!!gphMeasure.setPerpendicular()
+handle any
+  !trace.append('setPerpendicular_error=' & !!error.text)
+  !traceFile.writeFile('OVERWRITE', !trace)
+  return
+endhandle
+
+!first = object EDGPOSITIONDATA()
+!first.type = 'DESIGNAID'
+!first.originalType = 'DESIGNAID'
+!first.position = object POSITION('E 8000mm N 9000mm U 16500mm WRT /*')
+!first.pPoint = !!goldenPerpSourceAid
+!first.pLine = ''
+!second = object EDGPOSITIONDATA()
+!second.type = 'DESIGNAID'
+!second.originalType = 'DESIGNAID'
+!second.pPoint = !!goldenPerpPlaneAid
+!second.pLine = ''
+!arc = !!appMathLib.gmfArc.perpendicularToPoint(!first, !second)
+handle any
+  !trace.append('perpendicularToPoint_error=' & !!error.text)
+  !traceFile.writeFile('OVERWRITE', !trace)
+  return
+endhandle
+!!gphMeasure.setPerpendicularMeasure(!arc)
+handle any
+  !trace.append('setPerpendicularMeasure_error=' & !!error.text)
+  !traceFile.writeFile('OVERWRITE', !trace)
+  return
+endhandle
+!!gphViews.refreshAllViews()
+!trace.append('from=' & !!gphMeasure.dimension.from.string())
+!trace.append('to=' & !!gphMeasure.dimension.to.string())
+!trace.append('complete')
+!traceFile.writeFile('OVERWRITE', !trace)
+return

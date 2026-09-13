@@ -1,0 +1,461 @@
+{
+  "schema_version": 1,
+  "corpus_id": "e3d-dimension-behavior-v1",
+  "status": "capture-plan-ready",
+  "target_product": {
+    "name": "AVEVA E3D Design",
+    "version": null,
+    "build": null,
+    "capture_machine": null
+  },
+  "capture_contract": {
+    "coordinate_unit": "millimetre",
+    "angle_unit": "degree",
+    "required_context": [
+      "E3D version and build",
+      "project and MDB",
+      "element refnos and nouns",
+      "active view projection and viewport size",
+      "camera position, direction and up vector",
+      "display unit and precision",
+      "dimension style name"
+    ],
+    "required_artifacts": [
+      "before screenshot",
+      "step-by-step command/status text",
+      "after screenshot",
+      "dimension hierarchy and attribute dump",
+      "anchor positions in design coordinates",
+      "dimension/projection/plane directions when available",
+      "formatted label text",
+      "error number and message for rejected cases"
+    ],
+    "artifact_naming": "<case-id>__<e3d-build>__<project>__<timestamp>.<ext>",
+    "comparison_rule": "Capture source facts first. Do not fill expected numeric geometry from the web implementation."
+  },
+  "cases": [
+    {
+      "id": "E3D-GOLDEN-001",
+      "priority": "must",
+      "subsystem": "persistent-draft-dimension",
+      "kind": "linear",
+      "title": "Two exact semantic points, default placement",
+      "status": "blocked-e3d-runtime-startup",
+      "capture_attempt": "docs/verification/e3d-dimension-capture-attempt-2026-09-11.json",
+      "setup": [
+        "Use two P-Points or other exact semantic points with a non-zero 3D separation.",
+        "Use a view where the point-to-point direction is not parallel to the view direction."
+      ],
+      "actions": [
+        "Create a linear dimension.",
+        "Pick point A, then point B.",
+        "Place the dimension line with the default style and commit."
+      ],
+      "capture": [
+        "LINDIM/DIMPPT/DIMPLI hierarchy",
+        "point attachments and resolved positions",
+        "dimension direction, projection direction and offset",
+        "rendered line, extension lines, arrows and label"
+      ],
+      "assertions": [
+        "The displayed value equals the E3D-derived point distance.",
+        "Semantic attachments survive save and reopen.",
+        "Rendered geometry can be reconstructed from semantic data and placement attributes."
+      ],
+      "linked_evidence": [
+        "E3D-DIM-001",
+        "E3D-DIM-004",
+        "E3D-DIM-005"
+      ]
+    },
+    {
+      "id": "E3D-GOLDEN-002",
+      "priority": "must",
+      "subsystem": "persistent-draft-dimension",
+      "kind": "linear",
+      "title": "Camera rotation preserves design-space placement",
+      "status": "blocked-e3d-runtime-startup",
+      "capture_attempt": "docs/verification/e3d-dimension-capture-attempt-2026-09-11.json",
+      "setup": [
+        "Reuse the committed dimension from E3D-GOLDEN-001."
+      ],
+      "actions": [
+        "Capture the dimension in the creation view.",
+        "Orbit the camera to two materially different non-degenerate views without editing the dimension."
+      ],
+      "capture": [
+        "all three camera frames",
+        "dimension database attributes before and after orbit",
+        "screen projection in every view"
+      ],
+      "assertions": [
+        "Semantic anchors and stored dimension frame do not change when only the camera changes.",
+        "Only view projection and text orientation are allowed to change."
+      ],
+      "linked_evidence": [
+        "E3D-DIM-002",
+        "E3D-DIM-003"
+      ]
+    },
+    {
+      "id": "E3D-GOLDEN-003",
+      "priority": "must",
+      "subsystem": "persistent-draft-dimension",
+      "kind": "projected",
+      "title": "World-axis projected dimension",
+      "status": "blocked-e3d-runtime-startup",
+      "capture_attempt": "docs/verification/e3d-dimension-capture-attempt-2026-09-11.json",
+      "setup": [
+        "Choose two points with non-zero X, Y and Z deltas.",
+        "Use World X as the measured projection axis."
+      ],
+      "actions": [
+        "Create the projected dimension and place its projection lines."
+      ],
+      "capture": [
+        "raw point delta",
+        "measured axis",
+        "projection direction",
+        "formatted absolute value",
+        "all generated line endpoints"
+      ],
+      "assertions": [
+        "Measured axis and projection-line direction are captured as different fields.",
+        "The displayed length matches the absolute X projection."
+      ],
+      "linked_evidence": [
+        "E3D-DIM-004",
+        "E3D-DIM-007"
+      ]
+    },
+    {
+      "id": "E3D-GOLDEN-004",
+      "priority": "must",
+      "subsystem": "persistent-draft-dimension",
+      "kind": "projected",
+      "title": "Semantic pipe-axis direction and reversed sense",
+      "status": "pending-e3d-capture",
+      "setup": [
+        "Use a BRAN/TUBI or component that exposes a stable axial direction."
+      ],
+      "actions": [
+        "Create one projected dimension along the semantic direction.",
+        "Repeat after reversing the direction sense."
+      ],
+      "capture": [
+        "source refno and direction attribute",
+        "resolved design-space vector",
+        "reversal attribute",
+        "signed internal projection and displayed value"
+      ],
+      "assertions": [
+        "The semantic source and direction sense are recoverable after reopen.",
+        "Reversal changes direction semantics without losing the anchor source."
+      ],
+      "linked_evidence": [
+        "E3D-DIM-006",
+        "E3D-DIM-007"
+      ]
+    },
+    {
+      "id": "E3D-GOLDEN-005",
+      "priority": "must",
+      "subsystem": "placement",
+      "kind": "linear",
+      "title": "Positive and negative offset placement",
+      "status": "pending-e3d-capture",
+      "setup": [
+        "Use the same anchors and frame for both captures."
+      ],
+      "actions": [
+        "Place the dimension line on one side of the anchors.",
+        "Move or flip it to the opposite side with the same absolute offset."
+      ],
+      "capture": [
+        "cursor point used for placement",
+        "stored scalar offset",
+        "side or direction state",
+        "dimension and extension endpoints"
+      ],
+      "assertions": [
+        "Offset is stored in design units and is reproducible from the placement point and frame.",
+        "Cancel restores the pre-edit placement."
+      ],
+      "linked_evidence": [
+        "E3D-DIM-009",
+        "E3D-DIM-010"
+      ]
+    },
+    {
+      "id": "E3D-GOLDEN-006",
+      "priority": "must",
+      "subsystem": "presentation",
+      "kind": "linear",
+      "title": "Short dimension with outside text and arrow reversal",
+      "status": "pending-e3d-capture",
+      "setup": [
+        "Choose anchors whose projected separation is shorter than the formatted label plus arrow clearance."
+      ],
+      "actions": [
+        "Create and place the dimension using the default E3D style."
+      ],
+      "capture": [
+        "viewport size and camera",
+        "text extents",
+        "arrow direction",
+        "outside extension length",
+        "label placement attributes"
+      ],
+      "assertions": [
+        "The short-dimension policy is explicit and repeatable.",
+        "Text and arrow placement do not overlap."
+      ],
+      "linked_evidence": [
+        "E3D-DIM-014",
+        "E3D-DIM-016"
+      ]
+    },
+    {
+      "id": "E3D-GOLDEN-007",
+      "priority": "must",
+      "subsystem": "geometry-validation",
+      "kind": "linear",
+      "title": "Rejected near-parallel direction combinations",
+      "status": "pending-e3d-capture",
+      "setup": [
+        "Prepare one dimension direction parallel to view.",
+        "Prepare one projection direction parallel to view.",
+        "Prepare one projection direction parallel to the dimension line."
+      ],
+      "actions": [
+        "Attempt each invalid creation or edit separately.",
+        "Repeat just outside the rejection tolerance."
+      ],
+      "capture": [
+        "input vectors and magnitudes",
+        "projected vectors",
+        "E3D error number and full message",
+        "whether any database element was committed"
+      ],
+      "assertions": [
+        "Invalid input is rejected before a visible or persisted dimension is produced.",
+        "The observed boundary can be represented by deterministic tolerance tests."
+      ],
+      "linked_evidence": [
+        "E3D-DIM-002",
+        "E3D-DIM-003"
+      ]
+    },
+    {
+      "id": "E3D-GOLDEN-008",
+      "priority": "must",
+      "subsystem": "chain-dimension",
+      "kind": "chain",
+      "title": "Four-point chain with back-step and finish",
+      "status": "pending-e3d-capture",
+      "setup": [
+        "Prepare four ordered exact points on a common usable frame."
+      ],
+      "actions": [
+        "Enable chain mode.",
+        "Pick four points, remove the latest point once, add it again, then finish."
+      ],
+      "capture": [
+        "ordered point hierarchy",
+        "shared baseline/frame attributes",
+        "segment labels and endpoints",
+        "command prompts for add, back and finish"
+      ],
+      "assertions": [
+        "Point order is durable.",
+        "Adjacent segments share one baseline and placement frame.",
+        "Back-step does not leave an orphan dimension point."
+      ],
+      "linked_evidence": [
+        "E3D-DIM-010",
+        "E3D-DIM-011"
+      ]
+    },
+    {
+      "id": "E3D-GOLDEN-009",
+      "priority": "must",
+      "subsystem": "angular-dimension",
+      "kind": "angular",
+      "title": "Minor/major arc and near-orthogonal snapping",
+      "status": "pending-e3d-capture",
+      "setup": [
+        "Prepare ray pairs at exact 90 degrees, within approximately 0.9 degrees of 90, and clearly outside that band."
+      ],
+      "actions": [
+        "Create minor and major angular dimensions.",
+        "Repeat with orthogonal snap enabled and disabled if E3D exposes that control."
+      ],
+      "capture": [
+        "raw ray vectors",
+        "plane normal",
+        "raw and displayed angles",
+        "arc choice and radius",
+        "snap indication"
+      ],
+      "assertions": [
+        "Minor/major choice is durable.",
+        "The runtime threshold for orthogonal snapping is measured rather than assumed."
+      ],
+      "linked_evidence": [
+        "E3D-DIM-008",
+        "E3D-DIM-012"
+      ]
+    },
+    {
+      "id": "E3D-GOLDEN-010",
+      "priority": "must",
+      "subsystem": "radial-dimension",
+      "kind": "radial",
+      "title": "Radius and diameter from the same circle",
+      "status": "pending-e3d-capture",
+      "setup": [
+        "Use one circular or arc primitive with a known center, rim and normal."
+      ],
+      "actions": [
+        "Create a radius dimension.",
+        "Switch the same semantic geometry to diameter display.",
+        "Move the leader and label before committing."
+      ],
+      "capture": [
+        "circle/arc semantic reference",
+        "center, rim and normal",
+        "leader direction and label distance",
+        "radius and diameter labels"
+      ],
+      "assertions": [
+        "Radius and diameter share the same geometry source.",
+        "Display semantic changes do not duplicate or alter the source circle."
+      ],
+      "linked_evidence": [
+        "E3D-DIM-012"
+      ]
+    },
+    {
+      "id": "E3D-GOLDEN-011",
+      "priority": "must",
+      "subsystem": "value-formatting",
+      "kind": "format",
+      "title": "Metric, imperial and angular formatting matrix",
+      "status": "pending-e3d-capture",
+      "setup": [
+        "Use one exact length and one exact angle whose conversions expose rounding and trailing-zero behavior."
+      ],
+      "actions": [
+        "Capture mm, cm, m, inch and feet/inch presentations at at least two precision settings.",
+        "Capture decimal-degree and any alternate angular presentation exposed by E3D."
+      ],
+      "capture": [
+        "unit identifiers",
+        "precision settings",
+        "exact source value",
+        "complete formatted string including symbols, spaces, signs and zeros"
+      ],
+      "assertions": [
+        "Formatting is centralized and independent of persisted geometry.",
+        "No web expectation is accepted without an E3D-produced string."
+      ],
+      "linked_evidence": [
+        "E3D-DIM-013"
+      ]
+    },
+    {
+      "id": "E3D-GOLDEN-012",
+      "priority": "must",
+      "subsystem": "semantic-anchor-resolution",
+      "kind": "linear",
+      "title": "Referenced object moves between model revisions",
+      "status": "pending-e3d-capture",
+      "setup": [
+        "Create a dimension whose points are attached to movable model elements."
+      ],
+      "actions": [
+        "Save and reopen the dimension.",
+        "Move or revise one referenced element.",
+        "Refresh or reopen the drawing."
+      ],
+      "capture": [
+        "original and revised element refs/transforms",
+        "point attachment attributes",
+        "original and revised resolved positions",
+        "dimension value before and after",
+        "behavior when the reference is deleted"
+      ],
+      "assertions": [
+        "A valid reference re-resolves instead of remaining at only the old coordinate.",
+        "A missing reference produces an explicit degraded or error state and is not silently deleted."
+      ],
+      "linked_evidence": [
+        "E3D-DIM-005",
+        "E3D-DIM-006"
+      ]
+    },
+    {
+      "id": "E3D-GOLDEN-013",
+      "priority": "should",
+      "subsystem": "automatic-grid-annotation",
+      "kind": "grid",
+      "title": "GRIDPL/GRIDCY automatic annotation lifecycle",
+      "status": "pending-e3d-capture",
+      "setup": [
+        "Open a drawlist containing grid planes or cylinders with automatic dimensions enabled."
+      ],
+      "actions": [
+        "Capture the initial annotations.",
+        "Add and remove a grid member.",
+        "Refresh the same view and then switch to another view."
+      ],
+      "capture": [
+        "drawlist additions/deletions",
+        "generated annotation count and source grid refs",
+        "per-view text orientation and positions",
+        "clear/rebuild timing"
+      ],
+      "assertions": [
+        "Only GRIDPL/GRIDCY changes trigger this source.",
+        "Generated records are view-derived and not editable user dimensions.",
+        "Deletion clears stale generated annotations."
+      ],
+      "linked_evidence": [
+        "E3D-DIM-014",
+        "E3D-DIM-015",
+        "E3D-DIM-016"
+      ]
+    },
+    {
+      "id": "E3D-GOLDEN-014",
+      "priority": "should",
+      "subsystem": "transaction-lifecycle",
+      "kind": "linear",
+      "title": "Cancel, restore and undo boundaries",
+      "status": "pending-e3d-capture",
+      "setup": [
+        "Start from a saved linear dimension and record all relevant attributes."
+      ],
+      "actions": [
+        "Cancel during first-point, second-point, frame-selection and placement stages.",
+        "Edit offset then cancel.",
+        "Commit one edit and undo it."
+      ],
+      "capture": [
+        "command/status text at each stage",
+        "database hierarchy after every cancel",
+        "attribute values before edit, after cancel, after commit and after undo"
+      ],
+      "assertions": [
+        "Cancel leaves no partial child elements.",
+        "Cancelled edits restore prior values.",
+        "One committed placement edit maps to one undoable intent."
+      ],
+      "linked_evidence": [
+        "E3D-DIM-009",
+        "E3D-DIM-010",
+        "E3D-DIM-011"
+      ]
+    }
+  ]
+}

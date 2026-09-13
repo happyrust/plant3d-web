@@ -126,6 +126,7 @@ import { getModelSource } from '@/model-source';
 import { onCommand } from '@/ribbon/commandBus';
 import { emitToast } from '@/ribbon/toastBus';
 import { buildBackendUrl } from '@/utils/apiBase';
+import { parseJsonResponse } from '@/utils/fileValidation';
 import {
   applyModelUnitRefnoVisibility,
   applyModelUnitVersionSide,
@@ -140,7 +141,7 @@ import {
   type ModelUnitVersionCompareOpenDetail,
   type ModelUnitVersionCompareRuntimeState,
 } from '@/utils/modelUnitVersionCompare';
-import { parseGlbGeometry } from '@/utils/parseGlbGeometry';
+import { parseGlbGeometryResult } from '@/utils/parseGlbGeometry';
 import { SlopeAnnotation3D, WeldAnnotation3D } from '@/utils/three/annotation';
 import { DTXLayer, DTXSelectionController, DTXViewCullController } from '@/utils/three/dtx';
 import { DynamicPivotController } from '@/utils/three/dtx/DynamicPivotController';
@@ -638,9 +639,24 @@ async function loadRuntimeGlbGeometry(url: string): Promise<BufferGeometry | nul
 
   const task = (async () => {
     const response = await fetch(url);
-    if (!response.ok) return null;
-    const parsed = await parseGlbGeometry(await response.arrayBuffer());
-    if (!parsed) return null;
+    if (!response.ok) {
+      console.error('[ViewerPanel] Runtime GLB request failed', {
+        url,
+        status: response.status,
+        statusText: response.statusText,
+      });
+      return null;
+    }
+    const result = await parseGlbGeometryResult(await response.arrayBuffer(), url);
+    if (!result.ok) {
+      console.error('[ViewerPanel] Runtime GLB validation failed', {
+        url,
+        error: result.error.message,
+        issue: result.error.issue,
+      });
+      return null;
+    }
+    const parsed = result.data;
     const geometry = new BufferGeometry();
     geometry.setAttribute('position', new BufferAttribute(new Float32Array(parsed.positions), 3));
     if (parsed.normals && parsed.normals.length === parsed.positions.length) {
@@ -663,11 +679,18 @@ async function fetchReleaseRuntimeScene(releaseId: string, componentKey: string,
   if (project) params.set('project', project);
   const url = buildBackendUrl(`/api/model-version/releases/${encodeURIComponent(releaseId)}/runtime-scene?${params.toString()}`);
   const response = await fetch(url);
-  const body = await response.json();
+  const body = await parseJsonResponse<{
+    success?: boolean;
+    message?: string;
+    data?: RuntimeScenePayload;
+  }>(response, url);
   if (!response.ok || body?.success === false) {
     throw new Error(body?.message || `release runtime scene failed: ${releaseId}`);
   }
-  return body.data as RuntimeScenePayload;
+  if (!body.data) {
+    throw new Error(`release runtime scene payload is missing data: ${releaseId}`);
+  }
+  return body.data;
 }
 
 function modelVersionComponentKey(model: IncrementalCompareModel | null): string | null {
@@ -1258,6 +1281,8 @@ const dimensionViewerAdapter = createDtxDimensionViewerAdapter({
   getMillimetresToScene: () => dtxLayerRef.value?.getGlobalModelMatrix(),
   getContainer: () => containerRef.value,
   requestRender,
+  // 标签 billboard 避让管件包围盒：把标签周围的已加载构件交给尺寸内核。
+  getDtxLayer: () => dtxLayerRef.value,
 });
 
 function sceneWorldToDesignMetres(
@@ -3509,6 +3534,9 @@ function onViewerContextMenu(ev: MouseEvent): void {
   );
   const dimensionId = hit?.dimensionId ?? null;
   if (!dimensionId?.startsWith(DIMENSION_XEOKIT_PREFIX)) return;
+  const measurementId = xeokitMeasurementToolsRef.value
+    ?.resolveMeasurementIdFromDimensionId(dimensionId) ?? null;
+  if (!measurementId) return;
 
   ev.preventDefault();
   ev.stopImmediatePropagation();
@@ -3517,7 +3545,7 @@ function onViewerContextMenu(ev: MouseEvent): void {
   measurementContextMenu.value = {
     x: Math.min(ev.clientX - containerRect.left, Math.max(0, containerRect.width - 240)),
     y: Math.min(ev.clientY - containerRect.top, Math.max(0, containerRect.height - 340)),
-    id: dimensionId.slice(DIMENSION_XEOKIT_PREFIX.length),
+    id: measurementId,
   };
   requestRender();
 }

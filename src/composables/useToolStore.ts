@@ -42,6 +42,11 @@ import {
   normalizeAnnotationScreenshot,
   normalizeAnnotationSeverity,
 } from '@/types/auth';
+import {
+  describeValue,
+  failFileValidation,
+  parseJsonText,
+} from '@/utils/fileValidation';
 
 /** 从 userStore 读当前登录用户 id；未登录/SSR 场景返回 undefined，供批注 authorId 回填。 */
 function resolveCurrentAuthorId(): string | undefined {
@@ -163,6 +168,17 @@ export type MeasurementRecord =
 
 export type XeokitMeasurementKind = 'distance' | 'angle' | 'elevation_point' | 'elevation_delta';
 
+/**
+ * E3D「Perpendicular to」结果标记：`origin` 是拾取的源点，`target` 是落在目标
+ * 无限线 / 无限面上的垂足（点源无几何时为第二个拾取点本身）。结果表按
+ * Distance / Vertical / Horizontal / Direction 解读，参考系固定 World。
+ */
+export type PerpendicularMeasurementInfo = {
+  targetKind: 'line' | 'plane' | 'point';
+  /** 提供目标几何的点源摘要，如「P-Point #3 轴线」。 */
+  targetLabel?: string | null;
+};
+
 export type XeokitDistanceMeasurementRecord = {
   id: string;
   kind: 'distance';
@@ -171,6 +187,7 @@ export type XeokitDistanceMeasurementRecord = {
   visible: boolean;
   approximate: boolean;
   createdAt: number;
+  perpendicular?: PerpendicularMeasurementInfo;
 } & MeasurementSourceLink;
 
 export type XeokitAngleMeasurementRecord = {
@@ -228,16 +245,18 @@ export type XeokitDistanceDraft = {
 
 /**
  * 测量临时结果（E3D Measure Session 的 S3 态）：第二击后先产出结果供
- * Result Inspector 解读；仅当「生成线性标注」开启（或用户显式落地）才
- * 生成持久测量记录。r5 §3 / r4 §4。
+ * Result Inspector 解读；是否显示直接斜线、是否保留为 Web 测量标注是
+ * 两个独立选项。
  */
 export type MeasurementDraftResult = {
+  /** 从草稿继承的稳定 id；显式保留时沿用，避免临时/持久图形换身份。 */
+  id: string;
   kind: 'distance';
   origin: MeasurementPoint;
   target: MeasurementPoint;
   /** 两点真实三维距离（米，设计坐标）。 */
   distance: number;
-  /** Offset：wrt=World 下即 E/N/U 分量（ΔX/ΔY/ΔZ，米）。 */
+  /** Offset：P0 的 wrt=World XYZ 分量（ΔX/ΔY/ΔZ，米）。 */
   offsets: { frame: 'world'; components: Vec3 };
   /** 方向单位向量；显示格式待 E3D 实机验证，内部先存向量。 */
   direction: { vector: Vec3 } | null;
@@ -247,6 +266,8 @@ export type MeasurementDraftResult = {
   createdAt: number;
   /** 「生成线性标注」开启时对应的持久测量记录 id；未落地为 null。 */
   persistedMeasurementId: string | null;
+  /** 存在即为 Perpendicular to 结果（target 为垂足）。 */
+  perpendicular?: PerpendicularMeasurementInfo;
 };
 
 export type XeokitAngleDraftStage = 'finding_first_arm' | 'finding_second_arm';
@@ -2698,16 +2719,21 @@ function exportJSON(): string {
 
 function importJSON(
   raw: string,
-  options?: Readonly<{ now?: () => number }>,
+  options?: Readonly<{ now?: () => number; source?: string }>,
 ) {
-  const parsed = JSON.parse(raw) as
+  const parsed = parseJsonText<
     | PersistedStateV1
     | PersistedStateV2
     | PersistedStateV3
     | PersistedStateV4
     | PersistedStateV5
     | PersistedStateV6Bridge
-    | PersistedStateV7;
+    | PersistedStateV7
+  >(raw, {
+    source: options?.source ?? '工具状态 JSON',
+    expectedRoot: 'object',
+  });
+  const source = options?.source ?? '工具状态 JSON';
   if (
     !parsed ||
     (
@@ -2720,7 +2746,37 @@ function importJSON(
       parsed.version !== 7
     )
   ) {
-    throw new Error('Unsupported tools JSON format');
+    failFileValidation({
+      source,
+      format: 'json',
+      reason: '工具状态版本不受支持',
+      expected: 'version 为 1、2、3、4、5、6 或 7',
+      actual: describeValue((parsed as { version?: unknown }).version),
+    });
+  }
+  for (const field of [
+    'measurements',
+    'legacyMeasurements',
+    'annotations',
+    'obbAnnotations',
+    'cloudAnnotations',
+    'rectAnnotations',
+    'dimensions',
+    'xeokitDistanceMeasurements',
+    'xeokitAngleMeasurements',
+    'xeokitElevationPointMeasurements',
+    'xeokitElevationDeltaMeasurements',
+  ] as const) {
+    const value = (parsed as unknown as Record<string, unknown>)[field];
+    if (value !== undefined && !Array.isArray(value)) {
+      failFileValidation({
+        source,
+        format: 'json',
+        reason: `${field} 字段类型无效`,
+        expected: '数组',
+        actual: describeValue(value),
+      });
+    }
   }
 
   const importsV4OrV5Dimensions = parsed.version === 4 || parsed.version === 5;

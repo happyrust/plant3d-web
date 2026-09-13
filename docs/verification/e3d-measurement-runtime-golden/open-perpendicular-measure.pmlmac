@@ -1,0 +1,7 @@
+!!gphAngleMeasure.close()
+hide !!gphAngleMeasure
+
+!!gphViews.measure('DISTANCE')
+!!gphMeasure.perpendicularTo.val = TRUE
+!!gphMeasure.setPerpendicular()
+return

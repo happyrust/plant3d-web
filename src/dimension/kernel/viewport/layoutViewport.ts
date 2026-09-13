@@ -4,16 +4,18 @@ import { declutterOverlaps } from '../layout/declutterPolicy';
 import { layoutDimension } from '../layout/layoutDimension';
 import { emptyLayout } from '../layout/linear';
 import {
+  collectTagObstacles,
   isTagBillboardPlan,
   placeTagBillboards,
   planTagBillboard,
-  type TagBillboardPlan,
+  type PlannedTag,
 } from '../layout/tagBillboard';
 
 import type { LayoutContext } from '../layout/context';
 import type {
   ExplicitLayoutInput,
   InteractionState,
+  LayoutObstacleSource,
   LayoutResult,
   NormalizedDimensionInput,
 } from '../types';
@@ -23,17 +25,26 @@ export type ViewportLayoutBatch = Readonly<{
   hitIndex: HitIndex;
 }>;
 
+export type ViewportLayoutOptions = Readonly<{
+  /**
+   * Model component boxes around the billboard tags; omitted = the tags only
+   * keep clear of labels and dimension strokes.
+   */
+  obstacles?: LayoutObstacleSource;
+}>;
+
 export function layoutViewport(
   inputs: readonly (NormalizedDimensionInput | ExplicitLayoutInput)[],
   baseContext: Omit<LayoutContext, 'interaction'>,
   interactionById: ReadonlyMap<string, InteractionState>,
+  options: ViewportLayoutOptions = {},
 ): ViewportLayoutBatch {
   const normalContext: LayoutContext = {
     ...baseContext,
     interaction: 'normal',
   };
   const raw = new Array<LayoutResult>(inputs.length);
-  const tags: { index: number; id: string; plan: TagBillboardPlan }[] = [];
+  const tags: PlannedTag[] = [];
   for (const [index, input] of inputs.entries()) {
     const interaction = interactionById.get(input.id) ?? 'normal';
     const context = interaction === 'normal'
@@ -56,9 +67,15 @@ export function layoutViewport(
   // Solver-placed 3D dimension labels are elided pairwise before the moving
   // declutter runs, so a hidden label neither moves anyone nor claims space;
   // billboard tags then take the first candidate position clear of the
-  // surviving labels and of each other.
+  // surviving labels, of the dimension strokes, of the component boxes the
+  // host reports around them, and of each other.
+  const decluttered = declutterOverlaps(raw);
   const layouts = resolveLabelCollisions(
-    placeTagBillboards(declutterOverlaps(raw), tags),
+    placeTagBillboards(
+      decluttered,
+      tags,
+      collectTagObstacles(decluttered, tags, baseContext.projector, options.obstacles),
+    ),
   );
   return { layouts, hitIndex: buildHitIndex(layouts) };
 }

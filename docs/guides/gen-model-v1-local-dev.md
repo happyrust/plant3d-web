@@ -21,6 +21,9 @@ mdb_name = "ALL"
 curl http://127.0.0.1:8022/api/v1/health
 ```
 
+`refactor/retire-publish-stage` 之后的构建把 E3D schema 选择改成了显式：`DbOption.toml` 里还要有
+`e3d_version = "e3d210"`（AMS E3D3.1 语料），否则启动就停在 `automatic E3D schema selection is unavailable … choose a SchemaPack explicitly`。
+
 `initialization.model_ready=true`、`model_phase_open=true` 才接按需生成；`data_face` 是 `read-through`（零摄入，SITE/ZONE 的 ensure 由服务端自己解生成根）还是 `ingest`（容器回 `422 container`，前端展开一层）都能用，行为差别见 §5。
 
 **kv-mem 读透形态**（整库显示走服务端整库入口要它，收口计划 §17）：`data_face` 由存储介质派生、不由配置直说——`store_mode` 两档内存（`embedded-mem` 进程内嵌 `mem://`，无端口；`spawned-mem` 本进程拉起一个 `--memory` 后端的 surreal 子进程绑到 `v_ip:v_port`，端口是真的）⇒ `read-through`，`external` / `spawned-rocksdb` ⇒ `ingest`。不改配置文件的起法是环境变量压过去：
@@ -69,7 +72,7 @@ npm run dev          # http://127.0.0.1:3101
 
 | 参数 | 作用 |
 | --- | --- |
-| `model_source=gen-model-v1` | 本页面模型树 / 几何 / 网格 / 属性全部走 gen-model；**2026-09-09 起这就是缺省**，不写也一样。`model_source=legacy` = 旧链路（逐字节同前，保留一个发布周期） |
+| `model_source=gen-model-v1` | 本页面模型树 / 几何 / 网格 / 属性全部走 gen-model；**2026-09-09 起这就是缺省**，不写也一样。`model_source=legacy` = 旧链路（逐字节同前，保留一个发布周期）。**2026-09-12 起测量的 P-Point 也在这个开关下**：v1 源走 `POST /api/v1/element/ptset`（服务端须含 `feature/element-ptset-api` 的构建，旧服务端回 404/405 → 面板提示无 P-Point），legacy 源仍读 `ptsets.parquet` / `:3100 /api/pdms/ptset`；基本体 / PLINE 关键点 v1 源暂无接口（提示条会说明） |
 | `gm_backend_port=18082` / `gm_backend=http://10.0.0.5:8022` / `gm_backend=/gm` | 本页面 gen-model 地址，压过环境变量；`/gm` 仅在 dev Vite 或部署方显式 rewrite 时可用 |
 | `gm_health=1` | 在 legacy 下也把树顶部的 gen-model 徽标挂出来（只看健康与库三态，不动场景、不起同步） |
 | `show_refno=24381_145018` | 启动即显示这个节点（v1 下 = `ensure → records`） |

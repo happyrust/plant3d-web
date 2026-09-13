@@ -25,6 +25,7 @@ const {
   onCommandMock,
   ensurePanelAndActivateMock,
   dockPanelExistsMock,
+  setAttributeDisplayModeMock,
 } = vi.hoisted(() => ({
   authVerifyTokenMock: vi.fn(),
   clearAuthTokenMock: vi.fn(),
@@ -47,6 +48,7 @@ const {
   onCommandMock: vi.fn(() => () => undefined),
   ensurePanelAndActivateMock: vi.fn(),
   dockPanelExistsMock: vi.fn(() => false),
+  setAttributeDisplayModeMock: vi.fn(),
 }));
 
 let ribbonCommandHandler: ((commandId: string) => void) | null = null;
@@ -215,6 +217,7 @@ vi.mock('@/composables/useToolStore', () => ({
     obbAnnotations: ref([]),
     measurements: ref([]),
     clearAll: vi.fn(),
+    setAttributeDisplayMode: (...args: unknown[]) => setAttributeDisplayModeMock(...args),
   }),
 }));
 
@@ -356,6 +359,7 @@ describe('DockLayout embed bootstrap', () => {
     onCommandMock.mockReset();
     ensurePanelAndActivateMock.mockReset();
     dockPanelExistsMock.mockReset();
+    setAttributeDisplayModeMock.mockReset();
     ribbonCommandHandler = null;
 
     pendingReviewTasksRef.value = [createTask()];
@@ -726,6 +730,19 @@ describe('DockLayout embed bootstrap', () => {
     isDesignerRef.value = false;
     ribbonCommandHandler?.('panel.annotationTable');
     expect(ensurePanelAndActivateMock).toHaveBeenLastCalledWith('review');
+
+    mounted.unmount();
+  });
+
+  it('属性显示命令更新过滤模式并打开属性面板', async () => {
+    const mounted = await mountDockLayout();
+    expect(ribbonCommandHandler).toBeTypeOf('function');
+
+    ribbonCommandHandler?.('view.attr.general');
+
+    expect(setAttributeDisplayModeMock).toHaveBeenCalledWith('general');
+    expect(dockPanels.has('properties')).toBe(true);
+    expect(activatedPanels).toContain('properties');
 
     mounted.unmount();
   });

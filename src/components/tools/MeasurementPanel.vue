@@ -8,6 +8,7 @@ import {
   clampMeasurementPickThreshold,
   type MeasurementPickSourceId,
 } from '@/composables/useMeasurementPickSources';
+import { useMeasurementReferenceFrameStore } from '@/composables/useMeasurementReferenceFrameStore';
 import { usePipeDistanceStore } from '@/composables/usePipeDistanceStore';
 import {
   type MeasurementRecord,
@@ -40,6 +41,7 @@ const pipeDistanceStore = usePipeDistanceStore();
 const ctx = useViewerContext();
 const xeokitTools = computed(() => ctx.xeokitMeasurementTools.value);
 const measurementStyle = useXeokitMeasurementStyleStore();
+const measurementReferenceFrame = useMeasurementReferenceFrameStore();
 const unitSettings = useUnitSettingsStore();
 const confirmDialog = useConfirmDialogStore();
 const measurementRowEls = ref(new Map<string, HTMLElement>());
@@ -103,12 +105,16 @@ const allVisibilityLabel = computed(() => (
   hasHiddenMeasurements.value ? '全部显示' : '全部隐藏'
 ));
 const canShowStyleSettings = computed(() => !!xeokitTools.value);
+const activeDistanceAxes = computed(() => measurementReferenceFrame.axisLabels.value.join('/'));
+const activeWrtLabel = computed(() => measurementReferenceFrame.resolvedLabel.value);
 const distanceStylePreview = computed(() => {
   const items: string[] = [];
   if (measurementStyle.state.distanceKeepDimensions) items.push('保留历史尺寸');
   if (measurementStyle.state.distanceShowTotalLabel) items.push('总长标签');
   if (measurementStyle.state.distanceShowMarkers) items.push('端点');
-  if (measurementStyle.state.distanceShowAxisBreakdown) items.push('E/N/U 分量');
+  if (measurementStyle.state.distanceShowAxisBreakdown) {
+    items.push(`${activeWrtLabel.value} ${activeDistanceAxes.value} 分量`);
+  }
   return items.length > 0 ? items.join(' · ') : '仅保留主线';
 });
 const angleStylePreview = computed(() => {
@@ -135,8 +141,8 @@ const elevationDeltaStylePreview = computed(() => {
 });
 const distanceStyleNote = computed(() => {
   return measurementStyle.state.distanceShowAxisBreakdown
-    ? '当前距离结果会同时显示总长和 E / N / U 轴向分量（E3D 默认）。'
-    : '开启后距离结果会额外显示 E / N / U 轴向分量。';
+    ? `当前距离结果会同时显示总长和 ${activeWrtLabel.value} ${activeDistanceAxes.value} 轴向分量。`
+    : `开启后距离结果会额外显示 ${activeWrtLabel.value} ${activeDistanceAxes.value} 轴向分量。`;
 });
 const elevationDatumDisplayValue = computed(() => convertLength(
   measurementStyle.state.elevationDatum,
@@ -159,7 +165,10 @@ function getMeasurementSummary(record: MeasurementRecord | XeokitMeasurementReco
     record,
     unitSettings.displayUnit.value,
     unitSettings.precision.value,
-    { showAxisBreakdown: measurementStyle.state.distanceShowAxisBreakdown },
+    {
+      showAxisBreakdown: measurementStyle.state.distanceShowAxisBreakdown,
+      referenceFrame: measurementReferenceFrame.resolvedFrame.value,
+    },
   );
 }
 
@@ -551,7 +560,7 @@ watch(
               </button>
             </div>
             <div class="mt-1 text-xs text-muted-foreground">
-              默认显示总长与 E/N/U 轴向分量（E3D 默认）；可按需关闭。
+              距离、标高和高差按结果面板当前 WRT 重算；设计坐标锚点保持不变。
             </div>
             <div data-testid="measurement-style-distance-note"
               class="mt-2 rounded-md bg-muted/60 px-2 py-1 text-xs text-muted-foreground">
@@ -588,7 +597,7 @@ watch(
                   type="checkbox"
                   :checked="measurementStyle.state.distanceShowAxisBreakdown"
                   @change="updateMeasurementStyle('distanceShowAxisBreakdown', ($event.target as HTMLInputElement).checked)" />
-                <span>显示 E/N/U 轴向分量</span>
+                <span>显示 World X/Y/Z 轴向分量</span>
               </label>
             </div>
           </div>

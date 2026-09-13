@@ -1,0 +1,17 @@
+﻿product=E3D 3.1
+project=AvevaMarineSample
+mdb=/ALL
+wrt=/*
+from=E 9897.433mm N 8954.701mm U 13330.416mm WRT /*
+to=E 9769.75mm N 10047.176mm U 18664.801mm WRT /*
+distance_db=5446.60105926797
+distance_text=5446.6mm
+vertical_db=5334.38438847279
+vertical_text=5334.38mm
+horizontal_db=1099.91194867441
+horizontal_text=1099.91mm
+direction=N 6.66615 W 78.3493 U WRT /*
+show_linear=FALSE
+keep_dimensions=FALSE
+perpendicular=TRUE
+complete

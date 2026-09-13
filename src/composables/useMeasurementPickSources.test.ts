@@ -204,6 +204,60 @@ describe('useMeasurementPickSources', () => {
     expect(resolved.hit?.source).toBe('ptset');
   });
 
+  it('selects the nearest 4px cohort deterministically for every provider order', () => {
+    const settings = cloneMeasurementPickSourceSettings({
+      position: { show: true, snap: true, priority: 30, thresholdPx: 80 },
+      ptset: { show: true, snap: true, priority: 20, thresholdPx: 80 },
+      primitive_key_point: { show: true, snap: true, priority: 10, thresholdPx: 80 },
+    });
+    const candidates: MeasurementPickCandidate[] = [
+      {
+        id: 'A-position-1px',
+        source: 'position',
+        entityId: 'position:a',
+        objectId: 'o:1_1:0',
+        worldPos: new Vector3(0.01, 0, 0),
+      },
+      {
+        id: 'B-ptset-5px',
+        source: 'ptset',
+        entityId: 'ptset:b',
+        objectId: 'o:1_2:0',
+        worldPos: new Vector3(0.05, 0, 0),
+      },
+      {
+        id: 'C-primitive-9px',
+        source: 'primitive_key_point',
+        entityId: 'primitive:c',
+        objectId: 'o:1_3:0',
+        worldPos: new Vector3(0.09, 0, 0),
+      },
+    ];
+    const orders = [
+      [candidates[0], candidates[1], candidates[2]],
+      [candidates[0], candidates[2], candidates[1]],
+      [candidates[1], candidates[0], candidates[2]],
+      [candidates[1], candidates[2], candidates[0]],
+      [candidates[2], candidates[0], candidates[1]],
+      [candidates[2], candidates[1], candidates[0]],
+    ] as MeasurementPickCandidate[][];
+
+    const results = orders.map(order => resolveMeasurementPickCandidates({
+      cursor: { x: 100, y: 100 },
+      camera: camera(),
+      rect: { width: 200, height: 200 },
+      settings,
+      candidates: order,
+    }));
+
+    expect(results.map(result => result.hit?.id)).toEqual(
+      Array(orders.length).fill('B-ptset-5px'),
+    );
+    expect(results.map(result => result.snapCandidates.map(candidate => candidate.id))).toEqual(
+      Array(orders.length).fill(['B-ptset-5px', 'A-position-1px', 'C-primitive-9px']),
+    );
+  });
+
   it('falls back to mesh when PTSET is outside threshold', () => {
     const settings = cloneMeasurementPickSourceSettings({
       ptset: { show: true, snap: true, priority: 20, thresholdPx: 4 },

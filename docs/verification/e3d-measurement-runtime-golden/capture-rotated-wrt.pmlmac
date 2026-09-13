@@ -1,0 +1,103 @@
+!traceFile = object FILE('D:/work/plant-code/old/plant3d-web/docs/verification/e3d-measurement-runtime-golden/G3-02-rotated-wrt.trace.txt')
+!trace = ARRAY()
+
+-- Same World sample as G1 so the rotated components can be compared with the World offsets.
+!from = object POSITION('E 9769.75mm N 10047.18mm U 18664.8mm WRT /*')
+!to = object POSITION('E 7849.61mm N 10447.46mm U 14234.127mm WRT /*')
+
+-- Put the live form back into standard (non-perpendicular) mode through its own toggle callback.
+!!gphMeasure.perpendicularTo.val = FALSE
+!!gphMeasure.setPerpendicular()
+handle any
+  !trace.append('blocked: setPerpendicular(false) failed: ' & !!error.text)
+  !traceFile.writeFile('OVERWRITE', !trace)
+  return
+endhandle
+!!gphMeasure.showLinear.val = TRUE
+!trace.append('wrt_gadget_active=' & !!gphMeasure.wrt.active.string())
+
+!items = ARRAY()
+!items.append('=24381/101439')
+!items.append('=24381/101423')
+
+do !refnoString values !items
+  !wrtItem = object DBREF(!refnoString)
+  handle any
+    !trace.append('case ' & !refnoString & ' blocked: dbref failed: ' & !!error.text)
+    skip
+  endhandle
+
+  !trace.append('---- case wrt=' & !refnoString)
+  !trace.append('wrt_name=' & !wrtItem.name)
+  !trace.append('wrt_type=' & !wrtItem.type)
+  !trace.append('wrt_ori_world=' & !wrtItem.ori.wrt(world).string())
+  !trace.append('wrt_pos_world=' & !wrtItem.pos.wrt(world).string())
+
+  !!gphMeasure.dimension.setDimension(!from, !to)
+  !!gphMeasure.wrt.val = !wrtItem.name
+  !!gphMeasure.setUpForm()
+  handle any
+    !trace.append('blocked: setUpForm failed: ' & !!error.text)
+    skip
+  endhandle
+
+  !dimension = !!gphMeasure.dimension
+  !distance = !dimension.from.distance(!dimension.to)
+  !offset = !dimension.offsetType()
+  !direction = !dimension.from.direction(!dimension.to).wrt(!dimension.wrt)
+
+  !trace.append('resolved_wrt=' & !dimension.wrt.name & ' hardType=' & !dimension.wrt.hardType)
+  !trace.append('gadget_wrt_val=' & !!gphMeasure.wrt.val)
+  !trace.append('label_type=' & !dimension.labelType)
+  !trace.append('from_in_wrt=' & !dimension.from.string())
+  !trace.append('to_in_wrt=' & !dimension.to.string())
+  !trace.append('distance_text=' & !distance.string(!!gphMeasure.measureFormat))
+  !trace.append('offset_1_text=' & !offset[1].string(!!gphMeasure.measureFormat))
+  !trace.append('offset_2_text=' & !offset[2].string(!!gphMeasure.measureFormat))
+  !trace.append('offset_3_text=' & !offset[3].string(!!gphMeasure.measureFormat))
+  !trace.append('offset_1_db=' & !offset[1].string())
+  !trace.append('offset_2_db=' & !offset[2].string())
+  !trace.append('offset_3_db=' & !offset[3].string())
+  !trace.append('direction_in_wrt=' & !direction.string())
+  !trace.append('direction_world=' & !from.direction(!to).wrt(world).string())
+
+  -- Independent expectation: project the World delta onto the item's World-expressed axes.
+  !ori = !wrtItem.ori.wrt(world)
+  !xDir = !ori.xDir()
+  !yDir = !ori.yDir()
+  !zDir = !ori.zDir()
+  !de = !to.east - !from.east
+  !dn = !to.north - !from.north
+  !du = !to.up - !from.up
+  !ex = (!de * !xDir.east) + (!dn * !xDir.north) + (!du * !xDir.up)
+  !ey = (!de * !yDir.east) + (!dn * !yDir.north) + (!du * !yDir.up)
+  !ez = (!de * !zDir.east) + (!dn * !zDir.north) + (!du * !zDir.up)
+  !trace.append('expected_axis_x=' & !xDir.string())
+  !trace.append('expected_axis_y=' & !yDir.string())
+  !trace.append('expected_axis_z=' & !zDir.string())
+  !trace.append('expected_offset_1=' & !ex.string())
+  !trace.append('expected_offset_2=' & !ey.string())
+  !trace.append('expected_offset_3=' & !ez.string())
+  !diff1 = abs(!ex - !offset[1])
+  !diff2 = abs(!ey - !offset[2])
+  !diff3 = abs(!ez - !offset[3])
+  !diffMax = !diff1
+  if (!diff2 gt !diffMax) then
+    !diffMax = !diff2
+  endif
+  if (!diff3 gt !diffMax) then
+    !diffMax = !diff3
+  endif
+  !trace.append('expected_vs_actual_max_abs_diff=' & !diffMax.string())
+enddo
+
+-- Restore World so later cases start from the default frame.
+!!gphMeasure.wrt.val = 'World'
+!!gphMeasure.setUpForm()
+handle any
+  !trace.append('restore_world_error=' & !!error.text)
+endhandle
+!trace.append('restored_wrt=' & !!gphMeasure.dimension.wrt.name)
+!trace.append('complete')
+!traceFile.writeFile('OVERWRITE', !trace)
+return

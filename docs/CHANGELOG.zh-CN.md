@@ -1,5 +1,44 @@
 # 更新日志
 
+## 2026-09-11
+
+### P0 整改：消除假可用、生产禁用静默回退、解析前验证、真实后端冒烟门
+
+- 属性面板改为只读（头部标「只读」徽标）：原“可编辑但保存只打日志”的假编辑整段移除，
+  等正式保存 API、权限与失败回滚就位后再开放编辑。
+- 生产构建无条件禁用 mock/demo 回退，新增仅开发环境生效的 `VITE_REVIEW_ALLOW_MOCK_FALLBACK`
+  与 `VITE_INCREMENTAL_ALLOW_DEMO_FALLBACK`（`src/utils/runtimeFallback.ts`）：校审用户/审核人/
+  任务接口失败不再回落本地 mock、旧的 localStorage「本地模拟模式」偏好不能把生产拉进 mock；增量
+  monitor/report/model-changes/attr-diff 失败不再回落 DB1112 演示数据；legacy `db_meta_info.json`
+  拉不到时的内置 AMS 1112 ref0 映射同受该开关约束。增量面板初始来源改为 `backend`，不再把空面板
+  标成演示数据。
+- Ribbon 空入口收口：删除只有配置没有处理器的「文件」「编辑」页签、属性「完整显示 / 差异对比」、
+  「版本时间线」（正式入口留 P1 接通）与「帮助 › 文档」；`view.attr.all/general/component/uda`
+  接上 `toolStore.setAttributeDisplayMode` 并打开属性面板。
+- 文件解析统一“先验证、后解析”（`src/utils/fileValidation.ts`，`FileValidationError` 带文件/格式/
+  位置/期望/实际）：`.mesh` 与 GLB 改为 `parse*Result` 返回可定位错误并在加载器打日志；Parquet
+  校验 `PAR1` 头尾魔数；instances / bucket / 提交 manifest 校验结构；校审附件预览按 Range 读前
+  1 KB 校验 HTTP 状态、Content-Type 与文件签名后才渲染；校审同步导入、工具数据导入、instances
+  manifest 导入与 `useToolStore.importJSON` 先验扩展名/大小/根类型/字段类型再入库；后端 JSON
+  统一走 `parseJsonResponse`，非 JSON 正文直接报错而不是吞掉。
+- ReviewPanel 首屏不再被 Viewer 就绪的固定等待阻塞：任务切换后依赖 Viewer 的过滤/加载转后台并
+  按序号防串台；测试改为一次导入组件、去掉 10 s 超时豁免，全量 Vitest 不再出现并发超时。
+- 新增四条真实后端冒烟门 `npm run test:smoke:p0[:model|:measurement|:review|:pms]`
+  （`scripts/p0-live-smoke.mjs`）：后端不可达、缺环境变量或任一断言失败都返回非零，不把“后端
+  没启动”当跳过；说明见 `docs/verification/p0-live-smoke-gates.md`。
+
+### 按 E3D 2.1 原始 PML 纠正距离测量语义
+
+- `Show linear dimension` 与 Web 结果保留正式拆分：前者只控制完成结果的直接斜线尺寸，
+  后者以“测量后保留为标注”独立控制持久测量记录；未保留的结果仍通过 dimension source
+  显示临时尺寸，并可用“保留本次”补存。
+- measurement style store 升级到 V8：V7 的 `persistDimension` 只迁移为
+  `keepMeasurementAnnotation`，新增 `showDirectLinearDimension` 默认开启。
+- 距离结果检查器按 E3D 标准结构显示 `Distance / Offset X / Offset Y / Offset Z /
+  Direction` 五行；P0 明确使用 World X/Y/Z，待后续 COORD/WRT 解析器决定 E3D 轴标签。
+- 距离计算先验证两端设计坐标存在且有限；无效输入停止本次完成操作并给出明确错误，不再继续
+  生成记录。
+
 ## 2026-07-28
 
 ### 测量工作流对齐 AVEVA E3D：连续测量、取点模式契约、右键菜单与图形直接点选

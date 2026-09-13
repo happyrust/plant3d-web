@@ -1,0 +1,239 @@
+{
+  "classification": "offline replay of a real MbdV2PipeData generated from the gen-model HTTP integration test; not a live long-running backend",
+  "generatedAt": "2026-09-11T17:23:20.878Z",
+  "testResults": {
+    "focusedVitest": {
+      "filesPassed": 5,
+      "testsPassed": 44,
+      "testsFailed": 0
+    },
+    "genModelMbdHttpIntegration": {
+      "testsPassed": 1,
+      "testsFailed": 0
+    },
+    "dimensionWebglSceneSmoke": {
+      "testsPassed": 1,
+      "testsFailed": 0
+    },
+    "existingMbdFixtureE2e": {
+      "testsPassed": 0,
+      "testsFailed": 2,
+      "blocker": "The app bootstrapped the default gen-model-v1 source and failed with MDB_SNAPSHOT_STALE before the MBD assertions. dimension_demo=1 no longer isolates this test from model-source startup."
+    }
+  },
+  "commands": [
+    "npx vitest run src/dimension/adapters/mbdV2Contract.test.ts src/dimension/adapters/mbdV2ExternalAnnotations.test.ts src/composables/useMbdExternalSync.test.ts src/dimension/kernel/layout/explicit.test.ts src/dimension/kernel/theme.test.ts",
+    "$env:MBD_DUMP_DIR=$env:TEMP\\plant3d-mbd-t441; cargo test --test mbd_http_endpoint three_curl_paths_plus_bad_request -- --nocapture",
+    "temporary Vite :13101 + ephemeral replay API + Playwright Chrome script"
+  ],
+  "browserUrl": "http://127.0.0.1:13101/?dimension_demo=1&dtx_demo=primitives&dtx_demo_count=1&model_source=legacy&mbd_refno=24383_99996&mbdBackend=http%3A%2F%2F127.0.0.1%3A60000",
+  "replayApiBase": "http://127.0.0.1:60000",
+  "sourcePayload": {
+    "path": "C:\\Users\\dpc\\AppData\\Local\\Temp\\plant3d-mbd-t441\\24383_99996.json",
+    "version": "v2",
+    "inputRefno": "24383_99996",
+    "branchRefno": "24383_99996",
+    "primitiveCount": 58,
+    "primitiveKinds": {
+      "linear_dim": 8,
+      "aid_line": 11,
+      "aid_text": 5,
+      "label": 17,
+      "leader_line": 17
+    },
+    "issueCount": 7,
+    "meta": {
+      "geometry_space": "source_mm",
+      "source_to_design": [
+        0.001,
+        0,
+        0,
+        0,
+        0,
+        0.001,
+        0,
+        0,
+        0,
+        0,
+        0.001,
+        0,
+        0,
+        0,
+        0,
+        1
+      ],
+      "cheight_mm": 8,
+      "layout_mode": "isodim_main",
+      "notes": [
+        "isolines=12 ldirs=12 isodim_main=true empty_isolines=6"
+      ]
+    }
+  },
+  "mbdResponses": [
+    {
+      "url": "http://127.0.0.1:60000/api/mbd/v2/pipe/24383_99996",
+      "status": 200
+    }
+  ],
+  "initial": {
+    "phase": "framed",
+    "sourceRecordCount": 58,
+    "documentRecordCount": 0,
+    "layoutCount": 58,
+    "arrowWingCount": 32,
+    "arrowWingMinPx": 12.99999999999995,
+    "arrowWingMaxPx": 13.000000000000044,
+    "labelSample": {
+      "origin": [
+        668.7515136084266,
+        338.2785679220711
+      ],
+      "bounds": {
+        "x": 667.3497465529769,
+        "y": 317.10077016115883,
+        "width": 54.80353411089959,
+        "height": 33.688928855157826
+      },
+      "text": "847.76"
+    },
+    "camera": {
+      "position": [
+        6419.854700000003,
+        7934.295000000008,
+        2338.1049999999877
+      ],
+      "target": [
+        -570.8352999999998,
+        14924.984999999999,
+        -2655.245
+      ]
+    },
+    "sceneOverlay": {
+      "visible": true,
+      "childNames": [
+        "dimension-scene-lines",
+        "dimension-scene-arrows"
+      ],
+      "childCount": 2
+    }
+  },
+  "zoomedOut": {
+    "phase": "zoomed-out-x12",
+    "sourceRecordCount": 58,
+    "documentRecordCount": 0,
+    "layoutCount": 58,
+    "arrowWingCount": 32,
+    "arrowWingMinPx": 12.99999999999997,
+    "arrowWingMaxPx": 13.000000000000028,
+    "labelSample": {
+      "origin": [
+        444.450357298201,
+        427.3798699824768
+      ],
+      "bounds": {
+        "x": 443.0636354978687,
+        "y": 405.78366586452773,
+        "width": 54.77344360066468,
+        "height": 34.52574156923146
+      },
+      "text": "847.76"
+    },
+    "camera": {
+      "position": [
+        83317.44469999998,
+        -68963.29499999968,
+        57264.95499999979
+      ],
+      "target": [
+        -570.8352999999998,
+        14924.984999999999,
+        -2655.245
+      ]
+    },
+    "sceneOverlay": {
+      "visible": true,
+      "childNames": [
+        "dimension-scene-lines",
+        "dimension-scene-arrows"
+      ],
+      "childCount": 2
+    }
+  },
+  "rotated": {
+    "phase": "rotated-oblique",
+    "sourceRecordCount": 58,
+    "documentRecordCount": 0,
+    "layoutCount": 58,
+    "arrowWingCount": 32,
+    "arrowWingMinPx": 12.999999999999968,
+    "arrowWingMaxPx": 13.00000000000003,
+    "labelSample": {
+      "origin": [
+        404.2698738753198,
+        225.49737973211518
+      ],
+      "bounds": {
+        "x": 406.99271304318296,
+        "y": 195.62440411654637,
+        "width": 46.55432166427363,
+        "height": 51.07928456447098
+      },
+      "text": "847.76"
+    },
+    "camera": {
+      "position": [
+        -12754.200002141457,
+        7171.934735000904,
+        10635.698311427012
+      ],
+      "target": [
+        -570.8352999999998,
+        14924.984999999999,
+        -2655.245
+      ]
+    },
+    "sceneOverlay": {
+      "visible": true,
+      "childNames": [
+        "dimension-scene-lines",
+        "dimension-scene-arrows"
+      ],
+      "childCount": 2
+    }
+  },
+  "checks": {
+    "sourceStableAcrossCamera": true,
+    "cameraChangedOnZoom": true,
+    "cameraChangedOnRotate": true,
+    "labelProjectionChangedOnRotate": true,
+    "thirteenPixelFloorAtDistance": true,
+    "scenePainterMounted": true,
+    "noUserDimensionOwnership": true,
+    "svgCarriesMbd": true
+  },
+  "deleteAttempt": {
+    "result": {
+      "ok": false,
+      "reason": "not-found"
+    },
+    "documentContainsExternal": false,
+    "externalStillPresent": true
+  },
+  "svg": {
+    "bytes": 203369,
+    "dimensionGroups": 58,
+    "dimensionParts": 6,
+    "arrowParts": 32,
+    "labelParts": 72,
+    "hasFirstPrimitiveId": true
+  },
+  "live": {
+    "attemptedKnownPorts": [
+      8022,
+      3100,
+      3101,
+      64553
+    ],
+    "blocker": "No known MBD/frontend port was listening when checked; awaiting the main backend member live address. This replay is intentionally not labeled live."
+  }
+}

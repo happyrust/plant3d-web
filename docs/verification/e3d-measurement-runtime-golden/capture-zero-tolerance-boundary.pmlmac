@@ -1,0 +1,142 @@
+!traceFile = object FILE('D:/work/plant-code/old/plant3d-web/docs/verification/e3d-measurement-runtime-golden/G2-03-zero-tolerance.trace.txt')
+!trace = ARRAY()
+
+-- Standard World distance mode; exact positions are injected through the same
+-- form callback the EDG pick action uses (!!gphMeasure.setMeasure(LINE)).
+!!gphMeasure.perpendicularTo.val = FALSE
+!!gphMeasure.showLinear.val = TRUE
+!!gphMeasure.wrt.val = 'World'
+!trace.append('perpendicular_mode=' & !!gphMeasure.perpendicularTo.val.string())
+!trace.append('show_linear=' & !!gphMeasure.showLinear.val.string())
+
+!from = object POSITION('E 10000mm N 10000mm U 15000mm WRT /*')
+!trace.append('from=' & !from.string())
+
+-- Each case is (dE, dN, dU) in mm. The first block probes the 0.1mm component gate,
+-- the second block probes zero / negative-zero formatting (G1-04) and the
+-- int(sum) ne int(length) detail gate for axis-aligned measurements.
+!cases = ARRAY()
+!c = ARRAY()
+!c.append(0.09)
+!c.append(2000)
+!c.append(1000)
+!cases.append(!c)
+!c = ARRAY()
+!c.append(0.1)
+!c.append(2000)
+!c.append(1000)
+!cases.append(!c)
+!c = ARRAY()
+!c.append(0.11)
+!c.append(2000)
+!c.append(1000)
+!cases.append(!c)
+!c = ARRAY()
+!c.append(-0.09)
+!c.append(2000)
+!c.append(1000)
+!cases.append(!c)
+!c = ARRAY()
+!c.append(-0.1)
+!c.append(2000)
+!c.append(1000)
+!cases.append(!c)
+!c = ARRAY()
+!c.append(-0.11)
+!c.append(2000)
+!c.append(1000)
+!cases.append(!c)
+!c = ARRAY()
+!c.append(0.1000001)
+!c.append(2000)
+!c.append(1000)
+!cases.append(!c)
+!c = ARRAY()
+!c.append(0)
+!c.append(2000)
+!c.append(1000)
+!cases.append(!c)
+!c = ARRAY()
+!c.append(0.004)
+!c.append(2000)
+!c.append(1000)
+!cases.append(!c)
+!c = ARRAY()
+!c.append(-0.004)
+!c.append(2000)
+!c.append(1000)
+!cases.append(!c)
+!c = ARRAY()
+!c.append(-0.00001)
+!c.append(2000)
+!c.append(1000)
+!cases.append(!c)
+!c = ARRAY()
+!c.append(0)
+!c.append(2000)
+!c.append(0)
+!cases.append(!c)
+!c = ARRAY()
+!c.append(0)
+!c.append(-2000)
+!c.append(0)
+!cases.append(!c)
+!c = ARRAY()
+!c.append(3000)
+!c.append(4000)
+!c.append(0)
+!cases.append(!c)
+!c = ARRAY()
+!c.append(1000)
+!c.append(1000)
+!c.append(1000)
+!cases.append(!c)
+
+do !case values !cases
+  !dE = !case[1]
+  !dN = !case[2]
+  !dU = !case[3]
+  !to = !from
+  !to.east = !from.east + !dE
+  !to.north = !from.north + !dN
+  !to.up = !from.up + !dU
+
+  !trace.append('---- case dE=' & !dE.string() & ' dN=' & !dN.string() & ' dU=' & !dU.string())
+  !!gphMeasure.setMeasure(object LINE(!from, !to))
+  handle any
+    !trace.append('blocked: setMeasure failed: ' & !!error.text)
+    skip
+  endhandle
+
+  !dim = !!gphMeasure.dimension
+  !offset = !dim.offsetType()
+  !length = !dim.from.distance(!dim.to)
+  !gate1 = !offset[1].between(-0.1mm, 0.1mm)
+  !gate2 = !offset[2].between(-0.1mm, 0.1mm)
+  !gate3 = !offset[3].between(-0.1mm, 0.1mm)
+  !sumInt = int(!offset[1] + !offset[2] + !offset[3])
+  !lengthInt = int(!length)
+  !detailGate = (!dim.orthogonalOnly or (!dim.detail and (!sumInt ne !lengthInt)))
+
+  !trace.append('to=' & !dim.to.string())
+  !trace.append('distance_text=' & !length.string(!!gphMeasure.measureFormat))
+  !trace.append('distance_db=' & !length.string())
+  !trace.append('offset_1_db=' & !offset[1].string())
+  !trace.append('offset_1_text=' & !offset[1].string(!!gphMeasure.measureFormat))
+  !trace.append('offset_2_text=' & !offset[2].string(!!gphMeasure.measureFormat))
+  !trace.append('offset_3_text=' & !offset[3].string(!!gphMeasure.measureFormat))
+  !trace.append('component_1_suppressed_between_pm0.1mm=' & !gate1.string())
+  !trace.append('component_2_suppressed_between_pm0.1mm=' & !gate2.string())
+  !trace.append('component_3_suppressed_between_pm0.1mm=' & !gate3.string())
+  !trace.append('int_sum=' & !sumInt.string() & ' int_length=' & !lengthInt.string())
+  !trace.append('detail_block_drawn=' & !detailGate.string())
+  if (!length eq 0) then
+    !trace.append('direction=--')
+  else
+    !trace.append('direction=' & !dim.from.direction(!dim.to).wrt(world).string())
+  endif
+enddo
+
+!trace.append('complete')
+!traceFile.writeFile('OVERWRITE', !trace)
+return

@@ -1,3 +1,5 @@
+import { FileValidationError, failFileValidation } from './fileValidation';
+
 /**
  * 解析 gen-model 的 `.mesh` 文件（rkyv 0.7.42 归档的 aios-core `PlantMesh`）——
  * `.mesh` 直连口径（2026-09-09 拍板：不再经服务端转 GLB）。
@@ -30,10 +32,14 @@
  */
 
 export type ParsedMeshGeometry = {
-  positions: number[]
-  indices: number[]
-  normals?: number[]
-}
+  positions: number[];
+  indices: number[];
+  normals?: number[];
+};
+
+export type MeshGeometryParseResult =
+  | Readonly<{ ok: true; data: ParsedMeshGeometry }>
+  | Readonly<{ ok: false; error: FileValidationError }>;
 
 /** 根结构（`ArchivedPlantMesh`）的字节数。 */
 const ROOT_SIZE = 60;
@@ -43,52 +49,152 @@ const OFFSET_INDICES = 28;
 const OFFSET_VERTICES = 36;
 const OFFSET_NORMALS = 44;
 
-export function parseMeshGeometry(meshData: ArrayBuffer): ParsedMeshGeometry | null {
-  try {
-    const total = meshData.byteLength;
-    const root = total - ROOT_SIZE;
-    // rkyv 输出按根对齐（4）收尾；对不齐或装不下根结构的都不是 .mesh 归档
-    if (root < 0 || root % 4 !== 0) return null;
-    const view = new DataView(meshData);
+type MeshVecLayout = Readonly<{ at: number; len: number }>;
 
-    /** 读一个 ArchivedVec 头：rel 相对指针自身位置。 */
-    const readVec = (offset: number): { at: number; len: number } => {
-      const pos = root + offset;
-      return { at: pos + view.getInt32(pos, true), len: view.getUint32(pos + 4, true) };
-    };
-    /** 数据段必须整体落在根结构之前，且 4 字节对齐。 */
-    const inBounds = (at: number, len: number, elemBytes: number): boolean =>
-      len === 0 || (at >= 0 && at % 4 === 0 && at + len * elemBytes <= root);
+type ValidatedMeshLayout = Readonly<{
+  indices: MeshVecLayout;
+  vertices: MeshVecLayout;
+  normals: MeshVecLayout;
+}>;
 
-    const aabbTag = view.getUint8(root + OFFSET_AABB);
-    if (aabbTag > 1) return null;
+function validateMeshLayout(meshData: ArrayBuffer, source: string): ValidatedMeshLayout {
+  const total = meshData.byteLength;
+  const root = total - ROOT_SIZE;
+  if (root < 0) {
+    failFileValidation({
+      source,
+      format: 'mesh',
+      reason: '文件短于 ArchivedPlantMesh 根结构',
+      expected: `至少 ${ROOT_SIZE} 字节`,
+      actual: `${total} 字节`,
+      byteOffset: total,
+    });
+  }
+  if (root % 4 !== 0) {
+    failFileValidation({
+      source,
+      format: 'mesh',
+      reason: '根结构未按 4 字节对齐，文件可能被截断',
+      expected: '总长度减 60 后可被 4 整除',
+      actual: `${total} 字节`,
+      byteOffset: root,
+    });
+  }
 
-    const indicesVec = readVec(OFFSET_INDICES);
-    const verticesVec = readVec(OFFSET_VERTICES);
-    const normalsVec = readVec(OFFSET_NORMALS);
-    if (!inBounds(indicesVec.at, indicesVec.len, 4)) return null;
-    if (!inBounds(verticesVec.at, verticesVec.len, 12)) return null;
-    if (!inBounds(normalsVec.at, normalsVec.len, 12)) return null;
+  const view = new DataView(meshData);
+  const aabbTag = view.getUint8(root + OFFSET_AABB);
+  if (aabbTag > 1) {
+    failFileValidation({
+      source,
+      format: 'mesh',
+      reason: 'AABB ArchivedOption 标记无效',
+      expected: '0（None）或 1（Some）',
+      actual: String(aabbTag),
+      byteOffset: root + OFFSET_AABB,
+    });
+  }
 
-    // 与服务端 plant_mesh_to_glb 同一批拒收条件：空网格、索引数不是 3 的倍数、索引越界
-    if (verticesVec.len === 0) return null;
-    if (indicesVec.len === 0 || indicesVec.len % 3 !== 0) return null;
-
-    const indicesArr = new Uint32Array(meshData, indicesVec.at, indicesVec.len);
-    for (let i = 0; i < indicesArr.length; i++) {
-      if (indicesArr[i] >= verticesVec.len) return null;
+  const readVec = (offset: number, label: string, elemBytes: number): MeshVecLayout => {
+    const pos = root + offset;
+    const at = pos + view.getInt32(pos, true);
+    const len = view.getUint32(pos + 4, true);
+    const byteLength = len * elemBytes;
+    const validLength = Number.isSafeInteger(byteLength);
+    const inBounds = len === 0 || (
+      validLength
+      && at >= 0
+      && at % 4 === 0
+      && at + byteLength <= root
+    );
+    if (!inBounds) {
+      failFileValidation({
+        source,
+        format: 'mesh',
+        reason: `${label} 数据段越界或未对齐`,
+        expected: `位于根结构前且按 4 字节对齐的 ${len}×${elemBytes} 字节数据段`,
+        actual: `起点 ${at}，终点 ${validLength ? at + byteLength : '溢出'}，根起点 ${root}`,
+        byteOffset: pos,
+      });
     }
-    const positionsArr = new Float32Array(meshData, verticesVec.at, verticesVec.len * 3);
+    return { at, len };
+  };
+
+  const indices = readVec(OFFSET_INDICES, 'indices', 4);
+  const vertices = readVec(OFFSET_VERTICES, 'vertices', 12);
+  const normals = readVec(OFFSET_NORMALS, 'normals', 12);
+  if (vertices.len === 0) {
+    failFileValidation({
+      source,
+      format: 'mesh',
+      reason: '网格没有顶点',
+      expected: '至少 1 个顶点',
+      actual: '0 个顶点',
+      byteOffset: root + OFFSET_VERTICES + 4,
+    });
+  }
+  if (indices.len === 0 || indices.len % 3 !== 0) {
+    failFileValidation({
+      source,
+      format: 'mesh',
+      reason: '索引不能组成三角形',
+      expected: '非零且为 3 的倍数的索引数',
+      actual: `${indices.len} 个索引`,
+      byteOffset: root + OFFSET_INDICES + 4,
+    });
+  }
+
+  const indexView = new Uint32Array(meshData, indices.at, indices.len);
+  for (let index = 0; index < indexView.length; index++) {
+    const vertexIndex = indexView[index];
+    if (vertexIndex !== undefined && vertexIndex >= vertices.len) {
+      failFileValidation({
+        source,
+        format: 'mesh',
+        reason: '索引引用了不存在的顶点',
+        expected: `0..${vertices.len - 1}`,
+        actual: String(vertexIndex),
+        byteOffset: indices.at + index * 4,
+      });
+    }
+  }
+
+  return { indices, vertices, normals };
+}
+
+export function parseMeshGeometryResult(
+  meshData: ArrayBuffer,
+  source = '<memory>.mesh',
+): MeshGeometryParseResult {
+  try {
+    const layout = validateMeshLayout(meshData, source);
+    const indicesArr = new Uint32Array(meshData, layout.indices.at, layout.indices.len);
+    const positionsArr = new Float32Array(meshData, layout.vertices.at, layout.vertices.len * 3);
 
     const positions = Array.from(positionsArr);
     const indices = Array.from(indicesArr);
 
     let normals: number[] | undefined;
-    if (normalsVec.len === verticesVec.len && normalsVec.len > 0) {
-      normals = Array.from(new Float32Array(meshData, normalsVec.at, normalsVec.len * 3));
+    if (layout.normals.len === layout.vertices.len && layout.normals.len > 0) {
+      normals = Array.from(new Float32Array(meshData, layout.normals.at, layout.normals.len * 3));
     }
-    return { positions, indices, normals };
-  } catch {
-    return null;
+    return { ok: true, data: { positions, indices, normals } };
+  } catch (error) {
+    if (error instanceof FileValidationError) return { ok: false, error };
+    return {
+      ok: false,
+      error: new FileValidationError({
+        source,
+        format: 'mesh',
+        reason: error instanceof Error ? error.message : '读取二进制结构失败',
+        expected: '完整且可读取的 ArchivedPlantMesh',
+        actual: `${meshData.byteLength} 字节缓冲区`,
+      }),
+    };
   }
+}
+
+/** 兼容旧调用方；需要可定位错误时使用 `parseMeshGeometryResult`。 */
+export function parseMeshGeometry(meshData: ArrayBuffer): ParsedMeshGeometry | null {
+  const result = parseMeshGeometryResult(meshData);
+  return result.ok ? result.data : null;
 }

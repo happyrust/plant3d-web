@@ -8,8 +8,8 @@ import {
 import { useDisplayThemeStore, type DisplayTheme } from '@/composables/useDisplayThemeStore';
 import { getModelSource } from '@/model-source';
 import { type InstanceEntry } from '@/utils/instances/instanceManifest';
-import { parseGlbGeometry } from '@/utils/parseGlbGeometry';
-import { parseMeshGeometry } from '@/utils/parseMeshGeometry';
+import { parseGlbGeometryResult } from '@/utils/parseGlbGeometry';
+import { parseMeshGeometryResult } from '@/utils/parseMeshGeometry';
 import { DTXLayer } from '@/utils/three/dtx';
 import {
   buildHiddenNounSet,
@@ -311,12 +311,21 @@ async function ensureGeometryForGeoHash(
         notFoundNew = !cache.notFoundGeoHash.has(geoHash);
         cache.notFoundGeoHash.add(geoHash);
       }
+      if (!resp.ok && resp.status !== 404) {
+        console.error('[dtx][instances-json] mesh request failed', {
+          geoHash,
+          meshUrl,
+          status: resp.status,
+          statusText: resp.statusText,
+        });
+      }
       if (resp.ok) {
         const meshData = await resp.arrayBuffer();
-        const parsed = meshUrl.endsWith('.mesh')
-          ? parseMeshGeometry(meshData)
-          : await parseGlbGeometry(meshData);
-        if (parsed) {
+        const parseResult = meshUrl.endsWith('.mesh')
+          ? parseMeshGeometryResult(meshData, meshUrl)
+          : await parseGlbGeometryResult(meshData, meshUrl);
+        if (parseResult.ok) {
+          const parsed = parseResult.data;
           const g = new BufferGeometry();
           g.setAttribute('position', new BufferAttribute(new Float32Array(parsed.positions), 3));
           if (parsed.normals && parsed.normals.length > 0) {
@@ -325,6 +334,13 @@ async function ensureGeometryForGeoHash(
           g.setIndex(new BufferAttribute(new Uint32Array(parsed.indices), 1));
           g.computeBoundingBox();
           geometry = g;
+        } else {
+          console.error('[dtx][instances-json] mesh validation failed', {
+            geoHash,
+            meshUrl,
+            error: parseResult.error.message,
+            issue: parseResult.error.issue,
+          });
         }
       }
     } catch (e) {

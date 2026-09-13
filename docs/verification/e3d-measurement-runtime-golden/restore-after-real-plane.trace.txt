@@ -1,0 +1,4 @@
+﻿source2_removed=TRUE
+limits_restored=TRUE
+form perpendicular=FALSE wrt=/*
+complete

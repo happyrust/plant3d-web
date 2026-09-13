@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp, nextTick, ref } from 'vue';
 
 import ReviewAttachmentPreviewPanelDock from './ReviewAttachmentPreviewPanelDock.vue';
@@ -9,6 +9,7 @@ import {
   activeReviewAttachmentPreview,
   clearReviewAttachmentPreview,
   openReviewAttachmentPreview,
+  reviewAttachmentPreviewStatus,
 } from '@/composables/useReviewAttachmentPreview';
 
 const currentTask = ref<ReviewTask | null>(null);
@@ -73,14 +74,35 @@ describe('ReviewAttachmentPreviewPanelDock', () => {
     document.body.innerHTML = '';
     clearReviewAttachmentPreview();
     currentTask.value = createTask('task-1');
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const isJpeg = String(input).includes('.jpg');
+      return new Response(
+        new Uint8Array(isJpeg
+          ? [0xff, 0xd8, 0xff, 0xe0]
+          : [0x25, 0x50, 0x44, 0x46, 0x2d]),
+        {
+          status: 206,
+          headers: {
+            'Content-Type': isJpeg ? 'image/jpeg' : 'application/pdf',
+          },
+        },
+      );
+    }));
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
   it('renders PDF and switches the same panel to an image', async () => {
     openReviewAttachmentPreview('task-1', attachment());
     const mounted = mountPanel();
 
-    const frame = mounted.host.querySelector('[data-testid="review-attachment-pdf"]') as HTMLIFrameElement | null;
-    expect(frame?.src).toBe(new URL('/files/review_attachments/drawing.pdf', window.location.href).href);
+    expect(mounted.host.querySelector('[data-testid="review-attachment-preview-validating"]')).not.toBeNull();
+    await vi.waitFor(() => expect(reviewAttachmentPreviewStatus.value).toBe('ready'));
+    await nextTick();
+    const frame = mounted.host.querySelector('[data-testid="review-attachment-pdf"]') as HTMLObjectElement | null;
+    expect(frame?.data).toBe(new URL('/files/review_attachments/drawing.pdf', window.location.href).href);
     expect(mounted.host.textContent).toContain('drawing.pdf');
 
     openReviewAttachmentPreview('task-1', attachment({
@@ -89,6 +111,7 @@ describe('ReviewAttachmentPreviewPanelDock', () => {
       url: '/files/review_attachments/snapshot.jpg',
       mimeType: 'image/jpeg',
     }));
+    await vi.waitFor(() => expect(reviewAttachmentPreviewStatus.value).toBe('ready'));
     await nextTick();
 
     expect(mounted.host.querySelector('[data-testid="review-attachment-pdf"]')).toBeNull();

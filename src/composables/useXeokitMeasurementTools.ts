@@ -24,12 +24,9 @@ import {
   resolveDtxObjectIdsByRefno,
 } from './useDbnoInstancesDtxLoader';
 import {
-  useDbnoInstancesParquetLoader,
-  type PrimitiveKeyPointCandidate,
-} from './useDbnoInstancesParquetLoader';
-import {
   MEASUREMENT_PICK_SOURCE_IDS,
   MEASUREMENT_PICK_SOURCE_LABELS,
+  attachPlineSegments,
   buildPositionPickCandidate,
   resolveMeasurementPickCandidates,
   sourceNeedsHoverData,
@@ -38,7 +35,6 @@ import {
   type MeasurementPickSourceSettings,
   type ProjectedMeasurementPickCandidate,
 } from './useMeasurementPickSources';
-import { queryPtsetWithRuntimeFallback } from './usePtsetRuntimeLookup';
 import { projectToCanvas, usePtsetSnap } from './usePtsetSnap';
 import { usePtsetVisualizationThree } from './usePtsetVisualizationThree';
 import { useUnitSettingsStore } from './useUnitSettingsStore';
@@ -46,20 +42,18 @@ import { useXeokitMeasurementStyleStore } from './useXeokitMeasurementStyleStore
 import { getXeokitOverlayPalette } from './xeokitMeasurementUi';
 
 import type { UseAnnotationThreeReturn } from './useAnnotationThree';
+import type { PrimitiveKeyPointCandidate } from './useDbnoInstancesParquetLoader';
+import type { PtsetChildrenResponse, PtsetResponse } from '@/api/genModelPdmsAttrApi';
 import type { DimensionSystem, ExternalDimensionRecord } from '@/dimension';
 import type { DTXLayer, DTXSelectionController } from '@/utils/three/dtx';
 import type { DtxCompatViewer } from '@/viewer/dtx/DtxCompatViewer';
 import type { DtxViewer } from '@/viewer/dtx/DtxViewer';
 
-import {
-  pdmsGetPtsetChildrenWithContext,
-  type PtsetChildrenResponse,
-  type PtsetResponse,
-} from '@/api/genModelPdmsAttrApi';
 import { getDbnumByRefno } from '@/composables/useDbMetaInfo';
 import {
   useToolStore,
   type MeasurementPoint,
+  type PerpendicularMeasurementInfo,
   type Vec3,
   type XeokitAngleDraft,
   type XeokitAngleMeasurementRecord,
@@ -71,6 +65,31 @@ import {
   type XeokitMarkerRole,
   type XeokitMeasurementRecord,
 } from '@/composables/useToolStore';
+import {
+  buildPerpendicularAidPlan,
+  type PerpendicularAidLeg,
+} from '@/measurement/aids/perpendicularAidPlan';
+import {
+  buildWorldDistanceAidPlan,
+  type WorldDistanceAidPart,
+} from '@/measurement/aids/worldDistanceAidPlan';
+import { computePerpendicularDistance } from '@/measurement/kernel/perpendicularDistance';
+import { resolvePerpendicularTarget } from '@/measurement/kernel/perpendicularTargetProvider';
+import {
+  derivePickPosition,
+  isWithinSegmentExtent,
+  lineRayControlPoint,
+  type PickDerivationType,
+  type PickGeometry,
+  type PickVec3,
+} from '@/measurement/kernel/pickDerivation';
+import {
+  formatMeasurementPrompt,
+  measurementPickTypePromptToken,
+  type MeasurementPickLayerConfig,
+  type MeasurementPickTypeId,
+} from '@/measurement/pick/pickLayerModel';
+import { getModelSource } from '@/model-source';
 import { DTXOverlayHighlighter } from '@/utils/three/dtx/selection/DTXOverlayHighlighter';
 import {
   computeDistanceMeasurementResult,
@@ -90,8 +109,17 @@ type PickHit = {
   candidateId?: string;
   refno?: string | null;
   label?: string | null;
+  /** 点源自带的轴向 / 圆面几何（场景坐标），Perpendicular to 用来推导目标线 / 面。 */
+  direction?: Vector3;
+  circle?: Readonly<{ center: Vector3; rim: Vector3; normal: Vector3 }>;
+  arc?: Readonly<{ center: Vector3; rim: Vector3; normal: Vector3 }>;
   pixelDistance?: number;
   sourcePriority?: number;
+  /**
+   * E3D 拾取类型派生（Mid-Point / Fraction / Proportion / Distance / Cursor）改写了
+   * 候选位置时记录：`from` 是候选原位置（场景坐标），`worldPos` 已是派生后的位置。
+   */
+  derived?: Readonly<{ pickType: MeasurementPickTypeId; from: Vector3 }>;
 };
 export type MeasurementViewerSnapCandidate = Readonly<{
   id: string;
@@ -140,6 +168,27 @@ function sceneWorldToDesignMeters(world: Vector3, dtxLayerRef: Ref<DTXLayer | nu
   return raw.multiply(new Vector3().setFromMatrixScale(globalModelMatrix));
 }
 
+/** `sceneWorldToDesignMeters` 的逆：设计 World（米）→ 场景坐标。 */
+function designMetersToSceneWorld(design: Vector3, dtxLayerRef: Ref<DTXLayer | null>): Vector3 {
+  const globalModelMatrix = dtxLayerRef.value?.getGlobalModelMatrix?.();
+  if (!globalModelMatrix) return design.clone();
+  if (Math.abs(globalModelMatrix.determinant()) <= 1e-12) return design.clone();
+  const scale = new Vector3().setFromMatrixScale(globalModelMatrix);
+  const raw = new Vector3(design.x / scale.x, design.y / scale.y, design.z / scale.z);
+  return raw.applyMatrix4(globalModelMatrix);
+}
+
+/** 把场景坐标下的方向换到设计 World（米）：两点变换后相减，对任意仿射变换成立。 */
+function sceneDirectionToDesign(
+  origin: Vector3,
+  direction: Vector3,
+  dtxLayerRef: Ref<DTXLayer | null>,
+): Vector3 {
+  const from = sceneWorldToDesignMeters(origin, dtxLayerRef);
+  const to = sceneWorldToDesignMeters(origin.clone().add(direction), dtxLayerRef);
+  return to.sub(from);
+}
+
 function getCanvasPos(canvas: HTMLCanvasElement, e: PointerEvent): Vector2 {
   const rect = canvas.getBoundingClientRect();
   return new Vector2(e.clientX - rect.left, e.clientY - rect.top);
@@ -184,6 +233,7 @@ function xeokitMeasurementToExternalRecord(
   precision: number,
   sceneWorldToDesignMetres?: (point: Vec3) => readonly [number, number, number],
   isDraft = false,
+  showDirectLinearDimension = true,
 ): ExternalDimensionRecord | null {
   const visible = isDraft || rec.visible !== false;
   if (!visible) return null;
@@ -191,6 +241,10 @@ function xeokitMeasurementToExternalRecord(
   const sourceLabel = isDraft ? 'Xeokit Measurement Draft' : 'Xeokit Measurement';
 
   if (rec.kind === 'distance') {
+    // Picking keeps its rubber-band preview regardless of the completed-result
+    // display option. For completed results this flag is the actual E3D
+    // "Show linear dimension" behavior, not a persistence switch.
+    if (!isDraft && !showDirectLinearDimension) return null;
     const a = toDesignPoint(rec.origin, sceneWorldToDesignMetres);
     const b = toDesignPoint(rec.target, sceneWorldToDesignMetres);
     return {
@@ -276,6 +330,86 @@ function xeokitMeasurementToExternalRecord(
   };
 }
 
+function worldDistanceAidPartToExternalRecord(
+  part: Extract<WorldDistanceAidPart, { kind: 'axis' }>,
+  unit: string,
+  precision: number,
+): ExternalDimensionRecord {
+  const labelAnchor: Vec3 = [
+    (part.from[0] + part.to[0]) / 2,
+    (part.from[1] + part.to[1]) / 2,
+    (part.from[2] + part.to[2]) / 2,
+  ];
+  const labelAlong: Vec3 = [
+    part.to[0] - part.from[0],
+    part.to[1] - part.from[1],
+    part.to[2] - part.from[2],
+  ];
+  const axisLabel = part.axis.toUpperCase();
+  return {
+    id: part.id,
+    source: 'xeokit-measurement',
+    sourceLabel: `Xeokit Measurement World ${axisLabel}`,
+    role: 'external',
+    category: 'annotation',
+    layout: {
+      id: part.id,
+      role: 'external',
+      labelPinned: false,
+      formattedLabel: `${axisLabel} ${formatDistance(part.valueM, unit, precision)}`,
+      lines: [{
+        from: part.from,
+        to: part.to,
+        part: 'projection',
+      }],
+      labelAnchor,
+      labelAlong,
+      arrowLines: [],
+    },
+  };
+}
+
+/**
+ * E3D 垂距尺寸的 Vertical / Horizontal 腿：`draw(REAL, ARC)` 只标长度，不带轴字母。
+ */
+function perpendicularAidLegToExternalRecord(
+  leg: PerpendicularAidLeg,
+  unit: string,
+  precision: number,
+): ExternalDimensionRecord {
+  const labelAnchor: Vec3 = [
+    (leg.from[0] + leg.to[0]) / 2,
+    (leg.from[1] + leg.to[1]) / 2,
+    (leg.from[2] + leg.to[2]) / 2,
+  ];
+  const labelAlong: Vec3 = [
+    leg.to[0] - leg.from[0],
+    leg.to[1] - leg.from[1],
+    leg.to[2] - leg.from[2],
+  ];
+  return {
+    id: leg.id,
+    source: 'xeokit-measurement',
+    sourceLabel: `Xeokit Measurement Perpendicular ${leg.kind}`,
+    role: 'external',
+    category: 'annotation',
+    layout: {
+      id: leg.id,
+      role: 'external',
+      labelPinned: false,
+      formattedLabel: formatDistance(leg.valueM, unit, precision),
+      lines: [{
+        from: leg.from,
+        to: leg.to,
+        part: 'projection',
+      }],
+      labelAnchor,
+      labelAlong,
+      arrowLines: [],
+    },
+  };
+}
+
 export function useXeokitMeasurementTools(options: {
   dtxViewerRef: Ref<DtxViewer | null>;
   dtxLayerRef: Ref<DTXLayer | null>;
@@ -301,7 +435,12 @@ export function useXeokitMeasurementTools(options: {
   const suppressStoreMeasurements = options.suppressStoreMeasurements === true;
   const measurementStyle = useXeokitMeasurementStyleStore();
   const unitSettings = useUnitSettingsStore();
-  const parquetLoader = useDbnoInstancesParquetLoader();
+  /**
+   * 测量关键点（P-Point / 成员 P-Point / 基本体关键点）一律经模型数据源端口取：
+   * `legacy` 是 parquet + `:3100` API（与 2026-09-12 之前内联的取数逐字相同），`gen-model-v1` 是
+   * `POST /api/v1/element/ptset`。每次调用时取当前源（同 `useDbnoInstancesDtxLoader`），改 URL 开关刷新即切。
+   */
+  const keypointSource = () => getModelSource().keypoints;
 
   const readyRevision = ref(0);
   const clickTracker = ref<ClickTracker>({ down: null, moved: false });
@@ -552,8 +691,8 @@ export function useXeokitMeasurementTools(options: {
       }
       requestedPtsetRefnos.add(r);
       ptsetLoadStateByRefno.set(r, 'loading');
-      // dbnum 仅 parquet 路径需要；db_meta 不可用（如未导出 db_meta_info.json）
-      // 时回落 dbno=0 直连后端 ptset API，不再静默放弃关键点显示。
+      // dbnum 仅 legacy parquet 路径需要；db_meta 不可用（如未导出 db_meta_info.json）
+      // 时回落 dbno=0 走后端 ptset API，不再静默放弃关键点显示。gen-model-v1 源不看它。
       let dbno = 0;
       try {
         dbno = getDbnumByRefno(r);
@@ -602,7 +741,7 @@ export function useXeokitMeasurementTools(options: {
   async function fetchChildrenPtsets(ownerRefno: string, dbno: number): Promise<string[]> {
     let response: PtsetChildrenResponse | null = null;
     try {
-      response = await pdmsGetPtsetChildrenWithContext(ownerRefno, { dbno });
+      response = await keypointSource().memberPtsets(dbno, ownerRefno);
     } catch {
       return [];
     }
@@ -625,7 +764,15 @@ export function useXeokitMeasurementTools(options: {
   }
 
   async function queryPtsetForMeasurement(dbno: number, refno: string): Promise<PtsetResponse> {
-    return await queryPtsetWithRuntimeFallback(parquetLoader, dbno, refno);
+    return await keypointSource().ptset(dbno, refno);
+  }
+
+  /** 基本体 + PLINE 语义关键点：候选与失败原因一起回，调用方决定提示。 */
+  async function queryPrimitiveKeypointsForMeasurement(
+    dbno: number,
+    refno: string,
+  ): Promise<{ items: PrimitiveKeyPointCandidate[]; errors: string[] }> {
+    return await keypointSource().primitiveKeypoints(dbno, refno);
   }
 
   function isPtsetPickPending(refno: string | null): boolean {
@@ -734,19 +881,12 @@ export function useXeokitMeasurementTools(options: {
       return;
     }
 
-    Promise.allSettled([
-      parquetLoader.queryPrimitiveKeypointsByRefnoFromParquet(dbno, refno),
-      parquetLoader.querySemanticSnapPointsByRefnoFromParquet(dbno, refno),
-    ])
-      .then((results) => {
-        const items = results.flatMap(result => result.status === 'fulfilled' ? result.value : []);
+    queryPrimitiveKeypointsForMeasurement(dbno, refno)
+      .then(({ items, errors }) => {
         primitiveKeypointsByRefno.set(refno, items);
         if (items.length > 0) {
           primitiveKeypointErrorByRefno.delete(refno);
         } else {
-          const errors = results.flatMap(result => result.status === 'rejected'
-            ? [result.reason instanceof Error ? result.reason.message : String(result.reason)]
-            : []);
           primitiveKeypointErrorByRefno.set(
             refno,
             errors.join('；') || '当前构件没有基本体或 PLINE 关键点候选',
@@ -769,8 +909,8 @@ export function useXeokitMeasurementTools(options: {
     if (!refno) return '当前未命中模型实例，无法确定 P-Point 来源';
     const error = ptsetErrorByRefno.get(refno);
     if (error) return error;
-    if (!requestedPtsetRefnos.has(refno)) return '正在准备读取 ptsets.parquet，请稍候再靠近关键点';
-    if (!ptsetSnap.hasCandidates(refno)) return '当前模型包未提供该构件的 P-Point，无法登记测量点';
+    if (!requestedPtsetRefnos.has(refno)) return '正在读取该构件的 P-Point，请稍候再靠近关键点';
+    if (!ptsetSnap.hasCandidates(refno)) return '当前数据源未提供该构件的 P-Point，无法登记测量点';
     return '请将光标靠近构件 P-Point 后再点击';
   }
 
@@ -785,10 +925,10 @@ export function useXeokitMeasurementTools(options: {
     const error = primitiveKeypointErrorByRefno.get(refno);
     if (error) return error;
     if (!requestedPrimitiveKeypointRefnos.has(refno)) {
-      return '正在准备读取 primitive_keypoints.parquet，请稍候再靠近关键点';
+      return '正在读取该构件的基本体与 PLINE 关键点，请稍候再靠近关键点';
     }
     if ((primitiveKeypointsByRefno.get(refno)?.length ?? 0) === 0) {
-      return '当前模型包未提供该构件的 Primitive Key Point，无法登记测量点';
+      return '当前数据源未提供该构件的 Primitive Key Point，无法登记测量点';
     }
     return '请将光标靠近 Primitive Key Point 后再点击';
   }
@@ -835,6 +975,8 @@ export function useXeokitMeasurementTools(options: {
       objectId: `o:${candidate.refno}:ptset`,
       worldPos: new Vector3(candidate.worldPos[0], candidate.worldPos[1], candidate.worldPos[2]),
       label: `P-Point #${candidate.number}`,
+      // P-point 方向 = E3D PPOINT 轴线（Perpendicular to 的 LINE provider）。
+      ...(candidate.sceneDir ? { direction: new Vector3(...candidate.sceneDir) } : {}),
     }));
   }
 
@@ -879,7 +1021,7 @@ export function useXeokitMeasurementTools(options: {
     objectId: string,
   ): MeasurementPickCandidate[] {
     const globalModelMatrix = dtxLayerRef.value?.getGlobalModelMatrix?.() ?? null;
-    return (primitiveKeypointsByRefno.get(refno) ?? []).map((candidate) => {
+    const mapped: MeasurementPickCandidate[] = (primitiveKeypointsByRefno.get(refno) ?? []).map((candidate) => {
       const worldPos = new Vector3(candidate.world[0], candidate.world[1], candidate.world[2]);
       if (globalModelMatrix) worldPos.applyMatrix4(globalModelMatrix);
       const direction = candidate.dir
@@ -912,11 +1054,14 @@ export function useXeokitMeasurementTools(options: {
         worldPos,
         label: candidate.label
           ?? `${MEASUREMENT_PICK_SOURCE_LABELS.primitive_key_point} #${candidate.keypointIndex}`,
+        // E3D 拾取过滤器的特征类：PLINE 点是 Pline，其余基本体关键点是 Element 显著点。
+        feature: candidate.kind.startsWith('pline') ? 'pline' as const : 'element' as const,
         ...(direction ? { direction } : {}),
         ...(circle ? { circle } : {}),
         ...(arc ? { arc } : {}),
       };
     });
+    return attachPlineSegments(mapped);
   }
 
   function buildPrimitiveKeyPointCandidates(
@@ -942,9 +1087,125 @@ export function useXeokitMeasurementTools(options: {
       candidateId: candidate.id,
       refno: refnoFromObjectId(candidate.objectId),
       label: candidate.label,
+      ...(candidate.direction ? { direction: candidate.direction.clone() } : {}),
+      ...(candidate.circle ? { circle: candidate.circle } : {}),
+      ...(candidate.arc ? { arc: candidate.arc } : {}),
       pixelDistance,
       sourcePriority: measurementStyle.state.measurementPickSources[candidate.source]?.priority,
     };
+  }
+
+  /** 当前 E3D 拾取层（过滤器 × 拾取类型），喂给候选解析做准入。 */
+  function pickLayerGate(): Readonly<{ filter: MeasurementPickLayerConfig['filter']; pickType: MeasurementPickTypeId }> {
+    const layer = measurementStyle.state.measurementPickLayer;
+    return { filter: layer.filter, pickType: layer.pickType };
+  }
+
+  /** 光标处的拾取射线，换到设计 World（米）——内核的控制点 / 射线∩面都在这个系里算。 */
+  function designPickRay(
+    canvas: HTMLCanvasElement,
+    cursor: Readonly<{ x: number; y: number }>,
+  ): Readonly<{ origin: PickVec3; direction: PickVec3 }> | null {
+    const camera = dtxViewerRef.value?.camera;
+    if (!camera) return null;
+    const rect = canvas.getBoundingClientRect();
+    if (!(rect.width > 0) || !(rect.height > 0)) return null;
+    const raycaster = new Raycaster();
+    raycaster.setFromCamera(
+      new Vector2((cursor.x / rect.width) * 2 - 1, -(cursor.y / rect.height) * 2 + 1),
+      camera,
+    );
+    const origin = raycaster.ray.origin.clone();
+    const direction = raycaster.ray.direction.clone();
+    if (!Number.isFinite(origin.lengthSq()) || direction.lengthSq() <= 1e-24) return null;
+    return {
+      origin: vec3ToTuple(sceneWorldToDesignMeters(origin, dtxLayerRef)),
+      direction: vec3ToTuple(sceneDirectionToDesign(origin, direction, dtxLayerRef)),
+    };
+  }
+
+  /**
+   * E3D 拾取类型派生（`EDGPICKTYPE.snap / exact / distance / proportion / fraction`，
+   * 内核 `derivePickPosition`）：把拾中候选换到设计 World（米）交给内核，再把派生位置
+   * 换回场景坐标。点候选只有 Distance 会动（沿 P-Point 方向偏移，E3D `pPosition.offset`）；
+   * 线候选（PLINE / TUBING 轴 / 网格边）按拾取射线在线上的控制点派生；Significant Snaps
+   * 开着且线带中间显著点时先取控制点所在的那一段（E3D `intermediates`）。
+   * Intersect 要两次拾取，流程尚未接入，这里原样放行。派生失败（射线与线平行等）也原样放行。
+   */
+  function applyPickTypeDerivation(
+    hit: PickHit,
+    candidate: MeasurementPickCandidate,
+    canvas: HTMLCanvasElement,
+    cursor: Readonly<{ x: number; y: number }>,
+  ): PickHit {
+    const layer = measurementStyle.state.measurementPickLayer;
+    if (layer.pickType === 'intersect') return hit;
+    const kernelType: PickDerivationType = layer.pickType;
+    const toDesign = (v: Vector3): PickVec3 => vec3ToTuple(sceneWorldToDesignMeters(v, dtxLayerRef));
+
+    let geometry: PickGeometry;
+    const ray = designPickRay(canvas, cursor);
+    if (candidate.segment) {
+      if (!ray) return hit;
+      const segment = selectSignificantSubSegment(candidate.segment, layer.significantSnaps, ray, toDesign);
+      geometry = { kind: 'segment', start: toDesign(segment.start), end: toDesign(segment.end) };
+    } else {
+      // 点候选：除 Distance 外所有拾取类型都回它自己（E3D PPOINT / DPOINT / Aid POSITION 口径）。
+      if (kernelType !== 'distance') return hit;
+      geometry = {
+        kind: 'point',
+        position: toDesign(hit.worldPos),
+        direction: hit.direction
+          ? vec3ToTuple(sceneDirectionToDesign(hit.worldPos, hit.direction, dtxLayerRef))
+          : null,
+      };
+    }
+
+    const result = derivePickPosition({
+      type: kernelType,
+      geometry,
+      ray,
+      distance: layer.values.distanceMm / 1000,
+      fraction: layer.values.fraction,
+      proportion: layer.values.proportion,
+    });
+    if (!result.ok) return hit;
+
+    const worldPos = designMetersToSceneWorld(tupleToVector(result.position), dtxLayerRef);
+    if (worldPos.distanceToSquared(hit.worldPos) <= 1e-18) return hit;
+    const token = measurementPickTypePromptToken(layer.pickType, layer.values);
+    return {
+      ...hit,
+      worldPos,
+      label: hit.label ? `${hit.label} · ${token}` : token,
+      derived: { pickType: layer.pickType, from: hit.worldPos.clone() },
+    };
+  }
+
+  /**
+   * E3D `intermediates`：线带中间显著点（如型材上的接头位置）且 Significant Snaps 开着时，
+   * Snap / Distance / Proportion / Fraction 作用在控制点所在的那一小段上，而不是整条线。
+   */
+  function selectSignificantSubSegment(
+    segment: NonNullable<MeasurementPickCandidate['segment']>,
+    significantSnaps: boolean,
+    ray: Readonly<{ origin: PickVec3; direction: PickVec3 }>,
+    toDesign: (v: Vector3) => PickVec3,
+  ): Readonly<{ start: Vector3; end: Vector3 }> {
+    const intermediates = segment.intermediates ?? [];
+    if (!significantSnaps || intermediates.length === 0) return segment;
+    const whole = { start: toDesign(segment.start), end: toDesign(segment.end) };
+    const control = lineRayControlPoint(whole, ray);
+    if (!control) return segment;
+    const chain = [segment.start, ...intermediates, segment.end];
+    for (let index = 0; index + 1 < chain.length; index += 1) {
+      const start = chain[index]!;
+      const end = chain[index + 1]!;
+      if (isWithinSegmentExtent({ start: toDesign(start), end: toDesign(end) }, control)) {
+        return { start, end };
+      }
+    }
+    return segment;
   }
 
   function measurementPointFromHit(hit: PickHit): MeasurementPoint {
@@ -963,6 +1224,64 @@ export function useXeokitMeasurementTools(options: {
 
   function hasApproximatePoint(...points: MeasurementPoint[]): boolean {
     return points.some((point) => point.sourceInfo?.source === 'mesh_pick_point');
+  }
+
+  /**
+   * E3D「Perpendicular to」：按第二击点源自带的几何推导目标（轴向 → 无限线、
+   * 圆面 → 无限面、否则退化为点），把起点投影到目标得到垂足作为记录的 target。
+   * 垂距为 0（起点已在目标上）或几何退化时返回 null，对应 E3D 的
+   * "Perpendicular distance is 0" 告警。
+   */
+  function resolvePerpendicularTargetFromHit(
+    origin: MeasurementPoint,
+    hit: PickHit,
+    picked: MeasurementPoint,
+  ): { target: MeasurementPoint; info: PerpendicularMeasurementInfo } | null {
+    const sourceDesign = origin.designWorldPos;
+    const pointDesign = picked.designWorldPos;
+    if (!sourceDesign || !pointDesign) return null;
+    const designDirection = (direction: Vector3): Vec3 => (
+      vec3ToTuple(sceneDirectionToDesign(hit.worldPos, direction, dtxLayerRef))
+    );
+    const designPosition = (position: Vector3): Vec3 => (
+      vec3ToTuple(sceneWorldToDesignMeters(position, dtxLayerRef))
+    );
+    const circular = hit.circle ?? hit.arc ?? null;
+    const resolved = resolvePerpendicularTarget({
+      point: pointDesign,
+      direction: hit.direction ? designDirection(hit.direction) : null,
+      circle: circular
+        ? { center: designPosition(circular.center), normal: designDirection(circular.normal) }
+        : null,
+    });
+    const result = computePerpendicularDistance(sourceDesign, resolved.target);
+    if (!result.ok) return null;
+
+    const baseLabel = picked.sourceInfo?.label ?? null;
+    if (resolved.provider === 'point') {
+      return {
+        target: picked,
+        info: { targetKind: 'point', targetLabel: baseLabel },
+      };
+    }
+    const providerLabel = resolved.provider === 'axis-line' ? '轴线' : '圆面';
+    const targetLabel = `${baseLabel ?? MEASUREMENT_PICK_SOURCE_LABELS[hit.source]} ${providerLabel}`;
+    const footDesign: Vec3 = [result.value.foot[0], result.value.foot[1], result.value.foot[2]];
+    const footScene = designMetersToSceneWorld(tupleToVector(footDesign), dtxLayerRef);
+    return {
+      target: {
+        entityId: picked.entityId,
+        worldPos: vec3ToTuple(footScene),
+        designWorldPos: footDesign,
+        sourceInfo: {
+          source: picked.sourceInfo?.source ?? hit.source,
+          candidateId: picked.sourceInfo?.candidateId,
+          refno: picked.sourceInfo?.refno ?? null,
+          label: `${targetLabel}垂足`,
+        },
+      },
+      info: { targetKind: resolved.target.kind, targetLabel },
+    };
   }
 
   /** 以已有测量点为起点创建新的距离草稿（连续测量 / Repeat 共用）。 */
@@ -1009,14 +1328,14 @@ export function useXeokitMeasurementTools(options: {
 
   /**
    * 把当前临时结果落地为持久测量记录（Result Inspector「落地标注」）。
-   * persistDimension 开启时第二击已自动落地，此函数是显式补落地入口。
+   * keepMeasurementAnnotation 开启时第二击已自动保留，此函数是显式补入口。
    */
   function persistDraftResult(): boolean {
     if (suppressStoreMeasurements) return false;
     const result = store.measurementDraftResult.value;
     if (!result || result.persistedMeasurementId) return false;
     const rec: XeokitDistanceMeasurementRecord = {
-      id: nowId('xdist'),
+      id: result.id,
       kind: 'distance',
       origin: result.origin,
       target: result.target,
@@ -1116,29 +1435,54 @@ export function useXeokitMeasurementTools(options: {
     }
     const snapText = currentSnapTargetText();
 
-    // E3D Measure Session 口径（r5 §3）：分步命令提示 + 当前 Snap 目标。
+    // E3D `EDGSTATE.prompt()` 结构：`<命令> <步> (<拾取类型>) [Snap] : <目标>`——
+    // 括号里是拾取类型（Snap / Cursor / Mid-Point / Distance[d] …），尾巴的 Snap 是
+    // Significant Snaps 开着的标志；拾取过滤器不进提示（与 E3D 一致）。
+    const layer = measurementStyle.state.measurementPickLayer;
+    const pickTypeToken = measurementPickTypePromptToken(layer.pickType, layer.values);
+    const CANCEL_TRAILER = '；点空白取消当前点选';
+    const prompt = (
+      command: string,
+      stepIndex: number,
+      stepTotal: number,
+      stepHint: string,
+      trailer: string | null = null,
+    ): string => formatMeasurementPrompt({
+      command,
+      stepIndex,
+      stepTotal,
+      stepHint,
+      pickTypeToken,
+      significantSnaps: layer.significantSnaps,
+      target: snapText,
+      trailer,
+    });
+
     if (mode === 'xeokit_measure_distance') {
+      // E3D：Perpendicular to 时提示变为 "Measure perpendicular distance start / end"。
+      const title = measurementStyle.state.perpendicularTo ? '垂距测量' : '距离测量';
+      const endHint = measurementStyle.state.perpendicularTo ? '选择目标线 / 面上的点' : '选择终点';
       return store.currentXeokitDistanceDraft.value
-        ? `距离测量 · 第 2/2 步 选择终点 · Snap: ${snapText}；点空白取消当前点选`
-        : `距离测量 · 第 1/2 步 选择起点 · Snap: ${snapText}`;
+        ? prompt(title, 2, 2, endHint, CANCEL_TRAILER)
+        : prompt(title, 1, 2, '选择起点');
     }
 
     if (mode === 'xeokit_measure_angle') {
       const draft = store.currentXeokitAngleDraft.value;
-      if (!draft) return `角度测量 · 第 1/3 步 选择角度顶点 · Snap: ${snapText}`;
+      if (!draft) return prompt('角度测量', 1, 3, '选择角度顶点');
       if (draft.stage === 'finding_first_arm') {
-        return `角度测量 · 第 2/3 步 选择第一边点 · Snap: ${snapText}；点空白取消当前点选`;
+        return prompt('角度测量', 2, 3, '选择第一边点', CANCEL_TRAILER);
       }
-      return `角度测量 · 第 3/3 步 选择第二边点 · Snap: ${snapText}；点空白取消当前点选`;
+      return prompt('角度测量', 3, 3, '选择第二边点', CANCEL_TRAILER);
     }
 
     if (mode === 'xeokit_measure_elevation_point') {
-      return `位置/标高 · 第 1/1 步 选择测量点 · Snap: ${snapText}，单击完成`;
+      return prompt('位置/标高', 1, 1, '选择测量点', '，单击完成');
     }
 
     return store.currentXeokitElevationDeltaDraft.value
-      ? `高差测量 · 第 2/2 步 选择终点 · Snap: ${snapText}；点空白取消当前点选`
-      : `高差测量 · 第 1/2 步 选择起点 · Snap: ${snapText}`;
+      ? prompt('高差测量', 2, 2, '选择终点', CANCEL_TRAILER)
+      : prompt('高差测量', 1, 2, '选择起点');
   });
 
   function refreshReadyState() {
@@ -1286,6 +1630,7 @@ export function useXeokitMeasurementTools(options: {
       rect: { width: rect.width, height: rect.height },
       settings: measurementStyle.state.measurementPickSources,
       candidates,
+      pickLayer: pickLayerGate(),
     });
     showHoverPickCandidates(resolution.visibleCandidates);
 
@@ -1320,7 +1665,12 @@ export function useXeokitMeasurementTools(options: {
     if (resolution.hit) {
       pickPointMessage.value = null;
       return {
-        hit: candidateToPickHit(resolution.hit),
+        hit: applyPickTypeDerivation(
+          candidateToPickHit(resolution.hit),
+          resolution.hit,
+          canvas,
+          { x: cursor.x, y: cursor.y },
+        ),
         preview: null,
         surfaceRefno,
         source: resolution.hit.source,
@@ -1398,10 +1748,7 @@ export function useXeokitMeasurementTools(options: {
       try {
         primitiveKeypointsByRefno.set(
           normalizedRefno,
-          (await Promise.allSettled([
-            parquetLoader.queryPrimitiveKeypointsByRefnoFromParquet(dbno, normalizedRefno),
-            parquetLoader.querySemanticSnapPointsByRefnoFromParquet(dbno, normalizedRefno),
-          ])).flatMap(result => result.status === 'fulfilled' ? result.value : []),
+          (await queryPrimitiveKeypointsForMeasurement(dbno, normalizedRefno)).items,
         );
       } catch {
         primitiveKeypointsByRefno.set(normalizedRefno, []);
@@ -1417,6 +1764,7 @@ export function useXeokitMeasurementTools(options: {
         objectId,
         worldPos: new Vector3(...candidate.worldPos),
         label: `P-Point #${candidate.number}`,
+        ...(candidate.sceneDir ? { direction: new Vector3(...candidate.sceneDir) } : {}),
       }));
     const transform = getDtxRefnoTransform(dbno, normalizedRefno);
     const position = buildPositionPickCandidate({
@@ -1476,6 +1824,7 @@ export function useXeokitMeasurementTools(options: {
       rect: { width: rect.width, height: rect.height },
       settings,
       candidates,
+      pickLayer: pickLayerGate(),
     });
     return resolution.visibleCandidates.map(candidate =>
       toDimensionViewerSnapCandidate(candidate, candidate.pixelDistance));
@@ -1738,19 +2087,78 @@ export function useXeokitMeasurementTools(options: {
     const dimensionSystem = options.getDimensionSystem?.() ?? null;
     if (!dimensionSystem) return;
     const records: ExternalDimensionRecord[] = [];
-    const addRecord = (record: XeokitMeasurementRecord, isDraft = false) => {
+    const addRecord = (
+      record: XeokitMeasurementRecord,
+      isDraft = false,
+      showDirectLinearDimension = true,
+    ) => {
       const external = xeokitMeasurementToExternalRecord(
         record,
         unitSettings.displayUnit.value,
         unitSettings.precision.value,
         options.sceneWorldToDesignMetres,
         isDraft,
+        showDirectLinearDimension,
       );
       if (external) records.push(external);
+      if (
+        record.kind === 'distance'
+        && !isDraft
+        && record.perpendicular
+        && measurementStyle.state.distanceShowAxisBreakdown
+      ) {
+        // E3D 垂距尺寸：不画 World 分量，改画 Vertical / Horizontal 两条腿
+        // （golden G4；Vertical 为 0 时只剩直接线）。
+        const parentId = `${DIMENSION_XEOKIT_PREFIX}${record.id}`;
+        const plan = buildPerpendicularAidPlan({
+          parentId,
+          foot: toDesignPoint(record.target, options.sceneWorldToDesignMetres),
+          source: toDesignPoint(record.origin, options.sceneWorldToDesignMetres),
+        });
+        for (const leg of plan.legs) {
+          records.push(perpendicularAidLegToExternalRecord(
+            leg,
+            unitSettings.displayUnit.value,
+            unitSettings.precision.value,
+          ));
+        }
+      } else if (
+        record.kind === 'distance'
+        && !isDraft
+        && measurementStyle.state.distanceShowAxisBreakdown
+      ) {
+        const parentId = `${DIMENSION_XEOKIT_PREFIX}${record.id}`;
+        const a = toDesignPoint(record.origin, options.sceneWorldToDesignMetres);
+        const b = toDesignPoint(record.target, options.sceneWorldToDesignMetres);
+        // 直接斜线由上面的 external 记录负责；这里传真实的 Show linear 只为驱动
+        // E3D 的分解闸门（单一正向轴向 + 直线可见时不画分量，golden G2-03）。
+        const plan = buildWorldDistanceAidPlan({
+          parentId,
+          origin: a,
+          target: b,
+          showDirect: showDirectLinearDimension,
+          showOrthogonal: true,
+        });
+        for (const part of plan.parts) {
+          if (part.kind === 'axis') {
+            records.push(worldDistanceAidPartToExternalRecord(
+              part,
+              unitSettings.displayUnit.value,
+              unitSettings.precision.value,
+            ));
+          }
+        }
+      }
     };
 
     if (!suppressStoreMeasurements) {
-      for (const record of store.xeokitDistanceMeasurements.value) addRecord(record);
+      for (const record of store.xeokitDistanceMeasurements.value) {
+        addRecord(
+          record,
+          false,
+          measurementStyle.state.showDirectLinearDimension,
+        );
+      }
       for (const record of store.xeokitAngleMeasurements.value) addRecord(record);
       for (const record of store.xeokitElevationPointMeasurements.value) addRecord(record);
       for (const record of store.xeokitElevationDeltaMeasurements.value) addRecord(record);
@@ -1765,6 +2173,20 @@ export function useXeokitMeasurementTools(options: {
         if (draftElevationPoint) addRecord(draftElevationPoint, true);
         if (draftElevationDelta) addRecord(draftElevationDelta, true);
       }
+
+      const result = store.measurementDraftResult.value;
+      if (result && !result.persistedMeasurementId) {
+        addRecord({
+          id: result.id,
+          kind: 'distance',
+          origin: result.origin,
+          target: result.target,
+          visible: true,
+          approximate: result.approximate,
+          createdAt: result.createdAt,
+          ...(result.perpendicular ? { perpendicular: result.perpendicular } : {}),
+        }, false, measurementStyle.state.showDirectLinearDimension);
+      }
     }
 
     dimensionSystem.replaceExternalSource('xeokit-measurement', records);
@@ -1775,6 +2197,8 @@ export function useXeokitMeasurementTools(options: {
     const dimensionSystem = options.getDimensionSystem?.() ?? null;
     if (!dimensionSystem) return;
     if (id) {
+      const current = dimensionSystem.viewport.getSelection();
+      if (resolveMeasurementIdFromDimensionId(current) === id) return;
       dimensionSystem.viewport.setSelection(`${DIMENSION_XEOKIT_PREFIX}${id}`);
       return;
     }
@@ -1789,10 +2213,17 @@ export function useXeokitMeasurementTools(options: {
    * id 回写到 store（P1-6 图形直接点选）。选中非 xeokit 尺寸或取消选中
    * 时清空当前测量选中态，保持视口与面板一致。
    */
+  function resolveMeasurementIdFromDimensionId(
+    dimensionId: string | null,
+  ): string | null {
+    if (!dimensionId?.startsWith(DIMENSION_XEOKIT_PREFIX)) return null;
+    const id = dimensionId.slice(DIMENSION_XEOKIT_PREFIX.length);
+    const child = id.match(/^(.*)::(?:world-axis-[xyz]|perpendicular-(?:vertical|horizontal))$/);
+    return child?.[1] || id;
+  }
+
   function handleDimensionSelectionChange(dimensionId: string | null): void {
-    const id = dimensionId?.startsWith(DIMENSION_XEOKIT_PREFIX)
-      ? dimensionId.slice(DIMENSION_XEOKIT_PREFIX.length)
-      : null;
+    const id = resolveMeasurementIdFromDimensionId(dimensionId);
     if (store.activeXeokitMeasurementId.value === id) return;
     store.activeXeokitMeasurementId.value = id;
   }
@@ -2107,24 +2538,45 @@ export function useXeokitMeasurementTools(options: {
         return;
       }
 
-      const target = measurementPointFromHit(hit);
-      const approximate = hasApproximatePoint(draft.origin, target);
-      const persistDimension = measurementStyle.state.persistDimension;
-      // E3D Measure Session S3：第二击先产出临时结果（Result Inspector 数据源）；
-      // 仅当「生成线性标注」开启才落持久 dimension（r5 §3 / r4 §4）。
-      const resultValues = computeDistanceMeasurementResult(draft.origin, target);
-      if (resultValues) {
-        store.setMeasurementDraftResult({
-          kind: 'distance',
-          origin: draft.origin,
-          target,
-          ...resultValues,
-          approximate,
-          createdAt: draft.createdAt,
-          persistedMeasurementId: persistDimension ? draft.id : null,
-        });
+      const pickedTarget = measurementPointFromHit(hit);
+      let target = pickedTarget;
+      let perpendicular: PerpendicularMeasurementInfo | undefined;
+      if (measurementStyle.state.perpendicularTo) {
+        const resolved = resolvePerpendicularTargetFromHit(draft.origin, hit, pickedTarget);
+        if (!resolved) {
+          // E3D：垂距为 0 时 setPerpendicularMeasure 告警并回到 start 态。
+          pickPointMessage.value = 'Perpendicular distance is 0：起点已落在目标线 / 面上，无法绘制垂距尺寸';
+          store.clearCurrentXeokitDraft();
+          clearMeasurementVisualAssists();
+          syncFromStore();
+          requestRender?.();
+          return;
+        }
+        target = resolved.target;
+        perpendicular = resolved.info;
       }
-      if (persistDimension) {
+      const approximate = hasApproximatePoint(draft.origin, pickedTarget);
+      const resultValues = computeDistanceMeasurementResult(draft.origin, target);
+      if (!resultValues) {
+        pickPointMessage.value = '距离测量失败：起点或终点缺少有效的设计 World 坐标';
+        requestRender?.();
+        return;
+      }
+      const keepMeasurementAnnotation = measurementStyle.state.keepMeasurementAnnotation;
+      // 第二击始终产出会话结果；是否显示直接斜线、是否保留为 Web 标注
+      // 分别由两个独立选项控制。
+      store.setMeasurementDraftResult({
+        id: draft.id,
+        kind: 'distance',
+        origin: draft.origin,
+        target,
+        ...resultValues,
+        approximate,
+        createdAt: draft.createdAt,
+        persistedMeasurementId: keepMeasurementAnnotation ? draft.id : null,
+        ...(perpendicular ? { perpendicular } : {}),
+      });
+      if (keepMeasurementAnnotation) {
         const rec: XeokitDistanceMeasurementRecord = {
           id: draft.id,
           kind: 'distance',
@@ -2135,6 +2587,7 @@ export function useXeokitMeasurementTools(options: {
           createdAt: draft.createdAt,
           sourceAnnotationId: store.activeAnnotationContext.value?.id,
           sourceAnnotationType: store.activeAnnotationContext.value?.type,
+          ...(perpendicular ? { perpendicular } : {}),
         };
         if (!measurementStyle.state.distanceKeepDimensions) {
           for (const measurement of store.xeokitDistanceMeasurements.value) {
@@ -2353,6 +2806,7 @@ export function useXeokitMeasurementTools(options: {
       store.xeokitAngleMeasurements.value,
       store.xeokitElevationPointMeasurements.value,
       store.xeokitElevationDeltaMeasurements.value,
+      store.measurementDraftResult.value,
       store.currentXeokitDistanceDraft.value,
       store.currentXeokitAngleDraft.value,
       store.currentXeokitElevationPointDraft.value,
@@ -2447,6 +2901,7 @@ export function useXeokitMeasurementTools(options: {
     repeatLastDistanceMeasurement,
     persistDraftResult,
     handleDimensionSelectionChange,
+    resolveMeasurementIdFromDimensionId,
     onCanvasPointerDown,
     onCanvasPointerMove,
     onCanvasPointerUp,

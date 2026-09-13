@@ -1,0 +1,38 @@
+!traceFile = object FILE('D:/work/plant-code/old/plant3d-web/docs/verification/e3d-measurement-runtime-golden/G3-02-wrt-branch.trace.txt')
+!trace = ARRAY()
+
+!!gphMeasure.close()
+hide !!gphMeasure
+
+!!gphViews.measure('DISTANCE')
+!from = object POSITION('E 9769.75mm N 10047.18mm U 18664.8mm WRT /*')
+!to = object POSITION('E 7849.61mm N 10447.46mm U 14234.127mm WRT /*')
+!wrtItem = =24381/145018
+
+!!gphMeasure.perpendicularTo.val = FALSE
+!!gphMeasure.dimension.setDimension(!from, !to)
+!!gphMeasure.wrt.val = !wrtItem.name
+!!gphMeasure.setUpForm()
+handle any
+  !trace.append('blocked: setUpForm failed: ' & !!error.text)
+  !traceFile.writeFile('OVERWRITE', !trace)
+  return
+endhandle
+
+!dimension = !!gphMeasure.dimension
+!distance = !dimension.from.distance(!dimension.to)
+!offset = !dimension.offsetType()
+!direction = !dimension.from.direction(!dimension.to).wrt(!dimension.wrt)
+
+!trace.append('wrt=' & !dimension.wrt.name)
+!trace.append('wrt_type=' & !dimension.wrt.hardType)
+!trace.append('from=' & !dimension.from.string())
+!trace.append('to=' & !dimension.to.string())
+!trace.append('distance_text=' & !distance.string(!!gphMeasure.measureFormat))
+!trace.append('offset_1_text=' & !offset[1].string(!!gphMeasure.measureFormat))
+!trace.append('offset_2_text=' & !offset[2].string(!!gphMeasure.measureFormat))
+!trace.append('offset_3_text=' & !offset[3].string(!!gphMeasure.measureFormat))
+!trace.append('direction=' & !direction.string())
+!trace.append('complete')
+!traceFile.writeFile('OVERWRITE', !trace)
+return

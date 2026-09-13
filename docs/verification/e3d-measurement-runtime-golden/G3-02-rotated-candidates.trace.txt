@@ -1,0 +1,16 @@
+﻿sample_site=/1PTU-INST23 (SITE)
+site_EQUI_count=951
+rotated EQUI =24381/101421 name=/Copy-of-RCS616DT ori=Y is N WRT /* and Z is U WRT /* pos=W 9276.84mm N 10547.79mm U 1470mm WRT /*
+rotated EQUI =24381/101423 name=/Copy-of-RCS616MD ori=Y is U WRT /* and Z is S 21 E WRT /* pos=W 6376.75mm N 16349.28mm U 2430mm WRT /*
+rotated EQUI =24381/101425 name=/Copy-of-RCS601MT ori=Y is N WRT /* and Z is U WRT /* pos=W 5247.64mm N 9713.12mm U 6313.46mm WRT /*
+rotated EQUI =24381/101427 name=/Copy-of-RCS620MT ori=Y is N WRT /* and Z is U WRT /* pos=W 5808.01mm N 10413.18mm U 6170.5mm WRT /*
+rotated EQUI =24381/101429 name=/Copy-of-RCS621MT ori=Y is N WRT /* and Z is U WRT /* pos=W 5808.01mm N 10413.18mm U 6170.5mm WRT /*
+rotated EQUI =24381/101431 name=/Copy-of-RCS604MT ori=Y is N WRT /* and Z is U WRT /* pos=W 9744.11mm N 10802.77mm U 5860mm WRT /*
+rotated EQUI =24381/101433 name=/Copy-of-RCS605MT ori=Y is N WRT /* and Z is U WRT /* pos=W 9794.87mm N 10888.93mm U 5860mm WRT /*
+rotated EQUI =24381/101435 name=/Copy-of-RCS606MT ori=Y is N WRT /* and Z is U WRT /* pos=W 9845.62mm N 10975.09mm U 5860mm WRT /*
+rotated EQUI =24381/101437 name=/Copy-of-RCS150MM ori=Y is N WRT /* and Z is U WRT /* pos=W 6991.73mm N 9384.21mm U 6133mm WRT /*
+rotated EQUI =24381/101439 name=/Copy-of-RCS151MM ori=Y is E WRT /* and Z is U WRT /* pos=W 6696.92mm N 9656.05mm U 6133mm WRT /*
+rotated EQUI =24381/101441 name=/Copy-of-RCS152MM ori=Y is E WRT /* and Z is U WRT /* pos=W 6696.92mm N 9656.05mm U 6842mm WRT /*
+rotated EQUI =24381/101443 name=/Copy-of-RCS153MM ori=Y is E WRT /* and Z is U WRT /* pos=W 6991.73mm N 9384.21mm U 6842mm WRT /*
+found=12
+complete

@@ -15,7 +15,7 @@ import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { parseMeshGeometry } from './parseMeshGeometry';
+import { parseMeshGeometry, parseMeshGeometryResult } from './parseMeshGeometry';
 
 // jsdom 环境下 import.meta.url 会被改写，按 vitest 的项目根（cwd）取金样
 function fixture(name: string): ArrayBuffer {
@@ -83,6 +83,20 @@ describe('parseMeshGeometry（rkyv 布局金样）', () => {
     expect(parseMeshGeometry(whole.slice(0, 40))).toBeNull(); // 装不下根
     expect(parseMeshGeometry(whole.slice(0, whole.byteLength - 2))).toBeNull(); // 长度不是 4 的倍数
     expect(parseMeshGeometry(new ArrayBuffer(0))).toBeNull();
+  });
+
+  it('诊断入口返回文件名、字节位置、期望值和实际值', () => {
+    const result = parseMeshGeometryResult(new ArrayBuffer(12), 'broken.mesh');
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.issue).toMatchObject({
+      source: 'broken.mesh',
+      format: 'mesh',
+      expected: '至少 60 字节',
+      actual: '12 字节',
+      byteOffset: 12,
+    });
   });
 
   it('索引越界的坏字节串回 null（防上游写坏或传输损伤静默画歪）', () => {

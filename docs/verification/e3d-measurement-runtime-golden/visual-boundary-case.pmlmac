@@ -1,0 +1,51 @@
+-- Usage: $M "<this file>" <dE> <dN> <dU>
+-- Frames the boundary sample in the current 3D view and injects the measurement through
+-- !!gphMeasure.setMeasure(LINE) so the aid labels can be captured with PrintWindow.
+!traceFile = object FILE('D:/work/plant-code/old/plant3d-web/docs/verification/e3d-measurement-runtime-golden/visual-boundary-case.trace.txt')
+!trace = ARRAY()
+
+!view = !!fmsys.currentDocument().view
+handle any
+  !trace.append('blocked: current document view unavailable: ' & !!error.text)
+  !traceFile.writeFile('OVERWRITE', !trace)
+  return
+endhandle
+!saved = defined(!!goldenSavedLimits)
+if (!saved.not()) then
+  !!goldenSavedLimits = !view.limits
+  !trace.append('saved_limits=' & !!goldenSavedLimits.size().string() & ' values')
+endif
+
+!limits = ARRAY()
+!limits[1] = 8500
+!limits[2] = 11500
+!limits[3] = 8500
+!limits[4] = 12500
+!limits[5] = 13000
+!limits[6] = 17000
+!view.limits = !limits
+handle any
+  !trace.append('limits_error=' & !!error.text)
+endhandle
+
+!!gphMeasure.perpendicularTo.val = FALSE
+!!gphMeasure.showLinear.val = TRUE
+!!gphMeasure.wrt.val = 'World'
+!from = object POSITION('E 10000mm N 10000mm U 15000mm WRT /*')
+!to = !from
+!to.east = !from.east + ($1)
+!to.north = !from.north + ($2)
+!to.up = !from.up + ($3)
+!!gphMeasure.setMeasure(object LINE(!from, !to))
+handle any
+  !trace.append('setMeasure_error=' & !!error.text)
+  !traceFile.writeFile('OVERWRITE', !trace)
+  return
+endhandle
+!!gphViews.refreshAllViews()
+!trace.append('case dE=$1 dN=$2 dU=$3')
+!trace.append('from=' & !!gphMeasure.dimension.from.string())
+!trace.append('to=' & !!gphMeasure.dimension.to.string())
+!trace.append('complete')
+!traceFile.writeFile('OVERWRITE', !trace)
+return

@@ -1,0 +1,60 @@
+﻿---- =24381/145031 type=ELBO
+pos_world=E 7849.85mm N 9146.63mm U 18656.8mm WRT /*
+ori_world=Y is S 0.285797 U WRT /* and Z is S 39.8738 E 89.6276 D WRT /*
+P0|pos=E 7849.85mm N 9146.63mm U 18656.8mm|dir=S 39.8738 E 89.6276 D|bore=0mm
+P1|pos=E 7849.85mm N 9298.628mm U 18656.042mm|dir=N 0.285797 D|bore=100mm
+P2|pos=E 8001.849mm N 9146.633mm U 18657.433mm|dir=E 0.238736 U|bore=100mm
+---- =24381/145030 type=ATTA
+pos_world=E 7849.85mm N 10137.5mm U 18649.9mm WRT /*
+ori_world=Y is N 0.173675 D WRT /* and Z is N 89.8263 U WRT /*
+P0|pos=E 7849.85mm N 10137.5mm U 18649.9mm|dir=N 89.8263 U|bore=0mm
+P1|pos=E 7849.85mm N 10137.5mm U 18649.9mm|dir=N 0.173675 D|bore=100mm
+P2|pos=E 7849.85mm N 10137.5mm U 18649.9mm|dir=S 0.173675 U|bore=100mm
+P3|pos=E 7849.85mm N 10137.639mm U 18695.62mm|dir=N 89.8263 U|bore=100mm
+---- =24381/145032 type=OLET
+pos_world=E 9201.84mm N 9146.65mm U 18662.44mm WRT /*
+ori_world=Y is E 0.238688 U WRT /* and Z is W 89.7613 U WRT /*
+P0|pos=E 9201.84mm N 9146.65mm U 18662.44mm|dir=W 89.7613 U|bore=0mm
+P1|pos=E 9201.84mm N 9146.65mm U 18662.44mm|dir=W 0.238688 D|bore=100mm
+P2|pos=E 9201.84mm N 9146.65mm U 18662.44mm|dir=E 0.238688 U|bore=100mm
+P3|pos=E 9201.487mm N 9146.65mm U 18747.139mm|dir=W 89.7613 U|bore=25mm
+---- =24381/145019 type=ELBO
+pos_world=E 3341.63mm N 8330.57mm U 13301.33mm WRT /*
+ori_world=Y is E 5.45893 N 0.252725 U WRT /* and Z is N 5.45893 W WRT /*
+P0|pos=E 3341.63mm N 8330.57mm U 13301.33mm|dir=N 5.45893 W|bore=0mm
+P1|pos=E 3190.987mm N 8316.174mm U 13300.662mm|dir=W 5.45893 S 0.252725 D|bore=100mm
+P2|pos=E 3341.63mm N 8330.57mm U 13452.661mm|dir=U|bore=100mm
+---- =24381/145035 type=VALV
+pos_world=E 9769.75mm N 10047.18mm U 18664.8mm WRT /*
+ori_world=Y is N WRT /* and Z is U WRT /*
+P0|pos=E 9769.75mm N 10047.18mm U 18664.8mm|dir=U|bore=0mm
+P1|pos=E 9769.75mm N 9874.18mm U 18664.8mm|dir=S|bore=100mm
+P2|pos=E 9769.75mm N 10220.18mm U 18664.8mm|dir=N|bore=100mm
+P3|pos=E 10395.75mm N 10047.18mm U 18664.8mm|dir=E|bore=15mm
+P4|pos=E 9955.75mm N 10047.18mm U 18441.8mm|dir=D|bore=15mm
+P5|pos=E 10180.75mm N 9994.18mm U 19867.8mm|dir=U|bore=0mm
+P6|pos=E 9644.75mm N 9934.18mm U 18764.8mm|dir=W|bore=0mm
+P7|pos=E 9644.75mm N 10160.18mm U 18764.8mm|dir=W|bore=0mm
+P8|pos=E 10225.75mm N 9861.18mm U 19148.8mm|dir=D|bore=0mm
+P9|pos=E 10225.75mm N 9861.18mm U 19058.8mm|dir=W|bore=0mm
+P10|pos=E 10180.75mm N 9994.18mm U 18664.8mm|dir=U|bore=0mm
+P11|pos=E 10100.75mm N 10100.18mm U 18834.8mm|dir=U|bore=0mm
+P12|pos=E 10180.75mm N 9819.18mm U 19851.65mm|dir=E|bore=0mm
+P13|pos=E 10180.75mm N 10169.18mm U 19851.65mm|dir=E|bore=0mm
+P14|pos=E 10180.75mm N 9994.18mm U 19851.65mm|dir=N 30 W|bore=0mm
+P15|pos=E 10180.75mm N 9994.18mm U 19851.65mm|dir=S 30 W|bore=0mm
+P16|pos=E 10180.75mm N 9994.18mm U 19851.65mm|dir=E|bore=0mm
+P17|pos=E 10180.75mm N 9674.18mm U 19544.8mm|dir=U|bore=0mm
+P18|pos=E 10180.75mm N 9757.68mm U 19640.86mm|dir=N|bore=0mm
+P19|pos=E 10055.75mm N 9994.18mm U 19625.55mm|dir=S|bore=0mm
+P20|pos=E 10014.75mm N 10072.18mm U 18876.8mm|dir=D|bore=0mm
+P21|pos=E 10310.75mm N 10077.18mm U 19280.8mm|dir=U|bore=0mm
+P22|pos=E 10310.75mm N 9927.18mm U 19280.8mm|dir=E|bore=0mm
+P23|pos=E 10090.75mm N 9962.18mm U 19236.8mm|dir=W|bore=0mm
+P24|pos=E 10090.75mm N 10052.18mm U 19236.8mm|dir=W|bore=0mm
+P25|pos=E 9955.75mm N 10047.18mm U 18664.8mm|dir=D|bore=0mm
+P26|pos=E 9634.75mm N 10047.18mm U 18664.8mm|dir=W|bore=0mm
+P28|pos=E 9769.75mm N 10047.18mm U 18664.8mm|dir=S|bore=0mm
+P29|pos=E 9644.75mm N 10160.18mm U 18564.8mm|dir=W|bore=0mm
+P30|pos=E 10305.75mm N 9994.18mm U 19625.55mm|dir=S|bore=0mm
+P31|pos=E 9644.75mm N 9934.18mm U 18564.8mm|dir=W|bore=0mm

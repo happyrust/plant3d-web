@@ -1,0 +1,302 @@
+{
+  "classification": "live isolated gen-model backend plus ordinary plant3d-web model and MBD rendering",
+  "generatedAt": "2026-09-11T17:26:47.593Z",
+  "backend": {
+    "base": "http://127.0.0.1:18084",
+    "pid": 72048,
+    "revision": "cf168862aadf9d2744dd2be9dc20a8c2ff270ed3",
+    "binarySha256": "C2A41AB6988E75BEE0DFAF5CBD65C316E122C963C2EE1F98CDC7BA03021EF46E",
+    "apiStatus": 200,
+    "apiMs": 125.91149999999999
+  },
+  "browserUrl": "http://127.0.0.1:3101/?output_project=AvevaMarineSample&show_refno=24381_145018&mbd_refno=24381_145018&mbdBackend=http%3A%2F%2F127.0.0.1%3A18084&gm_backend=http%3A%2F%2F127.0.0.1%3A18084",
+  "sourcePayload": {
+    "version": "v2",
+    "inputRefno": "24381_145018",
+    "branchRefno": "24381_145018",
+    "primitiveCount": 77,
+    "primitiveKinds": {
+      "slope_mark": 7,
+      "aid_line": 21,
+      "linear_dim": 18,
+      "aid_text": 3,
+      "label": 14,
+      "leader_line": 14
+    },
+    "issueCount": 0,
+    "meta": {
+      "geometry_space": "source_mm",
+      "source_to_design": [
+        0.001,
+        0,
+        0,
+        0,
+        0,
+        0.001,
+        0,
+        0,
+        0,
+        0,
+        0.001,
+        0,
+        0,
+        0,
+        0,
+        1
+      ],
+      "cheight_mm": 27,
+      "layout_mode": "isodim_main",
+      "notes": [
+        "isolines=11 ldirs=11 isodim_main=true empty_isolines=1"
+      ]
+    }
+  },
+  "network": [
+    {
+      "url": "http://127.0.0.1:18084/api/v1/model/ensure",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:18084/api/v1/model/records",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:18084/api/mbd/v2/pipe/24381_145018",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:18084/api/mbd/v2/pipe/24381_145018",
+      "status": 200
+    }
+  ],
+  "initial": {
+    "phase": "live-framed",
+    "sourceRecordCount": 77,
+    "sourceDimensionCount": 18,
+    "sourceAnnotationCount": 59,
+    "documentRecordCount": 0,
+    "layoutCount": 77,
+    "arrowWingCount": 86,
+    "arrowWingMinPx": 12.999999999999964,
+    "arrowWingMaxPx": 13.000000000000037,
+    "labelSample": {
+      "origin": [
+        434.679994305587,
+        368.4472835770497
+      ],
+      "bounds": {
+        "x": 434.679994305587,
+        "y": 355.4472835770497,
+        "width": 93.52033428593295,
+        "height": 17.333333333333332
+      },
+      "text": "slope 0.4%"
+    },
+    "camera": {
+      "position": [
+        17.81390527343749,
+        13.360428955078117,
+        17.813905273437463
+      ],
+      "target": [
+        0,
+        8.881784197001252e-16,
+        1.7763568394002505e-15
+      ],
+      "near": 0.1,
+      "far": 1000
+    },
+    "model": {
+      "stats": {
+        "totalVertices": 33024,
+        "totalIndices": 33024,
+        "totalObjects": 22,
+        "drawIndexCount": 39504,
+        "drawTriangleCount": 13168,
+        "maxVertices": 1000000,
+        "maxIndices": 3000000,
+        "maxObjects": 100000,
+        "uniqueGeometries": 10,
+        "uniqueMaterials": 3,
+        "compiled": true
+      },
+      "loadedDbno": 7997,
+      "loadedRefnos": 12
+    },
+    "sceneOverlay": {
+      "visible": true,
+      "childNames": [
+        "dimension-scene-lines",
+        "dimension-scene-arrows"
+      ],
+      "childCount": 2
+    }
+  },
+  "zoomedOut": {
+    "phase": "live-zoomed-out-x6",
+    "sourceRecordCount": 77,
+    "sourceDimensionCount": 18,
+    "sourceAnnotationCount": 59,
+    "documentRecordCount": 0,
+    "layoutCount": 77,
+    "arrowWingCount": 86,
+    "arrowWingMinPx": 12.999999999999972,
+    "arrowWingMaxPx": 13.000000000000034,
+    "labelSample": {
+      "origin": [
+        409.2303080099023,
+        367.95031281151137
+      ],
+      "bounds": {
+        "x": 409.2303080099023,
+        "y": 354.95031281151137,
+        "width": 93.52033428593295,
+        "height": 17.333333333333332
+      },
+      "text": "slope 0.4%"
+    },
+    "camera": {
+      "position": [
+        106.88343164062495,
+        80.16257373046855,
+        106.88343164062458
+      ],
+      "target": [
+        0,
+        8.881784197001252e-16,
+        1.7763568394002505e-15
+      ],
+      "near": 0.1,
+      "far": 1000
+    },
+    "model": {
+      "stats": {
+        "totalVertices": 33024,
+        "totalIndices": 33024,
+        "totalObjects": 22,
+        "drawIndexCount": 39504,
+        "drawTriangleCount": 13168,
+        "maxVertices": 1000000,
+        "maxIndices": 3000000,
+        "maxObjects": 100000,
+        "uniqueGeometries": 10,
+        "uniqueMaterials": 3,
+        "compiled": true
+      },
+      "loadedDbno": 7997,
+      "loadedRefnos": 12
+    },
+    "sceneOverlay": {
+      "visible": true,
+      "childNames": [
+        "dimension-scene-lines",
+        "dimension-scene-arrows"
+      ],
+      "childCount": 2
+    }
+  },
+  "rotated": {
+    "phase": "live-rotated-oblique",
+    "sourceRecordCount": 77,
+    "sourceDimensionCount": 18,
+    "sourceAnnotationCount": 59,
+    "documentRecordCount": 0,
+    "layoutCount": 77,
+    "arrowWingCount": 86,
+    "arrowWingMinPx": 12.999999999999957,
+    "arrowWingMaxPx": 13.000000000000032,
+    "labelSample": {
+      "origin": [
+        493.1403872765436,
+        465.7209778623064
+      ],
+      "bounds": {
+        "x": 493.1403872765436,
+        "y": 452.7209778623064,
+        "width": 93.52033428593295,
+        "height": 17.333333333333332
+      },
+      "text": "slope 0.4%"
+    },
+    "camera": {
+      "position": [
+        -34.21939458590407,
+        22.812929723936016,
+        31.36777837041202
+      ],
+      "target": [
+        0,
+        8.881784197001252e-16,
+        1.7763568394002505e-15
+      ],
+      "near": 0.1,
+      "far": 1000
+    },
+    "model": {
+      "stats": {
+        "totalVertices": 33024,
+        "totalIndices": 33024,
+        "totalObjects": 22,
+        "drawIndexCount": 39504,
+        "drawTriangleCount": 13168,
+        "maxVertices": 1000000,
+        "maxIndices": 3000000,
+        "maxObjects": 100000,
+        "uniqueGeometries": 10,
+        "uniqueMaterials": 3,
+        "compiled": true
+      },
+      "loadedDbno": 7997,
+      "loadedRefnos": 12
+    },
+    "sceneOverlay": {
+      "visible": true,
+      "childNames": [
+        "dimension-scene-lines",
+        "dimension-scene-arrows"
+      ],
+      "childCount": 2
+    }
+  },
+  "diagnostics": {
+    "channel": "api",
+    "sourceId": "24381_145018",
+    "issues": [],
+    "skipped": [],
+    "layoutMode": "isodim_main",
+    "notes": [
+      "isolines=11 ldirs=11 isodim_main=true empty_isolines=1"
+    ],
+    "loadError": null,
+    "loadedAt": 1789147606641
+  },
+  "checks": {
+    "liveHttp200": true,
+    "realModelLoaded": true,
+    "sourceStableAcrossCamera": true,
+    "cameraChangedOnZoom": true,
+    "cameraChangedOnRotate": true,
+    "labelProjectionChangedOnRotate": true,
+    "thirteenPixelFloorAtDistance": true,
+    "scenePainterMounted": true,
+    "noUserDimensionOwnership": true,
+    "svgCarriesMbd": true,
+    "noMbdLoadDiagnostics": true
+  },
+  "deleteAttempt": {
+    "result": {
+      "ok": false,
+      "reason": "not-found"
+    },
+    "documentContainsExternal": false,
+    "externalStillPresent": true
+  },
+  "svg": {
+    "bytes": 297965,
+    "dimensionGroups": 77,
+    "dimensionParts": 14,
+    "arrowParts": 86,
+    "labelParts": 92,
+    "hasFirstPrimitiveId": true
+  }
+}

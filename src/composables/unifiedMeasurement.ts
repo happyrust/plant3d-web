@@ -32,6 +32,7 @@ import type {
   XeokitElevationPointMeasurementRecord,
   XeokitMeasurementRecord,
   MeasurementPoint,
+  PerpendicularMeasurementInfo,
 } from '@/composables/useToolStore';
 
 import {
@@ -62,6 +63,8 @@ export type UnifiedDistanceMeasurementRecord = UnifiedMeasurementBase & {
   kind: 'distance';
   origin: MeasurementPoint;
   target: MeasurementPoint;
+  /** E3D Perpendicular to 结果标记（target 为垂足）；普通距离没有此字段。 */
+  perpendicular?: PerpendicularMeasurementInfo;
 };
 
 export type UnifiedAngleMeasurementRecord = UnifiedMeasurementBase & {
@@ -332,7 +335,13 @@ export function fromXeokitMeasurement(rec: XeokitMeasurementRecord): UnifiedMeas
 
   switch (rec.kind) {
     case 'distance':
-      return { ...base, kind: 'distance', origin: rec.origin, target: rec.target };
+      return {
+        ...base,
+        kind: 'distance',
+        origin: rec.origin,
+        target: rec.target,
+        ...(rec.perpendicular ? { perpendicular: rec.perpendicular } : {}),
+      };
     case 'angle':
       return {
         ...base,
@@ -469,6 +478,7 @@ export function toXeokitMeasurement(u: UnifiedMeasurementRecord): XeokitMeasurem
         kind: 'distance',
         origin: u.origin,
         target: u.target,
+        ...(u.perpendicular ? { perpendicular: u.perpendicular } : {}),
       };
       return result;
     }

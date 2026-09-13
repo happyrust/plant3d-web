@@ -196,14 +196,6 @@ onUnmounted(() => {
         {{ diffCount }}
       </span>
 
-      <!-- 所属库号：只有 gen-model-v1 数据源给（plan 2026-09-06 P2-4），legacy 行没有这一格 -->
-      <span v-if="row.dbnum !== undefined && !ghost"
-        class="inline-flex shrink-0 items-center rounded border border-border/60 px-1 text-[10px] leading-4 tabular-nums text-muted-foreground/80"
-        :title="`所属库 dbnum ${row.dbnum}`"
-        data-testid="model-tree-dbnum-badge">
-        {{ row.dbnum }}
-      </span>
-
       <button v-if="!ghost" type="button" class="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-sm text-muted-foreground hover:bg-muted hover:text-foreground focus:opacity-100 transition-opacity disabled:cursor-wait disabled:opacity-100" :class="!isVisible ? 'opacity-100 text-destructive/70' : showEyeIcon || props.loading ? 'opacity-100' : 'opacity-0'" :disabled="props.loading" @mousedown.stop @click="onToggleVisible">
         <LoaderCircle v-if="props.loading" class="h-3.5 w-3.5 animate-spin" />
         <Eye v-if="isVisible" class="h-3.5 w-3.5" />

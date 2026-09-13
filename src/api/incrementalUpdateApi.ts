@@ -1,4 +1,6 @@
 import { getBackendApiBaseUrl } from '@/utils/apiBase';
+import { parseJsonResponse } from '@/utils/fileValidation';
+import { isDevOnlyFallbackEnabled } from '@/utils/runtimeFallback';
 
 export type IncrementalElementChange = {
   dbnum: number;
@@ -160,6 +162,16 @@ export type IncrementalApiResult<T> = {
 
 const DEMO_SUMMARY_URL = '/incremental-demo/1112_896_897_incremental_summary.json';
 const DEMO_MODEL_CHANGES_URL = '/incremental-demo/1112_896_897_model_changes.json';
+const ALLOW_INCREMENTAL_DEMO_FALLBACK = isDevOnlyFallbackEnabled({
+  isDev: import.meta.env.DEV,
+  configured: import.meta.env.VITE_INCREMENTAL_ALLOW_DEMO_FALLBACK,
+});
+
+type DemoFallbackOptions = { allowDemoFallback?: boolean };
+
+function canUseDemoFallback(options: DemoFallbackOptions): boolean {
+  return ALLOW_INCREMENTAL_DEMO_FALLBACK && options.allowDemoFallback !== false;
+}
 
 function getBaseUrl(): string {
   return getBackendApiBaseUrl({ fallbackUrl: 'http://localhost:3100' }).replace(/\/$/, '');
@@ -179,7 +191,7 @@ async function fetchBackendJson<T>(path: string, init?: RequestInit): Promise<T>
     const text = await resp.text().catch(() => '');
     throw new Error(`HTTP ${resp.status} ${resp.statusText}: ${text}`);
   }
-  return (await resp.json()) as T;
+  return parseJsonResponse<T>(resp, url);
 }
 
 async function fetchStaticJson<T>(path: string): Promise<T> {
@@ -188,7 +200,7 @@ async function fetchStaticJson<T>(path: string): Promise<T> {
     const text = await resp.text().catch(() => '');
     throw new Error(`HTTP ${resp.status} ${resp.statusText}: ${text}`);
   }
-  return (await resp.json()) as T;
+  return parseJsonResponse<T>(resp, path);
 }
 
 function shouldUseDemoFallback(params: Pick<IncrementalRunRequest, 'dbnum' | 'from_sesno' | 'to_sesno'>): boolean {
@@ -197,7 +209,7 @@ function shouldUseDemoFallback(params: Pick<IncrementalRunRequest, 'dbnum' | 'fr
 
 export async function loadIncrementalMonitor(
   params: { project?: string } = {},
-  options: { allowDemoFallback?: boolean } = {},
+  options: DemoFallbackOptions = {},
 ): Promise<IncrementalApiResult<IncrementalMonitorSnapshot>> {
   const search = new URLSearchParams();
   if (params.project) search.set('project', params.project);
@@ -206,7 +218,7 @@ export async function loadIncrementalMonitor(
     const data = await fetchBackendJson<IncrementalMonitorSnapshot>(`/api/model/incremental/monitor?${search.toString()}`);
     return { data: normalizeMonitorSnapshot(data, params.project), source: 'backend' };
   } catch (e) {
-    if (options.allowDemoFallback !== false) {
+    if (canUseDemoFallback(options)) {
       const data = await buildDemoMonitorSnapshot(params.project);
       return {
         data,
@@ -220,7 +232,7 @@ export async function loadIncrementalMonitor(
 
 export async function runGlobalIncrementalWatchOnce(
   params: IncrementalGlobalWatchRequest = {},
-  options: { allowDemoFallback?: boolean } = {},
+  options: DemoFallbackOptions = {},
 ): Promise<IncrementalApiResult<IncrementalMonitorSnapshot>> {
   try {
     const data = await fetchBackendJson<IncrementalMonitorSnapshot>('/api/model/incremental/watch-once', {
@@ -229,7 +241,7 @@ export async function runGlobalIncrementalWatchOnce(
     });
     return { data: normalizeMonitorSnapshot(data, params.project), source: 'backend' };
   } catch (e) {
-    if (options.allowDemoFallback !== false) {
+    if (canUseDemoFallback(options)) {
       const data = await buildDemoMonitorSnapshot(params.project);
       return {
         data,
@@ -243,7 +255,7 @@ export async function runGlobalIncrementalWatchOnce(
 
 export async function loadIncrementalReport(
   params: IncrementalRunRequest,
-  options: { allowDemoFallback?: boolean } = {},
+  options: DemoFallbackOptions = {},
 ): Promise<IncrementalApiResult<IncrementalSummary>> {
   const search = new URLSearchParams();
   if (params.project) search.set('project', params.project);
@@ -257,7 +269,7 @@ export async function loadIncrementalReport(
     const data = await fetchBackendJson<IncrementalSummary>(`/api/model/incremental/report?${search.toString()}`);
     return { data, source: 'backend' };
   } catch (e) {
-    if (options.allowDemoFallback !== false && shouldUseDemoFallback(params)) {
+    if (canUseDemoFallback(options) && shouldUseDemoFallback(params)) {
       const data = await fetchStaticJson<IncrementalSummary>(DEMO_SUMMARY_URL);
       return {
         data,
@@ -271,7 +283,7 @@ export async function loadIncrementalReport(
 
 export async function runIncrementalUpdate(
   params: IncrementalRunRequest,
-  options: { allowDemoFallback?: boolean } = {},
+  options: DemoFallbackOptions = {},
 ): Promise<IncrementalApiResult<IncrementalSummary>> {
   try {
     const data = await fetchBackendJson<IncrementalSummary>('/api/model/incremental/run', {
@@ -280,7 +292,7 @@ export async function runIncrementalUpdate(
     });
     return { data, source: 'backend' };
   } catch (e) {
-    if (options.allowDemoFallback !== false && shouldUseDemoFallback(params)) {
+    if (canUseDemoFallback(options) && shouldUseDemoFallback(params)) {
       const data = await fetchStaticJson<IncrementalSummary>(DEMO_SUMMARY_URL);
       return {
         data,
@@ -294,7 +306,7 @@ export async function runIncrementalUpdate(
 
 export async function runIncrementalWatchOnce(
   params: IncrementalRunRequest,
-  options: { allowDemoFallback?: boolean } = {},
+  options: DemoFallbackOptions = {},
 ): Promise<IncrementalApiResult<IncrementalSummary>> {
   try {
     const data = await fetchBackendJson<IncrementalSummary>('/api/model/incremental/watch-once', {
@@ -303,7 +315,7 @@ export async function runIncrementalWatchOnce(
     });
     return { data, source: 'backend' };
   } catch (e) {
-    if (options.allowDemoFallback !== false && shouldUseDemoFallback(params)) {
+    if (canUseDemoFallback(options) && shouldUseDemoFallback(params)) {
       const data = await fetchStaticJson<IncrementalSummary>(DEMO_SUMMARY_URL);
       return {
         data,
@@ -317,7 +329,7 @@ export async function runIncrementalWatchOnce(
 
 export async function loadIncrementalModelChanges(
   params: IncrementalRunRequest,
-  options: { allowDemoFallback?: boolean } = {},
+  options: DemoFallbackOptions = {},
 ): Promise<IncrementalApiResult<IncrementalModelChange[]>> {
   const search = new URLSearchParams();
   search.set('dbnum', String(params.dbnum));
@@ -330,7 +342,7 @@ export async function loadIncrementalModelChanges(
     const data = await fetchBackendJson<IncrementalModelChange[]>(`/api/model/incremental/model-changes?${search.toString()}`);
     return { data, source: 'backend' };
   } catch (e) {
-    if (options.allowDemoFallback !== false && shouldUseDemoFallback(params)) {
+    if (canUseDemoFallback(options) && shouldUseDemoFallback(params)) {
       const data = await fetchStaticJson<IncrementalModelChange[]>(DEMO_MODEL_CHANGES_URL);
       return {
         data,
@@ -345,6 +357,7 @@ export async function loadIncrementalModelChanges(
 export async function loadIncrementalAttrDiff(
   params: IncrementalAttrDiffRequest,
   change?: IncrementalElementChange,
+  options: DemoFallbackOptions = {},
 ): Promise<IncrementalAttrDiffResponse> {
   const search = new URLSearchParams({
     dbnum: String(params.dbnum),
@@ -357,6 +370,7 @@ export async function loadIncrementalAttrDiff(
     const resp = await fetchBackendJson<IncrementalAttrDiffResponse>(`/api/model/incremental/attr-diff?${search.toString()}`);
     return { ...resp, source: 'backend' };
   } catch (e) {
+    if (!canUseDemoFallback(options)) throw e;
     return {
       success: true,
       refno: params.refno,

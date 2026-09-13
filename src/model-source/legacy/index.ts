@@ -4,7 +4,15 @@
  * 这一层存在的意义是让 `usePdmsOwnerTree` / `useDbnoInstancesDtxLoader` 在 P2 / P3 改成通过端口取数时，
  * `model_source=legacy` 下的行为与今天**逐字节相同**——每个方法就是一次转发，不加缓存、不改参数、不吞错误。
  */
-import type { AttributeSource, MeshSource, ModelRecordSource, ModelSource, TreeSource } from '../ports';
+import type {
+  AttributeSource,
+  KeypointSource,
+  MeshSource,
+  ModelRecordSource,
+  ModelSource,
+  PrimitiveKeypointsResult,
+  TreeSource,
+} from '../ports';
 
 import {
   e3dGetAncestors,
@@ -15,8 +23,9 @@ import {
   e3dGetWorldRoot,
   e3dSearch,
 } from '@/api/genModelE3dApi';
-import { pdmsGetTypeInfo, pdmsGetUiAttr } from '@/api/genModelPdmsAttrApi';
+import { pdmsGetPtsetChildrenWithContext, pdmsGetTypeInfo, pdmsGetUiAttr } from '@/api/genModelPdmsAttrApi';
 import { useDbnoInstancesParquetLoader } from '@/composables/useDbnoInstancesParquetLoader';
+import { queryPtsetWithRuntimeFallback } from '@/composables/usePtsetRuntimeLookup';
 import { buildBackendUrl } from '@/utils/apiBase';
 
 const tree: TreeSource = {
@@ -52,6 +61,35 @@ const attributes: AttributeSource = {
   typeInfo: (refno) => pdmsGetTypeInfo(refno),
 };
 
+function errorText(reason: unknown): string {
+  return reason instanceof Error ? reason.message : String(reason);
+}
+
+/**
+ * 与 2026-09-12 之前 `useXeokitMeasurementTools` 内联的取数逐字相同：
+ * P-Point 走 `queryPtsetWithRuntimeFallback`（parquet 优先、`:3100` API 兜底）；成员点集直连
+ * `/api/pdms/ptset/children`；基本体 + PLINE 语义关键点两张 parquet 表 `allSettled` 后平铺，
+ * 失败原因逐条保留给工具拼提示。
+ */
+const keypoints: KeypointSource = {
+  ptset: (dbno, refno, options) =>
+    queryPtsetWithRuntimeFallback(useDbnoInstancesParquetLoader(), dbno, refno, {
+      forceRefresh: options?.forceRefresh,
+    }),
+  memberPtsets: (dbno, ownerRefno) => pdmsGetPtsetChildrenWithContext(ownerRefno, { dbno }),
+  async primitiveKeypoints(dbno, refno, options): Promise<PrimitiveKeypointsResult> {
+    const loader = useDbnoInstancesParquetLoader();
+    const results = await Promise.allSettled([
+      loader.queryPrimitiveKeypointsByRefnoFromParquet(dbno, refno, options),
+      loader.querySemanticSnapPointsByRefnoFromParquet(dbno, refno, options),
+    ]);
+    return {
+      items: results.flatMap((result) => (result.status === 'fulfilled' ? result.value : [])),
+      errors: results.flatMap((result) => (result.status === 'rejected' ? [errorText(result.reason)] : [])),
+    };
+  },
+};
+
 export function createLegacyModelSource(): ModelSource {
-  return { kind: 'legacy', tree, records, meshes, attributes };
+  return { kind: 'legacy', tree, records, meshes, attributes, keypoints };
 }

@@ -1,0 +1,4 @@
+﻿case dE=0 dN=-2000 dU=0
+from=E 10000mm N 10000mm U 15000mm WRT /*
+to=E 10000mm N 8000mm U 15000mm WRT /*
+complete

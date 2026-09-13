@@ -2,6 +2,7 @@ import type { MbdV2ParseResult } from '@/dimension';
 
 import { parseMbdV2PipeData } from '@/dimension';
 import { buildBackendUrl } from '@/utils/apiBase';
+import { parseJsonResponse } from '@/utils/fileValidation';
 
 export type ResolveMbdApiBaseUrlOptions = Readonly<{
   search: string;
@@ -69,15 +70,14 @@ export async function fetchMbdV2PipeData(
   }
   const path = `/api/mbd/v2/pipe/${encodeURIComponent(normalized)}`;
   const mbdApiBase = getMbdApiBaseUrl();
-  const response = await fetch(
-    mbdApiBase ? `${mbdApiBase}${path}` : buildBackendUrl(path),
-    { signal: options.signal },
-  );
+  const url = mbdApiBase ? `${mbdApiBase}${path}` : buildBackendUrl(path);
+  const response = await fetch(url, { signal: options.signal });
   if (!response.ok) {
     return {
       ok: false,
       error: `MBD V2 API responded with status ${response.status}`,
     };
   }
-  return parseMbdV2PipeData(await response.json());
+  const payload = await parseJsonResponse<unknown>(response, url);
+  return parseMbdV2PipeData(payload);
 }

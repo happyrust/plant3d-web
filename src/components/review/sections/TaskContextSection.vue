@@ -33,7 +33,7 @@ const priorityClass = computed(() => {
   switch (props.task?.priority) {
     case 'urgent': return 'bg-danger-subtle text-danger';
     case 'high': return 'bg-warning-subtle text-warning';
-    case 'normal': return 'bg-brand-subtle text-brand';
+    case 'medium': return 'bg-brand-subtle text-brand';
     case 'low': return 'bg-gray-100 text-gray-700';
     default: return 'bg-gray-100 text-gray-700';
   }

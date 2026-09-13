@@ -1,0 +1,13 @@
+﻿wrt==23406/14
+wrt_type=GENSEC
+wrt_ydir_world=S WRT /*
+wrt_zdir_world=U WRT /*
+from=E 5897.18mm S 9694.75mm U 18669.8mm WRT =23406/14
+to=E 6297.46mm S 7774.61mm U 14239.127mm WRT =23406/14
+distance_text=4845.41mm
+offset_1_text=1920.14mm
+offset_2_text=400.28mm
+offset_3_text=4430.67mm
+direction_world=W 11.7755 N 66.1215 D WRT /*
+direction_wrt=N 11.7755 E 66.1215 D WRT =23406/14
+complete

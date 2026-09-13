@@ -1,0 +1,622 @@
+{
+  "schema_version": 1,
+  "captured_at": "2026-09-11",
+  "target": {
+    "product": "AVEVA Everything3D 3.1",
+    "product_version": "3.1.9.0",
+    "project": "AvevaMarineSample",
+    "project_code": "ams",
+    "mdb": "/ALL",
+    "module": "Design",
+    "process_id": 32452,
+    "executable": "E:\\reverse\\e3d\\shadow_e3d31_aps_all\\des.exe",
+    "file_hashes": {
+      "des.exe": "0B94792B6958E6557BC51BA066C31180AE874C42FB218FDB804A5C09CB109AD0",
+      "Core3D.dll": "E43EC507026B6BBD60A3944C8B1A200E4ED16310DEED9EF85D2517F64E7AD790",
+      "gphmeasure.pmlfrm": "06C562C948F23344A04F790BB0282D038CEC5A969A8F08B61D963C5E2CBAC809",
+      "gphdimension.pmlobj": "E6583F8126C54AA003AE975680AF594985FE3B53B624167AAC2F358B4EFE4F4A",
+      "edgpickpacket.pmlobj": "6E03BE00E825BFF02AD5B15EBA1F228A95AC5FEA2BD899D2C9B10AF19BCF2AFF",
+      "edgpicktype.pmlobj": "D5289D57272CD05F3C1484C2910FC9EC67433D119FAB849F7FDE0DA496D88773"
+    },
+    "core3d_file_version": "1,3,13,0",
+    "coord": "ENU",
+    "distance_unit": "MM Bore MM Distance",
+    "world_wrt_name": "/*"
+  },
+  "launch": {
+    "status": "passed",
+    "entry": "E:\\reverse\\e3d\\launch_e3d_sample_repaired.ps1",
+    "safety_flags": [
+      "NoDllDeploy",
+      "NoCorePatch",
+      "NoCleanup",
+      "NoSensitiveBinaryRefresh"
+    ],
+    "scene_macro": "docs/verification/e3d-measurement-runtime-golden/prepare-ams-branch.pmlmac",
+    "scene_refno": "24381/145018",
+    "observation": "The first all-SITE repair was stopped after sustained full-core work. A bounded replacement macro loaded only BRAN 24381/145018; Design became responsive and the model was visible."
+  },
+  "cases": [
+    {
+      "case_id": "G0",
+      "status": "passed",
+      "static_expectation": "Design opens AvevaMarineSample /ALL with a usable 3D view and Measure Distance entry.",
+      "observation": {
+        "prompt": [
+          "Measure distance start",
+          "(Snap) Snap:"
+        ],
+        "result_rows": [],
+        "aid_geometry": "BRAN 24381/145018 rendered in the shaded Design view.",
+        "next_state": "Distance command is waiting for the start point."
+      },
+      "screenshots": [
+        "G0-ready.png",
+        "G0-measure-distance-open.png"
+      ],
+      "verdict": "Runtime identity, model view, Measure Distance form and first pick state were captured.",
+      "blocker": null
+    },
+    {
+      "case_id": "G1-01/G1-02/G1-03/G1-05",
+      "status": "passed",
+      "sample": {
+        "refno": "24381/145018",
+        "from": "E 9769.75mm N 10047.18mm U 18664.8mm WRT /*",
+        "to": "E 7849.61mm N 10447.46mm U 14234.127mm WRT /*"
+      },
+      "static_expectation": "Two standard position picks produce Distance, three signed World offsets, Direction, direct/orthogonal aids, then return to the start-pick state.",
+      "observation": {
+        "prompt": [
+          "Measure distance start",
+          "Measure distance end",
+          "Measure distance start"
+        ],
+        "result_rows": [
+          "Distance 4845.41mm",
+          "Offset E -1920.14mm",
+          "Offset N 400.28mm",
+          "Offset U -4430.67mm",
+          "Direction W 11.7755 N 66.1215 D WRT /*"
+        ],
+        "raw_values_mm": {
+          "distance": 4845.4130910139,
+          "offset_e": -1920.14003836707,
+          "offset_n": 400.279963591009,
+          "offset_u": -4430.67333555253
+        },
+        "independent_distance_mm": 4845.4100287695,
+        "aid_geometry": "A blue direct distance line plus staged E/N/U component lines and labels were visible.",
+        "next_state": "The persistent command returned to Measure distance start."
+      },
+      "screenshots": [
+        "G1-01-start.png",
+        "G1-02-result.png"
+      ],
+      "traces": [
+        "G1-current-measure.trace.txt"
+      ],
+      "verdict": "The captured offsets independently reproduce the displayed distance within formatting precision.",
+      "blocker": null
+    },
+    {
+      "case_id": "G2-01/G2-02 + Keep callback probes",
+      "status": "passed",
+      "static_expectation": "Show linear controls the direct line only; Keep dimensions independently controls aid lifetime.",
+      "observation": {
+        "show_linear_true": "Direct diagonal and E/N/U component aids were visible.",
+        "show_linear_false": "The direct diagonal disappeared while E/N/U component aids and the result table remained.",
+        "keep_true_close": "After the form close callback and EDG removal, the completed aids remained.",
+        "keep_false_close": "Disabling Keep cleared the completed aids."
+      },
+      "instrumentation": "The same PML form fields and callbacks used by the UI were invoked through the running process; screenshots captured the resulting UI state.",
+      "screenshots": [
+        "G1-02-result.png",
+        "G2-02-show-linear-off.png",
+        "G2-05-keep-true-close-callback.png",
+        "G2-04-keep-false-close.png"
+      ],
+      "verdict": "Show linear behavior is confirmed. Keep callback behavior was observed, but the full two-measure/tool-switch/reopen sequence is still pending.",
+      "blocker": null
+    },
+    {
+      "case_id": "G3-01/G3-03/G3-04/G3-05 + partial G3-02",
+      "status": "passed",
+      "samples": {
+        "ordinary_wrt": {
+          "refno": "24381/145018",
+          "name": "/Copy-of-RCS0014-1R43012新",
+          "type": "BRAN",
+          "note": "This sample's orientation produced the same numeric components as World, so the rotated-WRT requirement remains open."
+        },
+        "gensec_wrt": {
+          "refno": "23406/14",
+          "type": "GENSEC",
+          "y_direction_world": "S WRT /*",
+          "z_direction_world": "U WRT /*"
+        }
+      },
+      "static_expectation": "World follows project COORD labels; ordinary non-World WRT uses U/V/W; invalid WRT falls back World in the recorded PML; GENSEC uses projected magnitudes while its displayed Direction is evaluated in World.",
+      "observation": {
+        "world": "COORD=ENU produced E/N/U labels and signed offsets.",
+        "ordinary_wrt": [
+          "The result form switched to U/V/W labels.",
+          "Distance remained 4845.41mm.",
+          "The identity-oriented BRAN sample produced components -1920.14mm, 400.28mm, -4430.67mm."
+        ],
+        "invalid_wrt": [
+          "Input NOT-A-VALID-E3D-REFERENCE did not surface an error.",
+          "The field and resolved frame were silently rewritten to /* (WORL)."
+        ],
+        "gensec_wrt": [
+          "Known World points became E 5897.18mm S 9694.75mm U 18669.8mm and E 6297.46mm S 7774.61mm U 14239.127mm WRT =23406/14.",
+          "Offset rows were non-negative magnitudes 1920.14mm, 400.28mm, 4430.67mm.",
+          "Displayed direction followed World: W 11.7755 N 66.1215 D WRT /*.",
+          "The same direction expressed in the GENSEC frame was N 11.7755 E 66.1215 D WRT =23406/14.",
+          "Offsets greater than 1m were returned, showing the 1m construction line is used as a support line rather than a clamped finite segment in this runtime."
+        ]
+      },
+      "screenshots": [
+        "G3-02-wrt-branch.png",
+        "G3-04-gensec-wrt.png"
+      ],
+      "traces": [
+        "G3-02-wrt-branch.trace.txt",
+        "G3-03-invalid-wrt.trace.txt",
+        "G3-04-gensec-probe.trace.txt",
+        "G3-04-gensec-wrt.trace.txt"
+      ],
+      "verdict": "The recorded runtime confirms label switching, silent invalid-WRT fallback and the split GENSEC offset/direction policies. A rotated ordinary WRT still needs a dedicated sample.",
+      "blocker": null
+    },
+    {
+      "case_id": "G4-03",
+      "status": "passed",
+      "sample": {
+        "mode": "Perpendicular To",
+        "target_kind": "point fallback",
+        "from": "E 9897.433mm N 8954.701mm U 13330.416mm WRT /*",
+        "to": "E 9769.75mm N 10047.176mm U 18664.801mm WRT /*"
+      },
+      "static_expectation": "The perpendicular mode accepts the point-to-point fallback, disables WRT editing and reports Distance, Vertical, Horizontal and Direction.",
+      "observation": {
+        "prompt": [
+          "Measure perpendicular distance start",
+          "Measure perpendicular distance end",
+          "Measure perpendicular distance start"
+        ],
+        "result_rows": [
+          "Distance 5446.6mm",
+          "Vertical 5334.38mm",
+          "Horizontal 1099.91mm",
+          "Direction N 6.66615 W 78.3493 U WRT /*"
+        ],
+        "raw_values_mm": {
+          "distance": 5446.60105926797,
+          "vertical": 5334.38438847279,
+          "horizontal": 1099.91194867441
+        },
+        "aid_geometry": "A right-angle decomposition with Vertical and Horizontal labels was visible.",
+        "next_state": "The persistent command returned to the perpendicular start state."
+      },
+      "screenshots": [
+        "G4-00-perpendicular-open.png",
+        "G4-03-perpendicular-point-result.png"
+      ],
+      "traces": [
+        "G4-current-perpendicular.trace.txt"
+      ],
+      "verdict": "Point fallback is confirmed. Point-to-line and point-to-plane remain unverified.",
+      "blocker": null
+    },
+    {
+      "case_id": "G4-01/G4-02 synthetic kernel probe",
+      "status": "blocked",
+      "static_expectation": "Synthetic EDGPOSITIONDATA values should exercise point-to-line and point-to-plane branches without model edits.",
+      "observation": {
+        "error": "(2,754) Argument 1 to TRIM is unset",
+        "attempts": 2,
+        "cleanup": "All resulting modal error windows were closed and the Design session remained responsive."
+      },
+      "screenshots": [
+        "G4-line-plane-kernel-error.png"
+      ],
+      "verdict": "No point-to-line or point-to-plane behavior is inferred. The runtime picker populates additional EDGPOSITIONDATA fields that the synthetic fixture did not reproduce.",
+      "blocker": "A real LINE/PLANE pick or a complete captured EDGPOSITIONDATA fixture is required."
+    },
+    {
+      "case_id": "G6-01/G6-02",
+      "status": "passed",
+      "sample": {
+        "mode": "three-point angle",
+        "arc_position": "E 9769.75mm N 10047.18mm U 18664.8mm WRT /*",
+        "arc_radius_mm": 4984.34735326502
+      },
+      "static_expectation": "The command asks for root, first point and second point, then reports Angle and two directions.",
+      "observation": {
+        "prompt": [
+          "Measure angle root of angle",
+          "Measure angle first point",
+          "Measure angle second point",
+          "Measure angle root of angle"
+        ],
+        "result_rows": [
+          "Decimal 37.4 Degrees",
+          "DMS row displayed; exact seconds were not transcribed from the small UI text",
+          "Direction1 W 11.7755 N 66.8266 D WRT /*",
+          "Direction2 W 12.9006 S 32.3892 D WRT /*"
+        ],
+        "raw_values": {
+          "start_angle": 0,
+          "end_angle_degrees": 37.4013215953213
+        },
+        "aid_geometry": "Two radial lines, a yellow arc and an Angle 37.4 label were visible.",
+        "next_state": "The persistent command returned to root-of-angle."
+      },
+      "screenshots": [
+        "G6-01-angle-open.png",
+        "G6-02-angle-result.png"
+      ],
+      "traces": [
+        "G6-current-angle.trace.txt"
+      ],
+      "verdict": "Three-point ordering and two-direction result semantics are confirmed for this runtime.",
+      "blocker": null
+    },
+    {
+      "case_id": "G4-01 real pick",
+      "status": "passed",
+      "captured_at": "2026-09-12 02:19-02:25",
+      "sample": {
+        "mode": "Perpendicular To",
+        "provider": "registered GPHLINE design aid picked through EDG (aid 10020); source point picked on a GPHPOSITION aid (aid 10019)",
+        "source": "E 11000mm N 9500mm U 17500mm WRT /*",
+        "line_start": "E 8000mm N 9000mm U 15000mm WRT /*",
+        "line_end": "E 11000mm N 9000mm U 15000mm WRT /*",
+        "setup_macros": [
+          "prepare-real-perpendicular-aids.pmlmac",
+          "show-real-perpendicular-line.pmlmac"
+        ]
+      },
+      "static_expectation": "perpendicularToPoint takes the getLine() branch for a DESIGNAID LINE pick, maps the source onto the line with LINE.near() and reports Distance, Vertical, Horizontal and Direction.",
+      "observation": {
+        "pick_data": {
+          "type": "DESIGNAID",
+          "originalType": "DESIGNAID",
+          "aidType": "LINE",
+          "pPoint": 10020,
+          "position": "Unset"
+        },
+        "result_rows": [
+          "Distance 2549.51mm",
+          "Vertical 2500mm",
+          "Horizontal 500mm",
+          "Direction N 78.6901 U"
+        ],
+        "raw_values_mm": {
+          "distance": 2549.50975679639,
+          "vertical": 2500.00028338889,
+          "horizontal": 499.998583053485
+        },
+        "from_foot": "E 11000mm N 9000mm U 15000mm WRT /*",
+        "to_source": "E 11000mm N 9499.999mm U 17500mm WRT /*",
+        "prompt_after": "Measure perpendicular distance start (Snap) Snap :",
+        "note": "The chosen source projects exactly onto the line end, so this sample alone does not separate finite-segment from infinite-line behaviour; see G4-04 fixtures. The 0.001mm drift in the reported source (N 9499.999) comes from radius2Points rebuilding the ARC orientation from a formatted direction string, not from the pick."
+      },
+      "screenshots": [
+        "G4-real-aids-ready.png",
+        "G4-01-real-line-labeled.png",
+        "G4-01-real-point-to-line.png"
+      ],
+      "traces": [
+        "G4-real-aids.trace.txt",
+        "G4-01-real-point-to-line.trace.txt"
+      ],
+      "verdict": "Real point-to-line pick confirmed against a registered LINE provider.",
+      "blocker": null
+    },
+    {
+      "case_id": "G4-02 real pick",
+      "status": "passed",
+      "captured_at": "2026-09-12 10:39-10:43",
+      "sample": {
+        "mode": "Perpendicular To",
+        "provider": "registered GPHPLANE design aid (aid 10021, unfilled 2200mm x 2200mm patch) picked through EDG on its outline; source point picked on a fresh GPHPOSITION aid (aid 10041)",
+        "source": "E 8000mm N 9000mm U 16500mm WRT /*",
+        "plane_position": "E 8500mm N 10500mm U 17500mm WRT /*",
+        "plane_normal": "N WRT /*",
+        "setup_macros": [
+          "prepare-real-perpendicular-plane.pmlmac"
+        ]
+      },
+      "steps": [
+        "bring_to_front on the E3D main window (user-authorised), prompt read 'Measure perpendicular distance start (Snap) Snap :'",
+        "mouse click on the source sphere -> prompt changed to 'Measure perpendicular distance end (Snap) Snap :' and a start marker was placed",
+        "a first click at the old window layout missed (the window had just maximised) and left the prompt unchanged - EDG ignores empty picks",
+        "mouse click on the plane outline (screen x=1263, located by its blue pixel column) -> result populated and the prompt returned to start",
+        "capture-real-perpendicular-plane.pmlmac read !!edgCntrl.pickData and the form dimension",
+        "restore-after-real-plane.pmlmac removed the extra sphere, hid the plane, re-drew the line aid, reset the form to World standard with the G1 sample and restored the view limits; the window was minimised again"
+      ],
+      "static_expectation": "perpendicularToPoint skips getLine() (unset for a PLANE core object) and takes getPlane(); foot = PLANE.near(source); Vertical 0 for a vertical plane.",
+      "observation": {
+        "pick_data": {
+          "type": "DESIGNAID",
+          "originalType": "DESIGNAID",
+          "aidType": "LINE",
+          "pPoint": 10021,
+          "position": "Unset",
+          "note": "The graphics pick reports the outline primitive (aidType LINE) but getLine()/getPlane() resolve through !!aidNumbers.numbers[10021].coreObject(), which is the PLANE, so the registered object type wins over the picked primitive."
+        },
+        "branch": "getLine() unset, getPlane() set (position E 8500mm N 10500mm U 17500mm, normal N)",
+        "result_rows": [
+          "Distance 1500mm",
+          "Vertical 0mm",
+          "Horizontal 1500mm",
+          "Direction S"
+        ],
+        "raw_values_mm": {
+          "distance": 1500,
+          "vertical": 0,
+          "horizontal": 1500
+        },
+        "from_foot": "E 8000mm N 10500mm U 16500mm WRT /*",
+        "to_source": "E 8000mm N 9000mm U 16500mm WRT /*",
+        "wrt": "/* (gadget disabled)",
+        "prompt_after": "Measure perpendicular distance start (Snap) Snap :",
+        "aid_geometry": "A single direct aid line from the sphere to the plane with the pick marker on the outline; no Vertical/Horizontal decomposition (Vertical 0).",
+        "fixture_agreement": "Identical to the DESIGNAID fixture case 'G4-02 plane, foot inside the drawn patch' (1500 / 0 / 1500 / S)."
+      },
+      "screenshots": [
+        "G4-02-real-plane-ready.png",
+        "G4-02-real-plane-after-source.png",
+        "G4-02-real-point-to-plane.png"
+      ],
+      "traces": [
+        "G4-02-real-plane-prepare.trace.txt",
+        "G4-02-real-point-to-plane.trace.txt",
+        "restore-after-real-plane.trace.txt"
+      ],
+      "verdict": "Real point-to-plane pick confirmed against a registered PLANE provider and matches the fixture path exactly.",
+      "blocker": null
+    },
+    {
+      "case_id": "G4-02 / G4-01 interior / G4-04 (DESIGNAID fixtures)",
+      "status": "passed",
+      "captured_at": "2026-09-12 10:17",
+      "instrumentation": "EDGPOSITIONDATA fixtures mirror the captured real pick shape (type=DESIGNAID, originalType=DESIGNAID, pPoint=aid number, pLine='', target position unset) and are fed to the same EDG action (!!appMathLib.gmfArc.perpendicularToPoint) and form callback (!!gphMeasure.setPerpendicularMeasure) that mouse picks use. Case 1 reproduces the real G4-01 pick bit-for-bit (2549.50975679639 / 2500.00028338889 / 499.998583053485), which validates the fixture path. The earlier synthetic probe failed with (2,754) TRIM because type=GRAPHICS with an unset pLine takes the pline branch of getLine(); DESIGNAID fixtures avoid it.",
+      "target_aids": {
+        "line": "aid 10020 GPHLINE E 8000mm N 9000mm U 15000mm -> E 11000mm N 9000mm U 15000mm",
+        "plane": "aid 10021 GPHPLANE through E 8500mm N 10500mm U 17500mm, normal N, drawn patch 2200mm x 2200mm"
+      },
+      "cases": [
+        {
+          "name": "G4-01 line, foot inside the segment",
+          "source": "E 9500mm N 9800mm U 17000mm",
+          "foot": "E 9500mm N 9000mm U 15000mm",
+          "rows": "Distance 2154.07mm / Vertical 2000mm / Horizontal 800mm / Direction N 68.1986 U"
+        },
+        {
+          "name": "G4-04 line, foot beyond the segment end",
+          "source": "E 12000mm N 9800mm U 17000mm",
+          "foot": "E 12000mm N 9000mm U 15000mm",
+          "rows": "Distance 2154.07mm / Vertical 2000mm / Horizontal 800mm / Direction N 68.1986 U",
+          "finding": "LINE.near() projects onto the infinite line; the foot is not clamped to the finite aid segment."
+        },
+        {
+          "name": "G4-02 plane, foot inside the drawn patch",
+          "source": "E 8000mm N 9000mm U 16500mm",
+          "foot": "E 8000mm N 10500mm U 16500mm",
+          "rows": "Distance 1500mm / Vertical 0mm / Horizontal 1500mm / Direction S",
+          "branch": "getLine() unset, getPlane() set"
+        },
+        {
+          "name": "G4-02 plane, second sample",
+          "source": "E 8700mm N 12300mm U 18000mm",
+          "foot": "E 8700mm N 10500mm U 18000mm",
+          "rows": "Distance 1800mm / Vertical 0mm / Horizontal 1800mm / Direction N"
+        },
+        {
+          "name": "G4-04 plane, foot outside the drawn patch",
+          "source": "E 12000mm N 9500mm U 17500mm",
+          "foot": "E 12000mm N 10500mm U 17500mm",
+          "rows": "Distance 1000mm / Vertical 0mm / Horizontal 1000mm / Direction S",
+          "finding": "PLANE.near() uses the infinite plane; the drawn 2200mm patch does not bound the result."
+        },
+        {
+          "name": "G4-04 zero distance (source on plane / source on line)",
+          "result": "perpendicularToPoint returns an unset ARC; the form path setPerpendicularMeasure(unset) raises alert.warning 'Cannot draw dimension line. Perpendicular distance is 0' and resets the dimension (form code read, not invoked to avoid a modal)."
+        }
+      ],
+      "observation": {
+        "direction_frame": "Direction is evaluated from foot to source WRT the dimension frame, which is World in perpendicular mode (see G4-06).",
+        "vertical_rule": "Vertical = |up(foot) - up(source)| in World; Horizontal = sqrt(distance^2 - vertical^2). A vertical target plane therefore always yields Vertical 0.",
+        "precision": "Endpoints carry ~1e-3mm drift because radius2Points serialises the ARC orientation through a formatted direction string; goldens must be compared with a tolerance, not bit-exact.",
+        "aid_geometry": "G4-02-visual-point-to-plane.png (PrintWindow capture of the occluded main window): the GPHPLANE patch, the source sphere and a single direct aid line labelled 1500mm. No Vertical/Horizontal decomposition is drawn because draw(REAL, ARC) skips it when the datum is within 1mm of either end (Vertical 0). The form (G4-02-visual-measure-form.png) shows Perpendicular to checked, wrt /* disabled, Distance 1500mm.",
+        "real_pick": "Superseded by the 'G4-02 real pick' case (10:39-10:43): the mouse pick on the plane aid reproduced the fixture result exactly (1500 / 0 / 1500 / S)."
+      },
+      "traces": [
+        "G4-02-point-to-plane.trace.txt",
+        "visual-perpendicular-plane.trace.txt"
+      ],
+      "macros": [
+        "capture-perpendicular-fixtures.pmlmac",
+        "visual-perpendicular-plane.pmlmac",
+        "restore-after-visuals.pmlmac"
+      ],
+      "screenshots": [
+        "G4-02-visual-point-to-plane.png",
+        "G4-02-visual-measure-form.png"
+      ],
+      "screenshot_method": "printwindow-capture.ps1 (user32 PrintWindow with PW_RENDERFULLCONTENT on the occluded HWND; no focus change)",
+      "verdict": "Point-to-plane, interior point-to-line and out-of-range behaviour are confirmed through the runtime kernel and form callbacks; both LINE and PLANE targets are treated as infinite.",
+      "blocker": null
+    },
+    {
+      "case_id": "G4-06 WRT state in perpendicular mode",
+      "status": "passed",
+      "captured_at": "2026-09-12 10:18",
+      "static_expectation": "setPerpendicular() disables the wrt gadget and editPerpendicular() rebuilds the dimension via setup(), so the perpendicular dimension should be World regardless of the gadget text.",
+      "observation": [
+        "Standard mode with wrt '/Copy-of-RCS151MM': gadget active, dimension wrt '/Copy-of-RCS151MM', offsets -400.28 / -1920.14 / -4430.67mm.",
+        "Toggle Perpendicular on: gadget still shows '/Copy-of-RCS151MM' but is disabled; dimension wrt silently becomes '/*'.",
+        "Perpendicular result Direction is computed WRT World ('S'); the same direction in the EQUI frame would be 'E WRT /Copy-of-RCS151MM'.",
+        "Toggle Perpendicular off: the EDG packet re-shows the form, initialise() -> setUpForm() -> setWrt() re-resolves the gadget text, so the previous WRT is restored automatically."
+      ],
+      "traces": [
+        "G4-06-wrt-state.trace.txt"
+      ],
+      "macros": [
+        "capture-perpendicular-wrt-state.pmlmac"
+      ],
+      "verdict": "Perpendicular results are always World-framed even when the disabled gadget displays another WRT; leaving the mode restores that WRT.",
+      "blocker": null
+    },
+    {
+      "case_id": "G3-02 rotated ordinary WRT",
+      "status": "passed",
+      "captured_at": "2026-09-12 10:12",
+      "instrumentation": "Standard mode; the same World from/to as G1 were injected through GPHDIMENSION.setDimension and the form's setUpForm()/setWrt() path with the wrt gadget text set to the element name. Candidates were found by scanning SITE /1PTU-INST23 (951 EQUI) for non-identity ORI (find-rotated-wrt-candidates.pmlmac).",
+      "samples": [
+        {
+          "refno": "24381/101439",
+          "name": "/Copy-of-RCS151MM",
+          "type": "EQUI",
+          "ori_world": "Y is E and Z is U",
+          "axes_world": "X=S, Y=E, Z=U",
+          "from_in_wrt": "W 391.13mm N 16466.67mm U 12531.8mm WRT /Copy-of-RCS151MM",
+          "to_in_wrt": "W 791.41mm N 14546.53mm U 8101.127mm WRT /Copy-of-RCS151MM",
+          "rows": "Distance 4845.41mm / Offset U -400.28mm / Offset V -1920.14mm / Offset W -4430.67mm / Direction S 11.7755 W 66.1215 D WRT /Copy-of-RCS151MM",
+          "independent_projection": "-400.28 / -1920.14 / -4430.673 (max abs diff 0mm)"
+        },
+        {
+          "refno": "24381/101423",
+          "name": "/Copy-of-RCS616MD",
+          "type": "EQUI",
+          "ori_world": "Y is U and Z is S 21 E",
+          "axes_world": "X=E 21 N, Y=U, Z=S 21 E",
+          "from_in_wrt": "E 12815.586mm N 16234.8mm U 11669.905mm WRT /Copy-of-RCS616MD",
+          "to_in_wrt": "E 11166.428mm N 11804.127mm U 10608.095mm WRT /Copy-of-RCS616MD",
+          "rows": "Distance 4845.41mm / Offset U -1649.16mm / Offset V -4430.67mm / Offset W -1061.81mm / Direction S 20.416 W 12.6584 D WRT /Copy-of-RCS616MD",
+          "independent_projection": "-1649.15759729034 / -4430.673 / -1061.81020775821 (max abs diff 2.3e-13mm)"
+        }
+      ],
+      "observation": {
+        "rule": "Ordinary (non-GENSEC) WRT offsets are the World delta projected onto the element's World-expressed X/Y/Z axes (offset = R^T * delta), i.e. POSITION.wrt(item) followed by to-from in that frame; signs are preserved.",
+        "labels": "The grid switches to U/V/W labels and Direction is expressed WRT the element; Distance is invariant (4845.41mm).",
+        "world_direction_reference": "W 11.7755 N 66.1215 D WRT /*"
+      },
+      "traces": [
+        "G3-02-rotated-candidates.trace.txt",
+        "G3-02-rotated-wrt.trace.txt"
+      ],
+      "macros": [
+        "find-rotated-wrt-candidates.pmlmac",
+        "capture-rotated-wrt.pmlmac"
+      ],
+      "screenshots": [],
+      "verdict": "Rotated ordinary WRT confirmed for a 90-degree and a compound rotation; the projection contract matches to floating-point precision.",
+      "blocker": null
+    },
+    {
+      "case_id": "G2-03 0.1mm suppression + G1-04 zero/negative-zero + detail gate",
+      "status": "passed",
+      "captured_at": "2026-09-12 10:13",
+      "instrumentation": "World standard mode, Show linear on. Exact positions were injected through !!gphMeasure.setMeasure(LINE), the same callback the EDG distance action calls. The draw gates were evaluated on the resulting runtime offsets with the exact expressions used by GPHDIMENSION.draw(): offset.between(-0.1mm, 0.1mm) and int(sum of offsets) ne int(length). From = E 10000mm N 10000mm U 15000mm, dN = +2000, dU = +1000 unless stated.",
+      "cases": [
+        {"dE": 0.09, "offset_db": 0.0900000000014551, "text": "0.09mm", "component_suppressed": true},
+        {"dE": 0.1, "offset_db": 0.100000000000364, "text": "0.1mm", "component_suppressed": false, "note": "10000.1 - 10000 lands just above 0.1 in binary, so the nominally inclusive boundary draws the component."},
+        {"dE": 0.11, "offset_db": 0.110000000000582, "text": "0.11mm", "component_suppressed": false},
+        {"dE": -0.09, "offset_db": -0.0900000000014551, "text": "-0.09mm", "component_suppressed": true},
+        {"dE": -0.1, "offset_db": -0.100000000000364, "text": "-0.1mm", "component_suppressed": false},
+        {"dE": -0.11, "offset_db": -0.110000000000582, "text": "-0.11mm", "component_suppressed": false},
+        {"dE": 0.1000001, "offset_db": 0.100000099999306, "text": "0.1mm", "component_suppressed": false},
+        {"dE": 0, "offset_db": 0, "text": "0mm", "component_suppressed": true},
+        {"dE": 0.004, "offset_db": 0.00400000000081491, "text": "0mm", "component_suppressed": true},
+        {"dE": -0.004, "offset_db": -0.00400000000081491, "text": "0mm", "component_suppressed": true, "note": "no negative zero"},
+        {"dE": -0.00001, "offset_db": -9.99999974737875e-06, "text": "0mm", "component_suppressed": true, "note": "no negative zero"},
+        {"dE": 0, "dN": 2000, "dU": 0, "rows": "Distance 2000mm / Offset E 0mm / Offset N 2000mm / Offset U 0mm / Direction N", "int_sum": 2000, "int_length": 2000, "detail_block_drawn": false, "note": "single positive axis component: with Show linear on, only the direct line is drawn; the component breakdown is skipped"},
+        {"dE": 0, "dN": -2000, "dU": 0, "rows": "Distance 2000mm / Offset N -2000mm / Direction S", "int_sum": -2000, "int_length": 2000, "detail_block_drawn": true, "note": "single negative axis component: breakdown is drawn (asymmetric with the positive case)"},
+        {"dE": 3000, "dN": 4000, "dU": 0, "rows": "Distance 5000mm / Offset E 3000mm / Offset N 4000mm / Offset U 0mm / Direction N 36.8699 E", "int_sum": 7000, "int_length": 5000, "detail_block_drawn": true},
+        {"dE": 1000, "dN": 1000, "dU": 1000, "rows": "Distance 1732.05mm / Direction E 45 N 35.2644 U", "detail_block_drawn": true}
+      ],
+      "observation": {
+        "tolerance_rule": "A component is suppressed when offset.between(-0.1mm, 0.1mm) is TRUE (inclusive in exact arithmetic). Because the offset is a floating-point difference of World coordinates, inputs that are nominally exactly 0.1mm apart may land on either side; 0.09mm is reliably suppressed and 0.11mm reliably drawn. Tests must assert strictly inside/outside the band.",
+        "formatting": "The distance format prints 2 decimals and trims trailing zeros (0.09mm, 0.1mm, 2000mm, 2236.07mm). Values that round to zero print as 0mm with no sign, including -0.004mm and -0.00001mm.",
+        "detail_gate": "With Show linear on and detail on, the orthogonal breakdown is only drawn when int(offsetE + offsetN + offsetU) ne int(length). A single positive axis-aligned component therefore shows only the direct line, while the negative counterpart and any multi-axis case show the breakdown. With Show linear off (orthogonalOnly) the breakdown is always drawn.",
+        "labels": "World labels remain E/N/U (COORD ENU)."
+      },
+      "web_decision": "2026-09-12: replicate the observed gate as-is. src/measurement/aids/worldDistanceAidPlan.ts shouldDrawWorldAxisBreakdown() = !showDirect || trunc(sumMm) !== trunc(lengthMm) (1e-6 mm snap before truncation); buildWorldDistanceAidPlan applies it after showOrthogonal and useXeokitMeasurementTools passes the real Show linear flag. Covered by worldDistanceAidPlan.test.ts 'E3D 3.1 runtime golden G2-03' cases.",
+      "traces": [
+        "G2-03-zero-tolerance.trace.txt",
+        "visual-boundary-case.trace.txt"
+      ],
+      "macros": [
+        "capture-zero-tolerance-boundary.pmlmac",
+        "visual-boundary-case.pmlmac"
+      ],
+      "screenshots": [
+        "G2-03-visual-dE0.09.png",
+        "G2-03-visual-dE0.11.png",
+        "G2-03-visual-axis-positive.png",
+        "G2-03-visual-axis-negative.png"
+      ],
+      "screenshot_method": "printwindow-capture.ps1 on the occluded main window after framing the sample with view.limits; the view limits were restored afterwards (restore-after-visuals.pmlmac)",
+      "visual_check": {
+        "dE_0.09": "labels 2236.07mm, N2000mm, U1000mm only; no E label (component suppressed).",
+        "dE_0.11": "an additional E0.11mm label appears at the from point (component drawn).",
+        "axis_positive_N+2000": "only the direct 2000mm label; no N component label (detail gate false).",
+        "axis_negative_N-2000": "the direct 2000mm label and the N-2000mm component label are drawn on top of each other at the shared midpoint (detail gate true).",
+        "note": "The Angle 90 arc visible in these frames is the aid left by the last G6-03 case; the sphere and G4 REAL LINE TARGET tags are the G4 design aids."
+      },
+      "verdict": "0.1mm suppression band, zero/negative-zero formatting and the int(sum) detail gate are captured from the runtime.",
+      "blocker": null
+    },
+    {
+      "case_id": "G6-03 0 / 180 / near-collinear / minor-reflex",
+      "status": "passed",
+      "captured_at": "2026-09-12 10:15",
+      "instrumentation": "Exact positions were fed to the Measure Angle EDG action (!!appMathLib.gmfArc.radius3PointsNoError(root, first, second)) and, when an ARC came back, to the form callback !!gphAngleMeasure.setMeasure(ARC). Root = E 10000mm N 10000mm U 15000mm, first = E 12000mm N 10000mm U 15000mm.",
+      "cases": [
+        {"name": "0deg same ray", "second": "E 13000mm N 10000mm U 15000mm", "arc": "unset", "kernel_error": "Unable to derive arc from given positions.", "plane_error": "(2,886) Plane lines derived from points are parallel", "position_angle": "0degree"},
+        {"name": "0deg second equals first", "second": "E 12000mm N 10000mm U 15000mm", "arc": "unset", "plane_error": "(2,886) Plane lines derived from points are parallel", "position_angle": "0degree"},
+        {"name": "180deg opposite ray", "second": "E 8000mm N 10000mm U 15000mm", "arc": "unset", "plane_error": "(2,886) Plane lines derived from points are parallel", "position_angle": "180degree"},
+        {"name": "second equals root", "second": "E 10000mm N 10000mm U 15000mm", "arc": "unset", "position_angle_error": "(2,892) An invalid point co-incident to the original point has been supplied"},
+        {"name": "0.1deg near collinear", "second": "E 10999.99848mm N 10001.74533mm U 15000mm", "arc": "set", "angle": 0.10000009331775, "angle_fmt": "0.1", "orientation": "Y is N and Z is U", "direction1": "E", "direction2": "E 0.1 N", "form": "ok"},
+        {"name": "179.9deg near collinear", "second": "E 9000.00152mm N 10001.74533mm U 15000mm", "arc": "set", "angle": 179.899999906682, "angle_fmt": "179.9", "orientation": "Y is N and Z is U", "direction1": "E", "direction2": "W 0.1 N", "form": "ok"},
+        {"name": "90deg second north", "second": "E 10000mm N 12000mm U 15000mm", "arc": "set", "angle": 90, "orientation": "Y is N and Z is U", "direction1": "E", "direction2": "N"},
+        {"name": "90deg second south (reflex candidate)", "second": "E 10000mm N 8000mm U 15000mm", "arc": "set", "angle": 90, "orientation": "Y is S and Z is D", "direction1": "E", "direction2": "S", "note": "plane normal flips so the reported angle stays minor; no 270deg result"},
+        {"name": "135deg", "second": "E 9292.89322mm N 10707.10678mm U 15000mm", "arc": "set", "angle": 135, "direction1": "E", "direction2": "W 45 N"},
+        {"name": "90deg second up", "second": "E 10000mm N 10000mm U 17000mm", "arc": "set", "angle": 90, "orientation": "Y is U and Z is S", "direction1": "E", "direction2": "U"}
+      ],
+      "observation": {
+        "collinear_rule": "Exactly collinear picks (0deg or 180deg, or a coincident second point) cannot build the arc plane; radius3PointsNoError returns an unset ARC and the form path setMeasure(unset) raises alert.error 'An angular dimension could not be constructed from the data selected' and keeps the previous dimension (form code read, not invoked). The GPHANGLEDIMENSION.draw() 'Angle 0' text branch is therefore unreachable from the three-point pick flow.",
+        "range_rule": "Reported angles are always the minor angle in [0,180]; the arc plane normal is chosen from the pick order (right-hand from first to second), so a clockwise second point flips the orientation instead of producing a reflex angle.",
+        "precision": "Near-collinear inputs are accepted; 0.1deg and 179.9deg format as 0.1 and 179.9 with the default angle format.",
+        "wrt": "World"
+      },
+      "traces": [
+        "G6-03-angle-degenerate.trace.txt"
+      ],
+      "macros": [
+        "capture-angle-degenerate.pmlmac"
+      ],
+      "screenshots": [],
+      "verdict": "0deg and 180deg are rejected by the kernel before the form; minor-angle-only semantics and near-collinear acceptance are confirmed.",
+      "blocker": null
+    }
+  ],
+  "not_run": [
+    "G2-04 full two-measure, close and tool-switch sequence",
+    "G2-05 reopen sequence after Keep=true",
+    "G5",
+    "G6-04 two-graphic angle entry",
+    "G7"
+  ],
+  "limitations": [
+    "The runtime uses a repaired shadow installation and injected startup patches; compatibility claims are scoped to the recorded hashes.",
+    "Mouse picks were visually targeted. Exact picked feature IDs were not exported by the product UI.",
+    "PML instrumentation read current form objects and invoked their public callbacks; it did not edit model database elements.",
+    "The 2026-09-12 10:xx round ran while the E3D main window was minimised/occluded behind the user's active desktop session: results were captured through the same EDG actions and form callbacks the UI uses, alert-raising paths were not invoked, and the 3D-view screenshots for G2-03 and G4-02 were taken with PrintWindow on the occluded window (printwindow-capture.ps1) instead of a foreground desktop capture.",
+    "Shortest, Snap ambiguity (G7), the Keep lifecycle sequences (G2-04/05) and the two-graphic angle entry remain gated."
+  ]
+}

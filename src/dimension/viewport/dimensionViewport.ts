@@ -20,6 +20,7 @@ import type { DimensionTheme } from '../kernel/theme';
 import type {
   ExplicitLayoutInput,
   InteractionState,
+  LayoutObstacleSource,
   LayoutPrimitive,
   LayoutResult,
   NormalizedDimensionInput,
@@ -92,6 +93,8 @@ type DimensionViewportBaseInput = Readonly<{
   requestFrame: (callback: FrameRequestCallback) => number;
   cancelFrame: (id: number) => void;
   onFrame?: (durationMs: number, breakdown: DimensionFrameBreakdown) => void;
+  /** Model component boxes billboard tags keep clear of; omitted = none known. */
+  obstacles?: LayoutObstacleSource;
 }>;
 
 export type DimensionViewportInput = DimensionViewportBaseInput & Readonly<{
@@ -445,7 +448,7 @@ export class DimensionViewport {
       font: this.input.font,
       theme: this.theme,
       format: this.format,
-    }, interactions);
+    }, interactions, { obstacles: this.input.obstacles });
     const layoutCompletedAt = performance.now();
     this.layouts = batch.layouts;
     this.hitIndex = batch.hitIndex;

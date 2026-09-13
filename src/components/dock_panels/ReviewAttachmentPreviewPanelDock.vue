@@ -138,18 +138,26 @@ function describeAttachment(): string {
           </button>
         </div>
       </div>
-      <!-- PDF / 图片内容与 URL 校验并行加载 -->
-      <div v-else-if="activeReviewAttachmentPreview?.kind === 'pdf'"
+      <div v-else-if="activeReviewAttachmentPreview && reviewAttachmentPreviewStatus === 'loading'"
+        class="flex h-full flex-col items-center justify-center gap-2 text-sm text-slate-300"
+        data-testid="review-attachment-preview-validating">
+        <Loader2 class="h-5 w-5 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+        验证文件格式后再打开预览…
+      </div>
+      <div v-else-if="activeReviewAttachmentPreview?.kind === 'pdf' && reviewAttachmentPreviewStatus === 'ready'"
         class="flex h-full min-h-0 flex-col">
-        <iframe data-testid="review-attachment-pdf"
-          :src="activeReviewAttachmentPreview.url"
-          :title="activeReviewAttachmentPreview.attachment.name"
-          class="min-h-0 flex-1 border-0 bg-white" />
+        <object data-testid="review-attachment-pdf"
+          :data="activeReviewAttachmentPreview.url"
+          type="application/pdf"
+          :aria-label="activeReviewAttachmentPreview.attachment.name"
+          class="min-h-0 flex-1 border-0 bg-white">
+          <p class="p-4 text-sm text-slate-700">浏览器无法内嵌此 PDF，请下载后查看。</p>
+        </object>
         <p class="shrink-0 border-t border-slate-800 px-3 py-1.5 text-[11px] text-slate-400">
           若浏览器无法内嵌此 PDF，请在新窗口打开或下载后查看。
         </p>
       </div>
-      <div v-else-if="activeReviewAttachmentPreview?.kind === 'image'"
+      <div v-else-if="activeReviewAttachmentPreview?.kind === 'image' && reviewAttachmentPreviewStatus === 'ready'"
         class="flex h-full items-center justify-center overflow-auto bg-slate-900 p-4">
         <img data-testid="review-attachment-image"
           :src="activeReviewAttachmentPreview.url"

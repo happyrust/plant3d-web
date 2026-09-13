@@ -1,0 +1,63 @@
+-- Prepares the scene for a real mouse pick of the GPHPLANE aid (G4-02):
+-- a fresh GPHPOSITION source sphere at the fixture position, the plane aid shown, the line aid
+-- hidden to avoid accidental picks, the view framed, and the Measure form in perpendicular mode.
+!traceFile = object FILE('D:/work/plant-code/old/plant3d-web/docs/verification/e3d-measurement-runtime-golden/G4-02-real-plane-prepare.trace.txt')
+!trace = ARRAY()
+
+!!gphAngleMeasure.clearAids()
+handle any
+endhandle
+!!aidNumbers.hide(!!goldenPerpLineAid)
+handle any
+endhandle
+
+!hasSource2 = defined(!!goldenPerpSourceAid2)
+if (!hasSource2) then
+  !!aidNumbers.remove(!!goldenPerpSourceAid2)
+  handle any
+  endhandle
+endif
+!source2Position = object POSITION('E 8000mm N 9000mm U 16500mm WRT /*')
+!source2 = object GPHPOSITION(!source2Position)
+!source2.diameter(350mm)
+!!goldenPerpSourceAid2 = !!aidNumbers.add(!source2)
+!trace.append('source2_aid=' & !!goldenPerpSourceAid2.string())
+!trace.append('source2_position=' & !source2Position.string())
+
+!!aidNumbers.draw(!!goldenPerpPlaneAid)
+handle any
+  !trace.append('plane_draw_error=' & !!error.text)
+endhandle
+!planeCore = !!aidNumbers.numbers[!!goldenPerpPlaneAid].coreObject()
+!trace.append('plane_aid=' & !!goldenPerpPlaneAid.string())
+!trace.append('plane_position=' & !planeCore.position.string())
+!trace.append('plane_normal=' & !planeCore.direction().string())
+
+!view = !!fmsys.currentDocument().view
+!saved = defined(!!goldenSavedLimits)
+if (!saved.not()) then
+  !!goldenSavedLimits = !view.limits
+endif
+!limits = ARRAY()
+!limits[1] = 7000
+!limits[2] = 12500
+!limits[3] = 8000
+!limits[4] = 13000
+!limits[5] = 14000
+!limits[6] = 19000
+!view.limits = !limits
+handle any
+  !trace.append('limits_error=' & !!error.text)
+endhandle
+
+!!gphMeasure.wrt.val = 'World'
+!!gphMeasure.perpendicularTo.val = TRUE
+!!gphMeasure.setPerpendicular()
+handle any
+  !trace.append('setPerpendicular_error=' & !!error.text)
+endhandle
+!!gphViews.refreshAllViews()
+!trace.append('perpendicular=' & !!gphMeasure.perpendicularTo.val.string() & ' dimension_wrt=' & !!gphMeasure.dimension.wrt.name)
+!trace.append('complete')
+!traceFile.writeFile('OVERWRITE', !trace)
+return

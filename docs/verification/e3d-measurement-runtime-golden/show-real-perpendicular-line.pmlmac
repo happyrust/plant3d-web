@@ -1,0 +1,12 @@
+!!aidNumbers.hide(!!goldenPerpPlaneAid)
+!!aidNumbers.draw(!!goldenPerpSourceAid)
+
+!lineGraphic = !!aidNumbers.get(!!goldenPerpLineAid)
+!lineGraphic.detail = TRUE
+!lineGraphic.detailType = 'BOTH'
+!lineGraphic.tag = TRUE
+!lineGraphic.description = 'G4 REAL LINE TARGET'
+!!aidNumbers.replace(!!goldenPerpLineAid, !lineGraphic)
+
+!!gphViews.refreshAllViews()
+return

@@ -5,7 +5,9 @@
  * - `records`：`modelRecordSource.ts`（P3：ensure → records → `InstanceEntry`，按根收、按构件缓存）；
  * - `meshes`：`/api/v1/meshes/{hash}.mesh`（rkyv 原样直连，`parseMeshGeometry` 解；
  *   2026-09-09 拍板替代 P0-1 的服务端转 GLB，`.glb` 口径留一个发布周期）；
- * - `attributes`：`attributeSource.ts`（P4：`uiAttr` → `element/attributes`，`typeInfo` → 树节点两跳）。
+ * - `attributes`：`attributeSource.ts`（P4：`uiAttr` → `element/attributes`，`typeInfo` → 树节点两跳）；
+ * - `keypoints`：`keypointSource.ts`（2026-09-12：测量 P-Point → `element/ptset`，成员点集 `include_members`；
+ *   基本体关键点服务端无接口，回空带原因）。
  */
 
 import { createGenModelV1AttributeSource } from './attributeSource';
@@ -16,6 +18,7 @@ import {
   type CollectDbnumOptions,
   type CollectDbnumResult,
 } from './collectDbnum';
+import { createGenModelV1KeypointSource } from './keypointSource';
 import { resetBatchRecordsSupport } from './modelRecords';
 import { createGenModelV1ModelRecordSource, type GenModelV1ModelRecordSource } from './modelRecordSource';
 import { createGenModelV1TreeSource } from './treeSource';
@@ -124,6 +127,7 @@ export function createGenModelV1ModelSource(): GenModelV1ModelSource {
     meshes,
     records,
     attributes: createGenModelV1AttributeSource({ tree }),
+    keypoints: createGenModelV1KeypointSource(),
     collectDbnum,
     activate,
     dispose,
@@ -136,3 +140,4 @@ export * from './modelRecords';
 export * from './modelRecordSource';
 export * from './instanceMapping';
 export * from './attributeSource';
+export * from './keypointSource';

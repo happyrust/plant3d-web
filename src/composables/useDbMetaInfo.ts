@@ -2,6 +2,8 @@ import { getGenModelV1Dbnums } from '@/composables/useGenModelV1Dbnums';
 import { buildFilesOutputUrl, getOutputProjectFromUrl } from '@/lib/filesOutput';
 import { isGenModelV1Source } from '@/model-source/kind';
 import { getGenModelV1BaseUrl } from '@/utils/apiBase';
+import { parseJsonResponse } from '@/utils/fileValidation';
+import { isDevOnlyFallbackEnabled } from '@/utils/runtimeFallback';
 import { getJson, setJson } from '@/utils/storage/indexedDbCache';
 
 type DbMetaFileEntry = {
@@ -16,6 +18,12 @@ type DbMetaInfoJson = {
 const IDB_STORE = 'meta_info' as const;
 const IDB_KEY_PREFIX = 'db_meta_info' as const;
 const DEFAULT_PROJECT_KEY = '__default__' as const;
+// 内置 AMS 1112 ref0 映射只是增量演示的离线兜底，与增量接口的 DB1112 demo 同一开关：
+// 仅开发环境可用，生产构建下 db_meta_info.json 拉不到就直接报错，不得伪装成真实数据。
+const ALLOW_DEMO_DB_META_FALLBACK = isDevOnlyFallbackEnabled({
+  isDev: import.meta.env.DEV,
+  configured: import.meta.env.VITE_INCREMENTAL_ALLOW_DEMO_FALLBACK,
+});
 
 let ref0ToDbnum: Map<number, number> | null = null;
 let loadPromise: Promise<void> | null = null;
@@ -191,19 +199,21 @@ export async function ensureDbMetaInfoLoaded(): Promise<void> {
       return;
     }
 
-    // 3) 强制刷新；AMS 1112 增量演示允许用内置 ref0 映射兜底，避免无后端文件时 viewer 直接初始化失败。
+    // 3) 强制刷新；仅开发环境允许 AMS 1112 增量演示用内置 ref0 映射兜底，生产直接报错。
     const resp = await fetch(metaUrl);
     assertDbMetaGeneration(generation);
     if (!resp.ok) {
       if (ref0ToDbnum && ref0ToDbnum.size > 0) return;
-      const demo = buildDemoDbMetaInfo(projectKey);
+      const demo = ALLOW_DEMO_DB_META_FALLBACK ? buildDemoDbMetaInfo(projectKey) : null;
       if (demo) {
+        console.warn(`[db_meta] 加载失败: HTTP ${resp.status} ${resp.statusText} (${metaUrl})，开发环境已改用内置 AMS 1112 演示 ref0 映射`);
         applyDbMetaInfoJson(demo);
         return;
       }
       throw new Error(`[db_meta] 加载失败: HTTP ${resp.status} ${resp.statusText} (${metaUrl})`);
     }
-    const fresh = (await resp.json()) as unknown;
+    // 先验证 JSON 再解析：非 JSON / 截断的 meta 会带上位置立即报错，不会带着无效映射继续初始化 viewer。
+    const fresh = await parseJsonResponse<unknown>(resp, metaUrl);
     assertDbMetaGeneration(generation);
     applyDbMetaInfoJson(fresh);
     try {

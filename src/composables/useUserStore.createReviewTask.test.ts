@@ -65,6 +65,7 @@ function createSessionStorageMock() {
 
 describe('useUserStore.createReviewTask', () => {
   beforeEach(() => {
+    vi.unstubAllEnvs();
     reviewTaskCreateMock.mockReset();
     reviewTaskUpdateMock.mockReset();
     reviewTaskSubmitToNextMock.mockReset();
@@ -91,13 +92,36 @@ describe('useUserStore.createReviewTask', () => {
         modelName: 'model',
         checkerId: 'proofreader_001',
         approverId: 'reviewer_001',
-        reviewerId: 'reviewer_001',
         priority: 'medium',
         components: [{ id: 'c1', name: 'Comp', refNo: '100_1' }],
       })
     ).rejects.toThrow('backend failed');
 
     expect(store.reviewTasks.value).toHaveLength(0);
+  });
+
+  it('显式禁用开发回退后，网络异常也必须抛错', async () => {
+    vi.stubEnv('VITE_REVIEW_ALLOW_MOCK_FALLBACK', 'false');
+    reviewTaskCreateMock.mockRejectedValue(new TypeError('Failed to fetch'));
+
+    const { useUserStore } = await import('./useUserStore');
+    const store = useUserStore();
+    store.setEmbedUser('SJ', 'sj', { verified: true });
+
+    await expect(
+      store.createReviewTask({
+        title: 'task-no-fallback',
+        description: 'desc',
+        modelName: 'model',
+        checkerId: 'JH',
+        approverId: 'SH',
+        priority: 'medium',
+        components: [{ id: 'c1', name: 'Comp', refNo: '100_1' }],
+      })
+    ).rejects.toThrow('Failed to fetch');
+
+    expect(store.reviewTasks.value).toHaveLength(0);
+    expect(store.error.value).toBe('Failed to fetch');
   });
 
   // 本地回退（buildLocalTask）从本地 mock 名册 `users.value` 解 checker / approver，名册 id 现在是 SJ / JH / SH / PZ
@@ -115,7 +139,6 @@ describe('useUserStore.createReviewTask', () => {
       modelName: 'model',
       checkerId: 'JH',
       approverId: 'SH',
-      reviewerId: 'SH',
       priority: 'medium',
       components: [{ id: 'c1', name: 'Comp', refNo: '100_1' }],
     });
@@ -148,7 +171,6 @@ describe('useUserStore.createReviewTask', () => {
       modelName: 'model',
       checkerId: 'JH',
       approverId: 'SH',
-      reviewerId: 'SH',
       priority: 'medium',
       components: [{ id: 'c1', name: 'Comp', refNo: '100_1' }],
     });
@@ -178,7 +200,6 @@ describe('useUserStore.createReviewTask', () => {
       modelName: 'model',
       checkerId: 'JH',
       approverId: 'SH',
-      reviewerId: 'SH',
       priority: 'medium',
       components: [{ id: 'c1', name: 'Comp', refNo: '100_1' }],
     });

@@ -1,25 +1,35 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { DEFAULT_DIMENSION_FORMAT } from '../format';
+import { rectPolygonOverlapArea, segmentLengthInsideRect } from '../geometry/obstacleGeometry';
 import { createTestFont, createTestProjector } from '../testUtils';
 import { SOLVESPACE_DIMENSION_THEME } from '../theme';
 
 import { layoutExplicit } from './explicit';
 import {
+  collectTagObstacles,
+  dimensionStrokes,
   isTagBillboardPlan,
   layoutTagBillboard,
   placeTagBillboards,
   planTagBillboard,
+  projectObstacleOutline,
+  tagObstacleRegion,
 } from './tagBillboard';
 
+import type { ScreenPolygon } from '../geometry/obstacleGeometry';
 import type {
   ExplicitLayoutInput,
   ExplicitTagInput,
+  LayoutObstacleSource,
+  LayoutResult,
   SceneFill,
   SceneGlyphRun,
   SceneLine,
   ScenePath,
   ScreenPath,
+  ScreenRect,
+  Vec2,
 } from '../types';
 import type { LayoutContext } from './context';
 
@@ -330,5 +340,183 @@ describe('placeTagBillboards', () => {
 
     // Nothing to place: the batch comes back untouched.
     expect(placeTagBillboards([obstacle], [])).toEqual([obstacle]);
+  });
+
+  const placeholder = (id: string): LayoutResult => ({
+    dimensionId: id,
+    scenePrimitives: [],
+    primitives: [],
+    hitRegions: [],
+    labelBounds: { x: 0, y: 0, width: 0, height: 0 },
+    labelPinned: true,
+    derived: { formattedLabel: 'A' },
+  });
+  const rectPolygon = (rect: ScreenRect): ScreenPolygon => [
+    [rect.x, rect.y],
+    [rect.x + rect.width, rect.y],
+    [rect.x + rect.width, rect.y + rect.height],
+    [rect.x, rect.y + rect.height],
+  ];
+
+  it('keeps a tag clear of component boxes and dimension strokes', () => {
+    const plan = planTagBillboard(input, spec, context());
+    if (!isTagBillboardPlan(plan)) throw new Error('expected plan');
+    const preferred = plan.candidates[0]!;
+
+    // A component box (projected outline) exactly under the preferred body.
+    const box = rectPolygon(preferred);
+    const [overBox] = placeTagBillboards(
+      [placeholder('tag')],
+      [{ index: 0, id: 'tag', plan }],
+      { polygons: [box] },
+    );
+    expect(overBox!.derived.tag!.candidate).toBeGreaterThan(0);
+    expect(rectPolygonOverlapArea(overBox!.labelBounds, box)).toBe(0);
+
+    // A dimension stroke running through the preferred body.
+    const centreY = preferred.y + preferred.height / 2;
+    const stroke = {
+      from: [preferred.x - 10, centreY] as Vec2,
+      to: [preferred.x + preferred.width + 10, centreY] as Vec2,
+    };
+    const [overStroke] = placeTagBillboards(
+      [placeholder('tag')],
+      [{ index: 0, id: 'tag', plan }],
+      { segments: [stroke] },
+    );
+    expect(overStroke!.derived.tag!.candidate).toBeGreaterThan(0);
+    expect(segmentLengthInsideRect(stroke, overStroke!.labelBounds)).toBe(0);
+
+    // A stroke that only runs along the body's edge is not an intrusion.
+    const alongEdge = {
+      from: [preferred.x - 10, preferred.y] as Vec2,
+      to: [preferred.x + preferred.width + 10, preferred.y] as Vec2,
+    };
+    const [touched] = placeTagBillboards(
+      [placeholder('tag')],
+      [{ index: 0, id: 'tag', plan }],
+      { segments: [alongEdge] },
+    );
+    expect(touched!.derived.tag!.candidate).toBe(0);
+  });
+
+  it('takes the least intruding candidate when none is clear, values weighing more than boxes', () => {
+    const plan = planTagBillboard(input, spec, context());
+    if (!isTagBillboardPlan(plan)) throw new Error('expected plan');
+    // A box under the whole viewport: every candidate covers the same box area …
+    const everywhere = rectPolygon({ x: -1000, y: -1000, width: 3000, height: 3000 });
+    const [tied] = placeTagBillboards(
+      [placeholder('tag')],
+      [{ index: 0, id: 'tag', plan }],
+      { polygons: [everywhere] },
+    );
+    // … so the preferred position stands.
+    expect(tied!.derived.tag!.candidate).toBe(0);
+
+    // A dimension value over half of the preferred body tips the balance to
+    // the next candidate, which is no worse on the box.
+    const preferred = plan.candidates[0]!;
+    const value: LayoutResult = {
+      ...placeholder('dim'),
+      primitives: [{ kind: 'line', from: [0, 0], to: [1, 1], part: 'dimension', styleRole: 'external' }],
+      labelBounds: { ...preferred, width: preferred.width / 2 },
+    };
+    const [, moved] = placeTagBillboards(
+      [value, placeholder('tag')],
+      [{ index: 1, id: 'tag', plan }],
+      { polygons: [everywhere] },
+    );
+    expect(moved!.derived.tag!.candidate).toBe(1);
+  });
+});
+
+describe('tag obstacles', () => {
+  it('asks for component boxes in the region the candidates unproject to, around the anchor depth', () => {
+    const projector = createTestProjector();
+    const plan = planTagBillboard(input, spec, context());
+    if (!isTagBillboardPlan(plan)) throw new Error('expected plan');
+    const region = tagObstacleRegion([plan], projector)!;
+    expect(region).not.toBeNull();
+    const { envelope } = plan;
+    // Test projector: x = 200 + X·100, y = 200 − Y·100, depth = Z, forward −Z.
+    expect(region.min[0]).toBeCloseTo((envelope.x - 200) / 100, 9);
+    expect(region.max[0]).toBeCloseTo((envelope.x + envelope.width - 200) / 100, 9);
+    expect(region.min[1]).toBeCloseTo((200 - envelope.y - envelope.height) / 100, 9);
+    expect(region.max[1]).toBeCloseTo((200 - envelope.y) / 100, 9);
+    const reach = Math.hypot(envelope.width, envelope.height) / 100;
+    expect(region.min[2]).toBeCloseTo(-reach, 9);
+    expect(region.max[2]).toBeCloseTo(reach, 9);
+    // The anchor itself is inside.
+    expect(region.min[0]).toBeLessThan(0);
+    expect(region.max[0]).toBeGreaterThan(0);
+
+    expect(tagObstacleRegion([], projector)).toBeNull();
+  });
+
+  it('projects a box to the convex hull of its corners and drops boxes it cannot place on screen', () => {
+    const projector = createTestProjector();
+    const corners = (min: readonly number[], max: readonly number[]) =>
+      [0, 1].flatMap(i => [0, 1].flatMap(j => [0, 1].map(k =>
+        [i ? max[0]! : min[0]!, j ? max[1]! : min[1]!, k ? max[2]! : min[2]!] as const)));
+    const hull = projectObstacleOutline({ corners: corners([-0.5, -0.5, -0.5], [0.5, 0.5, 0.5]) }, projector)!;
+    expect(hull).toHaveLength(4);
+    expect(rectPolygonOverlapArea({ x: 150, y: 150, width: 100, height: 100 }, hull)).toBe(10000);
+    // Beyond the far plane (depth > 1) / behind the camera: unusable.
+    expect(projectObstacleOutline({ corners: corners([0, 0, 0], [1, 1, 2]) }, projector)).toBeNull();
+    // No area on screen.
+    expect(projectObstacleOutline({ corners: [[0, 0, 0], [1, 1, 0], [2, 2, 0]] }, projector)).toBeNull();
+    expect(projectObstacleOutline({ corners: [] }, projector)).toBeNull();
+  });
+
+  it('collects the strokes of the other layouts and the projected boxes the host reports', () => {
+    const strokes: LayoutResult = {
+      dimensionId: 'dim',
+      scenePrimitives: [],
+      primitives: [
+        { kind: 'line', from: [0, 0], to: [10, 0], part: 'dimension', styleRole: 'external' },
+        { kind: 'path', points: [[0, 0], [10, 0], [10, 10]], closed: true, part: 'arrow', styleRole: 'external' },
+        { kind: 'path', points: [[0, 0], [10, 0], [10, 10]], closed: false, part: 'arc', styleRole: 'external' },
+        { kind: 'marker', at: [5, 5], shape: 'circle', radiusPx: 3, part: 'marker', styleRole: 'external' },
+        {
+          kind: 'glyph-run', text: '1', origin: [0, 0], capHeightPx: 10,
+          bounds: { x: 0, y: 0, width: 5, height: 10 }, styleRole: 'external',
+        },
+      ],
+      hitRegions: [],
+      labelBounds: { x: 0, y: 0, width: 5, height: 10 },
+      labelPinned: true,
+      derived: { formattedLabel: '1' },
+    };
+    // Line 1 + closed triangle 3 + open path 2; glyphs and markers are not strokes.
+    expect(dimensionStrokes([strokes])).toHaveLength(6);
+
+    const projector = createTestProjector();
+    const plan = planTagBillboard(input, spec, context());
+    if (!isTagBillboardPlan(plan)) throw new Error('expected plan');
+    const tagSlot: LayoutResult = {
+      ...strokes,
+      dimensionId: 'tag',
+      primitives: [{ kind: 'line', from: [0, 0], to: [1, 1], part: 'leader', styleRole: 'external' }],
+    };
+    const source: LayoutObstacleSource = {
+      query: vi.fn(() => [
+        { corners: [[-0.5, -0.5, -0.5], [0.5, 0.5, 0.5], [0.5, -0.5, 0], [-0.5, 0.5, 0]] as const },
+        { corners: [[0, 0, 5], [1, 1, 5], [1, 0, 5]] as const }, // beyond the far plane
+      ]),
+    };
+    const planned = [{ index: 1, id: 'tag', plan }];
+    const obstacles = collectTagObstacles([strokes, tagSlot], planned, projector, source);
+    // The tag's own slot contributes no strokes.
+    expect(obstacles.segments).toHaveLength(6);
+    expect(obstacles.polygons).toHaveLength(1);
+    expect(source.query).toHaveBeenCalledTimes(1);
+    expect(source.query).toHaveBeenCalledWith(tagObstacleRegion([plan], projector));
+
+    // Without a host source: strokes only. Nothing planned: nothing to collect.
+    expect(collectTagObstacles([strokes, tagSlot], planned, projector)).toEqual({
+      polygons: [],
+      segments: dimensionStrokes([strokes]),
+    });
+    expect(collectTagObstacles([strokes], [], projector, source)).toEqual({});
   });
 });

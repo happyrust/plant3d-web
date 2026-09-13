@@ -9,6 +9,11 @@ import { reviewSyncExport, reviewSyncImport } from '@/api/reviewApi';
 import { useReviewStore } from '@/composables/useReviewStore';
 import { useUserStore } from '@/composables/useUserStore';
 import { emitToast } from '@/ribbon/toastBus';
+import {
+  describeValue,
+  failFileValidation,
+  parseJsonText,
+} from '@/utils/fileValidation';
 
 const reviewStore = useReviewStore();
 const userStore = useUserStore();
@@ -22,10 +27,43 @@ const currentTask = computed(() => reviewStore.currentTask.value);
 const currentTaskFormId = computed(() => currentTask.value?.formId?.trim() || null);
 const currentTaskTitle = computed(() => currentTask.value?.title?.trim() || '当前任务');
 
-function getImportedTasks(payload: unknown): ReviewTask[] {
-  if (!payload || typeof payload !== 'object') return [];
+function getImportedTasks(payload: unknown, source: string): ReviewTask[] {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    failFileValidation({
+      source,
+      format: 'json',
+      reason: '校审同步包根节点无效',
+      expected: '对象',
+      actual: describeValue(payload),
+    });
+  }
   const tasks = (payload as { tasks?: unknown }).tasks;
-  return Array.isArray(tasks) ? (tasks as ReviewTask[]) : [];
+  if (!Array.isArray(tasks) || tasks.length === 0) {
+    failFileValidation({
+      source,
+      format: 'json',
+      reason: '缺少可导入的 tasks 数组',
+      expected: '至少包含 1 项的 tasks 数组',
+      actual: describeValue(tasks),
+    });
+  }
+  const invalidTaskIndex = tasks.findIndex(task => (
+    !task
+    || typeof task !== 'object'
+    || Array.isArray(task)
+    || typeof (task as { id?: unknown }).id !== 'string'
+    || !(task as { id: string }).id.trim()
+  ));
+  if (invalidTaskIndex >= 0) {
+    failFileValidation({
+      source,
+      format: 'json',
+      reason: `tasks[${invalidTaskIndex}] 缺少有效任务 ID`,
+      expected: '包含非空 id 的任务对象',
+      actual: describeValue(tasks[invalidTaskIndex]),
+    });
+  }
+  return tasks as ReviewTask[];
 }
 
 async function refreshWorkbenchContextAfterImport(importedTasks: ReviewTask[]) {
@@ -83,12 +121,31 @@ async function importFromFile(event: Event) {
   syncError.value = null;
   syncImporting.value = true;
   try {
-    const text = await file.text();
-    const data = JSON.parse(text) as unknown;
-    const tasks = getImportedTasks(data);
-    if (tasks.length === 0) {
-      throw new Error('导入文件格式不正确：缺少 tasks 数组');
+    if (!/\.json$/i.test(file.name)) {
+      failFileValidation({
+        source: file.name,
+        format: 'json',
+        reason: '文件扩展名无效',
+        expected: '.json',
+        actual: file.name.includes('.') ? `.${file.name.split('.').pop()}` : '无扩展名',
+      });
     }
+    if (file.size === 0 || file.size > 20 * 1024 * 1024) {
+      failFileValidation({
+        source: file.name,
+        format: 'json',
+        reason: file.size === 0 ? '文件为空' : '文件过大',
+        expected: '1 字节至 20 MB',
+        actual: `${file.size} 字节`,
+        byteOffset: file.size,
+      });
+    }
+    const text = await file.text();
+    const data = parseJsonText<unknown>(text, {
+      source: file.name,
+      expectedRoot: 'object',
+    });
+    const tasks = getImportedTasks(data, file.name);
 
     const response = await reviewSyncImport({
       tasks,
@@ -133,7 +190,7 @@ async function importFromFile(event: Event) {
         :class="{ 'opacity-50 pointer-events-none': syncImporting }">
         <FileText class="h-3.5 w-3.5" />
         导入(后端)
-        <input type="file" accept="application/json" class="hidden" @change="importFromFile" />
+        <input type="file" accept=".json,application/json" class="hidden" @change="importFromFile" />
       </label>
     </div>
     <div class="mt-2 text-xs text-muted-foreground">

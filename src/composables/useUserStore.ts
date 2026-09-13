@@ -35,6 +35,7 @@ import {
   UserStatus,
   toBackendRole,
 } from '@/types/auth';
+import { isDevOnlyFallbackEnabled } from '@/utils/runtimeFallback';
 
 type UserPersistedState = {
   version: 3;
@@ -51,6 +52,10 @@ const DEFAULT_CURRENT_USER_ID = 'SJ';
 
 // 配置：是否使用后端 API
 const USE_BACKEND = ref(true);
+const ALLOW_REVIEW_MOCK_FALLBACK = isDevOnlyFallbackEnabled({
+  isDev: import.meta.env.DEV,
+  configured: import.meta.env.VITE_REVIEW_ALLOW_MOCK_FALLBACK,
+});
 
 // 四段角色：编制(sj) -> 校核(jd) -> 审核(sh) -> 批准(pz)
 const WORKFLOW_NODE_ORDER: WorkflowNode[] = ['sj', 'jd', 'sh', 'pz'];
@@ -534,11 +539,15 @@ function savePersisted(state: Partial<UserPersistedState> & { version: 3 }): voi
 
 // 全局状态
 const persistedState = loadPersisted();
-USE_BACKEND.value = persistedState.useBackend;
+// A stale localStorage preference must never put a production build into the
+// local/mock workflow. Explicit local mode is a development-only facility.
+USE_BACKEND.value = ALLOW_REVIEW_MOCK_FALLBACK ? persistedState.useBackend : true;
 const currentUserId = ref<string | null>(persistedState.currentUserId);
-const reviewTasks = ref<ReviewTask[]>(persistedState.reviewTasks);
-const users = ref<User[]>(mockUsers);
-const reviewerUsers = ref<User[]>(mockReviewerUsers);
+const reviewTasks = ref<ReviewTask[]>(
+  ALLOW_REVIEW_MOCK_FALLBACK ? persistedState.reviewTasks : [],
+);
+const users = ref<User[]>(ALLOW_REVIEW_MOCK_FALLBACK ? mockUsers : []);
+const reviewerUsers = ref<User[]>(ALLOW_REVIEW_MOCK_FALLBACK ? mockReviewerUsers : []);
 const loading = ref(false);
 const error = ref<string | null>(null);
 const backendCurrentUserResolved = ref(false);
@@ -676,8 +685,15 @@ async function loadUsers(): Promise<void> {
       throw new Error(response.error_message || '加载用户列表失败');
     }
   } catch (e) {
-    console.warn('[useUserStore] Failed to load users, using mock data:', e);
-    users.value = mockUsers;
+    const message = e instanceof Error ? e.message : '加载用户列表失败';
+    error.value = message;
+    if (ALLOW_REVIEW_MOCK_FALLBACK) {
+      console.warn('[useUserStore] Failed to load users, using development mock data:', e);
+      users.value = mockUsers;
+    } else {
+      console.error('[useUserStore] Failed to load users; production mock fallback is disabled:', e);
+      users.value = [];
+    }
   } finally {
     loading.value = false;
   }
@@ -695,11 +711,18 @@ async function loadReviewers(): Promise<void> {
     if (response.success && response.users) {
       reviewerUsers.value = response.users.map((user) => normalizeBackendUser(user as Partial<User> & Record<string, unknown>));
     } else {
-      reviewerUsers.value = mockReviewerUsers;
+      throw new Error(response.error_message || '加载审核人员列表失败');
     }
   } catch (e) {
-    console.warn('[useUserStore] Failed to load reviewers, using mock data:', e);
-    reviewerUsers.value = mockReviewerUsers;
+    const message = e instanceof Error ? e.message : '加载审核人员列表失败';
+    error.value = message;
+    if (ALLOW_REVIEW_MOCK_FALLBACK) {
+      console.warn('[useUserStore] Failed to load reviewers, using development mock data:', e);
+      reviewerUsers.value = mockReviewerUsers;
+    } else {
+      console.error('[useUserStore] Failed to load reviewers; production mock fallback is disabled:', e);
+      reviewerUsers.value = [];
+    }
   } finally {
     loading.value = false;
   }
@@ -861,6 +884,9 @@ async function loadReviewTasks(): Promise<void> {
       }
     } catch (e) {
       error.value = e instanceof Error ? e.message : '加载任务列表失败';
+      if (!ALLOW_REVIEW_MOCK_FALLBACK) {
+        reviewTasks.value = [];
+      }
     } finally {
       loading.value = false;
       refreshPromise = null;
@@ -905,7 +931,7 @@ async function createReviewTask(data: {
   modelName: string;
   checkerId: string;
   approverId: string;
-  priority: ReviewTask['priority'];
+  priority?: ReviewTask['priority'];
   components: ReviewComponent[];
   dueDate?: number;
   formId?: string;
@@ -913,6 +939,7 @@ async function createReviewTask(data: {
 }): Promise<ReviewTask> {
   const user = currentUser.value;
   if (!user) throw new Error('No user logged in');
+  const priority = data.priority ?? 'medium';
 
   const buildLocalTask = (): ReviewTask => {
     const checker = users.value.find((u) => u.id === data.checkerId);
@@ -927,7 +954,7 @@ async function createReviewTask(data: {
       description: data.description,
       modelName: data.modelName,
       status: 'draft',
-      priority: data.priority,
+      priority,
       requesterId: user.id,
       requesterName: user.name,
       checkerId: data.checkerId,
@@ -958,7 +985,7 @@ async function createReviewTask(data: {
         approverId: data.approverId,
         reviewerId: data.checkerId,
         formId: data.formId,
-        priority: data.priority,
+        priority,
         components: data.components,
         dueDate: data.dueDate,
         attachments: data.attachments,
@@ -978,7 +1005,7 @@ async function createReviewTask(data: {
     } catch (e) {
       const message = e instanceof Error ? e.message : '创建编校审单失败';
 
-      if (!isNetworkFailure(e)) {
+      if (!isNetworkFailure(e) || !ALLOW_REVIEW_MOCK_FALLBACK) {
         error.value = message;
         throw e instanceof Error ? e : new Error(message);
       }
@@ -1092,7 +1119,7 @@ async function updateTaskAttachments(taskId: string, attachments: ReviewAttachme
     } catch (e) {
       const message = e instanceof Error ? e.message : '更新任务附件失败';
 
-      if (!isNetworkFailure(e)) {
+      if (!isNetworkFailure(e) || !ALLOW_REVIEW_MOCK_FALLBACK) {
         error.value = message;
         throw e instanceof Error ? e : new Error(message);
       }
@@ -1155,7 +1182,7 @@ async function submitTaskToNextNode(taskId: string, comment?: string): Promise<v
     } catch (e) {
       const message = e instanceof Error ? e.message : '提交流转失败';
 
-      if (!isNetworkFailure(e)) {
+      if (!isNetworkFailure(e) || !ALLOW_REVIEW_MOCK_FALLBACK) {
         error.value = message;
         throw e instanceof Error ? e : new Error(message);
       }
@@ -1509,15 +1536,21 @@ async function initialize(): Promise<void> {
 // ============ 配置 ============
 
 function setUseBackend(use: boolean) {
-  USE_BACKEND.value = use;
+  const nextUseBackend = use || !ALLOW_REVIEW_MOCK_FALLBACK;
+  if (!use && !ALLOW_REVIEW_MOCK_FALLBACK) {
+    error.value = '生产环境不允许切换到本地校审模拟模式';
+    console.error('[useUserStore] Local review mock mode is disabled in production');
+  }
+
+  USE_BACKEND.value = nextUseBackend;
   savePersisted({
     version: 3,
     currentUserId: currentUserId.value,
-    useBackend: use,
-    reviewTasks: use ? [] : reviewTasks.value,
+    useBackend: nextUseBackend,
+    reviewTasks: nextUseBackend ? [] : reviewTasks.value,
   });
 
-  if (use) {
+  if (nextUseBackend) {
     initialize();
   } else {
     backendCurrentUserResolved.value = false;

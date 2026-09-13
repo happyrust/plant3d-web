@@ -1,0 +1,126 @@
+!traceFile = object FILE('D:/work/plant-code/old/plant3d-web/docs/verification/e3d-measurement-runtime-golden/G6-03-angle-degenerate.trace.txt')
+!trace = ARRAY()
+
+-- Three-point angle: the EDG action for Measure Angle is
+-- !!appMathLib.gmfArc.radius3PointsNoError(root, first, second) and the form callback is
+-- !!gphAngleMeasure.setMeasure(ARC). Exact positions are injected through the same two calls.
+!formDefined = defined(!!gphAngleMeasure)
+!trace.append('angle_form_defined=' & !formDefined.string())
+if (!formDefined.not()) then
+  pml load form !!gphAngleMeasure
+  handle any
+    !trace.append('angle_form_load_error=' & !!error.text)
+  endhandle
+endif
+!formDefined = defined(!!gphAngleMeasure)
+if (!formDefined) then
+  !!gphAngleMeasure.setup()
+  handle any
+    !trace.append('angle_form_setup_error=' & !!error.text)
+  endhandle
+  !!gphAngleMeasure.wrt.val = 'World'
+endif
+
+!root = object POSITION('E 10000mm N 10000mm U 15000mm WRT /*')
+!first = object POSITION('E 12000mm N 10000mm U 15000mm WRT /*')
+!trace.append('root=' & !root.string())
+!trace.append('first=' & !first.string())
+
+!names = ARRAY()
+!seconds = ARRAY()
+!names.append('0deg_same_ray')
+!seconds.append(object POSITION('E 13000mm N 10000mm U 15000mm WRT /*'))
+!names.append('0deg_same_point_as_first')
+!seconds.append(object POSITION('E 12000mm N 10000mm U 15000mm WRT /*'))
+!names.append('180deg_opposite_ray')
+!seconds.append(object POSITION('E 8000mm N 10000mm U 15000mm WRT /*'))
+!names.append('0.1deg_near_collinear')
+!seconds.append(object POSITION('E 10999.99848mm N 10001.74533mm U 15000mm WRT /*'))
+!names.append('179.9deg_near_collinear')
+!seconds.append(object POSITION('E 9000.00152mm N 10001.74533mm U 15000mm WRT /*'))
+!names.append('90deg_second_north')
+!seconds.append(object POSITION('E 10000mm N 12000mm U 15000mm WRT /*'))
+!names.append('90deg_second_south_reflex_candidate')
+!seconds.append(object POSITION('E 10000mm N 8000mm U 15000mm WRT /*'))
+!names.append('135deg')
+!seconds.append(object POSITION('E 9292.89322mm N 10707.10678mm U 15000mm WRT /*'))
+!names.append('second_equals_root')
+!seconds.append(object POSITION('E 10000mm N 10000mm U 15000mm WRT /*'))
+!names.append('root_first_second_collinear_up')
+!seconds.append(object POSITION('E 10000mm N 10000mm U 17000mm WRT /*'))
+
+!index = 0
+do !name values !names
+  !index = !index + 1
+  !second = !seconds[!index]
+  !trace.append('---- case ' & !name)
+  !trace.append('second=' & !second.string())
+
+  !arc = !!appMathLib.gmfArc.radius3PointsNoError(!root, !first, !second)
+  handle any
+    !trace.append('radius3PointsNoError_error=' & !!error.text)
+    skip
+  endhandle
+  !trace.append('arc_set=' & !arc.set().string())
+
+  if (!arc.set()) then
+    !angle = !arc.angle()
+    !trace.append('arc_angle=' & !angle.string())
+    !trace.append('arc_angle_fmt=' & !angle.string(!!angleFmt))
+    !trace.append('arc_start_angle=' & !arc.startAngle.string())
+    !trace.append('arc_end_angle=' & !arc.endAngle.string())
+    !trace.append('arc_radius=' & !arc.radius.string())
+    !trace.append('arc_position=' & !arc.position.string())
+    !trace.append('arc_orientation=' & !arc.orientation.string())
+    !trace.append('arc_sense=' & !arc.sense.string())
+    !dir1 = !arc.angleDirection(!arc.startAngle).wrt(world)
+    handle any
+      !trace.append('direction1_error=' & !!error.text)
+    elsehandle none
+      !trace.append('direction1=' & !dir1.string())
+    endhandle
+    !dir2 = !arc.angleDirection(!arc.endAngle).wrt(world)
+    handle any
+      !trace.append('direction2_error=' & !!error.text)
+    elsehandle none
+      !trace.append('direction2=' & !dir2.string())
+    endhandle
+    !angleZero = (!angle eq 0)
+    !trace.append('draw_would_emit_only_Angle0_text=' & !angleZero.string())
+    if (!formDefined) then
+      !!gphAngleMeasure.setMeasure(!arc)
+      handle any
+        !trace.append('form_setMeasure_error=' & !!error.text)
+      elsehandle none
+        !trace.append('form_setMeasure=ok')
+        !formArc = !!gphAngleMeasure.dimension.arc
+        !trace.append('form_arc_angle=' & !formArc.angle().string())
+        !trace.append('form_arc_radius=' & !formArc.radius.string())
+      endhandle
+    endif
+  else
+    !probe = !!appMathLib.gmfArc.radius3Points(!root, !first, !second)
+    handle any
+      !trace.append('radius3Points_error=' & !!error.text)
+    elsehandle none
+      !trace.append('radius3Points_unexpectedly_returned set=' & !probe.set().string())
+    endhandle
+    !plane = !root.plane(!first, !second)
+    handle any
+      !trace.append('position_plane_error=' & !!error.text)
+    elsehandle none
+      !trace.append('position_plane=' & !plane.direction().string())
+    endhandle
+    !ang = !root.angle(!first, !second)
+    handle any
+      !trace.append('position_angle_error=' & !!error.text)
+    elsehandle none
+      !trace.append('position_angle=' & !ang.string())
+    endhandle
+    !trace.append('form_path=setMeasure(unset ARC) would raise alert.error and keep the previous dimension (form code, not invoked)')
+  endif
+enddo
+
+!trace.append('complete')
+!traceFile.writeFile('OVERWRITE', !trace)
+return

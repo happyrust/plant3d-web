@@ -1,7 +1,14 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { nextTick, ref, shallowRef } from 'vue';
 
 import * as THREE from 'three';
+
+import { worldDistanceAidChildId } from '@/measurement/aids/worldDistanceAidPlan';
+
+// 本文件的 P-Point / 基本体关键点用例 mock 的是 parquet loader 与 `:3100` ptset API，
+// 那是 `legacy` 数据源的取数（2026-09-12 起测量关键点经 `getModelSource().keypoints` 端口）；
+// 缺省源是 gen-model-v1，这里钉回 legacy 让这些 mock 继续生效（同 useDbnoInstancesDtxLoader.test.ts）。
+beforeAll(() => window.history.replaceState({}, '', '?model_source=legacy'));
 
 describe('useXeokitMeasurementTools', () => {
   beforeEach(() => {
@@ -77,7 +84,9 @@ describe('useXeokitMeasurementTools', () => {
     tools.syncFromStore();
     await nextTick();
 
-    expect(dimensionSystem.replaceExternalSource).toHaveBeenLastCalledWith('xeokit-measurement', [
+    const records = dimensionSystem.replaceExternalSource.mock.calls.at(-1)?.[1];
+    expect(records).toHaveLength(4);
+    expect(records).toEqual(expect.arrayContaining([
       expect.objectContaining({
         id: 'xeokit-measurement:dist-1',
         source: 'xeokit-measurement',
@@ -87,7 +96,43 @@ describe('useXeokitMeasurementTools', () => {
           b: [11, 2, 3],
         }),
       }),
-    ]);
+      expect.objectContaining({
+        id: worldDistanceAidChildId('xeokit-measurement:dist-1', 'x'),
+        category: 'annotation',
+        layout: expect.objectContaining({
+          lines: [
+            expect.objectContaining({
+              from: [10, 0, 0],
+              to: [11, 0, 0],
+            }),
+          ],
+        }),
+      }),
+      expect.objectContaining({
+        id: worldDistanceAidChildId('xeokit-measurement:dist-1', 'y'),
+        category: 'annotation',
+        layout: expect.objectContaining({
+          lines: [
+            expect.objectContaining({
+              from: [11, 0, 0],
+              to: [11, 2, 0],
+            }),
+          ],
+        }),
+      }),
+      expect.objectContaining({
+        id: worldDistanceAidChildId('xeokit-measurement:dist-1', 'z'),
+        category: 'annotation',
+        layout: expect.objectContaining({
+          lines: [
+            expect.objectContaining({
+              from: [11, 2, 0],
+              to: [11, 2, 3],
+            }),
+          ],
+        }),
+      }),
+    ]));
     expect(annotationGroup.children).toHaveLength(0);
     expect(annotationSystem.registerExternalAnnotation).not.toHaveBeenCalled();
 
@@ -656,6 +701,122 @@ describe('useXeokitMeasurementTools', () => {
       source: 'ptset',
       refno: '24381_145018',
     });
+    vi.useRealTimers();
+  });
+
+  it('Perpendicular to：第二点吸到带方向的 P-Point 时按其轴线取垂足（golden G4-01 LINE provider）', async () => {
+    vi.useFakeTimers();
+    vi.doMock('@/composables/useDbMetaInfo', () => ({
+      getDbnumByRefno: vi.fn(() => 250160),
+    }));
+    vi.doMock('@/composables/useDbnoInstancesDtxLoader', () => ({
+      getDtxRefnoTransform: vi.fn(() => null),
+    }));
+    vi.doMock('@/composables/useDbnoInstancesParquetLoader', () => ({
+      useDbnoInstancesParquetLoader: () => ({
+        queryPtsetByRefnoFromParquet: vi.fn(async (_dbno: number, refno: string) => ({
+          success: true,
+          refno,
+          ptset: [{
+            number: 1,
+            pt: [0, 0, 0],
+            // P-point 轴线沿 +Z：E3D PPOINT 的 getLine()。
+            dir: [0, 0, 1],
+            dir_flag: 1,
+            ref_dir: null,
+            pbore: 100,
+            pwidth: 0,
+            pheight: 0,
+            pconnect: '',
+          }],
+          world_transform: null,
+          unit_info: { source_unit: 'mm', target_unit: 'mm', conversion_factor: 1 },
+          error_message: null,
+        })),
+      }),
+    }));
+
+    const [{ useToolStore }, { useXeokitMeasurementTools }, { useXeokitMeasurementStyleStore }] = await Promise.all([
+      import('@/composables/useToolStore'),
+      import('@/composables/useXeokitMeasurementTools'),
+      import('@/composables/useXeokitMeasurementStyleStore'),
+    ]);
+    const store = useToolStore();
+    store.clearAll();
+    store.setToolMode('xeokit_measure_distance');
+    const measurementStyle = useXeokitMeasurementStyleStore();
+    measurementStyle.resetStyle();
+    measurementStyle.updateMeasurementPickSource('position', { show: false, snap: false });
+    measurementStyle.updateMeasurementPickSource('mesh_pick_point', { show: true, snap: true, thresholdPx: 20 });
+    measurementStyle.updateStyle({ perpendicularTo: true, keepMeasurementAnnotation: true });
+
+    const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 10);
+    camera.position.set(0, 0, 1);
+    camera.lookAt(0, 0, 0);
+    camera.updateMatrixWorld(true);
+    camera.updateProjectionMatrix();
+    const canvas = document.createElement('canvas');
+    Object.defineProperty(canvas, 'getBoundingClientRect', {
+      value: () => ({ left: 0, top: 0, width: 200, height: 200 }),
+    });
+    // 源点：模型表面点 (0.5, 0, 0.5)，投影到画布 (150, 100)。
+    const selectionPick = vi.fn(() => ({
+      objectId: 'o:24381_145018:0',
+      point: new THREE.Vector3(0.5, 0, 0.5),
+    }));
+    const dimensionSystem = {
+      replaceExternalSource: vi.fn(),
+      viewport: { setSelection: vi.fn(), getSelection: vi.fn(() => null) },
+    } as any;
+    const tools = useXeokitMeasurementTools({
+      dtxViewerRef: ref({ camera, canvas, scene: new THREE.Scene() } as any),
+      dtxLayerRef: ref({
+        _totalObjects: 1,
+        getGlobalModelMatrix: () => new THREE.Matrix4(),
+      } as any),
+      selectionRef: ref({ pickPoint: selectionPick } as any),
+      overlayContainerRef: ref(document.createElement('div')),
+      getDimensionSystem: () => dimensionSystem,
+      store,
+      compatViewerRef: ref(null),
+      requestRender: null,
+    });
+
+    tools.onCanvasPointerMove(canvas, new PointerEvent('pointermove', { clientX: 150, clientY: 100, button: 0 }));
+    await vi.advanceTimersByTimeAsync(100);
+    await Promise.resolve();
+    tools.onCanvasPointerUp(canvas, new PointerEvent('pointerup', { clientX: 150, clientY: 100, button: 0 }));
+    expect(store.currentXeokitDistanceDraft.value?.origin.sourceInfo?.source).toBe('mesh_pick_point');
+
+    // 第二击：光标落在 P-Point (0,0,0) 的投影 (100, 100) 上，且不再命中表面。
+    selectionPick.mockReturnValue(null as any);
+    tools.onCanvasPointerUp(canvas, new PointerEvent('pointerup', { clientX: 100, clientY: 100, button: 0 }));
+
+    const record = store.xeokitDistanceMeasurements.value[0]!;
+    expect(record.perpendicular).toEqual({
+      targetKind: 'line',
+      targetLabel: 'P-Point #1 轴线',
+    });
+    // 垂足 = 源点 (0.5, 0, 0.5) 投影到过 (0,0,0)、沿 +Z 的无限线 → (0, 0, 0.5)。
+    expect(record.target.designWorldPos![0]).toBeCloseTo(0, 9);
+    expect(record.target.designWorldPos![1]).toBeCloseTo(0, 9);
+    expect(record.target.designWorldPos![2]).toBeCloseTo(0.5, 9);
+    expect(record.target.sourceInfo).toMatchObject({
+      source: 'ptset',
+      refno: '24381_145018',
+      label: 'P-Point #1 轴线垂足',
+    });
+    const result = store.measurementDraftResult.value!;
+    expect(result.perpendicular?.targetKind).toBe('line');
+    expect(result.distance).toBeCloseTo(0.5, 9);
+
+    // 垂距记录只出直接线：Vertical 0 → 不画 Vertical / Horizontal 腿，也不画 World 分量。
+    const records = dimensionSystem.replaceExternalSource.mock.calls.at(-1)?.[1];
+    expect(records.map((item: { id: string }) => item.id)).toEqual([
+      `xeokit-measurement:${record.id}`,
+    ]);
+
+    tools.dispose();
     vi.useRealTimers();
   });
 
@@ -1274,6 +1435,80 @@ describe('useXeokitMeasurementTools', () => {
     tools.dispose();
   });
 
+  it('把 World 正交子图形选择和右键命中解析回同一个父测量', async () => {
+    const [{ useToolStore }, { useXeokitMeasurementTools }, { useXeokitMeasurementStyleStore }] = await Promise.all([
+      import('@/composables/useToolStore'),
+      import('@/composables/useXeokitMeasurementTools'),
+      import('@/composables/useXeokitMeasurementStyleStore'),
+    ]);
+
+    const store = useToolStore();
+    store.clearAll();
+    const measurementStyle = useXeokitMeasurementStyleStore();
+    measurementStyle.resetStyle();
+    measurementStyle.updateStyle({
+      distanceShowAxisBreakdown: true,
+      showDirectLinearDimension: false,
+    });
+
+    let selection: string | null = null;
+    const dimensionSystem = {
+      replaceExternalSource: vi.fn(),
+      viewport: {
+        setSelection: vi.fn((id: string | null) => {
+          selection = id;
+        }),
+        getSelection: vi.fn(() => selection),
+      },
+    } as any;
+    const tools = useXeokitMeasurementTools({
+      dtxViewerRef: ref(null),
+      dtxLayerRef: ref(null),
+      selectionRef: ref(null),
+      overlayContainerRef: ref(document.createElement('div')),
+      getDimensionSystem: () => dimensionSystem,
+      store,
+      compatViewerRef: ref(null),
+      requestRender: null,
+    });
+    store.addXeokitDistanceMeasurement({
+      id: 'm-parent',
+      kind: 'distance',
+      origin: {
+        entityId: 'a',
+        worldPos: [0, 0, 0],
+        designWorldPos: [0, 0, 0],
+      },
+      target: {
+        entityId: 'b',
+        worldPos: [1, 2, 0],
+        designWorldPos: [1, 2, 0],
+      },
+      visible: true,
+      approximate: false,
+      createdAt: 1,
+    });
+    tools.syncFromStore();
+
+    const parentDimensionId = 'xeokit-measurement:m-parent';
+    const xChildId = worldDistanceAidChildId(parentDimensionId, 'x');
+    const yChildId = worldDistanceAidChildId(parentDimensionId, 'y');
+    expect(dimensionSystem.replaceExternalSource.mock.calls.at(-1)?.[1]
+      .map((record: { id: string }) => record.id)).toEqual([xChildId, yChildId]);
+
+    selection = yChildId;
+    tools.handleDimensionSelectionChange(yChildId);
+    expect(store.activeXeokitMeasurementId.value).toBe('m-parent');
+    expect(tools.resolveMeasurementIdFromDimensionId(yChildId)).toBe('m-parent');
+
+    // 前向同步发现当前已选中同一父测量的子图形时，应保留用户点中的子图形。
+    await nextTick();
+    expect(dimensionSystem.viewport.setSelection).not.toHaveBeenCalled();
+    expect(selection).toBe(yChildId);
+
+    tools.dispose();
+  });
+
   it('清空测量选中时不打断非 xeokit 来源的尺寸选中态', async () => {
     const [{ useToolStore }, { useXeokitMeasurementTools }] = await Promise.all([
       import('@/composables/useToolStore'),
@@ -1503,7 +1738,10 @@ describe('useXeokitMeasurementTools', () => {
   });
 
   describe('E3D Measure Session（r5 P0）', () => {
-    async function setupDistanceTools(input: { persistDimension: boolean }) {
+    async function setupDistanceTools(input: {
+      keepMeasurementAnnotation: boolean;
+      showDirectLinearDimension?: boolean;
+    }) {
       const [{ useToolStore }, { useXeokitMeasurementTools }, { useXeokitMeasurementStyleStore }] = await Promise.all([
         import('@/composables/useToolStore'),
         import('@/composables/useXeokitMeasurementTools'),
@@ -1518,7 +1756,10 @@ describe('useXeokitMeasurementTools', () => {
       measurementStyle.updateMeasurementPickSource('ptset', { show: false, snap: false });
       measurementStyle.updateMeasurementPickSource('position', { show: false, snap: false });
       measurementStyle.updateMeasurementPickSource('mesh_pick_point', { show: true, snap: true, thresholdPx: 40 });
-      measurementStyle.updateStyle({ persistDimension: input.persistDimension });
+      measurementStyle.updateStyle({
+        keepMeasurementAnnotation: input.keepMeasurementAnnotation,
+        showDirectLinearDimension: input.showDirectLinearDimension ?? true,
+      });
 
       const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 10);
       camera.position.set(2, 4, 7);
@@ -1535,6 +1776,10 @@ describe('useXeokitMeasurementTools', () => {
       const pickPoint = vi.fn()
         .mockReturnValueOnce({ objectId: 'o:24381_145018:0', point: new THREE.Vector3(2, 4, 6) })
         .mockReturnValue({ objectId: 'o:24381_145018:0', point: new THREE.Vector3(2, 4, 6.5) });
+      const dimensionSystem = {
+        replaceExternalSource: vi.fn(),
+        viewport: { setSelection: vi.fn(), getSelection: vi.fn(() => null) },
+      } as any;
       const tools = useXeokitMeasurementTools({
         dtxViewerRef: ref({ camera, canvas } as any),
         dtxLayerRef: ref({
@@ -1543,6 +1788,7 @@ describe('useXeokitMeasurementTools', () => {
         } as any),
         selectionRef: ref({ pickPoint } as any),
         overlayContainerRef: ref(document.createElement('div')),
+        getDimensionSystem: () => dimensionSystem,
         store,
         compatViewerRef: ref(null),
         requestRender: null,
@@ -1553,11 +1799,13 @@ describe('useXeokitMeasurementTools', () => {
         clientY: 100,
         button: 0,
       }));
-      return { store, measurementStyle, tools, click };
+      return { store, measurementStyle, dimensionSystem, tools, click };
     }
 
     it('statusText 分步命令提示：第 1/2 步 → 第 2/2 步（含 Snap 槽位）', async () => {
-      const { store, tools, click } = await setupDistanceTools({ persistDimension: true });
+      const { store, tools, click } = await setupDistanceTools({
+        keepMeasurementAnnotation: true,
+      });
       expect(tools.statusText.value).toContain('第 1/2 步');
       expect(tools.statusText.value).toContain('Snap:');
 
@@ -1568,8 +1816,10 @@ describe('useXeokitMeasurementTools', () => {
       tools.dispose();
     });
 
-    it('persistDimension=false：第二击只产出临时结果，不落持久记录；空格 Repeat 以临时结果终点续测', async () => {
-      const { store, tools, click } = await setupDistanceTools({ persistDimension: false });
+    it('keepMeasurementAnnotation=false：第二击只产出临时结果，不落持久记录；空格 Repeat 以临时结果终点续测', async () => {
+      const { store, dimensionSystem, tools, click } = await setupDistanceTools({
+        keepMeasurementAnnotation: false,
+      });
       click();
       click();
 
@@ -1583,6 +1833,16 @@ describe('useXeokitMeasurementTools', () => {
       expect(result!.distance).toBeCloseTo(0.5);
       expect(result!.offsets.components[2]).toBeCloseTo(0.5);
       expect(result!.direction!.vector[2]).toBeCloseTo(1);
+      expect(result!.id).toBeTruthy();
+      const records = dimensionSystem.replaceExternalSource.mock.calls.at(-1)?.[1];
+      // 单一正向轴向样本 + Show linear 开启：按 E3D golden G2-03 的
+      // int(sum) ne int(length) 闸门只画直接斜线，不再叠一条重合的 U 分量。
+      expect(records).toEqual([
+        expect.objectContaining({
+          id: `xeokit-measurement:${result!.id}`,
+          layout: expect.objectContaining({ kind: 'linear' }),
+        }),
+      ]);
 
       // E3D Repeat：临时结果态下以 draftResult.target 为起点开新草稿。
       expect(tools.repeatLastDistanceMeasurement()).toBe(true);
@@ -1593,7 +1853,9 @@ describe('useXeokitMeasurementTools', () => {
     });
 
     it('persistDraftResult 把临时结果落地为持久记录', async () => {
-      const { store, tools, click } = await setupDistanceTools({ persistDimension: false });
+      const { store, tools, click } = await setupDistanceTools({
+        keepMeasurementAnnotation: false,
+      });
       click();
       click();
       expect(store.xeokitDistanceMeasurements.value).toHaveLength(0);
@@ -1608,8 +1870,10 @@ describe('useXeokitMeasurementTools', () => {
       tools.dispose();
     });
 
-    it('persistDimension=true（默认）：第二击落持久记录且临时结果携带记录 id', async () => {
-      const { store, tools, click } = await setupDistanceTools({ persistDimension: true });
+    it('keepMeasurementAnnotation=true（默认）：第二击保留记录且临时结果携带记录 id', async () => {
+      const { store, tools, click } = await setupDistanceTools({
+        keepMeasurementAnnotation: true,
+      });
       click();
       click();
 
@@ -1621,8 +1885,97 @@ describe('useXeokitMeasurementTools', () => {
       tools.dispose();
     });
 
+    it('Show linear dimension 只切换直接斜线与 E3D 分解闸门，不改变结果或持久记录', async () => {
+      const {
+        store,
+        measurementStyle,
+        dimensionSystem,
+        tools,
+        click,
+      } = await setupDistanceTools({
+        keepMeasurementAnnotation: false,
+        showDirectLinearDimension: true,
+      });
+      click();
+      click();
+
+      const result = store.measurementDraftResult.value!;
+      expect(store.xeokitDistanceMeasurements.value).toHaveLength(0);
+      // 样本 delta = (0, 0, +0.5m) 是单一正向轴向：Show linear 开启时 E3D
+      // （golden G2-03，int(sum) eq int(length)）只画直接斜线。
+      expect(dimensionSystem.replaceExternalSource.mock.calls.at(-1)?.[1])
+        .toEqual([
+          expect.objectContaining({ id: `xeokit-measurement:${result.id}` }),
+        ]);
+
+      // Show linear 关闭 = E3D orthogonalOnly：直接斜线消失，正交分解必画（golden G2-02）。
+      measurementStyle.updateStyle({ showDirectLinearDimension: false });
+      tools.syncFromStore();
+      expect(store.measurementDraftResult.value).toEqual(result);
+      expect(store.xeokitDistanceMeasurements.value).toHaveLength(0);
+      expect(dimensionSystem.replaceExternalSource)
+        .toHaveBeenLastCalledWith('xeokit-measurement', [
+          expect.objectContaining({
+            id: worldDistanceAidChildId(`xeokit-measurement:${result.id}`, 'z'),
+          }),
+        ]);
+
+      expect(tools.persistDraftResult()).toBe(true);
+      expect(store.xeokitDistanceMeasurements.value).toHaveLength(1);
+      tools.syncFromStore();
+      expect(dimensionSystem.replaceExternalSource)
+        .toHaveBeenLastCalledWith('xeokit-measurement', [
+          expect.objectContaining({
+            id: worldDistanceAidChildId(`xeokit-measurement:${result.id}`, 'z'),
+          }),
+        ]);
+
+      measurementStyle.updateStyle({ showDirectLinearDimension: true });
+      tools.syncFromStore();
+      expect(store.xeokitDistanceMeasurements.value).toHaveLength(1);
+      expect(dimensionSystem.replaceExternalSource.mock.calls.at(-1)?.[1])
+        .toEqual([
+          expect.objectContaining({ id: `xeokit-measurement:${result.id}` }),
+        ]);
+
+      tools.dispose();
+    });
+
+    it('Perpendicular to：第二点无轴向/面几何时退化为点到点，结果表改读 Vertical / Horizontal（golden G4-03）', async () => {
+      const { store, measurementStyle, dimensionSystem, tools, click } = await setupDistanceTools({
+        keepMeasurementAnnotation: true,
+      });
+      measurementStyle.updateStyle({ perpendicularTo: true });
+      click();
+      click();
+
+      const record = store.xeokitDistanceMeasurements.value[0]!;
+      expect(record.perpendicular).toEqual({
+        targetKind: 'point',
+        targetLabel: '模型表面点',
+      });
+      // 点退化：target 就是第二个拾取点本身（design (12, 24, 36.5)，delta = (0, 0, +0.5m)）。
+      expect(record.target.sourceInfo?.source).toBe('mesh_pick_point');
+      expect(record.target.designWorldPos![0]).toBeCloseTo(12);
+      expect(record.target.designWorldPos![1]).toBeCloseTo(24);
+      expect(record.target.designWorldPos![2]).toBeCloseTo(36.5);
+      const result = store.measurementDraftResult.value!;
+      expect(result.perpendicular?.targetKind).toBe('point');
+      expect(result.distance).toBeCloseTo(0.5);
+
+      // 垂距记录不画 World 分量；Vertical 0.5 / Horizontal 0 → 腿也不画，只剩直接线。
+      const records = dimensionSystem.replaceExternalSource.mock.calls.at(-1)?.[1];
+      expect(records.map((item: { id: string }) => item.id)).toEqual([
+        `xeokit-measurement:${record.id}`,
+      ]);
+
+      tools.dispose();
+    });
+
     it('ESC 语义分层：草稿 → 临时结果 → 退出（reset 两段返回 true 后才 false）', async () => {
-      const { store, tools, click } = await setupDistanceTools({ persistDimension: false });
+      const { store, tools, click } = await setupDistanceTools({
+        keepMeasurementAnnotation: false,
+      });
       click();
       // 第一段：取消进行中的草稿。
       expect(tools.reset()).toBe(true);

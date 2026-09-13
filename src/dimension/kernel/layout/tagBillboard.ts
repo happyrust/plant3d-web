@@ -1,4 +1,13 @@
 import {
+  convexHull,
+  polygonBounds,
+  rectPolygonOverlapArea,
+  rectsOverlapArea,
+  segmentLengthInsideRect,
+  type ScreenPolygon,
+  type ScreenSegment,
+} from '../geometry/obstacleGeometry';
+import {
   makeSceneLine,
   projectScenePrimitives,
   projectSceneVertex,
@@ -17,12 +26,16 @@ import { add3, EPSILON, scale3, tryNormalize3 } from '../vec';
 
 import { emptyLayout } from './linear';
 
+import type { ViewportProjector } from '../projector';
 import type {
+  DesignBox,
   ExplicitLayoutInput,
   ExplicitLodHiddenReason,
   ExplicitTagInput,
   ExplicitTagStyle,
   HitRegion,
+  LayoutObstacle,
+  LayoutObstacleSource,
   LayoutResult,
   ScenePrimitive,
   SceneTone,
@@ -30,6 +43,7 @@ import type {
   ScreenLine,
   ScreenRect,
   Vec2,
+  Vec3,
 } from '../types';
 import type { LayoutContext } from './context';
 
@@ -41,9 +55,24 @@ import type { LayoutContext } from './context';
 export type TagBillboardPlan = Readonly<{
   /** Body rectangles (screen, with the collision margin) per candidate, preferred first. */
   candidates: readonly ScreenRect[];
+  /** Screen rectangle every candidate lies in. */
+  envelope: ScreenRect;
+  /** Design Space point the body hangs off (leader target or solver position). */
+  anchor: Vec3;
   /** Placement order among tags on one view: lower goes first (cards, then frames, then pills). */
   priority: number;
   materialize(candidate: number): LayoutResult;
+}>;
+
+/**
+ * What a tag body must not cover besides other labels: model components
+ * (their projected bounding boxes, as convex screen polygons) and dimension
+ * strokes (dimension / extension lines, arrowheads) on screen. Built by
+ * `collectTagObstacles` for a view; empty = labels only.
+ */
+export type TagObstacles = Readonly<{
+  polygons?: readonly ScreenPolygon[];
+  segments?: readonly ScreenSegment[];
 }>;
 
 /** Rotations (degrees) about the preferred direction, tried in this order. */
@@ -54,6 +83,23 @@ const CANDIDATE_DISTANCE_SCALES: readonly number[] = [1, 1.6];
 const AWAY_PROBE_PX = 50;
 /** Margin kept between a tag body and whatever it is placed against. */
 const BODY_MARGIN_PX = 2;
+/**
+ * Intrusion weights (per px² covered) that rank the candidates when none is
+ * clear: hiding a value or another tag is worst, cutting a dimension stroke
+ * next, covering a component's bounding box least — the box overstates the
+ * body and the tag is meant to sit over the model anyway.
+ */
+const LABEL_INTRUSION_WEIGHT = 4;
+const STROKE_INTRUSION_WEIGHT = 2;
+const BOX_INTRUSION_WEIGHT = 1;
+/** A covered stroke counts as a band this wide (px) so its length becomes an area. */
+const STROKE_BAND_PX = 4;
+/**
+ * Intrusion scores closer than this (px²) are a tie, which the earlier
+ * candidate wins: clipped areas carry floating-point noise, and a later
+ * candidate must beat the preferred one by a visible amount to displace it.
+ */
+const INTRUSION_TIE_PX2 = 1e-6;
 /** Corner subdivision of the rounded body; a pill's semicircles get more. */
 const CORNER_SEGMENTS = 4;
 const PILL_CORNER_SEGMENTS = 6;
@@ -133,6 +179,14 @@ function rectEdgeTowards(
 function rectInside(rect: ScreenRect, width: number, height: number): boolean {
   return rect.x >= 0 && rect.y >= 0
     && rect.x + rect.width <= width && rect.y + rect.height <= height;
+}
+
+function unionRects(rects: readonly ScreenRect[]): ScreenRect {
+  const minX = Math.min(...rects.map(rect => rect.x));
+  const minY = Math.min(...rects.map(rect => rect.y));
+  const maxX = Math.max(...rects.map(rect => rect.x + rect.width));
+  const maxY = Math.max(...rects.map(rect => rect.y + rect.height));
+  return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
 }
 
 /**
@@ -254,6 +308,7 @@ export function planTagBillboard(
     ...bodies.filter(body => !onScreen(body)),
   ];
   const candidates = ordered.map(body => expandRect(body, BODY_MARGIN_PX));
+  const envelope = unionRects(candidates);
 
   const radius = pill ? height / 2 : rules.cornerRadiusPx;
   const outline = roundedRectOutline(
@@ -342,7 +397,13 @@ export function planTagBillboard(
     };
   };
 
-  return { candidates, priority: STYLE_PRIORITY[spec.style], materialize };
+  return {
+    candidates,
+    envelope,
+    anchor: anchor3,
+    priority: STYLE_PRIORITY[spec.style],
+    materialize,
+  };
 }
 
 export function isTagBillboardPlan(
@@ -361,7 +422,8 @@ export function layoutTagBillboard(
   return isTagBillboardPlan(planned) ? planned.materialize(0) : planned;
 }
 
-type PlannedTag = Readonly<{
+/** A planned tag and the slot it holds in the view's layout batch. */
+export type PlannedTag = Readonly<{
   index: number;
   id: string;
   plan: TagBillboardPlan;
@@ -372,36 +434,204 @@ function compareIds(a: string, b: string): number {
 }
 
 /**
- * Placement pass for the tags of one view: every other visible label
- * (dimension values, flat annotations) is an obstacle, and tags are placed
- * one by one — cards, then frames, then pills, ties by id — each taking its
- * first candidate that overlaps neither an obstacle nor an already placed
- * tag; when every candidate is blocked the preferred position stands. The
+ * Design Space box the host should search for component boxes: for every
+ * plan, the candidate envelope unprojected onto the anchor's depth plane and
+ * pushed towards / away from the camera by the envelope's diagonal, so the
+ * components a body could end up over — and those just in front of them —
+ * are in. Null when no plan projects to a finite region.
+ */
+export function tagObstacleRegion(
+  plans: readonly TagBillboardPlan[],
+  projector: ViewportProjector,
+): DesignBox | null {
+  const min: [number, number, number] = [
+    Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY,
+  ];
+  const max: [number, number, number] = [
+    Number.NEGATIVE_INFINITY, Number.NEGATIVE_INFINITY, Number.NEGATIVE_INFINITY,
+  ];
+  let any = false;
+  for (const plan of plans) {
+    const anchor = projector.project(plan.anchor);
+    const metresPerPixel = projector.worldPerPixelAt(plan.anchor);
+    const { envelope } = plan;
+    const reachM = Math.hypot(envelope.width, envelope.height) * metresPerPixel;
+    if (!Number.isFinite(anchor.depth) || !Number.isFinite(reachM)) continue;
+    const corners: Vec2[] = [
+      [envelope.x, envelope.y],
+      [envelope.x + envelope.width, envelope.y],
+      [envelope.x + envelope.width, envelope.y + envelope.height],
+      [envelope.x, envelope.y + envelope.height],
+    ];
+    const points: Vec3[] = [];
+    for (const corner of corners) {
+      const onPlane = projector.unproject({ x: corner[0], y: corner[1], depth: anchor.depth });
+      points.push(
+        add3(onPlane, scale3(projector.forward, -reachM)),
+        add3(onPlane, scale3(projector.forward, reachM)),
+      );
+    }
+    if (!points.every(point => point.every(Number.isFinite))) continue;
+    for (const point of points) {
+      for (const axis of [0, 1, 2] as const) {
+        min[axis] = Math.min(min[axis], point[axis]);
+        max[axis] = Math.max(max[axis], point[axis]);
+      }
+    }
+    any = true;
+  }
+  return any ? { min, max } : null;
+}
+
+/**
+ * Screen outline (convex hull) of an obstacle's projected corners; null when
+ * the box has no area on screen or reaches behind the camera / beyond the far
+ * plane, where a projection is meaningless.
+ */
+export function projectObstacleOutline(
+  obstacle: LayoutObstacle,
+  projector: ViewportProjector,
+): ScreenPolygon | null {
+  const points: Vec2[] = [];
+  for (const corner of obstacle.corners) {
+    const screen = projector.project(corner);
+    if (!Number.isFinite(screen.x) || !Number.isFinite(screen.y)) return null;
+    if (!Number.isFinite(screen.depth) || screen.depth > 1) return null;
+    points.push([screen.x, screen.y]);
+  }
+  const hull = convexHull(points);
+  return hull.length >= 3 ? hull : null;
+}
+
+function segmentBounds(segment: ScreenSegment): ScreenRect {
+  const minX = Math.min(segment.from[0], segment.to[0]);
+  const minY = Math.min(segment.from[1], segment.to[1]);
+  return {
+    x: minX,
+    y: minY,
+    width: Math.max(segment.from[0], segment.to[0]) - minX,
+    height: Math.max(segment.from[1], segment.to[1]) - minY,
+  };
+}
+
+/**
+ * The strokes of the given layouts on screen — every projected line and
+ * path: dimension / extension / projection lines, leaders, arcs, arrowhead
+ * edges — as segments a tag body keeps clear of. Glyph runs are not strokes
+ * (values are covered by `labelBounds`), nor are markers.
+ */
+export function dimensionStrokes(layouts: readonly LayoutResult[]): ScreenSegment[] {
+  const segments: ScreenSegment[] = [];
+  for (const layout of layouts) {
+    for (const primitive of layout.primitives) {
+      if (primitive.kind === 'line') {
+        segments.push({ from: primitive.from, to: primitive.to });
+      } else if (primitive.kind === 'path') {
+        const { points } = primitive;
+        for (let index = 1; index < points.length; index += 1) {
+          segments.push({ from: points[index - 1]!, to: points[index]! });
+        }
+        if (primitive.closed && points.length > 2) {
+          segments.push({ from: points[points.length - 1]!, to: points[0]! });
+        }
+      }
+    }
+  }
+  return segments;
+}
+
+/**
+ * Everything besides labels the tags of one view keep clear of: the strokes
+ * of every other layout in the batch, and — when the host can answer — the
+ * component boxes found around the tags (`tagObstacleRegion`), projected to
+ * their screen outlines.
+ */
+export function collectTagObstacles(
+  layouts: readonly LayoutResult[],
+  planned: readonly PlannedTag[],
+  projector: ViewportProjector,
+  source?: LayoutObstacleSource,
+): TagObstacles {
+  if (planned.length === 0) return {};
+  const plannedIndices = new Set(planned.map(tag => tag.index));
+  const segments = dimensionStrokes(layouts.filter((_, index) => !plannedIndices.has(index)));
+  const region = source ? tagObstacleRegion(planned.map(tag => tag.plan), projector) : null;
+  const polygons: ScreenPolygon[] = [];
+  if (source && region) {
+    for (const obstacle of source.query(region)) {
+      const outline = projectObstacleOutline(obstacle, projector);
+      if (outline) polygons.push(outline);
+    }
+  }
+  return { polygons, segments };
+}
+
+/**
+ * Placement pass for the tags of one view. Obstacles are every other visible
+ * label (dimension values, flat annotations), the projected component boxes
+ * and dimension strokes the viewport hands in, and the tags already placed.
+ * Tags are placed one by one — cards, then frames, then pills, ties by id —
+ * each taking its first candidate clear of everything; when no candidate is
+ * clear, the one that intrudes least wins (weighted covered area: labels and
+ * tags over strokes over component boxes), earlier candidates on a tie. The
  * same view always yields the same placement.
  */
 export function placeTagBillboards(
   layouts: readonly LayoutResult[],
   planned: readonly PlannedTag[],
+  obstacles: TagObstacles = {},
 ): readonly LayoutResult[] {
   if (planned.length === 0) return layouts;
   const plannedIndices = new Set(planned.map(tag => tag.index));
-  const obstacles: ScreenRect[] = [];
+  const labels: ScreenRect[] = [];
   for (const [index, layout] of layouts.entries()) {
     if (plannedIndices.has(index)) continue;
     if (layout.primitives.length === 0 || layout.derived.formattedLabel.length === 0) continue;
-    obstacles.push(layout.labelBounds);
+    labels.push(layout.labelBounds);
   }
+  const boxes = (obstacles.polygons ?? []).map(polygon => ({ polygon, bounds: polygonBounds(polygon) }));
+  const strokes = (obstacles.segments ?? []).map(segment => ({ segment, bounds: segmentBounds(segment) }));
   const results = [...layouts];
   const order = [...planned].sort((a, b) =>
     a.plan.priority - b.plan.priority
     || compareIds(a.id, b.id)
     || a.index - b.index);
   for (const tag of order) {
-    const free = tag.plan.candidates.findIndex(candidate =>
-      !obstacles.some(obstacle => rectsOverlap(obstacle, candidate)));
-    const result = tag.plan.materialize(free >= 0 ? free : 0);
+    const { envelope } = tag.plan;
+    const nearBoxes = boxes.filter(box => rectsOverlap(box.bounds, envelope));
+    // A stroke's bounds have no area when it is axis-aligned; pad them so the
+    // overlap test still sees it.
+    const nearStrokes = strokes.filter(stroke => rectsOverlap(expandRect(stroke.bounds, 1), envelope));
+    const intrusion = (candidate: ScreenRect): number => {
+      let score = 0;
+      for (const label of labels) {
+        score += LABEL_INTRUSION_WEIGHT * rectsOverlapArea(candidate, label);
+      }
+      for (const stroke of nearStrokes) {
+        score += STROKE_INTRUSION_WEIGHT * STROKE_BAND_PX
+          * segmentLengthInsideRect(stroke.segment, candidate);
+      }
+      for (const box of nearBoxes) {
+        score += BOX_INTRUSION_WEIGHT * rectPolygonOverlapArea(candidate, box.polygon);
+      }
+      return score;
+    };
+    let best = 0;
+    let bestScore = Number.POSITIVE_INFINITY;
+    for (const [index, candidate] of tag.plan.candidates.entries()) {
+      const score = intrusion(candidate);
+      if (score === 0) {
+        best = index;
+        break;
+      }
+      if (score < bestScore - INTRUSION_TIE_PX2) {
+        bestScore = score;
+        best = index;
+      }
+    }
+    const result = tag.plan.materialize(best);
     results[tag.index] = result;
-    obstacles.push(result.labelBounds);
+    labels.push(result.labelBounds);
   }
   return results;
 }

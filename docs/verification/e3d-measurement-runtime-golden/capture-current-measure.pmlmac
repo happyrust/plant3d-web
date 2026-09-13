@@ -1,0 +1,39 @@
+!traceFile = object FILE('D:/work/plant-code/old/plant3d-web/docs/verification/e3d-measurement-runtime-golden/G1-current-measure.trace.txt')
+!trace = ARRAY()
+
+if undefined(!!gphMeasure) then
+  !trace.append('blocked: !!gphMeasure is undefined')
+  !traceFile.writeFile('OVERWRITE', !trace)
+  return
+endif
+
+!dimension = !!gphMeasure.dimension
+!distance = !dimension.from.distance(!dimension.to)
+!offset = !dimension.offsetType()
+!direction = !dimension.from.direction(!dimension.to).wrt(!dimension.wrt)
+var !coordinate coordinate
+var !unit unit
+
+!trace.append('product=E3D 3.1')
+!trace.append('project=AvevaMarineSample')
+!trace.append('mdb=/ALL')
+!trace.append('coord=' & !coordinate.string())
+!trace.append('unit=' & !unit.string())
+!trace.append('wrt=' & !dimension.wrt.name)
+!trace.append('from=' & !dimension.from.string())
+!trace.append('to=' & !dimension.to.string())
+!trace.append('distance_db=' & !distance.dbUnits().value().string())
+!trace.append('distance_text=' & !distance.string(!!gphMeasure.measureFormat))
+!trace.append('offset_1_db=' & !offset[1].dbUnits().value().string())
+!trace.append('offset_2_db=' & !offset[2].dbUnits().value().string())
+!trace.append('offset_3_db=' & !offset[3].dbUnits().value().string())
+!trace.append('offset_1_text=' & !offset[1].string(!!gphMeasure.measureFormat))
+!trace.append('offset_2_text=' & !offset[2].string(!!gphMeasure.measureFormat))
+!trace.append('offset_3_text=' & !offset[3].string(!!gphMeasure.measureFormat))
+!trace.append('direction=' & !direction.string())
+!trace.append('show_linear=' & !!gphMeasure.showLinear.val.string())
+!trace.append('keep_dimensions=' & !!gphMeasure.keepAids.val.string())
+!trace.append('perpendicular=' & !!gphMeasure.perpendicularTo.val.string())
+!trace.append('complete')
+!traceFile.writeFile('OVERWRITE', !trace)
+return

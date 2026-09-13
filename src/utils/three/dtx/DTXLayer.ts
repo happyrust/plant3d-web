@@ -2393,6 +2393,28 @@ export class DTXLayer {
   }
 
   /**
+   * 收集与 worldBox（场景世界坐标）相交的对象及其**局部**包围盒（未乘全局矩阵，
+   * 调用方按需变换）。查询框先变回局部空间，逐对象只做一次 AABB 相交测试、不分配，
+   * 整库装载后也能在每次重排版时调用（尺寸系统的标签避让用它取标签周围的构件包围盒）。
+   * `visibleOnly` 时跳过隐藏对象；全局矩阵不可逆时返回空。
+   */
+  collectObjectBoundsIntersecting(
+    worldBox: Box3,
+    options?: { visibleOnly?: boolean },
+  ): { objectId: string; boundingBox: Box3 }[] {
+    const result: { objectId: string; boundingBox: Box3 }[] = [];
+    if (worldBox.isEmpty() || this._globalModelMatrix.determinant() === 0) return result;
+    const localQuery = worldBox.clone().applyMatrix4(this._globalModelMatrix.clone().invert());
+    const visibleOnly = options?.visibleOnly === true;
+    for (const obj of this._objects.values()) {
+      if (visibleOnly && !obj.visible) continue;
+      if (obj.boundingBox.isEmpty() || !obj.boundingBox.intersectsBox(localQuery)) continue;
+      result.push({ objectId: obj.objectId, boundingBox: obj.boundingBox.clone() });
+    }
+    return result;
+  }
+
+  /**
    * 检查对象是否存在
    */
   hasObject(objectId: string): boolean {

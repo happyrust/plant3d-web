@@ -613,6 +613,65 @@ export function genModelV1ElementAttributes(
   });
 }
 
+/** `element/ptset` 里的一个 P 点：构件局部系，mm，`dir` 已归一化（spec §4.11.1）。 */
+export type ElementPtsetPoint = {
+  number: number;
+  /** `PTAX` / `PTCA` / `PTMI` */
+  noun: string;
+  pt: [number, number, number];
+  dir: [number, number, number];
+  /** `PBOR`，求不出为 null */
+  bore: number | null;
+};
+
+export type ElementPtsetUnresolved = {
+  number: number;
+  reason: string;
+};
+
+/** 一个构件的目录 P 点集（`element/ptset` 的顶层字段，也是 `members[]` 每一项的形状）。 */
+export type ElementPtsetItem = {
+  /** `a/b` */
+  refno: string;
+  dbnum: number;
+  noun: string;
+  name: string | null;
+  /** 没有 `SPRE` 链 / 目录件没有 `PTRE` 时为 null——「这个构件没有 P 点」，不是错 */
+  catalogue: { component: string; point_set: string | null } | null;
+  /** 局部 → 世界，列主序 16 个数（THREE `Matrix4.fromArray` 布局，平移在 12–14），mm */
+  world_transform: number[];
+  unit: 'mm' | (string & {});
+  /** `PTSE` 成员原序 */
+  points: ElementPtsetPoint[];
+  unresolved: ElementPtsetUnresolved[];
+};
+
+export type ElementPtsetResponse = ElementPtsetItem & {
+  source: 'e3d-model' | (string & {});
+  /** 仅 `include_members=true` 时出现：直属成员逐个一条 */
+  members?: ElementPtsetItem[];
+};
+
+export type GenModelV1ElementPtsetRequest = {
+  refno: string;
+  /** 一并解直属成员的点集（BRAN / EQUI 这类容器自身没有 P 点，测量悬停显示的是成员的点） */
+  includeMembers?: boolean;
+};
+
+/** `POST /api/v1/element/ptset`：直读 dabacon 的目录 P 点集（E3D PTSET），测量捕捉的 P-Point 来源。 */
+export function genModelV1ElementPtset(
+  req: GenModelV1ElementPtsetRequest,
+  options?: GenModelV1RequestOptions,
+): Promise<ElementPtsetResponse> {
+  return genModelV1Fetch<ElementPtsetResponse>('/api/v1/element/ptset', {
+    ...options,
+    method: 'POST',
+    body: req.includeMembers
+      ? { refno: toV1Refno(req.refno), include_members: true }
+      : { refno: toV1Refno(req.refno) },
+  });
+}
+
 export type GenModelV1EnsureRequest = {
   refno: string;
   /** 只给「人明确要求重生成」用；显示补齐**不要**传（spec §4.5） */

@@ -19,6 +19,20 @@ import {
 import { ensurePanelAndActivate } from '@/composables/useDockApi';
 import { useToolStore } from '@/composables/useToolStore';
 import { useXeokitMeasurementStyleStore } from '@/composables/useXeokitMeasurementStyleStore';
+import {
+  MEASUREMENT_PICK_FILTER_AVAILABILITY,
+  MEASUREMENT_PICK_FILTER_HINTS,
+  MEASUREMENT_PICK_FILTER_IDS,
+  MEASUREMENT_PICK_FILTER_LABELS,
+  MEASUREMENT_PICK_TYPE_AVAILABILITY,
+  MEASUREMENT_PICK_TYPE_HINTS,
+  MEASUREMENT_PICK_TYPE_IDS,
+  MEASUREMENT_PICK_TYPE_LABELS,
+  MEASUREMENT_PICK_TYPE_VALUE_KEY,
+  type MeasurementPickFilterId,
+  type MeasurementPickTypeId,
+  type MeasurementPickTypeValues,
+} from '@/measurement/pick/pickLayerModel';
 
 type ToolsApi = {
   ready: Ref<boolean>;
@@ -107,6 +121,62 @@ function setContinuousMeasure(checked: boolean): void {
 
 function setPickMode(mode: 'e3d' | 'free_surface'): void {
   measurementStyle.setMeasurementPickMode(mode);
+}
+
+// ── E3D Positioning Control 拾取层：过滤器 × 拾取类型 + Significant Snaps ──
+const pickLayer = computed(() => measurementStyle.state.measurementPickLayer);
+const pickTypeValueKey = computed<keyof MeasurementPickTypeValues | null>(() => (
+  MEASUREMENT_PICK_TYPE_VALUE_KEY[pickLayer.value.pickType] ?? null
+));
+const PICK_TYPE_VALUE_FIELD: Readonly<Record<keyof MeasurementPickTypeValues, {
+  label: string;
+  min: number;
+  max?: number;
+  step: number;
+}>> = {
+  distanceMm: { label: '距离 (mm)', min: -1e9, step: 1 },
+  fraction: { label: '等分数 n', min: 1, step: 1 },
+  proportion: { label: '比例 0–1', min: 0, max: 1, step: 0.05 },
+};
+const pickTypeValueField = computed(() => (
+  pickTypeValueKey.value ? PICK_TYPE_VALUE_FIELD[pickTypeValueKey.value] : null
+));
+const pickTypeValue = computed(() => (
+  pickTypeValueKey.value ? pickLayer.value.values[pickTypeValueKey.value] : null
+));
+
+function pickFilterTitle(id: MeasurementPickFilterId): string {
+  const availability = MEASUREMENT_PICK_FILTER_AVAILABILITY[id];
+  return availability.available
+    ? MEASUREMENT_PICK_FILTER_HINTS[id]
+    : `${MEASUREMENT_PICK_FILTER_HINTS[id]}——${availability.reason}`;
+}
+
+function pickTypeTitle(id: MeasurementPickTypeId): string {
+  const availability = MEASUREMENT_PICK_TYPE_AVAILABILITY[id];
+  return availability.available
+    ? MEASUREMENT_PICK_TYPE_HINTS[id]
+    : `${MEASUREMENT_PICK_TYPE_HINTS[id]}——${availability.reason}`;
+}
+
+function setPickFilter(filter: MeasurementPickFilterId): void {
+  if (!MEASUREMENT_PICK_FILTER_AVAILABILITY[filter].available) return;
+  measurementStyle.updateMeasurementPickLayer({ filter });
+}
+
+function setPickType(pickType: MeasurementPickTypeId): void {
+  if (!MEASUREMENT_PICK_TYPE_AVAILABILITY[pickType].available) return;
+  measurementStyle.updateMeasurementPickLayer({ pickType });
+}
+
+function setPickTypeValue(raw: string): void {
+  const key = pickTypeValueKey.value;
+  if (!key) return;
+  measurementStyle.updateMeasurementPickLayer({ values: { [key]: raw } as Partial<MeasurementPickTypeValues> });
+}
+
+function setSignificantSnaps(checked: boolean): void {
+  measurementStyle.updateMeasurementPickLayer({ significantSnaps: checked });
 }
 
 async function toggleSettings(): Promise<void> {

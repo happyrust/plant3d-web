@@ -1,0 +1,45 @@
+!traceFile = object FILE('D:/work/plant-code/old/plant3d-web/docs/verification/e3d-measurement-runtime-golden/G4-01-real-point-to-line.trace.txt')
+!trace = ARRAY()
+
+!pick = !!edgCntrl.pickData
+!positionData = !pick.positionData()
+!dimension = !!gphMeasure.dimension
+!from = !dimension.from
+!to = !dimension.to
+!distance = !from.distance(!to)
+!vertical = abs(!from.wrt(world).up - !to.wrt(world).up)
+!horizontal = sqrt(!distance * !distance - !vertical * !vertical)
+
+!trace.append('case=G4-01')
+!trace.append('provider=registered GPHLINE picked through EDG')
+!trace.append('source_aid=' & !!goldenPerpSourceAid.string())
+!trace.append('target_aid=' & !!goldenPerpLineAid.string())
+!trace.append('last_pick_type=' & !pick.type)
+!trace.append('last_pick_aid_type=' & !pick.aidType)
+!trace.append('last_pick_aid_number=' & !pick.point.string())
+!trace.append('position_data_type=' & !positionData.type)
+!trace.append('position_data_original_type=' & !positionData.originalType)
+!trace.append('position_data_position=' & !positionData.position.string())
+
+!targetLine = !positionData.getLine()
+handle any
+  !trace.append('target_line_error=' & !!error.text)
+elsehandle none
+  if(!targetLine.set()) then
+    !trace.append('target_line_status=set')
+    !trace.append('target_line_start=' & !targetLine.startPosition.string())
+    !trace.append('target_line_end=' & !targetLine.endPosition.string())
+  else
+    !trace.append('target_line_status=unset')
+  endif
+endhandle
+
+!trace.append('result_from=' & !from.string())
+!trace.append('result_to=' & !to.string())
+!trace.append('distance_db=' & !distance.dbUnits().value().string())
+!trace.append('distance_text=' & !distance.string(!!gphMeasure.measureFormat))
+!trace.append('vertical_db=' & !vertical.dbUnits().value().string())
+!trace.append('horizontal_db=' & !horizontal.dbUnits().value().string())
+!trace.append('complete')
+!traceFile.writeFile('OVERWRITE', !trace)
+return

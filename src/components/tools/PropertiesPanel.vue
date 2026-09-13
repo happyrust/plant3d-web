@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, nextTick, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 
 import { Search, ChevronDown, ChevronRight } from 'lucide-vue-next';
 
@@ -17,9 +17,6 @@ const toolStore = useToolStore();
 // 且具备缓存机制，因此无需手动 watch 调用 loadProperties。
 
 const searchQuery = ref('');
-const editingKey = ref<string | null>(null);
-const editValue = ref<string>('');
-const editInputRef = ref<HTMLInputElement | null>(null);
 
 // 折叠状态
 const collapsedGroups = ref<Set<string>>(new Set());
@@ -231,39 +228,6 @@ function toggleGroup(groupId: string) {
 function isGroupCollapsed(groupId: string): boolean {
   return collapsedGroups.value.has(groupId);
 }
-
-async function startEditing(row: PropertyRow) {
-  if (row.type === 'object') return;
-  editingKey.value = row.key;
-  editValue.value = row.displayValue;
-  await nextTick();
-  editInputRef.value?.focus();
-  editInputRef.value?.select();
-}
-
-function cancelEditing() {
-  editingKey.value = null;
-  editValue.value = '';
-}
-
-function confirmEditing(row: PropertyRow) {
-  // TODO: 调用 API 保存
-  console.log('Property edit:', row.key, '=', editValue.value);
-  editingKey.value = null;
-  editValue.value = '';
-}
-
-function handleKeydown(e: KeyboardEvent, row: PropertyRow) {
-  if (e.key === 'Enter') {
-    confirmEditing(row);
-  } else if (e.key === 'Escape') {
-    cancelEditing();
-  }
-}
-
-function handleBlur(row: PropertyRow) {
-  confirmEditing(row);
-}
 </script>
 
 <template>
@@ -271,7 +235,10 @@ function handleBlur(row: PropertyRow) {
     <!-- 头部 -->
     <div class="flex-shrink-0 border-b border-border px-3 py-2">
       <div class="flex items-center justify-between">
-        <span class="text-xs font-medium text-foreground">属性</span>
+        <div class="flex items-center gap-1.5">
+          <span class="text-xs font-medium text-foreground">属性</span>
+          <Badge variant="secondary" class="text-[10px]">只读</Badge>
+        </div>
         <Badge v-if="sel.selectedRefno.value"
           variant="outline"
           class="max-w-[60%] truncate text-[10px]"
@@ -341,8 +308,7 @@ function handleBlur(row: PropertyRow) {
                 :key="row.key"
                 :class="cn(
                   'group border-b border-border/30 last:border-b-0',
-                  'hover:bg-accent/50',
-                  editingKey === row.key && 'bg-accent'
+                  'hover:bg-accent/50'
                 )">
                 <!-- 属性名 -->
                 <td class="w-[45%] truncate border-r border-border/30 px-2 py-1 align-top text-xs text-muted-foreground"
@@ -352,29 +318,15 @@ function handleBlur(row: PropertyRow) {
 
                 <!-- 属性值 -->
                 <td class="px-2 py-1 align-top">
-                  <!-- 编辑模式 -->
-                  <input v-if="editingKey === row.key"
-                    ref="editInputRef"
-                    v-model="editValue"
-                    :type="row.type === 'number' ? 'number' : 'text'"
-                    class="h-5 w-full rounded border border-ring bg-background px-1 text-xs focus:outline-none"
-                    @keydown="(e) => handleKeydown(e, row)"
-                    @blur="handleBlur(row)" />
-
-                  <!-- 显示模式 -->
-                  <div v-else
-                    :class="cn(
-                      'min-h-[20px] cursor-text truncate rounded px-1 text-xs leading-5',
-                      'transition-colors',
-                      row.type !== 'object' && 'hover:bg-muted',
-                      row.type === 'null' && 'italic text-muted-foreground',
-                      row.type === 'boolean' && (row.value ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'),
-                      row.type === 'number' && 'text-blue-600 dark:text-blue-400',
-                      row.type === 'string' && 'text-foreground',
-                      row.type === 'object' && 'cursor-default text-muted-foreground'
-                    )"
-                    :title="row.title ?? row.displayValue"
-                    @click="startEditing(row)">
+                  <div :class="cn(
+                         'min-h-[20px] cursor-default truncate rounded px-1 text-xs leading-5',
+                         row.type === 'null' && 'italic text-muted-foreground',
+                         row.type === 'boolean' && (row.value ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'),
+                         row.type === 'number' && 'text-blue-600 dark:text-blue-400',
+                         row.type === 'string' && 'text-foreground',
+                         row.type === 'object' && 'text-muted-foreground'
+                       )"
+                    :title="row.title ?? row.displayValue">
                     {{ row.displayValue }}
                   </div>
                 </td>

@@ -1,8 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, type Ref } from 'vue';
 
-import type { InstanceManifest } from '@/utils/instances/instanceManifest';
-
 import { isReviewDebugUiEnabled } from '@/components/review/debugUiGate';
 import { ensureDbMetaInfoLoaded, getDbnumByRefno } from '@/composables/useDbMetaInfo';
 import { useModelGeneration } from '@/composables/useModelGeneration';
@@ -16,6 +14,11 @@ import {
   getReviewCommentEventLog,
   getReviewCommentThreadStore,
 } from '@/review/services/sharedStores';
+import { failFileValidation, parseJsonText } from '@/utils/fileValidation';
+import {
+  type InstanceManifest,
+  validateInstanceManifest,
+} from '@/utils/instances/instanceManifest';
 import { formatLengthMeters, formatVec3Meters } from '@/utils/unitFormat';
 
 type ToolsApi = {
@@ -175,8 +178,31 @@ async function handleInstancesFileSelect(event: Event) {
   if (!file) return;
 
   try {
+    if (!/\.json$/i.test(file.name)) {
+      failFileValidation({
+        source: file.name,
+        format: 'json',
+        reason: '文件扩展名无效',
+        expected: '.json',
+        actual: file.name.includes('.') ? `.${file.name.split('.').pop()}` : '无扩展名',
+      });
+    }
+    if (file.size === 0) {
+      failFileValidation({
+        source: file.name,
+        format: 'json',
+        reason: '文件为空',
+        expected: '非空 instances manifest',
+        actual: '0 字节',
+        byteOffset: 0,
+      });
+    }
     const text = await file.text();
-    const parsed = JSON.parse(text) as InstanceManifest;
+    const parsed = parseJsonText<unknown>(text, {
+      source: file.name,
+      expectedRoot: 'object',
+    });
+    validateInstanceManifest(parsed, file.name);
     instancesManifest.value = parsed;
 
     const guessedRoot = guessRootRefnoFromManifest(parsed);
@@ -268,7 +294,10 @@ async function copyExport() {
 function doImport() {
   importError.value = null;
   try {
-    const parsed = JSON.parse(importText.value) as Record<string, unknown>;
+    const parsed = parseJsonText<Record<string, unknown>>(importText.value, {
+      source: '工具数据粘贴导入',
+      expectedRoot: 'object',
+    });
     const legacyPayload = JSON.stringify(parsed);
     const shadowResult = runImportPayloadShadow({
       legacyPayload,

@@ -1,0 +1,23 @@
+!traceFile = object FILE('D:/work/plant-code/old/plant3d-web/docs/verification/e3d-measurement-runtime-golden/G3-03-invalid-wrt.trace.txt')
+!trace = ARRAY()
+
+if undefined(!!gphMeasure) then
+  !trace.append('blocked: !!gphMeasure is undefined')
+  !traceFile.writeFile('OVERWRITE', !trace)
+  return
+endif
+
+!!gphMeasure.wrt.val = 'NOT-A-VALID-E3D-REFERENCE'
+!!gphMeasure.setUpWrt()
+handle any
+  !trace.append('error=' & !!error.text)
+  !traceFile.writeFile('OVERWRITE', !trace)
+  return
+endhandle
+
+!trace.append('wrt_field=' & !!gphMeasure.wrt.val)
+!trace.append('resolved_wrt=' & !!gphMeasure.dimension.wrt.name)
+!trace.append('resolved_type=' & !!gphMeasure.dimension.wrt.hardType)
+!trace.append('complete')
+!traceFile.writeFile('OVERWRITE', !trace)
+return

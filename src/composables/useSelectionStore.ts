@@ -48,6 +48,11 @@ export function setGlobalSelectedRefno(refno: string | null) {
   setSelectionState(refno ? [refno] : [], refno);
 }
 
+/** Read the current element without creating a TanStack Query observer. */
+export function getGlobalSelectedRefno(): string | null {
+  return selectedRefno.value;
+}
+
 function usePdmsUiAttrQuery(refno: { value: string | null }) {
   return useQuery({
     queryKey: computed(() => ['pdms', 'ui-attr', refno.value]),

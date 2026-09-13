@@ -1,0 +1,33 @@
+!traceFile = object FILE('D:/work/plant-code/old/plant3d-web/docs/verification/e3d-measurement-runtime-golden/G6-current-angle.trace.txt')
+!trace = ARRAY()
+
+if undefined(!!gphAngleMeasure) then
+  !trace.append('blocked: !!gphAngleMeasure is undefined')
+  !traceFile.writeFile('OVERWRITE', !trace)
+  return
+endif
+
+!dimension = !!gphAngleMeasure.dimension
+!arc = !dimension.arc
+!angle = !arc.angle()
+!direction1 = !arc.angleDirection(!arc.startAngle).wrt(!dimension.wrt)
+!direction2 = !arc.angleDirection(!arc.endAngle).wrt(!dimension.wrt)
+var !coordinate coordinate
+var !unit unit
+
+!trace.append('product=E3D 3.1')
+!trace.append('project=AvevaMarineSample')
+!trace.append('mdb=/ALL')
+!trace.append('coord=' & !coordinate.string())
+!trace.append('unit=' & !unit.string())
+!trace.append('wrt=' & !dimension.wrt.name)
+!trace.append('arc_position=' & !arc.position.string())
+!trace.append('arc_radius_db=' & !arc.radius.dbUnits().value().string())
+!trace.append('arc_start_angle=' & !arc.startAngle.string())
+!trace.append('arc_end_angle=' & !arc.endAngle.string())
+!trace.append('angle_text=' & !angle.string(!!angleFmt))
+!trace.append('direction_1=' & !direction1.string())
+!trace.append('direction_2=' & !direction2.string())
+!trace.append('complete')
+!traceFile.writeFile('OVERWRITE', !trace)
+return

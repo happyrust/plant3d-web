@@ -1,0 +1,47 @@
+-- Restores the scene after the real GPHPLANE pick: source2 sphere removed, plane hidden, line aid shown
+-- again, Measure form back to standard World with the G1 sample, view limits restored.
+!traceFile = object FILE('D:/work/plant-code/old/plant3d-web/docs/verification/e3d-measurement-runtime-golden/restore-after-real-plane.trace.txt')
+!trace = ARRAY()
+
+!hasSource2 = defined(!!goldenPerpSourceAid2)
+if (!hasSource2) then
+  !!aidNumbers.remove(!!goldenPerpSourceAid2)
+  handle any
+  endhandle
+  !trace.append('source2_removed=TRUE')
+endif
+!!aidNumbers.hide(!!goldenPerpPlaneAid)
+handle any
+endhandle
+!!aidNumbers.draw(!!goldenPerpLineAid)
+handle any
+endhandle
+
+!!gphMeasure.perpendicularTo.val = FALSE
+!!gphMeasure.setPerpendicular()
+handle any
+  !trace.append('setPerpendicular_error=' & !!error.text)
+endhandle
+!!gphMeasure.showLinear.val = TRUE
+!!gphMeasure.wrt.val = 'World'
+!from = object POSITION('E 9769.75mm N 10047.18mm U 18664.8mm WRT /*')
+!to = object POSITION('E 7849.61mm N 10447.46mm U 14234.127mm WRT /*')
+!!gphMeasure.setMeasure(object LINE(!from, !to))
+handle any
+  !trace.append('setMeasure_error=' & !!error.text)
+endhandle
+
+!view = !!fmsys.currentDocument().view
+!saved = defined(!!goldenSavedLimits)
+if (!saved) then
+  !view.limits = !!goldenSavedLimits
+  handle any
+    !trace.append('limits_restore_error=' & !!error.text)
+  endhandle
+  !trace.append('limits_restored=TRUE')
+endif
+!!gphViews.refreshAllViews()
+!trace.append('form perpendicular=' & !!gphMeasure.perpendicularTo.val.string() & ' wrt=' & !!gphMeasure.dimension.wrt.name)
+!trace.append('complete')
+!traceFile.writeFile('OVERWRITE', !trace)
+return

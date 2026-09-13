@@ -1,0 +1,20 @@
+﻿case=G4-01
+provider=registered GPHLINE picked through EDG
+source_aid=10019
+target_aid=10020
+last_pick_type=DESIGNAID
+last_pick_aid_type=LINE
+last_pick_aid_number=10020
+position_data_type=DESIGNAID
+position_data_original_type=DESIGNAID
+position_data_position=Unset
+target_line_status=set
+target_line_start=E 8000mm N 9000mm U 15000mm WRT /*
+target_line_end=E 11000mm N 9000mm U 15000mm WRT /*
+result_from=E 11000mm N 9000mm U 15000mm WRT /*
+result_to=E 11000mm N 9499.999mm U 17500mm WRT /*
+distance_db=2549.50975679639
+distance_text=2549.51mm
+vertical_db=2500.00028338889
+horizontal_db=499.998583053485
+complete

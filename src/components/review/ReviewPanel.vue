@@ -103,6 +103,11 @@ import {
   type AnnotationSeverity,
 } from '@/types/auth';
 import {
+  describeValue,
+  failFileValidation,
+  parseJsonText,
+} from '@/utils/fileValidation';
+import {
   formatMeasurementKindLabel,
   formatMeasurementSummary,
 } from '@/utils/xeokitMeasurementFormat';
@@ -535,10 +540,35 @@ async function importFromFile(event: Event) {
 
   syncImporting.value = true;
   try {
+    if (!/\.json$/i.test(file.name) || file.size === 0 || file.size > 20 * 1024 * 1024) {
+      failFileValidation({
+        source: file.name,
+        format: 'json',
+        reason: !/\.json$/i.test(file.name)
+          ? '文件扩展名无效'
+          : file.size === 0
+            ? '文件为空'
+            : '文件过大',
+        expected: '.json 且大小为 1 字节至 20 MB',
+        actual: `${file.name}，${file.size} 字节`,
+        byteOffset: file.size,
+      });
+    }
     const text = await file.text();
-    const parsed = JSON.parse(text) as unknown;
+    const parsed = parseJsonText<unknown>(text, {
+      source: file.name,
+      expectedRoot: 'object',
+    });
     const tasks = (parsed as { tasks?: unknown }).tasks;
-    if (!Array.isArray(tasks)) throw new Error('导入文件格式不正确：缺少 tasks 数组');
+    if (!Array.isArray(tasks)) {
+      failFileValidation({
+        source: file.name,
+        format: 'json',
+        reason: '缺少 tasks 数组',
+        expected: 'tasks 数组',
+        actual: describeValue(tasks),
+      });
+    }
 
     const resp = await reviewSyncImport({
       tasks: tasks as ReviewTask[],
@@ -546,6 +576,10 @@ async function importFromFile(event: Event) {
     });
     if (!resp.success) throw new Error(resp.error_message || '导入失败');
     await userStore.loadReviewTasks();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '导入失败';
+    console.error('[ReviewPanel] Sync import failed:', error);
+    emitToast({ message, level: 'error' });
   } finally {
     syncImporting.value = false;
     input.value = '';
@@ -921,34 +955,39 @@ async function handleTaskComponentSelect(rawRefno?: string | null): Promise<void
   }
 }
 
-// 监听当前任务变化，自动应用过滤
-watch(currentTask, async (newTask) => {
+let taskViewerSyncSeq = 0;
+
+async function syncTaskToViewer(newTask: ReviewTask, seq: number): Promise<void> {
+  const taskId = newTask.id;
+  await nextTick();
+  const viewerReady = viewerContext.viewerRef.value
+    ? true
+    : await waitForViewerReady({ timeoutMs: 4000 });
+  if (seq !== taskViewerSyncSeq || currentTask.value?.id !== taskId) return;
+  if (!viewerReady) {
+    console.warn('[ReviewPanel] Viewer panel did not become ready in time for task filtering');
+    return;
+  }
+  await ensureTaskComponentsLoaded(newTask);
+  if (seq !== taskViewerSyncSeq || currentTask.value?.id !== taskId) return;
+  filterModelByTask();
+}
+
+// 任务 UI 状态立即切换；依赖 Viewer 的加载/过滤在后台完成，不能用固定等待
+// 阻塞校审记录、流转按钮和附件等首屏内容。
+watch(currentTask, (newTask) => {
+  const viewerSyncSeq = ++taskViewerSyncSeq;
   selectedTaskComponentRefno.value = null;
   lastRestoredSceneKey.value = null;
 
   if (newTask && newTask.components.length > 0) {
-    // 有新任务时自动应用过滤
-    const taskId = newTask.id;
-    await nextTick();
-    const viewerReady = await waitForViewerReady({ timeoutMs: 4000 });
-    if (!viewerReady) {
-      console.warn('[ReviewPanel] Viewer panel did not become ready in time for task filtering');
-      return;
-    }
-    if (currentTask.value?.id !== taskId) {
-      return;
-    }
-    await ensureTaskComponentsLoaded(newTask);
-    if (currentTask.value?.id !== taskId) {
-      return;
-    }
-    filterModelByTask();
+    void syncTaskToViewer(newTask, viewerSyncSeq);
   } else {
     // 清除任务时清除过滤
     clearModelFilter();
   }
 
-  await restoreConfirmedRecordsIntoScene(true);
+  void restoreConfirmedRecordsIntoScene(true);
 
   if (newTask) {
     showSubmitDialog.value = false;
@@ -1381,6 +1420,7 @@ function beforeUnloadGuard(e: BeforeUnloadEvent) {
 window.addEventListener('beforeunload', beforeUnloadGuard);
 
 onUnmounted(() => {
+  taskViewerSyncSeq++;
   window.removeEventListener('beforeunload', beforeUnloadGuard);
   window.removeEventListener(EMBED_LANDING_STATE_UPDATED_EVENT, handleEmbedLandingStateUpdated);
   document.removeEventListener('click', handleClickOutside);

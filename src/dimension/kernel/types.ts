@@ -8,6 +8,31 @@ export type ScreenRect = Readonly<{
   height: number;
 }>;
 
+/** Axis-aligned Design Space box (metres). */
+export type DesignBox = Readonly<{
+  min: Vec3;
+  max: Vec3;
+}>;
+
+/**
+ * A convex Design Space volume billboard tags keep clear of — a model
+ * component's bounding box in any orientation, given by its corners (the
+ * kernel projects them and works with their convex hull on screen).
+ */
+export type LayoutObstacle = Readonly<{
+  corners: readonly Vec3[];
+}>;
+
+/**
+ * Host seam the viewport layout asks for the component boxes around the
+ * billboard tags of one view (「标签避让管件」, 2026-09-13): `query` answers
+ * with every box intersecting the Design Space region, in any order; the
+ * kernel projects them and keeps the tag bodies clear.
+ */
+export type LayoutObstacleSource = Readonly<{
+  query(region: DesignBox): readonly LayoutObstacle[];
+}>;
+
 export type InteractionState = 'normal' | 'hovered' | 'selected';
 export type DimensionSemanticRole =
   | 'normal'

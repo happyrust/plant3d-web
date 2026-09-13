@@ -1,0 +1,21 @@
+﻿product=E3D 3.1
+project=AvevaMarineSample
+mdb=/ALL
+coord=ENU
+unit=MM Bore MM Distance
+wrt=/*
+from=E 9769.75mm N 10047.18mm U 18664.8mm WRT /*
+to=E 7849.61mm N 10447.46mm U 14234.127mm WRT /*
+distance_db=4845.4130910139
+distance_text=4845.41mm
+offset_1_db=-1920.14003836707
+offset_2_db=400.279963591009
+offset_3_db=-4430.67333555253
+offset_1_text=-1920.14mm
+offset_2_text=400.28mm
+offset_3_text=-4430.67mm
+direction=W 11.7755 N 66.1215 D WRT /*
+show_linear=TRUE
+keep_dimensions=FALSE
+perpendicular=FALSE
+complete

@@ -1,0 +1,80 @@
+!traceFile = object FILE('D:/work/plant-code/old/plant3d-web/docs/verification/e3d-measurement-runtime-golden/G3-02-rotated-candidates.trace.txt')
+!trace = ARRAY()
+
+!bran = object DBREF('=24381/145018')
+handle any
+  !trace.append('error=sample bran unavailable: ' & !!error.text)
+  !traceFile.writeFile('OVERWRITE', !trace)
+  return
+endhandle
+
+!site = !bran.owner.owner.owner
+!trace.append('sample_site=' & !site.name & ' (' & !site.type & ')')
+
+!types = ARRAY()
+!types.append('EQUI')
+!types.append('BRAN')
+!types.append('SUBE')
+!types.append('SBFR')
+
+!found = 0
+do !type values !types
+  !elements = !!collectAllFor(!type, '', !site)
+  handle any
+    !trace.append('collect_error ' & !type & '=' & !!error.text)
+    skip
+  endhandle
+  !trace.append('site_' & !type & '_count=' & !elements.size().string())
+  do !e values !elements
+    !ori = !e.ori.wrt(world)
+    handle any
+      skip
+    endhandle
+    !s = !ori.string()
+    if (!s.upcase().matchwild('Y IS N AND Z IS U*').not()) then
+      !found = !found + 1
+      !trace.append('rotated ' & !type & ' ' & !e.string() & ' name=' & !e.name & ' ori=' & !s & ' pos=' & !e.pos.wrt(world).string())
+      if (!found ge 12) then
+        break
+      endif
+    endif
+  enddo
+  if (!found ge 12) then
+    break
+  endif
+enddo
+
+if (!found eq 0) then
+  !trace.append('site_scan=no rotated element in sample site, widening to WORLD EQUI (capped)')
+  !elements = !!collectAllFor('EQUI', '', WORLD)
+  handle any
+    !trace.append('collect_error WORLD EQUI=' & !!error.text)
+    !traceFile.writeFile('OVERWRITE', !trace)
+    return
+  endhandle
+  !trace.append('world_EQUI_count=' & !elements.size().string())
+  !scanned = 0
+  do !e values !elements
+    !scanned = !scanned + 1
+    if (!scanned gt 4000) then
+      break
+    endif
+    !ori = !e.ori.wrt(world)
+    handle any
+      skip
+    endhandle
+    !s = !ori.string()
+    if (!s.upcase().matchwild('Y IS N AND Z IS U*').not()) then
+      !found = !found + 1
+      !trace.append('rotated EQUI ' & !e.string() & ' name=' & !e.name & ' ori=' & !s & ' pos=' & !e.pos.wrt(world).string())
+      if (!found ge 12) then
+        break
+      endif
+    endif
+  enddo
+endif
+
+!trace.append('found=' & !found.string())
+!trace.append('complete')
+!traceFile.writeFile('OVERWRITE', !trace)
+return

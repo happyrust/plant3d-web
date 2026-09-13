@@ -1,0 +1,52 @@
+!traceFile = object FILE('D:/work/plant-code/old/plant3d-web/docs/verification/e3d-measurement-runtime-golden/G4-real-aids.trace.txt')
+!trace = ARRAY()
+
+if defined(!!goldenPerpSourceAid) then
+  !!aidNumbers.remove(!!goldenPerpSourceAid)
+  handle any
+  endhandle
+endif
+if defined(!!goldenPerpLineAid) then
+  !!aidNumbers.remove(!!goldenPerpLineAid)
+  handle any
+  endhandle
+endif
+if defined(!!goldenPerpPlaneAid) then
+  !!aidNumbers.remove(!!goldenPerpPlaneAid)
+  handle any
+  endhandle
+endif
+
+!sourcePosition = object POSITION('E 11000mm N 9500mm U 17500mm WRT /*')
+!source = object GPHPOSITION(!sourcePosition)
+!source.diameter(350mm)
+!!goldenPerpSourceAid = !!aidNumbers.add(!source)
+
+!lineStart = object POSITION('E 8000mm N 9000mm U 15000mm WRT /*')
+!lineEnd = object POSITION('E 11000mm N 9000mm U 15000mm WRT /*')
+!line = object LINE(!lineStart, !lineEnd)
+!lineGraphic = object GPHLINE(!line)
+!!goldenPerpLineAid = !!aidNumbers.add(!lineGraphic)
+
+!planePosition = object POSITION('E 8500mm N 10500mm U 17500mm WRT /*')
+!planeVector = object POINTVECTOR(!planePosition, object DIRECTION('N WRT WORLD'))
+!plane = !planeVector.plane()
+!planeGraphic = object GPHPLANE(!plane)
+!planeGraphic.x = 2200mm
+!planeGraphic.y = 2200mm
+!planeGraphic.filled(FALSE)
+!!goldenPerpPlaneAid = !!aidNumbers.add(!planeGraphic)
+
+!trace.append('source_aid=' & !!goldenPerpSourceAid.string())
+!trace.append('source_position=' & !sourcePosition.string())
+!trace.append('line_aid=' & !!goldenPerpLineAid.string())
+!trace.append('line_start=' & !lineStart.string())
+!trace.append('line_end=' & !lineEnd.string())
+!trace.append('plane_aid=' & !!goldenPerpPlaneAid.string())
+!trace.append('plane_position=' & !planePosition.string())
+!trace.append('plane_normal=N WRT WORLD')
+!trace.append('complete')
+!traceFile.writeFile('OVERWRITE', !trace)
+
+!!gphViews.refreshAllViews()
+return

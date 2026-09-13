@@ -60,6 +60,7 @@ e2e/*
 !e2e/pms-powerpms-review-new.spec.ts
 !e2e/output-project-direct-entry.spec.ts
 !e2e/dimension-mbd-v2-fixture.spec.ts
+!e2e/dimension-real-ams-bran-version.spec.ts
 !e2e/helpers/
 !e2e/helpers/spatialQueryRealBran.ts
 !e2e/fixtures/
@@ -72,12 +73,14 @@ e2e/*
 !e2e/dimension-canvas-smoke.spec.ts
 !e2e/dimension-perf.spec.ts
 scripts/*
+!scripts/p0-live-smoke.mjs
 !scripts/run-dimension-browser-perf.mjs
 !scripts/run-gen-model-v1-frozen-source-live.ps1
 !scripts/run-gen-model-v1-p5-live.ps1
 !scripts/pms-chrome-devtools-flow.ts
 !scripts/pms-plant3d-initiate-flow.ts
 !scripts/pms-contract-sequence.ts
+!scripts/review-annotation-flow-contract.ts
 !scripts/pms-simulator-bootstrap.ts
 !scripts/pms-simulator-runner.ts
 !scripts/deploy-ubuntu.sh

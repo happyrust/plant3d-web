@@ -1,0 +1,301 @@
+# E3D 3.1 测量运行时 Golden Capture
+
+日期：2026-09-11  
+目标：把静态 PML / IDA 结论与 E3D 3.1 实际运行行为分开记录，为 plant3d-web 的测量兼容开发提供可重复证据。
+
+## 1. 证据规则
+
+- 每个用例记录 E3D 可执行文件、`Core3D.dll`、`gphmeasure.pmlfrm`、`gphdimension.pmlobj` 的 SHA-256。
+- 每个用例记录项目、MDB、模块、用户、COORD、单位、WRT、模型元素和点击顺序。
+- 原始数值、格式化文本、辅助图形、命令提示和测量完成后的下一状态分别记录。
+- 截图必须包含测量窗体、命令提示和三维视口；不能只截结果表。
+- 静态 PML 推导写在 `static_expectation`，运行观察写在 `observation`，两者不得互相覆盖。
+- 不能观察到的项标记 `blocked`，并给出可复现阻塞原因；不得按静态代码补值。
+- 本轮只做查询、测量和 AID 显示，不保存数据库元素，不执行模型编辑命令。
+
+## 2. 目标环境
+
+- 产品：AVEVA Everything3D 3.1
+- 项目：AvevaMarineSample（project code `ams`）
+- MDB：`/ALL`
+- 模块：Design
+- 首选样本：BRAN `24381/145018`
+- 启动入口：已修复的 shadow E3D 3.1 环境；启动时禁止刷新安装目录 DLL、禁止清理无关进程。
+- 输出目录：`docs/verification/e3d-measurement-runtime-golden/`
+
+## 3. 用例清单
+
+### G0 · 身份与基础状态
+
+- [x] 记录进程 PID、EXE 路径、模块版本和四个文件 SHA-256。
+- [x] 记录项目、MDB、当前元素、COORD、默认距离单位。
+- [x] 证明 3D 视口有模型，Measure Distance 能进入第 1 次取点状态。
+
+### G1 · World 标准距离
+
+- [x] G1-01：两个模型 Snap 点，记录 start/end Snap 文案（产品 UI 未导出具体 feature id）。
+- [x] G1-02：记录 Distance、三个 Offset、Direction 的原文和符号。
+- [x] G1-03：用独立坐标计算复核 `distance² = dx² + dy² + dz²`。
+- [x] G1-04：零分量和负分量样本，确认轴标签与负零格式（`0mm`，无负零；轴标签仍为 E/N/U）。
+- [x] G1-05：确认窗体保持活动以及下一次命令回到 start 状态。
+
+### G2 · Show linear / Keep dimensions
+
+- [x] G2-01：Show linear=true，记录直接线与正交分解线。
+- [x] G2-02：Show linear=false，确认仅保留正交分解线。
+- [x] G2-03：小于、等于、大于 0.1 mm 的分量，确认隐藏阈值（`between(-0.1mm,0.1mm)`；0.09 抑制、0.11 绘制、名义 0.1 落在浮点误差一侧；视口截图待补）。
+- [ ] G2-04：Keep=false，完成两次测量、关闭窗体、切换工具。
+- [ ] G2-05：Keep=true，完成两次测量、关闭窗体、切换工具、重新打开。
+
+### G3 · WRT / COORD / GENSEC
+
+- [x] G3-01：World 下记录项目 COORD 与 E/N/U 标签。
+- [x] G3-02：普通 WRT 切换 U/V/W；旋转样本 EQUI `/Copy-of-RCS151MM`（Y is E）与 `/Copy-of-RCS616MD`（Y is U and Z is S 21 E）均与独立投影一致。
+- [x] G3-03：无效 WRT 静默回退 World（`/*`）。
+- [x] G3-04：GENSEC WRT，确认 Offset 为非负投影距离，Direction 仍按 World。
+- [x] G3-05：实测 1920.14mm / 4430.67mm 投影未被 1m 截断。
+
+### G4 · Perpendicular To
+
+- [x] G4-01：点→线（真实 GPHLINE 设计辅助拾取 + 段内垂足 fixture）。
+- [x] G4-02：点→平面（真实 GPHPLANE 设计辅助鼠标拾取 `1500mm / 0 / 1500mm / S`，与 DESIGNAID fixture 完全一致）。
+- [x] G4-03：点→点退化。
+- [x] G4-04：零距离返回未设 ARC（窗体走 `alert.warning`）；垂足落在有限边 / 平面片之外时按无限线、无限面投影，不截断。
+- [x] G4-05：记录点退化结果的端点顺序、Distance / Vertical / Horizontal / Direction。
+- [x] G4-06：进入 Perpendicular 后 dimension.wrt 静默回到 `/*`，控件文字保留旧 WRT；退出时经 `initialise()` 重新解析恢复旧 WRT。
+
+### G5 · Shortest
+
+- [ ] G5-01：点点、点线、点平面。
+- [ ] G5-02：平行线、相交线、异面线。
+- [ ] G5-03：线平面、平行平面、相交平面。
+- [ ] G5-04：记录非唯一最近点对如何选择 witness。
+- [ ] G5-05：确认产品 UI 中实际可达的命令入口。
+
+### G6 · Angle
+
+- [x] G6-01：按 root / first / second 三点顺序测量。
+- [x] G6-02：记录 Angle、Direction1、Direction2 和 WRT。
+- [x] G6-03：0°、180°、second=first、second=root 均在内核返回未设 ARC（窗体走 `alert.error`）；0.1°/179.9° 接受；只报 minor 角，平面法向随拾取顺序翻转，无 reflex。
+- [ ] G6-04：确认两图形角度测量是否为当前产品可达入口。
+
+### G7 · Snap 候选与约束
+
+- [ ] G7-01：PPOINT 与 Item/表面重叠，记录 hover 与 click 胜出候选。
+- [ ] G7-02：PLINE、EDGE、PLANE、TUBING 各记录实际捕捉几何。
+- [ ] G7-03：轴/平面/工作网格约束后，记录最终点是否仍位于原 feature。
+- [ ] G7-04：模型或相机变化后点击，确认是否重算候选。
+
+## 4. 单用例记录格式
+
+```json
+{
+  "case_id": "G1-01",
+  "status": "passed | failed | blocked | not_run",
+  "target": {
+    "product": "E3D 3.1",
+    "exe_sha256": "",
+    "core3d_sha256": "",
+    "pml_sha256": {},
+    "project": "AvevaMarineSample",
+    "mdb": "/ALL",
+    "module": "Design",
+    "coord": "",
+    "unit": "",
+    "wrt": "World"
+  },
+  "sample": {
+    "refno": "24381/145018",
+    "feature_ids": [],
+    "input_points": []
+  },
+  "steps": [],
+  "static_expectation": "",
+  "observation": {
+    "prompt": [],
+    "result_rows": [],
+    "aid_geometry": "",
+    "next_state": ""
+  },
+  "screenshots": [],
+  "verdict": "",
+  "blocker": null
+}
+```
+
+## 5. Go / No-Go
+
+- World 正交辅助图形：G0、G1、G2 通过后才能宣称 E3D 3.1 兼容。
+- 普通元素 WRT：G3-01～G3-03 与后端 frame 数据契约同时通过。
+- GENSEC：G3-04～G3-05 通过前 No-Go。
+- Perpendicular：至少一个权威 LINE/PLANE provider 和 G4 通过后开放。
+- Shortest：G5 与有限/无限范围语义确认前 No-Go。
+- Angle 三点结果：G6-01～G6-03 通过；两图形模式单独审批。
+
+## 6. 本轮执行记录
+
+实际执行状态、文件身份、截图与阻塞信息写入同目录的
+`capture-2026-09-11.json`。未运行项保留 `not_run`，不可删除。
+
+## 7. 本轮执行摘要
+
+- 已通过：G0、G1-01/02/03/05、G2-01/02、G3-01/03/04/05、
+  G4-03/05、G6-01/02。
+- 已做局部探针：Keep=true 的 close 回调后 AID 保留；Keep=false 回调清除 AID。
+  尚未完成两次测量、切换工具和重新打开的完整生命周期序列，因此 G2-04/05
+  仍保持未勾选。
+- 标准距离实测：Distance `4845.41mm`；Offset
+  `E -1920.14mm / N 400.28mm / U -4430.67mm`。
+- Perpendicular 点退化实测：Distance `5446.6mm`；
+  Vertical `5334.38mm`；Horizontal `1099.91mm`。
+- 三点角度实测：`37.4013215953213°`；
+  Direction1 `W 11.7755 N 66.8266 D`；
+  Direction2 `W 12.9006 S 32.3892 D`。
+- GENSEC `=23406/14` 实测：Offset 为
+  `1920.14 / 400.28 / 4430.67mm` 非负投影距离；Direction 显示使用
+  World，而同一方向在 GENSEC 中是另一组方向文字。
+- 点→线/平面合成 `EDGPOSITIONDATA` 探针曾被
+  `(2,754) Argument 1 to TRIM is unset` 阻断；根因是 `type='GRAPHICS'` 且
+  `pLine` 未设时 `getLine()` 走入 pline 分支。
+
+## 8. 2026-09-12 补采（02:19 真实拾取 + 10:08–10:18 运行时注入）
+
+执行方式：E3D 主窗口当时最小化 / 被用户其它窗口遮挡，本轮不抢焦点，只通过运行中的
+进程调用 UI 本身使用的 EDG action 与窗体回调（`setMeasure` /
+`setPerpendicularMeasure` / `setUpForm` / `radius3PointsNoError` /
+`perpendicularToPoint`），数值与判定表达式写入 trace；会弹 `!!alert` 的分支只读
+代码、不触发。视口截图用 `printwindow-capture.ps1`（user32 `PrintWindow` +
+`PW_RENDERFULLCONTENT`，对被遮挡窗口后台取图，不改焦点）配合 `view.limits` 临时
+取景完成，取完由 `restore-after-visuals.pmlmac` 还原视图与窗体。所有宏、trace、
+截图在同目录，明细见 `capture-2026-09-11.json`。
+
+- **G4-01 真实点→线**（上一会话 02:25 完成，本轮入档）：GPHLINE 设计辅助经 EDG
+  拾取，`pickData` 为 `DESIGNAID / aidType LINE / position Unset`；Distance
+  `2549.51mm`、Vertical `2500mm`、Horizontal `500mm`、Direction `N 78.6901 U`。
+- **G4-02 真实点→平面**（10:39–10:43，用户授权提前台）：GPHPOSITION 源球
+  `E 8000 N 9000 U 16500` + 鼠标点在 GPHPLANE 轮廓线上，`pickData` 为
+  `DESIGNAID / aidType LINE（轮廓图元）/ pPoint 10021 / position Unset`，
+  `getLine()` 未设、`getPlane()` 命中注册的 PLANE；结果 Distance `1500mm`、
+  Vertical `0mm`、Horizontal `1500mm`、Direction `S`，命令回到 start；截图
+  `G4-02-real-plane-ready.png` / `-after-source.png` / `G4-02-real-point-to-plane.png`。
+  与下面 fixture 同一用例完全一致。中途一次点击因窗口刚被最大化而落空，EDG 对空拾取
+  不改状态。
+- **G4-02 fixture / G4-04**：DESIGNAID fixture 对同一源点复现真实拾取结果逐位一致
+  （2549.50975679639 / 2500.00028 / 499.99858），据此采集：平面片内 `1500mm /
+  0 / 1500mm / S`、`1800mm / 0 / 1800mm / N`；平面片外 `1000mm`（无限面）；线段
+  端点之外垂足 `E 12000` 不截断（无限线）；源点落在线/面上返回未设 ARC。端点带
+  ~1e-3mm 漂移，来自 `radius2Points` 用格式化方向字串重建 ARC 朝向——golden 比对
+  须带容差。截图 `G4-02-visual-point-to-plane.png`：平面片、源点球与一条标
+  `1500mm` 的直接辅助线；Vertical 为 0 时 `draw(REAL, ARC)` 因 datum 与端点相距
+  <1mm 而不画 Vertical/Horizontal 分解；窗体截图 `G4-02-visual-measure-form.png`。
+- **G4-06**：进入 Perpendicular 后 `dimension.wrt` 静默变为 `/*`，Direction 按
+  World 计算，禁用的 WRT 控件仍显示旧名；切回标准模式由 `initialise()` 重新解析
+  控件文字，旧 WRT 自动恢复。
+- **G3-02 旋转普通 WRT**：EQUI `/Copy-of-RCS151MM`（Y is E and Z is U）得
+  `U -400.28 / V -1920.14 / W -4430.67mm`，Direction `S 11.7755 W 66.1215 D`；
+  EQUI `/Copy-of-RCS616MD`（Y is U and Z is S 21 E）得
+  `-1649.16 / -4430.67 / -1061.81mm`，Direction `S 20.416 W 12.6584 D`。
+  两者与 `offset = Rᵀ·Δworld` 的独立投影最大差 2.3e-13mm；Distance 不变。
+- **G2-03 0.1mm 抑制**：`offset.between(-0.1mm, 0.1mm)` 为真即抑制。0.09 → 抑制
+  （截图 `G2-03-visual-dE0.09.png` 只有 `2236.07mm / N2000mm / U1000mm`），
+  0.11 → 绘制（`G2-03-visual-dE0.11.png` 多出 `E0.11mm`）；名义 0.1
+  （10000.1−10000 = 0.100000000000364）落在带外被绘制，−0.1 同理。结论：边界相等取决于
+  浮点，测试只能断言带内 / 带外，不能断言恰在边界。
+- **G1-04 零 / 负零**：0.004、−0.004、−0.00001 全部格式化为 `0mm`，无 `-0mm`；
+  格式为 2 位小数并去尾零（`0.09mm`、`2000mm`、`2236.07mm`）。
+- **细分线总闸门**（新发现）：Show linear 开启时，仅当
+  `int(ΔE+ΔN+ΔU) ne int(length)` 才绘制正交分解；单一正向轴向测量
+  （如 N +2000）只画直接线，不画分量（`G2-03-visual-axis-positive.png` 只有
+  `2000mm`）；同样长度的负向（N −2000）则画分量（`G2-03-visual-axis-negative.png`
+  中 `2000mm` 与 `N-2000mm` 叠在同一中点）。Show linear 关闭（orthogonalOnly）时
+  分解线总是绘制。
+  **决定（2026-09-12，按本轮 golden）**：Web 侧按观察到的规则原样复现，不做"改良"——
+  `src/measurement/aids/worldDistanceAidPlan.ts` 新增 `shouldDrawWorldAxisBreakdown`
+  （`!showDirect || trunc(sumMm) !== trunc(lengthMm)`，毫米截断前先吸掉 1e-6mm 的
+  米→毫米换算噪声），`buildWorldDistanceAidPlan` 在 `showOrthogonal` 之后过这道闸门，
+  `useXeokitMeasurementTools.syncFromStore` 改为把真实的 Show linear 传进去。理由：
+  兼容目标是"与 E3D 3.1 逐行一致"，闸门的可观察效果（哪些辅助线出现）就是契约；负向
+  单轴的重叠标签是 E3D 自身行为，要偏离它是另一条产品决策。vitest：G2-03 五行
+  （0.09 抑制 / 0.11 绘制 / N+2000 无分解 / N−2000 有分解 / 3000·4000 有分解）+
+  Show linear 关闭必画 + 换算噪声不翻转；`useXeokitMeasurementTools` 两条 +0.5m 单轴
+  用例改为只出直接斜线。
+- **G6-03 角度退化**：0°（同射线）、180°（反向射线）、second=first、second=root
+  均使 `POSITION.plane()` 报 `(2,886) Plane lines derived from points are parallel`
+  （或 `(2,892)` 重合点），`radius3PointsNoError` 返回未设 ARC，窗体走
+  `alert.error('An angular dimension could not be constructed ...')`；
+  `GPHANGLEDIMENSION.draw()` 的 `Angle 0` 分支在三点流程里不可达。0.1° / 179.9°
+  正常接受并格式化为 `0.1` / `179.9`；90° 第二点在南侧时朝向翻转为
+  `Y is S and Z is D`，角度仍报 90，不出现 270 反角。
+- 仍为 No-Go：Shortest（G5）、Snap 候选消歧（G7）、Keep 完整生命周期
+  （G2-04/05）、两图形角度入口（G6-04）。
+
+## 9. Web 侧 golden 用例（vitest，2026-09-12）
+
+| golden | Web 被测对象 | 测试文件 |
+| --- | --- | --- |
+| G2-03 0.1mm 抑制 / int(sum) 闸门 | `buildWorldDistanceAidPlan`、`shouldDrawWorldAxisBreakdown` | `src/measurement/aids/worldDistanceAidPlan.test.ts` |
+| G3-02 旋转普通 WRT（两件 EQUI，Rᵀ·Δ、U/V/W、from/to 局部坐标、方向） | `ReferenceFrameResolver` + `computeDistanceMeasurementResultInFrame` + `buildDistanceMeasurementResultRows` | `src/measurement/reference-frame/e3dRotatedWrt.golden.test.ts` |
+| G4-01/02/03/04/06 Perpendicular（无限线/面、World 帧、零距离、点退化） | 纯内核 `computePerpendicularDistance`（`src/measurement/kernel/perpendicularDistance.ts`）+ 目标 provider `resolvePerpendicularTarget`（P-Point 方向→无限线、圆面→无限面、否则点）+ 腿 `buildPerpendicularAidPlan`；已接入 `useXeokitMeasurementTools`（样式开关 `perpendicularTo`，结果表 `buildPerpendicularMeasurementResultRows`） | `perpendicularDistance.test.ts`、`perpendicularTargetProvider.test.ts`、`aids/perpendicularAidPlan.test.ts`、`useXeokitMeasurementTools.test.ts`（点退化 + P-Point 轴线两条流程）、`MeasurementResultInspector.test.ts` |
+| G6-01/02/03 三点角度（0°/180°/重合拒绝、minor 角、法向随拾取顺序翻转、0.1°/179.9°） | 新增纯内核 `buildThreePointAngle`（`src/measurement/kernel/threePointAngle.ts`，尚未接入 UI） | `src/measurement/kernel/threePointAngle.test.ts` |
+
+E3D 的方向字串（如 `S 11.7755 W 66.1215 D`）在用例里按 PDMS 罗盘约定换成单位向量比对；
+数值容差 0.01mm（E3D 结果端点带 ~1e-3mm 的 ARC 重建漂移）。
+
+## 10. Web 实机走查 · Perpendicular to（2026-09-12 12:28）
+
+环境：dev server `:3101` + gen-model 0.1.22 `:8022`，`?show_refno=24381_145018`，Playwright（Chrome）
+真实指针事件：测量 Dock → `距离` → 勾选 `Perpendicular to` → 自由表面模式点表面点 → 切回 E3D 模式
+扫描表面像素、以工具自身的指针透镜文字确认捕捉目标 → 点击。
+
+- **可走通的路径：表面点 → Item 原点（点退化，G4-03 语义）**。记录 `perpendicular.targetKind = point`、
+  `targetLabel = Item 原点 24381_145028`；结果表 `Distance 1893mm（近似）/ Vertical 1873mm /
+  Horizontal 276mm / Direction X +0.0252 · Y -0.1435 · Z +0.9893`，`wrt: World（垂距模式固定）`；
+  按持久化记录的设计坐标独立复算 1893.03 / 1872.83 / 275.82mm 一致。图形：直接线 `1893 mm`
+  + 竖直腿 `1873 mm` + 水平腿 `276 mm` 的直角分解。截图 `web-perpendicular-live-01-source.png`
+  … `-05-legs-zoom.png`。
+- **P-Point 轴线（点→无限线）在本环境走不通，不是代码问题**：当前模型包不含 `ptsets.parquet`
+  与 `primitive_keypoints.parquet`（`当前模型包未包含 …，ptset 测量不可用`），语义 snap 点为空，
+  运行时回退 `/api/pdms/ptset/24381_145031?dbno=7997`（:3100，standalone-real）返回
+  `MODEL_REFNO_NOT_FOUND`。扫描全部 102 个表面像素时透镜只出现 `Item 原点 24381_1450xx`，
+  从未出现 `P-Point`。要走真实点→线，需要带 ptsets / primitive keypoints 的模型包或可用的 ptset 服务；
+  该路径目前由 `useXeokitMeasurementTools.test.ts` 的 P-Point dir=+Z 流程用例覆盖。
+  → **2026-09-12 14:18 已走通**，见 §11：P-Point 改经 gen-model `POST /api/v1/element/ptset` 取，不再依赖模型包。
+- 顺带确认：E3D 拾取模式下普通表面点不锁定为起点（只锁 P-Point / Item 原点），需切自由表面模式才能以
+  表面点作起点。
+
+## 11. P-Point 改走 API（gen-model `element/ptset`）+ 实机 表面点 → P-Point 轴线（2026-09-12 14:18）
+
+**改动口径**：测量的关键点取数从「模型包 parquet」改成「API 请求」，经模型数据源端口
+`getModelSource().keypoints`（`src/model-source/ports.ts` `KeypointSource`）：
+
+- `gen-model-v1`（缺省源）：`POST /api/v1/element/ptset { refno, include_members }`（`src/model-source/genModelV1/keypointSource.ts`
+  → `PtsetResponse` / `PtsetChildrenResponse`，与旧后端契约同形，`usePtsetSnap` / 可视化 / `ptsetTransform` 一行不改）。
+  服务端是 gen-model 新端点（分支 `feature/element-ptset-api`，`src/web_service/ptset.rs`，spec §4.11.1）：**不经投影、不连库**，
+  直读 dabacon 走 e3d-model 目录链 `SPRE → SCOM → PTRE → PTSE`（新增公开函数 `e3d_model::catalogue_point_set`），
+  回局部系 mm 点 + 列主序世界矩阵。基本体 / PLINE 关键点服务端尚无接口：适配器回空并给出原因（提示条可见），P-Point 捕捉不受影响。
+- `legacy`：`ptsets.parquet` 优先、`:3100 /api/pdms/ptset` 兜底，与改动前逐字相同（挪进 `src/model-source/legacy/index.ts`）。
+
+**服务端 golden（41 个 P 点 · 0 不符）**：在运行中的 E3D 3.1（PID 32452）用 `G8-ptset-api-e3d-ppoints.pmlmac`
+对 BRAN `=24381/145018` 的 5 个成员（ELBO ×2、ATTA、OLET、VALV 含手轮 PTCA 点）逐个 `Q Pn POS/DIR/BORE WRT /*`
+（`G8-ptset-api-e3d-ppoints.trace.txt`），与 `element/ptset` 的局部点 × 世界矩阵逐点比对（`G8-ptset-api-compare-e3d.ps1`
+→ `G8-ptset-api-compare.txt`）：**compared=41 mismatches=0，位置最大差 0.00066 mm（E3D 打印 3 位小数），
+方向最大差 2.1e-5（E3D 角度打印 6 位有效数字），bore 全等**；E3D 报的 P0（元素原点）API 不列，VALV P27 两边都没有。
+
+**Web 实机走查（dev `:3101` + 本轮构建的 gen-model `:8023`，`?show_refno=24381_145018&gm_backend_port=8023`，Playwright 真指针）**：
+测量 Dock → `距离` → 勾 `Perpendicular to` → 自由表面模式取 **TUBI 表面点**（透镜「模型表面点」；已吸到 P-Point 的像素跳过）→
+切 E3D 模式悬停 → 透镜 `P-Point #1` → 点击。
+
+- 网络：3 发 `POST http://localhost:8023/api/v1/element/ptset`（`{"refno":"24381/145035"}` 等），200，VALV 31 点 / ELBO 2 点；
+  没有任何 parquet / `:3100` ptset 请求。
+- 记录：起点 `mesh_pick_point`（o:24381_145018:6，设计坐标 `7893.756 / 10483.003 / 15301.672 mm`），
+  终点 `ptset:24381_145031#1` 轴线垂足 `7849.850 / 10499.705 / 18650.051 mm`，`perpendicular = { targetKind: 'line', targetLabel: 'P-Point #1 轴线' }`。
+- 结果表：`Distance 3349mm（近似）/ Vertical 3348mm / Horizontal 47mm / Direction X +0.0131 · Y -0.0050 · Z -0.9999`，
+  `wrt: World（垂距模式固定）`，面板 `Perpendicular to · 点→无限线 · P-Point #1 轴线`。
+- 独立复算（用 E3D golden 里 ELBO 145031 的 P1 `E 7849.85 N 9298.628 U 18656.042`、`N 0.285797 D`）：垂足
+  `(7849.85, 10499.70, 18650.05)`、距离 3348.7、竖直 3348.4、水平 47.0、方向 `(0.0131, -0.0050, -0.9999)`——与面板一致。
+- 图形：直接线 `3349 mm` + 竖直腿 `3348 mm` + 水平腿 `47 mm`（`web-ptset-api-live-05-legs-zoom.png`）。
+  截图 `web-ptset-api-live-01-loaded.png` … `-04-result.png`，网络与记录 `web-ptset-api-live-network.json`。
+- 起点吸附一则：自由表面模式下 P-Point 到位后同样优先捕捉（与 E3D 相同），所以要拿真表面点须等 P-Point 落地后再看透镜。
+
+未做：Primitive Key Point / PLINE 语义关键点在 gen-model-v1 下仍无 API（服务端只存烘好的网格、无基本体分解），
+提示条显示原因；legacy 源照旧读 parquet。

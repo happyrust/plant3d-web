@@ -1,0 +1,9 @@
+﻿source_aid=10019
+source_position=E 11000mm N 9500mm U 17500mm WRT /*
+line_aid=10020
+line_start=E 8000mm N 9000mm U 15000mm WRT /*
+line_end=E 11000mm N 9000mm U 15000mm WRT /*
+plane_aid=10021
+plane_position=E 8500mm N 10500mm U 17500mm WRT /*
+plane_normal=N WRT WORLD
+complete

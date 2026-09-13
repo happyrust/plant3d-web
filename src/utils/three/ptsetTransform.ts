@@ -17,6 +17,8 @@ export type PtsetSceneCandidate = {
   worldPos: Vec3;
   /** 管道外径（透传，用于显示/优先级判断） */
   pbore: number;
+  /** P-point 方向（场景坐标，未归一化）；无方向的点为 null。 */
+  sceneDir?: Vec3 | null;
 };
 
 /**
@@ -177,6 +179,7 @@ export function ptsetResponseToSceneCandidates(
       number: point.number,
       worldPos: transformed.scenePt,
       pbore: point.pbore,
+      sceneDir: transformed.sceneDir,
     });
   }
 
