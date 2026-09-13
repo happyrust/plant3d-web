@@ -116,7 +116,12 @@ _Avoid_: entityId
 
 ## Object Snap Filter
 
-测量命令中的捕捉过滤器。用户通过它限定哪些点源可以成为测量点。显示候选点和允许捕捉是两个不同概念。
+测量命令中的捕捉过滤器。用户通过它限定哪些点源可以成为测量点。显示候选点和允许捕捉是两个不同概念。在 E3D 操作模式下它就是拾取层的拾取过滤器那一维。
+
+## 拾取层
+
+测量取点共用的两维选择：**拾取过滤器**（Any / Element / Aid / Pline / Ppoint / Screen / Graphics / External，决定哪一类特征可以被拾中）× **拾取类型**（Snap / Distance / Mid-Point / Fraction / Proportion / Intersect / Cursor，决定在拾中的点、线、面上落点怎么派生），外加 Significant Snaps 一档；两维正交。Any 只放行 Element、Ppoint、Pline 与模型表面点，不放行 Graphics 细节；Graphics 的边与面从已加载网格派生，属于近似点；Intersect 由两（三）次子拾取的线 / 面求交得到一个位置（ADR 0060）。
+_Avoid_: 点源开关、捕捉模式
 
 ## P-Point
 

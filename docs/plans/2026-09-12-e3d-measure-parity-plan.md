@@ -114,8 +114,9 @@
 - 切片 2b（`6ca770a`）：覆盖条设置弹层的过滤器 × 拾取类型 radio 组、取值输入、Significant snaps 控件（切片 1 漏掉的模板）。
 - 切片 3（`e91b30e`）：Intersect 两 / 三次子拾取状态机 `src/measurement/kernel/intersectPickSession.ts` + 工具接线（子拾取、交点预览、
   `Intersection[n]` 提示、Esc 第一档、换类型重置）。实机 `ELBO 边 × VALV 边` 出交点（golden MD §13）。
-- **未完**：`element/keypoints` / `element/plines` 服务端；TUBING 轴线点前端派生；G7 / G8 / G9 运行时 golden（E3D 需在跑）；
-  ADR「测量拾取层对齐 E3D Positioning Control」。
+- ADR 0060「测量拾取层对齐 E3D Positioning Control」已落（`docs/adr/0060-align-measurement-pick-layer-with-e3d-positioning-control.md`）：
+  两维模型、Any = Element / Ppoint / Pline（+ 表面点）、Graphics 网格派生、Intersect 分型三条口径与被否决的替代。
+- **未完**：`element/keypoints` / `element/plines` 服务端；TUBING 轴线点前端派生；G7 / G8 / G9 运行时 golden（E3D 需在跑）。
 
 **前端**
 - `useMeasurementPickSources` 重构成两维：**过滤器**（对齐 E3D：Any / Element / Ppoint / Pline / Graphics / Screen；Aid / External 先占位灰掉）× **拾取类型**（Snap / Exact / Mid-Point / Fraction / Proportion / Distance / Intersect）。现有 4 个点源映射：`ptset`→Ppoint、`position`+`primitive_key_point`→Element、PLINE 关键点→Pline、`mesh_pick_point`→Screen/Exact；新增 Graphics。
