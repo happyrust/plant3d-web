@@ -383,6 +383,78 @@ onBeforeUnmount(() => {
           自由表面模式下表面点捕捉已关闭。
         </div>
 
+        <!-- E3D Positioning Control：拾取过滤器 × 拾取类型 + Significant Snaps -->
+        <div data-testid="measurement-overlay-pick-layer"
+          class="mt-3 rounded-lg border border-border bg-muted/30 p-2">
+          <div class="mb-1 flex items-center justify-between text-[11px] text-muted-foreground">
+            <span>拾取过滤器</span>
+            <span data-testid="measurement-overlay-pick-layer-summary">
+              {{ MEASUREMENT_PICK_FILTER_LABELS[pickLayer.filter] }} · {{ MEASUREMENT_PICK_TYPE_LABELS[pickLayer.pickType] }}
+            </span>
+          </div>
+          <div role="radiogroup" aria-label="拾取过滤器" class="grid grid-cols-4 gap-1">
+            <button v-for="id in MEASUREMENT_PICK_FILTER_IDS"
+              :key="id"
+              type="button"
+              role="radio"
+              :data-testid="`measurement-overlay-pick-filter-${id}`"
+              class="h-8 rounded-md border px-1 text-[11px] leading-none disabled:cursor-not-allowed disabled:opacity-40"
+              :class="pickLayer.filter === id
+                ? 'border-primary bg-primary text-primary-foreground'
+                : 'border-border bg-background text-muted-foreground hover:bg-muted'"
+              :aria-checked="pickLayer.filter === id"
+              :disabled="!MEASUREMENT_PICK_FILTER_AVAILABILITY[id].available"
+              :title="pickFilterTitle(id)"
+              @click="setPickFilter(id)">
+              {{ MEASUREMENT_PICK_FILTER_LABELS[id] }}
+            </button>
+          </div>
+
+          <div class="mb-1 mt-2 text-[11px] text-muted-foreground">拾取类型</div>
+          <div role="radiogroup" aria-label="拾取类型" class="grid grid-cols-4 gap-1">
+            <button v-for="id in MEASUREMENT_PICK_TYPE_IDS"
+              :key="id"
+              type="button"
+              role="radio"
+              :data-testid="`measurement-overlay-pick-type-${id}`"
+              class="h-8 rounded-md border px-1 text-[11px] leading-none disabled:cursor-not-allowed disabled:opacity-40"
+              :class="pickLayer.pickType === id
+                ? 'border-primary bg-primary text-primary-foreground'
+                : 'border-border bg-background text-muted-foreground hover:bg-muted'"
+              :aria-checked="pickLayer.pickType === id"
+              :disabled="!MEASUREMENT_PICK_TYPE_AVAILABILITY[id].available"
+              :title="pickTypeTitle(id)"
+              @click="setPickType(id)">
+              {{ MEASUREMENT_PICK_TYPE_LABELS[id] }}
+            </button>
+          </div>
+
+          <label v-if="pickTypeValueField && pickTypeValueKey"
+            class="mt-2 flex h-9 items-center justify-between gap-2 rounded-md border border-border bg-background px-2">
+            <span class="text-[11px] text-muted-foreground">{{ pickTypeValueField.label }}</span>
+            <input type="number"
+              :data-testid="`measurement-overlay-pick-type-value-${pickTypeValueKey}`"
+              class="h-7 w-24 rounded border border-input bg-background px-1 text-right text-xs"
+              :value="pickTypeValue"
+              :min="pickTypeValueField.min"
+              :max="pickTypeValueField.max"
+              :step="pickTypeValueField.step"
+              :aria-label="pickTypeValueField.label"
+              @change="setPickTypeValue(($event.target as HTMLInputElement).value)" />
+          </label>
+
+          <label class="mt-2 flex h-9 cursor-pointer items-center gap-2 rounded-md px-1 hover:bg-background/70">
+            <input type="checkbox"
+              data-testid="measurement-overlay-significant-snaps"
+              class="h-3.5 w-3.5 accent-primary"
+              :checked="pickLayer.significantSnaps"
+              aria-label="Significant Snaps：吸到显著点 / 分段"
+              @change="setSignificantSnaps(($event.target as HTMLInputElement).checked)" />
+            <span>Significant snaps</span>
+            <span class="text-[11px] text-muted-foreground">（提示条尾巴的 Snap）</span>
+          </label>
+        </div>
+
         <label v-if="isDistanceMode"
           class="mt-2 flex h-10 cursor-pointer items-center gap-2 rounded-lg border border-border px-2 hover:bg-muted">
           <input type="checkbox"

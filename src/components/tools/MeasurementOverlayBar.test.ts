@@ -445,6 +445,110 @@ describe('MeasurementOverlayBar', () => {
     host = null;
   });
 
+  it('E3D 拾取层控件：过滤器 × 拾取类型写入样式 store，取值输入随类型出现，不可用项禁用，Significant snaps 可切', async () => {
+    let host: HTMLDivElement | null = document.createElement('div');
+    document.body.appendChild(host);
+
+    vi.doMock('@/composables/useDockApi', () => ({
+      ensurePanelAndActivate: vi.fn(),
+    }));
+
+    vi.doMock('@/composables/useViewerContext', () => ({
+      useViewerContext: () => ({
+        viewerRef: shallowRef(null),
+        overlayContainerRef: shallowRef(null),
+        tools: shallowRef(null),
+        xeokitMeasurementTools: shallowRef(null),
+        store: shallowRef(null),
+        viewerError: shallowRef(null),
+        ptsetVis: shallowRef(null),
+        annotationSystem: shallowRef({
+          selectAnnotation: vi.fn(),
+          selectedId: ref<string | null>(null),
+        }),
+      }),
+    }));
+
+    const [
+      { default: MeasurementOverlayBar },
+      { useToolStore },
+      { useXeokitMeasurementStyleStore },
+    ] = await Promise.all([
+      import('./MeasurementOverlayBar.vue'),
+      import('@/composables/useToolStore'),
+      import('@/composables/useXeokitMeasurementStyleStore'),
+    ]);
+
+    const store = useToolStore() as any;
+    const measurementStyle = useXeokitMeasurementStyleStore();
+    measurementStyle.resetStyle();
+    store.clearXeokitMeasurements();
+    store.setToolMode('xeokit_measure_distance');
+
+    const app = createApp(MeasurementOverlayBar, {
+      tools: {
+        ready: ref(true),
+        statusText: ref('ready'),
+        removeMeasurement: vi.fn(),
+        deactivate: vi.fn(),
+      },
+    });
+    app.mount(host);
+    await nextTick();
+
+    (host.querySelector('[data-testid="measurement-overlay-settings-trigger"]') as HTMLButtonElement | null)?.click();
+    await nextTick();
+    expect(host.querySelector('[data-testid="measurement-overlay-pick-layer"]')).toBeTruthy();
+    expect(host.querySelector('[data-testid="measurement-overlay-pick-layer-summary"]')?.textContent?.trim()).toBe('Any · Snap');
+
+    // E3D 缺省 Any × Snap；Aid / External / Intersect 灰掉。
+    const filterButton = (id: string) => host!.querySelector(`[data-testid="measurement-overlay-pick-filter-${id}"]`) as HTMLButtonElement | null;
+    const typeButton = (id: string) => host!.querySelector(`[data-testid="measurement-overlay-pick-type-${id}"]`) as HTMLButtonElement | null;
+    expect(filterButton('any')?.getAttribute('aria-checked')).toBe('true');
+    expect(filterButton('aid')?.disabled).toBe(true);
+    expect(filterButton('external')?.disabled).toBe(true);
+    expect(filterButton('graphics')?.disabled).toBe(false);
+    expect(typeButton('intersect')?.disabled).toBe(true);
+    expect(host.querySelector('[data-testid^="measurement-overlay-pick-type-value-"]')).toBeNull();
+
+    filterButton('graphics')?.click();
+    await nextTick();
+    expect(measurementStyle.state.measurementPickLayer.filter).toBe('graphics');
+    expect(filterButton('graphics')?.getAttribute('aria-checked')).toBe('true');
+
+    typeButton('fraction')?.click();
+    await nextTick();
+    expect(measurementStyle.state.measurementPickLayer.pickType).toBe('fraction');
+    const fractionInput = host.querySelector('[data-testid="measurement-overlay-pick-type-value-fraction"]') as HTMLInputElement | null;
+    expect(fractionInput).toBeTruthy();
+    expect(fractionInput?.value).toBe('2');
+    if (fractionInput) {
+      fractionInput.value = '4';
+      fractionInput.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+    await nextTick();
+    expect(measurementStyle.state.measurementPickLayer.values.fraction).toBe(4);
+    expect(host.querySelector('[data-testid="measurement-overlay-pick-layer-summary"]')?.textContent?.trim()).toBe('Graphics · Fraction');
+
+    // 禁用项点击不生效。
+    filterButton('aid')?.click();
+    await nextTick();
+    expect(measurementStyle.state.measurementPickLayer.filter).toBe('graphics');
+
+    const significant = host.querySelector('[data-testid="measurement-overlay-significant-snaps"]') as HTMLInputElement | null;
+    expect(significant?.checked).toBe(true);
+    if (significant) {
+      significant.checked = false;
+      significant.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+    await nextTick();
+    expect(measurementStyle.state.measurementPickLayer.significantSnaps).toBe(false);
+
+    app.unmount();
+    host.remove();
+    host = null;
+  });
+
   it('连续测量开关仅在距离模式显示，切换后写入 store 状态', async () => {
     let host: HTMLDivElement | null = document.createElement('div');
     document.body.appendChild(host);
