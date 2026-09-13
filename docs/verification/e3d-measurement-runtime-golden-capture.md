@@ -377,7 +377,7 @@ Esc 分层第一档「先放弃进行中的子拾取」；换拾取类型 / 过�
   拾取类型内核照线候选走：Snap 近端、Cursor 控制点、Mid-Point / Fraction / Proportion / Distance 沿轴线、Intersect 转 LINE；Perpendicular to 得到轴向 provider。
 - 过滤器准入：**Any 与 Element 放行、Pline / Ppoint / Graphics 不放行**——E3D 只在元素类拾取模式（`pany` / `pick`）经 `EDGPICKDATA.viewData` 的
   `data[1] = 'TUBING'` 回隐含管，`stdPline`（`inMode = 'pline'`）不拾它。用户 2026-09-13 14:27 的措辞是「管身轴线段进 Pline 类候选」，这里按「线类候选
-  （有两端点的拾中几何，与 PLINE 同一派生路径）」实现、**归 Element 特征类而不是 Pline 过滤器**，属有意偏离，待用户确认。
+  （有两端点的拾中几何，与 PLINE 同一派生路径）」实现、**归 Element 特征类而不是 Pline 过滤器**，属有意偏离；用户 22:05 确认「照 E3D 维持 Any / Element 放行、Pline 不放行」（决策 `d-318`，ADR 0060（4））。
 - 标签裸给「轴线（<起点 P-Point> → <终点 P-Point>）」，命令条按既有规则补元素类型 → `TUBI 轴线（ELBO P-Point #1 → ELBO P-Point #2） · Snap`；
   拾中的整条轴线在场景里高亮（同 Graphics 细节）。
 
