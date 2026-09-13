@@ -58,6 +58,8 @@ type ViewerLike = {
     selectedObjectIds: string[];
     getLoadedRefnos?: () => string[];
     getAABB: (refnos: string[]) => [number, number, number, number, number, number] | null;
+    /** 目标含子树的并集盒（`DtxCompatScene.getSubtreeAABB`）；旧查看器 / 测试桩没有它时退回 `getAABB`。 */
+    getSubtreeAABB?: (refnos: string[]) => [number, number, number, number, number, number] | null;
     setObjectsVisible: (refnos: string[], visible: boolean) => void;
     setObjectsSelected: (refnos: string[], selected: boolean) => void;
     setObjectsXRayed: (refnos: string[], xrayed: boolean) => void;
@@ -1114,12 +1116,14 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
       error.value = '请先选中一个模型';
       return;
     }
-    const aabb = viewer.scene.getAABB([selectedRefno]);
+    // 选中的是 BRAN 这类 owner 时，它自己的对象只有隐含管子（成员各有 refno）；服务端 refno 模式的 `refno_aabb_center`
+    // 是子树并集盒（spec §4.13），这里同口径取子树盒，没有该方法的查看器退回 `getAABB`（叶子构件两者相同）。
+    const aabb = viewer.scene.getSubtreeAABB?.([selectedRefno]) ?? viewer.scene.getAABB([selectedRefno]);
     if (!aabb) {
       error.value = '无法解析当前选中构件的位置';
       return;
     }
-    // `getAABB` 给的是场景坐标；`draft.center` 一律 mm。
+    // 盒是场景坐标；`draft.center` 一律 mm。
     draft.center = resolveSceneWorldTransform(viewer).pointToWorldMm(aabbToCenter(aabb));
     draft.rangeCenterSource = 'selected';
     draft.refno = selectedRefno;

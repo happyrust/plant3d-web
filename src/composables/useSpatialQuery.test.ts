@@ -1619,6 +1619,33 @@ describe('createSpatialQueryStore · 场景坐标 ↔ mm（plan 2026-09-13 §7 �
     expect(store.resultSet.value?.items.map((item) => item.refno)).toEqual(['loaded_a', 'server_only']);
   });
 
+  it('「当前选中」优先取子树盒（getSubtreeAABB）：BRAN 自身对象只有管子，成员盒并进来才与服务端 refno_aabb_center 同口径；取不到再退回 getAABB', () => {
+    const viewer = createScaledViewerStub();
+    // 自身（管子）盒 mm [0,0,0,10,10,10]（场景 LOADED_A_SCENE_AABB）；成员往 +x / +z 伸到 (20, 10, 30) → 子树盒中心 mm (10, 5, 15)
+    const subtreeSceneAabb: [number, number, number, number, number, number] = [-1, -2, -3, -0.98, -1.99, -2.97];
+    const getSubtreeAABB = vi.fn((ids: string[]) => (ids[0] === 'loaded_a' ? subtreeSceneAabb : null));
+    (viewer.scene as unknown as { getSubtreeAABB: typeof getSubtreeAABB }).getSubtreeAABB = getSubtreeAABB;
+
+    const store = createSpatialQueryStore({
+      viewerRef: ref(viewer),
+      selection: { selectedRefno: { value: 'loaded_a' } } as any,
+      toolStore: { pickedQueryCenter: { value: null }, setToolMode: vi.fn(), setPickedQueryCenter: vi.fn() } as any,
+    });
+
+    store.applyCurrentSelection();
+    expect(store.error.value).toBeNull();
+    expect(getSubtreeAABB).toHaveBeenCalledWith(['loaded_a']);
+    // 不是自身盒中心 (5, 5, 5)
+    expectPointClose(store.draft.center, [10, 5, 15]);
+    expect(store.draft.refno).toBe('loaded_a');
+
+    // 子树盒解不出（null）→ 退回 getAABB 的自身盒
+    getSubtreeAABB.mockReturnValue(null);
+    store.applyCurrentSelection();
+    expect(store.error.value).toBeNull();
+    expectPointClose(store.draft.center, [5, 5, 5]);
+  });
+
   it('「拾取中心」的 worldPos 是场景坐标，进草稿时换回 mm', async () => {
     const viewer = createScaledViewerStub();
     const pickedQueryCenter = ref<{ entityId: string; worldPos: [number, number, number] } | null>(null);

@@ -5,7 +5,7 @@ import type { DTXSelectionController } from '@/utils/three/dtx';
 import type { DtxViewer } from '@/viewer/dtx/DtxViewer';
 
 import { tryGetDbnumByRefno } from '@/composables/useDbMetaInfo';
-import { hasDtxDbnoCache, resolveDtxObjectIdsByRefno } from '@/composables/useDbnoInstancesDtxLoader';
+import { hasDtxDbnoCache, resolveDtxObjectIdsByRefno, resolveDtxObjectIdsByUnitRefno } from '@/composables/useDbnoInstancesDtxLoader';
 
 export type Aabb6 = [number, number, number, number, number, number]
 
@@ -549,6 +549,44 @@ export class DtxCompatScene {
 
     if (!hasAny || box.isEmpty()) return null;
     return aabbFromBox3(box);
+  }
+
+  /**
+   * 目标**含子树**的并集盒（场景坐标）：并上属于该 refno、以及沿 owner 链能走到该 refno 的全部已加载对象。
+   *
+   * `getAABB` 只并 `o:<refno>:n` 自己的对象——DTX loader 把隐含管子（TUBI）挂在 owner BRAN 的 refno 下，ELBO / VALV / OLET
+   * 等成员各用自己的 refno 建对象，所以 BRAN 的 `getAABB` 只是管子盒（BRAN 24381_145018：管子盒中心与子树盒中心差 295 / 573 mm，
+   * 差的正是 VALV 24381_145035 那一块）。gen-model-v1 `/api/v1/spatial/nearby?refno=` 的 `refno_aabb_center` 是子树并集
+   * （spec §4.13），空间查询「当前选中」要与它同口径就走这里。成员没加载的不计入——部分加载时仍可能偏，叶子构件两者相同。
+   */
+  getSubtreeAABB(refnos: string[]): Aabb6 | null {
+    const box = new Box3();
+    const tmp = new Box3();
+    let hasAny = false;
+
+    for (const refno of refnos) {
+      for (const objectId of this._getDtxSubtreeObjectIds(refno)) {
+        const b = this._dtxLayer.getObjectBoundingBoxInto(objectId, tmp);
+        if (!b || b.isEmpty()) continue;
+        box.union(b);
+        hasAny = true;
+      }
+    }
+
+    if (!hasAny || box.isEmpty()) return null;
+    return aabbFromBox3(box);
+  }
+
+  /** `_getDtxObjectIds` 的子树版：自己的对象 + loader 里 owner 链落到该 refno 的对象；解不出库号就只有自己的。 */
+  private _getDtxSubtreeObjectIds(refno: string): string[] {
+    const own = this._getDtxObjectIds(refno);
+    const normalized = refno.trim().replace('/', '_');
+    if (!/^\d+_/.test(normalized)) return own;
+    const dbno = tryGetDbnumByRefno(normalized);
+    if (!dbno) return own;
+    const subtree = resolveDtxObjectIdsByUnitRefno(dbno, normalized);
+    if (subtree.length === 0) return own;
+    return Array.from(new Set([...own, ...subtree]));
   }
 
   clear(): void {
