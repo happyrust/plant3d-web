@@ -80,8 +80,8 @@
 | 9 | 两线夹角（LINEANGLE） | ✗ | 无 EDGE 拾取；G6-04 未采 |
 | 10 | Shortest（graphics × graphics） | ✗ | 现有 clearance / 最近点是采样近似（上一计划 §3.2），不是 `gmfLine.shortest` 语义；G5 未采 |
 | 11 | 拾取过滤器：Ppoint | ✓ | `ptset` 源；2026-09-12 起经 `ModelSource.keypoints` 走 gen-model `element/ptset`（d-559），实机 表面点 → P-Point 轴线 走通 |
-| 12 | 拾取过滤器：Element | ✓ | E3D 3.1 Element × Snap 对 CYLI / BOX / ELBO / VALV 等一律回落**元素原点**（`edgpicktype` ELEMENT 分支 `handle any → item.position`；只有 SCTN / GENSEC / PANEL 等结构类实现 `snap()`），Web 的 `position`（Item 原点）即是；`primitive_key_point`（盒角 / 轴端）是 legacy parquet 带来的 Web 增强，v1 **不补 API**（Q5 2026-09-13 拍板，d-336）。**Element 拾中的元素当 Intersect / Perpendicular 操作数按 E3D `line()` 转 P1 → P2 ✓（2026-09-14，`79b199c`）**：CYLI / CONE / SNOU / DISH / PYRA / NOZZ（`src/measurement/kernel/elementLine.ts`），ptset 的 P1 / P2 优先、无点的设计基本体从 DTX 局部包围盒 × 放置矩阵派生（截面对中才认；带 XOFF / YOFF 的 SNOU / PYRA 不派生），实机 CYLI × CYLI / CYLI × CONE 交点与 Perpendicular 垂足 Δ ≤ 0.001 mm（golden MD §16）。缺：SCTN / GENSEC 沿截面 PLINE 线（→ `element/plines`） |
-| 13 | 拾取过滤器：Pline | ◐ | legacy `semantic_snap_points`（PLINE start/end）；v1 无 |
+| 12 | 拾取过滤器：Element | ✓ | E3D 3.1 Element × Snap 对 CYLI / BOX / ELBO / VALV 等一律回落**元素原点**（`edgpicktype` ELEMENT 分支 `handle any → item.position`；只有 SCTN / GENSEC / PANEL 等结构类实现 `snap()`），Web 的 `position`（Item 原点）即是；`primitive_key_point`（盒角 / 轴端）是 legacy parquet 带来的 Web 增强，v1 **不补 API**（Q5 2026-09-13 拍板，d-336）。**Element 拾中的元素当 Intersect / Perpendicular 操作数按 E3D `line()` 转 P1 → P2 ✓（2026-09-14，`79b199c`）**：CYLI / CONE / SNOU / DISH / PYRA / NOZZ（`src/measurement/kernel/elementLine.ts`），ptset 的 P1 / P2 优先、无点的设计基本体从 DTX 局部包围盒 × 放置矩阵派生（截面对中才认；带 XOFF / YOFF 的 SNOU / PYRA 不派生），实机 CYLI × CYLI / CYLI × CONE 交点与 Perpendicular 垂足 Δ ≤ 0.001 mm（golden MD §16）。SCTN / GENSEC 的 `line()` 是截面 PLINE 线 → #13（`element/plines`，2026-09-14 ✓） |
+| 13 | 拾取过滤器：Pline | ✓ | **gen-model-v1 供给 ✓（2026-09-14，gen-model `a00565522` + Web `c2e3d97`，d-394）**：`POST /api/v1/element/plines` 复用 e3d-model 建型材实体的截面链给 SCTN / GENSEC 每条目录 p-line 的 `PLSTART → PLEND` 世界线（cut 端点另给，只在真斜时出现）；前端摊成与 legacy `semantic_snap_points` 同形的端点候选配成线，再加一条线候选（控制点 = p-line 上离光标射线最近处）——光标落在梁中段就拾中整条 p-line：Snap 近端 / Mid-Point 等沿线 / Intersect 当 LINE / Perpendicular to 以它为目标（E3D `EDGPLINE.snap` / `edgsctn.snap → this.line`）。实机 14 根 SCTN 的 JUSL 线 = POSS → POSE、cut 端点 728 处核对 0 不符、网格在 p-line 标架的包围盒差 ≤ 0.001 mm；Snap / Mid-Point / Intersect / Perpendicular Δ 0.000 mm（golden MD §17）。legacy 仍走 `semantic_snap_points`。缺：E3D Pick Settings 的 cut / fitting / joint / node 档、GENSEC 弧 SPINE |
 | 14 | 拾取过滤器：Graphics（facet 边 / 面）、Screen、Aid、External | ◐ | **Graphics ✓（2026-09-13）**：`mesh_graphics` 点源从已加载网格派生绘制边（线）/ 面（平面），只在 Graphics 过滤器下参与；实机 `面 → 边` 距离走通（golden MD §12）。Screen ✓（= `mesh_pick_point`）。Aid / External 占位灰掉 |
 | 15 | TUBING 轴线点、DPOINT | ◐ | **TUBING ✓（2026-09-13）**：`tubing_axis` 点源从直管对象的局部包围盒 × 放置矩阵派生管身轴线，两端吸到邻接 P-Point（`src/measurement/tubing/tubingAxis.ts`），按 E3D `EDGTUBING` 走线候选（Snap 近端 / Cursor 交点 / Mid-Point 等沿线 / Intersect 转 LINE），Any / Element 放行；实机 `轴线 → 轴线` Snap 与 Mid-Point 两条距离走通、校正端点与 E3D ELBO 145031 P1 差 0.001 mm（golden MD §14）。ATTA 按 E3D `line()` 跳过：gen-model 本就不在非 SPKBRK 的 ATTA 处断管，SPKBRK 断开的两段前端合并（`mergeTubingAxisAcrossPassThrough`，golden MD §15）。DPOINT ✗ |
 | 16 | 拾取类型：Snap / Exact | ✓ | 拾取层 `pickType` Snap / Cursor；点候选、线候选（`GMFLINE` 近端 / 控制点）、面候选（射线 ∩ 平面）三类几何均接内核 |
@@ -128,7 +128,15 @@
   DTX 局部帧几何 × 放置矩阵派生：圆柱 / 锥 / 碟「对中且圆」、棱锥「对中」）+ 工具接线（候选 / 命中挂 `elementLine`，只做操作数不改 Snap；
   没候选胜出时光标命中的元素本身就是 ELEMENT 拾取 → 转线；Perpendicular 目标线 = 元素 P1 → P2，垂足在精确线上不标近似）。实机 CYLI × CYLI /
   CYLI × CONE 交点、Perpendicular to CYLI / DISH 垂足与解析 P1 / P2 全部 Δ ≤ 0.001 mm，DISH / PYRA 接受、BOX 拒收不消耗（golden MD §16）。
-- **未完**：`element/plines` 服务端（Q5 2026-09-13 拍板：`element/keypoints` 不做，d-336）；带 XOFF / YOFF 的 SNOU / PYRA 的斜 P1 → P2（要
+- 切片 6（2026-09-14 03:46，gen-model `a00565522` + Web `c2e3d97`，决策 d-394）：Pline 过滤器接 gen-model-v1——服务端 `POST /api/v1/element/plines`
+  （`gen-model-ptset-api/src/web_service/plines.rs`，spec §4.11.2：复用 e3d-model 建型材实体的截面链，目录 PSTR 每条 PLIN 的 (PX, PY) 经 JUSL 对齐 / LMIRR
+  镜像放进截面标架再乘世界矩阵 → `PLSTART → PLEND` 世界线；`PLSTCUT / PLENCUT` 另给 `start_cut / end_cut`，只在与平头端点差 > 0.01 mm 时出现；GENSEC 只接
+  直 SPINE）+ 前端（`keypointSource.primitiveKeypoints` 打它、`elementPlinesToKeypointCandidates` 摊成端点候选、`buildPlineLineCandidates` 每条线加一条线候选、
+  Perpendicular 目标标签用 p-line 自己的名字）。实机 STRU 24381_177298 的 14 根 SCTN：JUSL 线 = `world_transform`·POSS / POSE Δ 0.0000、cut 端点 728 处
+  0 不符、DTX 网格在 p-line 标架的包围盒与 p-line 极值差 ≤ 0.001 mm（含 BANG 155、25° 斜切）；Pline × Snap 近端 / Mid-Point / Any 放行 / Ppoint 不放行 /
+  Intersect NA × NA / Perpendicular to PLINE 全部 Δ 0.000 mm，PANE 提示服务端 reason（golden MD §17）。
+- **未完**：E3D Pick Settings 的 PLINE `cut = true` 与 fitting / joint / node 分段档（非缺省，`start_cut / end_cut` 已在响应里）；GENSEC 含弧 SPINE 的
+  `arc()` 与 GENSEC 的 cut 端点（本库无 GENSEC 样本，直 SPINE 分支运行时未验）；带 XOFF / YOFF 的 SNOU / PYRA 的斜 P1 → P2（要
   `element/attributes` 或服务端给设计基本体合成 P1 / P2，本 EQUI 无样本）；STIF / BRCO 处按 E3D 截断（gen-model 穿过它们、E3D `line()` 不跳，本库无样本）；
   G7 / G8 / G9 运行时 golden（E3D 需在跑）。
 
@@ -144,7 +152,8 @@
   E3D 3.1 Element × Snap 对基本体 / 管件一律 `handle any` 回落元素原点，「盒角 / 面中心 / 圆柱轴端」不是 E3D 口径；`GeneratedElement` 只有 `solid` / `parts`（逐基本体网格）/
   `world` / `primitive_instance`（仅纯 BOX / CYLI），吐基本体清单 + 放置矩阵是 3–5 d 后端且与 d-536 RefNo 原生路由改同一批持久化面。要这体验另立 Web 增强，
   走前端从 DTX 放置矩阵派生（BOX / CYLI 元素精确）。E3D 真多出来的两件：`element/plines`（下一条）与 Element 拾中元素的 P1 → P2 `line()` 操作数（前端，**2026-09-14 已做**，`79b199c`：目录件用 ptset 的 P1 / P2，设计基本体在 gen-model-v1 下没有点、从 DTX 局部帧几何派生，切片 5）。
-- `POST /api/v1/element/plines`：型材 PLINE（`e3d-model::section` 已求 SPRO/SREC PLINE 位置，暴露 start/end + 方向）。
+- `POST /api/v1/element/plines`：型材 PLINE（`e3d-model::section` 已求 SPRO/SREC PLINE 位置，暴露 start/end + 方向）——**2026-09-14 已落地**
+  （gen-model `a00565522`，spec §4.11.2；Web `c2e3d97` 接线；d-394；golden MD §17）。
 - TUBING 轴线点：由前端从 records 的隐式管身（`is_tubi`）+ 邻接 P-Point 派生，或服务端在 `element/ptset` 的 `members` 里附管身端点——Phase A 先前端派生
   （**已落地 2026-09-13**：直管对象局部包围盒 × 放置矩阵给轴线，端点吸 ptset 缓存里的邻接 P-Point；服务端不需改）。
 
@@ -198,7 +207,7 @@
 | --- | --- | --- |
 | P-Point（含成员） | ✓ `element/ptset`（今日落地，41 点 golden） | — |
 | Element 显著点 / 基本体关键点 | — 不做（d-336） | E3D Element × Snap = 元素原点，已有 `position`；显著点是 Web 增强，Q5 拍板不补后端 |
-| PLINE | ✗ | `element/plines`（e3d-model `section`） |
+| PLINE | ✓ `element/plines`（2026-09-14，gen-model `a00565522`，golden MD §17） | — （余：cut / fitting / joint / node 档、GENSEC 弧 SPINE） |
 | Graphics 边 / 面 | ✗ | 前端从网格派生，无后端 |
 | TUBING 轴线点 | ✓ 前端派生（2026-09-13，golden MD §14） | 无后端；直管放置矩阵 + `element/ptset` 邻接 P-Point |
 | Aid | ✗ | 需 Aid 系统，另立决策 |
@@ -233,12 +242,13 @@
 - **Q4 Imperial**：是否需要英制（ft-in 分数）显示？不需要则 Units 只做 Metric 矩阵 + Display Unit。
 - **Q5 后端排期**：`element/keypoints` 需要改 e3d-model 暴露基本体放置矩阵，是本方案最大的后端工作量；与 gen-model 当前 RefNo 原生路由计划（d-536）并行是否可接受？
   **已拍板 2026-09-13（d-336）**：不做 `element/keypoints`——E3D 3.1 Element × Snap 对基本体 / 管件回落元素原点，显著点不是 E3D 口径；排 `element/plines`
-  （后端 ~1 d，只读 `section` 已有结果，不碰 GeneratedElement / 持久化、与 d-536 不撞）+ Element 拾中 CYLI / NOZZ 的 P1 → P2 `line()` 操作数（前端 ~0.5 d；**2026-09-14 已做**，`79b199c`，
+  （后端 ~1 d，只读 `section` 已有结果，不碰 GeneratedElement / 持久化、与 d-536 不撞；**2026-09-14 已做**，gen-model `a00565522` + Web `c2e3d97`，d-394，golden MD §17）
+  + Element 拾中 CYLI / NOZZ 的 P1 → P2 `line()` 操作数（前端 ~0.5 d；**2026-09-14 已做**，`79b199c`，
   实测 gen-model-v1 的设计基本体 ptset 无点，P1 / P2 改从 DTX 局部帧几何派生，golden MD §16）。
 - **Q6 两线夹角**：若 G6-04 采出「产品 UI 不可达」，是否仍做（作为 Web 增强）？
 
 ## 8. 交付物
 
-- 代码：`src/measurement/kernel/{pickDerivation,shortestDistance}.ts` + golden 测试；`useMeasurementPickSources` 两维模型；Graphics provider；Inspector / OverlayBar 改动；gen-model `element/plines`（`element/keypoints` 不做，Q5 / d-336）。
+- 代码：`src/measurement/kernel/{pickDerivation,shortestDistance}.ts` + golden 测试；`useMeasurementPickSources` 两维模型；Graphics provider；Inspector / OverlayBar 改动；gen-model `element/plines`（**已落地** `a00565522`；`element/keypoints` 不做，Q5 / d-336）。
 - 文档：本文件 §2 随阶段更新；golden MD 新增 §12+；`e3d-measure-prompt-matrix.md`；ADR「测量拾取层对齐 E3D Positioning Control」。
 - 决策：每阶段结束 `record_decision`，取代本方案里对应的开放问题。

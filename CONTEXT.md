@@ -133,6 +133,11 @@ _Avoid_: 管道中心线（MBD 尺寸的走向线）、PLINE
 元素类拾取拾中一个元素本身、而这一击要的是一条线（Intersect 的操作数、Perpendicular to 的目标）时，元素代表的那条线：P-Point 1 → P-Point 2，对应 E3D `edgTypes.attribute(noun).line(item)`；只有圆柱、锥 / 斗、碟、棱锥、管嘴有这条线，弯头 / 盒 / 阀没有（拒收）。它只当操作数——Snap / Mid-Point 拾这些元素仍落元素原点。目录件的 P1 / P2 来自点集；gen-model 的设计基本体没有点集，就从它画在自己局部帧里的几何（局部包围盒 × 放置矩阵）取两端面中心，截面不对中（带 XOFF / YOFF）时不取。
 _Avoid_: 管身轴线（直管才有）、显著点、P-Point 方向线（单个 P-Point 带方向的那条）
 
+## p-line
+
+型材（SCTN / GENSEC）截面上带名字的纵向线（NA / TOS / BOS / LTOS …），来自目录 SPRF 的 PSTR 里每条 PLIN 的截面内坐标，随截面一起被 JUSL 对齐、LMIRR 镜像、BANG 旋转后沿轴从起端面拉到终端面——对应 E3D 的 `PLSTART pline → PLEND pline`。在测量取点里它是 Pline 过滤器拾中的那条线：光标落在梁上任意处就拾中整条 p-line，Snap 取近端、Mid-Point 等沿线派生、Intersect 当直线、Perpendicular to 以它为目标。gen-model-v1 下由服务端 `element/plines` 沿建型材实体的同一条截面链算出（所以线一定在画出来的梁上），legacy 下来自模型包导出的 PLINE 端点。斜切端面的端点（`PLSTCUT / PLENCUT`）另给，默认不用。
+_Avoid_: PLINE 关键点（把它当两个孤立端点）、管身轴线、元素轴线（型材的「轴线」就是它的 NA p-line）
+
 ## P-Point
 
 来自模型点集数据的设计关键点，适合作为精确测量点。它不是模型表面任意射线命中点。

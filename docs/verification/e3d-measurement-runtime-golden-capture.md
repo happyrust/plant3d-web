@@ -532,4 +532,73 @@ Playwright 真指针；临时 spec 已删）：测量 → `距离`（缺省 `Any
   的 XOFF / YOFF 或服务端在 `element/ptset` 给设计基本体合成 P1 / P2（本 EQUI 内未见 SNOU，抽查的 PYRA XOFF = YOFF = 0）。
 - NOZZ 只走 ptset 的 P1 / P2（目录件）；本库 NOZZ 均 CATR 0/0、无几何、无点，运行时未验。
 - 元素被布尔负体切掉端面时局部包围盒 z 范围会短于 HEIG（P1 / P2 随之内缩）；本库未见样本。
-- SCTN / GENSEC 的 `line()` 走 PLINE（`element/plines`），不在本节。
+- SCTN / GENSEC 的 `line()` 走 PLINE（`element/plines`），见 §17。
+
+## 17. 拾取层 Phase A · Pline 过滤器接 gen-model-v1 `element/plines`（SCTN / GENSEC 的目录 p-line 成整条可拾的线）实机走查（2026-09-14 03:46）
+
+**改动口径**（gen-model `a00565522` + Web `c2e3d97`；决策 `d-394`，Q5 `d-336` 排下的后端一项，ADR 0060（6）同步）：E3D `stdPline` 拾中的是一条
+**p-line 线**——`EDGPLINE.line(dbRef, pline)` 缺省 `cut = false` 取 `PLSTART → PLEND`（p-line 在 POSS / POSE 截面平面上的点，World）；`snap(LINE)`
+用它与光标射线求交后 `GMFLINE.snap` 取近端；Mid-Point / Fraction / Proportion / Distance 沿这条线派生；Intersect 当 LINE；Perpendicular 目标 =
+`edgsctn.snap → this.line`。`edgpline.pmlobj` 的 `cut / fitting / joint / node` 缺省全 false（`edgpicksettings.pmlfrm` 才改），所以**整条
+PLSTART → PLEND、不按 FITT / SJOI / SNOD 分段**就是 E3D 缺省行为。gen-model-v1 此前没有 PLINE 供给（读透形态只存烘好的网格），Pline 过滤器在 v1 下是空的。
+
+- 服务端 `POST /api/v1/element/plines`（`gen-model-ptset-api/src/web_service/plines.rs`，spec §4.11.2）：不经投影、不连库，直读 dabacon，复用 e3d-model
+  建型材实体的那条链（`section_catalogue → evaluate_section_profile → section_placement | spine_path`），把目录 `SPRF.PSTR` 里每条 PLIN 的 (PX, PY)
+  先减 JUSL 对齐量、LMIRR 沿 x 镜像（与截面顶点同一函数），放进截面标架再乘世界矩阵——**线一定落在画出来的梁上**。响应：`key / offset / start / end /
+  dir / length`，`start_cut / end_cut`（= `PLSTCUT / PLENCUT`：p-line 与「过 POSS 法向 DRNS」/「过 POSE 法向 DRNE」平面的交点）只在与平头端点差 > 0.01 mm
+  时出现（E3D 位置本就记到 0.01 mm；DRNS 是精确方向而轴向由记到 0.01 mm 的 POSS / POSE 算出，夹角带 1e-7 ～ 1e-5 rad 记录误差——实机 24381/177301
+  DRNS 恰 5°、夹角 3e-7 rad，离轴 50 mm 的 LTOS 交出偏 1.6e-5 mm 的假斜切点，按原 1e-6 mm 的门被当成真斜切给了出去，本轮改 0.01）。GENSEC 只接直
+  SPINE（含弧的 E3D 走 `arc()`，回空 + reason）；不是 SCTN / GENSEC、无 SPRE、链断、无 PSTR 都是 200 空 `plines` + `reason`。
+- 前端：`keypointSource.primitiveKeypoints` 打 `element/plines`，每条 p-line 摊成与 legacy `semantic_snap_points` 同形的「PLINE <key> 起点 / 终点」两个
+  候选（`kind` `pline_start / pline_end`，带 `dir`），`attachPlineSegments` 配成一条线；`buildPlineLineCandidates` 再给每条线一条**线候选**（控制点 =
+  p-line 上离光标射线最近处，像素距离是到线不是到端点），所以光标落在梁中段就拾中整条 p-line；服务端 `reason` 原样进 `errors`（提示条可见）。
+  Perpendicular to 拾中带 `segment` 的线候选时目标标签用候选自己的名字（「PLINE NA」，去派生记号、不缀「轴线」）。`primitive_key_point` 点源的开关
+  语义不变（默认 show / snap 关；Pline 过滤器要它开着），基本体显著点不给（`d-336`）。
+
+**证据等级**：`static_expectation`（`edgpline.pmlobj` 100 `line()` / 467 `snapLine()` / 546–640 `snap()`、48–78 成员缺省；`edgsctn.pmlobj`）；
+G7-02 PLINE 实际捕捉几何、G8 同一条 PLINE 的 Mid-Point 位置字串、G9 SCTN 落在 PLINE 线上三组 E3D 运行时 golden 未采。
+
+**后端事实**（gen-model `:8024` 新构建，STRU 24381_177298「Copy-of-1516项目3.6,-22米新增钢平台模拟」的 14 根 SCTN：FRMW 177300 / 177312 / 177359 属主恒等，
+177328 / 177343 的属主 STRU `ORI 0 0 −120`；SPRE 23984/111444（100 × 200 工字，26 条 p-line：NA / SDNA / LTOS / TLW / TOS / SDAT / TRW / RTOS / RTBS /
+TRWB / NAR / BRWT / RBTS / RBOS / BRW / BOS / SDAB / BLW / LBOS / LBTS / BLWT / NAL / TLWB / LTBS / NARO / NALO，腹板 5.5、翼缘 8）与 23984/111399
+（200 × 200）；JUSL 全 NA（177360 / 177361 未设 → 缺省 NA）；BANG 0，177360 BANG 155 立柱）：
+- **JUSL 线两端 = `world_transform`·POSS / POSE**：14 根全部 Δ 0.0000 mm（含属主转了 −120° 的 6 根）。
+- **cut 字段 = PLSTCUT / PLENCUT 定义**：每条 p-line 与「过 POSS 法向 DRNS」/「过 POSE 法向 DRNE」平面的交点——有字段的与交点 Δ ≤ 0.001 mm，无字段的
+  交点离平头端点 ≤ 0.01 mm，**728 处 0 不符**。平头端（DRNS / DRNE 与轴向夹角 0.000°）0 条；25.5° 斜切端 20 条（offset x = 0 的 TOS / BOS / SDAT / SDAB
+  不偏，水平斜切只动 x ≠ 0 的线）；0.038° 的「几乎平头」端 10 条——只有 |x| = 50 的 8 条翼缘线 + NARO / NALO 偏 50 · tan 0.038° = 0.033 mm 过门，
+  |x| = 2.75 的腹板线偏 0.002 mm 不给（0.01 mm 门在这里起作用）；177361 的 DRNE (−1, 0, 0) 25° 端 20 条（LTOS 端偏 46.6 mm = 100 · tan 25°）。
+- 目录侧 PX / PY 对照未做：`tree/children` 不展开目录库的 SPRF → PTSS（返回空），offset 的对齐 / 镜像口径以 `plines.rs` 单测（`place_in_section`）与下面的网格对照为证。
+
+**页内网格对照**（`?model_source=gen-model-v1&gm_backend_port=8024&show_refno=24381_177298`，38 对象；把每根 SCTN 的 DTX 三角网格换到 p-line 标架——
+origin = JUSL 线起点、ẑ = 轴向、ŷ / x̂ 由两条离轴 p-line 的 offset 解出——取包围盒，与 p-line 的 offset 极值比）：14 根**全部**右手系、x 极值 [−50, 50] /
+[−100, 100]、y 极值 [−100, 100] 与网格差 ≤ 0.001 mm；z 范围 = [0, L] 或斜切端按 cut 端点延伸（177314 / 177315 / 177330 / 177331 / 177345 / 177346
+z_min −23.807 / −23.847 = LTOS 的 start_cut，177361 z_max 1123.529 = end_cut，Δ ≤ 0.001 mm）；p-line 中点到网格表面 TOS / BOS / LTOS / RBOS ≤ 0.001 mm，
+NA 恰为半腹板厚（2.750 / 4.000 mm）——对齐、镜像、BANG 155 与斜切一致，线就在梁上。
+
+**Web 实机走查**（dev `:3101` + gen-model `:8024`，Playwright 真指针，`primitive_key_point` show / snap 开；临时 spec 已删）：
+- **Pline × Snap**：悬停 SCTN 24381_177301（L 5757.258）腹板 40% 处 → `Snap : SCTN PLINE NA · Snap`（`web-pline-live-01-hover-pline-snap.png`），点击 →
+  起点 `2892.030 / 14670.540 / 23194.210` = POSS（近端，Δ 0.000 mm）；60% 处再点 → 终点 = POSE（Δ 0.000），`Distance 5757mm / Offset X +502 / Y −5735 /
+  Direction X +0.0872 Y −0.9962`，距离 = 线长 Δ 0.000，不标近似（`-02-snap-both-ends-result.png`）。
+- **Pline × Mid-Point**：40% 处点击 → `3142.920 / 11802.865 / 23194.210` = 线中点 Δ 0.000（`-03-midpoint.png`）。
+- **Any × Snap** 同一处 → `PLINE NA · Snap`（Any 放行 Pline；`-04-any-filter-hover.png`）；**Ppoint × Snap** 同一处 → 无捕捉（`等待捕捉（P-Point）`）。
+- **Pline × Intersect**：点 177301 → `求交已选 1. SCTN PLINE NA（线），再选一项（Intersection[2]）`；悬停 177302 → `交点（预览）`（`-05-intersect-preview.png`），
+  点击 → 起点 `2886.100 / 14738.323 / 23194.210` = A 的 NA 上离 B 的 NA 最近点（解析 Δ 0.000 mm，两线相交、异面距 0.000；`-06-intersect-result.png`）。
+  从斜上方看时楼板 PANE 挡住 177302，提示条给服务端的 `PANE 不是 SCTN / GENSEC，没有 PLINE`，换视角后拾中。
+- **Perpendicular to PLINE**：起点 177302 的 `PLINE NA` 近端（= 其 POSS，Δ 0.000），悬停 177301 → `垂距测量 · 第 2/2 步 … SCTN PLINE NA · Snap`
+  （`-07-perpendicular-hover.png`），点击 → `perpendicular = {line, "PLINE NA"}`，终点标签 `PLINE NA垂足`，垂足 `2886.100 / 14738.322 / 23194.210` 到 A 的
+  NA 线 0.000 mm、(垂足 − 起点)·线向 0.000 mm，`Distance 50.000` = 解析垂距 50.000，不标近似（`-08-perpendicular-result.png`）。
+- **非型材**：PANE 24381_177305 上 Pline × Snap 点击 → `PANE 不是 SCTN / GENSEC，没有 PLINE`（服务端 reason 原句；`-09-pane-no-pline.png`）。
+- 记录 `web-pline-live-records.json`（14 根后端事实、网格对照、五组交互），扫描日志 `web-pline-live-scan.txt`；页面错误 0。
+
+**独立复算**：177301 POSS (2892.03, 14670.54, 23194.21) → POSE (3393.81, 8935.19, 23194.21)，|Δ| = √(501.78² + 5735.35²) = 5757.26 mm、方向 (0.0872, −0.9962, 0)
+——与 `Distance 5757mm / Direction` 一致；中点 (3142.92, 11802.865)。177302 的 NA 起点 (2935.91, 14742.68) 到 177301 NA 线：x̂ = up × d = (0.9962, 0.0872, 0)，
+(起点 − POSS)·x̂ = 43.88 × 0.9962 + 72.14 × 0.0872 = 50.00 mm，垂足 = 起点 − 50 x̂ = (2886.10, 14738.32)——与面板垂足、Intersect 交点同一点（177302 的 NA 延长线
+穿过 177301 的 NA）。
+
+**残余偏离 / 未做**：
+- E3D Pick Settings 的 `cut = true`（`PLSTCUT → PLENCUT` 当线）与 `fitting / joint / node` 分段（在 FITT / SJOI+SUBJ / SNOD 投影处把 p-line 切开取最近一段）
+  未做——非缺省档，本库无样本；`start_cut / end_cut` 已在响应里，前端接 cut 档只差一个开关。
+- GENSEC：只接单一直段 SPINE；含弧的 E3D 是 `edgPline.arc()`（GMFARC.snap），回空 + reason；GENSEC 的 DRNS / DRNE 在 SPINE 上，本期不给 cut 端点。本库无 GENSEC 样本，
+  GENSEC 直 SPINE 分支运行时未验。
+- Intersect / Perpendicular 悬停仍按射线首个命中的构件取候选：p-line 被楼板等挡住时要换视角（E3D 亦是拾中前景的构件）。
+- 现有：P-Point 集在拉（`isPtsetPickPending`）时点击被拦一拍，即便过滤器不放行 Ppoint（Phase A 之前的门，未动）。
