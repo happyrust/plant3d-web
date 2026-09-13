@@ -3,8 +3,10 @@
 - 日期：2026-09-13
 - 状态：**已批准（Plannotator 第 2 轮 `approved`，2026-09-13 10:38）**；实施中，§5 六项按推荐项 (a) 执行
   - 进度：**P2 已完成**（2026-09-13 11:45，plant3d-web `8127bcb`）；**P3 代码与单测已完成**（11:53，`12c66fe`；真服务联调等 P1）；
-    **P4 已完成，「整库生成」入口除外**（12:05，单独一提交，见 §4 P4 备注——入口怎么接需要拍板）；P0 / P1 仍等并行会话的迁移改动收口
-    （gen-model-refactor 到 11:26 还在连续提交 `7bacdb81f` 等，`verification/migration-baseline-20260913/` 2 万余文件未跟踪）
+    **P4 已完成，「整库生成」入口除外**（12:05，单独一提交，见 §4 P4 备注——入口怎么接需要拍板；用户 12:13 拍板：先不接入口）；
+    **P0 已完成**（old-aios-core `8758023`，21:03；代码 20:40 已在工作树、本轮验证后提交）；**P1 已完成**（gen-model-refactor
+    `12bf601e9` 路由 + 模块 + 单测，15:45；spec §4.13 `69f732e6b`，21:03）。剩 **P5**（教程补 v1 一节、本计划改「已实施」）与
+    §7 第 2–6 步真服务 / 浏览器联调（后端服务是长驻进程，须由用户在自己终端起）
   - 第 1 轮（09:36）唯一批注落在后端基线行：「先提交这个」。已落实：后端原 83 个在飞改动已由并行会话提交为
     `f888e9dc2 refactor: retire publish stage and complete lazy data routing`（10:10，215 文件），其后又有
     `b82d6fbbb fix(room)` / `8f99cbc64 fix(api)` 两条（10:25 / 10:26）；分支 10:21 改名
@@ -216,6 +218,15 @@ P2 只碰 plant3d-web，可以先行。P1 的新代码集中在新模块 `spatia
 - 验收：单测 `entries_of_returns_all_boxes_of_a_refno_and_nothing_else`；`bincode` 兼容测试 `refno_index_keeps_legacy_bincode_compatible`
   继续通过（不新增序列化字段）。
 - 文件：`vendor/old-aios-core/src/accel_tree/acceleration_tree.rs`。
+- **完成备注（2026-09-13，old-aios-core `codex/libgm-snout-caliber@8758023`）**：
+  - 签名取 `Cow<'_, [RStarBoundingBox]>` 而不是 `&[…]`：索引新鲜时 `Borrowed` 零拷贝，过期时线性扫描要 `Owned`。
+  - **不 `debug_assert!`**（与本节草案不同）：直接 `bincode::deserialize` 出来的树（`#[serde(skip)]` 让索引落成空表——快照复用
+    启动正是这条路）到第一次写树之前索引一直是过期的，断言会让 debug 构建的服务在第一条按 refno 的查询上崩掉；过期时静默退化为
+    O(n) 扫描，结果仍正确，写路径下一次 `ensure_refno_index` 治愈。
+  - 用例两条：草案那条 + `entries_of_falls_back_to_a_linear_scan_while_the_index_is_stale`（反序列化、绕过 API 直插 `tree`、
+    再经 `sync_refnos` 治愈三段都断言）。
+  - 验证：`cargo test --lib entries_of` 2 passed、`cargo test --lib refno_index_keeps_legacy_bincode_compatible` 1 passed；
+    只按路径 `git add` 了 `acceleration_tree.rs`，并行会话的 `Cargo.toml`（rkyv `validation`）/ `pdms_shape.rs` 仍留在工作树。
 
 ### P1 — 后端 `/api/v1/spatial/*`（gen-model-refactor）
 
@@ -231,6 +242,28 @@ P2 只碰 plant3d-web，可以先行。P1 的新代码集中在新模块 `spatia
   - 源码钉：新模块与 handler 不含 `GLOBAL_AABB_TREE.write()`（白名单测试自动覆盖）、不含 `lock_spatial_serial`。
   - `cargo test -p <crate> spatial_query` 与 `cargo clippy` 干净。
 - 文件：`src/fast_model/{mod.rs, spatial_query.rs}`、`src/web_service/{mod.rs, handlers.rs}`、`docs/specs/web-service-api.md`。
+- **完成备注（2026-09-13，gen-model-refactor `12bf601e9` 代码 + 单测 15:45、`69f732e6b` spec §4.13 21:03）**：
+  - 与草案的几处取舍：
+    1. 503 不加在 `ApiError` 上，而是 `handlers::SpatialApiError { Api(ApiError), NotReady(SpatialTreeState) }` 单独成型——
+       `ApiError` 的统一信封把 `detail` 写死为 `null`、也不带响应头，而 `spatial_not_ready` 要 `Retry-After: 5` 与
+       `detail.state`；不去改十几处构造点。
+    2. query 参数全部按字串收（`RawSpatialQuery`，`serde(flatten)` 进 `SpatialNearbyReq`）、`SpatialQueryParams::parse` 自己解：
+       axum 的 urlencoded 在 `flatten` 下把值先缓冲成字串，数字字段直接标 `f32` / `usize` 会报「invalid type: string」；自己解还能
+       给中文 400 消息。
+    3. 集成用例不碰全局树：`scan_tree(tree, state, params, memory)` 把树与状态都做成入参，用例用本地 `AccelerationTree` +
+       显式 `Rebuilding` / `ReadyEmpty`，不需要 `evict_tree_entries_for_test` / `mark_spatial_tree_fixture_preloaded`；
+       refno 组仍独占 `4000000011/*`。
+    4. `sort=name` 只对本页解名字，全集按 noun、refno 作近似序（§5-2 按 (a) 的直接后果，写进 spec）。
+    5. `direct_tree.rs` 末尾追加 `name_of`（读 `named_attmap("NAME")`，与 `noun_of` 同代价、只按页调）。
+  - 单测 16 条（`fast_model::spatial_query::tests`）：两条距离函数、参数默认值与两种 refno 写法、坏参数报错、状态门禁、
+    sphere / cube 角落差异、refno 目标盒到盒量距 + 默认剔子树、中心缺盒 404、中心来自投影并覆盖子树、负实体与 noun 计数顺序、
+    排序 / 分组 / 分页 / 只给本页补名、同距按 dbnum → refno、`/refnos` 全集按库分组、候选上限截断、负实体清单去重、
+    源码钉「不写树、不取串行锁」；`web_service::tests::spatial_routes_are_read_only_get_endpoints` 钉三条都是 GET。
+  - 验证（21:00，工作树含并行会话 20:54 的合并 `655285ce8`）：`cargo test --lib spatial` **39 passed**（含上述 17 条 + 既有
+    `spatial_state` / `aabb_tree` 等）；`cargo clippy --lib --tests` exit 0，P1 五个文件 0 警告（剩余警告全在既有 bin / tests）。
+    §7 第 2–4 步（起服务、`/model/ensure` 后 `GET /spatial/nearby`、未 Ready 回 503）**未验证**——服务是长驻进程，等用户起。
+  - 现场备注：`12bf601e9` 之后并行会话的合并把 `spatial_query.rs` 等 9 个文件的工作树 EOL 翻成 CRLF（`git diff -w` 为空、
+    `git ls-files --eol` 见 `i/lf w/crlf`），内容无差，本轮没碰。
 
 ### P2 — 前端端口 + legacy 委托（plant3d-web）
 
