@@ -311,6 +311,51 @@ export function attachPlineSegments(
   return [...candidates];
 }
 
+/**
+ * E3D `stdPline` picks a p-line **anywhere along it** (`EDGPLINE.snap` then takes the
+ * nearer end, Mid-Point / Fraction walk the line): for every PLINE whose two ends
+ * `attachPlineSegments` paired, add one **line** candidate whose control point is the
+ * point of the p-line nearest the cursor ray — so its pixel distance is the screen
+ * distance to the line, not to an end. It shares the ends' `segment` (Snap → nearer end,
+ * Intersect → LINE) and carries the line as `direction` (Perpendicular-to axis
+ * provider, E3D `edgsctn.snap → this.line`). Label `PLINE <key>`; feature `pline`.
+ */
+export function buildPlineLineCandidates(
+  candidates: readonly MeasurementPickCandidate[],
+  ray: Readonly<{ origin: Vector3; direction: Vector3 }>,
+): MeasurementPickCandidate[] {
+  const seen = new Set<MeasurementPickSegment>();
+  const out: MeasurementPickCandidate[] = [];
+  const rayTuple = {
+    origin: [ray.origin.x, ray.origin.y, ray.origin.z] as TubingVec3,
+    direction: [ray.direction.x, ray.direction.y, ray.direction.z] as TubingVec3,
+  };
+  for (const candidate of candidates) {
+    if (candidate.source !== 'primitive_key_point' || candidate.feature !== 'pline' || !candidate.segment) continue;
+    if (seen.has(candidate.segment)) continue;
+    seen.add(candidate.segment);
+    const key = PLINE_ENDPOINT_LABEL.exec(candidate.label ?? '')?.[1]?.trim() ?? '';
+    const { start, end } = candidate.segment;
+    const nearest = nearestPointOnSegmentToRay(
+      { start: [start.x, start.y, start.z], end: [end.x, end.y, end.z] },
+      rayTuple,
+    );
+    if (!nearest) continue;
+    out.push({
+      id: `pline-line:${candidate.objectId}|${key}`,
+      source: 'primitive_key_point',
+      entityId: candidate.entityId,
+      objectId: candidate.objectId,
+      worldPos: new Vector3(nearest.point[0], nearest.point[1], nearest.point[2]),
+      label: key ? `PLINE ${key}` : 'PLINE',
+      feature: 'pline',
+      segment: candidate.segment,
+      direction: end.clone().sub(start),
+    });
+  }
+  return out;
+}
+
 export const GRAPHICS_EDGE_LABEL = '边';
 export const GRAPHICS_FACET_LABEL = '面';
 /** Most drawn edges offered around the cursor per hover (nearest first). */

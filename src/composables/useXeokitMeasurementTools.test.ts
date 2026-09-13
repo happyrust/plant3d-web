@@ -2914,4 +2914,221 @@ describe('useXeokitMeasurementTools', () => {
       }
     });
   });
+
+  describe('E3D 拾取层 · Pline 过滤器（PLINE 线候选：legacy semantic_snap_points / gen-model-v1 element/plines 同一形状）', () => {
+    /**
+     * SCTN S 的 p-line：NA 从 (1, 4, 6) 到 (3, 4, 6)（沿 +X），TOS 在其上方 0.1（y = 4.1）。关键点源按 legacy
+     * `semantic_snap_points` 的形状给「起点 / 终点」两个候选（`elementPlinesToKeypointCandidates` 产出的也是这个形状）。
+     * ELBO C 有 P-Point #1 (1.2, 3.4, 6)，给 Perpendicular 起点。相机 / 画布同 `setupTubingTools`：
+     * px = 100 + (x − 2) × 100，py = 100 − (y − 4) × 100。
+     */
+    async function setupPlineTools() {
+      vi.useFakeTimers();
+      const refnoS = '24381_300001';
+      const refnoC = '24381_300002';
+      const designMm = (scene: readonly [number, number, number]): [number, number, number] => [
+        (scene[0] + 10) / 0.001,
+        (scene[1] + 20) / 0.001,
+        (scene[2] + 30) / 0.001,
+      ];
+      const plineEnd = (key: string, which: '起点' | '终点', scene: readonly [number, number, number], index: number) => ({
+        id: `plines:${refnoS}:${key}:${which === '起点' ? 'pline_start' : 'pline_end'}`,
+        refno: refnoS,
+        objectId: `o:${refnoS}:0`,
+        geoHash: '',
+        geoIndex: -1,
+        keypointIndex: index,
+        kind: which === '起点' ? 'pline_start' : 'pline_end',
+        source: 'semantic_snap_points',
+        label: `PLINE ${key} ${which}`,
+        local: designMm(scene),
+        world: designMm(scene),
+        hasDir: true,
+        dir: [1, 0, 0] as [number, number, number],
+      });
+      const plineCandidates = [
+        plineEnd('NA', '起点', [1, 4, 6], 0), plineEnd('NA', '终点', [3, 4, 6], 0),
+        plineEnd('TOS', '起点', [1, 4.1, 6], 1), plineEnd('TOS', '终点', [3, 4.1, 6], 1),
+      ];
+      const ptsetC = [{
+        number: 1, pt: designMm([1.2, 3.4, 6]), dir: null, dir_flag: 0, ref_dir: null, pbore: 100, pwidth: 0, pheight: 0, pconnect: '',
+      }];
+      vi.doMock('@/composables/useDbMetaInfo', () => ({
+        getDbnumByRefno: vi.fn(() => 7997),
+      }));
+      vi.doMock('@/composables/useDbnoInstancesDtxLoader', () => ({
+        getDtxRefnoTransform: vi.fn(() => null),
+        resolveDtxNounByRefno: vi.fn((_dbno: number, refno: string) => (refno === refnoS ? 'SCTN' : 'ELBO')),
+      }));
+      vi.doMock('@/composables/useDbnoInstancesParquetLoader', () => ({
+        useDbnoInstancesParquetLoader: () => ({
+          queryPtsetByRefnoFromParquet: vi.fn(async (_dbno: number, refno: string) => {
+            const ptset = refno === refnoC ? ptsetC : [];
+            return {
+              success: ptset.length > 0,
+              refno,
+              noun: refno === refnoS ? 'SCTN' : 'ELBO',
+              ptset,
+              world_transform: null,
+              unit_info: { source_unit: 'mm', target_unit: 'mm', conversion_factor: 1 },
+              error_code: ptset.length > 0 ? null : 'PTSET_POINTS_MISSING',
+              error_message: ptset.length > 0 ? null : '型材没有目录 P 点',
+            };
+          }),
+          queryPrimitiveKeypointsByRefnoFromParquet: vi.fn(async () => []),
+          querySemanticSnapPointsByRefnoFromParquet: vi.fn(async (_dbno: number, refno: string) => (refno === refnoS ? plineCandidates : [])),
+        }),
+      }));
+      vi.doMock('@/api/genModelPdmsAttrApi', () => ({
+        pdmsGetPtsetWithContext: vi.fn(async (refno: string) => ({
+          success: false, refno, ptset: [], world_transform: null, unit_info: null, error_code: 'PTSET_POINTS_MISSING', error_message: '无点',
+        })),
+        pdmsGetPtsetChildrenWithContext: vi.fn(async (refno: string) => ({
+          success: false, refno, results: [], total_count: 0, success_count: 0, failed_count: 0, error_message: '无子构件点集',
+        })),
+      }));
+
+      const [{ useToolStore }, { useXeokitMeasurementTools }, { useXeokitMeasurementStyleStore }] = await Promise.all([
+        import('@/composables/useToolStore'),
+        import('@/composables/useXeokitMeasurementTools'),
+        import('@/composables/useXeokitMeasurementStyleStore'),
+      ]);
+      const store = useToolStore();
+      store.clearAll();
+      store.setToolMode('xeokit_measure_distance');
+      const measurementStyle = useXeokitMeasurementStyleStore();
+      measurementStyle.resetStyle();
+      measurementStyle.updateMeasurementPickSource('ptset', { show: false, snap: true, thresholdPx: 3 });
+      measurementStyle.updateMeasurementPickSource('position', { show: false, snap: false });
+      measurementStyle.updateMeasurementPickSource('mesh_pick_point', { show: false, snap: false });
+      measurementStyle.updateMeasurementPickSource('primitive_key_point', { show: true, snap: true, thresholdPx: 6 });
+      measurementStyle.updateStyle({ keepMeasurementAnnotation: true, perpendicularTo: false });
+
+      const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 10);
+      camera.position.set(2, 4, 7);
+      camera.lookAt(2, 4, 6);
+      camera.updateMatrixWorld(true);
+      camera.updateProjectionMatrix();
+      const canvas = document.createElement('canvas');
+      Object.defineProperty(canvas, 'getBoundingClientRect', {
+        value: () => ({ left: 0, top: 0, width: 200, height: 200 }),
+      });
+      // S 占 y ≈ 4 ± 0.15 的横带（腹板 + 翼缘），C 在左下。
+      const pickPoint = vi.fn((pos: { x: number; y: number }) => {
+        const x = 2 + (pos.x - 100) / 100;
+        const y = 4 - (pos.y - 100) / 100;
+        if (Math.abs(pos.y - 100) <= 15 && pos.x > 0 && pos.x < 200) return { objectId: `o:${refnoS}:0`, point: new THREE.Vector3(x, 4.02, 6.2), distance: 0.8 };
+        if (pos.x < 60 && pos.y > 140) return { objectId: `o:${refnoC}:0`, point: new THREE.Vector3(x, y, 6.2), distance: 0.8 };
+        return null;
+      });
+      const globalModelMatrix = new THREE.Matrix4().makeScale(0.001, 0.001, 0.001);
+      globalModelMatrix.setPosition(-10, -20, -30);
+      const dimensionSystem = {
+        replaceExternalSource: vi.fn(),
+        viewport: { setSelection: vi.fn(), getSelection: vi.fn(() => null) },
+      } as any;
+      const tools = useXeokitMeasurementTools({
+        dtxViewerRef: ref({ camera, canvas, scene: new THREE.Scene() } as any),
+        dtxLayerRef: ref({
+          _totalObjects: 2,
+          getGlobalModelMatrix: () => globalModelMatrix.clone(),
+          getObjectGeometryData: vi.fn(() => null),
+        } as any),
+        selectionRef: ref({ pickPoint } as any),
+        overlayContainerRef: ref(document.createElement('div')),
+        getDimensionSystem: () => dimensionSystem,
+        store,
+        compatViewerRef: ref(null),
+        requestRender: null,
+        isTubingObject: () => false,
+      });
+      const hoverAt = (x: number, y: number) => tools.onCanvasPointerMove(canvas, new PointerEvent('pointermove', { clientX: x, clientY: y }));
+      const clickAt = (x: number, y: number) => tools.onCanvasPointerUp(canvas, new PointerEvent('pointerup', { clientX: x, clientY: y, button: 0 }));
+      /** 悬停到某元素并等它的 P-Point / PLINE 关键点落缓存（80 ms 防抖 + 异步源）。 */
+      const hoverAndLoad = async (x: number, y: number) => {
+        hoverAt(x, y);
+        await vi.advanceTimersByTimeAsync(200);
+        await Promise.resolve();
+        await vi.advanceTimersByTimeAsync(50);
+        hoverAt(x, y);
+      };
+      return { store, measurementStyle, tools, hoverAt, clickAt, hoverAndLoad, refnoS, refnoC };
+    }
+
+    it('Pline × Snap：光标落在 p-line 中段就拾中整条 PLINE 线（近端），Mid-Point 取中点；Any 放行、Ppoint 不放行', async () => {
+      const { store, measurementStyle, tools, clickAt, hoverAndLoad } = await setupPlineTools();
+      try {
+        measurementStyle.updateMeasurementPickLayer({ filter: 'pline', pickType: 'snap' });
+        await nextTick();
+
+        // 光标 (140, 100) = 场景 (2.4, 4)：NA 线 0 px、TOS 线 10 px、两端各 ≥ 60 px → 线候选胜出，Snap 落近端 (3, 4, 6)。
+        await hoverAndLoad(140, 100);
+        expect(tools.hoverSnapTarget.value?.label).toBe('PLINE NA · Snap');
+        clickAt(140, 100);
+        const draft = store.currentXeokitDistanceDraft.value!;
+        expect(draft).not.toBeNull();
+        expect(draft.origin.sourceInfo?.source).toBe('primitive_key_point');
+        expect(draft.origin.worldPos[0]).toBeCloseTo(3, 6);
+        expect(draft.origin.worldPos[1]).toBeCloseTo(4, 6);
+        expect(draft.origin.worldPos[2]).toBeCloseTo(6, 6);
+        store.clearCurrentXeokitDraft();
+
+        // Mid-Point：线中点 (2, 4, 6)，与光标位置无关。
+        measurementStyle.updateMeasurementPickLayer({ pickType: 'midpoint' });
+        await nextTick();
+        clickAt(140, 100);
+        expect(store.currentXeokitDistanceDraft.value!.origin.worldPos[0]).toBeCloseTo(2, 6);
+        expect(store.currentXeokitDistanceDraft.value!.origin.sourceInfo?.label).toBe('PLINE NA · Mid-Point');
+        store.clearCurrentXeokitDraft();
+
+        // Any 放行 Pline（E3D stdAny = Element / Ppoint / Pline）。
+        measurementStyle.updateMeasurementPickLayer({ filter: 'any', pickType: 'snap' });
+        await nextTick();
+        clickAt(140, 100);
+        expect(store.currentXeokitDistanceDraft.value!.origin.worldPos[0]).toBeCloseTo(3, 6);
+        store.clearCurrentXeokitDraft();
+
+        // Ppoint 不放行：同一位置无捕捉。
+        measurementStyle.updateMeasurementPickLayer({ filter: 'ppoint', pickType: 'snap' });
+        await nextTick();
+        clickAt(140, 100);
+        expect(store.currentXeokitDistanceDraft.value).toBeNull();
+      } finally {
+        tools.dispose();
+        vi.useRealTimers();
+      }
+    });
+
+    it('Perpendicular to PLINE：目标就是那条 p-line（标签用它自己的名字，不缀「轴线」，不带派生记号），垂足落在线上', async () => {
+      const { store, measurementStyle, tools, clickAt, hoverAndLoad } = await setupPlineTools();
+      try {
+        measurementStyle.updateStyle({ perpendicularTo: true });
+        measurementStyle.updateMeasurementPickLayer({ filter: 'any', pickType: 'snap' });
+        await nextTick();
+
+        // 起点：ELBO C 的 P-Point #1 (1.2, 3.4, 6)。
+        await hoverAndLoad(20, 160);
+        clickAt(20, 160);
+        const origin = store.currentXeokitDistanceDraft.value!.origin;
+        expect(origin.sourceInfo?.source).toBe('ptset');
+        expect(origin.worldPos[0]).toBeCloseTo(1.2, 6);
+
+        // 目标：SCTN S 的 PLINE NA（y = 4, z = 6，沿 X）→ 垂足 (1.2, 4, 6)，垂距 0.6。
+        await hoverAndLoad(140, 100);
+        expect(tools.hoverSnapTarget.value?.label).toBe('PLINE NA · Snap');
+        clickAt(140, 100);
+        const record = store.xeokitDistanceMeasurements.value[0]!;
+        expect(record.perpendicular).toEqual({ targetKind: 'line', targetLabel: 'PLINE NA' });
+        expect(record.target.sourceInfo?.label).toBe('PLINE NA垂足');
+        expect(record.target.worldPos[0]).toBeCloseTo(1.2, 6);
+        expect(record.target.worldPos[1]).toBeCloseTo(4, 6);
+        expect(record.target.worldPos[2]).toBeCloseTo(6, 6);
+        expect(store.measurementDraftResult.value!.distance).toBeCloseTo(0.6, 6);
+        expect(store.measurementDraftResult.value!.approximate).toBe(false);
+      } finally {
+        tools.dispose();
+        vi.useRealTimers();
+      }
+    });
+  });
 });

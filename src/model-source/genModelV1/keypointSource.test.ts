@@ -1,15 +1,45 @@
 import { describe, expect, it, vi } from 'vitest';
 
+import { Vector3 } from 'three';
+
 import {
-  GEN_MODEL_V1_PRIMITIVE_KEYPOINTS_UNSUPPORTED,
   createGenModelV1KeypointSource,
+  elementPlinesToKeypointCandidates,
   elementPtsetToChildrenResponse,
   elementPtsetToPtsetResponse,
   emptyPtsetReason,
 } from './keypointSource';
 
-import { GenModelV1ApiError, type ElementPtsetItem, type ElementPtsetResponse } from '@/api/genModelV1Api';
+import {
+  GenModelV1ApiError,
+  type ElementPlinesResponse,
+  type ElementPtsetItem,
+  type ElementPtsetResponse,
+} from '@/api/genModelV1Api';
+import { attachPlineSegments, type MeasurementPickCandidate } from '@/composables/useMeasurementPickSources';
 import { ptsetResponseToSceneCandidates } from '@/utils/three/ptsetTransform';
+
+/** 与 gen-model `POST /api/v1/element/plines`（spec §4.11.2）同形：世界系 mm，PSTR 成员原序。 */
+function sctnPlines(overrides: Partial<ElementPlinesResponse> = {}): ElementPlinesResponse {
+  return {
+    source: 'e3d-model',
+    refno: '24381/177301',
+    dbnum: 7997,
+    noun: 'SCTN',
+    name: '/COL-1',
+    unit: 'mm',
+    justification_line: 'NA',
+    plines: [
+      { key: 'NA', offset: [0, 0], start: [1000, 2000, 0], end: [1000, 2000, 3000], dir: [0, 0, 1], length: 3000 },
+      {
+        key: 'TOS', offset: [0, 150], start: [1000, 2150, 0], end: [1000, 2150, 3000], dir: [0, 0, 1], length: 3000,
+        start_cut: [1000, 2150, -75], end_cut: [1000, 2150, 3075],
+      },
+    ],
+    notes: [],
+    ...overrides,
+  };
+}
 
 /** 与 gen-model `POST /api/v1/element/ptset`（spec §4.11.1）同形：mm、局部系、列主序世界矩阵。 */
 function elbo(overrides: Partial<ElementPtsetItem> = {}): ElementPtsetItem {
@@ -115,7 +145,8 @@ describe('gen-model-v1 keypointSource', () => {
         ...(req.includeMembers ? { members: [elbo()] } : {}),
       } satisfies ElementPtsetResponse;
     });
-    const source = createGenModelV1KeypointSource({ api: { elementPtset } });
+    const elementPlines = vi.fn(async () => sctnPlines({ plines: [], reason: 'ELBO 不是 SCTN / GENSEC，没有 PLINE', noun: 'ELBO' }));
+    const source = createGenModelV1KeypointSource({ api: { elementPtset, elementPlines } });
 
     const missing = await source.ptset(7997, '24381_404');
     expect(missing.success).toBe(false);
@@ -127,8 +158,82 @@ describe('gen-model-v1 keypointSource', () => {
     expect(members.success).toBe(true);
     expect(members.results[0]!.refno).toBe('24381_145031');
 
+    // 没有 p-line 的构件：候选空，原因是服务端说的那句（不再报「接口不支持」）。
     const primitives = await source.primitiveKeypoints(7997, '24381_145031');
+    expect(elementPlines).toHaveBeenLastCalledWith({ refno: '24381_145031' });
     expect(primitives.items).toEqual([]);
-    expect(primitives.errors).toEqual([GEN_MODEL_V1_PRIMITIVE_KEYPOINTS_UNSUPPORTED]);
+    expect(primitives.errors).toEqual(['ELBO 不是 SCTN / GENSEC，没有 PLINE']);
+  });
+
+  it('element/plines → PLINE 端点候选：每条 p-line 出「起点 / 终点」两个、label 是 attachPlineSegments 认的写法、带线向；退化 / 非有限的跳过', () => {
+    const items = elementPlinesToKeypointCandidates(sctnPlines({
+      plines: [
+        ...sctnPlines().plines,
+        { key: 'BOS', offset: [0, -150], start: [1, 1, 1], end: [1, 1, 1], dir: [0, 0, 0], length: 0 }, // 零长
+        { key: '', offset: [0, 0], start: [0, 0, 0], end: [0, 0, 1], dir: [0, 0, 1], length: 1 }, // 无 key
+        { key: 'LTOS', offset: [0, 0], start: [Number.NaN, 0, 0], end: [0, 0, 1], dir: [0, 0, 1], length: 1 }, // 非有限
+      ],
+    }));
+    expect(items.map((item) => item.label)).toEqual(['PLINE NA 起点', 'PLINE NA 终点', 'PLINE TOS 起点', 'PLINE TOS 终点']);
+    expect(items.map((item) => item.kind)).toEqual(['pline_start', 'pline_end', 'pline_start', 'pline_end']);
+    expect(items[0]).toMatchObject({
+      id: 'plines:24381_177301:NA:pline_start',
+      refno: '24381_177301',
+      objectId: 'o:24381_177301:0',
+      keypointIndex: 0,
+      world: [1000, 2000, 0],
+      local: [1000, 2000, 0],
+      hasDir: true,
+      dir: [0, 0, 1],
+    });
+    expect(items[3]).toMatchObject({ keypointIndex: 1, world: [1000, 2150, 3000] });
+    // 服务端没给 dir 时用两端算。
+    const derived = elementPlinesToKeypointCandidates(sctnPlines({
+      plines: [{ key: 'NA', offset: [0, 0], start: [0, 0, 0], end: [0, 3, 4], dir: undefined as never, length: 5 }],
+    }));
+    expect(derived[0]!.dir).toEqual([0, 0.6, 0.8]);
+  });
+
+  it('端点候选经测量工具的 attachPlineSegments 配成一条线：同一 PLINE 两端共用 segment、feature 标 pline', () => {
+    const items = elementPlinesToKeypointCandidates(sctnPlines());
+    const candidates: MeasurementPickCandidate[] = items.map((item) => ({
+      id: item.id,
+      source: 'primitive_key_point',
+      entityId: item.id,
+      objectId: 'o:24381_177301:12',
+      worldPos: new Vector3(...item.world),
+      label: item.label,
+    }));
+    const attached = attachPlineSegments(candidates);
+    expect(attached.every((candidate) => candidate.feature === 'pline')).toBe(true);
+    const [naStart, naEnd, tosStart, tosEnd] = attached;
+    expect(naStart!.segment).toBeDefined();
+    expect(naStart!.segment).toBe(naEnd!.segment);
+    expect(naStart!.segment!.start.toArray()).toEqual([1000, 2000, 0]);
+    expect(naStart!.segment!.end.toArray()).toEqual([1000, 2000, 3000]);
+    expect(tosStart!.segment).toBe(tosEnd!.segment);
+    expect(tosStart!.segment).not.toBe(naStart!.segment);
+  });
+
+  it('适配器：primitiveKeypoints 打 element/plines；有 p-line 时 errors 为空；接口异常折成 errors 不抛', async () => {
+    const elementPlines = vi.fn(async (req: { refno: string }) => {
+      if (req.refno === '24381_500') {
+        throw new GenModelV1ApiError({ code: 'internal', status: 500, path: '/api/v1/element/plines', message: 'boom' });
+      }
+      return sctnPlines();
+    });
+    const elementPtset = vi.fn(async () => ({ source: 'e3d-model', ...elbo() }) satisfies ElementPtsetResponse);
+    const source = createGenModelV1KeypointSource({ api: { elementPtset, elementPlines } });
+
+    const ok = await source.primitiveKeypoints(7997, '24381_177301');
+    expect(elementPlines).toHaveBeenLastCalledWith({ refno: '24381_177301' });
+    expect(ok.items).toHaveLength(4);
+    expect(ok.errors).toEqual([]);
+
+    const failed = await source.primitiveKeypoints(7997, '24381_500');
+    expect(failed.items).toEqual([]);
+    expect(failed.errors).toHaveLength(1);
+    expect(failed.errors[0]).toContain('PLINE 查询失败');
+    expect(failed.errors[0]).toContain('internal');
   });
 });

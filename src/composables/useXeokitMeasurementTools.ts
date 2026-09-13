@@ -32,6 +32,7 @@ import {
   MEASUREMENT_PICK_SOURCE_LABELS,
   attachPlineSegments,
   buildGraphicsPickCandidates,
+  buildPlineLineCandidates,
   buildPositionPickCandidate,
   buildTubingAxisCandidate,
   resolveMeasurementPickCandidates,
@@ -1190,14 +1191,31 @@ export function useXeokitMeasurementTools(options: {
     return attachPlineSegments(mapped);
   }
 
+  /**
+   * 基本体 / PLINE 关键点候选。PLINE 两端配成线后再加一条**线候选**（控制点 = p-line 上离光标射线最近处，
+   * E3D `stdPline` 在 p-line 任意处都能拾中），Snap 由派生取近端、Mid-Point 等沿线。
+   */
   function buildPrimitiveKeyPointCandidates(
     base: PickHit | null,
     refno: string | null,
+    cursor: Readonly<{ x: number; y: number }>,
+    camera: Camera,
+    rect: Readonly<{ width: number; height: number }>,
   ): MeasurementPickCandidate[] {
     if (!base || !refno) return [];
     const setting = measurementStyle.state.measurementPickSources.primitive_key_point;
     if (!sourceNeedsHoverData(setting)) return [];
-    return primitiveKeyPointCandidates(refno, base.objectId);
+    const points = primitiveKeyPointCandidates(refno, base.objectId);
+    if (!(rect.width > 0) || !(rect.height > 0) || !points.some((candidate) => candidate.segment)) return points;
+    const raycaster = new Raycaster();
+    raycaster.setFromCamera(
+      new Vector2((cursor.x / rect.width) * 2 - 1, -(cursor.y / rect.height) * 2 + 1),
+      camera,
+    );
+    return [
+      ...points,
+      ...buildPlineLineCandidates(points, { origin: raycaster.ray.origin, direction: raycaster.ray.direction }),
+    ];
   }
 
   function candidateToPickHit(candidate: MeasurementPickCandidate | ProjectedMeasurementPickCandidate): PickHit {
@@ -1556,6 +1574,13 @@ export function useXeokitMeasurementTools(options: {
     };
   }
 
+  /** 去掉 `applyPickTypeDerivation` 缀在标签后的 ` · <拾取类型>` 记号（当前拾取层的那一个）。 */
+  function stripPickTypeToken(label: string): string {
+    const layer = measurementStyle.state.measurementPickLayer;
+    const suffix = ` · ${measurementPickTypePromptToken(layer.pickType, layer.values)}`;
+    return label.endsWith(suffix) ? label.slice(0, -suffix.length) : label;
+  }
+
   // ── E3D Intersect 拾取类型：一个测量点 = 两（三）次子拾取求交 ──
   /** 当前求交会话（设计 World 几何）；`intersectOrdinal` 是 `Intersection[n]` 的 n，响应式给提示条用。 */
   let intersectSession: IntersectPickSession = EMPTY_INTERSECT_SESSION;
@@ -1742,9 +1767,15 @@ export function useXeokitMeasurementTools(options: {
       : resolved.provider === 'facet-plane'
         ? '所在平面'
         : '圆面';
+    // 拾中的候选本身就是一条线（PLINE 线 / Graphics 边 / TUBING 轴线，带 `segment`）时，目标就是它：
+    // 标签用候选自己的名字（去掉 Snap / Mid-Point 等派生记号），不再缀「轴线」——E3D `edgsctn.snap → this.line`
+    // 的 Perpendicular 目标就是那条 p-line。
+    const lineLabel = hit.segment && !elementLine && resolved.provider === 'axis-line'
+      ? stripPickTypeToken(baseLabel ?? MEASUREMENT_PICK_SOURCE_LABELS[hit.source])
+      : null;
     const targetLabel = elementLine
       ? formatMeasurementSnapLabel({ label: ELEMENT_LINE_LABEL, noun: nounForRefno(hit.refno ?? null), refno: hit.refno })
-      : `${baseLabel ?? MEASUREMENT_PICK_SOURCE_LABELS[hit.source]} ${providerLabel}`;
+      : lineLabel ?? `${baseLabel ?? MEASUREMENT_PICK_SOURCE_LABELS[hit.source]} ${providerLabel}`;
     const footDesign: Vec3 = [result.value.foot[0], result.value.foot[1], result.value.foot[2]];
     const footScene = designMetersToSceneWorld(tupleToVector(footDesign), dtxLayerRef);
     return {
@@ -2108,7 +2139,7 @@ export function useXeokitMeasurementTools(options: {
     const candidates: MeasurementPickCandidate[] = [
       ...buildPtsetCandidates(),
       ...attachElementLine([...buildMeshPickCandidate(base), ...buildPositionCandidates(base, surfaceRefno)], surfaceRefno),
-      ...buildPrimitiveKeyPointCandidates(base, surfaceRefno),
+      ...buildPrimitiveKeyPointCandidates(base, surfaceRefno, { x: cursor.x, y: cursor.y }, camera, rectSize),
       ...buildGraphicsCandidates(base, { x: cursor.x, y: cursor.y }, camera, rectSize),
       ...buildTubingAxisCandidates(base, { x: cursor.x, y: cursor.y }, camera, rectSize),
     ];
@@ -2298,11 +2329,12 @@ export function useXeokitMeasurementTools(options: {
     }
     const camera = dtxViewerRef.value?.camera;
     if (!camera) return [];
+    const rect = canvas.getBoundingClientRect();
     const candidates: MeasurementPickCandidate[] = [
       ...buildPtsetCandidates(),
       ...buildMeshPickCandidate(base),
       ...buildPositionCandidates(base, surfaceRefno),
-      ...buildPrimitiveKeyPointCandidates(base, surfaceRefno),
+      ...buildPrimitiveKeyPointCandidates(base, surfaceRefno, screen, camera, { width: rect.width, height: rect.height }),
     ];
     const settings = Object.fromEntries(
       MEASUREMENT_PICK_SOURCE_IDS.map(id => [
@@ -2313,7 +2345,6 @@ export function useXeokitMeasurementTools(options: {
         },
       ]),
     ) as MeasurementPickSourceSettings;
-    const rect = canvas.getBoundingClientRect();
     const resolution = resolveMeasurementPickCandidates({
       cursor: screen,
       camera,

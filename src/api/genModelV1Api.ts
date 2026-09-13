@@ -675,6 +675,58 @@ export function genModelV1ElementPtset(
   });
 }
 
+/** `element/plines` 里的一条 p-line：世界系，mm（spec §4.11.2）。 */
+export type ElementPlineItem = {
+  /** `PKEY`，大写（`NA` / `TOS` / `BOS` …） */
+  key: string;
+  /** 在截面平面里、`JUSL` 对齐与 `LMIRR` 镜像之后的位置；`JUSL` 那条线恒为 `[0, 0]` */
+  offset: [number, number];
+  /** E3D `PLSTART pline`：p-line 在 `POSS` 截面平面上的点 */
+  start: [number, number, number];
+  /** E3D `PLEND pline`：p-line 在 `POSE` 截面平面上的点 */
+  end: [number, number, number];
+  /** `unit(end − start)` */
+  dir: [number, number, number];
+  length: number;
+  /** E3D `PLSTCUT / PLENCUT`：按 `DRNS / DRNE` 斜切后的端点；平头端面时缺省 */
+  start_cut?: [number, number, number];
+  end_cut?: [number, number, number];
+};
+
+/** `POST /api/v1/element/plines` 的响应：SCTN / GENSEC 的目录 p-line 线（E3D `EDGPLINE.line`）。 */
+export type ElementPlinesResponse = {
+  source: 'e3d-model' | (string & {});
+  /** `a/b` */
+  refno: string;
+  dbnum: number;
+  noun: string;
+  name: string | null;
+  unit: 'mm' | (string & {});
+  /** 实际用到的对齐线名（`JUSL`，缺省 `NA`）；没走到截面时为 null */
+  justification_line: string | null;
+  /** `PSTR` 成员原序 */
+  plines: ElementPlineItem[];
+  /** `plines` 为空时的原因（不是 SCTN / GENSEC、无 SPRE、链断、无 PSTR、GENSEC 含弧）——E3D 同样没有 p-line 可拾 */
+  reason?: string;
+  notes: string[];
+};
+
+export type GenModelV1ElementPlinesRequest = {
+  refno: string;
+};
+
+/** `POST /api/v1/element/plines`：型材（SCTN / GENSEC）的 PLINE 线，测量拾取层 Pline 过滤器的来源。 */
+export function genModelV1ElementPlines(
+  req: GenModelV1ElementPlinesRequest,
+  options?: GenModelV1RequestOptions,
+): Promise<ElementPlinesResponse> {
+  return genModelV1Fetch<ElementPlinesResponse>('/api/v1/element/plines', {
+    ...options,
+    method: 'POST',
+    body: { refno: toV1Refno(req.refno) },
+  });
+}
+
 export type GenModelV1EnsureRequest = {
   refno: string;
   /** 只给「人明确要求重生成」用；显示补齐**不要**传（spec §4.5） */

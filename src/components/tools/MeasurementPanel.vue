@@ -63,7 +63,7 @@ const measurementPickSourceRows: {
   },
   {
     id: 'primitive_key_point',
-    description: '基本体关键点；依赖模型包导出的关键点数据。',
+    description: 'PLINE / 基本体关键点：拾取过滤器 Pline 的来源。gen-model-v1 下是型材（SCTN / GENSEC）的目录 p-line（POST /api/v1/element/plines，E3D PLSTART → PLEND），整条线可拾、Snap 取近端、Mid-Point 等沿线派生、Perpendicular to 以它为目标；legacy 下是模型包导出的 PLINE 端点与基本体显著点。',
   },
   {
     id: 'mesh_graphics',

@@ -124,7 +124,8 @@ export type PrimitiveKeypointsResult = {
  * - `legacy`：`ptsets.parquet` 优先、`:3100 /api/pdms/ptset` 兜底（`usePtsetRuntimeLookup` 原样）；
  *   基本体 / PLINE 关键点读 `primitive_keypoints.parquet` + 语义捕捉点表。
  * - `gen-model-v1`：`POST /api/v1/element/ptset`（直读 dabacon 的目录 P 点集，mm + 列主序世界矩阵）；
- *   成员点集用 `include_members`；基本体关键点服务端尚无接口，回空并说明原因。
+ *   成员点集用 `include_members`；PLINE 关键点走 `POST /api/v1/element/plines`（SCTN / GENSEC 的目录 p-line
+ *   起 / 终点，世界系 mm，2026-09-14 起）；基本体显著点不给（E3D Element × Snap 回落元素原点，d-336）。
  */
 export type KeypointSource = {
   /** 单构件 P-Point（E3D PTSET）。`dbno` 是 legacy parquet 分桶键，v1 源不需要。 */

@@ -3,7 +3,9 @@ import { describe, expect, it } from 'vitest';
 import { Matrix4, OrthographicCamera, Vector3 } from 'three';
 
 import {
+  attachPlineSegments,
   buildGraphicsPickCandidates,
+  buildPlineLineCandidates,
   buildPositionPickCandidate,
   buildTubingAxisCandidate,
   cloneMeasurementPickSourceSettings,
@@ -368,6 +370,69 @@ describe('useMeasurementPickSources', () => {
       expect(graphics.hit?.feature).toBe('graphics-plane');
       // `show` is off by default: the picked detail is highlighted instead of drawing crosses.
       expect(graphics.visibleCandidates).toEqual([]);
+    });
+  });
+
+  describe('attachPlineSegments + buildPlineLineCandidates · E3D stdPline picks the p-line anywhere along it', () => {
+    const rect = { width: 200, height: 200 }; // orthographic camera: 100 px per world unit
+    const rayAt = (x: number, y: number) => ({ origin: new Vector3(x, y, 1), direction: new Vector3(0, 0, -1) });
+    const cursorAt = (x: number, y: number) => ({ x: 100 + x * 100, y: 100 - y * 100 });
+    /** PLINE NA from (−0.8, 0.3) to (0.6, 0.3) and TOS from (−0.8, 0.5) to (0.6, 0.5), given as end candidates like legacy / element/plines. */
+    function plineEnds(): MeasurementPickCandidate[] {
+      const end = (key: string, which: '起点' | '终点', x: number, y: number): MeasurementPickCandidate => ({
+        id: `plines:24381_177301:${key}:${which}`,
+        source: 'primitive_key_point',
+        entityId: `plines:${key}:${which}`,
+        objectId: 'o:24381_177301:0',
+        worldPos: new Vector3(x, y, 0),
+        label: `PLINE ${key} ${which}`,
+      });
+      return [end('NA', '起点', -0.8, 0.3), end('NA', '终点', 0.6, 0.3), end('TOS', '起点', -0.8, 0.5), end('TOS', '终点', 0.6, 0.5)];
+    }
+
+    it('one line candidate per paired PLINE: control point = p-line point nearest the ray, shares the ends\' segment, direction along the line, label `PLINE <key>`', () => {
+      const ends = attachPlineSegments(plineEnds());
+      const lines = buildPlineLineCandidates(ends, rayAt(0.1, 0.32));
+      expect(lines.map((line) => line.id)).toEqual(['pline-line:o:24381_177301:0|NA', 'pline-line:o:24381_177301:0|TOS']);
+      const [na, tos] = lines;
+      expect(na!.source).toBe('primitive_key_point');
+      expect(na!.feature).toBe('pline');
+      expect(na!.label).toBe('PLINE NA');
+      expect(na!.worldPos.toArray().map((v) => Number(v.toFixed(9)))).toEqual([0.1, 0.3, 0]);
+      expect(na!.segment).toBe(ends[0]!.segment);
+      expect(na!.direction!.clone().normalize().toArray().map((v) => Number(v.toFixed(9)))).toEqual([1, 0, 0]);
+      expect(tos!.worldPos.toArray().map((v) => Number(v.toFixed(9)))).toEqual([0.1, 0.5, 0]);
+      // Beyond the end the control point clamps to the end.
+      expect(buildPlineLineCandidates(ends, rayAt(0.9, 0.3))[0]!.worldPos.toArray().map((v) => Number(v.toFixed(9)))).toEqual([0.6, 0.3, 0]);
+      // Unpaired ends (no segment) and non-PLINE keypoints produce no line.
+      const lone = attachPlineSegments([plineEnds()[0]!, { ...plineEnds()[0]!, id: 'box', label: '盒角 #1' }]);
+      expect(buildPlineLineCandidates(lone, rayAt(0, 0))).toEqual([]);
+    });
+
+    it('under the Pline filter a cursor in the middle of a long p-line snaps to it (nearest line wins), and Snap derivation still has the whole segment', () => {
+      const settings = cloneMeasurementPickSourceSettings({
+        primitive_key_point: { show: true, snap: true, priority: 10, thresholdPx: 12 },
+      });
+      const ends = attachPlineSegments(plineEnds());
+      const candidates = [...ends, ...buildPlineLineCandidates(ends, rayAt(0.1, 0.32))];
+      // Cursor 2 px above NA (y = 0.32), 18 px below TOS, far from every end (≥ 50 px).
+      const resolved = resolveMeasurementPickCandidates({
+        cursor: cursorAt(0.1, 0.32), camera: camera(), rect, settings, candidates, pickLayer: { filter: 'pline', pickType: 'snap' },
+      });
+      expect(resolved.hit?.id).toBe('pline-line:o:24381_177301:0|NA');
+      expect(resolved.hit?.pixelDistance).toBeCloseTo(2, 6);
+      expect(resolved.hit?.segment?.start.toArray()).toEqual([-0.8, 0.3, 0]);
+      // Ends alone (legacy behaviour) would not have snapped here.
+      expect(resolveMeasurementPickCandidates({
+        cursor: cursorAt(0.1, 0.32), camera: camera(), rect, settings, candidates: ends, pickLayer: { filter: 'pline', pickType: 'snap' },
+      }).hit).toBeNull();
+      // Any admits it too (E3D stdAny = Element / Ppoint / Pline); Ppoint / Graphics do not.
+      const hitUnder = (filter: 'any' | 'ppoint' | 'graphics') => resolveMeasurementPickCandidates({
+        cursor: cursorAt(0.1, 0.32), camera: camera(), rect, settings, candidates, pickLayer: { filter, pickType: 'snap' },
+      }).hit?.id ?? null;
+      expect(hitUnder('any')).toBe('pline-line:o:24381_177301:0|NA');
+      expect(hitUnder('ppoint')).toBeNull();
+      expect(hitUnder('graphics')).toBeNull();
     });
   });
 
