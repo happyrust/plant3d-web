@@ -1,7 +1,13 @@
 import { Box3, Matrix4, Vector3, type Camera, type Object3D } from 'three';
 
 import type { DimensionViewerAdapter } from '../facade/createDimensionSystem';
-import type { DesignBox, LayoutObstacle, ScreenRect, Vec3 } from '../kernel/types';
+import type {
+  DesignBox,
+  LayoutObstacle,
+  OcclusionProbeHints,
+  ScreenRect,
+  Vec3,
+} from '../kernel/types';
 
 /**
  * The part of the DTX layer the adapter reads component boxes from: objects
@@ -20,6 +26,17 @@ export type DtxObjectBoundsSource = Readonly<{
     direction: Vector3,
   ): Readonly<{ distance: number }> | null;
 }>;
+
+/**
+ * The model element a DTX object belongs to: object ids are minted as
+ * `o:<refno>:<piece>` (one element may load as several pieces); anything
+ * else is its own element.
+ */
+export function refnoOfDtxObject(objectId: string): string {
+  if (!objectId.startsWith('o:')) return objectId;
+  const parts = objectId.split(':');
+  return parts.length >= 3 && parts[1] ? parts[1] : objectId;
+}
 
 /** The eight corners of an axis-aligned box, as fresh vectors. */
 function boxCorners(min: Vec3, max: Vec3): Vector3[] {
@@ -59,7 +76,9 @@ function tuple(vector: Vector3): Vec3 {
  * for the inspection display mode: the Design Space segment goes to scene
  * world, the visible objects whose box meets the segment's box are ray-cast
  * one by one, and the first hit nearer than the segment end (less the
- * tolerance, scaled the same way) blocks it.
+ * tolerance, scaled the same way) blocks it. With a `subject` hint (a tag's
+ * anchor on the element it names) that element's pieces and any body the
+ * anchor lies inside are left out — only other geometry hides the tag.
  */
 export function createDtxDimensionViewerAdapter(input: Readonly<{
   getCamera: () => Camera | null | undefined;
@@ -98,9 +117,15 @@ export function createDtxDimensionViewerAdapter(input: Readonly<{
           .map(corner => tuple(corner.applyMatrix4(millimetresToDesign))),
       }));
   };
-  const isSegmentBlocked = (from: Vec3, to: Vec3, toleranceM: number): boolean => {
+  const isSegmentBlocked = (
+    from: Vec3,
+    to: Vec3,
+    toleranceM: number,
+    hints?: OcclusionProbeHints,
+  ): boolean => {
     const layer = input.getDtxLayer?.();
     if (!layer?.raycastObject) return false;
+    const raycastObject = layer.raycastObject.bind(layer);
     const designToWorld = getDesignToWorld();
     if (designToWorld.determinant() === 0) return false;
     const origin = new Vector3(...from).applyMatrix4(designToWorld);
@@ -112,13 +137,33 @@ export function createDtxDimensionViewerAdapter(input: Readonly<{
     // A hit has to fall short of the target by the tolerance, expressed in
     // scene units through the same segment (uniform scale assumed, as for
     // every other length the adapter converts).
-    const reach = lengthWorld - toleranceM * (lengthWorld / lengthDesign);
+    const toleranceWorld = toleranceM * (lengthWorld / lengthDesign);
+    const reach = lengthWorld - toleranceWorld;
     if (reach <= 0) return false;
     const direction = segment.divideScalar(lengthWorld);
+    const subject = hints?.subject;
+    // The probe is a tag's anchor on / inside the object it names: that
+    // object's own pieces, and any body the anchor lies inside (the tube
+    // and the fitting meeting at a connection, the valve around its origin),
+    // are what the tag points at, not what hides it. A body encloses the
+    // anchor when a ray cast onward from just before the anchor still leaves
+    // through it — the layer's triangle test is two-sided, so the exit wall
+    // counts; starting the tolerance short of the anchor keeps a body whose
+    // face the anchor sits on (an open pipe end) in the test.
+    const encloses = subject
+      ? (objectId: string): boolean => raycastObject(
+        objectId,
+        target.clone().addScaledVector(direction, -toleranceWorld),
+        direction,
+      ) !== null
+      : (): boolean => false;
     const segmentBox = new Box3().setFromPoints([origin, target]);
     for (const { objectId } of layer.collectObjectBoundsIntersecting(segmentBox, { visibleOnly: true })) {
-      const hit = layer.raycastObject(objectId, origin, direction);
-      if (hit && hit.distance < reach) return true;
+      if (subject && refnoOfDtxObject(objectId) === subject) continue;
+      const hit = raycastObject(objectId, origin, direction);
+      if (!hit || hit.distance >= reach) continue;
+      if (encloses(objectId)) continue;
+      return true;
     }
     return false;
   };

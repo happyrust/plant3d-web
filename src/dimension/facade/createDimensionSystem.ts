@@ -21,6 +21,7 @@ import type {
   DesignBox,
   LayoutObstacle,
   LayoutObstacleSource,
+  OcclusionProbeHints,
   OcclusionSource,
   ScreenRect,
   Vec3,
@@ -70,9 +71,16 @@ export type DimensionViewerAdapter = Readonly<{
    * Whether visible model geometry meets the Design Space segment
    * `from → to` more than `toleranceM` short of `to` — the ray cast the
    * inspection display mode fades occluded dimensions by (S4, 2026-09-13).
-   * Optional: a host without one never fades anything in inspection mode.
+   * `hints.subject` names the model element a tag's anchor sits on; that
+   * element (and any body enclosing the anchor) must not count. Optional: a
+   * host without one never fades anything in inspection mode.
    */
-  isSegmentBlocked?(from: Vec3, to: Vec3, toleranceM: number): boolean;
+  isSegmentBlocked?(
+    from: Vec3,
+    to: Vec3,
+    toleranceM: number,
+    hints?: OcclusionProbeHints,
+  ): boolean;
 }>;
 
 export type DimensionAnchorRefreshReport = Readonly<{

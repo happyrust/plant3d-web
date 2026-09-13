@@ -386,8 +386,12 @@ describe('mbdV2ToExternalRecords', () => {
       dot: true,
     });
     expect(head.lod).toBeUndefined();
-    // A connection inside the branch (rooted by two dimensions) has no single outward direction.
-    expect(explicitLayout(result, 'b:isoline:1:tag:connection:mid').tag?.away).toBeUndefined();
+    // A connection inside the branch (rooted by two dimensions) has no single
+    // outward direction; the component it sits at is the tag's subject (a
+    // branch end has none — see `head.tag` above).
+    const mid = explicitLayout(result, 'b:isoline:1:tag:connection:mid');
+    expect(mid.tag?.away).toBeUndefined();
+    expect(mid.tag?.subject).toBe('mid');
 
     // Elbow tag: a pill from mid range on, the angle only on a close-up.
     const elbow = explicitLayout(result, 'b:isoline:0:tag:elbo:r1');
@@ -395,18 +399,20 @@ describe('mbdV2ToExternalRecords', () => {
       style: 'pill',
       lines: [{ text: '89.75°', detail: true }, { text: 'PE +13301' }],
       target: [0.5, 0, 0],
+      subject: 'r1',
     });
     expect(elbow.lod).toEqual({ tier: 'secondary' });
 
-    // Component name: framed, always shown.
+    // Component name: framed, always shown, naming the component.
     const name = explicitLayout(result, 'b:isoline:1:tag:name:r2');
-    expect(name.tag).toMatchObject({ style: 'frame', lines: [{ text: 'Copy-of-1RCS002VP' }] });
+    expect(name.tag).toMatchObject({ style: 'frame', lines: [{ text: 'Copy-of-1RCS002VP' }], subject: 'r2' });
     expect(name.tag?.dot).toBeUndefined();
     expect(name.lod).toBeUndefined();
 
-    // Branch name: close-up detail.
+    // Branch name: close-up detail, names no component.
     const branch = explicitLayout(result, 'b:tag:branch-name');
     expect(branch.tag?.style).toBe('pill');
+    expect(branch.tag?.subject).toBeUndefined();
     expect(branch.lod).toEqual({ tier: 'detail' });
   });
 

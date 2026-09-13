@@ -58,7 +58,26 @@ export type DimensionDisplayMode = 'engineering' | 'inspection';
  * camera / model states.
  */
 export type OcclusionSource = Readonly<{
-  isSegmentBlocked(from: Vec3, to: Vec3, toleranceM: number): boolean;
+  isSegmentBlocked(
+    from: Vec3,
+    to: Vec3,
+    toleranceM: number,
+    hints?: OcclusionProbeHints,
+  ): boolean;
+}>;
+
+/**
+ * What the inspection pass knows about a probe point that the host needs to
+ * answer fairly. `subject`: the probe is a tag's anchor on or inside the
+ * model object the tag names (an elbow's corner point, a valve's origin, a
+ * connection at the pipe's bore centre), and `subject` is that object as the
+ * host knows it (the refno the tag id carries). Geometry of `subject` itself,
+ * and any body the anchor lies inside, must not count as hiding the tag —
+ * only *other* geometry between the camera and the anchor does. Absent for a
+ * dimension's value text, which stands in free space off the pipe.
+ */
+export type OcclusionProbeHints = Readonly<{
+  subject?: string;
 }>;
 
 export type InteractionState = 'normal' | 'hovered' | 'selected';
@@ -313,13 +332,16 @@ export type LayoutResult = Readonly<{
     tag?: Readonly<{
       candidate: number;
       body: ScreenRect;
+      /** The model object the tag names (`ExplicitTagInput.subject`), when known. */
+      subject?: string;
     }>;
     /**
      * Set by the inspection pass (`markOcclusion`, display mode
      * `inspection`): model geometry stands between the camera and the
-     * dimension's probe point (its value text / tag anchor), so the painter
-     * fades the whole record to `theme.inspection.occludedAlpha`. Absent in
-     * `engineering` mode.
+     * record's probe point — a dimension's value text; a tag's anchor, other
+     * than the object the tag names (`subject`); the body of a tag without a
+     * subject — so the painter fades the whole record to
+     * `theme.inspection.occludedAlpha`. Absent in `engineering` mode.
      */
     occluded?: boolean;
   }>;
@@ -521,6 +543,15 @@ export type ExplicitTagInput = Readonly<{
    * direction from `target` to the solver's `labelAnchor`.
    */
   away?: Vec3;
+  /**
+   * The model object the tag names, as the host knows it (plant-mbd: the
+   * refno in `…:tag:elbo:<refno>` / `…:tag:name:<refno>` /
+   * `…:tag:connection:<refno>`). Opaque to the kernel; the inspection pass
+   * hands it to the host's occlusion seam so that object's own geometry
+   * does not count as hiding the tag. Omitted (branch head / tail cards,
+   * the branch name) = the tag is probed where its body is instead.
+   */
+  subject?: string;
   /** Mark `target` with a filled dot. */
   dot?: boolean;
 }>;

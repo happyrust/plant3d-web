@@ -57,12 +57,26 @@ describe('occlusionProbe', () => {
   const projector = createTestProjector(100);
 
   it('prefers the value text anchor and falls back to the first stroke vertex', () => {
-    expect(occlusionProbe(drawn('a', [1, 2, 3]), projector)).toEqual([1, 2, 3]);
-    expect(occlusionProbe(drawn('b', [1, 2, 3], false), projector)).toEqual([0, 2, 3]);
+    expect(occlusionProbe(drawn('a', [1, 2, 3]), projector)).toEqual({ point: [1, 2, 3] });
+    expect(occlusionProbe(drawn('b', [1, 2, 3], false), projector)).toEqual({ point: [0, 2, 3] });
     expect(occlusionProbe(elided('c'), projector)).toBeNull();
   });
 
-  it('probes a billboard tag where its body is, at the anchor depth, not at the anchor on the pipe', () => {
+  it('probes a tag that names its object at the anchor, telling the host which object that is', () => {
+    const tag: LayoutResult = {
+      ...drawn('tag', [0, 0, 0.4]),
+      derived: {
+        formattedLabel: 'tag',
+        tag: { candidate: 3, body: { x: 260, y: 130, width: 80, height: 40 }, subject: '24381_145035' },
+      },
+    };
+    expect(occlusionProbe(tag, projector)).toEqual({
+      point: [0, 0, 0.4],
+      hints: { subject: '24381_145035' },
+    });
+  });
+
+  it('probes a tag without an object where its body is, at the anchor depth', () => {
     // Anchor on the pipe at (0, 0, 0.4); the card was placed 100 px right and
     // 50 px up of the anchor's pixel (200, 200) → its centre is at (300, 150).
     const tag: LayoutResult = {
@@ -72,7 +86,7 @@ describe('occlusionProbe', () => {
         tag: { candidate: 3, body: { x: 260, y: 130, width: 80, height: 40 } },
       },
     };
-    expect(occlusionProbe(tag, projector)).toEqual([1, 0.5, 0.4]);
+    expect(occlusionProbe(tag, projector)).toEqual({ point: [1, 0.5, 0.4] });
   });
 });
 
@@ -118,6 +132,33 @@ describe('markOcclusion', () => {
       primitives: behind.primitives,
       derived: { formattedLabel: 'behind', occluded: true },
     });
+  });
+
+  it('hands the host a tag\'s object with the cast, and nothing extra for a dimension', () => {
+    const source: OcclusionSource = { isSegmentBlocked: vi.fn(() => false) };
+    const tag: LayoutResult = {
+      ...drawn('tag', [0.5, 0.2, 0.7]),
+      derived: {
+        formattedLabel: 'tag',
+        tag: { candidate: 0, body: { x: 240, y: 170, width: 20, height: 10 }, subject: 'r7' },
+      },
+    };
+
+    markOcclusion([tag, drawn('dim', [-0.5, 0.2, 0.7])], projector, source, theme);
+
+    expect(source.isSegmentBlocked).toHaveBeenNthCalledWith(
+      1,
+      [0.5, 0.2, -1],
+      [0.5, 0.2, 0.7],
+      expect.closeTo(0.02, 12),
+      { subject: 'r7' },
+    );
+    expect(source.isSegmentBlocked).toHaveBeenNthCalledWith(
+      2,
+      [-0.5, 0.2, -1],
+      [-0.5, 0.2, 0.7],
+      expect.closeTo(0.02, 12),
+    );
   });
 
   it('is deterministic: the same inputs give the same flags', () => {

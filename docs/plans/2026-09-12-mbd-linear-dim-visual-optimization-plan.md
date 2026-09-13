@@ -205,9 +205,11 @@
 
 - 实施：`DimensionViewport.setDisplayMode('engineering' | 'inspection')`，默认 `engineering`（与之前逐像素一致，材质保持不透明、
   不做任何探测）。`inspection` 下每次完整布局后 `kernel/layout/occlusionPolicy.ts::markOcclusion` 对每条画出来的记录取探测点
-  （第一条字形的三维锚点 = 数值文字基线中心；标签 billboard 探卡片屏幕中心在锚点深度上的点——锚点在构件体内，探锚点会让
-  卡片从任何方向都被标遮挡，实机第一轮已撞上），从其像素的近平面点向探测点发一条线段问宿主
-  `DimensionViewerAdapter.isSegmentBlocked(from, to, ε)`，ε = max(0.5 mm, 2 px·worldPerPixel)；DTX 适配器用
+  （第一条字形的三维锚点 = 数值文字基线中心；标签 billboard 也探锚点，但把它点名的构件——id 里的 refno，`derived.tag.subject`——
+  作为 `hints.subject` 一并交给宿主，宿主跳过该构件自己的 piece 与包着锚点的体；`connection:Head` / `Tail` / `branch-name` 这类点不出
+  构件的标签退回探卡片屏幕中心在锚点深度上的点。锚点在构件体内，裸探锚点会让卡片从任何方向都被标遮挡，实机第一轮已撞上；
+  一律探卡片则标签几乎不淡，用户 22:15 拍板要「被点名构件本身被挡才淡」），从其像素的近平面点向探测点发一条线段问宿主
+  `DimensionViewerAdapter.isSegmentBlocked(from, to, ε, hints?)`，ε = max(0.5 mm, 2 px·worldPerPixel)；DTX 适配器用
   `collectObjectBoundsIntersecting` 筛候选、`raycastObject` 逐三角求交（真实网格，非包围盒）。结果写 `derived.occluded`，画家按记录
   整体着 α（逐顶点 `batchAlpha`，描边 / 实心箭头 / 标签填充三套缓冲）：被遮挡 0.35、可见 0.65，不隐藏、不搬动。面板「显示模式」
   单选 + URL `mbd_mode=inspection`（直接调 viewport，不走 `popstate` 重拉 payload），检视模式下显示「被遮挡 N 条 / 可见 M 条」。
@@ -217,9 +219,12 @@
   真实 Chrome（gen-model 本轮未运行，demo 页 + 注入 `pipe-iso-sample.json`，把 DTX demo 立方体放大到 0.5 m 挡在相机与 `2084` 之间）：
   engineering 全部 α 1 / 材质不透明；inspection 只有 `2084` 被标遮挡（α 0.35），其余 22 条 0.65，重复布局逐条相同；换到对面看
   `2084` 回到 0.65；切回 engineering 复原；切换过程 payload 请求数不变。截图见验证目录「inspection 显示模式」段。
-  **实机对照（BRAN 24381_145018，live gen-model `:18122`，三个相机）**：正面淡 `900.51`、背面淡 `1834.19`、阀门簇中景淡
-  `900.51` / `173`——都是数值文字站在管子另一侧的三维尺寸，正 / 背面各淡不同的一组；再布局逐条相同，inspection 完整布局 3–5 ms；
-  标签探测点改卡片后没有一张卡片被误标（第一轮探锚点时阀门位号与坐标卡片正背面都淡）。截图与读数见验证目录「实机对照」小节。
+  **实机对照（BRAN 24381_145018，live gen-model `:18122`，三个相机）**：正面淡 `900.51`、背面淡 `1834.19` 与阀门位号
+  `Copy-of-1RCS002VP`（阀门原点被直管 `o:24381_145018:5` 挡住，命中比锚点近 3.0 m）、阀门簇中景淡 `900.51` / `173`——尺寸都是
+  数值文字站在管子另一侧的三维尺寸，正 / 背面各淡不同的一组；再布局逐条相同，inspection 完整布局 3–5 ms。标签三轮取法对照：
+  裸探锚点（第一轮，阀门位号与坐标卡片正背面都误标）→ 一律探卡片（第二轮，`9de9e60`，标签一张不淡）→ 探锚点但排除被点名构件
+  （第三轮，现口径，只有真被别的几何挡住的阀门位号淡；独立射线复核 6/6 与内核一致）。截图与读数见验证目录「实机对照」小节。
+  单测 59 文件 / 343 通过（+4：探测点带 `subject`、缝收到 hints、适配器跳过构件自身与包着锚点的体、`classifyTag` 读 refno）。
 - 原设计：`ThreeSceneDimensionPainter` 增 `inspection` 模式：保持 `depthTest=false` 但按深度做淡化（被遮挡尺寸
   α 降到 0.35 左右），而不是直接开启深度测试（会让尺寸被管体吃掉）。默认仍为 engineering。
 - 未做：2k 记录的分帧预算（本样本 23 条一帧内完成）；与 S5 三态开关的合并入口（S5 未排期，现为面板独立单选）。

@@ -100,7 +100,11 @@ describe('layoutTagBillboard', () => {
     expect(centre[0]).toBeCloseTo(200 - standoff / Math.SQRT2, 6);
     expect(centre[1]).toBeCloseTo(200 - standoff / Math.SQRT2, 6);
     expect(result.derived.tag!.candidate).toBe(0);
+    expect(result.derived.tag!.subject).toBeUndefined();
     expect(result.derived.formattedLabel).toBe('A');
+    // The component the tag names rides along for the inspection pass.
+    const named = layoutTagBillboard(input, { ...spec, subject: '24381_145035' }, context());
+    expect(named.derived.tag!.subject).toBe('24381_145035');
     expect(result.labelBounds).toEqual({
       x: body.x - 2, y: body.y - 2, width: body.width + 4, height: body.height + 4,
     });

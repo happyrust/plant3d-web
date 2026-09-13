@@ -418,7 +418,11 @@ export function planTagBillboard(
       labelPinned: input.labelPinned,
       derived: {
         formattedLabel: lines[0]!,
-        tag: { candidate: index, body },
+        tag: {
+          candidate: index,
+          body,
+          ...(spec.subject ? { subject: spec.subject } : {}),
+        },
       },
     };
   };

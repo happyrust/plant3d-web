@@ -143,10 +143,10 @@
 
 用户 2026-09-13 21:1x 拍板：默认 engineering 不变，inspection 下被遮挡尺寸 α 0.35 / 可见 0.65，对 label_anchor 做相机射线求交，入口放尺寸面板。细节见 ADR 0061。
 
-- **内核** `kernel/layout/occlusionPolicy.ts`（新）：完整布局后对每条画出的记录取探测点（尺寸：第一条字形的三维锚点；标签 billboard：卡片屏幕中心在锚点深度上的点——锚点在被点名的构件体内，探锚点会让卡片从任何方向都淡，实机第一轮已撞上），从其像素的近平面点向探测点发一条线段问宿主 `OcclusionSource.isSegmentBlocked(from, to, ε)`，ε = max(0.5 mm, 2 px·worldPerPixel)，结果写 `derived.occluded`；`layoutViewport` options 多 `occlusion` / `displayMode`，只在 inspection 下跑。
+- **内核** `kernel/layout/occlusionPolicy.ts`（新）：完整布局后对每条画出的记录取探测点（尺寸：第一条字形的三维锚点；标签 billboard：也探锚点，但把它点名的构件 `derived.tag.subject`——`classifyTag` 从 id 的 `tag:elbo|name|connection:<refno>` 读出、经 `ExplicitTagInput.subject` 随布局落地——作为 `hints.subject` 交给宿主，宿主跳过该构件自己的 piece 与包着锚点的体；`connection:Head` / `Tail` / `branch-name` 点不出构件，退回探卡片屏幕中心在锚点深度上的点。锚点在被点名的构件体内，裸探锚点会让卡片从任何方向都淡，实机第一轮已撞上；一律探卡片则标签几乎不淡，用户 2026-09-13 22:15 拍板「被点名构件本身被挡才淡」），从其像素的近平面点向探测点发一条线段问宿主 `OcclusionSource.isSegmentBlocked(from, to, ε, hints?)`，ε = max(0.5 mm, 2 px·worldPerPixel)，结果写 `derived.occluded`；`layoutViewport` options 多 `occlusion` / `displayMode`，只在 inspection 下跑。
 - **画家 / 视口** `scenePainter.ts`：逐顶点 `batchAlpha`（描边 / 实心箭头 / 标签填充），`layoutAlpha` 按模式取 1 / 0.65 / 0.35，材质 `transparent` 只在 inspection 下打开；`dimensionViewport.ts` `setDisplayMode` / `getDisplayMode`（dirty reason `display-mode`）。
-- **宿主缝** `DimensionViewerAdapter.isSegmentBlocked?`；DTX 适配器用 `collectObjectBoundsIntersecting` 筛候选、`raycastObject` 逐三角求交（真实网格）。
+- **宿主缝** `DimensionViewerAdapter.isSegmentBlocked?(from, to, ε, hints?)`；DTX 适配器用 `collectObjectBoundsIntersecting` 筛候选、`raycastObject` 逐三角求交（真实网格）；带 `hints.subject` 时跳过 `o:<refno>:<n>` 里 refno 相同的 piece（`refnoOfDtxObject`），并对每个够近的命中从锚点前 ε 处再向前发一条射线、穿得出去的是包着锚点的体，也跳过。
 - **面板** `DimensionPanelDock.vue`：「显示模式」单选（Engineering / Inspection），URL `mbd_mode=inspection`，直接调 viewport、不派发 `popstate`；检视模式下显示「被遮挡 N 条 / 可见 M 条」。
 - **验证**：单测 59 文件 / 338 通过；eslint 0；type-check 本改动新增 0；e2e fixture 2/2；真实 Chrome 无后端链路把 demo 立方体放大挡在相机与 `2084` 之间：inspection 只有 `2084` 淡到 0.35、其余 0.65，对面看回 0.65，切回 engineering 复原，切换不重拉 payload（验证 README「inspection 显示模式」段，`inspection-*.png`）。
-- **实机对照（同日补）**：BRAN 24381_145018 + live gen-model `:18122`，三个相机：正面淡 `900.51`、背面淡 `1834.19`、阀门簇中景淡 `900.51` / `173`（都是数值文字在管子另一侧的三维尺寸），再布局逐条相同，inspection 完整布局 3–5 ms；标签探测点改卡片后卡片不再被误标（验证 README「实机对照」小节，`inspection-real-*.png`）。
-- **未覆盖**：2k 记录的分帧预算；SVG 导出不带 α（导出仍是工程图样）；标签「被点名构件本身被挡才淡」的口径（要把对象身份传过缝）待拍板。
+- **实机对照（同日补，三轮）**：BRAN 24381_145018 + live gen-model `:18122`，三个相机：正面淡 `900.51`、背面淡 `1834.19` 与阀门位号 `Copy-of-1RCS002VP`（阀门原点被直管 `o:24381_145018:5` 挡住）、阀门簇中景淡 `900.51` / `173`（尺寸都是数值文字在管子另一侧的三维尺寸），再布局逐条相同，inspection 完整布局 3–5 ms。标签取法：裸探锚点误标（第一轮）→ 一律探卡片一张不淡（第二轮 `9de9e60`）→ 探锚点但排除被点名构件（第三轮，现口径），独立射线复核 6/6 与内核一致（验证 README「实机对照」小节，`inspection-real-*.png`、`inspection-real-b-probe.json`）。单测 59 文件 / 343 通过。
+- **未覆盖**：2k 记录的分帧预算；SVG 导出不带 α（导出仍是工程图样）；「包着锚点的体」用「锚点前 ε 处向前再发一条射线能穿出」判定，凹体（弯头、绕回来的管段）在锚点前后各穿一次时会被当成包着锚点而不算遮挡，本样本没有这种相机。

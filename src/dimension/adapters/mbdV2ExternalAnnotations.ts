@@ -281,24 +281,47 @@ type TagClass = Readonly<{
   lod?: ExplicitLodInput;
   /** Lines matching this pattern stay on a mid-range view; the rest are close-up detail. */
   primaryLine?: RegExp;
+  /** The component the tag names (its refno), when the id carries one. */
+  subject?: string;
 }>;
 
 /**
+ * The refno a plant-mbd tag id names after `:tag:<kind>:` — the elbow, the
+ * named component, the component a connection card sits at. A branch end
+ * (`connection:Head` / `connection:Tail`) is a point on the pipe, not a
+ * component, and has none.
+ */
+function tagSubject(id: string, kind: 'connection' | 'name' | 'elbo'): string | undefined {
+  const match = new RegExp(`:tag:${kind}:([^:]+)$`).exec(id);
+  const subject = match?.[1];
+  if (!subject || subject === 'Head' || subject === 'Tail') return undefined;
+  return subject;
+}
+
+/**
  * What kind of drawing call-out a solver tag is. plant-mbd names its tags
- * (`…:tag:connection:<end>` end-point coordinate blocks, `…:tag:elbo:<refno>`
+ * (`…:tag:connection:<end | refno>` coordinate blocks, `…:tag:elbo:<refno>`
  * elbow angle + elevation, `…:tag:name:<refno>` component name,
  * `…:tag:branch-name`); a label from another producer is classified by its
  * text — a coordinate block (`X … / Y … / PE …`) reads as a card, anything
  * else as a framed name. The reference drawing style keeps coordinate blocks
  * and names at every distance, shows elbow elevations from mid range (the
- * angle only on a close-up) and the branch name only on a close-up.
+ * angle only on a close-up) and the branch name only on a close-up. The
+ * refno in the id becomes the tag's `subject` for the inspection pass.
  */
 function classifyTag(primitive: MbdV2Label): TagClass {
   const id = primitive.id;
-  if (id.includes(':tag:connection:')) return { style: 'card', dot: true };
-  if (id.includes(':tag:name:')) return { style: 'frame', dot: false };
+  const withSubject = (tagClass: TagClass, kind: 'connection' | 'name' | 'elbo'): TagClass => {
+    const subject = tagSubject(id, kind);
+    return subject ? { ...tagClass, subject } : tagClass;
+  };
+  if (id.includes(':tag:connection:')) return withSubject({ style: 'card', dot: true }, 'connection');
+  if (id.includes(':tag:name:')) return withSubject({ style: 'frame', dot: false }, 'name');
   if (id.includes(':tag:elbo:')) {
-    return { style: 'pill', dot: false, lod: { tier: 'secondary' }, primaryLine: /^PE\b/ };
+    return withSubject(
+      { style: 'pill', dot: false, lod: { tier: 'secondary' }, primaryLine: /^PE\b/ },
+      'elbo',
+    );
   }
   if (id.includes(':tag:branch-name')) {
     return { style: 'pill', dot: false, lod: { tier: 'detail' } };
@@ -364,6 +387,7 @@ function mapLabel(
       })()
       : {}),
     ...(tagClass.dot ? { dot: true } : {}),
+    ...(tagClass.subject ? { subject: tagClass.subject } : {}),
   };
   return explicitRecord(primitive, 'annotation', {
     formattedLabel,

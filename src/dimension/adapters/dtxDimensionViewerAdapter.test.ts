@@ -2,7 +2,11 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { Box3, Matrix4, PerspectiveCamera, Scene, Vector3 } from 'three';
 
-import { createDtxDimensionViewerAdapter, type DtxObjectBoundsSource } from './dtxDimensionViewerAdapter';
+import {
+  createDtxDimensionViewerAdapter,
+  refnoOfDtxObject,
+  type DtxObjectBoundsSource,
+} from './dtxDimensionViewerAdapter';
 
 function elementAt(rect: Readonly<{ left: number; top: number; width: number; height: number }>): Element {
   return {
@@ -127,5 +131,61 @@ describe('createDtxDimensionViewerAdapter', () => {
     });
     expect(boundsOnly.isSegmentBlocked!([0, 0, 0], [1, 0, 0], 0.02)).toBe(false);
     expect(createDtxDimensionViewerAdapter(baseInput(null)).isSegmentBlocked).toBeUndefined();
+  });
+
+  it('leaves a tag\'s own element and the bodies around its anchor out of the cast', () => {
+    // Scene world = Design Space (mmToScene = scale(0.001)). The probe is a
+    // tag anchor at x = 10 inside the valve `24381_145035` (two pieces); the
+    // tube `24381_145036` meets the valve there and its wall is crossed at
+    // x = 9.9; a rack beam `24381_140000` stands at x = 4 in front of it all.
+    const millimetresToScene = new Matrix4().makeScale(0.001, 0.001, 0.001);
+    const hits: Record<string, (originX: number) => number | null> = {
+      'o:24381_145035:0': () => 9.5,
+      'o:24381_145035:1': () => 9.7,
+      // The tube: entered at 9.9 from the camera side; a cast onward from just
+      // before the anchor still leaves through its far wall (two-sided test).
+      'o:24381_145036:0': originX => (originX < 9.9 ? 9.9 : 0.05),
+      // The beam: crossed at 4, nothing of it beyond the anchor.
+      'o:24381_140000:0': originX => (originX < 4 ? 4 : null),
+    };
+    let objects = Object.keys(hits);
+    const layer: DtxObjectBoundsSource = {
+      collectObjectBoundsIntersecting: vi.fn(() => objects.map(objectId => ({ objectId, boundingBox: new Box3() }))),
+      raycastObject: vi.fn((objectId: string, origin: Vector3) => {
+        const distance = hits[objectId]!(origin.x);
+        return distance === null ? null : { distance };
+      }),
+    };
+    const adapter = createDtxDimensionViewerAdapter({
+      ...baseInput(elementAt({ left: 0, top: 0, width: 100, height: 100 })),
+      getMillimetresToScene: () => millimetresToScene,
+      getDtxLayer: () => layer,
+    });
+    const cast = () => adapter.isSegmentBlocked!([0, 0, 0], [10, 0, 0], 0.02, { subject: '24381_145035' });
+
+    // Beam in front: hidden.
+    expect(cast()).toBe(true);
+    // Without the beam only the valve's own pieces and the enclosing tube remain: visible.
+    objects = objects.filter(objectId => !objectId.startsWith('o:24381_140000'));
+    expect(cast()).toBe(false);
+    // The valve's pieces were never cast at; the tube was probed onward from 0.02 before the anchor.
+    const calls = (layer.raycastObject as ReturnType<typeof vi.fn>).mock.calls as [string, Vector3, Vector3][];
+    expect(calls.some(([id]) => id.startsWith('o:24381_145035'))).toBe(false);
+    const onward = calls.find(([id, origin]) => id === 'o:24381_145036:0' && origin.x > 9);
+    expect(onward).toBeDefined();
+    expect(onward![1].x).toBeCloseTo(9.98, 9);
+    expect([onward![2].x, onward![2].y, onward![2].z]).toEqual([1, 0, 0]);
+
+    // The same tube in front of a dimension's value text (no subject) does block it.
+    expect(adapter.isSegmentBlocked!([0, 0, 0], [10, 0, 0], 0.02)).toBe(true);
+  });
+});
+
+describe('refnoOfDtxObject', () => {
+  it('reads the element out of a piece id and leaves other ids alone', () => {
+    expect(refnoOfDtxObject('o:24381_145035:21')).toBe('24381_145035');
+    expect(refnoOfDtxObject('o:24381_145035:0')).toBe('24381_145035');
+    expect(refnoOfDtxObject('demo:0')).toBe('demo:0');
+    expect(refnoOfDtxObject('o::1')).toBe('o::1');
   });
 });

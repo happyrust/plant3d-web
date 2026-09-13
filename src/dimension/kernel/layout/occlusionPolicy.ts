@@ -1,6 +1,20 @@
 import type { ViewportProjector } from '../projector';
 import type { DimensionTheme } from '../theme';
-import type { LayoutResult, OcclusionSource, Vec3 } from '../types';
+import type {
+  LayoutResult,
+  OcclusionProbeHints,
+  OcclusionSource,
+  Vec3,
+} from '../types';
+
+/**
+ * Where the inspection pass tests a drawn layout, and what the host has to
+ * know to answer fairly (`hints.subject`: the object the probe sits on).
+ */
+export type OcclusionProbe = Readonly<{
+  point: Vec3;
+  hints?: OcclusionProbeHints;
+}>;
 
 /**
  * The 3D anchor a drawn layout hangs off: its first glyph run's anchor (the
@@ -32,29 +46,39 @@ function layoutAnchor(layout: LayoutResult): Vec3 | null {
 
 /**
  * The point the inspection pass tests a drawn layout at. A dimension is
- * probed at its value text (the 3D anchor above). A billboard tag is probed
- * where its body is: the body's screen centre unprojected at the anchor's
- * depth — the tag's anchor itself sits on or inside the component it names
- * (a valve's origin, a pipe end's centre), so a ray to the anchor would hit
- * that very component from every direction and the tag would always fade;
- * what matters for a call-out card is whether something nearer than its
- * anchor is drawn where the card is. Null for an elided layout.
+ * probed at its value text (the 3D anchor above), which stands in free
+ * space off the pipe. A billboard tag's anchor sits on or inside the object
+ * it names (an elbow's corner point, a valve's origin, a connection at the
+ * bore centre), so a plain ray to it would hit that very object from every
+ * direction and the tag would always fade (BRAN 24381_145018, 2026-09-13):
+ *
+ * - a tag that knows its object (`derived.tag.subject`) is probed at the
+ *   anchor with the subject as a hint — the host leaves out that object and
+ *   any body the anchor lies inside, so the tag fades exactly when *other*
+ *   geometry hides the thing it names (user's call, 2026-09-13 22:1x);
+ * - a tag without one (branch head / tail cards, the branch name) is probed
+ *   where its body is: the body's screen centre unprojected at the anchor's
+ *   depth — whether something nearer than the anchor is drawn where the
+ *   card is.
+ *
+ * Null for an elided layout.
  */
 export function occlusionProbe(
   layout: LayoutResult,
   projector: ViewportProjector,
-): Vec3 | null {
+): OcclusionProbe | null {
   const anchor = layoutAnchor(layout);
   if (!anchor) return null;
   const tag = layout.derived.tag;
-  if (!tag) return anchor;
+  if (!tag) return { point: anchor };
+  if (tag.subject) return { point: anchor, hints: { subject: tag.subject } };
   const depth = projector.project(anchor).depth;
   const probe = projector.unproject({
     x: tag.body.x + tag.body.width / 2,
     y: tag.body.y + tag.body.height / 2,
     depth,
   });
-  return probe.every(Number.isFinite) ? probe : anchor;
+  return { point: probe.every(Number.isFinite) ? probe : anchor };
 }
 
 /**
@@ -88,7 +112,8 @@ export function occlusionToleranceM(
 /**
  * Inspection pass (S4, 2026-09-13): every drawn layout is tested with one
  * ray cast from its probe's near-plane point to the probe; the host answers
- * whether visible model geometry stands in between. The result is written
+ * whether visible model geometry stands in between (for a tag, other than
+ * the object it names — see `occlusionProbe`). The result is written
  * to `derived.occluded` for the painter to fade the whole record — nothing
  * is hidden or moved, and the same camera / model state yields the same
  * flags. Elided layouts and layouts without a probe are passed through.
@@ -102,13 +127,12 @@ export function markOcclusion(
   return layouts.map((layout) => {
     const probe = occlusionProbe(layout, projector);
     if (!probe) return layout;
-    const origin = rayOrigin(probe, projector);
+    const origin = rayOrigin(probe.point, projector);
     if (!origin) return layout;
-    const occluded = source.isSegmentBlocked(
-      origin,
-      probe,
-      occlusionToleranceM(probe, projector, theme),
-    );
+    const toleranceM = occlusionToleranceM(probe.point, projector, theme);
+    const occluded = probe.hints
+      ? source.isSegmentBlocked(origin, probe.point, toleranceM, probe.hints)
+      : source.isSegmentBlocked(origin, probe.point, toleranceM);
     return { ...layout, derived: { ...layout.derived, occluded } };
   });
 }
