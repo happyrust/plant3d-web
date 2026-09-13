@@ -360,3 +360,61 @@ Esc 分层第一档「先放弃进行中的子拾取」；换拾取类型 / 过�
 - 扫描日志 `web-intersect-live-scan.txt`（16 个边像素样本）。
 - 单测：`intersectPickSession.test.ts` 12 条；`useXeokitMeasurementTools.test.ts` 新增 3 条（Graphics 边 / 面落点 + Any 不放行、线 × 线两次子拾取
   出角点 + `(2,870)` 保留首项 + Esc 分层、面 × 面 × 线 `(2,874)` 清空 + 换类型重置）。
+
+## 14. 拾取层 Phase A · TUBING 轴线（前端从直管放置矩阵派生 + 端点吸邻接 P-Point）实机走查（2026-09-13 21:30）
+
+**改动口径**：E3D `EDGTUBING`（`edgtubing.pmlobj`）把隐含管当**一条线**拾：`line(dbRef, 'LEAVE')` 从构件 `lPosition` 到下一个非 ATTA 成员的
+`aPosition`（注释明说用邻接构件的到达位置而不是隐含管长，「handles bad alignment between components correctly」）；`snap()` = 拾取线 ∩ 管线后取
+**近端**，`exact()` = 交点本身，`distance / proportion / fraction` = `GMFLINE` 从交点起算，`intersect` 把它当 LINE 操作数；3.1 的 `lineExtended` 就是
+`line`，Significant Snaps（`extended`）对 TUBING 不起作用。Web 没有分支拓扑，但有画出来的直管：
+
+- 纯内核 `src/measurement/tubing/tubingAxis.ts`：`tubingAxisFromBounds`（局部包围盒 × 放置矩阵 → 轴线段 + 半径；对 gen-model 直管 = 局部圆柱
+  半径 1、`z ∈ [0, 1]`，矩阵缩放 `(r, r, L)` 米）、`refineTubingAxisEnds`（两端各吸到容差内最近的邻接 P-Point，一点只服务一端，吸成零长即放弃）、
+  `tubingEndTolerance`（max(设计 2 mm, 5 % 半径)）。
+- 新点源 `tubing_axis`（特征类 `tubing`；缺省 show=false / snap=true / 18 px / priority 25，介于 P-Point 20 与 Item 原点 30 之间）：射线命中直管对象
+  （loader 登记 noun `TUBI` / gen-model `is_tubi`）时产出**一条线候选**——控制点 = 轴线上离射线最近处（`EDGTUBING.exact`），`segment` = 整条轴线，
+  `direction` = 轴向，标 `rayHit`（E3D 在管身任何位置都回 TUBING，所以候选按孔径边缘入围，光标离轴线更近时用真实投影距离；孔径内的 P-Point 仍赢）。
+  拾取类型内核照线候选走：Snap 近端、Cursor 控制点、Mid-Point / Fraction / Proportion / Distance 沿轴线、Intersect 转 LINE；Perpendicular to 得到轴向 provider。
+- 过滤器准入：**Any 与 Element 放行、Pline / Ppoint / Graphics 不放行**——E3D 只在元素类拾取模式（`pany` / `pick`）经 `EDGPICKDATA.viewData` 的
+  `data[1] = 'TUBING'` 回隐含管，`stdPline`（`inMode = 'pline'`）不拾它。用户 2026-09-13 14:27 的措辞是「管身轴线段进 Pline 类候选」，这里按「线类候选
+  （有两端点的拾中几何，与 PLINE 同一派生路径）」实现、**归 Element 特征类而不是 Pline 过滤器**，属有意偏离，待用户确认。
+- 标签裸给「轴线（<起点 P-Point> → <终点 P-Point>）」，命令条按既有规则补元素类型 → `TUBI 轴线（ELBO P-Point #1 → ELBO P-Point #2） · Snap`；
+  拾中的整条轴线在场景里高亮（同 Graphics 细节）。
+
+**证据等级**：`static_expectation`（`edgtubing.pmlobj` 149–228 / 308–334 / 589–604、`edgpicktype.pmlobj` 358 / 509 / 739 / 1019 / 1165 / 1306、
+`edgpickdata.pmlobj` 35 / 92）；**G7-02 TUBING 实际捕捉几何运行时 golden 未采**（E3D 未在跑）。唯一能对上 E3D 数字的是 §11 已采的
+ELBO 145031 P1（见下「独立复算」）。
+
+**Web 实机走查**（dev `:3101` + gen-model `:8023`（`%TEMP%\ptset-api-run`，本轮重新拉起），`?show_refno=24381_145018&gm_backend_port=8023`，
+Playwright 真指针；临时 spec 已删）：测量 → `距离`（缺省 `Any · Snap`）→ 按 `getObjectGeometryData` 局部包围盒识别 11 根直管对象
+（`o:24381_145018:0…10`，半径 57.15 mm，长 416～2556 mm）→ 悬停最长两根的轴线中点 → 两击 → 换拾取类型 / 过滤器复验。
+
+- 提示条：`距离测量 · 第 1/2 步 选择起点 (Snap) Snap : 等待捕捉（P-Point / Item 原点 / 管身轴线（TUBING））`；悬停直管 →
+  `… : TUBI 轴线（ELBO P-Point #1 → ELBO P-Point #2） · Snap`（两端都吸到了邻接 ELBO 的 P-Point；`web-tubing-live-01-hover-axis.png`）。
+- **Any × Snap**：起点直管 `o:…:7` 近端、终点直管 `o:…:6` 近端 → `Distance 4568mm / Offset X -0mm / Y -1189mm / Z -4410mm /
+  Direction X -0.0001 · Y -0.2603 · Z -0.9655`（`web-tubing-live-02-snap-result.png`）。记录设计坐标：起点 `7849.850 / 11636.248 / 18644.385 mm`，
+  终点 `7849.610 / 10447.460 / 14234.126 mm`。
+- **Any × Mid-Point**：同两根直管 → `Distance 3242mm / Offset X -0mm / Y -20mm / Z -3241mm / Direction X -0.0001 · Y -0.0062 · Z -1.0000`
+  （`web-tubing-live-03-hover-midpoint.png`、`-04-midpoint-result.png`）；起点 `7849.850 / 10467.438 / 18650.214 mm`，终点 `7849.610 / 10447.460 / 15408.741 mm`。
+- **Cursor**：标签不带派生标记 `… (Cursor) Snap : TUBI 轴线（ELBO P-Point #1 → ELBO P-Point #2）`。
+- **对偶**：`Pline` → `等待取点`（v1 下无 PLINE 点源，轴线不出现）；`Graphics` → `TUBI 面`（网格面，轴线不出现）；`Ppoint` → `等待捕捉（P-Point）`；
+  `Element` / `Any` → 轴线。
+- 网络：2 发 `POST :8023/api/v1/element/ptset`（`24381/145018` 与 `include_members`），P-Point 落地后端点校正生效。
+- 记录 `web-tubing-live-records.json`（两根直管的场景坐标轴线 + 两条记录），扫描日志 `web-tubing-live-scan.txt`。
+
+**独立复算**：
+- Snap：Δ = (−0.240, −1188.788, −4410.259) mm → |Δ| = 4567.7 mm，方向 (−0.0001, −0.2603, −0.9655)——与面板一致。
+- Mid-Point：Δ = (−0.240, −19.978, −3241.473) mm → 3241.5 mm，方向 (−0.0001, −0.0062, −1.0000)——一致。
+- 直管 `o:…:7` 的另一端 = 2 × 中点 − Snap 端 = `(7849.850, 9298.628, 18656.043)`，与 §11 E3D 实机 `Q P1 POS` 的 ELBO 145031 P1
+  `E 7849.85 N 9298.628 U 18656.042` 差 0.001 mm（E3D 打印 3 位小数）——校正后的轴线端点就是 E3D 的 P-Point；轴长 2337.6 mm 与放置矩阵
+  `scale.z = 2.3376` 一致（gen-model 画的直管已经落在 P-Point 上，端点校正位移 < 2 mm 容差）。
+
+**已知偏离 / 未做**：
+- E3D `line()` 跳过 ATTA（管线从构件 leave 直到下一个非 ATTA 构件的 arrive），Web 的直管对象在 ATTA 处是断开的两段，各自派生轴线；
+  Snap / Cursor 不受影响，**Mid-Point / Fraction / Proportion 在带 ATTA 的一段上与 E3D 不同**（未合并）。
+- BRAN HEAD 管（`hPosition → 首个非 ATTA 成员 aPosition`）与 LEAVE 管同一处理，无区别对待。
+- 测量列表条目的「近似」徽标来自 xeokit 记录缺 `provenance`（`legacy-unknown` → approximate），不是 TUBING 的精度判定（`tubing_axis` 在
+  `dtxDimensionSnapPort` 归 exact）；该徽标对所有 xeokit 记录都亮，属既有行为。
+- 完成一条测量后，尺寸系统在 capture 阶段接管其描边上的 `pointermove`（`viewerBindings.ts` `stopImmediatePropagation`），悬停在刚量过的
+  轴线上不再刷新捕捉提示；走查时先删记录再进下一场景。
+- G7-02 TUBING 运行时 golden 未采；`element/keypoints` / `element/plines` 服务端仍未做。

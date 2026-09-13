@@ -1,0 +1,34 @@
+# TUBING 轴线实机走查 2026-09-13 21:30（dev :3101 + gen-model :8023，?show_refno=24381_145018&gm_backend_port=8023，Playwright 真指针，临时 spec 已删）
+# 每行 = 一步操作后的覆盖条提示 / 记录摘要；坐标为画布像素。
+objects loaded: 22
+status after activate: 距离· 第 1/2 步 选择起点 (Snap) Snap : 等待捕捉（P-Point / Item 原点 / 管身轴线（TUBING））
+pick layer summary: Any · Snap
+status Any×Snap: 距离· 第 1/2 步 选择起点 (Snap) Snap : 等待捕捉（P-Point / Item 原点 / 管身轴线（TUBING））
+objects: 22, tube objects (unit cylinder r=1, z∈[0,1]): 11; tube scale samples: o:24381_145018:0 scale=(0.0572, 0.0572, 0.4564) radius=57.15mm len=456.4mm; o:24381_145018:1 scale=(0.0572, 0.0572, 2.5556) radius=57.15mm len=2555.6mm; o:24381_145018:2 scale=(0.0572, 0.0571, 0.4159) radius=57.15mm len=415.9mm
+visible tubes (len px desc): o:24381_145018:7@107px, o:24381_145018:6@84px, o:24381_145018:1@79px, o:24381_145018:4@76px, o:24381_145018:5@64px, o:24381_145018:3@51px, o:24381_145018:8@50px, o:24381_145018:10@47px
+hover o:24381_145018:7 mid=(411,337) → 距离· 第 1/2 步 选择起点 (Snap) Snap : TUBI 轴线（ELBO P-Point #1 → ELBO P-Point #2） · Snap
+hover o:24381_145018:6 mid=(413,462) → 距离· 第 1/2 步 选择起点 (Snap) Snap : TUBI 轴线（ELBO P-Point #1 → ELBO P-Point #2） · Snap
+first tube o:24381_145018:7: start=1.8861/-0.6736/2.1041 end=1.8861/1.6640/2.0924 (scene m)
+second tube o:24381_145018:6: start=1.8858/0.4752/0.0314 end=1.8858/0.4752/-2.3178 (scene m)
+hover state: {"hoverSnapTarget":{"label":"轴线（ELBO P-Point #1 → ELBO P-Point #2） · Snap","refno":"24381_145018"},"statusText":"距离测量 · 第 1/2 步 选择起点 (Snap) Snap : TUBI 轴线（ELBO P-Point #1 → ELBO P-Point #2） · Snap","pickPointMessage":null}
+after click 1: 距离· 第 2/2 步 选择终点 (Snap) Snap : TUBI 轴线（ELBO P-Point #1 → ELBO P-Point #2） · Snap
+hover second: 距离· 第 2/2 步 选择终点 (Snap) Snap : TUBI 轴线（ELBO P-Point #1 → ELBO P-Point #2） · Snap
+after click 2: 距离· 第 1/2 步 选择起点 (Snap) Snap : TUBI 轴线（ELBO P-Point #1 → ELBO P-Point #2） · Snap
+snap result rows: ["Distance4568mm","Offset X-0mm","Offset Y-1189mm","Offset Z-4410mm","DirectionX -0.0001 · Y -0.2603 · Z -0.9655"]
+snap record: id=xdist_1789306250547_za579u approximate=true origin=[tubing_axis:tubing:o:24381_145018:7 "轴线（ELBO P-Point #1 → ELBO P-Point #2） · Snap" design=7849.850/11636.248/18644.385mm] target=[tubing_axis:tubing:o:24381_145018:6 "轴线（ELBO P-Point #1 → ELBO P-Point #2） · Snap" design=7849.610/10447.460/14234.126mm]
+removed measurements: 1
+pick layer summary: Any · Mid-Point
+hover first (Mid-Point): 距离· 第 1/2 步 选择起点 (Mid-Point) Snap : TUBI 轴线（ELBO P-Point #1 → ELBO P-Point #2） · Mid-Point
+after midpoint click 1: 距离· 第 2/2 步 选择终点 (Mid-Point) Snap : TUBI 轴线（ELBO P-Point #1 → ELBO P-Point #2） · Mid-Point
+hover second (Mid-Point): 距离· 第 2/2 步 选择终点 (Mid-Point) Snap : TUBI 轴线（ELBO P-Point #1 → ELBO P-Point #2） · Mid-Point
+after midpoint click 2: 距离· 第 1/2 步 选择起点 (Mid-Point) Snap : TUBI 轴线（ELBO P-Point #1 → ELBO P-Point #2） · Mid-Point
+midpoint result rows: ["Distance3242mm","Offset X-0mm","Offset Y-20mm","Offset Z-3241mm","DirectionX -0.0001 · Y -0.0062 · Z -1.0000"]
+midpoint record: id=xdist_1789306256632_q9mrn3 approximate=true origin=[tubing_axis:tubing:o:24381_145018:7 "轴线（ELBO P-Point #1 → ELBO P-Point #2） · Mid-Point" design=7849.850/10467.438/18650.214mm] target=[tubing_axis:tubing:o:24381_145018:6 "轴线（ELBO P-Point #1 → ELBO P-Point #2） · Mid-Point" design=7849.610/10447.460/15408.741mm]
+removed measurements: 1
+hover first (Cursor, Any · Cursor): 距离· 第 1/2 步 选择起点 (Cursor) Snap : TUBI 轴线（ELBO P-Point #1 → ELBO P-Point #2） | {"hoverSnapTarget":{"label":"轴线（ELBO P-Point #1 → ELBO P-Point #2）","refno":"24381_145018"},"statusText":"距离测量 · 第 1/2 步 选择起点 (Cursor) Snap : TUBI 轴线（ELBO P-Point #1 → ELBO P-Point #2）","pickPointMessage":null}
+[pline] (Pline · Snap) hover first@(399,331) → 距离· 等待取点
+[graphics] (Graphics · Snap) hover first@(404,333) → 距离· 第 1/2 步 选择起点 (Snap) Snap : TUBI 面
+[ppoint] (Ppoint · Snap) hover first@(410,336) → 距离· 第 1/2 步 选择起点 (Snap) Snap : 等待捕捉（P-Point）
+[element] (Element · Snap) hover first@(415,338) → 距离· 第 1/2 步 选择起点 (Snap) Snap : TUBI 轴线（ELBO P-Point #1 → ELBO P-Point #2） · Snap
+[any] (Any · Snap) hover first@(420,341) → 距离· 第 1/2 步 选择起点 (Snap) Snap : TUBI 轴线（ELBO P-Point #1 → ELBO P-Point #2） · Snap
+ptset calls: 2; other api calls: 44

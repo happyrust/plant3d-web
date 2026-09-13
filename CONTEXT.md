@@ -120,8 +120,13 @@ _Avoid_: entityId
 
 ## 拾取层
 
-测量取点共用的两维选择：**拾取过滤器**（Any / Element / Aid / Pline / Ppoint / Screen / Graphics / External，决定哪一类特征可以被拾中）× **拾取类型**（Snap / Distance / Mid-Point / Fraction / Proportion / Intersect / Cursor，决定在拾中的点、线、面上落点怎么派生），外加 Significant Snaps 一档；两维正交。Any 只放行 Element、Ppoint、Pline 与模型表面点，不放行 Graphics 细节；Graphics 的边与面从已加载网格派生，属于近似点；Intersect 由两（三）次子拾取的线 / 面求交得到一个位置（ADR 0060）。
+测量取点共用的两维选择：**拾取过滤器**（Any / Element / Aid / Pline / Ppoint / Screen / Graphics / External，决定哪一类特征可以被拾中）× **拾取类型**（Snap / Distance / Mid-Point / Fraction / Proportion / Intersect / Cursor，决定在拾中的点、线、面上落点怎么派生），外加 Significant Snaps 一档；两维正交。Any 只放行 Element、Ppoint、Pline 与模型表面点，不放行 Graphics 细节；Graphics 的边与面从已加载网格派生，属于近似点；Intersect 由两（三）次子拾取的线 / 面求交得到一个位置（ADR 0060）。管身轴线是元素类拾取落在直管上时拾中的线（E3D TUBING），由直管的放置矩阵派生、两端吸到邻接 P-Point，只在 Any 与 Element 下参与。
 _Avoid_: 点源开关、捕捉模式
+
+## 管身轴线
+
+直管（TUBI）对象的中心线段，作为一条线参与测量取点：Snap 取近端、Cursor 取轴线上离光标最近处、Mid-Point 等沿线派生、Intersect 当直线。它从画出来的直管对象的局部包围盒与放置矩阵派生，两端再吸到邻接构件的 P-Point，对应 E3D `EDGTUBING.line` 的 leave → arrive 口径；在 ATTA 处直管是断开的两段，不合并。
+_Avoid_: 管道中心线（MBD 尺寸的走向线）、PLINE
 
 ## P-Point
 

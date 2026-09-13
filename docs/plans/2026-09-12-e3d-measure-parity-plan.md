@@ -83,7 +83,7 @@
 | 12 | 拾取过滤器：Element（noun 显著点） | ◐ | `primitive_key_point`（基本体 / PLINE 关键点）——legacy parquet 有，**gen-model-v1 无 API**；`position`（Item 原点）≈ 元素原点 |
 | 13 | 拾取过滤器：Pline | ◐ | legacy `semantic_snap_points`（PLINE start/end）；v1 无 |
 | 14 | 拾取过滤器：Graphics（facet 边 / 面）、Screen、Aid、External | ◐ | **Graphics ✓（2026-09-13）**：`mesh_graphics` 点源从已加载网格派生绘制边（线）/ 面（平面），只在 Graphics 过滤器下参与；实机 `面 → 边` 距离走通（golden MD §12）。Screen ✓（= `mesh_pick_point`）。Aid / External 占位灰掉 |
-| 15 | TUBING 轴线点、DPOINT | ✗ | — |
+| 15 | TUBING 轴线点、DPOINT | ◐ | **TUBING ✓（2026-09-13）**：`tubing_axis` 点源从直管对象的局部包围盒 × 放置矩阵派生管身轴线，两端吸到邻接 P-Point（`src/measurement/tubing/tubingAxis.ts`），按 E3D `EDGTUBING` 走线候选（Snap 近端 / Cursor 交点 / Mid-Point 等沿线 / Intersect 转 LINE），Any / Element 放行；实机 `轴线 → 轴线` Snap 与 Mid-Point 两条距离走通、校正端点与 E3D ELBO 145031 P1 差 0.001 mm（golden MD §14）。ATTA 处直管不合并（与 E3D `line()` 跳 ATTA 不同）。DPOINT ✗ |
 | 16 | 拾取类型：Snap / Exact | ✓ | 拾取层 `pickType` Snap / Cursor；点候选、线候选（`GMFLINE` 近端 / 控制点）、面候选（射线 ∩ 平面）三类几何均接内核 |
 | 17 | 拾取类型：Distance / Mid-Point / Fraction / Proportion / Intersect | ◐ | 全部已接：Distance / Mid-Point / Fraction / Proportion 走 `pickDerivation.ts`（PLINE 线、Graphics 边、P-Point Distance 偏移）；Intersect 走 `intersectPickSession.ts` 两 / 三次子拾取（线 × 线 / 线 × 面 / 面 × 面 × 第三项，E3D 2,870 / 2,874 分型），实机 `ELBO 边 × VALV 边` 出交点（golden MD §13）；**◐ 只因 G8 运行时 golden 未采** |
 | 18 | Significant Snaps 开关 | ◐ | 拾取层 `significantSnaps`（覆盖条开关 + 提示尾巴 `Snap`），线候选带 `intermediates` 时按段派生；无 E3D 实机对照 |
@@ -95,7 +95,7 @@
 
 - **P0（不补就不能说「E3D 有的我们都有」）**：#10 Shortest、#9 两线夹角、#17 拾取类型、#14 Graphics 边 / 面拾取（它同时解锁 Perpendicular 与 Shortest 的目标 provider）、#12/#13 在 gen-model-v1 下的 Element 显著点 / PLINE 供给。
 - **P1（功能在、契约缺角）**：#4 Keep 生命周期、#5 Units 矩阵、#7 角度内核接线 + Direction1/2、#8 角度单位 / 小数位、#19 提示结构、#20 分层取消。
-- **P2（可选 / 需拍板）**：#15 TUBING / DPOINT、Aid 拾取、External。
+- **P2（可选 / 需拍板）**：#15 DPOINT（TUBING 已于 2026-09-13 前端派生落地）、Aid 拾取、External。
 
 ## 4. 分阶段方案
 
@@ -116,7 +116,10 @@
   `Intersection[n]` 提示、Esc 第一档、换类型重置）。实机 `ELBO 边 × VALV 边` 出交点（golden MD §13）。
 - ADR 0060「测量拾取层对齐 E3D Positioning Control」已落（`docs/adr/0060-align-measurement-pick-layer-with-e3d-positioning-control.md`）：
   两维模型、Any = Element / Ppoint / Pline（+ 表面点）、Graphics 网格派生、Intersect 分型三条口径与被否决的替代。
-- **未完**：`element/keypoints` / `element/plines` 服务端；TUBING 轴线点前端派生；G7 / G8 / G9 运行时 golden（E3D 需在跑）。
+- 切片 4（2026-09-13）：TUBING 轴线前端派生——纯内核 `src/measurement/tubing/tubingAxis.ts`（局部包围盒 × 放置矩阵 → 轴线；两端吸邻接 P-Point）
+  + `tubing_axis` 点源（特征类 `tubing`，Any / Element 放行，`rayHit` 按孔径边缘入围）+ loader 的直管登记（noun `TUBI` / `is_tubi`）+ 轴线高亮。
+  实机 `轴线 → 轴线` Snap 4568 mm / Mid-Point 3242 mm，校正端点 = E3D ELBO 145031 P1（golden MD §14）。
+- **未完**：`element/keypoints` / `element/plines` 服务端；ATTA 处直管轴线合并（E3D `EDGTUBING.line` 跳 ATTA）；G7 / G8 / G9 运行时 golden（E3D 需在跑）。
 
 **前端**
 - `useMeasurementPickSources` 重构成两维：**过滤器**（对齐 E3D：Any / Element / Ppoint / Pline / Graphics / Screen；Aid / External 先占位灰掉）× **拾取类型**（Snap / Exact / Mid-Point / Fraction / Proportion / Distance / Intersect）。现有 4 个点源映射：`ptset`→Ppoint、`position`+`primitive_key_point`→Element、PLINE 关键点→Pline、`mesh_pick_point`→Screen/Exact；新增 Graphics。
@@ -128,7 +131,8 @@
 **后端（gen-model，`feature/element-ptset-api` 之后）**
 - `POST /api/v1/element/keypoints`：Element 显著点（对齐 `edgTypes` 各 noun 的 snap 点：盒角 / 面中心 / 圆柱轴端 / 圆环轴点 …）。需要 e3d-model 吐出每个元素的**基本体清单 + 放置矩阵**（`GeneratedElement` 目前只保留烘好的 `solid` 与可选 `primitive_instance`），这是这条端点的主要工作量。
 - `POST /api/v1/element/plines`：型材 PLINE（`e3d-model::section` 已求 SPRO/SREC PLINE 位置，暴露 start/end + 方向）。
-- TUBING 轴线点：由前端从 records 的隐式管身（`is_tubi`）+ 邻接 P-Point 派生，或服务端在 `element/ptset` 的 `members` 里附管身端点——Phase A 先前端派生。
+- TUBING 轴线点：由前端从 records 的隐式管身（`is_tubi`）+ 邻接 P-Point 派生，或服务端在 `element/ptset` 的 `members` 里附管身端点——Phase A 先前端派生
+  （**已落地 2026-09-13**：直管对象局部包围盒 × 放置矩阵给轴线，端点吸 ptset 缓存里的邻接 P-Point；服务端不需改）。
 
 **golden gate**
 - G7-01～04（重叠候选胜出、PLINE / EDGE / PLANE / TUBING 实际捕捉几何、约束后是否仍在 feature、相机变化后重算）。
@@ -182,7 +186,7 @@
 | Element 显著点 / 基本体关键点 | ✗ | `element/keypoints`（e3d-model 暴露基本体放置） |
 | PLINE | ✗ | `element/plines`（e3d-model `section`） |
 | Graphics 边 / 面 | ✗ | 前端从网格派生，无后端 |
-| TUBING 轴线点 | ✗ | 前端从 records + 邻接 P-Point 派生 |
+| TUBING 轴线点 | ✓ 前端派生（2026-09-13，golden MD §14） | 无后端；直管放置矩阵 + `element/ptset` 邻接 P-Point |
 | Aid | ✗ | 需 Aid 系统，另立决策 |
 
 ## 5. Golden 采集矩阵（新增 / 待补）

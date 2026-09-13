@@ -1,0 +1,245 @@
+{
+  "environment": {
+    "dev": "http://127.0.0.1:3101",
+    "genModelPort": "8023",
+    "url": "/?show_refno=24381_145018&gm_backend_port=8023"
+  },
+  "tubes": {
+    "first": {
+      "objectId": "o:24381_145018:7",
+      "unitTube": true,
+      "localBounds": [
+        [
+          -1,
+          -1,
+          0
+        ],
+        [
+          1,
+          1,
+          1
+        ]
+      ],
+      "scale": [
+        0.05715000260671008,
+        0.05715000152587891,
+        2.337649183986111
+      ],
+      "start": [
+        1.8860764160156247,
+        -0.6736115722656244,
+        2.104069824218751
+      ],
+      "end": [
+        1.8860764160156247,
+        1.6640085449218756,
+        2.0924124183654795
+      ],
+      "radius": 0.05715000260671024,
+      "screenStart": [
+        363.95889150416923,
+        314.4204889157443
+      ],
+      "screenMid": [
+        411.31980598296747,
+        336.66456379846414
+      ],
+      "screenEnd": [
+        460.72125544548817,
+        359.8670199429954
+      ],
+      "lengthPx": 106.90342491203523
+    },
+    "second": {
+      "objectId": "o:24381_145018:6",
+      "unitTube": true,
+      "localBounds": [
+        [
+          -1,
+          -1,
+          0
+        ],
+        [
+          1,
+          1,
+          1
+        ]
+      ],
+      "scale": [
+        0.05715000152587891,
+        0.05715000152587891,
+        2.3492297363281254
+      ],
+      "start": [
+        1.8858361816406246,
+        0.47522045898437604,
+        0.03138427734375071
+      ],
+      "end": [
+        1.8858361432735506,
+        0.4752204225753823,
+        -2.317845458984374
+      ],
+      "radius": 0.05715000152587891,
+      "screenStart": [
+        412.38357736133463,
+        418.37675625246413
+      ],
+      "screenMid": [
+        413.3753997024074,
+        461.6412502124339
+      ],
+      "screenEnd": [
+        414.31626341013094,
+        502.6828667542993
+      ],
+      "lengthPx": 84.3282606444059
+    }
+  },
+  "snapRecords": [
+    {
+      "id": "xdist_1789306250547_za579u",
+      "visible": true,
+      "approximate": true,
+      "createdAt": 1789306250547,
+      "provenance": {
+        "method": "legacy-unknown",
+        "accuracyClass": "legacy-unknown",
+        "coordinateSpace": "design-world",
+        "lengthUnit": "m",
+        "sourceModelVersion": null,
+        "source": {
+          "entityId": "o:24381_145018:7",
+          "refno": "24381_145018",
+          "candidateId": "tubing:o:24381_145018:7"
+        },
+        "target": {
+          "entityId": "o:24381_145018:6",
+          "refno": "24381_145018",
+          "candidateId": "tubing:o:24381_145018:6"
+        },
+        "warnings": [
+          {
+            "code": "LEGACY_PROVENANCE_UNKNOWN",
+            "message": "Legacy measurement did not record its computation method or accuracy."
+          }
+        ],
+        "errorBoundM": null
+      },
+      "kind": "distance",
+      "origin": {
+        "entityId": "o:24381_145018:7",
+        "worldPos": [
+          1.8860764160156265,
+          1.6640089282300075,
+          2.0924140911830165
+        ],
+        "designWorldPos": [
+          7.849850097656254,
+          11.636248430183132,
+          18.644385282589266
+        ],
+        "sourceInfo": {
+          "source": "tubing_axis",
+          "candidateId": "tubing:o:24381_145018:7",
+          "refno": "24381_145018",
+          "label": "轴线（ELBO P-Point #1 → ELBO P-Point #2） · Snap"
+        }
+      },
+      "target": {
+        "entityId": "o:24381_145018:6",
+        "worldPos": [
+          1.8858361351377244,
+          0.4752204255744328,
+          -2.317844917583777
+        ],
+        "designWorldPos": [
+          7.849609816778352,
+          10.447459927527557,
+          14.234126273822472
+        ],
+        "sourceInfo": {
+          "source": "tubing_axis",
+          "candidateId": "tubing:o:24381_145018:6",
+          "refno": "24381_145018",
+          "label": "轴线（ELBO P-Point #1 → ELBO P-Point #2） · Snap"
+        }
+      }
+    }
+  ],
+  "midRecords": [
+    {
+      "id": "xdist_1789306256632_q9mrn3",
+      "visible": true,
+      "approximate": true,
+      "createdAt": 1789306256632,
+      "provenance": {
+        "method": "legacy-unknown",
+        "accuracyClass": "legacy-unknown",
+        "coordinateSpace": "design-world",
+        "lengthUnit": "m",
+        "sourceModelVersion": null,
+        "source": {
+          "entityId": "o:24381_145018:7",
+          "refno": "24381_145018",
+          "candidateId": "tubing:o:24381_145018:7"
+        },
+        "target": {
+          "entityId": "o:24381_145018:6",
+          "refno": "24381_145018",
+          "candidateId": "tubing:o:24381_145018:6"
+        },
+        "warnings": [
+          {
+            "code": "LEGACY_PROVENANCE_UNKNOWN",
+            "message": "Legacy measurement did not record its computation method or accuracy."
+          }
+        ],
+        "errorBoundM": null
+      },
+      "kind": "distance",
+      "origin": {
+        "entityId": "o:24381_145018:7",
+        "worldPos": [
+          1.886076416015686,
+          0.49519870906372354,
+          2.0982427465764033
+        ],
+        "designWorldPos": [
+          7.849850097656313,
+          10.467438211016848,
+          18.650213937982652
+        ],
+        "sourceInfo": {
+          "source": "tubing_axis",
+          "candidateId": "tubing:o:24381_145018:7",
+          "refno": "24381_145018",
+          "label": "轴线（ELBO P-Point #1 → ELBO P-Point #2） · Mid-Point"
+        }
+      },
+      "target": {
+        "entityId": "o:24381_145018:6",
+        "worldPos": [
+          1.885836158389175,
+          0.4752204422794062,
+          -1.1432300926996266
+        ],
+        "designWorldPos": [
+          7.849609840029801,
+          10.44745994423253,
+          15.408741098706624
+        ],
+        "sourceInfo": {
+          "source": "tubing_axis",
+          "candidateId": "tubing:o:24381_145018:6",
+          "refno": "24381_145018",
+          "label": "轴线（ELBO P-Point #1 → ELBO P-Point #2） · Mid-Point"
+        }
+      }
+    }
+  ],
+  "ptsetCalls": [
+    "POST http://localhost:8023/api/v1/element/ptset {\"refno\":\"24381/145018\"}",
+    "POST http://localhost:8023/api/v1/element/ptset {\"refno\":\"24381/145018\",\"include_members\":true}"
+  ]
+}
