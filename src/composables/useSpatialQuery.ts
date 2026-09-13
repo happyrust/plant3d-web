@@ -1044,6 +1044,12 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
   const error = ref<string | null>(null);
   const resultSet = ref<SpatialQueryResultSet | null>(null);
   const activeResultRefno = ref<string | null>(null);
+  /**
+   * 「当前选中」选中的是 PIPE / ZONE 这类自身与成员都没加载几何的 owner 时，查看器解不出盒；这里记下它的 refno，
+   * 提交时改发 `refno=` 让服务端按子树盒解中心（口径同距离查询 refno 模式：到源盒表面量距、默认剔自身子树），
+   * 服务端 `center` 回来再写回 `draft.center` 并清掉。有盒的选中、拾取、手输都会清掉它。
+   */
+  const selectedCenterRefno = ref<string | null>(null);
 
   // 切模式时把排序拉回该模式的默认口径，用户在当前模式内的手动选择保持不变。
   // 用 watch 而不是只在 setMode 里改，是因为直接给 draft.mode 赋值同样要生效；
@@ -1073,8 +1079,19 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
       if (!picked) return;
       draft.center = pickedWorldPosToCenterMm(picked.worldPos);
       draft.rangeCenterSource = 'pick';
+      selectedCenterRefno.value = null;
     },
     { deep: true }
+  );
+
+  // 中心不再来自「当前选中」时，待服务端解析的 refno 就作废
+  watch(
+    () => [draft.mode, draft.rangeCenterSource] as const,
+    ([mode, rangeCenterSource]) => {
+      if (mode !== 'range' || rangeCenterSource !== 'selected') {
+        selectedCenterRefno.value = null;
+      }
+    },
   );
 
   const canSubmit = computed(() => {
@@ -1090,6 +1107,7 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
     error.value = null;
     resultSet.value = null;
     activeResultRefno.value = null;
+    selectedCenterRefno.value = null;
   }
 
   function clearResults() {
@@ -1120,13 +1138,18 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
     // 是子树并集盒（spec §4.13），这里同口径取子树盒，没有该方法的查看器退回 `getAABB`（叶子构件两者相同）。
     const aabb = viewer.scene.getSubtreeAABB?.([selectedRefno]) ?? viewer.scene.getAABB([selectedRefno]);
     if (!aabb) {
-      error.value = '无法解析当前选中构件的位置';
+      // 自身与成员都没加载几何（PIPE / ZONE 这类 owner、或还没显示的构件）：查看器解不出盒，改由服务端按 refno 解中心
+      selectedCenterRefno.value = normalizeRefno(selectedRefno);
+      draft.rangeCenterSource = 'selected';
+      draft.refno = selectedRefno;
+      error.value = null;
       return;
     }
     // 盒是场景坐标；`draft.center` 一律 mm。
     draft.center = resolveSceneWorldTransform(viewer).pointToWorldMm(aabbToCenter(aabb));
     draft.rangeCenterSource = 'selected';
     draft.refno = selectedRefno;
+    selectedCenterRefno.value = null;
     error.value = null;
   }
 
@@ -1166,7 +1189,8 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
     const maxz = request.center.z + radius;
 
     for (const refno of refnos) {
-      if (request.centerSource === 'refno' && request.includeSelf === false && request.refno && normalizeRefno(refno) === normalizeRefno(request.refno)) {
+      // refno 模式（含「当前选中」没盒时的 refno 兜底）默认剔除源构件自身
+      if (request.refno && request.includeSelf === false && normalizeRefno(refno) === normalizeRefno(request.refno)) {
         continue;
       }
       const sceneAabb = viewer.scene.getAABB([refno]) || viewer.scene.objects[refno]?.aabb || null;
@@ -1345,7 +1369,7 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
       include_negative: request.filters.includeNegative,
     };
 
-    if (request.centerSource === 'refno' && request.refno) {
+    if (isRefnoRoutedRequest(request)) {
       return {
         ...base,
         refno: request.refno,
@@ -1359,6 +1383,14 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
       y: request.center.y,
       z: request.center.z,
     };
+  }
+
+  /**
+   * 走服务端 refno 模式的请求：距离查询「通过 Refno」，以及范围查询「当前选中」在查看器解不出盒时的兜底
+   * （`resolveRequest` 给它带上 `refno`）。「手输坐标 / 拾取」永远是点模式，即使草稿里残留着 refno。
+   */
+  function isRefnoRoutedRequest(request: SpatialQueryRequest): request is SpatialQueryRequest & { refno: string } {
+    return !!request.refno && (request.centerSource === 'refno' || request.centerSource === 'selected');
   }
 
   /**
@@ -1456,7 +1488,12 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
     if (centerSource === 'selected') {
       applyCurrentSelection();
       if (error.value) throw new Error(error.value);
-      return { request: normalizeRequestFromCenter(draft.center, centerSource) };
+      const request = normalizeRequestFromCenter(draft.center, centerSource);
+      if (selectedCenterRefno.value) {
+        // 查看器没盒：发 refno 让服务端按子树盒解中心（方案 3 作兜底，用户 2026-09-14 拍板）；口径同距离查询 refno 模式
+        return { request: { ...request, refno: selectedCenterRefno.value, includeSelf: false } };
+      }
+      return { request };
     }
 
     if (centerSource === 'pick') {
@@ -1496,7 +1533,7 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
         include_negative: request.filters.includeNegative,
       };
 
-      if (request.centerSource === 'refno' && request.refno) {
+      if (isRefnoRoutedRequest(request)) {
         serverResp = await queryNearbyRefno(request.refno, request.radius, {
           include_self: request.includeSelf ?? false,
           nouns: serverOptions.nouns,
@@ -1535,6 +1572,10 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
           y: serverCenter.y,
           z: serverCenter.z,
         };
+        // 「当前选中」的 refno 兜底：服务端已按子树盒解出中心，摘要行改显示坐标
+        if (request.centerSource === 'selected') {
+          selectedCenterRefno.value = null;
+        }
       }
 
       if (viewer) {
@@ -1893,6 +1934,7 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
     error,
     resultSet,
     activeResultRefno,
+    selectedCenterRefno,
     canSubmit,
     spatialCapabilities,
     setMode,

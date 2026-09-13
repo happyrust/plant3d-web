@@ -658,6 +658,7 @@ const {
   error,
   resultSet,
   activeResultRefno,
+  selectedCenterRefno,
   canSubmit,
   spatialCapabilities,
   setMode: setSpatialQueryMode,
@@ -775,6 +776,10 @@ const showCoordinateInputs = computed(() => {
 });
 
 const centerSummary = computed(() => {
+  // 选中的 PIPE / ZONE 这类没加载几何的 owner：查看器解不出盒，查询时发 refno 由服务端按其整体盒解中心
+  if (draft.mode === 'range' && draft.rangeCenterSource === 'selected' && selectedCenterRefno.value) {
+    return `${selectedCenterRefno.value} · 未加载几何，查询时由服务端解中心`;
+  }
   return `${draft.center.x.toFixed(0)}, ${draft.center.y.toFixed(0)}, ${draft.center.z.toFixed(0)}`;
 });
 

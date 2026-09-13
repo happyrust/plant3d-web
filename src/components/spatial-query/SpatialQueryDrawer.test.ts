@@ -54,6 +54,8 @@ const stubState = {
   error: ref<string | null>(null) as Ref<string | null>,
   resultSet: ref<SpatialQueryResultSet | null>(null) as Ref<SpatialQueryResultSet | null>,
   activeResultRefno: ref<string | null>(null) as Ref<string | null>,
+  /** 「当前选中」没盒时待服务端解中心的 refno */
+  selectedCenterRefno: ref<string | null>(null) as Ref<string | null>,
   canSubmit: ref(true) as Ref<boolean>,
   /** legacy 源有专业维度；gen-model-v1 的用例把它翻成 false */
   spatialCapabilities: ref<SpatialQueryCapabilities>({ specValues: true }) as Ref<SpatialQueryCapabilities>,
@@ -135,6 +137,7 @@ function resetDraft() {
   stubState.error.value = null;
   stubState.resultSet.value = null;
   stubState.activeResultRefno.value = null;
+  stubState.selectedCenterRefno.value = null;
   stubState.canSubmit.value = true;
   stubState.spatialCapabilities.value = { specValues: true };
 }
@@ -431,6 +434,33 @@ describe('SpatialQueryDrawer (distance 模式)', () => {
     expect(host.textContent).toContain('仪表(2)');
     expect(host.textContent).not.toContain('电气');
     expect(host.textContent).not.toContain('暖通');
+
+    unmount();
+  });
+
+  it('range 模式「当前选中」选中的是没加载几何的 owner 时，中心摘要显示 refno 与「由服务端解中心」，解出后回到坐标', async () => {
+    const { host, unmount } = mountDrawer();
+    await nextTick();
+
+    stubState.draft.mode = 'range';
+    stubState.draft.rangeCenterSource = 'selected';
+    stubState.draft.center = { x: 5964, y: 9972, z: 16552 };
+    stubState.selectedCenterRefno.value = '24381_145000';
+    await nextTick();
+    expect(host.textContent).toContain('24381_145000 · 未加载几何，查询时由服务端解中心');
+    expect(host.textContent).not.toContain('5964, 9972, 16552');
+
+    // 服务端 center 回来后 store 清掉 refno → 摘要回到坐标
+    stubState.selectedCenterRefno.value = null;
+    await nextTick();
+    expect(host.textContent).toContain('5964, 9972, 16552');
+    expect(host.textContent).not.toContain('由服务端解中心');
+
+    // 只对「当前选中」生效：手输坐标下即使残留 refno 也显示坐标
+    stubState.selectedCenterRefno.value = '24381_145000';
+    stubState.draft.rangeCenterSource = 'coordinates';
+    await nextTick();
+    expect(host.textContent).not.toContain('由服务端解中心');
 
     unmount();
   });

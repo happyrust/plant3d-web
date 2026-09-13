@@ -1646,6 +1646,75 @@ describe('createSpatialQueryStore · 场景坐标 ↔ mm（plan 2026-09-13 §7 �
     expectPointClose(store.draft.center, [5, 5, 5]);
   });
 
+  it('「当前选中」选中的是没加载几何的 owner（PIPE / ZONE）：不报错，改发 refno 让服务端按子树盒解中心，center 回来写回草稿', async () => {
+    const viewer = createScaledViewerStub();
+    const selection = { selectedRefno: { value: 'pipe_1' as string | null } };
+    const queryNearbyByRefno = vi.fn(async (): Promise<SpatialQueryResult> => ({
+      success: true,
+      truncated: false,
+      total_count: 1,
+      returned_count: 1,
+      page: 1,
+      per_page: 100,
+      has_more: false,
+      center: { x: 5963.8, y: 9972.2, z: 16552, source: 'refno_aabb_center', refno: 'pipe_1' },
+      filter_options: { include_negative: false, nouns: [{ value: 'EQUI', count: 1 }], spec_values: [] },
+      results: [
+        { refno: 'server_only', noun: 'EQUI', spec_value: 0, distance: 15, aabb: { min: { x: 20, y: 0, z: 0 }, max: { x: 30, y: 10, z: 10 } } },
+      ],
+    }));
+    const queryNearbyByPosition = vi.fn();
+
+    const store = createSpatialQueryStore({
+      viewerRef: ref(viewer),
+      selection: selection as any,
+      toolStore: { pickedQueryCenter: { value: null }, setToolMode: vi.fn(), setPickedQueryCenter: vi.fn() } as any,
+      queryNearbyByRefno,
+      queryNearbyByPosition: queryNearbyByPosition as any,
+    });
+    store.draft.mode = 'range';
+    store.draft.rangeCenterSource = 'selected';
+    store.draft.radius = 1000;
+
+    // 查看器里 pipe_1 自身与成员都没加载：不再报「无法解析当前选中构件的位置」，记下 refno 交给服务端
+    store.applyCurrentSelection();
+    expect(store.error.value).toBeNull();
+    expect(store.selectedCenterRefno.value).toBe('pipe_1');
+    expect(store.draft.refno).toBe('pipe_1');
+    expect(store.draft.rangeCenterSource).toBe('selected');
+
+    await store.submitQuery();
+    expect(store.status.value).toBe('ready');
+    expect(store.error.value).toBeNull();
+    expect(queryNearbyByPosition).not.toHaveBeenCalled();
+    expect(queryNearbyByRefno).toHaveBeenCalledTimes(1);
+    expect(queryNearbyByRefno).toHaveBeenCalledWith('pipe_1', 1000, expect.objectContaining({ include_self: false, page: 1, shape: 'sphere' }));
+    // 服务端按子树盒解出的中心写回草稿，兜底标记清掉；结果集仍记着中心来源是「当前选中」
+    expectPointClose(store.draft.center, [5963.8, 9972.2, 16552]);
+    expect(store.selectedCenterRefno.value).toBeNull();
+    expect(store.resultSet.value?.request.centerSource).toBe('selected');
+    expect(store.resultSet.value?.request.refno).toBe('pipe_1');
+    expect(store.resultSet.value?.center).toMatchObject({ x: 5963.8, source: 'refno_aabb_center', refno: 'pipe_1' });
+    expect(store.resultSet.value?.items.map((item) => item.refno)).toEqual(['server_only']);
+
+    // 再次提交仍走 refno（查看器还是没盒）；换成有盒的选中后回到点模式
+    await store.submitQuery();
+    expect(queryNearbyByRefno).toHaveBeenCalledTimes(2);
+    expect(queryNearbyByPosition).not.toHaveBeenCalled();
+    selection.selectedRefno.value = 'loaded_a';
+    store.applyCurrentSelection();
+    expect(store.selectedCenterRefno.value).toBeNull();
+    expectPointClose(store.draft.center, [5, 5, 5]);
+
+    // 兜底标记只在「范围 · 当前选中」下有效：切到手输坐标就作废
+    selection.selectedRefno.value = 'pipe_1';
+    store.applyCurrentSelection();
+    expect(store.selectedCenterRefno.value).toBe('pipe_1');
+    store.draft.rangeCenterSource = 'coordinates';
+    await nextTick();
+    expect(store.selectedCenterRefno.value).toBeNull();
+  });
+
   it('「拾取中心」的 worldPos 是场景坐标，进草稿时换回 mm', async () => {
     const viewer = createScaledViewerStub();
     const pickedQueryCenter = ref<{ entityId: string; worldPos: [number, number, number] } | null>(null);
