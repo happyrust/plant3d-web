@@ -547,7 +547,8 @@ createPipeDistanceSceneTransformPoint` 已有反向那一半可对照），服�
   单测 store +1 / drawer +1。子树里一个都没生成过的 owner 仍会收到服务端 404 折成的「…还没生成过模型」提示（§5-3 口径不变）。
 
 **功能测试记录（2026-09-14 01:30，全部改动落地后在 plant3d-web 上走一遍）**：headless Chrome（SwiftShader）对着 `:3101` dev server +
-`:18122` v1 服务，`show_refno=24381_145018`，脚本 `%TEMP%\spatial-ui-suite.mjs`（不进仓），**32 / 32 项自动检查通过、1 项 headless 下无法验证**：
+`:18122` v1 服务，`show_refno=24381_145018`，脚本 `%TEMP%\spatial-ui-suite.mjs`（不进仓），**32 / 32 项自动检查通过；「拾取中心」headless 下无法验证，
+01:38 在 headed Chrome 里补核通过（见末条）**：
 - 范围 · 手输坐标：球形 2 m 请求带 x/y/z、`shape=sphere`、`per_page=20`，摘要「共 16 项」= `total_count`，结果行与服务端本页 refno 顺序一致，
   v1 源显示覆盖面提示、无专业筛选；立方体 `shape=cube`，21 ≥ 16；排序按名称 `sort=name`、按距离 `sort=distance` 且距离非降。
 - 翻页（5 m / 20 → 1387 项）：下一页 `page=2` 首条变、总数不变；上一页回到 `page=1` 首条原值。
@@ -562,9 +563,12 @@ createPipeDistanceSceneTransformPoint` 已有反向那一半可对照），服�
 - 错误路径：不存在的 `1_1` → 服务端 404 折成「构件 1_1 还没有生成过模型，空间索引里没有它的包围盒；请先显示该构件，再按距离查询」；refno 为空时
   「执行空间查询」禁用；整轮无 pageerror。
 - URL 入口：`spatial_refno=24381_145018&spatial_radius=2&spatial_radius_unit=m&spatial_autorun=1` → 抽屉自动打开、自动发 `refno=24381/145018&radius=2000`。
-- **未验证（headless 限制）**：「拾取中心」——相机对准 BRAN 后 25 个采样点普通点击都没命中几何（点击确实到了拾取处理器：会清空选中集），SwiftShader 下
-  拾取无命中，摘要不变；worldPos → mm 的换算由单测钉住，需在真实浏览器手点一次。「仅显示本库」在 2 m 结果只有一个库时跳过（5 m 两库的分组按钮在
-  22:32 那轮已核）。legacy 源仍受 `:3100` detached 所限。
+- **「拾取中心」（01:38 补核，真实 GPU 的 headed Chrome：ANGLE / AMD RX590 D3D11）**：headless SwiftShader 下拾取无命中（25 个采样点都空，点击确实到了
+  拾取处理器——会清空选中集），换 headed 后可用：相机对准 BRAN，普通点击 (665, 490) 命中 VALV `24381_145035`（盒 mm [9545, 9624, 18272, 10417, 10231, 19868]）；
+  点「拾取中心」再点同一像素，摘要「0, 0, 0」→「9939, 10190, 18817」，落在该 VALV 盒内（表面点）；查 1 m 请求 `x=9939.4&y=10190.2&z=18816.9` 与摘要一致，
+  200 / 36 项，**VALV 自身在结果里 distance=0**（同距的 PANE 按 dbnum / refno 排前面）——验收项 6「拾取一构件表面点查 1 m，center 回显与该构件在结果」通过。
+  脚本 `%TEMP%\spatial-ui-pick.mjs`，截图 `pick-headed.png`。
+- 未验证：「仅显示本库」在 2 m 结果只有一个库时跳过（5 m 两库的分组按钮在 22:32 那轮已核）。legacy 源仍受 `:3100` detached 所限。
 
 ## 8. 关键位置速查
 
