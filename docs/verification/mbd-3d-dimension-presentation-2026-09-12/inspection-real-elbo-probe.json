@@ -1,0 +1,5679 @@
+{
+ "url": "http://127.0.0.1:3101/?output_project=AvevaMarineSample&show_refno=24381_145018&show_refno_select=0&mbd_refno=24381_145018&gm_backend=http%3A%2F%2F127.0.0.1%3A18122&mbdBackend=http%3A%2F%2F127.0.0.1%3A18122",
+ "elbows": [
+  {
+   "id": "24381_145018:isoline:0:tag:elbo:24381_145019",
+   "refno": "24381_145019",
+   "pieces": [
+    "o:24381_145019:11"
+   ],
+   "targetDesign": [
+    3.3416300000000003,
+    8.33057,
+    13.30133
+   ]
+  },
+  {
+   "id": "24381_145018:isoline:2:tag:elbo:24381_145021",
+   "refno": "24381_145021",
+   "pieces": [
+    "o:24381_145021:12"
+   ],
+   "targetDesign": [
+    3.3416300000000003,
+    8.33057,
+    14.06022
+   ]
+  },
+  {
+   "id": "24381_145018:isoline:3:tag:elbo:24381_145023",
+   "refno": "24381_145023",
+   "pieces": [
+    "o:24381_145023:13"
+   ],
+   "targetDesign": [
+    5.84736,
+    8.5474,
+    14.07399
+   ]
+  },
+  {
+   "id": "24381_145018:isoline:4:tag:elbo:24381_145025",
+   "refno": "24381_145025",
+   "pieces": [
+    "o:24381_145025:14"
+   ],
+   "targetDesign": [
+    7.84961,
+    10.44746,
+    14.082600000000001
+   ]
+  },
+  {
+   "id": "24381_145018:isoline:6:tag:elbo:24381_145026",
+   "refno": "24381_145026",
+   "pieces": [
+    "o:24381_145026:15"
+   ],
+   "targetDesign": [
+    7.84961,
+    10.44746,
+    16.7346
+   ]
+  },
+  {
+   "id": "24381_145018:isoline:6:tag:elbo:24381_145028",
+   "refno": "24381_145028",
+   "pieces": [
+    "o:24381_145028:16"
+   ],
+   "targetDesign": [
+    7.849850000000001,
+    11.78749,
+    16.74128
+   ]
+  },
+  {
+   "id": "24381_145018:isoline:8:tag:elbo:24381_145029",
+   "refno": "24381_145029",
+   "pieces": [
+    "o:24381_145029:17"
+   ],
+   "targetDesign": [
+    7.849850000000001,
+    11.78749,
+    18.64363
+   ]
+  },
+  {
+   "id": "24381_145018:isoline:9:tag:elbo:24381_145031",
+   "refno": "24381_145031",
+   "pieces": [
+    "o:24381_145031:18"
+   ],
+   "targetDesign": [
+    7.849850000000001,
+    9.14663,
+    18.6568
+   ]
+  },
+  {
+   "id": "24381_145018:isoline:10:tag:elbo:24381_145033",
+   "refno": "24381_145033",
+   "pieces": [
+    "o:24381_145033:20"
+   ],
+   "targetDesign": [
+    9.76973,
+    9.14667,
+    18.6648
+   ]
+  }
+ ],
+ "directions": [
+  [
+   1,
+   0,
+   0
+  ],
+  [
+   -1,
+   0,
+   0
+  ],
+  [
+   0,
+   1,
+   0
+  ],
+  [
+   0,
+   -1,
+   0
+  ],
+  [
+   0,
+   0,
+   1
+  ],
+  [
+   0,
+   0,
+   -1
+  ],
+  [
+   -0.577,
+   -0.577,
+   -0.577
+  ],
+  [
+   -0.577,
+   -0.577,
+   0.577
+  ],
+  [
+   -0.577,
+   0.577,
+   -0.577
+  ],
+  [
+   -0.577,
+   0.577,
+   0.577
+  ],
+  [
+   0.577,
+   -0.577,
+   -0.577
+  ],
+  [
+   0.577,
+   -0.577,
+   0.577
+  ],
+  [
+   0.577,
+   0.577,
+   -0.577
+  ],
+  [
+   0.577,
+   0.577,
+   0.577
+  ]
+ ],
+ "distances": [
+  2,
+  1.4,
+  1
+ ],
+ "sweep": {
+  "24381_145019": [
+   {
+    "direction": 0,
+    "dir": [
+     1,
+     0,
+     0
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     -0.622,
+     -1.642,
+     -3.251
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:0:tag:elbo:24381_145019",
+     "label": "89.75°",
+     "subject": "24381_145019",
+     "anchorDesign": [
+      3.342,
+      8.331,
+      13.301
+     ],
+     "rayLength": 1.9,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": [
+      {
+       "objectId": "o:24381_145019:11",
+       "distance": 1.908,
+       "shortOfAnchorBy": -0.008,
+       "inFront": false,
+       "isSubject": true,
+       "encloses": null,
+       "hides": false
+      }
+     ]
+    }
+   },
+   {
+    "direction": 1,
+    "dir": [
+     -1,
+     0,
+     0
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     -4.622,
+     -1.642,
+     -3.251
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:0:tag:elbo:24381_145019",
+     "label": "89.75°",
+     "subject": "24381_145019",
+     "anchorDesign": [
+      3.342,
+      8.331,
+      13.301
+     ],
+     "rayLength": 1.9,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": true,
+     "independentVerdict": true,
+     "hits": [
+      {
+       "objectId": "o:24381_145018:8",
+       "distance": 1.298,
+       "shortOfAnchorBy": 0.602,
+       "inFront": true,
+       "isSubject": false,
+       "encloses": false,
+       "hides": true
+      },
+      {
+       "objectId": "o:24381_145019:11",
+       "distance": 1.748,
+       "shortOfAnchorBy": 0.152,
+       "inFront": true,
+       "isSubject": true,
+       "encloses": null,
+       "hides": false
+      }
+     ]
+    }
+   },
+   {
+    "direction": 2,
+    "dir": [
+     0,
+     1,
+     0
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     -2.622,
+     0.358,
+     -3.251
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:0:tag:elbo:24381_145019",
+     "label": "89.75°",
+     "subject": "24381_145019",
+     "anchorDesign": [
+      3.342,
+      8.331,
+      13.301
+     ],
+     "rayLength": 1.9,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": []
+    }
+   },
+   {
+    "direction": 3,
+    "dir": [
+     0,
+     -1,
+     0
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     -2.622,
+     -3.642,
+     -3.251
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:0:tag:elbo:24381_145019",
+     "label": "89.75°",
+     "subject": "24381_145019",
+     "anchorDesign": [
+      3.342,
+      8.331,
+      13.301
+     ],
+     "rayLength": 1.9,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": []
+    }
+   },
+   {
+    "direction": 4,
+    "dir": [
+     0,
+     0,
+     1
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     -2.622,
+     -1.642,
+     -1.251
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:0:tag:elbo:24381_145019",
+     "label": "89.75°",
+     "subject": "24381_145019",
+     "anchorDesign": [
+      3.342,
+      8.331,
+      13.301
+     ],
+     "rayLength": 1.9,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": true,
+     "independentVerdict": true,
+     "hits": [
+      {
+       "objectId": "o:24381_145018:0",
+       "distance": 1.292,
+       "shortOfAnchorBy": 0.608,
+       "inFront": true,
+       "isSubject": false,
+       "encloses": false,
+       "hides": true
+      },
+      {
+       "objectId": "o:24381_145019:11",
+       "distance": 1.749,
+       "shortOfAnchorBy": 0.151,
+       "inFront": true,
+       "isSubject": true,
+       "encloses": null,
+       "hides": false
+      },
+      {
+       "objectId": "o:24381_145021:12",
+       "distance": 1.149,
+       "shortOfAnchorBy": 0.751,
+       "inFront": true,
+       "isSubject": false,
+       "encloses": false,
+       "hides": true
+      }
+     ]
+    }
+   },
+   {
+    "direction": 5,
+    "dir": [
+     0,
+     0,
+     -1
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     -2.622,
+     -1.642,
+     -5.251
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:0:tag:elbo:24381_145019",
+     "label": "89.75°",
+     "subject": "24381_145019",
+     "anchorDesign": [
+      3.342,
+      8.331,
+      13.301
+     ],
+     "rayLength": 1.9,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": [
+      {
+       "objectId": "o:24381_145019:11",
+       "distance": 1.908,
+       "shortOfAnchorBy": -0.008,
+       "inFront": false,
+       "isSubject": true,
+       "encloses": null,
+       "hides": false
+      }
+     ]
+    }
+   },
+   {
+    "direction": 6,
+    "dir": [
+     -0.577,
+     -0.577,
+     -0.577
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     -3.776,
+     -2.796,
+     -4.405
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:0:tag:elbo:24381_145019",
+     "label": "89.75°",
+     "subject": "24381_145019",
+     "anchorDesign": [
+      3.342,
+      8.331,
+      13.301
+     ],
+     "rayLength": 1.899,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": []
+    }
+   },
+   {
+    "direction": 7,
+    "dir": [
+     -0.577,
+     -0.577,
+     0.577
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     -3.776,
+     -2.796,
+     -2.097
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:0:tag:elbo:24381_145019",
+     "label": "89.75°",
+     "subject": "24381_145019",
+     "anchorDesign": [
+      3.342,
+      8.331,
+      13.301
+     ],
+     "rayLength": 1.899,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": [
+      {
+       "objectId": "o:24381_145019:11",
+       "distance": 1.799,
+       "shortOfAnchorBy": 0.1,
+       "inFront": true,
+       "isSubject": true,
+       "encloses": null,
+       "hides": false
+      }
+     ]
+    }
+   },
+   {
+    "direction": 8,
+    "dir": [
+     -0.577,
+     0.577,
+     -0.577
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     -3.776,
+     -0.488,
+     -4.405
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:0:tag:elbo:24381_145019",
+     "label": "89.75°",
+     "subject": "24381_145019",
+     "anchorDesign": [
+      3.342,
+      8.331,
+      13.301
+     ],
+     "rayLength": 1.899,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": []
+    }
+   },
+   {
+    "direction": 9,
+    "dir": [
+     -0.577,
+     0.577,
+     0.577
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     -3.776,
+     -0.488,
+     -2.097
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:0:tag:elbo:24381_145019",
+     "label": "89.75°",
+     "subject": "24381_145019",
+     "anchorDesign": [
+      3.342,
+      8.331,
+      13.301
+     ],
+     "rayLength": 1.899,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": [
+      {
+       "objectId": "o:24381_145019:11",
+       "distance": 1.81,
+       "shortOfAnchorBy": 0.089,
+       "inFront": true,
+       "isSubject": true,
+       "encloses": null,
+       "hides": false
+      }
+     ]
+    }
+   },
+   {
+    "direction": 10,
+    "dir": [
+     0.577,
+     -0.577,
+     -0.577
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     -1.468,
+     -2.796,
+     -4.405
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:0:tag:elbo:24381_145019",
+     "label": "89.75°",
+     "subject": "24381_145019",
+     "anchorDesign": [
+      3.342,
+      8.331,
+      13.301
+     ],
+     "rayLength": 1.899,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": [
+      {
+       "objectId": "o:24381_145019:11",
+       "distance": 1.907,
+       "shortOfAnchorBy": -0.008,
+       "inFront": false,
+       "isSubject": true,
+       "encloses": null,
+       "hides": false
+      }
+     ]
+    }
+   },
+   {
+    "direction": 11,
+    "dir": [
+     0.577,
+     -0.577,
+     0.577
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     -1.468,
+     -2.796,
+     -2.097
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:0:tag:elbo:24381_145019",
+     "label": "89.75°",
+     "subject": "24381_145019",
+     "anchorDesign": [
+      3.342,
+      8.331,
+      13.301
+     ],
+     "rayLength": 1.899,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": []
+    }
+   },
+   {
+    "direction": 12,
+    "dir": [
+     0.577,
+     0.577,
+     -0.577
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     -1.468,
+     -0.488,
+     -4.405
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:0:tag:elbo:24381_145019",
+     "label": "89.75°",
+     "subject": "24381_145019",
+     "anchorDesign": [
+      3.342,
+      8.331,
+      13.301
+     ],
+     "rayLength": 1.899,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": [
+      {
+       "objectId": "o:24381_145019:11",
+       "distance": 1.906,
+       "shortOfAnchorBy": -0.007,
+       "inFront": false,
+       "isSubject": true,
+       "encloses": null,
+       "hides": false
+      }
+     ]
+    }
+   },
+   {
+    "direction": 13,
+    "dir": [
+     0.577,
+     0.577,
+     0.577
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     -1.468,
+     -0.488,
+     -2.097
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:0:tag:elbo:24381_145019",
+     "label": "89.75°",
+     "subject": "24381_145019",
+     "anchorDesign": [
+      3.342,
+      8.331,
+      13.301
+     ],
+     "rayLength": 1.899,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": []
+    }
+   }
+  ],
+  "24381_145021": [
+   {
+    "direction": 0,
+    "dir": [
+     1,
+     0,
+     0
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     -0.622,
+     -1.642,
+     -2.492
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:2:tag:elbo:24381_145021",
+     "label": "89.69°",
+     "subject": "24381_145021",
+     "anchorDesign": [
+      3.342,
+      8.331,
+      14.06
+     ],
+     "rayLength": 1.9,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": true,
+     "independentVerdict": true,
+     "hits": [
+      {
+       "objectId": "o:24381_145018:4",
+       "distance": 1.238,
+       "shortOfAnchorBy": 0.662,
+       "inFront": true,
+       "isSubject": false,
+       "encloses": false,
+       "hides": true
+      },
+      {
+       "objectId": "o:24381_145021:12",
+       "distance": 1.748,
+       "shortOfAnchorBy": 0.152,
+       "inFront": true,
+       "isSubject": true,
+       "encloses": null,
+       "hides": false
+      }
+     ]
+    }
+   },
+   {
+    "direction": 1,
+    "dir": [
+     -1,
+     0,
+     0
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     -4.622,
+     -1.642,
+     -2.492
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:2:tag:elbo:24381_145021",
+     "label": "89.69°",
+     "subject": "24381_145021",
+     "anchorDesign": [
+      3.342,
+      8.331,
+      14.06
+     ],
+     "rayLength": 1.9,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": [
+      {
+       "objectId": "o:24381_145021:12",
+       "distance": 1.908,
+       "shortOfAnchorBy": -0.008,
+       "inFront": false,
+       "isSubject": true,
+       "encloses": null,
+       "hides": false
+      }
+     ]
+    }
+   },
+   {
+    "direction": 2,
+    "dir": [
+     0,
+     1,
+     0
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     -2.622,
+     0.358,
+     -2.492
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:2:tag:elbo:24381_145021",
+     "label": "89.69°",
+     "subject": "24381_145021",
+     "anchorDesign": [
+      3.342,
+      8.331,
+      14.06
+     ],
+     "rayLength": 1.9,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": []
+    }
+   },
+   {
+    "direction": 3,
+    "dir": [
+     0,
+     -1,
+     0
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     -2.622,
+     -3.642,
+     -2.492
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:2:tag:elbo:24381_145021",
+     "label": "89.69°",
+     "subject": "24381_145021",
+     "anchorDesign": [
+      3.342,
+      8.331,
+      14.06
+     ],
+     "rayLength": 1.9,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": []
+    }
+   },
+   {
+    "direction": 4,
+    "dir": [
+     0,
+     0,
+     1
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     -2.622,
+     -1.642,
+     -0.492
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:2:tag:elbo:24381_145021",
+     "label": "89.69°",
+     "subject": "24381_145021",
+     "anchorDesign": [
+      3.342,
+      8.331,
+      14.06
+     ],
+     "rayLength": 1.9,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": [
+      {
+       "objectId": "o:24381_145021:12",
+       "distance": 1.908,
+       "shortOfAnchorBy": -0.008,
+       "inFront": false,
+       "isSubject": true,
+       "encloses": null,
+       "hides": false
+      }
+     ]
+    }
+   },
+   {
+    "direction": 5,
+    "dir": [
+     0,
+     0,
+     -1
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     -2.622,
+     -1.642,
+     -4.492
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:2:tag:elbo:24381_145021",
+     "label": "89.69°",
+     "subject": "24381_145021",
+     "anchorDesign": [
+      3.342,
+      8.331,
+      14.06
+     ],
+     "rayLength": 1.9,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": true,
+     "independentVerdict": true,
+     "hits": [
+      {
+       "objectId": "o:24381_145018:0",
+       "distance": 1.292,
+       "shortOfAnchorBy": 0.608,
+       "inFront": true,
+       "isSubject": false,
+       "encloses": false,
+       "hides": true
+      },
+      {
+       "objectId": "o:24381_145019:11",
+       "distance": 1.149,
+       "shortOfAnchorBy": 0.751,
+       "inFront": true,
+       "isSubject": false,
+       "encloses": false,
+       "hides": true
+      },
+      {
+       "objectId": "o:24381_145021:12",
+       "distance": 1.749,
+       "shortOfAnchorBy": 0.151,
+       "inFront": true,
+       "isSubject": true,
+       "encloses": null,
+       "hides": false
+      }
+     ]
+    }
+   },
+   {
+    "direction": 6,
+    "dir": [
+     -0.577,
+     -0.577,
+     -0.577
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     -3.776,
+     -2.796,
+     -3.646
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:2:tag:elbo:24381_145021",
+     "label": "89.69°",
+     "subject": "24381_145021",
+     "anchorDesign": [
+      3.342,
+      8.331,
+      14.06
+     ],
+     "rayLength": 1.899,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": []
+    }
+   },
+   {
+    "direction": 7,
+    "dir": [
+     -0.577,
+     -0.577,
+     0.577
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     -3.776,
+     -2.796,
+     -1.338
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:2:tag:elbo:24381_145021",
+     "label": "89.69°",
+     "subject": "24381_145021",
+     "anchorDesign": [
+      3.342,
+      8.331,
+      14.06
+     ],
+     "rayLength": 1.899,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": [
+      {
+       "objectId": "o:24381_145021:12",
+       "distance": 1.906,
+       "shortOfAnchorBy": -0.007,
+       "inFront": false,
+       "isSubject": true,
+       "encloses": null,
+       "hides": false
+      }
+     ]
+    }
+   },
+   {
+    "direction": 8,
+    "dir": [
+     -0.577,
+     0.577,
+     -0.577
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     -3.776,
+     -0.488,
+     -3.646
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:2:tag:elbo:24381_145021",
+     "label": "89.69°",
+     "subject": "24381_145021",
+     "anchorDesign": [
+      3.342,
+      8.331,
+      14.06
+     ],
+     "rayLength": 1.899,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": []
+    }
+   },
+   {
+    "direction": 9,
+    "dir": [
+     -0.577,
+     0.577,
+     0.577
+    ],
+    "distance": 2,
+    "drawn": false,
+    "hang": true
+   },
+   {
+    "direction": 9,
+    "dir": [
+     -0.577,
+     0.577,
+     0.577
+    ],
+    "distance": 1.4,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     -3.43,
+     -0.834,
+     -1.684
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:2:tag:elbo:24381_145021",
+     "label": "89.69°",
+     "subject": "24381_145021",
+     "anchorDesign": [
+      3.342,
+      8.331,
+      14.06
+     ],
+     "rayLength": 1.299,
+     "toleranceWorld": 0.002,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": [
+      {
+       "objectId": "o:24381_145021:12",
+       "distance": 1.307,
+       "shortOfAnchorBy": -0.008,
+       "inFront": false,
+       "isSubject": true,
+       "encloses": null,
+       "hides": false
+      }
+     ]
+    }
+   },
+   {
+    "direction": 10,
+    "dir": [
+     0.577,
+     -0.577,
+     -0.577
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     -1.468,
+     -2.796,
+     -3.646
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:2:tag:elbo:24381_145021",
+     "label": "89.69°",
+     "subject": "24381_145021",
+     "anchorDesign": [
+      3.342,
+      8.331,
+      14.06
+     ],
+     "rayLength": 1.899,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": [
+      {
+       "objectId": "o:24381_145021:12",
+       "distance": 1.809,
+       "shortOfAnchorBy": 0.09,
+       "inFront": true,
+       "isSubject": true,
+       "encloses": null,
+       "hides": false
+      }
+     ]
+    }
+   },
+   {
+    "direction": 11,
+    "dir": [
+     0.577,
+     -0.577,
+     0.577
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     -1.468,
+     -2.796,
+     -1.338
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:2:tag:elbo:24381_145021",
+     "label": "89.69°",
+     "subject": "24381_145021",
+     "anchorDesign": [
+      3.342,
+      8.331,
+      14.06
+     ],
+     "rayLength": 1.899,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": []
+    }
+   },
+   {
+    "direction": 12,
+    "dir": [
+     0.577,
+     0.577,
+     -0.577
+    ],
+    "distance": 2,
+    "drawn": false,
+    "hang": true
+   },
+   {
+    "direction": 12,
+    "dir": [
+     0.577,
+     0.577,
+     -0.577
+    ],
+    "distance": 1.4,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     -1.814,
+     -0.834,
+     -3.3
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:2:tag:elbo:24381_145021",
+     "label": "89.69°",
+     "subject": "24381_145021",
+     "anchorDesign": [
+      3.342,
+      8.331,
+      14.06
+     ],
+     "rayLength": 1.299,
+     "toleranceWorld": 0.002,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": [
+      {
+       "objectId": "o:24381_145021:12",
+       "distance": 1.2,
+       "shortOfAnchorBy": 0.099,
+       "inFront": true,
+       "isSubject": true,
+       "encloses": null,
+       "hides": false
+      }
+     ]
+    }
+   },
+   {
+    "direction": 13,
+    "dir": [
+     0.577,
+     0.577,
+     0.577
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     -1.468,
+     -0.488,
+     -1.338
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:2:tag:elbo:24381_145021",
+     "label": "89.69°",
+     "subject": "24381_145021",
+     "anchorDesign": [
+      3.342,
+      8.331,
+      14.06
+     ],
+     "rayLength": 1.899,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": []
+    }
+   }
+  ],
+  "24381_145023": [
+   {
+    "direction": 0,
+    "dir": [
+     1,
+     0,
+     0
+    ],
+    "distance": 2,
+    "drawn": false,
+    "error": "RangeError: Map maximum size exceeded",
+    "camera": [
+     1.884,
+     -1.425,
+     -2.478
+    ]
+   },
+   {
+    "direction": 0,
+    "dir": [
+     1,
+     0,
+     0
+    ],
+    "distance": 1.4,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     1.284,
+     -1.425,
+     -2.478
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:3:tag:elbo:24381_145023",
+     "label": "38.55°",
+     "subject": "24381_145023",
+     "anchorDesign": [
+      5.847,
+      8.547,
+      14.074
+     ],
+     "rayLength": 1.3,
+     "toleranceWorld": 0.002,
+     "kernelOccluded": true,
+     "independentVerdict": true,
+     "hits": [
+      {
+       "objectId": "o:24381_145018:1",
+       "distance": 1.217,
+       "shortOfAnchorBy": 0.083,
+       "inFront": true,
+       "isSubject": false,
+       "encloses": false,
+       "hides": true
+      },
+      {
+       "objectId": "o:24381_145023:13",
+       "distance": 1.227,
+       "shortOfAnchorBy": 0.073,
+       "inFront": true,
+       "isSubject": true,
+       "encloses": null,
+       "hides": false
+      }
+     ]
+    }
+   },
+   {
+    "direction": 1,
+    "dir": [
+     -1,
+     0,
+     0
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     -2.116,
+     -1.425,
+     -2.478
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:3:tag:elbo:24381_145023",
+     "label": "38.55°",
+     "subject": "24381_145023",
+     "anchorDesign": [
+      5.847,
+      8.547,
+      14.074
+     ],
+     "rayLength": 1.9,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": true,
+     "independentVerdict": true,
+     "hits": [
+      {
+       "objectId": "o:24381_145018:1",
+       "distance": 1.973,
+       "shortOfAnchorBy": -0.073,
+       "inFront": false,
+       "isSubject": false,
+       "encloses": null,
+       "hides": false
+      },
+      {
+       "objectId": "o:24381_145018:4",
+       "distance": 1.238,
+       "shortOfAnchorBy": 0.662,
+       "inFront": true,
+       "isSubject": false,
+       "encloses": false,
+       "hides": true
+      },
+      {
+       "objectId": "o:24381_145023:13",
+       "distance": 1.847,
+       "shortOfAnchorBy": 0.053,
+       "inFront": true,
+       "isSubject": true,
+       "encloses": null,
+       "hides": false
+      }
+     ]
+    }
+   },
+   {
+    "direction": 2,
+    "dir": [
+     0,
+     1,
+     0
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     -0.116,
+     0.575,
+     -2.478
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:3:tag:elbo:24381_145023",
+     "label": "38.55°",
+     "subject": "24381_145023",
+     "anchorDesign": [
+      5.847,
+      8.547,
+      14.074
+     ],
+     "rayLength": 1.9,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": true,
+     "independentVerdict": true,
+     "hits": [
+      {
+       "objectId": "o:24381_145018:1",
+       "distance": 1.821,
+       "shortOfAnchorBy": 0.079,
+       "inFront": true,
+       "isSubject": false,
+       "encloses": false,
+       "hides": true
+      },
+      {
+       "objectId": "o:24381_145023:13",
+       "distance": 1.823,
+       "shortOfAnchorBy": 0.077,
+       "inFront": true,
+       "isSubject": true,
+       "encloses": null,
+       "hides": false
+      }
+     ]
+    }
+   },
+   {
+    "direction": 3,
+    "dir": [
+     0,
+     -1,
+     0
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     -0.116,
+     -3.425,
+     -2.478
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:3:tag:elbo:24381_145023",
+     "label": "38.55°",
+     "subject": "24381_145023",
+     "anchorDesign": [
+      5.847,
+      8.547,
+      14.074
+     ],
+     "rayLength": 1.9,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": [
+      {
+       "objectId": "o:24381_145018:1",
+       "distance": 1.977,
+       "shortOfAnchorBy": -0.077,
+       "inFront": false,
+       "isSubject": false,
+       "encloses": null,
+       "hides": false
+      },
+      {
+       "objectId": "o:24381_145023:13",
+       "distance": 1.849,
+       "shortOfAnchorBy": 0.051,
+       "inFront": true,
+       "isSubject": true,
+       "encloses": null,
+       "hides": false
+      }
+     ]
+    }
+   },
+   {
+    "direction": 4,
+    "dir": [
+     0,
+     0,
+     1
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     -0.116,
+     -1.425,
+     -0.478
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:3:tag:elbo:24381_145023",
+     "label": "38.55°",
+     "subject": "24381_145023",
+     "anchorDesign": [
+      5.847,
+      8.547,
+      14.074
+     ],
+     "rayLength": 1.9,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": [
+      {
+       "objectId": "o:24381_145023:13",
+       "distance": 1.844,
+       "shortOfAnchorBy": 0.056,
+       "inFront": true,
+       "isSubject": true,
+       "encloses": null,
+       "hides": false
+      }
+     ]
+    }
+   },
+   {
+    "direction": 5,
+    "dir": [
+     0,
+     0,
+     -1
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     -0.116,
+     -1.425,
+     -4.478
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:3:tag:elbo:24381_145023",
+     "label": "38.55°",
+     "subject": "24381_145023",
+     "anchorDesign": [
+      5.847,
+      8.547,
+      14.074
+     ],
+     "rayLength": 1.9,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": [
+      {
+       "objectId": "o:24381_145023:13",
+       "distance": 1.844,
+       "shortOfAnchorBy": 0.056,
+       "inFront": true,
+       "isSubject": true,
+       "encloses": null,
+       "hides": false
+      }
+     ]
+    }
+   },
+   {
+    "direction": 6,
+    "dir": [
+     -0.577,
+     -0.577,
+     -0.577
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     -1.27,
+     -2.579,
+     -3.632
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:3:tag:elbo:24381_145023",
+     "label": "38.55°",
+     "subject": "24381_145023",
+     "anchorDesign": [
+      5.847,
+      8.547,
+      14.074
+     ],
+     "rayLength": 1.899,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": [
+      {
+       "objectId": "o:24381_145018:1",
+       "distance": 1.964,
+       "shortOfAnchorBy": -0.065,
+       "inFront": false,
+       "isSubject": false,
+       "encloses": null,
+       "hides": false
+      },
+      {
+       "objectId": "o:24381_145023:13",
+       "distance": 1.826,
+       "shortOfAnchorBy": 0.073,
+       "inFront": true,
+       "isSubject": true,
+       "encloses": null,
+       "hides": false
+      }
+     ]
+    }
+   },
+   {
+    "direction": 7,
+    "dir": [
+     -0.577,
+     -0.577,
+     0.577
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     -1.27,
+     -2.579,
+     -1.324
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:3:tag:elbo:24381_145023",
+     "label": "38.55°",
+     "subject": "24381_145023",
+     "anchorDesign": [
+      5.847,
+      8.547,
+      14.074
+     ],
+     "rayLength": 1.899,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": [
+      {
+       "objectId": "o:24381_145018:1",
+       "distance": 1.964,
+       "shortOfAnchorBy": -0.065,
+       "inFront": false,
+       "isSubject": false,
+       "encloses": null,
+       "hides": false
+      },
+      {
+       "objectId": "o:24381_145023:13",
+       "distance": 1.827,
+       "shortOfAnchorBy": 0.072,
+       "inFront": true,
+       "isSubject": true,
+       "encloses": null,
+       "hides": false
+      }
+     ]
+    }
+   },
+   {
+    "direction": 8,
+    "dir": [
+     -0.577,
+     0.577,
+     -0.577
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     -1.27,
+     -0.271,
+     -3.632
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:3:tag:elbo:24381_145023",
+     "label": "38.55°",
+     "subject": "24381_145023",
+     "anchorDesign": [
+      5.847,
+      8.547,
+      14.074
+     ],
+     "rayLength": 1.899,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": [
+      {
+       "objectId": "o:24381_145023:13",
+       "distance": 1.831,
+       "shortOfAnchorBy": 0.068,
+       "inFront": true,
+       "isSubject": true,
+       "encloses": null,
+       "hides": false
+      }
+     ]
+    }
+   },
+   {
+    "direction": 9,
+    "dir": [
+     -0.577,
+     0.577,
+     0.577
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     -1.27,
+     -0.271,
+     -1.324
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:3:tag:elbo:24381_145023",
+     "label": "38.55°",
+     "subject": "24381_145023",
+     "anchorDesign": [
+      5.847,
+      8.547,
+      14.074
+     ],
+     "rayLength": 1.899,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": [
+      {
+       "objectId": "o:24381_145023:13",
+       "distance": 1.831,
+       "shortOfAnchorBy": 0.068,
+       "inFront": true,
+       "isSubject": true,
+       "encloses": null,
+       "hides": false
+      }
+     ]
+    }
+   },
+   {
+    "direction": 10,
+    "dir": [
+     0.577,
+     -0.577,
+     -0.577
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     1.038,
+     -2.579,
+     -3.632
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:3:tag:elbo:24381_145023",
+     "label": "38.55°",
+     "subject": "24381_145023",
+     "anchorDesign": [
+      5.847,
+      8.547,
+      14.074
+     ],
+     "rayLength": 1.899,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": [
+      {
+       "objectId": "o:24381_145023:13",
+       "distance": 1.848,
+       "shortOfAnchorBy": 0.051,
+       "inFront": true,
+       "isSubject": true,
+       "encloses": null,
+       "hides": false
+      }
+     ]
+    }
+   },
+   {
+    "direction": 11,
+    "dir": [
+     0.577,
+     -0.577,
+     0.577
+    ],
+    "distance": 2,
+    "drawn": false,
+    "error": "RangeError: Map maximum size exceeded",
+    "camera": [
+     1.038,
+     -2.579,
+     -1.324
+    ]
+   },
+   {
+    "direction": 11,
+    "dir": [
+     0.577,
+     -0.577,
+     0.577
+    ],
+    "distance": 1.4,
+    "drawn": false,
+    "error": "RangeError: Map maximum size exceeded",
+    "camera": [
+     0.691,
+     -2.233,
+     -1.67
+    ]
+   },
+   {
+    "direction": 11,
+    "dir": [
+     0.577,
+     -0.577,
+     0.577
+    ],
+    "distance": 1,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     0.461,
+     -2.002,
+     -1.901
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:3:tag:elbo:24381_145023",
+     "label": "38.55°",
+     "subject": "24381_145023",
+     "anchorDesign": [
+      5.847,
+      8.547,
+      14.074
+     ],
+     "rayLength": 0.899,
+     "toleranceWorld": 0.001,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": [
+      {
+       "objectId": "o:24381_145023:13",
+       "distance": 0.848,
+       "shortOfAnchorBy": 0.051,
+       "inFront": true,
+       "isSubject": true,
+       "encloses": null,
+       "hides": false
+      }
+     ]
+    }
+   },
+   {
+    "direction": 12,
+    "dir": [
+     0.577,
+     0.577,
+     -0.577
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     1.038,
+     -0.271,
+     -3.632
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:3:tag:elbo:24381_145023",
+     "label": "38.55°",
+     "subject": "24381_145023",
+     "anchorDesign": [
+      5.847,
+      8.547,
+      14.074
+     ],
+     "rayLength": 1.899,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": true,
+     "independentVerdict": true,
+     "hits": [
+      {
+       "objectId": "o:24381_145018:1",
+       "distance": 1.801,
+       "shortOfAnchorBy": 0.098,
+       "inFront": true,
+       "isSubject": false,
+       "encloses": false,
+       "hides": true
+      },
+      {
+       "objectId": "o:24381_145023:13",
+       "distance": 1.834,
+       "shortOfAnchorBy": 0.065,
+       "inFront": true,
+       "isSubject": true,
+       "encloses": null,
+       "hides": false
+      }
+     ]
+    }
+   },
+   {
+    "direction": 13,
+    "dir": [
+     0.577,
+     0.577,
+     0.577
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     1.038,
+     -0.271,
+     -1.324
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:3:tag:elbo:24381_145023",
+     "label": "38.55°",
+     "subject": "24381_145023",
+     "anchorDesign": [
+      5.847,
+      8.547,
+      14.074
+     ],
+     "rayLength": 1.899,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": true,
+     "independentVerdict": true,
+     "hits": [
+      {
+       "objectId": "o:24381_145018:1",
+       "distance": 1.8,
+       "shortOfAnchorBy": 0.099,
+       "inFront": true,
+       "isSubject": false,
+       "encloses": false,
+       "hides": true
+      },
+      {
+       "objectId": "o:24381_145023:13",
+       "distance": 1.834,
+       "shortOfAnchorBy": 0.065,
+       "inFront": true,
+       "isSubject": true,
+       "encloses": null,
+       "hides": false
+      }
+     ]
+    }
+   }
+  ],
+  "24381_145025": [
+   {
+    "direction": 0,
+    "dir": [
+     1,
+     0,
+     0
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     3.886,
+     0.475,
+     -2.469
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:4:tag:elbo:24381_145025",
+     "label": "89.82°",
+     "subject": "24381_145025",
+     "anchorDesign": [
+      7.85,
+      10.447,
+      14.083
+     ],
+     "rayLength": 1.9,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": [
+      {
+       "objectId": "o:24381_145025:14",
+       "distance": 1.914,
+       "shortOfAnchorBy": -0.014,
+       "inFront": false,
+       "isSubject": true,
+       "encloses": null,
+       "hides": false
+      }
+     ]
+    }
+   },
+   {
+    "direction": 1,
+    "dir": [
+     -1,
+     0,
+     0
+    ],
+    "distance": 2,
+    "drawn": false,
+    "error": "RangeError: Map maximum size exceeded",
+    "camera": [
+     -0.114,
+     0.475,
+     -2.469
+    ]
+   },
+   {
+    "direction": 1,
+    "dir": [
+     -1,
+     0,
+     0
+    ],
+    "distance": 1.4,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     0.486,
+     0.475,
+     -2.469
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:4:tag:elbo:24381_145025",
+     "label": "89.82°",
+     "subject": "24381_145025",
+     "anchorDesign": [
+      7.85,
+      10.447,
+      14.083
+     ],
+     "rayLength": 1.3,
+     "toleranceWorld": 0.002,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": [
+      {
+       "objectId": "o:24381_145025:14",
+       "distance": 1.231,
+       "shortOfAnchorBy": 0.069,
+       "inFront": true,
+       "isSubject": true,
+       "encloses": null,
+       "hides": false
+      }
+     ]
+    }
+   },
+   {
+    "direction": 2,
+    "dir": [
+     0,
+     1,
+     0
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     1.886,
+     2.475,
+     -2.469
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:4:tag:elbo:24381_145025",
+     "label": "89.82°",
+     "subject": "24381_145025",
+     "anchorDesign": [
+      7.85,
+      10.447,
+      14.083
+     ],
+     "rayLength": 1.9,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": [
+      {
+       "objectId": "o:24381_145025:14",
+       "distance": 1.916,
+       "shortOfAnchorBy": -0.016,
+       "inFront": false,
+       "isSubject": true,
+       "encloses": null,
+       "hides": false
+      }
+     ]
+    }
+   },
+   {
+    "direction": 3,
+    "dir": [
+     0,
+     -1,
+     0
+    ],
+    "distance": 2,
+    "drawn": false,
+    "error": "RangeError: Map maximum size exceeded",
+    "camera": [
+     1.886,
+     -1.525,
+     -2.469
+    ]
+   },
+   {
+    "direction": 3,
+    "dir": [
+     0,
+     -1,
+     0
+    ],
+    "distance": 1.4,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     1.886,
+     -0.925,
+     -2.469
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:4:tag:elbo:24381_145025",
+     "label": "89.82°",
+     "subject": "24381_145025",
+     "anchorDesign": [
+      7.85,
+      10.447,
+      14.083
+     ],
+     "rayLength": 1.3,
+     "toleranceWorld": 0.002,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": [
+      {
+       "objectId": "o:24381_145025:14",
+       "distance": 1.24,
+       "shortOfAnchorBy": 0.06,
+       "inFront": true,
+       "isSubject": true,
+       "encloses": null,
+       "hides": false
+      }
+     ]
+    }
+   },
+   {
+    "direction": 4,
+    "dir": [
+     0,
+     0,
+     1
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     1.886,
+     0.475,
+     -0.469
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:4:tag:elbo:24381_145025",
+     "label": "89.82°",
+     "subject": "24381_145025",
+     "anchorDesign": [
+      7.85,
+      10.447,
+      14.083
+     ],
+     "rayLength": 1.9,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": true,
+     "independentVerdict": true,
+     "hits": [
+      {
+       "objectId": "o:24381_145018:6",
+       "distance": 1.748,
+       "shortOfAnchorBy": 0.152,
+       "inFront": true,
+       "isSubject": false,
+       "encloses": false,
+       "hides": true
+      },
+      {
+       "objectId": "o:24381_145025:14",
+       "distance": 1.748,
+       "shortOfAnchorBy": 0.152,
+       "inFront": true,
+       "isSubject": true,
+       "encloses": null,
+       "hides": false
+      }
+     ]
+    }
+   },
+   {
+    "direction": 5,
+    "dir": [
+     0,
+     0,
+     -1
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     1.886,
+     0.475,
+     -4.469
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:4:tag:elbo:24381_145025",
+     "label": "89.82°",
+     "subject": "24381_145025",
+     "anchorDesign": [
+      7.85,
+      10.447,
+      14.083
+     ],
+     "rayLength": 1.9,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": [
+      {
+       "objectId": "o:24381_145025:14",
+       "distance": 1.909,
+       "shortOfAnchorBy": -0.009,
+       "inFront": false,
+       "isSubject": true,
+       "encloses": null,
+       "hides": false
+      }
+     ]
+    }
+   },
+   {
+    "direction": 6,
+    "dir": [
+     -0.577,
+     -0.577,
+     -0.577
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     0.732,
+     -0.679,
+     -3.623
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:4:tag:elbo:24381_145025",
+     "label": "89.82°",
+     "subject": "24381_145025",
+     "anchorDesign": [
+      7.85,
+      10.447,
+      14.083
+     ],
+     "rayLength": 1.899,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": []
+    }
+   },
+   {
+    "direction": 7,
+    "dir": [
+     -0.577,
+     -0.577,
+     0.577
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     0.732,
+     -0.679,
+     -1.315
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:4:tag:elbo:24381_145025",
+     "label": "89.82°",
+     "subject": "24381_145025",
+     "anchorDesign": [
+      7.85,
+      10.447,
+      14.083
+     ],
+     "rayLength": 1.899,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": [
+      {
+       "objectId": "o:24381_145025:14",
+       "distance": 1.775,
+       "shortOfAnchorBy": 0.123,
+       "inFront": true,
+       "isSubject": true,
+       "encloses": null,
+       "hides": false
+      }
+     ]
+    }
+   },
+   {
+    "direction": 8,
+    "dir": [
+     -0.577,
+     0.577,
+     -0.577
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     0.732,
+     1.629,
+     -3.623
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:4:tag:elbo:24381_145025",
+     "label": "89.82°",
+     "subject": "24381_145025",
+     "anchorDesign": [
+      7.85,
+      10.447,
+      14.083
+     ],
+     "rayLength": 1.899,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": []
+    }
+   },
+   {
+    "direction": 9,
+    "dir": [
+     -0.577,
+     0.577,
+     0.577
+    ],
+    "distance": 2,
+    "drawn": false,
+    "error": "RangeError: Map maximum size exceeded",
+    "camera": [
+     0.732,
+     1.629,
+     -1.315
+    ]
+   },
+   {
+    "direction": 9,
+    "dir": [
+     -0.577,
+     0.577,
+     0.577
+    ],
+    "distance": 1.4,
+    "drawn": false,
+    "error": "RangeError: Map maximum size exceeded",
+    "camera": [
+     1.078,
+     1.283,
+     -1.662
+    ]
+   },
+   {
+    "direction": 9,
+    "dir": [
+     -0.577,
+     0.577,
+     0.577
+    ],
+    "distance": 1,
+    "drawn": false,
+    "error": "RangeError: Map maximum size exceeded",
+    "camera": [
+     1.309,
+     1.052,
+     -1.892
+    ]
+   },
+   {
+    "direction": 10,
+    "dir": [
+     0.577,
+     -0.577,
+     -0.577
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     3.04,
+     -0.679,
+     -3.623
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:4:tag:elbo:24381_145025",
+     "label": "89.82°",
+     "subject": "24381_145025",
+     "anchorDesign": [
+      7.85,
+      10.447,
+      14.083
+     ],
+     "rayLength": 1.899,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": [
+      {
+       "objectId": "o:24381_145025:14",
+       "distance": 1.924,
+       "shortOfAnchorBy": -0.025,
+       "inFront": false,
+       "isSubject": true,
+       "encloses": null,
+       "hides": false
+      }
+     ]
+    }
+   },
+   {
+    "direction": 11,
+    "dir": [
+     0.577,
+     -0.577,
+     0.577
+    ],
+    "distance": 2,
+    "drawn": false,
+    "error": "RangeError: Map maximum size exceeded",
+    "camera": [
+     3.04,
+     -0.679,
+     -1.315
+    ]
+   },
+   {
+    "direction": 11,
+    "dir": [
+     0.577,
+     -0.577,
+     0.577
+    ],
+    "distance": 1.4,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     2.694,
+     -0.333,
+     -1.662
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:4:tag:elbo:24381_145025",
+     "label": "89.82°",
+     "subject": "24381_145025",
+     "anchorDesign": [
+      7.85,
+      10.447,
+      14.083
+     ],
+     "rayLength": 1.299,
+     "toleranceWorld": 0.002,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": []
+    }
+   },
+   {
+    "direction": 12,
+    "dir": [
+     0.577,
+     0.577,
+     -0.577
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     3.04,
+     1.629,
+     -3.623
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:4:tag:elbo:24381_145025",
+     "label": "89.82°",
+     "subject": "24381_145025",
+     "anchorDesign": [
+      7.85,
+      10.447,
+      14.083
+     ],
+     "rayLength": 1.899,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": [
+      {
+       "objectId": "o:24381_145025:14",
+       "distance": 1.905,
+       "shortOfAnchorBy": -0.006,
+       "inFront": false,
+       "isSubject": true,
+       "encloses": null,
+       "hides": false
+      }
+     ]
+    }
+   },
+   {
+    "direction": 13,
+    "dir": [
+     0.577,
+     0.577,
+     0.577
+    ],
+    "distance": 2,
+    "drawn": false,
+    "error": "RangeError: Map maximum size exceeded",
+    "camera": [
+     3.04,
+     1.629,
+     -1.315
+    ]
+   },
+   {
+    "direction": 13,
+    "dir": [
+     0.577,
+     0.577,
+     0.577
+    ],
+    "distance": 1.4,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     2.694,
+     1.283,
+     -1.662
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:4:tag:elbo:24381_145025",
+     "label": "89.82°",
+     "subject": "24381_145025",
+     "anchorDesign": [
+      7.85,
+      10.447,
+      14.083
+     ],
+     "rayLength": 1.299,
+     "toleranceWorld": 0.002,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": []
+    }
+   }
+  ],
+  "24381_145026": [
+   {
+    "direction": 0,
+    "dir": [
+     1,
+     0,
+     0
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     3.886,
+     0.475,
+     0.183
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:6:tag:elbo:24381_145026",
+     "label": "89.71°",
+     "subject": "24381_145026",
+     "anchorDesign": [
+      7.85,
+      10.447,
+      16.735
+     ],
+     "rayLength": 1.9,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": []
+    }
+   },
+   {
+    "direction": 1,
+    "dir": [
+     -1,
+     0,
+     0
+    ],
+    "distance": 2,
+    "drawn": false,
+    "error": "RangeError: Map maximum size exceeded",
+    "camera": [
+     -0.114,
+     0.475,
+     0.183
+    ]
+   },
+   {
+    "direction": 1,
+    "dir": [
+     -1,
+     0,
+     0
+    ],
+    "distance": 1.4,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     0.486,
+     0.475,
+     0.183
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:6:tag:elbo:24381_145026",
+     "label": "89.71°",
+     "subject": "24381_145026",
+     "anchorDesign": [
+      7.85,
+      10.447,
+      16.735
+     ],
+     "rayLength": 1.3,
+     "toleranceWorld": 0.002,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": []
+    }
+   },
+   {
+    "direction": 2,
+    "dir": [
+     0,
+     1,
+     0
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     1.886,
+     2.475,
+     0.183
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:6:tag:elbo:24381_145026",
+     "label": "89.71°",
+     "subject": "24381_145026",
+     "anchorDesign": [
+      7.85,
+      10.447,
+      16.735
+     ],
+     "rayLength": 1.9,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": true,
+     "independentVerdict": true,
+     "hits": [
+      {
+       "objectId": "o:24381_145018:10",
+       "distance": 0.711,
+       "shortOfAnchorBy": 1.189,
+       "inFront": true,
+       "isSubject": false,
+       "encloses": false,
+       "hides": true
+      },
+      {
+       "objectId": "o:24381_145026:15",
+       "distance": 1.749,
+       "shortOfAnchorBy": 0.151,
+       "inFront": true,
+       "isSubject": true,
+       "encloses": null,
+       "hides": false
+      },
+      {
+       "objectId": "o:24381_145028:16",
+       "distance": 0.576,
+       "shortOfAnchorBy": 1.324,
+       "inFront": true,
+       "isSubject": false,
+       "encloses": false,
+       "hides": true
+      }
+     ]
+    }
+   },
+   {
+    "direction": 3,
+    "dir": [
+     0,
+     -1,
+     0
+    ],
+    "distance": 2,
+    "drawn": false,
+    "error": "RangeError: Map maximum size exceeded",
+    "camera": [
+     1.886,
+     -1.525,
+     0.183
+    ]
+   },
+   {
+    "direction": 3,
+    "dir": [
+     0,
+     -1,
+     0
+    ],
+    "distance": 1.4,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     1.886,
+     -0.925,
+     0.183
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:6:tag:elbo:24381_145026",
+     "label": "89.71°",
+     "subject": "24381_145026",
+     "anchorDesign": [
+      7.85,
+      10.447,
+      16.735
+     ],
+     "rayLength": 1.3,
+     "toleranceWorld": 0.002,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": [
+      {
+       "objectId": "o:24381_145026:15",
+       "distance": 1.308,
+       "shortOfAnchorBy": -0.008,
+       "inFront": false,
+       "isSubject": true,
+       "encloses": null,
+       "hides": false
+      }
+     ]
+    }
+   },
+   {
+    "direction": 4,
+    "dir": [
+     0,
+     0,
+     1
+    ],
+    "distance": 2,
+    "drawn": false,
+    "error": "RangeError: Map maximum size exceeded",
+    "camera": [
+     1.886,
+     0.475,
+     2.183
+    ]
+   },
+   {
+    "direction": 4,
+    "dir": [
+     0,
+     0,
+     1
+    ],
+    "distance": 1.4,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     1.886,
+     0.475,
+     1.583
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:6:tag:elbo:24381_145026",
+     "label": "89.71°",
+     "subject": "24381_145026",
+     "anchorDesign": [
+      7.85,
+      10.447,
+      16.735
+     ],
+     "rayLength": 1.3,
+     "toleranceWorld": 0.002,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": [
+      {
+       "objectId": "o:24381_145026:15",
+       "distance": 1.308,
+       "shortOfAnchorBy": -0.008,
+       "inFront": false,
+       "isSubject": true,
+       "encloses": null,
+       "hides": false
+      }
+     ]
+    }
+   },
+   {
+    "direction": 5,
+    "dir": [
+     0,
+     0,
+     -1
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     1.886,
+     0.475,
+     -1.817
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:6:tag:elbo:24381_145026",
+     "label": "89.71°",
+     "subject": "24381_145026",
+     "anchorDesign": [
+      7.85,
+      10.447,
+      16.735
+     ],
+     "rayLength": 1.9,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": true,
+     "independentVerdict": true,
+     "hits": [
+      {
+       "objectId": "o:24381_145018:6",
+       "distance": 1.749,
+       "shortOfAnchorBy": 0.151,
+       "inFront": true,
+       "isSubject": false,
+       "encloses": false,
+       "hides": true
+      },
+      {
+       "objectId": "o:24381_145026:15",
+       "distance": 1.749,
+       "shortOfAnchorBy": 0.151,
+       "inFront": true,
+       "isSubject": true,
+       "encloses": null,
+       "hides": false
+      }
+     ]
+    }
+   },
+   {
+    "direction": 6,
+    "dir": [
+     -0.577,
+     -0.577,
+     -0.577
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     0.732,
+     -0.679,
+     -0.971
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:6:tag:elbo:24381_145026",
+     "label": "89.71°",
+     "subject": "24381_145026",
+     "anchorDesign": [
+      7.85,
+      10.447,
+      16.735
+     ],
+     "rayLength": 1.899,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": []
+    }
+   },
+   {
+    "direction": 7,
+    "dir": [
+     -0.577,
+     -0.577,
+     0.577
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     0.732,
+     -0.679,
+     1.337
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:6:tag:elbo:24381_145026",
+     "label": "89.71°",
+     "subject": "24381_145026",
+     "anchorDesign": [
+      7.85,
+      10.447,
+      16.735
+     ],
+     "rayLength": 1.899,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": [
+      {
+       "objectId": "o:24381_145026:15",
+       "distance": 1.906,
+       "shortOfAnchorBy": -0.007,
+       "inFront": false,
+       "isSubject": true,
+       "encloses": null,
+       "hides": false
+      }
+     ]
+    }
+   },
+   {
+    "direction": 8,
+    "dir": [
+     -0.577,
+     0.577,
+     -0.577
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     0.732,
+     1.629,
+     -0.971
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:6:tag:elbo:24381_145026",
+     "label": "89.71°",
+     "subject": "24381_145026",
+     "anchorDesign": [
+      7.85,
+      10.447,
+      16.735
+     ],
+     "rayLength": 1.899,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": [
+      {
+       "objectId": "o:24381_145026:15",
+       "distance": 1.804,
+       "shortOfAnchorBy": 0.095,
+       "inFront": true,
+       "isSubject": true,
+       "encloses": null,
+       "hides": false
+      }
+     ]
+    }
+   },
+   {
+    "direction": 9,
+    "dir": [
+     -0.577,
+     0.577,
+     0.577
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     0.732,
+     1.629,
+     1.337
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:6:tag:elbo:24381_145026",
+     "label": "89.71°",
+     "subject": "24381_145026",
+     "anchorDesign": [
+      7.85,
+      10.447,
+      16.735
+     ],
+     "rayLength": 1.899,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": []
+    }
+   },
+   {
+    "direction": 10,
+    "dir": [
+     0.577,
+     -0.577,
+     -0.577
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     3.04,
+     -0.679,
+     -0.971
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:6:tag:elbo:24381_145026",
+     "label": "89.71°",
+     "subject": "24381_145026",
+     "anchorDesign": [
+      7.85,
+      10.447,
+      16.735
+     ],
+     "rayLength": 1.899,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": []
+    }
+   },
+   {
+    "direction": 11,
+    "dir": [
+     0.577,
+     -0.577,
+     0.577
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     3.04,
+     -0.679,
+     1.337
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:6:tag:elbo:24381_145026",
+     "label": "89.71°",
+     "subject": "24381_145026",
+     "anchorDesign": [
+      7.85,
+      10.447,
+      16.735
+     ],
+     "rayLength": 1.899,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": [
+      {
+       "objectId": "o:24381_145026:15",
+       "distance": 1.906,
+       "shortOfAnchorBy": -0.007,
+       "inFront": false,
+       "isSubject": true,
+       "encloses": null,
+       "hides": false
+      }
+     ]
+    }
+   },
+   {
+    "direction": 12,
+    "dir": [
+     0.577,
+     0.577,
+     -0.577
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     3.04,
+     1.629,
+     -0.971
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:6:tag:elbo:24381_145026",
+     "label": "89.71°",
+     "subject": "24381_145026",
+     "anchorDesign": [
+      7.85,
+      10.447,
+      16.735
+     ],
+     "rayLength": 1.899,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": [
+      {
+       "objectId": "o:24381_145026:15",
+       "distance": 1.804,
+       "shortOfAnchorBy": 0.095,
+       "inFront": true,
+       "isSubject": true,
+       "encloses": null,
+       "hides": false
+      }
+     ]
+    }
+   },
+   {
+    "direction": 13,
+    "dir": [
+     0.577,
+     0.577,
+     0.577
+    ],
+    "distance": 2,
+    "drawn": false,
+    "error": "RangeError: Map maximum size exceeded",
+    "camera": [
+     3.04,
+     1.629,
+     1.337
+    ]
+   },
+   {
+    "direction": 13,
+    "dir": [
+     0.577,
+     0.577,
+     0.577
+    ],
+    "distance": 1.4,
+    "drawn": false,
+    "error": "RangeError: Map maximum size exceeded",
+    "camera": [
+     2.694,
+     1.283,
+     0.99
+    ]
+   },
+   {
+    "direction": 13,
+    "dir": [
+     0.577,
+     0.577,
+     0.577
+    ],
+    "distance": 1,
+    "drawn": false,
+    "error": "RangeError: Map maximum size exceeded",
+    "camera": [
+     2.463,
+     1.052,
+     0.76
+    ]
+   }
+  ],
+  "24381_145028": [
+   {
+    "direction": 0,
+    "dir": [
+     1,
+     0,
+     0
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     3.886,
+     1.815,
+     0.189
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:6:tag:elbo:24381_145028",
+     "label": "89.71°",
+     "subject": "24381_145028",
+     "anchorDesign": [
+      7.85,
+      11.787,
+      16.741
+     ],
+     "rayLength": 1.9,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": []
+    }
+   },
+   {
+    "direction": 1,
+    "dir": [
+     -1,
+     0,
+     0
+    ],
+    "distance": 2,
+    "drawn": false,
+    "error": "RangeError: Map maximum size exceeded",
+    "camera": [
+     -0.114,
+     1.815,
+     0.189
+    ]
+   },
+   {
+    "direction": 1,
+    "dir": [
+     -1,
+     0,
+     0
+    ],
+    "distance": 1.4,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     0.486,
+     1.815,
+     0.189
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:6:tag:elbo:24381_145028",
+     "label": "89.71°",
+     "subject": "24381_145028",
+     "anchorDesign": [
+      7.85,
+      11.787,
+      16.741
+     ],
+     "rayLength": 1.3,
+     "toleranceWorld": 0.002,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": []
+    }
+   },
+   {
+    "direction": 2,
+    "dir": [
+     0,
+     1,
+     0
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     1.886,
+     3.815,
+     0.189
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:6:tag:elbo:24381_145028",
+     "label": "89.71°",
+     "subject": "24381_145028",
+     "anchorDesign": [
+      7.85,
+      11.787,
+      16.741
+     ],
+     "rayLength": 1.9,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": [
+      {
+       "objectId": "o:24381_145028:16",
+       "distance": 1.908,
+       "shortOfAnchorBy": -0.008,
+       "inFront": false,
+       "isSubject": true,
+       "encloses": null,
+       "hides": false
+      }
+     ]
+    }
+   },
+   {
+    "direction": 3,
+    "dir": [
+     0,
+     -1,
+     0
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     1.886,
+     -0.185,
+     0.189
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:6:tag:elbo:24381_145028",
+     "label": "89.71°",
+     "subject": "24381_145028",
+     "anchorDesign": [
+      7.85,
+      11.787,
+      16.741
+     ],
+     "rayLength": 1.9,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": true,
+     "independentVerdict": true,
+     "hits": [
+      {
+       "objectId": "o:24381_145018:10",
+       "distance": 0.711,
+       "shortOfAnchorBy": 1.189,
+       "inFront": true,
+       "isSubject": false,
+       "encloses": false,
+       "hides": true
+      },
+      {
+       "objectId": "o:24381_145026:15",
+       "distance": 0.576,
+       "shortOfAnchorBy": 1.324,
+       "inFront": true,
+       "isSubject": false,
+       "encloses": false,
+       "hides": true
+      },
+      {
+       "objectId": "o:24381_145028:16",
+       "distance": 1.749,
+       "shortOfAnchorBy": 0.151,
+       "inFront": true,
+       "isSubject": true,
+       "encloses": null,
+       "hides": false
+      }
+     ]
+    }
+   },
+   {
+    "direction": 4,
+    "dir": [
+     0,
+     0,
+     1
+    ],
+    "distance": 2,
+    "drawn": false,
+    "error": "RangeError: Map maximum size exceeded",
+    "camera": [
+     1.886,
+     1.815,
+     2.189
+    ]
+   },
+   {
+    "direction": 4,
+    "dir": [
+     0,
+     0,
+     1
+    ],
+    "distance": 1.4,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     1.886,
+     1.815,
+     1.589
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:6:tag:elbo:24381_145028",
+     "label": "89.71°",
+     "subject": "24381_145028",
+     "anchorDesign": [
+      7.85,
+      11.787,
+      16.741
+     ],
+     "rayLength": 1.3,
+     "toleranceWorld": 0.002,
+     "kernelOccluded": true,
+     "independentVerdict": true,
+     "hits": [
+      {
+       "objectId": "o:24381_145018:5",
+       "distance": 1.149,
+       "shortOfAnchorBy": 0.151,
+       "inFront": true,
+       "isSubject": false,
+       "encloses": false,
+       "hides": true
+      },
+      {
+       "objectId": "o:24381_145028:16",
+       "distance": 1.149,
+       "shortOfAnchorBy": 0.151,
+       "inFront": true,
+       "isSubject": true,
+       "encloses": null,
+       "hides": false
+      }
+     ]
+    }
+   },
+   {
+    "direction": 5,
+    "dir": [
+     0,
+     0,
+     -1
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     1.886,
+     1.815,
+     -1.811
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:6:tag:elbo:24381_145028",
+     "label": "89.71°",
+     "subject": "24381_145028",
+     "anchorDesign": [
+      7.85,
+      11.787,
+      16.741
+     ],
+     "rayLength": 1.9,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": [
+      {
+       "objectId": "o:24381_145028:16",
+       "distance": 1.908,
+       "shortOfAnchorBy": -0.008,
+       "inFront": false,
+       "isSubject": true,
+       "encloses": null,
+       "hides": false
+      }
+     ]
+    }
+   },
+   {
+    "direction": 6,
+    "dir": [
+     -0.577,
+     -0.577,
+     -0.577
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     0.732,
+     0.661,
+     -0.965
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:6:tag:elbo:24381_145028",
+     "label": "89.71°",
+     "subject": "24381_145028",
+     "anchorDesign": [
+      7.85,
+      11.787,
+      16.741
+     ],
+     "rayLength": 1.899,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": []
+    }
+   },
+   {
+    "direction": 7,
+    "dir": [
+     -0.577,
+     -0.577,
+     0.577
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     0.732,
+     0.661,
+     1.343
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:6:tag:elbo:24381_145028",
+     "label": "89.71°",
+     "subject": "24381_145028",
+     "anchorDesign": [
+      7.85,
+      11.787,
+      16.741
+     ],
+     "rayLength": 1.899,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": [
+      {
+       "objectId": "o:24381_145028:16",
+       "distance": 1.804,
+       "shortOfAnchorBy": 0.095,
+       "inFront": true,
+       "isSubject": true,
+       "encloses": null,
+       "hides": false
+      }
+     ]
+    }
+   },
+   {
+    "direction": 8,
+    "dir": [
+     -0.577,
+     0.577,
+     -0.577
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     0.732,
+     2.969,
+     -0.965
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:6:tag:elbo:24381_145028",
+     "label": "89.71°",
+     "subject": "24381_145028",
+     "anchorDesign": [
+      7.85,
+      11.787,
+      16.741
+     ],
+     "rayLength": 1.899,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": [
+      {
+       "objectId": "o:24381_145028:16",
+       "distance": 1.906,
+       "shortOfAnchorBy": -0.007,
+       "inFront": false,
+       "isSubject": true,
+       "encloses": null,
+       "hides": false
+      }
+     ]
+    }
+   },
+   {
+    "direction": 9,
+    "dir": [
+     -0.577,
+     0.577,
+     0.577
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     0.732,
+     2.969,
+     1.343
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:6:tag:elbo:24381_145028",
+     "label": "89.71°",
+     "subject": "24381_145028",
+     "anchorDesign": [
+      7.85,
+      11.787,
+      16.741
+     ],
+     "rayLength": 1.899,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": []
+    }
+   },
+   {
+    "direction": 10,
+    "dir": [
+     0.577,
+     -0.577,
+     -0.577
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     3.04,
+     0.661,
+     -0.965
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:6:tag:elbo:24381_145028",
+     "label": "89.71°",
+     "subject": "24381_145028",
+     "anchorDesign": [
+      7.85,
+      11.787,
+      16.741
+     ],
+     "rayLength": 1.899,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": []
+    }
+   },
+   {
+    "direction": 11,
+    "dir": [
+     0.577,
+     -0.577,
+     0.577
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     3.04,
+     0.661,
+     1.343
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:6:tag:elbo:24381_145028",
+     "label": "89.71°",
+     "subject": "24381_145028",
+     "anchorDesign": [
+      7.85,
+      11.787,
+      16.741
+     ],
+     "rayLength": 1.899,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": [
+      {
+       "objectId": "o:24381_145028:16",
+       "distance": 1.804,
+       "shortOfAnchorBy": 0.095,
+       "inFront": true,
+       "isSubject": true,
+       "encloses": null,
+       "hides": false
+      }
+     ]
+    }
+   },
+   {
+    "direction": 12,
+    "dir": [
+     0.577,
+     0.577,
+     -0.577
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     3.04,
+     2.969,
+     -0.965
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:6:tag:elbo:24381_145028",
+     "label": "89.71°",
+     "subject": "24381_145028",
+     "anchorDesign": [
+      7.85,
+      11.787,
+      16.741
+     ],
+     "rayLength": 1.899,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": [
+      {
+       "objectId": "o:24381_145028:16",
+       "distance": 1.906,
+       "shortOfAnchorBy": -0.007,
+       "inFront": false,
+       "isSubject": true,
+       "encloses": null,
+       "hides": false
+      }
+     ]
+    }
+   },
+   {
+    "direction": 13,
+    "dir": [
+     0.577,
+     0.577,
+     0.577
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     3.04,
+     2.969,
+     1.343
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:6:tag:elbo:24381_145028",
+     "label": "89.71°",
+     "subject": "24381_145028",
+     "anchorDesign": [
+      7.85,
+      11.787,
+      16.741
+     ],
+     "rayLength": 1.899,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": []
+    }
+   }
+  ],
+  "24381_145029": [
+   {
+    "direction": 0,
+    "dir": [
+     1,
+     0,
+     0
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     3.886,
+     1.815,
+     2.092
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:8:tag:elbo:24381_145029",
+     "label": "89.71°",
+     "subject": "24381_145029",
+     "anchorDesign": [
+      7.85,
+      11.787,
+      18.644
+     ],
+     "rayLength": 1.9,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": []
+    }
+   },
+   {
+    "direction": 1,
+    "dir": [
+     -1,
+     0,
+     0
+    ],
+    "distance": 2,
+    "drawn": false,
+    "error": "RangeError: Map maximum size exceeded",
+    "camera": [
+     -0.114,
+     1.815,
+     2.092
+    ]
+   },
+   {
+    "direction": 1,
+    "dir": [
+     -1,
+     0,
+     0
+    ],
+    "distance": 1.4,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     0.486,
+     1.815,
+     2.092
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:8:tag:elbo:24381_145029",
+     "label": "89.71°",
+     "subject": "24381_145029",
+     "anchorDesign": [
+      7.85,
+      11.787,
+      18.644
+     ],
+     "rayLength": 1.3,
+     "toleranceWorld": 0.002,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": []
+    }
+   },
+   {
+    "direction": 2,
+    "dir": [
+     0,
+     1,
+     0
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     1.886,
+     3.815,
+     2.092
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:8:tag:elbo:24381_145029",
+     "label": "89.71°",
+     "subject": "24381_145029",
+     "anchorDesign": [
+      7.85,
+      11.787,
+      18.644
+     ],
+     "rayLength": 1.9,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": [
+      {
+       "objectId": "o:24381_145029:17",
+       "distance": 1.908,
+       "shortOfAnchorBy": -0.008,
+       "inFront": false,
+       "isSubject": true,
+       "encloses": null,
+       "hides": false
+      }
+     ]
+    }
+   },
+   {
+    "direction": 3,
+    "dir": [
+     0,
+     -1,
+     0
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     1.886,
+     -0.185,
+     2.092
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:8:tag:elbo:24381_145029",
+     "label": "89.71°",
+     "subject": "24381_145029",
+     "anchorDesign": [
+      7.85,
+      11.787,
+      18.644
+     ],
+     "rayLength": 1.9,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": true,
+     "independentVerdict": true,
+     "hits": [
+      {
+       "objectId": "o:24381_145018:7",
+       "distance": 1.749,
+       "shortOfAnchorBy": 0.151,
+       "inFront": true,
+       "isSubject": false,
+       "encloses": false,
+       "hides": true
+      },
+      {
+       "objectId": "o:24381_145029:17",
+       "distance": 1.749,
+       "shortOfAnchorBy": 0.151,
+       "inFront": true,
+       "isSubject": true,
+       "encloses": null,
+       "hides": false
+      }
+     ]
+    }
+   },
+   {
+    "direction": 4,
+    "dir": [
+     0,
+     0,
+     1
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     1.886,
+     1.815,
+     4.092
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:8:tag:elbo:24381_145029",
+     "label": "89.71°",
+     "subject": "24381_145029",
+     "anchorDesign": [
+      7.85,
+      11.787,
+      18.644
+     ],
+     "rayLength": 1.9,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": [
+      {
+       "objectId": "o:24381_145029:17",
+       "distance": 1.908,
+       "shortOfAnchorBy": -0.008,
+       "inFront": false,
+       "isSubject": true,
+       "encloses": null,
+       "hides": false
+      }
+     ]
+    }
+   },
+   {
+    "direction": 5,
+    "dir": [
+     0,
+     0,
+     -1
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     1.886,
+     1.815,
+     0.092
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:8:tag:elbo:24381_145029",
+     "label": "89.71°",
+     "subject": "24381_145029",
+     "anchorDesign": [
+      7.85,
+      11.787,
+      18.644
+     ],
+     "rayLength": 1.9,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": true,
+     "independentVerdict": true,
+     "hits": [
+      {
+       "objectId": "o:24381_145018:5",
+       "distance": 0.149,
+       "shortOfAnchorBy": 1.751,
+       "inFront": true,
+       "isSubject": false,
+       "encloses": false,
+       "hides": true
+      },
+      {
+       "objectId": "o:24381_145028:16",
+       "distance": 0.006,
+       "shortOfAnchorBy": 1.894,
+       "inFront": true,
+       "isSubject": false,
+       "encloses": false,
+       "hides": true
+      },
+      {
+       "objectId": "o:24381_145029:17",
+       "distance": 1.749,
+       "shortOfAnchorBy": 0.151,
+       "inFront": true,
+       "isSubject": true,
+       "encloses": null,
+       "hides": false
+      }
+     ]
+    }
+   },
+   {
+    "direction": 6,
+    "dir": [
+     -0.577,
+     -0.577,
+     -0.577
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     0.732,
+     0.661,
+     0.938
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:8:tag:elbo:24381_145029",
+     "label": "89.71°",
+     "subject": "24381_145029",
+     "anchorDesign": [
+      7.85,
+      11.787,
+      18.644
+     ],
+     "rayLength": 1.899,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": [
+      {
+       "objectId": "o:24381_145029:17",
+       "distance": 1.804,
+       "shortOfAnchorBy": 0.095,
+       "inFront": true,
+       "isSubject": true,
+       "encloses": null,
+       "hides": false
+      }
+     ]
+    }
+   },
+   {
+    "direction": 7,
+    "dir": [
+     -0.577,
+     -0.577,
+     0.577
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     0.732,
+     0.661,
+     3.246
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:8:tag:elbo:24381_145029",
+     "label": "89.71°",
+     "subject": "24381_145029",
+     "anchorDesign": [
+      7.85,
+      11.787,
+      18.644
+     ],
+     "rayLength": 1.899,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": []
+    }
+   },
+   {
+    "direction": 8,
+    "dir": [
+     -0.577,
+     0.577,
+     -0.577
+    ],
+    "distance": 2,
+    "drawn": false,
+    "hang": true
+   },
+   {
+    "direction": 8,
+    "dir": [
+     -0.577,
+     0.577,
+     -0.577
+    ],
+    "distance": 1.4,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     1.078,
+     2.623,
+     1.284
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:8:tag:elbo:24381_145029",
+     "label": "89.71°",
+     "subject": "24381_145029",
+     "anchorDesign": [
+      7.85,
+      11.787,
+      18.644
+     ],
+     "rayLength": 1.299,
+     "toleranceWorld": 0.002,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": []
+    }
+   },
+   {
+    "direction": 9,
+    "dir": [
+     -0.577,
+     0.577,
+     0.577
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     0.732,
+     2.969,
+     3.246
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:8:tag:elbo:24381_145029",
+     "label": "89.71°",
+     "subject": "24381_145029",
+     "anchorDesign": [
+      7.85,
+      11.787,
+      18.644
+     ],
+     "rayLength": 1.899,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": [
+      {
+       "objectId": "o:24381_145029:17",
+       "distance": 1.906,
+       "shortOfAnchorBy": -0.007,
+       "inFront": false,
+       "isSubject": true,
+       "encloses": null,
+       "hides": false
+      }
+     ]
+    }
+   },
+   {
+    "direction": 10,
+    "dir": [
+     0.577,
+     -0.577,
+     -0.577
+    ],
+    "distance": 2,
+    "drawn": false,
+    "hang": true
+   },
+   {
+    "direction": 10,
+    "dir": [
+     0.577,
+     -0.577,
+     -0.577
+    ],
+    "distance": 1.4,
+    "drawn": false,
+    "error": "RangeError: Map maximum size exceeded",
+    "camera": [
+     2.694,
+     1.007,
+     1.284
+    ]
+   },
+   {
+    "direction": 10,
+    "dir": [
+     0.577,
+     -0.577,
+     -0.577
+    ],
+    "distance": 1,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     2.463,
+     1.238,
+     1.515
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:8:tag:elbo:24381_145029",
+     "label": "89.71°",
+     "subject": "24381_145029",
+     "anchorDesign": [
+      7.85,
+      11.787,
+      18.644
+     ],
+     "rayLength": 0.899,
+     "toleranceWorld": 0.001,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": [
+      {
+       "objectId": "o:24381_145029:17",
+       "distance": 0.804,
+       "shortOfAnchorBy": 0.095,
+       "inFront": true,
+       "isSubject": true,
+       "encloses": null,
+       "hides": false
+      }
+     ]
+    }
+   },
+   {
+    "direction": 11,
+    "dir": [
+     0.577,
+     -0.577,
+     0.577
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     3.04,
+     0.661,
+     3.246
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:8:tag:elbo:24381_145029",
+     "label": "89.71°",
+     "subject": "24381_145029",
+     "anchorDesign": [
+      7.85,
+      11.787,
+      18.644
+     ],
+     "rayLength": 1.899,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": []
+    }
+   },
+   {
+    "direction": 12,
+    "dir": [
+     0.577,
+     0.577,
+     -0.577
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     3.04,
+     2.969,
+     0.938
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:8:tag:elbo:24381_145029",
+     "label": "89.71°",
+     "subject": "24381_145029",
+     "anchorDesign": [
+      7.85,
+      11.787,
+      18.644
+     ],
+     "rayLength": 1.899,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": []
+    }
+   },
+   {
+    "direction": 13,
+    "dir": [
+     0.577,
+     0.577,
+     0.577
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     3.04,
+     2.969,
+     3.246
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:8:tag:elbo:24381_145029",
+     "label": "89.71°",
+     "subject": "24381_145029",
+     "anchorDesign": [
+      7.85,
+      11.787,
+      18.644
+     ],
+     "rayLength": 1.899,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": [
+      {
+       "objectId": "o:24381_145029:17",
+       "distance": 1.906,
+       "shortOfAnchorBy": -0.007,
+       "inFront": false,
+       "isSubject": true,
+       "encloses": null,
+       "hides": false
+      }
+     ]
+    }
+   }
+  ],
+  "24381_145031": [
+   {
+    "direction": 0,
+    "dir": [
+     1,
+     0,
+     0
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     3.886,
+     -0.826,
+     2.105
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:9:tag:elbo:24381_145031",
+     "label": "PE +18657",
+     "subject": "24381_145031",
+     "anchorDesign": [
+      7.85,
+      9.147,
+      18.657
+     ],
+     "rayLength": 1.9,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": true,
+     "independentVerdict": true,
+     "hits": [
+      {
+       "objectId": "o:24381_145018:2",
+       "distance": 0.132,
+       "shortOfAnchorBy": 1.768,
+       "inFront": true,
+       "isSubject": false,
+       "encloses": false,
+       "hides": true
+      },
+      {
+       "objectId": "o:24381_145018:3",
+       "distance": 0.548,
+       "shortOfAnchorBy": 1.352,
+       "inFront": true,
+       "isSubject": false,
+       "encloses": false,
+       "hides": true
+      },
+      {
+       "objectId": "o:24381_145031:18",
+       "distance": 1.748,
+       "shortOfAnchorBy": 0.152,
+       "inFront": true,
+       "isSubject": true,
+       "encloses": null,
+       "hides": false
+      },
+      {
+       "objectId": "o:24381_145033:20",
+       "distance": 0.132,
+       "shortOfAnchorBy": 1.768,
+       "inFront": true,
+       "isSubject": false,
+       "encloses": false,
+       "hides": true
+      }
+     ]
+    }
+   },
+   {
+    "direction": 1,
+    "dir": [
+     -1,
+     0,
+     0
+    ],
+    "distance": 2,
+    "drawn": false,
+    "error": "RangeError: Map maximum size exceeded",
+    "camera": [
+     -0.114,
+     -0.826,
+     2.105
+    ]
+   },
+   {
+    "direction": 1,
+    "dir": [
+     -1,
+     0,
+     0
+    ],
+    "distance": 1.4,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     0.486,
+     -0.826,
+     2.105
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:9:tag:elbo:24381_145031",
+     "label": "PE +18657",
+     "subject": "24381_145031",
+     "anchorDesign": [
+      7.85,
+      9.147,
+      18.657
+     ],
+     "rayLength": 1.3,
+     "toleranceWorld": 0.002,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": [
+      {
+       "objectId": "o:24381_145031:18",
+       "distance": 1.309,
+       "shortOfAnchorBy": -0.009,
+       "inFront": false,
+       "isSubject": true,
+       "encloses": null,
+       "hides": false
+      }
+     ]
+    }
+   },
+   {
+    "direction": 2,
+    "dir": [
+     0,
+     1,
+     0
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     1.886,
+     1.174,
+     2.105
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:9:tag:elbo:24381_145031",
+     "label": "PE +18657",
+     "subject": "24381_145031",
+     "anchorDesign": [
+      7.85,
+      9.147,
+      18.657
+     ],
+     "rayLength": 1.9,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": true,
+     "independentVerdict": true,
+     "hits": [
+      {
+       "objectId": "o:24381_145018:7",
+       "distance": 1.748,
+       "shortOfAnchorBy": 0.152,
+       "inFront": true,
+       "isSubject": false,
+       "encloses": false,
+       "hides": true
+      },
+      {
+       "objectId": "o:24381_145031:18",
+       "distance": 1.748,
+       "shortOfAnchorBy": 0.152,
+       "inFront": true,
+       "isSubject": true,
+       "encloses": null,
+       "hides": false
+      }
+     ]
+    }
+   },
+   {
+    "direction": 3,
+    "dir": [
+     0,
+     -1,
+     0
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     1.886,
+     -2.826,
+     2.105
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:9:tag:elbo:24381_145031",
+     "label": "PE +18657",
+     "subject": "24381_145031",
+     "anchorDesign": [
+      7.85,
+      9.147,
+      18.657
+     ],
+     "rayLength": 1.9,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": [
+      {
+       "objectId": "o:24381_145031:18",
+       "distance": 1.909,
+       "shortOfAnchorBy": -0.009,
+       "inFront": false,
+       "isSubject": true,
+       "encloses": null,
+       "hides": false
+      }
+     ]
+    }
+   },
+   {
+    "direction": 4,
+    "dir": [
+     0,
+     0,
+     1
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     1.886,
+     -0.826,
+     4.105
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:9:tag:elbo:24381_145031",
+     "label": "PE +18657",
+     "subject": "24381_145031",
+     "anchorDesign": [
+      7.85,
+      9.147,
+      18.657
+     ],
+     "rayLength": 1.9,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": []
+    }
+   },
+   {
+    "direction": 5,
+    "dir": [
+     0,
+     0,
+     -1
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     1.886,
+     -0.826,
+     0.105
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:9:tag:elbo:24381_145031",
+     "label": "PE +18657",
+     "subject": "24381_145031",
+     "anchorDesign": [
+      7.85,
+      9.147,
+      18.657
+     ],
+     "rayLength": 1.9,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": []
+    }
+   },
+   {
+    "direction": 6,
+    "dir": [
+     -0.577,
+     -0.577,
+     -0.577
+    ],
+    "distance": 2,
+    "drawn": false,
+    "error": "RangeError: Map maximum size exceeded",
+    "camera": [
+     0.732,
+     -1.98,
+     0.951
+    ]
+   },
+   {
+    "direction": 6,
+    "dir": [
+     -0.577,
+     -0.577,
+     -0.577
+    ],
+    "distance": 1.4,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     1.078,
+     -1.633,
+     1.297
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:9:tag:elbo:24381_145031",
+     "label": "PE +18657",
+     "subject": "24381_145031",
+     "anchorDesign": [
+      7.85,
+      9.147,
+      18.657
+     ],
+     "rayLength": 1.299,
+     "toleranceWorld": 0.002,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": [
+      {
+       "objectId": "o:24381_145031:18",
+       "distance": 1.307,
+       "shortOfAnchorBy": -0.008,
+       "inFront": false,
+       "isSubject": true,
+       "encloses": null,
+       "hides": false
+      }
+     ]
+    }
+   },
+   {
+    "direction": 7,
+    "dir": [
+     -0.577,
+     -0.577,
+     0.577
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     0.732,
+     -1.98,
+     3.259
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:9:tag:elbo:24381_145031",
+     "label": "PE +18657",
+     "subject": "24381_145031",
+     "anchorDesign": [
+      7.85,
+      9.147,
+      18.657
+     ],
+     "rayLength": 1.899,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": [
+      {
+       "objectId": "o:24381_145031:18",
+       "distance": 1.907,
+       "shortOfAnchorBy": -0.008,
+       "inFront": false,
+       "isSubject": true,
+       "encloses": null,
+       "hides": false
+      }
+     ]
+    }
+   },
+   {
+    "direction": 8,
+    "dir": [
+     -0.577,
+     0.577,
+     -0.577
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     0.732,
+     0.328,
+     0.951
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:9:tag:elbo:24381_145031",
+     "label": "PE +18657",
+     "subject": "24381_145031",
+     "anchorDesign": [
+      7.85,
+      9.147,
+      18.657
+     ],
+     "rayLength": 1.899,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": []
+    }
+   },
+   {
+    "direction": 9,
+    "dir": [
+     -0.577,
+     0.577,
+     0.577
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     0.732,
+     0.328,
+     3.259
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:9:tag:elbo:24381_145031",
+     "label": "PE +18657",
+     "subject": "24381_145031",
+     "anchorDesign": [
+      7.85,
+      9.147,
+      18.657
+     ],
+     "rayLength": 1.899,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": []
+    }
+   },
+   {
+    "direction": 10,
+    "dir": [
+     0.577,
+     -0.577,
+     -0.577
+    ],
+    "distance": 2,
+    "drawn": false,
+    "error": "RangeError: Map maximum size exceeded",
+    "camera": [
+     3.04,
+     -1.98,
+     0.951
+    ]
+   },
+   {
+    "direction": 10,
+    "dir": [
+     0.577,
+     -0.577,
+     -0.577
+    ],
+    "distance": 1.4,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     2.694,
+     -1.633,
+     1.297
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:9:tag:elbo:24381_145031",
+     "label": "PE +18657",
+     "subject": "24381_145031",
+     "anchorDesign": [
+      7.85,
+      9.147,
+      18.657
+     ],
+     "rayLength": 1.299,
+     "toleranceWorld": 0.002,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": []
+    }
+   },
+   {
+    "direction": 11,
+    "dir": [
+     0.577,
+     -0.577,
+     0.577
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     3.04,
+     -1.98,
+     3.259
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:9:tag:elbo:24381_145031",
+     "label": "PE +18657",
+     "subject": "24381_145031",
+     "anchorDesign": [
+      7.85,
+      9.147,
+      18.657
+     ],
+     "rayLength": 1.899,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": []
+    }
+   },
+   {
+    "direction": 12,
+    "dir": [
+     0.577,
+     0.577,
+     -0.577
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     3.04,
+     0.328,
+     0.951
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:9:tag:elbo:24381_145031",
+     "label": "PE +18657",
+     "subject": "24381_145031",
+     "anchorDesign": [
+      7.85,
+      9.147,
+      18.657
+     ],
+     "rayLength": 1.899,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": [
+      {
+       "objectId": "o:24381_145031:18",
+       "distance": 1.803,
+       "shortOfAnchorBy": 0.095,
+       "inFront": true,
+       "isSubject": true,
+       "encloses": null,
+       "hides": false
+      }
+     ]
+    }
+   },
+   {
+    "direction": 13,
+    "dir": [
+     0.577,
+     0.577,
+     0.577
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     3.04,
+     0.328,
+     3.259
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:9:tag:elbo:24381_145031",
+     "label": "PE +18657",
+     "subject": "24381_145031",
+     "anchorDesign": [
+      7.85,
+      9.147,
+      18.657
+     ],
+     "rayLength": 1.899,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": [
+      {
+       "objectId": "o:24381_145031:18",
+       "distance": 1.804,
+       "shortOfAnchorBy": 0.095,
+       "inFront": true,
+       "isSubject": true,
+       "encloses": null,
+       "hides": false
+      }
+     ]
+    }
+   }
+  ],
+  "24381_145033": [
+   {
+    "direction": 0,
+    "dir": [
+     1,
+     0,
+     0
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     5.806,
+     -0.826,
+     2.113
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:10:tag:elbo:24381_145033",
+     "label": "90°",
+     "subject": "24381_145033",
+     "anchorDesign": [
+      9.77,
+      9.147,
+      18.665
+     ],
+     "rayLength": 1.9,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": [
+      {
+       "objectId": "o:24381_145033:20",
+       "distance": 1.909,
+       "shortOfAnchorBy": -0.009,
+       "inFront": false,
+       "isSubject": true,
+       "encloses": null,
+       "hides": false
+      }
+     ]
+    }
+   },
+   {
+    "direction": 1,
+    "dir": [
+     -1,
+     0,
+     0
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     1.806,
+     -0.826,
+     2.113
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:10:tag:elbo:24381_145033",
+     "label": "90°",
+     "subject": "24381_145033",
+     "anchorDesign": [
+      9.77,
+      9.147,
+      18.665
+     ],
+     "rayLength": 1.9,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": true,
+     "independentVerdict": true,
+     "hits": [
+      {
+       "objectId": "o:24381_145018:2",
+       "distance": 1.332,
+       "shortOfAnchorBy": 0.568,
+       "inFront": true,
+       "isSubject": false,
+       "encloses": false,
+       "hides": true
+      },
+      {
+       "objectId": "o:24381_145018:3",
+       "distance": 0.132,
+       "shortOfAnchorBy": 1.768,
+       "inFront": true,
+       "isSubject": false,
+       "encloses": false,
+       "hides": true
+      },
+      {
+       "objectId": "o:24381_145031:18",
+       "distance": 0.132,
+       "shortOfAnchorBy": 1.768,
+       "inFront": true,
+       "isSubject": false,
+       "encloses": false,
+       "hides": true
+      },
+      {
+       "objectId": "o:24381_145033:20",
+       "distance": 1.748,
+       "shortOfAnchorBy": 0.152,
+       "inFront": true,
+       "isSubject": true,
+       "encloses": null,
+       "hides": false
+      }
+     ]
+    }
+   },
+   {
+    "direction": 2,
+    "dir": [
+     0,
+     1,
+     0
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     3.806,
+     1.174,
+     2.113
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:10:tag:elbo:24381_145033",
+     "label": "90°",
+     "subject": "24381_145033",
+     "anchorDesign": [
+      9.77,
+      9.147,
+      18.665
+     ],
+     "rayLength": 1.9,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": true,
+     "independentVerdict": true,
+     "hits": [
+      {
+       "objectId": "o:24381_145018:9",
+       "distance": 1.172,
+       "shortOfAnchorBy": 0.728,
+       "inFront": true,
+       "isSubject": false,
+       "encloses": false,
+       "hides": true
+      },
+      {
+       "objectId": "o:24381_145033:20",
+       "distance": 1.748,
+       "shortOfAnchorBy": 0.152,
+       "inFront": true,
+       "isSubject": true,
+       "encloses": null,
+       "hides": false
+      },
+      {
+       "objectId": "o:24381_145035:21",
+       "distance": 0.826,
+       "shortOfAnchorBy": 1.074,
+       "inFront": true,
+       "isSubject": false,
+       "encloses": false,
+       "hides": true
+      }
+     ]
+    }
+   },
+   {
+    "direction": 3,
+    "dir": [
+     0,
+     -1,
+     0
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     3.806,
+     -2.826,
+     2.113
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:10:tag:elbo:24381_145033",
+     "label": "90°",
+     "subject": "24381_145033",
+     "anchorDesign": [
+      9.77,
+      9.147,
+      18.665
+     ],
+     "rayLength": 1.9,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": [
+      {
+       "objectId": "o:24381_145033:20",
+       "distance": 1.909,
+       "shortOfAnchorBy": -0.009,
+       "inFront": false,
+       "isSubject": true,
+       "encloses": null,
+       "hides": false
+      }
+     ]
+    }
+   },
+   {
+    "direction": 4,
+    "dir": [
+     0,
+     0,
+     1
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     3.806,
+     -0.826,
+     4.113
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:10:tag:elbo:24381_145033",
+     "label": "90°",
+     "subject": "24381_145033",
+     "anchorDesign": [
+      9.77,
+      9.147,
+      18.665
+     ],
+     "rayLength": 1.9,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": []
+    }
+   },
+   {
+    "direction": 5,
+    "dir": [
+     0,
+     0,
+     -1
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     3.806,
+     -0.826,
+     0.113
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:10:tag:elbo:24381_145033",
+     "label": "90°",
+     "subject": "24381_145033",
+     "anchorDesign": [
+      9.77,
+      9.147,
+      18.665
+     ],
+     "rayLength": 1.9,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": []
+    }
+   },
+   {
+    "direction": 6,
+    "dir": [
+     -0.577,
+     -0.577,
+     -0.577
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     2.652,
+     -1.98,
+     0.959
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:10:tag:elbo:24381_145033",
+     "label": "90°",
+     "subject": "24381_145033",
+     "anchorDesign": [
+      9.77,
+      9.147,
+      18.665
+     ],
+     "rayLength": 1.899,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": []
+    }
+   },
+   {
+    "direction": 7,
+    "dir": [
+     -0.577,
+     -0.577,
+     0.577
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     2.652,
+     -1.98,
+     3.267
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:10:tag:elbo:24381_145033",
+     "label": "90°",
+     "subject": "24381_145033",
+     "anchorDesign": [
+      9.77,
+      9.147,
+      18.665
+     ],
+     "rayLength": 1.899,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": []
+    }
+   },
+   {
+    "direction": 8,
+    "dir": [
+     -0.577,
+     0.577,
+     -0.577
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     2.652,
+     0.328,
+     0.959
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:10:tag:elbo:24381_145033",
+     "label": "90°",
+     "subject": "24381_145033",
+     "anchorDesign": [
+      9.77,
+      9.147,
+      18.665
+     ],
+     "rayLength": 1.899,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": [
+      {
+       "objectId": "o:24381_145033:20",
+       "distance": 1.803,
+       "shortOfAnchorBy": 0.095,
+       "inFront": true,
+       "isSubject": true,
+       "encloses": null,
+       "hides": false
+      }
+     ]
+    }
+   },
+   {
+    "direction": 9,
+    "dir": [
+     -0.577,
+     0.577,
+     0.577
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     2.652,
+     0.328,
+     3.267
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:10:tag:elbo:24381_145033",
+     "label": "90°",
+     "subject": "24381_145033",
+     "anchorDesign": [
+      9.77,
+      9.147,
+      18.665
+     ],
+     "rayLength": 1.899,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": [
+      {
+       "objectId": "o:24381_145033:20",
+       "distance": 1.804,
+       "shortOfAnchorBy": 0.095,
+       "inFront": true,
+       "isSubject": true,
+       "encloses": null,
+       "hides": false
+      }
+     ]
+    }
+   },
+   {
+    "direction": 10,
+    "dir": [
+     0.577,
+     -0.577,
+     -0.577
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     4.96,
+     -1.98,
+     0.959
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:10:tag:elbo:24381_145033",
+     "label": "90°",
+     "subject": "24381_145033",
+     "anchorDesign": [
+      9.77,
+      9.147,
+      18.665
+     ],
+     "rayLength": 1.899,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": [
+      {
+       "objectId": "o:24381_145033:20",
+       "distance": 1.907,
+       "shortOfAnchorBy": -0.008,
+       "inFront": false,
+       "isSubject": true,
+       "encloses": null,
+       "hides": false
+      }
+     ]
+    }
+   },
+   {
+    "direction": 11,
+    "dir": [
+     0.577,
+     -0.577,
+     0.577
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     4.96,
+     -1.98,
+     3.267
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:10:tag:elbo:24381_145033",
+     "label": "90°",
+     "subject": "24381_145033",
+     "anchorDesign": [
+      9.77,
+      9.147,
+      18.665
+     ],
+     "rayLength": 1.899,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": [
+      {
+       "objectId": "o:24381_145033:20",
+       "distance": 1.907,
+       "shortOfAnchorBy": -0.008,
+       "inFront": false,
+       "isSubject": true,
+       "encloses": null,
+       "hides": false
+      }
+     ]
+    }
+   },
+   {
+    "direction": 12,
+    "dir": [
+     0.577,
+     0.577,
+     -0.577
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     4.96,
+     0.328,
+     0.959
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:10:tag:elbo:24381_145033",
+     "label": "90°",
+     "subject": "24381_145033",
+     "anchorDesign": [
+      9.77,
+      9.147,
+      18.665
+     ],
+     "rayLength": 1.899,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": []
+    }
+   },
+   {
+    "direction": 13,
+    "dir": [
+     0.577,
+     0.577,
+     0.577
+    ],
+    "distance": 2,
+    "drawn": true,
+    "lodHidden": null,
+    "camera": [
+     4.96,
+     0.328,
+     3.267
+    ],
+    "probe": {
+     "id": "24381_145018:isoline:10:tag:elbo:24381_145033",
+     "label": "90°",
+     "subject": "24381_145033",
+     "anchorDesign": [
+      9.77,
+      9.147,
+      18.665
+     ],
+     "rayLength": 1.899,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": []
+    }
+   }
+  ]
+ },
+ "showcases": {
+  "own-piece-in-front": {
+   "refno": "24381_145019",
+   "camera": {
+    "position": [
+     -3.776,
+     -2.796,
+     -2.097
+    ],
+    "target": [
+     -2.622143681640625,
+     -1.6416695019531247,
+     -3.250641191406249
+    ]
+   },
+   "direction": [
+    -0.577,
+    -0.577,
+    0.577
+   ],
+   "distance": 2,
+   "state": {
+    "drawn": true,
+    "occluded": false,
+    "subject": "24381_145019",
+    "probe": {
+     "id": "24381_145018:isoline:0:tag:elbo:24381_145019",
+     "label": "89.75°",
+     "subject": "24381_145019",
+     "anchorDesign": [
+      3.342,
+      8.331,
+      13.301
+     ],
+     "rayLength": 1.899,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": false,
+     "independentVerdict": false,
+     "hits": [
+      {
+       "objectId": "o:24381_145019:11",
+       "distance": 1.799,
+       "shortOfAnchorBy": 0.1,
+       "inFront": true,
+       "isSubject": true,
+       "encloses": null,
+       "hides": false
+      }
+     ]
+    }
+   }
+  },
+  "hidden-by-other": {
+   "refno": "24381_145019",
+   "camera": {
+    "position": [
+     -4.622,
+     -1.642,
+     -3.251
+    ],
+    "target": [
+     -2.622143681640625,
+     -1.6416695019531247,
+     -3.250641191406249
+    ]
+   },
+   "direction": [
+    -1,
+    0,
+    0
+   ],
+   "distance": 2,
+   "state": {
+    "drawn": true,
+    "occluded": true,
+    "subject": "24381_145019",
+    "probe": {
+     "id": "24381_145018:isoline:0:tag:elbo:24381_145019",
+     "label": "89.75°",
+     "subject": "24381_145019",
+     "anchorDesign": [
+      3.342,
+      8.331,
+      13.301
+     ],
+     "rayLength": 1.9,
+     "toleranceWorld": 0.003,
+     "kernelOccluded": true,
+     "independentVerdict": true,
+     "hits": [
+      {
+       "objectId": "o:24381_145018:8",
+       "distance": 1.298,
+       "shortOfAnchorBy": 0.602,
+       "inFront": true,
+       "isSubject": false,
+       "encloses": false,
+       "hides": true
+      },
+      {
+       "objectId": "o:24381_145019:11",
+       "distance": 1.748,
+       "shortOfAnchorBy": 0.152,
+       "inFront": true,
+       "isSubject": true,
+       "encloses": null,
+       "hides": false
+      }
+     ]
+    }
+   }
+  }
+ },
+ "reopens": 4,
+ "pageErrors": [
+  "RangeError: Map maximum size exceeded"
+ ]
+}

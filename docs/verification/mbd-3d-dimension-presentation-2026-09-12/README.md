@@ -151,8 +151,18 @@
 - **独立复核**（`pw-inspection-b-probe-54.mjs` → `inspection-real-b-probe.json`）：在页内用 `DTXLayer.raycastObject` 自己重发同一条射线（近平面点 → 锚点，ε 同内核取法），逐个候选列出命中距离、是否 `subject` 自己的 piece、是否包着锚点，再独立下结论——三个相机 × 2 张带 `subject` 的标签 = 6 例，与内核的 `derived.occluded` **6/6 一致**。远景：`X 9201`（`24381_145032`）只打到 `o:24381_145032:19`（命中距离 = 射线长，锚点就在它表面）；`Copy-of-1RCS002VP` 只打到 `o:24381_145035:21`（比锚点近 0.16 m，即第一轮误标的那半个阀体）。背面：`Copy-of-1RCS002VP` 打到 `o:24381_145018:5`（比锚点近 3.0 m，真遮挡）与 `o:24381_145035:21`（自己）。中景：两张都只打到自己的 piece。端点卡片 `X 1516`（Head）裸探锚点时射线会先打到管口 piece `o:24381_145018:8`（比锚点近 74 mm = 管半径）——它没有 refno 可排除，正是要留在卡片取法上的原因。
 - engineering 三个相机全部 α = 1、三种材质 `transparent=false`、`occluded` 全无；切回 engineering 复原（`restored.alphas=[1]`）；全程 `/api/mbd/v2/pipe/**` 请求 2 次（三轮都是 2 次；三个相机来回切模式一次都没多拉）；`pageerror` 0（两个脚本都是）。
 
+**ELBO 近景补验（2026-09-14 00:1x–00:4x，`pw-inspection-elbo-54.mjs` → `inspection-real-elbo-probe.json`）**：`tag:elbo:<refno>` 是 `secondary` 档，源字高投影 ≥ `theme.sourceTextHeightMinPx`（11 px）才画，三个标准相机一张都没画出来，所以单独把相机推到每个弯头跟前。9 个 ELBO（每个一块 DTX piece `o:<refno>:<n>`）× 14 个方向（6 轴向 + 8 对角）× 距标签目标 2.0 / 1.4 / 1.0 m 由远到近、画出即止；inspection 下读内核 `derived.occluded`，并用同一条射线在页内独立复核（同 b-probe 取法）。151 个视图里 124 个画出了 ELBO 标签（每个弯头 13–14 个方向）：
+
+- **独立复核 124/124 与内核一致**；被标遮挡 20 个视图，每一个都能在射线上点出至少一块真正挡在前面的别的 piece（直管 `o:24381_145018:n`、相邻弯头、阀门）。
+- **弯头自己的 piece 挡在锚点前面**的视图有 46 个（90° 弯头每个 4 个方向；38.55° 的 `24381_145023` 锚点就在自己体内，14/14 方向都是；最深比锚点近 152 mm）——其中 26 个再无别的几何，标签保持 0.65（`inspection-real-elbo-own-piece.png`：`24381_145019` 从对角看，自己的 piece 比锚点近 0.2 m，`89.75° / PE +13301` 亮着）；另外 20 个是自己的 piece 之外还有别的 piece 挡着，淡到 0.35（`inspection-real-elbo-hidden.png`：同一个弯头从 −X 看，被 `1834.19` 那根直管 `o:24381_145018:8` 挡住）。这就是 `subject` 排除要解决的那一档：第一轮裸探锚点在这 46 个视图里会把标签全部误标。
+- 「包着锚点的体」在 ELBO 上一次都没出现（0/124）：弯头锚点是两条轴线的角点，除了弯头自己没有别的体包着它。
+- **顺带撞出一个既有问题**（与本口径无关，未修）：27/151 个视图（23 个 `RangeError: Map maximum size exceeded`、4 个渲染进程卡死 > 25 s）在 `kernel/hit/hitIndex.ts::buildHitIndex` 里——近景时别的尺寸有顶点落到相机平面附近，投影坐标巨大，命中区域按 64 px 格子逐格登记时格子数以亿计。触发相机例：`24381_145023` 目标 `targetDesign` 沿 +X 2 m（`elbo-probe.json` 里 `error` / `hang` 的视图都带 `camera`）。真实用户把相机推到管件跟前也可能撞上（`pageerror` 1 次就是宿主帧循环自己那一次布局抛的），修法在 hitIndex（格子范围先与视口矩形相交、或每个区域封顶格子数），不在本线。
+
 | 文件 | 说明 |
 | --- | --- |
+| `inspection-real-elbo-own-piece.png` | ELBO 近景 · `24381_145019` 对角 2 m：自己的 piece 比锚点近 0.2 m，标签 0.65（排除生效） |
+| `inspection-real-elbo-hidden.png` | ELBO 近景 · 同一弯头从 −X 2 m：被直管 `o:24381_145018:8` 挡住，标签 0.35 |
+| `inspection-real-elbo-probe.json` | 9 弯头 × 14 方向 × 3 距离的逐视图读数（画出 / LOD / 内核 flag / 独立射线命中 / 出错相机） |
 | `inspection-real-far.png` | 第三轮 · 远景 inspection：只有 `900.51` 淡到 0.35，四张卡片 0.65 |
 | `inspection-real-far-anchor-probe.png` | 第一轮 · 同一相机：`Copy-of-1RCS002VP` / `X 1516` / `接 …` 卡片被误标遮挡 |
 | `inspection-real-behind.png` | 第三轮 · 背面：`1834.19`（尾段在管体后）与 `Copy-of-1RCS002VP`（阀门在直管后）淡到 0.35，其余 0.65 |
@@ -160,4 +170,4 @@
 | `inspection-real-result.json` | 第三轮逐相机原始读数（相机位姿、engineering / inspection 两态、耗时、签名） |
 | `inspection-real-b-probe.json` | 第三轮独立射线复核：逐相机、逐标签的候选命中（距离、subject、encloses、hides）与独立结论 |
 
-**未覆盖**：2k 记录时每条一次射线的耗时未量（本样本 63 条记录 / 15–16 条画出，inspection 完整布局 3–5 ms）；「包着锚点的体」用「锚点前 ε 处向前再发一条射线能穿出」判定，凹体（弯头、绕回来的管段）在锚点前后各穿一次时会被当成包着锚点而不算遮挡，本样本三个相机没有这种情形；弯头标签（`tag:elbo`）本样本远 / 中景全被 LOD 收起，第三轮没有一张画出来，`subject` 排除对 ELBO piece 的效果未实测。
+**未覆盖**：2k 记录时每条一次射线的耗时未量（本样本 63 条记录 / 15–16 条画出，inspection 完整布局 3–5 ms）；「包着锚点的体」用「锚点前 ε 处向前再发一条射线能穿出」判定，凹体（弯头、绕回来的管段）在锚点前后各穿一次时会被当成包着锚点而不算遮挡，本样本三个标准相机与 124 个 ELBO 近景视图都没有出现这种情形（ELBO 上「包着锚点的体」为 0）；`buildHitIndex` 的近景溢出（见上）未修。
