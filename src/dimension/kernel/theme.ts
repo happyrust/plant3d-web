@@ -111,6 +111,15 @@ export type DimensionTheme = Readonly<{
      * style: tags sit above the pipe like drawing call-outs.
      */
     upwardBias: Readonly<Record<'card' | 'frame' | 'pill', number>>;
+    /**
+     * Where a tag goes when every candidate position intrudes on something
+     * (a close-up where a component's projected box swallows all rings):
+     * `least-intrusion` takes the candidate with the smallest weighted
+     * covered area on any ring, which may lead the tag far out; `first-ring`
+     * only looks at the nearest ring, so the tag stays by its anchor on a
+     * short leader and accepts the overlap.
+     */
+    blockedFallback: 'least-intrusion' | 'first-ring';
     /** Stroke widths. */
     leaderWidthPx: number;
     borderWidthPx: number;
@@ -174,6 +183,7 @@ export const SOLVESPACE_DIMENSION_THEME: DimensionTheme = {
     standoffPx: { card: 96, frame: 64, pill: 34 },
     standoffSizeRatio: 0.35,
     upwardBias: { card: 1, frame: 1, pill: 0.5 },
+    blockedFallback: 'least-intrusion',
     leaderWidthPx: 0.9,
     borderWidthPx: 1,
     frameWidthPx: 1.2,

@@ -515,6 +515,49 @@ describe('placeTagBillboards', () => {
     expect(chosen.x + chosen.width / 2 - 200).toBeCloseTo(2.4 * standoff, 6);
     expect(chosen.y + chosen.height / 2 - 200).toBeCloseTo(0, 6);
     expect(placed!.derived.tag!.candidate).toBeLessThan(plan.onScreen);
+    expect(plan.rings[placed!.derived.tag!.candidate]).toBe(2);
+  });
+
+  it('stays on the nearest ring when blocked everywhere under the first-ring fallback', () => {
+    const wide: LayoutContext = {
+      ...context(),
+      projector: { ...createTestProjector(), widthCssPx: 2000, heightCssPx: 2000 },
+    };
+    const plan = planTagBillboard(input, spec, wide);
+    if (!isTagBillboardPlan(plan)) throw new Error('expected plan');
+    const { body } = plan.materialize(0).derived.tag!;
+    const standoff = rules.standoffPx.card + rules.standoffSizeRatio * Math.max(body.width, body.height);
+    // A box whose edge cuts through the outermost ring's bodies, plus a value
+    // on the preferred body: no candidate is clear, the least covered ones
+    // are on the outer ring (half out of the box), the preferred position is
+    // the worst.
+    const box = rectPolygon({ x: -1000, y: -1000, width: 1200 + 3.4 * standoff, height: 1200 + 3.4 * standoff });
+    const value: LayoutResult = {
+      ...placeholder('dim'),
+      primitives: [{ kind: 'line', from: [0, 0], to: [1, 1], part: 'dimension', styleRole: 'external' }],
+      labelBounds: plan.candidates[0]!,
+    };
+    const [, anywhere] = placeTagBillboards([value, placeholder('tag')], [{ index: 1, id: 'tag', plan }], { polygons: [box] });
+    expect(plan.rings[anywhere!.derived.tag!.candidate]).toBeGreaterThan(0);
+
+    const nearOnly = planTagBillboard(
+      input,
+      spec,
+      { ...wide, theme: { ...wide.theme, tag: { ...wide.theme.tag, blockedFallback: 'first-ring' } } },
+    );
+    if (!isTagBillboardPlan(nearOnly)) throw new Error('expected plan');
+    expect(nearOnly.blockedFallback).toBe('first-ring');
+    const [, near] = placeTagBillboards([value, placeholder('tag')], [{ index: 1, id: 'tag', plan: nearOnly }], { polygons: [box] });
+    const chosen = near!.derived.tag!.candidate;
+    expect(nearOnly.rings[chosen]).toBe(0);
+    // … and still not the one under the value: the least intruding of the ring.
+    expect(chosen).not.toBe(0);
+    const centre = near!.derived.tag!.body;
+    expect(Math.hypot(centre.x + centre.width / 2 - 200, centre.y + centre.height / 2 - 200)).toBeCloseTo(standoff, 6);
+
+    // A clear candidate still wins outright under either policy.
+    const [clear] = placeTagBillboards([placeholder('tag')], [{ index: 0, id: 'tag', plan: nearOnly }]);
+    expect(clear!.derived.tag!.candidate).toBe(0);
   });
 });
 

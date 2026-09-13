@@ -55,12 +55,16 @@ import type { LayoutContext } from './context';
 export type TagBillboardPlan = Readonly<{
   /** Body rectangles (screen, with the collision margin) per candidate, preferred first. */
   candidates: readonly ScreenRect[];
+  /** Ring (standoff step, 0 = nearest) each candidate lies on, same order. */
+  rings: readonly number[];
   /**
    * How many leading candidates lie whole inside the viewport; 0 when none
    * does (anchor near or beyond the edge). The placement pass never lets a
    * tag leave the screen to dodge an obstacle while it has such a candidate.
    */
   onScreen: number;
+  /** Where the tag goes when every candidate intrudes (`theme.tag.blockedFallback`). */
+  blockedFallback: 'least-intrusion' | 'first-ring';
   /** Screen rectangle every candidate lies in. */
   envelope: ScreenRect;
   /** Design Space point the body hangs off (leader target or solver position). */
@@ -300,17 +304,21 @@ export function planTagBillboard(
     width,
     height,
   });
-  const centres: Vec2[] = spec.target ? [] : [anchor];
-  for (const scale of CANDIDATE_DISTANCE_SCALES) {
+  // A leaderless tag's own position counts as the nearest ring.
+  const centres: { centre: Vec2; ring: number }[] = spec.target ? [] : [{ centre: anchor, ring: 0 }];
+  for (const [ring, scale] of CANDIDATE_DISTANCE_SCALES.entries()) {
     for (const degrees of CANDIDATE_ANGLES_DEG) {
       const turned = rotate2(direction, degrees);
-      centres.push([
-        anchor[0] + turned[0] * standoff * scale,
-        anchor[1] + turned[1] * standoff * scale,
-      ]);
+      centres.push({
+        centre: [
+          anchor[0] + turned[0] * standoff * scale,
+          anchor[1] + turned[1] * standoff * scale,
+        ],
+        ring,
+      });
     }
   }
-  const bodies = centres.map(bodyAt);
+  const bodies = centres.map(({ centre, ring }) => ({ body: bodyAt(centre), ring }));
   // Stable partition: positions that keep the whole body — margin included,
   // since that is the rectangle the placement pass reasons about — on
   // screen first.
@@ -319,12 +327,13 @@ export function planTagBillboard(
     projector.widthCssPx,
     projector.heightCssPx,
   );
-  const onScreenBodies = bodies.filter(body => onScreen(body));
+  const onScreenBodies = bodies.filter(({ body }) => onScreen(body));
   const ordered = [
     ...onScreenBodies,
-    ...bodies.filter(body => !onScreen(body)),
+    ...bodies.filter(({ body }) => !onScreen(body)),
   ];
-  const candidates = ordered.map(body => expandRect(body, BODY_MARGIN_PX));
+  const candidates = ordered.map(({ body }) => expandRect(body, BODY_MARGIN_PX));
+  const rings = ordered.map(({ ring }) => ring);
   const envelope = unionRects(candidates);
 
   const radius = pill ? height / 2 : rules.cornerRadiusPx;
@@ -341,7 +350,7 @@ export function planTagBillboard(
 
   const materialize = (candidate: number): LayoutResult => {
     const index = Math.min(Math.max(0, candidate), ordered.length - 1);
-    const body = ordered[index]!;
+    const { body } = ordered[index]!;
     // Every vertex hangs off the 3D anchor with a screen offset, so the whole
     // tag follows the anchor rigidly as the camera moves between layouts.
     const at = (screen: Vec2): SceneVertex =>
@@ -416,7 +425,9 @@ export function planTagBillboard(
 
   return {
     candidates,
+    rings,
     onScreen: onScreenBodies.length,
+    blockedFallback: rules.blockedFallback,
     envelope,
     anchor: anchor3,
     priority: STYLE_PRIORITY[spec.style],
@@ -594,7 +605,8 @@ export function collectTagObstacles(
  * pills, ties by id — each taking its first candidate clear of everything;
  * when no candidate is clear, the one that intrudes least wins (weighted
  * covered area: labels, tags and overlays over strokes over component
- * boxes), earlier candidates on a tie. A
+ * boxes), earlier candidates on a tie — on any ring, or on the nearest ring
+ * only under `theme.tag.blockedFallback = 'first-ring'`. A
  * tag with candidates whole on screen only competes among those: leaving the
  * screen (a clipped body) is never the way round an obstacle. The same view
  * always yields the same placement.
@@ -647,20 +659,33 @@ export function placeTagBillboards(
     const considered = tag.plan.onScreen > 0
       ? tag.plan.candidates.slice(0, tag.plan.onScreen)
       : tag.plan.candidates;
-    let best = 0;
+    let best = -1;
     let bestScore = Number.POSITIVE_INFINITY;
+    let bestNear = -1;
+    let bestNearScore = Number.POSITIVE_INFINITY;
     for (const [index, candidate] of considered.entries()) {
       const score = intrusion(candidate);
       if (score === 0) {
         best = index;
+        bestScore = 0;
         break;
       }
       if (score < bestScore - INTRUSION_TIE_PX2) {
         bestScore = score;
         best = index;
       }
+      if (tag.plan.rings[index] === 0 && score < bestNearScore - INTRUSION_TIE_PX2) {
+        bestNearScore = score;
+        bestNear = index;
+      }
     }
-    const result = tag.plan.materialize(best);
+    // Nothing clear: `first-ring` keeps the tag on its nearest ring (short
+    // leader, overlap accepted) as long as that ring has a candidate to
+    // consider; `least-intrusion` takes the least covered one anywhere.
+    if (bestScore !== 0 && tag.plan.blockedFallback === 'first-ring' && bestNear >= 0) {
+      best = bestNear;
+    }
+    const result = tag.plan.materialize(Math.max(0, best));
     results[tag.index] = result;
     labels.push(result.labelBounds);
   }
