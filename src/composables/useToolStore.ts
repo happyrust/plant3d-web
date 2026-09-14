@@ -1733,7 +1733,7 @@ export function refreshToolStorePersistedScope(opts?: RefreshToolStorePersistedS
   if (nextScope !== storageScope.value) {
     // 换容器前先把内存里的状态刷进旧 key：deep watch 是异步刷的，同一 tick 里的最后一笔编辑还没落盘，
     // 不刷的话它会跟着 applyPersistedState 之后的那次 watch 写进新 key——A 的草稿进了 B 的容器。
-    writePersistedSnapshot(storageScope.value);
+    recordAnnotationDraftPersistOutcome(storageScope.value, writePersistedSnapshot(storageScope.value));
   }
   storageScope.value = nextScope;
   applyPersistedState(loadPersisted(nextScope));
@@ -1783,9 +1783,11 @@ if (typeof window !== 'undefined') {
   window.addEventListener('modelProjectChanged', refreshPersistedScope as EventListener);
 }
 
-/** 把当前内存状态整份写进 `scope` 作用域的 V7 容器（deep watch 与切 scope 前的刷盘共用） */
-function writePersistedSnapshot(scope: string): void {
-  if (typeof localStorage === 'undefined') return;
+export type PersistedSnapshotWriteOutcome = { ok: true } | { ok: false; error: string };
+
+/** 把当前内存状态整份写进 `scope` 作用域的 V7 容器（deep watch 与切 scope 前的刷盘共用）；写没写成如实回报，不吞 */
+function writePersistedSnapshot(scope: string): PersistedSnapshotWriteOutcome {
+  if (typeof localStorage === 'undefined') return { ok: false, error: '本机存储不可用' };
   const payload: PersistedStateV7 = {
     version: 7,
     measurements: unifiedMeasurementRecords.value,
@@ -1799,10 +1801,57 @@ function writePersistedSnapshot(scope: string): void {
     archiveLegacyDimensionsForScope(localStorage, scope);
     archiveLegacyDimensionBridgeForScope(localStorage, scope);
     localStorage.setItem(withStorageScope(STORAGE_KEY_V7, scope), JSON.stringify(payload));
-  } catch {
-    // ignore
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
   }
 }
+
+// ---------------------------------------------------------------------------
+// U0 本机草稿流水（方案 2026-09-14 §3.6「本机草稿」那一行的事实来源）
+//
+// `revision`：四类批注数组每变一次 +1（用户编辑、程序性载入 / 导入 / 清空都算——它记的是「容器内容变了几次」，
+// 不判断是谁改的）；`persistedRevision`：最近一次成功写进本机容器时的 revision；`failedRevision / error`：最近一次
+// 写失败（配额满、存储被禁用）时的 revision 与原因，成功写入后清掉。接线层（useAnnotationDraftScopeSync）
+// 把它派发成草稿会话的 edit / local-persisted / local-persist-failed，面板据此显示「本机已存 / 未存 / 写入失败」，
+// 不再把「localStorage 写了」当成「已保存」。
+// ---------------------------------------------------------------------------
+
+export type AnnotationDraftJournal = {
+  revision: number;
+  persistedRevision: number;
+  failedRevision: number | null;
+  error: string | null;
+  /** 最近一次写入（成功或失败）针对的作用域字串 */
+  storageScope: string;
+  at: number;
+};
+
+const annotationDraftJournal = shallowRef<AnnotationDraftJournal>({
+  revision: 0,
+  persistedRevision: 0,
+  failedRevision: null,
+  error: null,
+  storageScope: '',
+  at: 0,
+});
+
+function recordAnnotationDraftPersistOutcome(scope: string, outcome: PersistedSnapshotWriteOutcome): void {
+  const prev = annotationDraftJournal.value;
+  annotationDraftJournal.value = outcome.ok
+    ? { ...prev, persistedRevision: prev.revision, failedRevision: null, error: null, storageScope: scope, at: Date.now() }
+    : { ...prev, failedRevision: prev.revision, error: outcome.error, storageScope: scope, at: Date.now() };
+}
+
+// 先于下面的刷盘 watch 注册：同一次 flush 里先记「内容变了」，再记「写进去了」。
+watch(
+  () => [annotations.value, obbAnnotations.value, cloudAnnotations.value, rectAnnotations.value],
+  () => {
+    const prev = annotationDraftJournal.value;
+    annotationDraftJournal.value = { ...prev, revision: prev.revision + 1, at: Date.now() };
+  },
+  { deep: true }
+);
 
 watch(
   () => ({
@@ -1814,7 +1863,7 @@ watch(
     rectAnnotations: rectAnnotations.value,
   }),
   () => {
-    writePersistedSnapshot(storageScope.value);
+    recordAnnotationDraftPersistOutcome(storageScope.value, writePersistedSnapshot(storageScope.value));
   },
   { deep: true }
 );
@@ -3451,6 +3500,7 @@ export function useToolStore() {
     setAnnotationDraftScope,
     getAnnotationDraftScope,
     getUnattributedDraftSummary,
+    annotationDraftJournal,
 
     // 评论/意见管理
     addCommentToAnnotation,

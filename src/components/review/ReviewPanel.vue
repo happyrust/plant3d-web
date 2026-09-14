@@ -23,6 +23,7 @@ import {
   XCircle,
 } from 'lucide-vue-next';
 
+import AnnotationDraftStatusBar from './AnnotationDraftStatusBar.vue';
 import AnnotationSheetWorkspace from './AnnotationSheetWorkspace.vue';
 import {
   buildAnnotationWorkspaceItems,
@@ -79,6 +80,7 @@ import {
 } from '@/api/reviewApi';
 import { useAnnotationBindingResolve } from '@/composables/useAnnotationBindingResolve';
 import { useAnnotationDraftScopeSync } from '@/composables/useAnnotationDraftScopeSync';
+import { useAnnotationDraftSession } from '@/composables/useAnnotationDraftSession';
 import { syncAnnotationReviewStates } from '@/composables/useAnnotationReviewStateSync';
 import { saveAnnotationBasicFields, saveAnnotationSeverity } from '@/composables/useAnnotationSeveritySync';
 import { refreshCommentThread } from '@/composables/useCommentThread';
@@ -388,6 +390,13 @@ const currentReviewUserId = computed<string | null>(() => {
 // U0 草稿 scope：任务 / 用户 / 项目一变就切本机草稿容器（flush:'sync'，抢在下面 watch(currentTask) 的确认记录回放之前），
 // 旧 project|db 容器从此只读，由 <UnattributedDraftNotice> 数条数提示。面板卸载时自动回到旧作用域。
 useAnnotationDraftScopeSync({ userId: () => currentReviewUserId.value });
+/** U0 草稿会话：本机写入成功 / 失败由 useToolStore.annotationDraftJournal 经同步层派发进来，喂给三行状态条 */
+const draftSession = useAnnotationDraftSession();
+const lastConfirmedAt = computed<number | null>(() => {
+  const records = currentTaskConfirmedRecords.value;
+  const last = records[records.length - 1];
+  return last ? last.confirmedAt : null;
+});
 
 /** 仅任务发起人在 sj（设计）节点可补传 / 删除附件；其余节点只读 */
 const canEditTaskAttachments = computed(() => {
@@ -2022,6 +2031,15 @@ function handleAnnotationQueueCompleted() {
           </div>
         </div>
       </div>
+
+      <!-- U0 三行状态：本机草稿 / 云端草稿（U3 前不显示）/ 已确认到修订 N（方案 §3.6，d-565 #4） -->
+      <AnnotationDraftStatusBar v-if="canCreateReviewEvidence && (currentTask || isExternalFormFocused)"
+        :status="draftSession.status.value"
+        :draft-count="pendingAnnotationCount"
+        :has-unconfirmed-changes="hasUnsavedChanges"
+        :confirmed-record-count="currentTaskConfirmedRecords.length"
+        :last-confirmed-at="lastConfirmedAt"
+        :local-write-error="draftSession.state.value.localWriteError" />
 
       <!-- 确认操作 -->
       <div v-if="hasPendingData && canCreateReviewEvidence" class="mt-3 border-t border-slate-200 pt-3">

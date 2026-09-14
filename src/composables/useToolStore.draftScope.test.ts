@@ -164,6 +164,56 @@ describe('useToolStore · U0 草稿 scope 隔离', () => {
     expect(store.getUnattributedDraftSummary()).toBeNull();
   });
 
+  it('本机草稿流水：批注一变 revision +1，刷盘成功 persistedRevision 跟上；写失败记 failedRevision / error，之后写成清掉', async () => {
+    store.setAnnotationDraftScope(scopeA);
+    await flush();
+    const base = store.annotationDraftJournal.value;
+    expect(base.failedRevision).toBeNull();
+
+    store.addAnnotation(textAnnotation('a-1'));
+    await flush();
+    let journal = store.annotationDraftJournal.value;
+    expect(journal.revision).toBe(base.revision + 1);
+    expect(journal.persistedRevision).toBe(journal.revision);
+    expect(journal.failedRevision).toBeNull();
+    expect(journal.storageScope).toBe(annotationScopeKey(scopeA));
+
+    // 测量变了不算批注修订，但刷盘照记
+    store.addMeasurement({
+      id: 'm-1',
+      kind: 'distance',
+      origin: { entityId: 'o:1', worldPos: [0, 0, 0] },
+      target: { entityId: 'o:2', worldPos: [1, 0, 0] },
+      visible: true,
+      createdAt: 1,
+    });
+    await flush();
+    expect(store.annotationDraftJournal.value.revision).toBe(journal.revision);
+    expect(store.annotationDraftJournal.value.persistedRevision).toBe(journal.revision);
+
+    // 配额满：写失败如实记下来，不吞
+    const setItem = vi.spyOn(localStorage, 'setItem').mockImplementation(() => {
+      throw new Error('QuotaExceededError');
+    });
+    store.addAnnotation(textAnnotation('a-2'));
+    await flush();
+    journal = store.annotationDraftJournal.value;
+    expect(journal.revision).toBe(base.revision + 2);
+    expect(journal.failedRevision).toBe(journal.revision);
+    expect(journal.error).toBe('QuotaExceededError');
+    expect(journal.persistedRevision).toBe(base.revision + 1);
+    expect(readIds(keyA)).toEqual(['a-1']);
+
+    setItem.mockRestore();
+    store.addAnnotation(textAnnotation('a-3'));
+    await flush();
+    journal = store.annotationDraftJournal.value;
+    expect(journal.failedRevision).toBeNull();
+    expect(journal.error).toBeNull();
+    expect(journal.persistedRevision).toBe(journal.revision);
+    expect(readIds(keyA)).toEqual(['a-1', 'a-2', 'a-3']);
+  });
+
   it('开关 scopedDraftsV1 关着：scope 只记不生效，key 仍是旧作用域；开回来 refresh 一次就接上', async () => {
     setAnnotationUxFlag('scopedDraftsV1', false);
     resetAnnotationUxFlagCache();

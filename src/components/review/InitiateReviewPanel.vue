@@ -25,6 +25,7 @@ import { pdmsGetUiAttr } from '@/api/genModelPdmsAttrApi';
 import Button from '@/components/ui/Button.vue';
 import Card from '@/components/ui/Card.vue';
 import Input from '@/components/ui/Input.vue';
+import { useAnnotationDraftScopeSync } from '@/composables/useAnnotationDraftScopeSync';
 import { ensurePanelAndActivate } from '@/composables/useDockApi';
 import { useOnboardingGuide } from '@/composables/useOnboardingGuide';
 import {
@@ -69,6 +70,10 @@ const confirmedRecordsRestorer = createConfirmedRecordsRestorer({
   getViewerTools: () => viewerContext.tools.value ?? null,
   skipClearOnEmpty: true,
 });
+
+// U0 草稿 scope（发起侧）：还没有任务时草稿落在本 tab 的 draftSessionId 容器里，不再写旧 project|db 容器；
+// 与 ReviewPanel / DesignerCommentHandlingPanel 共用同一份同步，最后一个面板卸载才回到旧作用域。
+useAnnotationDraftScopeSync({ userId: () => userStore.currentUser.value?.id ?? null });
 
 const formData = reactive({
   packageName: '',

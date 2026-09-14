@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ref } from 'vue';
+import { ref, shallowRef } from 'vue';
 
 /** 本测试环境没有 localStorage / sessionStorage 全局；给内存实现（flag 持久化与本 tab draftSessionId 都要它） */
 vi.hoisted(() => {
@@ -21,12 +21,16 @@ vi.hoisted(() => {
 const currentTask = ref<{ id: string; reviewRound?: number } | null>(null);
 const currentUser = ref<{ id: string } | null>({ id: 'JH' });
 const setAnnotationDraftScopeMock = vi.fn((_scope: AnnotationScope | null) => true);
+const emptyJournal = (): AnnotationDraftJournal => ({
+  revision: 0, persistedRevision: 0, failedRevision: null, error: null, storageScope: '', at: 0,
+});
+const annotationDraftJournal = shallowRef<AnnotationDraftJournal>(emptyJournal());
 
 vi.mock('@/composables/useReviewStore', () => ({
   useReviewStore: () => ({ currentTask }),
 }));
 vi.mock('@/composables/useToolStore', () => ({
-  useToolStore: () => ({ setAnnotationDraftScope: setAnnotationDraftScopeMock }),
+  useToolStore: () => ({ setAnnotationDraftScope: setAnnotationDraftScopeMock, annotationDraftJournal }),
 }));
 vi.mock('@/composables/useUserStore', () => ({
   useUserStore: () => ({ currentUser, currentUserId: ref('fallback-user') }),
@@ -36,12 +40,14 @@ import {
   computeAnnotationDraftScope,
   deriveTaskReviewRound,
   DRAFT_SESSION_ID_STORAGE_KEY,
+  getAnnotationDraftScopeSyncHostCount,
   resolveTabDraftSessionId,
   useAnnotationDraftScopeSync,
 } from './useAnnotationDraftScopeSync';
 import { resetAnnotationDraftSessionForTests, useAnnotationDraftSession } from './useAnnotationDraftSession';
 import { resetAnnotationUxFlagCache, setAnnotationUxFlag } from './useAnnotationUxFlags';
 
+import type { AnnotationDraftJournal } from './useToolStore';
 import type { AnnotationScope } from '@/review/domain/annotationScope';
 
 describe('computeAnnotationDraftScope / deriveTaskReviewRound（纯函数）', () => {
@@ -92,13 +98,16 @@ describe('useAnnotationDraftScopeSync（接线：任务 / 用户变化 → store
     resetAnnotationUxFlagCache();
     resetAnnotationDraftSessionForTests();
     setAnnotationDraftScopeMock.mockClear();
+    annotationDraftJournal.value = emptyJournal();
     currentTask.value = null;
     currentUser.value = { id: 'JH' };
     sessionStorage.setItem(DRAFT_SESSION_ID_STORAGE_KEY, 'ds-tab');
+    expect(getAnnotationDraftScopeSyncHostCount()).toBe(0);
   });
 
   afterEach(() => {
     resetAnnotationUxFlagCache();
+    expect(getAnnotationDraftScopeSyncHostCount()).toBe(0);
   });
 
   it('装上即同步一次：没有任务用 draftSessionId；任务一变同步切到任务 scope（flush:sync，不等 tick）', () => {
@@ -116,6 +125,9 @@ describe('useAnnotationDraftScopeSync（接线：任务 / 用户变化 → store
     expect(setAnnotationDraftScopeMock.mock.lastCall?.[0]).toBeNull();
     expect(useAnnotationDraftSession().scope.value).toBeNull();
     expect(sync.current()).toBeNull();
+    // 重复 stop 幂等
+    sync.stop();
+    expect(setAnnotationDraftScopeMock).toHaveBeenCalledTimes(3);
   });
 
   it('用户身份优先用传入的取法（嵌入模式的可信身份），没有再回用户库', () => {
@@ -130,6 +142,67 @@ describe('useAnnotationDraftScopeSync（接线：任务 / 用户变化 → store
     fallback.stop();
   });
 
+  it('多宿主：两个面板同时装，底下只有一份同步；少一个宿主 scope 不动，最后一个卸了才回 null', () => {
+    const a = useAnnotationDraftScopeSync({ userId: () => 'embed-user', projectId: () => 'ams' });
+    const b = useAnnotationDraftScopeSync({ projectId: () => 'ams' });
+    expect(getAnnotationDraftScopeSyncHostCount()).toBe(2);
+    // 第二个宿主登记只是让共享 watch 重取一遍：同一 scope，store 幂等（mock 记录调用但 scope 相同）
+    expect(a.current()).toEqual(b.current());
+    expect(b.current()?.userId).toBe('embed-user');
+
+    currentTask.value = { id: 'task-A' };
+    expect(a.current()?.taskId).toBe('task-A');
+    expect(b.current()?.taskId).toBe('task-A');
+
+    const callsBefore = setAnnotationDraftScopeMock.mock.calls.length;
+    a.stop();
+    expect(a.current()).toBeNull();
+    // 少了 a：用户 id 回落到用户库，但没有任何一发 null
+    expect(setAnnotationDraftScopeMock.mock.calls.slice(callsBefore).some(([scope]) => scope === null)).toBe(false);
+    expect(b.current()).toMatchObject({ taskId: 'task-A', userId: 'JH' });
+    expect(useAnnotationDraftSession().scope.value?.taskId).toBe('task-A');
+
+    b.stop();
+    expect(setAnnotationDraftScopeMock.mock.lastCall?.[0]).toBeNull();
+    expect(useAnnotationDraftSession().scope.value).toBeNull();
+    expect(getAnnotationDraftScopeSyncHostCount()).toBe(0);
+  });
+
+  it('本机草稿流水 → 草稿会话：内容变了记 edit，写成记 local-persisted，写败记 local-persist-failed，再写成清掉失败', () => {
+    const sync = useAnnotationDraftScopeSync({ projectId: () => 'ams' });
+    currentTask.value = { id: 'task-A' };
+    const session = useAnnotationDraftSession();
+    expect(session.status.value.local).toBe('clean');
+
+    // store 的批注数组变了（还没刷盘）
+    annotationDraftJournal.value = { ...annotationDraftJournal.value, revision: 1, at: 10 };
+    expect(session.state.value.localRevision).toBe(1);
+    expect(session.status.value.local).toBe('unsaved');
+
+    // 刷盘成功
+    annotationDraftJournal.value = { ...annotationDraftJournal.value, persistedRevision: 1, storageScope: 'k', at: 11 };
+    expect(session.status.value.local).toBe('saved');
+    expect(session.state.value.persistedLocalRevision).toBe(1);
+
+    // 再编辑一笔，刷盘失败（配额满）
+    annotationDraftJournal.value = { ...annotationDraftJournal.value, revision: 2, at: 12 };
+    annotationDraftJournal.value = { ...annotationDraftJournal.value, failedRevision: 2, error: 'QuotaExceededError', at: 13 };
+    expect(session.state.value.localRevision).toBe(2);
+    expect(session.status.value.local).toBe('write-failed');
+    expect(session.state.value.localWriteError).toBe('QuotaExceededError');
+
+    // 之后一次成功写入清掉失败
+    annotationDraftJournal.value = { ...annotationDraftJournal.value, persistedRevision: 2, failedRevision: null, error: null, at: 14 };
+    expect(session.status.value.local).toBe('saved');
+    expect(session.state.value.localWriteFailedAtRevision).toBeNull();
+
+    // 切任务：会话重置，旧流水不会串进新 scope
+    currentTask.value = { id: 'task-B' };
+    expect(session.state.value.localRevision).toBe(0);
+    expect(session.status.value.local).toBe('clean');
+    sync.stop();
+  });
+
   it('开关关着：不装同步、不碰 store', () => {
     setAnnotationUxFlag('scopedDraftsV1', false);
     resetAnnotationUxFlagCache();
@@ -137,6 +210,7 @@ describe('useAnnotationDraftScopeSync（接线：任务 / 用户变化 → store
     currentTask.value = { id: 'task-A' };
     expect(setAnnotationDraftScopeMock).not.toHaveBeenCalled();
     expect(sync.current()).toBeNull();
+    expect(getAnnotationDraftScopeSyncHostCount()).toBe(0);
     sync.stop();
     expect(setAnnotationDraftScopeMock).not.toHaveBeenCalled();
   });

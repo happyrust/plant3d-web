@@ -1253,6 +1253,50 @@ describe('ReviewPanel', () => {
     mounted.unmount();
   });
 
+  it('U0 三行状态条：刚进任务是「本机 · 无草稿 / 未确认」，云端那一行 U3 前不出现', async () => {
+    const mounted = await mountReviewPanel();
+    await settlePanel();
+
+    const bar = document.querySelector('[data-testid="annotation-draft-status-bar"]');
+    expect(bar).not.toBeNull();
+    expect(bar?.querySelector('[data-testid="annotation-draft-status-local"]')?.getAttribute('data-state')).toBe('empty');
+    expect(bar?.querySelector('[data-testid="annotation-draft-status-remote"]')).toBeNull();
+    expect(bar?.querySelector('[data-testid="annotation-draft-status-confirmed"]')?.getAttribute('data-state')).toBe('never');
+    expect(bar?.textContent).toContain('本机 · 无草稿');
+    expect(bar?.textContent).toContain('未确认');
+
+    mounted.unmount();
+  });
+
+  it('U0 三行状态条：有确认记录时「已确认」那一行按本任务确认记录条数报修订号', async () => {
+    sortedConfirmedRecords.value = [
+      {
+        id: 'record-status-1',
+        taskId: 'task-1',
+        formId: 'FORM-001',
+        confirmedAt: 1710000000000,
+        note: '',
+        annotations: [{ id: 'anno-status-1', title: '状态条批注', severity: 'high' }],
+        cloudAnnotations: [],
+        rectAnnotations: [],
+        obbAnnotations: [],
+        measurements: [],
+      },
+    ] as never[];
+    confirmedRecordCount.value = 1;
+    totalConfirmedAnnotations.value = 1;
+
+    const mounted = await mountReviewPanel();
+    await settlePanel();
+
+    const confirmedRow = document.querySelector('[data-testid="annotation-draft-status-confirmed"]');
+    expect(confirmedRow).not.toBeNull();
+    expect(confirmedRow?.textContent).toContain('已确认到修订 1');
+    expect(['up-to-date', 'has-unconfirmed-changes']).toContain(confirmedRow?.getAttribute('data-state'));
+
+    mounted.unmount();
+  });
+
   it('exposes automation hook to create mock measurements for reviewer e2e', async () => {
     window.history.replaceState({}, '', '/?automation_review=1');
 

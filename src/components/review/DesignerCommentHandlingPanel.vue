@@ -39,10 +39,12 @@ import {
   isCanonicalReturnedTask,
 } from './reviewTaskFilters';
 import TaskReviewDetail from './TaskReviewDetail.vue';
+import UnattributedDraftNotice from './UnattributedDraftNotice.vue';
 import { notifyParentWorkflowAction } from './workflowBridge';
 
 import { reviewAnnotationCheck } from '@/api/reviewApi';
 import { useAnnotationBindingResolve } from '@/composables/useAnnotationBindingResolve';
+import { useAnnotationDraftScopeSync } from '@/composables/useAnnotationDraftScopeSync';
 import { saveAnnotationBasicFields, saveAnnotationSeverity } from '@/composables/useAnnotationSeveritySync';
 import { ensurePanelAndActivate } from '@/composables/useDockApi';
 import { useReviewStore } from '@/composables/useReviewStore';
@@ -91,6 +93,10 @@ const confirmedRecordsRestorer = createConfirmedRecordsRestorer({
   getViewerTools: () => viewerContext.tools.value ?? null,
   skipClearOnEmpty: true,
 });
+
+// U0 草稿 scope（sj 侧）：与 ReviewPanel 共用同一份同步，任务 / 用户一变就切本机草稿容器；
+// 两个面板在 dock 里同时开着时各登记一次，最后一个卸载才回到旧作用域。
+useAnnotationDraftScopeSync({ userId: () => userStore.currentUser.value?.id ?? null });
 
 const returnedTasks = computed(() => userStore.returnedInitiatedTasks.value.filter((task) => isCanonicalReturnedTask(task)));
 const currentTask = computed(() => reviewStore.currentTask.value);
@@ -661,6 +667,7 @@ onMounted(() => {
 
           <div class="mt-4 min-h-[420px] flex-1 overflow-hidden"
             data-testid="designer-comment-annotation-list">
+            <UnattributedDraftNotice />
             <AnnotationSheetWorkspace :items="scopedAnnotationItems"
               :current-annotation-id="selectedAnnotationId"
               :current-annotation-type="selectedAnnotationType"

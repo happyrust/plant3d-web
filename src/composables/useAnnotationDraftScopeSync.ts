@@ -1,9 +1,9 @@
-import { getCurrentScope, onScopeDispose, watch } from 'vue';
+import { getCurrentScope, onScopeDispose, ref, watch, type WatchStopHandle } from 'vue';
 
 import { useAnnotationDraftSession } from '@/composables/useAnnotationDraftSession';
 import { isAnnotationUxFlagEnabled } from '@/composables/useAnnotationUxFlags';
 import { useReviewStore } from '@/composables/useReviewStore';
-import { useToolStore } from '@/composables/useToolStore';
+import { useToolStore, type AnnotationDraftJournal } from '@/composables/useToolStore';
 import { useUserStore } from '@/composables/useUserStore';
 import { getOutputProjectFromUrl } from '@/lib/filesOutput';
 import {
@@ -21,7 +21,11 @@ import {
  *   真正只读。
  * - 同步是 `flush:'sync'`：`currentTask` 一变就切容器，抢在面板自己的 `watch(currentTask)`（确认记录回放、clearAll）之前，
  *   回放的东西只会落进新任务的 key。
- * - 宿主（面板）卸载时回到 null：离开校审上下文 = 回到旧作用域；`useAnnotationDraftSession` 同步 `enterScope / leaveScope`。
+ * - **多宿主**：ReviewPanel / DesignerCommentHandlingPanel / InitiateReviewPanel 在 dock 里可以同时开着，每个都装一次；
+ *   底下只有一份同步在跑，宿主只是登记 / 注销。最后一个宿主卸载才回到 null（离开校审上下文 = 回到旧作用域）；
+ *   中途少一个宿主不影响别的面板。用户 id / 项目 id 按登记顺序取第一个给出值的宿主，都没给再回用户库 / URL。
+ * - 本机草稿流水：`useToolStore.annotationDraftJournal` 每变一次就派发进 `useAnnotationDraftSession`
+ *   （内容变了 → `edit`；写成 → `local-persisted`；写败 → `local-persist-failed`），面板的「本机」那一行由此而来。
  * - 开关 `annotationUx.scopedDraftsV1` 关着 = 整个同步不装，store 照旧。
  */
 
@@ -109,47 +113,75 @@ export type AnnotationDraftScopeSyncOptions = {
 };
 
 export type AnnotationDraftScopeSync = {
-  /** 当前同步出来的 scope（开关关 / 尚未同步时 null） */
+  /** 当前同步出来的 scope（开关关 / 本宿主已注销 / 尚未同步时 null） */
   current: () => AnnotationScope | null;
   stop: () => void;
 };
 
-export function useAnnotationDraftScopeSync(options: AnnotationDraftScopeSyncOptions = {}): AnnotationDraftScopeSync {
-  if (!isAnnotationUxFlagEnabled('scopedDraftsV1')) {
-    return { current: () => null, stop: () => {} };
-  }
+// ---------------------------------------------------------------------------
+// 共享的一份同步 + 宿主登记表
+// ---------------------------------------------------------------------------
 
+type Host = { id: symbol; options: AnnotationDraftScopeSyncOptions };
+
+type ToolStoreForScopeSync = {
+  setAnnotationDraftScope?: (scope: AnnotationScope | null) => boolean;
+  annotationDraftJournal?: { value: AnnotationDraftJournal };
+};
+
+const hosts: Host[] = [];
+/** 宿主增减时 +1，让共享 watch 重新取一遍 userId / projectId（登记表本身不是响应式的） */
+const hostsVersion = ref(0);
+
+let currentScope: AnnotationScope | null = null;
+let stopSharedWatch: WatchStopHandle | null = null;
+let stopJournalWatch: WatchStopHandle | null = null;
+
+function firstFromHosts<T>(pick: (host: Host) => T | null | undefined): T | null {
+  for (const host of hosts) {
+    const value = pick(host);
+    if (value !== null && value !== undefined) return value;
+  }
+  return null;
+}
+
+function trimmedOrNull(value: string | null | undefined): string | null {
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
+
+function startSharedSync(): void {
   const reviewStore = useReviewStore();
-  const toolStore = useToolStore();
-  const userStore = useUserStore();
+  const toolStore = useToolStore() as unknown as ToolStoreForScopeSync;
+  const userStore = useUserStore() as {
+    currentUser?: { value?: { id?: string | null } | null };
+    currentUserId?: { value?: string | null };
+  };
   const draftSession = useAnnotationDraftSession();
 
-  let current: AnnotationScope | null = null;
-
   const readUserId = (): string | null => {
-    const fromOption = options.userId?.();
-    if (typeof fromOption === 'string' && fromOption.trim()) return fromOption.trim();
-    const store = userStore as {
-      currentUser?: { value?: { id?: string | null } | null };
-      currentUserId?: { value?: string | null };
-    };
-    return store.currentUser?.value?.id?.trim() || store.currentUserId?.value?.trim() || null;
+    const fromHost = firstFromHosts((host) => trimmedOrNull(host.options.userId?.()));
+    if (fromHost) return fromHost;
+    return trimmedOrNull(userStore.currentUser?.value?.id) || trimmedOrNull(userStore.currentUserId?.value) || null;
   };
 
   const readProjectId = (): string | null => {
-    const fromOption = options.projectId?.();
-    if (typeof fromOption === 'string' && fromOption.trim()) return fromOption.trim();
-    return readProjectIdFromUrl();
+    const fromHost = firstFromHosts((host) => trimmedOrNull(host.options.projectId?.()));
+    return fromHost ?? readProjectIdFromUrl();
+  };
+
+  const readDraftSessionId = (): string => {
+    return firstFromHosts((host) => host.options.draftSessionId?.()) ?? resolveTabDraftSessionId();
   };
 
   const apply = (scope: AnnotationScope) => {
-    current = scope;
-    (toolStore as { setAnnotationDraftScope?: (s: AnnotationScope | null) => boolean }).setAnnotationDraftScope?.(scope);
+    currentScope = scope;
+    toolStore.setAnnotationDraftScope?.(scope);
     draftSession.enterScope(scope);
   };
 
-  const stopWatch = watch(
+  stopSharedWatch = watch(
     () => {
+      void hostsVersion.value;
       const task = reviewStore.currentTask.value as (AnnotationDraftScopeTask & { workflowHistory?: unknown }) | null;
       return {
         taskId: task?.id ?? null,
@@ -163,20 +195,75 @@ export function useAnnotationDraftScopeSync(options: AnnotationDraftScopeSyncOpt
         projectId: snapshot.projectId,
         task: snapshot.taskId ? { id: snapshot.taskId, reviewRound: snapshot.reviewRound } : null,
         userId: snapshot.userId,
-        draftSessionId: options.draftSessionId?.() ?? resolveTabDraftSessionId(),
+        draftSessionId: readDraftSessionId(),
       }));
     },
     { immediate: true, flush: 'sync' },
   );
 
+  // 本机草稿流水 → 草稿会话。`flush:'sync'`：切 scope 时旧容器的刷盘回执要落在旧 scope 的会话里，不能等到 enterScope 之后。
+  const journalRef = toolStore.annotationDraftJournal;
+  if (journalRef) {
+    stopJournalWatch = watch(
+      () => journalRef.value,
+      (journal, prev) => {
+        if (!journal || !draftSession.scope.value) return;
+        if (!prev || journal.revision > prev.revision) draftSession.markEdited(journal.at);
+        const revision = draftSession.state.value.localRevision;
+        if (revision === 0) return;
+        if (journal.failedRevision !== null && journal.failedRevision >= journal.revision) {
+          draftSession.dispatch({ type: 'local-persist-failed', revision, error: journal.error, at: journal.at });
+        } else if (journal.persistedRevision >= journal.revision) {
+          draftSession.dispatch({ type: 'local-persisted', revision, at: journal.at });
+        }
+      },
+      { flush: 'sync' },
+    );
+  }
+}
+
+function stopSharedSync(): void {
+  stopSharedWatch?.();
+  stopSharedWatch = null;
+  stopJournalWatch?.();
+  stopJournalWatch = null;
+  currentScope = null;
+  (useToolStore() as unknown as ToolStoreForScopeSync).setAnnotationDraftScope?.(null);
+  useAnnotationDraftSession().leaveScope();
+}
+
+export function useAnnotationDraftScopeSync(options: AnnotationDraftScopeSyncOptions = {}): AnnotationDraftScopeSync {
+  if (!isAnnotationUxFlagEnabled('scopedDraftsV1')) {
+    return { current: () => null, stop: () => {} };
+  }
+
+  const host: Host = { id: Symbol('annotation-draft-scope-host'), options };
+  let registered = true;
+  hosts.push(host);
+  if (hosts.length === 1) {
+    startSharedSync();
+  } else {
+    hostsVersion.value += 1;
+  }
+
   const stop = () => {
-    stopWatch();
-    current = null;
-    (toolStore as { setAnnotationDraftScope?: (s: AnnotationScope | null) => boolean }).setAnnotationDraftScope?.(null);
-    draftSession.leaveScope();
+    if (!registered) return;
+    registered = false;
+    const index = hosts.indexOf(host);
+    if (index >= 0) hosts.splice(index, 1);
+    if (hosts.length === 0) {
+      stopSharedSync();
+    } else {
+      hostsVersion.value += 1;
+    }
   };
 
   if (getCurrentScope()) onScopeDispose(stop);
 
-  return { current: () => current, stop };
+  return { current: () => (registered ? currentScope : null), stop };
+}
+
+/** 当前登记在册的宿主数（测试 / 排障用） */
+export function getAnnotationDraftScopeSyncHostCount(): number {
+  return hosts.length;
 }
