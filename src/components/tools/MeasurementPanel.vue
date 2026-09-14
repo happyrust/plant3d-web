@@ -176,6 +176,7 @@ function getMeasurementSummary(record: MeasurementRecord | XeokitMeasurementReco
     {
       showAxisBreakdown: measurementStyle.state.distanceShowAxisBreakdown,
       referenceFrame: measurementReferenceFrame.resolvedFrame.value,
+      angleUnits: measurementStyle.state.measurementAngleUnits,
     },
   );
 }

@@ -17,6 +17,13 @@ import {
   type ResolvedReferenceFrame,
 } from '@/measurement/reference-frame';
 import {
+  DEFAULT_MEASUREMENT_ANGLE_UNIT_SELECTION,
+  formatMeasurementAngle,
+  formatMeasurementAngleDms,
+  formatMeasurementAngleScalar,
+  type MeasurementAngleUnitSelection,
+} from '@/measurement/units/measurementAngleUnits';
+import {
   formatMeasurementLengthMeters,
   type MeasurementDistanceFormat,
 } from '@/measurement/units/measurementUnits';
@@ -79,6 +86,8 @@ export function formatMeasurementSummary(
   opts?: {
     showAxisBreakdown?: boolean;
     referenceFrame?: ResolvedReferenceFrame;
+    /** 角度摘要按测量会话的 Units 框出；不给就用 E3D 缺省（Default / 2 位）。 */
+    angleUnits?: MeasurementAngleUnitSelection;
   },
 ): string {
   switch (measurement.kind) {
@@ -118,6 +127,7 @@ export function formatMeasurementSummary(
           measurement.origin,
           measurement.target,
           opts.referenceFrame,
+          opts.angleUnits,
         )
         : [];
       if (rows.length === 0) return points;
@@ -396,9 +406,6 @@ export function buildDistanceMeasurementResultRows(
   ];
 }
 
-/** E3D Measure Angle 的 `Decimal Places` 缺省是 2（`gphanglemeasure.pmlfrm`，方案 §1.3）。 */
-export const ANGLE_DECIMAL_PLACES = 2;
-
 export type AngleMeasurementFrameResultValues = Readonly<{
   angleDeg: number;
   /** root → first 的单位方向，按当前 wrt 帧表达。 */
@@ -438,33 +445,43 @@ export function computeThreePointAngleInFrame(
 }
 
 export type AngleMeasurementResultRow = Readonly<{
-  key: 'angle' | 'direction1' | 'direction2';
+  key: 'angle' | 'dms' | 'direction1' | 'direction2';
   label: string;
   valueText: string;
 }>;
 
-/** E3D「Measure Angle」结果表的三行：Angle / Direction1 / Direction2（golden G6-01 / 02）。 */
+/**
+ * E3D「Measure Angle」结果表的四行（`gphanglemeasure.pmlfrm` 334–342 / 407–410）：
+ * `Decimal Angle`（按 Units 框的 Unit 换算 + Decimal Places，数值后面缀单位词）、
+ * `DMS`（恒按十进制度截断出度 / 分 / 秒）、`Direction1` / `Direction2`
+ * （两条臂的单位方向，按当前 wrt 帧表达，每个数也按 Decimal Places 出）。
+ */
 export function buildAngleMeasurementResultRows(
   root: MeasurementPoint,
   first: MeasurementPoint,
   second: MeasurementPoint,
   frame: ResolvedReferenceFrame,
-  decimals: number = ANGLE_DECIMAL_PLACES,
+  angleUnits: MeasurementAngleUnitSelection = DEFAULT_MEASUREMENT_ANGLE_UNIT_SELECTION,
 ): AngleMeasurementResultRow[] {
   const values = computeThreePointAngleInFrame(root, first, second, frame);
   if (!values) return [];
   const labels = values.axisLabels;
+  const signed = (value: number): string => {
+    const text = formatMeasurementAngleScalar(Math.abs(value), angleUnits.decimalPlaces);
+    return `${value < 0 && Number(text) !== 0 ? '-' : '+'}${text}`;
+  };
   const directionText = (vector: Vec3): string => [
-    `${labels[0]} ${formatSignedScalar(vector[0])}`,
-    `${labels[1]} ${formatSignedScalar(vector[1])}`,
-    `${labels[2]} ${formatSignedScalar(vector[2])}`,
+    `${labels[0]} ${signed(vector[0])}`,
+    `${labels[1]} ${signed(vector[1])}`,
+    `${labels[2]} ${signed(vector[2])}`,
   ].join(' · ');
   return [
     {
       key: 'angle',
-      label: 'Angle',
-      valueText: `${values.angleDeg.toFixed(Math.max(0, Math.min(6, Math.floor(decimals))))}°`,
+      label: 'Decimal Angle',
+      valueText: formatMeasurementAngle(values.angleDeg, angleUnits),
     },
+    { key: 'dms', label: 'DMS', valueText: formatMeasurementAngleDms(values.angleDeg) },
     { key: 'direction1', label: 'Direction1', valueText: directionText(values.direction1) },
     { key: 'direction2', label: 'Direction2', valueText: directionText(values.direction2) },
   ];
@@ -545,6 +562,7 @@ export function buildMeasurementValueText(
   unit: LengthUnit,
   precision: number,
   referenceFrame?: ResolvedReferenceFrame,
+  angleUnits: MeasurementAngleUnitSelection = DEFAULT_MEASUREMENT_ANGLE_UNIT_SELECTION,
 ): string | null {
   switch (measurement.kind) {
     case 'distance': {
@@ -562,7 +580,7 @@ export function buildMeasurementValueText(
         measurement.corner,
         measurement.target,
       );
-      return degrees === null ? null : `${degrees.toFixed(ANGLE_DECIMAL_PLACES)}°`;
+      return degrees === null ? null : formatMeasurementAngle(degrees, angleUnits);
     }
     case 'elevation_point': {
       const interpreted = referenceFrame

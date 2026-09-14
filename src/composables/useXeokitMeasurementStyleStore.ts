@@ -18,6 +18,11 @@ import {
   type MeasurementPickLayerConfig,
 } from '@/measurement/pick/pickLayerModel';
 import {
+  DEFAULT_MEASUREMENT_ANGLE_UNIT_SELECTION,
+  normalizeMeasurementAngleUnitSelection,
+  type MeasurementAngleUnitSelection,
+} from '@/measurement/units/measurementAngleUnits';
+import {
   DEFAULT_MEASUREMENT_UNIT_SELECTION,
   applyMeasurementUnitSelection,
   normalizeMeasurementUnitSelection,
@@ -90,6 +95,11 @@ export type XeokitMeasurementStyleConfig = {
    * （Default 档才回落到全局，= E3D 的 `!!distanceFmt`）。
    */
   measurementUnits: MeasurementUnitSelection;
+  /**
+   * E3D Measure Angle 窗体的 Units 框：Unit（Default / Degrees / Radians / Gradians）
+   * × Decimal Places（0–8，缺省 2）。同样是测量会话级；小数位同时管角度值与两条 Direction。
+   */
+  measurementAngleUnits: MeasurementAngleUnitSelection;
 };
 
 const STORAGE_KEY_V1 = 'plant3d-web-xeokit-measurement-style-v1';
@@ -130,6 +140,7 @@ export const DEFAULT_XEOKIT_MEASUREMENT_STYLE: Readonly<XeokitMeasurementStyleCo
   measurementPickModeSnapMemory: {},
   measurementPickLayer: DEFAULT_MEASUREMENT_PICK_LAYER,
   measurementUnits: DEFAULT_MEASUREMENT_UNIT_SELECTION,
+  measurementAngleUnits: DEFAULT_MEASUREMENT_ANGLE_UNIT_SELECTION,
 };
 
 function createDefaultMeasurementStyle(): XeokitMeasurementStyleConfig {
@@ -139,6 +150,7 @@ function createDefaultMeasurementStyle(): XeokitMeasurementStyleConfig {
     measurementPickModeSnapMemory: {},
     measurementPickLayer: normalizeMeasurementPickLayer(DEFAULT_MEASUREMENT_PICK_LAYER),
     measurementUnits: { ...DEFAULT_MEASUREMENT_UNIT_SELECTION },
+    measurementAngleUnits: { ...DEFAULT_MEASUREMENT_ANGLE_UNIT_SELECTION },
   };
 }
 
@@ -267,6 +279,7 @@ function loadPersisted(scope = getCurrentStorageScope()): XeokitMeasurementStyle
       measurementPickLayer: normalizeMeasurementPickLayer(parsed.measurementPickLayer),
       // 同理：没有这一格就停在 Default 档（结果随全局单位设置，与改动前一致）。
       measurementUnits: normalizeMeasurementUnitSelection(parsed.measurementUnits),
+      measurementAngleUnits: normalizeMeasurementAngleUnitSelection(parsed.measurementAngleUnits),
     };
   } catch {
     return createDefaultMeasurementStyle();
@@ -417,6 +430,19 @@ function updateMeasurementUnits(
   });
 }
 
+/**
+ * 改角度 Units 框（E3D `gphAngleMeasure.setupForm`）：Decimal Places 只收 0–8 的整数，
+ * 越界 / 非数字一律打回 2（E3D 那边同时弹 `Value must be between 0 and 8`，由调用方负责提示）。
+ */
+function updateMeasurementAngleUnits(patch: Partial<MeasurementAngleUnitSelection>): void {
+  updateStyle({
+    measurementAngleUnits: normalizeMeasurementAngleUnitSelection({
+      ...state.measurementAngleUnits,
+      ...patch,
+    }),
+  });
+}
+
 function resetStyle(): void {
   Object.assign(state, createDefaultMeasurementStyle());
 }
@@ -428,6 +454,7 @@ export function useXeokitMeasurementStyleStore() {
     updateMeasurementPickSource,
     updateMeasurementPickLayer,
     updateMeasurementUnits,
+    updateMeasurementAngleUnits,
     setMeasurementPickMode,
     resetStyle,
   };

@@ -3449,7 +3449,7 @@ describe('useXeokitMeasurementTools', () => {
       return { store, tools, click };
     }
 
-    it('三点不共线：第三击落成角度记录，结果表三行按内核出 Angle / Direction1 / Direction2', async () => {
+    it('三点不共线：第三击落成角度记录，结果表按内核出 Decimal Angle / DMS / Direction1 / Direction2', async () => {
       const { store, tools, click } = await setupAngleTools([
         [2, 4, 6],
         [2.3, 4, 6],
@@ -3473,8 +3473,8 @@ describe('useXeokitMeasurementTools', () => {
         record.target,
         WORLD_FRAME,
       );
-      expect(rows.map((row) => row.label)).toEqual(['Angle', 'Direction1', 'Direction2']);
-      expect(rows[0]!.valueText).toBe('90.00°');
+      expect(rows.map((row) => row.label)).toEqual(['Decimal Angle', 'DMS', 'Direction1', 'Direction2']);
+      expect(rows[0]!.valueText).toBe('90 Degrees');
 
       tools.dispose();
     });

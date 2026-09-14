@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 
 import {
   formatMeasurementSnapLabel,
@@ -13,6 +13,12 @@ import {
 import { useToolStore, type MeasurementPoint } from '@/composables/useToolStore';
 import { useUnitSettingsStore } from '@/composables/useUnitSettingsStore';
 import { useXeokitMeasurementStyleStore } from '@/composables/useXeokitMeasurementStyleStore';
+import {
+  DEFAULT_MEASUREMENT_ANGLE_DECIMALS,
+  MEASUREMENT_ANGLE_UNITS,
+  isMeasurementAngleDecimalsValid,
+  type MeasurementAngleUnit,
+} from '@/measurement/units/measurementAngleUnits';
 import {
   measurementDisplayUnitOptions,
   measurementSelectedDisplayUnit,
@@ -51,6 +57,7 @@ const latestAngleMeasurement = computed(() => {
   if (list.length === 0) return null;
   return list.reduce((latest, item) => (item.createdAt >= latest.createdAt ? item : latest));
 });
+const angleUnits = computed(() => measurementStyle.state.measurementAngleUnits);
 const angleRows = computed(() => {
   const record = latestAngleMeasurement.value;
   if (!record) return [];
@@ -59,8 +66,35 @@ const angleRows = computed(() => {
     record.origin,
     record.target,
     referenceFrame.resolvedFrame.value,
+    angleUnits.value,
   );
 });
+
+// E3D Measure Angle 的 Units 框：Unit 四档 + Decimal Places（0–8，越界打回 2 并报错）。
+const angleDecimalsDraft = ref(String(measurementStyle.state.measurementAngleUnits.decimalPlaces));
+const angleDecimalsError = ref<string | null>(null);
+watch(
+  () => measurementStyle.state.measurementAngleUnits.decimalPlaces,
+  (value) => { angleDecimalsDraft.value = String(value); },
+);
+
+function setAngleUnit(event: Event): void {
+  const unit = (event.target as HTMLSelectElement).value as MeasurementAngleUnit;
+  measurementStyle.updateMeasurementAngleUnits({ unit });
+}
+
+function setAngleDecimals(event: Event): void {
+  const raw = (event.target as HTMLInputElement).value;
+  angleDecimalsDraft.value = raw;
+  if (!isMeasurementAngleDecimalsValid(raw)) {
+    angleDecimalsError.value = 'Value must be between 0 and 8';
+    measurementStyle.updateMeasurementAngleUnits({ decimalPlaces: DEFAULT_MEASUREMENT_ANGLE_DECIMALS });
+    angleDecimalsDraft.value = String(DEFAULT_MEASUREMENT_ANGLE_DECIMALS);
+    return;
+  }
+  angleDecimalsError.value = null;
+  measurementStyle.updateMeasurementAngleUnits({ decimalPlaces: Number(raw) });
+}
 const interpretedResult = computed(() => {
   if (!result.value) return null;
   return computeDistanceMeasurementResultInFrame(
@@ -231,6 +265,40 @@ onMounted(() => {
             {{ option.label }}
           </option>
         </select>
+      </div>
+    </div>
+
+    <div v-if="isAngleMode"
+      data-testid="measurement-angle-units-controls"
+      class="mt-2 rounded-md border border-border bg-muted/20 p-2">
+      <div class="flex flex-wrap items-center gap-2">
+        <label class="text-xs text-muted-foreground" for="measurement-angle-unit">Unit</label>
+        <select id="measurement-angle-unit"
+          data-testid="measurement-angle-unit"
+          class="h-8 rounded-md border border-input bg-background px-2 text-xs"
+          :value="angleUnits.unit"
+          @change="setAngleUnit">
+          <option v-for="option in MEASUREMENT_ANGLE_UNITS"
+            :key="option.value"
+            :value="option.value">
+            {{ option.label }}
+          </option>
+        </select>
+        <label class="text-xs text-muted-foreground" for="measurement-angle-decimals">
+          Decimal Places
+        </label>
+        <input id="measurement-angle-decimals"
+          data-testid="measurement-angle-decimals"
+          class="h-8 w-16 rounded-md border border-input bg-background px-2 text-xs"
+          type="text"
+          inputmode="numeric"
+          :value="angleDecimalsDraft"
+          @change="setAngleDecimals" />
+      </div>
+      <div v-if="angleDecimalsError"
+        data-testid="measurement-angle-decimals-error"
+        class="mt-1 text-xs text-destructive">
+        {{ angleDecimalsError }}
       </div>
     </div>
 

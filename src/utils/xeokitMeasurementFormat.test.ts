@@ -392,8 +392,8 @@ describe('xeokitMeasurementFormat', () => {
       visible: true,
       approximate: false,
       createdAt: 1,
-      // E3D Measure Angle 的 Decimal Places 缺省是 2。
-    }, 'mm', 0)).toBe('90.00°');
+      // E3D Measure Angle 的结果表单元格：数值 + 空格 + 单位词（Decimal Places 缺省 2、去尾零）。
+    }, 'mm', 0)).toBe('90 Degrees');
 
     expect(buildMeasurementValueText({
       id: 'e1',
@@ -455,25 +455,44 @@ describe('buildAngleMeasurementResultRows · E3D Measure Angle 结果表（golde
   const FIRST = point([12, 10, 15]);
   const SECOND_NORTH = point([10, 12, 15]);
 
-  it('三行 Angle / Direction1 / Direction2，角度按 E3D 缺省两位小数', () => {
+  it('四行 Decimal Angle / DMS / Direction1 / Direction2，缺省 Default 档 + 两位小数', () => {
     expect(buildAngleMeasurementResultRows(ROOT, FIRST, SECOND_NORTH, worldFrame())).toEqual([
-      { key: 'angle', label: 'Angle', valueText: '90.00°' },
-      { key: 'direction1', label: 'Direction1', valueText: 'X +1.0000 · Y +0.0000 · Z +0.0000' },
-      { key: 'direction2', label: 'Direction2', valueText: 'X +0.0000 · Y +1.0000 · Z +0.0000' },
+      { key: 'angle', label: 'Decimal Angle', valueText: '90 Degrees' },
+      { key: 'dms', label: 'DMS', valueText: '90° 0\' 0\'\'' },
+      { key: 'direction1', label: 'Direction1', valueText: 'X +1.00 · Y +0.00 · Z +0.00' },
+      { key: 'direction2', label: 'Direction2', valueText: 'X +0.00 · Y +1.00 · Z +0.00' },
     ]);
   });
 
   it('两条臂的方向随 wrt 帧换分量与轴标签，角度本身不变', () => {
     const rows = buildAngleMeasurementResultRows(ROOT, FIRST, SECOND_NORTH, frame());
-    expect(rows[0]).toEqual({ key: 'angle', label: 'Angle', valueText: '90.00°' });
+    expect(rows[0]).toEqual({ key: 'angle', label: 'Decimal Angle', valueText: '90 Degrees' });
     // 帧基 u=[0,1,0] v=[-1,0,0] w=[0,0,1]：root→first 的世界 +X 在帧里是 -V。
-    expect(rows[1]!.valueText).toBe('U +0.0000 · V -1.0000 · W +0.0000');
-    expect(rows[2]!.valueText).toBe('U +1.0000 · V +0.0000 · W +0.0000');
+    expect(rows[2]!.valueText).toBe('U +0.00 · V -1.00 · W +0.00');
+    expect(rows[3]!.valueText).toBe('U +1.00 · V +0.00 · W +0.00');
   });
 
-  it('小数位可调（Phase C #8 的 Decimal Places 接进来时用它）', () => {
-    const rows = buildAngleMeasurementResultRows(ROOT, FIRST, point([11, 11, 15]), worldFrame(), 4);
-    expect(rows[0]!.valueText).toBe('45.0000°');
+  it('Units 框：Unit 换算与 Decimal Places 同时管角度值和两条 Direction；DMS 恒按度', () => {
+    const rows = buildAngleMeasurementResultRows(
+      ROOT,
+      FIRST,
+      point([11, 11, 15]),
+      worldFrame(),
+      { unit: 'radians', decimalPlaces: 4 },
+    );
+    expect(rows[0]!.valueText).toBe('0.7854 Radians');
+    expect(rows[1]!.valueText).toBe('45° 0\' 0\'\'');
+    expect(rows[2]!.valueText).toBe('X +1.0000 · Y +0.0000 · Z +0.0000');
+
+    const gradians = buildAngleMeasurementResultRows(
+      ROOT,
+      FIRST,
+      SECOND_NORTH,
+      worldFrame(),
+      { unit: 'gradians', decimalPlaces: 0 },
+    );
+    expect(gradians[0]!.valueText).toBe('100 Gradians');
+    expect(gradians[2]!.valueText).toBe('X +1 · Y +0 · Z +0');
   });
 
   it('0° / 180° / 重合点回空数组（E3D 这几种造不出 ARC，窗体走 alert.error）', () => {
@@ -501,9 +520,9 @@ describe('buildAngleMeasurementResultRows · E3D Measure Angle 结果表（golde
       createdAt: 1,
     };
     const summary = formatMeasurementSummary(record, 'mm', 0, { referenceFrame: worldFrame() });
-    expect(summary.startsWith('Angle 90.00° · Direction1 X +1.0000')).toBe(true);
+    expect(summary.startsWith('Decimal Angle 90 Degrees · DMS 90° 0\' 0\'\' · Direction1 X +1.00')).toBe(true);
     expect(summary).toContain('起点');
-    expect(buildMeasurementValueText(record, 'mm', 0, worldFrame())).toBe('90.00°');
+    expect(buildMeasurementValueText(record, 'mm', 0, worldFrame())).toBe('90 Degrees');
 
     const collinear = { ...record, target: point([13, 10, 15]) };
     expect(formatMeasurementSummary(collinear, 'mm', 0, { referenceFrame: worldFrame() })

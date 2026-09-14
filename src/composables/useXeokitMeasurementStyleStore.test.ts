@@ -348,4 +348,44 @@ describe('useXeokitMeasurementStyleStore · measurementPickMode', () => {
     expect(useXeokitMeasurementStyleStore().state.measurementUnits)
       .toEqual({ unitSystem: 'default', metricUnit: 'MM' });
   });
+
+  it('角度 Units：缺省 Default / 2 位；Decimal Places 越界或非数字打回 2；持久化到 V9', async () => {
+    {
+      const { useXeokitMeasurementStyleStore } = await import('@/composables/useXeokitMeasurementStyleStore');
+      const style = useXeokitMeasurementStyleStore();
+      expect(style.state.measurementAngleUnits).toEqual({ unit: 'default', decimalPlaces: 2 });
+
+      style.updateMeasurementAngleUnits({ unit: 'radians', decimalPlaces: 4 });
+      await nextTick();
+      expect(style.state.measurementAngleUnits).toEqual({ unit: 'radians', decimalPlaces: 4 });
+
+      // E3D：0–8 之外的值被打回 2（窗体同时弹 Value must be between 0 and 8）。
+      style.updateMeasurementAngleUnits({ decimalPlaces: 9 });
+      expect(style.state.measurementAngleUnits.decimalPlaces).toBe(2);
+      style.updateMeasurementAngleUnits({ decimalPlaces: 8 });
+      expect(style.state.measurementAngleUnits.decimalPlaces).toBe(8);
+      style.updateMeasurementAngleUnits({ decimalPlaces: Number.NaN });
+      expect(style.state.measurementAngleUnits.decimalPlaces).toBe(2);
+      // 单位不受小数位那一下影响。
+      expect(style.state.measurementAngleUnits.unit).toBe('radians');
+      await nextTick();
+    }
+
+    vi.resetModules();
+    {
+      const { useXeokitMeasurementStyleStore } = await import('@/composables/useXeokitMeasurementStyleStore');
+      expect(useXeokitMeasurementStyleStore().state.measurementAngleUnits)
+        .toEqual({ unit: 'radians', decimalPlaces: 2 });
+    }
+
+    const keys = Array.from({ length: localStorage.length }, (_, i) => localStorage.key(i)!);
+    const v9Key = keys.find((key) => key.includes('measurement-style-v9'))!;
+    localStorage.setItem(v9Key, JSON.stringify({
+      measurementAngleUnits: { unit: 'turns', decimalPlaces: 12 },
+    }));
+    vi.resetModules();
+    const { useXeokitMeasurementStyleStore } = await import('@/composables/useXeokitMeasurementStyleStore');
+    expect(useXeokitMeasurementStyleStore().state.measurementAngleUnits)
+      .toEqual({ unit: 'default', decimalPlaces: 2 });
+  });
 });
