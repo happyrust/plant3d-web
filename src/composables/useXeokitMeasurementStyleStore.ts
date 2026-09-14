@@ -17,6 +17,14 @@ import {
   normalizeMeasurementPickLayer,
   type MeasurementPickLayerConfig,
 } from '@/measurement/pick/pickLayerModel';
+import {
+  DEFAULT_MEASUREMENT_UNIT_SELECTION,
+  applyMeasurementUnitSelection,
+  normalizeMeasurementUnitSelection,
+  type MeasurementDisplayUnit,
+  type MeasurementUnitSelection,
+  type MeasurementUnitSystem,
+} from '@/measurement/units/measurementUnits';
 
 /**
  * 测量取点模式契约：
@@ -76,6 +84,12 @@ export type XeokitMeasurementStyleConfig = {
    * 哪些候选能被拾中、拾中后位置如何派生（方案 2026-09-12 Phase A）。
    */
   measurementPickLayer: MeasurementPickLayerConfig;
+  /**
+   * E3D Measure Distance 窗体的 Units 框：Unit type（Default / Metric / Imperial）
+   * × Display Unit，两套各记一次上次选择。测量会话级，优先级高于全局单位设置
+   * （Default 档才回落到全局，= E3D 的 `!!distanceFmt`）。
+   */
+  measurementUnits: MeasurementUnitSelection;
 };
 
 const STORAGE_KEY_V1 = 'plant3d-web-xeokit-measurement-style-v1';
@@ -115,6 +129,7 @@ export const DEFAULT_XEOKIT_MEASUREMENT_STYLE: Readonly<XeokitMeasurementStyleCo
   measurementPickSources: cloneMeasurementPickSourceSettings(),
   measurementPickModeSnapMemory: {},
   measurementPickLayer: DEFAULT_MEASUREMENT_PICK_LAYER,
+  measurementUnits: DEFAULT_MEASUREMENT_UNIT_SELECTION,
 };
 
 function createDefaultMeasurementStyle(): XeokitMeasurementStyleConfig {
@@ -123,6 +138,7 @@ function createDefaultMeasurementStyle(): XeokitMeasurementStyleConfig {
     measurementPickSources: cloneMeasurementPickSourceSettings(),
     measurementPickModeSnapMemory: {},
     measurementPickLayer: normalizeMeasurementPickLayer(DEFAULT_MEASUREMENT_PICK_LAYER),
+    measurementUnits: { ...DEFAULT_MEASUREMENT_UNIT_SELECTION },
   };
 }
 
@@ -249,6 +265,8 @@ function loadPersisted(scope = getCurrentStorageScope()): XeokitMeasurementStyle
       measurementPickModeSnapMemory: cloneSnapMemory(parsed.measurementPickModeSnapMemory),
       // V8 及更早没有这一格：按 E3D 缺省（Any × Snap，Significant Snaps 开）起步。
       measurementPickLayer: normalizeMeasurementPickLayer(parsed.measurementPickLayer),
+      // 同理：没有这一格就停在 Default 档（结果随全局单位设置，与改动前一致）。
+      measurementUnits: normalizeMeasurementUnitSelection(parsed.measurementUnits),
     };
   } catch {
     return createDefaultMeasurementStyle();
@@ -387,6 +405,18 @@ function updateMeasurementPickLayer(
   updateStyle({ measurementPickLayer: next });
 }
 
+/**
+ * 改 Units 框（E3D `changeUnitType` + `selectUnitType`）：换 Unit type 时
+ * Display Unit 回到那一套自己的上次选择；选 Display Unit 只写进当前那一套的记忆。
+ */
+function updateMeasurementUnits(
+  patch: Readonly<{ unitSystem?: MeasurementUnitSystem; displayUnit?: MeasurementDisplayUnit }>,
+): void {
+  updateStyle({
+    measurementUnits: applyMeasurementUnitSelection(state.measurementUnits, patch),
+  });
+}
+
 function resetStyle(): void {
   Object.assign(state, createDefaultMeasurementStyle());
 }
@@ -397,6 +427,7 @@ export function useXeokitMeasurementStyleStore() {
     updateStyle,
     updateMeasurementPickSource,
     updateMeasurementPickLayer,
+    updateMeasurementUnits,
     setMeasurementPickMode,
     resetStyle,
   };

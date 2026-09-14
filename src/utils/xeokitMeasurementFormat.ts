@@ -15,6 +15,10 @@ import {
   type ReferenceFrameAxisLabels,
   type ResolvedReferenceFrame,
 } from '@/measurement/reference-frame';
+import {
+  formatMeasurementLengthMeters,
+  type MeasurementDistanceFormat,
+} from '@/measurement/units/measurementUnits';
 import { formatPdmsRef } from '@/utils/pdmsRefno';
 
 type MeasurementLike = MeasurementRecord | XeokitMeasurementRecord;
@@ -309,29 +313,52 @@ function formatSignedScalar(value: number, precision = 4): string {
   return `${normalized >= 0 ? '+' : '-'}${Math.abs(normalized).toFixed(precision)}`;
 }
 
+/**
+ * 给定测量会话的 Units 选择时，结果表的长度按它渲染（E3D
+ * `gphMeasure.measureFormat`）；不给就沿用调用方的全局显示单位 + 小数位。
+ */
+function lengthFormatters(
+  unit: LengthUnit,
+  precision: number,
+  format?: MeasurementDistanceFormat | null,
+): Readonly<{ plain: (v: number) => string; signed: (v: number) => string }> {
+  if (!format) {
+    return {
+      plain: (v) => formatLengthMeters(v, unit, precision),
+      signed: (v) => formatSignedLengthMeters(v, unit, precision),
+    };
+  }
+  return {
+    plain: (v) => formatMeasurementLengthMeters(v, format),
+    signed: (v) => formatMeasurementLengthMeters(v, format, { signed: true }),
+  };
+}
+
 /** E3D 标准距离结果的五行结构；P0 的参考系固定为 World XYZ。 */
 export function buildDistanceMeasurementResultRows(
   result: DistanceMeasurementRowsSource,
   unit: LengthUnit,
   precision: number,
+  format?: MeasurementDistanceFormat | null,
 ): DistanceMeasurementResultRow[] {
   const [offsetX, offsetY, offsetZ] = result.offsets.components;
   const labels = result.axisLabels ?? DISTANCE_AXIS_LABELS;
+  const fmt = lengthFormatters(unit, precision, format);
   const offsetRows: DistanceMeasurementResultRow[] = [
     {
       key: 'offset-x',
       label: `Offset ${labels[0]}`,
-      valueText: formatSignedLengthMeters(offsetX, unit, precision),
+      valueText: fmt.signed(offsetX),
     },
     {
       key: 'offset-y',
       label: `Offset ${labels[1]}`,
-      valueText: formatSignedLengthMeters(offsetY, unit, precision),
+      valueText: fmt.signed(offsetY),
     },
     {
       key: 'offset-z',
       label: `Offset ${labels[2]}`,
-      valueText: formatSignedLengthMeters(offsetZ, unit, precision),
+      valueText: fmt.signed(offsetZ),
     },
   ];
   const directionText = result.direction
@@ -346,7 +373,7 @@ export function buildDistanceMeasurementResultRows(
     {
       key: 'distance',
       label: 'Distance',
-      valueText: formatLengthMeters(result.distance, unit, precision),
+      valueText: fmt.plain(result.distance),
     },
     ...offsetRows,
     {
@@ -374,6 +401,7 @@ export function buildPerpendicularMeasurementResultRows(
   target: MeasurementPoint,
   unit: LengthUnit,
   precision: number,
+  format?: MeasurementDistanceFormat | null,
 ): PerpendicularMeasurementResultRow[] {
   const source = measurementPointDesignPos(origin);
   const foot = measurementPointDesignPos(target);
@@ -390,10 +418,11 @@ export function buildPerpendicularMeasurementResultRows(
       `${labels[2]} ${formatSignedScalar(delta[2] / distance)}`,
     ].join(' · ')
     : '--';
+  const fmt = lengthFormatters(unit, precision, format);
   return [
-    { key: 'distance', label: 'Distance', valueText: formatLengthMeters(distance, unit, precision) },
-    { key: 'vertical', label: 'Vertical', valueText: formatLengthMeters(vertical, unit, precision) },
-    { key: 'horizontal', label: 'Horizontal', valueText: formatLengthMeters(horizontal, unit, precision) },
+    { key: 'distance', label: 'Distance', valueText: fmt.plain(distance) },
+    { key: 'vertical', label: 'Vertical', valueText: fmt.plain(vertical) },
+    { key: 'horizontal', label: 'Horizontal', valueText: fmt.plain(horizontal) },
     { key: 'direction', label: 'Direction', valueText: directionText },
   ];
 }

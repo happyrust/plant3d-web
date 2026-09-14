@@ -13,6 +13,13 @@ import {
 import { useToolStore, type MeasurementPoint } from '@/composables/useToolStore';
 import { useUnitSettingsStore } from '@/composables/useUnitSettingsStore';
 import { useXeokitMeasurementStyleStore } from '@/composables/useXeokitMeasurementStyleStore';
+import {
+  measurementDisplayUnitOptions,
+  measurementSelectedDisplayUnit,
+  resolveMeasurementDistanceFormat,
+  type MeasurementDisplayUnit,
+  type MeasurementUnitSystem,
+} from '@/measurement/units/measurementUnits';
 import { formatPdmsRef } from '@/utils/pdmsRefno';
 import {
   buildDistanceMeasurementResultRows,
@@ -41,6 +48,32 @@ const interpretedResult = computed(() => {
 // E3D Perpendicular to：结果表换成 Distance / Vertical / Horizontal / Direction，
 // 且不随 WRT 重解释（垂距模式下 E3D 的 wrt 控件禁用、方向按 World，golden G4-06）。
 const perpendicularInfo = computed(() => result.value?.perpendicular ?? null);
+
+// E3D Units 框：Unit type × Display Unit 决定这一窗体的 measureFormat；
+// Default 档回落到全局单位设置（= E3D 的 !!distanceFmt）。
+const unitSelection = computed(() => measurementStyle.state.measurementUnits);
+const unitSystemOptions: readonly { value: MeasurementUnitSystem; label: string }[] = [
+  { value: 'default', label: 'Default' },
+  { value: 'metric', label: 'Metric' },
+  { value: 'imperial', label: 'Imperial' },
+];
+const displayUnitOptions = computed(() => measurementDisplayUnitOptions(unitSelection.value.unitSystem));
+const selectedDisplayUnit = computed(() => measurementSelectedDisplayUnit(unitSelection.value));
+const distanceFormat = computed(() => resolveMeasurementDistanceFormat(unitSelection.value, {
+  unit: unitSettings.displayUnit.value,
+  precision: unitSettings.precision.value,
+}));
+
+function setUnitSystem(event: Event): void {
+  const unitSystem = (event.target as HTMLSelectElement).value as MeasurementUnitSystem;
+  measurementStyle.updateMeasurementUnits({ unitSystem });
+}
+
+function setDisplayUnit(event: Event): void {
+  const displayUnit = (event.target as HTMLSelectElement).value as MeasurementDisplayUnit;
+  measurementStyle.updateMeasurementUnits({ displayUnit });
+}
+
 const resultRows = computed(() => {
   if (!result.value) return [];
   if (perpendicularInfo.value) {
@@ -49,6 +82,7 @@ const resultRows = computed(() => {
       result.value.target,
       unitSettings.displayUnit.value,
       unitSettings.precision.value,
+      distanceFormat.value,
     );
   }
   return interpretedResult.value
@@ -56,6 +90,7 @@ const resultRows = computed(() => {
       interpretedResult.value,
       unitSettings.displayUnit.value,
       unitSettings.precision.value,
+      distanceFormat.value,
     )
     : [];
 });
@@ -121,6 +156,44 @@ onMounted(() => {
       <div data-testid="measurement-wrt-active"
         class="text-xs text-muted-foreground">
         wrt: {{ perpendicularInfo ? 'World（垂距模式固定）' : referenceFrame.resolvedLabel.value }}
+      </div>
+    </div>
+
+    <div data-testid="measurement-units-controls"
+      class="mt-2 rounded-md border border-border bg-muted/20 p-2">
+      <div class="flex flex-wrap items-center gap-2">
+        <label class="text-xs text-muted-foreground" for="measurement-unit-system">
+          Unit type
+        </label>
+        <select id="measurement-unit-system"
+          data-testid="measurement-unit-system"
+          class="h-8 rounded-md border border-input bg-background px-2 text-xs"
+          :value="unitSelection.unitSystem"
+          @change="setUnitSystem">
+          <option v-for="option in unitSystemOptions"
+            :key="option.value"
+            :value="option.value">
+            {{ option.label }}
+          </option>
+        </select>
+        <label class="text-xs text-muted-foreground" for="measurement-display-unit">
+          Display Unit
+        </label>
+        <select id="measurement-display-unit"
+          data-testid="measurement-display-unit"
+          class="h-8 rounded-md border border-input bg-background px-2 text-xs disabled:opacity-50"
+          :disabled="displayUnitOptions.length === 0"
+          :value="selectedDisplayUnit ?? ''"
+          @change="setDisplayUnit">
+          <option v-if="displayUnitOptions.length === 0" value="">
+            （随全局单位设置）
+          </option>
+          <option v-for="option in displayUnitOptions"
+            :key="option.token"
+            :value="option.token">
+            {{ option.label }}
+          </option>
+        </select>
       </div>
     </div>
 

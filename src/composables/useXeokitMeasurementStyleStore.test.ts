@@ -314,4 +314,53 @@ describe('useXeokitMeasurementStyleStore · measurementPickMode', () => {
       significantSnapPoints: { fitting: false, joint: false, node: true },
     });
   });
+
+  it('Units：缺省停在 Default 档；两套 Display Unit 各记各的上次选择并持久化到 V9', async () => {
+    {
+      const { useXeokitMeasurementStyleStore } = await import('@/composables/useXeokitMeasurementStyleStore');
+      const style = useXeokitMeasurementStyleStore();
+      expect(style.state.measurementUnits).toEqual({
+        unitSystem: 'default',
+        metricUnit: 'MM',
+        imperialUnit: 'IN',
+      });
+
+      style.updateMeasurementUnits({ unitSystem: 'metric' });
+      style.updateMeasurementUnits({ displayUnit: 'METRE' });
+      style.updateMeasurementUnits({ unitSystem: 'imperial' });
+      style.updateMeasurementUnits({ displayUnit: 'FINC' });
+      // 切回公制应回到它自己的上次选择（E3D lastMetricSelection）。
+      style.updateMeasurementUnits({ unitSystem: 'metric' });
+      await nextTick();
+      expect(style.state.measurementUnits).toEqual({
+        unitSystem: 'metric',
+        metricUnit: 'METRE',
+        imperialUnit: 'FINC',
+      });
+    }
+
+    vi.resetModules();
+    {
+      const { useXeokitMeasurementStyleStore } = await import('@/composables/useXeokitMeasurementStyleStore');
+      expect(useXeokitMeasurementStyleStore().state.measurementUnits).toEqual({
+        unitSystem: 'metric',
+        metricUnit: 'METRE',
+        imperialUnit: 'FINC',
+      });
+    }
+
+    // V9 里这一格缺失 / 是脏值：回 E3D 缺省（Default 档 = 随全局单位设置）。
+    const keys = Array.from({ length: localStorage.length }, (_, i) => localStorage.key(i)!);
+    const v9Key = keys.find((key) => key.includes('measurement-style-v9'))!;
+    localStorage.setItem(v9Key, JSON.stringify({
+      measurementUnits: { unitSystem: 'nautical', metricUnit: 'KM', imperialUnit: 'YD' },
+    }));
+    vi.resetModules();
+    const { useXeokitMeasurementStyleStore } = await import('@/composables/useXeokitMeasurementStyleStore');
+    expect(useXeokitMeasurementStyleStore().state.measurementUnits).toEqual({
+      unitSystem: 'default',
+      metricUnit: 'MM',
+      imperialUnit: 'IN',
+    });
+  });
 });

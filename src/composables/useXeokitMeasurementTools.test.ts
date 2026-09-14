@@ -3355,4 +3355,91 @@ describe('useXeokitMeasurementTools', () => {
       }
     });
   });
+
+  describe('E3D Measure Distance · Units（Phase B）', () => {
+    it('尺寸图形的长度文字跟着 Units 框走；Default 档回落到全局单位设置', async () => {
+      const [
+        { useToolStore },
+        { useXeokitMeasurementTools },
+        { useXeokitMeasurementStyleStore },
+        { AnnotationMaterials },
+      ] = await Promise.all([
+        import('@/composables/useToolStore'),
+        import('@/composables/useXeokitMeasurementTools'),
+        import('@/composables/useXeokitMeasurementStyleStore'),
+        import('@/utils/three/annotation/core/AnnotationMaterials'),
+      ]);
+
+      const store = useToolStore();
+      store.clearXeokitMeasurements();
+      store.clearCurrentXeokitDraft();
+      const measurementStyle = useXeokitMeasurementStyleStore();
+      measurementStyle.resetStyle();
+      // 只看直接斜线那一条，省掉分量尺寸。
+      measurementStyle.updateStyle({ distanceShowAxisBreakdown: false });
+
+      const dimensionSystem = {
+        replaceExternalSource: vi.fn(),
+        viewport: { setSelection: vi.fn(), getSelection: vi.fn(() => null) },
+      } as any;
+      const tools = useXeokitMeasurementTools({
+        dtxViewerRef: ref(null),
+        dtxLayerRef: ref(null),
+        selectionRef: ref(null),
+        overlayContainerRef: ref(document.createElement('div')),
+        annotationSystemRef: shallowRef({
+          materials: new AnnotationMaterials(),
+          annotationGroup: new THREE.Group(),
+          registerExternalAnnotation: vi.fn(),
+          unregisterExternalAnnotation: vi.fn(),
+          selectedId: ref<string | null>(null),
+          selectAnnotation: vi.fn(),
+        } as any),
+        getDimensionSystem: () => dimensionSystem,
+        store,
+        compatViewerRef: ref(null),
+        requestRender: null,
+      });
+
+      // 1 英尺（0.3048 m）：三档各出各的串。
+      store.addXeokitDistanceMeasurement({
+        id: 'dist-units',
+        kind: 'distance',
+        origin: { entityId: 'a', worldPos: [0, 0, 0], designWorldPos: [0, 0, 0] },
+        target: { entityId: 'b', worldPos: [0.3048, 0, 0], designWorldPos: [0.3048, 0, 0] },
+        visible: true,
+        approximate: false,
+        createdAt: 1,
+      });
+
+      const labelNow = async (): Promise<string> => {
+        tools.syncFromStore();
+        await nextTick();
+        const records = dimensionSystem.replaceExternalSource.mock.calls.at(-1)?.[1];
+        return records.find((r: any) => r.id === 'xeokit-measurement:dist-units')
+          .layout.authoritativeText;
+      };
+
+      // Default：全局单位设置（mm，0 位小数）。
+      expect(await labelNow()).toBe('305 mm');
+
+      measurementStyle.updateMeasurementUnits({ unitSystem: 'metric' });
+      expect(await labelNow()).toBe('304.8 mm');
+
+      measurementStyle.updateMeasurementUnits({ displayUnit: 'METRE' });
+      expect(await labelNow()).toBe('0.305 m');
+
+      measurementStyle.updateMeasurementUnits({ unitSystem: 'imperial' });
+      expect(await labelNow()).toBe('12 in');
+
+      measurementStyle.updateMeasurementUnits({ displayUnit: 'FT' });
+      expect(await labelNow()).toBe('1.000 ft');
+
+      // 切回 Default 又回到全局单位设置。
+      measurementStyle.updateMeasurementUnits({ unitSystem: 'default' });
+      expect(await labelNow()).toBe('305 mm');
+
+      tools.dispose();
+    });
+  });
 });

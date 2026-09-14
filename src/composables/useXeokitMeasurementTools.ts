@@ -131,6 +131,11 @@ import {
   type TubingAxisPiece,
   type TubingVec3,
 } from '@/measurement/tubing/tubingAxis';
+import {
+  formatMeasurementLengthMeters,
+  resolveMeasurementDistanceFormat,
+  type MeasurementDistanceFormat,
+} from '@/measurement/units/measurementUnits';
 import { getModelSource } from '@/model-source';
 import { DTXOverlayHighlighter } from '@/utils/three/dtx/selection/DTXOverlayHighlighter';
 import {
@@ -257,12 +262,12 @@ function isAngleDraft(record: XeokitMeasurementRecord): record is XeokitAngleDra
   return record.kind === 'angle' && 'stage' in record;
 }
 
-function formatDistance(meters: number, unit: string, precision: number): string {
-  if (unit === 'mm') return `${(meters * 1000).toFixed(precision)} mm`;
-  if (unit === 'cm') return `${(meters * 100).toFixed(precision)} cm`;
-  if (unit === 'ft') return `${(meters * 3.28084).toFixed(precision)} ft`;
-  if (unit === 'in') return `${(meters * 39.3701).toFixed(precision)} in`;
-  return `${meters.toFixed(precision)} m`;
+/**
+ * 尺寸图形上的长度文字。走测量会话的 Units 选择（E3D 把 `measureFormat` 交给
+ * `GPHDIMENSION.format`，画出来的尺寸与结果表同一套格式）；数值与单位之间留一个空格。
+ */
+function formatDistance(meters: number, format: MeasurementDistanceFormat): string {
+  return formatMeasurementLengthMeters(meters, format, { separator: ' ' });
 }
 
 function distance(a: readonly [number, number, number], b: readonly [number, number, number]): number {
@@ -278,8 +283,7 @@ function toDesignPoint(
 
 function xeokitMeasurementToExternalRecord(
   rec: XeokitMeasurementRecord,
-  unit: string,
-  precision: number,
+  format: MeasurementDistanceFormat,
   sceneWorldToDesignMetres?: (point: Vec3) => readonly [number, number, number],
   isDraft = false,
   showDirectLinearDimension = true,
@@ -306,7 +310,7 @@ function xeokitMeasurementToExternalRecord(
         kind: 'linear',
         role: 'external',
         labelPinned: false,
-        authoritativeText: formatDistance(distance(a, b), unit, precision),
+        authoritativeText: formatDistance(distance(a, b), format),
         a,
         b,
         placement: { offsetM: 0.2, labelT: 0.5, side: 1 },
@@ -346,7 +350,7 @@ function xeokitMeasurementToExternalRecord(
         kind: 'linear',
         role: 'external',
         labelPinned: false,
-        authoritativeText: formatDistance(rec.deltaElevation, unit, precision),
+        authoritativeText: formatDistance(rec.deltaElevation, format),
         a,
         b,
         placement: { offsetM: 0.2, labelT: 0.5, side: 1 },
@@ -365,13 +369,13 @@ function xeokitMeasurementToExternalRecord(
       id,
       role: 'external',
       labelPinned: false,
-      formattedLabel: formatDistance(rec.absoluteElevation, unit, precision),
+      formattedLabel: formatDistance(rec.absoluteElevation, format),
       lines: [],
       labelAnchor: at,
       arrowLines: [],
       markers: [{ at, shape: 'circle', radiusPx: 4 }],
       texts: [{
-        text: `REL ${formatDistance(rec.relativeElevation, unit, precision)}`,
+        text: `REL ${formatDistance(rec.relativeElevation, format)}`,
         anchor: at,
         stackIndex: 1,
       }],
@@ -381,8 +385,7 @@ function xeokitMeasurementToExternalRecord(
 
 function worldDistanceAidPartToExternalRecord(
   part: Extract<WorldDistanceAidPart, { kind: 'axis' }>,
-  unit: string,
-  precision: number,
+  format: MeasurementDistanceFormat,
 ): ExternalDimensionRecord {
   const labelAnchor: Vec3 = [
     (part.from[0] + part.to[0]) / 2,
@@ -405,7 +408,7 @@ function worldDistanceAidPartToExternalRecord(
       id: part.id,
       role: 'external',
       labelPinned: false,
-      formattedLabel: `${axisLabel} ${formatDistance(part.valueM, unit, precision)}`,
+      formattedLabel: `${axisLabel} ${formatDistance(part.valueM, format)}`,
       lines: [{
         from: part.from,
         to: part.to,
@@ -423,8 +426,7 @@ function worldDistanceAidPartToExternalRecord(
  */
 function perpendicularAidLegToExternalRecord(
   leg: PerpendicularAidLeg,
-  unit: string,
-  precision: number,
+  format: MeasurementDistanceFormat,
 ): ExternalDimensionRecord {
   const labelAnchor: Vec3 = [
     (leg.from[0] + leg.to[0]) / 2,
@@ -446,7 +448,7 @@ function perpendicularAidLegToExternalRecord(
       id: leg.id,
       role: 'external',
       labelPinned: false,
-      formattedLabel: formatDistance(leg.valueM, unit, precision),
+      formattedLabel: formatDistance(leg.valueM, format),
       lines: [{
         from: leg.from,
         to: leg.to,
@@ -513,6 +515,14 @@ export function useXeokitMeasurementTools(options: {
   });
   const measurementStyle = useXeokitMeasurementStyleStore();
   const unitSettings = useUnitSettingsStore();
+  /**
+   * 当前测量会话的长度格式（E3D `gphMeasure.measureFormat`）：Units 框选了
+   * Metric / Imperial 就按那一档，Default 档回落到全局单位设置。
+   */
+  const distanceFormat = (): MeasurementDistanceFormat => resolveMeasurementDistanceFormat(
+    measurementStyle.state.measurementUnits,
+    { unit: unitSettings.displayUnit.value, precision: unitSettings.precision.value },
+  );
   /**
    * 测量关键点（P-Point / 成员 P-Point / 基本体关键点）一律经模型数据源端口取：
    * `legacy` 是 parquet + `:3100` API（与 2026-09-12 之前内联的取数逐字相同），`gen-model-v1` 是
@@ -2652,8 +2662,7 @@ export function useXeokitMeasurementTools(options: {
     ) => {
       const external = xeokitMeasurementToExternalRecord(
         record,
-        unitSettings.displayUnit.value,
-        unitSettings.precision.value,
+        distanceFormat(),
         options.sceneWorldToDesignMetres,
         isDraft,
         showDirectLinearDimension,
@@ -2674,11 +2683,7 @@ export function useXeokitMeasurementTools(options: {
           source: toDesignPoint(record.origin, options.sceneWorldToDesignMetres),
         });
         for (const leg of plan.legs) {
-          records.push(perpendicularAidLegToExternalRecord(
-            leg,
-            unitSettings.displayUnit.value,
-            unitSettings.precision.value,
-          ));
+          records.push(perpendicularAidLegToExternalRecord(leg, distanceFormat()));
         }
       } else if (
         record.kind === 'distance'
@@ -2699,11 +2704,7 @@ export function useXeokitMeasurementTools(options: {
         });
         for (const part of plan.parts) {
           if (part.kind === 'axis') {
-            records.push(worldDistanceAidPartToExternalRecord(
-              part,
-              unitSettings.displayUnit.value,
-              unitSettings.precision.value,
-            ));
+            records.push(worldDistanceAidPartToExternalRecord(part, distanceFormat()));
           }
         }
       }
@@ -3445,6 +3446,7 @@ export function useXeokitMeasurementTools(options: {
     () => ({
       displayUnit: unitSettings.displayUnit.value,
       precision: unitSettings.precision.value,
+      measurementUnits: measurementStyle.state.measurementUnits,
     }),
     () => {
       syncFromStore();
