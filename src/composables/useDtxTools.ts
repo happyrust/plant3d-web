@@ -17,7 +17,9 @@ import {
   Vector3,
 } from 'three';
 
-import type { CloudLabelLayoutV1 } from '@/review/domain/cloudRegion';
+import type { WorldCell } from '@/review/domain/annotationProjection/clip4';
+import type { PhasePrevious } from '@/review/domain/annotationProjection/wave';
+import type { CloudLabelLayoutV1, ObbSnapshot, RegionV1, SourceStamp, ViewSnapshotV1 } from '@/review/domain/cloudRegion';
 import type { DTXLayer, DTXSelectionController } from '@/utils/three/dtx';
 import type { DtxCompatViewer } from '@/viewer/dtx/DtxCompatViewer';
 import type { DtxViewer } from '@/viewer/dtx/DtxViewer';
@@ -33,6 +35,7 @@ import {
   dtxLoaderRevision,
   findNounByRefnoAcrossAllDbnos,
   findOwnerRefnoByTubi,
+  getDtxRefnoLoadSourceAcrossAllDbnos,
   getDtxRefnoTransform,
   resolveDtxObjectIdsByRefno,
 } from '@/composables/useDbnoInstancesDtxLoader';
@@ -43,6 +46,17 @@ import { useSelectionStore } from '@/composables/useSelectionStore';
 import { buildCloudBindings, getCloudMemberRefnos, useToolStore, type AnnotationRecord, type CloudAnnotationRecord, type CloudElementBinding, type DistanceMeasurementRecord, type MeasurementPoint, type Obb, type ObbAnnotationRecord, type RectAnnotationRecord, type Vec3 } from '@/composables/useToolStore';
 import { useUnitSettingsStore } from '@/composables/useUnitSettingsStore';
 import { useUserStore } from '@/composables/useUserStore';
+import {
+  DEFAULT_CLOUD_REGION_RENDER_STYLE,
+  liftScreenPolylineToBillboard,
+  matricesEqual,
+  obbSnapshotFromLocalBoxAndMatrix,
+  regionToWorldCells,
+  renderCloudRegion,
+  type CloudFitState,
+  type CloudRegionRenderStyle,
+  type SmallTargetLod,
+} from '@/review/domain/annotationProjection/annotationProjection';
 import {
   ALL_CLOUD_DIRTY,
   computeCloudDirty,
@@ -61,6 +75,7 @@ import {
   type LabelLayoutResult,
   type LabelPreference,
 } from '@/review/domain/annotationProjection/labelLayout';
+import { createRegionCloudPresentationV1 } from '@/review/domain/cloudRegion';
 import { emitToast } from '@/ribbon/toastBus';
 import { UserRole } from '@/types/auth';
 import { worldPerPixelAt } from '@/utils/three/annotation/utils/solvespaceLike';
@@ -139,6 +154,21 @@ type CloudRenderCache = {
   labelLayout: LabelLayoutResult | null
   /** 拖动中的临时文字框左上角（overlay 像素），松手后清空 */
   labelDragTopLeft: { x: number; y: number } | null
+  /**
+   * P2 `region-v1`：校验并（必要时按 G_new · G_old⁻¹）重映射到当前世界系的凸单元。
+   * 随「记录引用 | DTX 全局矩阵版本」失效；null = 记录校验不过（`missing-region`，走旧布局）。
+   */
+  regionCells: WorldCell[] | null
+  regionCellsKey: string
+  regionInvalidReason: string | null
+  regionCellsTracker: ValueVersionTracker<WorldCell[] | null>
+  /** 上一帧的圆角路径 + 相位框（特征锚定 / 相位交接） */
+  regionPhase: PhasePrevious | null
+  regionLod: 'cloud' | 'icon'
+  /** 本帧状态（`missing-region` = 记录没有可用范围 / 未走新管线） */
+  regionState: CloudFitState | null
+  regionLastLod: SmallTargetLod | null
+  regionPolylineCount: number
 }
 
 function createCloudRenderCache(): CloudRenderCache {
@@ -151,6 +181,15 @@ function createCloudRenderCache(): CloudRenderCache {
     frameNdcZ: 0,
     labelLayout: null,
     labelDragTopLeft: null,
+    regionCells: null,
+    regionCellsKey: '',
+    regionInvalidReason: null,
+    regionCellsTracker: createValueVersionTracker<WorldCell[] | null>(),
+    regionPhase: null,
+    regionLod: 'cloud',
+    regionState: null,
+    regionLastLod: null,
+    regionPolylineCount: 0,
   };
 }
 
@@ -160,6 +199,8 @@ type CloudOverlayEl = {
   labelWorldPos: Vector3
   leader: AnnotationLeaderVisual
   outline: MeshLine
+  /** 视口截断时轮廓可能断成多段；MeshLine 不支持子路径（§15 ②），第 2 段起用这组同材质 MeshLine */
+  outlineExtra: MeshLine[]
   bboxEdges: LineSegments
   record: CloudAnnotationRecord
   /** 目标合并 AABB 的解析缓存，见 resolveCloudTargetBbox */
@@ -188,6 +229,199 @@ export function createDefaultCloudLabelLayoutV1(): CloudLabelLayoutV1 {
 
 function labelPreferenceFromRecord(layout: CloudLabelLayoutV1): LabelPreference {
   return { uv: layout.anchor.uv, offsetPx: layout.offsetPx };
+}
+
+/** `region-v1` 呈现参数 → 几何内核样式：padding / λ / A 来自记录（非法值回默认），halo 随描边宽度 */
+function regionRenderStyleFromRecord(record: CloudAnnotationRecord, lineWidthPx: number): CloudRegionRenderStyle {
+  const p = record.presentationV1;
+  const pick = (value: number | undefined, fallback: number, min: number) =>
+    typeof value === 'number' && Number.isFinite(value) && value >= min ? value : fallback;
+  return {
+    paddingPx: pick(p?.paddingPx, DEFAULT_CLOUD_REGION_RENDER_STYLE.paddingPx, 1),
+    wavelengthPx: pick(p?.wavelengthPx, DEFAULT_CLOUD_REGION_RENDER_STYLE.wavelengthPx, 4),
+    amplitudePx: pick(p?.amplitudePx, DEFAULT_CLOUD_REGION_RENDER_STYLE.amplitudePx, 0),
+    stepPx: DEFAULT_CLOUD_REGION_RENDER_STYLE.stepPx,
+    haloWidthPx: Math.max(DEFAULT_CLOUD_REGION_RENDER_STYLE.haloWidthPx, (Number.isFinite(lineWidthPx) ? lineWidthPx : 0) * 2),
+  };
+}
+
+/** 记录是否应走 P2 范围体管线（开关开 + 显式 `region-v1` + 带范围体）；旧记录 `legacy-v0` 一律照旧 */
+function isRegionPresentationRecord(record: CloudAnnotationRecord): boolean {
+  return record.presentationV1?.algorithm === 'region-v1' && !!record.regionV1;
+}
+
+/**
+ * 创建视点快照（方案 §6.2 `ViewSnapshotV1`）：保存的是**创建证据**，不是当前相机缓存；
+ * 恢复原貌时按创建宽高比等比适配或留边，不能拿新视口比例直接覆盖原投影。
+ */
+function captureCreationViewSnapshot(params: {
+  camera: any
+  controlsTarget: Vector3 | null
+  anchorWorldPos: Vector3
+  viewportCss: { width: number; height: number }
+  capturedAt: number
+  modelSnapshotId: string | null
+}): ViewSnapshotV1 {
+  const { camera } = params;
+  const position = new Vector3();
+  camera.getWorldPosition(position);
+  const direction = camera.getWorldDirection(new Vector3());
+  const target = params.controlsTarget
+    ? params.controlsTarget.clone()
+    : position.clone().addScaledVector(direction, Math.max(position.distanceTo(params.anchorWorldPos), 1e-3));
+  const zoom = typeof camera.zoom === 'number' && Number.isFinite(camera.zoom) ? camera.zoom : 1;
+  const projection: ViewSnapshotV1['projection'] = camera.isOrthographicCamera
+    ? {
+      kind: 'orthographic',
+      worldHeight: (Number(camera.top) - Number(camera.bottom)) / (zoom || 1),
+      zoom,
+      near: Number(camera.near),
+      far: Number(camera.far),
+    }
+    : {
+      kind: 'perspective',
+      verticalFovDeg: Number(camera.fov ?? 60),
+      zoom,
+      near: Number(camera.near),
+      far: Number(camera.far),
+    };
+  const dpr = typeof window !== 'undefined' && Number.isFinite(window.devicePixelRatio) ? window.devicePixelRatio : undefined;
+  return {
+    version: 1,
+    capturedAt: params.capturedAt,
+    position: vec3ToTuple(position),
+    target: vec3ToTuple(target),
+    up: vec3ToTuple(camera.up ?? new Vector3(0, 1, 0)),
+    projection,
+    viewportCss: { width: params.viewportCss.width, height: params.viewportCss.height },
+    ...(dpr !== undefined ? { devicePixelRatio: dpr } : {}),
+    ...(params.modelSnapshotId ? { modelSnapshotId: params.modelSnapshotId } : {}),
+    capturedContext: ['camera'],
+  };
+}
+
+/**
+ * 云线创建时的来源身份（§6.2 `SourceStamp` / §15 ③）：`modelSnapshotId` 取成员所在加载批次记下的身份（多个不同则逗号连接），
+ * `globalModelMatrix` 存 DTX 全局矩阵本身；拿不到一律 `null`，不用当前打开模型的信息冒充。
+ */
+function buildCloudSourceStamp(memberRefnos: readonly string[], layer: DTXLayer | null): SourceStamp {
+  const snapshotIds = new Set<string>();
+  for (const refno of memberRefnos) {
+    const stamp = getDtxRefnoLoadSourceAcrossAllDbnos(refno);
+    if (stamp?.modelSnapshotId) snapshotIds.add(stamp.modelSnapshotId);
+  }
+  return {
+    projectKey: null,
+    modelSnapshotId: snapshotIds.size > 0 ? [...snapshotIds].sort().join(',') : null,
+    globalModelMatrix: layer ? layer.getGlobalModelMatrix().elements.slice() : null,
+    coordinateFrameId: null,
+  };
+}
+
+/** 成员 refno → 已装进 DTX 图层的 objectId（直接同名 / 加载器缓存 / `o:${refno}:n` 兜底扫描） */
+function resolveRegionObjectIdsForRefno(layer: DTXLayer, refno: string): string[] {
+  const normalized = normalizeRefnoKey(refno);
+  if (!normalized) return [];
+  const out = new Set<string>();
+  if (layer.hasObject(normalized)) out.add(normalized);
+  const dbnum = parseDbnumFromRefno(normalized);
+  if (dbnum) {
+    for (const objectId of resolveDtxObjectIdsByRefno(dbnum, normalized)) {
+      if (layer.hasObject(objectId)) out.add(objectId);
+    }
+  }
+  if (out.size === 0) {
+    const prefix = `o:${normalized}:`;
+    for (const objectId of layer.getAllObjectIds()) {
+      if (objectId.startsWith(prefix)) out.add(objectId);
+    }
+  }
+  return [...out];
+}
+
+/** `regionV1.boxes` 数量预算；超过先退成每成员一个世界 AABB，仍超过就不写新版记录 */
+export const CLOUD_REGION_MAX_BOXES = 256;
+
+/**
+ * 由目标元素集合构造 `regionV1(obb-union, origin:'members')`（§4.1 / §6.2）：
+ * 每个已加载 objectId 一个「几何局部盒 × (global × instance)」OBB，只乘一次。
+ * 任一成员没有已加载对象 = 范围不完整（coverage 不足）→ 返回 null，**不写新版记录**（漏斗会按 selectionBbox 补 legacy）。
+ */
+export function buildMembersRegionV1(params: {
+  memberRefnos: readonly string[]
+  layer: DTXLayer
+  /** 成员的世界 AABB（盒数超预算时的保守退路） */
+  getMemberAabb: (refno: string) => readonly number[] | null
+  source: SourceStamp
+}): RegionV1 | null {
+  const { memberRefnos, layer } = params;
+  if (memberRefnos.length === 0) return null;
+  const perMember: { refno: string; objectIds: string[] }[] = [];
+  let totalObjects = 0;
+  for (const refno of memberRefnos) {
+    const objectIds = resolveRegionObjectIdsForRefno(layer, refno);
+    if (objectIds.length === 0) return null;
+    perMember.push({ refno, objectIds });
+    totalObjects += objectIds.length;
+  }
+  const boxes: ObbSnapshot[] = [];
+  if (totalObjects <= CLOUD_REGION_MAX_BOXES) {
+    const localBox = new Box3();
+    const world = new Matrix4();
+    for (const { refno, objectIds } of perMember) {
+      for (const objectId of objectIds) {
+        if (!layer.getObjectLocalBoxAndWorldMatrixInto(objectId, localBox, world)) return null;
+        if (localBox.isEmpty()) return null;
+        boxes.push(obbSnapshotFromLocalBoxAndMatrix(
+          vec3ToTuple(localBox.min),
+          vec3ToTuple(localBox.max),
+          world.elements,
+          objectId,
+          normalizeRefnoKey(refno),
+        ));
+      }
+    }
+  } else {
+    if (perMember.length > CLOUD_REGION_MAX_BOXES) return null;
+    for (const { refno } of perMember) {
+      const aabb = params.getMemberAabb(refno);
+      if (!aabb || aabb.length < 6 || aabb.some((v) => !Number.isFinite(v))) return null;
+      boxes.push({
+        id: `aabb:${normalizeRefnoKey(refno)}`,
+        memberRefno: normalizeRefnoKey(refno),
+        center: [(aabb[0]! + aabb[3]!) / 2, (aabb[1]! + aabb[4]!) / 2, (aabb[2]! + aabb[5]!) / 2],
+        axes: [[1, 0, 0], [0, 1, 0], [0, 0, 1]],
+        halfSize: [(aabb[3]! - aabb[0]!) / 2, (aabb[4]! - aabb[1]!) / 2, (aabb[5]! - aabb[2]!) / 2],
+      });
+    }
+  }
+  return {
+    version: 1,
+    space: 'world',
+    source: params.source,
+    origin: 'members',
+    kind: 'obb-union',
+    boxes,
+  };
+}
+
+/** 世界凸单元的全部边（按顶点 id 对去重），bbox3d 模式画「同一范围体的真实盒边」（§4.7） */
+function collectWorldCellEdgePositions(cells: readonly WorldCell[]): Float32Array {
+  const seen = new Set<string>();
+  const out: number[] = [];
+  for (const cell of cells) {
+    for (const face of cell) {
+      for (let i = 0; i < face.length; i++) {
+        const a = face[i]!;
+        const b = face[(i + 1) % face.length]!;
+        const key = a.id < b.id ? `${a.id}|${b.id}` : `${b.id}|${a.id}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        out.push(a.p[0], a.p[1], a.p[2], b.p[0], b.p[1], b.p[2]);
+      }
+    }
+  }
+  return new Float32Array(out);
 }
 
 type CloudAnnotationVisual = {
@@ -3645,6 +3879,7 @@ export function useDtxTools(options: {
         labelWorldPos: visual.labelWorldPos.clone(),
         leader: visual.leader,
         outline: visual.outline,
+        outlineExtra: [],
         bboxEdges: visual.bboxEdges,
         record: c,
         targetBbox: null,
@@ -4026,6 +4261,7 @@ export function useDtxTools(options: {
     // ---- 帧级版本戳（方案 §9.1，开关 cloudDirtyCache）：所有云线共用，一帧算一次 ----
     const dirtyCacheOn = isCloudRenderFlagEnabled('cloudDirtyCache');
     const labelFlagOn = isCloudRenderFlagEnabled('cloudLabelLayoutV1');
+    const envelopeOn = isCloudRenderFlagEnabled('cloudProjectedEnvelope');
     const canvasRect = canvas.getBoundingClientRect();
     const overlayRect = overlay.getBoundingClientRect();
     const drawMode = annotationStyleStore.cloudDrawMode.value;
@@ -4045,15 +4281,43 @@ export function useDtxTools(options: {
         dtxLayerRef.value?.getGlobalModelMatrix().elements ?? IDENTITY_MATRIX_ELEMENTS,
       ),
       modelEpoch: dtxLoaderRevision.value,
-      shapeStyle: cloudFrameTrackers.shapeStyle.update(`${drawMode}|${CLOUD_FIT_PADDING_PX}`),
+      shapeStyle: cloudFrameTrackers.shapeStyle.update(`${drawMode}|${CLOUD_FIT_PADDING_PX}|${envelopeOn ? 1 : 0}|${cloudStyle.lineWidth}`),
       paintStyle: cloudFrameTrackers.paintStyle.update(`${cloudStyle.color}|${cloudStyle.opacity}|${cloudStyle.lineWidth}`),
     };
     const viewportRect = { x: 0, y: 0, width: overlayRect.width || canvasRect.width, height: overlayRect.height || canvasRect.height };
     cloudRenderStats.frames += 1;
 
     for (const cloud of cloudShapes.values()) {
-      const sb = resolveCloudTargetBbox(cloud);
       const recordVersion = cloud.render.recordTracker.update(cloud.record);
+      // ---- P2：range 记录（开关开 + 显式 region-v1）先把范围体校验 / 重映射成当前世界系的凸单元 ----
+      // 随「记录引用 | DTX 全局矩阵版本」失效；校验不过 = missing-region → 下面照旧走旧管线（唯一允许回退旧布局的状态）
+      const regionRequested = envelopeOn && isRegionPresentationRecord(cloud.record);
+      if (regionRequested) {
+        const cellsKey = `${recordVersion}|${frameStamp.globalModelMatrix}`;
+        if (cloud.render.regionCellsKey !== cellsKey) {
+          const recorded = cloud.record.regionV1?.source.globalModelMatrix ?? null;
+          const current = dtxLayerRef.value?.getGlobalModelMatrix() ?? null;
+          let remap: number[] | null = null;
+          if (recorded && current && !matricesEqual(recorded, current.elements)) {
+            const old = new Matrix4().fromArray(recorded);
+            // 唯一有可信转换的情形：两边矩阵都在 → G_new · G_old⁻¹ 把范围体搬到当前世界系再投影（§8 补充 1）
+            remap = Math.abs(old.determinant()) > 1e-18 ? current.clone().multiply(old.invert()).elements.slice() : null;
+          }
+          const validated = regionToWorldCells(cloud.record.regionV1, remap);
+          cloud.render.regionCells = validated.ok ? validated.cells : null;
+          cloud.render.regionInvalidReason = validated.ok ? null : validated.reason;
+          cloud.render.regionCellsKey = cellsKey;
+          if (!validated.ok) cloud.render.regionPhase = null;
+        }
+      } else if (cloud.render.regionCells || cloud.render.regionCellsKey) {
+        cloud.render.regionCells = null;
+        cloud.render.regionCellsKey = '';
+        cloud.render.regionInvalidReason = null;
+        cloud.render.regionPhase = null;
+      }
+      const regionCells = regionRequested ? cloud.render.regionCells : null;
+      // 范围体是回放权威：走新管线的记录不再每帧解析目标 AABB
+      const sb = regionCells ? null : resolveCloudTargetBbox(cloud);
       const labelEntry = labels.get(cloud.id);
       // 走 V1 屏幕布局的条件：开关开，且记录带 labelLayoutV1——或正在按像素拖动（旧记录第一次拖动即按默认锚点升级，松手写入记录）
       const labelDragging = labelFlagOn && cloud.render.labelDragTopLeft !== null;
@@ -4067,7 +4331,7 @@ export function useDtxTools(options: {
         ...frameStamp,
         targetBounds: cloud.render.targetBoundsTracker.update(sb ? [...sb.min, ...sb.max] : EMPTY_BOUNDS),
         bindings: recordVersion,
-        effectiveRegion: 0,
+        effectiveRegion: cloud.render.regionCellsTracker.update(regionCells),
         labelMetrics: measured
           ? cloud.render.labelMetricsTracker.update(`${measured.width}x${measured.height}`)
           : cloud.render.labelMetricsTracker.version,
@@ -4089,12 +4353,90 @@ export function useDtxTools(options: {
         cloudRenderStats.paintUpdates += 1;
       }
 
-      if (dirty.shape) {
+      if (dirty.shape && regionCells) {
+        // ---- P2 范围体管线（方案 §3.3）：齐次裁剪 → 屏幕凸包 → 圆角外扩 → 单侧余弦波纹 → billboard ----
+        cloudRenderStats.contourBuilds += 1;
+        const viewport = {
+          width: canvasRect.width || canvas.clientWidth || 1,
+          height: canvasRect.height || canvas.clientHeight || 1,
+        };
+        const viewProjection = new Matrix4().multiplyMatrices(viewer.camera.projectionMatrix, viewer.camera.matrixWorldInverse);
+        const style = regionRenderStyleFromRecord(cloud.record, cloudStyle.lineWidth);
+        const result = renderCloudRegion({
+          cells: regionCells,
+          viewProjection: viewProjection.elements,
+          viewport,
+          style,
+          previous: cloud.render.regionPhase,
+          previousLod: cloud.render.regionLod,
+          active: store.activeCloudAnnotationId.value === cloud.record.id,
+        });
+        cloud.render.regionState = result.state;
+        cloud.render.regionLastLod = result.lod;
+        cloud.render.regionLod = result.lod === 'icon' ? 'icon' : 'cloud';
+        if (result.path && result.phase) cloud.render.regionPhase = { path: result.path, frame: result.phase };
+        cloud.render.regionPolylineCount = result.polylines.length;
+
+        // 屏幕坐标是 canvas CSS 像素；文字框布局与 DOM 定位要 overlay 坐标
+        const dx = canvasRect.left - overlayRect.left;
+        const dy = canvasRect.top - overlayRect.top;
+        cloud.render.frame = result.referenceBounds
+          ? {
+            referenceBounds: {
+              x: result.referenceBounds.x + dx,
+              y: result.referenceBounds.y + dy,
+              width: result.referenceBounds.width,
+              height: result.referenceBounds.height,
+            },
+            enclosure: result.enclosure.map((p) => ({ x: p.x + dx, y: p.y + dy })),
+            visibleStrokes: result.polylines.map((piece) => piece.map((p) => ({ x: p.x + dx, y: p.y + dy }))),
+          }
+          : null;
+        // 置顶装饰线统一放在 ndcZ = 0 的 billboard 平面；引线端点同一平面反投影
+        cloud.render.frameNdcZ = 0;
+
+        if (drawMode === 'bbox3d') {
+          // §4.7：同一范围体的真实盒边（多成员多盒、剪切下按平行六面体），不再画随相机游动的波浪边；可见性由裁剪结果决定
+          cloud.outline.visible = false;
+          for (const extra of cloud.outlineExtra) extra.visible = false;
+          updateCloudBboxLineSegmentsGeometry(cloud.bboxEdges, collectWorldCellEdgePositions(regionCells));
+          cloudRenderStats.setPoints += 1;
+          cloud.bboxEdges.visible = result.projection.state === 'visible';
+        } else {
+          cloud.bboxEdges.visible = false;
+          const inverseViewProjection = viewProjection.clone().invert().elements;
+          const pieces = result.polylines;
+          // 第 1 段用主 MeshLine，其余段用同材质的备用 MeshLine（MeshLine 不支持子路径）
+          while (cloud.outlineExtra.length < pieces.length - 1) {
+            const extra = new MeshLine(new MeshLineGeometry(), cloud.outline.material as MeshLineMaterial);
+            extra.frustumCulled = false;
+            extra.renderOrder = cloud.outline.renderOrder;
+            toolsGroup.add(extra);
+            cloud.outlineExtra.push(extra);
+          }
+          const meshes = [cloud.outline, ...cloud.outlineExtra];
+          for (let i = 0; i < meshes.length; i++) {
+            const mesh = meshes[i]!;
+            const piece = pieces[i];
+            if (!piece || piece.length < 2) {
+              mesh.visible = false;
+              continue;
+            }
+            const positions = liftScreenPolylineToBillboard(piece, inverseViewProjection, viewport, 0);
+            (mesh.geometry as MeshLineGeometry).setPoints(positions);
+            mesh.geometry.computeBoundingSphere();
+            mesh.visible = true;
+            cloudRenderStats.setPoints += 1;
+          }
+        }
+      } else if (dirty.shape) {
         cloudRenderStats.contourBuilds += 1;
         const anchorScreen = worldToOverlayPoint(viewer.camera, canvas, overlay, cloud.worldPos);
         const labelScreen = labelV1 ? null : worldToOverlayPoint(viewer.camera, canvas, overlay, cloud.labelWorldPos);
         cloud.render.frame = null;
         cloud.render.frameNdcZ = anchorScreen.ndcZ;
+        cloud.render.regionState = regionRequested ? 'missing-region' : null;
+        for (const extra of cloud.outlineExtra) extra.visible = false;
 
         let renderBbox3d = drawMode === 'bbox3d' && !!sb?.min && !!sb?.max;
         let bboxPositions: Float32Array | null = null;
@@ -4260,6 +4602,16 @@ export function useDtxTools(options: {
               cloud.leader.root.visible = false;
             }
           }
+        } else if (labelV1 && regionCells && layoutRecord) {
+          // 范围体在（offscreen / depth-empty / 图标态）但本帧没有可用轮廓：藏起文字框与引线，
+          // **不**回退旧世界点布局——「有范围但被裁剪 / 出屏」与「没有可用范围」是两种状态
+          if (dirty.label || labelEntry.layoutMode !== 'v1') {
+            labelEntry.layoutMode = 'v1';
+            labelEntry.el.style.transform = 'none';
+            labelEntry.el.style.opacity = '0';
+            cloud.leader.root.visible = false;
+            cloud.render.labelLayout = null;
+          }
         } else if (labelEntry.layoutMode === 'v1') {
           // 从 V1 回到旧布局（开关关掉 / 本帧没有可用轮廓）：还原居中变换与图钉 → 文字框引线
           labelEntry.layoutMode = 'legacy';
@@ -4298,6 +4650,37 @@ export function useDtxTools(options: {
     cloudRenderStats.setPoints = 0;
     cloudRenderStats.labelLayouts = 0;
     cloudRenderStats.paintUpdates = 0;
+  }
+
+  /** e2e / 单测：每条云线本帧的范围体管线状态（P2）；`regionState === null` = 未走新管线（旧记录 / 开关关） */
+  function debugCloudRegionRender(): {
+    id: string
+    regionState: CloudFitState | null
+    lod: SmallTargetLod | null
+    polylineCount: number
+    invalidReason: string | null
+    cellCount: number
+    outlineVisible: boolean
+    extraVisible: number
+    bboxEdgesVisible: boolean
+    phaseAnchorId: string | null
+  }[] {
+    const out: ReturnType<typeof debugCloudRegionRender> = [];
+    for (const [id, cloud] of cloudShapes.entries()) {
+      out.push({
+        id,
+        regionState: cloud.render.regionState,
+        lod: cloud.render.regionLastLod,
+        polylineCount: cloud.render.regionPolylineCount,
+        invalidReason: cloud.render.regionInvalidReason,
+        cellCount: cloud.render.regionCells?.length ?? 0,
+        outlineVisible: cloud.outline.visible,
+        extraVisible: cloud.outlineExtra.filter((m) => m.visible).length,
+        bboxEdgesVisible: cloud.bboxEdges.visible,
+        phaseAnchorId: cloud.render.regionPhase?.frame.anchorId ?? null,
+      });
+    }
+    return out;
   }
 
   /** e2e / 单测：每条云线当前的屏幕参考框、V1 文字框布局与文字框 DOM 定位 */
@@ -4343,16 +4726,17 @@ export function useDtxTools(options: {
       selectionBbox: { min: Vec3; max: Vec3 } | null
     }[] = [];
     for (const [id, cloud] of cloudShapes.entries()) {
-      const attr = (cloud.outline.geometry as BufferGeometry).getAttribute('position');
       const worldPositions: number[] = [];
-      if (attr) {
+      for (const mesh of [cloud.outline, ...cloud.outlineExtra.filter((m) => m.visible)]) {
+        const attr = (mesh.geometry as BufferGeometry).getAttribute('position');
+        if (!attr) continue;
         for (let i = 0; i < attr.count; i += 1) {
           worldPositions.push(attr.getX(i), attr.getY(i), attr.getZ(i));
         }
       }
       out.push({
         id,
-        visible: cloud.outline.visible,
+        visible: cloud.outline.visible || cloud.outlineExtra.some((m) => m.visible),
         worldPositions,
         selectionBbox: resolveCloudTargetBbox(cloud),
       });
@@ -4812,6 +5196,38 @@ export function useDtxTools(options: {
         // P1：新建即写像素意图布局（右上角 + 18 px）；开关关着就只写旧字段
         labelLayoutV1: isCloudRenderFlagEnabled('cloudLabelLayoutV1') ? createDefaultCloudLabelLayoutV1() : undefined,
       });
+      // P2：范围体 + 创建视点（方案 §6.2 / §11 P2）。范围不完整（成员未加载 / 超预算）时**不写**新版记录，
+      // 漏斗按 selectionBbox 补 legacy-snapshot + legacy-v0；创建视点是独立证据，只要开关开就记。
+      if (isCloudRenderFlagEnabled('cloudProjectedEnvelope')) {
+        const layer = dtxLayerRef.value;
+        const source = buildCloudSourceStamp(targetRefnos, layer);
+        const regionV1 = layer
+          ? buildMembersRegionV1({
+            memberRefnos: targetRefnos,
+            layer,
+            getMemberAabb: (refno) => compat.scene.getAABB([refno]) ?? null,
+            source,
+          })
+          : null;
+        const canvasRect = canvas.getBoundingClientRect();
+        rec.viewpointV1 = {
+          creation: captureCreationViewSnapshot({
+            camera: viewer.camera,
+            controlsTarget: viewer.controls?.target instanceof Vector3 ? viewer.controls.target : null,
+            anchorWorldPos: anchor,
+            viewportCss: {
+              width: canvasRect.width || canvas.clientWidth || 1,
+              height: canvasRect.height || canvas.clientHeight || 1,
+            },
+            capturedAt: createdAt,
+            modelSnapshotId: source.modelSnapshotId,
+          }),
+        };
+        if (regionV1) {
+          rec.regionV1 = regionV1;
+          rec.presentationV1 = createRegionCloudPresentationV1();
+        }
+      }
       store.addCloudAnnotation(rec);
       clearPendingCloudAnchor();
       store.clearCloudTargetRefnos();
@@ -5365,6 +5781,7 @@ export function useDtxTools(options: {
     debugCloudRenderStats,
     resetCloudRenderStats,
     debugCloudLabelLayouts,
+    debugCloudRegionRender,
 
     // 云线 V1 标签拖动（文字框拖柄的 pointer 事件由 syncFromStore 绑定；这里给测试与外部调用）
     beginInlineOverlayAnnotationDrag,

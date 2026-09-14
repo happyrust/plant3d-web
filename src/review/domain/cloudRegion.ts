@@ -151,6 +151,20 @@ export function createLegacyCloudPresentationV1(): CloudPresentationV1 {
   };
 }
 
+/** 新建（P2 开关开）或显式「升级为空间云线」的呈现版本：范围体投影 + 凸包 + 恒像素单侧波纹 */
+export function createRegionCloudPresentationV1(): CloudPresentationV1 {
+  return {
+    version: 1,
+    algorithm: 'region-v1',
+    contour: 'convex-hull',
+    paddingPx: CLOUD_PRESENTATION_DEFAULTS.paddingPx,
+    wavelengthPx: CLOUD_PRESENTATION_DEFAULTS.wavelengthPx,
+    amplitudePx: CLOUD_PRESENTATION_DEFAULTS.amplitudePx,
+    // 相位锚定特征由运行时按确定顺序（`src:` 优先、字典序）选取并在帧间转移，不需要持久化才稳定
+    phaseAnchor: null,
+  };
+}
+
 function isFiniteV3(value: unknown): value is V3 {
   return Array.isArray(value) && value.length === 3 && value.every((n) => typeof n === 'number' && Number.isFinite(n));
 }

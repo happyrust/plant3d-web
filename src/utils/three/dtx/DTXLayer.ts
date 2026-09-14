@@ -1944,6 +1944,30 @@ export class DTXLayer {
   }
 
   /**
+   * 对象的「几何局部盒 + 世界矩阵」这一对（云线空间范围体 2026-09-14 方案 §4.1 / §15 ①）。
+   *
+   * - `localBox` = 该 geoHash 全顶点扫描出的局部包围盒（`addGeometry` 时缓存于 `_geometryLocalBBoxes`），
+   *   **不是** `obj.boundingBox`——后者在服务端给了预算 AABB 且不「可疑」时直接采用预算盒，从它反推角点会与真实变换盒不一致；
+   * - `worldMatrix` = `globalModelMatrix × instanceMatrix`，**已含全局矩阵，只乘一次**，调用方不得再乘 `getGlobalModelMatrix()`。
+   *
+   * 写入调用方传入的 `Box3` / `Matrix4`，零分配、不切 BufferGeometry。返回 false = 对象不存在 / 几何句柄缺失。
+   */
+  getObjectLocalBoxAndWorldMatrixInto(objectId: string, localBox: Box3, worldMatrix: Matrix4): boolean {
+    const obj = this._objects.get(objectId);
+    if (!obj) return false;
+    let cached = this._geometryLocalBBoxes.get(obj.geoHash);
+    if (!cached) {
+      const handle = this._geometries.get(obj.geoHash);
+      if (!handle) return false;
+      cached = this._computeGeometryLocalBBox(handle);
+    }
+    localBox.copy(cached);
+    worldMatrix.fromArray(this._matricesBuffer, obj.objectIndex * 16);
+    worldMatrix.premultiply(this._globalModelMatrix);
+    return true;
+  }
+
+  /**
    * 通过索引获取对象 ID
    */
   getObjectIdByIndex(index: number): string | null {

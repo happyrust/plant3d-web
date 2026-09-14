@@ -1,6 +1,6 @@
 # 三维云线批注：空间范围体 + 屏幕云线呈现重构方案（2026-09-14）
 
-> 状态：**已拍板**（2026-09-14 20:50，§14 十项全部按推荐项定稿；用户口径「先补四项工程证据再进入 P0 兼容基线」）。四项工程证据已于同日核实，见 §15；证据带来的口径微调（`SourceStamp` 形状、`dtxLoaderRevision` 覆盖面、合批路线）已回写进对应章节并在 §15 逐条标注。
+> 状态：**已拍板**（2026-09-14 20:50，§14 十项全部按推荐项定稿；用户口径「先补四项工程证据再进入 P0 兼容基线」）。四项工程证据已于同日核实，见 §15；证据带来的口径微调（`SourceStamp` 形状、`dtxLoaderRevision` 覆盖面、合批路线）已回写进对应章节并在 §15 逐条标注。**P0 / P1 / P2 已于同日落地**（§16 / §17 / §18）；P2.5 / P3 / P4 待排。
 > 目标：用户在三维视口绘制云线后，**camera 旋转 / 缩放 / 平移时，云线始终正确地框住它所指认的空间范围**。
 > 咨询来源：oracle CLI 浏览器模式，ChatGPT 模型标签 `Latest`（= GPT-6）+ 思考档 `Pro`，**关闭联网**，两路并行：
 > - `plant3d-cloud-geometry-core`（A1 A2 B3 B4 B5 B7 E14，35 min，↑19.7k tokens）→ 表示法与几何内核；
@@ -583,7 +583,7 @@ export function inspectionFactor(mode: 'always-on-top' | 'inspection', probes: r
 |---|---|---|---|
 | **P0 兼容基线**（✅ 2026-09-14 落地，§16） | — | 新增类型、漏斗补齐（§6.3–6.4）、三链路 round-trip（§6.5）、旧截图与调用计数基线；加载器 `DbnoRuntimeCache` 记录每次加载的来源身份（`snapshot_epoch` / manifest / `artifact_sesno`，§15 ③）供创建时填 `SourceStamp`；`isolated` 加载不 bump `dtxLoaderRevision`（§15 ④） | 旧记录输出不变；没有新呈现启用；来源身份只记不用 |
 | **P1 标签 + 脏标记**（✅ 2026-09-14 落地，§17） | `cloudLabelLayoutV1`、`cloudDirtyCache` | 接入现有轮廓：像素意图标签与最近点对引线（§5）、分阶段脏标记（§9.1） | 最近点、夹紧可逆、旧世界点兼容、静止零重建；分别关开关回退 |
-| **P2 范围体呈现** | `annotationUx.projectedEnvelope`（交互方案同名） | 首项 `DTXLayer.getObjectLocalBoxAndWorldMatrixInto`（§4.1）；并行几何内核（§4.1–4.5、4.7）、创建时写 `regionV1(obb-union, origin:'members')` + `viewpointV1.creation`；最小来源校验与 epoch 隔离、`globalModelMatrix` 重映射（§8） | 多机位包含、裁剪连续性、相位测试通过；目标范围不完整（`coverage` 不足）时不写新版记录；关闭后兼容显示，保留新字段 |
+| **P2 范围体呈现**（✅ 2026-09-14 落地，§18） | `cloudProjectedEnvelope`（= 交互方案 `annotationUx.projectedEnvelope`，落在 P1 同一开关族 `useCloudRenderFlags`） | 首项 `DTXLayer.getObjectLocalBoxAndWorldMatrixInto`（§4.1）；并行几何内核（§4.1–4.5、4.7）、创建时写 `regionV1(obb-union, origin:'members')` + `viewpointV1.creation`；最小来源校验与 epoch 隔离、`globalModelMatrix` 重映射（§8） | 多机位包含、裁剪连续性、相位测试通过；目标范围不完整（`coverage` 不足）时不写新版记录；关闭后兼容显示，保留新字段 |
 | **P2.5 局部套索（可选，后置）** | `cloudUserVolume` | §4.8 截锥扫掠体 + 深度调整交互 | 套索验收口径按 `origin:'user-volume'`；拒绝自交 |
 | **P3 共享范围体** | `annotationSharedRegion` | rect / obb 新建走 `primitiveFromPlacement`（§7）；完整失效与重绑 member 交互（§8） | 真 OBB / 剪切分支、部分加载、版本切换、原子重绑；旧记录不自动迁移 |
 | **P4 性能与显示** | `annotationUx.adaptiveLod`、`cloudBatching`、`cloudInspectionFade` | LOD（§9.3）→ 合批（§9.2）→ 按数据决定 GPU 波浪；inspection 最后单开（§10） | 合批前后几何等价、无跨线连接、调用预算；任一优化可退回 CPU 基线 |
@@ -792,6 +792,37 @@ P0 已提交：`af4b382`（15 文件；`useToolStore.ts` 只取云线 hunk）。
 - 引线起点取的是**参考矩形边**上的最近点，与真实波浪轮廓差 ≤ 波幅（≤ 6 px）；P2 换成范围体投影轮廓后由 `visibleStrokes` 直接给真实可见 stroke。
 - bbox3d 模式下角点越界时无 frame，文字框退回旧布局；P2 齐次裁剪落地后消失。
 - `useToolStore` 未改；本阶段无记录 schema 变化。
+
+---
+
+## 18. P2 范围体呈现实施记录（2026-09-14）
+
+交接会话按 §11 顺序继续未完部分。开关 `cloudProjectedEnvelope` 默认开（与 P1 两开关同一族、同样的 URL / localStorage 覆盖方式）；**只影响开关开之后新建的云线与显式 `region-v1` 记录**，旧记录 `legacy-v0` 一行渲染代码都不走新管线。
+
+| # | 内容 | 落点 |
+|---|---|---|
+| 1 | **首项访问器** `DTXLayer.getObjectLocalBoxAndWorldMatrixInto(objectId, Box3, Matrix4): boolean`：局部盒取 `_geometryLocalBBoxes.get(geoHash)`（缺则 `_computeGeometryLocalBBox` 兜底），世界矩阵 = `_matricesBuffer` 实例矩阵 `premultiply(_globalModelMatrix)`，零分配；与 `getObjectBoundingBoxInto`（可能是服务端预算 AABB）分开 | `src/utils/three/dtx/DTXLayer.ts`（+3 例 `DTXLayer.localBox.test.ts`） |
+| 2 | **几何内核**（§3.3 点名目录，纯函数、无 three / DOM）：`clip4.ts`（`buildObjectBoxCell` / `clipFace4` / `clipConvexSolid4` 封口裁剪 / `depthPlanes` / `containsPointInConvexCell` / `transformWorldCell` 重映射）、`hull2d.ts`（`convexHull2d` 三键确定序、非有限抛错 / `intersectHullWithRect`）、`roundedPath.ts`（`buildRoundedConvexPath` Minkowski 圆角 + `features` 弧长 / `atArcLength` / `visibleCloudPathIntervals` 保留全局 s）、`wave.ts`（`cloudHeightAt` 单侧余弦 + 收口区 / `transportCloudPhase` 特征保留与相位转移 / `continuingBoundaryPair` 纯几何回退 / `buildVisibleCloudPolylines` 只采样可见区间并按视口切片）、入口 `annotationProjection.ts`（`regionToWorldCells` 校验 + 展开 + 可选重映射、`projectCloudRegion` 先裁深度 → 集合凸包 → 视口求交、`renderCloudRegion` 一帧、`obbSnapshotFromLocalBoxAndMatrix`、`chooseSmallTargetLod` 12/18 px 滞回、`liftScreenPolylineToBillboard`、`worldPerPixelFromProjection`） | `src/review/domain/annotationProjection/{clip4,hull2d,roundedPath,wave,annotationProjection}.ts`（+36 例 `annotationProjection.test.ts`：GPT 21 项自检移植 + §12.1 独立参考包含测试——盒内采样点投影必须在 enclosure 内，五机位含正交 / roll / 近平面穿越；跨近平面不回退；相机钻入单元；左右各出屏的两目标集合凸包穿过视口；剪切保持平行六面体；相位交接；超大周长只在视口附近采样；重映射） |
+| 3 | **校验规则**（§6.4）：`version===1 && space==='world'`；`obb-union` 1–256 盒、中心 / 半边长有限、半边长 ≥ 0、轴单位正交（1e-3）；`hull` / `lasso-prism` 单元 4–64 顶点、4–64 面、面索引合法；未知 kind / 版本一律不可用。**不可用 = `missing-region`**（整条记录），不截成员、不修复 | `annotationProjection.ts::regionToWorldCells` |
+| 4 | **创建**（`endMarquee`）：开关开 → `buildMembersRegionV1`：每个成员 refno 解析已加载 objectId（同名 / 加载器缓存 / `o:${refno}:n` 兜底），每个 objectId 一个 OBB（`localBox × worldMatrix`，正交时真 OBB；剪切 / 退化退成 8 角点单位轴 AABB 保守包住）；**任一成员没有已加载对象 = coverage 不足 → 不写 `regionV1` / `presentationV1`**，漏斗照旧补 `legacy-snapshot + legacy-v0`；盒数 > 256 退成每成员一个世界 AABB，仍超预算不写。`SourceStamp`：`modelSnapshotId` 取成员加载批次身份（P0 记下的 `DtxLoadSourceStamp`，多个不同逗号连接，无则 `null`）、`globalModelMatrix` 存 DTX 全局矩阵本身、`projectKey` / `coordinateFrameId` 首版 `null`。`viewpointV1.creation`（独立证据，开关开就记）：相机位置 / `controls.target`（无则沿视线到锚点距离）/ up / 透视 fov·zoom·near·far 或正交 worldHeight / 视口 CSS 尺寸 / DPR / `capturedContext:['camera']`。`presentationV1 = createRegionCloudPresentationV1()`（`region-v1` / `convex-hull` / 14·52·4 / `phaseAnchor:null`——锚定由运行时按 `src:` 优先 + 字典序确定选取，不必持久化才稳定）。旧字段 `selectionBbox / screenOffset / cloudSize / leaderEndWorldPos` 继续双写 | `useDtxTools.ts`（`buildMembersRegionV1` / `buildCloudSourceStamp` / `captureCreationViewSnapshot`）、`cloudRegion.ts::createRegionCloudPresentationV1` |
+| 5 | **呈现**（`updateOverlayPositions`）：开关开 + `presentationV1.algorithm==='region-v1'` + 有 `regionV1` 的记录先把范围体校验 / 重映射成当前世界系凸单元（缓存键 `记录引用 | DTX 全局矩阵版本`；`source.globalModelMatrix` 与当前不等且可逆 → `G_new · G_old⁻¹`），进 `Stamp.effectiveRegion`。`shape` 脏时 `renderCloudRegion(cells, P×V⁻¹, 视口 CSS, 记录参数, 上一帧相位)` → 可见折线片段反投影到 `ndcZ=0` billboard 平面喂 MeshLine（第 1 段主 MeshLine，其余段同材质备用 MeshLine 池，MeshLine 不支持子路径 §15 ②）；`CloudFrame` 的 `referenceBounds` = 圆角路径包围框（含 padding 未加波浪）、`enclosure` = 路径多边形、`visibleStrokes` = 真实可见片段（引线从此接在真实波浪轮廓上，P1 遗留的 ≤ 6 px 偏差消失）。范围记录不再每帧 `resolveCloudTargetBbox`（范围体是回放权威）。**状态机**：`complete` / `viewport-cut`（只画可见片段，不伪造闭合；范围覆盖整个视口时无片段）/ `offscreen` / `depth-empty`（藏轮廓、V1 文字框 opacity 0、引线藏起，**不切回旧世界点布局**）/ `missing-region`（唯一走旧管线的状态）。极小投影：裁视口前最大边长 < 12 px 进入 `icon`（只留图钉）、> 18 px 退出；激活的小目标用 32×24 最小提示框 | `useDtxTools.ts` |
+| 6 | **bbox3d**（§4.7 / §14 #2）：`region-v1` 记录画**同一范围体**的真实边（每单元每面相邻顶点对去重 → `LineSegments`，多成员多盒、剪切下按平行六面体），不再画随相机游动的正弦边；可见性 = 裁剪结果 `visible`，与锚点无关。旧记录 bbox3d 行为不变 | 同上 |
+| 7 | **调试出口** `debugCloudRegionRender()`（state / lod / 片段数 / 校验失败原因 / 单元数 / 轮廓与盒边可见性 / 相位锚点 id）；`debugCloudOutlines` 的 `worldPositions` 并入可见备用段 | 同上 |
+| 8 | **验收测试**（§12.1）：创建写入（OBB 中心 / 半边长 / 轴按 global × instance；来源矩阵；创建视点字段；旧字段双写）、coverage 不足不写、开关关只写旧字段；正对 + 四机位（斜视 / roll / 俯视 / 反侧）投回屏幕的折线包住范围体 8 角点；相机贴着目标 → `viewport-cut` 不回退；细长目标穿近平面有可见片段；背对 → `depth-empty` 藏轮廓 / 文字框 / 引线但仍 V1；静止 120 帧四计数为零、相机一动各 +1 且相位锚点不换手；bbox3d 真实盒边 + 背对隐藏；全局矩阵变 → 重映射后轮廓平移、记录不改写；轴不正交 → `missing-region` 走旧管线；开关关 → 旧管线兼容显示且新字段保留；旧记录不受影响 | 新增 `useDtxTools.cloudRegion.test.ts`（12 例） |
+
+**验证**（2026-09-14 22:5x–23:0x，本机）：
+- `npx vitest run` 全量：**320 文件 / 2758 用例全绿**（本次新增 3 + 36 + 12 = 51 例；`cloudFit` / `cloudCreation` / `cloudRender` 既有用例不动、全绿）。第一遍全量里 `ReviewPanel.test.ts › confirmed record counts…` 失败一次，单跑该文件 44/44 与第二遍全量均通过——并行负载下的既有时序抖动，与本次改动无关。
+- `npm run type-check`：本次改动文件 **0 条新增**；剩 1 条基线外在未触碰的 `resolveLabelCollisions.test.ts`（P1 记录里已有，HEAD 既有）。
+- `npx eslint` 改动文件：0 错误（`--fix` 调了 3 处 import 顺序）。
+- 未跑 Playwright；**真机观感（波纹相位是否稳、视口截断片段、引线贴合真实轮廓、bbox3d 真实盒边）待用户在浏览器里过一遍**：画一条新云线即走新管线，`?cloud_render_flags=cloudProjectedEnvelope:0` 可对照旧管线。
+
+**遗留 / 后续**：
+- `offscreen` / 范围覆盖视口的 `viewport-cut` 只做「不画、不回退」，§4.3 的**视口边缘方向提示 / 「范围延伸至视口外」提示 UI** 未做（需要 overlay 里新的 DOM 元素与样式，属交互层，另起）。
+- `icon` 态只留现有图钉，没有单独的图标样式；`minimum-halo` 用最小 32×24 矩形走同一套圆角 + 波纹。
+- 相位交接的 120 ms 高度场混合（`blendedCloudHeightAt`）未接：换手时直接切到新相位框（相位在共同特征处连续，视觉跳变很小）。
+- `SourceStamp.modelSnapshotId` 在 gen-model-v1 路径仍为 `null`（P0 遗留，端口透传另起）；`coordinateFrameId` 首版 `null`（ViewerPanel 的 `dtxGlobalTransformAppliedKey` 不在本 composable 可见范围）；ViewerPanel「单位 / 重心设置变化即清空全部批注」的一期策略**未放宽**（带矩阵的新版记录本可只重映射，列为独立事项）。
+- 「显式升级旧记录为空间云线」的入口（§6.3 / §14 #5）未做：本阶段只有新建写 `region-v1`。
+- 合批 / LOD 64 条预算 / inspection 淡化仍按 §11 留在 P4。
 
 ---
 

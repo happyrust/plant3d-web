@@ -5,6 +5,10 @@
  *   关掉后所有云线回到旧的 `leaderEndWorldPos` 世界点布局，记录里的 `labelLayoutV1` 只是不被读。
  * - `cloudDirtyCache`（P1）：分阶段脏标记——相机 / 视口 / 目标 / 样式都没变时不重建轮廓、不 `setPoints`、不重排文字框；
  *   关掉后恢复每帧重建（现状）。
+ * - `cloudProjectedEnvelope`（P2，= 交互方案 `annotationUx.projectedEnvelope`）：
+ *   新建云线写 `regionV1(obb-union, origin:'members')` + `viewpointV1.creation` + `presentationV1.algorithm='region-v1'`；
+ *   `region-v1` 记录按「范围体齐次裁剪 → 屏幕凸包 → 圆角外扩 → 单侧余弦波纹」呈现，bbox3d 画同一范围体的真实盒边。
+ *   关掉后：新建只写旧字段（漏斗补 `legacy-v0`），已有 `region-v1` 记录按旧管线兼容显示，新字段原样保留不丢。
  *
  * 默认全部开启。覆盖方式（优先级从高到低）：
  * 1. URL `?cloud_render_flags=cloudLabelLayoutV1:0,cloudDirtyCache:1`
@@ -12,7 +16,7 @@
  * 3. 默认值
  */
 
-export type CloudRenderFlag = 'cloudLabelLayoutV1' | 'cloudDirtyCache';
+export type CloudRenderFlag = 'cloudLabelLayoutV1' | 'cloudDirtyCache' | 'cloudProjectedEnvelope';
 
 export const CLOUD_RENDER_FLAG_STORAGE_KEY = 'plant3d.cloudRenderFlags';
 export const CLOUD_RENDER_FLAG_URL_PARAM = 'cloud_render_flags';
@@ -20,6 +24,7 @@ export const CLOUD_RENDER_FLAG_URL_PARAM = 'cloud_render_flags';
 const DEFAULTS: Readonly<Record<CloudRenderFlag, boolean>> = Object.freeze({
   cloudLabelLayoutV1: true,
   cloudDirtyCache: true,
+  cloudProjectedEnvelope: true,
 });
 
 const FLAG_NAMES = Object.keys(DEFAULTS) as CloudRenderFlag[];
