@@ -179,6 +179,38 @@ describe('createDtxDimensionViewerAdapter', () => {
     // The same tube in front of a dimension's value text (no subject) does block it.
     expect(adapter.isSegmentBlocked!([0, 0, 0], [10, 0, 0], 0.02)).toBe(true);
   });
+
+  it('leaves only the bodies around the anchor out of the cast for a point on the model without an element', () => {
+    // A branch head card: the anchor is the pipe-end point inside the tube
+    // `24381_145036` (crossed at 9.9, left through its far wall) — no refno
+    // to skip, so the valve pieces that stand in front (9.5 / 9.7) count.
+    const millimetresToScene = new Matrix4().makeScale(0.001, 0.001, 0.001);
+    const hits: Record<string, (originX: number) => number | null> = {
+      'o:24381_145035:0': originX => (originX < 9.5 ? 9.5 : null),
+      'o:24381_145036:0': originX => (originX < 9.9 ? 9.9 : 0.05),
+    };
+    let objects = Object.keys(hits);
+    const layer: DtxObjectBoundsSource = {
+      collectObjectBoundsIntersecting: vi.fn(() => objects.map(objectId => ({ objectId, boundingBox: new Box3() }))),
+      raycastObject: vi.fn((objectId: string, origin: Vector3) => {
+        const distance = hits[objectId]!(origin.x);
+        return distance === null ? null : { distance };
+      }),
+    };
+    const adapter = createDtxDimensionViewerAdapter({
+      ...baseInput(elementAt({ left: 0, top: 0, width: 100, height: 100 })),
+      getMillimetresToScene: () => millimetresToScene,
+      getDtxLayer: () => layer,
+    });
+    const cast = () => adapter.isSegmentBlocked!([0, 0, 0], [10, 0, 0], 0.02, { onModel: true });
+
+    // Valve piece in front, not enclosing the anchor: hidden.
+    expect(cast()).toBe(true);
+    // Only the enclosing tube left: visible — the plain cast (no hints) still says blocked.
+    objects = objects.filter(objectId => objectId === 'o:24381_145036:0');
+    expect(cast()).toBe(false);
+    expect(adapter.isSegmentBlocked!([0, 0, 0], [10, 0, 0], 0.02)).toBe(true);
+  });
 });
 
 describe('refnoOfDtxObject', () => {

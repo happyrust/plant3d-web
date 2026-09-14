@@ -1,0 +1,3811 @@
+{
+ "24383_84337": {
+  "far": {
+   "camera": {
+    "position": [
+     11.903,
+     -16.232,
+     9.731
+    ],
+    "target": [
+     0,
+     0,
+     0
+    ]
+   },
+   "objects": 64,
+   "tags": [
+    {
+     "id": "24383_84337:isoline:0:tag:connection:Head",
+     "subject": null,
+     "label": "X 2561",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 1227.75,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24383_84337:isoline:0:tag:atta:24383_84339",
+     "subject": "24383_84339",
+     "label": "5RX01-LSUP-E0406",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 1184.458,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [
+       {
+        "objectId": "o:24383_84338:10",
+        "shortOfAnchorMm": 78.54,
+        "encloses": true
+       }
+      ],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24383_84337:isoline:0:tag:atta:24383_84341",
+     "subject": "24383_84341",
+     "label": "5RX01-LSUP-E0407",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 1258.202,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [
+       {
+        "objectId": "o:24383_84356:12",
+        "shortOfAnchorMm": 82.807,
+        "encloses": true
+       }
+      ],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24383_84337:isoline:0:tag:atta:24383_84343",
+     "subject": "24383_84343",
+     "label": "5RX01-LSUP-E0405",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 2777.439,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24383_84337:isoline:0:tag:atta:24383_84345",
+     "subject": "24383_84345",
+     "label": "5RX01-LSUP-E0404",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 1833.298,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24383_84337:isoline:0:tag:atta:24383_84347",
+     "subject": "24383_84347",
+     "label": "5RX01-LSUP-E0403",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 1786.66,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24383_84337:isoline:0:tag:atta:24383_84349",
+     "subject": "24383_84349",
+     "label": "5RX01-LSUP-E0401",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 2516.691,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24383_84337:isoline:0:tag:atta:24383_84351",
+     "subject": "24383_84351",
+     "label": "5RX01-LSUP-E0399",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 3240.967,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24383_84337:isoline:0:tag:atta:24383_84353",
+     "subject": "24383_84353",
+     "label": "5RX01-LSUP-E0397",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 2281.549,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24383_84337:isoline:0:tag:bend:24383_84355",
+     "subject": "24383_84355",
+     "label": "10°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 1420.844,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [
+       {
+        "objectId": "o:24383_84338:10",
+        "shortOfAnchorMm": 82.459,
+        "encloses": true
+       }
+      ],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24383_84337:isoline:2:tag:bend:24383_84357",
+     "subject": "24383_84357",
+     "label": "90°",
+     "kernelOccluded": true,
+     "cardCentreOffsetMm": 1462.791,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [
+       {
+        "objectId": "o:24383_84356:12",
+        "shortOfAnchorMm": 84.631,
+        "encloses": false
+       }
+      ],
+      "verdict": true
+     }
+    },
+    {
+     "id": "24383_84337:isoline:3:tag:atta:24383_84359",
+     "subject": "24383_84359",
+     "label": "5RX01-LSUP-E0408",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 3119.497,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [
+       {
+        "objectId": "o:24383_84358:14",
+        "shortOfAnchorMm": 64.305,
+        "encloses": true
+       }
+      ],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24383_84337:isoline:3:tag:bend:24383_84361",
+     "subject": "24383_84361",
+     "label": "10°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 2387.092,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [
+       {
+        "objectId": "o:24383_84358:14",
+        "shortOfAnchorMm": 64.921,
+        "encloses": true
+       }
+      ],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24383_84337:isoline:5:tag:atta:24383_84363",
+     "subject": "24383_84363",
+     "label": "5RX01-LSUP-E0409",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 4553.41,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [
+       {
+        "objectId": "o:24383_84362:16",
+        "shortOfAnchorMm": 71.273,
+        "encloses": true
+       }
+      ],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24383_84337:isoline:5:tag:atta:24383_84365",
+     "subject": "24383_84365",
+     "label": "5RX01-LSUP-E0410",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 2198.269,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24383_84337:isoline:5:tag:bend:24383_84367",
+     "subject": "24383_84367",
+     "label": "10°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 1531.333,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [
+       {
+        "objectId": "o:24383_84362:16",
+        "shortOfAnchorMm": 71.814,
+        "encloses": true
+       }
+      ],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24383_84337:isoline:7:tag:bend:24383_84369",
+     "subject": "24383_84369",
+     "label": "10°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 1582.352,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [
+       {
+        "objectId": "o:24383_84368:18",
+        "shortOfAnchorMm": 84.768,
+        "encloses": true
+       }
+      ],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24383_84337:isoline:9:tag:atta:24383_84371",
+     "subject": "24383_84371",
+     "label": "5RX01-LSUP-E0415",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 4888.37,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [
+       {
+        "objectId": "o:24383_84370:20",
+        "shortOfAnchorMm": 94.466,
+        "encloses": true
+       }
+      ],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24383_84337:isoline:9:tag:bend:24383_84373",
+     "subject": "24383_84373",
+     "label": "10°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 2629.499,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [
+       {
+        "objectId": "o:24383_84370:20",
+        "shortOfAnchorMm": 94.482,
+        "encloses": true
+       }
+      ],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24383_84337:isoline:11:tag:bend:24383_84375",
+     "subject": "24383_84375",
+     "label": "90°",
+     "kernelOccluded": true,
+     "cardCentreOffsetMm": 1681.622,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [
+       {
+        "objectId": "o:24383_84374:22",
+        "shortOfAnchorMm": 96.687,
+        "encloses": false
+       }
+      ],
+      "verdict": true
+     }
+    },
+    {
+     "id": "24383_84337:isoline:12:tag:atta:24383_84377",
+     "subject": "24383_84377",
+     "label": "5RX01-LSUP-E0416",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 1462.416,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [
+       {
+        "objectId": "o:24383_84376:24",
+        "shortOfAnchorMm": 62.783,
+        "encloses": true
+       }
+      ],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24383_84337:isoline:12:tag:atta:24383_84379",
+     "subject": "24383_84379",
+     "label": "5RX01-LSUP-E0417",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 2282.666,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [
+       {
+        "objectId": "o:24383_84376:24",
+        "shortOfAnchorMm": 61.839,
+        "encloses": true
+       }
+      ],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24383_84337:isoline:12:tag:bend:24383_84381",
+     "subject": "24383_84381",
+     "label": "90°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 1614.086,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24383_84337:isoline:13:tag:bend:24383_84383",
+     "subject": "24383_84383",
+     "label": "10°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 1652.272,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [
+       {
+        "objectId": "o:24383_84382:26",
+        "shortOfAnchorMm": 96.626,
+        "encloses": true
+       }
+      ],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24383_84337:isoline:15:tag:atta:24383_84385",
+     "subject": "24383_84385",
+     "label": "5RX01-LSUP-E0418",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 2334.555,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [
+       {
+        "objectId": "o:24383_84384:28",
+        "shortOfAnchorMm": 97.504,
+        "encloses": true
+       }
+      ],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24383_84337:isoline:15:tag:atta:24383_84387",
+     "subject": "24383_84387",
+     "label": "5RX01-LSUP-E0419",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 3737.229,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [
+       {
+        "objectId": "o:24383_84390:30",
+        "shortOfAnchorMm": 104.029,
+        "encloses": true
+       }
+      ],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24383_84337:isoline:15:tag:bend:24383_84389",
+     "subject": "24383_84389",
+     "label": "10°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 1765.039,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [
+       {
+        "objectId": "o:24383_84384:28",
+        "shortOfAnchorMm": 103.171,
+        "encloses": true
+       }
+      ],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24383_84337:isoline:17:tag:bend:24383_84391",
+     "subject": "24383_84391",
+     "label": "10°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 1883.512,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [
+       {
+        "objectId": "o:24383_84390:30",
+        "shortOfAnchorMm": 109.862,
+        "encloses": true
+       }
+      ],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24383_84337:isoline:19:tag:atta:24383_84393",
+     "subject": "24383_84393",
+     "label": "5RX01-LSUP-E0420",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 3985.071,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [
+       {
+        "objectId": "o:24383_84390:30",
+        "shortOfAnchorMm": 109.881,
+        "encloses": true
+       }
+      ],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24383_84337:isoline:19:tag:atta:24383_84395",
+     "subject": "24383_84395",
+     "label": "5RX01-LSUP-E0421",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 4207.795,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [
+       {
+        "objectId": "o:24383_84392:32",
+        "shortOfAnchorMm": 116.467,
+        "encloses": true
+       }
+      ],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24383_84337:isoline:19:tag:bend:24383_84397",
+     "subject": "24383_84397",
+     "label": "10°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 2004.09,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [
+       {
+        "objectId": "o:24383_84392:32",
+        "shortOfAnchorMm": 116.487,
+        "encloses": true
+       }
+      ],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24383_84337:isoline:25:tag:atta:24383_84403",
+     "subject": "24383_84403",
+     "label": "5RX01-LSUP-E0422",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 4490.394,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24383_84337:isoline:26:tag:bend:24383_84405",
+     "subject": "24383_84405",
+     "label": "8°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 3432.53,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [
+       {
+        "objectId": "o:24383_84402:38",
+        "shortOfAnchorMm": 121.539,
+        "encloses": true
+       }
+      ],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24383_84337:isoline:27:tag:bend:24383_84408",
+     "subject": "24383_84408",
+     "label": "67°",
+     "kernelOccluded": true,
+     "cardCentreOffsetMm": 2188.024,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [
+       {
+        "objectId": "o:24383_84406:40",
+        "shortOfAnchorMm": 112.347,
+        "encloses": false
+       },
+       {
+        "objectId": "o:24383_84407:41",
+        "shortOfAnchorMm": 44.872,
+        "encloses": false
+       }
+      ],
+      "verdict": true
+     }
+    },
+    {
+     "id": "24383_84337:isoline:29:tag:atta:24383_84411",
+     "subject": "24383_84411",
+     "label": "5RX01-LSUP-E0423",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 6497.328,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24383_84337:isoline:29:tag:bend:24383_84413",
+     "subject": "24383_84413",
+     "label": "50°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 3519.05,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24383_84337:isoline:31:tag:atta:24383_84415",
+     "subject": "24383_84415",
+     "label": "5RX01-LSUP-E0424",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 6550.371,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24383_84337:isoline:31:tag:bend:24383_84417",
+     "subject": "24383_84417",
+     "label": "60°",
+     "kernelOccluded": true,
+     "cardCentreOffsetMm": 2226.075,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [
+       {
+        "objectId": "o:24383_84414:46",
+        "shortOfAnchorMm": 82.329,
+        "encloses": false
+       }
+      ],
+      "verdict": true
+     }
+    },
+    {
+     "id": "24383_84337:isoline:37:tag:atta:24383_84423",
+     "subject": "24383_84423",
+     "label": "5RX01-LSUP-E0425",
+     "kernelOccluded": true,
+     "cardCentreOffsetMm": 1984.048,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [
+       {
+        "objectId": "o:24383_84421:51",
+        "shortOfAnchorMm": 122.262,
+        "encloses": false
+       },
+       {
+        "objectId": "o:24383_84422:52",
+        "shortOfAnchorMm": 103.854,
+        "encloses": true
+       }
+      ],
+      "verdict": true
+     }
+    },
+    {
+     "id": "24383_84337:isoline:37:tag:bend:24383_84425",
+     "subject": "24383_84425",
+     "label": "90°",
+     "kernelOccluded": true,
+     "cardCentreOffsetMm": 3698.364,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [
+       {
+        "objectId": "o:24383_84422:52",
+        "shortOfAnchorMm": 132.536,
+        "encloses": false
+       }
+      ],
+      "verdict": true
+     }
+    },
+    {
+     "id": "24383_84337:isoline:38:tag:atta:24383_84428",
+     "subject": "24383_84428",
+     "label": "5RX01-LSUP-E0426",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 4931.864,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [
+       {
+        "objectId": "o:24383_84427:55",
+        "shortOfAnchorMm": 56.966,
+        "encloses": true
+       }
+      ],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24383_84337:isoline:38:tag:atta:24383_84432",
+     "subject": "24383_84432",
+     "label": "5RX01-LSUP-E0428",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 3434.781,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [
+       {
+        "objectId": "o:24383_84431:56",
+        "shortOfAnchorMm": 59.221,
+        "encloses": true
+       }
+      ],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24383_84337:isoline:38:tag:atta:24383_84434",
+     "subject": "24383_84434",
+     "label": "5RX01-LSUP-E0427",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 5042.017,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [
+       {
+        "objectId": "o:24383_84431:56",
+        "shortOfAnchorMm": 58.016,
+        "encloses": true
+       }
+      ],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24383_84337:isoline:38:tag:bend:24383_84436",
+     "subject": "24383_84436",
+     "label": "70°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 2471.564,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24383_84337:isoline:40:tag:atta:24383_84438",
+     "subject": "24383_84438",
+     "label": "5RX01-LSUP-E0429",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 3489.546,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [
+       {
+        "objectId": "o:24383_84436:57",
+        "shortOfAnchorMm": 102.665,
+        "encloses": true
+       }
+      ],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24383_84337:isoline:40:tag:bend:24383_84440",
+     "subject": "24383_84440",
+     "label": "90°",
+     "kernelOccluded": true,
+     "cardCentreOffsetMm": 2550.085,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [
+       {
+        "objectId": "o:24383_84437:58",
+        "shortOfAnchorMm": 145.445,
+        "encloses": false
+       }
+      ],
+      "verdict": true
+     }
+    },
+    {
+     "id": "24383_84337:isoline:42:tag:atta:24383_84444",
+     "subject": "24383_84444",
+     "label": "5RX01-LSUP-E0431",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 5365.369,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [
+       {
+        "objectId": "o:24383_84442:61",
+        "shortOfAnchorMm": 53.777,
+        "encloses": true
+       },
+       {
+        "objectId": "o:24383_84443:62",
+        "shortOfAnchorMm": 53.775,
+        "encloses": true
+       }
+      ],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24383_84337:isoline:42:tag:atta:24383_84446",
+     "subject": "24383_84446",
+     "label": "5RX01-LSUP-E0430",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 7647.019,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [
+       {
+        "objectId": "o:24383_84442:61",
+        "shortOfAnchorMm": 53.685,
+        "encloses": true
+       }
+      ],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24383_84337:isoline:42:tag:connection:Tail",
+     "subject": null,
+     "label": "X -5677",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 2351.505,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    }
+   ]
+  },
+  "behind": {
+   "camera": {
+    "position": [
+     -11.903,
+     16.232,
+     -9.731
+    ],
+    "target": [
+     0,
+     0,
+     0
+    ]
+   },
+   "objects": 64,
+   "tags": [
+    {
+     "id": "24383_84337:isoline:0:tag:connection:Head",
+     "subject": null,
+     "label": "X 2561",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 2455.595,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24383_84337:isoline:0:tag:atta:24383_84339",
+     "subject": "24383_84339",
+     "label": "5RX01-LSUP-E0406",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 3701.919,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24383_84337:isoline:0:tag:atta:24383_84341",
+     "subject": "24383_84341",
+     "label": "5RX01-LSUP-E0407",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 3583.929,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24383_84337:isoline:0:tag:atta:24383_84343",
+     "subject": "24383_84343",
+     "label": "5RX01-LSUP-E0405",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 5618.139,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24383_84337:isoline:0:tag:atta:24383_84345",
+     "subject": "24383_84345",
+     "label": "5RX01-LSUP-E0404",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 5676.154,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24383_84337:isoline:0:tag:atta:24383_84347",
+     "subject": "24383_84347",
+     "label": "5RX01-LSUP-E0403",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 8097.083,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24383_84337:isoline:0:tag:atta:24383_84349",
+     "subject": "24383_84349",
+     "label": "5RX01-LSUP-E0401",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 2424.101,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24383_84337:isoline:0:tag:atta:24383_84351",
+     "subject": "24383_84351",
+     "label": "5RX01-LSUP-E0399",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 2532.214,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24383_84337:isoline:0:tag:atta:24383_84353",
+     "subject": "24383_84353",
+     "label": "5RX01-LSUP-E0397",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 2534.794,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24383_84337:isoline:0:tag:bend:24383_84355",
+     "subject": "24383_84355",
+     "label": "10°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 2548.016,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24383_84337:isoline:2:tag:bend:24383_84357",
+     "subject": "24383_84357",
+     "label": "90°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 2506.069,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24383_84337:isoline:3:tag:atta:24383_84359",
+     "subject": "24383_84359",
+     "label": "5RX01-LSUP-E0408",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 7474.448,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24383_84337:isoline:3:tag:bend:24383_84361",
+     "subject": "24383_84361",
+     "label": "10°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 2476.927,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24383_84337:isoline:5:tag:atta:24383_84363",
+     "subject": "24383_84363",
+     "label": "5RX01-LSUP-E0409",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 7340.326,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24383_84337:isoline:5:tag:atta:24383_84365",
+     "subject": "24383_84365",
+     "label": "5RX01-LSUP-E0410",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 5037.129,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24383_84337:isoline:5:tag:bend:24383_84367",
+     "subject": "24383_84367",
+     "label": "10°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 2437.527,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24383_84337:isoline:7:tag:bend:24383_84369",
+     "subject": "24383_84369",
+     "label": "10°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 3818.414,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24383_84337:isoline:9:tag:atta:24383_84371",
+     "subject": "24383_84371",
+     "label": "5RX01-LSUP-E0415",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 4883.918,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24383_84337:isoline:9:tag:bend:24383_84373",
+     "subject": "24383_84373",
+     "label": "10°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 5581.016,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24383_84337:isoline:11:tag:bend:24383_84375",
+     "subject": "24383_84375",
+     "label": "90°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 2287.238,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24383_84337:isoline:12:tag:atta:24383_84377",
+     "subject": "24383_84377",
+     "label": "5RX01-LSUP-E0416",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 3216.49,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24383_84337:isoline:12:tag:atta:24383_84379",
+     "subject": "24383_84379",
+     "label": "5RX01-LSUP-E0417",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 4910.534,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24383_84337:isoline:12:tag:bend:24383_84381",
+     "subject": "24383_84381",
+     "label": "90°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 2354.774,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24383_84337:isoline:13:tag:bend:24383_84383",
+     "subject": "24383_84383",
+     "label": "10°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 2316.588,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24383_84337:isoline:15:tag:atta:24383_84385",
+     "subject": "24383_84385",
+     "label": "5RX01-LSUP-E0418",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 3221.799,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24383_84337:isoline:15:tag:atta:24383_84387",
+     "subject": "24383_84387",
+     "label": "5RX01-LSUP-E0419",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 1915.543,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24383_84337:isoline:15:tag:bend:24383_84389",
+     "subject": "24383_84389",
+     "label": "10°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 2203.821,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24383_84337:isoline:17:tag:bend:24383_84391",
+     "subject": "24383_84391",
+     "label": "10°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 2085.348,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24383_84337:isoline:19:tag:atta:24383_84393",
+     "subject": "24383_84393",
+     "label": "5RX01-LSUP-E0420",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 4410.507,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24383_84337:isoline:19:tag:atta:24383_84395",
+     "subject": "24383_84395",
+     "label": "5RX01-LSUP-E0421",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 4126.737,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24383_84337:isoline:19:tag:bend:24383_84397",
+     "subject": "24383_84397",
+     "label": "10°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 1964.77,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24383_84337:isoline:25:tag:atta:24383_84403",
+     "subject": "24383_84403",
+     "label": "5RX01-LSUP-E0422",
+     "kernelOccluded": true,
+     "cardCentreOffsetMm": 3905.184,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [
+       {
+        "objectId": "o:24383_84406:40",
+        "shortOfAnchorMm": 462.767,
+        "encloses": false
+       }
+      ],
+      "verdict": true
+     }
+    },
+    {
+     "id": "24383_84337:isoline:26:tag:bend:24383_84405",
+     "subject": "24383_84405",
+     "label": "8°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 1823.529,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24383_84337:isoline:27:tag:bend:24383_84408",
+     "subject": "24383_84408",
+     "label": "67°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 2849.338,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24383_84337:isoline:29:tag:atta:24383_84411",
+     "subject": "24383_84411",
+     "label": "5RX01-LSUP-E0423",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 3809.229,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24383_84337:isoline:29:tag:bend:24383_84413",
+     "subject": "24383_84413",
+     "label": "50°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 2831.126,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24383_84337:isoline:31:tag:atta:24383_84415",
+     "subject": "24383_84415",
+     "label": "5RX01-LSUP-E0424",
+     "kernelOccluded": true,
+     "cardCentreOffsetMm": 2534.873,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [
+       {
+        "objectId": "o:24383_84414:46",
+        "shortOfAnchorMm": 373.785,
+        "encloses": false
+       }
+      ],
+      "verdict": true
+     }
+    },
+    {
+     "id": "24383_84337:isoline:31:tag:bend:24383_84417",
+     "subject": "24383_84417",
+     "label": "60°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 2788.456,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24383_84337:isoline:37:tag:atta:24383_84423",
+     "subject": "24383_84423",
+     "label": "5RX01-LSUP-E0425",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 1514.109,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24383_84337:isoline:37:tag:bend:24383_84425",
+     "subject": "24383_84425",
+     "label": "90°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 2651.812,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24383_84337:isoline:38:tag:atta:24383_84428",
+     "subject": "24383_84428",
+     "label": "5RX01-LSUP-E0426",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 4906.928,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24383_84337:isoline:38:tag:atta:24383_84432",
+     "subject": "24383_84432",
+     "label": "5RX01-LSUP-E0428",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 4594.826,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24383_84337:isoline:38:tag:atta:24383_84434",
+     "subject": "24383_84434",
+     "label": "5RX01-LSUP-E0427",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 2235.707,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24383_84337:isoline:38:tag:bend:24383_84436",
+     "subject": "24383_84436",
+     "label": "70°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 1497.296,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24383_84337:isoline:40:tag:atta:24383_84438",
+     "subject": "24383_84438",
+     "label": "5RX01-LSUP-E0429",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 4478.449,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24383_84337:isoline:40:tag:bend:24383_84440",
+     "subject": "24383_84440",
+     "label": "90°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 1418.775,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24383_84337:isoline:42:tag:atta:24383_84444",
+     "subject": "24383_84444",
+     "label": "5RX01-LSUP-E0431",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 1237.151,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24383_84337:isoline:42:tag:atta:24383_84446",
+     "subject": "24383_84446",
+     "label": "5RX01-LSUP-E0430",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 1249.034,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24383_84337:isoline:42:tag:connection:Tail",
+     "subject": null,
+     "label": "X -5677",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 1331.84,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [
+       {
+        "objectId": "o:24383_84448:63",
+        "shortOfAnchorMm": 63.153,
+        "encloses": true
+       }
+      ],
+      "verdict": false
+     }
+    }
+   ]
+  }
+ },
+ "24381_106191": {
+  "far": {
+   "camera": {
+    "position": [
+     12.639,
+     -17.236,
+     10.333
+    ],
+    "target": [
+     0,
+     0,
+     0
+    ]
+   },
+   "objects": 99,
+   "tags": [
+    {
+     "id": "24381_106191:isoline:0:tag:connection:Head",
+     "subject": null,
+     "label": "X 4978",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 1618.67,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_106191:isoline:1:tag:bend:24381_106192",
+     "subject": "24381_106192",
+     "label": "88.8°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 2827.45,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_106191:isoline:2:tag:bend:24381_106193",
+     "subject": "24381_106193",
+     "label": "89.97°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 4020.081,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_106191:isoline:2:tag:bend:24381_106194",
+     "subject": "24381_106194",
+     "label": "89.97°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 2649.252,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_106191:isoline:3:tag:bend:24381_106195",
+     "subject": "24381_106195",
+     "label": "89.97°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 4032.749,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_106191:isoline:5:tag:bend:24381_106196",
+     "subject": "24381_106196",
+     "label": "89.99°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 5780.658,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_106191:isoline:5:tag:bend:24381_106198",
+     "subject": "24381_106198",
+     "label": "77.41°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 5770.058,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_106191:isoline:8:tag:bend:24381_106199",
+     "subject": "24381_106199",
+     "label": "92.1°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 2696.704,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_106191:isoline:8:tag:bend:24381_106203",
+     "subject": "24381_106203",
+     "label": "90°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 5413.196,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_106191:isoline:10:tag:bend:24381_106210",
+     "subject": "24381_106210",
+     "label": "62.89°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 1980.24,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_106191:isoline:12:tag:bend:24381_106212",
+     "subject": "24381_106212",
+     "label": "89.39°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 3280.449,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_106191:isoline:13:tag:bend:24381_106213",
+     "subject": "24381_106213",
+     "label": "90°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 3347.293,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_106191:isoline:13:tag:connection:24381_106215",
+     "subject": "24381_106215",
+     "label": "接 Copy-of-1RCS008MN-TUBE/RCS006MP",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 5041.183,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_106191:isoline:13:tag:bend:24381_106216",
+     "subject": "24381_106216",
+     "label": "92.08°",
+     "kernelOccluded": true,
+     "cardCentreOffsetMm": 4947.166,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [
+       {
+        "objectId": "o:24381_106218:60",
+        "shortOfAnchorMm": 129.927,
+        "encloses": false
+       }
+      ],
+      "verdict": true
+     }
+    },
+    {
+     "id": "24381_106191:isoline:15:tag:bend:24381_106217",
+     "subject": "24381_106217",
+     "label": "90.24°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 4944.113,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_106191:isoline:15:tag:connection:24381_106219",
+     "subject": "24381_106219",
+     "label": "接 Copy-of-1RCS008MN-TUBE/MAOXIGUAN",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 10808.024,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_106191:isoline:15:tag:tee:24381_106219",
+     "subject": "24381_106219",
+     "label": "PE +21800",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 1918.824,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_106191:isoline:17:tag:bend:24381_106220",
+     "subject": "24381_106220",
+     "label": "88.29°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 6977.169,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_106191:isoline:17:tag:bend:24381_106222",
+     "subject": "24381_106222",
+     "label": "88.29°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 6909.324,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_106191:isoline:19:tag:bend:24381_106225",
+     "subject": "24381_106225",
+     "label": "88.8°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 2145.916,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_106191:isoline:19:tag:bend:24381_106227",
+     "subject": "24381_106227",
+     "label": "88.8°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 3470.481,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_106191:isoline:21:tag:bend:24381_106229",
+     "subject": "24381_106229",
+     "label": "88.57°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 2231.258,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_106191:isoline:21:tag:bend:24381_106231",
+     "subject": "24381_106231",
+     "label": "88.57°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 3533.911,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_106191:isoline:23:tag:bend:24381_106234",
+     "subject": "24381_106234",
+     "label": "88.8°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 2285.649,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_106191:isoline:23:tag:bend:24381_106235",
+     "subject": "24381_106235",
+     "label": "88.8°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 3694.053,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_106191:isoline:25:tag:bend:24381_106238",
+     "subject": "24381_106238",
+     "label": "88.57°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 3743.819,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_106191:isoline:25:tag:bend:24381_106240",
+     "subject": "24381_106240",
+     "label": "88.57°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 3707.718,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_106191:isoline:27:tag:bend:24381_106244",
+     "subject": "24381_106244",
+     "label": "88.8°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 2462.161,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_106191:isoline:27:tag:bend:24381_106246",
+     "subject": "24381_106246",
+     "label": "88.8°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 2386.392,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_106191:isoline:29:tag:bend:24381_106249",
+     "subject": "24381_106249",
+     "label": "87.31°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 2463.723,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_106191:isoline:29:tag:bend:24381_106250",
+     "subject": "24381_106250",
+     "label": "87.31°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 5932.569,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_106191:isoline:31:tag:bend:24381_106251",
+     "subject": "24381_106251",
+     "label": "90°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 2479.505,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_106191:isoline:31:tag:connection:Tail",
+     "subject": null,
+     "label": "X 9760",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 3519.261,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    }
+   ]
+  },
+  "behind": {
+   "camera": {
+    "position": [
+     -12.639,
+     17.236,
+     -10.333
+    ],
+    "target": [
+     0,
+     0,
+     0
+    ]
+   },
+   "objects": 99,
+   "tags": [
+    {
+     "id": "24381_106191:isoline:0:tag:connection:Head",
+     "subject": null,
+     "label": "X 4978",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 2292.502,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_106191:isoline:1:tag:bend:24381_106192",
+     "subject": "24381_106192",
+     "label": "88.8°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 3958.721,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_106191:isoline:2:tag:bend:24381_106193",
+     "subject": "24381_106193",
+     "label": "89.97°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 3890.045,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_106191:isoline:2:tag:bend:24381_106194",
+     "subject": "24381_106194",
+     "label": "89.97°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 3920.847,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_106191:isoline:3:tag:bend:24381_106195",
+     "subject": "24381_106195",
+     "label": "89.97°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 5822.4,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_106191:isoline:5:tag:bend:24381_106196",
+     "subject": "24381_106196",
+     "label": "89.99°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 8180.803,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_106191:isoline:5:tag:bend:24381_106198",
+     "subject": "24381_106198",
+     "label": "77.41°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 8650.556,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_106191:isoline:8:tag:bend:24381_106199",
+     "subject": "24381_106199",
+     "label": "92.1°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 8690.117,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_106191:isoline:8:tag:bend:24381_106203",
+     "subject": "24381_106203",
+     "label": "90°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 9007.418,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_106191:isoline:10:tag:bend:24381_106210",
+     "subject": "24381_106210",
+     "label": "62.89°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 2261.117,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_106191:isoline:12:tag:bend:24381_106212",
+     "subject": "24381_106212",
+     "label": "89.39°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 3505.722,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_106191:isoline:13:tag:bend:24381_106213",
+     "subject": "24381_106213",
+     "label": "90°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 3438.878,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_106191:isoline:13:tag:connection:24381_106215",
+     "subject": "24381_106215",
+     "label": "接 Copy-of-1RCS008MN-TUBE/RCS006MP",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 7950.286,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_106191:isoline:13:tag:bend:24381_106216",
+     "subject": "24381_106216",
+     "label": "92.08°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 5232.091,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_106191:isoline:15:tag:bend:24381_106217",
+     "subject": "24381_106217",
+     "label": "90.24°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 5235.144,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_106191:isoline:15:tag:connection:24381_106219",
+     "subject": "24381_106219",
+     "label": "接 Copy-of-1RCS008MN-TUBE/MAOXIGUAN",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 8207.17,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_106191:isoline:15:tag:tee:24381_106219",
+     "subject": "24381_106219",
+     "label": "PE +21800",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 4943.69,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_106191:isoline:17:tag:bend:24381_106220",
+     "subject": "24381_106220",
+     "label": "88.29°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 7443.444,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_106191:isoline:17:tag:bend:24381_106222",
+     "subject": "24381_106222",
+     "label": "88.29°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 3534.725,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_106191:isoline:19:tag:bend:24381_106225",
+     "subject": "24381_106225",
+     "label": "88.8°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 2095.441,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_106191:isoline:19:tag:bend:24381_106227",
+     "subject": "24381_106227",
+     "label": "88.8°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 4973.536,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_106191:isoline:21:tag:bend:24381_106229",
+     "subject": "24381_106229",
+     "label": "88.57°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 2010.099,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_106191:isoline:21:tag:bend:24381_106231",
+     "subject": "24381_106231",
+     "label": "88.57°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 4878.39,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_106191:isoline:23:tag:bend:24381_106234",
+     "subject": "24381_106234",
+     "label": "88.8°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 3129.134,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_106191:isoline:23:tag:bend:24381_106235",
+     "subject": "24381_106235",
+     "label": "88.8°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 3092.118,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_106191:isoline:25:tag:bend:24381_106238",
+     "subject": "24381_106238",
+     "label": "88.57°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 1901.47,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_106191:isoline:25:tag:bend:24381_106240",
+     "subject": "24381_106240",
+     "label": "88.57°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 3078.453,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_106191:isoline:27:tag:bend:24381_106244",
+     "subject": "24381_106244",
+     "label": "88.8°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 1779.196,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_106191:isoline:27:tag:bend:24381_106246",
+     "subject": "24381_106246",
+     "label": "88.8°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 1854.965,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_106191:isoline:29:tag:bend:24381_106249",
+     "subject": "24381_106249",
+     "label": "87.31°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 2844.214,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_106191:isoline:29:tag:bend:24381_106250",
+     "subject": "24381_106250",
+     "label": "87.31°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 4246.688,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_106191:isoline:31:tag:bend:24381_106251",
+     "subject": "24381_106251",
+     "label": "90°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 1761.852,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_106191:isoline:31:tag:connection:Tail",
+     "subject": null,
+     "label": "X 9760",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 1630.607,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    }
+   ]
+  }
+ },
+ "24383_92086": {
+  "far": {
+   "camera": {
+    "position": [
+     1.473,
+     -2.009,
+     1.204
+    ],
+    "target": [
+     0,
+     0,
+     0
+    ]
+   },
+   "objects": 2,
+   "tags": [
+    {
+     "id": "24383_92086:isoline:0:tag:connection:Head",
+     "subject": null,
+     "label": "X -24807",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 198.57,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24383_92086:isoline:0:tag:atta:24383_92088",
+     "subject": "24383_92088",
+     "label": "1RB03-MSUP-E0012",
+     "kernelOccluded": true,
+     "cardCentreOffsetMm": 357.712,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [
+       {
+        "objectId": "o:24383_92086:0",
+        "shortOfAnchorMm": 14.752,
+        "encloses": true
+       },
+       {
+        "objectId": "o:24383_92087:1",
+        "shortOfAnchorMm": 208.774,
+        "encloses": false
+       }
+      ],
+      "verdict": true
+     }
+    },
+    {
+     "id": "24383_92086:isoline:0:tag:atta:24383_92089",
+     "subject": "24383_92089",
+     "label": "/1RB03-MSUP-E0011",
+     "kernelOccluded": true,
+     "cardCentreOffsetMm": 313.723,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [
+       {
+        "objectId": "o:24383_92087:1",
+        "shortOfAnchorMm": 183.979,
+        "encloses": false
+       }
+      ],
+      "verdict": true
+     }
+    },
+    {
+     "id": "24383_92086:isoline:0:tag:connection:Tail",
+     "subject": null,
+     "label": "X -26404",
+     "kernelOccluded": true,
+     "cardCentreOffsetMm": 264.111,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [
+       {
+        "objectId": "o:24383_92086:0",
+        "shortOfAnchorMm": 16.612,
+        "encloses": true
+       },
+       {
+        "objectId": "o:24383_92087:1",
+        "shortOfAnchorMm": 235.142,
+        "encloses": false
+       }
+      ],
+      "verdict": true
+     }
+    }
+   ]
+  },
+  "behind": {
+   "camera": {
+    "position": [
+     -1.473,
+     2.009,
+     -1.204
+    ],
+    "target": [
+     0,
+     0,
+     0
+    ]
+   },
+   "objects": 2,
+   "tags": [
+    {
+     "id": "24383_92086:isoline:0:tag:connection:Head",
+     "subject": null,
+     "label": "X -24807",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 260.411,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24383_92086:isoline:0:tag:atta:24383_92088",
+     "subject": "24383_92088",
+     "label": "1RB03-MSUP-E0012",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 206.197,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [
+       {
+        "objectId": "o:24383_92086:0",
+        "shortOfAnchorMm": 13.809,
+        "encloses": true
+       }
+      ],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24383_92086:isoline:0:tag:atta:24383_92089",
+     "subject": "24383_92089",
+     "label": "/1RB03-MSUP-E0011",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 241.559,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [
+       {
+        "objectId": "o:24383_92086:0",
+        "shortOfAnchorMm": 16.121,
+        "encloses": true
+       }
+      ],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24383_92086:isoline:0:tag:connection:Tail",
+     "subject": null,
+     "label": "X -26404",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 196.443,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    }
+   ]
+  }
+ },
+ "24381_105520": {
+  "far": {
+   "camera": {
+    "position": [
+     3.616,
+     -4.932,
+     2.957
+    ],
+    "target": [
+     0,
+     0,
+     0
+    ]
+   },
+   "objects": 41,
+   "tags": [
+    {
+     "id": "24381_105520:isoline:0:tag:connection:Head",
+     "subject": null,
+     "label": "X -8364",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 333.06,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [
+       {
+        "objectId": "o:24381_105521:18",
+        "shortOfAnchorMm": 14.829,
+        "encloses": true
+       }
+      ],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_105520:isoline:0:tag:bend:24381_105522",
+     "subject": "24381_105522",
+     "label": "90°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 594.242,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_105520:isoline:2:tag:bend:24381_105523",
+     "subject": "24381_105523",
+     "label": "88.8°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 390.841,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_105520:isoline:3:tag:bend:24381_105524",
+     "subject": "24381_105524",
+     "label": "89.97°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 632.27,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_105520:isoline:3:tag:bend:24381_105525",
+     "subject": "24381_105525",
+     "label": "89.97°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 391.551,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_105520:isoline:4:tag:bend:24381_105526",
+     "subject": "24381_105526",
+     "label": "89.97°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 368.913,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_105520:isoline:5:tag:bend:24381_105527",
+     "subject": "24381_105527",
+     "label": "89.97°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 895.201,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_105520:isoline:6:tag:bend:24381_105528",
+     "subject": "24381_105528",
+     "label": "88.8°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 988.439,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_105520:isoline:8:tag:bend:24381_105529",
+     "subject": "24381_105529",
+     "label": "88.8°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 428.359,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_105520:isoline:8:tag:bend:24381_105530",
+     "subject": "24381_105530",
+     "label": "88.8°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 1219.449,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_105520:isoline:10:tag:bend:24381_105531",
+     "subject": "24381_105531",
+     "label": "88.8°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 511.992,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_105520:isoline:11:tag:bend:24381_105532",
+     "subject": "24381_105532",
+     "label": "86.17°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 517.377,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_105520:isoline:11:tag:bend:24381_105533",
+     "subject": "24381_105533",
+     "label": "88.8°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 670.886,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_105520:isoline:13:tag:bend:24381_105534",
+     "subject": "24381_105534",
+     "label": "84.34°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 1096.768,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_105520:isoline:14:tag:bend:24381_105535",
+     "subject": "24381_105535",
+     "label": "76.81°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 1659.446,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_105520:isoline:16:tag:bend:24381_105536",
+     "subject": "24381_105536",
+     "label": "90°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 1301.966,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_105520:isoline:16:tag:bend:24381_105537",
+     "subject": "24381_105537",
+     "label": "90°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 1301.012,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_105520:isoline:17:tag:elevation:24381_105538",
+     "subject": "24381_105538",
+     "label": "PE +4065",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 1217.399,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_105520:isoline:17:tag:elevation:24381_105539",
+     "subject": "24381_105539",
+     "label": "PE +3980",
+     "kernelOccluded": true,
+     "cardCentreOffsetMm": 1218.086,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [
+       {
+        "objectId": "o:24381_105520:5",
+        "shortOfAnchorMm": 1768.533,
+        "encloses": false
+       },
+       {
+        "objectId": "o:24381_105533:30",
+        "shortOfAnchorMm": 1757.721,
+        "encloses": false
+       }
+      ],
+      "verdict": true
+     }
+    },
+    {
+     "id": "24381_105520:isoline:17:tag:elevation:24381_105540",
+     "subject": "24381_105540",
+     "label": "PE +3895",
+     "kernelOccluded": true,
+     "cardCentreOffsetMm": 764.351,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [
+       {
+        "objectId": "o:24381_105520:12",
+        "shortOfAnchorMm": 1738.175,
+        "encloses": false
+       }
+      ],
+      "verdict": true
+     }
+    },
+    {
+     "id": "24381_105520:isoline:18:tag:connection:24381_105541",
+     "subject": "24381_105541",
+     "label": "接 Copy-(2)-of-1RCS604MP-YK/B2",
+     "kernelOccluded": true,
+     "cardCentreOffsetMm": 2813.818,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [
+       {
+        "objectId": "o:24381_105520:12",
+        "shortOfAnchorMm": 1748.181,
+        "encloses": false
+       }
+      ],
+      "verdict": true
+     }
+    },
+    {
+     "id": "24381_105520:isoline:18:tag:tee:24381_105541",
+     "subject": "24381_105541",
+     "label": "PE +3795",
+     "kernelOccluded": true,
+     "cardCentreOffsetMm": 1843.048,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [
+       {
+        "objectId": "o:24381_105520:12",
+        "shortOfAnchorMm": 1746.038,
+        "encloses": false
+       }
+      ],
+      "verdict": true
+     }
+    },
+    {
+     "id": "24381_105520:isoline:18:tag:bend:24381_105542",
+     "subject": "24381_105542",
+     "label": "90°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 1343.068,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_105520:isoline:19:tag:bend:24381_105543",
+     "subject": "24381_105543",
+     "label": "90°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 2011.478,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_105520:isoline:20:tag:connection:Tail",
+     "subject": null,
+     "label": "X -11700",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 1228.786,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    }
+   ]
+  },
+  "behind": {
+   "camera": {
+    "position": [
+     -3.616,
+     4.932,
+     -2.957
+    ],
+    "target": [
+     0,
+     0,
+     0
+    ]
+   },
+   "objects": 41,
+   "tags": [
+    {
+     "id": "24381_105520:isoline:0:tag:connection:Head",
+     "subject": null,
+     "label": "X -8364",
+     "kernelOccluded": true,
+     "cardCentreOffsetMm": 1226.819,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [
+       {
+        "objectId": "o:24381_105521:18",
+        "shortOfAnchorMm": 15.087,
+        "encloses": true
+       },
+       {
+        "objectId": "o:24381_105535:32",
+        "shortOfAnchorMm": 3620.983,
+        "encloses": false
+       }
+      ],
+      "verdict": true
+     }
+    },
+    {
+     "id": "24381_105520:isoline:0:tag:bend:24381_105522",
+     "subject": "24381_105522",
+     "label": "90°",
+     "kernelOccluded": true,
+     "cardCentreOffsetMm": 1347.553,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [
+       {
+        "objectId": "o:24381_105534:31",
+        "shortOfAnchorMm": 3512.511,
+        "encloses": false
+       }
+      ],
+      "verdict": true
+     }
+    },
+    {
+     "id": "24381_105520:isoline:2:tag:bend:24381_105523",
+     "subject": "24381_105523",
+     "label": "88.8°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 1316.45,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_105520:isoline:3:tag:bend:24381_105524",
+     "subject": "24381_105524",
+     "label": "89.97°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 1852.999,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_105520:isoline:3:tag:bend:24381_105525",
+     "subject": "24381_105525",
+     "label": "89.97°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 1861.682,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_105520:isoline:4:tag:bend:24381_105526",
+     "subject": "24381_105526",
+     "label": "89.97°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 1277.343,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_105520:isoline:5:tag:bend:24381_105527",
+     "subject": "24381_105527",
+     "label": "89.97°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 1906.203,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_105520:isoline:6:tag:bend:24381_105528",
+     "subject": "24381_105528",
+     "label": "88.8°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 1924.254,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_105520:isoline:8:tag:bend:24381_105529",
+     "subject": "24381_105529",
+     "label": "88.8°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 1884.63,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_105520:isoline:8:tag:bend:24381_105530",
+     "subject": "24381_105530",
+     "label": "88.8°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 1128.829,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_105520:isoline:10:tag:bend:24381_105531",
+     "subject": "24381_105531",
+     "label": "88.8°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 701.63,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_105520:isoline:11:tag:bend:24381_105532",
+     "subject": "24381_105532",
+     "label": "86.17°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 696.245,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_105520:isoline:11:tag:bend:24381_105533",
+     "subject": "24381_105533",
+     "label": "88.8°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 868.377,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_105520:isoline:13:tag:bend:24381_105534",
+     "subject": "24381_105534",
+     "label": "84.34°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 845.027,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_105520:isoline:14:tag:bend:24381_105535",
+     "subject": "24381_105535",
+     "label": "76.81°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 1253.247,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_105520:isoline:16:tag:bend:24381_105536",
+     "subject": "24381_105536",
+     "label": "90°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 399.893,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_105520:isoline:16:tag:bend:24381_105537",
+     "subject": "24381_105537",
+     "label": "90°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 640.783,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_105520:isoline:17:tag:elevation:24381_105538",
+     "subject": "24381_105538",
+     "label": "PE +4065",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 362.132,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_105520:isoline:17:tag:elevation:24381_105539",
+     "subject": "24381_105539",
+     "label": "PE +3980",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 357.839,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_105520:isoline:17:tag:elevation:24381_105540",
+     "subject": "24381_105540",
+     "label": "PE +3895",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 851.499,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_105520:isoline:18:tag:connection:24381_105541",
+     "subject": "24381_105541",
+     "label": "接 Copy-(2)-of-1RCS604MP-YK/B2",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 1281.72,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_105520:isoline:18:tag:tee:24381_105541",
+     "subject": "24381_105541",
+     "label": "PE +3795",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 842.895,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_105520:isoline:18:tag:bend:24381_105542",
+     "subject": "24381_105542",
+     "label": "90°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 586.362,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_105520:isoline:19:tag:bend:24381_105543",
+     "subject": "24381_105543",
+     "label": "90°",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 588.444,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    },
+    {
+     "id": "24381_105520:isoline:20:tag:connection:Tail",
+     "subject": null,
+     "label": "X -11700",
+     "kernelOccluded": false,
+     "cardCentreOffsetMm": 814.941,
+     "current": {
+      "blockers": [],
+      "verdict": false
+     },
+     "proposed": {
+      "blockers": [],
+      "verdict": false
+     }
+    }
+   ]
+  }
+ }
+}

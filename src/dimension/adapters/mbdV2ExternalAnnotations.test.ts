@@ -416,6 +416,32 @@ describe('mbdV2ToExternalRecords', () => {
     expect(branch.lod).toEqual({ tier: 'detail' });
   });
 
+  it('names the component of every plant-mbd tag kind that ends in a refno as the tag\'s subject', () => {
+    // bend / atta / elevation / tee tags were classified by text only and
+    // probed like refno-less cards until 2026-09-14 (BRAN 24381_105520:
+    // `PE +3980` behind a tube run stayed bright; a support name tag faded
+    // because of the support's own geometry).
+    const data = fixtureData();
+    const result = mbdV2ToExternalRecords({
+      ...data,
+      primitives: [
+        { kind: 'label', id: 'b:isoline:0:tag:bend:24381_105522', text: '90°\n弯曲半径:28.50\nPE +5820', position: [0, 0, 0] },
+        { kind: 'label', id: 'b:isoline:0:tag:atta:24383_75127', text: 'R520.067-BV', position: [1, 0, 0] },
+        { kind: 'label', id: 'b:isoline:17:tag:elevation:24381_105538', text: 'PE +4065', position: [2, 0, 0] },
+        { kind: 'label', id: 'b:isoline:18:tag:tee:24381_105541', text: 'PE +3795', position: [3, 0, 0] },
+        { kind: 'label', id: 'b:isoline:0:tag:connection:Head', text: 'X 1\nY 2\nPE 3', position: [4, 0, 0] },
+        { kind: 'label', id: 'b:tag:branch-name', text: 'Copy', position: [5, 0, 0] },
+      ],
+    });
+
+    expect(explicitLayout(result, 'b:isoline:0:tag:bend:24381_105522').tag).toMatchObject({ style: 'card', subject: '24381_105522' });
+    expect(explicitLayout(result, 'b:isoline:0:tag:atta:24383_75127').tag).toMatchObject({ style: 'frame', subject: '24383_75127' });
+    expect(explicitLayout(result, 'b:isoline:17:tag:elevation:24381_105538').tag).toMatchObject({ style: 'card', subject: '24381_105538' });
+    expect(explicitLayout(result, 'b:isoline:18:tag:tee:24381_105541').tag).toMatchObject({ style: 'card', subject: '24381_105541' });
+    expect(explicitLayout(result, 'b:isoline:0:tag:connection:Head').tag?.subject).toBeUndefined();
+    expect(explicitLayout(result, 'b:tag:branch-name').tag?.subject).toBeUndefined();
+  });
+
   it('names the WELD component of a plant-mbd weld mark as the record\'s subject', () => {
     // The mark sits at the WELD's origin on the bore axis, inside the bead
     // the model draws for it and inside the pipe wall; without the refno

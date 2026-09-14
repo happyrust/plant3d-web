@@ -9,7 +9,8 @@ import type {
 
 /**
  * Where the inspection pass tests a drawn layout, and what the host has to
- * know to answer fairly (`hints.subject`: the object the probe sits on).
+ * know to answer fairly (`hints.subject`: the object the probe sits on;
+ * `hints.onModel`: it sits on the model without naming an object).
  */
 export type OcclusionProbe = Readonly<{
   point: Vec3;
@@ -60,30 +61,25 @@ function layoutAnchor(layout: LayoutResult): Vec3 | null {
  *   subject as a hint — the host leaves out that object and any body the
  *   anchor lies inside, so the record fades exactly when *other* geometry
  *   hides the thing it names (user's call, 2026-09-13 22:1x);
- * - a tag without one (branch head / tail cards, the branch name) is probed
- *   where its body is: the body's screen centre unprojected at the anchor's
- *   depth — whether something nearer than the anchor is drawn where the
- *   card is.
+ * - a tag without one (branch head / tail cards, the branch name) is still
+ *   probed at its anchor, as a point on the model (`onModel`): the host
+ *   leaves out the bodies the anchor lies inside — the tube whose end it
+ *   is, the fitting bolted to it — and anything else in front hides it.
+ *   (Until 2026-09-14 such a tag was probed where its body is, at the
+ *   anchor's depth; on a 20 mm branch drawn 100 px wide that point lies
+ *   inside the very component from both sides — BRAN 24381_104746 — and
+ *   the card was always faded.)
  *
  * Null for an elided layout.
  */
-export function occlusionProbe(
-  layout: LayoutResult,
-  projector: ViewportProjector,
-): OcclusionProbe | null {
+export function occlusionProbe(layout: LayoutResult): OcclusionProbe | null {
   const anchor = layoutAnchor(layout);
   if (!anchor) return null;
   const tag = layout.derived.tag;
   const subject = tag?.subject ?? layout.derived.subject;
   if (subject) return { point: anchor, hints: { subject } };
-  if (!tag) return { point: anchor };
-  const depth = projector.project(anchor).depth;
-  const probe = projector.unproject({
-    x: tag.body.x + tag.body.width / 2,
-    y: tag.body.y + tag.body.height / 2,
-    depth,
-  });
-  return { point: probe.every(Number.isFinite) ? probe : anchor };
+  if (tag) return { point: anchor, hints: { onModel: true } };
+  return { point: anchor };
 }
 
 /**
@@ -130,7 +126,7 @@ export function markOcclusion(
   theme: DimensionTheme,
 ): LayoutResult[] {
   return layouts.map((layout) => {
-    const probe = occlusionProbe(layout, projector);
+    const probe = occlusionProbe(layout);
     if (!probe) return layout;
     const origin = rayOrigin(probe.point, projector);
     if (!origin) return layout;

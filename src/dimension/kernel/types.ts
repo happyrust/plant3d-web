@@ -75,11 +75,16 @@ export type OcclusionSource = Readonly<{
  * — and `subject` is that object as the host knows it (the refno the record
  * id carries). Geometry of `subject` itself, and any body the anchor lies
  * inside, must not count as hiding the record — only *other* geometry
- * between the camera and the anchor does. Absent for a dimension's value
- * text, which stands in free space off the pipe.
+ * between the camera and the anchor does. `onModel`: the probe sits on the
+ * model without naming an object (a branch head / tail card's anchor at the
+ * pipe end): only the second exclusion applies — bodies the anchor lies
+ * inside (the tube whose end it is, the fitting bolted to it) do not hide
+ * it. Both absent for a dimension's value text, which stands in free space
+ * off the pipe.
  */
 export type OcclusionProbeHints = Readonly<{
   subject?: string;
+  onModel?: boolean;
 }>;
 
 export type InteractionState = 'normal' | 'hovered' | 'selected';
@@ -347,10 +352,10 @@ export type LayoutResult = Readonly<{
      * Set by the inspection pass (`markOcclusion`, display mode
      * `inspection`): model geometry stands between the camera and the
      * record's probe point — a dimension's value text; the anchor of a tag
-     * or weld mark, other than the object it names (`subject`) and bodies
-     * enclosing the anchor; the body of a tag without a subject — so the
-     * painter fades the whole record to `theme.inspection.occludedAlpha`.
-     * Absent in `engineering` mode.
+     * or weld mark, other than the object it names (`subject`, when known)
+     * and bodies enclosing the anchor — so the painter fades the whole
+     * record to `theme.inspection.occludedAlpha`. Absent in `engineering`
+     * mode.
      */
     occluded?: boolean;
   }>;
@@ -555,10 +560,12 @@ export type ExplicitTagInput = Readonly<{
   /**
    * The model object the tag names, as the host knows it (plant-mbd: the
    * refno in `…:tag:elbo:<refno>` / `…:tag:name:<refno>` /
-   * `…:tag:connection:<refno>`). Opaque to the kernel; the inspection pass
-   * hands it to the host's occlusion seam so that object's own geometry
-   * does not count as hiding the tag. Omitted (branch head / tail cards,
-   * the branch name) = the tag is probed where its body is instead.
+   * `…:tag:connection:<refno>` / `…:tag:bend:<refno>` …). Opaque to the
+   * kernel; the inspection pass hands it to the host's occlusion seam so
+   * that object's own geometry does not count as hiding the tag. Omitted
+   * (branch head / tail cards, the branch name) = the anchor is still probed
+   * as a point on the model: only bodies it lies inside are left out
+   * (`OcclusionProbeHints.onModel`).
    */
   subject?: string;
   /** Mark `target` with a filled dot. */

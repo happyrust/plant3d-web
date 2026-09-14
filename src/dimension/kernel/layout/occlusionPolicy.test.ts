@@ -54,12 +54,10 @@ function elided(id: string): LayoutResult {
 }
 
 describe('occlusionProbe', () => {
-  const projector = createTestProjector(100);
-
   it('prefers the value text anchor and falls back to the first stroke vertex', () => {
-    expect(occlusionProbe(drawn('a', [1, 2, 3]), projector)).toEqual({ point: [1, 2, 3] });
-    expect(occlusionProbe(drawn('b', [1, 2, 3], false), projector)).toEqual({ point: [0, 2, 3] });
-    expect(occlusionProbe(elided('c'), projector)).toBeNull();
+    expect(occlusionProbe(drawn('a', [1, 2, 3]))).toEqual({ point: [1, 2, 3] });
+    expect(occlusionProbe(drawn('b', [1, 2, 3], false))).toEqual({ point: [0, 2, 3] });
+    expect(occlusionProbe(elided('c'))).toBeNull();
   });
 
   it('probes a tag that names its object at the anchor, telling the host which object that is', () => {
@@ -70,7 +68,7 @@ describe('occlusionProbe', () => {
         tag: { candidate: 3, body: { x: 260, y: 130, width: 80, height: 40 }, subject: '24381_145035' },
       },
     };
-    expect(occlusionProbe(tag, projector)).toEqual({
+    expect(occlusionProbe(tag)).toEqual({
       point: [0, 0, 0.4],
       hints: { subject: '24381_145035' },
     });
@@ -93,15 +91,17 @@ describe('occlusionProbe', () => {
       scenePrimitives: [marker],
       derived: { formattedLabel: '', subject: '24381_146980' },
     };
-    expect(occlusionProbe(weld, projector)).toEqual({
+    expect(occlusionProbe(weld)).toEqual({
       point: [0, 0, 0.4],
       hints: { subject: '24381_146980' },
     });
   });
 
-  it('probes a tag without an object where its body is, at the anchor depth', () => {
-    // Anchor on the pipe at (0, 0, 0.4); the card was placed 100 px right and
-    // 50 px up of the anchor's pixel (200, 200) → its centre is at (300, 150).
+  it('probes a tag without an object at its anchor too, as a point on the model', () => {
+    // A branch head / tail card: the anchor is the pipe-end point. Probing the
+    // card's centre at the anchor depth instead put the probe inside the very
+    // component on a 20 mm branch drawn 100 px wide (BRAN 24381_104746), so
+    // the card faded from both sides; the body rectangle no longer matters.
     const tag: LayoutResult = {
       ...drawn('tag', [0, 0, 0.4]),
       derived: {
@@ -109,7 +109,7 @@ describe('occlusionProbe', () => {
         tag: { candidate: 3, body: { x: 260, y: 130, width: 80, height: 40 } },
       },
     };
-    expect(occlusionProbe(tag, projector)).toEqual({ point: [1, 0.5, 0.4] });
+    expect(occlusionProbe(tag)).toEqual({ point: [0, 0, 0.4], hints: { onModel: true } });
   });
 });
 
@@ -157,7 +157,7 @@ describe('markOcclusion', () => {
     });
   });
 
-  it('hands the host a tag\'s or a weld mark\'s object with the cast, and nothing extra for a dimension', () => {
+  it('hands the host a tag\'s or a weld mark\'s object with the cast, `onModel` for a refno-less tag, and nothing extra for a dimension', () => {
     const source: OcclusionSource = { isSegmentBlocked: vi.fn(() => false) };
     const tag: LayoutResult = {
       ...drawn('tag', [0.5, 0.2, 0.7]),
@@ -170,8 +170,15 @@ describe('markOcclusion', () => {
       ...drawn('weld', [0.5, -0.2, 0.7]),
       derived: { formattedLabel: '', subject: 'w9' },
     };
+    const headCard: LayoutResult = {
+      ...drawn('head', [-0.5, -0.2, 0.7]),
+      derived: {
+        formattedLabel: 'head',
+        tag: { candidate: 0, body: { x: 100, y: 200, width: 20, height: 10 } },
+      },
+    };
 
-    markOcclusion([tag, weld, drawn('dim', [-0.5, 0.2, 0.7])], projector, source, theme);
+    markOcclusion([tag, weld, headCard, drawn('dim', [-0.5, 0.2, 0.7])], projector, source, theme);
 
     expect(source.isSegmentBlocked).toHaveBeenNthCalledWith(
       1,
@@ -189,6 +196,13 @@ describe('markOcclusion', () => {
     );
     expect(source.isSegmentBlocked).toHaveBeenNthCalledWith(
       3,
+      [-0.5, -0.2, -1],
+      [-0.5, -0.2, 0.7],
+      expect.closeTo(0.02, 12),
+      { onModel: true },
+    );
+    expect(source.isSegmentBlocked).toHaveBeenNthCalledWith(
+      4,
       [-0.5, 0.2, -1],
       [-0.5, 0.2, 0.7],
       expect.closeTo(0.02, 12),

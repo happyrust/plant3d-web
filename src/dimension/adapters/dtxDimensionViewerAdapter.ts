@@ -79,7 +79,8 @@ function tuple(vector: Vector3): Vec3 {
  * tolerance, scaled the same way) blocks it. With a `subject` hint (a tag's
  * anchor on the element it names, a weld mark's weld point inside its WELD
  * component) that element's pieces and any body the anchor lies inside are
- * left out — only other geometry hides the record.
+ * left out — only other geometry hides the record; with `onModel` alone (a
+ * branch head / tail card at the pipe end) just the enclosing bodies are.
  */
 export function createDtxDimensionViewerAdapter(input: Readonly<{
   getCamera: () => Camera | null | undefined;
@@ -143,17 +144,18 @@ export function createDtxDimensionViewerAdapter(input: Readonly<{
     if (reach <= 0) return false;
     const direction = segment.divideScalar(lengthWorld);
     const subject = hints?.subject;
-    // The probe is a record's anchor on / inside the object it names — a
-    // tag's anchor, a weld mark's weld point on the bore axis: that object's
-    // own pieces (the WELD's bead), and any body the anchor lies inside (the
-    // tube and the fitting meeting at a connection, the valve around its
-    // origin, the pipe wall around a weld point), are what the record points
-    // at, not what hides it. A body encloses the anchor when a ray cast
-    // onward from just before the anchor still leaves through it — the
-    // layer's triangle test is two-sided, so the exit wall counts; starting
-    // the tolerance short of the anchor keeps a body whose face the anchor
-    // sits on (an open pipe end) in the test.
-    const encloses = subject
+    // The probe is a record's anchor on / inside the model — a tag's anchor
+    // on the object it names, a weld mark's weld point on the bore axis, a
+    // branch head / tail card's pipe-end point (`onModel`, no object named):
+    // the named object's own pieces (the WELD's bead), and any body the
+    // anchor lies inside (the tube and the fitting meeting at a connection,
+    // the valve around its origin, the pipe wall around a weld point), are
+    // what the record points at, not what hides it. A body encloses the
+    // anchor when a ray cast onward from just before the anchor still leaves
+    // through it — the layer's triangle test is two-sided, so the exit wall
+    // counts; starting the tolerance short of the anchor keeps a body whose
+    // face the anchor sits on (an open pipe end) in the test.
+    const encloses = subject || hints?.onModel
       ? (objectId: string): boolean => raycastObject(
         objectId,
         target.clone().addScaledVector(direction, -toleranceWorld),

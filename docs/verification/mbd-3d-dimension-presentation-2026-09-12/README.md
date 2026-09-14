@@ -297,5 +297,22 @@
 | `all-pipes-load-camera-probe-after.json` | 3 条 `RangeError` 管子修后的加载期复跑：pageerror 0、相机轨迹、最终相机下的独立投影 |
 | `all-pipes-weld-marks-inspection-after.png` / `all-pipes-weld-marks-crop-3x.png` | `24381_146979` far inspection 修后整幅；同一焊缝 3× 三联（engineering / 修前 / 修后） |
 | `all-pipes-browser-sweep-after.json` | 52 条实机抽样修后重跑（`--shots=0`）：上轮字段 + 每视图 `inspection.kinds`（按 tag / dim / weld / text / aid 的画出 / 遮挡数）与 `occludedIds` |
+| `all-pipes-browser-sweep-after2.json` | 端点卡片换探测点 + subject 放宽后的第二次 52 条重跑，字段同上 |
+| `all-pipes-card-probe-24381_104746.json` | 两条小管 + 参照管等 6 条的端点卡片干跑：每张无 subject 的卡片「探卡片中心」与「探锚点 + 包体排除」两种取法的挡体与结论（改前 / 改后各一份） |
+| `all-pipes-tag-verify-after2.json` | 4 条管 far / behind 全部 tag 的独立射线复核（跳 subject 自己的 piece、标包体），与内核 flag 逐条比 |
 
-**未做 / 仍留**：极端小管里端点卡片探卡片中心落在构件体内的边界情形（`24381_104746`）未动；「药丸云」观感未动；相机背后记录的二维快照（`primitives`，供 SVG / 命中）仍是把背后顶点直接投影的结果，画家走三维不受影响，命中索引现在只登记屏内部分。
+**端点卡片换探测点 + `subject` 提取放宽到所有带 refno 的 tag（2026-09-14 11:2x–11:5x，用户「处理极端小管端点卡片探卡片中心落在构件体内的边界情形，给无 subject 的卡片换探测点」）**。
+
+- **现场**：`24381_104746` / `24381_104806` 各 1 个对象 3 条记录，几何 20 mm，far 相机下卡片 100 px 宽；Tail 卡片「探卡片中心在锚点深度的反投影点」那一点离锚点只有 2.5–3.2 mm、在唯一那个构件体内，正反两面都判遮挡（`pw-card-probe-69.mjs` 干跑：card→true，挡体 `o:24381_104747:0` 在探测点前 4 / 12 mm）。同一干跑顺带看到 6 条管里有一批**带 refno 却没 subject** 的 tag：`…:tag:bend:<refno>`（弯管「角度 / 弯曲半径 / PE」卡片）、`…:tag:atta:<refno>`（支架位号）、`…:tag:elevation:<refno>`、`…:tag:tee:<refno>`——`classifyTag` 只对 `connection` / `name` / `elbo` 读 refno，其余按文字分类、走的是卡片那一档，于是 `24383_75125` 的支架位号 `R520.067-BV` 在锚点探法下会被支架自己的几何（`o:24383_75126:30`）淡掉，而 `24381_105520` 的 `PE +3980` 在别的管段后面 1.7 m 却因为卡片浮在空白处不淡。
+- **改法**：① `occlusionProbe` 对没有 subject 的 tag 也探**锚点**，带 `OcclusionProbeHints.onModel`，宿主只做「包着锚点的体」那条排除（管口所在的直管、对接的构件），没有 refno 可跳过；卡片中心那一档取法删除（`occlusionProbe` 不再需要 projector）。② `tagSubject` 改成对任何 `…:tag:<kind>:<refno>` 读尾段（`Head` / `Tail` 除外；`branch-name` 无尾段）。ADR 0061 标签段、`OcclusionProbeHints` / `ExplicitTagInput.subject` 注释同步。
+- **单测**：`occlusionPolicy.test.ts`（无 subject 的 tag → 锚点 + `onModel`，与 tag / weld / dim 三条射线的 hints 一起断言）、`dtxDimensionViewerAdapter.test.ts` +1（`onModel`：挡在前面的阀门 piece 算、包着锚点的直管不算、裸射线仍算）、`mbdV2ExternalAnnotations.test.ts` +1（bend / atta / elevation / tee 带 subject，Head / branch-name 无）。`vitest run src/dimension`：59 文件 / **353** 通过；eslint 0。
+- **实机**：两条小管 far / behind 的 Tail 卡片 **1 → 0** 判遮挡（`pw-card-probe-69.mjs` 复跑：kernel=0，独立「锚点 + 包体」结论 0）。参照管 `24381_145018` 三相机 4 个标签与全部记录的遮挡集合**逐条不变**（`X 1516` / `接 Copy-of-RCS0014…` 两张端点卡片在锚点探法下 far 只有包着管口的直管 / 阀门、behind 无挡体）。52 条抽样再跑一遍（`all-pipes-browser-sweep-after2.json`）：
+
+| 相机 | 遮挡 flag（焊缝修后 → 本次） | tag 类 | 本次 tag flag 按 id 类别 | 其它类别 |
+| --- | --- | --- | --- | --- |
+| far | 36 → **69**（6.8 % of 1010） | 7 → 40 | bend 14 · atta 8 · connection:Head/Tail 7 · elevation 5 · name 3 · connection:<refno> 2 · tee 1 | dim 19 / 270 · weld 8 / 78 · aid_text 2 / 21 |
+| behind | 30 → **37**（3.7 %） | 12 → 19 | name 5 · connection:<refno> 5 · connection:Head/Tail 4 · elevation 2 · atta 2 · bend 1 | dim 10 / 270 · weld 8 / 78 |
+
+  多出来的全是此前「探卡片几乎永远不淡」的四类 tag 与端点卡片按口径转淡：far +14 bend / +8 atta / +7 Head–Tail / +5 elevation / +1 tee，behind +4 Head–Tail / +2 elevation / +2 atta / +1 bend；减少的只有两条小管的 Tail 卡片（各 2）。`pw-tag-verify-69.mjs` 对 4 条管 far / behind **全部** tag 逐条独立复核（跳 subject 自己的 piece、标包体）：内核 flag 与独立结论 **49/49、33/33、4/4、25/25** 一致；新淡的挡体都是**别的**构件，距锚点 45 mm–3.6 m（`24383_84337` 的 6 张弯管卡片被相邻直管 / 管件挡 85–145 mm，支架位号被 122–463 mm 外的管件挡；`24381_105520` 的 `PE +3980 / +3895 / +3795` 与 Tail 卡片在 1.7 m 外的另一管段后面；`24383_92086` far 的支架位号与 Head 卡片被 184–235 mm 外的另一个构件挡，behind 全亮）。焊缝 8 / 8、尺寸 19 / 10 与上一趟一致，确定性 52 / 52，pageerror 0，inspection 布局 max 33 / 38 ms。
+
+**未做 / 仍留**：「药丸云」观感未动；相机背后记录的二维快照（`primitives`，供 SVG / 命中）仍是把背后顶点直接投影的结果，画家走三维不受影响，命中索引现在只登记屏内部分；顺带看到 `bend` 卡片按文字被分成 `card`（带点、无 LOD、远景也画），与 `elbo` 药丸（`secondary` LOD）不是一档，是呈现分类的事，未动。
