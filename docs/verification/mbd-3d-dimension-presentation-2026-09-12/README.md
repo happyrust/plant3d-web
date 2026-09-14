@@ -156,7 +156,7 @@
 - **独立复核 124/124 与内核一致**；被标遮挡 20 个视图，每一个都能在射线上点出至少一块真正挡在前面的别的 piece（直管 `o:24381_145018:n`、相邻弯头、阀门）。
 - **弯头自己的 piece 挡在锚点前面**的视图有 46 个（90° 弯头每个 4 个方向；38.55° 的 `24381_145023` 锚点就在自己体内，14/14 方向都是；最深比锚点近 152 mm）——其中 26 个再无别的几何，标签保持 0.65（`inspection-real-elbo-own-piece.png`：`24381_145019` 从对角看，自己的 piece 比锚点近 0.2 m，`89.75° / PE +13301` 亮着）；另外 20 个是自己的 piece 之外还有别的 piece 挡着，淡到 0.35（`inspection-real-elbo-hidden.png`：同一个弯头从 −X 看，被 `1834.19` 那根直管 `o:24381_145018:8` 挡住）。这就是 `subject` 排除要解决的那一档：第一轮裸探锚点在这 46 个视图里会把标签全部误标。
 - 「包着锚点的体」在 ELBO 上一次都没出现（0/124）：弯头锚点是两条轴线的角点，除了弯头自己没有别的体包着它。
-- **顺带撞出一个既有问题**（与本口径无关，未修）：27/151 个视图（23 个 `RangeError: Map maximum size exceeded`、4 个渲染进程卡死 > 25 s）在 `kernel/hit/hitIndex.ts::buildHitIndex` 里——近景时别的尺寸有顶点落到相机平面附近，投影坐标巨大，命中区域按 64 px 格子逐格登记时格子数以亿计。触发相机例：`24381_145023` 目标 `targetDesign` 沿 +X 2 m（`elbo-probe.json` 里 `error` / `hang` 的视图都带 `camera`）。真实用户把相机推到管件跟前也可能撞上（`pageerror` 1 次就是宿主帧循环自己那一次布局抛的），修法在 hitIndex（格子范围先与视口矩形相交、或每个区域封顶格子数），不在本线。
+- **顺带撞出一个既有问题**（与本口径无关，未修）：27/151 个视图（23 个 `RangeError: Map maximum size exceeded`、4 个渲染进程卡死 > 25 s）在 `kernel/hit/hitIndex.ts::buildHitIndex` 里——近景时别的尺寸有顶点落到相机平面附近，投影坐标巨大，命中区域按 64 px 格子逐格登记时格子数以亿计。触发相机例：`24381_145023` 目标 `targetDesign` 沿 +X 2 m（`elbo-probe.json` 里 `error` / `hang` 的视图都带 `camera`）。真实用户把相机推到管件跟前也可能撞上（`pageerror` 1 次就是宿主帧循环自己那一次布局抛的），修法在 hitIndex（格子范围先与视口矩形相交、或每个区域封顶格子数），不在本线。**2026-09-14 已修**：两张网格裁视口，见「修复复验」小节。
 
 | 文件 | 说明 |
 | --- | --- |
@@ -215,7 +215,7 @@
 
 - 单测 `theme.test.ts` 更新（钉住 0.92 / 0.80 并断言被遮挡 < 可见）；59 文件 / 344 通过；eslint 0。
 
-**未覆盖**：2k 记录时每条一次射线的耗时未量（本样本 63 条记录 / 15–16 条画出，inspection 完整布局 3–5 ms）；「包着锚点的体」用「锚点前 ε 处向前再发一条射线能穿出」判定，凹体（弯头、绕回来的管段）在锚点前后各穿一次时会被当成包着锚点而不算遮挡，本样本三个标准相机与 124 个 ELBO 近景视图都没有出现这种情形（ELBO 上「包着锚点的体」为 0）；`buildHitIndex` 的近景溢出（见上）未修——下一节全管道扫描量出了它的覆盖面。
+**未覆盖**：2k 记录时每条一次射线的耗时未量（本样本 63 条记录 / 15–16 条画出，inspection 完整布局 3–5 ms）；「包着锚点的体」用「锚点前 ε 处向前再发一条射线能穿出」判定，凹体（弯头、绕回来的管段）在锚点前后各穿一次时会被当成包着锚点而不算遮挡，本样本三个标准相机与 124 个 ELBO 近景视图都没有出现这种情形（ELBO 上「包着锚点的体」为 0）；`buildHitIndex` 的近景溢出（见上）当时未修——下一节全管道扫描量出了它的覆盖面，随后在「修复复验」小节修掉。
 
 ### 全管道扫描：2469 条 BRAN 内核全跑 + 52 条实机抽样（2026-09-14 02:0x–03:4x）
 
@@ -231,7 +231,7 @@
 
 - far 视图（整条管子在视野里）：75 947 条记录，26 576 条画出（LOD 收起 `detail-far` 41 026 / `secondary-far` 4698 / `short-line` 3319 / `overlap` 328），非有限数 **0**，SVG `NaN` **0**（268 MB SVG），再布局 **2469 / 2469** 逐条相同，屏内标签中心命中 **26 070 / 26 070**；engineering 布局耗时 p50 0.4 ms / p90 1.4 ms / p99 7.2 ms / max 36 ms（`24381_103674`，142 条记录）。解析诊断 0；原子拒绝 0。
 - payload `issues` 全是 `warning`（3901 条，散在 1020 个 BRAN），无 `error`：前三类都是后端的「implied tube 与两端端口不共轴、E3D 不画 tube、不出 tube 长度」（2679 条），其余是 ATTA / BEND / ELBO / WELD 偏离等轴线、Tail 与邻点跨轴等 PML 层面的数据检查——只进面板诊断，不影响出图。
-- 格子超限就是上一节记的近景溢出，这次量出**它不只在近景**：mid（0.6×，整条管子基本在视野里）已有 33 条；跑通的视图里 hitIndex 格子数 close p99 67 万、max 97 万（视口本身只有 20×13 = 260 格），mid max 88 万。根因一处：布局对相机平面附近 / 相机背后的顶点不裁剪，投影坐标到 1e5–1e7 px 量级后两张网格按格子逐个登记。**未修**（见下）。
+- 格子超限就是上一节记的近景溢出，这次量出**它不只在近景**：mid（0.6×，整条管子基本在视野里）已有 33 条；跑通的视图里 hitIndex 格子数 close p99 67 万、max 97 万（视口本身只有 20×13 = 260 格），mid max 88 万。根因一处：布局对相机平面附近 / 相机背后的顶点不裁剪，投影坐标到 1e5–1e7 px 量级后两张网格按格子逐个登记。当时**未修**（见下「结论与待拍板」），随后在「修复复验」小节修掉。
 
 **实机抽样**（真实 Chrome 1920×1080 @1x，RX590，`pw-all-pipes-61.mjs` → `all-pipes-browser-sweep.json`）。52 条 BRAN 分层抽样（`pick-sample-61.mjs`：4 个库按步长各取 3 / 7 / 10 / 7，payload 最大 5 / 最小 3，尺寸范围最小 3 / 最大 3，`slope_mark` / `weld_mark` 最多各 3，payload 警告最多 3，内核 mid 超限 4，参照管 `24381_145018`）。每条：`?show_refno=…&show_refno_select=0&mbd_refno=…` 加载 → 等几何 + MBD 记录 + 布局齐 → far（`fitBox(dtxBox, 1.7)`）与 behind（对面同距离）两相机 × engineering / inspection：读内核状态、3 次布局计时、截图、收 `pageerror` / console；每条 240 s 看门狗（没触发）。22 分钟。
 
@@ -253,4 +253,37 @@
 | `all-pipes-largest-24381_105860.png` | payload 最大的管（463 primitives）far engineering：药丸云 |
 | `all-pipes-24383_75125-behind-inspection.png` | 29 m 弯管 behind inspection：3 条淡化，其余药丸 / 位号 0.92 |
 
-**结论与待拍板**：按 far / behind 两个正常观察距离，2469 条管的解析、映射、布局、SVG、命中与 52 条实机的两模式渲染没有一处失败或非确定；两件事要人定：① 两张 64 px 网格不裁视口——近景 17.6 % 的管、中景 1.3 %、以及**每条管加载期的默认相机那一帧**都会撞上，表现为控制台 `RangeError`、渲染进程卡死或整页 OOM，修法在 `hitIndex.ts` / `resolveLabelCollisions.ts` 各一处「格子范围先与视口（外扩容差）相交」，或更上游在布局前剔除相机背后 / 近平面前的记录；② 焊缝标记的遮挡探测要不要像 tag 一样带 `subject`（本管 + 被焊的两个构件都排除）、或改探焊缝环表面点、或干脆不参与淡化——这是 d-386 口径的边界，要你定。
+**结论与待拍板（当时）**：按 far / behind 两个正常观察距离，2469 条管的解析、映射、布局、SVG、命中与 52 条实机的两模式渲染没有一处失败或非确定；两件事要人定：① 两张 64 px 网格不裁视口——近景 17.6 % 的管、中景 1.3 %、以及**每条管加载期的默认相机那一帧**都会撞上，表现为控制台 `RangeError`、渲染进程卡死或整页 OOM，修法在 `hitIndex.ts` / `resolveLabelCollisions.ts` 各一处「格子范围先与视口（外扩容差）相交」，或更上游在布局前剔除相机背后 / 近平面前的记录；② 焊缝标记的遮挡探测要不要像 tag 一样带 `subject`（本管 + 被焊的两个构件都排除）、或改探焊缝环表面点、或干脆不参与淡化——这是 d-386 口径的边界。**两件都已在下一小节修掉并复验**（用户交接时授权「继续未完的部分，不必重问」）。
+
+### 修复复验：两张网格裁视口 + 焊缝标记带 `subject`（2026-09-14 10:1x–10:5x，fable-5-1-69）
+
+**改了什么**。① `kernel/hit/hitIndex.ts::buildHitIndex(layouts, cellSizePx, bounds?)` 与 `kernel/collision/resolveLabelCollisions.ts::resolveLabelCollisions(inputs, bounds?)`：给了 `bounds`（视口）时，每个区域 / 标签矩形的格子范围先与「视口外扩一格（64 px）」相交再逐格登记——外扩一格保证屏内点、容差 ≤ 64 px 的命中测试与不裁时逐条相同；完全落在外面的区域不登记（命中索引对屏外点本来就不答），完全落在外面的标签既不占位也不被搬；非有限坐标得到空范围。`layoutViewport` 把 `projector` 的 `widthCssPx × heightCssPx` 传给两张网格（ADR 0040 早就要求「视口裁剪、有界碰撞」，这次把两张网格真正裁进去）；不传 `bounds` 的直接调用（单测、demo）行为不变。**没有**在上游剔除相机背后的记录：近景相机在管子里时很多记录一部分顶点在背后、另一部分正画在屏上，整条剔掉会把屏上那部分的命中一起丢掉。② 焊缝标记：`mbdV2ExternalAnnotations.ts::weldSubject` 从 `…:weld:mark:<refno>` 读出 **WELD 构件** refno（查 `/api/v1/tree/children`：`24381_146979` 的 49 个成员里 `24381_146980 / …982 / …984 …` 全是 `noun=WELD`、带 SPRE；gen-model 把它画成一段管外径的短圆盘，`o:24381_146980:17` 包围盒 43.5 × 24 × 48 mm，管 OD 48.3）→ 新增的 `ExplicitLayoutInput.subject` → `layoutExplicit` 落到 `derived.subject` → `occlusionProbe` 对带 `subject` 的记录（`derived.tag.subject` 或 `derived.subject`）探锚点并把 `subject` 交给宿主缝；DTX 适配器不改：WELD 自己的 piece 按 refno 跳过，包着焊点的直管 / 管件按「锚点前 ε 向前再穿出」排除。ADR 0061「焊缝标记」段。
+
+**先做的干跑**（`pw-weld-subject-probe-69.mjs`，改代码前，`all-pipes-weld-subject-probe-24381_146979.json` 的 `before`）：对 `24381_146979` far 相机 27 个画出的焊缝标记，页内独立射线逐个挡体标 `isSubject / encloses / ownBran`，按拟定口径算结论——27 个裸射线全遮挡 → 带 `subject` 后 **4** 个；21 个挡在前面的直管 piece 里 18 个「包着焊点」（直管端面有盖，向前那条射线穿得出去），剩 3 个是真挡在前面的别的直管。剩下 4 个逐条看：`weld:mark:24381_147020` 从弯头 `147019` 另一腿方向看过来，射线先穿竖直直管 `o:…:3`（前 72 mm）与焊缝盘 `147018`（前 52 mm）；`147023` / `147028` 是承插 COUP（`147022` / `147027`，套筒 OD ≈ 70、长 ≈ 60 mm，两端焊缝相距 13 mm）——射线先穿另一端的焊缝盘与直管；`147002` 是 COUP `147001` 的套筒壁挡在焊缝盘前 32 mm。四个都是**别的**几何挡在焊点前，按口径该淡。
+
+**单测**：`hitIndex.test.ts` +1（3e8 px 的线段、1e9 × 1e9 px 的矩形、屏外矩形、±∞ / NaN 坐标：屏内命中不变、屏外不答、不抛）、`resolveLabelCollisions.test.ts` +2（1e9 px 标签既不占位也不被搬、NaN 标签不动、屏内避让不变；跨视口边缘的标签只在屏内格子登记仍能挡住原点处的自动标签）、`layoutViewport.test.ts` +1（1e6 px/m 投影 + 斜向尺寸 = 尺寸线区域 6e7 格，修前 `RangeError`，修后屏内尺寸界线命中）、`occlusionPolicy.test.ts` +1 改 1（焊缝标记带 `derived.subject` 探锚点并把 subject 交给缝；tag / weld / dim 三条射线的 hints）、`explicit.test.ts` +1（`subject` 落到 `derived`）、`mbdV2ExternalAnnotations.test.ts` +1 改 1（plant-mbd id 尾段 → `subject`，别的 producer 无）。`vitest run src/dimension src/composables/useMbdExternalSync.test.ts`：**59 文件 / 351 通过**（上轮 344）。eslint 14 个改动文件 0 报错。`npm run type-check`：改动文件 0 新增（基线外剩下的 `useDtxTools.*.test.ts` ×5 `Ref<DTXLayer | null>` 不在本次改动里，与本线无关）。
+
+**内核全跑复验**（`allPipes.sweep.test.ts` 副本，两张网格的护栏改成**观察器**：仍按原公式算「不裁时要多少格」，但一律调真实现并计其耗时；命中冒烟只探中心在屏内的标签——命中索引的契约就是屏内点；`all-pipes-kernel-sweep-after.json`）。先跑上轮超限的 **461** 条（435 close ∪ 33 mid）：461 / 461 通过，26 s。再跑全部 **2469 条 × far / mid / close**：**2469 / 2469 三视图全过，0 flag，96 s**（上轮 312 s，其中 468 个视图在护栏上抛）。
+
+| 视图 | 跑通 | 不裁时格子数 p50 / p99 / max（> 1e6 的视图数） | 裁后网格耗时 hitIndex / 占用 max | 非有限数 / SVG NaN / 再布局不同 | 屏内标签命中 | engineering 布局 p99 / max |
+| --- | --- | --- | --- | --- | --- | --- |
+| far 1.7× | **2469 / 2469** | 111 / 575 / 4695（0） | 0.9 ms / 0.2 ms | 0 / 0 / 0 | 25 969 / 25 969 | 4.7 / 11.5 ms |
+| mid 0.6× | **2469 / 2469** | 486 / 5.6e6 / **4.65e9**（33；占用网格 3 条到 4.6e9） | 0.9 ms / 0.2 ms | 0 / 0 / 0 | 15 106 / 15 106 | 3.6 / 5.9 ms |
+| close 0.25× | **2469 / 2469** | 11 738 / 8.2e9 / **3.34e12**（435；占用网格 80 条，max 2.7e10） | 1.5 ms / 1.7 ms | 0 / 0 / 0 | 8646 / 8646 | 3.6 / 6.5 ms |
+
+超限视图数 33 / 435 与上轮一模一样——同一批相机、同一批坐标（max |coord| close 1.6e8 px），只是这次两张网格在 ≤ 1.7 ms 内登记完屏内那几百格。far 的标签命中 26 070 → 25 969 是探针口径变严（中心在屏内）少探了 101 条，不是丢命中。
+
+**实机复验**（真实 Chrome 1920×1080 @1x，vite dev 热更后的源码）：
+- 加载期 `RangeError`（`pw-load-camera-probe-61.mjs` 原脚本复跑 3 条，`all-pipes-load-camera-probe-after.json`）：`24383_75125` / `24381_145565` / `24383_99558` **pageerror 3 → 0**；轨迹里默认相机 `[-37.1, 13, 58.5]`、几何未到那一帧照样布局了 297 / 13 / 80 条记录（画出 135 / 13 / 44），不再抛；几何到后画出 46 / 4 / 32 条与上轮相同；payload 每条 2 次。
+- 焊缝标记（同 far 相机）：内核 `occluded` **27 → 4**，与干跑的独立结论 **4 / 4 同一批 id**（`all-pipes-weld-subject-probe-24381_146979.json` 的 `after`）；整管 48 条画出记录里遮挡 flag 28 → **5**（4 个焊缝 + 数值站在管背面的 `1032`，后者与上轮同），`all-pipes-occlusion-probe-24381_146979-after.json`。截图 `all-pipes-weld-marks-inspection-after.png`（与上轮 `-inspection.png` 同相机），`all-pipes-weld-marks-crop-3x.png` 是同一处焊缝 3× 放大的 engineering | 修前 inspection | 修后 inspection 三联——修前焊缝环比尺寸线淡一档，修后与 engineering 一样亮；像素统计（PIL，对 engineering 里的红色笔画像素量对背景的对比保留率）：焊缝像素修前中位 0.87 → 修后 0.97，其余红色像素（尺寸线）0.95 → 0.97 不变。
+- 参照管 `24381_145018`（`pw-inspection-b-probe-54.mjs` + `pw-inspection-real-41.mjs`，与上轮 `inspection-real-54` 逐条比）：三相机 4 个标签的内核 flag **逐条相同**（`Copy-of-1RCS002VP` 仍只在 behind 淡），三相机全部记录的遮挡集合 `[900.51]` / `[1834.19, Copy-of-1RCS002VP]` / `[900.51, 173]` **逐条相同**，确定性 3 / 3，pageerror 0——tag 与尺寸的口径没被动到。
+
+| 新增文件 | 说明 |
+| --- | --- |
+| `all-pipes-kernel-sweep-after.json` | 复验内核全跑逐管一行：每视图错误、画出、屏内、两模式耗时、**不裁时两张网格各要多少格**、裁后各自耗时、最大坐标、命中、确定性、SVG NaN |
+| `all-pipes-weld-subject-probe-24381_146979.json` | 焊缝口径干跑（`before`：内核仍 27/27）与实装后（`after`：内核 4/27）：逐焊缝的挡体列表（isSubject / encloses / ownBran / 距锚点 mm）与两种结论 |
+| `all-pipes-occlusion-probe-24381_146979-after.json` | 修后整管 48 条画出记录的内核 flag 与独立射线（原脚本，不知 subject，只作挡体清单） |
+| `all-pipes-load-camera-probe-after.json` | 3 条 `RangeError` 管子修后的加载期复跑：pageerror 0、相机轨迹、最终相机下的独立投影 |
+| `all-pipes-weld-marks-inspection-after.png` / `all-pipes-weld-marks-crop-3x.png` | `24381_146979` far inspection 修后整幅；同一焊缝 3× 三联（engineering / 修前 / 修后） |
+
+**未做 / 仍留**：极端小管里端点卡片探卡片中心落在构件体内的边界情形（`24381_104746`）未动；「药丸云」观感未动；相机背后记录的二维快照（`primitives`，供 SVG / 命中）仍是把背后顶点直接投影的结果，画家走三维不受影响，命中索引现在只登记屏内部分。

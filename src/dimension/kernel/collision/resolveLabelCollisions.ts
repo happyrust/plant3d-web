@@ -33,14 +33,60 @@ function cellEnd(origin: number, size: number): number {
     : Math.floor(origin / GRID_SIZE_PX);
 }
 
+type CellRange = Readonly<{
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+}>;
+
+function cellRangeOf(rect: ScreenRect): CellRange {
+  return {
+    minX: Math.floor(rect.x / GRID_SIZE_PX),
+    minY: Math.floor(rect.y / GRID_SIZE_PX),
+    maxX: cellEnd(rect.x, rect.width),
+    maxY: cellEnd(rect.y, rect.height),
+  };
+}
+
+/**
+ * Occupied label rectangles on a 64 px grid. With `bounds` (the viewport)
+ * the grid only covers the viewport padded by one cell: a label that
+ * projects beyond it — a vertex near the camera plane puts label bounds in
+ * the 1e5–1e9 px range, which registered cell by cell is 1e7–1e10 cells
+ * (`RangeError: Map maximum size exceeded` / a 4 GB heap, all-pipes sweep
+ * 2026-09-14) — neither claims space nor collides, and a label straddling
+ * the edge is registered in its on-screen cells only. A non-finite bound
+ * yields an empty range.
+ */
 class LabelOccupancy {
   private readonly columns = new Map<number, Map<number, ScreenRect[]>>();
+  private readonly clip: CellRange | null;
+
+  constructor(bounds?: ScreenRect) {
+    this.clip = bounds
+      ? cellRangeOf({
+        x: bounds.x - GRID_SIZE_PX,
+        y: bounds.y - GRID_SIZE_PX,
+        width: bounds.width + GRID_SIZE_PX * 2,
+        height: bounds.height + GRID_SIZE_PX * 2,
+      })
+      : null;
+  }
+
+  private cellRange(rect: ScreenRect): CellRange {
+    const range = cellRangeOf(rect);
+    if (!this.clip) return range;
+    return {
+      minX: Math.max(range.minX, this.clip.minX),
+      minY: Math.max(range.minY, this.clip.minY),
+      maxX: Math.min(range.maxX, this.clip.maxX),
+      maxY: Math.min(range.maxY, this.clip.maxY),
+    };
+  }
 
   insert(rect: ScreenRect): void {
-    const minX = Math.floor(rect.x / GRID_SIZE_PX);
-    const minY = Math.floor(rect.y / GRID_SIZE_PX);
-    const maxX = cellEnd(rect.x, rect.width);
-    const maxY = cellEnd(rect.y, rect.height);
+    const { minX, minY, maxX, maxY } = this.cellRange(rect);
     for (let x = minX; x <= maxX; x += 1) {
       let column = this.columns.get(x);
       if (!column) {
@@ -62,10 +108,12 @@ class LabelOccupancy {
   overlapsAt(rect: ScreenRect, offsetX: number, offsetY: number): boolean {
     const rectX = rect.x + offsetX;
     const rectY = rect.y + offsetY;
-    const minX = Math.floor(rectX / GRID_SIZE_PX);
-    const minY = Math.floor(rectY / GRID_SIZE_PX);
-    const maxX = cellEnd(rectX, rect.width);
-    const maxY = cellEnd(rectY, rect.height);
+    const { minX, minY, maxX, maxY } = this.cellRange({
+      x: rectX,
+      y: rectY,
+      width: rect.width,
+      height: rect.height,
+    });
     for (let cellX = minX; cellX <= maxX; cellX += 1) {
       const column = this.columns.get(cellX);
       if (!column) continue;
@@ -256,15 +304,21 @@ function hasLabelText(result: LayoutResult): boolean {
   return result.derived.formattedLabel.length > 0;
 }
 
+/**
+ * Move automatic labels off pinned labels and off each other (stable id
+ * order). `bounds` is the viewport: labels beyond it are left alone (see
+ * `LabelOccupancy`); omitted = every label takes part wherever it projects.
+ */
 export function resolveLabelCollisions(
   inputs: readonly LayoutResult[],
+  bounds?: ScreenRect,
 ): readonly LayoutResult[] {
   // ponytail: one extra probe for small overlays; use adaptive search if large
   // MBD batches need the same density without exceeding the performance budget.
   const candidateCount = inputs.length <= EXTENDED_SEARCH_MAX_LABELS
     ? CANDIDATE_COUNT + 1
     : CANDIDATE_COUNT;
-  const occupancy = new LabelOccupancy();
+  const occupancy = new LabelOccupancy(bounds);
   const results = [...inputs];
   for (const result of inputs) {
     if (result.labelPinned && hasLabelText(result)) {

@@ -450,6 +450,9 @@ export function layoutExplicit(
     hitRegions,
     labelBounds,
     labelPinned: input.labelPinned,
-    derived: { formattedLabel: input.formattedLabel },
+    derived: {
+      formattedLabel: input.formattedLabel,
+      ...(input.subject ? { subject: input.subject } : {}),
+    },
   };
 }

@@ -68,13 +68,15 @@ export type OcclusionSource = Readonly<{
 
 /**
  * What the inspection pass knows about a probe point that the host needs to
- * answer fairly. `subject`: the probe is a tag's anchor on or inside the
- * model object the tag names (an elbow's corner point, a valve's origin, a
- * connection at the pipe's bore centre), and `subject` is that object as the
- * host knows it (the refno the tag id carries). Geometry of `subject` itself,
- * and any body the anchor lies inside, must not count as hiding the tag —
- * only *other* geometry between the camera and the anchor does. Absent for a
- * dimension's value text, which stands in free space off the pipe.
+ * answer fairly. `subject`: the probe sits on or inside the model object
+ * the record names — a tag's anchor (an elbow's corner point, a valve's
+ * origin, a connection at the pipe's bore centre), a weld mark's weld point
+ * (on the bore axis, inside the WELD component's own bead and the pipe wall)
+ * — and `subject` is that object as the host knows it (the refno the record
+ * id carries). Geometry of `subject` itself, and any body the anchor lies
+ * inside, must not count as hiding the record — only *other* geometry
+ * between the camera and the anchor does. Absent for a dimension's value
+ * text, which stands in free space off the pipe.
  */
 export type OcclusionProbeHints = Readonly<{
   subject?: string;
@@ -336,12 +338,19 @@ export type LayoutResult = Readonly<{
       subject?: string;
     }>;
     /**
+     * Set by the explicit layout from `ExplicitLayoutInput.subject`: the
+     * model object the record sits on (a weld mark's WELD component), for
+     * the inspection pass.
+     */
+    subject?: string;
+    /**
      * Set by the inspection pass (`markOcclusion`, display mode
      * `inspection`): model geometry stands between the camera and the
-     * record's probe point — a dimension's value text; a tag's anchor, other
-     * than the object the tag names (`subject`); the body of a tag without a
-     * subject — so the painter fades the whole record to
-     * `theme.inspection.occludedAlpha`. Absent in `engineering` mode.
+     * record's probe point — a dimension's value text; the anchor of a tag
+     * or weld mark, other than the object it names (`subject`) and bodies
+     * enclosing the anchor; the body of a tag without a subject — so the
+     * painter fades the whole record to `theme.inspection.occludedAlpha`.
+     * Absent in `engineering` mode.
      */
     occluded?: boolean;
   }>;
@@ -592,6 +601,17 @@ export type ExplicitLayoutInput = Readonly<{
   textHeightM?: number;
   /** Level-of-detail hints; omitted = always draw. */
   lod?: ExplicitLodInput;
+  /**
+   * The model object the record sits on or inside, as the host knows it
+   * (plant-mbd: the WELD component's refno in `…:weld:mark:<refno>`, whose
+   * weld point lies on the bore axis inside its own bead and the pipe wall).
+   * Opaque to the kernel; the inspection pass hands it to the host's
+   * occlusion seam so that object's own geometry, and any body the anchor
+   * lies inside, do not count as hiding the record (`OcclusionProbeHints`).
+   * Omitted = the record is probed plainly (a dimension's value text stands
+   * in free space). A billboard tag names its object in `tag.subject`.
+   */
+  subject?: string;
   /**
    * Present the input as a 3D running dimension (see
    * `ExplicitDimension3dInput`); `lines` / `arrowLines` / `labelAnchor` are

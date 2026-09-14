@@ -156,6 +156,42 @@ describe('resolveLabelCollisions', () => {
     expect(glyphOf(results[2]!).bounds).toEqual({ x: 0, y: 0, width: 4, height: 4 });
   });
 
+  it('leaves labels that project beyond the viewport alone instead of gridding them', () => {
+    // Label bounds in the 1e8–1e9 px range (a vertex near the camera plane)
+    // would take 1e7+ occupancy cells each (RangeError / OOM before
+    // 2026-09-14); with the viewport known they neither claim nor take space.
+    const viewport = { x: 0, y: 0, width: 400, height: 400 };
+    const enormous = layout('enormous', 3e8, -2e8, true, 1e9);
+    const automaticEnormous = layout('auto-enormous', 3e8, -2e8, false, 1e9);
+    const nonFinite = layout('non-finite', NaN, 0, true);
+    const pinned = layout('pinned', 0, 0, true);
+    const auto = layout('auto', 0, 0);
+
+    const results = resolveLabelCollisions(
+      [enormous, automaticEnormous, nonFinite, pinned, auto],
+      viewport,
+    );
+
+    expect(results[0]).toBe(enormous);
+    expect(results[1]).toBe(automaticEnormous);
+    expect(results[2]).toBe(nonFinite);
+    expect(glyphOf(results[4]!).bounds).toEqual({ x: 0, y: -8, width: 4, height: 4 });
+  });
+
+  it('registers a label straddling the viewport edge in its on-screen cells only', () => {
+    const viewport = { x: 0, y: 0, width: 400, height: 400 };
+    // Pinned label covering x ≤ 2, y ≤ 2 from 1e8 px off-screen: it still
+    // blocks the automatic label at the origin and its first candidate (up),
+    // so the automatic label takes the second one, to the right of its edge.
+    const wide = layout('wide', -1e8, -1e8, true, 1e8 + 2);
+    const auto = layout('auto', 0, 0);
+
+    const results = resolveLabelCollisions([wide, auto], viewport);
+
+    expect(results[0]).toBe(wide);
+    expect(glyphOf(results[1]!).bounds).toEqual({ x: 16, y: 0, width: 4, height: 4 });
+  });
+
   it('is byte-identical across repeated calls', () => {
     const once = resolveLabelCollisions([
       layout('pinned', 0, 0, true),

@@ -162,4 +162,11 @@
 
 - **范围**：遍历项目树得 2693 个 BRAN，2469 个有 MBD payload（224 个 422 是后端按契约拒绝的非路由容器 / 无几何成员）。**内核全跑**（Node，临时 vitest 用例，跑完删除）：每条 payload 解析 → 映射 → 布局（far 1.7× / mid 0.6× / close 0.25× 三距离 × engineering / inspection × 再布局）→ SVG；**实机抽样** 52 条（真实 Chrome，far / behind 两相机 × 两模式，截图 + pageerror）。读数与文件见验证 README「全管道扫描」段（`all-pipes-*.json/png`）。
 - **结果**：far 2469 / 2469 全过（非有限数 0、SVG NaN 0、再布局逐条相同、屏内标签命中 26 070 / 26 070；解析诊断 0、原子拒绝 0；payload 3901 条 issue 全是后端 warning）；实机 52 条两模式 α / 确定性 / 复原全对，inspection 完整布局最大 37 ms（407 条记录）。
-- **撞出两件待拍板**：① `buildHitIndex` 与 `resolveLabelCollisions` 的 64 px 网格不裁视口——close 435 / 2469（17.6 %）、mid 33 条会爆格子（真机 = `RangeError` / 卡死 / OOM），且**每条管加载期**记录先于几何到达、在默认相机下布局的那一帧也会撞（实机 3 / 52 条 pageerror，一条拖了 30 s 一条尺寸都画不出）；② `weld_mark` 的探测点在管轴焊点上，inspection 下 27/27 判遮挡（抽样遮挡 flag 的 73 % 是焊缝标记，项目 334 个 BRAN / 1238 个焊缝标记受影响）。两项都记在 ADR 0061「已知边界」与验证 README，未改代码。
+- **撞出两件待拍板**：① `buildHitIndex` 与 `resolveLabelCollisions` 的 64 px 网格不裁视口——close 435 / 2469（17.6 %）、mid 33 条会爆格子（真机 = `RangeError` / 卡死 / OOM），且**每条管加载期**记录先于几何到达、在默认相机下布局的那一帧也会撞（实机 3 / 52 条 pageerror，一条拖了 30 s 一条尺寸都画不出）；② `weld_mark` 的探测点在管轴焊点上，inspection 下 27/27 判遮挡（抽样遮挡 flag 的 73 % 是焊缝标记，项目 334 个 BRAN / 1238 个焊缝标记受影响）。两项当时记在 ADR 0061「已知边界」与验证 README，未改代码——见 §9.8。
+
+### 9.8 全管道扫描撞出的两件事修掉（2026-09-14，fable-5-1-69；用户交接「继续未完的部分，不必重问」）
+
+- **两张 64 px 网格裁视口**（ADR 0040 早已要求「视口裁剪、有界碰撞」）：`buildHitIndex(layouts, cellSizePx, bounds?)` / `resolveLabelCollisions(inputs, bounds?)` 的格子范围先与「视口外扩一格」相交，`layoutViewport` 传入 `projector` 的视口；屏外区域不登记（命中索引只答屏内点），屏外标签不占位不被搬，非有限坐标得空范围。不在上游剔除相机背后的记录（近景时同一条记录一半在背后一半在屏上）。
+- **焊缝标记与标签同一遮挡口径**：`…:weld:mark:<refno>` 的 `<refno>` 是 E3D WELD 构件（gen-model 画成管外径短圆盘），`weldSubject` 读成新增的 `ExplicitLayoutInput.subject` → `derived.subject` → `occlusionProbe` 探锚点并交给宿主缝；WELD 自己的 piece 与包着焊点的直管 / 管件不算遮挡，只有别的几何挡在前面才淡（ADR 0061「焊缝标记」段）。
+- **验证**：单测 59 文件 / 351 通过（+7）；内核全跑 **2469 / 2469 × far / mid / close 全过**（0 flag，96 s；上轮超限的 33 mid / 435 close 视图不裁时要 1e6–3.3e12 格，裁后网格 ≤ 1.7 ms，屏内标签命中 25 969 / 15 106 / 8646 全中）；实机 3 条加载期 `RangeError` **3 → 0**；`24381_146979` 焊缝标记遮挡 **27 → 4**，与独立射线逐条一致，剩 4 个都是别的焊缝盘 / 直管 / 套筒挡在焊点前；参照管 `24381_145018` 三相机标签与尺寸 flag 逐条不变。读数与文件见验证 README「修复复验」小节。
+- **仍留**：极端小管里端点卡片探卡片中心落在构件体内（`24381_104746`）；药丸云观感。

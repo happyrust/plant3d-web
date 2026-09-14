@@ -189,6 +189,8 @@ type ExplicitParts = Readonly<{
   lod?: ExplicitLodInput;
   dimension3d?: ExplicitLayoutInput['dimension3d'];
   tag?: ExplicitTagInput;
+  /** The model object the record sits on (its refno), for the inspection pass. */
+  subject?: string;
 }>;
 
 function explicitRecord(
@@ -223,6 +225,7 @@ function explicitRecord(
     ...(parts.lod ? { lod: parts.lod } : {}),
     ...(parts.dimension3d ? { dimension3d: parts.dimension3d } : {}),
     ...(parts.tag ? { tag: parts.tag } : {}),
+    ...(parts.subject ? { subject: parts.subject } : {}),
   };
   return {
     id: primitive.id,
@@ -296,6 +299,19 @@ function tagSubject(id: string, kind: 'connection' | 'name' | 'elbo'): string | 
   const subject = match?.[1];
   if (!subject || subject === 'Head' || subject === 'Tail') return undefined;
   return subject;
+}
+
+/**
+ * The WELD component a plant-mbd weld mark id names after `:weld:mark:`
+ * (`<bran>:isoline:<n>:weld:mark:<refno>`). The mark's position is that
+ * component's origin — the weld point on the bore axis, inside the bead the
+ * model draws for the WELD and inside the pipe wall — so the inspection
+ * pass needs the refno to leave the weld's own geometry out of the ray
+ * (2026-09-14: 27 / 27 weld marks of BRAN 24381_146979 faded without it).
+ * Another producer's id carries none and the mark is probed plainly.
+ */
+function weldSubject(id: string): string | undefined {
+  return /:weld:mark:([^:]+)$/.exec(id)?.[1] || undefined;
 }
 
 /**
@@ -837,6 +853,7 @@ export function mbdV2ToExternalRecords(
       }
       case 'weld_mark': {
         const position = transformPoint(primitive.position);
+        const subject = weldSubject(primitive.id);
         record = explicitRecord(primitive, 'annotation', {
           formattedLabel: '',
           labelAnchor: position,
@@ -854,6 +871,7 @@ export function mbdV2ToExternalRecords(
               }]
               : []),
           ],
+          ...(subject ? { subject } : {}),
         });
         break;
       }

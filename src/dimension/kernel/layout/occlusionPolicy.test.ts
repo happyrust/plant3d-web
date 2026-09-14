@@ -5,7 +5,7 @@ import { SOLVESPACE_DIMENSION_THEME } from '../theme';
 
 import { markOcclusion, occlusionProbe, occlusionToleranceM } from './occlusionPolicy';
 
-import type { LayoutResult, OcclusionSource, Vec3 } from '../types';
+import type { LayoutResult, OcclusionSource, ScenePrimitive, Vec3 } from '../types';
 
 const RECT = { x: 0, y: 0, width: 10, height: 10 };
 
@@ -76,6 +76,29 @@ describe('occlusionProbe', () => {
     });
   });
 
+  it('probes a weld mark that names its WELD component at the anchor, with the component as subject', () => {
+    // A weld mark has no glyph: its anchor is the marker's weld point on the
+    // bore axis, inside the WELD bead and the pipe wall (27 / 27 faded
+    // without the subject, BRAN 24381_146979, 2026-09-14).
+    const marker: ScenePrimitive = {
+      kind: 'scene-marker',
+      at: { anchor: [0, 0, 0.4], offsetPx: [0, 0] },
+      shape: 'circle',
+      radiusPx: 5,
+      part: 'marker',
+      styleRole: 'external',
+    };
+    const weld: LayoutResult = {
+      ...drawn('weld', [0, 0, 0.4], false),
+      scenePrimitives: [marker],
+      derived: { formattedLabel: '', subject: '24381_146980' },
+    };
+    expect(occlusionProbe(weld, projector)).toEqual({
+      point: [0, 0, 0.4],
+      hints: { subject: '24381_146980' },
+    });
+  });
+
   it('probes a tag without an object where its body is, at the anchor depth', () => {
     // Anchor on the pipe at (0, 0, 0.4); the card was placed 100 px right and
     // 50 px up of the anchor's pixel (200, 200) → its centre is at (300, 150).
@@ -134,7 +157,7 @@ describe('markOcclusion', () => {
     });
   });
 
-  it('hands the host a tag\'s object with the cast, and nothing extra for a dimension', () => {
+  it('hands the host a tag\'s or a weld mark\'s object with the cast, and nothing extra for a dimension', () => {
     const source: OcclusionSource = { isSegmentBlocked: vi.fn(() => false) };
     const tag: LayoutResult = {
       ...drawn('tag', [0.5, 0.2, 0.7]),
@@ -143,8 +166,12 @@ describe('markOcclusion', () => {
         tag: { candidate: 0, body: { x: 240, y: 170, width: 20, height: 10 }, subject: 'r7' },
       },
     };
+    const weld: LayoutResult = {
+      ...drawn('weld', [0.5, -0.2, 0.7]),
+      derived: { formattedLabel: '', subject: 'w9' },
+    };
 
-    markOcclusion([tag, drawn('dim', [-0.5, 0.2, 0.7])], projector, source, theme);
+    markOcclusion([tag, weld, drawn('dim', [-0.5, 0.2, 0.7])], projector, source, theme);
 
     expect(source.isSegmentBlocked).toHaveBeenNthCalledWith(
       1,
@@ -155,6 +182,13 @@ describe('markOcclusion', () => {
     );
     expect(source.isSegmentBlocked).toHaveBeenNthCalledWith(
       2,
+      [0.5, -0.2, -1],
+      [0.5, -0.2, 0.7],
+      expect.closeTo(0.02, 12),
+      { subject: 'w9' },
+    );
+    expect(source.isSegmentBlocked).toHaveBeenNthCalledWith(
+      3,
       [-0.5, 0.2, -1],
       [-0.5, 0.2, 0.7],
       expect.closeTo(0.02, 12),

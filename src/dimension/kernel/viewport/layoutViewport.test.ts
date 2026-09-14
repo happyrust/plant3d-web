@@ -50,6 +50,24 @@ describe('layoutViewport', () => {
     });
   });
 
+  it('keeps the screen grids bounded when geometry projects far beyond the viewport', () => {
+    // 1e6 px per metre and a diagonal dimension: its line runs from 1.4e5 px
+    // up-left of the screen to 1.1e6 px down-right — the shape of a vertex
+    // near the camera plane. Registering that cell by cell is 6e7 cells
+    // (RangeError: Map maximum size exceeded / OOM before 2026-09-14). Only
+    // the near extension line, diagonally up-left from the centre, is on screen.
+    const diagonal = { ...linear('a'), b: [1, 1, 0] as const };
+    const batch = layoutViewport(
+      [diagonal, { ...diagonal, id: 'b' }],
+      { ...baseContext, projector: createTestProjector(1e6) },
+      new Map(),
+    );
+
+    expect(batch.layouts).toHaveLength(2);
+    expect(batch.hitIndex.hitTest([100, 100], 2)).toMatchObject({ dimensionId: 'a', part: 'extension' });
+    expect(batch.hitIndex.hitTest([300, 300], 2)).toBeNull();
+  });
+
   it('defaults missing interaction state to normal', () => {
     const batch = layoutViewport([linear('linear')], baseContext, new Map());
 

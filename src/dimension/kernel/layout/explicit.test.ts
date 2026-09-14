@@ -434,6 +434,30 @@ describe('layoutExplicit', () => {
     expect(result.primitives.every((primitive) => primitive.styleRole === 'hovered')).toBe(true);
   });
 
+  it('carries the object a record sits on into derived, for the inspection pass', () => {
+    const context: LayoutContext = {
+      projector: createTestProjector(),
+      font: createTestFont(),
+      theme: SOLVESPACE_DIMENSION_THEME,
+      format: DEFAULT_DIMENSION_FORMAT,
+      interaction: 'normal',
+    };
+    const weldMark: ExplicitLayoutInput = {
+      id: 'weld',
+      role: 'external',
+      labelPinned: true,
+      formattedLabel: '',
+      lines: [],
+      labelAnchor: [0.3, 0, 0],
+      arrowLines: [],
+      markers: [{ at: [0.3, 0, 0], shape: 'circle', radiusPx: 5 }],
+      subject: '24381_146980',
+    };
+
+    expect(layoutExplicit(weldMark, context).derived).toEqual({ formattedLabel: '', subject: '24381_146980' });
+    expect(layoutExplicit(input, context).derived).toEqual({ formattedLabel: '25 REF' });
+  });
+
   it('lays out arcs, markers, and extra texts with bounded hit regions', () => {
     const annotated: ExplicitLayoutInput = {
       id: 'explicit-annotation',

@@ -58,9 +58,46 @@ function compareIds(a: string, b: string): number {
   return a < b ? -1 : a > b ? 1 : 0;
 }
 
+export const HIT_INDEX_CELL_PX = 64;
+
+type CellRange = Readonly<{
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+}>;
+
+/**
+ * Restrict a cell range to the indexed area. A projected region whose
+ * vertex lies near the camera plane (a close-up, or the default camera of a
+ * pipe whose MBD records arrive before its geometry) has coordinates in the
+ * 1e5–1e9 px range; registering it cell by cell would take 1e7–1e10 cells
+ * (`RangeError: Map maximum size exceeded`, or a 4 GB heap — all-pipes
+ * sweep, 2026-09-14). Only the cells inside the area can ever be queried, so
+ * the rest are dropped; a non-finite coordinate ends up as an empty range.
+ */
+function clampCellRange(range: CellRange, clip: CellRange | null): CellRange {
+  if (!clip) return range;
+  return {
+    minX: Math.max(range.minX, clip.minX),
+    minY: Math.max(range.minY, clip.minY),
+    maxX: Math.min(range.maxX, clip.maxX),
+    maxY: Math.min(range.maxY, clip.maxY),
+  };
+}
+
+/**
+ * Spatial index over the hit regions of a layout batch, on a square grid of
+ * `cellSizePx`. With `bounds` (the viewport) a region is registered only in
+ * the cells it covers inside the viewport padded by one cell, so hit tests
+ * for on-screen points with a tolerance up to `cellSizePx` stay exact while
+ * regions that project far off-screen cost nothing; without it every cell a
+ * region covers is registered.
+ */
 export function buildHitIndex(
   layouts: readonly LayoutResult[],
-  cellSizePx = 64,
+  cellSizePx = HIT_INDEX_CELL_PX,
+  bounds?: ScreenRect,
 ): HitIndex {
   if (!Number.isFinite(cellSizePx) || cellSizePx <= 0) {
     throw new RangeError('Hit-index cell size must be positive');
@@ -68,17 +105,21 @@ export function buildHitIndex(
 
   const cells = new Map<string, IndexedRegion[]>();
   let nextKey = 0;
-  const cellRange = (rect: ScreenRect): Readonly<{
-    minX: number;
-    minY: number;
-    maxX: number;
-    maxY: number;
-  }> => ({
+  const rawCellRange = (rect: ScreenRect): CellRange => ({
     minX: Math.floor(rect.x / cellSizePx),
     minY: Math.floor(rect.y / cellSizePx),
     maxX: Math.floor((rect.x + Math.max(rect.width, 0)) / cellSizePx),
     maxY: Math.floor((rect.y + Math.max(rect.height, 0)) / cellSizePx),
   });
+  const clip = bounds
+    ? rawCellRange({
+      x: bounds.x - cellSizePx,
+      y: bounds.y - cellSizePx,
+      width: bounds.width + cellSizePx * 2,
+      height: bounds.height + cellSizePx * 2,
+    })
+    : null;
+  const cellRange = (rect: ScreenRect): CellRange => clampCellRange(rawCellRange(rect), clip);
 
   for (const layout of layouts) {
     for (const region of layout.hitRegions) {

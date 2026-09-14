@@ -49,13 +49,17 @@ function layoutAnchor(layout: LayoutResult): Vec3 | null {
  * probed at its value text (the 3D anchor above), which stands in free
  * space off the pipe. A billboard tag's anchor sits on or inside the object
  * it names (an elbow's corner point, a valve's origin, a connection at the
- * bore centre), so a plain ray to it would hit that very object from every
- * direction and the tag would always fade (BRAN 24381_145018, 2026-09-13):
+ * bore centre), and a weld mark's anchor is the weld point on the bore axis
+ * — inside the WELD component's own bead and the pipe wall — so a plain ray
+ * to either would hit that very object from every direction and the record
+ * would always fade (BRAN 24381_145018, 2026-09-13; 27 / 27 weld marks of
+ * BRAN 24381_146979, 2026-09-14):
  *
- * - a tag that knows its object (`derived.tag.subject`) is probed at the
- *   anchor with the subject as a hint — the host leaves out that object and
- *   any body the anchor lies inside, so the tag fades exactly when *other*
- *   geometry hides the thing it names (user's call, 2026-09-13 22:1x);
+ * - a record that knows its object (`derived.tag.subject`, or
+ *   `derived.subject` for a weld mark) is probed at the anchor with the
+ *   subject as a hint — the host leaves out that object and any body the
+ *   anchor lies inside, so the record fades exactly when *other* geometry
+ *   hides the thing it names (user's call, 2026-09-13 22:1x);
  * - a tag without one (branch head / tail cards, the branch name) is probed
  *   where its body is: the body's screen centre unprojected at the anchor's
  *   depth — whether something nearer than the anchor is drawn where the
@@ -70,8 +74,9 @@ export function occlusionProbe(
   const anchor = layoutAnchor(layout);
   if (!anchor) return null;
   const tag = layout.derived.tag;
+  const subject = tag?.subject ?? layout.derived.subject;
+  if (subject) return { point: anchor, hints: { subject } };
   if (!tag) return { point: anchor };
-  if (tag.subject) return { point: anchor, hints: { subject: tag.subject } };
   const depth = projector.project(anchor).depth;
   const probe = projector.unproject({
     x: tag.body.x + tag.body.width / 2,

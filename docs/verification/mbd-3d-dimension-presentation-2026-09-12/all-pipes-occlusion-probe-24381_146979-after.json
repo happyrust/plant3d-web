@@ -1,0 +1,847 @@
+{
+ "camera": {
+  "position": [
+   2.653,
+   -3.617,
+   2.169
+  ],
+  "target": [
+   0,
+   0,
+   0
+  ]
+ },
+ "records": [
+  {
+   "id": "24381_146979:isoline:0:main:Head--24381_146983",
+   "label": "368",
+   "tag": false,
+   "kernelOccluded": false,
+   "independent": false,
+   "blockers": [],
+   "nearestBlockerShortM": null,
+   "farthestBlockerShortM": null
+  },
+  {
+   "id": "24381_146979:isoline:0:weld:mark:24381_146980",
+   "label": "",
+   "tag": false,
+   "kernelOccluded": false,
+   "independent": true,
+   "blockers": [
+    {
+     "objectId": "o:24381_146979:1",
+     "ownPipe": true,
+     "shortOfAnchorM": 0.051
+    }
+   ],
+   "nearestBlockerShortM": 0.051,
+   "farthestBlockerShortM": 0.051
+  },
+  {
+   "id": "24381_146979:isoline:0:weld:mark:24381_146982",
+   "label": "",
+   "tag": false,
+   "kernelOccluded": false,
+   "independent": true,
+   "blockers": [
+    {
+     "objectId": "o:24381_146983:19",
+     "ownPipe": false,
+     "shortOfAnchorM": 0.066
+    }
+   ],
+   "nearestBlockerShortM": 0.066,
+   "farthestBlockerShortM": 0.066
+  },
+  {
+   "id": "24381_146979:isoline:1:main:24381_146983--24381_146985",
+   "label": "1032",
+   "tag": false,
+   "kernelOccluded": false,
+   "independent": false,
+   "blockers": [],
+   "nearestBlockerShortM": null,
+   "farthestBlockerShortM": null
+  },
+  {
+   "id": "24381_146979:isoline:1:small:24381_146986--24381_146987",
+   "label": "6.5",
+   "tag": false,
+   "kernelOccluded": false,
+   "independent": false,
+   "blockers": [],
+   "nearestBlockerShortM": null,
+   "farthestBlockerShortM": null
+  },
+  {
+   "id": "24381_146979:isoline:1:main:24381_146987--24381_146989",
+   "label": "1592",
+   "tag": false,
+   "kernelOccluded": false,
+   "independent": false,
+   "blockers": [],
+   "nearestBlockerShortM": null,
+   "farthestBlockerShortM": null
+  },
+  {
+   "id": "24381_146979:isoline:1:weld:mark:24381_146984",
+   "label": "",
+   "tag": false,
+   "kernelOccluded": false,
+   "independent": true,
+   "blockers": [
+    {
+     "objectId": "o:24381_146983:19",
+     "ownPipe": false,
+     "shortOfAnchorM": 0.031
+    },
+    {
+     "objectId": "o:24381_146979:14",
+     "ownPipe": true,
+     "shortOfAnchorM": 0.026
+    }
+   ],
+   "nearestBlockerShortM": 0.026,
+   "farthestBlockerShortM": 0.031
+  },
+  {
+   "id": "24381_146979:isoline:1:weld:mark:24381_146985",
+   "label": "",
+   "tag": false,
+   "kernelOccluded": false,
+   "independent": true,
+   "blockers": [
+    {
+     "objectId": "o:24381_146986:22",
+     "ownPipe": false,
+     "shortOfAnchorM": 0.028
+    }
+   ],
+   "nearestBlockerShortM": 0.028,
+   "farthestBlockerShortM": 0.028
+  },
+  {
+   "id": "24381_146979:isoline:1:weld:mark:24381_146987",
+   "label": "",
+   "tag": false,
+   "kernelOccluded": false,
+   "independent": true,
+   "blockers": [
+    {
+     "objectId": "o:24381_146979:4",
+     "ownPipe": true,
+     "shortOfAnchorM": 0.024
+    }
+   ],
+   "nearestBlockerShortM": 0.024,
+   "farthestBlockerShortM": 0.024
+  },
+  {
+   "id": "24381_146979:isoline:1:weld:mark:24381_146988",
+   "label": "",
+   "tag": false,
+   "kernelOccluded": false,
+   "independent": true,
+   "blockers": [
+    {
+     "objectId": "o:24381_146989:25",
+     "ownPipe": false,
+     "shortOfAnchorM": 0.031
+    },
+    {
+     "objectId": "o:24381_146979:4",
+     "ownPipe": true,
+     "shortOfAnchorM": 0.024
+    },
+    {
+     "objectId": "o:24381_146988:24",
+     "ownPipe": false,
+     "shortOfAnchorM": 0.019
+    }
+   ],
+   "nearestBlockerShortM": 0.019,
+   "farthestBlockerShortM": 0.031
+  },
+  {
+   "id": "24381_146979:isoline:2:main:24381_146989--24381_146993",
+   "label": "400",
+   "tag": false,
+   "kernelOccluded": false,
+   "independent": false,
+   "blockers": [],
+   "nearestBlockerShortM": null,
+   "farthestBlockerShortM": null
+  },
+  {
+   "id": "24381_146979:isoline:2:weld:mark:24381_146990",
+   "label": "",
+   "tag": false,
+   "kernelOccluded": false,
+   "independent": true,
+   "blockers": [
+    {
+     "objectId": "o:24381_146979:16",
+     "ownPipe": true,
+     "shortOfAnchorM": 0.081
+    },
+    {
+     "objectId": "o:24381_146989:25",
+     "ownPipe": false,
+     "shortOfAnchorM": 0.014
+    }
+   ],
+   "nearestBlockerShortM": 0.014,
+   "farthestBlockerShortM": 0.081
+  },
+  {
+   "id": "24381_146979:isoline:2:weld:mark:24381_146992",
+   "label": "",
+   "tag": false,
+   "kernelOccluded": false,
+   "independent": true,
+   "blockers": [
+    {
+     "objectId": "o:24381_146993:28",
+     "ownPipe": false,
+     "shortOfAnchorM": 0.038
+    }
+   ],
+   "nearestBlockerShortM": 0.038,
+   "farthestBlockerShortM": 0.038
+  },
+  {
+   "id": "24381_146979:isoline:3:weld:mark:24381_146994",
+   "label": "",
+   "tag": false,
+   "kernelOccluded": false,
+   "independent": true,
+   "blockers": [
+    {
+     "objectId": "o:24381_146993:28",
+     "ownPipe": false,
+     "shortOfAnchorM": 0.026
+    },
+    {
+     "objectId": "o:24381_146994:29",
+     "ownPipe": false,
+     "shortOfAnchorM": 0.006
+    }
+   ],
+   "nearestBlockerShortM": 0.006,
+   "farthestBlockerShortM": 0.026
+  },
+  {
+   "id": "24381_146979:isoline:4:main:24381_146995--24381_146996",
+   "label": "162.17",
+   "tag": false,
+   "kernelOccluded": false,
+   "independent": false,
+   "blockers": [],
+   "nearestBlockerShortM": null,
+   "farthestBlockerShortM": null
+  },
+  {
+   "id": "24381_146979:isoline:5:weld:mark:24381_146997",
+   "label": "",
+   "tag": false,
+   "kernelOccluded": false,
+   "independent": true,
+   "blockers": [
+    {
+     "objectId": "o:24381_146998:31",
+     "ownPipe": false,
+     "shortOfAnchorM": 0.032
+    },
+    {
+     "objectId": "o:24381_146979:7",
+     "ownPipe": true,
+     "shortOfAnchorM": 0.025
+    },
+    {
+     "objectId": "o:24381_146997:30",
+     "ownPipe": false,
+     "shortOfAnchorM": 0.006
+    }
+   ],
+   "nearestBlockerShortM": 0.006,
+   "farthestBlockerShortM": 0.032
+  },
+  {
+   "id": "24381_146979:isoline:6:main:24381_146998--24381_147000",
+   "label": "1592",
+   "tag": false,
+   "kernelOccluded": false,
+   "independent": false,
+   "blockers": [],
+   "nearestBlockerShortM": null,
+   "farthestBlockerShortM": null
+  },
+  {
+   "id": "24381_146979:isoline:6:main:24381_147002--24381_147004",
+   "label": "219",
+   "tag": false,
+   "kernelOccluded": false,
+   "independent": false,
+   "blockers": [],
+   "nearestBlockerShortM": null,
+   "farthestBlockerShortM": null
+  },
+  {
+   "id": "24381_146979:isoline:6:weld:mark:24381_146999",
+   "label": "",
+   "tag": false,
+   "kernelOccluded": false,
+   "independent": true,
+   "blockers": [
+    {
+     "objectId": "o:24381_146998:31",
+     "ownPipe": false,
+     "shortOfAnchorM": 0.031
+    },
+    {
+     "objectId": "o:24381_146979:8",
+     "ownPipe": true,
+     "shortOfAnchorM": 0.024
+    }
+   ],
+   "nearestBlockerShortM": 0.024,
+   "farthestBlockerShortM": 0.031
+  },
+  {
+   "id": "24381_146979:isoline:6:weld:mark:24381_147000",
+   "label": "",
+   "tag": false,
+   "kernelOccluded": false,
+   "independent": true,
+   "blockers": [
+    {
+     "objectId": "o:24381_147001:34",
+     "ownPipe": false,
+     "shortOfAnchorM": 0.032
+    },
+    {
+     "objectId": "o:24381_146979:8",
+     "ownPipe": true,
+     "shortOfAnchorM": 0.025
+    },
+    {
+     "objectId": "o:24381_147000:33",
+     "ownPipe": false,
+     "shortOfAnchorM": 0.008
+    }
+   ],
+   "nearestBlockerShortM": 0.008,
+   "farthestBlockerShortM": 0.032
+  },
+  {
+   "id": "24381_146979:isoline:6:weld:mark:24381_147002",
+   "label": "",
+   "tag": false,
+   "kernelOccluded": true,
+   "independent": true,
+   "blockers": [
+    {
+     "objectId": "o:24381_147001:34",
+     "ownPipe": false,
+     "shortOfAnchorM": 0.032
+    },
+    {
+     "objectId": "o:24381_146979:5",
+     "ownPipe": true,
+     "shortOfAnchorM": 0.025
+    },
+    {
+     "objectId": "o:24381_147002:35",
+     "ownPipe": false,
+     "shortOfAnchorM": 0.008
+    }
+   ],
+   "nearestBlockerShortM": 0.008,
+   "farthestBlockerShortM": 0.032
+  },
+  {
+   "id": "24381_146979:isoline:6:weld:mark:24381_147003",
+   "label": "",
+   "tag": false,
+   "kernelOccluded": false,
+   "independent": true,
+   "blockers": [
+    {
+     "objectId": "o:24381_147004:37",
+     "ownPipe": false,
+     "shortOfAnchorM": 0.032
+    },
+    {
+     "objectId": "o:24381_146979:13",
+     "ownPipe": true,
+     "shortOfAnchorM": 0.025
+    },
+    {
+     "objectId": "o:24381_147003:36",
+     "ownPipe": false,
+     "shortOfAnchorM": 0.007
+    }
+   ],
+   "nearestBlockerShortM": 0.007,
+   "farthestBlockerShortM": 0.032
+  },
+  {
+   "id": "24381_146979:isoline:7:main:24381_147004--24381_147008",
+   "label": "400",
+   "tag": false,
+   "kernelOccluded": false,
+   "independent": false,
+   "blockers": [],
+   "nearestBlockerShortM": null,
+   "farthestBlockerShortM": null
+  },
+  {
+   "id": "24381_146979:isoline:7:weld:mark:24381_147005",
+   "label": "",
+   "tag": false,
+   "kernelOccluded": false,
+   "independent": true,
+   "blockers": [
+    {
+     "objectId": "o:24381_146979:2",
+     "ownPipe": true,
+     "shortOfAnchorM": 0.053
+    },
+    {
+     "objectId": "o:24381_147004:37",
+     "ownPipe": false,
+     "shortOfAnchorM": 0.015
+    }
+   ],
+   "nearestBlockerShortM": 0.015,
+   "farthestBlockerShortM": 0.053
+  },
+  {
+   "id": "24381_146979:isoline:7:weld:mark:24381_147007",
+   "label": "",
+   "tag": false,
+   "kernelOccluded": false,
+   "independent": true,
+   "blockers": [
+    {
+     "objectId": "o:24381_147008:40",
+     "ownPipe": false,
+     "shortOfAnchorM": 0.053
+    }
+   ],
+   "nearestBlockerShortM": 0.053,
+   "farthestBlockerShortM": 0.053
+  },
+  {
+   "id": "24381_146979:isoline:8:main:24381_147008--24381_147010",
+   "label": "1592",
+   "tag": false,
+   "kernelOccluded": false,
+   "independent": false,
+   "blockers": [],
+   "nearestBlockerShortM": null,
+   "farthestBlockerShortM": null
+  },
+  {
+   "id": "24381_146979:isoline:8:small:24381_147010--24381_147011",
+   "label": "6.5",
+   "tag": false,
+   "kernelOccluded": false,
+   "independent": false,
+   "blockers": [],
+   "nearestBlockerShortM": null,
+   "farthestBlockerShortM": null
+  },
+  {
+   "id": "24381_146979:isoline:8:small:24381_147011--24381_147012",
+   "label": "6.5",
+   "tag": false,
+   "kernelOccluded": false,
+   "independent": false,
+   "blockers": [],
+   "nearestBlockerShortM": null,
+   "farthestBlockerShortM": null
+  },
+  {
+   "id": "24381_146979:isoline:8:main:24381_147012--24381_147015",
+   "label": "219",
+   "tag": false,
+   "kernelOccluded": false,
+   "independent": false,
+   "blockers": [],
+   "nearestBlockerShortM": null,
+   "farthestBlockerShortM": null
+  },
+  {
+   "id": "24381_146979:isoline:8:weld:mark:24381_147009",
+   "label": "",
+   "tag": false,
+   "kernelOccluded": false,
+   "independent": true,
+   "blockers": [
+    {
+     "objectId": "o:24381_147008:40",
+     "ownPipe": false,
+     "shortOfAnchorM": 0.032
+    },
+    {
+     "objectId": "o:24381_146979:0",
+     "ownPipe": true,
+     "shortOfAnchorM": 0.025
+    }
+   ],
+   "nearestBlockerShortM": 0.025,
+   "farthestBlockerShortM": 0.032
+  },
+  {
+   "id": "24381_146979:isoline:8:weld:mark:24381_147010",
+   "label": "",
+   "tag": false,
+   "kernelOccluded": false,
+   "independent": true,
+   "blockers": [
+    {
+     "objectId": "o:24381_147011:43",
+     "ownPipe": false,
+     "shortOfAnchorM": 0.031
+    },
+    {
+     "objectId": "o:24381_146979:0",
+     "ownPipe": true,
+     "shortOfAnchorM": 0.024
+    },
+    {
+     "objectId": "o:24381_147010:42",
+     "ownPipe": false,
+     "shortOfAnchorM": 0.024
+    }
+   ],
+   "nearestBlockerShortM": 0.024,
+   "farthestBlockerShortM": 0.031
+  },
+  {
+   "id": "24381_146979:isoline:8:weld:mark:24381_147012",
+   "label": "",
+   "tag": false,
+   "kernelOccluded": false,
+   "independent": true,
+   "blockers": [
+    {
+     "objectId": "o:24381_146979:6",
+     "ownPipe": true,
+     "shortOfAnchorM": 0.024
+    },
+    {
+     "objectId": "o:24381_147012:44",
+     "ownPipe": false,
+     "shortOfAnchorM": 0.024
+    }
+   ],
+   "nearestBlockerShortM": 0.024,
+   "farthestBlockerShortM": 0.024
+  },
+  {
+   "id": "24381_146979:isoline:8:weld:mark:24381_147014",
+   "label": "",
+   "tag": false,
+   "kernelOccluded": false,
+   "independent": true,
+   "blockers": [
+    {
+     "objectId": "o:24381_147015:46",
+     "ownPipe": false,
+     "shortOfAnchorM": 0.031
+    },
+    {
+     "objectId": "o:24381_146979:12",
+     "ownPipe": true,
+     "shortOfAnchorM": 0.024
+    },
+    {
+     "objectId": "o:24381_147014:45",
+     "ownPipe": false,
+     "shortOfAnchorM": 0.017
+    }
+   ],
+   "nearestBlockerShortM": 0.017,
+   "farthestBlockerShortM": 0.031
+  },
+  {
+   "id": "24381_146979:isoline:9:main:24381_147015--24381_147019",
+   "label": "1624",
+   "tag": false,
+   "kernelOccluded": false,
+   "independent": false,
+   "blockers": [],
+   "nearestBlockerShortM": null,
+   "farthestBlockerShortM": null
+  },
+  {
+   "id": "24381_146979:isoline:9:weld:mark:24381_147016",
+   "label": "",
+   "tag": false,
+   "kernelOccluded": false,
+   "independent": true,
+   "blockers": [
+    {
+     "objectId": "o:24381_147015:46",
+     "ownPipe": false,
+     "shortOfAnchorM": 0.028
+    },
+    {
+     "objectId": "o:24381_147016:47",
+     "ownPipe": false,
+     "shortOfAnchorM": 0.005
+    }
+   ],
+   "nearestBlockerShortM": 0.005,
+   "farthestBlockerShortM": 0.028
+  },
+  {
+   "id": "24381_146979:isoline:9:weld:mark:24381_147018",
+   "label": "",
+   "tag": false,
+   "kernelOccluded": false,
+   "independent": true,
+   "blockers": [
+    {
+     "objectId": "o:24381_146979:3",
+     "ownPipe": true,
+     "shortOfAnchorM": 0.031
+    },
+    {
+     "objectId": "o:24381_147019:49",
+     "ownPipe": false,
+     "shortOfAnchorM": 0.02
+    }
+   ],
+   "nearestBlockerShortM": 0.02,
+   "farthestBlockerShortM": 0.031
+  },
+  {
+   "id": "24381_146979:isoline:10:main:24381_147019--24381_147021",
+   "label": "1032",
+   "tag": false,
+   "kernelOccluded": true,
+   "independent": true,
+   "blockers": [
+    {
+     "objectId": "o:24381_146979:10",
+     "ownPipe": true,
+     "shortOfAnchorM": 0.286
+    }
+   ],
+   "nearestBlockerShortM": 0.286,
+   "farthestBlockerShortM": 0.286
+  },
+  {
+   "id": "24381_146979:isoline:10:small:24381_147021--24381_147022",
+   "label": "6.5",
+   "tag": false,
+   "kernelOccluded": false,
+   "independent": false,
+   "blockers": [],
+   "nearestBlockerShortM": null,
+   "farthestBlockerShortM": null
+  },
+  {
+   "id": "24381_146979:isoline:10:small:24381_147022--24381_147023",
+   "label": "6.5",
+   "tag": false,
+   "kernelOccluded": false,
+   "independent": false,
+   "blockers": [],
+   "nearestBlockerShortM": null,
+   "farthestBlockerShortM": null
+  },
+  {
+   "id": "24381_146979:isoline:10:weld:mark:24381_147020",
+   "label": "",
+   "tag": false,
+   "kernelOccluded": true,
+   "independent": true,
+   "blockers": [
+    {
+     "objectId": "o:24381_146979:3",
+     "ownPipe": true,
+     "shortOfAnchorM": 0.072
+    },
+    {
+     "objectId": "o:24381_147019:49",
+     "ownPipe": false,
+     "shortOfAnchorM": 0.069
+    },
+    {
+     "objectId": "o:24381_147018:48",
+     "ownPipe": false,
+     "shortOfAnchorM": 0.052
+    }
+   ],
+   "nearestBlockerShortM": 0.052,
+   "farthestBlockerShortM": 0.072
+  },
+  {
+   "id": "24381_146979:isoline:10:weld:mark:24381_147021",
+   "label": "",
+   "tag": false,
+   "kernelOccluded": false,
+   "independent": true,
+   "blockers": [
+    {
+     "objectId": "o:24381_147022:52",
+     "ownPipe": false,
+     "shortOfAnchorM": 0.047
+    },
+    {
+     "objectId": "o:24381_146979:10",
+     "ownPipe": true,
+     "shortOfAnchorM": 0.042
+    }
+   ],
+   "nearestBlockerShortM": 0.042,
+   "farthestBlockerShortM": 0.047
+  },
+  {
+   "id": "24381_146979:isoline:10:weld:mark:24381_147023",
+   "label": "",
+   "tag": false,
+   "kernelOccluded": true,
+   "independent": true,
+   "blockers": [
+    {
+     "objectId": "o:24381_147022:52",
+     "ownPipe": false,
+     "shortOfAnchorM": 0.054
+    },
+    {
+     "objectId": "o:24381_146979:10",
+     "ownPipe": true,
+     "shortOfAnchorM": 0.042
+    },
+    {
+     "objectId": "o:24381_147021:51",
+     "ownPipe": false,
+     "shortOfAnchorM": 0.018
+    }
+   ],
+   "nearestBlockerShortM": 0.018,
+   "farthestBlockerShortM": 0.054
+  },
+  {
+   "id": "24381_146979:isoline:12:main:24381_147025--24381_147027",
+   "label": "202",
+   "tag": false,
+   "kernelOccluded": false,
+   "independent": false,
+   "blockers": [],
+   "nearestBlockerShortM": null,
+   "farthestBlockerShortM": null
+  },
+  {
+   "id": "24381_146979:isoline:12:weld:mark:24381_147026",
+   "label": "",
+   "tag": false,
+   "kernelOccluded": false,
+   "independent": true,
+   "blockers": [
+    {
+     "objectId": "o:24381_146979:9",
+     "ownPipe": true,
+     "shortOfAnchorM": 0.031
+    },
+    {
+     "objectId": "o:24381_147027:56",
+     "ownPipe": false,
+     "shortOfAnchorM": 0.02
+    }
+   ],
+   "nearestBlockerShortM": 0.02,
+   "farthestBlockerShortM": 0.031
+  },
+  {
+   "id": "24381_146979:isoline:12:weld:mark:24381_147028",
+   "label": "",
+   "tag": false,
+   "kernelOccluded": true,
+   "independent": true,
+   "blockers": [
+    {
+     "objectId": "o:24381_147027:56",
+     "ownPipe": false,
+     "shortOfAnchorM": 0.039
+    },
+    {
+     "objectId": "o:24381_146979:9",
+     "ownPipe": true,
+     "shortOfAnchorM": 0.031
+    },
+    {
+     "objectId": "o:24381_147026:55",
+     "ownPipe": false,
+     "shortOfAnchorM": 0.022
+    }
+   ],
+   "nearestBlockerShortM": 0.022,
+   "farthestBlockerShortM": 0.039
+  },
+  {
+   "id": "24381_146979:isoline:0:tag:connection:Head",
+   "label": "接 Copy-of-1RCS0076-1R23002",
+   "tag": true,
+   "kernelOccluded": false,
+   "independent": true,
+   "blockers": [
+    {
+     "objectId": "o:24381_146979:1",
+     "ownPipe": true,
+     "shortOfAnchorM": 0.051
+    }
+   ],
+   "nearestBlockerShortM": 0.051,
+   "farthestBlockerShortM": 0.051
+  },
+  {
+   "id": "24381_146979:isoline:10:tag:bend:24381_147025",
+   "label": "35.24°",
+   "tag": true,
+   "kernelOccluded": false,
+   "independent": true,
+   "blockers": [
+    {
+     "objectId": "o:24381_147025:54",
+     "ownPipe": false,
+     "shortOfAnchorM": 0.045
+    }
+   ],
+   "nearestBlockerShortM": 0.045,
+   "farthestBlockerShortM": 0.045
+  },
+  {
+   "id": "24381_146979:isoline:12:tag:connection:Tail",
+   "label": "接 Copy-of-1RCS0099-1R23005",
+   "tag": true,
+   "kernelOccluded": false,
+   "independent": true,
+   "blockers": [
+    {
+     "objectId": "o:24381_147027:56",
+     "ownPipe": false,
+     "shortOfAnchorM": 0.039
+    },
+    {
+     "objectId": "o:24381_146979:9",
+     "ownPipe": true,
+     "shortOfAnchorM": 0.031
+    },
+    {
+     "objectId": "o:24381_147026:55",
+     "ownPipe": false,
+     "shortOfAnchorM": 0.022
+    }
+   ],
+   "nearestBlockerShortM": 0.022,
+   "farthestBlockerShortM": 0.039
+  }
+ ]
+}

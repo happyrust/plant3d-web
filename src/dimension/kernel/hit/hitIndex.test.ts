@@ -70,6 +70,33 @@ describe('buildHitIndex', () => {
     expect(index.hitTest([0, 0], 2)).toBeNull();
   });
 
+  it('registers only the on-screen cells of a region that projects far beyond the viewport', () => {
+    // A vertex near the camera plane projects to 1e8–1e9 px: cell by cell
+    // that is 1e7+ cells per region (RangeError / OOM before 2026-09-14).
+    const viewport = { x: 0, y: 0, width: 1920, height: 1080 };
+    const index = buildHitIndex([
+      layout('through-screen', [
+        { kind: 'segment', from: [100, 100], to: [3e8, 100], widthPx: 1, part: 'dimension' },
+      ]),
+      layout('covers-everything', [
+        { kind: 'rect', rect: { x: -5e8, y: 500, width: 1e9, height: 1e9 }, part: 'label' },
+      ]),
+      layout('off-screen', [
+        { kind: 'rect', rect: { x: 5000, y: 5000, width: 10, height: 10 }, part: 'label' },
+      ]),
+      layout('non-finite', [
+        { kind: 'segment', from: [-Infinity, 0], to: [Infinity, 0], widthPx: 1, part: 'dimension' },
+        { kind: 'rect', rect: { x: NaN, y: 0, width: 10, height: 10 }, part: 'label' },
+      ]),
+    ], 64, viewport);
+
+    expect(index.hitTest([1000, 102], 3)).toMatchObject({ dimensionId: 'through-screen', distancePx: 2 });
+    expect(index.hitTest([960, 900], 0)).toMatchObject({ dimensionId: 'covers-everything' });
+    expect(index.hitTest([960, 300], 0)).toBeNull();
+    // Beyond the viewport (plus one cell) nothing is indexed, by design.
+    expect(index.hitTest([5005, 5005], 0)).toBeNull();
+  });
+
   it('bulk-inserts 2,000 results into every overlapping cell', () => {
     const layouts = Array.from({ length: 2000 }, (_, index) =>
       layout(`dimension-${index.toString().padStart(4, '0')}`, [

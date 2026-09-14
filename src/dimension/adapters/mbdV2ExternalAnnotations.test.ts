@@ -416,6 +416,25 @@ describe('mbdV2ToExternalRecords', () => {
     expect(branch.lod).toEqual({ tier: 'detail' });
   });
 
+  it('names the WELD component of a plant-mbd weld mark as the record\'s subject', () => {
+    // The mark sits at the WELD's origin on the bore axis, inside the bead
+    // the model draws for it and inside the pipe wall; without the refno
+    // every weld mark fades in inspection (27 / 27, BRAN 24381_146979).
+    const data = fixtureData();
+    const result = mbdV2ToExternalRecords({
+      ...data,
+      primitives: [
+        { kind: 'weld_mark', id: '24381_146979:isoline:0:weld:mark:24381_146980', position: [0, 0, 0], weld_type: 'field' },
+        { kind: 'weld_mark', id: '24381_146979:isoline:1:weld:mark:24381_146984', position: [1, 0, 0], weld_type: 'shop' },
+        { kind: 'weld_mark', id: 'other-producer-weld', position: [2, 0, 0], weld_type: 'shop' },
+      ],
+    });
+
+    expect(explicitLayout(result, '24381_146979:isoline:0:weld:mark:24381_146980').subject).toBe('24381_146980');
+    expect(explicitLayout(result, '24381_146979:isoline:1:weld:mark:24381_146984').subject).toBe('24381_146984');
+    expect(explicitLayout(result, 'other-producer-weld').subject).toBeUndefined();
+  });
+
   it('marks slopes and skew aids as close-up detail', () => {
     const data = fixtureData();
     const result = mbdV2ToExternalRecords({
@@ -450,6 +469,9 @@ describe('mbdV2ToExternalRecords', () => {
       { at: [0.9, 0, 0], shape: 'circle', radiusPx: 5 },
       { at: [0.9, 0, 0], shape: 'cross', radiusPx: 5 },
     ]);
+    // Fixture ids carry no WELD refno: probed plainly by the inspection pass.
+    expect(shop.subject).toBeUndefined();
+    expect(field.subject).toBeUndefined();
 
     const slope = explicitLayout(result, 'slope-1');
     expect(slope.formattedLabel).toBe('i=1.0%');

@@ -1,5 +1,5 @@
 import { resolveLabelCollisions } from '../collision/resolveLabelCollisions';
-import { buildHitIndex, type HitIndex } from '../hit/hitIndex';
+import { HIT_INDEX_CELL_PX, buildHitIndex, type HitIndex } from '../hit/hitIndex';
 import { declutterOverlaps } from '../layout/declutterPolicy';
 import { layoutDimension } from '../layout/layoutDimension';
 import { emptyLayout } from '../layout/linear';
@@ -21,6 +21,7 @@ import type {
   LayoutResult,
   NormalizedDimensionInput,
   OcclusionSource,
+  ScreenRect,
 } from '../types';
 
 export type ViewportLayoutBatch = Readonly<{
@@ -78,7 +79,17 @@ export function layoutViewport(
   // declutter runs, so a hidden label neither moves anyone nor claims space;
   // billboard tags then take the first candidate position clear of the
   // surviving labels, of the dimension strokes, of the component boxes the
-  // host reports around them, and of each other.
+  // host reports around them, and of each other. Both screen grids (label
+  // occupancy, hit index) only cover the viewport: what projects beyond it
+  // — a vertex near the camera plane lands at 1e5–1e9 px — is neither
+  // registered nor queried, so a close-up or a not-yet-framed camera cannot
+  // blow the grids up (all-pipes sweep, 2026-09-14).
+  const viewport: ScreenRect = {
+    x: 0,
+    y: 0,
+    width: baseContext.projector.widthCssPx,
+    height: baseContext.projector.heightCssPx,
+  };
   const decluttered = declutterOverlaps(raw);
   const placed = resolveLabelCollisions(
     placeTagBillboards(
@@ -86,11 +97,12 @@ export function layoutViewport(
       tags,
       collectTagObstacles(decluttered, tags, baseContext.projector, options.obstacles),
     ),
+    viewport,
   );
   // Inspection (S4): once every record has its final geometry, ask the host
   // which of them sit behind model geometry; the painter fades those.
   const layouts = options.displayMode === 'inspection' && options.occlusion
     ? markOcclusion(placed, baseContext.projector, options.occlusion, baseContext.theme)
     : placed;
-  return { layouts, hitIndex: buildHitIndex(layouts) };
+  return { layouts, hitIndex: buildHitIndex(layouts, HIT_INDEX_CELL_PX, viewport) };
 }
