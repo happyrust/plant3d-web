@@ -290,8 +290,8 @@ _Avoid_: 按需模型生成、模型资产补齐
 _Avoid_: `data_source`（那是 legacy 内部 parquet | backend 的选择）、后端地址、数据库
 
 **数据源端口 (Model Source Port)**:
-取数点与数据源之间的四个接口：`TreeSource`（根 / 子节点 / 祖先 / 搜索 / 子树 / 可见实例）、`ModelRecordSource`（`refno → InstanceEntry[]`）、`MeshSource`（`geo_hash → 网格 URL`：legacy 给 `.glb`，gen-model-v1 给 `.mesh` rkyv 直连，DTX 加载链按后缀选解析器）、`AttributeSource`（属性面板 / 类型）。接口形状等于 legacy 函数的形状，所以 legacy 适配器是零逻辑委托；gen-model-v1 适配器负责把 `EleTreeNode` / `GeomInstQuery` / `element/attributes` 映射成这些形状。
-_Avoid_: API 客户端、fetch 封装
+取数点与数据源之间的四个接口：`TreeSource`（根 / 子节点 / 祖先 / 搜索 / 子树 / 可见实例）、`ModelRecordSource`（`refno → InstanceEntry[]`）、`MeshSource`（`geo_hash → 网格 URL`：legacy 给 `.glb`，gen-model-v1 给 `.mesh` rkyv 直连，DTX 加载链按后缀选解析器）、`AttributeSource`（属性面板 / 类型）。接口形状等于 legacy 函数的形状，所以 legacy 适配器是零逻辑委托；gen-model-v1 适配器负责把 `EleTreeNode` / `GeomInstQuery` / `element/attributes` 映射成这些形状。测量参考系（wrt）的元素帧也跟随当前数据源，但没进这四个接口：`legacy` 走 `:3100 /api/pdms/transform`，`gen-model-v1` 取 `element/ptset` 的 `world_transform`（同是 `get_world_mat4` 的局部→世界矩阵），owner / 元素类型取树节点（d-533）。
+_Avoid_: API 客户端、fetch 封装、拿 `element/attributes` 的 stored POS / ORI 自己拼元素帧（那是相对属主的）
 
 **虚拟根 (Virtual Root)**:
 gen-model-v1 源下模型树合成的唯一根 `gm-root:<project>:<mdb>`，children 是该 MDB 全部 DESI / ISOD 库的 SITE。它不是 refno，不能 ensure、不能整体显示；祖先链以它为终点。id 里不含 `/` `,` `<` `>`——树的 refno 归一化会改写这些字符。

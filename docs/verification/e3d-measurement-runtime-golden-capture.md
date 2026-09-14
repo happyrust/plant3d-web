@@ -998,8 +998,8 @@ E3D 是 `DIRECTION.string()` 的罗盘串（`W 11.7755 N 66.8266 D`）。用户 
 
 - 三张表都不带 `WRT`；距离表数字逐段 ≤ 6 位有效数字。页面错误 0（产物是 17:56 去尾巴后重跑的；浮条 UI 真点「自由表面」+ 只留「模型表面点」）。
   逐行实读见 `web-direction-compass-live-scan.txt`，数值见 `web-direction-compass-live-records.json`。
-- **旋转 wrt 帧这一档实机没走到**：切 `DBREF 24381/177298` 时 `/api/pdms/transform/24381_177298` 回 HTTP 500（那个后端没在跑），
-  帧回落 World。这一档由 golden 单测覆盖（下）。
+- ~~**旋转 wrt 帧这一档实机没走到**：切 `DBREF 24381/177298` 时 `/api/pdms/transform/24381_177298` 回 HTTP 500（那个后端没在跑），
+  帧回落 World。~~这一档由 golden 单测覆盖（下）；**§27 起 gen-model-v1 下元素 wrt 帧走 `element/ptset`，CE / Owner / DBREF 已实机**。
 
 **单测**：`compassDirection.test.ts` 15 条——G1 `W 11.7755 N 66.1215 D`、G3-02 两件 EQUI 的 `S 11.7755 W 66.1215 D` /
 `S 20.416 W 12.6584 D`、G4-01 `N 78.6901 U`、G4-02 `S`、G4-03 `N 6.66615 W 78.3493 U`（trace 坐标只到 3 位小数，第一个角只锁 `6.666x`）、
@@ -1074,7 +1074,49 @@ ORI 轴上取绝对值）；`gensecSectionBasis.test.ts` 7 条（轴对齐 / 任
 **已知偏离 / 残余**：
 - 截面标架来自 p-line 反解，不是 E3D 的 `yDir` / `zDir` 属性：GENSEC 含弧 SPINE（`element/plines` 回空 + reason）或 legacy 源下拿不到 →
   回落到 ORI 帧的轴上取绝对值（三个数值与 E3D 同一组、顺序可能不同；golden 用例 `=23406/16` 记着这一档）。
-- 真 GENSEC 未实机：本库 0 件；`:3100 /api/pdms/transform` 在 gen-model-v1 数据源下不认 refno，元素 wrt 帧本就走不到实机，本档靠夹具 + 真 p-line。
-  元素 wrt 帧要在 gen-model-v1 下真跑，得另给 transform 来源（另立项）。
+- 真 GENSEC 未实机：本库 0 件；~~`:3100 /api/pdms/transform` 在 gen-model-v1 数据源下不认 refno，元素 wrt 帧本就走不到实机~~（§27 起 gen-model-v1 下
+  元素 wrt 帧走 `element/ptset`，CE / Owner / DBREF 已实机），本档仍靠夹具 + 真 p-line（GENSEC 样本仍无）。
 - 三维标注（画布上的 X / Y / Z 尺寸线）一直是 World 分量、不随 wrt（既有，与本条无关）。
+
+## 27. 参考系 port 跟随模型数据源——gen-model-v1 下元素 wrt 帧（CE / Owner / DBREF）实机走查（2026-09-14 20:21）
+
+**为什么现在做**：§25 / §26 都记着「切 `DBREF` 时 `/api/pdms/transform/<refno>` 回 500 / `MODEL_REFNO_NOT_FOUND`，帧回落 World」——
+`pdmsTransformReferenceFramePort` 只认 `:3100` 旧后端，而缺省数据源 2026-09-09 起是 gen-model-v1。用户 2026-09-14 20:0x 拍板补这条来源（决策 `d-533`）。
+
+**来源对账**：`:3100 /api/pdms/transform` 的矩阵是 `aios_core::transform::get_world_mat4(refno)`（`plant-model-gen` `pdms_transform_api.rs` 58–70 兜底路径）；
+gen-model-v1 `element/ptset` 的 `world_transform` 是同一口径的「局部 → 世界」列主序 mm 矩阵（平移在 12–14）。实机 EQUI `24381/109581`：
+`element/attributes` 给 stored `POS (6316.57, −4741.49, 5347.89)` / `ORI (0, 0, −25)`（相对属主），ptset 给 25° 绕 Z + 平移 `(6241.68, −4737.41, 5347.89)`
+——已与属主 ZONE 复合过的世界矩阵，正是参考系要的。`element/attributes` 里**没有** WPOS / WORI，别拿 stored POS / ORI 自己拼。
+
+**Web 落地**（Web `dfb01ba`；决策 `d-533`）：
+
+- 缺省 `fetchTransform` 按 `getModelSourceKind()` 分叉：`legacy` 原样 `pdmsGetTransform`；`gen-model-v1` 用 `genModelV1ElementPtset({ refno }).world_transform`
+  + 树节点的 `owner`。ptset 404（`isNotFound`）→ `success:false`、reason `not-found`（与 legacy「element not found」同一档）；其它错误照旧 `unavailable`。
+  `provenance.source = 'gen-model-v1-element-ptset'`（legacy 仍 `pdms-transform-api`）。
+- owner 与 noun（§26 的类型提示）共用**同一次**树节点查询（memo 化的 lookup，一次帧解析只查一次）；树节点查不到只丢 owner / noun，不失败帧。
+- 注入了 `fetchTransform` / `fetchNoun` 的调用方（单测 / 夹具）一律不碰模型数据源。`ReferenceFrameTransformResponse = TransformResponse & { source? }`。
+
+**Web 实机走查**（**无任何 mock**：缺省 gen-model-v1 + `:8024`，`?model_source=gen-model-v1&gm_backend_port=8024&show_refno=24381_177298`，
+浮条真点「自由表面」+ 只留「模型表面点」，先退出测量普通点击选中 PANE `24381/177319` 当 CE，再真指针两击测距；临时 spec 已删）：
+
+| wrt | 状态行 | 结果表 | 独立期望（测试进程自己 POST `element/ptset` 取矩阵列 → Δ·u / Δ·v / Δ·w、帧字母罗盘串） | 图 |
+| --- | --- | --- | --- | --- |
+| CE（PANE `24381/177319`，ORI 绕 Z 24.4°） | `当前 CE 24381/177319 · U/V/W`，无错误 | `+4193mm / −23172mm / −20154mm` · `S 10.2557 E 40.5587 D` | `4192.62 / −23172.46 / −20154.21` · `S 10.2557 E 40.5587 D` | `web-wrt-frame-genmodel-live-03-result-card-ce.png` |
+| Owner（FRMW `24381/177318`） | `当前 Owner 24381/177318 · U/V/W`，无错误 | — | 属主来自树节点；ptset 请求里有 `24381/177318` | — |
+| DBREF `=24381/109581`（EQUI，ORI −25°） | `当前 DBREF 24381/109581 · U/V/W`，无错误 | `Distance 30996mm` · `+4427mm / −23129mm / −20154mm` · `S 10.8357 E 40.5587 D` | `4426.98 / −23128.83 / −20154.21` · `S 10.8357 E 40.5587 D` | `web-wrt-frame-genmodel-live-01-distance-dbref-equi.png` / `web-wrt-frame-genmodel-live-02-result-card-dbref-equi.png` |
+| World（对照） | `当前 World · X/Y/Z` | `−5762mm / −22833mm / −20154mm` · `S 14.1643 W 40.5587 D` | 同 §26 | — |
+
+- `/api/pdms/transform` 请求 **0**；`element/ptset` 请求里含 CE `24381/177319`、Owner `24381/177318`、DBREF `24381/109581`（其余是测量悬停 / 落点的 P-Point 查询）；
+  页面错误 0。数值见 `web-wrt-frame-genmodel-live-records.json`。
+- 顺带印证 §26：这里 EQUI 帧（−25°）的 `+4427 / −23129 / −20154` 与 §26 夹具 GENSEC 截面标架（BANG 155 = 180° − 25°）的 `4427 / 23129 / 20154` 只差符号——同一组轴线。
+
+**单测**：`pdmsTransformReferenceFramePort.modelSource.test.ts` 5 条（v1 逐格 origin / basis / owner / source 且树节点只查一次；Owner 模式 CE → 树节点 owner → 属主 ptset；
+404 → not-found、其它 → unavailable；树节点缺失只丢 owner / noun；legacy 不碰 gen-model）；`MeasurementResultInspector.test.ts` 那条 DBREF 用例钉住 legacy 源 +
+本地树节点（不再有 ECONNREFUSED 噪音）。测量相关 86 文件 / 979 用例全过；eslint 0；type-check 与 HEAD 同。
+
+**已知偏离 / 残余**：
+- SCTN / GENSEC 当 wrt 的**帧**：ptset 的 `world_transform` 对型材是属主链矩阵（型材没有自己的 POS / ORI；§26 的 14 根 SCTN 全是恒等 / STRU ORI），
+  与 E3D `ORI` 的派生值（Z 沿轴、Y 按 BANG）很可能不同，未对 E3D 校准；legacy 的 `:3100` 是同一个算法，不是新偏离。GENSEC 结果表不受影响
+  （Offset 走截面标架、Direction 按 World，§26）。
+- 元素帧的实机对账对象是 gen-model 自己的矩阵，不是 E3D 运行时 golden（E3D 不在跑）；E3D 侧的旋转帧证据仍是 G3-02 / G3-04 trace 的单测。
 
