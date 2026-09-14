@@ -1,0 +1,25 @@
+# E3D Measure Distance · Units（Unit type × Display Unit）实机走查（dev :3101 + gen-model :8024，?model_source=gen-model-v1&gm_backend_port=8024&show_refno=24381_177298，Playwright 真指针 + 真下拉，临时 spec 已删）
+# 每行 = 一档单位下测量面板结果表的实读文本；末尾是六档与同一个 mm 距离的换算对账。
+objects=38 STRU=24381_177298 gm_backend_port=8024
+bbox centers: 38
+picks: o:24381_177301:0@(375,183) o:24381_177313:8@(241,354)
+draft: distance=23787.9639 mm approx=true origin=[3.1455490372885024,11.804368173918014,23.19637774979147] target=[11.7934501953125,2.5737399902343756,3.0500000000000007]
+Default（随全局单位设置）: Distance=23788mm | Offset=+8648mm / -9231mm / -20146mm | DisplayUnit disabled=true options=[ （随全局单位设置） ]
+Metric × Millimetres: Distance=23787.96mm | Offset=+8647.9mm / -9230.63mm / -20146.38mm | DisplayUnit disabled=false options=[Millimetres, Centimetres, Metres]
+Metric × Centimetres: Distance=2378.796cm | Offset=+864.79cm / -923.063cm / -2014.638cm | DisplayUnit disabled=false options=[Millimetres, Centimetres, Metres]
+Metric × Metres: Distance=23.788m | Offset=+8.648m / -9.231m / -20.146m | DisplayUnit disabled=false options=[Millimetres, Centimetres, Metres]
+Imperial × Inch: Distance=936.17/32in | Offset=+340.15/32in / -363.13/32in / -793.5/32in | DisplayUnit disabled=false options=[Inch, Feet & Inches, Feet]
+Imperial × Feet & Inches: Distance=78'-0.17/32" | Offset=+28'-4.15/32" / -30'-3.13/32" / -66'-1.5/32" | DisplayUnit disabled=false options=[Inch, Feet & Inches, Feet]
+Imperial × Feet: Distance=78.045ft | Offset=+28.372ft / -30.284ft / -66.097ft | DisplayUnit disabled=false options=[Inch, Feet & Inches, Feet]
+切回 Metric（应记得 Metres）: Distance=23.788m | Offset=+8.648m / -9.231m / -20.146m | DisplayUnit disabled=false options=[Millimetres, Centimetres, Metres]
+切回 Imperial（应记得 Feet）: Distance=78.045ft | Offset=+28.372ft / -30.284ft / -66.097ft | DisplayUnit disabled=false options=[Inch, Feet & Inches, Feet]
+切回 Default: Distance=23788mm | Offset=+8648mm / -9231mm / -20146mm | DisplayUnit disabled=true options=[ （随全局单位设置） ]
+  对账 metricMm: "23787.96mm" → 23787.960 mm，Δ=0.004 mm
+  对账 metricCm: "2378.796cm" → 23787.960 mm，Δ=0.004 mm
+  对账 metricM: "23.788m" → 23788.000 mm，Δ=0.036 mm
+  对账 imperialFt: "78.045ft" → 23788.116 mm，Δ=0.152 mm
+  对账 imperialIn: "936.17/32in" 解析=["936","17","32"]
+  对账 imperialIn: 936.53125 in → 23787.894 mm，Δ=0.070 mm
+  对账 imperialFinc: "78'-0.17/32"" 解析=["78","0","17","32"]
+重载后持久化的 Units：{"unitSystem":"default","metricUnit":"METRE","imperialUnit":"FT"}
+page errors: 0

@@ -731,3 +731,74 @@ mode）→ `escape()`（779）：
 `edgpicktype.pmlobj` 778–821，`gphdimension.pmlobj` 594 / 641，`gphmeasure.pmlfrm` 194）；ESC / 右键 / 关窗三条运行时 trace 仍未采（采集矩阵 §5）。
 
 **本节无代码改动**：④ 层已由 §19 的 `deactivate()` 覆盖 `closeAction` 语义，其余为记录偏离。
+
+## 21. Phase B · Measure Distance 窗体 Units（Unit type × Display Unit）实机走查（2026-09-14 14:52）
+
+**E3D 口径**（`gphmeasure.pmlfrm` 56–58 / 111–154 / 171–178 / 719–799 + `comformats.pmlobj` 1301–1356）：
+
+- 窗体顶上一个 `Units` 框，两个 option：`.unitSystem`（`Unit type:`）与 `.unitDisplay`（`Display Unit:`）。
+- 构造 144–147 `unitSystem.dText = ['Default', 'Metric', 'Imperial']`，`val` 停在 1；118 `measureFormat = !!distanceFmt`。
+- `changeUnitType()`（719）：**Default 档**（val 1）`measureFormat = !!distanceFmt`、`unitDisplay.active = false`（下拉禁用）、`setUpForm()` 就返回；
+  否则把下拉换成那一套——Imperial（val 3）`dText = ['Inch', 'Feet & Inches', 'Feet']` / `rText = ['IN', 'FINC', 'FT']`，
+  Metric `dText = ['Millimetres', 'Centimetres', 'Metres']` / `rText = ['MM', 'CM', 'METRE']`，`val` 取 `lastImperialSelection` / `lastMetricSelection`
+  （744–747 首次进来两个记忆都置 1），再 `selectUnitType()`。
+- `selectUnitType()`（780）：`selection = unitDisplay.selection()`（rText 那一串）；val 3 / val 2 各把 `unitDisplay.val` 写回自己那一套的记忆，
+  `measureFormat = COMFORMATS.distanceFormat(selection)`；最后 `setUpForm()`。
+- `setUpForm()`（353）把 `measureFormat` 交给 `dimension.format` —— **结果表与画出来的尺寸图形同一套格式**。
+- `COMFORMATS.distanceFormat(!unit)`（1301）：`IN/INCH` → `units=INCH, fraction, denominator=32, inchSeparator='.', label='in'`；
+  `FINC` → `units=FINCH, label='"', fraction, denominator=32, ftLabel="'-", inchSeparator='.', zeros=false`；
+  `FT` → `dp=3, trailZeros=true`；`METRE` / `CM` → `dp=3, trailZeros=false`；其余公制（含 `MM`）走 `else` → `dp=2, trailZeros=false`
+  ——`MM` 这一档与 G1-04 实测的 `!!distanceFmt`（2 位小数去尾零、`0mm` 无负零）对得上。
+
+**Web 落地**（Web `12ad607`；方案 §2 #5 / Phase B 切片 3；决策 `d-481`）：
+
+- 纯内核 `src/measurement/units/measurementUnits.ts`：三档 Unit type、两组 Display Unit（token / label 逐字照搬 rText / dText）、
+  `measurementDistanceFormatForUnit` 逐格对应上面那张 FORMAT 表、`applyMeasurementUnitSelection` 实现两套记忆、
+  `formatMeasurementLengthMeters` 按 FORMAT 渲染（公制 dp + trailZeros + 无负零；英制按 1/32 英寸取整后约分，FINCH 再拆英尺段）。
+- 会话级状态 `measurementPickLayer` 旁边新增 `measurementUnits`（样式仓 V9，缺省 Default 档 / MM / IN = E3D 构造值），
+  **优先级高于全局单位设置**：Default 档才回落到全局（显示单位 + 小数位），对应 E3D 的 `!!distanceFmt`。
+- 结果表（`buildDistanceMeasurementResultRows` / `buildPerpendicularMeasurementResultRows` 多一个可选 format 参数）与画布上的尺寸文字
+  （`useXeokitMeasurementTools` 的 `formatDistance`）走同一个 format —— 对应 E3D `setUpForm()` 把同一个 `measureFormat` 交给结果表和 `GPHDIMENSION`。
+- 测量面板结果卡顶上多一个 Units 框（`measurement-unit-system` / `measurement-display-unit`），Default 档下拉禁用并写「（随全局单位设置）」。
+
+**证据等级**：公制 `static_expectation` + G1-04 实测（`MM` 档就是 `!!distanceFmt`，两者一致）；**英制串型是 `static_expectation`**
+——FORMAT 的各项参数取自 PML，但把它们渲染成字串的是 E3D 内核（C#），PML 里看不到。Web 现在出的是
+`936.17/32in` / `78'-0.17/32"` / `78.045ft`（PDMS 惯例的 `<整寸>.<分子>/<分母>`、`<英尺>'-<英寸>"`，`zeros=false` 时零英尺不出段）。
+E3D 起来后要按 G10 采一次逐格对账，对不上就改 Web、改这里。
+
+**Web 实机走查**（dev `:3101` + gen-model `:8024`，`?model_source=gen-model-v1&gm_backend_port=8024&show_refno=24381_177298`，
+Playwright 真指针点两个构件 + 真下拉换档，临时 spec 已删；38 个对象，落点 `o:24381_177301:0` 与 `o:24381_177313:8`，
+同一条距离 **23787.9639 mm**）：
+
+| 档 | 结果表 Distance | Offset X / Y / Z | Display Unit 下拉 | 图 |
+| --- | --- | --- | --- | --- |
+| Default | `23788mm` | `+8648mm / -9231mm / -20146mm` | 禁用，「（随全局单位设置）」 | `-01-default.png` |
+| Metric × Millimetres | `23787.96mm` | `+8647.9 / -9230.63 / -20146.38mm` | Millimetres / Centimetres / Metres | `-02-metric-mm.png` |
+| Metric × Centimetres | `2378.796cm` | `+864.79 / -923.063 / -2014.638cm` | 同上 | `-03-metric-cm.png` |
+| Metric × Metres | `23.788m` | `+8.648 / -9.231 / -20.146m` | 同上 | `-04-metric-metre.png` |
+| Imperial × Inch | `936.17/32in` | `+340.15/32 / -363.13/32 / -793.5/32in` | Inch / Feet & Inches / Feet | `-05-imperial-inch.png` |
+| Imperial × Feet & Inches | `78'-0.17/32"` | `+28'-4.15/32" / -30'-3.13/32" / -66'-1.5/32"` | 同上 | `-06-imperial-feet-inches.png` |
+| Imperial × Feet | `78.045ft` | `+28.372 / -30.284 / -66.097ft` | 同上 | `-07-imperial-feet.png` |
+
+- **换算对账**（六档都是同一个 23787.9639 mm）：MM Δ 0.004、CM Δ 0.004、METRE Δ 0.036、FT Δ 0.152 mm；
+  Inch `936 + 17/32 in = 23787.894 mm` Δ 0.070 mm；FINC `78'-0.17/32"` 解析成 78 ft + 17/32 in = 同一个值。各档的 Δ 就是那一档小数位 / 1/32 英寸的取整余量。
+- **两套记忆**：Metric 选到 Metres、Imperial 选到 Feet & Inches 再切到 Feet 之后，切回 Metric 回到 `23.788m`
+  （`web-measure-units-live-08-back-to-metric-remembers-metre.png`）、再切回 Imperial 回到 `78.045ft`
+  （`web-measure-units-live-09-back-to-imperial-remembers-feet.png`）——与 E3D `lastMetricSelection` / `lastImperialSelection` 同构。
+- 切回 Default 又回到 `23788mm`、下拉重新禁用（`-10-back-to-default.png`）；刷新后 V9 里存着
+  `{"unitSystem":"default","metricUnit":"METRE","imperialUnit":"FT"}`，两套记忆跨刷新还在。
+- 页面错误 0。逐行实读见 `web-measure-units-live-scan.txt`，数值见 `web-measure-units-live-records.json`。
+
+**单测**：`src/measurement/units/measurementUnits.test.ts` 16 条（Unit type / Display Unit 两组的 dText·rText、两套记忆、FORMAT 参数逐格、
+公制格式矩阵含 `0mm` 无负零、英制三档串型）；`useXeokitMeasurementStyleStore.test.ts` 一条（会话级状态持久化 + 脏值回缺省）；
+`useXeokitMeasurementTools.test.ts` 一条（画布尺寸文字跟着 Units 走、Default 回落全局）。
+
+**已知偏离 / 残余**：
+- **Q4 没单独问用户**：本片按方案 §0 的用户口径「E3D 有的测量功能我们也要有」把英制三档一起做了。英制串型未经 E3D 实测（见上「证据等级」），
+  用户若判定不需要英制，去掉 `MEASUREMENT_IMPERIAL_DISPLAY_UNITS` 那一组即可，内核其余部分（Default / Metric）不受影响。
+- E3D 的记忆只在进程会话（窗体成员），Web 记在 localStorage 并跨刷新——与 §19 Keep dimensions 同一条已知偏离（`d-437`）。
+- E3D 的 Default 档是工程当前距离格式 `!!distanceFmt`（`getCurrentUnitsByPtype('L')`），Web 这一侧对应全局单位设置（显示单位 + 小数位，留尾零）
+  ——所以 Default 档的输出与本片改动前**逐字相同**，老用户看不到变化。
+- Decimal Places 没做成 E3D 那样的会话级控件（E3D 的距离小数位固定在 FORMAT 里，不像角度那样有 `Decimal Places` 框）；
+  Web 的全局小数位只在 Default 档生效。角度那一侧的 Unit / Decimal Places 是 Phase C #8。
+- G10（Units / Angle 格式矩阵）运行时 golden 仍未采（采集矩阵 §5）。

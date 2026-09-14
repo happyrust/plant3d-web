@@ -73,7 +73,7 @@
 | 2 | wrt：World / 普通元素 U-V-W / GENSEC / 无效回退 | ✓ | `ReferenceFrameResolver`，G3-01～05；`e3dRotatedWrt.golden.test.ts` |
 | 3 | Show linear + 正交分解闸门 + 0.1 mm 抑制 | ✓ | `worldDistanceAidPlan.ts`，G2-01～03，d-534 |
 | 4 | Keep dimensions 生命周期（关窗 / 切工具 / 重开） | ◐ | **行为已对齐（2026-09-14，Web `3701208`，Phase B 切片 1）**：`distanceKeepDimensions` 原本只在下一次测量落地时隐藏旧图形，现补上 E3D 的另两处时机——勾掉当场收（`keepAids()` → `clearAids()`）、`deactivate()`（关窗 / 切工具）时 Keep 关着才收；都走可见性开关（E3D `aidNumbers.hide()`），记录不删。实机 S1–S4 + 单测状态机全过（golden MD §19）。已知偏离（用户拍板保留 Web 口径，决策 `d-437`）：缺省 true（E3D false）、开关记在 localStorage（E3D 只在进程会话）、Web 独有的 `keepMeasurementAnnotation` 一层、收的范围是整张距离测量列表（E3D 是本窗体 aid 号）。**◐ 只因 G2-04/05 运行时 golden 未采** |
-| 5 | Units：Metric / Imperial + Display Unit + 记忆 | ◐ | 全局 `useUnitSettingsStore`（长度单位 + precision）；无 Imperial 矩阵、无测量会话级覆盖（上一计划 M3 PR3.2 未做） |
+| 5 | Units：Metric / Imperial + Display Unit + 记忆 | ◐ | **会话级 Units 框已落地（2026-09-14，Web `12ad607`，Phase B 切片 3）**：Unit type 三档 Default / Metric / Imperial × Display Unit（Metric = Millimetres / Centimetres / Metres，Imperial = Inch / Feet & Inches / Feet），两套各记一次上次选择、Default 档下拉禁用并回落全局单位设置（= E3D `!!distanceFmt`）；纯内核 `src/measurement/units/measurementUnits.ts` 的 FORMAT 表逐格对应 `comformats.pmlobj` 1301–1356，结果表与画布尺寸文字同一套格式（E3D `setUpForm()` 把 `measureFormat` 同时给结果表和 `GPHDIMENSION`）。实机六档对同一条 23787.9639 mm 的换算 Δ ≤ 0.152 mm（各档取整余量），两套记忆与持久化走通（golden MD §21）。**◐ 只因英制串型未经 E3D 实测**（FORMAT 参数取自 PML，渲染在内核；G10 未采） |
 | 6 | Perpendicular to：点→线 / 面 / 点退化、World 帧、零距离告警 | ◐ | `perpendicularDistance.ts` + `perpendicularTargetProvider.ts`，G4 全部 ✓。目标 provider 按 E3D `GMFARC.perpendicularToPoint` 的分支序（`getLine()` → `getPlane()` → 点）接了：P-Point 轴、PLINE 线（实机 ✓，golden MD §17）、Graphics 边（`direction` + `segment`，标签用候选自己的名字）与 Graphics facet 面（`facet-plane`）、圆面关键点、Element 的 P1 → P2 `line()` 操作数（golden MD §16）。**余 Aid**（Q3 未拍板，无 Aid 系统）；Graphics 边 / 面当垂距目标的实机走查未单独采 |
 | 7 | 三点角 Angle / Direction1 / Direction2 / 拒绝 0°·180° | ◐ | `threePointAngle.ts` 内核 + golden（G6-01～03）；UI 用旧 `computeAngleDegrees`，内核**未接线**；无 Direction1/2 行 |
 | 8 | 角度 Unit（Degrees / Radians / Gradians）+ Decimal Places | ✗ | 只有度 + 全局 precision |
@@ -181,7 +181,12 @@
   勾掉 Keep 当场 `clearAids()`、关窗 `tidy()` 只在 Keep 关着时清、开着时图形留在视口、重开时开关按会话记忆。Web 补了前两处时机（原本只在下一次测量
   落地时隐藏旧的），vitest 状态机用例 + 实机 S1–S4 全过，golden MD §19。缺省值与 localStorage 记忆按用户 2026-09-14 拍板保留 Web 口径（已知偏离）。
   G2-04/05 运行时 golden 仍欠，等 E3D 起来补采（决策 `d-437`）。
-- Units：测量会话级 Unit type（Default / Metric / Imperial）+ Display Unit（mm / cm / m / in / ft-in …）+ 上次选择记忆，优先级高于全局设置（上一计划 M3 PR3.2）；格式矩阵（尾零、英制分数）先采 golden。
+- ~~Units：测量会话级 Unit type（Default / Metric / Imperial）+ Display Unit（mm / cm / m / in / ft-in …）+ 上次选择记忆，优先级高于全局设置（上一计划 M3 PR3.2）；格式矩阵（尾零、英制分数）先采 golden。~~
+  **切片 3 ✓（2026-09-14 14:52，Web `12ad607`，决策 `d-481`）**：E3D 进程仍不在跑，格式矩阵改从 `comformats.pmlobj` 1301–1356 的 FORMAT 参数定口径（同切片 1 / 2 的
+  `static_expectation` 走法），公制那一档有 G1-04 实测兜底（`MM` = `!!distanceFmt`，dp 2 去尾零、`0mm` 无负零）。落地：纯内核
+  `src/measurement/units/measurementUnits.ts`（两组 Display Unit 的 token / label 照搬 rText / dText、FORMAT 表逐格、两套记忆、公制 + 英制渲染）、
+  样式仓 V9 的 `measurementUnits`（缺省 Default = E3D 构造值，输出与改动前逐字相同）、结果表两个 row builder 与画布 `formatDistance` 共用同一个 format、
+  测量面板顶上的 Units 框。实机六档 + 两套记忆 + 刷新持久化全过（golden MD §21）。**余英制串型的 E3D 实测（G10）**。
 - Perpendicular to 目标 provider 接 Phase A 的 Graphics 边 / 面与 PLINE；面板「点→无限线 / 面」文案沿用。
 - ~~ESC / 右键 / 关窗分层：采 E3D 行为后对齐（当前 Web 的 Esc 分层保留，只调差异）。~~
   **切片 2 ✓（2026-09-14 13:50，只读源、无代码改动）**：E3D 的 Esc 与关窗口径从 `edgcntrl` / `edgstate` / `gphdimension` 源码采到——Esc 没有分层，一下整包退并跑
@@ -255,6 +260,9 @@
 - **Q2 Positioning 的拾取类型**：Distance / Fraction / Proportion 需要输入框（E3D 在 Positioning Control 工具条上）。Web 放覆盖条的「更多设置」弹层，还是独立小工具条？
 - **Q3 Aid 拾取**：E3D 的 GPHLINE / GPHPLANE 设计辅助（G4-01/02 golden 就是靠它采的）在 Web 没有对应物。要不要做一个最小 Aid 系统（用户画辅助线 / 面供测量），还是明确不做？
 - **Q4 Imperial**：是否需要英制（ft-in 分数）显示？不需要则 Units 只做 Metric 矩阵 + Display Unit。
+  **2026-09-14 按 §0 用户口径先做了**（没单独问）：英制三档（Inch / Feet & Inches / Feet）与公制一并落进内核（`12ad607`，切片 3）。
+  串型未经 E3D 实测，Web 现出 `936.17/32in` / `78'-0.17/32"` / `78.045ft`。用户判定不需要英制时，去掉
+  `MEASUREMENT_IMPERIAL_DISPLAY_UNITS` 那一组即可，Default / Metric 不受影响 —— 这一条仍等用户一句话定稿。
 - **Q5 后端排期**：`element/keypoints` 需要改 e3d-model 暴露基本体放置矩阵，是本方案最大的后端工作量；与 gen-model 当前 RefNo 原生路由计划（d-536）并行是否可接受？
   **已拍板 2026-09-13（d-336）**：不做 `element/keypoints`——E3D 3.1 Element × Snap 对基本体 / 管件回落元素原点，显著点不是 E3D 口径；排 `element/plines`
   （后端 ~1 d，只读 `section` 已有结果，不碰 GeneratedElement / 持久化、与 d-536 不撞；**2026-09-14 已做**，gen-model `a00565522` + Web `c2e3d97`，d-394，golden MD §17）
@@ -264,6 +272,6 @@
 
 ## 8. 交付物
 
-- 代码：`src/measurement/kernel/{pickDerivation,shortestDistance}.ts` + golden 测试；`useMeasurementPickSources` 两维模型；Graphics provider；Inspector / OverlayBar 改动；gen-model `element/plines`（**已落地** `a00565522`；`element/keypoints` 不做，Q5 / d-336）。
+- 代码：`src/measurement/kernel/{pickDerivation,shortestDistance}.ts` + golden 测试；`src/measurement/units/measurementUnits.ts`（**已落地** `12ad607`，Phase B 切片 3）；`useMeasurementPickSources` 两维模型；Graphics provider；Inspector / OverlayBar 改动；gen-model `element/plines`（**已落地** `a00565522`；`element/keypoints` 不做，Q5 / d-336）。
 - 文档：本文件 §2 随阶段更新；golden MD 新增 §12+；`e3d-measure-prompt-matrix.md`；ADR「测量拾取层对齐 E3D Positioning Control」。
 - 决策：每阶段结束 `record_decision`，取代本方案里对应的开放问题。

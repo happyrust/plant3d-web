@@ -138,6 +138,11 @@ _Avoid_: 管身轴线（直管才有）、显著点、P-Point 方向线（单个
 型材（SCTN / GENSEC）截面上带名字的纵向线（NA / TOS / BOS / LTOS …），来自目录 SPRF 的 PSTR 里每条 PLIN 的截面内坐标，随截面一起被 JUSL 对齐、LMIRR 镜像、BANG 旋转后沿轴从起端面拉到终端面——对应 E3D 的 `PLSTART pline → PLEND pline`。在测量取点里它是 Pline 过滤器拾中的那条线：光标落在梁上任意处就拾中整条 p-line，Snap 取近端、Mid-Point 等沿线派生、Intersect 当直线、Perpendicular to 以它为目标。gen-model-v1 下由服务端 `element/plines` 沿建型材实体的同一条截面链算出（所以线一定在画出来的梁上），legacy 下来自模型包导出的 PLINE 端点。斜切端面的端点（`PLSTCUT / PLENCUT`）另给，默认不用——E3D Pick Settings「Pline End Position = Cut」时整条线换成它们。同一设置里的 **Significant Snap Points**（Fittings / Joints / Nodes）把型材名下的 FITT / SJOI+SUBJ / SNOD 投到 p-line 上当分段点（服务端 `snap_points` 给成员位置），Significant snaps 开着时 Snap / Mid-Point 等只在光标所在那一段上做；缺省全关（E3D `EDGPLINE` 构造缺省），整条线不分段。
 _Avoid_: PLINE 关键点（把它当两个孤立端点）、管身轴线、元素轴线（型材的「轴线」就是它的 NA p-line）
 
+## 测量显示单位
+
+距离测量这一会话里结果表与尺寸文字共用的长度格式，由 Unit type（Default / Metric / Imperial）× Display Unit（公制 Millimetres / Centimetres / Metres，英制 Inch / Feet & Inches / Feet）两档选出，对应 E3D Measure Distance 窗体的 Units 框与 `COMFORMATS.distanceFormat`。它是**会话级**的，优先级高于全局单位设置——只有 Default 档才回落到全局（E3D 那边回落的是工程当前的 `!!distanceFmt`）。公制两档各自的小数位与去不去尾零由格式定（毫米 2 位去尾零、厘米 / 米 3 位去尾零、英尺 3 位留尾零），四舍五入到 0 一律不带负号；英制按 1/32 英寸取整后约分。公制与英制各记一次上次选的 Display Unit，来回切 Unit type 时各自回到自己那一档。
+_Avoid_: 全局单位设置（模型显示单位 + 小数位，另一层）、模型单位
+
 ## P-Point
 
 来自模型点集数据的设计关键点，适合作为精确测量点。它不是模型表面任意射线命中点。
