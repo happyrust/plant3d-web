@@ -207,6 +207,27 @@ export type XeokitDistanceMeasurementRecord = {
   perpendicular?: PerpendicularMeasurementInfo;
 } & MeasurementSourceLink;
 
+/**
+ * E3D「Angle 2 Lines」结果标记（`EDGPICKPACKET.measureLineAngleArc` → `gmfArc.radius2Lines`）：
+ * 角度来自两条拾中的线（或线 + 面），不是三个点。记录里 `corner` 是弧心（两线交点；异面时取
+ * 第一条线上离第二条最近的点），`origin` / `target` 是两条臂在弧半径处的端点，结果表仍是
+ * Decimal Angle / DMS / Direction1 / Direction2。角度值与两条臂的单位方向（设计 World）直接记在
+ * 这里——「线在面内」是 E3D 的 0° 弧，三点内核造不出它。
+ */
+export type LineAngleMeasurementInfo = {
+  kind: 'line-line' | 'line-plane';
+  angleDeg: number;
+  direction1: Vec3;
+  direction2: Vec3;
+  /** 两线异面：弧心落在第一条线上（E3D `LINE.intersection` 口径）。 */
+  skew: boolean;
+  /** 线 + 面：线在面内（E3D 半径 100 mm 的 0° 弧）。 */
+  inPlane: boolean;
+  /** 两次拾取的摘要，如「Graphics 边 · ELBO」。 */
+  firstLabel?: string | null;
+  secondLabel?: string | null;
+};
+
 export type XeokitAngleMeasurementRecord = {
   id: string;
   kind: 'angle';
@@ -216,6 +237,8 @@ export type XeokitAngleMeasurementRecord = {
   visible: boolean;
   approximate: boolean;
   createdAt: number;
+  /** 两线夹角（E3D Angle 2 Lines）时带；三点角没有此字段。 */
+  lineAngle?: LineAngleMeasurementInfo;
 } & MeasurementSourceLink;
 
 export type XeokitElevationPointMeasurementRecord = {

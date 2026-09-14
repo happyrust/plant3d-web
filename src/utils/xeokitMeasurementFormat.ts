@@ -1,6 +1,7 @@
 import { convertLength, formatLengthMeters, formatPdmsPos } from './unitFormat';
 
 import type {
+  LineAngleMeasurementInfo,
   MeasurementPoint,
   MeasurementRecord,
   Vec3,
@@ -121,7 +122,11 @@ export function formatMeasurementSummary(
       return `${total} · ${axisParts} · ${points}`;
     }
     case 'angle': {
-      const points = `起点 ${formatMeasurementPoint(measurement.origin)} -> 拐点 ${formatMeasurementPoint(measurement.corner)} -> 终点 ${formatMeasurementPoint(measurement.target)}`;
+      const lineAngle = 'lineAngle' in measurement ? measurement.lineAngle ?? null : null;
+      // E3D Angle 2 Lines：两条臂来自拾中的线 / 面，摘要里写的是那两项而不是三个点。
+      const points = lineAngle
+        ? `两线夹角 ${lineAngle.kind === 'line-plane' ? '线 × 面' : '线 × 线'} · ${lineAngle.firstLabel || '第一条线'} × ${lineAngle.secondLabel || (lineAngle.kind === 'line-plane' ? '面' : '第二条线')}`
+        : `起点 ${formatMeasurementPoint(measurement.origin)} -> 拐点 ${formatMeasurementPoint(measurement.corner)} -> 终点 ${formatMeasurementPoint(measurement.target)}`;
       const rows = opts?.referenceFrame
         ? buildAngleMeasurementResultRows(
           measurement.corner,
@@ -129,6 +134,7 @@ export function formatMeasurementSummary(
           measurement.target,
           opts.referenceFrame,
           opts.angleUnits,
+          lineAngle,
         )
         : [];
       if (rows.length === 0) return points;
@@ -464,11 +470,33 @@ export function computeThreePointAngleInFrame(
   if (!rootPos || !firstPos || !secondPos) return null;
   const built = buildThreePointAngle(rootPos, firstPos, secondPos);
   if (!built.ok) return null;
-  const projected1 = designVectorToFrame(frame, [...built.value.direction1]);
-  const projected2 = designVectorToFrame(frame, [...built.value.direction2]);
+  return angleValuesInFrame(built.value.angleDeg, built.value.direction1, built.value.direction2, frame);
+}
+
+/**
+ * E3D「Angle 2 Lines」在当前 wrt 帧下的结果：角度与两条臂方向已由 `buildLineAngle` 记在记录里
+ * （`gmfArc.radius2Lines` 的 ARC），这里只把两条臂换到帧里——与三点角同一张表、同一种 Direction
+ * 口径（`gphAngleMeasure.setupForm` 对两种 ARC 一视同仁）。
+ */
+export function computeLineAngleInFrame(
+  lineAngle: LineAngleMeasurementInfo,
+  frame: ResolvedReferenceFrame,
+): AngleMeasurementFrameResultValues | null {
+  if (!Number.isFinite(lineAngle.angleDeg)) return null;
+  return angleValuesInFrame(lineAngle.angleDeg, lineAngle.direction1, lineAngle.direction2, frame);
+}
+
+function angleValuesInFrame(
+  angleDeg: number,
+  direction1: readonly [number, number, number],
+  direction2: readonly [number, number, number],
+  frame: ResolvedReferenceFrame,
+): AngleMeasurementFrameResultValues | null {
+  const projected1 = designVectorToFrame(frame, [...direction1]);
+  const projected2 = designVectorToFrame(frame, [...direction2]);
   if (!projected1.ok || !projected2.ok) return null;
   return {
-    angleDeg: built.value.angleDeg,
+    angleDeg,
     direction1: [...projected1.value],
     direction2: [...projected2.value],
     axisLabels: frame.axisLabels,
@@ -493,8 +521,12 @@ export function buildAngleMeasurementResultRows(
   second: MeasurementPoint,
   frame: ResolvedReferenceFrame,
   angleUnits: MeasurementAngleUnitSelection = DEFAULT_MEASUREMENT_ANGLE_UNIT_SELECTION,
+  /** 两线夹角（E3D Angle 2 Lines）：给了就用记录里的角度与臂方向，不再从三点反推（0° 弧三点内核造不出）。 */
+  lineAngle: LineAngleMeasurementInfo | null = null,
 ): AngleMeasurementResultRow[] {
-  const values = computeThreePointAngleInFrame(root, first, second, frame);
+  const values = lineAngle
+    ? computeLineAngleInFrame(lineAngle, frame)
+    : computeThreePointAngleInFrame(root, first, second, frame);
   if (!values) return [];
   // 两条 Direction 也是罗盘字串，`.before('WRT')` 切掉尾巴（371 / 392）；每个角度再按
   // Decimal Places 走一遍 `!!realFmt`（374–385，留尾零）。
@@ -596,11 +628,14 @@ export function buildMeasurementValueText(
       return formatLengthMeters(Math.hypot(dx, dy, dz), unit, precision);
     }
     case 'angle': {
-      const degrees = computeAngleDegrees(
-        measurement.origin,
-        measurement.corner,
-        measurement.target,
-      );
+      const lineAngle = 'lineAngle' in measurement ? measurement.lineAngle ?? null : null;
+      const degrees = lineAngle && Number.isFinite(lineAngle.angleDeg)
+        ? lineAngle.angleDeg
+        : computeAngleDegrees(
+          measurement.origin,
+          measurement.corner,
+          measurement.target,
+        );
       return degrees === null ? null : formatMeasurementAngle(degrees, angleUnits);
     }
     case 'elevation_point': {

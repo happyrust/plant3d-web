@@ -262,6 +262,30 @@ describe('unifiedMeasurement adapters', () => {
       expect(back.approximate).toBe(true);
       expect(back.provenance?.accuracyClass).toBe('legacy-unknown');
     });
+
+    it('angle：两线夹角的 lineAngle 标记（E3D Angle 2 Lines）往返保留，三点角没有此字段', () => {
+      const lineAngle = {
+        kind: 'line-plane' as const,
+        angleDeg: 0,
+        direction1: [1, 0, 0] as [number, number, number],
+        direction2: [1, 0, 0] as [number, number, number],
+        skew: false,
+        inPlane: true,
+        firstLabel: 'Graphics 边',
+        secondLabel: 'Graphics 面（面）',
+      };
+      const u = fromXeokitMeasurement(makeXeokitAngle({ lineAngle }));
+      expect(u.kind).toBe('angle');
+      if (u.kind !== 'angle') return;
+      expect(u.lineAngle).toEqual(lineAngle);
+      const back = toXeokitMeasurement(u);
+      expect(back.kind).toBe('angle');
+      if (back.kind !== 'angle') return;
+      expect(back.lineAngle).toEqual(lineAngle);
+
+      const plain = toXeokitMeasurement(fromXeokitMeasurement(makeXeokitAngle()));
+      expect(plain.kind === 'angle' && 'lineAngle' in plain).toBe(false);
+    });
   });
 
   describe('combineMeasurements', () => {

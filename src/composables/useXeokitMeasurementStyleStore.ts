@@ -38,6 +38,16 @@ import {
  */
 export type MeasurementPickMode = 'e3d' | 'free_surface';
 
+/**
+ * 角度测量的两个 E3D 入口（`design.uic` `AVEVA.DesignGeneral.MenuMeasure`）：
+ * `three-point` = Angle 3 Points（root / first / second），`two-line` = Angle 2 Lines（线 × 线 / 线 × 面）。
+ */
+export type AngleMeasureVariant = 'three-point' | 'two-line';
+
+export function normalizeAngleMeasureVariant(value: unknown): AngleMeasureVariant {
+  return value === 'two-line' ? 'two-line' : 'three-point';
+}
+
 /** 每个取点模式记住的用户 snap 偏好（按点源）。 */
 export type MeasurementPickModeSnapMemory = Partial<
   Record<MeasurementPickMode, Partial<Record<MeasurementPickSourceId, boolean>>>
@@ -59,6 +69,12 @@ export type XeokitMeasurementStyleConfig = {
    * 参考系固定 World）；点源无几何时退化为点到点（golden G4）。
    */
   perpendicularTo: boolean;
+  /**
+   * E3D Design 功能区「Measure」下拉里的两个角度入口：`Angle 3 Points`（三点角，
+   * `measureAngle`）与 `Angle 2 Lines`（两线夹角，`measureLineAngleArc`：第一击拾线、
+   * 第二击拾线或面，`gmfArc.radius2Lines` 出 ARC，结果表同一张）。Web 用一个开关代替两个按钮。
+   */
+  angleMeasureVariant: AngleMeasureVariant;
   /** Web 扩展：测量完成后是否把临时结果保留为可管理的测量标注。 */
   keepMeasurementAnnotation: boolean;
   angleShowLabel: boolean;
@@ -121,6 +137,7 @@ export const DEFAULT_XEOKIT_MEASUREMENT_STYLE: Readonly<XeokitMeasurementStyleCo
   distanceShowAxisBreakdown: true,
   showDirectLinearDimension: true,
   perpendicularTo: false,
+  angleMeasureVariant: 'three-point',
   keepMeasurementAnnotation: true,
   angleShowLabel: true,
   angleShowMarkers: true,
@@ -258,6 +275,8 @@ function loadPersisted(scope = getCurrentStorageScope()): XeokitMeasurementStyle
       distanceShowAxisBreakdown,
       showDirectLinearDimension,
       perpendicularTo: parsed.perpendicularTo === true,
+      // 没有这一格就是三点角（E3D 两个按钮里 Web 原本只有这一个）。
+      angleMeasureVariant: normalizeAngleMeasureVariant(parsed.angleMeasureVariant),
       keepMeasurementAnnotation,
       angleShowLabel: parsed.angleShowLabel ?? DEFAULT_XEOKIT_MEASUREMENT_STYLE.angleShowLabel,
       angleShowMarkers: parsed.angleShowMarkers ?? DEFAULT_XEOKIT_MEASUREMENT_STYLE.angleShowMarkers,

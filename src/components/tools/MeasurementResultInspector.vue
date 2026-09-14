@@ -12,7 +12,10 @@ import {
 } from '@/composables/useMeasurementReferenceFrameStore';
 import { useToolStore, type MeasurementPoint } from '@/composables/useToolStore';
 import { useUnitSettingsStore } from '@/composables/useUnitSettingsStore';
-import { useXeokitMeasurementStyleStore } from '@/composables/useXeokitMeasurementStyleStore';
+import {
+  useXeokitMeasurementStyleStore,
+  type AngleMeasureVariant,
+} from '@/composables/useXeokitMeasurementStyleStore';
 import {
   DEFAULT_MEASUREMENT_ANGLE_DECIMALS,
   MEASUREMENT_ANGLE_UNITS,
@@ -67,7 +70,30 @@ const angleRows = computed(() => {
     record.target,
     referenceFrame.resolvedFrame.value,
     angleUnits.value,
+    record.lineAngle ?? null,
   );
+});
+
+// E3D Design 功能区「Measure」下拉里角度有两个按钮：Angle 3 Points / Angle 2 Lines，同一张结果表。
+const angleVariant = computed(() => measurementStyle.state.angleMeasureVariant);
+const angleVariantOptions: readonly { value: AngleMeasureVariant; label: string }[] = [
+  { value: 'three-point', label: 'Angle 3 Points' },
+  { value: 'two-line', label: 'Angle 2 Lines' },
+];
+function setAngleVariant(event: Event): void {
+  const variant = (event.target as HTMLSelectElement).value as AngleMeasureVariant;
+  measurementStyle.updateStyle({ angleMeasureVariant: variant });
+}
+/** 两线夹角记录的来源摘要：线 × 线 / 线 × 面、两项标签、弧心是交点还是异面最近点。 */
+const lineAngleInfo = computed(() => latestAngleMeasurement.value?.lineAngle ?? null);
+const lineAngleText = computed(() => {
+  const info = lineAngleInfo.value;
+  if (!info) return '';
+  const pair = info.kind === 'line-plane' ? '线 × 面' : '线 × 线';
+  const root = info.kind === 'line-plane'
+    ? (info.inPlane ? '线在面内（0°）' : '弧心 = 线与面的交点')
+    : (info.skew ? '异面：弧心取第一条线上离第二条最近的点' : '弧心 = 两线交点');
+  return `${pair} · ${info.firstLabel || '第一条线'} × ${info.secondLabel || '第二项'} · ${root}`;
 });
 
 // E3D Measure Angle 的 Units 框：Unit 四档 + Decimal Places（0–8，越界打回 2 并报错）。
@@ -272,6 +298,19 @@ onMounted(() => {
       data-testid="measurement-angle-units-controls"
       class="mt-2 rounded-md border border-border bg-muted/20 p-2">
       <div class="flex flex-wrap items-center gap-2">
+        <label class="text-xs text-muted-foreground" for="measurement-angle-variant">Angle</label>
+        <select id="measurement-angle-variant"
+          data-testid="measurement-angle-variant"
+          class="h-8 rounded-md border border-input bg-background px-2 text-xs"
+          aria-label="角度测量入口：Angle 3 Points（三点）/ Angle 2 Lines（两线）"
+          :value="angleVariant"
+          @change="setAngleVariant">
+          <option v-for="option in angleVariantOptions"
+            :key="option.value"
+            :value="option.value">
+            {{ option.label }}
+          </option>
+        </select>
         <label class="text-xs text-muted-foreground" for="measurement-angle-unit">Unit</label>
         <select id="measurement-angle-unit"
           data-testid="measurement-angle-unit"
@@ -361,7 +400,9 @@ onMounted(() => {
 
     <template v-if="isAngleMode">
       <div v-if="angleRows.length === 0" class="mt-2 text-xs text-muted-foreground">
-        完成一次三点角度测量后在此显示 Angle / Direction1 / Direction2。
+        {{ angleVariant === 'two-line'
+          ? '先拾一条线，再拾一条线或一个面，在此显示 Decimal Angle / DMS / Direction1 / Direction2。'
+          : '完成一次三点角度测量后在此显示 Angle / Direction1 / Direction2。' }}
       </div>
       <dl v-else data-testid="measurement-angle-result" class="mt-2 flex flex-col gap-1 text-xs">
         <div v-for="row in angleRows"
@@ -376,7 +417,13 @@ onMounted(() => {
               class="ml-1 text-xs font-normal text-muted-foreground">近似</span>
           </dd>
         </div>
-        <div class="flex items-start gap-2">
+        <div v-if="lineAngleInfo" class="flex items-start gap-2">
+          <dt class="w-24 shrink-0 text-muted-foreground">两线夹角</dt>
+          <dd data-testid="measurement-angle-line-info" class="min-w-0 break-all">
+            {{ lineAngleText }}
+          </dd>
+        </div>
+        <div v-else class="flex items-start gap-2">
           <dt class="w-24 shrink-0 text-muted-foreground">顶点 → 两臂</dt>
           <dd data-testid="measurement-angle-points" class="min-w-0 break-all">
             {{ angleRootText }} → {{ angleFirstText }} / {{ angleSecondText }}

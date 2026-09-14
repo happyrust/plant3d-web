@@ -31,6 +31,7 @@ import type {
   XeokitElevationDeltaMeasurementRecord,
   XeokitElevationPointMeasurementRecord,
   XeokitMeasurementRecord,
+  LineAngleMeasurementInfo,
   MeasurementPoint,
   PerpendicularMeasurementInfo,
 } from '@/composables/useToolStore';
@@ -72,6 +73,8 @@ export type UnifiedAngleMeasurementRecord = UnifiedMeasurementBase & {
   origin: MeasurementPoint;
   corner: MeasurementPoint;
   target: MeasurementPoint;
+  /** E3D Angle 2 Lines 结果标记（两条臂来自拾中的线 / 面）；三点角没有此字段。 */
+  lineAngle?: LineAngleMeasurementInfo;
 };
 
 export type UnifiedElevationPointMeasurementRecord = UnifiedMeasurementBase & {
@@ -349,6 +352,7 @@ export function fromXeokitMeasurement(rec: XeokitMeasurementRecord): UnifiedMeas
         origin: rec.origin,
         corner: rec.corner,
         target: rec.target,
+        ...(rec.lineAngle ? { lineAngle: rec.lineAngle } : {}),
       };
     case 'elevation_point':
     {
@@ -489,6 +493,7 @@ export function toXeokitMeasurement(u: UnifiedMeasurementRecord): XeokitMeasurem
         origin: u.origin,
         corner: u.corner,
         target: u.target,
+        ...(u.lineAngle ? { lineAngle: u.lineAngle } : {}),
       };
       return result;
     }

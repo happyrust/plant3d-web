@@ -566,4 +566,73 @@ describe('buildAngleMeasurementResultRows · E3D Measure Angle 结果表（golde
       .startsWith('起点')).toBe(true);
     expect(buildMeasurementValueText(collinear, 'mm', 0, worldFrame())).toBeNull();
   });
+
+  describe('两线夹角（E3D Angle 2 Lines，`measureLineAngleArc` 的 ARC 走同一张表）', () => {
+    // gmfArc.radius2Lines：弧心 (10,10,15)，两条臂在弧半径 1 m 处的端点；角度与臂方向记在 lineAngle 里。
+    const lineAngle = {
+      kind: 'line-line' as const,
+      angleDeg: 60,
+      direction1: [1, 0, 0] as [number, number, number],
+      direction2: [0.5, Math.sqrt(3) / 2, 0] as [number, number, number],
+      skew: false,
+      inPlane: false,
+      firstLabel: 'Graphics 边 · BOX 24381/1',
+      secondLabel: 'Graphics 边 · BOX 24381/2',
+    };
+    const record = {
+      id: 'la1',
+      kind: 'angle' as const,
+      origin: point([11, 10, 15]),
+      corner: ROOT,
+      target: point([10.5, 10 + Math.sqrt(3) / 2, 15]),
+      visible: true,
+      approximate: false,
+      createdAt: 1,
+      lineAngle,
+    };
+
+    it('四行来自记录里的角度与臂方向，Direction 仍按 wrt 帧与 Decimal Places 出', () => {
+      expect(buildAngleMeasurementResultRows(record.corner, record.origin, record.target, worldFrame(), undefined, lineAngle)).toEqual([
+        { key: 'angle', label: 'Decimal Angle', valueText: '60 Degrees' },
+        { key: 'dms', label: 'DMS', valueText: '60° 0\' 0\'\'' },
+        { key: 'direction1', label: 'Direction1', valueText: 'E' },
+        // 主轴取水平绝对值大的那路（N 0.866），再摆 30° 到 E；Decimal Places 2 留尾零。
+        { key: 'direction2', label: 'Direction2', valueText: 'N 30.00 E' },
+      ]);
+      // 帧基 u=[0,1,0] v=[-1,0,0] w=[0,0,1]：世界 +X 在帧里是 -V（S）；60° 臂是 (0.866, -0.5, 0) → E 30 S。
+      const framed = buildAngleMeasurementResultRows(record.corner, record.origin, record.target, frame(), undefined, lineAngle);
+      expect(framed[0]!.valueText).toBe('60 Degrees');
+      expect(framed[2]!.valueText).toBe('S');
+      expect(framed[3]!.valueText).toBe('E 30.00 S');
+    });
+
+    it('线在面内的 0° 弧（E3D radius 100mm 的 ARC）三点内核造不出，靠 lineAngle 出 0 Degrees', () => {
+      const inPlane = {
+        ...lineAngle,
+        kind: 'line-plane' as const,
+        angleDeg: 0,
+        direction2: [1, 0, 0] as [number, number, number],
+        inPlane: true,
+      };
+      const collapsed = { ...record, target: point([10.1, 10, 15]), origin: point([10.1, 10, 15]), lineAngle: inPlane };
+      expect(buildAngleMeasurementResultRows(collapsed.corner, collapsed.origin, collapsed.target, worldFrame())).toEqual([]);
+      expect(buildAngleMeasurementResultRows(collapsed.corner, collapsed.origin, collapsed.target, worldFrame(), undefined, inPlane)).toEqual([
+        { key: 'angle', label: 'Decimal Angle', valueText: '0 Degrees' },
+        { key: 'dms', label: 'DMS', valueText: '0° 0\' 0\'\'' },
+        { key: 'direction1', label: 'Direction1', valueText: 'E' },
+        { key: 'direction2', label: 'Direction2', valueText: 'E' },
+      ]);
+      expect(buildMeasurementValueText(collapsed, 'mm', 0, worldFrame())).toBe('0 Degrees');
+    });
+
+    it('列表摘要与复制值：写「两线夹角 线 × 线 · 第一项 × 第二项」而不是三个点', () => {
+      const summary = formatMeasurementSummary(record, 'mm', 0, { referenceFrame: worldFrame() });
+      expect(summary.startsWith('Decimal Angle 60 Degrees · DMS 60° 0\' 0\'\' · Direction1 E · Direction2 N 30.00 E')).toBe(true);
+      expect(summary).toContain('两线夹角 线 × 线 · Graphics 边 · BOX 24381/1 × Graphics 边 · BOX 24381/2');
+      expect(summary).not.toContain('拐点');
+      expect(buildMeasurementValueText(record, 'mm', 0, worldFrame(), { unit: 'radians', decimalPlaces: 3 })).toBe('1.047 Radians');
+      const linePlane = { ...record, lineAngle: { ...lineAngle, kind: 'line-plane' as const, secondLabel: null } };
+      expect(formatMeasurementSummary(linePlane, 'mm', 0, { referenceFrame: worldFrame() })).toContain('线 × 面 · Graphics 边 · BOX 24381/1 × 面');
+    });
+  });
 });

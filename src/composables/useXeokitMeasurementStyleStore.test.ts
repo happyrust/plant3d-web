@@ -203,6 +203,29 @@ describe('useXeokitMeasurementStyleStore · measurementPickMode', () => {
     expect(useXeokitMeasurementStyleStore().state.perpendicularTo).toBe(false);
   });
 
+  it('角度入口缺省 Angle 3 Points；切到 Angle 2 Lines 持久化到 V9 并在重载后恢复，脏值打回三点', async () => {
+    {
+      const { useXeokitMeasurementStyleStore } = await import('@/composables/useXeokitMeasurementStyleStore');
+      const style = useXeokitMeasurementStyleStore();
+      expect(style.state.angleMeasureVariant).toBe('three-point');
+      style.updateStyle({ angleMeasureVariant: 'two-line' });
+      await nextTick();
+    }
+
+    vi.resetModules();
+    {
+      const { useXeokitMeasurementStyleStore } = await import('@/composables/useXeokitMeasurementStyleStore');
+      expect(useXeokitMeasurementStyleStore().state.angleMeasureVariant).toBe('two-line');
+    }
+
+    const keys = Array.from({ length: localStorage.length }, (_, i) => localStorage.key(i)!);
+    const v9Key = keys.find((key) => key.includes('measurement-style-v9'))!;
+    localStorage.setItem(v9Key, JSON.stringify({ angleMeasureVariant: 'lineangle' }));
+    vi.resetModules();
+    const { useXeokitMeasurementStyleStore } = await import('@/composables/useXeokitMeasurementStyleStore');
+    expect(useXeokitMeasurementStyleStore().state.angleMeasureVariant).toBe('three-point');
+  });
+
   it('V7 persistDimension 仅迁移为 Web 标注保留开关，不再冒充 Show linear dimension', async () => {
     {
       const { useXeokitMeasurementStyleStore } = await import('@/composables/useXeokitMeasurementStyleStore');

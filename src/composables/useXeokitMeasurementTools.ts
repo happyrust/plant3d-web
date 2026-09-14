@@ -114,6 +114,13 @@ import {
   type IntersectOperand,
   type IntersectPickSession,
 } from '@/measurement/kernel/intersectPickSession';
+import {
+  buildLineAngle,
+  lineAngleArmEnd,
+  type LineAngleLineOperand,
+  type LineAngleReferenceOperand,
+  type LineAngleValues,
+} from '@/measurement/kernel/lineAngle';
 import { computePerpendicularDistance } from '@/measurement/kernel/perpendicularDistance';
 import { resolvePerpendicularTarget } from '@/measurement/kernel/perpendicularTargetProvider';
 import {
@@ -1903,6 +1910,174 @@ export function useXeokitMeasurementTools(options: {
     return { ...intersectionHit(hit, step.position), label: '交点（预览）' };
   }
 
+  // ── E3D「Angle 2 Lines」（`EDGPICKPACKET.measureLineAngleArc`）：两次拾取（线；线或面）出一条 ARC ──
+  /** 已选的第一条线（设计 World）；`lineAnglePendingLabel` 响应式给提示条 / 结果卡用。 */
+  let lineAnglePending: Readonly<{ operand: LineAngleLineOperand; label: string; hit: PickHit }> | null = null;
+  const lineAnglePendingLabel = ref<string | null>(null);
+
+  const LINE_ANGLE_E3D_ERROR = 'E3D：An angular dimension could not be constructed from the data selected';
+  const LINE_ANGLE_MESSAGES = {
+    firstMustBeLine: '两线夹角的第一击要拾中一条线（Graphics 边 / p-line / 轴线），请改选（E3D Angle 2 Lines 第一击只拾 EDGE）',
+    secondNotConvertible: '两线夹角的第二击要拾中一条线或一个面，请改选（E3D Angle 2 Lines 第二击只拾 EDGE / FACET）',
+  } as const;
+
+  function isTwoLineAngleMode(): boolean {
+    return store.toolMode.value === 'xeokit_measure_angle'
+      && measurementStyle.state.angleMeasureVariant === 'two-line';
+  }
+
+  function clearLineAnglePending(): boolean {
+    const hadPending = lineAnglePending !== null;
+    lineAnglePending = null;
+    lineAnglePendingLabel.value = null;
+    return hadPending;
+  }
+
+  /** 两线夹角的操作数标签：元素当线用时写它的轴线，不写「模型表面点」（同 Intersect）。 */
+  function lineAngleOperandLabel(hit: PickHit): string {
+    const usesElementLine = !hit.segment && Boolean(hit.elementLine);
+    return formatMeasurementSnapLabel({
+      label: usesElementLine ? ELEMENT_LINE_LABEL : hit.label,
+      noun: nounForRefno(hit.refno ?? null),
+      refno: hit.refno,
+    }) || MEASUREMENT_PICK_SOURCE_LABELS[hit.source] || '拾中项';
+  }
+
+  /**
+   * 把这一击换成两线夹角的操作数（设计 World）。线 / 面的分型与 Intersect 同一条路
+   * （`intersectOperandFromHit`：Graphics 边 / PLINE / 轴线 → LINE，Graphics 面 → PLANE，带方向的点 → 过该点的线）；
+   * 线操作数另带用户拾中的位置（E3D `EDGPOSITIONDATA.position`，决定臂朝哪一侧）。
+   */
+  function lineAngleOperandFromHit(hit: PickHit): LineAngleReferenceOperand | null {
+    const operand = intersectOperandFromHit(hit);
+    if (!operand) return null;
+    if (operand.kind === 'plane') return { kind: 'plane', position: operand.position, normal: operand.normal };
+    const picked = vec3ToTuple(sceneWorldToDesignMeters(hit.worldPos, dtxLayerRef));
+    return { kind: 'line', start: operand.start, end: operand.end, picked };
+  }
+
+  /** 由内核算出的设计 World 位置合成测量点（`worldPos` 换回场景坐标，来源信息沿用那一击）。 */
+  function lineAngleMeasurementPoint(hit: PickHit, designPos: PickVec3, label: string | null): MeasurementPoint {
+    return {
+      entityId: hit.entityId,
+      worldPos: vec3ToTuple(designMetersToSceneWorld(tupleToVector(designPos), dtxLayerRef)),
+      designWorldPos: [designPos[0], designPos[1], designPos[2]],
+      sourceInfo: {
+        source: hit.source,
+        candidateId: hit.candidateId,
+        refno: hit.refno ?? refnoFromObjectId(hit.objectId),
+        label,
+      },
+    };
+  }
+
+  function lineAngleFailureText(reason: string): string {
+    switch (reason) {
+      case 'parallel-lines':
+        return `两条线平行，画不出角度尺寸（${LINE_ANGLE_E3D_ERROR}）；已回到第 1 步`;
+      case 'line-parallel-to-plane':
+        return `线与面平行且不在面内，画不出角度尺寸（${LINE_ANGLE_E3D_ERROR}）；已回到第 1 步`;
+      default:
+        return `所选几何退化，画不出角度尺寸（${LINE_ANGLE_E3D_ERROR}）；已回到第 1 步`;
+    }
+  }
+
+  /**
+   * 两线夹角的一击。第一击必须是线（E3D `stdGraphics('first line')` + `EDGE`），第二击线或面
+   * （`'second line or plane'` + `FACET EDGE`）；凑齐就走 `gmfArc.radius2Lines` 落一条角度记录——
+   * 弧心 = 交点（异面取第一条线上最近点），两条臂 = 弧半径处的端点，与三点角同一张结果表。
+   * 造不出 ARC（平行）时 E3D `alert.error` 后重新从第一击开始，Web 同样丢掉第一条线回第 1 步。
+   */
+  function handleLineAnglePick(canvas: HTMLCanvasElement, e: PointerEvent, hit: PickHit | null, missOnModelWithoutPick: boolean): void {
+    if (!hit) {
+      if (missOnModelWithoutPick) {
+        updateHoverFeedback(canvas, e, null);
+        requestRender?.();
+        return;
+      }
+      // 点空白：放弃已选的第一条线。
+      if (clearLineAnglePending()) pickPointMessage.value = null;
+      clearHoverFeedback();
+      syncFromStore();
+      requestRender?.();
+      return;
+    }
+    const operand = lineAngleOperandFromHit(hit);
+    const label = lineAngleOperandLabel(hit);
+    if (!lineAnglePending) {
+      if (!operand || operand.kind !== 'line') {
+        pickPointMessage.value = LINE_ANGLE_MESSAGES.firstMustBeLine;
+        updateHoverFeedback(canvas, e, hit);
+        requestRender?.();
+        return;
+      }
+      lineAnglePending = { operand, label, hit };
+      lineAnglePendingLabel.value = label;
+      pickPointMessage.value = `两线夹角：已选第一条线 ${label}，再选第二条线或面`;
+      updateHoverFeedback(canvas, e, hit);
+      requestRender?.();
+      return;
+    }
+    if (!operand) {
+      pickPointMessage.value = LINE_ANGLE_MESSAGES.secondNotConvertible;
+      updateHoverFeedback(canvas, e, hit);
+      requestRender?.();
+      return;
+    }
+    const first = lineAnglePending;
+    const built = buildLineAngle(first.operand, operand);
+    if (!built.ok) {
+      pickPointMessage.value = lineAngleFailureText(built.reason);
+      clearLineAnglePending();
+      clearHoverFeedback();
+      syncFromStore();
+      requestRender?.();
+      return;
+    }
+    const rec = lineAngleRecord(built.value, first, { hit, label, kind: operand.kind });
+    pickPointMessage.value = null;
+    clearLineAnglePending();
+    store.addXeokitAngleMeasurement(rec);
+    syncFromStore();
+    updateSelectionBinding(rec.id);
+    requestRender?.();
+  }
+
+  function lineAngleRecord(
+    value: LineAngleValues,
+    first: Readonly<{ label: string; hit: PickHit }>,
+    second: Readonly<{ hit: PickHit; label: string; kind: 'line' | 'plane' }>,
+  ): XeokitAngleMeasurementRecord {
+    const rootLabel = value.kind === 'line-plane'
+      ? (value.inPlane ? '线在面内' : '线与面的交点')
+      : (value.skew ? '异面：第一条线上离第二条最近的点' : '两线交点');
+    const corner = lineAngleMeasurementPoint(first.hit, value.root, rootLabel);
+    const origin = lineAngleMeasurementPoint(first.hit, lineAngleArmEnd(value, 'first'), first.label);
+    const target = lineAngleMeasurementPoint(second.hit, lineAngleArmEnd(value, 'second'), second.label);
+    return {
+      id: nowId('xang'),
+      kind: 'angle',
+      origin,
+      corner,
+      target,
+      visible: true,
+      approximate: hasApproximatePoint(origin, corner, target),
+      createdAt: Date.now(),
+      lineAngle: {
+        kind: value.kind,
+        angleDeg: value.angleDeg,
+        direction1: [value.direction1[0], value.direction1[1], value.direction1[2]],
+        direction2: [value.direction2[0], value.direction2[1], value.direction2[2]],
+        skew: value.skew,
+        inPlane: value.inPlane,
+        firstLabel: first.label,
+        secondLabel: second.kind === 'plane' ? `${second.label}（面）` : second.label,
+      },
+      sourceAnnotationId: store.activeAnnotationContext.value?.id,
+      sourceAnnotationType: store.activeAnnotationContext.value?.type,
+    };
+  }
+
   /**
    * E3D `intermediates`：线带中间显著点（如型材上的接头位置）且 Significant Snaps 开着时，
    * Snap / Distance / Proportion / Fraction 作用在控制点所在的那一小段上，而不是整条线。
@@ -2237,6 +2412,12 @@ export function useXeokitMeasurementTools(options: {
     }
 
     if (mode === 'xeokit_measure_angle') {
+      // E3D Angle 2 Lines：`Measure angle between lines`，两击 `first line` / `second line or plane`。
+      if (measurementStyle.state.angleMeasureVariant === 'two-line') {
+        return lineAnglePendingLabel.value
+          ? prompt('两线夹角', 2, 2, `选择第二条线或面（第一条：${lineAnglePendingLabel.value}）`, CANCEL_TRAILER)
+          : prompt('两线夹角', 1, 2, '选择第一条线');
+      }
       const draft = store.currentXeokitAngleDraft.value;
       if (!draft) return prompt('角度测量', 1, 3, '选择角度顶点');
       if (draft.stage === 'finding_first_arm') {
@@ -2727,6 +2908,10 @@ export function useXeokitMeasurementTools(options: {
       return store.currentXeokitElevationDeltaDraft.value ? 'target' : 'origin';
     }
     if (store.toolMode.value === 'xeokit_measure_angle') {
+      // 两线夹角没有「顶点」那一击：第一击是线、第二击是线或面。
+      if (measurementStyle.state.angleMeasureVariant === 'two-line') {
+        return lineAnglePending ? 'target' : 'origin';
+      }
       const stage = store.currentXeokitAngleDraft.value?.stage;
       if (!stage) return 'corner';
       return stage === 'finding_first_arm' ? 'origin' : 'target';
@@ -2747,6 +2932,9 @@ export function useXeokitMeasurementTools(options: {
       const subtitle = pickPointMessage.value || `当前未捕捉到已启用点源：${activeSnapSourceText()}`;
       if (mode === 'xeokit_measure_elevation_point') {
         return { title: '等待标高点', subtitle };
+      }
+      if (isTwoLineAngleMode()) {
+        return { title: lineAnglePending ? '等待第二条线或面' : '等待第一条线', subtitle };
       }
       if (mode === 'xeokit_measure_elevation_delta') {
         return {
@@ -2773,6 +2961,15 @@ export function useXeokitMeasurementTools(options: {
     if (mode === 'xeokit_measure_elevation_delta') {
       return {
         title: store.currentXeokitElevationDeltaDraft.value ? '更新终点' : '锁定起点',
+        subtitle,
+      };
+    }
+    if (isTwoLineAngleMode()) {
+      // 两线夹角只认线 / 面：给不出线 / 面几何的候选提前说明，免得点下去被拒。
+      const convertible = hit ? lineAngleOperandFromHit(hit) : null;
+      const usable = lineAnglePending ? convertible !== null : convertible?.kind === 'line';
+      return {
+        title: usable ? (lineAnglePending ? '选第二条线 / 面' : '选第一条线') : '这一项不是线 / 面',
         subtitle,
       };
     }
@@ -3049,6 +3246,7 @@ export function useXeokitMeasurementTools(options: {
     if (suppressStoreMeasurements) return;
     clearMeasurementVisualAssists();
     clearIntersectSession();
+    clearLineAnglePending();
     store.setMeasurementDetailsDrawerOpen(false);
     store.setToolMode(mode);
   }
@@ -3060,6 +3258,13 @@ export function useXeokitMeasurementTools(options: {
    */
   function reset(): boolean {
     if (clearIntersectSession()) {
+      pickPointMessage.value = null;
+      clearHoverFeedback();
+      requestRender?.();
+      return true;
+    }
+    // 两线夹角已选第一条线 → 先只放弃它（E3D 整包退，Web 与 Intersect 子拾取同一层）。
+    if (clearLineAnglePending()) {
       pickPointMessage.value = null;
       clearHoverFeedback();
       requestRender?.();
@@ -3497,6 +3702,11 @@ export function useXeokitMeasurementTools(options: {
     }
 
     if (toolMode !== 'xeokit_measure_angle') return;
+    // E3D Angle 2 Lines：不走三点草稿，两击各转成线 / 面操作数。
+    if (isTwoLineAngleMode()) {
+      handleLineAnglePick(canvas, e, hit, missOnModelWithoutPick);
+      return;
+    }
     const draft = store.currentXeokitAngleDraft.value;
     if (!draft) {
       if (!hit) {
@@ -3656,6 +3866,23 @@ export function useXeokitMeasurementTools(options: {
     () => store.activeXeokitMeasurementId.value,
     (id) => {
       updateSelectionBinding(id);
+    },
+  );
+
+  // 切 Angle 3 Points ↔ Angle 2 Lines（E3D 是两个按钮各起一包）：丢掉进行中的三点草稿 / 第一条线。
+  watch(
+    () => measurementStyle.state.angleMeasureVariant,
+    () => {
+      if (store.toolMode.value !== 'xeokit_measure_angle') return;
+      const hadPending = clearLineAnglePending();
+      const hadDraft = store.currentXeokitAngleDraft.value !== null;
+      if (hadDraft) store.clearCurrentXeokitDraft();
+      if (hadPending || hadDraft) {
+        pickPointMessage.value = null;
+        clearHoverFeedback();
+        syncFromStore();
+        requestRender?.();
+      }
     },
   );
 
