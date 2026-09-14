@@ -880,6 +880,68 @@ describe('useXeokitMeasurementTools', () => {
     expect(store.xeokitDistanceMeasurements.value[1]?.visible).toBe(true);
   });
 
+  // E3D `gphmeasure.pmlfrm`：`keepAids()` 勾掉当场 `clearAids()`（247）、`close() → tidy()`
+  // 只在 Keep 关着时 `clearAids()`（194 / 224），两处都是 `!!aidNumbers.hide()` 而不是删除。
+  it('Keep Dimensions 勾掉当场收起已画尺寸；关窗按 Keep 决定收不收，记录都留着', async () => {
+    const [{ useToolStore }, { useXeokitMeasurementTools }, { useXeokitMeasurementStyleStore }] = await Promise.all([
+      import('@/composables/useToolStore'),
+      import('@/composables/useXeokitMeasurementTools'),
+      import('@/composables/useXeokitMeasurementStyleStore'),
+    ]);
+    const store = useToolStore();
+    store.clearAll();
+    store.setToolMode('xeokit_measure_distance');
+    for (const id of ['kept-a', 'kept-b']) {
+      store.addXeokitDistanceMeasurement({
+        id,
+        kind: 'distance',
+        origin: { entityId: `${id}-a`, worldPos: [0, 0, 0] },
+        target: { entityId: `${id}-b`, worldPos: [1, 0, 0] },
+        visible: true,
+        approximate: false,
+        createdAt: 1,
+      });
+    }
+    const measurementStyle = useXeokitMeasurementStyleStore();
+    measurementStyle.resetStyle();
+
+    const tools = useXeokitMeasurementTools({
+      dtxViewerRef: ref(null),
+      dtxLayerRef: ref(null),
+      selectionRef: ref(null),
+      overlayContainerRef: ref(document.createElement('div')),
+      store,
+      compatViewerRef: ref(null),
+      requestRender: null,
+    });
+
+    // 勾掉：两条当场不可见，记录一条不少。
+    measurementStyle.updateStyle({ distanceKeepDimensions: false });
+    await nextTick();
+    expect(store.xeokitDistanceMeasurements.value.map((item) => item.visible)).toEqual([false, false]);
+
+    // 再勾上不会把它们放回来（E3D 的 aid 一旦 hide 就得重新画）。
+    store.updateXeokitMeasurementVisible('kept-a', true);
+    measurementStyle.updateStyle({ distanceKeepDimensions: true });
+    await nextTick();
+    expect(store.xeokitDistanceMeasurements.value.map((item) => item.visible)).toEqual([true, false]);
+
+    // Keep 开着关窗：留在视口里。
+    tools.deactivate();
+    expect(store.xeokitDistanceMeasurements.value.map((item) => item.visible)).toEqual([true, false]);
+
+    // Keep 关着关窗：窗体画过的一并收起，记录仍在。
+    store.setToolMode('xeokit_measure_distance');
+    measurementStyle.updateStyle({ distanceKeepDimensions: false });
+    await nextTick();
+    store.updateXeokitMeasurementVisible('kept-a', true);
+    tools.deactivate();
+    expect(store.xeokitDistanceMeasurements.value.map((item) => item.visible)).toEqual([false, false]);
+    expect(store.xeokitDistanceMeasurements.value).toHaveLength(2);
+
+    tools.dispose();
+  });
+
   it('P-Point 候选未加载完成前不应登记当前构件测量点', async () => {
     vi.useFakeTimers();
     let resolvePtset!: (value: any) => void;

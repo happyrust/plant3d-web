@@ -1860,6 +1860,17 @@ export function useXeokitMeasurementTools(options: {
   }
 
   /**
+   * E3D `gphmeasure.clearAids()` = `!!aidNumbers.hide(!this.aidNumber)`：Keep dimensions 关着时
+   * 把窗体画过的尺寸图形收起来。Web 用可见性开关，记录本身留着（用户仍可在列表里重新显示）。
+   */
+  function hideKeptDistanceDimensions(): void {
+    if (suppressStoreMeasurements) return;
+    for (const measurement of store.xeokitDistanceMeasurements.value) {
+      store.updateXeokitMeasurementVisible(measurement.id, false);
+    }
+  }
+
+  /**
    * 把当前临时结果落地为持久测量记录（Result Inspector「落地标注」）。
    * keepMeasurementAnnotation 开启时第二击已自动保留，此函数是显式补入口。
    */
@@ -1879,9 +1890,7 @@ export function useXeokitMeasurementTools(options: {
       sourceAnnotationType: store.activeAnnotationContext.value?.type,
     };
     if (!measurementStyle.state.distanceKeepDimensions) {
-      for (const measurement of store.xeokitDistanceMeasurements.value) {
-        store.updateXeokitMeasurementVisible(measurement.id, false);
-      }
+      hideKeptDistanceDimensions();
     }
     store.addXeokitDistanceMeasurement(rec);
     store.setMeasurementDraftResult({ ...result, persistedMeasurementId: rec.id });
@@ -2852,9 +2861,18 @@ export function useXeokitMeasurementTools(options: {
     return false;
   }
 
+  /**
+   * E3D `gphmeasure.close() → tidy()`：Keep dimensions 关着时关窗把窗体画过的尺寸一并收起，
+   * 开着时留在视口里（`keepAidMeasure` 为真则 `tidy()` 什么都不做）。
+   */
   function deactivate() {
     reset();
     store.setMeasurementDraftResult(null);
+    if (!measurementStyle.state.distanceKeepDimensions) {
+      hideKeptDistanceDimensions();
+      syncFromStore();
+      requestRender?.();
+    }
     if (isActiveMode()) {
       store.setToolMode('none');
     }
@@ -3161,9 +3179,7 @@ export function useXeokitMeasurementTools(options: {
           ...(perpendicular ? { perpendicular } : {}),
         };
         if (!measurementStyle.state.distanceKeepDimensions) {
-          for (const measurement of store.xeokitDistanceMeasurements.value) {
-            store.updateXeokitMeasurementVisible(measurement.id, false);
-          }
+          hideKeptDistanceDimensions();
         }
         store.addXeokitDistanceMeasurement(rec);
         store.clearCurrentXeokitDraft();
@@ -3450,6 +3466,18 @@ export function useXeokitMeasurementTools(options: {
       requestRender?.();
     },
     { deep: true },
+  );
+
+  // 勾掉 Keep dimensions 当场收起已画的尺寸（E3D `keepAids()` 回调里直接 `clearAids()`），
+  // 不等到下一次测量落地时才收。
+  watch(
+    () => measurementStyle.state.distanceKeepDimensions,
+    (keep) => {
+      if (keep) return;
+      hideKeptDistanceDimensions();
+      syncFromStore();
+      requestRender?.();
+    },
   );
 
   // 换拾取类型 / 拾取过滤器就放弃进行中的 Intersect 子拾取（E3D 切 pickType 会重置 numberOfPicks）。
