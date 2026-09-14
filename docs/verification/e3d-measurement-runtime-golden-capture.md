@@ -596,9 +596,64 @@ NA 恰为半腹板厚（2.750 / 4.000 mm）——对齐、镜像、BANG 155 与�
 穿过 177301 的 NA）。
 
 **残余偏离 / 未做**：
-- E3D Pick Settings 的 `cut = true`（`PLSTCUT → PLENCUT` 当线）与 `fitting / joint / node` 分段（在 FITT / SJOI+SUBJ / SNOD 投影处把 p-line 切开取最近一段）
-  未做——非缺省档，本库无样本；`start_cut / end_cut` 已在响应里，前端接 cut 档只差一个开关。
+- ~~E3D Pick Settings 的 `cut = true`（`PLSTCUT → PLENCUT` 当线）与 `fitting / joint / node` 分段（在 FITT / SJOI+SUBJ / SNOD 投影处把 p-line 切开取最近一段）
+  未做~~——**2026-09-14 12:55 已做**（gen-model `df61072cc` + Web `648f957`），实机走查见 §18。
 - GENSEC：只接单一直段 SPINE；含弧的 E3D 是 `edgPline.arc()`（GMFARC.snap），回空 + reason；GENSEC 的 DRNS / DRNE 在 SPINE 上，本期不给 cut 端点。本库无 GENSEC 样本，
   GENSEC 直 SPINE 分支运行时未验。
 - Intersect / Perpendicular 悬停仍按射线首个命中的构件取候选：p-line 被楼板等挡住时要换视角（E3D 亦是拾中前景的构件）。
 - 现有：P-Point 集在拉（`isPtsetPickPending`）时点击被拦一拍，即便过滤器不放行 Ppoint（Phase A 之前的门，未动）。
+
+## 18. 拾取层 Phase A · E3D Pick Settings「Sections & Walls」：Pline 端点 Uncut / Cut 与 Significant Snap Points 三档 实机走查（2026-09-14 12:52）
+
+**改动口径**（gen-model `df61072cc` + Web `648f957`；§17「残余」第一条收口，ADR 0060（7）同步）：E3D Positioning Control → Pick Settings →
+Sections & Walls 对型材 p-line 有两组设置（`edgpicksettings.pmlfrm` → `!!edgTypes.pLine.cut / fitting / joint / node`）：
+- **Pline End Position**：`EDGPLINE.cut`（`edgpline.pmlobj` 100 `line()`）——`false`「Uncut (Intersect with cutplane)」取 `PLSTART → PLEND`（POSS / POSE 截面平面上的点，
+  缺省）；`true`「Cut (Use end preparation)」取 `PLSTCUT → PLENCUT`（按 DRNS / DRNE 斜切后的端点）。整条线换了，所以 Snap 两端、Mid-Point / Fraction /
+  Proportion / Distance、Intersect 与 Perpendicular 目标全部随之；平头端没有 cut 点，不变。
+- **Significant Snap Points**：`EDGPLINE.snapLine`（467）——只在 Significant Snaps（`edgPosCntrl.intermediate`）开着时调；三档全 false 直接回整条线；否则
+  `COLLECT ALL (FITT | SJOI SUBJ | SNOD) FOR sctn`，每个成员的 `position` 用 `LINE.near` 投到 p-line 上，与两端一起按到起点的距离排序，相邻两点成段，
+  `onProjected(光标点)` 的那一段就是 Snap / Distance / Proportion / Fraction 的作用线。`EDGPLINE` 构造里四个成员缺省全 false（75–78；Pick Settings 窗体显示的是
+  `EDGSCTN` 的缺省 node = true，按 Apply 才拷到 pLine 上），所以 Web 缺省也全关。
+- 服务端（`element/plines` 新加 `snap_points`，spec §4.11.2）：走遍 SCTN 全部后代，`kind` 按 noun 归档（FITT → fitting、SJOI / SUBJ → joint、SNOD → node，PJOI /
+  SCOJ 等不算）；`zdis` 沿轴离 POSS 的距离——自己的 ZDIS，SJOI / SUBJ 的模板**没有** ZDIS，沿属主链取最近 SNOD 的（E3D 的关节挂在节点上）；`position` 世界系 mm：
+  SNOD / SJOI / SUBJ 取对齐线（JUSL）上 z = ZDIS 的点，FITT 走 `section_fitting_placement`（与画出来的配件同一处）。只 SCTN 给（E3D GENSEC 分支不调 `snapLine`）。
+  修了一处：`get_double("ZDIS")` 对模板里没有 ZDIS 的成员回 `UnknownAttribute`，原样上抛把整条响应打成 500（实机 24381/177315 → SJOI、177361 → LNKS），现在当
+  None 继承。
+- 前端：`plineCut` / `significantSnapPoints` 进 `MeasurementPickLayerConfig`（样式仓持久化、非布尔回缺省、三档按字段合并）；`attachPlineSegments(candidates,
+  { cut, snapPoints, significantSnapPoints })`——`cut` 把带 `plineCut`（= `start_cut / end_cut`）的端点挪到斜切端，勾了的档投到每条 p-line 上当 `intermediates`
+  （从起点排序、去重——同一 ZDIS 的 SNOD + SJOI 只分一次；落在端点上 / 超出范围的丢）；`intermediates` 走切片 4 的既有门「Significant snaps 开着时先取控制点所在
+  那一段」，所以 Significant snaps 关掉三档就不起作用。覆盖条设置弹层加「Pick Settings · Sections & Walls」（Uncut / Cut 单选 + Fittings / Joints / Nodes 复选）。
+
+**证据等级**：`static_expectation`（`edgpline.pmlobj` 48–53 成员、75–78 构造缺省、100 `line()` cut 分支、467 `snapLine()`；`edgpicksettings.pmlfrm`）；
+G8「Significant Snap Points 下同一条 PLINE 的 Snap / Mid-Point 位置字串」E3D 运行时 golden 未采。
+
+**后端事实**（gen-model `:8024` `df61072cc`，STRU 24381_177298 的 14 根 SCTN）：本库无 SNOD / SJOI / SUBJ / FITT 之外的分段成员样本（`search` 无 SNOD / SJOI / SUBJ 名字，
+FITT 0 个，PJOI 60 个不算）；177315 / 177331 / 177346 各有 SNOD + 挂在它下面的 SJOI（ZDIS 435.56 / 335.56 / 435.56），177361 名下只有 LNKS。三根的 6 个点：
+`|position − (POSS + ZDIS·dir)|` ≤ 1e-12 mm；投到全部 26 条 p-line 上的参数与 ZDIS 差 ≤ 8e-13 mm（前端 `LINE.near` 投影就是这一步）；0 < ZDIS < L；
+其余 11 根 `snap_points: []`、无 500。
+
+**Web 实机走查**（dev `:3101` + gen-model `:8024`，`?model_source=gen-model-v1&gm_backend_port=8024&show_refno=24381_177298`，SCTN 24381_177315：L 564.447，JUSL NA，
+起端 DRNS 与轴夹 25.5°（斜切）、终端平头；从侧下方看底翼缘（楼板 PANE 在梁上方）；Playwright 真指针；`primitive_key_point` show / snap 开；临时 spec 已删）：
+- **S1 缺省（Uncut）× Snap**，NA 30% → 80%：起点 `10534.120 / 3122.050 / 3050.000` = POSS、终点 `10295.590 / 2610.480 / 3050.000` = POSE，Δ 0.000 / 0.000，
+  `Distance 564.447` = L，不标近似。
+- **S2 Cut × Snap**，RBOS（offset (50, −100)，起端 `start_cut` 离 `start` 23.847 mm）：Uncut 下起点 = PLSTART Δ 0.000；切到 Cut 后同一光标位置起点
+  `10589.514 / 3122.533 / 2950.000` = PLSTCUT Δ 0.000（离 PLSTART 23.847）；平头终端 = PLEND Δ 0.000；`Distance 588.294` = |PLEND − PLSTCUT|
+  （`web-pline-settings-live-01-cut-snap-result.png`）。
+- **S3 Cut × Mid-Point**，RBOS：`10465.210 / 2855.942 / 2950.000` = (PLSTCUT + PLEND)/2 Δ 0.000（离 Uncut 中点 11.923；`-02-cut-midpoint-result.png`）。
+- **S4 Nodes × Snap**，NA（Uncut）：悬停 80% 处 `Snap : SCTN PLINE NA · Snap`（`-03-nodes-snap-hover.png`），点击 → 起点 `10350.056 / 2727.293 / 3050.000`
+  = 节点在 NA 上的投影（POSS + 435.56·dir）Δ 0.000（离 PLEND 128.887——缺省整条线时近端是它）；30% 处 → 终点 = POSS；`Distance 435.560` = ZDIS
+  （`-04-nodes-snap-result.png`）。
+- **S5 Nodes × Mid-Point**：30% 处 → `10442.088 / 2924.671` = [0, ZDIS] 段中点、80% 处 → `10322.823 / 2668.886` = [ZDIS, L] 段中点，Δ 0.000 / 0.000，
+  `Distance 282.224` = L / 2（`-05-nodes-midpoint-result.png`）。
+- **S6 Nodes 勾着但 Significant snaps 关**：80% 处 Snap 回 PLEND Δ 0.000（三档不起作用，E3D `intermediates` 门）。
+- **S7 只勾 Fittings**（本构件无 FITT）：整条线，80% 处 = PLEND；**S8 只勾 Joints**：挂在节点上的 SJOI 同一处分段，80% 处 = 节点 Δ 0.000。
+- 覆盖条设置弹层：「Pick Settings · Sections & Walls」Uncut 选中 / Cut 未选、Fittings 关 / Joints 开 / Nodes 关（S8 之后的状态；`-06-pick-settings-ui.png`）。
+- 扫描日志 `web-pline-settings-live-scan.txt`；页面错误 0。每次结果面板的 `origin` 就是第一击那一点、`distance` = |target − origin|（脚本内核对）。
+
+**独立复算**：177315 POSS (10534.12, 3122.05) → POSE (10295.59, 2610.48)，|Δ| = √(238.53² + 511.57²) = 564.45，dir (−0.4226, −0.9063, 0)；节点 = POSS + 435.56·dir
+= (10350.06, 2727.29) ✓；RBOS 起端 25.5° 斜切在离轴 50 mm 处偏 50 · tan 25.5° = 23.85 mm ✓（§17 的 z_min −23.847 同一数）；Cut 线长 564.447 + 23.847 = 588.294 ✓。
+
+**残余偏离 / 未做**：
+- FITT 档只有单测（本库无 FITT）；FITT 位置走 `section_fitting_placement`（POSL 线上 z = ZDIS + DELP），投到 p-line 后只剩沿轴分量，与 E3D `LINE.near(fitt.position)` 同一结果。
+- E3D `snapLine` 不丢超出 p-line 范围的成员（按无符号距离排、可能把 Snap 给到 p-line 外）；Web 丢——实际没有成员放在 p-line 之外，差别不可达。
+- GENSEC 分支照 E3D 不分段、也没有 cut 端点（§17 残余第二条不变）。

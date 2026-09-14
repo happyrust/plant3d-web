@@ -81,7 +81,7 @@
 | 10 | Shortest（graphics × graphics） | ✗ | 现有 clearance / 最近点是采样近似（上一计划 §3.2），不是 `gmfLine.shortest` 语义；G5 未采 |
 | 11 | 拾取过滤器：Ppoint | ✓ | `ptset` 源；2026-09-12 起经 `ModelSource.keypoints` 走 gen-model `element/ptset`（d-559），实机 表面点 → P-Point 轴线 走通 |
 | 12 | 拾取过滤器：Element | ✓ | E3D 3.1 Element × Snap 对 CYLI / BOX / ELBO / VALV 等一律回落**元素原点**（`edgpicktype` ELEMENT 分支 `handle any → item.position`；只有 SCTN / GENSEC / PANEL 等结构类实现 `snap()`），Web 的 `position`（Item 原点）即是；`primitive_key_point`（盒角 / 轴端）是 legacy parquet 带来的 Web 增强，v1 **不补 API**（Q5 2026-09-13 拍板，d-336）。**Element 拾中的元素当 Intersect / Perpendicular 操作数按 E3D `line()` 转 P1 → P2 ✓（2026-09-14，`79b199c`）**：CYLI / CONE / SNOU / DISH / PYRA / NOZZ（`src/measurement/kernel/elementLine.ts`），ptset 的 P1 / P2 优先、无点的设计基本体从 DTX 局部包围盒 × 放置矩阵派生（截面对中才认；带 XOFF / YOFF 的 SNOU / PYRA 不派生），实机 CYLI × CYLI / CYLI × CONE 交点与 Perpendicular 垂足 Δ ≤ 0.001 mm（golden MD §16）。SCTN / GENSEC 的 `line()` 是截面 PLINE 线 → #13（`element/plines`，2026-09-14 ✓） |
-| 13 | 拾取过滤器：Pline | ✓ | **gen-model-v1 供给 ✓（2026-09-14，gen-model `a00565522` + Web `c2e3d97`，d-394）**：`POST /api/v1/element/plines` 复用 e3d-model 建型材实体的截面链给 SCTN / GENSEC 每条目录 p-line 的 `PLSTART → PLEND` 世界线（cut 端点另给，只在真斜时出现）；前端摊成与 legacy `semantic_snap_points` 同形的端点候选配成线，再加一条线候选（控制点 = p-line 上离光标射线最近处）——光标落在梁中段就拾中整条 p-line：Snap 近端 / Mid-Point 等沿线 / Intersect 当 LINE / Perpendicular to 以它为目标（E3D `EDGPLINE.snap` / `edgsctn.snap → this.line`）。实机 14 根 SCTN 的 JUSL 线 = POSS → POSE、cut 端点 728 处核对 0 不符、网格在 p-line 标架的包围盒差 ≤ 0.001 mm；Snap / Mid-Point / Intersect / Perpendicular Δ 0.000 mm（golden MD §17）。legacy 仍走 `semantic_snap_points`。缺：E3D Pick Settings 的 cut / fitting / joint / node 档、GENSEC 弧 SPINE |
+| 13 | 拾取过滤器：Pline | ✓ | **gen-model-v1 供给 ✓（2026-09-14，gen-model `a00565522` + Web `c2e3d97`，d-394）**：`POST /api/v1/element/plines` 复用 e3d-model 建型材实体的截面链给 SCTN / GENSEC 每条目录 p-line 的 `PLSTART → PLEND` 世界线（cut 端点另给，只在真斜时出现）；前端摊成与 legacy `semantic_snap_points` 同形的端点候选配成线，再加一条线候选（控制点 = p-line 上离光标射线最近处）——光标落在梁中段就拾中整条 p-line：Snap 近端 / Mid-Point 等沿线 / Intersect 当 LINE / Perpendicular to 以它为目标（E3D `EDGPLINE.snap` / `edgsctn.snap → this.line`）。实机 14 根 SCTN 的 JUSL 线 = POSS → POSE、cut 端点 728 处核对 0 不符、网格在 p-line 标架的包围盒差 ≤ 0.001 mm；Snap / Mid-Point / Intersect / Perpendicular Δ 0.000 mm（golden MD §17）。legacy 仍走 `semantic_snap_points`。**E3D Pick Settings「Sections & Walls」✓（2026-09-14 12:55，gen-model `df61072cc` + Web `648f957`，切片 7）**：Pline 端点 Uncut / Cut（`EDGPLINE.cut`，Cut 取 `PLSTCUT → PLENCUT`）与 Significant Snap Points 三档（Fittings / Joints / Nodes = SCTN 名下 FITT / SJOI+SUBJ / SNOD 投到 p-line 上分段，服务端 `snap_points` 给成员位置），缺省与 `EDGPLINE` 构造一致全关；实机 Cut × Snap 起点 = PLSTCUT、Nodes × Snap 吸到节点 Distance = ZDIS、Mid-Point 各段中点 Δ 0.000（golden MD §18）。缺：GENSEC 弧 SPINE |
 | 14 | 拾取过滤器：Graphics（facet 边 / 面）、Screen、Aid、External | ◐ | **Graphics ✓（2026-09-13）**：`mesh_graphics` 点源从已加载网格派生绘制边（线）/ 面（平面），只在 Graphics 过滤器下参与；实机 `面 → 边` 距离走通（golden MD §12）。Screen ✓（= `mesh_pick_point`）。Aid / External 占位灰掉 |
 | 15 | TUBING 轴线点、DPOINT | ◐ | **TUBING ✓（2026-09-13）**：`tubing_axis` 点源从直管对象的局部包围盒 × 放置矩阵派生管身轴线，两端吸到邻接 P-Point（`src/measurement/tubing/tubingAxis.ts`），按 E3D `EDGTUBING` 走线候选（Snap 近端 / Cursor 交点 / Mid-Point 等沿线 / Intersect 转 LINE），Any / Element 放行；实机 `轴线 → 轴线` Snap 与 Mid-Point 两条距离走通、校正端点与 E3D ELBO 145031 P1 差 0.001 mm（golden MD §14）。ATTA 按 E3D `line()` 跳过：gen-model 本就不在非 SPKBRK 的 ATTA 处断管，SPKBRK 断开的两段前端合并（`mergeTubingAxisAcrossPassThrough`，golden MD §15）。DPOINT ✗ |
 | 16 | 拾取类型：Snap / Exact | ✓ | 拾取层 `pickType` Snap / Cursor；点候选、线候选（`GMFLINE` 近端 / 控制点）、面候选（射线 ∩ 平面）三类几何均接内核 |
@@ -135,8 +135,16 @@
   Perpendicular 目标标签用 p-line 自己的名字）。实机 STRU 24381_177298 的 14 根 SCTN：JUSL 线 = `world_transform`·POSS / POSE Δ 0.0000、cut 端点 728 处
   0 不符、DTX 网格在 p-line 标架的包围盒与 p-line 极值差 ≤ 0.001 mm（含 BANG 155、25° 斜切）；Pline × Snap 近端 / Mid-Point / Any 放行 / Ppoint 不放行 /
   Intersect NA × NA / Perpendicular to PLINE 全部 Δ 0.000 mm，PANE 提示服务端 reason（golden MD §17）。
-- **未完**：E3D Pick Settings 的 PLINE `cut = true` 与 fitting / joint / node 分段档（非缺省，`start_cut / end_cut` 已在响应里）；GENSEC 含弧 SPINE 的
-  `arc()` 与 GENSEC 的 cut 端点（本库无 GENSEC 样本，直 SPINE 分支运行时未验）；带 XOFF / YOFF 的 SNOU / PYRA 的斜 P1 → P2（要
+- 切片 7（2026-09-14 12:55，gen-model `df61072cc` + Web `648f957`）：E3D Pick Settings「Sections & Walls」——**Pline End Position**（`EDGPLINE.cut`：Uncut 取
+  `PLSTART → PLEND`，Cut 取 `PLSTCUT → PLENCUT`，整条线换了所以 Snap / 沿线派生 / Intersect / Perpendicular 全随之，平头端不变）与 **Significant Snap Points**
+  三档（`EDGPLINE.fitting / joint / node`：`snapLine` 把 SCTN 名下 FITT / SJOI+SUBJ / SNOD 投到 p-line 上、光标所在那一段才是作用线，只在 Significant snaps 开着时）。
+  服务端 `element/plines` 加 `snap_points`（成员 + kind + ZDIS + 世界位置，SJOI / SUBJ 没有 ZDIS 沿属主链取 SNOD 的，FITT 走 `section_fitting_placement`；修了
+  模板无 ZDIS 的成员把响应打成 500）；前端 `plineCut / significantSnapPoints` 进拾取层模型（缺省全关 = `EDGPLINE` 构造）、`attachPlineSegments` 的 cut 挪端点 +
+  `intermediates` 分段、覆盖条设置弹层新控件。实机 SCTN 24381_177315（25.5° 斜切起端、SNOD + SJOI ZDIS 435.56）：Cut × Snap 起点 = PLSTCUT（离 PLSTART 23.847）、
+  Cut × Mid-Point = 斜切线中点、Nodes × Snap Distance 435.560 = ZDIS、Nodes × Mid-Point 两段各自中点、Significant snaps 关 / 只勾 Fittings 回整条线、只勾 Joints
+  同点分段——全部 Δ 0.000 mm（golden MD §18）。
+- **未完**：GENSEC 含弧 SPINE 的
+  `arc()` 与 GENSEC 的 cut 端点（本库无 GENSEC 样本，直 SPINE 分支运行时未验）；FITT 档只有单测（本库无 FITT）；带 XOFF / YOFF 的 SNOU / PYRA 的斜 P1 → P2（要
   `element/attributes` 或服务端给设计基本体合成 P1 / P2，本 EQUI 无样本）；STIF / BRCO 处按 E3D 截断（gen-model 穿过它们、E3D `line()` 不跳，本库无样本）；
   G7 / G8 / G9 运行时 golden（E3D 需在跑）。
 
@@ -207,7 +215,7 @@
 | --- | --- | --- |
 | P-Point（含成员） | ✓ `element/ptset`（今日落地，41 点 golden） | — |
 | Element 显著点 / 基本体关键点 | — 不做（d-336） | E3D Element × Snap = 元素原点，已有 `position`；显著点是 Web 增强，Q5 拍板不补后端 |
-| PLINE | ✓ `element/plines`（2026-09-14，gen-model `a00565522`，golden MD §17） | — （余：cut / fitting / joint / node 档、GENSEC 弧 SPINE） |
+| PLINE | ✓ `element/plines`（2026-09-14，gen-model `a00565522`，golden MD §17）+ `snap_points`（Pick Settings 三档的分段成员，gen-model `df61072cc`，golden MD §18） | — （余：GENSEC 弧 SPINE） |
 | Graphics 边 / 面 | ✗ | 前端从网格派生，无后端 |
 | TUBING 轴线点 | ✓ 前端派生（2026-09-13，golden MD §14） | 无后端；直管放置矩阵 + `element/ptset` 邻接 P-Point |
 | Aid | ✗ | 需 Aid 系统，另立决策 |

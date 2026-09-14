@@ -1,0 +1,16 @@
+web-pline-settings-live 实机走查 2026-09-14T04:52:14.577Z
+SCTN 24381_177315 JUSL=NA L=564.447 snap_points=SNOD 24381/177316 zdis=435.56, SJOI 24381/177317 zdis=435.56
+cut line RBOS offset=(50,-100) start=10579.436 / 3100.920 / 2950.000 start_cut=10589.514 / 3122.533 / 2950.000 |Δ|=23.847 end_cut=（平头，无）
+style: {"layer":{"filter":"pline","pickType":"snap","values":{"distanceMm":0,"fraction":2,"proportion":0.5},"significantSnaps":true,"plineCut":false,"significantSnapPoints":{"fitting":false,"joint":false,"node":false}},"pkp":{"show":true,"snap":true,"priority":10,"thresholdPx":12}}
+canvas rect={"left":350,"top":83,"width":900,"height":727}; NA.start→(1082,494) NA.end→(518,414) TOS.start→(1099,558) RBOS.start→(1116,517)
+S1 Uncut×Snap NA: origin PLINE NA · Snap 10534.120 / 3122.050 / 3050.000 Δstart=0.000; target PLINE NA · Snap 10295.590 / 2610.480 / 3050.000 Δend=0.000; dist=564.447 (L=564.447) approx=false
+S2a Uncut×Snap RBOS: origin PLINE RBOS · Snap 10579.436 / 3100.920 / 2950.000 Δstart=0.000; target PLINE RBOS · Snap Δend=0.000
+S2b Cut×Snap RBOS: origin PLINE RBOS · Snap 10589.514 / 3122.533 / 2950.000 Δstart_cut=0.000 (Δstart=23.847); target 10340.906 / 2589.350 / 2950.000 Δend=0.000; dist=588.294 (|end−start_cut|=588.294) approx=false
+S3 Cut×Mid-Point RBOS: origin PLINE RBOS · Mid-Point 10465.210 / 2855.942 / 2950.000 Δ(mid of start_cut→end)=0.000 (Δ(mid of start→end)=11.923)
+S4 Nodes×Snap NA: hover「PLINE NA · Snap」; origin PLINE NA · Snap 10350.056 / 2727.293 / 3050.000 Δnode=0.000 (Δend=128.887); target 10534.120 / 3122.050 / 3050.000 Δstart=0.000; dist=435.560 (ZDIS=435.56) approx=false
+S5 Nodes×Mid-Point NA: origin 10442.088 / 2924.671 / 3050.000 Δ(mid 0→node)=0.000; target 10322.823 / 2668.886 / 3050.000 Δ(mid node→L)=0.000; dist=282.224 (L/2=282.224) approx=false
+S6 Nodes but significantSnaps=false: origin 10295.590 / 2610.480 / 3050.000 Δend=0.000 (Δnode=128.887)
+S7 Fittings only: origin Δend=0.000 (Δnode=128.887)
+S8 Joints only: origin Δnode=0.000 (Δend=128.887)
+UI: Pline 端点 uncut=true cut=false; Significant snap points fitting=false joint=true node=false
+page errors: 0
