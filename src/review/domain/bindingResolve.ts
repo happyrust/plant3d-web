@@ -126,14 +126,15 @@ export type AnnotationDegrade = {
  * 视口降级样式（ADR-0050「面板与视口以降级样式提示，沿用尺寸系统 STALE 视觉语义」）。
  * 云线 / 引线 / 图钉一律中性灰 + 虚线，missing 与 stale 不在线条上区分——区分交给左上角小徽标，
  * 色调与面板徽标一致（不存在 = 玫红，STALE = 琥珀）。渲染仍只读坐标快照，这里只换外观。
+ * 灰度取 slate-500：2026-09-14 实机走查 slate-400 在浅色背景 + 网格上只能隐约看到虚线节，真模型里灰钢管道更多，用户拍板加深一档。
  */
 export const ANNOTATION_DEGRADE_VIEWPORT_STYLE = {
-  /** slate-400，three.js 材质用 */
-  lineColor: 0x94a3b8,
-  /** slate-400，DOM / SVG 用 */
-  lineColorCss: '#94a3b8',
-  /** slate-500，图钉描边 */
-  strokeColorCss: '#64748b',
+  /** slate-500，three.js 材质用 */
+  lineColor: 0x64748b,
+  /** slate-500，DOM / SVG 用 */
+  lineColorCss: '#64748b',
+  /** slate-700，图钉描边 */
+  strokeColorCss: '#334155',
   /** SVG 图钉描边的虚线节拍 */
   svgDashArray: '3 2',
   badge: {
