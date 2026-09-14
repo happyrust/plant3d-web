@@ -1074,8 +1074,8 @@ ORI 轴上取绝对值）；`gensecSectionBasis.test.ts` 7 条（轴对齐 / 任
 **已知偏离 / 残余**：
 - 截面标架来自 p-line 反解，不是 E3D 的 `yDir` / `zDir` 属性：GENSEC 含弧 SPINE（`element/plines` 回空 + reason）或 legacy 源下拿不到 →
   回落到 ORI 帧的轴上取绝对值（三个数值与 E3D 同一组、顺序可能不同；golden 用例 `=23406/16` 记着这一档）。
-- 真 GENSEC 未实机：本库 0 件；~~`:3100 /api/pdms/transform` 在 gen-model-v1 数据源下不认 refno，元素 wrt 帧本就走不到实机~~（§27 起 gen-model-v1 下
-  元素 wrt 帧走 `element/ptset`，CE / Owner / DBREF 已实机），本档仍靠夹具 + 真 p-line（GENSEC 样本仍无）。
+- ~~真 GENSEC 未实机：本库 0 件；`:3100 /api/pdms/transform` 在 gen-model-v1 数据源下不认 refno，元素 wrt 帧本就走不到实机~~（§27 起 gen-model-v1 下
+  元素 wrt 帧走 `element/ptset`，CE / Owner / DBREF 已实机；**§31 用设计模板 TMPL 15240/4 的真 GENSEC 走通**，本档的夹具只剩「斜截面（BANG 155）」这一档还没有真样本）。
 - 三维标注（画布上的 X / Y / Z 尺寸线）一直是 World 分量、不随 wrt（既有，与本条无关）。
 
 ## 27. 参考系 port 跟随模型数据源——gen-model-v1 下元素 wrt 帧（CE / Owner / DBREF）实机走查（2026-09-14 20:21）
@@ -1296,3 +1296,38 @@ spec 先把相机拉到模型跟前；临时 spec 已删）：
 - 斜交（既非 0° 也非 90°）的线 × 面一般解只有单测——本库这组构件的网格全是正交棱；斜边要等有斜撑 / 管件的模型。
 - 第二击的 `FACET` 在 Web 是 Graphics 面（三角形面片的平面）；E3D 的 `getPlane()` 对 P-Point / DPOINT 也给面（§29），Web 这里同样走 `intersectOperandFromHit`，但只实机验过 Graphics 面。
 - 两击都不进草稿，所以 Esc 第一层只放弃第一条线（E3D 整包退）——与 Intersect 子拾取同一层，方案 §2 #20 的分层口径不变。
+
+## 31. 真 GENSEC 当 wrt：设计模板 TMPL 15240/4 的立柱 / 横杆截面标架 实机走查（2026-09-15 05:58）
+
+**为什么现在做**：§26 把 GENSEC 当 wrt 的两条 E3D 特例（Offset = 截面标架三轴的非负投影、Direction 按 World）落了地，但实机是**夹具化**的——主库 24381 一件 GENSEC 都没有，
+残余一直记着「真 GENSEC 未实机」。2026-09-14 20:33 上一会话在 gen-model 里找到了真样本：设计模板库 7048 的 TMPL `/AVEVA_Two-Bay_Top-Mounted_Panel`（`15240/4`）名下有 **5 根直 SPINE 的 GENSEC**
+（`Rail_Profile 15240/5`、`Hand_Rail_Profile 15240/9`、`Post_1/2/3_Profile 15240/41 / 37 / 33`）+ 3 张 PANE，gen-model 能为它建模（14 个实例），当时跑通并采了图，但没写进本文。
+本轮对着 HEAD（`c8e1f13`）重跑一遍，数字逐格相同，产物换成 05:58 这一版落库。
+
+**数据**（全从 `:8024` 真数据来，无任何 mock）：
+
+- `tree/children 15240/4`：GENSEC × 5、PANE × 3、DDSE / DPSE 各 1。`element/plines`：`Post_3_Profile 15240/33` **52 条** p-line（`SNFA … SNFL …`，SPINE 方向 `(0, 0, −1)` = D），
+  `Rail_Profile 15240/5` **9 条**（`TOS / LTOS / LBOS / RBOS / RTOS / BOS / LEFT / RIGH / NA`，方向 `(1, 0, 0)` = E）——§17 后端只接直 SPINE 的分支，这两根就是它的运行时样本。
+- `element/ptset` 的 `world_transform` 对两根都是**恒等**（模板放在原点）→ 它们的 **ORI 帧 = World**（X = E / Y = N / Z = U）。这一点让下面的对照特别干净：
+  若 Web 仍按 ORI 帧算，Offset 就该是 World 那一行 `+999 / +1 / −252`（或它的绝对值）。
+- 测试进程自己从这批 p-line 解截面标架（`deriveSectionBasisFromPlines`，不经过页面）：`Post_3` → u = W `(−1, 0, 0)` / v = N / w = D `(0, 0, −1)`；`Rail` → u = N / v = U / w = E。
+
+**Web 实机走查**（`?model_source=gen-model-v1&gm_backend_port=8024&show_refno=15240_4`，浮条真点「自由表面」+ 只留「模型表面点」，真指针两击 `Post_2_Profile 15240/37` 与 `Post_3_Profile 15240/33`
+的表面点，草稿 `origin E 1310.49 N −117.11 U 823.45` → `target E 2309.54 N −116.16 U 571.80`（mm，Δ = `+999.05 / +0.95 / −251.66`，长 1030.26）；参考系框输 `=15240/33` / `=15240/5` 各算一次，再切回 World；临时 spec 已删）：
+
+| wrt | 状态条 | 结果表 | 独立期望 | 图 |
+| --- | --- | --- | --- | --- |
+| `DBREF 15240/33`（立柱，Z = D） | `当前 DBREF 15240/33 · U/V/W`，无 wrt 错误 | `Distance 1030mm · Offset U 999mm · Offset V 1mm · Offset W 252mm · Direction E 0.054391 N 14.1386 D` | \|Δ·u\| / \|Δ·v\| / \|Δ·w\| = 999.05 / 0.95 / 251.66；Direction = World 差向量的罗盘串；三格都不带符号 | `web-gensec-real-live-01-distance-15240_33.png` / `web-gensec-real-live-01-result-card-15240_33.png` |
+| `DBREF 15240/5`（横杆，Z = E） | `当前 DBREF 15240/5 · U/V/W` | `1030mm · Offset U 1mm · Offset V 252mm · Offset W 999mm · E 0.054391 N 14.1386 D` | 0.95 / 251.66 / 999.05——同一段测量，三个数按横杆的截面轴**重排** | `web-gensec-real-live-02-distance-15240_5.png` / `web-gensec-real-live-02-result-card-15240_5.png` |
+| World | `World` | `1030mm · Offset X +999mm · Y +1mm · Z −252mm · E 0.054391 N 14.1386 D` | 带符号、Direction 同一串 | — |
+
+- **判别点**：两根 GENSEC 的 ORI 帧都是 World，所以「ORI 分量取绝对值」对立柱那一行碰巧也能给出 `999 / 1 / 252`；横杆那一行 `1 / 252 / 999` 只有截面标架（u = N / v = U / w = E）能解释——
+  与 §26 用 G3-04 夹具（ORI 与截面标架差 90°）证的是同一件事，这次是真元素。Direction 三行同一串，按 World、不随 wrt（§26 口径）。
+- 请求：`/api/pdms/transform` **0**（§27 起元素帧走 `element/ptset`），`element/plines` 恰好两次（`15240/33` / `15240/5`，只在 noun 是 GENSEC 时拉），`element/ptset` 只对悬停过的成员与 wrt 元素；页面错误 0。
+  全部数值见 `web-gensec-real-live-records.json`。
+- 结果表行名 `Distance / Offset U / Offset V / Offset W / Direction`（wrt 不是 World 时 U/V/W，§26 413–431）。
+
+**已知偏离 / 残余**：
+- 这 5 根 GENSEC 的截面标架都是世界轴的排列（SPINE 沿 D / E，BANG 0），没有 §26 夹具那种 155° 的斜截面——斜截面 + 真 GENSEC 的组合仍没有样本；含弧 SPINE 的 GENSEC 也没有。
+- `Hand_Rail_Profile` / `Post_1 / Post_2` 没当 wrt 再跑（与 `Rail` / `Post_3` 同形）。
+- E3D 运行时 golden（同一模板在 E3D 里的 `Q OFFSET WRT =15240/33`）未采，E3D 不在跑；§26 的 G3-04 trace 仍是唯一的 E3D 侧证据。
