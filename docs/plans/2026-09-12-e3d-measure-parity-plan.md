@@ -70,7 +70,7 @@
 | # | E3D 能力 | Web 现状 | 证据 / 位置 |
 | --- | --- | --- | --- |
 | 1 | 两点距离 + Distance / Offset×3 / Direction | ✓ | `computeDistanceMeasurementResult`，G1 golden；结果 Inspector。**Direction 2026-09-14 改成 E3D 罗盘串**（Web `16e9a48` + `0e5c674`，决策 `d-515`，golden MD §25）：`DIRECTION.string()` 口径——主轴取水平绝对值大的那路、6 位有效数字去尾零、字母跟 wrt 帧的轴；**三张表都不带 ` WRT` 尾巴**（E3D 标准距离表带，用户拍板去掉：结果卡顶上另有 wrt 一格，元素帧下 E3D 给名字、Web 只有 refno 也对不齐）|
-| 2 | wrt：World / 普通元素 U-V-W / GENSEC / 无效回退 | ✓ | `ReferenceFrameResolver`，G3-01～05；`e3dRotatedWrt.golden.test.ts` |
+| 2 | wrt：World / 普通元素 U-V-W / GENSEC / 无效回退 | ✓ | `ReferenceFrameResolver`，G3-01～05；`e3dRotatedWrt.golden.test.ts`。**GENSEC 当 wrt 的两条 E3D 特例 ✓（2026-09-14 20:02，Web `3d6b16d`，决策 `d-529`，golden MD §26）**：参考系模型带 `noun` / `sectionBasis`；Offset 是差向量在 GENSEC **截面标架**（`yDir` / `zDir`，不是 ORI——G3-04 两者差 90°）三轴上的**非负**投影、不带符号，Direction 按 World；截面标架从 gen-model-v1 `element/plines` 的截面偏移 + 世界起点反解（`gensecSectionBasis.ts`，实机 14 根 SCTN 残差 1.8e-12 mm、BANG 155 立柱截面 X 恰 155°），解不出回落 ORI 轴取绝对值；`e3dGensecWrt.golden.test.ts` G3-04 逐格。本库无 GENSEC，实机是夹具化（树节点 noun 改 GENSEC + transform 夹具，p-line 真数据） |
 | 3 | Show linear + 正交分解闸门 + 0.1 mm 抑制 | ✓ | `worldDistanceAidPlan.ts`，G2-01～03，d-534 |
 | 4 | Keep dimensions 生命周期（关窗 / 切工具 / 重开） | ◐ | **行为已对齐（2026-09-14，Web `3701208`，Phase B 切片 1）**：`distanceKeepDimensions` 原本只在下一次测量落地时隐藏旧图形，现补上 E3D 的另两处时机——勾掉当场收（`keepAids()` → `clearAids()`）、`deactivate()`（关窗 / 切工具）时 Keep 关着才收；都走可见性开关（E3D `aidNumbers.hide()`），记录不删。实机 S1–S4 + 单测状态机全过（golden MD §19）。已知偏离（用户拍板保留 Web 口径，决策 `d-437`）：缺省 true（E3D false）、开关记在 localStorage（E3D 只在进程会话）、Web 独有的 `keepMeasurementAnnotation` 一层、收的范围是整张距离测量列表（E3D 是本窗体 aid 号）。**◐ 只因 G2-04/05 运行时 golden 未采** |
 | 5 | Units：Metric / Imperial + Display Unit + 记忆 | ✓（公制）· 英制有意不做 | **会话级 Units 框已落地（2026-09-14，Web `12ad607` + `2e9d354`，Phase B 切片 3，决策 `d-483`）**：Unit type 两档 Default / Metric × Display Unit（Millimetres / Centimetres / Metres），记住上次选的那一档、Default 档下拉禁用并回落全局单位设置（= E3D `!!distanceFmt`）；纯内核 `src/measurement/units/measurementUnits.ts` 的 FORMAT 表逐格对应 `comformats.pmlobj` 1301–1356，结果表与画布尺寸文字同一套格式（E3D `setUpForm()` 把 `measureFormat` 同时给结果表和 `GPHDIMENSION`）。实机四档对同一条 23787.9639 mm 的换算 Δ ≤ 0.036 mm（各档取整余量），记忆与持久化走通（golden MD §21）。**英制（Inch / Feet & Inches / Feet）用户拍板不做**（Q4）——E3D 那三个 FORMAT 的参数记在 golden MD §21，要加回来照着填 |
@@ -195,6 +195,10 @@
   **切片 2 ✓（2026-09-14 13:50，只读源、无代码改动）**：E3D 的 Esc 与关窗口径从 `edgcntrl` / `edgstate` / `gphdimension` 源码采到——Esc 没有分层，一下整包退并跑
   `tidy()`；关窗与 Esc 在测量这条命令上等价；窗体常驻来自 `packet.remove = FALSE`。Web 第 ④ 层已等价（`deactivate()` 含 tidy，切片 1），前三层保留为增强（决策
   `d-444`）。右键仍要 E3D 运行时 trace（原生 GUI，PML 不可见）。golden MD §20。
+- **切片 5 ✓（2026-09-14 20:02，Web `3d6b16d`，决策 `d-529`）**：§2 #2 残余的 GENSEC 当 wrt 两条特例一起落地——`gphdimension.offsetType()` 826–856 的
+  截面标架非负投影（不是 ORI 分量取绝对值：G3-04 ORI 帧给 `+400.28 / +1920.14 / −4430.67`，截面标架才是 `1920.14 / 400.28 / 4430.67`）+
+  `gphmeasure` 396–399 的 Direction 按 World。参考系 port 并发查元素类型（当前数据源的树节点）、GENSEC 才拉 `element/plines` 反解截面标架；
+  夹具化实机（本库无 GENSEC）+ 真 p-line 对 14 根 SCTN 的解法核对，golden MD §26。余：真 GENSEC 实机、gen-model-v1 下元素 wrt 帧的 transform 来源（另立项）。
 
 **golden gate**：G2-04/05、Units 矩阵（Metric / Imperial × 4 个 Display Unit × 尾零 / 负零）、ESC / 右键 / 关窗三态各一条 trace。
 

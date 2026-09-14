@@ -158,6 +158,11 @@ _Avoid_: 测量显示单位（距离那一套）、全局小数位
 测量结果表里表达一个方向的字串，照 E3D `DIRECTION.string()` 的写法：`W 11.7755 N 66.8266 D` = 在水平面里从 W 朝 N 转 11.7755°、再朝下倾 66.8266°。主轴取水平两分量里绝对值大的那个（第一个角总在 0–45°，打平时 E / W 在前），水平正落在轴上省掉「角 + 次轴字母」（`N 78.6901 U`），在水平面里省掉倾角（`S`），纯竖直只剩 `U` / `D`，零向量是 `--`。数字是 PML REAL 的缺省字串——6 位有效数字、去尾零，不是固定几位小数。字母指的是当前 wrt 帧的三根轴（轴 1 → E/W、轴 2 → N/S、轴 3 → U/D），换帧字母不变、值变。三张表都**不带** ` WRT …` 尾巴——E3D 的标准距离表带、垂距表与角度表不带，Web 统一不带（用户拍板，d-515）：wrt 在结果卡顶上另有一格。
 _Avoid_: 分量串（`X +0.36 · Y -0.39 · Z -0.85`，2026-09-14 前的旧写法）、带 `WRT` 尾巴的串、方向角、方位角
 
+## GENSEC 截面标架
+
+GENSEC 当 wrt 时距离结果表三个 Offset 所沿的三根轴：Z = 型材轴向（SPINE 方向）、Y = 截面 Y（BANG 转过之后）、X = Y × Z，即 E3D `gphdimension.offsetType()` 里的 `ORIENTATION('Z IS zDir AND Y IS yDir')`——与元素的 ORI 帧不是一回事（G3-04 两者差 90°）。GENSEC 帧下三个 Offset 是差向量在这三根轴上的**非负**投影（E3D 取 `from` 到各轴线垂足的距离），单元格不带符号；Direction 则例外地按 World 出、字母不跟帧；轴标签仍是 U/V/W。Web 没有 `yDir` / `zDir` 属性，从 gen-model-v1 `element/plines` 每条 p-line 的截面内偏移 + 世界起点反解（`gensecSectionBasis.ts`），解不出（含弧 SPINE、legacy 源、接口失败）就回落 ORI 帧的轴上取绝对值；元素类型只是提示，查不到当普通元素帧。其它元素帧不受影响：仍是 ORI 帧的带符号分量 + 帧字母的罗盘串（决策 d-529，golden MD §26）。
+_Avoid_: 拿 GENSEC 的 ORI 当截面标架、拿 `element/ptset` 的 `world_transform`（属主链矩阵）当 yDir / zDir、给 GENSEC 帧的 Offset 加正负号、对 ORI 分量取绝对值当「非负投影」、GENSEC 帧下按 U/V/W 字母出 Direction
+
 ## P-Point
 
 来自模型点集数据的设计关键点，适合作为精确测量点。它不是模型表面任意射线命中点。

@@ -1009,7 +1009,72 @@ G2-03 `E 45 N 35.2644 U`、G6-02 Decimal Places 2 → `W 11.78 N 66.83 D` / `W 1
 
 **已知偏离 / 残余**：
 - E3D 标准距离表带 ` WRT <wrt>` 尾巴、Web 不带（用户拍板，`d-515`）；元素帧下 E3D 写名字（`/Copy-of-RCS151MM`）、Web 只有 refno，也是不照搬的原因之一。
-- GENSEC 当 wrt 时 E3D 的 Direction 按 World，Web 的参考系模型不知道元素类型，没有特殊处理（与 §2 #2 的 GENSEC 非负投影同属未落地）。
+- ~~GENSEC 当 wrt 时 E3D 的 Direction 按 World，Web 的参考系模型不知道元素类型，没有特殊处理（与 §2 #2 的 GENSEC 非负投影同属未落地）。~~
+  → **2026-09-14 20:02 两条一起落地**（§26，Web `3d6b16d`，决策 `d-529`）。
 - **证据等级**：串型 / 位数 / 尾巴规则全部来自已采 trace 与截图（G1 / G2-03 / G3-02 / G4-01～03 / G6-02 / G8），不是静态推导；
   角度窗体 Decimal Places ≠ 2 的样子仍是 `static_expectation`（G10 未采）。
+
+## 26. GENSEC 当 wrt：Offset 是截面标架三轴的非负投影 + Direction 按 World（方案 §2 #2 残余）夹具化实机走查（2026-09-14 20:02）
+
+**为什么现在做**：§25 残余与方案 §2 #2 都记着 GENSEC 当 wrt 的两条 E3D 特例没落地——Web 的参考系模型不知道元素类型。
+用户 2026-09-14 17:44 拍板两条一起做（决策 `d-529`）。
+
+**E3D 口径**（`gphdimension.pmlobj` 826–856 `offsetType()`、`gphmeasure.pmlfrm` 396–399 + 已采 `G3-04-gensec-wrt.trace.txt`）：
+
+- `!this.wrt.hardType eq 'GENSEC'` 时 `offsetType()` **不走** `offset()`（ORI 帧的带符号分量），而是先拼
+  `ORIENTATION('Z IS ' + wrt.zDir.wrt(world) + ' AND Y IS ' + wrt.yDir.wrt(world))`，过 `from` 画三根轴线（`POINTVECTOR.line(1m)`），
+  三个 Offset = `from` 到 `to` 在各轴线上垂足（`LINE.near`）的距离——**非负**，且轴是 GENSEC 的 `yDir` / `zDir` **截面标架**，不是 ORI
+  （注释原话 "the frame of reference for GENSEC is with the Z axis in the GENSEC Z Direction"）。
+- Direction 用 `.wrt(world)`（399），标签仍是 U/V/W（wrt 不是 World，413–431）。
+- G3-04（`=23406/14`，`wrt_ydir_world=S` / `wrt_zdir_world=U`）：`from E 5897.18 S 9694.75 U 18669.8 WRT =23406/14` →
+  `to E 6297.46 S 7774.61 U 14239.127`，显示 `1920.14 / 400.28 / 4430.67mm` + `W 11.7755 N 66.1215 D`（World），
+  `direction_wrt=N 11.7755 E 66.1215 D` 不显示。ORI 帧（X = N / Y = W / Z = U）下的带符号投影是 `+400.28 / +1920.14 / −4430.67`——
+  **只有截面标架（X = W / Y = S / Z = U）能对上 `1920.14 / 400.28 / 4430.67`**，所以「非负投影」不是对 ORI 分量取绝对值，轴也不同。
+- Perpendicular 表（654–667）**没有** GENSEC 特例，Direction 照 `.wrt(!this.dimension.wrt)`；Web 垂距表本来就固定 World（G4-06），不动。
+
+**Web 落地**（Web `3d6b16d`；决策 `d-529`）：
+
+- `types.ts`：`ReferenceFrameElementData` / `ResolvedReferenceFrame` 加 `noun`（E3D hardtype，解析器大写化；**只是提示，缺了不失败帧**）
+  与 `sectionBasis`（GENSEC 截面标架，解析器按同一 basis policy 正交化；解不出为 null）。
+- `pdmsTransformReferenceFramePort.ts`：`fetchNoun`（缺省走当前模型数据源的树节点 `getModelSource().tree.node()`，legacy / gen-model-v1 都有 noun）
+  与 transform 并发；noun 是 GENSEC 才再拉 `fetchPlines`（缺省 gen-model-v1 `element/plines`，legacy 源直接 null）→ `deriveSectionBasisFromPlines`。
+  三个查询任一失败都只降级、不失败帧。
+- 纯内核 `gensecSectionBasis.ts`：Web 没有 `yDir` / `zDir` 属性，但 `element/plines` 给了每条 p-line 的截面内偏移 `(x, y)`（JUSL / LMIRR 之后）
+  和世界起点 `PLSTART`：`start = O + x·X + y·Y`，放置恒右手、Z = p-line 方向 → 在垂直于 Z 的平面里就是一个平面旋转，
+  全部 p-line 最小二乘解角、逐条验残差（相对 1e-6；不是同一右手刚体放置 / 方向不平行 → null）。
+- `xeokitMeasurementFormat.ts`：`computeDistanceMeasurementResultInFrame` 对 `isGensecReferenceFrame(frame)`
+  （`kind === 'element' && noun === 'GENSEC'`）的帧：Offset = |Δ·u| / |Δ·v| / |Δ·w| 沿 `sectionBasis ?? basis`，`offsetMode: 'magnitude'`；
+  Direction 直接用 World 差向量。行 builder / 列表摘要 / 「复制分量」按 `offsetMode` 不带符号。其余帧一字不变（`offsetMode: 'signed'`）。
+
+**Web 实机走查**——**夹具化**：本库 GENSEC 0 件（d-336 记的全库 noun 计数 GENSEC 0；STRU 24381/177298 名下 BFS 也只见 SCTN），且 `:3100 /api/pdms/transform` 在 gen-model-v1
+数据源下回 `MODEL_REFNO_NOT_FOUND`（元素 wrt 帧本就走不到实机，§25 同一条）。Playwright 用 `page.route` 把 BANG 155 立柱 SCTN
+`24381/177360` 在其属主 `24381/177359` 的 `tree/children` 回包里改成 `GENSEC`、`/api/pdms/transform/24381_177360` 给一个 G3-04 式 ORI
+（X = N / Y = W / Z = U）；**p-line 走 `:8024` 真数据，其余全真**——真 UI、浮条真点「自由表面」+ 只留「模型表面点」、真指针两击、真网格拾取
+（`?model_source=gen-model-v1&gm_backend_port=8024&show_refno=24381_177298`，落点 `o:24381_177305:6` / `o:24381_177335:22`，临时 spec 已删）：
+
+| 表 | 单元格 | 独立期望 | 图 |
+| --- | --- | --- | --- |
+| 距离 wrt `DBREF 24381/177360`（GENSEC，U/V/W） | `Distance 30996mm` · `Offset U 4427mm` · `Offset V 23129mm` · `Offset W 20154mm` · `Direction S 14.1643 W 40.5587 D` | 测试进程自己从 `:8024 element/plines` 解截面标架（u = (−0.9063, 0.4226, 0) 即 BANG 155、v = (−0.4226, −0.9063, 0)、w = U），\|Δ·轴\| = 4426.98 / 23128.83 / 20154.21；World 差向量罗盘串 `S 14.1643 W 40.5587 D` | `web-gensec-wrt-live-01-distance-gensec.png` / `web-gensec-wrt-live-02-result-card-gensec.png` |
+| 同一次测量切回 World | `Offset X −5762mm` · `Y −22833mm` · `Z −20154mm` · `Direction S 14.1643 W 40.5587 D` | 带符号、Direction 同一串 | `web-gensec-wrt-live-03-result-card-world.png` |
+
+- 夹具 ORI 帧（X = N / Y = W）下若仍按普通帧算会是 `−22833 / +5762 / −20154`——与显示的 `4427 / 23129 / 20154` 明显不同，
+  证明走的是截面标架 + 取绝对值，不是 ORI。
+- 请求计数：transform 1（夹具）、`element/plines` 1（真）、属主 `tree/children` 1（改 noun）；页面错误 0。数值见 `web-gensec-wrt-live-records.json`。
+- **解法对真数据的独立核对**（`web-gensec-wrt-sctn-section-basis-live.json`）：STRU 24381/177298 名下 14 根 SCTN，`element/plines` 各 26 条 p-line
+  全部解出截面标架，逐条重建起点的最大残差 **1.8e-12 mm**；13 根 BANG 0 横梁的截面 Y = Up（|v·U| = 1），BANG 155 立柱 `177360` 的截面 X
+  在水平面里离 E **155.000°**（§17 记的后端事实）。`element/ptset` 的 `world_transform` 对 SCTN 是属主链矩阵（恒等 / STRU ORI），
+  **不是**截面标架——不能拿它当 yDir / zDir 对。
+
+**单测**：`e3dGensecWrt.golden.test.ts` 4 条（G3-04 逐格 `4845.41 / 1920.14 / 400.28 / 4430.67mm`、`Direction W 11.7755 N 66.1215 D`、
+列表摘要 / 复制分量不带符号；同帧 noun 未知 → 普通帧 `+400.28 / +1920.14 / -4430.67`、`N 11.7755 E 66.1215 D`；GENSEC 无截面标架 →
+ORI 轴上取绝对值）；`gensecSectionBasis.test.ts` 7 条（轴对齐 / 任意旋转 / 镜像已进 offset / 单轴偏移的左右手歧义 / 真左手三点拒掉 /
+第三条不自洽拒掉 / 各种 null）；`pdmsTransformReferenceFramePort.test.ts` +2（noun 提示三态；GENSEC 才拉 p-line、SCTN 不拉、p-line 失败只丢截面标架）。
+测量相关 85 文件 / 974 用例全过；eslint 0；type-check 与 HEAD 同（基线外只有既有 `useDtxTools.*.test.ts` 与别的会话未提交的 `bindingResolve.ts`）。
+
+**已知偏离 / 残余**：
+- 截面标架来自 p-line 反解，不是 E3D 的 `yDir` / `zDir` 属性：GENSEC 含弧 SPINE（`element/plines` 回空 + reason）或 legacy 源下拿不到 →
+  回落到 ORI 帧的轴上取绝对值（三个数值与 E3D 同一组、顺序可能不同；golden 用例 `=23406/16` 记着这一档）。
+- 真 GENSEC 未实机：本库 0 件；`:3100 /api/pdms/transform` 在 gen-model-v1 数据源下不认 refno，元素 wrt 帧本就走不到实机，本档靠夹具 + 真 p-line。
+  元素 wrt 帧要在 gen-model-v1 下真跑，得另给 transform 来源（另立项）。
+- 三维标注（画布上的 X / Y / Z 尺寸线）一直是 World 分量、不随 wrt（既有，与本条无关）。
 

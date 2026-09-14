@@ -1,0 +1,375 @@
+{
+  "capturedAt": "2026-09-14T11:50:59.783Z",
+  "backend": "http://localhost:8024",
+  "stru": "24381/177298",
+  "members": 14,
+  "derived": 14,
+  "maxResidualMm": 1.8189894035458565e-12,
+  "report": [
+    {
+      "refno": "24381/177301",
+      "noun": "SCTN",
+      "name": "SCTN",
+      "plines": 26,
+      "reason": null,
+      "derived": true,
+      "axisHorizontal": true,
+      "maxResidualMm": 0,
+      "u": [
+        0.996195,
+        0.087156,
+        0
+      ],
+      "v": [
+        0,
+        0,
+        1
+      ],
+      "w": [
+        0.087156,
+        -0.996195,
+        0
+      ],
+      "yDotUp": 1
+    },
+    {
+      "refno": "24381/177302",
+      "noun": "SCTN",
+      "name": "SCTN",
+      "plines": 26,
+      "reason": null,
+      "derived": true,
+      "axisHorizontal": true,
+      "maxResidualMm": 0,
+      "u": [
+        0.087148,
+        -0.996195,
+        0
+      ],
+      "v": [
+        0,
+        0,
+        1
+      ],
+      "w": [
+        -0.996195,
+        -0.087148,
+        0
+      ],
+      "yDotUp": 1
+    },
+    {
+      "refno": "24381/177303",
+      "noun": "SCTN",
+      "name": "SCTN",
+      "plines": 26,
+      "reason": null,
+      "derived": true,
+      "axisHorizontal": true,
+      "maxResidualMm": 0,
+      "u": [
+        0.087158,
+        -0.996195,
+        0
+      ],
+      "v": [
+        0,
+        0,
+        1
+      ],
+      "w": [
+        -0.996195,
+        -0.087158,
+        0
+      ],
+      "yDotUp": 1
+    },
+    {
+      "refno": "24381/177313",
+      "noun": "SCTN",
+      "name": "SCTN",
+      "plines": 26,
+      "reason": null,
+      "derived": true,
+      "axisHorizontal": true,
+      "maxResidualMm": 0,
+      "u": [
+        -0.999967,
+        -0.008064,
+        0
+      ],
+      "v": [
+        0,
+        0,
+        1
+      ],
+      "w": [
+        -0.008064,
+        0.999967,
+        0
+      ],
+      "yDotUp": 1
+    },
+    {
+      "refno": "24381/177314",
+      "noun": "SCTN",
+      "name": "SCTN",
+      "plines": 26,
+      "reason": null,
+      "derived": true,
+      "axisHorizontal": true,
+      "maxResidualMm": 0,
+      "u": [
+        -0.008056,
+        0.999968,
+        0
+      ],
+      "v": [
+        0,
+        0,
+        1
+      ],
+      "w": [
+        0.999968,
+        0.008056,
+        0
+      ],
+      "yDotUp": 1
+    },
+    {
+      "refno": "24381/177315",
+      "noun": "SCTN",
+      "name": "SCTN",
+      "plines": 26,
+      "reason": null,
+      "derived": true,
+      "axisHorizontal": true,
+      "maxResidualMm": 0,
+      "u": [
+        0.906321,
+        -0.422591,
+        0
+      ],
+      "v": [
+        0,
+        0,
+        1
+      ],
+      "w": [
+        -0.422591,
+        -0.906321,
+        0
+      ],
+      "yDotUp": 1
+    },
+    {
+      "refno": "24381/177329",
+      "noun": "SCTN",
+      "name": "SCTN",
+      "plines": 26,
+      "reason": null,
+      "derived": true,
+      "axisHorizontal": true,
+      "maxResidualMm": 0,
+      "u": [
+        0.493007,
+        0.870025,
+        0
+      ],
+      "v": [
+        0,
+        0,
+        1
+      ],
+      "w": [
+        0.870025,
+        -0.493007,
+        0
+      ],
+      "yDotUp": 1
+    },
+    {
+      "refno": "24381/177330",
+      "noun": "SCTN",
+      "name": "SCTN",
+      "plines": 26,
+      "reason": null,
+      "derived": true,
+      "axisHorizontal": true,
+      "maxResidualMm": 0,
+      "u": [
+        0.870025,
+        -0.493007,
+        0
+      ],
+      "v": [
+        0,
+        0,
+        1
+      ],
+      "w": [
+        -0.493007,
+        -0.870025,
+        0
+      ],
+      "yDotUp": 1
+    },
+    {
+      "refno": "24381/177331",
+      "noun": "SCTN",
+      "name": "SCTN",
+      "plines": 26,
+      "reason": null,
+      "derived": true,
+      "axisHorizontal": true,
+      "maxResidualMm": 0,
+      "u": [
+        -0.819136,
+        -0.5736,
+        0
+      ],
+      "v": [
+        0,
+        0,
+        1
+      ],
+      "w": [
+        -0.5736,
+        0.819136,
+        0
+      ],
+      "yDotUp": 1
+    },
+    {
+      "refno": "24381/177344",
+      "noun": "SCTN",
+      "name": "SCTN",
+      "plines": 26,
+      "reason": null,
+      "derived": true,
+      "axisHorizontal": true,
+      "maxResidualMm": 0,
+      "u": [
+        0.506967,
+        -0.861965,
+        0
+      ],
+      "v": [
+        0,
+        0,
+        1
+      ],
+      "w": [
+        -0.861965,
+        -0.506967,
+        0
+      ],
+      "yDotUp": 1
+    },
+    {
+      "refno": "24381/177345",
+      "noun": "SCTN",
+      "name": "SCTN",
+      "plines": 26,
+      "reason": null,
+      "derived": true,
+      "axisHorizontal": true,
+      "maxResidualMm": 9.09e-13,
+      "u": [
+        -0.861969,
+        -0.50696,
+        0
+      ],
+      "v": [
+        0,
+        0,
+        1
+      ],
+      "w": [
+        -0.50696,
+        0.861969,
+        0
+      ],
+      "yDotUp": 1
+    },
+    {
+      "refno": "24381/177346",
+      "noun": "SCTN",
+      "name": "SCTN",
+      "plines": 26,
+      "reason": null,
+      "derived": true,
+      "axisHorizontal": true,
+      "maxResidualMm": 0,
+      "u": [
+        -0.087186,
+        0.996192,
+        0
+      ],
+      "v": [
+        0,
+        0,
+        1
+      ],
+      "w": [
+        0.996192,
+        0.087186,
+        0
+      ],
+      "yDotUp": 1
+    },
+    {
+      "refno": "24381/177360",
+      "noun": "SCTN",
+      "name": "SCTN",
+      "plines": 26,
+      "reason": null,
+      "derived": true,
+      "axisHorizontal": false,
+      "maxResidualMm": 1.82e-12,
+      "u": [
+        -0.906308,
+        0.422618,
+        0
+      ],
+      "v": [
+        -0.422618,
+        -0.906308,
+        0
+      ],
+      "w": [
+        0,
+        0,
+        1
+      ],
+      "xBearingFromEastDeg": 155,
+      "zDotUp": 1
+    },
+    {
+      "refno": "24381/177361",
+      "noun": "SCTN",
+      "name": "SCTN",
+      "plines": 26,
+      "reason": null,
+      "derived": true,
+      "axisHorizontal": true,
+      "maxResidualMm": 0,
+      "u": [
+        0.422621,
+        0.906306,
+        0
+      ],
+      "v": [
+        0,
+        0,
+        1
+      ],
+      "w": [
+        0.906306,
+        -0.422621,
+        0
+      ],
+      "yDotUp": 1
+    }
+  ]
+}
