@@ -9,6 +9,7 @@ import {
   Group,
   Line,
   LineBasicMaterial,
+  LineDashedMaterial,
   LineSegments,
   Matrix4,
   Plane,
@@ -19,6 +20,7 @@ import {
 
 import type { WorldCell } from '@/review/domain/annotationProjection/clip4';
 import type { PhasePrevious } from '@/review/domain/annotationProjection/wave';
+import type { AnnotationDegrade } from '@/review/domain/bindingResolve';
 import type { CloudLabelLayoutV1, ObbSnapshot, RegionV1, SourceStamp, ViewSnapshotV1 } from '@/review/domain/cloudRegion';
 import type { DTXLayer, DTXSelectionController } from '@/utils/three/dtx';
 import type { DtxCompatViewer } from '@/viewer/dtx/DtxCompatViewer';
@@ -29,6 +31,19 @@ import { reviewAttachmentDelete } from '@/api/reviewApi';
 import { setAnnotationProcessingEntryTarget } from '@/components/review/annotationProcessingEntry';
 import { isExternalSjFormFocusedMode, readPersistedEmbedModeParams } from '@/components/review/embedRoleLanding';
 import { isCanonicalReturnedTask } from '@/components/review/reviewTaskFilters';
+import {
+  applyDashedLineDegrade,
+  applyLeaderDegrade,
+  applyMeshLineDegrade,
+  buildAnnotationDegradeBadgeHtml,
+  createCloudDegradeBadgeEl,
+  markPinElDegrade,
+  pinDashSizeFromDistance,
+  pinSvgPaint,
+  positionCloudDegradeBadge,
+  sameDegrade,
+} from '@/composables/annotationDegradeViewport';
+import { buildRecordDegradeKey, useAnnotationBindingResolve } from '@/composables/useAnnotationBindingResolve';
 import { useAnnotationStyleStore } from '@/composables/useAnnotationStyleStore';
 import { isCloudRenderFlagEnabled } from '@/composables/useCloudRenderFlags';
 import {
@@ -100,6 +115,16 @@ type RectPlaneDrag = {
   startEntityId: string | null
 }
 
+/** DOM 图钉的重绘依据：解析表变化时按这些参数原地重画 SVG（ADR-0050 视口降级），不重建元素、不丢事件监听 */
+type MarkerMeta = {
+  kind: AnnotationOverlayKind
+  annotationId: string
+  glyph: string
+  collapsed: boolean
+  /** 上次画进 SVG 的降级态 */
+  degrade: AnnotationDegrade | null
+}
+
 type LabelEl = {
   id: string
   worldPos: Vector3
@@ -109,6 +134,8 @@ type LabelEl = {
    * 缺省 / `legacy` = 旧的世界点布局。
    */
   layoutMode?: 'legacy' | 'v1'
+  /** 只有图钉（markers）带 */
+  marker?: MarkerMeta
 }
 
 type TextAnnotationDragState = {
@@ -169,6 +196,8 @@ type CloudRenderCache = {
   regionState: CloudFitState | null
   regionLastLod: SmallTargetLod | null
   regionPolylineCount: number
+  /** paint 阶段的版本 = 帧级样式版本 × 本条记录的降级态（ADR-0050 视口降级）：只有这一条降级变了，也只重刷它的材质 */
+  paintTracker: ValueVersionTracker<string>
 }
 
 function createCloudRenderCache(): CloudRenderCache {
@@ -177,6 +206,7 @@ function createCloudRenderCache(): CloudRenderCache {
     targetBoundsTracker: createArrayVersionTracker(),
     recordTracker: createValueVersionTracker<CloudAnnotationRecord>(),
     labelMetricsTracker: createValueVersionTracker<string>(),
+    paintTracker: createValueVersionTracker<string>(),
     frame: null,
     frameNdcZ: 0,
     labelLayout: null,
@@ -202,11 +232,21 @@ type CloudOverlayEl = {
   /** 视口截断时轮廓可能断成多段；MeshLine 不支持子路径（§15 ②），第 2 段起用这组同材质 MeshLine */
   outlineExtra: MeshLine[]
   bboxEdges: LineSegments
+  /** 锚点小针（LineDashedMaterial，正常态 gapSize 0 等价实线） */
+  pin: LineSegments
+  /** 小针虚线节拍（世界单位），创建时按锚点到文字框距离定 */
+  pinDashSize: number
   record: CloudAnnotationRecord
   /** 目标合并 AABB 的解析缓存，见 resolveCloudTargetBbox */
   targetBbox: { min: Vec3; max: Vec3 } | null
   targetBboxAt: number
   render: CloudRenderCache
+  /** ADR-0050 视口降级：本条记录的 missing / stale 态；null = 正常 */
+  degrade: AnnotationDegrade | null
+  /** 降级时挂在轮廓参考框左上角的小徽标（overlay 元素）；正常态 null */
+  badgeEl: HTMLDivElement | null
+  /** 徽标刚创建、还没按本帧轮廓定位过 */
+  badgeDirty: boolean
 }
 
 /** 云线渲染计数（e2e / 单测「静止零重建」验收用），`debugCloudRenderStats()` 读取 */
@@ -426,6 +466,7 @@ function collectWorldCellEdgePositions(cells: readonly WorldCell[]): Float32Arra
 
 type CloudAnnotationVisual = {
   pin: LineSegments
+  pinDashSize: number
   leader: AnnotationLeaderVisual
   outline: MeshLine
   bboxEdges: LineSegments
@@ -518,6 +559,8 @@ type AnnotationLeaderVisual = {
   haloGeometry: MeshLineGeometry
   coreMaterial: MeshLineMaterial
   haloMaterial: MeshLineMaterial
+  /** ADR-0050 视口降级：上次应用到材质的降级态（applyLeaderDegrade 维护） */
+  degrade?: AnnotationDegrade | null
 }
 
 function nowId(prefix: string): string {
@@ -1218,6 +1261,14 @@ function updateCloudBboxLineSegmentsGeometry(line: LineSegments, positions: Floa
   const geom = line.geometry as BufferGeometry;
   geom.setAttribute('position', new BufferAttribute(positions, 3));
   geom.computeBoundingSphere();
+  // 材质是 LineDashedMaterial（降级时画虚线），lineDistance 属性要随位置一起重算
+  line.computeLineDistances();
+}
+
+/** 波浪盒 / 盒边的虚线节拍：按几何包围球直径的 1.5%（一条边约 40 段）；还没有几何时回 0（实线灰） */
+function dashSizeFromLineSegments(line: LineSegments): number {
+  const radius = line.geometry.boundingSphere?.radius ?? 0;
+  return Number.isFinite(radius) && radius > 0 ? radius * 2 * 0.015 : 0;
 }
 
 type CloudWavyRectangleOptions = {
@@ -1617,25 +1668,46 @@ export function buildTextAnnotationMarkerStyleText(collapsed: boolean, color = '
   ].join(';');
 }
 
-export function buildTextAnnotationMarkerHtml(glyph: string, collapsed: boolean): string {
+/**
+ * 图钉的降级外观（ADR-0050 视口降级）：`degrade` 非空 → 灰填充 + 深灰虚线描边；`badge` 为 true 时再在图钉左上角挂一枚小徽标。
+ * 云线的图钉不带徽标（云线的徽标挂在轮廓参考框左上角，一条记录只出一枚）。
+ */
+export type MarkerDegradeOptions = {
+  degrade: AnnotationDegrade | null
+  badge: boolean
+}
+
+export function buildTextAnnotationMarkerHtml(
+  glyph: string,
+  collapsed: boolean,
+  degradeOptions: MarkerDegradeOptions | null = null,
+): string {
+  const degrade = degradeOptions?.degrade ?? null;
+  const paint = pinSvgPaint(degrade);
+  // 徽标贴图钉左上角外侧：右缘离图钉左缘 4px，顶部与字泡同高
+  const badgeHtml = degrade && degradeOptions?.badge
+    ? buildAnnotationDegradeBadgeHtml(degrade, 'position:absolute;left:-4px;top:-6px;transform:translate(-100%,0);pointer-events:none;')
+    : '';
   if (collapsed) {
     return [
       '<div data-marker-kind="location-pin" style="position:relative;width:22px;height:28px;">',
       '<svg viewBox="0 0 24 32" width="22" height="28" aria-hidden="true">',
-      '<path d="M12 1.5C6.2 1.5 1.5 6.2 1.5 12c0 7.6 8.5 16.1 9.6 17.1a1.3 1.3 0 0 0 1.8 0c1.1-1 9.6-9.5 9.6-17.1C22.5 6.2 17.8 1.5 12 1.5Z" fill="#ef4444" stroke="#ffffff" stroke-width="1.4"/>',
+      `<path d="M12 1.5C6.2 1.5 1.5 6.2 1.5 12c0 7.6 8.5 16.1 9.6 17.1a1.3 1.3 0 0 0 1.8 0c1.1-1 9.6-9.5 9.6-17.1C22.5 6.2 17.8 1.5 12 1.5Z" fill="${paint.fill}" stroke="${paint.stroke}" stroke-width="1.4"${paint.dashAttr}/>`,
       '<circle cx="12" cy="12" r="4.2" fill="#ffffff"/>',
       '</svg>',
+      badgeHtml,
       '</div>',
     ].join('');
   }
   return [
     '<div data-marker-kind="push-pin" style="position:relative;width:18px;height:24px;">',
     '<svg viewBox="0 0 18 24" width="18" height="24" aria-hidden="true">',
-    '<path d="M6 2.5h6l-.8 4.2 2.5 2.5v1.5H4.3V9.2l2.5-2.5L6 2.5Z" fill="#ef4444" stroke="#ffffff" stroke-width="1.1" stroke-linejoin="round"/>',
-    '<path d="M9 10.8V21.8" stroke="#ffffff" stroke-width="1.4" stroke-linecap="round"/>',
-    '<circle cx="9" cy="22.4" r="1.2" fill="#ef4444"/>',
+    `<path d="M6 2.5h6l-.8 4.2 2.5 2.5v1.5H4.3V9.2l2.5-2.5L6 2.5Z" fill="${paint.fill}" stroke="${paint.stroke}" stroke-width="1.1" stroke-linejoin="round"${paint.dashAttr}/>`,
+    `<path d="M9 10.8V21.8" stroke="${degrade ? paint.stroke : '#ffffff'}" stroke-width="1.4" stroke-linecap="round"${paint.dashAttr}/>`,
+    `<circle cx="9" cy="22.4" r="1.2" fill="${paint.fill}"/>`,
     '</svg>',
-    `<div data-role="annotation-glyph" style="position:absolute;right:-10px;top:-6px;min-width:16px;height:16px;padding:0 4px;border-radius:999px;background:#0f172a;color:#f8fafc;font:700 10px/16px 'Segoe UI',sans-serif;text-align:center;">${escapeAnnotationLabelText(glyph)}</div>`,
+    `<div data-role="annotation-glyph" style="position:absolute;right:-10px;top:-6px;min-width:16px;height:16px;padding:0 4px;border-radius:999px;background:${paint.bubbleBackground};color:#f8fafc;font:700 10px/16px 'Segoe UI',sans-serif;text-align:center;">${escapeAnnotationLabelText(glyph)}</div>`,
+    badgeHtml,
     '</div>',
   ].join('');
 }
@@ -1849,7 +1921,8 @@ function createCloudAnnotationVisual(
   const pinGeometry = buildPinMarkerGeometry(anchor, distance);
 
   const cloudSt = buildAnnotationLeaderStyle('cloud');
-  const pinMaterial = new LineBasicMaterial({ color: cloudSt.color });
+  // 小针与盒边用 LineDashedMaterial：正常态 gapSize 0 等价实线，记录降级（ADR-0050）时只改 dash / gap 就是虚线，不必换材质
+  const pinMaterial = new LineDashedMaterial({ color: cloudSt.color, dashSize: 1, gapSize: 0 });
   const outlineGeometry = new MeshLineGeometry();
   const outlineMaterial = new MeshLineMaterial({
     color: cloudSt.color,
@@ -1870,24 +1943,28 @@ function createCloudAnnotationVisual(
   bboxGeom.setAttribute('position', new BufferAttribute(new Float32Array([0, 0, 0, 0, 0, 0]), 3));
   // 与 billboard 云线保持同一套遮挡语义：批注必须确定性地指认目标，被前景管道挡住
   // 的云线等于没有批注；空间纵深由 bbox3d 自身的透视形变表达，不依赖深度遮挡。
-  const bboxMat = new LineBasicMaterial({
+  const bboxMat = new LineDashedMaterial({
     color: cloudSt.color,
     transparent: true,
     opacity: cloudSt.opacity,
     depthTest: false,
     depthWrite: false,
+    dashSize: 1,
+    gapSize: 0,
   });
   const bboxEdges = new LineSegments(bboxGeom, bboxMat);
   bboxEdges.renderOrder = 902;
   bboxEdges.frustumCulled = false;
+  bboxEdges.computeLineDistances();
 
   const pin = new LineSegments(pinGeometry, pinMaterial);
+  pin.computeLineDistances();
   const leader = createAnnotationLeader('cloud', anchor, labelWorldPos, resolution);
   pin.renderOrder = 901;
 
   outlineGeometry.setPoints([0, 0, 0, 0, 0, 0]);
 
-  return { pin, leader, outline, bboxEdges, labelWorldPos };
+  return { pin, pinDashSize: pinDashSizeFromDistance(distance), leader, outline, bboxEdges, labelWorldPos };
 }
 
 function createRectAnnotationVisual(
@@ -2056,14 +2133,21 @@ function makeMarkerEl(parent: HTMLElement, text: string, color: string): HTMLDiv
   return el;
 }
 
-function makeTextAnnotationMarkerEl(parent: HTMLElement, glyph: string, collapsed: boolean): HTMLDivElement {
+const MARKER_NORMAL_TITLE = '单击选中，双击展开/收起';
+
+function makeTextAnnotationMarkerEl(
+  parent: HTMLElement,
+  glyph: string,
+  collapsed: boolean,
+  degradeOptions: MarkerDegradeOptions | null = null,
+): HTMLDivElement {
   const el = ensureDiv(
     parent,
     'dtx-anno-marker',
     buildTextAnnotationMarkerStyleText(collapsed),
   );
-  el.innerHTML = buildTextAnnotationMarkerHtml(glyph, collapsed);
-  el.title = '单击选中，双击展开/收起';
+  el.innerHTML = buildTextAnnotationMarkerHtml(glyph, collapsed, degradeOptions);
+  markPinElDegrade(el, degradeOptions?.degrade ?? null, MARKER_NORMAL_TITLE);
   el.setAttribute('aria-label', '文字批注图钉，单击选中，双击展开或收起');
   if (collapsed) {
     el.dataset.markerKind = 'location-pin';
@@ -2071,6 +2155,16 @@ function makeTextAnnotationMarkerEl(parent: HTMLElement, glyph: string, collapse
     el.dataset.markerKind = 'push-pin';
   }
   return el;
+}
+
+/** 图钉降级态变了就原地重画 SVG（元素与事件监听不动）；没变直接返回 false */
+function repaintMarkerDegrade(entry: LabelEl, degrade: AnnotationDegrade | null): boolean {
+  const meta = entry.marker;
+  if (!meta || sameDegrade(meta.degrade, degrade)) return false;
+  meta.degrade = degrade;
+  entry.el.innerHTML = buildTextAnnotationMarkerHtml(meta.glyph, meta.collapsed, { degrade, badge: meta.kind !== 'cloud' });
+  markPinElDegrade(entry.el, degrade, MARKER_NORMAL_TITLE);
+  return true;
 }
 
 function makeLabelEl(parent: HTMLElement, title: string, description: string): HTMLDivElement {
@@ -2122,6 +2216,8 @@ export function useDtxTools(options: {
   const userStore = useUserStore();
   const unitSettings = useUnitSettingsStore();
   const annotationStyleStore = useAnnotationStyleStore();
+  // ADR-0050：批注关联的失效解析表（只读）；missing / stale 的记录在视口降级为灰虚线 + 左上角小徽标
+  const bindingResolve = useAnnotationBindingResolve();
   const readyRevision = ref(0);
 
   let lastAnnotationLabelClick: AnnotationLabelClickState | null = null;
@@ -3674,6 +3770,9 @@ export function useDtxTools(options: {
       try { it.el.remove(); } catch { /* ignore */ }
     }
     markers.clear();
+    for (const it of cloudShapes.values()) {
+      try { it.badgeEl?.remove(); } catch { /* ignore */ }
+    }
     cloudShapes.clear();
     rectShapes.clear();
     obbShapes.clear();
@@ -3759,6 +3858,11 @@ export function useDtxTools(options: {
 
     if (suppressStoreOverlays) return;
 
+    // ADR-0050：一趟拿全部记录的降级态（missing / stale），创建时就画成灰虚线；之后解析表变化走 applyBindingDegrade 原地更新
+    const degrades = bindingResolve.getRecordDegrades();
+    const degradeOf = (kind: AnnotationOverlayKind, id: string): AnnotationDegrade | null =>
+      degrades.get(buildRecordDegradeKey(kind, id)) ?? null;
+
     // ---------------- Text annotations ----------------
     for (const a of store.annotations.value) {
       if (!a.visible) continue;
@@ -3768,9 +3872,16 @@ export function useDtxTools(options: {
       const labelPos = asVec3(a.labelWorldPos) ?? getDefaultTextAnnotationLabelWorldPos(worldPos);
       const wp = new Vector3(...worldPos);
       const labelWorldPos = new Vector3(...labelPos);
-      const marker = makeTextAnnotationMarkerEl(overlay, a.glyph || 'A', a.collapsed === true);
+      const degrade = degradeOf('text', a.id);
+      const glyph = a.glyph || 'A';
+      const marker = makeTextAnnotationMarkerEl(overlay, glyph, a.collapsed === true, { degrade, badge: true });
       if (a.severity) marker.dataset.severity = a.severity;
-      markers.set(`anno:${a.id}`, { id: `anno:${a.id}`, worldPos: wp, el: marker });
+      markers.set(`anno:${a.id}`, {
+        id: `anno:${a.id}`,
+        worldPos: wp,
+        el: marker,
+        marker: { kind: 'text', annotationId: a.id, glyph, collapsed: a.collapsed === true, degrade },
+      });
       marker.addEventListener('click', (ev) => {
         ev.stopPropagation();
         if (ev.detail > 1) return;
@@ -3783,6 +3894,7 @@ export function useDtxTools(options: {
 
       if (shouldRenderTextAnnotationCard(a.collapsed)) {
         const leader = createTextAnnotationLeader(wp, labelWorldPos, resolution);
+        applyLeaderDegrade(leader, buildAnnotationLeaderStyle('text').color, degrade);
         toolsGroup.add(leader.root);
         textLeaders.set(`anno:${a.id}`, leader);
 
@@ -3867,6 +3979,9 @@ export function useDtxTools(options: {
       if (!c.visible) continue;
       const anchor = new Vector3(...c.anchorWorldPos);
       const visual = createCloudAnnotationVisual(c, resolution);
+      const degrade = degradeOf('cloud', c.id);
+      // 引线的降级在这里就地应用；轮廓 / 盒边 / 小针的颜色与虚线由 updateOverlayPositions 的 paint 阶段按 cloud.degrade 统一刷
+      applyLeaderDegrade(visual.leader, buildAnnotationLeaderStyle('cloud').color, degrade);
       // pin / outline / bboxEdges 始终加入；leader（图钉 → 文字框引线）随 collapsed 控制，
       // 与文字批注的「双击图钉收起文字框 / 引线，保留图钉」行为对齐。
       toolsGroup.add(visual.pin, visual.outline, visual.bboxEdges);
@@ -3881,14 +3996,25 @@ export function useDtxTools(options: {
         outline: visual.outline,
         outlineExtra: [],
         bboxEdges: visual.bboxEdges,
+        pin: visual.pin,
+        pinDashSize: visual.pinDashSize,
         record: c,
         targetBbox: null,
         targetBboxAt: 0,
         render: createCloudRenderCache(),
+        degrade,
+        badgeEl: degrade ? createCloudDegradeBadgeEl(overlay, degrade) : null,
+        badgeDirty: true,
       });
 
-      const cloudMarker = makeTextAnnotationMarkerEl(overlay, 'C', c.collapsed === true);
-      markers.set(`cloud:${c.id}`, { id: `cloud:${c.id}`, worldPos: anchor, el: cloudMarker });
+      // 云线的图钉只换灰虚线、不挂徽标——徽标挂在轮廓参考框左上角，一条记录一枚
+      const cloudMarker = makeTextAnnotationMarkerEl(overlay, 'C', c.collapsed === true, { degrade, badge: false });
+      markers.set(`cloud:${c.id}`, {
+        id: `cloud:${c.id}`,
+        worldPos: anchor,
+        el: cloudMarker,
+        marker: { kind: 'cloud', annotationId: c.id, glyph: 'C', collapsed: c.collapsed === true, degrade },
+      });
       cloudMarker.addEventListener('click', (ev) => {
         ev.stopPropagation();
         if (ev.detail > 1) return;
@@ -4003,8 +4129,14 @@ export function useDtxTools(options: {
       });
 
       // 新增 DOM marker：与 cloud 一致，提供「双击图钉收起 / 展开」入口。
-      const rectMarker = makeTextAnnotationMarkerEl(overlay, 'R', r.collapsed === true);
-      markers.set(`rect:${r.id}`, { id: `rect:${r.id}`, worldPos: rectAnchor, el: rectMarker });
+      const rectDegrade = degradeOf('rect', r.id);
+      const rectMarker = makeTextAnnotationMarkerEl(overlay, 'R', r.collapsed === true, { degrade: rectDegrade, badge: true });
+      markers.set(`rect:${r.id}`, {
+        id: `rect:${r.id}`,
+        worldPos: rectAnchor,
+        el: rectMarker,
+        marker: { kind: 'rect', annotationId: r.id, glyph: 'R', collapsed: r.collapsed === true, degrade: rectDegrade },
+      });
       rectMarker.addEventListener('click', (ev) => {
         ev.stopPropagation();
         if (ev.detail > 1) return;
@@ -4113,8 +4245,14 @@ export function useDtxTools(options: {
       });
 
       // 新增 DOM marker：与 cloud / rect 一致，提供「双击图钉收起 / 展开」入口。
-      const obbMarker = makeTextAnnotationMarkerEl(overlay, 'O', o.collapsed === true);
-      markers.set(`obb:${o.id}`, { id: `obb:${o.id}`, worldPos: anchorWorldPos, el: obbMarker });
+      const obbDegrade = degradeOf('obb', o.id);
+      const obbMarker = makeTextAnnotationMarkerEl(overlay, 'O', o.collapsed === true, { degrade: obbDegrade, badge: true });
+      markers.set(`obb:${o.id}`, {
+        id: `obb:${o.id}`,
+        worldPos: anchorWorldPos,
+        el: obbMarker,
+        marker: { kind: 'obb', annotationId: o.id, glyph: 'O', collapsed: o.collapsed === true, degrade: obbDegrade },
+      });
       obbMarker.addEventListener('click', (ev) => {
         ev.stopPropagation();
         if (ev.detail > 1) return;
@@ -4329,6 +4467,8 @@ export function useDtxTools(options: {
       const measured = labelV1 && labelEntry ? measureLabelSize(labelEntry.el) : null;
       const stamp: CloudRenderStamp = {
         ...frameStamp,
+        // paint 版本叠上本条记录的降级态：解析表让它 missing / stale（或恢复）时，只有它重刷材质
+        paintStyle: cloud.render.paintTracker.update(`${frameStamp.paintStyle}|${cloud.degrade?.state ?? ''}`),
         targetBounds: cloud.render.targetBoundsTracker.update(sb ? [...sb.min, ...sb.max] : EMPTY_BOUNDS),
         bindings: recordVersion,
         effectiveRegion: cloud.render.regionCellsTracker.update(regionCells),
@@ -4342,14 +4482,16 @@ export function useDtxTools(options: {
       cloud.render.stamp = stamp;
 
       if (dirty.paint) {
+        // ADR-0050 视口降级：missing / stale 的记录轮廓 / 盒边 / 小针一律灰 + 虚线（outlineExtra 与 outline 共用材质）
         const outlineMat = cloud.outline.material as MeshLineMaterial;
-        outlineMat.color.setHex(cloudStyle.color);
+        applyMeshLineDegrade(outlineMat, cloudStyle.color, cloud.degrade);
         outlineMat.opacity = cloudStyle.opacity;
         outlineMat.lineWidth = cloudStyle.lineWidth;
         outlineMat.resolution.set(resolution.width, resolution.height);
-        const bboxMat = cloud.bboxEdges.material as LineBasicMaterial;
-        bboxMat.color.setHex(cloudStyle.color);
+        const bboxMat = cloud.bboxEdges.material as LineDashedMaterial;
+        applyDashedLineDegrade(bboxMat, cloudStyle.color, cloud.degrade, dashSizeFromLineSegments(cloud.bboxEdges));
         bboxMat.opacity = cloudStyle.opacity;
+        applyDashedLineDegrade(cloud.pin.material as LineDashedMaterial, cloudStyle.color, cloud.degrade, cloud.pinDashSize);
         cloudRenderStats.paintUpdates += 1;
       }
 
@@ -4574,6 +4716,21 @@ export function useDtxTools(options: {
         }
       }
 
+      // ---- ADR-0050 视口降级：盒边几何刚重建时按新尺度补一次虚线节拍；徽标贴到轮廓参考框左上角 ----
+      if (cloud.degrade && dirty.shape && cloud.bboxEdges.visible) {
+        applyDashedLineDegrade(cloud.bboxEdges.material as LineDashedMaterial, cloudStyle.color, cloud.degrade, dashSizeFromLineSegments(cloud.bboxEdges));
+      }
+      if (cloud.badgeEl && (dirty.shape || dirty.paint || cloud.badgeDirty)) {
+        cloud.badgeDirty = false;
+        const frame = cloud.render.frame;
+        positionCloudDegradeBadge(
+          cloud.badgeEl,
+          frame ? { x: frame.referenceBounds.x, y: frame.referenceBounds.y } : null,
+          worldToOverlayPoint(viewer.camera, canvas, overlay, cloud.worldPos),
+          cloud.outline.visible || cloud.bboxEdges.visible,
+        );
+      }
+
       // ---- 文字框 + 引线（方案 §5，开关 cloudLabelLayoutV1）----
       if (labelEntry) {
         const frame = cloud.render.frame;
@@ -4637,6 +4794,100 @@ export function useDtxTools(options: {
       it.el.style.top = `${p.y}px`;
       it.el.style.opacity = p.visible ? '1' : '0';
     }
+  }
+
+  /**
+   * ADR-0050 视口降级：解析表变了（模型加载 / 版本切换、定位回执、详情卡重算、批注后到）就地换外观——
+   * 不走 syncFromStore 重建：重建会打断行内编辑（输入框被换掉）并清空云线渲染缓存。
+   * 云线：记 `degrade`、换引线、增删徽标，轮廓 / 盒边 / 小针交给下一帧 paint 阶段（paintTracker 含降级态）；
+   * 图钉：原地重画 SVG；文字批注引线：直接换材质。
+   */
+  function applyBindingDegrade(): void {
+    const overlay = overlayContainerRef.value;
+    const degrades = bindingResolve.getRecordDegrades();
+    let changed = false;
+
+    for (const cloud of cloudShapes.values()) {
+      const degrade = degrades.get(buildRecordDegradeKey('cloud', cloud.record.id)) ?? null;
+      if (sameDegrade(cloud.degrade, degrade)) continue;
+      changed = true;
+      cloud.degrade = degrade;
+      applyLeaderDegrade(cloud.leader, buildAnnotationLeaderStyle('cloud').color, degrade);
+      if (cloud.badgeEl) {
+        try { cloud.badgeEl.remove(); } catch { /* ignore */ }
+        cloud.badgeEl = null;
+      }
+      if (degrade && overlay) {
+        cloud.badgeEl = createCloudDegradeBadgeEl(overlay, degrade);
+        cloud.badgeDirty = true;
+      }
+    }
+
+    for (const entry of markers.values()) {
+      const meta = entry.marker;
+      if (!meta) continue;
+      const degrade = degrades.get(buildRecordDegradeKey(meta.kind, meta.annotationId)) ?? null;
+      if (repaintMarkerDegrade(entry, degrade)) changed = true;
+    }
+
+    for (const [key, leader] of textLeaders) {
+      const degrade = degrades.get(buildRecordDegradeKey('text', key.slice('anno:'.length))) ?? null;
+      if (sameDegrade(leader.degrade, degrade)) continue;
+      changed = true;
+      applyLeaderDegrade(leader, buildAnnotationLeaderStyle('text').color, degrade);
+    }
+
+    if (!changed) return;
+    updateOverlayPositions();
+    requestRender?.();
+  }
+
+  /** e2e / 单测：每条批注当前在视口里的降级态与外观（ADR-0050） */
+  function debugAnnotationDegrades(): {
+    id: string
+    state: 'missing' | 'stale' | null
+    /** 云线：轮廓材质是否虚线 + 颜色；图钉：SVG 填充色 */
+    outlineDashed: boolean | null
+    lineColor: number | null
+    pinFill: string | null
+    badgeText: string | null
+    badgeLeft: string | null
+    badgeTop: string | null
+    badgeOpacity: string | null
+  }[] {
+    const out: ReturnType<typeof debugAnnotationDegrades> = [];
+    for (const [id, cloud] of cloudShapes.entries()) {
+      const outlineMat = cloud.outline.material as MeshLineMaterial;
+      const marker = markers.get(id);
+      out.push({
+        id,
+        state: cloud.degrade?.state ?? null,
+        outlineDashed: outlineMat.useDash,
+        lineColor: outlineMat.color.getHex(),
+        pinFill: marker?.el.querySelector('svg path')?.getAttribute('fill') ?? null,
+        badgeText: cloud.badgeEl?.textContent?.trim() ?? null,
+        badgeLeft: cloud.badgeEl?.style.left ?? null,
+        badgeTop: cloud.badgeEl?.style.top ?? null,
+        badgeOpacity: cloud.badgeEl?.style.opacity ?? null,
+      });
+    }
+    for (const [id, entry] of markers.entries()) {
+      if (!entry.marker || entry.marker.kind === 'cloud') continue;
+      const leader = textLeaders.get(id);
+      const badge = entry.el.querySelector<HTMLElement>('[data-role="annotation-binding-badge"]');
+      out.push({
+        id,
+        state: entry.marker.degrade?.state ?? null,
+        outlineDashed: leader ? leader.coreMaterial.useDash : null,
+        lineColor: leader ? leader.coreMaterial.color.getHex() : null,
+        pinFill: entry.el.querySelector('svg path')?.getAttribute('fill') ?? null,
+        badgeText: badge?.textContent?.trim() ?? null,
+        badgeLeft: badge?.style.left ?? null,
+        badgeTop: badge?.style.top ?? null,
+        badgeOpacity: null,
+      });
+    }
+    return out;
   }
 
   /** 云线渲染计数快照（静止零重建等验收用） */
@@ -5618,6 +5869,12 @@ export function useDtxTools(options: {
     { deep: true },
   );
 
+  // ADR-0050：解析表整表替换（模型加载 / 定位回执 / 详情卡重算 / 批注后到）→ 就地换降级外观，不重建 overlay
+  watch(bindingResolve.entries, () => {
+    if (!dtxViewerRef.value || !overlayContainerRef.value) return;
+    applyBindingDegrade();
+  });
+
   // pick_refno：候选变化与取消拾取时同步高亮
   watch(
     () => ({
@@ -5782,6 +6039,9 @@ export function useDtxTools(options: {
     resetCloudRenderStats,
     debugCloudLabelLayouts,
     debugCloudRegionRender,
+    // ADR-0050 视口降级：解析表变化后就地换外观（watch 已接；这里给测试直接调）与当前外观快照
+    applyBindingDegrade,
+    debugAnnotationDegrades,
 
     // 云线 V1 标签拖动（文字框拖柄的 pointer 事件由 syncFromStore 绑定；这里给测试与外部调用）
     beginInlineOverlayAnnotationDrag,
