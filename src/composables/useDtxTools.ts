@@ -475,25 +475,34 @@ type CloudAnnotationVisual = {
 }
 
 type RectAnnotationVisual = {
+  /** 线框与小针都是 LineDashedMaterial（正常态 gapSize 0 等价实线），记录降级时改灰虚线 */
   box: LineSegments
   pin: LineSegments
+  /** 正常态线色（rect 深灰、obb 青绿），降级恢复时回它 */
+  lineColor: number
+  /** 虚线节拍（世界单位）：线框按盒对角线、小针按针长 */
+  boxDashSize: number
+  pinDashSize: number
   leader: AnnotationLeaderVisual
   labelWorldPos: Vector3
 }
 
-type RectOverlayEl = {
+/** rect / obb 在视口里的一条：与 CloudOverlayEl 一样带降级态，供 applyBindingDegrade 就地换外观 */
+type BoxOverlayEl = {
   id: string
   worldPos: Vector3
   labelWorldPos: Vector3
   leader: AnnotationLeaderVisual
+  box: LineSegments
+  pin: LineSegments
+  lineColor: number
+  boxDashSize: number
+  pinDashSize: number
+  degrade: AnnotationDegrade | null
 }
 
-type ObbOverlayEl = {
-  id: string
-  worldPos: Vector3
-  labelWorldPos: Vector3
-  leader: AnnotationLeaderVisual
-}
+type RectOverlayEl = BoxOverlayEl
+type ObbOverlayEl = BoxOverlayEl
 
 type ScreenPoint = {
   x: number
@@ -2004,6 +2013,38 @@ function createCloudAnnotationVisual(
   return { pin, pinDashSize: pinDashSizeFromDistance(distance), leader, outline, bboxEdges, labelWorldPos };
 }
 
+const RECT_ANNOTATION_LINE_COLOR = 0x111827;
+const OBB_ANNOTATION_LINE_COLOR = 0x0f766e;
+
+/**
+ * rect / obb 的线框 + 小针：LineDashedMaterial（正常态 gapSize 0 等价实线），记录降级（ADR-0050）时只改 dash / gap 就是虚线，不必换材质。
+ * 与云线 / 尺寸系统同一套遮挡语义：批注线不参与深度测试。
+ */
+function createBoxAnnotationLines(
+  boxGeometry: BufferGeometry,
+  pinGeometry: BufferGeometry,
+  color: number,
+): { box: LineSegments; pin: LineSegments } {
+  const boxMaterial = new LineDashedMaterial({ color, dashSize: 1, gapSize: 0, depthTest: false });
+  const pinMaterial = new LineDashedMaterial({ color, dashSize: 1, gapSize: 0, depthTest: false });
+  const box = new LineSegments(boxGeometry, boxMaterial);
+  const pin = new LineSegments(pinGeometry, pinMaterial);
+  box.computeLineDistances();
+  pin.computeLineDistances();
+  box.geometry.computeBoundingSphere();
+  box.renderOrder = 900;
+  pin.renderOrder = 901;
+  return { box, pin };
+}
+
+/** rect / obb 一条记录的降级外观：线框 / 小针灰虚线 + 引线灰虚线；恢复回各自的正常线色 */
+function applyBoxOverlayDegrade(entry: BoxOverlayEl, kind: 'rect' | 'obb', degrade: AnnotationDegrade | null): void {
+  entry.degrade = degrade;
+  applyDashedLineDegrade(entry.box.material as LineDashedMaterial, entry.lineColor, degrade, entry.boxDashSize);
+  applyDashedLineDegrade(entry.pin.material as LineDashedMaterial, entry.lineColor, degrade, entry.pinDashSize);
+  applyLeaderDegrade(entry.leader, buildAnnotationLeaderStyle(kind).color, degrade);
+}
+
 function createRectAnnotationVisual(
   record: RectAnnotationRecord,
   resolution?: { width: number; height: number },
@@ -2020,18 +2061,18 @@ function createRectAnnotationVisual(
 
   const labelAnchor = anchor.clone().add(new Vector3(boxRadius * 0.65, boxRadius * 0.65, boxRadius * 0.45));
 
-  const boxMaterial = new LineBasicMaterial({ color: 0x111827 });
-  const pinMaterial = new LineBasicMaterial({ color: 0x111827 });
-  (boxMaterial as any).depthTest = false;
-  (pinMaterial as any).depthTest = false;
-
-  const box = new LineSegments(boxGeometry, boxMaterial);
-  const pin = new LineSegments(pinGeometry, pinMaterial);
+  const { box, pin } = createBoxAnnotationLines(boxGeometry, pinGeometry, RECT_ANNOTATION_LINE_COLOR);
   const leader = createAnnotationLeader('rect', anchor, labelAnchor, resolution);
-  box.renderOrder = 900;
-  pin.renderOrder = 901;
 
-  return { box, pin, leader, labelWorldPos: labelAnchor };
+  return {
+    box,
+    pin,
+    lineColor: RECT_ANNOTATION_LINE_COLOR,
+    boxDashSize: dashSizeFromLineSegments(box),
+    pinDashSize: pinDashSizeFromDistance(boxRadius),
+    leader,
+    labelWorldPos: labelAnchor,
+  };
 }
 
 function resolveObbAnnotationAnchorWorldPos(record: ObbAnnotationRecord): Vector3 {
@@ -2061,18 +2102,18 @@ function createObbAnnotationVisual(
   const pinGeometry = buildPinMarkerGeometry(anchorWorldPos, boxRadius);
   const labelWorldPos = new Vector3(...record.labelWorldPos);
 
-  const boxMaterial = new LineBasicMaterial({ color: 0x0f766e });
-  const pinMaterial = new LineBasicMaterial({ color: 0x0f766e });
-  (boxMaterial as any).depthTest = false;
-  (pinMaterial as any).depthTest = false;
-
-  const box = new LineSegments(boxGeometry, boxMaterial);
-  const pin = new LineSegments(pinGeometry, pinMaterial);
+  const { box, pin } = createBoxAnnotationLines(boxGeometry, pinGeometry, OBB_ANNOTATION_LINE_COLOR);
   const leader = createAnnotationLeader('obb', anchorWorldPos, labelWorldPos, resolution);
-  box.renderOrder = 900;
-  pin.renderOrder = 901;
 
-  return { box, pin, leader, labelWorldPos };
+  return {
+    box,
+    pin,
+    lineColor: OBB_ANNOTATION_LINE_COLOR,
+    boxDashSize: dashSizeFromLineSegments(box),
+    pinDashSize: pinDashSizeFromDistance(boxRadius),
+    leader,
+    labelWorldPos,
+  };
 }
 
 export function createRectAnnotationRecordFromObb(params: {
@@ -4191,15 +4232,24 @@ export function useDtxTools(options: {
       }
 
       const rectAnchor = new Vector3(...r.anchorWorldPos);
-      rectShapes.set(`rect:${r.id}`, {
+      const rectDegrade = degradeOf('rect', r.id);
+      const rectEntry: RectOverlayEl = {
         id: `rect:${r.id}`,
         worldPos: rectAnchor,
         labelWorldPos: (r.leaderEndWorldPos ? new Vector3(...r.leaderEndWorldPos) : visual.labelWorldPos).clone(),
         leader: visual.leader,
-      });
+        box: visual.box,
+        pin: visual.pin,
+        lineColor: visual.lineColor,
+        boxDashSize: visual.boxDashSize,
+        pinDashSize: visual.pinDashSize,
+        degrade: null,
+      };
+      // ADR-0050：成员 missing 时线框 / 小针 / 引线灰虚线（与云线同一套）
+      applyBoxOverlayDegrade(rectEntry, 'rect', rectDegrade);
+      rectShapes.set(rectEntry.id, rectEntry);
 
       // 新增 DOM marker：与 cloud 一致，提供「双击图钉收起 / 展开」入口。
-      const rectDegrade = degradeOf('rect', r.id);
       const rectMarker = makeTextAnnotationMarkerEl(overlay, 'R', r.collapsed === true, { degrade: rectDegrade, badge: true });
       markers.set(`rect:${r.id}`, {
         id: `rect:${r.id}`,
@@ -4307,15 +4357,24 @@ export function useDtxTools(options: {
       }
 
       const anchorWorldPos = resolveObbAnnotationAnchorWorldPos(o);
-      obbShapes.set(`obb:${o.id}`, {
+      const obbDegrade = degradeOf('obb', o.id);
+      const obbEntry: ObbOverlayEl = {
         id: `obb:${o.id}`,
         worldPos: anchorWorldPos,
         labelWorldPos: visual.labelWorldPos.clone(),
         leader: visual.leader,
-      });
+        box: visual.box,
+        pin: visual.pin,
+        lineColor: visual.lineColor,
+        boxDashSize: visual.boxDashSize,
+        pinDashSize: visual.pinDashSize,
+        degrade: null,
+      };
+      // ADR-0050：成员 missing 时线框 / 小针 / 引线灰虚线（与云线 / 矩形同一套）
+      applyBoxOverlayDegrade(obbEntry, 'obb', obbDegrade);
+      obbShapes.set(obbEntry.id, obbEntry);
 
       // 新增 DOM marker：与 cloud / rect 一致，提供「双击图钉收起 / 展开」入口。
-      const obbDegrade = degradeOf('obb', o.id);
       const obbMarker = makeTextAnnotationMarkerEl(overlay, 'O', o.collapsed === true, { degrade: obbDegrade, badge: true });
       markers.set(`obb:${o.id}`, {
         id: `obb:${o.id}`,
@@ -4874,7 +4933,7 @@ export function useDtxTools(options: {
    * ADR-0050 视口降级：解析表变了（模型加载 / 版本切换、定位回执、详情卡重算、批注后到）就地换外观——
    * 不走 syncFromStore 重建：重建会打断行内编辑（输入框被换掉）并清空云线渲染缓存。
    * 云线：记 `degrade`、换引线、增删徽标，轮廓 / 盒边 / 小针交给下一帧 paint 阶段（paintTracker 含降级态）；
-   * 图钉：原地重画 SVG；文字批注引线：直接换材质。
+   * 图钉：原地重画 SVG；文字批注引线：直接换材质；rect / obb：线框 / 小针 / 引线直接换材质。
    */
   function applyBindingDegrade(): void {
     const overlay = overlayContainerRef.value;
@@ -4909,6 +4968,15 @@ export function useDtxTools(options: {
       if (sameDegrade(leader.degrade, degrade)) continue;
       changed = true;
       applyLeaderDegrade(leader, buildAnnotationLeaderStyle('text').color, degrade);
+    }
+
+    for (const [kind, shapes] of [['rect', rectShapes], ['obb', obbShapes]] as const) {
+      for (const entry of shapes.values()) {
+        const degrade = degrades.get(buildRecordDegradeKey(kind, entry.id.slice(kind.length + 1))) ?? null;
+        if (sameDegrade(entry.degrade, degrade)) continue;
+        changed = true;
+        applyBoxOverlayDegrade(entry, kind, degrade);
+      }
     }
 
     if (!changed) return;
@@ -4948,12 +5016,15 @@ export function useDtxTools(options: {
     for (const [id, entry] of markers.entries()) {
       if (!entry.marker || entry.marker.kind === 'cloud') continue;
       const leader = textLeaders.get(id);
+      // rect / obb：外观读线框材质（虚线 = gapSize > 0）；text：读引线
+      const boxEntry = rectShapes.get(id) ?? obbShapes.get(id);
+      const boxMat = boxEntry ? (boxEntry.box.material as LineDashedMaterial) : null;
       const badge = entry.el.querySelector<HTMLElement>('[data-role="annotation-binding-badge"]');
       out.push({
         id,
         state: entry.marker.degrade?.state ?? null,
-        outlineDashed: leader ? leader.coreMaterial.useDash : null,
-        lineColor: leader ? leader.coreMaterial.color.getHex() : null,
+        outlineDashed: boxMat ? boxMat.gapSize > 0 : leader ? leader.coreMaterial.useDash : null,
+        lineColor: boxMat ? boxMat.color.getHex() : leader ? leader.coreMaterial.color.getHex() : null,
         pinFill: entry.el.querySelector('svg path')?.getAttribute('fill') ?? null,
         badgeText: badge?.textContent?.trim() ?? null,
         badgeLeft: badge?.style.left ?? null,

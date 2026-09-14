@@ -311,7 +311,7 @@ describe('ADR-0050 视口降级 · 图钉', () => {
     expect(marker.title).toBe('单击选中，双击展开/收起');
   });
 
-  it('矩形批注成员 missing：图钉灰 + 「⚠ 不存在」徽标（框体不动）', async () => {
+  it('矩形批注成员 missing：线框 / 小针 / 引线灰虚线，图钉灰 + 「⚠ 不存在」徽标；解析恢复后就地回原色实线', async () => {
     const { tools, store, overlay } = createTools();
     store.addRectAnnotation(makeRect());
     await flushStoreSync();
@@ -320,7 +320,51 @@ describe('ADR-0050 视口降级 · 图钉', () => {
     tools.updateOverlayPositions();
 
     const [rect] = tools.debugAnnotationDegrades().filter((d) => d.id === 'rect:rect-1');
-    expect(rect).toMatchObject({ state: 'missing', badgeText: '⚠ 不存在', pinFill: ANNOTATION_DEGRADE_VIEWPORT_STYLE.lineColorCss });
+    expect(rect).toMatchObject({
+      state: 'missing',
+      outlineDashed: true,
+      lineColor: GRAY,
+      badgeText: '⚠ 不存在',
+      pinFill: ANNOTATION_DEGRADE_VIEWPORT_STYLE.lineColorCss,
+    });
     expect(overlay.querySelector<HTMLElement>('.dtx-anno-marker')!.dataset.bindingState).toBe('missing');
+
+    resolveApi.resolveAll(probe());
+    await nextTick();
+    const [restored] = tools.debugAnnotationDegrades().filter((d) => d.id === 'rect:rect-1');
+    // 矩形正常线色 0x111827（深灰），线框回实线
+    expect(restored).toMatchObject({ state: null, outlineDashed: false, lineColor: 0x111827, badgeText: null, pinFill: '#ef4444' });
+  });
+
+  it('OBB 批注成员 missing：线框灰虚线（正常态青绿 0x0f766e）+ 图钉徽标；文字 / 云线不受影响', async () => {
+    const { tools, store } = createTools();
+    store.addObbAnnotation({
+      id: 'obb-1',
+      objectIds: [TARGET_REFNO],
+      refnos: [TARGET_REFNO],
+      obb: OBB,
+      labelWorldPos: [0, 0, 2],
+      anchor: { kind: 'top_center' },
+      visible: true,
+      title: 'OBB 批注 1',
+      description: '',
+      createdAt: 1_700_000_000_000,
+    });
+    store.addAnnotation(makeText({ refno: 'other-ok' }));
+    await flushStoreSync();
+    resolveApi.resolveAll(probe());
+    await nextTick();
+    tools.updateOverlayPositions();
+    expect(tools.debugAnnotationDegrades().find((d) => d.id === 'obb:obb-1')).toMatchObject({ state: null, outlineDashed: false, lineColor: 0x0f766e });
+
+    resolveApi.resolveAll(probe({ missing: [TARGET_REFNO] }));
+    await nextTick();
+    expect(tools.debugAnnotationDegrades().find((d) => d.id === 'obb:obb-1')).toMatchObject({
+      state: 'missing',
+      outlineDashed: true,
+      lineColor: GRAY,
+      badgeText: '⚠ 不存在',
+    });
+    expect(tools.debugAnnotationDegrades().find((d) => d.id === 'anno:text-1')).toMatchObject({ state: null, outlineDashed: false });
   });
 });
