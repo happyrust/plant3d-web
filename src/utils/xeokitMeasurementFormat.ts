@@ -112,10 +112,11 @@ export function formatMeasurementSummary(
       const labels = interpreted?.axisLabels ?? DISTANCE_AXIS_LABELS;
       const total = `距离 ${formatLengthMeters(Math.hypot(...worldDeltas), unit, precision)}`;
       if (opts?.showAxisBreakdown === false) return `${total} · ${points}`;
+      const deltaText = interpreted?.offsetMode === 'magnitude'
+        ? (delta: number) => formatLengthMeters(Math.abs(delta), unit, precision)
+        : (delta: number) => formatSignedLengthMeters(delta, unit, precision);
       const axisParts = deltas
-        .map((delta, index) => (
-          `${labels[index]} ${formatSignedLengthMeters(delta, unit, precision)}`
-        ))
+        .map((delta, index) => `${labels[index]} ${deltaText(delta)}`)
         .join(' · ');
       return `${total} · ${axisParts} · ${points}`;
     }
@@ -193,14 +194,37 @@ export type DistanceMeasurementResultValues = {
   wrt: 'world';
 };
 
+/**
+ * Offset 行的口径：普通帧是带符号的投影分量；GENSEC 帧是**非负**投影（E3D `offsetType()`，golden G3-04
+ * `1920.14 / 400.28 / 4430.67mm`），显示时不带符号。
+ */
+export type DistanceOffsetMode = 'signed' | 'magnitude';
+
 export type DistanceMeasurementFrameResultValues = Readonly<{
   distance: number;
   offsets: Readonly<{ components: Vec3 }>;
-  /** Unit direction components expressed in the resolved frame. */
+  /**
+   * Unit direction components expressed in the resolved frame — except for a GENSEC frame,
+   * where E3D expresses Direction in World (`gphmeasure.pmlfrm` 396–399, golden G3-04).
+   */
   direction: Readonly<{ vector: Vec3 }> | null;
   axisLabels: ReferenceFrameAxisLabels;
+  offsetMode: DistanceOffsetMode;
   frame: ResolvedReferenceFrame;
 }>;
+
+/** E3D 只对 `hardtype eq 'GENSEC'` 的 wrt 走特殊口径（SCTN 等不算）。 */
+export function isGensecReferenceFrame(frame: ResolvedReferenceFrame): boolean {
+  return frame.kind === 'element' && frame.noun === 'GENSEC';
+}
+
+/** 差向量在一组正交单位轴上的非负投影 |Δ·u| / |Δ·v| / |Δ·w|（E3D GENSEC 的 `offsetType()`）。 */
+function projectMagnitudes(delta: Vec3, basis: ResolvedReferenceFrame['basis']): Vec3 {
+  const along = (axis: readonly [number, number, number]): number => (
+    Math.abs(delta[0] * axis[0] + delta[1] * axis[1] + delta[2] * axis[2])
+  );
+  return [along(basis.u), along(basis.v), along(basis.w)];
+}
 
 export type ElevationPointFrameResultValues = Readonly<{
   position: Vec3;
@@ -259,21 +283,28 @@ export function computeDistanceMeasurementResultInFrame(
   const designDelta: Vec3 = [to[0] - from[0], to[1] - from[1], to[2] - from[2]];
   const projected = designVectorToFrame(frame, designDelta);
   if (!projected.ok) return null;
-  const components: Vec3 = [...projected.value];
   const distance = Math.hypot(...designDelta);
+  // GENSEC 当 wrt（`gphmeasure.pmlfrm` 396–399 + G3-04）：Offset 是沿**截面标架**（yDir / zDir，不是 ORI）
+  // 三根轴的**非负**投影，Direction 按 World 算。截面标架拿不到时退回 ORI 帧的轴。
+  const gensec = isGensecReferenceFrame(frame);
+  const components: Vec3 = gensec
+    ? projectMagnitudes(designDelta, frame.sectionBasis ?? frame.basis)
+    : [...projected.value];
+  const directionSource: Vec3 = gensec ? designDelta : [...projected.value];
   return {
     distance,
     offsets: { components },
     direction: distance > 0
       ? {
         vector: [
-          components[0] / distance,
-          components[1] / distance,
-          components[2] / distance,
+          directionSource[0] / distance,
+          directionSource[1] / distance,
+          directionSource[2] / distance,
         ],
       }
       : null,
     axisLabels: frame.axisLabels,
+    offsetMode: gensec ? 'magnitude' : 'signed',
     frame,
   };
 }
@@ -328,6 +359,8 @@ type DistanceMeasurementRowsSource = Readonly<{
   offsets: Readonly<{ components: readonly [number, number, number] }>;
   direction: Readonly<{ vector: readonly [number, number, number] }> | null;
   axisLabels?: ReferenceFrameAxisLabels;
+  /** 不给按 `signed`（World / 普通帧）；GENSEC 帧的结果给 `magnitude`，Offset 不带符号。 */
+  offsetMode?: DistanceOffsetMode;
 }>;
 
 /**
@@ -361,21 +394,25 @@ export function buildDistanceMeasurementResultRows(
   const [offsetX, offsetY, offsetZ] = result.offsets.components;
   const labels = result.axisLabels ?? DISTANCE_AXIS_LABELS;
   const fmt = lengthFormatters(unit, precision, format);
+  // GENSEC 帧的 Offset 是非负投影，E3D 单元格就是 `1920.14mm`，不带符号。
+  const offsetText = result.offsetMode === 'magnitude'
+    ? (v: number) => fmt.plain(Math.abs(v))
+    : fmt.signed;
   const offsetRows: DistanceMeasurementResultRow[] = [
     {
       key: 'offset-x',
       label: `Offset ${labels[0]}`,
-      valueText: fmt.signed(offsetX),
+      valueText: offsetText(offsetX),
     },
     {
       key: 'offset-y',
       label: `Offset ${labels[1]}`,
-      valueText: fmt.signed(offsetY),
+      valueText: offsetText(offsetY),
     },
     {
       key: 'offset-z',
       label: `Offset ${labels[2]}`,
-      valueText: fmt.signed(offsetZ),
+      valueText: offsetText(offsetZ),
     },
   ];
   // E3D 的 Direction 是罗盘字串（`DIRECTION.string()`），字母按当前 wrt 帧的三根轴走。
@@ -621,10 +658,11 @@ export function buildMeasurementComponentsText(
     target[2] - origin[2],
   ];
   const labels = interpreted?.axisLabels ?? DISTANCE_AXIS_LABELS;
+  const deltaText = interpreted?.offsetMode === 'magnitude'
+    ? (delta: number) => formatLengthMeters(Math.abs(delta), unit, precision)
+    : (delta: number) => formatSignedLengthMeters(delta, unit, precision);
   return deltas
-    .map((delta, index) => (
-      `${labels[index]} ${formatSignedLengthMeters(delta, unit, precision)}`
-    ))
+    .map((delta, index) => `${labels[index]} ${deltaText(delta)}`)
     .join('\n');
 }
 

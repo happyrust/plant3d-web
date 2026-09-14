@@ -503,6 +503,31 @@ export class ReferenceFrameResolver {
     return lookup.ok ? success(lookup.element) : errorForLookup(lookup, refno);
   }
 
+  /**
+   * GENSEC section frame (E3D `yDir` / `zDir`, golden G3-04). It only steers the Offset rows, so a
+   * missing or degenerate value is dropped instead of failing the frame; a usable one is normalised
+   * with the same basis policy as the main frame.
+   */
+  private readSectionBasis(
+    raw: ReferenceFrameElementData['sectionBasis'],
+    refno: string,
+  ): ReferenceFrameBasis | null {
+    if (!isRecord(raw)) return null;
+    const read = (name: 'u' | 'v' | 'w') => readFiniteVector(
+      raw[name],
+      `sectionBasis.${name}`,
+      'INVALID_FRAME_DATA',
+      'NON_FINITE_FRAME_DATA',
+      { refno },
+    );
+    const u = read('u');
+    const v = read('v');
+    const w = read('w');
+    if (!u.ok || !v.ok || !w.ok) return null;
+    const normalized = normalizeBasis(Object.freeze({ u: u.value, v: v.value, w: w.value }), this.options, refno);
+    return normalized.ok ? normalized.value.basis : null;
+  }
+
   private frameFromElement(
     element: ReferenceFrameElementData,
     selector: ReferenceFrameSelector,
@@ -592,12 +617,21 @@ export class ReferenceFrameResolver {
       }
     }
 
+    // The element type is a hint, not frame data: a missing / malformed value must not fail the frame.
+    const noun = typeof element.noun === 'string' && element.noun.trim() !== ''
+      ? element.noun.trim().toUpperCase()
+      : null;
+    // Same for the GENSEC section frame: keep it only when it is a usable orthonormal basis.
+    const sectionBasis = this.readSectionBasis(element.sectionBasis, refno);
+
     return success(Object.freeze({
       kind: 'element',
       refno,
       origin: originResult.value,
       basis: basisResult.value.basis,
       axisLabels: labelsResult.value,
+      noun,
+      sectionBasis,
       provenance: Object.freeze({
         resolution: resolutionFor(selector),
         selector,

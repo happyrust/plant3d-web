@@ -57,6 +57,17 @@ export type ReferenceFrameElementData = Readonly<{
   origin: ReferenceFrameVector3;
   basis: ReferenceFrameBasis;
   axisLabels?: ReferenceFrameAxisLabels;
+  /**
+   * E3D element type (`hardtype`, e.g. `GENSEC`, `EQUI`). Optional hint: the
+   * measurement result rules special-case GENSEC frames (`gphmeasure.pmlfrm` 396–399,
+   * golden G3-04). Unknown → treated as an ordinary element frame.
+   */
+  noun?: string | null;
+  /**
+   * GENSEC only: the section frame E3D projects the Offset rows on (X / Y = profile axes,
+   * Z = spine, i.e. the element's `yDir` / `zDir`), which differs from ORI. Absent when unknown.
+   */
+  sectionBasis?: ReferenceFrameBasis | null;
   provenance: ReferenceFrameElementProvenance;
 }>;
 
@@ -82,6 +93,10 @@ export type ResolvedReferenceFrame = Readonly<{
   origin: ReferenceFrameVector3;
   basis: ReferenceFrameBasis;
   axisLabels: ReferenceFrameAxisLabels;
+  /** Upper-cased E3D element type of an element frame when the port knew it; otherwise absent / null. */
+  noun?: string | null;
+  /** GENSEC section frame (orthonormalised) for the Offset rows; absent / null when unknown. */
+  sectionBasis?: ReferenceFrameBasis | null;
   provenance: ReferenceFrameProvenance;
 }>;
 

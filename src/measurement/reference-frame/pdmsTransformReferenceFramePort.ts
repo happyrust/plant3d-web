@@ -5,15 +5,30 @@ import type {
 } from '@/measurement/reference-frame/ports';
 import type {
   ReferenceFrameAxisLabels,
+  ReferenceFrameBasis,
   ReferenceFrameElementData,
 } from '@/measurement/reference-frame/types';
 
 import { pdmsGetTransform, type TransformResponse } from '@/api/genModelPdmsAttrApi';
+import {
+  deriveSectionBasisFromPlines,
+  type SectionPlineSample,
+} from '@/measurement/reference-frame/gensecSectionBasis';
 import { normalizeReferenceFrameRefno } from '@/measurement/reference-frame/referenceFrameResolver';
 
 export type PdmsTransformReferenceFramePortOptions = Readonly<{
   currentElementRefno: () => MaybePromise<string | null>;
   fetchTransform?: (refno: string) => Promise<TransformResponse>;
+  /**
+   * Element type lookup (E3D `hardtype`, e.g. `GENSEC`). Defaults to the active model source's
+   * tree node; any failure resolves to `null` so the frame still resolves as an ordinary element.
+   */
+  fetchNoun?: (refno: string) => Promise<string | null>;
+  /**
+   * GENSEC only: the element's catalogue p-lines (`element/plines`), from which the section frame
+   * E3D projects the Offset rows on is derived. Defaults to the gen-model-v1 endpoint; failures → `null`.
+   */
+  fetchPlines?: (refno: string) => Promise<readonly SectionPlineSample[] | null>;
   /** Source transform translation units to design-world metres. PDMS defaults to mm. */
   lengthScaleToM?: number;
   source?: string;
@@ -25,7 +40,43 @@ type TransformAdaptOptions = Readonly<{
   lengthScaleToM?: number;
   source?: string;
   axisLabels?: ReferenceFrameAxisLabels;
+  /** Element type when already known; omitted / null keeps the frame an ordinary element. */
+  noun?: string | null;
+  /** GENSEC section frame when derivable; omitted / null leaves the Offset rows on the ORI frame. */
+  sectionBasis?: ReferenceFrameBasis | null;
 }>;
+
+/**
+ * Default p-line lookup: gen-model-v1 `element/plines`. Only that source has section offsets
+ * (legacy p-lines come from parquet without them), so under `legacy` this resolves to `null`.
+ */
+async function fetchPlinesFromGenModel(refno: string): Promise<readonly SectionPlineSample[] | null> {
+  try {
+    const { getModelSourceKind } = await import('@/model-source/kind');
+    if (getModelSourceKind() !== 'gen-model-v1') return null;
+    const { genModelV1ElementPlines } = await import('@/api/genModelV1Api');
+    const response = await genModelV1ElementPlines({ refno });
+    return Array.isArray(response?.plines) ? response.plines : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Default element-type lookup: the active model source's tree node (the noun lives on the tree
+ * node under both `legacy` and `gen-model-v1`). Loaded lazily so the measurement chain does not
+ * statically depend on the model-source bundle (DuckDB-WASM under legacy).
+ */
+async function fetchNounFromModelSource(refno: string): Promise<string | null> {
+  try {
+    const { getModelSource } = await import('@/model-source');
+    const response = await getModelSource().tree.node(refno);
+    const noun = response?.node?.noun;
+    return typeof noun === 'string' && noun.trim() !== '' ? noun.trim() : null;
+  } catch {
+    return null;
+  }
+}
 
 function lookupFailure(
   reason: 'not-found' | 'unavailable' | 'invalid-data',
@@ -135,6 +186,8 @@ export function adaptPdmsTransformResponse(
       w: Object.freeze([matrix[8]!, matrix[9]!, matrix[10]!] as const),
     }),
     axisLabels: options.axisLabels ?? Object.freeze(['U', 'V', 'W'] as const),
+    ...(typeof options.noun === 'string' && options.noun.trim() !== '' ? { noun: options.noun.trim() } : {}),
+    ...(options.sectionBasis ? { sectionBasis: options.sectionBasis } : {}),
     provenance: Object.freeze({
       source,
       sourceCoordinateUnit: lengthScaleToM === 0.001 ? 'mm' : 'source-unit',
@@ -155,6 +208,8 @@ export function createPdmsTransformReferenceFramePort(
   options: PdmsTransformReferenceFramePortOptions,
 ): ReferenceFrameDataPort {
   const fetchTransform = options.fetchTransform ?? pdmsGetTransform;
+  const fetchNoun = options.fetchNoun ?? fetchNounFromModelSource;
+  const fetchPlines = options.fetchPlines ?? fetchPlinesFromGenModel;
   return Object.freeze({
     currentElementRefno: options.currentElementRefno,
     async elementByRefno(refno): Promise<ReferenceFrameElementLookup> {
@@ -163,9 +218,22 @@ export function createPdmsTransformReferenceFramePort(
         return lookupFailure('invalid-data', `Reference-frame refno is invalid: ${refno}`);
       }
       try {
-        const response = await fetchTransform(requestedRefno);
+        // The type lookup runs alongside the transform; it is a hint and never fails the frame.
+        const [response, noun] = await Promise.all([
+          fetchTransform(requestedRefno),
+          fetchNoun(requestedRefno).catch(() => null),
+        ]);
+        // GENSEC: E3D projects the Offset rows on the section frame (yDir / zDir), not ORI —
+        // derive it from the catalogue p-lines; unavailable → the ORI frame stands in.
+        let sectionBasis: ReferenceFrameBasis | null = null;
+        if (typeof noun === 'string' && noun.trim().toUpperCase() === 'GENSEC') {
+          const plines = await fetchPlines(requestedRefno).catch(() => null);
+          sectionBasis = plines && plines.length > 0 ? deriveSectionBasisFromPlines(plines) : null;
+        }
         return adaptPdmsTransformResponse(response, {
           requestedRefno,
+          noun,
+          sectionBasis,
           ...(options.lengthScaleToM === undefined
             ? {}
             : { lengthScaleToM: options.lengthScaleToM }),

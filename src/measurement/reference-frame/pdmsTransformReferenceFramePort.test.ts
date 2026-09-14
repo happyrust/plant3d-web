@@ -62,6 +62,7 @@ describe('PDMS transform reference-frame adapter', () => {
     const dataPort = createPdmsTransformReferenceFramePort({
       currentElementRefno,
       fetchTransform,
+      fetchNoun: async () => null,
     });
 
     const result = await new ReferenceFrameResolver(dataPort).resolve('CE');
@@ -69,8 +70,93 @@ describe('PDMS transform reference-frame adapter', () => {
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error(result.error.message);
     expect(result.value.origin).toEqual([1, 2, 3]);
+    expect(result.value.noun).toBeNull();
     expect(currentElementRefno).toHaveBeenCalledOnce();
     expect(fetchTransform).toHaveBeenCalledWith('24381_100');
+  });
+
+  it('carries the element type (hardtype) as a hint: adapter option, port lookup, resolver upper-cases it', async () => {
+    // Adapter: a known type lands on the element; blank / null types leave the key out.
+    const typed = adaptPdmsTransformResponse(response(), { requestedRefno: '24381_100', noun: 'gensec' });
+    expect(typed.ok && typed.element.noun).toBe('gensec');
+    const blank = adaptPdmsTransformResponse(response(), { requestedRefno: '24381_100', noun: '  ' });
+    expect(blank.ok && 'noun' in blank.element).toBe(false);
+    const missing = adaptPdmsTransformResponse(response(), { requestedRefno: '24381_100', noun: null });
+    expect(missing.ok && 'noun' in missing.element).toBe(false);
+
+    // Port: the type lookup runs alongside the transform and is normalised by the resolver (GENSEC rule key).
+    const fetchNoun = vi.fn(async (refno: string) => (refno === '24381_100' ? 'Gensec' : null));
+    const dataPort = createPdmsTransformReferenceFramePort({
+      currentElementRefno: () => null,
+      fetchTransform: async (refno) => response({ refno }),
+      fetchNoun,
+    });
+    const frame = await new ReferenceFrameResolver(dataPort).resolve('=24381/100');
+    expect(frame.ok && frame.value.noun).toBe('GENSEC');
+    expect(fetchNoun).toHaveBeenCalledWith('24381_100');
+
+    // A failing type lookup must not fail the frame: it just stays an ordinary element.
+    const failingPort = createPdmsTransformReferenceFramePort({
+      currentElementRefno: () => null,
+      fetchTransform: async (refno) => response({ refno }),
+      fetchNoun: async () => {
+        throw new Error('model tree offline');
+      },
+    });
+    const untyped = await new ReferenceFrameResolver(failingPort).resolve('=24381/100');
+    expect(untyped.ok).toBe(true);
+    expect(untyped.ok && untyped.value.noun).toBeNull();
+  });
+
+  it('derives the GENSEC section frame from the p-lines; other types never ask for them', async () => {
+    // G3-04 section frame X = W / Y = S / Z = U laid out as p-line offsets (mm) + world starts.
+    const plines = [
+      { key: 'NA', offset: [0, 0] as const, start: [15666.93, 4150, 6133] as const, dir: [0, 0, 1] as const },
+      { key: 'TOS', offset: [0, 50] as const, start: [15666.93, 4100, 6133] as const, dir: [0, 0, 1] as const },
+      { key: 'LTOS', offset: [-50, 100] as const, start: [15716.93, 4050, 6133] as const, dir: [0, 0, 1] as const },
+    ];
+    const fetchPlines = vi.fn(async () => plines);
+    const nouns: Record<string, string> = { '24381_100': 'GENSEC', '24381_101': 'SCTN' };
+    const dataPort = createPdmsTransformReferenceFramePort({
+      currentElementRefno: () => null,
+      fetchTransform: async (refno) => response({ refno }),
+      fetchNoun: async (refno) => nouns[refno] ?? null,
+      fetchPlines,
+    });
+    const resolver = new ReferenceFrameResolver(dataPort);
+
+    const gensec = await resolver.resolve('=24381/100');
+    expect(gensec.ok).toBe(true);
+    if (!gensec.ok) throw new Error(gensec.error.message);
+    expect(fetchPlines).toHaveBeenCalledWith('24381_100');
+    const expectBasis = (actual: { u: readonly number[]; v: readonly number[]; w: readonly number[] } | null | undefined, expected: number[][]) => {
+      expect(actual).toBeTruthy();
+      [actual!.u, actual!.v, actual!.w].forEach((axis, index) => {
+        expected[index]!.forEach((value, component) => expect(axis[component]).toBeCloseTo(value, 9));
+      });
+    };
+    // The ORI frame from the transform (X = N / Y = W) is kept for the frame itself…
+    expectBasis(gensec.value.basis, [[0, 1, 0], [-1, 0, 0], [0, 0, 1]]);
+    // …while the section frame rides along for the Offset rows.
+    expectBasis(gensec.value.sectionBasis, [[-1, 0, 0], [0, -1, 0], [0, 0, 1]]);
+
+    const sctn = await resolver.resolve('=24381/101');
+    expect(sctn.ok && sctn.value.noun).toBe('SCTN');
+    expect(sctn.ok && sctn.value.sectionBasis).toBeNull();
+    expect(fetchPlines).toHaveBeenCalledTimes(1);
+
+    // A failing / empty p-line lookup keeps the GENSEC frame and just drops the section frame.
+    const noPlines = createPdmsTransformReferenceFramePort({
+      currentElementRefno: () => null,
+      fetchTransform: async (refno) => response({ refno }),
+      fetchNoun: async () => 'GENSEC',
+      fetchPlines: async () => {
+        throw new Error('plines offline');
+      },
+    });
+    const fallback = await new ReferenceFrameResolver(noPlines).resolve('=24381/100');
+    expect(fallback.ok && fallback.value.noun).toBe('GENSEC');
+    expect(fallback.ok && fallback.value.sectionBasis).toBeNull();
   });
 
   it.each([
@@ -133,6 +219,7 @@ describe('PDMS transform reference-frame adapter', () => {
       fetchTransform: async () => {
         throw new Error('network offline');
       },
+      fetchNoun: async () => null,
     });
     const unavailable = await dataPort.elementByRefno('24381/100');
     expect(unavailable).toMatchObject({
