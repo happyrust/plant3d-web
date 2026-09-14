@@ -364,7 +364,7 @@ describe('region-v1 · 呈现', () => {
     tools.updateOverlayPositions();
     tools.resetCloudRenderStats();
     for (let i = 0; i < 120; i++) tools.updateOverlayPositions();
-    expect(tools.debugCloudRenderStats()).toEqual({ frames: 120, contourBuilds: 0, setPoints: 0, labelLayouts: 0, paintUpdates: 0, lodPlans: 0 });
+    expect(tools.debugCloudRenderStats()).toEqual({ frames: 120, contourBuilds: 0, setPoints: 0, labelLayouts: 0, paintUpdates: 0, lodPlans: 0, inspectionRays: 0 });
 
     const anchorBefore = tools.debugCloudRegionRender()[0]!.phaseAnchorId;
     camera.position.x += 0.3;

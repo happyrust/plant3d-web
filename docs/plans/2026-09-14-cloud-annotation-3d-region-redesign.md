@@ -586,7 +586,7 @@ export function inspectionFactor(mode: 'always-on-top' | 'inspection', probes: r
 | **P2 范围体呈现**（✅ 2026-09-14 落地，§18） | `cloudProjectedEnvelope`（= 交互方案 `annotationUx.projectedEnvelope`，落在 P1 同一开关族 `useCloudRenderFlags`） | 首项 `DTXLayer.getObjectLocalBoxAndWorldMatrixInto`（§4.1）；并行几何内核（§4.1–4.5、4.7）、创建时写 `regionV1(obb-union, origin:'members')` + `viewpointV1.creation`；最小来源校验与 epoch 隔离、`globalModelMatrix` 重映射（§8） | 多机位包含、裁剪连续性、相位测试通过；目标范围不完整（`coverage` 不足）时不写新版记录；关闭后兼容显示，保留新字段 |
 | **P2.5 局部套索（可选，后置）** | `cloudUserVolume` | §4.8 截锥扫掠体 + 深度调整交互 | 套索验收口径按 `origin:'user-volume'`；拒绝自交 |
 | **P3 共享范围体**（✅ 2026-09-14 落地，§19） | `annotationSharedRegion` | rect / obb 新建走 `primitiveFromPlacement`（§7）；完整失效与重绑 member 交互（§8） | 真 OBB / 剪切分支、部分加载、版本切换、原子重绑；旧记录不自动迁移 |
-| **P4 性能与显示**（LOD + 图钉聚合 ✅ 2026-09-15 落地，§20；合批 / inspection 未动） | `cloudAdaptiveLod`（= `annotationUx.adaptiveLod`）、`cloudBatching`、`cloudInspectionFade` | LOD（§9.3）→ 合批（§9.2）→ 按数据决定 GPU 波浪；inspection 最后单开（§10） | 合批前后几何等价、无跨线连接、调用预算；任一优化可退回 CPU 基线 |
+| **P4 性能与显示**（LOD + 图钉聚合 + inspection ✅ 2026-09-15 落地，§20；合批按实测决定、未动） | `cloudAdaptiveLod`（= `annotationUx.adaptiveLod`）、`cloudBatching`、`cloudInspectionFade` | LOD（§9.3）→ 合批（§9.2）→ 按数据决定 GPU 波浪；inspection 最后单开（§10） | 合批前后几何等价、无跨线连接、调用预算；任一优化可退回 CPU 基线 |
 
 回退不能绕过来源校验：新版来源不匹配时，即便退回旧外观也只能按快照降级，不能重新启用「当前模型 AABB 自愈」。
 
@@ -895,7 +895,28 @@ P0 已提交：`af4b382`（15 文件；`useToolStore.ts` 只取云线 hunk）。
 - LOD 与聚合只覆盖云线（轮廓 / 文字框是每帧成本所在）；rect / obb 线框是静态几何、文字批注只有 DOM，上千条时的文字框 DOM 惰性挂载与图钉聚合可沿 `mountCloudLabel` / `applyPinClusters` 同法推广，未做。
 - 预算 64 / 滞回 16 是 §14 #9 的初值，未按真机数据调；没有做「相机运动中用简化框、停止后精化」（交互方案 §3.4），运动中 full 档仍每帧全算。
 - 优先级只看锚点到视口中心的距离；投影尺寸（远处极小的目标本可先降）没进公式——它需要先算包围盒投影，与「pin 档不算凸包」相悖，若要引入应用 `worldPos` 到相机距离的廉价代理。
-- P4 其余：合批（§9.2，按实测决定）、GPU 波浪、inspection 淡化（§10，复用 ADR-0061 `isSegmentBlocked`，α 对齐尺寸系统 `theme.inspection`）仍未动。
+- P4 其余：合批（§9.2，按实测决定）、GPU 波浪仍未动；inspection 淡化见 20.2。
+
+### 20.2 inspection 遮挡淡化（同日第三次提交）
+
+用户口径「继续 P4：inspection 遮挡淡化（§10，复用 ADR-0061 isSegmentBlocked，默认置顶、独立开关 cloudInspectionFade）」。开关默认开，但**显示模式默认仍是置顶**——模式与尺寸面板同一口径（URL `mbd_mode=inspection`，`DimensionPanelDock` 的检视单选），所以开关开着不改变现状；任何模式 `depthTest` 仍 false，inspection 只调 α。
+
+| # | 内容 | 落点 |
+|---|---|---|
+| 1 | **复用 ADR-0061 的缝**：`dtxDimensionViewerAdapter.isSegmentBlocked` 的世界坐标内核抽成导出函数 `isWorldSegmentBlocked(layer, origin, target, toleranceWorld, hints)`（`subject` 排除该构件各片、`onModel` 排除包着目标点的体，逻辑一字未改），原函数只剩 Design → World 换算后调它；`@/dimension` 门面另导出 `SOLVESPACE_DIMENSION_THEME`（云线取 `theme.inspection.occludedAlpha / toleranceMm / tolerancePx`，不另定常量） | `dtxDimensionViewerAdapter.ts`、`dimension/index.ts` |
+| 2 | **纯函数** `inspectionFactor(mode, probes, emphasized, snapshotInvalid, occludedAlpha)`（§10 原文：置顶 / 强调 / 快照失效 → 1；有样本且**全部** blocked → α；有 clear / unknown 保守保持 1）；`chooseInspectionProbeMembers(region, memberRefnos, fallbackPoint, max=3)`：`origin:'members'` 范围体每个成员取第一个盒中心、按 refno 排序均匀挑首 / 中 / 尾；无范围体退到目标合并 AABB 中心 × 前 3 个成员；`inspectionModeFromSearch` 解析 `mbd_mode` | `annotationProjection/inspection.ts`（+8 例 `inspection.test.ts`，含 `isWorldSegmentBlocked` 用真 DTXLayer 的 blocked / subject 排除 / 挪开 / 容差 / 零长） |
+| 3 | **探测**（`probeCloudOcclusion`）：每个样本先从相机向成员盒中心打射线、要**命中成员自己的表面**（`resolveRegionObjectIdsForRefno` 的各片取最近命中；没命中 = `unknown`），再问缝「相机 → 命中点之间有没有别的可见几何」（成员 refno 作 `subject`）；容差 = max(`toleranceMm` × 全局矩阵缩放, `tolerancePx` × 命中点处每像素世界长度) | `useDtxTools.ts` |
+| 4 | **时机**：渲染循环只记「待探」（检视模式 + full 档 + 非强调 + 非失效 + 探测键「相机 \| 模型 epoch \| 全局矩阵 \| 记录版本」变了），射线在**相机停下 120 ms**（settle 定时器，帧内反复重排即防抖）后由 `runCloudInspection` 打，因子变了请一帧、paint 阶段刷材质；置顶模式 / 开关关 **零射线**（`CloudRenderStats.inspectionRays`）；LOD pin 档不探（降档时因子回 1） | 同上 |
+| 5 | **应用**：paint 阶段透明度乘因子——轮廓（含备用段，共用材质）/ bbox3d 盒边 / 锚点小针（按需置 `transparent`）/ 引线 core + halo；**文字框 DOM、图钉、STALE 徽标不淡**（保持可读）；强调（激活 / 悬停 / 拖动 / 待编辑）与失效记录因子恒 1；回到置顶模式那一帧因子归 1、材质回样式值 | 同上 |
+| 6 | 调试出口 `debugCloudInspection()`（模式 / 是否待探 / 每条因子 · 样本 · 探测键 · 轮廓与引线当前透明度）、`setCloudInspectionMode(mode \| null)`（覆盖 / 跟随 URL）、`runCloudInspectionNow()` | 同上 |
+| 7 | **验收测试**（7 例 `useDtxTools.cloudInspection.test.ts`，真 DTXLayer：单位盒成员 + z=10 的 6×6 平板挡板）：默认置顶 120 帧零射线、因子 1、透明度 = 样式值；开关关即便覆盖检视也置顶零射线；挡板在前 → `['blocked']`、轮廓 = 样式 α × 0.35、引线同比、文字框 DOM 不动、静止 120 帧 + 再探不加射线、回置顶立刻回 1；挡板挪开 → `clear` → 1，范围体中心指向空处 → `unknown` → 1；激活 / 悬停不探零射线、取消后才探；假定时器：settle 150 ms 后自动探，相机绕到侧面后重探回 1；旧记录（legacy-v0）以 AABB 中心探同样 blocked | 新增 |
+
+**验证**（2026-09-15 06:1x–06:3x，本机）：`npx vitest run` 全量见提交信息（相关套件 `inspection` 8 + `cloudInspection` 7 + `dtxDimensionViewerAdapter` 6 + 云线其它 66 全绿；三处既有「静止零重建」断言补 `inspectionRays: 0`）；`npm run type-check` 本次文件 0 条新增（剩 1 条基线外仍是未触碰的 `resolveLabelCollisions.test.ts`）；`npx eslint` 改动文件 0 错误。未跑 Playwright；真机要看：尺寸面板切「检视」后，被前景管道挡住的云线是否淡到约 35 %、转到侧面是否恢复、激活的那条始终清晰。
+
+**遗留 / 后续**：
+- 样本只取成员盒中心一条射线（≤ 3 个成员），大构件被局部遮挡时可能判 clear（保守方向）；顶点级采样待 §4.6 顶点代理落地后再议。
+- 模式读 URL `mbd_mode`（尺寸面板用 `history.replaceState` 写、不发事件），云线侧按 `location.search` 字串缓存每帧比对；若尺寸面板日后改成共享 store，这里改一处 `currentCloudInspectionMode` 即可。
+- rect / obb 线框、文字批注引线不参与淡化；合批（§9.2）仍按「实测数据决定」未动——至此 §11 P4 只剩它与 GPU 波浪。
 
 ---
 

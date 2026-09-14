@@ -330,7 +330,7 @@ describe('cloudAdaptiveLod · 超预算', () => {
     tools.updateOverlayPositions();
     tools.resetCloudRenderStats();
     for (let i = 0; i < 120; i++) tools.updateOverlayPositions();
-    expect(tools.debugCloudRenderStats()).toEqual({ frames: 120, contourBuilds: 0, setPoints: 0, labelLayouts: 0, paintUpdates: 0, lodPlans: 0 });
+    expect(tools.debugCloudRenderStats()).toEqual({ frames: 120, contourBuilds: 0, setPoints: 0, labelLayouts: 0, paintUpdates: 0, lodPlans: 0, inspectionRays: 0 });
   });
 
   it('syncFromStore 重建后滞回记忆保留：同一机位重建，集合与重建前一致；删掉的记录不占名额', () => {

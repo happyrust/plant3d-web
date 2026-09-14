@@ -44,6 +44,7 @@ import {
   sameDegrade,
 } from '@/composables/annotationDegradeViewport';
 import { buildRecordDegradeKey, useAnnotationBindingResolve } from '@/composables/useAnnotationBindingResolve';
+import { useAnnotationDraftSession } from '@/composables/useAnnotationDraftSession';
 import { useAnnotationStyleStore } from '@/composables/useAnnotationStyleStore';
 import { isCloudRenderFlagEnabled } from '@/composables/useCloudRenderFlags';
 import {
@@ -54,7 +55,6 @@ import {
   getDtxRefnoTransform,
   resolveDtxObjectIdsByRefno,
 } from '@/composables/useDbnoInstancesDtxLoader';
-import { useAnnotationDraftSession } from '@/composables/useAnnotationDraftSession';
 import { ensurePanelAndActivate } from '@/composables/useDockApi';
 import { useReviewStore } from '@/composables/useReviewStore';
 import { useScreenshot } from '@/composables/useScreenshot';
@@ -62,6 +62,7 @@ import { useSelectionStore } from '@/composables/useSelectionStore';
 import { buildCloudBindings, getCloudMemberRefnos, useToolStore, type AnnotationRecord, type CloudAnnotationRecord, type CloudElementBinding, type DistanceMeasurementRecord, type MeasurementPoint, type Obb, type ObbAnnotationRecord, type RectAnnotationRecord, type Vec3 } from '@/composables/useToolStore';
 import { useUnitSettingsStore } from '@/composables/useUnitSettingsStore';
 import { useUserStore } from '@/composables/useUserStore';
+import { SOLVESPACE_DIMENSION_THEME, isWorldSegmentBlocked } from '@/dimension';
 import {
   DEFAULT_CLOUD_REGION_RENDER_STYLE,
   liftScreenPolylineToBillboard,
@@ -89,6 +90,13 @@ import {
   type CloudRenderStamp,
   type ValueVersionTracker,
 } from '@/review/domain/annotationProjection/dirty';
+import {
+  chooseInspectionProbeMembers,
+  inspectionFactor,
+  inspectionModeFromSearch,
+  type CloudInspectionMode,
+  type OcclusionProbe,
+} from '@/review/domain/annotationProjection/inspection';
 import {
   DEFAULT_LABEL_PREFERENCE,
   labelOffsetFromTopLeft,
@@ -223,6 +231,13 @@ type CloudRenderCache = {
   /** 最近一次规划时的优先级 / 固定高档标记（调试用） */
   lodPriority: number
   lodPinnedHigh: boolean
+  /**
+   * P4 inspection（方案 §10，开关 `cloudInspectionFade`）：透明度因子（1 = 不淡），随 paint 阶段乘进轮廓 / 盒边 / 小针 / 引线；
+   * `inspectionKey` = 上次探测时的「相机 | 模型 epoch | 全局矩阵 | 记录版本」，没变不再打射线；`inspectionProbes` 是上次样本结果
+   */
+  inspectionFactor: number
+  inspectionKey: string
+  inspectionProbes: OcclusionProbe[]
 }
 
 function createCloudRenderCache(): CloudRenderCache {
@@ -249,6 +264,9 @@ function createCloudRenderCache(): CloudRenderCache {
     lodApplied: null,
     lodPriority: 0,
     lodPinnedHigh: false,
+    inspectionFactor: 1,
+    inspectionKey: '',
+    inspectionProbes: [],
   };
 }
 
@@ -287,6 +305,8 @@ export type CloudRenderStats = {
   paintUpdates: number
   /** P4 LOD 计划重算次数：相机 / 视口 / 集合 / 激活 / 拖动 / 悬停都没变时为零 */
   lodPlans: number
+  /** P4 inspection 打出的射线（成员表面命中 + 遮挡段探测各算一次）：置顶模式 / 开关关一律为零 */
+  inspectionRays: number
 }
 
 /** `debugCloudLod()` 的快照：P4 LOD 本帧计划 */
@@ -298,6 +318,14 @@ export type CloudLodDebugSnapshot = {
   pinCount: number
   hoveredId: string | null
   items: { id: string; level: CloudLodLevel; applied: CloudLodLevel | null; priority: number; pinnedHigh: boolean; labelMounted: boolean }[]
+}
+
+/** `debugCloudInspection()` 的快照：P4 遮挡淡化 */
+export type CloudInspectionDebugSnapshot = {
+  mode: CloudInspectionMode
+  pending: boolean
+  occludedAlpha: number
+  items: { id: string; factor: number; probes: OcclusionProbe[]; key: string; outlineOpacity: number; leaderOpacity: number }[]
 }
 
 /** `debugCloudClusters()` 的快照：pin 档图钉的屏幕聚合 */
@@ -3707,7 +3735,17 @@ export function useDtxTools(options: {
     shapeStyle: createValueVersionTracker<string>(),
     paintStyle: createValueVersionTracker<string>(),
   };
-  const cloudRenderStats: CloudRenderStats = { frames: 0, contourBuilds: 0, setPoints: 0, labelLayouts: 0, paintUpdates: 0, lodPlans: 0 };
+  const cloudRenderStats: CloudRenderStats = { frames: 0, contourBuilds: 0, setPoints: 0, labelLayouts: 0, paintUpdates: 0, lodPlans: 0, inspectionRays: 0 };
+
+  // P4 inspection（方案 §10）：模式跟尺寸面板同一口径（URL `mbd_mode=inspection`），测试 / 外部可覆盖；
+  // 射线只在相机停下（帧后 120 ms 没再动）才打，且只探 full 档、非强调、非失效的云线
+  let cloudInspectionModeOverride: CloudInspectionMode | null = null;
+  let cloudInspectionSearchCache = { search: '', mode: 'always-on-top' as CloudInspectionMode };
+  let cloudInspectionTimer: ReturnType<typeof setTimeout> | null = null;
+  let cloudInspectionPending = false;
+  const CLOUD_INSPECTION_SETTLE_MS = 120;
+  const CLOUD_INSPECTION_MAX_PROBES = 3;
+  const inspectionScratch = { origin: new Vector3(), point: new Vector3(), direction: new Vector3(), hit: new Vector3() };
 
   // P4 LOD（方案 §9.3）：上一次计划的等级按 `cloud:${id}` 记在这里——跨 syncFromStore 重建保留，滞回才有依据；
   // planKey 是上次规划时的输入指纹（相机 / 投影 / 视口 / 集合 / 激活 / 拖动 / 悬停 / 待编辑），没变就不重算
@@ -4461,6 +4499,156 @@ export function useDtxTools(options: {
     }
   }
 
+  // ---------------- P4 inspection：遮挡淡化（方案 §10） ----------------
+
+  /** 当前模式：开关关 → 置顶；否则测试 / 外部覆盖优先，再看 URL `mbd_mode`（与尺寸面板同一口径，按 search 字串缓存） */
+  function currentCloudInspectionMode(): CloudInspectionMode {
+    if (!isCloudRenderFlagEnabled('cloudInspectionFade')) return 'always-on-top';
+    if (cloudInspectionModeOverride) return cloudInspectionModeOverride;
+    const search = typeof window !== 'undefined' ? (window.location?.search ?? '') : '';
+    if (search !== cloudInspectionSearchCache.search) {
+      cloudInspectionSearchCache = { search, mode: inspectionModeFromSearch(search) };
+    }
+    return cloudInspectionSearchCache.mode;
+  }
+
+  /** 覆盖检视模式（null = 跟随 URL）；立刻重排一帧让因子回位 / 触发探测 */
+  function setCloudInspectionMode(mode: CloudInspectionMode | null): void {
+    if (cloudInspectionModeOverride === mode) return;
+    cloudInspectionModeOverride = mode;
+    updateOverlayPositions();
+    requestRender?.();
+  }
+
+  /** 强调 = 激活 / 悬停 / 拖动中 / 待编辑：inspection 不淡它，LOD 也固定高档 */
+  function isCloudEmphasized(cloud: CloudOverlayEl): boolean {
+    const id = cloud.record.id;
+    const drag = inlineOverlayAnnotationDrag.value;
+    return store.activeCloudAnnotationId.value === id
+      || hoveredCloudAnnotationId === id
+      || (drag.annotationKind === 'cloud' && drag.annotationId === id)
+      || store.pendingCloudAnnotationEditId.value === id
+      || cloud.render.labelDragTopLeft !== null;
+  }
+
+  /**
+   * 探一条云线：≤ 3 个代表性成员，每个先从相机向它的放置盒中心打射线、要**命中成员自己的表面**（否则 `unknown`），
+   * 再问 ADR-0061 的缝：相机 → 命中点之间有没有别的可见几何（成员 refno 作 `subject`，排除它自己的各片）。
+   * 容差 = max(尺寸系统 toleranceMm × 全局矩阵缩放, tolerancePx × 命中点处每像素世界长度)。
+   */
+  function probeCloudOcclusion(cloud: CloudOverlayEl, camera: any, canvas: HTMLCanvasElement): OcclusionProbe[] {
+    const layer = dtxLayerRef.value;
+    if (!layer) return [];
+    const members = getCloudMemberRefnos(cloud.record);
+    let fallback: readonly [number, number, number] | null = null;
+    if (!cloud.render.regionCells) {
+      const sb = resolveCloudTargetBbox(cloud);
+      if (sb) fallback = [(sb.min[0] + sb.max[0]) / 2, (sb.min[1] + sb.max[1]) / 2, (sb.min[2] + sb.max[2]) / 2];
+    }
+    const samples = chooseInspectionProbeMembers(cloud.render.regionCells ? cloud.record.regionV1 : null, members, fallback, CLOUD_INSPECTION_MAX_PROBES);
+    if (samples.length === 0) return [];
+    const origin = camera.getWorldPosition(inspectionScratch.origin);
+    const mmToWorld = layer.getGlobalModelMatrix().getMaxScaleOnAxis();
+    const toleranceFromMm = SOLVESPACE_DIMENSION_THEME.inspection.toleranceMm * (Number.isFinite(mmToWorld) && mmToWorld > 0 ? mmToWorld : 0);
+    const out: OcclusionProbe[] = [];
+    for (const sample of samples) {
+      const point = inspectionScratch.point.set(sample.point[0], sample.point[1], sample.point[2]);
+      const direction = inspectionScratch.direction.subVectors(point, origin);
+      const length = direction.length();
+      if (!(length > 0)) {
+        out.push('unknown');
+        continue;
+      }
+      direction.divideScalar(length);
+      let nearest: { point: Vector3; distance: number } | null = null;
+      for (const objectId of resolveRegionObjectIdsForRefno(layer, sample.refno)) {
+        cloudRenderStats.inspectionRays += 1;
+        const hit = layer.raycastObject(objectId, origin, direction);
+        if (hit && (!nearest || hit.distance < nearest.distance)) nearest = hit;
+      }
+      if (!nearest) {
+        out.push('unknown');
+        continue;
+      }
+      const hitPoint = inspectionScratch.hit.copy(nearest.point);
+      const perPixel = worldPerPixelAt(camera, hitPoint, Math.max(1, canvas.clientWidth), Math.max(1, canvas.clientHeight));
+      const tolerance = Math.max(toleranceFromMm, Number.isFinite(perPixel) ? SOLVESPACE_DIMENSION_THEME.inspection.tolerancePx * perPixel : 0);
+      cloudRenderStats.inspectionRays += 1;
+      out.push(isWorldSegmentBlocked(layer, origin, hitPoint, tolerance, { subject: sample.refno }) ? 'blocked' : 'clear');
+    }
+    return out;
+  }
+
+  function cloudInspectionKey(cloud: CloudOverlayEl, frame: { cameraWorld: number; modelEpoch: number; globalModelMatrix: number }): string {
+    return `${frame.cameraWorld}|${frame.modelEpoch}|${frame.globalModelMatrix}|${cloud.render.recordTracker.version}`;
+  }
+
+  /** 相机停下之后跑：给所有该探而没探过（key 变了）的 full 档云线打射线；因子变了就请一帧，paint 阶段按新因子刷材质 */
+  function runCloudInspection(): void {
+    if (cloudInspectionTimer !== null) {
+      clearTimeout(cloudInspectionTimer);
+      cloudInspectionTimer = null;
+    }
+    cloudInspectionPending = false;
+    const viewer = dtxViewerRef.value;
+    const canvas = viewer?.canvas;
+    if (!viewer || !canvas || currentCloudInspectionMode() !== 'inspection') return;
+    const frame = {
+      cameraWorld: cloudFrameTrackers.cameraWorld.version,
+      modelEpoch: dtxLoaderRevision.value,
+      globalModelMatrix: cloudFrameTrackers.globalModelMatrix.version,
+    };
+    const occludedAlpha = SOLVESPACE_DIMENSION_THEME.inspection.occludedAlpha;
+    let changed = false;
+    for (const cloud of cloudShapes.values()) {
+      if (cloud.render.lodLevel !== 'full' || cloud.degrade || isCloudEmphasized(cloud)) continue;
+      const key = cloudInspectionKey(cloud, frame);
+      if (cloud.render.inspectionKey === key) continue;
+      const probes = probeCloudOcclusion(cloud, viewer.camera, canvas);
+      const factor = inspectionFactor('inspection', probes, false, false, occludedAlpha);
+      cloud.render.inspectionKey = key;
+      cloud.render.inspectionProbes = probes;
+      if (cloud.render.inspectionFactor !== factor) {
+        cloud.render.inspectionFactor = factor;
+        changed = true;
+      }
+    }
+    if (changed) requestRender?.();
+  }
+
+  function scheduleCloudInspection(): void {
+    if (cloudInspectionTimer !== null) clearTimeout(cloudInspectionTimer);
+    cloudInspectionTimer = setTimeout(runCloudInspection, CLOUD_INSPECTION_SETTLE_MS);
+  }
+
+  /** 测试 / 调试：不等相机停下，立刻探一遍并把因子刷进材质（先跑一帧让版本戳对上当前相机） */
+  function runCloudInspectionNow(): void {
+    updateOverlayPositions();
+    runCloudInspection();
+    updateOverlayPositions();
+  }
+
+  /** e2e / 单测：inspection 当前模式、是否有待探、每条云线的因子 / 样本 / 探测键 */
+  function debugCloudInspection(): CloudInspectionDebugSnapshot {
+    const items: CloudInspectionDebugSnapshot['items'] = [];
+    for (const [id, cloud] of cloudShapes.entries()) {
+      items.push({
+        id,
+        factor: cloud.render.inspectionFactor,
+        probes: [...cloud.render.inspectionProbes],
+        key: cloud.render.inspectionKey,
+        outlineOpacity: (cloud.outline.material as MeshLineMaterial).opacity,
+        leaderOpacity: cloud.leader.coreMaterial.opacity,
+      });
+    }
+    return {
+      mode: currentCloudInspectionMode(),
+      pending: cloudInspectionPending || cloudInspectionTimer !== null,
+      occludedAlpha: SOLVESPACE_DIMENSION_THEME.inspection.occludedAlpha,
+      items,
+    };
+  }
+
   function syncFromStore() {
     const viewer = dtxViewerRef.value;
     const overlay = overlayContainerRef.value;
@@ -5005,6 +5193,9 @@ export function useDtxTools(options: {
 
     // ---- P4 LOD（方案 §9.3）：超预算时先定本帧谁算全轮廓、谁只留图钉；相机 / 视口 / 集合 / 交互态没变就复用上次计划 ----
     const lodReplanned = planCloudLodForFrame(viewer.camera, `${frameStamp.cameraWorld}|${frameStamp.projection}|${frameStamp.viewportCss}`);
+    // ---- P4 inspection（方案 §10）：本帧的显示模式，一帧读一次 ----
+    const inspectionMode = currentCloudInspectionMode();
+    cloudInspectionPending = false;
 
     for (const cloud of cloudShapes.values()) {
       // ---- LOD 切档：pin 档整条跳过（不解析目标 AABB、不算凸包、不 setPoints、不排文字框），只剩 DOM 图钉 ----
@@ -5019,6 +5210,9 @@ export function useDtxTools(options: {
           cloud.render.frame = null;
           cloud.render.regionPhase = null;
           cloud.render.stamp = null;
+          cloud.render.inspectionFactor = 1;
+          cloud.render.inspectionKey = '';
+          cloud.render.inspectionProbes = [];
         }
         // 降级徽标跟着图钉走（没有参考框）
         if (cloud.badgeEl) {
@@ -5079,10 +5273,22 @@ export function useDtxTools(options: {
       const labelV1 = !!labelEntry && !!layoutRecord;
       // 文字框实测尺寸是 label 阶段的依赖（字体加载完、文字改了都会变）；布局干净时读 offsetWidth 不触发回流
       const measured = labelV1 && labelEntry ? measureLabelSize(labelEntry.el) : null;
+
+      // ---- P4 inspection（方案 §10）：检视模式下、非强调、非失效的云线，相机 / 模型 / 记录变了就记一笔「待探」，
+      // 射线在相机停下（settle）后由 runCloudInspection 打；置顶模式 / 强调 / 失效一律因子 1（STALE 提示要可读）----
+      if (inspectionMode === 'inspection' && !cloud.degrade && !isCloudEmphasized(cloud)) {
+        if (cloud.render.inspectionKey !== cloudInspectionKey(cloud, frameStamp)) cloudInspectionPending = true;
+      } else if (cloud.render.inspectionFactor !== 1 || cloud.render.inspectionKey !== '') {
+        cloud.render.inspectionFactor = 1;
+        cloud.render.inspectionKey = '';
+        cloud.render.inspectionProbes = [];
+      }
+      const inspectionAlpha = cloud.render.inspectionFactor;
+
       const stamp: CloudRenderStamp = {
         ...frameStamp,
-        // paint 版本叠上本条记录的降级态：解析表让它 missing / stale（或恢复）时，只有它重刷材质
-        paintStyle: cloud.render.paintTracker.update(`${frameStamp.paintStyle}|${cloud.degrade?.state ?? ''}`),
+        // paint 版本叠上本条记录的降级态与 inspection 因子：解析表让它 missing / stale（或恢复）、遮挡淡化变了，只有它重刷材质
+        paintStyle: cloud.render.paintTracker.update(`${frameStamp.paintStyle}|${cloud.degrade?.state ?? ''}|${inspectionAlpha}`),
         targetBounds: cloud.render.targetBoundsTracker.update(sb ? [...sb.min, ...sb.max] : EMPTY_BOUNDS),
         bindings: recordVersion,
         effectiveRegion: cloud.render.regionCellsTracker.update(regionCells),
@@ -5097,15 +5303,24 @@ export function useDtxTools(options: {
 
       if (dirty.paint) {
         // ADR-0050 视口降级：missing / stale 的记录轮廓 / 盒边 / 小针一律灰 + 虚线（outlineExtra 与 outline 共用材质）
+        // P4 inspection：透明度再乘遮挡因子（只调 α，depthTest 仍 false）；文字框 DOM / 图钉 / 徽标不淡，保持可读
         const outlineMat = cloud.outline.material as MeshLineMaterial;
         applyMeshLineDegrade(outlineMat, cloudStyle.color, cloud.degrade);
-        outlineMat.opacity = cloudStyle.opacity;
+        outlineMat.opacity = cloudStyle.opacity * inspectionAlpha;
         outlineMat.lineWidth = cloudStyle.lineWidth;
         outlineMat.resolution.set(resolution.width, resolution.height);
         const bboxMat = cloud.bboxEdges.material as LineDashedMaterial;
         applyDashedLineDegrade(bboxMat, cloudStyle.color, cloud.degrade, dashSizeFromLineSegments(cloud.bboxEdges));
-        bboxMat.opacity = cloudStyle.opacity;
-        applyDashedLineDegrade(cloud.pin.material as LineDashedMaterial, cloudStyle.color, cloud.degrade, cloud.pinDashSize);
+        bboxMat.opacity = cloudStyle.opacity * inspectionAlpha;
+        const pinMat = cloud.pin.material as LineDashedMaterial;
+        applyDashedLineDegrade(pinMat, cloudStyle.color, cloud.degrade, cloud.pinDashSize);
+        if (inspectionAlpha < 1 || pinMat.transparent) {
+          pinMat.transparent = true;
+          pinMat.opacity = inspectionAlpha;
+        }
+        const leaderStyle = buildAnnotationLeaderStyle('cloud');
+        cloud.leader.coreMaterial.opacity = leaderStyle.opacity * inspectionAlpha;
+        cloud.leader.haloMaterial.opacity = leaderStyle.haloOpacity * inspectionAlpha;
         cloudRenderStats.paintUpdates += 1;
       }
 
@@ -5411,6 +5626,13 @@ export function useDtxTools(options: {
     }
     if (clusterItems) applyPinClusters(clusterItems);
 
+    // 检视模式下有云线待探：等相机停下（settle）再打射线；置顶模式下不会有待探，也就一条射线都不打
+    if (cloudInspectionPending) scheduleCloudInspection();
+    else if (cloudInspectionTimer !== null && inspectionMode !== 'inspection') {
+      clearTimeout(cloudInspectionTimer);
+      cloudInspectionTimer = null;
+    }
+
     for (const it of labels.values()) {
       if (it.layoutMode === 'v1') continue;
       const p = worldToOverlay(viewer.camera, canvas, overlay, it.worldPos);
@@ -5538,6 +5760,7 @@ export function useDtxTools(options: {
     cloudRenderStats.labelLayouts = 0;
     cloudRenderStats.paintUpdates = 0;
     cloudRenderStats.lodPlans = 0;
+    cloudRenderStats.inspectionRays = 0;
   }
 
   /** e2e / 单测：pin 档图钉的屏幕聚合快照——每簇种子 / 位置 / 成员，被藏起的图钉，弹出列表对着哪一簇 */
@@ -5785,6 +6008,11 @@ export function useDtxTools(options: {
     cloudLodPlanKey = '';
     hoveredCloudAnnotationId = null;
     clusterSeedOf = new Map();
+    if (cloudInspectionTimer !== null) {
+      clearTimeout(cloudInspectionTimer);
+      cloudInspectionTimer = null;
+    }
+    cloudInspectionPending = false;
 
     if (marqueeDiv.value) {
       try { marqueeDiv.value.remove(); } catch { /* ignore */ }
@@ -6727,6 +6955,10 @@ export function useDtxTools(options: {
     openClusterPopover,
     closeClusterPopover,
     flyToCloudAnnotations,
+    // P4 inspection：遮挡淡化快照；覆盖显示模式（null = 跟随 URL mbd_mode）；不等相机停下立刻探一遍
+    debugCloudInspection,
+    setCloudInspectionMode,
+    runCloudInspectionNow,
     // ADR-0050 视口降级：解析表变化后就地换外观（watch 已接；这里给测试直接调）与当前外观快照
     applyBindingDegrade,
     debugAnnotationDegrades,

@@ -19,6 +19,8 @@ export * from './domain/types';
 export * from './export/svgOverlay';
 export * from './facade/createDimensionSystem';
 export * from './interaction/editSession';
+// 主题常量给视口里的其它叠层对齐（云线 inspection 淡化取 `theme.inspection`，方案 §10），不暴露内核其余部分
+export { SOLVESPACE_DIMENSION_THEME, type DimensionTheme } from './kernel/theme';
 export * from './ports/anchorResolver';
 export * from './ports/repository';
 export * from './ports/snapPort';

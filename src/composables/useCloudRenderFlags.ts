@@ -15,6 +15,9 @@
  * - `cloudAdaptiveLod`（P4，= 交互方案 `annotationUx.adaptiveLod`，方案 §9.3）：云线超过 64 条时全轮廓只留激活 / 拖动 / 悬停的
  *   与视口中心附近的 64 条（滞回 16），其余只画图钉——不算凸包、不 `setPoints`、不建完整文字 DOM。运行时决策，不改记录、不写 `visible`。
  *   关掉后：所有可见云线一律全轮廓（现状）。
+ * - `cloudInspectionFade`（P4，方案 §10）：视口处于检视显示模式（尺寸面板的 `mbd_mode=inspection`）时，被模型挡住的云线
+ *   （代表性成员的表面全部被非目标几何遮住）淡到尺寸系统 `theme.inspection.occludedAlpha`；激活 / 悬停 / 失效记录不淡。
+ *   默认显示模式仍是置顶（engineering），所以开关开着也不改变现状；关掉后检视模式下云线也一律置顶、零射线。
  *
  * 默认全部开启。覆盖方式（优先级从高到低）：
  * 1. URL `?cloud_render_flags=cloudLabelLayoutV1:0,cloudDirtyCache:1`
@@ -22,7 +25,13 @@
  * 3. 默认值
  */
 
-export type CloudRenderFlag = 'cloudLabelLayoutV1' | 'cloudDirtyCache' | 'cloudProjectedEnvelope' | 'annotationSharedRegion' | 'cloudAdaptiveLod';
+export type CloudRenderFlag =
+  | 'cloudLabelLayoutV1'
+  | 'cloudDirtyCache'
+  | 'cloudProjectedEnvelope'
+  | 'annotationSharedRegion'
+  | 'cloudAdaptiveLod'
+  | 'cloudInspectionFade';
 
 export const CLOUD_RENDER_FLAG_STORAGE_KEY = 'plant3d.cloudRenderFlags';
 export const CLOUD_RENDER_FLAG_URL_PARAM = 'cloud_render_flags';
@@ -33,6 +42,7 @@ const DEFAULTS: Readonly<Record<CloudRenderFlag, boolean>> = Object.freeze({
   cloudProjectedEnvelope: true,
   annotationSharedRegion: true,
   cloudAdaptiveLod: true,
+  cloudInspectionFade: true,
 });
 
 const FLAG_NAMES = Object.keys(DEFAULTS) as CloudRenderFlag[];

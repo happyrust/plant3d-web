@@ -56,6 +56,61 @@ function tuple(vector: Vector3): Vec3 {
 }
 
 /**
+ * Scene-world core of `isSegmentBlocked` (ADR 0061), shared with the review
+ * cloud annotations' inspection fade (2026-09-15, 方案 §10): visible objects
+ * whose box meets the segment `origin → target` are ray-cast one by one, and
+ * the first hit nearer than the target (less `toleranceWorld`) blocks it.
+ * With a `subject` hint that element's pieces, and any body the target lies
+ * inside, are left out — only other geometry hides the record; with
+ * `onModel` alone just the enclosing bodies are. Both vectors are scene
+ * world; the caller converts from whatever space it measures in.
+ */
+export function isWorldSegmentBlocked(
+  layer: DtxObjectBoundsSource,
+  origin: Vector3,
+  target: Vector3,
+  toleranceWorld: number,
+  hints?: OcclusionProbeHints,
+): boolean {
+  if (!layer.raycastObject) return false;
+  const raycastObject = layer.raycastObject.bind(layer);
+  const segment = new Vector3().subVectors(target, origin);
+  const lengthWorld = segment.length();
+  if (lengthWorld <= 0) return false;
+  const reach = lengthWorld - toleranceWorld;
+  if (reach <= 0) return false;
+  const direction = segment.divideScalar(lengthWorld);
+  const subject = hints?.subject;
+  // The probe is a record's anchor on / inside the model — a tag's anchor
+  // on the object it names, a weld mark's weld point on the bore axis, a
+  // branch head / tail card's pipe-end point (`onModel`, no object named):
+  // the named object's own pieces (the WELD's bead), and any body the
+  // anchor lies inside (the tube and the fitting meeting at a connection,
+  // the valve around its origin, the pipe wall around a weld point), are
+  // what the record points at, not what hides it. A body encloses the
+  // anchor when a ray cast onward from just before the anchor still leaves
+  // through it — the layer's triangle test is two-sided, so the exit wall
+  // counts; starting the tolerance short of the anchor keeps a body whose
+  // face the anchor sits on (an open pipe end) in the test.
+  const encloses = subject || hints?.onModel
+    ? (objectId: string): boolean => raycastObject(
+      objectId,
+      target.clone().addScaledVector(direction, -toleranceWorld),
+      direction,
+    ) !== null
+    : (): boolean => false;
+  const segmentBox = new Box3().setFromPoints([origin, target]);
+  for (const { objectId } of layer.collectObjectBoundsIntersecting(segmentBox, { visibleOnly: true })) {
+    if (subject && refnoOfDtxObject(objectId) === subject) continue;
+    const hit = raycastObject(objectId, origin, direction);
+    if (!hit || hit.distance >= reach) continue;
+    if (encloses(objectId)) continue;
+    return true;
+  }
+  return false;
+}
+
+/**
  * DTX viewer adapter for the dimension system. Owns the source-specific
  * knowledge that the DTX global model matrix maps millimetres to scene world
  * while dimension geometry lives in Design Space metres (ADR 0008), so
@@ -126,50 +181,18 @@ export function createDtxDimensionViewerAdapter(input: Readonly<{
   ): boolean => {
     const layer = input.getDtxLayer?.();
     if (!layer?.raycastObject) return false;
-    const raycastObject = layer.raycastObject.bind(layer);
     const designToWorld = getDesignToWorld();
     if (designToWorld.determinant() === 0) return false;
     const origin = new Vector3(...from).applyMatrix4(designToWorld);
     const target = new Vector3(...to).applyMatrix4(designToWorld);
-    const segment = new Vector3().subVectors(target, origin);
-    const lengthWorld = segment.length();
+    const lengthWorld = target.distanceTo(origin);
     const lengthDesign = Math.hypot(to[0] - from[0], to[1] - from[1], to[2] - from[2]);
     if (lengthWorld <= 0 || lengthDesign <= 0) return false;
     // A hit has to fall short of the target by the tolerance, expressed in
     // scene units through the same segment (uniform scale assumed, as for
     // every other length the adapter converts).
     const toleranceWorld = toleranceM * (lengthWorld / lengthDesign);
-    const reach = lengthWorld - toleranceWorld;
-    if (reach <= 0) return false;
-    const direction = segment.divideScalar(lengthWorld);
-    const subject = hints?.subject;
-    // The probe is a record's anchor on / inside the model — a tag's anchor
-    // on the object it names, a weld mark's weld point on the bore axis, a
-    // branch head / tail card's pipe-end point (`onModel`, no object named):
-    // the named object's own pieces (the WELD's bead), and any body the
-    // anchor lies inside (the tube and the fitting meeting at a connection,
-    // the valve around its origin, the pipe wall around a weld point), are
-    // what the record points at, not what hides it. A body encloses the
-    // anchor when a ray cast onward from just before the anchor still leaves
-    // through it — the layer's triangle test is two-sided, so the exit wall
-    // counts; starting the tolerance short of the anchor keeps a body whose
-    // face the anchor sits on (an open pipe end) in the test.
-    const encloses = subject || hints?.onModel
-      ? (objectId: string): boolean => raycastObject(
-        objectId,
-        target.clone().addScaledVector(direction, -toleranceWorld),
-        direction,
-      ) !== null
-      : (): boolean => false;
-    const segmentBox = new Box3().setFromPoints([origin, target]);
-    for (const { objectId } of layer.collectObjectBoundsIntersecting(segmentBox, { visibleOnly: true })) {
-      if (subject && refnoOfDtxObject(objectId) === subject) continue;
-      const hit = raycastObject(objectId, origin, direction);
-      if (!hit || hit.distance >= reach) continue;
-      if (encloses(objectId)) continue;
-      return true;
-    }
-    return false;
+    return isWorldSegmentBlocked(layer, origin, target, toleranceWorld, hints);
   };
   const getLayoutOverlays = (): readonly ScreenRect[] => {
     const origin = input.getContainer()?.getBoundingClientRect();
