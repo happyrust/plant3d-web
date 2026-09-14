@@ -97,9 +97,9 @@ describe('computeDistanceMeasurementResult', () => {
       {
         key: 'direction',
         label: 'Direction',
-        // E3D 标准结果表原样显示 `DIRECTION.string()` 的 ` WRT /*` 尾巴（截图 G1-02-result）；
+        // E3D 标准结果表原样显示 `DIRECTION.string()` 的 ` WRT /*` 尾巴（截图 G1-02-result），Web 三张表都不带（d-515）；
         // 数字是 PML REAL 的 6 位有效数字（2.31478，不是 4 位小数的 2.3148）。
-        valueText: 'E 14.0362 S 2.31478 U WRT /*',
+        valueText: 'E 14.0362 S 2.31478 U',
       },
     ]);
   });
@@ -110,13 +110,13 @@ describe('computeDistanceMeasurementResult', () => {
       { entityId: 'a', worldPos: [0, 0, 0], designWorldPos: [9.76975, 10.04718, 18.6648] },
       { entityId: 'b', worldPos: [0, 0, 0], designWorldPos: [7.84961, 10.44746, 14.234127] },
     );
-    expect(buildDistanceMeasurementResultRows(g1!, 'mm', 2).at(-1)!.valueText).toBe('W 11.7755 N 66.1215 D WRT /*');
+    expect(buildDistanceMeasurementResultRows(g1!, 'mm', 2).at(-1)!.valueText).toBe('W 11.7755 N 66.1215 D');
     // G2-03：ΔE = ΔN = ΔU = 1000 → 水平打平时 E / W 在前。
     const g203 = computeDistanceMeasurementResult(
       { entityId: 'a', worldPos: [0, 0, 0], designWorldPos: [10, 10, 15] },
       { entityId: 'b', worldPos: [0, 0, 0], designWorldPos: [11, 11, 16] },
     );
-    expect(buildDistanceMeasurementResultRows(g203!, 'mm', 2).at(-1)!.valueText).toBe('E 45 N 35.2644 U WRT /*');
+    expect(buildDistanceMeasurementResultRows(g203!, 'mm', 2).at(-1)!.valueText).toBe('E 45 N 35.2644 U');
   });
 
   it('returns null direction for zero distance and rejects missing or non-finite design coords', () => {
@@ -233,9 +233,8 @@ describe('reference-frame measurement interpretation', () => {
       {
         key: 'direction',
         label: 'Direction',
-        // 罗盘字母按帧的三根轴走：轴 1 → E / W、轴 2 → N / S、轴 3 → U / D；
-        // 尾巴是这条方向的 wrt，元素帧按 E3D 无名元素的写法 `=<refno>`。
-        valueText: 'E 33.6901 N 47.9689 U WRT =7/8',
+        // 罗盘字母按帧的三根轴走：轴 1 → E / W、轴 2 → N / S、轴 3 → U / D。
+        valueText: 'E 33.6901 N 47.9689 U',
       },
     ]);
     expect(buildMeasurementComponentsText({

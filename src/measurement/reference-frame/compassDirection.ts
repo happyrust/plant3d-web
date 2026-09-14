@@ -20,11 +20,12 @@
  *
  * `WRT` 尾巴：`DIRECTION.string()` 自带 ` WRT <名字>`（World 是 `/*`）。E3D 三张结果表里只有
  * Measure Distance 的标准结果表原样显示它（`gphmeasure.pmlfrm` 403 只 `.trim()`；截图
- * `G1-02-result.png`），Perpendicular（666）与角度窗体（371 / 392）都 `.before('WRT')` 切掉 ——
- * 由调用方决定传不传 `wrt`。
+ * `G1-02-result.png`），Perpendicular（666）与角度窗体（371 / 392）都 `.before('WRT')` 切掉。
+ * **Web 三张表都不带尾巴**（用户 2026-09-14 拍板，决策 d-515：wrt 在结果卡顶上另有一格）——
+ * 这里出的就是 `.before('WRT')` 之后的那一段。
  *
  * 对过的 golden（`docs/verification/e3d-measurement-runtime-golden-capture.md` §7 / §8 与 trace）：
- * - G1 标准距离：`W 11.7755 N 66.1215 D WRT /*`；
+ * - G1 标准距离：`W 11.7755 N 66.1215 D`（E3D 单元格另带 ` WRT /*`）；
  * - G3-02 旋转 WRT：分量 `U -400.28 / V -1920.14 / W -4430.67` → `S 11.7755 W 66.1215 D`；
  * - G4-01 点→线垂距：`Vertical 2500 / Horizontal 500`、水平纯 N → `N 78.6901 U`；
  * - G4-03 点退化垂距：`N 6.66615 W 78.3493 U`；
@@ -42,8 +43,6 @@ export type CompassDirectionOptions = Readonly<{
   trailZeros?: boolean;
   /** 方向不可用（零向量）时回这个，缺省 `--`（`gphmeasure.pmlfrm` 394 / 663）。 */
   fallback?: string;
-  /** 给了就在尾巴加 ` WRT <wrt>`（World 传 `/*`）。零向量的 fallback 不加。 */
-  wrt?: string;
 }>;
 
 /** 小于它就当那一路分量是 0（单位向量上约等于 6e-9 度）。 */
@@ -96,10 +95,9 @@ export function formatCompassDirection(
   const north = y! / length;
   const up = z! / length;
   const horizontal = Math.hypot(east, north);
-  const suffix = options?.wrt ? ` WRT ${options.wrt}` : '';
 
   // 纯竖直：只有 U / D 一个字母。
-  if (horizontal <= ZERO) return `${up >= 0 ? 'U' : 'D'}${suffix}`;
+  if (horizontal <= ZERO) return up >= 0 ? 'U' : 'D';
 
   const eastLetter = east >= 0 ? 'E' : 'W';
   const northLetter = north >= 0 ? 'N' : 'S';
@@ -119,7 +117,7 @@ export function formatCompassDirection(
     const tilt = (Math.atan2(Math.abs(up), horizontal) * 180) / Math.PI;
     parts.push(formatAngle(tilt, options), up >= 0 ? 'U' : 'D');
   }
-  return `${parts.join(' ')}${suffix}`;
+  return parts.join(' ');
 }
 
 const COMPASS_TOKEN = /^([NSEW])(?:\s+(\d+(?:\.\d+)?)\s+([NSEW]))?(?:\s+(\d+(?:\.\d+)?)\s+([UD]))?$|^([UD])$/;

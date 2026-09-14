@@ -328,17 +328,7 @@ type DistanceMeasurementRowsSource = Readonly<{
   offsets: Readonly<{ components: readonly [number, number, number] }>;
   direction: Readonly<{ vector: readonly [number, number, number] }> | null;
   axisLabels?: ReferenceFrameAxisLabels;
-  /** 方向所在的 wrt 帧；不给（P0 的 World 结果）按 World。 */
-  frame?: ResolvedReferenceFrame;
 }>;
-
-/**
- * `DIRECTION.string()` 尾巴上的 wrt 名：World 是 `/*`，元素帧 E3D 给名字（`/Copy-of-RCS151MM`），
- * Web 只有 refno，按 E3D 无名元素的写法 `=24381/101439`。
- */
-function compassWrtName(frame: ResolvedReferenceFrame | undefined): string {
-  return frame && frame.kind === 'element' && frame.refno ? `=${formatPdmsRef(frame.refno)}` : '/*';
-}
 
 /**
  * 给定测量会话的 Units 选择时，结果表的长度按它渲染（E3D
@@ -388,10 +378,11 @@ export function buildDistanceMeasurementResultRows(
       valueText: fmt.signed(offsetZ),
     },
   ];
-  // E3D 的 Direction 是罗盘字串（`DIRECTION.string()`），字母按当前 wrt 帧的三根轴走；
-  // 标准结果表原样显示 ` WRT <wrt>` 尾巴（`gphmeasure.pmlfrm` 403 只 `.trim()`，截图 G1-02-result）。
+  // E3D 的 Direction 是罗盘字串（`DIRECTION.string()`），字母按当前 wrt 帧的三根轴走。
+  // E3D 这张表原样带 ` WRT /*` 尾巴（`gphmeasure.pmlfrm` 403 只 `.trim()`，截图 G1-02-result），
+  // 用户 2026-09-14 拍板不要——三张表都只出纯罗盘串，wrt 在结果卡顶上另有一格。
   const directionText = result.direction
-    ? formatCompassDirection(result.direction.vector, { wrt: compassWrtName(result.frame) })
+    ? formatCompassDirection(result.direction.vector)
     : '--';
 
   return [

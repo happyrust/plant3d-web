@@ -72,7 +72,7 @@ describe('MeasurementResultInspector', () => {
       ['Offset X', '+1000mm'],
       ['Offset Y', '+2000mm'],
       ['Offset Z', '+2000mm'],
-      ['Direction', 'N 26.5651 E 41.8103 U WRT /*'],
+      ['Direction', 'N 26.5651 E 41.8103 U'],
     ]);
 
     const showDirect = host.querySelector<HTMLInputElement>(

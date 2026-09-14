@@ -13,10 +13,10 @@ function between(from: CompassVector, to: CompassVector): CompassVector {
 }
 
 describe('formatCompassDirection · 对 E3D 已采 golden 的方向字串', () => {
-  it('G1 标准距离：`W 11.7755 N 66.1215 D WRT /*`（trace `G1-current-measure`）', () => {
+  it('G1 标准距离：`W 11.7755 N 66.1215 D`（trace `G1-current-measure`，E3D 单元格另带 ` WRT /*`，Web 不带）', () => {
     const from: CompassVector = [9769.75, 10047.18, 18664.8];
     const to: CompassVector = [7849.61, 10447.46, 14234.127];
-    expect(formatCompassDirection(between(from, to), { wrt: '/*' })).toBe('W 11.7755 N 66.1215 D WRT /*');
+    expect(formatCompassDirection(between(from, to))).toBe('W 11.7755 N 66.1215 D');
   });
 
   it('G3-02 旋转 WRT：帧内分量 (-400.28, -1920.14, -4430.673) → `S 11.7755 W 66.1215 D`', () => {
@@ -75,7 +75,6 @@ describe('formatCompassDirection · 边界', () => {
   it('纯竖直只出一个字母', () => {
     expect(formatCompassDirection([0, 0, 1])).toBe('U');
     expect(formatCompassDirection([0, 0, -3])).toBe('D');
-    expect(formatCompassDirection([0, 0, -3], { wrt: '/*' })).toBe('D WRT /*');
   });
 
   it('正好落在水平轴上时省掉「角度 + 次轴字母」', () => {
@@ -93,19 +92,18 @@ describe('formatCompassDirection · 边界', () => {
     expect(formatCompassDirection([1, -1, 0])).toBe('E 45 S');
   });
 
-  it('零向量回 fallback（不带 WRT 尾巴）；小数位与尾零可调', () => {
+  it('零向量回 fallback；小数位与尾零可调', () => {
     expect(formatCompassDirection([0, 0, 0])).toBe('--');
-    expect(formatCompassDirection([0, 0, 0], { wrt: '/*' })).toBe('--');
     expect(formatCompassDirection([0, 0, 0], { fallback: '—' })).toBe('—');
     expect(formatCompassDirection([0, 1, 1], { decimals: 2 })).toBe('N 45.00 U');
     expect(formatCompassDirection([0, 1, 1], { decimals: 2, trailZeros: false })).toBe('N 45 U');
     expect(formatCompassDirection([0, 1, 1], { decimals: 0 })).toBe('N 45 U');
-    expect(formatCompassDirection([0, 1, 1], { decimals: 3, wrt: '=24381/101439' })).toBe('N 45.000 U WRT =24381/101439');
+    expect(formatCompassDirection([0, 1, 1], { decimals: 3 })).toBe('N 45.000 U');
   });
 
-  it('WRT 尾巴原样接在后面', () => {
-    expect(formatCompassDirection([1000, 1000, 1000], { wrt: '/*' })).toBe('E 45 N 35.2644 U WRT /*');
-    expect(formatCompassDirection([0, -1, 0], { wrt: '/Copy-of-RCS151MM' })).toBe('S WRT /Copy-of-RCS151MM');
+  it('从不带 WRT 尾巴（E3D 标准距离表带、Web 三张表都不带，d-515）', () => {
+    expect(formatCompassDirection([1000, 1000, 1000])).not.toContain('WRT');
+    expect(formatCompassDirection([0, -1, 0])).toBe('S');
   });
 });
 
