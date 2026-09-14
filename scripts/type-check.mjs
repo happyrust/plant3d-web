@@ -8,7 +8,8 @@
  * 错误（按文件分桶的清单另立计划消化，P10-2），一刀切会让 `npm run build` 永远红。
  *
  * 做法：跑 `vue-tsc --build --force --pretty false`，把每条错误归一成 `文件|TS码|首行消息`
- * （去掉行列号——挪一行代码不该算新错），与 `scripts/type-check-baseline.txt` 里的多重集合比：
+ * （去掉行列号——挪一行代码不该算新错；tsc 省略长类型时的 `... 39 more ...` 成员计数归一成 `N`——
+ * 给大返回对象加一个方法也不该算新错），与 `scripts/type-check-baseline.txt` 里的多重集合比：
  * **只要出现基线之外的错误（或同一签名的条数超过基线）就红**；基线里的错误消失只提示、不红。
  *
  * 用法：
@@ -38,6 +39,15 @@ const BASELINE_HEADER = [
 /** 有位置的错误：`src/a.ts(12,5): error TS2322: ...`；无位置的全局错误：`error TS18003: ...` */
 const LOCATED = /^(?<file>[^\s(][^(]*?)\((?<line>\d+),(?<col>\d+)\): error (?<code>TS\d+): (?<msg>.*)$/;
 const GLOBAL = /^error (?<code>TS\d+): (?<msg>.*)$/;
+
+/**
+ * 签名里把 tsc 省略长对象类型时的成员计数（`...; 39 more ...;`）归一成 `N`：
+ * 那个数字只反映被省略的成员有几个，给 `useDtxTools` 这类大返回对象多加一个方法，
+ * 二十几条与它无关的既有错误就会被重新计成「基线外新增」+「基线里消失」。
+ */
+function normalizeSignatureMessage(msg) {
+  return msg.trim().replace(/\.\.\. \d+ more \.\.\./g, '... N more ...');
+}
 
 function runVueTsc() {
   if (!existsSync(vueTscBin)) {
@@ -71,7 +81,7 @@ function parseErrors(output) {
       const { file, line: ln, col, code, msg } = located.groups;
       const normalizedFile = file.replace(/\\/g, '/');
       errors.push({
-        signature: `${normalizedFile}|${code}|${msg.trim()}`,
+        signature: `${normalizedFile}|${code}|${normalizeSignatureMessage(msg)}`,
         location: `${normalizedFile}(${ln},${col})`,
         code,
         msg: msg.trim(),
@@ -81,7 +91,7 @@ function parseErrors(output) {
     const global = GLOBAL.exec(line);
     if (global) {
       const { code, msg } = global.groups;
-      errors.push({ signature: `(global)|${code}|${msg.trim()}`, location: '(global)', code, msg: msg.trim() });
+      errors.push({ signature: `(global)|${code}|${normalizeSignatureMessage(msg)}`, location: '(global)', code, msg: msg.trim() });
     }
     // 其余行：多行消息的缩进续行、vue-tsc 自己的噪音（如 @vue/language-core 的 TypeError 栈）——不计。
   }
@@ -100,7 +110,9 @@ function readBaseline() {
   const lines = readFileSync(baselinePath, 'utf8')
     .split(/\r?\n/)
     .map((line) => line.trimEnd())
-    .filter((line) => line.length > 0 && !line.startsWith('#'));
+    .filter((line) => line.length > 0 && !line.startsWith('#'))
+    // 旧基线里还带着具体成员计数，读进来同样归一，不必为此重写基线文件
+    .map((line) => normalizeSignatureMessage(line));
   return toMultiset(lines);
 }
 

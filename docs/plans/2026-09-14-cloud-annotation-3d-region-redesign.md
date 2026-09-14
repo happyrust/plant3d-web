@@ -582,7 +582,7 @@ export function inspectionFactor(mode: 'always-on-top' | 'inspection', probes: r
 | 阶段 | 开关 | 独立交付 | 验收与回退 |
 |---|---|---|---|
 | **P0 兼容基线**（✅ 2026-09-14 落地，§16） | — | 新增类型、漏斗补齐（§6.3–6.4）、三链路 round-trip（§6.5）、旧截图与调用计数基线；加载器 `DbnoRuntimeCache` 记录每次加载的来源身份（`snapshot_epoch` / manifest / `artifact_sesno`，§15 ③）供创建时填 `SourceStamp`；`isolated` 加载不 bump `dtxLoaderRevision`（§15 ④） | 旧记录输出不变；没有新呈现启用；来源身份只记不用 |
-| **P1 标签 + 脏标记** | `cloudLabelLayoutV1`、`cloudDirtyCache` | 接入现有轮廓：像素意图标签与最近点对引线（§5）、分阶段脏标记（§9.1） | 最近点、夹紧可逆、旧世界点兼容、静止零重建；分别关开关回退 |
+| **P1 标签 + 脏标记**（✅ 2026-09-14 落地，§17） | `cloudLabelLayoutV1`、`cloudDirtyCache` | 接入现有轮廓：像素意图标签与最近点对引线（§5）、分阶段脏标记（§9.1） | 最近点、夹紧可逆、旧世界点兼容、静止零重建；分别关开关回退 |
 | **P2 范围体呈现** | `annotationUx.projectedEnvelope`（交互方案同名） | 首项 `DTXLayer.getObjectLocalBoxAndWorldMatrixInto`（§4.1）；并行几何内核（§4.1–4.5、4.7）、创建时写 `regionV1(obb-union, origin:'members')` + `viewpointV1.creation`；最小来源校验与 epoch 隔离、`globalModelMatrix` 重映射（§8） | 多机位包含、裁剪连续性、相位测试通过；目标范围不完整（`coverage` 不足）时不写新版记录；关闭后兼容显示，保留新字段 |
 | **P2.5 局部套索（可选，后置）** | `cloudUserVolume` | §4.8 截锥扫掠体 + 深度调整交互 | 套索验收口径按 `origin:'user-volume'`；拒绝自交 |
 | **P3 共享范围体** | `annotationSharedRegion` | rect / obb 新建走 `primitiveFromPlacement`（§7）；完整失效与重绑 member 交互（§8） | 真 OBB / 剪切分支、部分加载、版本切换、原子重绑；旧记录不自动迁移 |
@@ -759,6 +759,39 @@ it('静止 120 帧不重建、不上传', () => {
 - `SourceStamp.projectKey` 首版 `null`（校审链路只有 task / round，无稳定项目键）。
 - `globalModelMatrix` 进 `SourceStamp` 的**写入**在 P2 创建路径（P0 只定类型与补齐规则）。
 - 字段一旦经保存回写，旧记录会带上 `presentationV1:{algorithm:'legacy-v0',…}` 与三个 `null`——这是 §6.3 的既定口径（旧端读取忽略未知字段即可；能读不等于能无损保存，见 §6.5 最后一行）。
+
+P0 已提交：`af4b382`（15 文件；`useToolStore.ts` 只取云线 hunk）。
+
+---
+
+## 17. P1 标签 + 脏标记实施记录（2026-09-14）
+
+用户确认「进入 P1：像素意图标签 + 最近点对引线 + 分阶段脏标记（开关 cloudLabelLayoutV1 / cloudDirtyCache）」。两个开关默认开、各自独立可关（URL `?cloud_render_flags=cloudLabelLayoutV1:0,cloudDirtyCache:0` 或 localStorage `plant3d.cloudRenderFlags`）。
+
+| # | 内容 | 落点 |
+|---|---|---|
+| 1 | **纯函数内核**（§3.3 点名的目录）：`layoutCloudLabel(frame, preference, measured, viewport)`——参考包围框（加 padding 未加波浪）锚点 `uv` + 意图偏移 → 夹紧安全区（内缩 8 px）→ 与云线内部重叠则试右 / 左 / 下 / 上四侧候选取离期望最近者（同分固定顺序）→ 四侧都不行允许覆盖并隐藏引线；引线 = 「可见轮廓线段 × 文字框四边」最近**线段对**（`closestSegmentPair`），≤ 1 px 不画，同分取先遇到的；`labelOffsetFromTopLeft` 与 `desiredLabelTopLeft` 互逆供拖动提交 | 新增 `src/review/domain/annotationProjection/labelLayout.ts`（+ 13 例测试） |
+| 2 | **分阶段脏标记**：`computeCloudDirty(prev, next)` 按 `resolve / project / shape / label / paint` 五组判脏（`shape ⊇ project`，`label ⊇ shape`）；`Stamp` 比方案多 `globalModelMatrix`（§15 ④）；`createArrayVersionTracker`（16 元素逐个比较）/ `createValueVersionTracker` 给相机矩阵、视口、目标 AABB、记录引用维护版本号 | 新增 `.../annotationProjection/dirty.ts`（+ 9 例） |
+| 3 | **开关**：`isCloudRenderFlagEnabled / setCloudRenderFlag / resetCloudRenderFlagCache` | 新增 `src/composables/useCloudRenderFlags.ts`（+ 3 例） |
+| 4 | **适配层** `useDtxTools.updateOverlayPositions`：帧级戳（相机 world / projection、视口、overlay 偏移、DPR、DTX 全局矩阵、`dtxLoaderRevision`、绘制模式 + padding、颜色 / 透明度 / 线宽）一帧算一次，逐云线加目标 AABB 六数、记录引用、文字框实测尺寸；`paint` 脏才写材质，`shape` 脏才重建轮廓 / `setPoints`，`label` 脏（或拖动中）才重排文字框。轮廓阶段把「加 padding 未加波浪」的屏幕矩形存成 `CloudFrame`（bbox3d 模式取 8 角点投影外接矩形，角点越界则本帧无 frame → 文字框退回旧布局）。V1 文字框 DOM 直接 `left/top` 定位（`transform:none`，通用「按 worldPos 投影」循环跳过 `layoutMode==='v1'`）；引线端点按 frame 深度反投影回世界后走原 `updateLeaderGeometry`；无引线时 `leader.root.visible=false`。图钉仍是独立参考中心不动 | `src/composables/useDtxTools.ts` |
+| 5 | **拖动**：文字框拖柄 pointerdown 记「按住点 − 文字框左上角」；拖动中写 `render.labelDragTopLeft` 走 V1 布局（跟手且实时夹紧 / 避让）；松手 `commitDraggedCloudLabelLayoutV1` 把最终矩形反算成意图偏移写 `labelLayoutV1`，并按旧含义**双写一次** `leaderEndWorldPos`（文字框中心在 billboard 深度的世界点）。**旧记录第一次拖动即升级**为 V1（默认右上锚点）；相机移动 / 视口夹紧 / 回放绝不回写 | 同上 |
+| 6 | **新建**：`createCloudAnnotationRecordFromAnchorAndMarquee` 增 `labelLayoutV1` 入参，`endMarquee` 在开关开时写默认 `{uv:[1,0], offsetPx:{18,0}}` | 同上 |
+| 7 | **调试出口**：`debugCloudRenderStats()`（frames / contourBuilds / setPoints / labelLayouts / paintUpdates）、`resetCloudRenderStats()`、`debugCloudLabelLayouts()`；`begin/continue/endInlineOverlayAnnotationDrag` 暴露给测试 | 同上 |
+| 8 | **验收测试**（§12.1）：静止 120 帧 `contourBuilds = setPoints = labelLayouts = paintUpdates = 0`，相机一动各 +1、paint 仍 0；关 `cloudDirtyCache` 回到每帧重建；只改标签意图 → 轮廓 0 次重建；V1 文字框位置 = 参考框右上 + 18 px、引线右边 → 左边；旧记录仍按 `leaderEndWorldPos` 投影；关 `cloudLabelLayoutV1` 回旧布局；拖动提交意图偏移 + 双写 | 新增 `src/composables/useDtxTools.cloudRender.test.ts`（7 例） |
+
+**验证**（2026-09-14 22:1x，本机）：
+- `npx vitest run` 全量：**317 文件 / 2702 用例全绿**（本次新增 13 + 9 + 3 + 7 = 32 例；`cloudFit` / `cloudCreation` 既有用例不动）。
+- `npm run type-check`：本次改动文件 **0 条新增**。剩余 4 条基线外全在未触碰文件（`ReviewPanel.test.ts` 3、`resolveLabelCollisions.test.ts` 1），HEAD 既有。
+- `npx eslint` 改动文件：0 错误（`--fix` 调了一次 import 顺序）。
+- 未跑 Playwright；真机观感（拖动手感、引线端点贴合）待用户在浏览器里过一遍。
+
+**顺手改的工具**（与本任务相关、单独说明）：`scripts/type-check.mjs` 的错误签名把 tsc 省略长类型时的 `... 39 more ...` 成员计数归一成 `... N more ...`（读基线时同样归一，基线文件不动）。原因：给 `useDtxTools` 返回对象加 6 个方法后，26 条与之无关的既有错误（`ViewerPanel.vue` 的 `hoverText` / `ToolsApi`、`useDtxTools.*.test.ts` 的 `Ref<DTXLayer>` mock 等）因计数从 33/39 变 40 被整体重新计成「新增」+「消失」，门禁失真。没有新增或放行任何错误。
+
+**遗留 / 后续**：
+- `labelMetrics` 每帧读一次 `offsetWidth/offsetHeight`（布局干净时不回流）；happy-dom / 首帧为 0 时用 240×96 兜底尺寸，只影响布局输入不写记录。
+- 引线起点取的是**参考矩形边**上的最近点，与真实波浪轮廓差 ≤ 波幅（≤ 6 px）；P2 换成范围体投影轮廓后由 `visibleStrokes` 直接给真实可见 stroke。
+- bbox3d 模式下角点越界时无 frame，文字框退回旧布局；P2 齐次裁剪落地后消失。
+- `useToolStore` 未改；本阶段无记录 schema 变化。
 
 ---
 

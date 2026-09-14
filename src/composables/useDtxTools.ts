@@ -17,6 +17,7 @@ import {
   Vector3,
 } from 'three';
 
+import type { CloudLabelLayoutV1 } from '@/review/domain/cloudRegion';
 import type { DTXLayer, DTXSelectionController } from '@/utils/three/dtx';
 import type { DtxCompatViewer } from '@/viewer/dtx/DtxCompatViewer';
 import type { DtxViewer } from '@/viewer/dtx/DtxViewer';
@@ -27,7 +28,9 @@ import { setAnnotationProcessingEntryTarget } from '@/components/review/annotati
 import { isExternalSjFormFocusedMode, readPersistedEmbedModeParams } from '@/components/review/embedRoleLanding';
 import { isCanonicalReturnedTask } from '@/components/review/reviewTaskFilters';
 import { useAnnotationStyleStore } from '@/composables/useAnnotationStyleStore';
+import { isCloudRenderFlagEnabled } from '@/composables/useCloudRenderFlags';
 import {
+  dtxLoaderRevision,
   findNounByRefnoAcrossAllDbnos,
   findOwnerRefnoByTubi,
   getDtxRefnoTransform,
@@ -40,6 +43,24 @@ import { useSelectionStore } from '@/composables/useSelectionStore';
 import { buildCloudBindings, getCloudMemberRefnos, useToolStore, type AnnotationRecord, type CloudAnnotationRecord, type CloudElementBinding, type DistanceMeasurementRecord, type MeasurementPoint, type Obb, type ObbAnnotationRecord, type RectAnnotationRecord, type Vec3 } from '@/composables/useToolStore';
 import { useUnitSettingsStore } from '@/composables/useUnitSettingsStore';
 import { useUserStore } from '@/composables/useUserStore';
+import {
+  ALL_CLOUD_DIRTY,
+  computeCloudDirty,
+  createArrayVersionTracker,
+  createValueVersionTracker,
+  type ArrayVersionTracker,
+  type CloudRenderStamp,
+  type ValueVersionTracker,
+} from '@/review/domain/annotationProjection/dirty';
+import {
+  DEFAULT_LABEL_PREFERENCE,
+  labelOffsetFromTopLeft,
+  layoutCloudLabel,
+  rectToCloudFrame,
+  type CloudFrame,
+  type LabelLayoutResult,
+  type LabelPreference,
+} from '@/review/domain/annotationProjection/labelLayout';
 import { emitToast } from '@/ribbon/toastBus';
 import { UserRole } from '@/types/auth';
 import { worldPerPixelAt } from '@/utils/three/annotation/utils/solvespaceLike';
@@ -68,6 +89,11 @@ type LabelEl = {
   id: string
   worldPos: Vector3
   el: HTMLDivElement
+  /**
+   * `v1` = 该文字框由云线屏幕布局（`cloudLabelLayoutV1`）直接定位，通用「按 worldPos 投影」循环要跳过它；
+   * 缺省 / `legacy` = 旧的世界点布局。
+   */
+  layoutMode?: 'legacy' | 'v1'
 }
 
 type TextAnnotationDragState = {
@@ -90,7 +116,43 @@ type InlineOverlayAnnotationDragState = {
   anchorWorldPos: Vector3 | null
   anchorNdcZ: number
   moved: boolean
+  /**
+   * 云线 V1 标签拖动：按住点相对文字框左上角的偏移（overlay 像素）。有值 = 本次拖动走屏幕像素布局，
+   * 松手时提交 `labelLayoutV1.offsetPx`；null = 旧的世界点拖动。
+   */
+  labelGrabOffsetPx: { x: number; y: number } | null
 };
+
+/**
+ * 云线渲染的分阶段缓存（方案 §9.1，开关 `cloudDirtyCache`）：上一帧的版本戳 + 供 label 阶段复用的轮廓产物。
+ * 相机 / 视口 / 目标 / 样式都没变时，轮廓不重建、`setPoints` 不调、文字框不重排。
+ */
+type CloudRenderCache = {
+  stamp: CloudRenderStamp | null
+  targetBoundsTracker: ArrayVersionTracker
+  recordTracker: ValueVersionTracker<CloudAnnotationRecord>
+  labelMetricsTracker: ValueVersionTracker<string>
+  /** 上一帧的屏幕参考框（加 padding、未加波浪）；null = 本帧没有可用轮廓（bbox3d 角点越界 / 走旧固定布局时也给） */
+  frame: CloudFrame | null
+  /** billboard 平面深度，把屏幕布局结果反投影回世界（引线端点）时用 */
+  frameNdcZ: number
+  labelLayout: LabelLayoutResult | null
+  /** 拖动中的临时文字框左上角（overlay 像素），松手后清空 */
+  labelDragTopLeft: { x: number; y: number } | null
+}
+
+function createCloudRenderCache(): CloudRenderCache {
+  return {
+    stamp: null,
+    targetBoundsTracker: createArrayVersionTracker(),
+    recordTracker: createValueVersionTracker<CloudAnnotationRecord>(),
+    labelMetricsTracker: createValueVersionTracker<string>(),
+    frame: null,
+    frameNdcZ: 0,
+    labelLayout: null,
+    labelDragTopLeft: null,
+  };
+}
 
 type CloudOverlayEl = {
   id: string
@@ -103,6 +165,29 @@ type CloudOverlayEl = {
   /** 目标合并 AABB 的解析缓存，见 resolveCloudTargetBbox */
   targetBbox: { min: Vec3; max: Vec3 } | null
   targetBboxAt: number
+  render: CloudRenderCache
+}
+
+/** 云线渲染计数（e2e / 单测「静止零重建」验收用），`debugCloudRenderStats()` 读取 */
+export type CloudRenderStats = {
+  frames: number
+  contourBuilds: number
+  setPoints: number
+  labelLayouts: number
+  paintUpdates: number
+}
+
+/** 新建云线的默认标签布局：参考包围框右上角、向右 18 px */
+export function createDefaultCloudLabelLayoutV1(): CloudLabelLayoutV1 {
+  return {
+    version: 1,
+    anchor: { kind: 'contour-bounds', uv: [1, 0], labelPoint: 'top-left' },
+    offsetPx: { x: DEFAULT_LABEL_PREFERENCE.offsetPx.x, y: DEFAULT_LABEL_PREFERENCE.offsetPx.y },
+  };
+}
+
+function labelPreferenceFromRecord(layout: CloudLabelLayoutV1): LabelPreference {
+  return { uv: layout.anchor.uv, offsetPx: layout.offsetPx };
 }
 
 type CloudAnnotationVisual = {
@@ -207,6 +292,18 @@ function nowId(prefix: string): string {
 
 function clamp(n: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, n));
+}
+
+const IDENTITY_MATRIX_ELEMENTS: readonly number[] = Object.freeze([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
+const EMPTY_BOUNDS: readonly number[] = Object.freeze([]);
+/** 文字框还没排版（offsetWidth 为 0，如 happy-dom / 首帧）时用的兜底尺寸，只影响布局输入，不写回记录 */
+const FALLBACK_LABEL_SIZE_PX = Object.freeze({ width: 240, height: 96 });
+
+function measureLabelSize(el: HTMLElement): { width: number; height: number } {
+  const width = el.offsetWidth;
+  const height = el.offsetHeight;
+  if (!(width > 1) || !(height > 1)) return { ...FALLBACK_LABEL_SIZE_PX };
+  return { width, height };
 }
 
 function escapeAnnotationLabelText(value: string): string {
@@ -997,6 +1094,8 @@ export function createCloudAnnotationRecordFromAnchorAndMarquee(params: {
   selectionBbox?: { min: Vec3; max: Vec3 }
   /** 带角色的关联结构；缺省时由 refnos / anchorRefno 归一推导 */
   bindings?: CloudElementBinding[]
+  /** P1：文字框像素意图布局；给了就写进记录（`leaderEndWorldPos` 仍按旧逻辑双写） */
+  labelLayoutV1?: CloudLabelLayoutV1
 }): CloudAnnotationRecord {
   const marqueeCenter = {
     x: (params.rect.x1 + params.rect.x2) * 0.5,
@@ -1034,6 +1133,15 @@ export function createCloudAnnotationRecordFromAnchorAndMarquee(params: {
     createdAt: params.createdAt ?? Date.now(),
     refnos: params.refnos ? [...params.refnos] : [...params.objectIds],
     bindings: params.bindings ? [...params.bindings] : undefined,
+    ...(params.labelLayoutV1
+      ? {
+        labelLayoutV1: {
+          version: 1 as const,
+          anchor: { ...params.labelLayoutV1.anchor, uv: [...params.labelLayoutV1.anchor.uv] as [number, number] },
+          offsetPx: { ...params.labelLayoutV1.offsetPx },
+        },
+      }
+      : {}),
   };
 }
 
@@ -2176,6 +2284,7 @@ export function useDtxTools(options: {
       anchorWorldPos: null,
       anchorNdcZ: 0,
       moved: false,
+      labelGrabOffsetPx: null,
     };
   }
 
@@ -2227,6 +2336,20 @@ export function useDtxTools(options: {
     if (labelEntry) {
       labelEntry.worldPos = labelWorldPos.clone();
     }
+    // 云线 + 开关开：按屏幕像素拖（松手提交 labelLayoutV1 意图偏移）；记住按住点相对文字框左上角的偏移，
+    // 拖动时文字框跟手而不是跳到指针下。旧记录（无 labelLayoutV1）第一次拖动即升级为 V1 布局（方案 §5）。
+    let labelGrabOffsetPx: { x: number; y: number } | null = null;
+    const cloud = kind === 'cloud' ? cloudShapes.get(`cloud:${annotationId}`) : undefined;
+    if (cloud && labelEntry && isCloudRenderFlagEnabled('cloudLabelLayoutV1')) {
+      const overlayRect = overlay.getBoundingClientRect();
+      const pointerX = event.clientX - overlayRect.left;
+      const pointerY = event.clientY - overlayRect.top;
+      const currentRect = cloud.render.labelLayout?.rect ?? (() => {
+        const elRect = labelEntry.el.getBoundingClientRect();
+        return { x: elRect.left - overlayRect.left, y: elRect.top - overlayRect.top, width: elRect.width, height: elRect.height };
+      })();
+      labelGrabOffsetPx = { x: pointerX - currentRect.x, y: pointerY - currentRect.y };
+    }
     inlineOverlayAnnotationDrag.value = {
       annotationId,
       annotationKind: kind,
@@ -2234,6 +2357,7 @@ export function useDtxTools(options: {
       anchorWorldPos: anchorWorldPos.clone(),
       anchorNdcZ: anchorScreen.ndcZ,
       moved: false,
+      labelGrabOffsetPx,
     };
   }
 
@@ -2245,6 +2369,19 @@ export function useDtxTools(options: {
     const canvas = viewer?.canvas;
     if (!viewer || !overlay || !canvas) return;
     const overlayRect = overlay.getBoundingClientRect();
+    if (dragState.labelGrabOffsetPx && dragState.annotationKind === 'cloud') {
+      const cloud = cloudShapes.get(`cloud:${dragState.annotationId}`);
+      if (cloud) {
+        cloud.render.labelDragTopLeft = {
+          x: event.clientX - overlayRect.left - dragState.labelGrabOffsetPx.x,
+          y: event.clientY - overlayRect.top - dragState.labelGrabOffsetPx.y,
+        };
+        dragState.moved = true;
+        updateOverlayPositions();
+        requestRender?.();
+        return;
+      }
+    }
     const nextLabelWorldPos = overlayToWorld(
       viewer.camera,
       canvas,
@@ -2257,6 +2394,39 @@ export function useDtxTools(options: {
     updateDraggedOverlayAnnotation(dragState.annotationKind, dragState.annotationId, nextLabelWorldPos);
   }
 
+  /**
+   * V1 标签拖动松手：把最终文字框（已夹紧到安全区）反算成相对参考包围框锚点的意图偏移写进 `labelLayoutV1`，
+   * 并按旧含义双写一次 `leaderEndWorldPos`（文字框中心在 billboard 深度上的世界点），旧端仍能按世界点布局。
+   * 没有可用轮廓（frame 为空）时不提交，保持原记录。
+   */
+  function commitDraggedCloudLabelLayoutV1(annotationId: string): boolean {
+    const cloud = cloudShapes.get(`cloud:${annotationId}`);
+    const viewer = dtxViewerRef.value;
+    const overlay = overlayContainerRef.value;
+    const canvas = viewer?.canvas;
+    if (!cloud || !viewer || !overlay || !canvas) return false;
+    const frame = cloud.render.frame;
+    const layout = cloud.render.labelLayout;
+    if (!frame || !layout) return false;
+    const uv = cloud.record.labelLayoutV1?.anchor.uv ?? DEFAULT_LABEL_PREFERENCE.uv;
+    const offsetPx = labelOffsetFromTopLeft(frame.referenceBounds, uv, { x: layout.rect.x, y: layout.rect.y });
+    const labelLayoutV1: CloudLabelLayoutV1 = {
+      version: 1,
+      anchor: { kind: 'contour-bounds', uv: [uv[0], uv[1]], labelPoint: 'top-left' },
+      offsetPx: { x: Math.round(offsetPx.x * 100) / 100, y: Math.round(offsetPx.y * 100) / 100 },
+    };
+    const centerWorld = overlayToWorld(
+      viewer.camera,
+      canvas,
+      overlay,
+      layout.rect.x + layout.rect.width / 2,
+      layout.rect.y + layout.rect.height / 2,
+      cloud.render.frameNdcZ,
+    );
+    store.updateCloudAnnotation(annotationId, { labelLayoutV1, leaderEndWorldPos: vec3ToTuple(centerWorld) });
+    return true;
+  }
+
   function endInlineOverlayAnnotationDrag(event: PointerEvent) {
     const dragState = inlineOverlayAnnotationDrag.value;
     if (!dragState.annotationId || !dragState.annotationKind || dragState.pointerId !== event.pointerId) return;
@@ -2264,8 +2434,19 @@ export function useDtxTools(options: {
     const finalLabelWorldPos = labelEntry?.worldPos?.clone() ?? null;
     const annotationId = dragState.annotationId;
     const annotationKind = dragState.annotationKind;
-    const shouldCommit = dragState.moved && finalLabelWorldPos;
+    const v1Drag = dragState.labelGrabOffsetPx !== null && annotationKind === 'cloud';
+    const shouldCommit = dragState.moved && (v1Drag || finalLabelWorldPos);
     resetInlineOverlayAnnotationDrag();
+    if (v1Drag) {
+      const committed = shouldCommit && commitDraggedCloudLabelLayoutV1(annotationId);
+      const cloud = cloudShapes.get(`cloud:${annotationId}`);
+      if (cloud) cloud.render.labelDragTopLeft = null;
+      if (!committed) {
+        updateOverlayPositions();
+        requestRender?.();
+      }
+      return;
+    }
     if (shouldCommit && finalLabelWorldPos) {
       commitDraggedOverlayAnnotation(annotationKind, annotationId, finalLabelWorldPos);
     } else {
@@ -3020,7 +3201,21 @@ export function useDtxTools(options: {
     anchorWorldPos: null,
     anchorNdcZ: 0,
     moved: false,
+    labelGrabOffsetPx: null,
   });
+
+  // 云线渲染分阶段脏标记的帧级版本戳（所有云线共用）：相机 / 视口 / overlay / DPR / 全局矩阵 / 样式
+  const cloudFrameTrackers = {
+    cameraWorld: createArrayVersionTracker(),
+    projection: createArrayVersionTracker(),
+    viewportCss: createArrayVersionTracker(),
+    overlayTransform: createArrayVersionTracker(),
+    dpr: createArrayVersionTracker(),
+    globalModelMatrix: createArrayVersionTracker(),
+    shapeStyle: createValueVersionTracker<string>(),
+    paintStyle: createValueVersionTracker<string>(),
+  };
+  const cloudRenderStats: CloudRenderStats = { frames: 0, contourBuilds: 0, setPoints: 0, labelLayouts: 0, paintUpdates: 0 };
 
   const marqueeState = ref<DragRect>({ active: false, pointerId: null, startClient: null, startCanvas: null, currentCanvas: null });
   const marqueeDiv = ref<HTMLDivElement | null>(null);
@@ -3454,6 +3649,7 @@ export function useDtxTools(options: {
         record: c,
         targetBbox: null,
         targetBboxAt: 0,
+        render: createCloudRenderCache(),
       });
 
       const cloudMarker = makeTextAnnotationMarkerEl(overlay, 'C', c.collapsed === true);
@@ -3827,128 +4023,252 @@ export function useDtxTools(options: {
       setAnnotationLeaderResolution(obb.leader, resolution.width, resolution.height);
     }
 
+    // ---- 帧级版本戳（方案 §9.1，开关 cloudDirtyCache）：所有云线共用，一帧算一次 ----
+    const dirtyCacheOn = isCloudRenderFlagEnabled('cloudDirtyCache');
+    const labelFlagOn = isCloudRenderFlagEnabled('cloudLabelLayoutV1');
+    const canvasRect = canvas.getBoundingClientRect();
+    const overlayRect = overlay.getBoundingClientRect();
+    const drawMode = annotationStyleStore.cloudDrawMode.value;
+    const cloudStyle = annotationStyleStore.style.cloud;
+    const frameStamp = {
+      cameraWorld: cloudFrameTrackers.cameraWorld.update(viewer.camera.matrixWorld.elements),
+      projection: cloudFrameTrackers.projection.update(viewer.camera.projectionMatrix.elements),
+      viewportCss: cloudFrameTrackers.viewportCss.update([canvasRect.width, canvasRect.height]),
+      overlayTransform: cloudFrameTrackers.overlayTransform.update([
+        canvasRect.left - overlayRect.left,
+        canvasRect.top - overlayRect.top,
+        overlayRect.width,
+        overlayRect.height,
+      ]),
+      dpr: cloudFrameTrackers.dpr.update([resolution.width, resolution.height]),
+      globalModelMatrix: cloudFrameTrackers.globalModelMatrix.update(
+        dtxLayerRef.value?.getGlobalModelMatrix().elements ?? IDENTITY_MATRIX_ELEMENTS,
+      ),
+      modelEpoch: dtxLoaderRevision.value,
+      shapeStyle: cloudFrameTrackers.shapeStyle.update(`${drawMode}|${CLOUD_FIT_PADDING_PX}`),
+      paintStyle: cloudFrameTrackers.paintStyle.update(`${cloudStyle.color}|${cloudStyle.opacity}|${cloudStyle.lineWidth}`),
+    };
+    const viewportRect = { x: 0, y: 0, width: overlayRect.width || canvasRect.width, height: overlayRect.height || canvasRect.height };
+    cloudRenderStats.frames += 1;
+
     for (const cloud of cloudShapes.values()) {
-      const drawMode = annotationStyleStore.cloudDrawMode.value;
       const sb = resolveCloudTargetBbox(cloud);
-      let renderBbox3d = drawMode === 'bbox3d' && !!sb?.min && !!sb?.max;
+      const recordVersion = cloud.render.recordTracker.update(cloud.record);
+      const labelEntry = labels.get(cloud.id);
+      // 走 V1 屏幕布局的条件：开关开，且记录带 labelLayoutV1——或正在按像素拖动（旧记录第一次拖动即按默认锚点升级，松手写入记录）
+      const labelDragging = labelFlagOn && cloud.render.labelDragTopLeft !== null;
+      const layoutRecord = labelFlagOn
+        ? (cloud.record.labelLayoutV1 ?? (labelDragging ? createDefaultCloudLabelLayoutV1() : null))
+        : null;
+      const labelV1 = !!labelEntry && !!layoutRecord;
+      // 文字框实测尺寸是 label 阶段的依赖（字体加载完、文字改了都会变）；布局干净时读 offsetWidth 不触发回流
+      const measured = labelV1 && labelEntry ? measureLabelSize(labelEntry.el) : null;
+      const stamp: CloudRenderStamp = {
+        ...frameStamp,
+        targetBounds: cloud.render.targetBoundsTracker.update(sb ? [...sb.min, ...sb.max] : EMPTY_BOUNDS),
+        bindings: recordVersion,
+        effectiveRegion: 0,
+        labelMetrics: measured
+          ? cloud.render.labelMetricsTracker.update(`${measured.width}x${measured.height}`)
+          : cloud.render.labelMetricsTracker.version,
+        labelPreference: recordVersion,
+        presentation: recordVersion,
+      };
+      const dirty = dirtyCacheOn ? computeCloudDirty(cloud.render.stamp, stamp) : { ...ALL_CLOUD_DIRTY };
+      cloud.render.stamp = stamp;
 
-      const anchorScreen = worldToOverlayPoint(viewer.camera, canvas, overlay, cloud.worldPos);
-      const labelScreen = worldToOverlayPoint(viewer.camera, canvas, overlay, cloud.labelWorldPos);
-
-      const cloudStyle = annotationStyleStore.style.cloud;
-      const outlineMat = cloud.outline.material as MeshLineMaterial;
-      outlineMat.color.setHex(cloudStyle.color);
-      outlineMat.opacity = cloudStyle.opacity;
-      outlineMat.lineWidth = cloudStyle.lineWidth;
-      const bboxMat = cloud.bboxEdges.material as LineBasicMaterial;
-      bboxMat.color.setHex(cloudStyle.color);
-      bboxMat.opacity = cloudStyle.opacity;
-
-      let bboxPositions: Float32Array | null = null;
-      if (renderBbox3d && sb) {
-        const camPos = new Vector3();
-        viewer.camera.getWorldPosition(camPos);
-        bboxPositions = buildWavySelectionBboxLinePositions(sb.min, sb.max, camPos, 10);
-        if (bboxPositions.length < 6) {
-          renderBbox3d = false;
-          bboxPositions = null;
-        }
+      if (dirty.paint) {
+        const outlineMat = cloud.outline.material as MeshLineMaterial;
+        outlineMat.color.setHex(cloudStyle.color);
+        outlineMat.opacity = cloudStyle.opacity;
+        outlineMat.lineWidth = cloudStyle.lineWidth;
+        outlineMat.resolution.set(resolution.width, resolution.height);
+        const bboxMat = cloud.bboxEdges.material as LineBasicMaterial;
+        bboxMat.color.setHex(cloudStyle.color);
+        bboxMat.opacity = cloudStyle.opacity;
+        cloudRenderStats.paintUpdates += 1;
       }
 
-      if (renderBbox3d && bboxPositions) {
-        cloud.outline.visible = false;
-        updateCloudBboxLineSegmentsGeometry(cloud.bboxEdges, bboxPositions);
-        cloud.bboxEdges.visible = anchorScreen.visible;
-        continue;
-      }
+      if (dirty.shape) {
+        cloudRenderStats.contourBuilds += 1;
+        const anchorScreen = worldToOverlayPoint(viewer.camera, canvas, overlay, cloud.worldPos);
+        const labelScreen = labelV1 ? null : worldToOverlayPoint(viewer.camera, canvas, overlay, cloud.labelWorldPos);
+        cloud.render.frame = null;
+        cloud.render.frameNdcZ = anchorScreen.ndcZ;
 
-      cloud.bboxEdges.visible = false;
-      cloud.outline.visible = true;
-
-      // 贴合优先：把目标合并 AABB 的 8 个角投影到屏幕求外接矩形（+padding），保证
-      // 绑定目标在任意相机角度下都被云线包住；拖框尺寸只作最小尺寸兜底。
-      // AABB 缺失或有角点越过近/远平面（如相机钻进目标内部）时退回锚点+偏移的固定布局。
-      const minWidthPx = clamp(cloud.record.cloudSize?.width ?? 120, 72, 220);
-      const minHeightPx = clamp(cloud.record.cloudSize?.height ?? 72, 48, 180);
-      let widthPx = minWidthPx;
-      let heightPx = minHeightPx;
-      const off = cloud.record.screenOffset ?? { x: widthPx * 0.5 + 26, y: -(heightPx * 0.5 + 18) };
-      let centerX = anchorScreen.x + off.x;
-      let centerY = anchorScreen.y + off.y;
-      let centerNdcZ = anchorScreen.ndcZ;
-      let fitted = false;
-      if (sb?.min && sb?.max) {
-        const cornerPoints = boxCornersFromMinMaxVec(
-          new Vector3(sb.min[0], sb.min[1], sb.min[2]),
-          new Vector3(sb.max[0], sb.max[1], sb.max[2]),
-        );
-        const projectedCorners = cornerPoints.map(
-          (corner) => worldToOverlayPoint(viewer.camera, canvas, overlay, corner),
-        );
-        if (projectedCorners.every((p) => p.visible)) {
-          const fittedRect = computeFittedCloudRectFromCorners(projectedCorners, CLOUD_FIT_PADDING_PX, {
-            width: minWidthPx,
-            height: minHeightPx,
-          });
-          if (fittedRect) {
-            widthPx = fittedRect.widthPx;
-            heightPx = fittedRect.heightPx;
-            centerX = fittedRect.centerX;
-            centerY = fittedRect.centerY;
-            // billboard 平面放在 AABB 中心深度，保证像素→世界换算与投影一致
-            centerNdcZ = worldToOverlayPoint(
-              viewer.camera,
-              canvas,
-              overlay,
-              new Vector3(
-                (sb.min[0] + sb.max[0]) * 0.5,
-                (sb.min[1] + sb.max[1]) * 0.5,
-                (sb.min[2] + sb.max[2]) * 0.5,
-              ),
-            ).ndcZ;
-            fitted = true;
+        let renderBbox3d = drawMode === 'bbox3d' && !!sb?.min && !!sb?.max;
+        let bboxPositions: Float32Array | null = null;
+        if (renderBbox3d && sb) {
+          const camPos = new Vector3();
+          viewer.camera.getWorldPosition(camPos);
+          bboxPositions = buildWavySelectionBboxLinePositions(sb.min, sb.max, camPos, 10);
+          if (bboxPositions.length < 6) {
+            renderBbox3d = false;
+            bboxPositions = null;
           }
         }
+
+        if (renderBbox3d && bboxPositions && sb) {
+          cloud.outline.visible = false;
+          updateCloudBboxLineSegmentsGeometry(cloud.bboxEdges, bboxPositions);
+          cloudRenderStats.setPoints += 1;
+          cloud.bboxEdges.visible = anchorScreen.visible;
+          // bbox3d 下文字框仍需要一个屏幕参考框：8 个角点全部可见时取其外接矩形 + padding，否则退回旧世界点布局
+          const projectedCorners = boxCornersFromMinMaxVec(
+            new Vector3(sb.min[0], sb.min[1], sb.min[2]),
+            new Vector3(sb.max[0], sb.max[1], sb.max[2]),
+          ).map((corner) => worldToOverlayPoint(viewer.camera, canvas, overlay, corner));
+          if (projectedCorners.every((p) => p.visible)) {
+            const fittedRect = computeFittedCloudRectFromCorners(projectedCorners, CLOUD_FIT_PADDING_PX);
+            if (fittedRect) {
+              cloud.render.frame = rectToCloudFrame({
+                x: fittedRect.centerX - fittedRect.widthPx / 2,
+                y: fittedRect.centerY - fittedRect.heightPx / 2,
+                width: fittedRect.widthPx,
+                height: fittedRect.heightPx,
+              });
+              cloud.render.frameNdcZ = worldToOverlayPoint(
+                viewer.camera,
+                canvas,
+                overlay,
+                new Vector3((sb.min[0] + sb.max[0]) * 0.5, (sb.min[1] + sb.max[1]) * 0.5, (sb.min[2] + sb.max[2]) * 0.5),
+              ).ndcZ;
+            }
+          }
+        } else {
+          cloud.bboxEdges.visible = false;
+          cloud.outline.visible = true;
+
+          // 贴合优先：把目标合并 AABB 的 8 个角投影到屏幕求外接矩形（+padding），保证
+          // 绑定目标在任意相机角度下都被云线包住；拖框尺寸只作最小尺寸兜底。
+          // AABB 缺失或有角点越过近/远平面（如相机钻进目标内部）时退回锚点+偏移的固定布局。
+          const minWidthPx = clamp(cloud.record.cloudSize?.width ?? 120, 72, 220);
+          const minHeightPx = clamp(cloud.record.cloudSize?.height ?? 72, 48, 180);
+          let widthPx = minWidthPx;
+          let heightPx = minHeightPx;
+          const off = cloud.record.screenOffset ?? { x: widthPx * 0.5 + 26, y: -(heightPx * 0.5 + 18) };
+          let centerX = anchorScreen.x + off.x;
+          let centerY = anchorScreen.y + off.y;
+          let centerNdcZ = anchorScreen.ndcZ;
+          let fitted = false;
+          if (sb?.min && sb?.max) {
+            const cornerPoints = boxCornersFromMinMaxVec(
+              new Vector3(sb.min[0], sb.min[1], sb.min[2]),
+              new Vector3(sb.max[0], sb.max[1], sb.max[2]),
+            );
+            const projectedCorners = cornerPoints.map(
+              (corner) => worldToOverlayPoint(viewer.camera, canvas, overlay, corner),
+            );
+            if (projectedCorners.every((p) => p.visible)) {
+              const fittedRect = computeFittedCloudRectFromCorners(projectedCorners, CLOUD_FIT_PADDING_PX, {
+                width: minWidthPx,
+                height: minHeightPx,
+              });
+              if (fittedRect) {
+                widthPx = fittedRect.widthPx;
+                heightPx = fittedRect.heightPx;
+                centerX = fittedRect.centerX;
+                centerY = fittedRect.centerY;
+                // billboard 平面放在 AABB 中心深度，保证像素→世界换算与投影一致
+                centerNdcZ = worldToOverlayPoint(
+                  viewer.camera,
+                  canvas,
+                  overlay,
+                  new Vector3(
+                    (sb.min[0] + sb.max[0]) * 0.5,
+                    (sb.min[1] + sb.max[1]) * 0.5,
+                    (sb.min[2] + sb.max[2]) * 0.5,
+                  ),
+                ).ndcZ;
+                fitted = true;
+              }
+            }
+          }
+          const cloudCenterWorld = overlayToWorld(
+            viewer.camera,
+            canvas,
+            overlay,
+            centerX,
+            centerY,
+            centerNdcZ,
+          );
+          const worldPerPixel = worldPerPixelAt(
+            viewer.camera,
+            cloudCenterWorld,
+            Math.max(1, canvas.clientWidth),
+            Math.max(1, canvas.clientHeight),
+          );
+          const cameraDir = viewer.camera.getWorldDirection(new Vector3()).normalize();
+          let right = new Vector3().crossVectors(cameraDir, viewer.camera.up).normalize();
+          if (!Number.isFinite(right.lengthSq()) || right.lengthSq() < 1e-8) {
+            right = new Vector3(1, 0, 0);
+          }
+          const up = new Vector3().crossVectors(right, cameraDir).normalize();
+          const wavesPerEdge = cloudWavesPerEdgeForSizePx(widthPx, heightPx);
+          const positions = buildCloudBillboardPolyline(
+            cloudCenterWorld,
+            right,
+            up,
+            widthPx * worldPerPixel,
+            heightPx * worldPerPixel,
+            clamp(wavesPerEdge * 4, 16, 200),
+            worldPerPixel,
+            wavesPerEdge,
+          );
+          const outlineGeometry = cloud.outline.geometry as MeshLineGeometry;
+          outlineGeometry.setPoints(positions);
+          cloudRenderStats.setPoints += 1;
+          cloud.outline.geometry.computeBoundingSphere();
+          // V1 标签总在视口安全区内，可见性只看锚点；旧布局仍要求文字框世界点也在视锥内
+          cloud.outline.visible = fitted || (anchorScreen.visible && (labelScreen?.visible ?? true));
+          // 文字框的屏幕参考框 = 加 padding、未加波浪的矩形（波浪只向外，参考框不含它）
+          cloud.render.frame = rectToCloudFrame({
+            x: centerX - widthPx / 2,
+            y: centerY - heightPx / 2,
+            width: widthPx,
+            height: heightPx,
+          });
+          cloud.render.frameNdcZ = centerNdcZ;
+        }
       }
-      const cloudCenterWorld = overlayToWorld(
-        viewer.camera,
-        canvas,
-        overlay,
-        centerX,
-        centerY,
-        centerNdcZ,
-      );
-      const worldPerPixel = worldPerPixelAt(
-        viewer.camera,
-        cloudCenterWorld,
-        Math.max(1, canvas.clientWidth),
-        Math.max(1, canvas.clientHeight),
-      );
-      const cameraDir = viewer.camera.getWorldDirection(new Vector3()).normalize();
-      let right = new Vector3().crossVectors(cameraDir, viewer.camera.up).normalize();
-      if (!Number.isFinite(right.lengthSq()) || right.lengthSq() < 1e-8) {
-        right = new Vector3(1, 0, 0);
+
+      // ---- 文字框 + 引线（方案 §5，开关 cloudLabelLayoutV1）----
+      if (labelEntry) {
+        const frame = cloud.render.frame;
+        if (labelV1 && frame && layoutRecord && measured) {
+          const dragTopLeft = cloud.render.labelDragTopLeft;
+          if (dirty.label || dragTopLeft || labelEntry.layoutMode !== 'v1') {
+            const preference: LabelPreference = dragTopLeft
+              ? { uv: layoutRecord.anchor.uv, offsetPx: labelOffsetFromTopLeft(frame.referenceBounds, layoutRecord.anchor.uv, dragTopLeft) }
+              : labelPreferenceFromRecord(layoutRecord);
+            const layout = layoutCloudLabel(frame, preference, measured, viewportRect);
+            cloud.render.labelLayout = layout;
+            cloudRenderStats.labelLayouts += 1;
+
+            labelEntry.layoutMode = 'v1';
+            labelEntry.el.style.transform = 'none';
+            labelEntry.el.style.left = `${layout.rect.x}px`;
+            labelEntry.el.style.top = `${layout.rect.y}px`;
+            labelEntry.el.style.opacity = '1';
+
+            if (layout.leader) {
+              const start = overlayToWorld(viewer.camera, canvas, overlay, layout.leader.start.x, layout.leader.start.y, cloud.render.frameNdcZ);
+              const end = overlayToWorld(viewer.camera, canvas, overlay, layout.leader.end.x, layout.leader.end.y, cloud.render.frameNdcZ);
+              updateLeaderGeometry(cloud.leader, start, end);
+              cloud.leader.root.visible = true;
+            } else {
+              cloud.leader.root.visible = false;
+            }
+          }
+        } else if (labelEntry.layoutMode === 'v1') {
+          // 从 V1 回到旧布局（开关关掉 / 本帧没有可用轮廓）：还原居中变换与图钉 → 文字框引线
+          labelEntry.layoutMode = 'legacy';
+          labelEntry.el.style.transform = 'translate(-50%,-50%)';
+          cloud.leader.root.visible = true;
+          updateLeaderGeometry(cloud.leader, cloud.worldPos, cloud.labelWorldPos);
+          cloud.render.labelLayout = null;
+        }
       }
-      const up = new Vector3().crossVectors(right, cameraDir).normalize();
-      const wavesPerEdge = cloudWavesPerEdgeForSizePx(widthPx, heightPx);
-      const positions = buildCloudBillboardPolyline(
-        cloudCenterWorld,
-        right,
-        up,
-        widthPx * worldPerPixel,
-        heightPx * worldPerPixel,
-        clamp(wavesPerEdge * 4, 16, 200),
-        worldPerPixel,
-        wavesPerEdge,
-      );
-      const outlineGeometry = cloud.outline.geometry as MeshLineGeometry;
-      outlineGeometry.setPoints(positions);
-      (cloud.outline.material as MeshLineMaterial).resolution.set(
-        resolution.width,
-        resolution.height,
-      );
-      cloud.outline.geometry.computeBoundingSphere();
-      cloud.outline.visible = fitted || (anchorScreen.visible && labelScreen.visible);
     }
 
     for (const it of markers.values()) {
@@ -3959,11 +4279,51 @@ export function useDtxTools(options: {
     }
 
     for (const it of labels.values()) {
+      if (it.layoutMode === 'v1') continue;
       const p = worldToOverlay(viewer.camera, canvas, overlay, it.worldPos);
       it.el.style.left = `${p.x}px`;
       it.el.style.top = `${p.y}px`;
       it.el.style.opacity = p.visible ? '1' : '0';
     }
+  }
+
+  /** 云线渲染计数快照（静止零重建等验收用） */
+  function debugCloudRenderStats(): CloudRenderStats {
+    return { ...cloudRenderStats };
+  }
+
+  function resetCloudRenderStats(): void {
+    cloudRenderStats.frames = 0;
+    cloudRenderStats.contourBuilds = 0;
+    cloudRenderStats.setPoints = 0;
+    cloudRenderStats.labelLayouts = 0;
+    cloudRenderStats.paintUpdates = 0;
+  }
+
+  /** e2e / 单测：每条云线当前的屏幕参考框、V1 文字框布局与文字框 DOM 定位 */
+  function debugCloudLabelLayouts(): {
+    id: string
+    frame: CloudFrame | null
+    layout: LabelLayoutResult | null
+    layoutMode: 'legacy' | 'v1'
+    labelLeft: string
+    labelTop: string
+    leaderVisible: boolean
+  }[] {
+    const out: ReturnType<typeof debugCloudLabelLayouts> = [];
+    for (const [id, cloud] of cloudShapes.entries()) {
+      const labelEntry = labels.get(id);
+      out.push({
+        id,
+        frame: cloud.render.frame,
+        layout: cloud.render.labelLayout,
+        layoutMode: labelEntry?.layoutMode === 'v1' ? 'v1' : 'legacy',
+        labelLeft: labelEntry?.el.style.left ?? '',
+        labelTop: labelEntry?.el.style.top ?? '',
+        leaderVisible: cloud.leader.root.visible,
+      });
+    }
+    return out;
   }
 
   /**
@@ -4449,6 +4809,8 @@ export function useDtxTools(options: {
         projectOverlayToWorld: (x, y, ndcZ) => vec3ToTuple(
           overlayToWorld(viewer.camera, canvas, overlay, x, y, ndcZ),
         ),
+        // P1：新建即写像素意图布局（右上角 + 18 px）；开关关着就只写旧字段
+        labelLayoutV1: isCloudRenderFlagEnabled('cloudLabelLayoutV1') ? createDefaultCloudLabelLayoutV1() : undefined,
       });
       store.addCloudAnnotation(rec);
       clearPendingCloudAnchor();
@@ -4999,6 +5361,15 @@ export function useDtxTools(options: {
 
     // e2e/调试：读取云线轮廓当前渲染几何（世界坐标），用于验证「贴合包住」性质
     debugCloudOutlines,
+    // e2e/调试：云线渲染计数（静止零重建验收）与 V1 标签布局结果
+    debugCloudRenderStats,
+    resetCloudRenderStats,
+    debugCloudLabelLayouts,
+
+    // 云线 V1 标签拖动（文字框拖柄的 pointer 事件由 syncFromStore 绑定；这里给测试与外部调用）
+    beginInlineOverlayAnnotationDrag,
+    continueInlineOverlayAnnotationDrag,
+    endInlineOverlayAnnotationDrag,
 
     clearAllInScene,
     dispose,
