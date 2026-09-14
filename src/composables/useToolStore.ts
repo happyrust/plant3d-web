@@ -1,4 +1,4 @@
-import { computed, ref, watch } from 'vue';
+import { computed, ref, shallowRef, watch } from 'vue';
 
 import {
   fromClassicMeasurement,
@@ -21,6 +21,7 @@ import type {
   User,
 } from '@/types/auth';
 
+import { isAnnotationUxFlagEnabled } from '@/composables/useAnnotationUxFlags';
 import { useUserStore } from '@/composables/useUserStore';
 import { getOutputProjectFromUrl } from '@/lib/filesOutput';
 import {
@@ -30,6 +31,13 @@ import {
   parseLegacyDimensionArchive,
   type StorageLike,
 } from '@/migrations/legacyDimensionV5Archive';
+import {
+  annotationScopeKey,
+  describeUnattributedDraft,
+  isSameAnnotationScope,
+  parseLegacyStorageScope,
+  type AnnotationScope,
+} from '@/review/domain/annotationScope';
 import {
   fillBoxAnnotationRegionDefault,
   fillCloudRegionFieldDefaults,
@@ -683,6 +691,73 @@ function getCurrentStorageScope(): string {
 
 function withStorageScope(storageKey: string, scope = getCurrentStorageScope()): string {
   return `${storageKey}:${scope}`;
+}
+
+// ---------------------------------------------------------------------------
+// U0 草稿 scope（方案 2026-09-14 §3.6，决策 d-565 / d-571）
+//
+// 校审上下文里本机草稿容器按「项目 + canonical taskId / draftSessionId + reviewRound + 用户」隔离：
+// `setAnnotationDraftScope(scope)` 之后存储 key 从旧的 `project=…|db=…` 换成 `annotationScopeKey(scope)`；
+// 切 scope 时先把内存里的状态刷进旧 key、再从新 key 载入，A 任务的草稿不会写进 B 的容器。
+// 旧 `project=…|db=…` 容器在 scope 生效期间**只读**：`getUnattributedDraftSummary()` 只数条数给面板显示「未归属草稿」，
+// 不导入、不改写。开关 `annotationUx.scopedDraftsV1` 关掉 = scope 不参与 key 计算，回到旧行为。
+// ---------------------------------------------------------------------------
+
+/** 当前批注草稿 scope；null = 不在校审任务上下文里（沿用旧 `project=…|db=…` 作用域） */
+const annotationDraftScope = shallowRef<AnnotationScope | null>(null);
+
+function isScopedDraftsEnabled(): boolean {
+  return isAnnotationUxFlagEnabled('scopedDraftsV1');
+}
+
+/** 实际生效的存储作用域字串：开关开 + 有 scope → `annotationScopeKey`；否则旧 `project=…|db=…` */
+function resolveStorageScope(): string {
+  const scope = annotationDraftScope.value;
+  if (scope && isScopedDraftsEnabled()) return annotationScopeKey(scope);
+  return getCurrentStorageScope();
+}
+
+export type UnattributedDraftSummary = {
+  /** 旧容器的作用域字串（`project=…|db=…` / `__default__`） */
+  storageScope: string;
+  /** 「未归属草稿」/「未归属草稿（项目 x）」 */
+  label: string;
+  counts: Record<AnnotationType, number>;
+  total: number;
+};
+
+/**
+ * 只读窥视某个作用域下容器里四类批注的条数：只读 V7 / V6 原文、不 normalize、不触发旧尺寸归档（那是有写副作用的）。
+ * 容器不存在 / 坏 JSON → null。
+ */
+function peekPersistedAnnotationCounts(scope: string): Record<AnnotationType, number> | null {
+  if (typeof localStorage === 'undefined') return null;
+  for (const key of [STORAGE_KEY_V7, STORAGE_KEY_V6]) {
+    let raw: string | null = null;
+    try {
+      raw = localStorage.getItem(withStorageScope(key, scope));
+    } catch {
+      return null;
+    }
+    if (!raw) continue;
+    try {
+      const parsed = JSON.parse(raw) as Record<string, unknown> | null;
+      if (!parsed || typeof parsed !== 'object') return null;
+      const count = (field: string): number => {
+        const value = parsed[field];
+        return Array.isArray(value) ? value.length : 0;
+      };
+      return {
+        text: count('annotations'),
+        cloud: count('cloudAnnotations'),
+        rect: count('rectAnnotations'),
+        obb: count('obbAnnotations'),
+      };
+    } catch {
+      return null;
+    }
+  }
+  return null;
 }
 
 function archiveLegacyDimensionsForScope(
@@ -1445,7 +1520,7 @@ function loadPersisted(scope = getCurrentStorageScope()): PersistedStateV7 {
   return emptyPersistedStateV7();
 }
 
-const storageScope = ref(getCurrentStorageScope());
+const storageScope = ref(resolveStorageScope());
 const persisted = loadPersisted(storageScope.value);
 
 /**
@@ -1653,8 +1728,13 @@ export type RefreshToolStorePersistedScopeOptions = { force?: boolean };
  */
 export function refreshToolStorePersistedScope(opts?: RefreshToolStorePersistedScopeOptions) {
   if (typeof window === 'undefined') return;
-  const nextScope = getCurrentStorageScope();
+  const nextScope = resolveStorageScope();
   if (!opts?.force && nextScope === storageScope.value) return;
+  if (nextScope !== storageScope.value) {
+    // 换容器前先把内存里的状态刷进旧 key：deep watch 是异步刷的，同一 tick 里的最后一笔编辑还没落盘，
+    // 不刷的话它会跟着 applyPersistedState 之后的那次 watch 写进新 key——A 的草稿进了 B 的容器。
+    writePersistedSnapshot(storageScope.value);
+  }
   storageScope.value = nextScope;
   applyPersistedState(loadPersisted(nextScope));
 }
@@ -1663,9 +1743,65 @@ function refreshPersistedScope() {
   refreshToolStorePersistedScope();
 }
 
+/**
+ * 设定批注草稿 scope（U0）。同一 scope 幂等返回 false；变了就切容器（旧 key 先刷盘、再从新 key 载入）并返回 true。
+ * 传 null = 离开校审任务上下文，回到旧 `project=…|db=…` 作用域。
+ * 开关 `annotationUx.scopedDraftsV1` 关着时只记不生效（key 不变），开回来那一刻 `refreshToolStorePersistedScope` 会接上。
+ */
+function setAnnotationDraftScope(scope: AnnotationScope | null): boolean {
+  if (isSameAnnotationScope(annotationDraftScope.value, scope)) return false;
+  annotationDraftScope.value = scope;
+  refreshToolStorePersistedScope();
+  return true;
+}
+
+function getAnnotationDraftScope(): AnnotationScope | null {
+  return annotationDraftScope.value;
+}
+
+/**
+ * 旧 `project=…|db=…` 容器里还躺着的批注条数（scope 生效期间只读、不导入）。
+ * 不在 scope 里 / 开关关 / 旧容器没有批注 → null（面板不出提示）。
+ */
+function getUnattributedDraftSummary(): UnattributedDraftSummary | null {
+  if (!annotationDraftScope.value || !isScopedDraftsEnabled()) return null;
+  const legacyScope = getCurrentStorageScope();
+  const counts = peekPersistedAnnotationCounts(legacyScope);
+  if (!counts) return null;
+  const total = counts.text + counts.cloud + counts.rect + counts.obb;
+  if (total === 0) return null;
+  return {
+    storageScope: legacyScope,
+    label: describeUnattributedDraft(parseLegacyStorageScope(legacyScope)),
+    counts,
+    total,
+  };
+}
+
 if (typeof window !== 'undefined') {
   window.addEventListener('popstate', refreshPersistedScope);
   window.addEventListener('modelProjectChanged', refreshPersistedScope as EventListener);
+}
+
+/** 把当前内存状态整份写进 `scope` 作用域的 V7 容器（deep watch 与切 scope 前的刷盘共用） */
+function writePersistedSnapshot(scope: string): void {
+  if (typeof localStorage === 'undefined') return;
+  const payload: PersistedStateV7 = {
+    version: 7,
+    measurements: unifiedMeasurementRecords.value,
+    legacyMeasurements: legacyMeasurementPayloads.value,
+    annotations: annotations.value,
+    obbAnnotations: obbAnnotations.value,
+    cloudAnnotations: cloudAnnotations.value,
+    rectAnnotations: rectAnnotations.value,
+  };
+  try {
+    archiveLegacyDimensionsForScope(localStorage, scope);
+    archiveLegacyDimensionBridgeForScope(localStorage, scope);
+    localStorage.setItem(withStorageScope(STORAGE_KEY_V7, scope), JSON.stringify(payload));
+  } catch {
+    // ignore
+  }
 }
 
 watch(
@@ -1677,24 +1813,8 @@ watch(
     cloudAnnotations: cloudAnnotations.value,
     rectAnnotations: rectAnnotations.value,
   }),
-  (state) => {
-    if (typeof localStorage === 'undefined') return;
-    const payload: PersistedStateV7 = {
-      version: 7,
-      measurements: state.measurements,
-      legacyMeasurements: state.legacyMeasurements,
-      annotations: state.annotations,
-      obbAnnotations: state.obbAnnotations,
-      cloudAnnotations: state.cloudAnnotations,
-      rectAnnotations: state.rectAnnotations,
-    };
-    try {
-      archiveLegacyDimensionsForScope(localStorage, storageScope.value);
-      archiveLegacyDimensionBridgeForScope(localStorage, storageScope.value);
-      localStorage.setItem(withStorageScope(STORAGE_KEY_V7, storageScope.value), JSON.stringify(payload));
-    } catch {
-      // ignore
-    }
+  () => {
+    writePersistedSnapshot(storageScope.value);
   },
   { deep: true }
 );
@@ -3325,6 +3445,12 @@ export function useToolStore() {
     getAnnotationRecordsByType,
 
     clearAll,
+
+    // U0 草稿 scope（方案 2026-09-14 §3.6）
+    annotationDraftScope,
+    setAnnotationDraftScope,
+    getAnnotationDraftScope,
+    getUnattributedDraftSummary,
 
     // 评论/意见管理
     addCommentToAnnotation,

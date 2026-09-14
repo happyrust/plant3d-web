@@ -62,6 +62,7 @@ import {
   runReviewSubmitPreflight,
   submitTaskToNextNodeSafely,
 } from './reviewPanelActions';
+import UnattributedDraftNotice from './UnattributedDraftNotice.vue';
 import { useMeasurementPathSummaries } from './useMeasurementPathSummaries';
 import { resolvePassiveWorkflowMode } from './workflowMode';
 import WorkflowReturnDialog from './WorkflowReturnDialog.vue';
@@ -77,6 +78,7 @@ import {
   reviewSyncImport,
 } from '@/api/reviewApi';
 import { useAnnotationBindingResolve } from '@/composables/useAnnotationBindingResolve';
+import { useAnnotationDraftScopeSync } from '@/composables/useAnnotationDraftScopeSync';
 import { syncAnnotationReviewStates } from '@/composables/useAnnotationReviewStateSync';
 import { saveAnnotationBasicFields, saveAnnotationSeverity } from '@/composables/useAnnotationSeveritySync';
 import { refreshCommentThread } from '@/composables/useCommentThread';
@@ -382,6 +384,10 @@ const currentReviewUserId = computed<string | null>(() => {
   }
   return userStore.currentUser.value?.id?.trim() || null;
 });
+
+// U0 草稿 scope：任务 / 用户 / 项目一变就切本机草稿容器（flush:'sync'，抢在下面 watch(currentTask) 的确认记录回放之前），
+// 旧 project|db 容器从此只读，由 <UnattributedDraftNotice> 数条数提示。面板卸载时自动回到旧作用域。
+useAnnotationDraftScopeSync({ userId: () => currentReviewUserId.value });
 
 /** 仅任务发起人在 sj（设计）节点可补传 / 删除附件；其余节点只读 */
 const canEditTaskAttachments = computed(() => {
@@ -2042,6 +2048,7 @@ function handleAnnotationQueueCompleted() {
       class="min-h-[480px]"
       data-guide="annotation-list-zone"
       data-testid="reviewer-annotation-sheet-container">
+      <UnattributedDraftNotice />
       <AnnotationSheetWorkspace :items="scopedReviewerItems"
         :density="props.density"
         :current-annotation-id="expandedAnnotationId"
