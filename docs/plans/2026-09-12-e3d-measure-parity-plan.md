@@ -88,7 +88,7 @@
 | 17 | 拾取类型：Distance / Mid-Point / Fraction / Proportion / Intersect | ◐ | 全部已接：Distance / Mid-Point / Fraction / Proportion 走 `pickDerivation.ts`（PLINE 线、Graphics 边、P-Point Distance 偏移）；Intersect 走 `intersectPickSession.ts` 两 / 三次子拾取（线 × 线 / 线 × 面 / 面 × 面 × 第三项，E3D 2,870 / 2,874 分型），实机 `ELBO 边 × VALV 边` 出交点（golden MD §13）；**◐ 只因 G8 运行时 golden 未采** |
 | 18 | Significant Snaps 开关 | ◐ | 拾取层 `significantSnaps`（覆盖条开关 + 提示尾巴 `Snap`），线候选带 `intermediates` 时按段派生；无 E3D 实机对照 |
 | 19 | 提示文案结构 `<命令> <步> (<拾取类型>) <过滤器> :` | ◐ | `formatMeasurementPrompt`：`距离测量 · 第 2/2 步 选择终点 (Mid-Point) Snap : ELBO P-Point #1`（E3D `EDGSTATE.prompt()` 结构，过滤器不进提示与 E3D 一致）；文案矩阵（Phase E）未对照 |
-| 20 | 窗体常驻 / 连续测量 / Repeat / ESC 分层 / 右键 | ◐ | 有连续测量、Esc 分层、右键菜单；ESC / 右键 / 关窗的 E3D 分层行为未采（上一计划 M3 gate） |
+| 20 | 窗体常驻 / 连续测量 / Repeat / ESC 分层 / 右键 | ◐ | **ESC / 关窗的 E3D 口径已采到（2026-09-14，静态源，golden MD §20）**：Esc 走 `EDGCNTRL.canvasPick(…,'ESCAPE') → escape()`，**没有分层**——跑 `packet.closeAction()`（= `gphMeasure.tidy()`）、收回本包 aid 号、`tidyForms()`、把上一层包 `reinstatePacket` 回来，停在哪一步都一样；关窗 `gphMeasure.close()` = `tidy()` + `edgCntrl.remove(description)`，对当前包即 `retrieve()`，与 escape 只差跑 `continue` 还是 `escape` 动作（测量包两者都没设 → 等价）。窗体常驻 / 连续测量来自 `packet.remove = FALSE` → `setOldPacket()`，Web 一致。Web 的四层 Esc 保留为增强（决策 `d-444`），第 ④ 层等价于 E3D 的 Esc（含 `deactivate()` 的 tidy，`d-437`）。**余右键**：E3D 拾取中的右键在原生 GUI（`EDGPICK.applyToView → view.setInMode`），静态源不可见，待 trace；Web 的右键是对已画尺寸弹菜单 |
 | 21 | 标高点 / 高差 | Web 独有 | E3D Measure 无此模式（用 Query），保留，不列 parity |
 
 ## 3. 差距分级
@@ -183,7 +183,10 @@
   G2-04/05 运行时 golden 仍欠，等 E3D 起来补采（决策 `d-437`）。
 - Units：测量会话级 Unit type（Default / Metric / Imperial）+ Display Unit（mm / cm / m / in / ft-in …）+ 上次选择记忆，优先级高于全局设置（上一计划 M3 PR3.2）；格式矩阵（尾零、英制分数）先采 golden。
 - Perpendicular to 目标 provider 接 Phase A 的 Graphics 边 / 面与 PLINE；面板「点→无限线 / 面」文案沿用。
-- ESC / 右键 / 关窗分层：采 E3D 行为后对齐（当前 Web 的 Esc 分层保留，只调差异）。
+- ~~ESC / 右键 / 关窗分层：采 E3D 行为后对齐（当前 Web 的 Esc 分层保留，只调差异）。~~
+  **切片 2 ✓（2026-09-14 13:50，只读源、无代码改动）**：E3D 的 Esc 与关窗口径从 `edgcntrl` / `edgstate` / `gphdimension` 源码采到——Esc 没有分层，一下整包退并跑
+  `tidy()`；关窗与 Esc 在测量这条命令上等价；窗体常驻来自 `packet.remove = FALSE`。Web 第 ④ 层已等价（`deactivate()` 含 tidy，切片 1），前三层保留为增强（决策
+  `d-444`）。右键仍要 E3D 运行时 trace（原生 GUI，PML 不可见）。golden MD §20。
 
 **golden gate**：G2-04/05、Units 矩阵（Metric / Imperial × 4 个 Display Unit × 尾零 / 负零）、ESC / 右键 / 关窗三态各一条 trace。
 

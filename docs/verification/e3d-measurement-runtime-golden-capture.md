@@ -695,4 +695,39 @@ golden 仍未采（E3D 进程不在跑，采集矩阵 §5 保留）。与 golden
 「关闭 Keep Dimensions 后只隐藏旧距离图形，不删除历史记录」覆盖下一次测量时的替换路径。46 用例全绿。
 
 **残余 / 未做**：G2-04 / 05 运行时 golden 未采；Phase B 其余三项未动——#5 Units 会话级单位待 Q4（英制 Inch / Feet & Inches / Feet 做不做）拍板，
-#6 的 Aid 目标 provider 待 Q3，#20 ESC / 右键 / 关窗分层待 `edgstate.pmlobj` 静态口径 + 运行时 trace。
+#6 的 Aid 目标 provider 待 Q3，#20 ESC / 右键 / 关窗分层见 §20。
+
+## 20. Phase B · ESC / 关窗 / 右键的 E3D 口径（源码对照，无代码改动）（2026-09-14 13:50）
+
+**E3D ESC 是「一下退到底」，没有分层。** 视口按 Esc → 视图 gadget 回调 `EDGCNTRL.canvasPick(view, 'ESCAPE')`（`edgcntrl.pmlobj` 908，911–913 只测这一个
+mode）→ `escape()`（779）：
+1. 取 `state.packet.escape`（测量包没设，见下）；
+2. 跑 `state.packet.closeAction()`（794）——测量包的 `close` 是 `!!gphMeasure.tidy()`，也就是 **Keep 关着时 `clearAids()`**（§19）；
+3. `!!aidNumbers.remove(state.packet.aidNumber)`（800）收回**本包**的 aid 号（`EDGSTATE.action` 506 在每个 major pick 之间打的 `AID TEXT` 标签就挂在它上面，
+   与窗体自己那个 `Measuring` 号是两回事）；
+4. `tidyForms()`（803）把该包的拾取类型窗体收掉；
+5. 新建 `EDGSTATE` 并 `reinstatePacket(stack.remove(1))`（806–807）把栈上的上一层包恢复回来——通常就是导航；
+6. `setModeState()`（826）。
+
+**不管停在哪一步都走这一条**：第 1 步、第 2 步、Intersect 的第 2 / 第 3 次子拾取中间，Esc 都是整包放弃。`edgpicktype.pmlobj` 778 / 796 / 813 / 821 那几句
+`…Select another item or escape to abort the operation` 是「可以按 Esc 放弃**整个操作**」的提示，不是「Esc 只退子拾取那一步」——Web 代码注释里引的就是这句，引偏了。
+
+**关窗与「测完一次」的口径**（`gphdimension.pmlobj` 594 `edit()` / 641 `editPerpendicular()`）：测量包 `packet.close = '!!gphMeasure.tidy()'`（616 / 658）、
+`packet.remove = FALSE`（618 / 660）、`action = '!!gphMeasure.setMeasure(!this.return[1])'`、`escape` / `continue` 都没设。于是：
+- 测完一次 → `EDGSTATE.action()` 走到底、`remove` 为假 → `setOldPacket(packet)` 从头再来 = 窗体常驻 + 连续测量（G1-05 ✓，Web 一致）。
+- 关窗 `gphMeasure.close()`（`gphmeasure.pmlfrm` 194）= `tidy()` + `edgCntrl.remove('Define a linear dimension')` / `remove('Define perpendicular linear dimension')`。
+  `remove(description)`（`edgcntrl.pmlobj` 595）对当前包就是 `retrieve()`（716），与 `escape()` **只差一件事**：`retrieve` 跑 `continue` 动作、`escape` 跑 `escape` 动作
+  ——测量包两个都没设，所以 Esc 与关窗在测量这条命令上等价。
+
+**Web 现状与偏离**（用户 2026-09-14 13:50 拍板保留，决策 `d-444`）：
+- Web 的 Esc 分四层（`useXeokitMeasurementTools.reset()`）：① Intersect 子拾取进行中 → 只丢已选的线 / 面；② 有草稿 → 取消草稿；③ 无草稿但有临时结果 → 丢结果；
+  ④ 都没有 → 回 false，`ViewerPanel.exitXeokitMeasureMode()` → `deactivate()` 退出测量模式。**第 ④ 层等价于 E3D 的 Esc**（含 §19 补的 `tidy()` 语义）；①②③ 是 Web 增强。
+- 保留的理由：Web 没有 E3D「在命令行重发一次命令」的回路，一下退到底会把已选的两条 Intersect 操作数、正在画的草稿、刚出的结果连同工具一起丢掉，代价比 E3D 大。
+- 右键：**静态源看不到**。视口的拾取模式由 `EDGPICK.applyToView` → `view.setInMode()`（`edgpick.pmlobj` 161 / 192）交给原生 GUI，PML 侧的回调只分出 `'ESCAPE'` 一支。
+  Web 现在的右键是对着**已画好的尺寸图形**弹菜单（`ViewerPanel.onViewerContextMenu`，命中 dimension 才弹，复制 / 删除等），E3D 侧语义最接近的是
+  `gphdimension.edit(aidNumber)`（编辑某个 aid 号上的尺寸），不是拾取中的取消。E3D 拾取途中右键弹什么，要等 E3D 进程起来采 trace。
+
+**证据等级**：`static_expectation`（`edgcntrl.pmlobj` 595 / 716 / 779 / 908，`edgstate.pmlobj` 436 `action()` / 506，`edgpick.pmlobj` 161，
+`edgpicktype.pmlobj` 778–821，`gphdimension.pmlobj` 594 / 641，`gphmeasure.pmlfrm` 194）；ESC / 右键 / 关窗三条运行时 trace 仍未采（采集矩阵 §5）。
+
+**本节无代码改动**：④ 层已由 §19 的 `deactivate()` 覆盖 `closeAction` 语义，其余为记录偏离。
