@@ -255,6 +255,8 @@ describe('useXeokitMeasurementStyleStore · measurementPickMode', () => {
       pickType: 'snap',
       values: { distanceMm: 0, fraction: 2, proportion: 0.5 },
       significantSnaps: true,
+      plineCut: false,
+      significantSnapPoints: { fitting: false, joint: false, node: false },
     });
   });
 
@@ -264,11 +266,16 @@ describe('useXeokitMeasurementStyleStore · measurementPickMode', () => {
       const style = useXeokitMeasurementStyleStore();
       style.updateMeasurementPickLayer({ filter: 'ppoint', pickType: 'fraction', values: { fraction: 3 } });
       style.updateMeasurementPickLayer({ significantSnaps: false });
+      // Pick Settings（Sections & Walls）：Pline 端点取 Cut，三档按字段合并。
+      style.updateMeasurementPickLayer({ plineCut: true, significantSnapPoints: { node: true } });
+      style.updateMeasurementPickLayer({ significantSnapPoints: { joint: true } });
       await nextTick();
       expect(style.state.measurementPickLayer.filter).toBe('ppoint');
       expect(style.state.measurementPickLayer.pickType).toBe('fraction');
       expect(style.state.measurementPickLayer.values).toEqual({ distanceMm: 0, fraction: 3, proportion: 0.5 });
       expect(style.state.measurementPickLayer.significantSnaps).toBe(false);
+      expect(style.state.measurementPickLayer.plineCut).toBe(true);
+      expect(style.state.measurementPickLayer.significantSnapPoints).toEqual({ fitting: false, joint: true, node: true });
     }
 
     vi.resetModules();
@@ -279,6 +286,8 @@ describe('useXeokitMeasurementStyleStore · measurementPickMode', () => {
       expect(layer.pickType).toBe('fraction');
       expect(layer.values.fraction).toBe(3);
       expect(layer.significantSnaps).toBe(false);
+      expect(layer.plineCut).toBe(true);
+      expect(layer.significantSnapPoints).toEqual({ fitting: false, joint: true, node: true });
     }
 
     // 不可用的过滤器（Aid）/ 未知类型与非法取值：读回时回 E3D 缺省，Fraction 取整且 ≥ 1。
@@ -290,6 +299,8 @@ describe('useXeokitMeasurementStyleStore · measurementPickMode', () => {
         pickType: 'bogus',
         values: { distanceMm: 'abc', fraction: 0.4, proportion: 0.25 },
         significantSnaps: 'yes',
+        plineCut: 'cut',
+        significantSnapPoints: { fitting: 1, node: true },
       },
     }));
     vi.resetModules();
@@ -299,6 +310,8 @@ describe('useXeokitMeasurementStyleStore · measurementPickMode', () => {
       pickType: 'snap',
       values: { distanceMm: 0, fraction: 1, proportion: 0.25 },
       significantSnaps: true,
+      plineCut: false,
+      significantSnapPoints: { fitting: false, joint: false, node: true },
     });
   });
 });

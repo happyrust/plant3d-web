@@ -13,13 +13,16 @@
  *   （E3D `PLSTART / PLEND pline`，世界系 mm），每条 p-line 摊成与 legacy `semantic_snap_points` 同形的
  *   「起点 / 终点」两个 `PrimitiveKeyPointCandidate`（`kind` `pline_start` / `pline_end`、`label` `PLINE <key> 起点|终点`），
  *   测量工具的 `attachPlineSegments` 据此把两端配成一条线、标特征类 `pline`；端点带线的方向（`dir`），Perpendicular to
- *   拾中它时目标就是这条 p-line（E3D `edgsctn.snap → this.line`）。**基本体显著点**（盒角 / 轴端）不给：E3D Element × Snap
- *   对基本体回落元素原点，那不是 E3D 口径（d-336），`errors` 里不再把它当缺口报。
+ *   拾中它时目标就是这条 p-line（E3D `edgsctn.snap → this.line`）。端点另带 `plineCut`（E3D `PLSTCUT / PLENCUT`，
+ *   服务端只在端面真斜时给），Pick Settings「Pline End Position = Cut」时测量工具用它当端点。**基本体显著点**（盒角 / 轴端）
+ *   不给：E3D Element × Snap 对基本体回落元素原点，那不是 E3D 口径（d-336），`errors` 里不再把它当缺口报。
+ * - 同一响应里的 `snap_points`（SCTN 名下的 FITT / SJOI / SUBJ / SNOD）摊成 `plineSnapPoints`：Pick Settings「Significant
+ *   Snap Points」勾了哪几档，测量工具就把哪几类投到 p-line 上当分段点（E3D `EDGPLINE.snapLine`）。
  *
  * 一切 `GenModelV1ApiError` 折成 `success:false + error_message`（与属性源同一做法）；`not_found` 也是
  * 一种「没有」——refno 不在所钉会话里，测量工具把它当无 P-Point 处理即可，不抛。
  */
-import type { KeypointQueryOptions, KeypointSource, PrimitiveKeypointsResult } from '../ports';
+import type { KeypointQueryOptions, KeypointSource, PlineSnapPointCandidate, PrimitiveKeypointsResult } from '../ports';
 import type { PtsetChildrenResponse, PtsetPoint, PtsetResponse } from '@/api/genModelPdmsAttrApi';
 import type { PrimitiveKeyPointCandidate } from '@/composables/useDbnoInstancesParquetLoader';
 
@@ -70,9 +73,9 @@ export function elementPlinesToKeypointCandidates(resp: ElementPlinesResponse): 
     const length = Math.hypot(dx, dy, dz);
     if (!(length > 1e-9)) return;
     const dir: [number, number, number] = finiteTriple(pline.dir) ? pline.dir : [dx / length, dy / length, dz / length];
-    for (const [endpoint, kind, world] of [
-      ['起点', 'pline_start', pline.start],
-      ['终点', 'pline_end', pline.end],
+    for (const [endpoint, kind, world, cut] of [
+      ['起点', 'pline_start', pline.start, pline.start_cut],
+      ['终点', 'pline_end', pline.end, pline.end_cut],
     ] as const) {
       out.push({
         id: `plines:${refno}:${key}:${kind}`,
@@ -88,9 +91,35 @@ export function elementPlinesToKeypointCandidates(resp: ElementPlinesResponse): 
         world: [world[0], world[1], world[2]],
         hasDir: true,
         dir: [dir[0], dir[1], dir[2]],
+        // 服务端只在端面真斜（与平头端点差 > 0.01 mm）时给 cut 端点；平头端 Cut = Uncut，没有这一格。
+        ...(finiteTriple(cut) ? { plineCut: [cut[0], cut[1], cut[2]] as [number, number, number] } : {}),
       });
     }
   });
+  return out;
+}
+
+const PLINE_SNAP_POINT_KINDS = new Set(['fitting', 'joint', 'node']);
+
+/**
+ * `element/plines` 的 `snap_points`（SCTN 名下的 FITT / SJOI / SUBJ / SNOD）→ 测量工具的分段点候选。
+ * 未知 `kind` 与坐标非有限的跳过；老构建没有这一格时为空。
+ */
+export function elementPlinesToSnapPoints(resp: ElementPlinesResponse): PlineSnapPointCandidate[] {
+  const out: PlineSnapPointCandidate[] = [];
+  for (const point of resp.snap_points ?? []) {
+    if (!point || !PLINE_SNAP_POINT_KINDS.has(point.kind) || !finiteTriple(point.position)) continue;
+    const refno = typeof point.refno === 'string' ? fromV1Refno(point.refno) : '';
+    const noun = typeof point.noun === 'string' && point.noun.trim() ? point.noun.trim() : point.kind.toUpperCase();
+    out.push({
+      refno,
+      noun,
+      kind: point.kind as PlineSnapPointCandidate['kind'],
+      zdis: typeof point.zdis === 'number' && Number.isFinite(point.zdis) ? point.zdis : Number.NaN,
+      world: [point.position[0], point.position[1], point.position[2]],
+      label: refno ? `${noun} ${refno}` : noun,
+    });
+  }
   return out;
 }
 
@@ -242,7 +271,7 @@ export function createGenModelV1KeypointSource(options: GenModelV1KeypointSource
       try {
         const resp = await api.elementPlines({ refno });
         const items = elementPlinesToKeypointCandidates(resp);
-        if (items.length > 0) return { items, errors: [] };
+        if (items.length > 0) return { items, errors: [], plineSnapPoints: elementPlinesToSnapPoints(resp) };
         const noun = resp.noun ? `${resp.noun} ` : '';
         return {
           items: [],

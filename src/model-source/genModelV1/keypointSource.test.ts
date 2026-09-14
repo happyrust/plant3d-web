@@ -5,6 +5,7 @@ import { Vector3 } from 'three';
 import {
   createGenModelV1KeypointSource,
   elementPlinesToKeypointCandidates,
+  elementPlinesToSnapPoints,
   elementPtsetToChildrenResponse,
   elementPtsetToPtsetResponse,
   emptyPtsetReason,
@@ -235,5 +236,37 @@ describe('gen-model-v1 keypointSource', () => {
     expect(failed.errors).toHaveLength(1);
     expect(failed.errors[0]).toContain('PLINE 查询失败');
     expect(failed.errors[0]).toContain('internal');
+  });
+
+  it('Pick Settings 供给：斜切端点随端点候选带成 plineCut（平头端没有）；snap_points 摊成 plineSnapPoints（未知 kind / 非有限跳过；老构建没有这一格 → 空）', async () => {
+    const items = elementPlinesToKeypointCandidates(sctnPlines());
+    // NA 两端平头：没有 plineCut；TOS 两端都斜切。
+    expect(items[0]!.plineCut).toBeUndefined();
+    expect(items[1]!.plineCut).toBeUndefined();
+    expect(items[2]).toMatchObject({ label: 'PLINE TOS 起点', plineCut: [1000, 2150, -75] });
+    expect(items[3]).toMatchObject({ label: 'PLINE TOS 终点', plineCut: [1000, 2150, 3075] });
+
+    const withSnapPoints = sctnPlines({
+      snap_points: [
+        { refno: '24381/177316', noun: 'SNOD', kind: 'node', zdis: 435.56, position: [1000, 2000, 435.56] },
+        { refno: '24381/177317', noun: 'SJOI', kind: 'joint', zdis: 435.56, position: [1000, 2000, 435.56] },
+        { refno: '24381/177399', noun: 'FITT', kind: 'fitting', zdis: 1200, position: [1000, 2050, 1200] },
+        { refno: '24381/1', noun: 'SCOJ', kind: 'compound' as never, zdis: 1, position: [0, 0, 1] },
+        { refno: '24381/2', noun: 'SNOD', kind: 'node', zdis: 2, position: [Number.NaN, 0, 2] },
+      ],
+    });
+    expect(elementPlinesToSnapPoints(withSnapPoints)).toEqual([
+      { refno: '24381_177316', noun: 'SNOD', kind: 'node', zdis: 435.56, world: [1000, 2000, 435.56], label: 'SNOD 24381_177316' },
+      { refno: '24381_177317', noun: 'SJOI', kind: 'joint', zdis: 435.56, world: [1000, 2000, 435.56], label: 'SJOI 24381_177317' },
+      { refno: '24381_177399', noun: 'FITT', kind: 'fitting', zdis: 1200, world: [1000, 2050, 1200], label: 'FITT 24381_177399' },
+    ]);
+    expect(elementPlinesToSnapPoints(sctnPlines())).toEqual([]);
+
+    const elementPlines = vi.fn(async () => withSnapPoints);
+    const elementPtset = vi.fn(async () => ({ source: 'e3d-model', ...elbo() }) satisfies ElementPtsetResponse);
+    const source = createGenModelV1KeypointSource({ api: { elementPtset, elementPlines } });
+    const result = await source.primitiveKeypoints(7997, '24381_177301');
+    expect(result.plineSnapPoints).toHaveLength(3);
+    expect(result.plineSnapPoints![0]).toMatchObject({ kind: 'node', refno: '24381_177316' });
   });
 });

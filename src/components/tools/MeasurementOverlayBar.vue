@@ -29,9 +29,13 @@ import {
   MEASUREMENT_PICK_TYPE_IDS,
   MEASUREMENT_PICK_TYPE_LABELS,
   MEASUREMENT_PICK_TYPE_VALUE_KEY,
+  MEASUREMENT_SIGNIFICANT_SNAP_POINT_HINTS,
+  MEASUREMENT_SIGNIFICANT_SNAP_POINT_IDS,
+  MEASUREMENT_SIGNIFICANT_SNAP_POINT_LABELS,
   type MeasurementPickFilterId,
   type MeasurementPickTypeId,
   type MeasurementPickTypeValues,
+  type MeasurementSignificantSnapPointId,
 } from '@/measurement/pick/pickLayerModel';
 
 type ToolsApi = {
@@ -177,6 +181,30 @@ function setPickTypeValue(raw: string): void {
 
 function setSignificantSnaps(checked: boolean): void {
   measurementStyle.updateMeasurementPickLayer({ significantSnaps: checked });
+}
+
+// ── E3D Pick Settings → Sections & Walls：Pline End Position（EDGPLINE.cut）+ Significant Snap Points ──
+const PLINE_END_OPTIONS: readonly Readonly<{ id: 'uncut' | 'cut'; cut: boolean; label: string; hint: string }>[] = [
+  {
+    id: 'uncut',
+    cut: false,
+    label: 'Uncut',
+    hint: 'Uncut (Intersect with cutplane)：p-line 取 POSS / POSE 截面平面上的两端（E3D PLSTART → PLEND，缺省）',
+  },
+  {
+    id: 'cut',
+    cut: true,
+    label: 'Cut',
+    hint: 'Cut (Use end preparation)：p-line 取按 DRNS / DRNE 斜切后的两端（E3D PLSTCUT → PLENCUT）；平头端不变',
+  },
+];
+
+function setPlineCut(cut: boolean): void {
+  measurementStyle.updateMeasurementPickLayer({ plineCut: cut });
+}
+
+function setSignificantSnapPoint(id: MeasurementSignificantSnapPointId, checked: boolean): void {
+  measurementStyle.updateMeasurementPickLayer({ significantSnapPoints: { [id]: checked } });
 }
 
 async function toggleSettings(): Promise<void> {
@@ -453,6 +481,53 @@ onBeforeUnmount(() => {
             <span>Significant snaps</span>
             <span class="text-[11px] text-muted-foreground">（提示条尾巴的 Snap）</span>
           </label>
+
+          <!-- E3D Pick Settings → Sections & Walls：Pline End Position + Significant Snap Points -->
+          <div data-testid="measurement-overlay-pick-settings-sections"
+            class="mt-2 rounded-md border border-border/70 bg-background/60 p-2">
+            <div class="mb-1 text-[11px] text-muted-foreground">Pick Settings · Sections &amp; Walls</div>
+            <div class="flex items-center justify-between gap-2">
+              <span class="text-[11px] text-muted-foreground" title="E3D Pick Settings「Pline End Position」：Pline 过滤器拾中的 p-line 用哪一对端点">Pline 端点</span>
+              <div role="radiogroup" aria-label="Pline End Position" class="grid grid-cols-2 gap-1">
+                <button v-for="option in PLINE_END_OPTIONS"
+                  :key="option.id"
+                  type="button"
+                  role="radio"
+                  :data-testid="`measurement-overlay-pline-end-${option.id}`"
+                  class="h-7 rounded-md border px-2 text-[11px] leading-none"
+                  :class="pickLayer.plineCut === option.cut
+                    ? 'border-primary bg-primary text-primary-foreground'
+                    : 'border-border bg-background text-muted-foreground hover:bg-muted'"
+                  :aria-checked="pickLayer.plineCut === option.cut"
+                  :title="option.hint"
+                  @click="setPlineCut(option.cut)">
+                  {{ option.label }}
+                </button>
+              </div>
+            </div>
+            <div class="mt-2 flex items-center justify-between gap-2">
+              <span class="text-[11px] text-muted-foreground"
+                :class="{ 'opacity-50': !pickLayer.significantSnaps }"
+                title="E3D Pick Settings「Significant Snap Points」：型材上的哪些成员把 p-line 分段（只在 Significant snaps 开着时起作用）">
+                Significant snap points
+              </span>
+              <div class="flex items-center gap-2">
+                <label v-for="id in MEASUREMENT_SIGNIFICANT_SNAP_POINT_IDS"
+                  :key="id"
+                  class="flex h-7 cursor-pointer items-center gap-1 rounded-md px-1 hover:bg-muted"
+                  :class="{ 'opacity-50': !pickLayer.significantSnaps }"
+                  :title="MEASUREMENT_SIGNIFICANT_SNAP_POINT_HINTS[id]">
+                  <input type="checkbox"
+                    :data-testid="`measurement-overlay-significant-snap-point-${id}`"
+                    class="h-3.5 w-3.5 accent-primary"
+                    :checked="pickLayer.significantSnapPoints[id]"
+                    :aria-label="`Significant Snap Points：${MEASUREMENT_SIGNIFICANT_SNAP_POINT_LABELS[id]}`"
+                    @change="setSignificantSnapPoint(id, ($event.target as HTMLInputElement).checked)" />
+                  <span class="text-[11px]">{{ MEASUREMENT_SIGNIFICANT_SNAP_POINT_LABELS[id] }}</span>
+                </label>
+              </div>
+            </div>
+          </div>
         </div>
 
         <label v-if="isDistanceMode"

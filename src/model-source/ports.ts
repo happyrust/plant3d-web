@@ -109,11 +109,30 @@ export type KeypointQueryOptions = {
   forceRefresh?: boolean;
 };
 
+/**
+ * SCTN 名下把 p-line 分段的成员（E3D Pick Settings「Significant Snap Points」：`EDGPLINE.snapLine` 收的
+ * FITT / SJOI / SUBJ / SNOD）。`world` 与 `PrimitiveKeyPointCandidate.world` 同一坐标系（世界系 mm），
+ * 测量工具按 E3D `LINE.near` 把它投到同一构件的每条 p-line 上。
+ */
+export type PlineSnapPointCandidate = {
+  refno: string;
+  /** `FITT` / `SJOI` / `SUBJ` / `SNOD` */
+  noun: string;
+  kind: 'fitting' | 'joint' | 'node';
+  /** 沿轴离 `POSS` 的距离（mm） */
+  zdis: number;
+  world: [number, number, number];
+  /** 例如 `SNOD 24381/177316` */
+  label: string;
+};
+
 /** `primitiveKeypoints` 的结果：候选与「为什么少 / 没有」的原因并列，由测量工具决定怎么提示。 */
 export type PrimitiveKeypointsResult = {
   items: PrimitiveKeyPointCandidate[];
   /** 每条来源各自的失败原因（parquet 表缺、接口不支持…）；有候选时也可能非空（部分来源失败） */
   errors: string[];
+  /** 与 PLINE 候选同一构件的 Significant Snap 分段点（只有 gen-model-v1 的 SCTN 给；legacy 与 GENSEC 没有） */
+  plineSnapPoints?: PlineSnapPointCandidate[];
 };
 
 /**

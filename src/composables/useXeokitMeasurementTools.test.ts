@@ -2921,8 +2921,15 @@ describe('useXeokitMeasurementTools', () => {
      * `semantic_snap_points` 的形状给「起点 / 终点」两个候选（`elementPlinesToKeypointCandidates` 产出的也是这个形状）。
      * ELBO C 有 P-Point #1 (1.2, 3.4, 6)，给 Perpendicular 起点。相机 / 画布同 `setupTubingTools`：
      * px = 100 + (x − 2) × 100，py = 100 − (y − 4) × 100。
+     *
+     * `options.cutEnds`：起端斜切——NA 的 `PLSTCUT` 在 (1.4, 4, 6)、TOS 的在 (1.3, 4.1, 6)，终端平头（E3D Pick Settings
+     * 「Pline End Position」）。`options.snapPoints`：SCTN S 名下的 Significant Snap 分段点（SNOD / SJOI / FITT，世界系 mm），
+     * 经 `getModelSource().keypoints.primitiveKeypoints` 的 `plineSnapPoints` 一格进测量工具。
      */
-    async function setupPlineTools() {
+    async function setupPlineTools(options: {
+      cutEnds?: boolean;
+      snapPoints?: readonly { kind: 'fitting' | 'joint' | 'node'; scene: readonly [number, number, number]; refno: string; noun: string }[];
+    } = {}) {
       vi.useFakeTimers();
       const refnoS = '24381_300001';
       const refnoC = '24381_300002';
@@ -2931,6 +2938,7 @@ describe('useXeokitMeasurementTools', () => {
         (scene[1] + 20) / 0.001,
         (scene[2] + 30) / 0.001,
       ];
+      const cutStart: Record<string, readonly [number, number, number]> = { NA: [1.4, 4, 6], TOS: [1.3, 4.1, 6] };
       const plineEnd = (key: string, which: '起点' | '终点', scene: readonly [number, number, number], index: number) => ({
         id: `plines:${refnoS}:${key}:${which === '起点' ? 'pline_start' : 'pline_end'}`,
         refno: refnoS,
@@ -2945,7 +2953,37 @@ describe('useXeokitMeasurementTools', () => {
         world: designMm(scene),
         hasDir: true,
         dir: [1, 0, 0] as [number, number, number],
+        ...(options.cutEnds && which === '起点' && cutStart[key] ? { plineCut: designMm(cutStart[key]!) } : {}),
       });
+      if (options.snapPoints) {
+        const snapPoints = options.snapPoints.map((point) => ({
+          refno: point.refno,
+          noun: point.noun,
+          kind: point.kind,
+          zdis: Number.NaN,
+          world: designMm(point.scene),
+          label: `${point.noun} ${point.refno}`,
+        }));
+        vi.doMock('@/model-source', async (importOriginal) => {
+          const original = await importOriginal<typeof import('@/model-source')>();
+          return {
+            ...original,
+            getModelSource: (...args: Parameters<typeof original.getModelSource>) => {
+              const source = original.getModelSource(...args);
+              return {
+                ...source,
+                keypoints: {
+                  ...source.keypoints,
+                  primitiveKeypoints: async (dbno: number, refno: string, queryOptions?: any) => {
+                    const base = await source.keypoints.primitiveKeypoints(dbno, refno, queryOptions);
+                    return { ...base, plineSnapPoints: refno === refnoS ? snapPoints : [] };
+                  },
+                },
+              };
+            },
+          };
+        });
+      }
       const plineCandidates = [
         plineEnd('NA', '起点', [1, 4, 6], 0), plineEnd('NA', '终点', [3, 4, 6], 0),
         plineEnd('TOS', '起点', [1, 4.1, 6], 1), plineEnd('TOS', '终点', [3, 4.1, 6], 1),
@@ -3125,6 +3163,130 @@ describe('useXeokitMeasurementTools', () => {
         expect(record.target.worldPos[2]).toBeCloseTo(6, 6);
         expect(store.measurementDraftResult.value!.distance).toBeCloseTo(0.6, 6);
         expect(store.measurementDraftResult.value!.approximate).toBe(false);
+      } finally {
+        tools.dispose();
+        vi.useRealTimers();
+      }
+    });
+
+    it('Pick Settings「Pline End Position = Cut」：p-line 改用 PLSTCUT → PLENCUT，Snap 近端与 Mid-Point 都随之变；平头端不变；Uncut 回 PLSTART', async () => {
+      const { store, measurementStyle, tools, clickAt, hoverAndLoad } = await setupPlineTools({ cutEnds: true });
+      try {
+        measurementStyle.updateMeasurementPickLayer({ filter: 'pline', pickType: 'snap' });
+        await nextTick();
+
+        // 光标 (90, 100) = 场景 (1.9, 4)：Uncut 线 [1 → 3]，近端是起点 (1, 4, 6)。
+        await hoverAndLoad(90, 100);
+        expect(tools.hoverSnapTarget.value?.label).toBe('PLINE NA · Snap');
+        clickAt(90, 100);
+        expect(store.currentXeokitDistanceDraft.value!.origin.worldPos[0]).toBeCloseTo(1, 6);
+        store.clearCurrentXeokitDraft();
+
+        // Cut：线是 [1.4 → 3]，近端是斜切起点 (1.4, 4, 6)（E3D `EDGPLINE.line` 的 `plStCut` 分支）。
+        measurementStyle.updateMeasurementPickLayer({ plineCut: true });
+        await nextTick();
+        clickAt(90, 100);
+        let origin = store.currentXeokitDistanceDraft.value!.origin;
+        expect(origin.sourceInfo?.label).toBe('PLINE NA · Snap');
+        expect(origin.worldPos[0]).toBeCloseTo(1.4, 6);
+        expect(origin.worldPos[1]).toBeCloseTo(4, 6);
+        store.clearCurrentXeokitDraft();
+
+        // Cut 下 Mid-Point 是斜切线的中点 (2.2, 4, 6)，不是 PLSTART → PLEND 的 (2, 4, 6)。
+        measurementStyle.updateMeasurementPickLayer({ pickType: 'midpoint' });
+        await nextTick();
+        clickAt(90, 100);
+        expect(store.currentXeokitDistanceDraft.value!.origin.worldPos[0]).toBeCloseTo(2.2, 6);
+        store.clearCurrentXeokitDraft();
+
+        // 平头的终端没有 cut 点：光标靠终端时 Snap 仍是 PLEND (3, 4, 6)。
+        measurementStyle.updateMeasurementPickLayer({ pickType: 'snap' });
+        await nextTick();
+        clickAt(180, 100);
+        expect(store.currentXeokitDistanceDraft.value!.origin.worldPos[0]).toBeCloseTo(3, 6);
+        store.clearCurrentXeokitDraft();
+
+        // 切回 Uncut：起点回 PLSTART。
+        measurementStyle.updateMeasurementPickLayer({ plineCut: false });
+        await nextTick();
+        clickAt(90, 100);
+        origin = store.currentXeokitDistanceDraft.value!.origin;
+        expect(origin.worldPos[0]).toBeCloseTo(1, 6);
+      } finally {
+        tools.dispose();
+        vi.useRealTimers();
+      }
+    });
+
+    it('Pick Settings「Significant Snap Points」：勾 Nodes 后 SNOD 把 p-line 分段，Snap / Mid-Point 只在光标所在那一段上；Significant snaps 关掉或只勾别的档就不分', async () => {
+      const { store, measurementStyle, tools, clickAt, hoverAndLoad } = await setupPlineTools({
+        snapPoints: [
+          { kind: 'node', scene: [2.5, 4, 6], refno: '24381_300003', noun: 'SNOD' },
+          // 关节挂在节点上：同一位置，只分一次。
+          { kind: 'joint', scene: [2.5, 4, 6], refno: '24381_300004', noun: 'SJOI' },
+        ],
+      });
+      try {
+        measurementStyle.updateMeasurementPickLayer({ filter: 'pline', pickType: 'snap' });
+        await nextTick();
+
+        // 缺省（EDGPLINE.node = false）：整条线 [1 → 3]，光标 (140, 100) = 场景 (2.4, 4) 的近端是 (3, 4, 6)。
+        await hoverAndLoad(140, 100);
+        expect(tools.hoverSnapTarget.value?.label).toBe('PLINE NA · Snap');
+        clickAt(140, 100);
+        expect(store.currentXeokitDistanceDraft.value!.origin.worldPos[0]).toBeCloseTo(3, 6);
+        store.clearCurrentXeokitDraft();
+
+        // 勾 Nodes：SNOD 在 x = 2.5 把线分成 [1 → 2.5] 与 [2.5 → 3]，光标在 2.4 落前一段，近端是节点 2.5。
+        measurementStyle.updateMeasurementPickLayer({ significantSnapPoints: { node: true } });
+        await nextTick();
+        clickAt(140, 100);
+        let origin = store.currentXeokitDistanceDraft.value!.origin;
+        expect(origin.sourceInfo?.label).toBe('PLINE NA · Snap');
+        expect(origin.worldPos[0]).toBeCloseTo(2.5, 6);
+        expect(origin.worldPos[1]).toBeCloseTo(4, 6);
+        store.clearCurrentXeokitDraft();
+
+        // 那一段的 Mid-Point 是 1.75，不是整条线的 2。
+        measurementStyle.updateMeasurementPickLayer({ pickType: 'midpoint' });
+        await nextTick();
+        clickAt(140, 100);
+        expect(store.currentXeokitDistanceDraft.value!.origin.worldPos[0]).toBeCloseTo(1.75, 6);
+        store.clearCurrentXeokitDraft();
+
+        // 光标 (180, 100) = 2.8 落后一段 [2.5 → 3]：Snap 近端 3、Mid-Point 2.75。
+        clickAt(180, 100);
+        expect(store.currentXeokitDistanceDraft.value!.origin.worldPos[0]).toBeCloseTo(2.75, 6);
+        store.clearCurrentXeokitDraft();
+        measurementStyle.updateMeasurementPickLayer({ pickType: 'snap' });
+        await nextTick();
+        clickAt(180, 100);
+        expect(store.currentXeokitDistanceDraft.value!.origin.worldPos[0]).toBeCloseTo(3, 6);
+        store.clearCurrentXeokitDraft();
+
+        // Significant snaps（`edgPosCntrl.intermediate`）关掉：三档不起作用，回整条线。
+        measurementStyle.updateMeasurementPickLayer({ significantSnaps: false });
+        await nextTick();
+        clickAt(140, 100);
+        expect(store.currentXeokitDistanceDraft.value!.origin.worldPos[0]).toBeCloseTo(3, 6);
+        store.clearCurrentXeokitDraft();
+
+        // 只勾 Fittings（本构件没有 FITT）：SNOD / SJOI 不算，仍是整条线。
+        measurementStyle.updateMeasurementPickLayer({
+          significantSnaps: true,
+          significantSnapPoints: { fitting: true, joint: false, node: false },
+        });
+        await nextTick();
+        clickAt(140, 100);
+        expect(store.currentXeokitDistanceDraft.value!.origin.worldPos[0]).toBeCloseTo(3, 6);
+        store.clearCurrentXeokitDraft();
+
+        // 只勾 Joints：挂在节点上的 SJOI 同样在 2.5 分段。
+        measurementStyle.updateMeasurementPickLayer({ significantSnapPoints: { fitting: false, joint: true } });
+        await nextTick();
+        clickAt(140, 100);
+        origin = store.currentXeokitDistanceDraft.value!.origin;
+        expect(origin.worldPos[0]).toBeCloseTo(2.5, 6);
       } finally {
         tools.dispose();
         vi.useRealTimers();

@@ -544,6 +544,37 @@ describe('MeasurementOverlayBar', () => {
     await nextTick();
     expect(measurementStyle.state.measurementPickLayer.significantSnaps).toBe(false);
 
+    // E3D Pick Settings · Sections & Walls：Pline End Position（缺省 Uncut）与 Significant Snap Points 三档（缺省全关）。
+    expect(host.querySelector('[data-testid="measurement-overlay-pick-settings-sections"]')).toBeTruthy();
+    const plineEnd = (id: 'uncut' | 'cut') => host!.querySelector(`[data-testid="measurement-overlay-pline-end-${id}"]`) as HTMLButtonElement | null;
+    expect(plineEnd('uncut')?.getAttribute('aria-checked')).toBe('true');
+    expect(plineEnd('cut')?.getAttribute('aria-checked')).toBe('false');
+    plineEnd('cut')?.click();
+    await nextTick();
+    expect(measurementStyle.state.measurementPickLayer.plineCut).toBe(true);
+    expect(plineEnd('cut')?.getAttribute('aria-checked')).toBe('true');
+    plineEnd('uncut')?.click();
+    await nextTick();
+    expect(measurementStyle.state.measurementPickLayer.plineCut).toBe(false);
+
+    const snapPoint = (id: 'fitting' | 'joint' | 'node') => host!.querySelector(`[data-testid="measurement-overlay-significant-snap-point-${id}"]`) as HTMLInputElement | null;
+    expect(snapPoint('fitting')?.checked).toBe(false);
+    expect(snapPoint('joint')?.checked).toBe(false);
+    expect(snapPoint('node')?.checked).toBe(false);
+    if (snapPoint('node')) {
+      snapPoint('node')!.checked = true;
+      snapPoint('node')!.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+    await nextTick();
+    expect(measurementStyle.state.measurementPickLayer.significantSnapPoints).toEqual({ fitting: false, joint: false, node: true });
+    if (snapPoint('joint')) {
+      snapPoint('joint')!.checked = true;
+      snapPoint('joint')!.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+    await nextTick();
+    // 按字段合并：勾 Joints 不会把 Nodes 掉回去。
+    expect(measurementStyle.state.measurementPickLayer.significantSnapPoints).toEqual({ fitting: false, joint: true, node: true });
+
     app.unmount();
     host.remove();
     host = null;

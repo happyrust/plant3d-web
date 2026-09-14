@@ -16,10 +16,13 @@ import {
   type MeshGraphicsFeatures,
 } from '@/measurement/graphics/meshFeatureGraphics';
 import {
+  anySignificantSnapPointEnabled,
   measurementPickFilterAdmits,
   type MeasurementPickFeature,
   type MeasurementPickFilterId,
   type MeasurementPickTypeId,
+  type MeasurementSignificantSnapPointId,
+  type MeasurementSignificantSnapPoints,
 } from '@/measurement/pick/pickLayerModel';
 
 export const DEFAULT_POSITION_SNAP_PX = 18;
@@ -82,6 +85,12 @@ export type MeasurementPickCandidate = {
    * Snap / Mid-Point — E3D's ELEMENT `snap()` still falls back to the element origin.
    */
   elementLine?: MeasurementPickSegment;
+  /**
+   * PLINE end candidates only: E3D `PLSTCUT / PLENCUT` — this end after the `DRNS / DRNE`
+   * end preparation (present only when the section end really is cut). Pick Settings
+   * "Pline End Position = Cut" (`EDGPLINE.cut`) makes `attachPlineSegments` use it as the end.
+   */
+  plineCut?: Vector3;
   /**
    * The cursor ray hit this candidate's object (E3D graphics pick on the element
    * itself, e.g. anywhere on a tube). Such a candidate is admitted for snapping
@@ -277,14 +286,83 @@ export function sourceNeedsHoverData(setting: MeasurementPickSourceSetting | und
 const PLINE_ENDPOINT_LABEL = /^PLINE (.+) (起点|终点)$/;
 
 /**
+ * A section member that splits its p-lines under E3D Pick Settings "Significant Snap
+ * Points" (`EDGPLINE.snapLine`: `FITT` → fitting, `SJOI SUBJ` → joint, `SNOD` → node),
+ * in the same (scene) frame as the candidates.
+ */
+export type PlineSignificantSnapPoint = Readonly<{
+  kind: MeasurementSignificantSnapPointId;
+  worldPos: Vector3;
+  label?: string;
+}>;
+
+export type AttachPlineSegmentsOptions = Readonly<{
+  /**
+   * E3D `EDGPLINE.cut` ("Pline End Position = Cut"): ends that carry `plineCut` move onto the
+   * prepared end (`PLSTCUT / PLENCUT`); flat ends have no cut point and stay put.
+   */
+  cut?: boolean;
+  /**
+   * Members collected by `EDGPLINE.snapLine`; only those whose `kind` is enabled in
+   * `significantSnapPoints` are projected onto the line (`LINE.near`) and become the
+   * segment's `intermediates`, sorted from `start`. Points projecting onto an end or
+   * outside the extent are dropped (E3D would sort them by unsigned distance and could
+   * hand Snap an end outside the p-line — a member is never placed there in practice).
+   */
+  snapPoints?: readonly PlineSignificantSnapPoint[];
+  significantSnapPoints?: MeasurementSignificantSnapPoints;
+}>;
+
+/** Relative parameter below which a projected split point coincides with an end / its neighbour. */
+const PLINE_SPLIT_EPSILON = 1e-9;
+
+/**
+ * `EDGPLINE.snapLine` split points for one p-line: the enabled members projected onto the
+ * infinite line through `start → end`, kept when strictly inside the extent, sorted and
+ * de-duplicated (a joint sits on its node: same ZDIS, one split).
+ */
+export function plineSignificantIntermediates(
+  start: Vector3,
+  end: Vector3,
+  snapPoints: readonly PlineSignificantSnapPoint[],
+  enabled: MeasurementSignificantSnapPoints,
+): Vector3[] {
+  if (snapPoints.length === 0 || !anySignificantSnapPointEnabled(enabled)) return [];
+  const axis = end.clone().sub(start);
+  const axisLengthSq = axis.lengthSq();
+  if (axisLengthSq <= 1e-18) return [];
+  const params: number[] = [];
+  for (const point of snapPoints) {
+    if (!enabled[point.kind]) continue;
+    const t = point.worldPos.clone().sub(start).dot(axis) / axisLengthSq;
+    if (!Number.isFinite(t) || t <= PLINE_SPLIT_EPSILON || t >= 1 - PLINE_SPLIT_EPSILON) continue;
+    params.push(t);
+  }
+  params.sort((a, b) => a - b);
+  const out: Vector3[] = [];
+  let previous = Number.NEGATIVE_INFINITY;
+  for (const t of params) {
+    if (t - previous <= PLINE_SPLIT_EPSILON) continue;
+    previous = t;
+    out.push(start.clone().addScaledVector(axis, t));
+  }
+  return out;
+}
+
+/**
  * legacy `semantic_snap_points` 把一条 PLINE 给成「起点 / 终点」两个点候选。E3D 的
  * PLINE 拾取是线：Snap 吸最近端、Mid-Point / Fraction / Proportion / Distance 沿线派生。
  * 这里把同一构件同一 PLINE 的两端配成一条 `segment` 挂回两端候选上（两端共用同一条线），
  * 并把它们的 feature 标成 `pline`，让拾取过滤器 Pline 与拾取类型内核都认得。配不上对的
  * 端点只标 feature，不造线。
+ *
+ * `options` 是 E3D Pick Settings「Sections & Walls」：`cut` 把带 `plineCut` 的端点挪到斜切端
+ * （`EDGPLINE.line` 的 `plStCut / plEnCut` 分支），`snapPoints × significantSnapPoints` 给线挂
+ * `intermediates`（`EDGPLINE.snapLine`）——Significant Snaps 开着时派生只在光标所在的那一段上做。
  */
 export function attachPlineSegments(
   candidates: readonly MeasurementPickCandidate[],
+  options: AttachPlineSegmentsOptions = {},
 ): MeasurementPickCandidate[] {
   const ends = new Map<string, { start?: MeasurementPickCandidate; end?: MeasurementPickCandidate }>();
   for (const candidate of candidates) {
@@ -292,18 +370,27 @@ export function attachPlineSegments(
     const match = PLINE_ENDPOINT_LABEL.exec(candidate.label ?? '');
     if (!match) continue;
     candidate.feature = 'pline';
+    if (options.cut && candidate.plineCut) {
+      candidate.worldPos = candidate.plineCut.clone();
+    }
     const key = `${candidate.objectId}|${match[1]}`;
     const entry = ends.get(key) ?? {};
     if (match[2] === '起点') entry.start = candidate;
     else entry.end = candidate;
     ends.set(key, entry);
   }
+  const snapPoints = options.snapPoints ?? [];
+  const enabled = options.significantSnapPoints;
   for (const { start, end } of ends.values()) {
     if (!start || !end) continue;
     if (start.worldPos.distanceToSquared(end.worldPos) <= 1e-18) continue;
+    const intermediates = enabled
+      ? plineSignificantIntermediates(start.worldPos, end.worldPos, snapPoints, enabled)
+      : [];
     const segment: MeasurementPickSegment = {
       start: start.worldPos.clone(),
       end: end.worldPos.clone(),
+      ...(intermediates.length > 0 ? { intermediates } : {}),
     };
     start.segment = segment;
     end.segment = segment;

@@ -693,6 +693,25 @@ export type ElementPlineItem = {
   end_cut?: [number, number, number];
 };
 
+/** Pick Settings「Significant Snap Points」的三档（E3D `EDGPLINE.fitting / joint / node`）。 */
+export type ElementPlineSnapPointKind = 'fitting' | 'joint' | 'node';
+
+/**
+ * `element/plines` 里的一个 Significant Snap 分段点来源：SCTN 名下的 FITT / SJOI / SUBJ / SNOD
+ * （E3D `EDGPLINE.snapLine` 的 `COLLECT ALL (FITT | SJOI SUBJ | SNOD) FOR sctn`）。世界系，mm。
+ */
+export type ElementPlineSnapPoint = {
+  /** `a/b` */
+  refno: string;
+  /** `FITT` / `SJOI` / `SUBJ` / `SNOD` */
+  noun: string;
+  kind: ElementPlineSnapPointKind | (string & {});
+  /** 沿轴离 `POSS` 的距离（mm）；SJOI / SUBJ 取属主链上最近 SNOD 的 */
+  zdis: number;
+  /** SNOD / SJOI / SUBJ：对齐线上 z = ZDIS 的点；FITT：目录标架原点。前端按 E3D `LINE.near` 投到各 p-line 上 */
+  position: [number, number, number];
+};
+
 /** `POST /api/v1/element/plines` 的响应：SCTN / GENSEC 的目录 p-line 线（E3D `EDGPLINE.line`）。 */
 export type ElementPlinesResponse = {
   source: 'e3d-model' | (string & {});
@@ -706,6 +725,8 @@ export type ElementPlinesResponse = {
   justification_line: string | null;
   /** `PSTR` 成员原序 */
   plines: ElementPlineItem[];
+  /** SCTN 名下的 FITT / SJOI / SUBJ / SNOD，按 `zdis` 升序；GENSEC 与没有 p-line 时为空（老构建没有这一格） */
+  snap_points?: ElementPlineSnapPoint[];
   /** `plines` 为空时的原因（不是 SCTN / GENSEC、无 SPRE、链断、无 PSTR、GENSEC 含弧）——E3D 同样没有 p-line 可拾 */
   reason?: string;
   notes: string[];

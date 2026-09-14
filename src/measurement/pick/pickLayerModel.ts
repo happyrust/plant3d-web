@@ -149,24 +149,92 @@ export const MEASUREMENT_PICK_TYPE_AVAILABILITY: Readonly<
   exact: { available: true },
 };
 
+/**
+ * E3D Pick Settings → Sections & Walls → **Significant Snap Points** (`edgpicksettings.pmlfrm`
+ * toggles `Fittings / Joints / Nodes` → `!!edgTypes.pLine.fitting / joint / node`). With
+ * Significant Snaps on, `EDGPLINE.snapLine` collects the section's `FITT` (fitting),
+ * `SJOI SUBJ` (joint) and `SNOD` (node) members, projects them onto the p-line and lets
+ * Snap / Distance / Proportion / Fraction act on the sub-segment under the cursor.
+ */
+export type MeasurementSignificantSnapPoints = Readonly<{
+  fitting: boolean;
+  joint: boolean;
+  node: boolean;
+}>;
+
+export const MEASUREMENT_SIGNIFICANT_SNAP_POINT_IDS = ['fitting', 'joint', 'node'] as const;
+
+export type MeasurementSignificantSnapPointId = (typeof MEASUREMENT_SIGNIFICANT_SNAP_POINT_IDS)[number];
+
+/** E3D gadget strings (`toggle .fitting 'Fittings'` …) and the members each one collects. */
+export const MEASUREMENT_SIGNIFICANT_SNAP_POINT_LABELS: Readonly<Record<MeasurementSignificantSnapPointId, string>> = {
+  fitting: 'Fittings',
+  joint: 'Joints',
+  node: 'Nodes',
+};
+
+export const MEASUREMENT_SIGNIFICANT_SNAP_POINT_HINTS: Readonly<Record<MeasurementSignificantSnapPointId, string>> = {
+  fitting: '型材上的配件 FITT 把 p-line 分段（E3D Fittings）',
+  joint: '型材上的接头 SJOI / SUBJ 把 p-line 分段（E3D Joints）',
+  node: '型材上的节点 SNOD 把 p-line 分段（E3D Nodes）',
+};
+
+/**
+ * `EDGPLINE` constructor: `cut / fitting / joint / node` all start `false`. (The E3D Pick
+ * Settings form shows the `EDGSCTN` defaults — `node = true` — and copies them onto
+ * `edgTypes.pLine` only when the user presses Apply; until then the Pline handler is
+ * unsegmented, which is the behaviour mirrored here.)
+ */
+export const DEFAULT_MEASUREMENT_SIGNIFICANT_SNAP_POINTS: MeasurementSignificantSnapPoints = {
+  fitting: false,
+  joint: false,
+  node: false,
+};
+
 export type MeasurementPickLayerConfig = Readonly<{
   filter: MeasurementPickFilterId;
   pickType: MeasurementPickTypeId;
   values: MeasurementPickTypeValues;
   /** `!!edgPosCntrl.intermediate` — E3D default true. */
   significantSnaps: boolean;
+  /**
+   * E3D Pick Settings → Sections & Walls → **Pline End Position**: `EDGPLINE.cut`.
+   * `false` = "Uncut (Intersect with cutplane)" → the p-line is `PLSTART → PLEND` (the
+   * `POSS` / `POSE` section planes); `true` = "Cut (Use end preparation)" → `PLSTCUT → PLENCUT`
+   * (the ends prepared by `DRNS` / `DRNE`). Applies to every use of the p-line as a line:
+   * Snap ends, Mid-Point / Fraction / Proportion / Distance, Intersect and Perpendicular-to.
+   */
+  plineCut: boolean;
+  /** Which section members split the p-line when Significant Snaps is on (see the type). */
+  significantSnapPoints: MeasurementSignificantSnapPoints;
 }>;
 
 /**
  * E3D defaults: Measure's `stdPosition` pick is `Any`; `pickTypeIndex = 1` (Snap);
- * `intermediate = true`.
+ * `intermediate = true`; `EDGPLINE.cut / fitting / joint / node = false`.
  */
 export const DEFAULT_MEASUREMENT_PICK_LAYER: MeasurementPickLayerConfig = {
   filter: 'any',
   pickType: 'snap',
   values: DEFAULT_MEASUREMENT_PICK_TYPE_VALUES,
   significantSnaps: true,
+  plineCut: false,
+  significantSnapPoints: DEFAULT_MEASUREMENT_SIGNIFICANT_SNAP_POINTS,
 };
+
+/** Rebuild the Significant Snap Points toggles from persisted / untrusted input. */
+export function normalizeMeasurementSignificantSnapPoints(raw: unknown): MeasurementSignificantSnapPoints {
+  const input = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+  const pick = (id: MeasurementSignificantSnapPointId): boolean => (
+    typeof input[id] === 'boolean' ? (input[id] as boolean) : DEFAULT_MEASUREMENT_SIGNIFICANT_SNAP_POINTS[id]
+  );
+  return { fitting: pick('fitting'), joint: pick('joint'), node: pick('node') };
+}
+
+/** Any of the three toggles on — `EDGPLINE.snapLine` returns the whole line otherwise. */
+export function anySignificantSnapPointEnabled(points: MeasurementSignificantSnapPoints): boolean {
+  return points.fitting || points.joint || points.node;
+}
 
 function isFilterId(value: unknown): value is MeasurementPickFilterId {
   return typeof value === 'string' && (MEASUREMENT_PICK_FILTER_IDS as readonly string[]).includes(value);
@@ -209,6 +277,8 @@ export function normalizeMeasurementPickLayer(raw: unknown): MeasurementPickLaye
     significantSnaps: typeof input.significantSnaps === 'boolean'
       ? input.significantSnaps
       : DEFAULT_MEASUREMENT_PICK_LAYER.significantSnaps,
+    plineCut: typeof input.plineCut === 'boolean' ? input.plineCut : DEFAULT_MEASUREMENT_PICK_LAYER.plineCut,
+    significantSnapPoints: normalizeMeasurementSignificantSnapPoints(input.significantSnapPoints),
   };
 }
 

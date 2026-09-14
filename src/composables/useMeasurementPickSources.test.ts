@@ -434,6 +434,46 @@ describe('useMeasurementPickSources', () => {
       expect(hitUnder('ppoint')).toBeNull();
       expect(hitUnder('graphics')).toBeNull();
     });
+
+    it('Pick Settings `cut` (EDGPLINE.cut): ends carrying `plineCut` move onto the prepared end and the segment follows; flat ends and Uncut keep PLSTART / PLEND', () => {
+      const withCut = () => plineEnds().map((end) => (
+        end.label === 'PLINE NA 起点' ? { ...end, plineCut: new Vector3(-0.5, 0.3, 0) } : end
+      ));
+      const uncut = attachPlineSegments(withCut(), { cut: false });
+      expect(uncut[0]!.worldPos.toArray()).toEqual([-0.8, 0.3, 0]);
+      expect(uncut[0]!.segment?.start.toArray()).toEqual([-0.8, 0.3, 0]);
+      const cut = attachPlineSegments(withCut(), { cut: true });
+      expect(cut[0]!.worldPos.toArray()).toEqual([-0.5, 0.3, 0]);
+      expect(cut[0]!.segment?.start.toArray()).toEqual([-0.5, 0.3, 0]);
+      expect(cut[0]!.segment?.end.toArray()).toEqual([0.6, 0.3, 0]);
+      expect(cut[0]!.segment).toBe(cut[1]!.segment);
+      // TOS has no cut point (flat end): unchanged.
+      expect(cut[2]!.worldPos.toArray()).toEqual([-0.8, 0.5, 0]);
+      // The line candidate is built on the cut segment: beyond the cut start the control point clamps there.
+      expect(buildPlineLineCandidates(cut, rayAt(-0.7, 0.3))[0]!.worldPos.toArray().map((v) => Number(v.toFixed(9)))).toEqual([-0.5, 0.3, 0]);
+    });
+
+    it('Pick Settings Significant Snap Points (EDGPLINE.snapLine): enabled members project onto every p-line as sorted `intermediates`; disabled kinds, ends and out-of-extent points are dropped; a joint on its node is one split', () => {
+      const snapPoints = [
+        { kind: 'node' as const, worldPos: new Vector3(0.2, 0.3, 0), label: 'SNOD 24381/1' },
+        { kind: 'joint' as const, worldPos: new Vector3(0.2, 0.45, 0.1), label: 'SJOI 24381/2' }, // on its node, off the line: same axial position
+        { kind: 'fitting' as const, worldPos: new Vector3(-0.3, 0.3, 0), label: 'FITT 24381/3' },
+        { kind: 'node' as const, worldPos: new Vector3(-0.8, 0.3, 0), label: 'SNOD at PLSTART' },
+        { kind: 'node' as const, worldPos: new Vector3(0.9, 0.3, 0), label: 'SNOD beyond PLEND' },
+      ];
+      const all = attachPlineSegments(plineEnds(), { snapPoints, significantSnapPoints: { fitting: true, joint: true, node: true } });
+      const na = all[0]!.segment!;
+      expect(na.intermediates!.map((p) => p.toArray().map((v) => Number(v.toFixed(9))))).toEqual([[-0.3, 0.3, 0], [0.2, 0.3, 0]]);
+      // TOS (y = 0.5) gets the same axial splits projected onto its own line.
+      expect(all[2]!.segment!.intermediates!.map((p) => p.toArray().map((v) => Number(v.toFixed(9))))).toEqual([[-0.3, 0.5, 0], [0.2, 0.5, 0]]);
+      // Only Joints: the SJOI splits at x = 0.2; the FITT does not.
+      const joints = attachPlineSegments(plineEnds(), { snapPoints, significantSnapPoints: { fitting: false, joint: true, node: false } });
+      expect(joints[0]!.segment!.intermediates!.map((p) => Number(p.x.toFixed(9)))).toEqual([0.2]);
+      // Nothing enabled (EDGPLINE defaults) or no members: no `intermediates` key at all.
+      expect(attachPlineSegments(plineEnds(), { snapPoints, significantSnapPoints: { fitting: false, joint: false, node: false } })[0]!.segment!.intermediates).toBeUndefined();
+      expect(attachPlineSegments(plineEnds(), { snapPoints: [], significantSnapPoints: { fitting: true, joint: true, node: true } })[0]!.segment!.intermediates).toBeUndefined();
+      expect(attachPlineSegments(plineEnds())[0]!.segment!.intermediates).toBeUndefined();
+    });
   });
 
   describe('buildTubingAxisCandidate · E3D TUBING on a tube the ray hit', () => {

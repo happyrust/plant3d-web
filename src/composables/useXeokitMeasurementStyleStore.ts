@@ -365,12 +365,14 @@ function updateMeasurementPickSource(
 }
 
 /**
- * 改拾取层（过滤器 / 拾取类型 / 类型取值 / Significant Snaps）。未知 id、不可用项
- * 与非法数值一律回 E3D 缺省（`normalizeMeasurementPickLayer`），`values` 按字段合并。
+ * 改拾取层（过滤器 / 拾取类型 / 类型取值 / Significant Snaps / Pick Settings 的 Pline 端点与
+ * Significant Snap Points 三档）。未知 id、不可用项与非法数值一律回 E3D 缺省
+ * （`normalizeMeasurementPickLayer`），`values` 与 `significantSnapPoints` 按字段合并。
  */
 function updateMeasurementPickLayer(
-  patch: Partial<Omit<MeasurementPickLayerConfig, 'values'>> & {
+  patch: Partial<Omit<MeasurementPickLayerConfig, 'values' | 'significantSnapPoints'>> & {
     values?: Partial<MeasurementPickLayerConfig['values']>;
+    significantSnapPoints?: Partial<MeasurementPickLayerConfig['significantSnapPoints']>;
   },
 ): void {
   const current = state.measurementPickLayer;
@@ -378,7 +380,9 @@ function updateMeasurementPickLayer(
     filter: patch.filter ?? current.filter,
     pickType: patch.pickType ?? current.pickType,
     significantSnaps: patch.significantSnaps ?? current.significantSnaps,
+    plineCut: patch.plineCut ?? current.plineCut,
     values: { ...current.values, ...(patch.values ?? {}) },
+    significantSnapPoints: { ...current.significantSnapPoints, ...(patch.significantSnapPoints ?? {}) },
   });
   updateStyle({ measurementPickLayer: next });
 }

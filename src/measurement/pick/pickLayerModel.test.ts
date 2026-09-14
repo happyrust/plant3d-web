@@ -5,10 +5,12 @@ import {
   MEASUREMENT_PICK_FILTER_AVAILABILITY,
   MEASUREMENT_PICK_FILTER_IDS,
   MEASUREMENT_PICK_TYPE_IDS,
+  anySignificantSnapPointEnabled,
   formatMeasurementPrompt,
   measurementPickFilterAdmits,
   measurementPickTypePromptToken,
   normalizeMeasurementPickLayer,
+  normalizeMeasurementSignificantSnapPoints,
   type MeasurementPickFeature,
 } from './pickLayerModel';
 
@@ -106,5 +108,23 @@ describe('normalizeMeasurementPickLayer', () => {
       fraction: 1,
       proportion: 0.5,
     });
+  });
+
+  it('Pick Settings（Sections & Walls）：EDGPLINE 构造缺省 cut / fitting / joint / node 全 false；三档按字段合并，非布尔回缺省', () => {
+    expect(DEFAULT_MEASUREMENT_PICK_LAYER.plineCut).toBe(false);
+    expect(DEFAULT_MEASUREMENT_PICK_LAYER.significantSnapPoints).toEqual({ fitting: false, joint: false, node: false });
+    // V9 及更早持久化的没有这两格 → 缺省。
+    expect(normalizeMeasurementPickLayer({ filter: 'pline' })).toMatchObject({
+      plineCut: false,
+      significantSnapPoints: { fitting: false, joint: false, node: false },
+    });
+    expect(normalizeMeasurementPickLayer({ plineCut: true, significantSnapPoints: { node: true, joint: 'yes' } })).toMatchObject({
+      plineCut: true,
+      significantSnapPoints: { fitting: false, joint: false, node: true },
+    });
+    expect(normalizeMeasurementPickLayer({ plineCut: 'cut', significantSnapPoints: null }).plineCut).toBe(false);
+    expect(anySignificantSnapPointEnabled({ fitting: false, joint: false, node: false })).toBe(false);
+    expect(anySignificantSnapPointEnabled({ fitting: false, joint: true, node: false })).toBe(true);
+    expect(normalizeMeasurementSignificantSnapPoints('junk')).toEqual({ fitting: false, joint: false, node: false });
   });
 });

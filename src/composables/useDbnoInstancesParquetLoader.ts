@@ -182,6 +182,11 @@ export type PrimitiveKeyPointCandidate = {
   world: [number, number, number]
   hasDir: boolean
   dir: [number, number, number] | null
+  /**
+   * PLINE 端点（`kind` `pline_start` / `pline_end`）：E3D `PLSTCUT / PLENCUT`——这一端按 `DRNS / DRNE`
+   * 斜切后的位置（世界系，同 `world`）；平头端面没有。Pick Settings「Pline End Position = Cut」时用它当端点。
+   */
+  plineCut?: [number, number, number] | null
   circle?: {
     center: [number, number, number]
     rim: [number, number, number]

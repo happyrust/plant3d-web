@@ -42,6 +42,7 @@ import {
   type MeasurementPickSegment,
   type MeasurementPickSourceId,
   type MeasurementPickSourceSettings,
+  type PlineSignificantSnapPoint,
   type ProjectedMeasurementPickCandidate,
 } from './useMeasurementPickSources';
 import { projectToCanvas, usePtsetSnap } from './usePtsetSnap';
@@ -54,6 +55,7 @@ import type { UseAnnotationThreeReturn } from './useAnnotationThree';
 import type { PrimitiveKeyPointCandidate } from './useDbnoInstancesParquetLoader';
 import type { PtsetChildrenResponse, PtsetResponse } from '@/api/genModelPdmsAttrApi';
 import type { DimensionSystem, ExternalDimensionRecord } from '@/dimension';
+import type { PlineSnapPointCandidate, PrimitiveKeypointsResult } from '@/model-source/ports';
 import type { DTXLayer, DTXSelectionController } from '@/utils/three/dtx';
 import type { DtxCompatViewer } from '@/viewer/dtx/DtxCompatViewer';
 import type { DtxViewer } from '@/viewer/dtx/DtxViewer';
@@ -552,6 +554,8 @@ export function useXeokitMeasurementTools(options: {
   const requestedPrimitiveKeypointRefnos = new Set<string>();
   const loadingPrimitiveKeypointRefnos = new Set<string>();
   const primitiveKeypointsByRefno = new Map<string, PrimitiveKeyPointCandidate[]>();
+  /** 同一构件 PLINE 的 Significant Snap 分段点（SCTN 的 FITT / SJOI / SUBJ / SNOD，世界系 mm），与上表同时填。 */
+  const plineSnapPointsByRefno = new Map<string, PlineSnapPointCandidate[]>();
   const primitiveKeypointErrorByRefno = new Map<string, string>();
   const pickPointMessage = ref<string | null>(null);
   let hoverFetchTimer: ReturnType<typeof setTimeout> | null = null;
@@ -881,11 +885,11 @@ export function useXeokitMeasurementTools(options: {
     return await keypointSource().ptset(dbno, refno);
   }
 
-  /** 基本体 + PLINE 语义关键点：候选与失败原因一起回，调用方决定提示。 */
+  /** 基本体 + PLINE 语义关键点：候选、失败原因与 PLINE 的 Significant Snap 分段点一起回，调用方决定提示。 */
   async function queryPrimitiveKeypointsForMeasurement(
     dbno: number,
     refno: string,
-  ): Promise<{ items: PrimitiveKeyPointCandidate[]; errors: string[] }> {
+  ): Promise<PrimitiveKeypointsResult> {
     return await keypointSource().primitiveKeypoints(dbno, refno);
   }
 
@@ -996,8 +1000,9 @@ export function useXeokitMeasurementTools(options: {
     }
 
     queryPrimitiveKeypointsForMeasurement(dbno, refno)
-      .then(({ items, errors }) => {
+      .then(({ items, errors, plineSnapPoints }) => {
         primitiveKeypointsByRefno.set(refno, items);
+        plineSnapPointsByRefno.set(refno, plineSnapPoints ?? []);
         if (items.length > 0) {
           primitiveKeypointErrorByRefno.delete(refno);
         } else {
@@ -1173,6 +1178,10 @@ export function useXeokitMeasurementTools(options: {
       };
       const circle = circularGeometry(candidate.circle);
       const arc = circularGeometry(candidate.arc);
+      const plineCut = candidate.plineCut
+        ? new Vector3(candidate.plineCut[0], candidate.plineCut[1], candidate.plineCut[2])
+        : null;
+      if (plineCut && globalModelMatrix) plineCut.applyMatrix4(globalModelMatrix);
       return {
         id: candidate.id,
         source: 'primitive_key_point' as const,
@@ -1186,9 +1195,21 @@ export function useXeokitMeasurementTools(options: {
         ...(direction ? { direction } : {}),
         ...(circle ? { circle } : {}),
         ...(arc ? { arc } : {}),
+        ...(plineCut ? { plineCut } : {}),
       };
     });
-    return attachPlineSegments(mapped);
+    // E3D Pick Settings「Sections & Walls」：Pline End Position（cut）与 Significant Snap Points 三档。
+    const layer = measurementStyle.state.measurementPickLayer;
+    const snapPoints: PlineSignificantSnapPoint[] = (plineSnapPointsByRefno.get(refno) ?? []).map((point) => {
+      const worldPos = new Vector3(point.world[0], point.world[1], point.world[2]);
+      if (globalModelMatrix) worldPos.applyMatrix4(globalModelMatrix);
+      return { kind: point.kind, worldPos, label: point.label };
+    });
+    return attachPlineSegments(mapped, {
+      cut: layer.plineCut,
+      snapPoints,
+      significantSnapPoints: layer.significantSnapPoints,
+    });
   }
 
   /**
@@ -2273,12 +2294,12 @@ export function useXeokitMeasurementTools(options: {
     }
     if (!primitiveKeypointsByRefno.has(normalizedRefno)) {
       try {
-        primitiveKeypointsByRefno.set(
-          normalizedRefno,
-          (await queryPrimitiveKeypointsForMeasurement(dbno, normalizedRefno)).items,
-        );
+        const result = await queryPrimitiveKeypointsForMeasurement(dbno, normalizedRefno);
+        primitiveKeypointsByRefno.set(normalizedRefno, result.items);
+        plineSnapPointsByRefno.set(normalizedRefno, result.plineSnapPoints ?? []);
       } catch {
         primitiveKeypointsByRefno.set(normalizedRefno, []);
+        plineSnapPointsByRefno.set(normalizedRefno, []);
       }
     }
     const objectId = `o:${normalizedRefno}:0`;
