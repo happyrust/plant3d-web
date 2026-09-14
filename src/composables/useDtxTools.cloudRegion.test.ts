@@ -422,7 +422,7 @@ describe('region-v1 · 呈现', () => {
   it('校验不过（轴不正交）= missing-region：唯一允许走旧管线的状态，旧轮廓照常画出', () => {
     const { tools, store } = createTools();
     store.addCloudAnnotation(makeRegionCloud({
-      regionV1: makeRegion({ boxes: [{ id: 'bad', memberRefno: null, center: [0, 0, 0], axes: [[1, 0, 0], [1, 0, 0], [0, 0, 1]], halfSize: [1, 1, 1] }] }),
+      regionV1: makeRegion({ boxes: [{ id: 'bad', memberRefno: TARGET_REFNO, center: [0, 0, 0], axes: [[1, 0, 0], [1, 0, 0], [0, 0, 1]], halfSize: [1, 1, 1] }] }),
     }));
     tools.syncFromStore();
     tools.updateOverlayPositions();

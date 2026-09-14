@@ -65,6 +65,7 @@ import {
   DEFAULT_CLOUD_REGION_RENDER_STYLE,
   liftScreenPolylineToBillboard,
   matricesEqual,
+  obbSnapshotCorners,
   obbSnapshotFromLocalBoxAndMatrix,
   regionToWorldCells,
   renderCloudRegion,
@@ -90,7 +91,7 @@ import {
   type LabelLayoutResult,
   type LabelPreference,
 } from '@/review/domain/annotationProjection/labelLayout';
-import { createRegionCloudPresentationV1 } from '@/review/domain/cloudRegion';
+import { createRegionCloudPresentationV1, regionCoversMembers } from '@/review/domain/cloudRegion';
 import { emitToast } from '@/ribbon/toastBus';
 import { UserRole } from '@/types/auth';
 import { worldPerPixelAt } from '@/utils/three/annotation/utils/solvespaceLike';
@@ -1878,6 +1879,42 @@ function buildWireBoxGeometryFromCorners(corners: Vec3[]): BufferGeometry | null
   return g;
 }
 
+/**
+ * rect / obb 线框的几何来源（方案 §7，开关 `annotationSharedRegion`）：
+ * 记录带 `origin:'members'` 的 `obb-union` 范围体且覆盖全部成员 → 每个成员对象一个真实放置盒（多成员多盒，不合并）；
+ * 否则（旧记录 legacy-snapshot / 开关关 / 范围与绑定不一致）→ 照旧画 `obb.corners` 的单个盒。
+ */
+function buildBoxAnnotationWireGeometry(record: RectAnnotationRecord | ObbAnnotationRecord): BufferGeometry | null {
+  const region = record.regionV1;
+  const memberRefnos = record.bindings
+    ? record.bindings.filter((binding) => binding.role === 'member').map((binding) => binding.refno)
+    : (record.refnos ?? record.objectIds);
+  if (
+    isCloudRenderFlagEnabled('annotationSharedRegion')
+    && region
+    && region.origin === 'members'
+    && region.kind === 'obb-union'
+    && region.boxes.length > 0
+    && regionCoversMembers(region, memberRefnos)
+  ) {
+    const positions: number[] = [];
+    for (const box of region.boxes) {
+      const corners = obbSnapshotCorners(box);
+      for (const [a, b] of CLOUD_BBOX_EDGE_INDEX_PAIRS) {
+        const p = corners[a]!;
+        const q = corners[b]!;
+        positions.push(p[0], p[1], p[2], q[0], q[1], q[2]);
+      }
+    }
+    if (positions.length >= 6 && positions.every(Number.isFinite)) {
+      const g = new BufferGeometry();
+      g.setAttribute('position', new BufferAttribute(new Float32Array(positions), 3));
+      return g;
+    }
+  }
+  return buildWireBoxGeometryFromCorners(record.obb.corners as unknown as Vec3[]);
+}
+
 function buildPinMarkerGeometry(anchor: Vector3, size: number): BufferGeometry {
   const headZ = anchor.z + Math.max(size * 0.24, 0.02);
   const radius = Math.max(size * 0.12, 0.02);
@@ -1968,11 +2005,12 @@ function createCloudAnnotationVisual(
 }
 
 function createRectAnnotationVisual(
-  obb: Obb,
-  anchorWorldPos: Vec3,
+  record: RectAnnotationRecord,
   resolution?: { width: number; height: number },
 ): RectAnnotationVisual | null {
-  const boxGeometry = buildWireBoxGeometryFromCorners(obb.corners as unknown as Vec3[]);
+  const { obb, anchorWorldPos } = record;
+  // 线框来源：共享范围体的真实放置盒（P3）或旧 `obb.corners`
+  const boxGeometry = buildBoxAnnotationWireGeometry(record);
   if (!boxGeometry) return null;
 
   const anchor = new Vector3(...anchorWorldPos);
@@ -2015,7 +2053,8 @@ function createObbAnnotationVisual(
   resolution?: { width: number; height: number },
 ): RectAnnotationVisual | null {
   const anchorWorldPos = resolveObbAnnotationAnchorWorldPos(record);
-  const boxGeometry = buildWireBoxGeometryFromCorners(record.obb.corners as unknown as Vec3[]);
+  // 线框来源：共享范围体的真实放置盒（P3）或旧 `obb.corners`
+  const boxGeometry = buildBoxAnnotationWireGeometry(record);
   if (!boxGeometry) return null;
   const halfSize = new Vector3(...record.obb.halfSize);
   const boxRadius = Math.max(halfSize.length(), 0.1);
@@ -2044,6 +2083,8 @@ export function createRectAnnotationRecordFromObb(params: {
   title: string
   description?: string
   createdAt?: number
+  /** P3 共享范围体（方案 §7）：给了就写进记录；`obb` 仍按旧含义双写 */
+  regionV1?: RegionV1
 }): RectAnnotationRecord {
   const center = new Vector3(...params.obb.center);
   const halfSize = new Vector3(...params.obb.halfSize);
@@ -2061,6 +2102,7 @@ export function createRectAnnotationRecordFromObb(params: {
     description: params.description ?? '',
     createdAt: params.createdAt ?? Date.now(),
     refnos: params.refnos ? [...params.refnos] : [...params.objectIds],
+    ...(params.regionV1 ? { regionV1: params.regionV1 } : {}),
   };
 }
 
@@ -2219,6 +2261,34 @@ export function useDtxTools(options: {
   // ADR-0050：批注关联的失效解析表（只读）；missing / stale 的记录在视口降级为灰虚线 + 左上角小徽标
   const bindingResolve = useAnnotationBindingResolve();
   const readyRevision = ref(0);
+
+  /** 共享范围体（方案 §7 / §8）：成员 refno → 已加载对象的真实放置盒；拿不到几何回 null（不用子集冒充） */
+  function resolveMemberRegionBoxes(refno: string): ObbSnapshot[] | null {
+    const layer = dtxLayerRef.value;
+    if (!layer) return null;
+    const region = buildMembersRegionV1({
+      memberRefnos: [refno],
+      layer,
+      getMemberAabb: (r) => compatViewerRef.value?.scene.getAABB([r]) ?? null,
+      source: { projectKey: null, modelSnapshotId: null, globalModelMatrix: null, coordinateFrameId: null },
+    });
+    return region && region.kind === 'obb-union' ? [...region.boxes] : null;
+  }
+  // 重绑 member 时 store 用它给 `origin:'members'` 范围体补盒（原子更新绑定 + 范围 + 兼容字段）
+  store.setAnnotationRegionMemberBoxResolver(resolveMemberRegionBoxes);
+
+  /** rect / obb 新建（开关 `annotationSharedRegion`）：目标集合 → `regionV1(obb-union, origin:'members')`；范围不完整回 null 不写 */
+  function buildSharedRegionForMembers(memberRefnos: readonly string[]): RegionV1 | null {
+    if (!isCloudRenderFlagEnabled('annotationSharedRegion')) return null;
+    const layer = dtxLayerRef.value;
+    if (!layer) return null;
+    return buildMembersRegionV1({
+      memberRefnos,
+      layer,
+      getMemberAabb: (refno) => compatViewerRef.value?.scene.getAABB([refno]) ?? null,
+      source: buildCloudSourceStamp(memberRefnos, layer),
+    });
+  }
 
   let lastAnnotationLabelClick: AnnotationLabelClickState | null = null;
   let textAnnotationMarkerClickTimer: ReturnType<typeof setTimeout> | null = null;
@@ -4112,7 +4182,7 @@ export function useDtxTools(options: {
     for (const r of store.rectAnnotations.value) {
       if (!r.visible) continue;
 
-      const visual = createRectAnnotationVisual(r.obb, r.anchorWorldPos, resolution);
+      const visual = createRectAnnotationVisual(r, resolution);
       if (!visual) continue;
       // box + pin 始终加入；leader 随 collapsed 控制（与文字 / 云线一致）。
       toolsGroup.add(visual.box, visual.pin);
@@ -4441,7 +4511,11 @@ export function useDtxTools(options: {
             // 唯一有可信转换的情形：两边矩阵都在 → G_new · G_old⁻¹ 把范围体搬到当前世界系再投影（§8 补充 1）
             remap = Math.abs(old.determinant()) > 1e-18 ? current.clone().multiply(old.invert()).elements.slice() : null;
           }
-          const validated = regionToWorldCells(cloud.record.regionV1, remap);
+          // §8：快照与绑定不一致（重绑后新成员还没拿到盒）= 没有可用范围，走旧的实时 AABB 贴合，不用子集缩小范围冒充
+          const covers = regionCoversMembers(cloud.record.regionV1, getCloudMemberRefnos(cloud.record));
+          const validated = covers
+            ? regionToWorldCells(cloud.record.regionV1, remap)
+            : { ok: false as const, reason: 'coverage: region does not cover all members' };
           cloud.render.regionCells = validated.ok ? validated.cells : null;
           cloud.render.regionInvalidReason = validated.ok ? null : validated.reason;
           cloud.render.regionCellsKey = cellsKey;
@@ -5503,6 +5577,8 @@ export function useDtxTools(options: {
       const halfSize = new Vector3(...obb.halfSize);
       const boxRadius = Math.max(halfSize.length(), 0.1);
       const labelWorldPos = anchorWorldPos.clone().add(new Vector3(boxRadius * 0.65, boxRadius * 0.65, boxRadius * 0.45));
+      // P3 共享范围体：`obb` 旧字段（合并 AABB）照旧双写；范围完整时另写每成员真实放置盒
+      const sharedRegion = buildSharedRegionForMembers(selectedRefnos);
       const rec: ObbAnnotationRecord = {
         id: nowId('obb'),
         objectIds: selectedRefnos,
@@ -5514,6 +5590,7 @@ export function useDtxTools(options: {
         description: '',
         createdAt: Date.now(),
         refnos: selectedRefnos,
+        ...(sharedRegion ? { regionV1: sharedRegion } : {}),
       };
       store.addObbAnnotation(rec);
       return;
@@ -5525,6 +5602,7 @@ export function useDtxTools(options: {
       refnos: selectedRefnos,
       obb,
       title: `矩形批注 ${n}`,
+      regionV1: buildSharedRegionForMembers(selectedRefnos) ?? undefined,
     });
     store.addRectAnnotation(rec);
   }
@@ -5623,6 +5701,7 @@ export function useDtxTools(options: {
         refnos: [pickedRefno],
         obb,
         title: `矩形批注 ${n}`,
+        regionV1: buildSharedRegionForMembers([pickedRefno]) ?? undefined,
       });
       store.addRectAnnotation(rec);
       return;

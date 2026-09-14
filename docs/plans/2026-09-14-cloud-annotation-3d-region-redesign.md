@@ -1,6 +1,6 @@
 # 三维云线批注：空间范围体 + 屏幕云线呈现重构方案（2026-09-14）
 
-> 状态：**已拍板**（2026-09-14 20:50，§14 十项全部按推荐项定稿；用户口径「先补四项工程证据再进入 P0 兼容基线」）。四项工程证据已于同日核实，见 §15；证据带来的口径微调（`SourceStamp` 形状、`dtxLoaderRevision` 覆盖面、合批路线）已回写进对应章节并在 §15 逐条标注。**P0 / P1 / P2 已于同日落地**（§16 / §17 / §18）；P2.5 / P3 / P4 待排。
+> 状态：**已拍板**（2026-09-14 20:50，§14 十项全部按推荐项定稿；用户口径「先补四项工程证据再进入 P0 兼容基线」）。四项工程证据已于同日核实，见 §15；证据带来的口径微调（`SourceStamp` 形状、`dtxLoaderRevision` 覆盖面、合批路线）已回写进对应章节并在 §15 逐条标注。**P0 / P1 / P2 / P3 已于同日落地**（§16 / §17 / §18 / §19）；P2.5 / P4 待排。
 > 目标：用户在三维视口绘制云线后，**camera 旋转 / 缩放 / 平移时，云线始终正确地框住它所指认的空间范围**。
 > 咨询来源：oracle CLI 浏览器模式，ChatGPT 模型标签 `Latest`（= GPT-6）+ 思考档 `Pro`，**关闭联网**，两路并行：
 > - `plant3d-cloud-geometry-core`（A1 A2 B3 B4 B5 B7 E14，35 min，↑19.7k tokens）→ 表示法与几何内核；
@@ -585,7 +585,7 @@ export function inspectionFactor(mode: 'always-on-top' | 'inspection', probes: r
 | **P1 标签 + 脏标记**（✅ 2026-09-14 落地，§17） | `cloudLabelLayoutV1`、`cloudDirtyCache` | 接入现有轮廓：像素意图标签与最近点对引线（§5）、分阶段脏标记（§9.1） | 最近点、夹紧可逆、旧世界点兼容、静止零重建；分别关开关回退 |
 | **P2 范围体呈现**（✅ 2026-09-14 落地，§18） | `cloudProjectedEnvelope`（= 交互方案 `annotationUx.projectedEnvelope`，落在 P1 同一开关族 `useCloudRenderFlags`） | 首项 `DTXLayer.getObjectLocalBoxAndWorldMatrixInto`（§4.1）；并行几何内核（§4.1–4.5、4.7）、创建时写 `regionV1(obb-union, origin:'members')` + `viewpointV1.creation`；最小来源校验与 epoch 隔离、`globalModelMatrix` 重映射（§8） | 多机位包含、裁剪连续性、相位测试通过；目标范围不完整（`coverage` 不足）时不写新版记录；关闭后兼容显示，保留新字段 |
 | **P2.5 局部套索（可选，后置）** | `cloudUserVolume` | §4.8 截锥扫掠体 + 深度调整交互 | 套索验收口径按 `origin:'user-volume'`；拒绝自交 |
-| **P3 共享范围体** | `annotationSharedRegion` | rect / obb 新建走 `primitiveFromPlacement`（§7）；完整失效与重绑 member 交互（§8） | 真 OBB / 剪切分支、部分加载、版本切换、原子重绑；旧记录不自动迁移 |
+| **P3 共享范围体**（✅ 2026-09-14 落地，§19） | `annotationSharedRegion` | rect / obb 新建走 `primitiveFromPlacement`（§7）；完整失效与重绑 member 交互（§8） | 真 OBB / 剪切分支、部分加载、版本切换、原子重绑；旧记录不自动迁移 |
 | **P4 性能与显示** | `annotationUx.adaptiveLod`、`cloudBatching`、`cloudInspectionFade` | LOD（§9.3）→ 合批（§9.2）→ 按数据决定 GPU 波浪；inspection 最后单开（§10） | 合批前后几何等价、无跨线连接、调用预算；任一优化可退回 CPU 基线 |
 
 回退不能绕过来源校验：新版来源不匹配时，即便退回旧外观也只能按快照降级，不能重新启用「当前模型 AABB 自愈」。
@@ -823,6 +823,34 @@ P0 已提交：`af4b382`（15 文件；`useToolStore.ts` 只取云线 hunk）。
 - `SourceStamp.modelSnapshotId` 在 gen-model-v1 路径仍为 `null`（P0 遗留，端口透传另起）；`coordinateFrameId` 首版 `null`（ViewerPanel 的 `dtxGlobalTransformAppliedKey` 不在本 composable 可见范围）；ViewerPanel「单位 / 重心设置变化即清空全部批注」的一期策略**未放宽**（带矩阵的新版记录本可只重映射，列为独立事项）。
 - 「显式升级旧记录为空间云线」的入口（§6.3 / §14 #5）未做：本阶段只有新建写 `region-v1`。
 - 合批 / LOD 64 条预算 / inspection 淡化仍按 §11 留在 P4。
+
+---
+
+## 19. P3 共享范围体实施记录（2026-09-14）
+
+用户口径「进入 P3 共享范围体：rect / obb 新建走 primitiveFromPlacement + 完整失效与重绑 member」。开关 `annotationSharedRegion` 默认开（P1/P2 同一族）。**同一工作树里另一会话正在同一批文件（`useDtxTools.ts` / `useToolStore.ts` / `bindingResolve.ts` / `useAnnotationBindingResolve.ts`）做 ADR-0050 视口降级**，本阶段把改动尽量落在纯函数层与新文件，适配层只留最小 hunk，与解析表 / 降级视觉相关的接线明确留给那条线（见「遗留」）。
+
+| # | 内容 | 落点 |
+|---|---|---|
+| 1 | **rect / obb 记录增 `regionV1?`**（与云线共用 `RegionV1`）；读取漏斗 `normalizeRect/ObbAnnotationRecord` 末尾 `fillBoxAnnotationRegionDefault`：缺失 → 由 `obb` 派生 `legacy-snapshot`（**按保存的 center / axes / halfSize 原样恢复**，旧数据 axes 是单位阵就照单位阵，不自动迁移、不重算）；显式 `null` 保留；幂等。`obb` 字段照旧双写，旧端只看它 | `useToolStore.ts`、`cloudRegion.ts::deriveLegacyObbRegion / fillBoxAnnotationRegionDefault` |
+| 2 | **新建走 `primitiveFromPlacement`**（§7）：obb 框选 / rect 框选 / rect 单击三条创建路径在开关开时用 P2 的 `buildMembersRegionV1`（每个已加载 objectId 一个「局部盒 × (global × instance)」OBB，剪切退单位轴 AABB）写 `regionV1(obb-union, origin:'members')` + `SourceStamp`；`obb` 旧字段仍是合并 AABB 的单位轴盒。**任一成员未加载（coverage 不足）不写**，漏斗回 legacy-snapshot | `useDtxTools.ts`（`buildSharedRegionForMembers`；`createRectAnnotationRecordFromObb` 增 `regionV1` 入参） |
+| 3 | **线框按范围体画**（§7「rect / obb 仍显示空间线框」+「多对象不能伪装成一个精确 OBB」）：`buildBoxAnnotationWireGeometry(record)`——开关开 + `origin:'members'` + 覆盖全部成员 → 每个成员对象一个真实放置盒（多成员多盒、不合并）；否则（旧记录 / 开关关 / 范围与绑定不一致）→ 照旧 `obb.corners` 单盒。`createRectAnnotationVisual` 改收整条记录 | 同上 |
+| 4 | **重绑 member 原子更新**（§8）：store `patchAnnotationBindings` 对 `origin:'members'` 范围体在**同一个 patch** 里调和——删掉不再是成员的盒、新成员经注入的 `AnnotationRegionMemberBoxResolver` 补盒（useDtxTools 启动时用 DTX 图层注册：`resolveMemberRegionBoxes`），云线另同步兼容字段 `selectionBbox = regionAabb(region)`；纯函数 `reconcileMembersRegion`（拿不到几何的新成员记进 `missing`，**不用子集冒充完整范围**）、`regionAabb`（旋转盒按 Σ\|axis·e\|·half）、`regionCoversMembers` / `regionMemberRefnos`。非 members 来源（legacy-snapshot / user-volume）一律不动 | `useToolStore.ts`（`setAnnotationRegionMemberBoxResolver` / `withReconciledRegion`）、`cloudRegion.ts` |
+| 5 | **快照与绑定不一致 = 没有可用范围**：云线新管线在校验前先 `regionCoversMembers(regionV1, members)`，不覆盖 → `missing-region`（`invalidReason: coverage…`）走旧的实时 AABB 贴合（自愈、且不用子集缩小范围）；rect / obb 线框同口径退回 `obb.corners` | `useDtxTools.ts` |
+| 6 | **来源身份探针**（§8 补充 1）纯函数 `compareRegionSource(source, current)`：两边都有 `modelSnapshotId` 且不等 → `mismatch`（范围整体判 stale），任一缺失 → `unknown`（不判）；坐标系不在这里比（矩阵不等走 P2 重映射，不判 stale） | `cloudRegion.ts` |
+| 7 | **测试**：纯函数 11 例（旧 obb 恢复 / 非法拒绝 / 漏斗幂等 / 覆盖判定两种写法 / 调和增删缺 / 非 members 不动 / 旋转盒 AABB / 来源比对）；store 7 例（rect / obb 漏斗 + 字节幂等；云线追加 → bindings / boxes / selectionBbox 同次到位；移除收缩；未加载 → 绑定改范围不动；legacy 不参与；rect / obb 同样调和且 `obb` 不动）；适配层 9 例（框选两对象建 OBB：A 旋转 30° / B 平移各一盒、`obb` 仍合并 AABB、来源矩阵；单击建 rect；开关关 → legacy-snapshot；成员未加载不写；线框 24 边 vs 12 边、开关关字段不丢、旧记录单盒；不覆盖退单盒；重绑经图层补盒后云线继续 `complete` 且 2 单元；追加未加载成员 → `missing-region / coverage` 旧管线照画；移除成员盒随删） | `cloudRegion.sharedRegion.test.ts`、`useToolStore.sharedRegion.test.ts`、`useDtxTools.sharedRegion.test.ts` |
+
+**验证**（2026-09-14 23:1x–23:2x，本机，工作树含另一会话的 ADR-0050 WIP）：
+- `npx vitest run` 全量：**325 文件 / 2800 用例全绿**（本次新增 11 + 7 + 9 = 27 例；P2 `cloudRegion.test` 里「轴不正交」夹具补了 `memberRefno`，否则先被覆盖判定拦住）。
+- `npm run type-check`：本次改动文件 **0 条新增**；剩 1 条基线外仍是未触碰的 `resolveLabelCollisions.test.ts`。
+- `npx eslint` 改动文件：0 错误。
+- 未跑 Playwright；真机要看：框选多个构件建 OBB 批注是否每构件一个贴合的真实盒、`?cloud_render_flags=annotationSharedRegion:0` 对照旧的合并盒。
+
+**遗留 / 后续**：
+- `compareRegionSource` 只给了纯函数；接进解析表（`useAnnotationBindingResolve` 的 probe）与视口 STALE 视觉**留给正在做 ADR-0050 视口降级的那条线**，避免同一文件双线改。今天 `modelSnapshotId` 只有 parquet 路径非 `null`，gen-model-v1 一律 `unknown`（P0 遗留）。
+- 重绑时新成员未加载：范围体不含它、云线回旧实时贴合；成员之后加载完**不会自动补盒**（补盒只在显式重绑时发生）。要自愈需在 `dtxLoaderRevision` 变化后对「不覆盖」的 members 范围体重试一次调和——属「普通模型加载补足运行时信息」，可做，另起。
+- rect / obb 的 `regionV1` 只用于线框与重绑；rect / obb 记录没有像云线那样的 `presentationV1`，不区分 legacy / region 呈现版本（线框来源由 `origin` 与开关决定）。
+- 「显式升级旧记录」（含 rect / obb 的 legacy-snapshot → members）入口仍未做。
 
 ---
 

@@ -232,3 +232,155 @@ export function fillCloudRegionFieldDefaults<T extends object>(rec: T): T & Clou
   if (src.labelLayoutV1 === undefined) out.labelLayoutV1 = null;
   return out;
 }
+
+// ---------------------------------------------------------------------------
+// P3 共享范围体（方案 §7 / §8）：rect / obb 共用 RegionV1；重绑 member 时范围体原子调和
+// ---------------------------------------------------------------------------
+
+/**
+ * 旧 rect / obb 记录的 `obb` 字段（center / axes / halfSize；旧数据 axes 是单位阵）→ `legacy-snapshot` 范围体，**按保存的盒恢复**，
+ * 不用当前模型重算。轴 / 中心 / 半边长任一非法（非有限、半边长 < 0）→ `null`。
+ */
+export function deriveLegacyObbRegion(obb: unknown): RegionV1 | null {
+  if (!obb || typeof obb !== 'object') return null;
+  const { center, axes, halfSize } = obb as { center?: unknown; axes?: unknown; halfSize?: unknown };
+  if (!isFiniteV3(center) || !isFiniteV3(halfSize) || halfSize.some((h) => h < 0)) return null;
+  if (!Array.isArray(axes) || axes.length !== 3 || !axes.every(isFiniteV3)) return null;
+  const [ax, ay, az] = axes as [V3, V3, V3];
+  return {
+    version: 1,
+    space: 'world',
+    source: createNullSourceStamp(),
+    origin: 'legacy-snapshot',
+    kind: 'obb-union',
+    boxes: [{
+      id: 'legacy-snapshot:0',
+      memberRefno: null,
+      center: [center[0], center[1], center[2]],
+      axes: [
+        [ax[0], ax[1], ax[2]],
+        [ay[0], ay[1], ay[2]],
+        [az[0], az[1], az[2]],
+      ],
+      halfSize: [halfSize[0], halfSize[1], halfSize[2]],
+    }],
+  };
+}
+
+/** rect / obb 读取漏斗：`regionV1` 缺失 → 由 `obb` 派生 `legacy-snapshot`；显式 `null` 保留。返回新对象、幂等 */
+export function fillBoxAnnotationRegionDefault<T extends object>(rec: T): T & { regionV1: RegionV1 | null } {
+  const src = rec as T & { obb?: unknown; regionV1?: RegionV1 | null };
+  const out = { ...src } as T & { regionV1: RegionV1 | null };
+  if (src.regionV1 === undefined) out.regionV1 = deriveLegacyObbRegion(src.obb);
+  return out;
+}
+
+/** 两种写法（`=24381/145018` / `24381_145018`）归成一个键 */
+function memberKey(refno: string): string {
+  return String(refno ?? '').trim().replace(/^=/, '').replace(/\//g, '_');
+}
+
+/** 范围体里出现过的成员 refno（去重，按首次出现顺序） */
+export function regionMemberRefnos(region: RegionV1 | null | undefined): string[] {
+  if (!region) return [];
+  const out: string[] = [];
+  const seen = new Set<string>();
+  const push = (refno: string | null) => {
+    if (!refno) return;
+    const key = memberKey(refno);
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push(refno);
+  };
+  switch (region.kind) {
+    case 'obb-union': for (const box of region.boxes) push(box.memberRefno); break;
+    case 'hull': push(region.hull.memberRefno); break;
+    case 'lasso-prism': for (const cell of region.cells) push(cell.memberRefno); break;
+  }
+  return out;
+}
+
+/**
+ * `origin:'members'` 范围体是否覆盖全部成员（每个成员至少一个盒 / 单元）。
+ * 其它来源（`legacy-snapshot` / `user-volume`）不承诺按成员覆盖，一律 true。
+ * 不覆盖 = 快照与绑定不一致 → 渲染层按「没有可用范围」处理（走旧的实时 AABB 贴合），不用子集缩小范围冒充。
+ */
+export function regionCoversMembers(region: RegionV1 | null | undefined, memberRefnos: readonly string[]): boolean {
+  if (!region || region.origin !== 'members') return true;
+  const have = new Set(regionMemberRefnos(region).map(memberKey));
+  return memberRefnos.every((refno) => have.has(memberKey(refno)));
+}
+
+export type ReconcileMembersRegionResult = {
+  region: RegionV1;
+  /** 这次没拿到几何的新成员（范围里没有它们的盒；渲染层据 `regionCoversMembers` 判不覆盖） */
+  missing: string[];
+  changed: boolean;
+};
+
+/**
+ * 重绑 member 时的范围体调和（§8「原子更新绑定、范围、来源及兼容字段」的纯函数部分）：
+ * - 删掉不再是成员的盒；
+ * - 新成员由 `resolveBoxes(refno)` 给盒（`null` = 此刻拿不到几何 → 记进 `missing`，**不**用子集冒充完整范围）。
+ * 只处理 `origin:'members'` 的 `obb-union`；其它范围体原样返回（`changed:false`）。
+ */
+export function reconcileMembersRegion(
+  region: RegionV1,
+  memberRefnos: readonly string[],
+  resolveBoxes: (refno: string) => readonly ObbSnapshot[] | null,
+): ReconcileMembersRegionResult {
+  if (region.origin !== 'members' || region.kind !== 'obb-union') return { region, missing: [], changed: false };
+  const wanted = new Map<string, string>();
+  for (const refno of memberRefnos) {
+    const key = memberKey(refno);
+    if (key && !wanted.has(key)) wanted.set(key, refno);
+  }
+  const kept = region.boxes.filter((box) => box.memberRefno !== null && wanted.has(memberKey(box.memberRefno)));
+  const have = new Set(kept.map((box) => memberKey(box.memberRefno!)));
+  const added: ObbSnapshot[] = [];
+  const missing: string[] = [];
+  for (const [key, refno] of wanted) {
+    if (have.has(key)) continue;
+    const boxes = resolveBoxes(refno);
+    if (!boxes || boxes.length === 0) {
+      missing.push(refno);
+      continue;
+    }
+    for (const box of boxes) added.push({ ...box, memberRefno: box.memberRefno ?? refno });
+  }
+  const changed = kept.length !== region.boxes.length || added.length > 0;
+  if (!changed) return { region, missing, changed: false };
+  return { region: { ...region, boxes: [...kept, ...added] }, missing, changed: true };
+}
+
+/** `obb-union` 范围体的世界 AABB（兼容字段 `selectionBbox` 用）；空 / 非 obb-union 回 null */
+export function regionAabb(region: RegionV1 | null | undefined): { min: V3; max: V3 } | null {
+  if (!region || region.kind !== 'obb-union' || region.boxes.length === 0) return null;
+  const min: [number, number, number] = [Infinity, Infinity, Infinity];
+  const max: [number, number, number] = [-Infinity, -Infinity, -Infinity];
+  for (const box of region.boxes) {
+    for (let axis = 0; axis < 3; axis++) {
+      // 沿世界轴的半径 = Σ |axes[i][axis]| · halfSize[i]
+      const r = Math.abs(box.axes[0][axis]!) * box.halfSize[0]
+        + Math.abs(box.axes[1][axis]!) * box.halfSize[1]
+        + Math.abs(box.axes[2][axis]!) * box.halfSize[2];
+      const c = box.center[axis]!;
+      if (c - r < min[axis]!) min[axis] = c - r;
+      if (c + r > max[axis]!) max[axis] = c + r;
+    }
+  }
+  if (!min.every(Number.isFinite) || !max.every(Number.isFinite)) return null;
+  return { min: [min[0], min[1], min[2]], max: [max[0], max[1], max[2]] };
+}
+
+export type RegionSourceMatch = 'match' | 'mismatch' | 'unknown';
+
+/**
+ * 来源身份比对（§8 补充 1 的 `sourceMatches` 探针）：两边都有 `modelSnapshotId` 且不等 → `mismatch`（范围整体判 stale）；
+ * 任一缺失 → `unknown`（身份不可得时不判）。坐标系（`globalModelMatrix`）不在这里比——矩阵不等走重映射，不判 stale。
+ */
+export function compareRegionSource(source: SourceStamp | null | undefined, current: { modelSnapshotId: string | null }): RegionSourceMatch {
+  const recorded = source?.modelSnapshotId ?? null;
+  if (!recorded || !current.modelSnapshotId) return 'unknown';
+  return recorded === current.modelSnapshotId ? 'match' : 'mismatch';
+}

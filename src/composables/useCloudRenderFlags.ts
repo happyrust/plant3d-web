@@ -9,6 +9,9 @@
  *   新建云线写 `regionV1(obb-union, origin:'members')` + `viewpointV1.creation` + `presentationV1.algorithm='region-v1'`；
  *   `region-v1` 记录按「范围体齐次裁剪 → 屏幕凸包 → 圆角外扩 → 单侧余弦波纹」呈现，bbox3d 画同一范围体的真实盒边。
  *   关掉后：新建只写旧字段（漏斗补 `legacy-v0`），已有 `region-v1` 记录按旧管线兼容显示，新字段原样保留不丢。
+ * - `annotationSharedRegion`（P3，方案 §7）：rect / obb 新建也写 `regionV1(obb-union, origin:'members')`——每个成员对象一个真实放置盒
+ *   （`primitiveFromPlacement`），线框按这些盒画（多成员多盒，不再用一个合并 AABB 冒充 OBB）；`obb` 旧字段照旧双写。
+ *   关掉后：新建只写 `obb`，已带 `regionV1` 的记录按 `obb` 线框兼容显示，字段保留。旧记录任何时候都不自动迁移。
  *
  * 默认全部开启。覆盖方式（优先级从高到低）：
  * 1. URL `?cloud_render_flags=cloudLabelLayoutV1:0,cloudDirtyCache:1`
@@ -16,7 +19,7 @@
  * 3. 默认值
  */
 
-export type CloudRenderFlag = 'cloudLabelLayoutV1' | 'cloudDirtyCache' | 'cloudProjectedEnvelope';
+export type CloudRenderFlag = 'cloudLabelLayoutV1' | 'cloudDirtyCache' | 'cloudProjectedEnvelope' | 'annotationSharedRegion';
 
 export const CLOUD_RENDER_FLAG_STORAGE_KEY = 'plant3d.cloudRenderFlags';
 export const CLOUD_RENDER_FLAG_URL_PARAM = 'cloud_render_flags';
@@ -25,6 +28,7 @@ const DEFAULTS: Readonly<Record<CloudRenderFlag, boolean>> = Object.freeze({
   cloudLabelLayoutV1: true,
   cloudDirtyCache: true,
   cloudProjectedEnvelope: true,
+  annotationSharedRegion: true,
 });
 
 const FLAG_NAMES = Object.keys(DEFAULTS) as CloudRenderFlag[];

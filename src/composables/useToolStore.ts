@@ -30,7 +30,15 @@ import {
   parseLegacyDimensionArchive,
   type StorageLike,
 } from '@/migrations/legacyDimensionV5Archive';
-import { fillCloudRegionFieldDefaults, type CloudRegionFields } from '@/review/domain/cloudRegion';
+import {
+  fillBoxAnnotationRegionDefault,
+  fillCloudRegionFieldDefaults,
+  reconcileMembersRegion,
+  regionAabb,
+  type CloudRegionFields,
+  type ObbSnapshot,
+  type RegionV1,
+} from '@/review/domain/cloudRegion';
 import { buildCommentThreadKey } from '@/review/domain/commentThread';
 import { liftAnnotationComment } from '@/review/domain/reviewSnapshot';
 import {
@@ -432,6 +440,11 @@ export type ObbAnnotationRecord = {
    * 选择集 OBB 没有单一锚点构件，不推导 anchor。读取后恒存在。
    */
   bindings?: AnnotationElementBinding[];
+  /**
+   * 与云线共用的世界范围体（2026-09-14 方案 §7，P3）：新建（开关 `annotationSharedRegion` 开）写 `origin:'members'` 的真实放置盒，
+   * 旧记录读取时由 `obb` 派生 `legacy-snapshot`（按保存的盒恢复，不自动迁移）。`obb` 字段照旧双写，旧端只看它。
+   */
+  regionV1?: RegionV1 | null;
   comments?: AnnotationComment[]; // 多角色意见列表
   reviewState?: AnnotationReviewState;
   severity?: AnnotationSeverity;
@@ -533,6 +546,8 @@ export type RectAnnotationRecord = {
    * 矩形框可由单击一个对象或框选多个对象生成，没有稳定的单一锚点构件，不推导 anchor。读取后恒存在。
    */
   bindings?: AnnotationElementBinding[];
+  /** 与云线 / OBB 共用的世界范围体（方案 §7，P3）；语义同 `ObbAnnotationRecord.regionV1` */
+  regionV1?: RegionV1 | null;
   comments?: AnnotationComment[]; // 多角色意见列表
   reviewState?: AnnotationReviewState;
   severity?: AnnotationSeverity;
@@ -1040,7 +1055,8 @@ export function getAnnotationRefnos(record: {
 function normalizeObbAnnotationRecord(rec: ObbAnnotationRecord): ObbAnnotationRecord {
   const bindings = deriveBoxAnnotationBindings(rec);
   const memberRefnos = bindings.filter((binding) => binding.role === 'member').map((binding) => binding.refno);
-  return {
+  // 共享范围体（P3）：`regionV1` 缺失 → 由 `obb` 派生 legacy-snapshot；显式 null 保留；旧记录不自动迁移
+  return fillBoxAnnotationRegionDefault({
     ...rec,
     // 与云线同一口径：`objectIds` / `refnos` 都是 member 集合的旧字段投影（创建时二者本就同为 refno）。
     objectIds: memberRefnos,
@@ -1050,7 +1066,7 @@ function normalizeObbAnnotationRecord(rec: ObbAnnotationRecord): ObbAnnotationRe
     reviewState: normalizeAnnotationReviewState(rec.reviewState),
     severity: normalizeAnnotationSeverity(rec.severity),
     screenshot: normalizeAnnotationScreenshot(rec.screenshot),
-  };
+  });
 }
 
 /**
@@ -1148,7 +1164,8 @@ function normalizeCloudAnnotationRecord(rec: CloudAnnotationRecord): CloudAnnota
 function normalizeRectAnnotationRecord(rec: RectAnnotationRecord): RectAnnotationRecord {
   const bindings = deriveBoxAnnotationBindings(rec);
   const memberRefnos = bindings.filter((binding) => binding.role === 'member').map((binding) => binding.refno);
-  return {
+  // 共享范围体（P3）：`regionV1` 缺失 → 由 `obb` 派生 legacy-snapshot；显式 null 保留；旧记录不自动迁移
+  return fillBoxAnnotationRegionDefault({
     ...rec,
     // 与云线同一口径：`objectIds` / `refnos` 都是 member 集合的旧字段投影（创建时二者本就同为 refno）。
     objectIds: memberRefnos,
@@ -1158,7 +1175,7 @@ function normalizeRectAnnotationRecord(rec: RectAnnotationRecord): RectAnnotatio
     reviewState: normalizeAnnotationReviewState(rec.reviewState),
     severity: normalizeAnnotationSeverity(rec.severity),
     screenshot: normalizeAnnotationScreenshot(rec.screenshot),
-  };
+  });
 }
 
 function normalizeV1(parsed: PersistedStateV1): PersistedStateV6 {
@@ -2146,21 +2163,63 @@ function removeCloudAnnotationMember(id: string, refno: string): boolean {
   return removeAnnotationMember('cloud', id, refno);
 }
 
-/** 按类型把 `bindings` patch 写回对应记录数组；四个 update 都会重投影旧字段。 */
+/**
+ * 重绑 member 时给 `origin:'members'` 范围体补新成员的盒（2026-09-14 方案 §8「原子更新绑定、范围、来源及兼容字段」）。
+ * store 不依赖模型查询能力：由 useDtxTools 用 DTX 图层注册；没注册 / 拿不到几何回 `null`，范围体里就没有该成员的盒，
+ * 渲染层按 `regionCoversMembers` 判「快照与绑定不一致」走旧的实时 AABB 贴合，不用子集冒充完整范围。
+ */
+export type AnnotationRegionMemberBoxResolver = (refno: string) => readonly ObbSnapshot[] | null;
+
+let annotationRegionMemberBoxResolver: AnnotationRegionMemberBoxResolver | null = null;
+
+function setAnnotationRegionMemberBoxResolver(resolver: AnnotationRegionMemberBoxResolver | null): void {
+  annotationRegionMemberBoxResolver = resolver;
+}
+
+/**
+ * 绑定变化随手把范围体调和进同一个 patch（原子）：删掉不再是成员的盒、新成员补盒；
+ * 云线另同步兼容字段 `selectionBbox`（= 范围体世界 AABB），旧端照旧能画。非 members 来源的范围体不动。
+ */
+function withReconciledRegion<T extends { regionV1?: RegionV1 | null; selectionBbox?: { min: Vec3; max: Vec3 } }>(
+  type: AnnotationType,
+  record: T,
+  bindings: AnnotationElementBinding[],
+): Partial<T> {
+  const region = record.regionV1;
+  if (!region || region.origin !== 'members') return {};
+  const memberRefnos = bindings.filter((binding) => binding.role === 'member').map((binding) => binding.refno);
+  const resolve = annotationRegionMemberBoxResolver ?? (() => null);
+  const reconciled = reconcileMembersRegion(region, memberRefnos, resolve);
+  if (!reconciled.changed) return {};
+  const patch: Partial<T> = { regionV1: reconciled.region } as Partial<T>;
+  if (type === 'cloud') {
+    const aabb = regionAabb(reconciled.region);
+    if (aabb) (patch as { selectionBbox?: { min: Vec3; max: Vec3 } }).selectionBbox = { min: [...aabb.min] as Vec3, max: [...aabb.max] as Vec3 };
+  }
+  return patch;
+}
+
+/** 按类型把 `bindings` patch 写回对应记录数组；四个 update 都会重投影旧字段。带范围体的记录连范围一起原子更新。 */
 function patchAnnotationBindings(type: AnnotationType, id: string, bindings: AnnotationElementBinding[]): void {
   switch (type) {
     case 'text':
       updateAnnotation(id, { bindings });
       return;
-    case 'cloud':
-      updateCloudAnnotation(id, { bindings });
+    case 'cloud': {
+      const record = cloudAnnotations.value.find((a) => a.id === id);
+      updateCloudAnnotation(id, { bindings, ...(record ? withReconciledRegion('cloud', record, bindings) : {}) });
       return;
-    case 'rect':
-      updateRectAnnotation(id, { bindings });
+    }
+    case 'rect': {
+      const record = rectAnnotations.value.find((a) => a.id === id);
+      updateRectAnnotation(id, { bindings, ...(record ? withReconciledRegion('rect', record, bindings) : {}) });
       return;
-    case 'obb':
-      updateObbAnnotation(id, { bindings });
+    }
+    case 'obb': {
+      const record = obbAnnotations.value.find((a) => a.id === id);
+      updateObbAnnotation(id, { bindings, ...(record ? withReconciledRegion('obb', record, bindings) : {}) });
       return;
+    }
   }
 }
 
@@ -3248,6 +3307,7 @@ export function useToolStore() {
     removeCloudAnnotationMember,
     addAnnotationMembers,
     removeAnnotationMember,
+    setAnnotationRegionMemberBoxResolver,
     findAnnotationsByMemberRefnosAcrossTypes,
     removeCloudAnnotation,
     clearCloudAnnotations,
