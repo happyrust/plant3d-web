@@ -850,3 +850,42 @@ Playwright 真指针，临时 spec 已删；38 个对象，三个落点 `o:24381
 **证据等级**：E3D 侧是**已采运行时 golden**（G6-01/02/03，2026-09-11/12 注入 `radius3PointsNoError` 实测），不是静态推导；
 Web 侧是上面的实机走查 + vitest。余 G6-04（两图形角度入口）未采。
 
+## 23. Phase B · Perpendicular to 以 Graphics 边（无限线）/ facet 面（无限面）为目标 实机走查（2026-09-14 15:46）
+
+**为什么补这一节**：方案 §2 #6 的目标 provider 早就按 E3D `GMFARC.perpendicularToPoint` 的分支序（`getLine()` → `getPlane()` → 点）把
+Graphics 边（`direction` + `segment`）与 facet 面（`facet-plane`）接上了（Phase A 切片 2，`001b302`），但**一直只有单测**：
+§12 走的是 Graphics 过滤器下的普通两点距离（`面 → 边`），§10 / §16 / §17 走的是 P-Point 轴 / 元素轴线 / p-line 当垂距目标。
+本节只补这一件事的实机证据，**没有代码改动**。
+
+**对账办法**（不看任何内部几何，全靠可观察行为）：
+1. 先把 Perpendicular **关着**，拾取层设成 `Graphics × Cursor`（Exact：边上取离射线最近处、面上取射线 ∩ 平面），
+   在**同一条边**上悬停 3 个像素、**同一个面**上悬停 4 个像素，各做一次普通两点测量，把第二击的控制点读出来。
+2. 末点回代验残差（第 3 点到前两点连线、第 4 点到前三点平面）——残差 0.0000 mm，说明这几次悬停确实落在同一条边 / 同一个面上，
+   由它们独立定出那条无限线 / 无限面。
+3. 再把 Perpendicular **开着**量一次，检查垂足落在那条线 / 面上、源点→垂足与线垂直（与面法向平行）、距离等于解析值。
+
+**Web 实机走查**（dev `:3101` + gen-model `:8024`，`?model_source=gen-model-v1&gm_backend_port=8024&show_refno=24381_177298`，
+Playwright 真指针；把最大的那根构件 `o:24381_177305:6`（包围盒对角 6.162 m）框到屏幕中央再扫像素——整屏看一片型材时
+每个像素都贴着绘制边、一个面候选都采不到；临时 spec 已删）：
+
+- 扫描：边像素 24、面像素 40（按覆盖条的悬停标签分类）。
+- **边当无限线目标**：控制点 `E1 (2415.420, 9107.373, 23294.211)` / `E2 (2406.319, 9211.402, 23294.211)`，
+  边方向 `(−0.087156, 0.996195, 0.000000)`；源点 `S (2684.488, 9409.125, 23326.211)`。
+  结果 `targetKind = line`、`targetLabel = 边`、**Distance 296.0782 mm**；
+  垂足 `(2391.265, 9383.471, 23294.211)` 到基准线 **0.0000 mm**，`(S−F)·边方向 = 3.61e-16`，
+  与解析垂距 **Δ 0.0000 mm**（`web-perp-graphics-live-01-hover-edge-target.png` / `web-perp-graphics-live-02-edge-result.png`）。
+- **facet 当无限面目标**：控制点三点定出的法向 `(0, 0, −1)`（这根型材的顶面），源点 `S2 (2415.420, 9107.373, 23294.211)`。
+  结果 `targetKind = plane`、`targetLabel = 面 所在平面`、**Distance 32.0000 mm**、`Vertical 32mm` / `Horizontal 0mm`
+  （源点正在面的下方，垂距全在竖直方向）；垂足 `(2415.420, 9107.373, 23326.211)` 到基准面 **0.0000 mm**，
+  `(S−F)` 与法向的 `|sin| = 1.11e-13`，与解析垂距 **Δ 0.0000 mm**（`web-perp-graphics-live-03-hover-facet-target.png` / `web-perp-graphics-live-04-facet-result.png`）。
+- 面板的 Perpendicular 信息条按 §10 的口径出「点→无限线」/「点→无限面」+ 目标名；`wrt` 显示「World（垂距模式固定）」、控件禁用（G4-06）。
+- **两次结果都不标「近似」**：源点是 `mesh_graphics` 的网格点（本该归 approximate），但垂足落在精确的目标线 / 面上，
+  按 §16 补的 `exactTarget` 口径整条结果不标近似。这一条与 §12「Graphics 两点距离标近似」并不矛盾——那一次两个端点都是网格点。
+- 页面错误 0。逐行实读见 `web-perp-graphics-live-scan.txt`，数值见 `web-perp-graphics-live-records.json`。
+
+**证据等级**：Web 侧是上面的实机走查；E3D 侧仍是 `static_expectation`（`edgpicktype.pmlobj` 的 `GRAPHICS` 分支 +
+`GMFARC.perpendicularToPoint` 的分支序，见 §12），**G7-02（EDGE / PLANE 实际捕捉几何）运行时 golden 未采**——
+这一节证明的是「Web 的 Graphics 边 / 面确实以无限线 / 无限面的语义参与垂距，数值自洽」，不是「与 E3D 逐位一致」。
+
+**余下**：#6 只剩 Aid 类目标（GPHLINE / GPHPLANE），要 Aid 系统，Q3 未拍板（§7）。
+
