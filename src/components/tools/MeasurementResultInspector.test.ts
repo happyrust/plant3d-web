@@ -191,6 +191,24 @@ describe('MeasurementResultInspector', () => {
       ...await importOriginal<typeof import('@/api/genModelPdmsAttrApi')>(),
       pdmsGetTransform,
     }));
+    // The reference-frame port follows the model source: pin `legacy` so the transform comes from
+    // the mocked `/api/pdms/transform` (under gen-model-v1 it would ask `element/ptset` instead),
+    // and answer the tree-node lookup (owner / noun hint) locally so nothing goes to the network.
+    vi.doMock('@/model-source/kind', async (importOriginal) => ({
+      ...await importOriginal<typeof import('@/model-source/kind')>(),
+      getModelSourceKind: () => 'legacy' as const,
+    }));
+    vi.doMock('@/model-source', async (importOriginal) => ({
+      ...await importOriginal<typeof import('@/model-source')>(),
+      getModelSource: () => ({
+        tree: {
+          node: async (refno: string) => ({
+            success: true,
+            node: { refno, name: 'EQUI', noun: 'EQUI', owner: '7_1' },
+          }),
+        },
+      }),
+    }));
     const [
       { default: MeasurementResultInspector },
       { useToolStore },

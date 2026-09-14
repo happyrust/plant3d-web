@@ -16,9 +16,20 @@ import {
 } from '@/measurement/reference-frame/gensecSectionBasis';
 import { normalizeReferenceFrameRefno } from '@/measurement/reference-frame/referenceFrameResolver';
 
+/**
+ * What a transform lookup hands back: the legacy `/api/pdms/transform` contract, optionally
+ * naming where it came from (`source`) so the frame provenance can tell the two backends apart.
+ */
+export type ReferenceFrameTransformResponse = TransformResponse & Readonly<{ source?: string }>;
+
 export type PdmsTransformReferenceFramePortOptions = Readonly<{
   currentElementRefno: () => MaybePromise<string | null>;
-  fetchTransform?: (refno: string) => Promise<TransformResponse>;
+  /**
+   * Element world placement lookup. Defaults to the active model source: legacy `:3100`
+   * `/api/pdms/transform`; gen-model-v1 `element/ptset` (`world_transform`, column-major mm) with
+   * the owner taken from the tree node.
+   */
+  fetchTransform?: (refno: string) => Promise<ReferenceFrameTransformResponse>;
   /**
    * Element type lookup (E3D `hardtype`, e.g. `GENSEC`). Defaults to the active model source's
    * tree node; any failure resolves to `null` so the frame still resolves as an ordinary element.
@@ -62,20 +73,74 @@ async function fetchPlinesFromGenModel(refno: string): Promise<readonly SectionP
   }
 }
 
+type ModelSourceNode = Readonly<{ noun: string | null; owner: string | null }>;
+type ModelSourceNodeLookup = () => Promise<ModelSourceNode | null>;
+
 /**
- * Default element-type lookup: the active model source's tree node (the noun lives on the tree
- * node under both `legacy` and `gen-model-v1`). Loaded lazily so the measurement chain does not
- * statically depend on the model-source bundle (DuckDB-WASM under legacy).
+ * The active model source's tree node (noun + owner live there under both `legacy` and
+ * `gen-model-v1`). Loaded lazily so the measurement chain does not statically depend on the
+ * model-source bundle (DuckDB-WASM under legacy). Any failure → `null`: the node only feeds hints.
  */
-async function fetchNounFromModelSource(refno: string): Promise<string | null> {
+async function lookupModelSourceNode(refno: string): Promise<ModelSourceNode | null> {
   try {
     const { getModelSource } = await import('@/model-source');
     const response = await getModelSource().tree.node(refno);
-    const noun = response?.node?.noun;
-    return typeof noun === 'string' && noun.trim() !== '' ? noun.trim() : null;
+    const node = response?.node;
+    if (!node) return null;
+    const noun = typeof node.noun === 'string' && node.noun.trim() !== '' ? node.noun.trim() : null;
+    const owner = typeof node.owner === 'string' && node.owner.trim() !== '' ? node.owner.trim() : null;
+    return { noun, owner };
   } catch {
     return null;
   }
+}
+
+/** One frame resolution asks for its tree node at most once (transform owner + type both need it). */
+function memoizedNodeLookup(refno: string): ModelSourceNodeLookup {
+  let pending: Promise<ModelSourceNode | null> | null = null;
+  return () => {
+    pending ??= lookupModelSourceNode(refno);
+    return pending;
+  };
+}
+
+/**
+ * Default transform lookup. `legacy` keeps the `:3100 /api/pdms/transform` contract. Under
+ * `gen-model-v1` that backend does not know the refnos, so the element's world placement comes
+ * from `element/ptset` — its `world_transform` is the same column-major mm local→world matrix
+ * (`aios_core::transform::get_world_mat4` on both sides) — and the owner from the tree node.
+ * A 404 is a plain "not found"; other failures propagate as "unavailable".
+ */
+async function fetchTransformFromModelSource(
+  refno: string,
+  node: ModelSourceNodeLookup,
+): Promise<ReferenceFrameTransformResponse> {
+  const { getModelSourceKind } = await import('@/model-source/kind');
+  if (getModelSourceKind() !== 'gen-model-v1') return pdmsGetTransform(refno);
+  const { genModelV1ElementPtset, isGenModelV1ApiError } = await import('@/api/genModelV1Api');
+  const [ptset, nodeInfo] = await Promise.all([
+    genModelV1ElementPtset({ refno }).catch((error: unknown) => {
+      if (isGenModelV1ApiError(error) && error.isNotFound) return null;
+      throw error;
+    }),
+    node(),
+  ]);
+  if (!ptset) {
+    return {
+      success: false,
+      refno,
+      world_transform: null,
+      owner: nodeInfo?.owner ?? null,
+      error_message: `Element ${refno} not found in gen-model-v1`,
+    };
+  }
+  return {
+    success: true,
+    refno: ptset.refno ?? refno,
+    world_transform: Array.isArray(ptset.world_transform) ? ptset.world_transform : null,
+    owner: nodeInfo?.owner ?? null,
+    source: 'gen-model-v1-element-ptset',
+  };
 }
 
 function lookupFailure(
@@ -207,8 +272,6 @@ export function adaptPdmsTransformResponse(
 export function createPdmsTransformReferenceFramePort(
   options: PdmsTransformReferenceFramePortOptions,
 ): ReferenceFrameDataPort {
-  const fetchTransform = options.fetchTransform ?? pdmsGetTransform;
-  const fetchNoun = options.fetchNoun ?? fetchNounFromModelSource;
   const fetchPlines = options.fetchPlines ?? fetchPlinesFromGenModel;
   return Object.freeze({
     currentElementRefno: options.currentElementRefno,
@@ -218,7 +281,13 @@ export function createPdmsTransformReferenceFramePort(
         return lookupFailure('invalid-data', `Reference-frame refno is invalid: ${refno}`);
       }
       try {
-        // The type lookup runs alongside the transform; it is a hint and never fails the frame.
+        // The default transform (owner) and type lookups share one tree-node request; injected
+        // lookups never touch the model source. The type lookup is a hint and never fails the frame.
+        const node = memoizedNodeLookup(requestedRefno);
+        const fetchTransform = options.fetchTransform
+          ?? ((target: string) => fetchTransformFromModelSource(target, node));
+        const fetchNoun = options.fetchNoun
+          ?? (async (): Promise<string | null> => (await node())?.noun ?? null);
         const [response, noun] = await Promise.all([
           fetchTransform(requestedRefno),
           fetchNoun(requestedRefno).catch(() => null),
@@ -230,6 +299,8 @@ export function createPdmsTransformReferenceFramePort(
           const plines = await fetchPlines(requestedRefno).catch(() => null);
           sectionBasis = plines && plines.length > 0 ? deriveSectionBasisFromPlines(plines) : null;
         }
+        // A port-level `source` names the whole adapter; otherwise the lookup says where it came from.
+        const source = options.source ?? response.source;
         return adaptPdmsTransformResponse(response, {
           requestedRefno,
           noun,
@@ -237,7 +308,7 @@ export function createPdmsTransformReferenceFramePort(
           ...(options.lengthScaleToM === undefined
             ? {}
             : { lengthScaleToM: options.lengthScaleToM }),
-          ...(options.source === undefined ? {} : { source: options.source }),
+          ...(source === undefined ? {} : { source }),
           ...(options.axisLabels === undefined ? {} : { axisLabels: options.axisLabels }),
         });
       } catch (error) {
