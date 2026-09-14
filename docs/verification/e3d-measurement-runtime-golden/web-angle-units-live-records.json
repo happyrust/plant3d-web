@@ -1,0 +1,127 @@
+{
+  "stru": "24381_177298",
+  "gmBackendPort": "8024",
+  "picks": [
+    {
+      "objectId": "o:24381_177301:0",
+      "x": 374.9511150712345,
+      "y": 183.15190488516183,
+      "z": 0.9974797016665121
+    },
+    {
+      "objectId": "o:24381_177313:8",
+      "x": 241.43946729780367,
+      "y": 353.9023536268339,
+      "z": 0.99784414493128
+    },
+    {
+      "objectId": "o:24381_177329:16",
+      "x": 230.0726818180787,
+      "y": 227.4142611814183,
+      "z": 0.998216320216789
+    }
+  ],
+  "measurement": {
+    "root": [
+      3.1455490372885024,
+      11.804368173918014,
+      23.19637774979147
+    ],
+    "first": [
+      11.7934501953125,
+      2.5737399902343756,
+      3.0500000000000007
+    ],
+    "second": [
+      -3.043612744028105,
+      -11.112978551288084,
+      3.1719999999999957
+    ]
+  },
+  "analyticDeg": 40.53856373223515,
+  "unitOptions": [
+    "Default",
+    "Degrees",
+    "Radians",
+    "Gradians"
+  ],
+  "cases": [
+    {
+      "name": "01-default-2",
+      "note": "Default × 2 位（E3D 构造值）",
+      "rows": {
+        "angle": "40.54 Degrees",
+        "dms": "40° 32' 18''",
+        "direction1": "X +0.36 · Y -0.39 · Z -0.85",
+        "direction2": "X -0.20 · Y -0.74 · Z -0.64"
+      },
+      "decimals": "2",
+      "unit": "default"
+    },
+    {
+      "name": "02-degrees-4",
+      "note": "Degrees × 4 位",
+      "rows": {
+        "angle": "40.5386 Degrees",
+        "dms": "40° 32' 18''",
+        "direction1": "X +0.3635 · Y -0.3880 · Z -0.8469",
+        "direction2": "X -0.1993 · Y -0.7379 · Z -0.6448"
+      },
+      "decimals": "4",
+      "unit": "degrees"
+    },
+    {
+      "name": "03-radians-4",
+      "note": "Radians × 4 位",
+      "rows": {
+        "angle": "0.7075 Radians",
+        "dms": "40° 32' 18''",
+        "direction1": "X +0.3635 · Y -0.3880 · Z -0.8469",
+        "direction2": "X -0.1993 · Y -0.7379 · Z -0.6448"
+      },
+      "decimals": "4",
+      "unit": "radians"
+    },
+    {
+      "name": "04-gradians-2",
+      "note": "Gradians × 2 位",
+      "rows": {
+        "angle": "45.04 Gradians",
+        "dms": "40° 32' 18''",
+        "direction1": "X +0.36 · Y -0.39 · Z -0.85",
+        "direction2": "X -0.20 · Y -0.74 · Z -0.64"
+      },
+      "decimals": "2",
+      "unit": "gradians"
+    },
+    {
+      "name": "05-decimals-out-of-range",
+      "note": "Decimal Places 填 9（越界）",
+      "rows": {
+        "angle": "45.04 Gradians",
+        "dms": "40° 32' 18''",
+        "direction1": "X +0.36 · Y -0.39 · Z -0.85",
+        "direction2": "X -0.20 · Y -0.74 · Z -0.64",
+        "error": "Value must be between 0 and 8"
+      },
+      "decimals": "2",
+      "unit": "gradians"
+    },
+    {
+      "name": "06-gradians-0",
+      "note": "Decimal Places 填 0（边界内）",
+      "rows": {
+        "angle": "45 Gradians",
+        "dms": "40° 32' 18''",
+        "direction1": "X +0 · Y +0 · Z -1",
+        "direction2": "X +0 · Y -1 · Z -1"
+      },
+      "decimals": "0",
+      "unit": "gradians"
+    }
+  ],
+  "persisted": {
+    "unit": "gradians",
+    "decimalPlaces": 0
+  }
+}

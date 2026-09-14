@@ -1,0 +1,14 @@
+# E3D Measure Angle · Units（Unit 四档 × Decimal Places 0–8）实机走查（dev :3101 + gen-model :8024，?model_source=gen-model-v1&gm_backend_port=8024&show_refno=24381_177298，Playwright 真指针 + 真控件，临时 spec 已删）
+# 每行 = 一档单位 / 小数位下测量面板角度结果表的实读文本；对账用的是三点设计坐标独立算出的角。
+objects=38 STRU=24381_177298 gm_backend_port=8024
+picks: o:24381_177301:0@(375,183) o:24381_177313:8@(241,354) o:24381_177329:16@(230,227)
+解析角度 40.538564°（弧度 0.707531，梯度 45.042849）
+Unit 下拉：[Default, Degrees, Radians, Gradians]
+Default × 2 位（E3D 构造值）: Decimal Angle=40.54 Degrees | DMS=40° 32' 18'' | Direction1=X +0.36 · Y -0.39 · Z -0.85 | Direction2=X -0.20 · Y -0.74 · Z -0.64
+Degrees × 4 位: Decimal Angle=40.5386 Degrees | DMS=40° 32' 18'' | Direction1=X +0.3635 · Y -0.3880 · Z -0.8469 | Direction2=X -0.1993 · Y -0.7379 · Z -0.6448
+Radians × 4 位: Decimal Angle=0.7075 Radians | DMS=40° 32' 18'' | Direction1=X +0.3635 · Y -0.3880 · Z -0.8469 | Direction2=X -0.1993 · Y -0.7379 · Z -0.6448
+Gradians × 2 位: Decimal Angle=45.04 Gradians | DMS=40° 32' 18'' | Direction1=X +0.36 · Y -0.39 · Z -0.85 | Direction2=X -0.20 · Y -0.74 · Z -0.64
+Decimal Places 填 9（越界）: Decimal Angle=45.04 Gradians | DMS=40° 32' 18'' | Direction1=X +0.36 · Y -0.39 · Z -0.85 | Direction2=X -0.20 · Y -0.74 · Z -0.64 | 错误=Value must be between 0 and 8
+Decimal Places 填 0（边界内）: Decimal Angle=45 Gradians | DMS=40° 32' 18'' | Direction1=X +0 · Y +0 · Z -1 | Direction2=X +0 · Y -1 · Z -1
+重载后持久化的角度 Units：{"unit":"gradians","decimalPlaces":0}
+page errors: 0

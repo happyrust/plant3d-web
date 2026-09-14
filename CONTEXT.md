@@ -148,6 +148,11 @@ _Avoid_: 全局单位设置（模型显示单位 + 小数位，另一层）、�
 按 E3D 的 root / first / second 三击测出的夹角（Web 草稿里依次是顶点、第一边点、第二边点）。它只报 minor 角（0°–180°，没有反角），两条臂各有一个单位方向（Direction1 = 顶点→第一边点，Direction2 = 顶点→第二边点），方向随当前 wrt 帧换分量与轴标签，角度本身与参考系无关。三点共线（0° / 180°）或有重合点时**测不出来**：不落记录、回到第 1 步重新取顶点——对应 E3D 那边 `radius3PointsNoError` 回未设 ARC、窗体报 `An angular dimension could not be constructed from the data selected`。
 _Avoid_: 反角 / 优角、两线夹角（EDGE × EDGE 的 LINEANGLE，另一回事）
 
+## 角度显示单位
+
+三点角这一会话里结果表用的角度格式，由 Unit（Default / Degrees / Radians / Gradians，Default 就是度）× Decimal Places（0–8，缺省 2，越界或非数字打回 2）两档选出，对应 E3D Measure Angle 窗体的 Units 框。它与距离那边的**测量显示单位**是两套、互不影响（E3D 也是两张窗体）。小数位同时管角度值与两条方向的分量，但尾零规则不同：角度值去尾零、方向留尾零。结果表四行 `Decimal Angle`（数值 + 空格 + 单位词）/ `DMS`（恒按十进制度截断出度分秒，与 Unit 无关）/ `Direction1` / `Direction2`。
+_Avoid_: 测量显示单位（距离那一套）、全局小数位
+
 ## P-Point
 
 来自模型点集数据的设计关键点，适合作为精确测量点。它不是模型表面任意射线命中点。

@@ -808,7 +808,8 @@ FORMAT 参数逐格、公制格式矩阵含 `0mm` 无负零、旧 `imperial` 配
 
 **E3D 口径**（已采 golden，见 §7 / §8 与 G6-01～03）：
 - 三点顺序 root / first / second；Web 草稿里对应第一击 `corner`、第二击 `origin`、第三击 `target`。
-- 结果表三行 `Angle` / `Direction1` / `Direction2` + wrt（§1.3）；`Direction1` 是 root→first、`Direction2` 是 root→second 的单位方向。
+- 结果表 `Angle` / `Direction1` / `Direction2` + wrt（当时按方案 §1.3 记的三行，**§24 已按 `gphanglemeasure` 源码纠成四行**：
+  `Decimal Angle` / `DMS` / `Direction1` / `Direction2`）；`Direction1` 是 root→first、`Direction2` 是 root→second 的单位方向。
   实测样本：`37.4013215953213°`、Direction1 `W 11.7755 N 66.8266 D`、Direction2 `W 12.9006 S 32.3892 D`。
 - 只报 minor 角、无 reflex；平面法向随拾取顺序翻转（90° 第二点在南侧时朝向翻成 `Y is S and Z is D`，角度仍报 90）。
 - 退化（0° / 180° / second=first / second=root）：`POSITION.plane()` 报 (2,886) / (2,892)，`radius3PointsNoError` 回未设 ARC，
@@ -888,4 +889,65 @@ Playwright 真指针；把最大的那根构件 `o:24381_177305:6`（包围盒�
 这一节证明的是「Web 的 Graphics 边 / 面确实以无限线 / 无限面的语义参与垂距，数值自洽」，不是「与 E3D 逐位一致」。
 
 **余下**：#6 只剩 Aid 类目标（GPHLINE / GPHPLANE），要 Aid 系统，Q3 未拍板（§7）。
+
+## 24. Phase C · 角度会话级 Units（Unit 四档 × Decimal Places）与结果表补 DMS 行 实机走查（2026-09-14 15:57）
+
+**先纠一处口径**：方案 §1.3 把角度结果表记成「`Angle / Direction1 / Direction2`」，§22 也照这个接的三行。
+读 `gphanglemeasure.pmlfrm` 334–342 才看清 E3D 的 `dimensionProperties` 是**四行**：
+`Decimal Angle` / `DMS` / `Direction1` / `Direction2`。G6-02 采到的是那几个**值**，行名是当时的转述。本节按源码补齐。
+
+**E3D 口径**（`gphanglemeasure.pmlfrm` 45–54 / 95–101 / 318–410 + `comformats.pmlobj` 1240–1259）：
+
+- `Units` 框两格：`Unit` 下拉（`add` 顺序 Default / Degrees / Radians / Gradians，构造时停在第 1 档）
+  与 `Decimal Places` 文本框（构造 `setValue('2', false)`）。两个控件的回调都是 `setupForm()`。
+- `Decimal Places` 只收 **0–8**：`REAL()` 转不动（非数字）走 `handle (2,441)`、越界走 `else`——
+  两条都是 `setValue('2')` + `alert.error('Value must be between 0 and 8')`（328–333 / 431–434）。
+- 角度格式：`!formAngleFormat = !!angleFmt`（= `angleFormat(UNIT('degree'))`，`dp 2`、degree 档 `label ''`、
+  **`trailZeros false`**），然后只换 `dp`（= Decimal Places）与 `units`（下拉那个词；Default 档取工程当前角度单位名 + `s` 首字母大写）。
+  单元格文本是 `!angle.string(!formAngleFormat) & ' ' & !formAngleFormat.units`（407）——**数值、一个空格、单位词**，
+  所以出的是 `40.54 Degrees`，不是 `40.54°`。
+- `DMS`（360–363）：`deg = int(v)`、`min = int((v−deg)×60)`、`sec = int((v−deg−min/60)×3600)`，
+  三处都是**截断**，且 `v` 恒是十进制度——**与 Unit 选了什么无关**。
+- 两条 Direction 的每个数字也按 Decimal Places 重新格式化（376–404，走 `!!realFmt`：只设 `dp`，`trailZeros` 是 FORMAT 缺省 = 留尾零）。
+
+**Web 落地**（Web `b45b33b`；方案 §2 #8 / Phase C 切片 2；决策 `d-494`）：
+
+- 纯内核 `src/measurement/units/measurementAngleUnits.ts`：四档 Unit、0–8 校验（`isMeasurementAngleDecimalsValid`）、
+  度 / 弧度 / 梯度换算、`formatMeasurementAngle`（去尾零 + 单位词）、`formatMeasurementAngleDms`（截断）、
+  `formatMeasurementAngleScalar`（**缺省留尾零** = `realFmt`，角度值那一格才传 `trailZeros: false`）。
+- 样式仓 V9 新增 `measurementAngleUnits`（缺省 Default / 2 = E3D 构造值），`updateMeasurementAngleUnits` 把越界值打回 2。
+- `buildAngleMeasurementResultRows` 出四行并吃这一档；列表摘要与右键「复制值」同源
+  （复制值从 `90.00°` 变成 `90 Degrees`，与结果表一致）。
+- 结果卡角度模式加 `Unit` / `Decimal Places` 两个控件，越界时原地出 `Value must be between 0 and 8`。
+
+**Web 实机走查**（dev `:3101` + gen-model `:8024`，`?model_source=gen-model-v1&gm_backend_port=8024&show_refno=24381_177298`，
+Playwright 真指针点三点 + 真控件换档，临时 spec 已删；三点落在 `o:24381_177301:0` / `o:24381_177313:8` / `o:24381_177329:16`，
+由三点设计坐标独立算出的角 **40.538564°**（弧度 0.707531，梯度 45.042849））：
+
+| Unit × Decimal Places | Decimal Angle | DMS | Direction1 | 图 |
+| --- | --- | --- | --- | --- |
+| Default × 2（构造值） | `40.54 Degrees` | `40° 32' 18''` | `X +0.36 · Y -0.39 · Z -0.85` | `web-angle-units-live-01-default-2.png` |
+| Degrees × 4 | `40.5386 Degrees` | 同上 | `X +0.3635 · Y -0.3880 · Z -0.8469` | `web-angle-units-live-02-degrees-4.png` |
+| Radians × 4 | `0.7075 Radians` | 同上 | 同上 | `web-angle-units-live-03-radians-4.png` |
+| Gradians × 2 | `45.04 Gradians` | 同上 | `X +0.36 · Y -0.39 · Z -0.85` | `web-angle-units-live-04-gradians-2.png` |
+| Gradians × 0 | `45 Gradians` | 同上 | `X +0 · Y +0 · Z -1` | `web-angle-units-live-06-gradians-0.png` |
+
+- Unit 下拉实读 `[Default, Degrees, Radians, Gradians]`；三档换算与解析值逐格对上
+  （`40.54` = `toFixed(2)`、`0.7075` = 弧度 `toFixed(4)`、`45.04` = 梯度 `toFixed(2)`）。
+- **DMS 五档全是 `40° 32' 18''`**——按十进制度截断，不随 Unit 变（40.538564° → 40° + 0.538564×60 = 32.31' → 32' + 0.3138×60 = 18.8'' → 18''）。
+- **Decimal Places 填 9**：原地出 `Value must be between 0 and 8`、输入框弹回 `2`、结果表不变
+  （`web-angle-units-live-05-decimals-out-of-range.png`）。填 `0` 正常收（边界内）。
+- 刷新后 V9 里存着 `{"unit":"gradians","decimalPlaces":0}`。页面错误 0。
+  逐行实读见 `web-angle-units-live-scan.txt`，数值见 `web-angle-units-live-records.json`。
+
+**单测**：`measurementAngleUnits.test.ts` 8 条（四档顺序、0–8 校验、换算、去尾零 / 留尾零两种、DMS 截断）；
+`xeokitMeasurementFormat.test.ts` 3 条改写成四行 + Unit / Decimal Places 矩阵；样式仓 1 条（持久化、越界打回、脏值回缺省）。
+
+**已知偏离 / 残余**：
+- **Default 档 = Degrees**：E3D 取工程当前角度单位（`!!angleFmt.units` + `s` 首字母大写），Web 没有这一层设置，
+  缺省就是度——与 E3D 在 degree 工程下的表现一致，换了角度单位的工程会不一样。
+- 方向仍是**分量串**不是 E3D 的罗盘串（`W 11.7755 N 66.8266 D`），与距离结果表同一条既有偏离（§22）；
+  Decimal Places 管的是这些分量的小数位。
+- Keep Dimension / wrt 这两格角度窗体也有，Web 走的是共用的那套（§19 / G3）。
+- **证据等级**：E3D 侧 `static_expectation`（上列 PML 行号）；G10（Units / Angle 格式矩阵）运行时 golden 仍未采（采集矩阵 §5）。
 
