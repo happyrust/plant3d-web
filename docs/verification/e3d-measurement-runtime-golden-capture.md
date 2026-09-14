@@ -1120,3 +1120,116 @@ gen-model-v1 `element/ptset` 的 `world_transform` 是同一口径的「局部 �
   （Offset 走截面标架、Direction 按 World，§26）。
 - 元素帧的实机对账对象是 gen-model 自己的矩阵，不是 E3D 运行时 golden（E3D 不在跑）；E3D 侧的旋转帧证据仍是 G3-02 / G3-04 trace 的单测。
 
+## 28. 会话设计辅助（Aid）：辅助线 / 面当 Aid 过滤器的拾取对象与 Perpendicular to 的目标 实机走查（2026-09-14 23:36）
+
+**为什么现在做**：方案 §7 Q3「要不要做一个最小 Aid 系统」——§2 #6 的 Perpendicular to 只剩 Aid 类目标没接、#14 的 Aid 过滤器一直灰着。
+用户 2026-09-14 20:0x 拍板做最小实现（「继续做 Q3 Aid 系统（Perpendicular to 的 Aid 类目标）」），E3D 进程不在跑，口径照 PML 源码定（`static_expectation`）。
+
+**E3D 口径**（`gphline.pmlobj` / `gphplane.pmlobj` / `edgpick.pmlobj` 746 `stdAid` / `edgpicktype.pmlobj` / `edgpositiondata.pmlobj`）：
+
+- **Aid LINE**（`GPHLINE`，核心对象 `LINE`）：一条有限的 `start → end`。`stdAid` 拾中回 `DESIGNAID` + aid 号；`snap()` = `GMFLINE.snap`（离拾取射线最近处 → 近端），
+  `exact()` = 线上离射线最近处，Distance / Proportion / Fraction 沿线派生，`getLine()` 回那条 LINE（`edgpositiondata` 179 / 301，`LINE.near` 是无限线 → Perpendicular to 投到无限线上），
+  `intersect()` 把 LINE 交出去。这些正是拾取类型内核（`pickDerivation.ts`）对带 `segment` 候选的既有契约，Aid 模块只供几何。
+- **Aid PLANE**（`GPHPLANE`，核心对象 `PLANE` = 位置 + 姿态，Z 为法向）：画成 `x × y` 的矩形框（构造缺省 `x = y = 5000mm`，107–108）+ 1 mm 法向短线（319 / 324 `ZLENGTH 1mm`），
+  四角在 `threeDPosition(±x/2, ±y/2)`（328–331）。各单击拾取类型一律回 `pointVector.intersection(plane)`（射线 ∩ 面），`getPlane()` 回那张 PLANE（430），`intersect()` 交 PLANE。
+  E3D 只拾画出来的图形——射线要落在矩形上。
+- 标签：`tag` 开着时 `Line [n]`（`gphline` 335–337）/ `Plane [n]`。编辑窗体：线 = 位置（Start / End）+ Direction + Length（`gphlineedit.pmlfrm` 77–81 / 128–131）；
+  面 = 位置 + `Z is`，或「Through three points」（`gphplaneedit.pmlfrm` 83 / 89）。
+- **没照搬**：Aid POSITION / ARC / 各类 grid、`detail` 文字、颜色 / 线型表、aid 文件（`definition()`）。
+
+**Web 落地**（决策 `d-561`；CONTEXT「设计辅助」）：
+
+- 纯内核 `src/measurement/aids/designAid.ts`：`createAidLine` / `aidLineFromDirection`（Start / Mid / End 锚点）/ `createAidPlane`（位置 + 法向 + Y 提示 + 尺寸）/
+  `aidPlaneFromThreePoints`（位置 = 点 1，Y 沿 1 → 2）/ `aidPlaneCorners` / `aidLineRayHit`（异面直线最近点，夹到线段内）/ `aidPlaneRayHit`（射线 ∩ 面 + 矩形内判定，2 % 边距吃框线）/
+  `nextAidNumber` / `aidDisplayName`。面的 X / Y 在只给法向时：Y = Up 在面内的投影（水平面回 North），X = Y × Z——水平面与 E3D 缺省 `Y is N / Z is U` 一致；倾斜面 E3D 自己的
+  `ORIENTATION('Z is …')` 补全规则**未核对**（Web 取舍）。坐标一律设计 World 米。
+- 会话仓 `useMeasurementAidStore.ts`：辅助按创建顺序编 1、2、3 …（E3D 是全局 `!!aidNumbers` 池），只在内存（E3D aid 也不落库）；增删 / 显隐 / 描述改动推 `revision`。
+- 点源 `design_aid`（`buildDesignAidCandidates`）：可见辅助线 → 线候选（控制点 = 线上离射线最近处，带整条 `segment` 与 `direction`），可见辅助面 → 面候选（射线 ∩ 面且落在矩形内，带 `plane` + 四边 outline，`rayHit`）。
+  **只在 Aid 过滤器下参与**（`measurementPickFilterAdmits('aid') = feature 'aid'`，E3D `stdAny` 从不拾 aid，ADR 0060 之一不变）；隐藏的辅助不出候选。缺省 `snap: true / show: false`（图形本身画在场景里，不另画十字）。
+- 图形：`renderDesignAids()` 在场景里画线段 + 矩形四边 + 法向短线（短线画到短边的 10 %，为的是屏幕上看得见方向——E3D 是 1 mm，Web 取舍），品红，`noPick`，随辅助集合 / 全局模型矩阵变化重画。
+- Perpendicular to：辅助线走 `getLine()` → 无限线（目标名 = 辅助自己的名字，不缀「轴线」）；辅助面走 `getPlane()` → 无限面（目标名同样是辅助名，`facet-plane` provider）。
+- 面板 `MeasurementAidPanel.vue`（右侧「测量」dock 的折叠块「设计辅助（Aid）」）：新建线（两点 / 位置 + 方向 + 长度）、新建面（位置 + 法向 / 过三点 + X / Y 尺寸）、
+  「填入最近一条距离 / 角度测量的点」快捷、列表（显隐 / 删除 / 清空）、「切到 Aid 过滤器」。输入按 E3D `!!distanceFmt` 用 mm。
+- 拾取层：`MEASUREMENT_PICK_FILTER_AVAILABILITY.aid = available`（覆盖条 Aid 按钮不再灰），External 仍占位。
+
+**Web 实机走查**（**无任何 mock**：缺省 gen-model-v1 + `:8024`，`?model_source=gen-model-v1&gm_backend_port=8024&show_refno=24381_177298`，浮条真点「自由表面」+ 只留「模型表面点」，
+真指针；临时 spec 已删）：
+
+1. 真距离测量两个表面点 `p1 = E 2705.624 N 11818.014 U 23326.211` → `p2 = E −7966.541 N 8249.809 U 3172.000`（mm，长 23082.9），落库后在面板「填入最近一条距离测量的两点」
+   建 `Line [1]`（描述「梁上两点」），再「过起点、法向 = 起点 → 终点」建 `Plane [2]`（4000 × 4000）。列表 2 条，场景里 `measurement-design-aids` 组 6 条线段（1 线 + 4 框边 + 1 法向短线）。
+2. 切 Aid 过滤器（面板按钮 → 覆盖条摘要 `Aid · Snap`，提示条 `等待捕捉（设计辅助线 / 面（Aid））`）。悬停线上 30 % 处 → `梁上两点 · Snap`，点下去 Snap 取近端 = `p1`（Δ 0.0002 mm，
+   来自面板 0.001 mm 取整）；悬停面上离 `p1` 沿面内 X 1 m 处 → `Plane [2]`，点下去 = 射线 ∩ 面（离面 5e-8 m）。结果表 `Distance 1000mm · +317mm / −948mm / 0mm · S 18.4871 E 0.0000411852 U`
+   = 面内 X 方向 1 m（`web-aid-live-01-distance-line-to-plane.png` / `web-aid-live-02-result-card-line-to-plane.png`）。
+3. Perpendicular to 辅助线：Any 下点第三个表面点 `E −3056.8 N −11014.7 U 3172.0`，切 Aid 拾辅助线 → 垂足 `E −8293.9 N 8140.4 U 2553.8`，与「投到过 p1、方向 p2 − p1 的无限线」独立算的垂足
+   Δ 4.7e-7 m（垂足在线段延长线之外——无限线口径）；结果卡 `Perpendicular to · 点→无限线 · 梁上两点`，`Distance 19868mm · Vertical 618mm · Horizontal 19858mm · S 15.2911 E 1.78301 U`
+   （`web-aid-live-03-result-card-perpendicular-line.png`）。
+4. Perpendicular to 辅助面：同一起点 → 垂足 `E 7942.7 N −7337.1 U 23944.4`，与「投到过 p1、法向 n 的面」Δ 6.6e-7 m；结果卡 `点→无限面 · Plane [2]`，
+   `23791mm · 20772mm / 11598mm · W 18.4872 S 60.8237 D`（`web-aid-live-04-perpendicular-plane.png` / `web-aid-live-05-result-card-perpendicular-plane.png`）。
+5. 页面错误 0；数值见 `web-aid-live-records.json`。「近似」标记来自起点是模型表面点，与辅助无关。
+
+**走查时撞到的既有口径（不是 Aid 的问题，记下来免得下次再查两小时）**：尺寸图形在测量**第 1 步**（尚无草稿）对悬停有优先权——`viewerBindings` 在 canvas 捕获阶段命中尺寸（6 px）就
+`stopImmediatePropagation`，门控 `setInteractionGate(() => !currentMeasurement)` 只在草稿进行中放行落点。辅助线与它所来自的那条尺寸线重合，第 1 步在线上悬停时 pointermove 到不了测量工具，
+表现为「拾不到」；spec 里先删掉那条记录再拾。用户拿距离测量造辅助线后立刻在同一处拾，也会碰到这一条——要改是尺寸 / 测量的优先级口径（另议）。
+
+**单测**：`designAid.test.ts` 12 条（线 / 面构造、锚点、三点面、帧规则、射线求交、编号命名）、`useMeasurementPickSources.designAid.test.ts` 5 条（候选、矩形内判定、隐藏跳过、
+只在 Aid 过滤器下放行并胜出、会话仓编号 / revision）、`pickLayerModel.test.ts` / `MeasurementOverlayBar.test.ts` / `useXeokitMeasurementStyleStore.test.ts` 把「Aid 灰掉」改成 External。
+
+**已知偏离 / 残余**：
+- 辅助只在内存，刷新即丢（E3D 同样不持久化 aid；要留下来另立项）。
+- 只有 LINE / PLANE 两类；POSITION / ARC / grid、颜色 / 线型不做。
+- 倾斜面的面内 X / Y 取法是 Web 规则，未对 E3D `ORIENTATION('Z is …')` 的缺省补全核对（只影响 Offset 的 U / V 字母指向，不影响距离 / 垂足）。
+- E3D 运行时 golden（stdAid 拾取、aid 的 Perpendicular 结果表）未采，E3D 不在跑。
+
+## 29. DPOINT：设计点随 P-Point 拾中、Distance 沿方向偏移、Perpendicular to 取法向面 实机走查（2026-09-14 23:40）
+
+**为什么现在做**：方案 §2 #15 的 DPOINT 一直 ✗（TUBING 2026-09-13 已落地）；用户 2026-09-14 20:0x 拍板「继续做 #15 DPOINT 拾取过滤器」。E3D 不在跑，口径照源码（`static_expectation`）。
+
+**E3D 口径**（`edgpicktype.pmlobj` / `edgpositiondata.pmlobj` / `edgpickmode.pmlfnc` / `splcreatweld.pmlfrm`）：
+
+- 数据：设计元素（EQUI / SUBE / STRU / FRMW / TMPL …）名下的 **DPSE** 装设计点 **DPCA**（直角）/ **DPCY**（柱面），各带 `NUMB` / `POS`（属主帧）/ `ORI`；在属主上表现为伪属性数组
+  `DPPS[n]`（世界位置）/ `DPDI[n]`（世界方向）。
+- 拾取：设计点与目录 P-Point 同一批拾取模式出来（`stdPpoint` → `data.type eq 'DPOINT'`），所以 Web 在 **Any / Ppoint** 过滤器下放行 `dpoint`，Element / Pline / Graphics / Aid 不放行。
+- 派生：`snap()` / `exact()` / `proportion()` 回 `item.dpps[n]`（354–355 / 505–506 / 1161–1162）；`distance(d)` = `dpps[n].offset(dpDir[n], d)`（1011–1012）；`intersect()` = POINTVECTOR
+  `(dpps[n], dpDir[n])`（733–736）；`getLine()` **没有** DPOINT 分支（回落属主元素的 `line()`，EQUI / STRU 没有），`getPlane()` 给「`position = dpps[n]`、`Z is dpdir[n]`」的面（590–593）
+  → Perpendicular to 设计点 = 投到过该点、法向 = 方向的面。
+- `DPDI[n]` 取 `ORI` 的 Z 轴（`edgpickmode.pmlfnc` 194–195 把 `dpps` / `dpdi` 与 `pPos` / `pdir` 同样配对）；stored `ORI` 三元组按 `Rz · Ry · Rx`（`aios_core::tool::math_tool::angles_to_ori`，
+  gen-model 建 `world_transform` 的同一约定）合成；DPCY 按 DPCA 处理（`ANGL` / `BORE` 不解释）。
+
+**Web 落地**（决策 `d-563`；CONTEXT「设计点」）：
+
+- 纯内核 `src/measurement/dpoint/designPoints.ts`：`parseE3dTriple`（数字数组 / gen-model `display` 串 / PDMS `E 100mm N 200mm U -86mm` 字母串）、`parseDesignPointAttributes`（`NUMB` / `POS` / `ORI`）、
+  `oriRotationColumns`（`Rz · Ry · Rx`）、`designPointToWorld`（属主 `world_transform` × POS → DPPS，× ORI Z 轴 → DPDI）、属主链止于 ZONE / SITE / WORL / TPWL / TMAR / GPWL / GPSE / REGI / DB。
+- 加载器 `designPointLoader.ts`：悬停到叶子（有几何的元素）时沿属主链往上到 ZONE 之下逐个 host 查一次——`tree.children(host)` → DPSE → `tree.children(dpse)` → DPCA / DPCY →
+  `attributes.uiAttr(point)` → 属主 `keypoints.ptset(host).world_transform`（gen-model-v1 `element/ptset` 对没有 P-Point 的 STRU 也给恒等 / 属主链矩阵）；全部 best-effort，失败只丢那一个 host。
+  各节点类型走一份 `nounCache`，同一 STRU 下换叶子悬停不再重查属主（gen-model-v1 `tree.node` 要两次请求）；`24381/1` 与 `24381_1` 两种写法当同一个。
+- 点源 `design_point`（`buildDesignPointCandidates`）：点候选在 `DPPS[n]`，带 `DPDI[n]` 当 `direction`（Distance 沿它偏移、Intersect 当点向量线），标签 `设计点 #n（PURP）`，
+  命令条前缀属主类型；优先级 22 排在 P-Point（20）之后——目录 P-Point 正压在设计点上时仍是 P-Point 赢；缺省 `show / snap` 开。
+- Perpendicular to：`design_point` 命中的 `direction` 不当轴线、当**法向**——`resolvePerpendicularTargetFromHit` 给 `plane { position: dpps, normal: dpdir }`（`facet-plane` provider），
+  目标名 `设计点 #n 法向面`。
+- 拾取层：`MeasurementPickFeature` 加 `dpoint`；`Any` / `Ppoint` 放行；`SOURCE_FEATURES.design_point = ['dpoint']`；提示条列它在「管身轴线」之后；记录里 `sourceInfo.source` 认 `design_point`；
+  尺寸吸附语义表把它记成 `p-point / exact`。
+
+**Web 实机走查**（**无任何 mock**：`?model_source=gen-model-v1&gm_backend_port=8024&show_refno=23714_1111`——MDS special STRU `/MDS/SPECIALS/LIGHTING/1`（库 7330），
+名下 DPSE `23714/1126` → DPCA `23714/1127`：`NUMB 1 · POS (0, 0, −86) · ORI (0, 0, 0) · PURP unset`，STRU `world_transform` 恒等 → `DPPS = (0, 0, −86) mm`、`DPDI = U`；这件 special 缺省视距下只有几十像素，
+spec 先把相机拉到模型跟前；临时 spec 已删）：
+
+| 步 | 做法 | 结果 | 独立期望 | 图 |
+| --- | --- | --- | --- | --- |
+| 悬停 | Any × Snap，光标到 `(0, 0, −86)` 的投影处 | 标签 `设计点 #1`（命令条 `STRU 设计点 #1`） | 悬停立柱 SCTN `23714/1124` 时已沿属主链 SCTN → FRMW → STRU 查到 DPSE | — |
+| Snap | 设计点 → 立柱上的表面点 | 起点 = `(0, 0, −86)`（Δ 8e-17 m）；`Distance 617mm · −109 / +9 / +608 · W 4.71118 N 79.809 U` | 两点差向量 | `web-dpoint-live-01-distance-dpoint-to-surface.png` / `web-dpoint-live-02-result-card-dpoint-snap.png` |
+| Distance 500 | 拾取类型 Distance = 500 再拾设计点 | 起点 = `(0, 0, 414)` mm（Δ 0） | `dpps.offset(dpDir, 500)` = `(0, 0, −86 + 500)` | — |
+| Perpendicular to | Any 下先点表面点 `(−108.9, 9.0, 521.7)`，再拾设计点 | 垂足 `(−108.9, 9.0, −86.0)`（Δ 8e-17 m）；结果卡 `点→无限面 · 设计点 #1 法向面`；`608mm · Vertical 608mm · Horizontal 0mm · U` | 表面点投到过 `(0, 0, −86)`、`Z is U` 的面 | `web-dpoint-live-03-result-card-perpendicular-dpoint.png` |
+
+- 请求全是 `tree/ancestors` / `tree/children` / `element/attributes`（DPCA 属性只查一次）/ `element/ptset`：悬停过 10 个叶子共 53 次树请求（没有 `nounCache` 那版是 99 次——每个叶子都把 STRU / ZONE 的属主链重查一遍）；页面错误 0；数值见 `web-dpoint-live-records.json`。
+- 第 2 / 3 步前同样先删掉上一条记录：它的尺寸线从设计点出发，第 1 步尺寸悬停优先会吞掉设计点处的 pointermove（§28 那条既有口径）。
+
+**单测**：`designPoints.test.ts` 11 条（三元组三种写法、NUMB / POS / ORI、`Rz · Ry · Rx` 与 Z 轴、`world_transform` 映射、属主链止点 / 同名两种写法 / nounCache、DPSE → DPCA / DPCY 收集与排序、
+无 DPSE 不查 ptset、错误不抛）、`useMeasurementPickSources.designPoint.test.ts` 3 条（候选形状与标签、Any / Ppoint 放行、Perpendicular 取法向面）、`pickLayerModel.test.ts` 的 Any / Ppoint 列表加 `dpoint`、
+`useXeokitMeasurementTools.test.ts` 提示条列「设计点（DPOINT）」。测量相关 42 文件 / 505 用例全过；eslint 0；type-check 与 HEAD 同。
+
+**已知偏离 / 残余**：
+- `DPDI` = `ORI` 的 Z 轴、`ORI` 按 `Rz · Ry · Rx` 合成——都是 `static_expectation`，本库唯一的样本 `ORI (0, 0, 0)` 检验不出旋转分支；E3D 运行时 golden 未采。
+- DPCY 的 `ANGL` / `BORE` 不解释（当 DPCA）。
+- 悬停才加载：光标没到过某个属主的叶子之前，它的设计点不在候选里（与 P-Point 同一口径）。
+- 主库 `24381` 没有 DPSE，实机用的是 MDS special 模板库 `7330`。
+

@@ -1,0 +1,200 @@
+{
+  "capturedAt": "2026-09-14T15:40:06.064Z",
+  "url": "/?model_source=gen-model-v1&gm_backend_port=8024&show_refno=23714_1111",
+  "hits": [
+    {
+      "x": 674.0652078299354,
+      "y": 218.44095581933584,
+      "objectId": "o:23714_1125:16",
+      "worldPos": [
+        -0.10888319230839483,
+        0.008973225166821086,
+        0.17874538078499325
+      ]
+    },
+    {
+      "x": 727.7187335158189,
+      "y": 331.97388805222204,
+      "objectId": "o:23714_1117:2",
+      "worldPos": [
+        -0.396878971643021,
+        0.0017353566620236238,
+        -0.33699999999999997
+      ]
+    },
+    {
+      "x": 527.8958063704558,
+      "y": 525.3876927291324,
+      "objectId": "o:23714_1122:12",
+      "worldPos": [
+        0.401506489849639,
+        0.0017353615755894003,
+        -0.33699999999999997
+      ]
+    },
+    {
+      "x": 640,
+      "y": 392.4379797829524,
+      "objectId": "o:23714_1124:14",
+      "worldPos": [
+        0.01677667907558278,
+        0.012582509306687473,
+        -0.2364624658183403
+      ]
+    }
+  ],
+  "designPoint": {
+    "refno": "23714/1127",
+    "host": "23714/1111",
+    "set": "23714/1126",
+    "attributes": {
+      "NUMB": 1,
+      "POS": [
+        0,
+        0,
+        -86
+      ],
+      "ORI": [
+        0,
+        0,
+        0
+      ]
+    },
+    "worldM": [
+      0,
+      0,
+      -0.086
+    ],
+    "hoverLabel": "设计点 #1"
+  },
+  "snap": {
+    "draft": {
+      "origin": [
+        0,
+        0,
+        -0.08600000000000008
+      ],
+      "target": [
+        -0.10888319230836799,
+        0.008973225166830856,
+        0.5217453807849369
+      ]
+    },
+    "deltaM": 8.326672684688674e-17,
+    "rows": {
+      "distance": "617mm 近似",
+      "offset-x": "-109mm",
+      "offset-y": "+9mm",
+      "offset-z": "+608mm",
+      "direction": "W 4.71118 N 79.809 U"
+    }
+  },
+  "distance500": {
+    "draft": {
+      "origin": [
+        0,
+        0,
+        0.41400000000000003
+      ],
+      "target": [
+        -0.10888319230836775,
+        0.0089732251668313,
+        0.5217453807849362
+      ]
+    },
+    "expectedOrigin": [
+      0,
+      0,
+      0.41400000000000003
+    ],
+    "deltaM": 0
+  },
+  "perpendicular": {
+    "origin": [
+      -0.10888319230836732,
+      0.008973225166831413,
+      0.5217453807849359
+    ],
+    "draft": {
+      "origin": [
+        -0.10888319230836732,
+        0.008973225166831413,
+        0.5217453807849359
+      ],
+      "target": [
+        -0.10888319230836732,
+        0.008973225166831413,
+        -0.08600000000000008
+      ]
+    },
+    "expectedFoot": [
+      -0.10888319230836732,
+      0.008973225166831413,
+      -0.086
+    ],
+    "footDeltaM": 8.326672684688674e-17,
+    "info": "Perpendicular to · 点→无限面 · 设计点 #1 法向面",
+    "rows": {
+      "distance": "608mm 近似",
+      "vertical": "608mm",
+      "horizontal": "0mm",
+      "direction": "U"
+    }
+  },
+  "requests": [
+    "/api/v1/tree/ancestors?refno=23714%2F1111",
+    "/api/v1/element/attributes",
+    "/api/v1/tree/children?refno=23714%2F1",
+    "/api/v1/tree/children?refno=23714%2F1110",
+    "/api/v1/tree/ancestors?refno=23714%2F1124",
+    "/api/v1/tree/children?refno=23714%2F1123",
+    "/api/v1/tree/ancestors?refno=23714%2F1124",
+    "/api/v1/tree/ancestors?refno=23714%2F1123",
+    "/api/v1/tree/children?refno=23714%2F1111",
+    "/api/v1/tree/ancestors?refno=23714%2F1111",
+    "/api/v1/tree/children?refno=23714%2F1110",
+    "/api/v1/tree/ancestors?refno=23714%2F1110",
+    "/api/v1/tree/children?refno=23714%2F1",
+    "/api/v1/tree/children?refno=23714%2F1124",
+    "/api/v1/tree/children?refno=23714%2F1123",
+    "/api/v1/tree/children?refno=23714%2F1111",
+    "/api/v1/tree/children?refno=23714%2F1126",
+    "/api/v1/element/attributes",
+    "/api/v1/tree/ancestors?refno=23714%2F1125",
+    "/api/v1/tree/children?refno=23714%2F1123",
+    "/api/v1/tree/ancestors?refno=23714%2F1125",
+    "/api/v1/tree/children?refno=23714%2F1125",
+    "/api/v1/tree/ancestors?refno=23714%2F1117",
+    "/api/v1/tree/children?refno=23714%2F1115",
+    "/api/v1/tree/ancestors?refno=23714%2F1117",
+    "/api/v1/tree/ancestors?refno=23714%2F1115",
+    "/api/v1/tree/children?refno=23714%2F1111",
+    "/api/v1/tree/children?refno=23714%2F1117",
+    "/api/v1/tree/children?refno=23714%2F1115",
+    "/api/v1/tree/ancestors?refno=23714%2F1122",
+    "/api/v1/tree/children?refno=23714%2F1115",
+    "/api/v1/tree/ancestors?refno=23714%2F1122",
+    "/api/v1/tree/children?refno=23714%2F1122",
+    "/api/v1/tree/ancestors?refno=23714%2F1116",
+    "/api/v1/tree/children?refno=23714%2F1115",
+    "/api/v1/tree/ancestors?refno=23714%2F1116",
+    "/api/v1/tree/children?refno=23714%2F1116",
+    "/api/v1/tree/ancestors?refno=23714%2F1118",
+    "/api/v1/tree/children?refno=23714%2F1115",
+    "/api/v1/tree/ancestors?refno=23714%2F1118",
+    "/api/v1/tree/children?refno=23714%2F1118",
+    "/api/v1/tree/ancestors?refno=23714%2F1119",
+    "/api/v1/tree/children?refno=23714%2F1115",
+    "/api/v1/tree/ancestors?refno=23714%2F1119",
+    "/api/v1/tree/children?refno=23714%2F1119",
+    "/api/v1/tree/ancestors?refno=23714%2F1120",
+    "/api/v1/tree/children?refno=23714%2F1115",
+    "/api/v1/tree/ancestors?refno=23714%2F1120",
+    "/api/v1/tree/children?refno=23714%2F1120",
+    "/api/v1/tree/ancestors?refno=23714%2F1121",
+    "/api/v1/tree/children?refno=23714%2F1115",
+    "/api/v1/tree/ancestors?refno=23714%2F1121",
+    "/api/v1/tree/children?refno=23714%2F1121"
+  ],
+  "pageErrors": []
+}
