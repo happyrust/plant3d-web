@@ -2,8 +2,10 @@
  * 批注体系重构阶段用 feature flag。
  *
  * 命名规范：`REVIEW_<PHASE>_<FEATURE>_<STAGE>`
- *   - PHASE：`A`/`B`/`C`/`D`/`E`/`F`/`G`/`H`
- *   - FEATURE：小写短语（`snapshot_layer` / `comment_thread_store` 等）
+ *   - PHASE：`C`/`H`（04 月计划里的 `B`/`D`/`E`/`F`/`G` 五个阶段的 flag 声明后一直零消费者，
+ *     2026-09-14 决策 d-571 删除；G「task 级草稿隔离」由交互方案 U0 的 `annotationUx.scopedDraftsV1`
+ *     + `src/review/domain/annotationScope.ts` 取代，见 `src/composables/useAnnotationUxFlags.ts`）
+ *   - FEATURE：小写短语（`comment_thread_store` / `log_drawer` 等）
  *   - STAGE：`SHADOW` / `CUTOVER`
  *
  * 优先级（高 → 低）：
@@ -14,29 +16,13 @@
  */
 
 export type ReviewFlagName =
-  | 'REVIEW_B_SNAPSHOT_LAYER_SHADOW'
-  | 'REVIEW_B_SNAPSHOT_LAYER_CUTOVER'
   | 'REVIEW_C_COMMENT_THREAD_STORE_CUTOVER'
   | 'REVIEW_C_EVENT_LOG'
-  | 'REVIEW_D_ANNOTATION_KEY_V2'
-  | 'REVIEW_D_REVIEW_ROUND_FIELDS'
-  | 'REVIEW_E_DRAFT_CONFIRMED_STORE'
-  | 'REVIEW_E_DUAL_LAYER_VIEWER'
-  | 'REVIEW_F_COMMENT_SYNC_V2'
-  | 'REVIEW_G_TASK_SCOPED_DRAFT'
   | 'REVIEW_H_LOG_DRAWER';
 
 const FLAG_DEFAULTS: Record<ReviewFlagName, boolean> = {
-  REVIEW_B_SNAPSHOT_LAYER_SHADOW: false,
-  REVIEW_B_SNAPSHOT_LAYER_CUTOVER: false,
   REVIEW_C_COMMENT_THREAD_STORE_CUTOVER: true,
   REVIEW_C_EVENT_LOG: true,
-  REVIEW_D_ANNOTATION_KEY_V2: false,
-  REVIEW_D_REVIEW_ROUND_FIELDS: false,
-  REVIEW_E_DRAFT_CONFIRMED_STORE: false,
-  REVIEW_E_DUAL_LAYER_VIEWER: false,
-  REVIEW_F_COMMENT_SYNC_V2: false,
-  REVIEW_G_TASK_SCOPED_DRAFT: false,
   // spec 003-review-log-viewer：校审页日志抽屉（默认关闭，排障时开启）
   REVIEW_H_LOG_DRAWER: false,
 };

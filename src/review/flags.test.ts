@@ -55,17 +55,25 @@ describe('review flags', () => {
     }
   });
 
+  it('only the live phases (C / H) remain; the zero-consumer B/D/E/F/G flags were removed (d-571)', () => {
+    expect([...REVIEW_FLAG_NAMES].sort()).toEqual([
+      'REVIEW_C_COMMENT_THREAD_STORE_CUTOVER',
+      'REVIEW_C_EVENT_LOG',
+      'REVIEW_H_LOG_DRAWER',
+    ]);
+  });
+
   it('respects localStorage override = 1/true', () => {
-    localStorage.setItem('review.flag.REVIEW_B_SNAPSHOT_LAYER_SHADOW', '1');
-    expect(isReviewFlagEnabled('REVIEW_B_SNAPSHOT_LAYER_SHADOW')).toBe(true);
+    localStorage.setItem('review.flag.REVIEW_H_LOG_DRAWER', '1');
+    expect(isReviewFlagEnabled('REVIEW_H_LOG_DRAWER')).toBe(true);
 
     localStorage.setItem('review.flag.REVIEW_C_EVENT_LOG', 'true');
     expect(isReviewFlagEnabled('REVIEW_C_EVENT_LOG')).toBe(true);
   });
 
   it('respects localStorage override = 0/false', () => {
-    localStorage.setItem('review.flag.REVIEW_B_SNAPSHOT_LAYER_SHADOW', '0');
-    expect(isReviewFlagEnabled('REVIEW_B_SNAPSHOT_LAYER_SHADOW')).toBe(false);
+    localStorage.setItem('review.flag.REVIEW_H_LOG_DRAWER', '0');
+    expect(isReviewFlagEnabled('REVIEW_H_LOG_DRAWER')).toBe(false);
 
     localStorage.setItem('review.flag.REVIEW_C_EVENT_LOG', 'false');
     expect(isReviewFlagEnabled('REVIEW_C_EVENT_LOG')).toBe(false);
@@ -73,19 +81,19 @@ describe('review flags', () => {
 
   it('force_legacy beats every localStorage override', () => {
     localStorage.setItem('review.force_legacy', '1');
-    localStorage.setItem('review.flag.REVIEW_B_SNAPSHOT_LAYER_SHADOW', '1');
-    expect(isReviewFlagEnabled('REVIEW_B_SNAPSHOT_LAYER_SHADOW')).toBe(false);
+    localStorage.setItem('review.flag.REVIEW_H_LOG_DRAWER', '1');
+    expect(isReviewFlagEnabled('REVIEW_H_LOG_DRAWER')).toBe(false);
   });
 
   it('falls back to VITE_ env flag when no localStorage override', () => {
-    vi.stubEnv('VITE_REVIEW_B_SNAPSHOT_LAYER_SHADOW', '1');
-    expect(isReviewFlagEnabled('REVIEW_B_SNAPSHOT_LAYER_SHADOW')).toBe(true);
+    vi.stubEnv('VITE_REVIEW_H_LOG_DRAWER', '1');
+    expect(isReviewFlagEnabled('REVIEW_H_LOG_DRAWER')).toBe(true);
   });
 
   it('localStorage override beats env flag', () => {
-    vi.stubEnv('VITE_REVIEW_B_SNAPSHOT_LAYER_SHADOW', '1');
-    localStorage.setItem('review.flag.REVIEW_B_SNAPSHOT_LAYER_SHADOW', '0');
-    expect(isReviewFlagEnabled('REVIEW_B_SNAPSHOT_LAYER_SHADOW')).toBe(false);
+    vi.stubEnv('VITE_REVIEW_H_LOG_DRAWER', '1');
+    localStorage.setItem('review.flag.REVIEW_H_LOG_DRAWER', '0');
+    expect(isReviewFlagEnabled('REVIEW_H_LOG_DRAWER')).toBe(false);
   });
 
   it('clearReviewFlagOverrides removes all overrides but not env/defaults', () => {

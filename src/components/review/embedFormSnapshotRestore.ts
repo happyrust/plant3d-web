@@ -13,7 +13,6 @@ import {
   type WorkflowSyncResponse,
 } from '@/api/reviewApi';
 import { buildSnapshotFromWorkflowSync } from '@/review/adapters/workflowSyncAdapter';
-import { runWorkflowSyncShadow } from '@/review/services/reviewSnapshotService';
 import {
   getReviewCommentEventLog,
   getReviewCommentThreadStore,
@@ -104,10 +103,9 @@ export async function restoreEmbedFormSnapshot(
 
   if (options.importTools) {
     const legacyPayload = buildWorkflowSnapshotReplayPayload(records, comments, options.formId);
-    const shadowResult = runWorkflowSyncShadow({ legacyPayload, data });
 
     try {
-      const snapshot = shadowResult?.snapshot ?? buildSnapshotFromWorkflowSync(data);
+      const snapshot = buildSnapshotFromWorkflowSync(data);
       if (snapshot.comments.length > 0) {
         const merge = getReviewCommentThreadStore().mergeFromSnapshot(snapshot);
         if (merge.changed) {

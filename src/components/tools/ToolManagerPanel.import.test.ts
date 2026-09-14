@@ -5,7 +5,6 @@ const importJSON = vi.hoisted(() => vi.fn());
 const exportJSON = vi.hoisted(() => vi.fn(() => '{"version":5}'));
 const mergeFromSnapshot = vi.hoisted(() => vi.fn(() => ({ changed: false })));
 const pushEvent = vi.hoisted(() => vi.fn());
-const runImportPayloadShadow = vi.hoisted(() => vi.fn());
 const syncFromStore = vi.hoisted(() => vi.fn());
 
 vi.mock('@/components/review/debugUiGate', () => ({
@@ -79,10 +78,6 @@ vi.mock('@/review/adapters/toolStoreAdapter', () => ({
   buildReplayPayloadFromImportSnapshot: vi.fn(() => '{"version":5,"annotations":[{"id":"text-1"}]}'),
 }));
 
-vi.mock('@/review/services/reviewSnapshotService', () => ({
-  runImportPayloadShadow,
-}));
-
 vi.mock('@/review/services/sharedStores', () => ({
   getReviewCommentThreadStore: vi.fn(() => ({
     mergeFromSnapshot,
@@ -99,7 +94,6 @@ describe('ToolManagerPanel import cutover', () => {
     importJSON.mockReset();
     mergeFromSnapshot.mockReset();
     pushEvent.mockReset();
-    runImportPayloadShadow.mockReset();
     syncFromStore.mockReset();
   });
 
@@ -135,16 +129,6 @@ describe('ToolManagerPanel import cutover', () => {
     importButton?.click();
     await nextTick();
 
-    expect(runImportPayloadShadow).toHaveBeenCalledWith({
-      legacyPayload: JSON.stringify({
-        version: 5,
-        annotations: [{ id: 'text-1', title: 'imported' }],
-      }),
-      payload: {
-        version: 5,
-        annotations: [{ id: 'text-1', title: 'imported' }],
-      },
-    });
     expect(importJSON).toHaveBeenCalledWith('{"version":5,"annotations":[{"id":"text-1"}]}');
     expect(syncFromStore).toHaveBeenCalledTimes(1);
 

@@ -5,7 +5,6 @@ import { buildReviewRecordReplayPayload } from './reviewRecordReplay';
 import type { ConfirmedRecord } from '@/composables/useReviewStore';
 
 import { buildSnapshotFromTaskRecords } from '@/review/adapters/reviewRecordAdapter';
-import { runTaskRecordsShadow } from '@/review/services/reviewSnapshotService';
 import {
   getReviewCommentEventLog,
   getReviewCommentThreadStore,
@@ -118,15 +117,9 @@ export function createConfirmedRecordsRestorer(options: ConfirmedRecordsRestoreO
       formId: formId ?? undefined,
     };
     const legacyPayload = buildReplayPayload(records, buildContext);
-    const shadowResult = runTaskRecordsShadow({
-      legacyPayload,
-      records,
-      build: buildContext,
-    });
 
     try {
-      const snapshot = shadowResult?.snapshot
-        ?? buildSnapshotFromTaskRecords(records, buildContext);
+      const snapshot = buildSnapshotFromTaskRecords(records, buildContext);
       if (snapshot.comments.length > 0) {
         const merge = getReviewCommentThreadStore().mergeFromSnapshot(snapshot);
         if (merge.changed) {

@@ -9,7 +9,6 @@ import { useUnitSettingsStore } from '@/composables/useUnitSettingsStore';
 import { useViewerContext } from '@/composables/useViewerContext';
 import { buildSnapshotFromImportPayload } from '@/review/adapters/importSnapshotAdapter';
 import { buildReplayPayloadFromImportSnapshot } from '@/review/adapters/toolStoreAdapter';
-import { runImportPayloadShadow } from '@/review/services/reviewSnapshotService';
 import {
   getReviewCommentEventLog,
   getReviewCommentThreadStore,
@@ -298,12 +297,7 @@ function doImport() {
       source: '工具数据粘贴导入',
       expectedRoot: 'object',
     });
-    const legacyPayload = JSON.stringify(parsed);
-    const shadowResult = runImportPayloadShadow({
-      legacyPayload,
-      payload: parsed,
-    });
-    const snapshot = shadowResult?.snapshot ?? buildSnapshotFromImportPayload(parsed);
+    const snapshot = buildSnapshotFromImportPayload(parsed);
 
     const merge = getReviewCommentThreadStore().mergeFromSnapshot(snapshot);
     if (merge.changed) {
