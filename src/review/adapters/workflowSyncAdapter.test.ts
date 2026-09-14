@@ -271,6 +271,31 @@ describe('buildSnapshotFromWorkflowSync', () => {
     ]);
   });
 
+  it('workflow_sync 链路整对象透传云线空间范围体四字段（regionV1 / presentationV1 / viewpointV1 / labelLayoutV1）', () => {
+    const regionFields = {
+      regionV1: {
+        version: 1, space: 'world', origin: 'members', kind: 'obb-union',
+        source: { projectKey: null, modelSnapshotId: '7997:parquet:2026-09-14T10:00:00Z', globalModelMatrix: null, coordinateFrameId: null },
+        boxes: [{ id: 'o:member-c-region:0', memberRefno: 'member-c-region', center: [1, 2, 3], axes: [[1, 0, 0], [0, 1, 0], [0, 0, 1]], halfSize: [1, 1, 1] }],
+      },
+      presentationV1: { version: 1, algorithm: 'region-v1', contour: 'convex-hull', paddingPx: 14, wavelengthPx: 52, amplitudePx: 4, phaseAnchor: { featureId: 'o:member-c-region:0:0', offsetPx: 0 } },
+      viewpointV1: { creation: { version: 1, capturedAt: 1, position: [9, 9, 9], target: [1, 2, 3], up: [0, 0, 1], projection: { kind: 'orthographic', worldHeight: 12, zoom: 1, near: 0.1, far: 1000 }, viewportCss: { width: 1280, height: 720 }, capturedContext: ['camera'] } },
+      labelLayoutV1: { version: 1, anchor: { kind: 'contour-bounds', uv: [1, 0], labelPoint: 'top-left' }, offsetPx: { x: 18, y: 0 } },
+    };
+    const data: WorkflowSyncData = {
+      models: [],
+      records: [makeRecord({ id: 'record-region', cloudAnnotations: [{ ...makeCloudItem('c-region'), ...regionFields }] })],
+      annotationComments: [],
+      attachments: [],
+    };
+
+    const snapshot = buildSnapshotFromWorkflowSync(data, { now: () => FIXED_NOW });
+    expect(snapshot.annotations.find((a) => a.annotationId === 'c-region')?.payload).toMatchObject(regionFields);
+
+    const replay = JSON.parse(buildReplayPayloadFromSnapshot(snapshot));
+    expect(replay.cloudAnnotations).toEqual([expect.objectContaining({ id: 'c-region', ...regionFields })]);
+  });
+
   it('keeps order across records and types when comments missing', () => {
     const records: WorkflowRecordData[] = [
       makeRecord({

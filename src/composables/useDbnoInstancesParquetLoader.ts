@@ -1403,6 +1403,11 @@ async function ensureMbdDimensionsRegistered(
 export function useDbnoInstancesParquetLoader() {
   const lastError = shallowRef<string | null>(null);
   const lastQueryTiming = shallowRef<ParquetQueryTiming | null>(null);
+  /**
+   * 最近一次 `queryInstanceEntriesByRefnos` 实际注册的清单身份（当前环境包也从这里拿到 `generated_at`）。
+   * DTX 加载器据此给装进场景的 refno 记几何来源（`DtxLoadSourceStamp`），批注创建时填 `regionV1.source`。
+   */
+  const lastRegisteredManifest = shallowRef<{ dbno: number; manifestUrl: string | null; generatedAt: string | null } | null>(null);
 
   async function prewarmDuckDB(): Promise<void> {
     await ensureDuckDB();
@@ -1975,6 +1980,11 @@ export function useDbnoInstancesParquetLoader() {
       pinnedManifest: options?.pinnedManifest,
     });
     timing.phaseMs.registerDbno = Date.now() - registerDbnoStartedAt;
+    lastRegisteredManifest.value = {
+      dbno,
+      manifestUrl: options?.manifestUrl ?? null,
+      generatedAt: String(reg.manifest.generated_at || '').trim() || null,
+    };
 
     // refno 在 parquet 里是 refno_str（与前端 refnoKey 一致：`24381_100818` 这种下划线格式）
     const toRefnoStr = (k: string) => String(k);
@@ -2371,6 +2381,7 @@ export function useDbnoInstancesParquetLoader() {
   return {
     lastError,
     lastQueryTiming,
+    lastRegisteredManifest,
     prewarmDuckDB,
     prewarmDbno,
     isParquetAvailable,

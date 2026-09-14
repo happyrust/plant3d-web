@@ -112,6 +112,37 @@ describe('buildSnapshotFromImportPayload', () => {
     expect(replay).not.toHaveProperty('xeokitAngleMeasurements');
   });
 
+  it('import_package 链路整对象透传云线空间范围体四字段，显式 null 与未知版本都不丢', () => {
+    const regionFields = {
+      regionV1: {
+        version: 1, space: 'world', origin: 'legacy-snapshot', kind: 'obb-union',
+        source: { projectKey: null, modelSnapshotId: null, globalModelMatrix: null, coordinateFrameId: null },
+        boxes: [{ id: 'legacy-snapshot:0', memberRefno: null, center: [1, 1, 1], axes: [[1, 0, 0], [0, 1, 0], [0, 0, 1]], halfSize: [1, 1, 1] }],
+      },
+      presentationV1: { version: 1, algorithm: 'legacy-v0', contour: 'screen-rect', paddingPx: 14, wavelengthPx: 52, amplitudePx: 4, phaseAnchor: null },
+      viewpointV1: null,
+      labelLayoutV1: { version: 1, anchor: { kind: 'contour-bounds', uv: [1, 0], labelPoint: 'top-left' }, offsetPx: { x: 18, y: 0 } },
+    };
+    const payload = {
+      version: 7,
+      measurements: [],
+      annotations: [],
+      cloudAnnotations: [
+        { id: 'cloud-region', title: 'cloud', ...regionFields },
+        { id: 'cloud-future', title: 'cloud', regionV1: { version: 9, kind: 'mesh', payload: [1, 2, 3] } },
+      ],
+      rectAnnotations: [],
+      obbAnnotations: [],
+    };
+
+    const replay = JSON.parse(buildReplayPayloadFromImportSnapshot(buildSnapshotFromImportPayload(payload)));
+
+    expect(replay.cloudAnnotations).toEqual([
+      expect.objectContaining({ id: 'cloud-region', ...regionFields }),
+      expect.objectContaining({ id: 'cloud-future', regionV1: { version: 9, kind: 'mesh', payload: [1, 2, 3] } }),
+    ]);
+  });
+
   it('copies a dimension document without restoring the removed legacy dimensions field', () => {
     const dimensionDocument = {
       schemaVersion: 2 as const,

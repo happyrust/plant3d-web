@@ -8,12 +8,14 @@ afterAll(() => window.history.replaceState({}, '', '/'));
 const parquetLoaderMocks = vi.hoisted(() => ({
   isParquetAvailable: vi.fn(async () => true),
   queryInstanceEntriesByRefnos: vi.fn(async () => new Map()),
+  lastRegisteredManifest: { value: null as { dbno: number; manifestUrl: string | null; generatedAt: string | null } | null },
 }));
 
 vi.mock('@/composables/useDbnoInstancesParquetLoader', () => ({
   useDbnoInstancesParquetLoader: () => ({
     isParquetAvailable: parquetLoaderMocks.isParquetAvailable,
     queryInstanceEntriesByRefnos: parquetLoaderMocks.queryInstanceEntriesByRefnos,
+    lastRegisteredManifest: parquetLoaderMocks.lastRegisteredManifest,
   }),
 }));
 
@@ -41,7 +43,22 @@ beforeEach(() => {
   vi.clearAllMocks();
   parquetLoaderMocks.isParquetAvailable.mockResolvedValue(true);
   parquetLoaderMocks.queryInstanceEntriesByRefnos.mockResolvedValue(new Map());
+  parquetLoaderMocks.lastRegisteredManifest.value = null;
 });
+
+// geo_hash '1' 是前端本地生成的基础几何（单位盒），不走网络；来源身份测试不关心几何本身。
+function makeInstanceEntry(refno: string, geoHash = '1', noun = 'VALV') {
+  return {
+    geo_hash: geoHash,
+    matrix: [
+      1, 0, 0, 0,
+      0, 1, 0, 0,
+      0, 0, 1, 0,
+      0, 0, 0, 1,
+    ],
+    uniforms: { refno, noun, owner_refno: '', owner_noun: '', spec_value: 0 },
+  };
+}
 
 describe('useDbnoInstancesDtxLoader', () => {
   it('模块可被导入并导出加载函数', async () => {
@@ -125,6 +142,82 @@ describe('useDbnoInstancesDtxLoader', () => {
 
     // 空批不算一次装载，修订号不动
     mod.loadDtxAabbProxyRefnos(dtxLayer, 99002, []);
+    expect(mod.dtxLoaderRevision.value).toBe(revisionBefore + 1);
+
+    // AABB 代理盒也记来源身份（没有快照概念，身份为 null）
+    expect(mod.getDtxRefnoLoadSource(99002, '=2013286704/480')).toMatchObject({
+      dataSource: 'aabb-proxy',
+      modelSnapshotId: null,
+      manifestUrl: null,
+      generatedAt: null,
+    });
+  });
+
+  it('装进场景的 refno 记几何来源身份：parquet 当前环境取实际注册清单的 generated_at，钉住的版本清单带 manifestUrl；跨库探针可查', async () => {
+    const { DTXLayer } = await import('@/utils/three/dtx');
+    const mod = await import('./useDbnoInstancesDtxLoader');
+    const dbno = 99021;
+    const refno = '24381_900001';
+    const dtxLayer = new DTXLayer({ maxVertices: 256, maxIndices: 512, maxObjects: 16 });
+
+    parquetLoaderMocks.queryInstanceEntriesByRefnos.mockImplementation(async () => {
+      parquetLoaderMocks.lastRegisteredManifest.value = { dbno, manifestUrl: null, generatedAt: '2026-09-14T10:00:00Z' };
+      return new Map([[refno, [makeInstanceEntry(refno)]]]);
+    });
+    await mod.loadDbnoInstancesForVisibleRefnosDtx(dtxLayer, dbno, [refno], { dataSource: 'parquet' });
+
+    expect(mod.getDtxRefnoLoadSource(dbno, refno)).toMatchObject({
+      dataSource: 'parquet',
+      modelSnapshotId: `${dbno}:parquet:2026-09-14T10:00:00Z`,
+      manifestUrl: null,
+      generatedAt: '2026-09-14T10:00:00Z',
+    });
+    expect(mod.getDtxRefnoLoadSourceAcrossAllDbnos('=24381/900001')?.modelSnapshotId).toBe(`${dbno}:parquet:2026-09-14T10:00:00Z`);
+    expect(mod.getDtxRefnoLoadSource(dbno, '24381_nothing')).toBeNull();
+    expect(mod.getDtxRefnoLoadSource(dbno + 1, refno)).toBeNull();
+
+    // 钉住不可变清单（版本切换）强制重载：身份换成该清单的 generated_at，并带上 manifestUrl
+    const manifestUrl = '/files/output/AvevaMarineSample/model_units/99021/24381_900001/897/manifest.json';
+    parquetLoaderMocks.queryInstanceEntriesByRefnos.mockImplementation(async () => {
+      parquetLoaderMocks.lastRegisteredManifest.value = { dbno, manifestUrl, generatedAt: 'ignored-when-pinned' };
+      return new Map([[refno, [makeInstanceEntry(refno)]]]);
+    });
+    await mod.loadDbnoInstancesForVisibleRefnosDtx(dtxLayer, dbno, [refno], {
+      dataSource: 'parquet',
+      forceReloadRefnos: [refno],
+      replaceExistingObjects: true,
+      parquetManifestUrl: manifestUrl,
+      parquetManifest: { generated_at: '2026-09-01T00:00:00Z' } as never,
+    });
+
+    expect(mod.getDtxRefnoLoadSource(dbno, refno)).toMatchObject({
+      dataSource: 'parquet',
+      modelSnapshotId: `${dbno}:parquet:2026-09-01T00:00:00Z`,
+      manifestUrl,
+      generatedAt: '2026-09-01T00:00:00Z',
+    });
+  });
+
+  it('版本对比的隔离图层（isolated）加载不推进 dtxLoaderRevision——主模型没变，不该触发批注重解析', async () => {
+    const { DTXLayer } = await import('@/utils/three/dtx');
+    const mod = await import('./useDbnoInstancesDtxLoader');
+    const dbno = 99022;
+    const refno = '24381_900002';
+    parquetLoaderMocks.queryInstanceEntriesByRefnos.mockResolvedValue(new Map([[refno, [makeInstanceEntry(refno)]]]));
+
+    const isolatedLayer = new DTXLayer({ maxVertices: 256, maxIndices: 512, maxObjects: 16 });
+    const revisionBefore = mod.dtxLoaderRevision.value;
+    const isolatedResult = await mod.loadDbnoInstancesForVisibleRefnosDtx(isolatedLayer, dbno, [refno], {
+      dataSource: 'parquet',
+      isolated: true,
+      objectIdPrefix: 'cmp-before',
+    });
+    expect(isolatedResult.loadedRefnos).toBe(1);
+    expect(mod.dtxLoaderRevision.value).toBe(revisionBefore);
+
+    // 同样的一批装进主图层则 +1
+    const primaryLayer = new DTXLayer({ maxVertices: 256, maxIndices: 512, maxObjects: 16 });
+    await mod.loadDbnoInstancesForVisibleRefnosDtx(primaryLayer, dbno, [refno], { dataSource: 'parquet' });
     expect(mod.dtxLoaderRevision.value).toBe(revisionBefore + 1);
   });
 

@@ -30,6 +30,7 @@ import {
   parseLegacyDimensionArchive,
   type StorageLike,
 } from '@/migrations/legacyDimensionV5Archive';
+import { fillCloudRegionFieldDefaults, type CloudRegionFields } from '@/review/domain/cloudRegion';
 import { buildCommentThreadKey } from '@/review/domain/commentThread';
 import { liftAnnotationComment } from '@/review/domain/reviewSnapshot';
 import {
@@ -466,6 +467,18 @@ export type CloudElementBinding = {
  */
 export type AnnotationElementBinding = CloudElementBinding;
 
+export type {
+  CloudLabelLayoutV1,
+  CloudPresentationV1,
+  CloudRegionFields,
+  CloudViewpointV1,
+  ConvexCell,
+  ObbSnapshot,
+  RegionV1,
+  SourceStamp,
+  ViewSnapshotV1,
+} from '@/review/domain/cloudRegion';
+
 export type CloudAnnotationRecord = {
   id: string;
   objectIds: string[];
@@ -479,6 +492,15 @@ export type CloudAnnotationRecord = {
   visible: boolean;
   /** 带角色的关联结构；缺失时由 `refnos` / `anchorRefno` 推导，读取后恒存在 */
   bindings?: CloudElementBinding[];
+  /**
+   * 空间范围体四字段（2026-09-14 方案 §6，`@/review/domain/cloudRegion`）：
+   * `regionV1` 指认范围快照 / `presentationV1` 呈现版本 / `viewpointV1` 创建与代表视点 / `labelLayoutV1` 标签像素意图。
+   * 只增不改；读取时经 `normalizeCloudAnnotationRecord` 补默认值（旧记录 `presentationV1.algorithm === 'legacy-v0'`，渲染照旧）。
+   */
+  regionV1?: CloudRegionFields['regionV1'];
+  presentationV1?: CloudRegionFields['presentationV1'];
+  viewpointV1?: CloudRegionFields['viewpointV1'];
+  labelLayoutV1?: CloudRegionFields['labelLayoutV1'];
   /**
    * 与 `AnnotationRecord.collapsed` 对齐：true 时只渲染图钉标记，
    * 不渲染文字框 / 引线。双击图钉切换。
@@ -1108,7 +1130,9 @@ function normalizeCloudAnnotationRecord(rec: CloudAnnotationRecord): CloudAnnota
     .filter((binding) => binding.role === 'member')
     .map((binding) => binding.refno);
   const anchorRefno = bindings.find((binding) => binding.role === 'anchor')?.refno;
-  return {
+  // 空间范围体四字段（regionV1 / presentationV1 / viewpointV1 / labelLayoutV1）在这同一个漏斗里补默认值：
+  // 字段缺失才补，显式 null 保留；旧记录一律 `legacy-v0`，渲染照旧。
+  return fillCloudRegionFieldDefaults({
     ...rec,
     objectIds: memberRefnos,
     anchorRefno,
@@ -1118,7 +1142,7 @@ function normalizeCloudAnnotationRecord(rec: CloudAnnotationRecord): CloudAnnota
     severity: normalizeAnnotationSeverity(rec.severity),
     screenshot: normalizeAnnotationScreenshot(rec.screenshot),
     bindings,
-  };
+  });
 }
 
 function normalizeRectAnnotationRecord(rec: RectAnnotationRecord): RectAnnotationRecord {

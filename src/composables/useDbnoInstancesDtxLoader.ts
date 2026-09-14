@@ -72,6 +72,21 @@ export type DtxAabbProxyEntry = {
   aabb: { min: number[]; max: number[] } | null
 }
 
+/**
+ * 一次装载的几何来源身份（2026-09-14 云线范围体方案 §15 ③ / P0）：只记不用，供批注创建时填
+ * `regionV1.source.modelSnapshotId`。拿不到身份就 `null`——backend 实时查询没有快照概念；
+ * gen-model-v1 records 回包带 `snapshot_epoch` / `session_vector`，但 `src/model-source` 适配层尚未透传，先留空。
+ */
+export type DtxLoadSourceStamp = {
+  dataSource: 'parquet' | 'backend' | 'gen-model-v1' | 'aabb-proxy'
+  /** parquet 环境 / 最小交付单元版本 = `${dbno}:parquet:${generated_at}`；其它路径 `null` */
+  modelSnapshotId: string | null
+  /** 调用方显式钉住的不可变清单 URL（版本切换 / 版本对比）；「当前环境」加载为 `null` */
+  manifestUrl: string | null
+  generatedAt: string | null
+  loadedAt: number
+}
+
 type DbnoRuntimeCache = {
   loadedRefnos: Set<string>
   loadedGeoHash: Set<string>
@@ -93,6 +108,8 @@ type DbnoRuntimeCache = {
   invalidTubiObjectIds: Set<string>
   /** 直管对象（noun `TUBI` / gen-model `is_tubi`）：测量拾取层按它把对象当 E3D TUBING 拾成轴线 */
   tubiObjectIds: Set<string>
+  /** refno → 最近一次把它装进场景的那批加载的来源身份（只记不用，见 `DtxLoadSourceStamp`） */
+  refnoLoadSource: Map<string, DtxLoadSourceStamp>
 }
 
 const cachesByDbno = new Map<number, DbnoRuntimeCache>();
@@ -165,6 +182,7 @@ function createRuntimeCache(): DbnoRuntimeCache {
     refnoToSpecValue: new Map(),
     invalidTubiObjectIds: new Set(),
     tubiObjectIds: new Set(),
+    refnoLoadSource: new Map(),
   };
 }
 
@@ -176,6 +194,7 @@ function getCache(dbno: number): DbnoRuntimeCache {
     if (!existing.failedGeoHash) existing.failedGeoHash = new Set();
     if (!existing.invalidTubiObjectIds) existing.invalidTubiObjectIds = new Set();
     if (!existing.tubiObjectIds) existing.tubiObjectIds = new Set();
+    if (!existing.refnoLoadSource) existing.refnoLoadSource = new Map();
     return existing;
   }
   const created = createRuntimeCache();
@@ -519,6 +538,30 @@ export function hasDtxDbnoCache(dbno: number): boolean {
   return cachesByDbno.has(dbno);
 }
 
+/** 该 refno 最近一次被装进场景时的几何来源身份；没装过（或缓存里没有该 dbno）返回 `null`。 */
+export function getDtxRefnoLoadSource(dbno: number, refno: string): DtxLoadSourceStamp | null {
+  const cache = cachesByDbno.get(dbno);
+  if (!cache) return null;
+  for (const key of refnoKeyCandidates(refno)) {
+    const stamp = cache.refnoLoadSource.get(key);
+    if (stamp) return stamp;
+  }
+  return null;
+}
+
+/** `getDtxRefnoLoadSource` 的跨库版本：gen-model-v1 源下调用方常常拿不到 dbno。 */
+export function getDtxRefnoLoadSourceAcrossAllDbnos(refno: string): DtxLoadSourceStamp | null {
+  const keys = refnoKeyCandidates(refno);
+  if (keys.length === 0) return null;
+  for (const cache of cachesByDbno.values()) {
+    for (const key of keys) {
+      const stamp = cache.refnoLoadSource.get(key);
+      if (stamp) return stamp;
+    }
+  }
+  return null;
+}
+
 export function resolveDtxRefnoByObjectId(dbno: number, objectId: string): string | null {
   const cache = cachesByDbno.get(dbno);
   return cache?.objectIdToRefno.get(objectId) ?? null;
@@ -708,6 +751,13 @@ export function loadDtxAabbProxyRefnos(
   const missingRefnos: string[] = [];
   let loadedObjects = 0;
   let skippedObjects = 0;
+  const sourceStamp: DtxLoadSourceStamp = {
+    dataSource: 'aabb-proxy',
+    modelSnapshotId: null,
+    manifestUrl: null,
+    generatedAt: null,
+    loadedAt: Date.now(),
+  };
 
   for (const entry of normalizedEntries) {
     const refno = entry.refno;
@@ -754,6 +804,7 @@ export function loadDtxAabbProxyRefnos(
       cache.refnoToSpecValue.set(refno, parseSpecValue(entry.specValue));
     }
     cache.loadedRefnos.add(refno);
+    cache.refnoLoadSource.set(refno, sourceStamp);
     loadedRefnos.push(refno);
   }
 
@@ -844,6 +895,7 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
   const dataSource: 'parquet' | 'backend' | 'gen-model-v1' =
     !pinnedByCaller && modelSource.kind === 'gen-model-v1' ? 'gen-model-v1' : (options.dataSource || 'parquet');
   let index: Map<string, InstanceEntry[]>;
+  let parquetGeneratedAt: string | null = null;
 
   if (options.instanceEntriesByRefno) {
     index = options.instanceEntriesByRefno;
@@ -889,7 +941,19 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
       pinnedManifest: options.parquetManifest,
     });
     if (debug) console.log('[dtx][instances] using parquet', { dbno, refnos: toLoad.length });
+    // 这次查询实际注册的清单（当前环境 / 钉住的不可变版本都从这里拿 generated_at）
+    parquetGeneratedAt = options.parquetManifest?.generated_at
+      ?? parquet.lastRegisteredManifest?.value?.generatedAt
+      ?? null;
   }
+
+  const sourceStamp: DtxLoadSourceStamp = {
+    dataSource,
+    modelSnapshotId: dataSource === 'parquet' && parquetGeneratedAt ? `${dbno}:parquet:${parquetGeneratedAt}` : null,
+    manifestUrl: options.parquetManifestUrl ?? null,
+    generatedAt: parquetGeneratedAt,
+    loadedAt: Date.now(),
+  };
 
   let loadedObjects = 0;
   let invalidTubiObjects = 0;
@@ -970,6 +1034,7 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
       loadedRefnos: new Set(cache.loadedRefnos),
       invalidTubiObjectIds: new Set(cache.invalidTubiObjectIds),
       tubiObjectIds: new Set(cache.tubiObjectIds),
+      refnoLoadSource: new Map(cache.refnoLoadSource),
     }
     : null;
   if (replaceExistingObjects) {
@@ -980,6 +1045,7 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
       }
       cache.refnoToObjectIds.set(refno, []);
       cache.loadedRefnos.delete(refno);
+      cache.refnoLoadSource.delete(refno);
     }
   }
 
@@ -987,6 +1053,7 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
     for (const refnoKey of toLoad) {
       if (hiddenRefnos.has(refnoKey)) {
         cache.loadedRefnos.add(refnoKey);
+        cache.refnoLoadSource.set(refnoKey, sourceStamp);
         cache.refnoToObjectIds.set(refnoKey, []);
         continue;
       }
@@ -1132,6 +1199,7 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
           cache.refnoToSpecValue.set(mappedRefnoKey, specValue);
         }
         cache.loadedRefnos.add(mappedRefnoKey);
+        cache.refnoLoadSource.set(mappedRefnoKey, sourceStamp);
       }
 
       for (const [mappedRefnoKey, objectIds] of objectIdsByMappedRefno.entries()) {
@@ -1161,6 +1229,7 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
         cache.refnoToSpecValue.set(refnoKey, firstSpecValue);
       }
       cache.loadedRefnos.add(refnoKey);
+      cache.refnoLoadSource.set(refnoKey, sourceStamp);
     }
 
     // 增量追加后重建 GPU 资源（1000 objects 级别可接受）
@@ -1189,6 +1258,7 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
       cache.loadedRefnos = replacementSnapshot.loadedRefnos;
       cache.invalidTubiObjectIds = replacementSnapshot.invalidTubiObjectIds;
       cache.tubiObjectIds = replacementSnapshot.tubiObjectIds;
+      cache.refnoLoadSource = replacementSnapshot.refnoLoadSource;
       try {
         dtxLayer.recompile();
       } catch {
@@ -1200,7 +1270,8 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
 
   // 一批实例装完（含 replaceExistingObjects 的版本切换重载）→ 运行时索引修订 +1，
   // 批注关联解析等消费方据此重算；抛错路径不 bump（索引已回滚到旧快照）。
-  if (toLoad.length > 0) bumpDtxLoaderRevision();
+  // 版本对比的隔离图层（`isolated`）装进的是另一张独立索引，主模型没变，不该让批注重解析一遍。
+  if (toLoad.length > 0 && options.isolated !== true) bumpDtxLoaderRevision();
 
   return {
     loadedRefnos: toLoad.length,
