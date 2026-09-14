@@ -1,3 +1,5 @@
+import { isSceneVertexVisible, sceneVertex } from '../geometry/sceneGeometry';
+
 import type { ViewportProjector } from '../projector';
 import type { DimensionTheme } from '../theme';
 import type {
@@ -128,6 +130,12 @@ export function markOcclusion(
   return layouts.map((layout) => {
     const probe = occlusionProbe(layout);
     if (!probe) return layout;
+    // A probe outside the frustum (behind the camera on a close-up) has no
+    // pixel to cast through — the painter clips what hangs off it — so the
+    // record is not hidden by geometry; it is simply not in view.
+    if (!isSceneVertexVisible(sceneVertex(probe.point), projector)) {
+      return { ...layout, derived: { ...layout.derived, occluded: false } };
+    }
     const origin = rayOrigin(probe.point, projector);
     if (!origin) return layout;
     const toleranceM = occlusionToleranceM(probe.point, projector, theme);

@@ -306,7 +306,14 @@ export type LayoutResult = Readonly<{
   dimensionId: string;
   /** Authoritative 3D/view-plane representation consumed by the scene painter. */
   scenePrimitives: readonly ScenePrimitive[];
-  /** Projected compatibility snapshot for collision, hit testing, and SVG. */
+  /**
+   * Projected compatibility snapshot for collision, hit testing, and SVG,
+   * in step with `scenePrimitives` (a `scene-triangle` projects to its three
+   * edges, everything else to one primitive) and clipped to the view frustum
+   * the way the painter's GPU clips the scene: a stroke is cut where it
+   * leaves the frustum, a primitive clipped entirely keeps its slot as an
+   * empty stand-in (`isClippedPrimitive`).
+   */
   primitives: readonly LayoutPrimitive[];
   hitRegions: readonly HitRegion[];
   labelBounds: ScreenRect;

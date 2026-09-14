@@ -1,4 +1,5 @@
 import { applyHomography, unitSquareToQuad } from '../kernel/geometry/homography';
+import { isClippedPrimitive } from '../kernel/geometry/sceneGeometry';
 import { traceFramedGlyphRun } from '../kernel/glyph/glyphTrace';
 import {
   resolveDimensionLineDash,
@@ -106,6 +107,8 @@ function serializePrimitive(
   font: LffFont,
   theme: DimensionTheme,
 ): string {
+  // A primitive the GPU clipped entirely (behind the camera) is not drawn.
+  if (isClippedPrimitive(primitive)) return '';
   if (primitive.kind === 'glyph-run' && primitive.perspective) {
     return framedGlyphPaths(primitive, primitive.perspective, font, theme);
   }
@@ -198,6 +201,7 @@ function serializeLayout(
       if (scenePrimitive.kind === 'scene-triangle') {
         const edges = layout.primitives.slice(index, index + 3);
         index += 3;
+        if (edges.every(isClippedPrimitive)) continue;
         if (edges.every((edge): edge is ScreenLine => edge.kind === 'line')) {
           parts.push(filledTriangle(edges, theme));
           continue;

@@ -68,6 +68,39 @@ describe('layoutViewport', () => {
     expect(batch.hitIndex.hitTest([300, 300], 2)).toBeNull();
   });
 
+  it('cuts the snapshot at the frustum: no hit region, label or obstacle from what the GPU clips', () => {
+    // Test projector: depth = Z, drawn within [−1, 1]. An explicit dimension
+    // whose line runs from the screen centre to a point behind the camera,
+    // with its value text behind the camera too: before 2026-09-14 the far
+    // end projected to a mirrored point and the whole line, plus the label,
+    // was hit-testable and claimed space on screen.
+    const batch = layoutViewport(
+      [{
+        id: 'past-the-camera',
+        role: 'external' as const,
+        labelPinned: true,
+        formattedLabel: '1000',
+        lines: [{ from: [0, 0, 0] as const, to: [1, 1, 2] as const, part: 'dimension' as const }],
+        labelAnchor: [1, 1, 2] as const,
+        arrowLines: [],
+        texts: [],
+      }],
+      baseContext,
+      new Map(),
+    );
+    const layout = batch.layouts[0]!;
+
+    // In step with the scene primitives, nothing non-finite.
+    expect(layout.primitives).toHaveLength(layout.scenePrimitives.length);
+    expect(JSON.stringify(layout.primitives)).not.toMatch(/null|Infinity/);
+    // The line is cut where it leaves the frustum (halfway, at (250, 150)) …
+    expect(batch.hitIndex.hitTest([225, 175], 2)).toMatchObject({ dimensionId: 'past-the-camera', part: 'dimension' });
+    expect(batch.hitIndex.hitTest([275, 125], 2)).toBeNull();
+    // … and the label parks off screen instead of at the mirrored position.
+    expect(layout.labelBounds.x).toBeLessThan(0);
+    expect(batch.hitIndex.hitTest([300, 100], 8)).toBeNull();
+  });
+
   it('defaults missing interaction state to normal', () => {
     const batch = layoutViewport([linear('linear')], baseContext, new Map());
 

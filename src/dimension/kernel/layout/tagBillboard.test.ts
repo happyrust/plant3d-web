@@ -221,6 +221,30 @@ describe('layoutTagBillboard', () => {
     });
   });
 
+  it('plans nothing for a tag whose anchor is out of the frustum and ignores a solver position that is', () => {
+    // Test projector: depth = Z, drawn within [−1, 1]. Every vertex of the
+    // body hangs off the anchor, so with the anchor behind the camera the
+    // painter clips the whole tag — the snapshot must not park a mirrored
+    // body on screen (a close-up inside the pipe, 2026-09-14).
+    const behind: ExplicitTagInput = { ...spec, target: [0, 0, 2] };
+    const gone = layoutTagBillboard({ ...input, tag: behind }, behind, context());
+    expect(gone.primitives).toEqual([]);
+    expect(gone.derived.tag).toBeUndefined();
+    expect(gone.derived.lodHidden).toBeUndefined();
+
+    // The solver's own label position only steers the preferred direction:
+    // behind the camera it is ignored and the tag stands straight up.
+    const upright = layoutTagBillboard(
+      { ...input, labelAnchor: [-0.1, 0.2, 2], tag: { ...spec, away: undefined } },
+      { ...spec, away: undefined },
+      context(),
+    );
+    const body = upright.derived.tag!.body;
+    expect(upright.primitives.length).toBeGreaterThan(0);
+    expect(body.x + body.width / 2).toBeCloseTo(200, 6);
+    expect(body.y + body.height / 2).toBeLessThan(200);
+  });
+
   it('centres a tag without a leader target on the solver position', () => {
     const bare: ExplicitTagInput = { style: 'card', lines: [{ text: 'A' }] };
     const result = layoutTagBillboard({ ...input, tag: bare }, bare, context());

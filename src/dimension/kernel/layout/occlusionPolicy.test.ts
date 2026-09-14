@@ -157,6 +157,21 @@ describe('markOcclusion', () => {
     });
   });
 
+  it('does not cast for a probe out of the frustum and leaves that record unfaded', () => {
+    // Test projector: depth = Z, drawn within [−1, 1]. A record whose value
+    // text sits behind the camera has no pixel to cast through (the painter
+    // clips it); it is not hidden by geometry, it is out of view.
+    const source: OcclusionSource = { isSegmentBlocked: vi.fn(() => true) };
+    const behindCamera = drawn('behind-camera', [0.5, 0.2, 2]);
+    const inView = drawn('in-view', [0.5, 0.2, 0.7]);
+
+    const results = markOcclusion([behindCamera, inView], projector, source, theme);
+
+    expect(results.map(result => result.derived.occluded)).toEqual([false, true]);
+    expect(source.isSegmentBlocked).toHaveBeenCalledTimes(1);
+    expect(source.isSegmentBlocked).toHaveBeenCalledWith([0.5, 0.2, -1], [0.5, 0.2, 0.7], expect.any(Number));
+  });
+
   it('hands the host a tag\'s or a weld mark\'s object with the cast, `onModel` for a refno-less tag, and nothing extra for a dimension', () => {
     const source: OcclusionSource = { isSegmentBlocked: vi.fn(() => false) };
     const tag: LayoutResult = {

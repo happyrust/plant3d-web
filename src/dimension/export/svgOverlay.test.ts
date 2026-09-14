@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { CLIPPED_SCREEN_POINT } from '../kernel/geometry/sceneGeometry';
 import { LffFont } from '../kernel/glyph/lffParser';
 import { SOLVESPACE_DIMENSION_THEME } from '../kernel/theme';
 
@@ -286,6 +287,45 @@ describe('layoutResultsToSvg', () => {
     const label = /<path d="([^"]+)" data-part="label" data-text-plane="3d"/.exec(svg);
     expect(label).not.toBeNull();
     expect(label![1]).toBe('M 98 100 L 105 90 M 105 90 L 102 100');
+  });
+
+  it('skips the empty stand-ins of primitives the GPU clipped', () => {
+    // A snapshot in step with its scene primitives (line, arrowhead, glyph
+    // run) where every one of them was clipped: nothing is drawn, the group
+    // stays.
+    const layout: LayoutResult = {
+      dimensionId: 'clipped',
+      scenePrimitives: [
+        { kind: 'scene-line', from: vertex([0, 0]), to: vertex([1, 0]), part: 'dimension', styleRole: 'normal' },
+        { kind: 'scene-triangle', points: [vertex([0, 0]), vertex([1, 1]), vertex([1, -1])], part: 'arrow', styleRole: 'normal' },
+        { kind: 'scene-glyph-run', text: 'A', at: vertex([0, 0]), capHeightPx: 12, rotationRad: 0, styleRole: 'normal' },
+      ],
+      primitives: [
+        { kind: 'line', from: CLIPPED_SCREEN_POINT, to: CLIPPED_SCREEN_POINT, part: 'dimension', styleRole: 'normal' },
+        { kind: 'line', from: CLIPPED_SCREEN_POINT, to: CLIPPED_SCREEN_POINT, part: 'arrow', styleRole: 'normal' },
+        { kind: 'line', from: CLIPPED_SCREEN_POINT, to: CLIPPED_SCREEN_POINT, part: 'arrow', styleRole: 'normal' },
+        { kind: 'line', from: CLIPPED_SCREEN_POINT, to: CLIPPED_SCREEN_POINT, part: 'arrow', styleRole: 'normal' },
+        {
+          kind: 'glyph-run',
+          text: 'A',
+          origin: CLIPPED_SCREEN_POINT,
+          capHeightPx: 12,
+          bounds: { x: CLIPPED_SCREEN_POINT[0], y: CLIPPED_SCREEN_POINT[1], width: 0, height: 0 },
+          styleRole: 'normal',
+        },
+      ],
+      hitRegions: [],
+      labelBounds: { x: CLIPPED_SCREEN_POINT[0], y: CLIPPED_SCREEN_POINT[1], width: 0, height: 0 },
+      labelPinned: false,
+      derived: { formattedLabel: 'A' },
+    };
+
+    const svg = layoutResultsToSvg([layout], FONT, SOLVESPACE_DIMENSION_THEME, METADATA);
+
+    expect(svg).toContain('<g data-dimension-id="clipped"></g>');
+    expect(svg).not.toContain('<line');
+    expect(svg).not.toContain('<path');
+    expect(svg).not.toContain('-1000000');
   });
 
   it('rejects invalid viewport dimensions', () => {

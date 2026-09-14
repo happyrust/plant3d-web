@@ -178,3 +178,10 @@
 - **药丸几何**：两行以上的药丸首末行的字帽角会落在半圆端外（三行 6 px 出头），`planTagBillboard` 的药丸左右内边距改取「半圆在首行字帽线处的内缩」与 `pillPaddingPx` 的较大者（`pillEndInsetPx`）；一行不变，两行 +1.3 px / 边，三行 +6.3 px / 边。
 - **验证**：单测 59 文件 / 354 通过（+1：三行药丸几何；分类用例加 bend，四类 refno 用例 bend `card` → `pill`）；eslint 0；type-check 改动文件 0 新增。内核全跑 2469 条 × far / mid / close 改前 / 改后各一趟（0 flag）：far 画出的 tag **15 737 → 10 803**（−31 %）、文字行 38 898 → 23 824（−39 %），bend 画出 5185 → 251 / 926 / 2315（far / mid / close），elbo 与其它 6 类逐类逐数相同。实机三条弯管多的管（dbnum 7999）五个相机改前 / 改后同相机对照：far 画出的 tag 49 → 30 / 25 → 12 / 23 → 10，bend 全部 `secondary-far`；弯管前 1 m 处一颗 `PE` 药丸（与同距离弯头药丸同样式）、0.45 m 处三行药丸，首末行留在半圆内；inspection 遮挡 flag 随之 far 7 → 1 / 1 → 0 / 6 → 2；pageerror 0；atta / connection / branch-name / elbo 各视图逐条与改前相同。读数与图见验证 README「`bend` 与 `elbo` 归成同一档呈现」。ADR 0058 分类句与效果图 README 规则 6 同步。决策 **d-490**。
 - **仍留**：`elevation`（821）/ `tee`（155）两类单行 `PE` 标高 tag 仍按文字规则落成卡片 + 圆点、无 LOD，是否也归进药丸档另拍；「药丸云」观感（弯头 / 弯管药丸只在 ~1 m 内出现）。
+
+### 9.10 二维快照按视锥裁剪（2026-09-14，fable-5-1-7；用户「回到三维标注剩的那件：相机背后顶点的二维快照 primitives 仍是直接投影」；ADR 0063）
+
+- **问题**：`LayoutResult.primitives` / `labelBounds` / `hitRegions` 这份只服务碰撞、命中与 SVG 的二维快照此前把每个锚点直接投影；透视相机把相机背后的点投到有限的镜像位置（深度 > 1），近景钻进管子时越过相机的尺寸线在快照里是穿过屏幕的幻影线段（可命中），背后的数值文字在屏内占一块幻影 `labelBounds`（被避让 / 去重 / 当障碍），SVG 多出画到虚空的描边。画家不受影响（GPU 在齐次空间正确裁剪）。
+- **做法**：`sceneGeometry.ts::projectScenePrimitive` 按 GPU 口径裁：顶点可见 = 投影有限且深度 ∈ [−1, 1]；线段在可见性谓词上二分找截点，开放折线留最长段，闭合轮廓 / 填充按 Sutherland–Hodgman，箭头 / 标记 / 字形整体画或不画；被整个裁掉的图元留空位占坑（`CLIPPED_SCREEN_POINT`，`isClippedPrimitive` 给 SVG 跳过），场景 ↔ 投影一一对应不变，可见路径仍每顶点一次投影。`planTagBillboard` 锚点不在视锥内不排；`markOcclusion` 探测点不在视锥内不发射线、`occluded = false`。否决：上游剔除背后记录（丢屏上那半的命中）、给 `ViewportProjector` 加相机空间深度 / near（接口与测试投影器都要动，深度谓词 + 二分不动接口且与 GPU near / far 一致）、删掉被裁图元（错位）、`NaN` 占坑（护栏亮、传染）。
+- **验证**：单测 59 文件 / 359 通过（+5）；eslint 0；type-check 改动文件 0 新增。内核全跑 2469 条、相机放在管子包围盒中心朝扫描方向（约半条管在背后）改前（HEAD worktree）/ 改后：快照里的镜像点残留 **146 279 → 0**，背后文字屏内占位 **1795 → 0**，命中网格采样命中 **32 910 → 2312**，一一对应 / 非有限数 / SVG NaN 全 0；实机三条管相机站在弯管处朝管内看：镜像残留 0、pageerror 0、确定性 3 / 3。读数见验证 README「二维快照按视锥裁剪」。决策 **d-496**。
+- **仍留**：快照不做侧面裁剪（相机前面远离视轴的顶点仍投到 1e5+ px，合法；SVG viewBox 外内容另议）。

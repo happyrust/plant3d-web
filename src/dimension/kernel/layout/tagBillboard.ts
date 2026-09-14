@@ -8,6 +8,7 @@ import {
   type ScreenSegment,
 } from '../geometry/obstacleGeometry';
 import {
+  isSceneVertexVisible,
   makeSceneLine,
   projectScenePrimitives,
   projectSceneVertex,
@@ -275,9 +276,17 @@ export function planTagBillboard(
     .filter(text => text.length > 0);
   if (lines.length === 0) return input.lod ? hidden('detail-far') : empty();
 
+  // Every vertex of the tag hangs off `anchor3`: with the anchor out of the
+  // frustum (behind the camera on a close-up) the painter clips the whole
+  // body, so the snapshot must not park a mirrored body on screen either.
   const anchor3 = spec.target ?? input.labelAnchor;
+  if (!isSceneVertexVisible(sceneVertex(anchor3), projector)) return empty();
   const anchor = projectSceneVertex(sceneVertex(anchor3), projector);
-  const solverLabel = projectSceneVertex(sceneVertex(input.labelAnchor), projector);
+  // The solver's label position only steers the preferred direction; behind
+  // the camera it would point the wrong way, so it is ignored there.
+  const solverLabel = isSceneVertexVisible(sceneVertex(input.labelAnchor), projector)
+    ? projectSceneVertex(sceneVertex(input.labelAnchor), projector)
+    : anchor;
   if (![...anchor, ...solverLabel].every(Number.isFinite)) return empty();
 
   // Body size from the text.

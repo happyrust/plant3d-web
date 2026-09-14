@@ -1,0 +1,213 @@
+{
+ "generatedAt": "2026-09-14T07:57:33.993Z",
+ "results": {
+  "24383_84337": {
+   "refno": "24383_84337",
+   "loadMs": 4398,
+   "objects": 64,
+   "records": 231,
+   "camera": {
+    "position": [
+     5.029256108398437,
+     -5.175521826171875,
+     -0.1966499023437498
+    ],
+    "target": [
+     4.736884503413956,
+     -4.2192170397158,
+     -0.1966499023437498
+    ]
+   },
+   "engineering": {
+    "mode": "engineering",
+    "records": 231,
+    "drawn": 56,
+    "onScreenLabels": 10,
+    "exposed": 6,
+    "mirroredResidual": 0,
+    "labelBehind": 5,
+    "labelBehindOnScreen": 0,
+    "mirroredLabelsOnScreenBefore": 0,
+    "outOfStep": 0,
+    "nonFinite": 0,
+    "gridHits": 60,
+    "gridHitIds": 8,
+    "svgBytes": 484785,
+    "svgPhantom": 36,
+    "svgNaN": 0,
+    "occluded": 0,
+    "unflagged": 56,
+    "canvas": [
+     1220,
+     806
+    ]
+   },
+   "inspection": {
+    "mode": "inspection",
+    "records": 231,
+    "drawn": 56,
+    "onScreenLabels": 10,
+    "exposed": 6,
+    "mirroredResidual": 0,
+    "labelBehind": 5,
+    "labelBehindOnScreen": 0,
+    "mirroredLabelsOnScreenBefore": 0,
+    "outOfStep": 0,
+    "nonFinite": 0,
+    "gridHits": 60,
+    "gridHitIds": 8,
+    "svgBytes": 484785,
+    "svgPhantom": 36,
+    "svgNaN": 0,
+    "occluded": 23,
+    "unflagged": 0,
+    "canvas": [
+     1220,
+     806
+    ]
+   },
+   "deterministic": true,
+   "ms": 9665,
+   "pageErrors": []
+  },
+  "24383_100657": {
+   "refno": "24383_100657",
+   "loadMs": 4953,
+   "objects": 50,
+   "records": 138,
+   "camera": {
+    "position": [
+     5.821786845703125,
+     -4.19504150390625,
+     -1.125
+    ],
+    "target": [
+     5.352313969827001,
+     -3.3120946092310373,
+     -1.125
+    ]
+   },
+   "engineering": {
+    "mode": "engineering",
+    "records": 138,
+    "drawn": 28,
+    "onScreenLabels": 22,
+    "exposed": 2,
+    "mirroredResidual": 0,
+    "labelBehind": 0,
+    "labelBehindOnScreen": 0,
+    "mirroredLabelsOnScreenBefore": 0,
+    "outOfStep": 0,
+    "nonFinite": 0,
+    "gridHits": 106,
+    "gridHitIds": 21,
+    "svgBytes": 197970,
+    "svgPhantom": 227,
+    "svgNaN": 0,
+    "occluded": 0,
+    "unflagged": 28,
+    "canvas": [
+     1220,
+     806
+    ]
+   },
+   "inspection": {
+    "mode": "inspection",
+    "records": 138,
+    "drawn": 28,
+    "onScreenLabels": 22,
+    "exposed": 2,
+    "mirroredResidual": 0,
+    "labelBehind": 0,
+    "labelBehindOnScreen": 0,
+    "mirroredLabelsOnScreenBefore": 0,
+    "outOfStep": 0,
+    "nonFinite": 0,
+    "gridHits": 106,
+    "gridHitIds": 21,
+    "svgBytes": 197970,
+    "svgPhantom": 227,
+    "svgNaN": 0,
+    "occluded": 19,
+    "unflagged": 0,
+    "canvas": [
+     1220,
+     806
+    ]
+   },
+   "deterministic": true,
+   "ms": 10131,
+   "pageErrors": []
+  },
+  "24383_84480": {
+   "refno": "24383_84480",
+   "loadMs": 3941,
+   "objects": 43,
+   "records": 145,
+   "camera": {
+    "position": [
+     2.9301768457031248,
+     -2.272381889648437,
+     0.05125000000000046
+    ],
+    "target": [
+     1.989886761512329,
+     -1.932007746135058,
+     0.05125000000000046
+    ]
+   },
+   "engineering": {
+    "mode": "engineering",
+    "records": 145,
+    "drawn": 22,
+    "onScreenLabels": 21,
+    "exposed": 2,
+    "mirroredResidual": 0,
+    "labelBehind": 0,
+    "labelBehindOnScreen": 0,
+    "mirroredLabelsOnScreenBefore": 0,
+    "outOfStep": 0,
+    "nonFinite": 0,
+    "gridHits": 77,
+    "gridHitIds": 17,
+    "svgBytes": 177309,
+    "svgPhantom": 17,
+    "svgNaN": 0,
+    "occluded": 0,
+    "unflagged": 22,
+    "canvas": [
+     1220,
+     806
+    ]
+   },
+   "inspection": {
+    "mode": "inspection",
+    "records": 145,
+    "drawn": 22,
+    "onScreenLabels": 21,
+    "exposed": 2,
+    "mirroredResidual": 0,
+    "labelBehind": 0,
+    "labelBehindOnScreen": 0,
+    "mirroredLabelsOnScreenBefore": 0,
+    "outOfStep": 0,
+    "nonFinite": 0,
+    "gridHits": 77,
+    "gridHitIds": 17,
+    "svgBytes": 177309,
+    "svgPhantom": 17,
+    "svgNaN": 0,
+    "occluded": 11,
+    "unflagged": 0,
+    "canvas": [
+     1220,
+     806
+    ]
+   },
+   "deterministic": true,
+   "ms": 9168,
+   "pageErrors": []
+  }
+ },
+ "note": "fable-5-1-7, 2026-09-14: pw-inside-7.mjs (real Chrome, vite :3101, gen-model :18122) after the frustum-clipped snapshot — camera at the first bend / elbo target looking at the next one (inside the pipe); per pipe engineering + inspection state: exposed layouts (a scene vertex behind the camera), mirroredResidual (must be 0), labels behind the camera with on-screen bounds (must be 0), 40 × 24 hit-test grid, SVG export size / numbers beyond 1e5 px, determinism, page errors."
+}
