@@ -69,13 +69,13 @@
 
 | # | E3D 能力 | Web 现状 | 证据 / 位置 |
 | --- | --- | --- | --- |
-| 1 | 两点距离 + Distance / Offset×3 / Direction | ✓ | `computeDistanceMeasurementResult`，G1 golden；结果 Inspector |
+| 1 | 两点距离 + Distance / Offset×3 / Direction | ✓ | `computeDistanceMeasurementResult`，G1 golden；结果 Inspector。**Direction 2026-09-14 改成 E3D 罗盘串**（Web `16e9a48`，决策 `d-505`，golden MD §25）：`DIRECTION.string()` 口径——主轴取水平绝对值大的那路、6 位有效数字去尾零、字母跟 wrt 帧的轴、标准表原样带 ` WRT /*` / ` WRT =refno` 尾巴（E3D 只有这张表不切；元素帧 E3D 给名字，Web 只有 refno）；垂距表不带尾巴 |
 | 2 | wrt：World / 普通元素 U-V-W / GENSEC / 无效回退 | ✓ | `ReferenceFrameResolver`，G3-01～05；`e3dRotatedWrt.golden.test.ts` |
 | 3 | Show linear + 正交分解闸门 + 0.1 mm 抑制 | ✓ | `worldDistanceAidPlan.ts`，G2-01～03，d-534 |
 | 4 | Keep dimensions 生命周期（关窗 / 切工具 / 重开） | ◐ | **行为已对齐（2026-09-14，Web `3701208`，Phase B 切片 1）**：`distanceKeepDimensions` 原本只在下一次测量落地时隐藏旧图形，现补上 E3D 的另两处时机——勾掉当场收（`keepAids()` → `clearAids()`）、`deactivate()`（关窗 / 切工具）时 Keep 关着才收；都走可见性开关（E3D `aidNumbers.hide()`），记录不删。实机 S1–S4 + 单测状态机全过（golden MD §19）。已知偏离（用户拍板保留 Web 口径，决策 `d-437`）：缺省 true（E3D false）、开关记在 localStorage（E3D 只在进程会话）、Web 独有的 `keepMeasurementAnnotation` 一层、收的范围是整张距离测量列表（E3D 是本窗体 aid 号）。**◐ 只因 G2-04/05 运行时 golden 未采** |
 | 5 | Units：Metric / Imperial + Display Unit + 记忆 | ✓（公制）· 英制有意不做 | **会话级 Units 框已落地（2026-09-14，Web `12ad607` + `2e9d354`，Phase B 切片 3，决策 `d-483`）**：Unit type 两档 Default / Metric × Display Unit（Millimetres / Centimetres / Metres），记住上次选的那一档、Default 档下拉禁用并回落全局单位设置（= E3D `!!distanceFmt`）；纯内核 `src/measurement/units/measurementUnits.ts` 的 FORMAT 表逐格对应 `comformats.pmlobj` 1301–1356，结果表与画布尺寸文字同一套格式（E3D `setUpForm()` 把 `measureFormat` 同时给结果表和 `GPHDIMENSION`）。实机四档对同一条 23787.9639 mm 的换算 Δ ≤ 0.036 mm（各档取整余量），记忆与持久化走通（golden MD §21）。**英制（Inch / Feet & Inches / Feet）用户拍板不做**（Q4）——E3D 那三个 FORMAT 的参数记在 golden MD §21，要加回来照着填 |
 | 6 | Perpendicular to：点→线 / 面 / 点退化、World 帧、零距离告警 | ◐ | `perpendicularDistance.ts` + `perpendicularTargetProvider.ts`，G4 全部 ✓。目标 provider 按 E3D `GMFARC.perpendicularToPoint` 的分支序（`getLine()` → `getPlane()` → 点）接了：P-Point 轴、PLINE 线（实机 ✓，golden MD §17）、Graphics 边（`direction` + `segment`，标签用候选自己的名字）与 Graphics facet 面（`facet-plane`）、圆面关键点、Element 的 P1 → P2 `line()` 操作数（golden MD §16）。**Graphics 边 / 面当垂距目标的实机走查已补（2026-09-14，无代码改动，golden MD §23）**：先在 Perpendicular 关着时用 `Graphics × Cursor` 在同一条边 / 同一个面上采控制点（末点回代残差 0.0000 mm）独立定出那条无限线 / 无限面，再开 Perpendicular 量——垂足到基准线 / 面 0.0000 mm，`(S−F)·边方向 = 3.6e-16`、与面法向的 `|sin| = 1.1e-13`，距离与解析值 Δ 0.0000 mm。**余 Aid**（Q3 未拍板，无 Aid 系统）；G7-02 的 E3D 运行时 golden 仍未采 |
-| 7 | 三点角 Angle / Direction1 / Direction2 / 拒绝 0°·180° | ✓ | **内核已接线（2026-09-14，Web `d2e7c02`，Phase C 切片 1，决策 `d-486`）**：`threePointAngle.ts`（G6-01～03 golden）接进 `buildAngleMeasurementResultRows`，测量结果卡在角度模式出 `Angle / Direction1 / Direction2` 三行——角度取内核 minor 角、两条臂的单位方向按当前 wrt 帧表达、小数位缺省 2（E3D `Decimal Places` 缺省）；第三击落记录前先过内核，0° / 180° / 重合点**不落记录**、丢草稿回第 1 步、提示条给 E3D `alert.error` 那句话的等价文案。实机 `Angle 40.54°` 与三点解析角差 0.001436°、两条 Direction 逐位差 < 2e-4，退化三击拒收并回到第 1 步（golden MD §22）。**已知偏离**：方向仍是分量串（`X +0.3635 · …`）不是 E3D 罗盘串（`W 11.7755 N 66.8266 D`）——与距离结果表 `Direction` 行同一条既有偏离，要改两处一起改 |
+| 7 | 三点角 Angle / Direction1 / Direction2 / 拒绝 0°·180° | ✓ | **内核已接线（2026-09-14，Web `d2e7c02`，Phase C 切片 1，决策 `d-486`）**：`threePointAngle.ts`（G6-01～03 golden）接进 `buildAngleMeasurementResultRows`，测量结果卡在角度模式出 `Angle / Direction1 / Direction2` 三行——角度取内核 minor 角、两条臂的单位方向按当前 wrt 帧表达、小数位缺省 2（E3D `Decimal Places` 缺省）；第三击落记录前先过内核，0° / 180° / 重合点**不落记录**、丢草稿回第 1 步、提示条给 E3D `alert.error` 那句话的等价文案。实机 `Angle 40.54°` 与三点解析角差 0.001436°、两条 Direction 逐位差 < 2e-4，退化三击拒收并回到第 1 步（golden MD §22）。~~**已知偏离**：方向仍是分量串（`X +0.3635 · …`）不是 E3D 罗盘串（`W 11.7755 N 66.8266 D`）——与距离结果表 `Direction` 行同一条既有偏离，要改两处一起改~~ → **2026-09-14 17:26 两处一起改成罗盘串**（Web `16e9a48`，决策 `d-505`，golden MD §25）：两条 Direction 走 `gphanglemeasure` 374–385 那条路（`.string()` 拆 token、数字按 Decimal Places 过 `!!realFmt` 留尾零、`.before('WRT')` 切尾巴），实机 Decimal Places 2 / 4 / 0 三档对账 |
 | 8 | 角度 Unit（Degrees / Radians / Gradians）+ Decimal Places | ✓ | **会话级已落地（2026-09-14，Web `b45b33b`，Phase C 切片 2，决策 `d-494`）**：`Unit` 四档 Default / Degrees / Radians / Gradians × `Decimal Places` 0–8（缺省 Default / 2 = E3D 构造值，越界或非数字打回 2 并出 `Value must be between 0 and 8`）；小数位同时管角度值与两条 Direction，但尾零规则不同（角度值走 `angleFmt` 去尾零、Direction 走 `realFmt` 留尾零）。顺带按源码把结果表从三行补成四行（加 `DMS`，恒按十进制度截断）。实机五档与三点解析角 40.538564° 逐格对上、DMS 五档恒为 `40° 32' 18''`、填 9 弹错并回 2、刷新持久化（golden MD §24）。**偏离**：Default 档 = Degrees（Web 无「工程当前角度单位」这一层） |
 | 9 | 两线夹角（LINEANGLE） | ✗ | 无 EDGE 拾取；G6-04 未采 |
 | 10 | Shortest（graphics × graphics） | ✗ | 现有 clearance / 最近点是采样近似（上一计划 §3.2），不是 `gmfLine.shortest` 语义；G5 未采 |
@@ -205,8 +205,12 @@
 - ~~`threePointAngle.ts` 接入 UI：结果表加 `Direction1 / Direction2`（wrt 帧罗盘字串，`labelXYZ/ENU/UVW` 口径），0° / 180° / 重合点走 `alert.error` 等价提示并回到第 1 步。~~
   **切片 1 ✓（2026-09-14 15:12，Web `d2e7c02`，决策 `d-486`）**：`buildAngleMeasurementResultRows` 出三行、`computeAngleDegrees` 改走内核、
   第三击落记录前过内核（退化就不落、丢草稿回第 1 步、提示条给 E3D 那句话的等价文案）、结果卡在角度模式换成这三行并收起距离窗体的 Units 框。
-  实机对账 Δ 0.0014°、Direction 逐位 < 2e-4，退化三击拒收并回到第 1 步（golden MD §22）。**方向仍按 `labelXYZ/ENU/UVW` 出分量串**，
-  没做成 E3D 的罗盘串（`W 11.7755 N 66.8266 D`）——距离结果表的 `Direction` 行也是分量串，两处是同一条既有偏离，要改一起改。
+  实机对账 Δ 0.0014°、Direction 逐位 < 2e-4，退化三击拒收并回到第 1 步（golden MD §22）。~~**方向仍按 `labelXYZ/ENU/UVW` 出分量串**，
+  没做成 E3D 的罗盘串（`W 11.7755 N 66.8266 D`）——距离结果表的 `Direction` 行也是分量串，两处是同一条既有偏离，要改一起改。~~
+  **切片 3 ✓（2026-09-14 17:26，Web `16e9a48`，决策 `d-505`）**：距离 / 垂距 / 角度三张表的 Direction 一起改成 E3D 罗盘串
+  （纯内核 `src/measurement/reference-frame/compassDirection.ts`：主轴取水平绝对值大的那路、6 位有效数字去尾零、字母跟 wrt 帧的轴），
+  距离表原样带 ` WRT` 尾巴、垂距与角度表不带（照 PML 各自 `.trim()` / `.before('WRT')`），角度表数字按 Decimal Places 过 `realFmt` 留尾零；
+  实机距离表 `W 18.4872 S 60.8237 D WRT /*` 反解 Δmax 2.5e-7，角度表 Decimal Places 2 / 4 / 0 三档对账（golden MD §25）。
 - ~~角度 Unit（Degrees / Radians / Gradians）+ Decimal Places（缺省 2），测量会话级。~~
   **切片 2 ✓（2026-09-14 15:57，Web `b45b33b`，决策 `d-494`）**：纯内核 `src/measurement/units/measurementAngleUnits.ts`
   （四档 Unit、0–8 校验、度 / 弧度 / 梯度换算、角度值去尾零 vs Direction 留尾零两套格式、DMS 截断）+ 样式仓 V9 的

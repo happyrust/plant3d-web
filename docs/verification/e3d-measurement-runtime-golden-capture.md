@@ -824,9 +824,9 @@ FORMAT 参数逐格、公制格式矩阵含 `0mm` 无负零、旧 `imperial` 配
 - 测量结果卡在角度模式下改显示这三行 + 顶点 / 两臂，并把距离窗体的 Units 框收起来（E3D 的 Units 在 `gphMeasure` 上）。
 
 **已知偏离**：
-- **方向仍是分量串、不是 E3D 的罗盘串**：Web 出 `X +0.3635 · Y -0.3880 · Z -0.8469`，E3D 出 `W 11.7755 N 66.8266 D`。
+- ~~**方向仍是分量串、不是 E3D 的罗盘串**：Web 出 `X +0.3635 · Y -0.3880 · Z -0.8469`，E3D 出 `W 11.7755 N 66.8266 D`。
   这与距离结果表的 `Direction` 行是同一条既有偏离（§9 的 golden 比对就是把罗盘串换算成单位向量再比的），本节没有单独改口径——
-  要改就两处一起改，另立一片。
+  要改就两处一起改，另立一片。~~ **2026-09-14 17:26 两处一起改成罗盘串（§25，Web `16e9a48`，决策 `d-505`）**；下面走查里的分量串是改前的样子。
 - 角度的 Unit（Degrees / Radians / Gradians）与 Decimal Places 控件没做，缺省锁在「度 + 2 位」；那是 §2 #8（Phase C 第二条）。
 - 「回到第 1 步」丢的是整条草稿；E3D 是整包退回命令起点。两者在测量这条命令上等价（§20）。
 
@@ -946,8 +946,69 @@ Playwright 真指针点三点 + 真控件换档，临时 spec 已删；三点落
 **已知偏离 / 残余**：
 - **Default 档 = Degrees**：E3D 取工程当前角度单位（`!!angleFmt.units` + `s` 首字母大写），Web 没有这一层设置，
   缺省就是度——与 E3D 在 degree 工程下的表现一致，换了角度单位的工程会不一样。
-- 方向仍是**分量串**不是 E3D 的罗盘串（`W 11.7755 N 66.8266 D`），与距离结果表同一条既有偏离（§22）；
-  Decimal Places 管的是这些分量的小数位。
+- ~~方向仍是**分量串**不是 E3D 的罗盘串（`W 11.7755 N 66.8266 D`），与距离结果表同一条既有偏离（§22）；
+  Decimal Places 管的是这些分量的小数位。~~ **2026-09-14 17:26 已改成罗盘串（§25，Web `16e9a48`）**；
+  Decimal Places 现在管的是罗盘串里每个角度的小数位（E3D `!!realFmt` 那条路）。上表 Direction1 列是改前的样子。
 - Keep Dimension / wrt 这两格角度窗体也有，Web 走的是共用的那套（§19 / G3）。
 - **证据等级**：E3D 侧 `static_expectation`（上列 PML 行号）；G10（Units / Angle 格式矩阵）运行时 golden 仍未采（采集矩阵 §5）。
+
+## 25. Direction 改成 E3D 罗盘串——距离 / 垂距 / 角度三张结果表一起改 实机走查（2026-09-14 17:26）
+
+**为什么现在改**：§22 / §24 都记着同一条既有偏离——Web 的 `Direction` 行是分量串（`X +0.3635 · Y -0.3880 · Z -0.8469`），
+E3D 是 `DIRECTION.string()` 的罗盘串（`W 11.7755 N 66.8266 D`）。用户 2026-09-14 16:00 拍板两张表一起改（决策 `d-505`）。
+
+**E3D 口径**（`gphmeasure.pmlfrm` 392–404 / 661–667、`gphanglemeasure.pmlfrm` 371–404 + 已采 trace / 截图）：
+
+- 串型 `<主轴> [<角> <次轴>] [<倾角> <U|D>]`：主轴取水平两分量里**绝对值大的那个**（第一个角 0–45°），
+  正好 45° 时出 `E 45 N`（G2-03 `E 45 N 35.2644 U`，`E 45 N`）——打平给 E / W；
+  水平落在轴上省掉「角 + 次轴」（G4-01 `N 78.6901 U`），在水平面里省掉倾角（G4-02 `S`），纯竖直只剩 `U` / `D`；
+  距离为 0 时 `--`（394 / 663）。
+- **数字是 PML REAL 的缺省字串：6 位有效数字、去尾零**，不是固定 4 位小数——`N 6.66615 W 78.3493 U`（G4-03 截图与 trace）、
+  `S 20.416 W 12.6584 D`（G3-02）、`N 0.285797 D` / `E 0.238736 U`（G8 P-Point 方向）。
+- 字母按当前 wrt 帧的三根轴走：G3-02 `/Copy-of-RCS151MM`（Y is E and Z is U）下同一条方向是 `S 11.7755 W 66.1215 D WRT /Copy-of-RCS151MM`，
+  World 下是 `W 11.7755 N 66.1215 D WRT /*`。
+- **`WRT` 尾巴**：`DIRECTION.string()` 自带 ` WRT <wrt>`。三张表里**只有 Measure Distance 的标准结果表原样显示它**
+  （403 只 `.trim()`；截图 `G1-02-result.png` 的单元格就是 `W 11.7755 N 66.1215 D WRT /*`）；
+  Perpendicular（666）与角度窗体（371 / 392）都 `.before('WRT')` 切掉（截图 `G4-03-perpendicular-point-result.png` /
+  `G6-02-angle-result.png`）。
+- 角度窗体的两条 Direction（374–385 / 394–404）：把 `.string()` 按空格拆开，能 `REAL()` 的每一段再按 `Decimal Places`
+  走 `!!realFmt`（固定小数位、留尾零），字母原样——G6-02 截图 Decimal Places 2 出 `W 11.78 N 66.83 D` / `W 12.90 S 32.39 D`。
+- GENSEC 当 wrt 时 Direction 按 World 算（396–399，G3-04 也这么记的）。
+
+**Web 落地**（Web `16e9a48`；决策 `d-505`）：
+
+- 纯内核 `src/measurement/reference-frame/compassDirection.ts`：`formatCompassDirection(vector, { decimals?, trailZeros?, fallback?, wrt? })`
+  ——不给 `decimals` 就是 `.string()` 的 6 位有效数字（`formatPmlReal`），给了就先出 6 位串、`Number()` 回来再 `toFixed(dp)`
+  （两次取整照 E3D 做）；`wrt` 给了才接尾巴；另有 `parseCompassDirection` 给 golden round-trip 用。
+- `xeokitMeasurementFormat.ts` 三处 Direction 都改吃它：距离行按 `result.frame` 接 ` WRT /*`（World）或 ` WRT =24381/101439`
+  （元素帧，Web 只有 refno，按 E3D 无名元素的写法）；垂距行不接尾巴；角度行传 `decimals = Decimal Places`。
+  删掉不再用的 `formatSignedScalar` 与 `formatMeasurementAngleScalar` 引用。
+
+**Web 实机走查**（Playwright 由 `webServer` 自起 dev `:3101` + gen-model `:8024`，
+`?model_source=gen-model-v1&gm_backend=http://127.0.0.1:8024&show_refno=24381_177298`，自由表面 × 模型表面点、真指针三击，临时 spec 已删；
+落点 `o:24381_177305:6` / `o:24381_177350:30` / `o:24381_177335:22`）：
+
+| 表 | 设置 | Direction 单元格 | 独立对账 | 图 |
+| --- | --- | --- | --- | --- |
+| 距离（World） | — | `W 18.4872 S 60.8237 D WRT /*` | 罗盘串按 PDMS 约定反解成单位向量，与两点设计坐标的单位差向量 Δmax **2.5e-7** | `web-direction-compass-live-01-distance-world.png` |
+| 角度 | Decimal Places 2 | `Direction1 W 18.49 S 60.82 D` / `Direction2 S 14.16 W 40.56 D` | 反解 vs 两臂单位向量 Δmax **4.6e-5 / 6.0e-5**（两位小数的取整余量） | `web-direction-compass-live-03-angle-decimals-2.png` |
+| 角度 | Decimal Places 4 | `W 18.4872 S 60.8237 D` | 与距离表同一条臂逐字相同（去掉尾巴）；反解 Δmax < 2e-5 | `web-direction-compass-live-04-angle-decimals-4.png` |
+| 角度 | Decimal Places 0 | `W 18 S 61 D` | 整数、留位 | `web-direction-compass-live-05-angle-decimals-0.png` |
+
+- 距离表数字逐段 ≤ 6 位有效数字；角度表两条都不带 `WRT`。页面错误 0。
+  逐行实读见 `web-direction-compass-live-scan.txt`，数值见 `web-direction-compass-live-records.json`。
+- **旋转 wrt 帧这一档实机没走到**：切 `DBREF 24381/177298` 时 `/api/pdms/transform/24381_177298` 回 HTTP 500（那个后端没在跑），
+  帧回落 World。这一档由 golden 单测覆盖（下）。
+
+**单测**：`compassDirection.test.ts` 15 条——G1 `W 11.7755 N 66.1215 D WRT /*`、G3-02 两件 EQUI 的 `S 11.7755 W 66.1215 D` /
+`S 20.416 W 12.6584 D`、G4-01 `N 78.6901 U`、G4-02 `S`、G4-03 `N 6.66615 W 78.3493 U`（trace 坐标只到 3 位小数，第一个角只锁 `6.666x`）、
+G2-03 `E 45 N 35.2644 U`、G6-02 Decimal Places 2 → `W 11.78 N 66.83 D` / `W 12.90 S 32.39 D`、G8 六条方向串 round-trip、边界与 fallback；
+`e3dRotatedWrt.golden.test.ts` 加三条**逐字**断言（World 尾巴 `/*`、两件 EQUI 尾巴 `=24381/101439` / `=24381/101423`）；
+`xeokitMeasurementFormat.test.ts` / `MeasurementResultInspector.test.ts` 期望改写。测量相关 83 文件 / 957 用例全过；eslint 0；type-check 与 HEAD 同。
+
+**已知偏离 / 残余**：
+- 元素帧的 WRT 尾巴 E3D 给**名字**（`/Copy-of-RCS151MM`），Web 只有 refno，写 `=24381/101439`；两者在 E3D 里都是合法写法。
+- GENSEC 当 wrt 时 E3D 的 Direction 按 World，Web 的参考系模型不知道元素类型，没有特殊处理（与 §2 #2 的 GENSEC 非负投影同属未落地）。
+- **证据等级**：串型 / 位数 / 尾巴规则全部来自已采 trace 与截图（G1 / G2-03 / G3-02 / G4-01～03 / G6-02 / G8），不是静态推导；
+  角度窗体 Decimal Places ≠ 2 的样子仍是 `static_expectation`（G10 未采）。
 

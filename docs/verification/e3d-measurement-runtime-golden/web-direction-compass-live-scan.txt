@@ -1,0 +1,11 @@
+objects=38 canvas=900x727
+picks=[{"objectId":"o:24381_177305:6","x":942,"y":373,"label":"模型表面点"},{"objectId":"o:24381_177350:30","x":961,"y":519,"label":"模型表面点"},{"objectId":"o:24381_177335:22","x":704,"y":451,"label":"模型表面点"}]
+距离表 World：Direction = W 18.4872 S 60.8237 D WRT /*
+  反解 vs 设计坐标单位向量 Δmax = 2.52e-7（Δ=-10672.168/-3568.206/-20154.211 mm）
+切 wrt → {"ok":false,"kind":"world","refno":null,"axisLabels":["X","Y","Z"],"label":"World"}
+  （wrt 元素帧没解析成功：{"ok":false,"error":{"code":"FRAME_DATA_UNAVAILABLE","message":"Failed to fetch transform 24381_177298: HTTP 500 Internal Server Error at /api/pdms/transform/24381_177298: ","refno":"24381_177298"},"kind":"world","refno":null,"axisLabels":["X","Y","Z"],"projected":null,"label":"World"}，跳过旋转帧对账）
+角度表 Decimal Places 2：Direction1 = W 18.49 S 60.82 D · Direction2 = S 14.16 W 40.56 D
+  反解 vs 两臂单位向量 Δmax = 4.57e-5 / 5.98e-5（2 位小数的取整余量 ≤ ~1e-4）
+角度表 Decimal Places 4：Direction1 = W 18.4872 S 60.8237 D
+角度表 Decimal Places 0：Direction1 = W 18 S 61 D
+page errors: 0
