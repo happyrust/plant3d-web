@@ -586,7 +586,7 @@ export function inspectionFactor(mode: 'always-on-top' | 'inspection', probes: r
 | **P2 范围体呈现**（✅ 2026-09-14 落地，§18） | `cloudProjectedEnvelope`（= 交互方案 `annotationUx.projectedEnvelope`，落在 P1 同一开关族 `useCloudRenderFlags`） | 首项 `DTXLayer.getObjectLocalBoxAndWorldMatrixInto`（§4.1）；并行几何内核（§4.1–4.5、4.7）、创建时写 `regionV1(obb-union, origin:'members')` + `viewpointV1.creation`；最小来源校验与 epoch 隔离、`globalModelMatrix` 重映射（§8） | 多机位包含、裁剪连续性、相位测试通过；目标范围不完整（`coverage` 不足）时不写新版记录；关闭后兼容显示，保留新字段 |
 | **P2.5 局部套索（可选，后置）** | `cloudUserVolume` | §4.8 截锥扫掠体 + 深度调整交互 | 套索验收口径按 `origin:'user-volume'`；拒绝自交 |
 | **P3 共享范围体**（✅ 2026-09-14 落地，§19） | `annotationSharedRegion` | rect / obb 新建走 `primitiveFromPlacement`（§7）；完整失效与重绑 member 交互（§8） | 真 OBB / 剪切分支、部分加载、版本切换、原子重绑；旧记录不自动迁移 |
-| **P4 性能与显示**（LOD ✅ 2026-09-15 落地，§20；合批 / inspection 未动） | `cloudAdaptiveLod`（= `annotationUx.adaptiveLod`）、`cloudBatching`、`cloudInspectionFade` | LOD（§9.3）→ 合批（§9.2）→ 按数据决定 GPU 波浪；inspection 最后单开（§10） | 合批前后几何等价、无跨线连接、调用预算；任一优化可退回 CPU 基线 |
+| **P4 性能与显示**（LOD + 图钉聚合 ✅ 2026-09-15 落地，§20；合批 / inspection 未动） | `cloudAdaptiveLod`（= `annotationUx.adaptiveLod`）、`cloudBatching`、`cloudInspectionFade` | LOD（§9.3）→ 合批（§9.2）→ 按数据决定 GPU 波浪；inspection 最后单开（§10） | 合批前后几何等价、无跨线连接、调用预算；任一优化可退回 CPU 基线 |
 
 回退不能绕过来源校验：新版来源不匹配时，即便退回旧外观也只能按快照降级，不能重新启用「当前模型 AABB 自愈」。
 
@@ -875,9 +875,24 @@ P0 已提交：`af4b382`（15 文件；`useToolStore.ts` 只取云线 hunk）。
 - `npx eslint` 改动文件：0 错误。
 - 未跑 Playwright；真机要看：`?dtx_demo=primitives` 之类场景批量建 > 64 条云线，转相机看远处只剩图钉、靠近视口中心的补回轮廓、悬停图钉临时展开；`?cloud_render_flags=cloudAdaptiveLod:0` 对照。
 
+### 20.1 pin 档图钉的屏幕聚合（同日第二次提交）
+
+用户口径「继续 P4：屏幕网格聚合——pin 档密集图钉合成带计数的聚合徽标，点击列成员或放大」。只作用于 LOD 已降为 `pin` 且锚点在屏内的云线；`full` 档（激活 / 悬停 / 预算内）一律不参与——「选中问题始终可找到」。
+
+| # | 内容 | 落点 |
+|---|---|---|
+| 1 | **纯函数** `clusterPins(items, previousSeedOf, {joinRadiusPx:28, stayRadiusPx:40, minSize:2})`：**种子贪心半径聚合，不是网格**（网格会让恰好跨格线的相邻两枚合不到一起）。上一帧的种子先立起来（簇身份 = 种子 id 跨帧稳定，徽标 DOM 与弹出列表按它复用）；其余按 id 字典序（与相机无关，确定性）：上一帧同簇且离种子 ≤ 40 px 留在原簇（滞回），否则加入第一个离种子 ≤ 28 px 的簇，都不行自己开一簇；成员 ≥ 2 才成簇，徽标放成员质心；非有限坐标忽略 | `annotationProjection/cluster.ts`（+7 例 `cluster.test.ts`） |
+| 2 | **接线**：只在 LOD 计划重算的那一帧重做（图钉屏幕位置只随相机 / 视口 / 集合变；`planCloudLodForFrame` 现在返回「是否重算」）；markers 循环顺手收集 pin 档且屏内的图钉位置 → `applyPinClusters`：合进徽标的图钉 `display:none`、散出去的放回；徽标一簇一枚按种子复用（计数、质心定位、`title` 列前 8 条成员标题）、不在场的拆掉；`clusterSeedOf` 跨 syncFromStore 保留，`clearOverlayEls` 只拆 DOM；退出超预算 / 开关关那一帧全部拆掉放回 | `useDtxTools.ts` |
+| 3 | **交互**：徽标**单击** → 弹出成员列表（`N 条云线批注` + 「放大到这些」+ 每行一条标题），**点一行 = `activateAnnotation('cloud', id)`**（激活即 LOD 固定高档，store 变化经 watch 重建后轮廓 + 文字框补回、退出聚合），**「放大到这些」/ 徽标双击** = `flyToCloudAnnotations(ids)` 相机飞到成员锚点 ∪ 创建时目标快照 AABB 的合并范围（`cameraFlight.flyTo({fit:true})`）；再点徽标 / 点外面（document `pointerdown` 捕获）/ Esc 关掉；相机动了列表跟着簇刷新，簇散了列表自动关 | 同上 |
+| 4 | **不变量**：聚合是视口运行时呈现——记录不改、列表数量不变、`visible` 不写；无 LOD（≤ 64 条或开关关）就没有聚合 | — |
+| 5 | **调试出口** `debugCloudClusters()`（每簇种子 / 质心 / 成员、藏起的图钉、弹出列表对着哪一簇）；`openClusterPopover / closeClusterPopover / flyToCloudAnnotations` 一并导出给测试与外部 | 同上 |
+| 6 | **验收测试**（`useDtxTools.cloudLod.test.ts` +3 例，合计 11）：90 条两端 26 枚 pin 图钉（相邻约 8.7 px）合成 ≥ 2 簇、每簇 ≥ 2、成员全是 pin 档且含种子、徽标计数 / 质心 / title 对得上、藏起的图钉数 = 成员之和、full 档图钉不藏、记录数与 `visible` 不变；徽标点开列表行数 = 成员数、再点收起、「放大」`flyTo` 一次且 AABB 包住成员、点外面 / Esc 关、点一行 → 激活 → 重建后 full + 文字框挂上 + 退出聚合；相机小幅摆动（LOD 集合不变）种子不换、重建后徽标照旧、删到 60 条徽标全拆图钉全放回；开关关无聚合 | 同上 |
+
+**验证**（2026-09-15 05:5x–06:0x，本机）：`npx vitest run` 全量 **333 文件 / 2896 用例全绿**（本次新增 7 + 3 = 10 例，其余增量是其它会话新加的测试）；`npm run type-check` 本次文件 0 条新增（基线外新出现的 `confirmedRecordsRestore.test.ts` / `draftLayerMerge.test.ts` 是 U0 那条线的在途 WIP，未触碰）；`npx eslint` 改动文件 0 错误。未跑 Playwright；真机要看：> 64 条云线时远处密集图钉是否合成徽标、点开列表选一条是否展开、「放大」是否飞对范围。
+
 **遗留 / 后续**：
-- **屏幕网格聚合**（§9.3「其他降为图钉或屏幕网格聚合」、交互方案「密集图钉聚合，点击列成员或放大」）未做：本步 pin 档是一枚枚独立图钉；聚合徽标 + 计数 + 点击列表属交互层 DOM，另起。
-- LOD 只覆盖云线（轮廓 / 文字框是每帧成本所在）；rect / obb 线框是静态几何、文字批注只有 DOM，上千条时的文字框 DOM 惰性挂载可沿 `mountCloudLabel` 同法推广，未做。
+- 聚合半径 28 / 40 px、徽标样式（深灰圆标白字）是首版设计值，未按真机调；徽标本身不受 LOD 的悬停升档影响（悬停徽标不展开成员）。
+- LOD 与聚合只覆盖云线（轮廓 / 文字框是每帧成本所在）；rect / obb 线框是静态几何、文字批注只有 DOM，上千条时的文字框 DOM 惰性挂载与图钉聚合可沿 `mountCloudLabel` / `applyPinClusters` 同法推广，未做。
 - 预算 64 / 滞回 16 是 §14 #9 的初值，未按真机数据调；没有做「相机运动中用简化框、停止后精化」（交互方案 §3.4），运动中 full 档仍每帧全算。
 - 优先级只看锚点到视口中心的距离；投影尺寸（远处极小的目标本可先降）没进公式——它需要先算包围盒投影，与「pin 档不算凸包」相悖，若要引入应用 `worldPos` 到相机距离的廉价代理。
 - P4 其余：合批（§9.2，按实测决定）、GPU 波浪、inspection 淡化（§10，复用 ADR-0061 `isSegmentBlocked`，α 对齐尺寸系统 `theme.inspection`）仍未动。

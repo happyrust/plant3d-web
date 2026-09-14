@@ -81,6 +81,7 @@ function createTools() {
   document.body.appendChild(overlay);
 
   const getAABB = vi.fn((_refnos: string[]) => [-0.5, -0.5, -0.5, 0.5, 0.5, 0.5]);
+  const flyTo = vi.fn();
   const tools = useDtxTools({
     dtxViewerRef: ref({
       scene: { add: vi.fn(), remove: vi.fn() },
@@ -92,11 +93,11 @@ function createTools() {
     selectionRef: ref({ pickPoint: vi.fn(() => null) } as any),
     overlayContainerRef: ref(overlay),
     store,
-    compatViewerRef: ref({ scene: { getAABB } } as any),
+    compatViewerRef: ref({ scene: { getAABB }, cameraFlight: { flyTo } } as any),
     requestRender: null,
   });
   tools.refreshReadyState();
-  return { tools, store, canvas, overlay, camera, getAABB };
+  return { tools, store, canvas, overlay, camera, getAABB, flyTo };
 }
 
 /** 第 i 条云线：锚点与范围体都在 x = i - COUNT/2 的位置（沿 x 轴一排），越靠近 0 越靠视口中心 */
@@ -385,7 +386,7 @@ describe('cloudAdaptiveLod · 超预算', () => {
     expect(store.cloudAnnotations.value.every((c) => c.visible && c.presentationV1?.algorithm === 'legacy-v0')).toBe(true);
   });
 
-  it('关掉 cloudAdaptiveLod：90 条全部 full，全部挂文字框', () => {
+  it('关掉 cloudAdaptiveLod：90 条全部 full，全部挂文字框，也没有聚合', () => {
     setCloudRenderFlag('cloudAdaptiveLod', false);
     const { tools, store, overlay } = createTools();
     seed(store, COUNT);
@@ -397,5 +398,143 @@ describe('cloudAdaptiveLod · 超预算', () => {
     expect(overlay.querySelectorAll('.dtx-anno-label')).toHaveLength(COUNT);
     // 90 条全走范围体管线并画出轮廓（两端贴着视口边的可能是 viewport-cut）
     expect(tools.debugCloudRegionRender().every((r) => (r.regionState === 'complete' || r.regionState === 'viewport-cut') && r.outlineVisible)).toBe(true);
+    // 没有 LOD 就没有聚合
+    expect(tools.debugCloudClusters()).toEqual({ clusters: [], hiddenMarkerIds: [], badgeSeedIds: [], popoverSeedId: null });
+    expect(overlay.querySelectorAll('.dtx-anno-cluster')).toHaveLength(0);
+  });
+});
+
+describe('cloudAdaptiveLod · pin 档图钉的屏幕聚合', () => {
+  function pinIds(tools: ReturnType<typeof createTools>['tools']): string[] {
+    return tools.debugCloudLod().items.filter((it) => it.level === 'pin').map((it) => it.id).sort();
+  }
+
+  it('90 条：两端 pin 档图钉（相邻约 8.7 px）合成带计数的聚合徽标，被合并的图钉藏起、full 档与未合并的图钉照常；记录 visible 不改', () => {
+    const { tools, store, overlay } = createTools();
+    seed(store, COUNT);
+    tools.syncFromStore();
+
+    const pins = pinIds(tools);
+    expect(pins).toHaveLength(COUNT - BUDGET);
+    const snap = tools.debugCloudClusters();
+    expect(snap.clusters.length).toBeGreaterThanOrEqual(2);
+    let merged = 0;
+    for (const cluster of snap.clusters) {
+      expect(cluster.memberIds.length).toBeGreaterThanOrEqual(2);
+      // 成员只能是 pin 档；种子是成员之一
+      for (const id of cluster.memberIds) expect(pins, id).toContain(id);
+      expect(cluster.memberIds).toContain(cluster.seedId);
+      merged += cluster.memberIds.length;
+      // 徽标 DOM：计数 = 成员数，位置在成员质心
+      const badge = overlay.querySelector(`.dtx-anno-cluster[data-cluster-seed="${cluster.seedId}"]`) as HTMLElement;
+      expect(badge, cluster.seedId).not.toBeNull();
+      expect(badge.textContent).toBe(String(cluster.memberIds.length));
+      expect(parseFloat(badge.style.left)).toBeCloseTo(cluster.x, 3);
+      expect(parseFloat(badge.style.top)).toBeCloseTo(cluster.y, 3);
+      expect(badge.title).toContain(`${cluster.memberIds.length} 条云线批注`);
+    }
+    expect(snap.hiddenMarkerIds).toHaveLength(merged);
+    expect(snap.badgeSeedIds).toEqual(snap.clusters.map((c) => c.seedId).sort());
+    expect(overlay.querySelectorAll('.dtx-anno-cluster')).toHaveLength(snap.clusters.length);
+
+    // 被合并的图钉 display:none；其它（full 档 + 没合并的 pin）都还在
+    const markerEls = [...overlay.querySelectorAll<HTMLElement>('.dtx-anno-marker')];
+    expect(markerEls).toHaveLength(COUNT);
+    const hidden = markerEls.filter((el) => el.style.display === 'none');
+    expect(hidden).toHaveLength(merged);
+    const fullIdsSet = new Set(tools.debugCloudLod().items.filter((it) => it.level === 'full').map((it) => it.id));
+    // 藏起来的必须全是 pin 档
+    for (const id of snap.hiddenMarkerIds) expect(fullIdsSet.has(id), id).toBe(false);
+
+    // 聚合不改业务数量
+    expect(store.cloudAnnotations.value).toHaveLength(COUNT);
+    expect(store.cloudAnnotations.value.every((c) => c.visible)).toBe(true);
+  });
+
+  it('点徽标弹出成员列表；点一行 = 选中那条（升 full、文字框补回、退出聚合）；「放大到这些」飞到全部成员的合并范围；再点徽标 / 点外面 / Esc 关掉', () => {
+    const { tools, store, overlay, flyTo } = createTools();
+    seed(store, COUNT);
+    tools.syncFromStore();
+    const cluster = tools.debugCloudClusters().clusters[0]!;
+    const badge = overlay.querySelector(`.dtx-anno-cluster[data-cluster-seed="${cluster.seedId}"]`) as HTMLElement;
+
+    badge.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(tools.debugCloudClusters().popoverSeedId).toBe(cluster.seedId);
+    const popover = overlay.querySelector('.dtx-anno-cluster-popover') as HTMLElement;
+    expect(popover).not.toBeNull();
+    expect(popover.textContent).toContain(`${cluster.memberIds.length} 条云线批注`);
+    const rows = [...popover.querySelectorAll<HTMLElement>('[data-role="cluster-member"]')];
+    expect(rows.map((r) => `cloud:${r.dataset.annotationId}`)).toEqual(cluster.memberIds);
+    expect(rows[0]!.textContent).toBe(store.cloudAnnotations.value.find((c) => `cloud:${c.id}` === cluster.memberIds[0])!.title);
+
+    // 再点徽标：收起
+    badge.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(tools.debugCloudClusters().popoverSeedId).toBeNull();
+    expect(overlay.querySelectorAll('.dtx-anno-cluster-popover')).toHaveLength(0);
+
+    // 放大：相机飞到成员锚点 ∪ 快照 AABB 的合并范围
+    tools.openClusterPopover(cluster.seedId);
+    (overlay.querySelector('[data-role="cluster-zoom"]') as HTMLElement).dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(flyTo).toHaveBeenCalledTimes(1);
+    const { aabb } = flyTo.mock.calls[0]![0] as { aabb: number[] };
+    const xs = cluster.memberIds.map((id) => store.cloudAnnotations.value.find((c) => `cloud:${c.id}` === id)!.anchorWorldPos[0]);
+    expect(aabb[0]).toBeLessThanOrEqual(Math.min(...xs) - HALF + 1e-9);
+    expect(aabb[3]).toBeGreaterThanOrEqual(Math.max(...xs) + HALF - 1e-9);
+    expect(tools.debugCloudClusters().popoverSeedId).toBeNull();
+
+    // 点外面关掉
+    tools.openClusterPopover(cluster.seedId);
+    document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+    expect(tools.debugCloudClusters().popoverSeedId).toBeNull();
+    // Esc 关掉
+    tools.openClusterPopover(cluster.seedId);
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    expect(tools.debugCloudClusters().popoverSeedId).toBeNull();
+
+    // 点一行：选中那条 → 激活即固定高档；store 变化经 watch 重建（这里手动 sync 模拟）
+    tools.openClusterPopover(cluster.seedId);
+    const pickedId = cluster.memberIds[1]!.replace(/^cloud:/, '');
+    const row = overlay.querySelector(`[data-role="cluster-member"][data-annotation-id="${pickedId}"]`) as HTMLElement;
+    row.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(store.activeCloudAnnotationId.value).toBe(pickedId);
+    expect(tools.debugCloudClusters().popoverSeedId).toBeNull();
+    tools.syncFromStore();
+    expect(levelOf(tools, pickedId)).toMatchObject({ level: 'full', pinnedHigh: true, labelMounted: true });
+    const after = tools.debugCloudClusters();
+    expect(after.hiddenMarkerIds).not.toContain(`cloud:${pickedId}`);
+    // 它所在的簇少了一名成员（或散掉）
+    const sameSeed = after.clusters.find((c) => c.seedId === cluster.seedId);
+    expect(sameSeed?.memberIds ?? []).not.toContain(`cloud:${pickedId}`);
+    // 图钉只藏被合并的：藏起的数量 = 各簇成员之和
+    const hiddenEls = [...overlay.querySelectorAll<HTMLElement>('.dtx-anno-marker')].filter((el) => el.style.display === 'none');
+    expect(hiddenEls).toHaveLength(after.clusters.reduce((n, c) => n + c.memberIds.length, 0));
+  });
+
+  it('簇身份跨帧稳定：相机小幅摆动种子不换；syncFromStore 重建后徽标照旧；删到 ≤ 预算后徽标全拆、图钉全放回', () => {
+    const { tools, store, overlay, camera } = createTools();
+    seed(store, COUNT);
+    tools.syncFromStore();
+    const seeds = tools.debugCloudClusters().badgeSeedIds;
+    expect(seeds.length).toBeGreaterThan(0);
+    const fullBefore = fullIds(tools);
+
+    // 向 -x 挪 0.3：LOD 集合不变（边界 tie 仍由 id 定给 x=-32），图钉整体平移约 2.6 px → 簇与种子都不换
+    camera.position.x = -0.3;
+    camera.lookAt(-0.3, 0, 0);
+    camera.updateMatrixWorld(true);
+    tools.updateOverlayPositions();
+    expect(fullIds(tools)).toEqual(fullBefore);
+    expect(tools.debugCloudClusters().badgeSeedIds).toEqual(seeds);
+
+    tools.syncFromStore();
+    expect(tools.debugCloudClusters().badgeSeedIds).toEqual(seeds);
+    expect(overlay.querySelectorAll('.dtx-anno-cluster')).toHaveLength(seeds.length);
+
+    for (let i = 0; i < 30; i++) store.removeCloudAnnotation(`cloud-${String(i).padStart(3, '0')}`);
+    tools.syncFromStore();
+    expect(tools.debugCloudLod().overBudget).toBe(false);
+    expect(tools.debugCloudClusters()).toEqual({ clusters: [], hiddenMarkerIds: [], badgeSeedIds: [], popoverSeedId: null });
+    expect(overlay.querySelectorAll('.dtx-anno-cluster')).toHaveLength(0);
+    expect([...overlay.querySelectorAll<HTMLElement>('.dtx-anno-marker')].every((el) => el.style.display !== 'none')).toBe(true);
   });
 });
