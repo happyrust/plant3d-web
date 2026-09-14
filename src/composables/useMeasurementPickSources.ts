@@ -7,9 +7,19 @@ import {
   type CanvasRectLike,
 } from './usePtsetSnap';
 
+import type { LoadedDesignPoint } from '@/measurement/dpoint/designPointLoader';
+import type { DesignPointVec3 } from '@/measurement/dpoint/designPoints';
 import type { RefinedTubingAxis, TubingVec3 } from '@/measurement/tubing/tubingAxis';
 import type { Camera } from 'three';
 
+import {
+  aidDisplayName,
+  aidLineRayHit,
+  aidPlaneCorners,
+  aidPlaneRayHit,
+  type AidVec3,
+  type MeasurementAid,
+} from '@/measurement/aids/designAid';
 import {
   nearestPointOnSegmentToRay,
   type GraphicsVec3,
@@ -36,7 +46,11 @@ export type MeasurementPickSourceId =
   /** E3D Graphics detail derived from the loaded mesh: drawn edges (lines) and facets (planes). */
   | 'mesh_graphics'
   /** E3D TUBING: the implied tube's centre-line, derived from the drawn tube object (`tubingAxis.ts`). */
-  | 'tubing_axis';
+  | 'tubing_axis'
+  /** E3D DESIGNAID: the session's aid lines / planes (`designAid.ts`, `useMeasurementAidStore`), Aid filter only. */
+  | 'design_aid'
+  /** E3D DPOINT: design points (`DPSE` → `DPCA` / `DPCY`) of the hovered element's host chain (`designPointLoader.ts`). */
+  | 'design_point';
 
 export type MeasurementPickSourceSetting = {
   show: boolean;
@@ -116,7 +130,7 @@ export type MeasurementPickPlane = Readonly<{
  * `ptset` is PPOINT, Item origin / primitive key points are ELEMENT significant
  * points, the mesh surface point is the exact cursor position (Screen / Element+Cursor),
  * mesh graphics are GRAPHICS details (edge by default; facet candidates set `graphics-plane`),
- * the tube axis is TUBING.
+ * the tube axis is TUBING, design aids are DESIGNAID.
  */
 export const MEASUREMENT_PICK_SOURCE_DEFAULT_FEATURE: Readonly<
   Record<MeasurementPickSourceId, MeasurementPickFeature>
@@ -127,6 +141,8 @@ export const MEASUREMENT_PICK_SOURCE_DEFAULT_FEATURE: Readonly<
   mesh_pick_point: 'surface',
   mesh_graphics: 'graphics-line',
   tubing_axis: 'tubing',
+  design_aid: 'aid',
+  design_point: 'dpoint',
 };
 
 export function measurementPickCandidateFeature(
@@ -165,6 +181,8 @@ export const MEASUREMENT_PICK_SOURCE_IDS: readonly MeasurementPickSourceId[] = [
   'primitive_key_point',
   'mesh_graphics',
   'tubing_axis',
+  'design_aid',
+  'design_point',
 ] as const;
 
 export const MEASUREMENT_PICK_SOURCE_LABELS: Record<MeasurementPickSourceId, string> = {
@@ -174,6 +192,8 @@ export const MEASUREMENT_PICK_SOURCE_LABELS: Record<MeasurementPickSourceId, str
   primitive_key_point: '基本体 / PLINE 关键点',
   mesh_graphics: '网格边 / 面（Graphics）',
   tubing_axis: '管身轴线（TUBING）',
+  design_aid: '设计辅助线 / 面（Aid）',
+  design_point: '设计点（DPOINT）',
 };
 
 /** Screen aperture inside which a drawn edge wins over the facet under the cursor (E3D `pickdetail`). */
@@ -227,6 +247,25 @@ export const DEFAULT_MEASUREMENT_PICK_SOURCE_SETTINGS: Readonly<MeasurementPickS
     snap: true,
     priority: 25,
     thresholdPx: DEFAULT_TUBING_AXIS_SNAP_PX,
+  },
+  // Only the Aid pick filter admits aids (E3D `stdAid`), so snapping on by default changes
+  // nothing elsewhere. The aid graphics themselves are drawn in the scene; no crosses.
+  // A plane pick needs the ray to land on the drawn rectangle (`rayHit`); the threshold
+  // is the screen aperture around an aid line.
+  design_aid: {
+    show: false,
+    snap: true,
+    priority: 15,
+    thresholdPx: DEFAULT_POSITION_SNAP_PX,
+  },
+  // E3D shows a design element's design points with its P-points and picks them in the same
+  // modes (Any / Ppoint); same aperture as P-Points, ranked right after them so a catalogue
+  // P-Point sitting on a design point still wins the tie.
+  design_point: {
+    show: true,
+    snap: true,
+    priority: 22,
+    thresholdPx: DEFAULT_PTSET_SNAP_PX,
   },
 };
 
@@ -599,6 +638,114 @@ export function buildTubingAxisCandidate(input: {
     direction: end.clone().sub(start),
     rayHit: true,
   };
+}
+
+/** Rectangle-test margin for aid planes: a pick on the drawn frame line still counts (2 % of the extent). */
+export const AID_PLANE_PICK_MARGIN_RATIO = 0.02;
+
+/**
+ * E3D Aid filter (`EDGPICK.stdAid` → `DESIGNAID` picks) on the session's design aids:
+ * - every visible **aid line** becomes a line candidate whose control point is the point
+ *   of the line nearest the pick ray (`LINE.intersection(pointVector)`), sharing the whole
+ *   line as `segment` (Snap → nearer end, Mid-Point / Fraction / Proportion / Distance walk
+ *   it, Intersect → LINE) and `direction` (Perpendicular-to `getLine()` = the aid LINE);
+ * - every visible **aid plane** the ray hits **on its drawn rectangle** becomes a plane
+ *   candidate at ray ∩ plane (`pointVector.intersection(plane)`), carrying the PLANE for
+ *   `getPlane()` / Intersect and the rectangle outline for highlighting; marked `rayHit`
+ *   because E3D picks the drawn graphics wherever the cursor lands on them.
+ *
+ * Aid geometry is design World metres; `ray` is the pick ray in that frame and `toScene`
+ * maps design points into the scene frame the candidates live in. Hidden aids are skipped
+ * (E3D `visible = false` draws nothing, so nothing can be picked).
+ */
+export function buildDesignAidCandidates(input: {
+  aids: readonly MeasurementAid[];
+  ray: Readonly<{ origin: AidVec3; direction: AidVec3 }>;
+  toScene: (point: AidVec3) => Vector3;
+}): MeasurementPickCandidate[] {
+  const out: MeasurementPickCandidate[] = [];
+  const sceneDirection = (origin: AidVec3, direction: AidVec3): Vector3 => (
+    input.toScene([origin[0] + direction[0], origin[1] + direction[1], origin[2] + direction[2]])
+      .sub(input.toScene(origin))
+  );
+  for (const aid of input.aids) {
+    if (!aid.visible) continue;
+    const label = aidDisplayName(aid);
+    if (aid.kind === 'line') {
+      const hit = aidLineRayHit(aid, input.ray);
+      if (!hit) continue;
+      const start = input.toScene(aid.start);
+      const end = input.toScene(aid.end);
+      out.push({
+        id: `aid:${aid.id}`,
+        source: 'design_aid',
+        entityId: `aid:${aid.id}`,
+        objectId: `aid:${aid.id}`,
+        worldPos: input.toScene(hit.point),
+        label,
+        feature: 'aid',
+        segment: { start, end },
+        direction: end.clone().sub(start),
+      });
+      continue;
+    }
+    const hit = aidPlaneRayHit(aid, input.ray, AID_PLANE_PICK_MARGIN_RATIO);
+    if (!hit || !hit.inside) continue;
+    const corners = aidPlaneCorners(aid).map((corner) => input.toScene(corner));
+    const position = input.toScene(hit.point);
+    out.push({
+      id: `aid:${aid.id}`,
+      source: 'design_aid',
+      entityId: `aid:${aid.id}`,
+      objectId: `aid:${aid.id}`,
+      worldPos: position.clone(),
+      label,
+      feature: 'aid',
+      plane: {
+        position,
+        normal: sceneDirection(hit.point, aid.zDir),
+        outline: corners.map((corner, index) => ({ start: corner, end: corners[(index + 1) % corners.length]! })),
+      },
+      rayHit: true,
+    });
+  }
+  return out;
+}
+
+/** Bare label of a design point; the command bar prefixes the host noun (`STRU 设计点 #1`). */
+export const DESIGN_POINT_LABEL = '设计点';
+
+/**
+ * E3D `DPOINT` candidates from the loaded design points of the hovered element's host chain:
+ * point candidates at `DPPS[n]` carrying `DPDI[n]` as `direction` — Distance offsets along it
+ * (`dpps.offset(dpDir, d)`), Intersect uses the POINTVECTOR; Perpendicular-to takes the plane
+ * `Z is dpdir` through the point (the tool maps the source to `getPlane()`, see
+ * `resolvePerpendicularTargetFromHit`). `toScene` maps World mm into the scene frame.
+ */
+export function buildDesignPointCandidates(input: {
+  points: readonly LoadedDesignPoint[];
+  toScene: (worldMm: DesignPointVec3) => Vector3;
+}): MeasurementPickCandidate[] {
+  return input.points.map((point) => {
+    const worldPos = input.toScene(point.worldMm);
+    const direction = point.direction
+      ? input.toScene([
+        point.worldMm[0] + point.direction[0],
+        point.worldMm[1] + point.direction[1],
+        point.worldMm[2] + point.direction[2],
+      ]).sub(worldPos)
+      : null;
+    return {
+      id: `dpoint:${point.hostRefno}#${point.number}`,
+      source: 'design_point',
+      entityId: `dpoint:${point.pointRefno}`,
+      objectId: `o:${point.hostRefno}:dpoint`,
+      worldPos,
+      label: `${DESIGN_POINT_LABEL} #${point.number}${point.purpose ? `（${point.purpose}）` : ''}`,
+      feature: 'dpoint',
+      ...(direction && direction.lengthSq() > 1e-24 ? { direction } : {}),
+    };
+  });
 }
 
 function matrixFromColsArray(raw: unknown): Matrix4 | null {

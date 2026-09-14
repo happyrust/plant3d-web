@@ -290,12 +290,12 @@ describe('useXeokitMeasurementStyleStore · measurementPickMode', () => {
       expect(layer.significantSnapPoints).toEqual({ fitting: false, joint: true, node: true });
     }
 
-    // 不可用的过滤器（Aid）/ 未知类型与非法取值：读回时回 E3D 缺省，Fraction 取整且 ≥ 1。
+    // 不可用的过滤器（External）/ 未知类型与非法取值：读回时回 E3D 缺省，Fraction 取整且 ≥ 1。
     const keys = Array.from({ length: localStorage.length }, (_, i) => localStorage.key(i)!);
     const v9Key = keys.find((key) => key.includes('measurement-style-v9'))!;
     localStorage.setItem(v9Key, JSON.stringify({
       measurementPickLayer: {
-        filter: 'aid',
+        filter: 'external',
         pickType: 'bogus',
         values: { distanceMm: 'abc', fraction: 0.4, proportion: 0.25 },
         significantSnaps: 'yes',

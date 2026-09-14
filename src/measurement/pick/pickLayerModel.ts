@@ -50,7 +50,7 @@ export const MEASUREMENT_PICK_FILTER_LABELS: Readonly<Record<MeasurementPickFilt
 export const MEASUREMENT_PICK_FILTER_HINTS: Readonly<Record<MeasurementPickFilterId, string>> = {
   any: '任意可拾取对象（E3D Any）',
   element: '元素显著点：Item 原点 / 基本体关键点；Cursor 类型下为元素表面点（E3D Element）',
-  aid: '设计辅助线 / 面（E3D Aid）',
+  aid: '本会话画的设计辅助线 / 面：线上任意处可拾（Snap 取近端、Mid-Point 等沿线派生），面取射线与面的交点；Perpendicular to / Intersect 以它们为无限线 / 面（E3D Aid）',
   pline: '型材 PLINE（E3D Pline）',
   ppoint: '目录 P-Point（E3D Ppoint）',
   screen: '屏幕位置 → 模型表面点（E3D Screen）',
@@ -116,9 +116,8 @@ export const DEFAULT_MEASUREMENT_PICK_TYPE_VALUES: MeasurementPickTypeValues = {
 
 /**
  * Availability of each filter / type in the Web today. `placeholder` entries
- * are shown greyed out with the reason (plan 2026-09-12 Phase A: Aid /
- * External are parked; Graphics waits for the mesh-derived provider; Intersect
- * waits for the two-pick flow).
+ * are shown greyed out with the reason (plan 2026-09-12 Phase A: External is
+ * parked; Aid became available with the session aid store, §7 Q3, 2026-09-14).
  */
 export type MeasurementPickAvailability =
   | Readonly<{ available: true }>
@@ -129,7 +128,7 @@ export const MEASUREMENT_PICK_FILTER_AVAILABILITY: Readonly<
 > = {
   any: { available: true },
   element: { available: true },
-  aid: { available: false, reason: 'Web 暂无设计辅助（Aid）系统，见方案 §7 Q3' },
+  aid: { available: true },
   pline: { available: true },
   ppoint: { available: true },
   screen: { available: true },
@@ -353,6 +352,8 @@ export function formatMeasurementPrompt(input: MeasurementPromptInput): string {
  */
 export type MeasurementPickFeature =
   | 'ppoint'
+  /** E3D `DPOINT`: a design point (`DPSE` → `DPCA` / `DPCY`) of a design element, picked with the P-points. */
+  | 'dpoint'
   | 'pline'
   | 'element'
   /** Implied tube of a branch, picked as its centre-line (`EDGTUBING.line`). */
@@ -377,6 +378,9 @@ export type MeasurementPickFeature =
  * - `TUBING` is what the element pick modes (`pany` / `pick`, `EDGPICKDATA.viewData`
  *   `data[1]`) return when the cursor is on an implied tube, so the tube axis is
  *   admitted under `Any` and `Element` — never under `Pline` / `Ppoint` / `Graphics`.
+ * - `DPOINT` (design points) come back from the same P-point pick modes as `PPOINT`
+ *   (`stdPpoint` → `data.type eq 'DPOINT'`, `splcreatweld.pmlfrm`), so they are admitted
+ *   wherever P-points are: `Any` and `Ppoint`.
  */
 export function measurementPickFilterAdmits(
   filter: MeasurementPickFilterId,
@@ -385,11 +389,11 @@ export function measurementPickFilterAdmits(
 ): boolean {
   switch (filter) {
     case 'any':
-      return feature === 'element' || feature === 'ppoint' || feature === 'pline' || feature === 'tubing' || feature === 'surface';
+      return feature === 'element' || feature === 'ppoint' || feature === 'dpoint' || feature === 'pline' || feature === 'tubing' || feature === 'surface';
     case 'element':
       return feature === 'element' || feature === 'tubing' || (feature === 'surface' && pickType === 'exact');
     case 'ppoint':
-      return feature === 'ppoint';
+      return feature === 'ppoint' || feature === 'dpoint';
     case 'pline':
       return feature === 'pline';
     case 'graphics':

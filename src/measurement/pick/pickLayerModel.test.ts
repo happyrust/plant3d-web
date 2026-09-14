@@ -15,7 +15,7 @@ import {
 } from './pickLayerModel';
 
 const FEATURES: readonly MeasurementPickFeature[] = [
-  'ppoint', 'pline', 'element', 'tubing', 'surface', 'graphics-line', 'graphics-plane', 'aid', 'external',
+  'ppoint', 'dpoint', 'pline', 'element', 'tubing', 'surface', 'graphics-line', 'graphics-plane', 'aid', 'external',
 ];
 
 function admitted(filter: (typeof MEASUREMENT_PICK_FILTER_IDS)[number], pickType: (typeof MEASUREMENT_PICK_TYPE_IDS)[number]) {
@@ -23,10 +23,10 @@ function admitted(filter: (typeof MEASUREMENT_PICK_FILTER_IDS)[number], pickType
 }
 
 describe('measurementPickFilterAdmits · E3D EDGPICK filters', () => {
-  it('Any = E3D stdAny "Element, Ppoint or Pline" (+ Web surface point, + TUBING from the element pick); never detail graphics / aids / external', () => {
-    expect(admitted('any', 'snap')).toEqual(['ppoint', 'pline', 'element', 'tubing', 'surface']);
-    expect(admitted('any', 'exact')).toEqual(['ppoint', 'pline', 'element', 'tubing', 'surface']);
-    expect(admitted('any', 'midpoint')).toEqual(['ppoint', 'pline', 'element', 'tubing', 'surface']);
+  it('Any = E3D stdAny "Element, Ppoint or Pline" (+ design points with the P-points, + Web surface point, + TUBING from the element pick); never detail graphics / aids / external', () => {
+    expect(admitted('any', 'snap')).toEqual(['ppoint', 'dpoint', 'pline', 'element', 'tubing', 'surface']);
+    expect(admitted('any', 'exact')).toEqual(['ppoint', 'dpoint', 'pline', 'element', 'tubing', 'surface']);
+    expect(admitted('any', 'midpoint')).toEqual(['ppoint', 'dpoint', 'pline', 'element', 'tubing', 'surface']);
   });
 
   it('Graphics = E3D stdGraphics (pickdetail): facet edges and facets only', () => {
@@ -44,17 +44,18 @@ describe('measurementPickFilterAdmits · E3D EDGPICK filters', () => {
     expect(admitted('graphics', 'snap')).not.toContain('tubing');
   });
 
-  it('Ppoint / Pline / Screen / Aid / External each admit their own feature class', () => {
-    expect(admitted('ppoint', 'snap')).toEqual(['ppoint']);
+  it('Ppoint / Pline / Screen / Aid / External each admit their own feature class (Ppoint also the DPOINT design points, E3D stdPpoint)', () => {
+    expect(admitted('ppoint', 'snap')).toEqual(['ppoint', 'dpoint']);
+    expect(admitted('element', 'snap')).not.toContain('dpoint');
     expect(admitted('pline', 'snap')).toEqual(['pline']);
     expect(admitted('screen', 'snap')).toEqual(['surface']);
     expect(admitted('aid', 'snap')).toEqual(['aid']);
     expect(admitted('external', 'snap')).toEqual(['external']);
   });
 
-  it('Graphics is available; Aid / External stay parked', () => {
+  it('Graphics and Aid are available (Aid since the session aid store, §7 Q3); External stays parked', () => {
     expect(MEASUREMENT_PICK_FILTER_AVAILABILITY.graphics).toEqual({ available: true });
-    expect(MEASUREMENT_PICK_FILTER_AVAILABILITY.aid.available).toBe(false);
+    expect(MEASUREMENT_PICK_FILTER_AVAILABILITY.aid).toEqual({ available: true });
     expect(MEASUREMENT_PICK_FILTER_AVAILABILITY.external.available).toBe(false);
   });
 });
@@ -99,9 +100,10 @@ describe('normalizeMeasurementPickLayer', () => {
       filter: 'graphics',
       pickType: 'exact',
     });
-    expect(normalizeMeasurementPickLayer({ filter: 'aid', pickType: 'bogus', significantSnaps: 'no' })).toEqual(
+    expect(normalizeMeasurementPickLayer({ filter: 'external', pickType: 'bogus', significantSnaps: 'no' })).toEqual(
       DEFAULT_MEASUREMENT_PICK_LAYER,
     );
+    expect(normalizeMeasurementPickLayer({ filter: 'aid' }).filter).toBe('aid');
     expect(normalizeMeasurementPickLayer({ pickType: 'intersect' }).pickType).toBe('intersect');
     expect(normalizeMeasurementPickLayer({ values: { fraction: 0.2, distanceMm: '', proportion: 'x' } }).values).toEqual({
       distanceMm: 0,

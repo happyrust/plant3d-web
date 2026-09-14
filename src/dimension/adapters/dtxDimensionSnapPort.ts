@@ -46,6 +46,12 @@ const SOURCE_SEMANTICS: Readonly<Record<
   mesh_graphics: { source: 'model-surface', accuracy: 'approximate' },
   // The tube axis is the placement matrix's z axis (the design centre-line), ends refined onto P-Points.
   tubing_axis: { source: 'primitive-key-point', accuracy: 'exact' },
+  // Session design aids are user-drawn construction geometry; the measurement tool does not offer
+  // them to dimension snapping (`queryDimensionSnapCandidates` builds no aid candidates), so this
+  // entry only completes the record.
+  design_aid: { source: 'model-surface', accuracy: 'exact' },
+  // A design point (DPSE → DPCA / DPCY) is a design-DB point like a P-Point (DPPS[n] via the host world_transform).
+  design_point: { source: 'p-point', accuracy: 'exact' },
 };
 
 function subtract(a: Vec3, b: Vec3): Vec3 {

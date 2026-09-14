@@ -812,7 +812,9 @@ function normalizeMeasurementPointSourceInfo(value: unknown): MeasurementPointSo
     raw.source !== 'position' &&
     raw.source !== 'primitive_key_point' &&
     raw.source !== 'mesh_graphics' &&
-    raw.source !== 'tubing_axis'
+    raw.source !== 'tubing_axis' &&
+    raw.source !== 'design_aid' &&
+    raw.source !== 'design_point'
   ) {
     return undefined;
   }

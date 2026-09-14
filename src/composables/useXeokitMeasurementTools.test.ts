@@ -2347,7 +2347,8 @@ describe('useXeokitMeasurementTools', () => {
 
     it('Any × Snap：光标落在直管上即拾到轴线（EDGTUBING.snap 取近端）；Cursor 取轴线上离射线最近处；Mid-Point 取中点', async () => {
       const { store, measurementStyle, tools, clickAt, hoverAt } = await setupTubingTools();
-      expect(tools.statusText.value).toMatch(/\(Snap\) Snap : 等待捕捉（管身轴线（TUBING））$/);
+      // 设计点（DPOINT）随 P-Point 在 Any 下参与，提示条把它列在轴线之后。
+      expect(tools.statusText.value).toMatch(/\(Snap\) Snap : 等待捕捉（管身轴线（TUBING） \/ 设计点（DPOINT））$/);
 
       // 画布 (140, 92) ↔ 管面 (2.4, 4.08)：离轴线 8 px，射线命中直管 → 轴线候选；标签裸给「轴线」，noun 由命令条补。
       hoverAt(140, 92);

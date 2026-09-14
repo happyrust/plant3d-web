@@ -12,6 +12,7 @@ import {
   Vector2,
   Vector3,
   type Camera,
+  type Object3D,
 } from 'three';
 
 import {
@@ -27,10 +28,13 @@ import {
   resolveDtxNounByRefno,
   resolveDtxObjectIdsByRefno,
 } from './useDbnoInstancesDtxLoader';
+import { useMeasurementAidStore } from './useMeasurementAidStore';
 import {
   MEASUREMENT_PICK_SOURCE_IDS,
   MEASUREMENT_PICK_SOURCE_LABELS,
   attachPlineSegments,
+  buildDesignAidCandidates as buildDesignAidPickCandidates,
+  buildDesignPointCandidates as buildDesignPointPickCandidates,
   buildGraphicsPickCandidates,
   buildPlineLineCandidates,
   buildPositionPickCandidate,
@@ -76,6 +80,7 @@ import {
   type XeokitMarkerRole,
   type XeokitMeasurementRecord,
 } from '@/composables/useToolStore';
+import { aidPlaneCorners, type AidVec3 } from '@/measurement/aids/designAid';
 import {
   buildPerpendicularAidPlan,
   type PerpendicularAidLeg,
@@ -84,6 +89,13 @@ import {
   buildWorldDistanceAidPlan,
   type WorldDistanceAidPart,
 } from '@/measurement/aids/worldDistanceAidPlan';
+import {
+  designPointHostChain,
+  loadDesignPointsOfHost,
+  type DesignPointHost,
+  type DesignPointNounCache,
+  type LoadedDesignPoint,
+} from '@/measurement/dpoint/designPointLoader';
 import {
   analyseMeshGraphics,
   type MeshGraphicsFeatures,
@@ -199,6 +211,10 @@ type PtsetLoadState = 'debouncing' | 'loading' | 'ready' | 'empty' | 'error';
 const XEOKIT_PREFIX = 'xmeas_';
 export const DIMENSION_XEOKIT_PREFIX = 'xeokit-measurement:';
 const CLICK_TOLERANCE = 20;
+/** 会话设计辅助的线色（E3D aid 缺省是一种醒目色；Web 取品红，区别于 Graphics 黄 / TUBING 青）。 */
+const DESIGN_AID_COLOR = 0xd946ef;
+/** 拾中的设计辅助高亮（比线色更亮）。 */
+const DESIGN_AID_HIGHLIGHT_COLOR = 0xf0abfc;
 
 function nowId(prefix: string): string {
   return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -516,6 +532,8 @@ export function useXeokitMeasurementTools(options: {
   });
   const measurementStyle = useXeokitMeasurementStyleStore();
   const unitSettings = useUnitSettingsStore();
+  /** 会话设计辅助（E3D `!!aidNumbers` 里的 GPHLINE / GPHPLANE）：Aid 过滤器的点源，画在场景里。 */
+  const measurementAids = useMeasurementAidStore();
   /**
    * 当前测量会话的长度格式（E3D `gphMeasure.measureFormat`）：Units 框选了
    * Metric / Imperial 就按那一档，Default 档回落到全局单位设置。
@@ -541,6 +559,12 @@ export function useXeokitMeasurementTools(options: {
   hoverPickCandidateGroup.name = 'measurement-hover-pick-candidates';
   hoverPickCandidateGroup.renderOrder = 985;
   hoverPickCandidateGroup.matrixAutoUpdate = false;
+  /** 会话设计辅助的图形（E3D `GPHLINE.draw` / `GPHPLANE.draw`）：线段、面的矩形框 + 法向短线。 */
+  const designAidGroup = new Group();
+  designAidGroup.name = 'measurement-design-aids';
+  designAidGroup.renderOrder = 984;
+  designAidGroup.matrixAutoUpdate = false;
+  let renderedDesignAidKey: string | null = null;
 
   // ── 关键点(ptset) hover 显示 + 吸附 ───────────────────────────────────
   // hover 构件时按 refno 防抖拉取其关键点：候选用于吸附，并以轻量十字显示；
@@ -663,6 +687,8 @@ export function useXeokitMeasurementTools(options: {
     if (source === 'primitive_key_point') return 0xf97316;
     if (source === 'mesh_graphics') return 0xfacc15;
     if (source === 'tubing_axis') return 0x2dd4bf;
+    if (source === 'design_aid') return DESIGN_AID_HIGHLIGHT_COLOR;
+    if (source === 'design_point') return 0x60a5fa;
     return 0x22c55e;
   }
 
@@ -723,9 +749,87 @@ export function useXeokitMeasurementTools(options: {
       if (candidate.source === 'ptset') continue;
       hoverPickCandidateGroup.add(createCandidateCross(candidate.worldPos, candidate.source));
     }
-    if (hit?.source === 'mesh_graphics' || hit?.source === 'tubing_axis') {
+    if (hit?.source === 'mesh_graphics' || hit?.source === 'tubing_axis' || hit?.source === 'design_aid') {
       const detail = createGraphicsDetailHighlight(hit);
       if (detail) hoverPickCandidateGroup.add(detail);
+    }
+    requestRender?.();
+  }
+
+  function disposeLineObject(child: Object3D): void {
+    const line = child as LineSegments;
+    try { line.geometry?.dispose(); } catch { /* ignore */ }
+    try {
+      const material = line.material;
+      if (Array.isArray(material)) {
+        for (const item of material) item.dispose();
+      } else {
+        material?.dispose();
+      }
+    } catch { /* ignore */ }
+  }
+
+  function clearDesignAidGraphics(): void {
+    for (const child of [...designAidGroup.children]) {
+      designAidGroup.remove(child);
+      disposeLineObject(child);
+    }
+    renderedDesignAidKey = null;
+  }
+
+  /**
+   * 画会话设计辅助（E3D `GPHLINE.draw`：一条线；`GPHPLANE.draw`：矩形四边 + 法向短线）。
+   * 几何存的是设计 World（米），按当前全局模型矩阵换到场景坐标；辅助集合或矩阵变了才重画。
+   * 法向短线 E3D 只画 1 mm，这里画到矩形短边的 10%，为的是屏幕上看得见方向（Web 取舍）。
+   */
+  function renderDesignAids(): void {
+    const viewer = dtxViewerRef.value;
+    if (!viewer?.scene) return;
+    if (designAidGroup.parent !== viewer.scene) {
+      try { designAidGroup.parent?.remove(designAidGroup); } catch { /* ignore */ }
+      viewer.scene.add(designAidGroup);
+      renderedDesignAidKey = null;
+    }
+    const matrix = dtxLayerRef.value?.getGlobalModelMatrix?.() ?? null;
+    const key = `${measurementAids.revision.value}|${matrix ? matrix.elements.join(',') : 'identity'}`;
+    if (key === renderedDesignAidKey) return;
+    for (const child of [...designAidGroup.children]) {
+      designAidGroup.remove(child);
+      disposeLineObject(child);
+    }
+    renderedDesignAidKey = key;
+    const toScene = (point: AidVec3): Vector3 => designMetersToSceneWorld(tupleToVector(point), dtxLayerRef);
+    const segments: number[] = [];
+    for (const aid of measurementAids.visibleAids.value) {
+      if (aid.kind === 'line') {
+        const start = toScene(aid.start);
+        const end = toScene(aid.end);
+        segments.push(start.x, start.y, start.z, end.x, end.y, end.z);
+        continue;
+      }
+      const corners = aidPlaneCorners(aid).map(toScene);
+      corners.forEach((corner, index) => {
+        const next = corners[(index + 1) % corners.length]!;
+        segments.push(corner.x, corner.y, corner.z, next.x, next.y, next.z);
+      });
+      const stubLength = Math.min(aid.xSize, aid.ySize) * 0.1;
+      const centre = toScene(aid.position);
+      const tip = toScene([
+        aid.position[0] + aid.zDir[0] * stubLength,
+        aid.position[1] + aid.zDir[1] * stubLength,
+        aid.position[2] + aid.zDir[2] * stubLength,
+      ]);
+      segments.push(centre.x, centre.y, centre.z, tip.x, tip.y, tip.z);
+    }
+    if (segments.length > 0) {
+      const geometry = new BufferGeometry();
+      geometry.setAttribute('position', new BufferAttribute(new Float32Array(segments), 3));
+      const material = new LineBasicMaterial({ color: DESIGN_AID_COLOR });
+      (material as any).depthTest = false;
+      const line = new LineSegments(geometry, material);
+      line.renderOrder = designAidGroup.renderOrder;
+      line.userData.noPick = true;
+      designAidGroup.add(line);
     }
     requestRender?.();
   }
@@ -1071,6 +1175,8 @@ export function useXeokitMeasurementTools(options: {
     mesh_pick_point: ['surface'],
     mesh_graphics: ['graphics-line', 'graphics-plane'],
     tubing_axis: ['tubing'],
+    design_aid: ['aid'],
+    design_point: ['dpoint'],
   };
 
   /** 已开捕捉、且当前拾取过滤器 × 拾取类型放行其特征的点源（E3D：过滤器不放行的点源等于没开）。 */
@@ -1412,6 +1518,102 @@ export function useXeokitMeasurementTools(options: {
       camera,
       rect,
       edgeThresholdPx: setting.thresholdPx,
+    });
+  }
+
+  /**
+   * E3D Aid 过滤器（`stdAid` → `DESIGNAID`）：会话里可见的辅助线 / 面。辅助不依赖光标命中模型
+   * （E3D 拾的是画出来的 aid 图形），所以不看 `base`；只在过滤器放行 `aid` 特征时算。
+   * 几何在设计 World（米）里求：线取离拾取射线最近处当控制点，面取射线 ∩ 面且落在画出的矩形内。
+   */
+  function buildDesignAidCandidates(
+    canvas: HTMLCanvasElement,
+    cursor: Readonly<{ x: number; y: number }>,
+  ): MeasurementPickCandidate[] {
+    const setting = measurementStyle.state.measurementPickSources.design_aid;
+    if (!sourceNeedsHoverData(setting)) return [];
+    const layer = measurementStyle.state.measurementPickLayer;
+    if (!measurementPickFilterAdmits(layer.filter, layer.pickType, 'aid')) return [];
+    const aids = measurementAids.visibleAids.value;
+    if (aids.length === 0) return [];
+    const ray = designPickRay(canvas, cursor);
+    if (!ray) return [];
+    return buildDesignAidPickCandidates({
+      aids,
+      ray,
+      toScene: (point) => designMetersToSceneWorld(tupleToVector(point), dtxLayerRef),
+    });
+  }
+
+  // ── E3D DPOINT：悬停构件属主链上的设计点（DPSE → DPCA / DPCY） ──
+  /** 已发起过设计点查询的悬停 refno（叶子）。 */
+  const requestedDesignPointRefnos = new Set<string>();
+  /** 每个 host（DPSE 属主候选）名下已解出的设计点；空数组 = 查过没有。 */
+  const designPointsByHost = new Map<string, LoadedDesignPoint[]>();
+  const designPointErrorByHost = new Map<string, string>();
+  /** 属主链上各节点的类型（同一 STRU 下换着悬停不同叶子时不再重查属主）。 */
+  const designPointNounCache: DesignPointNounCache = new Map();
+
+  /**
+   * 悬停到构件时按 E3D 口径找它的设计点：拾中的 `item` 是 DPSE 的属主（EQUI / STRU / FRMW …），
+   * 而 Web 悬停给的是有几何的叶子，所以从叶子沿属主链往上到 ZONE 之下逐个 host 查一次
+   * （`tree.children` → DPSE → `tree.children` → DPCA / DPCY → `uiAttr` → 属主 `ptset.world_transform`），
+   * 结果按 host 缓存；只在设计点点源开着、且拾取过滤器放行 DPOINT（Any / Ppoint）时才查。
+   */
+  function ensureDesignPointsForRefno(refno: string | null): void {
+    if (!refno) return;
+    if (!sourceNeedsHoverData(measurementStyle.state.measurementPickSources.design_point)) return;
+    const layer = measurementStyle.state.measurementPickLayer;
+    if (!measurementPickFilterAdmits(layer.filter, layer.pickType, 'dpoint')) return;
+    if (requestedDesignPointRefnos.has(refno)) return;
+    requestedDesignPointRefnos.add(refno);
+    const source = getModelSource();
+    let dbno = 0;
+    try {
+      dbno = getDbnumByRefno(refno);
+    } catch {
+      dbno = 0;
+    }
+    designPointHostChain(refno, source.tree, designPointNounCache)
+      .then(async (hosts: DesignPointHost[]) => {
+        for (const host of hosts) {
+          if (designPointsByHost.has(host.refno)) continue;
+          designPointsByHost.set(host.refno, []);
+          const result = await loadDesignPointsOfHost(host, {
+            tree: source.tree,
+            attributes: source.attributes,
+            keypoints: source.keypoints,
+            dbno,
+          });
+          designPointsByHost.set(host.refno, [...result.points]);
+          if (result.errors.length > 0) designPointErrorByHost.set(host.refno, result.errors.join('；'));
+          else designPointErrorByHost.delete(host.refno);
+          if (result.points.length > 0) requestRender?.();
+        }
+      })
+      .catch((error: unknown) => {
+        designPointErrorByHost.set(refno, error instanceof Error ? error.message : String(error));
+      });
+  }
+
+  /**
+   * E3D DPOINT 候选：缓存里所有 host 的设计点（与 P-Point 一样是全局候选，不看光标落在哪个对象上）。
+   * 位置 World mm → 设计米 → 场景；方向同样换到场景系。只在过滤器放行 DPOINT 时给。
+   */
+  function buildDesignPointCandidates(): MeasurementPickCandidate[] {
+    const setting = measurementStyle.state.measurementPickSources.design_point;
+    if (!sourceNeedsHoverData(setting)) return [];
+    const layer = measurementStyle.state.measurementPickLayer;
+    if (!measurementPickFilterAdmits(layer.filter, layer.pickType, 'dpoint')) return [];
+    const points: LoadedDesignPoint[] = [];
+    for (const list of designPointsByHost.values()) points.push(...list);
+    if (points.length === 0) return [];
+    return buildDesignPointPickCandidates({
+      points,
+      toScene: (worldMm) => designMetersToSceneWorld(
+        new Vector3(worldMm[0] / 1000, worldMm[1] / 1000, worldMm[2] / 1000),
+        dtxLayerRef,
+      ),
     });
   }
 
@@ -1769,19 +1971,27 @@ export function useXeokitMeasurementTools(options: {
     // 拾中的是元素本身（表面点 / Item 原点）且元素有 E3D `line()` 时，目标线 = 它的 P1 → P2，
     // 过 P1 而不是过拾中点（`edgpositiondata.line()` 对 ELEMENT 就是 `edgTypes.attribute(noun).line(item)`）。
     const elementLine = !hit.direction && !hit.plane && !circular && hit.elementLine ? hit.elementLine : null;
+    // E3D DPOINT：`getLine()` 没有 DPOINT 分支（回落到属主元素的 `line()`，EQUI / STRU 没有），
+    // `getPlane()` 给「过 dpps、Z is dpdir」的面——设计点的方向在这里是面法向，不是轴线。
+    const designPointPlane = hit.source === 'design_point' && hit.direction
+      ? { position: pointDesign, normal: designDirection(hit.direction) }
+      : null;
     const resolved = resolvePerpendicularTarget({
       point: elementLine ? designPosition(elementLine.start) : pointDesign,
-      direction: hit.direction
-        ? designDirection(hit.direction)
-        : elementLine
-          ? designDirection(elementLine.end.clone().sub(elementLine.start))
-          : null,
+      direction: designPointPlane
+        ? null
+        : hit.direction
+          ? designDirection(hit.direction)
+          : elementLine
+            ? designDirection(elementLine.end.clone().sub(elementLine.start))
+            : null,
       circle: circular
         ? { center: designPosition(circular.center), normal: designDirection(circular.normal) }
         : null,
-      plane: hit.plane
-        ? { position: designPosition(hit.plane.position), normal: designDirection(hit.plane.normal) }
-        : null,
+      plane: designPointPlane
+        ?? (hit.plane
+          ? { position: designPosition(hit.plane.position), normal: designDirection(hit.plane.normal) }
+          : null),
     });
     const result = computePerpendicularDistance(sourceDesign, resolved.target);
     if (!result.ok) return null;
@@ -1797,12 +2007,14 @@ export function useXeokitMeasurementTools(options: {
     const providerLabel = resolved.provider === 'axis-line'
       ? '轴线'
       : resolved.provider === 'facet-plane'
-        ? '所在平面'
+        ? (designPointPlane ? '法向面' : '所在平面')
         : '圆面';
     // 拾中的候选本身就是一条线（PLINE 线 / Graphics 边 / TUBING 轴线，带 `segment`）时，目标就是它：
     // 标签用候选自己的名字（去掉 Snap / Mid-Point 等派生记号），不再缀「轴线」——E3D `edgsctn.snap → this.line`
     // 的 Perpendicular 目标就是那条 p-line。
-    const lineLabel = hit.segment && !elementLine && resolved.provider === 'axis-line'
+    // 设计辅助面同理：E3D `getPlane()` 对 DESIGNAID 返回的就是那张 aid PLANE，目标名就是它自己。
+    const lineLabel = (hit.segment && !elementLine && resolved.provider === 'axis-line')
+      || (hit.source === 'design_aid' && hit.plane && resolved.provider === 'facet-plane')
       ? stripPickTypeToken(baseLabel ?? MEASUREMENT_PICK_SOURCE_LABELS[hit.source])
       : null;
     const targetLabel = elementLine
@@ -2154,6 +2366,7 @@ export function useXeokitMeasurementTools(options: {
       showHoverPtset(null);
     }
     ensurePrimitiveKeypointsForRefno(surfaceRefno);
+    ensureDesignPointsForRefno(surfaceRefno);
 
     if (base?.entityId.startsWith('annotation:')) {
       showHoverPickCandidates([]);
@@ -2183,6 +2396,8 @@ export function useXeokitMeasurementTools(options: {
       ...buildPrimitiveKeyPointCandidates(base, surfaceRefno, { x: cursor.x, y: cursor.y }, camera, rectSize),
       ...buildGraphicsCandidates(base, { x: cursor.x, y: cursor.y }, camera, rectSize),
       ...buildTubingAxisCandidates(base, { x: cursor.x, y: cursor.y }, camera, rectSize),
+      ...buildDesignAidCandidates(canvas, { x: cursor.x, y: cursor.y }),
+      ...buildDesignPointCandidates(),
     ];
     const resolution = resolveMeasurementPickCandidates({
       cursor: { x: cursor.x, y: cursor.y },
@@ -2653,6 +2868,8 @@ export function useXeokitMeasurementTools(options: {
   }
 
   function syncFromStore(): void {
+    // 设计辅助图形跟着每次同步核对一遍（辅助集合 / 全局模型矩阵没变就是空操作）。
+    renderDesignAids();
     const dimensionSystem = options.getDimensionSystem?.() ?? null;
     if (!dimensionSystem) return;
     const records: ExternalDimensionRecord[] = [];
@@ -3388,15 +3605,21 @@ export function useXeokitMeasurementTools(options: {
     clearHoverFeedback();
     clearMeasurementVisualAssists();
     clearHoverPickCandidates();
+    clearDesignAidGraphics();
     try { hoverOutlineHighlighter?.dispose(); } catch { /* ignore */ }
     hoverOutlineHighlighter = null;
     hoverOutlineRefno = null;
     try { hoverPickCandidateGroup.parent?.remove(hoverPickCandidateGroup); } catch { /* ignore */ }
+    try { designAidGroup.parent?.remove(designAidGroup); } catch { /* ignore */ }
     requestedPtsetRefnos.clear();
     ptsetResponseByRefno.clear();
     ptsetErrorByRefno.clear();
     ptsetLoadStateByRefno.clear();
     ptsetChildRefnosByOwner.clear();
+    requestedDesignPointRefnos.clear();
+    designPointsByHost.clear();
+    designPointErrorByHost.clear();
+    designPointNounCache.clear();
     ptsetSnap.clear();
     ptsetHoverViz.clearAll();
     if (hoverMarkerEl) {
@@ -3511,6 +3734,15 @@ export function useXeokitMeasurementTools(options: {
         pickPointMessage.value = null;
       }
     },
+  );
+
+  // 会话设计辅助变了（增删 / 显隐）或 viewer 就绪 / 换模型矩阵时重画 aid 图形（E3D `draw(aidNumber)`）。
+  watch(
+    () => [measurementAids.revision.value, readyRevision.value, dtxViewerRef.value, dtxLayerRef.value] as const,
+    () => {
+      renderDesignAids();
+    },
+    { immediate: true },
   );
 
   return {

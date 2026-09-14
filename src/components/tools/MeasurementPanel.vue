@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch, type Ref } from 'vue';
 
+import MeasurementAidPanel from '@/components/tools/MeasurementAidPanel.vue';
 import MeasurementResultInspector from '@/components/tools/MeasurementResultInspector.vue';
 import { useConfirmDialogStore } from '@/composables/useConfirmDialogStore';
 import {
@@ -72,6 +73,14 @@ const measurementPickSourceRows: {
   {
     id: 'tubing_axis',
     description: 'E3D TUBING 拾取的等价物：光标落在直管上时按直管的放置矩阵派生管身轴线，两端吸到邻接构件的 P-Point；Snap 取近端、Cursor 取轴线上离光标最近处、Mid-Point / Fraction / Proportion / Distance 沿轴线派生；在拾取过滤器 Any / Element 下参与，拾中的轴线会在场景里高亮。',
+  },
+  {
+    id: 'design_aid',
+    description: 'E3D Aid 拾取的等价物：本会话在「设计辅助（Aid）」里画的辅助线 / 面。仅在拾取过滤器选 Aid 时参与；线上任意处可拾（Snap 取近端、Mid-Point 等沿线派生），面取射线与面的交点；Perpendicular to / Intersect 以它们为无限线 / 面。图形本身画在场景里，不另画十字。',
+  },
+  {
+    id: 'design_point',
+    description: 'E3D DPOINT 拾取的等价物：光标所在构件及其属主链（到 ZONE 之下）名下 DPSE 里的设计点 DPCA / DPCY，位置 = 属主 world_transform × POS（DPPS），方向 = ORI 的 Z 轴（DPDI）。随 P-Point 一起在拾取过滤器 Any / Ppoint 下参与；Distance 沿方向偏移、Intersect 当点向量线、Perpendicular to 以过该点、法向 = 方向的面为目标。',
   },
 ];
 
@@ -500,6 +509,8 @@ watch(
           </div>
         </div>
       </details>
+
+      <MeasurementAidPanel v-if="isXeokitMode" />
 
       <details v-if="canShowStyleSettings" class="mt-2 rounded-md border border-border bg-muted/20 px-2 py-1">
         <summary class="cursor-pointer select-none text-sm font-medium">样式设置</summary>
