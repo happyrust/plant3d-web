@@ -1,6 +1,6 @@
 # 三维校审下一步开发计划（2026-09-14）
 
-> 状态：**草案，待拍板**（§6 列出拍板项；其中交互方案 §9 十项未拍板前 U0–U2 不动代码）。
+> 状态：**已拍板，执行中**（2026-09-14 23:0x 用户拍板：§6 五项全按推荐，含交互方案 §9 十项；决策 d-565 / d-567 / d-569 / d-571 / d-573。U0 同日开工，见 §9）。
 > 依据：`plant3d-web@b5fb047`（main）、后端唯一主线 `gen-model-refactor@9b972644e`（d-412）、共享决策库 d-398 / d-408 / d-410 / d-412、
 > 两份 09-14 方案（`2026-09-14-3d-annotation-interaction-redesign-proposal.md`、`2026-09-14-cloud-annotation-3d-region-redesign.md`）、
 > 后端 `docs/plans/2026-09-12-review-backend-port-plan.md` §11 与 `docs/plans/2026-09-14-review-closure-landing-plan.md` §10、`docs/adr/ADR-075-review-data-persistence.md`。
@@ -199,13 +199,15 @@
 
 ## 6. 需要拍板
 
-| # | 决策 | 推荐 | 备选 |
-| --- | --- | --- | --- |
-| 1 | 交互方案 §9 十项 | 全按方案推荐列 | 逐项另议（每项都会推迟 U0–U2 开工） |
-| 2 | 评论 / 处理状态的跨用户可见 | `annotation-context.record_revision` 驱动的轻量轮询，收掉前端空转 WS | 实现 `/ws/review`（要另开 ADR，改 N1） |
-| 3 | 旧端 `:3100` 库 | 不迁（新端从空库开始，旧端保留一个周期只读） | 出 SCHEMALESS 迁移脚本 + ADR 迁一次 |
-| 4 | Phase B / D / E / F 死 flag | 删（U0 合入前） | 开 SHADOW 收一周证据再定 |
-| 5 | `resolveDetailsV1` 是否写回记录 | 不写（结果只在内存，避免旧写端再保存时带上过期解析态） | 写回并带 `modelSnapshotId` |
+> **2026-09-14 23:0x 已拍板：五项全按「推荐」列（用户答复「§6 五项全按推荐拍板（含交互方案 §9 十项）」）。**「备选」列保留为被否决方案的记录；改任一项另起决策 supersede 对应 id。
+
+| # | 决策 | 推荐（= 定稿） | 备选（已否决） | 决策 id |
+| --- | --- | --- | --- | --- |
+| 1 | 交互方案 §9 十项 | 全按方案推荐列 | 逐项另议（每项都会推迟 U0–U2 开工） | d-565 |
+| 2 | 评论 / 处理状态的跨用户可见 | `annotation-context.record_revision` 驱动的轻量轮询，收掉前端空转 WS | 实现 `/ws/review`（要另开 ADR，改 N1） | d-567 |
+| 3 | 旧端 `:3100` 库 | 不迁（新端从空库开始，旧端保留一个周期只读） | 出 SCHEMALESS 迁移脚本 + ADR 迁一次 | d-569 |
+| 4 | Phase B / D / E / F 死 flag | 删（U0 合入前）；Phase G 由 U0 的 `annotationScope` 取代 | 开 SHADOW 收一周证据再定 | d-571 |
+| 5 | `resolveDetailsV1` 是否写回记录 | 不写（结果只在内存，避免旧写端再保存时带上过期解析态） | 写回并带 `modelSnapshotId` | d-573 |
 
 ## 7. 顺序与依赖
 
@@ -231,4 +233,6 @@ B3 / B4 与第 1 批并行拍板与部署；B5 / B6 按需。
 
 （随各批交付追加：日期 · 任务 · 改动文件 · 验收条目 · 与本文口径的偏离及 ADR 编号）
 
-- 2026-09-14 · 本文起草（fable-5-1-33）：只读分析，未改业务代码；现状 §1 以 `plant3d-web@b5fb047`、`gen-model-refactor@9b972644e` 为准。
+- 2026-09-14 · 本文起草（fable-5-1-33）：只读分析，未改业务代码；现状 §1 以 `plant3d-web@b5fb047`、`gen-model-refactor@9b972644e` 为准。提交 `fdcb525`。
+- 2026-09-14 23:0x · **§6 五项全按推荐拍板**（用户，fable-5-1-33 会话记录）：d-565（交互方案 §9 十项）、d-567（revision 轮询，不建 WS）、d-569（旧库不迁）、d-571（删 B/D/E/F 死 flag，G 由 U0 取代）、d-573（`resolveDetailsV1` 不写回）。交互方案头部状态与 §9 表头同步改为已拍板。F0.3 ✅。
+- 2026-09-14 23:4x · **U0 第一步：纯函数与单测先落，不接 UI**（fable-5-1-33）· 新增 `src/review/domain/annotationScope.ts`（scope = 项目 + canonical taskId / draftSessionId + reviewRound + 用户；`buildAnnotationScope` 两者皆无时抛错不退回全局；`annotationScopeKey` 五段 `v1|project=|task=/session=|round=|user=` 逐段转义可逆；旧 `project=…|db=…` / `__default__` 只识别为「未归属草稿」；`nextScopeEpoch` 同 scope 不递增；`judgeScopeStamp` 三种拒收 `no-scope / scope-changed / epoch-stale`；`diffScopeContext` 节点 / 流程修订 / form_id 只校验不进身份）、`src/composables/useAnnotationDraftSession.ts`（纯 reducer `applyDraftSessionEvent` 三维度：本机 `localRevision / persistedLocalRevision / 写失败`、云端 `sent / ack / mutationId 对账`、正式 `confirmedRevision`；`deriveDraftSaveStatus` 出三行状态文字，云端不可用时那一行为 null；不可能的事件原样返回旧状态；响应式外壳 `createAnnotationDraftSession` 的 `enterScope` 幂等 / 换 scope 重置 + epoch+1、`dispatch(event, stamp)` 带戳拒收）· 验证：`npx vitest run` 两个新文件 **36/36**；`npx eslint` 四文件 0 错误（`--fix` 调一次 import 顺序）；`npm run type-check` 本次改动文件 **0 新增**（唯一 1 条基线外在未触碰的 `resolveLabelCollisions.test.ts`，HEAD 既有）· 未做：接 `useToolStore` 草稿 key / `ReviewPanel` 状态条 / 截图与保存回执盖戳（U0 第二步）；`localStorage` 未碰。
