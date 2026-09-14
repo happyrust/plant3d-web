@@ -451,8 +451,15 @@ describe('mbdV2ToExternalRecords', () => {
 
     expect(explicitLayout(result, 'b:isoline:0:tag:bend:24381_105522').tag).toMatchObject({ style: 'pill', subject: '24381_105522' });
     expect(explicitLayout(result, 'b:isoline:0:tag:atta:24383_75127').tag).toMatchObject({ style: 'frame', subject: '24383_75127' });
-    expect(explicitLayout(result, 'b:isoline:17:tag:elevation:24381_105538').tag).toMatchObject({ style: 'card', subject: '24381_105538' });
-    expect(explicitLayout(result, 'b:isoline:18:tag:tee:24381_105541').tag).toMatchObject({ style: 'card', subject: '24381_105541' });
+    // A level change along the run and the elevation at a tee are the same
+    // elevation note as an elbow's `PE` line: a pill from mid range on, its
+    // one line primary (2026-09-14; they used to read as coordinate cards).
+    const elevation = explicitLayout(result, 'b:isoline:17:tag:elevation:24381_105538');
+    expect(elevation.tag).toEqual({ style: 'pill', lines: [{ text: 'PE +4065' }], subject: '24381_105538' });
+    expect(elevation.lod).toEqual({ tier: 'secondary' });
+    const tee = explicitLayout(result, 'b:isoline:18:tag:tee:24381_105541');
+    expect(tee.tag).toEqual({ style: 'pill', lines: [{ text: 'PE +3795' }], subject: '24381_105541' });
+    expect(tee.lod).toEqual({ tier: 'secondary' });
     expect(explicitLayout(result, 'b:isoline:0:tag:connection:Head').tag?.subject).toBeUndefined();
     expect(explicitLayout(result, 'b:tag:branch-name').tag?.subject).toBeUndefined();
   });

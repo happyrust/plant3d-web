@@ -185,3 +185,9 @@
 - **做法**：`sceneGeometry.ts::projectScenePrimitive` 按 GPU 口径裁：顶点可见 = 投影有限且深度 ∈ [−1, 1]；线段在可见性谓词上二分找截点，开放折线留最长段，闭合轮廓 / 填充按 Sutherland–Hodgman，箭头 / 标记 / 字形整体画或不画；被整个裁掉的图元留空位占坑（`CLIPPED_SCREEN_POINT`，`isClippedPrimitive` 给 SVG 跳过），场景 ↔ 投影一一对应不变，可见路径仍每顶点一次投影。`planTagBillboard` 锚点不在视锥内不排；`markOcclusion` 探测点不在视锥内不发射线、`occluded = false`。否决：上游剔除背后记录（丢屏上那半的命中）、给 `ViewportProjector` 加相机空间深度 / near（接口与测试投影器都要动，深度谓词 + 二分不动接口且与 GPU near / far 一致）、删掉被裁图元（错位）、`NaN` 占坑（护栏亮、传染）。
 - **验证**：单测 59 文件 / 359 通过（+5）；eslint 0；type-check 改动文件 0 新增。内核全跑 2469 条、相机放在管子包围盒中心朝扫描方向（约半条管在背后）改前（HEAD worktree）/ 改后：快照里的镜像点残留 **146 279 → 0**，背后文字屏内占位 **1795 → 0**，命中网格采样命中 **32 910 → 2312**，一一对应 / 非有限数 / SVG NaN 全 0；实机三条管相机站在弯管处朝管内看：镜像残留 0、pageerror 0、确定性 3 / 3。读数见验证 README「二维快照按视锥裁剪」。决策 **d-496**。
 - **仍留**：快照不做侧面裁剪（相机前面远离视轴的顶点仍投到 1e5+ px，合法；SVG viewBox 外内容另议）。
+
+### 9.11 `elevation` / `tee` 的单行 `PE` 标高归进药丸档（2026-09-14，fable-5-1-7；用户「elevation / tee 的单行 PE 标高也归进药丸档（secondary），照 bend 那套量完再改」）
+
+- **分类**：`…:tag:elevation:<refno>`（沿管标高变化处）与 `…:tag:tee:<refno>`（分支点）与 `elbo` / `bend` 共用 `ELEVATION_TAG`（原 `ELBOW_TAG` 改名）：无边框药丸、不带圆点、`secondary` LOD、`PE` 行为主行——这两类只有这一行，中景起整颗显示。此前按文字规则被 `PE` 行当成坐标块 → 卡片 + 圆点、无 LOD。全项目 elevation 821 / tee 155 个（385 / 144 条管）。
+- **验证**：单测 59 文件 / 359 通过（用例改写）；eslint 0；type-check 改动文件 0 新增。内核全跑 2469 条改前（HEAD 501b69c worktree）/ 改后：far 画出的 tag 10 803 → **9979**、文字行 23 824 → 23 000，elevation 821 → 143 / 306 / 346（far / mid / close），tee 155 → 9 / 41 / 54，其它 6 类逐类逐数相同——连同 §9.9，远景 tag 从 15 737 降到 9979（−37 %）。实机三条小管同相机对照：far 画出 tag 13 → 8 / 14 → 8 / 13 → 9，标高 tag 前 1.5 m 处以药丸出现，其它类别逐条相同，pageerror 0。读数与图见验证 README「`elevation` / `tee` 的单行 `PE` 标高也归进药丸档」。ADR 0058 分类句、效果图 README 规则 6 同步。决策 **d-500 取代 d-490**。
+- **仍留**：远景剩下的 tag 里 `connection` 卡片 5616、`atta` 方框 2804、`name` 方框 594 占九成，要不要给 `atta` 一档 LOD 另拍。

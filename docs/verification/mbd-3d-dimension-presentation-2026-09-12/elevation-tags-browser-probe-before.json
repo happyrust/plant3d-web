@@ -1,0 +1,2929 @@
+{
+ "generatedAt": "2026-09-14T08:19:27.189Z",
+ "results": {
+  "24383_66713": {
+   "refno": "24383_66713",
+   "loadMs": 3974,
+   "objects": 25,
+   "records": 76,
+   "loadResult": "{loadedRefnos: 17, skippedRefnos: 0, loadedObjects: 25, invalidTubiObjects: 0, missingRefnos: Array(0)}",
+   "loadFailed": null,
+   "extentWorldM": 2.2949311523437492,
+   "firstElbo": {
+    "id": "24383_66713:isoline:0:tag:elbo:24383_66716",
+    "world": [
+     -0.755367578125,
+     0.762475927734374,
+     0.7694902343750059
+    ]
+   },
+   "firstOfKind": {
+    "elevation": {
+     "id": "24383_66713:isoline:1:tag:elevation:24383_66717",
+     "world": [
+      -0.704457578125,
+      0.6603659277343761,
+      0.5718602343749986
+     ]
+    },
+    "tee": {
+     "id": "24383_66713:isoline:3:tag:tee:24383_66726",
+     "world": [
+      -0.15135757812500117,
+      -0.4489940722656245,
+      -0.320509765624994
+     ]
+    }
+   },
+   "views": {
+    "far": {
+     "camera": {
+      "position": [
+       2.0770403185740753,
+       -2.832554384033792,
+       1.698036562963921
+      ],
+      "target": [
+       8.881784197001252e-16,
+       -4.440892098500626e-16,
+       1.7763568394002505e-15
+      ]
+     },
+     "engineering": {
+      "mode": "engineering",
+      "records": 76,
+      "drawn": 32,
+      "drawnTags": 13,
+      "occludedTotal": 0,
+      "tags": {
+       "connection": {
+        "records": 5,
+        "drawn": 5,
+        "lines": 15,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "elbo": {
+        "records": 3,
+        "drawn": 0,
+        "lines": 0,
+        "occluded": 0,
+        "hidden": {
+         "secondary-far": 3
+        }
+       },
+       "elevation": {
+        "records": 4,
+        "drawn": 4,
+        "lines": 4,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "atta": {
+        "records": 1,
+        "drawn": 1,
+        "lines": 1,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "tee": {
+        "records": 2,
+        "drawn": 2,
+        "lines": 2,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "name": {
+        "records": 1,
+        "drawn": 1,
+        "lines": 1,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "branch-name": {
+        "records": 1,
+        "drawn": 0,
+        "lines": 0,
+        "occluded": 0,
+        "hidden": {
+         "detail-far": 1
+        }
+       }
+      },
+      "camera": {
+       "position": [
+        2.077,
+        -2.833,
+        1.698
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspection": {
+      "mode": "inspection",
+      "records": 76,
+      "drawn": 32,
+      "drawnTags": 13,
+      "occludedTotal": 3,
+      "tags": {
+       "connection": {
+        "records": 5,
+        "drawn": 5,
+        "lines": 15,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "elbo": {
+        "records": 3,
+        "drawn": 0,
+        "lines": 0,
+        "occluded": 0,
+        "hidden": {
+         "secondary-far": 3
+        }
+       },
+       "elevation": {
+        "records": 4,
+        "drawn": 4,
+        "lines": 4,
+        "occluded": 2,
+        "hidden": {}
+       },
+       "atta": {
+        "records": 1,
+        "drawn": 1,
+        "lines": 1,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "tee": {
+        "records": 2,
+        "drawn": 2,
+        "lines": 2,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "name": {
+        "records": 1,
+        "drawn": 1,
+        "lines": 1,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "branch-name": {
+        "records": 1,
+        "drawn": 0,
+        "lines": 0,
+        "occluded": 0,
+        "hidden": {
+         "detail-far": 1
+        }
+       }
+      },
+      "camera": {
+       "position": [
+        2.077,
+        -2.833,
+        1.698
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     }
+    },
+    "mid": {
+     "camera": {
+      "position": [
+       0.7330730536143801,
+       -0.9997250767178092,
+       0.5993070222225614
+      ],
+      "target": [
+       8.881784197001252e-16,
+       -4.440892098500626e-16,
+       1.7763568394002505e-15
+      ]
+     },
+     "engineering": {
+      "mode": "engineering",
+      "records": 76,
+      "drawn": 66,
+      "drawnTags": 17,
+      "occludedTotal": 0,
+      "tags": {
+       "connection": {
+        "records": 5,
+        "drawn": 5,
+        "lines": 15,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "elbo": {
+        "records": 3,
+        "drawn": 3,
+        "lines": 4,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "elevation": {
+        "records": 4,
+        "drawn": 4,
+        "lines": 4,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "atta": {
+        "records": 1,
+        "drawn": 1,
+        "lines": 1,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "tee": {
+        "records": 2,
+        "drawn": 2,
+        "lines": 2,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "name": {
+        "records": 1,
+        "drawn": 1,
+        "lines": 1,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "branch-name": {
+        "records": 1,
+        "drawn": 1,
+        "lines": 1,
+        "occluded": 0,
+        "hidden": {}
+       }
+      },
+      "camera": {
+       "position": [
+        0.733,
+        -1,
+        0.599
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspection": {
+      "mode": "inspection",
+      "records": 76,
+      "drawn": 66,
+      "drawnTags": 17,
+      "occludedTotal": 3,
+      "tags": {
+       "connection": {
+        "records": 5,
+        "drawn": 5,
+        "lines": 15,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "elbo": {
+        "records": 3,
+        "drawn": 3,
+        "lines": 4,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "elevation": {
+        "records": 4,
+        "drawn": 4,
+        "lines": 4,
+        "occluded": 2,
+        "hidden": {}
+       },
+       "atta": {
+        "records": 1,
+        "drawn": 1,
+        "lines": 1,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "tee": {
+        "records": 2,
+        "drawn": 2,
+        "lines": 2,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "name": {
+        "records": 1,
+        "drawn": 1,
+        "lines": 1,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "branch-name": {
+        "records": 1,
+        "drawn": 1,
+        "lines": 1,
+        "occluded": 0,
+        "hidden": {}
+       }
+      },
+      "camera": {
+       "position": [
+        0.733,
+        -1,
+        0.599
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     }
+    },
+    "elbo-mid": {
+     "camera": {
+      "position": [
+       0.04321090304829378,
+       -0.32658188092452356,
+       1.422349712981264
+      ],
+      "target": [
+       -0.755367578125,
+       0.762475927734374,
+       0.7694902343750059
+      ],
+      "distanceM": 1.5,
+      "centredElboLines": 1
+     },
+     "engineering": {
+      "mode": "engineering",
+      "records": 76,
+      "drawn": 74,
+      "drawnTags": 17,
+      "occludedTotal": 0,
+      "tags": {
+       "connection": {
+        "records": 5,
+        "drawn": 5,
+        "lines": 15,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "elbo": {
+        "records": 3,
+        "drawn": 3,
+        "lines": 4,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "elevation": {
+        "records": 4,
+        "drawn": 4,
+        "lines": 4,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "atta": {
+        "records": 1,
+        "drawn": 1,
+        "lines": 1,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "tee": {
+        "records": 2,
+        "drawn": 2,
+        "lines": 2,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "name": {
+        "records": 1,
+        "drawn": 1,
+        "lines": 1,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "branch-name": {
+        "records": 1,
+        "drawn": 1,
+        "lines": 1,
+        "occluded": 0,
+        "hidden": {}
+       }
+      },
+      "camera": {
+       "position": [
+        0.043,
+        -0.327,
+        1.422
+       ],
+       "target": [
+        -0.755,
+        0.762,
+        0.769
+       ]
+      }
+     },
+     "inspection": {
+      "mode": "inspection",
+      "records": 76,
+      "drawn": 74,
+      "drawnTags": 17,
+      "occludedTotal": 8,
+      "tags": {
+       "connection": {
+        "records": 5,
+        "drawn": 5,
+        "lines": 15,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "elbo": {
+        "records": 3,
+        "drawn": 3,
+        "lines": 4,
+        "occluded": 1,
+        "hidden": {}
+       },
+       "elevation": {
+        "records": 4,
+        "drawn": 4,
+        "lines": 4,
+        "occluded": 2,
+        "hidden": {}
+       },
+       "atta": {
+        "records": 1,
+        "drawn": 1,
+        "lines": 1,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "tee": {
+        "records": 2,
+        "drawn": 2,
+        "lines": 2,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "name": {
+        "records": 1,
+        "drawn": 1,
+        "lines": 1,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "branch-name": {
+        "records": 1,
+        "drawn": 1,
+        "lines": 1,
+        "occluded": 0,
+        "hidden": {}
+       }
+      },
+      "camera": {
+       "position": [
+        0.043,
+        -0.327,
+        1.422
+       ],
+       "target": [
+        -0.755,
+        0.762,
+        0.769
+       ]
+      }
+     }
+    },
+    "elevation-mid": {
+     "camera": {
+      "position": [
+       0.09412090304829379,
+       -0.4286918809245215,
+       1.2247197129812566
+      ],
+      "target": [
+       -0.704457578125,
+       0.6603659277343761,
+       0.5718602343749986
+      ],
+      "distanceM": 1.5,
+      "centredLines": 1
+     },
+     "engineering": {
+      "mode": "engineering",
+      "records": 76,
+      "drawn": 74,
+      "drawnTags": 17,
+      "occludedTotal": 0,
+      "tags": {
+       "connection": {
+        "records": 5,
+        "drawn": 5,
+        "lines": 15,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "elbo": {
+        "records": 3,
+        "drawn": 3,
+        "lines": 4,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "elevation": {
+        "records": 4,
+        "drawn": 4,
+        "lines": 4,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "atta": {
+        "records": 1,
+        "drawn": 1,
+        "lines": 1,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "tee": {
+        "records": 2,
+        "drawn": 2,
+        "lines": 2,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "name": {
+        "records": 1,
+        "drawn": 1,
+        "lines": 1,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "branch-name": {
+        "records": 1,
+        "drawn": 1,
+        "lines": 1,
+        "occluded": 0,
+        "hidden": {}
+       }
+      },
+      "camera": {
+       "position": [
+        0.094,
+        -0.429,
+        1.225
+       ],
+       "target": [
+        -0.704,
+        0.66,
+        0.572
+       ]
+      }
+     },
+     "inspection": {
+      "mode": "inspection",
+      "records": 76,
+      "drawn": 74,
+      "drawnTags": 17,
+      "occludedTotal": 4,
+      "tags": {
+       "connection": {
+        "records": 5,
+        "drawn": 5,
+        "lines": 15,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "elbo": {
+        "records": 3,
+        "drawn": 3,
+        "lines": 4,
+        "occluded": 1,
+        "hidden": {}
+       },
+       "elevation": {
+        "records": 4,
+        "drawn": 4,
+        "lines": 4,
+        "occluded": 2,
+        "hidden": {}
+       },
+       "atta": {
+        "records": 1,
+        "drawn": 1,
+        "lines": 1,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "tee": {
+        "records": 2,
+        "drawn": 2,
+        "lines": 2,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "name": {
+        "records": 1,
+        "drawn": 1,
+        "lines": 1,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "branch-name": {
+        "records": 1,
+        "drawn": 1,
+        "lines": 1,
+        "occluded": 0,
+        "hidden": {}
+       }
+      },
+      "camera": {
+       "position": [
+        0.094,
+        -0.429,
+        1.225
+       ],
+       "target": [
+        -0.704,
+        0.66,
+        0.572
+       ]
+      }
+     }
+    },
+    "elevation-close": {
+     "camera": {
+      "position": [
+       -0.4648840337730119,
+       0.3336485851367069,
+       0.767718077956876
+      ],
+      "target": [
+       -0.704457578125,
+       0.6603659277343761,
+       0.5718602343749986
+      ],
+      "distanceM": 0.45,
+      "centredLines": 1
+     },
+     "engineering": {
+      "mode": "engineering",
+      "records": 76,
+      "drawn": 67,
+      "drawnTags": 10,
+      "occludedTotal": 0,
+      "tags": {
+       "connection": {
+        "records": 5,
+        "drawn": 2,
+        "lines": 6,
+        "occluded": 0,
+        "hidden": {
+         "none": 3
+        }
+       },
+       "elbo": {
+        "records": 3,
+        "drawn": 2,
+        "lines": 3,
+        "occluded": 0,
+        "hidden": {
+         "none": 1
+        }
+       },
+       "elevation": {
+        "records": 4,
+        "drawn": 4,
+        "lines": 4,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "atta": {
+        "records": 1,
+        "drawn": 1,
+        "lines": 1,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "tee": {
+        "records": 2,
+        "drawn": 0,
+        "lines": 0,
+        "occluded": 0,
+        "hidden": {
+         "none": 2
+        }
+       },
+       "name": {
+        "records": 1,
+        "drawn": 0,
+        "lines": 0,
+        "occluded": 0,
+        "hidden": {
+         "none": 1
+        }
+       },
+       "branch-name": {
+        "records": 1,
+        "drawn": 1,
+        "lines": 1,
+        "occluded": 0,
+        "hidden": {}
+       }
+      },
+      "camera": {
+       "position": [
+        -0.465,
+        0.334,
+        0.768
+       ],
+       "target": [
+        -0.704,
+        0.66,
+        0.572
+       ]
+      }
+     },
+     "inspection": {
+      "mode": "inspection",
+      "records": 76,
+      "drawn": 67,
+      "drawnTags": 10,
+      "occludedTotal": 9,
+      "tags": {
+       "connection": {
+        "records": 5,
+        "drawn": 2,
+        "lines": 6,
+        "occluded": 1,
+        "hidden": {
+         "none": 3
+        }
+       },
+       "elbo": {
+        "records": 3,
+        "drawn": 2,
+        "lines": 3,
+        "occluded": 1,
+        "hidden": {
+         "none": 1
+        }
+       },
+       "elevation": {
+        "records": 4,
+        "drawn": 4,
+        "lines": 4,
+        "occluded": 2,
+        "hidden": {}
+       },
+       "atta": {
+        "records": 1,
+        "drawn": 1,
+        "lines": 1,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "tee": {
+        "records": 2,
+        "drawn": 0,
+        "lines": 0,
+        "occluded": 0,
+        "hidden": {
+         "none": 2
+        }
+       },
+       "name": {
+        "records": 1,
+        "drawn": 0,
+        "lines": 0,
+        "occluded": 0,
+        "hidden": {
+         "none": 1
+        }
+       },
+       "branch-name": {
+        "records": 1,
+        "drawn": 1,
+        "lines": 1,
+        "occluded": 0,
+        "hidden": {}
+       }
+      },
+      "camera": {
+       "position": [
+        -0.465,
+        0.334,
+        0.768
+       ],
+       "target": [
+        -0.704,
+        0.66,
+        0.572
+       ]
+      }
+     }
+    },
+    "tee-mid": {
+     "camera": {
+      "position": [
+       0.6472209030482926,
+       -1.538051880924522,
+       0.33234971298126403
+      ],
+      "target": [
+       -0.15135757812500117,
+       -0.4489940722656245,
+       -0.320509765624994
+      ],
+      "distanceM": 1.5,
+      "centredLines": 1
+     },
+     "engineering": {
+      "mode": "engineering",
+      "records": 76,
+      "drawn": 63,
+      "drawnTags": 17,
+      "occludedTotal": 0,
+      "tags": {
+       "connection": {
+        "records": 5,
+        "drawn": 5,
+        "lines": 15,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "elbo": {
+        "records": 3,
+        "drawn": 3,
+        "lines": 4,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "elevation": {
+        "records": 4,
+        "drawn": 4,
+        "lines": 4,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "atta": {
+        "records": 1,
+        "drawn": 1,
+        "lines": 1,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "tee": {
+        "records": 2,
+        "drawn": 2,
+        "lines": 2,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "name": {
+        "records": 1,
+        "drawn": 1,
+        "lines": 1,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "branch-name": {
+        "records": 1,
+        "drawn": 1,
+        "lines": 1,
+        "occluded": 0,
+        "hidden": {}
+       }
+      },
+      "camera": {
+       "position": [
+        0.647,
+        -1.538,
+        0.332
+       ],
+       "target": [
+        -0.151,
+        -0.449,
+        -0.321
+       ]
+      }
+     },
+     "inspection": {
+      "mode": "inspection",
+      "records": 76,
+      "drawn": 63,
+      "drawnTags": 17,
+      "occludedTotal": 4,
+      "tags": {
+       "connection": {
+        "records": 5,
+        "drawn": 5,
+        "lines": 15,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "elbo": {
+        "records": 3,
+        "drawn": 3,
+        "lines": 4,
+        "occluded": 2,
+        "hidden": {}
+       },
+       "elevation": {
+        "records": 4,
+        "drawn": 4,
+        "lines": 4,
+        "occluded": 2,
+        "hidden": {}
+       },
+       "atta": {
+        "records": 1,
+        "drawn": 1,
+        "lines": 1,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "tee": {
+        "records": 2,
+        "drawn": 2,
+        "lines": 2,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "name": {
+        "records": 1,
+        "drawn": 1,
+        "lines": 1,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "branch-name": {
+        "records": 1,
+        "drawn": 1,
+        "lines": 1,
+        "occluded": 0,
+        "hidden": {}
+       }
+      },
+      "camera": {
+       "position": [
+        0.647,
+        -1.538,
+        0.332
+       ],
+       "target": [
+        -0.151,
+        -0.449,
+        -0.321
+       ]
+      }
+     }
+    },
+    "tee-close": {
+     "camera": {
+      "position": [
+       0.08821596622698691,
+       -0.7757114148632936,
+       -0.12465192204311662
+      ],
+      "target": [
+       -0.15135757812500117,
+       -0.4489940722656245,
+       -0.320509765624994
+      ],
+      "distanceM": 0.45,
+      "centredLines": 1
+     },
+     "engineering": {
+      "mode": "engineering",
+      "records": 76,
+      "drawn": 68,
+      "drawnTags": 15,
+      "occludedTotal": 0,
+      "tags": {
+       "connection": {
+        "records": 5,
+        "drawn": 3,
+        "lines": 9,
+        "occluded": 0,
+        "hidden": {
+         "none": 2
+        }
+       },
+       "elbo": {
+        "records": 3,
+        "drawn": 3,
+        "lines": 4,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "elevation": {
+        "records": 4,
+        "drawn": 4,
+        "lines": 4,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "atta": {
+        "records": 1,
+        "drawn": 1,
+        "lines": 1,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "tee": {
+        "records": 2,
+        "drawn": 2,
+        "lines": 2,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "name": {
+        "records": 1,
+        "drawn": 1,
+        "lines": 1,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "branch-name": {
+        "records": 1,
+        "drawn": 1,
+        "lines": 1,
+        "occluded": 0,
+        "hidden": {}
+       }
+      },
+      "camera": {
+       "position": [
+        0.088,
+        -0.776,
+        -0.125
+       ],
+       "target": [
+        -0.151,
+        -0.449,
+        -0.321
+       ]
+      }
+     },
+     "inspection": {
+      "mode": "inspection",
+      "records": 76,
+      "drawn": 68,
+      "drawnTags": 15,
+      "occludedTotal": 8,
+      "tags": {
+       "connection": {
+        "records": 5,
+        "drawn": 3,
+        "lines": 9,
+        "occluded": 0,
+        "hidden": {
+         "none": 2
+        }
+       },
+       "elbo": {
+        "records": 3,
+        "drawn": 3,
+        "lines": 4,
+        "occluded": 1,
+        "hidden": {}
+       },
+       "elevation": {
+        "records": 4,
+        "drawn": 4,
+        "lines": 4,
+        "occluded": 2,
+        "hidden": {}
+       },
+       "atta": {
+        "records": 1,
+        "drawn": 1,
+        "lines": 1,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "tee": {
+        "records": 2,
+        "drawn": 2,
+        "lines": 2,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "name": {
+        "records": 1,
+        "drawn": 1,
+        "lines": 1,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "branch-name": {
+        "records": 1,
+        "drawn": 1,
+        "lines": 1,
+        "occluded": 0,
+        "hidden": {}
+       }
+      },
+      "camera": {
+       "position": [
+        0.088,
+        -0.776,
+        -0.125
+       ],
+       "target": [
+        -0.151,
+        -0.449,
+        -0.321
+       ]
+      }
+     }
+    }
+   },
+   "ms": 35362,
+   "pageErrors": []
+  },
+  "24383_67485": {
+   "refno": "24383_67485",
+   "loadMs": 3858,
+   "objects": 25,
+   "records": 43,
+   "loadResult": "{loadedRefnos: 18, skippedRefnos: 0, loadedObjects: 25, invalidTubiObjects: 0, missingRefnos: Array(0)}",
+   "loadFailed": null,
+   "extentWorldM": 3.0541201171875,
+   "firstElbo": {
+    "id": "24383_67485:isoline:1:tag:elbo:24383_67492",
+    "world": [
+     0.10740525390625066,
+     0.2653574523925782,
+     -0.49564013671874996
+    ]
+   },
+   "firstOfKind": {
+    "elevation": {
+     "id": "24383_67485:isoline:0:tag:elevation:24383_67487",
+     "world": [
+      0.10740525390625066,
+      0.2653574523925782,
+      -1.4003601367187497
+     ]
+    },
+    "tee": null
+   },
+   "views": {
+    "far": {
+     "camera": {
+      "position": [
+       2.7641485517716493,
+       -3.7695951438326434,
+       2.25976610294897
+      ],
+      "target": [
+       8.881784197001252e-16,
+       0,
+       0
+      ]
+     },
+     "engineering": {
+      "mode": "engineering",
+      "records": 43,
+      "drawn": 26,
+      "drawnTags": 14,
+      "occludedTotal": 0,
+      "tags": {
+       "connection": {
+        "records": 5,
+        "drawn": 5,
+        "lines": 17,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "elevation": {
+        "records": 6,
+        "drawn": 6,
+        "lines": 6,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "atta": {
+        "records": 3,
+        "drawn": 3,
+        "lines": 3,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "elbo": {
+        "records": 2,
+        "drawn": 0,
+        "lines": 0,
+        "occluded": 0,
+        "hidden": {
+         "secondary-far": 2
+        }
+       },
+       "branch-name": {
+        "records": 1,
+        "drawn": 0,
+        "lines": 0,
+        "occluded": 0,
+        "hidden": {
+         "detail-far": 1
+        }
+       }
+      },
+      "camera": {
+       "position": [
+        2.764,
+        -3.77,
+        2.26
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspection": {
+      "mode": "inspection",
+      "records": 43,
+      "drawn": 26,
+      "drawnTags": 14,
+      "occludedTotal": 2,
+      "tags": {
+       "connection": {
+        "records": 5,
+        "drawn": 5,
+        "lines": 17,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "elevation": {
+        "records": 6,
+        "drawn": 6,
+        "lines": 6,
+        "occluded": 1,
+        "hidden": {}
+       },
+       "atta": {
+        "records": 3,
+        "drawn": 3,
+        "lines": 3,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "elbo": {
+        "records": 2,
+        "drawn": 0,
+        "lines": 0,
+        "occluded": 0,
+        "hidden": {
+         "secondary-far": 2
+        }
+       },
+       "branch-name": {
+        "records": 1,
+        "drawn": 0,
+        "lines": 0,
+        "occluded": 0,
+        "hidden": {
+         "detail-far": 1
+        }
+       }
+      },
+      "camera": {
+       "position": [
+        2.764,
+        -3.77,
+        2.26
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     }
+    },
+    "mid": {
+     "camera": {
+      "position": [
+       0.9755818418017591,
+       -1.3304453448821094,
+       0.797564506923166
+      ],
+      "target": [
+       8.881784197001252e-16,
+       0,
+       0
+      ]
+     },
+     "engineering": {
+      "mode": "engineering",
+      "records": 43,
+      "drawn": 36,
+      "drawnTags": 17,
+      "occludedTotal": 0,
+      "tags": {
+       "connection": {
+        "records": 5,
+        "drawn": 5,
+        "lines": 17,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "elevation": {
+        "records": 6,
+        "drawn": 6,
+        "lines": 6,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "atta": {
+        "records": 3,
+        "drawn": 3,
+        "lines": 3,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "elbo": {
+        "records": 2,
+        "drawn": 2,
+        "lines": 2,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "branch-name": {
+        "records": 1,
+        "drawn": 1,
+        "lines": 1,
+        "occluded": 0,
+        "hidden": {}
+       }
+      },
+      "camera": {
+       "position": [
+        0.976,
+        -1.33,
+        0.798
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspection": {
+      "mode": "inspection",
+      "records": 43,
+      "drawn": 36,
+      "drawnTags": 17,
+      "occludedTotal": 4,
+      "tags": {
+       "connection": {
+        "records": 5,
+        "drawn": 5,
+        "lines": 17,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "elevation": {
+        "records": 6,
+        "drawn": 6,
+        "lines": 6,
+        "occluded": 1,
+        "hidden": {}
+       },
+       "atta": {
+        "records": 3,
+        "drawn": 3,
+        "lines": 3,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "elbo": {
+        "records": 2,
+        "drawn": 2,
+        "lines": 2,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "branch-name": {
+        "records": 1,
+        "drawn": 1,
+        "lines": 1,
+        "occluded": 0,
+        "hidden": {}
+       }
+      },
+      "camera": {
+       "position": [
+        0.976,
+        -1.33,
+        0.798
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     }
+    },
+    "elbo-mid": {
+     "camera": {
+      "position": [
+       0.9059837350795444,
+       -0.8237003562663194,
+       0.15721934188750808
+      ],
+      "target": [
+       0.10740525390625066,
+       0.26535745239257813,
+       -0.49564013671874996
+      ],
+      "distanceM": 1.5,
+      "centredElboLines": 1
+     },
+     "engineering": {
+      "mode": "engineering",
+      "records": 43,
+      "drawn": 42,
+      "drawnTags": 17,
+      "occludedTotal": 0,
+      "tags": {
+       "connection": {
+        "records": 5,
+        "drawn": 5,
+        "lines": 17,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "elevation": {
+        "records": 6,
+        "drawn": 6,
+        "lines": 6,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "atta": {
+        "records": 3,
+        "drawn": 3,
+        "lines": 3,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "elbo": {
+        "records": 2,
+        "drawn": 2,
+        "lines": 2,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "branch-name": {
+        "records": 1,
+        "drawn": 1,
+        "lines": 1,
+        "occluded": 0,
+        "hidden": {}
+       }
+      },
+      "camera": {
+       "position": [
+        0.906,
+        -0.824,
+        0.157
+       ],
+       "target": [
+        0.107,
+        0.265,
+        -0.496
+       ]
+      }
+     },
+     "inspection": {
+      "mode": "inspection",
+      "records": 43,
+      "drawn": 42,
+      "drawnTags": 17,
+      "occludedTotal": 2,
+      "tags": {
+       "connection": {
+        "records": 5,
+        "drawn": 5,
+        "lines": 17,
+        "occluded": 1,
+        "hidden": {}
+       },
+       "elevation": {
+        "records": 6,
+        "drawn": 6,
+        "lines": 6,
+        "occluded": 1,
+        "hidden": {}
+       },
+       "atta": {
+        "records": 3,
+        "drawn": 3,
+        "lines": 3,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "elbo": {
+        "records": 2,
+        "drawn": 2,
+        "lines": 2,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "branch-name": {
+        "records": 1,
+        "drawn": 1,
+        "lines": 1,
+        "occluded": 0,
+        "hidden": {}
+       }
+      },
+      "camera": {
+       "position": [
+        0.906,
+        -0.824,
+        0.157
+       ],
+       "target": [
+        0.107,
+        0.265,
+        -0.496
+       ]
+      }
+     }
+    },
+    "elevation-mid": {
+     "camera": {
+      "position": [
+       0.9059837350795444,
+       -0.8237003562663194,
+       -0.7475006581124917
+      ],
+      "target": [
+       0.10740525390625066,
+       0.26535745239257813,
+       -1.4003601367187497
+      ],
+      "distanceM": 1.5,
+      "centredLines": 1
+     },
+     "engineering": {
+      "mode": "engineering",
+      "records": 43,
+      "drawn": 23,
+      "drawnTags": 16,
+      "occludedTotal": 0,
+      "tags": {
+       "connection": {
+        "records": 5,
+        "drawn": 4,
+        "lines": 14,
+        "occluded": 0,
+        "hidden": {
+         "none": 1
+        }
+       },
+       "elevation": {
+        "records": 6,
+        "drawn": 6,
+        "lines": 6,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "atta": {
+        "records": 3,
+        "drawn": 3,
+        "lines": 3,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "elbo": {
+        "records": 2,
+        "drawn": 2,
+        "lines": 2,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "branch-name": {
+        "records": 1,
+        "drawn": 1,
+        "lines": 1,
+        "occluded": 0,
+        "hidden": {}
+       }
+      },
+      "camera": {
+       "position": [
+        0.906,
+        -0.824,
+        -0.748
+       ],
+       "target": [
+        0.107,
+        0.265,
+        -1.4
+       ]
+      }
+     },
+     "inspection": {
+      "mode": "inspection",
+      "records": 43,
+      "drawn": 23,
+      "drawnTags": 16,
+      "occludedTotal": 2,
+      "tags": {
+       "connection": {
+        "records": 5,
+        "drawn": 4,
+        "lines": 14,
+        "occluded": 1,
+        "hidden": {
+         "none": 1
+        }
+       },
+       "elevation": {
+        "records": 6,
+        "drawn": 6,
+        "lines": 6,
+        "occluded": 1,
+        "hidden": {}
+       },
+       "atta": {
+        "records": 3,
+        "drawn": 3,
+        "lines": 3,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "elbo": {
+        "records": 2,
+        "drawn": 2,
+        "lines": 2,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "branch-name": {
+        "records": 1,
+        "drawn": 1,
+        "lines": 1,
+        "occluded": 0,
+        "hidden": {}
+       }
+      },
+      "camera": {
+       "position": [
+        0.906,
+        -0.824,
+        -0.748
+       ],
+       "target": [
+        0.107,
+        0.265,
+        -1.4
+       ]
+      }
+     }
+    },
+    "elevation-close": {
+     "camera": {
+      "position": [
+       0.34697879825823885,
+       -0.06135989020509108,
+       -1.2045022931368723
+      ],
+      "target": [
+       0.10740525390625066,
+       0.2653574523925782,
+       -1.4003601367187497
+      ],
+      "distanceM": 0.45,
+      "centredLines": 1
+     },
+     "engineering": {
+      "mode": "engineering",
+      "records": 43,
+      "drawn": 22,
+      "drawnTags": 6,
+      "occludedTotal": 0,
+      "tags": {
+       "connection": {
+        "records": 5,
+        "drawn": 2,
+        "lines": 7,
+        "occluded": 0,
+        "hidden": {
+         "none": 3
+        }
+       },
+       "elevation": {
+        "records": 6,
+        "drawn": 2,
+        "lines": 2,
+        "occluded": 0,
+        "hidden": {
+         "none": 4
+        }
+       },
+       "atta": {
+        "records": 3,
+        "drawn": 1,
+        "lines": 1,
+        "occluded": 0,
+        "hidden": {
+         "none": 2
+        }
+       },
+       "elbo": {
+        "records": 2,
+        "drawn": 1,
+        "lines": 1,
+        "occluded": 0,
+        "hidden": {
+         "none": 1
+        }
+       },
+       "branch-name": {
+        "records": 1,
+        "drawn": 0,
+        "lines": 0,
+        "occluded": 0,
+        "hidden": {
+         "none": 1
+        }
+       }
+      },
+      "camera": {
+       "position": [
+        0.347,
+        -0.061,
+        -1.205
+       ],
+       "target": [
+        0.107,
+        0.265,
+        -1.4
+       ]
+      }
+     },
+     "inspection": {
+      "mode": "inspection",
+      "records": 43,
+      "drawn": 22,
+      "drawnTags": 6,
+      "occludedTotal": 2,
+      "tags": {
+       "connection": {
+        "records": 5,
+        "drawn": 2,
+        "lines": 7,
+        "occluded": 0,
+        "hidden": {
+         "none": 3
+        }
+       },
+       "elevation": {
+        "records": 6,
+        "drawn": 2,
+        "lines": 2,
+        "occluded": 0,
+        "hidden": {
+         "none": 4
+        }
+       },
+       "atta": {
+        "records": 3,
+        "drawn": 1,
+        "lines": 1,
+        "occluded": 0,
+        "hidden": {
+         "none": 2
+        }
+       },
+       "elbo": {
+        "records": 2,
+        "drawn": 1,
+        "lines": 1,
+        "occluded": 0,
+        "hidden": {
+         "none": 1
+        }
+       },
+       "branch-name": {
+        "records": 1,
+        "drawn": 0,
+        "lines": 0,
+        "occluded": 0,
+        "hidden": {
+         "none": 1
+        }
+       }
+      },
+      "camera": {
+       "position": [
+        0.347,
+        -0.061,
+        -1.205
+       ],
+       "target": [
+        0.107,
+        0.265,
+        -1.4
+       ]
+      }
+     }
+    }
+   },
+   "ms": 26369,
+   "pageErrors": []
+  },
+  "24383_75274": {
+   "refno": "24383_75274",
+   "loadMs": 4099,
+   "objects": 26,
+   "records": 60,
+   "loadResult": "{loadedRefnos: 17, skippedRefnos: 0, loadedObjects: 26, invalidTubiObjects: 0, missingRefnos: Array(0)}",
+   "loadFailed": null,
+   "extentWorldM": 3.5262509765625003,
+   "firstElbo": null,
+   "firstOfKind": {
+    "elevation": {
+     "id": "24383_75274:isoline:3:tag:elevation:24383_75279",
+     "world": [
+      0.53637994140625,
+      -0.1597117578124987,
+      -0.34460009765625
+     ]
+    },
+    "tee": {
+     "id": "24383_75274:isoline:2:tag:tee:24383_75278",
+     "world": [
+      0.53637994140625,
+      -0.1597117578124987,
+      -0.59460009765625
+     ]
+    }
+   },
+   "views": {
+    "far": {
+     "camera": {
+      "position": [
+       3.191453235645676,
+       -4.352329982825314,
+       2.60909922385919
+      ],
+      "target": [
+       4.440892098500626e-16,
+       8.881784197001252e-16,
+       4.440892098500626e-16
+      ]
+     },
+     "engineering": {
+      "mode": "engineering",
+      "records": 60,
+      "drawn": 24,
+      "drawnTags": 13,
+      "occludedTotal": 0,
+      "tags": {
+       "connection": {
+        "records": 4,
+        "drawn": 4,
+        "lines": 15,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "bend": {
+        "records": 3,
+        "drawn": 0,
+        "lines": 0,
+        "occluded": 0,
+        "hidden": {
+         "secondary-far": 3
+        }
+       },
+       "atta": {
+        "records": 3,
+        "drawn": 3,
+        "lines": 3,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "tee": {
+        "records": 2,
+        "drawn": 2,
+        "lines": 2,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "name": {
+        "records": 2,
+        "drawn": 2,
+        "lines": 2,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "elevation": {
+        "records": 2,
+        "drawn": 2,
+        "lines": 2,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "branch-name": {
+        "records": 1,
+        "drawn": 0,
+        "lines": 0,
+        "occluded": 0,
+        "hidden": {
+         "detail-far": 1
+        }
+       }
+      },
+      "camera": {
+       "position": [
+        3.191,
+        -4.352,
+        2.609
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspection": {
+      "mode": "inspection",
+      "records": 60,
+      "drawn": 24,
+      "drawnTags": 13,
+      "occludedTotal": 2,
+      "tags": {
+       "connection": {
+        "records": 4,
+        "drawn": 4,
+        "lines": 15,
+        "occluded": 1,
+        "hidden": {}
+       },
+       "bend": {
+        "records": 3,
+        "drawn": 0,
+        "lines": 0,
+        "occluded": 0,
+        "hidden": {
+         "secondary-far": 3
+        }
+       },
+       "atta": {
+        "records": 3,
+        "drawn": 3,
+        "lines": 3,
+        "occluded": 1,
+        "hidden": {}
+       },
+       "tee": {
+        "records": 2,
+        "drawn": 2,
+        "lines": 2,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "name": {
+        "records": 2,
+        "drawn": 2,
+        "lines": 2,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "elevation": {
+        "records": 2,
+        "drawn": 2,
+        "lines": 2,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "branch-name": {
+        "records": 1,
+        "drawn": 0,
+        "lines": 0,
+        "occluded": 0,
+        "hidden": {
+         "detail-far": 1
+        }
+       }
+      },
+      "camera": {
+       "position": [
+        3.191,
+        -4.352,
+        2.609
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     }
+    },
+    "mid": {
+     "camera": {
+      "position": [
+       1.1263952596396505,
+       -1.5361164645265806,
+       0.9208585495973614
+      ],
+      "target": [
+       4.440892098500626e-16,
+       8.881784197001252e-16,
+       4.440892098500626e-16
+      ]
+     },
+     "engineering": {
+      "mode": "engineering",
+      "records": 60,
+      "drawn": 43,
+      "drawnTags": 15,
+      "occludedTotal": 0,
+      "tags": {
+       "connection": {
+        "records": 4,
+        "drawn": 4,
+        "lines": 15,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "bend": {
+        "records": 3,
+        "drawn": 2,
+        "lines": 4,
+        "occluded": 0,
+        "hidden": {
+         "secondary-far": 1
+        }
+       },
+       "atta": {
+        "records": 3,
+        "drawn": 3,
+        "lines": 3,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "tee": {
+        "records": 2,
+        "drawn": 2,
+        "lines": 2,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "name": {
+        "records": 2,
+        "drawn": 2,
+        "lines": 2,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "elevation": {
+        "records": 2,
+        "drawn": 2,
+        "lines": 2,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "branch-name": {
+        "records": 1,
+        "drawn": 0,
+        "lines": 0,
+        "occluded": 0,
+        "hidden": {
+         "detail-far": 1
+        }
+       }
+      },
+      "camera": {
+       "position": [
+        1.126,
+        -1.536,
+        0.921
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     },
+     "inspection": {
+      "mode": "inspection",
+      "records": 60,
+      "drawn": 43,
+      "drawnTags": 15,
+      "occludedTotal": 3,
+      "tags": {
+       "connection": {
+        "records": 4,
+        "drawn": 4,
+        "lines": 15,
+        "occluded": 2,
+        "hidden": {}
+       },
+       "bend": {
+        "records": 3,
+        "drawn": 2,
+        "lines": 4,
+        "occluded": 0,
+        "hidden": {
+         "secondary-far": 1
+        }
+       },
+       "atta": {
+        "records": 3,
+        "drawn": 3,
+        "lines": 3,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "tee": {
+        "records": 2,
+        "drawn": 2,
+        "lines": 2,
+        "occluded": 1,
+        "hidden": {}
+       },
+       "name": {
+        "records": 2,
+        "drawn": 2,
+        "lines": 2,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "elevation": {
+        "records": 2,
+        "drawn": 2,
+        "lines": 2,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "branch-name": {
+        "records": 1,
+        "drawn": 0,
+        "lines": 0,
+        "occluded": 0,
+        "hidden": {
+         "detail-far": 1
+        }
+       }
+      },
+      "camera": {
+       "position": [
+        1.126,
+        -1.536,
+        0.921
+       ],
+       "target": [
+        0,
+        0,
+        0
+       ]
+      }
+     }
+    },
+    "elevation-mid": {
+     "camera": {
+      "position": [
+       1.0155270301102264,
+       -0.8131464430078372,
+       0.047115589507504885
+      ],
+      "target": [
+       0.53637994140625,
+       -0.1597117578124987,
+       -0.34460009765625
+      ],
+      "distanceM": 0.9,
+      "centredLines": 1
+     },
+     "engineering": {
+      "mode": "engineering",
+      "records": 60,
+      "drawn": 43,
+      "drawnTags": 13,
+      "occludedTotal": 0,
+      "tags": {
+       "connection": {
+        "records": 4,
+        "drawn": 3,
+        "lines": 12,
+        "occluded": 0,
+        "hidden": {
+         "none": 1
+        }
+       },
+       "bend": {
+        "records": 3,
+        "drawn": 1,
+        "lines": 3,
+        "occluded": 0,
+        "hidden": {
+         "secondary-far": 1,
+         "none": 1
+        }
+       },
+       "atta": {
+        "records": 3,
+        "drawn": 3,
+        "lines": 3,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "tee": {
+        "records": 2,
+        "drawn": 2,
+        "lines": 2,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "name": {
+        "records": 2,
+        "drawn": 2,
+        "lines": 2,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "elevation": {
+        "records": 2,
+        "drawn": 2,
+        "lines": 2,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "branch-name": {
+        "records": 1,
+        "drawn": 0,
+        "lines": 0,
+        "occluded": 0,
+        "hidden": {
+         "detail-far": 1
+        }
+       }
+      },
+      "camera": {
+       "position": [
+        1.016,
+        -0.813,
+        0.047
+       ],
+       "target": [
+        0.536,
+        -0.16,
+        -0.345
+       ]
+      }
+     },
+     "inspection": {
+      "mode": "inspection",
+      "records": 60,
+      "drawn": 43,
+      "drawnTags": 13,
+      "occludedTotal": 7,
+      "tags": {
+       "connection": {
+        "records": 4,
+        "drawn": 3,
+        "lines": 12,
+        "occluded": 1,
+        "hidden": {
+         "none": 1
+        }
+       },
+       "bend": {
+        "records": 3,
+        "drawn": 1,
+        "lines": 3,
+        "occluded": 0,
+        "hidden": {
+         "secondary-far": 1,
+         "none": 1
+        }
+       },
+       "atta": {
+        "records": 3,
+        "drawn": 3,
+        "lines": 3,
+        "occluded": 1,
+        "hidden": {}
+       },
+       "tee": {
+        "records": 2,
+        "drawn": 2,
+        "lines": 2,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "name": {
+        "records": 2,
+        "drawn": 2,
+        "lines": 2,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "elevation": {
+        "records": 2,
+        "drawn": 2,
+        "lines": 2,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "branch-name": {
+        "records": 1,
+        "drawn": 0,
+        "lines": 0,
+        "occluded": 0,
+        "hidden": {
+         "detail-far": 1
+        }
+       }
+      },
+      "camera": {
+       "position": [
+        1.016,
+        -0.813,
+        0.047
+       ],
+       "target": [
+        0.536,
+        -0.16,
+        -0.345
+       ]
+      }
+     }
+    },
+    "elevation-close": {
+     "camera": {
+      "position": [
+       0.7759534857582381,
+       -0.48642910041016785,
+       -0.1487422540743726
+      ],
+      "target": [
+       0.53637994140625,
+       -0.1597117578124987,
+       -0.34460009765625
+      ],
+      "distanceM": 0.45,
+      "centredLines": 1
+     },
+     "engineering": {
+      "mode": "engineering",
+      "records": 60,
+      "drawn": 43,
+      "drawnTags": 9,
+      "occludedTotal": 0,
+      "tags": {
+       "connection": {
+        "records": 4,
+        "drawn": 2,
+        "lines": 8,
+        "occluded": 0,
+        "hidden": {
+         "none": 2
+        }
+       },
+       "bend": {
+        "records": 3,
+        "drawn": 1,
+        "lines": 1,
+        "occluded": 0,
+        "hidden": {
+         "none": 2
+        }
+       },
+       "atta": {
+        "records": 3,
+        "drawn": 2,
+        "lines": 2,
+        "occluded": 0,
+        "hidden": {
+         "none": 1
+        }
+       },
+       "tee": {
+        "records": 2,
+        "drawn": 1,
+        "lines": 1,
+        "occluded": 0,
+        "hidden": {
+         "none": 1
+        }
+       },
+       "name": {
+        "records": 2,
+        "drawn": 1,
+        "lines": 1,
+        "occluded": 0,
+        "hidden": {
+         "none": 1
+        }
+       },
+       "elevation": {
+        "records": 2,
+        "drawn": 1,
+        "lines": 1,
+        "occluded": 0,
+        "hidden": {
+         "none": 1
+        }
+       },
+       "branch-name": {
+        "records": 1,
+        "drawn": 1,
+        "lines": 1,
+        "occluded": 0,
+        "hidden": {}
+       }
+      },
+      "camera": {
+       "position": [
+        0.776,
+        -0.486,
+        -0.149
+       ],
+       "target": [
+        0.536,
+        -0.16,
+        -0.345
+       ]
+      }
+     },
+     "inspection": {
+      "mode": "inspection",
+      "records": 60,
+      "drawn": 43,
+      "drawnTags": 9,
+      "occludedTotal": 2,
+      "tags": {
+       "connection": {
+        "records": 4,
+        "drawn": 2,
+        "lines": 8,
+        "occluded": 1,
+        "hidden": {
+         "none": 2
+        }
+       },
+       "bend": {
+        "records": 3,
+        "drawn": 1,
+        "lines": 1,
+        "occluded": 1,
+        "hidden": {
+         "none": 2
+        }
+       },
+       "atta": {
+        "records": 3,
+        "drawn": 2,
+        "lines": 2,
+        "occluded": 0,
+        "hidden": {
+         "none": 1
+        }
+       },
+       "tee": {
+        "records": 2,
+        "drawn": 1,
+        "lines": 1,
+        "occluded": 0,
+        "hidden": {
+         "none": 1
+        }
+       },
+       "name": {
+        "records": 2,
+        "drawn": 1,
+        "lines": 1,
+        "occluded": 0,
+        "hidden": {
+         "none": 1
+        }
+       },
+       "elevation": {
+        "records": 2,
+        "drawn": 1,
+        "lines": 1,
+        "occluded": 0,
+        "hidden": {
+         "none": 1
+        }
+       },
+       "branch-name": {
+        "records": 1,
+        "drawn": 1,
+        "lines": 1,
+        "occluded": 0,
+        "hidden": {}
+       }
+      },
+      "camera": {
+       "position": [
+        0.776,
+        -0.486,
+        -0.149
+       ],
+       "target": [
+        0.536,
+        -0.16,
+        -0.345
+       ]
+      }
+     }
+    },
+    "tee-mid": {
+     "camera": {
+      "position": [
+       1.0155270301102264,
+       -0.8131464430078372,
+       -0.20288441049249512
+      ],
+      "target": [
+       0.53637994140625,
+       -0.1597117578124987,
+       -0.59460009765625
+      ],
+      "distanceM": 0.9,
+      "centredLines": 1
+     },
+     "engineering": {
+      "mode": "engineering",
+      "records": 60,
+      "drawn": 43,
+      "drawnTags": 10,
+      "occludedTotal": 0,
+      "tags": {
+       "connection": {
+        "records": 4,
+        "drawn": 3,
+        "lines": 12,
+        "occluded": 0,
+        "hidden": {
+         "none": 1
+        }
+       },
+       "bend": {
+        "records": 3,
+        "drawn": 1,
+        "lines": 3,
+        "occluded": 0,
+        "hidden": {
+         "secondary-far": 1,
+         "none": 1
+        }
+       },
+       "atta": {
+        "records": 3,
+        "drawn": 2,
+        "lines": 2,
+        "occluded": 0,
+        "hidden": {
+         "none": 1
+        }
+       },
+       "tee": {
+        "records": 2,
+        "drawn": 2,
+        "lines": 2,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "name": {
+        "records": 2,
+        "drawn": 1,
+        "lines": 1,
+        "occluded": 0,
+        "hidden": {
+         "none": 1
+        }
+       },
+       "elevation": {
+        "records": 2,
+        "drawn": 1,
+        "lines": 1,
+        "occluded": 0,
+        "hidden": {
+         "none": 1
+        }
+       },
+       "branch-name": {
+        "records": 1,
+        "drawn": 0,
+        "lines": 0,
+        "occluded": 0,
+        "hidden": {
+         "detail-far": 1
+        }
+       }
+      },
+      "camera": {
+       "position": [
+        1.016,
+        -0.813,
+        -0.203
+       ],
+       "target": [
+        0.536,
+        -0.16,
+        -0.595
+       ]
+      }
+     },
+     "inspection": {
+      "mode": "inspection",
+      "records": 60,
+      "drawn": 43,
+      "drawnTags": 10,
+      "occludedTotal": 2,
+      "tags": {
+       "connection": {
+        "records": 4,
+        "drawn": 3,
+        "lines": 12,
+        "occluded": 1,
+        "hidden": {
+         "none": 1
+        }
+       },
+       "bend": {
+        "records": 3,
+        "drawn": 1,
+        "lines": 3,
+        "occluded": 0,
+        "hidden": {
+         "secondary-far": 1,
+         "none": 1
+        }
+       },
+       "atta": {
+        "records": 3,
+        "drawn": 2,
+        "lines": 2,
+        "occluded": 0,
+        "hidden": {
+         "none": 1
+        }
+       },
+       "tee": {
+        "records": 2,
+        "drawn": 2,
+        "lines": 2,
+        "occluded": 0,
+        "hidden": {}
+       },
+       "name": {
+        "records": 2,
+        "drawn": 1,
+        "lines": 1,
+        "occluded": 0,
+        "hidden": {
+         "none": 1
+        }
+       },
+       "elevation": {
+        "records": 2,
+        "drawn": 1,
+        "lines": 1,
+        "occluded": 0,
+        "hidden": {
+         "none": 1
+        }
+       },
+       "branch-name": {
+        "records": 1,
+        "drawn": 0,
+        "lines": 0,
+        "occluded": 0,
+        "hidden": {
+         "detail-far": 1
+        }
+       }
+      },
+      "camera": {
+       "position": [
+        1.016,
+        -0.813,
+        -0.203
+       ],
+       "target": [
+        0.536,
+        -0.16,
+        -0.595
+       ]
+      }
+     }
+    },
+    "tee-close": {
+     "camera": {
+      "position": [
+       0.7759534857582381,
+       -0.48642910041016785,
+       -0.3987422540743726
+      ],
+      "target": [
+       0.53637994140625,
+       -0.1597117578124987,
+       -0.59460009765625
+      ],
+      "distanceM": 0.45,
+      "centredLines": 1
+     },
+     "engineering": {
+      "mode": "engineering",
+      "records": 60,
+      "drawn": 41,
+      "drawnTags": 9,
+      "occludedTotal": 0,
+      "tags": {
+       "connection": {
+        "records": 4,
+        "drawn": 2,
+        "lines": 8,
+        "occluded": 0,
+        "hidden": {
+         "none": 2
+        }
+       },
+       "bend": {
+        "records": 3,
+        "drawn": 1,
+        "lines": 1,
+        "occluded": 0,
+        "hidden": {
+         "none": 2
+        }
+       },
+       "atta": {
+        "records": 3,
+        "drawn": 2,
+        "lines": 2,
+        "occluded": 0,
+        "hidden": {
+         "none": 1
+        }
+       },
+       "tee": {
+        "records": 2,
+        "drawn": 1,
+        "lines": 1,
+        "occluded": 0,
+        "hidden": {
+         "none": 1
+        }
+       },
+       "name": {
+        "records": 2,
+        "drawn": 1,
+        "lines": 1,
+        "occluded": 0,
+        "hidden": {
+         "none": 1
+        }
+       },
+       "elevation": {
+        "records": 2,
+        "drawn": 1,
+        "lines": 1,
+        "occluded": 0,
+        "hidden": {
+         "none": 1
+        }
+       },
+       "branch-name": {
+        "records": 1,
+        "drawn": 1,
+        "lines": 1,
+        "occluded": 0,
+        "hidden": {}
+       }
+      },
+      "camera": {
+       "position": [
+        0.776,
+        -0.486,
+        -0.399
+       ],
+       "target": [
+        0.536,
+        -0.16,
+        -0.595
+       ]
+      }
+     },
+     "inspection": {
+      "mode": "inspection",
+      "records": 60,
+      "drawn": 41,
+      "drawnTags": 9,
+      "occludedTotal": 2,
+      "tags": {
+       "connection": {
+        "records": 4,
+        "drawn": 2,
+        "lines": 8,
+        "occluded": 1,
+        "hidden": {
+         "none": 2
+        }
+       },
+       "bend": {
+        "records": 3,
+        "drawn": 1,
+        "lines": 1,
+        "occluded": 1,
+        "hidden": {
+         "none": 2
+        }
+       },
+       "atta": {
+        "records": 3,
+        "drawn": 2,
+        "lines": 2,
+        "occluded": 0,
+        "hidden": {
+         "none": 1
+        }
+       },
+       "tee": {
+        "records": 2,
+        "drawn": 1,
+        "lines": 1,
+        "occluded": 0,
+        "hidden": {
+         "none": 1
+        }
+       },
+       "name": {
+        "records": 2,
+        "drawn": 1,
+        "lines": 1,
+        "occluded": 0,
+        "hidden": {
+         "none": 1
+        }
+       },
+       "elevation": {
+        "records": 2,
+        "drawn": 1,
+        "lines": 1,
+        "occluded": 0,
+        "hidden": {
+         "none": 1
+        }
+       },
+       "branch-name": {
+        "records": 1,
+        "drawn": 1,
+        "lines": 1,
+        "occluded": 0,
+        "hidden": {}
+       }
+      },
+      "camera": {
+       "position": [
+        0.776,
+        -0.486,
+        -0.399
+       ],
+       "target": [
+        0.536,
+        -0.16,
+        -0.595
+       ]
+      }
+     }
+    }
+   },
+   "ms": 30799,
+   "pageErrors": []
+  }
+ },
+ "note": "fable-5-1-7, 2026-09-14: pw-petags-7.mjs (real Chrome, vite :3101, gen-model :18122) before the elevation / tee ↔ elbo change — far (1.7× scene box) / mid (0.6×) / elbo-mid (walk in on the first elbo until its pill shows the PE line only) / elevation-mid, tee-mid (that distance from the first tag of the kind) / elevation-close, tee-close (0.45 m); per view engineering + inspection state per plant-mbd tag kind (drawn, hidden by LOD reason — none = anchor out of the frustum, ADR 0063 — text lines, inspection occluded). Cameras are identical in both files."
+}

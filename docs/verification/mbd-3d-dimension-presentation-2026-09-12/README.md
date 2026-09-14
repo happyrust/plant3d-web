@@ -387,3 +387,40 @@
 | `behind-camera-inside-24383_100657-engineering.png` | 相机站在弯管处朝管内看的 engineering 画面 |
 
 **仍留**：快照不做侧面裁剪——相机前面、远离视轴的顶点仍投到 1e5+ px（合法，命中索引与占用网格已裁视口），SVG 导出的 viewBox 外内容另议；两端都不可见但中段穿过视锥的线段（一端在相机背后、另一端在远平面之外）整段不画，尺寸几何不会这样。
+
+### `elevation` / `tee` 的单行 `PE` 标高也归进药丸档（2026-09-14 16:1x–16:5x，fable-5-1-7；用户「elevation / tee 的单行 PE 标高也归进药丸档（secondary），照 bend 那套量完再改」）
+
+**改了什么**。`classifyTag`：`…:tag:elevation:<refno>`（沿管标高变化处的 `PE ±n`）与 `…:tag:tee:<refno>`（分支点的 `PE ±n`）与 `elbo` / `bend` 共用同一个类——原 `ELBOW_TAG` 改名 `ELEVATION_TAG`：无边框药丸、不带圆点、`secondary` LOD、`PE` 行是主行（这两类只有这一行，所以中景起整颗药丸就显示，近景没有更多行）。此前它们落到「按文字」规则、被 `PE` 行当成坐标块 → 卡片 + 圆点、无 LOD、任何距离都画。分类分支现在是一条正则 `/:tag:(?:elbo|bend|elevation|tee):/`。
+
+**规模**（同一份 `bendTags.sweep.test.ts` 内核全跑，before 跑在 HEAD `501b69c` 的 worktree、after 跑在工作树，`elevation-tags-kinds-sweep.json` 含两份总账 + 419 条带 elevation / tee 的管逐管一行）：全项目 elevation **821** 个（385 条管）、tee **155** 个（144 条管）。
+
+| 视图 | 画出的 tag 总数 | 文字行 | elevation 画出 / 821（隐藏原因） | tee 画出 / 155 | 其它 6 类 |
+| --- | --- | --- | --- | --- | --- |
+| far 1.7× | 10 803 → **9979** | 23 824 → 23 000 | 821 → **143**（`secondary-far` 678） | 155 → **9**（`secondary-far` 146） | 逐类逐数相同 |
+| mid 0.6× | 12 372 → 11 746 | 26 238 → 25 612 | 818 → 306（`secondary-far` 512，视锥外 3） | 155 → 41（`secondary-far` 114） | 相同 |
+| close 0.25× | 11 760 → 11 380 | 23 589 → 23 209 | 656 → 346（`secondary-far` 344，视锥外 131） | 124 → 54（`secondary-far` 79，视锥外 22） | 相同 |
+
+  mid / close 的「视锥外」（`hidden.none`）是上一节的裁剪在起作用——相机贴近时锚点在相机背后的标签不排，before / after 两趟都有、数目相同。连同弯管那一步，远景画出的 tag 从 15 737 降到 **9979**（−37 %），文字行 38 898 → 23 000（−41 %）。
+
+**单测**：`mbdV2ExternalAnnotations.test.ts`「四类带 refno 的 tag」用例里 elevation / tee 由 `card` 改成 `pill` + `lod secondary` + 单行主行。`vitest run src/dimension src/composables/useMbdExternalSync.test.ts`：**59 文件 / 359 通过**（数目不变，断言改写）。eslint 0。`npm run type-check`：改动文件 0 新增。
+
+**实机**（`pw-petags-7.mjs` = `pw-bend-7.mjs` 泛化成 `--kinds=elevation,tee`，同一份脚本改前 / 改后各跑一遍，相机逐个相同；dbnum 7997 的 `model/ensure` 仍挂起，抽 dbnum 7999 三条标高多的小管：`24383_66713` elevation 4 + tee 2 + elbo 3（2.3 m）、`24383_67485` elevation 6 + elbo 2（3.0 m）、`24383_75274` elevation 2 + tee 2 + bend 3（3.5 m）；`elevation-tags-browser-probe-before.json` / `-after.json`）：
+
+| 管 · 相机 | 画出的 tag 修前 → 修后 | elevation | tee | 其它类别 |
+| --- | --- | --- | --- | --- |
+| `24383_66713` far | 13 → **8** | 4 → **0**（`secondary-far`） | 2 → 1（一颗仍在阈值内） | 逐条相同 |
+| `24383_66713` mid（1.4 m） | 17 → 17 | 4 → 4（药丸） | 2 → 2（药丸） | 相同 |
+| `24383_67485` far | 14 → **8** | 6 → **0** | — | 相同 |
+| `24383_67485` 标高 tag 前 1.5 m | 16 → 16 | 6 → 6（药丸） | — | 相同 |
+| `24383_75274` far | 13 → **9** | 2 → **0** | 2 → **0** | 相同 |
+
+- 三条管 19 个视图 pageerror 0；atta / connection / name / branch-name / elbo / bend 各视图的画出数与行数**逐条与修前相同**。管子小、`mid` 已在药丸阈值内，所以这三条管的变化都在远景：远景不再有「PE ±n」卡片云，靠近后同一处以药丸出现。
+- `elevation-tags-far-before-after.png`：`24383_67485` 远景修前 / 修后并排——修前 6 张 `PE` 卡片 + 圆点挂在管边，修后只剩端点坐标卡片、位号方框与尺寸。`elevation-tags-mid-crop-3x.png`：标高 tag 前 1.5 m 同位置 3×——修前带边框圆点的卡片，修后与弯头同款的无边框药丸。
+
+| 新增文件 | 说明 |
+| --- | --- |
+| `elevation-tags-kinds-sweep.json` | 内核全跑按 tag 种类的总账（before / after，三视图 × 8 类）+ 419 条带 elevation / tee 的管逐管一行（每视图画出的 tag 总数与这两类的画出 `[修前, 修后]`、修后隐藏原因） |
+| `elevation-tags-browser-probe-before.json` / `-after.json` | 三条管 far / mid / elbo-mid / elevation-mid / elevation-close / tee-mid / tee-close 的实机状态；相机一致 |
+| `elevation-tags-far-before-after.png` / `elevation-tags-mid-crop-3x.png` | `24383_67485` 远景并排；标高 tag 前 1.5 m 同位置 3× |
+
+**仍留**：`atta`（2804，支架位号）与 `name`（594）是方框、`connection`（5616）是卡片——远景剩下的 9979 个 tag 里它们占 9014，「云」现在是支架方框与端点卡片的事，要不要给 `atta` 一档 LOD 另拍。

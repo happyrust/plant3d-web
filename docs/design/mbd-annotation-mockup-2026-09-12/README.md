@@ -55,10 +55,10 @@
 放不下时统一放到**终点**外侧（本文同）。
 
 规则 6（同日稍后，ADR 0058）已落地：`kernel/layout/tagBillboard.ts` 把 `label` 呈现为屏幕定尺的 billboard——端点
-connection tag = 白底圆角卡片 + 灰色引线 + 管端圆点，元件 name tag = 黑框方框，弯头 / 弯管（`elbo` / `bend`，2026-09-14 起同一档）tag / 分支名 = 无边框药丸；
+connection tag = 白底圆角卡片 + 灰色引线 + 管端圆点，元件 name tag = 黑框方框，标高 tag（`elbo` / `bend` / `elevation` / `tee`，2026-09-14 起同一档）/ 分支名 = 无边框药丸；
 `adapters/mbdV2ExternalAnnotations.ts` 把每条 `leader_line` 配进它的 `label` 记录（先按 `<label id>:leader` 命名、再按引线起点
-配对），引线始终指回管上的点、随标签一起隐藏 / 选中。三级 LOD：坐标卡片与位号任何距离都显示；弯头 / 弯管药丸从中景起（`secondary`，
-投影字高 ≥ `sourceTextHeightMinPx`）、角度行（弯管还有弯曲半径行）只在近景（`detail`，≥ `sourceTextHeightMaxPx`）；分支名、坡度、skew 辅助线 / 文字
+配对），引线始终指回管上的点、随标签一起隐藏 / 选中。三级 LOD：坐标卡片与位号任何距离都显示；标高药丸从中景起（`secondary`，
+投影字高 ≥ `sourceTextHeightMinPx`）、弯头的角度行（弯管还有弯曲半径行）只在近景（`detail`，≥ `sourceTextHeightMaxPx`）；分支名、坡度、skew 辅助线 / 文字
 均为 `detail`。「已知问题」里的卡片避让做了一半：标签体在首选位（沿管外 `away` 方向、带向上偏置）被尺寸数字或别的标签压住时，
 按卡片 → 方框 → 药丸、同类按 id 的确定顺序依次换到下一个候选位（绕首选方向 ±30° / ±60° / ±90° / ±135° / 180°，再放大 1.6 倍
 standoff；先试整块在屏内的位置），全部被占则回首选位；**不避让管件几何**（卡片仍可能压在阀体上），也不避让三维尺寸线本身。
