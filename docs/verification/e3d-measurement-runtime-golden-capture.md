@@ -236,7 +236,7 @@
 | G2-03 0.1mm 抑制 / int(sum) 闸门 | `buildWorldDistanceAidPlan`、`shouldDrawWorldAxisBreakdown` | `src/measurement/aids/worldDistanceAidPlan.test.ts` |
 | G3-02 旋转普通 WRT（两件 EQUI，Rᵀ·Δ、U/V/W、from/to 局部坐标、方向） | `ReferenceFrameResolver` + `computeDistanceMeasurementResultInFrame` + `buildDistanceMeasurementResultRows` | `src/measurement/reference-frame/e3dRotatedWrt.golden.test.ts` |
 | G4-01/02/03/04/06 Perpendicular（无限线/面、World 帧、零距离、点退化） | 纯内核 `computePerpendicularDistance`（`src/measurement/kernel/perpendicularDistance.ts`）+ 目标 provider `resolvePerpendicularTarget`（P-Point 方向→无限线、圆面→无限面、否则点）+ 腿 `buildPerpendicularAidPlan`；已接入 `useXeokitMeasurementTools`（样式开关 `perpendicularTo`，结果表 `buildPerpendicularMeasurementResultRows`） | `perpendicularDistance.test.ts`、`perpendicularTargetProvider.test.ts`、`aids/perpendicularAidPlan.test.ts`、`useXeokitMeasurementTools.test.ts`（点退化 + P-Point 轴线两条流程）、`MeasurementResultInspector.test.ts` |
-| G6-01/02/03 三点角度（0°/180°/重合拒绝、minor 角、法向随拾取顺序翻转、0.1°/179.9°） | 新增纯内核 `buildThreePointAngle`（`src/measurement/kernel/threePointAngle.ts`，尚未接入 UI） | `src/measurement/kernel/threePointAngle.test.ts` |
+| G6-01/02/03 三点角度（0°/180°/重合拒绝、minor 角、法向随拾取顺序翻转、0.1°/179.9°） | 纯内核 `buildThreePointAngle`（`src/measurement/kernel/threePointAngle.ts`）；**2026-09-14 已接入 UI**（`buildAngleMeasurementResultRows` + 第三击拒收，§22） | `src/measurement/kernel/threePointAngle.test.ts`、`src/utils/xeokitMeasurementFormat.test.ts`、`src/composables/useXeokitMeasurementTools.test.ts` |
 
 E3D 的方向字串（如 `S 11.7755 W 66.1215 D`）在用例里按 PDMS 罗盘约定换成单位向量比对；
 数值容差 0.01mm（E3D 结果端点带 ~1e-3mm 的 ARC 重建漂移）。
@@ -799,4 +799,54 @@ FORMAT 参数逐格、公制格式矩阵含 `0mm` 无负零、旧 `imperial` 配
 - Decimal Places 没做成会话级控件（E3D 的距离小数位固定在 FORMAT 里，不像角度那样有 `Decimal Places` 框）；Web 的全局小数位只在 Default 档生效。
   角度那一侧的 Unit / Decimal Places 是 Phase C #8。
 - 英制：不做（见上）。§2 #5 因此按「E3D 有、我们有意不做」记，不再挂 ◐ 的英制尾巴。
+
+## 22. Phase C · 三点角度接内核：结果表 Angle / Direction1 / Direction2 与退化三点拒收 实机走查（2026-09-14 15:12）
+
+**背景**：`src/measurement/kernel/threePointAngle.ts` 是 2026-09-12 照 G6-01/02/03 写的纯内核，带着 13 条 golden 用例，但**一直没接 UI**（§9 那张表里就标着「尚未接入 UI」）。
+在此之前 UI 走的是 `xeokitMeasurementFormat` 里自己算 acos 的 `computeAngleDegrees`：列表摘要只有三个点、没有角度值，没有 Direction1 / Direction2，
+三点共线 / 重合时照样落一条测不出角的记录。本节把它接上（Web `d2e7c02`；方案 §2 #7 / Phase C 第一条；决策 `d-486`）。
+
+**E3D 口径**（已采 golden，见 §7 / §8 与 G6-01～03）：
+- 三点顺序 root / first / second；Web 草稿里对应第一击 `corner`、第二击 `origin`、第三击 `target`。
+- 结果表三行 `Angle` / `Direction1` / `Direction2` + wrt（§1.3）；`Direction1` 是 root→first、`Direction2` 是 root→second 的单位方向。
+  实测样本：`37.4013215953213°`、Direction1 `W 11.7755 N 66.8266 D`、Direction2 `W 12.9006 S 32.3892 D`。
+- 只报 minor 角、无 reflex；平面法向随拾取顺序翻转（90° 第二点在南侧时朝向翻成 `Y is S and Z is D`，角度仍报 90）。
+- 退化（0° / 180° / second=first / second=root）：`POSITION.plane()` 报 (2,886) / (2,892)，`radius3PointsNoError` 回未设 ARC，
+  窗体走 `alert.error('An angular dimension could not be constructed from the data selected')`；0.1° / 179.9° 正常接受。
+- `Decimal Places` 缺省 2（§1.3）。
+
+**Web 落地**：
+- `buildAngleMeasurementResultRows(root, first, second, frame, decimals = 2)`：角度取内核的 minor 角；两条臂的单位方向经 `designVectorToFrame`
+  换到当前 wrt 帧、轴标签跟着帧走（与距离结果表的 Direction 行同一套写法）。内核判退化时回空数组。
+- `computeAngleDegrees` 改走内核，所以列表摘要与右键「复制值」在退化三点上不再给一个没有意义的角度；角度小数位从 1 位改成 2 位，与结果表一致。
+- 第三击落记录前先过一遍内核：不过就**不落记录**、丢掉草稿（= 回到第 1 步）、提示条给 E3D 那句话的等价文案。
+- 测量结果卡在角度模式下改显示这三行 + 顶点 / 两臂，并把距离窗体的 Units 框收起来（E3D 的 Units 在 `gphMeasure` 上）。
+
+**已知偏离**：
+- **方向仍是分量串、不是 E3D 的罗盘串**：Web 出 `X +0.3635 · Y -0.3880 · Z -0.8469`，E3D 出 `W 11.7755 N 66.8266 D`。
+  这与距离结果表的 `Direction` 行是同一条既有偏离（§9 的 golden 比对就是把罗盘串换算成单位向量再比的），本节没有单独改口径——
+  要改就两处一起改，另立一片。
+- 角度的 Unit（Degrees / Radians / Gradians）与 Decimal Places 控件没做，缺省锁在「度 + 2 位」；那是 §2 #8（Phase C 第二条）。
+- 「回到第 1 步」丢的是整条草稿；E3D 是整包退回命令起点。两者在测量这条命令上等价（§20）。
+
+**Web 实机走查**（dev `:3101` + gen-model `:8024`，`?model_source=gen-model-v1&gm_backend_port=8024&show_refno=24381_177298`，
+Playwright 真指针，临时 spec 已删；38 个对象，三个落点 `o:24381_177301:0` / `o:24381_177313:8` / `o:24381_177329:16`）：
+
+- 角度模式下测量面板**没有**距离窗体的 Units 框（`measurement-units-controls` 计数 0）。
+- 第 1 击 → `finding_first_arm`，第 2 击 → `finding_second_arm`，第 3 击 → 记录 1 条、草稿清空。
+- 结果表：`Angle 40.54°`（近似，三点都是模型表面点 / Item 原点）、
+  `Direction1 X +0.3635 · Y -0.3880 · Z -0.8469`、`Direction2 X -0.1993 · Y -0.7379 · Z -0.6448`
+  （`web-measure-angle-live-01-three-point-result.png`）。
+- **对账**：由三点的设计坐标独立算出的角 `40.538564°`，与结果表的 `40.54°` 差 **0.001436°**（就是两位小数的取整余量）；
+  两条 Direction 的三个分量与解析单位向量逐位差 **< 2e-4**。
+- **退化**：在同一处连点三下 → 记录数仍是 1（没有新增）、草稿清空，提示条出
+  `三点里有重合点，画不出角度尺寸（E3D：An angular dimension could not be constructed from the data selected）；已回到第 1 步`
+  （`web-measure-angle-live-02-degenerate-rejected.png`）；随后再点一下，`draftStage` 回到 `finding_first_arm`，即真的回到了第 1 步。
+- 页面错误 0。逐行实读见 `web-measure-angle-live-scan.txt`，数值见 `web-measure-angle-live-records.json`。
+
+**单测**：`xeokitMeasurementFormat.test.ts` 5 条（三行结构与两位小数、方向随 wrt 帧换分量与标签、小数位可调、退化回空、列表摘要与复制值）；
+`useXeokitMeasurementTools.test.ts` 3 条（三点不共线落记录、共线拒收回第 1 步、第三点落回顶点拒收）；内核既有 13 条（G6-01～03）不变。
+
+**证据等级**：E3D 侧是**已采运行时 golden**（G6-01/02/03，2026-09-11/12 注入 `radius3PointsNoError` 实测），不是静态推导；
+Web 侧是上面的实机走查 + vitest。余 G6-04（两图形角度入口）未采。
 

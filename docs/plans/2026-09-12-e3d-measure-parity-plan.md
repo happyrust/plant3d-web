@@ -75,7 +75,7 @@
 | 4 | Keep dimensions 生命周期（关窗 / 切工具 / 重开） | ◐ | **行为已对齐（2026-09-14，Web `3701208`，Phase B 切片 1）**：`distanceKeepDimensions` 原本只在下一次测量落地时隐藏旧图形，现补上 E3D 的另两处时机——勾掉当场收（`keepAids()` → `clearAids()`）、`deactivate()`（关窗 / 切工具）时 Keep 关着才收；都走可见性开关（E3D `aidNumbers.hide()`），记录不删。实机 S1–S4 + 单测状态机全过（golden MD §19）。已知偏离（用户拍板保留 Web 口径，决策 `d-437`）：缺省 true（E3D false）、开关记在 localStorage（E3D 只在进程会话）、Web 独有的 `keepMeasurementAnnotation` 一层、收的范围是整张距离测量列表（E3D 是本窗体 aid 号）。**◐ 只因 G2-04/05 运行时 golden 未采** |
 | 5 | Units：Metric / Imperial + Display Unit + 记忆 | ✓（公制）· 英制有意不做 | **会话级 Units 框已落地（2026-09-14，Web `12ad607` + `2e9d354`，Phase B 切片 3，决策 `d-483`）**：Unit type 两档 Default / Metric × Display Unit（Millimetres / Centimetres / Metres），记住上次选的那一档、Default 档下拉禁用并回落全局单位设置（= E3D `!!distanceFmt`）；纯内核 `src/measurement/units/measurementUnits.ts` 的 FORMAT 表逐格对应 `comformats.pmlobj` 1301–1356，结果表与画布尺寸文字同一套格式（E3D `setUpForm()` 把 `measureFormat` 同时给结果表和 `GPHDIMENSION`）。实机四档对同一条 23787.9639 mm 的换算 Δ ≤ 0.036 mm（各档取整余量），记忆与持久化走通（golden MD §21）。**英制（Inch / Feet & Inches / Feet）用户拍板不做**（Q4）——E3D 那三个 FORMAT 的参数记在 golden MD §21，要加回来照着填 |
 | 6 | Perpendicular to：点→线 / 面 / 点退化、World 帧、零距离告警 | ◐ | `perpendicularDistance.ts` + `perpendicularTargetProvider.ts`，G4 全部 ✓。目标 provider 按 E3D `GMFARC.perpendicularToPoint` 的分支序（`getLine()` → `getPlane()` → 点）接了：P-Point 轴、PLINE 线（实机 ✓，golden MD §17）、Graphics 边（`direction` + `segment`，标签用候选自己的名字）与 Graphics facet 面（`facet-plane`）、圆面关键点、Element 的 P1 → P2 `line()` 操作数（golden MD §16）。**余 Aid**（Q3 未拍板，无 Aid 系统）；Graphics 边 / 面当垂距目标的实机走查未单独采 |
-| 7 | 三点角 Angle / Direction1 / Direction2 / 拒绝 0°·180° | ◐ | `threePointAngle.ts` 内核 + golden（G6-01～03）；UI 用旧 `computeAngleDegrees`，内核**未接线**；无 Direction1/2 行 |
+| 7 | 三点角 Angle / Direction1 / Direction2 / 拒绝 0°·180° | ✓ | **内核已接线（2026-09-14，Web `d2e7c02`，Phase C 切片 1，决策 `d-486`）**：`threePointAngle.ts`（G6-01～03 golden）接进 `buildAngleMeasurementResultRows`，测量结果卡在角度模式出 `Angle / Direction1 / Direction2` 三行——角度取内核 minor 角、两条臂的单位方向按当前 wrt 帧表达、小数位缺省 2（E3D `Decimal Places` 缺省）；第三击落记录前先过内核，0° / 180° / 重合点**不落记录**、丢草稿回第 1 步、提示条给 E3D `alert.error` 那句话的等价文案。实机 `Angle 40.54°` 与三点解析角差 0.001436°、两条 Direction 逐位差 < 2e-4，退化三击拒收并回到第 1 步（golden MD §22）。**已知偏离**：方向仍是分量串（`X +0.3635 · …`）不是 E3D 罗盘串（`W 11.7755 N 66.8266 D`）——与距离结果表 `Direction` 行同一条既有偏离，要改两处一起改 |
 | 8 | 角度 Unit（Degrees / Radians / Gradians）+ Decimal Places | ✗ | 只有度 + 全局 precision |
 | 9 | 两线夹角（LINEANGLE） | ✗ | 无 EDGE 拾取；G6-04 未采 |
 | 10 | Shortest（graphics × graphics） | ✗ | 现有 clearance / 最近点是采样近似（上一计划 §3.2），不是 `gmfLine.shortest` 语义；G5 未采 |
@@ -94,7 +94,7 @@
 ## 3. 差距分级
 
 - **P0（不补就不能说「E3D 有的我们都有」）**：#10 Shortest、#9 两线夹角、#17 拾取类型、#14 Graphics 边 / 面拾取（它同时解锁 Perpendicular 与 Shortest 的目标 provider）、#13 在 gen-model-v1 下的 PLINE 供给（#12 Element 显著点 2026-09-13 核对为非 E3D 口径，撤出 P0，d-336）。
-- **P1（功能在、契约缺角）**：#4 Keep 生命周期、#5 Units 矩阵、#7 角度内核接线 + Direction1/2、#8 角度单位 / 小数位、#19 提示结构、#20 分层取消。
+- **P1（功能在、契约缺角）**：#4 Keep 生命周期（✓ 2026-09-14）、#5 Units 矩阵（✓ 2026-09-14，英制不做）、~~#7 角度内核接线 + Direction1/2~~（✓ 2026-09-14）、#8 角度单位 / 小数位、#19 提示结构、#20 分层取消（✓ 2026-09-14，余右键 trace）。
 - **P2（可选 / 需拍板）**：#15 DPOINT（TUBING 已于 2026-09-13 前端派生落地）、Aid 拾取、External。
 
 ## 4. 分阶段方案
@@ -199,7 +199,11 @@
 
 **范围**：#7 #8 #9。
 
-- `threePointAngle.ts` 接入 UI：结果表加 `Direction1 / Direction2`（wrt 帧罗盘字串，`labelXYZ/ENU/UVW` 口径），0° / 180° / 重合点走 `alert.error` 等价提示并回到第 1 步。
+- ~~`threePointAngle.ts` 接入 UI：结果表加 `Direction1 / Direction2`（wrt 帧罗盘字串，`labelXYZ/ENU/UVW` 口径），0° / 180° / 重合点走 `alert.error` 等价提示并回到第 1 步。~~
+  **切片 1 ✓（2026-09-14 15:12，Web `d2e7c02`，决策 `d-486`）**：`buildAngleMeasurementResultRows` 出三行、`computeAngleDegrees` 改走内核、
+  第三击落记录前过内核（退化就不落、丢草稿回第 1 步、提示条给 E3D 那句话的等价文案）、结果卡在角度模式换成这三行并收起距离窗体的 Units 框。
+  实机对账 Δ 0.0014°、Direction 逐位 < 2e-4，退化三击拒收并回到第 1 步（golden MD §22）。**方向仍按 `labelXYZ/ENU/UVW` 出分量串**，
+  没做成 E3D 的罗盘串（`W 11.7755 N 66.8266 D`）——距离结果表的 `Direction` 行也是分量串，两处是同一条既有偏离，要改一起改。
 - 角度 Unit（Degrees / Radians / Gradians）+ Decimal Places（缺省 2），测量会话级。
 - 两线夹角：Phase A 的 Graphics 边 provider 就位后，新增「两边角」子模式（`LINEANGLE` 回 REAL，`LINEANGLEARC` 画弧）；入口是否要做取决于 G6-04（若 E3D 产品 UI 不可达，只做内核 + 隐藏入口）。
 

@@ -143,6 +143,11 @@ _Avoid_: PLINE 关键点（把它当两个孤立端点）、管身轴线、元�
 距离测量这一会话里结果表与尺寸文字共用的长度格式，由 Unit type（Default / Metric）× Display Unit（Millimetres / Centimetres / Metres）两档选出，对应 E3D Measure Distance 窗体的 Units 框与 `COMFORMATS.distanceFormat`。它是**会话级**的，优先级高于全局单位设置——只有 Default 档才回落到全局（E3D 那边回落的是工程当前的 `!!distanceFmt`）。各档的小数位与去不去尾零由格式定（毫米 2 位去尾零、厘米 / 米 3 位去尾零），四舍五入到 0 一律不带负号。Display Unit 记得住上次选的那一档，切回 Metric 时回到它。E3D 还有一档 Imperial（Inch / Feet & Inches / Feet），本项目有意不做。
 _Avoid_: 全局单位设置（模型显示单位 + 小数位，另一层）、模型单位
 
+## 三点角
+
+按 E3D 的 root / first / second 三击测出的夹角（Web 草稿里依次是顶点、第一边点、第二边点）。它只报 minor 角（0°–180°，没有反角），两条臂各有一个单位方向（Direction1 = 顶点→第一边点，Direction2 = 顶点→第二边点），方向随当前 wrt 帧换分量与轴标签，角度本身与参考系无关。三点共线（0° / 180°）或有重合点时**测不出来**：不落记录、回到第 1 步重新取顶点——对应 E3D 那边 `radius3PointsNoError` 回未设 ARC、窗体报 `An angular dimension could not be constructed from the data selected`。
+_Avoid_: 反角 / 优角、两线夹角（EDGE × EDGE 的 LINEANGLE，另一回事）
+
 ## P-Point
 
 来自模型点集数据的设计关键点，适合作为精确测量点。它不是模型表面任意射线命中点。

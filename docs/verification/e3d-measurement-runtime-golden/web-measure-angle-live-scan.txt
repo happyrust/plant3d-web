@@ -1,0 +1,17 @@
+# E3D Measure Angle · 三点内核接线实机走查（dev :3101 + gen-model :8024，?model_source=gen-model-v1&gm_backend_port=8024&show_refno=24381_177298，Playwright 真指针，临时 spec 已删）
+# 前半：三点不共线一次测量的结果表三行与三点设计坐标的解析对账；后半：退化三点的拒收与回到第 1 步。
+objects=38 STRU=24381_177298 gm_backend_port=8024
+角度模式下测量面板没有距离窗体的 Units 框（E3D 的 Units 在 gphMeasure 上，gphAngleMeasure 是 Unit / Decimal Places）
+picks: o:24381_177301:0@(375,183) o:24381_177313:8@(241,354) o:24381_177329:16@(230,227)
+第 1 击（顶点）：draftStage=finding_first_arm records=0
+第 2 击（第一边点）：draftStage=finding_second_arm records=0
+第 3 击（第二边点）：draftStage=null records=1 approximate=true
+结果表：Angle=40.54° | Direction1=X +0.3635 · Y -0.3880 · Z -0.8469 | Direction2=X -0.1993 · Y -0.7379 · Z -0.6448
+  顶点 → 两臂：模型表面点 → Item 原点 24381_177313 / 模型表面点
+  对账：解析 40.538564° vs 结果表 40.54°，Δ=0.001436°
+  Direction1 解析 [0.3635, -0.3880, -0.8469] vs 结果表 [0.3635, -0.388, -0.8469]
+  Direction2 解析 [-0.1993, -0.7379, -0.6448] vs 结果表 [-0.1993, -0.7379, -0.6448]
+退化三击（同一处）：records=1 draftStage=null
+  提示：三点里有重合点，画不出角度尺寸（E3D：An angular dimension could not be constructed from the data selected）；已回到第 1 步
+拒收后再点一下：draftStage=finding_first_arm（应是 finding_first_arm = 回到第 1 步）
+page errors: 0
