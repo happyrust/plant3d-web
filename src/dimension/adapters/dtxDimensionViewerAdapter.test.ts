@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { Box3, Matrix4, PerspectiveCamera, Scene, Vector3 } from 'three';
+import { Box3, Matrix4, PerspectiveCamera, Vector3 } from 'three';
 
 import {
   createDtxDimensionViewerAdapter,
@@ -17,7 +17,6 @@ function elementAt(rect: Readonly<{ left: number; top: number; width: number; he
 function baseInput(container: Element | null) {
   return {
     getCamera: () => new PerspectiveCamera(),
-    getScene: () => new Scene(),
     getMillimetresToScene: () => new Matrix4(),
     getContainer: () => container as HTMLElement | null,
     requestRender: vi.fn(),

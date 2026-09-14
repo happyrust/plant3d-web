@@ -16,4 +16,6 @@ status: accepted
 
 **验证**：`scenePainter.test.ts` +1（两遍共享几何、renderOrder 顺序、深度状态与常量、`uPass`、羽化宽随 dpr、白边落到第 1 层）与既有用例更新（四个绘制对象、实心遍 engineering 不透明 / 羽化遍始终混合）、`theme.test.ts`、`createDimensionSystem.test.ts`（四个子对象）；`npx vitest run src/dimension src/composables/useMbdExternalSync.test.ts` 59 文件 / 344 通过；eslint 0；type-check 本改动 0。实机（BRAN 24381_145018，live gen-model `:18122`，真实 Chrome + RX590 2× DPR，OutlinePass 路径无 MSAA）：`docs/verification/mbd-3d-dimension-presentation-2026-09-12/README.md`「文字绘制」小节，同位置 3× 放大前后对照——坐标卡片、三维数字 `758.89`、弯头药丸——以及 inspection 下 `758.89` / `2760.31` 从「浅灰带深色斑点」到「均匀浅灰」的前后。着色器调试过程里逐项可视化过四边形几何、覆盖率、沿 / 横坐标、半宽、羽化宽与插值 w（均正确），最后定位到 z/w 插值噪声破坏去重相等这一处。
 
+**补（2026-09-14 17:xx，ADR 0064）**：叠层不再与模型同一帧画，而是在整帧后处理之后单独一遍直接进 sRGB 画布——上文「OutlinePass 路径无 MSAA」对叠层不再相关（FXAA 也碰不到它了），胶囊解析抗锯齿仍是描边唯一的抗锯齿；颜色改按 sRGB 分量写、羽化边在 sRGB 里混合；屏幕文字的笔画取整到设备像素（1.8 px → 1× 2 个、2× 4 个，最少 2 个）并把横竖笔吸到像素边界。两遍 / 深度去重 / 实心不透明、羽化始终混合的口径不变。
+
 依据：用户 2026-09-14 00:5x 要求「把文字的绘制改得更清晰」，01:0x 拍板「A + B 一起做」（A = 解析抗锯齿 + 圆头接头 + 深度去重，B = 笔画 1.8 px、药丸字高 11 px）。相关：ADR 0057（三维标注、白边）、ADR 0058（标签 billboard）、ADR 0061（inspection 淡化：engineering 下实心遍 / 箭头 / 填充仍不透明，羽化遍例外）。落地：`viewport/scenePainter.ts`（着色器、两个描边材质与 Mesh、`strokeLayer` 属性、`resize(…, pixelRatio)`）、`viewport/dimensionViewport.ts`（把 `projector.dpr` 传给画家）、`kernel/theme.ts`（两个主题值）。

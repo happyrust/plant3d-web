@@ -9,6 +9,7 @@ import {
   Matrix4,
   Mesh,
   ShaderMaterial,
+  SRGBColorSpace,
   Vector2,
   type IUniform,
   type Object3D,
@@ -60,6 +61,23 @@ const STROKE_HALO_DEPTH = 0.00002;
 /** Coverage at or above this is a stroke's solid core; below it, its feathered edge. */
 const STROKE_CORE_COVERAGE = 0.999;
 
+/**
+ * Screen-space (billboard) text is hinted to the device pixel grid: its
+ * strokes are a whole number of device pixels wide, never fewer than this,
+ * and each axis-aligned stem is centred so that its edges fall on pixel
+ * boundaries (ADR 0064). Below two device pixels a feathered stroke has no
+ * solid core at all (w/2 − f/2 ≤ 0) and reads grey on a 1× display.
+ */
+const MIN_TEXT_STROKE_DEVICE_PX = 2;
+
+/**
+ * Two ends of a glyph stroke closer than this (device px) along an axis
+ * count as an axis-aligned stem. LFF stems are exactly axis-aligned; the
+ * tolerance only absorbs float error, so no slanted stroke is pulled
+ * straight.
+ */
+const STEM_AXIS_TOLERANCE_DEVICE_PX = 0.01;
+
 const VERTEX_OFFSET_FUNCTION = `
 vec4 projectSceneVertex(vec3 anchor, vec2 offsetPx) {
   vec4 clip = projectionMatrix * modelViewMatrix * vec4(anchor, 1.0);
@@ -80,10 +98,19 @@ vec4 projectSceneVertex(vec3 anchor, vec2 offsetPx) {
  * The capsule coordinates travel pre-multiplied by clip.w so the
  * rasteriser's perspective-correct interpolation comes out linear in
  * screen space for 3D (framed) text whose two ends sit at different depths.
+ *
+ * Screen-space glyph strokes (\`pixelSnap\` = 1) are hinted: an axis-aligned
+ * stem has both ends moved to the same device-pixel-aligned coordinate —
+ * whole pixel for an even stroke width, half pixel for an odd one — so its
+ * edges land on pixel boundaries and the feather ramp has nothing to blur
+ * (ADR 0064). Both ends of a segment go through the same computation, so
+ * the four quad vertices agree; slanted strokes are left alone and their
+ * round caps cover the sub-pixel step at a joint with a snapped stem.
  */
 const STROKE_VERTEX_SHADER = `
 uniform vec2 uViewportCssPx;
 uniform float uFeatherPx;
+uniform float uPixelRatio;
 
 attribute vec2 offsetPx;
 attribute vec3 otherAnchor;
@@ -92,6 +119,7 @@ attribute float segmentT;
 attribute float side;
 attribute float strokeWidthPx;
 attribute float strokeLayer;
+attribute float pixelSnap;
 attribute vec3 batchColor;
 attribute float batchAlpha;
 attribute float dashCode;
@@ -113,9 +141,45 @@ vec2 clipToCss(vec4 clip) {
   );
 }
 
+// Inverse of clipToCss on x / y; depth and w stay the vertex's own, so the
+// GPU still clips a run whose anchor is behind the camera.
+vec4 cssToClip(vec2 css, vec4 clip) {
+  return vec4(
+    (css.x / uViewportCssPx.x * 2.0 - 1.0) * clip.w,
+    (1.0 - css.y / uViewportCssPx.y * 2.0) * clip.w,
+    clip.z,
+    clip.w
+  );
+}
+
+// Snaps one device-pixel coordinate so a stem of the given whole-pixel
+// width has its edges on pixel boundaries.
+float snapStem(float devicePx, float widthDevicePx) {
+  float phase = mod(floor(widthDevicePx + 0.5), 2.0) < 0.5 ? 0.0 : 0.5;
+  return floor(devicePx - phase + 0.5) + phase;
+}
+
 void main() {
   vec4 ownClip = projectSceneVertex(position, offsetPx);
   vec4 otherClip = projectSceneVertex(otherAnchor, otherOffsetPx);
+  if (pixelSnap > 0.5) {
+    vec2 ownDevice = clipToCss(ownClip) * uPixelRatio;
+    vec2 otherDevice = clipToCss(otherClip) * uPixelRatio;
+    vec2 stem = abs(otherDevice - ownDevice);
+    float widthDevicePx = strokeWidthPx * uPixelRatio;
+    if (stem.x < ${STEM_AXIS_TOLERANCE_DEVICE_PX}) {
+      float x = snapStem(ownDevice.x, widthDevicePx);
+      ownDevice.x = x;
+      otherDevice.x = x;
+    }
+    if (stem.y < ${STEM_AXIS_TOLERANCE_DEVICE_PX}) {
+      float y = snapStem(ownDevice.y, widthDevicePx);
+      ownDevice.y = y;
+      otherDevice.y = y;
+    }
+    ownClip = cssToClip(ownDevice / uPixelRatio, ownClip);
+    otherClip = cssToClip(otherDevice / uPixelRatio, otherClip);
+  }
   vec2 deltaCss = clipToCss(otherClip) - clipToCss(ownClip);
   float segmentLengthPx = length(deltaCss);
   vec2 dir = segmentLengthPx > 0.0001
@@ -240,6 +304,7 @@ const STROKE_ATTRIBUTES: readonly AttributeSpec[] = [
   { name: 'side', itemSize: 1 },
   { name: 'strokeWidthPx', itemSize: 1 },
   { name: 'strokeLayer', itemSize: 1 },
+  { name: 'pixelSnap', itemSize: 1 },
   { name: 'batchColor', itemSize: 3 },
   { name: 'batchAlpha', itemSize: 1 },
   { name: 'dashCode', itemSize: 1 },
@@ -414,6 +479,21 @@ function strokeWidthPx(theme: DimensionTheme, stroke: SegmentStroke | undefined)
   }
 }
 
+/**
+ * Stroke width of hinted (screen-space) text: the theme's CSS width taken
+ * to the nearest whole number of device pixels, at least
+ * `MIN_TEXT_STROKE_DEVICE_PX`, expressed back in CSS px. 1.8 px is 2 device
+ * px on a 1× display and 4 on a 2× one, so a snapped stem covers whole
+ * pixels and its feathered edge never straddles two.
+ */
+export function hintedTextStrokeWidthPx(widthCssPx: number, pixelRatio: number): number {
+  const devicePx = Math.max(
+    MIN_TEXT_STROKE_DEVICE_PX,
+    Math.round(widthCssPx * pixelRatio),
+  );
+  return devicePx / pixelRatio;
+}
+
 function offsetVertex(vertex: SceneVertex, offset: Vec2): SceneVertex {
   return {
     anchor: vertex.anchor,
@@ -442,6 +522,8 @@ type SegmentVisitor = (
   styleRole: string,
   lineStyle?: DimensionLineStyle,
   stroke?: SegmentStroke,
+  /** Screen-space glyph stroke: hinted to the device pixel grid (ADR 0064). */
+  hinted?: boolean,
 ) => void;
 
 function visitPrimitiveSegments(
@@ -549,13 +631,16 @@ function visitPrimitiveSegments(
       }
       for (const segment of segments) {
         // Glyph strokes stay solid: role dash patterns (external-reference,
-        // invalid, approximate) must never break up label text.
+        // invalid, approximate) must never break up label text. Screen-space
+        // text is hinted to the device pixel grid; framed (3D) text above
+        // is not — its stems are not axis-aligned on screen.
         visit(
           offsetVertex(primitive.at, segment.from),
           offsetVertex(primitive.at, segment.to),
           primitive.styleRole,
           'solid',
           primitive.tone ?? 'text',
+          true,
         );
       }
       return;
@@ -585,25 +670,31 @@ function visitSegments(
   }
 }
 
+/**
+ * A theme colour as the shader writes it: sRGB-encoded components. The
+ * overlay is drawn straight into the sRGB canvas after the frame's tone
+ * mapping and colour-space conversion (ADR 0064), so the fragment shader's
+ * output is the on-screen value — a flat drawing colour that must not go
+ * through ACES — and its alpha blending happens in sRGB, where a
+ * half-covered edge pixel of dark text lands halfway in perceived
+ * brightness instead of a light grey. (`new Color(hex)` holds linear
+ * working-space components under three's colour management.)
+ */
+export function srgbComponents(hex: string): readonly [number, number, number] {
+  const rgb = new Color(hex).getRGB(new Color(), SRGBColorSpace);
+  return [rgb.r, rgb.g, rgb.b];
+}
+
 function colorComponents(
   theme: DimensionTheme,
   styleRole: string,
   stroke: SegmentStroke | undefined,
 ): readonly [number, number, number] {
-  if (stroke === 'halo-3d') {
-    const halo = new Color(theme.dimension3d.textHaloColor);
-    return [halo.r, halo.g, halo.b];
-  }
-  if (isTagTone(stroke)) {
-    const tone = new Color(resolveTagToneColor(theme, styleRole, stroke));
-    return [tone.r, tone.g, tone.b];
-  }
+  if (stroke === 'halo-3d') return srgbComponents(theme.dimension3d.textHaloColor);
+  if (isTagTone(stroke)) return srgbComponents(resolveTagToneColor(theme, styleRole, stroke));
   const roleKey = styleRole as keyof typeof theme.colors;
   const textColor = stroke !== undefined ? theme.textColors[roleKey] : undefined;
-  const color = new Color(
-    textColor ?? theme.colors[roleKey] ?? theme.colors.normal,
-  );
-  return [color.r, color.g, color.b];
+  return srgbComponents(textColor ?? theme.colors[roleKey] ?? theme.colors.normal);
 }
 
 function createColorResolver(theme: DimensionTheme) {
@@ -724,24 +815,39 @@ type DimensionVertexRange = Readonly<{
  * dimension lines get real, DPR-independent stroke widths (GL_LINES
  * rasterizes at a fixed 1 device pixel and cannot); the quad is shaded as a
  * capsule with a one-device-pixel analytic edge (round joins, smooth at any
- * angle and without MSAA — the OutlinePass path has none), drawn in two
- * passes over the same geometry: opaque cores that dedupe through the depth
- * buffer, then blended edges tested against those cores.
+ * angle and without MSAA), drawn in two passes over the same geometry:
+ * opaque cores that dedupe through the depth buffer, then blended edges
+ * tested against those cores.
+ *
+ * The group is meant to be drawn as its own pass after the host's frame —
+ * post-processing included — straight into the sRGB canvas
+ * (`DimensionViewport.renderOverlay`, ADR 0064): colours are written
+ * sRGB-encoded and never tone-mapped, edges blend in sRGB, no FXAA touches
+ * the strokes, and screen-space text is hinted to the device pixel grid.
  */
 export class ThreeSceneDimensionPainter {
   readonly group = new Group();
 
   private readonly viewportCssPx = new Vector2(1, 1);
   private readonly featherPx: IUniform<number> = { value: 1 };
+  private readonly pixelRatio: IUniform<number> = { value: 1 };
   private readonly lineBuffers = new ReusableGeometry(STROKE_ATTRIBUTES, true);
   private readonly triangleBuffers = new ReusableGeometry(TRIANGLE_ATTRIBUTES);
   private readonly fillBuffers = new ReusableGeometry(TRIANGLE_ATTRIBUTES);
   private readonly lineMaterial = createStrokeMaterial(
-    { uViewportCssPx: { value: this.viewportCssPx }, uFeatherPx: this.featherPx },
+    {
+      uViewportCssPx: { value: this.viewportCssPx },
+      uFeatherPx: this.featherPx,
+      uPixelRatio: this.pixelRatio,
+    },
     'core',
   );
   private readonly lineEdgeMaterial = createStrokeMaterial(
-    { uViewportCssPx: { value: this.viewportCssPx }, uFeatherPx: this.featherPx },
+    {
+      uViewportCssPx: { value: this.viewportCssPx },
+      uFeatherPx: this.featherPx,
+      uPixelRatio: this.pixelRatio,
+    },
     'edge',
   );
   private readonly triangleMaterial = createMaterial(
@@ -809,7 +915,9 @@ export class ThreeSceneDimensionPainter {
   /**
    * Viewport size in CSS px and the device pixel ratio: the stroke edge
    * ramp is one device pixel wide, so it stays crisp on a 2× display
-   * instead of softening to two device pixels.
+   * instead of softening to two device pixels, and screen-space text is
+   * hinted to that display's pixel grid (the caller repaints on a DPR
+   * change — `DimensionViewport` invalidates `dpr`).
    */
   resize(widthCssPx: number, heightCssPx: number, pixelRatio = 1): void {
     if (
@@ -822,7 +930,9 @@ export class ThreeSceneDimensionPainter {
     }
     this.viewportCssPx.set(widthCssPx, heightCssPx);
     const ratio = Number.isFinite(pixelRatio) && pixelRatio > 0 ? pixelRatio : 1;
-    this.featherPx.value = 1 / Math.min(Math.max(ratio, 0.5), 8);
+    const clamped = Math.min(Math.max(ratio, 0.5), 8);
+    this.featherPx.value = 1 / clamped;
+    this.pixelRatio.value = clamped;
   }
 
   setDesignToWorld(matrix: Matrix4): void {
@@ -859,10 +969,12 @@ export class ThreeSceneDimensionPainter {
     const lineSide = this.lineBuffers.array('side');
     const lineStrokeWidth = this.lineBuffers.array('strokeWidthPx');
     const lineStrokeLayer = this.lineBuffers.array('strokeLayer');
+    const linePixelSnap = this.lineBuffers.array('pixelSnap');
     const lineColor = this.lineBuffers.array('batchColor');
     const lineAlpha = this.lineBuffers.array('batchAlpha');
     const lineDashCode = this.lineBuffers.array('dashCode');
     const resolveColor = createColorResolver(theme);
+    const pixelRatio = this.pixelRatio.value;
     const writeStrokeVertex = (
       vertexIndex: number,
       own: SceneVertex,
@@ -871,6 +983,7 @@ export class ThreeSceneDimensionPainter {
       side: -1 | 1,
       widthPx: number,
       layer: 0 | 1,
+      snap: 0 | 1,
       color: readonly [number, number, number],
       alpha: number,
       code: number,
@@ -883,6 +996,7 @@ export class ThreeSceneDimensionPainter {
       lineSide[vertexIndex] = side;
       lineStrokeWidth[vertexIndex] = widthPx;
       lineStrokeLayer[vertexIndex] = layer;
+      linePixelSnap[vertexIndex] = snap;
       writeVec3(lineColor, vertexIndex, color);
       lineAlpha[vertexIndex] = alpha;
       lineDashCode[vertexIndex] = code;
@@ -897,10 +1011,15 @@ export class ThreeSceneDimensionPainter {
         [layout],
         this.font,
         this.glyphCaches,
-        (from, to, styleRole, lineStyle, stroke) => {
+        (from, to, styleRole, lineStyle, stroke, hinted) => {
           const code = dashCode(styleRole, lineStyle);
           const color = resolveColor(styleRole, stroke);
-          const widthPx = strokeWidthPx(theme, stroke);
+          // Screen-space text is hinted: whole device pixels wide, stems
+          // snapped to the grid in the vertex shader (ADR 0064).
+          const snap = hinted ? 1 : 0;
+          const widthPx = hinted
+            ? hintedTextStrokeWidthPx(strokeWidthPx(theme, stroke), pixelRatio)
+            : strokeWidthPx(theme, stroke);
           // The 3D-text halo sits on the farther depth layer so the glyph
           // strokes drawn over it pass the depth test.
           const layer = stroke === 'halo-3d' ? 1 : 0;
@@ -908,16 +1027,16 @@ export class ThreeSceneDimensionPainter {
           // vertices at the far end negate `side` to stay on the same
           // world-space edge of the quad.
           writeStrokeVertex(
-            lineVertexIndex, from, to, 0, -1, widthPx, layer, color, alpha, code,
+            lineVertexIndex, from, to, 0, -1, widthPx, layer, snap, color, alpha, code,
           );
           writeStrokeVertex(
-            lineVertexIndex + 1, from, to, 0, 1, widthPx, layer, color, alpha, code,
+            lineVertexIndex + 1, from, to, 0, 1, widthPx, layer, snap, color, alpha, code,
           );
           writeStrokeVertex(
-            lineVertexIndex + 2, to, from, 1, 1, widthPx, layer, color, alpha, code,
+            lineVertexIndex + 2, to, from, 1, 1, widthPx, layer, snap, color, alpha, code,
           );
           writeStrokeVertex(
-            lineVertexIndex + 3, to, from, 1, -1, widthPx, layer, color, alpha, code,
+            lineVertexIndex + 3, to, from, 1, -1, widthPx, layer, snap, color, alpha, code,
           );
           lineVertexIndex += 4;
         },

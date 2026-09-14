@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { Group, Matrix4, PerspectiveCamera } from 'three';
+import { Matrix4, PerspectiveCamera } from 'three';
 
 import { createEmptyDimensionDocument } from '../domain/document';
 import { exactAnchor, linearRecord } from '../domain/testFixtures';
@@ -39,12 +39,10 @@ function createViewerAdapter(
   overrides: Partial<DimensionViewerAdapter> = {},
 ): DimensionViewerAdapter {
   const camera = new PerspectiveCamera(50, 1, 0.1, 100);
-  const scene = new Group();
   camera.position.set(0, 0, 10);
   camera.updateMatrixWorld(true);
   return {
     getCamera: () => camera,
-    getScene: () => scene,
     getDesignToWorld: () => new Matrix4(),
     getSize: () => ({ widthCssPx: 400, heightCssPx: 400, dpr: 1 }),
     requestRender: vi.fn(),
@@ -100,7 +98,7 @@ function createHarness(input: {
     cancelFrame: () => undefined,
     loadFont: async () => createTestFont(),
   });
-  return { scene: viewer.getScene(), inputCanvas, flush, promise };
+  return { inputCanvas, flush, promise };
 }
 
 function documentWithRecords(
@@ -134,7 +132,8 @@ describe('createDimensionSystem', () => {
     const harness = createHarness({ repository });
 
     await Promise.resolve();
-    expect(harness.scene?.children).toHaveLength(0);
+    // Nothing is wired before the document has loaded.
+    expect(harness.inputCanvas.addEventListener).not.toHaveBeenCalled();
 
     resolveLoad(documentWithRecords([linearRecord()], 3));
     const system = await createdSystem(harness);
@@ -145,9 +144,11 @@ describe('createDimensionSystem', () => {
 
     system.notifyViewerChanged();
     harness.flush();
-    expect(harness.scene?.children).toHaveLength(1);
-    // Stroke cores, stroke edges, filled arrowheads, filled tag bodies.
-    expect(harness.scene?.children[0]?.children).toHaveLength(4);
+    // The overlay is the viewport's own scene, not part of the host's
+    // (ADR 0064): one painter group with its four draw objects — stroke
+    // cores, stroke edges, filled arrowheads, filled tag bodies.
+    expect(system.viewport.overlayScene.children).toHaveLength(1);
+    expect(system.viewport.overlayScene.children[0]?.children).toHaveLength(4);
   });
 
   it('reports a typed document failure without mounting a canvas', async () => {
@@ -160,7 +161,6 @@ describe('createDimensionSystem', () => {
 
     expect(result).toMatchObject({ ok: false, stage: 'document' });
     expect(harness.inputCanvas.addEventListener).not.toHaveBeenCalled();
-    expect(harness.scene?.children).toHaveLength(0);
   });
 
   it('detects journal commands without replaying them', async () => {
@@ -272,15 +272,15 @@ describe('createDimensionSystem', () => {
     const system = await createdSystem(harness);
 
     expect(harness.inputCanvas.addEventListener).toHaveBeenCalledTimes(4);
-    expect(harness.scene?.children).toHaveLength(1);
+    expect(system.viewport.overlayScene.children).toHaveLength(1);
     system.dispose();
     system.dispose();
 
     expect(harness.inputCanvas.removeEventListener).toHaveBeenCalledTimes(4);
-    expect(harness.scene?.children).toHaveLength(0);
+    expect(system.viewport.overlayScene.children).toHaveLength(0);
     system.notifyViewerChanged();
     harness.flush();
-    expect(harness.scene?.children).toHaveLength(0);
+    expect(system.viewport.overlayScene.children).toHaveLength(0);
   });
 
   it('never lets external records touch the document', async () => {

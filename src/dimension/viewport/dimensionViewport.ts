@@ -1,3 +1,5 @@
+import { Scene } from 'three';
+
 import { normalizeExternalDimension } from '../adapters/normalizeExternalDimensions';
 import { normalizeUserDimension } from '../adapters/normalizeUserDimensions';
 import { buildHitIndex, type HitIndex, type HitTarget } from '../kernel/hit/hitIndex';
@@ -29,7 +31,7 @@ import type {
   ScenePrimitive,
   Vec2,
 } from '../kernel/types';
-import type { Matrix4, Object3D } from 'three';
+import type { Camera, Matrix4, WebGLRenderer } from 'three';
 
 export type DimensionFrameBreakdown = Readonly<{
   layoutMs: number;
@@ -105,11 +107,15 @@ type DimensionViewportBaseInput = Readonly<{
 }>;
 
 export type DimensionViewportInput = DimensionViewportBaseInput & Readonly<{
-  scene: Object3D;
   requestRender: () => void;
 }>;
 
 export class DimensionViewport {
+  /**
+   * The overlay's own scene. It is not part of the host scene graph: the
+   * host draws it with `renderOverlay` after its frame (ADR 0064).
+   */
+  readonly overlayScene = new Scene();
   private readonly scenePainter: ThreeSceneDimensionPainter;
   private readonly scheduler: DimensionViewportScheduler;
   private normalizedUsers: readonly NormalizedDimensionInput[] = [];
@@ -140,12 +146,33 @@ export class DimensionViewport {
   constructor(private readonly input: DimensionViewportInput) {
     this.theme = input.theme;
     this.format = input.format;
-    this.scenePainter = new ThreeSceneDimensionPainter(input.scene, input.font);
+    this.overlayScene.name = 'dimension-overlay-scene';
+    this.scenePainter = new ThreeSceneDimensionPainter(this.overlayScene, input.font);
     this.scheduler = new DimensionViewportScheduler({
       requestFrame: input.requestFrame,
       cancelFrame: input.cancelFrame,
       onFrame: reasons => this.render(reasons),
     });
+  }
+
+  /**
+   * Draws the dimension overlay over the frame the host has just rendered
+   * — after its post-processing (outline, FXAA, tone mapping, sRGB output)
+   * — with the same camera (ADR 0064). Nothing of the frame is cleared;
+   * only the depth buffer is, which the stroke passes use to paint every
+   * pixel once (ADR 0062) and which no model depth must reach. The renderer
+   * is left as it was found.
+   */
+  renderOverlay(renderer: WebGLRenderer, camera: Camera): void {
+    if (this.disposed) return;
+    const autoClear = renderer.autoClear;
+    renderer.autoClear = false;
+    try {
+      renderer.clearDepth();
+      renderer.render(this.overlayScene, camera);
+    } finally {
+      renderer.autoClear = autoClear;
+    }
   }
 
   setDocument(state: DimensionDocumentState): void {

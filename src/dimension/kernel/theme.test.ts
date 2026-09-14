@@ -46,13 +46,14 @@ describe('dimension theme', () => {
     });
   });
 
-  it('pins the inspection display mode alphas and occlusion tolerance (S4, 2026-09-13; alphas retuned 2026-09-14)', () => {
-    // 淡化系数是线性光里的混合因子，再经 ACES + sRGB 才上屏：实机量得 0.92 / 0.80 在深色文字上
-    // 分别呈现约 65 % / 35 % 的不透明对比（原 0.65 / 0.35 只呈现约 20 % / 8 %），两态可分且都还能读；
+  it('pins the inspection display mode alphas and occlusion tolerance (S4, 2026-09-13; alphas retuned 2026-09-14 twice)', () => {
+    // 叠层在整帧色调映射之后直接画进 sRGB 画布（ADR 0064），淡化系数就是 sRGB 里的混合因子，
+    // 留下的不透明对比 = 系数本身：0.65 / 0.35 ≈ 65 % / 35 %，两态可分且都还能读。（此前叠层在
+    // 线性光里混合再经 ACES，同样的观感要 0.92 / 0.80，d-417。）
     // 命中要比探测点近至少 max(0.5 mm, 2 px) 才算遮挡，标签锚点所在的管面本身不算。
     expect(SOLVESPACE_DIMENSION_THEME.inspection).toEqual({
-      visibleAlpha: 0.92,
-      occludedAlpha: 0.8,
+      visibleAlpha: 0.65,
+      occludedAlpha: 0.35,
       toleranceMm: 0.5,
       tolerancePx: 2,
     });

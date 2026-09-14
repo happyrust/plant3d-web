@@ -301,8 +301,8 @@ function setMbd3dEnabled(enabled: boolean): void {
 /**
  * 显示模式（S4，2026-09-13）：`engineering`（默认）每条尺寸照工程图样全画；`inspection`
  * 让内核在每次完整布局后对每条尺寸的探测点（数字 / 标签锚点）向相机做一次射线求交，
- * 被模型挡住的整条淡化到 `theme.inspection.occludedAlpha`、其余 `visibleAlpha`（线性光里的
- * 混合因子，2026-09-14 起 0.80 / 0.92，上屏后约为 35 % / 65 % 的对比），不隐藏。
+ * 被模型挡住的整条淡化到 `theme.inspection.occludedAlpha`、其余 `visibleAlpha`（叠层在整帧
+ * 之后直接画进 sRGB 画布，ADR 0064：0.35 / 0.65 就是约 35 % / 65 % 的对比），不隐藏。
  * 状态记在 URL `mbd_mode=inspection` 上，但**不走 `popstate` 重拉 payload**——模式只关系到
  * 呈现，直接交给 `viewport.setDisplayMode`；浏览器前进 / 后退带来的 `popstate` 仍会把它同步回来。
  */

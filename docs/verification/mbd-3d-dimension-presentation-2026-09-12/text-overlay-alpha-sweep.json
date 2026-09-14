@@ -1,0 +1,145 @@
+{
+ "note": "fable-5-1-17, 2026-09-14: pw-alpha-17.mjs (real Chrome, 2x DPR, gen-model :18122) — BRAN 24383_67485, camera 1.5 m before the elevation tag PE +3212 (elevation-mid), inspection mode with visibleAlpha = occludedAlpha = a; region = the pill text (device px 820,360 240x120); mask = pixels the opaque render paints darker than 90; eff = (bg - mean) / (bg - opaque) = share of the opaque contrast that survives. before = HEAD worktree (overlay in the host scene: linear-light blend + ACES + FXAA, vite :3102), after = working tree (overlay drawn after the frame into the sRGB canvas, ADR 0064, vite :3101).",
+ "camera": {
+  "position": [
+   0.906,
+   -0.824,
+   -0.748
+  ],
+  "target": [
+   0.107,
+   0.265,
+   -1.4
+  ]
+ },
+ "alphas": [
+  1,
+  0.92,
+  0.8,
+  0.65,
+  0.5,
+  0.35
+ ],
+ "before": {
+  "maskPixels": 357,
+  "bg": 228,
+  "opaque": 68,
+  "rows": {
+   "1": {
+    "lum": 68,
+    "rgb": [
+     45,
+     65,
+     94
+    ],
+    "eff": 1
+   },
+   "0.92": {
+    "lum": 123,
+    "rgb": [
+     111,
+     121,
+     137
+    ],
+    "eff": 0.65
+   },
+   "0.8": {
+    "lum": 166,
+    "rgb": [
+     161,
+     165,
+     173
+    ],
+    "eff": 0.38
+   },
+   "0.65": {
+    "lum": 193,
+    "rgb": [
+     191,
+     193,
+     196
+    ],
+    "eff": 0.22
+   },
+   "0.5": {
+    "lum": 207,
+    "rgb": [
+     206,
+     207,
+     209
+    ],
+    "eff": 0.13
+   },
+   "0.35": {
+    "lum": 216,
+    "rgb": [
+     215,
+     216,
+     217
+    ],
+    "eff": 0.07
+   }
+  }
+ },
+ "after": {
+  "maskPixels": 1042,
+  "bg": 227,
+  "opaque": 67,
+  "rows": {
+   "1": {
+    "lum": 67,
+    "rgb": [
+     51,
+     65,
+     85
+    ],
+    "eff": 1
+   },
+   "0.92": {
+    "lum": 82,
+    "rgb": [
+     67,
+     80,
+     98
+    ],
+    "eff": 0.91
+   },
+   "0.8": {
+    "lum": 104,
+    "rgb": [
+     91,
+     102,
+     118
+    ],
+    "eff": 0.77
+   },
+   "0.65": {
+    "lum": 129,
+    "rgb": [
+     119,
+     128,
+     141
+    ],
+    "eff": 0.61
+   },
+   "0.5": {
+    "lum": 154,
+    "rgb": [
+     145,
+     153,
+     163
+    ],
+    "eff": 0.46
+   },
+   "0.35": {
+    "lum": 177,
+    "rgb": [
+     171,
+     177,
+     184
+    ],
+    "eff": 0.31
+   }
+  }
+ }
+}

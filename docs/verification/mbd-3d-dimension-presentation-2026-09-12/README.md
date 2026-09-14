@@ -424,3 +424,33 @@
 | `elevation-tags-far-before-after.png` / `elevation-tags-mid-crop-3x.png` | `24383_67485` 远景并排；标高 tag 前 1.5 m 同位置 3× |
 
 **仍留**：`atta`（2804，支架位号）与 `name`（594）是方框、`connection`（5616）是卡片——远景剩下的 9979 个 tag 里它们占 9014，「云」现在是支架方框与端点卡片的事，要不要给 `atta` 一档 LOD 另拍。
+
+### 叠层挪到后处理之后 + 屏幕文字对齐像素格（2026-09-14 17:1x–18:0x，fable-5-1-17，ADR 0064；用户「文字的显示还要做的更清晰一些」→ 拍板「C + D 一起做」）
+
+**起因（改前先量）**。上一轮发给用户的 1× DPR 截图里药丸文字发灰：`24383_67485` 标高 tag 前 1.5 m 的 `PE +3212`（目标色 `#334155`，亮度 62）在 8× 逐像素放大下 133 个文字像素**中位亮度 179、亮度 < 100 的只有 2 个**——1.8 px 笔画、1 px 羽化的实心核只有 0.4 px 宽，几乎每个像素都是「边」。追到渲染链路：`hasOutline()` 只看有没有 outline helper，**生产上帧帧都走 EffectComposer**（RenderPass → OutlinePass → FXAA → OutputPass）——叠层挂在主场景里，被 FXAA 按亮度边沿抹糊、羽化边在 HalfFloat 线性光里混合（50 % 覆盖的深色边像素落在 ≈ 166 而不是 ≈ 125）、平色再过一遍 ACES（曝光 1.3：白卡片 ≈ 233 的米白，深色文字被压到亮度 9–10 而不是名义的 23）。
+
+**改法（ADR 0064）**。① `DimensionViewport` 自己持有 `overlayScene`，画家 group 不再进宿主场景；`renderOverlay(renderer, camera)` 在整帧（含 OutputPass）之后 `autoClear=false`、只 `clearDepth()`、同相机画一遍，`ViewerPanel` 三处画完主场景后调它（直接路径 / composer 路径 / 双视口每个 pass）。画家颜色改写 **sRGB 分量**（`Color.getRGB(SRGBColorSpace)`），不再进 FXAA / ACES，两条路径一致。② 屏幕字形段带 `pixelSnap = 1`：笔画宽 `hintedTextStrokeWidthPx` = max(2, round(w·dpr)) / dpr（1.8 px → 1× 2 个设备像素、2× 4 个），顶点着色器把横竖笔两端吸到像素格（偶宽整数、奇宽半整数），斜笔 / 曲线 / 三维 framed 文字 / 尺寸线不动。③ inspection α 0.92 / 0.80 → **0.65 / 0.35**（sRGB 里混合，留下的对比就是系数本身）。
+
+**单测**：`vitest run src/dimension src/composables/useMbdExternalSync.test.ts` **59 文件 / 362 通过**（+3：`renderOverlay` 只清深度、同相机画 `overlayScene`、还原 `autoClear`、dispose 后不画；`hintedTextStrokeWidthPx` 表；尺寸线 / 引线 / framed 文字不吸；sRGB 分量、`uPixelRatio`、`pixelSnap` 断言；facade 四个绘制对象在 `viewport.overlayScene`；`theme.test` 0.65 / 0.35）；eslint 0；type-check 基线外仍只有 `useDtxTools.*.test.ts` ×5（与本线无关）。
+
+**实机**（真实 Chrome，gen-model `:18122`；before = HEAD `b415820` 的 git worktree 起在 vite `:3102`，after = 工作树 vite `:3101`；`pw-petags-17.mjs` = `pw-petags-7.mjs` 加 `DPR` / `PORT` 环境变量，三条管七个相机 before / after **逐个相同**，pageerror 0；dbnum 7997 的 `24381_145018` 仍因 `model/ensure` 挂起加载不出来，所以换 dbnum 7999 的 `24383_67485` 量）：
+
+| 项 | DPR | 放大 | 修前 | 修后 |
+| --- | --- | --- | --- | --- |
+| 药丸 `PE +3212`（11 px，`#334155`，同一 84 × 26 CSS px 框） | 1× | 8× | 最暗 63、中位 179、亮度 < 100 的像素 **2** | 最暗 63、亮度 < 100 的像素 **234**；2 像素整宽的横竖笔、边上没有灰 |
+| 同一药丸 | 2× | 4× | 亮度 < 100 的文字像素 43（3.6 px 软边） | **1062**（4 像素整宽、硬边） |
+| 端点坐标卡片四行（`#0f172a`） | 2× | 3× | 最暗 **9**（ACES 压黑），深像素 3352，卡片米白 233 | 最暗 **23**（= 名义色），深像素 7786，卡片纯白 255，边框实 |
+| 位号方框 `R422.010-SV` | 2× | 4× | 最暗 9，深像素 1174 | 最暗 23，深像素 2628 |
+| 三维尺寸数字 `250.01`（2 px + 白边，不吸格） | 2× | 4× | 最暗 10，深像素 848，白边与背景混在一起 | 最暗 24，深像素 1788，白边干净，图纸红尺寸线 `#c81e1e` 不再被 ACES 去饱和 |
+
+- **inspection α**（`pw-alpha-17.mjs`，同相机、药丸文字区，对比保留率 eff = (背景 − 结果) / (背景 − 不透明)）：修前 α 0.92 → 65 %、0.80 → 38 %、0.65 → 22 %、0.35 → 7 %（复现 d-417 的读数）；**修后 α 0.92 → 91 %、0.80 → 77 %、0.65 → 61 %、0.50 → 46 %、0.35 → 31 %**——eff ≈ α，0.65 / 0.35 即是「可见 ≈ 65 %、被遮挡 ≈ 35 %」的本意（`text-overlay-alpha-sweep.json`）。
+- 观感：2× 上笔画从 3.6 个软边设备像素变成 4 个硬边，字明显重了一档；要是觉得过重，`theme.textStrokeWidthPx` 1.8 → 1.6 就是 2× 3 个像素 / 1× 仍 2 个，一行主题值的事。
+
+| 新增文件 | 说明 |
+| --- | --- |
+| `text-overlay-1x-pill-before-after-8x.png` | 1× 药丸 `PE +3212` 同框 8× 逐像素前后 |
+| `text-overlay-2x-{pill,card,frame,dim}-before-after.png` | 2× 药丸 / 坐标卡片 / 位号方框 / 三维数字 同框逐像素前后（4× / 3×） |
+| `text-overlay-2x-far-before-after.png` | `24383_67485` 远景 2× 并排（缩至 1/2） |
+| `text-overlay-alpha-sweep.json` | inspection α → 对比保留率，修前 / 修后 |
+
+**仍留**：三维 framed 文字（沿尺寸线的数字）不吸格——透视下笔画不与屏幕轴对齐，只受益于 sRGB 混合与免 FXAA；`dimensionStrokeWidthPx` 1.2 px 的尺寸线在 1× 上实心核仍只有 0.2 px（现在按 sRGB 混合看起来实一些，但没有取整），要不要给线也定「最少 1 个设备像素整宽」另拍；SVG 导出与命中区仍用名义 1.8 px。

@@ -1277,7 +1277,6 @@ let dimensionMountDisposed = false;
 let dimensionInitializationVersion = 0;
 const dimensionViewerAdapter = createDtxDimensionViewerAdapter({
   getCamera: () => dtxViewerRef.value?.camera,
-  getScene: () => dtxViewerRef.value?.scene,
   getMillimetresToScene: () => dtxLayerRef.value?.getGlobalModelMatrix(),
   getContainer: () => containerRef.value,
   requestRender,
@@ -1286,6 +1285,15 @@ const dimensionViewerAdapter = createDtxDimensionViewerAdapter({
   // 标签也让开视口右上角的坐标 gizmo 覆盖层（屏幕矩形）。
   getOverlayElements: () => [dtxViewerRef.value?.getGizmoElement()],
 });
+
+/**
+ * 尺寸叠层（标注、标签、文字）在整帧——含 OutlinePass / FXAA / 色调映射与
+ * sRGB 输出——之后单独画一遍，直接进 sRGB 画布（ADR 0064）：文字不再被
+ * FXAA 抹糊、平色不过 ACES、羽化边按 sRGB 混合。每处画完主场景都要调它。
+ */
+function renderDimensionOverlay(viewer: DtxViewer): void {
+  dimensionSystem?.viewport.renderOverlay(viewer.renderer, viewer.camera);
+}
 
 function sceneWorldToDesignMetres(
   point: readonly [number, number, number],
@@ -2651,6 +2659,7 @@ function renderModelUnitCompareScene(viewer: DtxViewer): boolean {
       camera.aspect = pass.width / Math.max(1, pass.height);
       camera.updateProjectionMatrix();
       renderer.render(viewer.scene, camera);
+      renderDimensionOverlay(viewer);
     }
   } catch (error) {
     splitRenderError = error;
@@ -3693,8 +3702,10 @@ function renderFrameImmediate() {
     // 分屏共享同一场景和相机；版本层显隐由两个 viewport 的 render pass 控制。
   } else if (selection?.hasOutline()) {
     selection.renderOutline();
+    renderDimensionOverlay(dtxViewer);
   } else {
     dtxViewer.renderer.render(dtxViewer.scene, dtxViewer.camera);
+    renderDimensionOverlay(dtxViewer);
   }
 
   try {
@@ -3783,8 +3794,10 @@ function renderFrame() {
       // 分屏共享同一场景和相机；版本层显隐由两个 viewport 的 render pass 控制。
     } else if (selection?.hasOutline()) {
       selection.renderOutline();
+      renderDimensionOverlay(dtxViewer);
     } else {
       dtxViewer.renderer.render(dtxViewer.scene, dtxViewer.camera);
+      renderDimensionOverlay(dtxViewer);
     }
 
     // ViewportGizmo 需要在主场景渲染后再渲染（会改 viewport/scissor）

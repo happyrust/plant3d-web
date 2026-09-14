@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { Color, Group, LessDepth, Matrix4, ShaderMaterial } from 'three';
+import { Color, Group, LessDepth, Matrix4, ShaderMaterial, SRGBColorSpace } from 'three';
 
 import {
   sceneFill,
@@ -11,7 +11,16 @@ import {
 import { createTestFont } from '../kernel/testUtils';
 import { SOLVESPACE_DIMENSION_THEME } from '../kernel/theme';
 
-import { ThreeSceneDimensionPainter } from './scenePainter';
+import {
+  hintedTextStrokeWidthPx,
+  srgbComponents,
+  ThreeSceneDimensionPainter,
+} from './scenePainter';
+
+/** The on-screen (sRGB-encoded) components the painter writes for a theme colour. */
+function srgb(hex: string): Color {
+  return new Color(hex).getRGB(new Color(), SRGBColorSpace) as Color;
+}
 
 import type { LayoutResult, ScenePrimitive } from '../kernel/types';
 
@@ -134,7 +143,7 @@ describe('ThreeSceneDimensionPainter', () => {
     expect(offsets.slice(14, 18)).toEqual([10, 10, 0, 10]);
     expect(Array.from(fills.geometry.getAttribute('position').array.slice(0, 3))).toEqual([1, 2, 3]);
     const color = Array.from(fills.geometry.getAttribute('batchColor').array.slice(0, 3)) as number[];
-    const expected = new Color(SOLVESPACE_DIMENSION_THEME.tag.fillColor);
+    const expected = srgb(SOLVESPACE_DIMENSION_THEME.tag.fillColor);
     expect(color[0]).toBeCloseTo(expected.r, 5);
     expect(color[1]).toBeCloseTo(expected.g, 5);
     expect(color[2]).toBeCloseTo(expected.b, 5);
@@ -237,11 +246,14 @@ describe('ThreeSceneDimensionPainter', () => {
     expect(widths.slice(8).every(width => width === Math.fround(rules.textStrokeWidthPx))).toBe(true);
     // Halo in the halo color, glyphs in the external text color.
     const colors = Array.from(lines.geometry.getAttribute('batchColor').array.slice(0, vertexCount * 3)) as number[];
-    const halo = new Color(rules.textHaloColor);
-    const text = new Color(SOLVESPACE_DIMENSION_THEME.textColors.external!);
+    const halo = srgb(rules.textHaloColor);
+    const text = srgb(SOLVESPACE_DIMENSION_THEME.textColors.external!);
     expect(colors[0]).toBeCloseTo(halo.r, 5);
     expect(colors[8 * 3]).toBeCloseTo(text.r, 5);
     expect(colors[8 * 3 + 1]).toBeCloseTo(text.g, 5);
+    // Framed text is not hinted: its stems are not axis-aligned on screen.
+    const snaps = Array.from(lines.geometry.getAttribute('pixelSnap').array.slice(0, vertexCount)) as number[];
+    expect(snaps.every(snap => snap === 0)).toBe(true);
     // Every vertex anchors in Design Space with no pixel offset: the run's
     // first stroke starts at origin − w/2·xAxis (glyph x = 0, y = 0).
     const offsets = Array.from(lines.geometry.getAttribute('offsetPx').array.slice(0, vertexCount * 2)) as number[];
@@ -257,41 +269,77 @@ describe('ThreeSceneDimensionPainter', () => {
     expect(tip[2]).toBeCloseTo(3 + 0.2, 5);
   });
 
-  it('gives glyph strokes the text stroke width and label text color', () => {
+  it('gives glyph strokes the hinted text stroke width and label text color', () => {
     const parent = new Group();
     const painter = new ThreeSceneDimensionPainter(parent, createTestFont());
     painter.resize(800, 600);
-    painter.paint(
-      [layout('text-only', [
-        sceneGlyph(
-          'A',
-          { anchor: [0.5, 0, 0], offsetPx: [0, -28] },
-          12,
-          'normal',
-          0,
-        ),
-      ])],
-      SOLVESPACE_DIMENSION_THEME,
+    const glyph = sceneGlyph(
+      'A',
+      { anchor: [0.5, 0, 0], offsetPx: [0, -28] },
+      12,
+      'normal',
+      0,
     );
+    painter.paint([layout('text-only', [glyph])], SOLVESPACE_DIMENSION_THEME);
 
     const lines = painter.group.children[0] as any;
-    const widths = Array.from(
-      lines.geometry.getAttribute('strokeWidthPx').array.slice(
-        0,
-        painter.getStats().lineVertexCount,
-      ),
-    );
-    expect(widths.length).toBeGreaterThan(0);
-    expect(widths.every(width => width === Math.fround(SOLVESPACE_DIMENSION_THEME.textStrokeWidthPx))).toBe(true);
+    const vertexCount = painter.getStats().lineVertexCount;
+    const widths = () => Array.from(
+      lines.geometry.getAttribute('strokeWidthPx').array.slice(0, vertexCount),
+    ) as number[];
+    expect(vertexCount).toBeGreaterThan(0);
+    // Screen-space text is hinted to whole device pixels (ADR 0064): the
+    // theme's 1.8 px is 2 device px on a 1× display …
+    expect(widths().every(width => width === Math.fround(2))).toBe(true);
+    const snaps = Array.from(lines.geometry.getAttribute('pixelSnap').array.slice(0, vertexCount)) as number[];
+    expect(snaps.every(snap => snap === 1)).toBe(true);
+    // … and 4 device px = 2 CSS px on a 2× one; the shader gets the ratio.
+    painter.resize(800, 600, 2);
+    painter.paint([layout('text-only', [glyph])], SOLVESPACE_DIMENSION_THEME);
+    expect(widths().every(width => width === Math.fround(2))).toBe(true);
+    expect(((lines as any).material as ShaderMaterial).uniforms.uPixelRatio!.value).toBe(2);
+    expect(((lines as any).material as ShaderMaterial).vertexShader).toContain('float snapStem(float devicePx, float widthDevicePx)');
 
-    // 普通角色标签文字使用 textColors.normal (#111827)，而非尺寸品红。
+    // 普通角色标签文字使用 textColors.normal (#111827)，而非尺寸品红；写进
+    // 缓冲的是 sRGB 编码分量（叠层直接画进 sRGB 画布，ADR 0064）。
     const color = Array.from(
       lines.geometry.getAttribute('batchColor').array.slice(0, 3),
     ) as number[];
-    const expected = new Color(SOLVESPACE_DIMENSION_THEME.textColors.normal!);
+    const expected = srgb(SOLVESPACE_DIMENSION_THEME.textColors.normal!);
     expect(color[0]).toBeCloseTo(expected.r, 5);
     expect(color[1]).toBeCloseTo(expected.g, 5);
     expect(color[2]).toBeCloseTo(expected.b, 5);
+    expect(expected.r).toBeCloseTo(0x11 / 255, 5);
+    expect(new Color(SOLVESPACE_DIMENSION_THEME.textColors.normal!).r).toBeLessThan(expected.r / 5);
+    expect(srgbComponents('#0f172a')).toEqual([15 / 255, 23 / 255, 42 / 255].map(v => expect.closeTo(v, 4)));
+  });
+
+  it('hints text stroke widths to whole device pixels, never below two', () => {
+    expect(hintedTextStrokeWidthPx(1.8, 1)).toBe(2);
+    expect(hintedTextStrokeWidthPx(1.8, 2)).toBe(2);
+    expect(hintedTextStrokeWidthPx(1.8, 1.5)).toBe(2);
+    expect(hintedTextStrokeWidthPx(1.8, 1.25)).toBe(1.6);
+    expect(hintedTextStrokeWidthPx(1.8, 3)).toBeCloseTo(5 / 3, 10);
+    expect(hintedTextStrokeWidthPx(0.5, 1)).toBe(2);
+    expect(hintedTextStrokeWidthPx(0.5, 2)).toBe(1);
+  });
+
+  it('does not hint dimension lines, markers or leaders', () => {
+    const parent = new Group();
+    const painter = new ThreeSceneDimensionPainter(parent, createTestFont());
+    painter.resize(800, 600, 1.5);
+    painter.paint([layout('one', primitives)], SOLVESPACE_DIMENSION_THEME);
+    const lines = painter.group.children[0] as any;
+    const vertexCount = painter.getStats().lineVertexCount;
+    const snaps = Array.from(lines.geometry.getAttribute('pixelSnap').array.slice(0, vertexCount)) as number[];
+    const widths = Array.from(lines.geometry.getAttribute('strokeWidthPx').array.slice(0, vertexCount)) as number[];
+    // The first quad is the dimension line: theme width as is, no snapping.
+    expect(snaps.slice(0, 4)).toEqual([0, 0, 0, 0]);
+    expect(widths.slice(0, 4)).toEqual(Array(4).fill(Math.fround(1.2)));
+    // The glyph run 'A' (two strokes) is the only hinted geometry.
+    expect(snaps.filter(snap => snap === 1)).toHaveLength(2 * 4);
+    expect(widths.filter((width, index) => snaps[index] === 1 && width === Math.fround(2)))
+      .toHaveLength(2 * 4);
   });
 
   it('updates only interaction style attributes when topology is unchanged', () => {
@@ -324,7 +372,7 @@ describe('ThreeSceneDimensionPainter', () => {
       new Set(['first']),
     )).toBe(true);
     expect(position.version).toBe(positionVersion);
-    const selectedColor = new Color(SOLVESPACE_DIMENSION_THEME.colors.selected);
+    const selectedColor = srgb(SOLVESPACE_DIMENSION_THEME.colors.selected);
     const firstColor = Array.from(color.array.slice(0, 3)) as number[];
     expect(firstColor[0]).toBeCloseTo(selectedColor.r, 5);
     expect(firstColor[1]).toBeCloseTo(selectedColor.g, 5);

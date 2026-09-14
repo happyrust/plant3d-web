@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { Group } from 'three';
+
+import { PerspectiveCamera } from 'three';
 
 import { normalizeExternalDimension } from '../adapters/normalizeExternalDimensions';
 import { normalizeUserDimension } from '../adapters/normalizeUserDimensions';
@@ -16,12 +17,10 @@ import { DimensionViewport } from './dimensionViewport';
 
 import type { ExternalDimensionRecord } from '../adapters/normalizeExternalDimensions';
 function createViewport() {
-  const scene = new Group();
   const callbacks: FrameRequestCallback[] = [];
   const cancelled: number[] = [];
   const requestRender = vi.fn();
   const viewport = new DimensionViewport({
-    scene,
     font: createTestFont(),
     theme: SOLVESPACE_DIMENSION_THEME,
     format: DEFAULT_DIMENSION_FORMAT,
@@ -38,7 +37,7 @@ function createViewport() {
     cancelled,
     flush,
     requestRender,
-    scene,
+    scene: viewport.overlayScene,
     viewport,
   };
 }
@@ -178,6 +177,36 @@ describe('DimensionViewport', () => {
     harness.viewport.dispose();
     expect(harness.cancelled).toEqual([1]);
     expect(harness.scene.children).toHaveLength(0);
+  });
+
+  it('draws its own overlay scene over the host frame with the depth buffer cleared', () => {
+    const harness = createViewport();
+    const camera = new PerspectiveCamera();
+    const calls: string[] = [];
+    const renderer = {
+      autoClear: true,
+      clearDepth: vi.fn(() => { calls.push(`clearDepth autoClear=${renderer.autoClear}`); }),
+      render: vi.fn((scene: unknown, cam: unknown) => {
+        calls.push(`render ${scene === harness.viewport.overlayScene ? 'overlay' : 'other'} ${cam === camera ? 'camera' : 'other'} autoClear=${renderer.autoClear}`);
+      }),
+    };
+
+    harness.viewport.renderOverlay(renderer as never, camera);
+    // Nothing of the frame is cleared; only depth, so stroke passes dedupe
+    // against each other and never meet model depth (ADR 0064 / 0062).
+    expect(calls).toEqual([
+      'clearDepth autoClear=false',
+      'render overlay camera autoClear=false',
+    ]);
+    expect(renderer.autoClear).toBe(true);
+
+    // The painter lives in that scene, not in any host scene graph.
+    expect(harness.viewport.overlayScene.parent).toBeNull();
+    expect(harness.viewport.overlayScene.getObjectByName('dimension-scene-overlay')).toBeDefined();
+
+    harness.viewport.dispose();
+    harness.viewport.renderOverlay(renderer as never, camera);
+    expect(renderer.render).toHaveBeenCalledTimes(1);
   });
 
   it('converts a screen drag into a semantic linear placement', () => {

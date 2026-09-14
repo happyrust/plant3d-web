@@ -44,7 +44,10 @@ export type DimensionTheme = Readonly<{
    * Stroke widths (CSS px) for the screen-space stroke-quad renderer, hit
    * regions, and SVG export. Text strokes stay heavier than dimension lines
    * (CAD practice); 1.8 px keeps 10–13 px LFF glyphs legible once their
-   * edges are feathered (user's call, 2026-09-14).
+   * edges are feathered (user's call, 2026-09-14). On screen the painter
+   * hints screen-space text to whole device pixels — 2 on a 1× display, 4
+   * on a 2× one — never below 2 (ADR 0064); hit regions and SVG use the
+   * nominal width.
    */
   textStrokeWidthPx: number;
   dimensionStrokeWidthPx: number;
@@ -140,12 +143,12 @@ export type DimensionTheme = Readonly<{
    * but a record whose probe point lies behind model geometry from the
    * camera is faded to `occludedAlpha`, the rest to `visibleAlpha` (so the
    * two states differ while everything still reads). `engineering` mode
-   * paints at alpha 1 and never probes. The values are blend factors in
-   * linear light before the viewer's ACES tone mapping and sRGB encoding,
-   * so they read much lighter than the same number would in a 2D canvas:
-   * measured on the real pipeline (dark text over the light background),
-   * 0.92 shows as about 65 % and 0.80 as about 35 % of the opaque contrast
-   * (2026-09-14).
+   * paints at alpha 1 and never probes. The overlay is drawn after the
+   * frame's tone mapping straight into the sRGB canvas (ADR 0064), so these
+   * are blend factors in sRGB and the share of the opaque contrast that
+   * survives is the factor itself: 0.65 keeps about 65 %, 0.35 about 35 %.
+   * (While the overlay still blended in linear light under ACES, the same
+   * look needed 0.92 / 0.80 — d-417, 2026-09-14.)
    */
   inspection: Readonly<{
     visibleAlpha: number;
@@ -223,10 +226,11 @@ export const SOLVESPACE_DIMENSION_THEME: DimensionTheme = {
     mutedTextColor: '#334155',
   },
   inspection: {
-    // Perceived ≈ 0.65 / 0.35 of the opaque contrast (see the type doc);
-    // the nominal 0.65 / 0.35 of 2026-09-13 read as ≈ 0.20 / 0.08.
-    visibleAlpha: 0.92,
-    occludedAlpha: 0.8,
+    // ≈ 0.65 / 0.35 of the opaque contrast, blended in sRGB (see the type
+    // doc; ADR 0064). Under the earlier linear-light blending these read as
+    // ≈ 0.20 / 0.08 and had to be 0.92 / 0.80.
+    visibleAlpha: 0.65,
+    occludedAlpha: 0.35,
     toleranceMm: 0.5,
     tolerancePx: 2,
   },

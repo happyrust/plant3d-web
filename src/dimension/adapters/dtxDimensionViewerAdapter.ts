@@ -1,4 +1,4 @@
-import { Box3, Matrix4, Vector3, type Camera, type Object3D } from 'three';
+import { Box3, Matrix4, Vector3, type Camera } from 'three';
 
 import type { DimensionViewerAdapter } from '../facade/createDimensionSystem';
 import type {
@@ -84,7 +84,6 @@ function tuple(vector: Vector3): Vec3 {
  */
 export function createDtxDimensionViewerAdapter(input: Readonly<{
   getCamera: () => Camera | null | undefined;
-  getScene: () => Object3D | null | undefined;
   getMillimetresToScene: () => Matrix4 | null | undefined;
   getContainer: () => HTMLElement | null | undefined;
   requestRender: () => void;
@@ -190,7 +189,6 @@ export function createDtxDimensionViewerAdapter(input: Readonly<{
   };
   return {
     getCamera: () => input.getCamera() ?? null,
-    getScene: () => input.getScene() ?? null,
     getDesignToWorld,
     getSize: () => {
       const rect = input.getContainer()?.getBoundingClientRect();

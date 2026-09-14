@@ -35,7 +35,7 @@ import type { DimensionSnapPort } from '../ports/snapPort';
 import type { DimensionCommandJournal } from '../services/commandJournal';
 import type { ExternalDimensionSource } from '../services/externalDimensionRegistry';
 import type { ReplayPendingCommandsResult } from '../services/replayPendingCommands';
-import type { Camera, Matrix4, Object3D } from 'three';
+import type { Camera, Matrix4 } from 'three';
 
 /**
  * Everything the dimension system needs to know about the hosting viewer.
@@ -46,7 +46,6 @@ import type { Camera, Matrix4, Object3D } from 'three';
  */
 export type DimensionViewerAdapter = Readonly<{
   getCamera(): Camera | null;
-  getScene(): Object3D | null;
   /** Design Space metres -> scene world (ADR 0008). */
   getDesignToWorld(): Matrix4;
   getSize(): Readonly<{
@@ -145,7 +144,7 @@ export type CreateDimensionSystemResult =
   | Readonly<{ ok: true; system: DimensionSystem }>
   | Readonly<{
       ok: false;
-      stage: 'font' | 'document' | 'viewer';
+      stage: 'font' | 'document';
       error: unknown;
     }>;
 
@@ -175,14 +174,6 @@ export async function createDimensionSystem(
   }
   const font = fontResult.value;
   const initialState = documentResult.value;
-  const scene = input.viewer.getScene();
-  if (!scene) {
-    return {
-      ok: false,
-      stage: 'viewer',
-      error: new Error('Dimension viewer scene is unavailable'),
-    };
-  }
 
   const session = new DimensionDocumentSession({
     initialState,
@@ -205,8 +196,9 @@ export async function createDimensionSystem(
   const occlusion: OcclusionSource | undefined = isSegmentBlocked
     ? { isSegmentBlocked }
     : undefined;
+  // The overlay lives in the viewport's own scene; the host draws it after
+  // its frame with `viewport.renderOverlay(renderer, camera)` (ADR 0064).
   const viewport = new DimensionViewport({
-    scene,
     font,
     theme,
     format,
