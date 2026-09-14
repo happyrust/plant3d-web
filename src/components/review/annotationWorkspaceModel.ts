@@ -14,9 +14,8 @@ import type {
 } from '@/composables/useToolStore';
 
 import {
-  deriveCloudBindings,
-  getAnnotationRefnos,
-  getCloudMemberRefnos,
+  deriveAnnotationBindings,
+  getAnnotationMemberRefnos,
 } from '@/composables/useToolStore';
 import {
   compareAnnotationSeverity,
@@ -54,7 +53,11 @@ export type AnnotationWorkspaceItem = {
   createdAt: number;
   activityAt: number;
   visible: boolean;
+  /** 问题目标元素（member 绑定），四类批注统一口径；锚点不在其中。 */
   refnos: string[];
+  /** 带角色的关联结构，四类批注都有（ADR-0049）；`buildAnnotationWorkspaceItems` 恒填写。 */
+  bindings?: CloudElementBinding[];
+  /** @deprecated 与 `bindings` 同一份数据，仅云线条目填写；保留给旧消费方过渡。 */
   cloudBindings?: CloudElementBinding[];
   formId?: string;
   commentCount: number;
@@ -194,8 +197,7 @@ function createWorkspaceItem(
   const status = resolveWorkspaceStatus(reviewState);
   const priorityDisplay = getAnnotationWorkspacePriorityDisplay(record.severity);
   const screenshot = resolveAnnotationScreenshot(record);
-  const cloudRecord = type === 'cloud' ? record as CloudAnnotationRecord : null;
-  const cloudBindings = cloudRecord ? deriveCloudBindings(cloudRecord) : undefined;
+  const bindings = deriveAnnotationBindings(type, record);
 
   return {
     id: record.id,
@@ -205,8 +207,9 @@ function createWorkspaceItem(
     createdAt: record.createdAt,
     activityAt: reviewState.updatedAt || record.createdAt,
     visible: record.visible,
-    refnos: cloudRecord ? getCloudMemberRefnos(cloudRecord) : getAnnotationRefnos(record),
-    cloudBindings,
+    refnos: getAnnotationMemberRefnos(type, record),
+    bindings,
+    cloudBindings: type === 'cloud' ? bindings : undefined,
     formId: normalizeFormId((record as { formId?: string }).formId),
     commentCount: getCommentCount ? getCommentCount(type, record.id) : 0,
     reviewState,

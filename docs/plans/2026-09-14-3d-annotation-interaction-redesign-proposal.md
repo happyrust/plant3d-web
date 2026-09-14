@@ -60,7 +60,7 @@
 |---|---|
 | 07-28 方案 Phase 2 与 PATCH 草案有 `rebindAnchor`；ADR-0051 禁止 | **以 ADR-0051 为准**，不提供换锚点入口，不接受该写操作 |
 | 严重度是三级还是四级 | 源码 `types/auth.ts:41` 是三级 `principle / general / drawing`（× / △ / ○）；07-28 方案里的「致命 / 严重 / 一般 / 建议」是旧稿。历史不认识的值原样保留并显示「历史类型」 |
-| ADR-0049「四类统一为带角色绑定」是否已实现 | **只有 cloud 有 `bindings`**（`useToolStore.ts:464`，`deriveCloudBindings` / `buildCloudBindings` / `addCloudMembers` / `removeCloudMember`）；text 仍是 `refno` + `refnos`（365–394 行），rect / obb 只有 `refnos`。ADR-0049 对 text 的「双角色」目前是语义约定，不是字段 → **U0 要补 `bindings?` 的推导** |
+| ADR-0049「四类统一为带角色绑定」是否已实现 | 评审时**只有 cloud 有 `bindings`**；text 仍是 `refno` + `refnos`，rect / obb 只有 `refnos`。**2026-09-14 用户拍板「其他批注也需要 bindings」，已随本方案同日落地**（plant3d-web 提交见 §8 第 1 条）：text 由 `refno`（点击命中构件）推导 anchor + member 双角色、其余 `refnos` 为 member；rect / obb 由 `refnos`（兜底 `objectIds`）推导 member、不推导 anchor；`deriveAnnotationBindings / getAnnotationMemberRefnos / addAnnotationMembers / removeAnnotationMember / findAnnotationsByMemberRefnosAcrossTypes` 四类通用；详情卡「关联元素」区块与视口「当前模型关联批注」反查覆盖四类 |
 | ADR-0050「批量重解析 + stale 降级」是否已实现 | `src` 中**没有** `resolve` / `stale` / `unloaded` / `resolveCloudBindings` 的运行实现（只在无关测试里出现字面量）→ 是已记录未实施的决策，评审 D1 的 `resolveDetailsV1` 以它为前提，**U0 须先落最小运行时解析** |
 | ADR-0051 的技术理由「几何签名参与 `annotationKey`」 | `review/domain/annotationKey.ts` 的 v1 = sha1(type, taskId, geometry 签名, content)，其中 cloud 取 `points`、text 取 anchor、rect/obb 取 center+size；**`computeAnnotationKeyV1` 当前没有运行时调用方**，评论线程按 `${type}:${annotationId}@formId#taskId` 归并（`commentThread.ts`）。结论：约束仍按 ADR 执行；新增呈现 / 视角字段**不会**进键（键只吃几何签名与 content）；提醒未来接线者：`content` 参与键会让改描述改键，接线前先定夺 |
 | 批注是否保存了相机 / 视角 | `useToolStore.ts` / `types/auth.ts` / `review/` **没有**任何 viewpoint / camera 字段；「回证据视角」必须新增 `viewpointV1`（§6） |
@@ -461,7 +461,7 @@ POST  /api/review/records                                        # 原接口，�
 
 ## 8. 接手会话的补充与调整（相对评审原文）
 
-1. **[调整] U0 要吃下两条「已记录未实施」的 ADR**：ADR-0049 的 `bindings?` 推导补到 text / rect / obb（`normalizeAnnotationRecord` 等各自漏斗里由 `refno / refnos` 推导，只读不回写），否则 U1 的共享详情「关联摘要」对非云线没数据；ADR-0050 的最小运行时解析（模型加载 / 版本切换后批量 `ensureRefnos` 探测 → 内存 `Map<handle, resolveState>`，先不持久化 `resolveDetailsV1`），否则 §3.7 的失效分栏无来源。两者都是纯前端、只增。
+1. **[调整] U0 要吃下两条「已记录未实施」的 ADR**：ADR-0049 的 `bindings?` 推导补到 text / rect / obb——**已于 2026-09-14 先行落地**（用户拍板「其他批注也需要 bindings」）：`useToolStore.ts` 四类记录都有 `bindings?`，各自 normalize 漏斗推导并双写旧字段（text：`refno` = 锚点、`refnos` = member；rect / obb：`objectIds` / `refnos` = member），`update*Annotation` 在 patch 碰到关联字段时重投影；`annotationWorkspaceModel` 条目带 `bindings`（`cloudBindings` 保留为云线过渡别名）；`AnnotationInlineDetailCard` 的「关联元素 / 锚点构件」区块、`cloudMemberPick` → `startAnnotationMemberPick`、`AnnotationOverlayBar` 的「当前模型关联批注」反查均覆盖四类；data-testid 沿用 `annotation-cloud-*` 旧名。验证：新增 `useToolStore.annotationBindings.test.ts` 15 例 + 全量 vitest 301 文件 / 2550 例通过。剩下 ADR-0050 的最小运行时解析（模型加载 / 版本切换后批量 `ensureRefnos` 探测 → 内存 `Map<handle, resolveState>`，先不持久化 `resolveDetailsV1`）仍归 U0，否则 §3.7 的失效分栏无来源。
 2. **[调整] U2 的纯函数状态机可与 U0 并行**：`annotationInteraction.ts` 是无副作用 reducer，可以先落 + vitest，接线（`useDtxTools` 四个边界）等 U0 的 scope guard 就位再合。这样 UX 主变化不会被 U0/U1 拖到第三批才可见。
 3. **[核对] `annotationKey` 现状**（§2.3）：v1 未接运行时，评论按 `annotationId` 归并。因此评审 G3 第一问已答：新增字段不影响键；但 ADR-0051 继续作为产品约束执行（换锚点 = 批注搬家的语义理由仍成立）。若日后接线 v1，请先决定 `content` 是否留在键里。
 4. **[调整] 07-28 方案附录决策 #3「框选默认全勾 + Enter」**：本方案改为「已选的保留勾选、新收集的背景候选不默认全勾」。这是对既有拍板的翻转，列入 §9 拍板项 #2 一并确认。

@@ -30,10 +30,9 @@ import { useReviewStore } from '@/composables/useReviewStore';
 import {
   type ActiveAnnotationContext,
   type AnnotationType,
-  findCloudAnnotationsByMemberRefnos,
-  getCloudMemberRefnos,
+  type AnyAnnotationRecord,
+  getAnnotationMemberRefnos,
   useToolStore,
-  type CloudAnnotationRecord,
 } from '@/composables/useToolStore';
 import { useUserStore } from '@/composables/useUserStore';
 import {
@@ -137,15 +136,17 @@ const currentAnnotation = computed<ActiveAnnotationContext | null>(() => {
   return store.activeAnnotationContext.value;
 });
 const selectedModelRefnos = computed(() => props.tools.selectionStore?.selectedRefnos.value ?? []);
-const relatedCloudAnnotations = computed(() => (
-  findCloudAnnotationsByMemberRefnos(store.cloudAnnotations.value, selectedModelRefnos.value)
+/** 模型元素 → 关联批注的反查，四类批注都算、只看 member 绑定（ADR-0049）。 */
+type RelatedAnnotationEntry = { type: AnnotationType; record: AnyAnnotationRecord };
+const relatedAnnotations = computed<RelatedAnnotationEntry[]>(() => (
+  store.findAnnotationsByMemberRefnosAcrossTypes(selectedModelRefnos.value)
 ));
 
 const isVisible = computed(() => {
   return isAnnotationMode.value ||
     cloudTargetPicking.value ||
     !!currentAnnotation.value ||
-    relatedCloudAnnotations.value.length > 0;
+    relatedAnnotations.value.length > 0;
 });
 
 // 浮层可见性同步到 store：ViewerPanel 据此决定「待保存证据」停靠进本栈（footer slot）还是浮在右下角
@@ -165,9 +166,16 @@ const currentType = computed<AnnotationType | null>(() => {
       return 'rect';
     default:
       return currentAnnotation.value?.type ??
-        (relatedCloudAnnotations.value.length > 0 ? 'cloud' : null);
+        (relatedAnnotations.value[0]?.type ?? null);
   }
 });
+
+const RELATED_TYPE_LABELS: Record<AnnotationType, string> = {
+  text: '文字',
+  cloud: '云线',
+  rect: '矩形',
+  obb: 'OBB',
+};
 
 const currentTypeRecords = computed(() => {
   if (!currentType.value) return [];
@@ -243,18 +251,36 @@ function useCurrentCloudTargets(): void {
   store.addCloudTargetRefnos(props.tools.selectionStore?.selectedRefnos.value ?? []);
 }
 
-function getMatchedCloudMemberRefnos(annotation: CloudAnnotationRecord): string[] {
+function getMatchedMemberRefnos(entry: RelatedAnnotationEntry): string[] {
   const selected = new Set(selectedModelRefnos.value);
-  return getCloudMemberRefnos(annotation).filter((refno) => selected.has(refno));
+  return getAnnotationMemberRefnos(entry.type, entry.record).filter((refno) => selected.has(refno));
 }
 
-function activateRelatedCloud(annotation: CloudAnnotationRecord): void {
-  store.activeAnnotationId.value = null;
-  store.activeObbAnnotationId.value = null;
-  store.activeRectAnnotationId.value = null;
-  store.activeCloudAnnotationId.value = annotation.id;
-  store.updateCloudAnnotationVisible(annotation.id, true);
-  props.tools.flyToCloudAnnotation?.(annotation.id);
+/** 激活一条反查到的批注：只保留该类型的 active id、确保可见、飞到它。 */
+function activateRelatedAnnotation(entry: RelatedAnnotationEntry): void {
+  const { type, record } = entry;
+  store.activeAnnotationId.value = type === 'text' ? record.id : null;
+  store.activeCloudAnnotationId.value = type === 'cloud' ? record.id : null;
+  store.activeRectAnnotationId.value = type === 'rect' ? record.id : null;
+  store.activeObbAnnotationId.value = type === 'obb' ? record.id : null;
+  switch (type) {
+    case 'text':
+      store.updateAnnotationVisible(record.id, true);
+      props.tools.flyToAnnotation(record.id);
+      return;
+    case 'cloud':
+      store.updateCloudAnnotationVisible(record.id, true);
+      props.tools.flyToCloudAnnotation?.(record.id);
+      return;
+    case 'rect':
+      store.updateRectAnnotationVisible(record.id, true);
+      props.tools.flyToRectAnnotation?.(record.id);
+      return;
+    case 'obb':
+      store.updateObbAnnotationVisible(record.id, true);
+      props.tools.flyToObbAnnotation?.(record.id);
+      return;
+  }
 }
 
 /** 把当前选择层级翻译成拾取用的 noun 过滤：分支级上溯到 BRAN，元件级不过滤。 */
@@ -819,7 +845,7 @@ onUnmounted(() => {
       @pointerdown.stop
       @wheel.stop>
       <!-- 卡片内容区：多卡叠加超出视口时在内部滚动，避免小屏把底部“待保存证据”卡顶出屏幕（审查风险4） -->
-      <div v-if="toolbarStatusText || relatedCloudAnnotations.length > 0 || isCloudCreationContext"
+      <div v-if="toolbarStatusText || relatedAnnotations.length > 0 || isCloudCreationContext"
         data-testid="annotation-overlay-scroll"
         class="flex min-h-0 flex-col items-end gap-2 overflow-y-auto overflow-x-hidden pr-0.5">
         <!-- 当前工具与操作指引（条数属于右侧校审面板，这里不重复） -->
@@ -831,28 +857,32 @@ onUnmounted(() => {
           <span class="truncate">{{ toolbarStatusText }}；Esc 退出</span>
         </div>
 
-        <div v-if="relatedCloudAnnotations.length > 0"
+        <!-- 反查覆盖四类批注（ADR-0049）；data-testid 沿用 annotation-related-cloud* 旧名，避免既有用例改名 -->
+        <div v-if="relatedAnnotations.length > 0"
           data-testid="annotation-related-clouds"
           class="w-[min(34rem,calc(100vw-2rem))] rounded-xl border border-border bg-background/95 p-2.5 shadow-lg backdrop-blur">
           <div class="mb-2 flex items-center justify-between gap-2">
-            <span class="text-xs font-semibold">当前模型关联云线</span>
+            <span class="text-xs font-semibold">当前模型关联批注</span>
             <span class="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] text-primary">
-              {{ relatedCloudAnnotations.length }} 条
+              {{ relatedAnnotations.length }} 条
             </span>
           </div>
           <div class="max-h-40 space-y-1 overflow-auto">
-            <button v-for="annotation in relatedCloudAnnotations"
-              :key="annotation.id"
+            <button v-for="entry in relatedAnnotations"
+              :key="`${entry.type}:${entry.record.id}`"
               type="button"
-              :data-testid="`annotation-related-cloud-${annotation.id}`"
+              :data-testid="`annotation-related-cloud-${entry.record.id}`"
+              :data-annotation-type="entry.type"
               class="flex w-full items-center gap-2 rounded-lg border border-transparent px-2 py-1.5 text-left hover:border-border hover:bg-muted"
-              :title="`定位并查看 ${annotation.title || '未命名云线'}`"
-              @click="activateRelatedCloud(annotation)">
+              :title="`定位并查看 ${entry.record.title || '未命名批注'}`"
+              @click="activateRelatedAnnotation(entry)">
               <Cloud class="h-3.5 w-3.5 shrink-0 text-primary" />
               <span class="min-w-0 flex-1">
-                <span class="block truncate text-xs font-medium">{{ annotation.title || '未命名云线' }}</span>
+                <span class="block truncate text-xs font-medium">
+                  <span class="mr-1 rounded bg-muted px-1 text-[10px] text-muted-foreground">{{ RELATED_TYPE_LABELS[entry.type] }}</span>{{ entry.record.title || '未命名批注' }}
+                </span>
                 <span class="block truncate font-mono text-[10px] text-muted-foreground">
-                  {{ getMatchedCloudMemberRefnos(annotation).join('、') }}
+                  {{ getMatchedMemberRefnos(entry).join('、') }}
                 </span>
               </span>
               <Focus class="h-3.5 w-3.5 shrink-0 text-muted-foreground" />

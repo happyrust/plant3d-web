@@ -185,6 +185,30 @@ vi.mock('@/composables/useToolStore', () => ({
       ? annotation.bindings.filter((binding) => binding.role === 'member').map((binding) => binding.refno)
       : annotation.refnos ?? annotation.objectIds ?? []
   ),
+  // 2026-09-14 ADR-0049 四类统一：workspace model 改用这两条通用入口（与上面 cloud 版同一套简化语义）
+  deriveAnnotationBindings: (
+    type: 'text' | 'cloud' | 'rect' | 'obb',
+    annotation: { bindings?: unknown[]; refno?: string; refnos?: string[]; objectIds?: string[]; anchorRefno?: string; createdAt?: number },
+  ) => {
+    if (Array.isArray(annotation.bindings)) return annotation.bindings;
+    const createdAt = annotation.createdAt ?? 0;
+    const memberRefnos = annotation.refnos ?? (annotation.refno ? [annotation.refno] : annotation.objectIds) ?? [];
+    const anchorRefno = type === 'cloud'
+      ? annotation.anchorRefno
+      : (type === 'text' ? (annotation.refno ?? annotation.refnos?.[0]) : undefined);
+    return [
+      ...(anchorRefno ? [{ refno: anchorRefno, role: 'anchor', createdAt }] : []),
+      ...memberRefnos.map((refno) => ({ refno, role: 'member', createdAt })),
+    ];
+  },
+  getAnnotationMemberRefnos: (
+    _type: 'text' | 'cloud' | 'rect' | 'obb',
+    annotation: { bindings?: { refno: string; role: string }[]; refno?: string; refnos?: string[]; objectIds?: string[] },
+  ) => (
+    Array.isArray(annotation.bindings)
+      ? annotation.bindings.filter((binding) => binding.role === 'member').map((binding) => binding.refno)
+      : annotation.refnos ?? (annotation.refno ? [annotation.refno] : annotation.objectIds) ?? []
+  ),
 }));
 
 vi.mock('@/composables/useUserStore', () => ({

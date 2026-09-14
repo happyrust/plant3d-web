@@ -31,7 +31,7 @@ import {
   type LinkedMeasurementItem,
 } from './annotationWorkspaceModel';
 import AssociatedFilesList from './AssociatedFilesList.vue';
-import { startCloudMemberPick } from './cloudMemberPick';
+import { startAnnotationMemberPick } from './cloudMemberPick';
 import CollisionResultList from './CollisionResultList.vue';
 import { createConfirmedRecordsRestorer } from './confirmedRecordsRestore';
 import { isReviewDebugUiEnabled } from './debugUiGate';
@@ -1700,7 +1700,7 @@ function locateWorkspaceElements(payload: { item: AnnotationWorkspaceItem; refno
 
 function pickWorkspaceElements(item: AnnotationWorkspaceItem) {
   ensurePanelAndActivate('viewer');
-  startCloudMemberPick(item);
+  startAnnotationMemberPick(item);
 }
 
 function startWorkspaceMeasurement(

@@ -20,7 +20,7 @@ import {
   type AnnotationWorkspaceItem,
   type LinkedMeasurementItem,
 } from './annotationWorkspaceModel';
-import { startCloudMemberPick } from './cloudMemberPick';
+import { startAnnotationMemberPick } from './cloudMemberPick';
 import { createConfirmedRecordsRestorer } from './confirmedRecordsRestore';
 import NonReturnedGuidanceCard from './NonReturnedGuidanceCard.vue';
 import ResubmissionTaskList from './ResubmissionTaskList.vue';
@@ -345,7 +345,7 @@ function locateElements(payload: { item: AnnotationWorkspaceItem; refnos: string
 
 function pickElements(item: AnnotationWorkspaceItem) {
   ensurePanelAndActivate('viewer');
-  startCloudMemberPick(item);
+  startAnnotationMemberPick(item);
 }
 
 async function startMeasurement(

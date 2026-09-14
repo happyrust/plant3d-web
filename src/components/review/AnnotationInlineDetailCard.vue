@@ -80,25 +80,24 @@ const typeDisplay = computed(() => getAnnotationWorkspaceTypeDisplay(props.item.
 const isDesignerOnly = computed(() => (
   props.designerOnly ?? props.currentUserRole === UserRole.DESIGNER
 ));
-const cloudMemberBindings = computed(() => (
-  props.item.cloudBindings?.filter((binding) => binding.role === 'member') ?? []
-));
-const cloudAnchorBinding = computed(() => (
-  props.item.cloudBindings?.find((binding) => binding.role === 'anchor')
-));
+// 四类批注统一为带角色绑定（ADR-0049）：`bindings` 恒有；`cloudBindings` 是云线条目的旧名，过渡期兜底。
+const itemBindings = computed(() => props.item.bindings ?? props.item.cloudBindings ?? []);
+const memberBindings = computed(() => itemBindings.value.filter((binding) => binding.role === 'member'));
+const anchorBinding = computed(() => itemBindings.value.find((binding) => binding.role === 'anchor'));
+/** 锚点区块标题：云线沿用「云线锚点」，文字批注的锚点是图钉命中的构件。 */
+const anchorLabel = computed(() => (props.item.type === 'cloud' ? '云线锚点' : '锚点构件'));
 
 /**
- * 关联元素可编辑：与严重度共用一套判定（作者本人或审核侧角色）。
+ * 关联元素可编辑：与严重度共用一套判定（作者本人或审核侧角色），四类批注一致。
  * 只覆盖 member——锚点构件不可更换（ADR-0051）。
  */
-const canEditCloudBindings = computed(() => (
-  props.item.type === 'cloud'
-  && canEditAnnotationSeverity(userStore.currentUser.value, props.item.authorId)
+const canEditBindings = computed(() => (
+  canEditAnnotationSeverity(userStore.currentUser.value, props.item.authorId)
 ));
 
-function removeCloudMember(refno: string) {
-  if (!canEditCloudBindings.value) return;
-  if (!toolStore.removeCloudAnnotationMember(props.item.id, refno)) return;
+function removeMember(refno: string) {
+  if (!canEditBindings.value) return;
+  if (!toolStore.removeAnnotationMember(props.item.type, props.item.id, refno)) return;
   emitToast({ message: `已移除关联元素 ${refno}`, level: 'success' });
 }
 
@@ -238,15 +237,15 @@ function formatDateTime(timestamp: number): string {
           </button>
         </div>
 
-        <div v-if="item.type === 'cloud'"
-          data-testid="annotation-cloud-bindings"
+        <!-- 关联元素：四类批注统一（ADR-0049）。data-testid 沿用 annotation-cloud-* 旧名，避免既有用例与 e2e 改名。 -->
+        <div data-testid="annotation-cloud-bindings"
           class="rounded-lg border border-slate-200 bg-white p-3">
           <div class="flex items-center justify-between gap-2">
             <h4 class="text-sm font-semibold text-slate-900">
-              关联元素 {{ cloudMemberBindings.length }}
+              关联元素 {{ memberBindings.length }}
             </h4>
             <div class="flex items-center gap-1">
-              <button v-if="canEditCloudBindings"
+              <button v-if="canEditBindings"
                 data-testid="annotation-cloud-add-members"
                 type="button"
                 class="inline-flex items-center gap-1 rounded-md border border-slate-200 px-2 py-1 text-[11px] font-medium text-slate-600 hover:border-brand/40 hover:text-brand"
@@ -255,7 +254,7 @@ function formatDateTime(timestamp: number): string {
                 <Plus class="h-3 w-3" />
                 添加元素
               </button>
-              <button v-if="cloudMemberBindings.length > 0"
+              <button v-if="memberBindings.length > 0"
                 data-testid="annotation-cloud-locate-all"
                 type="button"
                 class="inline-flex items-center gap-1 rounded-md border border-slate-200 px-2 py-1 text-[11px] font-medium text-slate-600 hover:border-brand/40 hover:text-brand"
@@ -266,8 +265,8 @@ function formatDateTime(timestamp: number): string {
             </div>
           </div>
 
-          <div v-if="cloudMemberBindings.length > 0" class="mt-2 space-y-1.5">
-            <div v-for="binding in cloudMemberBindings"
+          <div v-if="memberBindings.length > 0" class="mt-2 space-y-1.5">
+            <div v-for="binding in memberBindings"
               :key="binding.refno"
               class="flex items-center justify-between gap-2 rounded-md bg-slate-50 px-2.5 py-2">
               <div class="min-w-0">
@@ -281,29 +280,29 @@ function formatDateTime(timestamp: number): string {
                   @click="emit('locate-elements', { item, refnos: [binding.refno] })">
                   定位高亮
                 </button>
-                <button v-if="canEditCloudBindings"
+                <button v-if="canEditBindings"
                   type="button"
                   :data-testid="`annotation-cloud-remove-${binding.refno}`"
                   class="rounded-md border border-slate-200 bg-white p-1 text-slate-400 hover:border-rose-300 hover:text-rose-500"
                   :title="`移除关联元素 ${binding.refno}`"
                   :aria-label="`移除关联元素 ${binding.refno}`"
-                  @click="removeCloudMember(binding.refno)">
+                  @click="removeMember(binding.refno)">
                   <X class="h-3 w-3" />
                 </button>
               </div>
             </div>
           </div>
           <p v-else class="mt-2 rounded-md border border-dashed border-slate-200 bg-slate-50 px-3 py-3 text-xs text-slate-500">
-            {{ canEditCloudBindings ? '尚未关联元素，点「添加元素」在三维视口中点选' : '历史批注未关联元素' }}
+            {{ canEditBindings ? '尚未关联元素，点「添加元素」在三维视口中点选' : '历史批注未关联元素' }}
           </p>
 
-          <div v-if="cloudAnchorBinding" class="mt-3 border-t border-slate-100 pt-2">
+          <div v-if="anchorBinding" class="mt-3 border-t border-slate-100 pt-2">
             <div class="text-[11px] font-semibold text-slate-500">
-              云线锚点<span v-if="canEditCloudBindings" class="ml-1 font-normal text-slate-400">（不可更换）</span>
+              {{ anchorLabel }}<span v-if="canEditBindings" class="ml-1 font-normal text-slate-400">（不可更换）</span>
             </div>
             <div class="mt-1 flex items-center gap-2 text-[11px] text-slate-500">
-              <span v-if="cloudAnchorBinding.noun" class="font-semibold text-slate-700">{{ cloudAnchorBinding.noun }}</span>
-              <span class="truncate font-mono" :title="cloudAnchorBinding.refno">{{ cloudAnchorBinding.refno }}</span>
+              <span v-if="anchorBinding.noun" class="font-semibold text-slate-700">{{ anchorBinding.noun }}</span>
+              <span class="truncate font-mono" :title="anchorBinding.refno">{{ anchorBinding.refno }}</span>
             </div>
           </div>
         </div>

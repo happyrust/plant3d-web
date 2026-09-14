@@ -384,6 +384,12 @@ export type AnnotationRecord = {
    * 以便上层可以无差别地读取所有批注的关联对象。
    */
   refnos?: string[];
+  /**
+   * 带角色的关联结构（ADR-0049：四类批注统一）。缺失时由 `refno` / `refnos` 推导，读取后恒存在：
+   * 创建时点击命中的构件（`refno`）默认同时写 anchor 与 member 两条（双角色），其余 `refnos` 为 member。
+   * 反查与统计只看 member；锚点不构成关联。
+   */
+  bindings?: AnnotationElementBinding[];
   comments?: AnnotationComment[]; // 多角色意见列表
   reviewState?: AnnotationReviewState;
   /** 问题严重度（建议/一般/严重/致命），默认未设置 */
@@ -420,6 +426,11 @@ export type ObbAnnotationRecord = {
   description: string;
   createdAt: number;
   refnos?: string[]; // 关联的对象参考号列表
+  /**
+   * 带角色的关联结构（ADR-0049）。缺失时由 `refnos`（兜底 `objectIds`）推导为 member；
+   * 选择集 OBB 没有单一锚点构件，不推导 anchor。读取后恒存在。
+   */
+  bindings?: AnnotationElementBinding[];
   comments?: AnnotationComment[]; // 多角色意见列表
   reviewState?: AnnotationReviewState;
   severity?: AnnotationSeverity;
@@ -448,6 +459,12 @@ export type CloudElementBinding = {
   noun?: string;
   createdAt: number;
 };
+
+/**
+ * 四类批注共用的带角色绑定（ADR-0049）。结构与云线完全一致，
+ * 起别名只是为了让 text / rect / obb 的字段不再叫「Cloud」。
+ */
+export type AnnotationElementBinding = CloudElementBinding;
 
 export type CloudAnnotationRecord = {
   id: string;
@@ -489,6 +506,11 @@ export type RectAnnotationRecord = {
   description: string;
   createdAt: number;
   refnos?: string[];
+  /**
+   * 带角色的关联结构（ADR-0049）。缺失时由 `refnos`（兜底 `objectIds`）推导为 member；
+   * 矩形框可由单击一个对象或框选多个对象生成，没有稳定的单一锚点构件，不推导 anchor。读取后恒存在。
+   */
+  bindings?: AnnotationElementBinding[];
   comments?: AnnotationComment[]; // 多角色意见列表
   reviewState?: AnnotationReviewState;
   severity?: AnnotationSeverity;
@@ -844,16 +866,133 @@ function normalizeXeokitMeasurementRecord<T extends XeokitMeasurementRecord>(rec
   } as T;
 }
 
-function normalizeAnnotationRecord(rec: AnnotationRecord): AnnotationRecord {
+/**
+ * 绑定列表的统一清洗：按 `refno + role` 去重、剔除空白 refno、多个 anchor 只留首个、
+ * 缺 createdAt 用记录的 createdAt 兜底。四类批注的推导都汇到这里。
+ */
+function normalizeBindingList(
+  source: readonly AnnotationElementBinding[],
+  fallbackCreatedAt: number,
+): AnnotationElementBinding[] {
+  const seen = new Set<string>();
+  const bindings: AnnotationElementBinding[] = [];
+  let hasAnchor = false;
+  for (const binding of source) {
+    const refno = typeof binding?.refno === 'string' ? binding.refno.trim() : '';
+    if (!refno) continue;
+    const role: CloudBindingRole = binding.role === 'anchor' ? 'anchor' : 'member';
+    if (role === 'anchor' && hasAnchor) continue;
+    const key = `${refno}::${role}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    if (role === 'anchor') hasAnchor = true;
+    const noun = typeof binding.noun === 'string' ? binding.noun.trim() : '';
+    bindings.push({
+      refno,
+      role,
+      ...(noun ? { noun } : {}),
+      createdAt: typeof binding.createdAt === 'number' ? binding.createdAt : fallbackCreatedAt,
+    });
+  }
+  return bindings;
+}
+
+function legacyMemberBindings(refnos: readonly string[] | undefined, createdAt: number): AnnotationElementBinding[] {
+  return Array.isArray(refnos)
+    ? refnos.map((refno) => ({ refno, role: 'member' as const, createdAt }))
+    : [];
+}
+
+/**
+ * 推导文字批注的 `bindings`（ADR-0049）。
+ *
+ * 有 `bindings` 数组就以它为准；缺失才由旧字段推导：`refno`（创建时点击命中的构件）
+ * 同时写 anchor 与 member 两条（双角色），`refnos` 里其余的为 member。
+ * 与 `deriveCloudBindings` 同一条「判字段在不在、不判数组空不空」的规则——空数组是「关联被删光」。
+ */
+export function deriveTextAnnotationBindings(rec: AnnotationRecord): AnnotationElementBinding[] {
+  const fallbackCreatedAt = typeof rec.createdAt === 'number' ? rec.createdAt : 0;
+  if (Array.isArray(rec.bindings)) return normalizeBindingList(rec.bindings, fallbackCreatedAt);
   const refs = reconcileAnnotationRefs(rec.refno, rec.refnos);
+  return normalizeBindingList([
+    ...(refs.refno ? [{ refno: refs.refno, role: 'anchor' as const, createdAt: fallbackCreatedAt }] : []),
+    ...legacyMemberBindings(refs.refnos, fallbackCreatedAt),
+  ], fallbackCreatedAt);
+}
+
+/**
+ * 推导矩形 / OBB 批注的 `bindings`（ADR-0049）：`refnos`（兜底 `objectIds`）→ member。
+ * 两者都可能由框选多个对象生成，没有稳定的单一锚点构件，因此不推导 anchor；
+ * 显式写入的 anchor 绑定照常保留。
+ */
+export function deriveBoxAnnotationBindings(
+  rec: Pick<RectAnnotationRecord, 'objectIds' | 'refnos' | 'bindings' | 'createdAt'>,
+): AnnotationElementBinding[] {
+  const fallbackCreatedAt = typeof rec.createdAt === 'number' ? rec.createdAt : 0;
+  if (Array.isArray(rec.bindings)) return normalizeBindingList(rec.bindings, fallbackCreatedAt);
+  const legacyMembers = Array.isArray(rec.refnos) && rec.refnos.length > 0 ? rec.refnos : rec.objectIds;
+  return normalizeBindingList(legacyMemberBindings(legacyMembers, fallbackCreatedAt), fallbackCreatedAt);
+}
+
+/** 任意类型批注的 `bindings`（读取后恒存在的那份，含推导）。 */
+export function deriveAnnotationBindings(
+  type: AnnotationType,
+  record: AnyAnnotationRecord,
+): AnnotationElementBinding[] {
+  switch (type) {
+    case 'text':
+      return deriveTextAnnotationBindings(record as AnnotationRecord);
+    case 'cloud':
+      return deriveCloudBindings(record as CloudAnnotationRecord);
+    case 'rect':
+      return deriveBoxAnnotationBindings(record as RectAnnotationRecord);
+    case 'obb':
+      return deriveBoxAnnotationBindings(record as ObbAnnotationRecord);
+  }
+}
+
+/** 任意类型批注的问题目标元素 refno 列表（不含仅作视觉参考中心的锚点）。 */
+export function getAnnotationMemberRefnos(type: AnnotationType, record: AnyAnnotationRecord): string[] {
+  return deriveAnnotationBindings(type, record)
+    .filter((binding) => binding.role === 'member')
+    .map((binding) => binding.refno);
+}
+
+/** 任意类型批注的锚点构件 refno（没有则 undefined）。 */
+export function getAnnotationAnchorRefno(type: AnnotationType, record: AnyAnnotationRecord): string | undefined {
+  return deriveAnnotationBindings(type, record).find((binding) => binding.role === 'anchor')?.refno;
+}
+
+/**
+ * 根据模型元素反查关联批注（任意类型）；锚点不属于问题关联元素（ADR-0049）。
+ * 云线专用的 `findCloudAnnotationsByMemberRefnos` 是它的特化。
+ */
+export function findAnnotationsByMemberRefnos<T extends AnyAnnotationRecord>(
+  type: AnnotationType,
+  annotations: readonly T[],
+  refnos: readonly string[],
+): T[] {
+  const selected = new Set(refnos.map((refno) => refno.trim()).filter(Boolean));
+  if (selected.size === 0) return [];
+  return annotations.filter((annotation) =>
+    getAnnotationMemberRefnos(type, annotation).some((refno) => selected.has(refno)));
+}
+
+function normalizeAnnotationRecord(rec: AnnotationRecord): AnnotationRecord {
+  const bindings = deriveTextAnnotationBindings(rec);
+  const memberRefnos = bindings.filter((binding) => binding.role === 'member').map((binding) => binding.refno);
+  const anchorRefno = bindings.find((binding) => binding.role === 'anchor')?.refno;
+  // 旧字段双写：`refnos` = member 集合（只看 member，锚点不算关联）；
+  // deprecated 的单字段 `refno` 指锚点构件，没有锚点时退到首个 member。
   return {
     ...rec,
     labelWorldPos: Array.isArray(rec.labelWorldPos) && rec.labelWorldPos.length === 3 ? rec.labelWorldPos : undefined,
     collapsed: rec.collapsed === true,
     reviewState: normalizeAnnotationReviewState(rec.reviewState),
     severity: normalizeAnnotationSeverity(rec.severity),
-    refno: refs.refno,
-    refnos: refs.refnos,
+    refno: anchorRefno ?? memberRefnos[0],
+    refnos: memberRefnos.length > 0 ? memberRefnos : undefined,
+    bindings,
     screenshot: normalizeAnnotationScreenshot(rec.screenshot),
   };
 }
@@ -877,8 +1016,14 @@ export function getAnnotationRefnos(record: {
 }
 
 function normalizeObbAnnotationRecord(rec: ObbAnnotationRecord): ObbAnnotationRecord {
+  const bindings = deriveBoxAnnotationBindings(rec);
+  const memberRefnos = bindings.filter((binding) => binding.role === 'member').map((binding) => binding.refno);
   return {
     ...rec,
+    // 与云线同一口径：`objectIds` / `refnos` 都是 member 集合的旧字段投影（创建时二者本就同为 refno）。
+    objectIds: memberRefnos,
+    refnos: memberRefnos,
+    bindings,
     collapsed: rec.collapsed === true,
     reviewState: normalizeAnnotationReviewState(rec.reviewState),
     severity: normalizeAnnotationSeverity(rec.severity),
@@ -902,41 +1047,16 @@ function normalizeObbAnnotationRecord(rec: ObbAnnotationRecord): ObbAnnotationRe
  */
 export function deriveCloudBindings(rec: CloudAnnotationRecord): CloudElementBinding[] {
   const fallbackCreatedAt = typeof rec.createdAt === 'number' ? rec.createdAt : 0;
+  if (Array.isArray(rec.bindings)) return normalizeBindingList(rec.bindings, fallbackCreatedAt);
   const legacyMembers = Array.isArray(rec.refnos) && rec.refnos.length > 0
     ? rec.refnos
     : rec.objectIds;
-  const source: CloudElementBinding[] = Array.isArray(rec.bindings)
-    ? rec.bindings
-    : [
-      ...(rec.anchorRefno
-        ? [{ refno: rec.anchorRefno, role: 'anchor' as const, createdAt: fallbackCreatedAt }]
-        : []),
-      ...(Array.isArray(legacyMembers)
-        ? legacyMembers.map((refno) => ({ refno, role: 'member' as const, createdAt: fallbackCreatedAt }))
-        : []),
-    ];
-
-  const seen = new Set<string>();
-  const bindings: CloudElementBinding[] = [];
-  let hasAnchor = false;
-  for (const binding of source) {
-    const refno = typeof binding?.refno === 'string' ? binding.refno.trim() : '';
-    if (!refno) continue;
-    const role: CloudBindingRole = binding.role === 'anchor' ? 'anchor' : 'member';
-    if (role === 'anchor' && hasAnchor) continue;
-    const key = `${refno}::${role}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    if (role === 'anchor') hasAnchor = true;
-    const noun = typeof binding.noun === 'string' ? binding.noun.trim() : '';
-    bindings.push({
-      refno,
-      role,
-      ...(noun ? { noun } : {}),
-      createdAt: typeof binding.createdAt === 'number' ? binding.createdAt : fallbackCreatedAt,
-    });
-  }
-  return bindings;
+  return normalizeBindingList([
+    ...(rec.anchorRefno
+      ? [{ refno: rec.anchorRefno, role: 'anchor' as const, createdAt: fallbackCreatedAt }]
+      : []),
+    ...legacyMemberBindings(legacyMembers, fallbackCreatedAt),
+  ], fallbackCreatedAt);
 }
 
 /**
@@ -1002,8 +1122,14 @@ function normalizeCloudAnnotationRecord(rec: CloudAnnotationRecord): CloudAnnota
 }
 
 function normalizeRectAnnotationRecord(rec: RectAnnotationRecord): RectAnnotationRecord {
+  const bindings = deriveBoxAnnotationBindings(rec);
+  const memberRefnos = bindings.filter((binding) => binding.role === 'member').map((binding) => binding.refno);
   return {
     ...rec,
+    // 与云线同一口径：`objectIds` / `refnos` 都是 member 集合的旧字段投影（创建时二者本就同为 refno）。
+    objectIds: memberRefnos,
+    refnos: memberRefnos,
+    bindings,
     collapsed: rec.collapsed === true,
     reviewState: normalizeAnnotationReviewState(rec.reviewState),
     severity: normalizeAnnotationSeverity(rec.severity),
@@ -1846,8 +1972,16 @@ function addAnnotation(rec: AnnotationRecord) {
   pendingTextAnnotationEditId.value = rec.id;
 }
 
+/** patch 碰到关联字段时才走 normalize（重投影 refno / refnos / bindings 三者一致），其余 patch 保持原样直写。 */
+function patchTouchesBindings(patch: object): boolean {
+  return 'bindings' in patch || 'refnos' in patch || 'refno' in patch || 'objectIds' in patch;
+}
+
 function updateAnnotation(id: string, patch: Partial<AnnotationRecord>) {
-  annotations.value = annotations.value.map((a) => (a.id === id ? { ...a, ...patch } : a));
+  const renormalize = patchTouchesBindings(patch);
+  annotations.value = annotations.value.map((a) => (
+    a.id === id ? (renormalize ? normalizeAnnotationRecord({ ...a, ...patch }) : { ...a, ...patch }) : a
+  ));
 }
 
 function updateAnnotationVisible(id: string, visible: boolean) {
@@ -1883,7 +2017,10 @@ function addObbAnnotation(rec: ObbAnnotationRecord) {
 }
 
 function updateObbAnnotation(id: string, patch: Partial<ObbAnnotationRecord>) {
-  obbAnnotations.value = obbAnnotations.value.map((a) => (a.id === id ? { ...a, ...patch } : a));
+  const renormalize = patchTouchesBindings(patch);
+  obbAnnotations.value = obbAnnotations.value.map((a) => (
+    a.id === id ? (renormalize ? normalizeObbAnnotationRecord({ ...a, ...patch }) : { ...a, ...patch }) : a
+  ));
 }
 
 function updateObbAnnotationVisible(id: string, visible: boolean) {
@@ -1977,14 +2114,52 @@ function addCloudAnnotationMembers(
   refnos: string[],
   nounOf?: (refno: string) => string | undefined,
 ): number {
-  const record = cloudAnnotations.value.find((a) => a.id === id);
+  return addAnnotationMembers('cloud', id, refnos, nounOf);
+}
+
+/** 移除云线的一个问题目标元素；锚点绑定不受影响（ADR-0051）。 */
+function removeCloudAnnotationMember(id: string, refno: string): boolean {
+  return removeAnnotationMember('cloud', id, refno);
+}
+
+/** 按类型把 `bindings` patch 写回对应记录数组；四个 update 都会重投影旧字段。 */
+function patchAnnotationBindings(type: AnnotationType, id: string, bindings: AnnotationElementBinding[]): void {
+  switch (type) {
+    case 'text':
+      updateAnnotation(id, { bindings });
+      return;
+    case 'cloud':
+      updateCloudAnnotation(id, { bindings });
+      return;
+    case 'rect':
+      updateRectAnnotation(id, { bindings });
+      return;
+    case 'obb':
+      updateObbAnnotation(id, { bindings });
+      return;
+  }
+}
+
+/**
+ * 追加任意类型批注的问题目标元素（member 绑定），返回实际新增条数（ADR-0049 / 0051）。
+ *
+ * 只动 member：锚点构件不可更换——换锚点等于批注搬家，
+ * 几何签名变化会改 annotationKey，破坏跨快照的评论归并。
+ */
+function addAnnotationMembers(
+  type: AnnotationType,
+  id: string,
+  refnos: string[],
+  nounOf?: (refno: string) => string | undefined,
+): number {
+  const record = getAnnotationRecordByType(type, id);
   if (!record) return 0;
-  const bindings = deriveCloudBindings(record);
+  const bindings = deriveAnnotationBindings(type, record);
   const existing = new Set(
     bindings.filter((binding) => binding.role === 'member').map((binding) => binding.refno),
   );
   const createdAt = Date.now();
-  const added: CloudElementBinding[] = [];
+  const added: AnnotationElementBinding[] = [];
   for (const raw of refnos) {
     const refno = typeof raw === 'string' ? raw.trim() : '';
     if (!refno || existing.has(refno)) continue;
@@ -1995,21 +2170,36 @@ function addCloudAnnotationMembers(
       : { refno, role: 'member', createdAt });
   }
   if (added.length === 0) return 0;
-  updateCloudAnnotation(id, { bindings: [...bindings, ...added] });
+  patchAnnotationBindings(type, id, [...bindings, ...added]);
   return added.length;
 }
 
-/** 移除云线的一个问题目标元素；锚点绑定不受影响（ADR-0051）。 */
-function removeCloudAnnotationMember(id: string, refno: string): boolean {
-  const record = cloudAnnotations.value.find((a) => a.id === id);
+/** 移除任意类型批注的一个问题目标元素；锚点绑定不受影响（ADR-0051）。 */
+function removeAnnotationMember(type: AnnotationType, id: string, refno: string): boolean {
+  const record = getAnnotationRecordByType(type, id);
   if (!record) return false;
   const target = typeof refno === 'string' ? refno.trim() : '';
   if (!target) return false;
-  const bindings = deriveCloudBindings(record);
+  const bindings = deriveAnnotationBindings(type, record);
   const next = bindings.filter((binding) => !(binding.role === 'member' && binding.refno === target));
   if (next.length === bindings.length) return false;
-  updateCloudAnnotation(id, { bindings: next });
+  patchAnnotationBindings(type, id, next);
   return true;
+}
+
+/**
+ * 模型元素 → 关联批注的全类型反查（ADR-0049：覆盖四类批注的 member 绑定，锚点不参与）。
+ * 返回顺序：text → cloud → rect → obb，各自按数组原顺序。
+ */
+function findAnnotationsByMemberRefnosAcrossTypes(
+  refnos: readonly string[],
+): { type: AnnotationType; record: AnyAnnotationRecord }[] {
+  return [
+    ...findAnnotationsByMemberRefnos('text', annotations.value, refnos).map((record) => ({ type: 'text' as const, record })),
+    ...findAnnotationsByMemberRefnos('cloud', cloudAnnotations.value, refnos).map((record) => ({ type: 'cloud' as const, record })),
+    ...findAnnotationsByMemberRefnos('rect', rectAnnotations.value, refnos).map((record) => ({ type: 'rect' as const, record })),
+    ...findAnnotationsByMemberRefnos('obb', obbAnnotations.value, refnos).map((record) => ({ type: 'obb' as const, record })),
+  ];
 }
 
 function addRectAnnotation(rec: RectAnnotationRecord) {
@@ -2020,7 +2210,10 @@ function addRectAnnotation(rec: RectAnnotationRecord) {
 }
 
 function updateRectAnnotation(id: string, patch: Partial<RectAnnotationRecord>) {
-  rectAnnotations.value = rectAnnotations.value.map((a) => (a.id === id ? { ...a, ...patch } : a));
+  const renormalize = patchTouchesBindings(patch);
+  rectAnnotations.value = rectAnnotations.value.map((a) => (
+    a.id === id ? (renormalize ? normalizeRectAnnotationRecord({ ...a, ...patch }) : { ...a, ...patch }) : a
+  ));
 }
 
 function updateRectAnnotationVisible(id: string, visible: boolean) {
@@ -3029,6 +3222,9 @@ export function useToolStore() {
     updateCloudAnnotationVisible,
     addCloudAnnotationMembers,
     removeCloudAnnotationMember,
+    addAnnotationMembers,
+    removeAnnotationMember,
+    findAnnotationsByMemberRefnosAcrossTypes,
     removeCloudAnnotation,
     clearCloudAnnotations,
 
