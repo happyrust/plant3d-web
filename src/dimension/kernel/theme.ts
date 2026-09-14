@@ -128,7 +128,14 @@ export type DimensionTheme = Readonly<{
      * short leader and accepts the overlap.
      */
     blockedFallback: 'least-intrusion' | 'first-ring';
-    /** Stroke widths. */
+    /**
+     * Stroke widths (CSS px, nominal). On screen the painter hints them
+     * like the dimension strokes — whole device pixels, never below 2, an
+     * axis-aligned edge snapped to the pixel grid (ADR 0064 补, 2026-09-14):
+     * at 1× all three are 2 device px; at 2× the 1 px border stays 2, the
+     * 1.2 px frame rounds to 2, the 0.9 px leader to 2. Hit regions and
+     * the SVG export use the nominal widths.
+     */
     leaderWidthPx: number;
     borderWidthPx: number;
     frameWidthPx: number;

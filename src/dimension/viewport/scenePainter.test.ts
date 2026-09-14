@@ -340,7 +340,7 @@ describe('ThreeSceneDimensionPainter', () => {
     expect(hintedLineStrokeWidthPx(0.3, 2)).toBe(1);
   });
 
-  it('hints dimension lines, leaders and markers like text, but not tag strokes', () => {
+  it('hints dimension lines, leaders, markers and tag strokes like text', () => {
     const parent = new Group();
     const painter = new ThreeSceneDimensionPainter(parent, createTestFont());
     painter.resize(800, 600, 1.5);
@@ -361,7 +361,11 @@ describe('ThreeSceneDimensionPainter', () => {
     // … the glyph run 'A' (two strokes) keeps the text hint: 1.8 px → 3 device px = 2 CSS px.
     expect(widths.filter(width => width === Math.fround(2))).toHaveLength(2 * 4);
 
-    // A tag border (tone `tag-border`) keeps the theme width and is not snapped.
+    // A tag card border (tone `tag-border`, 1 px) and its leader (0.9 px)
+    // are hinted from their own theme widths: both round to 2 device px at
+    // 1.5× = 1.33 CSS px, and their axis-aligned edges snap (ADR 0064 补).
+    expect(SOLVESPACE_DIMENSION_THEME.tag.borderWidthPx).toBe(1);
+    expect(SOLVESPACE_DIMENSION_THEME.tag.leaderWidthPx).toBe(0.9);
     painter.paint([layout('tag', [{
       kind: 'scene-path',
       points: [
@@ -373,13 +377,35 @@ describe('ThreeSceneDimensionPainter', () => {
       part: 'tag',
       styleRole: 'normal',
       tone: 'tag-border',
+    }, {
+      kind: 'scene-line',
+      from: { anchor: [0, 0, 0], offsetPx: [0, 0] },
+      to: { anchor: [0, 0, 0], offsetPx: [-30, 25] },
+      part: 'leader',
+      styleRole: 'normal',
+      tone: 'tag-leader',
     }])], SOLVESPACE_DIMENSION_THEME);
     const tagCount = painter.getStats().lineVertexCount;
-    expect(tagCount).toBe(3 * 4);
+    expect(tagCount).toBe(4 * 4);
     const tagSnaps = Array.from(lines.geometry.getAttribute('pixelSnap').array.slice(0, tagCount)) as number[];
     const tagWidths = Array.from(lines.geometry.getAttribute('strokeWidthPx').array.slice(0, tagCount)) as number[];
-    expect(tagSnaps.every(snap => snap === 0)).toBe(true);
-    expect(tagWidths.every(width => width === Math.fround(SOLVESPACE_DIMENSION_THEME.tag.borderWidthPx))).toBe(true);
+    expect(tagSnaps.every(snap => snap === 1)).toBe(true);
+    expect(tagWidths.every(width => width === Math.fround(4 / 3))).toBe(true);
+    // At 1× both are the two-device-pixel floor; at 2× the border stays 2
+    // device px (1 CSS px) and the leader's 1.8 rounds up to 2 (1 CSS px).
+    painter.resize(800, 600, 1);
+    painter.paint([layout('tag', [{
+      kind: 'scene-line',
+      from: { anchor: [0, 0, 0], offsetPx: [0, 0] },
+      to: { anchor: [0, 0, 0], offsetPx: [-30, 25] },
+      part: 'leader',
+      styleRole: 'normal',
+      tone: 'tag-leader',
+    }])], SOLVESPACE_DIMENSION_THEME);
+    expect(Array.from(lines.geometry.getAttribute('strokeWidthPx').array.slice(0, 4))).toEqual([2, 2, 2, 2]);
+    expect(hintedLineStrokeWidthPx(1, 2)).toBe(1);
+    expect(hintedLineStrokeWidthPx(0.9, 2)).toBe(1);
+    expect(hintedLineStrokeWidthPx(0.9, 1.25)).toBe(1.6);
   });
 
   it('updates only interaction style attributes when topology is unchanged', () => {

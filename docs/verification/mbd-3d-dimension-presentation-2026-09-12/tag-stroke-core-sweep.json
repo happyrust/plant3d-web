@@ -1,0 +1,1174 @@
+{
+ "note": "fable-5-1-26 2026-09-14: solid-core measurement of the billboard tag strokes of BRAN 24383_67485, elbo-mid camera (pw-petags-17.mjs against a detached git worktree served by vite :3103), real Chrome, engineering mode: the name frame R422.010-SV (tag-frame, 1.2 px, #0f172a), the X / Y / PE end-point card (tag-border, 1 px, #94a3b8) and the frame's leader (tag-leader, 0.9 px, #64748b). Per cross-section every pixel's coverage is inverted from the background -> stroke mix with the background estimated on each side separately (white body inside, grey scene outside); pixels whose channels disagree are not the stroke. peak = max coverage of a cross-section, core = pixels with coverage >= 0.98, ink = sum of coverage corrected for slant (device px). Script: stroke-pixels-26.py (copy under %TEMP%/plant3d-mbd-debug).",
+ "frame": "24383_67485-elbo-mid-engineering.png",
+ "strokes": {
+  "frame-top": {
+   "box1x": [
+    356,
+    280,
+    444,
+    292
+   ],
+   "orient": "h",
+   "color": "#0f172a"
+  },
+  "frame-bottom": {
+   "box1x": [
+    356,
+    310,
+    444,
+    322
+   ],
+   "orient": "h",
+   "color": "#0f172a"
+  },
+  "frame-left": {
+   "box1x": [
+    341,
+    292,
+    353,
+    310
+   ],
+   "orient": "v",
+   "color": "#0f172a"
+  },
+  "frame-right": {
+   "box1x": [
+    446,
+    292,
+    458,
+    310
+   ],
+   "orient": "v",
+   "color": "#0f172a"
+  },
+  "card-top": {
+   "box1x": [
+    380,
+    722,
+    432,
+    734
+   ],
+   "orient": "h",
+   "color": "#94a3b8"
+  },
+  "card-bottom": {
+   "box1x": [
+    380,
+    784,
+    432,
+    796
+   ],
+   "orient": "h",
+   "color": "#94a3b8"
+  },
+  "card-left": {
+   "box1x": [
+    366,
+    736,
+    378,
+    782
+   ],
+   "orient": "v",
+   "color": "#94a3b8"
+  },
+  "card-right": {
+   "box1x": [
+    434,
+    736,
+    446,
+    782
+   ],
+   "orient": "v",
+   "color": "#94a3b8"
+  },
+  "leader": {
+   "box1x": [
+    383,
+    318,
+    405,
+    350
+   ],
+   "orient": "v",
+   "color": "#64748b"
+  }
+ },
+ "variants": {
+  "before": {
+   "1x": {
+    "frame-top": {
+     "sections": 88,
+     "peak_mean": 0.908,
+     "peak_min": 0.908,
+     "core_share": 0.0,
+     "core_mean": 0.0,
+     "ink_mean": 1.191,
+     "slant_deg": 0.0,
+     "hist": [
+      0,
+      0,
+      88,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      88
+     ],
+     "box": [
+      356,
+      280,
+      444,
+      292
+     ]
+    },
+    "frame-bottom": {
+     "sections": 88,
+     "peak_mean": 0.79,
+     "peak_min": 0.79,
+     "core_share": 0.0,
+     "core_mean": 0.0,
+     "ink_mean": 1.209,
+     "slant_deg": -0.006,
+     "hist": [
+      3,
+      2,
+      0,
+      2,
+      85,
+      0,
+      0,
+      88,
+      0,
+      0
+     ],
+     "box": [
+      356,
+      310,
+      444,
+      322
+     ]
+    },
+    "frame-left": {
+     "sections": 18,
+     "peak_mean": 0.607,
+     "peak_min": 0.601,
+     "core_share": 0.0,
+     "core_mean": 0.0,
+     "ink_mean": 1.149,
+     "slant_deg": -0.0,
+     "hist": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      18,
+      18,
+      0,
+      0,
+      0
+     ],
+     "box": [
+      341,
+      292,
+      353,
+      310
+     ]
+    },
+    "frame-right": {
+     "sections": 18,
+     "peak_mean": 0.884,
+     "peak_min": 0.883,
+     "core_share": 0.0,
+     "core_mean": 0.0,
+     "ink_mean": 1.212,
+     "slant_deg": -0.001,
+     "hist": [
+      0,
+      0,
+      0,
+      18,
+      0,
+      0,
+      0,
+      0,
+      18,
+      0
+     ],
+     "box": [
+      446,
+      292,
+      458,
+      310
+     ]
+    },
+    "card-top": {
+     "sections": 52,
+     "peak_mean": 0.514,
+     "peak_min": 0.514,
+     "core_share": 0.0,
+     "core_mean": 0.0,
+     "ink_mean": 0.879,
+     "slant_deg": 0.26,
+     "hist": [
+      17,
+      0,
+      0,
+      52,
+      0,
+      52,
+      0,
+      0,
+      0,
+      0
+     ],
+     "box": [
+      380,
+      722,
+      432,
+      734
+     ]
+    },
+    "card-bottom": {
+     "sections": 52,
+     "peak_mean": 0.866,
+     "peak_min": 0.859,
+     "core_share": 0.038,
+     "core_mean": 0.038,
+     "ink_mean": 1.083,
+     "slant_deg": 0.388,
+     "hist": [
+      0,
+      49,
+      0,
+      0,
+      2,
+      0,
+      0,
+      0,
+      52,
+      3
+     ],
+     "box": [
+      380,
+      784,
+      432,
+      796
+     ]
+    },
+    "card-left": {
+     "sections": 46,
+     "peak_mean": 0.582,
+     "peak_min": 0.578,
+     "core_share": 0.0,
+     "core_mean": 0.0,
+     "ink_mean": 1.01,
+     "slant_deg": 0.097,
+     "hist": [
+      8,
+      0,
+      0,
+      0,
+      46,
+      45,
+      1,
+      0,
+      0,
+      0
+     ],
+     "box": [
+      366,
+      736,
+      378,
+      782
+     ]
+    },
+    "card-right": {
+     "sections": 46,
+     "peak_mean": 0.912,
+     "peak_min": 0.912,
+     "core_share": 0.0,
+     "core_mean": 0.0,
+     "ink_mean": 1.093,
+     "slant_deg": 1.196,
+     "hist": [
+      5,
+      46,
+      0,
+      0,
+      2,
+      0,
+      1,
+      2,
+      0,
+      46
+     ],
+     "box": [
+      434,
+      736,
+      446,
+      782
+     ]
+    },
+    "leader": {
+     "sections": 32,
+     "peak_mean": 0.704,
+     "peak_min": 0.471,
+     "core_share": 0.0,
+     "core_mean": 0.0,
+     "ink_mean": 0.954,
+     "slant_deg": -8.061,
+     "hist": [
+      33,
+      7,
+      8,
+      3,
+      9,
+      6,
+      6,
+      5,
+      6,
+      5
+     ],
+     "box": [
+      383,
+      318,
+      405,
+      350
+     ]
+    },
+    "summary": {
+     "frame (tag-frame, 1.2 px, #0f172a)": {
+      "sections": 212,
+      "peak_mean": 0.831,
+      "core_share": 0.0,
+      "core_mean": 0.0,
+      "ink_mean": 1.197
+     },
+     "card border (tag-border, 1 px, #94a3b8)": {
+      "sections": 196,
+      "peak_mean": 0.717,
+      "core_share": 0.01,
+      "core_mean": 0.01,
+      "ink_mean": 1.014
+     },
+     "leader (tag-leader, 0.9 px, #64748b)": {
+      "sections": 32,
+      "peak_mean": 0.704,
+      "core_share": 0.0,
+      "core_mean": 0.0,
+      "ink_mean": 0.954
+     }
+    }
+   },
+   "2x": {
+    "frame-top": {
+     "sections": 176,
+     "peak_mean": 1.0,
+     "peak_min": 1.0,
+     "core_share": 1.0,
+     "core_mean": 1.0,
+     "ink_mean": 2.402,
+     "slant_deg": 0.0,
+     "hist": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      176,
+      0,
+      0,
+      176,
+      176
+     ],
+     "box": [
+      712,
+      560,
+      888,
+      584
+     ]
+    },
+    "frame-bottom": {
+     "sections": 176,
+     "peak_mean": 1.0,
+     "peak_min": 1.0,
+     "core_share": 1.0,
+     "core_mean": 1.0,
+     "ink_mean": 2.423,
+     "slant_deg": -0.008,
+     "hist": [
+      6,
+      3,
+      2,
+      7,
+      1,
+      176,
+      1,
+      1,
+      174,
+      176
+     ],
+     "box": [
+      712,
+      620,
+      888,
+      644
+     ]
+    },
+    "frame-left": {
+     "sections": 36,
+     "peak_mean": 1.0,
+     "peak_min": 1.0,
+     "core_share": 1.0,
+     "core_mean": 2.0,
+     "ink_mean": 2.401,
+     "slant_deg": 0.0,
+     "hist": [
+      34,
+      2,
+      0,
+      36,
+      0,
+      0,
+      0,
+      0,
+      0,
+      72
+     ],
+     "box": [
+      682,
+      584,
+      706,
+      620
+     ]
+    },
+    "frame-right": {
+     "sections": 36,
+     "peak_mean": 1.0,
+     "peak_min": 1.0,
+     "core_share": 1.0,
+     "core_mean": 1.0,
+     "ink_mean": 2.399,
+     "slant_deg": -0.001,
+     "hist": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      36,
+      36,
+      0,
+      36
+     ],
+     "box": [
+      892,
+      584,
+      916,
+      620
+     ]
+    },
+    "card-top": {
+     "sections": 104,
+     "peak_mean": 1.0,
+     "peak_min": 1.0,
+     "core_share": 1.0,
+     "core_mean": 1.0,
+     "ink_mean": 2.023,
+     "slant_deg": 0.11,
+     "hist": [
+      37,
+      0,
+      0,
+      104,
+      0,
+      0,
+      102,
+      2,
+      0,
+      104
+     ],
+     "box": [
+      760,
+      1444,
+      864,
+      1468
+     ]
+    },
+    "card-bottom": {
+     "sections": 104,
+     "peak_mean": 1.0,
+     "peak_min": 1.0,
+     "core_share": 1.0,
+     "core_mean": 1.087,
+     "ink_mean": 2.107,
+     "slant_deg": 0.278,
+     "hist": [
+      1,
+      0,
+      1,
+      100,
+      1,
+      1,
+      104,
+      0,
+      1,
+      114
+     ],
+     "box": [
+      760,
+      1568,
+      864,
+      1592
+     ]
+    },
+    "card-left": {
+     "sections": 92,
+     "peak_mean": 1.0,
+     "peak_min": 1.0,
+     "core_share": 1.0,
+     "core_mean": 1.0,
+     "ink_mean": 2.011,
+     "slant_deg": 0.023,
+     "hist": [
+      14,
+      91,
+      1,
+      0,
+      0,
+      0,
+      0,
+      0,
+      92,
+      92
+     ],
+     "box": [
+      732,
+      1472,
+      756,
+      1564
+     ]
+    },
+    "card-right": {
+     "sections": 92,
+     "peak_mean": 1.0,
+     "peak_min": 1.0,
+     "core_share": 1.0,
+     "core_mean": 1.0,
+     "ink_mean": 2.029,
+     "slant_deg": 0.292,
+     "hist": [
+      10,
+      0,
+      92,
+      0,
+      0,
+      2,
+      2,
+      92,
+      0,
+      92
+     ],
+     "box": [
+      868,
+      1472,
+      892,
+      1564
+     ]
+    },
+    "leader": {
+     "sections": 64,
+     "peak_mean": 0.989,
+     "peak_min": 0.909,
+     "core_share": 0.844,
+     "core_mean": 0.844,
+     "ink_mean": 1.889,
+     "slant_deg": -8.395,
+     "hist": [
+      100,
+      9,
+      20,
+      9,
+      14,
+      17,
+      7,
+      19,
+      8,
+      66
+     ],
+     "box": [
+      766,
+      636,
+      810,
+      700
+     ]
+    },
+    "summary": {
+     "frame (tag-frame, 1.2 px, #0f172a)": {
+      "sections": 424,
+      "peak_mean": 1.0,
+      "core_share": 1.0,
+      "core_mean": 1.085,
+      "ink_mean": 2.41
+     },
+     "card border (tag-border, 1 px, #94a3b8)": {
+      "sections": 392,
+      "peak_mean": 1.0,
+      "core_share": 1.0,
+      "core_mean": 1.023,
+      "ink_mean": 2.044
+     },
+     "leader (tag-leader, 0.9 px, #64748b)": {
+      "sections": 64,
+      "peak_mean": 0.989,
+      "core_share": 0.844,
+      "core_mean": 0.844,
+      "ink_mean": 1.889
+     }
+    }
+   }
+  },
+  "after": {
+   "1x": {
+    "frame-top": {
+     "sections": 88,
+     "peak_mean": 1.0,
+     "peak_min": 1.0,
+     "core_share": 1.0,
+     "core_mean": 2.0,
+     "ink_mean": 2.0,
+     "slant_deg": 0.0,
+     "hist": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      176
+     ],
+     "box": [
+      356,
+      280,
+      444,
+      292
+     ]
+    },
+    "frame-bottom": {
+     "sections": 88,
+     "peak_mean": 1.0,
+     "peak_min": 1.0,
+     "core_share": 1.0,
+     "core_mean": 2.0,
+     "ink_mean": 2.01,
+     "slant_deg": -0.005,
+     "hist": [
+      2,
+      2,
+      1,
+      1,
+      0,
+      0,
+      0,
+      0,
+      0,
+      176
+     ],
+     "box": [
+      356,
+      310,
+      444,
+      322
+     ]
+    },
+    "frame-left": {
+     "sections": 18,
+     "peak_mean": 1.0,
+     "peak_min": 1.0,
+     "core_share": 1.0,
+     "core_mean": 2.0,
+     "ink_mean": 2.0,
+     "slant_deg": 0.0,
+     "hist": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      36
+     ],
+     "box": [
+      341,
+      292,
+      353,
+      310
+     ]
+    },
+    "frame-right": {
+     "sections": 18,
+     "peak_mean": 1.0,
+     "peak_min": 1.0,
+     "core_share": 1.0,
+     "core_mean": 2.0,
+     "ink_mean": 2.0,
+     "slant_deg": 0.0,
+     "hist": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      36
+     ],
+     "box": [
+      446,
+      292,
+      458,
+      310
+     ]
+    },
+    "card-top": {
+     "sections": 52,
+     "peak_mean": 1.0,
+     "peak_min": 1.0,
+     "core_share": 1.0,
+     "core_mean": 2.0,
+     "ink_mean": 2.018,
+     "slant_deg": 0.111,
+     "hist": [
+      17,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      104
+     ],
+     "box": [
+      380,
+      722,
+      432,
+      734
+     ]
+    },
+    "card-bottom": {
+     "sections": 52,
+     "peak_mean": 1.0,
+     "peak_min": 1.0,
+     "core_share": 1.0,
+     "core_mean": 1.981,
+     "ink_mean": 2.029,
+     "slant_deg": 0.055,
+     "hist": [
+      0,
+      0,
+      1,
+      2,
+      0,
+      0,
+      1,
+      0,
+      0,
+      104
+     ],
+     "box": [
+      380,
+      784,
+      432,
+      796
+     ]
+    },
+    "card-left": {
+     "sections": 46,
+     "peak_mean": 1.0,
+     "peak_min": 1.0,
+     "core_share": 1.0,
+     "core_mean": 2.0,
+     "ink_mean": 2.009,
+     "slant_deg": 0.049,
+     "hist": [
+      8,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      92
+     ],
+     "box": [
+      366,
+      736,
+      378,
+      782
+     ]
+    },
+    "card-right": {
+     "sections": 46,
+     "peak_mean": 1.0,
+     "peak_min": 1.0,
+     "core_share": 1.0,
+     "core_mean": 2.0,
+     "ink_mean": 2.07,
+     "slant_deg": 0.695,
+     "hist": [
+      5,
+      0,
+      0,
+      0,
+      2,
+      0,
+      1,
+      2,
+      0,
+      92
+     ],
+     "box": [
+      434,
+      736,
+      446,
+      782
+     ]
+    },
+    "leader": {
+     "sections": 32,
+     "peak_mean": 1.0,
+     "peak_min": 1.0,
+     "core_share": 1.0,
+     "core_mean": 1.031,
+     "ink_mean": 2.053,
+     "slant_deg": -8.789,
+     "hist": [
+      32,
+      4,
+      6,
+      8,
+      7,
+      6,
+      8,
+      5,
+      9,
+      37
+     ],
+     "box": [
+      383,
+      318,
+      405,
+      350
+     ]
+    },
+    "summary": {
+     "frame (tag-frame, 1.2 px, #0f172a)": {
+      "sections": 212,
+      "peak_mean": 1.0,
+      "core_share": 1.0,
+      "core_mean": 2.0,
+      "ink_mean": 2.004
+     },
+     "card border (tag-border, 1 px, #94a3b8)": {
+      "sections": 196,
+      "peak_mean": 1.0,
+      "core_share": 1.0,
+      "core_mean": 1.995,
+      "ink_mean": 2.031
+     },
+     "leader (tag-leader, 0.9 px, #64748b)": {
+      "sections": 32,
+      "peak_mean": 1.0,
+      "core_share": 1.0,
+      "core_mean": 1.031,
+      "ink_mean": 2.053
+     }
+    }
+   },
+   "2x": {
+    "frame-top": {
+     "sections": 176,
+     "peak_mean": 1.0,
+     "peak_min": 1.0,
+     "core_share": 1.0,
+     "core_mean": 2.0,
+     "ink_mean": 2.0,
+     "slant_deg": 0.0,
+     "hist": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      352
+     ],
+     "box": [
+      712,
+      560,
+      888,
+      584
+     ]
+    },
+    "frame-bottom": {
+     "sections": 176,
+     "peak_mean": 1.0,
+     "peak_min": 1.0,
+     "core_share": 1.0,
+     "core_mean": 2.0,
+     "ink_mean": 2.026,
+     "slant_deg": -0.009,
+     "hist": [
+      6,
+      4,
+      2,
+      8,
+      1,
+      0,
+      0,
+      0,
+      0,
+      352
+     ],
+     "box": [
+      712,
+      620,
+      888,
+      644
+     ]
+    },
+    "frame-left": {
+     "sections": 36,
+     "peak_mean": 1.0,
+     "peak_min": 1.0,
+     "core_share": 1.0,
+     "core_mean": 2.0,
+     "ink_mean": 2.0,
+     "slant_deg": 0.0,
+     "hist": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      72
+     ],
+     "box": [
+      682,
+      584,
+      706,
+      620
+     ]
+    },
+    "frame-right": {
+     "sections": 36,
+     "peak_mean": 1.0,
+     "peak_min": 1.0,
+     "core_share": 1.0,
+     "core_mean": 2.0,
+     "ink_mean": 2.0,
+     "slant_deg": 0.0,
+     "hist": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      72
+     ],
+     "box": [
+      892,
+      584,
+      916,
+      620
+     ]
+    },
+    "card-top": {
+     "sections": 104,
+     "peak_mean": 1.0,
+     "peak_min": 1.0,
+     "core_share": 1.0,
+     "core_mean": 2.0,
+     "ink_mean": 2.019,
+     "slant_deg": 0.105,
+     "hist": [
+      37,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      208
+     ],
+     "box": [
+      760,
+      1444,
+      864,
+      1468
+     ]
+    },
+    "card-bottom": {
+     "sections": 104,
+     "peak_mean": 1.0,
+     "peak_min": 1.0,
+     "core_share": 1.0,
+     "core_mean": 2.077,
+     "ink_mean": 2.11,
+     "slant_deg": 0.199,
+     "hist": [
+      3,
+      1,
+      0,
+      0,
+      1,
+      0,
+      2,
+      2,
+      0,
+      216
+     ],
+     "box": [
+      760,
+      1568,
+      864,
+      1592
+     ]
+    },
+    "card-left": {
+     "sections": 92,
+     "peak_mean": 1.0,
+     "peak_min": 1.0,
+     "core_share": 1.0,
+     "core_mean": 2.0,
+     "ink_mean": 2.008,
+     "slant_deg": 0.023,
+     "hist": [
+      15,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      184
+     ],
+     "box": [
+      732,
+      1472,
+      756,
+      1564
+     ]
+    },
+    "card-right": {
+     "sections": 92,
+     "peak_mean": 1.0,
+     "peak_min": 1.0,
+     "core_share": 1.0,
+     "core_mean": 2.0,
+     "ink_mean": 2.031,
+     "slant_deg": 0.3,
+     "hist": [
+      10,
+      0,
+      0,
+      0,
+      0,
+      2,
+      2,
+      0,
+      0,
+      184
+     ],
+     "box": [
+      868,
+      1472,
+      892,
+      1564
+     ]
+    },
+    "leader": {
+     "sections": 64,
+     "peak_mean": 1.0,
+     "peak_min": 1.0,
+     "core_share": 1.0,
+     "core_mean": 1.109,
+     "ink_mean": 2.088,
+     "slant_deg": -8.495,
+     "hist": [
+      92,
+      16,
+      7,
+      20,
+      9,
+      14,
+      16,
+      8,
+      19,
+      74
+     ],
+     "box": [
+      766,
+      636,
+      810,
+      700
+     ]
+    },
+    "summary": {
+     "frame (tag-frame, 1.2 px, #0f172a)": {
+      "sections": 424,
+      "peak_mean": 1.0,
+      "core_share": 1.0,
+      "core_mean": 2.0,
+      "ink_mean": 2.011
+     },
+     "card border (tag-border, 1 px, #94a3b8)": {
+      "sections": 392,
+      "peak_mean": 1.0,
+      "core_share": 1.0,
+      "core_mean": 2.02,
+      "ink_mean": 2.043
+     },
+     "leader (tag-leader, 0.9 px, #64748b)": {
+      "sections": 64,
+      "peak_mean": 1.0,
+      "core_share": 1.0,
+      "core_mean": 1.109,
+      "ink_mean": 2.088
+     }
+    }
+   }
+  }
+ }
+}

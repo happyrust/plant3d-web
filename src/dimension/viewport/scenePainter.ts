@@ -71,18 +71,22 @@ const STROKE_CORE_COVERAGE = 0.999;
 const MIN_TEXT_STROKE_DEVICE_PX = 2;
 
 /**
- * Dimension strokes — dimension, extension and leader lines and the
- * markers, everything drawn at `theme.dimensionStrokeWidthPx` — are hinted
- * the same way, with the same floor: a stroke needs two device pixels for
- * a one-pixel solid core (w − feather ≥ 1). Measured on the real pipeline
- * (2026-09-14, BRAN 24383_67485, red 1.2 px dimension lines): at 1× the
- * nominal 1.2 px has a 0.2 px core — one cross-section in four owns a
- * fully covered pixel, peak coverage 0.85 — and rounding it down to one
- * device pixel loses even that (4 %, peak 0.76, visibly fainter); two
- * device pixels give every cross-section a solid pixel (peak 1.0). The
- * price is that on a 1× display a dimension line is as heavy as the text
- * stroke; from 1.5× up text stays heavier (2 vs 3 device px at 1.5×, 2 vs 4
- * at 2×, where 2.4 rounds down to 2 and keeps its core).
+ * Every other screen-space stroke — dimension, extension and leader lines
+ * and the markers at `theme.dimensionStrokeWidthPx`, and the billboard
+ * tags' card border (1 px), name frame (1.2 px) and leader (0.9 px) — is
+ * hinted the same way, with the same floor: a stroke needs two device
+ * pixels for a one-pixel solid core (w − feather ≥ 1). Measured on the
+ * real pipeline (2026-09-14, BRAN 24383_67485): at 1× the 1.2 px dimension
+ * line has a 0.2 px core — one cross-section in four owns a fully covered
+ * pixel, peak coverage 0.85 — and rounding it down to one device pixel
+ * loses even that (4 %, peak 0.76, visibly fainter); two device pixels
+ * give every cross-section a solid pixel (peak 1.0). The tag strokes were
+ * worse still (frame peak 0.83, card border 0.72, leader 0.70, no solid
+ * pixel anywhere): an axis-aligned 1 px border at an arbitrary sub-pixel
+ * phase is two grey rows. The price is that on a 1× display these strokes
+ * are as heavy as the text stroke; from 1.5× up text stays heavier (2 vs 3
+ * device px at 1.5×, 2 vs 4 at 2×, where 2.4 rounds down to 2 and keeps
+ * its core).
  */
 const MIN_LINE_STROKE_DEVICE_PX = 2;
 
@@ -521,9 +525,11 @@ export function hintedTextStrokeWidthPx(widthCssPx: number, pixelRatio: number):
 }
 
 /**
- * Stroke width of a hinted dimension stroke, never below
- * `MIN_LINE_STROKE_DEVICE_PX`: 1.2 px is 2 device px on a 1× display (the
- * floor), 2 on a 2× one (1 CSS px) and 2 (1.6 CSS px) at 1.25× (2026-09-14).
+ * Stroke width of a hinted line stroke (dimension strokes, tag borders /
+ * frames / leaders), never below `MIN_LINE_STROKE_DEVICE_PX`: 1.2 px is 2
+ * device px on a 1× display (the floor), 2 on a 2× one (1 CSS px) and 2
+ * (1.6 CSS px) at 1.25×; a 1 px card border is 2 device px at 1× and 2×
+ * alike (2026-09-14).
  */
 export function hintedLineStrokeWidthPx(widthCssPx: number, pixelRatio: number): number {
   return hintedStrokeWidthPx(widthCssPx, pixelRatio, MIN_LINE_STROKE_DEVICE_PX);
@@ -553,9 +559,10 @@ function dashCode(
 
 /**
  * Which device-pixel hinting a stroke gets (ADR 0064): screen-space glyph
- * strokes as `text`, dimension strokes as `line` (both whole device pixels,
+ * strokes as `text`, every other screen-space stroke — dimension strokes and
+ * the tag borders, frames and leaders — as `line` (both whole device pixels,
  * at least two, from their own theme widths); undefined strokes — framed 3D
- * text and the tag tones — keep the theme width and are not snapped.
+ * text and its halo — keep the theme width and are not snapped.
  */
 type StrokeHint = 'text' | 'line';
 
@@ -567,11 +574,6 @@ type SegmentVisitor = (
   stroke?: SegmentStroke,
   hint?: StrokeHint,
 ) => void;
-
-/** Dimension strokes (no tag tone) are hinted; tag borders and leaders keep their own widths. */
-function lineHint(tone: SceneTone | undefined): StrokeHint | undefined {
-  return tone === undefined ? 'line' : undefined;
-}
 
 function visitPrimitiveSegments(
   primitive: ScenePrimitive,
@@ -587,7 +589,7 @@ function visitPrimitiveSegments(
         primitive.styleRole,
         primitive.lineStyle,
         primitive.tone,
-        lineHint(primitive.tone),
+        'line',
       );
       return;
     case 'scene-path':
@@ -598,7 +600,7 @@ function visitPrimitiveSegments(
           primitive.styleRole,
           primitive.lineStyle,
           primitive.tone,
-          lineHint(primitive.tone),
+          'line',
         );
       }
       if (primitive.closed && primitive.points.length > 2) {
@@ -608,7 +610,7 @@ function visitPrimitiveSegments(
           primitive.styleRole,
           primitive.lineStyle,
           primitive.tone,
-          lineHint(primitive.tone),
+          'line',
         );
       }
       return;
@@ -879,8 +881,8 @@ type DimensionVertexRange = Readonly<{
  * post-processing included — straight into the sRGB canvas
  * (`DimensionViewport.renderOverlay`, ADR 0064): colours are written
  * sRGB-encoded and never tone-mapped, edges blend in sRGB, no FXAA touches
- * the strokes, and screen-space text and the dimension strokes are hinted
- * to the device pixel grid.
+ * the strokes, and every screen-space stroke — text, dimension strokes, tag
+ * borders and leaders — is hinted to the device pixel grid.
  */
 export class ThreeSceneDimensionPainter {
   readonly group = new Group();
@@ -972,9 +974,9 @@ export class ThreeSceneDimensionPainter {
   /**
    * Viewport size in CSS px and the device pixel ratio: the stroke edge
    * ramp is one device pixel wide, so it stays crisp on a 2× display
-   * instead of softening to two device pixels, and screen-space text and
-   * dimension strokes are hinted to that display's pixel grid (the caller
-   * repaints on a DPR change — `DimensionViewport` invalidates `dpr`).
+   * instead of softening to two device pixels, and the screen-space strokes
+   * are hinted to that display's pixel grid (the caller repaints on a DPR
+   * change — `DimensionViewport` invalidates `dpr`).
    */
   resize(widthCssPx: number, heightCssPx: number, pixelRatio = 1): void {
     if (
