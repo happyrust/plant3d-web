@@ -3401,7 +3401,7 @@ describe('useXeokitMeasurementTools', () => {
         requestRender: null,
       });
 
-      // 1 英尺（0.3048 m）：三档各出各的串。
+      // 0.3048 m：三档各出各的串。
       store.addXeokitDistanceMeasurement({
         id: 'dist-units',
         kind: 'distance',
@@ -3426,14 +3426,11 @@ describe('useXeokitMeasurementTools', () => {
       measurementStyle.updateMeasurementUnits({ unitSystem: 'metric' });
       expect(await labelNow()).toBe('304.8 mm');
 
+      measurementStyle.updateMeasurementUnits({ displayUnit: 'CM' });
+      expect(await labelNow()).toBe('30.48 cm');
+
       measurementStyle.updateMeasurementUnits({ displayUnit: 'METRE' });
       expect(await labelNow()).toBe('0.305 m');
-
-      measurementStyle.updateMeasurementUnits({ unitSystem: 'imperial' });
-      expect(await labelNow()).toBe('12 in');
-
-      measurementStyle.updateMeasurementUnits({ displayUnit: 'FT' });
-      expect(await labelNow()).toBe('1.000 ft');
 
       // 切回 Default 又回到全局单位设置。
       measurementStyle.updateMeasurementUnits({ unitSystem: 'default' });

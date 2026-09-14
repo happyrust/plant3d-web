@@ -52,10 +52,10 @@ const perpendicularInfo = computed(() => result.value?.perpendicular ?? null);
 // E3D Units 框：Unit type × Display Unit 决定这一窗体的 measureFormat；
 // Default 档回落到全局单位设置（= E3D 的 !!distanceFmt）。
 const unitSelection = computed(() => measurementStyle.state.measurementUnits);
+// E3D 还有一档 Imperial，本项目不做（方案 §7 Q4，用户 2026-09-14 拍板）。
 const unitSystemOptions: readonly { value: MeasurementUnitSystem; label: string }[] = [
   { value: 'default', label: 'Default' },
   { value: 'metric', label: 'Metric' },
-  { value: 'imperial', label: 'Imperial' },
 ];
 const displayUnitOptions = computed(() => measurementDisplayUnitOptions(unitSelection.value.unitSystem));
 const selectedDisplayUnit = computed(() => measurementSelectedDisplayUnit(unitSelection.value));

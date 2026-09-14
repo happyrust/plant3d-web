@@ -85,8 +85,8 @@ export type XeokitMeasurementStyleConfig = {
    */
   measurementPickLayer: MeasurementPickLayerConfig;
   /**
-   * E3D Measure Distance 窗体的 Units 框：Unit type（Default / Metric / Imperial）
-   * × Display Unit，两套各记一次上次选择。测量会话级，优先级高于全局单位设置
+   * E3D Measure Distance 窗体的 Units 框：Unit type（Default / Metric，英制不做见 Q4）
+   * × Display Unit，记住上次选的那一档。测量会话级，优先级高于全局单位设置
    * （Default 档才回落到全局，= E3D 的 `!!distanceFmt`）。
    */
   measurementUnits: MeasurementUnitSelection;
@@ -406,8 +406,8 @@ function updateMeasurementPickLayer(
 }
 
 /**
- * 改 Units 框（E3D `changeUnitType` + `selectUnitType`）：换 Unit type 时
- * Display Unit 回到那一套自己的上次选择；选 Display Unit 只写进当前那一套的记忆。
+ * 改 Units 框（E3D `changeUnitType` + `selectUnitType`）：换回 Metric 时
+ * Display Unit 回到上次选的那一档；Default 档下拉是灰的，此刻送来的 Display Unit 不落库。
  */
 function updateMeasurementUnits(
   patch: Readonly<{ unitSystem?: MeasurementUnitSystem; displayUnit?: MeasurementDisplayUnit }>,
