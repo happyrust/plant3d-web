@@ -77,7 +77,7 @@ npm run dev          # http://127.0.0.1:3101
 | `gm_health=1` | 在 legacy 下也把树顶部的 gen-model 徽标挂出来（只看健康与库三态，不动场景、不起同步） |
 | `show_refno=24381_145018` | 启动即显示这个节点（v1 下 = `ensure → records`） |
 | `debug_refno=24381_145018` | 同上，但强制重载并替换旧对象 |
-| `show_dbnum=7997` | 整库，两条路自动选（收口计划 §17，2026-09-10 起）。**服务端整库入口**（读透 / kv-mem 形态、且服务端含 spec §4.5.3 的构建）：`POST dbnums/7997/model/ensure` 起任务（202，服务端自己枚举全部生成根，e3d-model 流水线 16 路并行、按片提交进投影）→ 每 2 s 只查这一个 `task_id`（进度「服务端生成 N/M」）+ `GET dbnums/7997/model/roots?ready=1`，**新就绪的根立刻取 `records` 装进视口**（「已进视口 K 根」）——几何边生成边出现，第一片 16 根提交就能看见，不等整库生成完（plan 2026-09-10 §12「实时」）。服务端是 `dadbd821d` 那版（roots 行没有 `ready`）时退化为等终态再整取。前端一根也不催。**逐 SITE 老路**（服务端没有那条路由 404 → 记一次以后不再试；该库以 rocksdb 为准 409 → 只退这一次）：`tree/roots` 里该库的全部 SITE 逐个 `ensure → records`，进度按 SITE。两条路的 `records` 都按**多根批量**取（一次 ≤64 根，spec §4.5.2），生成根数不设预算，缺省只守 50 000 个构件（撞到 toast 会说「未轮到 N 个 SITE」），加 `show_dbnum_full=1` 连构件数也不限。服务端是不认识 `generation_roots` 的旧版（如 0.1.21 出厂包）时前端自动退回逐根（每根一次 `records`，0.5–10 s，几千根的库要几十分钟）——network 面板里第一发是 `dbnums/{dbnum}/model/ensure` 还是 `model/ensure`、`model/records` 的请求体有没有 `generation_roots`，走的哪条路一眼可辨 |
+| `show_dbnum=7997` | 整库，两条路自动选（收口计划 §17，2026-09-10 起）。**服务端整库入口**（读透 / kv-mem 形态、且服务端含 spec §4.5.3 的构建）：`POST dbnums/7997/model/ensure` 起任务（202，服务端自己枚举全部生成根，e3d-model 流水线 16 路并行、按片提交进投影）→ 每 2 s 只查这一个 `task_id`（进度「服务端生成 N/M」）+ `GET dbnums/7997/model/roots?ready=1`，**新就绪的根立刻取 `records` 装进视口**（「已进视口 K 根」）——几何边生成边出现，第一片 16 根提交就能看见，不等整库生成完（plan 2026-09-10 §12「实时」）。服务端是 `dadbd821d` 那版（roots 行没有 `ready`）时退化为等终态再整取。前端一根也不催。**逐 SITE 老路**（服务端没有那条路由 404 → 记一次以后不再试；该库以 rocksdb 为准 409 → 只退这一次）：`tree/roots` 里该库的全部 SITE 逐个 `ensure → records`，进度按 SITE。**database 形态的 409（摄入形态里已初始化的库，如本机 `:18122` 的 7997）2026-09-14 起不再干等逐 SITE**：退回之前先 `GET dbnums/7997/model/roots?ready=1` 把服务端**已经生成好的根**多根 `records` 抽进视口（直读 rocksdb，64 根一批几百毫秒；控制台「已先取进服务端已生成的 N/M 根，其余走逐 SITE 兼容路径」），逐 SITE 只负责催其余的根；逐 SITE 之后每 10 s 再抽一次 `?ready=1`（SITE 级 ensure 超时进 pending 的那些根，服务端在后台继续生成、新就绪的立刻进视口，进度「服务端生成 N/M 根 · 已进视口 K 根」），直到全部就绪 / 1 min 没有新就绪的根 / 预算用尽 / 2 h。实测 7997（6772 根，2943 根已就绪）：刷新后 22 s 视口里 12 064 个构件，改前逐 SITE 兼容路径 21.7 min 只装到 133 个。两条路的 `records` 都按**多根批量**取（一次 ≤64 根，spec §4.5.2），生成根数不设预算，缺省只守 50 000 个构件（撞到 toast 会说「未轮到 N 个 SITE」），加 `show_dbnum_full=1` 连构件数也不限。服务端是不认识 `generation_roots` 的旧版（如 0.1.21 出厂包）时前端自动退回逐根（每根一次 `records`，0.5–10 s，几千根的库要几十分钟）——network 面板里第一发是 `dbnums/{dbnum}/model/ensure` 还是 `model/ensure`、`model/records` 的请求体有没有 `generation_roots`，走的哪条路一眼可辨 |
 
 典型联调 URL：
 
@@ -106,7 +106,7 @@ pwsh scripts/verify-gen-model-v1.ps1 -BaseUrl http://127.0.0.1:8022 -Dbnum 7997 
 | | `data_face=read-through` | `data_face=ingest`（如 plant-1 的实例） |
 | --- | --- | --- |
 | SITE / ZONE 勾选眼睛 | 服务端解出全部生成根，`generation_roots` 直接给 | `422 container` → 前端展开一层对子节点逐个 ensure（深度 3 / 128 根上限，超出计 `truncatedRoots`） |
-| `show_dbnum` 整库显示 | 服务端整库入口：`dbnums/{dbnum}/model/ensure` 起任务 → 每拍只查自己那一个 `task_id` + `…/model/roots?ready=1` → 新就绪的根立刻多根 `records` 进视口（spec §4.5.3，服务端含 2026-09-10 之后的构建） | 已初始化的库 `409` → 逐 SITE 老路（每个 SITE 一发 `ensure`，串行）；旧构建 `404` 同样走老路且只试一次 |
+| `show_dbnum` 整库显示 | 服务端整库入口：`dbnums/{dbnum}/model/ensure` 起任务 → 每拍只查自己那一个 `task_id` + `…/model/roots?ready=1` → 新就绪的根立刻多根 `records` 进视口（spec §4.5.3，服务端含 2026-09-10 之后的构建） | 已初始化的库 `409` → 先 `…/model/roots?ready=1` 把已生成的根多根 `records` 抽进视口，再逐 SITE 老路（每个 SITE 一发 `ensure`，串行）催其余的根，之后每 10 s 再抽一次直到全部就绪 / 1 min 没新就绪（2026-09-14 起）；旧构建 `404` 直接走老路且只试一次 |
 | `/dbnums` 的 `ref0s` | 骨架预热过，每行都有 | 骨架预热过才有；没有的行整格不写，`useDbMetaInfo` 跳过它 |
 | `model/records` 的 `source` | `model-memory` | 库就绪了 `model-database`，否则 `model-memory` |
 | 服务重启后 | 投影全没：再点显示会重新生成（整库任务也只活在进程内） | 已初始化的库以 rocksdb 为准，重启即接上 |
@@ -139,3 +139,46 @@ pwsh scripts/verify-gen-model-v1.ps1 -BaseUrl http://127.0.0.1:8022 -Dbnum 7997 
 ## 8. 回退
 
 任何时候加 `?model_source=legacy`（或整站 `VITE_MODEL_SOURCE=legacy`）就回到旧链路——两套代码都在，legacy 路径没有改过一行行为；2026-09-09 之前缺省就是 legacy，现在要显式写。相关源码：`src/model-source/**`、`src/api/genModelV1Api.ts`、`src/composables/useGenModelV1Health.ts`（`genModelV1Ws.ts` / `useGenModelV1ModelSync.ts` 已于 2026-09-09 下线）。
+
+## 9. 校审域（review）——要 `rocksdb` 档才开，`mem` 出厂档下四前缀 503
+
+**2026-09-14 起校审后台并进了 gen-model**：`/api/review`、`/api/users`、`/api/auth`、`/files/review_attachments` 四个前缀由同一只 `aios-database.exe` 提供（`:8022`），不再有单独的旧端。前端默认配置随之改了——`.env.development` 的 `VITE_GEN_MODEL_API_BASE_URL` 现在指 `http://localhost:8022`（此前是 `:3100`），提资单 / 校对 / 批注 / 附件都打到这里。要回旧端把这一行改回 `http://localhost:3100`（保留一个发布周期）。设计见后端 `docs/adr/ADR-075-review-data-persistence.md`，出厂口径见决策 d-398。
+
+### 9.1 现象：`mem` 起 gen-model 时校审面 503 / `mock-disabled`
+
+校审 10 张 `review_*` 表和模型数据在同一个 `SUL_DB` 的 ns·db 上，要求跨重启保留。判据只认存储介质是否持久（`StoreMode::is_durable()`，只有 `rocksdb` 为真），与 `/api/v1/health` 同一个出处。所以：
+
+- **出厂默认 `store_mode = "mem"`（库在进程内、活不过重启）时，校审域四前缀一律 `503`**，body 是 `{"success":false,"code":"review.persistence.refused","storeMode":"mem",...}`，并在后端启动日志打多行横幅点名哪些接口没了、怎么开。这是**配置结果不是故障**，也不是「这一版还没移植」——刻意不回 404，就是为了把「被配置拒绝」和「后端地址配错」分开。
+- 前端把这个 503 归到 `mock-disabled`（mock 兜底默认关，`VITE_REVIEW_ALLOW_MOCK_FALLBACK=false`）：校审面板出不来数据、控制台有一条 `mock-disabled`。模型侧不受影响，`/api/v1/health` 照常 200、树和三维照常。
+
+`mem` 档下先 `curl http://127.0.0.1:8022/api/review/health` 看到 503 + `review.persistence.refused` 就能确认是这一条，不是地址配错。
+
+### 9.2 解法一（正解）：起一台持久 SurrealDB，`store_mode` 改 `rocksdb`
+
+```powershell
+# 用 gen-model 包内 fork 的 SurrealDB 2.1.x 起一台 rocksdb 库（别用 PATH 上 cargo install 的 3.x）
+D:\work\plant-code\old\gen-model\bin\surreal.exe start --user root --pass root --bind 127.0.0.1:8009 rocksdb:D:\path\to\.surreal\data
+```
+
+再把运行目录 `DbOption.toml` 改成连它，重启 gen-model：
+
+```toml
+store_mode = "rocksdb"
+v_ip = "127.0.0.1"
+v_port = "8009"
+```
+
+服务只**连**这台库、自己不拉起它（ADR-074）。起来后 `/api/v1/health` 报 `medium=rocksdb`、`durable=true`，校审域四前缀转 200，前端校审面正常。
+
+### 9.3 解法二（只演示 / 联调、明知重启即丢）：逃生门环境变量
+
+```powershell
+$env:PLANT_REVIEW_ALLOW_EPHEMERAL_STORE = '1'   # 认 1/true/yes/on
+.\aios-database.exe serve                         # mem 档也照常开校审域，但数据活不过重启
+```
+
+逃生门刻意做成环境变量而不是配置键：进程一停就没了，不会躺在 `DbOption.toml` 里过一个月。没设 / 留空 / 拼错一律不放行；每次放行启动横幅都点名。
+
+### 9.4 U3（PMS 嵌入 / S2S）只能走 env 档
+
+校审走查的 U3 嵌入地址是后端 `embed-url` 现拼给 PMS 的，带不上 `?backendPort=`，所以 **U3 只能用 env 档**（`VITE_GEN_MODEL_API_BASE_URL=http://localhost:8022`，dev 下 loopback 折成同源经 Vite `/api` 代理转发），不能用 URL 参数档。U1 / U2 两条路径 query 档、env 档都行。走查脚本见后端仓 `scripts/review/walkthrough`（plant3d-web 仓只读、不改）。
