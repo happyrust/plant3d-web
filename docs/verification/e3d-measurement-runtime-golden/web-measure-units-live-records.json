@@ -80,59 +80,23 @@
       ]
     },
     {
-      "name": "05-imperial-inch",
-      "note": "Imperial × Inch",
+      "name": "05-back-to-default",
+      "note": "切回 Default",
       "rows": {
-        "distance": "936.17/32in",
-        "offset-x": "+340.15/32in",
-        "offset-y": "-363.13/32in",
-        "offset-z": "-793.5/32in",
+        "distance": "23788mm",
+        "offset-x": "+8648mm",
+        "offset-y": "-9231mm",
+        "offset-z": "-20146mm",
         "direction": "X +0.3635 · Y -0.3880 · Z -0.8469"
       },
-      "displayUnitDisabled": false,
+      "displayUnitDisabled": true,
       "displayUnitOptions": [
-        "Inch",
-        "Feet & Inches",
-        "Feet"
+        " （随全局单位设置） "
       ]
     },
     {
-      "name": "06-imperial-feet-inches",
-      "note": "Imperial × Feet & Inches",
-      "rows": {
-        "distance": "78'-0.17/32\"",
-        "offset-x": "+28'-4.15/32\"",
-        "offset-y": "-30'-3.13/32\"",
-        "offset-z": "-66'-1.5/32\"",
-        "direction": "X +0.3635 · Y -0.3880 · Z -0.8469"
-      },
-      "displayUnitDisabled": false,
-      "displayUnitOptions": [
-        "Inch",
-        "Feet & Inches",
-        "Feet"
-      ]
-    },
-    {
-      "name": "07-imperial-feet",
-      "note": "Imperial × Feet",
-      "rows": {
-        "distance": "78.045ft",
-        "offset-x": "+28.372ft",
-        "offset-y": "-30.284ft",
-        "offset-z": "-66.097ft",
-        "direction": "X +0.3635 · Y -0.3880 · Z -0.8469"
-      },
-      "displayUnitDisabled": false,
-      "displayUnitOptions": [
-        "Inch",
-        "Feet & Inches",
-        "Feet"
-      ]
-    },
-    {
-      "name": "08-back-to-metric-remembers-metre",
-      "note": "切回 Metric（应记得 Metres）",
+      "name": "06-back-to-metric-remembers-metre",
+      "note": "再切回 Metric（应记得 Metres）",
       "rows": {
         "distance": "23.788m",
         "offset-x": "+8.648m",
@@ -146,41 +110,17 @@
         "Centimetres",
         "Metres"
       ]
-    },
-    {
-      "name": "09-back-to-imperial-remembers-feet",
-      "note": "切回 Imperial（应记得 Feet）",
-      "rows": {
-        "distance": "78.045ft",
-        "offset-x": "+28.372ft",
-        "offset-y": "-30.284ft",
-        "offset-z": "-66.097ft",
-        "direction": "X +0.3635 · Y -0.3880 · Z -0.8469"
-      },
-      "displayUnitDisabled": false,
-      "displayUnitOptions": [
-        "Inch",
-        "Feet & Inches",
-        "Feet"
-      ]
-    },
-    {
-      "name": "10-back-to-default",
-      "note": "切回 Default",
-      "rows": {
-        "distance": "23788mm",
-        "offset-x": "+8648mm",
-        "offset-y": "-9231mm",
-        "offset-z": "-20146mm",
-        "direction": "X +0.3635 · Y -0.3880 · Z -0.8469"
-      },
-      "displayUnitDisabled": true,
-      "displayUnitOptions": [
-        " （随全局单位设置） "
-      ]
     }
   ],
+  "unitSystemOptions": [
+    "Default",
+    "Metric"
+  ],
   "checks": {
+    "default": {
+      "text": "23788mm",
+      "mm": 23788
+    },
     "metricMm": {
       "text": "23787.96mm",
       "mm": 23787.96
@@ -192,17 +132,10 @@
     "metricM": {
       "text": "23.788m",
       "mm": 23788
-    },
-    "imperialFt": {
-      "text": "78.045ft",
-      "mm": 23788.116
     }
   },
-  "inchText": "936.17/32in",
-  "fincText": "78'-0.17/32\"",
   "persistedUnits": {
-    "unitSystem": "default",
-    "metricUnit": "METRE",
-    "imperialUnit": "FT"
+    "unitSystem": "metric",
+    "metricUnit": "METRE"
   }
 }

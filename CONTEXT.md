@@ -140,7 +140,7 @@ _Avoid_: PLINE 关键点（把它当两个孤立端点）、管身轴线、元�
 
 ## 测量显示单位
 
-距离测量这一会话里结果表与尺寸文字共用的长度格式，由 Unit type（Default / Metric / Imperial）× Display Unit（公制 Millimetres / Centimetres / Metres，英制 Inch / Feet & Inches / Feet）两档选出，对应 E3D Measure Distance 窗体的 Units 框与 `COMFORMATS.distanceFormat`。它是**会话级**的，优先级高于全局单位设置——只有 Default 档才回落到全局（E3D 那边回落的是工程当前的 `!!distanceFmt`）。公制两档各自的小数位与去不去尾零由格式定（毫米 2 位去尾零、厘米 / 米 3 位去尾零、英尺 3 位留尾零），四舍五入到 0 一律不带负号；英制按 1/32 英寸取整后约分。公制与英制各记一次上次选的 Display Unit，来回切 Unit type 时各自回到自己那一档。
+距离测量这一会话里结果表与尺寸文字共用的长度格式，由 Unit type（Default / Metric）× Display Unit（Millimetres / Centimetres / Metres）两档选出，对应 E3D Measure Distance 窗体的 Units 框与 `COMFORMATS.distanceFormat`。它是**会话级**的，优先级高于全局单位设置——只有 Default 档才回落到全局（E3D 那边回落的是工程当前的 `!!distanceFmt`）。各档的小数位与去不去尾零由格式定（毫米 2 位去尾零、厘米 / 米 3 位去尾零），四舍五入到 0 一律不带负号。Display Unit 记得住上次选的那一档，切回 Metric 时回到它。E3D 还有一档 Imperial（Inch / Feet & Inches / Feet），本项目有意不做。
 _Avoid_: 全局单位设置（模型显示单位 + 小数位，另一层）、模型单位
 
 ## P-Point
