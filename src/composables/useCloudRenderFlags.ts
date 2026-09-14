@@ -12,6 +12,9 @@
  * - `annotationSharedRegion`（P3，方案 §7）：rect / obb 新建也写 `regionV1(obb-union, origin:'members')`——每个成员对象一个真实放置盒
  *   （`primitiveFromPlacement`），线框按这些盒画（多成员多盒，不再用一个合并 AABB 冒充 OBB）；`obb` 旧字段照旧双写。
  *   关掉后：新建只写 `obb`，已带 `regionV1` 的记录按 `obb` 线框兼容显示，字段保留。旧记录任何时候都不自动迁移。
+ * - `cloudAdaptiveLod`（P4，= 交互方案 `annotationUx.adaptiveLod`，方案 §9.3）：云线超过 64 条时全轮廓只留激活 / 拖动 / 悬停的
+ *   与视口中心附近的 64 条（滞回 16），其余只画图钉——不算凸包、不 `setPoints`、不建完整文字 DOM。运行时决策，不改记录、不写 `visible`。
+ *   关掉后：所有可见云线一律全轮廓（现状）。
  *
  * 默认全部开启。覆盖方式（优先级从高到低）：
  * 1. URL `?cloud_render_flags=cloudLabelLayoutV1:0,cloudDirtyCache:1`
@@ -19,7 +22,7 @@
  * 3. 默认值
  */
 
-export type CloudRenderFlag = 'cloudLabelLayoutV1' | 'cloudDirtyCache' | 'cloudProjectedEnvelope' | 'annotationSharedRegion';
+export type CloudRenderFlag = 'cloudLabelLayoutV1' | 'cloudDirtyCache' | 'cloudProjectedEnvelope' | 'annotationSharedRegion' | 'cloudAdaptiveLod';
 
 export const CLOUD_RENDER_FLAG_STORAGE_KEY = 'plant3d.cloudRenderFlags';
 export const CLOUD_RENDER_FLAG_URL_PARAM = 'cloud_render_flags';
@@ -29,6 +32,7 @@ const DEFAULTS: Readonly<Record<CloudRenderFlag, boolean>> = Object.freeze({
   cloudDirtyCache: true,
   cloudProjectedEnvelope: true,
   annotationSharedRegion: true,
+  cloudAdaptiveLod: true,
 });
 
 const FLAG_NAMES = Object.keys(DEFAULTS) as CloudRenderFlag[];

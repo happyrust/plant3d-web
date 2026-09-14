@@ -91,6 +91,13 @@ import {
   type LabelLayoutResult,
   type LabelPreference,
 } from '@/review/domain/annotationProjection/labelLayout';
+import {
+  DEFAULT_CLOUD_LOD_OPTIONS,
+  cloudLodPriority,
+  planCloudLod,
+  type CloudLodCandidate,
+  type CloudLodLevel,
+} from '@/review/domain/annotationProjection/lod';
 import { createRegionCloudPresentationV1, regionCoversMembers } from '@/review/domain/cloudRegion';
 import { emitToast } from '@/ribbon/toastBus';
 import { UserRole } from '@/types/auth';
@@ -199,6 +206,16 @@ type CloudRenderCache = {
   regionPolylineCount: number
   /** paint 阶段的版本 = 帧级样式版本 × 本条记录的降级态（ADR-0050 视口降级）：只有这一条降级变了，也只重刷它的材质 */
   paintTracker: ValueVersionTracker<string>
+  /**
+   * P4 LOD（方案 §9.3，开关 `cloudAdaptiveLod`）：本帧计划等级。`pin` = 只留图钉——不算凸包、不 `setPoints`、不挂文字 DOM；
+   * 云线总数 ≤ 预算时一律 `full`。
+   */
+  lodLevel: CloudLodLevel
+  /** 已经应用到可视对象上的等级；null = 还没应用过（首帧）。与 `lodLevel` 不等 = 本帧要切档 */
+  lodApplied: CloudLodLevel | null
+  /** 最近一次规划时的优先级 / 固定高档标记（调试用） */
+  lodPriority: number
+  lodPinnedHigh: boolean
 }
 
 function createCloudRenderCache(): CloudRenderCache {
@@ -221,6 +238,10 @@ function createCloudRenderCache(): CloudRenderCache {
     regionState: null,
     regionLastLod: null,
     regionPolylineCount: 0,
+    lodLevel: 'full',
+    lodApplied: null,
+    lodPriority: 0,
+    lodPinnedHigh: false,
   };
 }
 
@@ -257,6 +278,19 @@ export type CloudRenderStats = {
   setPoints: number
   labelLayouts: number
   paintUpdates: number
+  /** P4 LOD 计划重算次数：相机 / 视口 / 集合 / 激活 / 拖动 / 悬停都没变时为零 */
+  lodPlans: number
+}
+
+/** `debugCloudLod()` 的快照：P4 LOD 本帧计划 */
+export type CloudLodDebugSnapshot = {
+  budget: number
+  slack: number
+  overBudget: boolean
+  fullCount: number
+  pinCount: number
+  hoveredId: string | null
+  items: { id: string; level: CloudLodLevel; applied: CloudLodLevel | null; priority: number; pinnedHigh: boolean; labelMounted: boolean }[]
 }
 
 /** 新建云线的默认标签布局：参考包围框右上角、向右 18 px */
@@ -3656,7 +3690,17 @@ export function useDtxTools(options: {
     shapeStyle: createValueVersionTracker<string>(),
     paintStyle: createValueVersionTracker<string>(),
   };
-  const cloudRenderStats: CloudRenderStats = { frames: 0, contourBuilds: 0, setPoints: 0, labelLayouts: 0, paintUpdates: 0 };
+  const cloudRenderStats: CloudRenderStats = { frames: 0, contourBuilds: 0, setPoints: 0, labelLayouts: 0, paintUpdates: 0, lodPlans: 0 };
+
+  // P4 LOD（方案 §9.3）：上一次计划的等级按 `cloud:${id}` 记在这里——跨 syncFromStore 重建保留，滞回才有依据；
+  // planKey 是上次规划时的输入指纹（相机 / 投影 / 视口 / 集合 / 激活 / 拖动 / 悬停 / 待编辑），没变就不重算
+  const cloudLodLevels = new Map<string, CloudLodLevel>();
+  let cloudLodPlanKey = '';
+  let cloudLodPlanSummary = { overBudget: false, fullCount: 0, pinCount: 0 };
+  let cloudLodSetVersion = 0;
+  /** 悬停在图钉上的云线（交互方案「悬停临时展示」）：LOD 固定高档，移开后按预算回落 */
+  let hoveredCloudAnnotationId: string | null = null;
+  const lodProjectScratch = new Vector3();
 
   const marqueeState = ref<DragRect>({ active: false, pointerId: null, startClient: null, startCanvas: null, currentCanvas: null });
   const marqueeDiv = ref<HTMLDivElement | null>(null);
@@ -3951,6 +3995,169 @@ export function useDtxTools(options: {
     div.style.height = `${y2 - y1}px`;
   }
 
+  /**
+   * 云线文字框（行内卡）DOM：从 syncFromStore 抽出来，P4 LOD 下只给 `full` 档挂载、降到 `pin` 档时卸掉——
+   * 上千条云线不为每条都建一张带输入框的卡。事件绑定与旧代码一致；重复调用（已挂载）不重建。
+   */
+  function mountCloudLabel(cloud: CloudOverlayEl): void {
+    const overlay = overlayContainerRef.value;
+    if (!overlay || labels.has(cloud.id)) return;
+    const c = cloud.record;
+    const anchor = cloud.worldPos;
+    const labelWorldPos = cloud.labelWorldPos;
+    const draft = getInlineTextAnnotationDraft('cloud', c.id, c);
+    const label = makeInlineAnnotationCardEl(overlay, '云线批注', draft.title, draft.description);
+    label.style.transform = 'translate(-50%,-50%)';
+    if (c.severity) label.dataset.severity = c.severity;
+    labels.set(cloud.id, { id: cloud.id, worldPos: labelWorldPos, el: label });
+    const dragHandle = label.querySelector('[data-role="annotation-drag-handle"]') as HTMLDivElement | null;
+    const titleInput = label.querySelector('[data-role="annotation-title-input"]') as HTMLInputElement | null;
+    const descriptionInput = label.querySelector('[data-role="annotation-description-input"]') as HTMLTextAreaElement | null;
+
+    label.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      activateAnnotation('cloud', c.id);
+    });
+    label.addEventListener('dblclick', (ev) => {
+      ev.stopPropagation();
+      focusInlineAnnotationEditor('cloud', c.id);
+    });
+    label.addEventListener('focusout', () => {
+      queueMicrotask(() => {
+        const activeElement = label.ownerDocument?.activeElement;
+        if (activeElement && label.contains(activeElement)) return;
+        commitInlineAnnotationDraft('cloud', c.id);
+      });
+    });
+
+    dragHandle?.addEventListener('pointerdown', (ev) => {
+      ev.stopPropagation();
+      ev.preventDefault();
+      commitInlineAnnotationDraft('cloud', c.id);
+      dragHandle.style.cursor = 'grabbing';
+      beginInlineOverlayAnnotationDrag('cloud', c.id, ev, labelWorldPos, anchor);
+      try {
+        dragHandle.setPointerCapture(ev.pointerId);
+      } catch {
+        // ignore
+      }
+    });
+    dragHandle?.addEventListener('pointermove', (ev) => {
+      if (inlineOverlayAnnotationDrag.value.annotationId !== c.id || inlineOverlayAnnotationDrag.value.annotationKind !== 'cloud') return;
+      continueInlineOverlayAnnotationDrag(ev);
+    });
+    dragHandle?.addEventListener('pointerup', (ev) => {
+      if (inlineOverlayAnnotationDrag.value.annotationId !== c.id || inlineOverlayAnnotationDrag.value.annotationKind !== 'cloud') return;
+      dragHandle.style.cursor = 'grab';
+      endInlineOverlayAnnotationDrag(ev);
+    });
+    dragHandle?.addEventListener('pointercancel', (ev) => {
+      if (inlineOverlayAnnotationDrag.value.annotationId !== c.id || inlineOverlayAnnotationDrag.value.annotationKind !== 'cloud') return;
+      dragHandle.style.cursor = 'grab';
+      endInlineOverlayAnnotationDrag(ev);
+    });
+
+    titleInput?.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      activateAnnotation('cloud', c.id);
+    });
+    titleInput?.addEventListener('input', () => {
+      setInlineAnnotationDraft('cloud', c.id, {
+        title: titleInput.value,
+        description: descriptionInput?.value ?? draft.description,
+      });
+    });
+    descriptionInput?.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      activateAnnotation('cloud', c.id);
+    });
+    descriptionInput?.addEventListener('input', () => {
+      setInlineAnnotationDraft('cloud', c.id, {
+        title: titleInput?.value ?? draft.title,
+        description: descriptionInput.value,
+      });
+    });
+
+    if (store.pendingCloudAnnotationEditId.value === c.id) {
+      queueMicrotask(() => focusInlineAnnotationEditor('cloud', c.id));
+    }
+  }
+
+  /** 降到 `pin` 档：卸掉文字框 DOM（草稿在 inlineTextAnnotationDrafts 里，不随 DOM 丢） */
+  function unmountCloudLabel(cloud: CloudOverlayEl): void {
+    const entry = labels.get(cloud.id);
+    if (!entry) return;
+    try { entry.el.remove(); } catch { /* ignore */ }
+    labels.delete(cloud.id);
+    cloud.render.labelLayout = null;
+  }
+
+  function setHoveredCloudAnnotation(id: string | null): void {
+    if (hoveredCloudAnnotationId === id) return;
+    hoveredCloudAnnotationId = id;
+    // 只有 LOD 真在生效（上次计划超预算）时悬停才改变呈现；否则不为一次 hover 白跑一帧
+    if (cloudLodPlanSummary.overBudget) {
+      updateOverlayPositions();
+      requestRender?.();
+    }
+  }
+
+  /**
+   * P4 LOD 计划（方案 §9.3）：云线 > 预算时，按锚点到视口中心的距离排优先级，激活 / 拖动 / 悬停 / 待编辑固定高档，
+   * 交给纯函数 `planCloudLod`（预算 64、滞回 16）。输入指纹没变就不重算；≤ 预算或开关关 → 全部 `full`。
+   * 结果写在每条 `cloud.render.lodLevel`，由渲染循环按「计划 ≠ 已应用」切档。
+   */
+  function planCloudLodForFrame(camera: any, frameKey: string): void {
+    const lodOn = isCloudRenderFlagEnabled('cloudAdaptiveLod');
+    if (!lodOn || cloudShapes.size <= DEFAULT_CLOUD_LOD_OPTIONS.budget) {
+      if (cloudLodPlanKey !== 'all-full') {
+        cloudLodPlanKey = 'all-full';
+        cloudLodPlanSummary = { overBudget: false, fullCount: cloudShapes.size, pinCount: 0 };
+        for (const cloud of cloudShapes.values()) {
+          cloud.render.lodLevel = 'full';
+          cloud.render.lodPinnedHigh = false;
+        }
+        cloudLodLevels.clear();
+      }
+      return;
+    }
+    const drag = inlineOverlayAnnotationDrag.value;
+    const dragId = drag.annotationKind === 'cloud' ? drag.annotationId : null;
+    const activeId = store.activeCloudAnnotationId.value;
+    const pendingEditId = store.pendingCloudAnnotationEditId.value;
+    const key = `${frameKey}|${cloudLodSetVersion}|${activeId ?? ''}|${dragId ?? ''}|${hoveredCloudAnnotationId ?? ''}|${pendingEditId ?? ''}`;
+    if (key === cloudLodPlanKey) return;
+    cloudLodPlanKey = key;
+    cloudRenderStats.lodPlans += 1;
+
+    const candidates: CloudLodCandidate[] = [];
+    for (const cloud of cloudShapes.values()) {
+      const recordId = cloud.record.id;
+      const v = lodProjectScratch.copy(cloud.worldPos).applyMatrix4(camera.matrixWorldInverse);
+      // three 相机看向视空间 -z：z ≥ 0 = 锚点在相机背后，投影坐标会翻转，不能拿它当屏内
+      const behind = v.z >= 0;
+      v.applyMatrix4(camera.projectionMatrix);
+      const priority = cloudLodPriority(v.x, v.y, behind);
+      const pinnedHigh = recordId === activeId
+        || recordId === dragId
+        || recordId === hoveredCloudAnnotationId
+        || recordId === pendingEditId
+        || cloud.render.labelDragTopLeft !== null;
+      cloud.render.lodPriority = priority;
+      cloud.render.lodPinnedHigh = pinnedHigh;
+      candidates.push({ id: cloud.id, priority, pinnedHigh, previous: cloudLodLevels.get(cloud.id) ?? null });
+    }
+    const plan = planCloudLod(candidates, DEFAULT_CLOUD_LOD_OPTIONS);
+    cloudLodPlanSummary = { overBudget: plan.overBudget, fullCount: plan.fullCount, pinCount: plan.pinCount };
+    // 记忆只留还在场的条目，删掉的记录不占着旧等级
+    for (const id of cloudLodLevels.keys()) if (!cloudShapes.has(id)) cloudLodLevels.delete(id);
+    for (const cloud of cloudShapes.values()) {
+      const level = plan.levels.get(cloud.id) ?? 'full';
+      cloud.render.lodLevel = level;
+      cloudLodLevels.set(cloud.id, level);
+    }
+  }
+
   function syncFromStore() {
     const viewer = dtxViewerRef.value;
     const overlay = overlayContainerRef.value;
@@ -4086,6 +4293,14 @@ export function useDtxTools(options: {
     }
 
     // ---------------- Cloud annotations (screen-space cloud + world anchor) ----------------
+    // P4 LOD（方案 §9.3）：云线超过预算时文字框 DOM 不在这里建——由 updateOverlayPositions 按计划只给 full 档挂载
+    // （本函数末尾就会调一次，同一同步调用内完成，不闪）；≤ 预算或开关关时照旧当场建。集合变了，LOD 计划要重算。
+    let visibleCloudCount = 0;
+    for (const c of store.cloudAnnotations.value) if (c.visible) visibleCloudCount += 1;
+    const deferCloudLabels = isCloudRenderFlagEnabled('cloudAdaptiveLod') && visibleCloudCount > DEFAULT_CLOUD_LOD_OPTIONS.budget;
+    cloudLodSetVersion += 1;
+    cloudLodPlanKey = '';
+
     for (const c of store.cloudAnnotations.value) {
       if (!c.visible) continue;
       const anchor = new Vector3(...c.anchorWorldPos);
@@ -4099,7 +4314,7 @@ export function useDtxTools(options: {
       if (shouldRenderTextAnnotationCard(c.collapsed)) {
         toolsGroup.add(visual.leader.root);
       }
-      cloudShapes.set(`cloud:${c.id}`, {
+      const cloudEntry: CloudOverlayEl = {
         id: `cloud:${c.id}`,
         worldPos: anchor,
         labelWorldPos: visual.labelWorldPos.clone(),
@@ -4116,7 +4331,8 @@ export function useDtxTools(options: {
         degrade,
         badgeEl: degrade ? createCloudDegradeBadgeEl(overlay, degrade) : null,
         badgeDirty: true,
-      });
+      };
+      cloudShapes.set(cloudEntry.id, cloudEntry);
 
       // 云线的图钉只换灰虚线、不挂徽标——徽标挂在轮廓参考框左上角，一条记录一枚
       const cloudMarker = makeTextAnnotationMarkerEl(overlay, 'C', c.collapsed === true, { degrade, badge: false });
@@ -4138,84 +4354,14 @@ export function useDtxTools(options: {
         store.setCloudAnnotationsCollapsed([c.id], toggleTextAnnotationCollapsed(c.collapsed));
         activateAnnotation('cloud', c.id);
       });
+      // P4 LOD「悬停临时展示」：图钉上悬停即固定高档（补回轮廓 + 文字框），移开后按预算回落
+      cloudMarker.addEventListener('pointerenter', () => setHoveredCloudAnnotation(c.id));
+      cloudMarker.addEventListener('pointerleave', () => {
+        if (hoveredCloudAnnotationId === c.id) setHoveredCloudAnnotation(null);
+      });
 
-      if (shouldRenderTextAnnotationCard(c.collapsed)) {
-        const draft = getInlineTextAnnotationDraft('cloud', c.id, c);
-        const label = makeInlineAnnotationCardEl(overlay, '云线批注', draft.title, draft.description);
-        label.style.transform = 'translate(-50%,-50%)';
-        if (c.severity) label.dataset.severity = c.severity;
-        labels.set(`cloud:${c.id}`, { id: `cloud:${c.id}`, worldPos: visual.labelWorldPos, el: label });
-        const dragHandle = label.querySelector('[data-role="annotation-drag-handle"]') as HTMLDivElement | null;
-        const titleInput = label.querySelector('[data-role="annotation-title-input"]') as HTMLInputElement | null;
-        const descriptionInput = label.querySelector('[data-role="annotation-description-input"]') as HTMLTextAreaElement | null;
-
-        label.addEventListener('click', (ev) => {
-          ev.stopPropagation();
-          activateAnnotation('cloud', c.id);
-        });
-        label.addEventListener('dblclick', (ev) => {
-          ev.stopPropagation();
-          focusInlineAnnotationEditor('cloud', c.id);
-        });
-        label.addEventListener('focusout', () => {
-          queueMicrotask(() => {
-            const activeElement = label.ownerDocument?.activeElement;
-            if (activeElement && label.contains(activeElement)) return;
-            commitInlineAnnotationDraft('cloud', c.id);
-          });
-        });
-
-        dragHandle?.addEventListener('pointerdown', (ev) => {
-          ev.stopPropagation();
-          ev.preventDefault();
-          commitInlineAnnotationDraft('cloud', c.id);
-          dragHandle.style.cursor = 'grabbing';
-          beginInlineOverlayAnnotationDrag('cloud', c.id, ev, visual.labelWorldPos, anchor);
-          try {
-            dragHandle.setPointerCapture(ev.pointerId);
-          } catch {
-            // ignore
-          }
-        });
-        dragHandle?.addEventListener('pointermove', (ev) => {
-          if (inlineOverlayAnnotationDrag.value.annotationId !== c.id || inlineOverlayAnnotationDrag.value.annotationKind !== 'cloud') return;
-          continueInlineOverlayAnnotationDrag(ev);
-        });
-        dragHandle?.addEventListener('pointerup', (ev) => {
-          if (inlineOverlayAnnotationDrag.value.annotationId !== c.id || inlineOverlayAnnotationDrag.value.annotationKind !== 'cloud') return;
-          dragHandle.style.cursor = 'grab';
-          endInlineOverlayAnnotationDrag(ev);
-        });
-        dragHandle?.addEventListener('pointercancel', (ev) => {
-          if (inlineOverlayAnnotationDrag.value.annotationId !== c.id || inlineOverlayAnnotationDrag.value.annotationKind !== 'cloud') return;
-          dragHandle.style.cursor = 'grab';
-          endInlineOverlayAnnotationDrag(ev);
-        });
-
-        titleInput?.addEventListener('click', (ev) => {
-          ev.stopPropagation();
-          activateAnnotation('cloud', c.id);
-        });
-        titleInput?.addEventListener('input', () => {
-          setInlineAnnotationDraft('cloud', c.id, {
-            title: titleInput.value,
-            description: descriptionInput?.value ?? draft.description,
-          });
-        });
-        descriptionInput?.addEventListener('click', (ev) => {
-          ev.stopPropagation();
-          activateAnnotation('cloud', c.id);
-        });
-        descriptionInput?.addEventListener('input', () => {
-          setInlineAnnotationDraft('cloud', c.id, {
-            title: titleInput?.value ?? draft.title,
-            description: descriptionInput.value,
-          });
-        });
-
-        if (store.pendingCloudAnnotationEditId.value === c.id) {
-          queueMicrotask(() => focusInlineAnnotationEditor('cloud', c.id));
-        }
+      if (shouldRenderTextAnnotationCard(c.collapsed) && !deferCloudLabels) {
+        mountCloudLabel(cloudEntry);
       }
     }
 
@@ -4554,7 +4700,39 @@ export function useDtxTools(options: {
     const viewportRect = { x: 0, y: 0, width: overlayRect.width || canvasRect.width, height: overlayRect.height || canvasRect.height };
     cloudRenderStats.frames += 1;
 
+    // ---- P4 LOD（方案 §9.3）：超预算时先定本帧谁算全轮廓、谁只留图钉；相机 / 视口 / 集合 / 交互态没变就复用上次计划 ----
+    planCloudLodForFrame(viewer.camera, `${frameStamp.cameraWorld}|${frameStamp.projection}|${frameStamp.viewportCss}`);
+
     for (const cloud of cloudShapes.values()) {
+      // ---- LOD 切档：pin 档整条跳过（不解析目标 AABB、不算凸包、不 setPoints、不排文字框），只剩 DOM 图钉 ----
+      if (cloud.render.lodLevel === 'pin') {
+        if (cloud.render.lodApplied !== 'pin') {
+          cloud.render.lodApplied = 'pin';
+          cloud.outline.visible = false;
+          for (const extra of cloud.outlineExtra) extra.visible = false;
+          cloud.bboxEdges.visible = false;
+          cloud.leader.root.visible = false;
+          unmountCloudLabel(cloud);
+          cloud.render.frame = null;
+          cloud.render.regionPhase = null;
+          cloud.render.stamp = null;
+        }
+        // 降级徽标跟着图钉走（没有参考框）
+        if (cloud.badgeEl) {
+          positionCloudDegradeBadge(cloud.badgeEl, null, worldToOverlayPoint(viewer.camera, canvas, overlay, cloud.worldPos), false);
+        }
+        continue;
+      }
+      if (cloud.render.lodApplied !== 'full') {
+        // 首帧或从 pin 升回来：全部阶段重建；文字框按 collapsed 补挂；引线先放出来，V1 布局再按需要藏
+        const promoted = cloud.render.lodApplied === 'pin';
+        cloud.render.lodApplied = 'full';
+        if (promoted) {
+          cloud.render.stamp = null;
+          cloud.leader.root.visible = true;
+        }
+        if (shouldRenderTextAnnotationCard(cloud.record.collapsed)) mountCloudLabel(cloud);
+      }
       const recordVersion = cloud.render.recordTracker.update(cloud.record);
       // ---- P2：range 记录（开关开 + 显式 region-v1）先把范围体校验 / 重映射成当前世界系的凸单元 ----
       // 随「记录引用 | DTX 全局矩阵版本」失效；校验不过 = missing-region → 下面照旧走旧管线（唯一允许回退旧布局的状态）
@@ -5046,6 +5224,31 @@ export function useDtxTools(options: {
     cloudRenderStats.setPoints = 0;
     cloudRenderStats.labelLayouts = 0;
     cloudRenderStats.paintUpdates = 0;
+    cloudRenderStats.lodPlans = 0;
+  }
+
+  /** e2e / 单测：P4 LOD 本帧计划——预算、是否超预算、每条云线的等级 / 优先级 / 是否固定高档、文字框 DOM 是否挂着 */
+  function debugCloudLod(): CloudLodDebugSnapshot {
+    const items: CloudLodDebugSnapshot['items'] = [];
+    for (const [id, cloud] of cloudShapes.entries()) {
+      items.push({
+        id,
+        level: cloud.render.lodLevel,
+        applied: cloud.render.lodApplied,
+        priority: cloud.render.lodPriority,
+        pinnedHigh: cloud.render.lodPinnedHigh,
+        labelMounted: labels.has(id),
+      });
+    }
+    return {
+      budget: DEFAULT_CLOUD_LOD_OPTIONS.budget,
+      slack: DEFAULT_CLOUD_LOD_OPTIONS.slack,
+      overBudget: cloudLodPlanSummary.overBudget,
+      fullCount: cloudLodPlanSummary.fullCount,
+      pinCount: cloudLodPlanSummary.pinCount,
+      hoveredId: hoveredCloudAnnotationId,
+      items,
+    };
   }
 
   /** e2e / 单测：每条云线本帧的范围体管线状态（P2）；`regionState === null` = 未走新管线（旧记录 / 开关关） */
@@ -5255,6 +5458,9 @@ export function useDtxTools(options: {
     clearGroup(toolsGroup);
     clearOverlayEls();
     hideMarquee();
+    cloudLodLevels.clear();
+    cloudLodPlanKey = '';
+    hoveredCloudAnnotationId = null;
 
     if (marqueeDiv.value) {
       try { marqueeDiv.value.remove(); } catch { /* ignore */ }
@@ -6189,6 +6395,9 @@ export function useDtxTools(options: {
     resetCloudRenderStats,
     debugCloudLabelLayouts,
     debugCloudRegionRender,
+    // P4 LOD：本帧计划快照；悬停临时升档（图钉的 pointerenter / leave 已绑定，这里给测试与外部调用）
+    debugCloudLod,
+    setHoveredCloudAnnotation,
     // ADR-0050 视口降级：解析表变化后就地换外观（watch 已接；这里给测试直接调）与当前外观快照
     applyBindingDegrade,
     debugAnnotationDegrades,

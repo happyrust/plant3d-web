@@ -586,7 +586,7 @@ export function inspectionFactor(mode: 'always-on-top' | 'inspection', probes: r
 | **P2 范围体呈现**（✅ 2026-09-14 落地，§18） | `cloudProjectedEnvelope`（= 交互方案 `annotationUx.projectedEnvelope`，落在 P1 同一开关族 `useCloudRenderFlags`） | 首项 `DTXLayer.getObjectLocalBoxAndWorldMatrixInto`（§4.1）；并行几何内核（§4.1–4.5、4.7）、创建时写 `regionV1(obb-union, origin:'members')` + `viewpointV1.creation`；最小来源校验与 epoch 隔离、`globalModelMatrix` 重映射（§8） | 多机位包含、裁剪连续性、相位测试通过；目标范围不完整（`coverage` 不足）时不写新版记录；关闭后兼容显示，保留新字段 |
 | **P2.5 局部套索（可选，后置）** | `cloudUserVolume` | §4.8 截锥扫掠体 + 深度调整交互 | 套索验收口径按 `origin:'user-volume'`；拒绝自交 |
 | **P3 共享范围体**（✅ 2026-09-14 落地，§19） | `annotationSharedRegion` | rect / obb 新建走 `primitiveFromPlacement`（§7）；完整失效与重绑 member 交互（§8） | 真 OBB / 剪切分支、部分加载、版本切换、原子重绑；旧记录不自动迁移 |
-| **P4 性能与显示** | `annotationUx.adaptiveLod`、`cloudBatching`、`cloudInspectionFade` | LOD（§9.3）→ 合批（§9.2）→ 按数据决定 GPU 波浪；inspection 最后单开（§10） | 合批前后几何等价、无跨线连接、调用预算；任一优化可退回 CPU 基线 |
+| **P4 性能与显示**（LOD ✅ 2026-09-15 落地，§20；合批 / inspection 未动） | `cloudAdaptiveLod`（= `annotationUx.adaptiveLod`）、`cloudBatching`、`cloudInspectionFade` | LOD（§9.3）→ 合批（§9.2）→ 按数据决定 GPU 波浪；inspection 最后单开（§10） | 合批前后几何等价、无跨线连接、调用预算；任一优化可退回 CPU 基线 |
 
 回退不能绕过来源校验：新版来源不匹配时，即便退回旧外观也只能按快照降级，不能重新启用「当前模型 AABB 自愈」。
 
@@ -851,6 +851,36 @@ P0 已提交：`af4b382`（15 文件；`useToolStore.ts` 只取云线 hunk）。
 - 重绑时新成员未加载：范围体不含它、云线回旧实时贴合；成员之后加载完**不会自动补盒**（补盒只在显式重绑时发生）。要自愈需在 `dtxLoaderRevision` 变化后对「不覆盖」的 members 范围体重试一次调和——属「普通模型加载补足运行时信息」，可做，另起。
 - rect / obb 的 `regionV1` 只用于线框与重绑；rect / obb 记录没有像云线那样的 `presentationV1`，不区分 legacy / region 呈现版本（线框来源由 `origin` 与开关决定）。
 - 「显式升级旧记录」（含 rect / obb 的 legacy-snapshot → members）入口仍未做。
+
+---
+
+## 20. P4 第一步 · 云线 LOD 实施记录（2026-09-15）
+
+接手会话按 §11 顺序进入 P4，先做 §9.3 LOD；合批（§9.2）与 inspection（§10）按 §11 原口径「按实测数据决定 / 最后单开」，本步不动。开关 `cloudAdaptiveLod`（= 交互方案 `annotationUx.adaptiveLod`，P1–P3 同一开关族、同样的 URL / localStorage 覆盖）默认开；**只在可见云线 > 64 条时生效**，≤ 64 条一律全轮廓、不排序、不计数——现状零开销。
+
+| # | 内容 | 落点 |
+|---|---|---|
+| 1 | **纯函数** `planCloudLod(candidates, {budget:64, slack:16})`：`pinnedHigh`（激活 / 拖动 / 悬停 / 待编辑）固定 `full` 且占预算；其余按 `priority` 升序（同分按 id 字典序，确定性）——排进剩余名额内的升 `full`，**已是 `full` 的排名掉到 `budget + slack` 之外才降 `pin`**（滞回：边界条目不来回抖，总 `full` 数 ≤ budget + slack）。`cloudLodPriority(ndcX, ndcY, behind)`：屏内 = 到视口中心的 NDC 距离 [0, √2]，屏外 = 2 + 出屏距离，相机背后 = 4 + …，三段不重叠；非有限值最低 | `src/review/domain/annotationProjection/lod.ts`（+7 例 `lod.test.ts`） |
+| 2 | **帧级计划**：`planCloudLodForFrame` 输入指纹 = 相机世界矩阵版本 \| 投影版本 \| 视口版本 \| 集合版本（syncFromStore 推进）\| 激活 id \| 拖动 id \| 悬停 id \| 待编辑 id；没变就复用上次计划（静止零重算，`CloudRenderStats.lodPlans` 计数）。锚点优先级 = `worldPos` 经 `matrixWorldInverse`（视空间 z ≥ 0 判「背后」）再 `projectionMatrix` 的 NDC。上一次等级按 `cloud:${id}` 记在 `cloudLodLevels`，**跨 syncFromStore 重建保留**（否则每次 store 变化滞回归零），已删记录随手清 | `useDtxTools.ts` |
+| 3 | **pin 档整条跳过**：渲染循环开头看 `render.lodLevel`——`pin` 时藏轮廓 / 备用段 / 盒边 / 引线、卸掉文字框 DOM、清 frame / 相位 / 版本戳后 `continue`，**不解析目标 AABB（旧管线的 `scene.getAABB`）、不校验范围体、不算凸包、不 `setPoints`、不排文字框**；只剩 DOM 图钉（markers 循环照常定位）与降级徽标（跟着图钉走）。升回 `full`：版本戳清空强制全阶段重建、引线放出（V1 布局再按需要藏）、按 `collapsed` 补挂文字框 | 同上 |
+| 4 | **文字框 DOM 惰性挂载**：云线行内卡的创建从 syncFromStore 抽成 `mountCloudLabel(cloud)`（事件绑定不变、幂等）/ `unmountCloudLabel`（草稿留在 `inlineTextAnnotationDrafts`，不随 DOM 丢）。可见云线 > 预算时 syncFromStore 不建任何云线文字框，由它末尾那一帧 `updateOverlayPositions` 只给 `full` 档挂——同一同步调用内完成，不闪 | 同上 |
+| 5 | **悬停临时展示**（交互方案 §3.4「当前问题完整展示 → 悬停临时展示 → 其它只图钉」）：图钉 `pointerenter / leave` → `setHoveredCloudAnnotation(id | null)`，悬停即 `pinnedHigh`；只有上次计划真超预算时才为 hover 跑一帧。移开后按预算回落（在滞回带内的会留着） | 同上 |
+| 6 | **不变量**：记录一律不改（`visible` 不写），列表 / 成员统计不受影响；图钉不宣称包住范围；`icon` 小目标态（12/18 px）与本 LOD 正交——`full` 档内仍按 P2 规则退图标 | — |
+| 7 | **调试出口** `debugCloudLod()`（预算 / 滞回 / 是否超预算 / full·pin 计数 / 悬停 id / 每条 level·applied·priority·pinnedHigh·labelMounted）；`CloudRenderStats` 增 `lodPlans` | 同上 |
+| 8 | **验收测试**（8 例 `useDtxTools.cloudLod.test.ts`，90 条云线沿 x 排开、相机正对中心）：64 条全 full 且 lodPlans 不计；90 条 → 视口中心最近 64 条 full（凸包 / setPoints / 文字框各 64 次）、26 条 pin（轮廓 / 盒边 / 引线藏、无文字 DOM、`getAABB` 零调用）、图钉 90 枚、`visible` 全 true；激活 / 待编辑 / 悬停最远端固定 full，悬停移开回落 pin 并卸文字框；相机小幅摆动已 full 不掉档、来回摆动集合不再变、大幅移动集合才换且 ≤ 80；静止 120 帧五计数全零；syncFromStore 重建后集合一致、删到 60 条全 full；旧记录（legacy-v0）full 档 `getAABB` 恰 64 次、按世界点布局，pin 档零调用；开关关 90 条全 full | 新增 |
+
+**验证**（2026-09-15 05:2x–05:4x，本机；工作树含其它会话的测量 / U0 WIP，未触碰）：
+- `npx vitest run` 全量：**331 文件 / 2874 用例，2873 绿**（本次新增 7 + 8 = 15 例）；唯一失败 `form-binding.test.ts › binds all fields…` 是 10 s 超时（另一会话在改 `InitiateReviewPanel.vue`），单跑该文件 9/9 过、1.8 s——并行负载下的时序抖动，与本次无关。相关套件 `lod` 7 + `cloudLod` 8 + `cloudRegion` 12 + `cloudRender` 7 + `cloudFit` 11 + `cloudCreation` 9 + `sharedRegion` 9 + `useCloudRenderFlags` 3 全绿；两处既有「静止零重建」断言补了 `lodPlans: 0`。
+- `npm run type-check`：本次改动文件 **0 条新增**；剩 1 条基线外仍是未触碰的 `resolveLabelCollisions.test.ts`（HEAD 既有）。
+- `npx eslint` 改动文件：0 错误。
+- 未跑 Playwright；真机要看：`?dtx_demo=primitives` 之类场景批量建 > 64 条云线，转相机看远处只剩图钉、靠近视口中心的补回轮廓、悬停图钉临时展开；`?cloud_render_flags=cloudAdaptiveLod:0` 对照。
+
+**遗留 / 后续**：
+- **屏幕网格聚合**（§9.3「其他降为图钉或屏幕网格聚合」、交互方案「密集图钉聚合，点击列成员或放大」）未做：本步 pin 档是一枚枚独立图钉；聚合徽标 + 计数 + 点击列表属交互层 DOM，另起。
+- LOD 只覆盖云线（轮廓 / 文字框是每帧成本所在）；rect / obb 线框是静态几何、文字批注只有 DOM，上千条时的文字框 DOM 惰性挂载可沿 `mountCloudLabel` 同法推广，未做。
+- 预算 64 / 滞回 16 是 §14 #9 的初值，未按真机数据调；没有做「相机运动中用简化框、停止后精化」（交互方案 §3.4），运动中 full 档仍每帧全算。
+- 优先级只看锚点到视口中心的距离；投影尺寸（远处极小的目标本可先降）没进公式——它需要先算包围盒投影，与「pin 档不算凸包」相悖，若要引入应用 `worldPos` 到相机距离的廉价代理。
+- P4 其余：合批（§9.2，按实测决定）、GPU 波浪、inspection 淡化（§10，复用 ADR-0061 `isSegmentBlocked`，α 对齐尺寸系统 `theme.inspection`）仍未动。
 
 ---
 
