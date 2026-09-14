@@ -1233,3 +1233,66 @@ spec 先把相机拉到模型跟前；临时 spec 已删）：
 - 悬停才加载：光标没到过某个属主的叶子之前，它的设计点不在候选里（与 P-Point 同一口径）。
 - 主库 `24381` 没有 DPSE，实机用的是 MDS special 模板库 `7330`。
 
+
+## 30. Angle 2 Lines（两线夹角）：Graphics 边 × 边 / 边 × 面出角度记录，平行拒收 实机走查（2026-09-15 05:33 / 05:34）
+
+**为什么现在做**：方案 §2 #9 是 P0 里最后一条 ✗（「无 EDGE 拾取；G6-04 未采」）。Graphics 边 / 面 provider（§12）与三点角内核（§22 / §24 / §25）都在了，
+两线夹角只差 `gmfArc.radius2Lines` 这一段内核和两击的接线。E3D 进程不在跑，口径照 PML 源码（`static_expectation`）；G6-04 里「产品 UI 可达性」这一问静态就能答：
+`design.uic` 3538–3551 有 `AVEVA.DesignGeneral.buttonMeasureAngleLines`（Caption `Angle 2 Lines`，执行 `LINEANGLE`），4413 挂在 Design 功能区 Measure 下拉里——
+它是正经 E3D 入口，方案 Q6「若 UI 不可达是否仍做」的前提不成立。
+
+**E3D 口径**（`edgpickpacket.pmlobj` 635–651 `measureLineAngleArc`、`gmfarc.pmlobj` 802–917 `radius2Lines`、`gphanglemeasure.pmlfrm` 334–410）：
+
+- 两击都是 `stdGraphics`：`first line` 只拾 `EDGE`，`second line or plane` 拾 `FACET EDGE`；凑齐调 `gmfArc.radius2LinesNoError(first.positionData(), second.positionData())`，
+  出来的 ARC 进**同一张** Measure Angle 窗体（`gphAngleMeasure.setMeasure(arc)` → Decimal Angle / DMS / Direction1 / Direction2）。
+- **两线**（855–890）：弧心 = `baseLine.intersection(referenceLine)`——共面取交点，异面取**第一条线**上离第二条最近的点（与 Intersect 拾取类型同一条 `LINE.intersection` 读法），
+  平行 → `(2,870)` → `alert.error('An angular dimension could not be constructed from the data selected')`。第二条臂是第二条线**平移到弧心**、从它自己的最近点朝用户拾中的位置；
+  第一条臂从弧心朝第一条线上拾中的位置（871–890 的 start / end 互换）。所以报的是两条**拾中的半线**的夹角——点另一侧得补角，这是 E3D 行为不是 bug。
+- **线 + 面**（826–854）：参照线 = 基线在面上的投影。基线在面内（两端 < 0.1 mm）→ 0° 弧（半径 100 mm，X = 基线方向）；基线垂直于面（投影退化成点）→ 参照取面内方向
+  （E3D 取拾中项的 `ORI` X），角 90°；否则弧心 = 基线穿过面的点，角 = 基线与其投影的夹角。基线平行于面但不在面内 → 投影与基线平行 → 同一句错误。
+- **半径**（892–903）：弧心在基线段外 → 弧心到近端的距离；否则两条线较短者的一半；不低于 500 mm。ARC：X = 基线方向，Z = (弧心, 拾中 1, 拾中 2) 面的法向，`endAngle = root.angle(p1, p2)` ∈ [0°, 180°]。
+- 造不出 ARC 时 E3D 整包重来（`alert.error` 后重新 `first line`）。
+
+**Web 落地**（决策 `d-587`；CONTEXT「两线夹角」）：
+
+- 纯内核 `src/measurement/kernel/lineAngle.ts`：`buildLineAngle(base: line, reference: line | plane)` → `{ root, angleDeg, direction1, direction2, radiusM, planeNormal, skew, gapM, inPlane }`
+  或 `{ ok: false, reason: parallel-lines | line-parallel-to-plane | zero-length-line | degenerate-plane | non-finite-input }`；`lineAngleArmEnd` 给弧半径处的两个臂端点。设计 World 米。
+- 入口：结果卡角度模式的 `Angle` 下拉 `Angle 3 Points / Angle 2 Lines`（`angleMeasureVariant`，样式仓 V9 持久化，缺省三点；脏值打回三点）——E3D 功能区两个按钮各起一包，Web 用一个开关。
+  切换时丢掉进行中的三点草稿 / 第一条线。
+- 接线 `useXeokitMeasurementTools.ts`：`two-line` 下角度模式的点击不走三点草稿——第一击必须能转成线（Graphics 边 / PLINE / 轴线 / 带方向的点，走 Intersect 的 `intersectOperandFromHit` 同一条分型路），
+  不是线就提示改选；第二击线或面；凑齐 `buildLineAngle` 落一条角度记录：`corner` = 弧心、`origin` / `target` = 弧半径处的臂端、`lineAngle { kind, angleDeg, direction1, direction2, skew, inPlane, firstLabel, secondLabel }`。
+  造不出 ARC → 提示条给 E3D 那句话的等价文案、丢掉第一条线回第 1 步、不落记录（同三点角退化的处理）。Esc / 点空白先只放弃第一条线；提示条 `两线夹角 · 第 1/2 步 选择第一条线` / `第 2/2 步 选择第二条线或面（第一条：…）`。
+- 结果表 / 摘要 / 复制值：`buildAngleMeasurementResultRows` 带 `lineAngle` 时用记录里的角度与臂方向（只把两条臂换到 wrt 帧——0° 弧三点内核造不出），四行不变；
+  结果卡多一行 `两线夹角 线 × 线 · PANE 边 × SCTN 边 · 异面：弧心取第一条线上离第二条最近的点`；列表摘要写「两线夹角 线 × 线 · 第一项 × 第二项」而不是三个点；`unifiedMeasurement` 往返保留 `lineAngle`。
+- **Web 取舍**（记在 `lineAngle.ts` 头注释）：两条线（或线与面）夹角 < 0.01° 视为平行（`LINE_ANGLE_PARALLEL_TOLERANCE_DEG`）——Web 输入是 float32 网格边，设计上平行的构件回来相差 ~1e-5 rad，
+  E3D 精确的 `LINE.intersection` 会拒掉，裸叉积却会把弧心算到几百公里外（实机见过 0.0004° → 弧心 762 km）；拾中点正落在弧心时保留线自己的方向（E3D 上移 100 mm 测一个无意义角）；
+  线 × 面的投影臂朝拾中点的投影（E3D 取投影线的 end，同一组拾取按 facet 边的存储顺序得 θ 或 180° − θ）；基线垂直于面时面内方向取世界轴投影（E3D 取 `ORI` X）。
+
+**Web 实机走查**（**无任何 mock**：缺省 gen-model-v1 + `:8024`，`?model_source=gen-model-v1&gm_backend_port=8024&show_refno=24381_177298`，浮条真点「自由表面」+ 只留「模型表面点」「Graphics」，
+过滤器 Graphics、拾取类型 Cursor，真指针；相机先拉到最大那件跟前（缺省视距只有几十像素）；临时 spec 已删）。每一组的**独立期望**都不经过拾取层与被测内核：吸附点所在的网格边方向 / 面法向直接翻
+`__dtxLayer.getObjectGeometryData()` 的三角形算出来，两条线的距离、弧心到线 / 面的距离、`90° − ∠(边, 法向)` 都是用它们独立算的。位置一律换到设计 World（场景帧与设计帧差一个平移
+`(1.605, 1.351, 12.501) m`——上一轮 spec 全红就是把场景坐标直接和记录比，弧心「离线 12.6 m」）：
+
+| 组 | 两击 | 结果表（Decimal Places 2）| 记录 | 独立期望 | 图 |
+| --- | --- | --- | --- | --- | --- |
+| 异面 | PANE `24381/177305` 顶面长边（`N 5° W`，U 23326.2）× SCTN `24381/177302` 边（`E 5° N`，U 23294.2，差一个板厚 32 mm） | `90 Degrees · 89° 59' 58'' · S 5.00 E · E 5.00 N` | `angleDeg 89.99956 · skew` · 弧心 `E 1925.7 N 14704.5 U 23326.2` · 半径 500 mm | 弧心在第一条线上（Δ 4e-16 m）；弧心 → 第二条线的垂线同时垂直于两条线、长 32.0 mm = 两线距离；臂 ∥ 各自的边（cos 与 1 差 < 1e-6）、朝拾中侧；DMS 按十进制度截断；Direction 串 = `formatCompassDirection(臂, 2 位)` | `web-line-angle-live-01-skew-two-edges.png` / `web-line-angle-live-01-skew-result-card.png` |
+| 相交 | 同一 PANE 顶面长边 × 短边（共顶点） | `90 Degrees · 90° 0' 0'' · S 5.00 E · E 5.00 N` | `angleDeg 90.00000000000006 · skew false` · 弧心 = 共顶点 `E 1925.7 N 14704.5 U 23326.2` · 半径 504.8 mm | 弧心到两条线 Δ 5.6e-16 / 4.1e-16 m；半径 = 较短那条（1009.66 mm 短边）的一半（892–903） | `web-line-angle-live-03-crossing-two-edges.png` / `web-line-angle-live-03-crossing-result-card.png` |
+| 线 ⟂ 面 | SCTN `24381/177301` 竖直边（`U`）× PANE 顶面（法向 `U`） | `90 Degrees · 90° 0' 0'' · D · E` | `line-plane · angleDeg 90 · inPlane false` · 弧心 `E 2894.8 N 14670.8 U 23326.2` · Direction2 = `E`（840–843：投影退化，面内方向取世界 X）· 半径 500 mm | 弧心既在边上又在面上（Δ 0）；第一条臂朝拾中侧（拾中点在面下 → `D`）；`90° − ∠(边, 法向)` = 90 | `web-line-angle-live-05-pierces-edge-facet.png` / `web-line-angle-live-05-pierces-result-card.png` |
+| 线在面内 | PANE 顶面长边 × 它自己的顶面 | `0 Degrees · 0° 0' 0'' · N 5.00 W · N 5.00 W` | `line-plane · angleDeg 0 · inPlane` · 两臂同向 · 半径 100 mm（`origin − corner` = 0.1 m） | 边 ⟂ 法向（d·n = 0）且拾中点在面上；弧心在边上 Δ 1.3e-16 m | `web-line-angle-live-07-in-plane-edge-facet.png` / `web-line-angle-live-07-in-plane-result-card.png` |
+| 拒收：平行 | 同一条 PANE 边点两次 | — | 不落记录；提示条 `两条线平行，画不出角度尺寸（E3D：An angular dimension could not be constructed from the data selected）；已回到第 1 步`；状态条回 `选择第一条线` | — | `web-line-angle-live-09-parallel-edges-rejected.png` |
+| 拒收：线 ∥ 面 | SCTN `177301` 水平边（U 23104.6）× PANE 顶面（U 23326.2，离面 221.7 mm） | — | 不落记录；`线与面平行且不在面内，画不出角度尺寸（E3D：…）；已回到第 1 步` | d·n = 0 且离面 > 0.1 mm → E3D 850–853 投影与基线平行 | `web-line-angle-live-10-edge-parallel-facet-rejected.png` |
+
+- 第一击后提示条 `两线夹角：已选第一条线 PANE 边，再选第二条线或面`、状态条 `第 2/2 步 选择第二条线或面（第一条：PANE 边）`，记录数不变；切到 `Angle 2 Lines` 时结果卡空态文案换成「先拾一条线，再拾一条线或一个面」。
+- 页面错误 0；全部数值（含每组的独立期望、采样到的边 / 面、场景原点在设计帧的位置）见 `web-line-angle-live-records.json`。
+- 每组前先删掉上一条记录：两击都不算草稿，§28 那条「无草稿时尺寸悬停优先」对两击都生效，上一条弧 / 臂压在要拾的边上时下一次拾不到。
+
+**单测**：`lineAngle.test.ts` 17 条（共面交点 / 拾中侧决定臂向 / 斜交 60° 与补角 120° / 异面弧心与 gap / 平行拒收 / 0.01° 平行容差两侧 / 弧心在段外的半径 / 500 mm 下限 / 拾中点在弧心 /
+臂端回灌三点内核同角；线 + 面一般解 / 投影臂朝拾中侧 / 线在面内 0° 弧 / 垂直 90° 与面内方向 / 平行于面拒收 / 未归一法向；退化输入），`xeokitMeasurementFormat.test.ts` 3 条（四行来自记录、0° 弧、摘要 / 复制值），
+`MeasurementResultInspector.test.ts` 1 条（开关 + 两线记录渲染）、`useXeokitMeasurementStyleStore.test.ts` 1 条（V9 持久化 / 脏值）、`unifiedMeasurement.test.ts` 1 条（往返）。
+测量相关 6 文件 129 用例全过；eslint 0；type-check 与 HEAD 同。
+
+**已知偏离 / 残余**：
+- E3D 运行时 golden（G6-04：`measureLineAngle` 注入的 ARC 与四行）未采，E3D 不在跑；上面全是 `static_expectation` + Web 实机。
+- 斜交（既非 0° 也非 90°）的线 × 面一般解只有单测——本库这组构件的网格全是正交棱；斜边要等有斜撑 / 管件的模型。
+- 第二击的 `FACET` 在 Web 是 Graphics 面（三角形面片的平面）；E3D 的 `getPlane()` 对 P-Point / DPOINT 也给面（§29），Web 这里同样走 `intersectOperandFromHit`，但只实机验过 Graphics 面。
+- 两击都不进草稿，所以 Esc 第一层只放弃第一条线（E3D 整包退）——与 Intersect 子拾取同一层，方案 §2 #20 的分层口径不变。

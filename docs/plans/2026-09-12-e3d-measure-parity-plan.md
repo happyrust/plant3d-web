@@ -77,7 +77,7 @@
 | 6 | Perpendicular to：点→线 / 面 / 点退化、World 帧、零距离告警 | ◐ | `perpendicularDistance.ts` + `perpendicularTargetProvider.ts`，G4 全部 ✓。目标 provider 按 E3D `GMFARC.perpendicularToPoint` 的分支序（`getLine()` → `getPlane()` → 点）接了：P-Point 轴、PLINE 线（实机 ✓，golden MD §17）、Graphics 边（`direction` + `segment`，标签用候选自己的名字）与 Graphics facet 面（`facet-plane`）、圆面关键点、Element 的 P1 → P2 `line()` 操作数（golden MD §16）。**Graphics 边 / 面当垂距目标的实机走查已补（2026-09-14，无代码改动，golden MD §23）**：先在 Perpendicular 关着时用 `Graphics × Cursor` 在同一条边 / 同一个面上采控制点（末点回代残差 0.0000 mm）独立定出那条无限线 / 无限面，再开 Perpendicular 量——垂足到基准线 / 面 0.0000 mm，`(S−F)·边方向 = 3.6e-16`、与面法向的 `|sin| = 1.1e-13`，距离与解析值 Δ 0.0000 mm。**Aid 类目标 ✓（2026-09-14 23:36，决策 `d-561`，golden MD §28）**：会话设计辅助线 / 面（Q3 拍板做最小实现）当 `getLine()` / `getPlane()` 的 DESIGNAID 分支——辅助线 → 无限线、辅助面 → 无限面，目标名就是辅助自己的名字；实机垂足与独立投影 Δ < 1e-6 m。余 G7-02 的 E3D 运行时 golden 仍未采 |
 | 7 | 三点角 Angle / Direction1 / Direction2 / 拒绝 0°·180° | ✓ | **内核已接线（2026-09-14，Web `d2e7c02`，Phase C 切片 1，决策 `d-486`）**：`threePointAngle.ts`（G6-01～03 golden）接进 `buildAngleMeasurementResultRows`，测量结果卡在角度模式出 `Angle / Direction1 / Direction2` 三行——角度取内核 minor 角、两条臂的单位方向按当前 wrt 帧表达、小数位缺省 2（E3D `Decimal Places` 缺省）；第三击落记录前先过内核，0° / 180° / 重合点**不落记录**、丢草稿回第 1 步、提示条给 E3D `alert.error` 那句话的等价文案。实机 `Angle 40.54°` 与三点解析角差 0.001436°、两条 Direction 逐位差 < 2e-4，退化三击拒收并回到第 1 步（golden MD §22）。~~**已知偏离**：方向仍是分量串（`X +0.3635 · …`）不是 E3D 罗盘串（`W 11.7755 N 66.8266 D`）——与距离结果表 `Direction` 行同一条既有偏离，要改两处一起改~~ → **2026-09-14 17:26 两处一起改成罗盘串**（Web `16e9a48` + `0e5c674`，决策 `d-515`，golden MD §25）：两条 Direction 走 `gphanglemeasure` 374–385 那条路（`.string()` 拆 token、数字按 Decimal Places 过 `!!realFmt` 留尾零、`.before('WRT')` 切尾巴），实机 Decimal Places 2 / 4 / 0 三档对账 |
 | 8 | 角度 Unit（Degrees / Radians / Gradians）+ Decimal Places | ✓ | **会话级已落地（2026-09-14，Web `b45b33b`，Phase C 切片 2，决策 `d-494`）**：`Unit` 四档 Default / Degrees / Radians / Gradians × `Decimal Places` 0–8（缺省 Default / 2 = E3D 构造值，越界或非数字打回 2 并出 `Value must be between 0 and 8`）；小数位同时管角度值与两条 Direction，但尾零规则不同（角度值走 `angleFmt` 去尾零、Direction 走 `realFmt` 留尾零）。顺带按源码把结果表从三行补成四行（加 `DMS`，恒按十进制度截断）。实机五档与三点解析角 40.538564° 逐格对上、DMS 五档恒为 `40° 32' 18''`、填 9 弹错并回 2、刷新持久化（golden MD §24）。**偏离**：Default 档 = Degrees（Web 无「工程当前角度单位」这一层） |
-| 9 | 两线夹角（LINEANGLE） | ✗ | 无 EDGE 拾取；G6-04 未采 |
+| 9 | 两线夹角（LINEANGLE） | ✓ | **已落地（2026-09-15 05:33，Phase C 切片 4，决策 `d-587`，golden MD §30）**：纯内核 `src/measurement/kernel/lineAngle.ts` = `gmfArc.radius2Lines`（弧心 = 两线交点 / 异面取第一条线上最近点 / 线穿过面的点；线在面内 0° 弧、垂直于面 90°；半径 892–903 规则；平行 / 线平行于面拒收），入口是结果卡 `Angle` 下拉 `Angle 3 Points / Angle 2 Lines`（E3D `design.uic` 3538 `buttonMeasureAngleLines`，产品 UI 可达），两击 Graphics 边 / 边或面各转线 / 面操作数，结果表同一张四行 + `两线夹角` 一行。实机六组：异面 89.9996°、相交 90°（弧心 = 共顶点、半径 = 短边一半）、竖直边 ⟂ 顶面 90°、边在顶面内 0°、平行边拒收、边 ∥ 面拒收。余：E3D 运行时 golden（G6-04）未采；斜交的线 × 面只有单测 |
 | 10 | Shortest（graphics × graphics） | ✗ | 现有 clearance / 最近点是采样近似（上一计划 §3.2），不是 `gmfLine.shortest` 语义；G5 未采 |
 | 11 | 拾取过滤器：Ppoint | ✓ | `ptset` 源；2026-09-12 起经 `ModelSource.keypoints` 走 gen-model `element/ptset`（d-559），实机 表面点 → P-Point 轴线 走通 |
 | 12 | 拾取过滤器：Element | ✓ | E3D 3.1 Element × Snap 对 CYLI / BOX / ELBO / VALV 等一律回落**元素原点**（`edgpicktype` ELEMENT 分支 `handle any → item.position`；只有 SCTN / GENSEC / PANEL 等结构类实现 `snap()`），Web 的 `position`（Item 原点）即是；`primitive_key_point`（盒角 / 轴端）是 legacy parquet 带来的 Web 增强，v1 **不补 API**（Q5 2026-09-13 拍板，d-336）。**Element 拾中的元素当 Intersect / Perpendicular 操作数按 E3D `line()` 转 P1 → P2 ✓（2026-09-14，`79b199c`）**：CYLI / CONE / SNOU / DISH / PYRA / NOZZ（`src/measurement/kernel/elementLine.ts`），ptset 的 P1 / P2 优先、无点的设计基本体从 DTX 局部包围盒 × 放置矩阵派生（截面对中才认；带 XOFF / YOFF 的 SNOU / PYRA 不派生），实机 CYLI × CYLI / CYLI × CONE 交点与 Perpendicular 垂足 Δ ≤ 0.001 mm（golden MD §16）。SCTN / GENSEC 的 `line()` 是截面 PLINE 线 → #13（`element/plines`，2026-09-14 ✓） |
@@ -93,7 +93,7 @@
 
 ## 3. 差距分级
 
-- **P0（不补就不能说「E3D 有的我们都有」）**：#10 Shortest、#9 两线夹角、#17 拾取类型、#14 Graphics 边 / 面拾取（它同时解锁 Perpendicular 与 Shortest 的目标 provider）、#13 在 gen-model-v1 下的 PLINE 供给（#12 Element 显著点 2026-09-13 核对为非 E3D 口径，撤出 P0，d-336）。
+- **P0（不补就不能说「E3D 有的我们都有」）**：#10 Shortest、~~#9 两线夹角~~（✓ 2026-09-15，d-587）、#17 拾取类型、#14 Graphics 边 / 面拾取（它同时解锁 Perpendicular 与 Shortest 的目标 provider）、#13 在 gen-model-v1 下的 PLINE 供给（#12 Element 显著点 2026-09-13 核对为非 E3D 口径，撤出 P0，d-336）。
 - **P1（功能在、契约缺角）**：#4 Keep 生命周期（✓ 2026-09-14）、#5 Units 矩阵（✓ 2026-09-14，英制不做）、~~#7 角度内核接线 + Direction1/2~~（✓ 2026-09-14）、~~#8 角度单位 / 小数位~~（✓ 2026-09-14）、#19 提示结构、#20 分层取消（✓ 2026-09-14，余右键 trace）。
 - **P2（可选 / 需拍板）**：~~#15 DPOINT~~（✓ 2026-09-14，d-563；TUBING 已于 2026-09-13 前端派生落地）、~~Aid 拾取~~（✓ 2026-09-14，最小会话级 Aid 系统，d-561）、External。
 
@@ -228,9 +228,14 @@
   （四档 Unit、0–8 校验、度 / 弧度 / 梯度换算、角度值去尾零 vs Direction 留尾零两套格式、DMS 截断）+ 样式仓 V9 的
   `measurementAngleUnits` + 结果卡的 `Unit` / `Decimal Places` 两个控件。顺带按 `gphanglemeasure` 源码把结果表补成四行。
   实机五档 + 越界回退 + 刷新持久化全过（golden MD §24）。
-- 两线夹角：Phase A 的 Graphics 边 provider 就位后，新增「两边角」子模式（`LINEANGLE` 回 REAL，`LINEANGLEARC` 画弧）；入口是否要做取决于 G6-04（若 E3D 产品 UI 不可达，只做内核 + 隐藏入口）。
+- ~~两线夹角：Phase A 的 Graphics 边 provider 就位后，新增「两边角」子模式（`LINEANGLE` 回 REAL，`LINEANGLEARC` 画弧）；入口是否要做取决于 G6-04（若 E3D 产品 UI 不可达，只做内核 + 隐藏入口）。~~
+  **切片 4 ✓（2026-09-15 05:33，决策 `d-587`）**：产品 UI 可达性静态答了——`design.uic` 3538–3551 `AVEVA.DesignGeneral.buttonMeasureAngleLines`（`Angle 2 Lines` → `LINEANGLE`）挂在 Measure 下拉，
+  是正经入口。纯内核 `src/measurement/kernel/lineAngle.ts`（`gmfArc.radius2Lines` 802–917：两线 / 线 + 面、弧心与两臂朝向、半径规则、平行拒收；Web 取舍 0.01° 平行容差等写在头注释）+
+  结果卡 `Angle` 下拉 `Angle 3 Points / Angle 2 Lines`（样式仓 V9 `angleMeasureVariant`）+ `useXeokitMeasurementTools` 两击接线（第一击线、第二击线或面、造不出 ARC 回第 1 步）+
+  记录 `lineAngle` 标记（结果表 / 摘要 / 复制值优先用它，`unifiedMeasurement` 往返）。实机 gen-model-v1 六组（异面 / 相交 / 竖直边 ⟂ 面 / 边在面内 0° / 平行拒收 / 边 ∥ 面拒收）全过，
+  独立期望直接翻三角形算（golden MD §30）。余：G6-04 运行时 golden；斜交的线 × 面一般解只有单测。
 
-**golden gate**：G6-04；角度 Unit × Decimal Places 格式矩阵；两线夹角 3 组（相交 / 平行 / 异面）。
+**golden gate**：G6-04（E3D 运行时，未采）；角度 Unit × Decimal Places 格式矩阵（✓ §24 / §25）；两线夹角 3 组（相交 / 平行 / 异面）——Web 实机三组都过了（golden MD §30），E3D 侧仍待 G6-04。
 
 ### Phase D · Shortest
 
@@ -279,7 +284,7 @@
 - **Parity 声明**只在 §2 表全部为 ✓ 时成立；每一行 ✓ 的依据是 E3D golden case id + Web 测试文件。
 - 拾取层：G7 + G8 + G9 通过 → 可宣称「拾取过滤器 × 拾取类型与 E3D 一致」。
 - Shortest：G5 通过前 No-Go（沿用）。
-- 角度：G6-01～03 已过；两线夹角随 G6-04 单独审批。
+- 角度：G6-01～03 已过；两线夹角 Web 侧已落地并实机走通三组（2026-09-15，golden MD §30），E3D 对账仍随 G6-04 单独审批。
 - 每阶段结束更新 `e3d-measurement-runtime-golden-capture.md` 与本文件 §2。
 
 ## 7. 开放问题（需拍板）
@@ -299,7 +304,8 @@
   （后端 ~1 d，只读 `section` 已有结果，不碰 GeneratedElement / 持久化、与 d-536 不撞；**2026-09-14 已做**，gen-model `a00565522` + Web `c2e3d97`，d-394，golden MD §17）
   + Element 拾中 CYLI / NOZZ 的 P1 → P2 `line()` 操作数（前端 ~0.5 d；**2026-09-14 已做**，`79b199c`，
   实测 gen-model-v1 的设计基本体 ptset 无点，P1 / P2 改从 DTX 局部帧几何派生，golden MD §16）。
-- **Q6 两线夹角**：若 G6-04 采出「产品 UI 不可达」，是否仍做（作为 Web 增强）？
+- ~~**Q6 两线夹角**：若 G6-04 采出「产品 UI 不可达」，是否仍做（作为 Web 增强）？~~
+  **前提不成立（2026-09-15，决策 `d-587`）**：`design.uic` 里 `Angle 2 Lines` 是 Design 功能区 Measure 下拉的正经按钮，不用等运行时 golden 就能答「可达」；已按 E3D 入口做，见 Phase C 切片 4 / golden MD §30。
 
 ## 8. 交付物
 

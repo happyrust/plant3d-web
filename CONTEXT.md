@@ -156,7 +156,12 @@ _Avoid_: 全局单位设置（模型显示单位 + 小数位，另一层）、�
 ## 三点角
 
 按 E3D 的 root / first / second 三击测出的夹角（Web 草稿里依次是顶点、第一边点、第二边点）。它只报 minor 角（0°–180°，没有反角），两条臂各有一个单位方向（Direction1 = 顶点→第一边点，Direction2 = 顶点→第二边点），方向随当前 wrt 帧换分量与轴标签，角度本身与参考系无关。三点共线（0° / 180°）或有重合点时**测不出来**：不落记录、回到第 1 步重新取顶点——对应 E3D 那边 `radius3PointsNoError` 回未设 ARC、窗体报 `An angular dimension could not be constructed from the data selected`。
-_Avoid_: 反角 / 优角、两线夹角（EDGE × EDGE 的 LINEANGLE，另一回事）
+_Avoid_: 反角 / 优角、两线夹角（两条拾中的线 / 线与面之间的角，另一种入口）
+
+## 两线夹角
+
+按 E3D「Angle 2 Lines」两击测出的夹角：第一击拾一条线（Graphics 边、p-line、轴线），第二击拾一条线或一个面，对应 E3D `gmfArc.radius2Lines` 出的 ARC，结果表与三点角同一张（Decimal Angle / DMS / Direction1 / Direction2）。弧心是两线的交点，两线异面时取**第一条线**上离第二条最近的点；两条臂都从弧心朝用户拾中的那一侧，所以报的是两条拾中的半线的夹角，点另一侧得补角（E3D 行为）。线与面：参照是线在面上的投影——线在面内是 0° 弧，线垂直于面是 90°，否则弧心是线穿过面的点。两线平行、线平行于面但不在面内、几何退化都**测不出来**：不落记录、丢掉第一条线回第 1 步，提示与三点角退化同一句 E3D 错误。角度入口在结果卡的 `Angle` 下拉里切（Angle 3 Points / Angle 2 Lines），记住上次选的；两击都不算草稿。夹角小于 0.01° 视为平行（float32 网格边的 Web 容差）。
+_Avoid_: 三点角（三击、有顶点）、Perpendicular to（点到线 / 面的距离，不是角）、Intersect 拾取类型（同样两击线 / 面，但出的是一个点）
 
 ## 角度显示单位
 

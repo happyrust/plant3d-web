@@ -1,0 +1,643 @@
+{
+  "capturedAt": "2026-09-14T21:34:33.176Z",
+  "url": "/?model_source=gen-model-v1&gm_backend_port=8024&show_refno=24381_177298",
+  "frame": {
+    "note": "位置 / 方向均为设计 World（米，X=E Y=N Z=U）；场景原点在设计帧里的位置见 sceneOriginInDesign",
+    "sceneOriginInDesign": [
+      1.6051733398437504,
+      1.3512724609375,
+      12.500605468750003
+    ]
+  },
+  "sampled": {
+    "edges": [
+      {
+        "at": [
+          2.437844200153287,
+          8.851064154139296,
+          23.3262109375
+        ],
+        "direction": [
+          -0.08715571291920333,
+          0.9961947007013967,
+          0
+        ],
+        "objectId": "o:24381_177305:6",
+        "screen": [
+          502.02728482714565,
+          246.01474740644767
+        ],
+        "label": "边"
+      },
+      {
+        "at": [
+          3.244221809664762,
+          10.70342201262415,
+          23.104554084777828
+        ],
+        "direction": [
+          -0.08715607300560253,
+          0.9961946691978643,
+          0
+        ],
+        "objectId": "o:24381_177301:0",
+        "screen": [
+          564.5438018272057,
+          308.72948916283553
+        ],
+        "label": "边"
+      },
+      {
+        "at": [
+          2.7162465106632596,
+          14.773654302796364,
+          23.294210937499997
+        ],
+        "direction": [
+          0.9961953732422572,
+          0.08714802539770967,
+          0
+        ],
+        "objectId": "o:24381_177302:2",
+        "screen": [
+          815.6134636863623,
+          360.9878043184832
+        ],
+        "label": "边"
+      }
+    ],
+    "facets": [
+      {
+        "at": [
+          2.70562530432567,
+          11.818012958292625,
+          23.3262109375
+        ],
+        "normal": [
+          0,
+          0,
+          1
+        ],
+        "objectId": "o:24381_177305:6",
+        "screen": [
+          639.9999999999999,
+          300.9999999999999
+        ],
+        "label": "面"
+      }
+    ],
+    "extraViews": [
+      {
+        "rank": 1,
+        "focused": "o:24381_177305:7",
+        "edges": [
+          {
+            "at": [
+              2.4379626790192797,
+              8.849709934037202,
+              23.3262109375
+            ],
+            "direction": [
+              -0.08715571291920318,
+              0.9961947007013967,
+              0
+            ],
+            "objectId": "o:24381_177305:6",
+            "screen": [
+              456.36867453236056,
+              228.2395803441727
+            ]
+          },
+          {
+            "at": [
+              3.236488741894462,
+              10.79181104420459,
+              23.104554084777828
+            ],
+            "direction": [
+              -0.08715607300560313,
+              0.9961946691978643,
+              0
+            ],
+            "objectId": "o:24381_177301:0",
+            "screen": [
+              542.9629969328624,
+              314.20119524592013
+            ]
+          },
+          {
+            "at": [
+              2.8054349710449946,
+              14.78145658578151,
+              23.102210937499997
+            ],
+            "direction": [
+              0.9961953732422572,
+              0.08714802539770972,
+              0
+            ],
+            "objectId": "o:24381_177302:2",
+            "screen": [
+              882.0425091618105,
+              404.41842547200827
+            ]
+          },
+          {
+            "at": [
+              3.093767429327803,
+              8.878438126747868,
+              23.2942109375
+            ],
+            "direction": [
+              0.9961947007013967,
+              0.08715571291920375,
+              0
+            ],
+            "objectId": "o:24381_177305:6",
+            "screen": [
+              431.46262648918906,
+              259.7538690306059
+            ]
+          }
+        ],
+        "facets": [
+          {
+            "at": [
+              2.7056253043256744,
+              11.818012958292645,
+              23.3262109375
+            ],
+            "normal": [
+              0,
+              0,
+              1
+            ],
+            "objectId": "o:24381_177305:6",
+            "screen": [
+              639.9999999999998,
+              301.0000000000001
+            ]
+          }
+        ]
+      },
+      {
+        "rank": 2,
+        "focused": "o:24381_177301:0",
+        "edges": [
+          {
+            "at": [
+              2.437910862563807,
+              8.850302199037655,
+              23.3262109375
+            ],
+            "direction": [
+              -0.08715571291920378,
+              0.9961947007013967,
+              0
+            ],
+            "objectId": "o:24381_177305:6",
+            "screen": [
+              473.0416629795617,
+              193.73169972511786
+            ]
+          },
+          {
+            "at": [
+              3.2345069238623547,
+              10.814463241473488,
+              23.104554084777828
+            ],
+            "direction": [
+              -0.08715607300560356,
+              0.996194669197864,
+              0
+            ],
+            "objectId": "o:24381_177301:0",
+            "screen": [
+              562.2281384533383,
+              284.5978960223363
+            ]
+          },
+          {
+            "at": [
+              2.894769564692235,
+              14.670779717363567,
+              23.180772770689796
+            ],
+            "direction": [
+              0,
+              0,
+              1
+            ],
+            "objectId": "o:24381_177301:0",
+            "screen": [
+              901.3681114862082,
+              380.4346749919014
+            ]
+          },
+          {
+            "at": [
+              3.0916254810982053,
+              8.878250730624547,
+              23.2942109375
+            ],
+            "direction": [
+              0.9961947007013969,
+              0.08715571291920195,
+              0
+            ],
+            "objectId": "o:24381_177305:6",
+            "screen": [
+              447.0144295168377,
+              225.8610202282253
+            ]
+          }
+        ],
+        "facets": [
+          {
+            "at": [
+              2.705691816349625,
+              11.818021530320085,
+              23.326210937499997
+            ],
+            "normal": [
+              0,
+              0,
+              1
+            ],
+            "objectId": "o:24381_177305:6",
+            "screen": [
+              661.2976647996757,
+              272.00362800416735
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "lineLineSkew": {
+    "rows": {
+      "angle": "90 Degrees",
+      "dms": "89° 59' 58''",
+      "direction1": "S 5.00 E",
+      "direction2": "E 5.00 N"
+    },
+    "info": "线 × 线 · PANE 边 × SCTN 边 · 异面：弧心取第一条线上离第二条最近的点",
+    "record": {
+      "count": 1,
+      "corner": [
+        1.9257351247833503,
+        14.70449968896833,
+        23.3262109375
+      ],
+      "origin": [
+        1.969312981242952,
+        14.20640233861763,
+        23.3262109375
+      ],
+      "target": [
+        2.4238328114044787,
+        14.748073701667186,
+        23.3262109375
+      ],
+      "lineAngle": {
+        "kind": "line-line",
+        "angleDeg": 89.99955785511872,
+        "direction1": [
+          0.0871557129192034,
+          -0.9961947007013967,
+          0
+        ],
+        "direction2": [
+          0.996195373242257,
+          0.08714802539771234,
+          0
+        ],
+        "skew": true,
+        "inPlane": false,
+        "firstLabel": "PANE 边",
+        "secondLabel": "SCTN 边"
+      },
+      "approximate": true
+    },
+    "expectedAngle": 89.99955785511872,
+    "independent": {
+      "edge1": {
+        "at": [
+          2.437844200153287,
+          8.851064154139296,
+          23.3262109375
+        ],
+        "direction": [
+          -0.08715571291920333,
+          0.9961947007013967,
+          0
+        ],
+        "objectId": "o:24381_177305:6"
+      },
+      "edge2": {
+        "at": [
+          2.7162465106632596,
+          14.773654302796364,
+          23.294210937499997
+        ],
+        "direction": [
+          0.9961953732422572,
+          0.08714802539770967,
+          0
+        ],
+        "objectId": "o:24381_177302:2"
+      },
+      "gapM": 0.03200000000000358,
+      "cornerOffLine1": 4.440892098500626e-16,
+      "cornerOffLine2": 0.03200000000000358,
+      "radiusM": 0.5000000000000008
+    }
+  },
+  "lineLineCrossing": {
+    "rows": {
+      "angle": "90 Degrees",
+      "dms": "90° 0' 0''",
+      "direction1": "S 5.00 E",
+      "direction2": "E 5.00 N"
+    },
+    "info": "线 × 线 · PANE 边 × PANE 边 · 弧心 = 两线交点",
+    "record": {
+      "count": 1,
+      "corner": [
+        1.9257353239390291,
+        14.704497412607717,
+        23.3262109375
+      ],
+      "origin": [
+        1.9697341421859338,
+        14.201588445351334,
+        23.3262109375
+      ],
+      "target": [
+        2.4286442911954116,
+        14.748496230854622,
+        23.3262109375
+      ],
+      "lineAngle": {
+        "kind": "line-line",
+        "angleDeg": 90.00000000000006,
+        "direction1": [
+          0.0871557129192034,
+          -0.9961947007013967,
+          0
+        ],
+        "direction2": [
+          0.9961947007013966,
+          0.0871557129192043,
+          0
+        ],
+        "skew": false,
+        "inPlane": false,
+        "firstLabel": "PANE 边",
+        "secondLabel": "PANE 边"
+      },
+      "approximate": true
+    },
+    "expectedAngle": 90.00000000000006,
+    "independent": {
+      "edge1": {
+        "at": [
+          2.437844200153287,
+          8.851064154139296,
+          23.3262109375
+        ],
+        "direction": [
+          -0.08715571291920333,
+          0.9961947007013967,
+          0
+        ],
+        "objectId": "o:24381_177305:6"
+      },
+      "edge2": {
+        "at": [
+          2.2402442640244886,
+          14.732013369953517,
+          23.3262109375
+        ],
+        "direction": [
+          0.9961947007013967,
+          0.08715571291920378,
+          0
+        ],
+        "objectId": "o:24381_177305:6"
+      },
+      "gapM": 0,
+      "cornerOffLine1": 5.551115123125783e-16,
+      "cornerOffLine2": 4.0592529337857286e-16,
+      "radiusM": 0.5048299964879326
+    }
+  },
+  "linePlanePierces": {
+    "rows": {
+      "angle": "90 Degrees",
+      "dms": "90° 0' 0''",
+      "direction1": "D",
+      "direction2": "E"
+    },
+    "info": "线 × 面 · SCTN 边 × PANE 面（面） · 弧心 = 线与面的交点",
+    "record": {
+      "count": 1,
+      "corner": [
+        2.894769564692235,
+        14.670779717363567,
+        23.326210937499997
+      ],
+      "origin": [
+        2.894769564692235,
+        14.670779717363567,
+        22.826210937499997
+      ],
+      "target": [
+        3.394769564692235,
+        14.670779717363567,
+        23.326210937499997
+      ],
+      "lineAngle": {
+        "kind": "line-plane",
+        "angleDeg": 90,
+        "direction1": [
+          0,
+          0,
+          -1
+        ],
+        "direction2": [
+          1,
+          0,
+          0
+        ],
+        "skew": false,
+        "inPlane": false,
+        "firstLabel": "SCTN 边",
+        "secondLabel": "PANE 面（面）"
+      },
+      "approximate": true
+    },
+    "expectedAngle": 90,
+    "independent": {
+      "edge": {
+        "at": [
+          2.894769564692235,
+          14.670779717363567,
+          23.180772770689796
+        ],
+        "direction": [
+          0,
+          0,
+          1
+        ],
+        "objectId": "o:24381_177301:0"
+      },
+      "facet": {
+        "at": [
+          2.705691816349625,
+          11.818021530320085,
+          23.326210937499997
+        ],
+        "normal": [
+          0,
+          0,
+          1
+        ],
+        "objectId": "o:24381_177305:6"
+      },
+      "sine": 1,
+      "cornerOffLine": 0,
+      "cornerOffPlane": 0
+    }
+  },
+  "linePlaneInPlane": {
+    "rows": {
+      "angle": "0 Degrees",
+      "dms": "0° 0' 0''",
+      "direction1": "N 5.00 W",
+      "direction2": "N 5.00 W"
+    },
+    "info": "线 × 面 · PANE 边 × PANE 面（面） · 线在面内（0°）",
+    "record": {
+      "count": 1,
+      "corner": [
+        2.4404499511718756,
+        8.821280273437502,
+        23.3262109375
+      ],
+      "origin": [
+        2.431734379879955,
+        8.920899743507642,
+        23.3262109375
+      ],
+      "target": [
+        2.431734379879955,
+        8.920899743507642,
+        23.3262109375
+      ],
+      "lineAngle": {
+        "kind": "line-plane",
+        "angleDeg": 0,
+        "direction1": [
+          -0.0871557129192034,
+          0.9961947007013967,
+          0
+        ],
+        "direction2": [
+          -0.0871557129192034,
+          0.9961947007013967,
+          0
+        ],
+        "skew": false,
+        "inPlane": true,
+        "firstLabel": "PANE 边",
+        "secondLabel": "PANE 面（面）"
+      },
+      "approximate": true
+    },
+    "expectedAngle": 0,
+    "independent": {
+      "edge": {
+        "at": [
+          2.437844200153287,
+          8.851064154139296,
+          23.3262109375
+        ],
+        "direction": [
+          -0.08715571291920333,
+          0.9961947007013967,
+          0
+        ],
+        "objectId": "o:24381_177305:6"
+      },
+      "facet": {
+        "at": [
+          2.70562530432567,
+          11.818012958292625,
+          23.3262109375
+        ],
+        "normal": [
+          0,
+          0,
+          1
+        ],
+        "objectId": "o:24381_177305:6"
+      },
+      "sine": 0,
+      "cornerOffLine": 1.3183898417423734e-16,
+      "cornerOffPlane": 0
+    }
+  },
+  "parallelLinesRejected": {
+    "message": "两条线平行，画不出角度尺寸（E3D：An angular dimension could not be constructed from the data selected）；已回到第 1 步",
+    "statusAfter": "两线夹角 · 第 1/2 步 选择第一条线 (Cursor) Snap : 等待捕捉（网格边 / 面（Graphics））"
+  },
+  "lineParallelToPlaneRejected": {
+    "message": "线与面平行且不在面内，画不出角度尺寸（E3D：An angular dimension could not be constructed from the data selected）；已回到第 1 步",
+    "status": "两线夹角 · 第 1/2 步 选择第一条线 (Cursor) Snap : 等待捕捉（网格边 / 面（Graphics））",
+    "independent": {
+      "edge": {
+        "at": [
+          3.244221809664762,
+          10.70342201262415,
+          23.104554084777828
+        ],
+        "direction": [
+          -0.08715607300560253,
+          0.9961946691978643,
+          0
+        ],
+        "objectId": "o:24381_177301:0"
+      },
+      "facet": {
+        "at": [
+          2.70562530432567,
+          11.818012958292625,
+          23.3262109375
+        ],
+        "normal": [
+          0,
+          0,
+          1
+        ],
+        "objectId": "o:24381_177305:6"
+      },
+      "sine": 0,
+      "offPlaneM": 0.22165685272217317
+    }
+  },
+  "screenshots": [
+    "docs/verification/e3d-measurement-runtime-golden/web-line-angle-live-01-skew-two-edges.png",
+    "docs/verification/e3d-measurement-runtime-golden/web-line-angle-live-01-skew-result-card.png",
+    "docs/verification/e3d-measurement-runtime-golden/web-line-angle-live-03-crossing-two-edges.png",
+    "docs/verification/e3d-measurement-runtime-golden/web-line-angle-live-03-crossing-result-card.png",
+    "docs/verification/e3d-measurement-runtime-golden/web-line-angle-live-07-in-plane-edge-facet.png",
+    "docs/verification/e3d-measurement-runtime-golden/web-line-angle-live-07-in-plane-result-card.png",
+    "docs/verification/e3d-measurement-runtime-golden/web-line-angle-live-09-parallel-edges-rejected.png",
+    "docs/verification/e3d-measurement-runtime-golden/web-line-angle-live-10-edge-parallel-facet-rejected.png",
+    "docs/verification/e3d-measurement-runtime-golden/web-line-angle-live-05-pierces-edge-facet.png",
+    "docs/verification/e3d-measurement-runtime-golden/web-line-angle-live-05-pierces-result-card.png"
+  ],
+  "pageErrors": []
+}
