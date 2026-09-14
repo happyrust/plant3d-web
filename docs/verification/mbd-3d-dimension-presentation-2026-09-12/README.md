@@ -278,6 +278,17 @@
 - 焊缝标记（同 far 相机）：内核 `occluded` **27 → 4**，与干跑的独立结论 **4 / 4 同一批 id**（`all-pipes-weld-subject-probe-24381_146979.json` 的 `after`）；整管 48 条画出记录里遮挡 flag 28 → **5**（4 个焊缝 + 数值站在管背面的 `1032`，后者与上轮同），`all-pipes-occlusion-probe-24381_146979-after.json`。截图 `all-pipes-weld-marks-inspection-after.png`（与上轮 `-inspection.png` 同相机），`all-pipes-weld-marks-crop-3x.png` 是同一处焊缝 3× 放大的 engineering | 修前 inspection | 修后 inspection 三联——修前焊缝环比尺寸线淡一档，修后与 engineering 一样亮；像素统计（PIL，对 engineering 里的红色笔画像素量对背景的对比保留率）：焊缝像素修前中位 0.87 → 修后 0.97，其余红色像素（尺寸线）0.95 → 0.97 不变。
 - 参照管 `24381_145018`（`pw-inspection-b-probe-54.mjs` + `pw-inspection-real-41.mjs`，与上轮 `inspection-real-54` 逐条比）：三相机 4 个标签的内核 flag **逐条相同**（`Copy-of-1RCS002VP` 仍只在 behind 淡），三相机全部记录的遮挡集合 `[900.51]` / `[1834.19, Copy-of-1RCS002VP]` / `[900.51, 173]` **逐条相同**，确定性 3 / 3，pageerror 0——tag 与尺寸的口径没被动到。
 
+**52 条实机抽样在 inspection 下重跑**（用户 2026-09-14 11:0x「按 d-402 的口径可以，把 52 条实机抽样在 inspection 下重跑一遍，量一下焊缝修后整体遮挡 flag 的分布」；`pw-all-pipes-69.mjs` = 上轮脚本多记每条遮挡记录的完整 id 与按记录类别的画出 / 遮挡计数，`--shots=0`，同一份 `browser-sample.json`，10 分钟；`all-pipes-browser-sweep-after.json`）：
+
+| 相机 | 画出 | 遮挡 flag 修前 → 修后（占画出） | 其中焊缝标记 | 其中其它记录 | 修后按类别（遮挡 / 画出） |
+| --- | --- | --- | --- | --- | --- |
+| far | 1010 | **95 → 36**（3.6 %） | **69 → 8** | 26 → 28 | tag 7 / 637 · dim 19 / 270 · weld 8 / 78 · aid_text 2 / 21 · aid 0 / 4 |
+| behind | 1010 | **91 → 30**（3.0 %） | **71 → 8** | 20 → 22 | tag 12 / 634 · dim 10 / 270 · weld 8 / 78 · aid_text 0 / 24 · aid 0 / 4 |
+
+- 52 / 52 加载、两相机两模式全过，**pageerror 0**（上轮 3 条 `RangeError`），确定性 52 / 52，`occluded` 无 `undefined`，α {0.92} / {0.80, 0.92}，inspection 完整布局 p50 3.6 / 5.0 ms、max 36 / 41 ms（与上轮同量级）。
+- 焊缝标记：抽样里 9 条管画出 **78** 个，修前 far 69 / behind 71 个判遮挡（88–91 %），修后各 **8**（10.3 %）。剩下的 8 个逐条看：`24381_146979` 4 / 3 个（上文分析过的那几处：弯头另一腿方向、承插 COUP 套筒）；`24381_145423` far 4 个（`145435 / 145440 / 145447 / 145453`）——独立射线 `pw-weld-subject-probe-69.mjs` 显示挡体都在焊点前 **150–330 mm**，是别的直管 piece、别的焊缝盘、OLET，以及 `145453` 前面整组 FLAN–GASK–FLAN（`145450 / 145451`），不是「一个管半径」那类误判；`24381_146921` behind 1 个（far 的 16 个全亮）。其余 6 条管修后 **0** 个焊缝判遮挡（修前 far / behind：`147955` 5 / 6、`146547` 3 / 3、`147590` 2 / 2、`24383_66977` 1 / 1、`24383_68374` 1 / 1、`24383_75125` 0 / 2）。
+- 其它记录的遮挡集合逐管对比：far **50 / 52**、behind **51 / 52** 与上轮逐条相同。不同的两条都是上轮那一趟本身没跑对：`24381_105520` 上轮 far 抓到的是**默认相机** `[-37.1, 13, 58.5]`（加载 15.4 s、payload 拉了 3 次，fit 还没发生）、behind 屏内标签 0 / 35，这次 fit 后 far 淡了一张连接卡片、behind 画出 41 条淡了两条 `85`；`24381_145565` 上轮加载时就抛 `RangeError`、只装出 2 个对象，这次 3 个对象齐了，skew 文字 `X:422` 正确落在第三个对象后面。tag 类的 flag 是 far 7 / behind 12——都是被点名构件被别的几何挡住的那一档，与 d-386 一致。
+
 | 新增文件 | 说明 |
 | --- | --- |
 | `all-pipes-kernel-sweep-after.json` | 复验内核全跑逐管一行：每视图错误、画出、屏内、两模式耗时、**不裁时两张网格各要多少格**、裁后各自耗时、最大坐标、命中、确定性、SVG NaN |
@@ -285,5 +296,6 @@
 | `all-pipes-occlusion-probe-24381_146979-after.json` | 修后整管 48 条画出记录的内核 flag 与独立射线（原脚本，不知 subject，只作挡体清单） |
 | `all-pipes-load-camera-probe-after.json` | 3 条 `RangeError` 管子修后的加载期复跑：pageerror 0、相机轨迹、最终相机下的独立投影 |
 | `all-pipes-weld-marks-inspection-after.png` / `all-pipes-weld-marks-crop-3x.png` | `24381_146979` far inspection 修后整幅；同一焊缝 3× 三联（engineering / 修前 / 修后） |
+| `all-pipes-browser-sweep-after.json` | 52 条实机抽样修后重跑（`--shots=0`）：上轮字段 + 每视图 `inspection.kinds`（按 tag / dim / weld / text / aid 的画出 / 遮挡数）与 `occludedIds` |
 
 **未做 / 仍留**：极端小管里端点卡片探卡片中心落在构件体内的边界情形（`24381_104746`）未动；「药丸云」观感未动；相机背后记录的二维快照（`primitives`，供 SVG / 命中）仍是把背后顶点直接投影的结果，画家走三维不受影响，命中索引现在只登记屏内部分。
