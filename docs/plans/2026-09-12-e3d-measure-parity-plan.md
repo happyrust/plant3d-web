@@ -41,7 +41,7 @@
 - 结果表（标准）：`Distance`、三个 Offset（World：E/N/U；普通 WRT：U/V/W；GENSEC：非负投影）、`Direction`（罗盘字串，GENSEC 仍按 World）（G1/G3 ✓）。
 - 结果表（Perpendicular）：`Distance / Vertical / Horizontal / Direction`，`wrt` 静默回 `/*`、控件禁用（G4-06 ✓）。
 - 辅助图形：直接线 + 正交分解，Show linear 开启时只有 `int(sum) ≠ int(length)` 才画分解；0.1 mm 抑制（G2-01～03 ✓，决策 d-534）。Perpendicular：直接线 + Vertical / Horizontal 两腿。
-- Keep dimensions：关闭时下一次测量 / 关窗清掉上一次辅助图形；开启时累积（G2-04/05 **未采**）。
+- Keep dimensions：一个窗体一个 aid 号（`aidNumbers.add('Measuring')`）。开启时每次测完 `draw(aidNumber, false)` 累积；关闭时 `replace()` 只剩最新一条，**勾掉那一下就 `clearAids()`**（`keepAids()` 回调，不等下一次测量），关窗 `tidy()` 也只在关闭时清；缺省 false，开关状态在进程会话内随窗体成员记忆（`gphmeasure.pmlfrm` 139–142 / 171 / 224 / 247 / 509，G2-04/05 运行时 **未采**）。
 - Units：Unit type 切 Metric / Imperial 重排 Display Unit 列表，记忆上一次选择（`lastMetricSelection / lastImperialSelection`）；格式 `!!distanceFmt`（2 位小数去尾零，`0mm` 无负零，G1-04 ✓）。
 - 错误：Perpendicular 零距离 `alert.warning('Perpendicular distance is 0')`；无效 WRT 静默回 World（G3-03 ✓）。
 
@@ -72,9 +72,9 @@
 | 1 | 两点距离 + Distance / Offset×3 / Direction | ✓ | `computeDistanceMeasurementResult`，G1 golden；结果 Inspector |
 | 2 | wrt：World / 普通元素 U-V-W / GENSEC / 无效回退 | ✓ | `ReferenceFrameResolver`，G3-01～05；`e3dRotatedWrt.golden.test.ts` |
 | 3 | Show linear + 正交分解闸门 + 0.1 mm 抑制 | ✓ | `worldDistanceAidPlan.ts`，G2-01～03，d-534 |
-| 4 | Keep dimensions 生命周期（关窗 / 切工具 / 重开） | ◐ | `keepMeasurementAnnotation` 有，G2-04/05 未采 |
+| 4 | Keep dimensions 生命周期（关窗 / 切工具 / 重开） | ◐ | **行为已对齐（2026-09-14，Web `3701208`，Phase B 切片 1）**：`distanceKeepDimensions` 原本只在下一次测量落地时隐藏旧图形，现补上 E3D 的另两处时机——勾掉当场收（`keepAids()` → `clearAids()`）、`deactivate()`（关窗 / 切工具）时 Keep 关着才收；都走可见性开关（E3D `aidNumbers.hide()`），记录不删。实机 S1–S4 + 单测状态机全过（golden MD §19）。已知偏离（用户拍板保留 Web 口径，决策 `d-437`）：缺省 true（E3D false）、开关记在 localStorage（E3D 只在进程会话）、Web 独有的 `keepMeasurementAnnotation` 一层、收的范围是整张距离测量列表（E3D 是本窗体 aid 号）。**◐ 只因 G2-04/05 运行时 golden 未采** |
 | 5 | Units：Metric / Imperial + Display Unit + 记忆 | ◐ | 全局 `useUnitSettingsStore`（长度单位 + precision）；无 Imperial 矩阵、无测量会话级覆盖（上一计划 M3 PR3.2 未做） |
-| 6 | Perpendicular to：点→线 / 面 / 点退化、World 帧、零距离告警 | ◐ | `perpendicularDistance.ts` + `perpendicularTargetProvider.ts`，G4 全部 ✓；**目标 provider 只有 P-Point 轴与圆面关键点**，无 GRAPHICS 边 / 面、PLINE、Aid |
+| 6 | Perpendicular to：点→线 / 面 / 点退化、World 帧、零距离告警 | ◐ | `perpendicularDistance.ts` + `perpendicularTargetProvider.ts`，G4 全部 ✓。目标 provider 按 E3D `GMFARC.perpendicularToPoint` 的分支序（`getLine()` → `getPlane()` → 点）接了：P-Point 轴、PLINE 线（实机 ✓，golden MD §17）、Graphics 边（`direction` + `segment`，标签用候选自己的名字）与 Graphics facet 面（`facet-plane`）、圆面关键点、Element 的 P1 → P2 `line()` 操作数（golden MD §16）。**余 Aid**（Q3 未拍板，无 Aid 系统）；Graphics 边 / 面当垂距目标的实机走查未单独采 |
 | 7 | 三点角 Angle / Direction1 / Direction2 / 拒绝 0°·180° | ◐ | `threePointAngle.ts` 内核 + golden（G6-01～03）；UI 用旧 `computeAngleDegrees`，内核**未接线**；无 Direction1/2 行 |
 | 8 | 角度 Unit（Degrees / Radians / Gradians）+ Decimal Places | ✗ | 只有度 + 全局 precision |
 | 9 | 两线夹角（LINEANGLE） | ✗ | 无 EDGE 拾取；G6-04 未采 |
@@ -176,7 +176,11 @@
 
 **范围**：#4 #5 #6（provider 扩展）#20。
 
-- Keep dimensions 生命周期：按 G2-04/05 采到的行为落地（关窗 / 切工具 / 重开各自清什么留什么），vitest 状态机用例。
+- ~~Keep dimensions 生命周期：按 G2-04/05 采到的行为落地（关窗 / 切工具 / 重开各自清什么留什么），vitest 状态机用例。~~
+  **切片 1 ✓（2026-09-14 13:32，Web `3701208`）**：E3D 进程不在跑，改按 `gphmeasure.pmlfrm` 源码定口径（同 Phase A 的 `static_expectation` 走法）——
+  勾掉 Keep 当场 `clearAids()`、关窗 `tidy()` 只在 Keep 关着时清、开着时图形留在视口、重开时开关按会话记忆。Web 补了前两处时机（原本只在下一次测量
+  落地时隐藏旧的），vitest 状态机用例 + 实机 S1–S4 全过，golden MD §19。缺省值与 localStorage 记忆按用户 2026-09-14 拍板保留 Web 口径（已知偏离）。
+  G2-04/05 运行时 golden 仍欠，等 E3D 起来补采（决策 `d-437`）。
 - Units：测量会话级 Unit type（Default / Metric / Imperial）+ Display Unit（mm / cm / m / in / ft-in …）+ 上次选择记忆，优先级高于全局设置（上一计划 M3 PR3.2）；格式矩阵（尾零、英制分数）先采 golden。
 - Perpendicular to 目标 provider 接 Phase A 的 Graphics 边 / 面与 PLINE；面板「点→无限线 / 面」文案沿用。
 - ESC / 右键 / 关窗分层：采 E3D 行为后对齐（当前 Web 的 Esc 分层保留，只调差异）。

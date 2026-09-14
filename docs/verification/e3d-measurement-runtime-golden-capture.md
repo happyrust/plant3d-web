@@ -657,3 +657,42 @@ FITT 0 个，PJOI 60 个不算）；177315 / 177331 / 177346 各有 SNOD + 挂�
 - FITT 档只有单测（本库无 FITT）；FITT 位置走 `section_fitting_placement`（POSL 线上 z = ZDIS + DELP），投到 p-line 后只剩沿轴分量，与 E3D `LINE.near(fitt.position)` 同一结果。
 - E3D `snapLine` 不丢超出 p-line 范围的成员（按无符号距离排、可能把 Snap 给到 p-line 外）；Web 丢——实际没有成员放在 p-line 之外，差别不可达。
 - GENSEC 分支照 E3D 不分段、也没有 cut 端点（§17 残余第二条不变）。
+
+## 19. Phase B · Measure Distance 窗体 Keep dimensions 生命周期（勾掉当场收、关窗按开关收）实机走查（2026-09-14 13:32）
+
+**改动口径**（Web `3701208`；方案 §2 #4 / Phase B 第一条）：E3D 的 Keep dimensions 是窗体上一个 toggle 配一个 aid 号（`gphmeasure.pmlfrm`）：
+- 构造 139–142 `keepAids.val = false`、`keepAidMeasure = false`；150 `aidNumber = !!aidNumbers.add('Measuring')`，**一个窗体一个号**。
+- 每次测完 `setUpForm() → preview()`（509）：`keepAidMeasure` 真 → `dimension.draw(aidNumber, false)` 往同一个号上再画一条（累积）；假 →
+  `!!aidNumbers.replace(aidNumber, dimension)` 换掉（只剩最新一条）。
+- `keepAids()` 回调（247）：**勾掉当场** `clearAids()` = `!!aidNumbers.hide(aidNumber)`——不等下一次测量，而且是 hide 不是删。
+- `close() → tidy()`（194 / 224）：`keepAidMeasure` 假才 `clearAids()`，真则关窗后图形留在视口；close 另把 `Define a linear dimension` /
+  `Define perpendicular linear dimension` 两条 edg 从栈上摘掉。
+- `initialise()`（171）重开时 `keepAids.val = keepAidMeasure`：开关跟着窗体成员在进程会话内记忆。
+
+Web 这一侧 `distanceKeepDimensions`（测量面板「保留已完成尺寸图形（Keep Dimensions）」）原本只在**下一次测量落地**时隐藏旧的（`useXeokitMeasurementTools`
+两处 add 路径），勾掉当场不动、退出测量也不动。本片补两处时机：勾掉（true → false）当场 `hideKeptDistanceDimensions()`；`deactivate()`（= 关窗 / 切工具）
+时 Keep 关着才收。两处都走 `updateXeokitMeasurementVisible(id, false)`，记录留在列表里可以再打开——对应 E3D 的 hide 语义。
+
+**已知偏离**（用户 2026-09-14 13:26 拍板「缺省维持 Web 口径，勾掉只收不删」，决策 `d-437`）：
+- 缺省值不跟 E3D：E3D `keepAids` 构造缺省 false，Web `distanceKeepDimensions` 缺省 true（Web 的测量标注是可管理对象，不是一次性 aid）。
+- 记忆范围不同：E3D 只在窗体成员（进程会话）里记，Web 存 localStorage，跨页面刷新仍记得。
+- `keepMeasurementAnnotation`（第二击要不要落成持久标注）是 Web 独有的一层，E3D 没有对应物——E3D 每次测完都画 aid，Web 的临时结果就是那条 aid。
+- E3D「一个窗体一个 aid 号」在 Web 没有对应作用域：收的是距离测量列表里的全部（与既有「下一次测量隐藏旧的」同一集合），评审导入的测量标注也在内。
+
+**证据等级**：`static_expectation`（`gphmeasure.pmlfrm` 139–142 / 150 / 171 / 194 / 224 / 247 / 509–517 源码阅读，不是运行时观测）；G2-04 / G2-05 运行时
+golden 仍未采（E3D 进程不在跑，采集矩阵 §5 保留）。与 golden 对不上时改 Web、改这里的措辞。
+
+**Web 实机走查**（dev `:3101`，`?model_source=gen-model-v1&gm_backend_port=8024`，未加载模型；两条距离记录直接灌进 store——本条查的是开关时机与作用范围，
+拾取本身 §17 / §18 已走过；临时 spec 已删）：
+- S0：两条记录 `visible` 均为真，Keep 开着。
+- S1：在测量面板真点掉「保留已完成尺寸图形（Keep Dimensions）」→ 两条当场 `visible=false`，记录仍是 2 条（`web-keep-dimensions-live-01-unchecked.png`）。
+- S2：再勾上，收起来的不会自己回来（E3D 的 aid hide 之后要重新画才有）。
+- S3：手动把其中一条放回可见、Keep 开着退出测量 → 仍可见（E3D `tidy()` 不动）。
+- S4：Keep 关着退出测量 → 两条一并收起，记录仍是 2 条。
+- 页面错误 0。
+
+**单测**：`useXeokitMeasurementTools.test.ts`「Keep Dimensions 勾掉当场收起已画尺寸；关窗按 Keep 决定收不收，记录都留着」覆盖 S1–S4 的状态机；既有
+「关闭 Keep Dimensions 后只隐藏旧距离图形，不删除历史记录」覆盖下一次测量时的替换路径。46 用例全绿。
+
+**残余 / 未做**：G2-04 / 05 运行时 golden 未采；Phase B 其余三项未动——#5 Units 会话级单位待 Q4（英制 Inch / Feet & Inches / Feet 做不做）拍板，
+#6 的 Aid 目标 provider 待 Q3，#20 ESC / 右键 / 关窗分层待 `edgstate.pmlobj` 静态口径 + 运行时 trace。
