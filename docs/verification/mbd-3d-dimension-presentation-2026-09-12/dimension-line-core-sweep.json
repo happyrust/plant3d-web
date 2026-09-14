@@ -1,0 +1,369 @@
+{
+ "note": "fable-5-1-26 2026-09-14: solid-core measurement of the red (#c81e1e) 1.2 px dimension lines of BRAN 24383_67485, elbo-mid camera (pw-petags-17.mjs against a detached git worktree served by vite :3103, so no other session's HMR reloads the page), real Chrome, engineering mode. Per cross-section (rows of the near-vertical 630 line, columns of the 500 / 250.01 line) every pixel's coverage is inverted from its green-channel drop against the cross-section background; grey grid / dark text / blue pipe are rejected because their red channel drops together with green. peak = max coverage of a cross-section, core = pixels with coverage >= 0.98, ink = sum of coverage corrected for slant = effective width in device px. Script: dimline-pixels-26.py (copy under %TEMP%/plant3d-mbd-debug).",
+ "frame": "24383_67485-elbo-mid-engineering.png",
+ "variants": {
+  "before": {
+   "description": "HEAD 1f44f0c: dimension strokes at the nominal 1.2 CSS px, not hinted",
+   "dpr": {
+    "1x": {
+     "vertical-630": {
+      "sections": 185,
+      "peak_mean": 0.847,
+      "peak_min": 0.603,
+      "core_share": 0.254,
+      "core_mean": 0.254,
+      "ink_mean": 1.223,
+      "slant_deg": -1.412,
+      "hist": [
+       297,
+       39,
+       42,
+       34,
+       37,
+       33,
+       36,
+       34,
+       38,
+       78
+      ],
+      "box": [
+       672,
+       385,
+       698,
+       570
+      ],
+      "orient": "v"
+     },
+     "top-500": {
+      "sections": 161,
+      "peak_mean": 0.828,
+      "peak_min": 0.3,
+      "core_share": 0.248,
+      "core_mean": 0.248,
+      "ink_mean": 1.432,
+      "slant_deg": -11.035,
+      "hist": [
+       772,
+       222,
+       25,
+       31,
+       31,
+       25,
+       26,
+       27,
+       31,
+       71
+      ],
+      "box": [
+       100,
+       395,
+       280,
+       465
+      ],
+      "orient": "h"
+     }
+    },
+    "2x": {
+     "vertical-630": {
+      "sections": 370,
+      "peak_mean": 1.0,
+      "peak_min": 1.0,
+      "core_share": 1.0,
+      "core_mean": 1.446,
+      "ink_mean": 2.425,
+      "slant_deg": -1.419,
+      "hist": [
+       623,
+       74,
+       75,
+       73,
+       77,
+       74,
+       72,
+       74,
+       70,
+       596
+      ],
+      "box": [
+       1344,
+       770,
+       1396,
+       1140
+      ],
+      "orient": "v"
+     },
+     "top-500": {
+      "sections": 313,
+      "peak_mean": 0.974,
+      "peak_min": 0.321,
+      "core_share": 0.952,
+      "core_mean": 1.406,
+      "ink_mean": 2.635,
+      "slant_deg": -11.446,
+      "hist": [
+       1643,
+       499,
+       58,
+       57,
+       59,
+       48,
+       55,
+       53,
+       67,
+       504
+      ],
+      "box": [
+       200,
+       790,
+       560,
+       930
+      ],
+      "orient": "h"
+     }
+    }
+   }
+  },
+  "hinted-min1": {
+   "description": "hinted to whole device px with a floor of 1 device px (measured, rejected)",
+   "dpr": {
+    "1x": {
+     "vertical-630": {
+      "sections": 185,
+      "peak_mean": 0.758,
+      "peak_min": 0.505,
+      "core_share": 0.038,
+      "core_mean": 0.038,
+      "ink_mean": 1.025,
+      "slant_deg": -1.408,
+      "hist": [
+       301,
+       38,
+       38,
+       36,
+       34,
+       34,
+       38,
+       35,
+       39,
+       40
+      ],
+      "box": [
+       672,
+       385,
+       698,
+       570
+      ],
+      "orient": "v"
+     },
+     "top-500": {
+      "sections": 154,
+      "peak_mean": 0.759,
+      "peak_min": 0.304,
+      "core_share": 0.039,
+      "core_mean": 0.039,
+      "ink_mean": 1.232,
+      "slant_deg": -11.055,
+      "hist": [
+       656,
+       189,
+       26,
+       30,
+       28,
+       26,
+       29,
+       23,
+       37,
+       37
+      ],
+      "box": [
+       100,
+       395,
+       280,
+       465
+      ],
+      "orient": "h"
+     }
+    },
+    "2x": {
+     "vertical-630": {
+      "sections": 370,
+      "peak_mean": 1.0,
+      "peak_min": 1.0,
+      "core_share": 1.0,
+      "core_mean": 1.038,
+      "ink_mean": 2.025,
+      "slant_deg": -1.417,
+      "hist": [
+       630,
+       74,
+       79,
+       71,
+       72,
+       73,
+       70,
+       79,
+       76,
+       443
+      ],
+      "box": [
+       1344,
+       770,
+       1396,
+       1140
+      ],
+      "orient": "v"
+     },
+     "top-500": {
+      "sections": 321,
+      "peak_mean": 0.959,
+      "peak_min": 0.304,
+      "core_share": 0.928,
+      "core_mean": 0.991,
+      "ink_mean": 2.282,
+      "slant_deg": -11.422,
+      "hist": [
+       1678,
+       643,
+       54,
+       57,
+       59,
+       54,
+       50,
+       52,
+       68,
+       379
+      ],
+      "box": [
+       200,
+       790,
+       560,
+       930
+      ],
+      "orient": "h"
+     }
+    }
+   }
+  },
+  "hinted-min2": {
+   "description": "hinted to whole device px with a floor of 2 device px (adopted)",
+   "dpr": {
+    "1x": {
+     "vertical-630": {
+      "sections": 185,
+      "peak_mean": 1.0,
+      "peak_min": 1.0,
+      "core_share": 1.0,
+      "core_mean": 1.027,
+      "ink_mean": 2.022,
+      "slant_deg": -1.417,
+      "hist": [
+       289,
+       34,
+       38,
+       37,
+       40,
+       40,
+       39,
+       36,
+       37,
+       219
+      ],
+      "box": [
+       672,
+       385,
+       698,
+       570
+      ],
+      "orient": "v"
+     },
+     "top-500": {
+      "sections": 156,
+      "peak_mean": 0.975,
+      "peak_min": 0.304,
+      "core_share": 0.962,
+      "core_mean": 1.019,
+      "ink_mean": 2.062,
+      "slant_deg": -11.719,
+      "hist": [
+       580,
+       130,
+       27,
+       29,
+       27,
+       26,
+       23,
+       27,
+       34,
+       191
+      ],
+      "box": [
+       100,
+       395,
+       280,
+       465
+      ],
+      "orient": "h"
+     }
+    },
+    "2x": {
+     "vertical-630": {
+      "sections": 370,
+      "peak_mean": 1.0,
+      "peak_min": 1.0,
+      "core_share": 1.0,
+      "core_mean": 1.038,
+      "ink_mean": 2.025,
+      "slant_deg": -1.417,
+      "hist": [
+       630,
+       74,
+       79,
+       71,
+       72,
+       73,
+       70,
+       79,
+       76,
+       443
+      ],
+      "box": [
+       1344,
+       770,
+       1396,
+       1140
+      ],
+      "orient": "v"
+     },
+     "top-500": {
+      "sections": 321,
+      "peak_mean": 0.959,
+      "peak_min": 0.304,
+      "core_share": 0.928,
+      "core_mean": 0.991,
+      "ink_mean": 2.282,
+      "slant_deg": -11.422,
+      "hist": [
+       1678,
+       643,
+       54,
+       57,
+       59,
+       54,
+       50,
+       52,
+       68,
+       379
+      ],
+      "box": [
+       200,
+       790,
+       560,
+       930
+      ],
+      "orient": "h"
+     }
+    }
+   }
+  }
+ }
+}

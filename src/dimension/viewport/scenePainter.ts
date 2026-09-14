@@ -71,10 +71,26 @@ const STROKE_CORE_COVERAGE = 0.999;
 const MIN_TEXT_STROKE_DEVICE_PX = 2;
 
 /**
- * Two ends of a glyph stroke closer than this (device px) along an axis
- * count as an axis-aligned stem. LFF stems are exactly axis-aligned; the
- * tolerance only absorbs float error, so no slanted stroke is pulled
- * straight.
+ * Dimension strokes — dimension, extension and leader lines and the
+ * markers, everything drawn at `theme.dimensionStrokeWidthPx` — are hinted
+ * the same way, with the same floor: a stroke needs two device pixels for
+ * a one-pixel solid core (w − feather ≥ 1). Measured on the real pipeline
+ * (2026-09-14, BRAN 24383_67485, red 1.2 px dimension lines): at 1× the
+ * nominal 1.2 px has a 0.2 px core — one cross-section in four owns a
+ * fully covered pixel, peak coverage 0.85 — and rounding it down to one
+ * device pixel loses even that (4 %, peak 0.76, visibly fainter); two
+ * device pixels give every cross-section a solid pixel (peak 1.0). The
+ * price is that on a 1× display a dimension line is as heavy as the text
+ * stroke; from 1.5× up text stays heavier (2 vs 3 device px at 1.5×, 2 vs 4
+ * at 2×, where 2.4 rounds down to 2 and keeps its core).
+ */
+const MIN_LINE_STROKE_DEVICE_PX = 2;
+
+/**
+ * Two ends of a stroke closer than this (device px) along an axis count as
+ * an axis-aligned stem. LFF stems are exactly axis-aligned, and so is a
+ * dimension line in an axis-aligned (plan / elevation) view; the tolerance
+ * only absorbs float error, so no slanted stroke is pulled straight.
  */
 const STEM_AXIS_TOLERANCE_DEVICE_PX = 0.01;
 
@@ -99,13 +115,14 @@ vec4 projectSceneVertex(vec3 anchor, vec2 offsetPx) {
  * rasteriser's perspective-correct interpolation comes out linear in
  * screen space for 3D (framed) text whose two ends sit at different depths.
  *
- * Screen-space glyph strokes (\`pixelSnap\` = 1) are hinted: an axis-aligned
- * stem has both ends moved to the same device-pixel-aligned coordinate —
- * whole pixel for an even stroke width, half pixel for an odd one — so its
- * edges land on pixel boundaries and the feather ramp has nothing to blur
- * (ADR 0064). Both ends of a segment go through the same computation, so
- * the four quad vertices agree; slanted strokes are left alone and their
- * round caps cover the sub-pixel step at a joint with a snapped stem.
+ * Hinted strokes (\`pixelSnap\` = 1: screen-space glyph strokes and the
+ * dimension strokes) have an axis-aligned stem's both ends moved to the
+ * same device-pixel-aligned coordinate — whole pixel for an even stroke
+ * width, half pixel for an odd one — so its edges land on pixel boundaries
+ * and the feather ramp has nothing to blur (ADR 0064). Both ends of a
+ * segment go through the same computation, so the four quad vertices
+ * agree; slanted strokes are left alone and their round caps cover the
+ * sub-pixel step at a joint with a snapped stem.
  */
 const STROKE_VERTEX_SHADER = `
 uniform vec2 uViewportCssPx;
@@ -480,18 +497,36 @@ function strokeWidthPx(theme: DimensionTheme, stroke: SegmentStroke | undefined)
 }
 
 /**
- * Stroke width of hinted (screen-space) text: the theme's CSS width taken
- * to the nearest whole number of device pixels, at least
- * `MIN_TEXT_STROKE_DEVICE_PX`, expressed back in CSS px. 1.8 px is 2 device
- * px on a 1× display and 4 on a 2× one, so a snapped stem covers whole
- * pixels and its feathered edge never straddles two.
+ * A hinted stroke width: the theme's CSS width taken to the nearest whole
+ * number of device pixels, at least `minDevicePx`, expressed back in CSS
+ * px — so a snapped stem covers whole pixels and its feathered edge never
+ * straddles two.
+ */
+function hintedStrokeWidthPx(
+  widthCssPx: number,
+  pixelRatio: number,
+  minDevicePx: number,
+): number {
+  const devicePx = Math.max(minDevicePx, Math.round(widthCssPx * pixelRatio));
+  return devicePx / pixelRatio;
+}
+
+/**
+ * Stroke width of hinted (screen-space) text, never below
+ * `MIN_TEXT_STROKE_DEVICE_PX`: 1.8 px is 2 device px on a 1× display and 4
+ * on a 2× one (ADR 0064).
  */
 export function hintedTextStrokeWidthPx(widthCssPx: number, pixelRatio: number): number {
-  const devicePx = Math.max(
-    MIN_TEXT_STROKE_DEVICE_PX,
-    Math.round(widthCssPx * pixelRatio),
-  );
-  return devicePx / pixelRatio;
+  return hintedStrokeWidthPx(widthCssPx, pixelRatio, MIN_TEXT_STROKE_DEVICE_PX);
+}
+
+/**
+ * Stroke width of a hinted dimension stroke, never below
+ * `MIN_LINE_STROKE_DEVICE_PX`: 1.2 px is 2 device px on a 1× display (the
+ * floor), 2 on a 2× one (1 CSS px) and 2 (1.6 CSS px) at 1.25× (2026-09-14).
+ */
+export function hintedLineStrokeWidthPx(widthCssPx: number, pixelRatio: number): number {
+  return hintedStrokeWidthPx(widthCssPx, pixelRatio, MIN_LINE_STROKE_DEVICE_PX);
 }
 
 function offsetVertex(vertex: SceneVertex, offset: Vec2): SceneVertex {
@@ -516,15 +551,27 @@ function dashCode(
   return 1;
 }
 
+/**
+ * Which device-pixel hinting a stroke gets (ADR 0064): screen-space glyph
+ * strokes as `text`, dimension strokes as `line` (both whole device pixels,
+ * at least two, from their own theme widths); undefined strokes — framed 3D
+ * text and the tag tones — keep the theme width and are not snapped.
+ */
+type StrokeHint = 'text' | 'line';
+
 type SegmentVisitor = (
   from: SceneVertex,
   to: SceneVertex,
   styleRole: string,
   lineStyle?: DimensionLineStyle,
   stroke?: SegmentStroke,
-  /** Screen-space glyph stroke: hinted to the device pixel grid (ADR 0064). */
-  hinted?: boolean,
+  hint?: StrokeHint,
 ) => void;
+
+/** Dimension strokes (no tag tone) are hinted; tag borders and leaders keep their own widths. */
+function lineHint(tone: SceneTone | undefined): StrokeHint | undefined {
+  return tone === undefined ? 'line' : undefined;
+}
 
 function visitPrimitiveSegments(
   primitive: ScenePrimitive,
@@ -540,6 +587,7 @@ function visitPrimitiveSegments(
         primitive.styleRole,
         primitive.lineStyle,
         primitive.tone,
+        lineHint(primitive.tone),
       );
       return;
     case 'scene-path':
@@ -550,6 +598,7 @@ function visitPrimitiveSegments(
           primitive.styleRole,
           primitive.lineStyle,
           primitive.tone,
+          lineHint(primitive.tone),
         );
       }
       if (primitive.closed && primitive.points.length > 2) {
@@ -559,6 +608,7 @@ function visitPrimitiveSegments(
           primitive.styleRole,
           primitive.lineStyle,
           primitive.tone,
+          lineHint(primitive.tone),
         );
       }
       return;
@@ -569,12 +619,16 @@ function visitPrimitiveSegments(
           offsetVertex(primitive.at, [primitive.radiusPx, primitive.radiusPx]),
           primitive.styleRole,
           primitive.lineStyle,
+          undefined,
+          'line',
         );
         visit(
           offsetVertex(primitive.at, [-primitive.radiusPx, primitive.radiusPx]),
           offsetVertex(primitive.at, [primitive.radiusPx, -primitive.radiusPx]),
           primitive.styleRole,
           primitive.lineStyle,
+          undefined,
+          'line',
         );
         return;
       }
@@ -592,6 +646,8 @@ function visitPrimitiveSegments(
           ]),
           primitive.styleRole,
           primitive.lineStyle,
+          undefined,
+          'line',
         );
       }
       return;
@@ -640,7 +696,7 @@ function visitPrimitiveSegments(
           primitive.styleRole,
           'solid',
           primitive.tone ?? 'text',
-          true,
+          'text',
         );
       }
       return;
@@ -823,7 +879,8 @@ type DimensionVertexRange = Readonly<{
  * post-processing included — straight into the sRGB canvas
  * (`DimensionViewport.renderOverlay`, ADR 0064): colours are written
  * sRGB-encoded and never tone-mapped, edges blend in sRGB, no FXAA touches
- * the strokes, and screen-space text is hinted to the device pixel grid.
+ * the strokes, and screen-space text and the dimension strokes are hinted
+ * to the device pixel grid.
  */
 export class ThreeSceneDimensionPainter {
   readonly group = new Group();
@@ -915,9 +972,9 @@ export class ThreeSceneDimensionPainter {
   /**
    * Viewport size in CSS px and the device pixel ratio: the stroke edge
    * ramp is one device pixel wide, so it stays crisp on a 2× display
-   * instead of softening to two device pixels, and screen-space text is
-   * hinted to that display's pixel grid (the caller repaints on a DPR
-   * change — `DimensionViewport` invalidates `dpr`).
+   * instead of softening to two device pixels, and screen-space text and
+   * dimension strokes are hinted to that display's pixel grid (the caller
+   * repaints on a DPR change — `DimensionViewport` invalidates `dpr`).
    */
   resize(widthCssPx: number, heightCssPx: number, pixelRatio = 1): void {
     if (
@@ -1011,15 +1068,19 @@ export class ThreeSceneDimensionPainter {
         [layout],
         this.font,
         this.glyphCaches,
-        (from, to, styleRole, lineStyle, stroke, hinted) => {
+        (from, to, styleRole, lineStyle, stroke, hint) => {
           const code = dashCode(styleRole, lineStyle);
           const color = resolveColor(styleRole, stroke);
-          // Screen-space text is hinted: whole device pixels wide, stems
-          // snapped to the grid in the vertex shader (ADR 0064).
-          const snap = hinted ? 1 : 0;
-          const widthPx = hinted
-            ? hintedTextStrokeWidthPx(strokeWidthPx(theme, stroke), pixelRatio)
-            : strokeWidthPx(theme, stroke);
+          // Screen-space text and dimension strokes are hinted: whole device
+          // pixels wide, axis-aligned stems snapped to the grid in the vertex
+          // shader (ADR 0064).
+          const snap = hint ? 1 : 0;
+          const nominalWidthPx = strokeWidthPx(theme, stroke);
+          const widthPx = hint === 'text'
+            ? hintedTextStrokeWidthPx(nominalWidthPx, pixelRatio)
+            : hint === 'line'
+              ? hintedLineStrokeWidthPx(nominalWidthPx, pixelRatio)
+              : nominalWidthPx;
           // The 3D-text halo sits on the farther depth layer so the glyph
           // strokes drawn over it pass the depth test.
           const layer = stroke === 'halo-3d' ? 1 : 0;

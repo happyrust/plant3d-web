@@ -12,6 +12,7 @@ import { createTestFont } from '../kernel/testUtils';
 import { SOLVESPACE_DIMENSION_THEME } from '../kernel/theme';
 
 import {
+  hintedLineStrokeWidthPx,
   hintedTextStrokeWidthPx,
   srgbComponents,
   ThreeSceneDimensionPainter,
@@ -169,9 +170,10 @@ describe('ThreeSceneDimensionPainter', () => {
       .toEqual([0, 0, 0, 0, 0, -20, 0, -20]);
     expect(Array.from(geometry.getAttribute('side').array.slice(0, 4)))
       .toEqual([-1, 1, 1, -1]);
+    // The dimension line is hinted to whole device pixels, at least two: 1.2 px is 2 on a 1× display.
     expect(Array.from(
       geometry.getAttribute('strokeWidthPx').array.slice(0, 4),
-    )).toEqual(Array(4).fill(Math.fround(1.2)));
+    )).toEqual(Array(4).fill(2));
     expect(geometry.index).not.toBeNull();
 
     const material = (lines as any).material as ShaderMaterial;
@@ -324,7 +326,21 @@ describe('ThreeSceneDimensionPainter', () => {
     expect(hintedTextStrokeWidthPx(0.5, 2)).toBe(1);
   });
 
-  it('does not hint dimension lines, markers or leaders', () => {
+  it('hints dimension stroke widths to whole device pixels, never below two', () => {
+    // 1.2 px: two device pixels on a 1× display (the floor — one would have
+    // no solid core), two on a 2× one (= 1 CSS px), two at 1.25× (1.6 CSS
+    // px) and 1.5× (1.33 CSS px), four at 3×.
+    expect(hintedLineStrokeWidthPx(1.2, 1)).toBe(2);
+    expect(hintedLineStrokeWidthPx(1.2, 2)).toBe(1);
+    expect(hintedLineStrokeWidthPx(1.2, 1.25)).toBe(1.6);
+    expect(hintedLineStrokeWidthPx(1.2, 1.5)).toBeCloseTo(4 / 3, 10);
+    expect(hintedLineStrokeWidthPx(1.2, 3)).toBeCloseTo(4 / 3, 10);
+    // Heavier lines round to the nearest whole pixel like text does.
+    expect(hintedLineStrokeWidthPx(2.6, 1)).toBe(3);
+    expect(hintedLineStrokeWidthPx(0.3, 2)).toBe(1);
+  });
+
+  it('hints dimension lines, leaders and markers like text, but not tag strokes', () => {
     const parent = new Group();
     const painter = new ThreeSceneDimensionPainter(parent, createTestFont());
     painter.resize(800, 600, 1.5);
@@ -333,13 +349,37 @@ describe('ThreeSceneDimensionPainter', () => {
     const vertexCount = painter.getStats().lineVertexCount;
     const snaps = Array.from(lines.geometry.getAttribute('pixelSnap').array.slice(0, vertexCount)) as number[];
     const widths = Array.from(lines.geometry.getAttribute('strokeWidthPx').array.slice(0, vertexCount)) as number[];
-    // The first quad is the dimension line: theme width as is, no snapping.
-    expect(snaps.slice(0, 4)).toEqual([0, 0, 0, 0]);
-    expect(widths.slice(0, 4)).toEqual(Array(4).fill(Math.fround(1.2)));
-    // The glyph run 'A' (two strokes) is the only hinted geometry.
-    expect(snaps.filter(snap => snap === 1)).toHaveLength(2 * 4);
-    expect(widths.filter((width, index) => snaps[index] === 1 && width === Math.fround(2)))
-      .toHaveLength(2 * 4);
+    // Every stroke of the fixture — dimension line, leader path, glyph run
+    // 'A', cross marker — is hinted: 1 dimension + 2 leader + 2 glyph + 2
+    // marker segments.
+    expect(vertexCount).toBe(7 * 4);
+    expect(snaps.every(snap => snap === 1)).toBe(true);
+    // The first quad is the dimension line: 1.2 px is 2 device px at 1.5×,
+    // 1.33 CSS px; the leader path and the marker share that width …
+    expect(widths.slice(0, 4).every(width => width === Math.fround(4 / 3))).toBe(true);
+    expect(widths.filter(width => width === Math.fround(4 / 3))).toHaveLength(5 * 4);
+    // … the glyph run 'A' (two strokes) keeps the text hint: 1.8 px → 3 device px = 2 CSS px.
+    expect(widths.filter(width => width === Math.fround(2))).toHaveLength(2 * 4);
+
+    // A tag border (tone `tag-border`) keeps the theme width and is not snapped.
+    painter.paint([layout('tag', [{
+      kind: 'scene-path',
+      points: [
+        { anchor: [0, 0, 0], offsetPx: [0, 0] },
+        { anchor: [0, 0, 0], offsetPx: [40, 0] },
+        { anchor: [0, 0, 0], offsetPx: [40, 12] },
+      ],
+      closed: true,
+      part: 'tag',
+      styleRole: 'normal',
+      tone: 'tag-border',
+    }])], SOLVESPACE_DIMENSION_THEME);
+    const tagCount = painter.getStats().lineVertexCount;
+    expect(tagCount).toBe(3 * 4);
+    const tagSnaps = Array.from(lines.geometry.getAttribute('pixelSnap').array.slice(0, tagCount)) as number[];
+    const tagWidths = Array.from(lines.geometry.getAttribute('strokeWidthPx').array.slice(0, tagCount)) as number[];
+    expect(tagSnaps.every(snap => snap === 0)).toBe(true);
+    expect(tagWidths.every(width => width === Math.fround(SOLVESPACE_DIMENSION_THEME.tag.borderWidthPx))).toBe(true);
   });
 
   it('updates only interaction style attributes when topology is unchanged', () => {

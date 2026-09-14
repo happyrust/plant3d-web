@@ -46,8 +46,12 @@ export type DimensionTheme = Readonly<{
    * (CAD practice); 1.8 px keeps 10–13 px LFF glyphs legible once their
    * edges are feathered (user's call, 2026-09-14). On screen the painter
    * hints screen-space text to whole device pixels — 2 on a 1× display, 4
-   * on a 2× one — never below 2 (ADR 0064); hit regions and SVG use the
-   * nominal width.
+   * on a 2× one — never below 2 (ADR 0064), and the dimension strokes
+   * (dimension / extension / leader lines, markers) the same way from
+   * 1.2 px: 2 device px on a 1× display (the floor — a thinner feathered
+   * stroke has no solid core, so at 1× lines and text weigh the same),
+   * 2 on a 2× one (2026-09-14 21:xx). Hit regions and SVG use the nominal
+   * widths.
    */
   textStrokeWidthPx: number;
   dimensionStrokeWidthPx: number;
