@@ -22,6 +22,7 @@ import {
 } from '@/measurement/units/measurementUnits';
 import { formatPdmsRef } from '@/utils/pdmsRefno';
 import {
+  buildAngleMeasurementResultRows,
   buildDistanceMeasurementResultRows,
   buildPerpendicularMeasurementResultRows,
   computeDistanceMeasurementResultInFrame,
@@ -37,6 +38,29 @@ const measurementStyle = useXeokitMeasurementStyleStore();
 const referenceFrame = useMeasurementReferenceFrameStore();
 
 const result = computed(() => store.measurementDraftResult.value);
+
+/**
+ * E3D 的 Measure Angle 是另一张窗体（`gphAngleMeasure`），结果表三行 Angle /
+ * Direction1 / Direction2，测完一次就停在最后那一条上等下一次。Web 这边角度没有
+ * 「草稿结果」这一层，第三击直接落成记录，所以角度模式下取最新那条记录来显示。
+ */
+const isAngleMode = computed(() => store.toolMode.value === 'xeokit_measure_angle');
+const latestAngleMeasurement = computed(() => {
+  if (!isAngleMode.value) return null;
+  const list = store.xeokitAngleMeasurements.value;
+  if (list.length === 0) return null;
+  return list.reduce((latest, item) => (item.createdAt >= latest.createdAt ? item : latest));
+});
+const angleRows = computed(() => {
+  const record = latestAngleMeasurement.value;
+  if (!record) return [];
+  return buildAngleMeasurementResultRows(
+    record.corner,
+    record.origin,
+    record.target,
+    referenceFrame.resolvedFrame.value,
+  );
+});
 const interpretedResult = computed(() => {
   if (!result.value) return null;
   return computeDistanceMeasurementResultInFrame(
@@ -141,6 +165,18 @@ function pointText(point: MeasurementPoint): string {
 
 const originText = computed(() => (result.value ? pointText(result.value.origin) : ''));
 const targetText = computed(() => (result.value ? pointText(result.value.target) : ''));
+const angleRootText = computed(() => {
+  const record = latestAngleMeasurement.value;
+  return record ? pointText(record.corner) : '';
+});
+const angleFirstText = computed(() => {
+  const record = latestAngleMeasurement.value;
+  return record ? pointText(record.origin) : '';
+});
+const angleSecondText = computed(() => {
+  const record = latestAngleMeasurement.value;
+  return record ? pointText(record.target) : '';
+});
 const persisted = computed(() => Boolean(result.value?.persistedMeasurementId));
 
 onMounted(() => {
@@ -159,7 +195,8 @@ onMounted(() => {
       </div>
     </div>
 
-    <div data-testid="measurement-units-controls"
+    <div v-if="!isAngleMode"
+      data-testid="measurement-units-controls"
       class="mt-2 rounded-md border border-border bg-muted/20 p-2">
       <div class="flex flex-wrap items-center gap-2">
         <label class="text-xs text-muted-foreground" for="measurement-unit-system">
@@ -254,7 +291,33 @@ onMounted(() => {
       </div>
     </div>
 
-    <div v-if="!result" class="mt-2 text-xs text-muted-foreground">
+    <template v-if="isAngleMode">
+      <div v-if="angleRows.length === 0" class="mt-2 text-xs text-muted-foreground">
+        完成一次三点角度测量后在此显示 Angle / Direction1 / Direction2。
+      </div>
+      <dl v-else data-testid="measurement-angle-result" class="mt-2 flex flex-col gap-1 text-xs">
+        <div v-for="row in angleRows"
+          :key="row.key"
+          :data-testid="rowTestId(row.key)"
+          class="flex items-start gap-2"
+          :class="row.key === 'angle' ? 'text-sm font-semibold' : ''">
+          <dt class="w-24 shrink-0 text-muted-foreground">{{ row.label }}</dt>
+          <dd class="tabular-nums">
+            {{ row.valueText }}
+            <span v-if="row.key === 'angle' && latestAngleMeasurement?.approximate"
+              class="ml-1 text-xs font-normal text-muted-foreground">近似</span>
+          </dd>
+        </div>
+        <div class="flex items-start gap-2">
+          <dt class="w-24 shrink-0 text-muted-foreground">顶点 → 两臂</dt>
+          <dd data-testid="measurement-angle-points" class="min-w-0 break-all">
+            {{ angleRootText }} → {{ angleFirstText }} / {{ angleSecondText }}
+          </dd>
+        </div>
+      </dl>
+    </template>
+
+    <div v-else-if="!result" class="mt-2 text-xs text-muted-foreground">
       完成一次测量后在此显示 距离 / Offset / 起终点。
     </div>
 

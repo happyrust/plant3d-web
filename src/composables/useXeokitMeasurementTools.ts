@@ -112,6 +112,7 @@ import {
   type PickGeometry,
   type PickVec3,
 } from '@/measurement/kernel/pickDerivation';
+import { buildThreePointAngle } from '@/measurement/kernel/threePointAngle';
 import {
   formatMeasurementPrompt,
   measurementPickFilterAdmits,
@@ -3333,6 +3334,26 @@ export function useXeokitMeasurementTools(options: {
     }
 
     const target = measurementPointFromHit(hit);
+    // E3D：三点共线（0° / 180°）或有重合点时 `POSITION.plane()` 报 (2,886) / (2,892)、
+    // `radius3PointsNoError` 回未设 ARC，窗体走
+    // `alert.error('An angular dimension could not be constructed from the data selected')`
+    // 并回到第 1 步（golden G6-03）。Web 这边同样不落记录、把草稿丢掉重新取顶点。
+    const built = buildThreePointAngle(
+      toDesignPoint(draft.corner, options.sceneWorldToDesignMetres),
+      toDesignPoint(draft.origin, options.sceneWorldToDesignMetres),
+      toDesignPoint(target, options.sceneWorldToDesignMetres),
+    );
+    if (!built.ok) {
+      pickPointMessage.value = built.reason === 'coincident-point'
+        ? '三点里有重合点，画不出角度尺寸（E3D：An angular dimension could not be constructed from the data selected）；已回到第 1 步'
+        : '三点共线（0° / 180°），画不出角度尺寸（E3D：An angular dimension could not be constructed from the data selected）；已回到第 1 步';
+      store.clearCurrentXeokitDraft();
+      clearHoverFeedback();
+      syncFromStore();
+      requestRender?.();
+      return;
+    }
+    pickPointMessage.value = null;
     const rec: XeokitAngleMeasurementRecord = {
       id: draft.id,
       kind: 'angle',

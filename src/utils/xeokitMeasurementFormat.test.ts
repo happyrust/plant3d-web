@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  buildAngleMeasurementResultRows,
   buildDistanceMeasurementResultRows,
   buildMeasurementComponentsText,
   buildMeasurementValueText,
@@ -37,6 +38,32 @@ function frame(
       basis: {
         policy: 'orthonormalize',
         action: 'accepted',
+        rawNorms: [1, 1, 1],
+        maxOrthogonalityError: 0,
+        rawHandedness: 1,
+        tolerance: 1e-6,
+      },
+    },
+  };
+}
+
+function worldFrame(): ResolvedReferenceFrame {
+  return {
+    kind: 'world',
+    refno: null,
+    origin: [0, 0, 0],
+    basis: { u: [1, 0, 0], v: [0, 1, 0], w: [0, 0, 1] },
+    axisLabels: ['X', 'Y', 'Z'],
+    provenance: {
+      resolution: 'world',
+      selector: { kind: 'world' },
+      currentElementRefno: null,
+      resolvedRefno: null,
+      resolvedOwnerRefno: null,
+      element: null,
+      basis: {
+        policy: 'orthonormalize',
+        action: 'identity',
         rawNorms: [1, 1, 1],
         maxOrthogonalityError: 0,
         rawHandedness: 1,
@@ -365,7 +392,8 @@ describe('xeokitMeasurementFormat', () => {
       visible: true,
       approximate: false,
       createdAt: 1,
-    }, 'mm', 0)).toBe('90.0°');
+      // E3D Measure Angle 的 Decimal Places 缺省是 2。
+    }, 'mm', 0)).toBe('90.00°');
 
     expect(buildMeasurementValueText({
       id: 'e1',
@@ -413,5 +441,73 @@ describe('xeokitMeasurementFormat', () => {
       approximate: false,
       createdAt: 1,
     }, 'mm', 0)).toBeNull();
+  });
+});
+
+describe('buildAngleMeasurementResultRows · E3D Measure Angle 结果表（golden G6-01 / 02 / 03）', () => {
+  const point = (designWorldPos: [number, number, number]) => ({
+    entityId: 'p',
+    worldPos: [0, 0, 0] as [number, number, number],
+    designWorldPos,
+  });
+  // root / first / second：E3D 的三点顺序，Web 草稿里是 corner / origin / target。
+  const ROOT = point([10, 10, 15]);
+  const FIRST = point([12, 10, 15]);
+  const SECOND_NORTH = point([10, 12, 15]);
+
+  it('三行 Angle / Direction1 / Direction2，角度按 E3D 缺省两位小数', () => {
+    expect(buildAngleMeasurementResultRows(ROOT, FIRST, SECOND_NORTH, worldFrame())).toEqual([
+      { key: 'angle', label: 'Angle', valueText: '90.00°' },
+      { key: 'direction1', label: 'Direction1', valueText: 'X +1.0000 · Y +0.0000 · Z +0.0000' },
+      { key: 'direction2', label: 'Direction2', valueText: 'X +0.0000 · Y +1.0000 · Z +0.0000' },
+    ]);
+  });
+
+  it('两条臂的方向随 wrt 帧换分量与轴标签，角度本身不变', () => {
+    const rows = buildAngleMeasurementResultRows(ROOT, FIRST, SECOND_NORTH, frame());
+    expect(rows[0]).toEqual({ key: 'angle', label: 'Angle', valueText: '90.00°' });
+    // 帧基 u=[0,1,0] v=[-1,0,0] w=[0,0,1]：root→first 的世界 +X 在帧里是 -V。
+    expect(rows[1]!.valueText).toBe('U +0.0000 · V -1.0000 · W +0.0000');
+    expect(rows[2]!.valueText).toBe('U +1.0000 · V +0.0000 · W +0.0000');
+  });
+
+  it('小数位可调（Phase C #8 的 Decimal Places 接进来时用它）', () => {
+    const rows = buildAngleMeasurementResultRows(ROOT, FIRST, point([11, 11, 15]), worldFrame(), 4);
+    expect(rows[0]!.valueText).toBe('45.0000°');
+  });
+
+  it('0° / 180° / 重合点回空数组（E3D 这几种造不出 ARC，窗体走 alert.error）', () => {
+    // 0°：second 与 first 同向；180°：反向；重合：second 落在 root 上。
+    expect(buildAngleMeasurementResultRows(ROOT, FIRST, point([13, 10, 15]), worldFrame())).toEqual([]);
+    expect(buildAngleMeasurementResultRows(ROOT, FIRST, point([8, 10, 15]), worldFrame())).toEqual([]);
+    expect(buildAngleMeasurementResultRows(ROOT, FIRST, ROOT, worldFrame())).toEqual([]);
+    expect(buildAngleMeasurementResultRows(
+      ROOT,
+      { entityId: 'p', worldPos: [0, 0, 0] },
+      SECOND_NORTH,
+      worldFrame(),
+    )).toEqual([]);
+  });
+
+  it('列表摘要把三行接在点串前面；退化时只剩点串', () => {
+    const record = {
+      id: 'a1',
+      kind: 'angle' as const,
+      origin: FIRST,
+      corner: ROOT,
+      target: SECOND_NORTH,
+      visible: true,
+      approximate: false,
+      createdAt: 1,
+    };
+    const summary = formatMeasurementSummary(record, 'mm', 0, { referenceFrame: worldFrame() });
+    expect(summary.startsWith('Angle 90.00° · Direction1 X +1.0000')).toBe(true);
+    expect(summary).toContain('起点');
+    expect(buildMeasurementValueText(record, 'mm', 0, worldFrame())).toBe('90.00°');
+
+    const collinear = { ...record, target: point([13, 10, 15]) };
+    expect(formatMeasurementSummary(collinear, 'mm', 0, { referenceFrame: worldFrame() })
+      .startsWith('起点')).toBe(true);
+    expect(buildMeasurementValueText(collinear, 'mm', 0, worldFrame())).toBeNull();
   });
 });

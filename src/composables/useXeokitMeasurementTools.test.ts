@@ -3356,6 +3356,169 @@ describe('useXeokitMeasurementTools', () => {
     });
   });
 
+  describe('E3D Measure Angle · 三点内核接线（Phase C #7）', () => {
+    const WORLD_FRAME = {
+      kind: 'world',
+      refno: null,
+      origin: [0, 0, 0],
+      basis: { u: [1, 0, 0], v: [0, 1, 0], w: [0, 0, 1] },
+      axisLabels: ['X', 'Y', 'Z'],
+      provenance: {
+        resolution: 'world',
+        selector: { kind: 'world' },
+        currentElementRefno: null,
+        resolvedRefno: null,
+        resolvedOwnerRefno: null,
+        element: null,
+        basis: {
+          policy: 'orthonormalize',
+          action: 'identity',
+          rawNorms: [1, 1, 1],
+          maxOrthogonalityError: 0,
+          rawHandedness: 1,
+          tolerance: 1e-6,
+        },
+      },
+    } as any;
+
+    /**
+     * 按「第几击」喂拾取点；scene → design 在这套夹具里是纯平移，角度不受影响。
+     * 画布 200px 对应正交视锥 2 个单位（100 px / 单位），表面点源的捕捉阈值上限 40 px，
+     * 所以三个点相对光标的横向偏移都得 < 0.4 个单位。
+     */
+    async function setupAngleTools(points: readonly [number, number, number][]) {
+      const [{ useToolStore }, { useXeokitMeasurementTools }, { useXeokitMeasurementStyleStore }] = await Promise.all([
+        import('@/composables/useToolStore'),
+        import('@/composables/useXeokitMeasurementTools'),
+        import('@/composables/useXeokitMeasurementStyleStore'),
+      ]);
+
+      const store = useToolStore();
+      store.clearAll();
+      store.setToolMode('xeokit_measure_angle');
+      const measurementStyle = useXeokitMeasurementStyleStore();
+      measurementStyle.resetStyle();
+      measurementStyle.updateMeasurementPickSource('ptset', { show: false, snap: false });
+      measurementStyle.updateMeasurementPickSource('position', { show: false, snap: false });
+      measurementStyle.updateMeasurementPickSource('mesh_pick_point', { show: true, snap: true, thresholdPx: 40 });
+
+      const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 10);
+      camera.position.set(2, 4, 7);
+      camera.lookAt(2, 4, 6);
+      camera.updateMatrixWorld(true);
+      camera.updateProjectionMatrix();
+
+      const canvas = document.createElement('canvas');
+      Object.defineProperty(canvas, 'getBoundingClientRect', {
+        value: () => ({ left: 0, top: 0, width: 200, height: 200 }),
+      });
+      const globalModelMatrix = new THREE.Matrix4().makeScale(0.001, 0.001, 0.001);
+      globalModelMatrix.setPosition(-10, -20, -30);
+      // 一次点击里 pickSurfacePoint 可能问多次，所以按「第几击」取点、不按调用次数。
+      let clickIndex = 0;
+      const pickPoint = vi.fn(() => ({
+        objectId: 'o:24381_145018:0',
+        point: new THREE.Vector3(...points[Math.min(clickIndex, points.length - 1)]!),
+      }));
+      const dimensionSystem = {
+        replaceExternalSource: vi.fn(),
+        viewport: { setSelection: vi.fn(), getSelection: vi.fn(() => null) },
+      } as any;
+      const tools = useXeokitMeasurementTools({
+        dtxViewerRef: ref({ camera, canvas } as any),
+        dtxLayerRef: ref({
+          _totalObjects: 1,
+          getGlobalModelMatrix: () => globalModelMatrix.clone(),
+        } as any),
+        selectionRef: ref({ pickPoint } as any),
+        overlayContainerRef: ref(document.createElement('div')),
+        getDimensionSystem: () => dimensionSystem,
+        store,
+        compatViewerRef: ref(null),
+        requestRender: null,
+      });
+
+      const click = (index: number) => {
+        clickIndex = index;
+        tools.onCanvasPointerUp(canvas, new PointerEvent('pointerup', {
+          clientX: 100,
+          clientY: 100,
+          button: 0,
+        }));
+      };
+      return { store, tools, click };
+    }
+
+    it('三点不共线：第三击落成角度记录，结果表三行按内核出 Angle / Direction1 / Direction2', async () => {
+      const { store, tools, click } = await setupAngleTools([
+        [2, 4, 6],
+        [2.3, 4, 6],
+        [2, 4.3, 6],
+      ]);
+      const { buildAngleMeasurementResultRows } = await import('@/utils/xeokitMeasurementFormat');
+
+      click(0);
+      click(1);
+      expect(store.currentXeokitAngleDraft.value?.stage).toBe('finding_second_arm');
+      click(2);
+
+      expect(store.currentXeokitAngleDraft.value).toBeNull();
+      expect(store.xeokitAngleMeasurements.value).toHaveLength(1);
+      expect(tools.pickPointMessage.value).toBeNull();
+
+      const record = store.xeokitAngleMeasurements.value[0]!;
+      const rows = buildAngleMeasurementResultRows(
+        record.corner,
+        record.origin,
+        record.target,
+        WORLD_FRAME,
+      );
+      expect(rows.map((row) => row.label)).toEqual(['Angle', 'Direction1', 'Direction2']);
+      expect(rows[0]!.valueText).toBe('90.00°');
+
+      tools.dispose();
+    });
+
+    it('三点共线：不落记录、给 E3D 等价提示、回到第 1 步（golden G6-03）', async () => {
+      const { store, tools, click } = await setupAngleTools([
+        [2, 4, 6],
+        [2.3, 4, 6],
+        [2.35, 4, 6],
+      ]);
+
+      click(0);
+      click(1);
+      click(2);
+
+      expect(store.xeokitAngleMeasurements.value).toHaveLength(0);
+      // 草稿丢掉 = 回到第 1 步（下一击重新取顶点）。
+      expect(store.currentXeokitAngleDraft.value).toBeNull();
+      expect(tools.pickPointMessage.value)
+        .toContain('An angular dimension could not be constructed from the data selected');
+      expect(tools.pickPointMessage.value).toContain('三点共线');
+
+      tools.dispose();
+    });
+
+    it('第三点落回顶点（重合）：同样拒收，提示说的是重合点', async () => {
+      const { store, tools, click } = await setupAngleTools([
+        [2, 4, 6],
+        [2.3, 4, 6],
+        [2, 4, 6],
+      ]);
+
+      click(0);
+      click(1);
+      click(2);
+
+      expect(store.xeokitAngleMeasurements.value).toHaveLength(0);
+      expect(store.currentXeokitAngleDraft.value).toBeNull();
+      expect(tools.pickPointMessage.value).toContain('三点里有重合点');
+
+      tools.dispose();
+    });
+  });
+
   describe('E3D Measure Distance · Units（Phase B）', () => {
     it('尺寸图形的长度文字跟着 Units 框走；Default 档回落到全局单位设置', async () => {
       const [

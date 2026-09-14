@@ -9,6 +9,7 @@ import type {
 import type { LengthUnit } from '@/composables/useUnitSettingsStore';
 
 import { MEASUREMENT_PICK_SOURCE_LABELS } from '@/composables/useMeasurementPickSources';
+import { buildThreePointAngle } from '@/measurement/kernel/threePointAngle';
 import {
   designPointToFrame,
   designVectorToFrame,
@@ -109,8 +110,19 @@ export function formatMeasurementSummary(
         .join(' · ');
       return `${total} · ${axisParts} · ${points}`;
     }
-    case 'angle':
-      return `起点 ${formatMeasurementPoint(measurement.origin)} -> 拐点 ${formatMeasurementPoint(measurement.corner)} -> 终点 ${formatMeasurementPoint(measurement.target)}`;
+    case 'angle': {
+      const points = `起点 ${formatMeasurementPoint(measurement.origin)} -> 拐点 ${formatMeasurementPoint(measurement.corner)} -> 终点 ${formatMeasurementPoint(measurement.target)}`;
+      const rows = opts?.referenceFrame
+        ? buildAngleMeasurementResultRows(
+          measurement.corner,
+          measurement.origin,
+          measurement.target,
+          opts.referenceFrame,
+        )
+        : [];
+      if (rows.length === 0) return points;
+      return `${rows.map((row) => `${row.label} ${row.valueText}`).join(' · ')} · ${points}`;
+    }
     case 'elevation_point': {
       const datumElevation = Number.isFinite(measurement.datumElevation)
         ? measurement.datumElevation
@@ -384,6 +396,80 @@ export function buildDistanceMeasurementResultRows(
   ];
 }
 
+/** E3D Measure Angle 的 `Decimal Places` 缺省是 2（`gphanglemeasure.pmlfrm`，方案 §1.3）。 */
+export const ANGLE_DECIMAL_PLACES = 2;
+
+export type AngleMeasurementFrameResultValues = Readonly<{
+  angleDeg: number;
+  /** root → first 的单位方向，按当前 wrt 帧表达。 */
+  direction1: Vec3;
+  /** root → second 的单位方向，按当前 wrt 帧表达。 */
+  direction2: Vec3;
+  axisLabels: ReferenceFrameAxisLabels;
+}>;
+
+/**
+ * 三点角在当前 wrt 帧下的结果。三点顺序是 E3D 的 root / first / second
+ * （Web 草稿里分别是第一击 `corner`、第二击 `origin`、第三击 `target`）。
+ * 角度本身与参考系无关（内核只报 minor 角），换帧只换两条臂方向的分量与轴标签。
+ * 内核判退化（0° / 180° / 重合点）时回 null —— E3D 那边是 `alert.error`、不出结果。
+ */
+export function computeThreePointAngleInFrame(
+  root: MeasurementPoint,
+  first: MeasurementPoint,
+  second: MeasurementPoint,
+  frame: ResolvedReferenceFrame,
+): AngleMeasurementFrameResultValues | null {
+  const rootPos = measurementPointDesignPos(root);
+  const firstPos = measurementPointDesignPos(first);
+  const secondPos = measurementPointDesignPos(second);
+  if (!rootPos || !firstPos || !secondPos) return null;
+  const built = buildThreePointAngle(rootPos, firstPos, secondPos);
+  if (!built.ok) return null;
+  const projected1 = designVectorToFrame(frame, [...built.value.direction1]);
+  const projected2 = designVectorToFrame(frame, [...built.value.direction2]);
+  if (!projected1.ok || !projected2.ok) return null;
+  return {
+    angleDeg: built.value.angleDeg,
+    direction1: [...projected1.value],
+    direction2: [...projected2.value],
+    axisLabels: frame.axisLabels,
+  };
+}
+
+export type AngleMeasurementResultRow = Readonly<{
+  key: 'angle' | 'direction1' | 'direction2';
+  label: string;
+  valueText: string;
+}>;
+
+/** E3D「Measure Angle」结果表的三行：Angle / Direction1 / Direction2（golden G6-01 / 02）。 */
+export function buildAngleMeasurementResultRows(
+  root: MeasurementPoint,
+  first: MeasurementPoint,
+  second: MeasurementPoint,
+  frame: ResolvedReferenceFrame,
+  decimals: number = ANGLE_DECIMAL_PLACES,
+): AngleMeasurementResultRow[] {
+  const values = computeThreePointAngleInFrame(root, first, second, frame);
+  if (!values) return [];
+  const labels = values.axisLabels;
+  const directionText = (vector: Vec3): string => [
+    `${labels[0]} ${formatSignedScalar(vector[0])}`,
+    `${labels[1]} ${formatSignedScalar(vector[1])}`,
+    `${labels[2]} ${formatSignedScalar(vector[2])}`,
+  ].join(' · ');
+  return [
+    {
+      key: 'angle',
+      label: 'Angle',
+      valueText: `${values.angleDeg.toFixed(Math.max(0, Math.min(6, Math.floor(decimals))))}°`,
+    },
+    { key: 'direction1', label: 'Direction1', valueText: directionText(values.direction1) },
+    { key: 'direction2', label: 'Direction2', valueText: directionText(values.direction2) },
+  ];
+}
+
 export type PerpendicularMeasurementResultRow = Readonly<{
   key: 'distance' | 'vertical' | 'horizontal' | 'direction';
   label: string;
@@ -435,6 +521,11 @@ function measurementPointDesignPos(point: MeasurementPoint): Vec3 | null {
   return value;
 }
 
+/**
+ * 三点角的角度值。走的是与结果表同一个内核（`buildThreePointAngle`，golden G6）：
+ * 只报 minor 角，0° / 180° / 重合点回 null（E3D 那边这几种造不出 ARC）。
+ * 三点顺序 root = `corner`（第一击）、first = `origin`、second = `target`。
+ */
 function computeAngleDegrees(
   origin: MeasurementPoint,
   corner: MeasurementPoint,
@@ -444,13 +535,8 @@ function computeAngleDegrees(
   const c = measurementPointDesignPos(corner);
   const t = measurementPointDesignPos(target);
   if (!o || !c || !t) return null;
-  const v1 = [o[0] - c[0], o[1] - c[1], o[2] - c[2]];
-  const v2 = [t[0] - c[0], t[1] - c[1], t[2] - c[2]];
-  const len1 = Math.hypot(v1[0], v1[1], v1[2]);
-  const len2 = Math.hypot(v2[0], v2[1], v2[2]);
-  if (len1 === 0 || len2 === 0) return null;
-  const dot = (v1[0] * v2[0] + v1[1] * v2[1] + v1[2] * v2[2]) / (len1 * len2);
-  return (Math.acos(Math.min(1, Math.max(-1, dot))) * 180) / Math.PI;
+  const built = buildThreePointAngle(c, o, t);
+  return built.ok ? built.value.angleDeg : null;
 }
 
 /** 右键菜单「复制值」文本：距离/角度/标高/高差的当前显示值。 */
@@ -476,7 +562,7 @@ export function buildMeasurementValueText(
         measurement.corner,
         measurement.target,
       );
-      return degrees === null ? null : `${degrees.toFixed(1)}°`;
+      return degrees === null ? null : `${degrees.toFixed(ANGLE_DECIMAL_PLACES)}°`;
     }
     case 'elevation_point': {
       const interpreted = referenceFrame
