@@ -200,6 +200,17 @@ function rectInside(rect: ScreenRect, width: number, height: number): boolean {
     && rect.x + rect.width <= width && rect.y + rect.height <= height;
 }
 
+/**
+ * How far a pill's semicircular end (radius `radius` = body height / 2)
+ * reaches into the body at `fromTopPx` below the top edge: the side padding
+ * a text row whose cap line starts there needs to stay inside the arc. Zero
+ * at mid-height, `radius` at the very top / bottom.
+ */
+function pillEndInsetPx(radius: number, fromTopPx: number): number {
+  const dy = radius - fromTopPx;
+  return radius - Math.sqrt(Math.max(0, radius * radius - dy * dy));
+}
+
 function unionRects(rects: readonly ScreenRect[]): ScreenRect {
   const minX = Math.min(...rects.map(rect => rect.x));
   const minY = Math.min(...rects.map(rect => rect.y));
@@ -275,8 +286,15 @@ export function planTagBillboard(
   const paddingPx = pill ? rules.pillPaddingPx : rules.paddingPx;
   const advancePx = capHeightPx * rules.lineAdvance;
   const lineWidths = lines.map(text => font.getWidth(capHeightPx, text));
-  const width = Math.max(...lineWidths) + 2 * paddingPx;
   const height = lines.length * advancePx + 2 * paddingPx;
+  // A pill's ends are semicircles of radius height / 2, so on a body of two
+  // or more rows the first and last rows' cap corners would sit outside the
+  // arcs at the plain padding (three rows: 6 px out); the side padding grows
+  // to the arc's inset at the outermost row's cap line instead.
+  const sidePaddingPx = pill
+    ? Math.max(paddingPx, pillEndInsetPx(height / 2, paddingPx + (advancePx - capHeightPx) / 2))
+    : paddingPx;
+  const width = Math.max(...lineWidths) + 2 * sidePaddingPx;
 
   // Preferred direction on screen.
   let base: Vec2 | null = null;
@@ -393,7 +411,7 @@ export function planTagBillboard(
     lines.forEach((text, row) => {
       primitives.push(sceneGlyph(
         text,
-        at(bodyPoint([paddingPx + lineWidths[row]! / 2, paddingPx + advancePx * (row + 0.5)])),
+        at(bodyPoint([sidePaddingPx + lineWidths[row]! / 2, paddingPx + advancePx * (row + 0.5)])),
         capHeightPx,
         styleRole,
         0,

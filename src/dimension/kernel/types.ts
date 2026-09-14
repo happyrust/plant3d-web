@@ -522,7 +522,7 @@ export type ExplicitDimension3dInput = Readonly<{
  * Body of a billboard tag: `card` = white rounded card with a grey border
  * (end-point coordinate blocks), `frame` = white box with a dark frame
  * (component name tags), `pill` = borderless white pill with muted text
- * (elbow elevations, branch name).
+ * (elbow / bend elevations, branch name).
  */
 export type ExplicitTagStyle = 'card' | 'frame' | 'pill';
 

@@ -318,16 +318,34 @@ function weldSubject(id: string): string | undefined {
 }
 
 /**
+ * Elbow / bend call-out: a pill from mid range on, showing the elevation
+ * (`PE …`) line only; the angle — and a bend's radius — appear on a close-up.
+ * plant-mbd's `elbo` (`<angle> / PE`) and `bend` (`<angle> / 弯曲半径:<r> /
+ * PE`) tags are the same drawing note about a direction change and read the
+ * same (2026-09-14: `bend` used to fall through to the text rule, which took
+ * its `PE` line for a coordinate block — a card with a dot, no LOD, drawn at
+ * every distance; 5185 bend tags against 1637 elbo tags across the project's
+ * 2469 BRANs, so most of the far-view card cloud was them).
+ */
+const ELBOW_TAG: TagClass = {
+  style: 'pill',
+  dot: false,
+  lod: { tier: 'secondary' },
+  primaryLine: /^PE\b/,
+};
+
+/**
  * What kind of drawing call-out a solver tag is. plant-mbd names its tags
  * (`…:tag:connection:<end | refno>` coordinate blocks, `…:tag:elbo:<refno>`
- * elbow angle + elevation, `…:tag:name:<refno>` component name,
- * `…:tag:branch-name`); a label from another producer is classified by its
- * text — a coordinate block (`X … / Y … / PE …`) reads as a card, anything
- * else as a framed name. The reference drawing style keeps coordinate blocks
- * and names at every distance, shows elbow elevations from mid range (the
- * angle only on a close-up) and the branch name only on a close-up. The
- * refno in the id (any kind) becomes the tag's `subject` for the inspection
- * pass.
+ * elbow angle + elevation, `…:tag:bend:<refno>` bend angle + radius +
+ * elevation, `…:tag:name:<refno>` component name, `…:tag:branch-name`); a
+ * label from another producer is classified by its text — a coordinate
+ * block (`X … / Y … / PE …`) reads as a card, anything else as a framed
+ * name. The reference drawing style keeps coordinate blocks and names at
+ * every distance, shows elbow / bend elevations from mid range (the angle
+ * and radius only on a close-up) and the branch name only on a close-up.
+ * The refno in the id (any kind) becomes the tag's `subject` for the
+ * inspection pass.
  */
 function classifyTag(primitive: MbdV2Label): TagClass {
   const id = primitive.id;
@@ -336,11 +354,7 @@ function classifyTag(primitive: MbdV2Label): TagClass {
     subject ? { ...tagClass, subject } : tagClass;
   if (id.includes(':tag:connection:')) return withSubject({ style: 'card', dot: true });
   if (id.includes(':tag:name:')) return withSubject({ style: 'frame', dot: false });
-  if (id.includes(':tag:elbo:')) {
-    return withSubject(
-      { style: 'pill', dot: false, lod: { tier: 'secondary' }, primaryLine: /^PE\b/ },
-    );
-  }
+  if (id.includes(':tag:elbo:') || id.includes(':tag:bend:')) return withSubject(ELBOW_TAG);
   if (id.includes(':tag:branch-name')) {
     return { style: 'pill', dot: false, lod: { tier: 'detail' } };
   }

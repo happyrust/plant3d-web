@@ -189,6 +189,38 @@ describe('layoutTagBillboard', () => {
       .toBeLessThan(rules.standoffPx.card);
   });
 
+  it('keeps every row of a multi-row pill inside its semicircular ends', () => {
+    // One row: the plain padding already clears the arcs.
+    const one: ExplicitTagInput = { style: 'pill', lines: [{ text: 'A' }], target: [0, 0, 0] };
+    const oneBody = layoutTagBillboard({ ...input, tag: one }, one, context()).derived.tag!.body;
+    expect(oneBody.width).toBeCloseTo(createTestFont().getWidth(rules.pillTextHeightPx, 'A') + 2 * rules.pillPaddingPx, 9);
+
+    // Three rows (a bend's angle / radius / elevation, 2026-09-14): the end
+    // radius is the body half-height, so at the plain padding the first
+    // row's cap corner would sit outside the arc; the side padding grows to
+    // the arc's inset at that cap line and every glyph run starts there.
+    const three: ExplicitTagInput = { style: 'pill', lines: [{ text: 'A' }, { text: 'hp' }, { text: 'hp' }], target: [0, 0, 0] };
+    const result = layoutTagBillboard({ ...input, tag: three }, three, context());
+    const body = result.derived.tag!.body;
+    const advance = rules.pillTextHeightPx * rules.lineAdvance;
+    const radius = body.height / 2;
+    const capTop = rules.pillPaddingPx + (advance - rules.pillTextHeightPx) / 2;
+    const inset = radius - Math.sqrt(radius * radius - (radius - capTop) ** 2);
+    expect(inset).toBeGreaterThan(rules.pillPaddingPx);
+    expect(body.width).toBeCloseTo(createTestFont().getWidth(rules.pillTextHeightPx, 'hp') + 2 * inset, 9);
+    // Each row is left-aligned at the side padding (its centre sits half its
+    // width in from there); the rows themselves keep the plain vertical
+    // padding. The target projects to (200, 200).
+    const runs = glyphs(result);
+    expect(runs).toHaveLength(3);
+    const widths = ['A', 'hp', 'hp'].map(text => createTestFont().getWidth(rules.pillTextHeightPx, text));
+    runs.forEach((run, row) => {
+      const [dx, dy] = run.at.offsetPx;
+      expect(200 + dx - widths[row]! / 2).toBeCloseTo(body.x + inset, 9);
+      expect(200 + dy).toBeCloseTo(body.y + rules.pillPaddingPx + advance * (row + 0.5), 9);
+    });
+  });
+
   it('centres a tag without a leader target on the solver position', () => {
     const bare: ExplicitTagInput = { style: 'card', lines: [{ text: 'A' }] };
     const result = layoutTagBillboard({ ...input, tag: bare }, bare, context());

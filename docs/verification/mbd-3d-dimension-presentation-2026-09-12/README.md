@@ -315,4 +315,42 @@
 
   多出来的全是此前「探卡片几乎永远不淡」的四类 tag 与端点卡片按口径转淡：far +14 bend / +8 atta / +7 Head–Tail / +5 elevation / +1 tee，behind +4 Head–Tail / +2 elevation / +2 atta / +1 bend；减少的只有两条小管的 Tail 卡片（各 2）。`pw-tag-verify-69.mjs` 对 4 条管 far / behind **全部** tag 逐条独立复核（跳 subject 自己的 piece、标包体）：内核 flag 与独立结论 **49/49、33/33、4/4、25/25** 一致；新淡的挡体都是**别的**构件，距锚点 45 mm–3.6 m（`24383_84337` 的 6 张弯管卡片被相邻直管 / 管件挡 85–145 mm，支架位号被 122–463 mm 外的管件挡；`24381_105520` 的 `PE +3980 / +3895 / +3795` 与 Tail 卡片在 1.7 m 外的另一管段后面；`24383_92086` far 的支架位号与 Head 卡片被 184–235 mm 外的另一个构件挡，behind 全亮）。焊缝 8 / 8、尺寸 19 / 10 与上一趟一致，确定性 52 / 52，pageerror 0，inspection 布局 max 33 / 38 ms。
 
-**未做 / 仍留**：「药丸云」观感未动；相机背后记录的二维快照（`primitives`，供 SVG / 命中）仍是把背后顶点直接投影的结果，画家走三维不受影响，命中索引现在只登记屏内部分；顺带看到 `bend` 卡片按文字被分成 `card`（带点、无 LOD、远景也画），与 `elbo` 药丸（`secondary` LOD）不是一档，是呈现分类的事，未动。
+**未做 / 仍留**：「药丸云」观感未动；相机背后记录的二维快照（`primitives`，供 SVG / 命中）仍是把背后顶点直接投影的结果，画家走三维不受影响，命中索引现在只登记屏内部分；顺带看到 `bend` 卡片按文字被分成 `card`（带点、无 LOD、远景也画），与 `elbo` 药丸（`secondary` LOD）不是一档，是呈现分类的事，未动（**→ 下一节已归成同一档**）。
+
+### `bend` 与 `elbo` 归成同一档呈现（2026-09-14 15:0x–15:5x，fable-5-1-7；用户「回三维标注把 bend 卡片与 elbo 药丸归成同一档呈现」）
+
+**改了什么**。① `adapters/mbdV2ExternalAnnotations.ts::classifyTag`：`…:tag:bend:<refno>`（弯管「角度 / 弯曲半径 / PE」）与 `…:tag:elbo:<refno>`（弯头「角度 / PE」）共用同一个 `ELBOW_TAG` 类——**无边框药丸、不带圆点、`secondary` LOD、只有 `PE` 行是主行**（角度与弯曲半径都是近景 `detail` 行）。此前 `bend` 没有自己的分支，落到「按文字」那条规则，它的 `PE` 行被当成坐标块 → **卡片 + 圆点、无 LOD、任何距离都画**。② `kernel/layout/tagBillboard.ts::planTagBillboard`：药丸两端是半径 = 体高一半的半圆，两行以上的药丸在原来 4 px 内边距下首末行的字帽角会落在弧外（三行 6 px 出头，弯管近景就是三行）；现在药丸的**左右**内边距取「半圆在首行字帽线处的内缩」与 4 px 的较大者（`pillEndInsetPx`），一行药丸不变（1.3 px < 4 px），两行 +1.3 px / 边、三行 +6.3 px / 边，行的纵向排布不变。`ExplicitTagStyle` 注释、ADR 0058、效果图 README、PRD §9.9 同步。
+
+**规模**（改代码前先量：`bendTags.sweep.test.ts` 临时内核全跑，2469 条 BRAN × far / mid / close，按 `…:tag:<kind>` 统计画出 / 隐藏 / 画出的文字行，`bend-tags-kinds-sweep.json` 含 before / after 两份总账与 1227 条带 bend 的管逐管一行）：项目里 plant-mbd 的 tag 共 connection 5616 · **bend 5185** · atta 2804 · branch-name 2332 · **elbo 1637** · elevation 821 · name 594 · tee 155——弯管标记是弯头标记的 **3.2 倍**，1227 / 2469 条管带它，30 条管 ≥ 20 个（`24381_105860` 36 个）。修前它们在三个视图 **5185 / 5185 全画、每个 3 行**；修后：
+
+| 视图 | 画出的 tag 总数 | 画出的文字行 | bend 画出 / 5185（隐藏原因） | elbo 画出 / 1637（对照，未动） | 其它 6 类 |
+| --- | --- | --- | --- | --- | --- |
+| far 1.7× | 15 737 → **10 803**（−31 %） | 38 898 → **23 824**（−39 %） | 5185 → **251**（`secondary-far` 4934） | 243（`secondary-far` 1394） | 逐类逐数相同 |
+| mid 0.6× | 16 747 → **12 488** | 39 987 → **26 568** | 5185 → **926**（`secondary-far` 4257、`detail-far` 2） | 743（`secondary-far` 894） | 相同 |
+| close 0.25× | 17 992 → **15 122** | 41 353 → **31 359** | 5185 → **2315**（`secondary-far` 2870） | 1207（`secondary-far` 429、`detail-far` 1） | 相同 |
+
+  `detail-far` 的 2 + 1 条是文字只有 `0°`、没有 `PE` 行的退化弯管 / 弯头（`24383_84721` / `24383_98289` / `24383_85844`），主行为空就按 `detail` 处理，近景才出——两类同一处置。2469 / 2469 两趟都 0 flag，各 58 s。
+
+**单测**：`mbdV2ExternalAnnotations.test.ts`（分类用例加一条三行 `bend`：`pill`、`10°` / `弯曲半径:51.50` 为 `detail`、`PE -6250` 主行、`lod secondary`、`subject`；「四类带 refno 的 tag」用例里 `bend` 由 `card` 改 `pill`）、`tagBillboard.test.ts` +1（一行药丸宽度不变；三行药丸的左右内边距 = 半圆在首行字帽线处的内缩、三行字形都从那里起、纵向仍按 4 px + 行距）。`vitest run src/dimension src/composables/useMbdExternalSync.test.ts`：**59 文件 / 354 通过**（上轮 353）。eslint 5 个改动文件 0。`npm run type-check`：改动文件 0 新增（基线外仍只剩 `useDtxTools.*.test.ts` ×5，与本线无关）。
+
+**实机**（真实 Chrome 1220×806 画布 @1x，vite 热更源码；`pw-bend-7.mjs`，同一份脚本改前 / 改后各跑一遍，**五个相机逐个相同**，`bend-tags-browser-probe-before.json` / `-after.json`；dbnum 7997 / 8000 的 `model/ensure` 当时在 gen-model 侧挂起 > 90 s，所以抽的是 dbnum 7999 的三条弯管多的管：`24383_84337` 19 bend + 5 elbo、`24383_100657` 13 + 8、`24383_84480` 13 + 2）：
+
+| 管 · 相机 | 画出的 tag 修前 → 修后 | bend 修前 → 修后（行） | elbo（对照） | inspection 遮挡 flag 修前 → 修后 |
+| --- | --- | --- | --- | --- |
+| `24383_84337` far 1.7× | 49 → **30** | 19（57 行）→ **0**（`secondary-far` 19） | 0 / 5 → 0 / 5 | 7 → **1**（bend 6 → 0，atta 1 不变） |
+| `24383_84337` bend-mid（弯管前 1 m） | 49 → 31 | 19 → **1（1 行 `PE -6250`）** | 0 / 5 | 14 → 4 |
+| `24383_84337` bend-close（0.45 m） | 49 → 32 | 19 → 2（4 行：居中那个 **3 行** + 屏边 1 行） | 0 / 5 | 17 → 7 |
+| `24383_100657` far | 25 → **12** | 13（39 行）→ **0** | 0 / 8 | 1 → 0 |
+| `24383_100657` elbo-mid（弯头前 1 m） | 27 → 16 | 13 → 2（6 行） | **2 / 8（2 行）**，与 bend 同一距离同一档 | 7 → 2 |
+| `24383_84480` far | 23 → **10** | 13（39 行）→ **0** | 0 / 2 | 6 → 2 |
+
+- 三条管 15 个视图 pageerror **0**，加载 3.5–3.9 s；atta / connection / branch-name / elbo 各视图的画出数与行数**逐条与修前相同**——只动了 bend。
+- `bend-tags-far-before-after.png`：`24383_84337` 远景 engineering 修前 / 修后并排（50 %）——修前 19 张三行卡片 + 19 个圆点 + 引线铺在 28 个支架方框之间，修后只剩支架方框、两张端点卡片与尺寸。`bend-tags-mid-crop-3x.png`：弯管前 1 m 处同一位置 3×——修前三行卡片，修后一颗 `PE -6250` 药丸（与同距离处弯头的 `PE -3150` 药丸同样式）。`bend-tags-close-crop-3x.png`：0.45 m 处 3×——修前三行卡片，修后三行药丸，首末行留在半圆内。
+
+| 新增文件 | 说明 |
+| --- | --- |
+| `bend-tags-kinds-sweep.json` | 内核全跑按 tag 种类的总账（before / after，三视图 × 8 类：records / drawn / lines / hidden）+ 1227 条带 bend 的管逐管一行（`bend.<view>.drawn / lines = [修前, 修后]`、修后隐藏原因、该视图画出的 tag 总数） |
+| `bend-tags-browser-probe-before.json` / `-after.json` | 三条管五个相机的实机状态（engineering + inspection，按 tag 种类的画出 / 隐藏 / 行数 / 遮挡）；相机一致 |
+| `bend-tags-far-before-after.png` / `bend-tags-mid-crop-3x.png` / `bend-tags-close-crop-3x.png` | `24383_84337` 远景并排；弯管前 1 m / 0.45 m 同位置 3× 修前修后 |
+
+**仍留**：`elevation`（821）/ `tee`（155）两类单行 `PE` 标高 tag 仍按文字规则落成卡片 + 圆点、无 LOD——它们是同一种「点上的标高」注释，要不要也归进药丸这一档另拍；「药丸云」观感（弯头 / 弯管药丸只在 ~1 m 内出现，远中景已无云）。

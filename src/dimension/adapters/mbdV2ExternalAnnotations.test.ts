@@ -366,6 +366,8 @@ describe('mbdV2ToExternalRecords', () => {
         { kind: 'leader_line', id: 'b:isoline:1:tag:connection:mid:leader', start: [1.1, 0.2, 0], end: [1, 0, 0] },
         { kind: 'label', id: 'b:isoline:0:tag:elbo:r1', text: '89.75°\nPE +13301', position: [0.5, 0.3, 0] },
         { kind: 'leader_line', id: 'b:isoline:0:tag:elbo:r1:leader', start: [0.5, 0.3, 0], end: [0.5, 0, 0] },
+        { kind: 'label', id: 'b:isoline:2:tag:bend:r3', text: '10°\n弯曲半径:51.50\nPE -6250', position: [0.8, 0.3, 0] },
+        { kind: 'leader_line', id: 'b:isoline:2:tag:bend:r3:leader', start: [0.8, 0.3, 0], end: [0.8, 0, 0] },
         { kind: 'label', id: 'b:isoline:1:tag:name:r2', text: 'Copy-of-1RCS002VP', position: [1.2, 0.5, 0] },
         { kind: 'leader_line', id: 'b:isoline:1:tag:name:r2:leader', start: [1.2, 0.5, 0], end: [1, 0.5, 0] },
         { kind: 'label', id: 'b:tag:branch-name', text: 'Copy', position: [0.5, -0.3, 0] },
@@ -403,6 +405,19 @@ describe('mbdV2ToExternalRecords', () => {
     });
     expect(elbow.lod).toEqual({ tier: 'secondary' });
 
+    // Bend tag: the same note about a direction change, presented the same
+    // way — a pill from mid range on, the angle and the bend radius only on a
+    // close-up (2026-09-14; it used to read as a coordinate-block card with
+    // no LOD because of its `PE` line).
+    const bend = explicitLayout(result, 'b:isoline:2:tag:bend:r3');
+    expect(bend.tag).toEqual({
+      style: 'pill',
+      lines: [{ text: '10°', detail: true }, { text: '弯曲半径:51.50', detail: true }, { text: 'PE -6250' }],
+      target: [0.8, 0, 0],
+      subject: 'r3',
+    });
+    expect(bend.lod).toEqual({ tier: 'secondary' });
+
     // Component name: framed, always shown, naming the component.
     const name = explicitLayout(result, 'b:isoline:1:tag:name:r2');
     expect(name.tag).toMatchObject({ style: 'frame', lines: [{ text: 'Copy-of-1RCS002VP' }], subject: 'r2' });
@@ -434,7 +449,7 @@ describe('mbdV2ToExternalRecords', () => {
       ],
     });
 
-    expect(explicitLayout(result, 'b:isoline:0:tag:bend:24381_105522').tag).toMatchObject({ style: 'card', subject: '24381_105522' });
+    expect(explicitLayout(result, 'b:isoline:0:tag:bend:24381_105522').tag).toMatchObject({ style: 'pill', subject: '24381_105522' });
     expect(explicitLayout(result, 'b:isoline:0:tag:atta:24383_75127').tag).toMatchObject({ style: 'frame', subject: '24383_75127' });
     expect(explicitLayout(result, 'b:isoline:17:tag:elevation:24381_105538').tag).toMatchObject({ style: 'card', subject: '24381_105538' });
     expect(explicitLayout(result, 'b:isoline:18:tag:tee:24381_105541').tag).toMatchObject({ style: 'card', subject: '24381_105541' });
