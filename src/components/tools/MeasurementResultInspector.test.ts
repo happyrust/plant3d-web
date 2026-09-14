@@ -72,7 +72,7 @@ describe('MeasurementResultInspector', () => {
       ['Offset X', '+1000mm'],
       ['Offset Y', '+2000mm'],
       ['Offset Z', '+2000mm'],
-      ['Direction', 'X +0.3333 · Y +0.6667 · Z +0.6667'],
+      ['Direction', 'N 26.5651 E 41.8103 U WRT /*'],
     ]);
 
     const showDirect = host.querySelector<HTMLInputElement>(
@@ -142,7 +142,8 @@ describe('MeasurementResultInspector', () => {
       ['Distance', '1500mm'],
       ['Vertical', '0mm'],
       ['Horizontal', '1500mm'],
-      ['Direction', 'X +0.0000 · Y -1.0000 · Z +0.0000'],
+      // golden G4-02 实测 `S`；Perpendicular 那张表 `.before('WRT')`，没有尾巴。
+      ['Direction', 'S'],
     ]);
     expect(host.querySelector('[data-testid="measurement-wrt-active"]')?.textContent)
       .toContain('World（垂距模式固定）');

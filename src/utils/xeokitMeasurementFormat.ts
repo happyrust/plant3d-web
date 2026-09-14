@@ -16,11 +16,11 @@ import {
   type ReferenceFrameAxisLabels,
   type ResolvedReferenceFrame,
 } from '@/measurement/reference-frame';
+import { formatCompassDirection } from '@/measurement/reference-frame/compassDirection';
 import {
   DEFAULT_MEASUREMENT_ANGLE_UNIT_SELECTION,
   formatMeasurementAngle,
   formatMeasurementAngleDms,
-  formatMeasurementAngleScalar,
   type MeasurementAngleUnitSelection,
 } from '@/measurement/units/measurementAngleUnits';
 import {
@@ -328,11 +328,16 @@ type DistanceMeasurementRowsSource = Readonly<{
   offsets: Readonly<{ components: readonly [number, number, number] }>;
   direction: Readonly<{ vector: readonly [number, number, number] }> | null;
   axisLabels?: ReferenceFrameAxisLabels;
+  /** 方向所在的 wrt 帧；不给（P0 的 World 结果）按 World。 */
+  frame?: ResolvedReferenceFrame;
 }>;
 
-function formatSignedScalar(value: number, precision = 4): string {
-  const normalized = Object.is(value, -0) ? 0 : value;
-  return `${normalized >= 0 ? '+' : '-'}${Math.abs(normalized).toFixed(precision)}`;
+/**
+ * `DIRECTION.string()` 尾巴上的 wrt 名：World 是 `/*`，元素帧 E3D 给名字（`/Copy-of-RCS151MM`），
+ * Web 只有 refno，按 E3D 无名元素的写法 `=24381/101439`。
+ */
+function compassWrtName(frame: ResolvedReferenceFrame | undefined): string {
+  return frame && frame.kind === 'element' && frame.refno ? `=${formatPdmsRef(frame.refno)}` : '/*';
 }
 
 /**
@@ -383,12 +388,10 @@ export function buildDistanceMeasurementResultRows(
       valueText: fmt.signed(offsetZ),
     },
   ];
+  // E3D 的 Direction 是罗盘字串（`DIRECTION.string()`），字母按当前 wrt 帧的三根轴走；
+  // 标准结果表原样显示 ` WRT <wrt>` 尾巴（`gphmeasure.pmlfrm` 403 只 `.trim()`，截图 G1-02-result）。
   const directionText = result.direction
-    ? [
-      `${labels[0]} ${formatSignedScalar(result.direction.vector[0])}`,
-      `${labels[1]} ${formatSignedScalar(result.direction.vector[1])}`,
-      `${labels[2]} ${formatSignedScalar(result.direction.vector[2])}`,
-    ].join(' · ')
+    ? formatCompassDirection(result.direction.vector, { wrt: compassWrtName(result.frame) })
     : '--';
 
   return [
@@ -465,16 +468,11 @@ export function buildAngleMeasurementResultRows(
 ): AngleMeasurementResultRow[] {
   const values = computeThreePointAngleInFrame(root, first, second, frame);
   if (!values) return [];
-  const labels = values.axisLabels;
-  const signed = (value: number): string => {
-    const text = formatMeasurementAngleScalar(Math.abs(value), angleUnits.decimalPlaces);
-    return `${value < 0 && Number(text) !== 0 ? '-' : '+'}${text}`;
-  };
-  const directionText = (vector: Vec3): string => [
-    `${labels[0]} ${signed(vector[0])}`,
-    `${labels[1]} ${signed(vector[1])}`,
-    `${labels[2]} ${signed(vector[2])}`,
-  ].join(' · ');
+  // 两条 Direction 也是罗盘字串，`.before('WRT')` 切掉尾巴（371 / 392）；每个角度再按
+  // Decimal Places 走一遍 `!!realFmt`（374–385，留尾零）。
+  const directionText = (vector: Vec3): string => formatCompassDirection(vector, {
+    decimals: angleUnits.decimalPlaces,
+  });
   return [
     {
       key: 'angle',
@@ -513,14 +511,9 @@ export function buildPerpendicularMeasurementResultRows(
   const distance = Math.hypot(delta[0], delta[1], delta[2]);
   const vertical = Math.abs(delta[2]);
   const horizontal = Math.sqrt(Math.max(0, distance * distance - vertical * vertical));
-  const labels = DISTANCE_AXIS_LABELS;
-  const directionText = distance > 0
-    ? [
-      `${labels[0]} ${formatSignedScalar(delta[0] / distance)}`,
-      `${labels[1]} ${formatSignedScalar(delta[1] / distance)}`,
-      `${labels[2]} ${formatSignedScalar(delta[2] / distance)}`,
-    ].join(' · ')
-    : '--';
+  // 垂距的 Direction 从垂足指向源点，固定按 World 表达（golden G4-06）；
+  // 这张表 `.before('WRT')` 切掉尾巴（`gphmeasure.pmlfrm` 666，截图 G4-03）。
+  const directionText = distance > 0 ? formatCompassDirection(delta) : '--';
   const fmt = lengthFormatters(unit, precision, format);
   return [
     { key: 'distance', label: 'Distance', valueText: fmt.plain(distance) },

@@ -134,6 +134,9 @@ describe('E3D 3.1 runtime golden G3-02 · rotated ordinary WRT', () => {
     // Direction "W 11.7755 N 66.1215 D WRT /*".
     const expected = compass('W', 11.7755, 'N', 66.1215, 'D');
     expected.forEach((value, index) => expect(result.direction!.vector[index]).toBeCloseTo(value, 5));
+    // The standard table shows the compass string with its WRT tail verbatim (G1-02-result.png).
+    expect(buildDistanceMeasurementResultRows(result, 'mm', 2).at(-1)!.valueText)
+      .toBe('W 11.7755 N 66.1215 D WRT /*');
   });
 
   it('/Copy-of-RCS151MM (Y is E and Z is U): offsets U -400.28 / V -1920.14 / W -4430.67 mm', async () => {
@@ -174,6 +177,9 @@ describe('E3D 3.1 runtime golden G3-02 · rotated ordinary WRT', () => {
     expect(rows[1]!.valueText).toBe('-400.28mm');
     expect(rows[2]!.valueText).toBe('-1920.14mm');
     expect(rows[3]!.valueText).toBe('-4430.67mm');
+    // E3D: "S 11.7755 W 66.1215 D WRT /Copy-of-RCS151MM" — compass letters name the frame's own axes;
+    // the tail is the wrt, written as the unnamed-element DBREF because Web only has the refno.
+    expect(rows[4]!.valueText).toBe('S 11.7755 W 66.1215 D WRT =24381/101439');
   });
 
   it('/Copy-of-RCS616MD (Y is U and Z is S 21 E): offsets -1649.16 / -4430.67 / -1061.81 mm', async () => {
@@ -196,9 +202,11 @@ describe('E3D 3.1 runtime golden G3-02 · rotated ordinary WRT', () => {
     expectMm(toLocal[1], 11804.127);
     expectMm(toLocal[2], 10608.095);
 
-    // Direction "S 20.416 W 12.6584 D WRT /Copy-of-RCS616MD".
+    // Direction "S 20.416 W 12.6584 D WRT /Copy-of-RCS616MD" (20.416 = PML REAL's 6 significant digits, zeros stripped).
     const expected = compass('S', 20.416, 'W', 12.6584, 'D');
     expected.forEach((value, index) => expect(result.direction!.vector[index]).toBeCloseTo(value, 5));
+    expect(buildDistanceMeasurementResultRows(result, 'mm', 2).at(-1)!.valueText)
+      .toBe('S 20.416 W 12.6584 D WRT =24381/101423');
   });
 
   it('the projection is Rᵀ·Δworld: components dotted with the World-expressed axes', async () => {

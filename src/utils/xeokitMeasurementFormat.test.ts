@@ -97,9 +97,26 @@ describe('computeDistanceMeasurementResult', () => {
       {
         key: 'direction',
         label: 'Direction',
-        valueText: expect.stringMatching(/^X \+0\.96\d{2} · Y -0\.24\d{2} · Z \+0\.04\d{2}$/),
+        // E3D 标准结果表原样显示 `DIRECTION.string()` 的 ` WRT /*` 尾巴（截图 G1-02-result）；
+        // 数字是 PML REAL 的 6 位有效数字（2.31478，不是 4 位小数的 2.3148）。
+        valueText: 'E 14.0362 S 2.31478 U WRT /*',
       },
     ]);
+  });
+
+  it('golden G1 / G2-03：Direction 单元格逐字对上 E3D 标准结果表', () => {
+    // G1：from E 9769.75 N 10047.18 U 18664.8 → to E 7849.61 N 10447.46 U 14234.127。
+    const g1 = computeDistanceMeasurementResult(
+      { entityId: 'a', worldPos: [0, 0, 0], designWorldPos: [9.76975, 10.04718, 18.6648] },
+      { entityId: 'b', worldPos: [0, 0, 0], designWorldPos: [7.84961, 10.44746, 14.234127] },
+    );
+    expect(buildDistanceMeasurementResultRows(g1!, 'mm', 2).at(-1)!.valueText).toBe('W 11.7755 N 66.1215 D WRT /*');
+    // G2-03：ΔE = ΔN = ΔU = 1000 → 水平打平时 E / W 在前。
+    const g203 = computeDistanceMeasurementResult(
+      { entityId: 'a', worldPos: [0, 0, 0], designWorldPos: [10, 10, 15] },
+      { entityId: 'b', worldPos: [0, 0, 0], designWorldPos: [11, 11, 16] },
+    );
+    expect(buildDistanceMeasurementResultRows(g203!, 'mm', 2).at(-1)!.valueText).toBe('E 45 N 35.2644 U WRT /*');
   });
 
   it('returns null direction for zero distance and rejects missing or non-finite design coords', () => {
@@ -136,7 +153,8 @@ describe('buildPerpendicularMeasurementResultRows', () => {
       { key: 'distance', label: 'Distance', valueText: '1500.00mm' },
       { key: 'vertical', label: 'Vertical', valueText: '0.00mm' },
       { key: 'horizontal', label: 'Horizontal', valueText: '1500.00mm' },
-      { key: 'direction', label: 'Direction', valueText: 'X +0.0000 · Y -1.0000 · Z +0.0000' },
+      // golden G4-02 实测的 Direction 就是这一个字母。
+      { key: 'direction', label: 'Direction', valueText: 'S' },
     ]);
   });
 
@@ -152,8 +170,26 @@ describe('buildPerpendicularMeasurementResultRows', () => {
       '2549.51mm',
       '2500.00mm',
       '500.00mm',
-      expect.stringMatching(/^X \+0\.0000 · Y \+0\.19\d{2} · Z \+0\.98\d{2}$/),
+      // golden G4-01 实测 `N 78.6901 U`。
+      'N 78.6901 U',
     ]);
+  });
+
+  it('golden G4-03 点退化：Direction 是 6 位有效数字、这张表不带 WRT 尾巴', () => {
+    // trace G4-current-perpendicular：from（垂足）E 9897.433 N 8954.701 U 13330.416，
+    // to（源点）E 9769.75 N 10047.176 U 18664.801；E3D 单元格 `N 6.66615 W 78.3493 U`。
+    // 坐标只印到 3 位小数，第一个角的第 6 位有效数字吃到取整，只锁前缀；倾角逐字。
+    const rows = buildPerpendicularMeasurementResultRows(
+      { entityId: 'src', worldPos: [0, 0, 0], designWorldPos: [9.76975, 10.047176, 18.664801] },
+      { entityId: 'foot', worldPos: [0, 0, 0], designWorldPos: [9.897433, 8.954701, 13.330416] },
+      'mm',
+      2,
+    );
+    expect(rows[0]!.valueText).toBe('5446.60mm');
+    // vertical_db 5334.38438847279 → E3D `5334.38mm`；这里 U 坐标各带 3 位小数取整，落在 .385 附近。
+    expect(rows[1]!.valueText).toMatch(/^5334\.3[89]mm$/);
+    expect(rows[2]!.valueText).toBe('1099.91mm');
+    expect(rows[3]!.valueText).toMatch(/^N 6\.666\d{1,2} W 78\.3493 U$/);
   });
 
   it('returns no rows when a design position is missing and "--" for zero distance', () => {
@@ -197,7 +233,9 @@ describe('reference-frame measurement interpretation', () => {
       {
         key: 'direction',
         label: 'Direction',
-        valueText: 'U +0.5571 · V +0.3714 · W +0.7428',
+        // 罗盘字母按帧的三根轴走：轴 1 → E / W、轴 2 → N / S、轴 3 → U / D；
+        // 尾巴是这条方向的 wrt，元素帧按 E3D 无名元素的写法 `=<refno>`。
+        valueText: 'E 33.6901 N 47.9689 U WRT =7/8',
       },
     ]);
     expect(buildMeasurementComponentsText({
@@ -459,8 +497,8 @@ describe('buildAngleMeasurementResultRows · E3D Measure Angle 结果表（golde
     expect(buildAngleMeasurementResultRows(ROOT, FIRST, SECOND_NORTH, worldFrame())).toEqual([
       { key: 'angle', label: 'Decimal Angle', valueText: '90 Degrees' },
       { key: 'dms', label: 'DMS', valueText: '90° 0\' 0\'\'' },
-      { key: 'direction1', label: 'Direction1', valueText: 'X +1.00 · Y +0.00 · Z +0.00' },
-      { key: 'direction2', label: 'Direction2', valueText: 'X +0.00 · Y +1.00 · Z +0.00' },
+      { key: 'direction1', label: 'Direction1', valueText: 'E' },
+      { key: 'direction2', label: 'Direction2', valueText: 'N' },
     ]);
   });
 
@@ -468,8 +506,8 @@ describe('buildAngleMeasurementResultRows · E3D Measure Angle 结果表（golde
     const rows = buildAngleMeasurementResultRows(ROOT, FIRST, SECOND_NORTH, frame());
     expect(rows[0]).toEqual({ key: 'angle', label: 'Decimal Angle', valueText: '90 Degrees' });
     // 帧基 u=[0,1,0] v=[-1,0,0] w=[0,0,1]：root→first 的世界 +X 在帧里是 -V。
-    expect(rows[2]!.valueText).toBe('U +0.00 · V -1.00 · W +0.00');
-    expect(rows[3]!.valueText).toBe('U +1.00 · V +0.00 · W +0.00');
+    expect(rows[2]!.valueText).toBe('S');
+    expect(rows[3]!.valueText).toBe('E');
   });
 
   it('Units 框：Unit 换算与 Decimal Places 同时管角度值和两条 Direction；DMS 恒按度', () => {
@@ -482,7 +520,7 @@ describe('buildAngleMeasurementResultRows · E3D Measure Angle 结果表（golde
     );
     expect(rows[0]!.valueText).toBe('0.7854 Radians');
     expect(rows[1]!.valueText).toBe('45° 0\' 0\'\'');
-    expect(rows[2]!.valueText).toBe('X +1.0000 · Y +0.0000 · Z +0.0000');
+    expect(rows[2]!.valueText).toBe('E');
 
     const gradians = buildAngleMeasurementResultRows(
       ROOT,
@@ -492,7 +530,7 @@ describe('buildAngleMeasurementResultRows · E3D Measure Angle 结果表（golde
       { unit: 'gradians', decimalPlaces: 0 },
     );
     expect(gradians[0]!.valueText).toBe('100 Gradians');
-    expect(gradians[2]!.valueText).toBe('X +1 · Y +0 · Z +0');
+    expect(gradians[2]!.valueText).toBe('E');
   });
 
   it('0° / 180° / 重合点回空数组（E3D 这几种造不出 ARC，窗体走 alert.error）', () => {
@@ -520,7 +558,7 @@ describe('buildAngleMeasurementResultRows · E3D Measure Angle 结果表（golde
       createdAt: 1,
     };
     const summary = formatMeasurementSummary(record, 'mm', 0, { referenceFrame: worldFrame() });
-    expect(summary.startsWith('Decimal Angle 90 Degrees · DMS 90° 0\' 0\'\' · Direction1 X +1.00')).toBe(true);
+    expect(summary.startsWith('Decimal Angle 90 Degrees · DMS 90° 0\' 0\'\' · Direction1 E · Direction2 N')).toBe(true);
     expect(summary).toContain('起点');
     expect(buildMeasurementValueText(record, 'mm', 0, worldFrame())).toBe('90 Degrees');
 
