@@ -188,6 +188,13 @@ const toolStoreMock = vi.hoisted(() => ({
   setToolMode: vi.fn(),
   setTextAnnotationsCollapsed: vi.fn(),
   updateAnnotationSeverity: vi.fn(),
+  // ADR-0050 关联失效解析（useAnnotationBindingResolve）按类型取记录；没有就当该类型没有批注
+  getAnnotationRecordsByType(type: 'text' | 'cloud' | 'rect' | 'obb'): any[] {
+    if (type === 'text') return this.annotations.value;
+    if (type === 'cloud') return this.cloudAnnotations.value;
+    if (type === 'rect') return this.rectAnnotations.value;
+    return this.obbAnnotations.value;
+  },
 }));
 
 const dockApiMock = vi.hoisted(() => ({
@@ -1697,6 +1704,63 @@ describe('ReviewPanel', () => {
     expect(dockApiMock.ensurePanelAndActivate).toHaveBeenCalledWith('viewer');
     expect(document.querySelector('[data-testid="annotation-table-expanded-ann-reviewer-2"]')).not.toBeNull();
 
+    mounted.unmount();
+  });
+
+  it('Reviewer 定位回执里加载失败的元素在行内处理卡上降级为「元素不存在」（ADR-0050），再次定位成功即撤销', async () => {
+    toolStoreMock.annotations.value = [
+      {
+        id: 'ann-reviewer-3',
+        formId: 'FORM-001',
+        entityId: 'entity-3',
+        worldPos: [0, 0, 0],
+        visible: true,
+        glyph: '1',
+        title: '关联元素已被删的批注',
+        description: 'stale binding',
+        severity: 'medium',
+        refnos: ['comp-3'],
+        createdAt: 1710000000000,
+      },
+    ];
+    // 有元素失败时 error 也带话——这一档不能被当成传输错误跳过
+    showModelByRefnosWithAckMock.mockResolvedValue({
+      ok: [],
+      fail: [{ refno: 'comp-3', error: 'HTTP 404 model unit not found' }],
+      error: '关联元素全部加载失败',
+    });
+    const { useAnnotationBindingResolve } = await import('@/composables/useAnnotationBindingResolve');
+    useAnnotationBindingResolve().resetForTests();
+
+    const mounted = await mountReviewPanel();
+    await settlePanel();
+    const row = document.querySelector('[data-testid="annotation-table-row-ann-reviewer-3"]') as HTMLElement | null;
+    expect(row).not.toBeNull();
+    if (!document.querySelector('[data-testid="annotation-table-expanded-ann-reviewer-3"]')) {
+      row?.click();
+      await settlePanel();
+    }
+    const q = (selector: string) => document.querySelector<HTMLElement>(selector);
+    // 展开即解析：模型还没装 → 「未加载」，仍可定位
+    expect(q('[data-testid="annotation-binding-state-comp-3"]')?.textContent).toContain('未加载');
+    expect(q('[data-testid="annotation-cloud-locate-comp-3"]')).not.toBeNull();
+
+    (q('[data-testid="annotation-table-locate-ann-reviewer-3"]') as HTMLButtonElement | null)?.click();
+    await settlePanel();
+
+    expect(showModelByRefnosWithAckMock).toHaveBeenCalledWith(expect.objectContaining({ refnos: ['comp-3'] }));
+    expect(q('[data-testid="annotation-binding-state-comp-3"]')?.textContent).toContain('元素不存在');
+    expect(q('[data-testid="annotation-binding-state-comp-3"]')?.getAttribute('title')).toContain('HTTP 404 model unit not found');
+    expect(q('[data-testid="annotation-cloud-locate-comp-3"]')).toBeNull();
+    expect(q('[data-testid="annotation-binding-resolve-summary"]')?.textContent).toContain('可用');
+
+    showModelByRefnosWithAckMock.mockResolvedValue({ ok: ['comp-3'], fail: [], error: null });
+    (q('[data-testid="annotation-table-locate-ann-reviewer-3"]') as HTMLButtonElement | null)?.click();
+    await settlePanel();
+    expect(q('[data-testid="annotation-binding-state-comp-3"]')?.textContent).not.toContain('元素不存在');
+    expect(q('[data-testid="annotation-cloud-locate-comp-3"]')).not.toBeNull();
+
+    useAnnotationBindingResolve().resetForTests();
     mounted.unmount();
   });
 

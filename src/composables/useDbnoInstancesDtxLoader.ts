@@ -1,3 +1,5 @@
+import { ref } from 'vue';
+
 import { Box3, BufferAttribute, BufferGeometry, Color, CylinderGeometry, Matrix4, SphereGeometry } from 'three';
 
 import { realtimeInstancesByRefnos } from '@/api/genModelRealtimeApi';
@@ -95,6 +97,54 @@ type DbnoRuntimeCache = {
 
 const cachesByDbno = new Map<number, DbnoRuntimeCache>();
 const AABB_PROXY_GEO_HASH = '__spatial_query_aabb_proxy_box';
+
+/**
+ * 运行时索引的修订号：每完成一批实例加载 / 替换（含版本切换重载）就 +1。
+ * 只增不减，供批注关联解析（ADR-0050）等消费方 `watch` 后重算，
+ * 省得它们各自去猜「模型什么时候装完了」。
+ */
+export const dtxLoaderRevision = ref(0);
+
+function bumpDtxLoaderRevision(): void {
+  dtxLoaderRevision.value += 1;
+}
+
+/** refno 的两种写法（`=24381/145018` 与 `24381_145018`）都试一遍，命中任一即算。 */
+function refnoKeyCandidates(refno: string): string[] {
+  const raw = String(refno ?? '').trim();
+  if (!raw) return [];
+  const out = new Set<string>([raw]);
+  const noEq = raw.replace(/^=/, '');
+  out.add(noEq);
+  out.add(raw.replace('/', '_'));
+  out.add(noEq.replace('/', '_'));
+  out.add(normalizeRefnoKey(raw));
+  return [...out].filter(Boolean);
+}
+
+/** 跨库：该 refno 的几何是否已装进场景（任一 dbno 缓存的 loadedRefnos 命中）。 */
+export function isDtxRefnoLoadedAcrossAllDbnos(refno: string): boolean {
+  const keys = refnoKeyCandidates(refno);
+  if (keys.length === 0) return false;
+  for (const cache of cachesByDbno.values()) {
+    for (const key of keys) {
+      if (cache.loadedRefnos.has(key)) return true;
+    }
+  }
+  return false;
+}
+
+/** 跨库：运行时索引是否认识该 refno（noun 已登记），与几何是否加载无关。 */
+export function isDtxRefnoKnownAcrossAllDbnos(refno: string): boolean {
+  const keys = refnoKeyCandidates(refno);
+  if (keys.length === 0) return false;
+  for (const cache of cachesByDbno.values()) {
+    for (const key of keys) {
+      if (cache.refnoToNoun.has(key)) return true;
+    }
+  }
+  return false;
+}
 
 function createRuntimeCache(): DbnoRuntimeCache {
   return {
@@ -710,6 +760,7 @@ export function loadDtxAabbProxyRefnos(
   if (loadedObjects > 0) {
     dtxLayer.recompile();
   }
+  if (loadedRefnos.length > 0) bumpDtxLoaderRevision();
 
   return {
     loadedRefnos: Array.from(new Set(loadedRefnos)),
@@ -1146,6 +1197,10 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
     }
     throw error;
   }
+
+  // 一批实例装完（含 replaceExistingObjects 的版本切换重载）→ 运行时索引修订 +1，
+  // 批注关联解析等消费方据此重算；抛错路径不 bump（索引已回滚到旧快照）。
+  if (toLoad.length > 0) bumpDtxLoaderRevision();
 
   return {
     loadedRefnos: toLoad.length,

@@ -42,6 +42,7 @@ import TaskReviewDetail from './TaskReviewDetail.vue';
 import { notifyParentWorkflowAction } from './workflowBridge';
 
 import { reviewAnnotationCheck } from '@/api/reviewApi';
+import { useAnnotationBindingResolve } from '@/composables/useAnnotationBindingResolve';
 import { saveAnnotationBasicFields, saveAnnotationSeverity } from '@/composables/useAnnotationSeveritySync';
 import { ensurePanelAndActivate } from '@/composables/useDockApi';
 import { useReviewStore } from '@/composables/useReviewStore';
@@ -67,6 +68,7 @@ const userStore = useUserStore();
 const reviewStore = useReviewStore();
 const toolStore = useToolStore();
 const viewerContext = useViewerContext();
+const bindingResolve = useAnnotationBindingResolve();
 const annotationProcessingEntryTarget = useAnnotationProcessingEntryTarget();
 
 const selectedAnnotationId = ref<string | null>(null);
@@ -334,6 +336,9 @@ async function locateAnnotation(item: AnnotationWorkspaceItem | null, refnos = i
     highlight: true,
     viewerRef: viewerContext.viewerRef,
   });
+  // 定位回执是关联失效解析的权威证据（ADR-0050）：fail → missing，ok → 撤销 missing。
+  // 有元素失败时 error 也会带话（「N 个关联元素加载失败」），所以不能按 error 跳过；纯传输错误（超时 / viewer 未就绪）ok / fail 都空，喂进去是空操作。
+  bindingResolve.markLoadResult(result);
   if (result.error) {
     emitToast({ message: result.error, level: 'warning' });
   }

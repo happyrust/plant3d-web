@@ -102,6 +102,32 @@ describe('useDbnoInstancesDtxLoader', () => {
     ]);
   });
 
+  it('跨库 refno 探针与运行时索引修订号（ADR-0050）：登记后 loaded / known 为真、两种 refno 写法都命中、每批装载修订号 +1', async () => {
+    const { DTXLayer } = await import('@/utils/three/dtx');
+    const mod = await import('./useDbnoInstancesDtxLoader');
+    const dtxLayer = new DTXLayer({ maxVertices: 64, maxIndices: 128, maxObjects: 8 });
+    const revisionBefore = mod.dtxLoaderRevision.value;
+
+    expect(mod.isDtxRefnoLoadedAcrossAllDbnos('2013286704_480')).toBe(false);
+    expect(mod.isDtxRefnoKnownAcrossAllDbnos('2013286704_480')).toBe(false);
+    expect(mod.isDtxRefnoLoadedAcrossAllDbnos('')).toBe(false);
+
+    mod.loadDtxAabbProxyRefnos(dtxLayer, 99002, [
+      { refno: '2013286704_480', noun: 'TEE', specValue: 0, aabb: { min: [-1, -1, -1], max: [1, 1, 1] } },
+    ]);
+
+    expect(mod.dtxLoaderRevision.value).toBe(revisionBefore + 1);
+    expect(mod.isDtxRefnoLoadedAcrossAllDbnos('2013286704_480')).toBe(true);
+    expect(mod.isDtxRefnoLoadedAcrossAllDbnos('=2013286704/480')).toBe(true);
+    expect(mod.isDtxRefnoLoadedAcrossAllDbnos(' 2013286704/480 ')).toBe(true);
+    expect(mod.isDtxRefnoKnownAcrossAllDbnos('=2013286704/480')).toBe(true);
+    expect(mod.isDtxRefnoLoadedAcrossAllDbnos('2013286704_481')).toBe(false);
+
+    // 空批不算一次装载，修订号不动
+    mod.loadDtxAabbProxyRefnos(dtxLayer, 99002, []);
+    expect(mod.dtxLoaderRevision.value).toBe(revisionBefore + 1);
+  });
+
   it('ELBO 自身已有几何时，不应把 owner 关系带出的 TUBI 也映射到 ELBO', async () => {
     const { DTXLayer } = await import('@/utils/three/dtx');
     const mod = await import('./useDbnoInstancesDtxLoader');

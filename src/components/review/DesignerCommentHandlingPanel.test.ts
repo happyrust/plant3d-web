@@ -170,6 +170,13 @@ vi.mock('@/composables/useToolStore', () => ({
     clearAll: vi.fn(),
     clearDraftDataByPayload: clearDraftDataByPayloadMock,
     updateAnnotationSeverity: vi.fn(),
+    // ADR-0050 关联失效解析（useAnnotationBindingResolve）按类型取记录
+    getAnnotationRecordsByType: (type: 'text' | 'cloud' | 'rect' | 'obb') => {
+      if (type === 'text') return annotationsRef.value;
+      if (type === 'cloud') return cloudAnnotationsRef.value;
+      if (type === 'rect') return rectAnnotationsRef.value;
+      return obbAnnotationsRef.value;
+    },
   }),
   getAnnotationRefnos: (annotation: { refnos?: string[]; refno?: string }) => annotation.refnos ?? (annotation.refno ? [annotation.refno] : []),
   deriveCloudBindings: (annotation: { bindings?: unknown[]; refnos?: string[]; objectIds?: string[]; anchorRefno?: string; createdAt?: number }) => (

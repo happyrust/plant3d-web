@@ -17,6 +17,22 @@ vi.mock('@/composables/useUserStore', () => ({
   useUserStore: () => ({ currentUser }),
 }));
 
+/** 关联失效解析（ADR-0050）的运行时索引探针换成可控集合，默认全部「未加载」 */
+const loaderMock = vi.hoisted(() => ({
+  loaded: new Set<string>(),
+  known: new Set<string>(),
+}));
+
+vi.mock('@/composables/useDbnoInstancesDtxLoader', async () => {
+  const { ref } = await import('vue');
+  return {
+    dtxLoaderRevision: ref(0),
+    isDtxRefnoLoadedAcrossAllDbnos: (refno: string) => loaderMock.loaded.has(refno),
+    isDtxRefnoKnownAcrossAllDbnos: (refno: string) => loaderMock.known.has(refno),
+    findNounByRefnoAcrossAllDbnos: () => null,
+  };
+});
+
 vi.mock('./ReviewCommentsTimeline.vue', () => ({
   default: {
     name: 'ReviewCommentsTimelineStub',
@@ -272,6 +288,130 @@ describe('AnnotationInlineDetailCard', () => {
     expect(record?.refnos).toEqual([]);
     expect(record?.anchorRefno).toBe('REF/A');
 
+    store.clearAll();
+    mounted.unmount();
+  });
+
+  it('关联失效降级（ADR-0050）：未加载 / 不存在 / STALE 各出徽标，不存在的构件不可定位并从「定位高亮全部」剔除', async () => {
+    const { useToolStore } = await import('@/composables/useToolStore');
+    const { useAnnotationBindingResolve } = await import('@/composables/useAnnotationBindingResolve');
+    const { useViewerContext } = await import('@/composables/useViewerContext');
+    const store = useToolStore();
+    const bindingResolve = useAnnotationBindingResolve();
+    const viewerContext = useViewerContext();
+    store.clearAll();
+    bindingResolve.resetForTests();
+    loaderMock.loaded.clear();
+    loaderMock.known.clear();
+    loaderMock.loaded.add('REF/A');
+    loaderMock.loaded.add('REF/B');
+    loaderMock.known.add('REF/C');
+    // 锚点在 [5000,0,0]，构件包围盒只到 10 → 锚点漂离 → STALE
+    viewerContext.viewerRef.value = {
+      scene: { getAABB: () => [0, 0, 0, 10, 10, 10] },
+    } as unknown as typeof viewerContext.viewerRef.value;
+    store.addCloudAnnotation({
+      id: 'annot-1',
+      objectIds: ['REF/A', 'REF/B', 'REF/C'],
+      anchorRefno: 'REF/A',
+      anchorWorldPos: [5000, 0, 0],
+      visible: true,
+      title: '云线批注',
+      description: '',
+      createdAt: 1,
+    });
+    const bindings = [
+      { refno: 'REF/A', role: 'anchor' as const, noun: 'PIPE', createdAt: 1 },
+      { refno: 'REF/A', role: 'member' as const, noun: 'PIPE', createdAt: 1 },
+      { refno: 'REF/B', role: 'member' as const, noun: 'VALV', createdAt: 1 },
+      { refno: 'REF/C', role: 'member' as const, noun: 'ELBO', createdAt: 1 },
+    ];
+
+    const mounted = await mountCard({
+      item: createItem({ type: 'cloud', refnos: ['REF/A', 'REF/B', 'REF/C'], bindings }),
+    });
+    const q = (selector: string) => mounted.host.querySelector<HTMLElement>(selector);
+
+    // 挂载即按记录解析：锚点 STALE 带原因；已加载 member 不出徽标；未加载 member 出徽标但仍可定位
+    expect(q('[data-testid="annotation-anchor-state"]')?.textContent).toContain('STALE');
+    expect(mounted.host.textContent).toContain('锚点坐标已不在该构件包围盒附近');
+    expect(q('[data-testid="annotation-binding-state-REF/A"]')).toBeNull();
+    expect(q('[data-testid="annotation-binding-state-REF/B"]')).toBeNull();
+    expect(q('[data-testid="annotation-binding-state-REF/C"]')?.textContent).toContain('未加载');
+    expect(q('[data-testid="annotation-cloud-locate-REF/C"]')).not.toBeNull();
+    // 有 STALE → 标题旁提示可用数：resolved 2 + unloaded 1 = 3 / 4
+    expect(q('[data-testid="annotation-binding-resolve-summary"]')?.textContent).toContain('可用 3/4');
+
+    // 一次定位回执说 REF/B 加载失败 → 权威 missing：徽标带错误文本、隐藏单项定位、从「定位高亮全部」剔除
+    bindingResolve.markLoadResult({ ok: [], fail: [{ refno: 'REF/B', error: 'HTTP 404' }] });
+    await nextTick();
+    expect(q('[data-testid="annotation-binding-state-REF/B"]')?.textContent).toContain('元素不存在');
+    expect(q('[data-testid="annotation-binding-state-REF/B"]')?.getAttribute('title')).toContain('HTTP 404');
+    expect(q('[data-testid="annotation-cloud-locate-REF/B"]')).toBeNull();
+    expect(q('[data-testid="annotation-binding-resolve-summary"]')?.textContent).toContain('可用 2/4');
+
+    q('[data-testid="annotation-cloud-locate-all"]')?.click();
+    await nextTick();
+    expect(mounted.locateElementsSpy).toHaveBeenLastCalledWith({
+      item: expect.objectContaining({ id: 'annot-1' }),
+      refnos: ['REF/A', 'REF/C'],
+    });
+
+    // 之后一次定位成功 → 撤销 missing，徽标消失、定位按钮回来
+    bindingResolve.markLoadResult({ ok: ['REF/B'], fail: [] });
+    await nextTick();
+    expect(q('[data-testid="annotation-binding-state-REF/B"]')).toBeNull();
+    expect(q('[data-testid="annotation-cloud-locate-REF/B"]')).not.toBeNull();
+
+    viewerContext.viewerRef.value = null;
+    bindingResolve.resetForTests();
+    store.clearAll();
+    mounted.unmount();
+  });
+
+  it('全部关联正常时不出任何失效徽标，也不出可用数提示', async () => {
+    const { useToolStore } = await import('@/composables/useToolStore');
+    const { useAnnotationBindingResolve } = await import('@/composables/useAnnotationBindingResolve');
+    const store = useToolStore();
+    const bindingResolve = useAnnotationBindingResolve();
+    store.clearAll();
+    bindingResolve.resetForTests();
+    loaderMock.loaded.clear();
+    loaderMock.known.clear();
+    loaderMock.loaded.add('REF/A');
+    store.addRectAnnotation({
+      id: 'annot-1',
+      objectIds: ['REF/A'],
+      refnos: ['REF/A'],
+      obb: {
+        center: [0, 0, 0],
+        axes: [[1, 0, 0], [0, 1, 0], [0, 0, 1]],
+        halfSize: [1, 1, 1],
+        corners: [
+          [-1, -1, -1], [1, -1, -1], [1, 1, -1], [-1, 1, -1],
+          [-1, -1, 1], [1, -1, 1], [1, 1, 1], [-1, 1, 1],
+        ],
+      },
+      anchorWorldPos: [0, 0, 0],
+      visible: true,
+      title: '矩形批注',
+      description: '',
+      createdAt: 1,
+    });
+
+    const mounted = await mountCard({
+      item: createItem({
+        type: 'rect',
+        refnos: ['REF/A'],
+        bindings: [{ refno: 'REF/A', role: 'member', createdAt: 1 }],
+      }),
+    });
+
+    expect(mounted.host.querySelector('[data-testid="annotation-binding-state-REF/A"]')).toBeNull();
+    expect(mounted.host.querySelector('[data-testid="annotation-binding-resolve-summary"]')).toBeNull();
+    expect(mounted.host.querySelector('[data-testid="annotation-cloud-locate-REF/A"]')).not.toBeNull();
+
+    bindingResolve.resetForTests();
     store.clearAll();
     mounted.unmount();
   });

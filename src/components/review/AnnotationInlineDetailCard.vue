@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 
 import {
   Camera,
@@ -22,9 +22,11 @@ import type {
 import type { AnnotationType, MeasurementRecord } from '@/composables/useToolStore';
 
 import { reviewAttachmentDelete } from '@/api/reviewApi';
+import { useAnnotationBindingResolve } from '@/composables/useAnnotationBindingResolve';
 import { useScreenshot } from '@/composables/useScreenshot';
 import { useToolStore } from '@/composables/useToolStore';
 import { useUserStore } from '@/composables/useUserStore';
+import { getBindingResolveDisplay, type BindingResolveEntry } from '@/review/domain/bindingResolve';
 import { emitToast } from '@/ribbon/toastBus';
 import {
   canEditAnnotationSeverity,
@@ -100,6 +102,45 @@ function removeMember(refno: string) {
   if (!toolStore.removeAnnotationMember(props.item.type, props.item.id, refno)) return;
   emitToast({ message: `已移除关联元素 ${refno}`, level: 'success' });
 }
+
+// ==================== 关联失效解析（ADR-0050）====================
+// 打开这张卡 / 换记录 / 绑定增删时按记录重算；模型加载或版本切换由 composable 内部 watch 全量重算。
+const bindingResolve = useAnnotationBindingResolve();
+watch(
+  () => [props.item.type, props.item.id, itemBindings.value.length] as const,
+  () => bindingResolve.resolveRecord(props.item.type, props.item.id),
+  { immediate: true },
+);
+
+function resolveOf(role: 'anchor' | 'member', refno: string): BindingResolveEntry | undefined {
+  // 读 entries.value 让这里跟着整表替换响应
+  void bindingResolve.entries.value;
+  return bindingResolve.getBindingResolve(props.item.type, props.item.id, role, refno);
+}
+function resolveDisplayOf(role: 'anchor' | 'member', refno: string) {
+  const entry = resolveOf(role, refno);
+  return entry ? getBindingResolveDisplay(entry.state) : null;
+}
+const bindingResolveSummary = computed(() => {
+  void bindingResolve.entries.value;
+  return bindingResolve.getRecordSummary(props.item.type, props.item.id);
+});
+/** 只有 missing / stale 时才在标题旁提示「可用 x/N」，正常态不加噪音 */
+const showResolveSummary = computed(() => (
+  bindingResolveSummary.value.missing > 0 || bindingResolveSummary.value.stale > 0
+));
+/** 「定位高亮全部」只带还能定位的 member（找不到的构件没有可去的地方） */
+const locatableMemberRefnos = computed(() => (
+  memberBindings.value
+    .filter((binding) => resolveDisplayOf('member', binding.refno)?.canLocate !== false)
+    .map((binding) => binding.refno)
+));
+const anchorResolveDisplay = computed(() => (
+  anchorBinding.value ? resolveDisplayOf('anchor', anchorBinding.value.refno) : null
+));
+const anchorResolveReason = computed(() => (
+  anchorBinding.value ? resolveOf('anchor', anchorBinding.value.refno)?.reason : undefined
+));
 
 // ==================== 批注截图（拍摄当前视角） ====================
 
@@ -243,6 +284,12 @@ function formatDateTime(timestamp: number): string {
           <div class="flex items-center justify-between gap-2">
             <h4 class="text-sm font-semibold text-slate-900">
               关联元素 {{ memberBindings.length }}
+              <span v-if="showResolveSummary"
+                data-testid="annotation-binding-resolve-summary"
+                class="ml-1 rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700"
+                title="有关联已失效：找不到的构件只能移除，锚点不可更换">
+                可用 {{ bindingResolveSummary.usable }}/{{ bindingResolveSummary.total }}
+              </span>
             </h4>
             <div class="flex items-center gap-1">
               <button v-if="canEditBindings"
@@ -254,11 +301,11 @@ function formatDateTime(timestamp: number): string {
                 <Plus class="h-3 w-3" />
                 添加元素
               </button>
-              <button v-if="memberBindings.length > 0"
+              <button v-if="locatableMemberRefnos.length > 0"
                 data-testid="annotation-cloud-locate-all"
                 type="button"
                 class="inline-flex items-center gap-1 rounded-md border border-slate-200 px-2 py-1 text-[11px] font-medium text-slate-600 hover:border-brand/40 hover:text-brand"
-                @click="emit('locate-elements', { item, refnos: item.refnos })">
+                @click="emit('locate-elements', { item, refnos: locatableMemberRefnos })">
                 <LocateFixed class="h-3 w-3" />
                 定位高亮全部
               </button>
@@ -268,13 +315,26 @@ function formatDateTime(timestamp: number): string {
           <div v-if="memberBindings.length > 0" class="mt-2 space-y-1.5">
             <div v-for="binding in memberBindings"
               :key="binding.refno"
-              class="flex items-center justify-between gap-2 rounded-md bg-slate-50 px-2.5 py-2">
+              class="flex items-center justify-between gap-2 rounded-md bg-slate-50 px-2.5 py-2"
+              :class="resolveDisplayOf('member', binding.refno)?.canLocate === false ? 'opacity-70' : ''"
+              :data-resolve-state="resolveOf('member', binding.refno)?.state ?? ''">
               <div class="min-w-0">
-                <div v-if="binding.noun" class="text-[11px] font-semibold text-slate-700">{{ binding.noun }}</div>
+                <div class="flex items-center gap-1.5">
+                  <span v-if="binding.noun" class="text-[11px] font-semibold text-slate-700">{{ binding.noun }}</span>
+                  <!-- 失效态徽标（ADR-0050）：resolved 不出徽标，unloaded / missing / stale 各一枚 -->
+                  <span v-if="resolveDisplayOf('member', binding.refno)?.showBadge"
+                    :data-testid="`annotation-binding-state-${binding.refno}`"
+                    class="rounded border px-1 py-px text-[10px] font-medium"
+                    :class="resolveDisplayOf('member', binding.refno)?.tone"
+                    :title="resolveOf('member', binding.refno)?.reason">
+                    {{ resolveDisplayOf('member', binding.refno)?.label }}
+                  </span>
+                </div>
                 <div class="truncate font-mono text-[11px] text-slate-500" :title="binding.refno">{{ binding.refno }}</div>
               </div>
               <div class="flex shrink-0 items-center gap-1">
-                <button type="button"
+                <button v-if="resolveDisplayOf('member', binding.refno)?.canLocate !== false"
+                  type="button"
                   :data-testid="`annotation-cloud-locate-${binding.refno}`"
                   class="rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-600 hover:border-brand/40"
                   @click="emit('locate-elements', { item, refnos: [binding.refno] })">
@@ -296,14 +356,27 @@ function formatDateTime(timestamp: number): string {
             {{ canEditBindings ? '尚未关联元素，点「添加元素」在三维视口中点选' : '历史批注未关联元素' }}
           </p>
 
-          <div v-if="anchorBinding" class="mt-3 border-t border-slate-100 pt-2">
-            <div class="text-[11px] font-semibold text-slate-500">
-              {{ anchorLabel }}<span v-if="canEditBindings" class="ml-1 font-normal text-slate-400">（不可更换）</span>
+          <div v-if="anchorBinding"
+            class="mt-3 border-t border-slate-100 pt-2"
+            :data-resolve-state="resolveOf('anchor', anchorBinding.refno)?.state ?? ''">
+            <div class="flex items-center gap-1.5 text-[11px] font-semibold text-slate-500">
+              <span>{{ anchorLabel }}<span v-if="canEditBindings" class="ml-1 font-normal text-slate-400">（不可更换）</span></span>
+              <span v-if="anchorResolveDisplay?.showBadge"
+                data-testid="annotation-anchor-state"
+                class="rounded border px-1 py-px text-[10px] font-medium"
+                :class="anchorResolveDisplay.tone"
+                :title="anchorResolveReason">
+                {{ anchorResolveDisplay.label }}
+              </span>
             </div>
             <div class="mt-1 flex items-center gap-2 text-[11px] text-slate-500">
               <span v-if="anchorBinding.noun" class="font-semibold text-slate-700">{{ anchorBinding.noun }}</span>
               <span class="truncate font-mono" :title="anchorBinding.refno">{{ anchorBinding.refno }}</span>
             </div>
+            <p v-if="anchorResolveDisplay?.showBadge && anchorResolveReason"
+              class="mt-1 text-[10px] text-slate-500">
+              {{ anchorResolveReason }}
+            </p>
           </div>
         </div>
 

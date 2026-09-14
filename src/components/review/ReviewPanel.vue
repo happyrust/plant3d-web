@@ -76,6 +76,7 @@ import {
   reviewSyncExport,
   reviewSyncImport,
 } from '@/api/reviewApi';
+import { useAnnotationBindingResolve } from '@/composables/useAnnotationBindingResolve';
 import { syncAnnotationReviewStates } from '@/composables/useAnnotationReviewStateSync';
 import { saveAnnotationBasicFields, saveAnnotationSeverity } from '@/composables/useAnnotationSeveritySync';
 import { refreshCommentThread } from '@/composables/useCommentThread';
@@ -151,6 +152,7 @@ const userStore = useUserStore();
 const onboarding = useOnboardingGuide();
 const selectionStore = useSelectionStore();
 const viewerContext = useViewerContext();
+const bindingResolve = useAnnotationBindingResolve();
 const unitSettings = useUnitSettingsStore();
 
 // 确认记录场景恢复（公共模块）
@@ -1689,6 +1691,9 @@ async function locateWorkspaceAnnotation(item: AnnotationWorkspaceItem, refnos =
     highlight: true,
     viewerRef: viewerContext.viewerRef,
   });
+  // 定位回执是关联失效解析的权威证据（ADR-0050）：fail → missing，ok → 撤销 missing。
+  // 有元素失败时 error 也会带话（「N 个关联元素加载失败」），所以不能按 error 跳过；纯传输错误（超时 / viewer 未就绪）ok / fail 都空，喂进去是空操作。
+  bindingResolve.markLoadResult(result);
   if (result.error) {
     emitToast({ message: result.error, level: 'warning' });
   }
