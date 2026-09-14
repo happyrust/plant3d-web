@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { nextTick } from 'vue';
 
-import { useAnnotationBindingResolve } from './useAnnotationBindingResolve';
+import { buildRecordDegradeKey, useAnnotationBindingResolve } from './useAnnotationBindingResolve';
 import { dtxLoaderRevision } from './useDbnoInstancesDtxLoader';
 import {
   useToolStore,
@@ -280,5 +280,69 @@ describe('useAnnotationBindingResolve（ADR-0050 运行时：批量解析 + 定�
       state: 'missing',
       reason: `${BINDING_RESOLVE_REASONS.missing}：custom evidence`,
     });
+  });
+
+  it('记录级降级态（视口用）：missing 压过 stale，只有 stale 的是 stale，正常记录不在表里；单条与整表口径一致', () => {
+    const store = useToolStore();
+    store.addCloudAnnotation(makeCloud('c-missing', { objectIds: ['=1/2'], anchorRefno: '=1/1' }));
+    store.addAnnotation(makeText('t-stale', { refno: '=1/1' }));
+    store.addRectAnnotation(makeRect('r-ok', { refnos: ['=1/3'] }));
+
+    api.resolveAll({
+      isLoaded: () => true,
+      isKnown: () => true,
+      isVerifiedMissing: (refno) => refno === '=1/2',
+      missingReason: () => 'HTTP 404',
+      anchorDrift: () => true,
+    });
+
+    const degrades = api.getRecordDegrades();
+    expect([...degrades.keys()].sort()).toEqual([buildRecordDegradeKey('cloud', 'c-missing'), buildRecordDegradeKey('text', 't-stale')]);
+    expect(degrades.get('cloud:c-missing')).toMatchObject({ state: 'missing', label: '⚠ 不存在' });
+    expect(degrades.get('cloud:c-missing')!.title.split('\n')).toEqual([
+      BINDING_RESOLVE_REASONS.stale,
+      `${BINDING_RESOLVE_REASONS.missing}：HTTP 404`,
+    ]);
+    expect(degrades.get('text:t-stale')).toMatchObject({ state: 'stale', label: 'STALE', title: BINDING_RESOLVE_REASONS.stale });
+
+    expect(api.getRecordDegrade('cloud', 'c-missing')).toEqual(degrades.get('cloud:c-missing'));
+    expect(api.getRecordDegrade('text', 't-stale')).toEqual(degrades.get('text:t-stale'));
+    expect(api.getRecordDegrade('rect', 'r-ok')).toBeNull();
+    expect(api.getRecordDegrade('obb', 'nope')).toBeNull();
+  });
+
+  it('触发 ④：记录集合 / 绑定数变化在同一合并窗口后重算一次；只改标题不触发', async () => {
+    vi.useFakeTimers();
+    const store = useToolStore();
+    loaderMock.loaded.add('=1/1');
+    api.resolveAll();
+    expect(api.entries.value.size).toBe(0);
+    loaderMock.isLoaded.mockClear();
+
+    // 模型已装好、批注后到（导入快照 / 服务端拉回）
+    store.addRectAnnotation(makeRect('late', { refnos: ['=1/1'] }));
+    await nextTick();
+    store.addCloudAnnotation(makeCloud('late-cloud', { objectIds: ['=1/1'] }));
+    await nextTick();
+    expect(api.getBindingResolve('rect', 'late', 'member', '=1/1')).toBeUndefined();
+
+    vi.advanceTimersByTime(200);
+    expect(api.getBindingResolve('rect', 'late', 'member', '=1/1')?.state).toBe('resolved');
+    expect(api.getBindingResolve('cloud', 'late-cloud', 'member', '=1/1')?.state).toBe('resolved');
+    // 两次增删、两条绑定 → 合并成一次重算，探针每条绑定只问一遍
+    expect(loaderMock.isLoaded).toHaveBeenCalledTimes(2);
+
+    // 改标题：签名不变，不重算
+    loaderMock.isLoaded.mockClear();
+    store.updateRectAnnotation('late', { title: '改个标题' });
+    await nextTick();
+    vi.advanceTimersByTime(200);
+    expect(loaderMock.isLoaded).not.toHaveBeenCalled();
+
+    // 绑定增删：签名变，重算
+    store.addAnnotationMembers('rect', 'late', ['=1/2'], () => undefined);
+    await nextTick();
+    vi.advanceTimersByTime(200);
+    expect(api.getBindingResolve('rect', 'late', 'member', '=1/2')?.state).toBe('unloaded');
   });
 });

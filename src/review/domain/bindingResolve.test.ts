@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  ANNOTATION_DEGRADE_VIEWPORT_STYLE,
   BINDING_RESOLVE_REASONS,
   buildBindingResolveKey,
   classifyBinding,
   getBindingResolveDisplay,
   isAnchorOutsideAabb,
   summarizeBindingResolve,
+  summarizeRecordDegrade,
   type BindingResolveProbe,
 } from './bindingResolve';
 
@@ -151,5 +153,40 @@ describe('summarizeBindingResolve / getBindingResolveDisplay / buildBindingResol
 
   it('索引键含类型、记录、角色与裁边后的 refno', () => {
     expect(buildBindingResolveKey('cloud', 'c1', 'anchor', ' =1/1 ')).toBe('cloud:c1:anchor:=1/1');
+  });
+});
+
+describe('summarizeRecordDegrade（视口记录级降级态）', () => {
+  it('任一绑定 missing 就是 missing，压过 stale；徽标文字取样式表，tooltip 拼各失效绑定的 reason 并去重', () => {
+    const degrade = summarizeRecordDegrade([
+      { state: 'resolved', checkedAt: 1 },
+      { state: 'stale', checkedAt: 1, reason: BINDING_RESOLVE_REASONS.stale },
+      { state: 'missing', checkedAt: 1, reason: `${BINDING_RESOLVE_REASONS.missing}：HTTP 404` },
+      { state: 'missing', checkedAt: 1, reason: `${BINDING_RESOLVE_REASONS.missing}：HTTP 404` },
+      undefined,
+    ]);
+    expect(degrade).not.toBeNull();
+    expect(degrade!.state).toBe('missing');
+    expect(degrade!.label).toBe(ANNOTATION_DEGRADE_VIEWPORT_STYLE.badge.missing.label);
+    expect(degrade!.title.split('\n')).toEqual([
+      BINDING_RESOLVE_REASONS.stale,
+      `${BINDING_RESOLVE_REASONS.missing}：HTTP 404`,
+    ]);
+    expect(degrade!.summary).toEqual({ total: 4, resolved: 1, unloaded: 0, missing: 2, stale: 1, usable: 1 });
+  });
+
+  it('只有 anchor stale → stale，徽标写 STALE（对齐尺寸系统）；没有 reason 时 tooltip 退回面板标签', () => {
+    expect(summarizeRecordDegrade([{ state: 'stale', checkedAt: 1, reason: BINDING_RESOLVE_REASONS.stale }])).toMatchObject({
+      state: 'stale',
+      label: 'STALE',
+      title: BINDING_RESOLVE_REASONS.stale,
+    });
+    expect(summarizeRecordDegrade([{ state: 'missing', checkedAt: 1 }])?.title).toBe(getBindingResolveDisplay('missing').label);
+  });
+
+  it('resolved / unloaded / 空表都不降级（正常态不加噪音）', () => {
+    expect(summarizeRecordDegrade([{ state: 'resolved', checkedAt: 1 }, { state: 'unloaded', checkedAt: 1 }])).toBeNull();
+    expect(summarizeRecordDegrade([])).toBeNull();
+    expect(summarizeRecordDegrade([undefined])).toBeNull();
   });
 });

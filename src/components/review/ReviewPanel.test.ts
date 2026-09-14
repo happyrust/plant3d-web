@@ -1,6 +1,7 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp, h, nextTick, type Component } from 'vue';
 
+import type { ShowModelByRefnosResult } from '@/composables/useViewerContext';
 import type { ReviewTask } from '@/types/auth';
 
 const currentTask = { value: null as ReviewTask | null };
@@ -151,7 +152,9 @@ vi.mock('@/api/reviewApi', () => ({
 }));
 
 const viewerWaitForReadyMock = vi.hoisted(() => vi.fn(async () => false));
-const showModelByRefnosWithAckMock = vi.hoisted(() => vi.fn(async () => ({ ok: [], fail: [], error: null })));
+const showModelByRefnosWithAckMock = vi.hoisted(() =>
+  vi.fn(async (): Promise<ShowModelByRefnosResult> => ({ ok: [], fail: [], error: null })),
+);
 
 vi.mock('@/composables/useViewerContext', () => ({
   useViewerContext: () => ({

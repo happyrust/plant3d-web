@@ -110,6 +110,59 @@ export function summarizeBindingResolve(entries: readonly (BindingResolveEntry |
   return summary;
 }
 
+/** 记录级降级态（视口用）：任一绑定 missing → `missing`；否则任一 anchor stale → `stale`；resolved / unloaded 不降级。 */
+export type AnnotationDegradeState = 'missing' | 'stale';
+
+export type AnnotationDegrade = {
+  state: AnnotationDegradeState;
+  /** 左上角小徽标的文字 */
+  label: string;
+  /** 徽标 / 图钉的 tooltip：各失效绑定的 reason 去重后按行拼接；一条 reason 都没有时退回面板标签 */
+  title: string;
+  summary: BindingResolveSummary;
+};
+
+/**
+ * 视口降级样式（ADR-0050「面板与视口以降级样式提示，沿用尺寸系统 STALE 视觉语义」）。
+ * 云线 / 引线 / 图钉一律中性灰 + 虚线，missing 与 stale 不在线条上区分——区分交给左上角小徽标，
+ * 色调与面板徽标一致（不存在 = 玫红，STALE = 琥珀）。渲染仍只读坐标快照，这里只换外观。
+ */
+export const ANNOTATION_DEGRADE_VIEWPORT_STYLE = {
+  /** slate-400，three.js 材质用 */
+  lineColor: 0x94a3b8,
+  /** slate-400，DOM / SVG 用 */
+  lineColorCss: '#94a3b8',
+  /** slate-500，图钉描边 */
+  strokeColorCss: '#64748b',
+  /** SVG 图钉描边的虚线节拍 */
+  svgDashArray: '3 2',
+  badge: {
+    missing: { label: '⚠ 不存在', background: '#fff1f2', color: '#be123c', border: '#fecdd3' },
+    stale: { label: 'STALE', background: '#fffbeb', color: '#b45309', border: '#fde68a' },
+  },
+} as const;
+
+/** 一条记录的全部绑定解析结果 → 视口降级态；没有 missing / stale 时回 null（正常态不加噪音）。 */
+export function summarizeRecordDegrade(
+  entries: readonly (BindingResolveEntry | undefined)[],
+): AnnotationDegrade | null {
+  const summary = summarizeBindingResolve(entries);
+  const state: AnnotationDegradeState | null = summary.missing > 0 ? 'missing' : summary.stale > 0 ? 'stale' : null;
+  if (!state) return null;
+  const reasons: string[] = [];
+  for (const entry of entries) {
+    if (!entry || (entry.state !== 'missing' && entry.state !== 'stale')) continue;
+    const reason = entry.reason?.trim();
+    if (reason && !reasons.includes(reason)) reasons.push(reason);
+  }
+  return {
+    state,
+    label: ANNOTATION_DEGRADE_VIEWPORT_STYLE.badge[state].label,
+    title: reasons.length > 0 ? reasons.join('\n') : getBindingResolveDisplay(state).label,
+    summary,
+  };
+}
+
 /**
  * 面板显示配置。`resolved` 不出徽标（正常态不加噪音），其余三态各一枚。
  * 色彩：未加载 = 中性灰；不存在 = 红（对齐「元素不存在」警示）；失效 = 琥珀（对齐尺寸 STALE）。
