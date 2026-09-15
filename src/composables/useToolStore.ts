@@ -783,6 +783,55 @@ function peekPersistedAnnotationCounts(scope: string): Record<AnnotationType, nu
   return null;
 }
 
+const ANNOTATION_TYPE_TO_V7_FIELD: Record<AnnotationType, 'annotations' | 'cloudAnnotations' | 'rectAnnotations' | 'obbAnnotations'> = {
+  text: 'annotations',
+  cloud: 'cloudAnnotations',
+  rect: 'rectAnnotations',
+  obb: 'obbAnnotations',
+};
+
+/**
+ * U0 迟到回执（方案 §3.6「A 任务截图上传返回时用户已在 B，只能归属 A」）：把一条 patch 写进**别的** scope 的本机 V7 容器里
+ * 的某条批注（按 id 浅合并）。只读写原文、不 normalize、不碰内存。
+ * 容器不存在 / 不是 V7 / 条目不存在 / 写失败 → false；`scope` 就是当前生效的作用域也 → false——当前作用域内存是权威，
+ * 下一次刷盘会把容器盖回去，请走 `setAnnotationScreenshot` 等内存 API。
+ */
+function patchPersistedAnnotationInScope(
+  scope: string,
+  type: AnnotationType,
+  id: string,
+  patch: Record<string, unknown>,
+): boolean {
+  if (typeof localStorage === 'undefined') return false;
+  if (scope === storageScope.value) return false;
+  const key = withStorageScope(STORAGE_KEY_V7, scope);
+  let raw: string | null = null;
+  try {
+    raw = localStorage.getItem(key);
+  } catch {
+    return false;
+  }
+  if (!raw) return false;
+  let parsed: Record<string, unknown> | null = null;
+  try {
+    parsed = JSON.parse(raw) as Record<string, unknown> | null;
+  } catch {
+    return false;
+  }
+  if (!parsed || typeof parsed !== 'object' || parsed.version !== 7) return false;
+  const list = parsed[ANNOTATION_TYPE_TO_V7_FIELD[type]];
+  if (!Array.isArray(list)) return false;
+  const index = list.findIndex((item) => !!item && typeof item === 'object' && (item as { id?: unknown }).id === id);
+  if (index < 0) return false;
+  list[index] = { ...(list[index] as Record<string, unknown>), ...patch };
+  try {
+    localStorage.setItem(key, JSON.stringify(parsed));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function archiveLegacyDimensionsForScope(
   storage: StorageLike,
   scope: string,
@@ -3524,6 +3573,7 @@ export function useToolStore() {
     getAnnotationDraftScope,
     getUnattributedDraftSummary,
     annotationDraftJournal,
+    patchPersistedAnnotationInScope,
 
     // 评论/意见管理
     addCommentToAnnotation,

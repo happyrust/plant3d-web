@@ -214,6 +214,35 @@ describe('useToolStore · U0 草稿 scope 隔离', () => {
     expect(readIds(keyA)).toEqual(['a-1', 'a-2', 'a-3']);
   });
 
+  it('迟到回执写进别的 scope 的容器：按 id 浅合并、不 normalize、不碰内存；当前作用域 / 容器缺 / 条目缺 → false', async () => {
+    store.setAnnotationDraftScope(scopeA);
+    store.addAnnotation(textAnnotation('a-1'));
+    await flush();
+    store.setAnnotationDraftScope(scopeB);
+    store.addAnnotation(textAnnotation('b-1'));
+    await flush();
+
+    // 现在在 B，A 的截图回执迟到：写进 A 的容器
+    const screenshot = { url: 'blob:a', attachmentId: 'att-1', capturedAt: 5 };
+    expect(store.patchPersistedAnnotationInScope(annotationScopeKey(scopeA), 'text', 'a-1', { screenshot })).toBe(true);
+    const rawA = JSON.parse(localStorage.getItem(keyA) ?? '{}') as { annotations: { id: string; screenshot?: unknown; title: string }[] };
+    expect(rawA.annotations[0]).toMatchObject({ id: 'a-1', title: 'a-1', screenshot });
+    // B 的内存 / 容器没动
+    expect(store.annotations.value.map((a) => a.id)).toEqual(['b-1']);
+    expect((store.annotations.value[0] as { screenshot?: unknown }).screenshot).toBeUndefined();
+
+    // 当前作用域不走这条路（内存是权威）
+    expect(store.patchPersistedAnnotationInScope(annotationScopeKey(scopeB), 'text', 'b-1', { screenshot })).toBe(false);
+    // 条目 / 容器不存在
+    expect(store.patchPersistedAnnotationInScope(annotationScopeKey(scopeA), 'text', 'nope', { screenshot })).toBe(false);
+    expect(store.patchPersistedAnnotationInScope(annotationScopeKey(scopeA), 'cloud', 'a-1', { screenshot })).toBe(false);
+    expect(store.patchPersistedAnnotationInScope('v1|project=p|task=ghost|round=0|user=JH', 'text', 'a-1', { screenshot })).toBe(false);
+
+    // 切回 A：迟到的截图跟着容器一起载回来
+    store.setAnnotationDraftScope(scopeA);
+    expect((store.annotations.value[0] as { screenshot?: { attachmentId?: string } }).screenshot?.attachmentId).toBe('att-1');
+  });
+
   it('开关 scopedDraftsV1 关着：scope 只记不生效，key 仍是旧作用域；开回来 refresh 一次就接上', async () => {
     setAnnotationUxFlag('scopedDraftsV1', false);
     resetAnnotationUxFlagCache();

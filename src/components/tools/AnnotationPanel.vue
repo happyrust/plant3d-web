@@ -13,6 +13,8 @@ import {
 } from '@/api/reviewApi';
 import ReviewCommentsPanel from '@/components/review/ReviewCommentsPanel.vue';
 import ReviewCommentsTimeline from '@/components/review/ReviewCommentsTimeline.vue';
+import { attachAnnotationScreenshotByRoute } from '@/composables/annotationReceiptRoute';
+import { useAnnotationDraftSession } from '@/composables/useAnnotationDraftSession';
 import { useCommentThread } from '@/composables/useCommentThread';
 import { useReviewStore } from '@/composables/useReviewStore';
 import { useScreenshot } from '@/composables/useScreenshot';
@@ -60,6 +62,7 @@ const props = defineProps<{
 const store = useToolStore();
 const userStore = useUserStore();
 const reviewStore = useReviewStore();
+const draftSession = useAnnotationDraftSession();
 const { captureAndUpload, isCapturing, uploadProgress } = useScreenshot();
 
 /** 正在截图的批注，格式 `${type}:${id}`（避免不同类型间 id 撞车） */
@@ -124,6 +127,8 @@ async function captureAnnotationShot(type: AnnotationType, annotationId: string)
   }
 
   capturingAnnotationKey.value = `${type}:${annotationId}`;
+  // U0 出发前盖戳：截图上传期间用户可能切到别的任务，回执只能归属出发时那个任务（方案 §3.6）
+  const scopeStamp = draftSession.currentStamp();
   try {
     const annotation = findAnnotationRecord(type, annotationId);
     const previousAttachmentId = existingScreenshot?.attachmentId;
@@ -137,18 +142,27 @@ async function captureAnnotationShot(type: AnnotationType, annotationId: string)
       sourceAnnotationId: annotationId,
       description: description || undefined,
     });
+    const route = draftSession.routeDataReceipt(scopeStamp);
+    // 提示是瞬态的：人已经在别的任务里就不打扰
+    const notify = route.kind !== 'other-scope';
     if (!attachment) {
-      emitToast({ message: '截图失败，请重试', level: 'error' });
+      if (notify) emitToast({ message: '截图失败，请重试', level: 'error' });
       return;
     }
-    store.setAnnotationScreenshot(type, annotationId, {
+    const attached = attachAnnotationScreenshotByRoute(store, route, type, annotationId, {
       url: attachment.url,
       attachmentId: attachment.id,
       name: attachment.name,
       capturedAt: attachment.capturedAt,
     });
+    if (!attached) {
+      // 目标批注已不在（内存里 / 出发时那个容器里都找不到）：删掉刚上传的附件，别留孤儿
+      cleanupScreenshotAttachment(attachment.id, '截图附件清理失败');
+      if (notify) emitToast({ message: '批注已不存在，截图未保存', level: 'warning' });
+      return;
+    }
     cleanupScreenshotAttachment(previousAttachmentId, '旧截图附件清理失败', attachment.id);
-    emitToast({ message: '截图已添加', level: 'success' });
+    if (notify) emitToast({ message: '截图已添加', level: 'success' });
   } finally {
     capturingAnnotationKey.value = null;
   }

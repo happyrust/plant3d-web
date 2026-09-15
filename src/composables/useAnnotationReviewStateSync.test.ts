@@ -35,7 +35,7 @@ async function loadStore() {
   return mod.useToolStore();
 }
 
-async function syncStates(options: { formId: string; taskId?: string }) {
+async function syncStates(options: { formId: string; taskId?: string; shouldApply?: () => boolean }) {
   const mod = await import('@/composables/useAnnotationReviewStateSync');
   return mod.syncAnnotationReviewStates(options);
 }
@@ -124,5 +124,48 @@ describe('syncAnnotationReviewStates', () => {
     expect(state.resolutionStatus).toBe('fixed');
     expect(state.decisionStatus).toBe('pending');
     expect(state.note).toBe('SJ 二次修改完成');
+  });
+
+  it('U0 回执守卫：请求回来后 shouldApply 说不该写，就一条都不写、结果标 skipped', async () => {
+    const store = await loadStore();
+    store.clearAll();
+    store.addAnnotation({
+      id: 'ann-guarded',
+      entityId: 'entity-guarded',
+      worldPos: [0, 0, 0],
+      visible: true,
+      glyph: '1',
+      title: 'Guarded annotation',
+      description: '',
+      createdAt: 1,
+    });
+    const before = store.getAnnotationReviewState('text', 'ann-guarded');
+
+    vi.mocked(annotationReviewStatesQuery).mockResolvedValue({
+      success: true,
+      states: [{
+        formId: 'FORM-G',
+        taskId: 'task-g',
+        annotationId: 'ann-guarded',
+        annotationType: 'text',
+        workflowNode: 'sj',
+        reviewRound: 1,
+        resolutionStatus: 'fixed',
+        decisionStatus: 'pending',
+        note: '迟到的状态',
+        updatedById: 'SJ',
+        updatedByName: 'SJ',
+        updatedByRole: 'sj',
+        updatedAt: 200,
+        history: [],
+      }],
+    });
+
+    const shouldApply = vi.fn(() => false);
+    const result = await syncStates({ formId: 'FORM-G', taskId: 'task-g', shouldApply });
+
+    expect(shouldApply).toHaveBeenCalledTimes(1);
+    expect(result).toEqual({ ok: true, appliedCount: 0, totalCount: 1, skipped: true });
+    expect(store.getAnnotationReviewState('text', 'ann-guarded')).toEqual(before);
   });
 });

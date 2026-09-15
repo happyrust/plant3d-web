@@ -22,7 +22,9 @@ import type {
 import type { AnnotationType, MeasurementRecord } from '@/composables/useToolStore';
 
 import { reviewAttachmentDelete } from '@/api/reviewApi';
+import { attachAnnotationScreenshotByRoute } from '@/composables/annotationReceiptRoute';
 import { useAnnotationBindingResolve } from '@/composables/useAnnotationBindingResolve';
+import { useAnnotationDraftSession } from '@/composables/useAnnotationDraftSession';
 import { useScreenshot } from '@/composables/useScreenshot';
 import { useToolStore } from '@/composables/useToolStore';
 import { useUserStore } from '@/composables/useUserStore';
@@ -76,6 +78,7 @@ const emit = defineEmits<{
 
 const toolStore = useToolStore();
 const userStore = useUserStore();
+const draftSession = useAnnotationDraftSession();
 
 const isDockDensity = computed(() => props.density === 'dock');
 const typeDisplay = computed(() => getAnnotationWorkspaceTypeDisplay(props.item.type));
@@ -178,6 +181,10 @@ async function captureItemScreenshot() {
   }
 
   capturingScreenshot.value = true;
+  // U0 出发前盖戳：截图上传期间用户可能切到别的任务，回执只能归属出发时那个任务（方案 §3.6）
+  const scopeStamp = draftSession.currentStamp();
+  // 卡片上的 type / id 也在出发时定下来——props 在等待期间可能已换成别的记录
+  const { type: annotationType, id: annotationId } = props.item;
   try {
     const severityLabel = getAnnotationSeverityDisplay(props.item.severity).label;
     const description = [
@@ -186,25 +193,36 @@ async function captureItemScreenshot() {
     ].filter((part): part is string => !!part).join(' - ');
     const attachment = await captureAndUpload(taskId, {
       kind: 'annotation_shot',
-      sourceAnnotationId: props.item.id,
+      sourceAnnotationId: annotationId,
       description: description || undefined,
     });
+    const route = draftSession.routeDataReceipt(scopeStamp);
+    // 提示是瞬态的：人已经在别的任务里就不打扰
+    const notify = route.kind !== 'other-scope';
     if (!attachment) {
-      emitToast({ message: '截图失败，请重试', level: 'error' });
+      if (notify) emitToast({ message: '截图失败，请重试', level: 'error' });
       return;
     }
-    toolStore.setAnnotationScreenshot(props.item.type, props.item.id, {
+    const attached = attachAnnotationScreenshotByRoute(toolStore, route, annotationType, annotationId, {
       url: attachment.url,
       attachmentId: attachment.id,
       name: attachment.name,
       capturedAt: attachment.capturedAt,
     });
+    if (!attached) {
+      // 目标批注已不在（内存里 / 出发时那个容器里都找不到）：删掉刚上传的附件，别留孤儿
+      void reviewAttachmentDelete(attachment.id).catch(() => {
+        emitToast({ message: '截图附件清理失败', level: 'warning' });
+      });
+      if (notify) emitToast({ message: '批注已不存在，截图未保存', level: 'warning' });
+      return;
+    }
     if (existing?.attachmentId && existing.attachmentId !== attachment.id) {
       void reviewAttachmentDelete(existing.attachmentId).catch(() => {
         emitToast({ message: '旧截图附件清理失败', level: 'warning' });
       });
     }
-    emitToast({ message: '截图已添加', level: 'success' });
+    if (notify) emitToast({ message: '截图已添加', level: 'success' });
   } finally {
     capturingScreenshot.value = false;
   }

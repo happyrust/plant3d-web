@@ -283,6 +283,17 @@ function confirmLabel(state: DraftSessionState, status: DraftConfirmStatus): str
 // 响应式外壳（不接 UI）
 // ---------------------------------------------------------------------------
 
+/**
+ * 数据类回执（截图引用、保存失败的回滚）该落到哪（方案 §3.6「A 任务截图上传返回时用户已在 B，只能归属 A」）：
+ * - `current`：出发时的 scope 就是现在这个（epoch 变了也算——数据回执说的是「记录 X 的截图」，来回切一趟不改变这个事实）→ 写内存；
+ * - `other-scope`：现在在别的 scope / 已离开校审上下文 → 写进出发时那个 scope 的本机容器（`scopeKey` 就是它的存储作用域字串），不碰当前内存；
+ * - `unscoped`：出发时就没有 scope（开关关 / 面板没开）→ 照旧写内存。
+ */
+export type DataReceiptRoute =
+  | { kind: 'current' }
+  | { kind: 'other-scope'; scopeKey: string }
+  | { kind: 'unscoped' };
+
 export type AnnotationDraftSession = {
   state: ShallowRef<DraftSessionState>;
   status: ComputedRef<DraftSaveStatus>;
@@ -303,6 +314,13 @@ export type AnnotationDraftSession = {
   dispatch: (event: DraftSessionEvent, stamp?: AnnotationScopeStamp | null) => ScopeStampVerdict;
   /** 便捷：当前 scope 内一次编辑；返回新的本机修订号（0 = 没有 scope，未记） */
   markEdited: (at?: number) => number;
+  /**
+   * 瞬态回执（相机 / 高亮 / 选择 / 提示 / 状态重拉）还能不能发布：出发时没 scope 照旧放行；有 scope 必须 key 与 epoch 都对——
+   * A → B → A 之后 A 的旧回执也不算（用户的视角意图已经重置）。
+   */
+  isTransientReceiptCurrent: (stamp: AnnotationScopeStamp | null | undefined) => boolean;
+  /** 数据类回执落点，见 `DataReceiptRoute` */
+  routeDataReceipt: (stamp: AnnotationScopeStamp | null | undefined) => DataReceiptRoute;
 };
 
 export function createAnnotationDraftSession(now: () => number = Date.now): AnnotationDraftSession {
@@ -361,7 +379,31 @@ export function createAnnotationDraftSession(now: () => number = Date.now): Anno
     return state.value.localRevision;
   }
 
-  return { state, status, scope, enterScope, leaveScope, currentStamp, judge, dispatch, markEdited };
+  function isTransientReceiptCurrent(stamp: AnnotationScopeStamp | null | undefined): boolean {
+    if (!stamp) return true;
+    return judge(stamp).accept;
+  }
+
+  function routeDataReceipt(stamp: AnnotationScopeStamp | null | undefined): DataReceiptRoute {
+    if (!stamp) return { kind: 'unscoped' };
+    const verdict = judge(stamp);
+    if (verdict.accept || verdict.reason === 'epoch-stale') return { kind: 'current' };
+    return { kind: 'other-scope', scopeKey: stamp.scopeKey };
+  }
+
+  return {
+    state,
+    status,
+    scope,
+    enterScope,
+    leaveScope,
+    currentStamp,
+    judge,
+    dispatch,
+    markEdited,
+    isTransientReceiptCurrent,
+    routeDataReceipt,
+  };
 }
 
 let shared: AnnotationDraftSession | null = null;

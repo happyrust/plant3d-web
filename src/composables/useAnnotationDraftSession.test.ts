@@ -235,6 +235,34 @@ describe('createAnnotationDraftSession（响应式外壳，不接 UI）', () => 
     expect(session.status.value.confirmed).toBe('up-to-date');
   });
 
+  it('瞬态回执守卫：没戳照旧放行；同 scope 同 epoch 放行；换 scope / A→B→A / 离开校审一律拒', () => {
+    const session = createAnnotationDraftSession(() => 1);
+    expect(session.isTransientReceiptCurrent(null)).toBe(true);
+    const stampA = session.enterScope(scopeA);
+    expect(session.isTransientReceiptCurrent(stampA)).toBe(true);
+    session.enterScope(scopeB);
+    expect(session.isTransientReceiptCurrent(stampA)).toBe(false);
+    session.enterScope(scopeA);
+    expect(session.isTransientReceiptCurrent(stampA)).toBe(false);
+    session.leaveScope();
+    expect(session.isTransientReceiptCurrent(stampA)).toBe(false);
+    expect(session.isTransientReceiptCurrent(null)).toBe(true);
+  });
+
+  it('数据类回执落点：没戳 unscoped；同 scope（含 A→B→A）current；在别的 scope / 已离开 → 写出发时那个 scope 的容器', () => {
+    const session = createAnnotationDraftSession(() => 1);
+    expect(session.routeDataReceipt(null)).toEqual({ kind: 'unscoped' });
+    const stampA = session.enterScope(scopeA);
+    expect(session.routeDataReceipt(stampA)).toEqual({ kind: 'current' });
+    session.enterScope(scopeB);
+    expect(session.routeDataReceipt(stampA)).toEqual({ kind: 'other-scope', scopeKey: stampA.scopeKey });
+    session.enterScope(scopeA);
+    // epoch 变了，但记录 X 的截图还是记录 X 的：仍落内存
+    expect(session.routeDataReceipt(stampA)).toEqual({ kind: 'current' });
+    session.leaveScope();
+    expect(session.routeDataReceipt(stampA)).toEqual({ kind: 'other-scope', scopeKey: stampA.scopeKey });
+  });
+
   it('useAnnotationDraftSession 是单例；reset 后重建', () => {
     resetAnnotationDraftSessionForTests();
     const a = useAnnotationDraftSession();

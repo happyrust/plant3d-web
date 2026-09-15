@@ -45,6 +45,7 @@ import { notifyParentWorkflowAction } from './workflowBridge';
 import { reviewAnnotationCheck } from '@/api/reviewApi';
 import { useAnnotationBindingResolve } from '@/composables/useAnnotationBindingResolve';
 import { useAnnotationDraftScopeSync } from '@/composables/useAnnotationDraftScopeSync';
+import { useAnnotationDraftSession } from '@/composables/useAnnotationDraftSession';
 import { saveAnnotationBasicFields, saveAnnotationSeverity } from '@/composables/useAnnotationSeveritySync';
 import { ensurePanelAndActivate } from '@/composables/useDockApi';
 import { useReviewStore } from '@/composables/useReviewStore';
@@ -97,6 +98,7 @@ const confirmedRecordsRestorer = createConfirmedRecordsRestorer({
 // U0 草稿 scope（sj 侧）：与 ReviewPanel 共用同一份同步，任务 / 用户一变就切本机草稿容器；
 // 两个面板在 dock 里同时开着时各登记一次，最后一个卸载才回到旧作用域。
 useAnnotationDraftScopeSync({ userId: () => userStore.currentUser.value?.id ?? null });
+const draftSession = useAnnotationDraftSession();
 
 const returnedTasks = computed(() => userStore.returnedInitiatedTasks.value.filter((task) => isCanonicalReturnedTask(task)));
 const currentTask = computed(() => reviewStore.currentTask.value);
@@ -337,15 +339,19 @@ async function locateAnnotation(item: AnnotationWorkspaceItem | null, refnos = i
   setActiveAnnotation(item.type, item.id);
   ensurePanelAndActivate('viewer');
   if (!refnos.length) return;
+  // U0 回执守卫：加载期间切了任务就不动相机 / 高亮，也不弹它的提示
+  const scopeStamp = draftSession.currentStamp();
+  const receiptCurrent = () => draftSession.isTransientReceiptCurrent(scopeStamp);
   const result = await showModelByRefnosWithAck({
     refnos,
     highlight: true,
     viewerRef: viewerContext.viewerRef,
+    shouldApply: receiptCurrent,
   });
   // 定位回执是关联失效解析的权威证据（ADR-0050）：fail → missing，ok → 撤销 missing。
   // 有元素失败时 error 也会带话（「N 个关联元素加载失败」），所以不能按 error 跳过；纯传输错误（超时 / viewer 未就绪）ok / fail 都空，喂进去是空操作。
   bindingResolve.markLoadResult(result);
-  if (result.error) {
+  if (result.error && receiptCurrent()) {
     emitToast({ message: result.error, level: 'warning' });
   }
 }

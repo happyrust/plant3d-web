@@ -29,6 +29,33 @@ describe('showModelByRefnosWithAck', () => {
       requestId: 'cloud-highlight',
     });
     expect(result.ok).toEqual(['REF_A']);
+    expect(result.suppressed).toBeUndefined();
+    window.removeEventListener('showModelByRefnos', onRequest);
+  });
+
+  it('U0 回执守卫：shouldApply 原样随事件带给 Viewer，Viewer 回 suppressed 时结果带出来', async () => {
+    const shouldApply = vi.fn(() => false);
+    const onRequest = vi.fn((event: Event) => {
+      const detail = (event as CustomEvent).detail;
+      // Viewer 侧在加载完那一刻问一次
+      expect(detail.shouldApply).toBe(shouldApply);
+      const apply = detail.shouldApply() !== false;
+      window.dispatchEvent(new CustomEvent('showModelByRefnosDone', {
+        detail: { requestId: detail.requestId, ok: ['REF_A'], fail: [], error: null, suppressed: !apply },
+      }));
+    });
+    window.addEventListener('showModelByRefnos', onRequest);
+
+    const result = await showModelByRefnosWithAck({
+      refnos: ['REF/A'],
+      flyTo: true,
+      ensureViewerReady: false,
+      requestId: 'guarded-fly',
+      shouldApply,
+    });
+
+    expect(shouldApply).toHaveBeenCalledTimes(1);
+    expect(result).toEqual({ ok: ['REF_A'], fail: [], error: null, suppressed: true });
     window.removeEventListener('showModelByRefnos', onRequest);
   });
 });

@@ -4981,6 +4981,12 @@ onMounted(async () => {
     const unique = Array.from(new Set(refnos));
     const flyTo = !!(detail as any)?.flyTo;
     const highlight = !!(detail as any)?.highlight;
+    // U0 回执守卫（useViewerContext.showModelByRefnosWithAck 的 shouldApply）：模型照常加载，
+    // 但相机 / 高亮 / 选择在加载完那一刻再问一次调用方「还该动吗」——用户已切到别的任务就不动视口。
+    const shouldApplyRaw = (detail as any)?.shouldApply;
+    const shouldApply: (() => boolean) | null = typeof shouldApplyRaw === 'function' ? shouldApplyRaw : null;
+    const applyAllowed = () => (shouldApply ? shouldApply() !== false : true);
+    let suppressed = false;
     const versionDbnum = Number((detail as any)?.dbnum);
     const versionSesno = Number((detail as any)?.sesno);
     const loadUnitVersion = Number.isInteger(versionDbnum)
@@ -5044,15 +5050,17 @@ onMounted(async () => {
 
     showModelQueue = showModelQueue
       .then(async () => {
+        // 带守卫的单构件飞行不在加载里飞（那时还没法核对），加载完再核一次、自己飞
+        const singleFlyTo = !highlight && flyTo && unique.length === 1;
         for (const r of unique) {
           const dtxStatsBefore =
                         (dtxLayer as any)?.getStats?.() ?? null;
           const ok = loadUnitVersion
             ? await mg.showModelUnitVersion(r, versionDbnum, versionSesno, {
-              flyTo: !highlight && flyTo && unique.length === 1,
+              flyTo: singleFlyTo && !shouldApply,
             })
             : await mg.showModelByRefno(r, {
-              flyTo: !highlight && flyTo && unique.length === 1,
+              flyTo: singleFlyTo && !shouldApply,
               regenerate: !!(detail as any)?.regenModel,
             });
           const loadDebug = mg.lastLoadDebug?.value ?? null;
@@ -5078,9 +5086,21 @@ onMounted(async () => {
           });
         }
 
+        if (singleFlyTo && shouldApply && debugState.ok.length > 0) {
+          const compat = compatViewerRef.value;
+          if (!applyAllowed()) {
+            suppressed = true;
+          } else if (compat) {
+            compat.scene.ensureRefnos(debugState.ok);
+            const aabb = compat.scene.getAABB(debugState.ok);
+            if (aabb) compat.cameraFlight.flyTo({ aabb, duration: 0.8, fit: true });
+          }
+        }
         if (highlight && debugState.ok.length > 0) {
           const compat = compatViewerRef.value;
-          if (compat) {
+          if (!applyAllowed()) {
+            suppressed = true;
+          } else if (compat) {
             applyLoadedModelHighlight({
               viewer: compat,
               refnos: debugState.ok,
@@ -5112,6 +5132,7 @@ onMounted(async () => {
                 ok: debugState.ok,
                 fail: debugState.fail,
                 error: debugState.error,
+                suppressed,
               },
             }),
           );

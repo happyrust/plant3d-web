@@ -8,6 +8,23 @@ import type {
 
 import { UserRole } from '@/types/auth';
 
+/** 本测试环境没有 localStorage / sessionStorage 全局；U0 截图回执要写别的 scope 的本机容器，先给内存实现 */
+vi.hoisted(() => {
+  const createMemoryStorage = (): Storage => {
+    const map = new Map<string, string>();
+    return {
+      get length() { return map.size; },
+      clear: () => map.clear(),
+      getItem: (key: string) => map.get(key) ?? null,
+      key: (index: number) => [...map.keys()][index] ?? null,
+      removeItem: (key: string) => { map.delete(key); },
+      setItem: (key: string, value: string) => { map.set(key, String(value)); },
+    } as Storage;
+  };
+  if (typeof globalThis.localStorage === 'undefined') vi.stubGlobal('localStorage', createMemoryStorage());
+  if (typeof globalThis.sessionStorage === 'undefined') vi.stubGlobal('sessionStorage', createMemoryStorage());
+});
+
 /** 关联元素的编辑权限取自当前用户，逐例改写 */
 const { currentUser } = vi.hoisted(() => ({
   currentUser: { value: null as null | { id: string; role: string; name: string } },
@@ -15,6 +32,34 @@ const { currentUser } = vi.hoisted(() => ({
 
 vi.mock('@/composables/useUserStore', () => ({
   useUserStore: () => ({ currentUser }),
+}));
+
+/** 截图上传与提示可控：captureAndUpload 由用例逐次给实现（可挂起），emitToast 只记不画 */
+const receiptMocks = vi.hoisted(() => ({
+  captureAndUpload: vi.fn<(...args: unknown[]) => Promise<unknown>>(),
+  emitToast: vi.fn(),
+  reviewAttachmentDelete: vi.fn(async () => ({ success: true })),
+}));
+
+vi.mock('@/composables/useScreenshot', async () => {
+  const { ref } = await import('vue');
+  return {
+    useScreenshot: () => ({
+      captureAndUpload: receiptMocks.captureAndUpload,
+      isCapturing: ref(false),
+      uploadProgress: ref(0),
+    }),
+  };
+});
+
+vi.mock('@/ribbon/toastBus', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/ribbon/toastBus')>()),
+  emitToast: receiptMocks.emitToast,
+}));
+
+vi.mock('@/api/reviewApi', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/api/reviewApi')>()),
+  reviewAttachmentDelete: receiptMocks.reviewAttachmentDelete,
 }));
 
 /** 关联失效解析（ADR-0050）的运行时索引探针换成可控集合，默认全部「未加载」 */
@@ -453,5 +498,153 @@ describe('AnnotationInlineDetailCard', () => {
     expect(mounted.closeSpy).toHaveBeenCalledTimes(1);
 
     mounted.unmount();
+  });
+
+  describe('U0 截图回执守卫（方案 §3.6：A 任务截图上传返回时用户已在 B，只能归属 A）', () => {
+    async function flushStore() {
+      await nextTick();
+      await nextTick();
+    }
+
+    /** 回到无 scope、内存与所有本机容器全空（上一例切回 A 时载回的截图不能漏到下一例） */
+    async function resetStore(store: { setAnnotationDraftScope: (scope: null) => boolean; clearAll: () => void }) {
+      store.setAnnotationDraftScope(null);
+      store.clearAll();
+      await flushStore();
+      localStorage.clear();
+    }
+
+    const textAnnotation = {
+      id: 'annot-1',
+      entityId: 'o:annot-1',
+      worldPos: [0, 0, 0] as [number, number, number],
+      visible: true,
+      glyph: '!',
+      title: '管线碰撞',
+      description: '',
+      createdAt: 1,
+    };
+
+    const lateAttachment = {
+      id: 'att-late',
+      url: '/uploads/late.png',
+      name: 'late.png',
+      mimeType: 'image/png',
+      size: 1,
+      width: 1,
+      height: 1,
+      capturedAt: 9,
+      uploadedAt: 10,
+    };
+
+    beforeEach(() => {
+      receiptMocks.captureAndUpload.mockReset();
+      receiptMocks.emitToast.mockReset();
+      receiptMocks.reviewAttachmentDelete.mockClear();
+    });
+
+    it('上传期间切了任务：截图写进出发时那个 scope 的本机容器，不碰当前任务内存，不弹提示；切回来跟着容器载回', async () => {
+      const { useToolStore } = await import('@/composables/useToolStore');
+      const { resetAnnotationDraftSessionForTests, useAnnotationDraftSession } = await import('@/composables/useAnnotationDraftSession');
+      const { annotationScopeKey, buildAnnotationScope } = await import('@/review/domain/annotationScope');
+      const store = useToolStore();
+      resetAnnotationDraftSessionForTests();
+      const session = useAnnotationDraftSession();
+      const scopeA = buildAnnotationScope({ projectId: 'p', taskId: 'task-A', userId: 'JH' });
+      const scopeB = buildAnnotationScope({ projectId: 'p', taskId: 'task-B', userId: 'JH' });
+      const keyA = `plant3d-web-tools-v7:${annotationScopeKey(scopeA)}`;
+
+      await resetStore(store);
+      expect(store.setAnnotationDraftScope(scopeA)).toBe(true);
+      session.enterScope(scopeA);
+      store.addAnnotation(textAnnotation);
+      await flushStore();
+      expect((JSON.parse(localStorage.getItem(keyA) ?? '{}') as { annotations: { id: string }[] }).annotations.map((a) => a.id)).toEqual(['annot-1']);
+
+      let resolveUpload: (value: unknown) => void = () => {};
+      receiptMocks.captureAndUpload.mockImplementationOnce(() => new Promise((resolve) => { resolveUpload = resolve; }));
+
+      const mounted = await mountCard({ item: createItem({ screenshot: undefined }), taskId: 'task-A' });
+      mounted.host.querySelector<HTMLButtonElement>('[data-testid="annotation-detail-screenshot-capture"]')?.click();
+      await nextTick();
+      expect(receiptMocks.captureAndUpload).toHaveBeenCalledWith('task-A', expect.objectContaining({ sourceAnnotationId: 'annot-1' }));
+
+      // 上传还在飞：用户切到 B（容器与会话都切过去）
+      expect(store.setAnnotationDraftScope(scopeB)).toBe(true);
+      session.enterScope(scopeB);
+      await flushStore();
+      expect(store.annotations.value).toEqual([]);
+
+      resolveUpload(lateAttachment);
+      await flushStore();
+      await flushStore();
+
+      // B 的内存一条都没多；A 的容器里 annot-1 挂上了迟到的截图；一句提示都不弹
+      expect(store.annotations.value).toEqual([]);
+      const rawA = JSON.parse(localStorage.getItem(keyA) ?? '{}') as { annotations: { id: string; screenshot?: { attachmentId?: string } }[] };
+      expect(rawA.annotations.map((a) => [a.id, a.screenshot?.attachmentId])).toEqual([['annot-1', 'att-late']]);
+      expect(receiptMocks.emitToast).not.toHaveBeenCalled();
+      expect(receiptMocks.reviewAttachmentDelete).not.toHaveBeenCalled();
+
+      // 切回 A：截图跟着容器一起回来
+      expect(store.setAnnotationDraftScope(scopeA)).toBe(true);
+      expect(store.getAnnotationScreenshot('text', 'annot-1')?.attachmentId).toBe('att-late');
+
+      session.leaveScope();
+      await resetStore(store);
+      mounted.unmount();
+    });
+
+    it('还在同一任务里：照旧写内存并提示「截图已添加」', async () => {
+      const { useToolStore } = await import('@/composables/useToolStore');
+      const { resetAnnotationDraftSessionForTests, useAnnotationDraftSession } = await import('@/composables/useAnnotationDraftSession');
+      const { buildAnnotationScope } = await import('@/review/domain/annotationScope');
+      const store = useToolStore();
+      resetAnnotationDraftSessionForTests();
+      const session = useAnnotationDraftSession();
+      const scopeA = buildAnnotationScope({ projectId: 'p', taskId: 'task-A', userId: 'JH' });
+
+      await resetStore(store);
+      expect(store.setAnnotationDraftScope(scopeA)).toBe(true);
+      session.enterScope(scopeA);
+      store.addAnnotation(textAnnotation);
+      await flushStore();
+      receiptMocks.captureAndUpload.mockResolvedValueOnce(lateAttachment);
+
+      const mounted = await mountCard({ item: createItem({ screenshot: undefined }), taskId: 'task-A' });
+      mounted.host.querySelector<HTMLButtonElement>('[data-testid="annotation-detail-screenshot-capture"]')?.click();
+      await flushStore();
+      await flushStore();
+
+      expect(store.getAnnotationScreenshot('text', 'annot-1')?.attachmentId).toBe('att-late');
+      expect(receiptMocks.emitToast).toHaveBeenCalledWith(expect.objectContaining({ message: '截图已添加', level: 'success' }));
+
+      session.leaveScope();
+      await resetStore(store);
+      mounted.unmount();
+    });
+
+    it('回来时批注已不在（内存 / 出发时容器里都找不到）：删掉刚上传的附件，不留孤儿', async () => {
+      const { useToolStore } = await import('@/composables/useToolStore');
+      const { resetAnnotationDraftSessionForTests, useAnnotationDraftSession } = await import('@/composables/useAnnotationDraftSession');
+      const store = useToolStore();
+      resetAnnotationDraftSessionForTests();
+      useAnnotationDraftSession().leaveScope();
+      await resetStore(store);
+      receiptMocks.captureAndUpload.mockResolvedValueOnce(lateAttachment);
+
+      // 卡片指向的 annot-1 根本不在 store 里（比如等待期间被删）
+      const mounted = await mountCard({ item: createItem({ screenshot: undefined }), taskId: 'task-A' });
+      mounted.host.querySelector<HTMLButtonElement>('[data-testid="annotation-detail-screenshot-capture"]')?.click();
+      await flushStore();
+      await flushStore();
+
+      expect(receiptMocks.reviewAttachmentDelete).toHaveBeenCalledWith('att-late');
+      expect(receiptMocks.emitToast).toHaveBeenCalledWith(expect.objectContaining({ level: 'warning' }));
+      expect(receiptMocks.emitToast).not.toHaveBeenCalledWith(expect.objectContaining({ message: '截图已添加' }));
+
+      await resetStore(store);
+      mounted.unmount();
+    });
   });
 });

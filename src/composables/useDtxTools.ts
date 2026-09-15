@@ -43,6 +43,7 @@ import {
   positionCloudDegradeBadge,
   sameDegrade,
 } from '@/composables/annotationDegradeViewport';
+import { attachAnnotationScreenshotByRoute } from '@/composables/annotationReceiptRoute';
 import { buildRecordDegradeKey, useAnnotationBindingResolve } from '@/composables/useAnnotationBindingResolve';
 import { useAnnotationDraftSession } from '@/composables/useAnnotationDraftSession';
 import { useAnnotationStyleStore } from '@/composables/useAnnotationStyleStore';
@@ -3906,20 +3907,9 @@ export function useDtxTools(options: {
       height: attachment.height,
       uploadedAt: attachment.uploadedAt,
     };
-    if (route.kind === 'other-scope') {
-      // 迟到的截图只能归属它出发时的任务：直接写进那个 scope 的本机容器，不碰当前任务的内存（方案 §3.6）
-      const patched = (store as { patchPersistedAnnotationInScope?: (scope: string, type: 'cloud', id: string, patch: Record<string, unknown>) => boolean })
-        .patchPersistedAnnotationInScope?.(route.scopeKey, 'cloud', rec.id, { screenshot }) ?? false;
-      if (!patched) {
-        void reviewAttachmentDelete(attachment.id).catch((error) => {
-          console.warn('[annotation] Failed to clean orphan cloud screenshot (stale scope):', error);
-        });
-        return null;
-      }
-      return attachment;
-    }
-
-    const attached = store.setAnnotationScreenshot('cloud', rec.id, screenshot);
+    // 按落点挂：还在出发时的任务就写内存；迟到的截图只能归属它出发时的任务——写进那个 scope 的本机容器，
+    // 不碰当前任务的内存（方案 §3.6）。两条路都找不到这条云线就删掉刚上传的附件，别留孤儿。
+    const attached = attachAnnotationScreenshotByRoute(store, route, 'cloud', rec.id, screenshot);
     if (!attached) {
       void reviewAttachmentDelete(attachment.id).catch((error) => {
         console.warn('[annotation] Failed to clean orphan cloud screenshot:', error);

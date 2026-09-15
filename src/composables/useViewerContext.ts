@@ -67,6 +67,8 @@ export type ShowModelByRefnosResult = {
   ok: string[];
   fail: ShowModelByRefnosFailItem[];
   error: string | null;
+  /** `shouldApply` 在加载完成时拒了：模型照常加载，但高亮 / 飞行没做 */
+  suppressed?: boolean;
 };
 
 export type ShowModelByRefnosOptions = {
@@ -78,6 +80,11 @@ export type ShowModelByRefnosOptions = {
   ensureViewerReady?: boolean;
   readyTimeoutMs?: number;
   viewerRef?: Ref<unknown | null>;
+  /**
+   * U0 回执守卫（方案 §3.6「旧 scopeEpoch 的回调不得更新当前任务的高亮 / 相机」）：模型加载完、要动相机 / 高亮 / 选择之前
+   * 问一次；返回 false 就只加载不动视口。调用方一般传 `() => draftSession.isTransientReceiptCurrent(stamp)`。
+   */
+  shouldApply?: () => boolean;
 };
 
 export function applyLoadedModelHighlight(options: {
@@ -117,6 +124,7 @@ export async function showModelByRefnosWithAck(options: ShowModelByRefnosOptions
     ensureViewerReady = true,
     readyTimeoutMs = 4_000,
     viewerRef,
+    shouldApply,
   } = options;
 
   if (!Array.isArray(refnos) || refnos.length === 0) {
@@ -141,6 +149,7 @@ export async function showModelByRefnosWithAck(options: ShowModelByRefnosOptions
         ok?: string[];
         fail?: ShowModelByRefnosFailItem[];
         error?: string | null;
+        suppressed?: boolean;
       }>).detail;
       if (detail?.requestId !== requestId) {
         return;
@@ -151,6 +160,7 @@ export async function showModelByRefnosWithAck(options: ShowModelByRefnosOptions
         ok: Array.isArray(detail?.ok) ? detail.ok : [],
         fail: Array.isArray(detail?.fail) ? detail.fail : [],
         error: detail?.error ?? null,
+        ...(detail?.suppressed ? { suppressed: true } : {}),
       });
     };
 
@@ -166,6 +176,7 @@ export async function showModelByRefnosWithAck(options: ShowModelByRefnosOptions
         flyTo,
         highlight,
         requestId,
+        ...(shouldApply ? { shouldApply } : {}),
       },
     }));
   });

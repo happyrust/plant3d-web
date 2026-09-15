@@ -53,6 +53,11 @@ export type SyncAnnotationReviewStatesOptions = {
   formId?: string | null;
   taskId?: string | null;
   silent?: boolean;
+  /**
+   * U0 回执守卫：请求回来、写 store 之前问一次「还该写吗」（调用方拿 scope 戳判）。
+   * 返回 false = 用户已切到别的任务，这批状态一条都不写（回到原任务时会重新拉），结果标 `skipped: true`。
+   */
+  shouldApply?: () => boolean;
 };
 
 export type SyncAnnotationReviewStatesResult = {
@@ -60,6 +65,8 @@ export type SyncAnnotationReviewStatesResult = {
   appliedCount: number;
   totalCount: number;
   errorMessage?: string;
+  /** `shouldApply` 拒了：请求成功但一条都没写 */
+  skipped?: boolean;
 };
 
 /**
@@ -105,8 +112,12 @@ export async function syncAnnotationReviewStates(
     };
   }
 
-  const store = useToolStore();
   const views = response.states ?? [];
+  if (options.shouldApply && !options.shouldApply()) {
+    return { ok: true, appliedCount: 0, totalCount: views.length, skipped: true };
+  }
+
+  const store = useToolStore();
   let appliedCount = 0;
 
   for (const view of pickLatestAnnotationStates(views)) {

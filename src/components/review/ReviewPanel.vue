@@ -34,7 +34,7 @@ import {
 import AssociatedFilesList from './AssociatedFilesList.vue';
 import { startAnnotationMemberPick } from './cloudMemberPick';
 import CollisionResultList from './CollisionResultList.vue';
-import { createConfirmedRecordsRestorer } from './confirmedRecordsRestore';
+import { createConfirmedRecordsRestorer, layerConfirmedReplayForStore } from './confirmedRecordsRestore';
 import { isReviewDebugUiEnabled } from './debugUiGate';
 import { restoreEmbedFormSnapshotContext } from './embedFormSnapshotRestore';
 import {
@@ -482,6 +482,12 @@ function collectTaskComponentRefnos(task: ReviewTask | null): string[] {
   return Array.from(refnos);
 }
 
+/** U0 回执守卫：出发时盖 scope 戳，回来时相机 / 高亮 / 提示只在还是同一 scope（同 epoch）时发布 */
+function transientReceiptGuard(): () => boolean {
+  const stamp = draftSession.currentStamp();
+  return () => draftSession.isTransientReceiptCurrent(stamp);
+}
+
 async function ensureTaskComponentsLoaded(task: ReviewTask): Promise<void> {
   const refnos = collectTaskComponentRefnos(task).map((refno) => toSlashComponentRefno(refno));
   if (refnos.length === 0) return;
@@ -491,6 +497,7 @@ async function ensureTaskComponentsLoaded(task: ReviewTask): Promise<void> {
     flyTo: true,
     ensureViewerReady: false,
     timeoutMs: 15_000,
+    shouldApply: transientReceiptGuard(),
   });
   if (result.error) {
     console.warn('[ReviewPanel] 加载任务构件模型失败:', {
@@ -728,7 +735,8 @@ async function refreshEmbedSnapshot(task: ReviewTask): Promise<void> {
       name: trustedContext.trustedIdentity.userId,
       roles: trustedContext.trustedIdentity.workflowRole || 'sj',
     },
-    importTools: (payload) => toolStore.importJSON(payload),
+    // U0 分层：刷新可信快照也不整份顶掉本机草稿（已确认层按 id 覆盖、草稿保留）
+    importTools: (payload) => toolStore.importJSON(layerConfirmedReplayForStore(toolStore, payload)),
     syncTools: () => viewerContext.tools.value?.syncFromStore(),
     task,
     updateTask: async (nextTask) => {
@@ -742,6 +750,7 @@ async function refreshEmbedSnapshot(task: ReviewTask): Promise<void> {
       flyTo: true,
       ensureViewerReady: false,
       timeoutMs: 15_000,
+      shouldApply: transientReceiptGuard(),
     });
     return;
   }
@@ -954,11 +963,15 @@ async function handleTaskComponentSelect(rawRefno?: string | null): Promise<void
   ensurePanelAndActivate('modelTree');
   selectionStore.setSelectedRefno(normalized);
 
+  const receiptCurrent = transientReceiptGuard();
   const result = await showModelByRefnosWithAck({
     refnos: [toSlashComponentRefno(normalized)],
     flyTo: true,
     timeoutMs: 15_000,
+    shouldApply: receiptCurrent,
   });
+  // 人已经切到别的任务：不再替它定位、不弹它的提示
+  if (!receiptCurrent()) return;
 
   window.dispatchEvent(new CustomEvent('autoLocateRefno', {
     detail: { refno: toSlashComponentRefno(normalized) },
@@ -1038,6 +1051,8 @@ async function refreshAnnotationReviewStatesForCurrentTask(): Promise<void> {
     // 外部 PMS 按 form_id 聚焦同一张单据，但 SJ/JD/JH 可能恢复到不同内部 taskId。
     // 按当前 taskId 查询会看不到 SJ 已提交的 fixed/wont_fix，导致 JD/JH 无法同意/驳回。
     taskId: isExternalFormFocused.value ? undefined : task?.id,
+    // U0：请求期间切了任务就一条都不写（回到原任务时 watch(currentTask) 会重拉）
+    shouldApply: transientReceiptGuard(),
   });
   if ((currentTask.value?.id ?? null) !== taskIdSnapshot) return;
   if (!result.ok && result.errorMessage) {
@@ -1172,6 +1187,8 @@ async function confirmCurrentData() {
 
   confirmSaving.value = true;
   confirmError.value = null;
+  // U0 回执守卫：POST /records 期间用户可能切到别的任务——清草稿 / 回放 / 重拉状态都不能落到别的任务上
+  const confirmStamp = draftSession.currentStamp();
   try {
     const saved = await confirmCurrentDataSafely({
       hasPendingData: hasUnsavedPendingData.value,
@@ -1188,7 +1205,11 @@ async function confirmCurrentData() {
       },
       addConfirmedRecord: reviewStore.addConfirmedRecord,
       clearDraftData: () => {
-        toolStore.clearAll();
+        // 仍在出发时的任务里才清内存；已切到别的任务就不动它的草稿——原任务容器里那些刚确认的条目
+        // 与服务端记录同 id，下次回到它时分层恢复会用已确认层覆盖，不会重复。
+        if (draftSession.routeDataReceipt(confirmStamp).kind !== 'other-scope') {
+          toolStore.clearAll();
+        }
       },
       resetNote: () => {
         confirmNote.value = '';
@@ -1196,6 +1217,7 @@ async function confirmCurrentData() {
     });
     if (saved) {
       emitToast({ message: '确认数据已保存', level: 'success' });
+      if (!draftSession.isTransientReceiptCurrent(confirmStamp)) return;
       await nextTick();
       await restoreConfirmedRecordsIntoScene(true);
       await refreshAnnotationReviewStatesForCurrentTask();
@@ -1701,15 +1723,18 @@ async function locateWorkspaceAnnotation(item: AnnotationWorkspaceItem, refnos =
   flyToAnnotationItem(item);
   ensurePanelAndActivate('viewer');
   if (refnos.length === 0) return;
+  const receiptCurrent = transientReceiptGuard();
   const result = await showModelByRefnosWithAck({
     refnos,
     highlight: true,
     viewerRef: viewerContext.viewerRef,
+    shouldApply: receiptCurrent,
   });
   // 定位回执是关联失效解析的权威证据（ADR-0050）：fail → missing，ok → 撤销 missing。
   // 有元素失败时 error 也会带话（「N 个关联元素加载失败」），所以不能按 error 跳过；纯传输错误（超时 / viewer 未就绪）ok / fail 都空，喂进去是空操作。
+  // 它说的是模型元素装没装上，不是某个任务的事，切了任务也照记；只有提示是瞬态的。
   bindingResolve.markLoadResult(result);
-  if (result.error) {
+  if (result.error && receiptCurrent()) {
     emitToast({ message: result.error, level: 'warning' });
   }
 }
