@@ -584,9 +584,9 @@ test.describe('U0 任务隔离 · 异步回执守卫（计划 §4 V2）', () => 
     const scopeKeyA = await waitForTaskScope(page, 'task-A');
     const localRow = page.locator('[data-testid="annotation-draft-status-local"]');
     await expect(localRow).toBeVisible({ timeout: 15_000 });
-    // 进任务时容器能写：不管此刻是「无草稿」还是「已存 · 未落库」，都不是写失败
-    await expect(localRow).not.toHaveAttribute('data-state', 'write-failed');
-    await expect(localRow).not.toHaveAttribute('data-state', 'unsaved');
+    // 空任务 = 「本机 · 无草稿」：视口自动绑的本地空尺寸文档不算未确认修改
+    await expect(localRow).toHaveAttribute('data-state', 'empty');
+    await expect(localRow).toContainText('本机 · 无草稿');
 
     // 让本机容器写不进去（模拟配额满）
     await page.evaluate((prefix) => {

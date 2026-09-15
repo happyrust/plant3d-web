@@ -334,6 +334,24 @@ function normalizeSnapshotForComparison(value: unknown): unknown {
   return normalizeSnapshotValue(omitSnapshotPresentationFields(value));
 }
 
+/**
+ * 尺寸文档参与内容比对的口径：一份**从未落过版的空文档**（没有任何尺寸记录，且 `dimensionDocumentVersion` 为 0 / 缺省）
+ * 等价于「没有尺寸文档」。视口一打开就会给当前工程绑一份本地空文档（`dimension-document:local:project=…`，baseVersion 0），
+ * 它不代表用户写了任何东西；不归一的话，一个什么都没画的任务也会被判成「有未确认修改」——U0 状态条本机行显示
+ * 「已存 · 未落库」而不是「无草稿」，「确认当前数据」也一直亮着。
+ * 已经有版本号的空文档仍算内容：它可能是把已落库的尺寸删光（dirty）之后的样子，删除也要能确认下去。
+ */
+function normalizeDimensionDocumentForComparison(
+  payload: Pick<ReviewConfirmSnapshotPayload, 'dimensionDocument' | 'dimensionDocumentVersion'>,
+): unknown {
+  const document = payload.dimensionDocument;
+  if (!document) return undefined;
+  const records = (document as { records?: unknown }).records;
+  const neverPersisted = !payload.dimensionDocumentVersion;
+  if (neverPersisted && Array.isArray(records) && records.length === 0) return undefined;
+  return normalizeSnapshotForComparison(document);
+}
+
 export function buildReviewConfirmSnapshotKey(payload: ReviewConfirmSnapshotPayload): string {
   return JSON.stringify({
     annotations: normalizeSnapshotForComparison(payload.annotations),
@@ -341,7 +359,7 @@ export function buildReviewConfirmSnapshotKey(payload: ReviewConfirmSnapshotPayl
     rectAnnotations: normalizeSnapshotForComparison(payload.rectAnnotations),
     obbAnnotations: normalizeSnapshotForComparison(payload.obbAnnotations),
     measurements: normalizeSnapshotForComparison(payload.measurements),
-    dimensionDocument: normalizeSnapshotForComparison(payload.dimensionDocument),
+    dimensionDocument: normalizeDimensionDocumentForComparison(payload),
   });
 }
 
@@ -401,8 +419,8 @@ export function buildUnsavedReviewConfirmPayload(
     rectAnnotations: diffSnapshotCollection(current.rectAnnotations, baseline.rectAnnotations),
     obbAnnotations: diffSnapshotCollection(current.obbAnnotations, baseline.obbAnnotations),
     measurements: diffSnapshotCollection(current.measurements, baseline.measurements),
-    ...(JSON.stringify(normalizeSnapshotForComparison(current.dimensionDocument))
-      !== JSON.stringify(normalizeSnapshotForComparison(baseline.dimensionDocument))
+    ...(JSON.stringify(normalizeDimensionDocumentForComparison(current) ?? null)
+      !== JSON.stringify(normalizeDimensionDocumentForComparison(baseline) ?? null)
       ? {
         dimensionDocument: current.dimensionDocument,
         dimensionDocumentVersion: current.dimensionDocumentVersion,

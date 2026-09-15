@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   buildSubmitBlockingReviewConfirmPayload,
   buildReviewConfirmSnapshotPayload,
+  buildReviewConfirmSnapshotPayloadFromRecords,
   buildReviewConfirmSnapshotKey,
   buildUnsavedReviewConfirmPayload,
   buildUnsavedReviewEvidencePayload,
@@ -424,6 +425,66 @@ describe('reviewPanelActions', () => {
     expect(unsaved.dimensionDocument).toBeUndefined();
     expect(unsaved.dimensionDocumentVersion).toBeUndefined();
     expect(hasReviewConfirmPayloadData(unsaved)).toBe(false);
+  });
+
+  it('从未落版的空尺寸文档等价于没有尺寸文档：视口自动绑的本地空文档不让空任务变成「有未确认修改」', () => {
+    const emptyLocalDocument = {
+      schemaVersion: 2 as const,
+      documentId: 'dimension-document:local:project=AvevaMarineSample|db=__all__',
+      records: [],
+    };
+    const nothingConfirmed = buildReviewConfirmSnapshotPayloadFromRecords([]);
+    const emptyTaskWithLocalDocument = buildReviewConfirmSnapshotPayload({
+      dimensionDocument: emptyLocalDocument,
+      dimensionDocumentVersion: 0,
+    });
+
+    // 内容 key 相等 → hasUnsavedChanges = false → 状态条「本机 · 无草稿」、确认按钮「已保存」
+    expect(buildReviewConfirmSnapshotKey(emptyTaskWithLocalDocument)).toBe(buildReviewConfirmSnapshotKey(nothingConfirmed));
+    const unsaved = buildUnsavedReviewConfirmPayload(emptyTaskWithLocalDocument, nothingConfirmed);
+    expect(unsaved.dimensionDocument).toBeUndefined();
+    expect(unsaved.dimensionDocumentVersion).toBeUndefined();
+    expect(hasReviewConfirmPayloadData(unsaved)).toBe(false);
+    // 确认 payload 本身不改：空文档照旧随 payload 带着（是否提交由差异判定说了算）
+    expect(emptyTaskWithLocalDocument.dimensionDocument).toEqual(emptyLocalDocument);
+    // 版本缺省也算从未落版
+    const noVersion = buildReviewConfirmSnapshotPayload({ dimensionDocument: emptyLocalDocument });
+    expect(buildReviewConfirmSnapshotKey(noVersion)).toBe(buildReviewConfirmSnapshotKey(nothingConfirmed));
+
+    // 已经落过版的空文档仍算内容（可能是把尺寸删光后 dirty 的样子）：与「没有文档」有差异，要提交
+    const emptyButVersioned = buildReviewConfirmSnapshotPayload({
+      dimensionDocument: { ...emptyLocalDocument, documentId: 'dimension-document:task:task-1' },
+      dimensionDocumentVersion: 6,
+    });
+    expect(buildReviewConfirmSnapshotKey(emptyButVersioned)).not.toBe(buildReviewConfirmSnapshotKey(nothingConfirmed));
+    const versionedUnsaved = buildUnsavedReviewConfirmPayload(emptyButVersioned, nothingConfirmed);
+    expect(versionedUnsaved.dimensionDocument).toEqual(emptyButVersioned.dimensionDocument);
+    expect(versionedUnsaved.dimensionDocumentVersion).toBe(6);
+
+    // 反向：基线有尺寸记录、当前删光成空文档 → 仍是差异，空文档要提交上去
+    const withRecord = buildReviewConfirmSnapshotPayload({
+      dimensionDocument: {
+        ...emptyLocalDocument,
+        records: [{
+          id: 'dimension-1',
+          kind: 'linear' as const,
+          a: { snapshot: [0, 0, 0] as const, accuracy: 'exact' as const },
+          b: { snapshot: [1, 0, 0] as const, accuracy: 'exact' as const },
+          placement: { offsetM: 0.1, labelT: 0.5, side: 1 as const },
+          labelPinned: false,
+          authorId: 'owner',
+          authorRole: 'designer',
+          createdAt: 1,
+          updatedAt: 1,
+          validity: 'valid' as const,
+        }],
+      },
+      dimensionDocumentVersion: 2,
+    });
+    expect(buildReviewConfirmSnapshotKey(emptyTaskWithLocalDocument)).not.toBe(buildReviewConfirmSnapshotKey(withRecord));
+    const cleared = buildUnsavedReviewConfirmPayload(emptyTaskWithLocalDocument, withRecord);
+    expect(cleared.dimensionDocument).toEqual(emptyLocalDocument);
+    expect(cleared.dimensionDocumentVersion).toBe(0);
   });
 
   it('confirmCurrentDataSafely 应等待保存成功后再清理工具数据', async () => {
