@@ -15,6 +15,7 @@ import { useUnitSettingsStore } from '@/composables/useUnitSettingsStore';
 import {
   useXeokitMeasurementStyleStore,
   type AngleMeasureVariant,
+  type DistanceMeasureVariant,
 } from '@/composables/useXeokitMeasurementStyleStore';
 import {
   DEFAULT_MEASUREMENT_ANGLE_DECIMALS,
@@ -35,6 +36,7 @@ import {
   buildDistanceMeasurementResultRows,
   buildPerpendicularMeasurementResultRows,
   computeDistanceMeasurementResultInFrame,
+  formatShortestMeasurementInfo,
 } from '@/utils/xeokitMeasurementFormat';
 
 const props = defineProps<{
@@ -132,6 +134,26 @@ const interpretedResult = computed(() => {
 // E3D Perpendicular to：结果表换成 Distance / Vertical / Horizontal / Direction，
 // 且不随 WRT 重解释（垂距模式下 E3D 的 wrt 控件禁用、方向按 World，golden G4-06）。
 const perpendicularInfo = computed(() => result.value?.perpendicular ?? null);
+
+/**
+ * Web 增强「最短距离」（决策 `d-619`）：距离入口的第二档，两击拾点 / 线 / 面，结果表照旧，
+ * 只多一行说明两端 witness 是怎么来的。E3D 没有这个入口——它的 Measure Shortest 永远是
+ * 两拾中点距离（golden MD §32 / §33），所以下拉里不写成 E3D 的按钮名。
+ */
+const distanceVariant = computed(() => measurementStyle.state.distanceMeasureVariant);
+const distanceVariantOptions: readonly { value: DistanceMeasureVariant; label: string }[] = [
+  { value: 'point-to-point', label: 'Point to Point' },
+  { value: 'shortest', label: 'Shortest（Web 增强）' },
+];
+function setDistanceVariant(event: Event): void {
+  const variant = (event.target as HTMLSelectElement).value as DistanceMeasureVariant;
+  measurementStyle.updateStyle({ distanceMeasureVariant: variant });
+}
+const shortestInfo = computed(() => result.value?.shortest ?? null);
+const shortestText = computed(() => {
+  const info = shortestInfo.value;
+  return info ? formatShortestMeasurementInfo(info) : '';
+});
 
 // E3D Units 框：Unit type × Display Unit 决定这一窗体的 measureFormat；
 // Default 档回落到全局单位设置（= E3D 的 !!distanceFmt）。
@@ -259,6 +281,19 @@ onMounted(() => {
       data-testid="measurement-units-controls"
       class="mt-2 rounded-md border border-border bg-muted/20 p-2">
       <div class="flex flex-wrap items-center gap-2">
+        <label class="text-xs text-muted-foreground" for="measurement-distance-variant">Distance</label>
+        <select id="measurement-distance-variant"
+          data-testid="measurement-distance-variant"
+          class="h-8 rounded-md border border-input bg-background px-2 text-xs"
+          aria-label="距离测量入口：Point to Point（两点）/ Shortest（两组几何的最短距离，Web 增强）"
+          :value="distanceVariant"
+          @change="setDistanceVariant">
+          <option v-for="option in distanceVariantOptions"
+            :key="option.value"
+            :value="option.value">
+            {{ option.label }}
+          </option>
+        </select>
         <label class="text-xs text-muted-foreground" for="measurement-unit-system">
           Unit type
         </label>
@@ -348,6 +383,12 @@ onMounted(() => {
       {{ perpendicularInfo.targetKind === 'line' ? '点→无限线'
         : perpendicularInfo.targetKind === 'plane' ? '点→无限面' : '点→点（目标无轴向/面几何）' }}
       <template v-if="perpendicularInfo.targetLabel">· {{ perpendicularInfo.targetLabel }}</template>
+    </div>
+
+    <div v-if="shortestInfo"
+      data-testid="measurement-shortest-info"
+      class="mt-2 rounded-md border border-border bg-muted/20 p-2 text-xs text-muted-foreground">
+      最短距离 · {{ shortestText }}
     </div>
 
     <div data-testid="measurement-wrt-controls"
@@ -470,14 +511,16 @@ onMounted(() => {
         <span>显示直接斜线尺寸</span>
       </label>
 
-      <label class="flex cursor-pointer items-center gap-2 text-xs">
+      <label class="flex cursor-pointer items-center gap-2 text-xs"
+        :class="distanceVariant === 'shortest' ? 'cursor-not-allowed opacity-50' : ''">
         <input type="checkbox"
           data-testid="measurement-result-perpendicular-toggle"
           class="h-3.5 w-3.5 accent-primary"
           :checked="measurementStyle.state.perpendicularTo"
+          :disabled="distanceVariant === 'shortest'"
           aria-label="Perpendicular to：测到目标线/面的垂距"
           @change="setPerpendicularTo(($event.target as HTMLInputElement).checked)" />
-        <span>Perpendicular to（第二点取轴线 / 圆面时测垂距）</span>
+        <span>Perpendicular to（第二点取轴线 / 圆面时测垂距{{ distanceVariant === 'shortest' ? '；Shortest 下不适用' : '' }}）</span>
       </label>
 
       <div class="flex items-center justify-between gap-2">

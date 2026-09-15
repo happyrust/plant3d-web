@@ -286,6 +286,27 @@ describe('unifiedMeasurement adapters', () => {
       const plain = toXeokitMeasurement(fromXeokitMeasurement(makeXeokitAngle()));
       expect(plain.kind === 'angle' && 'lineAngle' in plain).toBe(false);
     });
+
+    it('distance：最短距离的 shortest 标记（Web 增强 d-619）往返保留，两点距离没有此字段', () => {
+      const shortest = {
+        kind: 'line-plane' as const,
+        firstLabel: 'Graphics 边（线）',
+        secondLabel: 'Graphics 面（面）',
+        parallel: true,
+        skew: false,
+      };
+      const u = fromXeokitMeasurement(makeXeokitDistance({ shortest }));
+      expect(u.kind).toBe('distance');
+      if (u.kind !== 'distance') return;
+      expect(u.shortest).toEqual(shortest);
+      const back = toXeokitMeasurement(u);
+      expect(back.kind).toBe('distance');
+      if (back.kind !== 'distance') return;
+      expect(back.shortest).toEqual(shortest);
+
+      const plain = toXeokitMeasurement(fromXeokitMeasurement(makeXeokitDistance()));
+      expect(plain.kind === 'distance' && 'shortest' in plain).toBe(false);
+    });
   });
 
   describe('combineMeasurements', () => {

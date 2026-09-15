@@ -226,6 +226,29 @@ describe('useXeokitMeasurementStyleStore · measurementPickMode', () => {
     expect(useXeokitMeasurementStyleStore().state.angleMeasureVariant).toBe('three-point');
   });
 
+  it('距离入口缺省 Point to Point；切到 Shortest（Web 增强，d-619）持久化并在重载后恢复，脏值打回两点', async () => {
+    {
+      const { useXeokitMeasurementStyleStore } = await import('@/composables/useXeokitMeasurementStyleStore');
+      const style = useXeokitMeasurementStyleStore();
+      expect(style.state.distanceMeasureVariant).toBe('point-to-point');
+      style.updateStyle({ distanceMeasureVariant: 'shortest' });
+      await nextTick();
+    }
+
+    vi.resetModules();
+    {
+      const { useXeokitMeasurementStyleStore } = await import('@/composables/useXeokitMeasurementStyleStore');
+      expect(useXeokitMeasurementStyleStore().state.distanceMeasureVariant).toBe('shortest');
+    }
+
+    const keys = Array.from({ length: localStorage.length }, (_, i) => localStorage.key(i)!);
+    const v9Key = keys.find((key) => key.includes('measurement-style-v9'))!;
+    localStorage.setItem(v9Key, JSON.stringify({ distanceMeasureVariant: 'nearest' }));
+    vi.resetModules();
+    const { useXeokitMeasurementStyleStore } = await import('@/composables/useXeokitMeasurementStyleStore');
+    expect(useXeokitMeasurementStyleStore().state.distanceMeasureVariant).toBe('point-to-point');
+  });
+
   it('V7 persistDimension 仅迁移为 Web 标注保留开关，不再冒充 Show linear dimension', async () => {
     {
       const { useXeokitMeasurementStyleStore } = await import('@/composables/useXeokitMeasurementStyleStore');

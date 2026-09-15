@@ -4,6 +4,7 @@ import type {
   LineAngleMeasurementInfo,
   MeasurementPoint,
   MeasurementRecord,
+  ShortestMeasurementInfo,
   Vec3,
   XeokitMeasurementRecord,
 } from '@/composables/useToolStore';
@@ -80,6 +81,30 @@ function formatMeasurementPoint(point: MeasurementPoint): string {
   return sourceText === point.entityId ? entityText : `${entityText} (${sourceText})`;
 }
 
+const SHORTEST_PAIR_LABELS: Readonly<Record<ShortestMeasurementInfo['kind'], string>> = {
+  'point-point': '点 × 点',
+  'point-line': '点 × 线',
+  'point-plane': '点 × 面',
+  'line-line': '线 × 线',
+  'line-plane': '线 × 面',
+  'plane-plane': '面 × 面',
+};
+
+/**
+ * Web 增强「最短距离」的来源摘要（决策 `d-619`）：几何组合 · 两项标签 · witness 取法。
+ * 结果卡的那一行与列表摘要 / 复制值共用这一串，两处口径不会走散。
+ */
+export function formatShortestMeasurementInfo(info: ShortestMeasurementInfo): string {
+  const pair = SHORTEST_PAIR_LABELS[info.kind] ?? '两项';
+  const items = `${info.firstLabel || '第一项'} × ${info.secondLabel || '第二项'}`;
+  const witness = info.parallel
+    ? '平行：起点取第一项上的拾中处'
+    : info.skew
+      ? '异面：两端是公垂线的两端'
+      : '两项上的最近点对';
+  return `${pair} · ${items} · ${witness}`;
+}
+
 export function formatMeasurementSummary(
   measurement: MeasurementLike,
   unit: LengthUnit,
@@ -95,7 +120,11 @@ export function formatMeasurementSummary(
     case 'distance': {
       const origin = measurement.origin.designWorldPos;
       const target = measurement.target.designWorldPos;
-      const points = `起点 ${formatMeasurementPoint(measurement.origin)} -> 终点 ${formatMeasurementPoint(measurement.target)}`;
+      // 最短距离（Web 增强）：两端是 witness 而不是用户拾的两个点，摘要里写拾中的那两项。
+      const shortest = 'shortest' in measurement ? measurement.shortest ?? null : null;
+      const points = shortest
+        ? `最短距离 ${formatShortestMeasurementInfo(shortest)}`
+        : `起点 ${formatMeasurementPoint(measurement.origin)} -> 终点 ${formatMeasurementPoint(measurement.target)}`;
       if (!origin || !target) return points;
       const worldDeltas: Vec3 = [
         target[0] - origin[0],

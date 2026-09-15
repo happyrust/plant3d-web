@@ -48,6 +48,17 @@ export function normalizeAngleMeasureVariant(value: unknown): AngleMeasureVarian
   return value === 'two-line' ? 'two-line' : 'three-point';
 }
 
+/**
+ * 距离测量的两档（结果卡 `Distance` 下拉）：`point-to-point` = E3D Measure Distance 的两点距离（缺省），
+ * `shortest` = Web 增强「最短距离」——两组几何（点 / 无限线 / 无限面）的真最短距离 + witness（决策 d-619，
+ * 不是 E3D parity：E3D 产品里的 Measure Shortest 永远是两拾中点距离，golden MD §32 / §33）。
+ */
+export type DistanceMeasureVariant = 'point-to-point' | 'shortest';
+
+export function normalizeDistanceMeasureVariant(value: unknown): DistanceMeasureVariant {
+  return value === 'shortest' ? 'shortest' : 'point-to-point';
+}
+
 /** 每个取点模式记住的用户 snap 偏好（按点源）。 */
 export type MeasurementPickModeSnapMemory = Partial<
   Record<MeasurementPickMode, Partial<Record<MeasurementPickSourceId, boolean>>>
@@ -75,6 +86,8 @@ export type XeokitMeasurementStyleConfig = {
    * 第二击拾线或面，`gmfArc.radius2Lines` 出 ARC，结果表同一张）。Web 用一个开关代替两个按钮。
    */
   angleMeasureVariant: AngleMeasureVariant;
+  /** 距离结果卡 `Distance` 下拉：Point to Point（缺省）/ Shortest（Web 增强，d-619）。 */
+  distanceMeasureVariant: DistanceMeasureVariant;
   /** Web 扩展：测量完成后是否把临时结果保留为可管理的测量标注。 */
   keepMeasurementAnnotation: boolean;
   angleShowLabel: boolean;
@@ -138,6 +151,7 @@ export const DEFAULT_XEOKIT_MEASUREMENT_STYLE: Readonly<XeokitMeasurementStyleCo
   showDirectLinearDimension: true,
   perpendicularTo: false,
   angleMeasureVariant: 'three-point',
+  distanceMeasureVariant: 'point-to-point',
   keepMeasurementAnnotation: true,
   angleShowLabel: true,
   angleShowMarkers: true,
@@ -277,6 +291,8 @@ function loadPersisted(scope = getCurrentStorageScope()): XeokitMeasurementStyle
       perpendicularTo: parsed.perpendicularTo === true,
       // 没有这一格就是三点角（E3D 两个按钮里 Web 原本只有这一个）。
       angleMeasureVariant: normalizeAngleMeasureVariant(parsed.angleMeasureVariant),
+      // 没有这一格就是两点距离；脏值同样打回（V9 存储键不变，只多一格）。
+      distanceMeasureVariant: normalizeDistanceMeasureVariant(parsed.distanceMeasureVariant),
       keepMeasurementAnnotation,
       angleShowLabel: parsed.angleShowLabel ?? DEFAULT_XEOKIT_MEASUREMENT_STYLE.angleShowLabel,
       angleShowMarkers: parsed.angleShowMarkers ?? DEFAULT_XEOKIT_MEASUREMENT_STYLE.angleShowMarkers,

@@ -13,6 +13,7 @@ import {
   formatMeasurementSummary,
 } from './xeokitMeasurementFormat';
 
+import type { Vec3 } from '@/composables/useToolStore';
 import type { ResolvedReferenceFrame } from '@/measurement/reference-frame';
 
 function frame(
@@ -633,6 +634,49 @@ describe('buildAngleMeasurementResultRows · E3D Measure Angle 结果表（golde
       expect(buildMeasurementValueText(record, 'mm', 0, worldFrame(), { unit: 'radians', decimalPlaces: 3 })).toBe('1.047 Radians');
       const linePlane = { ...record, lineAngle: { ...lineAngle, kind: 'line-plane' as const, secondLabel: null } };
       expect(formatMeasurementSummary(linePlane, 'mm', 0, { referenceFrame: worldFrame() })).toContain('线 × 面 · Graphics 边 · BOX 24381/1 × 面');
+    });
+  });
+
+  describe('最短距离（Web 增强 d-619，E3D 产品里进不去的 gmfLine.shortest 分支）', () => {
+    // LOOP3 那对相距 8 mm 的平行边：两端是 witness，不是用户拾中的那两个点（点点距离 593 mm）。
+    const shortest = {
+      kind: 'line-line' as const,
+      firstLabel: 'Graphics 边 · SCTN 24381/177330（线）',
+      secondLabel: 'Graphics 边 · PANE 24381/177335（线）',
+      parallel: true,
+      skew: false,
+    };
+    const record = {
+      id: 'sd-1',
+      kind: 'distance' as const,
+      origin: { entityId: 'edge-1', worldPos: [10, 10, 15] as Vec3, designWorldPos: [10, 10, 15] as Vec3 },
+      target: { entityId: 'edge-2', worldPos: [10, 10, 14.992] as Vec3, designWorldPos: [10, 10, 14.992] as Vec3 },
+      visible: true,
+      approximate: false,
+      createdAt: 1,
+      shortest,
+    };
+
+    it('列表摘要与复制值：写「最短距离 线 × 线 · 两项 · 起点取法」而不是起点 → 终点', () => {
+      const summary = formatMeasurementSummary(record, 'mm', 0, { referenceFrame: worldFrame() });
+      expect(summary).toContain('距离 8mm · X +0mm · Y +0mm · Z -8mm');
+      expect(summary).toContain(
+        '最短距离 线 × 线 · Graphics 边 · SCTN 24381/177330（线） × Graphics 边 · PANE 24381/177335（线） · 平行：起点取第一项上的拾中处',
+      );
+      expect(summary).not.toContain('起点 ');
+    });
+
+    it('异面写公垂线、相交 / 垂足写最近点对；没有 shortest 的普通距离仍写两个点', () => {
+      const skew = { ...record, shortest: { ...shortest, parallel: false, skew: true } };
+      expect(formatMeasurementSummary(skew, 'mm', 0)).toContain('异面：两端是公垂线的两端');
+      const pointPlane = {
+        ...record,
+        shortest: { ...shortest, kind: 'point-plane' as const, parallel: false, skew: false, secondLabel: null },
+      };
+      expect(formatMeasurementSummary(pointPlane, 'mm', 0))
+        .toContain('点 × 面 · Graphics 边 · SCTN 24381/177330（线） × 第二项 · 两项上的最近点对');
+      const { shortest: _dropped, ...plain } = record;
+      expect(formatMeasurementSummary(plain, 'mm', 0)).toContain('起点 edge-1 -> 终点 edge-2');
     });
   });
 });

@@ -69,6 +69,7 @@ import {
   useToolStore,
   type MeasurementPoint,
   type PerpendicularMeasurementInfo,
+  type ShortestMeasurementInfo,
   type Vec3,
   type XeokitAngleDraft,
   type XeokitAngleMeasurementRecord,
@@ -131,6 +132,7 @@ import {
   type PickGeometry,
   type PickVec3,
 } from '@/measurement/kernel/pickDerivation';
+import { buildShortestDistance, type ShortestOperand } from '@/measurement/kernel/shortestDistance';
 import { buildThreePointAngle } from '@/measurement/kernel/threePointAngle';
 import {
   formatMeasurementPrompt,
@@ -2078,6 +2080,159 @@ export function useXeokitMeasurementTools(options: {
     };
   }
 
+  // ── Web 增强「最短距离」（结果卡 Distance 下拉 `Shortest`，决策 d-619）：两次拾取（点 / 线 / 面）出两个 witness ──
+  // 不是 E3D parity：E3D 产品里的 Measure Shortest 永远是两拾中点距离（golden MD §32 / §33）；这里落的是
+  // `gmfLine.shortest` 里产品进不去的分支（`src/measurement/kernel/shortestDistance.ts`）。
+  /** 已选的第一项（设计 World）；`shortestPendingLabel` 响应式给提示条 / 结果卡用。 */
+  let shortestPending: Readonly<{ operand: ShortestOperand; label: string; hit: PickHit }> | null = null;
+  const shortestPendingLabel = ref<string | null>(null);
+
+  function isShortestDistanceMode(): boolean {
+    return store.toolMode.value === 'xeokit_measure_distance'
+      && measurementStyle.state.distanceMeasureVariant === 'shortest';
+  }
+
+  function clearShortestPending(): boolean {
+    const hadPending = shortestPending !== null;
+    shortestPending = null;
+    shortestPendingLabel.value = null;
+    return hadPending;
+  }
+
+  /**
+   * 把这一击换成最短距离的操作数（设计 World）：带段的（Graphics 边 / PLINE / 元素轴线）→ 无限线，带面的
+   * （Graphics 面 / Aid 平面）→ 无限面，其余一律是点——带方向的点（P-Point / 基本体轴）在 E3D `positionData()`
+   * 里也是 `position`，不像 Intersect 那样转成过该点的线。线 / 面另带用户拾中的位置（平行时的起点 witness）。
+   */
+  function shortestOperandFromHit(hit: PickHit): ShortestOperand {
+    const toDesign = (v: Vector3): PickVec3 => vec3ToTuple(sceneWorldToDesignMeters(v, dtxLayerRef));
+    const toDesignDir = (origin: Vector3, v: Vector3): PickVec3 => vec3ToTuple(sceneDirectionToDesign(origin, v, dtxLayerRef));
+    const picked = toDesign(hit.worldPos);
+    const line = hit.segment ?? hit.elementLine ?? null;
+    if (line) return { kind: 'line', start: toDesign(line.start), end: toDesign(line.end), picked };
+    if (hit.plane) {
+      return { kind: 'plane', position: toDesign(hit.plane.position), normal: toDesignDir(hit.plane.position, hit.plane.normal), picked };
+    }
+    return { kind: 'point', position: picked };
+  }
+
+  const SHORTEST_KIND_TEXT: Record<ShortestOperand['kind'], string> = { point: '点', line: '线', plane: '面' };
+
+  /** 操作数标签带上它的几何类别，结果卡 / 摘要里一眼看出是点 × 线还是线 × 面。 */
+  function shortestOperandLabel(hit: PickHit, operand: ShortestOperand): string {
+    return `${lineAngleOperandLabel(hit)}（${SHORTEST_KIND_TEXT[operand.kind]}）`;
+  }
+
+  function shortestFailureText(reason: string): string {
+    switch (reason) {
+      case 'zero-distance':
+        return '两项相交（或重合），最短距离为 0，不落记录（E3D gmfLine.shortest 回 unset LINE、字段写 0）；已回到第 1 步';
+      case 'zero-length-line':
+        return '拾中的线长度为 0，算不出最短距离；已回到第 1 步';
+      case 'degenerate-plane':
+        return '拾中的面法向退化，算不出最短距离；已回到第 1 步';
+      default:
+        return '所选几何退化，算不出最短距离；已回到第 1 步';
+    }
+  }
+
+  /**
+   * 最短距离的一击。第一击、第二击都可以是点 / 线 / 面；凑齐就走 `buildShortestDistance` 落一条距离记录——
+   * `origin` / `target` = 两个 witness（第一项上的、第二项上的；线 × 面例外：内核照 E3D 856–874 把起点放在线上，
+   * 不看拾取顺序），结果表与两点距离同一张。零长（相交 / 重合）不落记录、提示回第 1 步（d-619 第 5 点）。
+   */
+  function handleShortestPick(canvas: HTMLCanvasElement, e: PointerEvent, hit: PickHit | null, missOnModelWithoutPick: boolean): void {
+    if (!hit) {
+      if (missOnModelWithoutPick) {
+        updateHoverFeedback(canvas, e, null);
+        requestRender?.();
+        return;
+      }
+      // 点空白：放弃已选的第一项。
+      if (clearShortestPending()) pickPointMessage.value = null;
+      clearHoverFeedback();
+      syncFromStore();
+      requestRender?.();
+      return;
+    }
+    const operand = shortestOperandFromHit(hit);
+    const label = shortestOperandLabel(hit, operand);
+    if (!shortestPending) {
+      shortestPending = { operand, label, hit };
+      shortestPendingLabel.value = label;
+      pickPointMessage.value = `最短距离：已选第一项 ${label}，再选第二项（点 / 线 / 面）`;
+      updateHoverFeedback(canvas, e, hit);
+      requestRender?.();
+      return;
+    }
+    const first = shortestPending;
+    const built = buildShortestDistance(first.operand, operand);
+    if (!built.ok) {
+      pickPointMessage.value = shortestFailureText(built.reason);
+      clearShortestPending();
+      clearHoverFeedback();
+      syncFromStore();
+      requestRender?.();
+      return;
+    }
+    const startOnSecond = built.value.kind === 'line-plane' && first.operand.kind === 'plane';
+    const origin = lineAngleMeasurementPoint(startOnSecond ? hit : first.hit, built.value.start, startOnSecond ? label : first.label);
+    const target = lineAngleMeasurementPoint(startOnSecond ? first.hit : hit, built.value.end, startOnSecond ? first.label : label);
+    const resultValues = computeDistanceMeasurementResult(origin, target);
+    if (!resultValues) {
+      pickPointMessage.value = '最短距离测量失败：witness 缺少有效的设计 World 坐标；已回到第 1 步';
+      clearShortestPending();
+      requestRender?.();
+      return;
+    }
+    const shortest: ShortestMeasurementInfo = {
+      kind: built.value.kind,
+      firstLabel: first.label,
+      secondLabel: label,
+      parallel: built.value.parallel,
+      skew: built.value.skew,
+    };
+    const id = nowId('xdist');
+    const createdAt = Date.now();
+    const approximate = hasApproximatePoint(origin, target);
+    const keepMeasurementAnnotation = measurementStyle.state.keepMeasurementAnnotation;
+    store.setMeasurementDraftResult({
+      id,
+      kind: 'distance',
+      origin,
+      target,
+      ...resultValues,
+      approximate,
+      createdAt,
+      persistedMeasurementId: keepMeasurementAnnotation ? id : null,
+      shortest,
+    });
+    if (keepMeasurementAnnotation) {
+      const rec: XeokitDistanceMeasurementRecord = {
+        id,
+        kind: 'distance',
+        origin,
+        target,
+        visible: true,
+        approximate,
+        createdAt,
+        sourceAnnotationId: store.activeAnnotationContext.value?.id,
+        sourceAnnotationType: store.activeAnnotationContext.value?.type,
+        shortest,
+      };
+      if (!measurementStyle.state.distanceKeepDimensions) {
+        hideKeptDistanceDimensions();
+      }
+      store.addXeokitDistanceMeasurement(rec);
+    }
+    pickPointMessage.value = null;
+    clearShortestPending();
+    clearMeasurementVisualAssists();
+    syncFromStore();
+    if (keepMeasurementAnnotation) updateSelectionBinding(id);
+    requestRender?.();
+  }
+
   /**
    * E3D `intermediates`：线带中间显著点（如型材上的接头位置）且 Significant Snaps 开着时，
    * Snap / Distance / Proportion / Fraction 作用在控制点所在的那一小段上，而不是整条线。
@@ -2403,6 +2558,12 @@ export function useXeokitMeasurementTools(options: {
     });
 
     if (mode === 'xeokit_measure_distance') {
+      // Web 增强「最短距离」：两击 `第一项` / `第二项`，点 / 线 / 面都收。
+      if (measurementStyle.state.distanceMeasureVariant === 'shortest') {
+        return shortestPendingLabel.value
+          ? prompt('最短距离', 2, 2, `选择第二项：点 / 线 / 面（第一项：${shortestPendingLabel.value}）`, CANCEL_TRAILER)
+          : prompt('最短距离', 1, 2, '选择第一项：点 / 线 / 面');
+      }
       // E3D：Perpendicular to 时提示变为 "Measure perpendicular distance start / end"。
       const title = measurementStyle.state.perpendicularTo ? '垂距测量' : '距离测量';
       const endHint = measurementStyle.state.perpendicularTo ? '选择目标线 / 面上的点' : '选择终点';
@@ -2916,6 +3077,10 @@ export function useXeokitMeasurementTools(options: {
       if (!stage) return 'corner';
       return stage === 'finding_first_arm' ? 'origin' : 'target';
     }
+    // 最短距离没有两点草稿：第一击是第一项、第二击是第二项。
+    if (isShortestDistanceMode()) {
+      return shortestPending ? 'target' : 'origin';
+    }
     if (store.currentXeokitDistanceDraft.value) {
       return 'target';
     }
@@ -2935,6 +3100,9 @@ export function useXeokitMeasurementTools(options: {
       }
       if (isTwoLineAngleMode()) {
         return { title: lineAnglePending ? '等待第二条线或面' : '等待第一条线', subtitle };
+      }
+      if (isShortestDistanceMode()) {
+        return { title: shortestPending ? '等待第二项（点 / 线 / 面）' : '等待第一项（点 / 线 / 面）', subtitle };
       }
       if (mode === 'xeokit_measure_elevation_delta') {
         return {
@@ -2970,6 +3138,14 @@ export function useXeokitMeasurementTools(options: {
       const usable = lineAnglePending ? convertible !== null : convertible?.kind === 'line';
       return {
         title: usable ? (lineAnglePending ? '选第二条线 / 面' : '选第一条线') : '这一项不是线 / 面',
+        subtitle,
+      };
+    }
+    if (isShortestDistanceMode() && hit) {
+      // 最短距离什么都收，只提前说明这一击会当点 / 线 / 面用。
+      const kindText = SHORTEST_KIND_TEXT[shortestOperandFromHit(hit).kind];
+      return {
+        title: shortestPending ? `选第二项（${kindText}）` : `选第一项（${kindText}）`,
         subtitle,
       };
     }
@@ -3247,6 +3423,7 @@ export function useXeokitMeasurementTools(options: {
     clearMeasurementVisualAssists();
     clearIntersectSession();
     clearLineAnglePending();
+    clearShortestPending();
     store.setMeasurementDetailsDrawerOpen(false);
     store.setToolMode(mode);
   }
@@ -3265,6 +3442,13 @@ export function useXeokitMeasurementTools(options: {
     }
     // 两线夹角已选第一条线 → 先只放弃它（E3D 整包退，Web 与 Intersect 子拾取同一层）。
     if (clearLineAnglePending()) {
+      pickPointMessage.value = null;
+      clearHoverFeedback();
+      requestRender?.();
+      return true;
+    }
+    // 最短距离已选第一项 → 同一层，只放弃它（两击都不进草稿，d-619）。
+    if (clearShortestPending()) {
       pickPointMessage.value = null;
       clearHoverFeedback();
       requestRender?.();
@@ -3510,6 +3694,11 @@ export function useXeokitMeasurementTools(options: {
     }
 
     if (toolMode === 'xeokit_measure_distance') {
+      // Web 增强「最短距离」：不走两点草稿，两击各转成点 / 线 / 面操作数。
+      if (isShortestDistanceMode()) {
+        handleShortestPick(canvas, e, hit, missOnModelWithoutPick);
+        return;
+      }
       const draft = store.currentXeokitDistanceDraft.value;
       if (!draft) {
         if (!hit) {
@@ -3876,6 +4065,23 @@ export function useXeokitMeasurementTools(options: {
       if (store.toolMode.value !== 'xeokit_measure_angle') return;
       const hadPending = clearLineAnglePending();
       const hadDraft = store.currentXeokitAngleDraft.value !== null;
+      if (hadDraft) store.clearCurrentXeokitDraft();
+      if (hadPending || hadDraft) {
+        pickPointMessage.value = null;
+        clearHoverFeedback();
+        syncFromStore();
+        requestRender?.();
+      }
+    },
+  );
+
+  // 切 Point to Point ↔ Shortest（Web 增强，d-619）：丢掉进行中的两点草稿 / 已选的第一项。
+  watch(
+    () => measurementStyle.state.distanceMeasureVariant,
+    () => {
+      if (store.toolMode.value !== 'xeokit_measure_distance') return;
+      const hadPending = clearShortestPending();
+      const hadDraft = store.currentXeokitDistanceDraft.value !== null;
       if (hadDraft) store.clearCurrentXeokitDraft();
       if (hadPending || hadDraft) {
         pickPointMessage.value = null;

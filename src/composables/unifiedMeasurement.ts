@@ -34,6 +34,7 @@ import type {
   LineAngleMeasurementInfo,
   MeasurementPoint,
   PerpendicularMeasurementInfo,
+  ShortestMeasurementInfo,
 } from '@/composables/useToolStore';
 
 import {
@@ -66,6 +67,8 @@ export type UnifiedDistanceMeasurementRecord = UnifiedMeasurementBase & {
   target: MeasurementPoint;
   /** E3D Perpendicular to 结果标记（target 为垂足）；普通距离没有此字段。 */
   perpendicular?: PerpendicularMeasurementInfo;
+  /** Web 增强「最短距离」结果标记（origin / target 为两个 witness，d-619）；普通距离没有此字段。 */
+  shortest?: ShortestMeasurementInfo;
 };
 
 export type UnifiedAngleMeasurementRecord = UnifiedMeasurementBase & {
@@ -344,6 +347,7 @@ export function fromXeokitMeasurement(rec: XeokitMeasurementRecord): UnifiedMeas
         origin: rec.origin,
         target: rec.target,
         ...(rec.perpendicular ? { perpendicular: rec.perpendicular } : {}),
+        ...(rec.shortest ? { shortest: rec.shortest } : {}),
       };
     case 'angle':
       return {
@@ -483,6 +487,7 @@ export function toXeokitMeasurement(u: UnifiedMeasurementRecord): XeokitMeasurem
         origin: u.origin,
         target: u.target,
         ...(u.perpendicular ? { perpendicular: u.perpendicular } : {}),
+        ...(u.shortest ? { shortest: u.shortest } : {}),
       };
       return result;
     }

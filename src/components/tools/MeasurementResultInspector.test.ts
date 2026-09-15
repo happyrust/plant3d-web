@@ -360,4 +360,84 @@ describe('MeasurementResultInspector', () => {
     app.unmount();
     host.remove();
   });
+
+  it('distance mode: exposes the Point to Point / Shortest switch and shows where a shortest record’s two witnesses come from', async () => {
+    const [
+      { default: MeasurementResultInspector },
+      { useToolStore },
+      { useXeokitMeasurementStyleStore },
+    ] = await Promise.all([
+      import('./MeasurementResultInspector.vue'),
+      import('@/composables/useToolStore'),
+      import('@/composables/useXeokitMeasurementStyleStore'),
+    ]);
+
+    const store = useToolStore();
+    store.clearAll();
+    const style = useXeokitMeasurementStyleStore();
+    style.resetStyle();
+    // LOOP3 那对相距 8 mm 的平行边（golden MD §33 里点点两击是 593 mm）：最短距离的两端是 witness。
+    store.setMeasurementDraftResult({
+      id: 'shortest-1',
+      kind: 'distance',
+      origin: { entityId: 'edge-1', worldPos: [10, 10, 15], designWorldPos: [10, 10, 15] },
+      target: { entityId: 'edge-2', worldPos: [10, 10, 14.992], designWorldPos: [10, 10, 14.992] },
+      distance: 0.008,
+      offsets: { frame: 'world', components: [0, 0, -0.008] },
+      direction: { vector: [0, 0, -1] },
+      wrt: 'world',
+      approximate: false,
+      createdAt: 1,
+      persistedMeasurementId: null,
+      shortest: {
+        kind: 'line-line',
+        firstLabel: 'Graphics 边 · SCTN 24381/177330（线）',
+        secondLabel: 'Graphics 边 · PANE 24381/177335（线）',
+        parallel: true,
+        skew: false,
+      },
+    });
+
+    const host = document.createElement('div');
+    document.body.append(host);
+    const app = createApp(MeasurementResultInspector, {});
+    app.mount(host);
+    await nextTick();
+
+    // 结果表照旧是那五行——Shortest 只换两端怎么来的，不换表。
+    const rows = Array.from(host.querySelectorAll('[data-testid^="measurement-result-row-"]'));
+    expect(rows.map(row => [
+      row.querySelector('dt')?.textContent?.trim(),
+      row.querySelector('dd')?.textContent?.replace(/\s+/g, ' ').trim(),
+    ])).toEqual([
+      ['Distance', '8mm'],
+      ['Offset X', '0mm'],
+      ['Offset Y', '0mm'],
+      ['Offset Z', '-8mm'],
+      ['Direction', 'D'],
+    ]);
+    const info = host.querySelector('[data-testid="measurement-shortest-info"]')?.textContent?.replace(/\s+/g, ' ').trim();
+    expect(info).toBe(
+      '最短距离 · 线 × 线 · Graphics 边 · SCTN 24381/177330（线） × Graphics 边 · PANE 24381/177335（线） · 平行：起点取第一项上的拾中处',
+    );
+
+    const variant = host.querySelector<HTMLSelectElement>('[data-testid="measurement-distance-variant"]')!;
+    expect(variant.value).toBe('point-to-point');
+    expect(Array.from(variant.options).map((option) => option.textContent?.trim()))
+      .toEqual(['Point to Point', 'Shortest（Web 增强）']);
+    const perpendicular = host.querySelector<HTMLInputElement>(
+      '[data-testid="measurement-result-perpendicular-toggle"]',
+    )!;
+    expect(perpendicular.disabled).toBe(false);
+
+    variant.value = 'shortest';
+    variant.dispatchEvent(new Event('change'));
+    await nextTick();
+    expect(style.state.distanceMeasureVariant).toBe('shortest');
+    // Shortest 下两击拾的是几何项，Perpendicular to 那一档无从谈起。
+    expect(perpendicular.disabled).toBe(true);
+
+    app.unmount();
+    host.remove();
+  });
 });

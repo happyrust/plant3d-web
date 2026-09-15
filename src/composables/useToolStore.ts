@@ -196,6 +196,23 @@ export type PerpendicularMeasurementInfo = {
   targetLabel?: string | null;
 };
 
+/**
+ * Web 增强「最短距离」（结果卡 Distance 下拉 `Shortest`，决策 d-619）：两组几何（点 / 无限线 / 无限面）
+ * 的真最短距离，`origin` / `target` 是两个 witness，结果表仍是 Distance / Offset / Direction。
+ * **不是 E3D parity**——E3D 产品里的 Measure Shortest 永远是两拾中点距离（golden MD §32 / §33）；
+ * 这里落的是 `gmfLine.shortest` 里产品进不去的分支（`src/measurement/kernel/shortestDistance.ts`）。
+ */
+export type ShortestMeasurementInfo = {
+  kind: 'point-point' | 'point-line' | 'point-plane' | 'line-line' | 'line-plane' | 'plane-plane';
+  /** 两次拾中项的摘要，如「SCTN 边」「PANE 面」。 */
+  firstLabel?: string | null;
+  secondLabel?: string | null;
+  /** 两项平行（线线 / 线面 / 面面）：最近点对不唯一，起点取第一项上的拾中处。 */
+  parallel: boolean;
+  /** 线 × 线异面：两个 witness 是公垂线两端。 */
+  skew: boolean;
+};
+
 export type XeokitDistanceMeasurementRecord = {
   id: string;
   kind: 'distance';
@@ -205,6 +222,8 @@ export type XeokitDistanceMeasurementRecord = {
   approximate: boolean;
   createdAt: number;
   perpendicular?: PerpendicularMeasurementInfo;
+  /** 存在即为「最短距离」结果（origin / target 为两个 witness）。 */
+  shortest?: ShortestMeasurementInfo;
 } & MeasurementSourceLink;
 
 /**
@@ -308,6 +327,8 @@ export type MeasurementDraftResult = {
   persistedMeasurementId: string | null;
   /** 存在即为 Perpendicular to 结果（target 为垂足）。 */
   perpendicular?: PerpendicularMeasurementInfo;
+  /** 存在即为「最短距离」结果（origin / target 为两个 witness）。 */
+  shortest?: ShortestMeasurementInfo;
 };
 
 export type XeokitAngleDraftStage = 'finding_first_arm' | 'finding_second_arm';
