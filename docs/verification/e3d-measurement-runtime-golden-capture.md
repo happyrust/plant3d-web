@@ -66,6 +66,8 @@
 
 ### G5 · Shortest
 
+> 2026-09-15 按 E3D 实际行为收口（决策 `d-616`，§32 静态 + §33 Web 实机）：方案 #10 已 ✓，下面五条只剩 E3D 侧对账补齐，不再卡任何 Web 工作。
+
 - [ ] G5-01：点点、点线、点平面。——静态（§32）：产品入口下三种都退化成两拾中点的点点距离；`line.near` / `plane.near` 两支不可达。运行时只剩「Picking Control 字段确实被这个距离填上」一次走查。
 - [ ] G5-02：平行线、相交线、异面线。——静态（§32）：不可达；代码口径已抄（无限线、平行取第一条线上拾中处）。运行时只剩 `isParallel` 容差。
 - [ ] G5-03：线平面、平行平面、相交平面。——静态（§32）：不可达；代码口径已抄（不平行 → 零长；平行面那支 `posData[1].line` 未设、靠 `handle any` 退 `plane.position`）。
@@ -129,7 +131,7 @@
 - 普通元素 WRT：G3-01～G3-03 与后端 frame 数据契约同时通过。
 - GENSEC：G3-04～G3-05 通过前 No-Go。
 - Perpendicular：至少一个权威 LINE/PLANE provider 和 G4 通过后开放。
-- Shortest：G5 与有限/无限范围语义确认前 No-Go。
+- Shortest：~~G5 与有限/无限范围语义确认前 No-Go。~~ 2026-09-15 按 E3D 实际行为收口（`d-616`）：产品里它是两拾中点距离，Web 距离测量 × Graphics 两击已覆盖（§32 / §33）。
 - Angle 三点结果：G6-01～G6-03 通过；两图形模式单独审批。
 
 ## 6. 本轮执行记录
@@ -1401,3 +1403,26 @@ spec 先把相机拉到模型跟前；临时 spec 已删）：
   Web 没有 Positioning Control 偏移字段这一层，无处可填。这样 #10 可以按「E3D 口径已覆盖、入口在 Web 无对应物」收口。
 - 按 `gmfLine.shortest` 的**设计意图**做真正的线 / 面最短距离 + witness（方案 Phase D 原设想）：那是 Web 增强，E3D 里是进不去的死代码，没有 golden 可对；要做也不能叫「E3D 有的」。
 - 方案 §1.4「点 / 线 / 平面 / 圆弧」里的**圆弧**是误写：`shortest` 没有 ARC 分支，`stdGraphics` 也不出 ARC。
+
+## 33. Shortest 按 E3D 实际行为收口：Graphics 边 × 面 / 边 × 边两击的距离 = 两拾中点距离 实机走查（2026-09-15 11:24，决策 `d-616`）
+
+**为什么现在做**：§32 静态核出 E3D 3.1 的「Measure Shortest」两次 Graphics 拾取后永远是两拾中点的距离（`positionData()` 给 EDGE / FACET 都带 `position`，`gmfLine.shortest` 先判它），
+用户按方案 §7 Q7 选 (a)：**按 E3D 实际行为收口**——Web 的对应物就是距离测量 × Graphics 过滤器两击，不建线 / 面最短距离内核（决策 `d-616`）。本节给它一条可引的 Web golden：
+两击的 Distance = |两拾中点|，且两拾中点正是 E3D `positionData()` 会给的位置（边线上离拾取射线最近点 / 射线 ∩ 面），独立从相机射线与网格算。
+
+**Web 实机走查**（**无任何 mock**：`?model_source=gen-model-v1&gm_backend_port=8024&show_refno=24381_177298`，距离模式，浮条真点「自由表面」+ 只留「模型表面点」「Graphics」，过滤器 Graphics、拾取类型 Cursor，
+真指针；LOOP3 那组构件，机位 el −0.45 / az 45（从下往上看）；临时 spec 已删）：
+
+| 组 | 两击 | 结果表（Default 单位，mm） | 记录两端（设计 World，mm） | 独立期望 | 图 |
+| --- | --- | --- | --- | --- | --- |
+| 边 × 面 | SCTN `24381/177330` 顶面棱（`N 29.54 E`，U 3150.0）× PANE `24381/177335` 底面（法向 `D`，U 3142.0） | `Distance 335mm · Offset X +287mm · Y −171mm · Z −8mm · Direction E 30.809 S 1.37043 D` | 起点 `E −3122.6 N −10690.3 U 3150.0` = 边上拾中点；终点 `E −2835.4 N −10861.6 U 3142.0` = 面上拾中点 | \|终点 − 起点\| = 334.501 mm；起点 = 边线上离拾取射线最近点（Δ 1.0e-7 m）、终点 = 射线 ∩ 面（Δ 2.1e-8 m）——即 E3D `positionData()` 175–200 会给的两个 `position`；Offset = 差向量分量、Direction = 差向量罗盘串 | `web-shortest-graphics-live-01-edge-facet.png` / `web-shortest-graphics-live-01-edge-facet-result-card.png` |
+| 边 × 边 | 同一条 SCTN 顶面棱 × PANE `177335` 底面的边（两条边**平行**，竖直相距 8 mm） | `Distance 593mm · Offset X +252mm · Y −537mm · Z −8mm · Direction S 25.1005 E 0.772503 D` | 终点 `E −2870.9 N −11227.6 U 3142.0` = 第二条边上拾中点 | \|两拾中点\| = 593.370 mm；两条**无限直线**的最短距离只有 **8.000 mm**——产品里进不去的 line-line 分支才会给它，E3D 报的就是 593（两拾中点），Web 同 | `web-shortest-graphics-live-02-edge-edge.png` / `web-shortest-graphics-live-02-edge-edge-result-card.png` |
+
+- 结果卡多一行 `起点 → 终点 边 → 面` / `边 → 边`；记录 `approximate: true`（网格派生的 Graphics 点，§12 口径）。
+- 与 E3D 的差别只在「输出去哪」：E3D 把 `.length()` 写进 Picking Control 的偏移字段、不出表；Web 出标准距离结果表（Distance / Offset X/Y/Z / Direction）。Web 多出来的三行不是偏离——它们是 E3D Measure Distance 那张表的行，
+  Shortest 在 E3D 里本来就没有表可对。
+- 拾中点的口径：Web Graphics 边的控制点是**线段**上离射线最近处（§12），E3D `line.intersection(pickLine)` 是**无限边线**上的最近点——光标落在线段范围内时两者相同（本节两击都在段内，Δ 1e-7 m）；光标在 12 px 吸附带内却越过线段端点时会差一段，未实机（记残余）。
+- 页面错误 0；全部数值（含每击的拾取射线、E3D 口径位置、line-line 对照值）见 `web-shortest-graphics-live-records.json`。
+
+**收口**（决策 `d-616`）：方案 §2 #10 → ✓（依据 = §32 静态 + 本节 Web 实机 + `d-616`）；Phase D 不建 `shortestDistance.ts`；E3D 那层「填进偏移字段」在 Web 无对应入口，记 N/A；
+G5 运行时 golden 仍未采（E3D 不在跑），剩 Picking Control 一次走查 + 截图、`isParallel` 容差、Graphics 拾取有无 `EDGE / FACET / VERTEX` 之外的 `primaryObject`——只是对账补齐，不再卡 #10。
