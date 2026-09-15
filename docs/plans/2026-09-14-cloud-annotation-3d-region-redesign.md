@@ -981,19 +981,33 @@ P0 已提交：`af4b382`（15 文件；`useToolStore.ts` 只取云线 hunk）。
   `annotationSystem.renderLabels` 只写 DOM transform，浏览器把 DOM 与 canvas **在同一帧一起合成**；
   而它读的 `camera.matrixWorldInverse` 就是本帧那一个（同一次 rAF 回调内，`controls.update()` 之后没人再动相机）。
   「排在渲染之后」只对**要被 WebGL 画出去的几何**才致命（§21 那条），对 DOM 不是。
-- 剩下真正没覆盖到的是 `ptsetVis.updateLabelPositions()`（点集标签，同样是 DOM、同样在渲染之后）：
-  它要后端点集数据，primitives demo 里造不出来，本轮没测。机制与 CSS2D 标签同类。
+- **点集标签**（`ptsetVis.updateLabelPositions()`）也一样：DOM、排在渲染之后、量出来 0.00px。
 
-**新增** `e2e/dtx-overlay-labels-fast-orbit.spec.ts`（`.gitignore` e2e 白名单加一行）；快拖输入抽到
+**新增** `e2e/dtx-overlay-labels-fast-orbit.spec.ts`（demo）与 `e2e/dtx-overlay-labels-real-model.spec.ts`
+（真实项目，见下），判据与探针抽在 `e2e/helpers/overlayLagProbe.ts`，快拖输入抽在
 `e2e/helpers/dtxFastOrbit.ts`（orbit 横扫 / 甩动 / 右键平移 / 轻推），§22 那条同步改成引用。
 
 - **尺子**：帧末（`queueMicrotask`）读三个浮层元素写在 DOM 上的坐标，与「用本帧相机投影它自己的世界锚点」
   算出来的期望值比（与 `worldToOverlay` 同一套算法；CSS2D 那个解析 `translate(Xpx,Ypx)`）。
 - **判据自带标尺**：同一帧再用**上一帧的相机**算一次。那就是「假如它晚一帧」的后果，不必把代码改坏再跑一遍。
-- **实测**（209~217 个运动帧，含 63~68 个平移帧）：三样的本帧误差 **中位与最大都是 0.00px**；
-  同一批帧换上一帧相机算是 **11~13px**。headless 与 `--headed` 都绿，`--repeat-each 2` 8/8。
+- **实测**（206~217 个运动帧，含 63~68 个平移帧）：四样的本帧误差 **中位与最大都是 0.00px**；
+  同一批帧换上一帧相机算是 **9~14px**。headless 与 `--headed` 都绿，`--repeat-each 2` 全绿。
 - **为什么非得掺平移**：orbit 绕着 target 转，靶心附近的锚点在屏幕上几乎不动（实测「晚一帧」也才差 5.8px），
   判据分不出来；右键 pan 让整幅画面一起走，一帧十几像素，差距才拉得开。
+
+**真实项目那一条**（`dtx-overlay-labels-real-model.spec.ts`）：gen-model-v1 直读
+（`?model_source=gen-model-v1&gm_backend_port=…&show_refno=24381_145018`，6 秒出图、22 个构件），
+点集喂的是后端 `element/ptset` 的**真实点**（`include_members` 取到成员 `24381/145019` 的 2 个点），
+渲染仍走应用自己的 `ptsetVis.renderPtset`。**实测 206~209 个运动帧（含 64~67 平移帧），四样同样
+中位与最大都是 0.00px**，「晚一帧」标尺 9~14px。后端没起就整条 skip，不算失败。
+
+- 本机 gen-model 开在 :8023（`.env.development` 默认写的是 :8022），跑之前 `$env:PLANT3D_GM_PORT=8023`。
+- 应用自己的点集取数（`queryPtsetWithRuntimeFallback`）只认 parquet 与旧后端 `/api/pdms/ptset`，
+  gen-model-v1 档下取不到点集，所以用例自己打了一次 `/api/v1/element/ptset`；数据是真的，定位与渲染是产品代码。
+- 两处踩过的坑，留给下一个人：① **CSS2D 标签的锚点要读 `getWorldPosition`**——它挂在
+  `annotationGroup` 下，真实项目里这个组带 mm→m + recenter 变换，拿创建时给的局部坐标去投影会差出
+  六七百像素（demo 里组是单位阵，所以只在真实模型上才露头）；② 真实项目常常只显示一条 BRAN，
+  144 个采样点里只有 3 个落在管子上，`findPickablePoint` 的疏网格会整片扫空，已补密网格兜底。
 
 ---
 

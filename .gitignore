@@ -76,6 +76,7 @@ e2e/*
 !e2e/dtx-cloud-outline-camera-motion.spec.ts
 !e2e/dtx-cloud-outline-fast-orbit.spec.ts
 !e2e/dtx-overlay-labels-fast-orbit.spec.ts
+!e2e/dtx-overlay-labels-real-model.spec.ts
 scripts/*
 !scripts/p0-live-smoke.mjs
 !scripts/run-dimension-browser-perf.mjs
@@ -114,3 +115,4 @@ state/
 .cursor/kc-chat-exports/
 # Added by code-review-graph
 .code-review-graph/
+

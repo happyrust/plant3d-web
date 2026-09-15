@@ -22,7 +22,12 @@ export async function waitForDemoReady(page: Page) {
   await page.waitForFunction(() => (window as any).__viewerTools?.ready?.value === true, null, { timeout: 15_000 });
 }
 
-/** 既能被 id 拾取又能被射线求到表面点（锚点用 pickPoint）、且没被浮层盖住的画布点 */
+/**
+ * 既能被 id 拾取又能被射线求到表面点（锚点用 pickPoint）、且没被浮层盖住的画布点。
+ *
+ * 先扫一遍靠中间的疏网格（demo 这类满屏构件一两下就中）；一个都没中再上密网格——真实项目常常
+ * 只显示一条 BRAN，144 个采样点里只有三四个落在管子上，疏网格会整片扫空。
+ */
 export async function findPickablePoint(page: Page): Promise<PickPoint> {
   const point = await page.evaluate(() => {
     const v = (window as any).__xeokitViewer;
@@ -30,18 +35,29 @@ export async function findPickablePoint(page: Page): Promise<PickPoint> {
     const canvas = document.querySelector('canvas.viewer') as HTMLCanvasElement | null;
     if (!sel || !canvas) return null;
     const rect = canvas.getBoundingClientRect();
-    const ratios = [0.5, 0.42, 0.58, 0.34, 0.66, 0.26, 0.74];
-    for (const ry of ratios) {
-      for (const rx of ratios) {
-        const x = rect.width * rx;
-        const y = rect.height * ry;
-        const px = rect.left + x;
-        const py = rect.top + y;
-        if (document.elementFromPoint(px, py) !== canvas) continue;
-        const hit = sel.pick?.({ x, y });
-        if (!hit?.objectId) continue;
-        if (typeof sel.pickPoint === 'function' && !sel.pickPoint({ x, y })) continue;
-        return { x: px, y: py, objectId: hit.objectId as string, rect: { left: rect.left, top: rect.top, width: rect.width, height: rect.height } };
+    const tryAt = (rx: number, ry: number) => {
+      const x = rect.width * rx;
+      const y = rect.height * ry;
+      const px = rect.left + x;
+      const py = rect.top + y;
+      if (document.elementFromPoint(px, py) !== canvas) return null;
+      const hit = sel.pick?.({ x, y });
+      if (!hit?.objectId) return null;
+      if (typeof sel.pickPoint === 'function' && !sel.pickPoint({ x, y })) return null;
+      return { x: px, y: py, objectId: hit.objectId as string, rect: { left: rect.left, top: rect.top, width: rect.width, height: rect.height } };
+    };
+    const coarse = [0.5, 0.42, 0.58, 0.34, 0.66, 0.26, 0.74];
+    for (const ry of coarse) {
+      for (const rx of coarse) {
+        const found = tryAt(rx, ry);
+        if (found) return found;
+      }
+    }
+    const steps = 24;
+    for (let j = 1; j < steps; j += 1) {
+      for (let i = 1; i < steps; i += 1) {
+        const found = tryAt(i / steps, j / steps);
+        if (found) return found;
       }
     }
     return null;
