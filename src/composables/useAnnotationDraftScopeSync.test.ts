@@ -50,6 +50,8 @@ import { resetAnnotationUxFlagCache, setAnnotationUxFlag } from './useAnnotation
 import type { AnnotationDraftJournal } from './useToolStore';
 import type { AnnotationScope } from '@/review/domain/annotationScope';
 
+import { setCurrentProjectPath } from '@/lib/filesOutput';
+
 describe('computeAnnotationDraftScope / deriveTaskReviewRound（纯函数）', () => {
   it('有任务：taskId 身份、round 只认任务上显式的 reviewRound', () => {
     const scope = computeAnnotationDraftScope({
@@ -201,6 +203,49 @@ describe('useAnnotationDraftScopeSync（接线：任务 / 用户变化 → store
     expect(session.state.value.localRevision).toBe(0);
     expect(session.status.value.local).toBe('clean');
     sync.stop();
+  });
+
+  it('工程变了 scope 跟着变：setCurrentProjectPath / modelProjectChanged / popstate 任一到来都重取 projectId，容器切走、epoch+1', () => {
+    setCurrentProjectPath(null);
+    // 不给 projectId 取法：走 URL / 当前工程（happy-dom 的 URL 没有 output_project → __default__）
+    const sync = useAnnotationDraftScopeSync();
+    currentTask.value = { id: 'task-A' };
+    expect(sync.current()).toMatchObject({ projectId: '__default__', taskId: 'task-A' });
+    const session = useAnnotationDraftSession();
+    const epochBefore = session.state.value.epoch;
+
+    // useModelProjects.applyProject 首屏那次：只 setCurrentProjectPath、不派事件，也要跟上
+    setCurrentProjectPath('P2');
+    expect(sync.current()).toMatchObject({ projectId: 'P2', taskId: 'task-A' });
+    expect(setAnnotationDraftScopeMock.mock.lastCall?.[0]).toMatchObject({ projectId: 'P2', taskId: 'task-A' });
+    expect(session.scope.value?.projectId).toBe('P2');
+    expect(session.state.value.epoch).toBe(epochBefore + 1);
+    // 同值再设：不重算、不递增
+    const calls = setAnnotationDraftScopeMock.mock.calls.length;
+    setCurrentProjectPath('P2');
+    expect(setAnnotationDraftScopeMock.mock.calls.length).toBe(calls);
+    expect(session.state.value.epoch).toBe(epochBefore + 1);
+    sync.stop();
+
+    // 宿主自己给 projectId（嵌入模式）：值变了没人碰 store，切换工程事件 / popstate 让它重取
+    let hostProject = 'P3';
+    const hosted = useAnnotationDraftScopeSync({ projectId: () => hostProject });
+    expect(hosted.current()?.projectId).toBe('P3');
+    hostProject = 'P4';
+    expect(hosted.current()?.projectId).toBe('P3');
+    window.dispatchEvent(new CustomEvent('modelProjectChanged', { detail: {} }));
+    expect(hosted.current()?.projectId).toBe('P4');
+    hostProject = 'P5';
+    window.dispatchEvent(new Event('popstate'));
+    expect(hosted.current()?.projectId).toBe('P5');
+    hosted.stop();
+
+    // 最后一个宿主卸了：信号监听一起拆，不再碰 store
+    const after = setAnnotationDraftScopeMock.mock.calls.length;
+    setCurrentProjectPath('P6');
+    window.dispatchEvent(new Event('popstate'));
+    expect(setAnnotationDraftScopeMock.mock.calls.length).toBe(after);
+    setCurrentProjectPath(null);
   });
 
   it('开关关着：不装同步、不碰 store', () => {

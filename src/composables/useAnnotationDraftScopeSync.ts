@@ -5,7 +5,7 @@ import { isAnnotationUxFlagEnabled } from '@/composables/useAnnotationUxFlags';
 import { useReviewStore } from '@/composables/useReviewStore';
 import { useToolStore, type AnnotationDraftJournal } from '@/composables/useToolStore';
 import { useUserStore } from '@/composables/useUserStore';
-import { getOutputProjectFromUrl } from '@/lib/filesOutput';
+import { getOutputProjectFromUrl, onCurrentProjectPathChange } from '@/lib/filesOutput';
 import {
   buildAnnotationScope,
   canonicalizeReviewRound,
@@ -26,6 +26,10 @@ import {
  *   中途少一个宿主不影响别的面板。用户 id / 项目 id 按登记顺序取第一个给出值的宿主，都没给再回用户库 / URL。
  * - 本机草稿流水：`useToolStore.annotationDraftJournal` 每变一次就派发进 `useAnnotationDraftSession`
  *   （内容变了 → `edit`；写成 → `local-persisted`；写败 → `local-persist-failed`），面板的「本机」那一行由此而来。
+ * - **工程变了 scope 跟着变**：projectId 取自 URL / 当前工程（不是响应式的），所以这里订阅三路信号——
+ *   `filesOutput.onCurrentProjectPathChange`（`useModelProjects.applyProject` 每次落工程都会走，含首屏那次不派事件的）、
+ *   `modelProjectChanged`（切换工程）、`popstate`（浏览器前进 / 后退 / 别处改 URL 后手动派发）——任一到来就重取一遍 projectId，
+ *   与 `useToolStore` 刷新旧作用域用的信号一致。工程换了就是另一个 scope：容器切走、epoch+1，旧工程在途的回执只能归旧工程。
  * - 开关 `annotationUx.scopedDraftsV1` 关着 = 整个同步不装，store 照旧。
  */
 
@@ -132,10 +136,29 @@ type ToolStoreForScopeSync = {
 const hosts: Host[] = [];
 /** 宿主增减时 +1，让共享 watch 重新取一遍 userId / projectId（登记表本身不是响应式的） */
 const hostsVersion = ref(0);
+/** URL / 当前工程变化时 +1（projectId 不是响应式的，靠它让共享 watch 重取） */
+const projectRevision = ref(0);
 
 let currentScope: AnnotationScope | null = null;
 let stopSharedWatch: WatchStopHandle | null = null;
 let stopJournalWatch: WatchStopHandle | null = null;
+let stopProjectSignals: (() => void) | null = null;
+
+/** 工程 / URL 变化的三路信号 → `projectRevision`；返回一次性拆除函数 */
+function listenProjectSignals(): () => void {
+  const bump = () => {
+    projectRevision.value += 1;
+  };
+  const offPath = onCurrentProjectPathChange(bump);
+  if (typeof window === 'undefined') return offPath;
+  window.addEventListener('popstate', bump);
+  window.addEventListener('modelProjectChanged', bump);
+  return () => {
+    offPath();
+    window.removeEventListener('popstate', bump);
+    window.removeEventListener('modelProjectChanged', bump);
+  };
+}
 
 function firstFromHosts<T>(pick: (host: Host) => T | null | undefined): T | null {
   for (const host of hosts) {
@@ -179,9 +202,12 @@ function startSharedSync(): void {
     draftSession.enterScope(scope);
   };
 
+  stopProjectSignals = listenProjectSignals();
+
   stopSharedWatch = watch(
     () => {
       void hostsVersion.value;
+      void projectRevision.value;
       const task = reviewStore.currentTask.value as (AnnotationDraftScopeTask & { workflowHistory?: unknown }) | null;
       return {
         taskId: task?.id ?? null,
@@ -227,6 +253,8 @@ function stopSharedSync(): void {
   stopSharedWatch = null;
   stopJournalWatch?.();
   stopJournalWatch = null;
+  stopProjectSignals?.();
+  stopProjectSignals = null;
   currentScope = null;
   (useToolStore() as unknown as ToolStoreForScopeSync).setAnnotationDraftScope?.(null);
   useAnnotationDraftSession().leaveScope();
