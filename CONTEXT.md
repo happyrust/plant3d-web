@@ -123,6 +123,11 @@ _Avoid_: entityId
 测量取点共用的两维选择：**拾取过滤器**（Any / Element / Aid / Pline / Ppoint / Screen / Graphics / External，决定哪一类特征可以被拾中）× **拾取类型**（Snap / Distance / Mid-Point / Fraction / Proportion / Intersect / Cursor，决定在拾中的点、线、面上落点怎么派生），外加 Significant Snaps 一档；两维正交。Any 只放行 Element、Ppoint、Pline 与模型表面点，不放行 Graphics 细节；Graphics 的边与面从已加载网格派生，属于近似点；Intersect 由两（三）次子拾取的线 / 面求交得到一个位置（ADR 0060）。管身轴线是元素类拾取落在直管上时拾中的线（E3D TUBING），由直管的放置矩阵派生、两端吸到邻接 P-Point，只在 Any 与 Element 下参与。设计点随 P-Point 在 Any 与 Ppoint 下参与；设计辅助只在 Aid 下参与。
 _Avoid_: 点源开关、捕捉模式
 
+## 最短距离
+
+距离测量的第二档入口（结果卡 `Distance` 下拉 `Point to Point` / `Shortest`）：两击各拾一项几何——**点**、**无限线**（Graphics 边 / PLINE / 元素轴线 / 辅助线）或**无限面**（Graphics 面 / 辅助面）——落一条距离记录，`origin` / `target` 是这两项之间真正最近的那对点（witness），结果表仍是 Distance / Offset / Direction。平行的线线 / 线面 / 面面最近点对不唯一，起点取第一项上的拾中处；异面线取公垂线两端；两项相交（无限线穿过无限面、不平行的面面、相交线）最短距离为 0，不落记录、提示回第 1 步。它是 **Web 增强，不是 E3D parity**：E3D 3.1 产品里的 Measure Shortest 两次 Graphics 拾取后永远退化成两拾中点距离，本档落的是 `gmfLine.shortest` 里产品进不去的分支（决策 `d-619` supersede `d-616` 第 2 点，方案 `docs/plans/2026-09-15-shortest-web-enhancement-plan.md`，golden MD §32 / §33 / §34）。
+_Avoid_: 说成「E3D 有的」、clearance（构件对构件的服务端最近点对，另一件事）、Perpendicular to（点到目标线 / 面的垂距，只有第二击派生）
+
 ## 设计辅助
 
 用户在本会话里画出来、专供测量取点用的辅助几何，对应 E3D 的 Design Aid（`GPHLINE` / `GPHPLANE`，`!!aidNumbers` 里的一号）。只有两类：**辅助线**（有限的起点 → 终点）与**辅助面**（位置 + 法向，画成一张 x × y 的矩形框加一根法向短线，缺省 5000 × 5000 mm）。它只在拾取过滤器选 Aid 时能被拾中（E3D `stdAid`；Any 从不拾 aid）：线上任意处可拾，Snap 取近端、Cursor 取线上离光标最近处、Mid-Point 等沿线派生；面取射线与面的交点，且射线要落在画出的矩形上。它当 Perpendicular to 的目标时是无限线 / 无限面（E3D `getLine()` / `getPlane()` 的 DESIGNAID 分支），当 Intersect 的操作数时交出 LINE / PLANE；目标名就是辅助自己的名字（描述，或缺省的 `Line [n]` / `Plane [n]`）。会话级、只在内存、按创建顺序编号，刷新即丢——E3D 的 aid 同样不落库。面只给法向时面内 Y 取 Up 的投影（水平面取 North）、X = Y × Z，与 E3D 水平面缺省一致，倾斜面未对 E3D 核对（决策 d-561，golden MD §28）。

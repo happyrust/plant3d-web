@@ -1426,3 +1426,28 @@ spec 先把相机拉到模型跟前；临时 spec 已删）：
 
 **收口**（决策 `d-616`）：方案 §2 #10 → ✓（依据 = §32 静态 + 本节 Web 实机 + `d-616`）；Phase D 不建 `shortestDistance.ts`；E3D 那层「填进偏移字段」在 Web 无对应入口，记 N/A；
 G5 运行时 golden 仍未采（E3D 不在跑），剩 Picking Control 一次走查 + 截图、`isParallel` 容差、Graphics 拾取有无 `EDGE / FACET / VERTEX` 之外的 `primaryObject`——只是对账补齐，不再卡 #10。
+## 34. 最短距离（Web 增强，**不是 parity**）：结果卡 `Distance` 下拉 `Shortest` 两击出 witness 实机走查（2026-09-15 12:30，决策 `d-619`）
+
+**这一节不是 E3D golden，标 `web_enhancement`。** E3D 3.1 产品里的「Measure Shortest」永远是两拾中点距离（§32 静态 + §33 实机，`d-616` 已按那条行为把方案 #10 收口）；
+本节走的是 `gmfLine.shortest` 里**产品进不去**的那几支——用户在方案 §7 Q7 拍板 (a) 之后追加「(b) 也做一份 Web 增强」并批准动手（一页方案
+`docs/plans/2026-09-15-shortest-web-enhancement-plan.md`，内核 `src/measurement/kernel/shortestDistance.ts` `fb0a24b`，接线 + 结果卡 `a2e4971`）。
+E3D 侧没有可对的值，期望值只能自己算，本节用两条互不相干的路：**设计侧 pline 高度**（`element/plines`，不碰网格）与**网格几何**（原始三角形算出的棱方向 / 面法向 + 拾中位置）。
+
+**Web 实机走查**（**无任何 mock**：`?model_source=gen-model-v1&gm_backend_port=8024&show_refno=24381_177298`，距离模式，浮条真点「自由表面」+ 只留「模型表面点」「Graphics」，过滤器 Graphics、
+拾取类型 Cursor，结果卡 `Distance` 下拉真选 `Shortest（Web 增强）`，真指针；LOOP3 那组构件，机位 el −0.45 / az 45；四组都落在同一机位；临时 spec 已删）：
+
+| 组 | 两击 | 结果表（Default 单位，mm） | 记录两端（设计 World，mm） | 独立期望 | 图 |
+| --- | --- | --- | --- | --- | --- |
+| 线 ∥ 线 | SCTN `24381/177330` 顶面棱（U 3150）× 同件下翼缘棱（U 2958），两条都沿 `N 29.54 E` | `Distance 192mm · Offset X 0mm · Y 0mm · Z −192mm · Direction D` | 起点 `E −3122.6 N −10690.3 U 3150.0`（= 第一条线上的拾中处）；终点 同 E / N，`U 2958.0`（= 它在第二条**无限线**上的垂足） | 设计侧 pline `TOS` 3150 − `BRWT` 2958 = **192 mm**（`element/plines`，与网格无关）；网格侧垂足 Δ ≤ 8.9e-16 m | `web-shortest-enhancement-live-01-parallel-lines{,-result-card}.png` |
+| 线 × 线 · 异面 | 同一条 SCTN 顶面棱 × PANE `24381/177335` 上的一条边（也水平，但方位 `N 50.65 W`） | `Distance 8mm · Offset X 0mm · Y 0mm · Z −8mm · Direction D` | 起点 `E −2864.6 N −10235.0 U 3150.0`、终点 同 E / N，`U 3142.0`——**公垂线两端**（两条不同高的水平线，公垂线竖直） | 设计侧 SCTN `TOS` 3150 − PANE `POS` U 3142 = **8 mm**；网格侧公垂线两端 Δ ≤ 1.9e-15 m | `web-shortest-enhancement-live-02-skew-lines{,-result-card}.png` |
+| 线 ∥ 面 | 同一条 SCTN 顶面棱 × PANE `177335` 底面（法向 `D`，U 3142） | `Distance 8mm · Offset X 0mm · Y 0mm · Z −8mm · Direction D` | 起点 `E −3122.6 N −10690.3 U 3150.0`（线上的拾中处，**不随拾取顺序换到面上**，内核照 E3D 856–874）；终点 同 E / N，`U 3142.0`（无限面上的垂足） | 同上 8 mm；网格侧垂足 Δ ≤ 4.4e-16 m | `web-shortest-enhancement-live-03-line-parallel-plane{,-result-card}.png` |
+| 零长拒收 | 同一条 SCTN 顶面棱 × SCTN `24381/177331` 的一个**不平行**面（\|cos∠(棱, 法向)\| = 0.9029） | 无结果表 | **不落记录、不留草稿结果**（`xeokitDistanceMeasurements` 仍 0） | 无限线必穿过无限面 → 0；提示条「两项相交（或重合），最短距离为 0，不落记录（E3D `gmfLine.shortest` 回 unset LINE、字段写 0）；已回到第 1 步」 | `web-shortest-enhancement-live-04-zero-length-refused.png` |
+
+- 结果卡：`Distance` 下拉停在 `Shortest（Web 增强）`；结果表仍是 Distance / Offset X/Y/Z / Direction 那五行（wrt 照旧生效），多一行
+  `最短距离 · 线 × 面 · SCTN 边（线） × PANE 面（面） · 平行：起点取第一项上的拾中处`；`Perpendicular to` 这一档灰掉并注明「Shortest 下不适用」。第一击后提示条写「已选第一项 …，再选第二项（点 / 线 / 面）」。
+- **与 §33 的对照就是 (a) / (b) 的区别**：同一组构件、同一类两击，E3D 口径（点点）给 593 mm，本节的真最短距离给 8.000 mm——差两个数量级。所以 §33 那条 parity 结论不能拿本节的数去核，反之亦然。
+- 独立期望的边界（老实说清）：两击的**拾中位置**用的是 Web 自己的 Graphics 控制点（§12 口径，§33 已独立用相机射线核过它 = 边线上离射线最近点 / 射线 ∩ 面），本节独立算的是**从那两个位置往下的 witness 几何**
+  （垂足 / 公垂线）与**设计侧高度**；Web 的操作数方向取自 `hit.segment` / `hit.plane`，期望侧取自原始网格三角形，两边不共用代码。
+- **没有实机的**：点 × 点 / 点 × 线 / 点 × 面（要开 P-Point 源，本轮只开了 Graphics）与 面 ∥ 面（本轮机位上没凑出一对可拾的平行面）——这四支目前只有内核单测
+  `src/measurement/kernel/shortestDistance.test.ts` 顶着，记残余。
+- 页面错误 0；每组的结果表、记录两端、独立期望与误差见 `web-shortest-enhancement-live-records.json`。

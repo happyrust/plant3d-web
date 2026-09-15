@@ -292,7 +292,7 @@
 ## 7. 开放问题（需拍板）
 
 - **Q1 顺序**：建议 A → B → C → D → E（拾取层是 Perpendicular / Shortest / 两线夹角的共同前置）。是否接受 Shortest 排在角度之后？
-- ~~**Q7 Shortest 做哪一档**~~ **已拍板 (a)（2026-09-15 11:1x，决策 `d-616`，golden MD §33）**；11:3x 追加「(b) 先出一页方案」→ `docs/plans/2026-09-15-shortest-web-enhancement-plan.md`（Web 增强，待拍板，批准动手时另起决策 supersede `d-616` 第 2 点）（原题，golden MD §32）：(a) **按 E3D 实际行为收口**——E3D 的 Measure Shortest 就是两次 Graphics 拾取的两拾中点距离，Web 的距离测量 × Graphics 过滤器已经是这个口径，#10 按「E3D 口径已覆盖、偏移字段填值在 Web 无对应入口」转 ✓ / N/A，Phase D 不建内核；(b) **做 Web 增强**——按 `gmfLine.shortest` 抄下的代码口径实现真线 / 面最短距离 + witness（无限线 / 面、平行取第一条线上拾中处、不平行线面 / 面面为零），文案不得写成「E3D 有的」，无 golden 可对；(c) 等 E3D 能跑再定。
+- ~~**Q7 Shortest 做哪一档**~~ **已拍板 (a)（2026-09-15 11:1x，决策 `d-616`，golden MD §33）**；11:3x 追加「(b) 先出一页方案」→ `docs/plans/2026-09-15-shortest-web-enhancement-plan.md`；11:33 批准动手，**(b) 已落地**（决策 `d-619` supersede `d-616` 第 2 点；内核 `fb0a24b`、接线与结果卡 `a2e4971`、实机 golden MD §34）——**它是 Web 增强，不进本表的 parity 计分**（原题，golden MD §32）：(a) **按 E3D 实际行为收口**——E3D 的 Measure Shortest 就是两次 Graphics 拾取的两拾中点距离，Web 的距离测量 × Graphics 过滤器已经是这个口径，#10 按「E3D 口径已覆盖、偏移字段填值在 Web 无对应入口」转 ✓ / N/A，Phase D 不建内核；(b) **做 Web 增强**——按 `gmfLine.shortest` 抄下的代码口径实现真线 / 面最短距离 + witness（无限线 / 面、平行取第一条线上拾中处、不平行线面 / 面面为零），文案不得写成「E3D 有的」，无 golden 可对；(c) 等 E3D 能跑再定。
 - **Q2 Positioning 的拾取类型**：Distance / Fraction / Proportion 需要输入框（E3D 在 Positioning Control 工具条上）。Web 放覆盖条的「更多设置」弹层，还是独立小工具条？
 - ~~**Q3 Aid 拾取**：E3D 的 GPHLINE / GPHPLANE 设计辅助（G4-01/02 golden 就是靠它采的）在 Web 没有对应物。要不要做一个最小 Aid 系统（用户画辅助线 / 面供测量），还是明确不做？~~
   **已拍板 2026-09-14（决策 `d-561`）：做最小会话级 Aid 系统**——只有 LINE / PLANE 两类（E3D `GPHLINE` / `GPHPLANE` 的几何契约：有限线；位置 + 法向的矩形面，缺省 5000 × 5000 mm），
