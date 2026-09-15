@@ -1,11 +1,15 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  LINE_ANGLE_ANGLE_SNAP_DEG,
+  LINE_ANGLE_DIRECTION_SNAP,
   LINE_ANGLE_IN_PLANE_RADIUS_M,
   LINE_ANGLE_MIN_RADIUS_M,
   LINE_ANGLE_PARALLEL_TOLERANCE_DEG,
   buildLineAngle,
   lineAngleArmEnd,
+  snapLineAngleDegrees,
+  snapLineAngleDirection,
   type LineAngleLineOperand,
   type LineAnglePlaneOperand,
 } from './lineAngle';
@@ -218,6 +222,63 @@ describe('buildLineAngle · line + facet plane (radius2Lines 826–854 projected
     const value = ok(buildLineAngle(line([0, 0, 5], [1, 0, 6], [0.8, 0, 5.8]), tilted));
     expectVec(value.root, [0, 0, 5]);
     expect(value.angleDeg).toBeCloseTo(45, 9);
+  });
+});
+
+describe('buildLineAngle · mesh-noise snapping of the finished arc (Web resolution, golden MD §30「补采」)', () => {
+  it('snapLineAngleDirection zeroes components below 1e-6 and re-normalises; real components stay', () => {
+    // Live: the projected arm of the 70° tilted-box case came back as (1.2e-9, 1.7e-9, 1) → `N 35.00 E 90.00 U`.
+    expect(snapLineAngleDirection([1.2101366035762613e-9, 1.7282620438027327e-9, 1])).toEqual([0, 0, 1]);
+    const nearNorth = snapLineAngleDirection([-2e-7, 0.9999999999999998, 3e-9]);
+    expect(nearNorth[0]).toBe(0);
+    expect(nearNorth[2]).toBe(0);
+    expect(nearNorth[1]).toBeCloseTo(1, 12);
+    // A genuine small component (sin 0.01° ≈ 1.7e-4) is not noise and survives.
+    const slightlyOff = snapLineAngleDirection([Math.cos(0.01 * Math.PI / 180), Math.sin(0.01 * Math.PI / 180), 0]);
+    expect(slightlyOff[1]).toBeCloseTo(Math.sin(0.01 * Math.PI / 180), 12);
+    expectVec(snapLineAngleDirection([0.6, 0.8, 0]), [0.6, 0.8, 0], 12);
+    expect(LINE_ANGLE_DIRECTION_SNAP).toBe(1e-6);
+  });
+
+  it('snapLineAngleDegrees rounds to the 1e-5° grid and folds -0', () => {
+    // Live: design 70° came back as 69.9999979° (mesh noise ~2e-6°) → E3D's truncating DMS showed `69° 59' 59''`.
+    expect(snapLineAngleDegrees(69.99999788835548)).toBe(70);
+    expect(snapLineAngleDegrees(64.5400279535944)).toBe(64.54003);
+    expect(snapLineAngleDegrees(89.99956)).toBe(89.99956);
+    expect(snapLineAngleDegrees(-4e-7)).toBe(0);
+    expect(Object.is(snapLineAngleDegrees(-4e-7), -0)).toBe(false);
+    expect(LINE_ANGLE_ANGLE_SNAP_DEG).toBe(1e-5);
+  });
+
+  it('the finished arc is measured between the snapped arms: axis-aligned projection prints as a bare axis, DMS lands on 70° 0\' 0\'\'', () => {
+    // The live 70° case: a box tilted 70° about Y (its Z axis rises 20°) against a vertical side face whose normal is
+    // the horizontal box's X axis — mesh-derived inputs carry ~1e-8 noise per component.
+    const d = [-0.7697511183832466, 0.5389855411949357, 0.3420201779581775] as const;
+    const n = [0.8191520419506295, -0.5735764396905736, 0] as const;
+    const start: PickVec3 = [10.3, 14.0, 0.27];
+    const end: PickVec3 = [start[0] + d[0] * 0.15, start[1] + d[1] * 0.15, start[2] + d[2] * 0.15];
+    const value = ok(buildLineAngle(line(start, end, [start[0] + d[0] * 0.1, start[1] + d[1] * 0.1, start[2] + d[2] * 0.1]), plane([10.3955, 14.0269, 0.5271], [n[0], n[1], n[2]])));
+    expect(value.kind).toBe('line-plane');
+    // The projected arm is geometrically vertical: snapped to exactly U (it came back as (1.2e-9, 1.7e-9, 1) live).
+    expect(value.direction2).toEqual([0, 0, 1]);
+    expect(value.angleDeg).toBe(70);
+    // DMS truncation (E3D 360–363) on the snapped angle: 70° 0' 0'' rather than 69° 59' 59''.
+    const deg = Math.trunc(value.angleDeg);
+    const min = Math.trunc((value.angleDeg - deg) * 60);
+    const sec = Math.trunc((value.angleDeg - deg - min / 60) * 3600);
+    expect([deg, min, sec]).toEqual([70, 0, 0]);
+    // The first arm keeps its real (non-axis) components — only sub-1e-6 noise is removed.
+    expectVec(value.direction1, [d[0], d[1], d[2]], 9);
+    // Arm ends and the plane normal follow the snapped arms.
+    expectVec(lineAngleArmEnd(value, 'second'), [value.root[0], value.root[1], value.root[2] + value.radiusM], 12);
+    expectVec(value.planeNormal!, [0.5735764396905736, 0.8191520419506295, 0], 6);
+  });
+
+  it('exact inputs are unchanged by the snapping (grid values pass through)', () => {
+    const value = ok(buildLineAngle(BASE_E, REF_N));
+    expect(value.angleDeg).toBe(90);
+    expect(value.direction1).toEqual([1, 0, 0]);
+    expect(value.direction2).toEqual([0, 1, 0]);
   });
 });
 
