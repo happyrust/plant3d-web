@@ -66,11 +66,11 @@
 
 ### G5 · Shortest
 
-- [ ] G5-01：点点、点线、点平面。
-- [ ] G5-02：平行线、相交线、异面线。
-- [ ] G5-03：线平面、平行平面、相交平面。
-- [ ] G5-04：记录非唯一最近点对如何选择 witness。
-- [ ] G5-05：确认产品 UI 中实际可达的命令入口。
+- [ ] G5-01：点点、点线、点平面。——静态（§32）：产品入口下三种都退化成两拾中点的点点距离；`line.near` / `plane.near` 两支不可达。运行时只剩「Picking Control 字段确实被这个距离填上」一次走查。
+- [ ] G5-02：平行线、相交线、异面线。——静态（§32）：不可达；代码口径已抄（无限线、平行取第一条线上拾中处）。运行时只剩 `isParallel` 容差。
+- [ ] G5-03：线平面、平行平面、相交平面。——静态（§32）：不可达；代码口径已抄（不平行 → 零长；平行面那支 `posData[1].line` 未设、靠 `handle any` 退 `plane.position`）。
+- [ ] G5-04：记录非唯一最近点对如何选择 witness。——静态（§32）：不可达；代码口径已抄；产品里不出 witness 图形，只写长度。
+- [ ] G5-05：确认产品 UI 中实际可达的命令入口。——**静态已答（§32）**：Picking Control（`design.uic` 4168）各偏移字段右键 `Measure Shortest` + 固定直径圆辅助的直径字段；结果只填一个数，不是 Measure 功能区的测量工具。运行时只剩截图。
 
 ### G6 · Angle
 
@@ -1354,3 +1354,50 @@ spec 先把相机拉到模型跟前；临时 spec 已删）：
 - 这 5 根 GENSEC 的截面标架都是世界轴的排列（SPINE 沿 D / E，BANG 0），没有 §26 夹具那种 155° 的斜截面——斜截面 + 真 GENSEC 的组合仍没有样本；含弧 SPINE 的 GENSEC 也没有。
 - `Hand_Rail_Profile` / `Post_1 / Post_2` 没当 wrt 再跑（与 `Rail` / `Post_3` 同形）。
 - E3D 运行时 golden（同一模板在 E3D 里的 `Q OFFSET WRT =15240/33`）未采，E3D 不在跑；§26 的 G3-04 trace 仍是唯一的 E3D 侧证据。
+
+## 32. Shortest（方案 §2 #10 / G5）：前提清单与静态答复——E3D 3.1 里「Measure Shortest」到底是什么（2026-09-15 11:0x）
+
+**为什么现在做**：方案 P0 只剩 #10 Shortest，一直「卡 G5」——五条 golden 一条没采（E3D 不在跑）。先把 G5 五条到底在问什么列清楚，能从 PML 源码静态答的先答（`static_expectation`），
+剩下的才是真要 E3D 运行时的。结论先写在前面：**E3D 3.1 的「Measure Shortest」在产品里只是 Picking Control 偏移字段的一个右键填值助手，两次 Graphics 拾取后拿到的永远是两拾中点的距离——
+`gmfLine.shortest` 里线 / 面那几段分支从产品入口进不去**。方案 §1.4 / Phase D 按「点 / 线 / 面 / 圆弧两两最短 + witness」设想的那一套，在 E3D 里并不存在。
+
+**证据链**（`E:\reverse\e3d\msi_admin_extract\Everything3D3.1`，全部静态）：
+
+1. **入口（G5-05）**：`design.uic` 4168 `AVEVA.DesignGeneral.ButtonSettingsPickingControl`（Caption `Picking Control`）→ `designsettingspickingcontrol.pmlcmd` 33 / 42 `show !!edgSettings`；
+   Positioning Control 工具条也开它（`edgposcntrl.pmlobj` 1023–1034 `.edgSettings()`）。`edgsettings.pmlfrm`（formTitle `Picking Control`，174）里带 `Measure` / `Measure Shortest` 右键菜单的字段：
+   ENU 偏移 `xENU / yENU / zENU`（244–257 → `setMeasureENU('SHORTEST', 'East' | 'North' | 'Up')` 306–328 → `measureENU` 348–365：`!line.length()` 写进该轴分量，unset → 0）、
+   工作面偏移 `xPlane / yPlane`（395–403 → `setMeasurePlane` 451–475 / `measurePlane` 495–512）、Distance-Direction 偏移 `distanceDD`（542–545 → `setMeasureDD` 596–621）、
+   表面偏移 `distanceSurface`（813–816 → `setMeasureSurface` 919–941 / `measureSurface` 960–970）。四处都是 `EDGPACKET.defineMeasure('shortest')`（`edgpacket.pmlobj` 1074–1076）→
+   `EDGPICKPACKET.lineShortest()`（`edgpickpacket.pmlobj` 1573–1586：prompt `Measure distance`，两次 `EDGPICKTYPE.stdGraphics('from' / 'to')`，action `!!appMathLib.gmfLine.shortest(return[1], return[2])`）。
+   `stdGraphics` = `EDGPICK.stdGraphics()`（`edgpick.pmlobj` 867–878，`inMode 'pickdetail'`，只拾绘制细节）。
+   另一处活入口：固定直径圆辅助的 `!!edgDiameter`（`edgdiameter.pmlfrm` 69–72 菜单 / 94–120 / 167–177 写进 `diameter`），由 `EDGPACKET.defineCircle('FIXEDDIAMETER3D' | '2D')`（735–807）打开，
+   钢结构 `strringcreate.pmlfrm` 65–66 两个按钮走得到（`AVEVA.Design.steelwork.uic` 1958 `HID_STRRINGCREATE`）；Aid Constructors 菜单 `aidconstructs.pmlfrm` 126 / 128 也走得到，
+   但 `!!aidConstructs` 本身不在 3.1 功能区（`CommandDesignViewConstructs` 在 `design.uic` 只挂了 `GRIDS` 那一档，3641–3644）。
+   **死路**：`edgoffset / edgoffsetenu / edgoffsetplane / edgoffsetsurface.pmlfrm` 四张带同一菜单的 1998 年 EDG 表单在 3.1 PMLLIB 里没有任何调用者；`EDGPACKET.defineLine('SHORTEST')`「Line shortest between」
+   辅助线构造（963–966）存在，但 `aidconstructs.pmlfrm` 139–151 的 Line 菜单与 `edgtbarlines.pmlfrm` 30–35 工具条都没有它——没人调 `linePacket('shortest')`。
+   **输出只有一个数**：`.measure*(LINE)` 全是 `unset → 0，否则 .length()`，没有结果表、没有 Direction / Vertical / Horizontal、不留 witness——它不是 Measure 功能区的测量工具。
+2. **两次拾取进 `gmfLine.shortest` 时手里是什么**：`EDGPICKDATA.positionData()`（`edgpickdata.pmlobj` 142–206）对 Graphics 拾取**总是同时给 `position`**：`EDGE` → `line = LINE(lines[1], lines[2])` **且**
+   `position = line.intersection(pickLine)`（无限边线上离拾取射线最近的点，失败退 `lines[1]`，175–181）；`FACET` → `plane = facets[1].plane(facets[2], facets[3])`（退 `facets[4]`）**且** `position = plane.intersection(pickLine)`
+   （射线 ∩ 无限面，失败退 `facets[1]`，184–200）；`VERTEX` → `position = vertices[1]`（203–204）。
+3. **`gmfLine.shortest`**（`gmfline.pmlobj` 800–908）的分支顺序是先看 `position`：`if(posData[1].position.set() and posData[2].position.set()) → start / end = 两个 position`（807–810）。
+   两次 `stdGraphics` 拾取按第 2 条都带 `position` → **永远走这一支**；`elseif` 里的点线（813–822，`line.near`）、点面（825–834，`plane.near`）、线线（837–851）、线面（854–880）、面面（883–897）
+   从产品入口**不可达**。末尾 `start.distance(end) eq 0 → return object LINE()`（unset，902–903）→ 字段写 0。
+
+**G5 五条：能静态答的**
+
+| 条 | 原题 | 静态答复 | 还要运行时的 |
+| --- | --- | --- | --- |
+| G5-01 | 点点、点线、点平面 | 产品入口下三种都退化成**点点**：距离 = 两拾中位置之差；拾中位置 = 边线上离射线最近点 / 射线 ∩ 面 / 顶点（无限边线、无限面，不裁到线段 / 三角形内）。`line.near` / `plane.near` 那两支进不去；若经 PML 直接喂无 `position` 的数据，它们是无限线 / 无限面上的垂足（与 G4-04 运行时证过的 `near` 语义同源） | 一次真实 Picking Control 走查，确认字段确实被两拾中点距离填上 |
+| G5-02 | 平行 / 相交 / 异面线 | 不可达。代码口径（若可达）：平行（`DIRECTION.isParallel`）→ start = 第一条线上离拾取射线最近点（`line.intersection(pointVector)`，退 `startPosition`），end = `line2.near(start)`；不平行 → `start = line1.intersection(line2)`、`end = line2.intersection(line1)`——相交时两点重合 → 零长 → unset；异面 → 公垂线两端（`LINE.intersection(LINE)` = 本线上离另一条最近的点，与 Intersect 拾取类型同一读法）。全部无限线语义 | `isParallel` 的角度容差（PML 内建，源码看不到） |
+| G5-03 | 线面、平行面、相交面 | 不可达。代码口径：线 ∥ 面（`line.direction.isParallel(line.projected(plane).direction)`）→ start = 线上拾中点、end = 投影线上的垂足；不平行 → **零长**（无限线总会穿过面，即便有限棱不到）；平行面 → `start = posData[1].line.intersection(pointVector)`——面拾取的 `line` 未设，这一句必错，`handle any` 退到 `plane1.position`，end = `plane2.near(start)`；不平行面 → 零长 | 无 |
+| G5-04 | 非唯一最近点对的 witness | 不可达。代码口径：平行线取**第一条线上拾中处**（不是中点、不是端点）；平行面因上面那个 bug 取**第一个面的 `plane.position`**（`facets[1].plane(...)` 造出来的面，位置 = 第一个顶点，不是拾中点）；平行 / 相交都不出 witness 图形，只写长度 | 无（进不去） |
+| G5-05 | 产品 UI 可达入口 | **可达但不是测量工具**：Picking Control（功能区 `Picking Control` 按钮 / Positioning Control 工具条）各偏移字段右键 `Measure Shortest`；固定直径圆辅助的直径字段同款。结果只填一个数 | 截一张 Picking Control 右键菜单 + 填值后的图（有 E3D 时顺手采） |
+
+**运行时仍要采的**（G5 真正剩下的）：(a) Picking Control 走查一次，看两次 Graphics 拾取后偏移字段的值 = 两拾中点距离（这是唯一能观察到的行为）；(b) Graphics 拾取除 `EDGE / FACET / VERTEX` 之外
+有没有别的 `primaryObject`（比如圆弧边）——有的话 `positionData` 不给 `position`，`shortest` 一支都进不去，`!start` 未定义会在 902 报错；(c) EDG 完成时有没有把返回的 LINE 画成临时辅助（`EDGCNTRL` 没读）。
+
+**对方案的影响（待拍板，方案 §7 Q7）**：
+- 按 E3D **实际行为**对齐：#10 的 Web 对应物 = 距离测量在 Graphics 过滤器下两击（拾中点 = 边线上离射线最近处 / 面上命中点，§12 已是这个口径）——**已经有了**；差的只是 E3D 那层「填进偏移字段」，
+  Web 没有 Positioning Control 偏移字段这一层，无处可填。这样 #10 可以按「E3D 口径已覆盖、入口在 Web 无对应物」收口。
+- 按 `gmfLine.shortest` 的**设计意图**做真正的线 / 面最短距离 + witness（方案 Phase D 原设想）：那是 Web 增强，E3D 里是进不去的死代码，没有 golden 可对；要做也不能叫「E3D 有的」。
+- 方案 §1.4「点 / 线 / 平面 / 圆弧」里的**圆弧**是误写：`shortest` 没有 ARC 分支，`stdGraphics` 也不出 ARC。

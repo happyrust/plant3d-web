@@ -31,7 +31,7 @@
 | --- | --- | --- |
 | Measure Distance | `!!gphMeasure`（`gphmeasure.pmlfrm`） | 两点距离；选项 Keep dimensions / Show linear dimension / Perpendicular to / wrt；Units（Unit type：Default / Metric / Imperial；Display Unit） |
 | Measure Angle | `!!gphAngleMeasure`（`gphanglemeasure.pmlfrm`） | 三点角（root / first / second）；Unit：Default / Degrees / Radians / Gradians；Decimal Places（缺省 2）；Keep Dimension；wrt |
-| Measure / Measure Shortest（定位偏移菜单） | `edgsettings.pmlfrm` → `EDGPACKET.defineMeasure('distance' \| 'shortest')` | Offset 各轴输入框的右键菜单：量一段距离或两组 graphics 的最短距离填进偏移值。`shortest` 用 `gmfLine.shortest(from, to)`，两端是 `stdGraphics` 拾取 |
+| Measure / Measure Shortest（Picking Control 偏移字段右键） | `edgsettings.pmlfrm`（`!!edgSettings`，功能区 `Picking Control` 按钮 `design.uic` 4168 / Positioning Control 工具条）→ `EDGPACKET.defineMeasure('distance' \| 'shortest')` | ENU / 工作面 / Distance-Direction / 表面偏移字段的右键菜单：量一段距离或两次 graphics 拾取的「最短距离」**填进字段**（`unset → 0`，否则 `.length()`）。`shortest` 用 `gmfLine.shortest(from, to)`，两端是 `stdGraphics` 拾取；**静态核过（golden MD §32，2026-09-15）：Graphics 拾取的 `positionData()` 总带 `position`，`shortest` 永远走点点分支 = 两拾中点距离，线 / 面分支从产品进不去；输出只有一个数，没有结果表 / witness**。固定直径圆辅助的直径字段（`edgdiameter.pmlfrm`）同款；`edgoffset*.pmlfrm` 四张表单与 `defineLine('SHORTEST')` 辅助线构造在 3.1 里没有调用者 |
 | Measure angle between lines | `EDGPICKPACKET.measureLineAngle / measureLineAngleArc` | 两条 EDGE（facet edge）之间的角；产品 UI 是否可达 = G6-04 待采 |
 
 ### 1.2 Measure Distance 窗体契约（已采 golden 的部分标 ✓）
@@ -54,6 +54,7 @@
 ### 1.4 Shortest（`gmfLine.shortest`）
 
 两组 graphics（点 / 线 / 平面 / 圆弧）的最短距离与 witness 点对：点点、点线、点面、线线（平行 / 相交 / 异面）、线面、面面（平行 / 相交）。有限 / 无限范围语义、非唯一最近点对的 witness 选择 = G5 **未采**。
+**2026-09-15 静态核对（golden MD §32）**：上面这段是照 `gmfLine.shortest` 的分支写的，但 `EDGPICKDATA.positionData()`（142–206）对 `EDGE / FACET / VERTEX` 都同时给 `position`，`shortest`（`gmfline.pmlobj` 807–810）先判 `position` → 两次 `stdGraphics` 拾取**永远是点点**（边线上离射线最近点 / 射线 ∩ 面 / 顶点，无限线、无限面）；线线 / 线面 / 面面分支与 witness 选择从产品入口不可达（代码口径见 §32 表）。没有 ARC 分支，「圆弧」是误写。产品里它只是 Picking Control 偏移字段的填值助手。
 
 ### 1.5 拾取层（Positioning Control，测量取点共用）
 
@@ -78,7 +79,7 @@
 | 7 | 三点角 Angle / Direction1 / Direction2 / 拒绝 0°·180° | ✓ | **内核已接线（2026-09-14，Web `d2e7c02`，Phase C 切片 1，决策 `d-486`）**：`threePointAngle.ts`（G6-01～03 golden）接进 `buildAngleMeasurementResultRows`，测量结果卡在角度模式出 `Angle / Direction1 / Direction2` 三行——角度取内核 minor 角、两条臂的单位方向按当前 wrt 帧表达、小数位缺省 2（E3D `Decimal Places` 缺省）；第三击落记录前先过内核，0° / 180° / 重合点**不落记录**、丢草稿回第 1 步、提示条给 E3D `alert.error` 那句话的等价文案。实机 `Angle 40.54°` 与三点解析角差 0.001436°、两条 Direction 逐位差 < 2e-4，退化三击拒收并回到第 1 步（golden MD §22）。~~**已知偏离**：方向仍是分量串（`X +0.3635 · …`）不是 E3D 罗盘串（`W 11.7755 N 66.8266 D`）——与距离结果表 `Direction` 行同一条既有偏离，要改两处一起改~~ → **2026-09-14 17:26 两处一起改成罗盘串**（Web `16e9a48` + `0e5c674`，决策 `d-515`，golden MD §25）：两条 Direction 走 `gphanglemeasure` 374–385 那条路（`.string()` 拆 token、数字按 Decimal Places 过 `!!realFmt` 留尾零、`.before('WRT')` 切尾巴），实机 Decimal Places 2 / 4 / 0 三档对账 |
 | 8 | 角度 Unit（Degrees / Radians / Gradians）+ Decimal Places | ✓ | **会话级已落地（2026-09-14，Web `b45b33b`，Phase C 切片 2，决策 `d-494`）**：`Unit` 四档 Default / Degrees / Radians / Gradians × `Decimal Places` 0–8（缺省 Default / 2 = E3D 构造值，越界或非数字打回 2 并出 `Value must be between 0 and 8`）；小数位同时管角度值与两条 Direction，但尾零规则不同（角度值走 `angleFmt` 去尾零、Direction 走 `realFmt` 留尾零）。顺带按源码把结果表从三行补成四行（加 `DMS`，恒按十进制度截断）。实机五档与三点解析角 40.538564° 逐格对上、DMS 五档恒为 `40° 32' 18''`、填 9 弹错并回 2、刷新持久化（golden MD §24）。**偏离**：Default 档 = Degrees（Web 无「工程当前角度单位」这一层） |
 | 9 | 两线夹角（LINEANGLE） | ✓ | **已落地（2026-09-15 05:33，Phase C 切片 4，决策 `d-587`，golden MD §30）**：纯内核 `src/measurement/kernel/lineAngle.ts` = `gmfArc.radius2Lines`（弧心 = 两线交点 / 异面取第一条线上最近点 / 线穿过面的点；线在面内 0° 弧、垂直于面 90°；半径 892–903 规则；平行 / 线平行于面拒收），入口是结果卡 `Angle` 下拉 `Angle 3 Points / Angle 2 Lines`（E3D `design.uic` 3538 `buttonMeasureAngleLines`，产品 UI 可达），两击 Graphics 边 / 边或面各转线 / 面操作数，结果表同一张四行 + `两线夹角` 一行。实机六组：异面 89.9996°、相交 90°（弧心 = 共顶点、半径 = 短边一半）、竖直边 ⟂ 顶面 90°、边在顶面内 0°、平行边拒收、边 ∥ 面拒收。余：E3D 运行时 golden（G6-04）未采；~~斜交的线 × 面只有单测~~（✓ 2026-09-15 10:28 / 10:32 补采：LOOP3 平面内 64.54° 的短梁棱 × 邻梁侧面、仪表支架 ORI 倾斜 70° 的盒体棱 × 水平盒体侧面，设计侧 64.540031 / 70.000000 对上；本库没有斜撑，管件没走——斜管段是圆柱网格、附近无直棱当第一条线；golden MD §30「补采」；补采撞出的网格噪声在 `87b8970` 吸掉——出记录前臂分量 < 1e-6 归零、角度按 1e-5° 吸整，`70 Degrees` 不再配 `69° 59' 59''`） |
-| 10 | Shortest（graphics × graphics） | ✗ | 现有 clearance / 最近点是采样近似（上一计划 §3.2），不是 `gmfLine.shortest` 语义；G5 未采 |
+| 10 | Shortest（graphics × graphics） | ✗ | 现有 clearance / 最近点是采样近似（上一计划 §3.2），不是 `gmfLine.shortest` 语义；G5 未采。**2026-09-15 静态前提清单（golden MD §32）**：E3D 3.1 产品里的 Measure Shortest = Picking Control 偏移字段右键填值，两次 Graphics 拾取后永远是**两拾中点的距离**（线 / 面分支不可达，无结果表 / witness）。按 E3D 实际行为，Web 的对应物 = 距离测量 × Graphics 过滤器两击（§12 已有），差的只是「填进偏移字段」这层（Web 无此字段）；按 `gmfLine.shortest` 设计意图做真最短距离则是 Web 增强、无 golden 可对。**待拍板 §7 Q7** |
 | 11 | 拾取过滤器：Ppoint | ✓ | `ptset` 源；2026-09-12 起经 `ModelSource.keypoints` 走 gen-model `element/ptset`（d-559），实机 表面点 → P-Point 轴线 走通 |
 | 12 | 拾取过滤器：Element | ✓ | E3D 3.1 Element × Snap 对 CYLI / BOX / ELBO / VALV 等一律回落**元素原点**（`edgpicktype` ELEMENT 分支 `handle any → item.position`；只有 SCTN / GENSEC / PANEL 等结构类实现 `snap()`），Web 的 `position`（Item 原点）即是；`primitive_key_point`（盒角 / 轴端）是 legacy parquet 带来的 Web 增强，v1 **不补 API**（Q5 2026-09-13 拍板，d-336）。**Element 拾中的元素当 Intersect / Perpendicular 操作数按 E3D `line()` 转 P1 → P2 ✓（2026-09-14，`79b199c`）**：CYLI / CONE / SNOU / DISH / PYRA / NOZZ（`src/measurement/kernel/elementLine.ts`），ptset 的 P1 / P2 优先、无点的设计基本体从 DTX 局部包围盒 × 放置矩阵派生（截面对中才认；带 XOFF / YOFF 的 SNOU / PYRA 不派生），实机 CYLI × CYLI / CYLI × CONE 交点与 Perpendicular 垂足 Δ ≤ 0.001 mm（golden MD §16）。SCTN / GENSEC 的 `line()` 是截面 PLINE 线 → #13（`element/plines`，2026-09-14 ✓） |
 | 13 | 拾取过滤器：Pline | ✓ | **gen-model-v1 供给 ✓（2026-09-14，gen-model `a00565522` + Web `c2e3d97`，d-394）**：`POST /api/v1/element/plines` 复用 e3d-model 建型材实体的截面链给 SCTN / GENSEC 每条目录 p-line 的 `PLSTART → PLEND` 世界线（cut 端点另给，只在真斜时出现）；前端摊成与 legacy `semantic_snap_points` 同形的端点候选配成线，再加一条线候选（控制点 = p-line 上离光标射线最近处）——光标落在梁中段就拾中整条 p-line：Snap 近端 / Mid-Point 等沿线 / Intersect 当 LINE / Perpendicular to 以它为目标（E3D `EDGPLINE.snap` / `edgsctn.snap → this.line`）。实机 14 根 SCTN 的 JUSL 线 = POSS → POSE、cut 端点 728 处核对 0 不符、网格在 p-line 标架的包围盒差 ≤ 0.001 mm；Snap / Mid-Point / Intersect / Perpendicular Δ 0.000 mm（golden MD §17）。legacy 仍走 `semantic_snap_points`。**E3D Pick Settings「Sections & Walls」✓（2026-09-14 12:55，gen-model `df61072cc` + Web `648f957`，切片 7）**：Pline 端点 Uncut / Cut（`EDGPLINE.cut`，Cut 取 `PLSTCUT → PLENCUT`）与 Significant Snap Points 三档（Fittings / Joints / Nodes = SCTN 名下 FITT / SJOI+SUBJ / SNOD 投到 p-line 上分段，服务端 `snap_points` 给成员位置），缺省与 `EDGPLINE` 构造一致全关；实机 Cut × Snap 起点 = PLSTCUT、Nodes × Snap 吸到节点 Distance = ZDIS、Mid-Point 各段中点 Δ 0.000（golden MD §18）。缺：GENSEC 弧 SPINE |
@@ -241,7 +242,8 @@
 
 **范围**：#10。
 
-- 内核 `src/measurement/kernel/shortestDistance.ts`：`shortest(A, B)`，A / B ∈ {点, 线(段/无限), 平面(片/无限), 圆弧}；回距离 + witness 点对 + 退化标记（平行 / 重合 / 非唯一）。范围语义按 G5-01～04 采到的为准，不预设有限 / 无限。
+- **2026-09-15 静态核对后本阶段范围待重定（§7 Q7，golden MD §32）**：E3D 产品里的 Shortest 永远是两拾中点的点点距离，下面的内核 / 入口设想对应的是 `gmfLine.shortest` 里不可达的分支。
+- ~~内核 `src/measurement/kernel/shortestDistance.ts`：`shortest(A, B)`，A / B ∈ {点, 线(段/无限), 平面(片/无限), 圆弧}；回距离 + witness 点对 + 退化标记（平行 / 重合 / 非唯一）。范围语义按 G5-01～04 采到的为准，不预设有限 / 无限。~~（若 Q7 选「按 E3D 实际行为」则不做；选「Web 增强」再按 §32 抄下的代码口径做：无限线 / 无限面、平行取第一条线上拾中处、不平行的线面 / 面面为零；没有圆弧）
 - 入口：E3D 里 Shortest 挂在偏移菜单（G5-05 待采）。Web 放进距离模式的第三个子模式「最短距离」（两次 Graphics / Ppoint / Pline 拾取），结果表 `Distance / Vertical / Horizontal / Direction` + 两个 witness；辅助图形画 witness 线。
 - 与 clearance 的关系：Shortest 是**用户取两组几何的精确最短距离**；clearance 仍是构件对构件的服务端 nearest-points（上一计划 D1）。UI 文案区分，不互相冒充。
 
@@ -283,13 +285,14 @@
 
 - **Parity 声明**只在 §2 表全部为 ✓ 时成立；每一行 ✓ 的依据是 E3D golden case id + Web 测试文件。
 - 拾取层：G7 + G8 + G9 通过 → 可宣称「拾取过滤器 × 拾取类型与 E3D 一致」。
-- Shortest：G5 通过前 No-Go（沿用）。
+- Shortest：G5 通过前 No-Go（沿用）。2026-09-15 静态答了 G5-05 与 01～04 的代码口径（golden MD §32）；运行时只剩 Picking Control 一次走查 + 截图，且先要 §7 Q7 定 Web 做哪一档。
 - 角度：G6-01～03 已过；两线夹角 Web 侧已落地并实机走通三组（2026-09-15，golden MD §30），E3D 对账仍随 G6-04 单独审批。
 - 每阶段结束更新 `e3d-measurement-runtime-golden-capture.md` 与本文件 §2。
 
 ## 7. 开放问题（需拍板）
 
 - **Q1 顺序**：建议 A → B → C → D → E（拾取层是 Perpendicular / Shortest / 两线夹角的共同前置）。是否接受 Shortest 排在角度之后？
+- **Q7 Shortest 做哪一档**（2026-09-15，golden MD §32）：(a) **按 E3D 实际行为收口**——E3D 的 Measure Shortest 就是两次 Graphics 拾取的两拾中点距离，Web 的距离测量 × Graphics 过滤器已经是这个口径，#10 按「E3D 口径已覆盖、偏移字段填值在 Web 无对应入口」转 ✓ / N/A，Phase D 不建内核；(b) **做 Web 增强**——按 `gmfLine.shortest` 抄下的代码口径实现真线 / 面最短距离 + witness（无限线 / 面、平行取第一条线上拾中处、不平行线面 / 面面为零），文案不得写成「E3D 有的」，无 golden 可对；(c) 等 E3D 能跑再定。
 - **Q2 Positioning 的拾取类型**：Distance / Fraction / Proportion 需要输入框（E3D 在 Positioning Control 工具条上）。Web 放覆盖条的「更多设置」弹层，还是独立小工具条？
 - ~~**Q3 Aid 拾取**：E3D 的 GPHLINE / GPHPLANE 设计辅助（G4-01/02 golden 就是靠它采的）在 Web 没有对应物。要不要做一个最小 Aid 系统（用户画辅助线 / 面供测量），还是明确不做？~~
   **已拍板 2026-09-14（决策 `d-561`）：做最小会话级 Aid 系统**——只有 LINE / PLANE 两类（E3D `GPHLINE` / `GPHPLANE` 的几何契约：有限线；位置 + 法向的矩形面，缺省 5000 × 5000 mm），
