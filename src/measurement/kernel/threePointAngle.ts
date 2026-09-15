@@ -17,8 +17,17 @@
  *   the arc radius is |root→first|.
  * - Near-collinear inputs (0.1°, 179.9°) are accepted.
  *
+ * Web resolution shared with the two-line kernel (`angleSnap.ts`, golden MD §30「补采」): the
+ * two unit arms have components below 1e-6 zeroed and are re-normalised, the angle is
+ * measured between the snapped arms and rounded to 1e-5°, and the arc-plane normal comes from
+ * the snapped arms — Web inputs are float32 mesh points, and without this a design 70° prints
+ * as `69° 59' 59''` and a geometrically vertical arm as `N 35.00 E 90.00 U`. The collinear /
+ * coincident rejections still use the raw arms (E3D rejects only exact degeneracy).
+ *
  * All coordinates are design-world metres (X=E, Y=N, Z=U).
  */
+
+import { snapAngleDegrees, snapUnitDirection } from './angleSnap';
 
 export type AnglePoint = readonly [number, number, number];
 
@@ -95,16 +104,26 @@ export function buildThreePointAngle(
     return { ok: false, reason: 'collinear' };
   }
 
-  const angleDeg = (Math.atan2(normalLength, dot(arm1, arm2)) * 180) / Math.PI;
+  // Web resolution (see header): de-noise the unit arms, then measure between the snapped arms.
+  const direction1 = snapUnitDirection(scale(arm1, 1 / length1));
+  const direction2 = snapUnitDirection(scale(arm2, 1 / length2));
+  const snappedNormal = cross(direction1, direction2);
+  const snappedNormalLength = Math.hypot(snappedNormal[0], snappedNormal[1], snappedNormal[2]);
+  // Snapping can only merge arms that were already within ~1e-6 rad of each other; keep the raw
+  // (non-degenerate) normal and angle in that corner rather than divide by zero.
+  const usable = snappedNormalLength > COLLINEAR_SIN_THRESHOLD;
+  const rawAngleDeg = usable
+    ? (Math.atan2(snappedNormalLength, dot(direction1, direction2)) * 180) / Math.PI
+    : (Math.atan2(normalLength, dot(arm1, arm2)) * 180) / Math.PI;
   return {
     ok: true,
     value: {
       root: [...root],
-      angleDeg,
+      angleDeg: snapAngleDegrees(rawAngleDeg),
       radiusM: length1,
-      planeNormal: scale(normal, 1 / normalLength),
-      direction1: scale(arm1, 1 / length1),
-      direction2: scale(arm2, 1 / length2),
+      planeNormal: usable ? scale(snappedNormal, 1 / snappedNormalLength) : scale(normal, 1 / normalLength),
+      direction1,
+      direction2,
     },
   };
 }

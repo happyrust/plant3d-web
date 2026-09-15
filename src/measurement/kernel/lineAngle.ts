@@ -48,7 +48,8 @@
  * `LINE.intersection` would reject but a bare cross-product test would turn into an arc
  * centred hundreds of kilometres away (seen live: 0.0004° → root 762 km off); the finished
  * arc is de-noised before it becomes a record (`LINE_ANGLE_DIRECTION_SNAP` /
- * `LINE_ANGLE_ANGLE_SNAP_DEG`): arm components below 1e-6 are zeroed (a projected arm that
+ * `LINE_ANGLE_ANGLE_SNAP_DEG`, shared with the three-point kernel through `angleSnap.ts`):
+ * arm components below 1e-6 are zeroed (a projected arm that
  * is geometrically vertical came back as (1.2e-9, 1.7e-9, 1) and printed `N 35.00 E 90.00 U`
  * instead of `U`) and the angle is rounded to 1e-5° (a design 70° came back as 69.9999979°,
  * which E3D's truncating DMS shows as `69° 59' 59''`). Both are far below any design angle
@@ -58,6 +59,7 @@
  * All coordinates are design-world metres (X = E, Y = N, Z = U).
  */
 
+import { ANGLE_DEGREES_SNAP_DEG, ANGLE_DIRECTION_SNAP, snapAngleDegrees, snapUnitDirection } from './angleSnap';
 import {
   closestPointOnInfiniteLine,
   intersectLines,
@@ -143,19 +145,21 @@ const PARALLEL_SIN = Math.sin((LINE_ANGLE_PARALLEL_TOLERANCE_DEG * Math.PI) / 18
 /** Exact-degeneracy threshold for normals / in-plane directions (not an angular tolerance). */
 const DEGENERATE_SIN = 1e-9;
 /**
- * Web resolution (see header): an arm component with |value| below this is mesh noise and is
- * zeroed before the arm is re-normalised, so a geometrically axis-aligned arm prints as `U` /
- * `E` … rather than `N 35.00 E 90.00 U`. 1e-6 on a unit vector ≈ 6e-5°, far below the 0.01°
- * parallel tolerance and ~25× above the noise seen live.
+ * Web resolution (see header), shared with the three-point kernel through `angleSnap.ts`: an
+ * arm component with |value| below this is mesh noise and is zeroed before the arm is
+ * re-normalised, so a geometrically axis-aligned arm prints as `U` / `E` … rather than
+ * `N 35.00 E 90.00 U`. 1e-6 on a unit vector ≈ 6e-5°, far below the 0.01° parallel tolerance
+ * and ~25× above the noise seen live.
  */
-export const LINE_ANGLE_DIRECTION_SNAP = 1e-6;
+export const LINE_ANGLE_DIRECTION_SNAP = ANGLE_DIRECTION_SNAP;
 /**
- * Web resolution (see header): the finished angle is rounded to this grid so mesh noise cannot
- * turn a design 70° into 69.9999979° (E3D's truncating DMS would show `69° 59' 59''`). 1e-5°
- * is 0.036'' — below the DMS resolution and below every Decimal Places setting that shows
- * anything but mesh noise — and ~5× above the angular noise seen live.
+ * Web resolution (see header), shared with the three-point kernel: the finished angle is
+ * rounded to this grid so mesh noise cannot turn a design 70° into 69.9999979° (E3D's
+ * truncating DMS would show `69° 59' 59''`). 1e-5° is 0.036'' — below the DMS resolution and
+ * below every Decimal Places setting that shows anything but mesh noise — and ~5× above the
+ * angular noise seen live.
  */
-export const LINE_ANGLE_ANGLE_SNAP_DEG = 1e-5;
+export const LINE_ANGLE_ANGLE_SNAP_DEG = ANGLE_DEGREES_SNAP_DEG;
 
 function isFiniteVec(value: PickVec3 | null | undefined): value is PickVec3 {
   return !!value && value.length === 3 && value.every(Number.isFinite);
@@ -243,26 +247,14 @@ function inPlaneDirection(unitNormal: PickVec3, preferred: PickVec3 | null | und
   return [1, 0, 0];
 }
 
-/**
- * Zero the mesh-noise components of a unit arm and re-normalise (`LINE_ANGLE_DIRECTION_SNAP`).
- * A unit vector always keeps at least one component ≥ 1/√3, so the snapped vector is never zero.
- */
+/** Zero the mesh-noise components of a unit arm and re-normalise (`angleSnap.snapUnitDirection`). */
 export function snapLineAngleDirection(direction: PickVec3): PickVec3 {
-  const snapped: PickVec3 = [
-    Math.abs(direction[0]) < LINE_ANGLE_DIRECTION_SNAP ? 0 : direction[0],
-    Math.abs(direction[1]) < LINE_ANGLE_DIRECTION_SNAP ? 0 : direction[1],
-    Math.abs(direction[2]) < LINE_ANGLE_DIRECTION_SNAP ? 0 : direction[2],
-  ];
-  return normalize(snapped) ?? direction;
+  return snapUnitDirection(direction);
 }
 
-/** Grid steps per degree (100 000 for 1e-5°); dividing by it yields the nearest double to the decimal value. */
-const ANGLE_SNAP_STEPS_PER_DEG = Math.round(1 / LINE_ANGLE_ANGLE_SNAP_DEG);
-
-/** Round an angle in degrees to the `LINE_ANGLE_ANGLE_SNAP_DEG` grid (`-0` folded to `0`). */
+/** Round an angle in degrees to the `LINE_ANGLE_ANGLE_SNAP_DEG` grid (`angleSnap.snapAngleDegrees`). */
 export function snapLineAngleDegrees(angleDeg: number): number {
-  const snapped = Math.round(angleDeg * ANGLE_SNAP_STEPS_PER_DEG) / ANGLE_SNAP_STEPS_PER_DEG;
-  return snapped === 0 ? 0 : snapped;
+  return snapAngleDegrees(angleDeg);
 }
 
 function finishArc(input: Readonly<{
