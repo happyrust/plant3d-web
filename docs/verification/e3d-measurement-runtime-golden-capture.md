@@ -1475,3 +1475,56 @@ E3D 侧没有可对的值，期望值只能自己算，本节用两条互不相�
 - **没有实机的**：点 × 点 / 点 × 线 / 点 × 面（要开 P-Point 源，本轮只开了 Graphics）与 面 ∥ 面（本轮机位上没凑出一对可拾的平行面）——这四支目前只有内核单测
   `src/measurement/kernel/shortestDistance.test.ts` 顶着，记残余。
 - 页面错误 0；每组的结果表、记录两端、独立期望与误差见 `web-shortest-enhancement-live-records.json`。
+
+## 35. 拾取类型（方案 §2 #17 / G8 的 Web 侧）：Distance / Fraction / Proportion / Mid-Point 沿同一条 PLINE 派生 + Intersect 面 × 面 × 面 出盒角 实机走查（2026-09-16 01:40）
+
+**为什么现在做**：方案 §2 #17 是 P0 里最后一条 ◐，◐ 只因 G8 运行时 golden 未采。七种拾取类型 §12 / §13 起就全接了，但 gen-model-v1 真模型上实机走过的只有
+Mid-Point（§14 / §15 / §17 / §18）与 Intersect 的线 × 线（§13 网格边、§16 CYLI 轴、§17 PLINE NA）——**Distance / Fraction / Proportion 一次都没实机过**，Intersect 的
+三面求交（`(2,874)` 那一支）只有 `intersectPickSession.test.ts` 顶着。G8 在 E3D 侧的题目是「同一条 PLINE / 边上 Mid-Point / Fraction 3 / Proportion 0.25 / Distance 100mm
+的位置字串；Intersect 两边交点」，本节就按同一组取值把 Web 侧走一遍，E3D 侧仍待采。
+
+**E3D 口径**（`edgpicktype.pmlobj` 各类型对拾中项类型的分派、`gmfline.pmlobj` `GMFLINE.snap / distance / proportion / fraction`、`edgposcntrl.pmlobj` `loadPicks`
+缺省 Distance 0 / Fraction 2 / Proportion 0.5、Mid-Point ≡ Proportion 0.5；内核 `src/measurement/kernel/pickDerivation.ts` 头注释逐条对应）：
+
+- 线类拾中项（PLINE / TUBING / Graphics 边 / Aid 线）的**控制点** = 拾取射线与项线的交点（异面取项线上离射线最近处）；`GMFLINE` 先把**离控制点近的那一端转成 start**（`reverseSense`）。
+- `Distance d`：从近端沿线走 d，**不截到线段内**；`Proportion p`：从近端走 p × 长度，控制点投影落在线段外 → 回近端；`Fraction n`：等分 `int(n)` 段，吸到离控制点最近的分点（同距取段起点，即朝近端），
+  段外 → 近端；`Mid-Point` = `Proportion 0.5`。点类拾中项（PPOINT / DPOINT）除 Distance（沿 P-Point 方向偏移）外全部回它自己；面类（Graphics facet / Aid 面）回 射线 ∩ 面。
+- `Intersect`：每次子拾取转 LINE / PLANE，线 × 线 / 线 × 面两项即交，**两面要第三项**（`golabel /nextPick`，提示 `Intersection[3]`），三面无唯一交点 `(2,874)`；平行 `(2,870)`。
+- 提示条 token（`EDGPICKTYPE.set*`）：`Distance[100]` / `Fraction[3]` / `Proportion[0.25]` / `Mid-Point` / `Intersection[n]`，缀在 `(…)` 里，过滤器不进提示。
+
+**证据等级**：`static_expectation`（上列 PML）+ Web 实机；**G8 运行时 golden 未采**（E3D 不在跑）。
+
+**Web 实机走查**（**无任何 mock**：后端 `:8022` = `gen-model-refactor` `1bd2cab4c` 的构建；前四组 `?model_source=gen-model-v1&gm_backend_port=8022&show_refno=24381_177299`
+（R840 房间的框架：长梁 SCTN `24381/177301` + 两根横梁 + 顶上一张 PANE），第五组 `show_refno=24381_102273`（仪表支架 `/Copy-(2)-of-1RCS024CQ`）；浮条真点「自由表面」+
+P-Point / 模型表面点 开、Item 原点 关；测量面板「样式设置 → 测量点源」把 `primitive_key_point`（基本体 / PLINE 关键点）的 show / snap 打开（缺省全关，§17 / §18 同一做法——
+不开的话 Pline 过滤器下提示条是「未启用任何测量点源捕捉」）；过滤器 Pline（前四组）/ Graphics（第五组）、拾取类型与取值都在设置弹层里真点 radio、真填输入框（`Distance` 填 100、
+`Fraction` 填 3、`Proportion` 填 0.25）；真指针；**每一击的光标都落在 p-line 上参数 t 处的投影上**（t 由 `element/plines` 的 PLSTART → PLEND 算，与 Web 拾取层无关）；两击之间可以换机位；
+临时 spec 已删）。**独立期望**都不经过拾取层与内核：PLINE 取 `element/plines` 的 `PLSTART → PLEND`（设计侧 mm → 米）按上面 E3D 口径手算；盒角 = `element/attributes` 的
+XLEN / YLEN / ZLEN 半长 × `element/ptset` 的 `world_transform`。
+
+| 组 | 提示条 token | 两击（光标落点） | 结果表（Default 单位） | 记录两端（设计 World，mm） | 独立期望 | 图 |
+| --- | --- | --- | --- | --- | --- | --- |
+| Distance 100 | `(Distance[100])` | SCTN `24381/177301` 的 `PLINE NA`（PLSTART `E 2892.03 N 14670.54 U 23194.21` → PLEND `E 3393.81 N 8935.19`，长 5757.258，方位 `S 5.00002 E`）：光标落在 t = 0.2 处，再落在 t = 0.8 处 | `Distance 5557mm · Offset X +484mm · Y −5536mm · Z 0mm · Direction S 5.00002 E` | 起点 `E 2900.746 N 14570.921 U 23194.21` = **PLSTART 沿线 100 mm**；终点 `E 3385.094 N 9034.809` = **PLEND 沿线倒回 100 mm**（第二击离 PLEND 近，近端换成 PLEND）；两端标签 `PLINE NA · Distance[100]` | 5757.258 − 2 × 100 = **5557.258 mm**；两端 Δ **7.4e-15 m** | `web-pick-types-live-01-distance-100{,-result-card}.png` |
+| Fraction 3 | `(Fraction[3])` | 同一条 NA：t = 0.3，再 t = 0.7 | `Distance 1919mm · Offset X +167mm · Y −1912mm · Z 0mm · Direction S 5.00002 E` | 起点 `E 3059.290 N 12758.757` = **PLSTART + L/3**（等分 3 段，离 t = 0.3 最近的分点）；终点 `E 3226.550 N 10846.973` = **PLSTART + 2L/3**（近端是 PLEND，它的 L/3 分点）；标签 `PLINE NA · Fraction[3]` | L/3 = **1919.086 mm**；两端 Δ 7.4e-15 m | `web-pick-types-live-02-fraction-3{,-result-card}.png` |
+| Proportion 0.25 | `(Proportion[0.25])` | 同一条 NA：t = 0.2，再 t = 0.8 | `Distance 2879mm · Offset X +251mm · Y −2868mm · Z 0mm · Direction S 5.00002 E` | 起点 `E 3017.475 N 13236.703` = **PLSTART + 0.25 L**；终点 `E 3268.365 N 10369.028` = **PLEND − 0.25 L**；标签 `PLINE NA · Proportion[0.25]` | 0.5 L = **2878.629 mm**；两端 Δ 7.5e-15 m | `web-pick-types-live-03-proportion-0.25{,-result-card}.png` |
+| Mid-Point | `(Mid-Point)` | 长梁 NA t = 0.5，再北横梁 SCTN `24381/177302` 的 NA（长 1009.661）t = 0.5（横梁只有从北面 az ≈ 90° 看得到：上面盖着 PANE、东面被长梁挡） | `Distance 2982mm · Offset X −710mm · Y +2896mm · Z 0mm · Direction N 13.7746 W` | 起点 `E 3142.920 N 11802.865` = 长梁 NA 中点；终点 `E 2433.000 N 14698.685` = 横梁 NA 中点；标签 `PLINE NA · Mid-Point` | 两条 NA 中点距 **2981.570 mm**；两端 Δ 7.3e-15 m | `web-pick-types-live-04-midpoint{,-result-card}.png` |
+| Intersect 面 × 面 × 面 | `(Intersection[1])` → `[2]` → `[3]` | BOX `24381/102278`（88 × 80 × 74，名下无负体）：起点 = **+X 面 × +Y 面 × +Z 面**三次子拾取，终点 = **−X 面 × +Y 面 × −Z 面**；六个面各用各的机位（正对面法向、朝盒角偏 ~23°、0.45 / 0.48 m 外），光标落在离两条相邻边各 18 mm（离盒角 25 mm）处，悬停标签 `面`、光标处网格三角形法向 = 该轴 | `Distance 115mm · Offset X −72mm · Y +50mm · Z −74mm · Direction W 35 N 40.0608 D` | 起点 `E 10371.572 N 14177.521 U 537.000`，终点 `E 10299.486 N 14227.996 U 463.000`，两端标签 `交点` | 设计盒角 `world_transform · (+44, +40, +37)` / `(−44, +40, −37)` mm：两端 Δ **1.78e-7 / 1.79e-7 m**（float32 网格在 ~10 m 处的量化）；与网格自己的顶点 Δ 1e-14 m；对角 √(88² + 74²) = **114.978 mm** | `web-pick-types-live-05-intersect-three-planes.png` / `-05-intersect-after-subpick-2.png` / `-05-intersect-result-card.png` |
+
+- 提示条逐步：`距离测量 · 第 1/2 步 选择起点 (Distance[100]) Snap : 等待捕捉（基本体 / PLINE 关键点）` → 悬停 `… : SCTN PLINE NA · Distance[100]` → 第一击后 `第 2/2 步 选择终点 (Distance[100]) …`。
+  Intersect：`… 选择起点 (Intersection[1]) Snap : 等待捕捉（网格边 / 面（Graphics））` → 第一面 `(Intersection[2]) Snap : BOX 面` + `求交已选 1. BOX 面（面），再选一项（Intersection[2]）` →
+  第二面 `(Intersection[3])` + `求交已选 1. BOX 面（面）；2. BOX 面（面），再选一项（Intersection[3]）` → 第三面悬停即 `BOX 交点（预览）`，点下去交点成为起点、进入 `第 2/2 步 (Intersection[1])`；
+  终点的三面同样走 `[1] → [2] → [3]`。六次子拾取之间相机换了六次，求交会话一次都没丢——与 E3D 两击之间可以转视角一致。
+- 透镜（悬停）位置就已经是派生点：四组八击的悬停 `worldPos` 与独立期望差同样 ~7e-15 m；点下去落的记录与悬停一致。Distance / Proportion 两组的第二击都验到了 `reverseSense`：
+  光标离 PLEND 近，派生就从 PLEND 起算。
+- 数值口径：p-line 端点来自 API（float64）经场景帧往返，7e-15 m 说明这一程在 10⁴ mm 量级上无损；盒角那 1.8e-7 m 是网格 float32 的量化（三面来自网格三角形，交点正好落回网格顶点）。
+  `Direction S 5.00002 E` 不是 5° 整——PLSTART / PLEND 是 mm 级存的（Δ = (501.78, −5735.35)），与 §30 管件路那个 30.0004° 同一性质，E3D 拿同一对 POSS / POSE 也会得同一个方位。
+- **坑**：(1) `primitive_key_point` 缺省 show / snap 全关，开关不在浮条设置弹层而在面板「样式设置」里，不开就拾不到任何 PLINE；(2) 仪表支架 5 只 BOX 里 4 只（`102274` / `102279` / `102283` / `102287`）
+  名下带 NBOX（`tree/children` 各 3 个），gen-model 网格是 44 个三角形 / 36 条绘制边的**槽形**——中段挖穿、顶 / 底面只剩 5 mm 的沿、−Y 侧中段敞开，顶 / 底面处处离绘制边 < 12 px，
+  永远拾成「边」，三面求交凑不齐；换成没有负体的 `102278`（12 条绘制边）才成。这不是拾取层的问题，是构件本来就是槽（负体是设计的一部分）；(3) 面上的拾点不能取面心：
+  `102278` 的 −Y 面贴着 `102274`，别的面从盒角往里 18 mm 起铺网格取第一个透镜给「面」且法向对上的点。
+- 页面错误 0；全部数值（每击的 t / 机位 / 屏幕坐标 / 悬停标签、p-line 两端、六个面的法向与拾中处、独立期望与误差、逐步提示条）见 `web-pick-types-live-records.json`。**没有改任何产品代码。**
+
+**已知偏离 / 残余**：
+- G8 E3D 运行时 golden 未采（E3D 不在跑）——本节是 G8 题面的 Web 侧，E3D 侧的位置字串仍待对账；#17 的 ✓ 据此只声明「Web 按 E3D 口径落地并实机」。
+- 没走到的分支：Distance 作用在 P-Point 上（沿 P-Point 方向偏移）、Proportion / Fraction 控制点落在线段外回近端、Fraction 恰在两分点正中间的同距取段起点、Intersect 面 × 面 × **线**（第三项是线时按 E3D 只与**第一**面求交）——都只有 `pickDerivation.test.ts` / `intersectPickSession.test.ts` 顶着。
+- Significant Snaps 开着且 p-line 带分段时派生只在光标所在段上做，§18 已实机（Cut × Mid-Point、Nodes × Snap / Mid-Point），本节 SCTN `177301` / `177302` 没有 FITT / SJOI / SNOD，整条线即作用线。

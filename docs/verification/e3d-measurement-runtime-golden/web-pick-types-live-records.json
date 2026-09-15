@@ -1,0 +1,714 @@
+{
+  "capturedAt": "2026-09-15T17:40:53.197Z",
+  "backend": "gen-model-v1 :8022",
+  "frame": {
+    "note": "位置 / 方向均为设计 World（米，X=E Y=N Z=U）；PLINE 端点直接来自 gen-model element/plines（世界 mm → 米，PLSTART → PLEND）；盒角 = element/attributes 的 XLEN / YLEN / ZLEN 半长 × element/ptset 的 world_transform"
+  },
+  "plineGroups": {
+    "url": "/?model_source=gen-model-v1&gm_backend_port=8022&show_refno=24381_177299",
+    "show": "24381_177299",
+    "beam": {
+      "refno": "24381_177301",
+      "noun": "SCTN",
+      "plines": 26,
+      "snapPoints": 0,
+      "NA": {
+        "key": "NA",
+        "start": [
+          2.89203,
+          14.67054,
+          23.194209999999998
+        ],
+        "end": [
+          3.39381,
+          8.93519,
+          23.194209999999998
+        ],
+        "lengthM": 5.757258270296722
+      }
+    },
+    "cross": {
+      "refno": "24381_177302",
+      "noun": "SCTN",
+      "NA": {
+        "key": "NA",
+        "start": [
+          2.93591,
+          14.74268,
+          23.194209999999998
+        ],
+        "end": [
+          1.9300899999999999,
+          14.65469,
+          23.194209999999998
+        ],
+        "lengthM": 1.0096613850692715
+      }
+    },
+    "results": {
+      "01-distance-100": {
+        "pickType": "distance",
+        "token": "Distance[100]",
+        "value": {
+          "key": "distanceMm",
+          "value": 100
+        },
+        "prompt": "距离测量 · 第 1/2 步 选择起点 (Distance[100]) Snap : 等待捕捉（基本体 / PLINE 关键点）",
+        "picks": [
+          {
+            "refno": "24381_177301",
+            "t": 0.2,
+            "plineKey": "NA",
+            "hoverLabel": "PLINE NA · Distance[100]",
+            "objectId": "o:24381_177301:0",
+            "screen": [
+              879.01806586852,
+              308.0001177483859
+            ],
+            "plineStart": [
+              2.89203,
+              14.67054,
+              23.194209999999998
+            ],
+            "plineEnd": [
+              3.39381,
+              8.93519,
+              23.194209999999998
+            ],
+            "plineLengthM": 5.757258270296722,
+            "expected": [
+              2.900745606916383,
+              14.570920533046603,
+              23.194209999999998
+            ],
+            "view": {
+              "el": 0.16,
+              "az": 5,
+              "factor": 1.05
+            }
+          },
+          {
+            "refno": "24381_177301",
+            "t": 0.8,
+            "plineKey": "NA",
+            "hoverLabel": "PLINE NA · Distance[100]",
+            "objectId": "o:24381_177301:0",
+            "screen": [
+              483.4892949403486,
+              275.12313326096256
+            ],
+            "plineStart": [
+              2.89203,
+              14.67054,
+              23.194209999999998
+            ],
+            "plineEnd": [
+              3.39381,
+              8.93519,
+              23.194209999999998
+            ],
+            "plineLengthM": 5.757258270296722,
+            "expected": [
+              3.3850943930836173,
+              9.034809466953398,
+              23.194209999999998
+            ],
+            "view": {
+              "el": 0.3,
+              "az": 40,
+              "factor": 1.15
+            }
+          }
+        ],
+        "record": {
+          "origin": [
+            2.900745606916384,
+            14.570920533046605,
+            23.19420999999999
+          ],
+          "target": [
+            3.3850943930836195,
+            9.034809466953398,
+            23.19420999999999
+          ],
+          "originLabel": "PLINE NA · Distance[100]",
+          "targetLabel": "PLINE NA · Distance[100]",
+          "originSource": "primitive_key_point",
+          "targetSource": "primitive_key_point"
+        },
+        "rows": {
+          "distance": "5557mm",
+          "offset-x": "+484mm",
+          "offset-y": "-5536mm",
+          "offset-z": "0mm",
+          "direction": "S 5.00002 E"
+        },
+        "independent": {
+          "originErrM": 7.377764055609925e-15,
+          "targetErrM": 7.444291678311382e-15,
+          "expectedDistanceM": 5.557258270296723,
+          "recordDistanceM": 5.557258270296725
+        }
+      },
+      "02-fraction-3": {
+        "pickType": "fraction",
+        "token": "Fraction[3]",
+        "value": {
+          "key": "fraction",
+          "value": 3
+        },
+        "prompt": "距离测量 · 第 1/2 步 选择起点 (Fraction[3]) Snap : 等待捕捉（基本体 / PLINE 关键点）",
+        "picks": [
+          {
+            "refno": "24381_177301",
+            "t": 0.3,
+            "plineKey": "NA",
+            "hoverLabel": "PLINE NA · Fraction[3]",
+            "objectId": "o:24381_177301:0",
+            "screen": [
+              799.3453934894843,
+              308.0001219253162
+            ],
+            "plineStart": [
+              2.89203,
+              14.67054,
+              23.194209999999998
+            ],
+            "plineEnd": [
+              3.39381,
+              8.93519,
+              23.194209999999998
+            ],
+            "plineLengthM": 5.757258270296722,
+            "expected": [
+              3.0592900000000003,
+              12.758756666666667,
+              23.194209999999998
+            ],
+            "view": {
+              "el": 0.16,
+              "az": 5,
+              "factor": 1.05
+            }
+          },
+          {
+            "refno": "24381_177301",
+            "t": 0.7,
+            "plineKey": "NA",
+            "hoverLabel": "PLINE NA · Fraction[3]",
+            "objectId": "o:24381_177301:0",
+            "screen": [
+              480.65465507266504,
+              308.00013863304014
+            ],
+            "plineStart": [
+              2.89203,
+              14.67054,
+              23.194209999999998
+            ],
+            "plineEnd": [
+              3.39381,
+              8.93519,
+              23.194209999999998
+            ],
+            "plineLengthM": 5.757258270296722,
+            "expected": [
+              3.22655,
+              10.846973333333334,
+              23.194209999999998
+            ],
+            "view": {
+              "el": 0.16,
+              "az": 5,
+              "factor": 1.05
+            }
+          }
+        ],
+        "record": {
+          "origin": [
+            3.059290000000001,
+            12.758756666666669,
+            23.19420999999999
+          ],
+          "target": [
+            3.2265500000000022,
+            10.846973333333334,
+            23.19420999999999
+          ],
+          "originLabel": "PLINE NA · Fraction[3]",
+          "targetLabel": "PLINE NA · Fraction[3]",
+          "originSource": "primitive_key_point",
+          "targetSource": "primitive_key_point"
+        },
+        "rows": {
+          "distance": "1919mm",
+          "offset-x": "+167mm",
+          "offset-y": "-1912mm",
+          "offset-z": "0mm",
+          "direction": "S 5.00002 E"
+        },
+        "independent": {
+          "originErrM": 7.377764055609925e-15,
+          "targetErrM": 7.444291678311382e-15,
+          "expectedDistanceM": 1.9190860900989062,
+          "recordDistanceM": 1.919086090098908
+        }
+      },
+      "03-proportion-0.25": {
+        "pickType": "proportion",
+        "token": "Proportion[0.25]",
+        "value": {
+          "key": "proportion",
+          "value": 0.25
+        },
+        "prompt": "距离测量 · 第 1/2 步 选择起点 (Proportion[0.25]) Snap : 等待捕捉（基本体 / PLINE 关键点）",
+        "picks": [
+          {
+            "refno": "24381_177301",
+            "t": 0.2,
+            "plineKey": "NA",
+            "hoverLabel": "PLINE NA · Proportion[0.25]",
+            "objectId": "o:24381_177301:0",
+            "screen": [
+              879.01806586852,
+              308.0001177483859
+            ],
+            "plineStart": [
+              2.89203,
+              14.67054,
+              23.194209999999998
+            ],
+            "plineEnd": [
+              3.39381,
+              8.93519,
+              23.194209999999998
+            ],
+            "plineLengthM": 5.757258270296722,
+            "expected": [
+              3.017475,
+              13.2367025,
+              23.194209999999998
+            ],
+            "view": {
+              "el": 0.16,
+              "az": 5,
+              "factor": 1.05
+            }
+          },
+          {
+            "refno": "24381_177301",
+            "t": 0.8,
+            "plineKey": "NA",
+            "hoverLabel": "PLINE NA · Proportion[0.25]",
+            "objectId": "o:24381_177301:0",
+            "screen": [
+              483.4892949403486,
+              275.12313326096256
+            ],
+            "plineStart": [
+              2.89203,
+              14.67054,
+              23.194209999999998
+            ],
+            "plineEnd": [
+              3.39381,
+              8.93519,
+              23.194209999999998
+            ],
+            "plineLengthM": 5.757258270296722,
+            "expected": [
+              3.268365,
+              10.369027500000001,
+              23.194209999999998
+            ],
+            "view": {
+              "el": 0.3,
+              "az": 40,
+              "factor": 1.15
+            }
+          }
+        ],
+        "record": {
+          "origin": [
+            3.017475000000002,
+            13.236702500000002,
+            23.19420999999999
+          ],
+          "target": [
+            3.268365000000002,
+            10.369027500000001,
+            23.19420999999999
+          ],
+          "originLabel": "PLINE NA · Proportion[0.25]",
+          "targetLabel": "PLINE NA · Proportion[0.25]",
+          "originSource": "primitive_key_point",
+          "targetSource": "primitive_key_point"
+        },
+        "rows": {
+          "distance": "2879mm",
+          "offset-x": "+251mm",
+          "offset-y": "-2868mm",
+          "offset-z": "0mm",
+          "direction": "S 5.00002 E"
+        },
+        "independent": {
+          "originErrM": 7.53644380168212e-15,
+          "targetErrM": 7.32410687763558e-15,
+          "expectedDistanceM": 2.8786291351483593,
+          "recordDistanceM": 2.878629135148361
+        }
+      },
+      "04-midpoint": {
+        "pickType": "midpoint",
+        "token": "Mid-Point",
+        "value": null,
+        "prompt": "距离测量 · 第 1/2 步 选择起点 (Mid-Point) Snap : 等待捕捉（基本体 / PLINE 关键点）",
+        "picks": [
+          {
+            "refno": "24381_177301",
+            "t": 0.5,
+            "plineKey": "NA",
+            "hoverLabel": "PLINE NA · Mid-Point",
+            "objectId": "o:24381_177301:0",
+            "screen": [
+              640.000034061211,
+              308.00013027917765
+            ],
+            "plineStart": [
+              2.89203,
+              14.67054,
+              23.194209999999998
+            ],
+            "plineEnd": [
+              3.39381,
+              8.93519,
+              23.194209999999998
+            ],
+            "plineLengthM": 5.757258270296722,
+            "expected": [
+              3.14292,
+              11.802865,
+              23.194209999999998
+            ],
+            "view": {
+              "el": 0.16,
+              "az": 5,
+              "factor": 1.05
+            }
+          },
+          {
+            "refno": "24381_177302",
+            "t": 0.5,
+            "plineKey": "NA",
+            "hoverLabel": "PLINE NA · Mid-Point",
+            "objectId": "o:24381_177302:2",
+            "screen": [
+              673.3452731395828,
+              382.6199237179406
+            ],
+            "plineStart": [
+              2.93591,
+              14.74268,
+              23.194209999999998
+            ],
+            "plineEnd": [
+              1.9300899999999999,
+              14.65469,
+              23.194209999999998
+            ],
+            "plineLengthM": 1.0096613850692715,
+            "expected": [
+              2.433,
+              14.698685000000001,
+              23.194209999999998
+            ],
+            "view": {
+              "el": 0.12,
+              "az": 92,
+              "factor": 1.1
+            }
+          }
+        ],
+        "record": {
+          "origin": [
+            3.142920000000002,
+            11.802865,
+            23.19420999999999
+          ],
+          "target": [
+            2.4330000000000016,
+            14.698685000000001,
+            23.19420999999999
+          ],
+          "originLabel": "PLINE NA · Mid-Point",
+          "targetLabel": "PLINE NA · Mid-Point",
+          "originSource": "primitive_key_point",
+          "targetSource": "primitive_key_point"
+        },
+        "rows": {
+          "distance": "2982mm",
+          "offset-x": "-710mm",
+          "offset-y": "+2896mm",
+          "offset-z": "0mm",
+          "direction": "N 13.7746 W"
+        },
+        "independent": {
+          "originErrM": 7.32410687763558e-15,
+          "targetErrM": 7.32410687763558e-15,
+          "expectedDistanceM": 2.981570035870364,
+          "recordDistanceM": 2.981570035870364
+        }
+      }
+    }
+  },
+  "intersect": {
+    "url": "/?model_source=gen-model-v1&gm_backend_port=8022&show_refno=24381_102273",
+    "show": "24381_102273",
+    "box": {
+      "refno": "24381_102278",
+      "xlenM": 0.088,
+      "ylenM": 0.08,
+      "zlenM": 0.074,
+      "axes": [
+        [
+          0.8191520442889918,
+          -0.573576436351046,
+          0
+        ],
+        [
+          0.573576436351046,
+          0.8191520442889918,
+          0
+        ],
+        [
+          0,
+          0,
+          1
+        ]
+      ],
+      "originM": [
+        10.312586114908084,
+        14.16999216354312,
+        0.5
+      ]
+    },
+    "first": {
+      "sign": [
+        1,
+        1,
+        1
+      ],
+      "designCorner": [
+        10.371571862310843,
+        14.177520882115234,
+        0.537
+      ],
+      "faces": [
+        {
+          "axis": "X",
+          "sign": 1,
+          "normal": [
+            0.8191520458724941,
+            -0.5735764340895706,
+            0
+          ],
+          "hoverAt": [
+            10.361247336599625,
+            14.162776207643136,
+            0.51899995782144
+          ],
+          "sample": [
+            10.361247486456524,
+            14.16277614531803,
+            0.519
+          ],
+          "screen": [
+            680.336173820571,
+            269.3867756982706
+          ],
+          "label": "面",
+          "objectId": "o:24381_102278:1"
+        },
+        {
+          "axis": "Y",
+          "sign": 1,
+          "normal": [
+            0.5735764422364834,
+            0.8191520401679643,
+            0
+          ],
+          "hoverAt": [
+            10.356827051451889,
+            14.187845210718649,
+            0.5189999859635736
+          ],
+          "sample": [
+            10.35682712551364,
+            14.18784525796955,
+            0.519
+          ],
+          "screen": [
+            592.2096292342799,
+            269.9161213701059
+          ],
+          "label": "面",
+          "objectId": "o:24381_102278:1"
+        },
+        {
+          "axis": "Z",
+          "sign": 1,
+          "normal": [
+            0,
+            0,
+            1
+          ],
+          "hoverAt": [
+            10.3465027515888,
+            14.17310053143683,
+            0.537
+          ],
+          "sample": [
+            10.34650274965932,
+            14.17310052117235,
+            0.537
+          ],
+          "screen": [
+            634.9114204206335,
+            357.21300642304385
+          ],
+          "label": "面",
+          "objectId": "o:24381_102278:1"
+        }
+      ],
+      "prompts": [
+        "距离测量 · 第 1/2 步 选择起点 (Intersection[2]) Snap : BOX 面 | 求交已选 1. BOX 面（面），再选一项（Intersection[2]）",
+        "距离测量 · 第 1/2 步 选择起点 (Intersection[3]) Snap : BOX 面 | 求交已选 1. BOX 面（面）；2. BOX 面（面），再选一项（Intersection[3]）",
+        "距离测量 · 第 2/2 步 选择终点 (Intersection[1]) Snap : BOX 交点（预览）；点空白取消当前点选 | "
+      ]
+    },
+    "second": {
+      "sign": [
+        -1,
+        1,
+        -1
+      ],
+      "designCorner": [
+        10.29948648241341,
+        14.227995608514124,
+        0.463
+      ],
+      "faces": [
+        {
+          "axis": "X",
+          "sign": -1,
+          "normal": [
+            -0.8191520458724941,
+            0.5735764340895706,
+            0
+          ],
+          "hoverAt": [
+            10.289162000751102,
+            14.213250999120072,
+            0.48099996129959244
+          ],
+          "sample": [
+            10.289162106559091,
+            14.213250871716923,
+            0.481
+          ],
+          "screen": [
+            599.6638261794305,
+            332.6132243017298
+          ],
+          "label": "面",
+          "objectId": "o:24381_102278:1"
+        },
+        {
+          "axis": "Y",
+          "sign": 1,
+          "normal": [
+            0.5735764422364845,
+            0.8191520401679634,
+            0
+          ],
+          "hoverAt": [
+            10.314231200281585,
+            14.217671147260646,
+            0.48100001394147957
+          ],
+          "sample": [
+            10.314231219210612,
+            14.217671232659805,
+            0.481
+          ],
+          "screen": [
+            687.79037076572,
+            332.08387862989366
+          ],
+          "label": "面",
+          "objectId": "o:24381_102278:1"
+        },
+        {
+          "axis": "Z",
+          "sign": -1,
+          "normal": [
+            0,
+            0,
+            -1
+          ],
+          "hoverAt": [
+            10.303906852341829,
+            14.202926501186381,
+            0.46300000000000013
+          ],
+          "sample": [
+            10.303906843356293,
+            14.202926495862604,
+            0.463
+          ],
+          "screen": [
+            645.0885795793679,
+            244.78699357695493
+          ],
+          "label": "面",
+          "objectId": "o:24381_102278:1"
+        }
+      ],
+      "prompts": [
+        "距离测量 · 第 2/2 步 选择终点 (Intersection[2]) Snap : BOX 面；点空白取消当前点选 | 求交已选 1. BOX 面（面），再选一项（Intersection[2]）",
+        "距离测量 · 第 2/2 步 选择终点 (Intersection[3]) Snap : BOX 面；点空白取消当前点选 | 求交已选 1. BOX 面（面）；2. BOX 面（面），再选一项（Intersection[3]）",
+        "距离测量 · 第 1/2 步 选择起点 (Intersection[1]) Snap : BOX 交点（预览） | "
+      ]
+    },
+    "record": {
+      "origin": [
+        10.37157168579102,
+        14.177520906448374,
+        0.537
+      ],
+      "target": [
+        10.29948630523682,
+        14.227995634078988,
+        0.46300000000000013
+      ],
+      "originLabel": "交点",
+      "targetLabel": "交点"
+    },
+    "rows": {
+      "distance": "115mm",
+      "offset-x": "-72mm",
+      "offset-y": "+50mm",
+      "offset-z": "-74mm",
+      "direction": "W 35 N 40.0608 D"
+    },
+    "independent": {
+      "originVsDesignCornerM": 1.7818908363448204e-7,
+      "targetVsDesignCornerM": 1.790114696332342e-7,
+      "originVsMeshVertexM": 1.0247487164177068e-14,
+      "targetVsMeshVertexM": 9.844507887422368e-15,
+      "expectedDistanceM": 0.11497825881443845,
+      "recordDistanceM": 0.11497825976691618
+    }
+  },
+  "pageErrors": []
+}
