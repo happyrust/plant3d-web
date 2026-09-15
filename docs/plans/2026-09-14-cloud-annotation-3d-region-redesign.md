@@ -1002,8 +1002,9 @@ P0 已提交：`af4b382`（15 文件；`useToolStore.ts` 只取云线 hunk）。
 中位与最大都是 0.00px**，「晚一帧」标尺 9~14px。后端没起就整条 skip，不算失败。
 
 - 本机 gen-model 开在 :8023（`.env.development` 默认写的是 :8022），跑之前 `$env:PLANT3D_GM_PORT=8023`。
-- 应用自己的点集取数（`queryPtsetWithRuntimeFallback`）只认 parquet 与旧后端 `/api/pdms/ptset`，
-  gen-model-v1 档下取不到点集，所以用例自己打了一次 `/api/v1/element/ptset`；数据是真的，定位与渲染是产品代码。
+- 顺这条线挖出一个产品缺口并已修：点集可视化那条链没接 `ModelSource.keypoints` 端口，gen-model-v1 档下
+  取不到点集（面板一直是空的）。改法与验证记在 gen-model-v1 收口计划 §18；这条用例现在走应用自己的
+  「显示点集」入口，真实 BRAN 一次出 **70 个点**，取不到就红。
 - 两处踩过的坑，留给下一个人：① **CSS2D 标签的锚点要读 `getWorldPosition`**——它挂在
   `annotationGroup` 下，真实项目里这个组带 mm→m + recenter 变换，拿创建时给的局部坐标去投影会差出
   六七百像素（demo 里组是单位阵，所以只在真实模型上才露头）；② 真实项目常常只显示一条 BRAN，

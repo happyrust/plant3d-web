@@ -81,10 +81,8 @@ import { createMbdExternalSync } from '@/composables/useMbdExternalSync';
 import { MeasurementAnnotationManager } from '@/composables/useMeasurementAnnotation';
 import { useModelGeneration } from '@/composables/useModelGeneration';
 import { useModelLoadStatus } from '@/composables/useModelLoadStatus';
-import {
-  queryDirectChildrenPtsetSummaryWithRuntimeFallback,
-  queryPtsetWithRuntimeFallback,
-} from '@/composables/usePtsetRuntimeLookup';
+import { queryDirectChildrenPtsetSummaryWithRuntimeFallback } from '@/composables/usePtsetRuntimeLookup';
+import { collectPtsetEntries } from '@/composables/usePtsetVisualizationEntries';
 import { usePtsetVisualizationThree } from '@/composables/usePtsetVisualizationThree';
 import { useReviewStore } from '@/composables/useReviewStore';
 import { useSelectionStore } from '@/composables/useSelectionStore';
@@ -5175,21 +5173,6 @@ onMounted(async () => {
   offModelUnitVersionCompare = () =>
     window.removeEventListener(MODEL_UNIT_VERSION_COMPARE_EVENT, handleModelUnitVersionCompare);
 
-  async function loadChildPtsetEntries(parquetLoader: ReturnType<typeof useDbnoInstancesParquetLoader>, dbno: number, ownerRefno: string) {
-    const summaries = await queryDirectChildrenPtsetSummaryWithRuntimeFallback(parquetLoader, dbno, ownerRefno);
-    const candidates = summaries.filter((item) => item.success && item.ptCount > 0);
-    const loaded: { refno: string; response: PtsetResponse }[] = [];
-
-    for (const item of candidates) {
-      const resp = await queryPtsetWithRuntimeFallback(parquetLoader, dbno, item.refno);
-      if (resp.success && resp.ptset.length > 0) {
-        loaded.push({ refno: item.refno, response: resp });
-      }
-    }
-
-    return { summaries, loaded };
-  }
-
   function renderPtsetEntries(contextRefno: string, entries: { refno: string; response: PtsetResponse }[]) {
     if (entries.length === 0) return;
     const [first, ...rest] = entries;
@@ -5224,29 +5207,33 @@ onMounted(async () => {
           return;
         }
 
-        const parquetLoader = useDbnoInstancesParquetLoader();
-        const response = await queryPtsetWithRuntimeFallback(parquetLoader, dbno, refnoKey);
-        if (response.success && response.ptset.length > 0) {
-          renderPtsetEntries(refnoKey, [{ refno: refnoKey, response }]);
+        // 取数走 ModelSource.keypoints 端口：legacy 仍是 parquet 优先 + 旧后端兜底（成员一层的
+        // parquet 摘要由下面这条 childSummaries 传进去，与之前逐字相同），gen-model-v1 走 element/ptset。
+        const modelSource = getModelSource();
+        const { entries, self, memberErrors } = await collectPtsetEntries(
+          {
+            keypoints: modelSource.keypoints,
+            childSummaries: modelSource.kind === 'legacy'
+              ? (db, owner) => queryDirectChildrenPtsetSummaryWithRuntimeFallback(useDbnoInstancesParquetLoader(), db, owner)
+              : null,
+          },
+          dbno,
+          refnoKey,
+        );
+
+        if (entries.length === 1 && entries[0]!.refno === refnoKey) {
+          renderPtsetEntries(refnoKey, entries);
+          emitToast({ message: `已显示 ${entries[0]!.response.ptset.length} 个连接点` });
+        } else if (entries.length > 0) {
+          renderPtsetEntries(refnoKey, entries);
+          const pointCount = entries.reduce((sum, item) => sum + item.response.ptset.length, 0);
           emitToast({
-            message: `已显示 ${response.ptset.length} 个连接点`,
+            message: `当前构件自身无 ptset，已显示 ${entries.length} 个子元件 ${pointCount} 个连接点`,
           });
         } else {
-          const fallback = await loadChildPtsetEntries(parquetLoader, dbno, refnoKey);
-          if (fallback.loaded.length > 0) {
-            renderPtsetEntries(refnoKey, fallback.loaded);
-            const pointCount = fallback.loaded.reduce((sum, item) => sum + item.response.ptset.length, 0);
-            emitToast({
-              message: `当前构件自身无 ptset，已显示 ${fallback.loaded.length} 个子元件 ${pointCount} 个连接点`,
-            });
-          } else {
-            const childErrors = fallback.summaries
-              .map((item) => item.errorMessage)
-              .filter(Boolean);
-            const errorMsg = response.error_message || childErrors[0] || '未找到点集数据';
-            emitToast({ message: errorMsg });
-            console.warn('[ptset]', errorMsg);
-          }
+          const errorMsg = self.error_message || memberErrors[0] || '未找到点集数据';
+          emitToast({ message: errorMsg });
+          console.warn('[ptset]', errorMsg);
         }
       } catch (error) {
         console.error('[ptset] Failed to load ptset:', error);

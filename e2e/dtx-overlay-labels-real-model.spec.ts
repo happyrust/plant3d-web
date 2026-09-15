@@ -53,46 +53,25 @@ async function waitForRealModel(page: Page, timeout: number): Promise<boolean> {
 }
 
 /**
- * 真实点集：直接问 gen-model `/api/v1/element/ptset`（容器自己常常没点，`include_members` 把成员的点一起带回来），
- * 取第一个有点的构件，转成 `PtsetResponse` 交给应用渲染。点是 mm，全局矩阵负责 mm→m，所以换算因子给 1。
+ * 真实点集：走**应用自己的**入口 `requestPtsetVisualization`（模型树右键「显示点集」就是它），
+ * 由 `ModelSource.keypoints` 取数——gen-model-v1 档下这条链落到 `element/ptset`。
+ * 顺带就把「v1 下点集面板取不到数」那个缺口也守住了：取不到就是这条用例红。
  */
-async function loadRealPtset(page: Page, refno: string, gmPort: string): Promise<{ refno: string; count: number } | null> {
-  return page.evaluate(async ({ refno: rf, gmPort: port }) => {
+async function loadRealPtset(page: Page, refno: string): Promise<{ refno: string; count: number } | null> {
+  return page.evaluate(async (rf) => {
     const ptsetVis = (window as any).__viewerContext?.ptsetVis?.value;
-    if (!ptsetVis) return null;
-    let payload: any;
-    try {
-      const res = await fetch(`http://127.0.0.1:${port}/api/v1/element/ptset`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ refno: rf.replace('_', '/'), include_members: true }),
-      });
-      if (!res.ok) return null;
-      payload = await res.json();
-    } catch {
-      return null;
+    const store = (window as any).__viewerToolStore;
+    if (!ptsetVis || !store) return null;
+    ptsetVis.clearAll?.();
+    store.requestPtsetVisualization(rf);
+    const deadline = Date.now() + 15_000;
+    while (Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      const count = ptsetVis.visualObjects.value.size as number;
+      if (count > 0) return { refno: rf, count };
     }
-    const items = [payload, ...(payload?.members ?? [])].filter((item) => (item?.points?.length ?? 0) > 0);
-    const item = items[0];
-    if (!item) return null;
-    ptsetVis.setPanelContext(String(item.refno));
-    ptsetVis.renderPtset(String(item.refno).replace('/', '_'), {
-      success: true,
-      refno: String(item.refno).replace('/', '_'),
-      noun: item.noun ?? null,
-      ptset: item.points.map((p: any) => ({
-        number: p.number,
-        pt: p.pt,
-        dir: p.dir ?? undefined,
-        pbore: p.bore ?? 0,
-        pconnect: '',
-      })),
-      world_transform: item.world_transform,
-      unit_info: { source_unit: item.unit ?? 'mm', target_unit: item.unit ?? 'mm', conversion_factor: 1 },
-    });
-    const count = ptsetVis.visualObjects.value.size as number;
-    return count > 0 ? { refno: String(item.refno), count } : null;
-  }, { refno, gmPort });
+    return null;
+  }, refno);
 }
 
 test('DTX 浮层 · 真实模型上快拖，图钉 / 文字框 / 三维标签 / 真实点集标签都贴着本帧相机', async ({ page }) => {
@@ -110,8 +89,8 @@ test('DTX 浮层 · 真实模型上快拖，图钉 / 文字框 / 三维标签 / 
   const markerCount = await page.evaluate(() => document.querySelectorAll('.dtx-anno-marker').length);
   expect(markerCount, '画面上不止一枚图钉（项目里还有别的批注？探针只认第一枚）').toBe(1);
 
-  const ptset = await loadRealPtset(page, SHOW_REFNO, GM_PORT);
-  expect(ptset, `没从 gen-model 取到真实点集（refno ${SHOW_REFNO}）：换一个 PLANT3D_REAL_REFNO 再跑`).not.toBeNull();
+  const ptset = await loadRealPtset(page, SHOW_REFNO);
+  expect(ptset, `应用没取到真实点集（refno ${SHOW_REFNO}，gen-model :${GM_PORT}）：v1 档下点集取数又断了？`).not.toBeNull();
 
   await installLabelProbe(page);
   await setLabelPhase(page, 'sweep');
@@ -137,3 +116,4 @@ test('DTX 浮层 · 真实模型上快拖，图钉 / 文字框 / 三维标签 / 
 
   expectNoLag(measured, 30);
 });
+

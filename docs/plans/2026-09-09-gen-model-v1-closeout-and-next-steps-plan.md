@@ -327,3 +327,23 @@ runtime/release 两条 GLB 链路不动。
 **P12-3 · 收尾**（2026-09-10 17:0x，接班会话）：`scripts/verify-gen-model-v1.ps1` 加 `-Dbnum <n>` 整库口径（roots 探能力 → ensure 202 → 轮询到终态并打耗时 / 进度 / 前后 RSS → 全部根 ≤64 一批 records；404 / 409 只记一句），对 `:9099` 真跑一次四步按预期「404 记一句 + 跳过 ×3」；联调指南补 kv-mem 起法（`AIOS_STORE_MODE=embedded-mem`）、`show_dbnum` 两条路与 `-Dbnum` 用法；`CONTEXT.md` 加「整库入口」词条；决策库落一条。S0 用的构建已出在独立 target `D:\Rust\target-kvmem\release\aios-database.exe`（`dadbd821d`），起服务与量数的命令在计划 §11——**仍等用户起**。
 
 **第 3 稿 · 实时**（2026-09-10 17:1x–17:4x，用户口径「按 e3d-model 的方式去生成模型，实时生成」，读法经用户确认；全文 plan 2026-09-10 §12）：查证第 2 稿的 S1 worker 经 `ensure_model_scope_generated_from_roots` **逐根串行**（每根各建一次 `E3dModelService`、各起一个 worker，整库无并行，量级小时），而 `E3dModelService::generate_and_persist_roots(dbnum, 全部根)` 才是 16 路常驻 worker + 按片提交的 Core.dll 式流水线。改法：gen-model `d6a5d49ac`——worker 一发交 `generate_roots_report` → 流水线，进度由 1 s ticker 数投影回执，`GET …/model/roots` 每行 `ready` + `?ready=1`（85 passed）；前端本笔——`collectDbnumViaServer` 每拍 `tasks/{id}` + `roots?ready=1`、新就绪的根立刻 `records` 并经 `onRefnosReady` 进 DTX，收尾对账；旧 `dadbd821d` 构建退化为等终态整取。全量 vitest 1991 / 0 failed；type-check 新增 0。release 构建换成 `d6a5d49ac`，起法不变。**live 仍等用户**。
+
+---
+
+## 18. 追记（2026-09-15）：点集可视化改走 `keypoints` 端口——v1 档下点集面板此前一直是空的
+
+**怎么发现的**：云线方案 §23 在真实项目上复核浮层「有没有晚一帧」，要一份真实点集来量；发现模型树右键「显示点集」那条链（`ViewerPanel` 的 `ptsetVisualizationRequest` watch）直接调 `queryPtsetWithRuntimeFallback` / `queryDirectChildrenPtsetSummaryWithRuntimeFallback`，**只认 parquet 与旧后端 `/api/pdms/ptset`**。gen-model-v1 档下这两处都没有数据（本机旧后端连 output 目录都不在），于是点集面板一条都出不来——而同一份 P 点，测量捕捉早就通过 `ModelSource.keypoints` 端口用上了 `element/ptset`。缺的不是后端能力，是这条链没接端口。
+
+**改法**（新增 `src/composables/usePtsetVisualizationEntries.ts` + `ViewerPanel.vue` 换调用，约 110 行）
+
+- `collectPtsetEntries(deps, dbno, refno)`：自身有 P 点就显示自身，没有就摊开直属成员。取数一律走 `ModelSource.keypoints`（`ptset` / `memberPtsets`），两种源同一条代码。
+- **legacy 逐字不变**：成员那一层仍先看 parquet 摘要再逐个取（旧后端 children 接口不随模型快照锁定），由调用方把 `childSummaries` 传进来；`keypoints.ptset` 在 legacy 源里本来就是 `queryPtsetWithRuntimeFallback`，等于原来那一发。
+- **v1 不传 `childSummaries`**：直接用 `memberPtsets`——成员的点、`world_transform`、`unit_info` 随同一次 `element/ptset?include_members` 回来，不必再逐个问。
+- Toast 三档文案（自身 N 个点 / 自身没有但成员 X 个 Y 个点 / 都没有）与改前一字不差。
+
+**验证**
+
+- 新增单测 4 条（自身有点不问成员、v1 成员一次回、legacy 按摘要逐个取且零点成员跳过、都没点时原因留给提示）；连同 `usePtsetRuntimeLookup` / `keypointSource` / `usePtsetSnap` 一起 **25/25 绿**。
+- **live**：真实项目 `AvevaMarineSample` BRAN `24381_145018`（gen-model :8023，`?model_source=gen-model-v1&show_refno=…`）按「显示点集」走应用自己的入口，**70 个点**渲染出来；改前这一发是 0。这条已钉进 `e2e/dtx-overlay-labels-real-model.spec.ts`（取不到点集就红）。
+- `npm run type-check` 新增 0（唯一基线外的仍是未触碰的 `resolveLabelCollisions.test.ts`）；eslint 0 错；四条相关 e2e 5/5 绿。
+- **未验证**：legacy 档 live——本机旧后端没有这个项目的数据。legacy 分支靠单测 + 「与改前逐字同构」两条兜着。
