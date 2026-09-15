@@ -1,5 +1,5 @@
 {
-  "capturedAt": "2026-09-15T15:57:53.285Z",
+  "capturedAt": "2026-09-15T16:15:20.915Z",
   "scenario": "斜管段管身轴线（TUBING）× 法向 ∓N 的竖直端面（Graphics 面）→ 60°",
   "url": "/?model_source=gen-model-v1&gm_backend_port=8022&show_refno=24383_66662",
   "frame": {
@@ -19,6 +19,16 @@
     "tiltDeg": 8,
     "azDeg": 90,
     "distanceFactor": 2.6
+  },
+  "shot": {
+    "distanceM": 2.4,
+    "tiltDeg": 20,
+    "elevDeg": 12,
+    "arcNormal": [
+      -1,
+      0,
+      0
+    ]
   },
   "tube": {
     "objectId": "o:24383_66662:5",

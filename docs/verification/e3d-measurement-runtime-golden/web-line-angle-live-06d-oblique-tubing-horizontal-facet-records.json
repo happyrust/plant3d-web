@@ -1,5 +1,5 @@
 {
-  "capturedAt": "2026-09-15T15:58:37.730Z",
+  "capturedAt": "2026-09-15T16:16:05.398Z",
   "scenario": "斜管段管身轴线（TUBING）× 法向 ∓U 的水平面（Graphics 面）→ 30°",
   "url": "/?model_source=gen-model-v1&gm_backend_port=8022&show_refno=24383_66662",
   "frame": {
@@ -19,6 +19,16 @@
     "tiltDeg": 35,
     "azDeg": 45,
     "distanceFactor": 4
+  },
+  "shot": {
+    "distanceM": 2.4,
+    "tiltDeg": 20,
+    "elevDeg": 12,
+    "arcNormal": [
+      1,
+      0,
+      0
+    ]
   },
   "tube": {
     "objectId": "o:24383_66662:5",
