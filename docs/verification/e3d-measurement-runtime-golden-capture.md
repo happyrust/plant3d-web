@@ -1282,6 +1282,8 @@ spec 先把相机拉到模型跟前；临时 spec 已删）：
 | 线 ⟂ 面 | SCTN `24381/177301` 竖直边（`U`）× PANE 顶面（法向 `U`） | `90 Degrees · 90° 0' 0'' · D · E` | `line-plane · angleDeg 90 · inPlane false` · 弧心 `E 2894.8 N 14670.8 U 23326.2` · Direction2 = `E`（840–843：投影退化，面内方向取世界 X）· 半径 500 mm | 弧心既在边上又在面上（Δ 0）；第一条臂朝拾中侧（拾中点在面下 → `D`）；`90° − ∠(边, 法向)` = 90 | `web-line-angle-live-05-pierces-edge-facet.png` / `web-line-angle-live-05-pierces-result-card.png` |
 | 斜交 · 平面内（10:28 补采） | LOOP3 SCTN `24381/177330` 下翼缘的水平棱（`N 29.54 E`，U 2958.0）× 邻梁 SCTN `24381/177331`（两梁 NA 成 64.54°）的竖直侧面（法向 `E 35.00 N`） | `64.54 Degrees · 64° 32' 24'' · S 29.54 W · S 35.00 E` | `line-plane · angleDeg 64.54003`（网格 64.540028 按 1e-5° 吸整，`87b8970`）`· inPlane false` · 弧心 `E −2805.4 N −10333.3 U 2958.0`（棱穿过侧面处）· 半径 500 mm（投影线太短，892–903 抬到下限） | 角 = 90° − ∠(棱, 法向) = 64.540028（网格）；设计侧两梁 NA 的锐角 64.540031（`element/plines`，差 3e-6° 是 float32 网格）；弧心在棱上 Δ 2e-16 m、在面上 Δ 6e-16 m、= 独立算的线 ∩ 面 Δ 4e-16 m；第二条臂在面内、= 棱在面上的投影、朝拾中点的投影 | `web-line-angle-live-06-oblique-edge-facet.png` / `web-line-angle-live-06-oblique-result-card.png` |
 | 斜交 · 空间（10:32 补采） | 仪表支架 `/Copy-(2)-of-1RCS024CQ`（`show_refno=24381_102273`）里 `ORI 180 70 180` 倾斜的 BOX `24381/102287`（280 × 100 × 150）沿它 Z 轴的棱（`W 35.00 N 20.00 U`，仰 20°）× 水平 BOX `24381/102274` 的竖直侧面（法向 = 它的 X 轴 `E 35.00 S`） | `70 Degrees · 70° 0' 0'' · W 35.00 N 20.00 U · U`（`87b8970` 之前是 `69° 59' 59''` 与 `N 35.00 E 90.00 U`，见「补采」末条） | `line-plane · angleDeg 70`（网格 69.9999979 吸整）`· inPlane false` · 弧心 `E 10368.3 N 13988.1 U 252.6` · Direction2 = 棱在竖直面上的投影 = 精确竖直 `(0, 0, 1)` · 半径 500 mm | 角 = 90° − ∠(棱, 法向) = 69.9999979（网格）；设计侧：棱 ∥ 102287 放置矩阵的 Z、法向 ∥ 102274 的 X（`element/ptset` `world_transform`），90° − ∠(Z, X) = 70.000000（ORI 绕 Y 转 70°）；弧心在棱上 Δ 3e-16、在面上 Δ 2e-15、= 独立交点 Δ 3e-15 m | `web-line-angle-live-06b-oblique-tilted-edge-facet.png` / `web-line-angle-live-06b-oblique-tilted-result-card.png` |
+| 斜交 · 管件路 · 竖直面（23:57 补采） | BRAN `24383/66662`（1WCC0073）里 30° 下倾斜管段的**管身轴线**（TUBI，`EDGTUBING.line` = ELBO `24383/66672` P-Point #1 → FLAN `24383/66671` P-Point #2）× 同一根 ELBO 的法兰端面（Graphics 面，法向 `N`） | `60 Degrees · 59° 59' 58'' · S 30.00 U · U` | `line-plane · angleDeg 59.99962 · inPlane false` · 弧心 `E 17899.7 N 308.8 U 17776.5`（管轴穿过端面处，在斜管段外的延长线上）· 半径 500 mm | 角 = 90° − ∠(管线, 法向) = 59.999583（网格法向 `(0, 1, 0)` 差 1.2e-7）；设计侧 leave / arrive 两个 P-Point 连线算得 59.999581——**不是整 60°，是设计坐标本身的量化**（见下「补采」）；弧心在管线上 Δ 1.6e-7 m、在面上 Δ 2e-17 m、= 独立算的线 ∩ 面 Δ 1.7e-7 m；第二条臂 = 管线在端面上的投影 = 精确竖直 `U` | `web-line-angle-live-06c-oblique-tubing-vertical-facet-tubing-facet.png` / `web-line-angle-live-06c-oblique-tubing-vertical-facet-result-card.png` |
+| 斜交 · 管件路 · 水平面（23:58 补采） | 同一条管身轴线 × 阀门 VALV `24383/66676` 的水平面（Graphics 面，法向 `U`） | `30 Degrees · 30° 0' 1'' · N 30.00 D · N` | `line-plane · angleDeg 30.00038 · inPlane false` · 弧心 `E 17899.7 N −88.7 U 18006.0` · 半径 500 mm | 角 = 90° − ∠(管线, `(0, 0, 1)`) = 30.000419；设计侧 VALV P-Point #100 的方向也是 `U`，同值；弧心在管线上 Δ 2.8e-7 m、在面上 Δ 0、= 独立交点 Δ 4.9e-7 m；第二条臂 = 投影 = `N` | `web-line-angle-live-06d-oblique-tubing-horizontal-facet-tubing-facet.png` / `web-line-angle-live-06d-oblique-tubing-horizontal-facet-result-card.png` |
 | 线在面内 | PANE 顶面长边 × 它自己的顶面 | `0 Degrees · 0° 0' 0'' · N 5.00 W · N 5.00 W` | `line-plane · angleDeg 0 · inPlane` · 两臂同向 · 半径 100 mm（`origin − corner` = 0.1 m） | 边 ⟂ 法向（d·n = 0）且拾中点在面上；弧心在边上 Δ 1.3e-16 m | `web-line-angle-live-07-in-plane-edge-facet.png` / `web-line-angle-live-07-in-plane-result-card.png` |
 | 拒收：平行 | 同一条 PANE 边点两次 | — | 不落记录；提示条 `两条线平行，画不出角度尺寸（E3D：An angular dimension could not be constructed from the data selected）；已回到第 1 步`；状态条回 `选择第一条线` | — | `web-line-angle-live-09-parallel-edges-rejected.png` |
 | 拒收：线 ∥ 面 | SCTN `177301` 水平边（U 23104.6）× PANE 顶面（U 23326.2，离面 221.7 mm） | — | 不落记录；`线与面平行且不在面内，画不出角度尺寸（E3D：…）；已回到第 1 步` | d·n = 0 且离面 > 0.1 mm → E3D 850–853 投影与基线平行 | `web-line-angle-live-10-edge-parallel-facet-rejected.png` |
@@ -1310,6 +1312,26 @@ spec 先把相机拉到模型跟前；临时 spec 已删）：
   1e-6 在单位向量上约 6e-5°，远低于 0.01° 平行容差、约 25× 于分量噪声（~4e-8）。单测 `lineAngle.test.ts` +4（实机那两个值回灌：69.9999979 → 70、64.5400279 → 64.54003；70° 组回灌内核出 `U` 与 `70° 0' 0''`；精确输入不变）。
   重跑两组：空间组 `70 Degrees · 70° 0' 0'' · W 35.00 N 20.00 U · U`、`angleDeg 70`、`direction2 (0, 0, 1)`；平面内组 `angleDeg 64.54003`（结果表四格不变）。**同一套吸整 `75d15d4` 起也用于三点角内核**（`buildThreePointAngle`：两臂先吸、角在吸过的两臂之间量、弧面法向随吸过的臂；共用 `src/measurement/kernel/angleSnap.ts`）——两条角度路口径一致；G6-03 那两条 0.1° / 179.9° golden 的 9e-8° 尾巴低于网格，单测改成「差 < 1e-5° 且落在网格上」。(3) 弧半径下限 500 mm（E3D 892–903）在 280 mm 的盒体上比构件还大，截图前把相机拉远了一档。
 
+**补采（2026-09-15 23:57 / 23:58）：管件路的斜交线 × 面**——上面表里「斜交 · 管件路」两行。环境 `?model_source=gen-model-v1&gm_backend_port=8022&show_refno=24383_66662`（`:8022` 上是 `gen-model-refactor` `1bd2cab4c` 的构建），
+浮条自由表面 + P-Point / 模型表面点 / Graphics 开、Item 原点关，拾取类型 Cursor；第一击 Any 过滤器（放行 TUBING），第二击 Graphics 过滤器；临时 spec 已删。
+
+- **为什么补**：10:28 / 10:32 那两组的第一击都是 Graphics 直棱，管件那一路当时以「斜管段是圆柱网格、附近没有直棱」搁下了。其实第一击**不必**是棱——`intersectOperandFromHit` 同样收 TUBING 轴线（§14），
+  E3D `EDGTUBING.line` 本身就是一条 EDGE。本轮走的就是这一路：1WCC0073 的 BRAN `24383/66662` 里 30° 下倾的斜管段（`o:24383_66662:5`，长 541.3 mm、外径 114 mm），轴线两端吸到
+  ELBO `24383/66672` P-Point #1 与 FLAN `24383/66671` P-Point #2（Δ < 0.005 mm），拾中处离设计管线 0.001 mm。
+- **第二击一开始一个也拾不到（15:31 那一轮两组全红）**：拾点取的是**单个三角形的重心**。`buildGraphicsPickCandidates` 里画出来的边只要投影落在光标 `DEFAULT_GRAPHICS_EDGE_SNAP_PX = 12 px` 内就整包压过面
+  （E3D `pickdetail` 同一口径），管件网格的三角形在那个视距下只有十几到几百 px²，重心离边不到 12 px——255 个候选面片一个都没拾到「面」，日志里清一色 `边 on …`。**改法**：(1) 把整片**共面片**
+  （同法向 + 同平面偏移的三角形并成一片）找出来，而不是逐个三角形；(2) 第二击前相机**正对那一片**拉近（距离 = 片外扩半径 × 2.6~4），拾点取屏幕上离**片边界**最远处（实际拾中处余量 131 px / 107 px）；
+  (3) 两击各用各的机位——先在管跟前拾轴线，再转到面跟前拾面，E3D 里两击之间同样可以转视角（第一条线不受影响，转完提示条仍是「已选第一条线」）。
+- **拾中的面不必是瞄的那一片**：管端盘与邻接管件的法兰面在同一平面上背靠背，谁在前谁被拾中都行；判据改成「拾中的是一个面 + 法向合要求 + 与管轴斜交 5°–85° + 弧心离管 ≤ 3 m」。
+  60° 那组最后拾到的是 ELBO 自己的端面（瞄的也是它），30° 那组瞄的是阀门 VALV `24383/66676` 的水平面、拾到的就是它。
+- **这一组的「整数角」是 30.0004° 而不是 30°**：斜管的设计方向取 leave / arrive 两个 P-Point 的连线（`EDGTUBING.line` 就是这么定义的），而 P-Point 坐标是 mm 级存的——ELBO #1
+  `E 17899.7 N 232.8 U 17820.4` → FLAN #2 `E 17899.7 N −235.9 U 18091.0`，Δ = `(0, −468.7, 270.6)`，仰角 30.00042°；P-Point 自己的**方向**倒是精确的 `(0, −0.866025, 0.5)`。
+  所以结果表 DMS 是 `59° 59' 58''` / `30° 0' 1''` 而不是整 `0' 0''`——这**不是** `87b8970` 那种 float32 网格噪声（1e-5° 吸整管不着 4e-4°），是设计数据本身的量化，E3D 拿同一条 `EDGTUBING.line` 会得同一个值。
+- 记录角与独立期望差 ~3.8e-5°（59.99962 / 59.999583、30.00038 / 30.000419）：前端的管身轴线从 float32 网格的放置矩阵派生、两端再吸到 P-Point（§14），P-Point 也过一道场景帧（float32）；
+  这一档噪声落在 1e-5° 吸整网格上就是 3~4 格，仍远低于 0.01° 平行容差与 DMS 的 1'' 分辩率。
+- 两组页面错误 0；全部数值（两端 P-Point、拾中点与屏幕余量、勘察过的机位、独立算的弧心）见 `web-line-angle-live-06c-oblique-tubing-vertical-facet-records.json` /
+  `web-line-angle-live-06d-oblique-tubing-horizontal-facet-records.json`。**没有改任何产品代码**——这一轮只是把 §30 缺的管件路补齐。
+
 **单测**：`lineAngle.test.ts` 17 条（共面交点 / 拾中侧决定臂向 / 斜交 60° 与补角 120° / 异面弧心与 gap / 平行拒收 / 0.01° 平行容差两侧 / 弧心在段外的半径 / 500 mm 下限 / 拾中点在弧心 /
 臂端回灌三点内核同角；线 + 面一般解 / 投影臂朝拾中侧 / 线在面内 0° 弧 / 垂直 90° 与面内方向 / 平行于面拒收 / 未归一法向；退化输入），`xeokitMeasurementFormat.test.ts` 3 条（四行来自记录、0° 弧、摘要 / 复制值），
 `MeasurementResultInspector.test.ts` 1 条（开关 + 两线记录渲染）、`useXeokitMeasurementStyleStore.test.ts` 1 条（V9 持久化 / 脏值）、`unifiedMeasurement.test.ts` 1 条（往返）。
@@ -1318,7 +1340,7 @@ spec 先把相机拉到模型跟前；临时 spec 已删）：
 **已知偏离 / 残余**：
 - E3D 运行时 golden（G6-04：`measureLineAngle` 注入的 ARC 与四行）未采，E3D 不在跑；上面全是 `static_expectation` + Web 实机。
 - ~~斜交（既非 0° 也非 90°）的线 × 面一般解只有单测——本库这组构件的网格全是正交棱；斜边要等有斜撑 / 管件的模型。~~ 10:28 / 10:32 补采两组（见上「补采」）：本库没有斜撑，
-  用 LOOP3 平面内 64.54° 的短梁与仪表支架里 ORI 倾斜 70° 的盒体走通；管件没走（斜管段是圆柱网格、附近无直棱当第一条线）。补采撞出的 float32 网格噪声（精确竖直的 Direction2 显示成 `N 35.00 E 90.00 U`、DMS 少 1''）已在 `87b8970` 吸掉（见「补采」末条）。
+  用 LOOP3 平面内 64.54° 的短梁与仪表支架里 ORI 倾斜 70° 的盒体走通；~~管件没走（斜管段是圆柱网格、附近无直棱当第一条线）~~ 23:57 / 23:58 管件路也补上了（第一击换成 TUBING 轴线，本来就不必是直棱；见「补采（23:57 / 23:58）」）。补采撞出的 float32 网格噪声（精确竖直的 Direction2 显示成 `N 35.00 E 90.00 U`、DMS 少 1''）已在 `87b8970` 吸掉（见「补采」末条）。
 - 第二击的 `FACET` 在 Web 是 Graphics 面（三角形面片的平面）；E3D 的 `getPlane()` 对 P-Point / DPOINT 也给面（§29），Web 这里同样走 `intersectOperandFromHit`，但只实机验过 Graphics 面。
 - 两击都不进草稿，所以 Esc 第一层只放弃第一条线（E3D 整包退）——与 Intersect 子拾取同一层，方案 §2 #20 的分层口径不变。
 

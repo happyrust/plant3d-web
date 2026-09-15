@@ -1,0 +1,356 @@
+{
+  "capturedAt": "2026-09-15T15:57:53.285Z",
+  "scenario": "斜管段管身轴线（TUBING）× 法向 ∓N 的竖直端面（Graphics 面）→ 60°",
+  "url": "/?model_source=gen-model-v1&gm_backend_port=8022&show_refno=24383_66662",
+  "frame": {
+    "note": "位置 / 方向均为设计 World（米，X=E Y=N Z=U）；记录里的臂 / 角度自 87b8970 起吸过网格噪声",
+    "sceneOriginInDesign": [
+      18.132119140625,
+      1.4021731872558594,
+      17.720509765625
+    ]
+  },
+  "tubeView": {
+    "el": 0.35,
+    "az": 250,
+    "factor": 1.2
+  },
+  "facetView": {
+    "tiltDeg": 8,
+    "azDeg": 90,
+    "distanceFactor": 2.6
+  },
+  "tube": {
+    "objectId": "o:24383_66662:5",
+    "meshAxis": {
+      "start": [
+        17.89966015625,
+        0.23283827209472663,
+        17.82036328125
+      ],
+      "end": [
+        17.89966015625,
+        -0.23590888977050786,
+        18.090999145507812
+      ],
+      "lengthM": 0.5412648822704881,
+      "radiusM": 0.05699999948275105
+    },
+    "designLine": {
+      "from": {
+        "refno": "24383_66672",
+        "noun": "ELBO",
+        "number": 1,
+        "position": [
+          17.89966,
+          0.23283827724953068,
+          17.820364138624765
+        ],
+        "direction": [
+          -5.302876193624534e-17,
+          -0.8660254037844386,
+          0.5000000000000001
+        ]
+      },
+      "to": {
+        "refno": "24383_66671",
+        "noun": "FLAN",
+        "number": 2,
+        "position": [
+          17.89966,
+          -0.23590886423162577,
+          18.091
+        ],
+        "direction": [
+          5.302876193624534e-17,
+          0.8660254037844386,
+          -0.5000000000000001
+        ]
+      },
+      "direction": [
+        0,
+        -0.8660217453070228,
+        0.5000063366152252
+      ]
+    },
+    "pickedAt": [
+      17.89966015625,
+      -0.001534483141592546,
+      17.95568140461263
+    ],
+    "screen": [
+      640.0000087860651,
+      301.0004414240981
+    ],
+    "label": "轴线（ELBO P-Point #1 → FLAN P-Point #2）"
+  },
+  "facet": {
+    "objectId": "o:24383_66672:17",
+    "aimedAt": {
+      "objectId": "o:24383_66672:17",
+      "triangles": 10,
+      "areaM2": 0.005016765529486846,
+      "extentM": 0.06196611030284602,
+      "centroid": [
+        17.892882210809717,
+        0.30883826326245284,
+        17.799981220298186
+      ],
+      "normal": [
+        -7.427932047221475e-8,
+        0.9999999999999956,
+        -5.816135129066424e-8
+      ]
+    },
+    "at": [
+      17.89966016035364,
+      0.30883826458049163,
+      17.81899999777285
+    ],
+    "normal": [
+      -1.2418886541354368e-7,
+      0.9999999999999918,
+      -3.1788459864401375e-8
+    ],
+    "screen": [
+      616.9902954101558,
+      237.06361389159605
+    ],
+    "label": "面",
+    "clearancePx": 130.68859773805534
+  },
+  "rows": {
+    "angle": "60 Degrees",
+    "dms": "59° 59' 58''",
+    "direction1": "S 30.00 U",
+    "direction2": "U"
+  },
+  "info": "线 × 面 · TUBI 轴线（ELBO P-Point #1 → FLAN P-Point #2） × ELBO 面（面） · 弧心 = 线与面的交点",
+  "record": {
+    "count": 1,
+    "corner": [
+      17.89966015625,
+      0.30883826322899977,
+      17.77648484032545
+    ],
+    "origin": [
+      17.89966015625,
+      -0.12417276187312981,
+      18.026487744588586
+    ],
+    "target": [
+      17.89966015625,
+      0.30883826322899977,
+      18.27648484032545
+    ],
+    "lineAngle": {
+      "kind": "line-plane",
+      "angleDeg": 59.99962,
+      "direction1": [
+        0,
+        -0.8660220502042592,
+        0.5000058085262723
+      ],
+      "direction2": [
+        0,
+        0,
+        1
+      ],
+      "skew": false,
+      "inPlane": false,
+      "firstLabel": "TUBI 轴线（ELBO P-Point #1 → FLAN P-Point #2）",
+      "secondLabel": "ELBO 面（面）"
+    },
+    "approximate": true
+  },
+  "expected": {
+    "angleDeg": 59.99958259336958,
+    "root": [
+      17.89966,
+      0.30883826322897856,
+      17.7764847848114
+    ],
+    "direction2": [
+      -2.150978057530956e-7,
+      3.178843311970516e-8,
+      0.9999999999999765
+    ]
+  },
+  "design": {
+    "facePoint": {
+      "refno": "24383_66672",
+      "noun": "ELBO",
+      "number": 2,
+      "position": [
+        17.89966,
+        0.30883827724953067,
+        17.8
+      ],
+      "direction": [
+        3.0616169978683836e-17,
+        1,
+        -2.220446049250313e-16
+      ]
+    },
+    "expectationDeg": 59.99958077202578
+  },
+  "independent": {
+    "cornerOffLine": 1.634790531645958e-7,
+    "cornerOffPlane": 2.2905284220686947e-17,
+    "cornerVsIndependent": 1.6581879192945364e-7,
+    "radiusM": 0.5000000000000007
+  },
+  "surveyed": [
+    {
+      "patch": "o:24383_66662:9",
+      "normal": [
+        0,
+        -1,
+        0
+      ],
+      "view": {
+        "tiltDeg": 22,
+        "azDeg": 90,
+        "distanceFactor": 3.2
+      },
+      "samples": 8,
+      "bestClearancePx": 128.4
+    },
+    {
+      "patch": "o:24383_66662:9",
+      "normal": [
+        0,
+        -1,
+        0
+      ],
+      "view": {
+        "tiltDeg": 22,
+        "azDeg": 270,
+        "distanceFactor": 3.2
+      },
+      "samples": 8,
+      "bestClearancePx": 128.4
+    },
+    {
+      "patch": "o:24383_66662:9",
+      "normal": [
+        0,
+        -1,
+        0
+      ],
+      "view": {
+        "tiltDeg": 22,
+        "azDeg": 0,
+        "distanceFactor": 3.2
+      },
+      "samples": 8,
+      "bestClearancePx": 131.9
+    },
+    {
+      "patch": "o:24383_66662:9",
+      "normal": [
+        0,
+        -1,
+        0
+      ],
+      "view": {
+        "tiltDeg": 35,
+        "azDeg": 45,
+        "distanceFactor": 4
+      },
+      "samples": 8,
+      "bestClearancePx": 131.2
+    },
+    {
+      "patch": "o:24383_66662:9",
+      "normal": [
+        0,
+        -1,
+        0
+      ],
+      "view": {
+        "tiltDeg": 8,
+        "azDeg": 90,
+        "distanceFactor": 2.6
+      },
+      "samples": 8,
+      "bestClearancePx": 127.3
+    },
+    {
+      "patch": "o:24383_66672:17",
+      "normal": [
+        -7.427932047221475e-8,
+        0.9999999999999956,
+        -5.816135129066424e-8
+      ],
+      "view": {
+        "tiltDeg": 22,
+        "azDeg": 90,
+        "distanceFactor": 3.2
+      },
+      "samples": 8,
+      "bestClearancePx": 131.8
+    },
+    {
+      "patch": "o:24383_66672:17",
+      "normal": [
+        -7.427932047221475e-8,
+        0.9999999999999956,
+        -5.816135129066424e-8
+      ],
+      "view": {
+        "tiltDeg": 22,
+        "azDeg": 270,
+        "distanceFactor": 3.2
+      },
+      "samples": 8,
+      "bestClearancePx": 131.8
+    },
+    {
+      "patch": "o:24383_66672:17",
+      "normal": [
+        -7.427932047221475e-8,
+        0.9999999999999956,
+        -5.816135129066424e-8
+      ],
+      "view": {
+        "tiltDeg": 22,
+        "azDeg": 0,
+        "distanceFactor": 3.2
+      },
+      "samples": 8,
+      "bestClearancePx": 127.1
+    },
+    {
+      "patch": "o:24383_66672:17",
+      "normal": [
+        -7.427932047221475e-8,
+        0.9999999999999956,
+        -5.816135129066424e-8
+      ],
+      "view": {
+        "tiltDeg": 35,
+        "azDeg": 45,
+        "distanceFactor": 4
+      },
+      "samples": 8,
+      "bestClearancePx": 128.3
+    },
+    {
+      "patch": "o:24383_66672:17",
+      "normal": [
+        -7.427932047221475e-8,
+        0.9999999999999956,
+        -5.816135129066424e-8
+      ],
+      "view": {
+        "tiltDeg": 8,
+        "azDeg": 90,
+        "distanceFactor": 2.6
+      },
+      "samples": 8,
+      "bestClearancePx": 130.7
+    }
+  ],
+  "pageErrors": []
+}

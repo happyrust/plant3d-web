@@ -1,0 +1,416 @@
+{
+  "capturedAt": "2026-09-15T15:58:37.730Z",
+  "scenario": "斜管段管身轴线（TUBING）× 法向 ∓U 的水平面（Graphics 面）→ 30°",
+  "url": "/?model_source=gen-model-v1&gm_backend_port=8022&show_refno=24383_66662",
+  "frame": {
+    "note": "位置 / 方向均为设计 World（米，X=E Y=N Z=U）；记录里的臂 / 角度自 87b8970 起吸过网格噪声",
+    "sceneOriginInDesign": [
+      18.132119140625,
+      1.4021731872558594,
+      17.720509765625
+    ]
+  },
+  "tubeView": {
+    "el": 0.35,
+    "az": 250,
+    "factor": 1.2
+  },
+  "facetView": {
+    "tiltDeg": 35,
+    "azDeg": 45,
+    "distanceFactor": 4
+  },
+  "tube": {
+    "objectId": "o:24383_66662:5",
+    "meshAxis": {
+      "start": [
+        17.89966015625,
+        0.23283827209472663,
+        17.82036328125
+      ],
+      "end": [
+        17.89966015625,
+        -0.23590888977050786,
+        18.090999145507812
+      ],
+      "lengthM": 0.5412648822704881,
+      "radiusM": 0.05699999948275105
+    },
+    "designLine": {
+      "from": {
+        "refno": "24383_66672",
+        "noun": "ELBO",
+        "number": 1,
+        "position": [
+          17.89966,
+          0.23283827724953068,
+          17.820364138624765
+        ],
+        "direction": [
+          -5.302876193624534e-17,
+          -0.8660254037844386,
+          0.5000000000000001
+        ]
+      },
+      "to": {
+        "refno": "24383_66671",
+        "noun": "FLAN",
+        "number": 2,
+        "position": [
+          17.89966,
+          -0.23590886423162577,
+          18.091
+        ],
+        "direction": [
+          5.302876193624534e-17,
+          0.8660254037844386,
+          -0.5000000000000001
+        ]
+      },
+      "direction": [
+        0,
+        -0.8660217453070228,
+        0.5000063366152252
+      ]
+    },
+    "pickedAt": [
+      17.89966015625,
+      -0.001534483141592546,
+      17.95568140461263
+    ],
+    "screen": [
+      640.0000087860651,
+      301.0004414240981
+    ],
+    "label": "轴线（ELBO P-Point #1 → FLAN P-Point #2）"
+  },
+  "facet": {
+    "objectId": "o:24383_66676:21",
+    "aimedAt": {
+      "objectId": "o:24383_66676:21",
+      "triangles": 22,
+      "areaM2": 0.008398160408284212,
+      "extentM": 0.052000002144631144,
+      "centroid": [
+        17.89966015625,
+        1.60025,
+        17.944199996948242
+      ],
+      "normal": [
+        0,
+        0,
+        1
+      ]
+    },
+    "at": [
+      17.922427734988048,
+      1.558167507501253,
+      18.006
+    ],
+    "normal": [
+      0,
+      0,
+      1
+    ],
+    "screen": [
+      573.7364501953208,
+      311.26602172852347
+    ],
+    "label": "面",
+    "clearancePx": 106.64889277974513
+  },
+  "rows": {
+    "angle": "30 Degrees",
+    "dms": "30° 0' 1''",
+    "direction1": "N 30.00 D",
+    "direction2": "N"
+  },
+  "info": "线 × 面 · TUBI 轴线（ELBO P-Point #1 → FLAN P-Point #2） × VALV 面（面） · 弧心 = 线与面的交点",
+  "record": {
+    "count": 1,
+    "corner": [
+      17.89966015625,
+      -0.08868749696198452,
+      18.006
+    ],
+    "origin": [
+      17.89966015625,
+      0.34432352814014505,
+      17.755997095736863
+    ],
+    "target": [
+      17.89966015625,
+      0.4113125030380155,
+      18.006
+    ],
+    "lineAngle": {
+      "kind": "line-plane",
+      "angleDeg": 30.00038,
+      "direction1": [
+        0,
+        0.8660220502042592,
+        -0.5000058085262723
+      ],
+      "direction2": [
+        0,
+        1,
+        0
+      ],
+      "skew": false,
+      "inPlane": false,
+      "firstLabel": "TUBI 轴线（ELBO P-Point #1 → FLAN P-Point #2）",
+      "secondLabel": "VALV 面（面）"
+    },
+    "approximate": true
+  },
+  "expected": {
+    "angleDeg": 30.00041922797424,
+    "root": [
+      17.89966,
+      -0.08868703330562114,
+      18.006
+    ],
+    "direction2": [
+      0,
+      -1,
+      0
+    ]
+  },
+  "design": {
+    "facePoint": {
+      "refno": "24383_66676",
+      "noun": "VALV",
+      "number": 100,
+      "position": [
+        17.90066,
+        1.59875,
+        17.86
+      ],
+      "direction": [
+        0,
+        0,
+        1
+      ]
+    },
+    "expectationDeg": 30.00041922797424
+  },
+  "independent": {
+    "cornerOffLine": 2.7957061797257363e-7,
+    "cornerOffPlane": 0,
+    "cornerVsIndependent": 4.892762876794997e-7,
+    "radiusM": 0.5000000000000007
+  },
+  "surveyed": [
+    {
+      "patch": "o:24383_66674:19",
+      "normal": [
+        0,
+        0,
+        -1
+      ],
+      "view": {
+        "tiltDeg": 22,
+        "azDeg": 90,
+        "distanceFactor": 3.2
+      },
+      "samples": 8,
+      "bestClearancePx": 11.3
+    },
+    {
+      "patch": "o:24383_66674:19",
+      "normal": [
+        0,
+        0,
+        -1
+      ],
+      "view": {
+        "tiltDeg": 22,
+        "azDeg": 270,
+        "distanceFactor": 3.2
+      },
+      "samples": 8,
+      "bestClearancePx": 11.3
+    },
+    {
+      "patch": "o:24383_66674:19",
+      "normal": [
+        0,
+        0,
+        -1
+      ],
+      "view": {
+        "tiltDeg": 22,
+        "azDeg": 0,
+        "distanceFactor": 3.2
+      },
+      "samples": 8,
+      "bestClearancePx": 11.3
+    },
+    {
+      "patch": "o:24383_66674:19",
+      "normal": [
+        0,
+        0,
+        -1
+      ],
+      "view": {
+        "tiltDeg": 35,
+        "azDeg": 45,
+        "distanceFactor": 4
+      },
+      "samples": 8,
+      "bestClearancePx": 11.2
+    },
+    {
+      "patch": "o:24383_66674:19",
+      "normal": [
+        0,
+        0,
+        -1
+      ],
+      "view": {
+        "tiltDeg": 8,
+        "azDeg": 90,
+        "distanceFactor": 2.6
+      },
+      "samples": 8,
+      "bestClearancePx": 10.9
+    },
+    {
+      "patch": "o:24383_66676:21",
+      "normal": [
+        0,
+        0,
+        -1
+      ],
+      "view": {
+        "tiltDeg": 22,
+        "azDeg": 90,
+        "distanceFactor": 3.2
+      },
+      "samples": 8,
+      "bestClearancePx": 117
+    },
+    {
+      "patch": "o:24383_66676:21",
+      "normal": [
+        0,
+        0,
+        -1
+      ],
+      "view": {
+        "tiltDeg": 22,
+        "azDeg": 270,
+        "distanceFactor": 3.2
+      },
+      "samples": 8,
+      "bestClearancePx": 117
+    },
+    {
+      "patch": "o:24383_66676:21",
+      "normal": [
+        0,
+        0,
+        -1
+      ],
+      "view": {
+        "tiltDeg": 22,
+        "azDeg": 0,
+        "distanceFactor": 3.2
+      },
+      "samples": 8,
+      "bestClearancePx": 119.1
+    },
+    {
+      "patch": "o:24383_66676:21",
+      "normal": [
+        0,
+        0,
+        -1
+      ],
+      "view": {
+        "tiltDeg": 35,
+        "azDeg": 45,
+        "distanceFactor": 4
+      },
+      "samples": 8,
+      "bestClearancePx": 115.6
+    },
+    {
+      "patch": "o:24383_66676:21",
+      "normal": [
+        0,
+        0,
+        -1
+      ],
+      "view": {
+        "tiltDeg": 8,
+        "azDeg": 90,
+        "distanceFactor": 2.6
+      },
+      "samples": 8,
+      "bestClearancePx": 116.1
+    },
+    {
+      "patch": "o:24383_66676:21",
+      "normal": [
+        0,
+        0,
+        1
+      ],
+      "view": {
+        "tiltDeg": 22,
+        "azDeg": 90,
+        "distanceFactor": 3.2
+      },
+      "samples": 8,
+      "bestClearancePx": 117
+    },
+    {
+      "patch": "o:24383_66676:21",
+      "normal": [
+        0,
+        0,
+        1
+      ],
+      "view": {
+        "tiltDeg": 22,
+        "azDeg": 270,
+        "distanceFactor": 3.2
+      },
+      "samples": 8,
+      "bestClearancePx": 117
+    },
+    {
+      "patch": "o:24383_66676:21",
+      "normal": [
+        0,
+        0,
+        1
+      ],
+      "view": {
+        "tiltDeg": 22,
+        "azDeg": 0,
+        "distanceFactor": 3.2
+      },
+      "samples": 8,
+      "bestClearancePx": 119.1
+    },
+    {
+      "patch": "o:24383_66676:21",
+      "normal": [
+        0,
+        0,
+        1
+      ],
+      "view": {
+        "tiltDeg": 35,
+        "azDeg": 45,
+        "distanceFactor": 4
+      },
+      "samples": 8,
+      "bestClearancePx": 118.5
+    }
+  ],
+  "pageErrors": []
+}
