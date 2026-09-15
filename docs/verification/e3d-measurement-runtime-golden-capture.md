@@ -1278,8 +1278,8 @@ spec 先把相机拉到模型跟前；临时 spec 已删）：
 | 异面 | PANE `24381/177305` 顶面长边（`N 5° W`，U 23326.2）× SCTN `24381/177302` 边（`E 5° N`，U 23294.2，差一个板厚 32 mm） | `90 Degrees · 89° 59' 58'' · S 5.00 E · E 5.00 N` | `angleDeg 89.99956 · skew` · 弧心 `E 1925.7 N 14704.5 U 23326.2` · 半径 500 mm | 弧心在第一条线上（Δ 4e-16 m）；弧心 → 第二条线的垂线同时垂直于两条线、长 32.0 mm = 两线距离；臂 ∥ 各自的边（cos 与 1 差 < 1e-6）、朝拾中侧；DMS 按十进制度截断；Direction 串 = `formatCompassDirection(臂, 2 位)` | `web-line-angle-live-01-skew-two-edges.png` / `web-line-angle-live-01-skew-result-card.png` |
 | 相交 | 同一 PANE 顶面长边 × 短边（共顶点） | `90 Degrees · 90° 0' 0'' · S 5.00 E · E 5.00 N` | `angleDeg 90.00000000000006 · skew false` · 弧心 = 共顶点 `E 1925.7 N 14704.5 U 23326.2` · 半径 504.8 mm | 弧心到两条线 Δ 5.6e-16 / 4.1e-16 m；半径 = 较短那条（1009.66 mm 短边）的一半（892–903） | `web-line-angle-live-03-crossing-two-edges.png` / `web-line-angle-live-03-crossing-result-card.png` |
 | 线 ⟂ 面 | SCTN `24381/177301` 竖直边（`U`）× PANE 顶面（法向 `U`） | `90 Degrees · 90° 0' 0'' · D · E` | `line-plane · angleDeg 90 · inPlane false` · 弧心 `E 2894.8 N 14670.8 U 23326.2` · Direction2 = `E`（840–843：投影退化，面内方向取世界 X）· 半径 500 mm | 弧心既在边上又在面上（Δ 0）；第一条臂朝拾中侧（拾中点在面下 → `D`）；`90° − ∠(边, 法向)` = 90 | `web-line-angle-live-05-pierces-edge-facet.png` / `web-line-angle-live-05-pierces-result-card.png` |
-| 斜交 · 平面内（10:28 补采） | LOOP3 SCTN `24381/177330` 下翼缘的水平棱（`N 29.54 E`，U 2958.0）× 邻梁 SCTN `24381/177331`（两梁 NA 成 64.54°）的竖直侧面（法向 `E 35.00 N`） | `64.54 Degrees · 64° 32' 24'' · S 29.54 W · S 35.00 E` | `line-plane · angleDeg 64.540028 · inPlane false` · 弧心 `E −2805.4 N −10333.3 U 2958.0`（棱穿过侧面处）· 半径 500 mm（投影线太短，892–903 抬到下限） | 角 = 90° − ∠(棱, 法向) = 64.540028（网格）；设计侧两梁 NA 的锐角 64.540031（`element/plines`，差 3e-6° 是 float32 网格）；弧心在棱上 Δ 2e-16 m、在面上 Δ 6e-16 m、= 独立算的线 ∩ 面 Δ 4e-16 m；第二条臂在面内、= 棱在面上的投影、朝拾中点的投影 | `web-line-angle-live-06-oblique-edge-facet.png` / `web-line-angle-live-06-oblique-result-card.png` |
-| 斜交 · 空间（10:32 补采） | 仪表支架 `/Copy-(2)-of-1RCS024CQ`（`show_refno=24381_102273`）里 `ORI 180 70 180` 倾斜的 BOX `24381/102287`（280 × 100 × 150）沿它 Z 轴的棱（`W 35.00 N 20.00 U`，仰 20°）× 水平 BOX `24381/102274` 的竖直侧面（法向 = 它的 X 轴 `E 35.00 S`） | `70 Degrees · 69° 59' 59'' · W 35.00 N 20.00 U · N 35.00 E 90.00 U` | `line-plane · angleDeg 69.9999979 · inPlane false` · 弧心 `E 10368.3 N 13988.1 U 252.6` · Direction2 = 棱在竖直面上的投影 = 竖直向上 · 半径 500 mm | 角 = 90° − ∠(棱, 法向) = 69.9999979（网格）；设计侧：棱 ∥ 102287 放置矩阵的 Z、法向 ∥ 102274 的 X（`element/ptset` `world_transform`），90° − ∠(Z, X) = 70.000000（ORI 绕 Y 转 70°）；弧心在棱上 Δ 3e-16、在面上 Δ 2e-15、= 独立交点 Δ 3e-15 m | `web-line-angle-live-06b-oblique-tilted-edge-facet.png` / `web-line-angle-live-06b-oblique-tilted-result-card.png` |
+| 斜交 · 平面内（10:28 补采） | LOOP3 SCTN `24381/177330` 下翼缘的水平棱（`N 29.54 E`，U 2958.0）× 邻梁 SCTN `24381/177331`（两梁 NA 成 64.54°）的竖直侧面（法向 `E 35.00 N`） | `64.54 Degrees · 64° 32' 24'' · S 29.54 W · S 35.00 E` | `line-plane · angleDeg 64.54003`（网格 64.540028 按 1e-5° 吸整，`87b8970`）`· inPlane false` · 弧心 `E −2805.4 N −10333.3 U 2958.0`（棱穿过侧面处）· 半径 500 mm（投影线太短，892–903 抬到下限） | 角 = 90° − ∠(棱, 法向) = 64.540028（网格）；设计侧两梁 NA 的锐角 64.540031（`element/plines`，差 3e-6° 是 float32 网格）；弧心在棱上 Δ 2e-16 m、在面上 Δ 6e-16 m、= 独立算的线 ∩ 面 Δ 4e-16 m；第二条臂在面内、= 棱在面上的投影、朝拾中点的投影 | `web-line-angle-live-06-oblique-edge-facet.png` / `web-line-angle-live-06-oblique-result-card.png` |
+| 斜交 · 空间（10:32 补采） | 仪表支架 `/Copy-(2)-of-1RCS024CQ`（`show_refno=24381_102273`）里 `ORI 180 70 180` 倾斜的 BOX `24381/102287`（280 × 100 × 150）沿它 Z 轴的棱（`W 35.00 N 20.00 U`，仰 20°）× 水平 BOX `24381/102274` 的竖直侧面（法向 = 它的 X 轴 `E 35.00 S`） | `70 Degrees · 70° 0' 0'' · W 35.00 N 20.00 U · U`（`87b8970` 之前是 `69° 59' 59''` 与 `N 35.00 E 90.00 U`，见「补采」末条） | `line-plane · angleDeg 70`（网格 69.9999979 吸整）`· inPlane false` · 弧心 `E 10368.3 N 13988.1 U 252.6` · Direction2 = 棱在竖直面上的投影 = 精确竖直 `(0, 0, 1)` · 半径 500 mm | 角 = 90° − ∠(棱, 法向) = 69.9999979（网格）；设计侧：棱 ∥ 102287 放置矩阵的 Z、法向 ∥ 102274 的 X（`element/ptset` `world_transform`），90° − ∠(Z, X) = 70.000000（ORI 绕 Y 转 70°）；弧心在棱上 Δ 3e-16、在面上 Δ 2e-15、= 独立交点 Δ 3e-15 m | `web-line-angle-live-06b-oblique-tilted-edge-facet.png` / `web-line-angle-live-06b-oblique-tilted-result-card.png` |
 | 线在面内 | PANE 顶面长边 × 它自己的顶面 | `0 Degrees · 0° 0' 0'' · N 5.00 W · N 5.00 W` | `line-plane · angleDeg 0 · inPlane` · 两臂同向 · 半径 100 mm（`origin − corner` = 0.1 m） | 边 ⟂ 法向（d·n = 0）且拾中点在面上；弧心在边上 Δ 1.3e-16 m | `web-line-angle-live-07-in-plane-edge-facet.png` / `web-line-angle-live-07-in-plane-result-card.png` |
 | 拒收：平行 | 同一条 PANE 边点两次 | — | 不落记录；提示条 `两条线平行，画不出角度尺寸（E3D：An angular dimension could not be constructed from the data selected）；已回到第 1 步`；状态条回 `选择第一条线` | — | `web-line-angle-live-09-parallel-edges-rejected.png` |
 | 拒收：线 ∥ 面 | SCTN `177301` 水平边（U 23104.6）× PANE 顶面（U 23326.2，离面 221.7 mm） | — | 不落记录；`线与面平行且不在面内，画不出角度尺寸（E3D：…）；已回到第 1 步` | d·n = 0 且离面 > 0.1 mm → E3D 850–853 投影与基线平行 | `web-line-angle-live-10-edge-parallel-facet-rejected.png` |
@@ -1288,7 +1288,7 @@ spec 先把相机拉到模型跟前；临时 spec 已删）：
 - 页面错误 0；全部数值（含每组的独立期望、采样到的边 / 面、场景原点在设计帧的位置）见 `web-line-angle-live-records.json`。
 - 每组前先删掉上一条记录：两击都不算草稿，§28 那条「无草稿时尺寸悬停优先」对两击都生效，上一条弧 / 臂压在要拾的边上时下一次拾不到。
 
-**补采（2026-09-15 10:28 / 10:32）：斜交的线 × 面一般解**——上面表里「斜交 · 平面内」「斜交 · 空间」两行。
+**补采（2026-09-15 10:28 / 10:32，`87b8970` 后 10:5x 重跑）：斜交的线 × 面一般解**——上面表里「斜交 · 平面内」「斜交 · 空间」两行。
 
 - **找模型**：用 gen-model-v1 `tree/children` 扫了 12 个 SITE（1RB / 1RC / 1RS-CIVI、1PTU-INST23、`SITE`、1WCC / 1RCV / 1RX03-PIPEBJ、1CCV-HVACHB、1RX-ELECBJ、Steel_Template_Site、MDS-Standards-Supports），
   27 643 件有几何的元素里核了 16 311 件的放置矩阵：**262 根 SCTN / GENSEC 的 NA 全是水平 / 竖直——本库没有斜撑**；轴真正倾斜（与竖直夹 5°–85°）的只有 278 件：管件（ELBO / FLAN / TEE / BEND / VALV，
@@ -1301,9 +1301,12 @@ spec 先把相机拉到模型跟前；临时 spec 已删）：
   两组页面错误 0；全部数值见 `web-line-angle-live-06-oblique-records.json` / `web-line-angle-live-06b-oblique-tilted-records.json`。
 - **坑**：gen-model `:8024` 对这棵 STRU 的 14 个生成根缓存成了 `NoRenderableGeometry`（`cached_root_count 14 / generated_root_count 0 / publication_status empty`——05:33 那一轮还是好的），
   页面 `show_refno` 报「可见子实例为 0」一件都不画；`POST /api/v1/model/ensure` 带 `force: true` 重生成后恢复（19 实例、`publication_status ready`）。
-- **网格精度带来的两处显示差异（不是内核错，记残余）**：(1) 空间斜交组 Direction2 是棱在竖直面上的投影，几何上精确竖直，Web 显示 `N 35.00 E 90.00 U`——法向来自 float32 网格，投影出的水平分量 ~2e-9
-  超过 `formatCompassDirection` 的零容差 1e-10，`N 35.00 E` 是噪声；E3D 用精确几何投影会得纯 `U`。(2) 同一组 DMS `69° 59' 59''` 而 Decimal Angle `70 Degrees`：angleDeg 69.9999979 按 E3D 口径截断出 59' 59''，
-  E3D 精确几何会是 `70° 0' 0''`。可选修法（要单独拍板）：两线夹角出记录时把 |分量| < 1e-6 的方向分量吸成 0、角度按 1e-6° 吸整。(3) 弧半径下限 500 mm（E3D 892–903）在 280 mm 的盒体上比构件还大，截图前把相机拉远了一档。
+- **网格精度带来的两处显示差异（不是内核错）→ 已修（`87b8970`，用户 10:4x 拍板）**：(1) 空间斜交组 Direction2 是棱在竖直面上的投影，几何上精确竖直，第一次跑显示 `N 35.00 E 90.00 U`——法向来自 float32 网格，
+  投影出的水平分量 ~2e-9 超过 `formatCompassDirection` 的零容差 1e-10，`N 35.00 E` 是噪声；E3D 用精确几何投影会得纯 `U`。(2) 同一组 DMS `69° 59' 59''` 而 Decimal Angle `70 Degrees`：angleDeg 69.9999979 按 E3D 口径截断出 59' 59''，
+  E3D 精确几何会是 `70° 0' 0''`。**修法**（Web 取舍，`lineAngle.ts` 头注释 + `LINE_ANGLE_DIRECTION_SNAP` / `LINE_ANGLE_ANGLE_SNAP_DEG`）：`finishArc` 先把两条臂里 |分量| < 1e-6 的归零再归一，再在吸过的两臂之间量角并按 **1e-5°** 四舍五入——
+  角度、DMS、两条 Direction、臂端、弧面法向出自同一对吸过的臂。取 1e-5° 而不是提议里的 1e-6°：实测噪声 2.1e-6° 吸不进 1e-6° 网格（69.9999979 → 69.999998 仍是 59''），1e-5° = 0.036''，低于 DMS 分辩率、约 5× 于噪声；
+  1e-6 在单位向量上约 6e-5°，远低于 0.01° 平行容差、约 25× 于分量噪声（~4e-8）。单测 `lineAngle.test.ts` +4（实机那两个值回灌：69.9999979 → 70、64.5400279 → 64.54003；70° 组回灌内核出 `U` 与 `70° 0' 0''`；精确输入不变）。
+  重跑两组：空间组 `70 Degrees · 70° 0' 0'' · W 35.00 N 20.00 U · U`、`angleDeg 70`、`direction2 (0, 0, 1)`；平面内组 `angleDeg 64.54003`（结果表四格不变）。(3) 弧半径下限 500 mm（E3D 892–903）在 280 mm 的盒体上比构件还大，截图前把相机拉远了一档。
 
 **单测**：`lineAngle.test.ts` 17 条（共面交点 / 拾中侧决定臂向 / 斜交 60° 与补角 120° / 异面弧心与 gap / 平行拒收 / 0.01° 平行容差两侧 / 弧心在段外的半径 / 500 mm 下限 / 拾中点在弧心 /
 臂端回灌三点内核同角；线 + 面一般解 / 投影臂朝拾中侧 / 线在面内 0° 弧 / 垂直 90° 与面内方向 / 平行于面拒收 / 未归一法向；退化输入），`xeokitMeasurementFormat.test.ts` 3 条（四行来自记录、0° 弧、摘要 / 复制值），
@@ -1313,7 +1316,7 @@ spec 先把相机拉到模型跟前；临时 spec 已删）：
 **已知偏离 / 残余**：
 - E3D 运行时 golden（G6-04：`measureLineAngle` 注入的 ARC 与四行）未采，E3D 不在跑；上面全是 `static_expectation` + Web 实机。
 - ~~斜交（既非 0° 也非 90°）的线 × 面一般解只有单测——本库这组构件的网格全是正交棱；斜边要等有斜撑 / 管件的模型。~~ 10:28 / 10:32 补采两组（见上「补采」）：本库没有斜撑，
-  用 LOOP3 平面内 64.54° 的短梁与仪表支架里 ORI 倾斜 70° 的盒体走通；管件没走（斜管段是圆柱网格、附近无直棱当第一条线）。新残余：float32 网格让精确竖直的 Direction2 显示成 `N 35.00 E 90.00 U`、DMS 少 1''（见「补采」）。
+  用 LOOP3 平面内 64.54° 的短梁与仪表支架里 ORI 倾斜 70° 的盒体走通；管件没走（斜管段是圆柱网格、附近无直棱当第一条线）。补采撞出的 float32 网格噪声（精确竖直的 Direction2 显示成 `N 35.00 E 90.00 U`、DMS 少 1''）已在 `87b8970` 吸掉（见「补采」末条）。
 - 第二击的 `FACET` 在 Web 是 Graphics 面（三角形面片的平面）；E3D 的 `getPlane()` 对 P-Point / DPOINT 也给面（§29），Web 这里同样走 `intersectOperandFromHit`，但只实机验过 Graphics 面。
 - 两击都不进草稿，所以 Esc 第一层只放弃第一条线（E3D 整包退）——与 Intersect 子拾取同一层，方案 §2 #20 的分层口径不变。
 
