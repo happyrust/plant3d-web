@@ -970,6 +970,33 @@ P0 已提交：`af4b382`（15 文件；`useToolStore.ts` 只取云线 hunk）。
 
 ---
 
+## 23. 浮层三兄弟的快拖复核：图钉 / 文字框 / 三维标签都没晚一帧（2026-09-15）
+
+接 §22 的边界往下查。**结论：一行代码都不用改，三样都已经跟着本帧相机走**；顺带纠正 §21 边界里的一句话。
+
+- **图钉（`.dtx-anno-marker`）与文字框（`.dtx-anno-label`）根本不在「渲染之后」那条路上**——它们的定位就写在
+  `useDtxTools.updateOverlayPositions()` 尾部（markers / labels 两个循环），而 §21 把这个函数整体提到了渲染之前。
+  §21 边界那句「文字框 DOM 图钉…走的是渲染之后那条路」是笔误。
+- **三维标注标签（CSS2D）确实仍排在 `renderer.render` 之后调，但这对 DOM 浮层不构成晚一帧**：
+  `annotationSystem.renderLabels` 只写 DOM transform，浏览器把 DOM 与 canvas **在同一帧一起合成**；
+  而它读的 `camera.matrixWorldInverse` 就是本帧那一个（同一次 rAF 回调内，`controls.update()` 之后没人再动相机）。
+  「排在渲染之后」只对**要被 WebGL 画出去的几何**才致命（§21 那条），对 DOM 不是。
+- 剩下真正没覆盖到的是 `ptsetVis.updateLabelPositions()`（点集标签，同样是 DOM、同样在渲染之后）：
+  它要后端点集数据，primitives demo 里造不出来，本轮没测。机制与 CSS2D 标签同类。
+
+**新增** `e2e/dtx-overlay-labels-fast-orbit.spec.ts`（`.gitignore` e2e 白名单加一行）；快拖输入抽到
+`e2e/helpers/dtxFastOrbit.ts`（orbit 横扫 / 甩动 / 右键平移 / 轻推），§22 那条同步改成引用。
+
+- **尺子**：帧末（`queueMicrotask`）读三个浮层元素写在 DOM 上的坐标，与「用本帧相机投影它自己的世界锚点」
+  算出来的期望值比（与 `worldToOverlay` 同一套算法；CSS2D 那个解析 `translate(Xpx,Ypx)`）。
+- **判据自带标尺**：同一帧再用**上一帧的相机**算一次。那就是「假如它晚一帧」的后果，不必把代码改坏再跑一遍。
+- **实测**（209~217 个运动帧，含 63~68 个平移帧）：三样的本帧误差 **中位与最大都是 0.00px**；
+  同一批帧换上一帧相机算是 **11~13px**。headless 与 `--headed` 都绿，`--repeat-each 2` 8/8。
+- **为什么非得掺平移**：orbit 绕着 target 转，靶心附近的锚点在屏幕上几乎不动（实测「晚一帧」也才差 5.8px），
+  判据分不出来；右键 pan 让整幅画面一起走，一帧十几像素，差距才拉得开。
+
+---
+
 ## 附录 A：咨询材料索引
 
 | 文件 | 内容 |
