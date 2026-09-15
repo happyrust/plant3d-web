@@ -920,6 +920,25 @@ P0 已提交：`af4b382`（15 文件；`useToolStore.ts` 只取云线 hunk）。
 
 ---
 
+## 21. 修复：相机运动中云线轮廓整段消失（2026-09-15）
+
+用户口径「为什么云线批注，在 camera 操作时，它会消失，然后操作停下才出现，我希望它一直都在」。
+
+**根因**：`ViewerPanel.renderFrame` / `renderFrameImmediate` 里，`tools.updateOverlayPositions()` 排在 `renderer.render()` **之后**。云线轮廓是 `liftScreenPolylineToBillboard` 贴在 `frameNdcZ = 0`（离相机约一个单位）的 billboard 折线，先渲染再重建 = 本帧画的那份几何是按**上一帧**相机摆的；orbit 一帧就能把相机挪半个单位，而 billboard 面只在相机前一个单位——差一帧就偏出二十几度，整段扫出画面。手一停，下一帧的几何才与相机对上，于是「一动就没、一停就回来」。不是 LOD 降档、也不是 inspection 淡化：全程 `lod: cloud`、`overBudget: false`、`mode: always-on-top`、`outlineOpacity: 0.96` 都没变过。
+
+**改法**（`ViewerPanel.vue`，两个渲染函数同样处理）：把 `toolsRef.value?.updateOverlayPositions()` 提到渲染**之前**，并在它之前补一次 `dtxViewer.camera.updateMatrixWorld()`——`controls.update()` 只改 `position / quaternion`，`matrixWorld` 要到 three 的 `render()` 内部才结算；不先算这一次，`updateOverlayPositions` 的 `frameStamp.cameraWorld`（拿 `camera.matrixWorld.elements` 做脏标记）读到的还是上一帧矩阵，几何照样不重建。`ptsetVisRef.updateLabelPositions()` 与 `annotationSystem.renderLabels()` 位置未动，仍在渲染之后；`isModelUnitSplitCompareReady()` 一帧只算一次。
+
+**验证**（新增 `e2e/dtx-cloud-outline-camera-motion.spec.ts`，`.gitignore` e2e 白名单加一行）：
+
+- **像素法测不出这条回归**——Playwright 的 `page.screenshot` 会等页面稳定，截到的永远是「相机停下后又渲染了一帧」的样子，改前改后都看得见轮廓（实测两边都绿）。所以改成在页面里挂帧级探针：包 `renderer.render`（进去前先 `camera.updateMatrixWorld()`，再把轮廓当前几何投到本帧相机、记 NDC 包围盒）＋ 包 `tools.updateOverlayPositions`（记几何是按哪个相机位置重建的）。
+- 断言只看 orbit 期间相机真动了的那些帧：① 轮廓 NDC 包围盒必须与 [-1,1]³ 有交集（症状），② 渲染用的相机 == 几何重建时的相机（机制）；另有「至少 5 帧在动」兜住用例空转，静止与松手后各数一次云线红像素兜住「轮廓真画出来了」。
+- 改前跑：**85 个运动帧里 48 帧轮廓整段画在画面外**（例：NDC x ∈ [-1.66, -1.48]、y ∈ [0.94, 1.14]），且 85/85 帧几何是按别的相机摆的；改后 0 / 0，`--repeat-each 3` 3/3 绿（每例约 10 s）。
+- `npx vitest run useDtxTools.cloudRegion + cloudCreation` 21/21；`npx eslint` 0 错；`npm run type-check` 0 新增（唯一基线外仍是未触碰的 `resolveLabelCollisions.test.ts`）。
+
+**边界**：用例跑在 `dtx_demo=primitives`（不依赖后端）、单条云线、6 px/帧的慢速 orbit——真机快速拖动只会更糟，方向一致。文字框 DOM 图钉与三维标注标签走的是渲染之后那条路，本次没动；若它们也有一帧延迟，要另开用例，不在这条修复里。
+
+---
+
 ## 附录 A：咨询材料索引
 
 | 文件 | 内容 |

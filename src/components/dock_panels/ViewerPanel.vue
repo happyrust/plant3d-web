@@ -3697,6 +3697,13 @@ function renderFrameImmediate() {
   const annotationSystem = annotationSystemRef.value;
   annotationSystem?.update(dtxViewer.camera);
 
+  // 与 renderFrame 同序：工具层几何先按本帧相机 / 新尺寸重建，再渲染，标签与线条首帧就不错位
+  const splitCompareReady = isModelUnitSplitCompareReady();
+  if (!splitCompareReady) {
+    dtxViewer.camera.updateMatrixWorld();
+    toolsRef.value?.updateOverlayPositions();
+  }
+
   const selection = selectionControllerRef.value;
   if (renderModelUnitCompareScene(dtxViewer)) {
     // 分屏共享同一场景和相机；版本层显隐由两个 viewport 的 render pass 控制。
@@ -3714,9 +3721,7 @@ function renderFrameImmediate() {
     // ignore
   }
 
-  // resize 同步渲染：补一次 overlay/labels 更新，避免标签与线条在首帧错位
-  if (!isModelUnitSplitCompareReady()) {
-    toolsRef.value?.updateOverlayPositions();
+  if (!splitCompareReady) {
     ptsetVisRef.value?.updateLabelPositions();
     annotationSystem?.renderLabels(dtxViewer.scene, dtxViewer.camera);
   }
@@ -3789,6 +3794,16 @@ function renderFrame() {
     const annotationSystem = annotationSystemRef.value;
     annotationSystem?.update(dtxViewer.camera);
 
+    const splitCompareReady = isModelUnitSplitCompareReady();
+    if (!splitCompareReady) {
+      // 工具层几何（云线轮廓 / 引线 / 盒边）要在本帧渲染**之前**按本帧相机重建：
+      // 云线轮廓是贴在 ndcZ = 0（离相机约一个 near 距离）的 billboard 折线，若先渲染再更新，
+      // 相机运动中每一帧画的都是上一帧相机前面那一小片，早已落到本帧近平面之外——轮廓在拖动期间整段消失、
+      // 停下才出现。controls.update() 只改 position / quaternion，先把 matrixWorld / matrixWorldInverse 算出来再投影。
+      dtxViewer.camera.updateMatrixWorld();
+      toolsRef.value?.updateOverlayPositions();
+    }
+
     const selection = selectionControllerRef.value;
     if (renderModelUnitCompareScene(dtxViewer)) {
       // 分屏共享同一场景和相机；版本层显隐由两个 viewport 的 render pass 控制。
@@ -3807,8 +3822,7 @@ function renderFrame() {
       // ignore
     }
 
-    if (!isModelUnitSplitCompareReady()) {
-      toolsRef.value?.updateOverlayPositions();
+    if (!splitCompareReady) {
       ptsetVisRef.value?.updateLabelPositions();
 
       // 三维标注系统更新

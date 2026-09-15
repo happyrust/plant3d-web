@@ -73,6 +73,7 @@ e2e/*
 !e2e/dimension-canvas-smoke.spec.ts
 !e2e/dimension-perf.spec.ts
 !e2e/review-u0-task-isolation.spec.ts
+!e2e/dtx-cloud-outline-camera-motion.spec.ts
 scripts/*
 !scripts/p0-live-smoke.mjs
 !scripts/run-dimension-browser-perf.mjs
