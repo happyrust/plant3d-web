@@ -1440,18 +1440,20 @@ export function useXeokitMeasurementTools(options: {
   }
 
   /**
-   * 给同一元素的表面点 / Item 原点候选挂上 `elementLine`。Element 过滤器 × Intersect 下表面点本不放行，
-   * 但 E3D 在元素类拾取模式下拾中元素任意处都回 ELEMENT 再 `line()`，所以这时把表面点当元素拾取（特征类 `element`）。
+   * 给同一元素的表面点 / Item 原点候选挂上 `elementLine`。Any / Element 过滤器 × Intersect 下表面点本不放行
+   * （表面点只在 Cursor 类型放行，2026-09-16 起 Any 与 Element 同一口径），但 E3D 在元素类拾取模式下拾中元素任意处
+   * 都回 ELEMENT 再 `line()`，所以这时把表面点当元素拾取（特征类 `element`）——元素没有 `line()`（ELBO 只有 `arc()`）
+   * 也照样当元素拾中，交给求交会话按 E3D「Unable to convert item into a line or plane」拒收且不消耗这一击。
    */
   function attachElementLine(candidates: MeasurementPickCandidate[], refno: string | null): MeasurementPickCandidate[] {
     if (candidates.length === 0) return candidates;
-    const elementLine = elementLineForRefno(refno, candidates[0]!.objectId);
-    if (!elementLine) return candidates;
     const layer = measurementStyle.state.measurementPickLayer;
-    const asElementPick = layer.pickType === 'intersect' && layer.filter === 'element';
+    const asElementPick = layer.pickType === 'intersect' && (layer.filter === 'element' || layer.filter === 'any');
+    const elementLine = elementLineForRefno(refno, candidates[0]!.objectId);
+    if (!elementLine && !asElementPick) return candidates;
     return candidates.map((candidate) => ({
       ...candidate,
-      elementLine,
+      ...(elementLine ? { elementLine } : {}),
       ...(asElementPick && candidate.source === 'mesh_pick_point' ? { feature: 'element' as const } : {}),
     }));
   }
@@ -2943,13 +2945,16 @@ export function useXeokitMeasurementTools(options: {
         },
       ]),
     ) as MeasurementPickSourceSettings;
+    // 尺寸 SnapPort 是 source-neutral 的候选列表，不做拾取类型派生：过滤器照测量拾取层，表面点按 Cursor 口径放行
+    // （Any / Element 在 Snap / Mid-Point 等类型下不放行表面点，那是测量取点的事，不该把尺寸标注的表面候选一起收掉）。
+    const gate = pickLayerGate();
     const resolution = resolveMeasurementPickCandidates({
       cursor: screen,
       camera,
       rect: { width: rect.width, height: rect.height },
       settings,
       candidates,
-      pickLayer: pickLayerGate(),
+      pickLayer: { filter: gate.filter, pickType: 'exact' },
     });
     return resolution.visibleCandidates.map(candidate =>
       toDimensionViewerSnapCandidate(candidate, candidate.pixelDistance));

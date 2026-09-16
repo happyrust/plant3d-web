@@ -48,7 +48,7 @@ export const MEASUREMENT_PICK_FILTER_LABELS: Readonly<Record<MeasurementPickFilt
 
 /** What each filter admits in E3D, for tooltips. */
 export const MEASUREMENT_PICK_FILTER_HINTS: Readonly<Record<MeasurementPickFilterId, string>> = {
-  any: '任意可拾取对象（E3D Any）',
+  any: '任意可拾取对象：Item 原点 / 基本体与 PLINE 关键点 / P-Point / 设计点 / 直管轴线；Cursor 类型下为元素表面点（E3D Any）',
   element: '元素显著点：Item 原点 / 基本体关键点；Cursor 类型下为元素表面点（E3D Element）',
   aid: '本会话画的设计辅助线 / 面：线上任意处可拾（Snap 取近端、Mid-Point 等沿线派生），面取射线与面的交点；Perpendicular to / Intersect 以它们为无限线 / 面（E3D Aid）',
   pline: '型材 PLINE（E3D Pline）',
@@ -370,10 +370,14 @@ export type MeasurementPickFeature =
  * - `Any` is E3D `EDGPICK.stdAny` — "Standard pick interpreter for **Element,
  *   Ppoint or Pline**" (`inMode = 'pany'`). It does **not** pick detail graphics
  *   (facet edges / facets need `stdGraphics`, `inMode = 'pickdetail'`), aids
- *   (`stdAid`) or external geometry (`stdExternal`). The Web surface point is
- *   admitted under `Any` as well: it is the Web stand-in for E3D's element pick
- *   when no significant point is near (free-surface mode) and for `Element` +
- *   `Cursor` (`edgTypes.attribute(noun).exact()`, the exact point on the element).
+ *   (`stdAid`) or external geometry (`stdExternal`). A pick on a bare surface
+ *   returns the **element** (TUBING / ELEMENT), never a surface position; the one
+ *   pick type whose result *is* the point under the cursor is `Cursor`
+ *   (`edgTypes.attribute(noun).exact()`). So the Web surface point is admitted under
+ *   `Any` only with `Cursor`, exactly like `Element`. (Until 2026-09-16 `Any` admitted
+ *   it under every pick type as the free-surface stand-in; at 0 px / priority 40 it
+ *   then out-ranked the tube axis, whose `rayHit` candidate only sits at the 18 px
+ *   aperture edge — golden MD §35 补采. Free-surface picking is `Cursor` or `Screen`.)
  * - `Element` + `Cursor` admits the surface point for the same reason, and only there.
  * - `TUBING` is what the element pick modes (`pany` / `pick`, `EDGPICKDATA.viewData`
  *   `data[1]`) return when the cursor is on an implied tube, so the tube axis is
@@ -389,7 +393,8 @@ export function measurementPickFilterAdmits(
 ): boolean {
   switch (filter) {
     case 'any':
-      return feature === 'element' || feature === 'ppoint' || feature === 'dpoint' || feature === 'pline' || feature === 'tubing' || feature === 'surface';
+      return feature === 'element' || feature === 'ppoint' || feature === 'dpoint' || feature === 'pline' || feature === 'tubing'
+        || (feature === 'surface' && pickType === 'exact');
     case 'element':
       return feature === 'element' || feature === 'tubing' || (feature === 'surface' && pickType === 'exact');
     case 'ppoint':

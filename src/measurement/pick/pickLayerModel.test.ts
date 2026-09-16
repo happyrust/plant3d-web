@@ -23,10 +23,24 @@ function admitted(filter: (typeof MEASUREMENT_PICK_FILTER_IDS)[number], pickType
 }
 
 describe('measurementPickFilterAdmits · E3D EDGPICK filters', () => {
-  it('Any = E3D stdAny "Element, Ppoint or Pline" (+ design points with the P-points, + Web surface point, + TUBING from the element pick); never detail graphics / aids / external', () => {
-    expect(admitted('any', 'snap')).toEqual(['ppoint', 'dpoint', 'pline', 'element', 'tubing', 'surface']);
+  it('Any = E3D stdAny "Element, Ppoint or Pline" (+ design points with the P-points, + TUBING from the element pick); the Web surface point only with Cursor; never detail graphics / aids / external', () => {
+    expect(admitted('any', 'snap')).toEqual(['ppoint', 'dpoint', 'pline', 'element', 'tubing']);
     expect(admitted('any', 'exact')).toEqual(['ppoint', 'dpoint', 'pline', 'element', 'tubing', 'surface']);
-    expect(admitted('any', 'midpoint')).toEqual(['ppoint', 'dpoint', 'pline', 'element', 'tubing', 'surface']);
+    expect(admitted('any', 'midpoint')).toEqual(['ppoint', 'dpoint', 'pline', 'element', 'tubing']);
+  });
+
+  it('Any × 非 Cursor 不放行表面点（golden MD §35 补采 2026-09-16）：E3D stdAny 落在直管 / 元素上回的是 TUBING / ELEMENT，不是表面位置——否则 0 px 的表面点盖过只顶在 18 px 孔径边上的轴线', () => {
+    for (const pickType of MEASUREMENT_PICK_TYPE_IDS) {
+      const surfaceAdmitted = measurementPickFilterAdmits('any', pickType, 'surface');
+      expect(surfaceAdmitted, `any × ${pickType}`).toBe(pickType === 'exact');
+      // 与 Element 同一口径；Screen 过滤器本来就是「屏幕位置 → 表面点」，任何类型都放行。
+      expect(measurementPickFilterAdmits('element', pickType, 'surface')).toBe(surfaceAdmitted);
+      expect(measurementPickFilterAdmits('screen', pickType, 'surface')).toBe(true);
+      // 轴线 / 元素 / P-Point / PLINE / 设计点在 Any 下不因拾取类型而变。
+      for (const feature of ['tubing', 'element', 'ppoint', 'pline', 'dpoint'] as const) {
+        expect(measurementPickFilterAdmits('any', pickType, feature), `any × ${pickType} × ${feature}`).toBe(true);
+      }
+    }
   });
 
   it('Graphics = E3D stdGraphics (pickdetail): facet edges and facets only', () => {

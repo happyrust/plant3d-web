@@ -570,5 +570,36 @@ describe('useMeasurementPickSources', () => {
       expect(hitUnder('graphics')).toBeNull();
       expect(hitUnder('screen')).toBeNull();
     });
+
+    it('free-surface point snapping on: under Any × Proportion the surface point (0 px, priority 40) is not admitted so the rayHit axis still wins; under Any × Cursor the surface point wins（golden MD §35 补采）', () => {
+      const settings = cloneMeasurementPickSourceSettings({ mesh_pick_point: { show: true, snap: true } });
+      // Cursor on the tube surface 25 px below the axis line: the axis candidate clamps to the 18 px aperture edge.
+      const tube = buildTubingAxisCandidate({ objectId: 'o:1', entityId: 'o:1', axis, ray: rayAt(0.1, 0.05) })!;
+      const surface: MeasurementPickCandidate = {
+        id: 'mesh:o:1',
+        source: 'mesh_pick_point',
+        entityId: 'o:1',
+        objectId: 'o:1',
+        worldPos: new Vector3(0.1, 0.05, 0.3),
+        label: '模型表面点',
+      };
+      const resolve = (pickType: 'snap' | 'proportion' | 'exact') => resolveMeasurementPickCandidates({
+        cursor: cursorAt(0.1, 0.05), camera: camera(), rect, settings, candidates: [surface, tube], pickLayer: { filter: 'any', pickType },
+      });
+      // Proportion / Snap: the surface point is filtered out → the tube axis is the hit (E3D stdAny on a tube = TUBING).
+      expect(resolve('proportion').snapCandidates.map((item) => item.id)).toEqual(['tubing:o:1']);
+      expect(resolve('proportion').hit?.id).toBe('tubing:o:1');
+      expect(resolve('snap').hit?.id).toBe('tubing:o:1');
+      // Cursor: the exact point under the cursor is the surface point, which sits at 0 px and out-ranks the clamped axis.
+      expect(resolve('exact').snapCandidates.map((item) => item.id)).toEqual(['mesh:o:1', 'tubing:o:1']);
+      expect(resolve('exact').hit?.id).toBe('mesh:o:1');
+      // Element behaves the same; Screen admits only the surface point whatever the type.
+      expect(resolveMeasurementPickCandidates({
+        cursor: cursorAt(0.1, 0.05), camera: camera(), rect, settings, candidates: [surface, tube], pickLayer: { filter: 'element', pickType: 'proportion' },
+      }).hit?.id).toBe('tubing:o:1');
+      expect(resolveMeasurementPickCandidates({
+        cursor: cursorAt(0.1, 0.05), camera: camera(), rect, settings, candidates: [surface, tube], pickLayer: { filter: 'screen', pickType: 'proportion' },
+      }).snapCandidates.map((item) => item.id)).toEqual(['mesh:o:1']);
+    });
   });
 });

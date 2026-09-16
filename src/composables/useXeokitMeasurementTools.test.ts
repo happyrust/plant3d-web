@@ -158,6 +158,8 @@ describe('useXeokitMeasurementTools', () => {
     measurementStyle.updateMeasurementPickSource('ptset', { show: false, snap: false });
     measurementStyle.updateMeasurementPickSource('position', { show: false, snap: false });
     measurementStyle.updateMeasurementPickSource('mesh_pick_point', { show: true, snap: true, thresholdPx: 40 });
+    // 裸表面点要 Screen 过滤器（E3D Screen = 屏幕位置 → 表面点）或 Cursor 类型；Any / Element × Snap 不再放行表面点（2026-09-16）。
+    measurementStyle.updateMeasurementPickLayer({ filter: 'screen' });
 
     const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 10);
     camera.position.set(2, 4, 7);
@@ -532,6 +534,7 @@ describe('useXeokitMeasurementTools', () => {
     measurementStyle.updateMeasurementPickSource('ptset', { show: false, snap: false });
     measurementStyle.updateMeasurementPickSource('position', { show: false, snap: false });
     measurementStyle.updateMeasurementPickSource('mesh_pick_point', { show: true, snap: true, thresholdPx: 40 });
+    measurementStyle.updateMeasurementPickLayer({ filter: 'screen' });
 
     const camera = new THREE.OrthographicCamera(-2, 2, 2, -2, 0.1, 10);
     camera.position.set(0, 0, 5);
@@ -748,6 +751,8 @@ describe('useXeokitMeasurementTools', () => {
     measurementStyle.resetStyle();
     measurementStyle.updateMeasurementPickSource('position', { show: false, snap: false });
     measurementStyle.updateMeasurementPickSource('mesh_pick_point', { show: true, snap: true, thresholdPx: 20 });
+    // 第一击裸表面点、第二击 P-Point 都要放行：Any × Cursor（表面点只在 Cursor 类型放行）。
+    measurementStyle.updateMeasurementPickLayer({ pickType: 'exact' });
     measurementStyle.updateStyle({ perpendicularTo: true, keepMeasurementAnnotation: true });
 
     const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 10);
@@ -844,6 +849,7 @@ describe('useXeokitMeasurementTools', () => {
     measurementStyle.updateMeasurementPickSource('ptset', { show: false, snap: false });
     measurementStyle.updateMeasurementPickSource('position', { show: false, snap: false });
     measurementStyle.updateMeasurementPickSource('mesh_pick_point', { show: true, snap: true, thresholdPx: 40 });
+    measurementStyle.updateMeasurementPickLayer({ filter: 'screen' });
 
     const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 10);
     camera.position.set(0, 0, 1);
@@ -1072,6 +1078,8 @@ describe('useXeokitMeasurementTools', () => {
     measurementStyle.updateMeasurementPickSource('position', { show: false, snap: false });
     measurementStyle.updateMeasurementPickSource('mesh_pick_point', { show: true, snap: true, thresholdPx: 40 });
     measurementStyle.setMeasurementPickMode('free_surface');
+    // 自由表面落点走 Cursor 类型（Any × Snap 只给显著点 / 线，不给表面点）。
+    measurementStyle.updateMeasurementPickLayer({ pickType: 'exact' });
 
     const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 10);
     camera.position.set(0, 0, 1);
@@ -1258,6 +1266,8 @@ describe('useXeokitMeasurementTools', () => {
     measurementStyle.updateMeasurementPickSource('ptset', { show: false, snap: false });
     measurementStyle.updateMeasurementPickSource('position', { show: false, snap: false });
     measurementStyle.updateMeasurementPickSource('mesh_pick_point', { show: true, snap: true });
+    // 第二击落裸表面点：Cursor 类型（Any × Snap 不放行表面点）。
+    measurementStyle.updateMeasurementPickLayer({ pickType: 'exact' });
     tools.onCanvasPointerUp(canvas, event);
 
     expect(store.xeokitDistanceMeasurements.value).toHaveLength(1);
@@ -1298,6 +1308,7 @@ describe('useXeokitMeasurementTools', () => {
     measurementStyle.updateMeasurementPickSource('ptset', { show: false, snap: false });
     measurementStyle.updateMeasurementPickSource('position', { show: false, snap: false });
     measurementStyle.updateMeasurementPickSource('mesh_pick_point', { show: true, snap: true, thresholdPx: 40 });
+    measurementStyle.updateMeasurementPickLayer({ filter: 'screen' });
 
     const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 10);
     camera.position.set(0, 0, 7);
@@ -1818,6 +1829,8 @@ describe('useXeokitMeasurementTools', () => {
       measurementStyle.updateMeasurementPickSource('ptset', { show: false, snap: false });
       measurementStyle.updateMeasurementPickSource('position', { show: false, snap: false });
       measurementStyle.updateMeasurementPickSource('mesh_pick_point', { show: true, snap: true, thresholdPx: 40 });
+      // 这一组全是裸表面点两击：Screen 过滤器（E3D 屏幕位置 → 表面点），拾取类型仍是缺省 Snap，提示条 token 不变。
+      measurementStyle.updateMeasurementPickLayer({ filter: 'screen' });
       measurementStyle.updateStyle({
         keepMeasurementAnnotation: input.keepMeasurementAnnotation,
         showDirectLinearDimension: input.showDirectLinearDimension ?? true,
@@ -2905,7 +2918,8 @@ describe('useXeokitMeasurementTools', () => {
       const { store, measurementStyle, tools, clickAt, hoverAndLoad } = await setupElementLineTools();
       try {
         measurementStyle.updateStyle({ perpendicularTo: true });
-        measurementStyle.updateMeasurementPickLayer({ filter: 'any', pickType: 'snap' });
+        // 起点是裸表面点：Any 下表面点只在 Cursor 类型放行（E3D `exact()`）；第二击拾 CYLI 表面仍按元素 line() 当目标线。
+        measurementStyle.updateMeasurementPickLayer({ filter: 'any', pickType: 'exact' });
         await nextTick();
 
         // 起点：ELBO C 表面 (1.4, 3.4, 6.2)（无 line()，普通表面点）。
@@ -3402,6 +3416,7 @@ describe('useXeokitMeasurementTools', () => {
       measurementStyle.updateMeasurementPickSource('ptset', { show: false, snap: false });
       measurementStyle.updateMeasurementPickSource('position', { show: false, snap: false });
       measurementStyle.updateMeasurementPickSource('mesh_pick_point', { show: true, snap: true, thresholdPx: 40 });
+      measurementStyle.updateMeasurementPickLayer({ filter: 'screen' });
 
       const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 10);
       camera.position.set(2, 4, 7);
