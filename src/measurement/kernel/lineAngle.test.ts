@@ -372,6 +372,62 @@ describe('gmfAngle.betweenLines（E3D measureLineAngle，提示矩阵 D6）：�
     expect(betweenLinesDeg(BASE_E, parallel)).toBe(0);
     expect(buildLineAngle(BASE_E, parallel)).toEqual({ ok: false, reason: 'parallel-lines' });
   });
+
+  it('随机化对数：固定种子 200 对随机线（偶数共面 / 奇数异面，拾中点落段内 / 段外、根点两侧），两条包的角逐对相等到 1e-4°', () => {
+    // mulberry32：固定种子，跑多少次都是同一批线对，失败时按序号就能复现。
+    let seed = 0x5eed06d6;
+    const rand = (): number => {
+      seed = (seed + 0x6d2b79f5) | 0;
+      let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+    const span = (lo: number, hi: number): number => lo + (hi - lo) * rand();
+    const cross = (a: PickVec3, b: PickVec3): PickVec3 => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+    const len = (a: PickVec3): number => Math.hypot(a[0], a[1], a[2]);
+    const at = (from: PickVec3, direction: PickVec3, t: number): PickVec3 => [from[0] + direction[0] * t, from[1] + direction[1] * t, from[2] + direction[2] * t];
+    /** 球面均匀的单位向量：z 均匀取 [-1, 1]，方位角均匀取 [0, 2π)。 */
+    const unitVector = (): PickVec3 => {
+      const z = span(-1, 1);
+      const r = Math.sqrt(1 - z * z);
+      const phi = span(0, 2 * Math.PI);
+      return [r * Math.cos(phi), r * Math.sin(phi), z];
+    };
+
+    let compared = 0;
+    let obtuse = 0;
+    for (let i = 0; i < 200; i += 1) {
+      const baseStart: PickVec3 = [span(-5, 5), span(-5, 5), span(-5, 5)];
+      const baseDirection = unitVector();
+      const baseLength = span(0.5, 6);
+      const referenceDirection = unitVector();
+      const orthogonal = cross(baseDirection, referenceDirection);
+      // ≈1.1° 以内的近平行对不进这一组：根点跑到几百米外，两边都病态，它的口径由上面的平行用例与 Web 0.01° 容差钉。
+      if (len(orthogonal) < 0.02) continue;
+      // 参照线要经过的点：偶数序号落在基线上（共面，t ∈ [-1, 2] 让根点既可在段内也可在段外），
+      // 奇数序号再沿两线的公垂线抬 0.05–1 m（异面）。
+      const anchor = at(baseStart, baseDirection, span(-1, 2) * baseLength);
+      const normal = at([0, 0, 0], orthogonal, 1 / len(orthogonal));
+      const referenceAnchor = i % 2 === 0 ? anchor : at(anchor, normal, (rand() < 0.5 ? 1 : -1) * span(0.05, 1));
+      const referenceLength = span(0.5, 6);
+      const referenceStart = at(referenceAnchor, referenceDirection, -span(0, 1) * referenceLength);
+      // 两个拾中点各自沿线取 t ∈ [-1, 2]：段内、段外、根点两侧（补角）都会出现。
+      const base = line(baseStart, at(baseStart, baseDirection, baseLength), at(baseStart, baseDirection, span(-1, 2) * baseLength));
+      const reference = line(referenceStart, at(referenceStart, referenceDirection, referenceLength), at(referenceStart, referenceDirection, span(-1, 2) * referenceLength));
+
+      const web = ok(buildLineAngle(base, reference));
+      const e3d = betweenLinesDeg(base, reference);
+      // Web 的 angleDeg 落在 1e-5° 网格上（snapLineAngleDegrees），所以对到 1e-4°。
+      expect(web.angleDeg, `#${i} ${i % 2 === 0 ? '共面' : '异面'}`).toBeCloseTo(e3d, 4);
+      expect(web.skew, `#${i} skew`).toBe(i % 2 === 1);
+      compared += 1;
+      if (e3d > 90) obtuse += 1;
+    }
+    // 这一批种子实际全部 200 对都进了比对（角 8.5°–172.8°，最大差 4.98e-6° = 网格半格）；钝角那一半就是「拾中点落在根点另一侧 → 补角」。
+    expect(compared).toBeGreaterThanOrEqual(195);
+    expect(obtuse).toBeGreaterThanOrEqual(50);
+    expect(compared - obtuse).toBeGreaterThanOrEqual(50);
+  });
 });
 
 describe('lineAngleOperandFromGeometry · 两击各自的 E3D 转换（EDGPOSITIONDATA.line() / .plane()）', () => {
