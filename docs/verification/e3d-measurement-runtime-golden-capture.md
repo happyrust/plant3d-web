@@ -1733,6 +1733,23 @@ ELBO `145028` P2 → ELBO `145029` P1 之间的竖直立管，DN100 · 外半径
   单测：`elementArc.test.ts` 7 条（含本节两枚实机件 → R 533.000 / 133.000、ANGL 逐位、源点到弧面 76.0983 / 7.0333）、`usePtsetSnap.test.ts` +1、`useXeokitMeasurementTools.test.ts` +1（Element × Cursor / Any × Snap / Intersect 仍拒）。
   **实机重跑**（`:8022`，`:3103` 自起 vite，真 UI 勾 Perpendicular to、Ppoint × Snap 拾 ATTA P3 → Element × Snap / × Cursor 落弯管体，光标在弧中点投影）：上表「修后」一行——ELBO `76mm / 29 / 70 / S 40.8313 E 22.2785 D`、BEND `7mm / 5 / 5 / N 11.0734 E 39.8165 U`，四次垂足 Δ ≤ 4.0e-15 m；页面错误 0。
   产物：`web-tubing-inclined-bend-live-10-elbo-scene-perpendicular-to-elbo-body-{snap,exact}-after-fix{,-result-card}.png`、`…-11-bend-scene-perpendicular-to-bend-body-{snap,exact}-after-fix{,-result-card}.png`、`…-after-fix-records.json`（独立弧参数 / 每击悬停 / 结果表 / 记录）。
-  仍开着的：Intersect 的 ARC 操作数（提示矩阵 §6「与弧无交点」那行）；RTOR / CTOR 的 `arc()` 是环面中心圆，不走 fillet，未做；透镜副标题对带弧的表面点仍写「（近似）」（与 CYLI 元素线同款，垂足本身是精确的）。
+  仍开着的：RTOR / CTOR 的 `arc()` 是环面中心圆，不走 fillet，未做；透镜副标题对带弧的表面点仍写「（近似）」（与 CYLI 元素线同款，垂足本身是精确的）。
+- **(1-b) Intersect 的 ARC 操作数**（上一条的余项）→ **已做（`9bbb501`，2026-09-16 23:23 实机）**。E3D 口径：ELEMENT 拾取先 `line()`、未设再 `arc()`（`edgpicktype.pmlobj` 631–681）；两项里有弧时**弧永远是被求交的主体**（864–904「Make sure arc is always first」），
+  `ARC.intersections(item)` → `anglePosition` 给圆上 0 / 1 / 2 个点，取离**拾中这条弧的那次射线落在弧面上的点**（`!pick.intersection(!arcPlane)`，895）最近的一个；一个都没有 → `!!alert.warning('No intersection between picked items')`（887），只丢这一击、第一项还在。
+  改法：内核 `pickDerivation.ts` 新 `IntersectArcOperand` + `intersectArcWith` / `arcLineIntersections` / `arcPlaneIntersections` / `arcArcIntersections`（`ARC.intersections` 按**整个圆**算，`GMFARC.exact` 才按 `onProjected` 裁；线先投到弧面，垂直于弧面的线投成一点、落在圆上才算交），
+  新失败原因 `no-arc-intersection`；会话 `intersectPickSession.ts` 的每档拒收带上 `level`（E3D 的 `alert.warning` / `alert.error`），「与弧无交点」= warning 且不消耗，**面 × 面之后的第三项是弧** → `ARC.intersection(PLANE, PLANE)` 不存在，按「转不成线 / 面」error 拒收且不消耗（不是 2,874 整包清空）；
+  `useXeokitMeasurementTools` 把 `elementArc` 换成设计 World 的 ARC 操作数（`picked` = 这一击的拾取射线 ∩ 弧面，射线缺席 / 平行时退回表面点）、`elementPickAsOperand` 在 Intersect 下也给弧，操作数名分两个——Intersect 是弧本身 `ELBO 中心线弧（P1 → P2）`、Perpendicular 是它所在的面 `ELBO 中心线弧面（P1 → P2）`。
+  单测：`pickDerivation.test.ts` +6、`intersectPickSession.test.ts` +4、`useXeokitMeasurementTools.test.ts` +1（原「Intersect 仍拒 ELBO」两处改口径：有放置矩阵的那枚现在成弧，没有矩阵的那枚仍「Unable to convert」）；100 文件 903 用例全过。
+  **实机「弧 × 线」**（`:8022` 真模型 `/Copy-of-1RCS0040-1R80001`，`:3103` 自起关 HMR 的 vite，真 UI 真指针，浮条 Element × Intersect，光标落在弧中点投影与管身上；独立期望只用 `element/ptset` 的原始点算，不经拾取层与内核）——**弯头两条腿上的隐含管轴线与它自己的中心线弧相切**（切点 = 弯头 P1 / P2）：
+
+| 组 | 两次子拾取 | Web | 独立期望 | Δ |
+| --- | --- | --- | --- | --- |
+| 弧 × 线（arrive 腿，相切） | 弯头体（`1. ELBO 中心线弧（P1 → P2）（弧）`）→ 45° 斜管管身（`TUBI 轴线（ELBO P-Point #1 → OLET P-Point #1）`） | 交点 `(7534.5084, −1586.8141, 2525.1215)`，起点名 `交点` | 同（管轴线离弧心 `gap − R = −4.9e-10 mm`，切点离 ELBO P1 0.72 µm，是模型数据不是算法） | **5.5e-15 m** |
+| 弧 × 线（leave 腿，相切） | 弯头体 → 66° 斜管管身 | 交点 `(7516.6026, −1385.0755, 2123.9653)`；与上一点合成一条距离 **`449mm / −18 / +202 / −401 · N 5.07212 W 63.2122 D`**，两端都叫 `交点` | 同（`gap − R = −7.9e-10 mm`，离 P2 0.92 µm）；两切点距 449.3834 mm | **4.6e-15 m** |
+| 先线后弧（换拾取顺序） | 45° 管管身 → 弯头体 | 同第一组的交点（E3D「弧永远第一」） | 同上 | **5.5e-15 m** |
+| 弧 × 线（无交点） | 弯头体 → 5.77 m 长管管身 | 不落测量点；warning toast + 提示条 `所选项与弧没有交点，请改选其它项（E3D: No intersection between picked items）；求交已选 1. ELBO 中心线弧（P1 → P2）（弧），再选一项（Intersection[2]）`，状态条仍 `(Intersection[2])`，弧没被丢 | 长管投到弧面后离弧心 1736.791 mm > R 533 | — |
+
+  页面错误 0。产物：`web-elbow-arc-intersect-live-01-arc-x-tube45-intersection.png`、`…-02-arc-x-tube66-distance{,-result-card}.png`、`…-03-line-then-arc.png`、`…-04-no-intersection-warning.png`、`…-records.json`（独立弧参数 / 三根管的两端与 `gap − R` / 每组的结果表与记录）。
+  **顺带看到**：两端都是交点（精确几何算出来的）的那条记录，测量列表里仍挂「近似」chip——记录级 `approximate` 与 §36 / `mem-259` 那条同源（线 × 线的交点也一样），本轮没动，要不要按「所有操作数都是精确几何时交点不标近似」改，你拍。
 - (2) Element × Snap 落在弯头体上 Web 拾不到任何东西，E3D 回元素原点——这是 §2 #12 的 Item 原点源（本轮关着、缺省也关）；要不要在 Element 过滤器下缺省放行 Item 原点，另拍。
 - (3) 标签细节：轴线两端名的顺序跟的是 DTX 直管对象的局部 z 向而不是流向（`轴线（BEND P-Point #1 → BEND P-Point #2）` 实际是 146110 P1 → 146107 P2）；同一位置的 OLET P1 / P2 校正取到先匹配的 P1（E3D `line()` 用的是 leave）。位置口径都对，不改。

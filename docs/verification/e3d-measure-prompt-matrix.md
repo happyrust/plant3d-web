@@ -107,7 +107,7 @@ E3D 换过滤器换的是 `EDGSTATE.pick`（`setPickType` 里定位拾取走 `se
 
 > **出口（2026-09-16 `896fbbc`，golden MD §36）**：`pickPointMessage` 此前在 UI 上没有消费者——指针透镜只在未吸附时拿它做 subtitle，而未吸附时透镜不画，下面这一列 Web 文案其实一句都没显示过。
 > 现在它画在 ViewerPanel 右下角提示条的**第二行**（第一行是 §1 的提示串），随下一次悬停命中 / 未命中被覆盖；E3D `!!alert.*` 一级的告警另走 `raiseMeasurementAlert` → toast（`v-snackbar`，warning 4.5 s / error 6 s）：
-> 零距离（warning）、2,870 / 2,874（warning）、「Unable to convert…」与两线夹角 / 三点角「An angular dimension could not be constructed…」（error）都接了（`14b0d4b`）；状态回显（已选第一项 / 求交已选）、Web 独有的拒收提示、未命中原因、P-Point 加载中 只在提示条第二行（决策 `d-343`）。
+> 零距离（warning）、2,870 / 2,874（warning）、「No intersection between picked items」（warning，`9bbb501`）、「Unable to convert…」与两线夹角 / 三点角「An angular dimension could not be constructed…」（error）都接了（`14b0d4b`）；状态回显（已选第一项 / 求交已选）、Web 独有的拒收提示、未命中原因、P-Point 加载中 只在提示条第二行（决策 `d-343`）。
 
 | 场景 | E3D（`edgpicktype.pmlobj` 等） | Web | 对照 |
 | --- | --- | --- | --- |
@@ -115,7 +115,8 @@ E3D 换过滤器换的是 `EDGSTATE.pick`（`setPickType` 里定位拾取走 `se
 | Intersect：后一项与第一条线平行 | `!!alert.warning('Pick another line, last pick was parallel to first line')`（913–916 / 928–930，`(2,870)`），只丢这一击 | `请再选一条线：上一次拾取与第一条线平行（E3D 2,870 Pick another line, last pick was parallel to first line）`，只丢这一击 | 一致，Web 带原文 |
 | Intersect：面 × 面 × 第三项无唯一交点 | `!!messageFile.warning(2,874)` + `return.clear()` + `numberOfPicks = 1`（843–847）——**文案在 message file 里，PML 源里没有** | `面 × 面 × 第三项没有唯一交点，求交已重置，请重新拾取（E3D 2,874）`，整包清空（`0c0d9eb` 前写「三个平面没有唯一交点」） | 行为一致；E3D 原文**未采**（**D5**）；~~第三项是线时 Web 这句「三个平面」是措辞偏离（golden MD §35 补采）~~ 措辞已改，第三项是线（线 ∥ 第一面）时也说得通 |
 | Intersect：拾中项转不成线 / 面 | `!!alert.error('Unable to convert item into a line or plane for intersection (<type>). Select another item or escape to abort the operation')`（813）；Aid / Graphics 变体 778 / 796 / 821 | `所选项无法转成线 / 面参与求交，请改选其它项或按 Esc 取消（E3D: Unable to convert item into a line or plane for intersection）`，不消耗这一击 | 一致，Web 合成一句 |
-| Intersect：与弧无交点 | `!!alert.warning('No intersection between picked items')`（887） | — | Web 无弧操作数（`unsupported-geometry` 走「转不成线 / 面」那句） |
+| Intersect：与弧无交点 | `!!alert.warning('No intersection between picked items')`（887） | `所选项与弧没有交点，请改选其它项（E3D: No intersection between picked items）`，只丢这一击（弧还列在「求交已选」里） | 一致，Web 带原文（`9bbb501` 接了 ARC 操作数，golden MD §37 (1-b) 实机） |
+| Intersect：面 × 面之后第三项是弧 | `ARC.intersection(PLANE, PLANE)` 不存在，`handle (2,874)` 接不住（841–848） | 走「转不成线 / 面」那句 error，不消耗这一击（两个面还在） | Web 取舍：E3D 这一路是未处理的 PML 错误，行为**未采**（新 **D7**） |
 | Snap / Cursor：拾中元素给不出位置 | `!!alert.error('Unable to derive snap position of picked element (<type>)')`（438 / 582）；Aid 变体 408 / 554 | `当前未捕捉到已启用点源：…` / `请将光标靠近构件 P-Point 后再点击` / `当前数据源未提供该构件的 P-Point，无法登记测量点` 等（`buildMissReason`） | 语义对应，Web 按点源分句；E3D 是 alert 弹窗、Web 是提示条第二行（`896fbbc` 起才真显示） |
 | 两线夹角 / 三点角造不出弧 | `alert.error('An angular dimension could not be constructed from the data selected')`（`gphanglemeasure.pmlfrm`，golden MD §22 / §30） | `两条线平行，画不出角度尺寸（E3D：An angular dimension could not be constructed from the data selected）；已回到第 1 步` / `线与面平行且不在面内…` / 三点共线 / 重合点 各一句 | 一致，Web 带原文并说明原因 |
 | 两线夹角第一击不是线 / 第二击不是线或面 | E3D 拾取过滤器 `EDGE` / `FACET EDGE` 根本拾不到别的东西 | `两线夹角的第一击要拾中一条线（Graphics 边 / p-line / 轴线），请改选（E3D Angle 2 Lines 第一击只拾 EDGE）` / `…第二击要拾中一条线或一个面…` | Web 放行更多操作数（PLINE / 轴线 / P-Point / 设计点，§30 补采），拒收时说明 E3D 口径 |
@@ -132,6 +133,7 @@ E3D 换过滤器换的是 `EDGSTATE.pick`（`setPickType` 里定位拾取走 `se
 | **D4** | ` WP` / ` Offset` 尾巴 | Web 没有工作平面 / 偏移定位 | 不做（方案 §0 非目标） |
 | **D5** | `(2,874)` 的 E3D 原文在 message file 里，PML 源看不到；~~Web 那句「三个平面没有唯一交点」在第三项是线时措辞不准~~ | 文案 | Web 已改「面 × 面 × 第三项没有唯一交点，求交已重置，请重新拾取（E3D 2,874）」（`0c0d9eb`，`INTERSECT_MESSAGES.planesNoPoint`；单测 `intersectPickSession.test.ts` +1：面 × 面 × 线 ∥ 第一面 → 2,874 整包清空、文案不再含「三个平面」）。E3D 原文仍**等 E3D 在跑时采一次** |
 | **D6** | E3D 还有 `measureLineAngle`（`gmfAngle.betweenLines`，`'Measure angle between lines -'`，两击都只拾 `EDGE`，只算角不画弧） | ~~Web 只做了 `radius2Lines`（画弧）那条；`design.uic` 里 `Angle 2 Lines` 按钮跑的是 `LINEANGLE`，两条包谁接这个命令要 E3D 在跑时核~~ **2026-09-16 静态核清，不必等 E3D**：`Angle 2 Lines` → `designViewMeasure('LINEANGLE')` → `gphViews.measure('LINEANGLE')`（`gphviews.pmlobj` 1301–1303）→ `GPHANGLEDIMENSION.edit('LINEANGLEARC')` → `EDGPACKET.defineMeasure('LINEANGLEARC')`（`edgpacket.pmlobj` 1089–1091）→ **画弧那条**。非弧包只有三张设计表单在用（`dbeelementangle.pmlfrm` 799 / `dbesrevolution.pmlfrm` 658 / `dbeloopedit.pmlfrm` 1716 的「Angle between two lines」菜单项，`defineMeasure('lineangle')`），量到的 REAL 回填表单的角度输入框——它**不进** Measure Angle 窗体（`gphAngleMeasure.setMeasure` 只收 `ARC`） | **不做**（Web 没有「把量到的角填进设计表单」这种入口，多一个模式在 E3D 侧没有对应物）；**数值口径已钉**：`betweenLines` 把参照线的拾中点投到过弧心的平面上，与 `radius2Lines` 把参照线平移到弧心是同一个操作，两者的角相等——`lineAngle.test.ts` +2（照 PML 81–103 独立实现 `betweenLines` 再逐组对数：共面 / 异面 / 拾另一侧 / 弧心在段外；以及唯一的差异——平行时非弧包 `handle any` 吞错返回 **0**，画弧那条与 Web 一样拒收） |
+| **D7** | Intersect 里**面 × 面之后第三项是弧**：E3D 走 `!intersectData.intersection(!this.return[2], !this.return[3])`（`edgpicktype.pmlobj` 842），而 ARC 对象没有 `intersection(PLANE, PLANE)`——抛出的不是 `(2,874)`，那个 `handle` 接不住，错误往上跑（怎么收场要 E3D 在跑时看） | 极窄的一路：先拾两个面，第三击落在 ELBO / BEND 上 | Web 取舍（`9bbb501`）：按「转不成线 / 面」那句 error 拒收且**不消耗**这一击——两个面还在，改拾线 / 面照样求得出交点。E3D 侧行为**未采** |
 
 ## 8. 结论（对方案 §2 #19）
 

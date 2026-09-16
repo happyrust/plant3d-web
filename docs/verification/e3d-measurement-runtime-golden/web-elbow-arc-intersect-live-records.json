@@ -1,0 +1,181 @@
+{
+  "capturedAt": "2026-09-16T15:23:11.803Z",
+  "url": "/?model_source=gen-model-v1&gm_backend_port=8022&show_refno=24381_145117",
+  "backend": "http://127.0.0.1:8022",
+  "frame": {
+    "note": "位置均为设计 World（米，X=E Y=N Z=U）；独立期望直接来自 gen-model element/ptset（世界矩阵 × 局部 mm）",
+    "sceneOriginInDesign": [
+      5.862437011718752,
+      -4.173051727294923,
+      2.0898283843994143
+    ]
+  },
+  "independent": {
+    "elbo": "24381/145121",
+    "arc": {
+      "center": [
+        7141.2122,
+        -1754.2876,
+        2206.7511
+      ],
+      "normal": [
+        0.6050267903990216,
+        -0.700156244144863,
+        -0.3791092410960428
+      ],
+      "radiusMm": 533,
+      "sweepDeg": 49.8663,
+      "p1": [
+        7534.5086,
+        -1586.8137,
+        2525.121
+      ],
+      "p2": [
+        7516.6023,
+        -1385.0754,
+        2123.9645
+      ],
+      "cornerPos": [
+        7608.62,
+        -1427.95,
+        2350
+      ]
+    },
+    "tubes": [
+      {
+        "name": "OLET 145119 P2 → ELBO 145121 P1（45° 斜管）",
+        "from": "24381/145119",
+        "fromPoint": 2,
+        "to": "24381/145121",
+        "toPoint": 1,
+        "startMm": [
+          7083.92,
+          -2552.7,
+          3589.84
+        ],
+        "endMm": [
+          7534.5086,
+          -1586.8137,
+          2525.121
+        ],
+        "gapMinusRadiusMm": -4.896e-10,
+        "intersections": [
+          [
+            7534.5084,
+            -1586.8141,
+            2525.1215
+          ]
+        ]
+      },
+      {
+        "name": "ELBO 145121 P2 → ELBO 145123 P1（66° 斜管）",
+        "from": "24381/145121",
+        "fromPoint": 2,
+        "to": "24381/145123",
+        "toPoint": 1,
+        "startMm": [
+          7516.6023,
+          -1385.0754,
+          2123.9645
+        ],
+        "endMm": [
+          7069.6347,
+          -1176.8164,
+          1026.0026
+        ],
+        "gapMinusRadiusMm": -7.919e-10,
+        "intersections": [
+          [
+            7516.6026,
+            -1385.0755,
+            2123.9653
+          ]
+        ]
+      },
+      {
+        "name": "ELBO 145123 P2 → ELBO 145127 P1（5.77 m 长管）",
+        "from": "24381/145123",
+        "fromPoint": 2,
+        "to": "24381/145127",
+        "toPoint": 1,
+        "startMm": [
+          6648.5178,
+          -1565.9359,
+          539.3473
+        ],
+        "endMm": [
+          4209.603,
+          -6800.3128,
+          510.4784
+        ],
+        "gapMinusRadiusMm": 1203.791,
+        "intersections": []
+      }
+    ],
+    "distanceMm": 449.383355
+  },
+  "view": {
+    "el": 0.25,
+    "az": 35,
+    "factor": 2.6
+  },
+  "nearbyObjectIds": [
+    "o:24381_145117:0",
+    "o:24381_145117:1",
+    "o:24381_145121:6"
+  ],
+  "groups": {
+    "arcThenLine": {
+      "rows": {
+        "distance": "449mm",
+        "offset-x": "-18mm",
+        "offset-y": "+202mm",
+        "offset-z": "-401mm",
+        "direction": "N 5.07212 W 63.2122 D"
+      },
+      "record": {
+        "origin": [
+          7.534508361370952,
+          -1.5868141459980776,
+          2.5251215474157385
+        ],
+        "target": [
+          7.516602594704716,
+          -1.3850755182630348,
+          2.1239653318881855
+        ],
+        "originLabel": "交点",
+        "targetLabel": "交点",
+        "approximate": true,
+        "originMm": [
+          7534.5084,
+          -1586.8141,
+          2525.1215
+        ],
+        "targetMm": [
+          7516.6026,
+          -1385.0755,
+          2123.9653
+        ]
+      },
+      "deltaToExpectedM": {
+        "tangent45": 5.5110021639452246e-15,
+        "tangent66": 4.5505602690274926e-15
+      }
+    },
+    "lineThenArc": {
+      "intersectionMm": [
+        7534.5084,
+        -1586.8141,
+        2525.1215
+      ],
+      "deltaToExpectedM": 5.5110021639452246e-15,
+      "firstPickMessage": "求交已选 1. TUBI 轴线（ELBO P-Point #1 → OLET P-Point #1）（线），再选一项（Intersection[2]）"
+    },
+    "noIntersection": {
+      "message": "所选项与弧没有交点，请改选其它项（E3D: No intersection between picked items）；求交已选 1. ELBO 中心线弧（P1 → P2）（弧），再选一项（Intersection[2]）",
+      "status": "距离测量 · 第 1/2 步 选择起点 (Intersection[2]) Snap : TUBI 轴线（ELBO P-Point #1 → ELBO P-Point #2）"
+    }
+  },
+  "pageErrors": []
+}
