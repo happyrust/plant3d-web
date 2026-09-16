@@ -1551,9 +1551,14 @@ ELBO `145028` P2 → ELBO `145029` P1 之间的竖直立管，DN100 · 外半径
   Proportion / Fraction 线段外回 B、线段内派生与 Element 那一轮逐位相同（`1200mm` / `1067mm`，Δ 9.0e-7 / 4.0e-7 / 3.1e-7 m）；同一光标处 Any × Cursor 仍是 `模型表面点`（E3D `exact()`）。
   图 `…-02b-proportion-outside-extent-any-filter{,-result-card}.png` / `…-03b-fraction-outside-extent-any-filter{,-result-card}.png`，数值在 records.json 的 `lineExtentOverflowAnyFilterAfterFix`。
   **口径变化**：自由表面模式下 Any × Snap（缺省拾取层）不再落裸表面点——要表面点切 Cursor 类型或 Screen 过滤器；浮条那条「自由表面模式下表面点捕捉已关闭」的提示没跟着改（待拍板要不要提示「当前过滤器 × 类型不放行表面点」）。
-- **数值口径**：本轮 P-Point 派生点与 API 手算差 7.5e-7 / 9.0e-7 m，不是 §34 那 3e-15——差在 P-Point **进场景那一步**：`usePtsetSnap.upsertCandidates` 优先用 DTX 登记的放置矩阵
+- **数值口径 → 已修（`2dc5ad1`，用户 09:2x 拍板）**：本轮 P-Point 派生点与 API 手算差 7.5e-7 / 9.0e-7 m，不是 §34 那 3e-15——差在 P-Point **进场景那一步**：`usePtsetSnap.upsertCandidates` 优先用 DTX 登记的放置矩阵
   （`getDtxRefnoTransform`，来自 float32 网格数据）、拿不到才回落 API 的 `world_transform`（float64）；这一档 `:8022` 上拿得到，18 m 处 float32 量化就是 ~1 µm（§34 在 `:8024` 上回落到了 API 矩阵）。
-  派生本身（偏移量 199.9993 / 199.9991 mm、与 API 方向夹角 7e-5°）在这个量级之内；盒角那 1.8e-7 m 同 §35。
+  派生本身（偏移量 199.9993 / 199.9991 mm、与 API 方向夹角 7e-5°）在这个量级之内；盒角那 1.8e-7 m 同 §35。**改法**：`pickPtsetWorldTransform`——接口给了可用矩阵就用接口的，没给（旧后端 `null`）才回落 DTX，
+  吸附候选与画出来的关键点十字（`usePtsetVisualizationThree`）同一取法。同一笔把 `formatCompassDirection` 接上 `angleSnap.snapUnitDirection`（归一后 |分量| < 1e-6 归零再归一，§30 `87b8970` 那一档口径），
+  `N 2.71502 W 90 U` 这类噪声方位不再出现。单测 `usePtsetSnap.test.ts` +3、`compassDirection.test.ts` +1；measurement + tools + dimension 98 文件 849 用例全过。
+  **重跑 P-Point Distance 两组**（09:3x，`:3103` 自起 vite）：派生点 Δ **1.9e-13 / 3.6e-15 / 3.3e-13 / 2.0e-13 m**（此前 7.5e-7～9e-7），距离 1199.862628 / 1905.854320 与独立期望逐位相同；
+  纯竖直组 `Direction U`（此前 `N 2.71502 W 90 U`），斜方向组 `E 89.9981 U`（此前 `E 0.00617624 S 89.9981 U`：0.0636 mm 的 E 分量是两枚 P-Point 真实的 x 差、留着；1.8e-7 的 S 噪声吸掉）。
+  图 `…-01c-ppoint-distance-after-fix{,-result-card}.png` / `…-01d-ppoint-distance-tilted-after-fix{,-result-card}.png`，数值在 records.json 的 `ppointDistanceAfterFix`。
 - 页面错误 0；全部数值（每击的机位 / 屏幕坐标 / 悬停标签 / 独立反算的射线与控制点参数 s、P-Point 的 API 位置与方向、六个面的法向与三条棱的方向、逐步提示条与 2,874 文案）见
   `web-pick-types-residual-live-records.json`。**没有改任何产品代码。**
 
@@ -1562,7 +1567,10 @@ ELBO `145028` P2 → ELBO `145029` P1 之间的竖直立管，DN100 · 外半径
 - 没走到的分支：~~Distance 作用在 P-Point 上（沿 P-Point 方向偏移）、Proportion / Fraction 控制点落在线段外回近端~~、Fraction 恰在两分点正中间的同距取段起点、~~Intersect 面 × 面 × **线**（第三项是线时按 E3D 只与**第一**面求交）~~——~~都~~ 08:30 / 08:31 补采走通三支（见上「补采」）；剩 Fraction 同距那一条真指针的像素量化到不了「恰好相等」，天然只能由 `pickDerivation.test.ts` 顶着。
 - **补采撞出的三处 Web 口径偏离（待拍板）**：~~(1) Any 过滤器 + 「模型表面点」捕捉开着时，表面点盖过 TUBING 轴线（E3D Any 拾直管即 TUBING，没有表面点这一档）——要么 Any 下表面点只在 Cursor 类型放行（同 Element 现状），要么让 `rayHit` 候选与表面点同权~~
   **(1) 已修 `737a02c`（08:4x 拍板）：Any 下表面点只在 Cursor 放行，同 Element；Any 重跑见上「坑 → 已修」**；
-  (2) P-Point 进场景优先用 float32 的 DTX 放置矩阵而不是 API 的 float64 `world_transform`，18 m 处差 ~1 µm——mm 级显示看不出，但 §34 / §35 那种 1e-15 的对账在这一档做不到；
-  (3) `Direction N 2.71502 W 90 U` / `S 2.71505 E 90 D`：ELBO `145028` P2 的 API 方向是 `(−1e-10, −6.3e-7, 1)`（gen-model 转 360° 的余数），A / B 两枚 P-Point 的 N 坐标也差 0.1 µm，派生 / 轴线继承了 1e-7 量级的横向分量，
-  `formatCompassDirection` 的零容差 1e-10 把它当成了方位（同 §30 `87b8970` 修掉的那一类，只是这次噪声在设计数据而不在网格）；E3D `DIRECTION.string()` 对同一对数据出什么未采。
+  ~~(2) P-Point 进场景优先用 float32 的 DTX 放置矩阵而不是 API 的 float64 `world_transform`，18 m 处差 ~1 µm——mm 级显示看不出，但 §34 / §35 那种 1e-15 的对账在这一档做不到~~
+  **(2) 已修 `2dc5ad1`（09:2x 拍板）：接口矩阵优先、DTX 回落；重跑 Δ 回到 1e-13**；
+  ~~(3) `Direction N 2.71502 W 90 U` / `S 2.71505 E 90 D`：ELBO `145028` P2 的 API 方向是 `(−1e-10, −6.3e-7, 1)`（gen-model 转 360° 的余数），A / B 两枚 P-Point 的 N 坐标也差 0.1 µm，派生 / 轴线继承了 1e-7 量级的横向分量，
+  `formatCompassDirection` 的零容差 1e-10 把它当成了方位（同 §30 `87b8970` 修掉的那一类，只是这次噪声在设计数据而不在网格）~~
+  **(3) 已修 `2dc5ad1`：罗盘字串归一后 |分量| < 1e-6 吸整（同 §30 口径）；重跑纯竖直组 `U`**。E3D `DIRECTION.string()` 对同一对带噪数据出什么仍未采（E3D 不在跑），Web 这一档按「精确几何会出纯 `U`」取舍。
+  三处都已修，本节「已知偏离」只剩 G8 E3D 对账与 Fraction 同距那一条。
 - Significant Snaps 开着且 p-line 带分段时派生只在光标所在段上做，§18 已实机（Cut × Mid-Point、Nodes × Snap / Mid-Point），本节 SCTN `177301` / `177302` 没有 FITT / SJOI / SNOD，整条线即作用线。
