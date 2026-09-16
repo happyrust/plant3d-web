@@ -1,0 +1,114 @@
+{
+  "capturedAt": "2026-09-16T10:29:23.960Z",
+  "url": "/?model_source=gen-model-v1&gm_backend_port=8022&show_refno=24381_145018",
+  "thresholdM": 0.000001,
+  "ppoints": {
+    "a": {
+      "refno": "24381_145028",
+      "noun": "ELBO",
+      "number": 2,
+      "designM": [
+        7.849849999982805,
+        11.78748990497079,
+        16.892523685784194
+      ],
+      "dir": [
+        -1.1369784178222598e-10,
+        -6.283185204737986e-7,
+        0.9999999999998026
+      ],
+      "designMm": [
+        7849.85,
+        11787.489905,
+        16892.523686
+      ]
+    },
+    "b": {
+      "refno": "24381_145029",
+      "noun": "ELBO",
+      "number": 1,
+      "designM": [
+        7.849850000000001,
+        11.78749,
+        18.492386314215775
+      ],
+      "dir": [
+        -6.123233995736766e-17,
+        -3.749399456654644e-33,
+        -1
+      ],
+      "designMm": [
+        7849.85,
+        11787.49,
+        18492.386314
+      ]
+    }
+  },
+  "independent": {
+    "aToAxisB": {
+      "footMm": [
+        7849.85,
+        11787.49,
+        16892.523686
+      ],
+      "distanceM": 9.502921094627231e-8
+    },
+    "bToAxisA": {
+      "footMm": [
+        7849.85,
+        11787.4889,
+        18492.386314
+      ],
+      "distanceM": 0.0000011002525470988977
+    }
+  },
+  "aToAxisB": {
+    "outcome": "zero",
+    "message": "Perpendicular distance is 0：起点已落在目标线 / 面上，画不出垂距尺寸（E3D：Cannot draw dimension line. Perpendicular distance is 0）；已回到第 1 步",
+    "snackbar": {
+      "visible": true,
+      "text": "Perpendicular distance is 0：起点已落在目标线 / 面上，画不出垂距尺寸（E3D：Cannot draw dimension line. Perpendicular distance is 0）；已回到第 1 步",
+      "classes": "v-overlay__content v-snackbar__wrapper v-theme--light bg-warning v-snackbar--variant-elevated"
+    },
+    "domOccurrences": 2,
+    "status": "垂距测量 · 第 1/2 步 选择起点 (Snap) Snap : ELBO P-Point #1",
+    "hasDraft": false,
+    "records": 0
+  },
+  "bToAxisA": {
+    "outcome": "result",
+    "message": null,
+    "rows": {
+      "distance": "0mm",
+      "vertical": "0mm",
+      "horizontal": "0mm",
+      "direction": "N 0.0102931 E"
+    },
+    "info": "Perpendicular to · 点→无限线 · P-Point #2 轴线",
+    "detail": {
+      "origin": [
+        7849.85,
+        11787.49,
+        18492.386314
+      ],
+      "target": [
+        7849.85,
+        11787.4889,
+        18492.386314
+      ],
+      "distanceM": 0.0000011002528825712272,
+      "footErrM": 1.4774986163254512e-12,
+      "originErrM": 1.7763568394002505e-15,
+      "perpendicular": {
+        "targetKind": "line",
+        "targetLabel": "P-Point #2 轴线"
+      },
+      "labels": [
+        "P-Point #1",
+        "P-Point #2 轴线垂足"
+      ]
+    },
+    "status": "垂距测量 · 第 1/2 步 选择起点 (Snap) Snap : ELBO P-Point #2"
+  },
+  "pageErrors": []
+}

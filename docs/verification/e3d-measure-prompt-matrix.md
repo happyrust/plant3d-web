@@ -106,7 +106,8 @@ E3D 换过滤器换的是 `EDGSTATE.pick`（`setPickType` 里定位拾取走 `se
 ## 6. 拾取过程中的告警 / 消息（`!!alert.*` ↔ `pickPointMessage`）
 
 > **出口（2026-09-16 `896fbbc`，golden MD §36）**：`pickPointMessage` 此前在 UI 上没有消费者——指针透镜只在未吸附时拿它做 subtitle，而未吸附时透镜不画，下面这一列 Web 文案其实一句都没显示过。
-> 现在它画在 ViewerPanel 右下角提示条的**第二行**（第一行是 §1 的提示串），随下一次悬停命中 / 未命中被覆盖；E3D `!!alert.*` 一级的告警另走 `raiseMeasurementAlert` → toast（`v-snackbar`，warning 4.5 s）——目前只有零距离那一条接了 toast，其余仍只在提示条第二行。
+> 现在它画在 ViewerPanel 右下角提示条的**第二行**（第一行是 §1 的提示串），随下一次悬停命中 / 未命中被覆盖；E3D `!!alert.*` 一级的告警另走 `raiseMeasurementAlert` → toast（`v-snackbar`，warning 4.5 s / error 6 s）：
+> 零距离（warning）、2,870 / 2,874（warning）、「Unable to convert…」与两线夹角 / 三点角「An angular dimension could not be constructed…」（error）都接了（`14b0d4b`）；状态回显（已选第一项 / 求交已选）、Web 独有的拒收提示、未命中原因、P-Point 加载中 只在提示条第二行（决策 `d-343`）。
 
 | 场景 | E3D（`edgpicktype.pmlobj` 等） | Web | 对照 |
 | --- | --- | --- | --- |
