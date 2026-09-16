@@ -254,7 +254,7 @@ function finiteOr(raw: unknown, fallback: number): number {
  * non-numeric input falls back to the E3D default. Fraction is deliberately not
  * truncated / clamped here — E3D echoes the typed value in the prompt (`Fraction[2.5]`)
  * and only the kernel takes `int()` (`GMFLINE.fraction`, `fractionAlongSegment`);
- * prompt matrix D2, decided 2026-09-16 (supersedes `d-228`).
+ * prompt matrix D2, decision `d-269` 2026-09-16 (supersedes `d-228`).
  */
 export function normalizeMeasurementPickTypeValues(
   raw: Partial<Record<keyof MeasurementPickTypeValues, unknown>> | null | undefined,
