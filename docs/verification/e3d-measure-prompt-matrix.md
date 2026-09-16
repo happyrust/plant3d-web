@@ -9,7 +9,7 @@
 > **证据等级**：E3D 一律 `static_expectation`（E3D 进程不在跑，字串照源码抄）；Web 字串照源码抄，并与 golden MD §35 / §30 补采实机截图里的提示条核过（`(Distance[100]) Snap : SCTN PLINE NA · Distance[100]`、
 > `(Intersection[3]) Snap : BOX 交点（预览）`、`两线夹角 · 第 2/2 步 选择第二条线或面（第一条：VALV P-Point #100） (Cursor) Snap : VALV P-Point #100；点空白取消当前点选`——后者是 D1 改前的截图，
 > `0c0d9eb` 起两线夹角不再带 `(Cursor) Snap`，改后的四态实机截图见 golden MD §30「补采（12:32 / 13:09）」）。
-> 2026-09-16 落成；差异见 §7。**D1 已拍板并改掉（用户 10:54，`0c0d9eb`）**：两线夹角提示按 E3D `stdGraphics` 口径去掉 `(token)` 与 ` Snap` 尾巴；D5 的 Web 文案同笔改掉，E3D 原文仍待采。
+> 2026-09-16 落成；差异见 §7。**D1 已拍板并改掉（用户 10:54，`0c0d9eb`）**：两线夹角提示按 E3D `stdGraphics` 口径去掉 `(token)` 与 ` Snap` 尾巴；D5 的 Web 文案同笔改掉，E3D 原文仍待采；D6 静态核清结掉、D2 定为不改（决策 `d-228`），余 D4（不做）。
 
 ## 1. 提示的结构
 
@@ -79,7 +79,7 @@ E3D：`edgposcntrl.pmlobj` `loadPicks` 按 `pickTypes[1..7]` 的顺序建七种�
 | 1 | `Snap` | `Snap`（1757） | — | Snap | `Snap` | 一致 |
 | 2 | `Distance` | `Distance[<pickTypesValue[2]>]`（1862；REAL 缺省字串） | 缺省 `0`，输入框 | Distance | `Distance[<distanceMm>]`（`formatPromptReal`） | 一致；数值都按 REAL 缺省字串出 |
 | 3 | `Mid-Point` | `Mid-Point`（`edgposcntrl` 384 覆盖 `setProportion(0.5)` 的 `Proportion[0.5]`） | — | Mid-Point | `Mid-Point` | 一致 |
-| 4 | `Fraction` | `Fraction[<pickTypesValue[4]>]`（1889，**原样**出输入值） | 缺省 `2`，输入框 | Fraction | `Fraction[<trunc(fraction) ≥ 1>]` | **D2**：输入 `2.5` E3D 出 `Fraction[2.5]`（`GMFLINE.fraction` 内部再 `int()`），Web 出 `Fraction[2]` |
+| 4 | `Fraction` | `Fraction[<pickTypesValue[4]>]`（1889，**原样**出输入值） | 缺省 `2`，输入框 | Fraction | `Fraction[<trunc(fraction) ≥ 1>]` | **D2**：输入 `2.5` E3D 出 `Fraction[2.5]`（`GMFLINE.fraction` 内部再 `int()`），Web 落库时就归一成 `2`（`normalizeMeasurementPickTypeValues`），输入框 / 提示 / 内核三处同一个 n——**已定不改（决策 `d-228`）** |
 | 5 | `Proportion` | `Proportion[<pickTypesValue[5]>]`（1835） | 缺省 `0.5`，输入框 | Proportion | `Proportion[<proportion>]` | 一致 |
 | 6 | `Intersect` | `Intersection[<minor>]`（1808；`minor` = 第几次子拾取，prompt() 里 BLOCK 求值） | — | Intersect | `Intersection[<intersectOrdinal>]` | 一致（golden MD §13 / §35 实机 `[1] → [2] → [3]`） |
 | 7 | `Cursor` | `Cursor`（1782；`setExact`） | — | Cursor（id `exact`） | `Cursor` | 一致 |
@@ -122,7 +122,7 @@ E3D 换过滤器换的是 `EDGSTATE.pick`（`setPickType` 里定位拾取走 `se
 | # | 差异 | 影响 | 建议 |
 | --- | --- | --- | --- |
 | **D1** | 两线夹角（`measureLineAngleArc`）在 E3D 是 `stdGraphics` 拾取：`positioning = false`、EDGPICK 无 prompt → 提示是 `Measure angle between lines first line :`，**没有 `(token)` 也没有 ` Snap` 尾巴**；Web 两线夹角~~照定位拾取的模板出 `(Cursor) Snap`~~ | 两线夹角的提示条多一段与这一击无关的信息（拾取类型对 Graphics 边 / 面不起作用：面永远取射线 ∩ 面、线的控制点由内核按类型派生但两线夹角只用线本身） | **已拍板（用户 2026-09-16 10:54）并改掉 `0c0d9eb`**：`formatMeasurementPrompt` 加 `positioning?: boolean`（缺省 `true`），`false` 时省掉 `(token)` 段与 ` Snap` 旗标，Web 加的段（D3）不动；`statusText` 对两线夹角两步传 `false`，三点角 / 距离 / 垂距照旧。单测 `pickLayerModel.test.ts` +1、`useXeokitMeasurementTools.test.ts` +1（Cursor × Significant Snaps 开：两步都不带 `(Cursor)` / ` Snap`，切回三点角即恢复）。目标名（冒号后）仍照拾中项出，拾取类型对它的影响不变。**实机 2026-09-16 12:32 采、13:09 复现**（golden MD §30「补采（12:32 / 13:09）」，`web-line-angle-live-06i-prompt-no-token-*`）：Cursor × Significant Snaps 全开，两线夹角两步都没有那两段，切回三点角即恢复 |
-| **D2** | `Fraction[<v>]`：E3D 原样出输入值（`2.5`），Web 出 `trunc` 后的整数 | 只在用户填非整数时可见 | 可不改：Web 的 `trunc` 与内核实际用的 `int(n)` 一致，提示更诚实；要严格照 E3D 就改成原样出 |
+| **D2** | `Fraction[<v>]`：E3D 原样出输入值（`2.5`），Web 出 `trunc` 后的整数 | 只在用户填非整数时可见 | ~~可不改：Web 的 `trunc` 与内核实际用的 `int(n)` 一致，提示更诚实；要严格照 E3D 就改成原样出~~ **2026-09-16 定为不改（决策 `d-228`）**：E3D 侧 `pickTypesValue[4]` 直接取 `text .input is REAL format !!integerFmt`（`edgpositioning.pmlfrm` 38，dp 0）的 `gadget.val`（`edgposcntrl.pmlobj` 1482），提示原样拼（`edgpicktype.pmlobj` 1889）、内核 `!fraction.int()`（`gmfline.pmlobj` 276）、重选拾取类型时 gadget 又按 dp 0 重显（`edgposcntrl` 1434）——填 `2.5` 时 E3D 自己三处不一致（量 2 段、提示 2.5、重显走整数格式），是只在非法输入路径上可见的 quirk，不是口径。Web 在 `normalizeMeasurementPickTypeValues` 落库时就 `max(1, trunc(v))`，输入框回显、提示 token、内核 `fractionAlongSegment` 永远同一个 n；`measurementPickTypePromptToken` 里再 `trunc` 一次只是冗余保险。复刻要把状态里的 fraction 放开成非整数并让提示与内核脱钩，只为在一个 E3D 自己也不自洽的角落长得一样，不值 |
 | **D3** | Web 加的段：`第 i/n 步`、`（第一条 / 第一项：…）`回显、冒号后的目标名 / `等待捕捉（…）`、trailer、`已选…` / `求交已选…` 消息 | 结构不变，信息更多 | 保留为增强（决策 `d-444` 那一类 Web 取舍） |
 | **D4** | ` WP` / ` Offset` 尾巴 | Web 没有工作平面 / 偏移定位 | 不做（方案 §0 非目标） |
 | **D5** | `(2,874)` 的 E3D 原文在 message file 里，PML 源看不到；~~Web 那句「三个平面没有唯一交点」在第三项是线时措辞不准~~ | 文案 | Web 已改「面 × 面 × 第三项没有唯一交点，求交已重置，请重新拾取（E3D 2,874）」（`0c0d9eb`，`INTERSECT_MESSAGES.planesNoPoint`；单测 `intersectPickSession.test.ts` +1：面 × 面 × 线 ∥ 第一面 → 2,874 整包清空、文案不再含「三个平面」）。E3D 原文仍**等 E3D 在跑时采一次** |
@@ -133,4 +133,5 @@ E3D 换过滤器换的是 `EDGSTATE.pick`（`setPickType` 里定位拾取走 `se
 结构 `<命令> <步> (<拾取类型>) [Snap] :` 与 E3D `EDGSTATE.prompt()` + `applyToView` 一致；三条定位拾取命令（Measure distance / perpendicular distance / angle）的**每一步**、七种拾取类型的 **token**、
 八个过滤器**不进提示**都逐条对上。Web 加的段（D3）不改结构；~~两线夹角多出的 `(token) Snap`（D1）是唯一一处 E3D 不会显示而 Web 显示的内容，待拍板~~ **D1 已拍板并改掉（`0c0d9eb`）**：两线夹角按 `stdGraphics`
 非定位拾取出 `<命令> <步> :`，现在没有一处 E3D 不显示而 Web 显示的段（D3 的 Web 加段除外），改后的提示条已实机采过（golden MD §30「补采（12:32 / 13:09）」四态截图 + `records.json`）。D5 的 Web 文案同笔改掉；D6 2026-09-16 静态核清并结掉（`Angle 2 Lines` 走的是画弧包，非弧包是三张设计表单的取值入口，Web 不做；两者数值相等已由 `lineAngle.test.ts` 钉住）。
-余 D2（可不改）、D4（不做）与 E3D 原文 / 运行时截图对账（待 E3D 在跑，本文全部是 `static_expectation`）。
+D2 2026-09-16 定为不改（决策 `d-228`：Web 落库即归一成整数，输入框 / 提示 / 内核同一个 n；E3D 原样回显非整数是它自己三处不一致的 quirk）。
+余 D4（不做）与 E3D 原文 / 运行时截图对账（待 E3D 在跑，本文全部是 `static_expectation`）。
