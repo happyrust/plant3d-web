@@ -1,0 +1,934 @@
+{
+  "capturedAt": "2026-09-16T09:45:19.239Z",
+  "url": "/?model_source=gen-model-v1&gm_backend_port=8022&show_refno=24381_102273",
+  "frame": {
+    "note": "位置 / 方向均为设计 World（米，X=E Y=N Z=U）",
+    "sceneOriginInDesign": [
+      10.160317871093753,
+      14.148096191406253,
+      0.3138957614898682
+    ]
+  },
+  "pickLayer": {
+    "filter": "graphics",
+    "type": "snap",
+    "perpendicularTo": true,
+    "mode": "free_surface"
+  },
+  "box": {
+    "refno": "24381/102278",
+    "originMm": [
+      10312.586115,
+      14169.992164,
+      500
+    ],
+    "halfMm": [
+      44,
+      40,
+      37
+    ],
+    "axes": {
+      "x": [
+        0.8191520442889918,
+        -0.573576436351046,
+        0
+      ],
+      "y": [
+        0.573576436351046,
+        0.8191520442889918,
+        0
+      ],
+      "z": [
+        0,
+        0,
+        1
+      ]
+    },
+    "worldTransform": [
+      0.8191520442889918,
+      -0.573576436351046,
+      0,
+      0,
+      0.573576436351046,
+      0.8191520442889918,
+      0,
+      0,
+      0,
+      0,
+      1,
+      0,
+      10312.586114908085,
+      14169.992163543118,
+      500,
+      1
+    ]
+  },
+  "faces": [
+    {
+      "face": "+Z",
+      "normal": [
+        0,
+        0,
+        1
+      ],
+      "center": [
+        10.312586114908084,
+        14.169992163543117,
+        0.537
+      ],
+      "view": {
+        "el": 0.94,
+        "az": 215,
+        "factor": 1
+      },
+      "probes": [
+        {
+          "offsetMm": [
+            -26,
+            -22
+          ],
+          "tri": 3,
+          "designMm": [
+            10278.669479,
+            14166.883805,
+            537
+          ],
+          "planeDistance": 2.775557561562891e-17
+        },
+        {
+          "offsetMm": [
+            -26,
+            -11
+          ],
+          "tri": 3,
+          "designMm": [
+            10284.978818,
+            14175.894485,
+            537
+          ],
+          "planeDistance": 2.775557561562891e-17
+        },
+        {
+          "offsetMm": [
+            -26,
+            0
+          ],
+          "tri": 3,
+          "designMm": [
+            10291.288167,
+            14184.905155,
+            537
+          ],
+          "planeDistance": 2.775557561562891e-17
+        },
+        {
+          "offsetMm": [
+            -26,
+            22
+          ],
+          "tri": 3,
+          "designMm": [
+            10303.906852,
+            14202.926493,
+            537
+          ],
+          "planeDistance": 2.775557561562891e-17
+        },
+        {
+          "offsetMm": [
+            -13,
+            -22
+          ],
+          "tri": 3,
+          "designMm": [
+            10289.318453,
+            14159.427324,
+            537
+          ],
+          "planeDistance": 2.775557561562891e-17
+        },
+        {
+          "offsetMm": [
+            -13,
+            -11
+          ],
+          "tri": 3,
+          "designMm": [
+            10295.627794,
+            14168.437992,
+            537
+          ],
+          "planeDistance": 2.775557561562891e-17
+        },
+        {
+          "offsetMm": [
+            -13,
+            0
+          ],
+          "tri": 3,
+          "designMm": [
+            10301.937131,
+            14177.448665,
+            537
+          ],
+          "planeDistance": 2.775557561562891e-17
+        },
+        {
+          "offsetMm": [
+            -13,
+            22
+          ],
+          "tri": 10,
+          "designMm": [
+            10314.55583,
+            14195.470003,
+            537
+          ],
+          "planeDistance": -2.7755575615628914e-17
+        },
+        {
+          "offsetMm": [
+            0,
+            -22
+          ],
+          "tri": 3,
+          "designMm": [
+            10299.967438,
+            14151.970805,
+            537
+          ],
+          "planeDistance": 2.775557561562891e-17
+        },
+        {
+          "offsetMm": [
+            0,
+            -11
+          ],
+          "tri": 3,
+          "designMm": [
+            10306.276783,
+            14160.981489,
+            537
+          ],
+          "planeDistance": 2.775557561562891e-17
+        },
+        {
+          "offsetMm": [
+            0,
+            0
+          ],
+          "tri": 10,
+          "designMm": [
+            10312.586115,
+            14169.992164,
+            537
+          ],
+          "planeDistance": 8.326672684688674e-17
+        },
+        {
+          "offsetMm": [
+            0,
+            22
+          ],
+          "tri": 10,
+          "designMm": [
+            10325.204801,
+            14188.013492,
+            537
+          ],
+          "planeDistance": 2.7755575615628914e-17
+        },
+        {
+          "offsetMm": [
+            13,
+            -22
+          ],
+          "tri": 3,
+          "designMm": [
+            10310.616403,
+            14144.514335,
+            537
+          ],
+          "planeDistance": -2.775557561562891e-17
+        },
+        {
+          "offsetMm": [
+            13,
+            -11
+          ],
+          "tri": 10,
+          "designMm": [
+            10316.925747,
+            14153.524996,
+            537
+          ],
+          "planeDistance": 2.7755575615628914e-17
+        },
+        {
+          "offsetMm": [
+            13,
+            0
+          ],
+          "tri": 10,
+          "designMm": [
+            10323.235099,
+            14162.535661,
+            537
+          ],
+          "planeDistance": 2.7755575615628914e-17
+        },
+        {
+          "offsetMm": [
+            13,
+            22
+          ],
+          "tri": 10,
+          "designMm": [
+            10335.853771,
+            14180.557025,
+            537
+          ],
+          "planeDistance": 8.326672684688674e-17
+        },
+        {
+          "offsetMm": [
+            26,
+            22
+          ],
+          "tri": 10,
+          "designMm": [
+            10346.502744,
+            14173.100531,
+            537
+          ],
+          "planeDistance": 2.7755575615628914e-17
+        }
+      ],
+      "runs": [
+        {
+          "name": "same-triangle",
+          "first": {
+            "objectId": "o:24381_102278:1",
+            "label": "面",
+            "designM": [
+              10.278669479350574,
+              14.166883804757552,
+              0.537
+            ],
+            "designMm": [
+              10278.669479,
+              14166.883805,
+              537
+            ],
+            "screen": [
+              607.7266226429772,
+              361.0493750118317
+            ],
+            "tri": 3,
+            "triNormal": [
+              0,
+              0,
+              1
+            ],
+            "offsetMm": [
+              -26,
+              -22
+            ]
+          },
+          "second": {
+            "objectId": "o:24381_102278:1",
+            "label": "面",
+            "designM": [
+              10.291288167206236,
+              14.184905155042598,
+              0.537
+            ],
+            "designMm": [
+              10291.288167,
+              14184.905155,
+              537
+            ],
+            "screen": [
+              594.0997927614361,
+              323.7039306305983
+            ],
+            "tri": 3,
+            "triNormal": [
+              0,
+              0,
+              1
+            ],
+            "offsetMm": [
+              -26,
+              0
+            ]
+          },
+          "independentPlaneDistanceM": 0,
+          "outcome": "zero",
+          "messageAtClear": "Perpendicular distance is 0：起点已落在目标线 / 面上，无法绘制垂距尺寸",
+          "messageAfterClick": null,
+          "clearLog": [
+            {
+              "message": "Perpendicular distance is 0：起点已落在目标线 / 面上，无法绘制垂距尺寸",
+              "hadDraft": true
+            }
+          ],
+          "visibleMessageDomCount": 0,
+          "stateAfter": {
+            "hasDraft": false,
+            "records": 0,
+            "draftResult": null,
+            "status": "垂距测量 · 第 1/2 步 选择起点 (Snap) Snap : BOX 面"
+          },
+          "rows": null,
+          "raw": null,
+          "info": null,
+          "prompts": [
+            "垂距测量 · 第 2/2 步 选择目标线 / 面上的点 (Snap) Snap : BOX 面；点空白取消当前点选",
+            "垂距测量 · 第 1/2 步 选择起点 (Snap) Snap : BOX 面"
+          ],
+          "shot": "docs/verification/e3d-measurement-runtime-golden/web-perp-zero-point-fallback-live-05-box-top-face-same-triangle-zero.png",
+          "cardShot": null
+        },
+        {
+          "name": "other-triangle",
+          "first": {
+            "objectId": "o:24381_102278:1",
+            "label": "面",
+            "designM": [
+              10.278669479350574,
+              14.166883804757552,
+              0.537
+            ],
+            "designMm": [
+              10278.669479,
+              14166.883805,
+              537
+            ],
+            "screen": [
+              607.7266226429772,
+              361.0493750118317
+            ],
+            "tri": 3,
+            "triNormal": [
+              0,
+              0,
+              1
+            ],
+            "offsetMm": [
+              -26,
+              -22
+            ]
+          },
+          "second": {
+            "objectId": "o:24381_102278:1",
+            "label": "面",
+            "designM": [
+              10.314555830025347,
+              14.195470003264978,
+              0.537
+            ],
+            "designMm": [
+              10314.55583,
+              14195.470003,
+              537
+            ],
+            "screen": [
+              603.6115019398228,
+              279.88276667233674
+            ],
+            "tri": 10,
+            "triNormal": [
+              0,
+              0,
+              1
+            ],
+            "offsetMm": [
+              -13,
+              22
+            ]
+          },
+          "independentPlaneDistanceM": 0,
+          "outcome": "zero",
+          "messageAtClear": "Perpendicular distance is 0：起点已落在目标线 / 面上，无法绘制垂距尺寸",
+          "messageAfterClick": null,
+          "clearLog": [
+            {
+              "message": "Perpendicular distance is 0：起点已落在目标线 / 面上，无法绘制垂距尺寸",
+              "hadDraft": true
+            }
+          ],
+          "visibleMessageDomCount": 0,
+          "stateAfter": {
+            "hasDraft": false,
+            "records": 0,
+            "draftResult": null,
+            "status": "垂距测量 · 第 1/2 步 选择起点 (Snap) Snap : BOX 面"
+          },
+          "rows": null,
+          "raw": null,
+          "info": null,
+          "prompts": [
+            "垂距测量 · 第 2/2 步 选择目标线 / 面上的点 (Snap) Snap : BOX 面；点空白取消当前点选",
+            "垂距测量 · 第 1/2 步 选择起点 (Snap) Snap : BOX 面"
+          ],
+          "shot": "docs/verification/e3d-measurement-runtime-golden/web-perp-zero-point-fallback-live-05-box-top-face-other-triangle-zero.png",
+          "cardShot": null
+        }
+      ]
+    },
+    {
+      "face": "+X",
+      "normal": [
+        0.8191520442889918,
+        -0.573576436351046,
+        0
+      ],
+      "center": [
+        10.3486288048568,
+        14.144754800343671,
+        0.5
+      ],
+      "view": {
+        "el": 0.3,
+        "az": -35,
+        "factor": 1
+      },
+      "probes": [
+        {
+          "offsetMm": [
+            -22,
+            -19
+          ],
+          "tri": 6,
+          "designMm": [
+            10336.009989,
+            14126.73354,
+            480.999942
+          ],
+          "planeDistance": -3.642919299551295e-17
+        },
+        {
+          "offsetMm": [
+            -22,
+            0
+          ],
+          "tri": 6,
+          "designMm": [
+            10336.009991,
+            14126.733543,
+            499.99995
+          ],
+          "planeDistance": 6.938893903907228e-18
+        },
+        {
+          "offsetMm": [
+            -22,
+            9.5
+          ],
+          "tri": 6,
+          "designMm": [
+            10336.009991,
+            14126.733542,
+            509.499953
+          ],
+          "planeDistance": -1.734723475976807e-18
+        },
+        {
+          "offsetMm": [
+            -22,
+            19
+          ],
+          "tri": 6,
+          "designMm": [
+            10336.00999,
+            14126.733542,
+            518.999951
+          ],
+          "planeDistance": 2.2551405187698492e-17
+        },
+        {
+          "offsetMm": [
+            -11,
+            -19
+          ],
+          "tri": 6,
+          "designMm": [
+            10342.319332,
+            14135.744216,
+            480.999942
+          ],
+          "planeDistance": -1.0755285551056204e-16
+        },
+        {
+          "offsetMm": [
+            -11,
+            0
+          ],
+          "tri": 6,
+          "designMm": [
+            10342.319324,
+            14135.744204,
+            499.99995
+          ],
+          "planeDistance": -6.418476861114186e-17
+        },
+        {
+          "offsetMm": [
+            -11,
+            9.5
+          ],
+          "tri": 6,
+          "designMm": [
+            10342.319333,
+            14135.744217,
+            509.499953
+          ],
+          "planeDistance": -2.949029909160572e-17
+        },
+        {
+          "offsetMm": [
+            -11,
+            19
+          ],
+          "tri": 11,
+          "designMm": [
+            10342.319333,
+            14135.744217,
+            518.999951
+          ],
+          "planeDistance": 0
+        },
+        {
+          "offsetMm": [
+            0,
+            -19
+          ],
+          "tri": 6,
+          "designMm": [
+            10348.628675,
+            14144.754891,
+            480.999942
+          ],
+          "planeDistance": 1.0408340855860843e-17
+        },
+        {
+          "offsetMm": [
+            0,
+            0
+          ],
+          "tri": 11,
+          "designMm": [
+            10348.628675,
+            14144.754891,
+            499.99995
+          ],
+          "planeDistance": 8.326672684688674e-17
+        },
+        {
+          "offsetMm": [
+            0,
+            9.5
+          ],
+          "tri": 11,
+          "designMm": [
+            10348.628675,
+            14144.754891,
+            509.499953
+          ],
+          "planeDistance": 5.551115123125783e-17
+        },
+        {
+          "offsetMm": [
+            0,
+            19
+          ],
+          "tri": 11,
+          "designMm": [
+            10348.628675,
+            14144.754891,
+            518.999951
+          ],
+          "planeDistance": -6.938893903907228e-18
+        },
+        {
+          "offsetMm": [
+            11,
+            -19
+          ],
+          "tri": 6,
+          "designMm": [
+            10354.938018,
+            14153.765567,
+            480.999942
+          ],
+          "planeDistance": -1.734723475976807e-17
+        },
+        {
+          "offsetMm": [
+            11,
+            0
+          ],
+          "tri": 11,
+          "designMm": [
+            10354.938026,
+            14153.765579,
+            499.99995
+          ],
+          "planeDistance": -3.642919299551295e-17
+        },
+        {
+          "offsetMm": [
+            11,
+            9.5
+          ],
+          "tri": 11,
+          "designMm": [
+            10354.938017,
+            14153.765566,
+            509.499953
+          ],
+          "planeDistance": -2.6020852139652106e-17
+        },
+        {
+          "offsetMm": [
+            11,
+            19
+          ],
+          "tri": 11,
+          "designMm": [
+            10354.938017,
+            14153.765566,
+            518.999951
+          ],
+          "planeDistance": 2.7755575615628914e-17
+        },
+        {
+          "offsetMm": [
+            22,
+            -19
+          ],
+          "tri": 11,
+          "designMm": [
+            10361.247361,
+            14162.776242,
+            480.999942
+          ],
+          "planeDistance": 3.9898639947466563e-17
+        },
+        {
+          "offsetMm": [
+            22,
+            0
+          ],
+          "tri": 11,
+          "designMm": [
+            10361.247359,
+            14162.77624,
+            499.99995
+          ],
+          "planeDistance": -5.204170427930421e-18
+        },
+        {
+          "offsetMm": [
+            22,
+            9.5
+          ],
+          "tri": 11,
+          "designMm": [
+            10361.247359,
+            14162.77624,
+            509.499953
+          ],
+          "planeDistance": 1.9081958235744878e-17
+        },
+        {
+          "offsetMm": [
+            22,
+            19
+          ],
+          "tri": 11,
+          "designMm": [
+            10361.24736,
+            14162.776241,
+            518.999951
+          ],
+          "planeDistance": 6.591949208711867e-17
+        }
+      ],
+      "runs": [
+        {
+          "name": "same-triangle",
+          "first": {
+            "objectId": "o:24381_102278:1",
+            "label": "面",
+            "designM": [
+              10.33600998934343,
+              14.12673354025196,
+              0.48099994222515696
+            ],
+            "designMm": [
+              10336.009989,
+              14126.73354,
+              480.999942
+            ],
+            "screen": [
+              599.4609359283181,
+              341.3983748058139
+            ],
+            "tri": 6,
+            "triNormal": [
+              0.8191520458724947,
+              -0.5735764340895697,
+              0
+            ],
+            "offsetMm": [
+              -22,
+              -19
+            ]
+          },
+          "second": {
+            "objectId": "o:24381_102278:1",
+            "label": "面",
+            "designM": [
+              10.336009991202445,
+              14.12673354290691,
+              0.4999999501910642
+            ],
+            "designMm": [
+              10336.009991,
+              14126.733543,
+              499.99995
+            ],
+            "screen": [
+              598.9474411167434,
+              308.0000000000002
+            ],
+            "tri": 6,
+            "triNormal": [
+              0.8191520458724953,
+              -0.5735764340895685,
+              0
+            ],
+            "offsetMm": [
+              -22,
+              0
+            ]
+          },
+          "independentPlaneDistanceM": -2.7226354145113918e-17,
+          "outcome": "zero",
+          "messageAtClear": "Perpendicular distance is 0：起点已落在目标线 / 面上，无法绘制垂距尺寸",
+          "messageAfterClick": null,
+          "clearLog": [
+            {
+              "message": "Perpendicular distance is 0：起点已落在目标线 / 面上，无法绘制垂距尺寸",
+              "hadDraft": true
+            }
+          ],
+          "visibleMessageDomCount": 0,
+          "stateAfter": {
+            "hasDraft": false,
+            "records": 0,
+            "draftResult": null,
+            "status": "垂距测量 · 第 1/2 步 选择起点 (Snap) Snap : BOX 面"
+          },
+          "rows": null,
+          "raw": null,
+          "info": null,
+          "prompts": [
+            "垂距测量 · 第 2/2 步 选择目标线 / 面上的点 (Snap) Snap : BOX 面；点空白取消当前点选",
+            "垂距测量 · 第 1/2 步 选择起点 (Snap) Snap : BOX 面"
+          ],
+          "shot": "docs/verification/e3d-measurement-runtime-golden/web-perp-zero-point-fallback-live-06-box-side-face-same-triangle-zero.png",
+          "cardShot": null
+        },
+        {
+          "name": "other-triangle",
+          "first": {
+            "objectId": "o:24381_102278:1",
+            "label": "面",
+            "designM": [
+              10.33600998934343,
+              14.12673354025196,
+              0.48099994222515696
+            ],
+            "designMm": [
+              10336.009989,
+              14126.73354,
+              480.999942
+            ],
+            "screen": [
+              599.4609359283181,
+              341.3983748058139
+            ],
+            "tri": 6,
+            "triNormal": [
+              0.8191520458724947,
+              -0.5735764340895697,
+              0
+            ],
+            "offsetMm": [
+              -22,
+              -19
+            ]
+          },
+          "second": {
+            "objectId": "o:24381_102278:1",
+            "label": "面",
+            "designM": [
+              10.342319332770014,
+              14.135744216543431,
+              0.5189999508576004
+            ],
+            "designMm": [
+              10342.319333,
+              14135.744217,
+              518.999951
+            ],
+            "screen": [
+              619.2103854406195,
+              273.74467837270004
+            ],
+            "tri": 11,
+            "triNormal": [
+              0.8191520458724948,
+              -0.5735764340895693,
+              0
+            ],
+            "offsetMm": [
+              -11,
+              19
+            ]
+          },
+          "independentPlaneDistanceM": -1.9142673557404066e-15,
+          "outcome": "zero",
+          "messageAtClear": "Perpendicular distance is 0：起点已落在目标线 / 面上，无法绘制垂距尺寸",
+          "messageAfterClick": null,
+          "clearLog": [
+            {
+              "message": "Perpendicular distance is 0：起点已落在目标线 / 面上，无法绘制垂距尺寸",
+              "hadDraft": true
+            }
+          ],
+          "visibleMessageDomCount": 0,
+          "stateAfter": {
+            "hasDraft": false,
+            "records": 0,
+            "draftResult": null,
+            "status": "垂距测量 · 第 1/2 步 选择起点 (Snap) Snap : BOX 面"
+          },
+          "rows": null,
+          "raw": null,
+          "info": null,
+          "prompts": [
+            "垂距测量 · 第 2/2 步 选择目标线 / 面上的点 (Snap) Snap : BOX 面；点空白取消当前点选",
+            "垂距测量 · 第 1/2 步 选择起点 (Snap) Snap : BOX 面"
+          ],
+          "shot": "docs/verification/e3d-measurement-runtime-golden/web-perp-zero-point-fallback-live-06-box-side-face-other-triangle-zero.png",
+          "cardShot": null
+        }
+      ]
+    }
+  ],
+  "pageErrors": []
+}

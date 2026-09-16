@@ -1,0 +1,335 @@
+{
+  "capturedAt": "2026-09-16T09:44:46.999Z",
+  "url": "/?model_source=gen-model-v1&gm_backend_port=8022&show_refno=24381_145018",
+  "frame": {
+    "note": "位置 / 方向均为设计 World（米，X=E Y=N Z=U）；P-Point 的 apiDesignM 直接来自 gen-model element/ptset（世界 mm → 米）",
+    "sceneOriginInDesign": [
+      5.963773681640626,
+      9.972239501953124,
+      16.55197119140625
+    ]
+  },
+  "pickLayer": {
+    "type": "snap",
+    "perpendicularTo": true,
+    "mode": "free_surface",
+    "sources": {
+      "ptset": true,
+      "position": false,
+      "mesh": true
+    }
+  },
+  "ppoints": {
+    "a": {
+      "refno": "24381_145028",
+      "noun": "ELBO",
+      "number": 2,
+      "designM": [
+        7.849849999982805,
+        11.78748990497079,
+        16.892523685784194
+      ],
+      "dir": [
+        -1.1369784178222598e-10,
+        -6.283185204737986e-7,
+        0.9999999999998026
+      ],
+      "designMm": [
+        7849.85,
+        11787.489905,
+        16892.523686
+      ]
+    },
+    "b": {
+      "refno": "24381_145029",
+      "noun": "ELBO",
+      "number": 1,
+      "designM": [
+        7.849850000000001,
+        11.78749,
+        18.492386314215775
+      ],
+      "dir": [
+        -6.123233995736766e-17,
+        -3.749399456654644e-33,
+        -1
+      ],
+      "designMm": [
+        7849.85,
+        11787.49,
+        18492.386314
+      ]
+    },
+    "axisLengthMm": 1599.8626284315833,
+    "total": 70
+  },
+  "view": {
+    "el": 0.1,
+    "az": 0,
+    "factor": 4.2
+  },
+  "hovers": {
+    "a": {
+      "objectId": "o:24381_145028:ptset",
+      "label": "P-Point #2",
+      "designM": [
+        7.849849999982806,
+        11.78748990497079,
+        16.892523685784194
+      ],
+      "designMm": [
+        7849.85,
+        11787.489905,
+        16892.523686
+      ],
+      "screen": [
+        639.9999906778925,
+        464.1555013325375
+      ]
+    },
+    "b": {
+      "objectId": "o:24381_145029:ptset",
+      "label": "P-Point #1",
+      "designM": [
+        7.849850000000003,
+        11.78749,
+        18.492386314215775
+      ],
+      "designMm": [
+        7849.85,
+        11787.49,
+        18492.386314
+      ],
+      "screen": [
+        640.0000096840996,
+        145.78073812525338
+      ]
+    },
+    "axis": {
+      "objectId": "o:24381_145018:5",
+      "label": "轴线（ELBO P-Point #1 → ELBO P-Point #2） · Snap",
+      "designM": [
+        7.849850000000004,
+        11.78749,
+        18.492386314215775
+      ],
+      "designMm": [
+        7849.85,
+        11787.49,
+        18492.386314
+      ],
+      "screen": [
+        639.9999999999999,
+        308
+      ],
+      "offLineM": 3.552713678800501e-15
+    },
+    "surface": {
+      "objectId": "o:24381_145018:5",
+      "label": "模型表面点",
+      "designM": [
+        7.907000070121035,
+        11.787489952485396,
+        17.461501234861757
+      ],
+      "designMm": [
+        7907.00007,
+        11787.489952,
+        17461.501235
+      ],
+      "screen": [
+        639.9999971662944,
+        348.4676703958308
+      ]
+    }
+  },
+  "independent": {
+    "selfAxisDistanceM": 0,
+    "tubingAxisDistanceM": 0,
+    "otherAxis": {
+      "footMm": [
+        7849.85,
+        11787.49,
+        16892.523686
+      ],
+      "distanceM": 9.502921094627231e-8,
+      "deltaMm": [
+        0,
+        -0.000095,
+        0
+      ]
+    }
+  },
+  "groups": {
+    "selfAxis": {
+      "outcome": "zero",
+      "messageAtClear": "Perpendicular distance is 0：起点已落在目标线 / 面上，无法绘制垂距尺寸",
+      "messageAfterClick": null,
+      "clearLog": [
+        {
+          "message": "Perpendicular distance is 0：起点已落在目标线 / 面上，无法绘制垂距尺寸",
+          "hadDraft": true
+        }
+      ],
+      "visibleMessageDomCount": 0,
+      "lensWhileSnappedBefore": {
+        "visible": true,
+        "snapped": true,
+        "title": "更新终点",
+        "subtitle": "P-Point #2"
+      },
+      "lensOnBlankAfter": {
+        "visible": false,
+        "snapped": false,
+        "title": "等待测量点",
+        "subtitle": "当前未命中模型实例，无法捕捉测量点"
+      },
+      "blankScreen": [
+        410,
+        473
+      ],
+      "stateAfter": {
+        "hasDraft": false,
+        "records": 0,
+        "draftResult": null,
+        "status": "垂距测量 · 第 1/2 步 选择起点 (Snap) Snap : ELBO P-Point #2"
+      }
+    },
+    "tubingAxis": {
+      "outcome": "zero",
+      "messageAtClear": "Perpendicular distance is 0：起点已落在目标线 / 面上，无法绘制垂距尺寸",
+      "messageAfterClick": null,
+      "clearLog": [
+        {
+          "message": "Perpendicular distance is 0：起点已落在目标线 / 面上，无法绘制垂距尺寸",
+          "hadDraft": true
+        }
+      ],
+      "stateAfter": {
+        "hasDraft": false,
+        "records": 0,
+        "draftResult": null,
+        "status": "垂距测量 · 第 1/2 步 选择起点 (Snap) Snap : TUBI 轴线（ELBO P-Point #1 → ELBO P-Point #2） · Snap"
+      }
+    },
+    "otherAxis": {
+      "outcome": "result",
+      "messageAtClear": null,
+      "messageAfterClick": null,
+      "detail": {
+        "rows": {
+          "distance": "0mm",
+          "vertical": "0mm",
+          "horizontal": "0mm",
+          "direction": "S 0.0103685 W"
+        },
+        "raw": {
+          "distance": "0mm",
+          "vertical": "0mm",
+          "horizontal": "0mm",
+          "direction": "S 0.0103685 W"
+        },
+        "info": "Perpendicular to · 点→无限线 · P-Point #1 轴线",
+        "record": {
+          "origin": [
+            7849.85,
+            11787.489905,
+            16892.523686
+          ],
+          "target": [
+            7849.85,
+            11787.49,
+            16892.523686
+          ],
+          "originLabel": "P-Point #2",
+          "targetLabel": "P-Point #1 轴线垂足",
+          "approximate": false,
+          "perpendicular": {
+            "targetKind": "line",
+            "targetLabel": "P-Point #1 轴线"
+          }
+        },
+        "distanceM": 9.502921094643304e-8,
+        "verticalM": 0,
+        "horizontalM": 9.502921094643304e-8,
+        "directionExpected": "S 0.0103685 W",
+        "originErrM": 8.881784197001252e-16,
+        "footErrM": 1.7763568394002505e-15,
+        "indepDistanceM": 9.502921094627231e-8
+      }
+    },
+    "pointFallback": {
+      "outcome": "result",
+      "messageAfterClick": null,
+      "detail": {
+        "rows": {
+          "distance": "572mm",
+          "vertical": "569mm",
+          "horizontal": "57mm",
+          "direction": "W 84.2643 D"
+        },
+        "raw": {
+          "distance": "572mm 近似",
+          "vertical": "569mm",
+          "horizontal": "57mm",
+          "direction": "W 84.2643 D"
+        },
+        "info": "Perpendicular to · 点→点（目标无轴向/面几何） · 模型表面点",
+        "record": {
+          "origin": [
+            7849.85,
+            11787.489905,
+            16892.523686
+          ],
+          "target": [
+            7907.00007,
+            11787.489952,
+            17461.501235
+          ],
+          "originLabel": "P-Point #2",
+          "targetLabel": "模型表面点",
+          "originSource": "ptset",
+          "targetSource": "mesh_pick_point",
+          "approximate": true,
+          "perpendicular": {
+            "targetKind": "point",
+            "targetLabel": "模型表面点"
+          }
+        },
+        "distanceMm": 571.8405213616089,
+        "verticalMm": 568.9775490775623,
+        "horizontalMm": 57.150070138248665,
+        "directionFootToSource": "W 84.2643 D",
+        "directionSourceToFootForContrast": "E 84.2643 U",
+        "targetErrM": 0,
+        "originErrM": 8.881784197001252e-16
+      },
+      "lensBeforeClick": {
+        "visible": true,
+        "snapped": true,
+        "title": "更新终点",
+        "subtitle": "模型表面点（近似）"
+      }
+    }
+  },
+  "prompts": {
+    "selfAxis": [
+      "垂距测量 · 第 1/2 步 选择起点 (Snap) Snap : 等待捕捉（P-Point / 设计点（DPOINT））",
+      "垂距测量 · 第 2/2 步 选择目标线 / 面上的点 (Snap) Snap : ELBO P-Point #2；点空白取消当前点选",
+      "垂距测量 · 第 1/2 步 选择起点 (Snap) Snap : ELBO P-Point #2"
+    ],
+    "tubingAxis": [
+      "垂距测量 · 第 2/2 步 选择目标线 / 面上的点 (Snap) Snap : ELBO P-Point #2；点空白取消当前点选",
+      "垂距测量 · 第 1/2 步 选择起点 (Snap) Snap : TUBI 轴线（ELBO P-Point #1 → ELBO P-Point #2） · Snap"
+    ],
+    "otherAxis": [
+      "垂距测量 · 第 2/2 步 选择目标线 / 面上的点 (Snap) Snap : ELBO P-Point #2；点空白取消当前点选",
+      "垂距测量 · 第 1/2 步 选择起点 (Snap) Snap : ELBO P-Point #1"
+    ],
+    "pointFallback": [
+      "垂距测量 · 第 2/2 步 选择目标线 / 面上的点 (Snap) Snap : ELBO P-Point #2；点空白取消当前点选",
+      "垂距测量 · 第 1/2 步 选择起点 (Snap) Snap : TUBI 模型表面点"
+    ]
+  },
+  "pageErrors": []
+}
