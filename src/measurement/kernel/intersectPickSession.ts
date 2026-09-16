@@ -78,7 +78,10 @@ export type IntersectPickStep =
 export const INTERSECT_MESSAGES = {
   notConvertible: '所选项无法转成线 / 面参与求交，请改选其它项或按 Esc 取消（E3D: Unable to convert item into a line or plane for intersection）',
   parallelToFirst: '请再选一条线：上一次拾取与第一条线平行（E3D 2,870 Pick another line, last pick was parallel to first line）',
-  planesNoPoint: '三个平面没有唯一交点，求交已重置，请重新拾取（E3D 2,874）',
+  // The third item may be a plane or a line (a line ∥ the first plane fails the same way), so the
+  // wording names "面 × 面 × 第三项" rather than "三个平面" (prompt matrix D5, 2026-09-16). The E3D
+  // text of (2,874) lives in the message file and is still to be captured with E3D running.
+  planesNoPoint: '面 × 面 × 第三项没有唯一交点，求交已重置，请重新拾取（E3D 2,874）',
 } as const;
 
 /**

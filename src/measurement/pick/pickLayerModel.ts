@@ -327,6 +327,14 @@ export type MeasurementPromptInput = Readonly<{
   pickTypeToken: string;
   /** Appends the E3D `Snap` flag when Significant Snaps is on. */
   significantSnaps: boolean;
+  /**
+   * E3D `pickType.positioning`. Default `true` (`stdPosition`: Measure distance / angle…).
+   * `false` for `stdGraphics` picks — Angle 2 Lines (`measureLineAngleArc`): its EDGPICK has no
+   * `prompt`, so the `(<token>)` segment is dropped, and `isPositionMode()` is false, so none of
+   * the ` WP` / ` Offset` / ` Snap` tails are appended → `Measure angle between lines first line :`
+   * (`docs/verification/e3d-measure-prompt-matrix.md` D1, decided 2026-09-16).
+   */
+  positioning?: boolean;
   /** Current snap target text (E3D shows the picked element after the colon). */
   target?: string | null;
   /** Web-only trailer such as `；点空白取消当前点选`. */
@@ -335,15 +343,18 @@ export type MeasurementPromptInput = Readonly<{
 
 /**
  * Web rendering of `EDGSTATE.prompt()`:
- * `距离测量 · 第 2/2 步 选择终点 (Mid-Point) Snap : ELBO P-Point #1；点空白取消当前点选`.
+ * `距离测量 · 第 2/2 步 选择终点 (Mid-Point) Snap : ELBO P-Point #1；点空白取消当前点选`;
+ * non-positioning (`stdGraphics`) picks: `两线夹角 · 第 1/2 步 选择第一条线 : …`.
  */
 export function formatMeasurementPrompt(input: MeasurementPromptInput): string {
   const step = [`第 ${input.stepIndex}/${input.stepTotal} 步`, input.stepHint?.trim()]
     .filter((part): part is string => Boolean(part))
     .join(' ');
-  const flags = input.significantSnaps ? ' Snap' : '';
+  const positioning = input.positioning ?? true;
+  const pickType = positioning ? ` (${input.pickTypeToken})` : '';
+  const flags = positioning && input.significantSnaps ? ' Snap' : '';
   const target = input.target?.trim() ? ` ${input.target.trim()}` : '';
-  return `${input.command} · ${step} (${input.pickTypeToken})${flags} :${target}${input.trailer ?? ''}`;
+  return `${input.command} · ${step}${pickType}${flags} :${target}${input.trailer ?? ''}`;
 }
 
 /**

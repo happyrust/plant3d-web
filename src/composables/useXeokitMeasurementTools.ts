@@ -2557,6 +2557,7 @@ export function useXeokitMeasurementTools(options: {
       stepTotal: number,
       stepHint: string,
       trailer: string | null = null,
+      positioning = true,
     ): string => formatMeasurementPrompt({
       command,
       stepIndex,
@@ -2564,6 +2565,7 @@ export function useXeokitMeasurementTools(options: {
       stepHint,
       pickTypeToken,
       significantSnaps: layer.significantSnaps,
+      positioning,
       target: snapText,
       trailer,
     });
@@ -2585,10 +2587,12 @@ export function useXeokitMeasurementTools(options: {
 
     if (mode === 'xeokit_measure_angle') {
       // E3D Angle 2 Lines：`Measure angle between lines`，两击 `first line` / `second line or plane`。
+      // 它是 `stdGraphics` 拾取（`positioning = false`、EDGPICK 无 prompt）：提示不带 `(token)` 也不带 ` Snap`
+      // 尾巴——`Measure angle between lines first line :`（提示矩阵 D1，2026-09-16 拍板）。
       if (measurementStyle.state.angleMeasureVariant === 'two-line') {
         return lineAnglePendingLabel.value
-          ? prompt('两线夹角', 2, 2, `选择第二条线或面（第一条：${lineAnglePendingLabel.value}）`, CANCEL_TRAILER)
-          : prompt('两线夹角', 1, 2, '选择第一条线');
+          ? prompt('两线夹角', 2, 2, `选择第二条线或面（第一条：${lineAnglePendingLabel.value}）`, CANCEL_TRAILER, false)
+          : prompt('两线夹角', 1, 2, '选择第一条线', null, false);
       }
       const draft = store.currentXeokitAngleDraft.value;
       if (!draft) return prompt('角度测量', 1, 3, '选择角度顶点');

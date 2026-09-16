@@ -105,6 +105,42 @@ describe('measurementPickTypePromptToken / formatMeasurementPrompt · EDGSTATE.p
       significantSnaps: false,
     })).toBe('角度测量 · 第 1/3 步 (Snap) :');
   });
+
+  it('non-positioning (stdGraphics) picks drop the `(token)` segment and the Snap tail — E3D `Measure angle between lines first line :` (prompt matrix D1)', () => {
+    // Significant Snaps on and a Cursor token set: neither may leak into the Angle 2 Lines prompt.
+    expect(formatMeasurementPrompt({
+      command: '两线夹角',
+      stepIndex: 1,
+      stepTotal: 2,
+      stepHint: '选择第一条线',
+      pickTypeToken: 'Cursor',
+      significantSnaps: true,
+      positioning: false,
+      target: '等待捕捉（网格边 / 面（Graphics））',
+    })).toBe('两线夹角 · 第 1/2 步 选择第一条线 : 等待捕捉（网格边 / 面（Graphics））');
+    // The Web-only segments (step counter, first-line echo, target, trailer) stay.
+    expect(formatMeasurementPrompt({
+      command: '两线夹角',
+      stepIndex: 2,
+      stepTotal: 2,
+      stepHint: '选择第二条线或面（第一条：BOX 边）',
+      pickTypeToken: 'Distance[100]',
+      significantSnaps: true,
+      positioning: false,
+      target: 'BOX 面',
+      trailer: '；点空白取消当前点选',
+    })).toBe('两线夹角 · 第 2/2 步 选择第二条线或面（第一条：BOX 边） : BOX 面；点空白取消当前点选');
+    // `positioning` defaults to true: positioning picks are unchanged.
+    expect(formatMeasurementPrompt({
+      command: '距离测量',
+      stepIndex: 1,
+      stepTotal: 2,
+      stepHint: '选择起点',
+      pickTypeToken: 'Cursor',
+      significantSnaps: true,
+      positioning: true,
+    })).toBe('距离测量 · 第 1/2 步 选择起点 (Cursor) Snap :');
+  });
 });
 
 describe('normalizeMeasurementPickLayer', () => {

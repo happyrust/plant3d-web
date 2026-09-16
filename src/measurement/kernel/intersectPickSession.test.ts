@@ -108,6 +108,26 @@ describe('advanceIntersectPick · EDGPICKTYPE.intersect sequencing', () => {
     expect(third.session).toEqual(EMPTY_INTERSECT_SESSION);
   });
 
+  it('(2,874) wording names 面 × 面 × 第三项 — the third item may be a line ∥ the first plane, not only a plane (prompt matrix D5)', () => {
+    // PLANE × PLANE, then a line lying in the second plane and parallel to the first (golden MD §35 补采「线 ∥ 第一面」).
+    const planes = advanceIntersectPick(advanceIntersectPick(EMPTY_INTERSECT_SESSION, PLANE_X3).session, PLANE_Y4);
+    expect(planes.status).toBe('need-more');
+    const lineInSecondParallelToFirst: IntersectOperand = { kind: 'line', start: [0, 4, 0], end: [0, 4, 5] };
+    const third = advanceIntersectPick(planes.session, lineInSecondParallelToFirst);
+    expect(third.status).toBe('rejected');
+    if (third.status !== 'rejected') throw new Error('unreachable');
+    expect(third.e3dCode).toBe('2,874');
+    expect(third.session).toEqual(EMPTY_INTERSECT_SESSION);
+    expect(third.message).toBe('面 × 面 × 第三项没有唯一交点，求交已重置，请重新拾取（E3D 2,874）');
+    expect(INTERSECT_MESSAGES.planesNoPoint).not.toContain('三个平面');
+    // Same line but crossing the first plane resolves on the first plane (E3D intersects the line with plane 1 only).
+    const crossing: IntersectOperand = { kind: 'line', start: [0, 4, 1], end: [6, 4, 1] };
+    const ok = advanceIntersectPick(planes.session, crossing);
+    expect(ok.status).toBe('resolved');
+    if (ok.status !== 'resolved') throw new Error('unreachable');
+    expect(ok.position).toEqual([3, 4, 1]);
+  });
+
   it('an item that converts to nothing is refused without consuming the pick', () => {
     const first = advanceIntersectPick(EMPTY_INTERSECT_SESSION, X_AXIS);
     const step = advanceIntersectPick(first.session, null);

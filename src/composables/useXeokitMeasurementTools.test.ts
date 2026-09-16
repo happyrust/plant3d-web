@@ -2198,6 +2198,34 @@ describe('useXeokitMeasurementTools', () => {
       tools.dispose();
     });
 
+    it('两线夹角（E3D stdGraphics 拾取）：提示条不带 (token) 也不带 Snap 尾巴——`Measure angle between lines first line :`（提示矩阵 D1）', async () => {
+      const { store, measurementStyle, tools, clickAt } = await setupGraphicsTools();
+      measurementStyle.updateMeasurementPickLayer({ filter: 'graphics', pickType: 'exact' });
+      store.setToolMode('xeokit_measure_angle');
+      measurementStyle.updateStyle({ angleMeasureVariant: 'two-line' });
+      await nextTick();
+
+      // Significant Snaps 缺省开、类型 Cursor：定位拾取会出 `(Cursor) Snap`，两线夹角一个都不带（非定位拾取，EDGPICK 无 prompt）。
+      expect(measurementStyle.state.measurementPickLayer.significantSnaps).toBe(true);
+      expect(tools.statusText.value).toMatch(/^两线夹角 · 第 1\/2 步 选择第一条线 : 等待捕捉（网格边 \/ 面（Graphics））$/);
+      expect(tools.statusText.value).not.toContain('(Cursor)');
+      expect(tools.statusText.value).not.toContain(' Snap');
+
+      // 第一击拾棱 x = 2.5（线）→ 第 2 步回显第一条线；仍无 token / Snap，Web 加的 trailer 照旧。
+      clickAt(148, 100);
+      expect(tools.pickPointMessage.value).toContain('已选第一条线');
+      expect(tools.statusText.value).toMatch(/^两线夹角 · 第 2\/2 步 选择第二条线或面（第一条：.+） : .*；点空白取消当前点选$/);
+      expect(tools.statusText.value).not.toMatch(/\((Cursor|Snap|Mid-Point|Distance\[[^\]]*\]|Fraction\[[^\]]*\]|Proportion\[[^\]]*\]|Intersection\[\d+\])\)/);
+      expect(tools.statusText.value).not.toContain(' Snap :');
+
+      // 切回三点角（stdPosition）：同一拾取层下定位拾取的模板照旧 `(Cursor) Snap`。
+      measurementStyle.updateStyle({ angleMeasureVariant: 'three-point' });
+      await nextTick();
+      expect(tools.statusText.value).toMatch(/^角度测量 · 第 1\/3 步 选择角度顶点 \(Cursor\) Snap : /);
+
+      tools.dispose();
+    });
+
     it('Intersect：两条棱（线 × 线）两次子拾取求出角点作为测量点；提示 Intersection[1]→[2]，Esc 先放弃子拾取', async () => {
       const { store, measurementStyle, tools, clickAt, hoverAt } = await setupGraphicsTools();
       measurementStyle.updateMeasurementPickLayer({ filter: 'graphics', pickType: 'intersect' });
