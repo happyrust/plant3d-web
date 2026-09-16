@@ -5,6 +5,7 @@ import {
   derivePickPosition,
   distanceAlongSegment,
   fractionAlongSegment,
+  intersectArcWith,
   intersectLines,
   intersectPicks,
   isWithinSegmentExtent,
@@ -13,6 +14,8 @@ import {
   proportionAlongSegment,
   rayPlaneIntersection,
   snapSegmentEnd,
+  type IntersectArcOperand,
+  type IntersectOperand,
   type PickRay,
   type PickSegment,
   type PickVec3,
@@ -29,6 +32,12 @@ function mm(east: number, north: number, up: number): PickVec3 {
 }
 
 function positionOf(result: ReturnType<typeof derivePickPosition>): PickVec3 {
+  expect(result.ok).toBe(true);
+  if (!result.ok) throw new Error(result.reason);
+  return result.position;
+}
+
+function positionOfIntersect(result: ReturnType<typeof intersectPicks>): PickVec3 {
   expect(result.ok).toBe(true);
   if (!result.ok) throw new Error(result.reason);
   return result.position;
@@ -256,5 +265,91 @@ describe('Intersect (EDGPICKTYPE.intersect)', () => {
 
   it('a single operand is not enough', () => {
     expect(intersectPicks([{ kind: 'line', start: east.start, end: east.end }])).toEqual({ ok: false, reason: 'needs-another-pick' });
+  });
+});
+
+/**
+ * `edgpicktype.pmlobj` 864–904: an ELBO / BEND pick converts to its centreline ARC
+ * (`elementArc.ts`), which is always the subject of the intersection; `ARC.intersections`
+ * works on the arc's full circle and the candidate nearest to where the arc's own pick ray
+ * met the arc plane wins.
+ */
+describe('Intersect · ARC operand (ELBO / BEND centreline fillet)', () => {
+  /** A 500 mm-radius centreline arc centred at E1000, lying in the horizontal plane U0. */
+  function arcAt(picked: PickVec3): IntersectArcOperand {
+    return { kind: 'arc', center: mm(1000, 0, 0), normal: [0, 0, 1], radius: 0.5, picked };
+  }
+  /** A north–south line at the given easting, `up` metres above the arc plane. */
+  function northSouthAt(eastMm: number, up = 0): IntersectOperand {
+    return { kind: 'line', start: mm(eastMm, -2000, up * 1000), end: mm(eastMm, 2000, up * 1000) };
+  }
+
+  it('arc × line: the circle is met twice and the pick decides which one; the arc is the subject in either pick order', () => {
+    const line = northSouthAt(1000);
+    for (const [pickedNorthMm, expectedNorthMm] of [[400, 500], [-400, -500]] as const) {
+      const arc = arcAt(mm(1000, pickedNorthMm, 0));
+      for (const operands of [[arc, line], [line, arc]] as const) {
+        const result = intersectPicks(operands);
+        expect(result.ok).toBe(true);
+        if (!result.ok) throw new Error(result.reason);
+        expectMm(result.position, [1000, expectedNorthMm, 0]);
+        expect(result.skew).toBe(false);
+      }
+    }
+  });
+
+  it('arc × line: a tangent line gives the single tangent point — the real-model case (a bend leg is tangent to its own fillet)', () => {
+    const arc = arcAt(mm(1500, 200, 0));
+    expectMm(positionOfIntersect(intersectArcWith(arc, northSouthAt(1500))), [1500, 0, 0]);
+    // Model data is only tangent to ~1e-9 mm (golden MD §37: the tube axis misses the arc by 5e-10 mm):
+    // inside or outside the tolerance band the answer stays the tangent point.
+    expectMm(positionOfIntersect(intersectArcWith(arc, northSouthAt(1500 - 1e-9))), [1500, 0, 0]);
+    expectMm(positionOfIntersect(intersectArcWith(arc, northSouthAt(1500 + 1e-9))), [1500, 0, 0]);
+  });
+
+  it('arc × line: no intersection is E3D「No intersection between picked items」, not a parallel error', () => {
+    expect(intersectArcWith(arcAt(mm(1600, 0, 0)), northSouthAt(1600))).toEqual({ ok: false, reason: 'no-arc-intersection' });
+    expect(intersectPicks([northSouthAt(1600), arcAt(mm(1600, 0, 0))])).toEqual({ ok: false, reason: 'no-arc-intersection' });
+  });
+
+  it('arc × line: a line off the arc plane is projected onto it; a line perpendicular to the plane meets only if its foot is on the circle', () => {
+    // 300 mm above the arc plane, otherwise the two-point case above.
+    expectMm(positionOfIntersect(intersectArcWith(arcAt(mm(1000, 400, 300)), northSouthAt(1000, 0.3))), [1000, 500, 0]);
+    const vertical = (eastMm: number): IntersectOperand => ({ kind: 'line', start: mm(eastMm, 0, -1000), end: mm(eastMm, 0, 1000) });
+    expectMm(positionOfIntersect(intersectArcWith(arcAt(mm(1500, 0, 100)), vertical(1500))), [1500, 0, 0]);
+    expect(intersectArcWith(arcAt(mm(1200, 0, 100)), vertical(1200))).toEqual({ ok: false, reason: 'no-arc-intersection' });
+  });
+
+  it('arc × plane: the plane cuts the arc plane in a line; a plane parallel to the arc plane never meets the circle', () => {
+    const cutting: IntersectOperand = { kind: 'plane', position: mm(1300, 0, 0), normal: [1, 0, 0] };
+    expectMm(positionOfIntersect(intersectArcWith(arcAt(mm(1300, 300, 0)), cutting)), [1300, 400, 0]);
+    expectMm(positionOfIntersect(intersectArcWith(arcAt(mm(1300, -300, 0)), cutting)), [1300, -400, 0]);
+    const parallel: IntersectOperand = { kind: 'plane', position: mm(0, 0, 50), normal: [0, 0, 1] };
+    expect(intersectArcWith(arcAt(mm(1300, 0, 0)), parallel)).toEqual({ ok: false, reason: 'no-arc-intersection' });
+  });
+
+  it('arc × arc: coplanar circles meet at two points; circles in different planes only where both planes and both circles agree', () => {
+    const coplanar: IntersectArcOperand = { kind: 'arc', center: mm(1800, 0, 0), normal: [0, 0, 1], radius: 0.5, picked: mm(1800, 0, 0) };
+    expectMm(positionOfIntersect(intersectArcWith(arcAt(mm(1400, 200, 0)), coplanar)), [1400, 300, 0]);
+    expectMm(positionOfIntersect(intersectArcWith(arcAt(mm(1400, -200, 0)), coplanar)), [1400, -300, 0]);
+    // Same centre and radius, vertical plane: the two circles cross on the shared trace line (E1000 ± 500).
+    const upright: IntersectArcOperand = { kind: 'arc', center: mm(1000, 0, 0), normal: [0, 1, 0], radius: 0.5, picked: mm(1000, 0, 0) };
+    expectMm(positionOfIntersect(intersectArcWith(arcAt(mm(1400, 0, 0)), upright)), [1500, 0, 0]);
+    expectMm(positionOfIntersect(intersectArcWith(arcAt(mm(600, 0, 0)), upright)), [500, 0, 0]);
+    // Concentric / far apart: nothing.
+    expect(intersectArcWith(arcAt(mm(1000, 0, 0)), { ...coplanar, center: mm(1000, 0, 0) })).toEqual({ ok: false, reason: 'no-arc-intersection' });
+    expect(intersectArcWith(arcAt(mm(1000, 0, 0)), { ...coplanar, center: mm(5000, 0, 0) })).toEqual({ ok: false, reason: 'no-arc-intersection' });
+  });
+
+  it('degenerate operands are refused before the geometry runs; an arc cannot be the third item after two planes', () => {
+    expect(intersectArcWith({ ...arcAt(mm(1000, 0, 0)), radius: 0 }, northSouthAt(1000))).toEqual({ ok: false, reason: 'non-finite-input' });
+    expect(intersectArcWith({ ...arcAt(mm(1000, 0, 0)), normal: [0, 0, 0] }, northSouthAt(1000))).toEqual({ ok: false, reason: 'non-finite-input' });
+    expect(intersectArcWith(arcAt(mm(1000, 0, 0)), { kind: 'line', start: mm(1000, 0, 0), end: mm(1000, 0, 0) }))
+      .toEqual({ ok: false, reason: 'zero-length-segment' });
+    expect(intersectArcWith(arcAt(mm(1000, 0, 0)), { kind: 'plane', position: mm(0, 0, 0), normal: [0, 0, 0] }))
+      .toEqual({ ok: false, reason: 'degenerate-plane' });
+    const px: IntersectOperand = { kind: 'plane', position: mm(100, 0, 0), normal: [1, 0, 0] };
+    const py: IntersectOperand = { kind: 'plane', position: mm(0, 200, 0), normal: [0, 1, 0] };
+    expect(intersectPicks([px, py, arcAt(mm(1000, 0, 0))])).toEqual({ ok: false, reason: 'unsupported-geometry' });
   });
 });

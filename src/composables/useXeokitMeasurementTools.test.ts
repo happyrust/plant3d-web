@@ -2956,7 +2956,8 @@ describe('useXeokitMeasurementTools', () => {
         expect(tools.statusText.value).toContain('(Intersection[1]) Snap :');
         store.clearCurrentXeokitDraft();
 
-        // ELBO 只有 arc()：E3D「Unable to convert item into a line or plane」（`alert.error`），拒收且不消耗这一击；error toast。
+        // ELBO C 只有 arc()，而它的点集没有放置矩阵（旧后端口径）→ 角点无从得知、连弧也造不出：
+        // E3D「Unable to convert item into a line or plane」（`alert.error`），拒收且不消耗这一击；error toast。
         expect(toasts).toEqual([]);
         await hoverAndLoad(40, 160);
         clickAt(40, 160);
@@ -3119,8 +3120,7 @@ describe('useXeokitMeasurementTools', () => {
       }
     });
 
-    it('Perpendicular to：第二点拾中 ELBO 元素时目标是它的中心线弧面（E3D getLine() 未设 → getPlane() = arc() 所在平面）——Element × Cursor 表面点带弧、Any × Snap 无候选时元素拾取给弧；Intersect 仍拒 ELBO', async () => {
-      const { toasts, stop } = await captureToasts();
+    it('Perpendicular to：第二点拾中 ELBO 元素时目标是它的中心线弧面（E3D getLine() 未设 → getPlane() = arc() 所在平面）——Element × Cursor 表面点带弧、Any × Snap 无候选时元素拾取给弧', async () => {
       const { store, measurementStyle, tools, clickAt, hoverAndLoad } = await setupElementLineTools();
       try {
         measurementStyle.updateStyle({ perpendicularTo: true });
@@ -3168,21 +3168,74 @@ describe('useXeokitMeasurementTools', () => {
         expect(snapRecord.target.sourceInfo?.label).toBe('ELBO 中心线弧面（P1 → P2）垂足');
         expect(store.measurementDraftResult.value!.distance).toBeCloseTo(0.4, 6);
         expect(store.measurementDraftResult.value!.approximate).toBe(false);
-        store.clearAll();
-        store.setToolMode('xeokit_measure_distance');
-        await nextTick();
+      } finally {
+        tools.dispose();
+        vi.useRealTimers();
+      }
+    });
 
-        // Intersect 不受影响：Web 还没有 ARC 操作数，拾中 ELBO G 仍按 E3D「Unable to convert item into a line or plane」拒收且不消耗。
-        measurementStyle.updateStyle({ perpendicularTo: false });
+    it('Intersect：ELBO 没有 line() 只有 arc() → 中心线弧当 ARC 操作数（E3D edgpicktype 666 / 864–904）：弧 × 线相切出切点、两种拾取顺序同一点，不相交按 alert.warning 拒收且不消耗；表面点源关着也拾得到弧', async () => {
+      const { toasts, stop } = await captureToasts();
+      const { store, measurementStyle, tools, clickAt, hoverAndLoad } = await setupElementLineTools();
+      try {
         measurementStyle.updateMeasurementPickLayer({ filter: 'element', pickType: 'intersect' });
         await nextTick();
-        expect(toasts).toEqual([]);
+
+        // 子拾取 1：ELBO G（弧心 (2.5, 3, 6.3)、R 0.3、法向 +Y，弧面 y = 3）→ 操作数是弧本身，名字不带「面」。
+        await hoverAndLoad(170, 170);
         clickAt(170, 170);
         expect(store.currentXeokitDistanceDraft.value).toBeNull();
-        expect(tools.pickPointMessage.value).toContain('无法转成线 / 面');
-        expect(tools.statusText.value).toContain('(Intersection[1]) Snap :');
-        expect(toasts).toEqual([{ message: tools.pickPointMessage.value, level: 'error' }]);
+        expect(tools.pickPointMessage.value).toContain('1. ELBO 中心线弧（P1 → P2）（弧）');
+        expect(tools.statusText.value).toContain('(Intersection[2]) Snap :');
+
+        // 子拾取 2：CYLI A 的轴线 (1, 4, 6) → (3, 4, 6)——投到弧面 y = 3 上与圆相切 → 交点 = 切点 (2.5, 3, 6)（弯头的 P1）。
+        await hoverAndLoad(140, 100);
+        expect(tools.hoverSnapTarget.value?.label).toBe('交点（预览）');
+        clickAt(140, 100);
+        const draft = store.currentXeokitDistanceDraft.value!;
+        expect(draft).not.toBeNull();
+        expect(draft.origin.worldPos[0]).toBeCloseTo(2.5, 6);
+        expect(draft.origin.worldPos[1]).toBeCloseTo(3, 6);
+        expect(draft.origin.worldPos[2]).toBeCloseTo(6, 6);
+        expect(draft.origin.sourceInfo?.label).toBe('交点');
+        store.clearCurrentXeokitDraft();
+
+        // 先线后弧：E3D「Make sure arc is always first」——弧仍是被求交的主体，同一个交点。
+        clickAt(140, 100);
+        expect(tools.pickPointMessage.value).toContain('1. CYLI 轴线（P1 → P2）（线）');
+        clickAt(170, 170);
+        const reversed = store.currentXeokitDistanceDraft.value!;
+        expect(reversed.origin.worldPos[0]).toBeCloseTo(2.5, 6);
+        expect(reversed.origin.worldPos[1]).toBeCloseTo(3, 6);
+        expect(reversed.origin.worldPos[2]).toBeCloseTo(6, 6);
+        store.clearCurrentXeokitDraft();
+        expect(toasts).toEqual([]);
+
+        // 不相交：CYLI B 的轴线（x = 2、z = 6）投到弧面后离弧心 0.583 m > R 0.3 →
+        // E3D `alert.warning('No intersection between picked items')`：只丢这一击，弧还留在会话里。
+        clickAt(170, 170);
+        await hoverAndLoad(100, 40);
+        clickAt(100, 40);
+        expect(store.currentXeokitDistanceDraft.value).toBeNull();
+        expect(tools.pickPointMessage.value).toContain('与弧没有交点');
+        expect(tools.pickPointMessage.value).toContain('1. ELBO 中心线弧（P1 → P2）（弧）');
+        expect(tools.statusText.value).toContain('(Intersection[2]) Snap :');
+        expect(toasts).toEqual([{ message: tools.pickPointMessage.value, level: 'warning' }]);
         stop();
+        expect(tools.reset()).toBe(true);
+        expect(tools.statusText.value).toContain('(Intersection[1]) Snap :');
+
+        // 表面点源关着、弯头体上又没有别的候选：E3D 这一击照样是 ELEMENT 拾取 → `line()` 未设 → `arc()`。
+        measurementStyle.updateMeasurementPickSource('mesh_pick_point', { show: false, snap: false });
+        await nextTick();
+        await hoverAndLoad(170, 170);
+        expect(tools.hoverSnapTarget.value?.label).toBe('中心线弧（P1 → P2）');
+        clickAt(170, 170);
+        expect(tools.pickPointMessage.value).toContain('1. ELBO 中心线弧（P1 → P2）（弧）');
+        clickAt(140, 100);
+        const withoutSurfacePoints = store.currentXeokitDistanceDraft.value!;
+        expect(withoutSurfacePoints.origin.worldPos[0]).toBeCloseTo(2.5, 6);
+        expect(withoutSurfacePoints.origin.worldPos[2]).toBeCloseTo(6, 6);
       } finally {
         tools.dispose();
         vi.useRealTimers();

@@ -130,8 +130,10 @@ import {
   derivePickPosition,
   isWithinSegmentExtent,
   lineRayControlPoint,
+  rayPlaneIntersection,
   type PickDerivationType,
   type PickGeometry,
+  type PickRay,
   type PickVec3,
 } from '@/measurement/kernel/pickDerivation';
 import { buildShortestDistance, type ShortestOperand } from '@/measurement/kernel/shortestDistance';
@@ -1441,7 +1443,7 @@ export function useXeokitMeasurementTools(options: {
    * `gmfArc.fillet(radius, pPosition[arrive], position, pPosition[leave])`——两条切线从元素原点（`POS`）分别到
    * P1 / P2，弧与两者相切。点从 ptset 缓存取、角点是同一份点集响应的放置矩阵平移（`ptsetSnap.getOrigin`，同一帧
    * 同一精度）；半径由几何自己定（ELBO 的 `RADI` 是 0）。noun 不在表内、缺 P1 / P2 / 原点或两腿共线时为 null。
-   * 它只当 Perpendicular 目标（`getLine()` 未设 → `getPlane()` = 弧所在平面）；Snap 不受影响，Intersect 的 ARC 操作数另做。
+   * 它当 Perpendicular 目标（`getLine()` 未设 → `getPlane()` = 弧所在平面）与 Intersect 的 ARC 操作数（弧本身）；Snap 不受影响。
    */
   function elementArcForRefno(refno: string | null): PickHit['elementArc'] | null {
     if (!refno) return null;
@@ -1464,9 +1466,9 @@ export function useXeokitMeasurementTools(options: {
   /**
    * 没有候选胜出时，把光标命中的元素当 E3D 的 ELEMENT 拾取转成操作数：只在要线 / 面的场合（Intersect 拾取类型，
    * 或 Perpendicular to 正在等第二点）、元素类过滤器（Any / Element）放行时成立。元素有 `line()` 就给 `elementLine`
-   * （Intersect 操作数 / Perpendicular 目标线）；没有 `line()` 只有 `arc()`（ELBO / BEND）时只在 Perpendicular 下给
-   * `elementArc`（E3D `getLine()` 未设 → `getPlane()` = 弧面；Intersect 的 ARC 操作数 Web 还没有，仍按原路拒收）。
-   * 命中点仍是表面点（Perpendicular 的 `picked`）。
+   * （Intersect 操作数 / Perpendicular 目标线）；没有 `line()` 只有 `arc()`（ELBO / BEND）时给 `elementArc`
+   * （`edgpicktype.pmlobj` 647–680 的 ELEMENT 分支就是 `line()` 不成再 `arc()`）——Intersect 下它是 ARC 操作数、
+   * Perpendicular 下是弧所在平面（`getLine()` 未设 → `getPlane()`），两处名字不同。命中点仍是表面点（Perpendicular 的 `picked`）。
    */
   function elementPickAsOperand(base: PickHit, refno: string | null): PickHit | null {
     const layer = measurementStyle.state.measurementPickLayer;
@@ -1486,7 +1488,6 @@ export function useXeokitMeasurementTools(options: {
         sourcePriority: measurementStyle.state.measurementPickSources.position?.priority,
       };
     }
-    if (!perpendicularWaiting) return null;
     const elementArc = elementArcForRefno(refno);
     if (!elementArc) return null;
     return {
@@ -1494,7 +1495,7 @@ export function useXeokitMeasurementTools(options: {
       source: 'mesh_pick_point',
       candidateId: `element-arc:${refno}`,
       refno,
-      label: ELEMENT_ARC_LABEL,
+      label: layer.pickType === 'intersect' ? ELEMENT_ARC_OPERAND_LABEL : ELEMENT_ARC_LABEL,
       elementArc,
       sourcePriority: measurementStyle.state.measurementPickSources.position?.priority,
     };
@@ -1503,9 +1504,9 @@ export function useXeokitMeasurementTools(options: {
   /**
    * 给同一元素的表面点 / Item 原点候选挂上 `elementLine` / `elementArc`。Any / Element 过滤器 × Intersect 下表面点本不放行
    * （表面点只在 Cursor 类型放行，2026-09-16 起 Any 与 Element 同一口径），但 E3D 在元素类拾取模式下拾中元素任意处
-   * 都回 ELEMENT 再 `line()`，所以这时把表面点当元素拾取（特征类 `element`）——元素没有 `line()`（ELBO 只有 `arc()`）
-   * 也照样当元素拾中，交给求交会话按 E3D「Unable to convert item into a line or plane」拒收且不消耗这一击。
-   * `elementArc` 只被 Perpendicular 消费（`resolvePerpendicularTargetFromHit`），挂上不改 Intersect / Snap 的行为。
+   * 都回 ELEMENT 再 `line()` / `arc()`，所以这时把表面点当元素拾取（特征类 `element`）——元素两者都没有时照样当元素拾中，
+   * 交给求交会话按 E3D「Unable to convert item into a line or plane」拒收且不消耗这一击。
+   * `elementArc` 由 Perpendicular（`resolvePerpendicularTargetFromHit`，弧所在平面）与 Intersect（`intersectOperandFromHit`，弧本身）消费，不改 Snap。
    */
   function attachElementGeometry(candidates: MeasurementPickCandidate[], refno: string | null): MeasurementPickCandidate[] {
     if (candidates.length === 0) return candidates;
@@ -1696,6 +1697,8 @@ export function useXeokitMeasurementTools(options: {
   const ELEMENT_LINE_LABEL = '轴线（P1 → P2）';
   /** ELBO / BEND 当 Perpendicular 目标时的弧面名（E3D `arc()` = fillet(P1, POS, P2) 所在平面）→ `ELBO 中心线弧面（P1 → P2）`。 */
   const ELEMENT_ARC_LABEL = '中心线弧面（P1 → P2）';
+  /** 同一条弧当 Intersect 操作数时拾中的是弧本身（不是它所在的面）→ `ELBO 中心线弧（P1 → P2）`。 */
+  const ELEMENT_ARC_OPERAND_LABEL = '中心线弧（P1 → P2）';
 
   /** 端点校正容差的下限：设计空间 2 mm，换成场景单位（全局模型矩阵可能带缩放）。 */
   const TUBING_END_TOLERANCE_DESIGN_M = 0.002;
@@ -1912,20 +1915,39 @@ export function useXeokitMeasurementTools(options: {
     return measurementStyle.state.measurementPickLayer.pickType === 'intersect';
   }
 
+  /** 这一击拾中的是元素的中心线弧（ELBO / BEND 没有 `line()`）时，它就是 E3D 的 ARC 操作数。 */
+  function intersectArcOfHit(hit: PickHit): PickHit['elementArc'] | null {
+    if (hit.segment || hit.elementLine || hit.plane || hit.direction) return null;
+    return hit.elementArc ?? null;
+  }
+
   /**
-   * 把拾中候选的几何换到设计 World，按 `EDGPICKTYPE.intersect` 的分型转成 LINE / PLANE 操作数。
+   * 把拾中候选的几何换到设计 World，按 `EDGPICKTYPE.intersect` 的分型转成 LINE / PLANE / ARC 操作数。
    * 线候选自己的 `segment` 优先；没有时，拾中的元素按 E3D `edgTypes.attribute(noun).line(item)` 用它的
-   * P1 → P2（`elementLine`）当 LINE——这就是 E3D 里 ELEMENT 类型的 `intersect()` 分支。
+   * P1 → P2（`elementLine`）当 LINE，`line()` 未设再按 `arc()` 用中心线弧（`elementArc`）当 ARC——这就是
+   * E3D 里 ELEMENT 类型的 `intersect()` 分支（`edgpicktype.pmlobj` 631–681）。
+   * ARC 的 `picked` 是 E3D 的 `!pick.intersection(!arcPlane)`：拾中这条弧的那次射线落在弧所在平面上的点，
+   * 两个交点时按它取近的（同上 891–904）。射线缺席 / 与弧面平行时退回这一击的表面点。
    */
-  function intersectOperandFromHit(hit: PickHit): IntersectOperand | null {
+  function intersectOperandFromHit(hit: PickHit, ray: PickRay | null): IntersectOperand | null {
     const toDesign = (v: Vector3): PickVec3 => vec3ToTuple(sceneWorldToDesignMeters(v, dtxLayerRef));
     const toDesignDir = (origin: Vector3, v: Vector3): PickVec3 => vec3ToTuple(sceneDirectionToDesign(origin, v, dtxLayerRef));
     const line = hit.segment ?? hit.elementLine ?? null;
+    const elementArc = intersectArcOfHit(hit);
+    let arc: Readonly<{ center: PickVec3; normal: PickVec3; radius: number; picked: PickVec3 }> | null = null;
+    if (elementArc) {
+      const center = toDesign(elementArc.center);
+      const normal = toDesignDir(elementArc.center, elementArc.normal);
+      const rim = toDesign(elementArc.rim);
+      const picked = (ray ? rayPlaneIntersection(ray, { position: center, normal }) : null) ?? toDesign(hit.worldPos);
+      arc = { center, normal, radius: Math.hypot(rim[0] - center[0], rim[1] - center[1], rim[2] - center[2]), picked };
+    }
     return intersectOperandFromGeometry({
       segment: line ? { start: toDesign(line.start), end: toDesign(line.end) } : null,
       plane: hit.plane
         ? { position: toDesign(hit.plane.position), normal: toDesignDir(hit.plane.position, hit.plane.normal) }
         : null,
+      arc,
       position: toDesign(hit.worldPos),
       direction: hit.direction ? toDesignDir(hit.worldPos, hit.direction) : null,
     });
@@ -1945,8 +1967,13 @@ export function useXeokitMeasurementTools(options: {
     };
   }
 
+  const INTERSECT_OPERAND_KIND_TEXT = { line: '线', plane: '面', arc: '弧' } as const;
+
   function intersectPendingText(session: IntersectPickSession): string {
-    const items = session.labels.map((label, index) => `${index + 1}. ${label || '拾中项'}（${session.operands[index]?.kind === 'plane' ? '面' : '线'}）`);
+    const items = session.labels.map((label, index) => {
+      const kind = session.operands[index]?.kind ?? 'line';
+      return `${index + 1}. ${label || '拾中项'}（${INTERSECT_OPERAND_KIND_TEXT[kind]}）`;
+    });
     return `求交已选 ${items.join('；')}，再选一项（Intersection[${intersectPickOrdinal(session)}]）`;
   }
 
@@ -1954,15 +1981,18 @@ export function useXeokitMeasurementTools(options: {
    * Intersect 子拾取（点击）：把这一击转成操作数喂给会话。返回交点命中 = 这一击产生测量点；
    * 返回 null = 还在等下一次子拾取或这一击被拒（原因已写进 pickPointMessage）。
    */
-  function consumeIntersectSubPick(hit: PickHit): PickHit | null {
-    // 元素当线用时，操作数标签写成它的轴线而不是「模型表面点」（E3D 这一击拾的是元素本身）。
+  function consumeIntersectSubPick(hit: PickHit, ray: PickRay | null): PickHit | null {
+    // 元素当线 / 弧用时，操作数标签写成它的轴线 / 中心线弧而不是「模型表面点」（E3D 这一击拾的是元素本身）。
     const usesElementLine = !hit.segment && Boolean(hit.elementLine);
+    const elementOperandLabel = usesElementLine
+      ? ELEMENT_LINE_LABEL
+      : intersectArcOfHit(hit) ? ELEMENT_ARC_OPERAND_LABEL : null;
     const label = formatMeasurementSnapLabel({
-      label: usesElementLine ? ELEMENT_LINE_LABEL : hit.label,
+      label: elementOperandLabel ?? hit.label,
       noun: nounForRefno(hit.refno ?? null),
       refno: hit.refno,
     });
-    const step = advanceIntersectPick(intersectSession, intersectOperandFromHit(hit), label);
+    const step = advanceIntersectPick(intersectSession, intersectOperandFromHit(hit, ray), label);
     setIntersectSession(step.session);
     if (step.status === 'resolved') {
       pickPointMessage.value = null;
@@ -1972,19 +2002,19 @@ export function useXeokitMeasurementTools(options: {
       pickPointMessage.value = intersectPendingText(step.session);
       return null;
     }
-    // 被拒的一击对应 E3D 的 `!!alert.*`：2,870 / 2,874 是 warning（`alert.warning` / `messageFile.warning`），
-    // 「Unable to convert…」是 `alert.error`——写提示条之外再发 toast（决策 d-343）。
+    // 被拒的一击对应 E3D 的 `!!alert.*`：2,870 / 2,874 与「与弧无交点」是 warning（`alert.warning` /
+    // `messageFile.warning`），「Unable to convert…」是 `alert.error`——写提示条之外再发 toast（决策 d-343）。
     raiseMeasurementAlert(
       `${step.message}${step.session.operands.length > 0 ? `；${intersectPendingText(step.session)}` : ''}`,
-      step.e3dCode ? 'warning' : 'error',
+      step.level,
     );
     return null;
   }
 
   /** Intersect 悬停预览：已有操作数时，用当前悬停项试算交点，成了就把命中挪到交点上（不改会话）。 */
-  function previewIntersectHit(hit: PickHit): PickHit {
+  function previewIntersectHit(hit: PickHit, ray: PickRay | null): PickHit {
     if (intersectSession.operands.length === 0) return hit;
-    const step = advanceIntersectPick(intersectSession, intersectOperandFromHit(hit));
+    const step = advanceIntersectPick(intersectSession, intersectOperandFromHit(hit, ray));
     if (step.status !== 'resolved') return hit;
     return { ...intersectionHit(hit, step.position), label: '交点（预览）' };
   }
@@ -3616,7 +3646,9 @@ export function useXeokitMeasurementTools(options: {
 
     const pick = pickSurfacePoint(canvas, e);
     // Intersect：已有子拾取时悬停预览交点位置，否则照常显示候选。
-    const hit = pick.hit && isIntersectPickType() ? previewIntersectHit(pick.hit) : pick.hit;
+    const hit = pick.hit && isIntersectPickType()
+      ? previewIntersectHit(pick.hit, designPickRay(canvas, getCanvasPos(canvas, e)))
+      : pick.hit;
     const hoverRefno = pick.surfaceRefno;
     currentHoverRefno = hoverRefno;
     syncMeasurementVisualAssists(hoverRefno, hit);
@@ -3732,8 +3764,8 @@ export function useXeokitMeasurementTools(options: {
     let hit = pick.hit;
     currentHoverRefno = pick.surfaceRefno;
     if (hit && isIntersectPickType()) {
-      // E3D Intersect：这一击是子拾取。凑齐线 / 面求出交点才往下走成测量点；否则停在这一步等下一击。
-      const resolved = consumeIntersectSubPick(hit);
+      // E3D Intersect：这一击是子拾取。凑齐线 / 面 / 弧求出交点才往下走成测量点；否则停在这一步等下一击。
+      const resolved = consumeIntersectSubPick(hit, designPickRay(canvas, getCanvasPos(canvas, e)));
       if (!resolved) {
         syncMeasurementVisualAssists(pick.surfaceRefno, hit);
         updateHoverFeedback(canvas, e, hit, pick.preview);

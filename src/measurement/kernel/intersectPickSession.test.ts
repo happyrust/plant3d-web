@@ -137,6 +137,69 @@ describe('advanceIntersectPick · EDGPICKTYPE.intersect sequencing', () => {
     expect(step.e3dCode).toBeNull();
     expect(step.session).toBe(first.session);
   });
+
+  it('every rejection carries the E3D alert level: 2,870 / 2,874 are warnings, "Unable to convert" is an error', () => {
+    const levelOf = (step: ReturnType<typeof advanceIntersectPick>) => {
+      expect(step.status).toBe('rejected');
+      if (step.status !== 'rejected') throw new Error('unreachable');
+      return step.level;
+    };
+    expect(levelOf(advanceIntersectPick(advanceIntersectPick(EMPTY_INTERSECT_SESSION, X_AXIS).session, X_PARALLEL))).toBe('warning');
+    const planes = advanceIntersectPick(advanceIntersectPick(EMPTY_INTERSECT_SESSION, PLANE_Z2).session, PLANE_X3);
+    expect(levelOf(advanceIntersectPick(planes.session, PLANE_Z7))).toBe('warning');
+    expect(levelOf(advanceIntersectPick(EMPTY_INTERSECT_SESSION, null))).toBe('error');
+  });
+});
+
+/**
+ * `edgpicktype.pmlobj` 864–904: an ELBO / BEND pick is an ARC operand — resolved as soon as
+ * the second item is in, whatever the pick order, with the arc as the subject.
+ */
+describe('advanceIntersectPick · ARC operand (ELBO / BEND centreline arc)', () => {
+  /** A 500 mm centreline arc centred at (1, 0, 0) in the horizontal plane, picked near its north side. */
+  const ARC_NORTH_PICK: IntersectOperand = { kind: 'arc', center: [1, 0, 0], normal: [0, 0, 1], radius: 0.5, picked: [1, 0.4, 0] };
+  const THROUGH_ARC_CENTRE: IntersectOperand = { kind: 'line', start: [1, -2, 0], end: [1, 2, 0] };
+  const CLEAR_OF_ARC: IntersectOperand = { kind: 'line', start: [3, -2, 0], end: [3, 2, 0] };
+
+  it('ARC × LINE resolves in either order at the intersection nearest to where the arc was picked', () => {
+    for (const operands of [[ARC_NORTH_PICK, THROUGH_ARC_CENTRE], [THROUGH_ARC_CENTRE, ARC_NORTH_PICK]] as const) {
+      const first = advanceIntersectPick(EMPTY_INTERSECT_SESSION, operands[0], 'ELBO 中心线弧（P1 → P2）');
+      expect(first.status).toBe('need-more');
+      const step = advanceIntersectPick(first.session, operands[1]);
+      expect(step.status).toBe('resolved');
+      if (step.status !== 'resolved') throw new Error('unreachable');
+      expect(step.position[0]).toBeCloseTo(1, 9);
+      expect(step.position[1]).toBeCloseTo(0.5, 9);
+      expect(step.session).toEqual(EMPTY_INTERSECT_SESSION);
+    }
+  });
+
+  it('nothing on the arc → E3D「No intersection between picked items」(warning): only that pick is dropped', () => {
+    const first = advanceIntersectPick(EMPTY_INTERSECT_SESSION, ARC_NORTH_PICK, 'ELBO 中心线弧（P1 → P2）');
+    const step = advanceIntersectPick(first.session, CLEAR_OF_ARC, '边 B');
+    expect(step.status).toBe('rejected');
+    if (step.status !== 'rejected') throw new Error('unreachable');
+    expect(step.reason).toBe('no-arc-intersection');
+    expect(step.e3dCode).toBeNull();
+    expect(step.level).toBe('warning');
+    expect(step.message).toBe(INTERSECT_MESSAGES.noArcIntersection);
+    expect(step.session.operands).toEqual([ARC_NORTH_PICK]);
+    expect(step.session.labels).toEqual(['ELBO 中心线弧（P1 → P2）']);
+    expect(intersectPickOrdinal(step.session)).toBe(2);
+  });
+
+  it('an arc after two planes is refused (ARC has no intersection(PLANE, PLANE)) without consuming the pick', () => {
+    const planes = advanceIntersectPick(advanceIntersectPick(EMPTY_INTERSECT_SESSION, PLANE_Z2).session, PLANE_X3);
+    const step = advanceIntersectPick(planes.session, ARC_NORTH_PICK);
+    expect(step.status).toBe('rejected');
+    if (step.status !== 'rejected') throw new Error('unreachable');
+    expect(step.reason).toBe('unsupported-geometry');
+    expect(step.level).toBe('error');
+    expect(step.message).toBe(INTERSECT_MESSAGES.notConvertible);
+    expect(step.session).toBe(planes.session);
+    // The same two planes still resolve with a line as the third pick.
+    expect(advanceIntersectPick(planes.session, SLANTED).status).toBe('resolved');
+  });
 });
 
 describe('intersectOperandFromGeometry · per-type conversion', () => {
@@ -162,5 +225,14 @@ describe('intersectOperandFromGeometry · per-type conversion', () => {
       position: [0, 0, 0],
       direction: [0, 1, 0],
     })?.kind).toBe('line');
+  });
+
+  it('an element arc → ARC, but only when the element has no line() (E3D tries line() first)', () => {
+    const arc = { center: [1, 0, 0] as const, normal: [0, 0, 1] as const, radius: 0.5, picked: [1, 0.4, 0] as const };
+    expect(intersectOperandFromGeometry({ arc })).toEqual({ kind: 'arc', ...arc });
+    expect(intersectOperandFromGeometry({ segment: { start: [0, 0, 0], end: [1, 0, 0] }, arc })?.kind).toBe('line');
+    expect(intersectOperandFromGeometry({ arc: { ...arc, radius: 0 } })).toBeNull();
+    expect(intersectOperandFromGeometry({ arc: { ...arc, normal: [0, 0, 0] } })).toBeNull();
+    expect(intersectOperandFromGeometry({ arc: { ...arc, picked: [Number.NaN, 0, 0] } })).toBeNull();
   });
 });

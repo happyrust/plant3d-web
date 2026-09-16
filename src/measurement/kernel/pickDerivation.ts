@@ -34,9 +34,14 @@
  *   except `Distance`, which offsets the P-point along its direction.
  * - Plane-bearing picks (GRAPHICS facet, Aid PLANE) return the ray ∩ plane
  *   position for every single-pick type.
- * - `Intersect` converts each pick into a LINE / PLANE and intersects them
+ * - `Intersect` converts each pick into a LINE / PLANE / ARC and intersects them
  *   (line × line, line × plane, plane × plane × plane); parallel inputs are the
  *   E3D `(2,870)` "Pick another line, last pick was parallel to first line".
+ *   An ARC (ELBO / BEND centreline fillet, `elementArc.ts`) is always the subject
+ *   (`edgpicktype.pmlobj` 864–904 "Make sure arc is always first"): `ARC.intersections`
+ *   gives the 0 / 1 / 2 angles where the other item meets the arc's circle, and the
+ *   position nearest to where the **arc's own pick ray** meets the arc plane wins;
+ *   none → `alert.warning('No intersection between picked items')`.
  *
  * All coordinates are design-world metres (X=E, Y=N, Z=U); `distance` is metres.
  */
@@ -71,6 +76,8 @@ export type PickDerivationFailureReason =
   | 'ray-parallel'
   | 'parallel-lines'
   | 'parallel-planes'
+  /** ARC × item: the item never meets the arc's circle (E3D "No intersection between picked items"). */
+  | 'no-arc-intersection'
   | 'unsupported-geometry';
 
 export type PickDerivationResult =
@@ -377,10 +384,25 @@ export function derivePickPosition(input: PickDerivationInput): PickDerivationRe
   }
 }
 
+/**
+ * An ARC operand: the element's centreline arc as a full circle (E3D `ARC.intersections`
+ * works on the circle; `GMFARC.exact` is the one that filters by `onProjected`).
+ * `picked` is where the cursor ray that picked the arc meets the arc plane
+ * (`!pick.intersection(!arcPlane)`, `edgpicktype.pmlobj` 895) — the candidate nearest to it wins.
+ */
+export type IntersectArcOperand = Readonly<{
+  kind: 'arc';
+  center: PickVec3;
+  normal: PickVec3;
+  radius: number;
+  picked: PickVec3;
+}>;
+
 /** Geometry an `Intersect` pick contributes (`EDGPICKTYPE.intersect` `intersectData`). */
 export type IntersectOperand =
   | Readonly<{ kind: 'line'; start: PickVec3; end: PickVec3 }>
-  | Readonly<{ kind: 'plane'; position: PickVec3; normal: PickVec3 }>;
+  | Readonly<{ kind: 'plane'; position: PickVec3; normal: PickVec3 }>
+  | IntersectArcOperand;
 
 export type IntersectPicksResult =
   | Readonly<{ ok: true; position: PickVec3; /** Lines were skew; position is on the first line. */ skew: boolean }>
@@ -433,13 +455,154 @@ export function intersectThreePlanes(a: PickPlane, b: PickPlane, c: PickPlane): 
   return { ok: true, position, skew: false };
 }
 
+function isFiniteArc(arc: IntersectArcOperand): boolean {
+  return isFiniteVec(arc.center) && isFiniteVec(arc.normal) && lengthSq(arc.normal) > DEGENERATE_LENGTH_SQ
+    && Number.isFinite(arc.radius) && arc.radius > 0 && isFiniteVec(arc.picked);
+}
+
+/** Tolerance (metres) for "on the circle" / tangency tests: relative to the radius, never below 1 nm. */
+function arcTolerance(radius: number): number {
+  return 1e-9 * Math.max(1, radius);
+}
+
+/**
+ * The points where an infinite line **lying in the arc plane** meets the arc's circle:
+ * two (chord), one (tangent within tolerance) or none. `origin` must be in the plane,
+ * `direction` in-plane and non-degenerate.
+ */
+function circleLineIntersections(
+  center: PickVec3,
+  radius: number,
+  origin: PickVec3,
+  direction: PickVec3,
+): PickVec3[] {
+  const unitDirection = normalize(direction);
+  if (!unitDirection) return [];
+  const toOrigin = sub(origin, center);
+  const along = dot(toOrigin, unitDirection);
+  const foot = sub(origin, scale(unitDirection, along));
+  const gap = Math.sqrt(distanceSq(foot, center));
+  const tolerance = arcTolerance(radius);
+  if (gap > radius + tolerance) return [];
+  if (gap >= radius - tolerance) return [foot];
+  const half = Math.sqrt(Math.max(0, radius * radius - gap * gap));
+  return [add(foot, scale(unitDirection, half)), sub(foot, scale(unitDirection, half))];
+}
+
+/**
+ * `ARC.intersections(LINE)`: the line is projected onto the arc plane and met with the
+ * circle. A line perpendicular to the plane projects to a point: an intersection only
+ * when that point sits on the circle.
+ */
+export function arcLineIntersections(arc: IntersectArcOperand, line: PickSegment): PickVec3[] {
+  const normal = normalize(arc.normal)!;
+  const direction = sub(line.end, line.start);
+  const inPlaneDirection = sub(direction, scale(normal, dot(direction, normal)));
+  const inPlaneStart = sub(line.start, scale(normal, dot(sub(line.start, arc.center), normal)));
+  if (lengthSq(inPlaneDirection) <= PARALLEL_SIN * PARALLEL_SIN * lengthSq(direction)) {
+    const gap = Math.sqrt(distanceSq(inPlaneStart, arc.center));
+    return Math.abs(gap - arc.radius) <= arcTolerance(arc.radius) ? [inPlaneStart] : [];
+  }
+  return circleLineIntersections(arc.center, arc.radius, inPlaneStart, inPlaneDirection);
+}
+
+/**
+ * The line shared by the arc plane and another plane: `null` when the planes are
+ * parallel (coincident planes share everything and nothing in particular — E3D's
+ * `ARC.intersections(PLANE)` comes back unset for them too).
+ */
+function arcPlaneTraceLine(arc: IntersectArcOperand, plane: PickPlane): PickRay | null {
+  const normal = normalize(arc.normal)!;
+  const other = normalize(plane.normal);
+  if (!other) return null;
+  const direction = cross(normal, other);
+  if (Math.sqrt(lengthSq(direction)) <= PARALLEL_SIN) return null;
+  // Walk from the arc centre, inside the arc plane, straight towards the other plane.
+  const towards = normalize(sub(other, scale(normal, dot(other, normal))))!;
+  const step = dot(sub(plane.position, arc.center), other) / dot(towards, other);
+  return { origin: add(arc.center, scale(towards, step)), direction };
+}
+
+/** `ARC.intersections(PLANE)`: the plane cuts the arc plane in a line, met with the circle. */
+export function arcPlaneIntersections(arc: IntersectArcOperand, plane: PickPlane): PickVec3[] {
+  const trace = arcPlaneTraceLine(arc, plane);
+  if (!trace) return [];
+  return circleLineIntersections(arc.center, arc.radius, trace.origin, trace.direction);
+}
+
+/**
+ * `ARC.intersections(ARC)`: coplanar circles meet at 0 / 1 / 2 points; circles in
+ * different planes can only meet where the trace line of the two planes crosses both.
+ */
+export function arcArcIntersections(arc: IntersectArcOperand, other: IntersectArcOperand): PickVec3[] {
+  const normal = normalize(arc.normal)!;
+  const otherNormal = normalize(other.normal)!;
+  const tolerance = arcTolerance(Math.max(arc.radius, other.radius));
+  const coplanar = Math.sqrt(lengthSq(cross(normal, otherNormal))) <= PARALLEL_SIN
+    && Math.abs(dot(sub(other.center, arc.center), normal)) <= tolerance;
+  if (!coplanar) {
+    const trace = arcPlaneTraceLine(arc, { position: other.center, normal: other.normal });
+    if (!trace) return [];
+    return circleLineIntersections(arc.center, arc.radius, trace.origin, trace.direction)
+      .filter((point) => Math.abs(Math.sqrt(distanceSq(point, other.center)) - other.radius) <= tolerance);
+  }
+  const between = sub(other.center, arc.center);
+  const distance = Math.sqrt(lengthSq(between));
+  if (distance <= tolerance) return []; // concentric: nothing (identical circles have no single point)
+  if (distance > arc.radius + other.radius + tolerance) return [];
+  if (distance < Math.abs(arc.radius - other.radius) - tolerance) return [];
+  const along = (arc.radius * arc.radius - other.radius * other.radius + distance * distance) / (2 * distance);
+  const unitBetween = scale(between, 1 / distance);
+  const base = add(arc.center, scale(unitBetween, along));
+  const halfSq = arc.radius * arc.radius - along * along;
+  if (halfSq <= tolerance * tolerance) return [base];
+  const side = scale(normalize(cross(normal, unitBetween))!, Math.sqrt(halfSq));
+  return [add(base, side), sub(base, side)];
+}
+
+/**
+ * `edgpicktype.pmlobj` 864–904: the arc is the subject whatever the pick order; among
+ * the candidates the one nearest to where the arc's own pick ray meets the arc plane
+ * is the position. No candidate → `alert.warning('No intersection between picked items')`
+ * (the failing pick is refused, the first stays).
+ */
+export function intersectArcWith(arc: IntersectArcOperand, other: IntersectOperand): IntersectPicksResult {
+  if (!isFiniteArc(arc)) return { ok: false, reason: 'non-finite-input' };
+  let candidates: PickVec3[];
+  if (other.kind === 'line') {
+    if (!isFiniteSegment(other)) return { ok: false, reason: 'non-finite-input' };
+    if (lengthSq(sub(other.end, other.start)) <= DEGENERATE_LENGTH_SQ) return { ok: false, reason: 'zero-length-segment' };
+    candidates = arcLineIntersections(arc, other);
+  } else if (other.kind === 'plane') {
+    if (!isFinitePlane(other)) return { ok: false, reason: 'degenerate-plane' };
+    candidates = arcPlaneIntersections(arc, other);
+  } else {
+    if (!isFiniteArc(other)) return { ok: false, reason: 'non-finite-input' };
+    candidates = arcArcIntersections(arc, other);
+  }
+  if (candidates.length === 0) return { ok: false, reason: 'no-arc-intersection' };
+  let best = candidates[0]!;
+  let bestDistance = distanceSq(best, arc.picked);
+  for (const candidate of candidates.slice(1)) {
+    const distance = distanceSq(candidate, arc.picked);
+    if (distance < bestDistance) {
+      best = candidate;
+      bestDistance = distance;
+    }
+  }
+  return { ok: true, position: best, skew: false };
+}
+
 /**
  * `EDGPICKTYPE.intersect` sequencing: two operands intersect unless both are
- * planes, in which case a third pick is required (`golabel /nextPick`).
+ * planes, in which case a third pick is required (`golabel /nextPick`). An arc
+ * among the first two is resolved at once with the other item as its subject.
  */
 export function intersectPicks(operands: readonly IntersectOperand[]): IntersectPicksResult {
   const [first, second, third] = operands;
   if (!first || !second) return { ok: false, reason: 'needs-another-pick' };
+  if (first.kind === 'arc') return intersectArcWith(first, second);
+  if (second.kind === 'arc') return intersectArcWith(second, first);
   if (first.kind === 'line' && second.kind === 'line') {
     return intersectLines(first, second);
   }
@@ -452,6 +615,9 @@ export function intersectPicks(operands: readonly IntersectOperand[]): Intersect
   if (first.kind === 'plane' && second.kind === 'plane') {
     if (!third) return { ok: false, reason: 'needs-another-pick' };
     if (third.kind === 'line') return intersectLinePlane(third, first);
+    // E3D would call `ARC.intersection(PLANE, PLANE)`, which the ARC object does not have:
+    // an arc cannot be the third item (refused without consuming the pick, see the session).
+    if (third.kind === 'arc') return { ok: false, reason: 'unsupported-geometry' };
     return intersectThreePlanes(first, second, third);
   }
   return { ok: false, reason: 'unsupported-geometry' };

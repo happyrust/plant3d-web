@@ -21,8 +21,14 @@
  *   stack is cleared and `numberOfPicks` reset to 1 — the user starts over.
  * - Skew lines are not an error: `LINE.intersection(LINE)` returns the point on the
  *   first line nearest to the second (see `intersectLines`).
- * - Arc-bearing items (`ARC` × line) are E3D-only for now: the Web has no arc
- *   operand yet; they are reported as `unsupported-geometry` (refused, not consumed).
+ * - ARC items (ELBO / BEND: `edgTypes.attribute(noun).arc()`, the centreline fillet —
+ *   `elementArc.ts`) are resolved as soon as the second item is in, whatever the
+ *   order (`edgpicktype.pmlobj` 864–904): `ARC.intersections(item)` → 0 / 1 / 2 points
+ *   on the arc's circle, the one nearest to where the arc's own pick ray meets the arc
+ *   plane wins. None → `alert.warning('No intersection between picked items')`: the
+ *   failing pick is refused, the first stays (like `(2,870)`). An arc **after** two
+ *   planes is refused as well (`ARC.intersection(PLANE, PLANE)` does not exist), and
+ *   like an unconvertible item it does not consume the pick.
  *
  * All coordinates are design-world metres like the rest of the pick kernel.
  */
@@ -70,6 +76,8 @@ export type IntersectPickStep =
     reason: PickDerivationFailureReason | 'not-convertible';
     /** E3D message code when the PML raises one. */
     e3dCode: '2,870' | '2,874' | null;
+    /** Which `!!alert` E3D raises for this rejection (`warning` for 2,870 / 2,874 / no arc intersection, `error` for "Unable to convert"). */
+    level: 'warning' | 'error';
     /** Session after the rejection (unchanged, or cleared for `2,874`). */
     session: IntersectPickSession;
     message: string;
@@ -82,6 +90,9 @@ export const INTERSECT_MESSAGES = {
   // wording names "面 × 面 × 第三项" rather than "三个平面" (prompt matrix D5, 2026-09-16). The E3D
   // text of (2,874) lives in the message file and is still to be captured with E3D running.
   planesNoPoint: '面 × 面 × 第三项没有唯一交点，求交已重置，请重新拾取（E3D 2,874）',
+  // `edgpicktype.pmlobj` 887: `!!alert.warning('No intersection between picked items')` — the arc's
+  // circle is never met by the other item; only this pick is dropped, the first stays.
+  noArcIntersection: '所选项与弧没有交点，请改选其它项（E3D: No intersection between picked items）',
 } as const;
 
 /**
@@ -98,6 +109,7 @@ export function advanceIntersectPick(
       status: 'rejected',
       reason: 'not-convertible',
       e3dCode: null,
+      level: 'error',
       session,
       message: INTERSECT_MESSAGES.notConvertible,
     };
@@ -116,6 +128,19 @@ export function advanceIntersectPick(
   }
   const reason: PickDerivationFailureReason = result.reason;
 
+  // PLANE × PLANE × ARC: E3D would call `ARC.intersection(PLANE, PLANE)`, which the ARC object
+  // does not have — the arc simply cannot be the third item. Refused like an unconvertible item,
+  // and like it the pick is not consumed: the two planes stay and a third line / plane still works.
+  if (reason === 'unsupported-geometry') {
+    return {
+      status: 'rejected',
+      reason,
+      e3dCode: null,
+      level: 'error',
+      session,
+      message: INTERSECT_MESSAGES.notConvertible,
+    };
+  }
   // Three-plane failure clears everything (E3D `!this.return.clear()`); the two-item
   // failures only drop the pick that failed.
   const threePlanes = operands.length >= 3 && operands.slice(0, 2).every((item) => item.kind === 'plane');
@@ -124,8 +149,19 @@ export function advanceIntersectPick(
       status: 'rejected',
       reason,
       e3dCode: '2,874',
+      level: 'warning',
       session: EMPTY_INTERSECT_SESSION,
       message: INTERSECT_MESSAGES.planesNoPoint,
+    };
+  }
+  if (reason === 'no-arc-intersection') {
+    return {
+      status: 'rejected',
+      reason,
+      e3dCode: null,
+      level: 'warning',
+      session,
+      message: INTERSECT_MESSAGES.noArcIntersection,
     };
   }
   const parallel = reason === 'parallel-lines' || reason === 'ray-parallel' || reason === 'parallel-planes';
@@ -133,6 +169,7 @@ export function advanceIntersectPick(
     status: 'rejected',
     reason,
     e3dCode: parallel ? '2,870' : null,
+    level: parallel ? 'warning' : 'error',
     session,
     message: parallel ? INTERSECT_MESSAGES.parallelToFirst : INTERSECT_MESSAGES.notConvertible,
   };
@@ -141,12 +178,17 @@ export function advanceIntersectPick(
 /**
  * Converts the geometry a Web pick candidate lends (design-world) into an
  * Intersect operand, following `EDGPICKTYPE.intersect`'s per-type conversion:
- * line-bearing (`segment`) → LINE; plane-bearing → PLANE; point with direction
- * (P-point / primitive axis) → POINTVECTOR line; a bare point → not convertible.
+ * line-bearing (`segment`) → LINE; plane-bearing → PLANE; the picked element's
+ * centreline arc (ELBO / BEND, `elementArc.ts`) → ARC, which the ELEMENT branch
+ * only reaches when `line()` is unset (`edgpicktype.pmlobj` 647–680); point with
+ * direction (P-point / primitive axis) → POINTVECTOR line; a bare point → not
+ * convertible. `arc.picked` is where the ray that picked the arc meets the arc
+ * plane — it decides which of two intersections wins (`intersectArcWith`).
  */
 export function intersectOperandFromGeometry(input: Readonly<{
   segment?: Readonly<{ start: PickVec3; end: PickVec3 }> | null;
   plane?: Readonly<{ position: PickVec3; normal: PickVec3 }> | null;
+  arc?: Readonly<{ center: PickVec3; normal: PickVec3; radius: number; picked: PickVec3 }> | null;
   position?: PickVec3 | null;
   direction?: PickVec3 | null;
 }>): IntersectOperand | null {
@@ -162,6 +204,13 @@ export function intersectOperandFromGeometry(input: Readonly<{
   }
   if (input.plane && finite(input.plane.position) && finite(input.plane.normal) && lengthSq(input.plane.normal) > 1e-24) {
     return { kind: 'plane', position: input.plane.position, normal: input.plane.normal };
+  }
+  const arc = input.arc;
+  if (
+    arc && finite(arc.center) && finite(arc.normal) && finite(arc.picked)
+    && lengthSq(arc.normal) > 1e-24 && Number.isFinite(arc.radius) && arc.radius > 0
+  ) {
+    return { kind: 'arc', center: arc.center, normal: arc.normal, radius: arc.radius, picked: arc.picked };
   }
   if (finite(input.position) && finite(input.direction) && lengthSq(input.direction) > 1e-24) {
     const [x, y, z] = input.position;
