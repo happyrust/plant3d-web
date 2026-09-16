@@ -37,6 +37,19 @@
  *   - Arc: X = base direction, Z = normal of the plane (root, picked1, picked2),
  *     startAngle 0, endAngle = `root.angle(picked1, picked2)` ∈ [0°, 180°] (minor).
  *
+ * The sibling packet `EDGPICKPACKET.measureLineAngle` (667–683, prompt matrix D6) is a different
+ * command, not a variant of this one: both of its picks are `EDGE`-only, its action is
+ * `gmfAngle.betweenLines(...)` and it returns a REAL rather than an ARC, so it draws nothing and
+ * never reaches the Measure Angle form (`gphAngleMeasure.setMeasure` only accepts an `ARC`). Its
+ * callers are the three design forms that measure an angle straight into an input field — the
+ * "Angle between two lines" menu item in `dbeelementangle.pmlfrm` 799, `dbesrevolution.pmlfrm` 658
+ * and `dbeloopedit.pmlfrm` 1716 — and Web has no such field, so there is no second mode here.
+ * Numerically the two agree: `betweenLines` (`gmfangle.pmlobj` 81–103) projects the reference pick
+ * onto the plane through the root, which is the same operation as moving the reference line onto
+ * the root, so its angle is this arc's `endAngle` (`lineAngle.test.ts` pins it case by case). The
+ * one divergence is parallel input — `betweenLines` swallows the intersection error and returns 0,
+ * while `radius2Lines`, and Web with it, reject.
+ *
  * Deliberate Web resolutions of `radius2Lines` corner cases (documented, not E3D
  * behaviour): a picked position exactly at the root keeps the line's own direction
  * (E3D offsets it 100 mm up and measures a meaningless angle); in the line + plane case

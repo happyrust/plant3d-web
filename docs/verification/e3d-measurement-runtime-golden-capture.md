@@ -1379,7 +1379,7 @@ vite 由临时 playwright 配置在 **`:3103`** 自起一台关掉 HMR 的（`:3
 测量相关 6 文件 129 用例全过；eslint 0；type-check 与 HEAD 同。
 
 **已知偏离 / 残余**：
-- E3D 运行时 golden（G6-04：`measureLineAngle` 注入的 ARC 与四行）未采，E3D 不在跑；上面全是 `static_expectation` + Web 实机。
+- E3D 运行时 golden（G6-04：`measureLineAngleArc` 注入的 ARC 与四行）未采，E3D 不在跑；上面全是 `static_expectation` + Web 实机。G6-04 的另一半「产品 UI 可达性」2026-09-16 静态答了：功能区 `Angle 2 Lines` → `gphViews.measure('LINEANGLE')`（`gphviews.pmlobj` 1301–1303）→ `GPHANGLEDIMENSION.edit('LINEANGLEARC')` → 画弧包，就是本节这条；E3D 另一条 `measureLineAngle`（`gmfAngle.betweenLines`，返回 REAL 不画弧）只服务三张设计表单的角度输入框（`dbeelementangle` 799 / `dbesrevolution` 658 / `dbeloopedit` 1716），Web 无对应入口 → 不做（矩阵 D6），两条包在同一对线上的角相等已由 `lineAngle.test.ts` 逐组钉住（差异只有平行那一档：非弧包吞错返 0）。
 - ~~斜交（既非 0° 也非 90°）的线 × 面一般解只有单测——本库这组构件的网格全是正交棱；斜边要等有斜撑 / 管件的模型。~~ 10:28 / 10:32 补采两组（见上「补采」）：本库没有斜撑，
   用 LOOP3 平面内 64.54° 的短梁与仪表支架里 ORI 倾斜 70° 的盒体走通；~~管件没走（斜管段是圆柱网格、附近无直棱当第一条线）~~ 23:57 / 23:58 管件路也补上了（第一击换成 TUBING 轴线，本来就不必是直棱；见「补采（23:57 / 23:58）」）。补采撞出的 float32 网格噪声（精确竖直的 Direction2 显示成 `N 35.00 E 90.00 U`、DMS 少 1''）已在 `87b8970` 吸掉（见「补采」末条）。
 - ~~第二击的 `FACET` 在 Web 是 Graphics 面（三角形面片的平面）；E3D 的 `getPlane()` 对 P-Point / DPOINT 也给面（§29），Web 这里同样走 `intersectOperandFromHit`，但只实机验过 Graphics 面。~~

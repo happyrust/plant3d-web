@@ -32,7 +32,7 @@
 | Measure Distance | `!!gphMeasure`（`gphmeasure.pmlfrm`） | 两点距离；选项 Keep dimensions / Show linear dimension / Perpendicular to / wrt；Units（Unit type：Default / Metric / Imperial；Display Unit） |
 | Measure Angle | `!!gphAngleMeasure`（`gphanglemeasure.pmlfrm`） | 三点角（root / first / second）；Unit：Default / Degrees / Radians / Gradians；Decimal Places（缺省 2）；Keep Dimension；wrt |
 | Measure / Measure Shortest（Picking Control 偏移字段右键） | `edgsettings.pmlfrm`（`!!edgSettings`，功能区 `Picking Control` 按钮 `design.uic` 4168 / Positioning Control 工具条）→ `EDGPACKET.defineMeasure('distance' \| 'shortest')` | ENU / 工作面 / Distance-Direction / 表面偏移字段的右键菜单：量一段距离或两次 graphics 拾取的「最短距离」**填进字段**（`unset → 0`，否则 `.length()`）。`shortest` 用 `gmfLine.shortest(from, to)`，两端是 `stdGraphics` 拾取；**静态核过（golden MD §32，2026-09-15）：Graphics 拾取的 `positionData()` 总带 `position`，`shortest` 永远走点点分支 = 两拾中点距离，线 / 面分支从产品进不去；输出只有一个数，没有结果表 / witness**。固定直径圆辅助的直径字段（`edgdiameter.pmlfrm`）同款；`edgoffset*.pmlfrm` 四张表单与 `defineLine('SHORTEST')` 辅助线构造在 3.1 里没有调用者 |
-| Measure angle between lines | `EDGPICKPACKET.measureLineAngle / measureLineAngleArc` | 两条 EDGE（facet edge）之间的角；产品 UI 是否可达 = G6-04 待采 |
+| Measure angle between lines | `EDGPICKPACKET.measureLineAngle / measureLineAngleArc` | 两条 EDGE（facet edge）之间的角；~~产品 UI 是否可达 = G6-04 待采~~ **2026-09-16 静态核清**：功能区 `Angle 2 Lines` → `gphViews.measure('LINEANGLE')`（`gphviews.pmlobj` 1301–1303）→ `GPHANGLEDIMENSION.edit('LINEANGLEARC')` → **画弧那条**（`measureLineAngleArc`，Web 已做，§30）；非弧包 `measureLineAngle`（`gmfAngle.betweenLines`，返回 REAL）只有三张设计表单在用（`dbeelementangle` 799 / `dbesrevolution` 658 / `dbeloopedit` 1716），量到的角回填表单输入框，Web 无对应入口 → 不做（矩阵 D6） |
 
 ### 1.2 Measure Distance 窗体契约（已采 golden 的部分标 ✓）
 
@@ -251,7 +251,7 @@
 
 ### Phase E · 交互细节与文案矩阵
 
-- 提示文案矩阵（每模式 × 每步 × 拾取类型 × 过滤器）与 E3D 逐条对照，落 `docs/verification/e3d-measure-prompt-matrix.md`。**2026-09-16 已落**（对本机 Administration 1.8 PMLLIB 源，`static_expectation`）：结构与三条定位拾取命令每一步、七种 token、过滤器不进提示都对上；差异 D1–D6 见该文 §7；D1（两线夹角不带 token / Snap）2026-09-16 10:54 拍板并改掉（`0c0d9eb`），改后的提示条 12:32 / 13:09 实机四态截图入 golden MD §30 补采，D5 的 Web 文案同笔改掉，余 D2 / D4 / D6 与 E3D 原文对账。
+- 提示文案矩阵（每模式 × 每步 × 拾取类型 × 过滤器）与 E3D 逐条对照，落 `docs/verification/e3d-measure-prompt-matrix.md`。**2026-09-16 已落**（对本机 Administration 1.8 PMLLIB 源，`static_expectation`）：结构与三条定位拾取命令每一步、七种 token、过滤器不进提示都对上；差异 D1–D6 见该文 §7；D1（两线夹角不带 token / Snap）2026-09-16 10:54 拍板并改掉（`0c0d9eb`），改后的提示条 12:32 / 13:09 实机四态截图入 golden MD §30 补采，D5 的 Web 文案同笔改掉，D6（非弧的 `measureLineAngle`）静态核清后结掉——功能区那颗按钮走的是画弧包，非弧包是三张设计表单的取值入口，Web 不做，两者角相等由 `lineAngle.test.ts` 钉住；余 D2 / D4 与 E3D 原文对账。
 - 窗体常驻 / 重复测量 / 连续测量 / Repeat / aid 编号（Keep 累积的图形可逐条删）。
 - 命令提示位置：E3D 在命令行 + 窗体标题；Web 在覆盖条 + 底部状态，结构一致即可。
 
@@ -273,7 +273,7 @@
 | --- | --- | --- |
 | G2 | 04 / 05 Keep 生命周期 | 注入宏 + 截图（关窗 / 切工具 / 重开） |
 | G5 | 01～05 Shortest | ~~`gmfLine.shortest` 注入各几何组合~~ 静态已答（golden MD §32）：产品入口下只有点点分支；剩 Picking Control 走一遍偏移字段右键 `Measure Shortest` + 截图、`isParallel` 容差、Graphics 拾取的 `primaryObject` 集合。不再卡 #10（d-616） |
-| G6 | 04 两线夹角入口 | 产品 UI 可达性 + `measureLineAngle` 注入 |
+| G6 | 04 两线夹角入口 | ~~产品 UI 可达性 + `measureLineAngle` 注入~~ 产品 UI 可达性 **2026-09-16 静态已答**（`Angle 2 Lines` → `edit('LINEANGLEARC')` → 画弧包；非弧包只服务三张设计表单，见 §1.1 与矩阵 D6，两者角相等已由 `lineAngle.test.ts` 钉住）；剩 `measureLineAngleArc` 注入后的 ARC 与结果表四行（要 E3D 在跑） |
 | G7 | 01～04 拾取候选 | 真实鼠标拾取（重叠区）+ `!!edgCntrl.pickData` |
 | G8（新） | 拾取类型 Mid-Point / Fraction / Proportion / Distance / Intersect | `!!edgPosCntrl.setPickType(n)` 后真实拾取（Web 侧按同一组取值 2026-09-16 已实机，golden MD §35；这里只剩 E3D 侧位置字串） |
 | G9（新） | Element × Snap 回元素原点 | 对 BOX / CYLI / DISH / CTOR / ELBO / VALV 各做 Element × Snap，对照 `Q POS`；SCTN 对照截面 PLINE 线（d-336 改题） |

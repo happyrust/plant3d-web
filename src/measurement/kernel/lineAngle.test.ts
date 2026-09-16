@@ -297,6 +297,83 @@ describe('buildLineAngle · degenerate input', () => {
   });
 });
 
+/**
+ * `gmfAngle.betweenLines(base, reference)` 照 PML 源独立实现一遍（`gmfangle.pmlobj` 81–103），
+ * 只用来和本文件实现的 `radius2Lines` 对数：
+ * root = `baseLine.intersection(referenceLine)`；plane = 过 root、Z = base ⊥ reference 的平面；
+ * 角 = `root.angle(baseLine ∩ base.pointVector, plane.near(referenceLine ∩ reference.pointVector))`；
+ * 两线平行时 `LINE.intersection` 抛错被 `handle any` 吞掉，角置 0 并返回 0。
+ */
+function betweenLinesDeg(base: LineAngleLineOperand, reference: LineAngleLineOperand): number {
+  const sub = (a: PickVec3, b: PickVec3): PickVec3 => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+  const dot = (a: PickVec3, b: PickVec3): number => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+  const cross = (a: PickVec3, b: PickVec3): PickVec3 => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+  const len = (a: PickVec3): number => Math.sqrt(dot(a, a));
+  const unit = (a: PickVec3): PickVec3 => { const l = len(a); return [a[0] / l, a[1] / l, a[2] / l]; };
+  const along = (from: PickVec3, direction: PickVec3, t: number): PickVec3 => [from[0] + direction[0] * t, from[1] + direction[1] * t, from[2] + direction[2] * t];
+  /** `LINE.intersection(POINTVECTOR)`：拾取落到线上的那一点。 */
+  const onLine = (point: PickVec3, from: PickVec3, direction: PickVec3): PickVec3 => along(from, direction, dot(sub(point, from), direction));
+
+  const baseDirection = unit(sub(base.end, base.start));
+  const referenceDirection = unit(sub(reference.end, reference.start));
+  const orthogonal = cross(baseDirection, referenceDirection);
+  if (len(orthogonal) <= 1e-12) return 0;
+  // 89：共面取交点，异面取第一条线上离第二条最近的点（与 radius2Lines 同一条 LINE.intersection 读法）。
+  const w = sub(reference.start, base.start);
+  const root = along(base.start, baseDirection, dot(cross(w, referenceDirection), orthogonal) / dot(orthogonal, orthogonal));
+  // 101：基线上的拾中点，与参照线上的拾中点在那张平面上的投影（plane.near）。
+  const normal = unit(orthogonal);
+  const first = onLine(base.picked, base.start, baseDirection);
+  const pickedOnReference = onLine(reference.picked, reference.start, referenceDirection);
+  const second = along(pickedOnReference, normal, -dot(sub(pickedOnReference, root), normal));
+  const arm1 = unit(sub(first, root));
+  const arm2 = unit(sub(second, root));
+  return (Math.atan2(len(cross(arm1, arm2)), dot(arm1, arm2)) * 180) / Math.PI;
+}
+
+/**
+ * E3D 的另一条两线角命令 `EDGPICKPACKET.measureLineAngle`（`edgpickpacket.pmlobj` 667–683，提示矩阵 D6）：
+ * 两击都只拾 `EDGE`，action 是 `gmfAngle.betweenLines(...)`，出来的是一个 REAL 而不是 ARC——不画弧，
+ * 也进不了 Measure Angle 窗体（`gphAngleMeasure.setMeasure` 只收 `ARC`）。`defineMeasure('LINEANGLE')` 的调用方
+ * 是三张设计表单的「Angle between two lines」菜单项（`dbeelementangle.pmlfrm` 799 / `dbesrevolution.pmlfrm` 658 /
+ * `dbeloopedit.pmlfrm` 1716），量到的角度直接填进表单的角度输入框；Measure 功能区那颗 `Angle 2 Lines` 走的是
+ * `gphViews.measure('LINEANGLE')` → `GPHANGLEDIMENSION.edit('LINEANGLEARC')` → `measureLineAngleArc`，也就是本文件实现的画弧那条。
+ * Web 没有「把量到的角填进设计表单」这种入口，所以不另做一个模式；这一组钉的是数值口径：同一对线上
+ * `betweenLines` 与 `radius2Lines` 的 `endAngle` 相等，差别只在平行那一档。
+ */
+describe('gmfAngle.betweenLines（E3D measureLineAngle，提示矩阵 D6）：角与 radius2Lines 相等，平行时它返回 0', () => {
+  it('共面 / 异面、拾中哪一侧，两条包给的角一样——非弧包把参照线的拾中点投到弧面上，画弧那条把参照线平移到弧心，同一个操作', () => {
+    const oblique = (pickFar: boolean) => line(
+      [1 - COS60, -SIN60, 0],
+      [1 + COS60, SIN60, 0],
+      pickFar ? [1 - 0.25, -0.25 * Math.sqrt(3), 0] : [1 + 0.25, 0.25 * Math.sqrt(3), 0],
+    );
+    const cos64 = Math.cos((64.54 * Math.PI) / 180);
+    const sin64 = Math.sin((64.54 * Math.PI) / 180);
+    const cases: readonly (readonly [string, LineAngleLineOperand, LineAngleLineOperand])[] = [
+      ['共面正交 90°', BASE_E, REF_N],
+      ['共面斜交 60°', BASE_E, oblique(false)],
+      ['共面斜交 · 拾参照线另一侧 → 补角 120°', BASE_E, oblique(true)],
+      ['共面斜交 · 拾基线另一侧 → 补角', line([0, 0, 0], [2, 0, 0], [0.5, 0, 0]), oblique(false)],
+      ['异面正交（gap 0.3 m）', BASE_E, line([1, -1, 0.3], [1, 1, 0.3], [1, 0.5, 0.3])],
+      ['异面斜交 64.54°（gap 0.42 m）', BASE_E, line([1 - cos64, -sin64, 0.42], [1 + cos64, sin64, 0.42], [1 + 0.3 * cos64, 0.3 * sin64, 0.42])],
+      ['弧心落在基线段外', line([0, 0, 0], [1, 0, 0], [0.8, 0, 0]), line([3, -1, 0], [3, 1, 0], [3, 0.5, 0])],
+    ];
+    for (const [name, base, reference] of cases) {
+      expect(ok(buildLineAngle(base, reference)).angleDeg, name).toBeCloseTo(betweenLinesDeg(base, reference), 5);
+    }
+    // 补角那两组确实是补角，不是同一个数碰巧相等。
+    expect(betweenLinesDeg(BASE_E, oblique(false))).toBeCloseTo(60, 9);
+    expect(betweenLinesDeg(BASE_E, oblique(true))).toBeCloseTo(120, 9);
+  });
+
+  it('平行：非弧包 handle any 吞掉交点错误、返回 0（91–94）；画弧那条报 E3D 那句话，Web 照画弧那条拒收', () => {
+    const parallel = line([0, 1, 0], [2, 1, 0], [1, 1, 0]);
+    expect(betweenLinesDeg(BASE_E, parallel)).toBe(0);
+    expect(buildLineAngle(BASE_E, parallel)).toEqual({ ok: false, reason: 'parallel-lines' });
+  });
+});
+
 describe('lineAngleOperandFromGeometry · 两击各自的 E3D 转换（EDGPOSITIONDATA.line() / .plane()）', () => {
   it('线 / 面两种角色都照原样：边 / p-line / 轴线 → LINE（带拾中位置），facet / Aid 面 → PLANE；退化线段落到下一档', () => {
     const seg = { start: [0, 0, 0] as PickVec3, end: [2, 0, 0] as PickVec3 };
