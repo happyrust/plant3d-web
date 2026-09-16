@@ -1768,3 +1768,42 @@ ELBO `145028` P2 → ELBO `145029` P1 之间的竖直立管，DN100 · 外半径
   **本库没有 RTOR / CTOR 样本**（`:8022` 搜不到），上面全是 `static_expectation` + 单测，未实机。
 - (2) Element × Snap 落在弯头体上 Web 拾不到任何东西，E3D 回元素原点——这是 §2 #12 的 Item 原点源（本轮关着、缺省也关）；要不要在 Element 过滤器下缺省放行 Item 原点，另拍。
 - (3) 标签细节：轴线两端名的顺序跟的是 DTX 直管对象的局部 z 向而不是流向（`轴线（BEND P-Point #1 → BEND P-Point #2）` 实际是 146110 P1 → 146107 P2）；同一位置的 OLET P1 / P2 校正取到先匹配的 P1（E3D `line()` 用的是 leave）。位置口径都对，不改。
+
+## 38. 提示矩阵的 E3D 运行时采集：`capture-prompt-step.pmlmac` + 首轮（四条命令第 1 步，2026-09-16 23:35–23:39）
+
+> 对应 `e3d-measure-prompt-matrix.md` §2–§6 的 E3D 列（此前全部 `static_expectation`）。目标：E3D 3.1 shadow（`E:\reverse\e3d\shadow_e3d31_aps_all\des.exe`，PID 11900，09-15 15:17 起跑，与 §8 / G8 同一环境），主窗口最小化。
+> 提示原文**不靠 OCR**：直读 `!!edgCntrl.state.prompt()`（`edgstate.pmlobj` 323–362，产品拼提示串的那个方法）和视口 inMode 上真正显示的那句（`EDGPICK.applyToView` 加 ` : ` 后写进 `!view.attribute(inMode).prompt`，`edgpick.pmlobj` 161–195）。
+> **本节没有截图**：主窗口 iconic 时 `printwindow-capture.ps1` 只出 158×26 的空图；不抢焦点、不还原窗口（§8 同款约束，还原窗口要用户点头）。
+
+### 38.1 采集宏 `capture-prompt-step.pmlmac`（同目录，已入库）
+
+- **每步一调**：`$M "D:/work/plant-code/old/plant3d-web/docs/verification/e3d-measurement-runtime-golden/capture-prompt-step.pmlmac" <tag> [<note>]`，`tag` = 矩阵条目 + 步（`P2-01-s1`、`P3-04-s2`、`P6-02-after-alert`），`INIT` 或文件尚不存在时先写一段**会话头**。缺省参数替换成空串（实机验过：`args=[ONE]|[]`、`[]|[]`）。
+- **写什么**（一块 `==== capture-prompt-step tag=… ==== end tag=…`）：`prompt=`（`prompt()` 原字）、`view[i].inMode.prompt=`（视口那句，带 ` :`）、三段原串（`state.pickPacket / pickType / pick` 的 `key / description / prompt`，BLOCK 求值前）、`state.major / minor / positioning / isPositionMode`、`!!edgPosCntrl` 的 `pickTypeIndex / pickType.description / pickTypesValue[*] / pickTypeFormat / pickIndex / pick.description / intermediate / activePlane / offset / offsetType`、`!!edgPositioning` 四个 gadget 的当前显示（`pick / pickType` 的 DTEXT、`input.val`、`wp.val`）、`!!gphMeasure.shown / perpendicularTo`、`edgCntrl.stack.size`。会话头：`PROJECT CODE / MDB / USER / ce / COORDINATE / UNIT`、`pickTypeList()` / `pickList()`、`distanceFmt / integerFmt / realFmt` 的 `dp`。
+- **只读**：查询 + 写文件，不动数据库、不拾取、不改任何 gadget。每个取值都带 `handle any`，取不到写 `unset`，一处失败不影响整块。
+- **落档**：`e3d-prompt-capture.trace.txt`（APPEND；写失败落 `e3d-prompt-capture.err.txt`）。
+- **怎么送进 E3D**：命令行直接敲；或不动窗口、从进程外投——`python E:\reverse\e3d\e3d-license-hook\exec_clr_method.py --pid 11900 --dll E:\reverse\e3d\e3d-license-hook\E3DBootstrap_20260713_192908.dll --type E3DBootstrap.Entry --method QueueThreadedDirectMacroRawFromHost --arg '<命令>'`（多条用 `||` 分隔；回执落 `E:\reverse\e3d\e3d_direct_macro_result.txt`，看到 `RunInCurrentScope => True` 即跑完）。**用 `Raw` 变体**：`NoRefresh` 那支会先 `CloseKnownToolForms`（现只匹配 Save/Restore Views / Compare 两类窗体）并刷新，`Raw` 一律不碰，测量状态原样保留。
+- **坑（已修）**：宏里不能有 `$P`——命令窗口没开时那一下 `Invoke` 在 PML 跑完**之后**抛 `InvalidOperationException`，bootstrap 依次再试 `Run` / `RunInPdms`，同一块被写三遍（23:34 那次实测）；去掉控制台输出后一调一块。
+
+### 38.2 首轮观察（Positioning Control 基线：Snap · Significant Snaps 开 · WP 关 · Offset NONE，trace 里 `posCntrl.*` 逐项可核）
+
+| tag | 操作（进程内 PML，与功能区按钮同一入口） | `prompt()` | 视口 inMode prompt | 三段 / 状态 | 矩阵 |
+| --- | --- | --- | --- | --- | --- |
+| `INIT` / `P2-00-baseline` | 空闲 | `Navigate` | `Navigate :` | packet / pickPacket / pick 都是 `stdDefault`（Default Pick），`isPositionMode` FALSE，`stack.size` 0 | — |
+| `P2-01-s1` | `!!gphViews.measure('DISTANCE')` | `Measure distance start (Snap) Snap` | `Measure distance start (Snap) Snap :` | pickPacket `Standard Distance Measure`、pickType.prompt `start`、pick.prompt `Snap`；`isPositionMode` TRUE、`intermediate` TRUE、`stack.size` 1 | §2 行 1 步 1 ✓ |
+| `P2-02-s1` | `!!gphMeasure.perpendicularTo.val = TRUE` + `setPerpendicular()` | `Measure perpendicular distance start (Snap) Snap` | `… start (Snap) Snap :` | pickPacket 立即换成 `Standard Perpendicular From Point Measure`；`gphMeasure.perpendicularTo` TRUE | §2 行 3 步 1 ✓（勾上那一下命令名就换） |
+| `P2-02-off` | 勾掉再 `setPerpendicular()` | `Measure distance start (Snap) Snap` | 同 | 回 `Standard Distance Measure` | — |
+| `P2-01-closed` | `!!gphMeasure.close()` + `hide` | `Navigate` | `Navigate :` | `stack.size` 0 | 退出回默认 ✓ |
+| `P2-03-s1` | `!!gphViews.measure('ANGLE')` | `Measure angle root of angle (Snap) Snap` | `… root of angle (Snap) Snap :` | pickPacket `Standard Angle Measure`、pickType.prompt `root of angle` | §2 行 5 步 1 ✓ |
+| `P2-04-s1` | `!!gphViews.measure('LINEANGLE')` | `Measure angle between lines first line` | `Measure angle between lines first line :` | pickPacket `Standard Line Angle Measure`、pickType `Standard Graphics Pick`、pick `Graphics`、**pick.prompt unset**、`isPositionMode` FALSE，同一刻 `posCntrl.intermediate` 仍 TRUE | §2 行 8 步 1 ✓ = **D1 运行时实证**：无 `(token)`、无 ` Snap` 尾巴，与 Significant Snaps 开着无关 |
+| `P2-03-closed` / `P2-04-closed` | `!!gphAngleMeasure.close()` + `hide` | `Navigate` | `Navigate :` | `stack.size` 0 | 退出回默认 ✓ |
+
+会话头（`INIT`）：`project=AMS · mdb=/ALL · user=SYSTEM · ce=* · coord=ENU · unit=MM Bore MM Distance`；
+`pickTypeList = Snap|Distance|Mid-Point|Fraction|Proportion|Intersect|Cursor`（七项、顺序、无 Angle → 矩阵 §3 ✓）；`pickList = Any|Element|Aid|Pline|Ppoint|Screen|Graphics|External`（→ §4 顺序 ✓）；
+缺省 `pickTypesValue[2]=0 / [4]=2 / [5]=0.5`，`distanceFmt.dp=2 · integerFmt.dp=0 · realFmt.dp=2`；`intermediate=TRUE · activePlane=FALSE · offset=FALSE · offsetType=NONE`（→ §5 缺省 ✓）。
+`!!edgPositioning` / `!!gphMeasure` 在空闲时都是 `unset`（窗体还没被 load 过），进命令后 `gphMeasure.*` 有值、`!!edgPositioning` 仍 unset（本轮没开 Positioning Control 窗体）。
+四条命令进出各一次，E3D 全部回到 `Navigate`、`stack.size` 0，没留任何测量状态；`e3d-prompt-capture.err.txt` 不存在（无写失败）。
+
+### 38.3 还没采（都要真实拾取或改 Positioning Control 设置，宏已就位、一步一调）
+
+- 各命令第 2 / 3 步（要拾中第一点 / 第一条线）；七种 token 的实际字串与 D2 三处（`P3-04`：`.input` 填 2.5 → `Fraction[2.5]`？重显几？落点在 0.5？）；过滤器八串字字相同（`P4-01`）；` Snap` 关 / ` WP` / ` Offset` 尾巴（`P5-*`，D4 实证）；§6 全部告警原文（`P6-*`，含 D5 的 `(2,874)`）。
+- 截图（golden §1 要求测量窗体 + 命令提示 + 三维视口同框）：要主窗口非最小化，`printwindow-capture.ps1` 才出图。

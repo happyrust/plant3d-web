@@ -6,7 +6,7 @@
 > （`stdPosition` 1447、`stdGraphics` 1696、`set*` 1747–1917、`intersect()` 825–935）、`edgpickpacket.pmlobj`（`measure*` 包）、`edgposcntrl.pmlobj`（`loadPicks` 346–405）；
 > Web：`src/measurement/pick/pickLayerModel.ts`（`formatMeasurementPrompt` / `measurementPickTypePromptToken` / 过滤器与类型表）、`src/composables/useXeokitMeasurementTools.ts`
 > （`statusText` 2527–2608、`currentSnapTargetText`、`pickPointMessage` 各处）。
-> **证据等级**：E3D 一律 `static_expectation`（E3D 进程不在跑，字串照源码抄）；Web 字串照源码抄，并与 golden MD §35 / §30 补采实机截图里的提示条核过（`(Distance[100]) Snap : SCTN PLINE NA · Distance[100]`、
+> **证据等级**：E3D 原为一律 `static_expectation`（字串照源码抄）；**2026-09-16 23:3x 起**，§2 四条命令的第 1 步、§3 七项顺序、§4 八项顺序、§5 三条尾巴的缺省状态已在跑着的 E3D 3.1（shadow，PID 11900）里用 `capture-prompt-step.pmlmac` 直读 `!!edgCntrl.state.prompt()` 与视口 inMode prompt 采成 `observation`（golden MD §38，`e3d-prompt-capture.trace.txt`，无截图——主窗口最小化），其余行仍 `static_expectation`；Web 字串照源码抄，并与 golden MD §35 / §30 补采实机截图里的提示条核过（`(Distance[100]) Snap : SCTN PLINE NA · Distance[100]`、
 > `(Intersection[3]) Snap : BOX 交点（预览）`、`两线夹角 · 第 2/2 步 选择第二条线或面（第一条：VALV P-Point #100） (Cursor) Snap : VALV P-Point #100；点空白取消当前点选`——后者是 D1 改前的截图，
 > `0c0d9eb` 起两线夹角不再带 `(Cursor) Snap`，改后的四态实机截图见 golden MD §30「补采（12:32 / 13:09）」）。
 > 2026-09-16 落成；差异见 §7。**D1 已拍板并改掉（用户 10:54，`0c0d9eb`）**：两线夹角提示按 E3D `stdGraphics` 口径去掉 `(token)` 与 ` Snap` 尾巴；D5 的 Web 文案同笔改掉，E3D 原文仍待采；D6 静态核清结掉；**D2 用户 2026-09-16 15:5x 改口、改掉（`e8ebc10`，决策 `d-269` 取代 `d-228`）**：Fraction 提示照 E3D 原样出输入值；余 D4（不做）。
@@ -53,14 +53,14 @@ Web（`formatMeasurementPrompt`）：
 
 | E3D 命令（`edgpickpacket.pmlobj`） | 步 | E3D 完整提示 | Web 命令 / 步（`statusText`） | Web 完整提示 | 对照 |
 | --- | --- | --- | --- | --- | --- |
-| `measureDistance`（`'Measure distance'`，`stdPosition`） | 1 `start` | `Measure distance start (Snap) Snap :` | 距离测量 · 选择起点 | `距离测量 · 第 1/2 步 选择起点 (Snap) Snap : 等待捕捉（P-Point / Item 原点）` | 结构 / 顺序一致；`start` ↔ 选择起点 |
+| `measureDistance`（`'Measure distance'`，`stdPosition`） | 1 `start` | `Measure distance start (Snap) Snap :` | 距离测量 · 选择起点 | `距离测量 · 第 1/2 步 选择起点 (Snap) Snap : 等待捕捉（P-Point / Item 原点）` | 结构 / 顺序一致；`start` ↔ 选择起点；**E3D 实机 ✓**（golden §38 `P2-01-s1`：`prompt()` = `Measure distance start (Snap) Snap`，视口 `… Snap :`；三段 = pickPacket `Standard Distance Measure` / pickType.prompt `start` / pick.prompt `Snap`） |
 | | 2 `end` | `Measure distance end (Snap) Snap :` | 距离测量 · 选择终点 | `距离测量 · 第 2/2 步 选择终点 (Snap) Snap : …；点空白取消当前点选` | 一致；trailer 是 Web 加的 |
-| `measurePerpendicularToPoint`（`'Measure perpendicular distance'`，`stdPosition`） | 1 `start` | `Measure perpendicular distance start (Snap) Snap :` | 垂距测量 · 选择起点 | `垂距测量 · 第 1/2 步 选择起点 (Snap) Snap : …` | 一致（Perpendicular to 勾上时命令名跟着换，与 E3D 换包同义） |
+| `measurePerpendicularToPoint`（`'Measure perpendicular distance'`，`stdPosition`） | 1 `start` | `Measure perpendicular distance start (Snap) Snap :` | 垂距测量 · 选择起点 | `垂距测量 · 第 1/2 步 选择起点 (Snap) Snap : …` | 一致（Perpendicular to 勾上时命令名跟着换，与 E3D 换包同义）；**E3D 实机 ✓**（§38 `P2-02-s1`：勾上那一下 pickPacket 立即换成 `Standard Perpendicular From Point Measure`，提示 `Measure perpendicular distance start (Snap) Snap :`；勾掉即回 `Measure distance start …`，`P2-02-off`） |
 | | 2 `end` | `Measure perpendicular distance end (Snap) Snap :` | 垂距测量 · 选择目标线 / 面上的点 | `垂距测量 · 第 2/2 步 选择目标线 / 面上的点 (Snap) Snap : …；点空白取消当前点选` | E3D 只说 `end`，Web 说明了这一击的用途；**文案比 E3D 多**，结构一致 |
-| `measureAngle`（`'Measure angle'`，`stdPosition`） | 1 `root of angle` | `Measure angle root of angle (Snap) Snap :` | 角度测量 · 选择角度顶点 | `角度测量 · 第 1/3 步 选择角度顶点 (Snap) Snap : …` | 一致（顶点先拾，golden G6 同序） |
+| `measureAngle`（`'Measure angle'`，`stdPosition`） | 1 `root of angle` | `Measure angle root of angle (Snap) Snap :` | 角度测量 · 选择角度顶点 | `角度测量 · 第 1/3 步 选择角度顶点 (Snap) Snap : …` | 一致（顶点先拾，golden G6 同序）；**E3D 实机 ✓**（§38 `P2-03-s1`：`Measure angle root of angle (Snap) Snap :`，pickPacket `Standard Angle Measure`） |
 | | 2 `first point` | `Measure angle first point (Snap) Snap :` | 角度测量 · 选择第一边点 | `角度测量 · 第 2/3 步 选择第一边点 (Snap) Snap : …；点空白取消当前点选` | 一致 |
 | | 3 `second point` | `Measure angle second point (Snap) Snap :` | 角度测量 · 选择第二边点 | `角度测量 · 第 3/3 步 选择第二边点 (Snap) Snap : …；点空白取消当前点选` | 一致 |
-| `measureLineAngleArc`（`'Measure angle between lines'`，`stdGraphics`，`positioning = false`） | 1 `first line` | `Measure angle between lines first line :`（**无 token、无 Snap**：Graphics 拾取的 EDGPICK 没有 prompt，非定位拾取不加尾巴） | 两线夹角 · 选择第一条线 | `两线夹角 · 第 1/2 步 选择第一条线 : …`（`0c0d9eb` 前是 `… 选择第一条线 (Cursor) Snap : …`） | 步文案一致；~~**Web 多了 `(Cursor)` 与 ` Snap`** → **D1**~~ **D1 已改**：`statusText` 对两线夹角传 `positioning: false`，token 与 Snap 都不出 |
+| `measureLineAngleArc`（`'Measure angle between lines'`，`stdGraphics`，`positioning = false`） | 1 `first line` | `Measure angle between lines first line :`（**无 token、无 Snap**：Graphics 拾取的 EDGPICK 没有 prompt，非定位拾取不加尾巴） | 两线夹角 · 选择第一条线 | `两线夹角 · 第 1/2 步 选择第一条线 : …`（`0c0d9eb` 前是 `… 选择第一条线 (Cursor) Snap : …`） | 步文案一致；~~**Web 多了 `(Cursor)` 与 ` Snap`** → **D1**~~ **D1 已改**：`statusText` 对两线夹角传 `positioning: false`，token 与 Snap 都不出；**E3D 实机 ✓ = D1 运行时实证**（§38 `P2-04-s1`：`prompt()` = `Measure angle between lines first line`，视口 `… first line :`；pickPacket `Standard Line Angle Measure`、pickType `Standard Graphics Pick`、pick `Graphics`、pick.prompt **unset**、`isPositionMode()` FALSE，而同一刻 `posCntrl.intermediate` 仍 TRUE——Significant Snaps 开着也不加尾巴） |
 | | 2 `second line or plane` | `Measure angle between lines second line or plane :` | 两线夹角 · 选择第二条线或面（第一条：<标签>） | `两线夹角 · 第 2/2 步 选择第二条线或面（第一条：TUBI 轴线（…）） : …；点空白取消当前点选` | 步文案一致；「第一条：…」回显是 Web 加的（D3）；~~token / Snap → **D1**~~ 已改 |
 | `measureLineAngle`（`'Measure angle between lines -'`，`gmfAngle.betweenLines`，两击 `first` / `second` 都只拾 `EDGE`） | 1 / 2 | `Measure angle between lines - first :` / `… - second :` | — | — | E3D 另一条只算数值不画弧的两线角命令，**不是 Measure 功能区那颗按钮**（见 D6）：调用方是三张设计表单的「Angle between two lines」菜单项，量到的 REAL 直接填进角度输入框。Web 不另做模式，数值口径由单测钉住 |
 | —（E3D 无；Picking Control 偏移字段右键 `Measure Shortest`，golden MD §32） | 1 / 2 | — | 最短距离 · 选择第一项：点 / 线 / 面 · 选择第二项：点 / 线 / 面（第一项：<标签>） | `最短距离 · 第 1/2 步 选择第一项：点 / 线 / 面 (Snap) Snap : …` / `… 第 2/2 步 …（第一项：…）…；点空白取消当前点选` | **Web 增强**（决策 `d-619`），不计 parity |
@@ -85,17 +85,19 @@ E3D：`edgposcntrl.pmlobj` `loadPicks` 按 `pickTypes[1..7]` 的顺序建七种�
 | 7 | `Cursor` | `Cursor`（1782；`setExact`） | — | Cursor（id `exact`） | `Cursor` | 一致 |
 | — | `Angle`（`setAngle`，1915） | `Angle` | — | — | — | E3D `EDGPICKTYPE` 有这个类型，但 Positioning Control 的七种里没有 → Web 不做 |
 
+运行时（golden MD §38 INIT 头块，2026-09-16 23:35）：`!!edgPosCntrl.pickTypeList()` = `Snap|Distance|Mid-Point|Fraction|Proportion|Intersect|Cursor`——恰好七项、顺序同上表、没有 Angle；缺省 `pickTypesValue[2]=0`、`[4]=2`、`[5]=0.5`（第 2 / 4 / 5 行「取值」列 ✓）；输入框格式 `distanceFmt.dp=2`、`integerFmt.dp=0`、`realFmt.dp=2`。七种 token 各自的提示串还没采（要在 Positioning Control 里逐个切类型，见 §8）。
+
 ## 4. 过滤器（不进提示）
 
 两边过滤器都只出现在选择控件里：E3D `edgposcntrl.pmlobj` `picks[1..8]` = `stdAny` / `stdElement` / `stdAid` / `stdPline` / `stdPpoint` / `stdScreen` / `stdGraphics` / `stdExternal`，`description` 依次
-`Any` / `Element` / `Aid` / `Pline` / `Ppoint` / `Screen` / `Graphics` / `External`；Web `MEASUREMENT_PICK_FILTER_IDS` / `MEASUREMENT_PICK_FILTER_LABELS` 同序同名（ADR 0060）。
+`Any` / `Element` / `Aid` / `Pline` / `Ppoint` / `Screen` / `Graphics` / `External`；Web `MEASUREMENT_PICK_FILTER_IDS` / `MEASUREMENT_PICK_FILTER_LABELS` 同序同名（ADR 0060）。运行时 `!!edgPosCntrl.pickList()` = `Any|Element|Aid|Pline|Ppoint|Screen|Graphics|External`（golden MD §38 INIT 头块），八项同序 ✓；缺省过滤器 `Any`。「换过滤器提示字字不变」那八串还没采。
 E3D 换过滤器换的是 `EDGSTATE.pick`（`setPickType` 里定位拾取走 `setPick(!!edgPosCntrl.pick)`，`edgstate.pmlobj` 262–296），`prompt()` 三段里没有过滤器；Web 同。唯一进提示的「过滤器痕迹」是 Web 目标段的 `等待捕捉（<已开且当前过滤器放行的点源>）`——这是 Web 加的（**D3**）。
 
 ## 5. 尾巴 / 前缀
 
 | 项 | E3D | Web | 对照 |
 | --- | --- | --- | --- |
-| ` Snap` | `!!edgPosCntrl.intermediate`（Significant Snaps）开且定位拾取；`loadPicks` 末尾 `intermediate = true`，**缺省开** | `pickLayer.significantSnaps` 开（`DEFAULT_MEASUREMENT_PICK_LAYER` 缺省开）且 `positioning`（两线夹角不加） | 一致（缺省值也一致；两线夹角 D1 已改 `0c0d9eb`） |
+| ` Snap` | `!!edgPosCntrl.intermediate`（Significant Snaps）开且定位拾取；`loadPicks` 末尾 `intermediate = true`，**缺省开** | `pickLayer.significantSnaps` 开（`DEFAULT_MEASUREMENT_PICK_LAYER` 缺省开）且 `positioning`（两线夹角不加） | 一致（缺省值也一致；两线夹角 D1 已改 `0c0d9eb`）；实机缺省 `intermediate=TRUE`、`activePlane=FALSE`、`offsetType=NONE`（golden §38），四条命令第 1 步的 ` Snap` 尾巴 / 两线夹角不加尾巴都已实采 |
 | ` WP` | 工作平面激活 | 无 | **D4** 不做 |
 | ` Offset` | `offsetType ne 'NONE'` | 无 | **D4** 不做 |
 | `第 i/n 步` | 无 | 有 | **D3** Web 加 |
@@ -142,4 +144,4 @@ E3D 换过滤器换的是 `EDGSTATE.pick`（`setPickType` 里定位拾取走 `se
 非定位拾取出 `<命令> <步> :`，现在没有一处 E3D 不显示而 Web 显示的段（D3 的 Web 加段除外），改后的提示条已实机采过（golden MD §30「补采（12:32 / 13:09）」四态截图 + `records.json`）。D5 的 Web 文案同笔改掉；D6 2026-09-16 静态核清并结掉（`Angle 2 Lines` 走的是画弧包，非弧包是三张设计表单的取值入口，Web 不做；两者数值相等已由 `lineAngle.test.ts` 钉住）。
 ~~D2 2026-09-16 定为不改（决策 `d-228`：Web 落库即归一成整数，输入框 / 提示 / 内核同一个 n；E3D 原样回显非整数是它自己三处不一致的 quirk）。~~
 **D2 2026-09-16 15:5x 用户改口、改掉（`e8ebc10`，决策 `d-269` 取代 `d-228`）**：Fraction 提示照 E3D 原样出输入值（`Fraction[2.5]`），落库不再归一，内核仍 `int()`——七种 token 现在字字与 E3D 相同。
-余 D4（不做）与 E3D 原文 / 运行时截图对账（待 E3D 在跑，本文全部是 `static_expectation`）。
+余 D4（不做）与 E3D 原文 / 运行时对账。**2026-09-16 23:3x**：E3D 3.1 在跑（shadow，PID 11900），采集宏 `docs/verification/e3d-measurement-runtime-golden/capture-prompt-step.pmlmac` 已备——每步一调、读 `!!edgCntrl.state.prompt()` + 视口 inMode prompt + `!!edgPosCntrl` / `!!edgPositioning` 状态，APPEND 到 `e3d-prompt-capture.trace.txt`；首轮已把 §2 四条命令的第 1 步（含 **D1 运行时实证**）、§3 七项顺序、§4 八项顺序、§5 缺省尾巴状态采成 `observation`（golden MD §38）。仍是 `static_expectation` 的：各命令第 2 / 3 步、七种 token 的实际字串（D2 的 `Fraction[2.5]` 三处）、过滤器八串、Significant Snaps 关 / WP / Offset 尾巴、§6 全部告警原文（D5 的 2,874）——都要真实拾取或改 Positioning Control 设置，下一轮用同一支宏逐步采。

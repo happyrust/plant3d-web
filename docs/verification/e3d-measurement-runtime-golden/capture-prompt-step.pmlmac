@@ -1,0 +1,497 @@
+-- capture-prompt-step.pmlmac
+--
+-- Purpose : one call per prompt-matrix step (docs/verification/e3d-measure-prompt-matrix.md, sections 2-6).
+--           Reads the live EDG prompt exactly as the product builds it -- !!edgCntrl.state.prompt()
+--           (edgstate.pmlobj 323-362) -- plus the ' : ' form EDGPICK.applyToView pushes into the 3D view
+--           (edgpick.pmlobj 161-195), and the positioning-control state behind the token
+--           (!!edgPosCntrl, edgposcntrl.pmlobj 82-162 members / 373-405 defaults; !!edgPositioning gadgets,
+--           edgpositioning.pmlfrm 33-38). Everything is APPENDED as one block to the trace file below.
+--           Read-only: queries only -- no database writes, no picks, no form or gadget changes.
+--
+-- Trace   : docs/verification/e3d-measurement-runtime-golden/e3d-prompt-capture.trace.txt
+--           (APPEND; created on first use; a session header block is written when the file is new or tag = INIT)
+--
+-- Run     : from the E3D command line, or dispatched into the running des.exe with
+--           E:/reverse/e3d/e3d-license-hook/exec_clr_method.py --method QueueThreadedDirectMacroRawFromHost
+--           (the Raw variant closes no tool forms and refreshes nothing, so the measure state is untouched):
+--
+--   $$M "D:/work/plant-code/old/plant3d-web/docs/verification/e3d-measurement-runtime-golden/capture-prompt-step.pmlmac" <tag> [<note>]
+--
+--   argument 1 <tag>  : matrix item + step, one word, e.g. P2-01-s1 / P3-04-s2 / P6-02-after-alert.
+--                       Empty -> untagged. INIT -> also writes the session header block.
+--   argument 2 <note> : optional single word copied into the block header.
+--   Missing arguments substitute as empty strings (verified live on E3D 3.1 PID 11900, 2026-09-16).
+--
+-- Source  : E:/reverse/e3d/shadow_e3d31_aps_all/PMLLIB/common (the running copy); edgstate / edgcntrl /
+--           edgpicktype / edgpickpacket are byte-identical to Administration1.8, edgposcntrl / edgpick differ
+--           by a few bytes only.
+
+!traceFile = object FILE('D:/work/plant-code/old/plant3d-web/docs/verification/e3d-measurement-runtime-golden/e3d-prompt-capture.trace.txt')
+!trace = ARRAY()
+
+-- arguments
+!tag = '$1'
+if (!tag.trim() eq '') then
+  !tag = 'untagged'
+endif
+!note = '$2'
+
+-- timestamp
+!now = 'unset'
+!dt = object DATETIME()
+handle any
+endhandle
+!now = !dt.string()
+handle any
+endhandle
+
+-- ---------------------------------------------------------------- session header
+!writeHeader = FALSE
+if (!tag.upcase() eq 'INIT') then
+  !writeHeader = TRUE
+endif
+!fileExists = TRUE
+!fileExists = !traceFile.exists()
+handle any
+endhandle
+if (!fileExists.not()) then
+  !writeHeader = TRUE
+endif
+
+if (!writeHeader) then
+  !trace.append('#### capture-prompt-step session header at=' & !now)
+
+  !v = 'unset'
+  var !v PROJECT CODE
+  handle any
+  endhandle
+  !trace.append('project=' & !v)
+
+  !v = 'unset'
+  var !v MDB
+  handle any
+  endhandle
+  !trace.append('mdb=' & !v)
+
+  !v = 'unset'
+  var !v USER
+  handle any
+  endhandle
+  !trace.append('user=' & !v)
+
+  !v = 'unset'
+  !v = !!ce.flnn
+  handle any
+  endhandle
+  !trace.append('ce=' & !v)
+
+  !v = 'unset'
+  var !v COORDINATE
+  handle any
+  endhandle
+  !trace.append('coord=' & !v)
+
+  !v = 'unset'
+  var !v UNIT
+  handle any
+  endhandle
+  !trace.append('unit=' & !v)
+
+  -- pick types (matrix section 3, expected exactly seven in order) and pick filters (section 4, eight)
+  !arr = ARRAY()
+  !arr = !!edgPosCntrl.pickTypeList()
+  handle any
+  endhandle
+  !list = ''
+  do !i indices !arr
+    !list = !list & !arr[!i] & '|'
+  enddo
+  !trace.append('posCntrl.pickTypeList=' & !list)
+
+  !arr = ARRAY()
+  !arr = !!edgPosCntrl.pickList()
+  handle any
+  endhandle
+  !list = ''
+  do !i indices !arr
+    !list = !list & !arr[!i] & '|'
+  enddo
+  !trace.append('posCntrl.pickList=' & !list)
+
+  -- formats behind the Method Value box (edgposcntrl.pmlobj 379 / 391 / 397)
+  !v = 'unset'
+  !v = !!distanceFmt.dp.string()
+  handle any
+  endhandle
+  !trace.append('distanceFmt.dp=' & !v)
+
+  !v = 'unset'
+  !v = !!integerFmt.dp.string()
+  handle any
+  endhandle
+  !trace.append('integerFmt.dp=' & !v)
+
+  !v = 'unset'
+  !v = !!realFmt.dp.string()
+  handle any
+  endhandle
+  !trace.append('realFmt.dp=' & !v)
+
+  !trace.append('#### end header')
+endif
+
+-- ---------------------------------------------------------------- one step
+!trace.append('==== capture-prompt-step tag=' & !tag & ' note=' & !note & ' at=' & !now)
+
+-- 1. the prompt as EDGSTATE builds it (packet prompt + type prompt + (pick prompt) + WP / Offset / Snap tails)
+!prompt = 'unset'
+!prompt = !!edgCntrl.state.prompt()
+handle any
+endhandle
+!trace.append('prompt=' & !prompt)
+
+-- 2. the prompt as the 3D view shows it (applyToView adds ' : ' then trims)
+!views = ARRAY()
+!views = !!edgCntrl.views
+handle any
+endhandle
+!trace.append('edgCntrl.views.size=' & !views.size().string())
+do !i indices !views
+  !v = 'unset'
+  !v = !views[!i].attribute(!!edgCntrl.state.pick.inMode).prompt
+  handle any
+  endhandle
+  if (!v.unset()) then
+    !v = 'unset'
+  endif
+  !trace.append('view[' & !i.string() & '].inMode.prompt=' & !v)
+enddo
+
+-- 3. the three prompt parts and the state counters (raw strings, before BLOCK evaluation)
+!v = 'unset'
+!v = !!edgCntrl.state.packet.key
+handle any
+endhandle
+if (!v.unset()) then
+  !v = 'unset'
+endif
+!trace.append('state.packet.key=' & !v)
+
+!v = 'unset'
+!v = !!edgCntrl.state.packet.description
+handle any
+endhandle
+if (!v.unset()) then
+  !v = 'unset'
+endif
+!trace.append('state.packet.description=' & !v)
+
+!v = 'unset'
+!v = !!edgCntrl.state.pickPacket.key
+handle any
+endhandle
+if (!v.unset()) then
+  !v = 'unset'
+endif
+!trace.append('state.pickPacket.key=' & !v)
+
+!v = 'unset'
+!v = !!edgCntrl.state.pickPacket.description
+handle any
+endhandle
+if (!v.unset()) then
+  !v = 'unset'
+endif
+!trace.append('state.pickPacket.description=' & !v)
+
+!v = 'unset'
+!v = !!edgCntrl.state.pickPacket.prompt
+handle any
+endhandle
+if (!v.unset()) then
+  !v = 'unset'
+endif
+!trace.append('state.pickPacket.prompt=' & !v)
+
+!v = 'unset'
+!v = !!edgCntrl.state.pickType.key
+handle any
+endhandle
+if (!v.unset()) then
+  !v = 'unset'
+endif
+!trace.append('state.pickType.key=' & !v)
+
+!v = 'unset'
+!v = !!edgCntrl.state.pickType.description
+handle any
+endhandle
+if (!v.unset()) then
+  !v = 'unset'
+endif
+!trace.append('state.pickType.description=' & !v)
+
+!v = 'unset'
+!v = !!edgCntrl.state.pickType.prompt
+handle any
+endhandle
+if (!v.unset()) then
+  !v = 'unset'
+endif
+!trace.append('state.pickType.prompt=' & !v)
+
+!v = 'unset'
+!v = !!edgCntrl.state.pickType.positioning.string()
+handle any
+endhandle
+!trace.append('state.pickType.positioning=' & !v)
+
+!v = 'unset'
+!v = !!edgCntrl.state.pickType.numberOfPicks.string()
+handle any
+endhandle
+!trace.append('state.pickType.numberOfPicks=' & !v)
+
+!v = 'unset'
+!v = !!edgCntrl.state.pick.key
+handle any
+endhandle
+if (!v.unset()) then
+  !v = 'unset'
+endif
+!trace.append('state.pick.key=' & !v)
+
+!v = 'unset'
+!v = !!edgCntrl.state.pick.description
+handle any
+endhandle
+if (!v.unset()) then
+  !v = 'unset'
+endif
+!trace.append('state.pick.description=' & !v)
+
+!v = 'unset'
+!v = !!edgCntrl.state.pick.prompt
+handle any
+endhandle
+if (!v.unset()) then
+  !v = 'unset'
+endif
+!trace.append('state.pick.prompt=' & !v)
+
+!v = 'unset'
+!v = !!edgCntrl.state.pick.inMode
+handle any
+endhandle
+if (!v.unset()) then
+  !v = 'unset'
+endif
+!trace.append('state.pick.inMode=' & !v)
+
+!v = 'unset'
+!v = !!edgCntrl.state.major.string()
+handle any
+endhandle
+!trace.append('state.major=' & !v)
+
+!v = 'unset'
+!v = !!edgCntrl.state.minor.string()
+handle any
+endhandle
+!trace.append('state.minor=' & !v)
+
+!v = 'unset'
+!v = !!edgCntrl.state.positioning.string()
+handle any
+endhandle
+!trace.append('state.positioning=' & !v)
+
+!v = 'unset'
+!v = !!edgCntrl.state.isPositionMode().string()
+handle any
+endhandle
+!trace.append('state.isPositionMode=' & !v)
+
+-- 4. positioning control (the token value and the three prompt tails)
+!v = 'unset'
+!v = !!edgPosCntrl.active.string()
+handle any
+endhandle
+!trace.append('posCntrl.active=' & !v)
+
+!v = 'unset'
+!v = !!edgPosCntrl.inUse.string()
+handle any
+endhandle
+!trace.append('posCntrl.inUse=' & !v)
+
+!v = 'unset'
+!v = !!edgPosCntrl.pickTypeIndex.string()
+handle any
+endhandle
+!trace.append('posCntrl.pickTypeIndex=' & !v)
+
+!v = 'unset'
+!v = !!edgPosCntrl.pickType.description
+handle any
+endhandle
+if (!v.unset()) then
+  !v = 'unset'
+endif
+!trace.append('posCntrl.pickType.description=' & !v)
+
+!v = 'unset'
+!v = !!edgPosCntrl.pickTypesValue[!!edgPosCntrl.pickTypeIndex].string()
+handle any
+endhandle
+!trace.append('posCntrl.pickTypeValue=' & !v)
+
+!v = 'unset'
+!v = !!edgPosCntrl.pickTypesFormat[!!edgPosCntrl.pickTypeIndex]
+handle any
+endhandle
+if (!v.unset()) then
+  !v = 'unset'
+endif
+!trace.append('posCntrl.pickTypeFormat=' & !v)
+
+!arr = ARRAY()
+!arr = !!edgPosCntrl.pickTypesValue
+handle any
+endhandle
+do !i indices !arr
+  !v = 'unset'
+  !v = !arr[!i].string()
+  handle any
+  endhandle
+  !trace.append('posCntrl.pickTypesValue[' & !i.string() & ']=' & !v)
+enddo
+
+!v = 'unset'
+!v = !!edgPosCntrl.pickIndex.string()
+handle any
+endhandle
+!trace.append('posCntrl.pickIndex=' & !v)
+
+!v = 'unset'
+!v = !!edgPosCntrl.pick.description
+handle any
+endhandle
+if (!v.unset()) then
+  !v = 'unset'
+endif
+!trace.append('posCntrl.pick.description=' & !v)
+
+!v = 'unset'
+!v = !!edgPosCntrl.intermediate.string()
+handle any
+endhandle
+!trace.append('posCntrl.intermediate=' & !v)
+
+!v = 'unset'
+!v = !!edgPosCntrl.activePlane.string()
+handle any
+endhandle
+!trace.append('posCntrl.activePlane=' & !v)
+
+!v = 'unset'
+!v = !!edgPosCntrl.offset.string()
+handle any
+endhandle
+!trace.append('posCntrl.offset=' & !v)
+
+!v = 'unset'
+!v = !!edgPosCntrl.offsetType
+handle any
+endhandle
+if (!v.unset()) then
+  !v = 'unset'
+endif
+!trace.append('posCntrl.offsetType=' & !v)
+
+-- 5. the Positioning Control form gadgets as displayed (Pick Type / Pick Method / Method Value / WP)
+!v = 'unset'
+!v = !!edgPositioning.pick.selection('DTEXT')
+handle any
+endhandle
+if (!v.unset()) then
+  !v = 'unset'
+endif
+!trace.append('posForm.pick=' & !v)
+
+!v = 'unset'
+!v = !!edgPositioning.pickType.selection('DTEXT')
+handle any
+endhandle
+if (!v.unset()) then
+  !v = 'unset'
+endif
+!trace.append('posForm.pickType=' & !v)
+
+!v = 'unset'
+!v = !!edgPositioning.input.val.string()
+handle any
+endhandle
+!trace.append('posForm.input=' & !v)
+
+!v = 'unset'
+!v = !!edgPositioning.input.active.string()
+handle any
+endhandle
+!trace.append('posForm.input.active=' & !v)
+
+!v = 'unset'
+!v = !!edgPositioning.wp.val.string()
+handle any
+endhandle
+!trace.append('posForm.wp=' & !v)
+
+!v = 'unset'
+!v = !!edgPositioning.shown().string()
+handle any
+endhandle
+!trace.append('posForm.shown=' & !v)
+
+-- 6. Measure form
+!v = 'unset'
+!v = !!gphMeasure.shown().string()
+handle any
+endhandle
+!trace.append('gphMeasure.shown=' & !v)
+
+!v = 'unset'
+!v = !!gphMeasure.perpendicularTo.val.string()
+handle any
+endhandle
+!trace.append('gphMeasure.perpendicularTo=' & !v)
+
+-- 7. EDG controller stack
+!v = 'unset'
+!v = !!edgCntrl.stack.size().string()
+handle any
+endhandle
+!trace.append('edgCntrl.stack.size=' & !v)
+
+!v = 'unset'
+!v = !!edgCntrl.description
+handle any
+endhandle
+if (!v.unset()) then
+  !v = 'unset'
+endif
+!trace.append('edgCntrl.description=' & !v)
+
+!trace.append('==== end tag=' & !tag)
+
+-- ---------------------------------------------------------------- write
+-- No console output on purpose: with the Command Window closed, a print makes the dispatched command throw
+-- after the PML has run, and the bootstrap then retries the same command through its other two entry points
+-- (seen live 2026-09-16: one call wrote the block three times). Errors go to a sidecar file instead.
+!traceFile.writeFile('APPEND', !trace)
+handle any
+  !errFile = object FILE('D:/work/plant-code/old/plant3d-web/docs/verification/e3d-measurement-runtime-golden/e3d-prompt-capture.err.txt')
+  !err = ARRAY()
+  !err.append('capture-prompt-step tag=' & !tag & ' at=' & !now & ' : writeFile APPEND failed : ' & !!error.text)
+  !errFile.writeFile('OVERWRITE', !err)
+endhandle
+return
