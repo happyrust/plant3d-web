@@ -7,8 +7,9 @@
 > Web：`src/measurement/pick/pickLayerModel.ts`（`formatMeasurementPrompt` / `measurementPickTypePromptToken` / 过滤器与类型表）、`src/composables/useXeokitMeasurementTools.ts`
 > （`statusText` 2527–2608、`currentSnapTargetText`、`pickPointMessage` 各处）。
 > **证据等级**：E3D 一律 `static_expectation`（E3D 进程不在跑，字串照源码抄）；Web 字串照源码抄，并与 golden MD §35 / §30 补采实机截图里的提示条核过（`(Distance[100]) Snap : SCTN PLINE NA · Distance[100]`、
-> `(Intersection[3]) Snap : BOX 交点（预览）`、`两线夹角 · 第 2/2 步 选择第二条线或面（第一条：VALV P-Point #100） (Cursor) Snap : VALV P-Point #100；点空白取消当前点选`）。
-> 2026-09-16 落成；差异见 §7，其中 D1 要拍板。
+> `(Intersection[3]) Snap : BOX 交点（预览）`、`两线夹角 · 第 2/2 步 选择第二条线或面（第一条：VALV P-Point #100） (Cursor) Snap : VALV P-Point #100；点空白取消当前点选`——后者是 D1 改前的截图，
+> `0c0d9eb` 起两线夹角不再带 `(Cursor) Snap`）。
+> 2026-09-16 落成；差异见 §7。**D1 已拍板并改掉（用户 10:54，`0c0d9eb`）**：两线夹角提示按 E3D `stdGraphics` 口径去掉 `(token)` 与 ` Snap` 尾巴；D5 的 Web 文案同笔改掉，E3D 原文仍待采。
 
 ## 1. 提示的结构
 
@@ -30,15 +31,16 @@ EDGPICK.applyToView(view, prompt)  →  view.inMode.prompt = (prompt & ' : ').tr
 Web（`formatMeasurementPrompt`）：
 
 ```
-<命令> · 第 <i>/<n> 步 <步提示> (<token>)[ Snap] :[ <目标>][<trailer>]
+<命令> · 第 <i>/<n> 步 <步提示> (<token>)[ Snap] :[ <目标>][<trailer>]        ← 定位拾取（positioning = true，缺省）
+<命令> · 第 <i>/<n> 步 <步提示> :[ <目标>][<trailer>]                        ← 非定位拾取（positioning = false：两线夹角，0c0d9eb 起）
 ```
 
 | 段 | E3D | Web | 对照 |
 | --- | --- | --- | --- |
 | 命令 | `pickPacket.prompt` | `command`（中文命令名） | 结构一致，文案按 §2 逐条对 |
 | 步 | `pickType.prompt`（一词，如 `start`） | `第 i/n 步 <步提示>`（带计数） | **步计数是 Web 加的**；步提示按 §2 逐条对 |
-| 拾取类型 token | `(<pick.prompt>)`，只有定位拾取有 | `(<token>)`，**所有**测量命令都有 | 定位拾取一致（§3）；两线夹角那种 Graphics 拾取 E3D 不带 → **D1** |
-| ` Snap` 尾巴 | `intermediate` 开且定位拾取 | `significantSnaps` 开，所有命令 | 定位拾取一致；两线夹角 → **D1** |
+| 拾取类型 token | `(<pick.prompt>)`，只有定位拾取有 | `(<token>)`，只有 `positioning` 的命令有（两线夹角传 `false`） | 一致（§3）；~~两线夹角那种 Graphics 拾取 E3D 不带 → **D1**~~ D1 已改（`0c0d9eb`） |
+| ` Snap` 尾巴 | `intermediate` 开且定位拾取 | `significantSnaps` 开且 `positioning` | 一致；~~两线夹角 → **D1**~~ D1 已改 |
 | ` WP` / ` Offset` | 工作平面 / 偏移开着时 | 无 | Web 无工作平面 / 偏移，不做（**D4**） |
 | 冒号 | `applyToView` 缀 ` :` | ` :` | 一致 |
 | 目标 | 无（图形高亮） | ` <目标>`（吸中项的名字，或 `等待捕捉（<已开点源>）`） | **Web 加的**（**D3**） |
@@ -58,8 +60,8 @@ Web（`formatMeasurementPrompt`）：
 | `measureAngle`（`'Measure angle'`，`stdPosition`） | 1 `root of angle` | `Measure angle root of angle (Snap) Snap :` | 角度测量 · 选择角度顶点 | `角度测量 · 第 1/3 步 选择角度顶点 (Snap) Snap : …` | 一致（顶点先拾，golden G6 同序） |
 | | 2 `first point` | `Measure angle first point (Snap) Snap :` | 角度测量 · 选择第一边点 | `角度测量 · 第 2/3 步 选择第一边点 (Snap) Snap : …；点空白取消当前点选` | 一致 |
 | | 3 `second point` | `Measure angle second point (Snap) Snap :` | 角度测量 · 选择第二边点 | `角度测量 · 第 3/3 步 选择第二边点 (Snap) Snap : …；点空白取消当前点选` | 一致 |
-| `measureLineAngleArc`（`'Measure angle between lines'`，`stdGraphics`，`positioning = false`） | 1 `first line` | `Measure angle between lines first line :`（**无 token、无 Snap**：Graphics 拾取的 EDGPICK 没有 prompt，非定位拾取不加尾巴） | 两线夹角 · 选择第一条线 | `两线夹角 · 第 1/2 步 选择第一条线 (Cursor) Snap : …` | 步文案一致；**Web 多了 `(Cursor)` 与 ` Snap`** → **D1** |
-| | 2 `second line or plane` | `Measure angle between lines second line or plane :` | 两线夹角 · 选择第二条线或面（第一条：<标签>） | `两线夹角 · 第 2/2 步 选择第二条线或面（第一条：TUBI 轴线（…）） (Cursor) Snap : …；点空白取消当前点选` | 步文案一致；「第一条：…」回显是 Web 加的；token / Snap → **D1** |
+| `measureLineAngleArc`（`'Measure angle between lines'`，`stdGraphics`，`positioning = false`） | 1 `first line` | `Measure angle between lines first line :`（**无 token、无 Snap**：Graphics 拾取的 EDGPICK 没有 prompt，非定位拾取不加尾巴） | 两线夹角 · 选择第一条线 | `两线夹角 · 第 1/2 步 选择第一条线 : …`（`0c0d9eb` 前是 `… 选择第一条线 (Cursor) Snap : …`） | 步文案一致；~~**Web 多了 `(Cursor)` 与 ` Snap`** → **D1**~~ **D1 已改**：`statusText` 对两线夹角传 `positioning: false`，token 与 Snap 都不出 |
+| | 2 `second line or plane` | `Measure angle between lines second line or plane :` | 两线夹角 · 选择第二条线或面（第一条：<标签>） | `两线夹角 · 第 2/2 步 选择第二条线或面（第一条：TUBI 轴线（…）） : …；点空白取消当前点选` | 步文案一致；「第一条：…」回显是 Web 加的（D3）；~~token / Snap → **D1**~~ 已改 |
 | `measureLineAngle`（`'Measure angle between lines -'`，`gmfAngle.betweenLines`，两击 `first` / `second` 都只拾 `EDGE`） | 1 / 2 | `Measure angle between lines - first :` / `… - second :` | — | — | E3D 另一条只算数值不画弧的两线角命令；Web 只做了 `radius2Lines` 那条（§30），这条**未做**，也不在方案 §2 里 |
 | —（E3D 无；Picking Control 偏移字段右键 `Measure Shortest`，golden MD §32） | 1 / 2 | — | 最短距离 · 选择第一项：点 / 线 / 面 · 选择第二项：点 / 线 / 面（第一项：<标签>） | `最短距离 · 第 1/2 步 选择第一项：点 / 线 / 面 (Snap) Snap : …` / `… 第 2/2 步 …（第一项：…）…；点空白取消当前点选` | **Web 增强**（决策 `d-619`），不计 parity |
 | —（E3D 无：位置 / 标高用 Query） | 1 | — | 位置/标高 · 选择测量点 | `位置/标高 · 第 1/1 步 选择测量点 (Snap) Snap : …，单击完成` | **Web 独有**（方案 §2 #21） |
@@ -93,7 +95,7 @@ E3D 换过滤器换的是 `EDGSTATE.pick`（`setPickType` 里定位拾取走 `se
 
 | 项 | E3D | Web | 对照 |
 | --- | --- | --- | --- |
-| ` Snap` | `!!edgPosCntrl.intermediate`（Significant Snaps）开且定位拾取；`loadPicks` 末尾 `intermediate = true`，**缺省开** | `pickLayer.significantSnaps` 开（`DEFAULT_MEASUREMENT_PICK_LAYER` 缺省开） | 一致（缺省值也一致）；两线夹角见 D1 |
+| ` Snap` | `!!edgPosCntrl.intermediate`（Significant Snaps）开且定位拾取；`loadPicks` 末尾 `intermediate = true`，**缺省开** | `pickLayer.significantSnaps` 开（`DEFAULT_MEASUREMENT_PICK_LAYER` 缺省开）且 `positioning`（两线夹角不加） | 一致（缺省值也一致；两线夹角 D1 已改 `0c0d9eb`） |
 | ` WP` | 工作平面激活 | 无 | **D4** 不做 |
 | ` Offset` | `offsetType ne 'NONE'` | 无 | **D4** 不做 |
 | `第 i/n 步` | 无 | 有 | **D3** Web 加 |
@@ -106,7 +108,7 @@ E3D 换过滤器换的是 `EDGSTATE.pick`（`setPickType` 里定位拾取走 `se
 | 场景 | E3D（`edgpicktype.pmlobj` 等） | Web | 对照 |
 | --- | --- | --- | --- |
 | Intersect：后一项与第一条线平行 | `!!alert.warning('Pick another line, last pick was parallel to first line')`（913–916 / 928–930，`(2,870)`），只丢这一击 | `请再选一条线：上一次拾取与第一条线平行（E3D 2,870 Pick another line, last pick was parallel to first line）`，只丢这一击 | 一致，Web 带原文 |
-| Intersect：面 × 面 × 第三项无唯一交点 | `!!messageFile.warning(2,874)` + `return.clear()` + `numberOfPicks = 1`（843–847）——**文案在 message file 里，PML 源里没有** | `三个平面没有唯一交点，求交已重置，请重新拾取（E3D 2,874）`，整包清空 | 行为一致；E3D 原文**未采**（**D5**）；第三项是线时 Web 这句「三个平面」是措辞偏离（golden MD §35 补采） |
+| Intersect：面 × 面 × 第三项无唯一交点 | `!!messageFile.warning(2,874)` + `return.clear()` + `numberOfPicks = 1`（843–847）——**文案在 message file 里，PML 源里没有** | `面 × 面 × 第三项没有唯一交点，求交已重置，请重新拾取（E3D 2,874）`，整包清空（`0c0d9eb` 前写「三个平面没有唯一交点」） | 行为一致；E3D 原文**未采**（**D5**）；~~第三项是线时 Web 这句「三个平面」是措辞偏离（golden MD §35 补采）~~ 措辞已改，第三项是线（线 ∥ 第一面）时也说得通 |
 | Intersect：拾中项转不成线 / 面 | `!!alert.error('Unable to convert item into a line or plane for intersection (<type>). Select another item or escape to abort the operation')`（813）；Aid / Graphics 变体 778 / 796 / 821 | `所选项无法转成线 / 面参与求交，请改选其它项或按 Esc 取消（E3D: Unable to convert item into a line or plane for intersection）`，不消耗这一击 | 一致，Web 合成一句 |
 | Intersect：与弧无交点 | `!!alert.warning('No intersection between picked items')`（887） | — | Web 无弧操作数（`unsupported-geometry` 走「转不成线 / 面」那句） |
 | Snap / Cursor：拾中元素给不出位置 | `!!alert.error('Unable to derive snap position of picked element (<type>)')`（438 / 582）；Aid 变体 408 / 554 | `当前未捕捉到已启用点源：…` / `请将光标靠近构件 P-Point 后再点击` / `当前数据源未提供该构件的 P-Point，无法登记测量点` 等（`buildMissReason`） | 语义对应，Web 按点源分句；E3D 是 alert 弹窗、Web 是提示条 |
@@ -119,14 +121,15 @@ E3D 换过滤器换的是 `EDGSTATE.pick`（`setPickType` 里定位拾取走 `se
 
 | # | 差异 | 影响 | 建议 |
 | --- | --- | --- | --- |
-| **D1** | 两线夹角（`measureLineAngleArc`）在 E3D 是 `stdGraphics` 拾取：`positioning = false`、EDGPICK 无 prompt → 提示是 `Measure angle between lines first line :`，**没有 `(token)` 也没有 ` Snap` 尾巴**；Web 两线夹角照定位拾取的模板出 `(Cursor) Snap` | 两线夹角的提示条多一段与这一击无关的信息（拾取类型对 Graphics 边 / 面不起作用：面永远取射线 ∩ 面、线的控制点由内核按类型派生但两线夹角只用线本身） | **要拍板**：两线夹角提示去掉 token 与 Snap 尾巴（`formatMeasurementPrompt` 加一档「非定位拾取」），或保留（Web 允许 PLINE / 轴线当第一条线时类型仍影响提示的目标名） |
+| **D1** | 两线夹角（`measureLineAngleArc`）在 E3D 是 `stdGraphics` 拾取：`positioning = false`、EDGPICK 无 prompt → 提示是 `Measure angle between lines first line :`，**没有 `(token)` 也没有 ` Snap` 尾巴**；Web 两线夹角~~照定位拾取的模板出 `(Cursor) Snap`~~ | 两线夹角的提示条多一段与这一击无关的信息（拾取类型对 Graphics 边 / 面不起作用：面永远取射线 ∩ 面、线的控制点由内核按类型派生但两线夹角只用线本身） | **已拍板（用户 2026-09-16 10:54）并改掉 `0c0d9eb`**：`formatMeasurementPrompt` 加 `positioning?: boolean`（缺省 `true`），`false` 时省掉 `(token)` 段与 ` Snap` 旗标，Web 加的段（D3）不动；`statusText` 对两线夹角两步传 `false`，三点角 / 距离 / 垂距照旧。单测 `pickLayerModel.test.ts` +1、`useXeokitMeasurementTools.test.ts` +1（Cursor × Significant Snaps 开：两步都不带 `(Cursor)` / ` Snap`，切回三点角即恢复）。目标名（冒号后）仍照拾中项出，拾取类型对它的影响不变 |
 | **D2** | `Fraction[<v>]`：E3D 原样出输入值（`2.5`），Web 出 `trunc` 后的整数 | 只在用户填非整数时可见 | 可不改：Web 的 `trunc` 与内核实际用的 `int(n)` 一致，提示更诚实；要严格照 E3D 就改成原样出 |
 | **D3** | Web 加的段：`第 i/n 步`、`（第一条 / 第一项：…）`回显、冒号后的目标名 / `等待捕捉（…）`、trailer、`已选…` / `求交已选…` 消息 | 结构不变，信息更多 | 保留为增强（决策 `d-444` 那一类 Web 取舍） |
 | **D4** | ` WP` / ` Offset` 尾巴 | Web 没有工作平面 / 偏移定位 | 不做（方案 §0 非目标） |
-| **D5** | `(2,874)` 的 E3D 原文在 message file 里，PML 源看不到；Web 那句「三个平面没有唯一交点」在第三项是线时措辞不准 | 文案 | 等 E3D 在跑时采一次原文；Web 可先改成「面 × 面 × 第三项没有唯一交点」 |
+| **D5** | `(2,874)` 的 E3D 原文在 message file 里，PML 源看不到；~~Web 那句「三个平面没有唯一交点」在第三项是线时措辞不准~~ | 文案 | Web 已改「面 × 面 × 第三项没有唯一交点，求交已重置，请重新拾取（E3D 2,874）」（`0c0d9eb`，`INTERSECT_MESSAGES.planesNoPoint`；单测 `intersectPickSession.test.ts` +1：面 × 面 × 线 ∥ 第一面 → 2,874 整包清空、文案不再含「三个平面」）。E3D 原文仍**等 E3D 在跑时采一次** |
 | **D6** | E3D 还有 `measureLineAngle`（`gmfAngle.betweenLines`，`'Measure angle between lines -'`，两击都只拾 `EDGE`，只算角不画弧） | Web 只做了 `radius2Lines`（画弧）那条；`design.uic` 里 `Angle 2 Lines` 按钮跑的是 `LINEANGLE`，两条包谁接这个命令要 E3D 在跑时核 | 记录，不在 #19 范围 |
 
 ## 8. 结论（对方案 §2 #19）
 
 结构 `<命令> <步> (<拾取类型>) [Snap] :` 与 E3D `EDGSTATE.prompt()` + `applyToView` 一致；三条定位拾取命令（Measure distance / perpendicular distance / angle）的**每一步**、七种拾取类型的 **token**、
-八个过滤器**不进提示**都逐条对上。Web 加的段（D3）不改结构；两线夹角多出的 `(token) Snap`（D1）是唯一一处 E3D 不会显示而 Web 显示的内容，待拍板。E3D 运行时截图对账仍待 E3D 在跑（本文全部是 `static_expectation`）。
+八个过滤器**不进提示**都逐条对上。Web 加的段（D3）不改结构；~~两线夹角多出的 `(token) Snap`（D1）是唯一一处 E3D 不会显示而 Web 显示的内容，待拍板~~ **D1 已拍板并改掉（`0c0d9eb`）**：两线夹角按 `stdGraphics`
+非定位拾取出 `<命令> <步> :`，现在没有一处 E3D 不显示而 Web 显示的段（D3 的 Web 加段除外）。D5 的 Web 文案同笔改掉；余 D2（可不改）、D4（不做）、D6（未做）与 E3D 原文 / 运行时截图对账（待 E3D 在跑，本文全部是 `static_expectation`）。
