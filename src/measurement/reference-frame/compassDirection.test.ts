@@ -105,6 +105,20 @@ describe('formatCompassDirection · 边界', () => {
     expect(formatCompassDirection([1000, 1000, 1000])).not.toContain('WRT');
     expect(formatCompassDirection([0, -1, 0])).toBe('S');
   });
+
+  it('分量吸整（golden MD §35 补采 (3)）：归一后 < 1e-6 的分量当噪声归零——实机 P-Point Distance 那两条从 `N 2.71502 W 90 U` / `S 2.71505 E 90 D` 回到 `U` / `D`', () => {
+    // 立管两端 ELBO P-Point 各沿自己方向进 200：A 的 API 方向是 (−1.1e-10, −6.3e-7, 1)，派生点继承了 1.26e-7 m 的横向分量（米）。
+    expect(formatCompassDirection([2.3e-11, 1.26e-7, 1.199864])).toBe('U');
+    // TUBING 轴线两端 P-Point 的 N 坐标差 0.1 µm（米）。
+    expect(formatCompassDirection([-9.8e-11, -1.0e-7, -1.199898])).toBe('D');
+    // 水平面里同样：纯 N 带 1e-7 的 E 噪声仍是 `N`；带 1e-7 的竖向噪声也不出倾角。
+    expect(formatCompassDirection([1e-7, 1, 0])).toBe('N');
+    expect(formatCompassDirection([0, 1, 1e-7])).toBe('N');
+    // 阈值之上照实出：1e-5 的横向分量是 89.9994° 的倾角，不吸。
+    expect(formatCompassDirection([1e-5, 0, 1])).toBe('E 89.9994 U');
+    // 吸整只动噪声一路，其它角不变（G2-03 打平那一组照旧）。
+    expect(formatCompassDirection([1000, 1000, 1000 + 1e-4])).toBe('E 45 N 35.2644 U');
+  });
 });
 
 describe('formatPmlReal · PML REAL 缺省字串', () => {

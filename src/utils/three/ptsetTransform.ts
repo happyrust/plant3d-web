@@ -23,6 +23,31 @@ export type PtsetSceneCandidate = {
   sceneDir?: Vec3 | null;
 };
 
+/** `applyPtsetTransformToPoint` 认得的矩阵形状：列主序 16 元或 ≥ 3 行的行主序，元素全是有限数。 */
+export function isUsablePtsetWorldTransform(worldTransform: unknown): boolean {
+  if (!Array.isArray(worldTransform)) return false;
+  if (worldTransform.length === 16) return worldTransform.every((value) => Number.isFinite(Number(value)));
+  if (worldTransform.length >= 3 && Array.isArray(worldTransform[0])) {
+    return (worldTransform as unknown[]).slice(0, 3).every((row) => Array.isArray(row) && row.length >= 4 && row.every((value) => Number.isFinite(Number(value))));
+  }
+  return false;
+}
+
+/**
+ * 点集进场景用哪一个放置矩阵：**优先点集接口自己带的 `world_transform`（float64）**，接口没给（旧后端 `null`）
+ * 才回落 DTX 登记的 per-refno 放置矩阵（来自 float32 网格数据）。
+ *
+ * 2026-09-16 之前是反过来的（DTX 优先）：gen-model-v1 `:8022` 上 DTX 矩阵拿得到，18 m 处 P-Point 与
+ * `element/ptset` 手算差 ~1 µm（float32 量化），golden MD §34 那种 1e-15 的对账只在拿不到 DTX 矩阵时才成立
+ * （§35 补采「已知偏离」(2)，用户 2026-09-16 拍板改成接口优先）。吸附候选（`usePtsetSnap`）与画出来的关键点十字
+ * （`usePtsetVisualizationThree`）都走这一个函数，两边位置一致。
+ */
+export function pickPtsetWorldTransform(responseTransform: unknown, dtxTransform: unknown): unknown {
+  if (isUsablePtsetWorldTransform(responseTransform)) return responseTransform;
+  if (isUsablePtsetWorldTransform(dtxTransform)) return dtxTransform;
+  return responseTransform ?? dtxTransform ?? null;
+}
+
 /**
  * 把局部坐标点应用 world_transform。
  *
@@ -154,7 +179,7 @@ export function transformPtsetPoint(input: {
  * `pt(局部) * unitFactor → applyPtsetTransformToPoint(worldTransform) → applyMatrix4(globalModelMatrix)`，
  * 保证吸附候选与场景中渲染的关键点十字位置一致。
  *
- * @param worldTransform 该构件的 world_transform（优先用 per-refno transform，回退 response.world_transform）
+ * @param worldTransform 该构件的 world_transform（`pickPtsetWorldTransform`：优先 response.world_transform，回退 DTX per-refno transform）
  * @param globalModelMatrix DTX 图层的全局矩阵（mm→m + recenter）；为 null 时不做全局变换
  */
 export function ptsetResponseToSceneCandidates(

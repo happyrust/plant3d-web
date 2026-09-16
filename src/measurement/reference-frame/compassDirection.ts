@@ -30,7 +30,15 @@
  * - G4-01 点→线垂距：`Vertical 2500 / Horizontal 500`、水平纯 N → `N 78.6901 U`；
  * - G4-03 点退化垂距：`N 6.66615 W 78.3493 U`；
  * - G6-02 三点角 Direction1 `W 11.7755 N 66.8266 D`（Decimal Places 2 → `W 11.78 N 66.83 D`）。
+ *
+ * **分量吸整（2026-09-16，golden MD §35 补采「已知偏离」(3)，用户拍板）**：归一后 |分量| < 1e-6 的一路先归零再归一
+ * （与两条角度内核共用的 `angleSnap.snapUnitDirection`，§30 `87b8970` 那一档口径）。实机里 ELBO P-Point 的 API 方向是
+ * `(−1e-10, −6.3e-7, 1)`（gen-model 转 360° 的余数）、两枚 P-Point 的 N 坐标差 0.1 µm，纯竖直的距离打成了
+ * `N 2.71502 W 90 U` / `S 2.71505 E 90 D`——1e-6 在单位向量上约 6e-5°，远低于 6 位有效数字能显出来的最小角、
+ * 约 10× 于这类设计数据 / float32 网格噪声；E3D 拿精确几何会出纯 `U` / `D`。
  */
+import { snapUnitDirection } from '@/measurement/kernel/angleSnap';
+
 export type CompassVector = readonly [number, number, number];
 
 export type CompassDirectionOptions = Readonly<{
@@ -91,9 +99,8 @@ export function formatCompassDirection(
   const length = Math.hypot(x!, y!, z!);
   if (!(length > ZERO)) return fallback;
 
-  const east = x! / length;
-  const north = y! / length;
-  const up = z! / length;
+  // 归一后把 < 1e-6 的分量吸成 0 再归一（见头注释「分量吸整」）：噪声级的横向 / 竖向分量不进字串。
+  const [east, north, up] = snapUnitDirection([x! / length, y! / length, z! / length]);
   const horizontal = Math.hypot(east, north);
 
   // 纯竖直：只有 U / D 一个字母。

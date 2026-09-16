@@ -7,6 +7,8 @@ import type { PtsetResponse } from '@/api/genModelPdmsAttrApi';
 import { projectToCanvas, snapToCandidates } from '@/composables/usePtsetSnap';
 import {
   applyPtsetTransformToPoint,
+  isUsablePtsetWorldTransform,
+  pickPtsetWorldTransform,
   ptsetResponseToSceneCandidates,
 } from '@/utils/three/ptsetTransform';
 
@@ -74,6 +76,45 @@ describe('ptsetTransform', () => {
       [0, 0, 1, 30],
     ];
     expect(applyPtsetTransformToPoint(m, [1, 1, 1])).toEqual([11, 21, 31]);
+  });
+});
+
+describe('pickPtsetWorldTransform · 点集进场景优先接口的 float64 world_transform（golden MD §35 补采 (2)，2026-09-16）', () => {
+  // gen-model element/ptset 给的列主序矩阵（float64）与 DTX 登记的同一构件放置矩阵（float32 量化：18 m 处差 ~1 µm）。
+  const api = [0, -1, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 7849.85, 11787.49, 18643.63, 1];
+  const dtx = api.map((v) => Math.fround(v));
+
+  it('接口给了可用矩阵就用接口的，DTX 只是回落', () => {
+    expect(pickPtsetWorldTransform(api, dtx)).toBe(api);
+    expect(pickPtsetWorldTransform(null, dtx)).toBe(dtx);
+    expect(pickPtsetWorldTransform(undefined, dtx)).toBe(dtx);
+    expect(pickPtsetWorldTransform(null, undefined)).toBeNull();
+    // 接口给的形状不认得（长度不对 / 有 NaN）→ 回落 DTX；两边都不可用时把接口原样交回去（applyPtsetTransformToPoint 会原样返回局部点）。
+    expect(pickPtsetWorldTransform([1, 2, 3], dtx)).toBe(dtx);
+    expect(pickPtsetWorldTransform([...api.slice(0, 15), Number.NaN], dtx)).toBe(dtx);
+    const junk = { not: 'a matrix' };
+    expect(pickPtsetWorldTransform(junk, 'junk')).toBe(junk);
+  });
+
+  it('isUsablePtsetWorldTransform 认列主序 16 元与 ≥ 3 行的行主序，元素得是有限数', () => {
+    expect(isUsablePtsetWorldTransform(api)).toBe(true);
+    expect(isUsablePtsetWorldTransform([[1, 0, 0, 10], [0, 1, 0, 20], [0, 0, 1, 30]])).toBe(true);
+    expect(isUsablePtsetWorldTransform([[1, 0, 0], [0, 1, 0], [0, 0, 1]])).toBe(false);
+    expect(isUsablePtsetWorldTransform(api.slice(0, 12))).toBe(false);
+    expect(isUsablePtsetWorldTransform(null)).toBe(false);
+    expect(isUsablePtsetWorldTransform('1,0,0')).toBe(false);
+  });
+
+  it('同一枚 P-Point：DTX 矩阵算出来的位置离接口矩阵 ~1 µm，选接口矩阵后与手算完全一致', () => {
+    const resp = makeResponse([{ number: 1, pt: [0, -151.2436857842262, 0] }]);
+    resp.world_transform = api;
+    const viaApi = ptsetResponseToSceneCandidates('24381_145029', resp, pickPtsetWorldTransform(resp.world_transform, dtx), null)[0]!.worldPos;
+    const viaDtx = ptsetResponseToSceneCandidates('24381_145029', resp, dtx, null)[0]!.worldPos;
+    const expected = applyPtsetTransformToPoint(api, [0, -151.2436857842262, 0]);
+    expect(viaApi).toEqual(expected);
+    const gapMm = Math.hypot(viaApi[0] - viaDtx[0], viaApi[1] - viaDtx[1], viaApi[2] - viaDtx[2]);
+    expect(gapMm).toBeGreaterThan(1e-4); // float32 在 1e4 mm 量级上的量化 ≈ 1e-3 mm
+    expect(gapMm).toBeLessThan(5e-3);
   });
 });
 

@@ -6,6 +6,7 @@ import type { Camera, Matrix4 } from 'three';
 import { getDbnumByRefno } from '@/composables/useDbMetaInfo';
 import { getDtxRefnoTransform } from '@/composables/useDbnoInstancesDtxLoader';
 import {
+  pickPtsetWorldTransform,
   ptsetResponseToSceneCandidates,
   type PtsetSceneCandidate,
   type Vec3,
@@ -85,21 +86,25 @@ export function snapToCandidates(
 export function usePtsetSnap(options: UsePtsetSnapOptions = {}) {
   const cache = new Map<string, PtsetSceneCandidate[]>();
 
-  function resolveWorldTransform(refno: string): unknown {
+  /** DTX 登记的 per-refno 放置矩阵（float32 网格数据）；db meta 未加载或未命中时为 null。 */
+  function resolveDtxTransform(refno: string): unknown {
     try {
       const dbno = getDbnumByRefno(refno);
       const t = getDtxRefnoTransform(dbno, refno);
       if (t) return t;
     } catch {
-      /* db meta 未加载或未命中：回退到 response.world_transform */
+      /* db meta 未加载或未命中 */
     }
     return null;
   }
 
-  /** 写入/更新某构件的候选缓存，返回换算后的候选。 */
+  /**
+   * 写入/更新某构件的候选缓存，返回换算后的候选。放置矩阵优先点集接口自己的 `world_transform`（float64），
+   * 接口没给才回落 DTX 矩阵（`pickPtsetWorldTransform`，2026-09-16 起）。
+   */
   function upsertCandidates(refno: string, response: PtsetResponse): PtsetSceneCandidate[] {
     const key = normalizeRefno(refno);
-    const worldTransform = resolveWorldTransform(key) ?? response.world_transform;
+    const worldTransform = pickPtsetWorldTransform(response.world_transform, resolveDtxTransform(key));
     const gm = options.getGlobalModelMatrix?.() ?? null;
     const candidates = ptsetResponseToSceneCandidates(key, response, worldTransform, gm);
     cache.set(key, candidates);

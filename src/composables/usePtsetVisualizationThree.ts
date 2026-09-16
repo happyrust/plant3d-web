@@ -8,7 +8,7 @@ import type { DtxViewer } from '@/viewer/dtx/DtxViewer';
 import { getDbnumByRefno } from '@/composables/useDbMetaInfo';
 import { getDtxRefnoTransform } from '@/composables/useDbnoInstancesDtxLoader';
 import { useUnitSettingsStore } from '@/composables/useUnitSettingsStore';
-import { transformPtsetPoint } from '@/utils/three/ptsetTransform';
+import { pickPtsetWorldTransform, transformPtsetPoint } from '@/utils/three/ptsetTransform';
 import { formatLengthMeters, formatNumber, formatVec3Meters } from '@/utils/unitFormat';
 
 type Vec3 = [number, number, number]
@@ -240,7 +240,8 @@ export function usePtsetVisualizationThree(
       dbno = null;
     }
     const refnoTransform = dbno != null ? getDtxRefnoTransform(dbno, normalizedRefno) : undefined;
-    const worldTransform = refnoTransform || response.world_transform;
+    // 与吸附候选（usePtsetSnap）同一取法：接口自己的 world_transform 优先，没给才回落 DTX 矩阵——十字与吸附点才重合。
+    const worldTransform = pickPtsetWorldTransform(response.world_transform, refnoTransform);
     let hasAny = false;
 
     for (const point of response.ptset) {
