@@ -1814,6 +1814,8 @@ describe('useXeokitMeasurementTools', () => {
     async function setupDistanceTools(input: {
       keepMeasurementAnnotation: boolean;
       showDirectLinearDimension?: boolean;
+      /** 第二击起的表面命中点（场景系），缺省 (2, 4, 6.5) = 起点正上方 0.5 m。 */
+      secondPoint?: THREE.Vector3;
     }) {
       const [{ useToolStore }, { useXeokitMeasurementTools }, { useXeokitMeasurementStyleStore }] = await Promise.all([
         import('@/composables/useToolStore'),
@@ -1850,7 +1852,7 @@ describe('useXeokitMeasurementTools', () => {
       globalModelMatrix.setPosition(-10, -20, -30);
       const pickPoint = vi.fn()
         .mockReturnValueOnce({ objectId: 'o:24381_145018:0', point: new THREE.Vector3(2, 4, 6) })
-        .mockReturnValue({ objectId: 'o:24381_145018:0', point: new THREE.Vector3(2, 4, 6.5) });
+        .mockReturnValue({ objectId: 'o:24381_145018:0', point: input.secondPoint ?? new THREE.Vector3(2, 4, 6.5) });
       const dimensionSystem = {
         replaceExternalSource: vi.fn(),
         viewport: { setSelection: vi.fn(), getSelection: vi.fn(() => null) },
@@ -1874,7 +1876,7 @@ describe('useXeokitMeasurementTools', () => {
         clientY: 100,
         button: 0,
       }));
-      return { store, measurementStyle, dimensionSystem, tools, click };
+      return { store, measurementStyle, dimensionSystem, tools, canvas, click };
     }
 
     it('statusText 分步命令提示：第 1/2 步 → 第 2/2 步（E3D `<命令> <步> (<拾取类型>) Snap :` 结构）', async () => {
@@ -2047,6 +2049,46 @@ describe('useXeokitMeasurementTools', () => {
       ]);
 
       tools.dispose();
+    });
+
+    it('Perpendicular to：零距离（第二击落在起点自己身上）→ 不落记录、草稿清空回第 1 步，告警留在 pickPointMessage 并发 warning toast（golden G4-04 / MD §36）', async () => {
+      const [{ onToast }, { PERPENDICULAR_ZERO_DISTANCE_MESSAGE }] = await Promise.all([
+        import('@/ribbon/toastBus'),
+        import('@/composables/useXeokitMeasurementTools'),
+      ]);
+      const toasts: { message: string; level?: string }[] = [];
+      const offToast = onToast((payload) => { toasts.push({ ...payload }); });
+      try {
+        // 第二击的表面命中点就是起点 (2, 4, 6)：点退化目标与源点重合 → 内核 zero-distance。
+        const { store, measurementStyle, tools, canvas, click } = await setupDistanceTools({
+          keepMeasurementAnnotation: true,
+          secondPoint: new THREE.Vector3(2, 4, 6),
+        });
+        measurementStyle.updateStyle({ perpendicularTo: true });
+        click();
+        expect(store.currentXeokitDistanceDraft.value).not.toBeNull();
+        expect(tools.statusText.value).toMatch(/^垂距测量 · 第 2\/2 步 /);
+
+        click();
+        // E3D setPerpendicularMeasure(unset ARC)：alert.warning + 尺寸重置 + 回 start。
+        expect(store.currentXeokitDistanceDraft.value).toBeNull();
+        expect(store.measurementDraftResult.value).toBeNull();
+        expect(store.xeokitDistanceMeasurements.value).toHaveLength(0);
+        expect(tools.statusText.value).toMatch(/^垂距测量 · 第 1\/2 步 选择起点 /);
+        // 告警必须在 clearMeasurementVisualAssists（→ clearHoverPtset 清 message）之后写，否则同一处理函数里就没了。
+        expect(tools.pickPointMessage.value).toBe(PERPENDICULAR_ZERO_DISTANCE_MESSAGE);
+        expect(PERPENDICULAR_ZERO_DISTANCE_MESSAGE).toContain('Cannot draw dimension line. Perpendicular distance is 0');
+        expect(toasts).toEqual([{ message: PERPENDICULAR_ZERO_DISTANCE_MESSAGE, level: 'warning' }]);
+
+        // 提示条那一行随下一次悬停命中被清掉（这正是要另发 toast 的原因）。
+        tools.onCanvasPointerMove(canvas, new PointerEvent('pointermove', { clientX: 100, clientY: 100, button: 0 }));
+        expect(tools.pickPointMessage.value).toBeNull();
+        expect(toasts).toHaveLength(1);
+
+        tools.dispose();
+      } finally {
+        offToast();
+      }
     });
 
     it('ESC 语义分层：草稿 → 临时结果 → 退出（reset 两段返回 true 后才 false）', async () => {

@@ -160,11 +160,19 @@ import {
   type MeasurementDistanceFormat,
 } from '@/measurement/units/measurementUnits';
 import { getModelSource } from '@/model-source';
+import { emitToast, type ToastLevel } from '@/ribbon/toastBus';
 import { DTXOverlayHighlighter } from '@/utils/three/dtx/selection/DTXOverlayHighlighter';
 import {
   computeDistanceMeasurementResult,
   getMeasurementPointElevation,
 } from '@/utils/xeokitMeasurementFormat';
+
+/**
+ * E3D `gphmeasure.setPerpendicularMeasure`：ARC 未设 → `!!alert.warning('Cannot draw dimension line.
+ * Perpendicular distance is 0')`，尺寸重置、命令回 start（golden G4-04 / MD §36）。
+ */
+export const PERPENDICULAR_ZERO_DISTANCE_MESSAGE =
+  'Perpendicular distance is 0：起点已落在目标线 / 面上，画不出垂距尺寸（E3D：Cannot draw dimension line. Perpendicular distance is 0）；已回到第 1 步';
 
 type ClickTracker = {
   down: { x: number; y: number } | null;
@@ -603,6 +611,14 @@ export function useXeokitMeasurementTools(options: {
   const plineSnapPointsByRefno = new Map<string, PlineSnapPointCandidate[]>();
   const primitiveKeypointErrorByRefno = new Map<string, string>();
   const pickPointMessage = ref<string | null>(null);
+  /**
+   * E3D `!!alert.warning / error` 一级的拾取告警：写进 `pickPointMessage`（提示条第二行）之外再发一条 toast——
+   * 提示条那一行会被下一次悬停的命中 / 未命中原因盖掉，模态告警的对应物得有个不随光标走的出口。
+   */
+  function raiseMeasurementAlert(message: string, level: ToastLevel = 'warning'): void {
+    pickPointMessage.value = message;
+    emitToast({ message, level });
+  }
   let hoverFetchTimer: ReturnType<typeof setTimeout> | null = null;
   let pendingHoverRefno: string | null = null;
   let currentHoverRefno: string | null = null;
@@ -3764,9 +3780,11 @@ export function useXeokitMeasurementTools(options: {
         const resolved = resolvePerpendicularTargetFromHit(draft.origin, hit, pickedTarget);
         if (!resolved) {
           // E3D：垂距为 0 时 setPerpendicularMeasure 告警并回到 start 态。
-          pickPointMessage.value = 'Perpendicular distance is 0：起点已落在目标线 / 面上，无法绘制垂距尺寸';
+          // 先收草稿与辅助态——`clearMeasurementVisualAssists()` → `clearHoverPtset()` 会顺手把 `pickPointMessage`
+          // 清掉，告警必须写在它之后，否则在同一个处理函数里就被抹了（golden MD §36）。
           store.clearCurrentXeokitDraft();
           clearMeasurementVisualAssists();
+          raiseMeasurementAlert(PERPENDICULAR_ZERO_DISTANCE_MESSAGE, 'warning');
           syncFromStore();
           requestRender?.();
           return;

@@ -1212,7 +1212,9 @@ const activeMeasureStatusText = computed(() => {
   return tools ? tools.statusText.value : '';
 });
 const activeMeasureHoverText = computed(() => {
-  if (isXeokitMeasureMode.value) return '';
+  // xeokit 测量：提示条第二行放拾取消息（E3D `!!alert.*` 对应的告警、已选第一项 / 求交已选、P-Point 加载中、
+  // 未命中原因……）。它此前只喂给指针透镜的 subtitle，而透镜未吸附时不画——这些话一直没有可见出口（golden MD §36）。
+  if (isXeokitMeasureMode.value) return xeokitMeasurementToolsRef.value?.pickPointMessage.value ?? '';
   return toolsRef.value?.hoverText?.value ?? '';
 });
 
@@ -5694,7 +5696,7 @@ onUnmounted(() => {
     </div>
 
     <div v-if="store.toolMode.value !== 'none' && activeMeasureTools && modelUnitCompareState?.viewMode !== 'split'"
-      class="pointer-events-none absolute bottom-2 right-2 rounded-md border border-border bg-background/85 px-2 py-1 text-xs text-foreground shadow-sm backdrop-blur"
+      class="pointer-events-none absolute bottom-2 right-2 max-w-[min(30rem,calc(100%-4.5rem))] rounded-md border border-border bg-background/85 px-2 py-1 text-xs text-foreground shadow-sm backdrop-blur"
       style="z-index: 940">
       <div>{{ activeMeasureStatusText }}</div>
       <div v-if="activeMeasureHoverText" class="mt-1 text-muted-foreground">
