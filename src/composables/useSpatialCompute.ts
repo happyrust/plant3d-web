@@ -49,10 +49,45 @@ export type SpatialComputeResultRow = {
   drawn?: boolean;
 };
 
+/**
+ * 一条净距候选是怎么算出来的（`docs/plans/2026-09-11-measurement-clearance-dimension-convergence-plan.md` D2：精度不是布尔值）。
+ * 服务端候选是沿中心线量到候选**包围盒**（目标侧不是网格精算）；三维里点选管件得到的那条是 DTX 网格采样估算，
+ * 进同一份结果时必须带着这个标签，表里与尺寸文字都按它标「估算」。
+ */
+export type BranClearanceProvenance = {
+  method: 'centerline-to-aabb' | 'sampled-object';
+  accuracyClass: 'approximate-bounds' | 'approximate-sampled';
+};
+
+export const SERVER_BRAN_CLEARANCE_PROVENANCE: BranClearanceProvenance = {
+  method: 'centerline-to-aabb',
+  accuracyClass: 'approximate-bounds',
+};
+
+export const INTERACTIVE_BRAN_CLEARANCE_PROVENANCE: BranClearanceProvenance = {
+  method: 'sampled-object',
+  accuracyClass: 'approximate-sampled',
+};
+
 export type BranNearestClearanceAnnotationCandidate = {
   targetGroup: string;
   candidate: BranNearestClearanceCandidate;
   index: number;
+  /** 缺省 = 服务端候选（`SERVER_BRAN_CLEARANCE_PROVENANCE`）；三维点选写进来的那几条带 `sampled-object` */
+  provenance?: BranClearanceProvenance;
+};
+
+/**
+ * 三维里点选管件算出的一条管-墙/柱估算净距（`useDtxTools.measure_pipe_to_structure`），写进 BRAN 净距结果用。
+ * 两个点都要是 **E3D 世界 mm**（与服务端候选同一坐标系；scene → mm 的换算在 viewer 侧做完再交进来）。
+ */
+export type InteractiveBranClearanceInput = {
+  /** 点选的管件 refno，进 `nearest.source_segment_refno` */
+  sourceRefno: string;
+  targetRefno: string;
+  targetNoun: string;
+  sourcePointMm: { x: number; y: number; z: number };
+  targetPointMm: { x: number; y: number; z: number };
 };
 
 /**
@@ -81,13 +116,15 @@ type SpatialComputeScenarioState = {
   resultRows: SpatialComputeResultRow[];
   annotationCandidates: BranNearestClearanceAnnotationCandidate[];
   /**
-   * 以下四格只有 BRAN 净距用：服务端分桶原文（`group_by=noun`，一桶一类）、由它派生的类型 facet、
-   * 当前画在三维里的候选键、被剔掉的自身成员数。`resultRows` / `annotationCandidates` 是 `branGroups × 勾选` 的派生结果。
+   * 以下几格只有 BRAN 净距用：分桶（`group_by=noun`，一桶一类；服务端候选 + 三维点选写进来的估算候选）、由它派生的类型 facet、
+   * 当前画在三维里的候选键、被剔掉的自身成员数、非服务端候选的来源标签（键 = `branCandidateKey`；没登记的就是服务端候选）。
+   * `resultRows` / `annotationCandidates` 是 `branGroups × 勾选` 的派生结果。
    */
   branGroups: BranNearestClearanceGroupResult[];
   nounFacets: BranNounFacet[];
   drawnCandidateKeys: string[];
   excludedSelfMembers: number;
+  candidateProvenance: Record<string, BranClearanceProvenance>;
 };
 
 type SpatialComputeScenarioMeta = {
@@ -209,7 +246,16 @@ const DEFAULT_STATE_BY_SCENARIO: Record<
   SpatialComputeScenarioKey,
   Omit<
     SpatialComputeScenarioState,
-    'loading' | 'error' | 'responseText' | 'resultRows' | 'annotationCandidates' | 'branGroups' | 'nounFacets' | 'drawnCandidateKeys' | 'excludedSelfMembers'
+    | 'loading'
+    | 'error'
+    | 'responseText'
+    | 'resultRows'
+    | 'annotationCandidates'
+    | 'branGroups'
+    | 'nounFacets'
+    | 'drawnCandidateKeys'
+    | 'excludedSelfMembers'
+    | 'candidateProvenance'
   >
 > = {
   fittingOffset: {
@@ -306,10 +352,11 @@ function createScenarioState(key: SpatialComputeScenarioKey): SpatialComputeScen
     nounFacets: [],
     drawnCandidateKeys: [],
     excludedSelfMembers: 0,
+    candidateProvenance: {},
   };
 }
 
-/** 清掉一次计算的全部产出（表、标注候选、BRAN 分桶与 facet），输入格不动。 */
+/** 清掉一次计算的全部产出（表、标注候选、BRAN 分桶与 facet，含三维点选写进来的估算候选），输入格不动。 */
 function clearScenarioResults(state: SpatialComputeScenarioState): void {
   state.resultRows = [];
   state.annotationCandidates = [];
@@ -317,6 +364,7 @@ function clearScenarioResults(state: SpatialComputeScenarioState): void {
   state.nounFacets = [];
   state.drawnCandidateKeys = [];
   state.excludedSelfMembers = 0;
+  state.candidateProvenance = {};
 }
 
 function extractResultRows(key: SpatialComputeScenarioKey, envelope: SpatialComputeResultEnvelope): SpatialComputeResultRow[] {
@@ -447,9 +495,19 @@ export function defaultDrawnCandidateKeys(groups: readonly BranNearestClearanceG
   });
 }
 
-function toBranResultRow(group: string, candidate: BranNearestClearanceCandidate, drawn: boolean): SpatialComputeResultRow {
+/** 表里给非服务端候选看的来源字样（2026-09-11 收敛计划 PR0.2：`sampled-object` 显示「估算最近距离」）。 */
+function provenanceLabel(provenance: BranClearanceProvenance | undefined): string {
+  return provenance?.method === 'sampled-object' ? '估算最近距离（网格采样）' : '';
+}
+
+function toBranResultRow(
+  group: string,
+  candidate: BranNearestClearanceCandidate,
+  drawn: boolean,
+  provenance: BranClearanceProvenance | undefined,
+): SpatialComputeResultRow {
   const segment = candidate.nearest?.source_segment_refno
-    ? `segment ${candidate.nearest.source_segment_refno}${candidate.nearest.source_segment_order != null ? `#${candidate.nearest.source_segment_order}` : ''}`
+    ? `${provenance?.method === 'sampled-object' ? '点选' : 'segment'} ${candidate.nearest.source_segment_refno}${candidate.nearest.source_segment_order != null ? `#${candidate.nearest.source_segment_order}` : ''}`
     : '';
   return {
     refno: candidate.refno,
@@ -460,7 +518,7 @@ function toBranResultRow(group: string, candidate: BranNearestClearanceCandidate
     sourceSegmentOrder: candidate.nearest?.source_segment_order ?? null,
     candidateKey: branCandidateKey(group, candidate.refno),
     drawn,
-    label: [candidate.intersects ? '相交' : '', segment].filter(Boolean).join(' · '),
+    label: [candidate.intersects ? '相交' : '', provenanceLabel(provenance), segment].filter(Boolean).join(' · '),
   };
 }
 
@@ -468,19 +526,53 @@ function toBranResultRow(group: string, candidate: BranNearestClearanceCandidate
  * `branGroups × facet 勾选 × 标注开关` → `resultRows` / `annotationCandidates`。
  * 没勾的类型整桶不进表、不画；勾了的类型全部候选进表，只有开了「标注」的那几条进 `annotationCandidates`
  * （`ViewerPanel` 盯着它经 `bran-clearance` external source 画尺寸）。`index` 是桶内位置，与勾选无关，尺寸 id 才稳定。
+ * 登记在 `candidateProvenance` 里的候选（三维点选的估算）把来源标签一起带出去，画尺寸时才知道要标「≈」。
  */
 function applyBranSelection(state: SpatialComputeScenarioState): void {
   const selectedNouns = new Set(state.nounFacets.filter((facet) => facet.selected).map((facet) => facet.noun));
   const drawn = new Set(state.drawnCandidateKeys);
   const visibleGroups = state.branGroups.filter((group) => selectedNouns.has(group.group));
   state.resultRows = visibleGroups.flatMap((group) =>
-    group.candidates.map((candidate) => toBranResultRow(group.group, candidate, drawn.has(branCandidateKey(group.group, candidate.refno)))),
+    group.candidates.map((candidate) => {
+      const key = branCandidateKey(group.group, candidate.refno);
+      return toBranResultRow(group.group, candidate, drawn.has(key), state.candidateProvenance[key]);
+    }),
   );
   state.annotationCandidates = visibleGroups.flatMap((group) =>
     group.candidates
-      .map((candidate, index) => ({ targetGroup: group.group, candidate, index }))
+      .map((candidate, index): BranNearestClearanceAnnotationCandidate => {
+        const provenance = state.candidateProvenance[branCandidateKey(group.group, candidate.refno)];
+        return provenance
+          ? { targetGroup: group.group, candidate, index, provenance }
+          : { targetGroup: group.group, candidate, index };
+      })
       .filter((item) => drawn.has(branCandidateKey(group.group, item.candidate.refno))),
   );
+}
+
+/**
+ * 三维点选的一条管-墙/柱估算净距 → 与服务端同形的候选（`nearest` + `annotation` 两个端点齐全，尺寸系统直接画）。
+ * refno 归一成 `a_b`；`source_segment_order` 为 null（点选的是一个管件，不是成员序里的哪一段）；距离由两点算，mm。
+ */
+export function interactiveBranClearanceCandidate(input: InteractiveBranClearanceInput): BranNearestClearanceCandidate {
+  const source = input.sourcePointMm;
+  const target = input.targetPointMm;
+  const vector = { dx: target.x - source.x, dy: target.y - source.y, dz: target.z - source.z };
+  const distance = Math.hypot(vector.dx, vector.dy, vector.dz);
+  return {
+    refno: normalizeBranComputeRefno(input.targetRefno),
+    noun: String(input.targetNoun || '').trim().toUpperCase() || 'UNKNOWN',
+    distance_mm: distance,
+    intersects: distance <= 1e-6,
+    nearest: {
+      source_segment_refno: normalizeBranComputeRefno(input.sourceRefno),
+      source_segment_order: null,
+      source_point: { ...source },
+      target_point: { ...target },
+      vector,
+    },
+    annotation: { start_point: { ...source }, end_point: { ...target }, label_mm: distance },
+  };
 }
 
 type BranNearestClearanceQuery = {
@@ -740,6 +832,50 @@ export function createSpatialComputeStore() {
     applyBranSelection(state);
   }
 
+  /**
+   * 三维里点选管件算出的管-墙/柱估算净距，写进**同一份** BRAN 净距结果（同一张表、同一组 facet、同一个 `bran-clearance`
+   * external source），不再只 Toast（plan 2026-09-16 §3.3 ③，沿 2026-09-11 收敛计划 §6 M1）。
+   * 落到目标类型那一桶的末尾（不重排，别的候选的桶内位置 / 尺寸 id 不变），同一目标再点一次就地替换；
+   * 类型 chip 没有就加、有就计数 +1 并勾上；这一条默认开「标注」；来源登记为 `sampled-object`。
+   * 下一次跑服务端查询（`submitScenario`）会连它一起清掉——它就是这一份结果的一部分。
+   * 返回候选键（`branCandidateKey`）。
+   */
+  function recordInteractiveBranClearance(input: InteractiveBranClearanceInput): string {
+    const state = scenarios.branNearestClearance;
+    const candidate = interactiveBranClearanceCandidate(input);
+    const key = branCandidateKey(candidate.noun, candidate.refno);
+
+    let group = state.branGroups.find((item) => item.group === candidate.noun);
+    if (!group) {
+      group = { group: candidate.noun, nouns: [candidate.noun], candidates: [] };
+      state.branGroups.push(group);
+    }
+    const existingIndex = group.candidates.findIndex((item) => item.refno === candidate.refno);
+    if (existingIndex >= 0) {
+      group.candidates.splice(existingIndex, 1, candidate);
+    } else {
+      group.candidates.push(candidate);
+    }
+
+    const facet = state.nounFacets.find((item) => item.noun === candidate.noun);
+    if (facet) {
+      if (existingIndex < 0) facet.count += 1;
+      facet.selected = true;
+    } else {
+      state.nounFacets.push({ noun: candidate.noun, count: 1, selected: true });
+    }
+
+    state.candidateProvenance = { ...state.candidateProvenance, [key]: INTERACTIVE_BRAN_CLEARANCE_PROVENANCE };
+    if (!state.drawnCandidateKeys.includes(key)) {
+      state.drawnCandidateKeys = [...state.drawnCandidateKeys, key];
+    }
+    // 上一次服务端查询的报错不该拦住这条画出来（`ViewerPanel` 见 error 就清空 `bran-clearance`）。
+    state.error = '';
+    applyBranSelection(state);
+    activeScenario.value = 'branNearestClearance';
+    return key;
+  }
+
   if (typeof window !== 'undefined') {
     window.addEventListener('modelProjectChanged', () => {
       for (const k of Object.keys(scenarios) as SpatialComputeScenarioKey[]) {
@@ -768,6 +904,7 @@ export function createSpatialComputeStore() {
     toggleBranNounFacet,
     setAllBranNounFacets,
     toggleBranCandidateDrawn,
+    recordInteractiveBranClearance,
   };
 }
 

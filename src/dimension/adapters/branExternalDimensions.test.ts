@@ -37,6 +37,34 @@ describe('branClearanceToExternalDimensions', () => {
     ]);
   });
 
+  it('marks a sampled (interactive pipe-to-structure) estimate as approximate in both the label text and the source label', () => {
+    const result = branClearanceToExternalDimensions([
+      {
+        targetGroup: 'WALL',
+        index: 2,
+        provenance: { method: 'sampled-object', accuracyClass: 'approximate-sampled' },
+        candidate: {
+          refno: '24381_900',
+          noun: 'WALL',
+          distance_mm: 600.4,
+          annotation: {
+            start_point: { x: 1000, y: 2000, z: 3000 },
+            end_point: { x: 1000, y: 2000, z: 3600 },
+            label_mm: 600.4,
+          },
+        },
+      },
+    ], point => [point[0] * 0.001, point[1] * 0.001, point[2] * 0.001]);
+
+    expect(result.records).toEqual([
+      expect.objectContaining({
+        id: 'bran-clearance:wall:24381_900:2',
+        sourceLabel: 'WALL: 24381_900（估算）',
+        layout: expect.objectContaining({ authoritativeText: '≈600mm', a: [1, 2, 3], b: [1, 2, 3.6] }),
+      }),
+    ]);
+  });
+
   it('skips incomplete coordinates without creating a user record', () => {
     const result = branClearanceToExternalDimensions([
       {

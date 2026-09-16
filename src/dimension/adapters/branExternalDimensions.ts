@@ -23,9 +23,14 @@ function point(value: unknown): Vec3 | null {
   return values.every(Number.isFinite) ? values as unknown as Vec3 : null;
 }
 
+/**
+ * BRAN 净距候选 → 只读 external 线性尺寸。`annotation` 两端点是 **E3D 世界 mm**（两个后端、三维点选写进来的估算候选都是），
+ * 调用方给 mm → Design Space 米的换算。网格采样估算的候选（`provenance.accuracyClass = approximate-sampled`）
+ * 尺寸文字前带「≈」，来源标签带「估算」——近似值不得以精确净距的样子呈现（2026-09-11 收敛计划 D2）。
+ */
 export function branClearanceToExternalDimensions(
   candidates: readonly BranNearestClearanceAnnotationCandidate[],
-  sceneWorldToDesignMetres: (point: Vec3) => Vec3,
+  millimetresToDesignMetres: (point: Vec3) => Vec3,
 ): ExternalDimensionMappingResult {
   const records: ExternalDimensionRecord[] = [];
   const skipped: { id: string; reason: string }[] = [];
@@ -37,11 +42,12 @@ export function branClearanceToExternalDimensions(
       skipped.push({ id, reason: 'Missing finite annotation start/end point' });
       continue;
     }
+    const approximate = item.provenance?.accuracyClass === 'approximate-sampled';
     const labelMm = Number(item.candidate.annotation?.label_mm);
     records.push({
       id,
       source: 'bran-clearance',
-      sourceLabel: `${item.targetGroup}: ${item.candidate.refno}`,
+      sourceLabel: `${item.targetGroup}: ${item.candidate.refno}${approximate ? '（估算）' : ''}`,
       role: 'external',
       layout: {
         id,
@@ -49,10 +55,10 @@ export function branClearanceToExternalDimensions(
         role: 'external',
         labelPinned: false,
         ...(Number.isFinite(labelMm)
-          ? { authoritativeText: `${Math.round(labelMm)}mm` }
+          ? { authoritativeText: `${approximate ? '≈' : ''}${Math.round(labelMm)}mm` }
           : {}),
-        a: sceneWorldToDesignMetres(start),
-        b: sceneWorldToDesignMetres(end),
+        a: millimetresToDesignMetres(start),
+        b: millimetresToDesignMetres(end),
         placement: { offsetM: 0.5, labelT: 0.5, side: 1 },
       },
     });

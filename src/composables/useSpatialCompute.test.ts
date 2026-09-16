@@ -1,6 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { createSpatialComputeStore, normalizeBranComputeRefno, resetSpatialComputeStore } from './useSpatialCompute';
+import {
+  INTERACTIVE_BRAN_CLEARANCE_PROVENANCE,
+  createSpatialComputeStore,
+  interactiveBranClearanceCandidate,
+  normalizeBranComputeRefno,
+  resetSpatialComputeStore,
+} from './useSpatialCompute';
 
 import type { ModelSourceKind } from '@/model-source/ports';
 
@@ -436,5 +442,94 @@ describe('useSpatialCompute BRAN nearest clearance', () => {
     expect(normalizeBranComputeRefno('24381/145018')).toBe('24381_145018');
     expect(normalizeBranComputeRefno('<24381/145018>')).toBe('24381_145018');
     expect(normalizeBranComputeRefno('=24381,145018')).toBe('24381_145018');
+  });
+
+  /** 三维里点选管件算出的管-墙/柱估算净距（plan 2026-09-16 §3.3 ③）：不再只 Toast，写进同一份 BRAN 净距结果。 */
+  describe('recordInteractiveBranClearance writes the pipe-to-structure estimate into the same BRAN clearance result', () => {
+    const interactive = {
+      sourceRefno: '24381/200001',
+      targetRefno: '24381/900',
+      targetNoun: 'wall',
+      sourcePointMm: { x: 1000, y: 2000, z: 3000 },
+      targetPointMm: { x: 1000, y: 2000, z: 3600 },
+    };
+
+    it('builds a server-shaped candidate: a_b refnos, upper-case noun, distance from the two mm points, both endpoints in nearest + annotation', () => {
+      expect(interactiveBranClearanceCandidate(interactive)).toEqual({
+        refno: '24381_900',
+        noun: 'WALL',
+        distance_mm: 600,
+        intersects: false,
+        nearest: {
+          source_segment_refno: '24381_200001',
+          source_segment_order: null,
+          source_point: { x: 1000, y: 2000, z: 3000 },
+          target_point: { x: 1000, y: 2000, z: 3600 },
+          vector: { dx: 0, dy: 0, dz: 600 },
+        },
+        annotation: { start_point: { x: 1000, y: 2000, z: 3000 }, end_point: { x: 1000, y: 2000, z: 3600 }, label_mm: 600 },
+      });
+      expect(interactiveBranClearanceCandidate({ ...interactive, targetNoun: '', targetPointMm: interactive.sourcePointMm }))
+        .toEqual(expect.objectContaining({ noun: 'UNKNOWN', distance_mm: 0, intersects: true }));
+    });
+
+    it('with no server result yet: creates the noun bucket + chip, draws it by default, tags provenance, switches the panel to the BRAN scenario', () => {
+      const store = createSpatialComputeStore();
+      const state = store.scenarios.branNearestClearance;
+      state.error = '上一次的报错';
+
+      expect(store.recordInteractiveBranClearance(interactive)).toBe('WALL:24381_900');
+
+      expect(store.activeScenario.value).toBe('branNearestClearance');
+      expect(state.error).toBe('');
+      expect(state.branGroups).toEqual([{ group: 'WALL', nouns: ['WALL'], candidates: [expect.objectContaining({ refno: '24381_900', distance_mm: 600 })] }]);
+      expect(state.nounFacets).toEqual([{ noun: 'WALL', count: 1, selected: true }]);
+      expect(state.drawnCandidateKeys).toEqual(['WALL:24381_900']);
+      expect(state.candidateProvenance).toEqual({ 'WALL:24381_900': INTERACTIVE_BRAN_CLEARANCE_PROVENANCE });
+      expect(state.resultRows).toEqual([
+        expect.objectContaining({
+          refno: '24381_900',
+          noun: 'WALL',
+          distanceMm: 600,
+          drawn: true,
+          sourceSegmentRefno: '24381_200001',
+          sourceSegmentOrder: null,
+          label: '估算最近距离（网格采样） · 点选 24381_200001',
+        }),
+      ]);
+      expect(state.annotationCandidates).toEqual([
+        { targetGroup: 'WALL', index: 0, candidate: expect.objectContaining({ refno: '24381_900' }), provenance: INTERACTIVE_BRAN_CLEARANCE_PROVENANCE },
+      ]);
+    });
+
+    it('on top of a server result: appends to the existing bucket without reordering it, bumps the chip count and re-selects it; same target again replaces in place; the next server query clears it', async () => {
+      const fetchMock = vi.fn().mockImplementation(async () => freshNounGroupedResponse());
+      vi.stubGlobal('fetch', fetchMock);
+      const store = createSpatialComputeStore();
+      const state = store.scenarios.branNearestClearance;
+      await store.submitScenario('branNearestClearance');
+      store.toggleBranNounFacet('WALL');
+      expect(state.nounFacets.find((facet) => facet.noun === 'WALL')?.selected).toBe(false);
+
+      store.recordInteractiveBranClearance(interactive);
+
+      const wall = state.branGroups.find((group) => group.group === 'WALL')!;
+      expect(wall.candidates.map((candidate) => candidate.refno)).toEqual(['24381_1', '24381_11', '24381_900']);
+      expect(state.nounFacets.find((facet) => facet.noun === 'WALL')).toEqual({ noun: 'WALL', count: 4, selected: true });
+      // 服务端候选不带来源标签，只有点选那条带；两条都画：默认那条 + 新写进来的
+      expect(state.annotationCandidates.filter((item) => item.targetGroup === 'WALL').map((item) => [item.candidate.refno, item.index, item.provenance?.method ?? 'server']))
+        .toEqual([['24381_1', 0, 'server'], ['24381_900', 2, 'sampled-object']]);
+      expect(state.resultRows.find((row) => row.refno === '24381_1')?.label).toBe('segment 24381_14503#3');
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+
+      store.recordInteractiveBranClearance({ ...interactive, targetPointMm: { x: 1000, y: 2000, z: 3300 } });
+      expect(wall.candidates.map((candidate) => [candidate.refno, candidate.distance_mm])).toEqual([['24381_1', 1200.4], ['24381_11', 2600], ['24381_900', 300]]);
+      expect(state.nounFacets.find((facet) => facet.noun === 'WALL')?.count).toBe(4);
+
+      await store.submitScenario('branNearestClearance');
+      expect(state.branGroups.find((group) => group.group === 'WALL')?.candidates.map((candidate) => candidate.refno)).toEqual(['24381_1', '24381_11']);
+      expect(state.candidateProvenance).toEqual({});
+      expect(state.nounFacets.find((facet) => facet.noun === 'WALL')?.count).toBe(3);
+    });
   });
 });

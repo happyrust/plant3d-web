@@ -18,6 +18,7 @@ import {
   Vector3,
 } from 'three';
 
+import type { InteractiveBranClearanceInput } from '@/composables/useSpatialCompute';
 import type { WorldCell } from '@/review/domain/annotationProjection/clip4';
 import type { PhasePrevious } from '@/review/domain/annotationProjection/wave';
 import type { AnnotationDegrade } from '@/review/domain/bindingResolve';
@@ -2366,10 +2367,16 @@ export function useDtxTools(options: {
   compatViewerRef: Ref<DtxCompatViewer | null>
   requestRender?: (() => void) | null
   suppressStoreOverlays?: boolean
+  /**
+   * 「管-墙/柱净距测量」的结果落点：写进 Dock「BRAN 中心线最近清距」那一份结果（`useSpatialCompute.recordInteractiveBranClearance`），
+   * 由 `bran-clearance` external source 画成尺寸。不给就退回只报状态 + Toast「暂不创建尺寸」（旧行为）。
+   */
+  recordBranClearance?: ((input: InteractiveBranClearanceInput) => void) | null
 }) {
   const { dtxViewerRef, dtxLayerRef, selectionRef, overlayContainerRef, store, compatViewerRef } = options;
   const requestRender = options.requestRender ?? null;
   const suppressStoreOverlays = options.suppressStoreOverlays === true;
+  const recordBranClearance = options.recordBranClearance ?? null;
 
   const selectionStore = useSelectionStore();
   const reviewStore = useReviewStore();
@@ -3605,10 +3612,32 @@ export function useDtxTools(options: {
       }
 
       const distance = best.sourcePoint.distanceTo(best.targetPoint);
+      const distanceText = formatLengthMeters(distance, unitSettings.displayUnit.value, unitSettings.precision.value);
+      if (!recordBranClearance) {
+        setPipeMeasureStatus(`${DIMENSION_REBUILD_NOTICE}（${sourceRefno} ↔ ${best.targetRefno}，净距 ${distanceText}）`);
+        emitToast({ message: DIMENSION_REBUILD_NOTICE, level: 'warning' });
+        return;
+      }
+
+      // 最近点对是 scene 世界坐标（全局矩阵之后：已缩放到米、可能已重定心）；BRAN 净距那一份结果里的候选是 E3D 世界 mm，
+      // 这里用全局矩阵的逆换回去，进了同一份结果就跟服务端候选走同一条画尺寸的路。
+      const sceneToMillimetres = globalMatrix.clone().invert();
+      const toMillimetres = (point: Vector3) => {
+        const mm = point.clone().applyMatrix4(sceneToMillimetres);
+        return { x: mm.x, y: mm.y, z: mm.z };
+      };
+      const targetNoun = candidates.find((candidate) => normalizeRefnoKey(candidate.refno) === best.targetRefno)?.noun ?? '';
+      recordBranClearance({
+        sourceRefno,
+        targetRefno: best.targetRefno,
+        targetNoun,
+        sourcePointMm: toMillimetres(best.sourcePoint),
+        targetPointMm: toMillimetres(best.targetPoint),
+      });
       setPipeMeasureStatus(
-        `${DIMENSION_REBUILD_NOTICE}（${sourceRefno} ↔ ${best.targetRefno}，净距 ${formatLengthMeters(distance, unitSettings.displayUnit.value, unitSettings.precision.value)}）`,
+        `管-墙/柱净距：${sourceRefno} ↔ ${best.targetRefno}${targetNoun ? `（${targetNoun}）` : ''} 估算最近距离 ${distanceText}（网格采样），已写入 Dock「BRAN 中心线最近清距」结果并画出尺寸`,
       );
-      emitToast({ message: DIMENSION_REBUILD_NOTICE, level: 'warning' });
+      requestRender?.();
     } catch (error) {
       setPipeMeasureStatus(`计算失败：${error instanceof Error ? error.message : String(error)}`);
     } finally {
@@ -3643,7 +3672,9 @@ export function useDtxTools(options: {
       if (pipeMeasureBusy.value) {
         return pipeMeasureStatus.value || '管-墙/柱净距测量：正在计算…';
       }
-      return pipeMeasureStatus.value || '管-墙/柱净距测量：点击管道，计算最近距离（尺寸创建暂不可用）';
+      return pipeMeasureStatus.value || (recordBranClearance
+        ? '管-墙/柱净距测量：点击管道，估算到最近墙/柱的距离，结果写入 Dock「BRAN 中心线最近清距」并画出尺寸'
+        : '管-墙/柱净距测量：点击管道，计算最近距离（尺寸创建暂不可用）');
     }
     if (mode === 'measure_pipe_to_pipe') {
       if (pipeMeasureBusy.value) {

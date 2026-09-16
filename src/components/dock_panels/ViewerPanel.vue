@@ -2269,14 +2269,11 @@ function syncBranClearanceDimensions(): void {
     system?.replaceExternalSource('bran-clearance', []);
     return;
   }
+  // 候选端点是 E3D 世界 mm（服务端算的、三维点选换算过的都是），Design Space 是同一原点的米：直接 /1000。
+  // 此前这里套的是 designToWorld 的逆——那是 scene → design 的换算，对 mm 端点差一个 1000 倍还带着重定心平移。
   const result = branClearanceToExternalDimensions(
     candidates,
-    point => {
-      const design = new Vector3(...point).applyMatrix4(
-        dimensionViewerAdapter.getDesignToWorld().invert(),
-      );
-      return [design.x, design.y, design.z];
-    },
+    point => [point[0] / 1000, point[1] / 1000, point[2] / 1000],
   );
   system.replaceExternalSource('bran-clearance', result.records);
   if (result.skipped.length > 0) {
@@ -4214,6 +4211,8 @@ onMounted(async () => {
     compatViewerRef,
     requestRender,
     suppressStoreOverlays: false,
+    // 管-墙/柱净距测量的结果写进 Dock 的 BRAN 净距那一份（同一张表、同一个 bran-clearance external source）
+    recordBranClearance: spatialComputeStore.recordInteractiveBranClearance,
   });
   toolsRef.value = tools;
   tools.refreshReadyState();
