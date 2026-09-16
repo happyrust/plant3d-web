@@ -2769,8 +2769,11 @@ describe('useXeokitMeasurementTools', () => {
       // G：ELBO，点集带接口放置矩阵（角点 POS = 场景 (2.8, 3, 6)），P1 = POS − 300 mm X、P2 = POS + 300 mm Z（局部）
       //   → 90° 弯、R 300 mm，中心线弧面 = 过弧心 (2.5, 3, 6.3)、法向 +Y 的 XZ 面（y = 3）。没有 line()，只有 arc()。
       const refnoG = '24381_200007';
+      // H：CTOR 环面，中心圆在 z = 6 平面上（心 (2, 4, 6)、R 0.5），三枚 P-Point 就在圆上（E3D `through3Points(P1, P3, P2)`）。
+      //   它没有放置矩阵也不需要——环面的圆不要 `POS`。
+      const refnoH = '24381_200008';
       const nounByRefno: Record<string, string> = {
-        [refnoA]: 'CYLI', [refnoB]: 'CYLI', [refnoC]: 'ELBO', [refnoD]: 'CYLI', [refnoE]: 'CONE', [refnoF]: 'CONE', [refnoG]: 'ELBO',
+        [refnoA]: 'CYLI', [refnoB]: 'CYLI', [refnoC]: 'ELBO', [refnoD]: 'CYLI', [refnoE]: 'CONE', [refnoF]: 'CONE', [refnoG]: 'ELBO', [refnoH]: 'CTOR',
       };
       const designMm = (scene: readonly [number, number, number]): [number, number, number] => [
         (scene[0] + 10) / 0.001,
@@ -2800,6 +2803,11 @@ describe('useXeokitMeasurementTools', () => {
         [refnoF]: [],
         // 局部 mm（随 world_transform 进场景）。
         [refnoG]: [{ ...ptsetPoint(1, [0, 0, 0]), pt: [-300, 0, 0] }, { ...ptsetPoint(2, [0, 0, 0]), pt: [0, 0, 300] }],
+        [refnoH]: [
+          ptsetPoint(1, [2.5, 4, 6]),
+          ptsetPoint(2, [2, 4.5, 6]),
+          ptsetPoint(3, [2 + 0.5 * Math.SQRT1_2, 4 + 0.5 * Math.SQRT1_2, 6]),
+        ],
       };
       vi.doMock('@/composables/useDbMetaInfo', () => ({
         getDbnumByRefno: vi.fn(() => 7997),
@@ -2871,6 +2879,10 @@ describe('useXeokitMeasurementTools', () => {
         if (Math.abs(pos.x - 185) <= 10 && pos.y < 95) return { objectId: `o:${refnoF}:0`, point: new THREE.Vector3(2.85, y, 6.2), distance: 0.8 };
         if (pos.x < 60 && pos.y > 140) return { objectId: `o:${refnoC}:0`, point: new THREE.Vector3(x, y, 6.2), distance: 0.8 };
         if (pos.x > 140 && pos.y > 140) return { objectId: `o:${refnoG}:0`, point: new THREE.Vector3(x, y, 6.2), distance: 0.8 };
+        // H（CTOR）在环上两处露头：右边贴着 (2.5, 4, 6) 那个交点，左边贴着 (1.5, 4, 6) 那个。
+        if (pos.y >= 96 && pos.y <= 138 && ((pos.x >= 30 && pos.x <= 75) || (pos.x >= 152 && pos.x <= 180))) {
+          return { objectId: `o:${refnoH}:0`, point: new THREE.Vector3(x, y, 6.2), distance: 0.8 };
+        }
         return null;
       });
       const globalModelMatrix = new THREE.Matrix4().makeScale(0.001, 0.001, 0.001);
@@ -2925,7 +2937,7 @@ describe('useXeokitMeasurementTools', () => {
         await Promise.resolve();
         hoverAt(x, y);
       };
-      return { store, measurementStyle, tools, hoverAt, clickAt, hoverAndLoad, getObjectGeometryData, refnoA, refnoB, refnoC, refnoD, refnoE, refnoF, refnoG };
+      return { store, measurementStyle, tools, hoverAt, clickAt, hoverAndLoad, getObjectGeometryData, refnoA, refnoB, refnoC, refnoD, refnoE, refnoF, refnoG, refnoH };
     }
 
     it('Intersect：拾中 CYLI 元素（表面点）按 E3D line() 当 P1 → P2 线求交，Any 与 Element 过滤器都成；ELBO 无 line() 被拒不消耗；无点的 CYLI / CONE 用局部几何', async () => {
@@ -3198,7 +3210,24 @@ describe('useXeokitMeasurementTools', () => {
         expect(draft.origin.worldPos[1]).toBeCloseTo(3, 6);
         expect(draft.origin.worldPos[2]).toBeCloseTo(6, 6);
         expect(draft.origin.sourceInfo?.label).toBe('交点');
-        store.clearCurrentXeokitDraft();
+        // 交点是算出来的，不是拾中弯头用的那个表面点：标 `exact`，整条记录不写「近似」。
+        expect(draft.origin.sourceInfo?.source).toBe('mesh_pick_point');
+        expect(draft.origin.sourceInfo?.exact).toBe(true);
+
+        // 终点也走求交（CYLI A 轴 × CYLI B 轴 = (2, 4, 6)）→ 落记录：两端都是交点，不标近似。
+        clickAt(140, 100);
+        await hoverAndLoad(100, 40);
+        clickAt(100, 40);
+        const record = store.xeokitDistanceMeasurements.value[0]!;
+        expect(record.target.worldPos[0]).toBeCloseTo(2, 6);
+        expect(record.target.worldPos[1]).toBeCloseTo(4, 6);
+        expect(record.origin.sourceInfo?.exact).toBe(true);
+        expect(record.target.sourceInfo?.exact).toBe(true);
+        expect(record.approximate).toBe(false);
+        expect(store.measurementDraftResult.value!.approximate).toBe(false);
+        store.clearAll();
+        store.setToolMode('xeokit_measure_distance');
+        await nextTick();
 
         // 先线后弧：E3D「Make sure arc is always first」——弧仍是被求交的主体，同一个交点。
         clickAt(140, 100);
@@ -3236,6 +3265,55 @@ describe('useXeokitMeasurementTools', () => {
         const withoutSurfacePoints = store.currentXeokitDistanceDraft.value!;
         expect(withoutSurfacePoints.origin.worldPos[0]).toBeCloseTo(2.5, 6);
         expect(withoutSurfacePoints.origin.worldPos[2]).toBeCloseTo(6, 6);
+      } finally {
+        tools.dispose();
+        vi.useRealTimers();
+      }
+    });
+
+    it('Intersect：RTOR / CTOR 的 arc() 是过 P1 / P3 / P2 的环面中心圆（E3D through3Points，不要 POS）——两个交点按拾中处取近；Perpendicular 那条路先不给弧', async () => {
+      const { store, measurementStyle, tools, clickAt, hoverAndLoad } = await setupElementLineTools();
+      try {
+        measurementStyle.updateMeasurementPickLayer({ filter: 'element', pickType: 'intersect' });
+        await nextTick();
+
+        // 子拾取 1：CTOR H（中心圆：心 (2, 4, 6)、R 0.5、法向 ±Z）——光标落在环右侧。
+        await hoverAndLoad(165, 120);
+        clickAt(165, 120);
+        expect(tools.pickPointMessage.value).toContain('1. CTOR 中心线弧（P1 → P2）（弧）');
+
+        // 子拾取 2：CYLI A 的轴线 (1, 4, 6) → (3, 4, 6) 在圆面内，与圆交于 (1.5, 4, 6) 与 (2.5, 4, 6)：
+        // 拾弧那一击的射线落在圆面上 ≈ (2.55, 3.8, 6)，取近的那个 = (2.5, 4, 6)。
+        await hoverAndLoad(140, 100);
+        clickAt(140, 100);
+        const right = store.currentXeokitDistanceDraft.value!;
+        expect(right.origin.worldPos[0]).toBeCloseTo(2.5, 6);
+        expect(right.origin.worldPos[1]).toBeCloseTo(4, 6);
+        expect(right.origin.worldPos[2]).toBeCloseTo(6, 6);
+        store.clearCurrentXeokitDraft();
+
+        // 换到环左侧拾同一个环面：另一个交点 (1.5, 4, 6) 胜出（E3D `!pick.intersection(!arcPlane)` 取最近）。
+        clickAt(50, 120);
+        clickAt(140, 100);
+        const left = store.currentXeokitDistanceDraft.value!;
+        expect(left.origin.worldPos[0]).toBeCloseTo(1.5, 6);
+        expect(left.origin.worldPos[1]).toBeCloseTo(4, 6);
+        store.clearAll();
+        store.setToolMode('xeokit_measure_distance');
+        await nextTick();
+
+        // Perpendicular：E3D 对环面走的是 `arc(item, refPosition)`（要 RINS / ROUT），Web 本轮不给弧 →
+        // 第二击落在环面上仍按「目标无轴向 / 面几何」退化成点到点。
+        measurementStyle.updateStyle({ perpendicularTo: true });
+        measurementStyle.updateMeasurementPickLayer({ filter: 'element', pickType: 'exact' });
+        await nextTick();
+        await hoverAndLoad(40, 160);
+        clickAt(40, 160);
+        await hoverAndLoad(165, 120);
+        clickAt(165, 120);
+        const record = store.xeokitDistanceMeasurements.value[0]!;
+        expect(record.perpendicular?.targetKind).toBe('point');
+        expect(record.target.worldPos[2]).toBeCloseTo(6.2, 6);
       } finally {
         tools.dispose();
         vi.useRealTimers();

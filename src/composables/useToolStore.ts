@@ -116,6 +116,11 @@ export type MeasurementPointSourceInfo = {
   candidateId?: string;
   refno?: string | null;
   label?: string | null;
+  /**
+   * 位置是由精确几何算出来的（元素线 / 中心线弧 / P-Point 向量之间的交点等），不是拾中的那个网格表面点——
+   * 拾取来源仍记着是谁把这条几何带进来的（多半是 `mesh_pick_point`），但结果不该因此标「近似」。
+   */
+  exact?: boolean;
 };
 
 export type MeasurementPoint = {
@@ -991,6 +996,7 @@ function normalizeMeasurementPointSourceInfo(value: unknown): MeasurementPointSo
     candidateId: normalizeOptionalString(raw.candidateId),
     refno: normalizeNullableString(raw.refno),
     label: normalizeNullableString(raw.label),
+    ...(raw.exact === true ? { exact: true } : {}),
   };
 }
 

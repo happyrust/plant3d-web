@@ -91,6 +91,11 @@ import {
   type WorldDistanceAidPart,
 } from '@/measurement/aids/worldDistanceAidPlan';
 import {
+  createComputationProvenance,
+  type ComputationOperandRef,
+  type ComputationProvenance,
+} from '@/measurement/domain/computationProvenance';
+import {
   designPointHostChain,
   loadDesignPointsOfHost,
   type DesignPointHost,
@@ -101,7 +106,7 @@ import {
   analyseMeshGraphics,
   type MeshGraphicsFeatures,
 } from '@/measurement/graphics/meshFeatureGraphics';
-import { elementArcFromPPoints, elementHasE3dArc } from '@/measurement/kernel/elementArc';
+import { elementArcFromPPoints, elementHasE3dArc, elementHasE3dFilletArc } from '@/measurement/kernel/elementArc';
 import {
   elementHasE3dLine,
   elementLineAcceptsLocalBounds,
@@ -210,6 +215,8 @@ type PickHit = {
    * 候选位置时记录：`from` 是候选原位置（场景坐标），`worldPos` 已是派生后的位置。
    */
   derived?: Readonly<{ pickType: MeasurementPickTypeId; from: Vector3 }>;
+  /** `worldPos` 由精确几何算出（求交的交点等），不是拾中的那个网格表面点——进 `sourceInfo.exact`，不标近似。 */
+  exactPosition?: boolean;
 };
 export type MeasurementViewerSnapCandidate = Readonly<{
   id: string;
@@ -1443,14 +1450,15 @@ export function useXeokitMeasurementTools(options: {
    * `gmfArc.fillet(radius, pPosition[arrive], position, pPosition[leave])`——两条切线从元素原点（`POS`）分别到
    * P1 / P2，弧与两者相切。点从 ptset 缓存取、角点是同一份点集响应的放置矩阵平移（`ptsetSnap.getOrigin`，同一帧
    * 同一精度）；半径由几何自己定（ELBO 的 `RADI` 是 0）。noun 不在表内、缺 P1 / P2 / 原点或两腿共线时为 null。
-   * 它当 Perpendicular 目标（`getLine()` 未设 → `getPlane()` = 弧所在平面）与 Intersect 的 ARC 操作数（弧本身）；Snap 不受影响。
+   * RTOR / CTOR 的 `arc()` 是过 P1 / P3 / P2 的环面中心圆，不要原点（`corner` 为 null 也成）。
+   * 弯头的弧当 Perpendicular 目标（`getLine()` 未设 → `getPlane()` = 弧所在平面）与 Intersect 的 ARC 操作数；
+   * 环面的圆只当 Intersect 操作数（见 `elementArc.ts` 头注与 `resolvePerpendicularTargetFromHit`）。Snap 都不受影响。
    */
   function elementArcForRefno(refno: string | null): PickHit['elementArc'] | null {
     if (!refno) return null;
     const noun = nounForRefno(refno);
     if (!elementHasE3dArc(noun)) return null;
     const corner = ptsetSnap.getOrigin(refno);
-    if (!corner) return null;
     const arc = elementArcFromPPoints(
       noun,
       ptsetSnap.getCandidates([refno]).map((candidate) => ({
@@ -1490,12 +1498,15 @@ export function useXeokitMeasurementTools(options: {
     }
     const elementArc = elementArcForRefno(refno);
     if (!elementArc) return null;
+    const intersecting = layer.pickType === 'intersect';
+    // 环面（RTOR / CTOR）的中心圆只当 Intersect 操作数，Perpendicular 那条路 E3D 另有取法（见 elementArcForRefno）。
+    if (!intersecting && !elementHasE3dFilletArc(nounForRefno(refno))) return null;
     return {
       ...base,
       source: 'mesh_pick_point',
       candidateId: `element-arc:${refno}`,
       refno,
-      label: layer.pickType === 'intersect' ? ELEMENT_ARC_OPERAND_LABEL : ELEMENT_ARC_LABEL,
+      label: intersecting ? ELEMENT_ARC_OPERAND_LABEL : ELEMENT_ARC_LABEL,
       elementArc,
       sourcePriority: measurementStyle.state.measurementPickSources.position?.priority,
     };
@@ -1953,7 +1964,12 @@ export function useXeokitMeasurementTools(options: {
     });
   }
 
-  /** 交点作为测量点：位置换回场景坐标，几何字段清空（E3D 回的是 POSITION，不再带线 / 面）。 */
+  /**
+   * 交点作为测量点：位置换回场景坐标，几何字段清空（E3D 回的是 POSITION，不再带线 / 面）。
+   * 交点是**算出来的**，不是拾中的那个表面点——标 `exactPosition`，别因为拾元素用了表面点就把记录写成近似。
+   * （裸表面点转不成操作数，元素线 / 中心线弧 / P-Point 向量 / p-line / 设计辅助都是后端给的精确几何；
+   * Graphics 的边 / 面来自 DTX 网格，但它们与元素几何分属不同过滤器、混不到一次求交里，且 Web 现在别处也不把它们当近似。）
+   */
   function intersectionHit(lastHit: PickHit, position: PickVec3): PickHit {
     const worldPos = designMetersToSceneWorld(tupleToVector(position), dtxLayerRef);
     const {
@@ -1964,6 +1980,7 @@ export function useXeokitMeasurementTools(options: {
       worldPos,
       label: '交点',
       derived: { pickType: 'intersect', from: lastHit.worldPos.clone() },
+      exactPosition: true,
     };
   }
 
@@ -2324,6 +2341,7 @@ export function useXeokitMeasurementTools(options: {
       shortest,
     });
     if (keepMeasurementAnnotation) {
+      const provenance = distanceRecordProvenance(origin, target, approximate);
       const rec: XeokitDistanceMeasurementRecord = {
         id,
         kind: 'distance',
@@ -2335,6 +2353,7 @@ export function useXeokitMeasurementTools(options: {
         sourceAnnotationId: store.activeAnnotationContext.value?.id,
         sourceAnnotationType: store.activeAnnotationContext.value?.type,
         shortest,
+        ...(provenance ? { provenance } : {}),
       };
       if (!measurementStyle.state.distanceKeepDimensions) {
         hideKeptDistanceDimensions();
@@ -2385,12 +2404,46 @@ export function useXeokitMeasurementTools(options: {
         candidateId: hit.candidateId,
         refno: hit.refno ?? refnoFromObjectId(hit.objectId),
         label: hit.label ?? null,
+        ...(hit.exactPosition ? { exact: true as const } : {}),
       },
     };
   }
 
+  /**
+   * 「近似」= 这个测量点就是拾中的那个网格表面点（DTX float32 顶点插出来的）。
+   * 由精确几何算出来的位置（`sourceInfo.exact`，如两条元素线 / 中心线弧求出的交点）不算——
+   * 拾中它用的那个表面点只是个把手，与 Perpendicular 的 `exactTarget` 同一口径。
+   */
   function hasApproximatePoint(...points: MeasurementPoint[]): boolean {
-    return points.some((point) => point.sourceInfo?.source === 'mesh_pick_point');
+    return points.some((point) => point.sourceInfo?.source === 'mesh_pick_point' && point.sourceInfo.exact !== true);
+  }
+
+  /**
+   * 记录级 provenance。统一层 `fromXeokitMeasurement` 读不到 provenance 时一律按 `legacy-unknown` 处理，
+   * 投影回来的 `approximate` 恒 true——测量列表那个「近似」chip 因此谁都摘不掉（`mem-259`），哪怕这一轮算出来是精确的。
+   * 这里把本轮算到的精度如实写进记录：两端都是语义几何（P-Point / 元素线 / 中心线弧 / 求交出的交点 / p-line / 设计辅助）
+   * → `semantic-point-pair`（`exact-semantic`）；有一端是 Graphics 网格特征 → `point-to-triangle-mesh`（`exact-surface`）；
+   * 本轮判为近似（裸表面点）就不写，照旧 `legacy-unknown`。三档投影回的 `approximate` 与本轮一致。
+   */
+  function distanceRecordProvenance(
+    origin: MeasurementPoint,
+    target: MeasurementPoint,
+    approximate: boolean,
+  ): ComputationProvenance | null {
+    if (approximate) return null;
+    const operand = (point: MeasurementPoint): ComputationOperandRef => ({
+      entityId: point.entityId,
+      ...(point.sourceInfo?.refno ? { refno: point.sourceInfo.refno } : {}),
+      ...(point.sourceInfo?.candidateId ? { candidateId: point.sourceInfo.candidateId } : {}),
+    });
+    const fromMesh = [origin, target].some((point) => point.sourceInfo?.source === 'mesh_graphics');
+    return createComputationProvenance({
+      method: fromMesh ? 'point-to-triangle-mesh' : 'semantic-point-pair',
+      accuracyClass: fromMesh ? 'exact-surface' : 'exact-semantic',
+      coordinateSpace: origin.designWorldPos && target.designWorldPos ? 'design-world' : 'scene-world',
+      source: operand(origin),
+      target: operand(target),
+    });
   }
 
   /**
@@ -2419,7 +2472,13 @@ export function useXeokitMeasurementTools(options: {
     const elementLine = !hit.direction && !hit.plane && !circular && hit.elementLine ? hit.elementLine : null;
     // 元素没有 `line()` 只有 `arc()`（ELBO / BEND）时，E3D `getLine()` 未设 → `getPlane()` = 中心线弧所在平面：
     // 过弧心、法向 = 弧面法向（`GMFARC.perpendicularToPoint` 的第二个分支），不是过拾中的表面点。
-    const elementArc = !hit.direction && !hit.plane && !circular && !elementLine && hit.elementArc ? hit.elementArc : null;
+    // 只认弯头的 fillet：RTOR / CTOR 的 Perpendicular 在 E3D 走 `arc(item, refPosition)`（圆随拾中点沿轴挪 /
+    // 换成 RINS / ROUT / 改成截面圆，`edgrtorus` 117–142 / `edgctorus` 120–177），要目录属性，本轮不做，
+    // 它们的中心圆只进 Intersect。
+    const elementArc = !hit.direction && !hit.plane && !circular && !elementLine && hit.elementArc
+      && elementHasE3dFilletArc(nounForRefno(hit.refno ?? null))
+      ? hit.elementArc
+      : null;
     // E3D DPOINT：`getLine()` 没有 DPOINT 分支（回落到属主元素的 `line()`，EQUI / STRU 没有），
     // `getPlane()` 给「过 dpps、Z is dpdir」的面——设计点的方向在这里是面法向，不是轴线。
     const designPointPlane = hit.source === 'design_point' && hit.direction
@@ -2555,6 +2614,7 @@ export function useXeokitMeasurementTools(options: {
     if (suppressStoreMeasurements) return false;
     const result = store.measurementDraftResult.value;
     if (!result || result.persistedMeasurementId) return false;
+    const provenance = distanceRecordProvenance(result.origin, result.target, result.approximate);
     const rec: XeokitDistanceMeasurementRecord = {
       id: result.id,
       kind: 'distance',
@@ -2565,6 +2625,7 @@ export function useXeokitMeasurementTools(options: {
       createdAt: result.createdAt,
       sourceAnnotationId: store.activeAnnotationContext.value?.id,
       sourceAnnotationType: store.activeAnnotationContext.value?.type,
+      ...(provenance ? { provenance } : {}),
     };
     if (!measurementStyle.state.distanceKeepDimensions) {
       hideKeptDistanceDimensions();
@@ -3915,6 +3976,7 @@ export function useXeokitMeasurementTools(options: {
         ...(perpendicular ? { perpendicular } : {}),
       });
       if (keepMeasurementAnnotation) {
+        const provenance = distanceRecordProvenance(draft.origin, target, approximate);
         const rec: XeokitDistanceMeasurementRecord = {
           id: draft.id,
           kind: 'distance',
@@ -3926,6 +3988,7 @@ export function useXeokitMeasurementTools(options: {
           sourceAnnotationId: store.activeAnnotationContext.value?.id,
           sourceAnnotationType: store.activeAnnotationContext.value?.type,
           ...(perpendicular ? { perpendicular } : {}),
+          ...(provenance ? { provenance } : {}),
         };
         if (!measurementStyle.state.distanceKeepDimensions) {
           hideKeptDistanceDimensions();
