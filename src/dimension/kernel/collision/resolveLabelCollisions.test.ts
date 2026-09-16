@@ -106,7 +106,7 @@ describe('resolveLabelCollisions', () => {
     ] as const;
     for (let candidate = 0; candidate < 8; candidate += 1) {
       const distance = (candidate + 1) * 8;
-      const [dx, dy] = directions[candidate % directions.length];
+      const [dx, dy] = directions[candidate % directions.length]!;
       blockers.push(layout(`block-${candidate}`, dx * distance, dy * distance, true, 2));
     }
     const result = resolveLabelCollisions([...blockers, layout('auto', 0, 0, false, 2)]).at(-1)!;
