@@ -8,6 +8,7 @@ import {
   LINE_ANGLE_PARALLEL_TOLERANCE_DEG,
   buildLineAngle,
   lineAngleArmEnd,
+  lineAngleOperandFromGeometry,
   snapLineAngleDegrees,
   snapLineAngleDirection,
   type LineAngleLineOperand,
@@ -293,5 +294,48 @@ describe('buildLineAngle · degenerate input', () => {
       reason: 'non-finite-input',
     });
     expect(buildLineAngle(BASE_E, plane([0, 0, 0], [0, Number.NaN, 1]))).toEqual({ ok: false, reason: 'non-finite-input' });
+  });
+});
+
+describe('lineAngleOperandFromGeometry · 两击各自的 E3D 转换（EDGPOSITIONDATA.line() / .plane()）', () => {
+  it('线 / 面两种角色都照原样：边 / p-line / 轴线 → LINE（带拾中位置），facet / Aid 面 → PLANE；退化线段落到下一档', () => {
+    const seg = { start: [0, 0, 0] as PickVec3, end: [2, 0, 0] as PickVec3 };
+    for (const role of ['first', 'second'] as const) {
+      expect(lineAngleOperandFromGeometry({ segment: seg, picked: [1, 0, 0] }, role)).toEqual({ kind: 'line', start: seg.start, end: seg.end, picked: [1, 0, 0] });
+      // 没给拾中位置就用线的 start（E3D `position` 缺省）。
+      expect(lineAngleOperandFromGeometry({ segment: seg }, role)).toEqual({ kind: 'line', start: seg.start, end: seg.end, picked: seg.start });
+      expect(lineAngleOperandFromGeometry({ plane: { position: [0, 0, 1], normal: [0, 0, 2] } }, role)).toEqual({ kind: 'plane', position: [0, 0, 1], normal: [0, 0, 2] });
+      // 零长线段不成线，退到面 / 点那一档。
+      expect(lineAngleOperandFromGeometry({ segment: { start: [1, 1, 1], end: [1, 1, 1] }, plane: { position: [0, 0, 0], normal: [1, 0, 0] } }, role)?.kind).toBe('plane');
+      expect(lineAngleOperandFromGeometry({ position: [1, 2, 3] }, role)).toBeNull();
+      expect(lineAngleOperandFromGeometry({ position: [1, 2, 3], direction: [0, 0, 0] }, role)).toBeNull();
+      expect(lineAngleOperandFromGeometry({ position: [Number.NaN, 2, 3], direction: [0, 0, 1] }, role)).toBeNull();
+    }
+  });
+
+  it('带方向的点（P-Point / DPOINT）：第一击 getLine() = 过该点的轴线；第二击 getPlane() = 过该点、Z 沿其方向的面（edgpositiondata.pmlobj PPOINT / DPOINT 分支）', () => {
+    const point = { position: [7.84985, 11.78749, 16.892524] as PickVec3, direction: [0, 0, 1] as PickVec3 };
+    expect(lineAngleOperandFromGeometry(point, 'first')).toEqual({
+      kind: 'line', start: point.position, end: [7.84985, 11.78749, 17.892524], picked: point.position,
+    });
+    expect(lineAngleOperandFromGeometry(point, 'second')).toEqual({ kind: 'plane', position: point.position, normal: [0, 0, 1] });
+  });
+
+  it('§30 管件路那两组换成 P-Point 当面：30° 下倾的管身轴线 × VALV P-Point（方向 U）→ 30.0004°，× ELBO P-Point（方向 N）→ 59.9996°——与 Graphics 面那两行同值', () => {
+    // 斜管的设计管线 = ELBO 24383/66672 P-Point #1 → FLAN 24383/66671 P-Point #2（mm，golden MD §30「补采（23:57 / 23:58）」）。
+    const base = line([17.8997, 0.2328, 17.8204], [17.8997, -0.2359, 18.0910], [17.8997, -0.0016, 17.9557]);
+    // VALV P-Point #100：方向 U，位置随便落在管线下方——面是无限的，只有法向进角度。
+    const valv = lineAngleOperandFromGeometry({ position: [17.8997, -0.5, 17.6], direction: [0, 0, 1] }, 'second')!;
+    expect(valv.kind).toBe('plane');
+    const horizontal = ok(buildLineAngle(base, valv));
+    expect(horizontal.kind).toBe('line-plane');
+    expect(horizontal.angleDeg).toBeCloseTo(Math.atan2(0.2706, 0.4687) * 180 / Math.PI, 4); // 30.00042°
+    // ELBO P-Point #2：方向 N（法兰端面的法向）。
+    const elbo = lineAngleOperandFromGeometry({ position: [17.8997, 0.3088, 17.7], direction: [0, 1, 0] }, 'second')!;
+    const vertical = ok(buildLineAngle(base, elbo));
+    expect(vertical.kind).toBe('line-plane');
+    expect(vertical.angleDeg).toBeCloseTo(90 - Math.atan2(0.2706, 0.4687) * 180 / Math.PI, 4); // 59.99958°
+    // 同一枚 P-Point 若当第一击，是它的轴线（线 × 线）。
+    expect(lineAngleOperandFromGeometry({ position: [17.8997, -0.5, 17.6], direction: [0, 0, 1] }, 'first')?.kind).toBe('line');
   });
 });

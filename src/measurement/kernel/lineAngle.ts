@@ -257,6 +257,59 @@ export function snapLineAngleDegrees(angleDeg: number): number {
   return snapAngleDegrees(angleDeg);
 }
 
+/**
+ * Geometry a pick lends to the two-line angle (design metres): a line (facet edge / p-line /
+ * axis / element `line()`), a plane (facet / aid plane), or a bare point with a direction
+ * (P-point / design point). `picked` is where the user picked (`EDGPOSITIONDATA.position`).
+ */
+export type LineAnglePickGeometry = Readonly<{
+  segment?: Readonly<{ start: PickVec3; end: PickVec3 }> | null;
+  plane?: Readonly<{ position: PickVec3; normal: PickVec3 }> | null;
+  position?: PickVec3 | null;
+  direction?: PickVec3 | null;
+  picked?: PickVec3 | null;
+}>;
+
+/**
+ * `radius2Lines(base, reference)` reads `reference.line` and `reference.plane` — the members
+ * E3D's `EDGPOSITIONDATA.line()` / `.plane()` accessors fill from `getLine()` / `getPlane()`.
+ * A **line** pick (edge / p-line / axis / element `line()`) is a LINE for both roles; a **facet**
+ * (or aid plane) is a PLANE. A bare point that carries a direction (P-point, design point) is a
+ * LINE for the first pick (`getLine()`: the P-point axis, same as the Intersect conversion) but
+ * a **PLANE** for the second pick — `EDGPOSITIONDATA.getPlane()` has explicit branches
+ * `PPOINT → PLANE(pPosition, Z is pDirection)` and `DPOINT → PLANE(dpps, Z is dpdir)`
+ * (`edgpositiondata.pmlobj` 421–608), the same plane Perpendicular-to uses for a design point
+ * (golden MD §29). E3D itself only offers `FACET EDGE` on that pick, so admitting P-points /
+ * design points there is a Web extension; this is the E3D conversion it follows
+ * (golden MD §30「补采」, 2026-09-16). Unconvertible → `null`.
+ */
+export function lineAngleOperandFromGeometry(
+  input: LineAnglePickGeometry,
+  role: 'first' | 'second',
+): LineAngleReferenceOperand | null {
+  const finite = (v: PickVec3 | null | undefined): v is PickVec3 => !!v && v.length === 3 && v.every(Number.isFinite);
+  const lengthSq = (v: PickVec3) => v[0] * v[0] + v[1] * v[1] + v[2] * v[2];
+  if (input.segment && finite(input.segment.start) && finite(input.segment.end)) {
+    const d = sub(input.segment.end, input.segment.start);
+    if (lengthSq(d) > DEGENERATE_LENGTH_SQ) {
+      const picked = finite(input.picked) ? input.picked : input.segment.start;
+      return { kind: 'line', start: input.segment.start, end: input.segment.end, picked };
+    }
+  }
+  if (input.plane && finite(input.plane.position) && finite(input.plane.normal) && lengthSq(input.plane.normal) > DEGENERATE_LENGTH_SQ) {
+    return { kind: 'plane', position: input.plane.position, normal: input.plane.normal };
+  }
+  if (finite(input.position) && finite(input.direction) && lengthSq(input.direction) > DEGENERATE_LENGTH_SQ) {
+    if (role === 'second') {
+      return { kind: 'plane', position: input.position, normal: input.direction };
+    }
+    const [x, y, z] = input.position;
+    const [dx, dy, dz] = input.direction;
+    return { kind: 'line', start: input.position, end: [x + dx, y + dy, z + dz], picked: input.position };
+  }
+  return null;
+}
+
 function finishArc(input: Readonly<{
   kind: LineAngleValues['kind'];
   root: PickVec3;

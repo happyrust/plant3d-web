@@ -118,6 +118,7 @@ import {
 import {
   buildLineAngle,
   lineAngleArmEnd,
+  lineAngleOperandFromGeometry,
   type LineAngleLineOperand,
   type LineAngleReferenceOperand,
   type LineAngleValues,
@@ -1948,16 +1949,24 @@ export function useXeokitMeasurementTools(options: {
   }
 
   /**
-   * 把这一击换成两线夹角的操作数（设计 World）。线 / 面的分型与 Intersect 同一条路
-   * （`intersectOperandFromHit`：Graphics 边 / PLINE / 轴线 → LINE，Graphics 面 → PLANE，带方向的点 → 过该点的线）；
+   * 把这一击换成两线夹角的操作数（设计 World，内核 `lineAngleOperandFromGeometry`）：Graphics 边 / PLINE / 轴线 /
+   * 元素 `line()` → LINE，Graphics 面 / Aid 面 → PLANE；**带方向的点**（P-Point / DPOINT）第一击是过该点的线（`getLine()`，同 Intersect），
+   * **第二击是过该点、Z 沿其方向的面**（E3D `EDGPOSITIONDATA.getPlane()` 的 PPOINT / DPOINT 分支，同 §29 Perpendicular to 的取法）。
    * 线操作数另带用户拾中的位置（E3D `EDGPOSITIONDATA.position`，决定臂朝哪一侧）。
    */
-  function lineAngleOperandFromHit(hit: PickHit): LineAngleReferenceOperand | null {
-    const operand = intersectOperandFromHit(hit);
-    if (!operand) return null;
-    if (operand.kind === 'plane') return { kind: 'plane', position: operand.position, normal: operand.normal };
-    const picked = vec3ToTuple(sceneWorldToDesignMeters(hit.worldPos, dtxLayerRef));
-    return { kind: 'line', start: operand.start, end: operand.end, picked };
+  function lineAngleOperandFromHit(hit: PickHit, role: 'first' | 'second'): LineAngleReferenceOperand | null {
+    const toDesign = (v: Vector3): PickVec3 => vec3ToTuple(sceneWorldToDesignMeters(v, dtxLayerRef));
+    const toDesignDir = (origin: Vector3, v: Vector3): PickVec3 => vec3ToTuple(sceneDirectionToDesign(origin, v, dtxLayerRef));
+    const line = hit.segment ?? hit.elementLine ?? null;
+    return lineAngleOperandFromGeometry({
+      segment: line ? { start: toDesign(line.start), end: toDesign(line.end) } : null,
+      plane: hit.plane
+        ? { position: toDesign(hit.plane.position), normal: toDesignDir(hit.plane.position, hit.plane.normal) }
+        : null,
+      position: toDesign(hit.worldPos),
+      direction: hit.direction ? toDesignDir(hit.worldPos, hit.direction) : null,
+      picked: toDesign(hit.worldPos),
+    }, role);
   }
 
   /** 由内核算出的设计 World 位置合成测量点（`worldPos` 换回场景坐标，来源信息沿用那一击）。 */
@@ -2006,7 +2015,7 @@ export function useXeokitMeasurementTools(options: {
       requestRender?.();
       return;
     }
-    const operand = lineAngleOperandFromHit(hit);
+    const operand = lineAngleOperandFromHit(hit, lineAnglePending ? 'second' : 'first');
     const label = lineAngleOperandLabel(hit);
     if (!lineAnglePending) {
       if (!operand || operand.kind !== 'line') {
@@ -3139,7 +3148,7 @@ export function useXeokitMeasurementTools(options: {
     }
     if (isTwoLineAngleMode()) {
       // 两线夹角只认线 / 面：给不出线 / 面几何的候选提前说明，免得点下去被拒。
-      const convertible = hit ? lineAngleOperandFromHit(hit) : null;
+      const convertible = hit ? lineAngleOperandFromHit(hit, lineAnglePending ? 'second' : 'first') : null;
       const usable = lineAnglePending ? convertible !== null : convertible?.kind === 'line';
       return {
         title: usable ? (lineAnglePending ? '选第二条线 / 面' : '选第一条线') : '这一项不是线 / 面',
