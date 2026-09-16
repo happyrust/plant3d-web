@@ -1,0 +1,105 @@
+{
+  "capturedAt": "2026-09-16T02:18:37.677Z",
+  "url": "/?model_source=gen-model-v1&gm_backend_port=8022&show_refno=23714_1111",
+  "backend": "http://127.0.0.1:8022 (gen-model-v1)",
+  "sceneOriginInDesign": [
+    0,
+    0,
+    0.343
+  ],
+  "dpoint": {
+    "dpca": "23714/1127",
+    "numb": "1",
+    "pos": "0, 0, -86",
+    "ori": "0, 0, 0",
+    "dppsM": [
+      0,
+      0,
+      -0.08600000000000001
+    ],
+    "dpdi": [
+      0,
+      0,
+      1
+    ],
+    "hoverLabel": "设计点 #1",
+    "hoverWorldPos": [
+      0,
+      0,
+      -0.08600000000000008
+    ]
+  },
+  "firstEdge": {
+    "objectId": "o:23714_1124:14",
+    "dir": [
+      0,
+      0,
+      -1
+    ],
+    "hoverWorldPos": [
+      0.02135000038146973,
+      0,
+      0.3862459200329496
+    ],
+    "screen": [
+      634.552829626225,
+      278.10253899111365
+    ],
+    "status1": "两线夹角 · 第 2/2 步 选择第二条线或面（第一条：SCTN 边） (Cursor) Snap : SCTN 边；点空白取消当前点选"
+  },
+  "rows": {
+    "angle": "90 Degrees",
+    "dms": "90° 0' 0''",
+    "direction1": "U",
+    "direction2": "E"
+  },
+  "lineAngle": {
+    "kind": "line-plane",
+    "angleDeg": 90,
+    "direction1": [
+      0,
+      0,
+      1
+    ],
+    "direction2": [
+      1,
+      0,
+      0
+    ],
+    "skew": false,
+    "inPlane": false,
+    "firstLabel": "SCTN 边",
+    "secondLabel": "设计点 #1（面）"
+  },
+  "record": {
+    "origin": [
+      0.02135000038146973,
+      0,
+      0.4139999999999999
+    ],
+    "corner": [
+      0.02135000038146973,
+      0,
+      -0.08600000000000008
+    ],
+    "target": [
+      0.5213500003814697,
+      0,
+      -0.08600000000000008
+    ],
+    "originLabel": "SCTN 边",
+    "cornerLabel": "线与面的交点",
+    "targetLabel": "设计点 #1",
+    "approximate": true
+  },
+  "independent": {
+    "expectedAngleDeg": 90,
+    "root": [
+      0.02135000038146973,
+      0,
+      -0.08600000000000002
+    ],
+    "cornerErrM": 5.551115123125783e-17
+  },
+  "pageErrors": []
+}

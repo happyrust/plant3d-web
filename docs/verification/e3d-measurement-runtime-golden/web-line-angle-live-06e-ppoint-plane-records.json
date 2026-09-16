@@ -1,0 +1,408 @@
+{
+  "capturedAt": "2026-09-16T02:16:06.485Z",
+  "url": "/?model_source=gen-model-v1&gm_backend_port=8022&show_refno=24383_66662",
+  "backend": "http://127.0.0.1:8022 (gen-model-v1)",
+  "frame": "位置 / 方向均为设计 World（米，X=E Y=N Z=U）；P-Point 位置与方向直接来自 gen-model element/ptset（世界 mm → 米）",
+  "sceneOriginInDesign": [
+    18.132119140625,
+    1.4021731872558594,
+    17.720509765625
+  ],
+  "axis": {
+    "from": {
+      "refno": "24383_66672",
+      "number": 1,
+      "designM": [
+        17.89966,
+        0.23283827724953068,
+        17.820364138624765
+      ],
+      "dir": [
+        -5.302876193624534e-17,
+        -0.8660254037844386,
+        0.5000000000000001
+      ]
+    },
+    "to": {
+      "refno": "24383_66671",
+      "number": 2,
+      "designM": [
+        17.89966,
+        -0.23590886423162577,
+        18.091
+      ],
+      "dir": [
+        5.302876193624534e-17,
+        0.8660254037844386,
+        -0.5000000000000001
+      ]
+    },
+    "dir": [
+      0,
+      -0.8660217453070228,
+      0.5000063366152252
+    ],
+    "lengthM": 0.5412648631761271,
+    "tubeObjectId": "o:24383_66662:5",
+    "tubeLabel": "轴线（ELBO P-Point #1 → FLAN P-Point #2）"
+  },
+  "results": {
+    "horizontal": {
+      "note": "VALV 24383/66676 P100（方向 U）→ 水平面：与 §30「管件路 · 水平面」Graphics 面同值 30.0004°",
+      "rows": {
+        "angle": "30 Degrees",
+        "dms": "30° 0' 1''",
+        "direction1": "S 30.00 U",
+        "direction2": "S"
+      },
+      "lineAngle": {
+        "kind": "line-plane",
+        "angleDeg": 30.00042,
+        "direction1": [
+          0,
+          -0.866021745307023,
+          0.5000063366152253
+        ],
+        "direction2": [
+          0,
+          -1,
+          0
+        ],
+        "skew": false,
+        "inPlane": false,
+        "firstLabel": "TUBI 轴线（ELBO P-Point #1 → FLAN P-Point #2）",
+        "secondLabel": "VALV P-Point #100（面）"
+      },
+      "record": {
+        "origin": [
+          17.89966,
+          -0.2688227610744669,
+          18.11000316830761
+        ],
+        "corner": [
+          17.89966,
+          0.1641881115790446,
+          17.86
+        ],
+        "target": [
+          17.89966,
+          -0.33581188842095544,
+          17.86
+        ],
+        "originLabel": "TUBI 轴线（ELBO P-Point #1 → FLAN P-Point #2）",
+        "cornerLabel": "线与面的交点",
+        "targetLabel": "VALV P-Point #100",
+        "approximate": true
+      },
+      "first": {
+        "label": "轴线（ELBO P-Point #1 → FLAN P-Point #2）",
+        "objectId": "o:24383_66662:5",
+        "worldPos": [
+          17.89966,
+          -0.0015352934910470145,
+          17.955682069312385
+        ],
+        "screen": [
+          640,
+          301.00000000000006
+        ],
+        "status": "两线夹角 · 第 2/2 步 选择第二条线或面（第一条：TUBI 轴线（ELBO P-Point #1 → FLAN P-Point #2）） (Cursor) Snap : TUBI 轴线（ELBO P-Point #1 → FLAN P-Point #2）；点空白取消当前点选",
+        "message": "两线夹角：已选第一条线 TUBI 轴线（ELBO P-Point #1 → FLAN P-Point #2），再选第二条线或面"
+      },
+      "second": {
+        "refno": "24383_66676",
+        "number": 100,
+        "noun": "VALV",
+        "apiDesignM": [
+          17.90066,
+          1.5987500000000001,
+          17.86
+        ],
+        "apiDir": [
+          0,
+          0,
+          1
+        ],
+        "hoverLabel": "P-Point #100",
+        "hoverWorldPos": [
+          17.900659999999995,
+          1.5987500000000003,
+          17.86
+        ],
+        "screen": [
+          640,
+          301.00000000000006
+        ],
+        "cam": {
+          "lookAt": [
+            17.90066,
+            1.5987500000000001,
+            17.86
+          ],
+          "direction": [
+            1,
+            0,
+            0
+          ],
+          "distanceM": 0.9
+        }
+      },
+      "independent": {
+        "normal": [
+          0,
+          0,
+          1
+        ],
+        "expectedAngleDeg": 30.00041922797424,
+        "root": [
+          17.89966,
+          0.16418811157904462,
+          17.86
+        ],
+        "cornerErrM": 2.7755575615628914e-17,
+        "cornerOnLineM": 1.3877787807814457e-17,
+        "cornerOnPlaneM": 0
+      }
+    },
+    "vertical": {
+      "note": "ELBO 24383/66672 P2（方向 N）→ 竖直面 = 法兰端面所在平面：与 §30「管件路 · 竖直面」同值 59.9996°",
+      "rows": {
+        "angle": "60 Degrees",
+        "dms": "59° 59' 58''",
+        "direction1": "S 30.00 U",
+        "direction2": "U"
+      },
+      "lineAngle": {
+        "kind": "line-plane",
+        "angleDeg": 59.99958,
+        "direction1": [
+          0,
+          -0.866021745307023,
+          0.5000063366152253
+        ],
+        "direction2": [
+          0,
+          0,
+          1
+        ],
+        "skew": false,
+        "inPlane": false,
+        "firstLabel": "TUBI 轴线（ELBO P-Point #1 → FLAN P-Point #2）",
+        "secondLabel": "ELBO P-Point #2（面）"
+      },
+      "record": {
+        "origin": [
+          17.89966,
+          -0.12417259540398085,
+          18.02648794502411
+        ],
+        "corner": [
+          17.89966,
+          0.30883827724953067,
+          17.776484776716497
+        ],
+        "target": [
+          17.89966,
+          0.30883827724953067,
+          18.276484776716497
+        ],
+        "originLabel": "TUBI 轴线（ELBO P-Point #1 → FLAN P-Point #2）",
+        "cornerLabel": "线与面的交点",
+        "targetLabel": "ELBO P-Point #2",
+        "approximate": true
+      },
+      "first": {
+        "label": "轴线（ELBO P-Point #1 → FLAN P-Point #2）",
+        "objectId": "o:24383_66662:5",
+        "worldPos": [
+          17.89966,
+          -0.0015352934910470145,
+          17.955682069312385
+        ],
+        "screen": [
+          640,
+          301.00000000000006
+        ],
+        "status": "两线夹角 · 第 2/2 步 选择第二条线或面（第一条：TUBI 轴线（ELBO P-Point #1 → FLAN P-Point #2）） (Cursor) Snap : TUBI 轴线（ELBO P-Point #1 → FLAN P-Point #2）；点空白取消当前点选",
+        "message": "两线夹角：已选第一条线 TUBI 轴线（ELBO P-Point #1 → FLAN P-Point #2），再选第二条线或面"
+      },
+      "second": {
+        "refno": "24383_66672",
+        "number": 2,
+        "noun": "ELBO",
+        "apiDesignM": [
+          17.89966,
+          0.30883827724953067,
+          17.8
+        ],
+        "apiDir": [
+          3.0616169978683836e-17,
+          1,
+          -2.220446049250313e-16
+        ],
+        "hoverLabel": "P-Point #2",
+        "hoverWorldPos": [
+          17.89966,
+          0.30883827724953067,
+          17.8
+        ],
+        "screen": [
+          640,
+          301.00000000000006
+        ],
+        "cam": {
+          "lookAt": [
+            17.89966,
+            0.30883827724953067,
+            17.8
+          ],
+          "direction": [
+            1,
+            0,
+            0
+          ],
+          "distanceM": 0.8
+        }
+      },
+      "independent": {
+        "normal": [
+          3.0616169978683836e-17,
+          1,
+          -2.220446049250313e-16
+        ],
+        "expectedAngleDeg": 59.99958077202576,
+        "root": [
+          17.89966,
+          0.30883827724953067,
+          17.776484776716497
+        ],
+        "cornerErrM": 0,
+        "cornerOnLineM": 9.210711918752955e-16,
+        "cornerOnPlaneM": 5.221428463709414e-18
+      }
+    },
+    "perpendicular": {
+      "note": "ELBO 24383/66672 P1（方向沿管线）→ 面 ⟂ 管线：90°，投影退化、Direction2 取世界轴投影（E3D 840–843 取 ORI X）",
+      "rows": {
+        "angle": "90 Degrees",
+        "dms": "89° 59' 58''",
+        "direction1": "S 30.00 U",
+        "direction2": "N 60.00 U"
+      },
+      "lineAngle": {
+        "kind": "line-plane",
+        "angleDeg": 89.99958,
+        "direction1": [
+          0,
+          -0.866021745307023,
+          0.5000063366152253
+        ],
+        "direction2": [
+          0,
+          0.5000000000381712,
+          0.8660254037624004
+        ],
+        "skew": false,
+        "inPlane": false,
+        "firstLabel": "TUBI 轴线（ELBO P-Point #1 → FLAN P-Point #2）",
+        "secondLabel": "ELBO P-Point #1（面）"
+      },
+      "record": {
+        "origin": [
+          17.89966,
+          -0.20017259540398083,
+          18.070367306932376
+        ],
+        "corner": [
+          17.89966,
+          0.23283827724953068,
+          17.820364138624765
+        ],
+        "target": [
+          17.89966,
+          0.4828382772686163,
+          18.253376840505965
+        ],
+        "originLabel": "TUBI 轴线（ELBO P-Point #1 → FLAN P-Point #2）",
+        "cornerLabel": "线与面的交点",
+        "targetLabel": "ELBO P-Point #1",
+        "approximate": true
+      },
+      "first": {
+        "label": "轴线（ELBO P-Point #1 → FLAN P-Point #2）",
+        "objectId": "o:24383_66662:5",
+        "worldPos": [
+          17.89966,
+          -0.0015352934910470145,
+          17.955682069312385
+        ],
+        "screen": [
+          640,
+          301.00000000000006
+        ],
+        "status": "两线夹角 · 第 2/2 步 选择第二条线或面（第一条：TUBI 轴线（ELBO P-Point #1 → FLAN P-Point #2）） (Cursor) Snap : TUBI 轴线（ELBO P-Point #1 → FLAN P-Point #2）；点空白取消当前点选",
+        "message": "两线夹角：已选第一条线 TUBI 轴线（ELBO P-Point #1 → FLAN P-Point #2），再选第二条线或面"
+      },
+      "second": {
+        "refno": "24383_66672",
+        "number": 1,
+        "noun": "ELBO",
+        "apiDesignM": [
+          17.89966,
+          0.23283827724953068,
+          17.820364138624765
+        ],
+        "apiDir": [
+          -5.302876193624534e-17,
+          -0.8660254037844386,
+          0.5000000000000001
+        ],
+        "hoverLabel": "P-Point #1",
+        "hoverWorldPos": [
+          17.89966,
+          0.23283827724953068,
+          17.820364138624765
+        ],
+        "screen": [
+          640,
+          301.00000000000006
+        ],
+        "cam": {
+          "lookAt": [
+            17.89966,
+            0.23283827724953068,
+            17.820364138624765
+          ],
+          "direction": [
+            1,
+            0,
+            0
+          ],
+          "distanceM": 0.8
+        }
+      },
+      "independent": {
+        "normal": [
+          -5.302876193624534e-17,
+          -0.8660254037844386,
+          0.5000000000000001
+        ],
+        "expectedAngleDeg": 89.99958077192717,
+        "root": [
+          17.89966,
+          0.23283827724953068,
+          17.820364138624765
+        ],
+        "cornerErrM": 0,
+        "cornerOnLineM": 0,
+        "cornerOnPlaneM": 0
+      }
+    }
+  },
+  "firstPickAsPPoint": {
+    "status": "两线夹角 · 第 2/2 步 选择第二条线或面（第一条：VALV P-Point #100） (Cursor) Snap : VALV P-Point #100；点空白取消当前点选",
+    "message": "两线夹角：已选第一条线 VALV P-Point #100，再选第二条线或面",
+    "hovered": "P-Point #100"
+  },
+  "pageErrors": []
+}
