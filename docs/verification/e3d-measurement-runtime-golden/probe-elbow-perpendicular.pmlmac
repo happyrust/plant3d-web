@@ -1,0 +1,103 @@
+-- probe-elbow-perpendicular.pmlmac : what does E3D's "Perpendicular to" really use for an ELBO / BEND?
+-- GMFARC.perpendicularToPoint (gmfarc.pmlobj 1911-1939) tries getLine(), then getPlane(), then falls back to
+-- point-to-point. EDGPOSITIONDATA.getPlane()'s ELEMENT branch (edgpositiondata.pmlobj 458-468) calls
+-- edgTypes.attribute(fullType).plane(item) -- and edgelbow.pmlobj / edgbend.pmlobj only define arc(); getArc()
+-- is not in the perpendicular path at all. If that reading is right, E3D measures the straight distance to the
+-- picked position, not the distance to the centreline arc plane (golden MD section 37 (1) assumed the latter).
+-- Read-only: local PML objects only, no database writes.
+!f = object FILE('D:/work/plant-code/old/plant3d-web/docs/verification/e3d-measurement-runtime-golden/e3d-arc-operand.trace.txt')
+!a = ARRAY()
+!a.append('==== probe-elbow-perpendicular phase 1 pick an ELBO')
+!elbos = ARRAY()
+var !elbos collect all ELBO
+!a.append('ELBO count=' & !elbos.size().string())
+!ref = !elbos[1]
+!dbRef = object DBREF(!ref)
+!a.append('elbo=' & !ref & ' type=' & !dbRef.fullType.upcase())
+!pos = !dbRef.position.wrt(world)
+!a.append('POS=' & !pos.string())
+!a.append('P1=' & !dbRef.pPosition[1].wrt(world).string())
+!a.append('P2=' & !dbRef.pPosition[2].wrt(world).string())
+!f.writeFile('APPEND', !a)
+
+!a = ARRAY()
+!a.append('==== phase 2 does the EDG type give a line / plane at all')
+!edg = object EDGELBOW()
+!l = !edg.line(!dbRef)
+handle any
+  !a.append('EDGELBOW.line(DBREF) error=' & !!error.text)
+elsehandle none
+  !a.append('EDGELBOW.line(DBREF) returned set=' & !l.set().string())
+endhandle
+!pl = !edg.plane(!dbRef)
+handle any
+  !a.append('EDGELBOW.plane(DBREF) error=' & !!error.text)
+elsehandle none
+  !a.append('EDGELBOW.plane(DBREF) returned set=' & !pl.set().string())
+endhandle
+!ar = !edg.arc(!dbRef)
+handle any
+  !a.append('EDGELBOW.arc(DBREF) error=' & !!error.text)
+elsehandle none
+  !a.append('EDGELBOW.arc(DBREF) radius=' & !ar.radius.string() & ' position=' & !ar.position.wrt(world).string())
+endhandle
+!f.writeFile('APPEND', !a)
+
+!a = ARRAY()
+!a.append('==== phase 3 EDGPOSITIONDATA for an ELEMENT pick on that elbow')
+!surface = !pos.offset(object DIRECTION('U'), 100)
+!a.append('pretend picked surface position=' & !surface.string())
+!pdElbo = object EDGPOSITIONDATA()
+!pdElbo.type = 'ELEMENT'
+!pdElbo.originalType = 'ELEMENT'
+!pdElbo.item = !dbRef
+!pdElbo.position = !surface
+!line2 = !pdElbo.getLine()
+handle any
+  !a.append('getLine() error=' & !!error.text)
+elsehandle none
+  !a.append('getLine() set=' & !line2.set().string())
+endhandle
+!plane2 = !pdElbo.getPlane()
+handle any
+  !a.append('getPlane() error=' & !!error.text)
+elsehandle none
+  !a.append('getPlane() set=' & !plane2.set().string())
+endhandle
+!arc2 = !pdElbo.getArc()
+handle any
+  !a.append('getArc() error=' & !!error.text)
+elsehandle none
+  !a.append('getArc() set=' & !arc2.set().string())
+endhandle
+!f.writeFile('APPEND', !a)
+
+!a = ARRAY()
+!a.append('==== phase 4 the real call: GMFARC.perpendicularToPoint(source, elbow)')
+!src = !pos.offset(object DIRECTION('E'), 2000)
+!src = !src.offset(object DIRECTION('N'), 1500)
+!a.append('source position=' & !src.string())
+!pdSrc = object EDGPOSITIONDATA()
+!pdSrc.type = 'POSITION'
+!pdSrc.originalType = 'POSITION'
+!pdSrc.position = !src
+!gmf = object GMFARC()
+!result = !gmf.perpendicularToPoint(!pdSrc, !pdElbo)
+handle any
+  !a.append('perpendicularToPoint error=' & !!error.text)
+  !f.writeFile('APPEND', !a)
+  return
+endhandle
+!a.append('result arc set=' & !result.set().string())
+!a.append('result radius (= the perpendicular distance E3D would show)=' & !result.radius.string())
+!a.append('result position (= the foot)=' & !result.position.wrt(world).string())
+!direct = !src.distance(!surface)
+!a.append('straight distance source -> picked surface position=' & !direct.string())
+!toPos = !src.distance(!pos)
+!a.append('straight distance source -> element POS=' & !toPos.string())
+!f.writeFile('APPEND', !a)
+
+!a = ARRAY()
+!a.append('==== probe-elbow-perpendicular end')
+!f.writeFile('APPEND', !a)
+return

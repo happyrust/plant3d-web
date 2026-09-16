@@ -1,0 +1,96 @@
+-- probe-elbow-perpendicular-v3.pmlmac : the golden MD section 37 case itself, straight from E3D.
+-- Elbow =24381/145121 (DN350, R 533, the one the Web measured), source = ATTA 145120 P3.
+-- Asks GMFARC.perpendicularToPoint exactly what the product asks it, for two picked positions
+-- (the arc mid-point, i.e. where the cursor sat in the Web run, and the element POS, i.e. what Snap gives),
+-- and prints the distance to the centreline arc plane next to it for comparison. Read-only, no loops.
+!f = object FILE('D:/work/plant-code/old/plant3d-web/docs/verification/e3d-measurement-runtime-golden/e3d-arc-operand.trace.txt')
+!a = ARRAY()
+!a.append('==== probe-elbow-perpendicular-v3 golden section 37 case')
+!dbRef = object DBREF('=24381/145121')
+!a.append('elbo=' & !dbRef.name & ' type=' & !dbRef.fullType.upcase())
+!pos = !dbRef.position.wrt(world)
+!a.append('POS=' & !pos.string())
+!a.append('P1=' & !dbRef.pPosition[1].wrt(world).string())
+!a.append('P2=' & !dbRef.pPosition[2].wrt(world).string())
+!a.append('ANGL=' & !dbRef.angle.string() & ' RADI=' & !dbRef.radius.string())
+!f.writeFile('APPEND', !a)
+
+!a = ARRAY()
+!edg = object EDGELBOW()
+!arc = !edg.arc(!dbRef)
+handle any
+  !a.append('arc(dbRef) error=' & !!error.text)
+  !f.writeFile('APPEND', !a)
+  return
+endhandle
+!a.append('arc centre=' & !arc.position.wrt(world).string() & ' radius=' & !arc.radius.string())
+!a.append('arc orientation=' & !arc.orientation.wrt(world).string())
+!a.append('arc start=' & !arc.startAngle.string() & ' end=' & !arc.endAngle.string())
+!f.writeFile('APPEND', !a)
+
+-- source: ATTA 145120 P3 as recorded in golden MD section 37 (design world mm)
+!a = ARRAY()
+!src = object POSITION('E 7400.402mm N -1874.288mm U 2641.29mm WRT /*')
+!a.append('source (ATTA 145120 P3)=' & !src.string())
+!pdSrc = object EDGPOSITIONDATA()
+!pdSrc.type = 'POSITION'
+!pdSrc.originalType = 'POSITION'
+!pdSrc.position = !src
+
+-- picked position 1: the arc mid-point (where the cursor sat in the Web run)
+!mid = !arc.anglePosition(0)
+!half = !arc.startAngle + !arc.endAngle
+!half = !half / 2
+!mid = !arc.anglePosition(!half)
+!a.append('picked 1 = arc mid-point=' & !mid.wrt(world).string())
+!pd1 = object EDGPOSITIONDATA()
+!pd1.type = 'ELEMENT'
+!pd1.originalType = 'ELEMENT'
+!pd1.item = !dbRef
+!pd1.position = !mid
+!a.append('pd1.getLine() set=' & !pd1.getLine().set().string())
+!a.append('pd1.getPlane() set=' & !pd1.getPlane().set().string())
+!a.append('pd1.getArc() set=' & !pd1.getArc().set().string())
+!f.writeFile('APPEND', !a)
+
+!a = ARRAY()
+!gmf = object GMFARC()
+!r1 = !gmf.perpendicularToPoint(!pdSrc, !pd1)
+handle any
+  !a.append('perpendicularToPoint(pick=arc mid) error=' & !!error.text)
+elsehandle none
+  !a.append('perpendicularToPoint(pick=arc mid) distance=' & !r1.radius.string())
+  !a.append('perpendicularToPoint(pick=arc mid) foot=' & !r1.position.wrt(world).string())
+endhandle
+!d1 = !src.distance(!mid)
+!a.append('straight source -> arc mid=' & !d1.string())
+!f.writeFile('APPEND', !a)
+
+-- picked position 2: the element origin (what Snap on an ELEMENT falls back to)
+!a = ARRAY()
+!pd2 = object EDGPOSITIONDATA()
+!pd2.type = 'ELEMENT'
+!pd2.originalType = 'ELEMENT'
+!pd2.item = !dbRef
+!pd2.position = !pos
+!r2 = !gmf.perpendicularToPoint(!pdSrc, !pd2)
+handle any
+  !a.append('perpendicularToPoint(pick=POS) error=' & !!error.text)
+elsehandle none
+  !a.append('perpendicularToPoint(pick=POS) distance=' & !r2.radius.string())
+  !a.append('perpendicularToPoint(pick=POS) foot=' & !r2.position.wrt(world).string())
+endhandle
+!d2 = !src.distance(!pos)
+!a.append('straight source -> POS=' & !d2.string())
+!f.writeFile('APPEND', !a)
+
+-- for comparison: the distance to the plane of the centreline arc (what the Web measures since c4f20bd)
+!a = ARRAY()
+!plane = object PLANE(!arc.position, !arc.orientation)
+!foot = !plane.near(!src)
+!a.append('foot on the centreline arc plane=' & !foot.wrt(world).string())
+!d3 = !src.distance(!foot)
+!a.append('distance to the centreline arc plane (Web since c4f20bd)=' & !d3.string())
+!a.append('==== probe-elbow-perpendicular-v3 end')
+!f.writeFile('APPEND', !a)
+return

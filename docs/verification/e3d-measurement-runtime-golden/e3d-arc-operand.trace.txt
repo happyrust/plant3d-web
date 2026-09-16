@@ -1,0 +1,198 @@
+﻿hello from probe-hello
+==== probe-arc-sweep phase 1 build
+full radius=500 start=0 end=360
+quarter radius=500 start=0 end=90
+full position=E 10000mm N 10000mm U 15000mm WRT /*
+full orientation=Y is N WRT /* and Z is U WRT /*
+anglePosition 0=E 10500mm N 10000mm U 15000mm WRT /*
+anglePosition 90=E 10000mm N 10500mm U 15000mm WRT /*
+anglePosition 180=E 9500mm N 10000mm U 15000mm WRT /*
+anglePosition 270=E 10000mm N 9500mm U 15000mm WRT /*
+==== probe-arc-sweep phase 2 line through the centre along E
+full size=2
+full angle=180 at=E 9500mm N 10000mm U 15000mm WRT /*
+full angle=0 at=E 10500mm N 10000mm U 15000mm WRT /*
+quarter size=2
+quarter angle=180 at=E 9500mm N 10000mm U 15000mm WRT /*
+quarter angle=0 at=E 10500mm N 10000mm U 15000mm WRT /*
+==== probe-arc-sweep phase 3 chord 400 south, tangent, clear, out of plane
+chord-south full size=2
+chord-south full angle=233.130102354156 at=E 9700mm N 9600mm U 15000mm WRT /*
+chord-south full angle=306.869897645844 at=E 10300mm N 9600mm U 15000mm WRT /*
+chord-south quarter size=2
+tangent full size=1
+tangent full angle=90 at=E 10000mm N 10500mm U 15000mm WRT /*
+clear full size=0
+above-plane-300 full size=2
+above-plane-300 full angle=180 at=E 9500mm N 10000mm U 15000mm WRT /*
+above-plane-300 full angle=0 at=E 10500mm N 10000mm U 15000mm WRT /*
+==== probe-arc-sweep phase 4 D7 ARC.intersection(PLANE, PLANE)
+planes built
+ARC.intersection(PLANE,PLANE) error=(2,779)   Method <ARC>.INTERSECTION(<PLANE>,<PLANE>) not found
+ARC.intersection(PLANE) error=(2,779)   Method <ARC>.INTERSECTION(<PLANE>) not found
+ARC.intersections(PLANE) size=2
+ARC.intersections(ARC) size=0
+==== probe-arc-sweep end
+==== probe-torus-arc phase 1 collect
+CTOR count=499
+RTOR count=1345
+probing=4
+---- =24381/46880
+fullType=CTORUS
+position=W 23321mm S 44236mm U 6615mm WRT /*
+orientation=Y is U WRT /* and Z is S WRT /*
+rins=40mm rout=60mm
+angle=90degree
+P1=W 23321mm S 44236mm U 6665mm WRT /*
+P2=W 23271mm S 44236mm U 6615mm WRT /*
+P3=W 23285.645mm S 44236mm U 6650.355mm WRT /*
+arc(dbRef) error=(2,751)   Variable !!EDGTYPES does not exist
+==== probe-torus-arc phase 1 collect
+CTOR count=499
+RTOR count=1345
+probing=4
+---- =24381/46880
+fullType=CTORUS
+position=W 23321mm S 44236mm U 6615mm WRT /*
+orientation=Y is U WRT /* and Z is S WRT /*
+rins=40mm rout=60mm
+angle=90degree
+P1=W 23321mm S 44236mm U 6665mm WRT /*
+P2=W 23271mm S 44236mm U 6615mm WRT /*
+P3=W 23285.645mm S 44236mm U 6650.355mm WRT /*
+arc(dbRef) error=(2,751)   Variable !!EDGTYPES does not exist
+==== probe-torus-arc-v2 phase 1 collect
+CTOR count=499 RTOR count=1345
+==== probe-torus-arc-v2 phase 1 collect
+CTOR count=499 RTOR count=1345
+==== probe-torus-arc-v2 phase 1 collect
+CTOR count=499 RTOR count=1345
+---- =24381/46880 CTORUS
+position=W 23321mm S 44236mm U 6615mm WRT /*
+orientation=Y is U WRT /* and Z is S WRT /*
+rins=40mm rout=60mm angle=90degree
+centreline radius (rins+rout)/2=50mm
+P1=W 23321mm S 44236mm U 6665mm WRT /*
+P2=W 23271mm S 44236mm U 6615mm WRT /*
+P3=W 23285.645mm S 44236mm U 6650.355mm WRT /*
+arc(dbRef) position=W 23321mm S 44236mm U 6615mm WRT /*
+arc(dbRef) radius=50.0000000000029mm start=359.999999999999degree end=449.999999999992degree
+arc(dbRef) orientation=Y is E WRT /* and Z is N WRT /*
+arc(dbRef) GMFARC.plane error=(2,779)   Method <GMFARC>.PLANE() not found
+==== probe-torus-arc-v2 phase 1 collect
+CTOR count=499 RTOR count=1345
+---- =24381/46880 CTORUS
+position=W 23321mm S 44236mm U 6615mm WRT /*
+orientation=Y is U WRT /* and Z is S WRT /*
+rins=40mm rout=60mm angle=90degree
+centreline radius (rins+rout)/2=50mm
+P1=W 23321mm S 44236mm U 6665mm WRT /*
+P2=W 23271mm S 44236mm U 6615mm WRT /*
+P3=W 23285.645mm S 44236mm U 6650.355mm WRT /*
+arc(dbRef) position=W 23321mm S 44236mm U 6615mm WRT /*
+arc(dbRef) radius=50.0000000000029mm start=359.999999999999degree end=449.999999999992degree
+arc(dbRef) orientation=Y is E WRT /* and Z is N WRT /*
+arc(dbRef) GMFARC.plane error=(2,779)   Method <GMFARC>.PLANE() not found
+==== probe-elbow-perpendicular phase 1 pick an ELBO
+ELBO count=1691
+elbo==24381/57393 type=ELBOW
+POS=E 9052.32mm S 24506.22mm U 37300mm WRT /*
+P1=E 11967.424mm S 22823.184mm U 37300mm WRT /*
+P2=E 8267.57mm S 24807.457mm U 37300mm WRT /*
+==== phase 2 does the EDG type give a line / plane at all
+EDGELBOW.line(DBREF) error=(2,779)   Method <EDGELBOW>.LINE(<DBREF>) not found
+EDGELBOW.plane(DBREF) error=(2,779)   Method <EDGELBOW>.PLANE(<DBREF>) not found
+EDGELBOW.arc(DBREF) error=(2,888)   Attempt to create invalid arc
+==== phase 3 EDGPOSITIONDATA for an ELEMENT pick on that elbow
+pretend picked surface position=E 9052.32mm S 24506.22mm U 37400mm WRT /*
+getLine() set=FALSE
+getPlane() set=FALSE
+getArc() set=FALSE
+==== phase 4 the real call: GMFARC.perpendicularToPoint(source, elbow)
+source position=E 11052.32mm S 23006.22mm U 37300mm WRT /*
+result arc set=TRUE
+result radius (= the perpendicular distance E3D would show)=2501.99920063936mm
+result position (= the foot)=E 9052.32mm S 24506.22mm U 37400mm WRT /*
+straight distance source -> picked surface position=2501.99920063936mm
+straight distance source -> element POS=2500mm
+==== probe-elbow-perpendicular end
+==== probe-elbow-perpendicular-v3 golden section 37 case
+elbo==24381/145121 type=ELBOW
+POS=E 7608.62mm S 1427.95mm U 2350mm WRT /*
+P1=E 7534.509mm S 1586.814mm U 2525.121mm WRT /*
+P2=E 7516.602mm S 1385.075mm U 2123.964mm WRT /*
+ANGL=49.8663degree RADI=0mm
+arc centre=E 7296.43mm S 1645.917mm U 2254.322mm WRT /* radius=355.999999999994mm
+arc orientation=Y is N 25.0095 E 44.9707 D WRT /* and Z is N 40.8313 W 22.2785 U WRT /*
+arc start=0 end=49.8663000000008degree
+source (ATTA 145120 P3)=E 7400.402mm S 1874.288mm U 2641.29mm WRT /*
+picked 1 = arc mid-point=E 7579.524mm S 1448.265mm U 2341.083mm WRT /*
+pd1.getLine() set=FALSE
+pd1.getPlane() set=FALSE
+pd1.getArc() set=FALSE
+perpendicularToPoint(pick=arc mid) distance=551.094343251565mm
+perpendicularToPoint(pick=arc mid) foot=E 7579.524mm S 1448.265mm U 2341.083mm WRT /*
+straight source -> arc mid=551.094343251565mm
+perpendicularToPoint(pick=POS) distance=572.208187522688mm
+perpendicularToPoint(pick=POS) foot=E 7608.62mm S 1427.95mm U 2350mm WRT /*
+straight source -> POS=572.208187522688mm
+foot on the centreline arc plane=E 7354.361mm S 1821.007mm U 2670.14mm WRT /*
+distance to the centreline arc plane (Web since c4f20bd)=76.0982654617965mm
+==== probe-elbow-perpendicular-v3 end
+==== probe-torus-perpendicular
+ctor==24381/46880 type=CTORUS POS=W 23321mm S 44236mm U 6615mm WRT /*
+EDGCTORUS.line(DBREF) error=(2,779)   Method <EDGCTORUS>.LINE(<DBREF>) not found
+EDGCTORUS.plane(DBREF) error=(2,779)   Method <EDGCTORUS>.PLANE(<DBREF>) not found
+picked position (P3 on the centreline)=W 23285.645mm S 44236mm U 6650.355mm WRT /*
+getLine() set=FALSE
+getPlane() set=FALSE
+getArc() set=FALSE
+source=W 23321mm S 44236mm U 7115mm WRT /*
+perpendicular distance=465.987833468507mm
+foot=W 23285.645mm S 44236mm U 6650.355mm WRT /*
+straight source -> picked position=465.987833468507mm
+==== probe-torus-perpendicular end
+==== probe-edg-dispatch-v4 phase 0 globals
+undefined(!!edgTypes) before=TRUE
+undefined(!!appMathLib)=FALSE
+undefined(!!edgCntrl)=FALSE
+created !!edgTypes via EDGTYPES.globalInstance() (the product init path)
+undefined(!!edgTypes) after=FALSE
+---- v4 phase 1 ELBO =24381/145121 (the golden section 37 case)
+POS=E 7608.62mm S 1427.95mm U 2350mm WRT /*
+ANGL=49.8663degree RADI=0mm arrive=1 leave=2
+|POS->P1|=247.785290843323mm |POS->P2|=247.785290843323mm
+catref=/ASME_B16.9/A1/TYEGESSQQ type=SCOMPONENT
+parameter size=3
+parameter[1]=350
+parameter[2]=356
+parameter[3]=533
+E3D arc centre=E 7296.43mm S 1645.917mm U 2254.322mm WRT /* R=355.999999999994mm
+E3D arc start=0 end=49.8663000000008degree
+tangent at start=E 7559.12mm S 1534.058mm U 2466.966mm WRT /* dist to P1=82.2850087442867mm to P2=376.369390731666mm
+tangent at end=E 7547.16mm S 1399.313mm U 2199.027mm WRT /* dist to P1=376.369109235113mm to P2=82.2853345176429mm
+|POS->tangent at start|=165.500282099058mm   (compare |POS->P1| above)
+picked position = E3D arc mid-point=E 7579.524mm S 1448.265mm U 2341.083mm WRT /*
+ELBO getLine() set=FALSE
+ELBO getPlane() set=FALSE
+ELBO getArc() set=TRUE
+   getArc centre=E 7296.43mm S 1645.917mm U 2254.322mm WRT /* R=355.999999999994mm
+perpendicularToPoint(ELBO pick=arc mid) distance=551.094343251565mm foot=E 7579.524mm S 1448.265mm U 2341.083mm WRT /*
+straight source -> picked=551.094343251565mm
+---- v4 phase 2 CTOR =24381/46880
+POS=W 23321mm S 44236mm U 6615mm WRT /* rins=40mm rout=60mm tube radius=10mm
+arc(dbRef) centre=W 23321mm S 44236mm U 6615mm WRT /* R=50.0000000000029mm start=359.999999999999degree end=449.999999999992degree
+torus axis (Z)=S WRT /73
+pick A on-centreline P3=W 23285.645mm S 44236mm U 6650.355mm WRT /*
+pick B half-tube along axis=W 23285.645mm S 44241mm U 6650.355mm WRT /*
+pick C one-tube along axis=W 23285.645mm S 44246mm U 6650.355mm WRT /*
+arc(dbRef, pick A) centre=W 23321mm S 44236mm U 6615mm WRT /* R=50.0000000000029mm start=359.999999999999degree end=449.999999999992degree
+arc(dbRef, pick B) centre=W 23321mm S 44236mm U 6625mm WRT /* R=50.0000000000029mm start=359.999999999999degree end=449.999999999992degree
+arc(dbRef, pick C) centre=W 23321mm S 44236mm U 6625mm WRT /* R=50.0000000000029mm start=359.999999999999degree end=449.999999999992degree
+CTOR getLine() set=FALSE
+CTOR getPlane() set=FALSE
+CTOR getArc() set=TRUE
+   getArc centre=W 23321mm S 44236mm U 6615mm WRT /* R=50.0000000000029mm
+perpendicularToPoint(CTOR pick=P3) distance=465.987833468507mm foot=W 23285.645mm S 44236mm U 6650.355mm WRT /*
+straight source -> picked=465.987833468507mm
+==== probe-edg-dispatch-v4 end

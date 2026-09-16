@@ -1,0 +1,93 @@
+-- probe-elbow-perpendicular-v2.pmlmac : same question as v1, but on an elbow whose arc() really builds
+-- (v1 landed on one that raises (2,888) Attempt to create invalid arc). Shows that even when the centreline
+-- arc exists, EDGPOSITIONDATA.getPlane() stays unset and GMFARC.perpendicularToPoint falls through to
+-- point-to-point. Read-only.
+!f = object FILE('D:/work/plant-code/old/plant3d-web/docs/verification/e3d-measurement-runtime-golden/e3d-arc-operand.trace.txt')
+!a = ARRAY()
+!a.append('==== probe-elbow-perpendicular-v2 find an elbow with a valid arc')
+!elbos = ARRAY()
+var !elbos collect all ELBO
+!edg = object EDGELBOW()
+!chosen = ''
+!count = 0
+do !ref values !elbos
+  !count = !count + 1
+  if (!count gt 40) then
+    break
+  endif
+  !dbRef = object DBREF(!ref)
+  !ar = !edg.arc(!dbRef)
+  handle any
+    skip
+  endhandle
+  if (!ar.set()) then
+    !chosen = !ref
+    break
+  endif
+enddo
+!a.append('scanned=' & !count.string() & ' chosen=' & !chosen)
+!f.writeFile('APPEND', !a)
+
+!a = ARRAY()
+!dbRef = object DBREF(!chosen)
+!arc = !edg.arc(!dbRef)
+!pos = !dbRef.position.wrt(world)
+!a.append('elbo=' & !chosen & ' POS=' & !pos.string())
+!a.append('P1=' & !dbRef.pPosition[1].wrt(world).string())
+!a.append('P2=' & !dbRef.pPosition[2].wrt(world).string())
+!a.append('arc centre=' & !arc.position.wrt(world).string() & ' radius=' & !arc.radius.string())
+!a.append('arc orientation=' & !arc.orientation.wrt(world).string())
+!a.append('arc start=' & !arc.startAngle.string() & ' end=' & !arc.endAngle.string())
+!f.writeFile('APPEND', !a)
+
+!a = ARRAY()
+!surface = !pos.offset(object DIRECTION('U'), 100)
+!pdElbo = object EDGPOSITIONDATA()
+!pdElbo.type = 'ELEMENT'
+!pdElbo.originalType = 'ELEMENT'
+!pdElbo.item = !dbRef
+!pdElbo.position = !surface
+!a.append('picked surface position=' & !surface.string())
+!l = !pdElbo.getLine()
+!a.append('getLine() set=' & !l.set().string())
+!p = !pdElbo.getPlane()
+!a.append('getPlane() set=' & !p.set().string())
+!g = !pdElbo.getArc()
+!a.append('getArc() set=' & !g.set().string())
+if (!g.set()) then
+  !a.append('getArc() centre=' & !g.position.wrt(world).string() & ' radius=' & !g.radius.string())
+endif
+!f.writeFile('APPEND', !a)
+
+!a = ARRAY()
+!src = !pos.offset(object DIRECTION('E'), 2000)
+!src = !src.offset(object DIRECTION('N'), 1500)
+!pdSrc = object EDGPOSITIONDATA()
+!pdSrc.type = 'POSITION'
+!pdSrc.originalType = 'POSITION'
+!pdSrc.position = !src
+!gmf = object GMFARC()
+!result = !gmf.perpendicularToPoint(!pdSrc, !pdElbo)
+handle any
+  !a.append('perpendicularToPoint error=' & !!error.text)
+  !f.writeFile('APPEND', !a)
+  return
+endhandle
+!a.append('source=' & !src.string())
+!a.append('perpendicular distance E3D shows=' & !result.radius.string())
+!a.append('foot=' & !result.position.wrt(world).string())
+!d1 = !src.distance(!surface)
+!a.append('straight source -> picked position=' & !d1.string())
+!n = !arc.orientation.zDir()
+!v = !arc.position.wrt(world)
+!pl = object PLANE(!v, !arc.orientation)
+!d2 = !pl.near(!src)
+!a.append('foot on the centreline arc plane would be=' & !d2.wrt(world).string())
+!d3 = !src.distance(!d2)
+!a.append('distance to the centreline arc plane (what the Web now measures)=' & !d3.string())
+!f.writeFile('APPEND', !a)
+
+!a = ARRAY()
+!a.append('==== probe-elbow-perpendicular-v2 end')
+!f.writeFile('APPEND', !a)
+return

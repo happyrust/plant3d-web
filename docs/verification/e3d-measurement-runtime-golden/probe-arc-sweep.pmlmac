@@ -1,0 +1,111 @@
+-- probe-arc-sweep.pmlmac : does ARC.intersections() use the whole circle or only the swept arc,
+-- and what does ARC.intersection(PLANE, PLANE) do (prompt matrix D7)? Read-only; appends as it goes so a
+-- failure halfway still leaves the earlier phases in the trace.
+!f = object FILE('D:/work/plant-code/old/plant3d-web/docs/verification/e3d-measurement-runtime-golden/e3d-arc-operand.trace.txt')
+!a = ARRAY()
+!a.append('==== probe-arc-sweep phase 1 build')
+!centre = object POSITION('E 10000mm N 10000mm U 15000mm WRT /*')
+!ori = object ORIENTATION('Y is N and Z is U')
+!full = object ARC(!centre, !ori, 0, 360, 500, true)
+!quarter = object ARC(!centre, !ori, 0, 90, 500, true)
+!a.append('full radius=' & !full.radius.string() & ' start=' & !full.startAngle.string() & ' end=' & !full.endAngle.string())
+!a.append('quarter radius=' & !quarter.radius.string() & ' start=' & !quarter.startAngle.string() & ' end=' & !quarter.endAngle.string())
+!a.append('full position=' & !full.position.string())
+!a.append('full orientation=' & !full.orientation.string())
+!a.append('anglePosition 0=' & !full.anglePosition(0).string())
+!a.append('anglePosition 90=' & !full.anglePosition(90).string())
+!a.append('anglePosition 180=' & !full.anglePosition(180).string())
+!a.append('anglePosition 270=' & !full.anglePosition(270).string())
+!f.writeFile('APPEND', !a)
+
+!a = ARRAY()
+!a.append('==== probe-arc-sweep phase 2 line through the centre along E')
+!fromE = object POSITION('E 8000mm N 10000mm U 15000mm WRT /*')
+!toE = object POSITION('E 12000mm N 10000mm U 15000mm WRT /*')
+!lineE = object LINE(!fromE, !toE)
+!r1 = !full.intersections(!lineE)
+!a.append('full size=' & !r1.size().string())
+do !i indices !r1
+  !a.append('full angle=' & !r1[!i].string() & ' at=' & !full.anglePosition(!r1[!i]).string())
+enddo
+!r2 = !quarter.intersections(!lineE)
+!a.append('quarter size=' & !r2.size().string())
+do !i indices !r2
+  !a.append('quarter angle=' & !r2[!i].string() & ' at=' & !quarter.anglePosition(!r2[!i]).string())
+enddo
+!f.writeFile('APPEND', !a)
+
+!a = ARRAY()
+!a.append('==== probe-arc-sweep phase 3 chord 400 south, tangent, clear, out of plane')
+!fromS = object POSITION('E 8000mm N 9600mm U 15000mm WRT /*')
+!toS = object POSITION('E 12000mm N 9600mm U 15000mm WRT /*')
+!lineS = object LINE(!fromS, !toS)
+!r3 = !full.intersections(!lineS)
+!a.append('chord-south full size=' & !r3.size().string())
+do !i indices !r3
+  !a.append('chord-south full angle=' & !r3[!i].string() & ' at=' & !full.anglePosition(!r3[!i]).string())
+enddo
+!r4 = !quarter.intersections(!lineS)
+!a.append('chord-south quarter size=' & !r4.size().string())
+!fromT = object POSITION('E 8000mm N 10500mm U 15000mm WRT /*')
+!toT = object POSITION('E 12000mm N 10500mm U 15000mm WRT /*')
+!lineT = object LINE(!fromT, !toT)
+!r5 = !full.intersections(!lineT)
+!a.append('tangent full size=' & !r5.size().string())
+do !i indices !r5
+  !a.append('tangent full angle=' & !r5[!i].string() & ' at=' & !full.anglePosition(!r5[!i]).string())
+enddo
+!fromC = object POSITION('E 8000mm N 10900mm U 15000mm WRT /*')
+!toC = object POSITION('E 12000mm N 10900mm U 15000mm WRT /*')
+!lineC = object LINE(!fromC, !toC)
+!r6 = !full.intersections(!lineC)
+!a.append('clear full size=' & !r6.size().string())
+!fromU = object POSITION('E 8000mm N 10000mm U 15300mm WRT /*')
+!toU = object POSITION('E 12000mm N 10000mm U 15300mm WRT /*')
+!lineU = object LINE(!fromU, !toU)
+!r7 = !full.intersections(!lineU)
+!a.append('above-plane-300 full size=' & !r7.size().string())
+do !i indices !r7
+  !a.append('above-plane-300 full angle=' & !r7[!i].string() & ' at=' & !full.anglePosition(!r7[!i]).string())
+enddo
+!f.writeFile('APPEND', !a)
+
+!a = ARRAY()
+!a.append('==== probe-arc-sweep phase 4 D7 ARC.intersection(PLANE, PLANE)')
+!posA = object POSITION('E 10300mm N 10000mm U 15000mm WRT /*')
+!oriA = object ORIENTATION('Y is N and Z is E')
+!planeA = object PLANE(!posA, !oriA)
+!posB = object POSITION('E 10000mm N 10200mm U 15000mm WRT /*')
+!oriB = object ORIENTATION('Y is U and Z is N')
+!planeB = object PLANE(!posB, !oriB)
+!a.append('planes built')
+!f.writeFile('APPEND', !a)
+
+!a = ARRAY()
+!x = !full.intersection(!planeA, !planeB)
+handle any
+  !a.append('ARC.intersection(PLANE,PLANE) error=' & !!error.text)
+elsehandle none
+  !a.append('ARC.intersection(PLANE,PLANE) returned=' & !x.string())
+endhandle
+!y = !full.intersection(!planeA)
+handle any
+  !a.append('ARC.intersection(PLANE) error=' & !!error.text)
+elsehandle none
+  !a.append('ARC.intersection(PLANE) returned=' & !y.string())
+endhandle
+!z = !full.intersections(!planeA)
+handle any
+  !a.append('ARC.intersections(PLANE) error=' & !!error.text)
+elsehandle none
+  !a.append('ARC.intersections(PLANE) size=' & !z.size().string())
+endhandle
+!w = !full.intersections(!quarter)
+handle any
+  !a.append('ARC.intersections(ARC) error=' & !!error.text)
+elsehandle none
+  !a.append('ARC.intersections(ARC) size=' & !w.size().string())
+endhandle
+!a.append('==== probe-arc-sweep end')
+!f.writeFile('APPEND', !a)
+return

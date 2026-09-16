@@ -1,0 +1,102 @@
+-- probe-torus-arc-v2.pmlmac : same as probe-torus-arc.pmlmac, but builds the EDG type object locally
+-- (object EDGCTORUS() / EDGRTORUS()) instead of going through !!edgTypes, which this session has never
+-- created (the first run came back with (2,751) Variable !!EDGTYPES does not exist). Still read-only:
+-- no global is defined, nothing is written to the database.
+!f = object FILE('D:/work/plant-code/old/plant3d-web/docs/verification/e3d-measurement-runtime-golden/e3d-arc-operand.trace.txt')
+!a = ARRAY()
+!a.append('==== probe-torus-arc-v2 phase 1 collect')
+!ctors = ARRAY()
+var !ctors collect all CTOR
+!rtors = ARRAY()
+var !rtors collect all RTOR
+!a.append('CTOR count=' & !ctors.size().string() & ' RTOR count=' & !rtors.size().string())
+!refs = ARRAY()
+!refs.append(!ctors[1])
+!refs.append(!rtors[1])
+!f.writeFile('APPEND', !a)
+
+do !ref values !refs
+  !a = ARRAY()
+  !dbRef = object DBREF(!ref)
+  !type = !dbRef.fullType.upcase()
+  !a.append('---- ' & !ref & ' ' & !type)
+  !rins = !dbRef.rins
+  !rout = !dbRef.rout
+  !a.append('position=' & !dbRef.position.wrt(world).string())
+  !a.append('orientation=' & !dbRef.orientation.wrt(world).string())
+  !a.append('rins=' & !rins.string() & ' rout=' & !rout.string() & ' angle=' & !dbRef.angle.string())
+  !clRadius = !rins + !rout
+  !clRadius = !clRadius / 2
+  !a.append('centreline radius (rins+rout)/2=' & !clRadius.string())
+  !a.append('P1=' & !dbRef.pPosition[1].wrt(world).string())
+  !a.append('P2=' & !dbRef.pPosition[2].wrt(world).string())
+  !a.append('P3=' & !dbRef.pPosition[3].wrt(world).string())
+  !f.writeFile('APPEND', !a)
+
+  !a = ARRAY()
+  !edg = object EDGCTORUS()
+  if (!type eq 'RTORUS') then
+    !edg = object EDGRTORUS()
+  endif
+  !plain = !edg.arc(!dbRef)
+  handle any
+    !a.append('arc(dbRef) error=' & !!error.text)
+    !f.writeFile('APPEND', !a)
+    skip
+  endhandle
+  !a.append('arc(dbRef) position=' & !plain.position.wrt(world).string())
+  !a.append('arc(dbRef) radius=' & !plain.radius.string() & ' start=' & !plain.startAngle.string() & ' end=' & !plain.endAngle.string())
+  !a.append('arc(dbRef) orientation=' & !plain.orientation.wrt(world).string())
+  !gmf0 = object GMFARC(!plain)
+  !pl0 = !gmf0.plane()
+  handle any
+    !a.append('arc(dbRef) GMFARC.plane error=' & !!error.text)
+    elsehandle none
+    !a.append('arc(dbRef) GMFARC.plane position=' & !pl0.position.wrt(world).string() & ' direction=' & !pl0.direction().string())
+  endhandle
+  !f.writeFile('APPEND', !a)
+
+  -- what a surface pick hands EDGPOSITIONDATA.getArc(): on the centreline P3, and off the torus plane
+  !tubeR = !rout - !rins
+  !tubeR = !tubeR / 2
+  !halfTube = !tubeR / 2
+  !axis = !dbRef.orientation.zDirection()
+  !p3 = !dbRef.pPosition[3].wrt(world)
+  !names = ARRAY()
+  !names.append('on-centreline-P3')
+  !names.append('half-tube-off-plane')
+  !names.append('one-tube-off-plane')
+  !poss = ARRAY()
+  !poss.append(!p3)
+  !poss.append(!p3.offset(!axis, !halfTube))
+  !poss.append(!p3.offset(!axis, !tubeR))
+  !k = 0
+  do !name values !names
+    !k = !k + 1
+    !a = ARRAY()
+    !refPos = !poss[!k]
+    !a.append('-- refPosition ' & !name & ' = ' & !refPos.string())
+    !shifted = !edg.arc(!dbRef, !refPos)
+    handle any
+      !a.append('arc(dbRef,POSITION) error=' & !!error.text)
+      !f.writeFile('APPEND', !a)
+      skip
+    endhandle
+    !a.append('arc(dbRef,POSITION) position=' & !shifted.position.wrt(world).string())
+    !a.append('arc(dbRef,POSITION) radius=' & !shifted.radius.string() & ' start=' & !shifted.startAngle.string() & ' end=' & !shifted.endAngle.string())
+    !a.append('arc(dbRef,POSITION) orientation=' & !shifted.orientation.wrt(world).string())
+    !gmf = object GMFARC(!shifted)
+    !pl = !gmf.plane()
+    handle any
+      !a.append('GMFARC.plane error=' & !!error.text)
+      elsehandle none
+      !a.append('GMFARC.plane position=' & !pl.position.wrt(world).string() & ' direction=' & !pl.direction().string())
+    endhandle
+    !f.writeFile('APPEND', !a)
+  enddo
+enddo
+
+!a = ARRAY()
+!a.append('==== probe-torus-arc-v2 end')
+!f.writeFile('APPEND', !a)
+return

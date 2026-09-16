@@ -1,0 +1,286 @@
+-- probe-edg-dispatch-v4.pmlmac : closes the !!edgTypes confound in the 00:0x run and finishes the two
+-- pieces that run aborted on.
+--
+-- Why: EDGPOSITIONDATA.getLine() / getPlane() / getArc() reach the EDG type objects only through
+-- !!edgTypes.attribute(fullType), and every one of those calls sits inside a swallow-all `handle any`.
+-- That global did not exist in this session (the first torus probe came back with
+-- (2,751) Variable !!EDGTYPES does not exist), so the three `set=FALSE` readings from 00:0x cannot tell
+-- "the EDG type has no such method" apart from "the global was missing". This macro creates the global
+-- the way the product does (EDGTYPES.globalInstance(), edgtypes.pmlobj 149-164) and asks again.
+--
+-- Also finishes: (a) EDGCTORUS.arc(DBREF, POSITION) for three picked positions -- probe-torus-arc-v2
+-- aborted before it on `orientation.zDirection()`, which is not a method (it is .zDir(), 384 uses in
+-- PMLLIB); (b) where E3D's elbow arc actually touches, i.e. whether parameter[2] is the centreline
+-- bend radius.
+--
+-- Read-only against the database: queries + one global object factory + file appends. No picking, no
+-- form, no view change, no DB write.
+!f = object FILE('D:/work/plant-code/old/plant3d-web/docs/verification/e3d-measurement-runtime-golden/e3d-arc-operand.trace.txt')
+
+!a = ARRAY()
+!a.append('==== probe-edg-dispatch-v4 phase 0 globals')
+!before = undefined(!!edgTypes)
+!a.append('undefined(!!edgTypes) before=' & !before.string())
+!hasMath = undefined(!!appMathLib)
+!a.append('undefined(!!appMathLib)=' & !hasMath.string())
+!hasCntrl = undefined(!!edgCntrl)
+!a.append('undefined(!!edgCntrl)=' & !hasCntrl.string())
+!f.writeFile('APPEND', !a)
+
+!a = ARRAY()
+if (!before) then
+  !t = object EDGTYPES()
+  handle any
+    !a.append('object EDGTYPES() error=' & !!error.text)
+    !f.writeFile('APPEND', !a)
+    return
+  endhandle
+  !t.globalInstance()
+  handle any
+    !a.append('globalInstance() error=' & !!error.text)
+  elsehandle none
+    !a.append('created !!edgTypes via EDGTYPES.globalInstance() (the product init path)')
+  endhandle
+endif
+!after = undefined(!!edgTypes)
+!a.append('undefined(!!edgTypes) after=' & !after.string())
+!f.writeFile('APPEND', !a)
+
+-- ---------------------------------------------------------------- phase 1 : ELBO =24381/145121
+!a = ARRAY()
+!a.append('---- v4 phase 1 ELBO =24381/145121 (the golden section 37 case)')
+!dbE = object DBREF('=24381/145121')
+!posE = !dbE.position.wrt(world)
+!p1 = !dbE.pPosition[1].wrt(world)
+!p2 = !dbE.pPosition[2].wrt(world)
+!angE = !dbE.angle
+!radE = !dbE.radius
+!a.append('POS=' & !posE.string())
+!a.append('ANGL=' & !angE.string() & ' RADI=' & !radE.string() & ' arrive=' & !dbE.arrive.string() & ' leave=' & !dbE.leave.string())
+!dP1 = !posE.distance(!p1)
+!dP2 = !posE.distance(!p2)
+!a.append('|POS->P1|=' & !dP1.string() & ' |POS->P2|=' & !dP2.string())
+!f.writeFile('APPEND', !a)
+
+!a = ARRAY()
+!cat = !dbE.catref
+handle any
+  !a.append('catref error=' & !!error.text)
+elsehandle none
+  !a.append('catref=' & !cat.name & ' type=' & !cat.fullType.upcase())
+endhandle
+!f.writeFile('APPEND', !a)
+
+!a = ARRAY()
+!pars = !dbE.parameter
+handle any
+  !a.append('parameter error=' & !!error.text)
+  !f.writeFile('APPEND', !a)
+elsehandle none
+  !np = !pars.size()
+  !a.append('parameter size=' & !np.string())
+  do !i indices !pars
+    !v = !pars[!i]
+    !a.append('parameter[' & !i.string() & ']=' & !v.string())
+  enddo
+  !f.writeFile('APPEND', !a)
+endhandle
+
+!a = ARRAY()
+!edgE = object EDGELBOW()
+!arcE = !edgE.arc(!dbE)
+handle any
+  !a.append('EDGELBOW.arc(dbRef) error=' & !!error.text)
+  !f.writeFile('APPEND', !a)
+  return
+endhandle
+!cenE = !arcE.position.wrt(world)
+!rE = !arcE.radius
+!saE = !arcE.startAngle
+!eaE = !arcE.endAngle
+!a.append('E3D arc centre=' & !cenE.string() & ' R=' & !rE.string())
+!a.append('E3D arc start=' & !saE.string() & ' end=' & !eaE.string())
+!tS = !arcE.anglePosition(!saE)
+!tE = !arcE.anglePosition(!eaE)
+!tSw = !tS.wrt(world)
+!tEw = !tE.wrt(world)
+!dTS1 = !tSw.distance(!p1)
+!dTS2 = !tSw.distance(!p2)
+!dTE1 = !tEw.distance(!p1)
+!dTE2 = !tEw.distance(!p2)
+!a.append('tangent at start=' & !tSw.string() & ' dist to P1=' & !dTS1.string() & ' to P2=' & !dTS2.string())
+!a.append('tangent at end=' & !tEw.string() & ' dist to P1=' & !dTE1.string() & ' to P2=' & !dTE2.string())
+!dPT = !posE.distance(!tSw)
+!a.append('|POS->tangent at start|=' & !dPT.string() & '   (compare |POS->P1| above)')
+!f.writeFile('APPEND', !a)
+
+-- the three dispatch questions, now with !!edgTypes in place
+!a = ARRAY()
+!half = !saE + !eaE
+!half = !half / 2
+!mid = !arcE.anglePosition(!half)
+!midw = !mid.wrt(world)
+!a.append('picked position = E3D arc mid-point=' & !midw.string())
+!pdE = object EDGPOSITIONDATA()
+!pdE.type = 'ELEMENT'
+!pdE.originalType = 'ELEMENT'
+!pdE.item = !dbE
+!pdE.position = !mid
+!lnE = !pdE.getLine()
+!setL = !lnE.set()
+!a.append('ELBO getLine() set=' & !setL.string())
+!plE = !pdE.getPlane()
+!setP = !plE.set()
+!a.append('ELBO getPlane() set=' & !setP.string())
+!gaE = !pdE.getArc()
+!setA = !gaE.set()
+!a.append('ELBO getArc() set=' & !setA.string())
+if (!setA) then
+  !gc = !gaE.position.wrt(world)
+  !gr = !gaE.radius
+  !a.append('   getArc centre=' & !gc.string() & ' R=' & !gr.string())
+endif
+!f.writeFile('APPEND', !a)
+
+!a = ARRAY()
+!src = object POSITION('E 7400.402mm N -1874.288mm U 2641.29mm WRT /*')
+!pdSrc = object EDGPOSITIONDATA()
+!pdSrc.type = 'POSITION'
+!pdSrc.originalType = 'POSITION'
+!pdSrc.position = !src
+!gmf = object GMFARC()
+!r1 = !gmf.perpendicularToPoint(!pdSrc, !pdE)
+handle any
+  !a.append('perpendicularToPoint(ELBO pick=arc mid) error=' & !!error.text)
+elsehandle none
+  !pr = !r1.radius
+  !pf = !r1.position.wrt(world)
+  !a.append('perpendicularToPoint(ELBO pick=arc mid) distance=' & !pr.string() & ' foot=' & !pf.string())
+endhandle
+!dsm = !src.distance(!midw)
+!a.append('straight source -> picked=' & !dsm.string())
+!f.writeFile('APPEND', !a)
+
+-- ---------------------------------------------------------------- phase 2 : CTOR =24381/46880
+!a = ARRAY()
+!a.append('---- v4 phase 2 CTOR =24381/46880')
+!dbC = object DBREF('=24381/46880')
+!posC = !dbC.position.wrt(world)
+!p3 = !dbC.pPosition[3].wrt(world)
+!rins = !dbC.rins
+!rout = !dbC.rout
+!tubeR = !rout - !rins
+!tubeR = !tubeR / 2
+!halfTube = !tubeR / 2
+!a.append('POS=' & !posC.string() & ' rins=' & !rins.string() & ' rout=' & !rout.string() & ' tube radius=' & !tubeR.string())
+!edgC = object EDGCTORUS()
+!arcC = !edgC.arc(!dbC)
+handle any
+  !a.append('EDGCTORUS.arc(dbRef) error=' & !!error.text)
+elsehandle none
+  !cc = !arcC.position.wrt(world)
+  !cr = !arcC.radius
+  !cs = !arcC.startAngle
+  !ce = !arcC.endAngle
+  !a.append('arc(dbRef) centre=' & !cc.string() & ' R=' & !cr.string() & ' start=' & !cs.string() & ' end=' & !ce.string())
+endhandle
+!f.writeFile('APPEND', !a)
+
+-- arc(DBREF, POSITION): the overload ELBO / BEND do not have.  Three picked positions, unrolled so one
+-- failure cannot take the rest with it.
+!a = ARRAY()
+!axis = !dbC.orientation.zDir()
+handle any
+  !a.append('orientation.zDir() error=' & !!error.text)
+  !f.writeFile('APPEND', !a)
+  return
+endhandle
+!a.append('torus axis (Z)=' & !axis.string())
+!q1 = !p3.offset(!axis, !halfTube)
+!q2 = !p3.offset(!axis, !tubeR)
+!a.append('pick A on-centreline P3=' & !p3.string())
+!a.append('pick B half-tube along axis=' & !q1.string())
+!a.append('pick C one-tube along axis=' & !q2.string())
+!f.writeFile('APPEND', !a)
+
+!a = ARRAY()
+!shA = !edgC.arc(!dbC, !p3)
+handle any
+  !a.append('arc(dbRef, pick A) error=' & !!error.text)
+elsehandle none
+  !sac = !shA.position.wrt(world)
+  !sar = !shA.radius
+  !sas = !shA.startAngle
+  !sae = !shA.endAngle
+  !a.append('arc(dbRef, pick A) centre=' & !sac.string() & ' R=' & !sar.string() & ' start=' & !sas.string() & ' end=' & !sae.string())
+endhandle
+!f.writeFile('APPEND', !a)
+
+!a = ARRAY()
+!shB = !edgC.arc(!dbC, !q1)
+handle any
+  !a.append('arc(dbRef, pick B) error=' & !!error.text)
+elsehandle none
+  !sbc = !shB.position.wrt(world)
+  !sbr = !shB.radius
+  !sbs = !shB.startAngle
+  !sbe = !shB.endAngle
+  !a.append('arc(dbRef, pick B) centre=' & !sbc.string() & ' R=' & !sbr.string() & ' start=' & !sbs.string() & ' end=' & !sbe.string())
+endhandle
+!f.writeFile('APPEND', !a)
+
+!a = ARRAY()
+!shC = !edgC.arc(!dbC, !q2)
+handle any
+  !a.append('arc(dbRef, pick C) error=' & !!error.text)
+elsehandle none
+  !scc = !shC.position.wrt(world)
+  !scr = !shC.radius
+  !scs = !shC.startAngle
+  !sce = !shC.endAngle
+  !a.append('arc(dbRef, pick C) centre=' & !scc.string() & ' R=' & !scr.string() & ' start=' & !scs.string() & ' end=' & !sce.string())
+endhandle
+!f.writeFile('APPEND', !a)
+
+!a = ARRAY()
+!pdC = object EDGPOSITIONDATA()
+!pdC.type = 'ELEMENT'
+!pdC.originalType = 'ELEMENT'
+!pdC.item = !dbC
+!pdC.position = !p3
+!lnC = !pdC.getLine()
+!setLC = !lnC.set()
+!a.append('CTOR getLine() set=' & !setLC.string())
+!plC = !pdC.getPlane()
+!setPC = !plC.set()
+!a.append('CTOR getPlane() set=' & !setPC.string())
+!gaC = !pdC.getArc()
+!setAC = !gaC.set()
+!a.append('CTOR getArc() set=' & !setAC.string())
+if (!setAC) then
+  !gcc = !gaC.position.wrt(world)
+  !gcr = !gaC.radius
+  !a.append('   getArc centre=' & !gcc.string() & ' R=' & !gcr.string())
+endif
+!f.writeFile('APPEND', !a)
+
+!a = ARRAY()
+!upDir = object DIRECTION('U')
+!srcC = !posC.offset(!upDir, 500)
+!pdSrcC = object EDGPOSITIONDATA()
+!pdSrcC.type = 'POSITION'
+!pdSrcC.originalType = 'POSITION'
+!pdSrcC.position = !srcC
+!r2 = !gmf.perpendicularToPoint(!pdSrcC, !pdC)
+handle any
+  !a.append('perpendicularToPoint(CTOR pick=P3) error=' & !!error.text)
+elsehandle none
+  !pr2 = !r2.radius
+  !pf2 = !r2.position.wrt(world)
+  !a.append('perpendicularToPoint(CTOR pick=P3) distance=' & !pr2.string() & ' foot=' & !pf2.string())
+endhandle
+!dsc = !srcC.distance(!p3)
+!a.append('straight source -> picked=' & !dsc.string())
+!a.append('==== probe-edg-dispatch-v4 end')
+!f.writeFile('APPEND', !a)
+return

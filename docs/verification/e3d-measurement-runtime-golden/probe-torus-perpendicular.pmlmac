@@ -1,0 +1,57 @@
+-- probe-torus-perpendicular.pmlmac : the same question as probe-elbow-perpendicular-v3, for a torus.
+-- CTOR =24381/46880 (rins 40 / rout 60 / 90 degrees). Does EDGCTORUS give getPlane() anything, or does
+-- GMFARC.perpendicularToPoint fall through to point-to-point here too? Read-only, no loops.
+!f = object FILE('D:/work/plant-code/old/plant3d-web/docs/verification/e3d-measurement-runtime-golden/e3d-arc-operand.trace.txt')
+!a = ARRAY()
+!a.append('==== probe-torus-perpendicular')
+!dbRef = object DBREF('=24381/46880')
+!pos = !dbRef.position.wrt(world)
+!a.append('ctor=' & !dbRef.name & ' type=' & !dbRef.fullType.upcase() & ' POS=' & !pos.string())
+!edg = object EDGCTORUS()
+!l = !edg.line(!dbRef)
+handle any
+  !a.append('EDGCTORUS.line(DBREF) error=' & !!error.text)
+elsehandle none
+  !a.append('EDGCTORUS.line(DBREF) set=' & !l.set().string())
+endhandle
+!pl = !edg.plane(!dbRef)
+handle any
+  !a.append('EDGCTORUS.plane(DBREF) error=' & !!error.text)
+elsehandle none
+  !a.append('EDGCTORUS.plane(DBREF) set=' & !pl.set().string())
+endhandle
+!f.writeFile('APPEND', !a)
+
+!a = ARRAY()
+!p3 = !dbRef.pPosition[3].wrt(world)
+!pd = object EDGPOSITIONDATA()
+!pd.type = 'ELEMENT'
+!pd.originalType = 'ELEMENT'
+!pd.item = !dbRef
+!pd.position = !p3
+!a.append('picked position (P3 on the centreline)=' & !p3.string())
+!a.append('getLine() set=' & !pd.getLine().set().string())
+!a.append('getPlane() set=' & !pd.getPlane().set().string())
+!a.append('getArc() set=' & !pd.getArc().set().string())
+!f.writeFile('APPEND', !a)
+
+!a = ARRAY()
+!src = !pos.offset(object DIRECTION('U'), 500)
+!pdSrc = object EDGPOSITIONDATA()
+!pdSrc.type = 'POSITION'
+!pdSrc.originalType = 'POSITION'
+!pdSrc.position = !src
+!gmf = object GMFARC()
+!r = !gmf.perpendicularToPoint(!pdSrc, !pd)
+handle any
+  !a.append('perpendicularToPoint error=' & !!error.text)
+elsehandle none
+  !a.append('source=' & !src.string())
+  !a.append('perpendicular distance=' & !r.radius.string())
+  !a.append('foot=' & !r.position.wrt(world).string())
+endhandle
+!d = !src.distance(!p3)
+!a.append('straight source -> picked position=' & !d.string())
+!a.append('==== probe-torus-perpendicular end')
+!f.writeFile('APPEND', !a)
+return
