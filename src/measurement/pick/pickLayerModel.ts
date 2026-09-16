@@ -248,12 +248,19 @@ function finiteOr(raw: unknown, fallback: number): number {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
-/** Normalise pick-type values: Fraction is an integer ≥ 1 (E3D `!!integerFmt`, `REAL.int()`). */
+/**
+ * Normalise pick-type values: each is kept **as typed** (E3D `EDGPOSCNTRL.setInput`
+ * stores the raw `gadget.val` into `pickTypesValue[n]`, `edgposcntrl.pmlobj` 1482);
+ * non-numeric input falls back to the E3D default. Fraction is deliberately not
+ * truncated / clamped here — E3D echoes the typed value in the prompt (`Fraction[2.5]`)
+ * and only the kernel takes `int()` (`GMFLINE.fraction`, `fractionAlongSegment`);
+ * prompt matrix D2, decided 2026-09-16 (supersedes `d-228`).
+ */
 export function normalizeMeasurementPickTypeValues(
   raw: Partial<Record<keyof MeasurementPickTypeValues, unknown>> | null | undefined,
 ): MeasurementPickTypeValues {
   const distanceMm = finiteOr(raw?.distanceMm, DEFAULT_MEASUREMENT_PICK_TYPE_VALUES.distanceMm);
-  const fraction = Math.max(1, Math.trunc(finiteOr(raw?.fraction, DEFAULT_MEASUREMENT_PICK_TYPE_VALUES.fraction)));
+  const fraction = finiteOr(raw?.fraction, DEFAULT_MEASUREMENT_PICK_TYPE_VALUES.fraction);
   const proportion = finiteOr(raw?.proportion, DEFAULT_MEASUREMENT_PICK_TYPE_VALUES.proportion);
   return { distanceMm, fraction, proportion };
 }
@@ -306,7 +313,9 @@ export function measurementPickTypePromptToken(
     case 'distance':
       return `Distance[${formatPromptReal(values.distanceMm)}]`;
     case 'fraction':
-      return `Fraction[${Math.max(1, Math.trunc(values.fraction))}]`;
+      // `'Fraction[' & pickTypesValue[4] & ']'` (`edgpicktype.pmlobj` 1889): the typed value
+      // as-is, no `int()` — that happens in the kernel only (prompt matrix D2).
+      return `Fraction[${formatPromptReal(values.fraction)}]`;
     case 'proportion':
       return `Proportion[${formatPromptReal(values.proportion)}]`;
     case 'intersect':

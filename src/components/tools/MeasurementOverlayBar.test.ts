@@ -554,6 +554,15 @@ describe('MeasurementOverlayBar', () => {
     expect(measurementStyle.state.measurementPickLayer.values.fraction).toBe(4);
     expect(host.querySelector('[data-testid="measurement-overlay-pick-layer-summary"]')?.textContent?.trim()).toBe('Graphics · Fraction');
 
+    // 提示矩阵 D2：非整数原样落库、原样回显（E3D pickTypesValue[4] = gadget.val），不再取整；int() 只在内核。
+    if (fractionInput) {
+      fractionInput.value = '2.5';
+      fractionInput.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+    await nextTick();
+    expect(measurementStyle.state.measurementPickLayer.values.fraction).toBe(2.5);
+    expect(fractionInput?.value).toBe('2.5');
+
     // 禁用项点击不生效。
     filterButton('external')?.click();
     await nextTick();

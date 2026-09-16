@@ -86,6 +86,18 @@ describe('measurementPickTypePromptToken / formatMeasurementPrompt · EDGSTATE.p
     expect(measurementPickTypePromptToken('intersect', values, 2)).toBe('Intersection[2]');
   });
 
+  it('Fraction[<v>] echoes the typed value like E3D `pickTypesValue[4]` (prompt matrix D2): no trunc, no clamp — only the kernel takes int()', () => {
+    const values = { distanceMm: 0, fraction: 2.5, proportion: 0.5 };
+    expect(measurementPickTypePromptToken('fraction', values)).toBe('Fraction[2.5]');
+    expect(measurementPickTypePromptToken('fraction', { ...values, fraction: 0.4 })).toBe('Fraction[0.4]');
+    // PML `REAL.string()`-like: integers stay bare, no trailing zeros.
+    expect(measurementPickTypePromptToken('fraction', { ...values, fraction: 3 })).toBe('Fraction[3]');
+    // Normalisation keeps the value as typed (string from the number input included); non-numeric → E3D default 2.
+    expect(normalizeMeasurementPickLayer({ pickType: 'fraction', values: { fraction: '2.5' } }).values.fraction).toBe(2.5);
+    expect(normalizeMeasurementPickLayer({ pickType: 'fraction', values: { fraction: 0.4 } }).values.fraction).toBe(0.4);
+    expect(normalizeMeasurementPickLayer({ pickType: 'fraction', values: { fraction: 'abc' } }).values.fraction).toBe(2);
+  });
+
   it('composes `<命令> · <步> (<拾取类型>) [Snap] : <目标><trailer>`', () => {
     expect(formatMeasurementPrompt({
       command: '距离测量',
@@ -155,9 +167,10 @@ describe('normalizeMeasurementPickLayer', () => {
     );
     expect(normalizeMeasurementPickLayer({ filter: 'aid' }).filter).toBe('aid');
     expect(normalizeMeasurementPickLayer({ pickType: 'intersect' }).pickType).toBe('intersect');
+    // Empty / non-numeric → E3D defaults; a numeric Fraction is kept as typed (prompt matrix D2), not clamped to ≥ 1.
     expect(normalizeMeasurementPickLayer({ values: { fraction: 0.2, distanceMm: '', proportion: 'x' } }).values).toEqual({
       distanceMm: 0,
-      fraction: 1,
+      fraction: 0.2,
       proportion: 0.5,
     });
   });

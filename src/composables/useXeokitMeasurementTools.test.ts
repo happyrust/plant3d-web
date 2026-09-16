@@ -2226,6 +2226,26 @@ describe('useXeokitMeasurementTools', () => {
       tools.dispose();
     });
 
+    it('Fraction 2.5（提示矩阵 D2）：提示条与派生记号原样出 `Fraction[2.5]`（E3D pickTypesValue[4]），位置仍按内核 int(2.5) = 2 等分吸分点', async () => {
+      const { store, measurementStyle, tools, clickAt } = await setupGraphicsTools();
+      measurementStyle.updateMeasurementPickLayer({ filter: 'graphics', pickType: 'fraction', values: { fraction: 2.5 } });
+      await nextTick();
+      expect(measurementStyle.state.measurementPickLayer.values.fraction).toBe(2.5);
+      expect(tools.statusText.value).toContain('(Fraction[2.5]) Snap :');
+
+      // 棱 x = 2.5（y 3.5 → 4.5），点在 y = 4.2：2 等分的分点 {3.5, 4.0, 4.5} 里最近的是 4.0；
+      // 若把 2.5 当 3（三等分 {3.5, 3.833, 4.167, 4.5}）会落 4.1667——提示写 2.5、内核量 2 段，与 E3D 同口径。
+      clickAt(148, 80);
+      const draft = store.currentXeokitDistanceDraft.value!;
+      expect(draft).not.toBeNull();
+      expect(draft.origin.worldPos[0]).toBeCloseTo(2.5, 6);
+      expect(draft.origin.worldPos[1]).toBeCloseTo(4.0, 6);
+      expect(draft.origin.worldPos[2]).toBeCloseTo(6.5, 6);
+      expect(draft.origin.sourceInfo?.label).toMatch(/ · Fraction\[2\.5\]$/);
+
+      tools.dispose();
+    });
+
     it('Intersect：两条棱（线 × 线）两次子拾取求出角点作为测量点；提示 Intersection[1]→[2]，Esc 先放弃子拾取', async () => {
       const { store, measurementStyle, tools, clickAt, hoverAt } = await setupGraphicsTools();
       measurementStyle.updateMeasurementPickLayer({ filter: 'graphics', pickType: 'intersect' });

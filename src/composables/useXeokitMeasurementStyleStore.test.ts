@@ -347,7 +347,8 @@ describe('useXeokitMeasurementStyleStore · measurementPickMode', () => {
       expect(layer.significantSnapPoints).toEqual({ fitting: false, joint: true, node: true });
     }
 
-    // 不可用的过滤器（External）/ 未知类型与非法取值：读回时回 E3D 缺省，Fraction 取整且 ≥ 1。
+    // 不可用的过滤器（External）/ 未知类型与非法取值：读回时回 E3D 缺省；Fraction 原样留着（非整数也留——E3D
+    // pickTypesValue[4] = gadget.val 口径，提示矩阵 D2），只有非数字才回缺省。
     const keys = Array.from({ length: localStorage.length }, (_, i) => localStorage.key(i)!);
     const v9Key = keys.find((key) => key.includes('measurement-style-v9'))!;
     localStorage.setItem(v9Key, JSON.stringify({
@@ -365,7 +366,7 @@ describe('useXeokitMeasurementStyleStore · measurementPickMode', () => {
     expect(useXeokitMeasurementStyleStore().state.measurementPickLayer).toEqual({
       filter: 'any',
       pickType: 'snap',
-      values: { distanceMm: 0, fraction: 1, proportion: 0.25 },
+      values: { distanceMm: 0, fraction: 0.4, proportion: 0.25 },
       significantSnaps: true,
       plineCut: false,
       significantSnapPoints: { fitting: false, joint: false, node: true },
