@@ -8,7 +8,7 @@
 > （`statusText` 2527–2608、`currentSnapTargetText`、`pickPointMessage` 各处）。
 > **证据等级**：E3D 一律 `static_expectation`（E3D 进程不在跑，字串照源码抄）；Web 字串照源码抄，并与 golden MD §35 / §30 补采实机截图里的提示条核过（`(Distance[100]) Snap : SCTN PLINE NA · Distance[100]`、
 > `(Intersection[3]) Snap : BOX 交点（预览）`、`两线夹角 · 第 2/2 步 选择第二条线或面（第一条：VALV P-Point #100） (Cursor) Snap : VALV P-Point #100；点空白取消当前点选`——后者是 D1 改前的截图，
-> `0c0d9eb` 起两线夹角不再带 `(Cursor) Snap`）。
+> `0c0d9eb` 起两线夹角不再带 `(Cursor) Snap`，改后的四态实机截图见 golden MD §30「补采（12:32 / 13:09）」）。
 > 2026-09-16 落成；差异见 §7。**D1 已拍板并改掉（用户 10:54，`0c0d9eb`）**：两线夹角提示按 E3D `stdGraphics` 口径去掉 `(token)` 与 ` Snap` 尾巴；D5 的 Web 文案同笔改掉，E3D 原文仍待采。
 
 ## 1. 提示的结构
@@ -121,7 +121,7 @@ E3D 换过滤器换的是 `EDGSTATE.pick`（`setPickType` 里定位拾取走 `se
 
 | # | 差异 | 影响 | 建议 |
 | --- | --- | --- | --- |
-| **D1** | 两线夹角（`measureLineAngleArc`）在 E3D 是 `stdGraphics` 拾取：`positioning = false`、EDGPICK 无 prompt → 提示是 `Measure angle between lines first line :`，**没有 `(token)` 也没有 ` Snap` 尾巴**；Web 两线夹角~~照定位拾取的模板出 `(Cursor) Snap`~~ | 两线夹角的提示条多一段与这一击无关的信息（拾取类型对 Graphics 边 / 面不起作用：面永远取射线 ∩ 面、线的控制点由内核按类型派生但两线夹角只用线本身） | **已拍板（用户 2026-09-16 10:54）并改掉 `0c0d9eb`**：`formatMeasurementPrompt` 加 `positioning?: boolean`（缺省 `true`），`false` 时省掉 `(token)` 段与 ` Snap` 旗标，Web 加的段（D3）不动；`statusText` 对两线夹角两步传 `false`，三点角 / 距离 / 垂距照旧。单测 `pickLayerModel.test.ts` +1、`useXeokitMeasurementTools.test.ts` +1（Cursor × Significant Snaps 开：两步都不带 `(Cursor)` / ` Snap`，切回三点角即恢复）。目标名（冒号后）仍照拾中项出，拾取类型对它的影响不变 |
+| **D1** | 两线夹角（`measureLineAngleArc`）在 E3D 是 `stdGraphics` 拾取：`positioning = false`、EDGPICK 无 prompt → 提示是 `Measure angle between lines first line :`，**没有 `(token)` 也没有 ` Snap` 尾巴**；Web 两线夹角~~照定位拾取的模板出 `(Cursor) Snap`~~ | 两线夹角的提示条多一段与这一击无关的信息（拾取类型对 Graphics 边 / 面不起作用：面永远取射线 ∩ 面、线的控制点由内核按类型派生但两线夹角只用线本身） | **已拍板（用户 2026-09-16 10:54）并改掉 `0c0d9eb`**：`formatMeasurementPrompt` 加 `positioning?: boolean`（缺省 `true`），`false` 时省掉 `(token)` 段与 ` Snap` 旗标，Web 加的段（D3）不动；`statusText` 对两线夹角两步传 `false`，三点角 / 距离 / 垂距照旧。单测 `pickLayerModel.test.ts` +1、`useXeokitMeasurementTools.test.ts` +1（Cursor × Significant Snaps 开：两步都不带 `(Cursor)` / ` Snap`，切回三点角即恢复）。目标名（冒号后）仍照拾中项出，拾取类型对它的影响不变。**实机 2026-09-16 12:32 采、13:09 复现**（golden MD §30「补采（12:32 / 13:09）」，`web-line-angle-live-06i-prompt-no-token-*`）：Cursor × Significant Snaps 全开，两线夹角两步都没有那两段，切回三点角即恢复 |
 | **D2** | `Fraction[<v>]`：E3D 原样出输入值（`2.5`），Web 出 `trunc` 后的整数 | 只在用户填非整数时可见 | 可不改：Web 的 `trunc` 与内核实际用的 `int(n)` 一致，提示更诚实；要严格照 E3D 就改成原样出 |
 | **D3** | Web 加的段：`第 i/n 步`、`（第一条 / 第一项：…）`回显、冒号后的目标名 / `等待捕捉（…）`、trailer、`已选…` / `求交已选…` 消息 | 结构不变，信息更多 | 保留为增强（决策 `d-444` 那一类 Web 取舍） |
 | **D4** | ` WP` / ` Offset` 尾巴 | Web 没有工作平面 / 偏移定位 | 不做（方案 §0 非目标） |
@@ -132,4 +132,4 @@ E3D 换过滤器换的是 `EDGSTATE.pick`（`setPickType` 里定位拾取走 `se
 
 结构 `<命令> <步> (<拾取类型>) [Snap] :` 与 E3D `EDGSTATE.prompt()` + `applyToView` 一致；三条定位拾取命令（Measure distance / perpendicular distance / angle）的**每一步**、七种拾取类型的 **token**、
 八个过滤器**不进提示**都逐条对上。Web 加的段（D3）不改结构；~~两线夹角多出的 `(token) Snap`（D1）是唯一一处 E3D 不会显示而 Web 显示的内容，待拍板~~ **D1 已拍板并改掉（`0c0d9eb`）**：两线夹角按 `stdGraphics`
-非定位拾取出 `<命令> <步> :`，现在没有一处 E3D 不显示而 Web 显示的段（D3 的 Web 加段除外）。D5 的 Web 文案同笔改掉；余 D2（可不改）、D4（不做）、D6（未做）与 E3D 原文 / 运行时截图对账（待 E3D 在跑，本文全部是 `static_expectation`）。
+非定位拾取出 `<命令> <步> :`，现在没有一处 E3D 不显示而 Web 显示的段（D3 的 Web 加段除外），改后的提示条已实机采过（golden MD §30「补采（12:32 / 13:09）」四态截图 + `records.json`）。D5 的 Web 文案同笔改掉；余 D2（可不改）、D4（不做）、D6（未做）与 E3D 原文 / 运行时截图对账（待 E3D 在跑，本文全部是 `static_expectation`）。

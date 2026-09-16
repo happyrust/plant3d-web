@@ -1351,6 +1351,28 @@ spec 先把相机拉到模型跟前；临时 spec 已删）：
   弧心与独立算的管线 ∩ 面差 ≤ 2.8e-17 m。⟂ 那组 89.99958° 不是内核问题，是同一条「设计数据量化」。四组页面错误 0；记录仍标「近似」——来自第一击的 TUBING 轴线 / Graphics 棱（网格派生），与本表其它行同。
 - 数值见 `web-line-angle-live-06e-ppoint-plane-records.json`（三组 P-Point）/ `web-line-angle-live-06h-dpoint-plane-records.json`（DPOINT）。
 
+**补采（2026-09-16 12:32 采、13:09 原样重跑复现，入库的是 13:09 那一版，`0c0d9eb`）：D1 改后的提示条**——两线夹角两步都不带 `(token)` 与 ` Snap`，同一条拾取层下三点角照旧带。环境同上那组
+（`?model_source=gen-model-v1&gm_backend_port=8022&show_refno=24383_66662`，`:8022` 上仍是 `gen-model-refactor` 的构建；E3D 模式 · 只留 P-Point 源 · Any 过滤器 × Cursor 拾取类型 · Significant Snaps 开），
+vite 由临时 playwright 配置在 **`:3103`** 自起一台关掉 HMR 的（`:3102` 那台是别的会话 `watch: ignored` 起的，不重读改过的 `src`）；临时 spec 与临时配置跑完即删。
+
+- **为什么补**：`0c0d9eb` 只有单测顶着（`pickLayerModel.test.ts` / `useXeokitMeasurementTools.test.ts` 各 +1），而提示条是给人看的东西，缺一张改后的实机图；且 `(Cursor)` 与 ` Snap` 分别由「拾取类型真选了 Cursor」
+  和「Significant Snaps 开」喂出来，两个开关都真开着时才验得出「该没有的两段真没有」。
+- **同一条拾取层下四态**（整句见 records.json 的 `prompts`；浮条状态格宽度有限，可见文字前缀是命令短名「角度」且末尾带 `…`，整句在它的 `title` 上，也印在画布底部那条提示行里——左端被竖排工具条压住一点）：
+
+| 态 | `statusText`（工具层整句） | 图 |
+| --- | --- | --- |
+| 三点角（`stdPosition`，对照组） | `角度测量 · 第 1/3 步 选择角度顶点 (Cursor) Snap : 等待捕捉（P-Point / 管身轴线（TUBING） / 设计点（DPOINT））` | `web-line-angle-live-06i-prompt-no-token-00-three-point-cursor-snap.png` / `…-00-…-bar.png` |
+| 两线夹角 第 1 步 | `两线夹角 · 第 1/2 步 选择第一条线 : 等待捕捉（P-Point / 管身轴线（TUBING） / 设计点（DPOINT））` | `…-01-step1-first-line.png` / `…-01-…-bar.png` |
+| 两线夹角 第 2 步（第一击拾中管身轴线后） | `两线夹角 · 第 2/2 步 选择第二条线或面（第一条：TUBI 轴线（ELBO P-Point #1 → FLAN P-Point #2）） : TUBI 轴线（…）；点空白取消当前点选` | `…-02-step2-second-line-or-plane.png` / `…-02-…-bar.png` |
+| 第二击落记录后回第 1 步 | `两线夹角 · 第 1/2 步 选择第一条线 : VALV P-Point #100` | `…-03-result.png` / `…-03-result-card.png` |
+| 切回三点角 | `角度测量 · 第 1/3 步 选择角度顶点 (Cursor) Snap : VALV P-Point #100` | — |
+
+- 四态都断言了不匹配 `\((Cursor|Snap|Mid-Point|Distance\[…\]|Fraction\[…\]|Proportion\[…\]|Intersection\[n\])\)`、不含 ` Snap`，浮条 `title` == `statusText`；中途换机位、悬停到 P-Point、第二击落地都不改结构。
+  两线夹角只在切回三点角时恢复 `(Cursor) Snap`——同一条拾取层、同一批开关，差的只是 `positioning`。
+- **顺带复走了上表「斜交 · P-Point 当面 · 水平」那一组**（管身轴线 × VALV `24383/66676` P-Point #100 当面）：`30 Degrees · 30° 0' 1'' · S 30.00 U · S`、`line-plane · angleDeg 30.00042`、弧心 `E 17899.66 N 164.188 U 17860`，
+  与独立期望 `90° − ∠(管线, U)` = 30.000419° 差 7.7e-7°，悬停点与 `element/ptset` 差 3.6e-15 m——与 10:15 那次同值，这一笔改的只是提示串。页面错误 0。
+- 整句与全部数值见 `web-line-angle-live-06i-prompt-no-token-records.json`。**没有改任何产品代码**。
+
 **单测**：`lineAngle.test.ts` 17 条（共面交点 / 拾中侧决定臂向 / 斜交 60° 与补角 120° / 异面弧心与 gap / 平行拒收 / 0.01° 平行容差两侧 / 弧心在段外的半径 / 500 mm 下限 / 拾中点在弧心 /
 臂端回灌三点内核同角；线 + 面一般解 / 投影臂朝拾中侧 / 线在面内 0° 弧 / 垂直 90° 与面内方向 / 平行于面拒收 / 未归一法向；退化输入），`xeokitMeasurementFormat.test.ts` 3 条（四行来自记录、0° 弧、摘要 / 复制值），
 `MeasurementResultInspector.test.ts` 1 条（开关 + 两线记录渲染）、`useXeokitMeasurementStyleStore.test.ts` 1 条（V9 持久化 / 脏值）、`unifiedMeasurement.test.ts` 1 条（往返）。
