@@ -1917,9 +1917,16 @@ export function useXeokitMeasurementTools(options: {
       pickPointMessage.value = null;
       return intersectionHit(hit, step.position);
     }
-    pickPointMessage.value = step.status === 'need-more'
-      ? intersectPendingText(step.session)
-      : `${step.message}${step.session.operands.length > 0 ? `；${intersectPendingText(step.session)}` : ''}`;
+    if (step.status === 'need-more') {
+      pickPointMessage.value = intersectPendingText(step.session);
+      return null;
+    }
+    // 被拒的一击对应 E3D 的 `!!alert.*`：2,870 / 2,874 是 warning（`alert.warning` / `messageFile.warning`），
+    // 「Unable to convert…」是 `alert.error`——写提示条之外再发 toast（决策 d-343）。
+    raiseMeasurementAlert(
+      `${step.message}${step.session.operands.length > 0 ? `；${intersectPendingText(step.session)}` : ''}`,
+      step.e3dCode ? 'warning' : 'error',
+    );
     return null;
   }
 
@@ -2056,9 +2063,10 @@ export function useXeokitMeasurementTools(options: {
     const first = lineAnglePending;
     const built = buildLineAngle(first.operand, operand);
     if (!built.ok) {
-      pickPointMessage.value = lineAngleFailureText(built.reason);
+      // E3D `gphanglemeasure` 的 `alert.error('An angular dimension could not be constructed …')`。
       clearLineAnglePending();
       clearHoverFeedback();
+      raiseMeasurementAlert(lineAngleFailureText(built.reason), 'error');
       syncFromStore();
       requestRender?.();
       return;
@@ -3996,11 +4004,15 @@ export function useXeokitMeasurementTools(options: {
       toDesignPoint(target, options.sceneWorldToDesignMetres),
     );
     if (!built.ok) {
-      pickPointMessage.value = built.reason === 'coincident-point'
-        ? '三点里有重合点，画不出角度尺寸（E3D：An angular dimension could not be constructed from the data selected）；已回到第 1 步'
-        : '三点共线（0° / 180°），画不出角度尺寸（E3D：An angular dimension could not be constructed from the data selected）；已回到第 1 步';
       store.clearCurrentXeokitDraft();
       clearHoverFeedback();
+      // E3D `radius3PointsNoError` 回未设 ARC → 窗体 `alert.error`（golden G6-03）。
+      raiseMeasurementAlert(
+        built.reason === 'coincident-point'
+          ? '三点里有重合点，画不出角度尺寸（E3D：An angular dimension could not be constructed from the data selected）；已回到第 1 步'
+          : '三点共线（0° / 180°），画不出角度尺寸（E3D：An angular dimension could not be constructed from the data selected）；已回到第 1 步',
+        'error',
+      );
       syncFromStore();
       requestRender?.();
       return;

@@ -33,6 +33,17 @@ describe('useXeokitMeasurementTools', () => {
     vi.resetModules();
   });
 
+  /**
+   * 收集 E3D `!!alert.*` 一级告警发出的 toast（`raiseMeasurementAlert` → ribbon `toastBus`）。
+   * 必须在 `vi.resetModules()` 之后、与被测 composable 同一轮动态 import，否则订到的是另一份模块实例。
+   */
+  async function captureToasts(): Promise<{ toasts: { message: string; level?: string }[]; stop: () => void }> {
+    const { onToast } = await import('@/ribbon/toastBus');
+    const toasts: { message: string; level?: string }[] = [];
+    const stop = onToast((payload) => { toasts.push({ ...payload }); });
+    return { toasts, stop };
+  }
+
   it('有 dimension system 时把 xeokit 测量写入外部尺寸快照，不再创建旧 Object3D', async () => {
     const [{ useToolStore }, { useXeokitMeasurementTools }, { AnnotationMaterials }] = await Promise.all([
       import('@/composables/useToolStore'),
@@ -2268,6 +2279,31 @@ describe('useXeokitMeasurementTools', () => {
       tools.dispose();
     });
 
+    it('两线夹角：两条平行棱造不出弧 → 不落记录、丢掉第一条线回第 1 步，E3D alert.error 那句走提示条 + error toast', async () => {
+      const { toasts, stop } = await captureToasts();
+      const { store, measurementStyle, tools, clickAt } = await setupGraphicsTools();
+      measurementStyle.updateMeasurementPickLayer({ filter: 'graphics', pickType: 'exact' });
+      store.setToolMode('xeokit_measure_angle');
+      measurementStyle.updateStyle({ angleMeasureVariant: 'two-line' });
+      await nextTick();
+
+      // 第一条：棱 x = 2.5（沿 Y）。「已选第一条线」是状态回显，不发 toast。
+      clickAt(148, 100);
+      expect(tools.pickPointMessage.value).toContain('已选第一条线');
+      expect(toasts).toEqual([]);
+
+      // 第二条：棱 x = 1.5（也沿 Y）→ 平行，`gmfArc.radius2Lines` 造不出弧。
+      clickAt(52, 100);
+      expect(store.xeokitAngleMeasurements.value).toHaveLength(0);
+      expect(tools.statusText.value).toMatch(/^两线夹角 · 第 1\/2 步 选择第一条线 : /);
+      expect(tools.pickPointMessage.value).toContain('两条线平行');
+      expect(tools.pickPointMessage.value).toContain('An angular dimension could not be constructed from the data selected');
+      expect(toasts).toEqual([{ message: tools.pickPointMessage.value, level: 'error' }]);
+
+      stop();
+      tools.dispose();
+    });
+
     it('Fraction 2.5（提示矩阵 D2）：提示条与派生记号原样出 `Fraction[2.5]`（E3D pickTypesValue[4]），位置仍按内核 int(2.5) = 2 等分吸分点', async () => {
       const { store, measurementStyle, tools, clickAt } = await setupGraphicsTools();
       measurementStyle.updateMeasurementPickLayer({ filter: 'graphics', pickType: 'fraction', values: { fraction: 2.5 } });
@@ -2289,6 +2325,7 @@ describe('useXeokitMeasurementTools', () => {
     });
 
     it('Intersect：两条棱（线 × 线）两次子拾取求出角点作为测量点；提示 Intersection[1]→[2]，Esc 先放弃子拾取', async () => {
+      const { toasts, stop } = await captureToasts();
       const { store, measurementStyle, tools, clickAt, hoverAt } = await setupGraphicsTools();
       measurementStyle.updateMeasurementPickLayer({ filter: 'graphics', pickType: 'intersect' });
       await nextTick();
@@ -2300,16 +2337,21 @@ describe('useXeokitMeasurementTools', () => {
       expect(tools.statusText.value).toContain('(Intersection[2]) Snap :');
       expect(tools.pickPointMessage.value).toContain('求交已选 1.');
       expect(tools.pickPointMessage.value).toContain('Intersection[2]');
+      // 「求交已选…」是状态回显，不是告警：不发 toast。
+      expect(toasts).toEqual([]);
 
       // 悬停到棱 y = 4.5（沿 X）：预览交点 (2.5, 4.5, 6.5)。
       hoverAt(100, 52);
       expect(tools.hoverSnapTarget.value?.label).toBe('交点（预览）');
 
-      // 平行棱（x = 1.5，沿 Y）→ E3D (2,870)，第一条线保留。
+      // 平行棱（x = 1.5，沿 Y）→ E3D (2,870) `alert.warning`，第一条线保留；提示条 + warning toast 同一句。
       clickAt(52, 100);
       expect(store.currentXeokitDistanceDraft.value).toBeNull();
       expect(tools.pickPointMessage.value).toContain('2,870');
       expect(tools.statusText.value).toContain('(Intersection[2]) Snap :');
+      expect(toasts).toEqual([{ message: tools.pickPointMessage.value, level: 'warning' }]);
+      expect(toasts[0]!.message).toContain('求交已选 1.');
+      stop();
 
       // 子拾取 2：棱 y = 4.5 → 交点 = 角点 (2.5, 4.5, 6.5) 成为起点。
       clickAt(100, 52);
@@ -2334,6 +2376,7 @@ describe('useXeokitMeasurementTools', () => {
     });
 
     it('Intersect：面 × 面要第三次子拾取（Intersection[3]）；面中的线与面平行被拒且不消耗', async () => {
+      const { toasts, stop } = await captureToasts();
       const { store, measurementStyle, tools, clickAt } = await setupGraphicsTools();
       measurementStyle.updateMeasurementPickLayer({ filter: 'graphics', pickType: 'intersect' });
       await nextTick();
@@ -2343,11 +2386,16 @@ describe('useXeokitMeasurementTools', () => {
       expect(tools.statusText.value).toContain('(Intersection[2]) Snap :');
       clickAt(110, 110);
       expect(tools.statusText.value).toContain('(Intersection[3]) Snap :');
-      // 第三项选 +Z 面上的棱：线在两个面里 → 无唯一交点（E3D 2,874），整个会话清空。
+      expect(toasts).toEqual([]);
+      // 第三项选 +Z 面上的棱：线在两个面里 → 无唯一交点（E3D 2,874 `messageFile.warning`），整个会话清空；warning toast。
       clickAt(148, 100);
       expect(store.currentXeokitDistanceDraft.value).toBeNull();
       expect(tools.pickPointMessage.value).toContain('2,874');
       expect(tools.statusText.value).toContain('(Intersection[1]) Snap :');
+      expect(toasts).toEqual([{ message: tools.pickPointMessage.value, level: 'warning' }]);
+      // 会话已清空：这句话后面不再拖「求交已选…」。
+      expect(toasts[0]!.message).not.toContain('求交已选');
+      stop();
 
       // 换拾取类型即放弃进行中的子拾取。
       clickAt(100, 100);
@@ -2872,6 +2920,7 @@ describe('useXeokitMeasurementTools', () => {
     }
 
     it('Intersect：拾中 CYLI 元素（表面点）按 E3D line() 当 P1 → P2 线求交，Any 与 Element 过滤器都成；ELBO 无 line() 被拒不消耗；无点的 CYLI / CONE 用局部几何', async () => {
+      const { toasts, stop } = await captureToasts();
       const { store, measurementStyle, tools, clickAt, hoverAndLoad, getObjectGeometryData, refnoD, refnoE, refnoF } = await setupElementLineTools();
       try {
         measurementStyle.updateMeasurementPickLayer({ filter: 'any', pickType: 'intersect' });
@@ -2898,12 +2947,16 @@ describe('useXeokitMeasurementTools', () => {
         expect(tools.statusText.value).toContain('(Intersection[1]) Snap :');
         store.clearCurrentXeokitDraft();
 
-        // ELBO 只有 arc()：E3D「Unable to convert item into a line or plane」，拒收且不消耗这一击。
+        // ELBO 只有 arc()：E3D「Unable to convert item into a line or plane」（`alert.error`），拒收且不消耗这一击；error toast。
+        expect(toasts).toEqual([]);
         await hoverAndLoad(40, 160);
         clickAt(40, 160);
         expect(store.currentXeokitDistanceDraft.value).toBeNull();
         expect(tools.pickPointMessage.value).toContain('无法转成线 / 面');
         expect(tools.statusText.value).toContain('(Intersection[1]) Snap :');
+        expect(toasts).toEqual([{ message: tools.pickPointMessage.value, level: 'error' }]);
+        expect(toasts[0]!.message).toContain('Unable to convert item into a line or plane');
+        stop();
 
         // Element 过滤器 × Intersect：表面点本不放行，但元素有 line() 时这一击就是元素拾取 → 同样求出 (2, 4, 6)。
         measurementStyle.updateMeasurementPickLayer({ filter: 'element', pickType: 'intersect' });
@@ -3586,6 +3639,7 @@ describe('useXeokitMeasurementTools', () => {
     });
 
     it('三点共线：不落记录、给 E3D 等价提示、回到第 1 步（golden G6-03）', async () => {
+      const { toasts, stop } = await captureToasts();
       const { store, tools, click } = await setupAngleTools([
         [2, 4, 6],
         [2.3, 4, 6],
@@ -3594,6 +3648,7 @@ describe('useXeokitMeasurementTools', () => {
 
       click(0);
       click(1);
+      expect(toasts).toEqual([]);
       click(2);
 
       expect(store.xeokitAngleMeasurements.value).toHaveLength(0);
@@ -3602,7 +3657,10 @@ describe('useXeokitMeasurementTools', () => {
       expect(tools.pickPointMessage.value)
         .toContain('An angular dimension could not be constructed from the data selected');
       expect(tools.pickPointMessage.value).toContain('三点共线');
+      // E3D 窗体 `alert.error`：提示条之外同一句走 error toast。
+      expect(toasts).toEqual([{ message: tools.pickPointMessage.value, level: 'error' }]);
 
+      stop();
       tools.dispose();
     });
 

@@ -49,8 +49,18 @@ export type PerpendicularDistanceResult =
 
 /** Squared length below which a direction or normal counts as degenerate. */
 const DEGENERATE_LENGTH_SQ = 1e-24;
-/** Distances below this (metres) are treated as E3D's "Perpendicular distance is 0". */
-const ZERO_DISTANCE_M = 1e-9;
+/**
+ * Distances below this (metres) are treated as E3D's "Perpendicular distance is 0".
+ *
+ * 1e-6 m (1 µm), not exact zero: design data carries 1e-7 m noise (golden MD §36 — two
+ * P-Points of one riser differ by 9.5e-5 mm in N, so "A onto B's axis" came out as
+ * 9.5e-8 m and produced a `0mm / 0mm / 0mm / S 0.0103685 W` row whose direction was
+ * pure noise). Same magnitude as `angleSnap`'s component snapping. E3D compares with
+ * PML `eq 0`, which is exact for REAL, but it never displays below 0.01 mm either.
+ * Decided 2026-09-16 (golden MD §36 已知偏离 (2)).
+ */
+export const PERPENDICULAR_ZERO_DISTANCE_M = 1e-6;
+const ZERO_DISTANCE_M = PERPENDICULAR_ZERO_DISTANCE_M;
 
 function isFinitePoint(point: PerpendicularPoint): boolean {
   return point.length === 3 && point.every(Number.isFinite);

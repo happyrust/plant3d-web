@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   computePerpendicularDistance,
+  PERPENDICULAR_ZERO_DISTANCE_M,
   type PerpendicularPoint,
   type PerpendicularTarget,
 } from './perpendicularDistance';
@@ -109,6 +110,28 @@ describe('computePerpendicularDistance · E3D 3.1 runtime golden G4', () => {
       .toEqual({ ok: false, reason: 'zero-distance' });
     expect(computePerpendicularDistance(mm(9000, 9000, 15000), GOLDEN_LINE))
       .toEqual({ ok: false, reason: 'zero-distance' });
+  });
+
+  it('zero-distance threshold is 1 µm: design-data noise below it is "0", anything at or above it is measured (golden MD §36 (2))', () => {
+    expect(PERPENDICULAR_ZERO_DISTANCE_M).toBe(1e-6);
+    // golden MD §36: ELBO 145028 P2 (A) onto the vertical axis through ELBO 145029 P1 (B) — the two
+    // P-Points differ by 9.5e-5 mm in N, so the perpendicular distance is 9.5029e-8 m. That is noise,
+    // not a dimension: it must be refused like an exact zero (E3D would otherwise print `0mm`).
+    const axisB: PerpendicularTarget = { kind: 'line', start: mm(7849.85, 11787.49, 18492.386314), end: mm(7849.85, 11787.49, 18491.386314) };
+    expect(computePerpendicularDistance(mm(7849.85, 11787.489905, 16892.523686), axisB))
+      .toEqual({ ok: false, reason: 'zero-distance' });
+    // Same for a point target that sits within noise of the source.
+    expect(computePerpendicularDistance(mm(1, 2, 3), { kind: 'point', position: mm(1, 2 + 5e-4, 3) }))
+      .toEqual({ ok: false, reason: 'zero-distance' });
+    // Just below the threshold is still zero; at the threshold it is a (tiny) dimension.
+    expect(computePerpendicularDistance([0, 0, 0.99e-6], { kind: 'plane', position: [0, 0, 0], normal: [0, 0, 1] }))
+      .toEqual({ ok: false, reason: 'zero-distance' });
+    const tiny = valueOf(computePerpendicularDistance([0, 0, 1.01e-6], { kind: 'plane', position: [0, 0, 0], normal: [0, 0, 1] }));
+    expect(tiny.distanceM).toBeCloseTo(1.01e-6, 12);
+    expect(tiny.direction).toEqual([0, 0, 1]);
+    // A real 0.1 mm perpendicular is untouched.
+    const real = valueOf(computePerpendicularDistance(mm(9000, 9000.1, 15000), GOLDEN_LINE));
+    expectMm(real.distanceM, 0.1);
   });
 
   it('G4-03: two point picks fall back to the point-to-point split', () => {
