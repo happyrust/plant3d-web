@@ -417,7 +417,8 @@ Playwright 真指针；临时 spec 已删）：测量 → `距离`（缺省 `Any
   gen-model 画直管时本就跳过非 SPKBRK 的 ATTA（§15），这根 BRAN 的 6 个 ATTA 全在直管轴线内部；SPKBRK 断开的两段现由前端合并（§15）。
 - BRAN HEAD 管（`hPosition → 首个非 ATTA 成员 aPosition`）与 LEAVE 管同一处理，无区别对待。
 - 测量列表条目的「近似」徽标来自 xeokit 记录缺 `provenance`（`legacy-unknown` → approximate），不是 TUBING 的精度判定（`tubing_axis` 在
-  `dtxDimensionSnapPort` 归 exact）；该徽标对所有 xeokit 记录都亮，属既有行为。
+  `dtxDimensionSnapPort` 归 exact）；~~该徽标对所有 xeokit 记录都亮，属既有行为~~ **2026-09-16 起距离记录按本轮算到的精度写
+  `provenance`（`semantic-point-pair` / `point-to-triangle-mesh`，近似的仍不写）**，徽标与结果卡一致；角度 / 标高 / classic 记录照旧全亮（§37 (1-b)）。
 - 完成一条测量后，尺寸系统在 capture 阶段接管其描边上的 `pointermove`（`viewerBindings.ts` `stopImmediatePropagation`），悬停在刚量过的
   轴线上不再刷新捕捉提示；走查时先删记录再进下一场景。
 - G7-02 TUBING 运行时 golden 未采；`element/keypoints` / `element/plines` 服务端仍未做。
@@ -1733,7 +1734,7 @@ ELBO `145028` P2 → ELBO `145029` P1 之间的竖直立管，DN100 · 外半径
   单测：`elementArc.test.ts` 7 条（含本节两枚实机件 → R 533.000 / 133.000、ANGL 逐位、源点到弧面 76.0983 / 7.0333）、`usePtsetSnap.test.ts` +1、`useXeokitMeasurementTools.test.ts` +1（Element × Cursor / Any × Snap / Intersect 仍拒）。
   **实机重跑**（`:8022`，`:3103` 自起 vite，真 UI 勾 Perpendicular to、Ppoint × Snap 拾 ATTA P3 → Element × Snap / × Cursor 落弯管体，光标在弧中点投影）：上表「修后」一行——ELBO `76mm / 29 / 70 / S 40.8313 E 22.2785 D`、BEND `7mm / 5 / 5 / N 11.0734 E 39.8165 U`，四次垂足 Δ ≤ 4.0e-15 m；页面错误 0。
   产物：`web-tubing-inclined-bend-live-10-elbo-scene-perpendicular-to-elbo-body-{snap,exact}-after-fix{,-result-card}.png`、`…-11-bend-scene-perpendicular-to-bend-body-{snap,exact}-after-fix{,-result-card}.png`、`…-after-fix-records.json`（独立弧参数 / 每击悬停 / 结果表 / 记录）。
-  仍开着的：RTOR / CTOR 的 `arc()` 是环面中心圆，不走 fillet，未做；透镜副标题对带弧的表面点仍写「（近似）」（与 CYLI 元素线同款，垂足本身是精确的）。
+  仍开着的：透镜副标题对带弧的表面点仍写「（近似）」（与 CYLI 元素线同款，垂足本身是精确的）。
 - **(1-b) Intersect 的 ARC 操作数**（上一条的余项）→ **已做（`9bbb501`，2026-09-16 23:23 实机）**。E3D 口径：ELEMENT 拾取先 `line()`、未设再 `arc()`（`edgpicktype.pmlobj` 631–681）；两项里有弧时**弧永远是被求交的主体**（864–904「Make sure arc is always first」），
   `ARC.intersections(item)` → `anglePosition` 给圆上 0 / 1 / 2 个点，取离**拾中这条弧的那次射线落在弧面上的点**（`!pick.intersection(!arcPlane)`，895）最近的一个；一个都没有 → `!!alert.warning('No intersection between picked items')`（887），只丢这一击、第一项还在。
   改法：内核 `pickDerivation.ts` 新 `IntersectArcOperand` + `intersectArcWith` / `arcLineIntersections` / `arcPlaneIntersections` / `arcArcIntersections`（`ARC.intersections` 按**整个圆**算，`GMFARC.exact` 才按 `onProjected` 裁；线先投到弧面，垂直于弧面的线投成一点、落在圆上才算交），
@@ -1750,6 +1751,20 @@ ELBO `145028` P2 → ELBO `145029` P1 之间的竖直立管，DN100 · 外半径
 | 弧 × 线（无交点） | 弯头体 → 5.77 m 长管管身 | 不落测量点；warning toast + 提示条 `所选项与弧没有交点，请改选其它项（E3D: No intersection between picked items）；求交已选 1. ELBO 中心线弧（P1 → P2）（弧），再选一项（Intersection[2]）`，状态条仍 `(Intersection[2])`，弧没被丢 | 长管投到弧面后离弧心 1736.791 mm > R 533 | — |
 
   页面错误 0。产物：`web-elbow-arc-intersect-live-01-arc-x-tube45-intersection.png`、`…-02-arc-x-tube66-distance{,-result-card}.png`、`…-03-line-then-arc.png`、`…-04-no-intersection-warning.png`、`…-records.json`（独立弧参数 / 三根管的两端与 `gap − R` / 每组的结果表与记录）。
-  **顺带看到**：两端都是交点（精确几何算出来的）的那条记录，测量列表里仍挂「近似」chip——记录级 `approximate` 与 §36 / `mem-259` 那条同源（线 × 线的交点也一样），本轮没动，要不要按「所有操作数都是精确几何时交点不标近似」改，你拍。
+  **顺带看到的「近似」chip** → **已修（`2ee0531`，用户 2026-09-16 23:3x 拍板）**。两处各错一半：
+  (a) 交点命中沿用最后那一击的来源，那一击若是拾元素用的表面点（`mesh_pick_point`），`hasApproximatePoint` 就把结果判成近似——交点是**算出来的**，表面点只是个把手（与 Perpendicular 的 `exactTarget` 同一条道理）。
+  改法：`intersectionHit` 给命中打 `exactPosition` → `sourceInfo.exact`，`hasApproximatePoint` 跳过带它的点。
+  (b) 就算本轮算出 `approximate: false`，测量列表读的是统一层投影：`fromXeokitMeasurement` 读不到 `provenance` 一律按 `legacy-unknown` → `toLegacyApproximate` 恒 true（§14 那条「该徽标对所有 xeokit 记录都亮」）。
+  改法：距离记录按本轮算到的精度写 `provenance`——两端都是语义几何 → `semantic-point-pair`（`exact-semantic`）、有一端是 Graphics 网格特征 → `point-to-triangle-mesh`（`exact-surface`）、本轮判为近似就不写（照旧 `legacy-unknown`）。三档投影回的 `approximate` 与本轮一致，不给旧记录反推精确。
+  **实机复核**（同一台 `:8022` / `:3103`，真 UI 走上表第一、二组）：记录 `approximate=false`、会话结果 `false`、两端 `sourceInfo.exact=true`、`provenance semantic-point-pair / exact-semantic`，交点与独立切点 Δ ≤ 5.5e-15 m；测量列表那条只剩「距离测量 / 显示中」两枚 chip，`measurement-approximate-badge-*` 不存在；页面错误 0。
+  产物：`web-intersection-exact-live-01-scene.png`、`…-02-result-card.png`、`…-03-measurement-row.png`、`…-records.json`。仍开着的是**别的**记录类型（角度 / 标高 / classic）与「拾中表面点本身」那一档，照旧 `legacy-unknown`。
+- **(1-c) RTOR / CTOR 的 `arc()`** → **Intersect 已接（`2ee0531`），Perpendicular 待拍板**。环面的弧不是 fillet：`arc(dbRef)` = `gmfArc.through3Points(pPosition[1], pPosition[3], pPosition[2])`
+  （`edgctorus.pmlobj` 59–68 / `edgrtorus.pmlobj` 59–68）——三枚 P-Point 本来就在中心圆上，**不要 `POS`、也不要 `RINS` / `ROUT`**。`EDGPICKTYPE.intersect` 拿的正是这个无参重载（`edgpicktype.pmlobj` 666），
+  所以 Web 的 `elementArcFromPPoints` 多一条环面分支（`kind: 'torus'`，圆心 = 三点外接圆心、法向按 P1 → P3 → P2 的右手序、`sweep` = 实际扫角），照原路进 ARC 操作数；单测 `elementArc.test.ts` +4、`useXeokitMeasurementTools.test.ts` +1
+  （两个交点按「拾中这条弧的射线落在圆面上的点」取近：光标在环右侧出 (2.5, 4, 6)、挪到左侧出 (1.5, 4, 6)）。
+  **Perpendicular 那一路没接**：E3D 的 `getArc()` 对 ELEMENT 先试 `arc(item, refPosition)`（`edgpositiondata.pmlobj` 348），ELBO / BEND 没有这个重载才回落到 fillet，而 RTOR / CTOR **有**——它按拾中点把圆沿轴挪到那个高度、
+  或换成 `RINS` / `ROUT`、或改成截面圆（`edgrtorus.pmlobj` 117–142 / `edgctorus.pmlobj` 120–177），要目录属性 `RINS` / `ROUT`，测量的悬停链路现在不取属性。给它一个中心圆面会得出 E3D 不会给的数（差到 ±HEIG/2 或整个平面换向），
+  所以环面在 Perpendicular 下照旧退化成点到点（`resolvePerpendicularTargetFromHit` 只认 fillet）。要不要补（取一次 `element/attributes` 把四个分支做全）另拍。
+  **本库没有 RTOR / CTOR 样本**（`:8022` 搜不到），上面全是 `static_expectation` + 单测，未实机。
 - (2) Element × Snap 落在弯头体上 Web 拾不到任何东西，E3D 回元素原点——这是 §2 #12 的 Item 原点源（本轮关着、缺省也关）；要不要在 Element 过滤器下缺省放行 Item 原点，另拍。
 - (3) 标签细节：轴线两端名的顺序跟的是 DTX 直管对象的局部 z 向而不是流向（`轴线（BEND P-Point #1 → BEND P-Point #2）` 实际是 146110 P1 → 146107 P2）；同一位置的 OLET P1 / P2 校正取到先匹配的 P1（E3D `line()` 用的是 leave）。位置口径都对，不改。

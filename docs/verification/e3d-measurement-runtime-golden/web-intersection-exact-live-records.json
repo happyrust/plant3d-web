@@ -1,0 +1,77 @@
+{
+  "capturedAt": "2026-09-16T15:40:40.375Z",
+  "url": "/?model_source=gen-model-v1&gm_backend_port=8022&show_refno=24381_145117",
+  "backend": "http://127.0.0.1:8022",
+  "independent": {
+    "elbo": "24381/145121",
+    "arcCenterMm": [
+      7141.2122,
+      -1754.2876,
+      2206.7511
+    ],
+    "radiusMm": 533,
+    "tangent45Mm": [
+      7534.5084,
+      -1586.8141,
+      2525.1215
+    ],
+    "tangent66Mm": [
+      7516.6026,
+      -1385.0755,
+      2123.9653
+    ]
+  },
+  "record": {
+    "count": 1,
+    "id": "xdist_1789573238240_hkj6rt",
+    "approximate": false,
+    "provenance": {
+      "method": "semantic-point-pair",
+      "accuracyClass": "exact-semantic",
+      "coordinateSpace": "design-world",
+      "lengthUnit": "m",
+      "sourceModelVersion": null,
+      "source": {
+        "entityId": "o:24381_145117:1",
+        "refno": "24381_145117",
+        "candidateId": "tubing:o:24381_145117:1"
+      },
+      "target": {
+        "entityId": "o:24381_145117:0",
+        "refno": "24381_145117",
+        "candidateId": "tubing:o:24381_145117:0"
+      },
+      "warnings": [],
+      "errorBoundM": null
+    },
+    "origin": [
+      7.534508361370952,
+      -1.5868141459980776,
+      2.5251215474157385
+    ],
+    "target": [
+      7.516602594704716,
+      -1.3850755182630348,
+      2.1239653318881855
+    ],
+    "originExact": true,
+    "targetExact": true,
+    "draftApproximate": false,
+    "originMm": [
+      7534.5084,
+      -1586.8141,
+      2525.1215
+    ],
+    "targetMm": [
+      7516.6026,
+      -1385.0755,
+      2123.9653
+    ]
+  },
+  "rowText": "距离测量 显示中 9/16/2026, 11:40:38 PM 距离 449mm · X -18mm · Y +202mm · Z -401mm · 起点 24381/145117 (管身轴线（TUBING） 交点) -> 终点 24381/145117 (管身轴线（TUBING） 交点) ID: xdist_1789573238240_hkj6rt 定位 隐藏 删除",
+  "deltaToExpectedM": {
+    "tangent45": 5.5110021639452246e-15,
+    "tangent66": 4.5505602690274926e-15
+  },
+  "pageErrors": []
+}
