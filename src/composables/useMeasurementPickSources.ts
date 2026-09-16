@@ -100,6 +100,14 @@ export type MeasurementPickCandidate = {
    */
   elementLine?: MeasurementPickSegment;
   /**
+   * E3D `edgTypes.attribute(noun).arc(item)`: the centreline fillet the picked **element**
+   * stands for (ELBO / BEND: arrive P-Point → `POS` → leave P-Point). `getLine()` is unset
+   * for these, so "Perpendicular to" measures to `getPlane()` = the plane of this arc
+   * (`rim` = the arrive tangent point). Like `elementLine` it is an operand only — Snap
+   * still falls back to the element origin, and the intersect session does not take arcs yet.
+   */
+  elementArc?: Readonly<{ center: Vector3; rim: Vector3; normal: Vector3 }>;
+  /**
    * PLINE end candidates only: E3D `PLSTCUT / PLENCUT` — this end after the `DRNS / DRNE`
    * end preparation (present only when the section end really is cut). Pick Settings
    * "Pline End Position = Cut" (`EDGPLINE.cut`) makes `attachPlineSegments` use it as the end.

@@ -9,6 +9,7 @@ import {
   applyPtsetTransformToPoint,
   isUsablePtsetWorldTransform,
   pickPtsetWorldTransform,
+  ptsetElementOriginToScene,
   ptsetResponseToSceneCandidates,
 } from '@/utils/three/ptsetTransform';
 
@@ -115,6 +116,34 @@ describe('pickPtsetWorldTransform · 点集进场景优先接口的 float64 worl
     const gapMm = Math.hypot(viaApi[0] - viaDtx[0], viaApi[1] - viaDtx[1], viaApi[2] - viaDtx[2]);
     expect(gapMm).toBeGreaterThan(1e-4); // float32 在 1e4 mm 量级上的量化 ≈ 1e-3 mm
     expect(gapMm).toBeLessThan(5e-3);
+  });
+
+  it('ptsetElementOriginToScene：构件原点（POS）= 放置矩阵平移列再过 globalModelMatrix，与同一构件的 P-Point 同一换算链；矩阵不可用回 null', () => {
+    // BEND 24381/146110 的接口矩阵（golden MD §37）：平移 (8999.9, 10727.68, 24781.69) = `POS`。
+    const bend = [
+      -0.169234484505, 0.657105483744, -0.734555697336, 0,
+      0.97447204401, 0, -0.224508876088, 0,
+      -0.147526013627, -0.753798635734, -0.640330923874, 0,
+      8999.9, 10727.68, 24781.69, 1,
+    ];
+    expect(ptsetElementOriginToScene(bend, null)).toEqual([8999.9, 10727.68, 24781.69]);
+    // 行主序 3x4 也认。
+    expect(ptsetElementOriginToScene([[1, 0, 0, 10], [0, 1, 0, 20], [0, 0, 1, 30]], null)).toEqual([10, 20, 30]);
+    // 过 globalModelMatrix（mm → m + 重定心）：与 P-Point 用同一条链，原点与该构件的局部 (0, 0, 0) 点重合。
+    const gm = new Matrix4().makeScale(0.001, 0.001, 0.001);
+    gm.setPosition(-10, -20, -30);
+    const origin = ptsetElementOriginToScene(bend, gm)!;
+    const resp = makeResponse([{ number: 9, pt: [0, 0, 0] }]);
+    resp.world_transform = bend;
+    const localZero = ptsetResponseToSceneCandidates('24381_146110', resp, bend, gm)[0]!.worldPos;
+    expect(origin[0]).toBeCloseTo(localZero[0], 12);
+    expect(origin[1]).toBeCloseTo(localZero[1], 12);
+    expect(origin[2]).toBeCloseTo(localZero[2], 12);
+    expect(origin[0]).toBeCloseTo(8999.9 * 0.001 - 10, 9);
+    // 旧后端 null / 形状不认得：点集当作已在世界帧，原点无从得知。
+    expect(ptsetElementOriginToScene(null, gm)).toBeNull();
+    expect(ptsetElementOriginToScene([1, 2, 3], gm)).toBeNull();
+    expect(ptsetElementOriginToScene([...bend.slice(0, 15), Number.NaN], null)).toBeNull();
   });
 });
 

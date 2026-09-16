@@ -127,6 +127,21 @@ export function applyMatrix4ToDir(matrix: Matrix4 | null, dir: Vec3): Vec3 {
   ];
 }
 
+/**
+ * 构件自己的原点（E3D `POS`：ptset 局部帧的 (0, 0, 0)）进场景：`worldTransform` 的平移列再过 `globalModelMatrix`，
+ * 与 `transformPtsetPoint` 同一条换算链，所以它与该构件的 P-Point 在同一帧、同一精度（接口 float64 矩阵）。
+ * 矩阵不可用（旧后端 `null`、DTX 也没登记）时返回 null——那时点集被当作已在世界帧，原点无从得知。
+ * ELBO / BEND 的中心线弧（`elementArc`）拿它当两条切线的角点。
+ */
+export function ptsetElementOriginToScene(worldTransform: unknown, globalModelMatrix: Matrix4 | null): Vec3 | null {
+  if (!isUsablePtsetWorldTransform(worldTransform)) return null;
+  const worldPt = applyPtsetTransformToPoint(worldTransform, [0, 0, 0]);
+  if (!worldPt.every(Number.isFinite)) return null;
+  if (!globalModelMatrix) return worldPt;
+  const v = new Vector3(worldPt[0], worldPt[1], worldPt[2]).applyMatrix4(globalModelMatrix);
+  return [v.x, v.y, v.z];
+}
+
 export type TransformedPtsetPoint = {
   localPt: Vec3;
   worldPt: Vec3;

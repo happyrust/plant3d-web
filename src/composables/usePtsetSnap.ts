@@ -7,6 +7,7 @@ import { getDbnumByRefno } from '@/composables/useDbMetaInfo';
 import { getDtxRefnoTransform } from '@/composables/useDbnoInstancesDtxLoader';
 import {
   pickPtsetWorldTransform,
+  ptsetElementOriginToScene,
   ptsetResponseToSceneCandidates,
   type PtsetSceneCandidate,
   type Vec3,
@@ -85,6 +86,8 @@ export function snapToCandidates(
  */
 export function usePtsetSnap(options: UsePtsetSnapOptions = {}) {
   const cache = new Map<string, PtsetSceneCandidate[]>();
+  /** 构件原点（E3D `POS`）的场景坐标，与同一构件的候选同一换算链；矩阵不可用的构件没有条目。 */
+  const origins = new Map<string, Vec3>();
 
   /** DTX 登记的 per-refno 放置矩阵（float32 网格数据）；db meta 未加载或未命中时为 null。 */
   function resolveDtxTransform(refno: string): unknown {
@@ -108,11 +111,22 @@ export function usePtsetSnap(options: UsePtsetSnapOptions = {}) {
     const gm = options.getGlobalModelMatrix?.() ?? null;
     const candidates = ptsetResponseToSceneCandidates(key, response, worldTransform, gm);
     cache.set(key, candidates);
+    const origin = ptsetElementOriginToScene(worldTransform, gm);
+    if (origin) origins.set(key, origin);
+    else origins.delete(key);
     return candidates;
   }
 
   function hasCandidates(refno: string): boolean {
     return cache.has(normalizeRefno(refno));
+  }
+
+  /**
+   * 构件原点（E3D `POS`）的场景坐标；未拉过点集、或点集没带可用放置矩阵时为 null。
+   * ELBO / BEND 的中心线弧（`arc()` = fillet(P1, POS, P2)）用它当两条切线的角点。
+   */
+  function getOrigin(refno: string): Vec3 | null {
+    return origins.get(normalizeRefno(refno)) ?? null;
   }
 
   /** 取指定 refno 集合的候选；不传则返回全部缓存候选。 */
@@ -132,10 +146,13 @@ export function usePtsetSnap(options: UsePtsetSnapOptions = {}) {
 
   function clear(): void {
     cache.clear();
+    origins.clear();
   }
 
   function remove(refno: string): void {
-    cache.delete(normalizeRefno(refno));
+    const key = normalizeRefno(refno);
+    cache.delete(key);
+    origins.delete(key);
   }
 
   /**
@@ -158,6 +175,7 @@ export function usePtsetSnap(options: UsePtsetSnapOptions = {}) {
     upsertCandidates,
     hasCandidates,
     getCandidates,
+    getOrigin,
     remove,
     clear,
     snap,
