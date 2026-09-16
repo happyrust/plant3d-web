@@ -1726,10 +1726,14 @@ ELBO `145028` P2 → ELBO `145029` P1 之间的竖直立管，DN100 · 外半径
 
 **已知偏离 / 待拍板**：
 
-> **2026-09-17 更正（§39，跑着的 E3D 实测）**：下面 (1) 的前提——「ELBO / BEND 作为 Perpendicular 目标，E3D 给的是中心线弧所在的面」——**不成立**。
+> **2026-09-17 更正（§39，跑着的 E3D 实测）→ 两条都已对齐 E3D（`dcac130`）**：下面 (1) 的前提——「ELBO / BEND 作为 Perpendicular 目标，E3D 给的是中心线弧所在的面」——**不成立**。
 > `GMFARC.perpendicularToPoint` 只问 `getLine()` → `getPlane()`，而 `EDGELBOW` / `EDGCTORUS` 两张对象根本没有 `.line()` / `.plane()`，E3D 实际给的是**到拾中位置的点到点**（§39.3 逐位）。
-> (1) 引的 `edgpositiondata.pmlobj` 537 是**弧 PLINE** 分支，不是 ELEMENT 分支。`c4f20bd` 怎么收（回退成点到点 / 留作 Web 增强）**待拍板**；
-> (1-b) 的 ARC 操作数本身站得住（Intersect 确实走 `arc()`），但**圆不一样**：E3D 的弯头弧半径取目录 `parameter[2]`，那一格是外径不是弯曲半径（§39.4）。
+> (1) 引的 `edgpositiondata.pmlobj` 537 是**弧 PLINE** 分支，不是 ELEMENT 分支。
+> (1-b) 的 ARC 操作数这条路站得住（Intersect 确实走 `arc()`），但**圆不一样**：E3D 的弯头弧半径取目录 `parameter[2]`，那一格是外径不是弯曲半径（§39.4）。
+>
+> **用户 2026-09-17 拍板「两条都对齐 E3D」**，`dcac130` 已实现：① 弯管 / 环面的 Perpendicular 回退成点到点（弧只留给 Intersect）；
+> ② ARC 操作数改用目录 `parameter[2]` 的圆（复刻 AVEVA 那个下标，几何上「更对」的 `parameter[3]` = 533 不用），取不到半径就没有弧。
+> 下面 (1) / (1-b) 里凡是写「弧面」「R 533」的段落都以这一条为准；真 UI 复核见 §39.6。
 
 - **(1) 弯管的「轴线」在 Web 里不存在** → **已修（`c4f20bd`，2026-09-16 19:04 拍板 / 19:56 重跑）**；**前提已被 §39.3 推翻，见上面那段更正**。修前：ELBO / BEND 作为 Perpendicular 目标，E3D 给的是中心线弧所在的**面**（`getArc()` → `GMFARC.plane`），Intersect 给 ARC 操作数；Web 的 ELBO / BEND 没有 `arc()`——Element × Snap 什么都拾不到、Element × Cursor 退化成表面点，
   两次实机分别差了 456 vs 76 mm、1271 vs 7 mm。改法：新 kernel `src/measurement/kernel/elementArc.ts`（`elementArcFromPPoints(noun, points, corner)`：noun 表 ELBO / ELBOW / BEND；两腿 `POS` → P1 / P2，内角 α，
@@ -1867,7 +1871,9 @@ Web 的取舍（按「转不成线 / 面」error 拒收、**不消耗**这一击
 | （对比）到中心线弧所在平面 | 76.0983 mm，垂足 `(7354.361, −1821.007, 2670.14)` | 与 §37「修后」Web 的逐位相同——**但 E3D 不给这个数** |
 
   CTOR `=24381/46880` 同样：`getPlane()` FALSE，`perpendicularToPoint` = 到拾中点的直线距离 **465.988 mm**、垂足 = 拾中点。
-⇒ §37 (1) 引的 `edgpositiondata.pmlobj` 537 是**弧 PLINE** 分支，不是 ELEMENT 分支。`c4f20bd` 把弯管的 Perpendicular 改成测到弧面，方向反了：E3D 给的就是**到拾中位置的点到点**（即修前 Web 的 456 mm 那一档）。**怎么收：回退成点到点，还是留作 Web 增强并在结果里标明——待拍板。**
+⇒ §37 (1) 引的 `edgpositiondata.pmlobj` 537 是**弧 PLINE** 分支，不是 ELEMENT 分支。`c4f20bd` 把弯管的 Perpendicular 改成测到弧面，方向反了：E3D 给的就是**到拾中位置的点到点**（即修前 Web 的 456 mm 那一档）。
+**已回退（`dcac130`，用户 2026-09-17 拍板对齐 E3D）**：`resolvePerpendicularTargetFromHit` 不再把 `elementArc` 转成 `circle-plane`，弧只留给 Intersect；Element × Cursor 拾中弯管体 = 到那个表面点的点到点，
+Any × Snap 走「Item 原点」点源 = 上表第二行的 `POS` 那一档。
 
 ### 39.4 弯头 `arc()` 取的是目录 `parameter[2]`，而那一格是**外径**不是弯曲半径——E3D 这个圆不切在 P1 / P2 上
 
@@ -1885,7 +1891,10 @@ E3D 实际给的 **R = 356.000**、圆心 `(7296.430, −1645.917, 2254.322)`，
 Web（`c4f20bd` 的 `elementArc.ts`，由 P1 / POS / P2 反推）给 R **533**、圆心 `(7141.212, −1754.288, 2206.751)`：**与目录声明的弯曲半径一致、切点就是 P1 / P2**。
 两个圆**在同一张平面上**（所以 39.3 里 76.0983 两边一致），但不是同一个圆。
 ⇒ 差异的来源是 `edgelbow.pmlobj` 把目录参数的**下标取错了一格**（`EDGBEND` 那一份取的是 `!dbRef.radius`，即 RADI 真值，没有这个毛病）。
-**要不要对齐这条：对齐 = 在 Web 里复刻 AVEVA 的这个下标 bug（几何上错的圆），不对齐 = Intersect 的弧交点与 E3D 差 ~82 mm 量级。待拍板。**
+**已对齐（`dcac130`，用户 2026-09-17 拍板）**：Web 照 E3D 读同一格——新内核 `elementArcRadius.ts`（BEND → `RADI`；ELBO → `SPRE` → SPCO `CATR` → SCOM `PARA` 第 2 项），
+`elementArc.ts` 的 fillet 改成按给定半径定切点（`T = R / tan(α / 2)`，`start` / `end` 是腿上的切点而不是 P1 / P2），半径取不到 / ≤ 0 就不给弧。
+最后一条与 E3D 也对得上：ELBO `=24381/57393` 的 `PARA` 只有一项「0」，实机 `EDGELBOW.arc(dbRef)` 抛 `(2,888) Attempt to create invalid arc`（本篇 trace 第 105 行），两边都没有 ARC 操作数。
+悬停链路从此会取一次目录属性（`elementArcRadiusCache`，按 refno + `CATR` 两级缓存，只在 Intersect 下发起）。
 
 环面相反，**完全对上**：CTOR `=24381/46880`（`rins 40 / rout 60 / ANGL 90`）的 `arc(dbRef)` 圆心 = `POS`、R = **50** = (rins + rout)/2、扫角 = ANGL，与 Web 的 `through3Points(P1, P3, P2)` 一致（§37 (1-c)）。
 
@@ -1904,6 +1913,17 @@ v4 用 CTOR `=24381/46880`（`rins 40 / rout 60`，管半径 10，轴 = S）三�
 而这枚环面的轴是 S，所以圆被搬出了自己的平面，几何上讲不通（AVEVA 侧的毛病，只在非竖轴环面上暴露）。
 **对 Web 没有影响**：Intersect 走的是 `edgpicktype.pmlobj` 666 的 `arc(item)` 无参重载（回落那一支传的是 `pickLine`，是 LINE 不是 POSITION，`EDGCTORUS` 没有这个重载 → 被 `handle` 吞掉），
 拿到的始终是中心线圆；这一支只在 `EDGPOSITIONDATA.getArc()`（`edgpositiondata.pmlobj` 349，定位 / 捕捉那一路）上出现，而 Perpendicular 不问 `getArc()`（39.3）。
+
+### 39.6 对齐那一版（`dcac130`）的验证状态：单测 + 目录链路已核，**真 UI 实机未做**
+
+| 项 | 结果 |
+| --- | --- |
+| 单测 | **185 文件 1647 用例全过**；eslint 0；type-check 新增 0。`elementArc.test.ts` 的 ELBO 那条直接对 39.4 的实测值（圆心 `(7296.430, −1645.917, 2254.322)`、R 356、切点离 `POS` 165.500、离 P1 / P2 各 82.285 mm，E3D 自带 ~3e-4 mm 的 `arcFillet` 噪声按 1e-3 mm 对） |
+| 目录链路（`:8022` 真库） | `24381/145121` / `145123` → `SPRE` → `CATR /ASME_B16.9/A1/TYEGESSQQ` → `PARA 350, 356, 533` ✓；BEND `146110` → `RADI 133`（它的 `PARA` 只有「20, 26.7」两项，正好说明 BEND 不能走目录那一格）；ELBO `57393` → `PARA 0` → 无半径 → 无弧，与 E3D 的 `(2,888)` 一致 |
+| **真 UI 实机** | **未做**。这一刻 `:8022` 上跑的是另一个 build（07:05 起的 `aios-database`），只有 `tree` / `element/attributes` / `search`，`element/ptset` / `element/plines` / `geom/instances` 一律 405 —— 模型加载不出来、P-Point 也拿不到，弧根本构不成。后端回来后要补的两组见下 |
+
+后端（带 `element/ptset` 的 gen-model）回来后补跑：① Element × Intersect，弯管体 + 同一条腿上的隐含管轴线 → 交点应落在离 `POS` **165.500 mm** 的新切点（比 `9bbb501` 那一轮挪 **82.285 mm**）；
+② Perpendicular to，第二击落在弯管体 → 点到点、目标名不带「弧面」（对 §39.3 表的第一行 551.094 mm 那一档）。
 
 ## 40. 提示矩阵 E3D 运行时采集·第二轮：七种 token / D2 三处 / 两线夹角第 2 步（主窗口还原、真实拾取、带截图，2026-09-17 00:0x + 06:3x–06:5x）
 
