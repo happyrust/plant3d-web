@@ -1,6 +1,10 @@
 export type SpatialQueryMode = 'range' | 'distance';
 
-export type SpatialQueryCenterSource = 'selected' | 'pick' | 'coordinates' | 'refno';
+/**
+ * 查询中心 / 源几何从哪来。`bran_centerline` 只在距离查询里出现：源仍是一个 refno（BRAN），
+ * 但服务端沿它的真实中心线走廊量距，而不是取包围盒中心画球。
+ */
+export type SpatialQueryCenterSource = 'selected' | 'pick' | 'coordinates' | 'refno' | 'bran_centerline';
 
 export type SpatialQueryShape = 'sphere' | 'cube';
 
@@ -92,6 +96,8 @@ export type SpatialQueryDbnumGroupCount = {
  */
 export type SpatialQueryCapabilities = {
   specValues: boolean;
+  /** 距离查询能否「沿 BRAN 中心线」：legacy 有（`/query?mode=bran_centerline`），gen-model-v1 没有，抽屉据此收起那一档 */
+  branCenterline: boolean;
 };
 
 export type SpatialQueryFilterOptions = {
@@ -156,8 +162,8 @@ export type SpatialQueryResultSet = {
 
 export type SpatialQueryDraft = {
   mode: SpatialQueryMode;
-  rangeCenterSource: Exclude<SpatialQueryCenterSource, 'refno'>;
-  distanceCenterSource: Extract<SpatialQueryCenterSource, 'coordinates' | 'refno'>;
+  rangeCenterSource: Exclude<SpatialQueryCenterSource, 'refno' | 'bran_centerline'>;
+  distanceCenterSource: Extract<SpatialQueryCenterSource, 'coordinates' | 'refno' | 'bran_centerline'>;
   refno: string;
   center: SpatialQueryPoint;
   radius: number;

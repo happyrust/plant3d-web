@@ -11,6 +11,7 @@ import {
   genModelV1ModelRecords,
   genModelV1SpatialNearby,
   genModelV1SpatialNearbyRefnos,
+  genModelV1SpatialNearestClearance,
   genModelV1SpatialNegativeNouns,
   genModelV1TaskGet,
   genModelV1TreeChildren,
@@ -361,5 +362,72 @@ describe('spatial/*（spec §4.13：GET，参数进 query）', () => {
     expect(error?.isRetryable).toBe(true);
     expect(error?.retryAfterMs).toBe(5000);
     expect(error?.detail).toEqual({ state: 'loading' });
+  });
+
+  it('nearest-clearance：全部格都进 query（refno 转 a/b，清单逗号拼接，布尔显式发出），路径与方法对', async () => {
+    const fetchImpl = fetchMockReturning(jsonResponse(200, { success: true, nearest_by_group: [], noun_counts: {}, excluded_self_members: 0, warnings: [] }));
+    await genModelV1SpatialNearestClearance(
+      {
+        sourceRefno: '24381_145018',
+        sourceMode: 'bran_centerline',
+        targetGroups: ['wall', 'column'],
+        targetNouns: ['EQUI', 'SUPPO'],
+        groupBy: 'noun',
+        excludeNouns: ['WELD', 'ATTA'],
+        radius: 1500,
+        scope: 'same_dbnum',
+        dbnums: [24381, 24383],
+        maxPerGroup: 3,
+        includeSelf: false,
+        surface: true,
+        debug: true,
+      },
+      { baseUrl: BASE, fetchImpl, identity: { project: 'P' } },
+    );
+    const parsed = new URL(String(fetchImpl.mock.calls[0]![0]));
+    expect(parsed.origin + parsed.pathname).toBe(`${BASE}/api/v1/spatial/nearest-clearance`);
+    expect(fetchImpl.mock.calls[0]![1]?.method).toBe('GET');
+    expect(Object.fromEntries(parsed.searchParams)).toEqual({
+      project: 'P',
+      source_refno: '24381/145018',
+      source_mode: 'bran_centerline',
+      target_groups: 'wall,column',
+      target_nouns: 'EQUI,SUPPO',
+      group_by: 'noun',
+      exclude_nouns: 'WELD,ATTA',
+      radius: '1500',
+      scope: 'same_dbnum',
+      dbnums: '24381,24383',
+      max_per_group: '3',
+      include_self: 'false',
+      surface: 'true',
+      debug: 'true',
+    });
+  });
+
+  it('nearest-clearance：只给 source_refno 时 URL 里只有它（缺省全部交给服务端），空清单不出现', async () => {
+    const fetchImpl = fetchMockReturning(jsonResponse(200, { success: true, nearest_by_group: [] }));
+    const resp = await genModelV1SpatialNearestClearance(
+      { sourceRefno: '24381/145018', targetGroups: [], excludeNouns: [], dbnums: [] },
+      { baseUrl: BASE, fetchImpl },
+    );
+    const parsed = new URL(String(fetchImpl.mock.calls[0]![0]));
+    expect(Object.fromEntries(parsed.searchParams)).toEqual({ source_refno: '24381/145018' });
+    expect(resp.nearest_by_group).toEqual([]);
+  });
+
+  it('nearest-clearance：源不是 BRAN 的 422 precondition 与库里没有的 404 not_found 都走错误信封', async () => {
+    const precondition = fetchMockReturning(jsonResponse(422, { code: 'precondition', message: '不是 BRAN', detail: null }));
+    const e1 = await genModelV1SpatialNearestClearance({ sourceRefno: '24381_1' }, { baseUrl: BASE, fetchImpl: precondition })
+      .then(() => null, (e: unknown) => e as GenModelV1ApiError);
+    expect(isGenModelV1ApiError(e1)).toBe(true);
+    expect(e1?.code).toBe('precondition');
+    expect(e1?.message).toBe('不是 BRAN');
+
+    const notFound = fetchMockReturning(jsonResponse(404, { code: 'not_found', message: 'refno 24381_2 不存在', detail: null }));
+    const e2 = await genModelV1SpatialNearestClearance({ sourceRefno: '24381_2' }, { baseUrl: BASE, fetchImpl: notFound })
+      .then(() => null, (e: unknown) => e as GenModelV1ApiError);
+    expect(e2?.isNotFound).toBe(true);
+    expect(e2?.isRetryable).toBe(false);
   });
 });

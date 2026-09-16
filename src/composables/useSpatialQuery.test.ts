@@ -29,7 +29,7 @@ const spatialSourceMocks = vi.hoisted(() => ({
   })),
   negativeNouns: vi.fn(async (): Promise<NegativeNounsResult> => ({ success: false, nouns: [] })),
   /** 当前「数据源」：缺省 legacy（有专业维度）；v1 用例翻成 gen-model-v1 / specValues=false */
-  state: { kind: 'legacy' as 'legacy' | 'gen-model-v1', specValues: true },
+  state: { kind: 'legacy' as 'legacy' | 'gen-model-v1', specValues: true, branCenterline: true },
 }));
 
 vi.mock('@/model-source', () => ({
@@ -39,7 +39,7 @@ vi.mock('@/model-source', () => ({
       nearby: spatialSourceMocks.nearby,
       nearbyRefnos: spatialSourceMocks.nearbyRefnos,
       negativeNouns: spatialSourceMocks.negativeNouns,
-      capabilities: { specValues: spatialSourceMocks.state.specValues },
+      capabilities: { specValues: spatialSourceMocks.state.specValues, branCenterline: spatialSourceMocks.state.branCenterline },
     },
   }),
 }));
@@ -144,6 +144,7 @@ describe('createSpatialQueryStore', () => {
     __resetNegativeNounRegistryForTests();
     spatialSourceMocks.state.kind = 'legacy';
     spatialSourceMocks.state.specValues = true;
+    spatialSourceMocks.state.branCenterline = true;
     dbMetaMocks.ensureDbMetaInfoLoaded.mockResolvedValue(undefined);
     dbMetaMocks.getDbnumByRefno.mockReturnValue(7997);
     dtxLoaderMocks.loadDtxAabbProxyRefnos.mockImplementation((_layer, _dbno, entries) => ({
@@ -189,7 +190,7 @@ describe('createSpatialQueryStore', () => {
     });
 
     store.draft.mode = 'range';
-    store.draft.centerSource = 'selected';
+    store.draft.rangeCenterSource = 'selected';
     store.draft.radius = 50;
 
     await store.submitQuery();
@@ -790,9 +791,80 @@ describe('createSpatialQueryStore', () => {
     expect(spatialSourceMocks.nearbyRefnos).toHaveBeenCalledTimes(1);
   });
 
+  it('distance「沿 BRAN 中心线」：refno 路径多带 source_mode，不扫本地，服务端回来的源 BRAN 自身被剔掉', async () => {
+    const viewer = createViewerStub();
+    const queryNearbyByPosition = vi.fn();
+    const queryNearbyByRefno = vi.fn(async (): Promise<SpatialQueryResult> => ({
+      success: true,
+      total_count: 2,
+      returned_count: 2,
+      page: 1,
+      per_page: 25,
+      has_more: false,
+      results: [
+        // `/query?mode=bran_centerline` 还不剔源自身：BRAN 会以 0 距离回来
+        { refno: 'loaded_a', noun: 'BRAN', spec_value: 1, distance: 0 },
+        { refno: 'server_only', noun: 'SCTN', spec_value: 2, distance: 18 },
+      ],
+    }));
+
+    const store = createSpatialQueryStore({
+      viewerRef: ref(viewer),
+      selection: { selectedRefno: { value: 'loaded_a' } } as any,
+      toolStore: { pickedQueryCenter: { value: null }, setToolMode: vi.fn(), setPickedQueryCenter: vi.fn() } as any,
+      queryNearbyByPosition,
+      queryNearbyByRefno,
+    });
+
+    store.draft.mode = 'distance';
+    store.draft.distanceCenterSource = 'bran_centerline';
+    store.draft.refno = 'loaded_a';
+    store.draft.radius = 1500;
+    store.draft.limit = 25;
+    expect(store.canSubmit.value).toBe(true);
+
+    await store.submitQuery();
+
+    expect(queryNearbyByRefno).toHaveBeenCalledWith('loaded_a', 1500, expect.objectContaining({
+      source_mode: 'bran_centerline',
+      include_self: false,
+      per_page: 25,
+    }));
+    expect(queryNearbyByPosition).not.toHaveBeenCalled();
+    expect(store.status.value).toBe('ready');
+    // 本地扫描没跑：草稿中心 (0,0,0) 半径内的 loaded_b 不会以 viewer-local 混进来；源 BRAN 自身那条也被剔掉
+    expect(store.resultSet.value?.items.map((item) => item.refno)).toEqual(['server_only']);
+    expect(store.resultSet.value?.items[0]).toMatchObject({ refno: 'server_only', noun: 'SCTN', loaded: false, matchedBy: 'server-spatial-index' });
+    // `/query` 不回 center：草稿中心保持不动，结果集也没有服务端中心
+    expect(store.draft.center).toEqual({ x: 0, y: 0, z: 0 });
+    expect(store.resultSet.value?.center).toBeNull();
+  });
+
+  it('distance「沿 BRAN 中心线」：当前数据源没有这一档能力时提交报错、不发请求', async () => {
+    spatialSourceMocks.state.branCenterline = false;
+    const queryNearbyByRefno = vi.fn();
+    const store = createSpatialQueryStore({
+      viewerRef: ref(null),
+      selection: { selectedRefno: { value: null } } as any,
+      toolStore: { pickedQueryCenter: { value: null }, setToolMode: vi.fn(), setPickedQueryCenter: vi.fn() } as any,
+      queryNearbyByRefno,
+    });
+    store.draft.mode = 'distance';
+    store.draft.distanceCenterSource = 'bran_centerline';
+    store.draft.refno = '24381_145018';
+    store.draft.radius = 1500;
+
+    await store.submitQuery();
+
+    expect(store.status.value).toBe('error');
+    expect(store.error.value).toContain('沿 BRAN 中心线');
+    expect(queryNearbyByRefno).not.toHaveBeenCalled();
+  });
+
   it('gen-model-v1：结果带 dbnum / dbnum_groups / coverage 进结果集；范围查询默认排序退到按距离；按库分组的批量作用域与「仅显示本库」', async () => {
     spatialSourceMocks.state.kind = 'gen-model-v1';
     spatialSourceMocks.state.specValues = false;
+    spatialSourceMocks.state.branCenterline = false;
     const viewer = createViewerStub();
     spatialSourceMocks.nearby.mockResolvedValueOnce({
       success: true,
@@ -821,7 +893,7 @@ describe('createSpatialQueryStore', () => {
       batchLoadRefnos,
     });
 
-    expect(store.spatialCapabilities.value).toEqual({ specValues: false });
+    expect(store.spatialCapabilities.value).toEqual({ specValues: false, branCenterline: false });
     store.draft.mode = 'range';
     // legacy 下范围查询默认「按专业」；v1 没有专业维度，退到由近及远
     expect(store.draft.sortBy).toBe('distanceAsc');
@@ -865,6 +937,7 @@ describe('createSpatialQueryStore', () => {
   it('gen-model-v1：缺省批量加载跳过 parquet 与旧后端 SSE 生成，按结果自带 dbnum 分桶直接走 backend 加载', async () => {
     spatialSourceMocks.state.kind = 'gen-model-v1';
     spatialSourceMocks.state.specValues = false;
+    spatialSourceMocks.state.branCenterline = false;
     const viewer = createViewerStub();
     viewer.__dtxLayer = { id: 'dtx' };
     spatialSourceMocks.nearby.mockResolvedValueOnce({
@@ -1549,6 +1622,7 @@ describe('createSpatialQueryStore · 场景坐标 ↔ mm（plan 2026-09-13 §7 �
     __resetNegativeNounRegistryForTests();
     spatialSourceMocks.state.kind = 'gen-model-v1';
     spatialSourceMocks.state.specValues = false;
+    spatialSourceMocks.state.branCenterline = false;
     dbMetaMocks.ensureDbMetaInfoLoaded.mockResolvedValue(undefined);
     dbMetaMocks.getDbnumByRefno.mockReturnValue(7997);
     dtxLoaderMocks.loadDtxAabbProxyRefnos.mockImplementation((_layer, _dbno, entries) => ({

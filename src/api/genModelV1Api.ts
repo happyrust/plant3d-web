@@ -940,6 +940,11 @@ export type SpatialPosition = { x: number; y: number; z: number };
 export type GenModelV1SpatialNearbyRequest = {
   /** 与 `position` 二选一；`a_b` / `a/b`，中心取该构件（含子树）的 AABB */
   refno?: string;
+  /**
+   * `bran_centerline`：沿这条 BRAN 的真实中心线（含隐式管身）逐段取候选，距离是段到盒的最小距离，
+   * 自身 = 投影子树 ∪ BRAN 成员。只能与 `refno` 搭配。缺省按 AABB。
+   */
+  sourceMode?: 'bran_centerline';
   /** 与 `refno` 二选一；mm，世界坐标 */
   position?: SpatialPosition;
   /** mm，服务端要求 `0 < r ≤ 100000` */
@@ -977,12 +982,28 @@ export type SpatialNearbyItem = {
 };
 
 export type SpatialCenter = SpatialPosition & {
-  source: 'position' | 'refno_aabb_center' | (string & {});
+  source: 'position' | 'refno_aabb_center' | 'bran_centerline' | (string & {});
+};
+
+/** 中心线模式独有的源描述；其它模式服务端不下发这一块。 */
+export type SpatialCenterlineSource = {
+  kind: 'bran_centerline' | (string & {});
+  /** BRAN 的 `a_b` */
+  refno: string;
+  /** 走廊段数（含按 E3D 规则合成的隐式管身） */
+  segment_count: number;
+  centerline_bbox: { min: [number, number, number]; max: [number, number, number] };
+  /** 首个给出外径的成员的外径（mm），取不到为 null */
+  outside_diameter_mm: number | null;
 };
 
 export type SpatialNearbyResponse = {
   results: SpatialNearbyItem[];
   center: SpatialCenter;
+  /** 只有 `source_mode=bran_centerline` 才有 */
+  source?: SpatialCenterlineSource;
+  /** 预取中心线时的非致命问题（有成员没成段之类） */
+  warnings?: string[];
   radius: number;
   shape: SpatialShape | (string & {});
   total_count: number;
@@ -1011,6 +1032,9 @@ export type SpatialNearbyRefnosResponse = {
   truncated_results: boolean;
   result_cap: number;
   center: SpatialCenter;
+  /** 只有 `source_mode=bran_centerline` 才有 */
+  source?: SpatialCenterlineSource;
+  warnings?: string[];
   radius: number;
   shape: SpatialShape | (string & {});
   [key: string]: unknown;
@@ -1023,6 +1047,7 @@ export type SpatialNegativeNounsResponse = {
 function spatialNearbyQuery(req: GenModelV1SpatialNearbyRequest): Record<string, QueryValue> {
   return {
     refno: req.refno !== undefined && req.refno !== '' ? toV1Refno(req.refno) : undefined,
+    source_mode: req.sourceMode,
     x: req.position?.x,
     y: req.position?.y,
     z: req.position?.z,
@@ -1065,6 +1090,195 @@ export function genModelV1SpatialNearbyRefnos(
 /** `GET /api/v1/spatial/negative-nouns`：负实体 noun 全量清单（`TOTAL_NEG_NOUN_NAMES`）。 */
 export function genModelV1SpatialNegativeNouns(options?: GenModelV1RequestOptions): Promise<SpatialNegativeNounsResponse> {
   return genModelV1Fetch<SpatialNegativeNounsResponse>('/api/v1/spatial/negative-nouns', options);
+}
+
+// ---------------------------------------------------------------------------
+// BRAN 中心线最近净距（spec §4.13；plan `docs/plans/2026-09-16-bran-centerline-nearest-clearance-v1-dev-plan.md` §3.2）
+// ---------------------------------------------------------------------------
+
+/** `bran_centerline`（缺省）：沿 BRAN 真实中心线（含隐式管身）量距；`aabb`：按源整盒量距，源不必是 BRAN。 */
+export type SpatialClearanceSourceMode = 'bran_centerline' | 'aabb';
+/** `target_groups`（缺省）：每个预置组一桶；`noun`：半径内每个 NOUN 自成一桶。 */
+export type SpatialClearanceGroupBy = 'target_groups' | 'noun';
+/** `all_loaded`（缺省）：不限库；`same_dbnum`：只看与源同库的候选。给了 `dbnums` 就按显式库号，这一格忽略。 */
+export type SpatialClearanceScope = 'all_loaded' | 'same_dbnum';
+
+export type GenModelV1SpatialNearestClearanceRequest = {
+  /** 源构件，`a_b` / `a/b`。中心线模式必须是 BRAN（不是 → 422 `precondition`；库里没有 → 404）；`aabb` 模式任意有盒的构件 */
+  sourceRefno: string;
+  sourceMode?: SpatialClearanceSourceMode;
+  /** 预置组：`wall` = WALL/PANE/GWALL/STWALL，`column` = COLU/SCTN/GENSEC；服务端收逗号分隔 */
+  targetGroups?: string[];
+  /** 直接点名的 NOUN 白名单，与 `targetGroups` 可并用。`target_groups` 分桶下两者都不给 → 400（与 legacy 同，默认值由调用方补） */
+  targetNouns?: string[];
+  groupBy?: SpatialClearanceGroupBy;
+  /** 目标过滤之后再剔掉的噪声类型（`WELD,ATTA`），两种分桶方式都生效 */
+  excludeNouns?: string[];
+  /** mm；缺省 5000，上限同 `/nearby` */
+  radius?: number;
+  scope?: SpatialClearanceScope;
+  dbnums?: number[];
+  /** 每桶最多几条；缺省 1，服务端钳到 1..100 */
+  maxPerGroup?: number;
+  /** 缺省 **false**（与 `/nearby` 相反：净距场景没人要自己），自身 = 投影子树 ∪ BRAN 成员 */
+  includeSelf?: boolean;
+  /** 距离从管外表面起算（扣 `outside_diameter/2`，不小于 0）；只在中心线模式下有意义，`aabb` 下服务端忽略并出 warning。v1 独有 */
+  surface?: boolean;
+  debug?: boolean;
+};
+
+export type SpatialClearanceVector = { dx: number; dy: number; dz: number };
+/** 净距接口的盒是 `{x,y,z}` 对象（与 `/nearby` 的三元组不同），尺寸系统直接吃。 */
+export type SpatialClearanceAabb = { min: SpatialPosition; max: SpatialPosition };
+
+export type SpatialClearanceNearest = {
+  /** 中心线模式是命中的那一段（隐式管身为 `a_b~c_d`）；`aabb` 模式是源自己 */
+  source_segment_refno: string;
+  /** 段在成员序里的位置；`aabb` 模式为 null */
+  source_segment_order: number | null;
+  source_point: SpatialPosition;
+  target_point: SpatialPosition;
+  vector: SpatialClearanceVector;
+};
+
+/** 可以直接画的那条尺寸：两个端点 + 标注值（mm）。 */
+export type SpatialClearanceAnnotation = {
+  start_point: SpatialPosition;
+  end_point: SpatialPosition;
+  label_mm: number;
+};
+
+export type SpatialClearanceCandidate = {
+  /** `a_b` */
+  refno: string;
+  noun: string;
+  /** 答不出为 null */
+  dbnum: number | null;
+  distance_mm: number;
+  /** 源与目标盒相交（距离 0） */
+  intersects: boolean;
+  aabb: SpatialClearanceAabb;
+  nearest: SpatialClearanceNearest;
+  annotation: SpatialClearanceAnnotation;
+};
+
+export type SpatialClearanceGroup = {
+  /** `target_groups` 分桶是组名（`wall` / `column`），`noun` 分桶是 NOUN 名 */
+  group: string;
+  nouns: string[];
+  /** 距离升序，已按 `max_per_group` 截断；`target_groups` 分桶下空桶保留（并出 warning） */
+  candidates: SpatialClearanceCandidate[];
+};
+
+export type SpatialClearanceSource = {
+  kind: SpatialClearanceSourceMode | (string & {});
+  /** `a_b` */
+  refno: string;
+  dbnum: number | null;
+  /** `aabb` 模式：源盒 */
+  aabb: SpatialClearanceAabb | null;
+  /** 中心线模式：走廊段数（含隐式管身） */
+  segment_count: number | null;
+  centerline_bbox: SpatialClearanceAabb | null;
+  /** 管外径（mm）；`surface=1` 扣的就是它的一半，取不到为 null */
+  outside_diameter_mm: number | null;
+};
+
+export type SpatialClearanceResolvedFilters = {
+  /** 生效的 NOUN 白名单并集；空 = 不限 NOUN（只在 `group_by=noun` 且没给目标过滤时出现） */
+  target_nouns: string[];
+  target_groups: { name: string; nouns: string[] }[];
+  group_by: SpatialClearanceGroupBy | (string & {});
+  exclude_nouns: string[];
+  scope: SpatialClearanceScope | 'explicit_dbnums' | (string & {});
+  dbnums: number[] | null;
+  radius: number;
+  max_per_group: number;
+  include_self: boolean;
+  /** 实际生效值：`aabb` 模式下给了 `surface=1` 也回 false */
+  surface: boolean;
+};
+
+export type SpatialClearanceDebug = {
+  candidate_ids: number;
+  rows_examined: number;
+  scope_filtered: number;
+  noun_filtered: number;
+  distance_filtered: number;
+  /** 因属于源自身被剔掉的候选数，与顶层 `excluded_self_members` 同源 */
+  self_filtered: number;
+  groups_with_hits: number;
+  returned_candidates: number;
+  truncated_candidates: boolean;
+};
+
+export type SpatialClearanceDistanceMethod =
+  | 'centerline_aabb_clearance_mm'
+  | 'centerline_surface_aabb_clearance_mm'
+  | 'aabb_clearance_mm';
+
+/**
+ * 出参与 legacy `/api/sqlite-spatial/nearest-clearance` 同形（plan §3.2），`useSpatialCompute` /
+ * `branExternalDimensions` 不做转换直接吃；多出来的 `dbnum` / `outside_diameter_mm` / `resolved_filters.surface` /
+ * `spatial_state` / `coverage` 是 v1 独有。
+ */
+export type SpatialNearestClearanceResponse = {
+  /** 恒为 true：失败走 HTTP 状态码 + 错误信封（`GenModelV1ApiError`），不在 200 里报错 */
+  success: boolean;
+  source: SpatialClearanceSource;
+  distance_method: SpatialClearanceDistanceMethod | (string & {});
+  unit: 'mm' | (string & {});
+  /** 源盒 / 中心线盒外扩 `radius` 的查询盒 */
+  query_bbox: SpatialClearanceAabb | null;
+  resolved_filters: SpatialClearanceResolvedFilters;
+  nearest_by_group: SpatialClearanceGroup[];
+  /** 半径内、过完全部过滤的候选按 NOUN 计数（`max_per_group` 截断之前），可直接做类型 facet */
+  noun_counts: Record<string, number>;
+  /** 因属于源自身（BRAN + 投影子树 + `branch_query` 成员）被剔掉的候选数 */
+  excluded_self_members: number;
+  /** 非致命问题：BRAN 没外径、`aabb` 模式下给了 `surface`、组内无命中、库号限定答不出… */
+  warnings: string[];
+  spatial_state: string;
+  coverage: 'global-tree' | (string & {});
+  /** 仅 `debug=1` */
+  debug?: SpatialClearanceDebug;
+  [key: string]: unknown;
+};
+
+function joinCsv(values: readonly (string | number)[] | undefined): string | undefined {
+  return values && values.length > 0 ? values.join(',') : undefined;
+}
+
+function spatialNearestClearanceQuery(req: GenModelV1SpatialNearestClearanceRequest): Record<string, QueryValue> {
+  return {
+    source_refno: toV1Refno(req.sourceRefno),
+    source_mode: req.sourceMode,
+    target_groups: joinCsv(req.targetGroups),
+    target_nouns: joinCsv(req.targetNouns),
+    group_by: req.groupBy,
+    exclude_nouns: joinCsv(req.excludeNouns),
+    radius: req.radius,
+    scope: req.scope,
+    dbnums: joinCsv(req.dbnums),
+    max_per_group: req.maxPerGroup,
+    include_self: req.includeSelf,
+    surface: req.surface,
+    debug: req.debug,
+  };
+}
+
+/**
+ * `GET /api/v1/spatial/nearest-clearance`：沿 BRAN 中心线（或按源包围盒）在进程内 `GLOBAL_AABB_TREE` 里找每组最近的
+ * 目标，每条候选带可直接画尺寸的两个端点。只读，与 `/nearby` 同一条流水线。
+ */
+export function genModelV1SpatialNearestClearance(
+  req: GenModelV1SpatialNearestClearanceRequest,
+  options?: GenModelV1RequestOptions,
+): Promise<SpatialNearestClearanceResponse> {
+  return genModelV1Fetch<SpatialNearestClearanceResponse>('/api/v1/spatial/nearest-clearance', {
+    ...options,
+    query: spatialNearestClearanceQuery(req),
+  });
 }
 
 /**

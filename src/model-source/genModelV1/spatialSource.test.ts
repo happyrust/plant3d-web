@@ -217,8 +217,52 @@ describe('gen-model-v1 spatialSource', () => {
     expect(refnos).toMatchObject({ success: true, refnos: ['24383_71586'], by_dbnum: { '24383': ['24383_71586'] } });
 
     expect(await source.negativeNouns()).toEqual({ success: true, nouns: ['NBOX', 'NCYL'] });
-    expect(source.capabilities).toEqual({ specValues: false });
+    expect(source.capabilities).toEqual({ specValues: false, branCenterline: true });
     expect(GEN_MODEL_V1_SPATIAL_CAPABILITIES.specValues).toBe(false);
+  });
+
+  it('中心线：source_mode 只在给了 refno 时随请求发出；服务端的 warnings 带进结果，center.source 原样', async () => {
+    expect(toV1SpatialNearbyRequest({ refno: '24381_145018', radius: 1500, source_mode: 'bran_centerline' }).sourceMode)
+      .toBe('bran_centerline');
+    expect(toV1SpatialNearbyRequest({ refno: '24381_145018', radius: 1500 }).sourceMode).toBeUndefined();
+    expect(toV1SpatialNearbyRequest({ x: 1, y: 2, z: 3, radius: 1500, source_mode: 'bran_centerline' }).sourceMode)
+      .toBeUndefined();
+
+    const api = {
+      nearby: vi.fn(async () =>
+        nearbyResponse({
+          center: { x: 1, y: 2, z: 3, source: 'bran_centerline' },
+          source: {
+            kind: 'bran_centerline',
+            refno: '24381_145018',
+            segment_count: 36,
+            centerline_bbox: { min: [0, 0, 0], max: [1000, 1000, 0] },
+            outside_diameter_mm: 219.1,
+          },
+          warnings: ['1 个成员没有长度（穿过件），不参与走廊'],
+        }),
+      ),
+      nearbyRefnos: vi.fn(async (): Promise<SpatialNearbyRefnosResponse> => ({
+        refnos: [],
+        by_dbnum: {},
+        total_count: 0,
+        truncated_results: false,
+        result_cap: 100000,
+        center: { x: 1, y: 2, z: 3, source: 'bran_centerline' },
+        radius: 1500,
+        shape: 'sphere',
+      })),
+      negativeNouns: vi.fn(async () => ({ nouns: [] })),
+    };
+    const source = createGenModelV1SpatialSource({ api });
+
+    const result = await source.nearby({ refno: '24381_145018', radius: 1500, source_mode: 'bran_centerline', include_self: false });
+    expect(api.nearby).toHaveBeenCalledWith(
+      expect.objectContaining({ refno: '24381_145018', sourceMode: 'bran_centerline', includeSelf: false }),
+    );
+    expect(result.center?.source).toBe('bran_centerline');
+    expect(result.warnings).toEqual(['1 个成员没有长度（穿过件），不参与走廊']);
+    expect(spatialNearbyToLegacyResult({ refno: '24381_145018', radius: 1500 }, nearbyResponse())).not.toHaveProperty('warnings');
   });
 
   it('错误分型：refno 模式 not_found 折成 success:false + 「先显示该构件」；spatial_not_ready 原样抛出且 isRetryable；点模式 not_found 也原样抛', async () => {

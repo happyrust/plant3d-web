@@ -4,7 +4,8 @@
  * 抽屉「范围 / 距离查询」改打 `GET /api/v1/spatial/{nearby, nearby/refnos, negative-nouns}`（spec §4.13），候选来自
  * 服务进程内的 `GLOBAL_AABB_TREE`；这里把 legacy 形状的入参 / 出参与 v1 契约互译，`useSpatialQuery` 一行不改：
  * - 入参：`x,y,z` → `position`；`nouns` 逗号串 → 数组；`sort=spec_distance` → `distance`（v1 无专业）；`spec_values` 丢弃；
- *   `per_page` 缺省时沿用旧参数 `max_results`；refno 的 `a_b` → `a/b` 由 API 基座做。
+ *   `per_page` 缺省时沿用旧参数 `max_results`；refno 的 `a_b` → `a/b` 由 API 基座做；
+ *   `source_mode=bran_centerline` 原样转成 v1 的 `source_mode`（legacy 那边要改打 `/query`，v1 是同一条 `/nearby`）。
  * - 出参：refno 归一 `a_b`；`spec_value` 一律 0、`filter_options.spec_values = []`、不给专业 `groups`
  *   （§5-1 按 (a)：v1 源下抽屉隐藏专业维度，改按库分组——服务端的 dbnum 分组放进 `dbnum_groups`）；
  *   盒从 `[x,y,z]` 三元组转成 `{x,y,z}`；`dbnum` / `coverage` / `spatial_state` 原样带出给 P4 用。
@@ -45,8 +46,14 @@ export const defaultSpatialApi: SpatialApi = {
   negativeNouns: genModelV1SpatialNegativeNouns,
 };
 
-/** v1 的几何投影里没有 `spec_value` 这一列（§5-1）。 */
-export const GEN_MODEL_V1_SPATIAL_CAPABILITIES: SpatialSourceCapabilities = { specValues: false };
+/**
+ * v1 的几何投影里没有 `spec_value` 这一列（§5-1）。
+ *
+ * BRAN 中心线支持：`/api/v1/spatial/nearby?source_mode=bran_centerline` 的走廊不来自 `GLOBAL_AABB_TREE`
+ * （那里只有包围盒），而是服务端从 E3D 库现取的成员序 + 隐式管身（`mbd::branch_query`，与 `/api/mbd/v2/pipe`
+ * 同一份数据）。
+ */
+export const GEN_MODEL_V1_SPATIAL_CAPABILITIES: SpatialSourceCapabilities = { specValues: false, branCenterline: true };
 
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value);
@@ -64,6 +71,8 @@ export function toV1SpatialNearbyRequest(params: SpatialNearbyParams): GenModelV
   const hasPosition = isFiniteNumber(params.x) && isFiniteNumber(params.y) && isFiniteNumber(params.z);
   return {
     refno: refno ? refno : undefined,
+    // 中心线只对 refno 有效；没给 refno 就不发这一格，免得服务端为一条注定 400 的请求去读库。
+    sourceMode: refno && params.source_mode === 'bran_centerline' ? 'bran_centerline' : undefined,
     position: !refno && hasPosition ? { x: params.x!, y: params.y!, z: params.z! } : undefined,
     radius: params.radius,
     shape: params.shape,
@@ -129,6 +138,8 @@ export function spatialNearbyToLegacyResult(params: SpatialNearbyParams, resp: S
     dbnum_groups: (resp.groups ?? []).map((group) => ({ dbnum: group.dbnum, count: group.count })),
     coverage: resp.coverage,
     spatial_state: resp.spatial_state,
+    // 中心线预取的非致命问题（有成员没成段之类）；抽屉现有警告条直接展示。
+    ...(resp.warnings && resp.warnings.length > 0 ? { warnings: resp.warnings } : {}),
   };
 }
 

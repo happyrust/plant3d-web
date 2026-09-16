@@ -159,6 +159,11 @@ export type KeypointSource = {
 export type SpatialSourceCapabilities = {
   /** 结果带专业（`spec_value`）维度：legacy 有；gen-model-v1 的几何投影里没有这一列（plan §5-1 按 (a)：隐藏专业筛选 / 分组，改按 dbnum）。 */
   readonly specValues: boolean;
+  /**
+   * `nearby / nearbyRefnos` 认不认 `source_mode: 'bran_centerline'`（沿 BRAN 真实中心线走廊量距）：
+   * legacy 走 `/query?mode=bran_centerline`；gen-model-v1 的 `GLOBAL_AABB_TREE` 只有包围盒，没有这一档。
+   */
+  readonly branCenterline: boolean;
 };
 
 /**

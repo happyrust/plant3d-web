@@ -132,11 +132,21 @@
             </div>
 
             <label v-if="hasField('targetNouns')" class="block">
-              <span class="mb-1 block text-xs font-semibold text-muted-foreground">{{ activeScenario === 'branNearestClearance' ? 'target_groups' : 'target_nouns' }}</span>
+              <span class="mb-1 block text-xs font-semibold text-muted-foreground">target_nouns</span>
               <input v-model="computeState.targetNouns"
                 type="text"
-                :placeholder="activeScenario === 'branNearestClearance' ? 'wall,column' : 'WALL,COLUMN,FIXING'"
+                placeholder="WALL,COLUMN,FIXING"
                 class="h-10 w-full rounded-[10px] border border-gray-200 bg-white px-3 text-[13px] text-foreground outline-none focus:border-brand" />
+            </label>
+
+            <label v-if="hasField('excludeNouns')" class="block">
+              <span class="mb-1 block text-xs font-semibold text-muted-foreground">exclude_nouns（可空，先剔掉的噪声类型）</span>
+              <input v-model="computeState.excludeNouns"
+                type="text"
+                data-testid="bran-exclude-nouns"
+                placeholder="WELD,ATTA"
+                class="h-10 w-full rounded-[10px] border border-gray-200 bg-white px-3 font-mono text-[13px] text-foreground outline-none focus:border-brand" />
+              <span class="mt-0.5 block text-[11px] font-medium text-gray-400">目标类型不用先选：计算后按半径内出现的类型逐个勾选。</span>
             </label>
 
             <label v-if="hasField('neighborWindow')" class="block">
@@ -164,11 +174,43 @@
             </button>
           </div>
 
+          <!-- BRAN 净距：由 noun_counts 驱动的类型 facet（计算后才出现；勾选只在前端过滤，不重新请求） -->
+          <div v-if="isBranScenario && computeState.nounFacets.length > 0" class="mt-3" data-testid="bran-noun-facet">
+            <div class="flex items-center justify-between pb-1.5">
+              <div class="text-xs font-semibold text-muted-foreground">
+                目标类型 · 半径内 {{ computeState.nounFacets.length }} 类 / {{ branFacetTotal }} 个候选
+              </div>
+              <div class="flex items-center gap-2 text-[11px] font-semibold">
+                <button type="button" class="text-brand hover:underline" data-testid="bran-noun-facet-all" @click="setAllBranNounFacets(true)">全选</button>
+                <button type="button" class="text-muted-foreground hover:underline" data-testid="bran-noun-facet-none" @click="setAllBranNounFacets(false)">清空</button>
+              </div>
+            </div>
+            <div class="flex flex-wrap gap-1.5">
+              <button v-for="facet in computeState.nounFacets"
+                :key="facet.noun"
+                type="button"
+                :data-testid="`bran-noun-chip-${facet.noun}`"
+                :aria-pressed="facet.selected"
+                class="inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors"
+                :class="facet.selected
+                  ? 'border-brand bg-brand-subtle text-brand'
+                  : 'border-gray-200 bg-white text-muted-foreground hover:border-gray-300'"
+                @click="toggleBranNounFacet(facet.noun)">
+                <Check v-if="facet.selected" class="h-3 w-3" />
+                <span class="font-mono">{{ facet.noun }}</span>
+                <span class="rounded-full px-1.5 text-[10px] tabular-nums" :class="facet.selected ? 'bg-brand/15' : 'bg-gray-100'">{{ facet.count }}</span>
+              </button>
+            </div>
+            <div class="mt-1.5 text-[11px] leading-relaxed text-gray-400">
+              每类默认只标注最近 1 条，其余候选可在下表逐条开关「标注」；已排除 BRAN 自身成员 {{ computeState.excludedSelfMembers }} 个。
+            </div>
+          </div>
+
           <!-- Result Table -->
           <div v-if="computeState.resultRows.length > 0 || computeState.error || computeState.responseText" class="mt-3">
             <div class="flex items-center justify-between pb-2">
               <div class="text-[13px] font-bold text-foreground">查询结果表</div>
-              <div class="text-xs font-bold text-brand">可点击行自动选中并跳转</div>
+              <div class="text-xs font-bold text-brand">{{ isBranScenario ? '高亮行已画进三维尺寸' : '可点击行自动选中并跳转' }}</div>
             </div>
 
             <div v-if="computeState.error" class="rounded-[10px] border border-danger/25 bg-danger-subtle px-3 py-2 text-sm text-danger">
@@ -181,30 +223,44 @@
                 <div class="w-[130px] px-3">构件 Refno</div>
                 <div class="w-[70px] px-2">类型</div>
                 <div class="w-[56px] px-2">距离</div>
-                <div v-if="activeScenario === 'branNearestClearance'" class="flex-1 px-2">分组 / BRAN 段</div>
+                <div v-if="isBranScenario" class="flex-1 px-2">BRAN 段</div>
                 <div class="flex-1 px-2.5 text-right">操作</div>
               </div>
               <!-- Rows -->
-              <div v-for="(row, idx) in computeState.resultRows" :key="idx"
+              <div v-for="(row, idx) in computeState.resultRows" :key="row.candidateKey ?? idx"
                 class="flex items-center border-t text-xs"
-                :class="idx === 0 ? 'border-brand/25 bg-brand-subtle' : 'border-gray-200'">
+                :data-testid="isBranScenario ? 'bran-result-row' : undefined"
+                :data-drawn="isBranScenario ? String(Boolean(row.drawn)) : undefined"
+                :class="isRowEmphasized(row, idx) ? 'border-brand/25 bg-brand-subtle' : 'border-gray-200'">
                 <div class="w-[130px] truncate px-3 py-2.5 font-mono text-xs font-medium text-foreground">{{ row.refno }}</div>
                 <div class="w-[70px] px-2 py-2.5 font-medium text-gray-700">{{ row.noun }}</div>
                 <div class="w-[56px] px-2 py-2.5"
-                  :class="idx === 0 ? 'font-semibold text-brand' : 'text-muted-foreground'">
+                  :class="isRowEmphasized(row, idx) ? 'font-semibold text-brand' : 'text-muted-foreground'">
                   {{ formatDistanceMm(row.distanceMm) }}
                 </div>
-                <div v-if="activeScenario === 'branNearestClearance'" class="min-w-0 flex-1 truncate px-2 py-2.5 text-[11px] text-muted-foreground">
-                  {{ formatBranRowDetails(row) }}
+                <div v-if="isBranScenario" class="min-w-0 flex-1 truncate px-2 py-2.5 text-[11px] text-muted-foreground">
+                  {{ row.label || '-' }}
                 </div>
-                <div class="flex justify-end px-2.5 py-2" :class="activeScenario === 'branNearestClearance' ? 'w-[92px]' : 'flex-1'">
+                <div class="flex items-center justify-end gap-1 px-2.5 py-2" :class="isBranScenario ? 'w-[150px]' : 'flex-1'">
+                  <button v-if="isBranScenario && row.candidateKey"
+                    type="button"
+                    :data-testid="`bran-draw-toggle-${row.candidateKey}`"
+                    :aria-pressed="Boolean(row.drawn)"
+                    class="inline-flex items-center gap-1 rounded-md px-2 py-1.5 text-[11px] font-semibold transition-colors"
+                    :class="row.drawn
+                      ? 'bg-brand-subtle text-brand hover:bg-brand/15'
+                      : 'border border-gray-200 text-gray-700 hover:bg-gray-50'"
+                    @click="toggleBranCandidateDrawn(row.candidateKey)">
+                    <Ruler class="h-3 w-3" />
+                    {{ row.drawn ? '已标注' : '标注' }}
+                  </button>
                   <button type="button"
                     class="inline-flex items-center gap-1 rounded-md px-2 py-1.5 text-[11px] font-semibold transition-colors"
-                    :class="idx === 0
+                    :class="isRowEmphasized(row, idx)
                       ? 'bg-primary text-primary-foreground hover:bg-primary/90'
                       : 'border border-gray-200 text-gray-700 hover:bg-gray-50'"
                     @click="$emit('select-refno', row.refno)">
-                    选中并跳转
+                    {{ isBranScenario ? '跳转' : '选中并跳转' }}
                     <MousePointerClick class="h-3 w-3" />
                   </button>
                 </div>
@@ -212,7 +268,7 @@
             </div>
 
             <div v-else-if="!computeState.error" class="rounded-[10px] border border-gray-200 bg-gray-50 px-3 py-4 text-center text-sm text-muted-foreground">
-              未找到符合条件的结果。
+              {{ isBranScenario && computeState.nounFacets.length > 0 ? '所有类型都已取消勾选，勾回任意类型即可显示候选。' : '未找到符合条件的结果。' }}
             </div>
           </div>
 
@@ -238,9 +294,11 @@
 </template>
 
 <script setup lang="ts">
-import { ChevronDown, Loader2, MousePointerClick } from 'lucide-vue-next';
+import { computed } from 'vue';
 
-import type { SpatialComputeResultRow } from '@/composables/useSpatialCompute';
+import { Check, ChevronDown, Loader2, MousePointerClick, Ruler } from 'lucide-vue-next';
+
+import type { SpatialComputeResultRow, SpatialComputeScenarioField } from '@/composables/useSpatialCompute';
 
 import { useSpatialCompute } from '@/composables/useSpatialCompute';
 
@@ -262,29 +320,33 @@ const {
   applyCurrentSelection: applyComputeSelection,
   submitScenario,
   toggleScenarioExpanded,
+  toggleBranNounFacet,
+  setAllBranNounFacets,
+  toggleBranCandidateDrawn,
 } = spatialCompute;
 
 const computeState = currentScenarioState;
+const isBranScenario = computed(() => activeScenario.value === 'branNearestClearance');
+/** facet 上的候选总数（`noun_counts` 之和，截断前口径）。 */
+const branFacetTotal = computed(() => computeState.value.nounFacets.reduce((sum, facet) => sum + facet.count, 0));
 
 function runComputeScenario() {
   void submitScenario();
 }
 
-function hasField(field: 'tolerance' | 'suppoType' | 'searchRadius' | 'targetNouns' | 'neighborWindow') {
+function hasField(field: SpatialComputeScenarioField) {
   return currentScenarioMeta.value.fields.includes(field);
+}
+
+/** BRAN 净距按「画进三维了没」高亮；其余场景沿用「首行 = 最近 / 主结果」。 */
+function isRowEmphasized(row: SpatialComputeResultRow, idx: number): boolean {
+  return isBranScenario.value ? Boolean(row.drawn) : idx === 0;
 }
 
 function formatDistanceMm(mm: number | null): string {
   if (mm == null) return '-';
-  if (activeScenario.value === 'branNearestClearance') return `${Math.round(mm)}mm`;
+  if (isBranScenario.value) return `${Math.round(mm)}mm`;
   if (mm >= 1000) return `${(mm / 1000).toFixed(1)}m`;
   return `${mm.toFixed(0)}mm`;
-}
-
-function formatBranRowDetails(row: SpatialComputeResultRow): string {
-  const segment = row.sourceSegmentRefno
-    ? `segment ${row.sourceSegmentRefno}${row.sourceSegmentOrder != null ? `#${row.sourceSegmentOrder}` : ''}`
-    : 'segment -';
-  return `${row.targetGroup || '-'} · ${segment}`;
 }
 </script>

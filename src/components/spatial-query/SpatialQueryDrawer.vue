@@ -115,6 +115,15 @@
                   @click="draft.distanceCenterSource = 'refno'">
                   通过 Refno
                 </button>
+                <button v-if="spatialCapabilities.branCenterline"
+                  type="button"
+                  class="rounded px-2 py-0.5 font-medium transition-colors"
+                  :class="draft.distanceCenterSource === 'bran_centerline' ? 'bg-brand-subtle text-brand' : 'text-gray-500 hover:text-gray-700'"
+                  data-testid="distance-source-bran-centerline"
+                  title="以 BRAN 各段真实中心线为源量距，而不是它的包围盒中心"
+                  @click="draft.distanceCenterSource = 'bran_centerline'">
+                  沿 BRAN 中心线
+                </button>
                 <button type="button"
                   class="rounded px-2 py-0.5 font-medium transition-colors"
                   :class="draft.distanceCenterSource === 'coordinates' ? 'bg-brand-subtle text-brand' : 'text-gray-500 hover:text-gray-700'"
@@ -123,8 +132,8 @@
                 </button>
               </div>
             </div>
-            <div v-if="draft.distanceCenterSource === 'refno'" class="mt-3 space-y-2">
-              <label class="block text-xs text-gray-500">拾取起始物项</label>
+            <div v-if="isRefnoDistanceSource" class="mt-3 space-y-2">
+              <label class="block text-xs text-gray-500">{{ isBranCenterlineSource ? '拾取起始 BRAN' : '拾取起始物项' }}</label>
               <div class="flex gap-1.5">
                 <button type="button"
                   class="inline-flex items-center gap-1 rounded-md bg-primary px-2.5 py-1.5 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90"
@@ -145,9 +154,12 @@
                 <label class="text-[11px] text-gray-400">或手填 Refno</label>
                 <input v-model="draft.refno"
                   type="text"
-                  placeholder="例如：24381_100818"
+                  :placeholder="isBranCenterlineSource ? '例如：24381_145018（BRAN）' : '例如：24381_100818'"
                   class="h-7 w-full rounded-md border border-gray-200 bg-white px-2.5 font-mono text-[11px] text-gray-900 outline-none focus:border-brand" />
               </div>
+              <p v-if="isBranCenterlineSource" class="text-[11px] leading-relaxed text-gray-400">
+                沿该 BRAN 各段中心线量到候选包围盒的最近距离；半径即走廊外扩距离。
+              </p>
             </div>
           </section>
         </template>
@@ -775,6 +787,23 @@ const showCoordinateInputs = computed(() => {
     || (draft.mode === 'distance' && draft.distanceCenterSource === 'coordinates');
 });
 
+/** 距离查询里以 refno 为源的两档（按包围盒 / 沿 BRAN 中心线）共用同一块「起始物项」输入。 */
+const isRefnoDistanceSource = computed(() =>
+  draft.mode === 'distance' && (draft.distanceCenterSource === 'refno' || draft.distanceCenterSource === 'bran_centerline'),
+);
+const isBranCenterlineSource = computed(() => draft.mode === 'distance' && draft.distanceCenterSource === 'bran_centerline');
+
+// 数据源切到没有这一档的（gen-model-v1）时按钮消失，残留的选择退回「通过 Refno」，免得提交被服务端拒绝
+watch(
+  () => [spatialCapabilities.value.branCenterline, draft.distanceCenterSource] as const,
+  ([supported, source]) => {
+    if (!supported && source === 'bran_centerline') {
+      draft.distanceCenterSource = 'refno';
+    }
+  },
+  { immediate: true },
+);
+
 const centerSummary = computed(() => {
   // 选中的 PIPE / ZONE 这类没加载几何的 owner：查看器解不出盒，查询时发 refno 由服务端按其整体盒解中心
   if (draft.mode === 'range' && draft.rangeCenterSource === 'selected' && selectedCenterRefno.value) {
@@ -1092,7 +1121,7 @@ function createPipeDistanceSceneTransformPoint(): ((point: Vec3) => Vec3) | unde
 function canAnnotatePipeDistance(item: SpatialQueryResultItem): boolean {
   // 净距由服务端 nearest-points 计算：源是 BRAN 会自动用真实中心线，
   // 其余构件退回包围盒口径，所以这里不再限制 noun。
-  if (draft.mode !== 'distance' || draft.distanceCenterSource !== 'refno') return false;
+  if (!isRefnoDistanceSource.value) return false;
   const sourceRefno = normalizePipeDistanceRefno(draft.refno);
   const targetRefno = normalizePipeDistanceRefno(item.refno);
   return !!sourceRefno && !!targetRefno && sourceRefno !== targetRefno;

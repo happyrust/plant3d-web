@@ -1,5 +1,7 @@
 import { computed, reactive, ref } from 'vue';
 
+import type { ModelSourceKind } from '@/model-source/ports';
+
 import {
   postSpaceFitting,
   postSpaceFittingOffset,
@@ -19,8 +21,10 @@ import {
   type SpaceComputeWallDistanceData,
   type SpaceEnvelope,
 } from '@/api/genModelSpatialApi';
+import { genModelV1SpatialNearestClearance } from '@/api/genModelV1Api';
 import { useSelectionStore } from '@/composables/useSelectionStore';
 import { useViewerContext } from '@/composables/useViewerContext';
+import { getModelSourceKind } from '@/model-source/kind';
 
 export type SpatialComputeScenarioKey =
   | 'fittingOffset'
@@ -39,6 +43,10 @@ export type SpatialComputeResultRow = {
   targetGroup?: string;
   sourceSegmentRefno?: string | null;
   sourceSegmentOrder?: number | null;
+  /** BRAN 净距：这一行对应候选的键（`branCandidateKey`），给「标注」开关用 */
+  candidateKey?: string;
+  /** BRAN 净距：这一行此刻画在三维里 */
+  drawn?: boolean;
 };
 
 export type BranNearestClearanceAnnotationCandidate = {
@@ -47,18 +55,39 @@ export type BranNearestClearanceAnnotationCandidate = {
   index: number;
 };
 
+/**
+ * BRAN 净距的类型 facet：一类一个 chip。`count` 是半径内该类候选总数（响应 `noun_counts`，`max_per_group` 截断之前），
+ * `selected` 决定这一类的候选要不要进结果表与三维标注。
+ */
+export type BranNounFacet = {
+  noun: string;
+  count: number;
+  selected: boolean;
+};
+
+export type SpatialComputeScenarioField = 'tolerance' | 'suppoType' | 'searchRadius' | 'targetNouns' | 'excludeNouns' | 'neighborWindow';
+
 type SpatialComputeScenarioState = {
   suppoRefno: string;
   tolerance: string;
   suppoType: string;
   searchRadius: string;
   targetNouns: string;
+  excludeNouns: string;
   neighborWindow: string;
   loading: boolean;
   error: string;
   responseText: string;
   resultRows: SpatialComputeResultRow[];
   annotationCandidates: BranNearestClearanceAnnotationCandidate[];
+  /**
+   * 以下四格只有 BRAN 净距用：服务端分桶原文（`group_by=noun`，一桶一类）、由它派生的类型 facet、
+   * 当前画在三维里的候选键、被剔掉的自身成员数。`resultRows` / `annotationCandidates` 是 `branGroups × 勾选` 的派生结果。
+   */
+  branGroups: BranNearestClearanceGroupResult[];
+  nounFacets: BranNounFacet[];
+  drawnCandidateKeys: string[];
+  excludedSelfMembers: number;
 };
 
 type SpatialComputeScenarioMeta = {
@@ -69,7 +98,7 @@ type SpatialComputeScenarioMeta = {
   exampleRefno: string;
   sourceLabel: string;
   sourceHelp: string;
-  fields: ('tolerance' | 'suppoType' | 'searchRadius' | 'targetNouns' | 'neighborWindow')[];
+  fields: SpatialComputeScenarioField[];
 };
 
 type SpatialComputeResultData =
@@ -82,6 +111,25 @@ type SpatialComputeResultData =
   | null;
 
 type SpatialComputeResultEnvelope = SpaceEnvelope<SpatialComputeResultData>;
+
+/**
+ * BRAN 净距是唯一按数据源分流的场景（plan `docs/plans/2026-09-16-bran-centerline-nearest-clearance-v1-dev-plan.md`
+ * §3.3，D5 取「`useSpatialCompute` 内按 kind 分流」）：其余六个场景只有旧后端 `/api/space/*` 一种实现。
+ * legacy 打 `/api/sqlite-spatial/nearest-clearance`；gen-model-v1 打 `/api/v1/spatial/nearest-clearance`，两边出参同形。
+ */
+const BRAN_NEAREST_CLEARANCE_ENDPOINT: Record<ModelSourceKind, string> = {
+  legacy: '/api/sqlite-spatial/nearest-clearance',
+  'gen-model-v1': '/api/v1/spatial/nearest-clearance',
+};
+
+/**
+ * BRAN 净距按 `group_by=noun` 查：半径内每个 NOUN 自成一桶、按最近距离排桶，`noun_counts` 直接当类型 facet
+ * （设计 fable-5-1-36 §UI：Dock 的「目标 chips」由 `noun_counts` 驱动，每类默认勾选、默认只画最近 1 条）。
+ * 每桶多取几条留在列表里供逐条勾选，不然「默认 1 条」就没有「多画」的余地。
+ */
+export const BRAN_CLEARANCE_MAX_PER_NOUN = 3;
+/** 默认剔掉的噪声类型：焊点与附着件几乎贴着每根管子，只会把 facet 刷满。面板里可改。 */
+export const BRAN_CLEARANCE_DEFAULT_EXCLUDE_NOUNS = 'WELD,ATTA';
 
 const SCENARIO_META: SpatialComputeScenarioMeta[] = [
   {
@@ -147,18 +195,22 @@ const SCENARIO_META: SpatialComputeScenarioMeta[] = [
   {
     key: 'branNearestClearance',
     title: 'BRAN 中心线最近清距',
-    description: '沿 BRAN 中心线查找墙、柱最近点并返回标注点对。',
-    endpoint: '/api/sqlite-spatial/nearest-clearance',
+    description: '沿 BRAN 中心线按类型找半径内最近的构件（墙 / 柱 / 设备 / 支架…），每类默认标注最近 1 条。',
+    // 建 store 时按当前数据源换成对应后端的路径（见 `createSpatialComputeStore`）。
+    endpoint: BRAN_NEAREST_CLEARANCE_ENDPOINT.legacy,
     exampleRefno: '24381_145018',
     sourceLabel: 'BRAN Refno',
     sourceHelp: 'BRAN 格式示例：24381_145018 或 24381/145018',
-    fields: ['searchRadius', 'targetNouns'],
+    fields: ['searchRadius', 'excludeNouns'],
   },
 ];
 
 const DEFAULT_STATE_BY_SCENARIO: Record<
   SpatialComputeScenarioKey,
-  Omit<SpatialComputeScenarioState, 'loading' | 'error' | 'responseText' | 'resultRows' | 'annotationCandidates'>
+  Omit<
+    SpatialComputeScenarioState,
+    'loading' | 'error' | 'responseText' | 'resultRows' | 'annotationCandidates' | 'branGroups' | 'nounFacets' | 'drawnCandidateKeys' | 'excludedSelfMembers'
+  >
 > = {
   fittingOffset: {
     suppoRefno: '24383/88342',
@@ -166,6 +218,7 @@ const DEFAULT_STATE_BY_SCENARIO: Record<
     suppoType: '',
     searchRadius: '',
     targetNouns: '',
+    excludeNouns: '',
     neighborWindow: '',
   },
   fitting: {
@@ -174,6 +227,7 @@ const DEFAULT_STATE_BY_SCENARIO: Record<
     suppoType: '',
     searchRadius: '',
     targetNouns: '',
+    excludeNouns: '',
     neighborWindow: '',
   },
   wallDistance: {
@@ -182,6 +236,7 @@ const DEFAULT_STATE_BY_SCENARIO: Record<
     suppoType: 'S2',
     searchRadius: '5000',
     targetNouns: '',
+    excludeNouns: '',
     neighborWindow: '',
   },
   steelRelative: {
@@ -190,6 +245,7 @@ const DEFAULT_STATE_BY_SCENARIO: Record<
     suppoType: '',
     searchRadius: '8000',
     targetNouns: '',
+    excludeNouns: '',
     neighborWindow: '',
   },
   suppoTrays: {
@@ -198,6 +254,7 @@ const DEFAULT_STATE_BY_SCENARIO: Record<
     suppoType: '',
     searchRadius: '',
     targetNouns: '',
+    excludeNouns: '',
     neighborWindow: '',
   },
   traySpan: {
@@ -206,6 +263,7 @@ const DEFAULT_STATE_BY_SCENARIO: Record<
     suppoType: '',
     searchRadius: '',
     targetNouns: '',
+    excludeNouns: '',
     neighborWindow: '5000',
   },
   branNearestClearance: {
@@ -213,7 +271,8 @@ const DEFAULT_STATE_BY_SCENARIO: Record<
     tolerance: '',
     suppoType: '',
     searchRadius: '5000',
-    targetNouns: 'wall,column',
+    targetNouns: '',
+    excludeNouns: BRAN_CLEARANCE_DEFAULT_EXCLUDE_NOUNS,
     neighborWindow: '',
   },
 };
@@ -243,7 +302,21 @@ function createScenarioState(key: SpatialComputeScenarioKey): SpatialComputeScen
     responseText: '',
     resultRows: [],
     annotationCandidates: [],
+    branGroups: [],
+    nounFacets: [],
+    drawnCandidateKeys: [],
+    excludedSelfMembers: 0,
   };
+}
+
+/** 清掉一次计算的全部产出（表、标注候选、BRAN 分桶与 facet），输入格不动。 */
+function clearScenarioResults(state: SpatialComputeScenarioState): void {
+  state.resultRows = [];
+  state.annotationCandidates = [];
+  state.branGroups = [];
+  state.nounFacets = [];
+  state.drawnCandidateKeys = [];
+  state.excludedSelfMembers = 0;
 }
 
 function extractResultRows(key: SpatialComputeScenarioKey, envelope: SpatialComputeResultEnvelope): SpatialComputeResultRow[] {
@@ -333,46 +406,129 @@ function extractResultRows(key: SpatialComputeScenarioKey, envelope: SpatialComp
   }
 }
 
-function extractBranNearestRows(response: BranNearestClearanceResponse): SpatialComputeResultRow[] {
-  if (!response.success) return [];
-  return normalizeBranNearestGroups(response.nearest_by_group).flatMap(([targetGroup, candidates]) =>
-    (candidates ?? []).map((candidate) => ({
-      refno: candidate.refno,
-      noun: candidate.noun,
-      distanceMm: Number.isFinite(candidate.distance_mm) ? candidate.distance_mm : null,
-      targetGroup,
-      sourceSegmentRefno: candidate.nearest?.source_segment_refno ?? null,
-      sourceSegmentOrder: candidate.nearest?.source_segment_order ?? null,
-      label: [
-        targetGroup,
-        candidate.nearest?.source_segment_refno
-          ? `segment ${candidate.nearest.source_segment_refno}${candidate.nearest.source_segment_order != null ? `#${candidate.nearest.source_segment_order}` : ''}`
-          : '',
-      ].filter(Boolean).join(' · '),
-    })),
-  );
+/** 一条候选在结果表 / 标注开关里的键：桶名 + refno（同一构件理论上只会落在一个桶里，带桶名只为稳妥）。 */
+export function branCandidateKey(group: string, refno: string): string {
+  return `${group}:${refno}`;
 }
 
-function extractBranAnnotationCandidates(
-  response: BranNearestClearanceResponse,
-): BranNearestClearanceAnnotationCandidate[] {
-  if (!response.success) return [];
-  return normalizeBranNearestGroups(response.nearest_by_group).flatMap(([targetGroup, candidates]) =>
-    (candidates ?? []).map((candidate, index) => ({ targetGroup, candidate, index })),
-  );
-}
-
-function normalizeBranNearestGroups(
+/** 两种响应形态都收：新的数组分桶（`group_by=noun` 一桶一类）与老的对象形态 `{ wall: [...] }`。 */
+export function normalizeBranNearestGroups(
   nearestByGroup: BranNearestClearanceResponse['nearest_by_group'],
-): [string, BranNearestClearanceCandidate[]][] {
+): BranNearestClearanceGroupResult[] {
   if (!nearestByGroup) return [];
   if (Array.isArray(nearestByGroup)) {
-    return nearestByGroup.map((group: BranNearestClearanceGroupResult) => [
-      group.group,
-      group.candidates ?? [],
-    ]);
+    return nearestByGroup.map((group) => ({ group: group.group, nouns: group.nouns, candidates: group.candidates ?? [] }));
   }
-  return Object.entries(nearestByGroup);
+  return Object.entries(nearestByGroup).map(([group, candidates]) => ({ group, candidates: candidates ?? [] }));
+}
+
+/**
+ * 由分桶派生类型 facet：桶序就是服务端的最近距离序；`count` 取截断前计数 `noun_counts`，老响应没有这一格就按桶内条数。
+ * 全部默认勾选（用户要看的是「周围都有什么」，再把不关心的关掉）。
+ */
+export function buildBranNounFacets(
+  groups: readonly BranNearestClearanceGroupResult[],
+  nounCounts: Record<string, number> | undefined,
+): BranNounFacet[] {
+  return groups
+    .filter((group) => group.candidates.length > 0)
+    .map((group) => ({
+      noun: group.group,
+      count: Math.max(nounCounts?.[group.group] ?? 0, group.candidates.length),
+      selected: true,
+    }));
+}
+
+/** 默认标注：每类最近 1 条（桶内已按距离升序）。 */
+export function defaultDrawnCandidateKeys(groups: readonly BranNearestClearanceGroupResult[]): string[] {
+  return groups.flatMap((group) => {
+    const nearest = group.candidates[0];
+    return nearest ? [branCandidateKey(group.group, nearest.refno)] : [];
+  });
+}
+
+function toBranResultRow(group: string, candidate: BranNearestClearanceCandidate, drawn: boolean): SpatialComputeResultRow {
+  const segment = candidate.nearest?.source_segment_refno
+    ? `segment ${candidate.nearest.source_segment_refno}${candidate.nearest.source_segment_order != null ? `#${candidate.nearest.source_segment_order}` : ''}`
+    : '';
+  return {
+    refno: candidate.refno,
+    noun: candidate.noun,
+    distanceMm: Number.isFinite(candidate.distance_mm) ? candidate.distance_mm : null,
+    targetGroup: group,
+    sourceSegmentRefno: candidate.nearest?.source_segment_refno ?? null,
+    sourceSegmentOrder: candidate.nearest?.source_segment_order ?? null,
+    candidateKey: branCandidateKey(group, candidate.refno),
+    drawn,
+    label: [candidate.intersects ? '相交' : '', segment].filter(Boolean).join(' · '),
+  };
+}
+
+/**
+ * `branGroups × facet 勾选 × 标注开关` → `resultRows` / `annotationCandidates`。
+ * 没勾的类型整桶不进表、不画；勾了的类型全部候选进表，只有开了「标注」的那几条进 `annotationCandidates`
+ * （`ViewerPanel` 盯着它经 `bran-clearance` external source 画尺寸）。`index` 是桶内位置，与勾选无关，尺寸 id 才稳定。
+ */
+function applyBranSelection(state: SpatialComputeScenarioState): void {
+  const selectedNouns = new Set(state.nounFacets.filter((facet) => facet.selected).map((facet) => facet.noun));
+  const drawn = new Set(state.drawnCandidateKeys);
+  const visibleGroups = state.branGroups.filter((group) => selectedNouns.has(group.group));
+  state.resultRows = visibleGroups.flatMap((group) =>
+    group.candidates.map((candidate) => toBranResultRow(group.group, candidate, drawn.has(branCandidateKey(group.group, candidate.refno)))),
+  );
+  state.annotationCandidates = visibleGroups.flatMap((group) =>
+    group.candidates
+      .map((candidate, index) => ({ targetGroup: group.group, candidate, index }))
+      .filter((item) => drawn.has(branCandidateKey(group.group, item.candidate.refno))),
+  );
+}
+
+type BranNearestClearanceQuery = {
+  /** 已归一成 `a_b` */
+  sourceRefno: string;
+  /** 目标过滤之后再剔掉的噪声类型；空数组 = 不剔 */
+  excludeNouns: string[];
+  radius: number;
+};
+
+/**
+ * 按数据源取 BRAN 净距。两条路径的响应同形（plan §3.2），这里统一按 legacy 的 `BranNearestClearanceResponse` 往下交，
+ * v1 那一支的返回值赋给它就是这条「同形」契约的编译期检查。
+ *
+ * 请求口径两边一致：`source_mode=bran_centerline` 显式发（不吃服务端缺省）、`group_by=noun` 且不给任何目标 = 半径内全部类型
+ * （负几何服务端默认剔）、`max_per_group` 每类多取几条供列表勾选、`scope=all_loaded`。`surface` 等 v1 独有的格留给服务端缺省
+ * （D4 未拍板：净距是否缺省扣外径）。
+ */
+async function fetchBranNearestClearance(
+  kind: ModelSourceKind,
+  query: BranNearestClearanceQuery,
+): Promise<BranNearestClearanceResponse> {
+  if (kind === 'gen-model-v1') {
+    return await genModelV1SpatialNearestClearance({
+      sourceRefno: query.sourceRefno,
+      sourceMode: 'bran_centerline',
+      groupBy: 'noun',
+      excludeNouns: query.excludeNouns,
+      radius: query.radius,
+      maxPerGroup: BRAN_CLEARANCE_MAX_PER_NOUN,
+      scope: 'all_loaded',
+    });
+  }
+  return await queryBranCenterlineNearestClearance({
+    source_refno: query.sourceRefno,
+    group_by: 'noun',
+    exclude_nouns: query.excludeNouns,
+    radius: query.radius,
+    max_per_group: BRAN_CLEARANCE_MAX_PER_NOUN,
+    scope: 'all_loaded',
+  });
+}
+
+function splitCsv(raw: string): string[] {
+  return raw
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
 }
 
 function parseOptionalNumber(raw: string | number | null | undefined, fieldLabel: string): number | undefined {
@@ -397,6 +553,8 @@ export function createSpatialComputeStore() {
   const scenarioExpanded = ref(false);
   const requestTokens: Record<string, number> = {};
   let nextRequestToken = 0;
+  // 数据源随页面加载定死（`?model_source=` / `VITE_MODEL_SOURCE`），建 store 时读一次即可；面板上显示的路径与实际请求同源。
+  const sourceKind = getModelSourceKind();
   const scenarios = reactive<Record<SpatialComputeScenarioKey, SpatialComputeScenarioState>>({
     fittingOffset: createScenarioState('fittingOffset'),
     fitting: createScenarioState('fitting'),
@@ -407,7 +565,9 @@ export function createSpatialComputeStore() {
     branNearestClearance: createScenarioState('branNearestClearance'),
   });
 
-  const scenarioList = SCENARIO_META;
+  const scenarioList: SpatialComputeScenarioMeta[] = SCENARIO_META.map((meta) =>
+    meta.key === 'branNearestClearance' ? { ...meta, endpoint: BRAN_NEAREST_CLEARANCE_ENDPOINT[sourceKind] } : meta,
+  );
   const currentScenarioMeta = computed(() => scenarioList.find((item) => item.key === activeScenario.value) ?? scenarioList[0]!);
   const currentScenarioState = computed(() => scenarios[activeScenario.value]);
   const isBusy = computed(() => Object.values(scenarios).some((item) => item.loading));
@@ -454,8 +614,7 @@ export function createSpatialComputeStore() {
     if (!refno) {
       state.error = key === 'branNearestClearance' ? '请输入完整 BRAN refno' : '请输入完整 suppo_refno';
       state.responseText = '';
-      state.resultRows = [];
-      state.annotationCandidates = [];
+      clearScenarioResults(state);
       return;
     }
 
@@ -465,8 +624,7 @@ export function createSpatialComputeStore() {
     state.loading = true;
     state.error = '';
     state.responseText = '';
-    state.resultRows = [];
-    state.annotationCandidates = [];
+    clearScenarioResults(state);
 
     try {
       let response: SpatialComputeResultEnvelope;
@@ -514,25 +672,23 @@ export function createSpatialComputeStore() {
           });
           break;
         case 'branNearestClearance': {
-          const targetGroups = state.targetNouns
-            .split(',')
-            .map((item) => item.trim())
-            .filter(Boolean);
-          const branResponse = await queryBranCenterlineNearestClearance({
-            source_refno: refno,
-            target_groups: targetGroups.length > 0 ? targetGroups : 'wall,column',
+          const branResponse = await fetchBranNearestClearance(sourceKind, {
+            sourceRefno: refno,
+            excludeNouns: splitCsv(state.excludeNouns),
             radius: parseOptionalNumber(state.searchRadius, 'radius') ?? 5000,
-            scope: 'all_loaded',
           });
           if (requestTokens[key] !== token) return;
           state.responseText = JSON.stringify(branResponse, null, 2);
-          state.resultRows = extractBranNearestRows(branResponse);
-          state.annotationCandidates = extractBranAnnotationCandidates(branResponse);
           if (!branResponse.success) {
             state.error = branResponse.error || branResponse.message || '请求失败';
-            state.resultRows = [];
-            state.annotationCandidates = [];
+            clearScenarioResults(state);
+            return;
           }
+          state.branGroups = normalizeBranNearestGroups(branResponse.nearest_by_group);
+          state.nounFacets = buildBranNounFacets(state.branGroups, branResponse.noun_counts);
+          state.drawnCandidateKeys = defaultDrawnCandidateKeys(state.branGroups);
+          state.excludedSelfMembers = branResponse.excluded_self_members ?? 0;
+          applyBranSelection(state);
           return;
         }
       }
@@ -547,8 +703,7 @@ export function createSpatialComputeStore() {
       if (requestTokens[key] !== token) return;
       state.error = error instanceof Error ? error.message : String(error);
       state.responseText = '';
-      state.resultRows = [];
-      state.annotationCandidates = [];
+      clearScenarioResults(state);
     } finally {
       if (requestTokens[key] === token) {
         state.loading = false;
@@ -558,6 +713,31 @@ export function createSpatialComputeStore() {
 
   function toggleScenarioExpanded() {
     scenarioExpanded.value = !scenarioExpanded.value;
+  }
+
+  /** 勾 / 不勾某一类：整桶进出结果表与三维标注，不重新请求。 */
+  function toggleBranNounFacet(noun: string) {
+    const state = scenarios.branNearestClearance;
+    const facet = state.nounFacets.find((item) => item.noun === noun);
+    if (!facet) return;
+    facet.selected = !facet.selected;
+    applyBranSelection(state);
+  }
+
+  function setAllBranNounFacets(selected: boolean) {
+    const state = scenarios.branNearestClearance;
+    for (const facet of state.nounFacets) facet.selected = selected;
+    applyBranSelection(state);
+  }
+
+  /** 单条候选的「标注」开关：默认只有每类最近 1 条是开的。 */
+  function toggleBranCandidateDrawn(candidateKey: string) {
+    const state = scenarios.branNearestClearance;
+    const drawn = new Set(state.drawnCandidateKeys);
+    if (drawn.has(candidateKey)) drawn.delete(candidateKey);
+    else drawn.add(candidateKey);
+    state.drawnCandidateKeys = [...drawn];
+    applyBranSelection(state);
   }
 
   if (typeof window !== 'undefined') {
@@ -585,6 +765,9 @@ export function createSpatialComputeStore() {
     applyCurrentSelection,
     submitScenario,
     toggleScenarioExpanded,
+    toggleBranNounFacet,
+    setAllBranNounFacets,
+    toggleBranCandidateDrawn,
   };
 }
 

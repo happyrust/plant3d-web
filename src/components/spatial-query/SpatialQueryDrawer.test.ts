@@ -58,7 +58,7 @@ const stubState = {
   selectedCenterRefno: ref<string | null>(null) as Ref<string | null>,
   canSubmit: ref(true) as Ref<boolean>,
   /** legacy 源有专业维度；gen-model-v1 的用例把它翻成 false */
-  spatialCapabilities: ref<SpatialQueryCapabilities>({ specValues: true }) as Ref<SpatialQueryCapabilities>,
+  spatialCapabilities: ref<SpatialQueryCapabilities>({ specValues: true, branCenterline: true }) as Ref<SpatialQueryCapabilities>,
 };
 
 vi.mock('@/composables/useSpatialQuery', () => ({
@@ -139,7 +139,7 @@ function resetDraft() {
   stubState.activeResultRefno.value = null;
   stubState.selectedCenterRefno.value = null;
   stubState.canSubmit.value = true;
-  stubState.spatialCapabilities.value = { specValues: true };
+  stubState.spatialCapabilities.value = { specValues: true, branCenterline: true };
 }
 
 function makeResultSet(count: number, options: { page?: number; perPage?: number; total?: number; hasMore?: boolean; startIndex?: number } = {}): SpatialQueryResultSet {
@@ -253,6 +253,34 @@ describe('SpatialQueryDrawer (distance 模式)', () => {
     await nextTick();
 
     expect(applyCurrentSelection).toHaveBeenCalledTimes(1);
+
+    unmount();
+  });
+
+  it('distance 模式多一档「沿 BRAN 中心线」：点选后仍用 refno 输入区并给出口径提示；数据源没这一档时按钮不出现、残留选择退回 refno', async () => {
+    const { host, unmount } = mountDrawer();
+    await nextTick();
+
+    const centerlineButton = host.querySelector('[data-testid="distance-source-bran-centerline"]') as HTMLButtonElement | null;
+    expect(centerlineButton).toBeTruthy();
+    expect(centerlineButton?.textContent).toContain('沿 BRAN 中心线');
+
+    centerlineButton?.click();
+    await nextTick();
+
+    expect(stubState.draft.distanceCenterSource).toBe('bran_centerline');
+    expect(host.querySelector('[data-testid="pick-from-selection"]')).toBeTruthy();
+    expect(host.textContent).toContain('拾取起始 BRAN');
+    expect(host.textContent).toContain('走廊外扩距离');
+    expect(host.querySelector('[data-testid="distance-source-bran-centerline"]')?.className).toContain('bg-brand-subtle');
+
+    // gen-model-v1 没有中心线：按钮消失，已选的那一档退回「通过 Refno」
+    stubState.spatialCapabilities.value = { specValues: false, branCenterline: false };
+    await nextTick();
+
+    expect(host.querySelector('[data-testid="distance-source-bran-centerline"]')).toBeNull();
+    expect(stubState.draft.distanceCenterSource).toBe('refno');
+    expect(host.querySelector('[data-testid="pick-from-selection"]')).toBeTruthy();
 
     unmount();
   });
@@ -780,7 +808,7 @@ describe('SpatialQueryDrawer (distance 模式)', () => {
   });
 
   it('gen-model-v1（无专业维度）：收起专业过滤与「按专业」排序，结果按库分组、组头用服务端全量计数、组按钮走 dbnum 路径，并提示覆盖面', async () => {
-    stubState.spatialCapabilities.value = { specValues: false };
+    stubState.spatialCapabilities.value = { specValues: false, branCenterline: false };
     const base = makeResultSet(3);
     base.items[0]!.dbnum = 24381;
     base.items[1]!.dbnum = 24383;

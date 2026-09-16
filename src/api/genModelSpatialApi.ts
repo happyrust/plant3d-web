@@ -81,6 +81,12 @@ export type SpatialNearbyParams = {
   y?: number;
   z?: number;
   radius: number;
+  /**
+   * 源几何。缺省按 refno 的包围盒 / 点量距；`bran_centerline` = 沿该 BRAN 的真实中心线（`tubi_relate` 各段）
+   * 走廊量距，只对 `refno` 有效。legacy 后端只有 `/query?mode=bran_centerline` 会走中心线，
+   * `queryNearbySpatial` / `queryNearbyRefnos` 见到它就改打 `/query`，`radius` 映射成走廊外扩 `distance`。
+   */
+  source_mode?: 'bran_centerline';
   /** 查询形状：sphere（默认）| cube */
   shape?: 'cube' | 'sphere';
   /** noun 过滤（逗号分隔，如 "EQUI,PIPE,TUBI"） */
@@ -149,6 +155,8 @@ export type SpatialQueryResult = {
   coverage?: string;
   /** gen-model-v1 源：服务端空间树状态字面值 */
   spatial_state?: string;
+  /** 服务端非致命问题（目前只有 `/query?mode=bran_centerline` 预取 BRAN 成员表时会产生），查询照常完成 */
+  warnings?: string[];
   error?: string;
 };
 
@@ -160,7 +168,8 @@ export type SpatialQueryDbnumGroup = {
 export type SpatialNearbyResult = SpatialQueryResult;
 
 export type SpatialQueryParams = {
-  mode?: 'bbox' | 'refno' | 'position';
+  /** `bran_centerline`：以 `refno` 指定的 BRAN 各段中心线为走廊、外扩 `distance` 取候选，再按线段到候选盒的最小距离二次过滤 */
+  mode?: 'bbox' | 'refno' | 'position' | 'bran_centerline';
   refno?: string;
   x?: number;
   y?: number;
@@ -228,13 +237,30 @@ export type SpaceComputeVector = {
 
 export type BranNearestClearanceTargetGroup = 'wall' | 'column' | string;
 
+/**
+ * 结果分桶方式：`target_groups`（默认，wall / column 这类预置组，一个 noun 白名单合成一桶 `target_nouns`）
+ * 或 `noun`（半径内每个 NOUN 自成一桶，各桶按 `max_per_group` 截断；不给任何目标过滤 = 全部类型）。
+ */
+export type BranNearestClearanceGroupBy = 'target_groups' | 'noun';
+
 export type BranNearestClearanceRequest = {
   source_refno: string;
+  /**
+   * 预置目标组。`group_by` 缺省 / `target_groups` 且 `target_groups` 与 `target_nouns` 都没给时回退 `wall,column`；
+   * `group_by=noun` 下两者都是可选过滤，都不给就是半径内所有类型。
+   */
   target_groups?: BranNearestClearanceTargetGroup[] | string;
+  /** 直接点名的 NOUN 白名单（`EQUI,SUPPO,SCTN`），与 `target_groups` 可并用 */
+  target_nouns?: string[] | string;
+  group_by?: BranNearestClearanceGroupBy;
+  /** 在目标过滤之后再剔掉的噪声类型（`WELD,ATTA`），两种分桶方式都生效 */
+  exclude_nouns?: string[] | string;
   /** mm */
   radius?: number;
   scope?: 'same_dbnum' | 'all_loaded' | string;
   max_per_group?: number;
+  /** 放行源自身（BRAN + TUBI 段 + 成员构件），默认 false */
+  include_self?: boolean;
   debug?: boolean;
 };
 
@@ -274,24 +300,60 @@ export type BranNearestClearanceGroupResult = {
   candidates: BranNearestClearanceCandidate[];
 };
 
+/** 两个后端都可能把答不出的格发成 `null`（gen-model-v1 的 `Option<T>` 序列化），所以这里 `?` 与 `| null` 并存。 */
 export type BranNearestClearanceSource = {
   kind?: string;
   refno?: string;
-  dbnum?: number | string;
-  segment_count?: number;
-  centerline_bbox?: BranNearestClearanceAabb;
+  dbnum?: number | string | null;
+  segment_count?: number | null;
+  centerline_bbox?: BranNearestClearanceAabb | null;
+};
+
+export type BranNearestClearanceResolvedFilters = {
+  /** 生效的 NOUN 白名单；空 = 不限 NOUN（只在 `group_by=noun` 且没给目标过滤时出现） */
+  target_nouns?: string[];
+  target_groups?: { name: string; nouns: string[] }[];
+  group_by?: BranNearestClearanceGroupBy | string;
+  exclude_nouns?: string[];
+  scope?: string;
+  dbnums?: number[] | null;
+  radius?: number;
+  max_per_group?: number;
+  include_self?: boolean;
+};
+
+export type BranNearestClearanceDebug = {
+  candidate_ids?: number;
+  rows_examined?: number;
+  rows_missing_items?: number;
+  rows_missing_aabb?: number;
+  scope_filtered?: number;
+  noun_filtered?: number;
+  distance_filtered?: number;
+  /** 因属于源自身被剔掉的候选数，与顶层 `excluded_self_members` 同源 */
+  self_filtered?: number;
+  groups_with_hits?: number;
+  returned_candidates?: number;
 };
 
 export type BranNearestClearanceResponse = {
   success: boolean;
+  /** `group_by=noun` 时每桶 `group` 就是 NOUN 名；老响应是对象形态，`normalizeBranNearestGroups` 两种都收 */
   nearest_by_group?: Record<string, BranNearestClearanceCandidate[]> | BranNearestClearanceGroupResult[];
+  /** 半径内、过完全部过滤的候选按 NOUN 计数（`max_per_group` 截断之前），可直接做类型 facet；两种分桶方式都带 */
+  noun_counts?: Record<string, number>;
+  /** 因属于源自身（源 refno、BRAN 的 TUBI 段与全部成员构件）而被排除的候选数 */
+  excluded_self_members?: number;
   warnings?: string[];
   error?: string;
   message?: string;
   unit?: string;
   distance_method?: string;
   source?: BranNearestClearanceSource;
-  resolved_filters?: unknown;
+  query_bbox?: BranNearestClearanceAabb | null;
+  resolved_filters?: BranNearestClearanceResolvedFilters | null;
+  /** 仅 `debug=1` 时返回 */
+  debug?: BranNearestClearanceDebug;
 };
 
 export type SpaceComputeSuppoRequest = SpaceComputeRefnoRequest & {
@@ -508,12 +570,90 @@ function appendNearbySearchParams(sp: URLSearchParams, params: SpatialNearbyPara
   if (params.max_results !== undefined) sp.set('max_results', String(params.max_results));
 }
 
+/** `/query` 单页硬上限（sqlite_spatial_api `HARD_MAX_HITS`）；中心线模式取全集时一页拉满，拉不完就标 truncated。 */
+const QUERY_PAGE_HARD_CAP = 10_000;
+
+/**
+ * 沿 BRAN 中心线的邻近查询走 `/query?mode=bran_centerline`——legacy 后端只有这条路会拼 `tubi_relate` 中心线，
+ * `/nearby` 不认。参数一一对应，只有 `radius` 改名成走廊外扩 `distance`；
+ * 响应与 `/nearby` 同一个结构体，只是没有 `center / radius / shape` 这几格元数据。
+ */
+function toBranCenterlineQueryParams(params: SpatialNearbyParams): SpatialQueryParams {
+  return {
+    mode: 'bran_centerline',
+    refno: params.refno,
+    distance: params.radius,
+    shape: params.shape,
+    nouns: params.nouns,
+    spec_values: params.spec_values,
+    keyword: params.keyword,
+    sort: params.sort,
+    include_self: params.include_self,
+    include_negative: params.include_negative,
+    page: params.page,
+    per_page: params.per_page,
+    max_results: params.max_results,
+  };
+}
+
+/**
+ * 中心线模式没有 `/nearby/refnos` 的对应接口：一页拉到 `/query` 上限，再按服务端 `/nearby/refnos` 的口径
+ * 拼出 `refnos / by_dbnum / by_spec_value`。超过一页装不下的部分只能标 `truncated`，批量操作据此提示。
+ */
+async function queryBranCenterlineRefnos(params: SpatialNearbyParams): Promise<SpatialNearbyRefnosResult> {
+  const resp = await querySpatialIndex({
+    ...toBranCenterlineQueryParams(params),
+    page: 1,
+    per_page: QUERY_PAGE_HARD_CAP,
+    max_results: undefined,
+  });
+  if (!resp.success) {
+    return {
+      success: false,
+      refnos: [],
+      by_dbnum: {},
+      by_spec_value: {},
+      total_count: 0,
+      truncated: false,
+      cap: QUERY_PAGE_HARD_CAP,
+      error: resp.error,
+    };
+  }
+
+  const refnos: string[] = [];
+  const by_dbnum: Record<string, string[]> = {};
+  const by_spec_value: Record<string, string[]> = {};
+  for (const item of resp.results ?? []) {
+    refnos.push(item.refno);
+    // 服务端 refno 一律 `dbnum_refno`，库号就是前缀
+    const dbnum = item.refno.split('_')[0];
+    if (dbnum && Number.isFinite(Number(dbnum))) {
+      (by_dbnum[dbnum] ||= []).push(item.refno);
+    }
+    (by_spec_value[String(item.spec_value ?? 0)] ||= []).push(item.refno);
+  }
+  const total_count = resp.total_count ?? refnos.length;
+  return {
+    success: true,
+    refnos,
+    by_dbnum,
+    by_spec_value,
+    total_count,
+    truncated: Boolean(resp.has_more || resp.truncated_candidates || resp.truncated_results) || total_count > refnos.length,
+    cap: QUERY_PAGE_HARD_CAP,
+  };
+}
+
 /**
  * nearby 空间查询：按 refno 或中心坐标 + 半径查找周边构件。
  *
  * 与 legacy querySpatialIndex() 分离，确保旧调用继续走 /query。
+ * `source_mode=bran_centerline` 是唯一的例外：它只在 `/query` 上有实现，见 `toBranCenterlineQueryParams`。
  */
 export async function queryNearbySpatial(params: SpatialNearbyParams): Promise<SpatialNearbyResult> {
+  if (params.source_mode === 'bran_centerline') {
+    return querySpatialIndex(toBranCenterlineQueryParams(params));
+  }
   const sp = new URLSearchParams();
   appendNearbySearchParams(sp, params);
   const query = sp.toString();
@@ -544,6 +684,9 @@ export type SpatialNearbyRefnosResult = {
 export async function queryNearbyRefnos(
   params: SpatialNearbyParams,
 ): Promise<SpatialNearbyRefnosResult> {
+  if (params.source_mode === 'bran_centerline') {
+    return queryBranCenterlineRefnos(params);
+  }
   const sp = new URLSearchParams();
   appendNearbySearchParams(sp, params);
   sp.delete('page');
@@ -605,21 +748,32 @@ export async function queryPipeWallDistanceCandidates(
   });
 }
 
+/** 逗号清单参数：数组或已拼好的字符串都收，空值归一成 undefined。 */
+function joinListParam(value: string[] | string | undefined): string | undefined {
+  const joined = Array.isArray(value) ? value.join(',') : value;
+  const trimmed = joined?.trim();
+  return trimmed ? trimmed : undefined;
+}
+
 export async function queryBranCenterlineNearestClearance(
   request: BranNearestClearanceRequest,
 ): Promise<BranNearestClearanceResponse> {
   const sp = new URLSearchParams();
   sp.set('source_mode', 'bran_centerline');
   sp.set('source_refno', normalizeBranRefno(request.source_refno));
-  sp.set(
-    'target_groups',
-    Array.isArray(request.target_groups)
-      ? request.target_groups.join(',')
-      : request.target_groups || 'wall,column',
-  );
+  const targetGroups = joinListParam(request.target_groups);
+  const targetNouns = joinListParam(request.target_nouns);
+  if (targetGroups) sp.set('target_groups', targetGroups);
+  if (targetNouns) sp.set('target_nouns', targetNouns);
+  // 老口径：什么目标都不给就查墙 / 柱。`group_by=noun` 下不给目标 = 半径内所有类型，不能再补这个默认值。
+  if (!targetGroups && !targetNouns && request.group_by !== 'noun') sp.set('target_groups', 'wall,column');
+  if (request.group_by) sp.set('group_by', request.group_by);
+  const excludeNouns = joinListParam(request.exclude_nouns);
+  if (excludeNouns) sp.set('exclude_nouns', excludeNouns);
   sp.set('radius', String(request.radius ?? 5000));
   sp.set('scope', request.scope || 'all_loaded');
   if (request.max_per_group !== undefined) sp.set('max_per_group', String(request.max_per_group));
+  if (request.include_self !== undefined) sp.set('include_self', String(request.include_self));
   if (request.debug !== undefined) sp.set('debug', String(request.debug));
 
   return await fetchJson<BranNearestClearanceResponse>(

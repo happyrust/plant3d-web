@@ -560,8 +560,13 @@ function makeFilters(draft: SpatialQueryDraft): SpatialQueryFilters {
   };
 }
 
+/** 距离查询里以 refno 为源的两档：按源包围盒量距（`refno`）或沿 BRAN 真实中心线走廊量距（`bran_centerline`）。 */
+function isRefnoCenterSource(source: SpatialQueryCenterSource): source is 'refno' | 'bran_centerline' {
+  return source === 'refno' || source === 'bran_centerline';
+}
+
 function shouldIncludeSelf(draft: SpatialQueryDraft): boolean | undefined {
-  if (draft.mode === 'distance' && draft.distanceCenterSource === 'refno') {
+  if (draft.mode === 'distance' && isRefnoCenterSource(draft.distanceCenterSource)) {
     return false;
   }
   return undefined;
@@ -1033,6 +1038,7 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
   /** 当前源的空间查询能力；v1 没有专业维度，抽屉据此收起专业 UI、改按库分组 */
   const spatialCapabilities = computed<SpatialQueryCapabilities>(() => ({
     specValues: spatialSource().capabilities.specValues,
+    branCenterline: spatialSource().capabilities.branCenterline,
   }));
   const nextRequestId = options.createRequestId ?? createRequestId;
   const batchLoadRefnos = options.batchLoadRefnos ?? ((refnos: string[], loadOptions?: BatchLoadOptions) => {
@@ -1095,7 +1101,7 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
   );
 
   const canSubmit = computed(() => {
-    if (draft.mode === 'distance' && draft.distanceCenterSource === 'refno') {
+    if (draft.mode === 'distance' && isRefnoCenterSource(draft.distanceCenterSource)) {
       return draft.refno.trim().length > 0 && draft.radius > 0;
     }
     return Number.isFinite(draft.center.x) && Number.isFinite(draft.center.y) && Number.isFinite(draft.center.z) && draft.radius > 0;
@@ -1170,7 +1176,7 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
       filters,
       limit: draft.limit,
       sortBy,
-      refno: draft.mode === 'distance' && draft.distanceCenterSource === 'refno' ? draft.refno.trim() || undefined : undefined,
+      refno: draft.mode === 'distance' && isRefnoCenterSource(draft.distanceCenterSource) ? draft.refno.trim() || undefined : undefined,
       includeSelf: shouldIncludeSelf(draft),
     };
   }
@@ -1269,8 +1275,17 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
       if (serverResp.truncated_results) {
         warnings.push('服务端结果集已截断，请缩小半径或过滤条件');
       }
+      // 服务端的非致命问题（中心线模式成员表取不到 → 结果可能混入 BRAN 自身构件）原样带给用户
+      for (const warning of serverResp.warnings ?? []) {
+        warnings.push(warning);
+      }
 
       for (const raw of serverResults) {
+        // refno 模式服务端已经剔掉源自身；中心线模式走的 `/query` 还没有这一步，源 BRAN 会以 0 距离回来，这里兜一道。
+        // 它的 TUBI / 成员构件在这里认不出来，仍靠服务端。
+        if (request.refno && request.includeSelf === false && normalizeRefno(raw.refno) === normalizeRefno(request.refno)) {
+          continue;
+        }
         const existing = localByRefno.get(raw.refno);
         const visible = existing?.visible ?? true;
         const loaded = loadedRefnos.has(raw.refno);
@@ -1374,6 +1389,7 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
         ...base,
         refno: request.refno,
         include_self: request.includeSelf ?? false,
+        ...centerlineSourceMode(request),
       };
     }
 
@@ -1385,12 +1401,17 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
     };
   }
 
+  /** 「沿 BRAN 中心线」那一档要多带 `source_mode`；其余请求一个字段都不多给，老用例的参数断言原样成立。 */
+  function centerlineSourceMode(request: SpatialQueryRequest): Pick<ApiSpatialNearbyParams, 'source_mode'> {
+    return request.centerSource === 'bran_centerline' ? { source_mode: 'bran_centerline' } : {};
+  }
+
   /**
-   * 走服务端 refno 模式的请求：距离查询「通过 Refno」，以及范围查询「当前选中」在查看器解不出盒时的兜底
-   * （`resolveRequest` 给它带上 `refno`）。「手输坐标 / 拾取」永远是点模式，即使草稿里残留着 refno。
+   * 走服务端 refno 模式的请求：距离查询「通过 Refno」/「沿 BRAN 中心线」，以及范围查询「当前选中」在查看器
+   * 解不出盒时的兜底（`resolveRequest` 给它带上 `refno`）。「手输坐标 / 拾取」永远是点模式，即使草稿里残留着 refno。
    */
   function isRefnoRoutedRequest(request: SpatialQueryRequest): request is SpatialQueryRequest & { refno: string } {
-    return !!request.refno && (request.centerSource === 'refno' || request.centerSource === 'selected');
+    return !!request.refno && (isRefnoCenterSource(request.centerSource) || request.centerSource === 'selected');
   }
 
   /**
@@ -1477,10 +1498,14 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
     status.value = 'resolving-center';
     const centerSource = parseRequestMode(draft).centerSource;
 
-    if (draft.mode === 'distance' && centerSource === 'refno') {
+    if (draft.mode === 'distance' && isRefnoCenterSource(centerSource)) {
       const refno = draft.refno.trim();
       if (!refno) {
-        throw new Error('请输入起始物项 Refno');
+        throw new Error(centerSource === 'bran_centerline' ? '请输入起始 BRAN Refno' : '请输入起始物项 Refno');
+      }
+      // 抽屉在没有这一档能力时不画按钮；URL / 旧草稿残留下来的选择在这里拦住，别发一个服务端不认的请求
+      if (centerSource === 'bran_centerline' && !spatialSource().capabilities.branCenterline) {
+        throw new Error('当前数据源不支持沿 BRAN 中心线查询');
       }
       return { request: normalizeRequestFromCenter(draft.center, centerSource) };
     }
@@ -1544,6 +1569,7 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
           per_page: serverOptions.per_page,
           shape: serverOptions.shape,
           include_negative: serverOptions.include_negative,
+          ...centerlineSourceMode(request),
         });
       } else {
         serverResp = await queryNearbyPosition(request.center.x, request.center.y, request.center.z, request.radius, serverOptions);
@@ -1578,7 +1604,9 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
         }
       }
 
-      if (viewer) {
+      // 本地扫描按「中心点 + 半径」画球 / 方，中心线模式的源是一条走廊、服务端也不回 center，
+      // 拿草稿里残留的中心去扫只会混进一批不相干的「本地命中」；这一档以服务端为准，loaded 标记走 viewerLoadedRefnos。
+      if (viewer && request.centerSource !== 'bran_centerline') {
         status.value = 'querying-local';
         localItems = queryLocal(viewer, authoritativeRequest);
       }
