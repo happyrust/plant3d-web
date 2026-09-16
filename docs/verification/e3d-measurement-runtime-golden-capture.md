@@ -1542,9 +1542,15 @@ ELBO `145028` P2 → ELBO `145029` P1 之间的竖直立管，DN100 · 外半径
   第三项悬停 `(Intersection[3]) Snap : BOX 交点（预览）` → 点下去 `第 2/2 步 选择终点 (Intersection[1])`。六次子拾取仍是各用各的机位。
 - **线段外那一击的标签不带 token**：轴线候选的控制点本来就钳在线段端点 B（`nearestPointOnSegmentToRay` 钳 [0, 1]），派生按 `GMFLINE.proportion / fraction` 又回近端 B，两者重合，
   `applyPickTypeDerivation` 就原样放行（不缀 ` · Proportion[0.25]`、不标 derived）；线段内那一击标签带 token。位置口径与 E3D 一致，只是 Web 的标签少一截。
-- **坑（Any 过滤器下拾不到轴线）**：第一轮按 Any 过滤器跑，36 个机位的透镜清一色 `模型表面点`——「模型表面点」源开着（`mesh_pick_point.snap`）时它 0 px、优先级 40，而轴线候选按 `rayHit`
-  只顶在 18 px 孔径边上，光标不在轴线投影 4 px 内就输给表面点。换 **Element** 过滤器（E3D `stdElement` 拾到直管就是 TUBING；Web 里 Element 只在 Cursor 类型下放行表面点）一次过。
-  E3D 的 Any 也不会给表面点（表面点是 Web 自由表面模式的增强），这一档记进下面「偏离」。
+- **坑（Any 过滤器下拾不到轴线）→ 已修（`737a02c`，用户 08:4x 拍板）**：第一轮按 Any 过滤器跑，36 个机位的透镜清一色 `模型表面点`——「模型表面点」源开着（`mesh_pick_point.snap`）时它 0 px、优先级 40，而轴线候选按 `rayHit`
+  只顶在 18 px 孔径边上，光标不在轴线投影 4 px 内就输给表面点。当场换 **Element** 过滤器（E3D `stdElement` 拾到直管就是 TUBING；Web 里 Element 只在 Cursor 类型下放行表面点）一次过。
+  E3D 的 Any 也不会给表面点（`stdAny` 落在直管 / 元素上回 TUBING / ELEMENT，光标下那一点只有 Cursor `exact()` 这一档），所以 **`measurementPickFilterAdmits` 改成 Any × surface 只在 Cursor 放行**，与 Element 同口径；
+  连带 `attachElementLine` 把 Any × Intersect 也按 Element 的做法把表面点当元素拾取（ELBO 无 `line()` 照样拾中、由求交会话按 E3D「Unable to convert」拒收），尺寸 SnapPort 的表面候选按 Cursor 口径放行不受影响。
+  单测 +2 文件（`pickLayerModel.test.ts` 准入矩阵、`useMeasurementPickSources.test.ts` 表面点 vs 轴线的解析）、18 条靠 Any × Snap 落裸表面点的夹具改 Screen 过滤器 / Any × Cursor；测量 + 尺寸 474 用例全过。
+  **重跑**（08:5x，Any 过滤器 + 模型表面点捕捉开着，Playwright 在 `:3103` 自起一台关 HMR 的 vite——`:3102` 那台是 `watch: ignored` 起的，不重读改过的 src）：**第 1 个机位就拾到轴线**，
+  Proportion / Fraction 线段外回 B、线段内派生与 Element 那一轮逐位相同（`1200mm` / `1067mm`，Δ 9.0e-7 / 4.0e-7 / 3.1e-7 m）；同一光标处 Any × Cursor 仍是 `模型表面点`（E3D `exact()`）。
+  图 `…-02b-proportion-outside-extent-any-filter{,-result-card}.png` / `…-03b-fraction-outside-extent-any-filter{,-result-card}.png`，数值在 records.json 的 `lineExtentOverflowAnyFilterAfterFix`。
+  **口径变化**：自由表面模式下 Any × Snap（缺省拾取层）不再落裸表面点——要表面点切 Cursor 类型或 Screen 过滤器；浮条那条「自由表面模式下表面点捕捉已关闭」的提示没跟着改（待拍板要不要提示「当前过滤器 × 类型不放行表面点」）。
 - **数值口径**：本轮 P-Point 派生点与 API 手算差 7.5e-7 / 9.0e-7 m，不是 §34 那 3e-15——差在 P-Point **进场景那一步**：`usePtsetSnap.upsertCandidates` 优先用 DTX 登记的放置矩阵
   （`getDtxRefnoTransform`，来自 float32 网格数据）、拿不到才回落 API 的 `world_transform`（float64）；这一档 `:8022` 上拿得到，18 m 处 float32 量化就是 ~1 µm（§34 在 `:8024` 上回落到了 API 矩阵）。
   派生本身（偏移量 199.9993 / 199.9991 mm、与 API 方向夹角 7e-5°）在这个量级之内；盒角那 1.8e-7 m 同 §35。
@@ -1554,7 +1560,8 @@ ELBO `145028` P2 → ELBO `145029` P1 之间的竖直立管，DN100 · 外半径
 **已知偏离 / 残余**：
 - G8 E3D 运行时 golden 未采（E3D 不在跑）——本节是 G8 题面的 Web 侧，E3D 侧的位置字串仍待对账；#17 的 ✓ 据此只声明「Web 按 E3D 口径落地并实机」。
 - 没走到的分支：~~Distance 作用在 P-Point 上（沿 P-Point 方向偏移）、Proportion / Fraction 控制点落在线段外回近端~~、Fraction 恰在两分点正中间的同距取段起点、~~Intersect 面 × 面 × **线**（第三项是线时按 E3D 只与**第一**面求交）~~——~~都~~ 08:30 / 08:31 补采走通三支（见上「补采」）；剩 Fraction 同距那一条真指针的像素量化到不了「恰好相等」，天然只能由 `pickDerivation.test.ts` 顶着。
-- **补采撞出的三处 Web 口径偏离（未改代码，待拍板）**：(1) Any 过滤器 + 「模型表面点」捕捉开着时，表面点盖过 TUBING 轴线（E3D Any 拾直管即 TUBING，没有表面点这一档）——要么 Any 下表面点只在 Cursor 类型放行（同 Element 现状），要么让 `rayHit` 候选与表面点同权；
+- **补采撞出的三处 Web 口径偏离（待拍板）**：~~(1) Any 过滤器 + 「模型表面点」捕捉开着时，表面点盖过 TUBING 轴线（E3D Any 拾直管即 TUBING，没有表面点这一档）——要么 Any 下表面点只在 Cursor 类型放行（同 Element 现状），要么让 `rayHit` 候选与表面点同权~~
+  **(1) 已修 `737a02c`（08:4x 拍板）：Any 下表面点只在 Cursor 放行，同 Element；Any 重跑见上「坑 → 已修」**；
   (2) P-Point 进场景优先用 float32 的 DTX 放置矩阵而不是 API 的 float64 `world_transform`，18 m 处差 ~1 µm——mm 级显示看不出，但 §34 / §35 那种 1e-15 的对账在这一档做不到；
   (3) `Direction N 2.71502 W 90 U` / `S 2.71505 E 90 D`：ELBO `145028` P2 的 API 方向是 `(−1e-10, −6.3e-7, 1)`（gen-model 转 360° 的余数），A / B 两枚 P-Point 的 N 坐标也差 0.1 µm，派生 / 轴线继承了 1e-7 量级的横向分量，
   `formatCompassDirection` 的零容差 1e-10 把它当成了方位（同 §30 `87b8970` 修掉的那一类，只是这次噪声在设计数据而不在网格）；E3D `DIRECTION.string()` 对同一对数据出什么未采。
