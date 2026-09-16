@@ -1715,16 +1715,24 @@ ELBO `145028` P2 → ELBO `145029` P1 之间的竖直立管，DN100 · 外半径
 | Element × Snap | 不吸附，提示条第二行 `当前未捕捉到已启用点源：管身轴线（TUBING）` | 同 | ELEMENT 拾取 → `item.position`（角点；Web 对应 Item 原点源，本轮关着） |
 | Element × Cursor | `ELBO 模型表面点` | `BEND 模型表面点` | 同上（Cursor 对元素也是 `exact()` = 光标下那一点） |
 | Any × Snap / Cursor | 先 `正在读取该构件的 P-Point…`，落地后 Snap 仍无候选（弯头体上没有 P-Point / 轴线）；Cursor = 表面点 | 同 | 同上 |
-| **Perpendicular 第二击落在弯管体**（源点 ATTA 145120 P3 / ATTA 146109 P3） | Element × Snap：**拾不到、草稿保留**；Element × Cursor：**点退化**到表面点 `456mm / 226 / 397 / W 39.9659 S 29.6401 U`（信息条 `点→点（目标无轴向/面几何）`，标近似） | Element × Snap：拾不到；Element × Cursor：点退化 `1271mm / 309 / 1233 / W 0.165464 S 14.0898 U` | `getLine()` 未设 → `getPlane()` = **弧面** → 源点到弧面 **76.098 mm**（ELBO）/ **7.033 mm**（BEND） |
+| **Perpendicular 第二击落在弯管体**（源点 ATTA 145120 P3 / ATTA 146109 P3）——**修前**（`67b662a` 之前） | Element × Snap：**拾不到、草稿保留**；Element × Cursor：**点退化**到表面点 `456mm / 226 / 397 / W 39.9659 S 29.6401 U`（信息条 `点→点（目标无轴向/面几何）`，标近似） | Element × Snap：拾不到；Element × Cursor：点退化 `1271mm / 309 / 1233 / W 0.165464 S 14.0898 U` | `getLine()` 未设 → `getPlane()` = **弧面** → 源点到弧面 **76.098 mm**（ELBO）/ **7.033 mm**（BEND） |
+| 同上——**修后**（`c4f20bd`，2026-09-16 19:56 重跑，→ 已知偏离 (1)） | Element × Snap **与** × Cursor 都出 **`76mm / 29 / 70 / S 40.8313 E 22.2785 D`**，信息条 `点→无限面 · ELBO 中心线弧面（P1 → P2）`，终点名 `ELBO 中心线弧面（P1 → P2）垂足`，垂足 `(7354.3604, −1821.0073, 2670.1391)` 与独立值 Δ **2.7e-15 m**，垂距 76.0983 逐位；Snap 下悬停标签 `中心线弧面（P1 → P2）`、状态条 `Snap : ELBO 中心线弧面（P1 → P2）`，Cursor 下仍是 `模型表面点` 但弧随表面点带上；不标近似 | 同：**`7mm / 5 / 5 / N 11.0734 E 39.8165 U`**，垂足 `(7732.0402, 10722.3783, 25080.0337)` Δ **4.0e-15 m**，7.0333 逐位 | 同上（Web 现在与 E3D 同口径） |
 
 - 页面错误 0；全部数值（成员表与每枚 P-Point、四根管的 API 两端 / 方向 / 倾角、每击悬停标签与设计坐标、独立弧参数、弯管体四种拾取层的悬停状态与两次 Perpendicular 的结果）见
-  `web-tubing-inclined-bend-live-elbo-scene-records.json` / `…-bend-scene-records.json`。**没有改任何产品代码。**
+  `web-tubing-inclined-bend-live-elbo-scene-records.json` / `…-bend-scene-records.json`。**本节首采没有改任何产品代码**；修后重跑的数值与产物见下面「已知偏离 (1)」。
 
 **证据等级**：Web 侧实机；E3D 侧 `static_expectation`（`edgtubing` / `edgelbow` / `edgbend` / `edgpositiondata` 上列行号）；G7-02 TUBING 运行时 golden 仍未采。
 
 **已知偏离 / 待拍板**：
-- **(1) 弯管的「轴线」在 Web 里不存在**：ELBO / BEND 作为 Perpendicular 目标，E3D 给的是中心线弧所在的**面**（`getArc()` → `GMFARC.plane`），Intersect 给 ARC 操作数；Web 的 ELBO / BEND 没有 `arc()`——Element × Snap 什么都拾不到、Element × Cursor 退化成表面点，
-  两次实机分别差了 456 vs 76 mm、1271 vs 7 mm。要补就是给 ELBO / BEND 一个 `arc` 几何：P1 / P2 / `POS`（角点）三点 + 上面的 fillet 算法（不依赖 `RADI`，ELBO 的 RADI 本来就是 0），
-  接进已有的 `circle-plane` provider（`resolvePerpendicularTarget` 已认 `hit.arc`，只是 gen-model-v1 下没人填）；Intersect 的 ARC 操作数是另一件事（提示矩阵 §6「与弧无交点」那行）。**待拍板**。
+- **(1) 弯管的「轴线」在 Web 里不存在** → **已修（`c4f20bd`，2026-09-16 19:04 拍板 / 19:56 重跑）**。修前：ELBO / BEND 作为 Perpendicular 目标，E3D 给的是中心线弧所在的**面**（`getArc()` → `GMFARC.plane`），Intersect 给 ARC 操作数；Web 的 ELBO / BEND 没有 `arc()`——Element × Snap 什么都拾不到、Element × Cursor 退化成表面点，
+  两次实机分别差了 456 vs 76 mm、1271 vs 7 mm。改法：新 kernel `src/measurement/kernel/elementArc.ts`（`elementArcFromPPoints(noun, points, corner)`：noun 表 ELBO / ELBOW / BEND；两腿 `POS` → P1 / P2，内角 α，
+  R = T · tan(α / 2)（T 取两腿切点长度平均），弧心 = `POS` + (u1 + u2) · T / (1 + cos α)，法向 = u1 × u2，偏转角 = π − α；不依赖 `RADI`；缺点 / 角点、切点落在角点、两腿 |sin| ≤ 1e-6 共线都回 null）；
+  角点 `POS` = 点集响应 `world_transform` 的平移列（`ptsetElementOriginToScene` → `usePtsetSnap.getOrigin`，与 P-Point 同一条 float64 换算链；旧后端 `null` 矩阵 → 无原点、无弧）；
+  `useXeokitMeasurementTools` 给候选 / 命中挂 `elementArc`（`attachElementGeometry`，无 `line()` 才挂弧）、无候选时的元素拾取 `elementPickAsOperand` 在 **Perpendicular 正等第二点**时给弧（Intersect 的 ARC 操作数 Web 仍没有，照旧「Unable to convert」拒收），
+  `resolvePerpendicularTargetFromHit` 把它喂给 `resolvePerpendicularTarget` 的 `arc` → `circle-plane`（过弧心、法向 = 弧面法向），目标名 `ELBO 中心线弧面（P1 → P2）`、垂足按精确几何（不因拾中它的表面点标近似）。
+  单测：`elementArc.test.ts` 7 条（含本节两枚实机件 → R 533.000 / 133.000、ANGL 逐位、源点到弧面 76.0983 / 7.0333）、`usePtsetSnap.test.ts` +1、`useXeokitMeasurementTools.test.ts` +1（Element × Cursor / Any × Snap / Intersect 仍拒）。
+  **实机重跑**（`:8022`，`:3103` 自起 vite，真 UI 勾 Perpendicular to、Ppoint × Snap 拾 ATTA P3 → Element × Snap / × Cursor 落弯管体，光标在弧中点投影）：上表「修后」一行——ELBO `76mm / 29 / 70 / S 40.8313 E 22.2785 D`、BEND `7mm / 5 / 5 / N 11.0734 E 39.8165 U`，四次垂足 Δ ≤ 4.0e-15 m；页面错误 0。
+  产物：`web-tubing-inclined-bend-live-10-elbo-scene-perpendicular-to-elbo-body-{snap,exact}-after-fix{,-result-card}.png`、`…-11-bend-scene-perpendicular-to-bend-body-{snap,exact}-after-fix{,-result-card}.png`、`…-after-fix-records.json`（独立弧参数 / 每击悬停 / 结果表 / 记录）。
+  仍开着的：Intersect 的 ARC 操作数（提示矩阵 §6「与弧无交点」那行）；RTOR / CTOR 的 `arc()` 是环面中心圆，不走 fillet，未做；透镜副标题对带弧的表面点仍写「（近似）」（与 CYLI 元素线同款，垂足本身是精确的）。
 - (2) Element × Snap 落在弯头体上 Web 拾不到任何东西，E3D 回元素原点——这是 §2 #12 的 Item 原点源（本轮关着、缺省也关）；要不要在 Element 过滤器下缺省放行 Item 原点，另拍。
 - (3) 标签细节：轴线两端名的顺序跟的是 DTX 直管对象的局部 z 向而不是流向（`轴线（BEND P-Point #1 → BEND P-Point #2）` 实际是 146110 P1 → 146107 P2）；同一位置的 OLET P1 / P2 校正取到先匹配的 P1（E3D `line()` 用的是 leave）。位置口径都对，不改。

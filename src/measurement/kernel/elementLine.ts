@@ -13,7 +13,8 @@
  * - `EDGNOZZLE`   — NOZZ
  * - `EDGPYRAMID`  — PYRA / NPYR
  *
- * ELBO / BEND / RTOR / CTOR only implement `arc()`, BOX / VALV / FLAN / TEE have no
+ * ELBO / BEND / RTOR / CTOR only implement `arc()` (ELBO / BEND: `elementArc.ts`, the
+ * centreline fillet — a Perpendicular-to plane, not a line), BOX / VALV / FLAN / TEE have no
  * handler at all: for those E3D's `handle any` rejects the pick as an operand
  * ("Unable to convert item into a line or plane for intersection"). SCTN / GENSEC
  * lines come from PLINEs (`element/plines`, separate work).

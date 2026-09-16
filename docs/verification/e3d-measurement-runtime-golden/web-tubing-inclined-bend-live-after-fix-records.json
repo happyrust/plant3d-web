@@ -1,0 +1,337 @@
+{
+  "capturedAt": "2026-09-16T11:56:53.553Z",
+  "note": "§37 弯管体两组修后重跑：位置均为设计 World mm（X=E Y=N Z=U）；independentArc 由 element/ptset 的 P1 / P2 与 world_transform 平移（POS）按 fillet 手算，不经拾取层与内核",
+  "scenes": {
+    "elbo": {
+      "url": "/?model_source=gen-model-v1&gm_backend_port=8022&show_refno=24381_145117",
+      "element": {
+        "refno": "24381_145121",
+        "noun": "ELBO",
+        "objectIds": [
+          "o:24381_145121:6"
+        ],
+        "posMm": [
+          7608.62,
+          -1427.95,
+          2350
+        ],
+        "p1Mm": [
+          7534.5086,
+          -1586.8137,
+          2525.121
+        ],
+        "p2Mm": [
+          7516.6023,
+          -1385.0754,
+          2123.9645
+        ]
+      },
+      "independentArc": {
+        "centreMm": [
+          7141.2122,
+          -1754.2876,
+          2206.7511
+        ],
+        "normal": [
+          0.6050267903990216,
+          -0.700156244144863,
+          -0.3791092410960428
+        ],
+        "radiusMm": 532.9999999999989,
+        "sweepDeg": 49.86630000000008,
+        "tangentMm": [
+          247.78529084332328,
+          247.7852908433233
+        ],
+        "midMm": [
+          7565.0577,
+          -1458.3646,
+          2336.6492
+        ]
+      },
+      "source": {
+        "refno": "24381_145120",
+        "number": 3,
+        "designMm": [
+          7400.4019,
+          -1874.288,
+          2641.2895
+        ]
+      },
+      "e3dArcPlaneDistanceMm": 76.09827124960447,
+      "e3dArcPlaneFootMm": [
+        7354.3604,
+        -1821.0073,
+        2670.1391
+      ],
+      "runs": {
+        "element-snap": {
+          "view": {
+            "el": 0.35,
+            "az": 30,
+            "factor": 1.6
+          },
+          "hover": {
+            "x": 639.0157580628614,
+            "y": 320.2588032179657,
+            "objectId": "o:24381_145121:6",
+            "label": "中心线弧面（P1 → P2）",
+            "status": "垂距测量 · 第 2/2 步 选择目标线 / 面上的点 (Snap) Snap : ELBO 中心线弧面（P1 → P2）；点空白取消当前点选",
+            "designM": [
+              7.70915372297389,
+              -1.3749288261595196,
+              2.4016476644025024
+            ]
+          },
+          "rows": {
+            "distance": "76mm",
+            "vertical": "29mm",
+            "horizontal": "70mm",
+            "direction": "S 40.8313 E 22.2785 D"
+          },
+          "info": "Perpendicular to · 点→无限面 · ELBO 中心线弧面（P1 → P2）",
+          "record": {
+            "origin": [
+              7400.4019,
+              -1874.288,
+              2641.2895
+            ],
+            "target": [
+              7354.3604,
+              -1821.0073,
+              2670.1391
+            ],
+            "targetLabel": "ELBO 中心线弧面（P1 → P2）垂足",
+            "perpendicular": {
+              "targetKind": "plane",
+              "targetLabel": "ELBO 中心线弧面（P1 → P2）"
+            },
+            "approximate": false
+          },
+          "webDistanceMm": 76.09827124960474,
+          "footErrM": 2.7375497437671545e-15,
+          "screenshots": [
+            "web-tubing-inclined-bend-live-10-elbo-scene-perpendicular-to-elbo-body-snap-after-fix.png",
+            "web-tubing-inclined-bend-live-10-elbo-scene-perpendicular-to-elbo-body-snap-after-fix-result-card.png"
+          ]
+        },
+        "element-exact": {
+          "view": {
+            "el": 0.35,
+            "az": 30,
+            "factor": 1.6
+          },
+          "hover": {
+            "x": 639.0157580628614,
+            "y": 320.2588032179657,
+            "objectId": "o:24381_145121:6",
+            "label": "模型表面点",
+            "status": "垂距测量 · 第 2/2 步 选择目标线 / 面上的点 (Cursor) Snap : ELBO 模型表面点；点空白取消当前点选",
+            "designM": [
+              7.70915372297389,
+              -1.3749288261595196,
+              2.4016476644025024
+            ]
+          },
+          "rows": {
+            "distance": "76mm",
+            "vertical": "29mm",
+            "horizontal": "70mm",
+            "direction": "S 40.8313 E 22.2785 D"
+          },
+          "info": "Perpendicular to · 点→无限面 · ELBO 中心线弧面（P1 → P2）",
+          "record": {
+            "origin": [
+              7400.4019,
+              -1874.288,
+              2641.2895
+            ],
+            "target": [
+              7354.3604,
+              -1821.0073,
+              2670.1391
+            ],
+            "targetLabel": "ELBO 中心线弧面（P1 → P2）垂足",
+            "perpendicular": {
+              "targetKind": "plane",
+              "targetLabel": "ELBO 中心线弧面（P1 → P2）"
+            },
+            "approximate": false
+          },
+          "webDistanceMm": 76.09827124960474,
+          "footErrM": 2.7375497437671545e-15,
+          "screenshots": [
+            "web-tubing-inclined-bend-live-10-elbo-scene-perpendicular-to-elbo-body-exact-after-fix.png",
+            "web-tubing-inclined-bend-live-10-elbo-scene-perpendicular-to-elbo-body-exact-after-fix-result-card.png"
+          ]
+        }
+      }
+    },
+    "bend": {
+      "url": "/?model_source=gen-model-v1&gm_backend_port=8022&show_refno=24381_146105",
+      "element": {
+        "refno": "24381_146110",
+        "noun": "BEND",
+        "objectIds": [
+          "o:24381_146110:9"
+        ],
+        "posMm": [
+          8999.9,
+          10727.68,
+          24781.69
+        ],
+        "p1Mm": [
+          8890.8664,
+          10727.68,
+          24806.8103
+        ],
+        "p2Mm": [
+          8999.903,
+          10800.1189,
+          24696.4142
+        ]
+      },
+      "independentArc": {
+        "centreMm": [
+          8868.3582,
+          10815.075,
+          24709.1144
+        ],
+        "normal": [
+          -0.14752601362659262,
+          -0.753798635733804,
+          -0.6403309238739782
+        ],
+        "radiusMm": 133.0000000000004,
+        "sweepDeg": 80.14629999999933,
+        "tangentMm": [
+          111.88991936286067,
+          111.88991936285461
+        ],
+        "midMm": [
+          8969.017,
+          10748.1983,
+          24764.6509
+        ]
+      },
+      "source": {
+        "refno": "24381_146109",
+        "number": 3,
+        "designMm": [
+          7733.0778,
+          10727.68,
+          25084.5373
+        ]
+      },
+      "e3dArcPlaneDistanceMm": 7.033294928775358,
+      "e3dArcPlaneFootMm": [
+        7732.0402,
+        10722.3783,
+        25080.0337
+      ],
+      "runs": {
+        "element-snap": {
+          "view": {
+            "el": 0.35,
+            "az": 30,
+            "factor": 1.6
+          },
+          "hover": {
+            "x": 602.9336158112461,
+            "y": 295.7560428317679,
+            "objectId": "o:24381_146110:9",
+            "label": "中心线弧面（P1 → P2）",
+            "status": "垂距测量 · 第 2/2 步 选择目标线 / 面上的点 (Snap) Snap : BEND 中心线弧面（P1 → P2）；点空白取消当前点选",
+            "designM": [
+              8.980783830505008,
+              10.755747623667023,
+              24.769637901874866
+            ]
+          },
+          "rows": {
+            "distance": "7mm",
+            "vertical": "5mm",
+            "horizontal": "5mm",
+            "direction": "N 11.0734 E 39.8165 U"
+          },
+          "info": "Perpendicular to · 点→无限面 · BEND 中心线弧面（P1 → P2）",
+          "record": {
+            "origin": [
+              7733.0778,
+              10727.68,
+              25084.5373
+            ],
+            "target": [
+              7732.0402,
+              10722.3783,
+              25080.0337
+            ],
+            "targetLabel": "BEND 中心线弧面（P1 → P2）垂足",
+            "perpendicular": {
+              "targetKind": "plane",
+              "targetLabel": "BEND 中心线弧面（P1 → P2）"
+            },
+            "approximate": false
+          },
+          "webDistanceMm": 7.03329492877917,
+          "footErrM": 3.972054645195637e-15,
+          "screenshots": [
+            "web-tubing-inclined-bend-live-11-bend-scene-perpendicular-to-bend-body-snap-after-fix.png",
+            "web-tubing-inclined-bend-live-11-bend-scene-perpendicular-to-bend-body-snap-after-fix-result-card.png"
+          ]
+        },
+        "element-exact": {
+          "view": {
+            "el": 0.35,
+            "az": 30,
+            "factor": 1.6
+          },
+          "hover": {
+            "x": 602.9336158112461,
+            "y": 295.7560428317679,
+            "objectId": "o:24381_146110:9",
+            "label": "模型表面点",
+            "status": "垂距测量 · 第 2/2 步 选择目标线 / 面上的点 (Cursor) Snap : BEND 模型表面点；点空白取消当前点选",
+            "designM": [
+              8.980783830505008,
+              10.755747623667023,
+              24.769637901874866
+            ]
+          },
+          "rows": {
+            "distance": "7mm",
+            "vertical": "5mm",
+            "horizontal": "5mm",
+            "direction": "N 11.0734 E 39.8165 U"
+          },
+          "info": "Perpendicular to · 点→无限面 · BEND 中心线弧面（P1 → P2）",
+          "record": {
+            "origin": [
+              7733.0778,
+              10727.68,
+              25084.5373
+            ],
+            "target": [
+              7732.0402,
+              10722.3783,
+              25080.0337
+            ],
+            "targetLabel": "BEND 中心线弧面（P1 → P2）垂足",
+            "perpendicular": {
+              "targetKind": "plane",
+              "targetLabel": "BEND 中心线弧面（P1 → P2）"
+            },
+            "approximate": false
+          },
+          "webDistanceMm": 7.03329492877917,
+          "footErrM": 3.972054645195637e-15,
+          "screenshots": [
+            "web-tubing-inclined-bend-live-11-bend-scene-perpendicular-to-bend-body-exact-after-fix.png",
+            "web-tubing-inclined-bend-live-11-bend-scene-perpendicular-to-bend-body-exact-after-fix-result-card.png"
+          ]
+        }
+      }
+    }
+  },
+  "pageErrors": []
+}
