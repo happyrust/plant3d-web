@@ -1638,7 +1638,7 @@ ELBO `145028` P2 → ELBO `145029` P1 之间的竖直立管，DN100 · 外半径
 
 | 组 | 过滤器 · 两击 | 独立期望 | Web 结果 | 图 |
 | --- | --- | --- | --- | --- |
-| 零距离 · 线（P-Point 自己的轴线） | Ppoint：A，再点 **同一枚 A**（`getLine()` = 过 A 沿 `U` 的轴线，源点就在线上） | 0 | **零距离**：草稿清空、不落记录、结果卡空、提示条回 `垂距测量 · 第 1/2 步 选择起点 (Snap) Snap : ELBO P-Point #2`；`pickPointMessage` 在 `clearCurrentXeokitDraft()` 被调用那一刻是 `Perpendicular distance is 0：起点已落在目标线 / 面上，无法绘制垂距尺寸`，**点完再读已是 null**，页面 DOM 里 0 处出现这句话 | `web-perp-zero-point-fallback-live-01-ppoint-self-axis-zero.png` |
+| 零距离 · 线（P-Point 自己的轴线） | Ppoint：A，再点 **同一枚 A**（`getLine()` = 过 A 沿 `U` 的轴线，源点就在线上） | 0 | **零距离**：草稿清空、不落记录、结果卡空、提示条回 `垂距测量 · 第 1/2 步 选择起点 (Snap) Snap : ELBO P-Point #2`；`pickPointMessage` 在 `clearCurrentXeokitDraft()` 被调用那一刻是 `Perpendicular distance is 0：起点已落在目标线 / 面上，无法绘制垂距尺寸`，**点完再读已是 null**，页面 DOM 里 0 处出现这句话（→ 已知偏离 (1)，`896fbbc` 修后重跑见下） | `web-perp-zero-point-fallback-live-01-ppoint-self-axis-zero.png` |
 | 零距离 · 线（TUBING 轴线） | Ppoint：A；换 **Element**，光标落在立管中段轴线投影上，透镜 `轴线（ELBO P-Point #1 → ELBO P-Point #2） · Snap`（Snap 控制点吸到近端 B，到 A→B 直线 3.6e-15 m） | A 到 line(A, B) = 0（轴线两端就是 A / B） | **零距离**，同上；提示条回 `第 1/2 步 … : TUBI 轴线（ELBO P-Point #1 → ELBO P-Point #2） · Snap` | `…-02-ppoint-tubing-axis-zero.png` |
 | 近零 · 线（另一枚 P-Point 的轴线） | Ppoint：A，再点 **B**（`getLine()` = 过 B 沿 `D` 的竖直线） | A 到 line(B, `D`) = **9.5029e-8 m**（A / B 的 N 坐标差 9.5e-5 mm，设计数据本身的量化）；垂足 `(7849.85, 11787.49, 16892.523686)` | **不是零距离**（> 1e-9 m）：`Distance 0mm · Vertical 0mm · Horizontal 0mm · Direction S 0.0103685 W`，信息条 `点→无限线 · P-Point #1 轴线`，记录 `P-Point #2 → P-Point #1 轴线垂足`，不标近似；垂足 Δ 1.8e-15 m、距离 9.502921e-8 m 与独立值 Δ 1.6e-19 | `…-03-ppoint-near-zero-result{,-result-card}.png` |
 | 点退化 | Ppoint：A；换 **Screen**，光标落在立管 t = 0.356 处的东侧表面，透镜 `模型表面点`（无轴向 / 面几何 → E3D 第三分支） | 记录终点 = 拾中的表面点本身（不投影）；Horizontal = 表面点到轴线的径向距离 = 管外半径 **57.15**；Vertical = 0.3556 L = 568.978；Direction = 垂足（第二击）→ 源点（第一击） | `Distance 572mm 近似 · Vertical 569mm · Horizontal 57mm · Direction W 84.2643 D`；信息条 `点→点（目标无轴向/面几何） · 模型表面点`；记录 `origin` = A（Δ 8.9e-16）、`target` = 表面点 `(7907.00007, 11787.489952, 17461.501235)`（Δ 0）、`targetKind = point`、`approximate = true`；Horizontal **57.15007**（网格 float32 Δ 7e-5 mm）、Vertical 568.978、Distance 571.841；Direction 若按源点 → 垂足会是 `E 84.2643 U`——**Web 出的是垂足 → 源点，与 E3D from → to 同向** | `…-04-point-fallback-result{,-result-card}.png` |
@@ -1654,9 +1654,16 @@ ELBO `145028` P2 → ELBO `145029` P1 之间的竖直立管，DN100 · 外半径
 **证据等级**：Web 侧是上面的实机走查；E3D 侧是 G4-03 运行时 trace（点退化的四行值与 from / to）+ G4-04 fixture（`perpendicularToPoint` 对源点在线 / 面上返回未设 ARC，窗体那句告警读代码未触发）+ 上列 PML 静态口径。
 
 **已知偏离 / 待拍板**：
-- **(1) 零距离告警在 Web 上没有任何可见出口**。`useXeokitMeasurementTools` 3767 写完 `pickPointMessage` 后，同一个处理函数里紧接着的 `clearMeasurementVisualAssists()` → `clearHoverPtset()`（905 行）又把它置回 null——从外面读到的永远是 null（本节用包一层 `store.clearCurrentXeokitDraft` 的探针才抄到那句话）；
+- ~~**(1) 零距离告警在 Web 上没有任何可见出口**~~。`useXeokitMeasurementTools` 3767 写完 `pickPointMessage` 后，同一个处理函数里紧接着的 `clearMeasurementVisualAssists()` → `clearHoverPtset()`（905 行）又把它置回 null——从外面读到的永远是 null（本节用包一层 `store.clearCurrentXeokitDraft` 的探针才抄到那句话）；
   而且 `pickPointMessage` 在 UI 上本来就没有消费者（`rg` 只有单测在读）：指针透镜的 subtitle 只在**未吸附**时取它，而透镜未吸附时 `visible = false`，不画。用户看到的只有「草稿没了、提示条回第 1 步、结果卡空」。E3D 是模态 `alert.warning`。
-  §13 / §35 记的 2,870 / 2,874、「Unable to convert…」、「求交已选…」同走这条通道，同样不可见（当时是从 `pickPointMessage` 读的）。要修：先清辅助态再写 message（或让 `clearHoverPtset` 不碰它），再给它一个出口（提示条尾巴 / toast）——**待拍板**。
+  §13 / §35 记的 2,870 / 2,874、「Unable to convert…」、「求交已选…」同走这条通道，同样不可见（当时是从 `pickPointMessage` 读的）。
+  **(1) 已修 `896fbbc`（用户 2026-09-16 18:0x 拍板）**：零距离分支先收草稿 / 辅助态、再 `raiseMeasurementAlert(PERPENDICULAR_ZERO_DISTANCE_MESSAGE, 'warning')`——写 `pickPointMessage` 的同时 `emitToast`（ribbon `toastBus` → `v-snackbar`，warning 4500 ms）；
+  文案改成 `Perpendicular distance is 0：起点已落在目标线 / 面上，画不出垂距尺寸（E3D：Cannot draw dimension line. Perpendicular distance is 0）；已回到第 1 步`。ViewerPanel 右下角提示条的第二行在 xeokit 测量模式下改放 `pickPointMessage`
+  （此前这一行只给 legacy 工具的 hoverText、xeokit 下恒空）——零距离告警之外，2,870 / 2,874、「Unable to convert…」、「已选第一项 / 求交已选…」、「P-Point 正在加载」、未命中原因等此前从未显示过的消息都从这里出；加 `max-w` 让长文案在窄画布里换行、不压左侧工具列。
+  单测 `useXeokitMeasurementTools.test.ts` +1（第二击落在起点自己身上：草稿 / 临时结果清空、不落记录、`statusText` 回第 1/2 步、`pickPointMessage` 保留告警、`onToast` 收到 `{ level: 'warning' }` 一条；随后一次悬停命中把提示条那一行清掉）；98 文件 872 用例全过。
+  **重跑（18:10，`:3103` 自起 vite）零距离两组**——P-Point → 自己的轴线 / TUBING 轴线、BOX +Z / +X 同一 / 另一三角形，六次点完 `pickPointMessage` 都还在、提示条第二行画出、`bg-warning` snackbar 弹出（同一句话 DOM 里 2 处），
+  5.2 s 后 snackbar 自收、提示条那一行不动光标就在、再悬停命中即清（`pickSurfacePoint` 命中置 null——这正是要另发 toast 的原因）。图 `…-07-ppoint-self-axis-zero-after-fix.png` / `…-08-ppoint-tubing-axis-zero-after-fix.png` /
+  `…-09-box-top-face-{same,other}-triangle-zero-after-fix.png` / `…-10-box-side-face-{same,other}-triangle-zero-after-fix.png`，数值在 `…-after-fix-line-records.json` / `…-after-fix-plane-records.json`。
 - **(2) 近零阈值**：Web `1e-9 m` 对设计数据里 1e-7 m 量级的偏差不生效，A → B 轴线出 `0mm / 0mm / 0mm / S 0.0103685 W`（一个全零的表带着由 1e-7 m 噪声定出来的方位）。E3D 的 `eq 0` 是精确零，同一对数据也不会告警、会拿两个相距 9.5e-5 mm 的点去 `radius2Points`——它最终显示什么**未采**（E3D 不在跑）。
   Web 这一档要么照现状（忠于「不是零就算」），要么把阈值提到 1e-6 m（与 `angleSnap` 的分量吸整同一量级）或在距离小于显示精度时 Direction 出 `--`——**待拍板**。
 - (3) 结果卡「起点 → 终点」按拾取顺序、E3D from / to 按垂足 → 源点：只是叫法，Direction 已同向，不改。

@@ -105,13 +105,17 @@ E3D 换过滤器换的是 `EDGSTATE.pick`（`setPickType` 里定位拾取走 `se
 
 ## 6. 拾取过程中的告警 / 消息（`!!alert.*` ↔ `pickPointMessage`）
 
+> **出口（2026-09-16 `896fbbc`，golden MD §36）**：`pickPointMessage` 此前在 UI 上没有消费者——指针透镜只在未吸附时拿它做 subtitle，而未吸附时透镜不画，下面这一列 Web 文案其实一句都没显示过。
+> 现在它画在 ViewerPanel 右下角提示条的**第二行**（第一行是 §1 的提示串），随下一次悬停命中 / 未命中被覆盖；E3D `!!alert.*` 一级的告警另走 `raiseMeasurementAlert` → toast（`v-snackbar`，warning 4.5 s）——目前只有零距离那一条接了 toast，其余仍只在提示条第二行。
+
 | 场景 | E3D（`edgpicktype.pmlobj` 等） | Web | 对照 |
 | --- | --- | --- | --- |
+| Perpendicular to：起点落在目标线 / 面上 | `!!alert.warning('Cannot draw dimension line. Perpendicular distance is 0')`（`gphmeasure.pmlfrm` 630）+ 尺寸重置 + 回 start | `Perpendicular distance is 0：起点已落在目标线 / 面上，画不出垂距尺寸（E3D：Cannot draw dimension line. Perpendicular distance is 0）；已回到第 1 步`（提示条第二行 + warning toast），草稿清空、不落记录 | 一致，Web 带原文；golden MD §36 实机 |
 | Intersect：后一项与第一条线平行 | `!!alert.warning('Pick another line, last pick was parallel to first line')`（913–916 / 928–930，`(2,870)`），只丢这一击 | `请再选一条线：上一次拾取与第一条线平行（E3D 2,870 Pick another line, last pick was parallel to first line）`，只丢这一击 | 一致，Web 带原文 |
 | Intersect：面 × 面 × 第三项无唯一交点 | `!!messageFile.warning(2,874)` + `return.clear()` + `numberOfPicks = 1`（843–847）——**文案在 message file 里，PML 源里没有** | `面 × 面 × 第三项没有唯一交点，求交已重置，请重新拾取（E3D 2,874）`，整包清空（`0c0d9eb` 前写「三个平面没有唯一交点」） | 行为一致；E3D 原文**未采**（**D5**）；~~第三项是线时 Web 这句「三个平面」是措辞偏离（golden MD §35 补采）~~ 措辞已改，第三项是线（线 ∥ 第一面）时也说得通 |
 | Intersect：拾中项转不成线 / 面 | `!!alert.error('Unable to convert item into a line or plane for intersection (<type>). Select another item or escape to abort the operation')`（813）；Aid / Graphics 变体 778 / 796 / 821 | `所选项无法转成线 / 面参与求交，请改选其它项或按 Esc 取消（E3D: Unable to convert item into a line or plane for intersection）`，不消耗这一击 | 一致，Web 合成一句 |
 | Intersect：与弧无交点 | `!!alert.warning('No intersection between picked items')`（887） | — | Web 无弧操作数（`unsupported-geometry` 走「转不成线 / 面」那句） |
-| Snap / Cursor：拾中元素给不出位置 | `!!alert.error('Unable to derive snap position of picked element (<type>)')`（438 / 582）；Aid 变体 408 / 554 | `当前未捕捉到已启用点源：…` / `请将光标靠近构件 P-Point 后再点击` / `当前数据源未提供该构件的 P-Point，无法登记测量点` 等（`buildMissReason`） | 语义对应，Web 按点源分句；E3D 是 alert 弹窗、Web 是提示条 |
+| Snap / Cursor：拾中元素给不出位置 | `!!alert.error('Unable to derive snap position of picked element (<type>)')`（438 / 582）；Aid 变体 408 / 554 | `当前未捕捉到已启用点源：…` / `请将光标靠近构件 P-Point 后再点击` / `当前数据源未提供该构件的 P-Point，无法登记测量点` 等（`buildMissReason`） | 语义对应，Web 按点源分句；E3D 是 alert 弹窗、Web 是提示条第二行（`896fbbc` 起才真显示） |
 | 两线夹角 / 三点角造不出弧 | `alert.error('An angular dimension could not be constructed from the data selected')`（`gphanglemeasure.pmlfrm`，golden MD §22 / §30） | `两条线平行，画不出角度尺寸（E3D：An angular dimension could not be constructed from the data selected）；已回到第 1 步` / `线与面平行且不在面内…` / 三点共线 / 重合点 各一句 | 一致，Web 带原文并说明原因 |
 | 两线夹角第一击不是线 / 第二击不是线或面 | E3D 拾取过滤器 `EDGE` / `FACET EDGE` 根本拾不到别的东西 | `两线夹角的第一击要拾中一条线（Graphics 边 / p-line / 轴线），请改选（E3D Angle 2 Lines 第一击只拾 EDGE）` / `…第二击要拾中一条线或一个面…` | Web 放行更多操作数（PLINE / 轴线 / P-Point / 设计点，§30 补采），拒收时说明 E3D 口径 |
 | 已选第一条线 / 已选第一项 / 求交已选 | E3D 靠提示条 token 变化（`Intersection[2]`）与高亮，没有文字 | `两线夹角：已选第一条线 <标签>，再选第二条线或面` / `已选第一项…` / `求交已选 1. …；2. …，再选一项（Intersection[n]）` | **D3** Web 加 |

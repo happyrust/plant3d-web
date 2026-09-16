@@ -1,0 +1,176 @@
+{
+  "capturedAt": "2026-09-16T10:10:23.749Z",
+  "url": "/?model_source=gen-model-v1&gm_backend_port=8022&show_refno=24381_145018",
+  "message": "Perpendicular distance is 0：起点已落在目标线 / 面上，画不出垂距尺寸（E3D：Cannot draw dimension line. Perpendicular distance is 0）；已回到第 1 步",
+  "ppoints": {
+    "a": {
+      "refno": "24381_145028",
+      "noun": "ELBO",
+      "number": 2,
+      "designM": [
+        7.849849999982805,
+        11.78748990497079,
+        16.892523685784194
+      ],
+      "dir": [
+        -1.1369784178222598e-10,
+        -6.283185204737986e-7,
+        0.9999999999998026
+      ],
+      "designMm": [
+        7849.85,
+        11787.489905,
+        16892.523686
+      ]
+    },
+    "b": {
+      "refno": "24381_145029",
+      "noun": "ELBO",
+      "number": 1,
+      "designM": [
+        7.849850000000001,
+        11.78749,
+        18.492386314215775
+      ],
+      "dir": [
+        -6.123233995736766e-17,
+        -3.749399456654644e-33,
+        -1
+      ],
+      "designMm": [
+        7849.85,
+        11787.49,
+        18492.386314
+      ]
+    }
+  },
+  "runs": [
+    {
+      "name": "self-axis",
+      "first": {
+        "objectId": "o:24381_145028:ptset",
+        "label": "P-Point #2",
+        "designMm": [
+          7849.85,
+          11787.489905,
+          16892.523686
+        ],
+        "screen": [
+          639.9999906778925,
+          464.1555013325375
+        ]
+      },
+      "second": {
+        "objectId": "o:24381_145028:ptset",
+        "label": "P-Point #2",
+        "designMm": [
+          7849.85,
+          11787.489905,
+          16892.523686
+        ],
+        "screen": [
+          639.9999906778925,
+          464.1555013325375
+        ]
+      },
+      "messageAfterClick": "Perpendicular distance is 0：起点已落在目标线 / 面上，画不出垂距尺寸（E3D：Cannot draw dimension line. Perpendicular distance is 0）；已回到第 1 步",
+      "promptBarAfterClick": {
+        "lines": [
+          "垂距测量 · 第 1/2 步 选择起点 (Snap) Snap : ELBO P-Point #2",
+          "Perpendicular distance is 0：起点已落在目标线 / 面上，画不出垂距尺寸（E3D：Cannot draw dimension line. Perpendicular distance is 0）；已回到第 1 步"
+        ]
+      },
+      "snackbarAfterClick": {
+        "visible": true,
+        "text": "Perpendicular distance is 0：起点已落在目标线 / 面上，画不出垂距尺寸（E3D：Cannot draw dimension line. Perpendicular distance is 0）；已回到第 1 步",
+        "classes": "v-overlay__content v-snackbar__wrapper v-theme--light bg-warning v-snackbar--variant-elevated"
+      },
+      "domOccurrences": 2,
+      "stateAfter": {
+        "status": "垂距测量 · 第 1/2 步 选择起点 (Snap) Snap : ELBO P-Point #2",
+        "message": "Perpendicular distance is 0：起点已落在目标线 / 面上，画不出垂距尺寸（E3D：Cannot draw dimension line. Perpendicular distance is 0）；已回到第 1 步",
+        "hasDraft": false,
+        "records": 0,
+        "hasDraftResult": false
+      },
+      "snackbarAfter5s": null,
+      "promptBarAfter5s": {
+        "lines": [
+          "垂距测量 · 第 1/2 步 选择起点 (Snap) Snap : ELBO P-Point #2",
+          "Perpendicular distance is 0：起点已落在目标线 / 面上，画不出垂距尺寸（E3D：Cannot draw dimension line. Perpendicular distance is 0）；已回到第 1 步"
+        ]
+      },
+      "messageAfterRehover": null,
+      "promptBarAfterRehover": {
+        "lines": [
+          "垂距测量 · 第 1/2 步 选择起点 (Snap) Snap : ELBO P-Point #2"
+        ]
+      },
+      "shot": "web-perp-zero-point-fallback-live-07-ppoint-self-axis-zero-after-fix.png"
+    },
+    {
+      "name": "tubing-axis",
+      "first": {
+        "objectId": "o:24381_145028:ptset",
+        "label": "P-Point #2",
+        "designMm": [
+          7849.85,
+          11787.489905,
+          16892.523686
+        ],
+        "screen": [
+          639.9999906778925,
+          464.1555013325375
+        ]
+      },
+      "second": {
+        "objectId": "o:24381_145018:5",
+        "label": "轴线（ELBO P-Point #1 → ELBO P-Point #2） · Snap",
+        "designMm": [
+          7849.85,
+          11787.49,
+          18492.386314
+        ],
+        "screen": [
+          639.9999999999999,
+          308
+        ]
+      },
+      "messageAfterClick": "Perpendicular distance is 0：起点已落在目标线 / 面上，画不出垂距尺寸（E3D：Cannot draw dimension line. Perpendicular distance is 0）；已回到第 1 步",
+      "promptBarAfterClick": {
+        "lines": [
+          "垂距测量 · 第 1/2 步 选择起点 (Snap) Snap : TUBI 轴线（ELBO P-Point #1 → ELBO P-Point #2） · Snap",
+          "Perpendicular distance is 0：起点已落在目标线 / 面上，画不出垂距尺寸（E3D：Cannot draw dimension line. Perpendicular distance is 0）；已回到第 1 步"
+        ]
+      },
+      "snackbarAfterClick": {
+        "visible": true,
+        "text": "Perpendicular distance is 0：起点已落在目标线 / 面上，画不出垂距尺寸（E3D：Cannot draw dimension line. Perpendicular distance is 0）；已回到第 1 步",
+        "classes": "v-overlay__content v-snackbar__wrapper v-theme--light bg-warning v-snackbar--variant-elevated"
+      },
+      "domOccurrences": 2,
+      "stateAfter": {
+        "status": "垂距测量 · 第 1/2 步 选择起点 (Snap) Snap : TUBI 轴线（ELBO P-Point #1 → ELBO P-Point #2） · Snap",
+        "message": "Perpendicular distance is 0：起点已落在目标线 / 面上，画不出垂距尺寸（E3D：Cannot draw dimension line. Perpendicular distance is 0）；已回到第 1 步",
+        "hasDraft": false,
+        "records": 0,
+        "hasDraftResult": false
+      },
+      "snackbarAfter5s": null,
+      "promptBarAfter5s": {
+        "lines": [
+          "垂距测量 · 第 1/2 步 选择起点 (Snap) Snap : TUBI 轴线（ELBO P-Point #1 → ELBO P-Point #2） · Snap",
+          "Perpendicular distance is 0：起点已落在目标线 / 面上，画不出垂距尺寸（E3D：Cannot draw dimension line. Perpendicular distance is 0）；已回到第 1 步"
+        ]
+      },
+      "messageAfterRehover": null,
+      "promptBarAfterRehover": {
+        "lines": [
+          "垂距测量 · 第 1/2 步 选择起点 (Snap) Snap : TUBI 轴线（ELBO P-Point #1 → ELBO P-Point #2） · Snap"
+        ]
+      },
+      "shot": "web-perp-zero-point-fallback-live-08-ppoint-tubing-axis-zero-after-fix.png"
+    }
+  ],
+  "pageErrors": []
+}
