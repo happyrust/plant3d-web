@@ -32,6 +32,7 @@ import {
   MEASUREMENT_SIGNIFICANT_SNAP_POINT_HINTS,
   MEASUREMENT_SIGNIFICANT_SNAP_POINT_IDS,
   MEASUREMENT_SIGNIFICANT_SNAP_POINT_LABELS,
+  measurementPickFilterAdmits,
   type MeasurementPickFilterId,
   type MeasurementPickTypeId,
   type MeasurementPickTypeValues,
@@ -109,6 +110,14 @@ const pickMode = computed(() => measurementStyle.state.measurementPickMode);
 const pickModeLabel = computed(() => pickMode.value === 'e3d' ? 'E3D' : '自由表面');
 const freeSurfaceWithoutMeshSnap = computed(() => (
   pickMode.value === 'free_surface' && !meshPointSourceEnabled.value
+));
+/**
+ * 表面点捕捉开着，但当前拾取过滤器 × 拾取类型不放行它（Any / Element 只在 Cursor 类型取元素表面点，Pline / Ppoint / Graphics / Aid
+ * 从不给表面点，ADR 0060（1 修订））——用户开着开关却拾不到裸表面点，提示一句该切什么。
+ */
+const surfaceNotAdmitted = computed(() => (
+  meshPointSourceEnabled.value
+  && !measurementPickFilterAdmits(pickLayer.value.filter, pickLayer.value.pickType, 'surface')
 ));
 const currentActionDisabled = computed(() => !activeMeasurement.value);
 
@@ -304,12 +313,14 @@ onBeforeUnmount(() => {
           aria-haspopup="dialog"
           :aria-label="freeSurfaceWithoutMeshSnap
             ? `${pickModeLabel}设置，表面点捕捉已关闭`
-            : `${pickModeLabel}设置`"
+            : surfaceNotAdmitted
+              ? `${pickModeLabel}设置，当前过滤器 × 类型不放行表面点`
+              : `${pickModeLabel}设置`"
           :title="`${pickMode === 'e3d' ? 'E3D 捕捉' : '自由表面'}设置`"
           @click="toggleSettings">
           <span>{{ pickModeLabel }}</span>
           <ChevronDown class="h-3.5 w-3.5" />
-          <span v-if="freeSurfaceWithoutMeshSnap"
+          <span v-if="freeSurfaceWithoutMeshSnap || surfaceNotAdmitted"
             data-testid="measurement-overlay-warning-dot"
             class="absolute right-1 top-1 h-2 w-2 rounded-full bg-amber-500"
             aria-hidden="true" />
@@ -409,6 +420,12 @@ onBeforeUnmount(() => {
           data-testid="measurement-overlay-free-surface-hint"
           class="mt-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-2 py-1.5 text-amber-700">
           自由表面模式下表面点捕捉已关闭。
+        </div>
+
+        <div v-if="surfaceNotAdmitted"
+          data-testid="measurement-overlay-surface-not-admitted-hint"
+          class="mt-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-2 py-1.5 text-amber-700">
+          当前过滤器 {{ MEASUREMENT_PICK_FILTER_LABELS[pickLayer.filter] }} × 类型 {{ MEASUREMENT_PICK_TYPE_LABELS[pickLayer.pickType] }} 不放行模型表面点：要表面点切 Cursor 类型或 Screen 过滤器（E3D Any / Element 只在 Cursor 下取元素上的点）。
         </div>
 
         <!-- E3D Positioning Control：拾取过滤器 × 拾取类型 + Significant Snaps -->

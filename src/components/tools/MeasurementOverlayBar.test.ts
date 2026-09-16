@@ -413,6 +413,30 @@ describe('MeasurementOverlayBar', () => {
     expect(measurementStyle.state.measurementPickSources.mesh_pick_point.snap).toBe(true);
     expect((host.querySelector('[data-testid="measurement-overlay-source-mesh"]') as HTMLInputElement | null)?.checked).toBe(true);
     expect(host.querySelector('[data-testid="measurement-overlay-free-surface-hint"]')).toBeNull();
+    // 切进自由表面顺手把拾取类型设成 Cursor（Any 只在 Cursor 放行表面点，ADR 0060（1 修订））→ 不放行提示不出现。
+    expect(measurementStyle.state.measurementPickLayer.pickType).toBe('exact');
+    expect(host.querySelector('[data-testid="measurement-overlay-surface-not-admitted-hint"]')).toBeNull();
+    expect(host.querySelector('[data-testid="measurement-overlay-warning-dot"]')).toBeNull();
+
+    // 表面点捕捉开着却把类型改回 Snap：Any × Snap 不放行表面点 → 提示 + 角标，说明该切 Cursor / Screen。
+    (host.querySelector('[data-testid="measurement-overlay-pick-type-snap"]') as HTMLButtonElement | null)?.click();
+    await nextTick();
+    const notAdmitted = host.querySelector('[data-testid="measurement-overlay-surface-not-admitted-hint"]');
+    expect(notAdmitted?.textContent).toContain('Any × 类型 Snap 不放行模型表面点');
+    expect(notAdmitted?.textContent).toContain('切 Cursor 类型或 Screen 过滤器');
+    expect(host.querySelector('[data-testid="measurement-overlay-warning-dot"]')).toBeTruthy();
+    expect(host.querySelector('[data-testid="measurement-overlay-settings-trigger"]')?.getAttribute('aria-label')).toContain('不放行表面点');
+    // Screen 过滤器任何类型都放行表面点 → 提示消失；换回 Any 再点 Cursor 同样消失。
+    (host.querySelector('[data-testid="measurement-overlay-pick-filter-screen"]') as HTMLButtonElement | null)?.click();
+    await nextTick();
+    expect(host.querySelector('[data-testid="measurement-overlay-surface-not-admitted-hint"]')).toBeNull();
+    (host.querySelector('[data-testid="measurement-overlay-pick-filter-any"]') as HTMLButtonElement | null)?.click();
+    await nextTick();
+    expect(host.querySelector('[data-testid="measurement-overlay-surface-not-admitted-hint"]')).toBeTruthy();
+    (host.querySelector('[data-testid="measurement-overlay-pick-type-exact"]') as HTMLButtonElement | null)?.click();
+    await nextTick();
+    expect(host.querySelector('[data-testid="measurement-overlay-surface-not-admitted-hint"]')).toBeNull();
+    expect(host.querySelector('[data-testid="measurement-overlay-warning-dot"]')).toBeNull();
 
     // 自由表面下关掉表面点捕捉：不静默回落模式，显示提示角标。
     const meshCheckbox = host.querySelector('[data-testid="measurement-overlay-source-mesh"]') as HTMLInputElement | null;

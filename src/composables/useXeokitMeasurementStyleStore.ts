@@ -409,10 +409,17 @@ function setMeasurementPickMode(mode: MeasurementPickMode): void {
     applyModeDefaultSnap(mode, sources);
   }
 
+  // 自由表面模式要的就是「光标下那一点」：Any / Element 只在 Cursor 类型放行表面点（2026-09-16 起，ADR 0060（1 修订）），
+  // 切进来时顺手把拾取类型设成 Cursor（E3D `exact()`），不然缺省 Any × Snap 落不了裸表面点。切回 E3D 模式不动类型。
+  const pickLayer = mode === 'free_surface' && state.measurementPickLayer.pickType !== 'exact'
+    ? normalizeMeasurementPickLayer({ ...state.measurementPickLayer, pickType: 'exact' })
+    : state.measurementPickLayer;
+
   updateStyle({
     measurementPickMode: mode,
     measurementPickSources: sources,
     measurementPickModeSnapMemory: memory,
+    measurementPickLayer: pickLayer,
   });
 }
 

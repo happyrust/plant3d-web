@@ -32,10 +32,15 @@ describe('useXeokitMeasurementStyleStore · measurementPickMode', () => {
     expect(style.state.measurementPickMode).toBe('e3d');
     expect(style.state.measurementPickSources.mesh_pick_point.snap).toBe(false);
 
+    expect(style.state.measurementPickLayer.pickType).toBe('snap');
+
     style.setMeasurementPickMode('free_surface');
     expect(style.state.measurementPickMode).toBe('free_surface');
     expect(style.state.measurementPickSources.mesh_pick_point.show).toBe(true);
     expect(style.state.measurementPickSources.mesh_pick_point.snap).toBe(true);
+    // 自由表面 = 光标下那一点：拾取类型顺手设成 Cursor（Any 只在 Cursor 放行表面点，ADR 0060（1 修订）），过滤器与其它格不动。
+    expect(style.state.measurementPickLayer.pickType).toBe('exact');
+    expect(style.state.measurementPickLayer.filter).toBe('any');
 
     style.updateMeasurementPickSource('ptset', { snap: false });
     style.setMeasurementPickMode('e3d');
@@ -43,6 +48,12 @@ describe('useXeokitMeasurementStyleStore · measurementPickMode', () => {
     expect(style.state.measurementPickSources.ptset.snap).toBe(true);
     expect(style.state.measurementPickSources.position.snap).toBe(true);
     expect(style.state.measurementPickSources.mesh_pick_point.snap).toBe(false);
+    // 切回 E3D 不改类型（用户自己选的 Cursor 留着）；再切自由表面时已是 Cursor 也不重写。
+    expect(style.state.measurementPickLayer.pickType).toBe('exact');
+    style.updateMeasurementPickLayer({ pickType: 'midpoint', filter: 'element' });
+    style.setMeasurementPickMode('free_surface');
+    expect(style.state.measurementPickLayer.pickType).toBe('exact');
+    expect(style.state.measurementPickLayer.filter).toBe('element');
   });
 
   it('自由表面模式下关闭表面点捕捉不再静默回落，模式与 snap 可自由组合', async () => {
