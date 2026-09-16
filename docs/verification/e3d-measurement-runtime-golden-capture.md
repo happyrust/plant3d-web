@@ -1524,7 +1524,38 @@ XLEN / YLEN / ZLEN 半长 × `element/ptset` 的 `world_transform`。
   `102278` 的 −Y 面贴着 `102274`，别的面从盒角往里 18 mm 起铺网格取第一个透镜给「面」且法向对上的点。
 - 页面错误 0；全部数值（每击的 t / 机位 / 屏幕坐标 / 悬停标签、p-line 两端、六个面的法向与拾中处、独立期望与误差、逐步提示条）见 `web-pick-types-live-records.json`。**没有改任何产品代码。**
 
+**补采（2026-09-16 08:30 / 08:31）：上面「没走到的分支」里能用真指针到达的三支**——Distance 作用在 P-Point 上、Proportion / Fraction 的控制点落在线段外回近端、Intersect 面 × 面 × **线**
+（外加 线 ∥ 第一面 的 `(2,874)` 重置）。环境同上（`:8022` = `gen-model-refactor` `1bd2cab4c`，vite `:3102`）；前两支在 1RCS 的 BRAN `24381/145018`（`show_refno=24381_145018`，
+ELBO `145028` P2 → ELBO `145029` P1 之间的竖直立管，DN100 · 外半径 57.15 mm · 轴长 1599.863 mm），第三支仍是 BOX `24381/102278`；浮条自由表面 + P-Point / 模型表面点 开、Item 原点 关；
+过滤器 / 拾取类型 / 取值都在设置弹层里真点、真填；**独立期望仍不经拾取层与内核**：P-Point 位置与方向取 `element/ptset`，控制点参数用相机世界位置 + 光标像素自己反投影出射线再算；临时 spec 已删。
+
+| 分支 | 过滤器 · token | 两击（光标落点） | 结果表 | 记录两端（设计 World，mm） | 独立期望 / 误差 | 图 |
+| --- | --- | --- | --- | --- | --- | --- |
+| Distance 作用在 P-Point | Ppoint · `(Distance[200])` | 立管两端：ELBO `145028` **P2**（方向 `U`），再 ELBO `145029` **P1**（方向 `D`）——光标落在 P-Point 自己的投影上 | `Distance 1200mm · Offset X 0 · Y 0 · Z +1200mm · Direction N 2.71502 W 90 U` | 起点 `U 17092.524` = **P2 沿自己的方向进 200**；终点 `U 18292.387` = **P1 沿自己的方向（朝下）进 200**；标签 `P-Point #2 · Distance[200]` / `P-Point #1 · Distance[200]` | 1599.863 − 2 × 200 = **1199.863**（表 1199.864）；两端 Δ 7.5e-7 / 9.0e-7 m | `web-pick-types-residual-live-01-ppoint-distance{,-result-card}.png` |
+| 同上 · 斜方向 | Ppoint · `(Distance[200])` | 两只 ELBO 的另一端：`145028` **P1**（方向 `(−0.00018, −0.99999, −0.00499)`）→ `145029` **P2**（`(0, −0.99999, +0.00499)`） | `Distance 1906mm · Offset Z +1906mm · Direction E 0.00617624 S 89.9981 U` | 两端偏移量 `(−0.036, −199.997, −0.998)` / `(0.000, −199.997, +0.998)`——**严格沿各自 P-Point 方向**，0.005 的竖向分量变成了 ±0.998 mm，不是轴向吸整 | 1905.854（表 1905.856） | `…-01b-ppoint-distance-tilted{,-result-card}.png` |
+| Proportion 控制点在线段外 | Element · `(Proportion[0.25])` | 第一击：相机在正东、低于管顶，**仰 60°** 0.9 m 看；光标落在**轴线延长线上 B 之上 69.3 mm**（= 0.7 · r · tan 60°）处的投影——射线打在直管 +E 表面 B 之下 29.7 mm（对象是直管，轴线候选按 `rayHit` 放行），射线与轴线无限直线的最近点却在 **B 之外**（独立反算 s = **1.04331**）。第二击：正东水平 1.6 m 看 A + 0.4 L，光标就在轴线上（s = 0.40000，近端 A） | `Distance 1200mm · Offset Z −1200mm · Direction S 2.71505 E 90 D` | 起点 = **B**（`U 18492.387`，ELBO 145029 P1 本身，不是 B − 0.25 L）；终点 = **A + 0.25 L**（`U 17292.489`）；标签 `轴线（ELBO P-Point #1 → ELBO P-Point #2）` / `… · Proportion[0.25]` | 0.75 L = **1199.897**（表 1199.898）；Δ 9.0e-7 / 4.0e-7 m | `…-02-proportion-outside-extent{,-first-click,-result-card}.png` |
+| Fraction 控制点在线段外 | Element · `(Fraction[3])` | 同一对机位 / 光标 | `Distance 1067mm · Offset Z −1067mm · Direction S 2.71505 E 90 D` | 起点 = **B**；终点 = **A + L/3**（`U 17425.811`：近端 A，离 s = 0.4 最近的分点是 1/3） | 2L/3 = **1066.575**（表 1066.576）；Δ 9.0e-7 / 3.1e-7 m | `…-03-fraction-outside-extent{,-first-click,-result-card}.png` |
+| Intersect 面 × 面 × 线 | Graphics · `(Intersection[1])` → `[2]` → `[3]` | 起点 = **+X 面 × +Y 面 × X 向棱 (Y+, Z−)**——这条棱**躺在第二面 +Y 里**，与第二面没有交点，与第一面 +X 交于角 (+44, +40, −37)；终点 = **+Z 面 × +X 面 × Z 向棱 (X−, Y+)**——棱 **∥ 第二面 +X**，与第一面 +Z 交于角 (−44, +40, +37)。两个面照 §35 从盒角往里 18 mm 铺点，棱从两邻面法向的角平分线方向 0.45 m 外看、光标落在棱中点 | `Distance 115mm · Offset X −72mm · Y +50mm · Z +74mm · Direction W 35 N 40.0608 U` | 起点 `E 10371.572 N 14177.521 U 463.000`，终点 `E 10299.486 N 14227.996 U 537.000`，两端标签 `交点`；第三项**悬停即 `交点（预览）`**、预览位置 = 角 | 设计盒角 Δ **1.78e-7 / 1.79e-7 m**（同 §35 的 float32 量化）；用网格自己的棱与面独立算 线 ∩ 第一面 = 记录（Δ 4e-15），线 ∩ 第二面 = **平行**（无解）——取的确是第一面；对角 √(88² + 74²) = **114.978** | `…-04-plane-plane-line{,-after-subpick-2,-preview,-result-card}.png` |
+| 线 ∥ 第一面 → `(2,874)` | Graphics · `(Intersection[3])` | +X 面 × +Y 面之后点 **Y 向棱 (X−, Z+)**（棱方向 · 第一面法向 = 2e-15） | —（没有测量点落地） | 悬停仍是 `边`（预览算不出交点），点下去 `三个平面没有唯一交点，求交已重置，请重新拾取（E3D 2,874）`，提示条退回 `(Intersection[1])`、仍在第 1/2 步 | 整个会话清空（E3D `!this.return.clear()`），不是只丢这一击 | `…-04-plane-plane-line-parallel-2874.png` |
+
+- 提示条逐步（面 × 面 × 线）：`… (Intersection[2]) Snap : BOX 面` + `求交已选 1. BOX 面（面），再选一项（Intersection[2]）` → `(Intersection[3])` + `1. BOX 面（面）；2. BOX 面（面）` →
+  第三项悬停 `(Intersection[3]) Snap : BOX 交点（预览）` → 点下去 `第 2/2 步 选择终点 (Intersection[1])`。六次子拾取仍是各用各的机位。
+- **线段外那一击的标签不带 token**：轴线候选的控制点本来就钳在线段端点 B（`nearestPointOnSegmentToRay` 钳 [0, 1]），派生按 `GMFLINE.proportion / fraction` 又回近端 B，两者重合，
+  `applyPickTypeDerivation` 就原样放行（不缀 ` · Proportion[0.25]`、不标 derived）；线段内那一击标签带 token。位置口径与 E3D 一致，只是 Web 的标签少一截。
+- **坑（Any 过滤器下拾不到轴线）**：第一轮按 Any 过滤器跑，36 个机位的透镜清一色 `模型表面点`——「模型表面点」源开着（`mesh_pick_point.snap`）时它 0 px、优先级 40，而轴线候选按 `rayHit`
+  只顶在 18 px 孔径边上，光标不在轴线投影 4 px 内就输给表面点。换 **Element** 过滤器（E3D `stdElement` 拾到直管就是 TUBING；Web 里 Element 只在 Cursor 类型下放行表面点）一次过。
+  E3D 的 Any 也不会给表面点（表面点是 Web 自由表面模式的增强），这一档记进下面「偏离」。
+- **数值口径**：本轮 P-Point 派生点与 API 手算差 7.5e-7 / 9.0e-7 m，不是 §34 那 3e-15——差在 P-Point **进场景那一步**：`usePtsetSnap.upsertCandidates` 优先用 DTX 登记的放置矩阵
+  （`getDtxRefnoTransform`，来自 float32 网格数据）、拿不到才回落 API 的 `world_transform`（float64）；这一档 `:8022` 上拿得到，18 m 处 float32 量化就是 ~1 µm（§34 在 `:8024` 上回落到了 API 矩阵）。
+  派生本身（偏移量 199.9993 / 199.9991 mm、与 API 方向夹角 7e-5°）在这个量级之内；盒角那 1.8e-7 m 同 §35。
+- 页面错误 0；全部数值（每击的机位 / 屏幕坐标 / 悬停标签 / 独立反算的射线与控制点参数 s、P-Point 的 API 位置与方向、六个面的法向与三条棱的方向、逐步提示条与 2,874 文案）见
+  `web-pick-types-residual-live-records.json`。**没有改任何产品代码。**
+
 **已知偏离 / 残余**：
 - G8 E3D 运行时 golden 未采（E3D 不在跑）——本节是 G8 题面的 Web 侧，E3D 侧的位置字串仍待对账；#17 的 ✓ 据此只声明「Web 按 E3D 口径落地并实机」。
-- 没走到的分支：Distance 作用在 P-Point 上（沿 P-Point 方向偏移）、Proportion / Fraction 控制点落在线段外回近端、Fraction 恰在两分点正中间的同距取段起点、Intersect 面 × 面 × **线**（第三项是线时按 E3D 只与**第一**面求交）——都只有 `pickDerivation.test.ts` / `intersectPickSession.test.ts` 顶着。
+- 没走到的分支：~~Distance 作用在 P-Point 上（沿 P-Point 方向偏移）、Proportion / Fraction 控制点落在线段外回近端~~、Fraction 恰在两分点正中间的同距取段起点、~~Intersect 面 × 面 × **线**（第三项是线时按 E3D 只与**第一**面求交）~~——~~都~~ 08:30 / 08:31 补采走通三支（见上「补采」）；剩 Fraction 同距那一条真指针的像素量化到不了「恰好相等」，天然只能由 `pickDerivation.test.ts` 顶着。
+- **补采撞出的三处 Web 口径偏离（未改代码，待拍板）**：(1) Any 过滤器 + 「模型表面点」捕捉开着时，表面点盖过 TUBING 轴线（E3D Any 拾直管即 TUBING，没有表面点这一档）——要么 Any 下表面点只在 Cursor 类型放行（同 Element 现状），要么让 `rayHit` 候选与表面点同权；
+  (2) P-Point 进场景优先用 float32 的 DTX 放置矩阵而不是 API 的 float64 `world_transform`，18 m 处差 ~1 µm——mm 级显示看不出，但 §34 / §35 那种 1e-15 的对账在这一档做不到；
+  (3) `Direction N 2.71502 W 90 U` / `S 2.71505 E 90 D`：ELBO `145028` P2 的 API 方向是 `(−1e-10, −6.3e-7, 1)`（gen-model 转 360° 的余数），A / B 两枚 P-Point 的 N 坐标也差 0.1 µm，派生 / 轴线继承了 1e-7 量级的横向分量，
+  `formatCompassDirection` 的零容差 1e-10 把它当成了方位（同 §30 `87b8970` 修掉的那一类，只是这次噪声在设计数据而不在网格）；E3D `DIRECTION.string()` 对同一对数据出什么未采。
 - Significant Snaps 开着且 p-line 带分段时派生只在光标所在段上做，§18 已实机（Cut × Mid-Point、Nodes × Snap / Mid-Point），本节 SCTN `177301` / `177302` 没有 FITT / SJOI / SNOD，整条线即作用线。
