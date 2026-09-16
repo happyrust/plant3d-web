@@ -5,7 +5,10 @@
 --           (edgstate.pmlobj 323-362) -- plus the ' : ' form EDGPICK.applyToView pushes into the 3D view
 --           (edgpick.pmlobj 161-195), and the positioning-control state behind the token
 --           (!!edgPosCntrl, edgposcntrl.pmlobj 82-162 members / 373-405 defaults; !!edgPositioning gadgets,
---           edgpositioning.pmlfrm 33-38). Everything is APPENDED as one block to the trace file below.
+--           edgpositioning.pmlfrm 33-38). Since 2026-09-17 (blocks from 00:05 on) also: the docked pad actually in use
+--           (!!edgNewPositioning, posCntrl.type = PAD1 -- sections 5b), the last EDGPICKDATA and what the packet has
+--           collected (pickData.* / state.return[*] -- 5c) and the Measure form's dimension from / to (6).
+--           Everything is APPENDED as one block to the trace file below.
 --           Read-only: queries only -- no database writes, no picks, no form or gadget changes.
 --
 -- Trace   : docs/verification/e3d-measurement-runtime-golden/e3d-prompt-capture.trace.txt
@@ -452,6 +455,150 @@ handle any
 endhandle
 !trace.append('posForm.shown=' & !v)
 
+-- 5b. which positioning UI variant is in use (edgposcntrl.pmlobj 196 hard-codes PAD1 = the docked pad
+--     !!edgNewPositioning, edgnewpositioning.pmlfrm; its Fraction / Proportion buttons are commented out, 55-56)
+!v = 'unset'
+!v = !!edgPosCntrl.type
+handle any
+endhandle
+if (!v.unset()) then
+  !v = 'unset'
+endif
+!trace.append('posCntrl.type=' & !v)
+
+!v = 'unset'
+!v = !!edgNewPositioning.shown().string()
+handle any
+endhandle
+!trace.append('padForm.shown=' & !v)
+
+!v = 'unset'
+!v = !!edgNewPositioning.input.val.string()
+handle any
+endhandle
+!trace.append('padForm.input=' & !v)
+
+!v = 'unset'
+!v = !!edgNewPositioning.input.active.string()
+handle any
+endhandle
+!trace.append('padForm.input.active=' & !v)
+
+!names = ARRAY()
+!names.append('snap')
+!names.append('distance')
+!names.append('midpoint')
+!names.append('intersect')
+!names.append('cursor')
+!names.append('any')
+!names.append('element')
+!names.append('aid')
+!names.append('pline')
+!names.append('ppoint')
+!names.append('screen')
+!names.append('graphics')
+!names.append('external')
+!names.append('wp')
+!list = ''
+do !n values !names
+  !v = 'unset'
+  !v = !!edgNewPositioning.$!<n>.val.string()
+  handle any
+  endhandle
+  !list = !list & !n & '=' & !v & ' '
+enddo
+!trace.append('padForm.toggles=' & !list)
+
+!v = 'unset'
+!v = !!edgFormat.dp.string()
+handle any
+endhandle
+!trace.append('edgFormat.dp=' & !v)
+
+-- 5c. last pick (EDGPICKDATA on the controller) and what the packet has collected so far
+!v = 'unset'
+!v = !!edgCntrl.pickData.type
+handle any
+endhandle
+if (!v.unset()) then
+  !v = 'unset'
+endif
+!trace.append('pickData.type=' & !v)
+
+!v = 'unset'
+!v = !!edgCntrl.pickData.item.flnn
+handle any
+endhandle
+if (!v.unset()) then
+  !v = 'unset'
+endif
+!trace.append('pickData.item=' & !v)
+
+!v = 'unset'
+!v = !!edgCntrl.pickData.item.type
+handle any
+endhandle
+if (!v.unset()) then
+  !v = 'unset'
+endif
+!trace.append('pickData.item.type=' & !v)
+
+!v = 'unset'
+!v = !!edgCntrl.pickData.point.string()
+handle any
+endhandle
+!trace.append('pickData.point=' & !v)
+
+!v = 'unset'
+!v = !!edgCntrl.pickData.pLine
+handle any
+endhandle
+if (!v.unset()) then
+  !v = 'unset'
+endif
+!trace.append('pickData.pLine=' & !v)
+
+!v = 'unset'
+!v = !!edgCntrl.pickData.aidType
+handle any
+endhandle
+if (!v.unset()) then
+  !v = 'unset'
+endif
+!trace.append('pickData.aidType=' & !v)
+
+!v = 'unset'
+!v = !!edgCntrl.pickData.primitiveType
+handle any
+endhandle
+if (!v.unset()) then
+  !v = 'unset'
+endif
+!trace.append('pickData.primitiveType=' & !v)
+
+!v = 'unset'
+!v = !!edgCntrl.pickData.position.string()
+handle any
+endhandle
+!trace.append('pickData.position=' & !v)
+
+!arr = ARRAY()
+!arr = !!edgCntrl.state.getReturn()
+handle any
+endhandle
+!trace.append('state.return.size=' & !arr.size().string())
+do !i indices !arr
+  !t = 'unset'
+  !t = !arr[!i].objectType()
+  handle any
+  endhandle
+  !v = 'unset'
+  !v = !arr[!i].string()
+  handle any
+  endhandle
+  !trace.append('state.return[' & !i.string() & ']=' & !t & ' ' & !v)
+enddo
+
 -- 6. Measure form
 !v = 'unset'
 !v = !!gphMeasure.shown().string()
@@ -464,6 +611,27 @@ endhandle
 handle any
 endhandle
 !trace.append('gphMeasure.perpendicularTo=' & !v)
+
+!v = 'unset'
+!v = !!gphMeasure.dimension.from.string()
+handle any
+endhandle
+!trace.append('gphMeasure.dimension.from=' & !v)
+
+!v = 'unset'
+!v = !!gphMeasure.dimension.to.string()
+handle any
+endhandle
+!trace.append('gphMeasure.dimension.to=' & !v)
+
+!v = 'unset'
+!v = !!gphMeasure.dimension.wrt.name
+handle any
+endhandle
+if (!v.unset()) then
+  !v = 'unset'
+endif
+!trace.append('gphMeasure.dimension.wrt=' & !v)
 
 -- 7. EDG controller stack
 !v = 'unset'

@@ -1,0 +1,33 @@
+﻿==== after-pick probe tag=typed-2p5-value-3
+pickData.type=TUBING
+pickData.tubing=LEAVE
+pickData.item=ELBOW 4 of BRANCH /Copy-of-RCS0014-1R43012新
+pickData.item.type=ELBO
+pickData.pickLine=POINTVECTOR  POSITION E 7466.603mm N 10079.192mm U 15226.834mm WRT /*  DIRECTION W 45 S 35.264 D WRT /*
+tube.line.start=E 7849.61mm N 10447.46mm U 14234.127mm WRT /*
+tube.line.end=E 7849.61mm N 10447.46mm U 16583.356mm WRT /*
+tube.line.length=2349.2296497683mm
+tube.lineExtended.start=E 7849.61mm N 10447.46mm U 14234.127mm WRT /*
+tube.lineExtended.end=E 7849.61mm N 10447.46mm U 16583.356mm WRT /*
+tube.lineExtended.length=2349.2296497683mm
+pickPacket.return.size=1
+pickPacket.return[1]=EDGPOSITIONDATA position=E 7849.61mm N 10447.46mm U 15800.28mm WRT /*
+landing.fromTubeStart=1566.15309984553mm fromTubeEnd=783.076549922768mm ratio=0.666666666666667
+landing.fromExtendedStart=1566.15309984553mm ratioExtended=0.666666666666667
+state.major=2
+prompt=Measure distance end (Fraction[3]) Snap
+==== after-pick probe tag=direct-2p5-second-pick
+pickData.type=TUBING
+pickData.tubing=LEAVE
+pickData.item=ELBOW 4 of BRANCH /Copy-of-RCS0014-1R43012新
+pickData.item.type=ELBO
+pickData.pickLine=POINTVECTOR  POSITION E 7618.305mm N 10230.895mm U 14923.425mm WRT /*  DIRECTION W 45 S 35.264 D WRT /*
+tube.line.start=E 7849.61mm N 10447.46mm U 14234.127mm WRT /*
+tube.line.end=E 7849.61mm N 10447.46mm U 16583.356mm WRT /*
+tube.line.length=2349.2296497683mm
+tube.lineExtended.start=E 7849.61mm N 10447.46mm U 14234.127mm WRT /*
+tube.lineExtended.end=E 7849.61mm N 10447.46mm U 16583.356mm WRT /*
+tube.lineExtended.length=2349.2296497683mm
+pickPacket.return.size=0
+state.major=1
+prompt=Measure distance start (Fraction[2.5]) Snap

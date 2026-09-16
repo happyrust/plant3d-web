@@ -1,0 +1,98 @@
+-- probe-fraction-landing.pmlmac : after a positioning pick, where did it land along the picked tube?
+-- Run right after the pick (same dispatch route as capture-prompt-step.pmlmac): $M "<this file>" <tag>
+-- Reads !!edgCntrl.pickData (the pick), !!edgTypes.tubing.line / lineExtended (the tube the positioning code uses,
+-- extended = !!edgPosCntrl.intermediate) and !!edgCntrl.state.pickPacket.return[i].position (the landing point), and
+-- writes distance ratios along the tube. Read-only; APPEND to e3d-fraction-landing.trace.txt (golden MD section 40).
+!f = object FILE('D:/work/plant-code/old/plant3d-web/docs/verification/e3d-measurement-runtime-golden/e3d-fraction-landing.trace.txt')
+!a = ARRAY()
+!a.append('==== after-pick probe tag=$1')
+!v = 'unset'
+!v = !!edgCntrl.pickData.type
+handle any
+endhandle
+!a.append('pickData.type=' & !v)
+!v = 'unset'
+!v = !!edgCntrl.pickData.tubing
+handle any
+endhandle
+!a.append('pickData.tubing=' & !v)
+!item = !!edgCntrl.pickData.item
+!v = 'unset'
+!v = !item.flnn
+handle any
+endhandle
+!a.append('pickData.item=' & !v)
+!v = 'unset'
+!v = !item.type
+handle any
+endhandle
+!a.append('pickData.item.type=' & !v)
+!v = 'unset'
+!v = !!edgCntrl.pickData.pickLine.string()
+handle any
+endhandle
+!a.append('pickData.pickLine=' & !v)
+-- the tube the positioning code uses (extended = !!edgPosCntrl.intermediate)
+!tube = object LINE()
+!tube = !!edgTypes.tubing.line(!item)
+handle any
+  !a.append('tubing.line error: ' & !!error.text)
+endhandle
+!a.append('tube.line.start=' & !tube.startPosition.string())
+!a.append('tube.line.end=' & !tube.endPosition.string())
+!a.append('tube.line.length=' & !tube.startPosition.distance(!tube.endPosition).string())
+!tubeX = object LINE()
+!tubeX = !!edgTypes.tubing.lineExtended(!item)
+handle any
+  !a.append('tubing.lineExtended error: ' & !!error.text)
+endhandle
+!a.append('tube.lineExtended.start=' & !tubeX.startPosition.string())
+!a.append('tube.lineExtended.end=' & !tubeX.endPosition.string())
+!a.append('tube.lineExtended.length=' & !tubeX.startPosition.distance(!tubeX.endPosition).string())
+-- what the packet collected
+!ret = ARRAY()
+!ret = !!edgCntrl.state.pickPacket.return
+handle any
+endhandle
+!a.append('pickPacket.return.size=' & !ret.size().string())
+do !i indices !ret
+  !t = 'unset'
+  !t = !ret[!i].objectType()
+  handle any
+  endhandle
+  !p = 'unset'
+  !p = !ret[!i].position.string()
+  handle any
+  endhandle
+  !a.append('pickPacket.return[' & !i.string() & ']=' & !t & ' position=' & !p)
+  if (!t eq 'EDGPOSITIONDATA') then
+    !landing = !ret[!i].position
+    !d0 = !landing.distance(!tube.startPosition)
+    !d1 = !landing.distance(!tube.endPosition)
+    !len = !tube.startPosition.distance(!tube.endPosition)
+    !ratio = !d0 / !len
+    !a.append('landing.fromTubeStart=' & !d0.string() & ' fromTubeEnd=' & !d1.string() & ' ratio=' & !ratio.string())
+    handle any
+      !a.append('landing ratio error: ' & !!error.text)
+    endhandle
+    !d0x = !landing.distance(!tubeX.startPosition)
+    !lenx = !tubeX.startPosition.distance(!tubeX.endPosition)
+    !ratiox = !d0x / !lenx
+    !a.append('landing.fromExtendedStart=' & !d0x.string() & ' ratioExtended=' & !ratiox.string())
+    handle any
+      !a.append('landing ratioExtended error: ' & !!error.text)
+    endhandle
+  endif
+enddo
+!v = 'unset'
+!v = !!edgCntrl.state.major.string()
+handle any
+endhandle
+!a.append('state.major=' & !v)
+!v = 'unset'
+!v = !!edgCntrl.state.prompt()
+handle any
+endhandle
+!a.append('prompt=' & !v)
+!f.writeFile('APPEND', !a)
+return
