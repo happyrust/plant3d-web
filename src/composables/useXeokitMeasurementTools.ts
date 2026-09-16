@@ -15,6 +15,7 @@ import {
   type Object3D,
 } from 'three';
 
+import { getCachedElementArcRadius, requestElementArcRadius } from './elementArcRadiusCache';
 import {
   formatMeasurementSnapLabel,
   getCachedNounForRefno,
@@ -288,6 +289,16 @@ function sceneDirectionToDesign(
   const from = sceneWorldToDesignMeters(origin, dtxLayerRef);
   const to = sceneWorldToDesignMeters(origin.clone().add(direction), dtxLayerRef);
   return to.sub(from);
+}
+
+/**
+ * 设计 World 的长度（米）→ 场景坐标下的同一段长度。属性给的是设计尺寸（`RADI` / 目录 `PARA`，mm），
+ * 而弧的点都在场景系里算，两点变换后取距离对任意仿射变换成立（同 `sceneDirectionToDesign` 的做法）。
+ */
+function designLengthToScene(meters: number, dtxLayerRef: Ref<DTXLayer | null>): number {
+  const origin = designMetersToSceneWorld(new Vector3(0, 0, 0), dtxLayerRef);
+  const along = designMetersToSceneWorld(new Vector3(meters, 0, 0), dtxLayerRef);
+  return origin.distanceTo(along);
 }
 
 function getCanvasPos(canvas: HTMLCanvasElement, e: PointerEvent): Vector2 {
@@ -1447,17 +1458,19 @@ export function useXeokitMeasurementTools(options: {
 
   /**
    * E3D `EDGTYPES.attribute(fullType).arc(item)`：ELBO / BEND 没有 `line()`，只有中心线弧
-   * `gmfArc.fillet(radius, pPosition[arrive], position, pPosition[leave])`——两条切线从元素原点（`POS`）分别到
+   * `gmfArc.fillet(radius, pPosition[arrive], position, pPosition[leave])`——两条切线从元素原点（`POS`）分别指向
    * P1 / P2，弧与两者相切。点从 ptset 缓存取、角点是同一份点集响应的放置矩阵平移（`ptsetSnap.getOrigin`，同一帧
-   * 同一精度）；半径由几何自己定（ELBO 的 `RADI` 是 0）。noun 不在表内、缺 P1 / P2 / 原点或两腿共线时为 null。
-   * RTOR / CTOR 的 `arc()` 是过 P1 / P3 / P2 的环面中心圆，不要原点（`corner` 为 null 也成）。
-   * 弯头的弧当 Perpendicular 目标（`getLine()` 未设 → `getPlane()` = 弧所在平面）与 Intersect 的 ARC 操作数；
-   * 环面的圆只当 Intersect 操作数（见 `elementArc.ts` 头注与 `resolvePerpendicularTargetFromHit`）。Snap 都不受影响。
+   * 同一精度）；**半径是输入**，BEND 读 `RADI`、ELBO 读目录 `parameter[2]`（`elementArcRadiusCache`，异步预取，
+   * 到货前这里回 null）。noun 不在表内、缺 P1 / P2 / 原点 / 半径或两腿共线时为 null。
+   * RTOR / CTOR 的 `arc()` 是过 P1 / P3 / P2 的环面中心圆，不要原点也不要半径（`corner` 为 null 也成）。
+   * 只当 Intersect 的 ARC 操作数：Perpendicular 那一路 E3D 只问 `getLine()` / `getPlane()`，弯头与环面两者都没有，
+   * 给的是到拾中点的点到点（golden MD §39.3）。Snap 也不受影响。
    */
   function elementArcForRefno(refno: string | null): PickHit['elementArc'] | null {
     if (!refno) return null;
     const noun = nounForRefno(refno);
     if (!elementHasE3dArc(noun)) return null;
+    if (elementHasE3dFilletArc(noun)) requestElementArcRadius(refno, noun);
     const corner = ptsetSnap.getOrigin(refno);
     const arc = elementArcFromPPoints(
       noun,
@@ -1466,17 +1479,29 @@ export function useXeokitMeasurementTools(options: {
         position: [candidate.worldPos[0], candidate.worldPos[1], candidate.worldPos[2]] as const,
       })),
       corner,
+      { radius: elementArcSceneRadius(refno) },
     );
     if (!arc) return null;
     return { center: new Vector3(...arc.center), rim: new Vector3(...arc.start), normal: new Vector3(...arc.normal) };
   }
 
   /**
+   * 缓存里的半径是属性原值（设计 mm），弧的其余几何都在场景系算，这里折成场景长度。
+   * 还没取到（或元素没有半径）时回 null——`elementArcFromPPoints` 就不给弧，与 E3D `arc()` 抛错时一样。
+   */
+  function elementArcSceneRadius(refno: string): number | null {
+    const designMm = getCachedElementArcRadius(refno);
+    if (designMm === null) return null;
+    const scene = designLengthToScene(designMm / 1000, dtxLayerRef);
+    return Number.isFinite(scene) && scene > 0 ? scene : null;
+  }
+
+  /**
    * 没有候选胜出时，把光标命中的元素当 E3D 的 ELEMENT 拾取转成操作数：只在要线 / 面的场合（Intersect 拾取类型，
    * 或 Perpendicular to 正在等第二点）、元素类过滤器（Any / Element）放行时成立。元素有 `line()` 就给 `elementLine`
-   * （Intersect 操作数 / Perpendicular 目标线）；没有 `line()` 只有 `arc()`（ELBO / BEND）时给 `elementArc`
-   * （`edgpicktype.pmlobj` 647–680 的 ELEMENT 分支就是 `line()` 不成再 `arc()`）——Intersect 下它是 ARC 操作数、
-   * Perpendicular 下是弧所在平面（`getLine()` 未设 → `getPlane()`），两处名字不同。命中点仍是表面点（Perpendicular 的 `picked`）。
+   * （Intersect 操作数 / Perpendicular 目标线）；没有 `line()` 只有 `arc()`（ELBO / BEND / RTOR / CTOR）时给
+   * `elementArc`（`edgpicktype.pmlobj` 647–680 的 ELEMENT 分支就是 `line()` 不成再 `arc()`）——**只在 Intersect**，
+   * Perpendicular 那一路 E3D 给的是点到点（§39.3）。命中点仍是表面点。
    */
   function elementPickAsOperand(base: PickHit, refno: string | null): PickHit | null {
     const layer = measurementStyle.state.measurementPickLayer;
@@ -1496,17 +1521,17 @@ export function useXeokitMeasurementTools(options: {
         sourcePriority: measurementStyle.state.measurementPickSources.position?.priority,
       };
     }
+    // 弧只在 Intersect 下是操作数：Perpendicular 那一路 E3D 对 ELBO / BEND / RTOR / CTOR 都给点到点
+    // （`getLine()` / `getPlane()` 两档都空，golden MD §39.3），这时拾中的就是普通表面点。
+    if (layer.pickType !== 'intersect') return null;
     const elementArc = elementArcForRefno(refno);
     if (!elementArc) return null;
-    const intersecting = layer.pickType === 'intersect';
-    // 环面（RTOR / CTOR）的中心圆只当 Intersect 操作数，Perpendicular 那条路 E3D 另有取法（见 elementArcForRefno）。
-    if (!intersecting && !elementHasE3dFilletArc(nounForRefno(refno))) return null;
     return {
       ...base,
       source: 'mesh_pick_point',
       candidateId: `element-arc:${refno}`,
       refno,
-      label: intersecting ? ELEMENT_ARC_OPERAND_LABEL : ELEMENT_ARC_LABEL,
+      label: ELEMENT_ARC_OPERAND_LABEL,
       elementArc,
       sourcePriority: measurementStyle.state.measurementPickSources.position?.priority,
     };
@@ -1517,14 +1542,15 @@ export function useXeokitMeasurementTools(options: {
    * （表面点只在 Cursor 类型放行，2026-09-16 起 Any 与 Element 同一口径），但 E3D 在元素类拾取模式下拾中元素任意处
    * 都回 ELEMENT 再 `line()` / `arc()`，所以这时把表面点当元素拾取（特征类 `element`）——元素两者都没有时照样当元素拾中，
    * 交给求交会话按 E3D「Unable to convert item into a line or plane」拒收且不消耗这一击。
-   * `elementArc` 由 Perpendicular（`resolvePerpendicularTargetFromHit`，弧所在平面）与 Intersect（`intersectOperandFromHit`，弧本身）消费，不改 Snap。
+   * `elementLine` 由 Perpendicular（`resolvePerpendicularTargetFromHit`，目标线）与 Intersect 共用；
+   * `elementArc` 只有 Intersect 消费（`intersectOperandFromHit`），所以只在那时才算——它要取一次目录属性。不改 Snap。
    */
   function attachElementGeometry(candidates: MeasurementPickCandidate[], refno: string | null): MeasurementPickCandidate[] {
     if (candidates.length === 0) return candidates;
     const layer = measurementStyle.state.measurementPickLayer;
     const asElementPick = layer.pickType === 'intersect' && (layer.filter === 'element' || layer.filter === 'any');
     const elementLine = elementLineForRefno(refno, candidates[0]!.objectId);
-    const elementArc = elementLine ? null : elementArcForRefno(refno);
+    const elementArc = elementLine || layer.pickType !== 'intersect' ? null : elementArcForRefno(refno);
     if (!elementLine && !elementArc && !asElementPick) return candidates;
     return candidates.map((candidate) => ({
       ...candidate,
@@ -1706,9 +1732,7 @@ export function useXeokitMeasurementTools(options: {
 
   /** 元素当 Intersect / Perpendicular 操作数时的线名（E3D `line()` = P1 → P2）；命令条前缀元素类型 → `CYLI 轴线（P1 → P2）`。 */
   const ELEMENT_LINE_LABEL = '轴线（P1 → P2）';
-  /** ELBO / BEND 当 Perpendicular 目标时的弧面名（E3D `arc()` = fillet(P1, POS, P2) 所在平面）→ `ELBO 中心线弧面（P1 → P2）`。 */
-  const ELEMENT_ARC_LABEL = '中心线弧面（P1 → P2）';
-  /** 同一条弧当 Intersect 操作数时拾中的是弧本身（不是它所在的面）→ `ELBO 中心线弧（P1 → P2）`。 */
+  /** 弧当 Intersect 操作数时拾中的是弧本身 → `ELBO 中心线弧（P1 → P2）`。Perpendicular 不用弧（E3D 给点到点，§39.3）。 */
   const ELEMENT_ARC_OPERAND_LABEL = '中心线弧（P1 → P2）';
 
   /** 端点校正容差的下限：设计空间 2 mm，换成场景单位（全局模型矩阵可能带缩放）。 */
@@ -2470,15 +2494,11 @@ export function useXeokitMeasurementTools(options: {
     // 拾中的是元素本身（表面点 / Item 原点）且元素有 E3D `line()` 时，目标线 = 它的 P1 → P2，
     // 过 P1 而不是过拾中点（`edgpositiondata.line()` 对 ELEMENT 就是 `edgTypes.attribute(noun).line(item)`）。
     const elementLine = !hit.direction && !hit.plane && !circular && hit.elementLine ? hit.elementLine : null;
-    // 元素没有 `line()` 只有 `arc()`（ELBO / BEND）时，E3D `getLine()` 未设 → `getPlane()` = 中心线弧所在平面：
-    // 过弧心、法向 = 弧面法向（`GMFARC.perpendicularToPoint` 的第二个分支），不是过拾中的表面点。
-    // 只认弯头的 fillet：RTOR / CTOR 的 Perpendicular 在 E3D 走 `arc(item, refPosition)`（圆随拾中点沿轴挪 /
-    // 换成 RINS / ROUT / 改成截面圆，`edgrtorus` 117–142 / `edgctorus` 120–177），要目录属性，本轮不做，
-    // 它们的中心圆只进 Intersect。
-    const elementArc = !hit.direction && !hit.plane && !circular && !elementLine && hit.elementArc
-      && elementHasE3dFilletArc(nounForRefno(hit.refno ?? null))
-      ? hit.elementArc
-      : null;
+    // 元素只有 `arc()`（ELBO / BEND / RTOR / CTOR）时**没有 Perpendicular 目标**：
+    // `GMFARC.perpendicularToPoint`（`gmfarc.pmlobj` 1911–1939）只问 `getLine()` → `getPlane()`，从不问 `getArc()`，
+    // 而这几张 EDG 对象只定义了 `arc()` 的重载、没有 `.line()` / `.plane()`——E3D 落到最后那一档，给的是
+    // 到拾中位置的点到点（跑着的 E3D 实测：ELBO 551.094 mm / CTOR 465.988 mm，垂足 = 拾中点，golden MD §39.3）。
+    // 弧只当 Intersect 的操作数（`intersectOperandFromHit`）。
     // E3D DPOINT：`getLine()` 没有 DPOINT 分支（回落到属主元素的 `line()`，EQUI / STRU 没有），
     // `getPlane()` 给「过 dpps、Z is dpdir」的面——设计点的方向在这里是面法向，不是轴线。
     const designPointPlane = hit.source === 'design_point' && hit.direction
@@ -2495,9 +2515,6 @@ export function useXeokitMeasurementTools(options: {
             : null,
       circle: circular
         ? { center: designPosition(circular.center), normal: designDirection(circular.normal) }
-        : null,
-      arc: elementArc
-        ? { center: designPosition(elementArc.center), normal: designDirection(elementArc.normal) }
         : null,
       plane: designPointPlane
         ?? (hit.plane
@@ -2528,8 +2545,8 @@ export function useXeokitMeasurementTools(options: {
       || (hit.source === 'design_aid' && hit.plane && resolved.provider === 'facet-plane')
       ? stripPickTypeToken(baseLabel ?? MEASUREMENT_PICK_SOURCE_LABELS[hit.source])
       : null;
-    // 元素操作数（P1 → P2 线 / 中心线弧面）：目标名是元素类型 + 操作数名，不带拾中它用的表面点。
-    const elementOperandLabel = elementLine ? ELEMENT_LINE_LABEL : elementArc ? ELEMENT_ARC_LABEL : null;
+    // 元素操作数（P1 → P2 线）：目标名是元素类型 + 操作数名，不带拾中它用的表面点。
+    const elementOperandLabel = elementLine ? ELEMENT_LINE_LABEL : null;
     const targetLabel = elementOperandLabel
       ? formatMeasurementSnapLabel({ label: elementOperandLabel, noun: nounForRefno(hit.refno ?? null), refno: hit.refno })
       : lineLabel ?? `${baseLabel ?? MEASUREMENT_PICK_SOURCE_LABELS[hit.source]} ${providerLabel}`;
@@ -2548,8 +2565,8 @@ export function useXeokitMeasurementTools(options: {
         },
       },
       info: { targetKind: resolved.target.kind, targetLabel },
-      // 垂足落在元素的 P1 → P2 / 中心线弧面上（ptset / 放置矩阵给的精确几何）时，拾中它用的那个表面点不再决定「近似」。
-      exactTarget: Boolean(elementLine || elementArc),
+      // 垂足落在元素的 P1 → P2 上（ptset / 放置矩阵给的精确几何）时，拾中它用的那个表面点不再决定「近似」。
+      exactTarget: Boolean(elementLine),
     };
   }
 

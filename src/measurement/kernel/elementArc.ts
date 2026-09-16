@@ -9,41 +9,43 @@
  *
  * — the arc tangent to both centreline legs, which run from the element origin
  * (`POS`, the intersection of the two tangents) to the arrive and leave P-Points.
- * E3D takes `radius` from the catalogue (`parameter[2]` for ELBO, `RADI` for BEND);
- * the Web derives it from the geometry alone, because gen-model's ELBO carries
- * `RADI 0` (the radius lives in the catalogue) while its P-Points already sit on
- * the tangent points: with tangent length T = |P1 − POS| and the interior angle
- * α = ∠(P1 − POS, P2 − POS),
  *
- *     R      = T · tan(α / 2)
- *     centre = POS + (u1 + u2) · T / (1 + cos α)        (along the bisector, T / cos(α / 2) away)
+ * **`radius` is an input, not something the geometry decides** (`elementArcRadius.ts`): E3D reads
+ * `RADI` for BEND and the catalogue's `parameter[2]` for ELBO. With the interior angle
+ * α = ∠(P1 − POS, P2 − POS) the rest follows,
+ *
+ *     T      = R / tan(α / 2)                            (tangent length from the corner)
+ *     start  = POS + u1 · T,  end = POS + u2 · T         (where the arc touches each leg)
+ *     centre = POS + (u1 + u2) · T / (1 + cos α)         (along the bisector, T / cos(α / 2) away)
  *     normal = u1 × u2                                   (`fillet`'s Z: leave ⟂ arrive)
- *     sweep  = π − α                                     (= E3D `ANGL`)
+ *     sweep  = π − α                                     (= E3D `ANGL`, its `endAngle`)
  *
- * Golden MD §37 checked this against the model: ELBO 24381/145121 gives R 533.000
- * (DN350 1.5 D long-radius, catalogue value 533.4 rounded) and sweep 49.8663° = `ANGL`;
- * BEND 24381/146110 gives R 133.000 = `RADI` and 80.1463° = `ANGL`.
+ * The tangent points are **not** in general the element's P-Points. Measured on the running E3D
+ * (golden MD §39.4): ELBO `24381/145121` has `PARA = 350, 356, 533`, E3D takes `parameter[2]` = 356
+ * and its arc touches 165.500 mm from `POS` while P1 / P2 sit at 247.785 mm — 82.285 mm apart. The
+ * geometric centreline radius (533, the catalogue's `parameter[3]`) would touch exactly at P1 / P2,
+ * but E3D does not draw that circle, so neither does the Web (user decision 2026-09-17: match the
+ * product, index quirk and all). BEND is unaffected — its `RADI` *is* the bend radius
+ * (`24381/146110`: R 133, sweep 80.1463° = `ANGL`).
  *
- * Where the fillet is used: `EDGPOSITIONDATA.getLine()` is unset for these elements, so
- * `GMFARC.perpendicularToPoint` falls through to `getPlane()` = the **plane of the arc**
- * (through its centre, normal as above) — "Perpendicular to" an elbow measures to that plane —
- * and `EDGPICKTYPE.intersect` takes the ARC itself as an operand (`pickDerivation.intersectArcWith`).
- * Both reach the same arc because ELBO / BEND only define `arc(DBREF)` and `arc(DBREF, REAL)`:
- * `getArc()`'s earlier `arc(item, refPosition)` attempt (`edgpositiondata.pmlobj` 348) raises and
- * is handled away.
+ * Where the fillet is used: **Intersect only.** `EDGPICKTYPE.intersect` takes the ARC as an operand
+ * (`edgpicktype.pmlobj` 666 → `pickDerivation.intersectArcWith`). Perpendicular does **not** use it:
+ * `GMFARC.perpendicularToPoint` only asks `getLine()` → `getPlane()`, and `EDGELBOW` / `EDGBEND`
+ * define neither (only `arc()`), so E3D degenerates to a point-to-point distance to the picked
+ * position — measured on the running E3D, golden MD §39.3.
  *
- * **RTOR / CTOR** get their circle a different way — `gmfArc.through3Points(P1, P3, P2)`, no `POS`
- * and no `RINS` / `ROUT` (`edgctorus.pmlobj` 59–68 / `edgrtorus.pmlobj` 59–68) — and only
- * `EDGPICKTYPE.intersect` uses that plain circle (`edgpicktype.pmlobj` 666). Their Perpendicular
- * goes through `getArc()`'s `arc(item, refPosition)` overload instead, which moves the circle to
- * the picked height / swaps in `RINS` / `ROUT` / builds the cross-section circle
- * (`edgrtorus.pmlobj` 117–142, `edgctorus.pmlobj` 120–177) — that needs catalogue attributes the
- * measurement path does not fetch, so the Web feeds the torus circle to Intersect only.
+ * **RTOR / CTOR** get their circle a different way — `gmfArc.through3Points(P1, P3, P2)`, no `POS`,
+ * no `RINS` / `ROUT` and no catalogue radius (`edgctorus.pmlobj` 59–68 / `edgrtorus.pmlobj` 59–68)
+ * — and it too is an Intersect operand only: their Perpendicular degenerates to point-to-point for
+ * the same reason as the elbow's (`EDGCTORUS` has no `.plane()`; CTOR `24381/46880` measured at
+ * §39.3). The `arc(item, refPosition)` overload they do have only feeds `getArc()`, which
+ * Perpendicular never calls.
  *
  * As with `elementLine`, this does not change Snap: E3D's ELEMENT `snap()` falls back to
  * `item.position` for these elements — the arc is an operand only.
  *
- * Evidence: `static_expectation` (PML source reading; golden MD §37 (1), 2026-09-16).
+ * Evidence: runtime observation on E3D 3.1 (golden MD §39, 2026-09-17), on top of the PML reading
+ * in §37 (1).
  */
 
 export type ElementArcVec3 = readonly [number, number, number];
@@ -64,11 +66,11 @@ export type ElementArc = Readonly<{
   center: ElementArcVec3;
   /** Unit normal of the arc plane: (arrive − corner) × (leave − corner). */
   normal: ElementArcVec3;
-  /** Bend radius derived from the tangent length (R = T · tan(α / 2)). */
+  /** Fillet: the radius E3D was given (`RADI` / catalogue `parameter[2]`). Torus: the circle's. */
   radius: number;
-  /** Tangent point on the arrive leg (P-Point `arrive`, default 1). */
+  /** Fillet: where the arc touches the arrive leg, `corner + u1 · T` — **not** the P-Point. Torus: P1. */
   start: ElementArcVec3;
-  /** Tangent point on the leave leg (P-Point `leave`, default 2). */
+  /** Fillet: where the arc touches the leave leg, `corner + u2 · T`. Torus: P2. */
   end: ElementArcVec3;
   /** Fillet: the element origin `POS`, where the two centreline tangents meet. Torus: the circle centre. */
   corner: ElementArcVec3;
@@ -196,22 +198,27 @@ function torusArcFromPPoints(
 }
 
 /**
- * The element's E3D `arc()`. ELBO / BEND: the centreline fillet through arrive P-Point → `POS` →
- * leave P-Point (`corner` is `POS`). RTOR / CTOR: the centreline circle through P1 → P3 → P2, which
- * needs no `POS` at all (`corner` may be null). `null` when the noun has no `arc()` handler, a point
- * is missing / non-finite, a tangent point coincides with the corner, or the defining points are
- * (anti)parallel / collinear. `points` may be the element's whole ptset in any order; the first
- * arrive / leave / control found win. Units are whatever the inputs are in.
+ * The element's E3D `arc()`. ELBO / BEND: the centreline fillet of the given `radius`, tangent to
+ * the two legs that run from `corner` (`POS`) towards the arrive / leave P-Points — the P-Points
+ * fix the leg **directions**, the radius fixes where the arc touches them. RTOR / CTOR: the
+ * centreline circle through P1 → P3 → P2, which needs neither `POS` nor a radius (`corner` may be
+ * null). `null` when the noun has no `arc()` handler, a defining point is missing / non-finite, a
+ * leg is degenerate, the legs are (anti)parallel / collinear, or — for the fillet — no positive
+ * radius was supplied (E3D raises `(2,888) Attempt to create invalid arc` and ends up without an
+ * operand too). `points` may be the element's whole ptset in any order; the first arrive / leave /
+ * control found win. Units are whatever the inputs are in; `radius` must be in the same ones.
  */
 export function elementArcFromPPoints(
   noun: string | null | undefined,
   points: readonly ElementArcPPoint[],
   corner: ElementArcVec3 | null | undefined,
-  options: Readonly<{ arrive?: number; leave?: number; control?: number }> = {},
+  options: Readonly<{ arrive?: number; leave?: number; control?: number; radius?: number | null }> = {},
 ): ElementArc | null {
   if (elementHasE3dTorusArc(noun)) return torusArcFromPPoints(points, options);
   if (!elementHasE3dFilletArc(noun)) return null;
   if (!isFiniteVec3(corner)) return null;
+  const radius = options.radius;
+  if (typeof radius !== 'number' || !Number.isFinite(radius) || radius <= 0) return null;
   const arriveNumber = options.arrive ?? 1;
   const leaveNumber = options.leave ?? 2;
   if (arriveNumber === leaveNumber) return null;
@@ -239,25 +246,25 @@ export function elementArcFromPPoints(
   const cosine = u1[0] * u2[0] + u1[1] * u2[1] + u1[2] * u2[2];
   const alpha = Math.atan2(sine, cosine);
 
-  // Both P-Points of a consistent component sit at the same tangent length; average them so
-  // the fillet does not depend on which leg is called arrive.
-  const tangent = (t1 + t2) / 2;
-  const radius = tangent * Math.tan(alpha / 2);
+  // `arcFillet`: the tangent length the given radius implies on both legs. The P-Points only said
+  // which way the legs run — how far along them the arc touches is the radius' business.
+  const tangent = radius / Math.tan(alpha / 2);
+  if (!Number.isFinite(tangent) || !(tangent > 0)) return null;
   const toCentre = tangent / (1 + cosine);
   const center: ElementArcVec3 = [
     corner[0] + (u1[0] + u2[0]) * toCentre,
     corner[1] + (u1[1] + u2[1]) * toCentre,
     corner[2] + (u1[2] + u2[2]) * toCentre,
   ];
-  if (!isFiniteVec3(center) || !Number.isFinite(radius) || !(radius > 0)) return null;
+  if (!isFiniteVec3(center)) return null;
 
   return {
     kind: 'fillet',
     center,
     normal: [cross[0] / sine, cross[1] / sine, cross[2] / sine],
     radius,
-    start: p1,
-    end: p2,
+    start: [corner[0] + u1[0] * tangent, corner[1] + u1[1] * tangent, corner[2] + u1[2] * tangent],
+    end: [corner[0] + u2[0] * tangent, corner[1] + u2[1] * tangent, corner[2] + u2[2] * tangent],
     corner,
     sweep: Math.PI - alpha,
   };

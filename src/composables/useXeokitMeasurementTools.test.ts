@@ -2813,7 +2813,10 @@ describe('useXeokitMeasurementTools', () => {
         getDbnumByRefno: vi.fn(() => 7997),
       }));
       vi.doMock('@/composables/useDbnoInstancesDtxLoader', () => ({
-        getDtxRefnoTransform: vi.fn(() => null),
+        // G 有放置矩阵 → 「Item 原点」点源拿得到它的 `POS`（E3D 的 ELEMENT `snap()` 回落值）；其余构件没有。
+        getDtxRefnoTransform: vi.fn((_dbno: number, refno: string) => (
+          refno === refnoG ? [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, ...designMm([2.8, 3, 6]), 1] : undefined
+        )),
         resolveDtxNounByRefno: vi.fn((_dbno: number, refno: string) => nounByRefno[refno] ?? null),
       }));
       vi.doMock('@/composables/useDbnoInstancesParquetLoader', () => ({
@@ -2833,12 +2836,25 @@ describe('useXeokitMeasurementTools', () => {
           }),
         }),
       }));
+      // 弧的半径按 E3D 的取法从属性来（`elementArcRadiusCache`）：ELBO 走 SPRE → SPCO `CATR` → SCOM `PARA` 第 2 项，
+      // BEND 走元素自己的 `RADI`。G 的目录参数「100, 300, 450」→ parameter[2] = 300 mm，正是它两腿 90° 弯的半径。
+      const uiAttrByRefno: Record<string, Record<string, unknown>> = {
+        [refnoC]: { RADI: 0, SPRE: '13246/700001' },
+        [refnoG]: { RADI: 0, SPRE: '13246/700001' },
+        '13246/700001': { CATR: '13246/700002' },
+        '13246/700002': { GTYP: 'ELBO', PARA: '100, 300, 450' },
+      };
       vi.doMock('@/api/genModelPdmsAttrApi', () => ({
         pdmsGetPtsetWithContext: vi.fn(async (refno: string) => ({
           success: false, refno, ptset: [], world_transform: null, unit_info: null, error_code: 'PTSET_POINTS_MISSING', error_message: '无点',
         })),
         pdmsGetPtsetChildrenWithContext: vi.fn(async (refno: string) => ({
           success: false, refno, results: [], total_count: 0, success_count: 0, failed_count: 0, error_message: '无子构件点集',
+        })),
+        pdmsGetUiAttr: vi.fn(async (refno: string) => ({
+          success: uiAttrByRefno[refno] !== undefined,
+          refno,
+          attrs: uiAttrByRefno[refno] ?? {},
         })),
       }));
 
@@ -2930,11 +2946,14 @@ describe('useXeokitMeasurementTools', () => {
       });
       const hoverAt = (x: number, y: number) => tools.onCanvasPointerMove(canvas, new PointerEvent('pointermove', { clientX: x, clientY: y }));
       const clickAt = (x: number, y: number) => tools.onCanvasPointerUp(canvas, new PointerEvent('pointerup', { clientX: x, clientY: y, button: 0 }));
-      /** 悬停到某元素并等它的点集落缓存（80 ms 防抖）。 */
+      /** 悬停到某元素并等它的点集（80 ms 防抖）与弧半径（目录属性三跳）都落缓存。 */
       const hoverAndLoad = async (x: number, y: number) => {
         hoverAt(x, y);
         await vi.advanceTimersByTimeAsync(200);
         await Promise.resolve();
+        hoverAt(x, y);
+        // 半径那几跳是点集到位后这一次悬停才发出的，再放一轮让它回来（实机同理：属性到货后下一帧才有弧）。
+        await vi.advanceTimersByTimeAsync(50);
         hoverAt(x, y);
       };
       return { store, measurementStyle, tools, hoverAt, clickAt, hoverAndLoad, getObjectGeometryData, refnoA, refnoB, refnoC, refnoD, refnoE, refnoF, refnoG, refnoH };
@@ -3132,53 +3151,57 @@ describe('useXeokitMeasurementTools', () => {
       }
     });
 
-    it('Perpendicular to：第二点拾中 ELBO 元素时目标是它的中心线弧面（E3D getLine() 未设 → getPlane() = arc() 所在平面）——Element × Cursor 表面点带弧、Any × Snap 无候选时元素拾取给弧', async () => {
+    it('Perpendicular to：第二点拾中 ELBO 元素时退化成点到点，不是弧面（E3D getLine() / getPlane() 两档都空，perpendicularToPoint 从不问 getArc()——golden MD §39.3 实机）', async () => {
       const { store, measurementStyle, tools, clickAt, hoverAndLoad } = await setupElementLineTools();
       try {
         measurementStyle.updateStyle({ perpendicularTo: true });
         measurementStyle.updateMeasurementPickLayer({ filter: 'element', pickType: 'exact' });
         await nextTick();
 
-        // 起点：ELBO C 表面 (1.4, 3.4, 6.2)——C 的点集没有放置矩阵（旧后端口径）→ 角点无从得知、无弧，只是普通表面点。
+        // 起点：ELBO C 表面 (1.4, 3.4, 6.2)。
         await hoverAndLoad(40, 160);
         clickAt(40, 160);
         expect(store.currentXeokitDistanceDraft.value!.origin.sourceInfo?.source).toBe('mesh_pick_point');
 
-        // 终点：ELBO G 表面 (2.7, 3.3, 6.2) → 目标 = G 的中心线弧面 y = 3（过弧心 (2.5, 3, 6.3)、法向 +Y），不是表面点
-        // → 垂足 (1.4, 3, 6.2)，垂距 0.4 m；目标名是元素 + 弧面，不带「模型表面点」。
+        // 终点：ELBO G 表面 (2.7, 3.3, 6.2)。E3D 这一击给的是到拾中位置本身的距离（`EDGELBOW` 没有 `.line()` / `.plane()`），
+        // 所以目标就是那个表面点，不是过弧心的平面 y = 3（那个会给 0.4 m 的垂距）。
         await hoverAndLoad(170, 170);
         clickAt(170, 170);
         const record = store.xeokitDistanceMeasurements.value[0]!;
-        expect(record.perpendicular).toEqual({ targetKind: 'plane', targetLabel: 'ELBO 中心线弧面（P1 → P2）' });
-        expect(record.target.worldPos[0]).toBeCloseTo(1.4, 6);
-        expect(record.target.worldPos[1]).toBeCloseTo(3, 6);
+        expect(record.perpendicular?.targetKind).toBe('point');
+        expect(record.perpendicular?.targetLabel).not.toContain('弧');
+        expect(record.target.worldPos[0]).toBeCloseTo(2.7, 6);
+        expect(record.target.worldPos[1]).toBeCloseTo(3.3, 6);
         expect(record.target.worldPos[2]).toBeCloseTo(6.2, 6);
-        expect(record.target.sourceInfo?.label).toBe('ELBO 中心线弧面（P1 → P2）垂足');
-        expect(store.measurementDraftResult.value!.distance).toBeCloseTo(0.4, 6);
-        // 起点是表面点 → 仍标近似；弧面本身是精确几何（下一段验证）。
+        expect(store.measurementDraftResult.value!.distance).toBeCloseTo(
+          Math.hypot(2.7 - 1.4, 3.3 - 3.4, 0),
+          6,
+        );
+        // 两端都是表面点 → 仍标近似。
         expect(store.measurementDraftResult.value!.approximate).toBe(true);
         store.clearAll();
         store.setToolMode('xeokit_measure_distance');
         await nextTick();
 
-        // Any × Snap：表面点不放行、弯头体上也没有吸得到的 P-Point / 轴线——E3D 这一击仍是 ELEMENT 拾取，
-        // `getLine()` 未设 → `getPlane()` = 弧面。起点吸 C 的 P-Point #1 (1.2, 3.4, 6)（精确）→ 垂足 (1.2, 3, 6)、记录不标近似。
+        // Any × Snap：弯头体上没有吸得到的 P-Point，E3D 的 ELEMENT `snap()` 回落到元素原点 `POS`
+        // （实机第二行：`perpendicularToPoint(pick=POS)` = 572.208 mm、垂足 = POS）。Web 的「Item 原点」点源就是它：
+        // 起点吸 C 的 P-Point #1 (1.2, 3.4, 6)、终点吸 G 的 POS (2.8, 3, 6) → 点到点 1.6492 m，两端都是精确语义点。
+        measurementStyle.updateMeasurementPickSource('position', { show: true, snap: true, thresholdPx: 40 });
         measurementStyle.updateMeasurementPickLayer({ filter: 'any', pickType: 'snap' });
         await nextTick();
         await hoverAndLoad(20, 160);
         clickAt(20, 160);
         expect(store.currentXeokitDistanceDraft.value!.origin.sourceInfo?.source).toBe('ptset');
         await hoverAndLoad(170, 170);
-        expect(tools.hoverSnapTarget.value?.label).toBe('中心线弧面（P1 → P2）');
-        expect(tools.statusText.value).toContain('ELBO 中心线弧面（P1 → P2）');
+        expect(tools.hoverSnapTarget.value?.label ?? '').not.toContain('弧');
+        expect(tools.statusText.value).not.toContain('中心线弧');
         clickAt(170, 170);
         const snapRecord = store.xeokitDistanceMeasurements.value[0]!;
-        expect(snapRecord.perpendicular).toEqual({ targetKind: 'plane', targetLabel: 'ELBO 中心线弧面（P1 → P2）' });
-        expect(snapRecord.target.worldPos[0]).toBeCloseTo(1.2, 6);
+        expect(snapRecord.perpendicular?.targetKind).toBe('point');
+        expect(snapRecord.target.worldPos[0]).toBeCloseTo(2.8, 6);
         expect(snapRecord.target.worldPos[1]).toBeCloseTo(3, 6);
         expect(snapRecord.target.worldPos[2]).toBeCloseTo(6, 6);
-        expect(snapRecord.target.sourceInfo?.label).toBe('ELBO 中心线弧面（P1 → P2）垂足');
-        expect(store.measurementDraftResult.value!.distance).toBeCloseTo(0.4, 6);
+        expect(store.measurementDraftResult.value!.distance).toBeCloseTo(Math.hypot(1.6, 0.4, 0), 6);
         expect(store.measurementDraftResult.value!.approximate).toBe(false);
       } finally {
         tools.dispose();
