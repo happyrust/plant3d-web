@@ -58,13 +58,30 @@ export type InstanceMappingContext = {
   nounByRefno?: Map<string, string>;
 };
 
-/** 同一批记录里「构件 → generic」的索引，供 `owner_noun` 查（生成根常常自己也有记录，比如 BRAN 的直管）。 */
+/**
+ * 同一批记录里「构件 → generic」的索引，供 `owner_noun` 查（生成根常常自己也有记录，比如 BRAN 的直管）。
+ *
+ * 隐式管身的记录挂在它所属 **BRAN 的 refno** 上（`refno == owner`），而 `generic` 给的是 `TUBI`——那是管身自己的类型，
+ * 不是这个 refno 的类型：直管只会长在 BRAN 上，所以这条记录只说明「这个 refno 是一条 BRAN」。真机 `model/records`
+ * 从来不发 `generic=BRAN` 的记录（2026-09-17 :8023 实测：BRAN 24381_145018 的 22 条里 11 条 TUBI 都挂在它自己的 refno 上），
+ * 按字面收 `TUBI` 会让整条 BRAN 下所有构件的 `owner_noun` 变成 `TUBI`，靠 `owner_noun == BRAN` 认属主的都认不出来。
+ * 非 `TUBI` 的 generic（含真给了 `BRAN` 的）优先，首见为准。
+ */
 export function buildNounIndex(items: GeomInstQuery[]): Map<string, string> {
   const map = new Map<string, string>();
+  const tubingOwners: string[] = [];
   for (const item of items) {
     const key = fromV1Refno(item.refno);
     const noun = (item.generic ?? '').trim().toUpperCase();
-    if (key && noun && !map.has(key)) map.set(key, noun);
+    if (!key || !noun) continue;
+    if (noun === 'TUBI') {
+      tubingOwners.push(key);
+      continue;
+    }
+    if (!map.has(key)) map.set(key, noun);
+  }
+  for (const key of tubingOwners) {
+    if (!map.has(key)) map.set(key, 'BRAN');
   }
   return map;
 }

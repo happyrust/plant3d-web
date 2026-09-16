@@ -4215,6 +4215,8 @@ onMounted(async () => {
     suppressStoreOverlays: false,
     // 管-墙/柱净距测量的结果写进 Dock 的 BRAN 净距那一份（同一张表、同一个 bran-clearance external source）
     recordBranClearance: spatialComputeStore.recordInteractiveBranClearance,
+    // 管-管间距（两条 BRAN 平行直段的中心距）也写进同一份，一对平行直段一条
+    recordBranParallelSpacing: spatialComputeStore.recordBranParallelSpacing,
   });
   toolsRef.value = tools;
   tools.refreshReadyState();

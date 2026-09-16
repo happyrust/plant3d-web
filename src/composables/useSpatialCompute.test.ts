@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   INTERACTIVE_BRAN_CLEARANCE_PROVENANCE,
+  PARALLEL_BRAN_SPACING_PROVENANCE,
   createSpatialComputeStore,
   interactiveBranClearanceCandidate,
   normalizeBranComputeRefno,
@@ -530,6 +531,148 @@ describe('useSpatialCompute BRAN nearest clearance', () => {
       expect(state.branGroups.find((group) => group.group === 'WALL')?.candidates.map((candidate) => candidate.refno)).toEqual(['24381_1', '24381_11']);
       expect(state.candidateProvenance).toEqual({});
       expect(state.nounFacets.find((facet) => facet.noun === 'WALL')?.count).toBe(3);
+    });
+  });
+
+  /** 三维里点选两根管算出的两条 BRAN 平行直段间距（plan 2026-09-16 §3.3 ④）：一对一条、同目标多条、同一对再测整组替换。 */
+  describe('recordBranParallelSpacing writes one candidate per parallel run pair into the same BRAN clearance result', () => {
+    function run(branRefno: string, refno: string, start: [number, number, number], end: [number, number, number], od: number | null = 114.3) {
+      const axis = { x: end[0] - start[0], y: end[1] - start[1], z: end[2] - start[2] };
+      const lengthMm = Math.hypot(axis.x, axis.y, axis.z);
+      return {
+        branRefno,
+        start: { x: start[0], y: start[1], z: start[2] },
+        end: { x: end[0], y: end[1], z: end[2] },
+        direction: { x: axis.x / lengthMm, y: axis.y / lengthMm, z: axis.z / lengthMm },
+        lengthMm,
+        segments: [{ refno, order: 0, noun: 'TUBI', implicit: true, start: { x: start[0], y: start[1], z: start[2] }, end: { x: end[0], y: end[1], z: end[2] }, length_mm: lengthMm, outside_diameter_mm: null }],
+        outsideDiameterMm: od,
+      };
+    }
+
+    function pair(sourceRun: ReturnType<typeof run>, targetRun: ReturnType<typeof run>, axisDistance: number, overlap: number, clearance: number | null) {
+      return {
+        source: sourceRun,
+        target: targetRun,
+        angleDeg: 0,
+        overlapStartMm: 0,
+        overlapEndMm: overlap,
+        overlapMm: overlap,
+        axisDistanceMm: axisDistance,
+        sourcePointMm: { x: overlap / 2, y: 0, z: 0 },
+        targetPointMm: { x: overlap / 2, y: axisDistance, z: 0 },
+        clearanceMm: clearance,
+      };
+    }
+
+    const a1 = run('24381_145018', '24381_145019~24381_145021', [0, 0, 0], [2000, 0, 0]);
+    const a2 = run('24381_145018', '24381_145025~24381_145026', [2000, 0, 0], [2000, 0, 1000]);
+    const b1 = run('24381_144924', '24381_144931~24381_144935', [0, 1584, 0], [2500, 1584, 0], 168.3);
+    const b2 = run('24381_144924', 'Head~24381_144928', [2000, 1920, 0], [2000, 1920, 800], null);
+    const input = {
+      sourceBranRefno: '24381/145018',
+      targetBranRefno: '24381/144924',
+      pairs: [pair(a1, b1, 1584, 2000, 1584 - (114.3 + 168.3) / 2), pair(a2, b2, 1920, 800, null)],
+    };
+
+    it('builds server-shaped candidates: axis distance as distance_mm / label, both endpoints on the axes, variant per pair, detail in `parallel`', () => {
+      const store = createSpatialComputeStore();
+      const state = store.scenarios.branNearestClearance;
+
+      const keys = store.recordBranParallelSpacing(input);
+
+      expect(keys).toEqual([
+        'BRAN:24381_144924#parallel:24381_144924~24381_145018:0',
+        'BRAN:24381_144924#parallel:24381_144924~24381_145018:1',
+      ]);
+      expect(store.activeScenario.value).toBe('branNearestClearance');
+      expect(state.branGroups).toEqual([{ group: 'BRAN', nouns: ['BRAN'], candidates: [expect.anything(), expect.anything()] }]);
+      const [first, second] = state.branGroups[0]!.candidates;
+      expect(first).toEqual({
+        refno: '24381_144924',
+        noun: 'BRAN',
+        distance_mm: 1584,
+        intersects: false,
+        nearest: {
+          source_segment_refno: '24381_145019~24381_145021',
+          source_segment_order: 0,
+          source_point: { x: 1000, y: 0, z: 0 },
+          target_point: { x: 1000, y: 1584, z: 0 },
+          vector: { dx: 0, dy: 1584, dz: 0 },
+        },
+        annotation: { start_point: { x: 1000, y: 0, z: 0 }, end_point: { x: 1000, y: 1584, z: 0 }, label_mm: 1584 },
+        variant: 'parallel:24381_144924~24381_145018:0',
+        parallel: {
+          source_bran_refno: '24381_145018',
+          source_run_refno: '24381_145019~24381_145021',
+          target_run_refno: '24381_144931~24381_144935',
+          overlap_mm: 2000,
+          angle_deg: 0,
+          clearance_mm: 1584 - (114.3 + 168.3) / 2,
+          source_outside_diameter_mm: 114.3,
+          target_outside_diameter_mm: 168.3,
+        },
+      });
+      expect(second).toEqual(expect.objectContaining({ distance_mm: 1920, variant: 'parallel:24381_144924~24381_145018:1' }));
+      expect(state.nounFacets).toEqual([{ noun: 'BRAN', count: 2, selected: true }]);
+      expect(state.drawnCandidateKeys).toEqual(keys);
+      expect(state.candidateProvenance).toEqual({ [keys[0]!]: PARALLEL_BRAN_SPACING_PROVENANCE, [keys[1]!]: PARALLEL_BRAN_SPACING_PROVENANCE });
+      // 表：两行同 refno、各自的键；标签给中心距口径、重叠、净距（外径不全时说明）、两条直段
+      expect(state.resultRows.map((row) => [row.candidateKey, row.distanceMm, row.drawn, row.label])).toEqual([
+        [keys[0], 1584, true, '平行直段中心距 · 重叠 2000mm · 净距 1443mm（外径 114.3/168.3） · 直段 24381_145019~24381_145021 ∥ 24381_144931~24381_144935'],
+        [keys[1], 1920, true, '平行直段中心距 · 重叠 800mm · 外径不全（114.3/?），净距未算 · 直段 24381_145025~24381_145026 ∥ Head~24381_144928'],
+      ]);
+      // 两条都画，index 是桶内位置（尺寸 id 才不撞）
+      expect(state.annotationCandidates.map((item) => [item.index, item.candidate.variant, item.provenance])).toEqual([
+        [0, 'parallel:24381_144924~24381_145018:0', PARALLEL_BRAN_SPACING_PROVENANCE],
+        [1, 'parallel:24381_144924~24381_145018:1', PARALLEL_BRAN_SPACING_PROVENANCE],
+      ]);
+    });
+
+    it('re-measuring the same pair (either order) replaces that group only; other candidates stay; an empty result clears it; the next server query clears everything', async () => {
+      const fetchMock = vi.fn().mockImplementation(async () => freshNounGroupedResponse());
+      vi.stubGlobal('fetch', fetchMock);
+      const store = createSpatialComputeStore();
+      const state = store.scenarios.branNearestClearance;
+      await store.submitScenario('branNearestClearance');
+      const pipeToWall = { sourceRefno: '24381_200001', targetRefno: '24381_900', targetNoun: 'WALL', sourcePointMm: { x: 0, y: 0, z: 0 }, targetPointMm: { x: 0, y: 0, z: 600 } };
+      store.recordInteractiveBranClearance(pipeToWall);
+      store.recordBranParallelSpacing(input);
+      // 另一对 BRAN 也写一组
+      store.recordBranParallelSpacing({ sourceBranRefno: '24381_145018', targetBranRefno: '24381_146830', pairs: [pair(a1, run('24381_146830', '24381_146833~24381_146836', [0, 5586, 0], [2337, 5586, 0]), 5586, 2337, 5586 - 114.3)] });
+
+      const bran = () => state.branGroups.find((group) => group.group === 'BRAN')!;
+      expect(bran().candidates.map((candidate) => [candidate.refno, candidate.distance_mm])).toEqual([['24381_144924', 1584], ['24381_144924', 1920], ['24381_146830', 5586]]);
+      expect(state.nounFacets.find((facet) => facet.noun === 'BRAN')?.count).toBe(3);
+      expect(state.drawnCandidateKeys).toHaveLength(3 + 1 + 3);
+
+      // 反着点同一对（先 144924 再 145018）：那两条整组换成新的一条；146830 那条与墙那条不动
+      const swapped = store.recordBranParallelSpacing({ sourceBranRefno: '24381_144924', targetBranRefno: '24381_145018', pairs: [pair(b1, a1, 1584, 2000, null)] });
+      expect(swapped).toEqual(['BRAN:24381_145018#parallel:24381_144924~24381_145018:0']);
+      expect(bran().candidates.map((candidate) => [candidate.refno, candidate.distance_mm])).toEqual([['24381_146830', 5586], ['24381_145018', 1584]]);
+      expect(state.nounFacets.find((facet) => facet.noun === 'BRAN')?.count).toBe(2);
+      expect(Object.keys(state.candidateProvenance).sort()).toEqual([
+        'BRAN:24381_145018#parallel:24381_144924~24381_145018:0',
+        'BRAN:24381_146830#parallel:24381_145018~24381_146830:0',
+        'WALL:24381_900',
+      ]);
+      expect(state.drawnCandidateKeys).toHaveLength(3 + 1 + 2);
+      expect(state.resultRows.find((row) => row.refno === '24381_900')?.label).toBe('估算最近距离（网格采样） · 点选 24381_200001');
+
+      // 同一对再测但没有平行直段：整组清掉、桶还在（146830 那条）
+      expect(store.recordBranParallelSpacing({ ...input, pairs: [] })).toEqual([]);
+      expect(bran().candidates.map((candidate) => candidate.refno)).toEqual(['24381_146830']);
+      expect(state.nounFacets.find((facet) => facet.noun === 'BRAN')).toEqual({ noun: 'BRAN', count: 1, selected: true });
+
+      // 最后一条也清掉：BRAN 桶与 chip 一起消失
+      store.recordBranParallelSpacing({ sourceBranRefno: '24381_146830', targetBranRefno: '24381_145018', pairs: [] });
+      expect(state.branGroups.some((group) => group.group === 'BRAN')).toBe(false);
+      expect(state.nounFacets.some((facet) => facet.noun === 'BRAN')).toBe(false);
+
+      store.recordBranParallelSpacing(input);
+      await store.submitScenario('branNearestClearance');
+      expect(state.branGroups.some((group) => group.group === 'BRAN')).toBe(false);
+      expect(state.candidateProvenance).toEqual({});
     });
   });
 });

@@ -1281,6 +1281,57 @@ export function genModelV1SpatialNearestClearance(
   });
 }
 
+// ---------------------------------------------------------------------------
+// BRAN 中心线线段表（spec §4.13.3；plan `docs/plans/2026-09-16-bran-centerline-nearest-clearance-v1-dev-plan.md` §3.3 ④）
+// ---------------------------------------------------------------------------
+
+/**
+ * 中心线上的一段：一个成员从到达点到离开点（E3D 世界 mm，与 `/nearest-clearance` 的 `annotation` 端点同一坐标系）。
+ * `implicit = true` 是按 E3D 规则合成的隐式管身（refno `a_b~c_d`，不是构件），`noun` 给 `TUBI`；其余段的 `noun` 是成员自身类型
+ * （大写；成员没给 → `UNKNOWN`）。挑「直段」就靠这两格：隐式管身一定直，ELBO / BEND 的到达→离开是弦不是轴。
+ */
+export type SpatialCenterlineSegment = {
+  refno: string;
+  /** 成员序（`BranchMember.order`） */
+  order: number;
+  noun: string;
+  implicit: boolean;
+  start: SpatialPosition;
+  end: SpatialPosition;
+  length_mm: number;
+  /** 这一段成员自己的外径（mm）；隐式管身为 null，用顶层 `outside_diameter_mm` */
+  outside_diameter_mm: number | null;
+};
+
+export type SpatialCenterlineResponse = {
+  /** `a_b` */
+  refno: string;
+  dbnum: number | null;
+  /** 成段的成员数（穿过件 `start == end` 不成段，所以 ≤ 成员数） */
+  segment_count: number;
+  /** 首个给出外径的成员的外径（mm）；隐式管身按它算半径。取不到为 null */
+  outside_diameter_mm: number | null;
+  centerline_bbox: SpatialClearanceAabb | null;
+  /** 按成员序排好 */
+  segments: SpatialCenterlineSegment[];
+  warnings: string[];
+  [key: string]: unknown;
+};
+
+/**
+ * `GET /api/v1/spatial/centerline`：一条 BRAN 的真实中心线线段表原样取回（成员到达→离开点 + 隐式管身）。
+ * 只读库、不碰空间树（没有 503 `spatial_not_ready` 一档，库没 ensure 过也答得出）；不是 BRAN → 422 `precondition`、库里没有 → 404。
+ */
+export function genModelV1SpatialCenterline(
+  refno: string,
+  options?: GenModelV1RequestOptions,
+): Promise<SpatialCenterlineResponse> {
+  return genModelV1Fetch<SpatialCenterlineResponse>('/api/v1/spatial/centerline', {
+    ...options,
+    query: { refno: toV1Refno(refno) },
+  });
+}
+
 /**
  * `GET /api/v1/meshes/{geo_hash}.mesh` 的 URL（spec §4.11）。不发请求——网格由现有 DTX
  * 加载链自己 fetch + `parseMeshGeometry`（rkyv 原样直连，2026-09-09 拍板：不再经服务端

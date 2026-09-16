@@ -644,6 +644,24 @@ export function findOwnerRefnoByTubi(childRefno: string): string | null {
   return null;
 }
 
+/**
+ * 构件所属的 BRAN refno（跨库）。先看缓存里它的 `owner_noun` / `owner_refno`——gen-model-v1 的 `owner_refno` 是**生成根**，
+ * 管件的生成根就是 BRAN，BRAN 自己的隐式直管（`o:<bran>:n`）owner 也是它自己；再看它本身是不是 BRAN（legacy 里 BRAN 有自己的记录）；
+ * 最后退回 `findOwnerRefnoByTubi` 的 owner / 前缀匹配。只认 BRAN（HANG 不算：中心线接口只接 BRAN）。
+ */
+export function findOwnerBranRefnoAcrossAllDbnos(refno: string): string | null {
+  const key = normalizeRefnoKey(String(refno ?? ''));
+  if (!key) return null;
+  for (const cache of cachesByDbno.values()) {
+    const ownerNoun = normalizeNounKey(cache.refnoToOwnerNoun.get(key) || '');
+    const ownerRefno = cache.refnoToOwnerRefno.get(key);
+    if (ownerRefno && ownerNoun === 'BRAN') return ownerRefno;
+  }
+  if (normalizeNounKey(findNounByRefnoAcrossAllDbnos(key) || '') === 'BRAN') return key;
+  const owner = findOwnerRefnoByTubi(key);
+  return owner && normalizeNounKey(findNounByRefnoAcrossAllDbnos(owner) || '') !== 'HANG' ? owner : null;
+}
+
 export function resolveDtxOwnerNounByRefno(dbno: number, refno: string): string | null {
   const cache = cachesByDbno.get(dbno);
   return cache?.refnoToOwnerNoun.get(refno) ?? null;

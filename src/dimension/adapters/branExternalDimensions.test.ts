@@ -65,6 +65,30 @@ describe('branClearanceToExternalDimensions', () => {
     ]);
   });
 
+  it('keeps a parallel-run axis spacing exact (no ≈), names the metric in the source label, and keeps ids apart for two pairs on the same target BRAN', () => {
+    const candidate = (variant: string, labelMm: number) => ({
+      refno: '24381_144924',
+      noun: 'BRAN',
+      distance_mm: labelMm,
+      variant,
+      annotation: {
+        start_point: { x: 1000, y: 0, z: 0 },
+        end_point: { x: 1000, y: labelMm, z: 0 },
+        label_mm: labelMm,
+      },
+    });
+    const result = branClearanceToExternalDimensions([
+      { targetGroup: 'BRAN', index: 0, provenance: { method: 'parallel-centerline', accuracyClass: 'exact-centerline' }, candidate: candidate('parallel:a~b:0', 1583.7) },
+      { targetGroup: 'BRAN', index: 1, provenance: { method: 'parallel-centerline', accuracyClass: 'exact-centerline' }, candidate: candidate('parallel:a~b:1', 1919.7) },
+    ], point => [point[0] * 0.001, point[1] * 0.001, point[2] * 0.001]);
+
+    expect(result.skipped).toEqual([]);
+    expect(result.records.map((record) => [record.id, record.sourceLabel, (record.layout as { authoritativeText?: string }).authoritativeText])).toEqual([
+      ['bran-clearance:bran:24381_144924:0', 'BRAN: 24381_144924（平行直段中心距）', '1584mm'],
+      ['bran-clearance:bran:24381_144924:1', 'BRAN: 24381_144924（平行直段中心距）', '1920mm'],
+    ]);
+  });
+
   it('skips incomplete coordinates without creating a user record', () => {
     const result = branClearanceToExternalDimensions([
       {

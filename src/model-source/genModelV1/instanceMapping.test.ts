@@ -146,4 +146,37 @@ describe('groupInstanceEntriesByRefno / buildNounIndex', () => {
     expect(grouped.get('24381_145019')![0]!.uniforms).toMatchObject({ owner_noun: 'BRAN', noun: 'ELBO' });
     expect(grouped.get('24381_145018')![0]!.uniforms).toMatchObject({ noun: 'TUBI', owner_noun: 'BRAN' });
   });
+
+  it('真机形状：BRAN 的隐式管身记录 refno==owner 且 generic=TUBI（服务端不发 generic=BRAN）→ 这个 refno 认成 BRAN，构件 owner_noun 是 BRAN 不是 TUBI', () => {
+    const tubing = (geoHash: string) => record({
+      refno: '24381_145018',
+      owner: '24381_145018',
+      generic: 'TUBI',
+      insts: [{ geo_hash: geoHash, transform: IDENTITY, is_tubi: true, is_invalid_tubi: false }],
+    });
+    const items = [
+      record({ refno: '24381_145019', owner: '24381_145018', generic: 'ELBO' }),
+      tubing('t1'),
+      tubing('t2'),
+      record({ refno: '24381_145035', owner: '24381_145018', generic: 'VALV' }),
+    ];
+    const index = buildNounIndex(items);
+    expect(index.get('24381_145018')).toBe('BRAN');
+    expect(index.get('24381_145035')).toBe('VALV');
+    const grouped = groupInstanceEntriesByRefno(items);
+    expect(grouped.get('24381_145019')![0]!.uniforms).toMatchObject({ owner_refno: '24381_145018', owner_noun: 'BRAN' });
+    expect(grouped.get('24381_145035')![0]!.uniforms).toMatchObject({ owner_refno: '24381_145018', owner_noun: 'BRAN' });
+    expect(grouped.get('24381_145018')!.map((entry) => entry.uniforms)).toEqual([
+      expect.objectContaining({ noun: 'TUBI', owner_noun: 'BRAN', owner_refno: '24381_145018' }),
+      expect.objectContaining({ noun: 'TUBI', owner_noun: 'BRAN', owner_refno: '24381_145018' }),
+    ]);
+    // 真给了 generic=BRAN 的记录以它为准；别的 refno 上的 TUBI 记录不会把已知类型盖掉
+    const explicit = buildNounIndex([
+      record({ refno: '24381_1', owner: '24381_1', generic: 'BRAN', insts: [] }),
+      record({ refno: '24381_1', owner: '24381_1', generic: 'TUBI' }),
+      record({ refno: '24381_2', owner: '24381_2', generic: 'HANG', insts: [] }),
+    ]);
+    expect(explicit.get('24381_1')).toBe('BRAN');
+    expect(explicit.get('24381_2')).toBe('HANG');
+  });
 });

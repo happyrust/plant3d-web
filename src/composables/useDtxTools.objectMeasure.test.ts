@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { nextTick, ref } from 'vue';
+import { nextTick, ref, shallowRef } from 'vue';
 
 import { BoxGeometry, BufferGeometry, Matrix4, Vector3 } from 'three';
 
@@ -53,11 +53,37 @@ vi.mock('@/composables/useSelectionStore', () => ({
   useSelectionStore: () => selectionStoreMock,
 }));
 
+/** 管-管间距：点到的构件 → 所属 BRAN，用 DTX 缓存；这里直接给表。 */
+const ownerBranByRefno = new Map<string, string>();
+vi.mock('@/composables/useDbnoInstancesDtxLoader', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/composables/useDbnoInstancesDtxLoader')>()),
+  findOwnerBranRefnoAcrossAllDbnos: (refno: string) => ownerBranByRefno.get(refno) ?? null,
+}));
+
+/** 两条 BRAN 的中心线（`GET /api/v1/spatial/centerline`）按 refno 给。 */
+const centerlineByRefno = new Map<string, unknown>();
+const genModelV1SpatialCenterline = vi.fn(async (refno: string) => {
+  const line = centerlineByRefno.get(refno.replace('/', '_'));
+  if (!line) throw new Error(`no centerline fixture for ${refno}`);
+  return line;
+});
+vi.mock('@/api/genModelV1Api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/api/genModelV1Api')>()),
+  genModelV1SpatialCenterline: (refno: string) => genModelV1SpatialCenterline(refno),
+}));
+
+const sourceKindState: { kind: 'gen-model-v1' | 'legacy' } = { kind: 'gen-model-v1' };
+vi.mock('@/model-source/kind', () => ({
+  getModelSourceKind: () => sourceKindState.kind,
+}));
+
 import {
   computeApproxNearestBetweenObjects,
   useDtxTools,
 } from './useDtxTools';
 import { useToolStore } from './useToolStore';
+
+import type { BranParallelSpacingInput } from '@/composables/useSpatialCompute';
 
 import { DTXLayer } from '@/utils/three/dtx';
 
@@ -246,16 +272,64 @@ describe('useDtxTools object measure tree flow', () => {
     expect(tools.statusText.value).toBe('请先显示这两个构件后再测量');
   });
 
-  it('管-管净距测量在无管段数据时应退回 mesh 最近点但不创建尺寸', async () => {
+  /** 点一下（pointer down + up），等异步工具流程跑完。 */
+  async function clickOnce(tools: ReturnType<typeof useDtxTools>): Promise<void> {
+    const canvas = createCanvasStub();
+    const event = createPointerEventStub();
+    tools.onCanvasPointerDown(canvas, event);
+    tools.onCanvasPointerUp(canvas, event);
+    await flushAsyncToolWork();
+  }
+
+  /** 两次点选（先第一根管、再第二根），走到 `completePipeToPipeSpacing`。 */
+  async function clickTwoPipes(tools: ReturnType<typeof useDtxTools>): Promise<void> {
+    await clickOnce(tools);
+    await clickOnce(tools);
+  }
+
+  function centerlineSegment(refno: string, order: number, start: [number, number, number], end: [number, number, number], noun = 'TUBI') {
+    return {
+      refno,
+      order,
+      noun,
+      implicit: refno.includes('~'),
+      start: { x: start[0], y: start[1], z: start[2] },
+      end: { x: end[0], y: end[1], z: end[2] },
+      length_mm: Math.hypot(end[0] - start[0], end[1] - start[1], end[2] - start[2]),
+      outside_diameter_mm: null,
+    };
+  }
+
+  /** 两条 BRAN：`24381_1000` 沿 x 直跑 2000；`24381_2000` 与它平行、抬高 600，再拐个弯（那一截配不上）。 */
+  function installTwoParallelBrans(): void {
+    ownerBranByRefno.clear();
+    ownerBranByRefno.set('24381_1001', '24381_1000');
+    ownerBranByRefno.set('24381_1002', '24381_2000');
+    ownerBranByRefno.set('24381_1003', '24381_2000');
+    centerlineByRefno.clear();
+    centerlineByRefno.set('24381_1000', {
+      refno: '24381_1000', dbnum: 24381, segment_count: 1, outside_diameter_mm: 114.3, centerline_bbox: null, warnings: [],
+      segments: [centerlineSegment('Head~24381_1001', 0, [0, 0, 0], [2000, 0, 0])],
+    });
+    centerlineByRefno.set('24381_2000', {
+      refno: '24381_2000', dbnum: 24381, segment_count: 3, outside_diameter_mm: 168.3, centerline_bbox: null, warnings: [],
+      segments: [
+        centerlineSegment('Head~24381_1002', 0, [500, 0, 600], [2500, 0, 600]),
+        centerlineSegment('24381_1002', 1, [2500, 0, 600], [2600, 100, 600], 'ELBO'),
+        centerlineSegment('24381_1002~24381_1003', 2, [2600, 100, 600], [2600, 1100, 600]),
+      ],
+    });
+  }
+
+  function createPipeToPipeTools(
+    hits: { objectId: string; point: Vector3 }[],
+    recordBranParallelSpacing?: (input: BranParallelSpacingInput) => void,
+  ) {
     const store = useToolStore();
     const layer = createLayerWithBoxes(3);
-    const hits = [
-      { objectId: 'o:24381_1001:0', point: new Vector3(0, 0, 0) },
-      { objectId: 'o:24381_1002:0', point: new Vector3(3, 0, 0) },
-    ];
     const tools = useDtxTools({
       dtxViewerRef: ref(createViewerStub() as any),
-      dtxLayerRef: ref(layer),
+      dtxLayerRef: shallowRef<DTXLayer | null>(layer),
       selectionRef: ref({
         pickPoint: vi.fn(() => hits.shift() ?? null),
       } as any),
@@ -263,26 +337,92 @@ describe('useDtxTools object measure tree flow', () => {
       store,
       compatViewerRef: ref(null),
       requestRender: null,
+      recordBranParallelSpacing: recordBranParallelSpacing ?? null,
     });
-
     tools.refreshReadyState();
     store.setToolMode('measure_pipe_to_pipe');
+    return tools;
+  }
+
+  it('管-管间距：两次点选解到两条 BRAN，取两条中心线，平行直段的中心距写进结果落点（一对一条），状态报「已写入」（plan 2026-09-16 §3.3 ④）', async () => {
+    installTwoParallelBrans();
+    sourceKindState.kind = 'gen-model-v1';
+    const recordBranParallelSpacing = vi.fn();
+    const tools = createPipeToPipeTools([
+      { objectId: 'o:24381_1001:0', point: new Vector3(0, 0, 0) },
+      { objectId: 'o:24381_1002:0', point: new Vector3(3, 0, 0) },
+    ], recordBranParallelSpacing);
     await nextTick();
 
-    const canvas = createCanvasStub();
-    const event = createPointerEventStub();
-    tools.onCanvasPointerDown(canvas, event);
-    tools.onCanvasPointerUp(canvas, event);
-    await flushAsyncToolWork();
+    await clickOnce(tools);
+    expect(tools.statusText.value).toBe('管-管间距：已选第一条 BRAN 24381_1000（点选 24381_1001），请点第二条 BRAN 上的管件');
+    expect(genModelV1SpatialCenterline).not.toHaveBeenCalled();
 
-    tools.onCanvasPointerDown(canvas, event);
-    tools.onCanvasPointerUp(canvas, event);
-    await flushAsyncToolWork();
+    await clickOnce(tools);
+    expect(genModelV1SpatialCenterline.mock.calls.map((call) => call[0])).toEqual(['24381_1000', '24381_2000']);
+    expect(recordBranParallelSpacing).toHaveBeenCalledTimes(1);
+    const input = recordBranParallelSpacing.mock.calls[0]![0];
+    expect(input.sourceBranRefno).toBe('24381_1000');
+    expect(input.targetBranRefno).toBe('24381_2000');
+    expect(input.pairs).toHaveLength(1);
+    const [pair] = input.pairs;
+    expect(pair.axisDistanceMm).toBeCloseTo(600, 9);
+    expect(pair.overlapMm).toBeCloseTo(1500, 9);
+    expect(pair.sourcePointMm).toEqual({ x: 1250, y: 0, z: 0 });
+    expect(pair.targetPointMm).toEqual({ x: 1250, y: 0, z: 600 });
+    expect(pair.clearanceMm).toBeCloseTo(600 - (114.3 + 168.3) / 2, 9);
+    expect(pair.source.segments[0].refno).toBe('Head~24381_1001');
+    expect(pair.target.segments[0].refno).toBe('Head~24381_1002');
+    // 全局默认显示单位为 mm + 0 位小数（E3D 惯例，V2 迁移）；中心线上的中心距是精确值，不标「估算」
+    expect(tools.statusText.value).toBe('管-管间距：24381_1000 ↔ 24381_2000 找到 1 对平行直段（1 / 2 条直段），中心距 600mm，已写入 Dock「BRAN 中心线最近清距」结果并画出尺寸');
+    expect(tools.statusText.value).not.toContain('估算');
+  });
 
-    expect(store).not.toHaveProperty('dimensions');
-    expect(tools.statusText.value).toContain('尺寸标注正在重构，净距计算结果暂不创建尺寸');
-    expect(tools.statusText.value).toContain('24381_1001 ↔ 24381_1002');
-    // 全局默认显示单位为 mm + 0 位小数（E3D 惯例，V2 迁移）。
-    expect(tools.statusText.value).toContain('净距 2000mm');
+  it('管-管间距：点到不属于 BRAN 的构件、同一条 BRAN 点两次都只提示；没接落点时只报状态不写；没有平行直段直说', async () => {
+    installTwoParallelBrans();
+    sourceKindState.kind = 'gen-model-v1';
+    // 第二条 BRAN 改成与第一条垂直：没有平行直段
+    centerlineByRefno.set('24381_2000', {
+      refno: '24381_2000', dbnum: 24381, segment_count: 1, outside_diameter_mm: null, centerline_bbox: null, warnings: [],
+      segments: [centerlineSegment('Head~24381_1002', 0, [1000, -500, 600], [1000, 500, 600])],
+    });
+    const tools = createPipeToPipeTools([
+      { objectId: 'o:24381_9999:0', point: new Vector3(0, 0, 0) },
+      { objectId: 'o:24381_1001:0', point: new Vector3(0, 0, 0) },
+      { objectId: 'o:24381_1001:0', point: new Vector3(1, 0, 0) },
+      { objectId: 'o:24381_1002:0', point: new Vector3(3, 0, 0) },
+    ]);
+    await nextTick();
+    expect(tools.statusText.value).toBe('管-管间距：点第一根管道（量两条 BRAN 平行直段之间的中心距，结果写入 Dock「BRAN 中心线最近清距」并画出尺寸）');
+
+    await clickOnce(tools);
+    expect(tools.statusText.value).toBe('管-管间距：24381_9999 不属于任何 BRAN——只能量两条 BRAN 之间的平行直段，请点管件或直管');
+
+    await clickOnce(tools);
+    await clickOnce(tools);
+    expect(tools.statusText.value).toBe('管-管间距：24381_1001 与第一根同属 BRAN 24381_1000，请点另一条 BRAN 上的管件');
+    expect(genModelV1SpatialCenterline).not.toHaveBeenCalled();
+
+    await clickOnce(tools);
+    expect(genModelV1SpatialCenterline).toHaveBeenCalledTimes(2);
+    expect(tools.statusText.value).toBe('管-管间距：24381_1000 ↔ 24381_2000 没有平行的直段（1 / 1 条直段，夹角容差 0.5°）');
+    expect(tools.statusText.value).not.toContain('暂不创建尺寸');
+  });
+
+  it('管-管间距：legacy 数据源没有中心线接口，第二次点选只提示、不请求、不写', async () => {
+    installTwoParallelBrans();
+    sourceKindState.kind = 'legacy';
+    const recordBranParallelSpacing = vi.fn();
+    const tools = createPipeToPipeTools([
+      { objectId: 'o:24381_1001:0', point: new Vector3(0, 0, 0) },
+      { objectId: 'o:24381_1002:0', point: new Vector3(3, 0, 0) },
+    ], recordBranParallelSpacing);
+    await nextTick();
+    await clickTwoPipes(tools);
+
+    expect(genModelV1SpatialCenterline).not.toHaveBeenCalled();
+    expect(recordBranParallelSpacing).not.toHaveBeenCalled();
+    expect(tools.statusText.value).toBe('管-管间距：当前数据源没有 BRAN 中心线接口（/api/v1/spatial/centerline），请切到 gen-model-v1 数据源');
+    sourceKindState.kind = 'gen-model-v1';
   });
 });

@@ -10,6 +10,7 @@ import {
   genModelV1ModelEnsure,
   genModelV1ModelRecords,
   genModelV1SpatialNearby,
+  genModelV1SpatialCenterline,
   genModelV1SpatialNearbyRefnos,
   genModelV1SpatialNearestClearance,
   genModelV1SpatialNegativeNouns,
@@ -429,5 +430,38 @@ describe('spatial/*（spec §4.13：GET，参数进 query）', () => {
       .then(() => null, (e: unknown) => e as GenModelV1ApiError);
     expect(e2?.isNotFound).toBe(true);
     expect(e2?.isRetryable).toBe(false);
+  });
+
+  it('centerline：refno 转 a/b 进 query，路径 /api/v1/spatial/centerline，线段表原样回来', async () => {
+    const body = {
+      refno: '24381_145018',
+      dbnum: 24381,
+      segment_count: 2,
+      outside_diameter_mm: 114.3,
+      centerline_bbox: { min: { x: 0, y: 0, z: 0 }, max: { x: 100, y: 0, z: 0 } },
+      segments: [
+        { refno: '24381_145019', order: 0, noun: 'ELBO', implicit: false, start: { x: 0, y: 0, z: 0 }, end: { x: 10, y: 0, z: 0 }, length_mm: 10, outside_diameter_mm: 114.3 },
+        { refno: '24381_145019~24381_145020', order: 1, noun: 'TUBI', implicit: true, start: { x: 10, y: 0, z: 0 }, end: { x: 100, y: 0, z: 0 }, length_mm: 90, outside_diameter_mm: null },
+      ],
+      warnings: ['1 个成员没有长度（穿过件），不参与走廊'],
+    };
+    const fetchImpl = fetchMockReturning(jsonResponse(200, body));
+    const resp = await genModelV1SpatialCenterline('24381_145018', { baseUrl: BASE, fetchImpl, identity: { project: 'P' } });
+    const parsed = new URL(String(fetchImpl.mock.calls[0]![0]));
+    expect(parsed.origin + parsed.pathname).toBe(`${BASE}/api/v1/spatial/centerline`);
+    expect(fetchImpl.mock.calls[0]![1]?.method).toBe('GET');
+    expect(Object.fromEntries(parsed.searchParams)).toEqual({ project: 'P', refno: '24381/145018' });
+    expect(resp.segments).toHaveLength(2);
+    expect(resp.segments[1]).toMatchObject({ implicit: true, noun: 'TUBI', outside_diameter_mm: null });
+    expect(resp.outside_diameter_mm).toBe(114.3);
+  });
+
+  it('centerline：不是 BRAN 的 422 precondition 走错误信封', async () => {
+    const precondition = fetchMockReturning(jsonResponse(422, { code: 'precondition', message: '不是 BRAN', detail: null }));
+    const error = await genModelV1SpatialCenterline('24381_1', { baseUrl: BASE, fetchImpl: precondition })
+      .then(() => null, (e: unknown) => e as GenModelV1ApiError);
+    expect(isGenModelV1ApiError(error)).toBe(true);
+    expect(error?.code).toBe('precondition');
+    expect(error?.status).toBe(422);
   });
 });

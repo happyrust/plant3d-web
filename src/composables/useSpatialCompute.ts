@@ -13,6 +13,7 @@ import {
   type BranNearestClearanceCandidate,
   type BranNearestClearanceGroupResult,
   type BranNearestClearanceResponse,
+  type BranParallelSpacingDetail,
   type SpaceComputeFittingData,
   type SpaceComputeFittingOffsetData,
   type SpaceComputeSteelRelativeData,
@@ -22,6 +23,7 @@ import {
   type SpaceEnvelope,
 } from '@/api/genModelSpatialApi';
 import { genModelV1SpatialNearestClearance } from '@/api/genModelV1Api';
+import { type BranParallelRunPair, describeStraightRun } from '@/composables/branParallelSpacing';
 import { useSelectionStore } from '@/composables/useSelectionStore';
 import { useViewerContext } from '@/composables/useViewerContext';
 import { getModelSourceKind } from '@/model-source/kind';
@@ -52,11 +54,12 @@ export type SpatialComputeResultRow = {
 /**
  * 一条净距候选是怎么算出来的（`docs/plans/2026-09-11-measurement-clearance-dimension-convergence-plan.md` D2：精度不是布尔值）。
  * 服务端候选是沿中心线量到候选**包围盒**（目标侧不是网格精算）；三维里点选管件得到的那条是 DTX 网格采样估算，
- * 进同一份结果时必须带着这个标签，表里与尺寸文字都按它标「估算」。
+ * 进同一份结果时必须带着这个标签，表里与尺寸文字都按它标「估算」；两条 BRAN 平行直段的中心距是两条真实轴线之间的垂距，
+ * 精确到中心线本身（`parallel-centerline / exact-centerline`），不标「≈」。
  */
 export type BranClearanceProvenance = {
-  method: 'centerline-to-aabb' | 'sampled-object';
-  accuracyClass: 'approximate-bounds' | 'approximate-sampled';
+  method: 'centerline-to-aabb' | 'sampled-object' | 'parallel-centerline';
+  accuracyClass: 'approximate-bounds' | 'approximate-sampled' | 'exact-centerline';
 };
 
 export const SERVER_BRAN_CLEARANCE_PROVENANCE: BranClearanceProvenance = {
@@ -67,6 +70,11 @@ export const SERVER_BRAN_CLEARANCE_PROVENANCE: BranClearanceProvenance = {
 export const INTERACTIVE_BRAN_CLEARANCE_PROVENANCE: BranClearanceProvenance = {
   method: 'sampled-object',
   accuracyClass: 'approximate-sampled',
+};
+
+export const PARALLEL_BRAN_SPACING_PROVENANCE: BranClearanceProvenance = {
+  method: 'parallel-centerline',
+  accuracyClass: 'exact-centerline',
 };
 
 export type BranNearestClearanceAnnotationCandidate = {
@@ -88,6 +96,18 @@ export type InteractiveBranClearanceInput = {
   targetNoun: string;
   sourcePointMm: { x: number; y: number; z: number };
   targetPointMm: { x: number; y: number; z: number };
+};
+
+/**
+ * 三维里点选两根管算出的「两条 BRAN 平行直段的间距」（`useDtxTools.measure_pipe_to_pipe`，plan 2026-09-16 §3.3 ④），
+ * 一对平行直段一条候选，写进 BRAN 净距结果用。`pairs` 里的点都是 **E3D 世界 mm**（中心线接口给的就是）。
+ */
+export type BranParallelSpacingInput = {
+  /** 先点的那一根所属 BRAN（`a_b` / `a/b` 都收） */
+  sourceBranRefno: string;
+  /** 后点的那一根所属 BRAN */
+  targetBranRefno: string;
+  pairs: readonly BranParallelRunPair[];
 };
 
 /**
@@ -454,9 +474,12 @@ function extractResultRows(key: SpatialComputeScenarioKey, envelope: SpatialComp
   }
 }
 
-/** 一条候选在结果表 / 标注开关里的键：桶名 + refno（同一构件理论上只会落在一个桶里，带桶名只为稳妥）。 */
-export function branCandidateKey(group: string, refno: string): string {
-  return `${group}:${refno}`;
+/**
+ * 一条候选在结果表 / 标注开关里的键：桶名 + refno（同一构件理论上只会落在一个桶里，带桶名只为稳妥）；
+ * 前端交互写入的多条同目标候选（两条 BRAN 之间每对平行直段一条）再带 `#variant`。服务端候选没有 `variant`，键不变。
+ */
+export function branCandidateKey(group: string, candidate: Pick<BranNearestClearanceCandidate, 'refno' | 'variant'>): string {
+  return candidate.variant ? `${group}:${candidate.refno}#${candidate.variant}` : `${group}:${candidate.refno}`;
 }
 
 /** 两种响应形态都收：新的数组分桶（`group_by=noun` 一桶一类）与老的对象形态 `{ wall: [...] }`。 */
@@ -491,13 +514,39 @@ export function buildBranNounFacets(
 export function defaultDrawnCandidateKeys(groups: readonly BranNearestClearanceGroupResult[]): string[] {
   return groups.flatMap((group) => {
     const nearest = group.candidates[0];
-    return nearest ? [branCandidateKey(group.group, nearest.refno)] : [];
+    return nearest ? [branCandidateKey(group.group, nearest)] : [];
   });
 }
 
-/** 表里给非服务端候选看的来源字样（2026-09-11 收敛计划 PR0.2：`sampled-object` 显示「估算最近距离」）。 */
+/**
+ * 表里给非服务端候选看的来源字样（2026-09-11 收敛计划 PR0.2：`sampled-object` 显示「估算最近距离」；
+ * `parallel-centerline` 显示「平行直段中心距」——这一行的距离是两条轴线的垂距，不是到包围盒的净距）。
+ */
 function provenanceLabel(provenance: BranClearanceProvenance | undefined): string {
-  return provenance?.method === 'sampled-object' ? '估算最近距离（网格采样）' : '';
+  switch (provenance?.method) {
+    case 'sampled-object':
+      return '估算最近距离（网格采样）';
+    case 'parallel-centerline':
+      return '平行直段中心距';
+    default:
+      return '';
+  }
+}
+
+function formatMm(value: number): string {
+  return `${Math.round(value)}mm`;
+}
+
+/** 平行直段候选的行标签明细：重叠长度、扣两侧外径的净距（外径不全就说明缺哪边）、源 / 目标直段。 */
+function parallelDetailLabel(detail: BranParallelSpacingDetail): string[] {
+  const diameters = [detail.source_outside_diameter_mm, detail.target_outside_diameter_mm]
+    .map((value) => (value != null ? String(value) : '?'))
+    .join('/');
+  return [
+    `重叠 ${formatMm(detail.overlap_mm)}`,
+    detail.clearance_mm != null ? `净距 ${formatMm(detail.clearance_mm)}（外径 ${diameters}）` : `外径不全（${diameters}），净距未算`,
+    `直段 ${detail.source_run_refno} ∥ ${detail.target_run_refno}`,
+  ];
 }
 
 function toBranResultRow(
@@ -506,9 +555,11 @@ function toBranResultRow(
   drawn: boolean,
   provenance: BranClearanceProvenance | undefined,
 ): SpatialComputeResultRow {
-  const segment = candidate.nearest?.source_segment_refno
-    ? `${provenance?.method === 'sampled-object' ? '点选' : 'segment'} ${candidate.nearest.source_segment_refno}${candidate.nearest.source_segment_order != null ? `#${candidate.nearest.source_segment_order}` : ''}`
-    : '';
+  const segment = candidate.parallel
+    ? ''
+    : candidate.nearest?.source_segment_refno
+      ? `${provenance?.method === 'sampled-object' ? '点选' : 'segment'} ${candidate.nearest.source_segment_refno}${candidate.nearest.source_segment_order != null ? `#${candidate.nearest.source_segment_order}` : ''}`
+      : '';
   return {
     refno: candidate.refno,
     noun: candidate.noun,
@@ -516,9 +567,14 @@ function toBranResultRow(
     targetGroup: group,
     sourceSegmentRefno: candidate.nearest?.source_segment_refno ?? null,
     sourceSegmentOrder: candidate.nearest?.source_segment_order ?? null,
-    candidateKey: branCandidateKey(group, candidate.refno),
+    candidateKey: branCandidateKey(group, candidate),
     drawn,
-    label: [candidate.intersects ? '相交' : '', provenanceLabel(provenance), segment].filter(Boolean).join(' · '),
+    label: [
+      candidate.intersects ? '相交' : '',
+      provenanceLabel(provenance),
+      ...(candidate.parallel ? parallelDetailLabel(candidate.parallel) : []),
+      segment,
+    ].filter(Boolean).join(' · '),
   };
 }
 
@@ -534,20 +590,65 @@ function applyBranSelection(state: SpatialComputeScenarioState): void {
   const visibleGroups = state.branGroups.filter((group) => selectedNouns.has(group.group));
   state.resultRows = visibleGroups.flatMap((group) =>
     group.candidates.map((candidate) => {
-      const key = branCandidateKey(group.group, candidate.refno);
+      const key = branCandidateKey(group.group, candidate);
       return toBranResultRow(group.group, candidate, drawn.has(key), state.candidateProvenance[key]);
     }),
   );
   state.annotationCandidates = visibleGroups.flatMap((group) =>
     group.candidates
       .map((candidate, index): BranNearestClearanceAnnotationCandidate => {
-        const provenance = state.candidateProvenance[branCandidateKey(group.group, candidate.refno)];
+        const provenance = state.candidateProvenance[branCandidateKey(group.group, candidate)];
         return provenance
           ? { targetGroup: group.group, candidate, index, provenance }
           : { targetGroup: group.group, candidate, index };
       })
-      .filter((item) => drawn.has(branCandidateKey(group.group, item.candidate.refno))),
+      .filter((item) => drawn.has(branCandidateKey(group.group, item.candidate))),
   );
+}
+
+/** 两条 BRAN 之间平行直段候选的 `variant` 前缀：同一对（不分先后）再测一次就整组替换。 */
+function parallelVariantPrefix(branA: string, branB: string): string {
+  return `parallel:${[branA, branB].sort().join('~')}:`;
+}
+
+/**
+ * 一对平行直段 → 与服务端同形的候选：`distance_mm` / `annotation.label_mm` 是中心距，两端点都在轴线上（重叠区中点），
+ * `nearest.source_segment_refno/order` 是源直段的首段；明细进 `parallel`，`variant` 区分同一目标 BRAN 的多条。
+ */
+export function parallelSpacingCandidate(
+  sourceBranRefno: string,
+  targetBranRefno: string,
+  pair: BranParallelRunPair,
+  index: number,
+): BranNearestClearanceCandidate {
+  const source = pair.sourcePointMm;
+  const target = pair.targetPointMm;
+  const head = pair.source.segments[0];
+  return {
+    refno: targetBranRefno,
+    noun: 'BRAN',
+    distance_mm: pair.axisDistanceMm,
+    intersects: pair.axisDistanceMm <= 1e-6,
+    nearest: {
+      source_segment_refno: head?.refno ?? sourceBranRefno,
+      source_segment_order: head?.order ?? null,
+      source_point: { ...source },
+      target_point: { ...target },
+      vector: { dx: target.x - source.x, dy: target.y - source.y, dz: target.z - source.z },
+    },
+    annotation: { start_point: { ...source }, end_point: { ...target }, label_mm: pair.axisDistanceMm },
+    variant: `${parallelVariantPrefix(sourceBranRefno, targetBranRefno)}${index}`,
+    parallel: {
+      source_bran_refno: sourceBranRefno,
+      source_run_refno: describeStraightRun(pair.source),
+      target_run_refno: describeStraightRun(pair.target),
+      overlap_mm: pair.overlapMm,
+      angle_deg: pair.angleDeg,
+      clearance_mm: pair.clearanceMm,
+      source_outside_diameter_mm: pair.source.outsideDiameterMm,
+      target_outside_diameter_mm: pair.target.outsideDiameterMm,
+    },
+  };
 }
 
 /**
@@ -843,14 +944,15 @@ export function createSpatialComputeStore() {
   function recordInteractiveBranClearance(input: InteractiveBranClearanceInput): string {
     const state = scenarios.branNearestClearance;
     const candidate = interactiveBranClearanceCandidate(input);
-    const key = branCandidateKey(candidate.noun, candidate.refno);
+    const key = branCandidateKey(candidate.noun, candidate);
 
     let group = state.branGroups.find((item) => item.group === candidate.noun);
     if (!group) {
       group = { group: candidate.noun, nouns: [candidate.noun], candidates: [] };
       state.branGroups.push(group);
     }
-    const existingIndex = group.candidates.findIndex((item) => item.refno === candidate.refno);
+    // 只替换同目标的「单条」候选（服务端的或上一次点选的）；平行直段那些带 variant 的多条不在此列。
+    const existingIndex = group.candidates.findIndex((item) => item.refno === candidate.refno && !item.variant);
     if (existingIndex >= 0) {
       group.candidates.splice(existingIndex, 1, candidate);
     } else {
@@ -874,6 +976,71 @@ export function createSpatialComputeStore() {
     applyBranSelection(state);
     activeScenario.value = 'branNearestClearance';
     return key;
+  }
+
+  /**
+   * 三维里点选两根管算出的「两条 BRAN 平行直段的间距」写进**同一份** BRAN 净距结果（plan 2026-09-16 §3.3 ④）：
+   * 一对平行直段一条候选，落进 `BRAN` 那一桶末尾、全部默认开「标注」，来源登记 `parallel-centerline / exact-centerline`。
+   * 同一对 BRAN（不分先后）再测一次先把上一次那组整体摘掉再写（结果变了就换、没有平行直段了就清）；
+   * 别的候选（服务端的、点选估算的、别的 BRAN 对）原位不动。下一次服务端查询连它们一起清。
+   * 返回这次写进去的候选键。
+   */
+  function recordBranParallelSpacing(input: BranParallelSpacingInput): string[] {
+    const state = scenarios.branNearestClearance;
+    const sourceBran = normalizeBranComputeRefno(input.sourceBranRefno);
+    const targetBran = normalizeBranComputeRefno(input.targetBranRefno);
+    const prefix = parallelVariantPrefix(sourceBran, targetBran);
+    const isSamePair = (candidate: BranNearestClearanceCandidate) => !!candidate.variant && candidate.variant.startsWith(prefix);
+
+    // 摘掉上一次同一对的那组（哪一桶都看：反着点时目标是另一条 BRAN，也在 BRAN 桶，但别赌）。
+    const removedKeys = new Set<string>();
+    for (const group of state.branGroups) {
+      const kept = group.candidates.filter((candidate) => {
+        if (!isSamePair(candidate)) return true;
+        removedKeys.add(branCandidateKey(group.group, candidate));
+        return false;
+      });
+      const removed = group.candidates.length - kept.length;
+      if (removed > 0) {
+        group.candidates = kept;
+        const facet = state.nounFacets.find((item) => item.noun === group.group);
+        if (facet) facet.count = Math.max(kept.length, facet.count - removed);
+      }
+    }
+    state.branGroups = state.branGroups.filter((group) => group.candidates.length > 0);
+    state.nounFacets = state.nounFacets.filter((facet) => state.branGroups.some((group) => group.group === facet.noun));
+
+    const candidates = input.pairs.map((pair, index) => parallelSpacingCandidate(sourceBran, targetBran, pair, index));
+    const keys: string[] = [];
+    if (candidates.length > 0) {
+      let group = state.branGroups.find((item) => item.group === 'BRAN');
+      if (!group) {
+        group = { group: 'BRAN', nouns: ['BRAN'], candidates: [] };
+        state.branGroups.push(group);
+      }
+      group.candidates.push(...candidates);
+      const facet = state.nounFacets.find((item) => item.noun === 'BRAN');
+      if (facet) {
+        facet.count += candidates.length;
+        facet.selected = true;
+      } else {
+        state.nounFacets.push({ noun: 'BRAN', count: candidates.length, selected: true });
+      }
+      for (const candidate of candidates) keys.push(branCandidateKey('BRAN', candidate));
+    }
+
+    const provenance = { ...state.candidateProvenance };
+    for (const key of removedKeys) delete provenance[key];
+    for (const key of keys) provenance[key] = PARALLEL_BRAN_SPACING_PROVENANCE;
+    state.candidateProvenance = provenance;
+    state.drawnCandidateKeys = [
+      ...state.drawnCandidateKeys.filter((key) => !removedKeys.has(key)),
+      ...keys,
+    ];
+    state.error = '';
+    applyBranSelection(state);
+    activeScenario.value = 'branNearestClearance';
+    return keys;
   }
 
   if (typeof window !== 'undefined') {
@@ -905,6 +1072,7 @@ export function createSpatialComputeStore() {
     setAllBranNounFacets,
     toggleBranCandidateDrawn,
     recordInteractiveBranClearance,
+    recordBranParallelSpacing,
   };
 }
 

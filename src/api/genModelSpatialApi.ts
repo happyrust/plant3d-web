@@ -283,6 +283,26 @@ export type BranNearestClearanceAnnotation = {
   label_mm: number;
 };
 
+/**
+ * 前端交互写进 BRAN 净距结果的「平行直段间距」候选独有的一格（服务端不发）：两条 BRAN 的直段配成的一对平行段的明细，
+ * 表里的行标签与尺寸来源标签用它。`distance_mm` / `annotation.label_mm` 是中心距（两条轴线的垂距，不扣外径）。
+ */
+export type BranParallelSpacingDetail = {
+  /** 源 BRAN（三维里先点的那一根） */
+  source_bran_refno: string;
+  /** 源 / 目标直段的首段 refno（隐式管身 `a_b~c_d`） */
+  source_run_refno: string;
+  target_run_refno: string;
+  /** 沿源直段轴线的重叠长度（mm） */
+  overlap_mm: number;
+  /** 两条轴线夹角（度，锐角） */
+  angle_deg: number;
+  /** 中心距扣掉两侧半径后的净距（mm，可为负）；任一侧外径未知为 null */
+  clearance_mm: number | null;
+  source_outside_diameter_mm: number | null;
+  target_outside_diameter_mm: number | null;
+};
+
 export type BranNearestClearanceCandidate = {
   refno: string;
   noun: string;
@@ -292,6 +312,13 @@ export type BranNearestClearanceCandidate = {
   aabb?: BranNearestClearanceAabb;
   nearest?: BranNearestClearanceNearest | null;
   annotation?: BranNearestClearanceAnnotation | null;
+  /**
+   * 前端交互写入的候选独有（服务端不发）：同一目标 refno 在同一桶里可以有多条时用它区分（两条 BRAN 之间每对平行直段一条），
+   * 进 `branCandidateKey`。服务端候选没有这一格 = 一目标一条。
+   */
+  variant?: string;
+  /** 前端交互写入的「平行直段间距」候选独有（服务端不发） */
+  parallel?: BranParallelSpacingDetail;
 };
 
 export type BranNearestClearanceGroupResult = {
