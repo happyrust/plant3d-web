@@ -1269,6 +1269,17 @@ async function saveRestoreRecord(
   const now = Date.now();
   const annotationId = `restore-annot-${now}`;
   const commentContent = `评论线程回归 ${now}`;
+  // 确认记录按 (form_id, current_node, operator_id) 占一个槽位，同槽位的后一次 POST 整份覆盖前一次
+  // （后端 records.rs::build_confirmed_record_slot_key，落库 id 形如 slot-<sha256>）。JH 刚在界面上
+  // 确认过那条带截图的云线，落的就是这同一个槽位——这里再丢一份 cloudAnnotations: [] 上去会把它抹掉，
+  // 刷新后场景回放自然找不回云线。把槽位里已有的云线原样带上再 POST。
+  const existingRecords = await getJson<unknown>(
+    `${runtime.env.backendBaseUrl}/api/review/records/by-task/${encodeURIComponent(options.taskId)}?${new URLSearchParams({ form_id: options.formId })}`,
+    token,
+  );
+  const carriedCloudAnnotations = collectConfirmedRecords(existingRecords.body)
+    .flatMap((record) => (Array.isArray(record.cloudAnnotations) ? record.cloudAnnotations : []));
+  traceSimulator(`restore 记录注入前槽位已有云线 ${carriedCloudAnnotations.length} 条（form_id=${options.formId}）`);
   await postJson(`${runtime.env.backendBaseUrl}/api/review/records`, {
     taskId: options.taskId,
     formId: options.formId,
@@ -1288,7 +1299,7 @@ async function saveRestoreRecord(
       formId: options.formId,
       taskId: options.taskId,
     }],
-    cloudAnnotations: [],
+    cloudAnnotations: carriedCloudAnnotations,
     rectAnnotations: [],
     measurements: [{
       id: `restore-measure-${now}`,
@@ -2002,16 +2013,40 @@ async function createAndConfirmCloudScreenshot(
   if (!recordStored) {
     traceSimulator(`restore cloud record readback HTTP ${recordsResponse.status} ${JSON.stringify(recordsResponse.body).slice(0, 2000)}`);
   }
-  const attachmentResponse = await getJson<unknown>(
-    `${runtime.env.backendBaseUrl}/api/review/attachments/${encodeURIComponent(screenshot.attachmentId)}`,
+  // 附件落库走任务详情里的 attachments 投影核对：附件路由只有 POST /api/review/attachments 与
+  // DELETE /api/review/attachments/{id} 两条，没有按 id 读的 GET（前端也只拿 url 去
+  // /files/review_attachments 取图），原先那条 GET 一律 405。批注与附件的对应关系由上面
+  // recordStored 那一段（记录里 cloudAnnotations[].screenshot.attachmentId）负责。
+  const taskDetailResponse = await getJson<unknown>(
+    `${runtime.env.backendBaseUrl}/api/review/tasks/${encodeURIComponent(taskId)}`,
     token,
   );
-  const attachmentText = JSON.stringify(attachmentResponse.body);
-  const attachmentStored = attachmentResponse.status === 200
-    && attachmentText.includes(screenshot.attachmentId)
-    && attachmentText.includes(screenshot.annotationId)
-    && attachmentText.includes('image/png')
-    && attachmentText.includes('contentBase64');
+  const projectedAttachments = isObjectRecord(taskDetailResponse.body)
+    && isObjectRecord(taskDetailResponse.body.task)
+    && Array.isArray(taskDetailResponse.body.task.attachments)
+    ? taskDetailResponse.body.task.attachments
+    : [];
+  // 投影里的 url 是后端写的相对路径，store 里那份被 resolveReviewAssetUrl 绝对化过，按 pathname 比。
+  const toAttachmentUrlPath = (value: unknown): string => {
+    const raw = String(value || '').trim();
+    if (!raw) return '';
+    try {
+      return new URL(raw, runtime.env.backendBaseUrl).pathname;
+    } catch {
+      return raw;
+    }
+  };
+  const screenshotUrlPath = toAttachmentUrlPath(screenshot.url);
+  const attachmentStored = taskDetailResponse.status === 200
+    && projectedAttachments.some((item) => (
+      isObjectRecord(item)
+      && String(item.id || '') === screenshot.attachmentId
+      && toAttachmentUrlPath(item.url) === screenshotUrlPath
+      && String(item.mimeType || '') === 'image/png'
+    ));
+  if (!attachmentStored) {
+    traceSimulator(`restore cloud attachment readback HTTP ${taskDetailResponse.status} ${JSON.stringify(taskDetailResponse.body).slice(0, 2000)}`);
+  }
 
   const fileResponse = await fetch(new URL(screenshot.url, runtime.env.backendBaseUrl));
   const fileBytes = new Uint8Array(await fileResponse.arrayBuffer());
@@ -2086,6 +2121,42 @@ async function buildRestoreCounts(runtime: ScenarioRuntime, formId: string, task
   };
 }
 
+/**
+ * 挑一个「确实载着这张单的确认记录」的校审工作区 root。
+ *
+ * 跨上下文扫描只认得出「像校审工作区的 root」，认不出它里面装的是哪张单的数据；刷新之后两个候选
+ * 里只有一个真把记录拉回来了。这里遍历所有页面与 iframe，取 `getConfirmedRecordCount() > 0` 的那个；
+ * 等不到就退回普通扫描结果，让调用方照旧往下读（断言自己会失败，不在这里吞）。
+ */
+async function resolveReviewerRootWithRecords(
+  runtime: ScenarioRuntime,
+  formId: string,
+  timeoutMs = 90_000,
+): Promise<{ page: Page; root: Page | Frame }> {
+  const fallback = await waitForReviewerWorkbenchAcrossContext(runtime.context, { formId });
+  const found = await waitFor(async () => {
+    for (const page of runtime.context.pages().filter((item) => !item.isClosed())) {
+      const roots: (Page | Frame)[] = [page, ...page.frames().filter((frame) => !frame.isDetached() && frame !== page.mainFrame())];
+      for (const root of roots) {
+        const count = await root.evaluate(() => {
+          const hook = (window as Window & {
+            __plant3dReviewerE2E?: { getConfirmedRecordCount: () => number };
+          }).__plant3dReviewerE2E;
+          return hook ? hook.getConfirmedRecordCount() : -1;
+        }).catch(() => -1);
+        if (count > 0) return { page, root };
+      }
+    }
+    return null;
+  }, { timeoutMs, intervalMs: 800, message: `未找到载有 form_id=${formId} 确认记录的校审工作区` }).catch(() => null);
+  if (!found) {
+    traceSimulator(`restore 刷新后没有任何工作区载入确认记录（form_id=${formId}），退回扫描结果 ${rootUrlForTrace(fallback.root)}`);
+    return fallback;
+  }
+  traceSimulator(`restore 刷新后确认记录载入于 ${rootUrlForTrace(found.root)}`);
+  return found;
+}
+
 async function readRestoreCounts(
   runtime: ScenarioRuntime,
   formId: string,
@@ -2111,7 +2182,12 @@ async function readRestoreCounts(
   commentContentFound: boolean;
   commentDetail: string;
 }> {
-  const located = await waitForReviewerWorkbenchAcrossContext(runtime.context, { formId });
+  // 同一个 form 常有两个校审工作区能被扫到：仿 PMS 页里内嵌的 iframe，和「PMS 打开三维」开出来的
+  // 那个独立页。刷新重载的是后者，而它重建工作区要等三维装完（几十秒），这期间跨上下文扫描只会
+  // 落到 iframe 上——那个上下文没有本单的确认记录，读出来是一排 0。按 URL 钉死那个页面并不稳（重载
+  // 期间它连标记都没有），所以这里按「谁手上真有这张单的确认记录」挑 root，挑不到再退回扫描结果。
+  const located = await resolveReviewerRootWithRecords(runtime, formId);
+
   const counts = await located.root.evaluate(async ({ annotationId }) => {
     const hook = (window as Window & {
       __plant3dReviewerE2E?: {
@@ -2124,18 +2200,28 @@ async function readRestoreCounts(
     if (!hook) {
       throw new Error('__plant3dReviewerE2E 未挂载');
     }
-    if (typeof hook.refreshAnnotationCommentThread === 'function') {
-      await hook.refreshAnnotationCommentThread('text', annotationId);
-    }
+    // 这一发的返回值就是界面侧那条批注拉回来的评论条数：DOM 里看不到评论时，用它分清
+    // 「线程没载回来」和「载回来了但这一屏不显示」。
+    const threadCount = typeof hook.refreshAnnotationCommentThread === 'function'
+      ? await hook.refreshAnnotationCommentThread('text', annotationId)
+      : -1;
     return {
       confirmedRecordCount: hook.getConfirmedRecordCount(),
       confirmedAnnotationCount: hook.getConfirmedAnnotationCount(),
       confirmedMeasurementCount: hook.getConfirmedMeasurementCount(),
+      threadCount,
     };
   }, { annotationId: comment.annotationId });
   const expectedAnnotationTitle = 'restore 自动化批注 24381_145018';
+  // 下面要依次切三个视图（批注详情 → 评论 → 审核记录），每切一次 body 文本就换一批内容。
+  // 评论只在批注详情那一屏露面，切到审核记录后就没了——逐屏累计，别只拿最后一屏的快照下判断。
+  let commentSeen = false;
+  const rememberComment = (text: string): string => {
+    if (text.includes(comment.content)) commentSeen = true;
+    return text;
+  };
   let visibleText = await waitFor(async () => {
-    const text = await located.root.locator('body').innerText({ timeout: 3000 }).catch(() => '');
+    const text = rememberComment(await located.root.locator('body').innerText({ timeout: 3000 }).catch(() => ''));
     const hasTitle = text.includes(expectedAnnotationTitle);
     const hasComment = text.includes(comment.content);
     return hasTitle && hasComment ? text : null;
@@ -2143,17 +2229,28 @@ async function readRestoreCounts(
     timeoutMs: 30_000,
     intervalMs: 600,
     message: '等待 reviewer 详情页显示恢复批注标题与评论内容超时',
-  }).catch(async () => await located.root.locator('body').innerText({ timeout: 3000 }).catch(() => ''));
+  }).catch(async () => rememberComment(await located.root.locator('body').innerText({ timeout: 3000 }).catch(() => '')));
   if (visibleText.includes(expectedAnnotationTitle)) {
-    await located.root.getByText(expectedAnnotationTitle, { exact: false }).first().click({ timeout: 3000 }).catch(() => undefined);
+    // 评论正文只在批注表格那一行展开后才渲染（AnnotationTableView 的 expanded-row →
+    // AnnotationInlineDetailCard → ReviewCommentsTimeline）。点标题文本不展开行，还可能落进标题
+    // 行内编辑；走「详情」按钮（annotation-table-comment-<id>，openInlineDetail），点不到再退回点整行。
+    const detailButton = located.root.locator(`[data-testid="annotation-table-comment-${comment.annotationId}"]`).first();
+    const opened = await detailButton.click({ timeout: 3000 }).then(() => true).catch(() => false);
+    if (!opened) {
+      await located.root.locator(`[data-testid="annotation-table-row-${comment.annotationId}"]`).first().click({ timeout: 3000 }).catch(() => undefined);
+    }
     visibleText = await waitFor(async () => {
-      const text = await located.root.locator('body').innerText({ timeout: 3000 }).catch(() => '');
+      const text = rememberComment(await located.root.locator('body').innerText({ timeout: 3000 }).catch(() => ''));
       return text.includes(comment.content) ? text : null;
     }, {
-      timeoutMs: 10_000,
+      timeoutMs: 15_000,
       intervalMs: 500,
-      message: '点击恢复批注后等待评论内容显示超时',
-    }).catch(async () => await located.root.locator('body').innerText({ timeout: 3000 }).catch(() => visibleText));
+      message: '展开恢复批注详情后等待评论内容显示超时',
+    }).catch(async () => {
+      const expandedVisible = await located.root.locator(`[data-testid="annotation-table-expanded-${comment.annotationId}"]`).first().isVisible().catch(() => false);
+      traceSimulator(`restore 评论未显示：详情按钮点击=${opened} 展开行可见=${expandedVisible} 线程条数=${counts.threadCount}`);
+      return rememberComment(await located.root.locator('body').innerText({ timeout: 3000 }).catch(() => visibleText));
+    });
   }
   await located.root.getByRole('button', { name: /审核记录/ }).first().click({ timeout: 3000 }).catch(() => undefined);
   visibleText = await waitFor(async () => {
@@ -2184,15 +2281,19 @@ async function readRestoreCounts(
   const measurementTextSnippet = measurementTextIndex >= 0
     ? visibleText.slice(Math.max(0, measurementTextIndex - 80), measurementTextIndex + 240).replace(/\s+/g, ' ')
     : visibleText.slice(0, 240).replace(/\s+/g, ' ');
+  // 端点按 E3D 控制台形式显示：xeokitMeasurementFormat 走 formatPdmsRef，只把下划线换成斜杠
+  // （`起点 24381/145018 -> 终点 24381/145018`）。旧断言等的是 `起点 /*`——现行格式化器不产出这种写法，
+  // 真正要守的是「端点解析成了构件引用、没把 o:…:0 这种内部 id 漏出来」，后者由 raw_suffix_leaked 管。
+  const measurementEndpointsRendered = visibleText.includes('距离测量')
+    && /起点\s+24381\/145018/.test(visibleText)
+    && /终点\s+24381\/145018/.test(visibleText);
   return {
     ...counts,
     uiAnnotationCount: counts.confirmedAnnotationCount,
     uiAnnotationTitleFound: visibleText.includes(expectedAnnotationTitle),
-    uiCommentContentFound: visibleText.includes(comment.content),
+    uiCommentContentFound: commentSeen,
     uiBranRefnoFound: visibleText.includes('24381_145018') || visibleText.includes('24381/145018'),
-    uiMeasurementPathFound: visibleText.includes('距离测量')
-      && visibleText.includes('起点 /*')
-      && visibleText.includes('终点 /*'),
+    uiMeasurementPathFound: measurementEndpointsRendered,
     uiMeasurementRawSuffixLeaked: visibleText.includes(':origin')
       || visibleText.includes(':target')
       || visibleText.includes('o:24381_145018')
@@ -2200,11 +2301,10 @@ async function readRestoreCounts(
       || visibleText.includes('24381_145018:1'),
     uiDetail: [
       `title_found=${visibleText.includes(expectedAnnotationTitle)}`,
-      `comment_found=${visibleText.includes(comment.content)}`,
+      `comment_found=${commentSeen}`,
+      `ui_thread_count=${counts.threadCount}`,
       `bran_found=${visibleText.includes('24381_145018') || visibleText.includes('24381/145018')}`,
-      `measurement_path_found=${visibleText.includes('距离测量')
-        && visibleText.includes('起点 /*')
-        && visibleText.includes('终点 /*')}`,
+      `measurement_path_found=${measurementEndpointsRendered}`,
       `raw_suffix_leaked=${visibleText.includes(':origin')
         || visibleText.includes(':target')
         || visibleText.includes('o:24381_145018')
@@ -3249,11 +3349,64 @@ async function scenarioRestore(runtime: ScenarioRuntime): Promise<PmsSimulatorSc
   });
   const restoredCloudScreenshot = await waitFor(async () => {
     const located = await waitForReviewerWorkbenchAcrossContext(runtime.context, { formId: created.formId });
-    return await readCloudScreenshotFromWorkbench(located.root, cloudScreenshot.annotationId);
+    const shot = await readCloudScreenshotFromWorkbench(located.root, cloudScreenshot.annotationId);
+    if (shot) {
+      const where = await located.root.evaluate(() => {
+        const win = window as Window & { __plant3dReviewerE2E?: { getConfirmedRecordCount: () => number } };
+        return `${window.location.href.replace(/user_token=[^&]+/, 'user_token=…')} records=${win.__plant3dReviewerE2E?.getConfirmedRecordCount() ?? -1}`;
+      }).catch(() => 'n/a');
+      traceSimulator(`restore 刷新后云线截图恢复于 ${where}`);
+    }
+    return shot;
   }, {
     timeoutMs: 60_000,
     intervalMs: 800,
     message: 'restore 刷新后未恢复云线截图',
+  }).catch(async (error: unknown) => {
+    // 只报「没恢复」分不清是云线没回来、回来了没带截图，还是确认记录本身没落住：把刷新后的现场
+    // （store 里的云线及其截图、待确认/已确认计数）一起带出来。
+    const located = await waitForReviewerWorkbenchAcrossContext(runtime.context, { formId: created.formId }).catch(() => null);
+    const state = located
+      ? await located.root.evaluate(() => {
+        type CloudItem = { id?: string; screenshot?: { attachmentId?: string } };
+        const win = window as unknown as {
+          __viewerToolStore?: { cloudAnnotations?: { value?: CloudItem[] } | CloudItem[] };
+          __plant3dReviewerE2E?: {
+            getAnnotationCount: () => number;
+            getConfirmedRecordCount: () => number;
+            getConfirmedAnnotationCount: () => number;
+          };
+        };
+        const raw = win.__viewerToolStore?.cloudAnnotations;
+        const clouds = (Array.isArray(raw) ? raw : raw?.value) || [];
+        return {
+          clouds: clouds.map((item) => `${item.id || '--'}${item.screenshot?.attachmentId ? `+shot(${item.screenshot.attachmentId})` : '(no shot)'}`),
+          pending: win.__plant3dReviewerE2E?.getAnnotationCount() ?? -1,
+          confirmedRecords: win.__plant3dReviewerE2E?.getConfirmedRecordCount() ?? -1,
+          confirmedAnnotations: win.__plant3dReviewerE2E?.getConfirmedAnnotationCount() ?? -1,
+          // 场景回放要 viewer + tools 都就绪才跑（confirmedRecordsRestore.ts:128），这两项缺一
+          // 就会静默 return——分清「回放没资格跑」和「跑了但没带出云线」。
+          hasCanvas: Boolean(document.querySelector('canvas.viewer')),
+          hasToolStore: Boolean(win.__viewerToolStore),
+          hasDtxHook: Boolean((window as unknown as { __plant3dDtxE2E?: unknown }).__plant3dDtxE2E),
+        };
+      }).catch((probeError: unknown) => `n/a(${probeError instanceof Error ? probeError.message : String(probeError)})`)
+      : 'n/a(工作区未找到)';
+    // 确认记录在（confirmedRecords>0）却没进场景，多半是回放的触发条件问题：ReviewPanel 只在
+    // 「任务变化」与「viewer/tools 就绪」两处调 restoreConfirmedRecordsIntoScene，记录晚到就没人再喊一次。
+    // 重选一次任务看云线会不会回来——能回来就是竞态，不是数据没落住。
+    let reselect = 'n/a';
+    try {
+      await openTaskForRole(runtime.page, created.formId, 'JH', { taskId: created.taskId });
+      const afterReselect = await waitFor(async () => {
+        const again = await waitForReviewerWorkbenchAcrossContext(runtime.context, { formId: created.formId });
+        return await readCloudScreenshotFromWorkbench(again.root, cloudScreenshot.annotationId);
+      }, { timeoutMs: 25_000, intervalMs: 800, message: '重选任务后仍未恢复' }).catch(() => null);
+      reselect = afterReselect ? `restored(${afterReselect.attachmentId})` : 'still-missing';
+    } catch (reselectError: unknown) {
+      reselect = `probe-failed(${reselectError instanceof Error ? reselectError.message : String(reselectError)})`;
+    }
+    throw new Error(`${error instanceof Error ? error.message : String(error)} ｜ after_refresh=${JSON.stringify(state)} ｜ reselect=${reselect}`);
   });
   assertions.push(assertResult('restore-form-preserved', afterSnapshot.currentFormId === created.formId, undefined, created.formId, afterSnapshot.currentFormId));
   assertions.push(assertResult('restore-cloud-screenshot-restored', restoredCloudScreenshot.attachmentId === cloudScreenshot.attachmentId && restoredCloudScreenshot.url === cloudScreenshot.url, undefined, cloudScreenshot, restoredCloudScreenshot));
