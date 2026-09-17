@@ -1,0 +1,593 @@
+{
+  "env": {
+    "base": "http://127.0.0.1:3111",
+    "gmPort": "8023",
+    "show": "24381_145018",
+    "startedAt": "2026-09-17T08:01:10.628Z"
+  },
+  "steps": [
+    {
+      "label": "00-default-any-snap",
+      "at": "2026-09-17T08:01:17.326Z",
+      "summary": "Any · Snap",
+      "inertHint": null,
+      "inertHintTitle": null,
+      "statusText": "距离测量 · 第 1/2 步 选择起点 (Snap) Snap : 等待捕捉（P-Point / Item 原点 / 管身轴线（TUBING） / 设计点（DPOINT））",
+      "statusBar": "距离· 第 1/2 步 选择起点 (Snap) Snap : 等待捕捉（P-Point / Item 原点 / 管身轴线（TUBING） / 设计点（DPOINT））",
+      "typeGroupAriaDisabled": null,
+      "types": {
+        "snap": {
+          "disabled": false,
+          "checked": "true",
+          "title": "吸到最近的显著点 / 线端（E3D Snap）"
+        },
+        "distance": {
+          "disabled": false,
+          "checked": "false",
+          "title": "沿拾中线从近端走指定距离；P-Point 沿其方向偏移（E3D Distance）"
+        },
+        "midpoint": {
+          "disabled": false,
+          "checked": "false",
+          "title": "拾中线的中点（E3D Mid-Point = Proportion 0.5）"
+        },
+        "fraction": {
+          "disabled": false,
+          "checked": "false",
+          "title": "把拾中线等分 n 段，吸到最近的分点（E3D Fraction）"
+        },
+        "proportion": {
+          "disabled": false,
+          "checked": "false",
+          "title": "从近端按比例取点（E3D Proportion）"
+        },
+        "intersect": {
+          "disabled": false,
+          "checked": "false",
+          "title": "两次拾取的线 / 面交点：先选一条边 / PLINE / P-Point 轴或一个面，再选另一个，两个面要再选第三项（E3D Intersect）"
+        },
+        "exact": {
+          "disabled": false,
+          "checked": "false",
+          "title": "光标下的精确位置（E3D Cursor）"
+        }
+      },
+      "filters": {
+        "any": {
+          "disabled": false,
+          "checked": "true"
+        },
+        "element": {
+          "disabled": false,
+          "checked": "false"
+        },
+        "aid": {
+          "disabled": false,
+          "checked": "false"
+        },
+        "pline": {
+          "disabled": false,
+          "checked": "false"
+        },
+        "ppoint": {
+          "disabled": false,
+          "checked": "false"
+        },
+        "screen": {
+          "disabled": false,
+          "checked": "false"
+        },
+        "graphics": {
+          "disabled": false,
+          "checked": "false"
+        },
+        "external": {
+          "disabled": true,
+          "checked": "false"
+        }
+      },
+      "valueInput": null
+    },
+    {
+      "label": "00b-any-midpoint",
+      "at": "2026-09-17T08:01:17.623Z",
+      "summary": "Any · Mid-Point",
+      "inertHint": null,
+      "inertHintTitle": null,
+      "statusText": "距离测量 · 第 1/2 步 选择起点 (Mid-Point) Snap : 等待捕捉（P-Point / Item 原点 / 管身轴线（TUBING） / 设计点（DPOINT））",
+      "statusBar": "距离· 第 1/2 步 选择起点 (Mid-Point) Snap : 等待捕捉（P-Point / Item 原点 / 管身轴线（TUBING） / 设计点（DPOINT））",
+      "typeGroupAriaDisabled": null,
+      "types": {
+        "snap": {
+          "disabled": false,
+          "checked": "false",
+          "title": "吸到最近的显著点 / 线端（E3D Snap）"
+        },
+        "distance": {
+          "disabled": false,
+          "checked": "false",
+          "title": "沿拾中线从近端走指定距离；P-Point 沿其方向偏移（E3D Distance）"
+        },
+        "midpoint": {
+          "disabled": false,
+          "checked": "true",
+          "title": "拾中线的中点（E3D Mid-Point = Proportion 0.5）"
+        },
+        "fraction": {
+          "disabled": false,
+          "checked": "false",
+          "title": "把拾中线等分 n 段，吸到最近的分点（E3D Fraction）"
+        },
+        "proportion": {
+          "disabled": false,
+          "checked": "false",
+          "title": "从近端按比例取点（E3D Proportion）"
+        },
+        "intersect": {
+          "disabled": false,
+          "checked": "false",
+          "title": "两次拾取的线 / 面交点：先选一条边 / PLINE / P-Point 轴或一个面，再选另一个，两个面要再选第三项（E3D Intersect）"
+        },
+        "exact": {
+          "disabled": false,
+          "checked": "false",
+          "title": "光标下的精确位置（E3D Cursor）"
+        }
+      },
+      "filters": {
+        "any": {
+          "disabled": false,
+          "checked": "true"
+        },
+        "element": {
+          "disabled": false,
+          "checked": "false"
+        },
+        "aid": {
+          "disabled": false,
+          "checked": "false"
+        },
+        "pline": {
+          "disabled": false,
+          "checked": "false"
+        },
+        "ppoint": {
+          "disabled": false,
+          "checked": "false"
+        },
+        "screen": {
+          "disabled": false,
+          "checked": "false"
+        },
+        "graphics": {
+          "disabled": false,
+          "checked": "false"
+        },
+        "external": {
+          "disabled": true,
+          "checked": "false"
+        }
+      },
+      "valueInput": null
+    },
+    {
+      "label": "01-ppoint-types-inert",
+      "at": "2026-09-17T08:01:17.953Z",
+      "summary": "Ppoint · Mid-Point",
+      "inertHint": "Ppoint 下不起作用（E3D 同）",
+      "inertHintTitle": "Ppoint / Screen 过滤器下拾取类型不起作用（E3D Positioning Control 把这一排置灰，类型保持不变）",
+      "statusText": "距离测量 · 第 1/2 步 选择起点 (Mid-Point) Snap : 等待捕捉（P-Point / 设计点（DPOINT））",
+      "statusBar": "距离· 第 1/2 步 选择起点 (Mid-Point) Snap : 等待捕捉（P-Point / 设计点（DPOINT））",
+      "typeGroupAriaDisabled": "true",
+      "types": {
+        "snap": {
+          "disabled": true,
+          "checked": "false",
+          "title": "吸到最近的显著点 / 线端（E3D Snap）——Ppoint / Screen 过滤器下拾取类型不起作用（E3D Positioning Control 把这一排置灰，类型保持不变）"
+        },
+        "distance": {
+          "disabled": true,
+          "checked": "false",
+          "title": "沿拾中线从近端走指定距离；P-Point 沿其方向偏移（E3D Distance）——Ppoint / Screen 过滤器下拾取类型不起作用（E3D Positioning Control 把这一排置灰，类型保持不变）"
+        },
+        "midpoint": {
+          "disabled": true,
+          "checked": "true",
+          "title": "拾中线的中点（E3D Mid-Point = Proportion 0.5）——Ppoint / Screen 过滤器下拾取类型不起作用（E3D Positioning Control 把这一排置灰，类型保持不变）"
+        },
+        "fraction": {
+          "disabled": true,
+          "checked": "false",
+          "title": "把拾中线等分 n 段，吸到最近的分点（E3D Fraction）——Ppoint / Screen 过滤器下拾取类型不起作用（E3D Positioning Control 把这一排置灰，类型保持不变）"
+        },
+        "proportion": {
+          "disabled": true,
+          "checked": "false",
+          "title": "从近端按比例取点（E3D Proportion）——Ppoint / Screen 过滤器下拾取类型不起作用（E3D Positioning Control 把这一排置灰，类型保持不变）"
+        },
+        "intersect": {
+          "disabled": true,
+          "checked": "false",
+          "title": "两次拾取的线 / 面交点：先选一条边 / PLINE / P-Point 轴或一个面，再选另一个，两个面要再选第三项（E3D Intersect）——Ppoint / Screen 过滤器下拾取类型不起作用（E3D Positioning Control 把这一排置灰，类型保持不变）"
+        },
+        "exact": {
+          "disabled": true,
+          "checked": "false",
+          "title": "光标下的精确位置（E3D Cursor）——Ppoint / Screen 过滤器下拾取类型不起作用（E3D Positioning Control 把这一排置灰，类型保持不变）"
+        }
+      },
+      "filters": {
+        "any": {
+          "disabled": false,
+          "checked": "false"
+        },
+        "element": {
+          "disabled": false,
+          "checked": "false"
+        },
+        "aid": {
+          "disabled": false,
+          "checked": "false"
+        },
+        "pline": {
+          "disabled": false,
+          "checked": "false"
+        },
+        "ppoint": {
+          "disabled": false,
+          "checked": "true"
+        },
+        "screen": {
+          "disabled": false,
+          "checked": "false"
+        },
+        "graphics": {
+          "disabled": false,
+          "checked": "false"
+        },
+        "external": {
+          "disabled": true,
+          "checked": "false"
+        }
+      },
+      "valueInput": null
+    },
+    {
+      "label": "01b-ppoint-after-clicking-snap",
+      "at": "2026-09-17T08:01:18.407Z",
+      "summary": "Ppoint · Mid-Point",
+      "inertHint": "Ppoint 下不起作用（E3D 同）",
+      "inertHintTitle": "Ppoint / Screen 过滤器下拾取类型不起作用（E3D Positioning Control 把这一排置灰，类型保持不变）",
+      "statusText": "距离测量 · 第 1/2 步 选择起点 (Mid-Point) Snap : 等待捕捉（P-Point / 设计点（DPOINT））",
+      "statusBar": "距离· 第 1/2 步 选择起点 (Mid-Point) Snap : 等待捕捉（P-Point / 设计点（DPOINT））",
+      "typeGroupAriaDisabled": "true",
+      "types": {
+        "snap": {
+          "disabled": true,
+          "checked": "false",
+          "title": "吸到最近的显著点 / 线端（E3D Snap）——Ppoint / Screen 过滤器下拾取类型不起作用（E3D Positioning Control 把这一排置灰，类型保持不变）"
+        },
+        "distance": {
+          "disabled": true,
+          "checked": "false",
+          "title": "沿拾中线从近端走指定距离；P-Point 沿其方向偏移（E3D Distance）——Ppoint / Screen 过滤器下拾取类型不起作用（E3D Positioning Control 把这一排置灰，类型保持不变）"
+        },
+        "midpoint": {
+          "disabled": true,
+          "checked": "true",
+          "title": "拾中线的中点（E3D Mid-Point = Proportion 0.5）——Ppoint / Screen 过滤器下拾取类型不起作用（E3D Positioning Control 把这一排置灰，类型保持不变）"
+        },
+        "fraction": {
+          "disabled": true,
+          "checked": "false",
+          "title": "把拾中线等分 n 段，吸到最近的分点（E3D Fraction）——Ppoint / Screen 过滤器下拾取类型不起作用（E3D Positioning Control 把这一排置灰，类型保持不变）"
+        },
+        "proportion": {
+          "disabled": true,
+          "checked": "false",
+          "title": "从近端按比例取点（E3D Proportion）——Ppoint / Screen 过滤器下拾取类型不起作用（E3D Positioning Control 把这一排置灰，类型保持不变）"
+        },
+        "intersect": {
+          "disabled": true,
+          "checked": "false",
+          "title": "两次拾取的线 / 面交点：先选一条边 / PLINE / P-Point 轴或一个面，再选另一个，两个面要再选第三项（E3D Intersect）——Ppoint / Screen 过滤器下拾取类型不起作用（E3D Positioning Control 把这一排置灰，类型保持不变）"
+        },
+        "exact": {
+          "disabled": true,
+          "checked": "false",
+          "title": "光标下的精确位置（E3D Cursor）——Ppoint / Screen 过滤器下拾取类型不起作用（E3D Positioning Control 把这一排置灰，类型保持不变）"
+        }
+      },
+      "filters": {
+        "any": {
+          "disabled": false,
+          "checked": "false"
+        },
+        "element": {
+          "disabled": false,
+          "checked": "false"
+        },
+        "aid": {
+          "disabled": false,
+          "checked": "false"
+        },
+        "pline": {
+          "disabled": false,
+          "checked": "false"
+        },
+        "ppoint": {
+          "disabled": false,
+          "checked": "true"
+        },
+        "screen": {
+          "disabled": false,
+          "checked": "false"
+        },
+        "graphics": {
+          "disabled": false,
+          "checked": "false"
+        },
+        "external": {
+          "disabled": true,
+          "checked": "false"
+        }
+      },
+      "valueInput": null
+    },
+    {
+      "label": "02-screen-types-inert",
+      "at": "2026-09-17T08:01:18.737Z",
+      "summary": "Screen · Mid-Point",
+      "inertHint": "Screen 下不起作用（E3D 同）",
+      "inertHintTitle": "Ppoint / Screen 过滤器下拾取类型不起作用（E3D Positioning Control 把这一排置灰，类型保持不变）",
+      "statusText": "测量模式：未启用任何测量点源捕捉",
+      "statusBar": "距离· 等待取点",
+      "typeGroupAriaDisabled": "true",
+      "types": {
+        "snap": {
+          "disabled": true,
+          "checked": "false",
+          "title": "吸到最近的显著点 / 线端（E3D Snap）——Ppoint / Screen 过滤器下拾取类型不起作用（E3D Positioning Control 把这一排置灰，类型保持不变）"
+        },
+        "distance": {
+          "disabled": true,
+          "checked": "false",
+          "title": "沿拾中线从近端走指定距离；P-Point 沿其方向偏移（E3D Distance）——Ppoint / Screen 过滤器下拾取类型不起作用（E3D Positioning Control 把这一排置灰，类型保持不变）"
+        },
+        "midpoint": {
+          "disabled": true,
+          "checked": "true",
+          "title": "拾中线的中点（E3D Mid-Point = Proportion 0.5）——Ppoint / Screen 过滤器下拾取类型不起作用（E3D Positioning Control 把这一排置灰，类型保持不变）"
+        },
+        "fraction": {
+          "disabled": true,
+          "checked": "false",
+          "title": "把拾中线等分 n 段，吸到最近的分点（E3D Fraction）——Ppoint / Screen 过滤器下拾取类型不起作用（E3D Positioning Control 把这一排置灰，类型保持不变）"
+        },
+        "proportion": {
+          "disabled": true,
+          "checked": "false",
+          "title": "从近端按比例取点（E3D Proportion）——Ppoint / Screen 过滤器下拾取类型不起作用（E3D Positioning Control 把这一排置灰，类型保持不变）"
+        },
+        "intersect": {
+          "disabled": true,
+          "checked": "false",
+          "title": "两次拾取的线 / 面交点：先选一条边 / PLINE / P-Point 轴或一个面，再选另一个，两个面要再选第三项（E3D Intersect）——Ppoint / Screen 过滤器下拾取类型不起作用（E3D Positioning Control 把这一排置灰，类型保持不变）"
+        },
+        "exact": {
+          "disabled": true,
+          "checked": "false",
+          "title": "光标下的精确位置（E3D Cursor）——Ppoint / Screen 过滤器下拾取类型不起作用（E3D Positioning Control 把这一排置灰，类型保持不变）"
+        }
+      },
+      "filters": {
+        "any": {
+          "disabled": false,
+          "checked": "false"
+        },
+        "element": {
+          "disabled": false,
+          "checked": "false"
+        },
+        "aid": {
+          "disabled": false,
+          "checked": "false"
+        },
+        "pline": {
+          "disabled": false,
+          "checked": "false"
+        },
+        "ppoint": {
+          "disabled": false,
+          "checked": "false"
+        },
+        "screen": {
+          "disabled": false,
+          "checked": "true"
+        },
+        "graphics": {
+          "disabled": false,
+          "checked": "false"
+        },
+        "external": {
+          "disabled": true,
+          "checked": "false"
+        }
+      },
+      "valueInput": null
+    },
+    {
+      "label": "03-any-restored",
+      "at": "2026-09-17T08:01:19.266Z",
+      "summary": "Any · Mid-Point",
+      "inertHint": null,
+      "inertHintTitle": null,
+      "statusText": "距离测量 · 第 1/2 步 选择起点 (Mid-Point) Snap : 等待捕捉（P-Point / Item 原点 / 管身轴线（TUBING） / 设计点（DPOINT））",
+      "statusBar": "距离· 第 1/2 步 选择起点 (Mid-Point) Snap : 等待捕捉（P-Point / Item 原点 / 管身轴线（TUBING） / 设计点（DPOINT））",
+      "typeGroupAriaDisabled": null,
+      "types": {
+        "snap": {
+          "disabled": false,
+          "checked": "false",
+          "title": "吸到最近的显著点 / 线端（E3D Snap）"
+        },
+        "distance": {
+          "disabled": false,
+          "checked": "false",
+          "title": "沿拾中线从近端走指定距离；P-Point 沿其方向偏移（E3D Distance）"
+        },
+        "midpoint": {
+          "disabled": false,
+          "checked": "true",
+          "title": "拾中线的中点（E3D Mid-Point = Proportion 0.5）"
+        },
+        "fraction": {
+          "disabled": false,
+          "checked": "false",
+          "title": "把拾中线等分 n 段，吸到最近的分点（E3D Fraction）"
+        },
+        "proportion": {
+          "disabled": false,
+          "checked": "false",
+          "title": "从近端按比例取点（E3D Proportion）"
+        },
+        "intersect": {
+          "disabled": false,
+          "checked": "false",
+          "title": "两次拾取的线 / 面交点：先选一条边 / PLINE / P-Point 轴或一个面，再选另一个，两个面要再选第三项（E3D Intersect）"
+        },
+        "exact": {
+          "disabled": false,
+          "checked": "false",
+          "title": "光标下的精确位置（E3D Cursor）"
+        }
+      },
+      "filters": {
+        "any": {
+          "disabled": false,
+          "checked": "true"
+        },
+        "element": {
+          "disabled": false,
+          "checked": "false"
+        },
+        "aid": {
+          "disabled": false,
+          "checked": "false"
+        },
+        "pline": {
+          "disabled": false,
+          "checked": "false"
+        },
+        "ppoint": {
+          "disabled": false,
+          "checked": "false"
+        },
+        "screen": {
+          "disabled": false,
+          "checked": "false"
+        },
+        "graphics": {
+          "disabled": false,
+          "checked": "false"
+        },
+        "external": {
+          "disabled": true,
+          "checked": "false"
+        }
+      },
+      "valueInput": null
+    },
+    {
+      "label": "03b-any-snap-again",
+      "at": "2026-09-17T08:01:19.562Z",
+      "summary": "Any · Snap",
+      "inertHint": null,
+      "inertHintTitle": null,
+      "statusText": "距离测量 · 第 1/2 步 选择起点 (Snap) Snap : 等待捕捉（P-Point / Item 原点 / 管身轴线（TUBING） / 设计点（DPOINT））",
+      "statusBar": "距离· 第 1/2 步 选择起点 (Snap) Snap : 等待捕捉（P-Point / Item 原点 / 管身轴线（TUBING） / 设计点（DPOINT））",
+      "typeGroupAriaDisabled": null,
+      "types": {
+        "snap": {
+          "disabled": false,
+          "checked": "true",
+          "title": "吸到最近的显著点 / 线端（E3D Snap）"
+        },
+        "distance": {
+          "disabled": false,
+          "checked": "false",
+          "title": "沿拾中线从近端走指定距离；P-Point 沿其方向偏移（E3D Distance）"
+        },
+        "midpoint": {
+          "disabled": false,
+          "checked": "false",
+          "title": "拾中线的中点（E3D Mid-Point = Proportion 0.5）"
+        },
+        "fraction": {
+          "disabled": false,
+          "checked": "false",
+          "title": "把拾中线等分 n 段，吸到最近的分点（E3D Fraction）"
+        },
+        "proportion": {
+          "disabled": false,
+          "checked": "false",
+          "title": "从近端按比例取点（E3D Proportion）"
+        },
+        "intersect": {
+          "disabled": false,
+          "checked": "false",
+          "title": "两次拾取的线 / 面交点：先选一条边 / PLINE / P-Point 轴或一个面，再选另一个，两个面要再选第三项（E3D Intersect）"
+        },
+        "exact": {
+          "disabled": false,
+          "checked": "false",
+          "title": "光标下的精确位置（E3D Cursor）"
+        }
+      },
+      "filters": {
+        "any": {
+          "disabled": false,
+          "checked": "true"
+        },
+        "element": {
+          "disabled": false,
+          "checked": "false"
+        },
+        "aid": {
+          "disabled": false,
+          "checked": "false"
+        },
+        "pline": {
+          "disabled": false,
+          "checked": "false"
+        },
+        "ppoint": {
+          "disabled": false,
+          "checked": "false"
+        },
+        "screen": {
+          "disabled": false,
+          "checked": "false"
+        },
+        "graphics": {
+          "disabled": false,
+          "checked": "false"
+        },
+        "external": {
+          "disabled": true,
+          "checked": "false"
+        }
+      },
+      "valueInput": null
+    }
+  ],
+  "shots": [
+    "web-prompt-matrix-d8-pick-type-inert-live-01-ppoint.png",
+    "web-prompt-matrix-d8-pick-type-inert-live-01-ppoint-pick-layer.png",
+    "web-prompt-matrix-d8-pick-type-inert-live-02-screen.png",
+    "web-prompt-matrix-d8-pick-type-inert-live-02-screen-pick-layer.png",
+    "web-prompt-matrix-d8-pick-type-inert-live-03-any-restored-pick-layer.png"
+  ],
+  "pageErrors": [],
+  "finishedAt": "2026-09-17T08:01:19.650Z"
+}

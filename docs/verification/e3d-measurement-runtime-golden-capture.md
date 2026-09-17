@@ -2062,3 +2062,15 @@ Positioning pad 是停靠版 `!!edgNewPositioning`（`posCntrl.type=PAD1`，`edg
 **结论**：(1) **过滤器不进提示**——八串 `prompt()` 与视口气泡逐字相同，矩阵 §4 的静态预期成立，§4 结；(2) pad 亮灯与 `pickIndex` / `state.pick.description` 一一对应，每次只亮一颗（`setPickGadgets` 195–197），与 Web 浮条过滤器组的单选一致；(3) Web `MEASUREMENT_PICK_FILTER_IDS` 同序同名（ADR 0060），Web 提示里唯一的过滤器痕迹仍只有 D3 那段 Web 加的目标段。
 
 **顺手观察**：(a) Ppoint / Screen 过滤器下 pad 把五颗拾取类型按钮 `active=FALSE`（`edgnewpositioning.pmlfrm` 199–201：截图里 Midpoint / Intersect / Cursor 明显变灰，Snap 因 `val` 仍 TRUE 还带黄底），提示里的 `(Snap) Snap` 不变、`pickTypeIndex` 仍 1；Web 浮条原来没这条联动（`MeasurementOverlayBar.vue` 拾取类型按钮的 `disabled` 只看静态 `MEASUREMENT_PICK_TYPE_AVAILABILITY`）——不进提示，属 pad UI 差异；~~没立 D 项，要不要跟由用户定~~ **用户 15:5x 拍板立 D8、Web 跟上（`82411f9`，决策 `d-379`，矩阵 §7 D8 行）**：`pickLayerModel.measurementPickTypeSelectable(filter)`（ppoint / screen → false），浮条拾取类型按钮 `disabled` + `title` 原因 + `setPickType` 拦截，标题旁一句「<过滤器> 下不起作用（E3D 同）」，当前类型仍 `aria-checked`（E3D Snap 仍亮）；store / normalize / 提示 token / 落库不动。(b) pad 输入框一直显示 `3`——是 §40.3 D2 那轮留下的 `pickTypesValue[4]`，与过滤器无关。(c) 收尾时 E3D 回 `Navigate`、stack 0、pad 隐藏、缺省 Any / Snap / `intermediate` TRUE / `activePlane` FALSE / `offsetType` NONE 都在，无 Warning；主窗口 15:4x 由 cua-driver `bring_to_front` 拉回前台（`input.ps1` 的 `SetForegroundWindow` 仍被前台锁挡）。
+
+**Web 实机走查（D8 改后 `82411f9`，16:0x；dev `:3111` + gen-model `:8023`，`?model_source=gen-model-v1&gm_backend_port=8023&show_refno=24381_145018`，Playwright headless Chrome 1600×900，真 UI 真点击、无 mock，临时脚本放仓外跑完即删）**：`__xeokitMeasurementTools.activate('xeokit_measure_distance')` → 开设置弹层 → 先点 Mid-Point（让「类型保持不变」看得见）→ 依次点过滤器 Ppoint / Screen / Any，每步读七颗拾取类型按钮的 `disabled`、摘要、那句提示与 `statusText`（`-records.json`，`pageerror` 0）：
+
+| 步 | 过滤器 | 七颗拾取类型 | 摘要 | 提示 / 状态条 | 截图 |
+| --- | --- | --- | --- | --- | --- |
+| 00 / 00b | Any，点 Mid-Point | 全可用 | `Any · Snap` → `Any · Mid-Point` | `距离测量 · 第 1/2 步 选择起点 (Mid-Point) Snap : 等待捕捉（P-Point / Item 原点 / 管身轴线（TUBING） / 设计点（DPOINT））` | — |
+| 01 | **Ppoint** | **七颗全 `disabled`**，Mid-Point 仍 `aria-checked`；标题旁 `Ppoint 下不起作用（E3D 同）` | `Ppoint · Mid-Point`（类型没动） | `… (Mid-Point) Snap : 等待捕捉（P-Point / 设计点（DPOINT））`——token 照旧，与 E3D `(Snap) Snap` 不变同口径 | `web-prompt-matrix-d8-pick-type-inert-live-01-ppoint.png`（弹层 + 提示条 + 视口同框）、`…-01-ppoint-pick-layer.png` |
+| 01b | Ppoint，强点 Snap | 不生效 | 仍 `Ppoint · Mid-Point` | 不变 | — |
+| 02 | **Screen** | 七颗全 `disabled`；`Screen 下不起作用（E3D 同）` | `Screen · Mid-Point` | 状态条是既有的 `测量模式：未启用任何测量点源捕捉`（E3D 捕捉模式下表面点源关着、Screen 只放行表面点——与 D8 无关，开「模型表面点」即回提示） | `…-02-screen.png`、`…-02-screen-pick-layer.png` |
+| 03 / 03b | Any，再点 Snap | 整排复活，Snap 点得动 | `Any · Mid-Point` → `Any · Snap` | 回 00 那条 | `…-03-any-restored-pick-layer.png` |
+
+与 E3D §40.8 的 `P4-05-r3-ppoint` / `P4-06-r3-screen`（`-pad.png`）并排看：两边都是「只亮一颗过滤器 + 整排类型置灰 + 当前类型仍标着 + 提示不变」。**D8 结**。
