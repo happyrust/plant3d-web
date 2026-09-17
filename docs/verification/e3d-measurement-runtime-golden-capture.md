@@ -1819,7 +1819,7 @@ ELBO `145028` P2 → ELBO `145029` P1 之间的竖直立管，DN100 · 外半径
 
 - 各命令第 2 / 3 步（要拾中第一点 / 第一条线）；七种 token 的实际字串与 D2 三处（`P3-04`：`.input` 填 2.5 → `Fraction[2.5]`？重显几？落点在 0.5？）；过滤器八串字字相同（`P4-01`）；` Snap` 关 / ` WP` / ` Offset` 尾巴（`P5-*`，D4 实证）；§6 全部告警原文（`P6-*`，含 D5 的 `(2,874)`）。
 - 截图（golden §1 要求测量窗体 + 命令提示 + 三维视口同框）：要主窗口非最小化，`printwindow-capture.ps1` 才出图。
-- **→ §40（2026-09-17）**：七种 token 实串、D2 三处（结论翻案；07:36 用户拍板 (a)，`67b127b` 改掉，决策 `d-342`）、两线夹角第 2 步、距离第 2 步的步词已采成 observation，带截图；`printwindow-capture.ps1` 对这扇窗只回旧帧，截图改走 `CopyFromScreen`。**§40.6（10:3x 第三轮）**：距离第 2 步 `(Snap)` 变体、垂距第 2 步、三点角第 2 / 3 步——三条定位命令每一步都实机了。
+- **→ §40（2026-09-17）**：七种 token 实串、D2 三处（结论翻案；07:36 用户拍板 (a)，`67b127b` 改掉，决策 `d-342`）、两线夹角第 2 步、距离第 2 步的步词已采成 observation，带截图；`printwindow-capture.ps1` 对这扇窗只回旧帧，截图改走 `CopyFromScreen`。**§40.6（10:3x 第三轮）**：距离第 2 步 `(Snap)` 变体、垂距第 2 步、三点角第 2 / 3 步——三条定位命令每一步都实机了；**§40.7（10:5x）**：§5 三条尾巴 Snap 关 / WP / Offset 及组合，pad WP 按钮没平面时弹 `No working plane has been defined.`。
 
 ## 39. Intersect 的 ARC 操作数 / 弯管与环面的 Perpendicular：E3D 运行时采集（2026-09-17 00:0x + 06:3x）
 
@@ -1925,10 +1925,10 @@ v4 用 CTOR `=24381/46880`（`rins 40 / rout 60`，管半径 10，轴 = S）三�
 后端（带 `element/ptset` 的 gen-model）回来后补跑：① Element × Intersect，弯管体 + 同一条腿上的隐含管轴线 → 交点应落在离 `POS` **165.500 mm** 的新切点（比 `9bbb501` 那一轮挪 **82.285 mm**）；
 ② Perpendicular to，第二击落在弯管体 → 点到点、目标名不带「弧面」（对 §39.3 表的第一行 551.094 mm 那一档）。
 
-## 40. 提示矩阵 E3D 运行时采集·第二轮：七种 token / D2 三处 / 两线夹角第 2 步（主窗口还原、真实拾取、带截图，2026-09-17 00:0x + 06:3x–06:5x）+ 第三轮 10:3x–10:4x：距离第 2 步 `(Snap)` 变体 / 垂距第 2 步 / 三点角第 2、3 步（§40.6）
+## 40. 提示矩阵 E3D 运行时采集·第二轮：七种 token / D2 三处 / 两线夹角第 2 步（主窗口还原、真实拾取、带截图，2026-09-17 00:0x + 06:3x–06:5x）+ 第三轮 10:3x–11:0x：距离第 2 步 `(Snap)` 变体 / 垂距第 2 步 / 三点角第 2、3 步（§40.6）、§5 三条尾巴 Snap 关 / WP / Offset（§40.7）
 
 > 接 §38.3 的清单。用户 00:00 点头「把 E3D 主窗口还原到前台」，这一轮才有截图与真实鼠标 / 键盘输入。同一台 E3D 3.1 shadow（PID 11900），同一支宏 `capture-prompt-step.pmlmac`（本轮多了 5b pad 状态 / 5c pickData 与 return / 6 dimension 三段，见宏头），trace 仍是 `e3d-prompt-capture.trace.txt`；落点核算另加只读探针 `probe-fraction-landing.pmlmac` → `e3d-fraction-landing.trace.txt`。
-> 00:05–00:14 那一段是上一会话（fable-5-1-32）做的，trace 里 `P3-04-s*` / `P3-0x-*` / `P3-04-round-*` 十九块；06:36–06:53 是本会话，`*-r2-*` 十五块；10:34–10:42 是接手会话（fable-5-1-41）的第三轮，`*-r3-*` 十四块（§40.6）。
+> 00:05–00:14 那一段是上一会话（fable-5-1-32）做的，trace 里 `P3-04-s*` / `P3-0x-*` / `P3-04-round-*` 十九块；06:36–06:53 是本会话，`*-r2-*` 十五块；10:34–10:42 是接手会话（fable-5-1-41）的第三轮，`*-r3-*` 十四块（§40.6）；10:56–11:07 同一会话续采尾巴，`P5-*` 十七块（§40.7）。
 
 ### 40.1 现场与路子（这一轮新踩出来的）
 
@@ -1985,10 +1985,11 @@ Positioning pad 是停靠版 `!!edgNewPositioning`（`posCntrl.type=PAD1`，`edg
 3. **E3D 3.1 的 pad 没有 Fraction / Proportion 按钮**（`edgnewpositioning.pmlfrm` 55–56 按钮、128–129 映射都注释掉），`pickTypeList()` 却仍回七项；程序切到 Fraction 后 pad 上 Snap 仍亮着。Web 浮条把七种都露出来，是比 E3D 3.1 多的入口（记为 Web 增强，不算偏离）。
 4. Esc 在两线夹角第 2 步是**撤掉整条命令**（Web 点空白回第 1 步，D3 一类取舍）。
 5. **第三轮（§40.6）三条定位命令的后续步全部 ✓**：距离第 2 步 `(Snap)` 变体 `Measure distance end (Snap) Snap :`、垂距第 2 步 `Measure perpendicular distance end (Snap) Snap :`、三点角第 2 / 3 步 `Measure angle first point (Snap) Snap :` / `… second point (Snap) Snap :`——四条字串与矩阵 §2 的 `static_expectation` 逐字相同；每条命令最后一击之后状态**回第 1 步**（`start` / `root of angle`，`major=1`，stack 仍 1，窗体出结果），不是退出命令。矩阵 §2 三条定位命令（距离 / 垂距 / 三点角）现在**每一步**都是 `observation`；§2 只剩 `measureLineAngle`（非弧包，D6 不做）没实机。
+6. **§5 三条尾巴（§40.7）**：` Snap` 关得掉（`intermediate=FALSE` → `Measure distance start (Snap) :`，`(Snap)` 是类型 token 留着）；` WP` / ` Offset` 的字串与顺序照 `edgstate.pmlobj` 345–357——`prompt()` 里 **`WP` 后面跟两个空格**（`' WP '` 自带尾空格再接 `' Snap'` / `' Offset'`），视口气泡收成一个：`… (Snap) WP Offset Snap :`；**用户路径上 pad 的 WP 按钮在没定义工作平面时只弹 `No working plane has been defined.`、按钮弹回，尾巴不出**（`edgposcntrl` 672–685），` WP` 要先在 Working Plane 表单里定义平面；本 shadow 会话里 3.1 的 Offset 入口走不通（`!!appDesMain` / `!!edgSettings` 都没加载，`offsetType('ENU')` 弹 `(2,751) Variable !!EDGSETTINGS does not exist`），尾巴是直写 `offsetType` 采到的。D4（Web 不做 WP / Offset）不变，这两条只把 E3D 的字串钉死。
 
 ### 40.5 还没采
 
-~~垂距 / 三点角的第 2 / 3 步、距离第 2 步的 `(Snap)` 变体~~（10:4x 第三轮已采，§40.6）；过滤器八串（`P4-*`）、Significant Snaps 关 / WP / Offset 尾巴（`P5-*`）、§6 全部告警原文（`P6-*`，含 D5 的 `(2,874)`）。窗口还原着（前台）、pad / Measure 窗体坐标在屏内（Measure Angle 每次 show 要再挪），下一轮可直接接着采。
+~~垂距 / 三点角的第 2 / 3 步、距离第 2 步的 `(Snap)` 变体~~（10:4x 第三轮已采，§40.6）；~~Significant Snaps 关 / WP / Offset 尾巴（`P5-*`）~~（10:5x–11:0x 已采，§40.7）；过滤器八串（`P4-*`）、§6 全部告警原文（`P6-*`，含 D5 的 `(2,874)`）。窗口还原着（前台）、pad / Measure 窗体坐标在屏内（Measure Angle 每次 show 要再挪），下一轮可直接接着采。
 
 ### 40.6 10:3x–10:4x 第三轮（接手会话 fable-5-1-41，真实 Snap 拾取，带截图）
 
@@ -2011,3 +2012,28 @@ Positioning pad 是停靠版 `!!edgNewPositioning`（`posCntrl.type=PAD1`，`edg
 | `P2-03-r3-closed` / `P2-r3-final` | `gphAngleMeasure.close()` + hide | `Navigate` | stack 0、AID 全清（Keep dimensions 没勾）、pad 隐、缺省 0 / 2 / 0.5 Snap 未动 | — |
 
 **对矩阵**：§2 距离第 2 步 `(Snap)` 变体、垂距第 2 步、三点角第 2 / 3 步四行 E3D 列全部字字相同 → 改 `observation`；`Measure perpendicular distance end` 的第二击是**定位拾取**（Snap 落点），E3D 拿落点所在管的线做垂足——Web 第 2 步文案「选择目标线 / 面上的点」说的就是这一击（结构一致、文案比 E3D 多，原判不变）。命令完成后 E3D **回第 1 步继续量下一组**（stack 仍 1、窗体留着），与 §40.3 距离那条一致；Web 完成后也停在同一模式等下一组，一致。trace 里每块 `state.return.size=0`、`pickData.position=Unset`——`getReturn()` 在两击之间也是空的，落点只能从 `gphMeasure.dimension.from/to`（距离 / 垂距）或 AID TEXT 位置（三点角）反推，与 §40.3 用 `probe-fraction-landing.pmlmac` 读 `pickPacket.return[i].position` 的路子不同（本轮没跑探针）。
+
+### 40.7 10:5x–11:0x 尾巴三条（`P5-*`，Measure distance 第 1 步上切开关，带截图）
+
+`EDGSTATE.prompt()`（`edgstate.pmlobj` 345–357）在定位模式下按 **WP → Offset → Snap** 的顺序缀尾巴：`activePlane` → `' WP '`（**自带尾空格**）、`offsetType ne 'NONE'` → `' Offset'`、`intermediate` → `' Snap'`，最后 `trim()` 只剪两端。开关的用户入口：Significant Snaps 在 Pick Settings 表单（`!!edgSettings`，回调 `edgsettings.pmlfrm` 1031–1040 = `!!edgPosCntrl.intermediate = !this.snap.val` + `!!edgCntrl.state.updatePrompt()`），WP 是 pad 右上那颗按钮，Offset 是功能区 Offset 开关（`offsetToggle`，要 `!!appDesMain`）。本 shadow 会话里 `!!edgSettings` / `!!appDesMain` / `!!edgPositionOffset` / `!!edgWorkingPlane` 都没加载（探针 `defined()` 全 FALSE），所以 Snap / Offset 两条按回调体直写状态再 `updatePrompt()`；WP 既走了程序路（`activePlane(TRUE)`）也走了用户路（真点 pad 按钮）。trace `P5-*` 十七块（其中 `P5-02-r3-wp-on` 两块，见下）。
+
+| tag | 操作 | `prompt()` | 视口气泡 | 截图 |
+| --- | --- | --- | --- | --- |
+| `P5-00-r3-s1` | `measure('DISTANCE')`，缺省 | `Measure distance start (Snap) Snap` | `… (Snap) Snap :` | — |
+| `P5-01-r3-snap-off` | `intermediate = FALSE` + `updatePrompt()` | **`Measure distance start (Snap)`** | `… (Snap) :` | `e3d-prompt-P5-01-r3-snap-off.png`、`…-zoom.png` |
+| `P5-01-r3-snap-on` | `intermediate = TRUE` + `updatePrompt()` | `… (Snap) Snap` | `… (Snap) Snap :` | — |
+| `P5-02-r3-wp-on` | **程序路** `!!edgPosCntrl.activePlane(TRUE)`（708：只置位 + `displayPlane()` → `updatePrompt()`，不查有没有平面） | **`Measure distance start (Snap) WP  Snap`**（`WP` 后**两个空格**） | `… (Snap) WP Snap :`（gadget 回读只剩一个空格） | `e3d-prompt-P5-02-r3-wp-on.png`、`…-zoom.png` |
+| `P5-02-r3-wp-off` | `activePlane(FALSE)` | `… (Snap) Snap` | `… (Snap) Snap :` | — |
+| `P5-03-r3-offset-on` | `!!edgPosCntrl.offsetType('ENU')`（1142：置 `offsetType`，再跑 `offsetForms[2]` = `!!edgSettings.editENU(…)`） | `Measure distance start (Snap) Offset Snap` | **仍是旧的** `… (Snap) Snap :`——`editENU` 撞 `(2,751) Variable !!EDGSETTINGS does not exist`，`handle ANY`（1160）挡不住那张 **Warning** 模态框，1174 的 `updatePrompt()` 要等 OK | `e3d-prompt-P5-03-r3-offset-warning.png`、`…-zoom.png` |
+| `P5-03-r3-offset-on-updated` | 点掉 OK，`updatePrompt()` | `… (Snap) Offset Snap` | `… (Snap) Offset Snap :` | — |
+| `P5-04-r3-wp-offset-snap` | WP + Offset + Snap 三开 | **`Measure distance start (Snap) WP  Offset Snap`** | `… (Snap) WP Offset Snap :` | `e3d-prompt-P5-04-r3-wp-offset-snap.png`、`…-zoom.png` |
+| `P5-04-r3-wp-offset-nosnap` | 三开再关 Snap | `… (Snap) WP  Offset` | `… (Snap) WP Offset :` | `…-nosnap-zoom.png` |
+| `P5-05-r3-wp-off-again` | `activePlane(FALSE)`（Offset 仍开、Snap 关） | `… (Snap) Offset` | `… (Snap) Offset :` | — |
+| `P5-05-r3-defaults` | `offsetType = 'NONE'`（直写成员，绕开 `offsetForms[1]` 那张 alert）+ `intermediate = TRUE` + `updatePrompt()` | `… (Snap) Snap` | `… (Snap) Snap :` | — |
+| `P5-02-r3-wp-click`（块没落下，见下） | **用户路**：真点 pad 的 Working Plane 按钮（物理 620,245），没定义工作平面 | — | 弹 **Warning `No working plane has been defined.`**（`edgposcntrl` 672–685 GADGET 重载：`workPlane.unset()` → 按钮 `val = false` 弹回 + `!!alert.warning`，`activePlane` 不动） | `e3d-prompt-P5-02-r3-wp-click-warning.png`、`…-zoom.png` |
+| `P5-02-r3-wp-click-after` | 点掉 OK | `… (Snap) Snap`（`activePlane` FALSE、pad `wp=FALSE`） | `… (Snap) Snap :` | — |
+| `P5-r3-closed` / `P5-r3-final` | `gphMeasure.close()` + hide | `Navigate` | `Navigate :` | — |
+
+**结论**：(1) ` Snap` 尾巴 = Significant Snaps，关掉只去尾巴，`(Snap)` 类型 token 留着；(2) ` WP` 在用户路上**要先有工作平面**——pad 按钮在没平面时只弹 `No working plane has been defined.` 并弹回，尾巴不出；程序直写 `activePlane(TRUE)` 才在没平面时出 ` WP`；(3) 三条尾巴的字面与顺序照源码：`… (Snap) WP  Offset Snap`（`prompt()` 里 WP 后两个空格，视口收成一个）；(4) D4（Web 不做 WP / Offset）不变——Web 的 ` Snap` 开关（`pickLayer.significantSnaps`）与 E3D 同义、字面相同。
+
+**坑**：(a) 程序里给 pad 的 toggle 按钮赋 `!!edgNewPositioning.wp.val = TRUE` **会触发它的回调**，走的就是上面那条 GADGET 重载——弹两张 `No working plane has been defined.`（置 TRUE 一张、`val = false` 弹回再一张），而且模态框把投进去的整条命令序列卡住，OK 之后才继续跑（所以 `P5-02-r3-wp-on` 有 10:57:55 / 11:01:09 两块，第二块是被卡住的那半截醒过来又置了一次 TRUE）；切 WP 只调 `activePlane(BOOLEAN)`。(b) 模态 Warning 期间再投的命令有的会丢（`P5-02-r3-wp-click` 那块没落下），点掉 OK 后要重采一次。(c) 点 OK 的物理坐标 (1280,724) 与 3D 视口重叠——对话框不在时那一下会变成一次定位拾取，点前先 `EnumWindows` 确认有 `Warning` 窗口。(d) 顺手拿到两条 §6 之外的告警原文：`No working plane has been defined.`（`!!alert.warning`）与 PML 错误框 `(2,751)   Variable !!EDGSETTINGS does not exist`。
