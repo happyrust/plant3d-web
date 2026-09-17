@@ -149,6 +149,22 @@ export const MEASUREMENT_PICK_TYPE_AVAILABILITY: Readonly<
 };
 
 /**
+ * E3D Positioning Control (`edgnewpositioning.pmlfrm` `setPickGadgets` 193–201): picking a
+ * filter lights exactly one filter button and sets every pick-type button
+ * `active = not pickIndex inset(5,6)` — under **Ppoint** (5) and **Screen** (6) the pick type
+ * has nothing to refine (a P-point *is* the position; Screen returns the point under the
+ * cursor), so the type row is greyed out. The type itself is left as it was (`pickTypeIndex`
+ * unchanged) and the prompt still shows its token (`… (Snap) Snap :`, golden MD §40.8).
+ * Prompt matrix **D8** (user 2026-09-17): the Web bar follows.
+ */
+export function measurementPickTypeSelectable(filter: MeasurementPickFilterId): boolean {
+  return filter !== 'ppoint' && filter !== 'screen';
+}
+
+/** Tooltip suffix for the greyed pick-type buttons (D8). */
+export const MEASUREMENT_PICK_TYPE_INERT_REASON = 'Ppoint / Screen 过滤器下拾取类型不起作用（E3D Positioning Control 把这一排置灰，类型保持不变）';
+
+/**
  * E3D Pick Settings → Sections & Walls → **Significant Snap Points** (`edgpicksettings.pmlfrm`
  * toggles `Fittings / Joints / Nodes` → `!!edgTypes.pLine.fitting / joint / node`). With
  * Significant Snaps on, `EDGPLINE.snapLine` collects the section's `FITT` (fitting),

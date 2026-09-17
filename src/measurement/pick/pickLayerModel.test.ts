@@ -9,6 +9,7 @@ import {
   formatMeasurementPrompt,
   measurementPickFilterAdmits,
   measurementPickTypePromptToken,
+  measurementPickTypeSelectable,
   normalizeMeasurementPickLayer,
   normalizeMeasurementSignificantSnapPoints,
   type MeasurementPickFeature,
@@ -71,6 +72,22 @@ describe('measurementPickFilterAdmits · E3D EDGPICK filters', () => {
     expect(MEASUREMENT_PICK_FILTER_AVAILABILITY.graphics).toEqual({ available: true });
     expect(MEASUREMENT_PICK_FILTER_AVAILABILITY.aid).toEqual({ available: true });
     expect(MEASUREMENT_PICK_FILTER_AVAILABILITY.external.available).toBe(false);
+  });
+
+  it('D8：Ppoint / Screen 过滤器下拾取类型整排置灰（E3D pad setPickGadgets 199–201 `active = not inset(5,6)`，2026-09-17 实机 golden MD §40.8）；其余六个过滤器可选', () => {
+    for (const filter of MEASUREMENT_PICK_FILTER_IDS) {
+      expect(measurementPickTypeSelectable(filter), filter).toBe(filter !== 'ppoint' && filter !== 'screen');
+    }
+    // 置灰只管按钮：类型本身与提示 token 不动（E3D 下 pickTypeIndex 仍 1、提示仍 `(Snap) Snap`）——过滤器不进提示（矩阵 §4）。
+    expect(normalizeMeasurementPickLayer({ filter: 'ppoint', pickType: 'midpoint' })).toMatchObject({ filter: 'ppoint', pickType: 'midpoint' });
+    expect(formatMeasurementPrompt({
+      command: '距离测量',
+      stepIndex: 1,
+      stepTotal: 2,
+      stepHint: '选择起点',
+      pickTypeToken: measurementPickTypePromptToken('snap', DEFAULT_MEASUREMENT_PICK_LAYER.values),
+      significantSnaps: true,
+    })).toBe('距离测量 · 第 1/2 步 选择起点 (Snap) Snap :');
   });
 });
 

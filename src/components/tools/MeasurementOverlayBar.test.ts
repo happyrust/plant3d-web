@@ -469,7 +469,7 @@ describe('MeasurementOverlayBar', () => {
     host = null;
   });
 
-  it('E3D 拾取层控件：过滤器 × 拾取类型写入样式 store，取值输入随类型出现，不可用项禁用，Significant snaps 可切', async () => {
+  it('E3D 拾取层控件：过滤器 × 拾取类型写入样式 store，取值输入随类型出现，不可用项禁用，Ppoint / Screen 下类型整排置灰（D8），Significant snaps 可切', async () => {
     let host: HTMLDivElement | null = document.createElement('div');
     document.body.appendChild(host);
 
@@ -576,6 +576,41 @@ describe('MeasurementOverlayBar', () => {
     filterButton('external')?.click();
     await nextTick();
     expect(measurementStyle.state.measurementPickLayer.filter).toBe('graphics');
+
+    // 提示矩阵 D8（2026-09-17 实机 golden MD §40.8）：Ppoint / Screen 过滤器下整排拾取类型置灰（E3D pad `setPickGadgets` 199–201
+    // `active = not inset(5,6)`），类型本身不动、摘要照旧带类型、取值输入还在；点灰掉的类型不生效；换回别的过滤器整排复活。
+    filterButton('ppoint')?.click();
+    await nextTick();
+    expect(measurementStyle.state.measurementPickLayer.filter).toBe('ppoint');
+    expect(measurementStyle.state.measurementPickLayer.pickType).toBe('fraction');
+    for (const id of ['snap', 'distance', 'midpoint', 'fraction', 'proportion', 'intersect', 'exact']) {
+      expect(typeButton(id)?.disabled, `ppoint × ${id}`).toBe(true);
+    }
+    expect(typeButton('fraction')?.getAttribute('aria-checked')).toBe('true');
+    expect(host.querySelector('[data-testid="measurement-overlay-pick-type-inert-hint"]')?.textContent).toContain('Ppoint 下不起作用');
+    expect(host.querySelector('[data-testid="measurement-overlay-pick-layer-summary"]')?.textContent?.trim()).toBe('Ppoint · Fraction');
+    expect(host.querySelector('[data-testid="measurement-overlay-pick-type-value-fraction"]')).toBeTruthy();
+    typeButton('snap')?.click();
+    await nextTick();
+    expect(measurementStyle.state.measurementPickLayer.pickType).toBe('fraction');
+
+    filterButton('screen')?.click();
+    await nextTick();
+    expect(typeButton('exact')?.disabled).toBe(true);
+    expect(typeButton('snap')?.disabled).toBe(true);
+    expect(host.querySelector('[data-testid="measurement-overlay-pick-type-inert-hint"]')?.textContent).toContain('Screen 下不起作用');
+
+    filterButton('graphics')?.click();
+    await nextTick();
+    expect(typeButton('snap')?.disabled).toBe(false);
+    expect(typeButton('exact')?.disabled).toBe(false);
+    expect(host.querySelector('[data-testid="measurement-overlay-pick-type-inert-hint"]')).toBeNull();
+    typeButton('snap')?.click();
+    await nextTick();
+    expect(measurementStyle.state.measurementPickLayer.pickType).toBe('snap');
+    typeButton('fraction')?.click();
+    await nextTick();
+    expect(measurementStyle.state.measurementPickLayer.pickType).toBe('fraction');
 
     const significant = host.querySelector('[data-testid="measurement-overlay-significant-snaps"]') as HTMLInputElement | null;
     expect(significant?.checked).toBe(true);

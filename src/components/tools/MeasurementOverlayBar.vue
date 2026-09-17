@@ -27,12 +27,14 @@ import {
   MEASUREMENT_PICK_TYPE_AVAILABILITY,
   MEASUREMENT_PICK_TYPE_HINTS,
   MEASUREMENT_PICK_TYPE_IDS,
+  MEASUREMENT_PICK_TYPE_INERT_REASON,
   MEASUREMENT_PICK_TYPE_LABELS,
   MEASUREMENT_PICK_TYPE_VALUE_KEY,
   MEASUREMENT_SIGNIFICANT_SNAP_POINT_HINTS,
   MEASUREMENT_SIGNIFICANT_SNAP_POINT_IDS,
   MEASUREMENT_SIGNIFICANT_SNAP_POINT_LABELS,
   measurementPickFilterAdmits,
+  measurementPickTypeSelectable,
   type MeasurementPickFilterId,
   type MeasurementPickTypeId,
   type MeasurementPickTypeValues,
@@ -157,6 +159,11 @@ const pickTypeValueField = computed(() => (
 const pickTypeValue = computed(() => (
   pickTypeValueKey.value ? pickLayer.value.values[pickTypeValueKey.value] : null
 ));
+/**
+ * 提示矩阵 D8（2026-09-17 实机 golden MD §40.8）：E3D pad 在 Ppoint / Screen 过滤器下把整排拾取类型按钮置灰
+ * （`edgnewpositioning.pmlfrm` 199–201 `active = not inset(5,6)`），类型本身不动、提示照旧带 token；浮条同。
+ */
+const pickTypeSelectable = computed(() => measurementPickTypeSelectable(pickLayer.value.filter));
 
 function pickFilterTitle(id: MeasurementPickFilterId): string {
   const availability = MEASUREMENT_PICK_FILTER_AVAILABILITY[id];
@@ -167,9 +174,9 @@ function pickFilterTitle(id: MeasurementPickFilterId): string {
 
 function pickTypeTitle(id: MeasurementPickTypeId): string {
   const availability = MEASUREMENT_PICK_TYPE_AVAILABILITY[id];
-  return availability.available
-    ? MEASUREMENT_PICK_TYPE_HINTS[id]
-    : `${MEASUREMENT_PICK_TYPE_HINTS[id]}——${availability.reason}`;
+  if (!availability.available) return `${MEASUREMENT_PICK_TYPE_HINTS[id]}——${availability.reason}`;
+  if (!pickTypeSelectable.value) return `${MEASUREMENT_PICK_TYPE_HINTS[id]}——${MEASUREMENT_PICK_TYPE_INERT_REASON}`;
+  return MEASUREMENT_PICK_TYPE_HINTS[id];
 }
 
 function setPickFilter(filter: MeasurementPickFilterId): void {
@@ -179,6 +186,7 @@ function setPickFilter(filter: MeasurementPickFilterId): void {
 
 function setPickType(pickType: MeasurementPickTypeId): void {
   if (!MEASUREMENT_PICK_TYPE_AVAILABILITY[pickType].available) return;
+  if (!pickTypeSelectable.value) return;
   measurementStyle.updateMeasurementPickLayer({ pickType });
 }
 
@@ -459,8 +467,19 @@ onBeforeUnmount(() => {
             </button>
           </div>
 
-          <div class="mb-1 mt-2 text-[11px] text-muted-foreground">拾取类型</div>
-          <div role="radiogroup" aria-label="拾取类型" class="grid grid-cols-4 gap-1">
+          <div class="mb-1 mt-2 flex items-center justify-between text-[11px] text-muted-foreground">
+            <span>拾取类型</span>
+            <!-- D8：Ppoint / Screen 下整排置灰（E3D pad 同），类型不动、提示照旧带 token -->
+            <span v-if="!pickTypeSelectable"
+              data-testid="measurement-overlay-pick-type-inert-hint"
+              :title="MEASUREMENT_PICK_TYPE_INERT_REASON">
+              {{ MEASUREMENT_PICK_FILTER_LABELS[pickLayer.filter] }} 下不起作用（E3D 同）
+            </span>
+          </div>
+          <div role="radiogroup"
+            aria-label="拾取类型"
+            :aria-disabled="!pickTypeSelectable || undefined"
+            class="grid grid-cols-4 gap-1">
             <button v-for="id in MEASUREMENT_PICK_TYPE_IDS"
               :key="id"
               type="button"
@@ -471,7 +490,7 @@ onBeforeUnmount(() => {
                 ? 'border-primary bg-primary text-primary-foreground'
                 : 'border-border bg-background text-muted-foreground hover:bg-muted'"
               :aria-checked="pickLayer.pickType === id"
-              :disabled="!MEASUREMENT_PICK_TYPE_AVAILABILITY[id].available"
+              :disabled="!MEASUREMENT_PICK_TYPE_AVAILABILITY[id].available || !pickTypeSelectable"
               :title="pickTypeTitle(id)"
               @click="setPickType(id)">
               {{ MEASUREMENT_PICK_TYPE_LABELS[id] }}
