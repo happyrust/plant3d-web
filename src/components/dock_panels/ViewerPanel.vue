@@ -47,6 +47,10 @@ import {
   type ReviewSnapshotAnnotationPayload,
   type ReviewSnapshotMeasurementPayload,
 } from '@/api/reviewApi';
+import { useClearanceDimensionSync } from '@/clearance/composables/useClearanceDimensionSync';
+import { useComponentToWallClearance } from '@/clearance/composables/useComponentToWallClearance';
+import { type ClearanceRecord } from '@/clearance/domain/clearanceRecord';
+import { useClearanceStore } from '@/clearance/stores/useClearanceStore';
 import { resolveViewerToolbarSelection } from '@/components/dock_panels/viewerToolbarSelection';
 import PipeDistanceDrawer from '@/components/pipe-distance/PipeDistanceDrawer.vue';
 import ReviewConfirmation from '@/components/review/ReviewConfirmation.vue';
@@ -182,6 +186,7 @@ const viewerContext = useViewerContext();
 const backgroundStore = useBackgroundStore();
 const displayThemeStore = useDisplayThemeStore();
 const mbdDiagnosticsStore = useMbdDiagnosticsStore();
+const clearanceStore = useClearanceStore();
 
 const initError = ref<string | null>(null);
 
@@ -2286,6 +2291,45 @@ function syncBranClearanceDimensions(): void {
   }
 }
 
+/**
+ * 构件 → 墙净距（`docs/plans/2026-09-17-component-to-wall-surface-clearance-plan.md` §6.3）：
+ * 记录里的两点是 design-world 米，飞过去要走 designToWorld（mm → scene 的全局矩阵 × 1000），
+ * 与 `DtxDimensionViewerAdapter` 同一口径。
+ */
+function flyToClearanceRecord(record: ClearanceRecord): void {
+  const snapshot = record.snapshot;
+  const compat = compatViewerRef.value;
+  if (!snapshot || !compat) return;
+  const millimetresToScene = dtxLayerRef.value?.getGlobalModelMatrix() ?? new Matrix4();
+  const toScene = (point: readonly [number, number, number]) =>
+    new Vector3(point[0] * 1000, point[1] * 1000, point[2] * 1000).applyMatrix4(millimetresToScene);
+  const a = toScene(snapshot.sourcePoint);
+  const b = toScene(snapshot.targetPoint);
+  const pad = Math.max(a.distanceTo(b), 0.5);
+  compat.cameraFlight.flyTo({
+    aabb: [
+      Math.min(a.x, b.x) - pad,
+      Math.min(a.y, b.y) - pad,
+      Math.min(a.z, b.z) - pad,
+      Math.max(a.x, b.x) + pad,
+      Math.max(a.y, b.y) + pad,
+      Math.max(a.z, b.z) + pad,
+    ],
+    duration: 0.8,
+    fit: true,
+  });
+  requestRender();
+}
+
+const componentToWallClearance = useComponentToWallClearance({
+  toolStore: store,
+  selectionStore,
+  clearanceStore,
+  toast: emitToast,
+  onRecord: flyToClearanceRecord,
+});
+useClearanceDimensionSync(viewerContext.dimensionSystem, clearanceStore, requestRender);
+
 function nextDimensionId(prefix: string): string {
   return typeof crypto.randomUUID === 'function'
     ? `${prefix}-${crypto.randomUUID()}`
@@ -2449,6 +2493,13 @@ function handleRibbonCommand(commandId: string) {
     case 'panel.pipeDistance':
       pipeDistDrawerOpen.value = !pipeDistDrawerOpen.value;
       if (pipeDistDrawerOpen.value) rangeDrawerOpen.value = false;
+      return;
+    case 'clearance.componentToWall':
+      componentToWallClearance.start();
+      return;
+    case 'clearance.clear':
+      clearanceStore.clearRecords();
+      requestRender();
       return;
     case 'tools.clear_all':
       store.clearAll();

@@ -628,18 +628,16 @@
 import { computed, ref, watch } from 'vue';
 
 import { ArrowUpRight, Eye, EyeOff, Loader2, MapPinned, MousePointerClick, Ruler, Search, X } from 'lucide-vue-next';
-import { Vector3, type Matrix4 } from 'three';
 
 import type { SpatialQueryMode, SpatialQueryResultItem, SpatialQuerySortBy } from '@/types/spatialQuery';
-import type { Vec3 } from '@/types/vec3';
 
+import { formatClearanceToast } from '@/clearance/composables/useComponentToWallClearance';
+import { useClearanceStore } from '@/clearance/stores/useClearanceStore';
 import { useConfirmDialogStore } from '@/composables/useConfirmDialogStore';
 import { findNounByRefnoAcrossAllDbnos } from '@/composables/useDbnoInstancesDtxLoader';
-import { usePipeDistanceStore } from '@/composables/usePipeDistanceStore';
 import { resolveContainingRoomInfo, useRoomInfoPanel } from '@/composables/useRoomInfoPanel';
 import { useSpatialQuery } from '@/composables/useSpatialQuery';
-import { useViewerContext } from '@/composables/useViewerContext';
-import { emitCommand } from '@/ribbon/commandBus';
+import { emitToast } from '@/ribbon/toastBus';
 import {
   SITE_SPEC_OPTIONS_WITH_UNKNOWN,
   getSpecBadgeStyle,
@@ -654,16 +652,9 @@ const emit = defineEmits<{
   'update:open': [value: boolean];
 }>();
 
-type ViewerWithDtxLayerMatrix = {
-  __dtxLayer?: {
-    getGlobalModelMatrix?: () => Matrix4 | null;
-  };
-};
-
 const spatialQuery = useSpatialQuery();
 const roomInfoPanel = useRoomInfoPanel();
-const pipeDistanceStore = usePipeDistanceStore();
-const viewerContext = useViewerContext();
+const clearanceStore = useClearanceStore();
 const {
   draft,
   status,
@@ -1109,33 +1100,32 @@ function normalizePipeDistanceRefno(refno: string): string {
   return String(refno || '').trim().replace(/\//g, '_');
 }
 
-function createPipeDistanceSceneTransformPoint(): ((point: Vec3) => Vec3) | undefined {
-  const matrix = (viewerContext.viewerRef.value as ViewerWithDtxLayerMatrix | null)?.__dtxLayer?.getGlobalModelMatrix?.();
-  if (!matrix) return undefined;
-  return (point: Vec3): Vec3 => {
-    const p = new Vector3(point[0], point[1], point[2]).applyMatrix4(matrix);
-    return [p.x, p.y, p.z];
-  };
-}
-
 function canAnnotatePipeDistance(item: SpatialQueryResultItem): boolean {
-  // 净距由服务端 nearest-points 计算：源是 BRAN 会自动用真实中心线，
-  // 其余构件退回包围盒口径，所以这里不再限制 noun。
+  // 净距由 gen-model `surface-clearance` 用两侧真实网格精算（任意 noun 都收，`target_kind=any`），
+  // 所以这里不限制 noun，只要源 / 目标都是 refno 且不同。
   if (!isRefnoDistanceSource.value) return false;
   const sourceRefno = normalizePipeDistanceRefno(draft.refno);
   const targetRefno = normalizePipeDistanceRefno(item.refno);
   return !!sourceRefno && !!targetRefno && sourceRefno !== targetRefno;
 }
 
+/**
+ * 「净距标注」：源 refno × 这一行的目标 → `useClearanceStore.compute`（外表面到外表面精算，
+ * 计划 `docs/plans/2026-09-17-component-to-wall-surface-clearance-plan.md` §6.3 Q8 (c)）。
+ * 结果由外部尺寸源 `clearance` 画出，不再进 `usePipeDistanceStore`（那条打的 legacy
+ * `/api/space/nearest-points` 已经不在跑）。
+ */
 async function annotatePipeDistance(item: SpatialQueryResultItem) {
   const sourceRefno = normalizePipeDistanceRefno(draft.refno);
   const targetRefno = normalizePipeDistanceRefno(item.refno);
   if (!sourceRefno || !targetRefno || sourceRefno === targetRefno) return;
-  pipeDistanceStore.showAnnotations.value = true;
-  await pipeDistanceStore.autoDetectBrans([sourceRefno, targetRefno], {
-    transformPoint: createPipeDistanceSceneTransformPoint(),
-  });
-  emitCommand('panel.pipeDistance.open');
+  clearanceStore.showAnnotations.value = true;
+  const record = await clearanceStore.compute({ sourceRefno, targetRefno, targetKind: 'any' });
+  if (!record) {
+    emitToast({ message: `净距计算失败：${clearanceStore.lastError.value ?? '未知错误'}`, level: 'error' });
+    return;
+  }
+  emitToast({ message: formatClearanceToast(record), level: record.snapshot ? 'success' : 'warning' });
 }
 
 function showAll() {

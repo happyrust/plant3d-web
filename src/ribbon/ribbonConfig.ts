@@ -118,6 +118,8 @@ const ALL_RIBBON_TABS: RibbonTabConfig[] = [
           { kind: 'button', id: 'measurement.object_to_object', label: '构件最近点', icon: 'ruler_combined', commandId: 'measurement.object_to_object' },
           { kind: 'button', id: 'measurement.pipe_to_structure', label: '管-墙/柱', icon: 'ruler_combined', commandId: 'measurement.pipe_to_structure' },
           { kind: 'button', id: 'measurement.pipe_to_pipe', label: '管-管', icon: 'ruler_combined', commandId: 'measurement.pipe_to_pipe' },
+          // 构件 → 墙外表面净距（真实网格精算，docs/plans/2026-09-17-component-to-wall-surface-clearance-plan.md §6.3）：先选中构件再点墙。
+          { kind: 'button', id: 'clearance.componentToWall', label: '构件→墙净距', icon: 'ruler_combined', commandId: 'clearance.componentToWall' },
         ],
       },
       {
@@ -125,6 +127,7 @@ const ALL_RIBBON_TABS: RibbonTabConfig[] = [
         label: '管理',
         items: [
           { kind: 'button', id: 'panel.pipeDistance', label: '管道距离', icon: 'activity', commandId: 'panel.pipeDistance' },
+          { kind: 'button', id: 'clearance.clear', label: '清空净距', icon: 'trash', commandId: 'clearance.clear' },
           { kind: 'button', id: 'measurement.clear', label: '清空', icon: 'trash', commandId: 'measurement.clear' },
         ],
       },
