@@ -257,9 +257,9 @@ reducer 拒收缺 `method` / `accuracyClass` 的记录（09-11 M0 验收）。
 ## 8. PR 拆分与顺序
 
 1. **PR-A（gen-model，`gen-model-model-cache` 分支）——已落地 `a0e307588`**：`fast_model/surface_clearance.rs`（参数 / 叶子加载 + 两级缓存 / `closest_points` + AABB 剪枝 / 面分类 / raycast / 响应）+ `handlers::spatial_surface_clearance` + GET 路由 + 守卫更新 + 11 条单测 + 1 条 live。**偏离**：没有去抽 `gen_world_mesh` 的磁盘支路——本模块自带只读磁盘的加载器（`gen_world_mesh` 先三角化再回退磁盘，两者口径不同），`rvm_baseline` 一字未动。
-2. **PR-B（plant3d-web）**：`genModelV1Api` 类型与客户端（GET + query）；`src/clearance/domain | services | stores | adapters`；单测。
-3. **PR-C（plant3d-web）**：拾取流入口 + 抽屉改接 + 外部尺寸源渲染 + Playwright + 截图；顺手补 G6「构件在洞里」的实机对。
-4. **PR-D（docs）**：09-11 计划 PR1.2 / PR1.3 / M1 金样状态同步；本计划回填 PR-B / PR-C 验证结果。
+2. **PR-B（plant3d-web）——已落地 `dbbda78`**：`genModelV1SurfaceClearance`（GET + query）；`src/clearance/domain/clearanceRecord.ts`（嵌 `ComputationProvenance`，缺合同拒收）、`services/clearanceService.ts`（mm → m 只在这里转一次；只认 `surface_to_surface / exact-surface`）、`stores/useClearanceStore.ts`（一对 inputs 一条，重算 / stale / failed）、`adapters/clearanceExternalDimensions.ts`（linear external，文字 `64mm ⊥` / `（过期）…` / `相交`）、`testing/surfaceClearanceFixtures.ts`（live 真值）；vitest 22 + API 1，type-check 新增 0。
+3. **PR-C（plant3d-web）——已落地 `8402b2c`**：`composables/useComponentToWallClearance.ts`（ribbon `clearance.componentToWall` → 源 = 当前选中 → `pick_refno` 只放行墙族 → 确认即算 → toast + 飞到两点）、`composables/useClearanceDimensionSync.ts`（store → `replaceExternalSource('clearance')`）、ViewerPanel 两条命令 + `flyToClearanceRecord`（designToWorld = mm→scene 全局矩阵 × 1000）、抽屉「净距标注」改走 `clearanceStore.compute(targetKind any)`、ribbon 两颗按钮；vitest +8，抽屉 23 条不回归。真 UI 冒烟（dev :3111 HMR，Playwright 真点击）：按钮在、未选中出 warning toast、pageerror 0。**未做**：选中 → 点墙 → 出尺寸的完整流截图与 G6「构件在洞里」实机对——都要 :8022 / :8023 换到含 `a0e307588` 的二进制。
+4. **PR-D（docs）**：09-11 计划 PR1.2 / PR1.3 / M1 金样状态同步；服务换二进制后补完整流截图进 `docs/verification/`。
 
 ## 9. 风险与开放问题
 
