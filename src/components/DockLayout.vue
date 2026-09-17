@@ -100,6 +100,10 @@ const viewerContext = useViewerContext();
 
 let offCommand: (() => void) | null = null;
 let userStoreInitializationPromise: Promise<void> | null = null;
+// 嵌入启动链（bootstrapEmbedSession → applyInitialLanding）是异步的，实例可能在 await 期间被卸载
+// （App.vue 置 embedBootstrapPending 会重挂 DockLayout）。卸载后的实例不得再挂 postMessage 桥、
+// 不得再动共享 store——否则桥泄漏成两份，每条 pms.* 被处理两遍（pre_action 并发存两笔撞版本门）。
+let disposed = false;
 const embedTokenVerified = ref(false);
 const embedSessionError = ref<string | null>(null);
 const invalidGridRetryScheduledIds = new Set<string>();
@@ -361,7 +365,7 @@ let offEmbedPostMessage: (() => void) | null = null;
 let offWorkflowSyncBridge: (() => void) | null = null;
 
 function tryRegisterWorkflowSyncBridge() {
-  const shouldEnable = embedModeParams.value.isEmbedMode && embedTokenVerified.value;
+  const shouldEnable = !disposed && embedModeParams.value.isEmbedMode && embedTokenVerified.value;
   if (!shouldEnable) {
     if (offWorkflowSyncBridge) {
       offWorkflowSyncBridge();
@@ -387,7 +391,7 @@ function tryRegisterWorkflowSyncBridge() {
 }
 
 function tryRegisterEmbedPostMessageBridge() {
-  const shouldEnable = embedModeParams.value.isEmbedMode && embedTokenVerified.value;
+  const shouldEnable = !disposed && embedModeParams.value.isEmbedMode && embedTokenVerified.value;
   if (!shouldEnable) {
     if (offEmbedPostMessage) {
       offEmbedPostMessage();
@@ -1514,6 +1518,8 @@ async function bootstrapEmbedSession(): Promise<void> {
     }
   }
 
+  if (disposed) return;
+
   tryRegisterEmbedPostMessageBridge();
   tryRegisterWorkflowSyncBridge();
 
@@ -1563,6 +1569,7 @@ function handleEmbedFormFocusChanged(event: Event) {
 
 async function applyInitialLanding() {
   await bootstrapEmbedSession();
+  if (disposed) return;
   closeBlockedReviewPanels();
 
   const trustedEmbedIdentity = resolveTrustedEmbedIdentity(embedModeParams.value);
@@ -1623,6 +1630,7 @@ async function applyInitialLanding() {
         loadTaskByFormId: userStore.loadReviewTaskByFormId,
         returnedDesignerTaskPanel: isExternalSjFormFocused ? 'review' : 'designerCommentHandling',
       });
+      if (disposed) return;
 
       const fallbackLandingTarget = resolvePassiveEmbedViewTarget({
         workflowRole: trustedEmbedIdentity?.workflowRole,
@@ -1679,6 +1687,7 @@ async function applyInitialLanding() {
         restoredWorkflowRecordCount = snapshotRestore.recordCount;
         restoreResult.restoredTask = snapshotRestore.task;
       }
+      if (disposed) return;
 
       if (restoredModelRefnos.length > 0) {
         await ensureModelRefnosVisible(restoredModelRefnos, {
@@ -1837,6 +1846,8 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
+  disposed = true;
+
   if (offCommand) {
     offCommand();
     offCommand = null;

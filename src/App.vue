@@ -32,7 +32,9 @@ const hasRequestedOutputProject = requestedOutputProject.length > 0;
 const { currentProject, loadProjects, switchProjectById, projects } = useModelProjects();
 
 const onboarding = useOnboardingGuide();
-const embedBootstrapPending = ref(false);
+// 带 user_token 的嵌入链接一进来就置 pending：否则首帧先挂一次 DockLayout，onMounted 里置 pending
+// 又把它卸掉、预选完项目再挂第二次——第一份实例的异步启动链还在跑，会把 postMessage 桥泄漏成两份。
+const embedBootstrapPending = ref(Boolean(urlParams.get('user_token')?.trim()));
 const showDashboardLayout = computed(() =>
   !currentProject.value && !embedBootstrapPending.value && !hasRequestedOutputProject,
 );

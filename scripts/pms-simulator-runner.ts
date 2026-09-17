@@ -3696,11 +3696,20 @@ async function emitPmsWorkflowMessageAndAwaitAck(
       }
       return new Promise<WorkflowSyncAckRaw>((resolve) => {
         let timer: ReturnType<typeof setTimeout> | null = null;
+        // 一条 pms.* 只该回一个 ack。回多个 = 嵌入页里挂了不止一个消息桥，
+        // 表现是同一个动作被执行两遍（例如 pre_action 保存并发打两笔，后一笔撞版本冲突）。
+        // 首个 ack 照常 resolve，之后再监听一小段时间，多出来的往 console 里点名。
+        let ackCount = 0;
         function listener(event: MessageEvent) {
           const data = event.data as { type?: string };
           if (data && data.type === ackType) {
-            window.removeEventListener('message', listener);
+            ackCount += 1;
+            if (ackCount > 1) {
+              console.warn(`[pms-simulator] duplicate ack ${ackType} #${ackCount}: ${JSON.stringify(event.data)}`);
+              return;
+            }
             if (timer) clearTimeout(timer);
+            timer = setTimeout(() => window.removeEventListener('message', listener), 1500);
             resolve(event.data as WorkflowSyncAckRaw);
           }
         }
@@ -4261,6 +4270,10 @@ async function runSingleScenario(base: ScenarioContext, caseId: PmsSimulatorCase
   const context = await base.browser.newContext({ viewport: { width: 1680, height: 1040 } });
   const consoleMessages: ScenarioRuntime['consoleMessages'] = [];
   const attachedPages = new WeakSet<Page>();
+  // `PMS_SIMULATOR_LOG_REQUESTS=<URL 片段>`：把命中的请求连同**发起它的页面与框**打出来。
+  // 排「同一个接口为什么被打了两次」这类问题时，只有这一行能区分是仿真页里的 iframe
+  // 发的，还是独立 automation 标签页发的——后端日志看不出客户端是谁。默认不开。
+  const requestLogPattern = process.env.PMS_SIMULATOR_LOG_REQUESTS?.trim() || '';
   const attachConsoleCapture = (targetPage: Page) => {
     if (attachedPages.has(targetPage)) return;
     attachedPages.add(targetPage);
@@ -4270,9 +4283,52 @@ async function runSingleScenario(base: ScenarioContext, caseId: PmsSimulatorCase
         text: message.text(),
         url: targetPage.url(),
       });
+      // 下面那段 initScript 打的调用栈，直接透到 runner 的输出里
+      if (requestLogPattern
+        && (message.text().startsWith('[fetch-trace]') || message.text().includes('duplicate ack'))) {
+        console.error(`[pms-simulator]${message.text()}`);
+      }
+    });
+    if (!requestLogPattern) return;
+    targetPage.on('request', (request) => {
+      if (!request.url().includes(requestLogPattern)) return;
+      const frame = request.frame();
+      const body = (request.postData() || '').replace(/\s+/g, ' ');
+      console.error(
+        `[pms-simulator][req] ${new Date().toISOString()} ${request.method()} ${request.url().split('?')[0]}`
+        + ` main_frame=${frame ? String(frame === targetPage.mainFrame()) : '--'}`
+        + ` page=${targetPage.url().split('?')[0]} frame=${frame ? frame.url().split('?')[0] : '--'}`
+        + (body ? ` body=${body.slice(0, 400)}` : ''),
+      );
     });
   };
   context.on('page', attachConsoleCapture);
+  if (requestLogPattern) {
+    // 在每个页面与 iframe 里包一层 fetch，把命中请求的调用栈打进 console。
+    // 「同一个动作为什么发了两笔请求」只有调用栈答得了：抓包只知道有两笔。
+    await context.addInitScript((pattern: string) => {
+      // tsx 产物在页面里缺 __name helper：具名函数表达式会被包一层 __name(...)，
+      // 序列化进页面就是 ReferenceError（本文件别处同坑）。先补 polyfill，函数一律匿名。
+      const g = globalThis as { __name?: <T>(fn: T, n?: string) => T };
+      if (typeof g.__name !== 'function') {
+        g.__name = (fn) => fn;
+      }
+      const original = window.fetch;
+      window.fetch = (...args: Parameters<typeof window.fetch>) => {
+        try {
+          const first = args[0];
+          const url = typeof first === 'string' ? first : (first as Request).url;
+          if (url && url.includes(pattern)) {
+            const stack = (new Error('fetch-trace').stack || '').replace(/\s+/g, ' ').slice(0, 1200);
+            console.warn(`[fetch-trace] ${url} :: ${stack}`);
+          }
+        } catch {
+          // 追踪不该影响业务请求
+        }
+        return original.apply(window, args);
+      };
+    }, requestLogPattern);
+  }
   const page = await context.newPage();
   attachConsoleCapture(page);
   const runtime: ScenarioRuntime = {
