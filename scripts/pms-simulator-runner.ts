@@ -182,36 +182,38 @@ function traceSimulator(message: string): void {
   console.error(`[pms-simulator] ${message}`);
 }
 
-async function waitForDesignerCommentAnnotationListAcrossContext(
-  context: BrowserContext,
-): Promise<{ page: Page; root: Page | import('playwright').Frame }> {
-  const rawPoll = process.env.PMS_PLANT3D_POLL_MS?.trim();
-  const parsed = rawPoll ? Number(rawPoll) : NaN;
-  const pollMs = Number.isFinite(parsed) && parsed >= 60_000 ? parsed : 180_000;
-  const deadline = Date.now() + pollMs;
-  while (Date.now() < deadline) {
-    const pages = context.pages().filter((p) => !p.isClosed());
-    for (const p of pages) {
-      for (const root of listPageAndFrames(p)) {
-        let listVisible = false;
-        try {
-          listVisible = await root
-            .locator('[data-testid="designer-comment-annotation-list"]')
-            .first()
-            .isVisible()
-            .catch(() => false);
-        } catch {
-          continue;
-        }
-        if (!listVisible) continue;
-        return { page: p, root };
-      }
+/**
+ * 超时时把各标签页 / iframe 里当前可见的 `data-testid` 列出来，看得出落点到底开了哪块面板，
+ * 而不是只剩一句「没找到」。
+ */
+async function describeVisibleTestIds(context: BrowserContext): Promise<string> {
+  const parts: string[] = [];
+  for (const p of context.pages().filter((item) => !item.isClosed())) {
+    for (const root of listPageAndFrames(p)) {
+      const ids = await root
+        .evaluate(() => Array.from(document.querySelectorAll<HTMLElement>('[data-testid]'))
+          .filter((el) => {
+            const rect = el.getBoundingClientRect();
+            return rect.width > 0 && rect.height > 0 && getComputedStyle(el).visibility !== 'hidden';
+          })
+          .map((el) => el.dataset.testid || '')
+          .filter(Boolean))
+        .catch(() => [] as string[]);
+      if (!ids.length) continue;
+      const unique = [...new Set(ids)].slice(0, 40);
+      parts.push(`${rootUrlForTrace(root)} => ${unique.join(', ')}`);
     }
-    await new Promise((r) => setTimeout(r, 600));
   }
-  throw new Error(
-    '超时：未在任何标签页/iframe 内找到设计端批注列表 [data-testid=designer-comment-annotation-list]（请确认驳回后已从 PMS 重新打开对应单据）',
-  );
+  return parts.length ? parts.join(' ‖ ') : '(无)';
+}
+
+function rootUrlForTrace(root: Page | import('playwright').Frame): string {
+  try {
+    const url = new URL(root.url());
+    return `${url.pathname}${url.search ? '?…' : ''}`;
+  } catch {
+    return root.url();
+  }
 }
 
 const CASE_NAMES: Record<PmsSimulatorCaseId, string> = {
@@ -778,20 +780,32 @@ async function waitForSnapshotByFormId(
   formId: string,
   options?: { timeoutMs?: number; predicate?: (snapshot: SimulatorTestSnapshot) => boolean },
 ): Promise<SimulatorTestSnapshot> {
-  return await waitFor(async () => {
-    const snapshot = await getSnapshot(page);
-    if (snapshot.currentFormId !== formId && snapshot.lastOpenedFormId !== formId) {
-      return null;
-    }
-    if (options?.predicate && !options.predicate(snapshot)) {
-      return null;
-    }
-    return snapshot;
-  }, {
-    timeoutMs: options?.timeoutMs ?? 90_000,
-    intervalMs: 600,
-    message: `等待 simulator 快照切到 form_id=${formId} 超时`,
-  });
+  let lastSnapshot: SimulatorTestSnapshot | null = null;
+  try {
+    return await waitFor(async () => {
+      const snapshot = await getSnapshot(page);
+      lastSnapshot = snapshot;
+      if (snapshot.currentFormId !== formId && snapshot.lastOpenedFormId !== formId) {
+        return null;
+      }
+      if (options?.predicate && !options.predicate(snapshot)) {
+        return null;
+      }
+      return snapshot;
+    }, {
+      timeoutMs: options?.timeoutMs ?? 90_000,
+      intervalMs: 600,
+      message: `等待 simulator 快照切到 form_id=${formId} 超时`,
+    });
+  } catch (error) {
+    // 超时时把最后一帧快照的关键字段带出来，否则只有一句「超时」，看不出是没切过去还是 predicate 没满足。
+    const last = lastSnapshot as SimulatorTestSnapshot | null;
+    const detail = last
+      ? ` ｜ last: current_form=${last.currentFormId || '--'} last_opened=${last.lastOpenedFormId || '--'} iframe=${last.iframeSource || '--'} side_panel=${last.sidePanelMode} status=${last.currentTaskStatus} node=${last.currentWorkflowNode || '--'} diagnostics=${last.diagnosticsError || '--'} last_action=${last.lastAction || '--'}/${last.lastOk === null ? '--' : last.lastOk} msg=${last.lastMessage || '--'}`
+      : ' ｜ last: (no snapshot)';
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`${message}${detail}`);
+  }
 }
 
 async function waitForOpenedIframeSnapshot(
@@ -878,10 +892,13 @@ async function openTaskForRole(
   });
   const opened = await getSnapshot(page);
   traceSimulator(`openTaskForRole opened role=${role} iframe=${opened.iframeSource || '--'} current_form=${opened.currentFormId || '--'} current_task=${opened.currentTaskId || '--'} diagnostics=${opened.diagnosticsError || '--'}`);
-  return await waitForSnapshotByFormId(page, formId, {
+  const settled = await waitForSnapshotByFormId(page, formId, {
     predicate: (item) => {
       if (!item.iframeSource) return false;
-      if (normalizedTaskId && item.currentTaskId !== normalizedTaskId && item.selectedTaskId !== normalizedTaskId) {
+      // 仿 PMS 打开 iframe 后 taskDetail 是异步刷新的，刷回来之前 currentTaskId / currentFormId 还是上一张单的。
+      // 这里只认 currentTaskId（不再拿 selectedTaskId 兜底）：否则紧接着的 workflow action 会按旧上下文打到上一张单上
+      // （duplicate-bran-form 同一 BRAN 两张单时实测发生，active 打到了第二张单）。
+      if (normalizedTaskId && item.currentTaskId !== normalizedTaskId) {
         return false;
       }
       return Boolean(
@@ -892,6 +909,25 @@ async function openTaskForRole(
           || item.diagnosticsError,
       );
     },
+  });
+  // 侧栏模式（workflow / readonly）取决于 workflow 快照里的 next_step / current_node，它和 taskDetail 并行拉取、常常晚到；
+  // 上面的判据只等到 taskDetail 就放行，会把「还没回来」时算出的 readonly 当成终态（resubmit-reviewer-reopen 两处
+  // expected=workflow actual=readonly、returned-sj-active-block 的 return 动作发不出去，都是这一下）。
+  // 这里再给 workflow 快照最多 15s 落定；落不下来照旧返回，不改变原有成功判据。
+  const workflowSnapshotSettled = (item: SimulatorTestSnapshot): boolean => Boolean(
+    item.workflowNextStep || item.workflowCurrentNode || item.diagnosticsError,
+  );
+  if (workflowSnapshotSettled(settled)) return settled;
+  return await waitFor(async () => {
+    const next = await getSnapshot(page);
+    return workflowSnapshotSettled(next) ? next : null;
+  }, {
+    timeoutMs: 15_000,
+    intervalMs: 500,
+    message: `openTaskForRole role=${role} form_id=${formId} workflow 快照 15s 内未落定`,
+  }).catch((error) => {
+    traceSimulator(error instanceof Error ? error.message : String(error));
+    return settled;
   });
 }
 
@@ -1051,6 +1087,30 @@ async function cleanupForms(runtime: Pick<ScenarioRuntime, 'env' | 'cleanupFormI
   await postJson(`${runtime.env.backendBaseUrl}/api/review/delete`, payload, token);
 }
 
+/**
+ * 每条场景跑完就把它自己建的单删掉，不等全量收尾再一起删。
+ * 否则前面场景（尤其是失败中途退出的）留下的单会一直挂在仿 PMS 收件箱里，改变后面场景里
+ * `reopenLast` 这类「按列表现状猜任务」分支的走向：`stop` / `stop-sh` 单跑通过、全量却倒在
+ * 「快照切不到 form_id」，就是 cancelled 单从收件箱消失后，被前面 `return` 留下的那张 sj/draft 单
+ * 顶成了 `rows.length === 1` 的兜底行。删失败不影响场景结果，留给收尾的整批清理再试。
+ */
+async function cleanupScenarioForms(
+  base: ScenarioContext,
+  formIdsBefore: Set<string>,
+  caseId: PmsSimulatorCaseId,
+): Promise<void> {
+  if (process.env.PMS_SIMULATOR_SKIP_CLEANUP === '1') return;
+  const created = [...base.cleanupFormIds].filter((formId) => formId && !formIdsBefore.has(formId));
+  if (!created.length) return;
+  try {
+    await cleanupForms({ env: base.env, cleanupFormIds: new Set(created) });
+    created.forEach((formId) => base.cleanupFormIds.delete(formId));
+    traceSimulator(`cleanup case=${caseId} deleted form_ids=${created.join(',')}`);
+  } catch (error) {
+    traceSimulator(`cleanup case=${caseId} failed, defer to final cleanup: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
 async function saveGateRecord(
   runtime: ScenarioRuntime,
   options: {
@@ -1060,7 +1120,7 @@ async function saveGateRecord(
     currentPmsUser: SimulatorPmsUser;
     gateType: 'block' | 'return';
   },
-): Promise<void> {
+): Promise<string> {
   const auth = buildAuthLoginRequest({
     projectId: runtime.env.projectId,
     currentPmsUser: options.currentPmsUser,
@@ -1124,6 +1184,51 @@ async function saveGateRecord(
     measurements: [],
     note: options.gateType === 'block' ? 'gate-block 注入 confirmed record' : 'gate-return 注入 confirmed record',
   }, token);
+  return annotationId;
+}
+
+/**
+ * SJ 经 PMS 外部流程重新打开被驳回单据后的落点断言（2026-05-18「SJ 外部 form_id 入口全面收敛到 ReviewPanel」）：
+ * 批注处理统一在审核侧 ReviewPanel 内完成，不再单独打开「批注处理」(DCH) / 「发起编校审」面板；
+ * 面板里只能查看和处理当前单据已有批注（`external-sj-existing-annotations-only`），表格按 form_id 收敛。
+ * 旧断言等的是 DCH 的 `designer-comment-annotation-list`，那是 RUS-244 design-A 时期的落点，和现行产品口径相反。
+ */
+async function assertExternalSjReturnedLanding(
+  runtime: ScenarioRuntime,
+  keyPrefix: string,
+  formId: string,
+  annotationId: string | null,
+): Promise<PmsSimulatorAssertionResult[]> {
+  let located: Awaited<ReturnType<typeof waitForReviewerWorkbenchAcrossContext>>;
+  try {
+    located = await waitForReviewerWorkbenchAcrossContext(runtime.context, { formId });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`${message} ｜ 现场可见 testid：${await describeVisibleTestIds(runtime.context)}`);
+  }
+  const isVisible = async (selector: string): Promise<boolean> => await located.root
+    .locator(selector)
+    .first()
+    .isVisible()
+    .catch(() => false);
+  const sjOnlyVisible = await isVisible('[data-testid="external-sj-existing-annotations-only"]');
+  const rowVisible = annotationId
+    ? await located.root
+      .locator(`[data-testid="annotation-table-row-${annotationId}"]`)
+      .first()
+      .waitFor({ state: 'visible', timeout: 30_000 })
+      .then(() => true)
+      .catch(() => false)
+    : false;
+  const dchListVisible = await isVisible('[data-testid="designer-comment-annotation-list"]');
+  const initiateVisible = await isVisible('[data-testid="designer-landing-workspace"]');
+  return [
+    assertResult(`${keyPrefix}-sj-review-panel-landing`, true, `root=${rootUrlForTrace(located.root)}`, true, true),
+    assertResult(`${keyPrefix}-sj-existing-annotations-only`, sjOnlyVisible, '外部流程 SJ 入口只能查看 / 处理已有批注', true, sjOnlyVisible),
+    assertResult(`${keyPrefix}-sj-scoped-annotation-row`, rowVisible, `annotation_id=${annotationId || '--'}`, true, rowVisible),
+    assertResult(`${keyPrefix}-designer-comment-panel-not-opened`, !dchListVisible, 'SJ 外部 form_id 模式不再单独打开 DCH', false, dchListVisible),
+    assertResult(`${keyPrefix}-initiate-panel-closed`, !initiateVisible, '处理已退回单据时不再展示「发起编校审」', false, initiateVisible),
+  ];
 }
 
 async function saveRestoreRecord(
@@ -2707,7 +2812,7 @@ async function scenarioReturn(runtime: ScenarioRuntime): Promise<PmsSimulatorSce
   if (!created.taskId) {
     throw new Error(`return 缺少 task_id（form_id=${created.formId}）`);
   }
-  await saveGateRecord(runtime, {
+  const returnAnnotationId = await saveGateRecord(runtime, {
     taskId: created.taskId,
     formId: created.formId,
     currentWorkflowRole: 'pz',
@@ -2737,29 +2842,7 @@ async function scenarioReturn(runtime: ScenarioRuntime): Promise<PmsSimulatorSce
     reopened.sidePanelMode,
   ));
   assertions.push(assertResult('return-form-preserved', reopened.currentFormId === created.formId, undefined, created.formId, reopened.currentFormId));
-  const designerCommentPanel = await waitForDesignerCommentAnnotationListAcrossContext(runtime.context);
-  const detailVisible = await designerCommentPanel.root
-    .locator('[data-testid="designer-comment-annotation-detail"]')
-    .first()
-    .isVisible()
-    .catch(() => false);
-  const taskEntryVisible = await designerCommentPanel.root
-    .locator('[data-testid="designer-comment-task-entry"]')
-    .first()
-    .isVisible()
-    .catch(() => false);
-  const listText = await designerCommentPanel.root
-    .locator('[data-testid="designer-comment-annotation-list"]')
-    .first()
-    .textContent()
-    .catch(() => null);
-  assertions.push(assertResult(
-    'return-designer-comment-list',
-    Boolean(listText?.includes('批注列表') || listText?.includes('全部批注')),
-    listText || '',
-  ));
-  assertions.push(assertResult('return-designer-comment-detail-hidden', detailVisible === false, undefined, false, detailVisible));
-  assertions.push(assertResult('return-designer-comment-task-entry-hidden', taskEntryVisible === false, undefined, false, taskEntryVisible));
+  assertions.push(...await assertExternalSjReturnedLanding(runtime, 'return', created.formId, returnAnnotationId));
 
   return finalizeScenarioReport({
     caseId: 'return',
@@ -3181,7 +3264,7 @@ async function scenarioRus244DesignAUiEmptyState(runtime: ScenarioRuntime): Prom
   if (!created.taskId) {
     throw new Error(`rus-244 缺少 task_id（form_id=${created.formId}）`);
   }
-  await saveGateRecord(runtime, {
+  const returnAnnotationId = await saveGateRecord(runtime, {
     taskId: created.taskId,
     formId: created.formId,
     currentWorkflowRole: 'jd',
@@ -3212,19 +3295,9 @@ async function scenarioRus244DesignAUiEmptyState(runtime: ScenarioRuntime): Prom
     reopened.currentWorkflowNode,
   ));
 
-  const designerCommentPanel = await waitForDesignerCommentAnnotationListAcrossContext(runtime.context);
-  const state1VisibleAfterReturn = await designerCommentPanel.root
-    .locator('[data-testid="designer-state-1"]')
-    .first()
-    .isVisible()
-    .catch(() => false);
-  assertions.push(assertResult(
-    'rus-244-state1-visible-after-return',
-    state1VisibleAfterReturn,
-    'State 1 (returned task UI) should be visible after task is returned',
-    true,
-    state1VisibleAfterReturn,
-  ));
+  // design-A 的「状态 1」是 DCH 面板里的 UI；SJ 经 PMS 外部 form_id 入口重开被驳回单据时，
+  // 现行口径（2026-05-18）不再打开 DCH，而是收敛到 ReviewPanel，所以这里改为断言该落点。
+  assertions.push(...await assertExternalSjReturnedLanding(runtime, 'rus-244-return', created.formId, returnAnnotationId));
 
   return finalizeScenarioReport({
     caseId: 'rus-244-design-a-ui-empty-state',
@@ -3826,6 +3899,7 @@ const SCENARIO_HANDLERS: Record<PmsSimulatorCaseId, ScenarioHandler> = {
 
 async function runSingleScenario(base: ScenarioContext, caseId: PmsSimulatorCaseId): Promise<PmsSimulatorScenarioReport> {
   traceSimulator(`runSingleScenario ${caseId} newContext`);
+  const formIdsBefore = new Set(base.cleanupFormIds);
   const context = await base.browser.newContext({ viewport: { width: 1680, height: 1040 } });
   const consoleMessages: ScenarioRuntime['consoleMessages'] = [];
   const attachedPages = new WeakSet<Page>();
@@ -3872,6 +3946,7 @@ async function runSingleScenario(base: ScenarioContext, caseId: PmsSimulatorCase
   } finally {
     await context.close().catch(() => undefined);
     delete process.env.PMS_MOCK_PACKAGE_NAME;
+    await cleanupScenarioForms(base, formIdsBefore, caseId);
   }
 }
 

@@ -123,6 +123,8 @@ async function waitForWorkspaceAcrossContext(
     formId?: string | null;
     urlIncludes?: string | null;
     ready?: (root: Page | Frame) => Promise<boolean>;
+    /** 标记还没出现时先在这个 root 上试着把它对应的面板打开。 */
+    prepare?: (root: Page | Frame) => Promise<void>;
     timeoutMessage: string;
   },
 ): Promise<{ page: Page; root: Page | Frame }> {
@@ -157,6 +159,9 @@ async function waitForWorkspaceAcrossContext(
       }
       if (!n) {
         tracePlant3dAutomation(`${options.description} marker missing root=${url}`);
+        if (options.prepare) {
+          await options.prepare(root).catch(() => undefined);
+        }
         continue;
       }
       const vis = await root
@@ -653,6 +658,7 @@ export async function runPlant3dInitiateOnRoot(root: Page | Frame): Promise<Plan
   if (stillDisabled || stillAriaDisabled === 'true') {
     throw new Error('发起编校审主按钮仍处于禁用状态，无法提交');
   }
+  await submitBtn.click({ timeout: 20_000 });
 
   const successToastVisible = await root
     .getByText(/编校审单(创建|保存)成功/, { exact: false })
@@ -927,10 +933,27 @@ export async function runCheckerWorkflowAcrossContext(context: BrowserContext): 
   await runPlant3dCheckerWorkflowOnRoot(located.root);
 }
 
+/**
+ * 嵌入落点不会替设计端打开「发起编校审」面板——`embedRoleLanding.getEmbedLandingPanelIdsWithOptions`
+ * 对 designer 恒返回 `['viewer']`，全仓只有新手引导会去开它，而本套用例把引导全标成已完成。
+ * 所以这里照人的走法自己点一次 Ribbon「校审 → 发起编校审」；面板已经开着时是空操作。
+ */
+async function openInitiateReviewPanel(root: Page | Frame): Promise<void> {
+  const reviewTab = root.locator('[data-ribbon-tab="review"]').first();
+  if (await reviewTab.count().catch(() => 0)) {
+    await reviewTab.click({ timeout: 5_000 }).catch(() => undefined);
+  }
+  const initiateButton = root.locator('[data-command="panel.initiateReview"]').first();
+  if (!(await initiateButton.count().catch(() => 0))) return;
+  tracePlant3dAutomation(`designer-landing open panel via ribbon root=${rootUrl(root)}`);
+  await initiateButton.click({ timeout: 5_000 }).catch(() => undefined);
+}
+
 export async function runSubmitReviewAcrossContext(context: BrowserContext): Promise<Plant3dSubmitReviewResult> {
   const located = await waitForWorkspaceAcrossContext(context, {
     marker: '[data-testid="designer-landing-workspace"]',
     description: 'designer-landing',
+    prepare: openInitiateReviewPanel,
     timeoutMessage: '超时：未在任何标签页/iframe 内找到发起编校审面板 [data-testid=designer-landing-workspace]（跨域 iframe 无法用 Playwright 注入，请改为新开同源标签或调整嵌入方式）',
   });
   return await runPlant3dInitiateOnRoot(located.root);
