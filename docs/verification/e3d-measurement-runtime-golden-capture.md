@@ -1819,7 +1819,7 @@ ELBO `145028` P2 → ELBO `145029` P1 之间的竖直立管，DN100 · 外半径
 
 - 各命令第 2 / 3 步（要拾中第一点 / 第一条线）；七种 token 的实际字串与 D2 三处（`P3-04`：`.input` 填 2.5 → `Fraction[2.5]`？重显几？落点在 0.5？）；过滤器八串字字相同（`P4-01`）；` Snap` 关 / ` WP` / ` Offset` 尾巴（`P5-*`，D4 实证）；§6 全部告警原文（`P6-*`，含 D5 的 `(2,874)`）。
 - 截图（golden §1 要求测量窗体 + 命令提示 + 三维视口同框）：要主窗口非最小化，`printwindow-capture.ps1` 才出图。
-- **→ §40（2026-09-17）**：七种 token 实串、D2 三处（结论翻案）、两线夹角第 2 步、距离第 2 步的步词已采成 observation，带截图；`printwindow-capture.ps1` 对这扇窗只回旧帧，截图改走 `CopyFromScreen`。
+- **→ §40（2026-09-17）**：七种 token 实串、D2 三处（结论翻案；07:36 用户拍板 (a)，`67b127b` 改掉，决策 `d-342`）、两线夹角第 2 步、距离第 2 步的步词已采成 observation，带截图；`printwindow-capture.ps1` 对这扇窗只回旧帧，截图改走 `CopyFromScreen`。
 
 ## 39. Intersect 的 ARC 操作数 / 弯管与环面的 Perpendicular：E3D 运行时采集（2026-09-17 00:0x + 06:3x）
 
@@ -1980,7 +1980,7 @@ Positioning pad 是停靠版 `!!edgNewPositioning`（`posCntrl.type=PAD1`，`edg
 ### 40.4 结论
 
 1. **矩阵 §3 七种 token 字面 ✓**（40.2）；**§2 两线夹角第 2 步 ✓**（`… second line or plane :`，无 token 无尾巴，D1 第 2 步也实证）；距离第 2 步的步词 `end` ✓（token 位当时是 Fraction，`(Snap)` 变体没单独采）。
-2. **D2 翻案**：用户在 E3D 3.1 里能走到的路径（pad 输入框填 `2.5`）得到的三处是 **`Fraction[3]` / 输入框 `3` / 落三分点**——三处**一致，都是整数**，因为 `text .input is REAL format !!edgFormat` 在 Fraction 下是 `!!integerFmt`（dp 0），`gadget.val` 按格式回读已经是 3（不只是显示）。矩阵 D2 引的「E3D 原样出输入值 `Fraction[2.5]`」只在**程序直写 `pickTypesValue[4]`** 时成立，那时才有「提示 2.5 / 输入框 3 / 落点 1/2」的三处不一致。Web `e8ebc10`（决策 `d-269`）对上的是源码读出来的那条程序路径：用户填 2.5，Web 出 `Fraction[2.5]` 落二分点，E3D 出 `Fraction[3]` 落三分点——**两处都不同，待用户重新拍板**（矩阵 §7 D2 行列了 (a) 输入即四舍五入 / (b) 保持 / (c) 只改内核）。
+2. **D2 翻案**：用户在 E3D 3.1 里能走到的路径（pad 输入框填 `2.5`）得到的三处是 **`Fraction[3]` / 输入框 `3` / 落三分点**——三处**一致，都是整数**，因为 `text .input is REAL format !!edgFormat` 在 Fraction 下是 `!!integerFmt`（dp 0），`gadget.val` 按格式回读已经是 3（不只是显示）。矩阵 D2 引的「E3D 原样出输入值 `Fraction[2.5]`」只在**程序直写 `pickTypesValue[4]`** 时成立，那时才有「提示 2.5 / 输入框 3 / 落点 1/2」的三处不一致。Web `e8ebc10`（决策 `d-269`）对上的是源码读出来的那条程序路径：用户填 2.5，Web 出 `Fraction[2.5]` 落二分点，E3D 出 `Fraction[3]` 落三分点——**两处都不同**，~~待用户重新拍板~~（矩阵 §7 D2 行列了 (a) 输入即四舍五入 / (b) 保持 / (c) 只改内核）。**→ 用户 2026-09-17 07:36 拍板 (a)，`67b127b` 已改（决策 `d-342` 取代 `d-269`）**：`normalizeMeasurementPickTypeValues` 对 fraction 走 `roundLikeIntegerFmt`（最近整数、.5 远离零、不夹——0 合法），提示 token 拼落库值、浮条输入框 `change` 后把落库值写回、内核不动——填 `2.5` 两边都是 `Fraction[3]` / `3` / 三分点；单测四处改口（token / V9 读回 0.4 → 0 / 输入框 2.5 → '3'、3.4 → '3' / Graphics 立方体 y = 4.2 吸三等分的 4.1667），96 文件 854 用例过、eslint 0、type-check 新增 0。浮条真 UI 实机截图未补。
 3. **E3D 3.1 的 pad 没有 Fraction / Proportion 按钮**（`edgnewpositioning.pmlfrm` 55–56 按钮、128–129 映射都注释掉），`pickTypeList()` 却仍回七项；程序切到 Fraction 后 pad 上 Snap 仍亮着。Web 浮条把七种都露出来，是比 E3D 3.1 多的入口（记为 Web 增强，不算偏离）。
 4. Esc 在两线夹角第 2 步是**撤掉整条命令**（Web 点空白回第 1 步，D3 一类取舍）。
 
