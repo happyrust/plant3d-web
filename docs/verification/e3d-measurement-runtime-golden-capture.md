@@ -1819,7 +1819,7 @@ ELBO `145028` P2 → ELBO `145029` P1 之间的竖直立管，DN100 · 外半径
 
 - 各命令第 2 / 3 步（要拾中第一点 / 第一条线）；七种 token 的实际字串与 D2 三处（`P3-04`：`.input` 填 2.5 → `Fraction[2.5]`？重显几？落点在 0.5？）；过滤器八串字字相同（`P4-01`）；` Snap` 关 / ` WP` / ` Offset` 尾巴（`P5-*`，D4 实证）；§6 全部告警原文（`P6-*`，含 D5 的 `(2,874)`）。
 - 截图（golden §1 要求测量窗体 + 命令提示 + 三维视口同框）：要主窗口非最小化，`printwindow-capture.ps1` 才出图。
-- **→ §40（2026-09-17）**：七种 token 实串、D2 三处（结论翻案；07:36 用户拍板 (a)，`67b127b` 改掉，决策 `d-342`）、两线夹角第 2 步、距离第 2 步的步词已采成 observation，带截图；`printwindow-capture.ps1` 对这扇窗只回旧帧，截图改走 `CopyFromScreen`。**§40.6（10:3x 第三轮）**：距离第 2 步 `(Snap)` 变体、垂距第 2 步、三点角第 2 / 3 步——三条定位命令每一步都实机了；**§40.7（10:5x）**：§5 三条尾巴 Snap 关 / WP / Offset 及组合，pad WP 按钮没平面时弹 `No working plane has been defined.`。
+- **→ §40（2026-09-17）**：七种 token 实串、D2 三处（结论翻案；07:36 用户拍板 (a)，`67b127b` 改掉，决策 `d-342`）、两线夹角第 2 步、距离第 2 步的步词已采成 observation，带截图；`printwindow-capture.ps1` 对这扇窗只回旧帧，截图改走 `CopyFromScreen`。**§40.6（10:3x 第三轮）**：距离第 2 步 `(Snap)` 变体、垂距第 2 步、三点角第 2 / 3 步——三条定位命令每一步都实机了；**§40.7（10:5x）**：§5 三条尾巴 Snap 关 / WP / Offset 及组合，pad WP 按钮没平面时弹 `No working plane has been defined.`。**§40.8（11:3x）**：§4 过滤器八串——真点 pad 八颗过滤器按钮，提示字字不变、亮灯与 `pickIndex` 一一对应；§38.3 只剩 §6 告警原文（`P6-*`）。
 
 ## 39. Intersect 的 ARC 操作数 / 弯管与环面的 Perpendicular：E3D 运行时采集（2026-09-17 00:0x + 06:3x）
 
@@ -1925,10 +1925,10 @@ v4 用 CTOR `=24381/46880`（`rins 40 / rout 60`，管半径 10，轴 = S）三�
 后端（带 `element/ptset` 的 gen-model）回来后补跑：① Element × Intersect，弯管体 + 同一条腿上的隐含管轴线 → 交点应落在离 `POS` **165.500 mm** 的新切点（比 `9bbb501` 那一轮挪 **82.285 mm**）；
 ② Perpendicular to，第二击落在弯管体 → 点到点、目标名不带「弧面」（对 §39.3 表的第一行 551.094 mm 那一档）。
 
-## 40. 提示矩阵 E3D 运行时采集·第二轮：七种 token / D2 三处 / 两线夹角第 2 步（主窗口还原、真实拾取、带截图，2026-09-17 00:0x + 06:3x–06:5x）+ 第三轮 10:3x–11:0x：距离第 2 步 `(Snap)` 变体 / 垂距第 2 步 / 三点角第 2、3 步（§40.6）、§5 三条尾巴 Snap 关 / WP / Offset（§40.7）
+## 40. 提示矩阵 E3D 运行时采集·第二轮：七种 token / D2 三处 / 两线夹角第 2 步（主窗口还原、真实拾取、带截图，2026-09-17 00:0x + 06:3x–06:5x）+ 第三轮 10:3x–11:0x：距离第 2 步 `(Snap)` 变体 / 垂距第 2 步 / 三点角第 2、3 步（§40.6）、§5 三条尾巴 Snap 关 / WP / Offset（§40.7）+ 11:3x：§4 过滤器八串（§40.8）
 
 > 接 §38.3 的清单。用户 00:00 点头「把 E3D 主窗口还原到前台」，这一轮才有截图与真实鼠标 / 键盘输入。同一台 E3D 3.1 shadow（PID 11900），同一支宏 `capture-prompt-step.pmlmac`（本轮多了 5b pad 状态 / 5c pickData 与 return / 6 dimension 三段，见宏头），trace 仍是 `e3d-prompt-capture.trace.txt`；落点核算另加只读探针 `probe-fraction-landing.pmlmac` → `e3d-fraction-landing.trace.txt`。
-> 00:05–00:14 那一段是上一会话（fable-5-1-32）做的，trace 里 `P3-04-s*` / `P3-0x-*` / `P3-04-round-*` 十九块；06:36–06:53 是本会话，`*-r2-*` 十五块；10:34–10:42 是接手会话（fable-5-1-41）的第三轮，`*-r3-*` 十四块（§40.6）；10:56–11:07 同一会话续采尾巴，`P5-*` 十七块（§40.7）。
+> 00:05–00:14 那一段是上一会话（fable-5-1-32）做的，trace 里 `P3-04-s*` / `P3-0x-*` / `P3-04-round-*` 十九块；06:36–06:53 是本会话，`*-r2-*` 十五块；10:34–10:42 是接手会话（fable-5-1-41）的第三轮，`*-r3-*` 十四块（§40.6）；10:56–11:07 同一会话续采尾巴，`P5-*` 十七块（§40.7）；11:37–11:39 同一会话再采过滤器，`P4-*` 九块（§40.8）——那一轮采完没来得及记录，截图 / 文档 / 入库与 E3D 收尾由接手会话（fable-5-1-7）15:3x 补做（`P4-r3-check` / `P4-r3-closed` / `P4-r3-final` 三块）。
 
 ### 40.1 现场与路子（这一轮新踩出来的）
 
@@ -1986,10 +1986,11 @@ Positioning pad 是停靠版 `!!edgNewPositioning`（`posCntrl.type=PAD1`，`edg
 4. Esc 在两线夹角第 2 步是**撤掉整条命令**（Web 点空白回第 1 步，D3 一类取舍）。
 5. **第三轮（§40.6）三条定位命令的后续步全部 ✓**：距离第 2 步 `(Snap)` 变体 `Measure distance end (Snap) Snap :`、垂距第 2 步 `Measure perpendicular distance end (Snap) Snap :`、三点角第 2 / 3 步 `Measure angle first point (Snap) Snap :` / `… second point (Snap) Snap :`——四条字串与矩阵 §2 的 `static_expectation` 逐字相同；每条命令最后一击之后状态**回第 1 步**（`start` / `root of angle`，`major=1`，stack 仍 1，窗体出结果），不是退出命令。矩阵 §2 三条定位命令（距离 / 垂距 / 三点角）现在**每一步**都是 `observation`；§2 只剩 `measureLineAngle`（非弧包，D6 不做）没实机。
 6. **§5 三条尾巴（§40.7）**：` Snap` 关得掉（`intermediate=FALSE` → `Measure distance start (Snap) :`，`(Snap)` 是类型 token 留着）；` WP` / ` Offset` 的字串与顺序照 `edgstate.pmlobj` 345–357——`prompt()` 里 **`WP` 后面跟两个空格**（`' WP '` 自带尾空格再接 `' Snap'` / `' Offset'`），视口气泡收成一个：`… (Snap) WP Offset Snap :`；**用户路径上 pad 的 WP 按钮在没定义工作平面时只弹 `No working plane has been defined.`、按钮弹回，尾巴不出**（`edgposcntrl` 672–685），` WP` 要先在 Working Plane 表单里定义平面；本 shadow 会话里 3.1 的 Offset 入口走不通（`!!appDesMain` / `!!edgSettings` 都没加载，`offsetType('ENU')` 弹 `(2,751) Variable !!EDGSETTINGS does not exist`），尾巴是直写 `offsetType` 采到的。D4（Web 不做 WP / Offset）不变，这两条只把 E3D 的字串钉死。
+7. **§4 过滤器八串（§40.8）**：在 Measure distance 第 1 步上真点 pad 的八颗过滤器按钮，`prompt()` 八次**字字不变**（`Measure distance start (Snap) Snap`，视口 `… (Snap) Snap :`）——`edgposcntrl.setPick` 1397 把旧 pick 的 `prompt`（token 词）原样带给新 pick，`edgstate.prompt()` 三段里不引用 `pick.description`；`pickIndex` 1→2→…→8→1、`state.pick.description` 与 pad 亮灯**一一对应**（每次只亮一颗）。矩阵 §4 结。顺手观察：Ppoint / Screen 下 pad 把五颗拾取类型按钮置灰（`edgnewpositioning.pmlfrm` 200 `active = not inset(5,6)`），提示里的 `(Snap) Snap` 不变；Web 浮条没这条联动（拾取类型的 `disabled` 只看静态 `MEASUREMENT_PICK_TYPE_AVAILABILITY`）——不进提示，属 pad UI 差异，没立 D 项。
 
 ### 40.5 还没采
 
-~~垂距 / 三点角的第 2 / 3 步、距离第 2 步的 `(Snap)` 变体~~（10:4x 第三轮已采，§40.6）；~~Significant Snaps 关 / WP / Offset 尾巴（`P5-*`）~~（10:5x–11:0x 已采，§40.7）；过滤器八串（`P4-*`）、§6 全部告警原文（`P6-*`，含 D5 的 `(2,874)`）。窗口还原着（前台）、pad / Measure 窗体坐标在屏内（Measure Angle 每次 show 要再挪），下一轮可直接接着采。
+~~垂距 / 三点角的第 2 / 3 步、距离第 2 步的 `(Snap)` 变体~~（10:4x 第三轮已采，§40.6）；~~Significant Snaps 关 / WP / Offset 尾巴（`P5-*`）~~（10:5x–11:0x 已采，§40.7）；~~过滤器八串（`P4-*`）~~（11:3x 已采，§40.8）；§6 全部告警原文（`P6-*`，含 D5 的 `(2,874)`）。窗口还原着（前台，15:4x 由 cua-driver `bring_to_front` 再拉回一次）、pad / Measure 窗体坐标在屏内（Measure Angle 每次 show 要再挪），下一轮可直接接着采。
 
 ### 40.6 10:3x–10:4x 第三轮（接手会话 fable-5-1-41，真实 Snap 拾取，带截图）
 
@@ -2037,3 +2038,27 @@ Positioning pad 是停靠版 `!!edgNewPositioning`（`posCntrl.type=PAD1`，`edg
 **结论**：(1) ` Snap` 尾巴 = Significant Snaps，关掉只去尾巴，`(Snap)` 类型 token 留着；(2) ` WP` 在用户路上**要先有工作平面**——pad 按钮在没平面时只弹 `No working plane has been defined.` 并弹回，尾巴不出；程序直写 `activePlane(TRUE)` 才在没平面时出 ` WP`；(3) 三条尾巴的字面与顺序照源码：`… (Snap) WP  Offset Snap`（`prompt()` 里 WP 后两个空格，视口收成一个）；(4) D4（Web 不做 WP / Offset）不变——Web 的 ` Snap` 开关（`pickLayer.significantSnaps`）与 E3D 同义、字面相同。
 
 **坑**：(a) 程序里给 pad 的 toggle 按钮赋 `!!edgNewPositioning.wp.val = TRUE` **会触发它的回调**，走的就是上面那条 GADGET 重载——弹两张 `No working plane has been defined.`（置 TRUE 一张、`val = false` 弹回再一张），而且模态框把投进去的整条命令序列卡住，OK 之后才继续跑（所以 `P5-02-r3-wp-on` 有 10:57:55 / 11:01:09 两块，第二块是被卡住的那半截醒过来又置了一次 TRUE）；切 WP 只调 `activePlane(BOOLEAN)`。(b) 模态 Warning 期间再投的命令有的会丢（`P5-02-r3-wp-click` 那块没落下），点掉 OK 后要重采一次。(c) 点 OK 的物理坐标 (1280,724) 与 3D 视口重叠——对话框不在时那一下会变成一次定位拾取，点前先 `EnumWindows` 确认有 `Warning` 窗口。(d) 顺手拿到两条 §6 之外的告警原文：`No working plane has been defined.`（`!!alert.warning`）与 PML 错误框 `(2,751)   Variable !!EDGSETTINGS does not exist`。
+
+### 40.8 11:3x 过滤器八串（`P4-*`，Measure distance 第 1 步上真点 pad 的八颗过滤器按钮，带截图）
+
+**路子**：全走用户路——pad（`edgnewpositioning.pmlfrm` 39–46）八颗 toggle 按钮的回调都是 `!this.pick(n)`（n = 1 Any / 2 Element / 3 Aid / 4 Pline / 5 Ppoint / 6 Screen / 7 Graphics / 8 External，External 的 tooltip 是 `Point Cloud Data`），`.pick(REAL)`（172–177）先 `setPickGadgets`（193–201：`pickTable[1..8].val = (i eq n)`，**每次只亮一颗**；再把五颗拾取类型按钮 `active = not n inset(5,6)`）再 `!!edgPosCntrl.setPick(n)`（`edgposcntrl.pmlobj` 1390–1406：`pickIndex = n`、`newPick = picks[n]`、**`newPick.prompt = this.pick.prompt`**（token 词照旧带过去）、`pickType.pick = pick`、`!!edgCntrl.state.setPick(pick)`），`edgstate.setPick(EDGPICK)`（297–305）只换 `pick` 再 `pick.applyToViews(this.prompt())`——`prompt()`（318–365）三段里没有 `pick.description`，所以字串重算一遍还是原样。pad 布局两行四列：上排 Element / Ppoint / Pline / Graphics，下排 Aid / Screen / External / Any。点击用 `input.ps1`（物理坐标，与 §40.7 点 WP 按钮同一路子），每点一颗 `Shot` + `Capture`。trace `P4-*` 十二块（八颗 + 基线 + 接手核对 + 收尾两块），无 err 文件。
+
+| tag | 操作 | `posCntrl.pickIndex` / `state.pick.description` | pad 亮灯（`padForm.toggles` 里唯一 TRUE 的过滤器） | `prompt()` / 视口气泡 | 截图 |
+| --- | --- | --- | --- | --- | --- |
+| `P4-00-r3-s1` | `measure('DISTANCE')`，缺省 | 1 / Any | any | `Measure distance start (Snap) Snap` / `… (Snap) Snap :` | `e3d-prompt-P4-00-r3-any.png` |
+| `P4-02-r3-element` | 点 Element | 2 / Element | element | 同上，字字不变 | `e3d-prompt-P4-02-r3-element.png`、`…-zoom.png`、`…-pad.png` |
+| `P4-03-r3-aid` | 点 Aid | 3 / Aid | aid | 同上 | `e3d-prompt-P4-03-r3-aid.png`、`…-zoom.png`、`…-pad.png` |
+| `P4-04-r3-pline` | 点 Pline | 4 / Pline | pline | 同上 | `e3d-prompt-P4-04-r3-pline.png`、`…-zoom.png`、`…-pad.png` |
+| `P4-05-r3-ppoint` | 点 Ppoint | 5 / Ppoint | ppoint（拾取类型五颗置灰） | 同上（`(Snap) Snap` 仍在） | `e3d-prompt-P4-05-r3-ppoint.png`、`…-zoom.png`、`…-pad.png` |
+| `P4-06-r3-screen` | 点 Screen | 6 / Screen | screen（拾取类型五颗置灰） | 同上 | `e3d-prompt-P4-06-r3-screen.png`、`…-zoom.png`、`…-pad.png` |
+| `P4-07-r3-graphics` | 点 Graphics | 7 / Graphics | graphics | 同上 | `e3d-prompt-P4-07-r3-graphics.png`、`…-zoom.png`、`…-pad.png` |
+| `P4-08-r3-external` | 点 External（Point Cloud Data） | 8 / External | external | 同上 | `e3d-prompt-P4-08-r3-external.png`、`…-zoom.png`、`…-pad.png` |
+| `P4-01-r3-any` | 点 Any（回缺省） | 1 / Any | any | 同上 | `e3d-prompt-P4-01-r3-any.png`、`…-zoom.png`、`…-pad.png` |
+| `P4-r3-check` | 15:37 接手会话核对——E3D 在 Measure distance 第 1 步里停了近四小时没人碰 | 1 / Any | any | 同上 | — |
+| `P4-r3-closed` / `P4-r3-final` | `gphMeasure.close()` + hide | 1 / Any（`active=FALSE`） | pad 隐藏 | `Navigate` / `Navigate :`，stack 0 | — |
+
+每块里 `state.pickType.description=Snap`、`state.pickType.prompt=start`、`state.pick.prompt=Snap`、`posCntrl.pickTypeIndex=1`、`edgCntrl.stack.size=1` 都没动；`-zoom.png` 是 pad + 提示气泡同一条横带，`-pad.png` 是 pad 放大两倍（亮的那颗黄底）。
+
+**结论**：(1) **过滤器不进提示**——八串 `prompt()` 与视口气泡逐字相同，矩阵 §4 的静态预期成立，§4 结；(2) pad 亮灯与 `pickIndex` / `state.pick.description` 一一对应，每次只亮一颗（`setPickGadgets` 195–197），与 Web 浮条过滤器组的单选一致；(3) Web `MEASUREMENT_PICK_FILTER_IDS` 同序同名（ADR 0060），Web 提示里唯一的过滤器痕迹仍只有 D3 那段 Web 加的目标段。
+
+**顺手观察**：(a) Ppoint / Screen 过滤器下 pad 把五颗拾取类型按钮 `active=FALSE`（`edgnewpositioning.pmlfrm` 199–201：截图里 Midpoint / Intersect / Cursor 明显变灰，Snap 因 `val` 仍 TRUE 还带黄底），提示里的 `(Snap) Snap` 不变、`pickTypeIndex` 仍 1；Web 浮条没这条联动（`MeasurementOverlayBar.vue` 拾取类型按钮的 `disabled` 只看静态 `MEASUREMENT_PICK_TYPE_AVAILABILITY`）——不进提示，属 pad UI 差异，没立 D 项，要不要跟由用户定。(b) pad 输入框一直显示 `3`——是 §40.3 D2 那轮留下的 `pickTypesValue[4]`，与过滤器无关。(c) 收尾时 E3D 回 `Navigate`、stack 0、pad 隐藏、缺省 Any / Snap / `intermediate` TRUE / `activePlane` FALSE / `offsetType` NONE 都在，无 Warning；主窗口 15:4x 由 cua-driver `bring_to_front` 拉回前台（`input.ps1` 的 `SetForegroundWindow` 仍被前台锁挡）。
