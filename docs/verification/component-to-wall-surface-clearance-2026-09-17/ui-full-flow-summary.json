@@ -1,0 +1,93 @@
+{
+  "url": "http://localhost:3111/?model_source=gen-model-v1&gm_backend_port=8024&show_refno=24384_22582",
+  "gmPort": 8024,
+  "source": "24384_22582",
+  "wall": "17496_105912",
+  "api": {
+    "url": "http://127.0.0.1:8024/api/v1/spatial/surface-clearance?source_refno=24384/22582&target_refno=17496/105912&debug=1",
+    "distance_mm": 64.42777,
+    "perpendicular_mm": 64.49526,
+    "face": {
+      "kind": "outer",
+      "normal": {
+        "x": -0.9993213,
+        "y": 0.036837157,
+        "z": 0
+      },
+      "confidence": "geometric"
+    },
+    "source_point": {
+      "x": -17464.125,
+      "y": 102.35253,
+      "z": 2550.0002
+    },
+    "target_point": {
+      "x": -17399.707,
+      "y": 101.22853,
+      "z": 2550.0002
+    },
+    "timing_ms": {
+      "load": 0,
+      "query": 0,
+      "total": 4
+    },
+    "model": {
+      "source_sesno": 619,
+      "target_sesno": 729
+    }
+  },
+  "ui": {
+    "wallLoad": {
+      "requestId": "sc-1789656226464",
+      "requested": [
+        "17496_105912"
+      ],
+      "ok": [
+        "17496_105912"
+      ],
+      "fail": [],
+      "error": null,
+      "suppressed": false
+    },
+    "objectCount": 117,
+    "pickAttempts": 1,
+    "pickedBeforeEnter": [
+      "17496_105912"
+    ],
+    "toolModeAfter": "none",
+    "toast": "源构件 24384_22582：请点选一堵墙，Enter 确认、Esc 取消 | 外表面净距 64.4 mm（墙面外侧），垂直于墙面",
+    "registryCountBefore": 0,
+    "clearanceRecords": [
+      {
+        "id": "clearance:clearance:24384_22582:17496_105912",
+        "source": "clearance",
+        "role": "external",
+        "sourceLabel": "外表面净距: 24384_22582 → 17496_105912（墙面外侧）",
+        "layout": {
+          "kind": "linear",
+          "authoritativeText": "64mm ⊥",
+          "a": [
+            -17.464125,
+            0.10235253,
+            2.5500002
+          ],
+          "b": [
+            -17.399707,
+            0.10122853000000001,
+            2.5500002
+          ]
+        }
+      }
+    ],
+    "clearanceRequests": [
+      "http://localhost:8024/api/v1/spatial/surface-clearance?source_refno=24384%2F22582&target_refno=17496%2F105912&target_kind=wall"
+    ],
+    "clearanceResponses": [
+      {
+        "url": "http://localhost:8024/api/v1/spatial/surface-clearance?source_refno=24384%2F22582&target_refno=17496%2F105912&target_kind=wall",
+        "status": 200
+      }
+    ],
+    "pageErrors": []
+  }
+}

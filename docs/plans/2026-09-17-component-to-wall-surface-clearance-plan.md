@@ -223,9 +223,9 @@ reducer 拒收缺 `method` / `accuracyClass` 的记录（09-11 M0 验收）。
 | G1 | 直墙、构件正对墙面 | `distance == perpendicular.distance`（±0.01 mm），`target_face.kind = side`（直墙不分内外） | 合成单测 ✓（300 mm，⊥ 300，side/pca，法向 +X 指向源） |
 | G2 | 直墙、构件在墙端外斜靠 | 最近点落墙端面 / 竖棱，`target_face.kind ∈ side / end`，`perpendicular = null` + warning | 合成单测 ✓（500 mm 到竖棱，无垂距）；live BOX × STWALL 1 同形（角上，无垂距） |
 | G3 | 弧墙内侧 / 外侧各一构件 | `target_face.kind` 分别 inner / outer（geometric），`error_bound_mm = 0.5`，与解析圆柱面手算差 ≤ 弦高 | 合成单测 ✓（120° 环形扇区 48 段，内外各 500 mm，误差 < 3 mm 容差内）；live ELBO / BEND / BRAN → outer、SCTN → inner |
-| G4 | 构件穿墙 | `distance = 0`、`intersects = true`、无垂距，`witness = aabb-overlap-center` | 合成单测 ✓；live 未遇到相交对 |
+| G4 | 构件穿墙 | `distance = 0`、`intersects = true`、无垂距，`witness = aabb-overlap-center` | 合成单测 ✓；**live ✓（PR-D，§7.2）**：BEND `24384/24729` × GWALL `17496/118130`、BEND `24384/24742` × PANE `17496/136833` 等 17 对硬穿墙都回 0 + intersects + `aabb-overlap-center` |
 | G5 | 选 CWALL owner vs 选单块 STWALL | owner 结果 ≤ 单块结果，`target_leaf_refno` 指出命中哪块 | 合成单测 ✓（两墙两构件取最小，剪掉 ≥ 1 对）；live BOX × CWALL owner 113 叶子 → 29.14 mm 命中 GWALL `17496/118130` |
-| G6 | 带洞墙（`booled_id`）、构件在洞里 | 距洞壁的距离，不是未开洞墙的 0 | 行解析单测覆盖 `booled_id` 路；live 墙叶子全是 `e3d_baked_v2_*` 布尔后网格；「构件在洞里」的实机对未找，**待 PR-C 真 UI 时补** |
+| G6 | 带洞墙（`booled_id`）、构件在洞里 | 距洞壁的距离，不是未开洞墙的 0 | 行解析单测覆盖 `booled_id` 路；live 墙叶子全是 `e3d_baked_v2_*` 布尔后网格；**实机对仍未找到（PR-D，§7.2）**：WALL 1 周边 126 对 AABB 相交的管 × 墙里穿墙的 17 对全是没开洞的硬穿（G4），38 个 FIXING 开洞周围没有管件，FLOOR 无竖管贯穿——留待有穿孔数据的工程 |
 | G7 | 源为 BRAN owner | 多叶子并集（含 `tubi_relate` 隐式管身）；`source_leaf_refno` 是某个成员 | live BRAN `24384/22659`（20 叶子 384 tri）× 弧墙 → 209.73 mm，命中成员 `24384/22679` |
 
 ### 7.1 PR-A 验证记录（2026-09-17 20:0x–20:3x，`gen-model-model-cache` → `a0e307588`）
@@ -254,12 +254,21 @@ reducer 拒收缺 `method` / `accuracyClass` 的记录（09-11 M0 验收）。
 - plant3d-web：`npx vitest run src/clearance src/api src/components/spatial-query`；`npm run type-check` 不新增基线外错误；`npm run lint`。
 - e2e：`?model_source=gen-model-v1&gm_backend_port=8023&show_refno=…` 下 Playwright 真点击：选构件 → 工具 → 点墙 → 断言外部尺寸源 `clearance` 出现一条、标签含 `外表面净距`；截图入 `docs/verification/`。
 
+### 7.2 PR-D 验证记录（2026-09-17 22:3x–23:0x，验证实例 `:8024`；全文与截图见 `docs/verification/component-to-wall-surface-clearance-2026-09-17/`）
+
+- **服务**：没换 `:8023`。核对后它是 `store_mode=mem` 的 debug 二进制（`g0e697503`），库在进程里、`resident_records=37 / roots=2`，弧墙 WALL 1 与 ELBO 在它那儿都是 `not_found`——换二进制 = 清库，且完整流要的数据它本来就没有；`:8022` 是 8009 那台 rocksdb 库唯一的写者（机器级写者锁），第二个实例连不上。于是从 `gen-model-model-cache` HEAD `a0e307588` 干净 `cargo build --release --features http_api`（2 m 31 s，`build_id 0.1.27+ga0e307588e76.1789655384`），在 `_runs\surface-clearance-8024` 以 mem 档并排起一台（配置 = `p3-verify-8023` 的只改端口，独立 `assets\meshes`），22:33 起 4 s 就绪；ELBO / 墙各一次 `POST /api/v1/model/ensure` 按需生成（根 `24384/22579` 4 实例、`17496/105799` 113 实例，各 0 s）。`:8022` / `:8023` 一个字节没动。
+- **HTTP 金样**：`GET :8024/api/v1/spatial/surface-clearance?source_refno=24384/22582&target_refno=17496/105912&debug=1` → `64.42777 mm`，outer / geometric，⊥ 64.49526，两点 (−17464.125, 102.353, 2550.0) → (−17399.707, 101.229, 2550.0)，`timing_ms.total 4`，pairs 2 / eval 1 / pruned 1——与 §7.1 A 对一致。未生成时同 URL 回 `404 no_model_mesh`。
+- **真 UI 完整流**（dev `:3111`，`?model_source=gen-model-v1&gm_backend_port=8024&show_refno=24384_22582`，Playwright 无头真指针）：`show_refno` 选中 ELBO → `showModelByRefnos` 事件加载墙（117 对象）→ 菜单「测量 › 构件→墙净距」→ `pick_refno`（过滤 CWALL / WALL / STWALL / GWALL / PANE）一次点中 `17496_105912` → Enter → 前端只发一条 `…surface-clearance?…&target_kind=wall`（200）→ toast「外表面净距 64.4 mm（墙面外侧），垂直于墙面」→ `externalRegistry` 里 `source='clearance'` 0 → 1（`authoritativeText "64mm ⊥"`，`sourceLabel 外表面净距: 24384_22582 → 17496_105912（墙面外侧）`，两端 = API 两点 ÷ 1000）→ 飞到两点、尺寸线画出；`pageerror` 0。五张截图：选中 + 墙 / 菜单 / 拾取高亮 + toast / 结果尺寸 / 近景。
+- **G4 live ✓ / G6 仍无实机对**：WALL 1 周边 126 对 AABB 相交的管 × 墙逐对打接口——17 对 `intersects`（硬穿墙）、4 对 0 mm 贴合、23 对 < 10 mm（贴着 12 三角形的 PANE 平板走）、其余 82 对 10 mm 以上；38 个 FIXING 开洞周围无管件、FLOOR 无竖管贯穿。带洞路径仍只有合成 / 行解析单测。
+- **顺手发现**（未改代码）：① 源是目标后代时目标叶子集合含源自己（FIXING × 其所在 WALL：`target.leaf_count 2`），一般情形自对给 0 掩盖真值，建议 `run()` 里剔除同 key 行（§9）；② 8009 里 `aabb:17496_137183` 落在 z −6.6 m，而网格 / viewer 都在墙上 2.1 m 处——datum（JLDATU / PLDAT）下 FIXING 的库内 AABB 疑似只用了局部 `POS`，与本功能无关，转 gen-model 侧。
+- **没做的**：`stale` 的真 UI 可见性（要模型换版）；带洞实机对；e2e 脚本未入仓（步骤与选择器记在验证 README §6）。
+
 ## 8. PR 拆分与顺序
 
 1. **PR-A（gen-model，`gen-model-model-cache` 分支）——已落地 `a0e307588`**：`fast_model/surface_clearance.rs`（参数 / 叶子加载 + 两级缓存 / `closest_points` + AABB 剪枝 / 面分类 / raycast / 响应）+ `handlers::spatial_surface_clearance` + GET 路由 + 守卫更新 + 11 条单测 + 1 条 live。**偏离**：没有去抽 `gen_world_mesh` 的磁盘支路——本模块自带只读磁盘的加载器（`gen_world_mesh` 先三角化再回退磁盘，两者口径不同），`rvm_baseline` 一字未动。
 2. **PR-B（plant3d-web）——已落地 `dbbda78`**：`genModelV1SurfaceClearance`（GET + query）；`src/clearance/domain/clearanceRecord.ts`（嵌 `ComputationProvenance`，缺合同拒收）、`services/clearanceService.ts`（mm → m 只在这里转一次；只认 `surface_to_surface / exact-surface`）、`stores/useClearanceStore.ts`（一对 inputs 一条，重算 / stale / failed）、`adapters/clearanceExternalDimensions.ts`（linear external，文字 `64mm ⊥` / `（过期）…` / `相交`）、`testing/surfaceClearanceFixtures.ts`（live 真值）；vitest 22 + API 1，type-check 新增 0。
 3. **PR-C（plant3d-web）——已落地 `8402b2c`**：`composables/useComponentToWallClearance.ts`（ribbon `clearance.componentToWall` → 源 = 当前选中 → `pick_refno` 只放行墙族 → 确认即算 → toast + 飞到两点）、`composables/useClearanceDimensionSync.ts`（store → `replaceExternalSource('clearance')`）、ViewerPanel 两条命令 + `flyToClearanceRecord`（designToWorld = mm→scene 全局矩阵 × 1000）、抽屉「净距标注」改走 `clearanceStore.compute(targetKind any)`、ribbon 两颗按钮；vitest +8，抽屉 23 条不回归。真 UI 冒烟（dev :3111 HMR，Playwright 真点击）：按钮在、未选中出 warning toast、pageerror 0。**未做**：选中 → 点墙 → 出尺寸的完整流截图与 G6「构件在洞里」实机对——都要 :8022 / :8023 换到含 `a0e307588` 的二进制。
-4. **PR-D（docs）**：09-11 计划 PR1.2 / PR1.3 / M1 金样状态同步；服务换二进制后补完整流截图进 `docs/verification/`。
+4. **PR-D（docs）——已落地**：09-11 计划 PR1.2 / PR1.3 / M1 金样状态同步（另一条会话，`5ea1417`）；完整流截图 + HTTP 金样 + G4 live + G6 扫描记录进 `docs/verification/component-to-wall-surface-clearance-2026-09-17/`（本笔，§7.2）。**偏离**：没换 `:8023`（mem 档、无数据、PMS e2e 在用），改在 `:8024` 并排起含 `a0e307588` 的干净 release 二进制验证；`:8022` / `:8023` 换不换、何时换仍由用户定。
 
 ## 9. 风险与开放问题
 
@@ -272,11 +281,13 @@ reducer 拒收缺 `method` / `accuracyClass` 的记录（09-11 M0 验收）。
 - **`model_sesno` 跨库不可比**：只在同一 dbnum 下比较两侧会话号（live 里源 24384 / 目标 17496 分属两库，586 vs 729 不是异常）。
 - **legacy 抽屉路径**：改接后 `usePipeDistanceStore` 仍被 `PipeDistanceDrawer` 用；09-11 M1 再统一。
 - **多 MDB / 身份**：沿 `ProjectReq`，两 refno 需在同一服务实例可见；跨库对（如上面 A–F）只要都在同一个 Surreal 库里就能算。
-- **:8023 / :8022 换二进制**：新路由要服务重启后才对外可用；两台都有人在用（PMS e2e / 校审全量），何时换由用户定。
+- **:8023 / :8022 换二进制**：新路由要服务重启后才对外可用；两台都有人在用（PMS e2e / 校审全量），何时换由用户定。**PR-D 核对补充**：`:8023` 是 mem 档（重启即清库，且它几乎没有模型数据，换了也跑不了完整流）；`:8022` 是 8009 库唯一写者（rocksdb，durable，重启不丢数据，但要停校审 / dev 缺省后端一分钟左右）；并排验证用 `:8024`（`_runs\surface-clearance-8024`，mem，独立网格目录）即可，不必动那两台。
+- **源 ⊂ 目标（后代关系）的自对**（PR-D 实测）：目标叶子按 `anc CONTAINS` 取，源若是目标的后代（如 FIXING × 它所在的 WALL），目标集合含源自身，自对回 0 / intersects 掩盖真值。修法一行：`run()` 里从目标行剔除与源行同 key 的叶子；顺带在响应 `warnings` 里提示「源是目标的一部分」。未改，待用户点头。
+- **datum 下 FIXING 的库内 AABB**（PR-D 顺手发现，与本功能无关）：`aabb:17496_137183` 在 8009 里落在 z −6.6 m，网格与 viewer 都在 2.1 m；疑似只用了局部 `POS`，影响 `spatial/nearby` / 空间树对这类元素的定位，转 gen-model 侧。
 
 ## 10. 完成定义
 
-- G1–G7 金样全过并留 curl 输入 / 输出与截图；
-- 前端 `clearance` 外部尺寸源在真 UI 出现，标签带精度字样，stale 可见；
-- `npm run type-check` / `lint` / 相关 vitest 全绿，`cargo test` 新增单测全过；
-- 决策 `d-428` 已登记（本轮已完成），09-11 计划状态已同步（PR-D）。
+- G1–G7 金样全过并留 curl 输入 / 输出与截图；——**2026-09-17 状态**：合成单测 7 组 ✓；live G1–G5 / G7 ✓（§7.1 + §7.2），G6 只有合成 / 行解析覆盖，实机对缺穿孔数据；curl 输入 / 输出与截图在 `docs/verification/component-to-wall-surface-clearance-2026-09-17/`。
+- 前端 `clearance` 外部尺寸源在真 UI 出现，标签带精度字样，stale 可见；——**状态**：出现 ✓（`64mm ⊥`、来源标签「外表面净距」），stale 的真 UI 可见性未演示（要模型换版）。
+- `npm run type-check` / `lint` / 相关 vitest 全绿，`cargo test` 新增单测全过；——**状态** ✓（PR-A / B / C 各自记录）。
+- 决策 `d-428` 已登记（本轮已完成），09-11 计划状态已同步（PR-D）。——**状态** ✓（`5ea1417`）。
