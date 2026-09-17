@@ -168,7 +168,8 @@ GET /api/v1/spatial/surface-clearance
 ```
 
 - `target_face.kind ∈ inner | outer | side | top | bottom | end | unknown`，`confidence ∈ pca | geometric | normal-only`（§4.3）；`witness ∈ closest-points | aabb-overlap-center`（相交时 parry 不给点）。
-- 错误码沿用 v1 既有集合（`ApiError::coded` 不对外，不新增码字）：400 `bad_request`（refno 格式 / 两个 refno 相同 / `target_kind` 非 wall|any / `max_distance_mm` 越界）；404 `not_found` + `detail.reason = no_model_mesh`（任一侧没有模型面行或网格文件）；422 `precondition` + `detail.reason = target_not_wall`（`target_kind = wall` 且目标不在墙族，`detail.wall_nouns` 列出墙族）；`max_distance_mm` 内无结果 → 200 + `result: null` + warning `beyond_max_distance`。失败一律走 HTTP 状态码 + `ApiError`，200 里不报错（与 v1 其它端点同）。
+- 错误码沿用 v1 既有集合（`ApiError::coded` 不对外，不新增码字）：400 `bad_request`（refno 格式 / 两个 refno 相同 / `target_kind` 非 wall|any / `max_distance_mm` 越界）；404 `not_found` + `detail.reason = no_model_mesh`（任一侧没有模型面行或网格文件）；422 `precondition` + `detail.reason = target_not_wall`（`target_kind = wall` 且目标不在墙族，`detail.wall_nouns` 列出墙族）；422 `precondition` + `detail.reason = shared_leaves_only`（源与目标在模型面上是同一批叶子——剔除重合叶子后祖先那一侧空了，`detail.trimmed_side ∈ source | target`；`3509b93f9` 起）；`max_distance_mm` 内无结果 → 200 + `result: null` + warning `beyond_max_distance`。失败一律走 HTTP 状态码 + `ApiError`，200 里不报错（与 v1 其它端点同）。
+- warnings 形状 `code: 说明`：`perpendicular_ray_missed`（垂距射线落空）、`beyond_max_distance`、`source_within_target` / `target_within_source`（源与目标有祖先关系，重合叶子已从祖先那一侧剔除，结果是到「其余部分」的距离；`3509b93f9`）、两侧会话不同 / 目标 TYPE 兜底两句无 code。
 - 前端类型：`genModelV1Api.ts` 新增 `GenModelV1SurfaceClearanceRequest` / `SurfaceClearanceResponse` + `genModelV1SurfaceClearance(req, options)`（`genModelV1Fetch` + `query`，refno 走 `toV1Refno`）。
 
 ## 6. 前端落地
@@ -282,7 +283,7 @@ reducer 拒收缺 `method` / `accuracyClass` 的记录（09-11 M0 验收）。
 - **legacy 抽屉路径**：改接后 `usePipeDistanceStore` 仍被 `PipeDistanceDrawer` 用；09-11 M1 再统一。
 - **多 MDB / 身份**：沿 `ProjectReq`，两 refno 需在同一服务实例可见；跨库对（如上面 A–F）只要都在同一个 Surreal 库里就能算。
 - **:8023 / :8022 换二进制**：新路由要服务重启后才对外可用；两台都有人在用（PMS e2e / 校审全量），何时换由用户定。**PR-D 核对补充**：`:8023` 是 mem 档（重启即清库，且它几乎没有模型数据，换了也跑不了完整流）；`:8022` 是 8009 库唯一写者（rocksdb，durable，重启不丢数据，但要停校审 / dev 缺省后端一分钟左右）；并排验证用 `:8024`（`_runs\surface-clearance-8024`，mem，独立网格目录）即可，不必动那两台。
-- **源 ⊂ 目标（后代关系）的自对**（PR-D 实测）：目标叶子按 `anc CONTAINS` 取，源若是目标的后代（如 FIXING × 它所在的 WALL），目标集合含源自身，自对回 0 / intersects 掩盖真值。修法一行：`run()` 里从目标行剔除与源行同 key 的叶子；顺带在响应 `warnings` 里提示「源是目标的一部分」。未改，待用户点头。
+- **源 ⊂ 目标（后代关系）的自对**（PR-D 实测）——**已修 `gen-model-model-cache` `3509b93f9`**：目标叶子按 `anc CONTAINS` 取，源若是目标的后代（如 FIXING × 它所在的 WALL），目标集合含源自身，自对回 0 / intersects 掩盖真值。现在 `split_shared_leaves` 把重合叶子从**祖先那一侧**剔掉（源在目标里 → 剔目标；目标在源里 → 剔源），warning `source_within_target` / `target_within_source`，剔完一侧空了 → 422 `shared_leaves_only`；单测 1 条 + live 三对（FIXING × WALL 目标 2→1 片、BRAN `24384/22579` × 自己的 ELBO 源 4→3 片、金样不变）。
 - **datum 下 FIXING 的库内 AABB**（PR-D 顺手发现，与本功能无关）：`aabb:17496_137183` 在 8009 里落在 z −6.6 m，网格与 viewer 都在 2.1 m；疑似只用了局部 `POS`，影响 `spatial/nearby` / 空间树对这类元素的定位，转 gen-model 侧。
 
 ## 10. 完成定义

@@ -62,7 +62,7 @@ GET http://127.0.0.1:8024/api/v1/spatial/surface-clearance?source_refno=24384/22
 
 ## 5. 顺手发现（未改代码，记进计划 §9）
 
-- **源是目标的后代时会出现自对**：`surface-clearance?source_refno=17496/137183(FIXING)&target_refno=17496/105912(WALL)` 的目标叶子集合按 `anc CONTAINS` 取，包含 FIXING 自己（`target.leaf_count = 2`）。本例 FIXING × WALL 先算出 0（贴合）把自对剪掉了；一般情形自对会给出 0 / intersects，掩盖真实距离。建议：目标叶子集合剔除与源叶子同 key 的行（`surface_clearance.rs::run`，一行过滤）。`side-finding-fixing-17496_137183-x-wall-api.json`。
+- **源是目标的后代时会出现自对**：`surface-clearance?source_refno=17496/137183(FIXING)&target_refno=17496/105912(WALL)` 的目标叶子集合按 `anc CONTAINS` 取，包含 FIXING 自己（`target.leaf_count = 2`）。本例 FIXING × WALL 先算出 0（贴合）把自对剪掉了；一般情形自对会给出 0 / intersects，掩盖真实距离。`side-finding-fixing-17496_137183-x-wall-api.json` 是修前的响应。**已修 `gen-model-model-cache` `3509b93f9`**（用户 23:0x 拍板）：`split_shared_leaves` 把重合叶子从祖先那一侧剔掉，warning `source_within_target` / `target_within_source`，剔空 → 422 `shared_leaves_only`；:8024 换到含它的二进制（`0.1.27+gaed4d6c74f6a`）后复验——FIXING × WALL `target.leaf_count` 2→1、带 warning、仍 0 mm 贴合不相交；BRAN `24384/22579` × 自己的 ELBO `24384/22582`（`target_kind=any`）源 4→3 片（剩三段 FTUB）、warning `target_within_source`、0 mm（管身与弯头相接）；金样 ELBO × WALL 1 仍 64.42777 mm 无 warning。
 - **FIXING 的库内 AABB 与网格摆放不一致**：8009 里 `aabb:17496_137183 = z −6594…−5332 / x ≈ −2550`（:8022 `nearby` 的 `center` 同样落在 z −5963），而 surface-clearance 用 `insts_flat × world_trans` 拼出的网格与前端 viewer 的包围盒都在 `x −17196…−15549 / z 2088…2212`（墙上 2.1 m 高的过梁位置，`DESP 100,124,12,1650,…`）。`aabb` 表那一行像是只用了 `POS`（owner 局部坐标）没乘 JLDATU / PLDAT 的摆放；影响 `spatial/nearby` / 空间树对这类 datum 下 FIXING 的定位，与本功能无关但值得 gen-model 侧看一眼。`side-finding-fixing-17496_137183-viewer-boxes.json`。
 - `:8023` 是 mem 档且几乎无模型数据（§1），之前「:8022 / :8023 共用 8009 库」的判断只对 :8022 成立。
 
