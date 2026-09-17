@@ -151,6 +151,16 @@ type CloudScreenshotProbe = {
   width: number | null;
   height: number | null;
 };
+/** 画布内坐标（相对 canvas 左上角，CSS px）上射线命中的构件。 */
+type CloudPickPoint = { x: number; y: number; objectId: string };
+type CloudPickProbe = {
+  point: CloudPickPoint | null;
+  canvas: { width: number; height: number } | null;
+  /** 射线命中构件的候选点个数（含被浮层挡住的）。 */
+  picked: number;
+  /** 射线命中但锚点 / 拖框起点被浮层挡住的候选点（最多 8 条），带上挡住它的元素。 */
+  covered: string[];
+};
 type CommentThreadApiComment = {
   id?: string;
   commentId?: string;
@@ -1648,6 +1658,89 @@ async function createSeededReview(runtime: ScenarioRuntime, caseId: PmsSimulator
   };
 }
 
+/**
+ * 在三维画布上按网格扫点找可当云线锚点的位置：射线要命中构件；`requireClear` 时还要求锚点与
+ * 拖框起点（锚点左上 `marqueeHalfPx`）在 `document.elementFromPoint` 里落到 canvas 本身——云线
+ * 工具的指针监听器直接挂在 canvas 上，被浮层（批注工具条、「待保存证据」卡）挡住的点 click 到不了它。
+ * `preferObjectId` 给了就优先返回同一构件上的点，没有再退到任意构件。
+ *
+ * 注意：传给 evaluate 的函数在浏览器里跑，别在里面写 `const fn = () => {}` 这种有名字的内部函数——
+ * tsx 会给它包一层模块级的 `__name(...)` 助手，序列化到页面后就是 ReferenceError。
+ */
+async function probeCloudPickPoint(
+  root: Page | Frame,
+  options: { marqueeHalfPx: number; requireClear: boolean; preferObjectId?: string | null },
+): Promise<CloudPickProbe> {
+  return await root.evaluate(({ half, requireClear, preferObjectId }) => {
+    const viewer = (window as unknown as {
+      __xeokitViewer?: {
+        __dtxSelection?: {
+          pick?: (point: { x: number; y: number }) => { objectId?: string } | null;
+        };
+      };
+    }).__xeokitViewer;
+    const canvas = document.querySelector('canvas.viewer');
+    const selection = viewer?.__dtxSelection;
+    const result: CloudPickProbe = { point: null, canvas: null, picked: 0, covered: [] };
+    if (!(canvas instanceof HTMLCanvasElement) || !selection?.pick) return result;
+    const rect = canvas.getBoundingClientRect();
+    result.canvas = { width: Math.round(rect.width), height: Math.round(rect.height) };
+    let fallback: CloudPickPoint | null = null;
+    const ratios = [0.5, 0.45, 0.55, 0.4, 0.6, 0.35, 0.65, 0.3, 0.7, 0.25, 0.75];
+    for (const yRatio of ratios) {
+      for (const xRatio of ratios) {
+        const x = rect.width * xRatio;
+        const y = rect.height * yRatio;
+        const hit = selection.pick({ x, y });
+        if (!hit?.objectId) continue;
+        result.picked += 1;
+        if (x - half < 0 || y - half < 0 || x + half > rect.width || y + half > rect.height) continue;
+        if (requireClear) {
+          const anchorEl = document.elementFromPoint(rect.left + x, rect.top + y);
+          const startEl = document.elementFromPoint(rect.left + x - half, rect.top + y - half);
+          if (anchorEl !== canvas || startEl !== canvas) {
+            if (result.covered.length < 8) {
+              const [anchorDesc, startDesc] = [anchorEl, startEl].map((el) => {
+                if (!el) return 'null';
+                if (el === canvas) return 'canvas';
+                const html = el as HTMLElement;
+                const testId = html.dataset?.testid ? `[data-testid=${html.dataset.testid}]` : '';
+                const text = (html.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 24);
+                return `${el.tagName.toLowerCase()}${testId}${text ? `「${text}」` : ''}`;
+              });
+              result.covered.push(`(${Math.round(x)},${Math.round(y)}) anchor=${anchorDesc} start=${startDesc}`);
+            }
+            continue;
+          }
+        }
+        const candidate = { x, y, objectId: hit.objectId };
+        if (!preferObjectId || hit.objectId === preferObjectId) {
+          result.point = candidate;
+          return result;
+        }
+        fallback = fallback || candidate;
+      }
+    }
+    result.point = fallback;
+    return result;
+  }, { half: options.marqueeHalfPx, requireClear: options.requireClear, preferObjectId: options.preferObjectId ?? null });
+}
+
+/** 画布内坐标处 `elementFromPoint` 命中的是谁：`canvas`，或挡在前面的那个元素（标签 / data-testid / 文案头 24 字）。 */
+async function describeElementAtCanvasPoint(root: Page | Frame, x: number, y: number): Promise<string> {
+  return await root.evaluate(([px, py]) => {
+    const canvas = document.querySelector('canvas.viewer');
+    const rect = canvas?.getBoundingClientRect();
+    const el = rect ? document.elementFromPoint(rect.left + px, rect.top + py) : null;
+    if (!el) return 'null';
+    if (el === canvas) return 'canvas';
+    const html = el as HTMLElement;
+    const testId = html.dataset?.testid ? `[data-testid=${html.dataset.testid}]` : '';
+    const text = (html.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 24);
+    return `${el.tagName.toLowerCase()}${testId}${text ? `「${text}」` : ''}`;
+  }, [x, y] as [number, number]).catch((error: unknown) => `n/a(${error instanceof Error ? error.message : String(error)})`);
+}
+
 async function readCloudScreenshotFromWorkbench(
   root: Page | Frame,
   annotationId?: string,
@@ -1704,6 +1797,16 @@ async function createAndConfirmCloudScreenshot(
   }
   const located = await waitForReviewerWorkbenchAcrossContext(runtime.context, { formId });
   let createdScreenshot: CloudScreenshotProbe | null = null;
+  const consoleIndexBeforeCloud = runtime.consoleMessages.length;
+  // 记下这一步里打到附件接口的请求（方法 / 路径 / 状态码）：截图链失败时能分清是没发上传、上传被拒，
+  // 还是上传成功后写回批注那一步没接住（那条路会再发一个 DELETE 删孤儿附件）。
+  const attachmentTraffic: string[] = [];
+  const onAttachmentResponse = (response: { url: () => string; status: () => number; request: () => { method: () => string } }) => {
+    const url = response.url();
+    if (!url.includes('/api/review/attachments')) return;
+    attachmentTraffic.push(`${response.request().method()} ${url.replace(runtime.env.backendBaseUrl, '')} -> ${response.status()}`);
+  };
+  located.page.on('response', onAttachmentResponse);
   if (process.env.PMS_SIMULATOR_STANDALONE_AUTH_SHIM === '1') {
     await located.page.waitForTimeout(3_000);
     try {
@@ -1737,37 +1840,21 @@ async function createAndConfirmCloudScreenshot(
       throw new Error(`${error instanceof Error ? error.message : String(error)}${consoleTail ? `\n${consoleTail}` : ''}`);
     }
   } else {
-    const point = await waitFor(async () => await located.root.evaluate(() => {
-      const viewer = (window as unknown as {
-        __xeokitViewer?: {
-          __dtxSelection?: {
-            pick?: (point: { x: number; y: number }) => { objectId?: string } | null;
-          };
-        };
-      }).__xeokitViewer;
-      const canvas = document.querySelector('canvas.viewer');
-      const selection = viewer?.__dtxSelection;
-      if (!(canvas instanceof HTMLCanvasElement) || !selection?.pick) return null;
-      const rect = canvas.getBoundingClientRect();
-      const ratios = [0.5, 0.45, 0.55, 0.4, 0.6, 0.35, 0.65];
-      for (const yRatio of ratios) {
-        for (const xRatio of ratios) {
-          const x = rect.width * xRatio;
-          const y = rect.height * yRatio;
-          const hit = selection.pick({ x, y });
-          if (hit?.objectId) return { x, y, objectId: hit.objectId };
-        }
-      }
-      return null;
-    }).catch(() => null), {
+    // 现行云线工具是三步式（① 关联元素 → ② 点锚点 → ③ 拖轮廓），后两步的指针事件都直接挂在 canvas 上
+    // （ViewerPanel.attachToolsInput）：click 落在浮层上就不会成为锚点，pointerdown 落在浮层上也不会开始拖框。
+    // 进 annotation_cloud 之后视口顶部中央会弹出批注工具条（「关联元素 / 选锚点 / 画轮廓」那条），加上
+    // 「待保存证据」卡，画布中央一大片都是浮层——9/15 起 restore 一直倒在这里：锚点 click 落在工具条上。
+    const marqueeHalfPx = 70;
+    // 第一步：先找一个射线能命中的构件当关联元素。此时还没进云线模式、浮层布局与画锚点时不同，不做 DOM 命中测试。
+    const target = await waitFor(async () => {
+      const probe = await probeCloudPickPoint(located.root, { marqueeHalfPx, requireClear: false });
+      return probe.point;
+    }, {
       timeoutMs: 120_000,
       intervalMs: 800,
       message: 'restore 云线截图验证未找到可点选模型对象',
     });
-    const canvasBox = await located.root.locator('canvas.viewer').first().boundingBox();
-    if (!canvasBox) {
-      throw new Error('restore 云线截图验证未找到可见三维画布');
-    }
+    traceSimulator(`restore cloud target object=${target.objectId} at (${Math.round(target.x)},${Math.round(target.y)})`);
     await located.root.evaluate((objectId) => {
       const store = (window as unknown as {
         __viewerToolStore?: {
@@ -1778,23 +1865,108 @@ async function createAndConfirmCloudScreenshot(
       if (!store) throw new Error('__viewerToolStore 未挂载');
       store.setCloudTargetRefnos([objectId]);
       store.setToolMode('annotation_cloud');
-    }, point.objectId);
+    }, target.objectId);
+    await waitFor(
+      () => located.root.evaluate(() => ((document.body.textContent || '').includes('请点击模型选择锚点') ? true : null)).catch(() => null),
+      { timeoutMs: 10_000, intervalMs: 300, message: 'restore 进入云线批注模式后状态栏未出现「请点击模型选择锚点」' },
+    );
+    // 第二步：在进了云线模式、浮层都摆好之后再挑锚点——射线命中构件（优先关联元素本身），且锚点与
+    // 拖框起点在 DOM 命中测试里都落在 canvas 上；找不到时把被挡住的候选点带出来。
+    let lastPickProbe: CloudPickProbe | null = null;
+    let point: CloudPickPoint;
+    try {
+      point = await waitFor(async () => {
+        const probe = await probeCloudPickPoint(located.root, { marqueeHalfPx, requireClear: true, preferObjectId: target.objectId });
+        lastPickProbe = probe;
+        return probe.point;
+      }, {
+        timeoutMs: 20_000,
+        intervalMs: 500,
+        message: 'restore 云线锚点找不到未被浮层遮挡的可点选位置',
+      });
+    } catch (error) {
+      const probe = lastPickProbe as CloudPickProbe | null;
+      const detail = probe
+        ? ` ｜ last: canvas=${probe.canvas ? `${probe.canvas.width}x${probe.canvas.height}` : '--'} 射线命中=${probe.picked} 被浮层挡住=[${probe.covered.join('; ') || '--'}]`
+        : ' ｜ last: (no probe)';
+      throw new Error(`${error instanceof Error ? error.message : String(error)}${detail}`);
+    }
+    const pickProbe = lastPickProbe as CloudPickProbe | null;
+    traceSimulator(`restore cloud anchor candidate=(${Math.round(point.x)},${Math.round(point.y)}) object=${point.objectId} canvas=${pickProbe?.canvas ? `${pickProbe.canvas.width}x${pickProbe.canvas.height}` : '--'} picked=${pickProbe?.picked ?? '--'} covered=${pickProbe?.covered.length ?? 0}${pickProbe?.covered.length ? ` [${pickProbe.covered.join('; ')}]` : ''}`);
+    const canvasBox = await located.root.locator('canvas.viewer').first().boundingBox();
+    if (!canvasBox) {
+      throw new Error('restore 云线截图验证未找到可见三维画布');
+    }
     const anchor = { x: canvasBox.x + point.x, y: canvasBox.y + point.y };
+    // 点锚点：工具在 pointerup 时同步 pickSurfacePoint 落锚，状态栏文案随之切到「锚点已就绪」；
+    // 等到它再拖，否则第三步的 pointerdown 会被 beginMarquee 当成「还没锚点」拦下。
     await located.page.mouse.click(anchor.x, anchor.y);
-    await located.page.mouse.move(anchor.x - 70, anchor.y - 70);
+    const anchorHitTest = await describeElementAtCanvasPoint(located.root, point.x, point.y);
+    await waitFor(
+      () => located.root.evaluate(() => ((document.body.textContent || '').includes('锚点已就绪') ? true : null)).catch(() => null),
+      {
+        timeoutMs: 10_000,
+        intervalMs: 300,
+        message: `restore 云线锚点点击后状态栏未切到「锚点已就绪」（anchor=(${Math.round(point.x)},${Math.round(point.y)}) 命中元素=${anchorHitTest}）`,
+      },
+    );
+    // 第三步：从锚点左上到右下拖一个 2*half 的轮廓框（endMarquee 要求 ≥6px）。起点也得落在 canvas 上，
+    // 之后的 move/up 由 setPointerCapture 兜住。
+    const startHitTest = await describeElementAtCanvasPoint(located.root, point.x - marqueeHalfPx, point.y - marqueeHalfPx);
+    traceSimulator(`restore cloud anchor ready at (${Math.round(point.x)},${Math.round(point.y)}) anchor_hit=${anchorHitTest} marquee_start_hit=${startHitTest}`);
+    await located.page.mouse.move(anchor.x - marqueeHalfPx, anchor.y - marqueeHalfPx);
     await located.page.mouse.down();
-    await located.page.mouse.move(anchor.x + 70, anchor.y + 70, { steps: 10 });
+    await located.page.mouse.move(anchor.x + marqueeHalfPx, anchor.y + marqueeHalfPx, { steps: 10 });
     await located.page.mouse.up();
+    const cloudCount = await located.root.evaluate(() => {
+      const store = (window as unknown as {
+        __viewerToolStore?: { cloudAnnotations?: { value?: unknown[] } | unknown[] };
+      }).__viewerToolStore;
+      const raw = store?.cloudAnnotations;
+      const list = Array.isArray(raw) ? raw : raw?.value;
+      return Array.isArray(list) ? list.length : -1;
+    }).catch(() => -1);
+    traceSimulator(`restore cloud marquee done clouds=${cloudCount}`);
   }
 
-  const screenshot = createdScreenshot || await waitFor(
-    () => readCloudScreenshotFromWorkbench(located.root),
-    {
-      timeoutMs: 60_000,
-      intervalMs: 500,
-      message: 'restore 云线创建后未自动生成并上传截图',
-    },
-  );
+  let screenshot: CloudScreenshotProbe;
+  try {
+    screenshot = createdScreenshot || await waitFor(
+      () => readCloudScreenshotFromWorkbench(located.root),
+      {
+        timeoutMs: 60_000,
+        intervalMs: 500,
+        message: 'restore 云线创建后未自动生成并上传截图',
+      },
+    );
+  } catch (error) {
+    // 自动截图那条链（captureCreatedCloudScreenshot → captureAndUpload → /api/review/attachments）失败时只在
+    // console 里留 error / 弹一条 toast，这里把云线记录状态、toast 与 console 尾巴一起带出来，别只剩「没截图」。
+    const consoleTail = runtime.consoleMessages
+      .slice(consoleIndexBeforeCloud)
+      .filter((item) => item.type === 'error' || item.type === 'warning')
+      .slice(-10)
+      .map((item) => `${item.type}: ${item.text.replace(/\s+/g, ' ').slice(0, 300)}`)
+      .join(' ‖ ');
+    const cloudState = await located.root.evaluate(() => {
+      type CloudItem = { id?: string; title?: string; screenshot?: { attachmentId?: string; url?: string } };
+      const store = (window as unknown as {
+        __viewerToolStore?: { cloudAnnotations?: { value?: CloudItem[] } | CloudItem[] };
+      }).__viewerToolStore;
+      const raw = store?.cloudAnnotations;
+      const clouds = (Array.isArray(raw) ? raw : raw?.value) || [];
+      const text = document.body.textContent || '';
+      return {
+        clouds: clouds.map((item) => `${item.id || '--'}${item.screenshot?.attachmentId ? `+shot(${item.screenshot.attachmentId})` : '(no shot)'}`),
+        toastAutoShotFailed: text.includes('自动截图失败'),
+        anchorReady: text.includes('锚点已就绪'),
+      };
+    }).catch((probeError: unknown) => `n/a(${probeError instanceof Error ? probeError.message : String(probeError)})`);
+    located.page.off('response', onAttachmentResponse);
+    throw new Error(`${error instanceof Error ? error.message : String(error)} ｜ clouds=${JSON.stringify(cloudState)} ｜ attachments_api=[${attachmentTraffic.join('; ') || '--'}] ｜ console=${consoleTail || '--'}`);
+  }
+  located.page.off('response', onAttachmentResponse);
+  traceSimulator(`restore cloud screenshot ready annotation=${screenshot.annotationId} attachment=${screenshot.attachmentId} attachments_api=[${attachmentTraffic.join('; ') || '--'}]`);
   const confirmProbe = await located.root.evaluate(async () => {
     const hook = (window as unknown as {
       __plant3dReviewerE2E?: {
