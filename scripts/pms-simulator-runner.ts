@@ -187,7 +187,40 @@ type RestoreCommentReadback = {
 
 type ScenarioHandler = (runtime: ScenarioRuntime) => Promise<PmsSimulatorScenarioReport>;
 
+/**
+ * 步骤截图（`PMS_SIMULATOR_STEP_SHOTS=1` 才开）：每条 trace 落一张当前上下文各页面的图，
+ * 交付文档（用户操作手册）的配图就是这么取的。默认关闭，正常跑用例一张都不拍。
+ * 截图是异步发出去的，`runSingleScenario` 关上下文前统一 await，避免出现半截文件。
+ */
+let stepShots: { context: BrowserContext; dir: string; seq: number; pending: Promise<unknown>[] } | null = null;
+
+function armStepShots(context: BrowserContext, dir: string): void {
+  stepShots = process.env.PMS_SIMULATOR_STEP_SHOTS === '1'
+    ? { context, dir, seq: 0, pending: [] }
+    : null;
+}
+
+async function flushStepShots(): Promise<void> {
+  const current = stepShots;
+  stepShots = null;
+  if (!current) return;
+  await Promise.allSettled(current.pending);
+}
+
+function captureStepShot(label: string): void {
+  const current = stepShots;
+  if (!current) return;
+  const index = String(++current.seq).padStart(3, '0');
+  const slug = label.replace(/[^\w\u4e00-\u9fa5]+/g, '-').replace(/^-|-$/g, '').slice(0, 64) || 'step';
+  const pages = current.context.pages().filter((item) => !item.isClosed());
+  pages.forEach((target, pageIndex) => {
+    const file = path.join(current.dir, `${index}-p${pageIndex}-${slug}.png`);
+    current.pending.push(target.screenshot({ path: file }).catch(() => undefined));
+  });
+}
+
 function traceSimulator(message: string): void {
+  captureStepShot(message);
   if (process.env.PMS_SIMULATOR_TRACE !== '1') return;
   console.error(`[pms-simulator] ${message}`);
 }
@@ -4250,6 +4283,12 @@ async function runSingleScenario(base: ScenarioContext, caseId: PmsSimulatorCase
     consoleMessages,
   };
 
+  const stepShotDir = path.join(base.artifactDir, 'step-shots', caseId);
+  if (process.env.PMS_SIMULATOR_STEP_SHOTS === '1') {
+    await ensureDir(stepShotDir);
+  }
+  armStepShots(context, stepShotDir);
+
   try {
     await openScenarioPage(runtime);
     return await SCENARIO_HANDLERS[caseId](runtime);
@@ -4269,6 +4308,7 @@ async function runSingleScenario(base: ScenarioContext, caseId: PmsSimulatorCase
       screenshotPath: screenshotPath || undefined,
     };
   } finally {
+    await flushStepShots();
     await context.close().catch(() => undefined);
     delete process.env.PMS_MOCK_PACKAGE_NAME;
     await cleanupScenarioForms(base, formIdsBefore, caseId);
