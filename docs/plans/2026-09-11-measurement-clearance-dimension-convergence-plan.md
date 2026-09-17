@@ -2,6 +2,7 @@
 
 日期：2026-09-11  
 状态：Plannotator 已批准  
+落地状态（2026-09-17 同步）：M1 的第一格已由「构件到墙最近距离」计划落地——`docs/plans/2026-09-17-component-to-wall-surface-clearance-plan.md`（决策 `d-428`）：gen-model `a0e307588`（`GET /api/v1/spatial/surface-clearance`，两侧真实网格 parry3d `closest_points`）+ plant3d-web `dbbda78`（`src/clearance/` 领域）/ `8402b2c`（入口）。PR0.1 的 `ClearanceRecord`、PR1.1 的 service / store / adapter、PR1.2 的 `surface_to_surface` 契约、PR1.3 第 3 / 4 项各有第一次实现；逐节状态见下文各 **2026-09-17 状态** 行，未点到的条目仍未动。  
 范围：`plant3d-web`，以及净距精算与语义点导出所依赖的后端/模型生成仓库  
 依据：当前源码审计、Oracle MCP 第二模型复核、IDA Bridge 对 Plant3 `Core3D.dll` / `core.dll` / `libgeom.dll` 的只读分析
 
@@ -148,6 +149,8 @@ ClearanceRecord 保存“输入引用 + 算法 + 结果快照 + 模型版本”�
 - 用户可重算；批量重算成功后原子替换快照。
 - 语义引用解析失败时保留旧 snapshot，但不得继续标为 current/exact。
 
+**2026-09-17 状态（D1–D4 第一次落地，`dbbda78`）**：`src/clearance/domain/clearanceRecord.ts` 的 `ClearanceRecord` = `inputs`（两个 refno）+ `provenance`（嵌 `ComputationProvenance`，缺 `method` / `accuracyClass` 直接拒收）+ `snapshot`（两最近点、E/N/U 分量、命中墙面分类、垂距、`errorBoundM`，design-world 米，mm → m 只在 `clearanceService` 转一次）+ `sourceModelVersion`（两侧 `model_sesno`）+ `status: current | stale | failed`；`useClearanceStore.markStaleByModelSesno` / `recompute` 对应 D4 的失效与重算。外部尺寸源 `clearance` 只画不拥有记录。**未动**：`CreateDimensionFromResult` 显式转尺寸命令；Review snapshot 落库。
+
 ### D5：扩展现有尺寸系统
 
 E3D parity 在现有 `src/dimension` 上演进，不创建新的尺寸 runtime。
@@ -181,6 +184,8 @@ E3D parity 在现有 `src/dimension` 上演进，不创建新的尺寸 runtime�
 5. 为旧 V6 payload 提供单向迁移；未知旧算法统一标 `legacy-unknown`，不能猜 exact。
 6. 修正 `unifiedMeasurement.ts` 过时注释。
 
+**2026-09-17 状态**：三个模块都在——`measurementResult.ts` / `computationProvenance.ts` 早已落地；`clearance/domain/clearanceRecord.ts` 随 `dbbda78` 落地并复用同一份 `ComputationProvenance`（`surface-to-surface` / `exact-surface`）。任务 4（object-to-object 迁往 `ClearanceRecord`）只走到一半：空间查询抽屉「净距标注」已改走 `useClearanceStore.compute(targetKind any)`（`8402b2c`），`useDtxTools` 里三维点选的 object-to-object 采样路径未迁。
+
 ### PR0.2：产品文案和 UI 防误导
 
 在精算未完成前：
@@ -189,6 +194,8 @@ E3D parity 在现有 `src/dimension` 上演进，不创建新的尺寸 runtime�
 - `pca-axis` 显示“估算轴线距离”。
 - `centerline-to-aabb` 显示“中心线至包围盒距离”。
 - 只有 `pipe-surface-clearance` 才显示“外表面净距”。
+
+**2026-09-17 状态**：这一条按 D2 的方法枚举补一格——`surface-to-surface`（两侧真实网格精算）同样显示“外表面净距”，其余方法只显示“净距”（`clearanceExternalDimensions.ts` 来源标签 / `formatClearanceToast`）；近似档前缀 `≈`，`stale` 前缀“（过期）”，相交显示“相交”。
 
 ### M0 验收
 
@@ -209,6 +216,8 @@ E3D parity 在现有 `src/dimension` 上演进，不创建新的尺寸 runtime�
 3. interactive pipe-to-pipe
 4. PipeDistanceDrawer batch
 
+**2026-09-17 状态**：多出第 5 个入口——ribbon「构件→墙净距」拾取流（源 = 当前选中，`pick_refno` 只放行 CWALL / WALL / STWALL / GWALL / PANE，`8402b2c`），它和入口 1 的抽屉「净距标注」（`targetKind = any`）已共用 `useClearanceStore`；入口 2 / 3（`useDtxTools` 采样路径，结果写 Dock「BRAN 中心线最近清距」）与入口 4（`usePipeDistanceStore` → legacy `/api/space/nearest-points`，该后端 :3100 已不在跑）**未接**。
+
 ### PR1.1：Clearance service/store
 
 新增建议模块：
@@ -225,6 +234,8 @@ E3D parity 在现有 `src/dimension` 上演进，不创建新的尺寸 runtime�
 4. Clearance external source 只负责绘制，不拥有记录。
 5. 将记录加入校审快照；模型版本变化时显示 stale。
 6. 提供显式“创建尺寸”动作，不自动混入 DimensionDocument。
+
+**2026-09-17 状态（`dbbda78` / `8402b2c`）**：三个模块按上面的建议路径原名落地。任务 4 ✓（外部尺寸源 `clearance` 只画，`useClearanceDimensionSync` → `replaceExternalSource('clearance')`）；任务 5 半 ✓（`markStaleByModelSesno` + stale 文字；**未**进校审快照）；任务 3 半 ✓（抽屉入口与拾取流共用 store 的记录 / 隐藏 / 清空，批量 Drawer 仍独立）；任务 1 / 2 / 6 **未动**。vitest：`src/clearance` 22 + API 1 + 入口 8。
 
 ### PR1.2：后端距离契约 v2
 
@@ -247,6 +258,8 @@ E3D parity 在现有 `src/dimension` 上演进，不创建新的尺寸 runtime�
 
 不允许用 `centerline_aabb` 响应满足 `surface_clearance` 请求。
 
+**2026-09-17 状态**：定位完成——`/api/space/nearest-points` 的真实实现在 legacy 后端 plant-model-gen（`sqlite_spatial_api.rs` 3881–4240，只有 `centerline_aabb` / `aabb_aabb`），:3100 已不在跑，本轮**一字未动**；网格与 `model_sesno` 都在 gen-model。契约 v2 的第一条不是改它，而是 gen-model v1 新端点 **`GET /api/v1/spatial/surface-clearance`**（`a0e307588`，09-17 计划 §5）：响应带 `method = surface_to_surface`、`accuracy_class = exact-surface`、`error_bound_mm`、两侧最近点与 `vector`、输入 refno 与命中叶子 refno、`target_face`、`model.{source,target}_sesno`、`warnings`、`timing_ms`；失败走 HTTP 状态码（404 `no_model_mesh` / 422 `target_not_wall`）。**未覆盖**：`centerline_distance` / `point_to_surface` / 管外径与保温 allowance / candidate truncation（本端点一对一，没有候选集）。
+
 ### PR1.3：精算内核
 
 优先级：
@@ -259,6 +272,8 @@ E3D parity 在现有 `src/dimension` 上演进，不创建新的尺寸 runtime�
 
 无法精算时允许 fallback，但结果必须保持 approximate。
 
+**2026-09-17 状态**：第 3 / 4 项先落地（顺序与上面不同，见 §13 第 3 条）——gen-model `fast_model/surface_clearance.rs`：两侧叶子网格（`inst_relate` / `tubi_relate` 按 `anc CONTAINS` 取齐，磁盘 `.mesh` 只读）拼成世界 mm `TriMesh`，`parry3d::query::closest_points`（TriMesh × TriMesh 嵌套 BVH，不自写 BVH）+ 叶子对 AABB 下界剪枝，命中墙主面再 `cast_local_ray_and_get_normal` 出垂距；`error_bound_mm = 0.5`（弦高容差）。源任意 noun（含 BRAN owner 的隐式管身），目标一期限墙族。第 1 项（直管—直管解析）、第 2 项（点—网格）、第 5 项（弯头 / 异径 / 保温）**未动**。实测（09-17 计划 §7.1）：单对 3–14 ms，CWALL owner 113 叶子首访 132 ms、热后 15 ms。
+
 ### M1 金样
 
 - 两根平行直管，已知中心距和半径。
@@ -269,12 +284,16 @@ E3D parity 在现有 `src/dimension` 上演进，不创建新的尺寸 runtime�
 - 弯管/异径，验证 fallback 标签。
 - 后端 exact、现有 sampled、PCA axis 三路误差对比。
 
+**2026-09-17 状态**：这一组里只有「直管到平面墙」有了对应实机——09-17 计划 §7 的 G1–G7（合成单测 7 组全过；live：ELBO / BEND / BRAN owner × 弧墙 WALL 1、SCTN × 弧墙、BOX × 直墙 STWALL 1、BOX × CWALL owner 113 叶子、ELBO × BEND `target_kind=any`），G6「构件在洞里」的实机对与完整流真 UI 截图待验证实例（`_runs\surface-clearance-8024`，22:33 起）上补。平行 / 斜交 / 相交直管、管到柱、弯管异径 fallback、三路误差对比**未采**。
+
 验收：
 
 - 四个入口都能产生可管理记录。
 - `maxDistance/maxAngle` 在主路径和 fallback 语义一致。
 - UI 不再把中心线距离显示为外表面净距。
 - 同一输入在交互和批量入口得到同一 method 和结果。
+
+**2026-09-17 状态**：第 1 条 5 个入口里 2 个（抽屉「净距标注」+ 构件→墙拾取流）产生 `ClearanceRecord`；第 3 条在这两个入口成立（只有 `surface-to-surface` 叫“外表面净距”）；第 2 / 4 条未到（批量入口未接）。
 
 ## 7. 里程碑 M2：工程语义点与锚点重绑定
 
@@ -500,7 +519,8 @@ npm run test:smoke:p0:measurement
    推荐用户点击“保留结果”后写入；临时探测不自动污染校审记录。
 
 3. **第一批 exact 范围？**  
-   推荐直管—直管、点—网格、直管—墙；弯头/异径先保留 approximate。
+   推荐直管—直管、点—网格、直管—墙；弯头/异径先保留 approximate。  
+   **2026-09-17 实际**：用户在「构件到墙最近距离」考问里拍板（决策 `d-428`）第一批 exact = **任意构件（含 owner）— 墙**的通用 mesh—mesh 外表面净距（parry3d `closest_points`，弧墙 / 带洞墙同一条网格路径），弯头 / 管件因此**也已 exact**（与推荐的“先保留 approximate”不同）；直管—直管解析、点—网格仍待做。
 
 4. **semantic snap 首批范围？**  
    推荐 TUBI LEAVE/ARRIVE + 完整 PLINE PKEY；SPINE 后置。
