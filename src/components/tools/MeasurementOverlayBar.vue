@@ -182,10 +182,14 @@ function setPickType(pickType: MeasurementPickTypeId): void {
   measurementStyle.updateMeasurementPickLayer({ pickType });
 }
 
-function setPickTypeValue(raw: string): void {
+function setPickTypeValue(target: HTMLInputElement): void {
   const key = pickTypeValueKey.value;
   if (!key) return;
-  measurementStyle.updateMeasurementPickLayer({ values: { [key]: raw } as Partial<MeasurementPickTypeValues> });
+  measurementStyle.updateMeasurementPickLayer({ values: { [key]: target.value } as Partial<MeasurementPickTypeValues> });
+  // Redisplay what the store kept (E3D `EDGPOSCNTRL.setPickType` 1434 / the dp-0 gadget: typing `2.5`
+  // for Fraction shows `3`). `:value` alone would not repaint when the normalised value did not change.
+  const kept = pickLayer.value.values[key];
+  target.value = Number.isFinite(kept) ? String(kept) : '';
 }
 
 function setSignificantSnaps(checked: boolean): void {
@@ -485,7 +489,7 @@ onBeforeUnmount(() => {
               :max="pickTypeValueField.max"
               :step="pickTypeValueField.step"
               :aria-label="pickTypeValueField.label"
-              @change="setPickTypeValue(($event.target as HTMLInputElement).value)" />
+              @change="setPickTypeValue($event.target as HTMLInputElement)" />
           </label>
 
           <label class="mt-2 flex h-9 cursor-pointer items-center gap-2 rounded-md px-1 hover:bg-background/70">

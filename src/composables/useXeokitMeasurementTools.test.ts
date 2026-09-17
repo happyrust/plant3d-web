@@ -2304,22 +2304,23 @@ describe('useXeokitMeasurementTools', () => {
       tools.dispose();
     });
 
-    it('Fraction 2.5（提示矩阵 D2）：提示条与派生记号原样出 `Fraction[2.5]`（E3D pickTypesValue[4]），位置仍按内核 int(2.5) = 2 等分吸分点', async () => {
+    it('Fraction 2.5（提示矩阵 D2 (a)）：落库即按 E3D pad 输入框的 dp 0 四舍五入成 3——提示条 / 派生记号出 `Fraction[3]`，位置按三等分吸分点', async () => {
       const { store, measurementStyle, tools, clickAt } = await setupGraphicsTools();
       measurementStyle.updateMeasurementPickLayer({ filter: 'graphics', pickType: 'fraction', values: { fraction: 2.5 } });
       await nextTick();
-      expect(measurementStyle.state.measurementPickLayer.values.fraction).toBe(2.5);
-      expect(tools.statusText.value).toContain('(Fraction[2.5]) Snap :');
+      expect(measurementStyle.state.measurementPickLayer.values.fraction).toBe(3);
+      expect(tools.statusText.value).toContain('(Fraction[3]) Snap :');
 
-      // 棱 x = 2.5（y 3.5 → 4.5），点在 y = 4.2：2 等分的分点 {3.5, 4.0, 4.5} 里最近的是 4.0；
-      // 若把 2.5 当 3（三等分 {3.5, 3.833, 4.167, 4.5}）会落 4.1667——提示写 2.5、内核量 2 段，与 E3D 同口径。
+      // 棱 x = 2.5（y 3.5 → 4.5），点在 y = 4.2：三等分的分点 {3.5, 3.833, 4.167, 4.5} 里最近的是 4.1667；
+      // 若照 e8ebc10 把 2.5 原样留着（内核 int(2.5) = 2 等分 {3.5, 4.0, 4.5}）会落 4.0——E3D 3.1 实机（golden MD §40）
+      // 在 pad 输入框填 2.5 得到的是提示 Fraction[3] / 输入框 3 / 三分点，提示、回显、内核三处同一个整数。
       clickAt(148, 80);
       const draft = store.currentXeokitDistanceDraft.value!;
       expect(draft).not.toBeNull();
       expect(draft.origin.worldPos[0]).toBeCloseTo(2.5, 6);
-      expect(draft.origin.worldPos[1]).toBeCloseTo(4.0, 6);
+      expect(draft.origin.worldPos[1]).toBeCloseTo(3.5 + 2 / 3, 6);
       expect(draft.origin.worldPos[2]).toBeCloseTo(6.5, 6);
-      expect(draft.origin.sourceInfo?.label).toMatch(/ · Fraction\[2\.5\]$/);
+      expect(draft.origin.sourceInfo?.label).toMatch(/ · Fraction\[3\]$/);
 
       tools.dispose();
     });

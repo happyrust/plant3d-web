@@ -554,14 +554,23 @@ describe('MeasurementOverlayBar', () => {
     expect(measurementStyle.state.measurementPickLayer.values.fraction).toBe(4);
     expect(host.querySelector('[data-testid="measurement-overlay-pick-layer-summary"]')?.textContent?.trim()).toBe('Graphics · Fraction');
 
-    // 提示矩阵 D2：非整数原样落库、原样回显（E3D pickTypesValue[4] = gadget.val），不再取整；int() 只在内核。
+    // 提示矩阵 D2 (a)（2026-09-17 实机，golden MD §40）：输入即按 E3D pad 输入框的 dp 0 四舍五入——填 2.5 落库 3、
+    // 输入框重显 '3'（E3D 填 2.5 也是提示 Fraction[3] / 输入框 3 / 落三分点），提示 / 回显 / 内核同一个整数。
     if (fractionInput) {
       fractionInput.value = '2.5';
       fractionInput.dispatchEvent(new Event('change', { bubbles: true }));
     }
     await nextTick();
-    expect(measurementStyle.state.measurementPickLayer.values.fraction).toBe(2.5);
-    expect(fractionInput?.value).toBe('2.5');
+    expect(measurementStyle.state.measurementPickLayer.values.fraction).toBe(3);
+    expect(fractionInput?.value).toBe('3');
+    // 归一后的值没变（3.4 → 3）时 `:value` 不会重绘，`setPickTypeValue` 自己把落库值写回输入框。
+    if (fractionInput) {
+      fractionInput.value = '3.4';
+      fractionInput.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+    await nextTick();
+    expect(measurementStyle.state.measurementPickLayer.values.fraction).toBe(3);
+    expect(fractionInput?.value).toBe('3');
 
     // 禁用项点击不生效。
     filterButton('external')?.click();

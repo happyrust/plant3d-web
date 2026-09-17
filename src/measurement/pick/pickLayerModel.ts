@@ -249,18 +249,32 @@ function finiteOr(raw: unknown, fallback: number): number {
 }
 
 /**
- * Normalise pick-type values: each is kept **as typed** (E3D `EDGPOSCNTRL.setInput`
- * stores the raw `gadget.val` into `pickTypesValue[n]`, `edgposcntrl.pmlobj` 1482);
- * non-numeric input falls back to the E3D default. Fraction is deliberately not
- * truncated / clamped here — E3D echoes the typed value in the prompt (`Fraction[2.5]`)
- * and only the kernel takes `int()` (`GMFLINE.fraction`, `fractionAlongSegment`);
- * prompt matrix D2, decision `d-269` 2026-09-16 (supersedes `d-228`).
+ * PML `FORMAT` with `dp 0` as the Positioning Control input gadget applies it when it is
+ * read back: nearest integer, halves away from zero (E3D 3.1 live, 2026-09-17: 2.4 → 2,
+ * 2.5 → 3, 2.6 → 3, 1.5 → 2, 3.5 → 4, 0.4 → 0, 0.6 → 1, 1.9 → 2). No clamp — `0` is a
+ * legal E3D value (`Fraction[0]`, the kernel loop then never runs).
+ */
+function roundLikeIntegerFmt(value: number): number {
+  const rounded = Math.sign(value) * Math.round(Math.abs(value));
+  return rounded === 0 ? 0 : rounded;
+}
+
+/**
+ * Normalise pick-type values: Distance / Proportion are kept as typed (E3D `EDGPOSCNTRL.setInput`
+ * stores `gadget.val` into `pickTypesValue[n]`, `edgposcntrl.pmlobj` 1482); non-numeric input
+ * falls back to the E3D default. **Fraction is rounded to the nearest integer on input**: the
+ * pad's `text .input is REAL format !!edgFormat` runs with `!!integerFmt` (dp 0) while Fraction
+ * is selected, and `gadget.val` already comes back rounded — so E3D's prompt, input echo and
+ * kernel all see the same integer (live 2026-09-17, golden MD §40: typing 2.5 gives
+ * `Fraction[3]`, the box redisplays `3`, the pick lands on a third). Prompt matrix D2,
+ * option (a) decided 2026-09-17 (supersedes `d-269`, which had matched the source-reading
+ * `Fraction[2.5]` that only a direct write to `pickTypesValue[4]` produces).
  */
 export function normalizeMeasurementPickTypeValues(
   raw: Partial<Record<keyof MeasurementPickTypeValues, unknown>> | null | undefined,
 ): MeasurementPickTypeValues {
   const distanceMm = finiteOr(raw?.distanceMm, DEFAULT_MEASUREMENT_PICK_TYPE_VALUES.distanceMm);
-  const fraction = finiteOr(raw?.fraction, DEFAULT_MEASUREMENT_PICK_TYPE_VALUES.fraction);
+  const fraction = roundLikeIntegerFmt(finiteOr(raw?.fraction, DEFAULT_MEASUREMENT_PICK_TYPE_VALUES.fraction));
   const proportion = finiteOr(raw?.proportion, DEFAULT_MEASUREMENT_PICK_TYPE_VALUES.proportion);
   return { distanceMm, fraction, proportion };
 }
@@ -313,8 +327,9 @@ export function measurementPickTypePromptToken(
     case 'distance':
       return `Distance[${formatPromptReal(values.distanceMm)}]`;
     case 'fraction':
-      // `'Fraction[' & pickTypesValue[4] & ']'` (`edgpicktype.pmlobj` 1889): the typed value
-      // as-is, no `int()` — that happens in the kernel only (prompt matrix D2).
+      // `'Fraction[' & pickTypesValue[4] & ']'` (`edgpicktype.pmlobj` 1889): the stored value
+      // as-is — which is already the dp-0 rounded integer from the input gadget
+      // (`normalizeMeasurementPickTypeValues`; prompt matrix D2 (a), 2026-09-17).
       return `Fraction[${formatPromptReal(values.fraction)}]`;
     case 'proportion':
       return `Proportion[${formatPromptReal(values.proportion)}]`;

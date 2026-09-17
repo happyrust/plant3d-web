@@ -86,16 +86,28 @@ describe('measurementPickTypePromptToken / formatMeasurementPrompt · EDGSTATE.p
     expect(measurementPickTypePromptToken('intersect', values, 2)).toBe('Intersection[2]');
   });
 
-  it('Fraction[<v>] echoes the typed value like E3D `pickTypesValue[4]` (prompt matrix D2): no trunc, no clamp — only the kernel takes int()', () => {
-    const values = { distanceMm: 0, fraction: 2.5, proportion: 0.5 };
-    expect(measurementPickTypePromptToken('fraction', values)).toBe('Fraction[2.5]');
-    expect(measurementPickTypePromptToken('fraction', { ...values, fraction: 0.4 })).toBe('Fraction[0.4]');
-    // PML `REAL.string()`-like: integers stay bare, no trailing zeros.
-    expect(measurementPickTypePromptToken('fraction', { ...values, fraction: 3 })).toBe('Fraction[3]');
-    // Normalisation keeps the value as typed (string from the number input included); non-numeric → E3D default 2.
-    expect(normalizeMeasurementPickLayer({ pickType: 'fraction', values: { fraction: '2.5' } }).values.fraction).toBe(2.5);
-    expect(normalizeMeasurementPickLayer({ pickType: 'fraction', values: { fraction: 0.4 } }).values.fraction).toBe(0.4);
-    expect(normalizeMeasurementPickLayer({ pickType: 'fraction', values: { fraction: 'abc' } }).values.fraction).toBe(2);
+  it('Fraction[<v>]：输入即按 E3D pad 输入框的 dp 0 四舍五入（提示矩阵 D2 (a)，2026-09-17 实机）——提示 / 落库 / 内核同一个整数', () => {
+    // E3D 3.1 live (golden MD §40): the pad's `text .input is REAL format !!edgFormat` runs with `!!integerFmt`
+    // (dp 0) while Fraction is selected, so `gadget.val` is already rounded when `setInput` stores it.
+    const typed = (fraction: unknown) => normalizeMeasurementPickLayer({ pickType: 'fraction', values: { fraction } }).values.fraction;
+    expect(typed('2.5')).toBe(3);
+    expect(typed(2.5)).toBe(3);
+    expect(measurementPickTypePromptToken('fraction', { distanceMm: 0, fraction: typed('2.5'), proportion: 0.5 })).toBe('Fraction[3]');
+    // The 00:13 / 06:44 scan on the running E3D: nearest integer, halves away from zero, no clamp (0 is legal).
+    const scan: readonly [number, number][] = [[2.4, 2], [2.5, 3], [2.6, 3], [1.5, 2], [3.5, 4], [0.4, 0], [0.6, 1], [1.9, 2]];
+    for (const [input, expected] of scan) {
+      expect(typed(input), `typed ${input}`).toBe(expected);
+    }
+    expect(measurementPickTypePromptToken('fraction', { distanceMm: 0, fraction: typed(0.4), proportion: 0.5 })).toBe('Fraction[0]');
+    // PML `REAL.string()`-like: integers stay bare, no trailing zeros; non-numeric → E3D default 2.
+    expect(measurementPickTypePromptToken('fraction', { distanceMm: 0, fraction: 3, proportion: 0.5 })).toBe('Fraction[3]');
+    expect(typed('abc')).toBe(2);
+    // Distance / Proportion are still kept as typed (their gadget formats carry decimals).
+    expect(normalizeMeasurementPickLayer({ values: { distanceMm: '12.5', proportion: 0.25 } }).values).toEqual({
+      distanceMm: 12.5,
+      fraction: 2,
+      proportion: 0.25,
+    });
   });
 
   it('composes `<命令> · <步> (<拾取类型>) [Snap] : <目标><trailer>`', () => {
@@ -167,10 +179,11 @@ describe('normalizeMeasurementPickLayer', () => {
     );
     expect(normalizeMeasurementPickLayer({ filter: 'aid' }).filter).toBe('aid');
     expect(normalizeMeasurementPickLayer({ pickType: 'intersect' }).pickType).toBe('intersect');
-    // Empty / non-numeric → E3D defaults; a numeric Fraction is kept as typed (prompt matrix D2), not clamped to ≥ 1.
+    // Empty / non-numeric → E3D defaults; a numeric Fraction is rounded like the dp-0 gadget (prompt matrix D2 (a)),
+    // not clamped to ≥ 1 — 0.2 → 0 is what E3D stores too.
     expect(normalizeMeasurementPickLayer({ values: { fraction: 0.2, distanceMm: '', proportion: 'x' } }).values).toEqual({
       distanceMm: 0,
-      fraction: 0.2,
+      fraction: 0,
       proportion: 0.5,
     });
   });
