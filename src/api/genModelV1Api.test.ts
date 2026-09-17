@@ -14,6 +14,7 @@ import {
   genModelV1SpatialNearbyRefnos,
   genModelV1SpatialNearestClearance,
   genModelV1SpatialNegativeNouns,
+  genModelV1SurfaceClearance,
   genModelV1TaskGet,
   genModelV1TreeChildren,
   isGenModelV1ApiError,
@@ -404,6 +405,56 @@ describe('spatial/*（spec §4.13：GET，参数进 query）', () => {
       surface: 'true',
       debug: 'true',
     });
+  });
+
+  it('surface-clearance：GET，两个 refno 转 a/b，可选格缺省不出现、给了显式发出，422 target_not_wall 的 detail 原样透出', async () => {
+    const fetchImpl = fetchMockReturning(jsonResponse(200, {
+      success: true, unit: 'mm', method: 'surface_to_surface', accuracy_class: 'exact-surface', error_bound_mm: 0.5,
+      target_kind: 'wall', source: { refno: '24384/22582', noun: 'ELBO', leaf_count: 1, triangle_count: 12 },
+      target: { refno: '17496/105912', noun: 'WALL', leaf_count: 2, triangle_count: 312 }, result: null,
+      model: { source_sesno: 586, target_sesno: 729 }, timing_ms: { load: 0, query: 0, total: 1 }, warnings: [],
+    }));
+    const resp = await genModelV1SurfaceClearance(
+      { sourceRefno: '24384_22582', targetRefno: '17496/105912' },
+      { baseUrl: BASE, fetchImpl, identity: { project: 'P' } },
+    );
+    expect(resp.method).toBe('surface_to_surface');
+    let parsed = new URL(String(fetchImpl.mock.calls[0]![0]));
+    expect(parsed.origin + parsed.pathname).toBe(`${BASE}/api/v1/spatial/surface-clearance`);
+    expect(fetchImpl.mock.calls[0]![1]?.method).toBe('GET');
+    expect(Object.fromEntries(parsed.searchParams)).toEqual({
+      project: 'P',
+      source_refno: '24384/22582',
+      target_refno: '17496/105912',
+    });
+
+    const fetchAll = fetchMockReturning(jsonResponse(200, { success: true, result: null, warnings: [] }));
+    await genModelV1SurfaceClearance(
+      { sourceRefno: '24384_22582', targetRefno: '24384_22678', targetKind: 'any', perpendicular: false, maxDistanceMm: 2000, debug: true },
+      { baseUrl: BASE, fetchImpl: fetchAll },
+    );
+    parsed = new URL(String(fetchAll.mock.calls[0]![0]));
+    expect(Object.fromEntries(parsed.searchParams)).toEqual({
+      source_refno: '24384/22582',
+      target_refno: '24384/22678',
+      target_kind: 'any',
+      perpendicular: 'false',
+      max_distance_mm: '2000',
+      debug: 'true',
+    });
+
+    const notWall = fetchMockReturning(jsonResponse(422, {
+      code: 'precondition',
+      message: 'target_kind=wall 要求目标是墙族（CWALL / WALL / PANE / GWALL / STWALL），24384/22678 是 BEND',
+      detail: { reason: 'target_not_wall', refno: '24384/22678', noun: 'BEND' },
+    }));
+    const error = await genModelV1SurfaceClearance(
+      { sourceRefno: '24384_22582', targetRefno: '24384_22678' },
+      { baseUrl: BASE, fetchImpl: notWall },
+    ).then(() => null, (e: unknown) => e as GenModelV1ApiError);
+    expect(error?.status).toBe(422);
+    expect(error?.code).toBe('precondition');
+    expect(error?.detail).toEqual({ reason: 'target_not_wall', refno: '24384/22678', noun: 'BEND' });
   });
 
   it('nearest-clearance：只给 source_refno 时 URL 里只有它（缺省全部交给服务端），空清单不出现', async () => {

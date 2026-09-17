@@ -1332,6 +1332,116 @@ export function genModelV1SpatialCenterline(
   });
 }
 
+// ---------------------------------------------------------------------------
+// 构件 × 墙外表面净距（plan `docs/plans/2026-09-17-component-to-wall-surface-clearance-plan.md` §5；决策 d-428；
+// gen-model `a0e307588`）
+// ---------------------------------------------------------------------------
+
+/** `wall`（缺省）：目标必须是墙族（CWALL / WALL / STWALL / GWALL / PANE），否则 422；`any`：任何有网格的构件都收。 */
+export type SurfaceClearanceTargetKind = 'wall' | 'any';
+
+export type GenModelV1SurfaceClearanceRequest = {
+  /** 源构件，`a_b` / `a/b`；owner（BRAN / EQUI）也行——服务端取名下全部叶子网格 */
+  sourceRefno: string;
+  /** 目标构件；与源相同 → 400 */
+  targetRefno: string;
+  targetKind?: SurfaceClearanceTargetKind;
+  /** 缺省 true：命中墙主面时附一条沿墙面法向的垂距射线 */
+  perpendicular?: boolean;
+  /** mm；缺省 50000，上限 1e6；超出即 `result: null` + warning `beyond_max_distance` */
+  maxDistanceMm?: number;
+  debug?: boolean;
+};
+
+/** 命中墙面：直墙两侧对称只分得出 `side`；弧墙分 `inner`（凹）/ `outer`（凸）。 */
+export type SurfaceClearanceFaceKind = 'inner' | 'outer' | 'side' | 'top' | 'bottom' | 'end' | 'unknown';
+/** `pca`：按墙的水平主轴分端 / 侧；`geometric`：按拟合的弧轴分内 / 外；`normal-only`：只有法向（顶 / 底）。 */
+export type SurfaceClearanceFaceConfidence = 'pca' | 'geometric' | 'normal-only';
+
+export type SurfaceClearanceEndpoint = {
+  /** `a/b` */
+  refno: string;
+  noun: string;
+  leaf_count: number;
+  triangle_count: number;
+};
+
+export type SurfaceClearanceFace = {
+  kind: SurfaceClearanceFaceKind | (string & {});
+  /** 命中三角的法向，已翻成指向源侧 */
+  normal: SpatialPosition;
+  confidence: SurfaceClearanceFaceConfidence | (string & {});
+};
+
+export type SurfaceClearancePerpendicular = {
+  distance_mm: number;
+  from: SpatialPosition;
+  to: SpatialPosition;
+};
+
+export type SurfaceClearanceResult = {
+  distance_mm: number;
+  intersects: boolean;
+  source_point: SpatialPosition;
+  target_point: SpatialPosition;
+  /** `target_point − source_point`，dx / dy / dz 即 E / N / U */
+  vector: SpatialClearanceVector;
+  /** `a/b`：两侧真正命中的叶子 */
+  source_leaf_refno: string;
+  target_leaf_refno: string;
+  target_leaf_noun: string;
+  target_face: SurfaceClearanceFace | null;
+  perpendicular: SurfaceClearancePerpendicular | null;
+  /** `closest-points`：精确最近点对；`aabb-overlap-center`：相交时 parry 不给点，取两叶子 AABB 交集中心占位 */
+  witness: 'closest-points' | 'aabb-overlap-center' | (string & {});
+};
+
+export type SurfaceClearanceResponse = {
+  /** 恒为 true：失败走 HTTP 状态码 + 错误信封（404 `not_found` detail.reason=no_model_mesh / 422 `precondition` detail.reason=target_not_wall） */
+  success: boolean;
+  unit: 'mm' | (string & {});
+  method: 'surface_to_surface' | (string & {});
+  accuracy_class: 'exact-surface' | (string & {});
+  /** 弦高容差 `FACET_TOL_MM = 0.5`：网格与真实曲面的最大偏差 */
+  error_bound_mm: number;
+  target_kind: SurfaceClearanceTargetKind | (string & {});
+  source: SurfaceClearanceEndpoint;
+  target: SurfaceClearanceEndpoint;
+  /** `null` = `max_distance_mm` 内两侧网格没有靠近到一起 */
+  result: SurfaceClearanceResult | null;
+  /** 参与叶子的 `model_sesno` 最大值；跨库两侧各有各的计数，不可比 */
+  model: { source_sesno: number | null; target_sesno: number | null };
+  timing_ms: { load: number; query: number; total: number };
+  warnings: string[];
+  debug?: unknown;
+  [key: string]: unknown;
+};
+
+function surfaceClearanceQuery(req: GenModelV1SurfaceClearanceRequest): Record<string, QueryValue> {
+  return {
+    source_refno: toV1Refno(req.sourceRefno),
+    target_refno: toV1Refno(req.targetRefno),
+    target_kind: req.targetKind,
+    perpendicular: req.perpendicular,
+    max_distance_mm: req.maxDistanceMm,
+    debug: req.debug,
+  };
+}
+
+/**
+ * `GET /api/v1/spatial/surface-clearance`：一对构件用两侧真实三角网格算外表面最近距离与两侧最近点
+ * （parry `closest_points`），命中墙主面时附沿法向的垂距。只读，网格来自磁盘 `.mesh`，不碰空间树。
+ */
+export function genModelV1SurfaceClearance(
+  req: GenModelV1SurfaceClearanceRequest,
+  options?: GenModelV1RequestOptions,
+): Promise<SurfaceClearanceResponse> {
+  return genModelV1Fetch<SurfaceClearanceResponse>('/api/v1/spatial/surface-clearance', {
+    ...options,
+    query: surfaceClearanceQuery(req),
+  });
+}
+
 /**
  * `GET /api/v1/meshes/{geo_hash}.mesh` 的 URL（spec §4.11）。不发请求——网格由现有 DTX
  * 加载链自己 fetch + `parseMeshGeometry`（rkyv 原样直连，2026-09-09 拍板：不再经服务端

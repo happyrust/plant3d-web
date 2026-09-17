@@ -11,6 +11,7 @@ import type {
 export type ExternalDimensionCategory = 'dimension' | 'annotation';
 export type ExternalDimensionSource =
   | 'bran-clearance'
+  | 'clearance'
   | 'mbd'
   | 'measurement'
   | 'pipe-distance'
