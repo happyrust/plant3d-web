@@ -1819,7 +1819,7 @@ ELBO `145028` P2 → ELBO `145029` P1 之间的竖直立管，DN100 · 外半径
 
 - 各命令第 2 / 3 步（要拾中第一点 / 第一条线）；七种 token 的实际字串与 D2 三处（`P3-04`：`.input` 填 2.5 → `Fraction[2.5]`？重显几？落点在 0.5？）；过滤器八串字字相同（`P4-01`）；` Snap` 关 / ` WP` / ` Offset` 尾巴（`P5-*`，D4 实证）；§6 全部告警原文（`P6-*`，含 D5 的 `(2,874)`）。
 - 截图（golden §1 要求测量窗体 + 命令提示 + 三维视口同框）：要主窗口非最小化，`printwindow-capture.ps1` 才出图。
-- **→ §40（2026-09-17）**：七种 token 实串、D2 三处（结论翻案；07:36 用户拍板 (a)，`67b127b` 改掉，决策 `d-342`）、两线夹角第 2 步、距离第 2 步的步词已采成 observation，带截图；`printwindow-capture.ps1` 对这扇窗只回旧帧，截图改走 `CopyFromScreen`。
+- **→ §40（2026-09-17）**：七种 token 实串、D2 三处（结论翻案；07:36 用户拍板 (a)，`67b127b` 改掉，决策 `d-342`）、两线夹角第 2 步、距离第 2 步的步词已采成 observation，带截图；`printwindow-capture.ps1` 对这扇窗只回旧帧，截图改走 `CopyFromScreen`。**§40.6（10:3x 第三轮）**：距离第 2 步 `(Snap)` 变体、垂距第 2 步、三点角第 2 / 3 步——三条定位命令每一步都实机了。
 
 ## 39. Intersect 的 ARC 操作数 / 弯管与环面的 Perpendicular：E3D 运行时采集（2026-09-17 00:0x + 06:3x）
 
@@ -1925,10 +1925,10 @@ v4 用 CTOR `=24381/46880`（`rins 40 / rout 60`，管半径 10，轴 = S）三�
 后端（带 `element/ptset` 的 gen-model）回来后补跑：① Element × Intersect，弯管体 + 同一条腿上的隐含管轴线 → 交点应落在离 `POS` **165.500 mm** 的新切点（比 `9bbb501` 那一轮挪 **82.285 mm**）；
 ② Perpendicular to，第二击落在弯管体 → 点到点、目标名不带「弧面」（对 §39.3 表的第一行 551.094 mm 那一档）。
 
-## 40. 提示矩阵 E3D 运行时采集·第二轮：七种 token / D2 三处 / 两线夹角第 2 步（主窗口还原、真实拾取、带截图，2026-09-17 00:0x + 06:3x–06:5x）
+## 40. 提示矩阵 E3D 运行时采集·第二轮：七种 token / D2 三处 / 两线夹角第 2 步（主窗口还原、真实拾取、带截图，2026-09-17 00:0x + 06:3x–06:5x）+ 第三轮 10:3x–10:4x：距离第 2 步 `(Snap)` 变体 / 垂距第 2 步 / 三点角第 2、3 步（§40.6）
 
 > 接 §38.3 的清单。用户 00:00 点头「把 E3D 主窗口还原到前台」，这一轮才有截图与真实鼠标 / 键盘输入。同一台 E3D 3.1 shadow（PID 11900），同一支宏 `capture-prompt-step.pmlmac`（本轮多了 5b pad 状态 / 5c pickData 与 return / 6 dimension 三段，见宏头），trace 仍是 `e3d-prompt-capture.trace.txt`；落点核算另加只读探针 `probe-fraction-landing.pmlmac` → `e3d-fraction-landing.trace.txt`。
-> 00:05–00:14 那一段是上一会话（fable-5-1-32）做的，trace 里 `P3-04-s*` / `P3-0x-*` / `P3-04-round-*` 十九块；06:36–06:53 是本会话，`*-r2-*` 十五块。
+> 00:05–00:14 那一段是上一会话（fable-5-1-32）做的，trace 里 `P3-04-s*` / `P3-0x-*` / `P3-04-round-*` 十九块；06:36–06:53 是本会话，`*-r2-*` 十五块；10:34–10:42 是接手会话（fable-5-1-41）的第三轮，`*-r3-*` 十四块（§40.6）。
 
 ### 40.1 现场与路子（这一轮新踩出来的）
 
@@ -1936,6 +1936,7 @@ v4 用 CTOR `=24381/46880`（`rins 40 / rout 60`，管半径 10，轴 = S）三�
 - **窗体在屏外**：最小化期间 show 出来的 owned 窗体坐标停在 −21334 附近——`Positioning Control`（`!!edgNewPositioning`，hwnd 85331936，160×69）与 `!!GPHMEASURE`（hwnd 35134792，245×315）都「shown=TRUE 但看不见」，00:09 那三张截图里没有窗体就是这个原因。`SetWindowPos(SWP_NOSIZE|SWP_NOZORDER|SWP_NOACTIVATE)` 挪进视口：pad → (262,128)，Measure → (1205,128)，Measure Angle（hwnd 43649440，本来就在屏内 512,456，挡住模型）→ (1205,128)。E3D 记住了新坐标，本会话后面再 show 都在屏内。
 - **截图**：`printwindow-capture.ps1`（`PrintWindow`）对这扇窗只回同一帧旧画面——00:09 的 `e3d-prompt-P3-04-s1/s2/s3-*.png` 三张字节相同（SHA-256 前缀 `172A9D6C…`，1721×927，无窗体无提示），已删。改用 `Graphics.CopyFromScreen`（合成桌面 BitBlt，进程先 `SetProcessDPIAware`），按主窗口矩形裁到屏内 → 2560×1379 物理像素，浮动窗体、提示气泡、AID 文字都在同一帧里（golden §1 的「窗体 + 提示 + 视口同框」）；脚本入库为同目录 `screen-capture.ps1`（`-Out <png> [-Hwnd]`，与 `printwindow-capture.ps1` 并列）。
 - **真实输入**：`SetCursorPos` + `mouse_event` 点视口（物理像素），`SendKeys` 往 pad 输入框敲 `Ctrl+A`、`2.5`、`Enter`。
+- **第三轮（10:3x）补两条**：(1) 主窗口没被最小化，但被最大化的桌面壳盖住，pwsh 里 `SetForegroundWindow` 被前台锁挡掉（`fg` 不变）——cua-driver 的 `bring_to_front`（`AttachThreadInput` 路子）一次到位，之后每次点击前 `input.ps1` 再 `SetForegroundWindow` 就都成了；(2) pad 与 `!!GPHMEASURE` 记住了上轮挪进屏的坐标（262,128 / 1205,128），**Measure Angle 窗体没记住**，`measure('ANGLE')` 又出现在 (512,456) 挡住模型，再挪一次。
 - **投宏路子**（§38.1）不变，但 00:14 那条 `!!edgPosCntrl.active = FALSE` 起每条命令都是 `RunInCurrentScope threw InvalidOperationException（在创建窗口句柄之前，不能在控件上调用 Invoke）` → `Run => False (41,6) Non-existent element` → `RunInPdms => True`。**只跑一遍**（每 tag 一块，`e3d-prompt-capture.err.txt` 不存在），照用即可。
 - `!!edgTypes` 本会话是 defined 的（06:45 探针：`EDGTYPES`，`.tubing` = `EDGTUBING`）——§39 说的 `(2,751)` 不在拾取这一路上；真实拾取走 `EDGPICKTYPE.fraction()` → `!!edgTypes.tubing.fraction(item, value, pointVector, intermediate)` 一路通。
 
@@ -1983,7 +1984,30 @@ Positioning pad 是停靠版 `!!edgNewPositioning`（`posCntrl.type=PAD1`，`edg
 2. **D2 翻案**：用户在 E3D 3.1 里能走到的路径（pad 输入框填 `2.5`）得到的三处是 **`Fraction[3]` / 输入框 `3` / 落三分点**——三处**一致，都是整数**，因为 `text .input is REAL format !!edgFormat` 在 Fraction 下是 `!!integerFmt`（dp 0），`gadget.val` 按格式回读已经是 3（不只是显示）。矩阵 D2 引的「E3D 原样出输入值 `Fraction[2.5]`」只在**程序直写 `pickTypesValue[4]`** 时成立，那时才有「提示 2.5 / 输入框 3 / 落点 1/2」的三处不一致。Web `e8ebc10`（决策 `d-269`）对上的是源码读出来的那条程序路径：用户填 2.5，Web 出 `Fraction[2.5]` 落二分点，E3D 出 `Fraction[3]` 落三分点——**两处都不同**，~~待用户重新拍板~~（矩阵 §7 D2 行列了 (a) 输入即四舍五入 / (b) 保持 / (c) 只改内核）。**→ 用户 2026-09-17 07:36 拍板 (a)，`67b127b` 已改（决策 `d-342` 取代 `d-269`）**：`normalizeMeasurementPickTypeValues` 对 fraction 走 `roundLikeIntegerFmt`（最近整数、.5 远离零、不夹——0 合法），提示 token 拼落库值、浮条输入框 `change` 后把落库值写回、内核不动——填 `2.5` 两边都是 `Fraction[3]` / `3` / 三分点；单测四处改口（token / V9 读回 0.4 → 0 / 输入框 2.5 → '3'、3.4 → '3' / Graphics 立方体 y = 4.2 吸三等分的 4.1667），96 文件 854 用例过、eslint 0、type-check 新增 0。浮条真 UI 实机截图未补。
 3. **E3D 3.1 的 pad 没有 Fraction / Proportion 按钮**（`edgnewpositioning.pmlfrm` 55–56 按钮、128–129 映射都注释掉），`pickTypeList()` 却仍回七项；程序切到 Fraction 后 pad 上 Snap 仍亮着。Web 浮条把七种都露出来，是比 E3D 3.1 多的入口（记为 Web 增强，不算偏离）。
 4. Esc 在两线夹角第 2 步是**撤掉整条命令**（Web 点空白回第 1 步，D3 一类取舍）。
+5. **第三轮（§40.6）三条定位命令的后续步全部 ✓**：距离第 2 步 `(Snap)` 变体 `Measure distance end (Snap) Snap :`、垂距第 2 步 `Measure perpendicular distance end (Snap) Snap :`、三点角第 2 / 3 步 `Measure angle first point (Snap) Snap :` / `… second point (Snap) Snap :`——四条字串与矩阵 §2 的 `static_expectation` 逐字相同；每条命令最后一击之后状态**回第 1 步**（`start` / `root of angle`，`major=1`，stack 仍 1，窗体出结果），不是退出命令。矩阵 §2 三条定位命令（距离 / 垂距 / 三点角）现在**每一步**都是 `observation`；§2 只剩 `measureLineAngle`（非弧包，D6 不做）没实机。
 
 ### 40.5 还没采
 
-垂距 / 三点角的第 2 / 3 步、距离第 2 步的 `(Snap)` 变体、过滤器八串（`P4-*`）、Significant Snaps 关 / WP / Offset 尾巴（`P5-*`）、§6 全部告警原文（`P6-*`，含 D5 的 `(2,874)`）。窗口现在还原着、三张窗体都在屏内，下一轮可直接接着采。
+~~垂距 / 三点角的第 2 / 3 步、距离第 2 步的 `(Snap)` 变体~~（10:4x 第三轮已采，§40.6）；过滤器八串（`P4-*`）、Significant Snaps 关 / WP / Offset 尾巴（`P5-*`）、§6 全部告警原文（`P6-*`，含 D5 的 `(2,874)`）。窗口还原着（前台）、pad / Measure 窗体坐标在屏内（Measure Angle 每次 show 要再挪），下一轮可直接接着采。
+
+### 40.6 10:3x–10:4x 第三轮（接手会话 fable-5-1-41，真实 Snap 拾取，带截图）
+
+拾取类型一直是缺省 **Snap**（`pickTypeIndex=1`，`pickTypesValue` 0 / 2 / 0.5 没动），Significant Snaps 开、WP / Offset 关——正是矩阵 §2 表头写的那个状态。拾取对象仍是 `/Copy-of-RCS0014-1R43012新`：竖管（`ELBOW 4` leave，U 14234.127 → 16583.356）、`ELBOW 4 → ELBOW 5` 那段管、右侧折线的尾管。Snap 落点 = 所点管段**离点击处最近的一端**（AID TEXT 全挂在管端 / 弯头处）。截图 `e3d-prompt-P2-0x-r3-*.png`（2560×1379，`screen-capture.ps1`）。
+
+| tag | 操作 | `prompt()`（视口再缀 ` :`） | 状态 / 数值 | 截图 |
+| --- | --- | --- | --- | --- |
+| `P2-r3-s0` | idle | `Navigate` | 缺省 Snap、0 / 2 / 0.5、`intermediate` TRUE、stack 0 | — |
+| `P2-01-r3-s1` | `measure('DISTANCE')` | `Measure distance start (Snap) Snap` | pickPacket `Standard Distance Measure`、`major=1`（同 §40.3 `P3-04-r2-s1`） | — |
+| `P2-01-r3-s2` | 真实点竖管（1200,905） | **`Measure distance end (Snap) Snap`** | `pickType.prompt=end`、`major=2`、`pickData.type=TUBING`（ELBOW 4 leave）；Snap 落竖管**上端**，AID TEXT `Measure distance start` 挂在弯头处 | `e3d-prompt-P2-01-r3-s2.png`、`…-s2-zoom.png` |
+| `P2-01-r3-s3` | 真实点竖管近下端（1200,990） | 回 `… start (Snap) Snap` | `dimension.from` U 16583.356 → `to` U 14234.127（两击各落一端）；Measure 窗体 Dist **2349.23mm**、Offs 0 / 0 / −2349.23、Dire `D WRT /*`；视口标注 `2349.23mm` | `…-s3.png`、`…-s3-measure-zoom.png` |
+| `P2-02-r3-s1` | `perpendicularTo.val = TRUE` + `setPerpendicular()` | `Measure perpendicular distance start (Snap) Snap` | pickPacket 换成 `Standard Perpendicular From Point Measure`、`major=1`；窗体 `Perpendicular to` 勾上、wrt 灰 | `e3d-prompt-P2-02-r3-s1.png` |
+| `P2-02-r3-s2` | 真实点竖管（1200,905） | **`Measure perpendicular distance end (Snap) Snap`** | `pickType.prompt=end`、`major=2`；Snap 落竖管上端 | `…-s2.png`、`…-s2-zoom.png` |
+| `P2-02-r3-s3` | 真实点右侧折线尾管（1430,772） | 回 `… perpendicular distance start (Snap) Snap` | `pickData.item` = BRANCH 本身（尾管）；`from` E 8023.196 N 8776.253 U 13322.101 → `to` 竖管上端 U 16583.357；窗体**四行** Distance **3668.63mm** / Vertical 3261.26mm / Horizontal 1680.2mm / Direction `N 5.92997 W 62.7425 U`；视口三段标注 | `…-s3.png`、`…-s3-measure-zoom.png` |
+| `P2-02-r3-closed` | 勾掉 + `gphMeasure.close()` + hide | `Navigate` | stack 0、`perpendicularTo` FALSE | — |
+| `P2-03-r3-s1` | `measure('ANGLE')` | `Measure angle root of angle (Snap) Snap` | pickPacket `Standard Angle Measure`；Measure Angle 窗体出现在 (512,456)，挪到 (1205,128) | `e3d-prompt-P2-03-r3-s1.png` |
+| `P2-03-r3-s2` | 真实点竖管近上端（1200,850）→ 根点 = 竖管上端 | **`Measure angle first point (Snap) Snap`** | `pickType.prompt=first point`、`major=2`；AID TEXT `Measure angle root of angle` | `…-s2.png`、`…-s2-zoom.png` |
+| `P2-03-r3-s3` | 真实点竖管近下端（1200,990）→ 第一点 = 竖管下端 | **`Measure angle second point (Snap) Snap`** | `pickType.prompt=second point`、`major=3`；AID TEXT `Measure angle first point` | `…-s3.png`、`…-s3-zoom.png` |
+| `P2-03-r3-s4` | 真实点 `ELBOW 4 → ELBOW 5` 管段近远端（1265,855） | 回 `… root of angle (Snap) Snap` | `pickData.item` = ELBOW 5；Measure Angle 窗体 **97.53 Degrees** / DMS `97Å° 31' 52"`（度号画成 `Å°`，窗体字符集问题，原样记）/ Direction1 `D` / Direction2 `N 0.01 E 7.53 U`（那段管不水平，上仰 7.53°）；视口弧 + `Angle 97.53` | `…-s4.png`、`…-s4-angle-form-zoom.png` |
+| `P2-03-r3-closed` / `P2-r3-final` | `gphAngleMeasure.close()` + hide | `Navigate` | stack 0、AID 全清（Keep dimensions 没勾）、pad 隐、缺省 0 / 2 / 0.5 Snap 未动 | — |
+
+**对矩阵**：§2 距离第 2 步 `(Snap)` 变体、垂距第 2 步、三点角第 2 / 3 步四行 E3D 列全部字字相同 → 改 `observation`；`Measure perpendicular distance end` 的第二击是**定位拾取**（Snap 落点），E3D 拿落点所在管的线做垂足——Web 第 2 步文案「选择目标线 / 面上的点」说的就是这一击（结构一致、文案比 E3D 多，原判不变）。命令完成后 E3D **回第 1 步继续量下一组**（stack 仍 1、窗体留着），与 §40.3 距离那条一致；Web 完成后也停在同一模式等下一组，一致。trace 里每块 `state.return.size=0`、`pickData.position=Unset`——`getReturn()` 在两击之间也是空的，落点只能从 `gphMeasure.dimension.from/to`（距离 / 垂距）或 AID TEXT 位置（三点角）反推，与 §40.3 用 `probe-fraction-landing.pmlmac` 读 `pickPacket.return[i].position` 的路子不同（本轮没跑探针）。
