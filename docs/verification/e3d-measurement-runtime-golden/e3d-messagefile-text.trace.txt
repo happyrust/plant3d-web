@@ -1,0 +1,8 @@
+﻿==== probe-messagefile-text at=17:02:20 17 September 2026
+messageFile.defined=TRUE
+alert.defined=TRUE
+messageString(2,874)=[Planes passed to method are parallel]
+messageString(2,870)=[Lines passed to method are parallel]
+messageString(2,779)=[Method --- not found]
+messageString(2,751)=[Variable --- does not exist]
+==== end probe-messagefile-text

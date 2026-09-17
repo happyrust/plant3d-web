@@ -1,0 +1,31 @@
+-- probe-messagefile-text.pmlmac — read-only: the E3D message-file texts behind the numbered errors the
+-- prompt matrix cites (docs/verification/e3d-measure-prompt-matrix.md §6 / D5 / D7), via !!messageFile.messageString(module, number).
+-- Run in the E3D 3.1 shadow (des.exe) through the bootstrap direct-macro entry:
+--   $M "D:/work/plant-code/old/plant3d-web/docs/verification/e3d-measurement-runtime-golden/probe-messagefile-text.pmlmac"
+-- Appends one block to e3d-messagefile-text.trace.txt next to this file. Does NOT provoke the errors themselves:
+-- a kernel error raised inside a macro run through the threaded host entry (even inside `handle any`) kills the run with
+-- .NET InvalidOperationException (Control.Invoke before the handle exists) — golden MD §40.9.
+!f = object FILE('D:/work/plant-code/old/plant3d-web/docs/verification/e3d-measurement-runtime-golden/e3d-messagefile-text.trace.txt')
+!a = ARRAY()
+!d = object DATETIME()
+!a.append('==== probe-messagefile-text at=' & !d.string())
+!b = defined(!!messageFile)
+!a.append('messageFile.defined=' & !b.string())
+!b = defined(!!alert)
+!a.append('alert.defined=' & !b.string())
+!nums = ARRAY()
+!nums.append(874)
+!nums.append(870)
+!nums.append(779)
+!nums.append(751)
+do !n values !nums
+  !v = 'n/a'
+  !v = !!messageFile.messageString(2, !n)
+  handle any
+    !v = 'error ' & !!error.text
+  endhandle
+  !a.append('messageString(2,' & !n.string() & ')=[' & !v & ']')
+enddo
+!a.append('==== end probe-messagefile-text')
+!f.writeFile('APPEND', !a)
+return

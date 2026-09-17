@@ -1819,7 +1819,7 @@ ELBO `145028` P2 → ELBO `145029` P1 之间的竖直立管，DN100 · 外半径
 
 - 各命令第 2 / 3 步（要拾中第一点 / 第一条线）；七种 token 的实际字串与 D2 三处（`P3-04`：`.input` 填 2.5 → `Fraction[2.5]`？重显几？落点在 0.5？）；过滤器八串字字相同（`P4-01`）；` Snap` 关 / ` WP` / ` Offset` 尾巴（`P5-*`，D4 实证）；§6 全部告警原文（`P6-*`，含 D5 的 `(2,874)`）。
 - 截图（golden §1 要求测量窗体 + 命令提示 + 三维视口同框）：要主窗口非最小化，`printwindow-capture.ps1` 才出图。
-- **→ §40（2026-09-17）**：七种 token 实串、D2 三处（结论翻案；07:36 用户拍板 (a)，`67b127b` 改掉，决策 `d-342`）、两线夹角第 2 步、距离第 2 步的步词已采成 observation，带截图；`printwindow-capture.ps1` 对这扇窗只回旧帧，截图改走 `CopyFromScreen`。**§40.6（10:3x 第三轮）**：距离第 2 步 `(Snap)` 变体、垂距第 2 步、三点角第 2 / 3 步——三条定位命令每一步都实机了；**§40.7（10:5x）**：§5 三条尾巴 Snap 关 / WP / Offset 及组合，pad WP 按钮没平面时弹 `No working plane has been defined.`。**§40.8（11:3x）**：§4 过滤器八串——真点 pad 八颗过滤器按钮，提示字字不变、亮灯与 `pickIndex` 一一对应；§38.3 只剩 §6 告警原文（`P6-*`）。
+- **→ §40（2026-09-17）**：七种 token 实串、D2 三处（结论翻案；07:36 用户拍板 (a)，`67b127b` 改掉，决策 `d-342`）、两线夹角第 2 步、距离第 2 步的步词已采成 observation，带截图；`printwindow-capture.ps1` 对这扇窗只回旧帧，截图改走 `CopyFromScreen`。**§40.6（10:3x 第三轮）**：距离第 2 步 `(Snap)` 变体、垂距第 2 步、三点角第 2 / 3 步——三条定位命令每一步都实机了；**§40.7（10:5x）**：§5 三条尾巴 Snap 关 / WP / Offset 及组合，pad WP 按钮没平面时弹 `No working plane has been defined.`。**§40.8（11:3x）**：§4 过滤器八串——真点 pad 八颗过滤器按钮，提示字字不变、亮灯与 `pickIndex` 一一对应。**§40.9（16:5x）**：D5 的 `(2,874)` = `Planes passed to method are parallel`（`!!messageFile.messageString`，弹框同句无编号），`(2,870)` kernel 原文 `Lines passed to method are parallel`（正常路径不露，用户看到的是 PML 字面句）；§38.3 只剩 §6 那几张要真实拾取才弹的框。
 
 ## 39. Intersect 的 ARC 操作数 / 弯管与环面的 Perpendicular：E3D 运行时采集（2026-09-17 00:0x + 06:3x）
 
@@ -1925,7 +1925,7 @@ v4 用 CTOR `=24381/46880`（`rins 40 / rout 60`，管半径 10，轴 = S）三�
 后端（带 `element/ptset` 的 gen-model）回来后补跑：① Element × Intersect，弯管体 + 同一条腿上的隐含管轴线 → 交点应落在离 `POS` **165.500 mm** 的新切点（比 `9bbb501` 那一轮挪 **82.285 mm**）；
 ② Perpendicular to，第二击落在弯管体 → 点到点、目标名不带「弧面」（对 §39.3 表的第一行 551.094 mm 那一档）。
 
-## 40. 提示矩阵 E3D 运行时采集·第二轮：七种 token / D2 三处 / 两线夹角第 2 步（主窗口还原、真实拾取、带截图，2026-09-17 00:0x + 06:3x–06:5x）+ 第三轮 10:3x–11:0x：距离第 2 步 `(Snap)` 变体 / 垂距第 2 步 / 三点角第 2、3 步（§40.6）、§5 三条尾巴 Snap 关 / WP / Offset（§40.7）+ 11:3x：§4 过滤器八串（§40.8）
+## 40. 提示矩阵 E3D 运行时采集·第二轮：七种 token / D2 三处 / 两线夹角第 2 步（主窗口还原、真实拾取、带截图，2026-09-17 00:0x + 06:3x–06:5x）+ 第三轮 10:3x–11:0x：距离第 2 步 `(Snap)` 变体 / 垂距第 2 步 / 三点角第 2、3 步（§40.6）、§5 三条尾巴 Snap 关 / WP / Offset（§40.7）+ 11:3x：§4 过滤器八串（§40.8）+ 16:5x：§6 D5 `(2,874)` 原文（§40.9）
 
 > 接 §38.3 的清单。用户 00:00 点头「把 E3D 主窗口还原到前台」，这一轮才有截图与真实鼠标 / 键盘输入。同一台 E3D 3.1 shadow（PID 11900），同一支宏 `capture-prompt-step.pmlmac`（本轮多了 5b pad 状态 / 5c pickData 与 return / 6 dimension 三段，见宏头），trace 仍是 `e3d-prompt-capture.trace.txt`；落点核算另加只读探针 `probe-fraction-landing.pmlmac` → `e3d-fraction-landing.trace.txt`。
 > 00:05–00:14 那一段是上一会话（fable-5-1-32）做的，trace 里 `P3-04-s*` / `P3-0x-*` / `P3-04-round-*` 十九块；06:36–06:53 是本会话，`*-r2-*` 十五块；10:34–10:42 是接手会话（fable-5-1-41）的第三轮，`*-r3-*` 十四块（§40.6）；10:56–11:07 同一会话续采尾巴，`P5-*` 十七块（§40.7）；11:37–11:39 同一会话再采过滤器，`P4-*` 九块（§40.8）——那一轮采完没来得及记录，截图 / 文档 / 入库与 E3D 收尾由接手会话（fable-5-1-7）15:3x 补做（`P4-r3-check` / `P4-r3-closed` / `P4-r3-final` 三块）。
@@ -1987,10 +1987,11 @@ Positioning pad 是停靠版 `!!edgNewPositioning`（`posCntrl.type=PAD1`，`edg
 5. **第三轮（§40.6）三条定位命令的后续步全部 ✓**：距离第 2 步 `(Snap)` 变体 `Measure distance end (Snap) Snap :`、垂距第 2 步 `Measure perpendicular distance end (Snap) Snap :`、三点角第 2 / 3 步 `Measure angle first point (Snap) Snap :` / `… second point (Snap) Snap :`——四条字串与矩阵 §2 的 `static_expectation` 逐字相同；每条命令最后一击之后状态**回第 1 步**（`start` / `root of angle`，`major=1`，stack 仍 1，窗体出结果），不是退出命令。矩阵 §2 三条定位命令（距离 / 垂距 / 三点角）现在**每一步**都是 `observation`；§2 只剩 `measureLineAngle`（非弧包，D6 不做）没实机。
 6. **§5 三条尾巴（§40.7）**：` Snap` 关得掉（`intermediate=FALSE` → `Measure distance start (Snap) :`，`(Snap)` 是类型 token 留着）；` WP` / ` Offset` 的字串与顺序照 `edgstate.pmlobj` 345–357——`prompt()` 里 **`WP` 后面跟两个空格**（`' WP '` 自带尾空格再接 `' Snap'` / `' Offset'`），视口气泡收成一个：`… (Snap) WP Offset Snap :`；**用户路径上 pad 的 WP 按钮在没定义工作平面时只弹 `No working plane has been defined.`、按钮弹回，尾巴不出**（`edgposcntrl` 672–685），` WP` 要先在 Working Plane 表单里定义平面；本 shadow 会话里 3.1 的 Offset 入口走不通（`!!appDesMain` / `!!edgSettings` 都没加载，`offsetType('ENU')` 弹 `(2,751) Variable !!EDGSETTINGS does not exist`），尾巴是直写 `offsetType` 采到的。D4（Web 不做 WP / Offset）不变，这两条只把 E3D 的字串钉死。
 7. **§4 过滤器八串（§40.8）**：在 Measure distance 第 1 步上真点 pad 的八颗过滤器按钮，`prompt()` 八次**字字不变**（`Measure distance start (Snap) Snap`，视口 `… (Snap) Snap :`）——`edgposcntrl.setPick` 1397 把旧 pick 的 `prompt`（token 词）原样带给新 pick，`edgstate.prompt()` 三段里不引用 `pick.description`；`pickIndex` 1→2→…→8→1、`state.pick.description` 与 pad 亮灯**一一对应**（每次只亮一颗）。矩阵 §4 结。顺手观察：Ppoint / Screen 下 pad 把五颗拾取类型按钮置灰（`edgnewpositioning.pmlfrm` 200 `active = not inset(5,6)`），提示里的 `(Snap) Snap` 不变；Web 浮条原来没这条联动（拾取类型的 `disabled` 只看静态 `MEASUREMENT_PICK_TYPE_AVAILABILITY`）——不进提示，属 pad UI 差异；~~没立 D 项~~ **→ 用户 15:5x 拍板立 D8、Web 跟上（`82411f9`，决策 `d-379`）**：`measurementPickTypeSelectable(filter)`，浮条在 Ppoint / Screen 下整排拾取类型 `disabled` + 一句「<过滤器> 下不起作用（E3D 同）」，类型 / 提示 / 落库不动；单测 +1 与 D8 段。
+8. **§6 D5（§40.9）**：`(2,874)` 的 E3D 原文 = **`Planes passed to method are parallel`**（`!!messageFile.messageString(2,874)`；`warning(2,874)` 弹的 Warning 框就这一句，无编号前缀）——D5 结；`(2,870)` kernel 原文 `Lines passed to method are parallel`，但 `handle (2,870)` 里用户看到的是 PML 字面 `Pick another line, last pick was parallel to first line`。Web 的 2,874 文案带编号不带原文，要不要补原文由用户定（原文对「第三项是线」那一路字面不贴切）。
 
 ### 40.5 还没采
 
-~~垂距 / 三点角的第 2 / 3 步、距离第 2 步的 `(Snap)` 变体~~（10:4x 第三轮已采，§40.6）；~~Significant Snaps 关 / WP / Offset 尾巴（`P5-*`）~~（10:5x–11:0x 已采，§40.7）；~~过滤器八串（`P4-*`）~~（11:3x 已采，§40.8）；§6 全部告警原文（`P6-*`，含 D5 的 `(2,874)`）。窗口还原着（前台，15:4x 由 cua-driver `bring_to_front` 再拉回一次）、pad / Measure 窗体坐标在屏内（Measure Angle 每次 show 要再挪），下一轮可直接接着采。
+~~垂距 / 三点角的第 2 / 3 步、距离第 2 步的 `(Snap)` 变体~~（10:4x 第三轮已采，§40.6）；~~Significant Snaps 关 / WP / Offset 尾巴（`P5-*`）~~（10:5x–11:0x 已采，§40.7）；~~过滤器八串（`P4-*`）~~（11:3x 已采，§40.8）；§6 告警原文：~~D5 的 `(2,874)`~~（16:5x 已采，`Planes passed to method are parallel`，§40.9）；**还剩**要真实拾取才弹的几张框——垂距 0（`Cannot draw dimension line. Perpendicular distance is 0`）、`(2,870)` 字面句、`An angular dimension could not be constructed…`、`No intersection between picked items`、`Unable to convert item…`——字面都在 PML 源里，实机只差「弹框长什么样、之后状态回到哪一步」。~~窗口还原着（前台）~~ **主窗口 16:5x 起被人反复最小化**（§40.9 坑 (c)），真实拾取要先跟用户确认能不能把 E3D 拉到前台；pad / Measure 窗体坐标仍在屏内（Measure Angle 每次 show 要再挪）。
 
 ### 40.6 10:3x–10:4x 第三轮（接手会话 fable-5-1-41，真实 Snap 拾取，带截图）
 
@@ -2074,3 +2075,20 @@ Positioning pad 是停靠版 `!!edgNewPositioning`（`posCntrl.type=PAD1`，`edg
 | 03 / 03b | Any，再点 Snap | 整排复活，Snap 点得动 | `Any · Mid-Point` → `Any · Snap` | 回 00 那条 | `…-03-any-restored-pick-layer.png` |
 
 与 E3D §40.8 的 `P4-05-r3-ppoint` / `P4-06-r3-screen`（`-pad.png`）并排看：两边都是「只亮一颗过滤器 + 整排类型置灰 + 当前类型仍标着 + 提示不变」。**D8 结**。
+
+### 40.9 16:5x–17:0x §6 告警原文第一步：message file 里的 `(2,874)` / `(2,870)`（矩阵 **D5** 结）+ `!!messageFile.warning(2,874)` 的弹框
+
+**路子**：`!!messageFile` 在本 shadow 会话里**是定义着的**（`defined()` TRUE，与 `!!edgSettings` / `!!appDesMain` 不同），`MESSAGEFILE.messageString(module, number)` 直接回 message file 的原文，不弹框、不拾取——只读探针 `probe-messagefile-text.pmlmac`（同目录，APPEND 到 `e3d-messagefile-text.trace.txt`）：
+
+| 编号 | `messageString(2,n)` | 谁在用 |
+| --- | --- | --- |
+| **(2,874)** | **`Planes passed to method are parallel`** | `edgpicktype.pmlobj` 843–847：面 × 面之后第三项无唯一交点，`handle (2,874)` → `!!messageFile.warning(2,874)` + `return.clear()` + `numberOfPicks = 1`——**用户看到的就是这一句**（矩阵 §6 第 3 行、D5） |
+| (2,870) | `Lines passed to method are parallel` | 913–916 / 928–931 的 `handle (2,870)` **不放这句**，换成字面 `Pick another line, last pick was parallel to first line`；kernel 原文只在 `elsehandle any` 分支（别的错误）经 `!!alert.warning(!!error.text)` 露出 |
+| (2,779) | `Method --- not found`（`---` 运行时填成 `<ARC>.INTERSECTION(<PLANE>,<PLANE>)`，§39.2 采到的整句） | D7 那一路的未处理错误 |
+| (2,751) | `Variable --- does not exist` | §40.7 Offset 那张 `(2,751)   Variable !!EDGSETTINGS does not exist` 框 |
+
+**弹框实机**：按 844 那一句原样投 `!!messageFile.warning(2,874)` → 弹 **Warning** 框（hwnd 132784940，逻辑 757,405–950,503，主窗口正中），黄色警示图标 + 正文 **`Planes passed to method are parallel`**（**没有 `(2,874)` 编号前缀**）+ OK；`e3d-prompt-P6-03-r4-2874-warning.png`、`…-zoom.png`。框是模态的，投宏队列停到 OK 为止；这次没等我点，主窗口被（人）最小化后框就没了，`P6-03-r4-after-ok` 捕到 `Navigate`、队列已通。
+
+**结论**：(1) **D5 结**——`(2,874)` 的 E3D 原文是 `Planes passed to method are parallel`，弹框里就这一句；Web 那句 `面 × 面 × 第三项没有唯一交点，求交已重置，请重新拾取（E3D 2,874）` 行为一致、带编号不带原文——要不要像其它行那样把原文也带上由用户定（注意原文说的是「planes parallel」，第三项是**线**（线 ∥ 第一面）时它字面上不贴切，Web 现在的措辞反而更准）；(2) `(2,870)` 用户看到的是 PML 字面那句，kernel 原文 `Lines passed to method are parallel` 不会出现在正常路径上。
+
+**坑（工具）**：(a) 让 kernel **抛错**的语句（`LINE.intersection(平行线)`、`do !n values 874, 870`、`!!CE.name` 这类）放在经 `QueueThreadedDirectMacroRawFromHost` 投进去的宏里，**哪怕包在 `handle any` 里**，整条 `RunInPdms` 也会以 `.NET InvalidOperationException（在创建窗口句柄之前，不能在控件上调用 Invoke）` 中断、输出文件不落——错误上报要往命令窗口控件 Invoke，本 shadow 会话里那个控件没建句柄。所以 `(2,870)` / `(2,874)` 的原文改用 `messageString` 拿，不去真抛；真实拾取路径走 UI 线程，不受这条影响（§40.7 的 `(2,751)` 框就是 UI 线程弹出来的）。(b) 探针宏要一句一句保守写：`do … values` 只吃 ARRAY；写文件之前任何一句抛错都等于白跑。(c) **E3D 主窗口 16:5x 起被人反复最小化**（16:52 一次、16:58 一次——都在我 `bring_to_front` 之后几分钟），owned 的 Warning 框随之不可见、`EnumWindows` 只剩主窗口；隐藏的框仍可用 `EnumChildWindows` 找 OK 子窗口 `SendMessage(BM_CLICK)` 点掉，不用抢前台。§6 其余告警（垂距 0 / `(2,870)` 字面 / 造不出弧 / 与弧无交点 / 转不成线面）要**真实拾取**、要主窗口在前台——等用户点头再采。
