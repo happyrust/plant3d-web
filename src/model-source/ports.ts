@@ -164,6 +164,11 @@ export type SpatialSourceCapabilities = {
    * legacy 走 `/query?mode=bran_centerline`；gen-model-v1 的 `GLOBAL_AABB_TREE` 只有包围盒，没有这一档。
    */
   readonly branCenterline: boolean;
+  /**
+   * 服务端关键字匹不匹配构件**名称**：legacy 的 `/api/sqlite-spatial/*` 按 refno / noun / name 匹配；
+   * gen-model-v1 只按 refno / noun（全集匹配名称要对全部候选读记录，大半径下会拖成秒级），抽屉据此切关键字文案。
+   */
+  readonly keywordMatchesName: boolean;
 };
 
 /**

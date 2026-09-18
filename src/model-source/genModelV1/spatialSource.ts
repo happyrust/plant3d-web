@@ -52,8 +52,14 @@ export const defaultSpatialApi: SpatialApi = {
  * BRAN 中心线支持：`/api/v1/spatial/nearby?source_mode=bran_centerline` 的走廊不来自 `GLOBAL_AABB_TREE`
  * （那里只有包围盒），而是服务端从 E3D 库现取的成员序 + 隐式管身（`mbd::branch_query`，与 `/api/mbd/v2/pipe`
  * 同一份数据）。
+ *
+ * 关键字只匹配 refno / noun，不匹配名称（spec §4.13；名称只对本页补）。
  */
-export const GEN_MODEL_V1_SPATIAL_CAPABILITIES: SpatialSourceCapabilities = { specValues: false, branCenterline: true };
+export const GEN_MODEL_V1_SPATIAL_CAPABILITIES: SpatialSourceCapabilities = {
+  specValues: false,
+  branCenterline: true,
+  keywordMatchesName: false,
+};
 
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value);

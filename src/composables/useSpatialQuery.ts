@@ -86,6 +86,8 @@ type DtxLayerMatrixSource = {
 
 type SelectionLike = {
   selectedRefno: Ref<string | null>;
+  /** 写全局选中（属性面板 / 模型树跟着走），与查看器点选同一条路（`ViewerPanel` 拾取 → `setSelectedRefno`）；测试桩可不给。 */
+  setSelectedRefno?: (refno: string | null) => void;
 };
 
 type ToolStoreLike = {
@@ -231,6 +233,23 @@ type SpatialQueryDrawerOpenFn = (
 ) => void;
 
 const SPATIAL_RADIUS_METERS_TO_MM = 1000;
+/** 服务端半径硬上限 100 m（sqlite_spatial_api MAX_CLEARANCE_RADIUS_MM，v1 同口径）：抽屉、URL、请求三处都按它钳。 */
+export const SPATIAL_RADIUS_MAX_MM = 100 * SPATIAL_RADIUS_METERS_TO_MM;
+/** 「每页数量」缺省；草稿里填空 / 非正数时请求按它发，不让 `per_page=` 空着出门。 */
+const DEFAULT_PAGE_LIMIT = 100;
+
+function clampRadiusMm(radius: number): number {
+  return Math.min(radius, SPATIAL_RADIUS_MAX_MM);
+}
+
+/** 草稿里的「每页数量」是不是能直接发的正整数（`v-model.number` 清空会写进 `''`）。 */
+function isValidPageLimit(limit: unknown): limit is number {
+  return typeof limit === 'number' && Number.isInteger(limit) && limit >= 1;
+}
+
+function normalizePageLimit(limit: unknown): number {
+  return isValidPageLimit(limit) ? limit : DEFAULT_PAGE_LIMIT;
+}
 
 function normalizeUrlRefno(refno: string): string {
   return String(refno || '').trim().replace(/\//g, '_');
@@ -255,9 +274,10 @@ export function parseSpatialQueryUrlParams(search: string | URLSearchParams): Sp
   const rawRadius = Number(params.get('spatial_radius'));
   if (!Number.isFinite(rawRadius) || rawRadius <= 0) return null;
   const radiusUnit = String(params.get('spatial_radius_unit') || '').trim().toLowerCase();
-  const radius = radiusUnit === 'm' || radiusUnit === 'meter' || radiusUnit === 'meters'
+  // 与抽屉 `setRadiusMeters` 同一道钳位：URL 给 500 m 直接发会被服务端 400，钳到 100 m 后草稿与面板也显示 100 m
+  const radius = clampRadiusMm(radiusUnit === 'm' || radiusUnit === 'meter' || radiusUnit === 'meters'
     ? Math.round(rawRadius * SPATIAL_RADIUS_METERS_TO_MM)
-    : rawRadius;
+    : rawRadius);
 
   const rawShape = String(params.get('spatial_shape') || 'sphere').trim().toLowerCase();
   const shape: SpatialQueryShape = rawShape === 'cube' ? 'cube' : 'sphere';
@@ -1081,6 +1101,7 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
   const spatialCapabilities = computed<SpatialQueryCapabilities>(() => ({
     specValues: spatialSource().capabilities.specValues,
     branCenterline: spatialSource().capabilities.branCenterline,
+    keywordMatchesName: spatialSource().capabilities.keywordMatchesName,
   }));
   const nextRequestId = options.createRequestId ?? createRequestId;
   const batchLoadRefnos = options.batchLoadRefnos ?? ((refnos: string[], loadOptions?: BatchLoadOptions) => {
@@ -1142,7 +1163,11 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
     },
   );
 
+  /** 「每页数量」填空 / 非正整数时不让提交（请求侧另有缺省兜底，这里是让用户看见按钮灰掉、去补那一格）。 */
+  const hasValidPageLimit = computed(() => isValidPageLimit(draft.limit));
+
   const canSubmit = computed(() => {
+    if (!hasValidPageLimit.value) return false;
     if (draft.mode === 'distance' && isRefnoCenterSource(draft.distanceCenterSource)) {
       return draft.refno.trim().length > 0 && draft.radius > 0;
     }
@@ -1213,10 +1238,11 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
       mode: draft.mode,
       centerSource,
       center,
-      radius: draft.radius,
+      // 半径钳到服务端上限、每页数量补缺省：草稿可能来自 URL / 宿主脚本 / 被清空的输入框，请求不带坏值出门
+      radius: clampRadiusMm(draft.radius),
       shape: draft.shape,
       filters,
-      limit: draft.limit,
+      limit: normalizePageLimit(draft.limit),
       sortBy,
       refno: draft.mode === 'distance' && isRefnoCenterSource(draft.distanceCenterSource) ? draft.refno.trim() || undefined : undefined,
       includeSelf: shouldIncludeSelf(draft),
@@ -1835,6 +1861,8 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
       if (previous.length > 0) {
         viewer.scene.setObjectsSelected(previous, false);
       }
+      // 与查看器点选同一条路：全局选中也写，属性面板 / 模型树跟着走（改前只改查看器高亮）
+      selection.setSelectedRefno?.(item.refno);
       viewer.scene.ensureRefnos([item.refno]);
       viewer.scene.setObjectsVisible([item.refno], true);
       viewer.scene.setObjectsSelected([item.refno], true);
@@ -2160,6 +2188,7 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
     activeResultRefno,
     selectedCenterRefno,
     canSubmit,
+    hasValidPageLimit,
     spatialCapabilities,
     setMode,
     applyCurrentSelection,

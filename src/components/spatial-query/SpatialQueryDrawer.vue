@@ -275,7 +275,13 @@
               <input v-model.number="draft.limit"
                 type="number"
                 min="1"
-                class="h-8 w-full rounded-md border border-gray-200 bg-white px-2.5 font-mono text-xs text-gray-900 outline-none focus:border-brand" />
+                step="1"
+                data-testid="spatial-page-limit"
+                class="h-8 w-full rounded-md border bg-white px-2.5 font-mono text-xs text-gray-900 outline-none focus:border-brand"
+                :class="pageLimitValid ? 'border-gray-200' : 'border-danger/60'" />
+              <span v-if="!pageLimitValid" class="mt-1 block text-[10px] text-danger" data-testid="spatial-page-limit-hint">
+                请填 ≥ 1 的整数，否则无法执行查询
+              </span>
             </label>
             <label class="text-xs text-gray-500">
               <span class="mb-1 block">Noun 类型（逗号分隔）</span>
@@ -328,10 +334,11 @@
               </p>
             </div>
             <label class="text-xs text-gray-500">
-              <span class="mb-1 block">关键字（Refno / 名称）</span>
+              <span class="mb-1 block" data-testid="spatial-keyword-label">{{ keywordLabel }}</span>
               <input v-model="draft.keyword"
                 type="text"
-                placeholder="支持 Refno 或名称关键字"
+                :placeholder="keywordPlaceholder"
+                data-testid="spatial-keyword-input"
                 class="h-8 w-full rounded-md border border-gray-200 bg-white px-2.5 text-xs text-gray-900 outline-none focus:border-brand" />
             </label>
             <div class="flex flex-wrap gap-1.5">
@@ -667,6 +674,7 @@ const {
   activeResultRefno,
   selectedCenterRefno,
   canSubmit,
+  hasValidPageLimit,
   spatialCapabilities,
   setMode: setSpatialQueryMode,
   applyCurrentSelection,
@@ -693,6 +701,13 @@ const confirmDialog = useConfirmDialogStore();
 const hasSpecDimension = computed(() => spatialCapabilities.value.specValues);
 const groupDimensionLabel = computed(() => (hasSpecDimension.value ? '按专业' : '按库'));
 const groupUnitLabel = computed(() => (hasSpecDimension.value ? '专业' : '库'));
+/** 关键字文案随源切：legacy 服务端按 Refno / Noun / 名称匹配，gen-model-v1 只按 Refno / Noun（名称只对本页补，全集不匹配）。 */
+const keywordLabel = computed(() => (spatialCapabilities.value.keywordMatchesName ? '关键字（Refno / Noun / 名称）' : '关键字（Refno / Noun）'));
+const keywordPlaceholder = computed(() => (
+  spatialCapabilities.value.keywordMatchesName ? '支持 Refno、Noun 或名称关键字' : '支持 Refno 或 Noun 关键字（当前源不按名称匹配）'
+));
+/** 「每页数量」是否可用：清空 / 非正整数时输入框标红、提交按钮灰掉（store 的 canSubmit 同一口径）。 */
+const pageLimitValid = hasValidPageLimit;
 
 const METERS_TO_MM = 1000;
 const DISTANCE_RADIUS_MIN_M = 0.1;

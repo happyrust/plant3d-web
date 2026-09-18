@@ -29,7 +29,7 @@ const spatialSourceMocks = vi.hoisted(() => ({
   })),
   negativeNouns: vi.fn(async (): Promise<NegativeNounsResult> => ({ success: false, nouns: [] })),
   /** 当前「数据源」：缺省 legacy（有专业维度）；v1 用例翻成 gen-model-v1 / specValues=false */
-  state: { kind: 'legacy' as 'legacy' | 'gen-model-v1', specValues: true, branCenterline: true },
+  state: { kind: 'legacy' as 'legacy' | 'gen-model-v1', specValues: true, branCenterline: true, keywordMatchesName: true },
 }));
 
 vi.mock('@/model-source', () => ({
@@ -39,7 +39,11 @@ vi.mock('@/model-source', () => ({
       nearby: spatialSourceMocks.nearby,
       nearbyRefnos: spatialSourceMocks.nearbyRefnos,
       negativeNouns: spatialSourceMocks.negativeNouns,
-      capabilities: { specValues: spatialSourceMocks.state.specValues, branCenterline: spatialSourceMocks.state.branCenterline },
+      capabilities: {
+        specValues: spatialSourceMocks.state.specValues,
+        branCenterline: spatialSourceMocks.state.branCenterline,
+        keywordMatchesName: spatialSourceMocks.state.keywordMatchesName,
+      },
     },
   }),
 }));
@@ -82,6 +86,7 @@ import {
   initializeSpatialQueryFromUrl,
   parseSpatialQueryUrlParams,
   resolveSceneWorldTransform,
+  SPATIAL_RADIUS_MAX_MM,
 } from './useSpatialQuery';
 
 import type {
@@ -147,6 +152,7 @@ describe('createSpatialQueryStore', () => {
     spatialSourceMocks.state.kind = 'legacy';
     spatialSourceMocks.state.specValues = true;
     spatialSourceMocks.state.branCenterline = true;
+    spatialSourceMocks.state.keywordMatchesName = true;
     dbMetaMocks.ensureDbMetaInfoLoaded.mockResolvedValue(undefined);
     dbMetaMocks.getDbnumByRefno.mockReturnValue(7997);
     dtxLoaderMocks.loadDtxAabbProxyRefnos.mockImplementation((_layer, _dbno, entries) => ({
@@ -867,6 +873,7 @@ describe('createSpatialQueryStore', () => {
     spatialSourceMocks.state.kind = 'gen-model-v1';
     spatialSourceMocks.state.specValues = false;
     spatialSourceMocks.state.branCenterline = false;
+    spatialSourceMocks.state.keywordMatchesName = false;
     const viewer = createViewerStub();
     spatialSourceMocks.nearby.mockResolvedValueOnce({
       success: true,
@@ -895,7 +902,7 @@ describe('createSpatialQueryStore', () => {
       batchLoadRefnos,
     });
 
-    expect(store.spatialCapabilities.value).toEqual({ specValues: false, branCenterline: false });
+    expect(store.spatialCapabilities.value).toEqual({ specValues: false, branCenterline: false, keywordMatchesName: false });
     store.draft.mode = 'range';
     // legacy 下范围查询默认「按专业」；v1 没有专业维度，退到由近及远
     expect(store.draft.sortBy).toBe('distanceAsc');
@@ -1292,16 +1299,17 @@ describe('createSpatialQueryStore', () => {
     expect(store.resultSet.value?.items[0]?.visible).toBe(true);
   });
 
-  it('点击未加载结果时应先请求加载，再飞行并选中', async () => {
+  it('点击未加载结果时应先请求加载，再飞行并选中（全局选中 store 也写，属性面板 / 模型树跟着走）', async () => {
     const viewer = createViewerStub();
     const requestId = 'req-1';
     const addEventListenerSpy = vi.spyOn(window, 'addEventListener');
     const removeEventListenerSpy = vi.spyOn(window, 'removeEventListener');
     const dispatchEventSpy = vi.spyOn(window, 'dispatchEvent');
+    const setSelectedRefno = vi.fn();
 
     const store = createSpatialQueryStore({
       viewerRef: { value: viewer },
-      selection: { selectedRefno: { value: null } } as any,
+      selection: { selectedRefno: { value: null }, setSelectedRefno } as any,
       toolStore: { pickedQueryCenter: { value: null }, setToolMode: vi.fn(), setPickedQueryCenter: vi.fn() } as any,
       createRequestId: () => requestId,
     });
@@ -1374,6 +1382,8 @@ describe('createSpatialQueryStore', () => {
 
     expect(removeEventListenerSpy).toHaveBeenCalledWith('showModelByRefnosDone', listener);
     expect(viewer.scene.setObjectsSelected).toHaveBeenCalledWith(['server_only'], true);
+    // 改前只改查看器高亮，不写 useSelectionStore，属性面板 / 模型树不跟
+    expect(setSelectedRefno).toHaveBeenCalledWith('server_only');
     expect(viewer.cameraFlight.flyTo).toHaveBeenCalled();
     expect(store.resultSet.value.items[0]?.loaded).toBe(true);
     expect(store.activeResultRefno.value).toBe('server_only');
@@ -1524,6 +1534,57 @@ describe('createSpatialQueryStore', () => {
       shape: 'sphere',
       autorun: false,
     });
+  });
+
+  it('spatial URL 半径超过服务端上限 100 m 时钳到 100 m（与抽屉 setRadiusMeters 同一道），不让整次查询被 400', () => {
+    expect(SPATIAL_RADIUS_MAX_MM).toBe(100_000);
+    expect(parseSpatialQueryUrlParams('?spatial_refno=24381_145019&spatial_radius=500&spatial_radius_unit=m')?.radius).toBe(100_000);
+    expect(parseSpatialQueryUrlParams('?spatial_refno=24381_145019&spatial_radius=250000')?.radius).toBe(100_000);
+    expect(parseSpatialQueryUrlParams('?spatial_refno=24381_145019&spatial_radius=100000')?.radius).toBe(100_000);
+    expect(parseSpatialQueryUrlParams('?spatial_refno=24381_145019&spatial_radius=99999')?.radius).toBe(99_999);
+  });
+
+  it('「每页数量」清空 / 非正整数：canSubmit 为假；宿主脚本硬提交时 per_page 按缺省 100 发，半径也钳到 100 m', async () => {
+    const queryNearbyByPosition = vi.fn(async (): Promise<SpatialQueryResult> => ({
+      success: true,
+      total_count: 0,
+      returned_count: 0,
+      page: 1,
+      per_page: 100,
+      has_more: false,
+      results: [],
+    }));
+    const store = createSpatialQueryStore({
+      viewerRef: ref(null),
+      selection: { selectedRefno: { value: null } } as any,
+      toolStore: { pickedQueryCenter: { value: null }, setToolMode: vi.fn(), setPickedQueryCenter: vi.fn() } as any,
+      queryNearbyByPosition,
+    });
+    store.draft.mode = 'range';
+    store.draft.rangeCenterSource = 'coordinates';
+    store.draft.center = { x: 1, y: 2, z: 3 };
+    store.draft.radius = 250_000;
+    expect(store.canSubmit.value).toBe(true);
+    expect(store.hasValidPageLimit.value).toBe(true);
+
+    // v-model.number 清空写进 ''；0 / 1.5 / 负数也都不算
+    (store.draft as unknown as { limit: unknown }).limit = '';
+    expect(store.hasValidPageLimit.value).toBe(false);
+    expect(store.canSubmit.value).toBe(false);
+    store.draft.limit = 0;
+    expect(store.canSubmit.value).toBe(false);
+    store.draft.limit = 1.5;
+    expect(store.canSubmit.value).toBe(false);
+    store.draft.limit = 20;
+    expect(store.canSubmit.value).toBe(true);
+
+    // 绕过按钮硬提交（URL autorun / 宿主脚本）：请求不带坏值出门
+    (store.draft as unknown as { limit: unknown }).limit = '';
+    await store.submitQuery();
+    expect(store.status.value).toBe('ready');
+    expect(queryNearbyByPosition).toHaveBeenCalledWith(1, 2, 3, 100_000, expect.objectContaining({ per_page: 100 }));
+    expect(store.resultSet.value?.request.limit).toBe(100);
+    expect(store.resultSet.value?.request.radius).toBe(100_000);
   });
 
   it('spatial URL 没有 autorun 时只打开并填充，不触发查询', () => {

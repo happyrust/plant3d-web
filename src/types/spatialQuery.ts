@@ -98,6 +98,8 @@ export type SpatialQueryCapabilities = {
   specValues: boolean;
   /** 距离查询能否「沿 BRAN 中心线」：legacy 有（`/query?mode=bran_centerline`），gen-model-v1 没有，抽屉据此收起那一档 */
   branCenterline: boolean;
+  /** 服务端关键字匹不匹配构件名称：legacy 匹配 refno / noun / name，gen-model-v1 只匹配 refno / noun；抽屉据此切关键字文案 */
+  keywordMatchesName: boolean;
 };
 
 export type SpatialQueryFilterOptions = {

@@ -59,8 +59,10 @@ const stubState = {
   /** 「当前选中」没盒时待服务端解中心的 refno */
   selectedCenterRefno: ref<string | null>(null) as Ref<string | null>,
   canSubmit: ref(true) as Ref<boolean>,
+  /** 「每页数量」是否为正整数（store 算，抽屉据此标红输入框） */
+  hasValidPageLimit: ref(true) as Ref<boolean>,
   /** legacy 源有专业维度；gen-model-v1 的用例把它翻成 false */
-  spatialCapabilities: ref<SpatialQueryCapabilities>({ specValues: true, branCenterline: true }) as Ref<SpatialQueryCapabilities>,
+  spatialCapabilities: ref<SpatialQueryCapabilities>({ specValues: true, branCenterline: true, keywordMatchesName: true }) as Ref<SpatialQueryCapabilities>,
 };
 
 vi.mock('@/composables/useSpatialQuery', () => ({
@@ -152,7 +154,8 @@ function resetDraft() {
   stubState.activeResultRefno.value = null;
   stubState.selectedCenterRefno.value = null;
   stubState.canSubmit.value = true;
-  stubState.spatialCapabilities.value = { specValues: true, branCenterline: true };
+  stubState.hasValidPageLimit.value = true;
+  stubState.spatialCapabilities.value = { specValues: true, branCenterline: true, keywordMatchesName: true };
 }
 
 function makeResultSet(count: number, options: { page?: number; perPage?: number; total?: number; hasMore?: boolean; startIndex?: number } = {}): SpatialQueryResultSet {
@@ -292,7 +295,7 @@ describe('SpatialQueryDrawer (distance 模式)', () => {
     expect(host.querySelector('[data-testid="distance-source-bran-centerline"]')?.className).toContain('bg-brand-subtle');
 
     // gen-model-v1 没有中心线：按钮消失，已选的那一档退回「通过 Refno」
-    stubState.spatialCapabilities.value = { specValues: false, branCenterline: false };
+    stubState.spatialCapabilities.value = { specValues: false, branCenterline: false, keywordMatchesName: false };
     await nextTick();
 
     expect(host.querySelector('[data-testid="distance-source-bran-centerline"]')).toBeNull();
@@ -469,6 +472,35 @@ describe('SpatialQueryDrawer (distance 模式)', () => {
     stubState.draft.center.z = Number.NaN;
     await nextTick();
     expect(host.textContent).toContain('—, 5678, —');
+
+    unmount();
+  });
+
+  it('更多条件：关键字文案随源切（legacy 含名称、v1 只 Refno / Noun）；「每页数量」无效时输入框标红并提示', async () => {
+    const { host, unmount } = mountDrawer();
+    await nextTick();
+    (host.querySelector('[data-testid="spatial-advanced-toggle"]') as HTMLButtonElement).click();
+    await nextTick();
+
+    expect(host.querySelector('[data-testid="spatial-keyword-label"]')?.textContent).toContain('关键字（Refno / Noun / 名称）');
+    expect((host.querySelector('[data-testid="spatial-keyword-input"]') as HTMLInputElement).placeholder).toContain('名称');
+
+    // gen-model-v1：服务端不按名称匹配，文案不再许诺「名称」（改前写死「Refno / 名称」）
+    stubState.spatialCapabilities.value = { specValues: false, branCenterline: false, keywordMatchesName: false };
+    await nextTick();
+    expect(host.querySelector('[data-testid="spatial-keyword-label"]')?.textContent).toContain('关键字（Refno / Noun）');
+    expect(host.querySelector('[data-testid="spatial-keyword-label"]')?.textContent).not.toContain('名称');
+    expect((host.querySelector('[data-testid="spatial-keyword-input"]') as HTMLInputElement).placeholder).toContain('不按名称匹配');
+
+    // 每页数量清空：store 判无效 → 输入框标红 + 提示；有效时没有提示
+    expect(host.querySelector('[data-testid="spatial-page-limit-hint"]')).toBeNull();
+    stubState.hasValidPageLimit.value = false;
+    await nextTick();
+    expect(host.querySelector('[data-testid="spatial-page-limit-hint"]')?.textContent).toContain('请填 ≥ 1 的整数');
+    expect(host.querySelector('[data-testid="spatial-page-limit"]')?.className).toContain('border-danger');
+    stubState.hasValidPageLimit.value = true;
+    await nextTick();
+    expect(host.querySelector('[data-testid="spatial-page-limit-hint"]')).toBeNull();
 
     unmount();
   });
@@ -920,7 +952,7 @@ describe('SpatialQueryDrawer (distance 模式)', () => {
   });
 
   it('gen-model-v1（无专业维度）：收起专业过滤与「按专业」排序，结果按库分组、组头用服务端全量计数、组按钮走 dbnum 路径，并提示覆盖面', async () => {
-    stubState.spatialCapabilities.value = { specValues: false, branCenterline: false };
+    stubState.spatialCapabilities.value = { specValues: false, branCenterline: false, keywordMatchesName: false };
     const base = makeResultSet(3);
     base.items[0]!.dbnum = 24381;
     base.items[1]!.dbnum = 24383;

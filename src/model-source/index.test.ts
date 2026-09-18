@@ -154,7 +154,7 @@ describe('legacy 适配器：零逻辑委托', () => {
     expect(nearby).toEqual({ success: true, results: [] });
     expect(refnos.total_count).toBe(0);
     expect(negative).toEqual({ success: true, nouns: ['NBOX'] });
-    expect(source.spatial.capabilities).toEqual({ specValues: true, branCenterline: true });
+    expect(source.spatial.capabilities).toEqual({ specValues: true, branCenterline: true, keywordMatchesName: true });
   });
 
   it('网格 URL 模板与 useDbnoInstancesDtxLoader 现有写法逐字相同', () => {
@@ -174,8 +174,8 @@ describe('legacy 适配器：零逻辑委托', () => {
     expect(source.attributes.typeInfo).not.toBe(legacy.attributes.typeInfo);
     expect(source.attributes.uiAttr).not.toBe(legacy.attributes.uiAttr);
     expect(source.spatial.nearby).not.toBe(legacy.spatial.nearby);
-    expect(source.spatial.capabilities).toEqual({ specValues: false, branCenterline: true });
-    expect(legacy.spatial.capabilities).toEqual({ specValues: true, branCenterline: true });
+    expect(source.spatial.capabilities).toEqual({ specValues: false, branCenterline: true, keywordMatchesName: false });
+    expect(legacy.spatial.capabilities).toEqual({ specValues: true, branCenterline: true, keywordMatchesName: true });
     expect(legacyMocks.e3dGetWorldRoot).not.toHaveBeenCalled();
     expect(legacyMocks.queryInstanceEntriesByRefnos).not.toHaveBeenCalled();
     expect(legacyMocks.pdmsGetTypeInfo).not.toHaveBeenCalled();

@@ -217,7 +217,7 @@ describe('gen-model-v1 spatialSource', () => {
     expect(refnos).toMatchObject({ success: true, refnos: ['24383_71586'], by_dbnum: { '24383': ['24383_71586'] } });
 
     expect(await source.negativeNouns()).toEqual({ success: true, nouns: ['NBOX', 'NCYL'] });
-    expect(source.capabilities).toEqual({ specValues: false, branCenterline: true });
+    expect(source.capabilities).toEqual({ specValues: false, branCenterline: true, keywordMatchesName: false });
     expect(GEN_MODEL_V1_SPATIAL_CAPABILITIES.specValues).toBe(false);
   });
 
