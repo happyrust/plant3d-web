@@ -342,3 +342,26 @@ legacy 下与从前的可见差别只有一处、且不可见于用户：A/B 隔
   `element_attributes`）都在，缺一条只读接口，何时立等前端再要。出口：`rg` 对 `model-history | ModelTreeAttrDiffPanel | modelHistoryApi` 在
   `src / e2e / docs/guides / CONTEXT.md` 只剩 v1 任务种类 `kind: 'model-history'`（gen-model 的历史投影任务名，与 legacy 路由无关）；
   vitest 全仓 343 文件 / 3056 用例全绿；type-check 基线外仍只剩那条无关的；ESLint 0。差异模式下选中节点后底部不再有「属性差异」块。
+
+## 8. 属性历史对比回到 gen-model-v1（18:0x 起，用户拍板 (a)：契约先定、前端半边先做、后端等 `element_attributes.rs` 落地）
+
+- **契约**（gen-model-refactor ADR-081 候选条，`b923c1711`）：`POST /api/v1/model/history/query { snapshot_key, tool: "attributes", arguments: { refno: "a/b" } }`
+  → `{ snapshot_key, dbnum, sesno, refno, exists, noun, attributes: ElementAttribute[] }`，行与 `element/attributes` 同型、同一个渲染器；
+  不存在的 refno `exists: false` 不 404；`INVALID_REFNO` 400 / `SNAPSHOT_NOT_FOUND` 404 / `REFNO_OUTSIDE_SNAPSHOT` 422。
+- **为什么后端不现在做**：`src/data_interface/element_attributes.rs` 正被另一会话改（+678 行未提交，E3D 对齐渲染器 + `open_pinned_set`），
+  `tool=attributes` 要复用的渲染器就在那个文件里；没有写锁，同时改 = 后写的静静覆盖先写的。等它落地后 `tool=attributes` = 快照的
+  `(source_file, sesno)` → 钉死 `DbSet` → `extraction()` → 同一个渲染器，属性面板与历史对比印同一个字。
+- **前端半边（本仓，已做）**：
+  - `genModelV1Api`：`HistoryQueryTool` 加 `'attributes'`，`HistoryAttributesDto`，`genModelV1ModelHistoryQuery` 接 `arguments`。
+  - 端口：`ModelVersionGeometry.handle`（v1 = snapshot_key，适配器私有）、`ModelVersionAttributeRow / ModelVersionAttributes`、
+    `ModelVersionSource.attributesAt(geometry, refno)`；v1 适配器实现（tombstone 没句柄 → `exists:false` 不打后端）；legacy stub 同样抛退役错。
+  - `TreeDiffContext.attributesAt?: (side, refno, signal)`：版本对比面板 `dispatchTreeDiff` 闭包住本次持有的两份版本几何，随上下文交给模型树；
+    `ModelTreePanel.applyTreeDiffContext` 透传（不是函数就当没给）。
+  - 新面板 `components/model-tree/ModelVersionAttrDiffPanel.vue` 挂在差异模式底部（原 `ModelTreeAttrDiffPanel` 的位置）：两侧并发取、
+    `utils/modelVersionAttrDiff.diffAttributeRows` 按属性名（大小写不敏感）合并成 `changed / only-before / only-after / unchanged`，
+    缺省只列有差异的行、「显示未变」可切；一侧 `exists:false` 给「该构件在版本 A / B 不存在」横幅（正常态）；取数失败给「暂不可用 + 原因」；
+    没带取数口的上下文提示重新运行对比。没有「在 3D 中定位」按钮（树行点击本就选中 / 聚焦）。
+  - 测试：面板 5 条（变更 / 只一侧 / 无差异 / 抛错 / 无取数口）、纯函数 4 条、v1 适配器 2 条、对比面板上下文带 `attributesAt` 1 条断言。
+- **验证**：vitest 全仓 345 文件 / 3067 用例全绿；type-check 基线外仍只剩无关那条；ESLint 13 个触及文件 0；真机（`:8022 d47d747fd` + dev `:3111`）
+  587→602 进差异模式后底部挂出面板、两条 `tool=attributes` 请求按契约发出、服务端回「unknown historical query tool」→ 面板给「暂不可用 + 原因」，
+  pageerror 0（`docs/verification/…/attr-diff/`）。后端落地后前端不用再改。

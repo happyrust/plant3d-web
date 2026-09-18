@@ -4,7 +4,7 @@ import { computed, markRaw, onBeforeUnmount, onMounted, ref } from 'vue';
 import { GitCompare, RefreshCw, X } from 'lucide-vue-next';
 
 import { ensureDbMetaInfoLoaded, getDbnumByRefno } from '@/composables/useDbMetaInfo';
-import { dispatchTreeDiffContext } from '@/composables/useTreeVersionDiff';
+import { dispatchTreeDiffContext, type TreeDiffAttributesAt } from '@/composables/useTreeVersionDiff';
 import {
   getModelSource,
   getModelSourceKind,
@@ -89,8 +89,11 @@ function dispatch(detail: ModelUnitVersionCompareEventDetail): void {
  * 把本次模型几何差异送进模型树的差异模式（徽章 / 幽灵节点 / 筛选）。本面板是该通道唯一的派发方（ADR 0065 §1.4）；
  * 模型列表怎么折（`unchanged` 不进、`ownerRefno` 从哪侧取、tombstone 补单元根）见 `buildTreeDiffModels`。
  */
-function dispatchTreeDiff(input: TreeDiffDispatchInput): void {
+function dispatchTreeDiff(input: TreeDiffDispatchInput, geometries: { before: ModelVersionGeometry; after: ModelVersionGeometry }): void {
   const models = buildTreeDiffModels(input);
+  // 属性历史对比的取数口：闭包住本次对比持有的两份版本几何（句柄在里面），树那边只认「哪一侧、哪个 refno」
+  const attributesAt: TreeDiffAttributesAt = (side, refno, signal) =>
+    getModelSource().versions.attributesAt(side === 'before' ? geometries.before : geometries.after, refno, { signal });
   dispatchTreeDiffContext({
     dbnum: input.dbnum,
     fromSesno: input.before.sesno,
@@ -98,6 +101,7 @@ function dispatchTreeDiff(input: TreeDiffDispatchInput): void {
     mode: 'compare',
     refnos: models.map((model) => model.refno),
     models,
+    attributesAt,
   });
 }
 
@@ -218,7 +222,7 @@ async function runCompare(): Promise<void> {
       rows: rows.value,
       beforeOwners: beforeData.geometry.ownerByRefno,
       afterOwners: afterData.geometry.ownerByRefno,
-    });
+    }, { before: beforeData.geometry, after: afterData.geometry });
     dispatch({
       action: 'open',
       dbnum: dbnum.value,

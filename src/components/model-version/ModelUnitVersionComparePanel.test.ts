@@ -9,6 +9,7 @@ import type { ModelVersion, ModelVersionGeometry } from '@/model-source';
 const versionSourceMocks = vi.hoisted(() => ({
   listVersions: vi.fn(),
   loadVersion: vi.fn(),
+  attributesAt: vi.fn(),
 }));
 vi.mock('@/model-source', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/model-source')>();
@@ -122,7 +123,7 @@ describe('ModelUnitVersionComparePanel', () => {
     await flushUi();
 
     expect(treeDiffEvents).toHaveLength(1);
-    expect(treeDiffEvents[0]?.detail).toEqual({
+    expect(treeDiffEvents[0]?.detail).toMatchObject({
       dbnum: 7997,
       fromSesno: 791,
       toSesno: 897,
@@ -133,6 +134,16 @@ describe('ModelUnitVersionComparePanel', () => {
         { refno: '1_2', category: 'VALV', status: 'deleted', sourceNouns: 'VALV' },
       ],
     });
+
+    // 属性历史对比的取数口随上下文一起来：按「哪一侧」把本次持有的那份版本几何交回模型来源
+    const attributesAt = treeDiffEvents[0]?.detail.attributesAt as ((side: string, refno: string) => Promise<unknown>) | undefined;
+    expect(typeof attributesAt).toBe('function');
+    versionSourceMocks.attributesAt.mockResolvedValue({ sesno: 791, exists: true, noun: 'VALV', attributes: [] });
+    await attributesAt!('before', '1_2');
+    expect(versionSourceMocks.attributesAt).toHaveBeenCalledTimes(1);
+    const [geometryArg, refnoArg] = versionSourceMocks.attributesAt.mock.calls[0]!;
+    expect(refnoArg).toBe('1_2');
+    expect((geometryArg as { refnos: string[] }).refnos).toEqual(['1_1', '1_2']);
 
     // 视口侧关闭 → 树退出差异模式（空上下文）
     window.dispatchEvent(new CustomEvent('plant3d:model-unit-version-compare', { detail: { action: 'close' } }));

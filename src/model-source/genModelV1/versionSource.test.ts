@@ -191,6 +191,50 @@ describe('genModelV1 ModelVersionSource', () => {
     })).rejects.toThrow('仍未完成');
   });
 
+  it('attributesAt：拿几何句柄（snapshot_key）打 history/query tool=attributes { refno: a/b }，行映成属性面板同型', async () => {
+    const historyQuery = vi.fn(async (_key: string, tool: string) => {
+      if (tool === 'attributes') {
+        return {
+          snapshot_key: '24381_145018@66', dbnum: 7997, sesno: 66, refno: '24381/145019', exists: true, noun: 'ELBO',
+          attributes: [
+            { name: 'NAME', value_type: 'string', display: '/P1', is_unset: false, editable: true, is_uda: false },
+            { name: 'ANGL', value_type: 'real', display: '90', is_unset: false, editable: true, is_uda: false },
+            { name: 'DESC', value_type: 'string', display: '', is_unset: true, editable: true, is_uda: false },
+          ],
+        };
+      }
+      return [];
+    }) as unknown as GenModelV1VersionApi['historyQuery'];
+    const source = createGenModelV1ModelVersionSource(api({ historyQuery }));
+    const geometry = await source.loadVersion({
+      dbnum: 7997, unitRefno: '24381_145018', unitNoun: 'BRAN', sesno: 66, sessionTime: null, impactKind: 'mesh',
+    });
+    expect(geometry.handle).toBe('24381_145018@66');
+
+    const side = await source.attributesAt(geometry, '24381_145019');
+    expect(historyQuery).toHaveBeenLastCalledWith('24381_145018@66', 'attributes', expect.objectContaining({ arguments: { refno: '24381/145019' } }));
+    expect(side).toEqual({
+      sesno: 66,
+      exists: true,
+      noun: 'ELBO',
+      attributes: [
+        { name: 'NAME', valueType: 'string', display: '/P1', isUnset: false, isUda: false },
+        { name: 'ANGL', valueType: 'real', display: '90', isUnset: false, isUda: false },
+        { name: 'DESC', valueType: 'string', display: '', isUnset: true, isUda: false },
+      ],
+    });
+  });
+
+  it('attributesAt：tombstone（没有句柄）不打后端，直接回 exists:false', async () => {
+    const historyQuery = vi.fn(async () => []) as unknown as GenModelV1VersionApi['historyQuery'];
+    const source = createGenModelV1ModelVersionSource(api({ historyQuery }));
+    const geometry = await source.loadVersion({
+      dbnum: 7997, unitRefno: '24381_145018', unitNoun: 'BRAN', sesno: 604, sessionTime: null, impactKind: 'tombstone',
+    });
+    await expect(source.attributesAt(geometry, '24381_145019')).resolves.toEqual({ sesno: 0, exists: false, noun: null, attributes: [] });
+    expect(historyQuery).not.toHaveBeenCalled();
+  });
+
   it('ownerMapFromHistoryRows：anc（自身 → 顶层，打包 refno）拆成逐级直接属主表', () => {
     const pack = (w0: number, w1: number) => w0 * 2 ** 32 + w1;
     const owners = ownerMapFromHistoryRows([

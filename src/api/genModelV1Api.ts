@@ -1020,7 +1020,24 @@ export function genModelV1ModelHistoryGenerate(
   });
 }
 
-export type HistoryQueryTool = 'snapshot' | 'instances' | 'tubes' | 'geometry';
+export type HistoryQueryTool = 'snapshot' | 'instances' | 'tubes' | 'geometry' | 'attributes';
+
+/**
+ * `history/query tool=attributes` 的回执（gen-model-refactor ADR-081 候选条，契约 2026-09-18）：某构件在该快照
+ * 那个 sesno 下的属性，行与 `element/attributes` 同型、同一个渲染器。该 refno 在那个 sesno 不存在（还没建 / 已删）→
+ * `exists: false`、`attributes: []`，不是 404。
+ */
+export type HistoryAttributesDto = {
+  snapshot_key: string;
+  dbnum: number;
+  sesno: number;
+  /** `a/b` */
+  refno: string;
+  exists: boolean;
+  noun: string | null;
+  attributes: ElementAttribute[];
+  [key: string]: unknown;
+};
 
 /** `history/query tool=instances` 的一行：一条非直管的投影记录 */
 export type HistoryInstanceRowDto = {
@@ -1071,16 +1088,20 @@ export function unpackRefno(packed: unknown): string {
   return word0 > 0 && word1 >= 0 ? `${word0}_${word1}` : '';
 }
 
-/** `POST /api/v1/model/history/query`；`snapshot` 回回执对象（不存在为 `null`），其余三个工具回数组。 */
+/**
+ * `POST /api/v1/model/history/query`；`snapshot` 回回执对象（不存在为 `null`），`instances / tubes / geometry` 回数组，
+ * `attributes` 回 `HistoryAttributesDto`（要 `arguments: { refno: "a/b" }`）。
+ */
 export function genModelV1ModelHistoryQuery<T = unknown>(
   snapshotKey: string,
   tool: HistoryQueryTool,
-  options?: GenModelV1RequestOptions,
+  options?: GenModelV1RequestOptions & { arguments?: Record<string, unknown> },
 ): Promise<T> {
+  const { arguments: args, ...rest } = options ?? {};
   return genModelV1Fetch<T>('/api/v1/model/history/query', {
-    ...options,
+    ...rest,
     method: 'POST',
-    body: { snapshot_key: snapshotKey, tool },
+    body: args ? { snapshot_key: snapshotKey, tool, arguments: args } : { snapshot_key: snapshotKey, tool },
   });
 }
 

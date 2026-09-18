@@ -235,12 +235,34 @@ export type ModelVersionGeometry = {
    * 尽力而为：查不到的 refno 不在表里，树会回落挂根。
    */
   ownerByRefno?: ReadonlyMap<string, string>;
+  /** 适配器私有的取数句柄（gen-model-v1：`snapshot_key`；tombstone / 空几何没有）。调用方不得解读，只原样交回 `attributesAt`。 */
+  handle?: unknown;
   /** 释放服务端资源：gen-model-v1 = `DELETE /api/v1/model/history/{snapshot_key}` */
   release(): Promise<void>;
 };
 
 export type ModelVersionLoadOptions = {
   signal?: AbortSignal;
+};
+
+/** 一个模型版本下某构件的一行属性；与属性面板吃的 `element/attributes` 行同型（同一个渲染器印同一个字）。 */
+export type ModelVersionAttributeRow = {
+  name: string;
+  valueType: string;
+  display: string;
+  isUnset: boolean;
+  isUda: boolean;
+};
+
+/**
+ * 「属性历史对比」的一侧：某构件在某个模型版本下的属性（gen-model-refactor ADR-081 候选条，`history/query tool=attributes`）。
+ * 该 refno 在那个版本不存在（还没建 / 已删）→ `exists: false`、`attributes: []`，是正常态而不是错误。
+ */
+export type ModelVersionAttributes = {
+  sesno: number;
+  exists: boolean;
+  noun: string | null;
+  attributes: ModelVersionAttributeRow[];
 };
 
 /**
@@ -256,6 +278,11 @@ export type ModelVersionSource = {
   listVersions(dbnum: number, unitRefno: string): Promise<ModelVersion[]>;
   /** 一个版本的几何；`impactKind === 'tombstone'` 返回空集而不是抛错（「已删除单元版本」）。 */
   loadVersion(version: ModelVersion, options?: ModelVersionLoadOptions): Promise<ModelVersionGeometry>;
+  /**
+   * 某构件在 `geometry` 所属版本下的属性（属性历史对比）。`geometry` 必须是本源 `loadVersion` 给出、尚未 `release()` 的那份；
+   * 没有句柄的几何（tombstone / 空几何）直接回 `exists: false`。
+   */
+  attributesAt(geometry: ModelVersionGeometry, refno: string, options?: ModelVersionLoadOptions): Promise<ModelVersionAttributes>;
 };
 
 export type ModelSource = {

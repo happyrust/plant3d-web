@@ -54,3 +54,10 @@
   一进来就是「legacy 数据源的版本对比已退役：去掉 ?model_source=legacy（或改为 model_source=gen-model-v1）后再打开版本对比」，
   没有版本下拉、没有请求 legacy 库元数据、`pageerror` 0（§7.3 第 4 条）。
 - 同一台 `:8022`（`d47d747fd`）+ dev `:3111`：`e2e/model-version-compare-gen-model-v1.spec.ts` 3 过（12.3 s）——删掉 legacy 链后 v1 链一处没动。
+
+## 5. 属性历史对比·前端半边（18:2x，后端 `tool=attributes` 未落地）
+
+- `attr-diff/attr-diff-panel-backend-pending.png`：587→602 对比进差异模式后，模型树底部挂出「属性历史对比 · 24384_26481 · 改」，
+  两侧请求已按契约发出——`POST /api/v1/model/history/query {"snapshot_key":"24384_26480@587","tool":"attributes","arguments":{"refno":"24384/26481"}}`
+  与 `@602` 一条；服务端（`d47d747fd`）还不认这个 tool，回 `unknown historical query tool "attributes"; expected snapshot/instances/tubes/geometry`，
+  面板照契约给「属性历史对比暂不可用 + 原因」，pageerror 0。后端落地后这块不用再改，直接出表。

@@ -1,6 +1,7 @@
 import { computed, ref } from 'vue';
 
 import type { FlatRow, TreeNode } from '@/composables/useModelTree';
+import type { ModelVersionAttributes } from '@/model-source/ports';
 
 /**
  * 树内差异模式的驱动事件（`CustomEvent<TreeDiffContext>`）。
@@ -32,6 +33,9 @@ export type TreeDiffModel = {
   ownerRefno?: string;
 };
 
+/** 属性历史对比的取数口：某构件在 A（`before`）/ B（`after`）版本下的属性；由派发方（版本对比面板）按它手里的两份版本几何闭包出来。 */
+export type TreeDiffAttributesAt = (side: 'before' | 'after', refno: string, signal?: AbortSignal) => Promise<ModelVersionAttributes>;
+
 export type TreeDiffContext = {
   project?: string;
   dbnum?: number;
@@ -40,6 +44,8 @@ export type TreeDiffContext = {
   mode?: string;
   refnos: string[];
   models: TreeDiffModel[];
+  /** 可选：给差异模式底部的「属性历史对比」面板取两侧属性；没有就不显示那块。 */
+  attributesAt?: TreeDiffAttributesAt;
 };
 
 export type TreeDiffStatus = 'added' | 'modified' | 'deleted';

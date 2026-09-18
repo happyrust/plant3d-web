@@ -10,6 +10,7 @@ import { pdmsSearch, type PdmsSearchItem } from '@/api/genModelSearchApi';
 import GenModelV1HealthBadge from '@/components/model-tree/GenModelV1HealthBadge.vue';
 import ModelGenerationProgressModal from '@/components/model-tree/ModelGenerationProgressModal.vue';
 import ModelTreeRow from '@/components/model-tree/ModelTreeRow.vue';
+import ModelVersionAttrDiffPanel from '@/components/model-tree/ModelVersionAttrDiffPanel.vue';
 import { ensurePanelAndActivate } from '@/composables/useDockApi';
 import { useModelGeneration } from '@/composables/useModelGeneration';
 import { setModelTreeInstance } from '@/composables/useModelTreeStore';
@@ -23,6 +24,7 @@ import {
   MODEL_VERSION_TREE_DIFF_EVENT,
   useTreeVersionDiff,
   type DiffFlatRow,
+  type TreeDiffAttributesAt,
   type TreeDiffFilter,
   type TreeDiffModel,
 } from '@/composables/useTreeVersionDiff';
@@ -109,6 +111,7 @@ const diffResolving = treeDiff.resolving;
 const diffResolveDone = treeDiff.resolveDone;
 const diffResolveTotal = treeDiff.resolveTotal;
 const diffUnplacedCount = treeDiff.unplacedCount;
+const diffSelectedModel = treeDiff.selectedModel;
 const diffContext = treeDiff.context;
 const diffDbLabel = computed(() => (diffContext.value?.dbnum ? `DB ${diffContext.value.dbnum}` : ''));
 
@@ -1111,6 +1114,7 @@ function applyTreeDiffContext(rawDetail: unknown) {
     mode?: unknown;
     refnos?: unknown;
     models?: unknown;
+    attributesAt?: unknown;
   };
   const refnos = Array.isArray(detail?.refnos)
     ? detail.refnos.map(normalizeCompareRefno).filter(Boolean)
@@ -1153,6 +1157,8 @@ function applyTreeDiffContext(rawDetail: unknown) {
     mode: typeof detail.mode === 'string' ? detail.mode : undefined,
     refnos: mergedRefnos,
     models: models.length > 0 ? models : mergedRefnos.map((refno) => ({ refno })),
+    // 属性历史对比的取数口（派发方闭包住两份版本几何）；不是函数就当没给，底部那块不显示
+    attributesAt: typeof detail.attributesAt === 'function' ? (detail.attributesAt as TreeDiffAttributesAt) : undefined,
   });
   const first = mergedRefnos[0] ?? null;
   if (first) {
@@ -1839,6 +1845,14 @@ function onSearchEnter(value: string) {
         </div>
       </div>
     </div>
+
+    <!-- 版本差异模式：选中变更构件在 A / B 两版下的属性逐项对比（取数口随差异上下文来，没有就不显示） -->
+    <ModelVersionAttrDiffPanel v-if="diffActive && diffSelectedModel && diffContext?.attributesAt"
+      class="max-h-[45%] shrink-0"
+      :model="diffSelectedModel"
+      :from-sesno="diffContext?.fromSesno"
+      :to-sesno="diffContext?.toSesno"
+      :attributes-at="diffContext?.attributesAt" />
 
     <!-- 右键菜单 - 使用 Teleport 渲染到 body -->
     <Teleport to="body">

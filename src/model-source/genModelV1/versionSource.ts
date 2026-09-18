@@ -7,7 +7,9 @@
  * - `loadVersion`：`POST model/history/generate` → 轮询 `tasks/{id}` 到 `succeeded`（`result.snapshot_key`）→
  *   `history/query tool=instances` + `tool=tubes` → 与生产 `model/records` 同一条映射（`projection_record_to_query`
  *   的 TS 对偶 + `groupInstanceEntriesByRefno`）→ `InstanceEntry[]`。`tombstone` 版本不打后端、回空集。
- *   `release()` = `DELETE model/history/{snapshot_key}`。
+ *   `release()` = `DELETE model/history/{snapshot_key}`；`handle` = snapshot_key，给 `attributesAt` 用。
+ * - `attributesAt`：`history/query tool=attributes { refno }`（属性历史对比，契约见 gen-model-refactor ADR-081 候选条），
+ *   行与 `element/attributes` 同型；没有句柄的几何（tombstone）不打后端、回 `exists: false`。
  * 「最新环境模型」= 视口里已加载的模型，刷新环境由 ViewerPanel 按页面级开关走 records + forceRefresh（Q12），不经这里。
  *
  * 历史投影不落库、重启即丢、单次 ≤ 100 000 元素 / 300 s：这里每次 `loadVersion` 都重新 generate，不依赖上一次的快照还在。
@@ -16,6 +18,7 @@ import { groupInstanceEntriesByRefno } from './instanceMapping';
 
 import type {
   ModelVersion,
+  ModelVersionAttributes,
   ModelVersionGeometry,
   ModelVersionLoadOptions,
   ModelVersionSource,
@@ -31,11 +34,13 @@ import {
   isGenModelV1ApiError,
   type GenModelV1RequestOptions,
   type GeomInstQuery,
+  type HistoryAttributesDto,
   type HistoryInstanceRowDto,
   type HistoryTubeRowDto,
   type ModelVersionsResponse,
   type TaskEntryDto,
   type V1Transform,
+  toV1Refno,
   unpackRefno,
 } from '@/api/genModelV1Api';
 import { NotDeliveryUnitRootError } from '@/model-source/modelVersionErrors';
@@ -275,6 +280,7 @@ export function createGenModelV1ModelVersionSource(api: GenModelV1VersionApi = d
       refnos: [...entries.keys()],
       entries,
       ownerByRefno,
+      handle: snapshotKey,
       async release() {
         if (released) return;
         released = true;
@@ -283,5 +289,41 @@ export function createGenModelV1ModelVersionSource(api: GenModelV1VersionApi = d
     };
   }
 
-  return { listVersions, loadVersion };
+  /**
+   * 属性历史对比的一侧：`history/query tool=attributes`（契约见 gen-model-refactor ADR-081 候选条）。
+   * 几何没有句柄（tombstone / 空几何）= 该版本下整个单元都不存在，不打后端直接回 `exists: false`。
+   */
+  async function attributesAt(
+    geometry: ModelVersionGeometry,
+    refno: string,
+    options: ModelVersionLoadOptions = {},
+  ): Promise<ModelVersionAttributes> {
+    const snapshotKey = typeof geometry.handle === 'string' ? geometry.handle : null;
+    if (!snapshotKey) return { sesno: sesnoOfSnapshotKey(snapshotKey), exists: false, noun: null, attributes: [] };
+    const response = await api.historyQuery<HistoryAttributesDto>(snapshotKey, 'attributes', {
+      signal: options.signal,
+      arguments: { refno: toV1Refno(refno) },
+    });
+    return {
+      sesno: Number(response.sesno ?? sesnoOfSnapshotKey(snapshotKey)),
+      exists: response.exists === true,
+      noun: response.noun ?? null,
+      attributes: (Array.isArray(response.attributes) ? response.attributes : []).map((row) => ({
+        name: String(row.name ?? ''),
+        valueType: String(row.value_type ?? ''),
+        display: String(row.display ?? ''),
+        isUnset: row.is_unset === true,
+        isUda: row.is_uda === true,
+      })),
+    };
+  }
+
+  return { listVersions, loadVersion, attributesAt };
+}
+
+/** `<unit_refno>@<sesno>` → sesno；解不出给 0（只用在没有句柄的空态上）。 */
+function sesnoOfSnapshotKey(snapshotKey: string | null): number {
+  const raw = snapshotKey?.split('@').at(-1);
+  const value = Number(raw);
+  return Number.isInteger(value) && value >= 0 ? value : 0;
 }
