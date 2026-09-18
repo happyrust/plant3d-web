@@ -1,7 +1,7 @@
 # 版本对比收口并迁到 gen-model-v1（gen-model-refactor）· 执行清单
 
-- 日期：2026-09-18 ｜ 状态：**草案 — 只是清单，还没动一行代码**
-- 决策来源：grill 第 1–2 轮（Q1–Q14）用户逐条拍板；共识登记 d-165（导向）、d-167（术语）
+- 日期：2026-09-18 ｜ 状态：**B / A1 / A2 / A3 四期已提交并真机验过（§5）；剩「退役」一期，清单与时点见 §7**
+- 决策来源：grill 第 1–4 轮（Q1–Q25）用户逐条拍板；共识登记 d-165（导向）、d-167（术语）、d-179（历史投影不入库）、第 4 轮退役锚见 §7
 - ADR：本仓 `docs/adr/0065`（草案）；gen-model-refactor `docs/adr/ADR-081`（草案）
 - 词汇：`CONTEXT.md`「模型版本查看」——**最小交付单元 / 模型版本 / 模型版本对 / 无几何变化提交 / 已删除单元版本 /
   最新环境模型 / 单视口版本切换 / 双视口分屏版本视图 / 模型几何差异**。下文只用这些词。
@@ -25,6 +25,17 @@
 | Q12 | 最新环境模型 | = 打开对比时视口里已加载的该 dbnum 模型，冻住；不整库加载 |
 | Q13 | 树的 sesno 模式 | 不做全库版本树；当前树 + 差异徽章 / 幽灵节点；单元子树结构取 `history/query tool=snapshot` |
 | Q14 | 版本列表代价 | 按需算 + 进程内缓存 + `since_sesno` / `limit`；不建表 |
+| Q15 | 分屏两侧网格缓存 | 不动，各自取；先量 A/B 重复 geo_hash 比例再说，不进本计划 |
+| Q16 | URL 入口 | 保留 `unit_refno`，加 `compare_a` / `compare_b` / `compare_autorun`（照 `spatial_*` 前缀体例） |
+| Q17 | `limit` 截断 | v1 适配器按 `since_sesno` 连续拉到 `truncated=false`（上限 20 页），端口永远给全表 |
+| Q18 | 主层「加载某版本」死路 | 删（`showModelUnitVersion` / `getModelUnitCommit` / ViewerPanel `{dbnum, sesno}` 分支） |
+| Q19 | `?tree_sesno=` 残留 | 随 legacy 退役一起删 |
+| Q20 | 退役时点的锚 | **生产部署**：第一次用 `deploy-ubuntu.yml` 把默认 v1 的构建部到生产 = 周期起点，下一次生产部署 = 可删；硬条件「那次部署时生产 `:3100` 已停」（tag 自 `v0.1.26` 2026-05-14 起没打过，不能当锚） |
+| Q21 | 两处已死项 | **现在删**：`showModelByDbnum({manifestUrl, replaceRefnos})` + `mergeVersionReplacementRefnos`；`e2e/dimension-real-ams-bran-version.spec.ts` 第 2 条（旧事件形状） |
+| Q22 | parquet 版本取数删到哪层 | 「不可变清单」分叉随链一起删（parquet loader `manifestUrl / pinnedManifest / lastRegisteredManifest`，DTX loader `parquetManifestUrl / parquetManifest / pinnedByCaller` 例外 / `sourceStamp` 三格）；parquet loader 本体留给 legacy 整体退役 |
+| Q23 | 端口里 legacy 专用格 | 删 `assetSesno` + 3 处 artifact 文案 + `ModelVersionEnvironmentLoaderOptions` parquet 三格（`pinLatestEnvironment` 整个拿掉）；**留** `geometryKey`、`handle`；词条「无几何变化提交」「模型几何差异」改口 |
+| Q24 | 退役出口 | `rg` 零命中 + vitest 全绿 + type-check 基线收紧 + v1 e2e 3 过 + `?model_source=legacy` 下面板给明确空态；**legacy 对拍不做**（791/898 vs 332，无共同地面） |
+| Q25 | `ModelTreeAttrDiffPanel`（链外） | 随 legacy 退役一起删（面板 + `modelHistoryApi` + 测试）；「属性历史对比」记成 gen-model-refactor 候选需求 |
 
 ## 1. 收口：删除清单（阶段 B）
 
@@ -232,18 +243,65 @@ legacy 下与从前的可见差别只有一处、且不可见于用户：A/B 隔
 |---|---|---|
 | B | §1 全部 + §1.4 桥接 | §1.5 四条 |
 | A1（前端）✅ | §2 端口 + legacy 适配器 + 面板 / ViewerPanel 改走端口 | `model_source=legacy` 行为逐字节不变（面板旧用例一字未改全过）——plant3d-web `ec187960` |
-| A2（后端）✅ | §3.1 | 真库探针 ams7997 BRAN / ams8000 EQUI 与证据文档一致；legacy 逐条对拍**未做**（`:3100` 未起）——gen-model-refactor `ef2284f12` |
+| A2（后端）✅ | §3.1 | 真库探针 ams7997 BRAN / ams8000 EQUI 与证据文档一致；legacy 逐条对拍**不做**（Q24：legacy 版本表算自另一份库副本——旧 e2e 期待 7997 BRAN 24381_145018 有 sesno 791 / 898，现在这份 ams7997 只有 332 个会话、该单元 1 版，没有共同地面；v1 真值以 ADR-081 探针为准）——gen-model-refactor `ef2284f12` |
 | A3（前端）✅ | gen-model-v1 `listVersions` / `loadVersion` 接线 + Q16 URL 入口 + Q18 删死路 + Q6 拆 `ROOT_NOUNS` | 单测全绿；**真机端到端 ✅**（15:32 `:8022` 换成 `d47d747fd` 后，dev `:3111` 两条场景全过：`docs/verification/model-version-compare-gen-model-v1-2026-09-18/`）——plant3d-web `961a3ea5`；一次性脚本已整理成 `e2e/model-version-compare-gen-model-v1.spec.ts`（3 条，数字取自服务端回执；`PLAYWRIGHT_PORT=3111 npx playwright test e2e/model-version-compare-gen-model-v1.spec.ts` 真机 3 过） |
-| 退役 | legacy 开关到期时删 `legacy/versionSource.ts` 与 parquet 版本取数 | — |
+| Q21 预清 ✅ | 两处与 legacy 存亡无关、今天已死的：`showModelByDbnum({manifestUrl, replaceRefnos})` 分支 + `mergeVersionReplacementRefnos`（+ `loadScope.test` 那组、`genModelV1.test` 那条）；`e2e/dimension-real-ams-bran-version.spec.ts` 第 2 条（按 A1 之前的事件形状派发，`ec187960` 起跑不通） | 全仓 vitest 347 / 3084 全绿（第 2 遍；另两遍 `review/form-binding.test.ts` 一条超时抖动、单跑过、无关）、type-check 基线外仍只剩无关那条、ESLint 零告警——plant3d-web `c6e1fdd3` |
+| 退役 | §7 清单，锚与出口见 §7.1 / §7.3 | §7.3 |
 
 ## 6. 明确不做
 
 - 不做后端 diff 接口；不给 `tree/*` 加 `sesno`；不建版本索引表；不找回 release API；不续做 spec 004。
-- `ModelTreeAttrDiffPanel`（属性历史，钉在 legacy `/api/model-history/*`，gen-model-refactor 无对应路由）**不在本计划**——另记一笔 legacy 依赖。
+- `ModelTreeAttrDiffPanel`（属性历史，钉在 legacy `/api/model-history/*`，gen-model-refactor 无对应路由）**不在这条链里做**；Q25 定它随 legacy 退役一起删（§7.2 第 6 组），「属性历史对比」记成 gen-model-refactor 的候选需求。
 - `IncrementalUpdatePanel` 整面板去留不在本计划。
+- legacy 版本表逐条对拍不做（Q24，原因见 §5 A2 行）。
+- 分屏两侧网格缓存共享不做（Q15）。
 
-## 7. 第 3 轮待问
+## 7. legacy 退役：这条链要删的清单与时点（第 4 轮，Q20–Q25）
 
-- 双视口分屏在 gen-model-v1 下两侧 `DTXLayer` 的网格缓存能否共享（同一 `MeshSource`，理论上可以）；
-- 版本对比的 URL 入口参数（`unit_refno` 保留？加 `a` / `b` sesno 直达？）；
-- `limit` 截断后前端怎么翻（`since_sesno` 连续拉，还是只给最近 500 条 + 提示）。
+### 7.1 时点（Q20）
+
+- **锚 = 生产部署，不是 tag**：仓里最后一个版本 tag 是 `v0.1.26`（2026-05-14），之后 283 个提交没打过；`deploy-ubuntu.yml` 2026-09-18（`81ea1d68`）才入库。
+  「开关保留一个发布周期」（2026-09-09，P8-5 / ADR 0054 追记）按下面数：
+  1. **周期起点** = 第一次用 `deploy-ubuntu.yml` 把默认 `gen-model-v1` 的构建部署到生产；
+  2. **可删** = 其后的下一次生产部署；
+  3. **硬条件** = 那次部署时生产环境的 legacy `:3100` 已经停掉（没人再需要 `?model_source=legacy` 的可观测证据）。
+- 这条链的退役与 legacy 整体退役（整个 `legacy/` 适配器、parquet loader 本体、DuckDB-WASM、`genModelE3dApi.ts` 等）**可以同一个 PR，也可以先走**——§7.2 的边界画的就是「不等整体也能单独删干净」。
+
+### 7.2 删除清单（逐文件）
+
+第 1 组 · 适配器与 API（整文件删）
+- `src/model-source/legacy/versionSource.ts`、`src/model-source/legacy/versionSource.test.ts`
+- `src/api/modelUnitVersionApi.ts`（`listModelUnitCommits`，legacy `/api/model/units/{refno}/versions`；唯一消费方就是上面那个文件）
+- `src/model-source/legacy/index.ts`：去掉 `versions: legacyModelVersionSource`（若 legacy 适配器整体同时退役，整个文件一起走）
+
+第 2 组 · parquet「不可变清单」分叉（Q22；parquet loader 本体不动）
+- `src/composables/useDbnoInstancesParquetLoader.ts`：`fetchLatestDbnoManifest` + `LatestDbnoManifest` 型；`queryAllRefnosByDbno` / `queryInstanceEntriesByRefnos` 的 `manifestUrl` / `pinnedManifest` 选项与分叉；`assertManifestIdentity` 的 `expectedRootRefno` 校验分叉；`lastRegisteredManifest`。`expectedRootRefno` 作为 `InstanceEntryQueryOptions` 的一格**留**（v1 路径也传）。
+- `src/composables/useDbnoInstancesDtxLoader.ts`：选项 `parquetManifestUrl` / `parquetManifest`；`pinnedByCaller` 改写例外收成只看 `instanceEntriesByRefno`；`sourceStamp.modelSnapshotId / manifestUrl / generatedAt` 三格与 `parquetGeneratedAt`；头注里「不可变清单，版本对比」那句。`replaceExistingObjects` / `isolated` / `instanceEntriesByRefno` **留**（环境刷新与 v1 A/B 图层都在用）。
+
+第 3 组 · 端口与面板里只有 legacy 会填的格（Q23）
+- `src/model-source/ports.ts`：`ModelVersion.assetSesno`；`ModelVersionEnvironmentLoaderOptions`、`ModelVersionEnvironmentPin`、`ModelVersionSource.pinLatestEnvironment`（v1 已是终态：环境 = 视口里已加载的，重钉不带 pin）。**留** `geometryKey`（v1 以后可给 noop 版本填上一版的键，同样省一次加载）与 `handle`（适配器私有句柄是端口的通用形状）。
+- `src/model-source/genModelV1/versionSource.ts`：删 `pinLatestEnvironment` 实现。
+- `src/components/dock_panels/ViewerPanel.vue` `refreshModelUnitCompareEnvironment`：不再问适配器，直接按页面级开关走 records + forceRefresh。
+- `src/components/model-version/ModelUnitVersionComparePanel.vue`：「复用 N」「artifact N」「A/B 复用 artifact_sesno N」三处文案与 `assetSesno` 读取；`sameGeometry` 只加载一次那条**留**（吃 `geometryKey`）。
+- `src/utils/modelUnitVersionCompare.ts` / 面板测试 / `legacy/versionSource.test.ts` 夹具里的 `assetSesno`。
+
+第 4 组 · `tree_sesno`（Q19；文件留、只删 sesno 三件）
+- `src/api/genModelE3dApi.ts`：`getTreeSesno` / `withTreeVersion` / `getE3dSource` 里「版本模式只能走 backend」那条例外。文件本身另有 5 个绕过端口的直接调用方（`usePdmsConsoleCommands` / `usePdmsOwnerTree` / `useReviewDeliveryUnit` / `InitiateReviewPanel` / `measurementPathLookup`），留给 legacy 整体退役。
+- `src/components/model-tree/ModelTreePanel.vue`：`treeVersionContext` / `returnToLatestTree`（:1497–:1518）与模板横幅 `model-tree-version-banner`（「历史模型树 / 回到最新」，:1824–:1836）。
+
+第 5 组 · 文档与词汇
+- `CONTEXT.md`「无几何变化提交」「模型几何差异」：去掉“复用较早模型资产 / 模型资产引用相同”这套 legacy artifact 说法，改为“sesno 推进但几何未变（v1 `impact_kind=noop`）→ 不产生模型几何差异”；「模型来源」词条按整体退役改口。
+- ADR 0054 追记退役日（§7.1 的锚落地那天）；ADR 0065 状态 proposed → accepted 并追记「legacy 链已删」；本计划 §5 退役行打勾。
+- `e2e/dimension-real-ams-bran-version.spec.ts` 剩下那条（MBD 行数 = 0）与版本无关，随 legacy 整体退役处理，不在这条链。
+
+第 6 组 · 链外、同死于退役（Q25）
+- `src/components/model-tree/ModelTreeAttrDiffPanel.vue` / `.test.ts`、`src/api/modelHistoryApi.ts` / `.test.ts`（legacy `/api/model-history/*`：anchors / resolve-anchor / snapshot，gen-model-refactor 无对应路由）+ `ModelTreePanel` 里挂它的入口。留一个没有后端的面板就是第二个 spec 004。
+- 「属性历史对比」记成 gen-model-refactor 候选需求：需要 anchors / snapshot 的 v1 对应物（会话链 + `ReadOnlyEngine::open_at` 都有，接口未立）。
+
+### 7.3 出口（Q24）
+
+1. `rg` 在 `src / e2e / docs/guides / CONTEXT.md` 零命中：`manifest_url | artifact_sesno | assetSesno | listModelUnitCommits | fetchLatestDbnoManifest | parquetManifestUrl | pinnedManifest | pinLatestEnvironment | tree_sesno | model-history`。
+2. 全仓 vitest 全绿；`scripts/type-check-baseline.txt` 收紧（把已删文件的旧条目一并清掉，基线外不得新增）；ESLint 触及文件零告警。
+3. `PLAYWRIGHT_PORT=3111 npx playwright test e2e/model-version-compare-gen-model-v1.spec.ts` 3 过。
+4. 若 `?model_source=legacy` 开关本体还在：该开关下打开版本对比面板要给明确的「legacy 已退役，请去掉 `model_source=legacy`」空态，不能白屏；开关本体也一起删则此条不适用。
+5. 不做 legacy 版本表对拍（§5 A2 行）。
