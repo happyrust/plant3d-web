@@ -69,7 +69,8 @@ type TreeDeps = {
   rootIds: { value: string[] };
   expandedIds: { value: Set<string> };
   flatRows: { value: FlatRow[] };
-  expandPathToNode: (refno: string) => Promise<boolean>;
+  /** 加载 + 展开到目标节点的路径；`expandSelf` 时连目标自己也展开（幽灵行的挂载点要靠这个才看得见） */
+  expandPathToNode: (refno: string, options?: { expandSelf?: boolean }) => Promise<boolean>;
 };
 
 /** 超过该数量的变更不再逐个解析祖先路径（保持界面可交互，FR-014） */
@@ -281,18 +282,43 @@ export function useTreeVersionDiff(deps: TreeDeps) {
   const rows = computed(() => buildResult.value.rows);
   const unplacedCount = computed(() => buildResult.value.unplaced);
 
+  /**
+   * 删除节点的路径解析目标 = 幽灵行的挂载点：沿 `ownerRefno` 链跳过「自己也在本次删除集合里、且不在
+   * 当前树中」的原父，落到最近可能仍存活的祖先（与 `resolveGhostOwner` 同一条链）。直接拿被删的原父去
+   * 后端查祖先只会 404（它在当前会话里已经不存在）。链断 / 成环返回 null。
+   */
+  function ghostAnchor(model: TreeDiffModel, byRefno: Map<string, TreeDiffModel>): string | null {
+    const nodes = deps.nodesById.value;
+    const seen = new Set<string>();
+    let cur = model.ownerRefno ?? null;
+    while (cur && !seen.has(cur)) {
+      seen.add(cur);
+      if (nodes[cur]) return cur;
+      const owner = byRefno.get(cur);
+      if (!owner || normalizeTreeDiffStatus(owner.status) !== 'deleted') return cur;
+      cur = owner.ownerRefno ?? null;
+    }
+    return null;
+  }
+
   async function resolvePaths(ctx: TreeDiffContext) {
     const seq = ++resolveSeq;
-    const targets: string[] = [];
+    const byRefno = new Map<string, TreeDiffModel>();
+    for (const model of ctx.models) if (model.refno) byRefno.set(model.refno, model);
+
+    // refno → 是否要把它自己也展开。变更节点本身只需路径可见；幽灵挂载点得自己展开，幽灵行才渲染
+    // （`buildResult` 只在 `expandedIds` 含挂载点时插幽灵行）。同一节点两种身份都有时取「展开」。
+    const targets = new Map<string, boolean>();
     for (const model of ctx.models) {
       const status = normalizeTreeDiffStatus(model.status);
       if (status === 'deleted') {
-        if (model.ownerRefno) targets.push(model.ownerRefno);
+        const anchor = ghostAnchor(model, byRefno);
+        if (anchor) targets.set(anchor, true);
       } else {
-        targets.push(model.refno);
+        targets.set(model.refno, targets.get(model.refno) ?? false);
       }
     }
-    const unique = Array.from(new Set(targets)).slice(0, MAX_PATH_RESOLVE);
+    const unique = Array.from(targets.entries()).slice(0, MAX_PATH_RESOLVE);
 
     resolving.value = true;
     resolveDone.value = 0;
@@ -303,11 +329,12 @@ export function useTreeVersionDiff(deps: TreeDeps) {
       const worker = async () => {
         while (cursor < unique.length) {
           if (seq !== resolveSeq) return;
-          const target = unique[cursor];
+          const entry = unique[cursor];
           cursor += 1;
-          if (!target) continue;
+          if (!entry) continue;
+          const [target, expandSelf] = entry;
           try {
-            await deps.expandPathToNode(target);
+            await deps.expandPathToNode(target, expandSelf ? { expandSelf: true } : undefined);
           } finally {
             if (seq === resolveSeq) resolveDone.value += 1;
           }

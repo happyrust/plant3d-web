@@ -1,0 +1,90 @@
+{
+  "url": "http://127.0.0.1:3111/?model_source=gen-model-v1&gm_backend_port=8026&unit_refno=24384_23257&compare_autorun=1&compare_a=573&compare_b=626",
+  "startedAt": "2026-09-18T14:09:50.062Z",
+  "attributeRequests": [
+    "{\"snapshot_key\":\"24384_23257@573\",\"tool\":\"attributes\",\"arguments\":{\"refno\":\"24384/23262\"}}",
+    "{\"snapshot_key\":\"24384_23257@626\",\"tool\":\"attributes\",\"arguments\":{\"refno\":\"24384/23262\"}}"
+  ],
+  "attributeResponses": [
+    {
+      "status": 200,
+      "sesno": 573,
+      "exists": true,
+      "noun": "FTUB",
+      "rows": 68,
+      "elapsed_ms": 15
+    },
+    {
+      "status": 200,
+      "sesno": 626,
+      "exists": true,
+      "noun": "FTUB",
+      "rows": 68,
+      "elapsed_ms": 9
+    }
+  ],
+  "pageErrors": [],
+  "steps": [
+    {
+      "at": "2026-09-18T14:09:50.286Z",
+      "name": "goto",
+      "url": "http://127.0.0.1:3111/?model_source=gen-model-v1&gm_backend_port=8026&unit_refno=24384_23257&compare_autorun=1&compare_a=573&compare_b=626"
+    },
+    {
+      "at": "2026-09-18T14:09:57.639Z",
+      "name": "compare finished",
+      "summary": "新增 0删除 0修改 1未变 8"
+    },
+    {
+      "at": "2026-09-18T14:09:58.173Z",
+      "name": "clicked changed row",
+      "status": "modified",
+      "text": "FTUB FTUB改"
+    },
+    {
+      "at": "2026-09-18T14:09:58.297Z",
+      "name": "attr diff panel",
+      "unavailable": false,
+      "count": "变更 2 / 68",
+      "rows": [
+        [
+          "POS",
+          "10887, 12332, 2900",
+          "10887, 12332, 3400"
+        ],
+        [
+          "SPAMAP",
+          "1400029000, -2147483647",
+          "1400034000, -2147483647"
+        ]
+      ]
+    },
+    {
+      "at": "2026-09-18T14:09:59.210Z",
+      "name": "with unchanged",
+      "rows": 68
+    }
+  ],
+  "summaryText": "新增 0删除 0修改 1未变 8",
+  "treeDiffPill": "573 → 626 差异模式",
+  "clickedRowStatus": "modified",
+  "clickedRowText": "FTUB FTUB改",
+  "attrPanelText": "属性历史对比24384_23262改 变更 2 / 68 显示未变 在 3D 中定位 属性A · sesno 573B · sesno 626POS10887, 12332, 290010887, 12332, 3400SPAMAP1400029000, -21474836471400034000, -2147483647 点击带徽章节点查看该构件在 A / B 两版下的属性；两侧由同一个渲染器印字，字不同就是变了",
+  "unavailable": false,
+  "count": "变更 2 / 68",
+  "rows": [
+    [
+      "POS",
+      "10887, 12332, 2900",
+      "10887, 12332, 3400"
+    ],
+    [
+      "SPAMAP",
+      "1400029000, -2147483647",
+      "1400034000, -2147483647"
+    ]
+  ],
+  "rowsWithUnchanged": 68,
+  "ok": true,
+  "finishedAt": "2026-09-18T14:09:59.210Z"
+}

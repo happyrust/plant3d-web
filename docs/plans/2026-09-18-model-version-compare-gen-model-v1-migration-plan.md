@@ -366,6 +366,13 @@ legacy 下与从前的可见差别只有一处、且不可见于用户：A/B 隔
 - **验证**：vitest 全仓 345 文件 / 3067 用例全绿；type-check 基线外仍只剩无关那条；ESLint 13 个触及文件 0；真机（`:8022 d47d747fd` + dev `:3111`）
   587→602 进差异模式后底部挂出面板、两条 `tool=attributes` 请求按契约发出、服务端回「unknown historical query tool」→ 面板给「暂不可用 + 原因」，
   pageerror 0（`docs/verification/…/attr-diff/`）。后端落地后前端不用再改。
+- **后端落地 + 真机（20:3x–22:1x）**：gen-model-refactor `6a76eefb4`（20:19 代提 `element_attributes.rs`，`cargo test --lib` 过）→ `2f891b370`
+  （20:31 `tool=attributes`），跑在 `:8026`。前端果然一处没改就出表：573→626 点 FTUB「改」行 → 「变更 2 / 68」（POS / SPAMAP）。
+  但 **tombstone 场景暴露了树的一个缺口**：602→604（EQUI 与其下 BOX 都被删）树里挂着「2」的 ZONE 收着，一条幽灵行都看不见、面板打不开——
+  `useTreeVersionDiff.resolvePaths` 对被删节点只把路径展开**到**挂载点，挂载点自己不展开，而幽灵行只在挂载点展开时才插；BOX 的 `ownerRefno`
+  又是同批被删的 EQUI，拿去查祖先只会 404。修法：`expandPathToNode(refno, { expandSelf })` + 沿 `ownerRefno` 链落到最近存活祖先再带
+  `expandSelf` 解析（`usePdmsOwnerTree.ts` / `useTreeVersionDiff.ts`）。修后 602→604 两条幽灵行自动可见，点开给「变更 28 / 28 · 该构件在版本 B
+  不存在（已删除）」；vitest 11 过（新增 tombstone 形状用例）、e2e 加「解析完成后徽章行 / 幽灵行可见」断言后两单元各 3 过。README §5.1。
 
 ## 9. 真管线走一遍：BRAN 增量更新 → 版本对比（19:3x，用户 18:37「测试一个 BRAN 的增量更新，然后在 plant3d-web 里通过模型对比查看」）
 
@@ -378,4 +385,4 @@ legacy 下与从前的可见差别只有一处、且不可见于用户：A/B 隔
 - **restore 腿（19:50，用户拍板）**：`l3_suite --check-driver db8000_bran_ftub_move_restore.mac` 把 FTUBE 4 放回 U 2900（sesno 630，631 是同一次 SAVEWORK 的尾号）；
   `:8022` 重生成 24384/23257，`model/records` z 回 2900 ~ 2930；对比 **626 → 630 = 修改 1 / 未变 8**，**573 → 630 = 0 / 0 / 0 / 未变 9「无几何差异」**——相对测试前基线净变更归零。
   证据 `bran-ftub-move/a626-b630-*`、`a573-b630-*`、`api-evidence.json#restore_leg`，README §6.1。
-- **待定**：FTUB 纯 POS 变更被归成 `mesh` 而非 `placement`（gen-model-refactor 分类器口径，不在本计划）；`tool=attributes` 后端仍等 `element_attributes.rs` 提交（§8）。
+- **待定**：FTUB 纯 POS 变更被归成 `mesh` 而非 `placement`（gen-model-refactor 分类器口径，不在本计划）；~~`tool=attributes` 后端仍等 `element_attributes.rs` 提交（§8）~~ 20:31 已落地、真机已过（§8 末条）。

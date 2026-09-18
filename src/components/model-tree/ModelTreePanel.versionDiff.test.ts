@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { computed, ref } from 'vue';
 
 import type { FlatRow, TreeNode } from '@/composables/useModelTree';
 
@@ -18,14 +19,15 @@ import {
 
 type SpecNode = { id: string; type?: string; children?: SpecNode[] };
 
+/**
+ * deps 用真的 ref / computed 搭：`flatRows` 随 `expandedIds` 重算，这样「路径解析把挂载点展开 → 幽灵行出现」
+ * 这一段也能在 useTreeVersionDiff 的 computed 链上被观察到（与 usePdmsOwnerTree 的形状一致）。
+ */
 function buildTreeDeps(roots: SpecNode[], expanded: string[]) {
-  const nodesById: Record<string, TreeNode> = {};
-  const flatRows: FlatRow[] = [];
-  const expandedIds = new Set(expanded);
-
-  const visit = (spec: SpecNode, parentId: string | null, depth: number, visible: boolean) => {
+  const nodesRecord: Record<string, TreeNode> = {};
+  const visit = (spec: SpecNode, parentId: string | null) => {
     const children = spec.children ?? [];
-    nodesById[spec.id] = {
+    nodesRecord[spec.id] = {
       id: spec.id,
       refno: spec.id,
       name: spec.id,
@@ -33,29 +35,28 @@ function buildTreeDeps(roots: SpecNode[], expanded: string[]) {
       parentId,
       childrenIds: children.map((c) => c.id),
     };
-    if (visible) {
-      flatRows.push({
-        id: spec.id,
-        refno: spec.id,
-        name: spec.id,
-        type: spec.type ?? 'ZONE',
-        depth,
-        hasChildren: children.length > 0,
-      });
-    }
-    const childVisible = visible && expandedIds.has(spec.id);
-    for (const child of children) visit(child, spec.id, depth + 1, childVisible);
+    for (const child of children) visit(child, spec.id);
   };
-  for (const root of roots) visit(root, null, 0, true);
+  for (const root of roots) visit(root, null);
 
-  const expandPathToNode = vi.fn(async (_refno: string) => true);
-  return {
-    nodesById: { value: nodesById },
-    rootIds: { value: roots.map((r) => r.id) },
-    expandedIds: { value: expandedIds },
-    flatRows: { value: flatRows },
-    expandPathToNode,
-  };
+  const nodesById = ref<Record<string, TreeNode>>(nodesRecord);
+  const rootIds = ref<string[]>(roots.map((r) => r.id));
+  const expandedIds = ref<Set<string>>(new Set(expanded));
+  const flatRows = computed<FlatRow[]>(() => {
+    const out: FlatRow[] = [];
+    const build = (id: string, depth: number) => {
+      const node = nodesById.value[id];
+      if (!node) return;
+      out.push({ id, refno: id, name: id, type: node.type, depth, hasChildren: node.childrenIds.length > 0 });
+      if (!expandedIds.value.has(id)) return;
+      for (const childId of node.childrenIds) build(childId, depth + 1);
+    };
+    for (const rootId of rootIds.value) build(rootId, 0);
+    return out;
+  });
+
+  const expandPathToNode = vi.fn(async (_refno: string, _options?: { expandSelf?: boolean }) => true);
+  return { nodesById, rootIds, expandedIds, flatRows, expandPathToNode };
 }
 
 /**
@@ -145,12 +146,59 @@ describe('useTreeVersionDiff（T015 树内差异回归）', () => {
     expect(rowById(rows, 'pipeA1').ghost).toBeFalsy();
     expect(rowById(rows, 'pipeA2')).toMatchObject({ diffStatus: 'added', diffCount: undefined });
 
-    // 路径解析：非删除节点解析自身，删除节点解析其 ownerRefno（去重）
+    // 路径解析：非删除节点解析自身（只展开路径）；删除节点解析幽灵挂载点并要求把挂载点自己展开（expandSelf）。
+    // del-child 的原父 del-parent 同批被删且不在树中 → 沿 ownerRefno 链落到 zoneA，不拿 del-parent 去后端查（只会 404）。
     await untilResolveSettled(diff.resolving);
-    const targets = deps.expandPathToNode.mock.calls.map((c) => c[0]).sort();
-    expect(targets).toEqual(['del-parent', 'gone-forever', 'pipeA1', 'pipeA2', 'zoneA', 'zoneB'].sort());
-    expect(diff.resolveTotal.value).toBe(6);
-    expect(diff.resolveDone.value).toBe(6);
+    const calls = deps.expandPathToNode.mock.calls
+      .map(([refno, options]) => `${refno}${options?.expandSelf ? '+self' : ''}`)
+      .sort();
+    expect(calls).toEqual(['gone-forever+self', 'pipeA1', 'pipeA2', 'zoneA+self', 'zoneB+self'].sort());
+    expect(diff.resolveTotal.value).toBe(5);
+    expect(diff.resolveDone.value).toBe(5);
+  });
+
+  it('整单元被删（tombstone）：挂载点沿 ownerRefno 链落到最近存活祖先并被自己展开，幽灵行随之可见', async () => {
+    // site → zone（收起）→ equiOther；EQUI 及其下 BOX 在 B 版都被删、当前树里都没有——2026-09-18 真机 602→604 的形状：
+    // 修复前 zone 挂着「2」却收着，树里一行带 data-diff-status 的都看不见。
+    const deps = buildTreeDeps(
+      [{ id: 'site', type: 'SITE', children: [{ id: 'zone', children: [{ id: 'equiOther', type: 'EQUI' }] }] }],
+      ['site'],
+    );
+    // fake 的 expandPathToNode 照 usePdmsOwnerTree 的语义：展开祖先链；expandSelf 时连目标自己一起展开。
+    // 先让出一拍（真实现要等后端 ancestors / children），好观察「解析前」的形态
+    deps.expandPathToNode.mockImplementation(async (refno, options) => {
+      await flushAsync();
+      const next = new Set(deps.expandedIds.value);
+      let cur = deps.nodesById.value[refno]?.parentId ?? null;
+      while (cur) {
+        next.add(cur);
+        cur = deps.nodesById.value[cur]?.parentId ?? null;
+      }
+      if (options?.expandSelf) next.add(refno);
+      deps.expandedIds.value = next;
+      return !!deps.nodesById.value[refno];
+    });
+    const diff = useTreeVersionDiff(deps);
+    diff.apply(makeContext([
+      { refno: 'equi', status: 'deleted', category: 'EQUI', ownerRefno: 'zone' },
+      { refno: 'box', status: 'deleted', category: 'BOX', ownerRefno: 'equi' },
+    ]));
+
+    // 解析前：zone 收着 → 幽灵行不渲染，只有汇总「2」
+    expect(diff.rows.value.map((r) => r.id)).toEqual(['site', 'zone']);
+    expect(rowById(diff.rows.value, 'zone')).toMatchObject({ diffStatus: undefined, diffCount: 2 });
+
+    await untilResolveSettled(diff.resolving);
+    // 只解析一个目标：zone（box 的原父 equi 也被删且不在树中 → 续链），且带 expandSelf
+    expect(deps.expandPathToNode.mock.calls).toEqual([['zone', { expandSelf: true }]]);
+    expect(diff.resolveTotal.value).toBe(1);
+
+    // 解析后：zone 已展开，两条幽灵行紧随其后；未变的 equiOther 不进差异行
+    expect(deps.expandedIds.value.has('zone')).toBe(true);
+    expect(diff.rows.value.map((r) => r.id)).toEqual(['site', 'zone', 'equi', 'box']);
+    expect(rowById(diff.rows.value, 'equi')).toMatchObject({ ghost: true, ghostUnplaced: false, diffStatus: 'deleted', depth: 2, type: 'EQUI' });
+    expect(rowById(diff.rows.value, 'box')).toMatchObject({ ghost: true, ghostUnplaced: false, diffStatus: 'deleted', depth: 2, type: 'BOX' });
+    expect(diff.unplacedCount.value).toBe(0);
   });
 
   it('幽灵节点回插：原父存在挂原父末尾；原父也被删挂最近存活祖先；均不可得挂根并标记 ghostUnplaced', () => {

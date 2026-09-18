@@ -157,6 +157,14 @@ test('缺省最近两版：compare_autorun 开面板、版本表来自服务端�
   await expect(page.getByTestId('model-tree-diff-chip-all')).toContainText(String(changed));
   // 幽灵节点挂回原父（anc 链）：没有「未能定位」提示
   await expect(page.getByTestId('model-tree-diff-unplaced')).toHaveCount(0);
+  // 变更行自动定位到可见，不用手动点开容器：非删除节点展开到自身；删除节点的幽灵行挂在最近存活祖先下，
+  // 且那个祖先自己也被展开（2026-09-18 真机 602→604：ZONE 挂着「2」却收着，幽灵行一行都看不见）
+  await expect(page.getByTestId('model-tree-diff-resolving')).toHaveCount(0, { timeout: 60_000 });
+  const badgeRows = page.locator('[data-testid="model-tree-row"][data-diff-status]');
+  await expect(badgeRows.first()).toBeVisible({ timeout: 30_000 });
+  if (b.impact_kind === 'tombstone') {
+    await expect(page.locator('[data-testid="model-tree-row"][data-ghost="true"]').first()).toBeVisible();
+  }
 
   // 关闭：每份生成过的历史快照各一条 DELETE；差异模式退出
   const generated = historyRequests.filter((r) => r.method === 'POST' && /history\/generate/.test(r.url)).length;

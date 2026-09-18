@@ -849,13 +849,19 @@ export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
   /**
    * 仅“加载 + 展开”到目标节点的路径，不做选中/飞行/滚动等副作用。
    * 供版本差异模式批量定位变更节点使用；任何失败都返回 false（不抛错）。
+   *
+   * `expandSelf`：连目标节点自己也展开（并加载其子节点）。差异模式里已删除节点的幽灵行挂在
+   * 「最近仍存活的祖先」下面，只把路径展开到那个祖先是不够的——它自己收着，幽灵行就一行都看不见
+   * （2026-09-18 真机 602→604：EQUI 与 BOX 都被删，ZONE 挂着「2」却收着，`attr-diff/live-8026/a602-b604-*`）。
    */
-  async function expandPathToNode(refno: string): Promise<boolean> {
+  async function expandPathToNode(refno: string, options?: { expandSelf?: boolean }): Promise<boolean> {
     const rootId = rootIds.value[0];
     if (!rootId) return false;
 
     const key = normalizeRefnoKey(refno);
     if (!isPdmsRefnoKey(key)) return false;
+
+    const expandSelf = options?.expandSelf === true;
 
     // 已在树中：只需确保祖先链展开
     if (nodesById.value[key]) {
@@ -867,7 +873,9 @@ export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
         nextExpanded.add(cur);
         cur = nodesById.value[cur]?.parentId ?? null;
       }
+      if (expandSelf) nextExpanded.add(key);
       expandedIds.value = nextExpanded;
+      if (expandSelf) await ensureChildrenLoaded(key).catch(() => undefined);
       return true;
     }
 
@@ -904,8 +912,13 @@ export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
       }
 
       await ensureChildrenLoaded(curParent);
+      const located = !!nodesById.value[key];
+      if (expandSelf && located) {
+        nextExpanded.add(key);
+        await ensureChildrenLoaded(key).catch(() => undefined);
+      }
       expandedIds.value = nextExpanded;
-      return !!nodesById.value[key];
+      return located;
     } catch {
       return false;
     }
