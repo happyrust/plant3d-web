@@ -1135,25 +1135,27 @@ function applyTreeDiffContext(rawDetail: unknown) {
   const refnos = Array.isArray(detail?.refnos)
     ? detail.refnos.map(normalizeCompareRefno).filter(Boolean)
     : [];
-  const models = Array.isArray(detail?.models)
+  // 可选字段按「有才带」条件展开：`TreeDiffModel` 的这些字段是 `?:`，写成 `字段: undefined` 会让映射出来的类型变成
+  // 「必有该键、值可为 undefined」，`TreeDiffModel` 反过来就装不进去（TS2677 类型谓词不成立）。
+  const models: TreeDiffModel[] = Array.isArray(detail?.models)
     ? detail.models
-      .map((model: unknown) => {
-        const item = model as TreeDiffModel;
+      .map((model: unknown): TreeDiffModel | null => {
+        const item = model as Partial<TreeDiffModel> | null | undefined;
         const refno = normalizeCompareRefno(item?.refno);
         if (!refno) return null;
         const ownerRefno = normalizeCompareRefno(item?.ownerRefno);
         return {
           refno,
-          category: item.category,
-          status: item.status,
-          beforeState: item.beforeState,
-          afterState: item.afterState,
-          sourceChangeCount: item.sourceChangeCount,
-          sourceNouns: item.sourceNouns,
-          ownerRefno: ownerRefno || undefined,
+          ...(item?.category !== undefined ? { category: item.category } : {}),
+          ...(item?.status !== undefined ? { status: item.status } : {}),
+          ...(item?.beforeState !== undefined ? { beforeState: item.beforeState } : {}),
+          ...(item?.afterState !== undefined ? { afterState: item.afterState } : {}),
+          ...(item?.sourceChangeCount !== undefined ? { sourceChangeCount: item.sourceChangeCount } : {}),
+          ...(item?.sourceNouns !== undefined ? { sourceNouns: item.sourceNouns } : {}),
+          ...(ownerRefno ? { ownerRefno } : {}),
         };
       })
-      .filter((item): item is TreeDiffModel => !!item)
+      .filter((item): item is TreeDiffModel => item !== null)
     : [];
   const mergedRefnos = Array.from(new Set([
     ...refnos,
@@ -1179,7 +1181,7 @@ function applyTreeDiffContext(rawDetail: unknown) {
   const first = mergedRefnos[0] ?? null;
   if (first) {
     // 第一条变更就是被删的（tombstone 单元里常见）：按幽灵登记，右侧属性面板不去拉当前会话
-    const firstModel = models.find((item) => item?.refno === first);
+    const firstModel = models.find((item) => item.refno === first);
     const firstIsGhost = !!firstModel
       && normalizeTreeDiffStatus(firstModel.status) === 'deleted'
       && !pdmsTree.nodesById.value[first];

@@ -1,0 +1,44 @@
+{
+  "url": "http://127.0.0.1:3111/?model_source=gen-model-v1&gm_backend_port=8026&unit_refno=24384_26480&compare_autorun=1&compare_a=587&compare_b=602",
+  "startedAt": "2026-09-18T14:48:43.450Z",
+  "attributeRequests": [
+    "{\"snapshot_key\":\"24384_26480@587\",\"tool\":\"attributes\",\"arguments\":{\"refno\":\"24384/26481\"}}",
+    "{\"snapshot_key\":\"24384_26480@602\",\"tool\":\"attributes\",\"arguments\":{\"refno\":\"24384/26481\"}}"
+  ],
+  "attributeResponses": [
+    {
+      "status": 200,
+      "sesno": 587,
+      "exists": true,
+      "noun": "BOX",
+      "rows": 28,
+      "elapsed_ms": 4
+    },
+    {
+      "status": 200,
+      "sesno": 602,
+      "exists": true,
+      "noun": "BOX",
+      "rows": 28,
+      "elapsed_ms": 4
+    }
+  ],
+  "pageErrors": [],
+  "steps": [
+    {
+      "at": "2026-09-18T14:48:43.642Z",
+      "name": "goto",
+      "url": "http://127.0.0.1:3111/?model_source=gen-model-v1&gm_backend_port=8026&unit_refno=24384_26480&compare_autorun=1&compare_a=587&compare_b=602"
+    },
+    {
+      "at": "2026-09-18T14:48:48.784Z",
+      "name": "compare finished",
+      "summary": "新增 0删除 0修改 1未变 0"
+    }
+  ],
+  "summaryText": "新增 0删除 0修改 1未变 0",
+  "treeDiffPill": "587 → 602 差异模式",
+  "ok": false,
+  "error": "locator.waitFor: Timeout 60000ms exceeded.\nCall log:\n  - waiting for locator('[data-testid=\"model-tree-row\"][data-diff-status=\"added\"]').first() to be visible\n\n    at D:\\work\\plant-code\\old\\.scratch\\attr-diff-live.mjs:62:18",
+  "finishedAt": "2026-09-18T14:49:48.861Z"
+}
