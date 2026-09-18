@@ -15,7 +15,7 @@
 
 前端：dev `:3111`（HMR 到 `8402b2c` 之后的工作树），页面参数 `?model_source=gen-model-v1&gm_backend_port=8024&show_refno=…`（`src/utils/apiBase.ts` 的 `gm_backend_port` 覆盖）。
 
-> **2026-09-18 08:27 后 `:8022` 已换到 `3509b93f9` 的干净 release**（用户 09-17 23:40 拍板），金样与完整流在 `:8022` 上复验一致——见 §7；上表 `:8022` 那一行是 09-17 的形态。`:8023` 未动。
+> **2026-09-18 08:27 后 `:8022` 已换到 `3509b93f9` 的干净 release**（用户 09-17 23:40 拍板），金样与完整流在 `:8022` 上复验一致——见 §7；**09:12 再换到 `994f2e0cc`**（世界网格缓存键修复，§7.5）。上表 `:8022` 那一行是 09-17 的形态。`:8023` 未动。
 
 启动命令（cwd = 运行目录，与 `New-LocalRelease.ps1` 生成的 `Start-AMS.ps1` 同形）：
 
@@ -101,3 +101,13 @@ GET http://127.0.0.1:8024/api/v1/spatial/surface-clearance?source_refno=24384/22
 **08:40 按用户指示在 `:8022` 上重算了那个根**（`regen-root-17496_105799-record.json`）：`POST /api/v1/model/ensure {"refno":"17496/105799","force":true}` → 200 / 237 ms，`Generated`，`generated_instance_count 168`（`published_geometry_count 113`，`published_via regen`，`source_sesno 729`，`durable`），write-behind 1 s 内落库无 error。库里 `inst_relate:17496_137183` 的 `world_trans.translation` 变为 (−15559.963, −2743.641, 2150.0)，`model_sesno` 仍 729；`aabb` 行与 `nearby` center 在重算前就已经是对的（(−17195.7…−15549.2, −3091.2…−2682.6, 2088…2212)，09-17 23 点读到的 z −6.6 m 在这之间被别的过程修过，不是本轮）。
 
 **但同一进程里 FIXING × WALL 仍回 10 358.7 mm**（`fixing-x-wall-8022-after-force-regen-stale-cache.json`）：`surface_clearance.rs::build_leaf_mesh` 的世界网格缓存 `LEAF_MESHES` 键是 `(叶子 key, model_sesno)`，注释写「换版自然失效」——**强制重算不换源会话号，键 `(17496_137183, 729)` 不变，旧网格一直命中**。用一条只读请求把缓存挤掉（源 = ZONE `17496/8516`，1 789 片叶子 / 43 720 三角 > 上限 1 024 → 整体清空；560 ms，结果照样 64.42777）之后再问，**0 mm 贴合、`intersects=false`，`sp = tp = (−16364.817, −2930.0754, 2106.1594)`，与 `:8024` 逐字一致**，warning `source_within_target`（`fixing-x-wall-8022-after-force-regen-cache-cleared.json`）。金样 ELBO × WALL 1 前后都是 64.42777 mm（墙根重算没改它的几何）。缓存键那一条记进计划 §9。
+
+### 7.5 缓存键修复落地：`gen-model-model-cache` `994f2e0cc`，`:8022` 09:12 换上（`swap-record-2-994f2e0cc.json`）
+
+用户拍板后改 `surface_clearance.rs`：`LeafRow` 新增 `placement_fingerprint`（`row_to_leaf` 里由 `world_trans` 与每个实例的 `geo_hash` / 本地变换算出），`leaf_cache_key()` 统一出键 `(key, model_sesno, 指纹)`，`LEAF_MESHES` 改 `DashMap<(String, i64, u64), _>`；没 `model_sesno` / 空 key 的行照旧不进缓存，`UNIT_MESHES`（按内容哈希 `geo_hash`）未动。单测 2 条：`placement_fingerprint_tracks_world_trans_and_instances`、`leaf_mesh_cache_misses_when_placement_changes_under_the_same_sesno`（临时目录写一片单位三角形 `.mesh`，同 key 同 sesno 只换 `world_trans` 的第二行拼出 x+1000 的新网格而不是命中旧缓存；摆放没变的第三次仍命中同一份 `Arc`）。`cargo test --lib -- surface_clearance …` **17 passed**（15 旧 + 2 新）、1 ignored；`rustfmt --check` 本次改动 0 diff。
+
+二进制仍从干净 worktree build（`0.1.27+g994f2e0cc00a.1789693424`，`git_dirty=false`，2 m 56 s；主工作树此刻有别人的 `model_impact.rs` 在途 M 与未跟踪的 `tests/zz_tmp_room_probe.rs`），`:8022` 09:12:38 停旧起新 **停机 10 s**（launch 同 §7.1）。新进程第一问 FIXING × WALL 就是 0 mm 贴合、金样 64.42777 mm 不变。live 上已经没有第二枚落点错的 FIXING 可拿来演示「重算后立刻失效」，那一条靠单测担保。
+
+### 7.6 1112 库全部 FIXING 逐枚核对：190 枚，0 错（`fixing-1112-audit-store-vs-fresh.json`）
+
+`inst_relate` 里 `generic = 'FIXING' AND dbnum = 1112` 共 **190** 行（之前写的「另 37 个」是 WALL 1 周边扫描的局部数，不是全库数）。逐枚：`:8024` `POST /model/ensure {refno: FIXING}` 现生成（回执 `generation_roots[0]` 是它所在的墙，共 13 堵）→ `:8024` `model/records {generation_root: 墙}` 取现生成的 `world_trans`；`:8022` `model/records {generation_root: FIXING}` 取存量 `world_trans`；比平移（阈值 1 mm）与四元数（1e-3，q 与 −q 同姿态）。结果 **190 / 190 一致，最大偏差 0 mm / 0**，`model_sesno` 全部 729；CWALL `17496/105799` 下 28 堵墙里的 38 枚 FIXING（昨天扫描说的那 38 个）全对——其中 `17496/137183` 是 08:40 重算修好的，其余 37 枚是否在那次重算前就对、还是随根一起被修，没有重算前的快照可断。**没有需要再重算的根。** 耗时 61 s。

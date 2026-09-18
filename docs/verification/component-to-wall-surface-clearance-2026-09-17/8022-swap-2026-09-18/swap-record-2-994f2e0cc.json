@@ -1,0 +1,22 @@
+{
+  "swappedAt": "2026-09-18T09:12:38+08:00",
+  "reason": "gen-model-model-cache 994f2e0cc：surface-clearance 世界网格缓存键加摆放指纹",
+  "old": {
+    "pid": 27760,
+    "build_id": "0.1.27+g3509b93f9ba0.1789690830"
+  },
+  "new": {
+    "pid": 45700,
+    "exe": "_runs\\review-full-8031\\aios-database-994f2e0cc.exe",
+    "build_id": "0.1.27+g994f2e0cc00a.1789693424",
+    "git_commit": "994f2e0cc00a",
+    "git_dirty": false,
+    "built_from": "git worktree add --detach .scratch\\gmmc-994f2e0cc 994f2e0cc; cargo build --release --features http_api --bin aios-database（2 m 56 s）",
+    "launch": "同 08:27 那次：cwd 仓库根、仓库根 DbOption.toml、serve、非提权"
+  },
+  "downtime_seconds": 10,
+  "checks_after": {
+    "fixing_x_wall_fresh_process": "17496/137183 × 17496/105912 → 0 mm, intersects=false, sp (−16364.817, −2930.0754, 2106.1594), warning source_within_target",
+    "golden": "24384/22582 × 17496/105912 → 64.42777 mm, ⊥ 64.49526, total 5 ms, warnings []"
+  }
+}
