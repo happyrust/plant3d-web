@@ -1,29 +1,22 @@
-import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
+
+/**
+ * legacy（`:3100` + parquet）真机用例。
+ *
+ * 2026-09-18：原第 2 条「BRAN 24381_145018 装 sesno 791 / 898 做版本对比」已删——它按 A1（`ec187960`）之前的
+ * 事件形状（`artifactSesno / manifestUrl / generatedAt`，没有 `version / entries`）派发 `plant3d:model-unit-version-compare`，
+ * ViewerPanel 现在读的是 `detail.before.entries`，这条早已跑不通；且它期待的 791 / 898 来自另一份 ams7997 库副本
+ * （现在这份只有 332 个会话）。版本对比的真机回归见 `e2e/model-version-compare-gen-model-v1.spec.ts`
+ * （plan `docs/plans/2026-09-18-model-version-compare-gen-model-v1-migration-plan.md` Q21）。
+ * 剩下这一条（MBD 行数 = 0 时尺寸场景绘制器仍挂着）与版本无关，随 legacy 整体退役再处理。
+ */
 
 const BACKEND_ORIGIN = (process.env.PLANT3D_API_BASE || 'http://127.0.0.1:3100').replace(/\/$/, '');
 const BACKEND_QUERY = `backend=${encodeURIComponent(BACKEND_ORIGIN)}`;
 const PROJECT = 'AvevaMarineSample';
 const DBNUM = 7997;
-const UNIT_REFNO = '24381_145018';
-const COMPARE_EVENT = 'plant3d:model-unit-version-compare';
 
 test.setTimeout(120_000);
-
-type ModelUnitCommitResponse = {
-  success: boolean;
-  data: {
-    commit: {
-      dbnum: number;
-      unit_noun: string;
-      unit_refno: string;
-      sesno: number;
-      artifact_sesno: number;
-      impact_kind: string;
-      generated_at: string;
-    };
-    manifest_url: string;
-  }[];
-};
 
 async function waitForDimensionSystem(page: Page): Promise<void> {
   await page.getByText('三维查看器', { exact: true }).click();
@@ -32,44 +25,6 @@ async function waitForDimensionSystem(page: Page): Promise<void> {
     || typeof (window as any).__dimensionSystemError === 'string'
   ), null, { timeout: 60_000 });
   expect(await page.evaluate(() => (window as any).__dimensionSystemError ?? null)).toBeNull();
-}
-
-async function fetchVersions(request: APIRequestContext): Promise<ModelUnitCommitResponse['data']> {
-  const response = await request.get(
-    `${BACKEND_ORIGIN}/api/model/units/${encodeURIComponent(UNIT_REFNO)}/versions?dbnum=${DBNUM}`,
-  );
-  expect(response.ok()).toBe(true);
-  const body = await response.json() as ModelUnitCommitResponse;
-  expect(body.success).toBe(true);
-  expect(body.data.length).toBeGreaterThanOrEqual(2);
-  return body.data;
-}
-
-function findVersion(
-  versions: ModelUnitCommitResponse['data'],
-  sesno: number,
-): ModelUnitCommitResponse['data'][number] {
-  const version = versions.find(item => item.commit.sesno === sesno);
-  expect(version, `missing AMS ${DBNUM} BRAN ${UNIT_REFNO} sesno ${sesno}`).toBeTruthy();
-  expect(version!.commit.dbnum).toBe(DBNUM);
-  expect(version!.commit.unit_noun).toBe('BRAN');
-  expect(version!.commit.unit_refno).toBe(UNIT_REFNO);
-  expect(version!.manifest_url).toContain(`/model_units/${DBNUM}/${UNIT_REFNO}/`);
-  return version!;
-}
-
-async function queryManifestRefnos(
-  page: Page,
-  manifestUrl: string,
-): Promise<string[]> {
-  return page.evaluate(async ({ dbnum, unitRefno, manifestUrl }) => {
-    const mod = await import('/src/composables/useDbnoInstancesParquetLoader.ts');
-    const loader = mod.useDbnoInstancesParquetLoader();
-    return loader.queryAllRefnosByDbno(dbnum, {
-      manifestUrl,
-      expectedRootRefno: unitRefno,
-    });
-  }, { dbnum: DBNUM, unitRefno: UNIT_REFNO, manifestUrl });
 }
 
 test('AMS 7997 empty parquet MBD source keeps the Three scene painter mounted safely', async ({ page }) => {
@@ -109,128 +64,4 @@ test('AMS 7997 empty parquet MBD source keeps the Three scene painter mounted sa
     return loaded.dimensions.length;
   }, DBNUM);
   expect(mbdRows).toBe(0);
-});
-
-test('AMS 7997 BRAN 24381_145018 loads minimal delivery unit versions 791 and 898 for compare', async ({ page, request }) => {
-  const versions = await fetchVersions(request);
-  const before = findVersion(versions, 791);
-  const after = findVersion(versions, 898);
-
-  await page.goto(
-    `/?${BACKEND_QUERY}&output_project=${PROJECT}&dimension_demo=1`,
-    { waitUntil: 'domcontentloaded' },
-  );
-  await waitForDimensionSystem(page);
-
-  const beforeRefnos = await queryManifestRefnos(page, before.manifest_url);
-  const afterRefnos = await queryManifestRefnos(page, after.manifest_url);
-  expect(beforeRefnos.length, 'sesno 791 manifest refnos').toBeGreaterThan(0);
-  expect(afterRefnos.length, 'sesno 898 manifest refnos').toBeGreaterThan(0);
-
-  await page.evaluate(({ eventName, dbnum, unitRefno, before, after, beforeRefnos, afterRefnos }) => {
-    window.dispatchEvent(new CustomEvent(eventName, {
-      detail: {
-        action: 'open',
-        dbnum,
-        unitRefno,
-        before: {
-          sesno: before.commit.sesno,
-          artifactSesno: before.commit.artifact_sesno,
-          manifestUrl: before.manifest_url,
-          generatedAt: before.commit.generated_at,
-          refnos: beforeRefnos,
-        },
-        after: {
-          sesno: after.commit.sesno,
-          artifactSesno: after.commit.artifact_sesno,
-          manifestUrl: after.manifest_url,
-          generatedAt: after.commit.generated_at,
-          refnos: afterRefnos,
-        },
-        refnos: Array.from(new Set([...beforeRefnos, ...afterRefnos])),
-        rows: [{
-          refno: unitRefno,
-          noun: 'BRAN',
-          status: before.commit.artifact_sesno === after.commit.artifact_sesno ? 'unchanged' : 'modified',
-        }],
-      },
-    }));
-  }, {
-    eventName: COMPARE_EVENT,
-    dbnum: DBNUM,
-    unitRefno: UNIT_REFNO,
-    before,
-    after,
-    beforeRefnos,
-    afterRefnos,
-  });
-
-  await expect.poll(() => page.evaluate(() => (window as any).__modelUnitVersionCompare ?? null), {
-    timeout: 120_000,
-  }).toMatchObject({
-    unitRefno: UNIT_REFNO,
-    beforeSesno: 791,
-    afterSesno: 898,
-  });
-
-  await page.evaluate(async () => {
-    const { emitCommand } = await import('/src/ribbon/commandBus.ts');
-    emitCommand('panel.modelVersionCompare');
-  });
-  await expect(page.getByTestId('model-unit-version-compare-panel')).toBeVisible();
-  await expect(page.getByTestId('model-unit-compare-runtime')).toBeVisible();
-  await expect(page.getByTestId('viewer-model-unit-version-compare-overlay')).toHaveCount(0);
-
-  const debug = await page.evaluate(() => (window as any).__modelUnitVersionCompare);
-  expect(debug.beforeObjects).toBeGreaterThan(0);
-  expect(debug.afterObjects).toBeGreaterThan(0);
-  expect(debug.environmentLoadedRefnos).toBeGreaterThanOrEqual(0);
-
-  await expect(page.getByTestId('model-unit-compare-show-before')).toContainText('A · sesno 791');
-  await expect(page.getByTestId('model-unit-compare-show-after')).toContainText('B · sesno 898');
-
-  await page.getByTestId('model-unit-compare-show-before').click();
-  await expect.poll(() => page.evaluate(() => (
-    (window as any).__modelUnitVersionCompare?.activeSide
-  ))).toBe('before');
-  await page.getByTestId('model-unit-compare-show-after').click();
-  await expect.poll(() => page.evaluate(() => (
-    (window as any).__modelUnitVersionCompare?.activeSide
-  ))).toBe('after');
-
-  await page.getByTestId('model-unit-compare-split-mode').click();
-  await expect(page.getByTestId('viewer-model-unit-split-overlay')).toBeVisible();
-  await expect(page.getByTestId('model-unit-compare-split-summary'))
-    .toContainText('左 A · sesno 791');
-  await expect(page.getByTestId('model-unit-compare-split-summary'))
-    .toContainText('右 B · sesno 898');
-
-  const canvas = page.locator('canvas.viewer');
-  const box = await canvas.boundingBox();
-  expect(box).not.toBeNull();
-  const interactionPoint = {
-    x: box!.x + box!.width * 0.75,
-    y: box!.y + box!.height * 0.25,
-  };
-  expect(await page.evaluate(({ x, y }) => (
-    document.elementFromPoint(x, y)?.tagName
-  ), interactionPoint)).toBe('CANVAS');
-
-  const cameraBefore = await page.evaluate(() => (
-    (window as any).__dtxViewer.camera.position.toArray() as number[]
-  ));
-  await page.mouse.move(interactionPoint.x, interactionPoint.y);
-  await page.mouse.down();
-  await page.mouse.move(interactionPoint.x + 60, interactionPoint.y + 40, { steps: 10 });
-  await page.mouse.up();
-  await expect.poll(async () => {
-    const cameraAfter = await page.evaluate(() => (
-      (window as any).__dtxViewer.camera.position.toArray() as number[]
-    ));
-    return cameraAfter.some((value, index) => Math.abs(value - cameraBefore[index]!) > 1e-6);
-  }).toBe(true);
-
-  await page.getByTestId('model-unit-compare-close').click();
-  await expect(page.getByTestId('model-unit-compare-runtime')).toHaveCount(0);
-  await expect(page.getByTestId('viewer-model-unit-split-overlay')).toHaveCount(0);
 });

@@ -157,17 +157,6 @@ function uniqStrings(list: string[]): string[] {
   return out;
 }
 
-export function mergeVersionReplacementRefnos(
-  targetRefnos: string[],
-  previouslyLoadedRefnos: string[],
-): string[] {
-  return uniqStrings(
-    [...targetRefnos, ...previouslyLoadedRefnos]
-      .map((refno) => normalizeRefnoString(refno))
-      .filter(Boolean),
-  );
-}
-
 async function querySubtreeRefnos(refno: string): Promise<{ refnos: string[]; truncated: boolean }> {
   const normalized = normalizeRefnoString(refno);
   if (!normalized) return { refnos: [], truncated: false };
@@ -289,7 +278,7 @@ export async function resolveActualModelLoadScope(
 
 export function useModelGeneration(options: ModelGenerationOptions): ModelGenerationState & {
   generateAndLoadModel: (refno: string) => Promise<boolean>
-  showModelByDbnum: (dbno: number, options?: { flyTo?: boolean; manifestUrl?: string; replaceRefnos?: string[] }) => Promise<ShowModelByDbnumResult>
+  showModelByDbnum: (dbno: number, options?: { flyTo?: boolean }) => Promise<ShowModelByDbnumResult>
   showModelByRefno: (refno: string, options?: { flyTo?: boolean; regenerate?: boolean }) => Promise<boolean>
   isModelActuallyLoaded: (refno: string) => boolean
   checkRefnoExists: (refno: string) => boolean
@@ -1524,7 +1513,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
 
   async function showModelByDbnum(
     dbno: number,
-    loadOptions?: { flyTo?: boolean; manifestUrl?: string; replaceRefnos?: string[] }
+    loadOptions?: { flyTo?: boolean }
   ): Promise<ShowModelByDbnumResult> {
     isGenerating.value = true;
     error.value = null;
@@ -1543,8 +1532,9 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         throw new Error(`Invalid dbnum: ${dbno}`);
       }
 
-      // gen-model-v1（P3-c）：整库 = 该库全部 SITE 逐个 ensure。带 manifestUrl 的是版本对比（不可变清单），仍走 parquet（Q3）。
-      const genModelV1 = loadOptions?.manifestUrl ? null : getGenModelV1ModelSource();
+      // gen-model-v1（P3-c）：整库 = 该库全部 SITE 逐个 ensure。
+      // （2026-09-18 起不再有「带 manifestUrl 把某个版本装进主层」的分支：版本只在隔离图层里看，见 plan 2026-09-18 Q18。）
+      const genModelV1 = getGenModelV1ModelSource();
       if (genModelV1) {
         return await showModelByDbnumGenModelV1(genModelV1, dbno, { flyTo: loadOptions?.flyTo });
       }
@@ -1554,28 +1544,19 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
       progress.value = 10;
       syncGlobalLoadStatus();
 
-      if (!loadOptions?.manifestUrl) {
-        let parquetAvailable = await parquetLoader.isParquetAvailable(dbno);
-        if (!parquetAvailable) {
-          parquetAvailable = await ensureParquetAvailableByAutoExport(dbno, []);
-        }
-        if (!parquetAvailable) {
-          throw new Error(`Model files not found for dbnum=${dbno}`);
-        }
+      let parquetAvailable = await parquetLoader.isParquetAvailable(dbno);
+      if (!parquetAvailable) {
+        parquetAvailable = await ensureParquetAvailableByAutoExport(dbno, []);
+      }
+      if (!parquetAvailable) {
+        throw new Error(`Model files not found for dbnum=${dbno}`);
       }
 
       statusMessage.value = `Loading refnos for dbnum=${dbno}...`;
       progress.value = 25;
       syncGlobalLoadStatus();
-      const loadRefnos = await parquetLoader.queryAllRefnosByDbno(dbno, {
-        debug: false,
-        manifestUrl: loadOptions?.manifestUrl,
-      });
+      const loadRefnos = await parquetLoader.queryAllRefnosByDbno(dbno, { debug: false });
       const uniqueRefnos = uniqStrings(loadRefnos.map((r) => normalizeRefnoString(r))).filter(Boolean);
-      const requestRefnos = loadOptions?.manifestUrl
-        ? mergeVersionReplacementRefnos(uniqueRefnos, loadOptions.replaceRefnos ?? [])
-        : uniqueRefnos;
-
       if (uniqueRefnos.length === 0) {
         statusMessage.value = 'Model is empty (0 instances)';
         progress.value = 100;
@@ -1597,7 +1578,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         throw new Error('DTXLayer 未初始化，无法加载模型');
       }
 
-      totalCount.value = requestRefnos.length;
+      totalCount.value = uniqueRefnos.length;
       currentIndex.value = 0;
 
       const LOAD_BATCH_SIZE = VISIBLE_REFNOS_PAGE_SIZE;
@@ -1606,12 +1587,12 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
       let totalLoadedObjects = 0;
       const missingAll: string[] = [];
 
-      for (let start = 0; start < requestRefnos.length; start += LOAD_BATCH_SIZE) {
-        const end = Math.min(requestRefnos.length, start + LOAD_BATCH_SIZE);
-        const batch = requestRefnos.slice(start, end);
+      for (let start = 0; start < uniqueRefnos.length; start += LOAD_BATCH_SIZE) {
+        const end = Math.min(uniqueRefnos.length, start + LOAD_BATCH_SIZE);
+        const batch = uniqueRefnos.slice(start, end);
         currentIndex.value = end;
-        statusMessage.value = `Loading model batch ${Math.ceil(end / LOAD_BATCH_SIZE)}/${Math.ceil(requestRefnos.length / LOAD_BATCH_SIZE)}...`;
-        progress.value = Math.max(35, Math.min(92, 35 + Math.floor((end / requestRefnos.length) * 55)));
+        statusMessage.value = `Loading model batch ${Math.ceil(end / LOAD_BATCH_SIZE)}/${Math.ceil(uniqueRefnos.length / LOAD_BATCH_SIZE)}...`;
+        progress.value = Math.max(35, Math.min(92, 35 + Math.floor((end / uniqueRefnos.length) * 55)));
         syncGlobalLoadStatus();
 
         const result = await loadDbnoInstancesForVisibleRefnosDtx(dtxLayer, dbno, batch, {
@@ -1619,11 +1600,6 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
           debug: false,
           dataSource: 'parquet',
           forceReloadRefnos: batch,
-          replaceExistingObjects: !!loadOptions?.manifestUrl,
-          // 单元 manifest 已包含 root 与全部成员；按 refno 逐项加载时关闭 owner 扩展，
-          // 避免同一 TUBI 同时命中 BRAN root 和 leave refno 而重复绘制。
-          includeOwnedTubings: loadOptions?.manifestUrl ? false : undefined,
-          parquetManifestUrl: loadOptions?.manifestUrl,
         });
         anyViewer.__dtxAfterInstancesLoaded?.(dbno, batch);
         totalLoadedRefnos += result.loadedRefnos;
@@ -1635,7 +1611,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
       }
 
       const uniqueMissing = uniqStrings(missingAll.map((r) => normalizeRefnoString(r))).filter(Boolean);
-      if (uniqueMissing.length > 0 && !loadOptions?.manifestUrl) {
+      if (uniqueMissing.length > 0) {
         const realtimeResult = await handleMissingRefnos(dtxLayer, dbno, uniqueMissing, anyViewer);
         totalLoadedObjects += realtimeResult.loadedObjects;
       }

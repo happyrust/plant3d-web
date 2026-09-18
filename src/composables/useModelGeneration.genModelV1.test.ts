@@ -686,15 +686,6 @@ describe('showModelByDbnum（gen-model-v1 整库）', () => {
     expect(messages.join('\n')).not.toMatch(/没有 SITE|无法整库加载/);
   });
 
-  it('带 manifestUrl（版本对比）仍走 parquet 路，不碰 gen-model', async () => {
-    const { useModelGeneration } = await import('./useModelGeneration');
-    const gen = useModelGeneration({ viewer: makeViewer(), db_num: 7997 });
-    const result = await gen.showModelByDbnum(7997, { manifestUrl: '/m.json' });
-    expect(collectDbnumMock).not.toHaveBeenCalled();
-    // parquet loader 在这里是空 mock，走到它就会失败——只要没碰 gen-model 就是对的
-    expect(result.loaded).toBe(false);
-  });
-
   it('collectDbnum 抛错 → 错误 toast、loaded:false，弹窗关掉', async () => {
     const { useModelGeneration } = await import('./useModelGeneration');
     const gen = useModelGeneration({ viewer: makeViewer(), db_num: 7997 });
