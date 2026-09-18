@@ -1,0 +1,35 @@
+{
+  "swappedAt": "2026-09-18T11:28:28+08:00",
+  "instance": "_runs\\surface-clearance-8024（mem 验证实例）",
+  "reason": "gen-model-model-cache 7bcdd60df：垂距射线在棱上落空不再报 warning——最近点连线与主面法向几乎平行（distance × (1 − cos θ) ≤ 垂距容差）就取连线当垂距（method edge），否则换棱上另一面读，真楔形留空垂距不报；hit_candidates 共点 eps 随坐标量级放大（世界坐标下板角的 end 三角不再被滤掉）；perpendicular 多一格 method（ray / contact / edge）。用户 10:42 拍板「剩下 3 对落空也收掉，定个口径（取贴合度高的那面直接给 ⊥ = 距离）」，改后重跑 126 对",
+  "old": {
+    "pid": 15392,
+    "exe": "_runs\\surface-clearance-8024\\aios-database-83beef25.exe",
+    "build_id": "0.1.27+g83beef25754b.1789697591",
+    "started": "2026-09-18T10:16:29+08:00",
+    "resident_records_before_stop": 1215
+  },
+  "new": {
+    "pid": 17572,
+    "exe": "_runs\\surface-clearance-8024\\aios-database-7bcdd60d.exe",
+    "sha256_prefix": "71E635277019E6EC",
+    "build_id": "0.1.27+g7bcdd60df238.1789700589",
+    "git_commit": "7bcdd60df238",
+    "git_dirty": false,
+    "includes_others": "7bcdd60df 直接叠在 83beef257 之上（中间没有别人的提交）；二进制仍含另一条会话的 2d27bde35（fix(rooms)）",
+    "built_from": "git worktree add --detach .scratch\\wt-7bcdd60df-edge 7bcdd60df; cargo build --release --features http_api --bin aios-database（2 m 45 s，11:03–11:05 由上一会话起，本会话接手时已 Finished；CARGO_TARGET_DIR=D:\\Rust\\target；worktree 用完已删）",
+    "launch": "同 README §1；日志 logs\\20260918-112828.*.log",
+    "ready_after_seconds": 4
+  },
+  "downtime_seconds": 4,
+  "data_after": {
+    "model_ensure_calls": 97,
+    "model_ensure_seconds": 7,
+    "resident_records": 1215
+  },
+  "checks_after": {
+    "golden": "24384/22582 × 17496/105912 → 64.42777 mm, intersects=false, outer/geometric, 法向 (−0.9993213, 0.036837157, 0), ⊥ 64.49526 (method ray), 两点与 from / to 逐位相同, sesno 619/729, pairs 2/1/1, warnings [] —— 与 09-17 §2 一致（http-surface-clearance-elbo-x-wall1-7bcdd60df.json；total 24 ms 是换机后首发冷缓存）",
+    "replay_126_pairs": "126/126 → 200；intersects 17 = 17；distance max|Δ| 0.005 mm（对 09-17 两位小数）；warnings 0 对（perpendicular_ray_missed 已删）；有垂距 77 → 101 对：method ray 73 / contact 4 / edge 24；⊥ 对 09-17 仍只有 24384/24514 × 17496/118130 那 1 对差 0.12 mm；「主面 + 空垂距」0 对（楔形分支 (c) live 里没出现）；与 83beef257 那轮逐对比 24 对变了、全是 edge：3 对目标（FTUB 24384/24671 × PANE 17496/135244 46.6 mm、24384/2683 × 17496/129513 93.1 mm、24384/3110 × 17496/129020 184.1 mm，偏 1° / 2° / 1.5°）由「side + 落空警告」→ side + ⊥ = 距离；另 21 对（0dce7fee2 那轮改读 end / top 的 17 对里 16 对 + §8.3 那 5 对，偏 0.4–5.7°、gap ≤ 0.29 mm 都在容差内）由 end 19 / top 2 → side 17 / outer 4 + ⊥ = 距离；只有 FTUB 24384/24458 × GWALL 17496/118130（连线离 outer 法向远、与 end 法向垂直）仍读 end；分布 side 53 / outer 25 / inner 23 / end 8 / 相交 17（top 0、opening 0）—— replay-126-pairs-7bcdd60df.jsonl（新增 method 列）"
+  },
+  "untouched": [":8022（994f2e0cc）", ":8023"]
+}
