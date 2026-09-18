@@ -35,7 +35,9 @@
        真机：模型树点选 PIPE 24381_144975 → 200，center 同 BRAN 的子树中心，共 1753 项。
     - **仍开着的**：§7 第 5 步 legacy 对拍要一台带 sqlite 空间索引的完整 `plant-web-server`（`:3100` 是 detached）；成员部分加载时子树盒仍不全；
       子树里一个都没生成过的 owner 仍是服务端 404 折成的「…还没生成过模型」提示。真机脚本（选中中心 / 叶子 / owner 兜底 / 加载当前页 / 确认框 / BRAN 盒）
-      都在 `%TEMP%\spatial-ui-*.mjs`，没进仓；要作回归得整理成 `e2e/spatial-query-*.spec.ts`。别人的在飞文件（测量 / 尺寸系统）一个都没碰。
+       都在 `%TEMP%\spatial-ui-*.mjs`，没进仓；要作回归得整理成 `e2e/spatial-query-*.spec.ts`。别人的在飞文件（测量 / 尺寸系统）一个都没碰。
+       **→ 2026-09-18 已整理进仓**：`e2e/spatial-query-gen-model-v1-ui.spec.ts`（+ `e2e/helpers/spatialQueryGenModelV1.ts`），10 条用例逐条对应
+       §7 01:30 的功能测试记录（含 headed 才跑的「拾取中心」）；`%TEMP%` 里原脚本已不在，按记录重写，**未真机验证**。
     - 最终状态：`vitest` useSpatialQuery 29 / SpatialQueryDrawer 22 / getSubtreeAABB 4 / spatialSource 7 / realBranHelper 6 全绿；`eslint` 0；
       `type-check` 基线之外只剩别处在飞改动带来的 5 条 `useDtxTools.*.test.ts`。
   - 进度：**P2 已完成**（2026-09-13 11:45，plant3d-web `8127bcb`）；**P3 代码与单测已完成**（11:53，`12c66fe`；真服务联调等 P1）；
@@ -547,7 +549,8 @@ createPipeDistanceSceneTransformPoint` 已有反向那一半可对照），服�
   单测 store +1 / drawer +1。子树里一个都没生成过的 owner 仍会收到服务端 404 折成的「…还没生成过模型」提示（§5-3 口径不变）。
 
 **功能测试记录（2026-09-14 01:30，全部改动落地后在 plant3d-web 上走一遍）**：headless Chrome（SwiftShader）对着 `:3101` dev server +
-`:18122` v1 服务，`show_refno=24381_145018`，脚本 `%TEMP%\spatial-ui-suite.mjs`（不进仓），**32 / 32 项自动检查通过；「拾取中心」headless 下无法验证，
+`:18122` v1 服务，`show_refno=24381_145018`，脚本 `%TEMP%\spatial-ui-suite.mjs`（不进仓；**2026-09-18 按本记录重写为
+`e2e/spatial-query-gen-model-v1-ui.spec.ts`，数量断言改取服务端响应、结果不够时 skip，未真机验证**），**32 / 32 项自动检查通过；「拾取中心」headless 下无法验证，
 01:38 在 headed Chrome 里补核通过（见末条）**：
 - 范围 · 手输坐标：球形 2 m 请求带 x/y/z、`shape=sphere`、`per_page=20`，摘要「共 16 项」= `total_count`，结果行与服务端本页 refno 顺序一致，
   v1 源显示覆盖面提示、无专业筛选；立方体 `shape=cube`，21 ≥ 16；排序按名称 `sort=name`、按距离 `sort=distance` 且距离非降。

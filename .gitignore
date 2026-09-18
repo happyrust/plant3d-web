@@ -68,6 +68,7 @@ e2e/*
 !e2e/fixtures/
 !e2e/fixtures/*.json
 !e2e/spatial-query-real-bran.spec.ts
+!e2e/spatial-query-gen-model-v1-ui.spec.ts
 !e2e/mbd-real-bran-standalone.spec.ts
 !e2e/mbd-interactive-ui.spec.ts
 !e2e/mbd-branch-corpus.spec.ts
