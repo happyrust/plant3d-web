@@ -7,6 +7,11 @@ import { listModelUnitCommits } from '@/api/modelUnitVersionApi';
 import { useDbnoInstancesParquetLoader } from '@/composables/useDbnoInstancesParquetLoader';
 
 vi.mock('@/api/modelUnitVersionApi', () => ({ listModelUnitCommits: vi.fn() }));
+// 面板经模型来源端口取数；这里钉住 legacy 适配器（零逻辑委托到上面两处 mock），不让默认的 gen-model-v1 源被建出来
+vi.mock('@/model-source', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/model-source')>();
+  return { ...actual, getModelSource: () => actual.getModelSource('legacy') };
+});
 vi.mock('@/composables/useDbMetaInfo', () => ({
   ensureDbMetaInfoLoaded: vi.fn().mockResolvedValue(undefined),
   getDbnumByRefno: vi.fn().mockReturnValue(7997),
@@ -103,6 +108,46 @@ describe('ModelUnitVersionComparePanel', () => {
     });
 
     window.removeEventListener('plant3d:model-unit-version-compare', listener);
+    app.unmount();
+  });
+
+  it('对比成功后把非 unchanged 行送进模型树差异模式，关闭时派发空上下文退出', async () => {
+    const treeDiffEvents: CustomEvent[] = [];
+    const listener = (event: Event) => treeDiffEvents.push(event as CustomEvent);
+    window.addEventListener('plant3d:model-version-tree-diff', listener);
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const app = createApp(ModelUnitVersionComparePanel);
+    app.mount(host);
+    const input = host.querySelector('[data-testid="model-unit-compare-refno"]') as HTMLInputElement;
+    input.value = '24381_145018';
+    input.dispatchEvent(new Event('input'));
+    (host.querySelector('[data-testid="model-unit-compare-load"]') as HTMLButtonElement).click();
+    await flushUi();
+    (host.querySelector('[data-testid="model-unit-compare-run"]') as HTMLButtonElement).click();
+    await flushUi();
+
+    expect(treeDiffEvents).toHaveLength(1);
+    expect(treeDiffEvents[0]?.detail).toEqual({
+      dbnum: 7997,
+      fromSesno: 791,
+      toSesno: 897,
+      mode: 'compare',
+      refnos: ['1_3', '1_2'],
+      models: [
+        { refno: '1_3', category: 'ELBO', status: 'added', sourceNouns: 'ELBO' },
+        { refno: '1_2', category: 'VALV', status: 'deleted', sourceNouns: 'VALV' },
+      ],
+    });
+
+    // 视口侧关闭 → 树退出差异模式（空上下文）
+    window.dispatchEvent(new CustomEvent('plant3d:model-unit-version-compare', { detail: { action: 'close' } }));
+    await flushUi();
+    expect(treeDiffEvents).toHaveLength(2);
+    expect(treeDiffEvents[1]?.detail).toEqual({ refnos: [], models: [] });
+
+    window.removeEventListener('plant3d:model-version-tree-diff', listener);
     app.unmount();
   });
 

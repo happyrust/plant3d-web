@@ -7,7 +7,8 @@
  * - `MeshSource`：`geo_hash → GLB URL`（`ensureGeometryForGeoHash` 的 URL 模板）；
  * - `AttributeSource`：属性面板 / BRAN-HANG 规则要的 `uiAttr` / `typeInfo`；
  * - `KeypointSource`：测量捕捉的 P-Point / 基本体关键点（2026-09-12 加入）；
- * - `SpatialSource`：抽屉「范围 / 距离查询」的邻近查询（2026-09-13 加入，见下）。
+ * - `SpatialSource`：抽屉「范围 / 距离查询」的邻近查询（2026-09-13 加入，见下）；
+ * - `ModelVersionSource`：版本对比的「模型版本」列表 / 几何 / 最新环境模型（2026-09-18 加入，ADR 0065）。
  *
  * 接口形状**故意等于**现有 legacy 函数的形状（`NodeResponse` / `ChildrenResponse` / `Map<string, InstanceEntry[]>` …），
  * 这样 `legacy` 适配器是零逻辑的委托，大量 `*.test.ts` 依赖的旧函数签名一个都不动；`genModelV1` 适配器
@@ -36,7 +37,7 @@ import type {
   SpatialNearbyRefnosResult,
   SpatialNearbyResult,
 } from '@/api/genModelSpatialApi';
-import type { PrimitiveKeyPointCandidate } from '@/composables/useDbnoInstancesParquetLoader';
+import type { ParquetManifest, PrimitiveKeyPointCandidate } from '@/composables/useDbnoInstancesParquetLoader';
 import type { InstanceEntry } from '@/utils/instances/instanceManifest';
 
 /** 数据源种类。`legacy` = 旧后端 `:3100` + parquet / DuckDB-WASM；`gen-model-v1` = gen-model `/api/v1`。 */
@@ -197,6 +198,84 @@ export type SpatialSource = {
   readonly capabilities: SpatialSourceCapabilities;
 };
 
+/** 一个模型版本对模型的影响；与 legacy `impact_kind` 同一词表（ADR 0045 起前端与词汇表都在用）。 */
+export type ModelVersionImpactKind = 'mesh' | 'placement' | 'delivery' | 'noop' | 'tombstone';
+
+/**
+ * 一个「模型版本」（CONTEXT.md「模型版本查看」）：身份 = `(dbnum, unitRefno, sesno)`，其余是展示信息。
+ * 由谁、怎么把它算出来（legacy 不可变 manifest / gen-model-v1 历史投影）不进入身份。
+ */
+export type ModelVersion = {
+  dbnum: number;
+  /** 最小交付单元根，本仓内部键 `a_b` */
+  unitRefno: string;
+  unitNoun: string;
+  sesno: number;
+  /** RFC3339；legacy 给模型提交的 `generated_at`，gen-model-v1 给会话时刻；解不出为 null */
+  sessionTime: string | null;
+  impactKind: ModelVersionImpactKind;
+  /**
+   * 这一版实际使用的模型资产来自哪个 sesno：等于自身 = 自己生成；早于自身 = 无几何变化提交复用较早资产
+   * （legacy `artifact_sesno`）。gen-model-v1 没有资产复用的概念，不给。
+   */
+  assetSesno?: number;
+  /**
+   * 「几何相同」承诺键：两个版本的键相等 ⇒ 适配器保证几何逐条相同，调用方可以只加载一次。
+   * legacy = `${dbnum}:${unitRefno}:${artifact_sesno}`；gen-model-v1 不给（undefined）。
+   */
+  geometryKey?: string;
+  /** 适配器私有的取数句柄（legacy：manifest URL）。调用方不得解读，只在事件里原样携带。 */
+  handle?: unknown;
+};
+
+/** 一个模型版本的几何：`ModelRecordSource` 同型的实例表 + 有几何的 refno 集。 */
+export type ModelVersionGeometry = {
+  /** 该版本下单元子树里有几何的 refno（`a_b`）；「已删除单元版本」为空 */
+  refnos: string[];
+  /** 喂 `geometrySnapshotsFromInstanceEntries` / DTX 层（`instanceEntriesByRefno`）的形状 */
+  entries: Map<string, InstanceEntry[]>;
+  /** 释放服务端资源：gen-model-v1 = `DELETE /api/v1/model/history/{snapshot_key}`；legacy 空操作 */
+  release(): Promise<void>;
+};
+
+/**
+ * 把已加载的环境 refno 重钉到「最新环境模型」时要传给 DTX 加载器的取数选项：
+ * legacy = 钉住的最新 manifest（与 2026-09-18 之前 `refreshModelUnitCompareEnvironment` 逐字相同）；
+ * gen-model-v1 = 空（加载器按页面级开关走 records + forceRefresh，CONTEXT「最新环境模型」按 Q12 改口）。
+ */
+export type ModelVersionEnvironmentLoaderOptions = {
+  dataSource?: 'parquet' | 'gen-model-v1';
+  parquetManifestUrl?: string;
+  parquetManifest?: ParquetManifest;
+};
+
+export type ModelVersionEnvironmentPin = {
+  /** 环境模型的时间戳（legacy = 最新 manifest 的 `generated_at`；gen-model-v1 = null，常驻投影没有单一时间戳） */
+  generatedAt: string | null;
+  loaderOptions: ModelVersionEnvironmentLoaderOptions;
+};
+
+export type ModelVersionLoadOptions = {
+  signal?: AbortSignal;
+};
+
+/**
+ * 版本对比取数（ADR 0065，plan `docs/plans/2026-09-18-model-version-compare-gen-model-v1-migration-plan.md` §2）。
+ *
+ * 形状**故意贴着** 2026-09-18 之前 `ModelUnitVersionComparePanel` 内联的取数：
+ * - `legacy`：`listModelUnitCommits` + 两句 parquet 查询原样委托（`legacy/versionSource.ts`）；
+ * - `gen-model-v1`：`GET /api/v1/model/versions` + `model/history/generate | query`（A2 / A3 接入前抛「尚未接入」）。
+ * 面板与 ViewerPanel 只认 `ModelVersion` / `ModelVersionGeometry`，不再知道 manifest。
+ */
+export type ModelVersionSource = {
+  /** 该最小交付单元的全部模型版本，按 sesno 升序。 */
+  listVersions(dbnum: number, unitRefno: string): Promise<ModelVersion[]>;
+  /** 一个版本的几何；`impactKind === 'tombstone'` 返回空集而不是抛错（「已删除单元版本」）。 */
+  loadVersion(version: ModelVersion, options?: ModelVersionLoadOptions): Promise<ModelVersionGeometry>;
+  /** 打开对比 / 显式刷新环境时，把「最新环境模型」钉下来。 */
+  pinLatestEnvironment(dbnum: number): Promise<ModelVersionEnvironmentPin>;
+};
+
 export type ModelSource = {
   readonly kind: ModelSourceKind;
   readonly tree: TreeSource;
@@ -205,4 +284,5 @@ export type ModelSource = {
   readonly attributes: AttributeSource;
   readonly keypoints: KeypointSource;
   readonly spatial: SpatialSource;
+  readonly versions: ModelVersionSource;
 };

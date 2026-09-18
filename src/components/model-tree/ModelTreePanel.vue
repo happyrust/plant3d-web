@@ -21,6 +21,7 @@ import { useRoomTree } from '@/composables/useRoomTree';
 import { useSelectionStore } from '@/composables/useSelectionStore';
 import { useToolStore } from '@/composables/useToolStore';
 import {
+  MODEL_VERSION_TREE_DIFF_EVENT,
   useTreeVersionDiff,
   type DiffFlatRow,
   type TreeDiffFilter,
@@ -67,7 +68,7 @@ const pdmsTree = usePdmsOwnerTree(pdmsViewerRef);
 // 房间树仅在 tab=room 时启用，避免其副作用影响 PDMS 模型树（显隐/选中回放等）
 const roomTree = useRoomTree(roomViewerRef, computed(() => activeTree.value === 'room'));
 
-// 版本差异模式（树内差异标注）：由 plant3d:incremental-version-compare 事件驱动
+// 版本差异模式（树内差异标注）：由 MODEL_VERSION_TREE_DIFF_EVENT 事件驱动（派发方：模型版本对比面板）
 const treeDiff = useTreeVersionDiff({
   nodesById: pdmsTree.nodesById,
   rootIds: pdmsTree.rootIds,
@@ -990,11 +991,11 @@ onMounted(async () => {
   // 清理函数将在 onUnmounted 中处理
   (window as any).__autoLocateHandler = handleAutoLocate;
 
-  const handleIncrementalCompare = (event: Event) => {
-    applyIncrementalCompareContext((event as CustomEvent).detail);
+  const handleTreeDiffContext = (event: Event) => {
+    applyTreeDiffContext((event as CustomEvent).detail);
   };
-  window.addEventListener('plant3d:incremental-version-compare', handleIncrementalCompare);
-  (window as any).__incrementalCompareTreeHandler = handleIncrementalCompare;
+  window.addEventListener(MODEL_VERSION_TREE_DIFF_EVENT, handleTreeDiffContext);
+  (window as any).__treeDiffContextHandler = handleTreeDiffContext;
 });
 
 onUnmounted(() => {
@@ -1007,10 +1008,10 @@ onUnmounted(() => {
     delete (window as any).__autoLocateHandler;
   }
 
-  const compareHandler = (window as any).__incrementalCompareTreeHandler;
-  if (compareHandler) {
-    window.removeEventListener('plant3d:incremental-version-compare', compareHandler);
-    delete (window as any).__incrementalCompareTreeHandler;
+  const treeDiffHandler = (window as any).__treeDiffContextHandler;
+  if (treeDiffHandler) {
+    window.removeEventListener(MODEL_VERSION_TREE_DIFF_EVENT, treeDiffHandler);
+    delete (window as any).__treeDiffContextHandler;
   }
 
   delete (window as any).__plant3dModelTreeE2E;
@@ -1103,7 +1104,8 @@ function normalizeCompareRefno(raw: unknown): string {
   return normalizeRefnoKeyLike(String(raw ?? ''));
 }
 
-function applyIncrementalCompareContext(rawDetail: unknown) {
+/** 应用一份树内差异上下文；`models` / `refnos` 都为空视为退出差异模式（见 `MODEL_VERSION_TREE_DIFF_EVENT`）。 */
+function applyTreeDiffContext(rawDetail: unknown) {
   const detail = rawDetail as {
     project?: unknown;
     dbnum?: unknown;
@@ -1140,7 +1142,10 @@ function applyIncrementalCompareContext(rawDetail: unknown) {
     ...refnos,
     ...models.map((item) => item.refno),
   ]));
-  if (mergedRefnos.length === 0) return;
+  if (mergedRefnos.length === 0) {
+    treeDiff.clear();
+    return;
+  }
 
   activeTree.value = 'pdms';
   treeDiff.apply({

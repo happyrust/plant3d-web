@@ -1,14 +1,11 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, markRaw, onBeforeUnmount, onMounted, ref } from 'vue';
 
 import { GitCompare, RefreshCw, X } from 'lucide-vue-next';
 
-import {
-  listModelUnitCommits,
-  type ModelUnitCommitData,
-} from '@/api/modelUnitVersionApi';
 import { ensureDbMetaInfoLoaded, getDbnumByRefno } from '@/composables/useDbMetaInfo';
-import { useDbnoInstancesParquetLoader } from '@/composables/useDbnoInstancesParquetLoader';
+import { dispatchTreeDiffContext, type TreeDiffModel } from '@/composables/useTreeVersionDiff';
+import { getModelSource, type ModelVersion, type ModelVersionGeometry } from '@/model-source';
 import {
   compareModelUnitGeometry,
   formatModelUnitVersionTime,
@@ -24,11 +21,17 @@ import {
   type ModelUnitVersionCompareRuntimeState,
 } from '@/utils/modelUnitVersionCompare';
 
+/**
+ * 单元根类型清单——阶段 A1 暂留（plan 2026-09-18 §1.2）：按 Q6 它该由后端项目配置说了算，
+ * 等 gen-model-v1 适配器能把 `NOT_A_DELIVERY_UNIT_ROOT` 翻译出来再拆，现在拆会改 legacy 行为。
+ */
 const ROOT_NOUNS = new Set(['BRAN', 'HANG', 'EQUI', 'WALL', 'FLOOR']);
 
 const unitRefno = ref(new URLSearchParams(window.location.search).get('unit_refno') || '');
 const dbnum = ref<number | null>(null);
-const versions = ref<ModelUnitCommitData[]>([]);
+const versions = ref<ModelVersion[]>([]);
+/** 本次对比持有的版本几何，关闭 / 重查时 `release()`（gen-model-v1 下是服务端快照） */
+let heldGeometries: ModelVersionGeometry[] = [];
 const beforeSesno = ref<number | null>(null);
 const afterSesno = ref<number | null>(null);
 const loadingVersions = ref(false);
@@ -43,9 +46,14 @@ const compareCompleted = ref(false);
 let requestId = 0;
 
 const normalizedRefno = computed(() => unitRefno.value.trim().replace(/\//g, '_'));
-const selectedBefore = computed(() => versions.value.find((item) => item.commit.sesno === beforeSesno.value) ?? null);
-const selectedAfter = computed(() => versions.value.find((item) => item.commit.sesno === afterSesno.value) ?? null);
-const sameArtifact = computed(() => selectedBefore.value?.commit.artifact_sesno === selectedAfter.value?.commit.artifact_sesno);
+const selectedBefore = computed(() => versions.value.find((item) => item.sesno === beforeSesno.value) ?? null);
+const selectedAfter = computed(() => versions.value.find((item) => item.sesno === afterSesno.value) ?? null);
+/** 两个版本几何相同的承诺（legacy：同一 artifact_sesno）；键缺失时不承诺 */
+const sameGeometry = computed(() => sameGeometryKey(selectedBefore.value, selectedAfter.value));
+
+function sameGeometryKey(a: ModelVersion | null, b: ModelVersion | null): boolean {
+  return !!a && !!b && a.geometryKey !== undefined && a.geometryKey === b.geometryKey;
+}
 
 const summary = computed(() => {
   const counts: Record<ModelUnitGeometryStatus, number> = { added: 0, deleted: 0, modified: 0, unchanged: 0 };
@@ -66,15 +74,49 @@ function dispatch(detail: ModelUnitVersionCompareEventDetail): void {
   window.dispatchEvent(new CustomEvent(MODEL_UNIT_VERSION_COMPARE_EVENT, { detail }));
 }
 
+/**
+ * 把本次模型几何差异送进模型树的差异模式（徽章 / 幽灵节点 / 筛选）。
+ * 本面板是该通道唯一的派发方（ADR 0065 §1.4）；`unchanged` 行不进树。
+ * 已删除节点的原父（`ownerRefno`，幽灵节点回插位置）现阶段不给，树回退挂根；随迁移阶段 A 从版本快照结构补上。
+ */
+function dispatchTreeDiff(dbnumValue: number, fromSesno: number, toSesno: number, diffRows: ModelUnitGeometryDiff[]): void {
+  const models: TreeDiffModel[] = diffRows
+    .filter((row) => row.status !== 'unchanged')
+    .map((row) => ({
+      refno: row.refno,
+      category: row.noun,
+      status: row.status,
+      sourceNouns: row.noun,
+    }));
+  dispatchTreeDiffContext({
+    dbnum: dbnumValue,
+    fromSesno,
+    toSesno,
+    mode: 'compare',
+    refnos: models.map((model) => model.refno),
+    models,
+  });
+}
+
 function messageOf(value: unknown): string {
   return value instanceof Error ? value.message : String(value);
 }
 
-function versionLabel(item: ModelUnitCommitData): string {
-  const reused = item.commit.artifact_sesno !== item.commit.sesno
-    ? ` · 复用 ${item.commit.artifact_sesno}`
+function versionLabel(item: ModelVersion): string {
+  const reused = item.assetSesno !== undefined && item.assetSesno !== item.sesno
+    ? ` · 复用 ${item.assetSesno}`
     : '';
-  return `${item.commit.sesno} · ${formatModelUnitVersionTime(item.commit.generated_at)} · ${item.commit.impact_kind}${reused}`;
+  return `${item.sesno} · ${formatModelUnitVersionTime(item.sessionTime ?? '')} · ${item.impactKind}${reused}`;
+}
+
+function releaseHeldGeometries(): void {
+  const held = heldGeometries;
+  heldGeometries = [];
+  for (const geometry of held) {
+    void geometry.release().catch((cause) => {
+      console.warn('[ModelUnitVersionComparePanel] release version geometry failed', cause);
+    });
+  }
 }
 
 async function loadVersions(): Promise<void> {
@@ -96,15 +138,15 @@ async function loadVersions(): Promise<void> {
   try {
     await ensureDbMetaInfoLoaded();
     const resolvedDbnum = getDbnumByRefno(refno);
-    const result = await listModelUnitCommits(resolvedDbnum, refno);
+    const result = await getModelSource().versions.listVersions(resolvedDbnum, refno);
     if (run !== requestId) return;
     if (result.length < 2) throw new Error('该最小交付单元至少需要两个模型提交才能对比');
-    const noun = String(result[0]?.commit.unit_noun || '').toUpperCase();
+    const noun = String(result[0]?.unitNoun || '').toUpperCase();
     if (!ROOT_NOUNS.has(noun)) throw new Error(`参考号不是支持的最小交付单元根：${noun || 'UNKNOWN'}`);
     dbnum.value = resolvedDbnum;
     versions.value = result;
-    beforeSesno.value = result.at(-2)?.commit.sesno ?? null;
-    afterSesno.value = result.at(-1)?.commit.sesno ?? null;
+    beforeSesno.value = result.at(-2)?.sesno ?? null;
+    afterSesno.value = result.at(-1)?.sesno ?? null;
   } catch (cause) {
     if (run === requestId) {
       versions.value = [];
@@ -119,25 +161,22 @@ async function loadVersions(): Promise<void> {
 function normalizeSelectedPair(): void {
   const first = selectedBefore.value;
   const second = selectedAfter.value;
-  if (!first || !second || first.commit.sesno === second.commit.sesno) return;
+  if (!first || !second || first.sesno === second.sesno) return;
   const [before, after] = orderModelUnitVersionPair(first, second);
-  beforeSesno.value = before.commit.sesno;
-  afterSesno.value = after.commit.sesno;
+  beforeSesno.value = before.sesno;
+  afterSesno.value = after.sesno;
 }
 
-async function snapshotsFor(version: ModelUnitCommitData) {
-  if (dbnum.value === null || version.manifest_url === null) return { snapshots: [], refnos: [] };
-  const parquet = useDbnoInstancesParquetLoader();
-  const refnos = await parquet.queryAllRefnosByDbno(dbnum.value, {
-    manifestUrl: version.manifest_url,
-    expectedRootRefno: normalizedRefno.value,
-  });
-  const entries = await parquet.queryInstanceEntriesByRefnos(dbnum.value, refnos, {
-    manifestUrl: version.manifest_url,
-    expectedRootRefno: normalizedRefno.value,
-    includeOwnedTubings: false,
-  });
-  return { snapshots: geometrySnapshotsFromInstanceEntries(entries), refnos };
+type LoadedSide = {
+  snapshots: ReturnType<typeof geometrySnapshotsFromInstanceEntries>
+  refnos: string[]
+  geometry: ModelVersionGeometry
+}
+
+/** 经模型来源端口取一个版本的几何；tombstone 由适配器回空集（「已删除单元版本」）。 */
+async function loadSide(version: ModelVersion): Promise<LoadedSide> {
+  const geometry = await getModelSource().versions.loadVersion(version);
+  return { snapshots: geometrySnapshotsFromInstanceEntries(geometry.entries), refnos: geometry.refnos, geometry };
 }
 
 async function runCompare(): Promise<void> {
@@ -147,7 +186,7 @@ async function runCompare(): Promise<void> {
   normalizeSelectedPair();
   const before = selectedBefore.value;
   const after = selectedAfter.value;
-  if (dbnum.value === null || !before || !after || before.commit.sesno >= after.commit.sesno) {
+  if (dbnum.value === null || !before || !after || before.sesno >= after.sesno) {
     error.value = '请选择两个不同版本，A 必须早于 B';
     return;
   }
@@ -156,31 +195,36 @@ async function runCompare(): Promise<void> {
   comparing.value = true;
   error.value = null;
   try {
-    const sameArtifact = before.commit.artifact_sesno === after.commit.artifact_sesno;
-    const [beforeData, afterData] = sameArtifact
-      ? await snapshotsFor(after).then((data) => [data, data] as const)
-      : await Promise.all([snapshotsFor(before), snapshotsFor(after)]);
-    if (run !== requestId) return;
+    // 几何相同的承诺（legacy：同一 artifact）→ 只取一次，两侧共用
+    const [beforeData, afterData] = sameGeometryKey(before, after)
+      ? await loadSide(after).then((data) => [data, data] as const)
+      : await Promise.all([loadSide(before), loadSide(after)]);
+    if (run !== requestId) {
+      // 本次比较已被更新的请求作废：几何拿到了也不留，直接还给来源
+      heldGeometries = [...new Set([beforeData.geometry, afterData.geometry])];
+      releaseHeldGeometries();
+      return;
+    }
+    heldGeometries = [...new Set([beforeData.geometry, afterData.geometry])];
     rows.value = compareModelUnitGeometry(beforeData.snapshots, afterData.snapshots);
     compareCompleted.value = true;
     compareActive.value = true;
+    dispatchTreeDiff(dbnum.value, before.sesno, after.sesno, rows.value);
     dispatch({
       action: 'open',
       dbnum: dbnum.value,
       unitRefno: normalizedRefno.value,
       before: {
-        sesno: before.commit.sesno,
-        artifactSesno: before.commit.artifact_sesno,
-        manifestUrl: before.manifest_url,
-        generatedAt: before.commit.generated_at,
+        version: before,
+        sesno: before.sesno,
         refnos: beforeData.refnos,
+        entries: markRaw(beforeData.geometry.entries),
       },
       after: {
-        sesno: after.commit.sesno,
-        artifactSesno: after.commit.artifact_sesno,
-        manifestUrl: after.manifest_url,
-        generatedAt: after.commit.generated_at,
+        version: after,
+        sesno: after.sesno,
         refnos: afterData.refnos,
+        entries: markRaw(afterData.geometry.entries),
       },
       refnos: rows.value.map((row) => row.refno),
       rows: rows.value,
@@ -209,17 +253,27 @@ function refreshCompareEnvironment(): void {
 }
 
 function closeCompare(): void {
-  if (compareActive.value || compareRuntime.value) dispatch({ action: 'close' });
+  const wasActive = compareActive.value || compareRuntime.value !== null;
+  // 先落自己的状态再派发：`handleCompareLifecycle` 会同步收到这一发 close，看到已不活跃就不再重复处理
   compareActive.value = false;
   compareRuntime.value = null;
+  releaseHeldGeometries();
+  if (wasActive) {
+    dispatch({ action: 'close' });
+    dispatchTreeDiffContext(null);
+  }
 }
 
 function handleCompareLifecycle(event: Event): void {
   const detail = (event as CustomEvent<ModelUnitVersionCompareEventDetail>).detail;
-  if (detail?.action === 'close') {
-    compareActive.value = false;
-    compareRuntime.value = null;
-  }
+  if (detail?.action !== 'close') return;
+  // 自己刚派出去的 close 已经在 closeCompare 里处理完
+  if (!compareActive.value && compareRuntime.value === null) return;
+  // 视口侧关掉对比（ViewerPanel 的关闭按钮）：树的差异模式一并退出，持有的版本几何一并释放
+  compareActive.value = false;
+  compareRuntime.value = null;
+  releaseHeldGeometries();
+  dispatchTreeDiffContext(null);
 }
 
 function handleCompareRuntime(event: Event): void {
@@ -281,7 +335,7 @@ onBeforeUnmount(() => {
               class="w-full rounded-md border border-input bg-background px-2 py-1.5 text-xs text-foreground"
               data-testid="model-unit-compare-a"
               @change="normalizeSelectedPair">
-              <option v-for="item in versions" :key="item.commit.sesno" :value="item.commit.sesno">{{ versionLabel(item) }}</option>
+              <option v-for="item in versions" :key="item.sesno" :value="item.sesno">{{ versionLabel(item) }}</option>
             </select>
           </label>
           <label class="space-y-1 text-[11px] text-muted-foreground">
@@ -290,7 +344,7 @@ onBeforeUnmount(() => {
               class="w-full rounded-md border border-input bg-background px-2 py-1.5 text-xs text-foreground"
               data-testid="model-unit-compare-b"
               @change="normalizeSelectedPair">
-              <option v-for="item in versions" :key="item.commit.sesno" :value="item.commit.sesno">{{ versionLabel(item) }}</option>
+              <option v-for="item in versions" :key="item.sesno" :value="item.sesno">{{ versionLabel(item) }}</option>
             </select>
           </label>
         </div>
@@ -357,11 +411,11 @@ onBeforeUnmount(() => {
               data-testid="model-unit-compare-show-before"
               @click="setCompareSide('before')">
               <div class="font-semibold">A · sesno {{ compareRuntime.detail.before.sesno }}</div>
-              <div class="mt-0.5 text-[10px] opacity-75">{{ formatModelUnitVersionTime(compareRuntime.detail.before.generatedAt) }}</div>
-              <div v-if="compareRuntime.detail.before.manifestUrl" class="mt-0.5 text-[10px] opacity-75">
-                artifact {{ compareRuntime.detail.before.artifactSesno }}
+              <div class="mt-0.5 text-[10px] opacity-75">{{ formatModelUnitVersionTime(compareRuntime.detail.before.version.sessionTime ?? '') }}</div>
+              <div v-if="compareRuntime.detail.before.version.impactKind === 'tombstone'" class="mt-0.5 text-[10px] opacity-75">该版本单元已删除</div>
+              <div v-else-if="compareRuntime.detail.before.version.assetSesno !== undefined" class="mt-0.5 text-[10px] opacity-75">
+                artifact {{ compareRuntime.detail.before.version.assetSesno }}
               </div>
-              <div v-else class="mt-0.5 text-[10px] opacity-75">该版本单元已删除</div>
             </button>
             <button type="button"
               class="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1.5 text-left text-emerald-700 transition-opacity"
@@ -369,11 +423,11 @@ onBeforeUnmount(() => {
               data-testid="model-unit-compare-show-after"
               @click="setCompareSide('after')">
               <div class="font-semibold">B · sesno {{ compareRuntime.detail.after.sesno }}</div>
-              <div class="mt-0.5 text-[10px] opacity-75">{{ formatModelUnitVersionTime(compareRuntime.detail.after.generatedAt) }}</div>
-              <div v-if="compareRuntime.detail.after.manifestUrl" class="mt-0.5 text-[10px] opacity-75">
-                artifact {{ compareRuntime.detail.after.artifactSesno }}
+              <div class="mt-0.5 text-[10px] opacity-75">{{ formatModelUnitVersionTime(compareRuntime.detail.after.version.sessionTime ?? '') }}</div>
+              <div v-if="compareRuntime.detail.after.version.impactKind === 'tombstone'" class="mt-0.5 text-[10px] opacity-75">该版本单元已删除</div>
+              <div v-else-if="compareRuntime.detail.after.version.assetSesno !== undefined" class="mt-0.5 text-[10px] opacity-75">
+                artifact {{ compareRuntime.detail.after.version.assetSesno }}
               </div>
-              <div v-else class="mt-0.5 text-[10px] opacity-75">该版本单元已删除</div>
             </button>
           </div>
           <div v-else
@@ -427,7 +481,7 @@ onBeforeUnmount(() => {
             <span class="rounded bg-slate-100 px-1.5 py-0.5 text-slate-600">未变 {{ summary.unchanged }}</span>
           </div>
           <p v-if="noGeometryDifference" class="mt-2 text-xs font-medium text-emerald-700" data-testid="model-unit-compare-noop">
-            无几何差异<span v-if="sameArtifact">；A/B 复用 artifact_sesno {{ selectedAfter?.commit.artifact_sesno }}</span>
+            无几何差异<span v-if="sameGeometry && selectedAfter?.assetSesno !== undefined">；A/B 复用 artifact_sesno {{ selectedAfter?.assetSesno }}</span>
           </p>
         </div>
 

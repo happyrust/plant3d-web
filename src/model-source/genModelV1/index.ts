@@ -25,6 +25,7 @@ import { resetBatchRecordsSupport } from './modelRecords';
 import { createGenModelV1ModelRecordSource, type GenModelV1ModelRecordSource } from './modelRecordSource';
 import { createGenModelV1SpatialSource } from './spatialSource';
 import { createGenModelV1TreeSource } from './treeSource';
+import { createGenModelV1ModelVersionSource } from './versionSource';
 
 import type { MeshSource, ModelSource } from '../ports';
 
@@ -132,6 +133,7 @@ export function createGenModelV1ModelSource(): GenModelV1ModelSource {
     attributes: createGenModelV1AttributeSource({ tree }),
     keypoints: createGenModelV1KeypointSource(),
     spatial: createGenModelV1SpatialSource(),
+    versions: createGenModelV1ModelVersionSource(),
     collectDbnum,
     activate,
     dispose,
@@ -146,3 +148,4 @@ export * from './instanceMapping';
 export * from './attributeSource';
 export * from './keypointSource';
 export * from './spatialSource';
+export * from './versionSource';

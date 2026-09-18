@@ -10,10 +10,10 @@ import {
   resolveAnchor,
   type ModelHistoryAnchor,
   type ModelHistorySnapshot,
-} from '@/api/modelVersionApi';
+} from '@/api/modelHistoryApi';
 
-vi.mock('@/api/modelVersionApi', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/api/modelVersionApi')>();
+vi.mock('@/api/modelHistoryApi', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/api/modelHistoryApi')>();
   return {
     ...actual,
     resolveAnchor: vi.fn(),

@@ -18,9 +18,9 @@ function snapshot(refno: string, signature: string): ModelUnitGeometrySnapshot {
 }
 
 describe('modelUnitVersionCompare', () => {
-  it('自动把较早提交放在 A、较新提交放在 B', () => {
-    const older = { manifest_url: '/791/manifest.json', commit: { sesno: 791 } };
-    const newer = { manifest_url: '/897/manifest.json', commit: { sesno: 897 } };
+  it('自动把较早版本放在 A、较新版本放在 B', () => {
+    const older = { sesno: 791, impactKind: 'mesh' };
+    const newer = { sesno: 897, impactKind: 'mesh' };
 
     expect(orderModelUnitVersionPair(newer, older)).toEqual([older, newer]);
   });

@@ -1,10 +1,15 @@
 # Feature Specification: 模型版本时间线与历史模型树（Model Version Timeline）
 
+> **已废弃（2026-09-18）**：release 线放弃（ADR 0045 已选 sesno 弃 release；本 spec 依赖的 `/api/model-version/*`
+> 在任何后端源码里都不存在）。`VersionTimelinePanel` / `useVersionTimelineStore` / `modelVersionApi` 的 release 家族
+> 已删除，本目录只作史料。活着的版本对比见 ADR 0065 与
+> `docs/plans/2026-09-18-model-version-compare-gen-model-v1-migration-plan.md`。
+
 **Feature Branch**: `004-model-version-timeline`
 
 **Created**: 2026-07-18
 
-**Status**: Draft
+**Status**: Superseded（原 Draft）
 
 **Input**: User description: "结合 ../plant-model-gen 的版本管理能力，在 plant3d-web 前端加版本管理功能：用时间线展示模型版本演进，并支持查看不同时间点的模型树（含差异标注、历史快照、双版本对比）。"
 

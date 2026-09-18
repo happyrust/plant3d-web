@@ -1,6 +1,6 @@
 <!-- @ts-nocheck -->
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue';
+import { computed, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue';
 
 import {
   Aperture,
@@ -8,7 +8,6 @@ import {
   EyeClosed,
   EyeOff,
   Focus,
-  GitCompare,
   House,
   Ruler,
   ScanEye,
@@ -18,25 +17,11 @@ import {
   X,
 } from 'lucide-vue-next';
 import {
-  AmbientLight,
   Box3,
-  BoxGeometry,
-  BufferAttribute,
-  BufferGeometry,
   Color,
-  DirectionalLight,
-  EdgesGeometry,
-  Group,
-  LineBasicMaterial,
-  LineSegments,
   Matrix4,
-  Mesh,
-  MeshBasicMaterial,
-  PerspectiveCamera,
-  Scene,
   Vector2,
   Vector3,
-  WebGLRenderer,
 } from 'three';
 
 import { pdmsGetUiAttr, type PtsetResponse } from '@/api/genModelPdmsAttrApi';
@@ -73,10 +58,7 @@ import {
   resolveDtxObjectIdsByUnitRefno,
   resolveDtxRefnoByObjectId,
 } from '@/composables/useDbnoInstancesDtxLoader';
-import {
-  fetchLatestDbnoManifest,
-  useDbnoInstancesParquetLoader,
-} from '@/composables/useDbnoInstancesParquetLoader';
+import { useDbnoInstancesParquetLoader } from '@/composables/useDbnoInstancesParquetLoader';
 import { useDisplayThemeStore, type DisplayTheme } from '@/composables/useDisplayThemeStore';
 import { ensurePanelAndActivate } from '@/composables/useDockApi';
 import { useDtxTools } from '@/composables/useDtxTools';
@@ -127,8 +109,6 @@ import { getOutputProjectFromUrl } from '@/lib/filesOutput';
 import { getModelSource } from '@/model-source';
 import { onCommand } from '@/ribbon/commandBus';
 import { emitToast } from '@/ribbon/toastBus';
-import { buildBackendUrl } from '@/utils/apiBase';
-import { parseJsonResponse } from '@/utils/fileValidation';
 import {
   applyModelUnitRefnoVisibility,
   applyModelUnitVersionSide,
@@ -139,11 +119,12 @@ import {
   MODEL_UNIT_VERSION_COMPARE_EVENT,
   MODEL_UNIT_VERSION_COMPARE_STATE_EVENT,
   type ModelUnitCompareViewMode,
+  type ModelUnitVersionCompareEnvironment,
   type ModelUnitVersionCompareEventDetail,
   type ModelUnitVersionCompareOpenDetail,
   type ModelUnitVersionCompareRuntimeState,
+  type ModelUnitVersionSide,
 } from '@/utils/modelUnitVersionCompare';
-import { parseGlbGeometryResult } from '@/utils/parseGlbGeometry';
 import { SlopeAnnotation3D, WeldAnnotation3D } from '@/utils/three/annotation';
 import { DTXLayer, DTXSelectionController, DTXViewCullController } from '@/utils/three/dtx';
 import { DynamicPivotController } from '@/utils/three/dtx/DynamicPivotController';
@@ -210,689 +191,6 @@ function normalizeRefnoKeyLike(raw: string): string | null {
 
 function normalizeCompareRefno(raw: unknown): string {
   return normalizeRefnoKeyLike(String(raw ?? '')) || '';
-}
-
-function applyIncrementalCompareState(rawDetail: unknown) {
-  const detail = rawDetail as {
-    project?: unknown;
-    dbnum?: unknown;
-    fromReleaseId?: unknown;
-    toReleaseId?: unknown;
-    fromSesno?: unknown;
-    toSesno?: unknown;
-    mode?: unknown;
-    compare?: unknown;
-    componentKey?: unknown;
-    refnos?: unknown;
-    models?: unknown;
-  };
-  const refnos = Array.isArray(detail?.refnos)
-    ? detail.refnos.map(normalizeCompareRefno).filter(Boolean)
-    : [];
-  const models = Array.isArray(detail?.models)
-    ? detail.models
-      .map((model: unknown) => {
-        const item = model as IncrementalCompareModel;
-        const refno = normalizeCompareRefno(item?.refno);
-        if (!refno) return null;
-        return {
-          refno,
-          componentKey: typeof item.componentKey === 'string' ? item.componentKey : undefined,
-          refnoU64: Number.isFinite(Number(item.refnoU64)) ? Number(item.refnoU64) : undefined,
-          category: item.category,
-          status: item.status,
-          beforeState: item.beforeState,
-          afterState: item.afterState,
-          sourceChangeCount: item.sourceChangeCount,
-          sourceNouns: item.sourceNouns,
-        };
-      })
-      .filter((item): item is IncrementalCompareModel => !!item)
-    : [];
-  const mergedRefnos = Array.from(new Set([
-    ...refnos,
-    ...models.map((item) => item.refno),
-  ]));
-  if (mergedRefnos.length === 0) return;
-
-  incrementalCompareState.value = {
-    project: typeof detail.project === 'string' ? detail.project : undefined,
-    dbnum: Number.isFinite(Number(detail.dbnum)) ? Number(detail.dbnum) : undefined,
-    fromReleaseId: typeof detail.fromReleaseId === 'string' ? detail.fromReleaseId : undefined,
-    toReleaseId: typeof detail.toReleaseId === 'string' ? detail.toReleaseId : undefined,
-    fromSesno: Number.isFinite(Number(detail.fromSesno)) ? Number(detail.fromSesno) : undefined,
-    toSesno: Number.isFinite(Number(detail.toSesno)) ? Number(detail.toSesno) : undefined,
-    mode: typeof detail.mode === 'string' ? detail.mode : undefined,
-    compare: !!detail.compare,
-    componentKey: typeof detail.componentKey === 'string' ? detail.componentKey : undefined,
-    refnos: mergedRefnos,
-    models: models.length > 0 ? models : mergedRefnos.map((refno) => ({ refno })),
-  };
-  incrementalCompareSelectedRefno.value = mergedRefnos[0] ?? null;
-  if (incrementalCompareSelectedRefno.value) {
-    selectionStore.setSelectedRefno(incrementalCompareSelectedRefno.value);
-  }
-  emitToast({ message: `已进入 DTX 版本对比：${mergedRefnos.length} 个模型` });
-  clearIncrementalCompareProxy();
-  clearIncrementalSplitCompare();
-  if (incrementalCompareSelectedRefno.value) {
-    loadIncrementalCompareRefno(incrementalCompareSelectedRefno.value);
-  }
-}
-
-function compareStatusLabel(status?: string): string {
-  if (status === 'added') return '新增';
-  if (status === 'modified') return '修改';
-  if (status === 'deleted') return '删除';
-  if (status === 'mixed') return '混合';
-  return '变化';
-}
-
-function compareStatusClass(status?: string): string {
-  if (status === 'added') return 'bg-emerald-50 text-emerald-700';
-  if (status === 'modified') return 'bg-amber-50 text-amber-700';
-  if (status === 'deleted') return 'bg-rose-50 text-rose-700';
-  if (status === 'mixed') return 'bg-blue-50 text-blue-700';
-  return 'bg-slate-100 text-slate-700';
-}
-
-function versionStateLabel(state?: string): string {
-  if (state === 'missing') return '不存在';
-  if (state === 'changed') return '变化';
-  if (state === 'present') return '存在';
-  return '-';
-}
-
-function disposeObjectTree(obj: Group) {
-  obj.traverse((child: any) => {
-    child.geometry?.dispose?.();
-    if (Array.isArray(child.material)) {
-      child.material.forEach((mat: any) => mat?.dispose?.());
-    } else {
-      child.material?.dispose?.();
-    }
-  });
-}
-
-function clearIncrementalCompareProxy() {
-  const viewer = dtxViewerRef.value;
-  if (incrementalCompareProxyGroup && viewer) {
-    viewer.scene.remove(incrementalCompareProxyGroup);
-  }
-  if (incrementalCompareProxyGroup) {
-    disposeObjectTree(incrementalCompareProxyGroup);
-  }
-  incrementalCompareProxyGroup = null;
-}
-
-function materialForVersionState(state?: string, status?: string) {
-  if (state === 'missing') {
-    return new MeshBasicMaterial({
-      color: 0x94a3b8,
-      transparent: true,
-      opacity: 0.12,
-      depthWrite: false,
-    });
-  }
-  if (status === 'deleted') return new MeshBasicMaterial({ color: 0xe11d48, transparent: true, opacity: 0.72 });
-  if (status === 'modified' || status === 'mixed') return new MeshBasicMaterial({ color: 0xf59e0b, transparent: true, opacity: 0.78 });
-  return new MeshBasicMaterial({ color: 0x10b981, transparent: true, opacity: 0.82 });
-}
-
-function clearIncrementalCompareMiniScene(side: 'before' | 'after') {
-  const sceneState = incrementalCompareSplitScenes[side];
-  if (!sceneState) return;
-  disposeObjectTree(sceneState.scene);
-  sceneState.renderer.dispose();
-  incrementalCompareSplitScenes[side] = null;
-}
-
-function clearIncrementalSplitCompare() {
-  clearIncrementalCompareMiniScene('before');
-  clearIncrementalCompareMiniScene('after');
-  if (isDev) {
-    delete (window as any).__incrementalCompareSplit;
-  }
-}
-
-function scheduleIncrementalSplitCompareRender() {
-  if (typeof window === 'undefined') return;
-  void nextTick().then(() => {
-    window.requestAnimationFrame(() => renderIncrementalSplitCompare());
-  });
-}
-
-function ensureIncrementalCompareMiniScene(side: 'before' | 'after', canvas: HTMLCanvasElement) {
-  let sceneState = incrementalCompareSplitScenes[side];
-  if (!sceneState || sceneState.renderer.domElement !== canvas) {
-    clearIncrementalCompareMiniScene(side);
-    const renderer = new WebGLRenderer({ canvas, antialias: true, alpha: false });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-    renderer.setClearColor(new Color(0xf8fafc), 1);
-    sceneState = {
-      renderer,
-      scene: new Scene(),
-      camera: new PerspectiveCamera(38, 1, 0.1, 5000),
-    };
-    incrementalCompareSplitScenes[side] = sceneState;
-  } else {
-    disposeObjectTree(sceneState.scene);
-    sceneState.scene = new Scene();
-  }
-  return sceneState;
-}
-
-function buildIncrementalCompareSideGroup(side: 'before' | 'after') {
-  const rows = incrementalCompareModels.value;
-  const group = new Group();
-  group.name = `incremental-${side}-version-models`;
-  if (rows.length === 0) return group;
-
-  const columns = Math.min(10, Math.max(1, Math.ceil(Math.sqrt(rows.length * 1.3))));
-  const cellX = 2.4;
-  const cellY = 2.1;
-  const selected = incrementalCompareSelectedRefno.value;
-
-  rows.forEach((row, index) => {
-    const col = index % columns;
-    const line = Math.floor(index / columns);
-    const baseX = (col - (columns - 1) / 2) * cellX;
-    const baseY = -line * cellY;
-    const state = side === 'before' ? row.beforeState : row.afterState;
-    const isSelected = row.refno === selected;
-    const scale = isSelected ? 1.45 : 1;
-    const height = Math.min(2.6, 0.7 + (row.sourceChangeCount ?? 1) * 0.07);
-    const geometry = new BoxGeometry(0.86 * scale, 0.86 * scale, Math.max(0.24, height * scale));
-    const mesh = new Mesh(geometry, materialForVersionState(state, row.status));
-    mesh.name = `incremental-${side}-${row.refno}`;
-    mesh.position.set(baseX, baseY, Math.max(0.24, height * scale) / 2);
-    mesh.userData.refno = row.refno;
-    mesh.userData.version = side;
-    group.add(mesh);
-
-    const edges = new LineSegments(
-      new EdgesGeometry(geometry),
-      new LineBasicMaterial({
-        color: isSelected ? 0x2563eb : 0x475569,
-        transparent: true,
-        opacity: isSelected ? 1 : state === 'missing' ? 0.35 : 0.58,
-      }),
-    );
-    edges.name = `incremental-${side}-edges-${row.refno}`;
-    edges.position.copy(mesh.position);
-    group.add(edges);
-  });
-
-  return group;
-}
-
-function renderIncrementalCompareSide(side: 'before' | 'after', canvas: HTMLCanvasElement) {
-  const sceneState = ensureIncrementalCompareMiniScene(side, canvas);
-  const width = Math.max(240, Math.floor(canvas.clientWidth || canvas.getBoundingClientRect().width || 320));
-  const height = Math.max(180, Math.floor(canvas.clientHeight || canvas.getBoundingClientRect().height || 220));
-  sceneState.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-  sceneState.renderer.setSize(width, height, false);
-
-  const scene = sceneState.scene;
-  scene.background = new Color(0xf8fafc);
-  scene.add(new AmbientLight(0xffffff, 0.76));
-  const keyLight = new DirectionalLight(0xffffff, 1.45);
-  keyLight.position.set(8, -10, 12);
-  scene.add(keyLight);
-  const fillLight = new DirectionalLight(0xc7d2fe, 0.58);
-  fillLight.position.set(-8, 8, 8);
-  scene.add(fillLight);
-
-  const group = buildIncrementalCompareSideGroup(side);
-  scene.add(group);
-
-  const box = new Box3().setFromObject(group);
-  const center = new Vector3();
-  const size = new Vector3();
-  if (box.isEmpty()) {
-    center.set(0, 0, 0);
-    size.set(8, 8, 4);
-  } else {
-    box.getCenter(center);
-    box.getSize(size);
-  }
-
-  const maxDim = Math.max(size.x, size.y, size.z, 8);
-  const camera = sceneState.camera;
-  camera.aspect = width / height;
-  camera.near = 0.1;
-  camera.far = Math.max(500, maxDim * 40);
-  camera.position.set(center.x + maxDim * 0.82, center.y - maxDim * 1.18, center.z + maxDim * 0.78);
-  camera.lookAt(center);
-  camera.updateProjectionMatrix();
-
-  sceneState.renderer.render(scene, camera);
-  canvas.dataset.rendered = 'true';
-  canvas.dataset.modelCount = String(incrementalCompareModels.value.length);
-}
-
-function renderIncrementalSplitCompare() {
-  if (!incrementalCompareState.value) return;
-  const beforeCanvas = incrementalCompareBeforeCanvas.value;
-  const afterCanvas = incrementalCompareAfterCanvas.value;
-  if (!beforeCanvas || !afterCanvas) return;
-
-  renderIncrementalCompareSide('before', beforeCanvas);
-  renderIncrementalCompareSide('after', afterCanvas);
-
-  if (isDev) {
-    (window as any).__incrementalCompareSplit = {
-      before: {
-        hasCanvas: !!beforeCanvas,
-        rendered: beforeCanvas.dataset.rendered === 'true',
-        count: Number(beforeCanvas.dataset.modelCount || 0),
-        width: beforeCanvas.clientWidth,
-        height: beforeCanvas.clientHeight,
-      },
-      after: {
-        hasCanvas: !!afterCanvas,
-        rendered: afterCanvas.dataset.rendered === 'true',
-        count: Number(afterCanvas.dataset.modelCount || 0),
-        width: afterCanvas.clientWidth,
-        height: afterCanvas.clientHeight,
-      },
-    };
-  }
-}
-
-function renderIncrementalCompareProxy(flyTo = true) {
-  const viewer = dtxViewerRef.value;
-  if (!viewer || !incrementalCompareState.value) return;
-  clearIncrementalCompareProxy();
-
-  const rows = incrementalCompareModels.value;
-  if (rows.length === 0) return;
-
-  const group = new Group();
-  group.name = 'incremental-version-compare-proxy';
-  const columns = Math.min(8, Math.max(1, Math.ceil(Math.sqrt(rows.length))));
-  const cellX = 5.5;
-  const cellY = 3.6;
-  const pairGap = 1.25;
-  const selected = incrementalCompareSelectedRefno.value;
-
-  rows.forEach((row, index) => {
-    const col = index % columns;
-    const line = Math.floor(index / columns);
-    const baseX = (col - (columns - 1) / 2) * cellX;
-    const baseY = -line * cellY;
-    const height = Math.min(2.4, 0.8 + (row.sourceChangeCount ?? 1) * 0.08);
-    const isSelected = row.refno === selected;
-    const scale = isSelected ? 1.35 : 1;
-    const geometry = new BoxGeometry(0.9 * scale, 0.9 * scale, height * scale);
-
-    const before = new Mesh(geometry.clone(), materialForVersionState(row.beforeState, row.status));
-    before.name = `incremental-before-${row.refno}`;
-    before.position.set(baseX - pairGap, baseY, height / 2);
-    before.userData.refno = row.refno;
-    before.userData.version = 'before';
-    group.add(before);
-
-    const after = new Mesh(geometry.clone(), materialForVersionState(row.afterState, row.status));
-    after.name = `incremental-after-${row.refno}`;
-    after.position.set(baseX + pairGap, baseY, height / 2);
-    after.userData.refno = row.refno;
-    after.userData.version = 'after';
-    group.add(after);
-
-    const edgeColor = isSelected ? 0x2563eb : 0x334155;
-    for (const mesh of [before, after]) {
-      const edges = new LineSegments(
-        new EdgesGeometry(mesh.geometry),
-        new LineBasicMaterial({ color: edgeColor, transparent: true, opacity: isSelected ? 0.95 : 0.42 }),
-      );
-      edges.position.copy(mesh.position);
-      edges.scale.copy(mesh.scale);
-      group.add(edges);
-    }
-  });
-
-  viewer.scene.add(group);
-  incrementalCompareProxyGroup = group;
-
-  const box = new Box3().setFromObject(group);
-  if (flyTo && !box.isEmpty()) {
-    viewer.fitClipPlanesToBox(box);
-    const center = new Vector3();
-    const size = new Vector3();
-    box.getCenter(center);
-    box.getSize(size);
-    const maxDim = Math.max(size.x, size.y, size.z, 8);
-    const position = new Vector3(center.x + maxDim * 1.1, center.y - maxDim * 1.45, center.z + maxDim * 0.9);
-    viewer.flyTo(position, center, { duration: 650 });
-  }
-
-  if (isDev) {
-    (window as any).__incrementalCompareProxy = {
-      count: rows.length,
-      selected,
-      hasGroup: true,
-    };
-  }
-  requestRender();
-  scheduleIncrementalSplitCompareRender();
-}
-
-type RuntimeSceneGeometry = {
-  geo_hash?: string;
-  geo_index?: number;
-  geo_matrix?: number[];
-  mesh_asset?: {
-    mesh_url?: string;
-    sha256?: string;
-  } | null;
-};
-
-type RuntimeSceneComponent = {
-  aabb?: { min?: number[]; max?: number[] } | null;
-  component_key?: string;
-  geometries?: RuntimeSceneGeometry[];
-  instance_matrix?: number[];
-  noun?: string;
-  refno_str?: string;
-  refno_u64?: number;
-};
-
-type RuntimeScenePayload = {
-  mesh_base_url?: string;
-  mesh_lod_tag?: string;
-  scene?: {
-    components?: RuntimeSceneComponent[];
-    release?: { release_id?: string; dbnum?: number };
-  };
-};
-
-const modelVersionDtxGeometryCache = new Map<string, Promise<BufferGeometry | null>>();
-let modelVersionDtxCompareObjectIds: string[] = [];
-let modelVersionDtxCompareRunId = 0;
-
-function hideModelVersionDtxCompareObjects() {
-  const layer = dtxLayerRef.value;
-  if (layer && modelVersionDtxCompareObjectIds.length > 0) {
-    layer.setObjectsVisible(modelVersionDtxCompareObjectIds, false);
-  }
-  modelVersionDtxCompareObjectIds = [];
-}
-
-function matrixFromRuntimeArray(value: unknown): Matrix4 {
-  if (Array.isArray(value) && value.length === 16 && value.every((item) => typeof item === 'number' && Number.isFinite(item))) {
-    return new Matrix4().fromArray(value as number[]);
-  }
-  return new Matrix4();
-}
-
-function runtimeMeshUrl(data: RuntimeScenePayload, geo: RuntimeSceneGeometry): string {
-  const assetUrl = geo.mesh_asset?.mesh_url;
-  if (assetUrl) return assetUrl;
-  const base = String(data.mesh_base_url || '').replace(/\/+$/, '');
-  const lod = String(data.mesh_lod_tag || 'L1');
-  const hash = String(geo.geo_hash || '');
-  return `${base}/${hash}_${lod}.glb`;
-}
-
-async function loadRuntimeGlbGeometry(url: string): Promise<BufferGeometry | null> {
-  const key = url;
-  const existing = modelVersionDtxGeometryCache.get(key);
-  if (existing) return await existing;
-
-  const task = (async () => {
-    const response = await fetch(url);
-    if (!response.ok) {
-      console.error('[ViewerPanel] Runtime GLB request failed', {
-        url,
-        status: response.status,
-        statusText: response.statusText,
-      });
-      return null;
-    }
-    const result = await parseGlbGeometryResult(await response.arrayBuffer(), url);
-    if (!result.ok) {
-      console.error('[ViewerPanel] Runtime GLB validation failed', {
-        url,
-        error: result.error.message,
-        issue: result.error.issue,
-      });
-      return null;
-    }
-    const parsed = result.data;
-    const geometry = new BufferGeometry();
-    geometry.setAttribute('position', new BufferAttribute(new Float32Array(parsed.positions), 3));
-    if (parsed.normals && parsed.normals.length === parsed.positions.length) {
-      geometry.setAttribute('normal', new BufferAttribute(new Float32Array(parsed.normals), 3));
-    }
-    geometry.setIndex(new BufferAttribute(new Uint32Array(parsed.indices), 1));
-    if (!parsed.normals) geometry.computeVertexNormals();
-    return geometry;
-  })();
-
-  modelVersionDtxGeometryCache.set(key, task);
-  return await task;
-}
-
-async function fetchReleaseRuntimeScene(releaseId: string, componentKey: string, project?: string): Promise<RuntimeScenePayload> {
-  const params = new URLSearchParams({
-    component_key: componentKey,
-    limit: '1',
-  });
-  if (project) params.set('project', project);
-  const url = buildBackendUrl(`/api/model-version/releases/${encodeURIComponent(releaseId)}/runtime-scene?${params.toString()}`);
-  const response = await fetch(url);
-  const body = await parseJsonResponse<{
-    success?: boolean;
-    message?: string;
-    data?: RuntimeScenePayload;
-  }>(response, url);
-  if (!response.ok || body?.success === false) {
-    throw new Error(body?.message || `release runtime scene failed: ${releaseId}`);
-  }
-  if (!body.data) {
-    throw new Error(`release runtime scene payload is missing data: ${releaseId}`);
-  }
-  return body.data;
-}
-
-function modelVersionComponentKey(model: IncrementalCompareModel | null): string | null {
-  if (model?.componentKey) return model.componentKey;
-  const state = incrementalCompareState.value;
-  if (state?.componentKey) return state.componentKey;
-  const dbnum = state?.dbnum;
-  if (dbnum && model?.refnoU64) return `${dbnum}:${model.refnoU64}`;
-  return null;
-}
-
-function boxFromRuntimeComponent(component: RuntimeSceneComponent): Box3 | null {
-  const min = component.aabb?.min;
-  const max = component.aabb?.max;
-  if (!Array.isArray(min) || !Array.isArray(max) || min.length < 3 || max.length < 3) return null;
-  const values = [min[0], min[1], min[2], max[0], max[1], max[2]].map(Number);
-  if (!values.every((value) => Number.isFinite(value))) return null;
-  return new Box3(
-    new Vector3(values[0], values[1], values[2]),
-    new Vector3(values[3], values[4], values[5]),
-  );
-}
-
-function runtimeSceneComponentsBox(components: RuntimeSceneComponent[]): Box3 {
-  const box = new Box3();
-  for (const component of components) {
-    const componentBox = boxFromRuntimeComponent(component);
-    if (componentBox && !componentBox.isEmpty()) box.union(componentBox);
-  }
-  return box;
-}
-
-async function loadIncrementalCompareReleaseDtx(refno: string): Promise<boolean> {
-  const state = incrementalCompareState.value;
-  const model = incrementalCompareSelectedModel.value;
-  const componentKey = modelVersionComponentKey(model);
-  if (!state?.fromReleaseId || !state.toReleaseId || !componentKey) return false;
-
-  const layer = dtxLayerRef.value;
-  const viewer = dtxViewerRef.value;
-  if (!layer || !viewer) return false;
-
-  const runId = ++modelVersionDtxCompareRunId;
-  hideModelVersionDtxCompareObjects();
-
-  const debugState = {
-    runId,
-    status: 'running',
-    requested: [refno],
-    componentKey,
-    releases: [state.fromReleaseId, state.toReleaseId],
-    loadedObjects: 0,
-    failedGeometries: 0,
-    displayMode: 'release-local-side-by-side',
-    offset: 0,
-    sideCenters: [] as { side: string; center: number[]; size: number[]; components: number }[],
-    error: null as string | null,
-  };
-  if (isDev) {
-    (window as any).__dtxVersionCompareReleaseScene = debugState;
-  }
-
-  try {
-    const [fromScene, toScene] = await Promise.all([
-      fetchReleaseRuntimeScene(state.fromReleaseId, componentKey, state.project),
-      fetchReleaseRuntimeScene(state.toReleaseId, componentKey, state.project),
-    ]);
-    const sideScenes = [
-      { side: 'from', data: fromScene, releaseId: state.fromReleaseId, offsetSign: -1, color: new Color(0x2563eb) },
-      { side: 'to', data: toScene, releaseId: state.toReleaseId, offsetSign: 1, color: new Color(0x10b981) },
-    ] as const;
-    const sideEntries = sideScenes.map((sideScene) => {
-      const components = sideScene.data.scene?.components || [];
-      const sourceBox = runtimeSceneComponentsBox(components);
-      const center = new Vector3();
-      const size = new Vector3(100, 100, 100);
-      if (!sourceBox.isEmpty()) {
-        sourceBox.getCenter(center);
-        sourceBox.getSize(size);
-      }
-      return { ...sideScene, components, sourceBox, center, size };
-    });
-    const maxSideWidth = Math.max(...sideEntries.map(({ size }) => Math.abs(size.x)), 80);
-    const maxSideDim = Math.max(
-      ...sideEntries.flatMap(({ size }) => [Math.abs(size.x), Math.abs(size.y), Math.abs(size.z)]),
-      80,
-    );
-    const offset = Math.max(105, maxSideWidth * 0.65 + 55, maxSideDim * 0.55);
-    debugState.offset = offset;
-    debugState.sideCenters = sideEntries.map(({ side, center, size, components }) => ({
-      side,
-      center: center.toArray(),
-      size: size.toArray(),
-      components: components.length,
-    }));
-    const addedObjectIds: string[] = [];
-
-    for (const { side, data, releaseId, offsetSign, color, components, center } of sideEntries) {
-      for (const component of components) {
-        const instanceMatrix = matrixFromRuntimeArray(component.instance_matrix);
-        for (const geo of component.geometries || []) {
-          const meshUrl = runtimeMeshUrl(data, geo);
-          const geometry = await loadRuntimeGlbGeometry(meshUrl);
-          if (!geometry) {
-            debugState.failedGeometries += 1;
-            continue;
-          }
-          const geoHash = `mv:${releaseId}:${geo.geo_hash || 'geo'}:${geo.geo_index ?? 0}:${geo.mesh_asset?.sha256 || meshUrl}`;
-          layer.addGeometry(geoHash, geometry);
-          const geoMatrix = matrixFromRuntimeArray(geo.geo_matrix);
-          const normalizeMatrix = new Matrix4().makeTranslation(
-            offset * offsetSign - center.x,
-            -center.y,
-            -center.z,
-          );
-          const matrix = new Matrix4()
-            .copy(normalizeMatrix)
-            .multiply(instanceMatrix)
-            .multiply(geoMatrix);
-          const objectId = `mv:${runId}:${side}:${component.component_key || componentKey}:${geo.geo_index ?? addedObjectIds.length}`;
-          layer.addObject(objectId, geoHash, matrix, color, {
-            metalness: 0.08,
-            roughness: 0.78,
-            opacity: 0.86,
-          });
-          addedObjectIds.push(objectId);
-          debugState.loadedObjects += 1;
-        }
-      }
-    }
-
-    modelVersionDtxCompareObjectIds = addedObjectIds;
-    if (addedObjectIds.length > 0) {
-      layer.recompile();
-      const box = new Box3();
-      const tmp = new Box3();
-      for (const objectId of addedObjectIds) {
-        const objectBox = layer.getObjectBoundingBoxInto(objectId, tmp);
-        if (objectBox && !objectBox.isEmpty()) box.union(objectBox);
-      }
-      if (!box.isEmpty()) {
-        viewer.fitClipPlanesToBox(box);
-        const center = new Vector3();
-        const size = new Vector3();
-        box.getCenter(center);
-        box.getSize(size);
-        const maxDim = Math.max(size.x, size.y, size.z, 1);
-        viewer.flyTo(
-          new Vector3(center.x + maxDim * 2.05, center.y - maxDim * 2.35, center.z + maxDim * 1.65),
-          center,
-          { duration: 650 },
-        );
-      }
-      requestRender();
-    }
-
-    debugState.status = 'done';
-    emitToast({ message: `已用 DTX 加载版本对比模型：${refno}` });
-    return addedObjectIds.length > 0;
-  } catch (error) {
-    debugState.status = 'error';
-    debugState.error = error instanceof Error ? error.message : String(error);
-    console.warn('[ViewerPanel] release DTX compare load failed', error);
-    emitToast({ message: `版本 DTX 模型加载失败：${debugState.error}`, level: 'error' });
-    return false;
-  }
-}
-
-function loadIncrementalCompareRefno(refno: string) {
-  const normalized = normalizeCompareRefno(refno);
-  if (!normalized) return;
-  incrementalCompareSelectedRefno.value = normalized;
-  selectionStore.setSelectedRefno(normalized);
-  clearIncrementalCompareProxy();
-  clearIncrementalSplitCompare();
-  if (incrementalCompareState.value?.fromReleaseId && incrementalCompareState.value?.toReleaseId) {
-    void loadIncrementalCompareReleaseDtx(normalized);
-    return;
-  }
-  window.dispatchEvent(new CustomEvent('showModelByRefnos', {
-    detail: {
-      refnos: [normalized],
-      flyTo: true,
-    },
-  }));
-  window.dispatchEvent(new CustomEvent('autoLocateRefno', {
-    detail: {
-      refno: normalized.replace(/_/g, '/'),
-    },
-  }));
-}
-
-function closeIncrementalCompareOverlay() {
-  incrementalCompareState.value = null;
-  incrementalCompareSelectedRefno.value = null;
-  hideModelVersionDtxCompareObjects();
-  clearIncrementalCompareProxy();
-  clearIncrementalSplitCompare();
-  requestRender();
 }
 
 function mergeRootRefnoWithVisibleRefnos(rootRefno: string, visibleRefnos: string[]): string[] {
@@ -1321,78 +619,6 @@ function sceneDirectionToDesign(
   ];
 }
 
-type IncrementalCompareModel = {
-    refno: string;
-    componentKey?: string;
-    refnoU64?: number;
-    category?: string;
-    status?: string;
-    beforeState?: string;
-    afterState?: string;
-    sourceChangeCount?: number;
-    sourceNouns?: string;
-};
-
-type IncrementalCompareState = {
-    project?: string;
-    dbnum?: number;
-    fromReleaseId?: string;
-    toReleaseId?: string;
-    fromSesno?: number;
-    toSesno?: number;
-    mode?: string;
-    compare?: boolean;
-    componentKey?: string;
-    refnos: string[];
-    models: IncrementalCompareModel[];
-};
-
-const incrementalCompareState = ref<IncrementalCompareState | null>(null);
-const incrementalCompareSelectedRefno = ref<string | null>(null);
-const incrementalCompareBeforeCanvas = ref<HTMLCanvasElement | null>(null);
-const incrementalCompareAfterCanvas = ref<HTMLCanvasElement | null>(null);
-
-const incrementalCompareModels = computed(() => {
-  const state = incrementalCompareState.value;
-  if (!state) return [];
-  if (state.models.length > 0) return state.models;
-  return state.refnos.map((refno) => ({ refno }));
-});
-
-const incrementalCompareSelectedModel = computed(() => {
-  const selected = incrementalCompareSelectedRefno.value;
-  return incrementalCompareModels.value.find((item) => item.refno === selected)
-    ?? incrementalCompareModels.value[0]
-    ?? null;
-});
-
-const incrementalCompareBeforePresentCount = computed(() =>
-  incrementalCompareModels.value.filter((item) => item.beforeState !== 'missing').length,
-);
-
-const incrementalCompareAfterPresentCount = computed(() =>
-  incrementalCompareModels.value.filter((item) => item.afterState !== 'missing').length,
-);
-
-let incrementalCompareProxyGroup: Group | null = null;
-let incrementalCompareSplitScenes: Record<'before' | 'after', {
-    renderer: WebGLRenderer;
-    scene: Scene;
-    camera: PerspectiveCamera;
-} | null> = {
-  before: null,
-  after: null,
-};
-
-watch(
-  () => [dtxViewerRef.value, incrementalCompareState.value, incrementalCompareSelectedRefno.value] as const,
-  ([viewer, state]) => {
-    if (!viewer || !state) return;
-    clearIncrementalCompareProxy();
-    clearIncrementalSplitCompare();
-  },
-);
-
 const cameraViewMode = ref<CameraViewMode>('cad_weak');
 const globalEdgeEnabled = ref(false);
 const globalEdgeThresholdAngle = ref(20);
@@ -1415,7 +641,6 @@ let offXeokitToolsInput: (() => void) | null = null;
 let offPtsetWatch: (() => void) | null = null;
 let offBranClearanceWatch: (() => void) | null = null;
 let offShowModelByRefnos: (() => void) | null = null;
-let offIncrementalCompare: (() => void) | null = null;
 let offModelUnitVersionCompare: (() => void) | null = null;
 let offOpenSpatialQuery: (() => void) | null = null;
 let offControlsChange: (() => void) | null = null;
@@ -2602,24 +1827,26 @@ function collectLoadedRefnoVisibility(primaryLayer: DTXLayer, dbnum: number): Ma
   return visibility;
 }
 
+/**
+ * 「最新环境模型」：把视口里**已加载**的该 dbnum refno 按当前数据源重钉一次并保留各自显隐（CONTEXT「模型版本查看」）。
+ * 钉住什么由模型来源端口决定（legacy = 最新 manifest；gen-model-v1 = records + forceRefresh），这里不认数据源。
+ */
 async function refreshModelUnitCompareEnvironment(
   detail: ModelUnitVersionCompareOpenDetail,
   runId: number,
-): Promise<{ generatedAt: string; loadedRefnos: number; refreshing: false }> {
+): Promise<{ generatedAt?: string; loadedRefnos: number; refreshing: false }> {
   const primaryLayer = dtxLayerRef.value;
   if (!primaryLayer) throw new Error('三维环境图层尚未就绪');
 
-  const latest = await fetchLatestDbnoManifest(detail.dbnum);
+  const pin = await getModelSource().versions.pinLatestEnvironment(detail.dbnum);
   if (runId !== modelUnitCompareRunId) throw new Error('版本对比已取消');
   const visibilityByRefno = collectLoadedRefnoVisibility(primaryLayer, detail.dbnum);
   const loadedRefnos = [...visibilityByRefno.keys()];
   if (loadedRefnos.length > 0) {
     await loadDbnoInstancesForVisibleRefnosDtx(primaryLayer, detail.dbnum, loadedRefnos, {
-      dataSource: 'parquet',
+      ...pin.loaderOptions,
       forceReloadRefnos: loadedRefnos,
       replaceExistingObjects: true,
-      parquetManifestUrl: latest.manifestUrl,
-      parquetManifest: latest.manifest,
     });
     if (runId !== modelUnitCompareRunId) throw new Error('版本对比已取消');
     applyModelUnitRefnoVisibility(
@@ -2630,7 +1857,7 @@ async function refreshModelUnitCompareEnvironment(
   }
 
   return {
-    generatedAt: latest.generatedAt,
+    ...(pin.generatedAt ? { generatedAt: pin.generatedAt } : {}),
     loadedRefnos: loadedRefnos.length,
     refreshing: false,
   };
@@ -2819,7 +2046,6 @@ function focusModelUnitVersionCompare(refno: string): void {
 
 async function openModelUnitVersionCompare(detail: ModelUnitVersionCompareOpenDetail): Promise<void> {
   clearModelUnitVersionCompare();
-  closeIncrementalCompareOverlay();
   const viewer = dtxViewerRef.value;
   const primaryLayer = dtxLayerRef.value;
   if (!viewer || !primaryLayer) {
@@ -2856,7 +2082,7 @@ async function openModelUnitVersionCompare(detail: ModelUnitVersionCompareOpenDe
         error: error instanceof Error ? error.message : String(error),
       }));
     if (runId !== modelUnitCompareRunId) return;
-    const environment = environmentResult.environment ?? {
+    const environment: ModelUnitVersionCompareEnvironment = environmentResult.environment ?? {
       loadedRefnos: collectLoadedRefnoVisibility(primaryLayer, detail.dbnum).size,
       refreshing: false as const,
       error: environmentResult.error,
@@ -2878,33 +2104,23 @@ async function openModelUnitVersionCompare(detail: ModelUnitVersionCompareOpenDe
     const afterLayer = createShowDbnumDtxLayer(viewer, primaryLayer);
     runLayers.push(beforeLayer, afterLayer);
     modelUnitCompareLayers = [beforeLayer, afterLayer];
-    const sharedInstanceEntries = detail.before.manifestUrl
-      && detail.after.manifestUrl
-      && detail.before.artifactSesno === detail.after.artifactSesno
-      ? await useDbnoInstancesParquetLoader().queryInstanceEntriesByRefnos(detail.dbnum, detail.after.refnos, {
-        manifestUrl: detail.after.manifestUrl,
-        expectedRootRefno: detail.unitRefno,
-        includeOwnedTubings: false,
-      })
-      : undefined;
-    if (runId !== modelUnitCompareRunId) return;
+    // 两侧几何由版本对比面板经模型来源端口取好、随事件带来（ADR 0065 §2）；这里只往隔离图层里装，
+    // 网格 URL 仍按页面级数据源走 `MeshSource`。「已删除单元版本」（tombstone）那一侧不装、显示删除空态。
+    const sideHasGeometry = (side: ModelUnitVersionSide): boolean => side.version.impactKind !== 'tombstone';
     const commonOptions = {
-      dataSource: 'parquet' as const,
       includeOwnedTubings: false,
       isolated: true,
-      instanceEntriesByRefno: sharedInstanceEntries,
+      expectedRootRefno: detail.unitRefno,
     };
     const [beforeResult, afterResult] = await Promise.all([
-      detail.before.manifestUrl ? loadDbnoInstancesForVisibleRefnosDtx(beforeLayer, detail.dbnum, detail.before.refnos, {
+      sideHasGeometry(detail.before) ? loadDbnoInstancesForVisibleRefnosDtx(beforeLayer, detail.dbnum, detail.before.refnos, {
         ...commonOptions,
-        parquetManifestUrl: detail.before.manifestUrl,
-        expectedRootRefno: detail.unitRefno,
+        instanceEntriesByRefno: detail.before.entries,
         objectIdPrefix: 'unit-compare:a',
       }) : Promise.resolve(null),
-      detail.after.manifestUrl ? loadDbnoInstancesForVisibleRefnosDtx(afterLayer, detail.dbnum, detail.after.refnos, {
+      sideHasGeometry(detail.after) ? loadDbnoInstancesForVisibleRefnosDtx(afterLayer, detail.dbnum, detail.after.refnos, {
         ...commonOptions,
-        parquetManifestUrl: detail.after.manifestUrl,
-        expectedRootRefno: detail.unitRefno,
+        instanceEntriesByRefno: detail.after.entries,
         objectIdPrefix: 'unit-compare:b',
       }) : Promise.resolve(null),
     ]);
@@ -2914,10 +2130,10 @@ async function openModelUnitVersionCompare(detail: ModelUnitVersionCompareOpenDe
     }
     const beforeObjects = beforeResult?.loadedObjects ?? 0;
     const afterObjects = afterResult?.loadedObjects ?? 0;
-    if (detail.before.manifestUrl && beforeObjects === 0) {
+    if (sideHasGeometry(detail.before) && beforeObjects === 0) {
       throw new Error(`版本 A（sesno ${detail.before.sesno}）没有可显示的几何对象`);
     }
-    if (detail.after.manifestUrl && afterObjects === 0) {
+    if (sideHasGeometry(detail.after) && afterObjects === 0) {
       throw new Error(`版本 B（sesno ${detail.after.sesno}）没有可显示的几何对象`);
     }
     const beforeColor = new Color(0x2563eb);
@@ -5213,16 +4429,6 @@ onMounted(async () => {
       handleShowModelByRefnos,
     );
 
-  const handleIncrementalCompare = (ev: Event) => {
-    applyIncrementalCompareState((ev as CustomEvent).detail);
-  };
-  window.addEventListener('plant3d:incremental-version-compare', handleIncrementalCompare);
-  offIncrementalCompare = () =>
-    window.removeEventListener(
-      'plant3d:incremental-version-compare',
-      handleIncrementalCompare,
-    );
-
   window.addEventListener(MODEL_UNIT_VERSION_COMPARE_EVENT, handleModelUnitVersionCompare);
   offModelUnitVersionCompare = () =>
     window.removeEventListener(MODEL_UNIT_VERSION_COMPARE_EVENT, handleModelUnitVersionCompare);
@@ -5491,10 +4697,6 @@ onUnmounted(() => {
 
   offShowModelByRefnos?.();
   offShowModelByRefnos = null;
-
-  offIncrementalCompare?.();
-  offIncrementalCompare = null;
-  clearIncrementalCompareProxy();
 
   offModelUnitVersionCompare?.();
   offModelUnitVersionCompare = null;
@@ -6070,66 +5272,6 @@ onUnmounted(() => {
 
     <!-- 管道间距离标注控制面板 -->
     <PipeDistanceDrawer v-model:open="pipeDistDrawerOpen" />
-
-    <!-- 批注浮层（fixed 右上，z-940）可见时对照卡让位到左上，避免同角重叠时 z-956 盖住批注工作列（审查风险4收尾） -->
-    <div v-if="incrementalCompareState"
-      class="pointer-events-auto absolute w-[300px] max-w-[calc(100%-1.5rem)] rounded-lg border border-blue-200 bg-background/95 p-2.5 text-sm text-foreground shadow-lg backdrop-blur"
-      :class="store.annotationOverlayVisible.value ? 'left-3 top-3' : 'right-3 top-3'"
-      style="z-index: 956"
-      data-testid="viewer-dtx-version-compare-overlay"
-      @pointerdown.stop
-      @wheel.stop>
-      <div class="flex items-start justify-between gap-2">
-        <div class="min-w-0">
-          <div class="flex items-center gap-2">
-            <GitCompare class="h-4 w-4 shrink-0 text-blue-700" />
-            <div class="truncate font-semibold">增量版本对照</div>
-          </div>
-          <div class="mt-0.5 truncate text-xs text-muted-foreground">
-            DB {{ incrementalCompareState.dbnum ?? '-' }} · {{ incrementalCompareState.fromSesno ?? '-' }} -> {{ incrementalCompareState.toSesno ?? '-' }}
-          </div>
-        </div>
-        <button type="button"
-          class="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded border border-input bg-background hover:bg-muted"
-          title="关闭"
-          @click="closeIncrementalCompareOverlay">
-          <X class="h-4 w-4" />
-        </button>
-      </div>
-
-      <div class="mt-2 flex items-center justify-between gap-2 rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-600">
-        <span class="min-w-0 truncate">当前 ViewerPanel DTX</span>
-        <span class="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[11px] text-slate-600">真实 diff</span>
-      </div>
-
-      <div v-if="incrementalCompareSelectedModel" class="mt-2 rounded-md border border-blue-100 bg-blue-50/60 p-2 text-xs">
-        <div class="flex items-center justify-between gap-2">
-          <div class="min-w-0 truncate font-mono">{{ incrementalCompareSelectedModel.refno }}</div>
-          <div class="shrink-0 rounded px-2 py-0.5" :class="compareStatusClass(incrementalCompareSelectedModel.status)">
-            {{ compareStatusLabel(incrementalCompareSelectedModel.status) }}
-          </div>
-        </div>
-        <div class="mt-1 truncate text-[11px] text-muted-foreground">
-          {{ versionStateLabel(incrementalCompareSelectedModel.beforeState) }} -> {{ versionStateLabel(incrementalCompareSelectedModel.afterState) }}
-          · {{ incrementalCompareSelectedModel.category || '-' }}
-        </div>
-      </div>
-
-      <div class="mt-2 flex gap-2">
-        <select v-model="incrementalCompareSelectedRefno"
-          class="h-8 min-w-0 flex-1 rounded border border-input bg-background px-2 text-xs">
-          <option v-for="item in incrementalCompareModels" :key="item.refno" :value="item.refno">
-            {{ item.refno }} · {{ compareStatusLabel(item.status) }}
-          </option>
-        </select>
-        <button type="button"
-          class="shrink-0 rounded-md bg-primary px-3 py-1 text-xs text-primary-foreground hover:bg-primary/90"
-          :disabled="!incrementalCompareSelectedRefno"
-          @click="loadIncrementalCompareRefno(incrementalCompareSelectedRefno || '')">
-          加载
-        </button>
-      </div>
-    </div>
 
     <div v-if="initError"
       class="pointer-events-auto absolute inset-0 flex items-center justify-center bg-background/80 backdrop-blur"

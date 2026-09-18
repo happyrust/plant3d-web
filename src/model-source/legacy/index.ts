@@ -5,6 +5,7 @@
  * `model_source=legacy` 下的行为与今天**逐字节相同**——每个方法就是一次转发，不加缓存、不改参数、不吞错误。
  */
 import { legacySpatialSource } from './spatialSource';
+import { legacyModelVersionSource } from './versionSource';
 
 import type {
   AttributeSource,
@@ -93,5 +94,14 @@ const keypoints: KeypointSource = {
 };
 
 export function createLegacyModelSource(): ModelSource {
-  return { kind: 'legacy', tree, records, meshes, attributes, keypoints, spatial: legacySpatialSource };
+  return {
+    kind: 'legacy',
+    tree,
+    records,
+    meshes,
+    attributes,
+    keypoints,
+    spatial: legacySpatialSource,
+    versions: legacyModelVersionSource,
+  };
 }

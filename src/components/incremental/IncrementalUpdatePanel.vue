@@ -965,10 +965,17 @@ function toSlashRefno(refno: string): string {
   return refno.includes('_') ? refno.replace(/_/g, '/') : refno;
 }
 
-async function loadModelRefnos(refnos: string[], forcedMode?: VersionMode) {
+/**
+ * 把选中的模型 refno 送进三维视口。
+ *
+ * 2026-09-18 之前这里还向 `plant3d:incremental-version-compare` 派发一份对比上下文（ViewerPanel 的
+ * release 对照卡 + 模型树差异模式）；release 线放弃后那条通道只由「版本对比」面板驱动
+ * （ADR 0065，`docs/plans/2026-09-18-model-version-compare-gen-model-v1-migration-plan.md` §1.2 / §1.4），
+ * 本面板任何模式下都只加载模型。
+ */
+async function loadModelRefnos(refnos: string[]) {
   const record = selectedRecord.value;
   if (!record) return;
-  const mode = forcedMode ?? activeVersionMode.value;
   const unique = Array.from(new Set(refnos.filter(Boolean))).slice(0, 300);
   if (unique.length === 0) return;
   modelLoading.value = true;
@@ -977,43 +984,6 @@ async function loadModelRefnos(refnos: string[], forcedMode?: VersionMode) {
     ensurePanelAndActivate('modelTree');
     ensurePanelAndActivate('viewer');
     await nextTick();
-    const compareModelRows = compareRows.value
-      .filter((row) => unique.includes(row.refno))
-      .map((row) => ({
-        refno: row.refno,
-        category: row.category,
-        status: row.status,
-        beforeState: row.beforeState,
-        afterState: row.afterState,
-        sourceChangeCount: row.sourceChangeCount,
-        sourceNouns: row.sourceNouns,
-        // 删除节点的原父节点：树内差异模式用于幽灵节点回插定位
-        ownerRefno: row.sourceChanges.find((change) => change.refno === row.refno)?.owner_refno
-          ?? row.sourceChanges[0]?.owner_refno
-          ?? undefined,
-      }));
-    const compareDetail = {
-      project: record.project,
-      dbnum: record.dbnum,
-      fromSesno: record.from_sesno,
-      toSesno: record.to_sesno,
-      mode,
-      compare: mode === 'compare',
-      refnos: unique,
-      models: compareModelRows,
-      stats: compareStats.value,
-    };
-    const dispatchCompareDetail = () => {
-      window.dispatchEvent(new CustomEvent('plant3d:incremental-version-compare', {
-        detail: compareDetail,
-      }));
-    };
-    dispatchCompareDetail();
-    if (mode === 'compare') {
-      await new Promise((resolve) => window.setTimeout(resolve, 250));
-      dispatchCompareDetail();
-      return;
-    }
     const result = await showModelByRefnosWithAck({
       refnos: unique.map(toSlashRefno),
       flyTo: true,
@@ -1023,7 +993,6 @@ async function loadModelRefnos(refnos: string[], forcedMode?: VersionMode) {
     if (result.error && result.ok.length === 0) {
       error.value = result.error;
     }
-    dispatchCompareDetail();
   } finally {
     modelLoading.value = false;
   }
@@ -1039,7 +1008,7 @@ async function compareSelectedModel() {
   const refno = selectedModelRefno.value || selectedChange.value?.model_refno || selectedChange.value?.refno;
   if (!refno) return;
   activeVersionMode.value = 'compare';
-  await loadModelRefnos([refno], 'compare');
+  await loadModelRefnos([refno]);
 }
 
 async function loadAllChangedModels() {
@@ -1051,7 +1020,7 @@ async function loadAllChangedModels() {
 
 async function compareAllChangedModels() {
   activeVersionMode.value = 'compare';
-  await loadModelRefnos(modelRows.value.map((row) => row.model_refno), 'compare');
+  await loadModelRefnos(modelRows.value.map((row) => row.model_refno));
 }
 
 function focusSelectedChange() {

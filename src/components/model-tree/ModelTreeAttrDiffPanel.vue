@@ -9,7 +9,7 @@ import {
   getSnapshot,
   resolveAnchor,
   type ModelHistorySnapshot,
-} from '@/api/modelVersionApi';
+} from '@/api/modelHistoryApi';
 import { normalizeTreeDiffStatus, type TreeDiffModel } from '@/composables/useTreeVersionDiff';
 
 const props = defineProps<{

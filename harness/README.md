@@ -10,28 +10,32 @@
 
 ```
 harness/
-  vt.html          VersionTimelinePanel 的 harness 页面
-  vt.shots.mjs     其截图场景（mock 路由 + 交互步骤）
-  mvc.html         ModelVersionComparePanel 的 harness 页面
-  mvc.shots.mjs    其截图场景
-  README.md        本文档
+  spatial-query.html        SpatialQueryDrawer 的 harness 页面
+  spatial-query.shots.mjs   其截图场景（mock 路由 + 交互步骤）
+  pipe-distance.html        PipeDistanceDrawer 的 harness 页面
+  pipe-distance.shots.mjs   其截图场景
+  …                         其余面板同一套式（见目录）
+  README.md                 本文档
 src/harness/
-  vt.ts            vt.html 的入口：挂载真实组件
-  mvc.ts           mvc.html 的入口
+  spatialQuery.ts           spatial-query.html 的入口：挂载真实组件
+  pipeDistance.ts           pipe-distance.html 的入口
 scripts/visual-baseline/
-  shot.mjs         通用 runner：起 Vite → 开 Chromium → 应用 mock → 截图
+  shot.mjs                  通用 runner：起 Vite → 开 Chromium → 应用 mock → 截图
 ```
+
+> 2026-09-18：`vt`（VersionTimelinePanel）与 `mvc`（ModelVersionComparePanel）两套 harness 随这两个面板一起删除
+> （release 线放弃，见 `docs/adr/0065`）。
 
 ## 运行（无 npm script，直接 node 调用）
 
 `package.json` 处于他人 WIP 状态，因此**不加 npm script**，一律从仓库根目录直调：
 
 ```bash
-# VersionTimelinePanel
-node scripts/visual-baseline/shot.mjs harness/vt.html --port 5190 --out scripts/pen-preview/out-vt
+# SpatialQueryDrawer
+node scripts/visual-baseline/shot.mjs harness/spatial-query.html --port 5190 --out scripts/pen-preview/out-spatial-query
 
-# ModelVersionComparePanel
-node scripts/visual-baseline/shot.mjs harness/mvc.html --port 5190 --out scripts/pen-preview/out-mvc
+# PipeDistanceDrawer
+node scripts/visual-baseline/shot.mjs harness/pipe-distance.html --port 5190 --out scripts/pen-preview/out-pipe-distance
 ```
 
 runner 参数：
@@ -58,7 +62,7 @@ runner 会自己用项目的 `vite.config.ts` 起 dev server（不需要预先 `
 
 ### 1. harness 页面 + 入口
 
-`harness/foo.html`（可复制 `vt.html` 改）：核心是一个 `.panel-host` 容器 + `#app` 挂载点，
+`harness/foo.html`（可复制 `spatial-query.html` 改）：核心是一个 `.panel-host` 容器 + `#app` 挂载点，
 `<script type="module" src="/src/harness/foo.ts"></script>`。
 `.panel-host` 的宽高按面板真实使用尺寸设置，截图即截该容器。
 

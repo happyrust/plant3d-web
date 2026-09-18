@@ -2,7 +2,24 @@ import { computed, ref } from 'vue';
 
 import type { FlatRow, TreeNode } from '@/composables/useModelTree';
 
-/** 单个变更模型（来自 plant3d:incremental-version-compare 事件 payload 的 models 项） */
+/**
+ * 树内差异模式的驱动事件（`CustomEvent<TreeDiffContext>`）。
+ *
+ * 唯一派发方是「模型版本对比」面板（`ModelUnitVersionComparePanel`），唯一消费者是 `ModelTreePanel`。
+ * `models` 与 `refnos` 都为空 = 退出差异模式。2026-09-18 之前叫 `plant3d:incremental-version-compare`，
+ * 由 release diff 面板 / 版本时间线 / 增量更新面板三处派发；那三处随 release 线一起删除（ADR 0065，
+ * `docs/plans/2026-09-18-model-version-compare-gen-model-v1-migration-plan.md` §1.4）。
+ */
+export const MODEL_VERSION_TREE_DIFF_EVENT = 'plant3d:model-version-tree-diff';
+
+/** 派发一份树内差异上下文；传 `null` 表示退出差异模式。 */
+export function dispatchTreeDiffContext(context: TreeDiffContext | null): void {
+  if (typeof window === 'undefined') return;
+  const detail: TreeDiffContext = context ?? { refnos: [], models: [] };
+  window.dispatchEvent(new CustomEvent<TreeDiffContext>(MODEL_VERSION_TREE_DIFF_EVENT, { detail }));
+}
+
+/** 单个变更模型（`MODEL_VERSION_TREE_DIFF_EVENT` payload 的 models 项） */
 export type TreeDiffModel = {
   refno: string;
   category?: string;

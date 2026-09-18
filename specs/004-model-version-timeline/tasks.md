@@ -1,5 +1,7 @@
 # Tasks: 模型版本时间线与历史模型树
 
+> **已废弃（2026-09-18）**：见 [spec.md](./spec.md) 顶部说明；T013 / T014 不再做，已完成的 T001–T012 代码已随 release 线删除。
+
 **Input**: Design documents from `/specs/004-model-version-timeline/`
 
 **Prerequisites**: [plan.md](./plan.md), [spec.md](./spec.md), [research.md](./research.md), [data-model.md](./data-model.md), [contracts/version-timeline-ui-contract.md](./contracts/version-timeline-ui-contract.md), [quickstart.md](./quickstart.md)

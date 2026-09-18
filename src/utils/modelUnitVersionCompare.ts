@@ -1,4 +1,5 @@
-import type { ModelUnitCommitData } from '@/api/modelUnitVersionApi';
+import type { ModelVersion } from '@/model-source/ports';
+import type { InstanceEntry } from '@/utils/instances/instanceManifest';
 
 export type ModelUnitGeometryStatus = 'added' | 'deleted' | 'modified' | 'unchanged'
 
@@ -83,12 +84,17 @@ export function applyModelUnitRefnoVisibility(
   }
 }
 
+/**
+ * 对比的一侧：版本身份 + 面板已经通过 `ModelVersionSource.loadVersion` 取到的几何。
+ * ViewerPanel 只渲染这里给的 `entries`（`instanceEntriesByRefno`），不再自己回源取数；
+ * `entries` 由面板 `markRaw` 后放进事件，避免几千条实例被 Vue 递归代理。
+ */
 export type ModelUnitVersionSide = {
+  version: ModelVersion
+  /** 等于 `version.sesno`，模板 / 测试直接读 */
   sesno: number
-  artifactSesno: number
-  manifestUrl: string | null
-  generatedAt: string
   refnos: string[]
+  entries: Map<string, InstanceEntry[]>
 }
 
 export function formatModelUnitVersionTime(generatedAt: string): string {
@@ -160,11 +166,11 @@ export function geometrySnapshotsFromInstanceEntries(
   }).sort((a, b) => a.refno.localeCompare(b.refno));
 }
 
-export function orderModelUnitVersionPair<T extends Pick<ModelUnitCommitData, 'commit'>>(
+export function orderModelUnitVersionPair<T extends Pick<ModelVersion, 'sesno'>>(
   first: T,
   second: T,
 ): [T, T] {
-  return first.commit.sesno <= second.commit.sesno ? [first, second] : [second, first];
+  return first.sesno <= second.sesno ? [first, second] : [second, first];
 }
 
 export function compareModelUnitGeometry(
