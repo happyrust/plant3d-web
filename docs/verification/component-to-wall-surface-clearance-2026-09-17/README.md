@@ -117,3 +117,20 @@ GET http://127.0.0.1:8024/api/v1/spatial/surface-clearance?source_refno=24384/22
 用户要确认「旧二进制的 datum 摆放问题只碎在 FIXING」，索性全库核而不抽样：存量侧一句 SQL 取 `inst_relate` 里 `dbnum = 1112` 全部行的 `world_trans_d`（平移 + 四元数，4 892 行 656 KB，0.7 s）；现生成侧按根取——每遇到一行还没被任何根覆盖的，`:8024` `model/ensure {refno}` 一次拿 `generation_roots[0]`，再 `model/records {根}` 把该根全部记录一并收下（149 个根、149 次 ensure，20 s 跑完）。阈值仍是平移 1 mm / 四元数 1e-3（q 与 −q 同姿态）。**4 892 / 4 892 一致，各 noun 最大平移偏差 0.001 mm（f32 舍入）、四元数偏差 0，现生成侧一行不缺。**
 
 结论：`17496/137183` 是 1112 库里**唯一**一行落点错的存量记录——同一批 FIXING 里其余 189 枚、同样挂在 datum 下的都对，PANE / 墙族 / 楼板 / SBFI 也全对。这更像那一次生成的偶发（当时 datum 属性没读到、或半截重算写了个错的 `world_trans`），不是旧二进制系统性的 datum 摆放 bug；§5 / 计划 §9 那条按此收口。副作用：`:8024`（mem 验证实例）现在装着 1112 整库 4 892 条模型记录（149 根）。
+
+## 8. `:8024` 换到 `eabd16d5c`（洞壁 `opening` 口径）后复验：金样与 126 对全部一致（2026-09-18 09:26–09:33；文件在 `8024-swap-2026-09-18/`）
+
+### 8.1 换法（`swap-record-8024-eabd16d5c.json`）
+
+- 从 `gen-model-model-cache` `eabd16d5c` 开干净 worktree（`.scratch\wt-eabd16d5c-opening`，用完已删）`cargo build --release --features http_api --bin aios-database`，3 m 01 s，`build_id 0.1.27+geabd16d5cdda.1789694793`（无 `.dirty`——工作树里别人的 `model_impact.rs` / `model_db_adapter.rs` 在途 M 没被带进去）。
+- 复制为 `_runs\surface-clearance-8024\aios-database-eabd16d5.exe`；09:31:25 `Stop-Process` 旧进程 pid 69496（`aios-database-shared-leaves.exe`，`0.1.27+gaed4d6c74f6a…dirty`，09-17 23:25 起），09:31:28 以 §1 的命令起新进程 pid 67008，5 s 内 `/health` ready。mem 档，重启即清库：§7.7 那次装进去的 1112 整库 4 892 条模型记录随之清空；本节按需 `model/ensure` 了 97 个 refno（金样两侧 + 126 对涉及的 72 源 / 23 目标），`resident_records = 1215`。`:8022` / `:8023` 一个字节没动。
+
+### 8.2 金样（`http-surface-clearance-elbo-x-wall1-eabd16d5c.json`）
+
+`ensure 24384/22582`（根 `24384/22579`，4 实例，414 ms）、`ensure 17496/105912`（根 `17496/105799`，113 实例，218 ms）后 `GET …surface-clearance?source_refno=24384/22582&target_refno=17496/105912&debug=1` → 200：`distance_mm 64.42777`、`intersects false`、`outer / geometric`、法向 (−0.9993213, 0.036837157, 0)、`⊥ 64.49526`、两点与 09-17 金样逐位相同、`sesno 619 / 729`、`total 4 ms`、`pairs 2/1/1`、`warnings []`。与 §2（09-17，`a0e307588`）**逐字段一致**，Δdistance = Δ⊥ = 0。
+
+### 8.3 126 对重放（`replay-126-pairs-eabd16d5c.jsonl`，每行带 `old_*` 是 §4 的旧值）
+
+§4 那 126 对 AABB 相交的管 × 墙逐对重打 `?target_kind=wall`：126/126 → 200；**`intersects` 17 = 17，一对不差**（BEND `24384/24729` × GWALL `17496/118130`、BEND `24384/24742` × PANE `17496/136833`、FTUB `24384/24730` / `24384/24743` × GWALL、13 对 dbnum 7999 型钢 SCTN × PANE）；**距离 126 对全部一致**（max |Δ| 0.005 mm——旧记录只存到两位小数，是四舍五入）；有垂距的 73 对前后都有、没有的 53 对前后都没有，`⊥` 值 72 对差 ≤ 0.005 mm，1 对差 0.12 mm（FTUB `24384/24514` × GWALL `17496/118130`：57.77 → 57.65，距离 57.46 不变——最近点落在弧墙两片相邻小面的共棱上，新的 `hit_triangle` 选了法向更贴合源方向的那片，垂距沿它打，仍在 1% 容差内）。**`opening` 0 对**：AMS 里本来就没有构件在洞里的对（§4），本次只能证明新口径不碰旧金样。
+
+**分类变化 5 对**（都是最近点落在墙端与主面共棱上的边缘情形，`end` → 主面，垂距前后都是 null）：FTUB `24384/22533` × WALL `17496/105935`（1.26 mm，`end` → `outer/geometric`）、FTUB `24384/22737` × PANE `17496/137594`（23.19 mm，`end` → `side/pca`）、FTUB `24384/24513` / `24384/22739` / `24384/24101` × GWALL `17496/118130`（75.03 / 80.66 / 171.70 mm，`end` → `outer/geometric`）。原因是 `eabd16d5c` 的 `hit_triangle`：共棱处不再由 parry 随手挑一片，而是选法向最贴合「指向源侧」方向的那片——这 5 对的源更像正对主面而不是越过墙端，于是读成主面；主面要打垂距，射线擦棱落空，多出 `perpendicular_ray_missed` warning（前端标签从「墙端」变成「墙面外侧」/「墙面」，仍不带 ⊥）。与 G2 合成用例同一情形（计划 §7 G2 行已改成两种读法都收）。其余 121 对分类不变（新分布：side 54 / outer 25 / inner 23 / end 7 / 相交 17）。

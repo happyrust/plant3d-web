@@ -1,0 +1,35 @@
+{
+  "swappedAt": "2026-09-18T09:31:28+08:00",
+  "instance": "_runs\\surface-clearance-8024（mem 验证实例）",
+  "reason": "gen-model-model-cache eabd16d5c：surface-clearance 洞壁单独分类 opening 并打垂距；用户 09:2x 要求在 :8024 上确认金样与 G4 17 对无回归，:8022 不动",
+  "old": {
+    "pid": 69496,
+    "exe": "_runs\\surface-clearance-8024\\aios-database-shared-leaves.exe",
+    "build_id": "0.1.27+gaed4d6c74f6a.1789658537.dirty",
+    "started": "2026-09-17T23:25:04+08:00",
+    "resident_records_before_stop": 7203,
+    "note": "mem 档，停掉即清库——§7.7 装进去的 1112 整库 4 892 条模型记录随之清空"
+  },
+  "new": {
+    "pid": 67008,
+    "exe": "_runs\\surface-clearance-8024\\aios-database-eabd16d5.exe",
+    "sha256_prefix": "30C74DFE1C59DBB0",
+    "build_id": "0.1.27+geabd16d5cdda.1789694793",
+    "git_commit": "eabd16d5cdda",
+    "git_dirty": false,
+    "built_from": "git worktree add --detach .scratch\\wt-eabd16d5c-opening eabd16d5c; cargo build --release --features http_api --bin aios-database（3 m 01 s，CARGO_TARGET_DIR=D:\\Rust\\target；worktree 用完已删）",
+    "launch": "同 README §1：cwd 运行目录、DB_OPTION_FILE / PLANT_ASSET_ROOT / AIOS_E3D_SCHEMA_ROOT / RUST_MIN_STACK / AIOS_OPEN_BROWSER=0、serve、日志 logs\\20260918-093128.*.log",
+    "ready_after_seconds": 5
+  },
+  "downtime_seconds": 5,
+  "data_after": {
+    "model_ensure_calls": 97,
+    "resident_records": 1215,
+    "note": "金样两侧 + 126 对涉及的 72 源 / 23 目标 refno，各 POST /api/v1/model/ensure 一次（95 个 6 s）"
+  },
+  "checks_after": {
+    "golden": "24384/22582 × 17496/105912 → 64.42777 mm, intersects=false, outer/geometric, ⊥ 64.49526, sesno 619/729, total 4 ms, pairs 2/1/1, warnings [] —— 与 09-17 §2 逐字段一致（http-surface-clearance-elbo-x-wall1-eabd16d5c.json）",
+    "replay_126_pairs": "126/126 → 200；intersects 17 = 17（0 mismatch）；distance max|Δ| 0.005 mm（旧记录两位小数）；垂距有/无 73/53 前后一致，⊥ 72 对 |Δ| ≤ 0.005 mm、1 对 0.12 mm（24384/24514 × 17496/118130，共棱换面）；opening 0 对（数据里没有构件在洞里的对）；分类变化 5 对 end → outer/side（共棱处 hit_triangle 选面，垂距前后都 null，多出 perpendicular_ray_missed）——replay-126-pairs-eabd16d5c.jsonl"
+  },
+  "untouched": [":8022（994f2e0cc，不含 eabd16d5c）", ":8023"]
+}
