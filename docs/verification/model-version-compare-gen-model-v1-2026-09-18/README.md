@@ -80,8 +80,18 @@
 | 回归 | 修后重跑正例 573→626：同样「变更 2 / 68」、68 行、pageerror 0（`a573-b626-*` 为修后那次） |
 | 测试 | vitest `ModelTreePanel.versionDiff.test.ts` **11 过**（新增「整单元被删：挂载点沿链落到最近存活祖先并被自己展开，幽灵行随之可见」；原「路径解析目标」用例改成 5 个目标 + `expandSelf` 标记）；e2e 第 1 条新增断言「解析完成后至少一条带徽章的行可见；tombstone 时至少一条幽灵行可见」——`GEN_MODEL_V1_BASE_URL=http://127.0.0.1:8026 PLAYWRIGHT_PORT=3111`：缺省单元 24384_26480（末两版 602→604）**3 过**（12.9 s）、`MODEL_VERSION_E2E_UNIT=24384_23257` **3 过**（13.2 s） |
 
-顺手看到（未动）：点幽灵行时右侧常规「属性」面板也去拉当前会话的属性，红条「not_found (404): dbnum 8000 会话 Some(636) 的索引里没有 24384/26481」——
-被删构件在当前会话本来就不在，属于该面板对 ghost 行的处理口径，与属性历史对比无关。
+~~顺手看到（未动）：点幽灵行时右侧常规「属性」面板也去拉当前会话的属性，红条「not_found (404): dbnum 8000 会话 Some(636) 的索引里没有 24384/26481」——
+被删构件在当前会话本来就不在，属于该面板对 ghost 行的处理口径，与属性历史对比无关。~~ **22:3x 已收（用户拍板）**，见 §5.2。
+
+### 5.2 幽灵行进右侧「属性」面板：不拉当前会话，给「该构件已删除，属性见底部属性历史对比」（22:3x）
+
+| 项 | 事实 |
+|---|---|
+| 红条从哪来 | 两条路都把被删 refno 写进全局选中：`applyTreeDiffContext` 进差异模式时把**第一条变更**设为选中（tombstone 单元里第一条就是被删的 BOX）；以及点幽灵行。`useSelectionStore` 的 `useQuery` 见到 refno 就发 `POST element/attributes` → 当前会话里没有它 → 404 → 面板按错误渲染。 |
+| 修法 | `useSelectionStore`：新增「已删除」登记 `selectedIsDeleted`（`setSelectedDeletedRefno` / `setGlobalSelectedDeletedRefno`），登记时查询 `enabled=false`、`propertiesData / fullName / refFullNames / diagnostics / error` 一律按无数据（同一 key 上可能还留着上次正常选中缓存的 404），任何一次正常选中复位。`PropertiesPanel` 最前面加分支 `data-testid="properties-deleted-notice"`：「该构件已删除，属性见底部属性历史对比」（中性底色，不是错误）。`ModelTreePanel`：幽灵行点击与差异上下文首条为幽灵时走 `selectDeletedRefno`（置 `internalTreeSelection`，树内不再去后端定位）；退出差异模式（`exitDiffMode` / 上下文置空）时已删除登记的选中一起清掉。 |
+| 真机 602→604（`a602-b604-properties-panel-*`，`old/.scratch/attr-deleted-notice-live.mjs`） | 进差异模式即显示提示（首条 = 被删 BOX 24384/26481），**`element/attributes` 请求 0 条**；点幽灵行仍是提示、无 `not_found`；关闭对比 → 提示消失；全程 `element/attributes` 0 条，pageerror 0 |
+| 真机 573→626 对照（`a573-b626-properties-panel-*`） | 首条是修改的 FTUB：`element/attributes {refno: 24384/23262}` 200 一条、无提示；点行 / 关闭同样无提示 |
+| 测试 | 新增 `PropertiesPanel.deleted.test.ts` 2 条（挂真 `VueQueryPlugin`、mock `@/model-source`）：已删除登记不发查询 / 给提示 / 正常选中复位；同一 refno 缓存过 404 再按幽灵登记不漏红条。全仓 **346 文件 / 3084 用例过**；e2e 两单元各 3 过。 |
 
 ## 6. BRAN 增量更新 → 版本对比（19:3x，`bran-ftub-move/`）
 

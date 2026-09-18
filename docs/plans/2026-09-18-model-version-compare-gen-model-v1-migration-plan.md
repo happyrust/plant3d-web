@@ -373,6 +373,10 @@ legacy 下与从前的可见差别只有一处、且不可见于用户：A/B 隔
   又是同批被删的 EQUI，拿去查祖先只会 404。修法：`expandPathToNode(refno, { expandSelf })` + 沿 `ownerRefno` 链落到最近存活祖先再带
   `expandSelf` 解析（`usePdmsOwnerTree.ts` / `useTreeVersionDiff.ts`）。修后 602→604 两条幽灵行自动可见，点开给「变更 28 / 28 · 该构件在版本 B
   不存在（已删除）」；vitest 11 过（新增 tombstone 形状用例）、e2e 加「解析完成后徽章行 / 幽灵行可见」断言后两单元各 3 过。README §5.1。
+- **幽灵行 × 右侧「属性」面板（22:3x，用户拍板）**：被删 refno 进全局选中后 `useSelectionStore` 照发 `element/attributes` → 404 红条。
+  加「已删除」登记（`selectedIsDeleted` / `setSelectedDeletedRefno`）：登记时不发查询、面板给「该构件已删除，属性见底部属性历史对比」、
+  正常选中复位、退出差异模式清掉；`ModelTreePanel` 幽灵行点击与差异上下文首条为幽灵时走这条。真机 602→604 全程 `element/attributes` 0 条，
+  573→626 对照仍 1 条 200。README §5.2。
 
 ## 9. 真管线走一遍：BRAN 增量更新 → 版本对比（19:3x，用户 18:37「测试一个 BRAN 的增量更新，然后在 plant3d-web 里通过模型对比查看」）
 

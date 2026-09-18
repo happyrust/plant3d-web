@@ -22,6 +22,7 @@ import { useSelectionStore } from '@/composables/useSelectionStore';
 import { useToolStore } from '@/composables/useToolStore';
 import {
   MODEL_VERSION_TREE_DIFF_EVENT,
+  normalizeTreeDiffStatus,
   useTreeVersionDiff,
   type DiffFlatRow,
   type TreeDiffAttributesAt,
@@ -125,6 +126,17 @@ const DIFF_FILTER_CHIPS: { key: TreeDiffFilter; label: string; activeCls: string
 
 function exitDiffMode() {
   treeDiff.clear();
+  // 差异模式退了，「属性见底部属性历史对比」那块也没了：登记为已删除的选中一起清掉
+  if (selection.selectedIsDeleted.value) selection.clearSelection();
+}
+
+/**
+ * 幽灵行（差异模式里已删除的构件）进全局选中：属性面板据 `selectedIsDeleted` 给「该构件已删除，属性见底部属性历史对比」、
+ * 不拉当前会话的属性；树内不定位（当前树里没有它，去后端查祖先只会 404）。
+ */
+function selectDeletedRefno(refno: string) {
+  if (selection.selectedRefno.value !== refno) internalTreeSelection = true;
+  selection.setSelectedDeletedRefno(refno);
 }
 
 /** 虚拟列表实际渲染的行：差异模式下为“变更节点 + 祖先 + 幽灵节点”过滤视图 */
@@ -287,8 +299,11 @@ function selectByRowIndex(index: number, ev: MouseEvent) {
     if (!row) return;
     // 变更节点/幽灵节点：更新属性差异面板选中
     if (row.diffStatus || row.ghost) treeDiff.select(row.id);
-    // 幽灵节点仅展示：不进入树选中与 3D 联动
-    if (row.ghost) return;
+    // 幽灵节点：不进入树选中与 3D 联动；全局选中登记为「已删除」，让右侧属性面板给提示而不是去拉当前会话（404）
+    if (row.ghost) {
+      selectDeletedRefno(row.id);
+      return;
+    }
     // 差异视图行索引与源树 flatRows 索引不一致，按 id 映射回源索引
     const realIndex = pdmsTree.flatRows.value.findIndex((r) => r.id === row.id);
     if (realIndex < 0) return;
@@ -1145,7 +1160,7 @@ function applyTreeDiffContext(rawDetail: unknown) {
     ...models.map((item) => item.refno),
   ]));
   if (mergedRefnos.length === 0) {
-    treeDiff.clear();
+    exitDiffMode();
     return;
   }
 
@@ -1163,7 +1178,13 @@ function applyTreeDiffContext(rawDetail: unknown) {
   });
   const first = mergedRefnos[0] ?? null;
   if (first) {
-    selection.setSelectedRefno(first);
+    // 第一条变更就是被删的（tombstone 单元里常见）：按幽灵登记，右侧属性面板不去拉当前会话
+    const firstModel = models.find((item) => item?.refno === first);
+    const firstIsGhost = !!firstModel
+      && normalizeTreeDiffStatus(firstModel.status) === 'deleted'
+      && !pdmsTree.nodesById.value[first];
+    if (firstIsGhost) selectDeletedRefno(first);
+    else selection.setSelectedRefno(first);
   }
 }
 

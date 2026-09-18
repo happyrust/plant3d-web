@@ -264,8 +264,17 @@ function isGroupCollapsed(groupId: string): boolean {
       </div>
     </div>
 
+    <!-- 已删除构件（模型版本差异模式里的幽灵行）：当前会话里没有它，不拉属性，也不当错误 -->
+    <div v-if="sel.selectedIsDeleted.value"
+      class="flex flex-1 items-center justify-center p-3"
+      data-testid="properties-deleted-notice">
+      <div class="rounded bg-muted px-3 py-2 text-xs text-muted-foreground">
+        该构件已删除，属性见底部属性历史对比
+      </div>
+    </div>
+
     <!-- 加载状态 -->
-    <div v-if="sel.propertiesLoading.value" class="flex flex-1 items-center justify-center">
+    <div v-else-if="sel.propertiesLoading.value" class="flex flex-1 items-center justify-center">
       <div class="flex items-center gap-2 text-xs text-muted-foreground">
         <div class="h-3.5 w-3.5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
         <span>加载中...</span>

@@ -1,0 +1,74 @@
+{
+  "url": "http://127.0.0.1:3111/?model_source=gen-model-v1&gm_backend_port=8026&unit_refno=24384_23257&compare_autorun=1&compare_a=573&compare_b=626",
+  "startedAt": "2026-09-18T14:30:01.106Z",
+  "elementAttributeRequests": [
+    {
+      "at": "2026-09-18T14:30:04.372Z",
+      "refno": "24384/23262",
+      "status": 200
+    }
+  ],
+  "pageErrors": [],
+  "steps": [
+    {
+      "at": "2026-09-18T14:30:01.243Z",
+      "name": "goto",
+      "url": "http://127.0.0.1:3111/?model_source=gen-model-v1&gm_backend_port=8026&unit_refno=24384_23257&compare_autorun=1&compare_a=573&compare_b=626"
+    },
+    {
+      "at": "2026-09-18T14:30:04.373Z",
+      "name": "compare finished",
+      "summary": "新增 0删除 0修改 1未变 8"
+    },
+    {
+      "at": "2026-09-18T14:30:05.351Z",
+      "name": "before click",
+      "firstRowStatus": "modified",
+      "ghost": false,
+      "notice": null,
+      "elementAttributeRequests": [
+        {
+          "at": "2026-09-18T14:30:04.372Z",
+          "refno": "24384/23262",
+          "status": 200
+        }
+      ]
+    },
+    {
+      "at": "2026-09-18T14:30:06.588Z",
+      "name": "after click",
+      "notice": null,
+      "propertiesError": null,
+      "elementAttributeRequests": [
+        {
+          "at": "2026-09-18T14:30:04.372Z",
+          "refno": "24384/23262",
+          "status": 200
+        }
+      ]
+    },
+    {
+      "at": "2026-09-18T14:30:07.358Z",
+      "name": "after close",
+      "notice": null,
+      "elementAttributeRequests": [
+        {
+          "at": "2026-09-18T14:30:04.372Z",
+          "refno": "24384/23262",
+          "status": 200
+        }
+      ]
+    }
+  ],
+  "summaryText": "新增 0删除 0修改 1未变 8",
+  "firstRowStatus": "modified",
+  "firstRowGhost": false,
+  "firstRowText": "FTUB FTUB改",
+  "noticeBeforeClick": null,
+  "elementAttributeRequestsBeforeClick": 1,
+  "noticeAfterClick": null,
+  "propertiesErrorText": null,
+  "noticeAfterClose": null,
+  "ok": true,
+  "finishedAt": "2026-09-18T14:30:07.420Z"
+}
