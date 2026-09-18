@@ -81,8 +81,7 @@ if [[ -f package-lock.json ]]; then
 else
   npm install
 fi
-npm run build
-
+npm run build-only
 CURRENT_COMMIT="$(git rev-parse HEAD)"
 CURRENT_VERSION="$(node -p "require('./package.json').version")"
 CURRENT_BUILD_DATE="$(date -u '+%Y-%m-%d %H:%M:%S UTC')"
