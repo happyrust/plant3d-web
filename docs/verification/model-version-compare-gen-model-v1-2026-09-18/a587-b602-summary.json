@@ -1,0 +1,267 @@
+{
+  "url": "http://127.0.0.1:3111/?model_source=gen-model-v1&gm_backend_port=8022&unit_refno=24384_26480&compare_autorun=1&compare_a=587&compare_b=602",
+  "scenario": "a587-b602",
+  "startedAt": "2026-09-18T07:33:40.192Z",
+  "requests": [
+    {
+      "method": "GET",
+      "url": "/api/v1/model/versions?dbnum=8000&refno=24384%2F26480",
+      "at": 1789716821745
+    },
+    {
+      "method": "POST",
+      "url": "/api/v1/model/history/generate",
+      "at": 1789716821856
+    },
+    {
+      "method": "POST",
+      "url": "/api/v1/model/history/generate",
+      "at": 1789716821856
+    },
+    {
+      "method": "GET",
+      "url": "/api/v1/tasks/model-history-20260918-153341-000001",
+      "at": 1789716821999
+    },
+    {
+      "method": "GET",
+      "url": "/api/v1/tasks/model-history-20260918-153341-000002",
+      "at": 1789716822000
+    },
+    {
+      "method": "POST",
+      "url": "/api/v1/model/history/query",
+      "at": 1789716822002
+    },
+    {
+      "method": "POST",
+      "url": "/api/v1/model/history/query",
+      "at": 1789716822002
+    },
+    {
+      "method": "POST",
+      "url": "/api/v1/model/history/query",
+      "at": 1789716822003
+    },
+    {
+      "method": "POST",
+      "url": "/api/v1/model/history/query",
+      "at": 1789716822003
+    },
+    {
+      "method": "DELETE",
+      "url": "/api/v1/model/history/24384_26480%40587",
+      "at": 1789716824646
+    },
+    {
+      "method": "DELETE",
+      "url": "/api/v1/model/history/24384_26480%40602",
+      "at": 1789716824646
+    }
+  ],
+  "pageErrors": [],
+  "consoleErrors": [
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Failed to load model projects from API: Error: Failed to load projects: 404 Not Found\n    at http://127.0.0.1:3111/src/composables/useModelProjects.ts?t=1789597470767:84:17",
+    "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+    "[vite] failed to connect to websocket.\nyour current setup:\n  (browser) 127.0.0.1:3111/ <--[HTTP]--> 127.0.0.1:3111/ (server)\n  (browser) 127.0.0.1:3111/ <--[WebSocket (failing)]--> 127.0.0.1:3111/ (server)\nCheck out your Vite / network configuration and https://vite.dev/config/server-options.html#se",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+    "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+    "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)"
+  ],
+  "steps": [
+    {
+      "at": "2026-09-18T07:33:40.367Z",
+      "name": "goto",
+      "url": "http://127.0.0.1:3111/?model_source=gen-model-v1&gm_backend_port=8022&unit_refno=24384_26480&compare_autorun=1&compare_a=587&compare_b=602"
+    },
+    {
+      "at": "2026-09-18T07:33:41.697Z",
+      "name": "panel opened by compare_autorun"
+    },
+    {
+      "at": "2026-09-18T07:33:42.288Z",
+      "name": "versions listed",
+      "count": 11,
+      "a": "587",
+      "b": "602",
+      "options": [
+        "587 · 2026/09/15 14:59 · delivery",
+        "589 · 2026/09/15 15:00 · placement",
+        "591 · 2026/09/15 15:01 · placement",
+        "592 · 2026/09/15 15:01 · placement",
+        "593 · 2026/09/15 15:01 · placement",
+        "595 · 2026/09/15 15:02 · placement",
+        "596 · 2026/09/15 15:02 · placement",
+        "598 · 2026/09/15 15:03 · placement",
+        "600 · 2026/09/15 15:03 · placement",
+        "602 · 2026/09/15 15:03 · placement",
+        "604 · 2026/09/15 15:05 · tombstone"
+      ]
+    },
+    {
+      "at": "2026-09-18T07:33:42.292Z",
+      "name": "compare finished",
+      "summary": "新增 0删除 0修改 1未变 0"
+    },
+    {
+      "at": "2026-09-18T07:33:42.298Z",
+      "name": "viewer state",
+      "unitRefno": "24384_26480",
+      "beforeSesno": 587,
+      "afterSesno": 602,
+      "beforeObjects": 1,
+      "afterObjects": 1,
+      "environmentGeneratedAt": null,
+      "environmentLoadedRefnos": 0,
+      "activeSide": "after",
+      "viewMode": "single"
+    },
+    {
+      "at": "2026-09-18T07:33:42.406Z",
+      "name": "tree diff",
+      "visible": true,
+      "pill": "587 → 602 差异模式"
+    },
+    {
+      "at": "2026-09-18T07:33:44.624Z",
+      "name": "split",
+      "splitSummary": "左 A · sesno 587 · 右 B · sesno 602"
+    },
+    {
+      "at": "2026-09-18T07:33:46.215Z",
+      "name": "closed",
+      "deletes": 2,
+      "treeDiffBarAfterClose": false
+    }
+  ],
+  "versionsResponse": {
+    "dbnum": 8000,
+    "unit_refno": "24384/26480",
+    "unit_noun": "EQUI",
+    "file_latest_sesno": 623,
+    "truncated": false,
+    "versions": [
+      {
+        "sesno": 587,
+        "session_time": "2026-09-15T06:59:27+00:00",
+        "impact_kind": "delivery"
+      },
+      {
+        "sesno": 589,
+        "session_time": "2026-09-15T07:00:41+00:00",
+        "impact_kind": "placement"
+      },
+      {
+        "sesno": 591,
+        "session_time": "2026-09-15T07:01:13+00:00",
+        "impact_kind": "placement"
+      },
+      {
+        "sesno": 592,
+        "session_time": "2026-09-15T07:01:13+00:00",
+        "impact_kind": "placement"
+      },
+      {
+        "sesno": 593,
+        "session_time": "2026-09-15T07:01:13+00:00",
+        "impact_kind": "placement"
+      },
+      {
+        "sesno": 595,
+        "session_time": "2026-09-15T07:02:23+00:00",
+        "impact_kind": "placement"
+      },
+      {
+        "sesno": 596,
+        "session_time": "2026-09-15T07:02:49+00:00",
+        "impact_kind": "placement"
+      },
+      {
+        "sesno": 598,
+        "session_time": "2026-09-15T07:03:00+00:00",
+        "impact_kind": "placement"
+      },
+      {
+        "sesno": 600,
+        "session_time": "2026-09-15T07:03:12+00:00",
+        "impact_kind": "placement"
+      },
+      {
+        "sesno": 602,
+        "session_time": "2026-09-15T07:03:57+00:00",
+        "impact_kind": "placement"
+      },
+      {
+        "sesno": 604,
+        "session_time": "2026-09-15T07:05:47+00:00",
+        "impact_kind": "tombstone"
+      }
+    ],
+    "cached": true,
+    "elapsed_ms": 2204,
+    "stats": {
+      "sessions": 623,
+      "windows_with_changes": 620,
+      "candidates": 47502,
+      "membership_checks": 47491,
+      "members_hit": 2,
+      "sets_built": 633,
+      "index_diff_ms": 959,
+      "set_build_ms": 782,
+      "membership_ms": 514
+    }
+  },
+  "versionsStatus": 200,
+  "historyQueryRows": 2,
+  "versions": [
+    "587 · 2026/09/15 14:59 · delivery",
+    "589 · 2026/09/15 15:00 · placement",
+    "591 · 2026/09/15 15:01 · placement",
+    "592 · 2026/09/15 15:01 · placement",
+    "593 · 2026/09/15 15:01 · placement",
+    "595 · 2026/09/15 15:02 · placement",
+    "596 · 2026/09/15 15:02 · placement",
+    "598 · 2026/09/15 15:03 · placement",
+    "600 · 2026/09/15 15:03 · placement",
+    "602 · 2026/09/15 15:03 · placement",
+    "604 · 2026/09/15 15:05 · tombstone"
+  ],
+  "selectedA": "587",
+  "selectedB": "602",
+  "summaryText": "新增 0删除 0修改 1未变 0",
+  "errorText": null,
+  "viewerState": {
+    "unitRefno": "24384_26480",
+    "beforeSesno": 587,
+    "afterSesno": 602,
+    "beforeObjects": 1,
+    "afterObjects": 1,
+    "environmentGeneratedAt": null,
+    "environmentLoadedRefnos": 0,
+    "activeSide": "after",
+    "viewMode": "single"
+  },
+  "showBefore": "A · sesno 5872026/09/15 14:59",
+  "showAfter": "B · sesno 6022026/09/15 15:03",
+  "environmentText": "最新环境 已固定当前加载范围：0 个 refno 刷新 混合时间视图：环境始终取 dbnum 最新模型，目标单元取所选 sesno。",
+  "treeDiffBarVisible": true,
+  "treeDiffPill": "587 → 602 差异模式",
+  "splitSummary": "左 A · sesno 587 · 右 B · sesno 602",
+  "deletesAfterClose": 2,
+  "treeDiffBarAfterClose": false,
+  "ok": true,
+  "finishedAt": "2026-09-18T07:33:46.272Z",
+  "requestSummary": {
+    "GET /api/v1/model/versions": 1,
+    "POST /api/v1/model/history/{key}": 6,
+    "GET /api/v1/tasks/{id}": 2,
+    "DELETE /api/v1/model/history/{key}": 2
+  }
+}

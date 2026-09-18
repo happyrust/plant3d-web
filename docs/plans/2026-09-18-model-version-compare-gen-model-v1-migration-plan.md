@@ -161,7 +161,9 @@ legacy 下与从前的可见差别只有一处、且不可见于用户：A/B 隔
 - Q18：删 `useModelGeneration.showModelUnitVersion` / `loadedUnitVersionRefnos`、`modelUnitVersionApi.getModelUnitCommit`、ViewerPanel `showModelByRefnos {dbnum, sesno}` 分支。
 - Q6：面板 `ROOT_NOUNS` 硬编码删除，单元根合法性交给模型来源（v1 由服务端 422 翻译；legacy 无此判定，非根参考号只会得到「至少需要两个模型提交」）。
 - 验证：全仓 vitest 347 文件 / 3084 用例全绿（适配器 9 条、URL 入口 2 + 1 条新增）；`type-check` 基线外仍只剩 `useSpatialQuery.test.ts:1969`；ESLint 零告警。
-  **未真机**：本机 `:8022` 仍是另一会话的旧二进制，`?model_source=gen-model-v1` 端到端要等它换成含 `ef2284f12` 的构建；legacy 对拍同样未做。
+  **真机（15:32 追记）**：`:8022` 换成含 `ef2284f12` 的 `d47d747fd` 后，`GET model/versions` 冷 2.2 s / 缓存 17 ms（release，623 会话）；dev `:3111`
+  两条场景（602→604 tombstone、587→602 placement）端到端全过——面板自动开、11 版、A/B、单视口 / 分屏、树内差异、退出 DELETE 快照；
+  证据 `docs/verification/model-version-compare-gen-model-v1-2026-09-18/`。legacy 对拍仍未做（`:3100` 未起）。
 
 ## 3. 后端契约（gen-model-refactor，ADR-081）
 
@@ -229,7 +231,7 @@ legacy 下与从前的可见差别只有一处、且不可见于用户：A/B 隔
 | B | §1 全部 + §1.4 桥接 | §1.5 四条 |
 | A1（前端）✅ | §2 端口 + legacy 适配器 + 面板 / ViewerPanel 改走端口 | `model_source=legacy` 行为逐字节不变（面板旧用例一字未改全过）——plant3d-web `ec187960` |
 | A2（后端）✅ | §3.1 | 真库探针 ams7997 BRAN / ams8000 EQUI 与证据文档一致；legacy 逐条对拍**未做**（`:3100` 未起）——gen-model-refactor `ef2284f12` |
-| A3（前端）✅ | gen-model-v1 `listVersions` / `loadVersion` 接线 + Q16 URL 入口 + Q18 删死路 + Q6 拆 `ROOT_NOUNS` | 单测全绿；`?model_source=gen-model-v1` **真机端到端未做**（本机 `:8022` 还是旧二进制） |
+| A3（前端）✅ | gen-model-v1 `listVersions` / `loadVersion` 接线 + Q16 URL 入口 + Q18 删死路 + Q6 拆 `ROOT_NOUNS` | 单测全绿；**真机端到端 ✅**（15:32 `:8022` 换成 `d47d747fd` 后，dev `:3111` 两条场景全过：`docs/verification/model-version-compare-gen-model-v1-2026-09-18/`）——plant3d-web `961a3ea5` |
 | 退役 | legacy 开关到期时删 `legacy/versionSource.ts` 与 parquet 版本取数 | — |
 
 ## 6. 明确不做

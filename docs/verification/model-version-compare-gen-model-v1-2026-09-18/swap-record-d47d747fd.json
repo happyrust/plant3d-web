@@ -1,0 +1,31 @@
+{
+  "swappedAt": "2026-09-18T15:32:27+08:00",
+  "reason": "把 :8022 换成含 gen-model-refactor ef2284f12（ADR-081 GET /api/v1/model/versions）的构建，跑版本对比 gen-model-v1 端到端。用户 15:2x 拍板「把本机 :8022 换成含 ef2284f12 的新构建，用 ?model_source=gen-model-v1&unit_refno=24384_26480&compare_autorun=1 跑一遍端到端」",
+  "old": {
+    "pid": 57636,
+    "exe": "_runs\\review-full-8031\\aios-database-7bcdd60df.exe",
+    "build_id": "0.1.27+g7bcdd60df238.1789700589",
+    "started": "2026-09-18T11:54:12+08:00",
+    "branch": "codex/model-projection-cache @ 7bcdd60df",
+    "health_before_stop": "core=ready open_db_count=29"
+  },
+  "new": {
+    "pid": 88680,
+    "exe": "_runs\\review-full-8031\\aios-database-d47d747fd.exe",
+    "sha256_prefix": "B54B28F6F74E8975",
+    "build_id": "0.1.27+gd47d747fd4cf.1789716516",
+    "git_commit": "d47d747fd",
+    "built_from": "不是 gen-model-refactor 分支头：:8022 上跑的是 codex/model-projection-cache 的 7bcdd60df（surface-clearance 四条口径，别的会话在用），直接换成 gen-model-refactor@ef2284f12 会把那四条丢掉。于是 git worktree add --detach old\\.scratch\\wt-mv-d47d747fd 7bcdd60df → git cherry-pick ef2284f12（只 changelog.md 冲突，两段都留）→ d47d747fd → cargo build --release --features http_api --bin aios-database（2 m 38 s，15:28–15:31；worktree 必须放在 old\\.scratch 下，vendor/* 是相对路径、那里有 vendor 的 junction）。D:\\Rust\\target\\release\\aios-database.exe 15:31:12 那份立刻拷走，--version 与 build_id 核过",
+    "launch": "同 11:54 那次：cwd gen-model-model-cache 仓库根（DbOption.toml rocksdb @ 8009，watch_dbnums 7998 / 8000）、serve、非提权 Start-Process、env RUST_MIN_STACK=134217728 AIOS_OPEN_BROWSER=0 AIOS_RESTART_HANDOFF=1 RUST_BACKTRACE=1；日志 logs\\gm-8022-d47d747fd.log(.err)，pid 写 gm-8022-d47d747fd.pid",
+    "timeline": "15:32:26 Stop-Process 57636（741 ms 后 8022 无监听）→ 15:32:27.4 起 88680 → 15:32:34 /health core=ready（open_db_count 0 → 29 随后补齐）"
+  },
+  "downtime_seconds": 7,
+  "checks_after": {
+    "versions_cold": "GET /api/v1/model/versions?dbnum=8000&refno=24384/26480 → 200，2353 ms（服务端 elapsed_ms 2204，release build）：EQUI，file_latest_sesno 623，11 版 587 delivery / 589 591 592 593 595 596 598 600 602 placement / 604 tombstone；stats sessions 623 · windows_with_changes 620 · candidates 47502 · membership_checks 47491 · members_hit 2 · sets_built 633 · index_diff 959 ms · set_build 782 ms · membership 514 ms",
+    "versions_cached": "同一请求（refno 写成 24384_26480）17 ms，cached=true",
+    "error_paths": "refno=24384/1 → 404 REFNO_NOT_FOUND；dbnum=7997&refno=24384/26480 → 400 INVALID_REFNO；since_sesno=999999 → 404 SESSION_NOT_FOUND；since_sesno=595&limit=2 → 200 truncated=true [596, 598]",
+    "e2e": "见 README.md：dev :3111（别的会话的 vite，HMR websocket 在浏览器侧掐掉）两条场景全过"
+  },
+  "untouched": [":8023", ":8024", ":3102 / :3111 / :3120 三个 dev server"],
+  "worktree_kept": "old\\.scratch\\wt-mv-d47d747fd（d47d747fd，detached；要重建同一份二进制就在这里 cargo build）"
+}
