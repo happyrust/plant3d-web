@@ -1,0 +1,34 @@
+{
+  "swappedAt": "2026-09-18T10:16:29+08:00",
+  "instance": "_runs\\surface-clearance-8024（mem 验证实例）",
+  "reason": "gen-model-model-cache 83beef257：贴合（距离 ≤ 垂距容差 max(1%, 0.05 mm)）不打垂距射线——垂距 = 距离本身（0 mm 就是 0）、垂足 = 目标侧最近点、不报 perpendicular_ray_missed；用户 09:56 拍板「0 mm 贴合的 4 对也不要警告」，改后重跑 126 对",
+  "old": {
+    "pid": 58268,
+    "exe": "_runs\\surface-clearance-8024\\aios-database-0dce7fee.exe",
+    "build_id": "0.1.27+g0dce7fee26c9.1789695900",
+    "started": "2026-09-18T09:48:31+08:00",
+    "resident_records_before_stop": 1215
+  },
+  "new": {
+    "pid": 15392,
+    "exe": "_runs\\surface-clearance-8024\\aios-database-83beef25.exe",
+    "sha256_prefix": "5ED7FFC789CA1CB2",
+    "build_id": "0.1.27+g83beef25754b.1789697591",
+    "git_commit": "83beef25754b",
+    "git_dirty": false,
+    "includes_others": "83beef257 叠在另一条会话的 2d27bde35（fix(rooms): 房间归属的点包含换成射线奇偶）之上，二进制含它",
+    "built_from": "git worktree add --detach .scratch\\wt-83beef257-touching 83beef257; cargo build --release --features http_api --bin aios-database（2 m 44 s，CARGO_TARGET_DIR=D:\\Rust\\target；worktree 用完已删）",
+    "launch": "同 README §1；日志 logs\\20260918-101628.*.log",
+    "ready_after_seconds": 4
+  },
+  "downtime_seconds": 4,
+  "data_after": {
+    "model_ensure_calls": 97,
+    "resident_records": 1215
+  },
+  "checks_after": {
+    "golden": "24384/22582 × 17496/105912 → 64.42777 mm, intersects=false, outer/geometric, 法向 (−0.9993213, 0.036837157, 0), ⊥ 64.49526, 两点逐位相同, sesno 619/729, pairs 2/1/1, warnings [] —— 与 09-17 §2 一致（http-surface-clearance-elbo-x-wall1-83beef257.json）",
+    "replay_126_pairs": "126/126 → 200；intersects 17 = 17；distance max|Δ| 0.005 mm；有垂距 73 → 77 对（多出的正是 4 对 0 mm 贴合：SCTN 24383/68484 / 24383/101200 × PANE 24383/101207 / 24383/68491，side/pca，⊥ 0，from = to = 目标侧最近点 (−10147.158, 12070.674, 3077.96)，无 warning）；⊥ 仍只有 24384/24514 × 17496/118130 那 1 对差 0.12 mm；与 0dce7fee2 那轮逐对比只有这 4 对变了；剩下的 perpendicular_ray_missed 3 对（FTUB 24384/24671 × PANE 17496/135244 46.6 mm、24384/2683 × 17496/129513 93.1 mm、24384/3110 × 17496/129020 184.1 mm，平板棱两侧都是主面）；分布 side 36 / end 27 / inner 23 / outer 21 / top 2 / 相交 17；opening 0 对 —— replay-126-pairs-83beef257.jsonl"
+  },
+  "untouched": [":8022（994f2e0cc）", ":8023"]
+}
