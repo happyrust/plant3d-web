@@ -30,7 +30,7 @@ import {
 } from '@/composables/useTreeVersionDiff';
 import { cn } from '@/lib/utils';
 import { isGenModelV1Source } from '@/model-source/kind';
-import { MODEL_UNIT_VERSION_COMPARE_EVENT } from '@/utils/modelUnitVersionCompare';
+import { MODEL_UNIT_VERSION_COMPARE_EVENT, requestModelVersionInspect } from '@/utils/modelUnitVersionCompare';
 
 const props = defineProps<{
   viewer: DtxCompatViewer | null;
@@ -1436,6 +1436,20 @@ function viewProperties() {
   closeContextMenu();
 }
 
+/**
+ * 「查看历史版本」：把这个构件交给版本对比面板。面板自己解它所属的最小交付单元——树里点的多半是
+ * 单元里的某个构件（FTUB / BOX…），不是单元根。
+ */
+function viewVersionHistory() {
+  if (!contextNodeId.value) return;
+  const refno = treeNodeRefno(contextNodeId.value);
+  if (refno) {
+    requestModelVersionInspect(refno);
+    ensurePanelAndActivate('modelVersionCompare');
+  }
+  closeContextMenu();
+}
+
 async function showContainingRoomFromContext(showModels: boolean) {
   if (!contextNodeId.value) return;
 
@@ -1918,6 +1932,12 @@ function onSearchEnter(value: string) {
           class="w-full rounded px-2 py-1 text-left text-sm hover:bg-muted"
           @click="viewProperties">
           查看属性
+        </button>
+        <button type="button"
+          class="w-full rounded px-2 py-1 text-left text-sm hover:bg-muted"
+          data-testid="model-tree-view-version-history"
+          @click="viewVersionHistory">
+          查看历史版本
         </button>
         <template v-if="contextNodeCanShowRoom">
           <div class="my-1 h-px bg-border" />

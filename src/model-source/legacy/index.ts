@@ -105,6 +105,7 @@ async function legacyModelVersionsRetired(): Promise<never> {
  */
 const versions: ModelVersionSource = {
   listVersions: legacyModelVersionsRetired,
+  listElementVersions: legacyModelVersionsRetired,
   loadVersion: legacyModelVersionsRetired,
   attributesAt: legacyModelVersionsRetired,
 };

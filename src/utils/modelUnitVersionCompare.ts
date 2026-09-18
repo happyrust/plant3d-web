@@ -18,6 +18,28 @@ export type ModelUnitGeometryDiff = {
 
 export const MODEL_UNIT_VERSION_COMPARE_EVENT = 'plant3d:model-unit-version-compare';
 export const MODEL_UNIT_VERSION_COMPARE_STATE_EVENT = 'plant3d:model-unit-version-compare-state';
+/** 「查看这个构件的历史版本」：模型树 / 属性面板发，版本对比面板收 */
+export const MODEL_VERSION_INSPECT_EVENT = 'plant3d:model-version-inspect';
+
+/**
+ * 待认领的「查看历史版本」请求。
+ *
+ * 光发事件不够：请求多半是在面板还没开的时候发出来的（右键菜单里点的），`ensurePanelAndActivate`
+ * 把面板建起来时事件早就过去了。所以请求同时留一份在这里，面板挂载时自己来取。
+ */
+let pendingInspectRefno: string | null = null;
+
+export function requestModelVersionInspect(refno: string): void {
+  pendingInspectRefno = refno;
+  window.dispatchEvent(new CustomEvent(MODEL_VERSION_INSPECT_EVENT, { detail: { refno } }));
+}
+
+/** 取走待认领的那一笔（取一次就没了）。 */
+export function takePendingModelVersionInspect(): string | null {
+  const refno = pendingInspectRefno;
+  pendingInspectRefno = null;
+  return refno;
+}
 
 /**
  * 版本对比的 URL 入口（2026-09-18 Q16，照 `spatial_refno / spatial_radius / spatial_autorun` 的前缀体例）：

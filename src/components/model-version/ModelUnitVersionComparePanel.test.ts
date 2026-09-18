@@ -3,11 +3,12 @@ import { createApp, nextTick } from 'vue';
 
 import ModelUnitVersionComparePanel from './ModelUnitVersionComparePanel.vue';
 
-import type { ModelVersion, ModelVersionGeometry } from '@/model-source';
+import type { ModelElementVersionTimeline, ModelVersion, ModelVersionGeometry } from '@/model-source';
 
 // 面板只经模型来源端口的 `versions` 取数；这里给一份可编程的 ModelVersionSource，不建真适配器
 const versionSourceMocks = vi.hoisted(() => ({
   listVersions: vi.fn(),
+  listElementVersions: vi.fn(),
   loadVersion: vi.fn(),
   attributesAt: vi.fn(),
 }));
@@ -28,6 +29,31 @@ const versions: ModelVersion[] = [
   version(791, '2026-07-22T01:00:00Z'),
   version(897, '2026-07-22T02:00:00Z'),
 ];
+
+/** 查的就是单元根自己：两列说的是同一件事 */
+const unitTimeline: ModelElementVersionTimeline = {
+  dbnum: 7997,
+  refno: '24381_145018',
+  noun: 'BRAN',
+  unitRefno: '24381_145018',
+  unitNoun: 'BRAN',
+  unitColumnOnly: false,
+  versions: versions.map((item) => ({ sesno: item.sesno, sessionTime: item.sessionTime, elementImpact: 'mesh', unitImpact: 'mesh' })),
+};
+
+/** 查的是单元里的一个构件（`1_2`，791 有 897 没有）：791 那一版它自己变过，897 那一版没有 */
+const elementTimeline: ModelElementVersionTimeline = {
+  dbnum: 7997,
+  refno: '1_2',
+  noun: 'VALV',
+  unitRefno: '24381_145018',
+  unitNoun: 'BRAN',
+  unitColumnOnly: false,
+  versions: [
+    { sesno: 791, sessionTime: '2026-07-22T01:00:00Z', elementImpact: 'mesh', unitImpact: 'mesh' },
+    { sesno: 897, sessionTime: '2026-07-22T02:00:00Z', elementImpact: null, unitImpact: 'mesh' },
+  ],
+};
 
 function geometry(entries: Map<string, unknown[]>): ModelVersionGeometry {
   return { refnos: [...entries.keys()], entries: entries as never, release: vi.fn().mockResolvedValue(undefined) };
@@ -54,6 +80,7 @@ async function flushUi(): Promise<void> {
 describe('ModelUnitVersionComparePanel', () => {
   beforeEach(() => {
     versionSourceMocks.listVersions.mockResolvedValue(versions);
+    versionSourceMocks.listElementVersions.mockResolvedValue(unitTimeline);
     versionSourceMocks.loadVersion.mockImplementation(async (item: ModelVersion) => geometryBySesno[item.sesno]!());
   });
 
@@ -102,6 +129,68 @@ describe('ModelUnitVersionComparePanel', () => {
     expect(versionSourceMocks.loadVersion.mock.calls.map(([item]) => (item as ModelVersion).sesno)).toEqual([791, 897]);
 
     window.removeEventListener('plant3d:model-unit-version-compare', listener);
+    app.unmount();
+  });
+
+  it('填构件参考号：版本表按所属单元列、每一版标出本构件变没变，对比按单元跑且结果收窄到它', async () => {
+    versionSourceMocks.listElementVersions.mockResolvedValue(elementTimeline);
+    const events: CustomEvent[] = [];
+    const listener = (event: Event) => events.push(event as CustomEvent);
+    window.addEventListener('plant3d:model-unit-version-compare', listener);
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const app = createApp(ModelUnitVersionComparePanel);
+    app.mount(host);
+
+    const input = host.querySelector('[data-testid="model-unit-compare-refno"]') as HTMLInputElement;
+    input.value = '1/2';
+    input.dispatchEvent(new Event('input'));
+    (host.querySelector('[data-testid="model-unit-compare-load"]') as HTMLButtonElement).click();
+    await flushUi();
+
+    // 构件 → 所属单元：时间线问的是构件，版本表问的是它所属的单元
+    expect(versionSourceMocks.listElementVersions).toHaveBeenCalledWith(7997, '1_2');
+    expect(versionSourceMocks.listVersions).toHaveBeenCalledWith(7997, '24381_145018');
+    expect(host.querySelector('[data-testid="model-unit-compare-scope"]')?.textContent).toContain('所属单元 24381_145018');
+    const options = host.querySelector('[data-testid="model-unit-compare-a"]') as HTMLSelectElement;
+    expect(options.textContent).toContain('本构件 mesh');
+    expect(options.textContent).toContain('本构件 未变');
+
+    (host.querySelector('[data-testid="model-unit-compare-run"]') as HTMLButtonElement).click();
+    await flushUi();
+
+    // 对比仍按单元跑（几何只按单元生成）
+    expect(events.at(-2)?.detail).toEqual(expect.objectContaining({ action: 'open', unitRefno: '24381_145018' }));
+    // 跑完把镜头与列表收窄到查的那个构件：1_2 在 897 里没有，是「删除」行
+    expect(events.at(-1)?.detail).toEqual({ action: 'focus', refno: '1_2' });
+    const queried = host.querySelector('[data-queried-element="true"]');
+    expect(queried?.textContent).toContain('1_2');
+    expect(queried?.textContent).toContain('本构件');
+
+    window.removeEventListener('plant3d:model-unit-version-compare', listener);
+    app.unmount();
+  });
+
+  it('构件不在任何最小交付单元下：给明确原因，不去查版本表', async () => {
+    versionSourceMocks.listElementVersions.mockResolvedValue({
+      ...elementTimeline, refno: '1_9', noun: 'ZONE', unitRefno: null, unitNoun: null, versions: [],
+    } satisfies ModelElementVersionTimeline);
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const app = createApp(ModelUnitVersionComparePanel);
+    app.mount(host);
+
+    const input = host.querySelector('[data-testid="model-unit-compare-refno"]') as HTMLInputElement;
+    input.value = '1_9';
+    input.dispatchEvent(new Event('input'));
+    (host.querySelector('[data-testid="model-unit-compare-load"]') as HTMLButtonElement).click();
+    await flushUi();
+
+    expect(host.querySelector('[data-testid="model-unit-compare-error"]')?.textContent).toContain('不在任何最小交付单元下');
+    expect(versionSourceMocks.listVersions).not.toHaveBeenCalled();
+
     app.unmount();
   });
 

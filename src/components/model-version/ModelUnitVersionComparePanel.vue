@@ -9,6 +9,7 @@ import {
   getModelSource,
   getModelSourceKind,
   LegacyModelVersionsRetiredError,
+  type ModelElementVersionTimeline,
   type ModelVersion,
   type ModelVersionGeometry,
 } from '@/model-source';
@@ -20,8 +21,10 @@ import {
   geometrySnapshotsFromInstanceEntries,
   MODEL_UNIT_VERSION_COMPARE_EVENT,
   MODEL_UNIT_VERSION_COMPARE_STATE_EVENT,
+  MODEL_VERSION_INSPECT_EVENT,
   orderModelUnitVersionPair,
   readModelUnitVersionCompareUrl,
+  takePendingModelVersionInspect,
   type ModelUnitCompareSide,
   type ModelUnitCompareViewMode,
   type ModelUnitGeometryDiff,
@@ -41,6 +44,11 @@ const legacyRetired = getModelSourceKind() === 'legacy';
 const unitRefno = ref(urlConfig.unitRefno);
 const dbnum = ref<number | null>(null);
 const versions = ref<ModelVersion[]>([]);
+/**
+ * 查的那个构件的版本时间线（`listElementVersions`）。输入可以是任意构件，不必是单元根：
+ * 版本表按它所属单元列（几何只按单元生成），但每一行标出「这一版它自己变没变」。
+ */
+const elementTimeline = ref<ModelElementVersionTimeline | null>(null);
 /** 本次对比持有的版本几何，关闭 / 重查时 `release()`（gen-model-v1 下是服务端快照） */
 let heldGeometries: ModelVersionGeometry[] = [];
 const beforeSesno = ref<number | null>(null);
@@ -57,6 +65,23 @@ const compareCompleted = ref(false);
 let requestId = 0;
 
 const normalizedRefno = computed(() => unitRefno.value.trim().replace(/\//g, '_'));
+/** 查的那个构件自己就是单元根时，两列说的是同一件事，界面上不再多说一遍 */
+const queriedIsUnitRoot = computed(() => {
+  const timeline = elementTimeline.value;
+  return !timeline || timeline.unitRefno === null || timeline.unitRefno === timeline.refno;
+});
+/** 对比按这个单元跑（几何只按单元生成）；查的是构件时它是解出来的所属单元根 */
+const comparedUnitRefno = computed(() => elementTimeline.value?.unitRefno ?? normalizedRefno.value);
+/** 查的那个构件（不是单元根时才有）：对比结果与三维定位都收窄到它 */
+const queriedElementRefno = computed(() => (queriedIsUnitRoot.value ? null : elementTimeline.value?.refno ?? null));
+/** `sesno → 这一版该构件自身记录的变化`；没有这一版 = 它自己没变 */
+const elementImpactBySesno = computed(() => {
+  const map = new Map<number, string>();
+  for (const row of elementTimeline.value?.versions ?? []) {
+    if (row.elementImpact) map.set(row.sesno, row.elementImpact);
+  }
+  return map;
+});
 const selectedBefore = computed(() => versions.value.find((item) => item.sesno === beforeSesno.value) ?? null);
 const selectedAfter = computed(() => versions.value.find((item) => item.sesno === afterSesno.value) ?? null);
 /** 两个版本几何相同的承诺（`ModelVersion.geometryKey` 相等）；键缺失时不承诺 */
@@ -110,7 +135,12 @@ function messageOf(value: unknown): string {
 }
 
 function versionLabel(item: ModelVersion): string {
-  return `${item.sesno} · ${formatModelUnitVersionTime(item.sessionTime ?? '')} · ${item.impactKind}`;
+  const head = `${item.sesno} · ${formatModelUnitVersionTime(item.sessionTime ?? '')} · ${item.impactKind}`;
+  if (queriedIsUnitRoot.value) return head;
+  // 查的是单元里的某个构件：右列已经是单元，这里补上左列——「本构件」那一格空着就是它自己没变
+  if (elementTimeline.value?.unitColumnOnly) return `${head} · 本构件 ?`;
+  const own = elementImpactBySesno.value.get(item.sesno);
+  return `${head} · 本构件 ${own ?? '未变'}`;
 }
 
 function releaseHeldGeometries(): void {
@@ -129,6 +159,7 @@ async function loadVersions(): Promise<void> {
   error.value = null;
   rows.value = [];
   versions.value = [];
+  elementTimeline.value = null;
   dbnum.value = null;
   beforeSesno.value = null;
   afterSesno.value = null;
@@ -139,23 +170,31 @@ async function loadVersions(): Promise<void> {
     return;
   }
   if (!/^\d+_\d+$/.test(refno)) {
-    error.value = '请输入最小交付单元根参考号，例如 24381_145018';
+    error.value = '请输入构件或交付单元参考号，例如 24384_23262';
     return;
   }
   loadingVersions.value = true;
   try {
     await ensureDbMetaInfoLoaded();
     const resolvedDbnum = getDbnumByRefno(refno);
-    const result = await getModelSource().versions.listVersions(resolvedDbnum, refno);
+    // 先问这个构件的时间线：它自己哪几版变过，以及它属于哪个交付单元（几何只按单元生成，对比得拿它去取）
+    const timeline = await getModelSource().versions.listElementVersions(resolvedDbnum, refno);
+    if (run !== requestId) return;
+    if (!timeline.unitRefno) {
+      throw new Error(`${refno}（${timeline.noun || '类型未知'}）不在任何最小交付单元下，没有可对比的模型版本`);
+    }
+    const result = await getModelSource().versions.listVersions(resolvedDbnum, timeline.unitRefno);
     if (run !== requestId) return;
     if (result.length < 2) throw new Error('该最小交付单元至少需要两个模型提交才能对比');
     dbnum.value = resolvedDbnum;
+    elementTimeline.value = timeline;
     versions.value = result;
     beforeSesno.value = result.at(-2)?.sesno ?? null;
     afterSesno.value = result.at(-1)?.sesno ?? null;
   } catch (cause) {
     if (run === requestId) {
       versions.value = [];
+      elementTimeline.value = null;
       dbnum.value = null;
       error.value = messageOf(cause);
     }
@@ -226,7 +265,7 @@ async function runCompare(): Promise<void> {
     dispatch({
       action: 'open',
       dbnum: dbnum.value,
-      unitRefno: normalizedRefno.value,
+      unitRefno: comparedUnitRefno.value,
       before: {
         version: before,
         sesno: before.sesno,
@@ -242,6 +281,7 @@ async function runCompare(): Promise<void> {
       refnos: rows.value.map((row) => row.refno),
       rows: rows.value,
     });
+    focusQueriedElement();
   } catch (cause) {
     if (run === requestId) error.value = messageOf(cause);
   } finally {
@@ -251,6 +291,20 @@ async function runCompare(): Promise<void> {
 
 function focusRow(refno: string): void {
   dispatch({ action: 'focus', refno });
+}
+
+/**
+ * 查的是单元里的某个构件时，对比一跑完就把结果收窄到它：它那一行如果是 `unchanged`（两版几何一样）
+ * 就先把「包含未变化」打开，否则列表里根本看不见它，然后选中并在三维里定位过去。
+ */
+function focusQueriedElement(): void {
+  const refno = queriedElementRefno.value;
+  if (!refno) return;
+  const row = rows.value.find((item) => item.refno === refno);
+  if (!row) return;
+  if (row.status === 'unchanged') includeUnchanged.value = true;
+  if (statusFilter.value !== 'all' && statusFilter.value !== row.status) statusFilter.value = 'all';
+  focusRow(refno);
 }
 
 function setCompareSide(side: ModelUnitCompareSide): void {
@@ -314,10 +368,31 @@ async function autorunFromUrl(): Promise<void> {
   if (fallbackNote && requestId === run + 1 && !error.value) error.value = fallbackNote;
 }
 
+/** 模型树右键「查看历史版本」：把输入框换成那个构件并直接查一次（面板已开 / 刚被这一笔打开都走这里）。 */
+function inspectRefno(refno: string): void {
+  const normalized = refno.trim().replace(/\//g, '_');
+  if (!normalized) return;
+  unitRefno.value = normalized;
+  void loadVersions();
+}
+
+function handleInspectRequest(event: Event): void {
+  const refno = (event as CustomEvent<{ refno?: string }>).detail?.refno;
+  takePendingModelVersionInspect();
+  if (typeof refno === 'string') inspectRefno(refno);
+}
+
 onMounted(() => {
   window.addEventListener(MODEL_UNIT_VERSION_COMPARE_EVENT, handleCompareLifecycle);
   window.addEventListener(MODEL_UNIT_VERSION_COMPARE_STATE_EVENT, handleCompareRuntime);
+  window.addEventListener(MODEL_VERSION_INSPECT_EVENT, handleInspectRequest);
   dispatch({ action: 'request-state' });
+  // 面板是被「查看历史版本」这一笔打开的：事件在挂载之前就过去了，这里把它认领回来
+  const pending = takePendingModelVersionInspect();
+  if (pending) {
+    inspectRefno(pending);
+    return;
+  }
   void autorunFromUrl();
 });
 onBeforeUnmount(() => {
@@ -325,6 +400,7 @@ onBeforeUnmount(() => {
   closeCompare();
   window.removeEventListener(MODEL_UNIT_VERSION_COMPARE_EVENT, handleCompareLifecycle);
   window.removeEventListener(MODEL_UNIT_VERSION_COMPARE_STATE_EVENT, handleCompareRuntime);
+  window.removeEventListener(MODEL_VERSION_INSPECT_EVENT, handleInspectRequest);
 });
 </script>
 
@@ -335,7 +411,7 @@ onBeforeUnmount(() => {
         <GitCompare class="h-4 w-4 text-primary" />
         <div>
           <h2 class="text-sm font-semibold text-foreground">模型版本对比</h2>
-          <p class="text-[11px] text-muted-foreground">按最小交付单元 sesno 对比</p>
+          <p class="text-[11px] text-muted-foreground">填构件或交付单元参考号，按 sesno 对比</p>
         </div>
       </div>
 
@@ -343,7 +419,7 @@ onBeforeUnmount(() => {
         <input v-model="unitRefno"
           class="min-w-0 flex-1 rounded-md border border-input bg-background px-2.5 py-1.5 text-xs outline-none focus:border-primary"
           data-testid="model-unit-compare-refno"
-          placeholder="根参考号，例如 24381_145018"
+          placeholder="构件或单元根参考号，例如 24384_23262"
           autocomplete="off" />
         <button type="submit"
           class="inline-flex items-center gap-1 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground disabled:opacity-50"
@@ -353,7 +429,15 @@ onBeforeUnmount(() => {
           查询
         </button>
       </form>
-      <p v-if="dbnum !== null" class="mt-1.5 text-[11px] text-muted-foreground">DB {{ dbnum }} · {{ normalizedRefno }}</p>
+      <p v-if="dbnum !== null" class="mt-1.5 text-[11px] text-muted-foreground" data-testid="model-unit-compare-scope">
+        DB {{ dbnum }} · {{ normalizedRefno }}
+        <template v-if="queriedElementRefno">
+          （{{ elementTimeline?.noun }}）· 所属单元 {{ comparedUnitRefno }}（{{ elementTimeline?.unitNoun }}）
+        </template>
+      </p>
+      <p v-if="elementTimeline?.unitColumnOnly && queriedElementRefno" class="mt-1 text-[11px] text-amber-600" data-testid="model-unit-compare-element-column-missing">
+        服务端还没有 <code>element/versions</code>：只列得出单元那一列，「本构件」那一格要新版服务端。
+      </p>
     </header>
 
     <div class="min-h-0 flex-1 overflow-auto p-3">
@@ -526,7 +610,9 @@ onBeforeUnmount(() => {
         <div class="mt-2 space-y-1" data-testid="model-unit-compare-list">
           <button v-for="row in visibleRows"
             :key="row.refno"
-            class="flex w-full items-center gap-2 rounded border border-border px-2 py-1.5 text-left text-xs hover:bg-muted/50"
+            class="flex w-full items-center gap-2 rounded border px-2 py-1.5 text-left text-xs hover:bg-muted/50"
+            :class="row.refno === queriedElementRefno ? 'border-primary bg-primary/5' : 'border-border'"
+            :data-queried-element="row.refno === queriedElementRefno ? 'true' : undefined"
             @click="focusRow(row.refno)">
             <span class="rounded px-1.5 py-0.5 text-[10px]"
               :class="{
@@ -538,6 +624,7 @@ onBeforeUnmount(() => {
               {{ { added: '新增', deleted: '删除', modified: '修改', unchanged: '未变' }[row.status] }}
             </span>
             <span class="min-w-0 flex-1 truncate font-mono">{{ row.refno }}</span>
+            <span v-if="row.refno === queriedElementRefno" class="rounded bg-primary/10 px-1 py-0.5 text-[10px] text-primary">本构件</span>
             <span class="text-[10px] text-muted-foreground">{{ row.noun }}</span>
           </button>
           <p v-if="visibleRows.length === 0" class="py-4 text-center text-xs text-muted-foreground">当前筛选没有差异项</p>

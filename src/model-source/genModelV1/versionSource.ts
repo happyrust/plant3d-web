@@ -17,6 +17,8 @@
 import { groupInstanceEntriesByRefno } from './instanceMapping';
 
 import type {
+  ModelElementVersion,
+  ModelElementVersionTimeline,
   ModelVersion,
   ModelVersionAttributes,
   ModelVersionGeometry,
@@ -26,12 +28,14 @@ import type {
 
 import {
   fromV1Refno,
+  genModelV1ElementVersions,
   genModelV1ModelHistoryDelete,
   genModelV1ModelHistoryGenerate,
   genModelV1ModelHistoryQuery,
   genModelV1ModelVersions,
   genModelV1TaskGet,
   isGenModelV1ApiError,
+  type ElementVersionsResponse,
   type GenModelV1RequestOptions,
   type GeomInstQuery,
   type HistoryAttributesDto,
@@ -56,6 +60,7 @@ const IDENTITY: V1Transform = { translation: [0, 0, 0], rotation: [0, 0, 0, 1], 
 /** 便于测试注入的后端面；缺省全走 `genModelV1Api`。 */
 export type GenModelV1VersionApi = {
   listVersions: typeof genModelV1ModelVersions;
+  listElementVersions: typeof genModelV1ElementVersions;
   historyGenerate: typeof genModelV1ModelHistoryGenerate;
   taskGet: typeof genModelV1TaskGet;
   historyQuery: typeof genModelV1ModelHistoryQuery;
@@ -67,6 +72,7 @@ export type GenModelV1VersionApi = {
 
 const defaultApi: GenModelV1VersionApi = {
   listVersions: genModelV1ModelVersions,
+  listElementVersions: genModelV1ElementVersions,
   historyGenerate: genModelV1ModelHistoryGenerate,
   taskGet: genModelV1TaskGet,
   historyQuery: genModelV1ModelHistoryQuery,
@@ -103,6 +109,16 @@ function readTypes(detail: unknown): string[] {
 function readNoun(detail: unknown): string {
   const noun = (detail as { noun?: unknown } | null | undefined)?.noun;
   return typeof noun === 'string' ? noun : '';
+}
+
+/**
+ * 「服务端没有这条路由」——旧构建的 404。与「这个 refno 服务端找不到」（同样 404，但 `code` 是
+ * `REFNO_NOT_FOUND` 一类）分开：后者是真实答案，不该被回落掩盖。
+ */
+function isMissingRoute(error: unknown): boolean {
+  // 路由不存在时 axum 回的 404 没有错误信封，客户端按状态码回落成 `not_found`；
+  // 服务端自己答的 404 带 `REFNO_NOT_FOUND` / `SESSION_NOT_FOUND` 这样的信封码，不在这里回落。
+  return isGenModelV1ApiError(error) && error.status === 404 && error.code === 'not_found';
 }
 
 export function toModelVersion(
@@ -231,6 +247,70 @@ export function createGenModelV1ModelVersionSource(api: GenModelV1VersionApi = d
     throw new Error(`模型版本表超过 ${MAX_PAGES} 页仍未取完（dbnum ${dbnum} 单元 ${normalized}），放弃`);
   }
 
+  /**
+   * 构件的版本时间线：`GET /api/v1/element/versions`，同样按 `since_sesno` 连续拉到全表。
+   *
+   * 服务端还没有这条路由（旧构建回 404 / `not_found`）时回落到单元表：先把这个 refno 当单元根试
+   * （它本来就是单元根的话，回落后除了左列为空以外什么都不缺）；它不是单元根就把 `NotDeliveryUnitRootError`
+   * 照原样抛出去——那是旧服务端下的真实能力边界，不能假装成「这个构件一次都没变过」。
+   */
+  async function listElementVersions(dbnum: number, refno: string): Promise<ModelElementVersionTimeline> {
+    const normalized = fromV1Refno(refno);
+    const versions: ModelElementVersion[] = [];
+    let sinceSesno: number | undefined;
+    for (let page = 0; page < MAX_PAGES; page += 1) {
+      let response: ElementVersionsResponse;
+      try {
+        response = await api.listElementVersions({ dbnum, refno: normalized, sinceSesno });
+      } catch (error) {
+        if (page === 0 && isMissingRoute(error)) return unitOnlyTimeline(dbnum, normalized);
+        throw error;
+      }
+      for (const row of response.versions ?? []) {
+        versions.push({
+          sesno: row.sesno,
+          sessionTime: row.session_time ?? null,
+          elementImpact: row.element_impact ?? null,
+          unitImpact: row.unit_impact ?? null,
+        });
+      }
+      if (!response.truncated) {
+        return {
+          dbnum: response.dbnum,
+          refno: fromV1Refno(response.refno),
+          noun: response.noun,
+          unitRefno: response.unit_root ? fromV1Refno(response.unit_root) : null,
+          unitNoun: response.unit_noun ?? null,
+          versions,
+          unitColumnOnly: false,
+        };
+      }
+      const last = response.versions?.at(-1)?.sesno;
+      if (last === undefined) break;
+      sinceSesno = last;
+    }
+    throw new Error(`构件版本时间线超过 ${MAX_PAGES} 页仍未取完（dbnum ${dbnum} 构件 ${normalized}），放弃`);
+  }
+
+  /** 旧服务端的回落：只有单元那一列。 */
+  async function unitOnlyTimeline(dbnum: number, refno: string): Promise<ModelElementVersionTimeline> {
+    const unitVersions = await listVersions(dbnum, refno);
+    return {
+      dbnum,
+      refno,
+      noun: unitVersions[0]?.unitNoun ?? '',
+      unitRefno: refno,
+      unitNoun: unitVersions[0]?.unitNoun ?? null,
+      versions: unitVersions.map((version) => ({
+        sesno: version.sesno,
+        sessionTime: version.sessionTime,
+        elementImpact: null,
+        unitImpact: version.impactKind,
+      })),
+      unitColumnOnly: true,
+    };
+  }
+
   async function waitForSnapshot(taskId: string, options: GenModelV1RequestOptions): Promise<string> {
     const deadline = now() + HISTORY_TIMEOUT_MS;
     for (;;) {
@@ -318,7 +398,7 @@ export function createGenModelV1ModelVersionSource(api: GenModelV1VersionApi = d
     };
   }
 
-  return { listVersions, loadVersion, attributesAt };
+  return { listVersions, listElementVersions, loadVersion, attributesAt };
 }
 
 /** `<unit_refno>@<sesno>` → sesno；解不出给 0（只用在没有句柄的空态上）。 */

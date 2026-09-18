@@ -992,6 +992,55 @@ export function genModelV1ModelVersions(
   });
 }
 
+export type ElementVersionRowDto = {
+  sesno: number;
+  session_time: string | null;
+  /** 该构件**自身记录**在这一会话的变化；`null` = 它自己没变 */
+  element_impact: ModelVersionImpactKindDto | null;
+  /** **所属单元**在这一会话的折叠影响；`null` = 单元表里没有这一会话 */
+  unit_impact: ModelVersionImpactKindDto | null;
+};
+
+/** `GET /api/v1/element/versions` 的回执：某个构件的版本时间线（按链序旧 → 新），并排带所属单元那一列 */
+export type ElementVersionsResponse = {
+  dbnum: number;
+  /** `a/b` */
+  refno: string;
+  noun: string;
+  /** 所属最小交付单元根（`a/b`）；owner 链上没有就是 null（那种构件对不了几何） */
+  unit_root: string | null;
+  unit_noun: string | null;
+  file_latest_sesno: number;
+  truncated: boolean;
+  versions: ElementVersionRowDto[];
+  cached?: boolean;
+  elapsed_ms?: number;
+  stats?: Record<string, unknown>;
+  warnings?: string[];
+  [key: string]: unknown;
+};
+
+/**
+ * 某个**构件**的版本时间线。与 `model/versions` 的分工：那条折整棵单元子树，这条只认这个 refno 自己的变化，
+ * 并把所属单元那一列并排放在同一行。任意 refno 都受理（非单元根在这里不是错误）；整条链里没有它 → 404
+ * `REFNO_NOT_FOUND`。服务端要带 `element/versions` 路由的构建，旧服务端回 404 由调用方回落。
+ */
+export function genModelV1ElementVersions(
+  req: GenModelV1ModelVersionsRequest,
+  options?: GenModelV1RequestOptions,
+): Promise<ElementVersionsResponse> {
+  return genModelV1Fetch<ElementVersionsResponse>('/api/v1/element/versions', {
+    ...options,
+    timeoutMs: options?.timeoutMs ?? MODEL_VERSIONS_TIMEOUT_MS,
+    query: {
+      dbnum: req.dbnum,
+      refno: toV1Refno(req.refno),
+      since_sesno: req.sinceSesno,
+      limit: req.limit,
+    },
+  });
+}
+
 export type GenModelV1HistoryGenerateRequest = {
   dbnum: number;
   /** `a_b` / `a/b`：单元根 */

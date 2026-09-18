@@ -265,6 +265,34 @@ export type ModelVersionAttributes = {
   attributes: ModelVersionAttributeRow[];
 };
 
+/** 构件版本时间线的一行：同一个会话上，构件自己一列、它所属单元一列（`null` = 那一侧没变）。 */
+export type ModelElementVersion = {
+  sesno: number;
+  /** RFC3339 会话时刻；解不出为 null */
+  sessionTime: string | null;
+  /** 该构件自身记录在这一会话的变化；`null` = 它自己没变，这一版是单元里别的东西变的 */
+  elementImpact: ModelVersionImpactKind | null;
+  /** 所属单元在这一会话的折叠影响；`null` = 单元表里没有这一会话 */
+  unitImpact: ModelVersionImpactKind | null;
+};
+
+/** 一个构件的版本时间线 + 它所属的最小交付单元（对比几何要按单元生成，所以这条必须带出来）。 */
+export type ModelElementVersionTimeline = {
+  dbnum: number;
+  /** 本仓内部键 `a_b` */
+  refno: string;
+  noun: string;
+  /** 所属最小交付单元根（`a_b`）；owner 链上没有单元（如 ZONE 自身）为 null，那种构件对不了几何 */
+  unitRefno: string | null;
+  unitNoun: string | null;
+  versions: ModelElementVersion[];
+  /**
+   * 服务端还没有 `element/versions` 这条路由（旧构建）时为 true：此时 `versions` 里只有单元那一列，
+   * 左列一律 `null`，面板据此说明「本构件那一列要新版服务端」，而不是假装它一次都没变过。
+   */
+  unitColumnOnly: boolean;
+};
+
 /**
  * 版本对比取数（ADR 0065，plan `docs/plans/2026-09-18-model-version-compare-gen-model-v1-migration-plan.md` §2）。
  *
@@ -276,6 +304,15 @@ export type ModelVersionAttributes = {
 export type ModelVersionSource = {
   /** 该最小交付单元的全部模型版本，按 sesno 升序。 */
   listVersions(dbnum: number, unitRefno: string): Promise<ModelVersion[]>;
+  /**
+   * 某个**构件**的版本时间线（「查看某个构件的所有历史版本」）：每一行两列，左列是它自己这条记录变没变、
+   * 右列是它所属单元在同一会话的折叠影响。只给左列会漏——抬一根管子会让邻居的派生管身跟着变、改目录也能
+   * 在不碰构件记录的前提下换它的形状，那些版本左列为空、右列有值。
+   *
+   * 传单元根进来同样成立（左列 = 单元根这条记录自己变了）。对比几何仍按 `unitRefno` 走 `listVersions` /
+   * `loadVersion`：几何只按单元生成，构件级对比是在单元结果上收窄。
+   */
+  listElementVersions(dbnum: number, refno: string): Promise<ModelElementVersionTimeline>;
   /** 一个版本的几何；`impactKind === 'tombstone'` 返回空集而不是抛错（「已删除单元版本」）。 */
   loadVersion(version: ModelVersion, options?: ModelVersionLoadOptions): Promise<ModelVersionGeometry>;
   /**

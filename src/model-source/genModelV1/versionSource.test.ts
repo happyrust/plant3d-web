@@ -8,7 +8,7 @@ import {
   type GenModelV1VersionApi,
 } from './versionSource';
 
-import { GenModelV1ApiError, unpackRefno, type ModelVersionsResponse, type TaskEntryDto } from '@/api/genModelV1Api';
+import { GenModelV1ApiError, unpackRefno, type ElementVersionsResponse, type ModelVersionsResponse, type TaskEntryDto } from '@/api/genModelV1Api';
 import { NotDeliveryUnitRootError } from '@/model-source/modelVersionErrors';
 
 function response(partial: Partial<ModelVersionsResponse>): ModelVersionsResponse {
@@ -23,9 +23,24 @@ function response(partial: Partial<ModelVersionsResponse>): ModelVersionsRespons
   };
 }
 
+function elementResponse(partial: Partial<ElementVersionsResponse> = {}): ElementVersionsResponse {
+  return {
+    dbnum: 8000,
+    refno: '24384/23262',
+    noun: 'FTUB',
+    unit_root: '24384/23257',
+    unit_noun: 'BRAN',
+    file_latest_sesno: 633,
+    truncated: false,
+    versions: [],
+    ...partial,
+  };
+}
+
 function api(overrides: Partial<GenModelV1VersionApi> = {}): GenModelV1VersionApi {
   return {
     listVersions: vi.fn(async () => response({})),
+    listElementVersions: vi.fn(async () => elementResponse()),
     historyGenerate: vi.fn(async () => ({ task_id: 't-1' })),
     taskGet: vi.fn(async () => ({ task_id: 't-1', kind: 'model-history', state: 'succeeded', result: { snapshot_key: '24381_145018@66' } }) as TaskEntryDto),
     historyQuery: vi.fn(async () => []) as unknown as GenModelV1VersionApi['historyQuery'],
@@ -54,6 +69,67 @@ describe('genModelV1 ModelVersionSource', () => {
       { dbnum: 7997, unitRefno: '24381_145018', unitNoun: 'BRAN', sesno: 120, sessionTime: null, impactKind: 'placement' },
     ]);
     expect(versions[0]).not.toHaveProperty('geometryKey');
+  });
+
+  it('listElementVersions 给出构件自身与所属单元两列，refno 归一成 a_b', async () => {
+    const listElementVersions = vi.fn(async () => elementResponse({
+      versions: [
+        // 单元变了、构件自己没变：左列 null——「邻居带着我变」那一档
+        { sesno: 573, session_time: '2026-09-13T16:19:46+08:00', element_impact: null, unit_impact: 'mesh' },
+        { sesno: 626, session_time: '2026-09-18T19:31:48+08:00', element_impact: 'mesh', unit_impact: 'mesh' },
+      ],
+    }));
+    const source = createGenModelV1ModelVersionSource(api({ listElementVersions }));
+
+    const timeline = await source.listElementVersions(8000, '24384/23262');
+
+    expect(listElementVersions).toHaveBeenCalledWith({ dbnum: 8000, refno: '24384_23262', sinceSesno: undefined });
+    expect(timeline).toEqual({
+      dbnum: 8000,
+      refno: '24384_23262',
+      noun: 'FTUB',
+      unitRefno: '24384_23257',
+      unitNoun: 'BRAN',
+      unitColumnOnly: false,
+      versions: [
+        { sesno: 573, sessionTime: '2026-09-13T16:19:46+08:00', elementImpact: null, unitImpact: 'mesh' },
+        { sesno: 626, sessionTime: '2026-09-18T19:31:48+08:00', elementImpact: 'mesh', unitImpact: 'mesh' },
+      ],
+    });
+  });
+
+  it('listElementVersions 在没有 element/versions 路由的旧服务端上回落到单元表（只剩单元那一列）', async () => {
+    const listElementVersions = vi.fn(async () => {
+      // 路由不存在：axum 的 404 没有错误信封，客户端按状态码回落成 not_found
+      throw new GenModelV1ApiError({ code: 'not_found', status: 404, path: '/api/v1/element/versions', message: 'HTTP 404 Not Found' });
+    });
+    const listVersions = vi.fn(async () => response({
+      versions: [
+        { sesno: 66, session_time: null, impact_kind: 'delivery' },
+        { sesno: 120, session_time: null, impact_kind: 'mesh' },
+      ],
+    }));
+    const source = createGenModelV1ModelVersionSource(api({ listElementVersions, listVersions }));
+
+    const timeline = await source.listElementVersions(7997, '24381_145018');
+
+    expect(timeline.unitColumnOnly).toBe(true);
+    expect(timeline.unitRefno).toBe('24381_145018');
+    expect(timeline.versions).toEqual([
+      { sesno: 66, sessionTime: null, elementImpact: null, unitImpact: 'delivery' },
+      { sesno: 120, sessionTime: null, elementImpact: null, unitImpact: 'mesh' },
+    ]);
+  });
+
+  it('listElementVersions 不把服务端自己答的 404（REFNO_NOT_FOUND）当成缺路由', async () => {
+    const listElementVersions = vi.fn(async () => {
+      throw new GenModelV1ApiError({ code: 'REFNO_NOT_FOUND' as never, status: 404, path: '/api/v1/element/versions', message: '整条链上都没有 24384/999999' });
+    });
+    const listVersions = vi.fn(async () => response({}));
+    const source = createGenModelV1ModelVersionSource(api({ listElementVersions, listVersions }));
+
+    await expect(source.listElementVersions(8000, '24384_999999')).rejects.toThrow('整条链上都没有');
+    expect(listVersions).not.toHaveBeenCalled();
   });
 
   it('truncated 时按最后一条 sesno 作 since_sesno 连续拉到全表（Q17）', async () => {
