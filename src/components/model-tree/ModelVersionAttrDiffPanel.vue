@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 
-import { LoaderCircle } from 'lucide-vue-next';
+import { Crosshair, LoaderCircle } from 'lucide-vue-next';
 
 import type { ModelVersionAttributeRow, ModelVersionAttributes } from '@/model-source/ports';
 
@@ -22,6 +22,9 @@ const props = defineProps<{
   toSesno?: number;
   attributesAt?: TreeDiffAttributesAt;
 }>();
+
+/** 「在 3D 中定位」：交给模型树飞到该构件在版本对比 A / B 隔离图层里的位置（被删的构件在 A 层也找得到，所以幽灵节点也能定位）。 */
+const emit = defineEmits<(e: 'locate', refno: string) => void>();
 
 const rows = ref<AttrDiffRow[]>([]);
 const sides = ref<{ before: ModelVersionAttributes; after: ModelVersionAttributes } | null>(null);
@@ -127,10 +130,20 @@ onBeforeUnmount(() => {
           变更 {{ changedCount }} / {{ rows.length }}
         </span>
       </div>
-      <label v-if="sides && rows.length > 0" class="flex shrink-0 items-center gap-1 text-[10px] text-muted-foreground">
-        <input v-model="showUnchanged" type="checkbox" class="h-3 w-3" data-testid="attr-diff-show-unchanged" />
-        显示未变
-      </label>
+      <div class="flex shrink-0 items-center gap-2">
+        <label v-if="sides && rows.length > 0" class="flex items-center gap-1 text-[10px] text-muted-foreground">
+          <input v-model="showUnchanged" type="checkbox" class="h-3 w-3" data-testid="attr-diff-show-unchanged" />
+          显示未变
+        </label>
+        <button type="button"
+          class="inline-flex h-6 items-center gap-1 rounded border border-input px-1.5 text-[11px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          title="飞到该构件在版本 A / B 图层里的位置"
+          data-testid="attr-diff-locate"
+          @click="emit('locate', model.refno)">
+          <Crosshair class="h-3 w-3" />
+          在 3D 中定位
+        </button>
+      </div>
     </div>
 
     <div class="min-h-0 flex-1 overflow-auto px-3 pb-1">

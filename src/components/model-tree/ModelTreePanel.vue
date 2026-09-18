@@ -30,6 +30,7 @@ import {
 } from '@/composables/useTreeVersionDiff';
 import { cn } from '@/lib/utils';
 import { isGenModelV1Source } from '@/model-source/kind';
+import { MODEL_UNIT_VERSION_COMPARE_EVENT } from '@/utils/modelUnitVersionCompare';
 
 const props = defineProps<{
   viewer: DtxCompatViewer | null;
@@ -1166,6 +1167,18 @@ function applyTreeDiffContext(rawDetail: unknown) {
   }
 }
 
+/**
+ * 「在 3D 中定位」（差异模式底部属性历史对比面板）：飞到该构件在版本对比 A / B 隔离图层里的包围盒
+ * （`plant3d:model-unit-version-compare` 的 `focus`，两层都找，被删的构件在 A 层也找得到），不往主层装当前模型。
+ */
+function locateModelVersionCompareRefno(refno: string): void {
+  const target = normalizeCompareRefno(refno);
+  if (!target) return;
+  treeDiff.select(target);
+  ensurePanelAndActivate('viewer');
+  window.dispatchEvent(new CustomEvent(MODEL_UNIT_VERSION_COMPARE_EVENT, { detail: { action: 'focus', refno: target } }));
+}
+
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
@@ -1852,7 +1865,8 @@ function onSearchEnter(value: string) {
       :model="diffSelectedModel"
       :from-sesno="diffContext?.fromSesno"
       :to-sesno="diffContext?.toSesno"
-      :attributes-at="diffContext?.attributesAt" />
+      :attributes-at="diffContext?.attributesAt"
+      @locate="locateModelVersionCompareRefno" />
 
     <!-- 右键菜单 - 使用 Teleport 渲染到 body -->
     <Teleport to="body">

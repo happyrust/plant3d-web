@@ -360,7 +360,8 @@ legacy 下与从前的可见差别只有一处、且不可见于用户：A/B 隔
   - 新面板 `components/model-tree/ModelVersionAttrDiffPanel.vue` 挂在差异模式底部（原 `ModelTreeAttrDiffPanel` 的位置）：两侧并发取、
     `utils/modelVersionAttrDiff.diffAttributeRows` 按属性名（大小写不敏感）合并成 `changed / only-before / only-after / unchanged`，
     缺省只列有差异的行、「显示未变」可切；一侧 `exists:false` 给「该构件在版本 A / B 不存在」横幅（正常态）；取数失败给「暂不可用 + 原因」；
-    没带取数口的上下文提示重新运行对比。没有「在 3D 中定位」按钮（树行点击本就选中 / 聚焦）。
+    没带取数口的上下文提示重新运行对比。「在 3D 中定位」按钮（18:3x 用户要求加回）走版本对比事件的 `focus`——飞到该构件在 A / B
+    隔离图层里的包围盒、顺手激活三维查看器；被删的构件在 A 层也找得到，所以幽灵节点同样能定位（旧面板那条「幽灵不可定位」的限制是因为它往主层装当前模型）。
   - 测试：面板 5 条（变更 / 只一侧 / 无差异 / 抛错 / 无取数口）、纯函数 4 条、v1 适配器 2 条、对比面板上下文带 `attributesAt` 1 条断言。
 - **验证**：vitest 全仓 345 文件 / 3067 用例全绿；type-check 基线外仍只剩无关那条；ESLint 13 个触及文件 0；真机（`:8022 d47d747fd` + dev `:3111`）
   587→602 进差异模式后底部挂出面板、两条 `tool=attributes` 请求按契约发出、服务端回「unknown historical query tool」→ 面板给「暂不可用 + 原因」，

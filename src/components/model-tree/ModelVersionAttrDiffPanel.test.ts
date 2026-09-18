@@ -21,7 +21,15 @@ async function flushUi(): Promise<void> {
   }
 }
 
-function mount(props: { model: { refno: string; status?: string }; fromSesno?: number; toSesno?: number; attributesAt?: TreeDiffAttributesAt }) {
+type MountProps = {
+  model: { refno: string; status?: string };
+  fromSesno?: number;
+  toSesno?: number;
+  attributesAt?: TreeDiffAttributesAt;
+  onLocate?: (refno: string) => void;
+};
+
+function mount(props: MountProps) {
   const host = document.createElement('div');
   document.body.appendChild(host);
   const app = createApp(ModelVersionAttrDiffPanel, props);
@@ -90,6 +98,23 @@ describe('ModelVersionAttrDiffPanel', () => {
     const unavailable = host.querySelector('[data-testid="attr-diff-unavailable"]');
     expect(unavailable?.textContent).toContain('暂不可用');
     expect(unavailable?.textContent).toContain('unknown historical query tool');
+    app.unmount();
+  });
+
+  it('「在 3D 中定位」按钮 emit locate(refno)——幽灵节点也能点（被删构件在 A 层）', async () => {
+    const attributesAt = vi.fn<TreeDiffAttributesAt>(async (which) => side(1, which === 'before' ? [row('NAME', '/BOX1')] : [], which === 'before'));
+    const located: string[] = [];
+    const { host, app } = mount({
+      model: { refno: '24384_26481', status: 'deleted' },
+      attributesAt,
+      onLocate: (refno) => located.push(refno),
+    });
+    await flushUi();
+
+    const button = host.querySelector('[data-testid="attr-diff-locate"]') as HTMLButtonElement;
+    expect(button.disabled).toBe(false);
+    button.click();
+    expect(located).toEqual(['24384_26481']);
     app.unmount();
   });
 

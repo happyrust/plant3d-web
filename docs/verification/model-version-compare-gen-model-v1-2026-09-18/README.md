@@ -61,3 +61,5 @@
   两侧请求已按契约发出——`POST /api/v1/model/history/query {"snapshot_key":"24384_26480@587","tool":"attributes","arguments":{"refno":"24384/26481"}}`
   与 `@602` 一条；服务端（`d47d747fd`）还不认这个 tool，回 `unknown historical query tool "attributes"; expected snapshot/instances/tubes/geometry`，
   面板照契约给「属性历史对比暂不可用 + 原因」，pageerror 0。后端落地后这块不用再改，直接出表。
+- `attr-diff/attr-diff-locate.png`：面板上「在 3D 中定位」——先把相机挪到 (53279, 62579, 58750)，点按钮后 1.2 s 相机回到 (686, 3581, 5547)
+  （该 BOX 在 A / B 隔离图层里的包围盒），三维查看器面板被激活，pageerror 0。
