@@ -570,6 +570,19 @@ createPipeDistanceSceneTransformPoint` 已有反向那一半可对照），服�
   脚本 `%TEMP%\spatial-ui-pick.mjs`，截图 `pick-headed.png`。
 - 未验证：「仅显示本库」在 2 m 结果只有一个库时跳过（5 m 两库的分组按钮在 22:32 那轮已核）。legacy 源仍受 `:3100` detached 所限。
 
+**整库范围显示记录（2026-09-14 03:xx，用户「配合 AMS 7997 的模型运行起来，然后范围显示」）**：headed Chrome（AMD RX590，CDP `:9444`，窗口留在桌面上）
+对着 `:3101` → `:18122`，`?show_dbnum=7997`（AvevaMarineSample，6772 个生成根），再在整库场景里查 BRAN `24381_145018` 中心 5 m。
+- **先撞上的问题**：本机 `:18122` 是摄入形态、7997 以 rocksdb 为准，`dbnums/7997/model/ensure` 回 409 → 前端退回逐 SITE 兼容路径，SITE 级 ensure
+  在 debug 构建上 10/13 个撞 130 s 超时进 pending，**21.7 min 只装到 133 个构件**；5 m 查询「共 1637 项 … 已加载 0 项」，隔离结果后视口里只有零星几块。
+  改法与数据见 `2026-09-10-show-dbnum-server-side-rebuild-plan.md` §12.7：409 分支先抽 `roots?ready=1` 已生成的根进视口，逐 SITE 只催其余的根，
+  之后边生成边抽（`collectDbnum.ts`，单测 29 条）。
+- **改后真机**：刷新 **22 s** 视口里 **14 083** 个构件（就绪 3487/6772 根）；范围 · 手输坐标 (5963.8, 9972.2, 16552.0) 球形 5 m / 每页 50 →
+  200，`total_count` 1637（1112:26 / 7997:1611）= 摘要「共 1637 项，当前页 50 项，**已加载 50 项，未加载 0 项**」；全部显示 50/50 可见；隔离结果
+  其余 13 238/14 083 有几何对象 xray、50/50 可见；相机对准结果盒；无错误横幅、无 pageerror。逐 SITE 期间每个 SITE 之后补进新就绪的根（14 083 → 14 509）。
+  脚本 `%TEMP%\spatial-ui-dbnum7997-v3.mjs`，截图 `%TEMP%\spatial-ui\dbnum7997-v3-{drained,range-isolated,final-isolated}.png`（不进仓）。
+- 顺带核出：`scene.objects` 里 1600 多个 key 是模型树登记的占位对象（无 `aabb`、`visible:false`），不是几何——数「已加载」要看 `getLoadedRefnos()` /
+  带 `aabb` 的对象，之前 01:30 那轮脚本的 `present` 计数就是被它骗过（数出 present 50 而抽屉说已加载 0，两边其实都对）。
+
 ## 8. 关键位置速查
 
 后端（行号以 `gen-model-refactor@8f99cbc64` + 10:30 工作树为准）：`vendor/old-aios-core/src/room/room.rs` L12；

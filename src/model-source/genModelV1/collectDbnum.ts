@@ -9,6 +9,10 @@
  *    生成的编排全在服务端（e3d-model 流水线按片提交），前端边就绪边取——**实时**（plan 2026-09-10 §12）。
  *    旧 §4.5.3 构建（roots 行没有 `ready`）退化为「等终态再整取」。
  * 2. **逐 SITE 老路**（服务端没有那条路由、或这个库以 rocksdb 为准时自动退回）：下面这段。
+ *    这个库以 rocksdb 为准（摄入形态、整库即时 ensure 回 409 `database_routed`）时，退回之前先把 `roots?ready=1`
+ *    里服务端**已经生成好的根**抽进视口（`records` 直读 rocksdb，64 根一批几百毫秒），逐 SITE 只负责催其余的根；
+ *    逐 SITE 之后接着每拍抽一次——SITE 级 ensure 超时进 pending 的那些根，服务端在后台继续生成，新就绪的立刻进视口，
+ *    直到全部就绪 / 一分钟没有新就绪的根 / 预算用尽 / 超时（`taskWaitTimeoutMs`）。
  *
  * 逐 SITE 老路 = `tree/roots` 里该库（`dbnum`）的全部 SITE 逐个 `ensureAndCollect`（走记录源，进同一份缓存），
  * 回构件 refno 集给调用方分批装进 DTX。
@@ -244,6 +248,146 @@ function rootsSupportReady(listed: DbnumModelRootsResponse): boolean {
 }
 
 /**
+ * 就绪根收集器：服务端整库入口的每一拍、database 形态的「先抽就绪根」与逐 SITE 收尾的再抽一次，三处共用同一套
+ * 「按根预算切 → 取记录进缓存 → 构件按 refno 预算切 → 经 `onRefnosReady` 交给调用方」。
+ * `seed` 给已经收过的根 / 构件（逐 SITE 收尾时用），这些不再重取、不再重复交给调用方。
+ */
+type ReadyRootsCollector = {
+  collectedRoots: Set<string>;
+  generationRoots: string[];
+  pending: string[];
+  empty: string[];
+  errors: Record<string, string>;
+  refnos: string[];
+  budgetExhausted(): boolean;
+  refnoBudgetHit(): boolean;
+  /** 一批就绪根：按根预算切 → 取记录进缓存 → 构件按 refno 预算切 → 交给调用方。 */
+  collectReady(readyRoots: string[], rootsTotal: number): Promise<void>;
+};
+
+function createReadyRootsCollector(
+  records: GenModelV1ModelRecordSource,
+  options: {
+    rootBudget: number;
+    refnoBudget: number;
+    signal?: AbortSignal;
+    onProgress?: CollectDbnumOptions['onProgress'];
+    onRefnosReady?: CollectDbnumOptions['onRefnosReady'];
+    /** 每批记录取回后立刻调一次（服务端整库入口在这里核对服务代次） */
+    afterCollect?: () => void;
+    seed?: { generationRoots?: string[]; refnos?: string[] };
+  },
+): ReadyRootsCollector {
+  const { rootBudget, refnoBudget, signal, onProgress, onRefnosReady, afterCollect, seed } = options;
+  const collectedRoots = new Set<string>(seed?.generationRoots ?? []);
+  const generationRoots: string[] = [...collectedRoots];
+  const pending: string[] = [];
+  const empty: string[] = [];
+  const errors: Record<string, string> = {};
+  const refnos: string[] = [];
+  const seenRefnos = new Set<string>();
+  for (const refno of seed?.refnos ?? []) {
+    if (seenRefnos.has(refno)) continue;
+    seenRefnos.add(refno);
+    refnos.push(refno);
+  }
+  let refnoBudgetHit = false;
+  const budgetExhausted = () => refnoBudgetHit || collectedRoots.size >= rootBudget;
+
+  async function collectReady(readyRoots: string[], rootsTotal: number): Promise<void> {
+    if (budgetExhausted()) return;
+    const fresh = readyRoots.filter((root) => !collectedRoots.has(root));
+    const take = fresh.slice(0, Math.max(0, rootBudget - collectedRoots.size));
+    if (take.length === 0) return;
+    const result = await records.collectRoots(take, {
+      signal,
+      onRootDone: ({ done, root }) => onProgress?.({
+        phase: 'roots', siteIndex: 1, siteCount: 1, site: null, rootsDone: collectedRoots.size + done, rootsTotal, root,
+      }),
+    });
+    afterCollect?.();
+    for (const root of take) collectedRoots.add(root);
+    pushAllUnique(generationRoots, result.generationRoots);
+    pushAllUnique(pending, result.pending);
+    pushAllUnique(empty, result.empty);
+    Object.assign(errors, result.errors);
+    const batchRefnos: string[] = [];
+    for (const refno of refnosOfRecords(result.items)) {
+      if (seenRefnos.has(refno)) continue;
+      if (refnos.length >= refnoBudget) {
+        refnoBudgetHit = true;
+        break;
+      }
+      seenRefnos.add(refno);
+      refnos.push(refno);
+      batchRefnos.push(refno);
+    }
+    if (onRefnosReady) {
+      await onRefnosReady({ roots: take, refnos: batchRefnos, rootsDone: collectedRoots.size, rootsTotal });
+    }
+  }
+
+  return {
+    collectedRoots, generationRoots, pending, empty, errors, refnos,
+    budgetExhausted,
+    refnoBudgetHit: () => refnoBudgetHit,
+    collectReady,
+  };
+}
+
+/** database 形态下一次抽多少根交给收集器：4 批 records（64 根一批），视口按这个粒度逐步填满。 */
+const DATABASE_ROUTED_DRAIN_SLICE = 256;
+/** database 形态收尾轮询 `roots?ready=1` 的间隔 = `taskPollIntervalMs`（缺省 2 s）× 这个倍数；没有任务可查，问得比整库任务稀一点。 */
+const DATABASE_ROUTED_POLL_MULTIPLIER = 5;
+/** 连续这么多拍 `ready_total` 没涨就当服务端没在生成，停止收尾轮询（缺省 6 × 10 s = 1 min）。 */
+const DATABASE_ROUTED_IDLE_POLLS = 6;
+
+export type DrainReadyRootsOutcome = {
+  /** 该库全部根数（服务端 `total`） */
+  total: number;
+  /** 服务端此刻已就绪的根数 */
+  readyTotal: number;
+  /** 这一次真正新取进来的根数 */
+  drainedRoots: number;
+  /** 服务端已就绪、但这边（预算所限）没取的根数 */
+  remainingReady: number;
+};
+
+/**
+ * database 形态（整库即时 ensure 回 409）下的「先抽就绪根」：`roots?ready=1` 在这一形态下照样可用、`records`
+ * 直接读 rocksdb，先把服务端已经生成好的根一口气取进视口，再让逐 SITE 老路去催其余的根。
+ * roots 路由不可用（旧构建 404 / 405）或不认 `ready`（旧 §4.5.3 构建）时回 `null`，调用方按原样退回逐 SITE。
+ */
+async function drainReadyRoots(
+  api: DbnumServerEntryApi,
+  dbnum: number,
+  collector: ReadyRootsCollector,
+  options: { signal?: AbortSignal; lifecycle: CollectDbnumLifecycle },
+): Promise<DrainReadyRootsOutcome | null> {
+  let listed: DbnumModelRootsResponse;
+  try {
+    listed = await api.dbnumRoots(dbnum, { ready: true, signal: options.signal });
+  } catch (error) {
+    options.lifecycle.noteRequestFailure(error);
+    if (isFixedRouteUnsupported(error, true)) return null;
+    throw error;
+  }
+  if (!rootsSupportReady(listed)) return null;
+  const ready = rootKeys((listed.roots ?? []).filter((row) => row?.ready !== false));
+  const total = Number(listed.total) || ready.length;
+  const before = collector.collectedRoots.size;
+  for (let start = 0; start < ready.length && !collector.budgetExhausted(); start += DATABASE_ROUTED_DRAIN_SLICE) {
+    await collector.collectReady(ready.slice(start, start + DATABASE_ROUTED_DRAIN_SLICE), total);
+  }
+  return {
+    total,
+    readyTotal: Number(listed.ready_total) || ready.length,
+    drainedRoots: collector.collectedRoots.size - before,
+    remainingReady: ready.filter((root) => !collector.collectedRoots.has(root)).length,
+  };
+}
+
+/**
  * 服务端整库入口（spec §4.5.3，读透 / kv-mem 形态；plan 2026-09-10 §12「实时生成」）：
  * `dbnums/{dbnum}/model/ensure` 起任务 → 每拍 `tasks/{id}`（进度，只查自己这一个）+ `roots?ready=1`（哪些根的投影已提交）
  * → 新就绪的根**立刻**取 `records`、经 `onRefnosReady` 交给调用方装视口 → 任务终态后收尾。生成的编排全在服务端，
@@ -279,6 +423,8 @@ export async function collectDbnumViaServer(
   if (capability !== 'supported' && dbnumServerEntrySupport(api) === 'no') {
     return fallback('server_unsupported', '服务端版本不支持整库入口，已走逐 SITE 兼容路径');
   }
+  const rootBudget = Number.isFinite(maxTotalRoots) ? Math.max(0, Math.floor(maxTotalRoots)) : Number.POSITIVE_INFINITY;
+  const refnoBudget = Number.isFinite(maxRefnos) ? Math.max(0, Math.floor(maxRefnos)) : Number.POSITIVE_INFINITY;
 
   let receipt;
   const supportGeneration = getGenModelV1ServiceGeneration();
@@ -294,10 +440,38 @@ export async function collectDbnumViaServer(
       }
       return fallback('server_unsupported', '服务端版本不支持整库入口，已走逐 SITE 兼容路径');
     }
-    // 这个库以 database 为准：本次退回逐 SITE，但**不**把服务端整体
-    // 记成「没有」——同一进程里别的库仍可能是 memory 形态
+    // 这个库以 database 为准（整库即时 ensure 只服务 memory-routed 投影，服务端指路 model/rebuild）：本次退回逐 SITE，
+    // 但**不**把服务端整体记成「没有」——同一进程里别的库仍可能是 memory 形态。
+    // 退回之前先把服务端**已经生成好的根**抽进视口：`roots?ready=1` 在这一形态下照样可用、`records` 直接读 rocksdb
+    // （64 根一批几百毫秒）；逐 SITE 老路只负责催其余还没生成的根（SITE 级 ensure 超时就整棵子树进 pending，
+    // 而那些根多半在等它的这段时间里陆续生成好——`collectDbnumRefnos` 收尾会再抽一次）。
     if (error.code === 'conflict') {
-      return fallback('database_routed', '该库当前以 database 为准，已走逐 SITE 兼容路径');
+      const collector = createReadyRootsCollector(records, { rootBudget, refnoBudget, signal, onProgress, onRefnosReady });
+      const drained = await drainReadyRoots(api, dbnum, collector, { signal, lifecycle });
+      if (!drained) {
+        return fallback('database_routed', '该库当前以 database 为准，已走逐 SITE 兼容路径');
+      }
+      const partial: CollectDbnumFallback = {
+        reason: 'database_routed',
+        message: drained.drainedRoots > 0
+          ? `该库当前以 database 为准，已先取进服务端已生成的 ${drained.drainedRoots}/${drained.total} 根，其余走逐 SITE 兼容路径`
+          : `该库当前以 database 为准（服务端已生成 ${drained.readyTotal}/${drained.total} 根），已走逐 SITE 兼容路径`,
+      };
+      onFallback?.(partial);
+      return {
+        dbnum,
+        sites: [],
+        siteSummaryAvailable: true,
+        refnos: collector.refnos,
+        generationRoots: collector.generationRoots,
+        pending: collector.pending,
+        empty: collector.empty,
+        truncatedRoots: [],
+        errors: collector.errors,
+        skippedSites: [],
+        budgetLimited: collector.refnoBudgetHit() || collector.collectedRoots.size >= rootBudget,
+        fallback: partial,
+      };
     }
     throw error;
   }
@@ -308,52 +482,20 @@ export async function collectDbnumViaServer(
   const expectedRoots = Number(receipt.expected_roots) || 0;
   const taskId = String(receipt.task_id);
   const taskGeneration = lifecycle.generation();
-  const rootBudget = Number.isFinite(maxTotalRoots) ? Math.max(0, Math.floor(maxTotalRoots)) : Number.POSITIVE_INFINITY;
-  const refnoBudget = Number.isFinite(maxRefnos) ? Math.max(0, Math.floor(maxRefnos)) : Number.POSITIVE_INFINITY;
   const report = (phase: 'generate' | 'roots', rootsDone: number, root: string | null, rootsTotal = expectedRoots) =>
     onProgress?.({ phase, siteIndex: 1, siteCount: 1, site: null, rootsDone, rootsTotal, root });
 
-  const collectedRoots = new Set<string>();
-  const generationRoots: string[] = [];
-  const pending: string[] = [];
-  const empty: string[] = [];
-  const errors: Record<string, string> = {};
-  const refnos: string[] = [];
-  const seenRefnos = new Set<string>();
-  let refnoBudgetHit = false;
-  const budgetExhausted = () => refnoBudgetHit || collectedRoots.size >= rootBudget;
-
-  /** 一批就绪根：按根预算切 → 取记录进缓存 → 构件按 refno 预算切 → 交给调用方。 */
-  async function collectReady(readyRoots: string[]): Promise<void> {
-    if (budgetExhausted()) return;
-    const fresh = readyRoots.filter((root) => !collectedRoots.has(root));
-    const take = fresh.slice(0, Math.max(0, rootBudget - collectedRoots.size));
-    if (take.length === 0) return;
-    const result = await records.collectRoots(take, {
-      signal,
-      onRootDone: ({ done, root }) => report('roots', collectedRoots.size + done, root),
-    });
-    lifecycle.assertGeneration(taskGeneration);
-    for (const root of take) collectedRoots.add(root);
-    pushAllUnique(generationRoots, result.generationRoots);
-    pushAllUnique(pending, result.pending);
-    pushAllUnique(empty, result.empty);
-    Object.assign(errors, result.errors);
-    const batchRefnos: string[] = [];
-    for (const refno of refnosOfRecords(result.items)) {
-      if (seenRefnos.has(refno)) continue;
-      if (refnos.length >= refnoBudget) {
-        refnoBudgetHit = true;
-        break;
-      }
-      seenRefnos.add(refno);
-      refnos.push(refno);
-      batchRefnos.push(refno);
-    }
-    if (onRefnosReady) {
-      await onRefnosReady({ roots: take, refnos: batchRefnos, rootsDone: collectedRoots.size, rootsTotal: expectedRoots });
-    }
-  }
+  const collector = createReadyRootsCollector(records, {
+    rootBudget,
+    refnoBudget,
+    signal,
+    onProgress,
+    onRefnosReady,
+    afterCollect: () => lifecycle.assertGeneration(taskGeneration),
+  });
+  const { collectedRoots, generationRoots, pending, empty, errors, refnos } = collector;
+  const budgetExhausted = collector.budgetExhausted;
+  const collectReady = (readyRoots: string[]) => collector.collectReady(readyRoots, expectedRoots);
 
   report('generate', 0, null);
   const deadline = Date.now() + taskWaitTimeoutMs;
@@ -503,7 +645,7 @@ export async function collectDbnumViaServer(
     truncatedRoots,
     errors,
     skippedSites: [],
-    budgetLimited: truncatedRoots.length > 0 || refnoBudgetHit,
+    budgetLimited: truncatedRoots.length > 0 || collector.refnoBudgetHit(),
   };
 }
 
@@ -522,17 +664,59 @@ export async function collectDbnumRefnos(
       options.onFallback?.(value);
     },
   }, api);
-  if (viaServer) return viaServer;
+  // 带 fallback 的结果是 database 形态的「半份」：就绪根已经取进视口，逐 SITE 老路接着催其余的根，并进同一份结果
+  if (viaServer && !viaServer.fallback) return viaServer;
   const {
     onProgress, maxRoots = 4096, maxContainerDepth = 4, maxRefnos = DEFAULT_DBNUM_REFNOS_BUDGET, maxTotalRoots = DEFAULT_DBNUM_ROOTS_BUDGET,
   } = options;
   const sites = await listSitesOfDbnum(tree, dbnum);
   const result: CollectDbnumResult = {
     dbnum, sites, siteSummaryAvailable: true,
-    refnos: [], generationRoots: [], pending: [], empty: [], truncatedRoots: [], errors: {}, skippedSites: [], budgetLimited: false,
+    refnos: [...(viaServer?.refnos ?? [])],
+    generationRoots: [...(viaServer?.generationRoots ?? [])],
+    pending: [...(viaServer?.pending ?? [])],
+    empty: [...(viaServer?.empty ?? [])],
+    truncatedRoots: [],
+    errors: { ...(viaServer?.errors ?? {}) },
+    skippedSites: [],
+    budgetLimited: viaServer?.budgetLimited === true,
     ...(fallback ? { fallback } : {}),
   };
-  const seen = new Set<string>();
+  const seen = new Set<string>(result.refnos);
+
+  // database 形态：逐 SITE 每做完一个、以及收尾的每一拍，都拿当前结果做种子抽一次就绪根——服务端在后台生成
+  // （SITE 级 ensure 催起来的、或本来就在跑的），新就绪的立刻进视口；已收过的根不重取，新取到的根从 pending 里划掉
+  const databaseRouted = viaServer?.fallback?.reason === 'database_routed';
+  const drainLifecycle = options.lifecycle ?? PASSIVE_LIFECYCLE;
+  const drainBudgets = {
+    rootBudget: Number.isFinite(maxTotalRoots) ? Math.max(0, Math.floor(maxTotalRoots)) : Number.POSITIVE_INFINITY,
+    refnoBudget: Number.isFinite(maxRefnos) ? Math.max(0, Math.floor(maxRefnos)) : Number.POSITIVE_INFINITY,
+  };
+  async function drainIntoResult(): Promise<DrainReadyRootsOutcome | null> {
+    const collector = createReadyRootsCollector(records, {
+      ...drainBudgets,
+      signal: options.signal,
+      onProgress,
+      onRefnosReady: options.onRefnosReady,
+      seed: { generationRoots: result.generationRoots, refnos: result.refnos },
+    });
+    const drained = await drainReadyRoots(api, dbnum, collector, { signal: options.signal, lifecycle: drainLifecycle });
+    if (drained && collector.collectedRoots.size > result.generationRoots.length) {
+      result.refnos = collector.refnos;
+      for (const refno of collector.refnos) seen.add(refno);
+      result.generationRoots = collector.generationRoots;
+      result.pending = result.pending.filter((root) => !collector.collectedRoots.has(root));
+      pushAllUnique(result.pending, collector.pending);
+      pushAllUnique(result.empty, collector.empty);
+      Object.assign(result.errors, collector.errors);
+    }
+    // 构件预算切掉了记录、或根预算用尽而服务端还有就绪的根没取：结果是「安全概览」，不是整库
+    if (drained && (collector.refnoBudgetHit() || (drained.remainingReady > 0 && collector.budgetExhausted()))) {
+      result.budgetLimited = true;
+    }
+    return drained;
+  }
+
   for (let index = 0; index < sites.length; index++) {
     const site = sites[index]!;
     const rootsBudgetLeft = maxTotalRoots - result.generationRoots.length;
@@ -567,6 +751,26 @@ export async function collectDbnumRefnos(
     pushAllUnique(result.empty, collected.empty);
     pushAllUnique(result.truncatedRoots, collected.truncatedRoots);
     Object.assign(result.errors, collected.errors);
+    // 这个 SITE 的 ensure 等了多久（最长 ENSURE_TIMEOUT_MS），服务端就生成了多久：顺手把这段时间里新就绪的根抽进视口
+    if (databaseRouted && !result.budgetLimited) await drainIntoResult();
+  }
+  // database 形态收尾：接着每拍抽一次就绪根（database 形态的「边生成边进视口」），直到全部就绪、一段时间没有
+  // 新就绪的根（服务端没在生成）、预算用尽或超时
+  if (databaseRouted && !result.budgetLimited) {
+    const pollMs = Math.max(0, (options.taskPollIntervalMs ?? 2_000) * DATABASE_ROUTED_POLL_MULTIPLIER);
+    const deadline = Date.now() + (options.taskWaitTimeoutMs ?? 2 * 60 * 60 * 1_000);
+    let idlePolls = 0;
+    let lastReadyTotal = -1;
+    for (;;) {
+      const drained = await drainIntoResult();
+      if (!drained) break;
+      onProgress?.({ phase: 'generate', siteIndex: 1, siteCount: 1, site: null, rootsDone: drained.readyTotal, rootsTotal: drained.total, root: null });
+      if (result.budgetLimited || drained.readyTotal >= drained.total) break;
+      idlePolls = drained.readyTotal > lastReadyTotal ? 0 : idlePolls + 1;
+      lastReadyTotal = drained.readyTotal;
+      if (idlePolls >= DATABASE_ROUTED_IDLE_POLLS || Date.now() >= deadline) break;
+      await sleep(pollMs, options.signal);
+    }
   }
   return result;
 }

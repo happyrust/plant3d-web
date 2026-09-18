@@ -735,3 +735,165 @@ describe('collectDbnumRefnos · 服务端整库入口 · 实时（roots 认 read
     expect(result.errors).toEqual({});
   });
 });
+
+/**
+ * database 形态（摄入形态里已初始化的库）：整库即时 ensure 回 409，但 `roots?ready=1` 照样可用、`records` 直读 rocksdb。
+ * 退回逐 SITE 之前先把服务端已生成的根抽进视口；逐 SITE 收尾再抽一次，把等 SITE ensure 期间新就绪的根补上。
+ */
+describe('collectDbnumRefnos · database 形态（409）先抽就绪根', () => {
+  /** `ensure` 恒 409；`roots` 每问一次按 `readyByCall` 的下一项回就绪子集（认 `ready`）。 */
+  function databaseRoutedApi(options: { allRoots: string[]; readyByCall: string[][]; rootsSupportReady?: boolean }) {
+    let call = 0;
+    const dbnumRoots = vi.fn(async (dbnum: number, opts?: { ready?: boolean; taskId?: string; signal?: AbortSignal }) => {
+      const readyNow = new Set(options.readyByCall[Math.min(call++, options.readyByCall.length - 1)] ?? []);
+      const supportReady = options.rootsSupportReady !== false;
+      const rows = options.allRoots.map((root) => ({
+        generation_root: root, noun: 'EQUI', name: root, ...(supportReady ? { ready: readyNow.has(root) } : {}),
+      }));
+      const filtered = opts?.ready && supportReady ? rows.filter((row) => row.ready) : rows;
+      return {
+        source: 'direct', dbnum, total: options.allRoots.length,
+        ...(supportReady ? { ready_total: readyNow.size, only_ready: opts?.ready === true } : {}),
+        roots: filtered,
+      };
+    });
+    return {
+      ensureDbnum: vi.fn(async () => { throw apiError('conflict', 409); }),
+      task: vi.fn(async () => { throw apiError('not_found', 404); }),
+      dbnumRoots,
+    } as unknown as DbnumServerEntryApi & { ensureDbnum: ReturnType<typeof vi.fn>; task: ReturnType<typeof vi.fn>; dbnumRoots: ReturnType<typeof vi.fn> };
+  }
+
+  // 库里两个 SITE：24381_2 的 SITE ensure 解出根 24381_145018；24383_2 这次 ensure 超时（pending）。
+  // 服务端另有两根 101/1、102/1 已经 / 即将生成好，不经 SITE ensure 也能从 roots?ready=1 拿到。
+  const plan = {
+    '24381_2': { roots: ['24381_145018'], items: [item('24381_1', '24381_145018')] },
+    '24383_2': { roots: [] as string[], items: [] as GeomInstQuery[], pending: ['24383_2'] },
+    ready: { items: [item('101_1', '101_1'), item('101_2', '101_1'), item('102_1', '102_1')] },
+  };
+
+  it('先把就绪根取进视口（onRefnosReady），再逐 SITE 老路；收尾接着抽，等 SITE 期间新就绪的根补进结果、不重取已收的根，全部就绪即停', async () => {
+    const records = fakeRecords(plan);
+    const api = databaseRoutedApi({
+      allRoots: ['101/1', '102/1', '24381/145018'],
+      readyByCall: [['101/1'], ['101/1', '102/1', '24381/145018']],
+    });
+    const fallbacks: { reason: string; message: string }[] = [];
+    const batches: { roots: string[]; refnos: string[]; rootsDone: number; rootsTotal: number }[] = [];
+    const progress: CollectDbnumProgress[] = [];
+    const result = await collectDbnumRefnos(
+      fakeTree(), records, 7997,
+      { taskPollIntervalMs: 0, onFallback: (f) => fallbacks.push(f), onRefnosReady: (batch) => { batches.push(batch); }, onProgress: (p) => progress.push(p) },
+      api,
+    );
+
+    // 第一次 roots?ready=1 只有 101/1 就绪 → 立刻取记录、交给调用方；然后两个 SITE 照常逐个 ensureAndCollect，
+    // 每个 SITE 之后再问一次 ready（第一个 SITE 之后 3/3 全就绪：24381/145018 已由 SITE ensure 收过不重取，只补 102/1）；
+    // 收尾第一拍 3/3 → 不再轮询
+    expect(api.dbnumRoots.mock.calls.map((c) => c[1]?.ready === true)).toEqual([true, true, true, true]);
+    expect(records.collectRoots.mock.calls.map((c) => c[0])).toEqual([['101_1'], ['102_1']]);
+    expect(records.ensureAndCollect.mock.calls.map((c) => c[0])).toEqual(['24381_2', '24383_2']);
+    expect(batches).toEqual([
+      { roots: ['101_1'], refnos: ['101_1', '101_2'], rootsDone: 1, rootsTotal: 3 },
+      { roots: ['102_1'], refnos: ['102_1'], rootsDone: 3, rootsTotal: 3 },
+    ]);
+    // 进度：抽就绪根按 roots 报（无 SITE 维度），逐 SITE 照旧，收尾每拍报一次服务端就绪数（generate）
+    expect(progress.map((p) => `${p.phase}:${p.site ? p.site.refno : '-'}:${p.rootsDone}/${p.rootsTotal}`)).toEqual([
+      'roots:-:1/3',
+      'sites:24381_2:0/0', 'roots:24381_2:1/1', 'roots:-:3/3',
+      'sites:24383_2:0/0',
+      'generate:-:3/3',
+    ]);
+
+    expect(fallbacks).toEqual([{ reason: 'database_routed', message: expect.stringContaining('已先取进服务端已生成的 1/3 根') }]);
+    expect(result.fallback).toMatchObject({ reason: 'database_routed' });
+    expect(result.sites.map((s) => s.refno)).toEqual(['24381_2', '24383_2']);
+    expect(result.refnos).toEqual(['101_1', '101_2', '24381_1', '102_1']);
+    expect(result.generationRoots).toEqual(['101_1', '24381_145018', '102_1']);
+    // SITE 级 pending 照旧留着（那是 SITE 的 ensure 超时，不是某一根）
+    expect(result.pending).toEqual(['24383_2']);
+    expect(result.errors).toEqual({});
+    expect(result.budgetLimited).toBe(false);
+    // 不把服务端整体记成「没有整库入口」
+    expect(dbnumServerEntrySupport(api)).toBe('unknown');
+  });
+
+  it('roots 路由不可用（旧构建 404）或不认 ready（旧 §4.5.3 构建）：不抽，按原样退回逐 SITE', async () => {
+    const records = fakeRecords(plan);
+    const api = legacyServerApi();
+    (api.ensureDbnum as ReturnType<typeof vi.fn>).mockImplementation(async () => { throw apiError('conflict', 409); });
+    const fallbacks: { reason: string; message: string }[] = [];
+    const result = await collectDbnumRefnos(fakeTree(), records, 7997, { onFallback: (f) => fallbacks.push(f) }, api);
+    expect(records.collectRoots).not.toHaveBeenCalled();
+    expect(records.ensureAndCollect).toHaveBeenCalledTimes(2);
+    expect(fallbacks).toEqual([{ reason: 'database_routed', message: '该库当前以 database 为准，已走逐 SITE 兼容路径' }]);
+    expect(result.refnos).toEqual(['24381_1']);
+
+    const records2 = fakeRecords(plan);
+    const api2 = databaseRoutedApi({ allRoots: ['101/1', '102/1'], readyByCall: [['101/1']], rootsSupportReady: false });
+    const result2 = await collectDbnumRefnos(fakeTree(), records2, 7997, {}, api2);
+    expect(records2.collectRoots).not.toHaveBeenCalled();
+    expect(records2.ensureAndCollect).toHaveBeenCalledTimes(2);
+    expect(result2.fallback).toMatchObject({ reason: 'database_routed', message: '该库当前以 database 为准，已走逐 SITE 兼容路径' });
+    expect(result2.refnos).toEqual(['24381_1']);
+  });
+
+  it('此刻一根都没就绪：不交空批，文案报服务端进度；每个 SITE 之后与收尾每拍边生成边抽，ready_total 一分钟不涨就停、没就绪的根记 pending', async () => {
+    const records = fakeRecords(plan);
+    // 第一个 SITE 之后 101/1 就绪 → 取；之后服务端再没有新就绪的根（102/1 一直不就绪）→ 收尾连续 6 拍不涨即停
+    const api = databaseRoutedApi({ allRoots: ['101/1', '102/1'], readyByCall: [[], ['101/1']] });
+    const fallbacks: { reason: string; message: string }[] = [];
+    const batches: { roots: string[] }[] = [];
+    const result = await collectDbnumRefnos(
+      fakeTree(), records, 7997,
+      { taskPollIntervalMs: 0, onFallback: (f) => fallbacks.push(f), onRefnosReady: (batch) => { batches.push(batch); } },
+      api,
+    );
+    expect(fallbacks[0]!.message).toContain('服务端已生成 0/2 根');
+    expect(batches.map((b) => b.roots)).toEqual([['101_1']]);
+    expect(records.collectRoots.mock.calls.map((c) => c[0])).toEqual([['101_1']]);
+    // 开头 1 拍 + 两个 SITE 之后各 1 拍（第一拍取到 101/1）+ 收尾 1 拍 + 6 拍没涨
+    expect(api.dbnumRoots).toHaveBeenCalledTimes(10);
+    expect(result.refnos).toEqual(['24381_1', '101_1', '101_2']);
+    expect(result.generationRoots).toEqual(['24381_145018', '101_1']);
+    expect(result.pending).toEqual(['24383_2']);
+    expect(result.budgetLimited).toBe(false);
+  });
+
+  it('收尾轮询边生成边抽：每拍只取新就绪的根，直到全部就绪；超时（taskWaitTimeoutMs）也停', async () => {
+    const records = fakeRecords(plan);
+    const api = databaseRoutedApi({
+      allRoots: ['101/1', '102/1', '24381/145018'],
+      readyByCall: [[], ['101/1'], ['101/1'], ['101/1', '102/1'], ['101/1', '102/1', '24381/145018']],
+    });
+    const batches: { roots: string[]; rootsDone: number; rootsTotal: number }[] = [];
+    const result = await collectDbnumRefnos(
+      fakeTree(), records, 7997, { taskPollIntervalMs: 0, onRefnosReady: (batch) => { batches.push(batch); } }, api,
+    );
+    expect(records.collectRoots.mock.calls.map((c) => c[0])).toEqual([['101_1'], ['102_1']]);
+    expect(batches.map((b) => `${b.roots.join(',')}:${b.rootsDone}/${b.rootsTotal}`)).toEqual(['101_1:2/3', '102_1:3/3']);
+    // 开头 1 + 两个 SITE 之后各 1 + 收尾 2 拍（第 2 拍 3/3 即停）
+    expect(api.dbnumRoots).toHaveBeenCalledTimes(5);
+    expect(result.refnos).toEqual(['24381_1', '101_1', '101_2', '102_1']);
+    expect(result.generationRoots).toEqual(['24381_145018', '101_1', '102_1']);
+
+    const records2 = fakeRecords(plan);
+    const api2 = databaseRoutedApi({ allRoots: ['101/1', '102/1'], readyByCall: [[], ['101/1']] });
+    const result2 = await collectDbnumRefnos(fakeTree(), records2, 7997, { taskPollIntervalMs: 0, taskWaitTimeoutMs: 0 }, api2);
+    // 超时：收尾只抽一拍就停（开头 1 + 两个 SITE 之后各 1 + 收尾 1）
+    expect(api2.dbnumRoots).toHaveBeenCalledTimes(4);
+    expect(result2.refnos).toEqual(['24381_1', '101_1', '101_2']);
+  });
+
+  it('就绪根的构件先用完 maxRefnos：budgetLimited，后面的 SITE 整个跳过，收尾不再抽', async () => {
+    const records = fakeRecords(plan);
+    const api = databaseRoutedApi({ allRoots: ['101/1', '102/1'], readyByCall: [['101/1', '102/1']] });
+    const result = await collectDbnumRefnos(fakeTree(), records, 7997, { maxRefnos: 2 }, api);
+    expect(records.collectRoots.mock.calls.map((c) => c[0])).toEqual([['101_1', '102_1']]);
+    expect(result.refnos).toEqual(['101_1', '101_2']);
+    expect(result.budgetLimited).toBe(true);
+    expect(result.skippedSites).toEqual(['24381_2', '24383_2']);
+    expect(records.ensureAndCollect).not.toHaveBeenCalled();
+    expect(api.dbnumRoots).toHaveBeenCalledTimes(1);
+  });
+});

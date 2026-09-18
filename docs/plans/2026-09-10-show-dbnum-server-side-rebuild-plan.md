@@ -251,3 +251,27 @@ pwsh scripts/verify-gen-model-v1.ps1 -BaseUrl http://127.0.0.1:8022 -Dbnum 7997
 
 **仍未验**：live——等用户按 §11 起 kv-mem 形态的服务（构建已换成 `d6a5d49ac`，命令不变）。看点：第一片 16 根提交后视口是否就出几何、
 `/health.geometry_concurrency.active` 生成期间是否接近 16、`-Dbnum 7997` 终态那行的 `elapsed` 对比第 2 稿的串行量级。
+
+### 12.7 追记（2026-09-14 03:xx）：database 形态的 409 分支也吃 `roots?ready=1`——摄入形态的 `:18122` 上整库显示从 133 个构件变成 14 083 个
+
+**现场**：用户要「配合 AMS 7997 的模型运行起来，然后范围显示」。本机在跑的是 **摄入形态**（`data_face=ingest`、0.1.23 debug 构建、`:18122`），
+7997 已初始化、以 rocksdb 为准 → `POST dbnums/7997/model/ensure` 回 **409**「整库即时 ensure 只服务 memory-routed 投影，需要持久重建时请调用
+`model/rebuild`」→ 前端 `database_routed` 退回逐 SITE 兼容路径。逐 SITE 在这台机上是灾难：SITE 级 `ensure` 要服务端把整棵子树生成完才回，
+debug 构建 ≈ 13–40 根/min，13 个 SITE 里 10 个撞 `ENSURE_TIMEOUT_MS`（130 s）进 pending、整棵子树这次全丢——**21.7 min 只装到 47 根 / 133 个构件**
+（`path=database_routed sites=13 roots=47 refno_count=133 pending=10 ms=1302899`）。而同一台服务端 `GET dbnums/7997/model/roots?ready=1`
+照样可用（`ready_total` 2212 → 3632 一路在涨——SITE ensure 超时后服务端仍在后台生成），`POST model/records` 64 根一批 **262 ms**（`source=rocksdb+memory-overlay`）。
+
+**改法（`collectDbnum.ts`，端点不动）**：
+- 409 分支退回逐 SITE **之前**先抽就绪根：`roots?ready=1` → 按 256 根一片 `collectRoots` → `onRefnosReady` 立刻进视口（与整库入口的每一拍同一套收集器
+  `createReadyRootsCollector`）；控制台 / 状态栏「该库当前以 database 为准，已先取进服务端已生成的 N/M 根，其余走逐 SITE 兼容路径」。roots 路由 404 / 不认
+  `ready`（旧构建）时照旧直接退回。
+- 逐 SITE 每做完一个 SITE 再抽一次（SITE ensure 等了多久服务端就生成了多久）；逐 SITE 之后接着每 10 s 抽一次（进度「服务端生成 N/M 根 · 已进视口 K 根」），
+  直到全部就绪 / 连续 1 min `ready_total` 没涨（服务端没在生成）/ 预算用尽 / `taskWaitTimeoutMs`（2 h）。已收过的根不重取，新取到的根从 pending 划掉；
+  构件预算切掉记录或根预算用尽而服务端还有就绪根没取 → `budgetLimited`。
+- 单测 +5（`collectDbnum.test.ts` 29 条）：先抽后逐 SITE 再收尾 / roots 404 与不认 ready 不抽 / 一根没就绪不交空批 + 收尾 6 拍不涨即停 /
+  收尾边生成边抽到全部就绪 + 超时即停 / 就绪根先用完 maxRefnos 则 budgetLimited 且不再逐 SITE。
+
+**真机**（headed Chrome，`:3101` → `:18122`，`?show_dbnum=7997`，缺省预算）：刷新后 **22 s** 视口里 **14 083** 个构件（就绪 3487 根），控制台
+「已先取进服务端已生成的 3487/6772 根」；逐 SITE 期间每个 SITE 之后补进新就绪的根（14 083 → 14 509，SITE 8/13 时）；范围查询 5 m（BRAN 中心）
+「共 1637 项，当前页 50 项，**已加载 50 项**」（改前 0 / 1 项），全部显示 / 隔离结果（其余 13 238/14 083 xray）正常。代价：逐 SITE 那 13 发 ensure 仍各等
+130 s（服务端仍在生成时），进度弹窗随之停留；收尾轮询让弹窗一直开到服务端生成完或 1 min 没进展——这一形态下本来就是「按小时计」（§12.5）。
