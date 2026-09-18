@@ -54,11 +54,13 @@ export const defaultSpatialApi: SpatialApi = {
  * 同一份数据）。
  *
  * 关键字只匹配 refno / noun，不匹配名称（spec §4.13；名称只对本页补）。
+ * 同一个原因，`sort=name` 不按名称排全集：服务端按 noun / refno 作近似序、只为本页补名字（`sort_hits`），抽屉在「按名称」下提示。
  */
 export const GEN_MODEL_V1_SPATIAL_CAPABILITIES: SpatialSourceCapabilities = {
   specValues: false,
   branCenterline: true,
   keywordMatchesName: false,
+  nameSortExact: false,
 };
 
 function isFiniteNumber(value: unknown): value is number {

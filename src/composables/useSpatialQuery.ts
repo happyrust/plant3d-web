@@ -529,6 +529,9 @@ const SORT_BY_TO_SERVER_PARAM: Record<SpatialQuerySortBy, SpatialQuerySortParam>
   specThenDistance: 'spec_distance',
 };
 
+/** 跨页批量操作的按钮清单，全集截断 / 取不到的提示里点名它们受影响。 */
+const BATCH_ACTIONS_LABEL = '「全部显示 / 全部隐藏 / 隔离结果 / 只加载未加载」与分组的「加载本专业（本库）/ 仅显示本专业（本库）」';
+
 /**
  * 按专业分组。
  *
@@ -1102,6 +1105,7 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
     specValues: spatialSource().capabilities.specValues,
     branCenterline: spatialSource().capabilities.branCenterline,
     keywordMatchesName: spatialSource().capabilities.keywordMatchesName,
+    nameSortExact: spatialSource().capabilities.nameSortExact,
   }));
   const nextRequestId = options.createRequestId ?? createRequestId;
   const batchLoadRefnos = options.batchLoadRefnos ?? ((refnos: string[], loadOptions?: BatchLoadOptions) => {
@@ -1323,8 +1327,15 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
   type MergeResultsOptions = {
     /** 有翻页时先取回的完整命中集合；用来判定「本地命中、但服务端整个命中集合里都没有」。 */
     fullMatches?: SpatialQueryFullMatchSet | null;
+    /**
+     * 有翻页却没拿到全集（`nearbyRefnos` 失败）：批量操作会退回只作用于当前页，要在结果里说出来；
+     * 没翻页时本页就是全集，不算这一档。
+     */
+    fullMatchesUnavailable?: boolean;
     /** 查看器里某 refno 当前是否可见；不给则一律按可见。 */
     isVisible?: (refno: string) => boolean;
+    /** 当前源 `sort=name` 是不是真按名称排全集（`SpatialQueryCapabilities.nameSortExact`）；不是就在结果里提示。 */
+    nameSortExact?: boolean;
   };
 
   /**
@@ -1390,6 +1401,19 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
       // 只能在服务端分页之后于本页内后筛：服务端不知道这两项，总数与页数按它的全量计
       if (request.filters.onlyLoaded || request.filters.onlyVisible) {
         warnings.push('「仅看已加载 / 仅看当前可见」只在本页内后筛，总数与页数按服务端全量计');
+      }
+      // 「按名称」在 gen-model-v1 只为本页补名字，全集按 noun / refno 近似排（spec §4.13）：顺序不是名称序，说出来
+      if (request.sortBy === 'nameAsc' && options.nameSortExact === false) {
+        warnings.push('「按名称」在当前源不按名称排整个命中集合：服务端按 Noun / Refno 近似排、只为本页补名字，跨页顺序不是名称序');
+      }
+      // 全集有服务端上限（v1 result_cap 100000 / legacy 中心线一页 10000），超出时跨页批量操作只动取到的这部分；
+      // 全集取不到（接口失败）时退回只动当前页——两种都要说，否则「全部隐藏」静默地少动一批
+      if (options.fullMatches?.truncated) {
+        const full = options.fullMatches;
+        const capText = typeof full.cap === 'number' && full.cap > 0 ? `，服务端上限 ${full.cap}` : '';
+        warnings.push(`完整命中集合已截断：只取到 ${full.refnos.length} / ${full.total} 项${capText}；${BATCH_ACTIONS_LABEL}只作用于取到的这部分`);
+      } else if (options.fullMatchesUnavailable) {
+        warnings.push(`完整命中集合取不到；${BATCH_ACTIONS_LABEL}退回只作用于当前页`);
       }
       // 服务端的非致命问题（中心线模式成员表取不到 → 结果可能混入 BRAN 自身构件）原样带给用户
       for (const warning of serverResp.warnings ?? []) {
@@ -1563,6 +1587,7 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
         bySpecValue: resp.by_spec_value ?? {},
         total: resp.total_count,
         truncated: Boolean(resp.truncated),
+        cap: typeof resp.cap === 'number' && Number.isFinite(resp.cap) ? resp.cap : null,
       };
     } catch {
       return null;
@@ -1761,7 +1786,9 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
     const viewerLoadedRefnos = viewer ? new Set(resolveLoadedRefnos(viewer)) : null;
     commitResultSet(mergeResults(authoritativeRequest, localItems, serverResp, viewerLoadedRefnos, {
       fullMatches,
+      fullMatchesUnavailable: hasMore && !fullMatches,
       isVisible: viewer ? (refno) => isViewerObjectVisible(viewer, refno) : undefined,
+      nameSortExact: spatialSource().capabilities.nameSortExact,
     }));
     status.value = 'ready';
   }

@@ -14,5 +14,5 @@ export const legacySpatialSource: SpatialSource = {
   nearby: (params) => queryNearbySpatial(params),
   nearbyRefnos: (params) => queryNearbyRefnos(params),
   negativeNouns: () => fetchNegativeNouns(),
-  capabilities: { specValues: true, branCenterline: true, keywordMatchesName: true },
+  capabilities: { specValues: true, branCenterline: true, keywordMatchesName: true, nameSortExact: true },
 };

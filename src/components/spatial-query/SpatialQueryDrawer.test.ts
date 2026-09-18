@@ -62,7 +62,7 @@ const stubState = {
   /** 「每页数量」是否为正整数（store 算，抽屉据此标红输入框） */
   hasValidPageLimit: ref(true) as Ref<boolean>,
   /** legacy 源有专业维度；gen-model-v1 的用例把它翻成 false */
-  spatialCapabilities: ref<SpatialQueryCapabilities>({ specValues: true, branCenterline: true, keywordMatchesName: true }) as Ref<SpatialQueryCapabilities>,
+  spatialCapabilities: ref<SpatialQueryCapabilities>({ specValues: true, branCenterline: true, keywordMatchesName: true, nameSortExact: true }) as Ref<SpatialQueryCapabilities>,
 };
 
 vi.mock('@/composables/useSpatialQuery', () => ({
@@ -155,7 +155,7 @@ function resetDraft() {
   stubState.selectedCenterRefno.value = null;
   stubState.canSubmit.value = true;
   stubState.hasValidPageLimit.value = true;
-  stubState.spatialCapabilities.value = { specValues: true, branCenterline: true, keywordMatchesName: true };
+  stubState.spatialCapabilities.value = { specValues: true, branCenterline: true, keywordMatchesName: true, nameSortExact: true };
 }
 
 function makeResultSet(count: number, options: { page?: number; perPage?: number; total?: number; hasMore?: boolean; startIndex?: number } = {}): SpatialQueryResultSet {
@@ -295,7 +295,7 @@ describe('SpatialQueryDrawer (distance 模式)', () => {
     expect(host.querySelector('[data-testid="distance-source-bran-centerline"]')?.className).toContain('bg-brand-subtle');
 
     // gen-model-v1 没有中心线：按钮消失，已选的那一档退回「通过 Refno」
-    stubState.spatialCapabilities.value = { specValues: false, branCenterline: false, keywordMatchesName: false };
+    stubState.spatialCapabilities.value = { specValues: false, branCenterline: false, keywordMatchesName: false, nameSortExact: false };
     await nextTick();
 
     expect(host.querySelector('[data-testid="distance-source-bran-centerline"]')).toBeNull();
@@ -486,7 +486,7 @@ describe('SpatialQueryDrawer (distance 模式)', () => {
     expect((host.querySelector('[data-testid="spatial-keyword-input"]') as HTMLInputElement).placeholder).toContain('名称');
 
     // gen-model-v1：服务端不按名称匹配，文案不再许诺「名称」（改前写死「Refno / 名称」）
-    stubState.spatialCapabilities.value = { specValues: false, branCenterline: false, keywordMatchesName: false };
+    stubState.spatialCapabilities.value = { specValues: false, branCenterline: false, keywordMatchesName: false, nameSortExact: false };
     await nextTick();
     expect(host.querySelector('[data-testid="spatial-keyword-label"]')?.textContent).toContain('关键字（Refno / Noun）');
     expect(host.querySelector('[data-testid="spatial-keyword-label"]')?.textContent).not.toContain('名称');
@@ -501,6 +501,35 @@ describe('SpatialQueryDrawer (distance 模式)', () => {
     stubState.hasValidPageLimit.value = true;
     await nextTick();
     expect(host.querySelector('[data-testid="spatial-page-limit-hint"]')).toBeNull();
+
+    unmount();
+  });
+
+  it('更多条件：「按名称」在不按名称排全集的源（v1）下选中时给出提示并换 tooltip；legacy 或换别的排序都不提示', async () => {
+    const { host, unmount } = mountDrawer();
+    await nextTick();
+    (host.querySelector('[data-testid="spatial-advanced-toggle"]') as HTMLButtonElement).click();
+    await nextTick();
+
+    const byName = () => host.querySelector('[data-testid="spatial-sort-nameAsc"]') as HTMLButtonElement;
+    const hint = () => host.querySelector('[data-testid="spatial-sort-name-hint"]');
+
+    // legacy：服务端真按名称排全集，选中「按名称」也不提示
+    stubState.draft.sortBy = 'nameAsc';
+    await nextTick();
+    expect(hint()).toBeNull();
+    expect(byName().title).toBe('按构件名称升序');
+
+    // gen-model-v1：只为本页补名字、全集按 Noun / Refno 近似排 → 按钮下方提示 + tooltip 说明
+    stubState.spatialCapabilities.value = { specValues: false, branCenterline: false, keywordMatchesName: false, nameSortExact: false };
+    await nextTick();
+    expect(hint()?.textContent).toContain('当前源不按名称排整个命中集合');
+    expect(byName().title).toContain('近似');
+
+    // 没选「按名称」就不提示
+    stubState.draft.sortBy = 'distanceAsc';
+    await nextTick();
+    expect(hint()).toBeNull();
 
     unmount();
   });
@@ -952,7 +981,7 @@ describe('SpatialQueryDrawer (distance 模式)', () => {
   });
 
   it('gen-model-v1（无专业维度）：收起专业过滤与「按专业」排序，结果按库分组、组头用服务端全量计数、组按钮走 dbnum 路径，并提示覆盖面', async () => {
-    stubState.spatialCapabilities.value = { specValues: false, branCenterline: false, keywordMatchesName: false };
+    stubState.spatialCapabilities.value = { specValues: false, branCenterline: false, keywordMatchesName: false, nameSortExact: false };
     const base = makeResultSet(3);
     base.items[0]!.dbnum = 24381;
     base.items[1]!.dbnum = 24383;

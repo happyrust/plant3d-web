@@ -269,6 +269,9 @@
                   {{ option.label }}
                 </button>
               </div>
+              <p v-if="showNameSortApproxHint" class="mt-1 text-[10px] text-gray-400" data-testid="spatial-sort-name-hint">
+                当前源不按名称排整个命中集合：服务端按 Noun / Refno 近似排、只为本页补名字，跨页顺序不是名称序。
+              </p>
             </section>
             <label class="text-xs text-gray-500">
               <span class="mb-1 block">每页数量</span>
@@ -1104,11 +1107,18 @@ const ALL_SORT_OPTIONS: { value: SpatialQuerySortBy; label: string; hint: string
   { value: 'specThenDistance', label: '按专业', hint: '先按专业分组，组内由近及远' },
   { value: 'nameAsc', label: '按名称', hint: '按构件名称升序' },
 ];
+const NAME_SORT_APPROX_HINT = '按构件名称升序（当前源只为本页补名字，全集按 Noun / Refno 近似排）';
 
-/** 没有专业维度的源不给「按专业」这一档。 */
-const sortOptions = computed(() =>
-  hasSpecDimension.value ? ALL_SORT_OPTIONS : ALL_SORT_OPTIONS.filter((option) => option.value !== 'specThenDistance'),
-);
+/**
+ * 没有专业维度的源不给「按专业」这一档；「按名称」在 gen-model-v1 不按名称排全集（spec §4.13：服务端按 noun / refno
+ * 近似排、只为本页补名字），tooltip 与按钮下方的提示据 `nameSortExact` 切。
+ */
+const sortOptions = computed(() => {
+  const options = hasSpecDimension.value ? ALL_SORT_OPTIONS : ALL_SORT_OPTIONS.filter((option) => option.value !== 'specThenDistance');
+  if (spatialCapabilities.value.nameSortExact) return options;
+  return options.map((option) => (option.value === 'nameAsc' ? { ...option, hint: NAME_SORT_APPROX_HINT } : option));
+});
+const showNameSortApproxHint = computed(() => draft.sortBy === 'nameAsc' && !spatialCapabilities.value.nameSortExact);
 
 function setSortBy(sortBy: SpatialQuerySortBy) {
   if (draft.sortBy === sortBy) return;

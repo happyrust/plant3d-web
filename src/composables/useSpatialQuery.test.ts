@@ -29,7 +29,7 @@ const spatialSourceMocks = vi.hoisted(() => ({
   })),
   negativeNouns: vi.fn(async (): Promise<NegativeNounsResult> => ({ success: false, nouns: [] })),
   /** 当前「数据源」：缺省 legacy（有专业维度）；v1 用例翻成 gen-model-v1 / specValues=false */
-  state: { kind: 'legacy' as 'legacy' | 'gen-model-v1', specValues: true, branCenterline: true, keywordMatchesName: true },
+  state: { kind: 'legacy' as 'legacy' | 'gen-model-v1', specValues: true, branCenterline: true, keywordMatchesName: true, nameSortExact: true },
 }));
 
 vi.mock('@/model-source', () => ({
@@ -43,6 +43,7 @@ vi.mock('@/model-source', () => ({
         specValues: spatialSourceMocks.state.specValues,
         branCenterline: spatialSourceMocks.state.branCenterline,
         keywordMatchesName: spatialSourceMocks.state.keywordMatchesName,
+        nameSortExact: spatialSourceMocks.state.nameSortExact,
       },
     },
   }),
@@ -153,6 +154,7 @@ describe('createSpatialQueryStore', () => {
     spatialSourceMocks.state.specValues = true;
     spatialSourceMocks.state.branCenterline = true;
     spatialSourceMocks.state.keywordMatchesName = true;
+    spatialSourceMocks.state.nameSortExact = true;
     dbMetaMocks.ensureDbMetaInfoLoaded.mockResolvedValue(undefined);
     dbMetaMocks.getDbnumByRefno.mockReturnValue(7997);
     dtxLoaderMocks.loadDtxAabbProxyRefnos.mockImplementation((_layer, _dbno, entries) => ({
@@ -874,6 +876,7 @@ describe('createSpatialQueryStore', () => {
     spatialSourceMocks.state.specValues = false;
     spatialSourceMocks.state.branCenterline = false;
     spatialSourceMocks.state.keywordMatchesName = false;
+    spatialSourceMocks.state.nameSortExact = false;
     const viewer = createViewerStub();
     spatialSourceMocks.nearby.mockResolvedValueOnce({
       success: true,
@@ -902,7 +905,7 @@ describe('createSpatialQueryStore', () => {
       batchLoadRefnos,
     });
 
-    expect(store.spatialCapabilities.value).toEqual({ specValues: false, branCenterline: false, keywordMatchesName: false });
+    expect(store.spatialCapabilities.value).toEqual({ specValues: false, branCenterline: false, keywordMatchesName: false, nameSortExact: false });
     store.draft.mode = 'range';
     // legacy 下范围查询默认「按专业」；v1 没有专业维度，退到由近及远
     expect(store.draft.sortBy).toBe('distanceAsc');
@@ -1951,6 +1954,8 @@ describe('createSpatialQueryStore · 审核 P1–P8', () => {
     spatialSourceMocks.state.kind = 'legacy';
     spatialSourceMocks.state.specValues = true;
     spatialSourceMocks.state.branCenterline = true;
+    spatialSourceMocks.state.keywordMatchesName = true;
+    spatialSourceMocks.state.nameSortExact = true;
     dbMetaMocks.ensureDbMetaInfoLoaded.mockResolvedValue(undefined);
     dbMetaMocks.getDbnumByRefno.mockReturnValue(7997);
   });
@@ -2330,5 +2335,118 @@ describe('createSpatialQueryStore · 审核 P1–P8', () => {
     viewer.scene.setObjectsVisible.mockClear();
     store.restoreScene();
     expect(viewer.scene.setObjectsVisible).not.toHaveBeenCalled();
+  });
+
+  it('低：「按名称」在不按名称排全集的源（gen-model-v1）下结果带提示、顺序仍沿用服务端；legacy、换按距离、纯本地路径都不提示', async () => {
+    const viewer = createViewerStub();
+    const queryNearbyByPosition = vi.fn(async (): Promise<SpatialQueryResult> => pageResponse(1, 100, 2, [
+      { refno: 'server_only', noun: 'EQUI', spec_value: 2, distance: 18 },
+      { refno: 'loaded_a', noun: 'PIPE', spec_value: 1, distance: 5 },
+    ]));
+    const store = createSpatialQueryStore({
+      viewerRef: ref(viewer),
+      selection: { selectedRefno: { value: null } } as any,
+      toolStore: toolStoreStub(),
+      queryNearbyByPosition,
+    });
+    store.draft.mode = 'range';
+    store.draft.rangeCenterSource = 'coordinates';
+    store.draft.center = { x: 500, y: 500, z: 500 };
+    store.draft.radius = 50;
+    store.draft.sortBy = 'nameAsc';
+
+    // legacy：服务端真按名称排全集，不提示
+    await store.submitQuery();
+    expect(store.status.value).toBe('ready');
+    expect(store.resultSet.value?.warnings).toEqual([]);
+    expect(store.resultSet.value?.items.map((item) => item.refno)).toEqual(['server_only', 'loaded_a']);
+
+    // gen-model-v1：只为本页补名字、全集按 Noun / Refno 近似排 → 提示；顺序仍沿用服务端（前端重排只改本页，跨页照旧不是名称序）
+    spatialSourceMocks.state.kind = 'gen-model-v1';
+    spatialSourceMocks.state.specValues = false;
+    spatialSourceMocks.state.nameSortExact = false;
+    await store.submitQuery();
+    expect(store.resultSet.value?.warnings).toEqual([
+      expect.stringContaining('「按名称」在当前源不按名称排整个命中集合'),
+    ]);
+    expect(store.resultSet.value?.items.map((item) => item.refno)).toEqual(['server_only', 'loaded_a']);
+
+    // 换成按距离：没有这条提示
+    await store.requeryResults({ sortBy: 'distanceAsc' });
+    expect(store.resultSet.value?.request.sortBy).toBe('distanceAsc');
+    expect(store.resultSet.value?.warnings).toEqual([]);
+
+    // 纯本地路径（「仅看已加载」）在前端按名称排，与服务端无关，不提示
+    store.draft.sortBy = 'nameAsc';
+    store.draft.onlyLoaded = true;
+    await store.submitQuery();
+    expect(store.resultSet.value?.localOnly).toBe(true);
+    expect(store.resultSet.value?.warnings).toEqual([]);
+  });
+
+  it('低：完整命中集合被服务端截断 → 提示只取到 N / M 项与上限、批量操作只动取到的部分；全集取不到 → 提示退回当前页；没翻页两种都不提示', async () => {
+    const viewer = createViewerStub();
+    const paged = vi.fn(async (_x: number, _y: number, _z: number, _r: number, options: { page?: number }): Promise<SpatialQueryResult> => {
+      const page = options.page ?? 1;
+      return pageResponse(page, 1, 3, [{ refno: `server_p${page}`, noun: 'EQUI', spec_value: 2, distance: 18 + page }]);
+    });
+    const nearbyRefnos = vi.fn(async (): Promise<SpatialNearbyRefnosResult> => ({
+      success: true,
+      refnos: ['server_p1', 'server_p2'],
+      by_dbnum: {},
+      by_spec_value: { '2': ['server_p1', 'server_p2'] },
+      total_count: 3,
+      truncated: true,
+      cap: 2,
+    }));
+    const store = createSpatialQueryStore({
+      viewerRef: ref(viewer),
+      selection: { selectedRefno: { value: null } } as any,
+      toolStore: toolStoreStub(),
+      queryNearbyByPosition: paged as any,
+      queryNearbyRefnos: nearbyRefnos,
+    });
+    store.draft.mode = 'range';
+    store.draft.rangeCenterSource = 'coordinates';
+    store.draft.center = { x: 500, y: 500, z: 500 };
+    store.draft.radius = 50;
+    store.draft.limit = 1;
+
+    await store.submitQuery();
+    expect(store.status.value).toBe('ready');
+    expect(store.resultSet.value?.fullMatches).toEqual(expect.objectContaining({ truncated: true, cap: 2, total: 3 }));
+    const truncatedWarning = store.resultSet.value?.warnings.find((warning) => warning.includes('完整命中集合已截断'));
+    expect(truncatedWarning).toContain('只取到 2 / 3 项，服务端上限 2');
+    expect(truncatedWarning).toContain('只加载未加载');
+    expect(truncatedWarning).toContain('只作用于取到的这部分');
+    // 批量作用域就是取到的那 2 条（改前静默地少动第 3 条）
+    expect(store.countLoadTargets({ onlyUnloaded: true })).toBe(2);
+
+    // 全集取不到（接口失败）→ 批量退回当前页，说出来；「已截断」那条不再出现
+    nearbyRefnos.mockRejectedValueOnce(new Error('boom'));
+    await store.requeryResults({ page: 2 });
+    expect(store.status.value).toBe('ready');
+    expect(store.resultSet.value?.fullMatches).toBeNull();
+    expect(store.resultSet.value?.warnings).toEqual(expect.arrayContaining([expect.stringContaining('完整命中集合取不到')]));
+    expect(store.resultSet.value?.warnings.some((warning) => warning.includes('已截断'))).toBe(false);
+    expect(store.countLoadTargets({ onlyUnloaded: true })).toBe(1);
+
+    // 没翻页：本页就是全集，不取全集、两种提示都没有
+    const single = vi.fn(async (): Promise<SpatialQueryResult> => pageResponse(1, 100, 1, [{ refno: 'server_only', noun: 'EQUI', spec_value: 2, distance: 18 }]));
+    nearbyRefnos.mockClear();
+    const singleStore = createSpatialQueryStore({
+      viewerRef: ref(viewer),
+      selection: { selectedRefno: { value: null } } as any,
+      toolStore: toolStoreStub(),
+      queryNearbyByPosition: single,
+      queryNearbyRefnos: nearbyRefnos,
+    });
+    singleStore.draft.mode = 'range';
+    singleStore.draft.rangeCenterSource = 'coordinates';
+    singleStore.draft.center = { x: 500, y: 500, z: 500 };
+    singleStore.draft.radius = 50;
+    await singleStore.submitQuery();
+    expect(nearbyRefnos).not.toHaveBeenCalled();
+    expect(singleStore.resultSet.value?.warnings.some((warning) => warning.includes('完整命中集合'))).toBe(false);
   });
 });

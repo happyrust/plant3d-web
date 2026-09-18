@@ -169,6 +169,11 @@ export type SpatialSourceCapabilities = {
    * gen-model-v1 只按 refno / noun（全集匹配名称要对全部候选读记录，大半径下会拖成秒级），抽屉据此切关键字文案。
    */
   readonly keywordMatchesName: boolean;
+  /**
+   * 服务端 `sort=name` 是不是真按名称排整个命中集合：legacy 是；gen-model-v1 只为本页补名字，全集按 noun / refno
+   * 作近似序（spec §4.13：名称要回元素记录读 `NAME`，对全部候选做会拖成秒级），抽屉据此在「按名称」下给提示。
+   */
+  readonly nameSortExact: boolean;
 };
 
 /**

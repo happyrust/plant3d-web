@@ -100,6 +100,8 @@ export type SpatialQueryCapabilities = {
   branCenterline: boolean;
   /** 服务端关键字匹不匹配构件名称：legacy 匹配 refno / noun / name，gen-model-v1 只匹配 refno / noun；抽屉据此切关键字文案 */
   keywordMatchesName: boolean;
+  /** 「按名称」是不是真按名称排整个命中集合：legacy 是；gen-model-v1 按 noun / refno 近似排、只为本页补名字，抽屉与结果区据此提示 */
+  nameSortExact: boolean;
 };
 
 export type SpatialQueryFilterOptions = {
@@ -127,7 +129,9 @@ export type SpatialQueryFullMatchSet = {
   byDbnum: Record<string, string[]>;
   bySpecValue: Record<string, string[]>;
   total: number;
+  /** 服务端按 `cap` 截断了全集（gen-model-v1 `result_cap` 100000；legacy 中心线模式一页 10000）：`refnos` 少于 `total`，批量操作只能作用于取到的这部分 */
   truncated: boolean;
+  cap?: number | null;
 };
 
 export type SpatialQueryResultSet = {
