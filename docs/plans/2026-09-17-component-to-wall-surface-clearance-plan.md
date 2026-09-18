@@ -96,10 +96,11 @@
 
 ### 4.3 命中墙面分类
 
-**PR-A 落地口径（取代下面最初的 `world_trans` 帧方案）**：元素的 `world_trans` 是摆放帧，不是扫掠帧（STWALL 与 SCTN 同一条截面链，局部轴不保证 X=左法向 / Y=上），所以分类**只用世界几何**：命中三角法向 n（`project_local_point_and_get_feature` 取到 Face，法向翻成指向源侧；取不到三角退到 `p − q`），世界 Up = +Z（E3D 的 U）——
+**PR-A 落地口径（取代下面最初的 `world_trans` 帧方案）**：元素的 `world_trans` 是摆放帧，不是扫掠帧（STWALL 与 SCTN 同一条截面链，局部轴不保证 X=左法向 / Y=上），所以分类**只用世界几何**：命中三角法向 n（`project_local_point_and_get_feature` 取到 Face，法向翻成指向源侧；取不到三角退到 `p − q`；**09-18 补**：最近点落在棱 / 角上时 parry 只报一片三角，`hit_triangle` 在到 q 距离 ≤ eps 的三角里挑法向最贴合「指向源侧」方向的那片——洞壁与开孔面共棱时选洞壁不选外皮，斜靠墙端的竖棱多读 `end`），世界 Up = +Z（E3D 的 U）——
+- **洞壁先判（2026-09-18 口径，gen-model `eabd16d5c`）**：命中三角沿自己法向 n 的支撑区间**严格在墙 AABB 沿 n 的支撑区间内部**（外皮一定贴着 AABB 的某一侧；eps = 千分之一跨度、最小 0.05 mm），**且**从命中点沿 n（指向源侧、朝洞里）再往前在 AABB 内会**撞回本墙**、撞到的面与 n 大致平行（|dot| > 0.5，对面还有一片洞壁）→ **`opening`**（`confidence = geometric`）。两条同时成立才算：只看第一条，台阶墙低一级的顶面也在内部；只看第二条，U 形叶子的两腿互相照面。弧墙上与径向平行的面（内 / 外弧面本身——凹面对面隔 2R 也是本墙）不参与洞壁判定。洞壁是主面，打垂距。
 - |n.z| ≥ 0.7 → `top` / `bottom`（`confidence = normal-only`）；
 - 否则对墙叶子顶点做水平 PCA 得行进方向 t（厚度方向 s = t × Up）：侧面（|n.z| < 0.5）法向里偏离 ±t / ±s 超 15° 的**面积占比 > 25%** 判弧墙，并用这些法向线做最小二乘拟合弧轴 c（法向线 q + λh 都过弧轴）——弧墙：`h · (c − q)` ≥ 0.707 → `inner`（外法向指向圆心 = 凹面），≤ −0.707 → `outer`，其余 `end`（`confidence = geometric`）；直墙：|h · t| ≥ 0.707 → `end`，否则 **`side`**（直墙两侧对称，分不出内外；`confidence = pca`）。
-- 枚举因此是 `inner | outer | side | top | bottom | end | unknown`。live 实测：ELBO / BEND / BRAN × 弧墙 WALL 1 → `outer/geometric`，SCTN × 同墙 → `inner/geometric`，BOX × STWALL 1 → `side/pca`。
+- 枚举因此是 `inner | outer | side | opening | top | bottom | end | unknown`（`opening` 09-18 加）。live 实测：ELBO / BEND / BRAN × 弧墙 WALL 1 → `outer/geometric`，SCTN × 同墙 → `inner/geometric`，BOX × STWALL 1 → `side/pca`；`opening` 只有合成用例（§7 G6），live 还没有构件在洞里的对。
 
 最初方案（未采用，留作二期读 `Spline` 参数时的参照）：取墙叶子的 `world_trans` 旋转 R，`n_local = Rᵀ n`：
 
@@ -111,7 +112,7 @@
 
 ### 4.4 垂距（raycast）
 
-仅当 `target_face.kind ∈ {inner, outer, side}`（主面）：射线起点 = 源侧最近点 p，方向 = −n（指向墙面），`w_j.cast_local_ray_and_get_normal(&ray, max_toi = distance × 4 + 1, solid = false)`；命中 → `perpendicular = {distance_mm: toi, from: p, to: hit}`；未命中或 toi 与 distance 差 > max(1%, 0.05 mm) → `perpendicular = null` 并 warning `perpendicular_ray_missed`（最近点在棱 / 角上）。相交时不算垂距。live 实测：正对墙面时 ⊥ 与最近距离相差 ≤ 0.07 mm（ELBO × 弧墙 64.43 / 64.50）；SCTN × 弧墙、BOX × 直墙的最近点落在棱 / 角上，垂距如期置空。
+仅当 `target_face.kind ∈ {inner, outer, side, opening}`（主面；`opening` 09-18 加）：射线起点 = 源侧最近点 p，方向 = −n（指向墙面），`w_j.cast_local_ray_and_get_normal(&ray, max_toi = distance × 4 + 1, solid = false)`；命中 → `perpendicular = {distance_mm: toi, from: p, to: hit}`；未命中或 toi 与 distance 差 > max(1%, 0.05 mm) → `perpendicular = null` 并 warning `perpendicular_ray_missed`（最近点在棱 / 角上）。**09-18 补**：直打落空时把起点朝命中三角重心在面内挪 max(0.01, distance‰) mm 再打一次（面垂直于射线，toi 不变；`from` / `to` 仍按原起点算）——穿孔的管与洞壁同宽时最近点正落在洞壁与开孔面的共棱上，不挪就擦棱打空。相交时不算垂距。live 实测：正对墙面时 ⊥ 与最近距离相差 ≤ 0.07 mm（ELBO × 弧墙 64.43 / 64.50）；SCTN × 弧墙、BOX × 直墙的最近点落在棱 / 角上，垂距如期置空。
 
 ### 4.5 输出组装
 
@@ -167,7 +168,7 @@ GET /api/v1/spatial/surface-clearance
 }
 ```
 
-- `target_face.kind ∈ inner | outer | side | top | bottom | end | unknown`，`confidence ∈ pca | geometric | normal-only`（§4.3）；`witness ∈ closest-points | aabb-overlap-center`（相交时 parry 不给点）。
+- `target_face.kind ∈ inner | outer | side | opening | top | bottom | end | unknown`（`opening` = 洞壁，09-18 加，主面带垂距；前端标签「洞口」，plant3d-web `554c6ca5`），`confidence ∈ pca | geometric | normal-only`（§4.3）；`witness ∈ closest-points | aabb-overlap-center`（相交时 parry 不给点）。
 - 错误码沿用 v1 既有集合（`ApiError::coded` 不对外，不新增码字）：400 `bad_request`（refno 格式 / 两个 refno 相同 / `target_kind` 非 wall|any / `max_distance_mm` 越界）；404 `not_found` + `detail.reason = no_model_mesh`（任一侧没有模型面行或网格文件）；422 `precondition` + `detail.reason = target_not_wall`（`target_kind = wall` 且目标不在墙族，`detail.wall_nouns` 列出墙族）；422 `precondition` + `detail.reason = shared_leaves_only`（源与目标在模型面上是同一批叶子——剔除重合叶子后祖先那一侧空了，`detail.trimmed_side ∈ source | target`；`3509b93f9` 起）；`max_distance_mm` 内无结果 → 200 + `result: null` + warning `beyond_max_distance`。失败一律走 HTTP 状态码 + `ApiError`，200 里不报错（与 v1 其它端点同）。
 - warnings 形状 `code: 说明`：`perpendicular_ray_missed`（垂距射线落空）、`beyond_max_distance`、`source_within_target` / `target_within_source`（源与目标有祖先关系，重合叶子已从祖先那一侧剔除，结果是到「其余部分」的距离；`3509b93f9`）、两侧会话不同 / 目标 TYPE 兜底两句无 code。
 - 前端类型：`genModelV1Api.ts` 新增 `GenModelV1SurfaceClearanceRequest` / `SurfaceClearanceResponse` + `genModelV1SurfaceClearance(req, options)`（`genModelV1Fetch` + `query`，refno 走 `toV1Refno`）。
@@ -222,11 +223,11 @@ reducer 拒收缺 `method` / `accuracyClass` 的记录（09-11 M0 验收）。
 | # | 场景 | 期望 | PR-A 状态 |
 | --- | --- | --- | --- |
 | G1 | 直墙、构件正对墙面 | `distance == perpendicular.distance`（±0.01 mm），`target_face.kind = side`（直墙不分内外） | 合成单测 ✓（300 mm，⊥ 300，side/pca，法向 +X 指向源） |
-| G2 | 直墙、构件在墙端外斜靠 | 最近点落墙端面 / 竖棱，`target_face.kind ∈ side / end`，`perpendicular = null` + warning | 合成单测 ✓（500 mm 到竖棱，无垂距）；live BOX × STWALL 1 同形（角上，无垂距） |
+| G2 | 直墙、构件在墙端外斜靠 | 最近点落墙端面 / 竖棱，`target_face.kind ∈ side / end`，`perpendicular = null`（读 `side` 时带 warning；09-18 起共棱处选法向更贴合源方向的面，斜靠墙端多读 `end`、无 warning） | 合成单测 ✓（500 mm 到竖棱，无垂距，两种读法都收）；live BOX × STWALL 1 同形（角上，无垂距） |
 | G3 | 弧墙内侧 / 外侧各一构件 | `target_face.kind` 分别 inner / outer（geometric），`error_bound_mm = 0.5`，与解析圆柱面手算差 ≤ 弦高 | 合成单测 ✓（120° 环形扇区 48 段，内外各 500 mm，误差 < 3 mm 容差内）；live ELBO / BEND / BRAN → outer、SCTN → inner |
 | G4 | 构件穿墙 | `distance = 0`、`intersects = true`、无垂距，`witness = aabb-overlap-center` | 合成单测 ✓；**live ✓（PR-D，§7.2）**：BEND `24384/24729` × GWALL `17496/118130`、BEND `24384/24742` × PANE `17496/136833` 等 17 对硬穿墙都回 0 + intersects + `aabb-overlap-center` |
 | G5 | 选 CWALL owner vs 选单块 STWALL | owner 结果 ≤ 单块结果，`target_leaf_refno` 指出命中哪块 | 合成单测 ✓（两墙两构件取最小，剪掉 ≥ 1 对）；live BOX × CWALL owner 113 叶子 → 29.14 mm 命中 GWALL `17496/118130` |
-| G6 | 带洞墙（`booled_id`）、构件在洞里 | 距洞壁的距离，不是未开洞墙的 0 | **合成几何单测 ✓**（09-18，gen-model-model-cache `82517dbd8`：`g6_component_in_wall_hole_measures_to_hole_wall_not_zero`——200 厚直墙开 400 × 400 方孔、穿孔的管离洞壁 50 mm → 50 mm / 不相交 / 最近点在洞壁上，同一根管对实心墙回 G4 的 0 + intersects 作对照；`7de9309f9`：`hole_wall_faces_currently_classify_as_end_and_top_bottom` 钉住洞壁面分类**现状**——竖洞壁法向 ±Y 读 `end`/pca、洞底 / 洞顶读 `top` / `bottom`/normal-only，都不是主面、无垂距无 warning；这是现状不是口径）+ **行解析单测 ✓**（`booled_id` 路）；live 墙叶子全是 `e3d_baked_v2_*` 布尔后网格；**实机对仍缺（PR-D，§7.2）**：WALL 1 周边 126 对 AABB 相交的管 × 墙里穿墙的 17 对全是没开洞的硬穿（G4），38 个 FIXING 开洞周围没有管件，FLOOR 无竖管贯穿——留待有穿孔数据的工程 |
+| G6 | 带洞墙（`booled_id`）、构件在洞里 | 距洞壁的距离，不是未开洞墙的 0；命中面 `opening`（洞壁，主面），垂距 = 距离 | **合成几何单测 ✓**（09-18，gen-model-model-cache `82517dbd8` → `eabd16d5c`：`g6_component_in_wall_hole_measures_to_hole_wall_not_zero`——200 厚直墙开 400 × 400 方孔、穿孔的管离洞壁 50 mm → 50 mm / 不相交 / 最近点在洞壁上 / **`opening`、法向朝管、垂距 50 落在洞壁、无 warning**，同一根管对实心墙回 G4 的 0 + intersects 作对照；`hole_wall_faces_classify_as_opening_with_perpendicular`——四片洞壁都 `opening/geometric`、垂距 50、垂足在那片洞壁上；`opening_needs_both_interior_position_and_a_facing_wall`——台阶墙低段顶面仍 `top` 无垂距、350° 弧墙凹面仍 `inner`）+ **行解析单测 ✓**（`booled_id` 路）；前端「洞口」/「垂直于洞壁」（plant3d-web `554c6ca5`）；live 墙叶子全是 `e3d_baked_v2_*` 布尔后网格；**实机对仍缺（PR-D，§7.2）**：WALL 1 周边 126 对 AABB 相交的管 × 墙里穿墙的 17 对全是没开洞的硬穿（G4），38 个 FIXING 开洞周围没有管件，FLOOR 无竖管贯穿——留待有穿孔数据的工程 |
 | G7 | 源为 BRAN owner | 多叶子并集（含 `tubi_relate` 隐式管身）；`source_leaf_refno` 是某个成员 | live BRAN `24384/22659`（20 叶子 384 tri）× 弧墙 → 209.73 mm，命中成员 `24384/22679` |
 
 ### 7.1 PR-A 验证记录（2026-09-17 20:0x–20:3x，`gen-model-model-cache` → `a0e307588`）
@@ -287,11 +288,11 @@ reducer 拒收缺 `method` / `accuracyClass` 的记录（09-11 M0 验收）。
 - **源 ⊂ 目标（后代关系）的自对**（PR-D 实测）——**已修 `gen-model-model-cache` `3509b93f9`**：目标叶子按 `anc CONTAINS` 取，源若是目标的后代（如 FIXING × 它所在的 WALL），目标集合含源自身，自对回 0 / intersects 掩盖真值。现在 `split_shared_leaves` 把重合叶子从**祖先那一侧**剔掉（源在目标里 → 剔目标；目标在源里 → 剔源），warning `source_within_target` / `target_within_source`，剔完一侧空了 → 422 `shared_leaves_only`；单测 1 条 + live 三对（FIXING × WALL 目标 2→1 片、BRAN `24384/22579` × 自己的 ELBO 源 4→3 片、金样不变）。
 - **datum 下 FIXING 的库内 AABB**（PR-D 顺手发现，与本功能无关）：`aabb:17496_137183` 在 8009 里落在 z −6.6 m，网格与 viewer 都在 2.1 m；疑似只用了局部 `POS`，影响 `spatial/nearby` / 空间树对这类元素的定位，转 gen-model 侧。**2026-09-18 补**：`:8022` 换新二进制后同一对 FIXING × WALL 算出 10 358.7 mm，源网格落在与 `aabb` 行同一个错位置——错的是库里的**存量模型记录**（`insts_flat × world_trans`），`aabb` 行只是它的派生；`:8024` 现生成的记录是对的。修法是重新生成那个根（`17496/105799`）/ 全库重建。**09-18 08:40 已在 `:8022` 重算该根**（`POST /api/v1/model/ensure {"refno":"17496/105799","force":true}`），`inst_relate:17496_137183` 的 `world_trans` 变为 (−15559.96, −2743.64, 2150)，FIXING × WALL 回 0 mm 贴合（清缓存后）；`aabb` 行在重算前就已被别的过程修正。**09-18 09:1x 把 1112 库全部 190 枚 FIXING 逐枚核对**（`:8022` 存量 `world_trans` 对 `:8024` 现生成，13 堵墙）：**190 / 190 一致（最大偏差 0）**，没有需要再重算的根（验证 README §7.6）。之前写的「另 37 个」是 WALL 1 周边扫描的局部数。
 - **`surface_clearance` 世界网格缓存在强制重算后不失效**（09-18 实测）——**已修 `gen-model-model-cache` `994f2e0cc`**：`build_leaf_mesh` 的 `LEAF_MESHES` 键原是 `(叶子 key, model_sesno)`，注释假设「换版自然失效」；`model/ensure force=true` 重算不换源会话号（仍 729），旧网格一直命中，重算后的第一问仍回 10 358.7 mm，直到缓存被挤满整体清空（上限 1 024 片）或进程重启。现在键 = `(key, sesno, placement_fingerprint)`，指纹由 `world_trans` 与每个实例的 `geo_hash` / 本地变换算出（`row_to_leaf`），摆放一变自然失效；单测 2 条。`UNIT_MESHES` 按内容哈希 `geo_hash` 键不受影响。`:8022` 09-18 09:12 已换到含它的二进制（停机 10 s）。
-- **洞壁面的分类口径未定**（09-18 合成 G6 实测，`gen-model-model-cache` `7de9309f9` 的 `hole_wall_faces_currently_classify_as_end_and_top_bottom` 钉的是现状）：§4.3 只认「Up = +Z 分顶 / 底、水平 PCA 分端 / 侧、弧轴分内 / 外」，不知道命中的是洞壁——沿厚度方向开的孔，两片竖洞壁法向与墙的行进方向平行，读成 `end`（pca）；洞底 / 洞顶读成 `top` / `bottom`（normal-only）。三种都不是主面，所以构件在洞里时 `perpendicular = null`、无 warning；前端尺寸文字是 `50mm`（不带 `⊥`），而 toast / 来源标签会按 `FACE_LABEL`（`clearanceExternalDimensions.ts`）写成「墙端」/「墙顶」/「墙底」——对洞壁这是误导性的字眼。**要不要给洞壁单独口径**（如 `opening`，并对洞壁打垂距）待定：判据可以是「命中三角的 AABB 落在墙 AABB 内部、且法向与相邻外皮法向反向」，或直接从 `booled_id` 对应的负体（FIXING / 洞）AABB 判归属；改了口径就改那条测试。live 里还没有构件在洞里的对（§7 G6），暂不动。
+- **洞壁面的分类口径**——**已定并落地（09-18 09:0x 用户拍板；gen-model `eabd16d5c` + plant3d-web `554c6ca5`）**：合成 G6 实测里洞壁曾被 §4.3 读成 `end`（竖洞壁）/ `top` / `bottom`（洞底 / 洞顶），不是主面、无垂距，前端还会写成「墙端 / 墙顶 / 墙底」。口径：洞壁单独叫 **`opening`**，算主面、打垂距，前端标签「洞口」、toast「垂直于洞壁」；判据 = 命中三角沿自身法向严格在墙 AABB 内部 **且** 沿法向再往前撞回本墙（§4.3 第一条）。**仍开的一半**：判据只认「对面还有一片本墙」，套管孔 / 门窗这类闭合洞成立；单侧的缺口（墙端开的凹口、L 形叶子的内角）读不出洞壁，仍按端 / 侧；`booled_id` 对应负体的 AABB 判归属那条路没走（要多查一次库）；弧墙上的洞只对法向非径向的洞壁成立。live 里还没有构件在洞里的对（§7 G6），口径只有合成覆盖；`:8022` 09:12 换上的是 `994f2e0cc`，**不含**这条，要 live 看 `opening` 得再换一次二进制。
 
 ## 10. 完成定义
 
-- G1–G7 金样全过并留 curl 输入 / 输出与截图；——**2026-09-17 状态**：合成单测 G1–G6 ✓（tests 里 `g1`–`g6` 与 §7 表一一对应，09-18 `7de9309f9` 起）；live G1–G5 / G7 ✓（§7.1 + §7.2）；G6 合成几何单测 ✓（`82517dbd8` / `7de9309f9`）+ 行解析 ✓，洞壁面分类现状 `end` / `top`，实机对仍缺穿孔数据；curl 输入 / 输出与截图在 `docs/verification/component-to-wall-surface-clearance-2026-09-17/`。
+- G1–G7 金样全过并留 curl 输入 / 输出与截图；——**2026-09-17 状态**：合成单测 G1–G6 ✓（tests 里 `g1`–`g6` 与 §7 表一一对应，09-18 `7de9309f9` 起）；live G1–G5 / G7 ✓（§7.1 + §7.2）；G6 合成几何单测 ✓（`82517dbd8` / `7de9309f9` / `eabd16d5c`）+ 行解析 ✓，洞壁 `opening` 口径已落地（后端 + 前端「洞口」），实机对仍缺穿孔数据；curl 输入 / 输出与截图在 `docs/verification/component-to-wall-surface-clearance-2026-09-17/`。
 - 前端 `clearance` 外部尺寸源在真 UI 出现，标签带精度字样，stale 可见；——**状态**：出现 ✓（`64mm ⊥`、来源标签「外表面净距」），stale 的真 UI 可见性未演示（要模型换版）。
 - `npm run type-check` / `lint` / 相关 vitest 全绿，`cargo test` 新增单测全过；——**状态** ✓（PR-A / B / C 各自记录）。
 - 决策 `d-428` 已登记（本轮已完成），09-11 计划状态已同步（PR-D）。——**状态** ✓（`5ea1417`）。
