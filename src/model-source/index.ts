@@ -16,6 +16,7 @@ import type { ModelSource, ModelSourceKind } from './ports';
 
 export * from './ports';
 export * from './kind';
+export * from './modelVersionErrors';
 export type { GenModelV1EnsureProgress, GenModelV1ModelSource } from './genModelV1';
 export type { CollectDbnumProgress, CollectDbnumResult } from './genModelV1';
 

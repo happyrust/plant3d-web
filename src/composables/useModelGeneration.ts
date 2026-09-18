@@ -6,7 +6,6 @@ import type { VisibleInstsIncomplete, VisibleInstsResponse } from '@/api/genMode
 import { enqueueParquetIncremental, getParquetVersion } from '@/api/genModelRealtimeApi';
 import { triggerBatchGenerateSse } from '@/api/genModelStreamGenerateApi';
 import { modelRegenerateByRefno, modelShowByRefno } from '@/api/genModelTaskApi';
-import { getModelUnitCommit } from '@/api/modelUnitVersionApi';
 import { useConfirmDialogStore } from '@/composables/useConfirmDialogStore';
 import { useConsoleStore } from '@/composables/useConsoleStore';
 import { ensureDbMetaInfoLoaded, tryGetDbnumByRefno } from '@/composables/useDbMetaInfo';
@@ -292,7 +291,6 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
   generateAndLoadModel: (refno: string) => Promise<boolean>
   showModelByDbnum: (dbno: number, options?: { flyTo?: boolean; manifestUrl?: string; replaceRefnos?: string[] }) => Promise<ShowModelByDbnumResult>
   showModelByRefno: (refno: string, options?: { flyTo?: boolean; regenerate?: boolean }) => Promise<boolean>
-  showModelUnitVersion: (unitRefno: string, dbno: number, sesno: number, options?: { flyTo?: boolean }) => Promise<boolean>
   isModelActuallyLoaded: (refno: string) => boolean
   checkRefnoExists: (refno: string) => boolean
 } {
@@ -312,7 +310,6 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
   const lastLoadDebug = ref<ModelLoadDebugInfo | null>(null);
 
   const loadedRoots = new Set<string>();
-  const loadedUnitVersionRefnos = new Map<string, string[]>();
   const PARQUET_VERSION_POLL_INTERVAL_MS = 3000;
 
   function syncGlobalLoadStatus() {
@@ -1693,38 +1690,6 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
     }
   }
 
-  async function showModelUnitVersion(
-    unitRefno: string,
-    dbno: number,
-    sesno: number,
-    loadOptions?: { flyTo?: boolean },
-  ): Promise<boolean> {
-    const normalized = normalizeRefnoString(unitRefno);
-    const unitKey = `${dbno}|${normalized}`;
-    try {
-      const version = await getModelUnitCommit(dbno, normalized, sesno);
-      const result = await showModelByDbnum(dbno, {
-        flyTo: loadOptions?.flyTo,
-        manifestUrl: version.manifest_url,
-        replaceRefnos: loadedUnitVersionRefnos.get(unitKey) ?? [],
-      });
-      if (result.loaded) {
-        loadedRoots.add(normalized);
-        loadedUnitVersionRefnos.set(unitKey, result.refnos);
-        consoleStore.addLog(
-          'info',
-          `[model-load] unit version loaded dbno=${dbno} unit_refno=${normalized} sesno=${sesno} artifact_sesno=${version.commit.artifact_sesno}`,
-        );
-      }
-      return result.loaded;
-    } catch (e) {
-      const message = e instanceof Error ? e.message : String(e);
-      error.value = message;
-      emitToast({ message: `[错误] 模型版本加载失败：${message}`, level: 'error' });
-      return false;
-    }
-  }
-
   async function generateAndLoadModel(refno: string): Promise<boolean> {
     // 统一入口：当前策略下“显示”即按需触发生成 instances 并加载
     return await showModelByRefno(refno);
@@ -1744,7 +1709,6 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
     generateAndLoadModel,
     showModelByDbnum,
     showModelByRefno,
-    showModelUnitVersion,
     isModelActuallyLoaded,
     checkRefnoExists,
   };

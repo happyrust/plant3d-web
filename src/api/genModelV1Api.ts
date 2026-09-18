@@ -171,7 +171,8 @@ export type GenModelV1RequestOptions = {
 type QueryValue = string | number | boolean | null | undefined;
 
 type InternalRequest = GenModelV1RequestOptions & {
-  method?: 'GET' | 'POST';
+  /** `DELETE` 只给 `model/history/{snapshot_key}` 释放历史投影用（2026-09-18，ADR 0065） */
+  method?: 'GET' | 'POST' | 'DELETE';
   query?: Record<string, QueryValue>;
   body?: Record<string, unknown>;
 };
@@ -261,7 +262,7 @@ export async function genModelV1Fetch<T>(path: string, request: InternalRequest 
   const identity = identityEntries(request.identity);
   const url = appendQuery(
     joinUrl(base, path),
-    method === 'GET' ? { ...identity, ...(request.query ?? {}) } : request.query,
+    method === 'POST' ? request.query : { ...identity, ...(request.query ?? {}) },
   );
   const fetchImpl = request.fetchImpl ?? globalThis.fetch;
   if (typeof fetchImpl !== 'function') {
@@ -925,6 +926,161 @@ export type TaskEntryDto = {
  */
 export function genModelV1TaskGet(taskId: string, options?: GenModelV1RequestOptions): Promise<TaskEntryDto> {
   return genModelV1Fetch<TaskEntryDto>(`/api/v1/tasks/${encodeURIComponent(taskId)}`, options);
+}
+
+// ---------------------------------------------------------------------------
+// 模型版本（版本对比，ADR 0065 / gen-model-refactor ADR-081）
+// ---------------------------------------------------------------------------
+
+/** 与 legacy `impact_kind` 同一词表 */
+export type ModelVersionImpactKindDto = 'mesh' | 'placement' | 'delivery' | 'noop' | 'tombstone';
+
+export type ModelVersionRowDto = {
+  sesno: number;
+  /** RFC3339；会话页解不出时刻为 null */
+  session_time: string | null;
+  impact_kind: ModelVersionImpactKindDto;
+};
+
+/** `GET /api/v1/model/versions` 的回执：某最小交付单元的模型版本表（按链序旧 → 新） */
+export type ModelVersionsResponse = {
+  dbnum: number;
+  /** `a/b` */
+  unit_refno: string;
+  unit_noun: string;
+  file_latest_sesno: number;
+  /** `limit` 截断了尾部；下一页用最后一条的 `sesno` 作 `since_sesno` */
+  truncated: boolean;
+  versions: ModelVersionRowDto[];
+  cached?: boolean;
+  elapsed_ms?: number;
+  stats?: Record<string, unknown>;
+  warnings?: string[];
+  [key: string]: unknown;
+};
+
+export type GenModelV1ModelVersionsRequest = {
+  dbnum: number;
+  /** `a_b` / `a/b` */
+  refno: string;
+  /** 只列链序在它之后的会话（翻页游标） */
+  sinceSesno?: number;
+  /** 服务端缺省 500、上限 5000 */
+  limit?: number;
+};
+
+/** 服务端整条链冷算是秒级（ams7997 332 会话 debug 1.9 s，大库更久）；给 120 s。 */
+export const MODEL_VERSIONS_TIMEOUT_MS = 120_000;
+
+/**
+ * 某最小交付单元的模型版本表。`refno` 不是单元根 → 422 `NOT_A_DELIVERY_UNIT_ROOT`（`detail` 带 `noun` 与项目
+ * `delivery_unit_types`）；整条链里没有它 → 404 `REFNO_NOT_FOUND`；`since_sesno` 不在链上 → 404 `SESSION_NOT_FOUND`。
+ */
+export function genModelV1ModelVersions(
+  req: GenModelV1ModelVersionsRequest,
+  options?: GenModelV1RequestOptions,
+): Promise<ModelVersionsResponse> {
+  return genModelV1Fetch<ModelVersionsResponse>('/api/v1/model/versions', {
+    ...options,
+    timeoutMs: options?.timeoutMs ?? MODEL_VERSIONS_TIMEOUT_MS,
+    query: {
+      dbnum: req.dbnum,
+      refno: toV1Refno(req.refno),
+      since_sesno: req.sinceSesno,
+      limit: req.limit,
+    },
+  });
+}
+
+export type GenModelV1HistoryGenerateRequest = {
+  dbnum: number;
+  /** `a_b` / `a/b`：单元根 */
+  refno: string;
+  sesno: number;
+};
+
+/** `POST /api/v1/model/history/generate` 的 202 回执；结果要轮询 `tasks/{task_id}`，成功时 `result.snapshot_key`。 */
+export type HistoryGenerateResponse = {
+  task_id: string;
+  [key: string]: unknown;
+};
+
+/**
+ * 把某单元子树在某会话的几何投进进程内 `Historical(<refno>@<sesno>)` 命名空间（不落库、重启即丢、
+ * ≤ 100 000 元素 / 300 s）。202 先回，后台跑。
+ */
+export function genModelV1ModelHistoryGenerate(
+  req: GenModelV1HistoryGenerateRequest,
+  options?: GenModelV1RequestOptions,
+): Promise<HistoryGenerateResponse> {
+  return genModelV1Fetch<HistoryGenerateResponse>('/api/v1/model/history/generate', {
+    ...options,
+    method: 'POST',
+    body: { dbnum: req.dbnum, refno: toV1Refno(req.refno), sesno: req.sesno },
+  });
+}
+
+export type HistoryQueryTool = 'snapshot' | 'instances' | 'tubes' | 'geometry';
+
+/** `history/query tool=instances` 的一行：一条非直管的投影记录 */
+export type HistoryInstanceRowDto = {
+  id: string;
+  snapshot_key: string;
+  dbnum: number;
+  /** noun */
+  generic: string;
+  /** `a_b` */
+  source_refno: string;
+  mesh_id: string;
+  world_bounds: V1Aabb | null;
+  world_transform: V1Transform;
+  /** true = 烘焙网格（`booled_id` = `mesh_id`）；false = 规范基本体，带 `local_transform` */
+  booled?: boolean;
+  primitive_key?: string;
+  local_transform?: V1Transform;
+  local_bounds?: V1Aabb;
+  [key: string]: unknown;
+};
+
+/** `history/query tool=tubes` 的一行：一段隐含直管 */
+export type HistoryTubeRowDto = {
+  id: string;
+  snapshot_key: string;
+  dbnum: number;
+  /** `a_b`，所属 BRAN */
+  container_refno: string;
+  source_refno: string;
+  leave_refno: string;
+  arrive_refno: string;
+  mesh_id: string;
+  invalid?: boolean;
+  world_bounds: V1Aabb | null;
+  world_transform: V1Transform;
+  [key: string]: unknown;
+};
+
+/** `POST /api/v1/model/history/query`；`snapshot` 回回执对象（不存在为 `null`），其余三个工具回数组。 */
+export function genModelV1ModelHistoryQuery<T = unknown>(
+  snapshotKey: string,
+  tool: HistoryQueryTool,
+  options?: GenModelV1RequestOptions,
+): Promise<T> {
+  return genModelV1Fetch<T>('/api/v1/model/history/query', {
+    ...options,
+    method: 'POST',
+    body: { snapshot_key: snapshotKey, tool },
+  });
+}
+
+/** `DELETE /api/v1/model/history/{snapshot_key}`：释放一份历史投影（共享网格不动）。 */
+export function genModelV1ModelHistoryDelete(
+  snapshotKey: string,
+  options?: GenModelV1RequestOptions,
+): Promise<{ snapshot_key: string; status: string }> {
+  return genModelV1Fetch<{ snapshot_key: string; status: string }>(
+    `/api/v1/model/history/${encodeURIComponent(snapshotKey)}`,
+    { ...options, method: 'DELETE' },
+  );
 }
 
 // ---------------------------------------------------------------------------

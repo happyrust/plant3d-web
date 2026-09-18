@@ -54,22 +54,5 @@ export async function listModelUnitCommits(
     .sort((a, b) => a.commit.sesno - b.commit.sesno);
 }
 
-export async function getModelUnitCommit(
-  dbnum: number,
-  unitRefno: string,
-  sesno: number,
-): Promise<ModelUnitCommitData> {
-  const base = getBaseUrl().replace(/\/$/, '');
-  const normalizedRefno = String(unitRefno || '').trim().replace(/\//g, '_');
-  const path = `/api/model/units/${encodeURIComponent(normalizedRefno)}/versions/${encodeURIComponent(String(sesno))}?dbnum=${encodeURIComponent(String(dbnum))}`;
-  const resp = await fetch(`${base}${path}`);
-  const body = await resp.json().catch(() => null) as {
-    success?: boolean
-    data?: ModelUnitCommitData
-    message?: string
-  } | null;
-  if (!resp.ok || !body?.success || !body.data) {
-    throw new Error(body?.message || `加载模型提交失败: HTTP ${resp.status}`);
-  }
-  return validateModelUnitCommitData(body.data);
-}
+// `getModelUnitCommit`（单条 `/versions/{sesno}`，给「把某版本装进主图层」用）2026-09-18 随那条死路一起删（Q18）；
+// 这个模块只剩 legacy 模型来源适配器要的版本表。

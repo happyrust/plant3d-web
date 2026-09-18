@@ -42,7 +42,6 @@ vi.mock('@/model-source', () => ({
 vi.mock('@/api/genModelRealtimeApi', () => ({ enqueueParquetIncremental: vi.fn(), getParquetVersion: vi.fn() }));
 vi.mock('@/api/genModelTaskApi', () => ({ modelRegenerateByRefno: vi.fn(), modelShowByRefno: vi.fn() }));
 vi.mock('@/api/genModelStreamGenerateApi', () => ({ triggerBatchGenerateSse: vi.fn() }));
-vi.mock('@/api/modelUnitVersionApi', () => ({ getModelUnitCommit: vi.fn() }));
 vi.mock('@/composables/useConfirmDialogStore', () => ({ useConfirmDialogStore: () => ({ confirm: vi.fn() }) }));
 vi.mock('@/composables/useConsoleStore', () => ({ useConsoleStore: () => ({ addLog: addLogMock }) }));
 vi.mock('@/composables/useDbMetaInfo', () => ({

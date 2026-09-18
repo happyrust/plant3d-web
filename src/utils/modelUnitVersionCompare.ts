@@ -17,6 +17,42 @@ export type ModelUnitGeometryDiff = {
 
 export const MODEL_UNIT_VERSION_COMPARE_EVENT = 'plant3d:model-unit-version-compare';
 export const MODEL_UNIT_VERSION_COMPARE_STATE_EVENT = 'plant3d:model-unit-version-compare-state';
+
+/**
+ * 版本对比的 URL 入口（2026-09-18 Q16，照 `spatial_refno / spatial_radius / spatial_autorun` 的前缀体例）：
+ * - `unit_refno`：最小交付单元根参考号（`a_b` / `a/b`），沿用 ADR 0045 起的名字；
+ * - `compare_a` / `compare_b`：A / B 的 sesno；缺省最近两版；
+ * - `compare_autorun=1`：`DockLayout` 打开版本对比面板，面板自动查版本、选 A/B、跑对比。
+ */
+export type ModelUnitVersionCompareUrlConfig = {
+  unitRefno: string
+  compareA: number | null
+  compareB: number | null
+  autorun: boolean
+}
+
+export function readModelUnitVersionCompareUrl(search: string): ModelUnitVersionCompareUrlConfig {
+  const params = new URLSearchParams(search);
+  const sesno = (key: string): number | null => {
+    const raw = params.get(key);
+    if (raw === null || raw.trim() === '') return null;
+    const value = Number(raw);
+    return Number.isInteger(value) && value > 0 ? value : null;
+  };
+  const flag = String(params.get('compare_autorun') ?? '').trim().toLowerCase();
+  return {
+    unitRefno: params.get('unit_refno')?.trim() ?? '',
+    compareA: sesno('compare_a'),
+    compareB: sesno('compare_b'),
+    autorun: flag === '1' || flag === 'true' || flag === 'yes',
+  };
+}
+
+/** `DockLayout` 用：URL 要求自动跑版本对比时先把面板打开。 */
+export function shouldOpenModelUnitVersionCompareFromUrl(search: string): boolean {
+  const config = readModelUnitVersionCompareUrl(search);
+  return config.autorun && config.unitRefno.length > 0;
+}
 export type ModelUnitCompareSide = 'before' | 'after'
 export const DEFAULT_MODEL_UNIT_COMPARE_SIDE: ModelUnitCompareSide = 'after';
 export type ModelUnitCompareViewMode = 'single' | 'split'

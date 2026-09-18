@@ -48,6 +48,7 @@ import { useToolStore } from '@/composables/useToolStore';
 import { useUserStore } from '@/composables/useUserStore';
 import { showModelByRefnosWithAck, useViewerContext, waitForViewerReady } from '@/composables/useViewerContext';
 import { onCommand } from '@/ribbon/commandBus';
+import { shouldOpenModelUnitVersionCompareFromUrl } from '@/utils/modelUnitVersionCompare';
 
 const embedModeParams = ref<EmbedModeParams>(readEmbedModeParamsFromSearch(window.location.search));
 
@@ -1836,6 +1837,11 @@ function onReady(event: DockviewReadyEvent) {
   setupTabContextMenu();
 
   void applyInitialLanding();
+
+  // URL `unit_refno=…&compare_autorun=1`（Q16）：把版本对比面板打开，面板自己接着查版本、选 A/B、跑对比
+  if (!isEmbedLayoutMode() && shouldOpenModelUnitVersionCompareFromUrl(window.location.search)) {
+    openPanel('modelVersionCompare');
+  }
 }
 
 onMounted(() => {

@@ -4269,12 +4269,6 @@ onMounted(async () => {
     const shouldApply: (() => boolean) | null = typeof shouldApplyRaw === 'function' ? shouldApplyRaw : null;
     const applyAllowed = () => (shouldApply ? shouldApply() !== false : true);
     let suppressed = false;
-    const versionDbnum = Number((detail as any)?.dbnum);
-    const versionSesno = Number((detail as any)?.sesno);
-    const loadUnitVersion = Number.isInteger(versionDbnum)
-      && versionDbnum > 0
-      && Number.isInteger(versionSesno)
-      && versionSesno > 0;
     const requestIdRaw = (detail as any)?.requestId;
     const requestId =
             typeof requestIdRaw === 'string'
@@ -4337,14 +4331,12 @@ onMounted(async () => {
         for (const r of unique) {
           const dtxStatsBefore =
                         (dtxLayer as any)?.getStats?.() ?? null;
-          const ok = loadUnitVersion
-            ? await mg.showModelUnitVersion(r, versionDbnum, versionSesno, {
-              flyTo: singleFlyTo && !shouldApply,
-            })
-            : await mg.showModelByRefno(r, {
-              flyTo: singleFlyTo && !shouldApply,
-              regenerate: !!(detail as any)?.regenModel,
-            });
+          // `showModelByRefnos {dbnum, sesno}` 把某版本装进主图层的那条路 2026-09-18 删了（Q18）：
+          // 版本只在隔离图层里看（单视口切换 / 双视口分屏），主层装旧版本会跟「最新环境模型」打架。
+          const ok = await mg.showModelByRefno(r, {
+            flyTo: singleFlyTo && !shouldApply,
+            regenerate: !!(detail as any)?.regenModel,
+          });
           const loadDebug = mg.lastLoadDebug?.value ?? null;
           const dtxStatsAfter =
                         (dtxLayer as any)?.getStats?.() ?? null;

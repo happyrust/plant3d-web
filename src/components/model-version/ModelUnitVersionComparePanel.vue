@@ -13,6 +13,7 @@ import {
   MODEL_UNIT_VERSION_COMPARE_EVENT,
   MODEL_UNIT_VERSION_COMPARE_STATE_EVENT,
   orderModelUnitVersionPair,
+  readModelUnitVersionCompareUrl,
   type ModelUnitCompareSide,
   type ModelUnitCompareViewMode,
   type ModelUnitGeometryDiff,
@@ -21,13 +22,10 @@ import {
   type ModelUnitVersionCompareRuntimeState,
 } from '@/utils/modelUnitVersionCompare';
 
-/**
- * 单元根类型清单——阶段 A1 暂留（plan 2026-09-18 §1.2）：按 Q6 它该由后端项目配置说了算，
- * 等 gen-model-v1 适配器能把 `NOT_A_DELIVERY_UNIT_ROOT` 翻译出来再拆，现在拆会改 legacy 行为。
- */
-const ROOT_NOUNS = new Set(['BRAN', 'HANG', 'EQUI', 'WALL', 'FLOOR']);
-
-const unitRefno = ref(new URLSearchParams(window.location.search).get('unit_refno') || '');
+// URL 入口（Q16）见 `readModelUnitVersionCompareUrl`；面板本身由 `DockLayout` 按同一个开关打开。
+// 哪些类型算最小交付单元不再由前端判（Q6）：不是单元根时由模型来源报 `NotDeliveryUnitRootError`。
+const urlConfig = readModelUnitVersionCompareUrl(window.location.search);
+const unitRefno = ref(urlConfig.unitRefno);
 const dbnum = ref<number | null>(null);
 const versions = ref<ModelVersion[]>([]);
 /** 本次对比持有的版本几何，关闭 / 重查时 `release()`（gen-model-v1 下是服务端快照） */
@@ -141,8 +139,6 @@ async function loadVersions(): Promise<void> {
     const result = await getModelSource().versions.listVersions(resolvedDbnum, refno);
     if (run !== requestId) return;
     if (result.length < 2) throw new Error('该最小交付单元至少需要两个模型提交才能对比');
-    const noun = String(result[0]?.unitNoun || '').toUpperCase();
-    if (!ROOT_NOUNS.has(noun)) throw new Error(`参考号不是支持的最小交付单元根：${noun || 'UNKNOWN'}`);
     dbnum.value = resolvedDbnum;
     versions.value = result;
     beforeSesno.value = result.at(-2)?.sesno ?? null;
@@ -281,10 +277,31 @@ function handleCompareRuntime(event: Event): void {
   compareActive.value = compareRuntime.value !== null;
 }
 
+/** URL `compare_autorun=1`：查版本 → 按 `compare_a` / `compare_b` 选（缺省最近两版）→ 跑对比。 */
+async function autorunFromUrl(): Promise<void> {
+  if (!urlConfig.autorun || !urlConfig.unitRefno) return;
+  const run = requestId + 1;
+  await loadVersions();
+  // loadVersions 内部会推进 requestId；期间用户手动改了输入就不接着跑
+  if (requestId !== run || versions.value.length < 2) return;
+  const has = (sesno: number | null): sesno is number => sesno !== null && versions.value.some((item) => item.sesno === sesno);
+  let fallbackNote: string | null = null;
+  if (has(urlConfig.compareA) && has(urlConfig.compareB) && urlConfig.compareA !== urlConfig.compareB) {
+    beforeSesno.value = urlConfig.compareA;
+    afterSesno.value = urlConfig.compareB;
+  } else if (urlConfig.compareA !== null || urlConfig.compareB !== null) {
+    fallbackNote = `URL 指定的版本 compare_a=${urlConfig.compareA ?? '-'} / compare_b=${urlConfig.compareB ?? '-'} 不在该单元的版本表里，已回落到最近两版`;
+  }
+  await runCompare();
+  // runCompare 会先清 error；回落提示放在它之后，且不盖住真正的失败
+  if (fallbackNote && requestId === run + 1 && !error.value) error.value = fallbackNote;
+}
+
 onMounted(() => {
   window.addEventListener(MODEL_UNIT_VERSION_COMPARE_EVENT, handleCompareLifecycle);
   window.addEventListener(MODEL_UNIT_VERSION_COMPARE_STATE_EVENT, handleCompareRuntime);
   dispatch({ action: 'request-state' });
+  void autorunFromUrl();
 });
 onBeforeUnmount(() => {
   requestId += 1;

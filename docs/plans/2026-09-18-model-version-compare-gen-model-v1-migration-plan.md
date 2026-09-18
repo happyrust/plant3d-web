@@ -149,6 +149,20 @@ legacy 回钉住的最新 manifest 与 `dataSource:'parquet'`，gen-model-v1 回
 legacy 下与从前的可见差别只有一处、且不可见于用户：A/B 隔离图层的 `DtxLoadSourceStamp.modelSnapshotId` 从 `${dbno}:parquet:${generated_at}`
 变为 `null`（几何由调用方钉入、加载器不再自己读 manifest）——隔离缓存的印记本就不经 `getDtxRefnoLoadSource` 暴露。手工项未验证（未起 `:3100` 与浏览器）。
 
+**执行记录（2026-09-18，阶段 A3 已做；A2 见 gen-model-refactor `ef2284f12`）**：
+- `genModelV1/versionSource.ts` 成为真适配器：`listVersions` = `GET /api/v1/model/versions`，`truncated` 时按最后一条 `sesno` 作
+  `since_sesno` 连续拉到全表（Q17，上限 20 页）；422 `NOT_A_DELIVERY_UNIT_ROOT` 翻成 `NotDeliveryUnitRootError`（`src/model-source/modelVersionErrors.ts`，
+  noun 与项目类型集来自 `detail`）。`loadVersion` = `history/generate` → 轮询 `tasks/{id}`（500 ms，300 s 预算）→ `history/query` `instances` + `tubes`
+  → `historyRowsToGeomInstQueries`（gen-model `projection_record_to_query` 的 TS 对偶：规范基本体带 `local_transform`、烘焙件单位阵 + `has_neg`、
+  直管挂 `container_refno`）→ `groupInstanceEntriesByRefno`；tombstone 不打后端；`release()` = `DELETE history/{key}`（幂等）。
+  `genModelV1Api.ts` 补 `DELETE` 方法与四个 wrapper（`genModelV1ModelVersions / ModelHistoryGenerate / ModelHistoryQuery / ModelHistoryDelete`）及 DTO。
+- Q16 URL 入口：`readModelUnitVersionCompareUrl` / `shouldOpenModelUnitVersionCompareFromUrl`（`utils/modelUnitVersionCompare.ts`）；
+  `DockLayout.onReady` 非嵌入模式下按 `unit_refno + compare_autorun` 打开面板；面板 `autorunFromUrl` 查版本 → 按 `compare_a/b` 选（不在表里回落最近两版并提示）→ 跑对比。
+- Q18：删 `useModelGeneration.showModelUnitVersion` / `loadedUnitVersionRefnos`、`modelUnitVersionApi.getModelUnitCommit`、ViewerPanel `showModelByRefnos {dbnum, sesno}` 分支。
+- Q6：面板 `ROOT_NOUNS` 硬编码删除，单元根合法性交给模型来源（v1 由服务端 422 翻译；legacy 无此判定，非根参考号只会得到「至少需要两个模型提交」）。
+- 验证：全仓 vitest 347 文件 / 3084 用例全绿（适配器 9 条、URL 入口 2 + 1 条新增）；`type-check` 基线外仍只剩 `useSpatialQuery.test.ts:1969`；ESLint 零告警。
+  **未真机**：本机 `:8022` 仍是另一会话的旧二进制，`?model_source=gen-model-v1` 端到端要等它换成含 `ef2284f12` 的构建；legacy 对拍同样未做。
+
 ## 3. 后端契约（gen-model-refactor，ADR-081）
 
 ### 3.1 新增 `GET /api/v1/model/versions`
@@ -213,9 +227,9 @@ legacy 下与从前的可见差别只有一处、且不可见于用户：A/B 隔
 | 期 | 内容 | 出口 |
 |---|---|---|
 | B | §1 全部 + §1.4 桥接 | §1.5 四条 |
-| A1（前端） | §2 端口 + legacy 适配器 + 面板 / ViewerPanel 改走端口；gen-model-v1 适配器先只接 `loadVersion`（`listVersions` 在 §3.1 落地前抛 `NotImplemented`） | `model_source=legacy` 行为逐字节不变（对拍：同一单元同一 A/B 的 `rows` 相等） |
-| A2（后端） | §3.1 | 真库探针：ams8000 任取 3 个 BRAN 根，版本表与 legacy `GET /api/model/units/{refno}/versions` 的 sesno 集合、impact_kind 逐条对上（legacy 的 `artifact_sesno` 不比） |
-| A3（前端） | gen-model-v1 `listVersions` 接线；缺省源下端到端 | `?model_source=gen-model-v1` 下 A/B 对比、切侧、分屏、树内差异、tombstone 空态、404 重生、退出 DELETE 各一条用例 |
+| A1（前端）✅ | §2 端口 + legacy 适配器 + 面板 / ViewerPanel 改走端口 | `model_source=legacy` 行为逐字节不变（面板旧用例一字未改全过）——plant3d-web `ec187960` |
+| A2（后端）✅ | §3.1 | 真库探针 ams7997 BRAN / ams8000 EQUI 与证据文档一致；legacy 逐条对拍**未做**（`:3100` 未起）——gen-model-refactor `ef2284f12` |
+| A3（前端）✅ | gen-model-v1 `listVersions` / `loadVersion` 接线 + Q16 URL 入口 + Q18 删死路 + Q6 拆 `ROOT_NOUNS` | 单测全绿；`?model_source=gen-model-v1` **真机端到端未做**（本机 `:8022` 还是旧二进制） |
 | 退役 | legacy 开关到期时删 `legacy/versionSource.ts` 与 parquet 版本取数 | — |
 
 ## 6. 明确不做

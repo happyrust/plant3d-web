@@ -10,6 +10,8 @@ import {
   getModelUnitCompareRenderPasses,
   geometrySnapshotsFromInstanceEntries,
   orderModelUnitVersionPair,
+  readModelUnitVersionCompareUrl,
+  shouldOpenModelUnitVersionCompareFromUrl,
   type ModelUnitGeometrySnapshot,
 } from './modelUnitVersionCompare';
 
@@ -18,6 +20,25 @@ function snapshot(refno: string, signature: string): ModelUnitGeometrySnapshot {
 }
 
 describe('modelUnitVersionCompare', () => {
+  it('URL 入口：unit_refno + compare_a/b + compare_autorun（Q16）', () => {
+    expect(readModelUnitVersionCompareUrl('?unit_refno=24381/145018&compare_a=791&compare_b=897&compare_autorun=1')).toEqual({
+      unitRefno: '24381/145018',
+      compareA: 791,
+      compareB: 897,
+      autorun: true,
+    });
+    expect(readModelUnitVersionCompareUrl('?unit_refno=24381_145018&compare_a=abc&compare_autorun=yes')).toEqual({
+      unitRefno: '24381_145018',
+      compareA: null,
+      compareB: null,
+      autorun: true,
+    });
+    expect(readModelUnitVersionCompareUrl('?unit_refno=24381_145018')).toMatchObject({ autorun: false });
+    expect(shouldOpenModelUnitVersionCompareFromUrl('?unit_refno=24381_145018&compare_autorun=1')).toBe(true);
+    expect(shouldOpenModelUnitVersionCompareFromUrl('?compare_autorun=1')).toBe(false);
+    expect(shouldOpenModelUnitVersionCompareFromUrl('?unit_refno=24381_145018')).toBe(false);
+  });
+
   it('自动把较早版本放在 A、较新版本放在 B', () => {
     const older = { sesno: 791, impactKind: 'mesh' };
     const newer = { sesno: 897, impactKind: 'mesh' };

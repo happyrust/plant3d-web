@@ -151,6 +151,50 @@ describe('ModelUnitVersionComparePanel', () => {
     app.unmount();
   });
 
+  it('URL compare_autorun=1 + compare_a/b：挂载后自动查版本、选 A/B、跑对比（Q16）', async () => {
+    const originalUrl = window.location.href;
+    window.history.replaceState({}, '', '/?unit_refno=24381/145018&compare_a=897&compare_b=791&compare_autorun=1');
+    const events: CustomEvent[] = [];
+    const listener = (event: Event) => events.push(event as CustomEvent);
+    window.addEventListener('plant3d:model-unit-version-compare', listener);
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const app = createApp(ModelUnitVersionComparePanel);
+    app.mount(host);
+    await flushUi();
+    await flushUi();
+
+    // 没点任何按钮：版本已查、A/B 已按 URL 选好（791 早于 897 自动摆正）、对比已跑并派发 open
+    expect((host.querySelector('[data-testid="model-unit-compare-a"]') as HTMLSelectElement).value).toBe('791');
+    expect((host.querySelector('[data-testid="model-unit-compare-b"]') as HTMLSelectElement).value).toBe('897');
+    expect(host.querySelector('[data-testid="model-unit-compare-summary"]')?.textContent).toContain('新增 1');
+    expect(events.some((event) => event.detail?.action === 'open')).toBe(true);
+
+    window.removeEventListener('plant3d:model-unit-version-compare', listener);
+    app.unmount();
+    window.history.replaceState({}, '', originalUrl);
+  });
+
+  it('URL 指定的 compare_a 不在版本表里：回落最近两版并提示', async () => {
+    const originalUrl = window.location.href;
+    window.history.replaceState({}, '', '/?unit_refno=24381_145018&compare_a=5&compare_b=897&compare_autorun=1');
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const app = createApp(ModelUnitVersionComparePanel);
+    app.mount(host);
+    await flushUi();
+    await flushUi();
+
+    expect((host.querySelector('[data-testid="model-unit-compare-a"]') as HTMLSelectElement).value).toBe('791');
+    expect(host.querySelector('[data-testid="model-unit-compare-error"]')?.textContent).toContain('compare_a=5');
+    expect(host.querySelector('[data-testid="model-unit-compare-summary"]')).toBeTruthy();
+
+    app.unmount();
+    window.history.replaceState({}, '', originalUrl);
+  });
+
   it('两个提交复用同一 artifact 时只读取一次并显示无几何差异', async () => {
     vi.mocked(listModelUnitCommits).mockResolvedValue([
       versions[0],
