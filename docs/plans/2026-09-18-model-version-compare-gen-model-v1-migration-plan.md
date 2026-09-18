@@ -233,7 +233,7 @@ legacy 下与从前的可见差别只有一处、且不可见于用户：A/B 隔
 | B | §1 全部 + §1.4 桥接 | §1.5 四条 |
 | A1（前端）✅ | §2 端口 + legacy 适配器 + 面板 / ViewerPanel 改走端口 | `model_source=legacy` 行为逐字节不变（面板旧用例一字未改全过）——plant3d-web `ec187960` |
 | A2（后端）✅ | §3.1 | 真库探针 ams7997 BRAN / ams8000 EQUI 与证据文档一致；legacy 逐条对拍**未做**（`:3100` 未起）——gen-model-refactor `ef2284f12` |
-| A3（前端）✅ | gen-model-v1 `listVersions` / `loadVersion` 接线 + Q16 URL 入口 + Q18 删死路 + Q6 拆 `ROOT_NOUNS` | 单测全绿；**真机端到端 ✅**（15:32 `:8022` 换成 `d47d747fd` 后，dev `:3111` 两条场景全过：`docs/verification/model-version-compare-gen-model-v1-2026-09-18/`）——plant3d-web `961a3ea5` |
+| A3（前端）✅ | gen-model-v1 `listVersions` / `loadVersion` 接线 + Q16 URL 入口 + Q18 删死路 + Q6 拆 `ROOT_NOUNS` | 单测全绿；**真机端到端 ✅**（15:32 `:8022` 换成 `d47d747fd` 后，dev `:3111` 两条场景全过：`docs/verification/model-version-compare-gen-model-v1-2026-09-18/`）——plant3d-web `961a3ea5`；一次性脚本已整理成 `e2e/model-version-compare-gen-model-v1.spec.ts`（3 条，数字取自服务端回执；`PLAYWRIGHT_PORT=3111 npx playwright test e2e/model-version-compare-gen-model-v1.spec.ts` 真机 3 过） |
 | 退役 | legacy 开关到期时删 `legacy/versionSource.ts` 与 parquet 版本取数 | — |
 
 ## 6. 明确不做
