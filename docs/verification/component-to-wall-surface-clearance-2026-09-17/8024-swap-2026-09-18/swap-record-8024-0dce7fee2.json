@@ -1,0 +1,34 @@
+{
+  "swappedAt": "2026-09-18T09:48:31+08:00",
+  "instance": "_runs\\surface-clearance-8024（mem 验证实例）",
+  "reason": "gen-model-model-cache 0dce7fee2：共棱选面后垂距射线落空就换棱上另一面读（多半退回 end），不再报「side + perpendicular_ray_missed」；用户 09:4x 拍板，改后重跑 126 对",
+  "old": {
+    "pid": 67008,
+    "exe": "_runs\\surface-clearance-8024\\aios-database-eabd16d5.exe",
+    "build_id": "0.1.27+geabd16d5cdda.1789694793",
+    "started": "2026-09-18T09:31:28+08:00",
+    "resident_records_before_stop": 1215
+  },
+  "new": {
+    "pid": 58268,
+    "exe": "_runs\\surface-clearance-8024\\aios-database-0dce7fee.exe",
+    "sha256_prefix": "3BA5C6E0BCE703BD",
+    "build_id": "0.1.27+g0dce7fee26c9.1789695900",
+    "git_commit": "0dce7fee26c9",
+    "git_dirty": false,
+    "includes_others": "0dce7fee2 叠在另一条会话的 7d67ca5f8（fix(model): 隐式管身重发布不再被第一次发布的 aabb / trans 钉死）之上，二进制含它",
+    "built_from": "git worktree add --detach .scratch\\wt-0dce7fee2-edge-fallback 0dce7fee2; cargo build --release --features http_api --bin aios-database（2 m 35 s；worktree 用完已删）",
+    "launch": "同 README §1；日志 logs\\20260918-094831.*.log",
+    "ready_after_seconds": 3
+  },
+  "downtime_seconds": 3,
+  "data_after": {
+    "model_ensure_calls": 97,
+    "resident_records": 1215
+  },
+  "checks_after": {
+    "golden": "24384/22582 × 17496/105912 → 64.42777 mm, intersects=false, outer/geometric, ⊥ 64.49526, sesno 619/729, warnings [] —— 与 09-17 §2 一致（http-surface-clearance-elbo-x-wall1-0dce7fee2.json）",
+    "replay_126_pairs": "126/126 → 200；intersects 17 = 17；distance max|Δ| 0.005 mm；垂距有/无 73/53 一致，⊥ 1 对 0.12 mm（24384/24514 × 17496/118130，同上一轮）；eabd16d5c 那 5 对 end → 主面 + 落空警告的全部回到 end 无警告；另 17 对 09-17 时是 side + perpendicular_ray_missed 的现在按同一条规则读 end（15）/ top（2）无警告；side + 落空警告从 24 对降到 7 对；opening 0 对 —— replay-126-pairs-0dce7fee2.jsonl"
+  },
+  "untouched": [":8022（994f2e0cc）", ":8023"]
+}

@@ -1,0 +1,109 @@
+{
+  "url": "http://127.0.0.1:8024/api/v1/spatial/surface-clearance?source_refno=24384/22582&target_refno=17496/105912&debug=1",
+  "status": 200,
+  "body": {
+    "success": true,
+    "unit": "mm",
+    "method": "surface_to_surface",
+    "accuracy_class": "exact-surface",
+    "error_bound_mm": 0.5,
+    "target_kind": "wall",
+    "source": {
+      "refno": "24384/22582",
+      "noun": "ELBO",
+      "leaf_count": 1,
+      "triangle_count": 12
+    },
+    "target": {
+      "refno": "17496/105912",
+      "noun": "WALL",
+      "leaf_count": 2,
+      "triangle_count": 312
+    },
+    "result": {
+      "distance_mm": 64.42777,
+      "intersects": false,
+      "source_point": {
+        "x": -17464.125,
+        "y": 102.35253,
+        "z": 2550.0002
+      },
+      "target_point": {
+        "x": -17399.707,
+        "y": 101.22853,
+        "z": 2550.0002
+      },
+      "vector": {
+        "dx": 64.41797,
+        "dy": -1.1240005,
+        "dz": 0.0
+      },
+      "source_leaf_refno": "24384/22582",
+      "target_leaf_refno": "17496/105912",
+      "target_leaf_noun": "WALL",
+      "target_face": {
+        "kind": "outer",
+        "normal": {
+          "x": -0.9993213,
+          "y": 0.036837157,
+          "z": 0.0
+        },
+        "confidence": "geometric"
+      },
+      "perpendicular": {
+        "distance_mm": 64.49526,
+        "from": {
+          "x": -17464.125,
+          "y": 102.35253,
+          "z": 2550.0002
+        },
+        "to": {
+          "x": -17399.674,
+          "y": 99.97671,
+          "z": 2550.0002
+        }
+      },
+      "witness": "closest-points"
+    },
+    "model": {
+      "source_sesno": 619,
+      "target_sesno": 729
+    },
+    "timing_ms": {
+      "load": 0,
+      "query": 0,
+      "total": 30
+    },
+    "warnings": [],
+    "debug": {
+      "pairs_total": 2,
+      "pairs_evaluated": 1,
+      "pairs_pruned": 1,
+      "source_leaves": [
+        {
+          "refno": "24384/22582",
+          "key": "24384_22582",
+          "noun": "ELBO",
+          "triangles": 12,
+          "model_sesno": 619
+        }
+      ],
+      "target_leaves": [
+        {
+          "refno": "17496/105912",
+          "key": "17496_105912",
+          "noun": "WALL",
+          "triangles": 184,
+          "model_sesno": 729
+        },
+        {
+          "refno": "17496/137183",
+          "key": "17496_137183",
+          "noun": "FIXING",
+          "triangles": 128,
+          "model_sesno": 729
+        }
+      ]
+    }
+  }
+}
