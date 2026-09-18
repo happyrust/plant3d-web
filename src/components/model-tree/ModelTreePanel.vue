@@ -9,7 +9,6 @@ import type { DtxCompatViewer } from '@/viewer/dtx/DtxCompatViewer';
 import { pdmsSearch, type PdmsSearchItem } from '@/api/genModelSearchApi';
 import GenModelV1HealthBadge from '@/components/model-tree/GenModelV1HealthBadge.vue';
 import ModelGenerationProgressModal from '@/components/model-tree/ModelGenerationProgressModal.vue';
-import ModelTreeAttrDiffPanel from '@/components/model-tree/ModelTreeAttrDiffPanel.vue';
 import ModelTreeRow from '@/components/model-tree/ModelTreeRow.vue';
 import { ensurePanelAndActivate } from '@/composables/useDockApi';
 import { useModelGeneration } from '@/composables/useModelGeneration';
@@ -110,8 +109,6 @@ const diffResolving = treeDiff.resolving;
 const diffResolveDone = treeDiff.resolveDone;
 const diffResolveTotal = treeDiff.resolveTotal;
 const diffUnplacedCount = treeDiff.unplacedCount;
-const diffSelectedModel = treeDiff.selectedModel;
-const diffSelectedIsGhost = treeDiff.selectedIsGhost;
 const diffContext = treeDiff.context;
 const diffDbLabel = computed(() => (diffContext.value?.dbnum ? `DB ${diffContext.value.dbnum}` : ''));
 
@@ -1163,30 +1160,6 @@ function applyTreeDiffContext(rawDetail: unknown) {
   }
 }
 
-async function focusIncrementalCompareModel(refno: string) {
-  const target = normalizeCompareRefno(refno);
-  if (!target) return;
-  activeTree.value = 'pdms';
-  treeDiff.select(target);
-  selection.setSelectedRefno(target);
-  ensurePanelAndActivate('viewer');
-
-  try {
-    await pdmsTree.focusNodeById(target, { flyTo: false, syncSceneSelection: false, clearSearch: false });
-  } catch (e) {
-    if (import.meta.env.DEV) {
-      console.warn('[model-tree] incremental compare focus fallback', e);
-    }
-  }
-
-  window.dispatchEvent(new CustomEvent('showModelByRefnos', {
-    detail: {
-      refnos: [target],
-      flyTo: true,
-    },
-  }));
-}
-
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
@@ -1867,16 +1840,6 @@ function onSearchEnter(value: string) {
       </div>
     </div>
 
-    <!-- 版本差异模式：选中变更节点的属性级 before/after 差异 -->
-    <ModelTreeAttrDiffPanel v-if="diffActive && diffSelectedModel"
-      class="max-h-[45%] shrink-0"
-      :model="diffSelectedModel"
-      :dbnum="diffContext?.dbnum"
-      :from-sesno="diffContext?.fromSesno"
-      :to-sesno="diffContext?.toSesno"
-      :can-locate="!diffSelectedIsGhost"
-      @locate="focusIncrementalCompareModel" />
-    
     <!-- 右键菜单 - 使用 Teleport 渲染到 body -->
     <Teleport to="body">
       <div v-if="contextMenuOpen"

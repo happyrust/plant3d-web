@@ -246,7 +246,7 @@ legacy 下与从前的可见差别只有一处、且不可见于用户：A/B 隔
 | A2（后端）✅ | §3.1 | 真库探针 ams7997 BRAN / ams8000 EQUI 与证据文档一致；legacy 逐条对拍**不做**（Q24：legacy 版本表算自另一份库副本——旧 e2e 期待 7997 BRAN 24381_145018 有 sesno 791 / 898，现在这份 ams7997 只有 332 个会话、该单元 1 版，没有共同地面；v1 真值以 ADR-081 探针为准）——gen-model-refactor `ef2284f12` |
 | A3（前端）✅ | gen-model-v1 `listVersions` / `loadVersion` 接线 + Q16 URL 入口 + Q18 删死路 + Q6 拆 `ROOT_NOUNS` | 单测全绿；**真机端到端 ✅**（15:32 `:8022` 换成 `d47d747fd` 后，dev `:3111` 两条场景全过：`docs/verification/model-version-compare-gen-model-v1-2026-09-18/`）——plant3d-web `961a3ea5`；一次性脚本已整理成 `e2e/model-version-compare-gen-model-v1.spec.ts`（3 条，数字取自服务端回执；`PLAYWRIGHT_PORT=3111 npx playwright test e2e/model-version-compare-gen-model-v1.spec.ts` 真机 3 过） |
 | Q21 预清 ✅ | 两处与 legacy 存亡无关、今天已死的：`showModelByDbnum({manifestUrl, replaceRefnos})` 分支 + `mergeVersionReplacementRefnos`（+ `loadScope.test` 那组、`genModelV1.test` 那条）；`e2e/dimension-real-ams-bran-version.spec.ts` 第 2 条（按 A1 之前的事件形状派发，`ec187960` 起跑不通） | 全仓 vitest 347 / 3084 全绿（第 2 遍；另两遍 `review/form-binding.test.ts` 一条超时抖动、单跑过、无关）、type-check 基线外仍只剩无关那条、ESLint 零告警——plant3d-web `c6e1fdd3` |
-| 退役（版本对比 legacy 链）✅ | §7.2 第 1–5 组（用户 16:5x 拍板「不等部署锚，现在就删」）；第 6 组（链外 `ModelTreeAttrDiffPanel`）与 `model_source=legacy` 开关本体仍按 §7.1 的锚 | §7.3 五条全过，见 §7.4 执行记录 |
+| 退役（版本对比 legacy 链）✅ | §7.2 第 1–5 组（用户 16:5x 拍板「不等部署锚，现在就删」）——plant3d-web `7314eade`；第 6 组（链外 `ModelTreeAttrDiffPanel` + `modelHistoryApi`，用户 17:5x 拍板「也现在删」）——见 §7.4 末条；`model_source=legacy` 开关本体仍按 §7.1 的锚 | §7.3 五条全过，见 §7.4 执行记录 |
 
 ## 6. 明确不做
 
@@ -330,8 +330,15 @@ legacy 下与从前的可见差别只有一处、且不可见于用户：A/B 隔
   `ensureDbMetaInfoLoaded` 会先报 `[db_meta] 未命中`，把真正的原因盖住。
 - **出口**：① `rg` 在 `src / e2e / docs/guides / CONTEXT.md` 对 `manifest_url | artifact_sesno | assetSesno | listModelUnitCommits |
   fetchLatestDbnoManifest | parquetManifestUrl | pinnedManifest | pinLatestEnvironment | tree_sesno` 零命中（只剩 CONTEXT 那行 _Avoid_）；
-  `model-history` 仍有命中 = 第 6 组，按锚另退。② vitest 全仓 345 文件 / 3070 用例全绿（C: 盘满，`TEMP` 指到 D: 才跑得起来）；
+  `model-history` 当时仍有命中 = 第 6 组（随后同日删掉，见末条）。② vitest 全仓 345 文件 / 3070 用例全绿（C: 盘满，`TEMP` 指到 D: 才跑得起来）；
   `type-check-baseline.txt` 620 → 542 收紧（`--update-baseline` 后手工把另一会话那条 `useSpatialQuery.test.ts:1969` 从基线里拿掉，
   它仍是唯一一条基线外错误、没有被放行）；ESLint 16 个触及文件 0。③ `PLAYWRIGHT_PORT=3111 npx playwright test
   e2e/model-version-compare-gen-model-v1.spec.ts` 3 过（12.3 s，`:8022 d47d747fd`）。④ `?model_source=legacy` 真机：面板给退役提示、
   无版本下拉、pageerror 0（`docs/verification/model-version-compare-gen-model-v1-2026-09-18/legacy-retired/`）。⑤ 对拍不做。
+- **第 6 组（17:5x，用户拍板「也现在删」）**：`ModelTreeAttrDiffPanel.vue` / `.test.ts`、`api/modelHistoryApi.ts` / `.test.ts` 整文件删；
+  `ModelTreePanel.vue` 去掉它的挂载、`diffSelectedModel / diffSelectedIsGhost` 两个只为它存在的别名与 `@locate` 用的 `focusIncrementalCompareModel`
+  （`useTreeVersionDiff.selectedModel / selectedIsGhost` 留在组合式里，行内选中高亮仍走 `treeDiff.select`）。「属性历史对比」记成 gen-model-refactor
+  候选需求：ADR-081 实施记录 + changelog（gen-model-refactor `c08198616`，代码零改动）——积木（`session_chain`、`ReadOnlyEngine::open_at` +
+  `element_attributes`）都在，缺一条只读接口，何时立等前端再要。出口：`rg` 对 `model-history | ModelTreeAttrDiffPanel | modelHistoryApi` 在
+  `src / e2e / docs/guides / CONTEXT.md` 只剩 v1 任务种类 `kind: 'model-history'`（gen-model 的历史投影任务名，与 legacy 路由无关）；
+  vitest 全仓 343 文件 / 3056 用例全绿；type-check 基线外仍只剩那条无关的；ESLint 0。差异模式下选中节点后底部不再有「属性差异」块。
