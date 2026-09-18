@@ -366,3 +366,14 @@ legacy 下与从前的可见差别只有一处、且不可见于用户：A/B 隔
 - **验证**：vitest 全仓 345 文件 / 3067 用例全绿；type-check 基线外仍只剩无关那条；ESLint 13 个触及文件 0；真机（`:8022 d47d747fd` + dev `:3111`）
   587→602 进差异模式后底部挂出面板、两条 `tool=attributes` 请求按契约发出、服务端回「unknown historical query tool」→ 面板给「暂不可用 + 原因」，
   pageerror 0（`docs/verification/…/attr-diff/`）。后端落地后前端不用再改。
+
+## 9. 真管线走一遍：BRAN 增量更新 → 版本对比（19:3x，用户 18:37「测试一个 BRAN 的增量更新，然后在 plant3d-web 里通过模型对比查看」）
+
+- **改动**：E3D 宏 `db8000_bran_ftub_move_apply.mac`（19:31:48）把 FTUBE 4 of BRANCH `/C-OR-1R345-C`（24384/23262）`U 2900 → 3400`，一次 SAVEWORK。
+- **增量**：`:8022`（`d47d747fd`）自动 `[watch]` 到 dbnum 8000 sesno 626..=627，修改 3，重生成根 24384/23257（该 BRAN），461 ms，SAVEWORK 后 16 s 模型换好；
+  `model/records` 里 24384_23262 的 `world_aabb` z 变成 3400 ~ 3430（`durable: true`）。
+- **版本对比**：`model/versions` 该 BRAN 56 版、末版 626 mesh；两份快照 `instances` 只有 24384_23262 的 translation z 不同、`mesh_id` 相同；
+  浏览器 `unit_refno=24384_23257&compare_autorun=1` → A=573 B=626，**修改 1 / 未变 8**，分屏 + 树差异挂到 FTUB，关闭 DELETE × 2，pageerror 0；
+  `MODEL_VERSION_E2E_UNIT=24384_23257` 跑 e2e 3 过。证据 `docs/verification/model-version-compare-gen-model-v1-2026-09-18/bran-ftub-move/` + README §6。
+- **未做 / 待定**：restore 腿（放回 U 2900）没跑；FTUB 纯 POS 变更被归成 `mesh` 而非 `placement`（gen-model-refactor 分类器口径，不在本计划）；
+  `tool=attributes` 后端仍等 `element_attributes.rs` 提交（§8）。

@@ -63,3 +63,26 @@
   面板照契约给「属性历史对比暂不可用 + 原因」，pageerror 0。后端落地后这块不用再改，直接出表。
 - `attr-diff/attr-diff-locate.png`：面板上「在 3D 中定位」——先把相机挪到 (53279, 62579, 58750)，点按钮后 1.2 s 相机回到 (686, 3581, 5547)
   （该 BOX 在 A / B 隔离图层里的包围盒），三维查看器面板被激活，pageerror 0。
+
+## 6. BRAN 增量更新 → 版本对比（19:3x，`bran-ftub-move/`）
+
+用户 18:37「测试一个 BRAN 的增量更新，然后通过在 plant3d-web 里通过模型对比来查看」。这次不再是 EQUI 夹具，而是一条真正的管线支管，
+从 E3D 改动到前端看见差异整条链走一遍；数字见 `bran-ftub-move/api-evidence.json`。
+
+| 环节 | 事实 |
+|---|---|
+| E3D 改动 | `gen-model-refactor/scripts/e3d/db8000_bran_ftub_move_apply.mac`（19:31:48 写 log）：FTUBE 4 of BRANCH `/C-OR-1R345-C` = **24384/23262** `POS … U 2900mm → U 3400mm`（+500），一次 SAVEWORK；`ams8000_0001` mtime 19:31:53 |
+| `:8022` 增量（`d47d747fd`，自动 `[watch]`） | task `db-20260918-193207-000027`：dbnum 8000 sesno **626..=627**，修改 3；交付单元重生成 1 = 根 **24384/23257**（BRAN `/C-OR-1R345-C`）；模型发布 write-behind；总耗时 461 ms，19:32:09 完成——SAVEWORK 后 **16 s** 模型就换好了 |
+| `GET model/versions?dbnum=8000&refno=24384/23257` | BRAN，latest 627，**56 版**，末尾 `571 mesh · 573 mesh（09-13 restore）· 626 mesh（09-18 19:31）`；627 没碰它、不列 |
+| `POST model/records {generation_root: 24384/23257}` | 9 条，`durable: true`；24384_23262 `world_aabb` z **3400.0 ~ 3430.0**、translation (10887, 12332, **3400**)——位移真的传播到模型记录 |
+| 两份快照 `history/query tool=instances`（@573 / @626） | 各 9 行；只有 24384_23262 不同：translation z 2900 → 3400、bounds z [2900,2930] → [3400,3430]，**mesh_id 相同**（纯位移）；其余 8 行 translation / bounds / mesh_id 全同 |
+| 浏览器（dev `:3111` = `381ca5c2`，入口 `unit_refno=24384_23257&compare_autorun=1`） | 面板自动开、56 版全列、A=573 B=626 自动选中；结果 **新增 0 / 删除 0 / 修改 1 / 未变 8**，修改行 `24384_23262 FTUB`；A/B 各 9 对象；分屏「左 A · sesno 573 · 右 B · sesno 626」；树差异「573 → 626」沿 SITE 1RX03-EQUI → ZONE 1RX03-LCT → PIPE 1RX-345 → BRAN C-OR-1R345-C 挂到 FTUB（标「改」）；关闭 DELETE × 2；pageerror 0（`latest-two-0[1-5]-*.png`、`latest-two-summary.json`） |
+| e2e | `MODEL_VERSION_E2E_UNIT=24384_23257 PLAYWRIGHT_PORT=3111 npx playwright test e2e/model-version-compare-gen-model-v1.spec.ts --workers=1` → **3 passed**（9.2 s）——用例按回执自适应，换成 56 版的 BRAN 一处没改 |
+
+顺手看到：
+- 626 的 `impact_kind` 是 `mesh` 而不是 `placement`：FTUB 的 `POS` 变更被 `classify_operation_impact` 判成 Regen（它的几何要重新烘），
+  但烘出来内容寻址同一个 `mesh_id`。对比展示按几何签名走、结果照样是「修改」，只是版本表标签比实际保守一档；要不要把 FTUB 的纯 POS 变更归到
+  `placement`，是 gen-model-refactor 那边分类器的事，不在本计划。
+- 底部「属性历史对比 · 24384_23262 · 改」仍是「暂不可用 · unknown historical query tool "attributes"」——后端 `tool=attributes` 还没落地
+  （§5 那条 blocker 未解：`element_attributes.rs` 仍未提交）。
+- 这轮测试对库的净变更还没归零：`db8000_bran_ftub_move_restore.mac`（放回 U 2900）没跑，跑不跑由用户定。

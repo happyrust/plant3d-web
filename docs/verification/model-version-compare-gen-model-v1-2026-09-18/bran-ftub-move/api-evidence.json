@@ -1,0 +1,60 @@
+{
+  "scenario": "BRAN 增量更新 → 版本对比（2026-09-18 19:3x）",
+  "e3d_edit": {
+    "macro": "gen-model-refactor/scripts/e3d/db8000_bran_ftub_move_apply.mac",
+    "log_written_at": "2026-09-18 19:31:48",
+    "target": "FTUBE 4 of BRANCH /C-OR-1R345-C = 24384/23262（PIPE /1RX-345，owner BRAN 24384/23257）",
+    "change": "POS E 10887mm N 12332mm U 2900mm → U 3400mm（+500）",
+    "savework": "CODEX db8000 FTUBE 4 of /C-OR-1R345-C up 500mm (U2900 -> U3400)",
+    "db_file": "D:/AVEVA/Projects/E3D3.1/AvevaMarineSample/ams000/ams8000_0001 mtime 2026-09-18 19:31:53"
+  },
+  "gen_model_8022_incremental": {
+    "build": "0.1.27+gd47d747fd4cf",
+    "task": "db-20260918-193207-000027",
+    "detected_by": "[watch] dbnum=8000 新排：sesno 626..=627",
+    "save_time_utc": "2026-09-18T11:31:53+00:00",
+    "changes": "新增=0 修改=3 删除=0 合计=3",
+    "regenerated_roots": ["24384/23257"],
+    "model_publish": "durable=pending → write-behind（model/records 随后 durable=true）",
+    "total_ms": 461,
+    "finished_at": "2026-09-18 19:32:09"
+  },
+  "model_versions_after": {
+    "request": "GET /api/v1/model/versions?dbnum=8000&refno=24384/23257",
+    "unit_noun": "BRAN",
+    "file_latest_sesno": 627,
+    "count": 56,
+    "tail": [
+      { "sesno": 571, "impact_kind": "mesh", "session_time": "2026-09-13 16:16:09" },
+      { "sesno": 573, "impact_kind": "mesh", "session_time": "2026-09-13 16:19:46" },
+      { "sesno": 626, "impact_kind": "mesh", "session_time": "2026-09-18 19:31:48" }
+    ],
+    "note": "627 没碰这个单元，所以不是它的版本；626 归成 mesh（FTUB POS 变更被 classify_operation_impact 判成 Regen），但两份快照里该件 mesh_id 相同、只有 world_transform 变——对比结果按几何签名照样是「修改」"
+  },
+  "model_records_after": {
+    "request": "POST /api/v1/model/records { generation_root: \"24384/23257\" }",
+    "items": 9,
+    "durable": true,
+    "ftube_24384_23262": {
+      "world_aabb": { "mins": [10869.6337890625, 11980.580078125, 3400.0], "maxs": [11249.6494140625, 12349.9833984375, 3430.0] },
+      "world_trans_translation": [10887.0, 12332.0, 3400.0]
+    }
+  },
+  "history_snapshots_instances": {
+    "request": "POST model/history/generate {dbnum:8000, refno:\"24384/23257\", sesno} → tasks/{id} → POST model/history/query {snapshot_key, tool:\"instances\"} → DELETE model/history/{key}",
+    "generate_ms": { "573": 324, "626": 312 },
+    "rows_each": 9,
+    "ftube_24384_23262": {
+      "@573": { "translation": [10887.0, 12332.0, 2900.0], "world_bounds_z": [2900.0, 2930.0], "mesh_id_prefix": "e3d_baked_v2_5a93cb58d3a" },
+      "@626": { "translation": [10887.0, 12332.0, 3400.0], "world_bounds_z": [3400.0, 3430.0], "mesh_id_prefix": "e3d_baked_v2_5a93cb58d3a" }
+    },
+    "other_8_members": "两份快照逐行相同（translation / world_bounds / mesh_id）"
+  },
+  "browser": {
+    "url": "/?model_source=gen-model-v1&gm_backend_port=8022&unit_refno=24384_23257&compare_autorun=1",
+    "script": "old/.scratch/mvc-e2e-run.mjs（Playwright headless chromium，一次性）",
+    "dev_server": "http://127.0.0.1:3111（plant3d-web 工作树 = 381ca5c2）",
+    "result": "见 latest-two-summary.json / latest-two-0[1-5]-*.png",
+    "e2e_spec": "MODEL_VERSION_E2E_UNIT=24384_23257 PLAYWRIGHT_PORT=3111 npx playwright test e2e/model-version-compare-gen-model-v1.spec.ts --workers=1 → 3 passed (9.2 s)"
+  }
+}

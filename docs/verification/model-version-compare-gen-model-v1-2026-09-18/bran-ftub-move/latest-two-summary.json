@@ -1,0 +1,587 @@
+{
+  "url": "http://127.0.0.1:3111/?model_source=gen-model-v1&gm_backend_port=8022&unit_refno=24384_23257&compare_autorun=1",
+  "scenario": "latest-two",
+  "startedAt": "2026-09-18T11:36:39.144Z",
+  "requests": [
+    {
+      "method": "GET",
+      "url": "/api/v1/model/versions?dbnum=8000&refno=24384%2F23257",
+      "at": 1789731400937
+    },
+    {
+      "method": "POST",
+      "url": "/api/v1/model/history/generate",
+      "at": 1789731401059
+    },
+    {
+      "method": "POST",
+      "url": "/api/v1/model/history/generate",
+      "at": 1789731401059
+    },
+    {
+      "method": "GET",
+      "url": "/api/v1/tasks/model-history-20260918-193641-000048",
+      "at": 1789731401196
+    },
+    {
+      "method": "GET",
+      "url": "/api/v1/tasks/model-history-20260918-193641-000049",
+      "at": 1789731401226
+    },
+    {
+      "method": "POST",
+      "url": "/api/v1/model/history/query",
+      "at": 1789731401227
+    },
+    {
+      "method": "POST",
+      "url": "/api/v1/model/history/query",
+      "at": 1789731401227
+    },
+    {
+      "method": "POST",
+      "url": "/api/v1/model/history/query",
+      "at": 1789731401228
+    },
+    {
+      "method": "POST",
+      "url": "/api/v1/model/history/query",
+      "at": 1789731401228
+    },
+    {
+      "method": "POST",
+      "url": "/api/v1/model/history/query",
+      "at": 1789731401247
+    },
+    {
+      "method": "POST",
+      "url": "/api/v1/model/history/query",
+      "at": 1789731401248
+    },
+    {
+      "method": "DELETE",
+      "url": "/api/v1/model/history/24384_23257%40573",
+      "at": 1789731404046
+    },
+    {
+      "method": "DELETE",
+      "url": "/api/v1/model/history/24384_23257%40626",
+      "at": 1789731404046
+    }
+  ],
+  "pageErrors": [],
+  "consoleErrors": [
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Failed to load model projects from API: Error: Failed to load projects: 404 Not Found\n    at http://127.0.0.1:3111/src/composables/useModelProjects.ts?t=1789597470767:84:17",
+    "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+    "[vite] failed to connect to websocket.\nyour current setup:\n  (browser) 127.0.0.1:3111/ <--[HTTP]--> 127.0.0.1:3111/ (server)\n  (browser) 127.0.0.1:3111/ <--[WebSocket (failing)]--> 127.0.0.1:3111/ (server)\nCheck out your Vite / network configuration and https://vite.dev/config/server-options.html#se",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+    "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+    "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+    "Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
+    "Failed to load resource: the server responded with a status of 500 (Internal Server Error)"
+  ],
+  "steps": [
+    {
+      "at": "2026-09-18T11:36:39.335Z",
+      "name": "goto",
+      "url": "http://127.0.0.1:3111/?model_source=gen-model-v1&gm_backend_port=8022&unit_refno=24384_23257&compare_autorun=1"
+    },
+    {
+      "at": "2026-09-18T11:36:40.888Z",
+      "name": "panel opened by compare_autorun"
+    },
+    {
+      "at": "2026-09-18T11:36:41.653Z",
+      "name": "versions listed",
+      "count": 56,
+      "a": "573",
+      "b": "626",
+      "options": [
+        "5 · 2022/07/01 22:24 · delivery",
+        "211 · 2026/08/12 16:38 · mesh",
+        "212 · 2026/08/12 16:40 · mesh",
+        "213 · 2026/08/12 16:41 · mesh",
+        "214 · 2026/08/12 16:44 · mesh",
+        "215 · 2026/08/14 08:45 · mesh",
+        "216 · 2026/08/14 08:45 · mesh",
+        "217 · 2026/08/14 08:49 · mesh",
+        "218 · 2026/08/14 08:49 · mesh",
+        "219 · 2026/08/14 08:50 · mesh",
+        "220 · 2026/08/14 08:50 · mesh",
+        "225 · 2026/08/14 21:33 · mesh",
+        "226 · 2026/08/14 21:33 · mesh",
+        "227 · 2026/08/14 21:35 · mesh",
+        "228 · 2026/08/14 21:35 · mesh",
+        "231 · 2026/08/19 08:23 · mesh",
+        "232 · 2026/08/19 08:23 · mesh",
+        "251 · 2026/08/20 03:33 · mesh",
+        "252 · 2026/08/20 03:33 · mesh",
+        "257 · 2026/08/25 07:51 · mesh",
+        "258 · 2026/08/25 07:51 · mesh",
+        "259 · 2026/08/28 14:57 · mesh",
+        "260 · 2026/08/28 14:57 · mesh",
+        "261 · 2026/08/28 16:30 · mesh",
+        "262 · 2026/08/28 16:30 · mesh",
+        "263 · 2026/08/28 17:21 · mesh",
+        "264 · 2026/08/28 17:21 · mesh",
+        "265 · 2026/09/01 20:47 · mesh",
+        "266 · 2026/09/01 20:47 · mesh",
+        "282 · 2026/09/05 00:53 · mesh",
+        "283 · 2026/09/05 01:00 · mesh",
+        "284 · 2026/09/05 07:12 · mesh",
+        "285 · 2026/09/05 07:13 · mesh",
+        "380 · 2026/09/08 11:39 · mesh",
+        "382 · 2026/09/08 11:43 · mesh",
+        "417 · 2026/09/08 17:45 · mesh",
+        "419 · 2026/09/08 17:45 · mesh",
+        "421 · 2026/09/08 17:47 · mesh",
+        "423 · 2026/09/08 17:47 · mesh",
+        "425 · 2026/09/08 17:48 · mesh",
+        "427 · 2026/09/08 17:48 · mesh",
+        "429 · 2026/09/08 18:30 · mesh",
+        "431 · 2026/09/08 18:32 · mesh",
+        "437 · 2026/09/08 19:56 · mesh",
+        "439 · 2026/09/08 20:38 · mesh",
+        "441 · 2026/09/09 00:21 · mesh",
+        "443 · 2026/09/09 00:22 · mesh",
+        "559 · 2026/09/13 15:01 · mesh",
+        "561 · 2026/09/13 15:02 · mesh",
+        "563 · 2026/09/13 15:51 · mesh",
+        "565 · 2026/09/13 15:51 · mesh",
+        "567 · 2026/09/13 16:04 · mesh",
+        "569 · 2026/09/13 16:05 · mesh",
+        "571 · 2026/09/13 16:16 · mesh",
+        "573 · 2026/09/13 16:19 · mesh",
+        "626 · 2026/09/18 19:31 · mesh"
+      ]
+    },
+    {
+      "at": "2026-09-18T11:36:41.656Z",
+      "name": "compare finished",
+      "summary": "新增 0删除 0修改 1未变 8"
+    },
+    {
+      "at": "2026-09-18T11:36:41.661Z",
+      "name": "viewer state",
+      "unitRefno": "24384_23257",
+      "beforeSesno": 573,
+      "afterSesno": 626,
+      "beforeObjects": 9,
+      "afterObjects": 9,
+      "environmentLoadedRefnos": 0,
+      "activeSide": "after",
+      "viewMode": "single"
+    },
+    {
+      "at": "2026-09-18T11:36:41.785Z",
+      "name": "tree diff",
+      "visible": true,
+      "pill": "573 → 626 差异模式"
+    },
+    {
+      "at": "2026-09-18T11:36:44.014Z",
+      "name": "split",
+      "splitSummary": "左 A · sesno 573 · 右 B · sesno 626"
+    },
+    {
+      "at": "2026-09-18T11:36:45.610Z",
+      "name": "closed",
+      "deletes": 2,
+      "treeDiffBarAfterClose": false
+    }
+  ],
+  "versionsResponse": {
+    "dbnum": 8000,
+    "unit_refno": "24384/23257",
+    "unit_noun": "BRAN",
+    "file_latest_sesno": 627,
+    "truncated": false,
+    "versions": [
+      {
+        "sesno": 5,
+        "session_time": "2022-07-01T14:24:55+00:00",
+        "impact_kind": "delivery"
+      },
+      {
+        "sesno": 211,
+        "session_time": "2026-08-12T08:38:22+00:00",
+        "impact_kind": "mesh"
+      },
+      {
+        "sesno": 212,
+        "session_time": "2026-08-12T08:40:57+00:00",
+        "impact_kind": "mesh"
+      },
+      {
+        "sesno": 213,
+        "session_time": "2026-08-12T08:41:37+00:00",
+        "impact_kind": "mesh"
+      },
+      {
+        "sesno": 214,
+        "session_time": "2026-08-12T08:44:32+00:00",
+        "impact_kind": "mesh"
+      },
+      {
+        "sesno": 215,
+        "session_time": "2026-08-14T00:45:31+00:00",
+        "impact_kind": "mesh"
+      },
+      {
+        "sesno": 216,
+        "session_time": "2026-08-14T00:45:34+00:00",
+        "impact_kind": "mesh"
+      },
+      {
+        "sesno": 217,
+        "session_time": "2026-08-14T00:49:50+00:00",
+        "impact_kind": "mesh"
+      },
+      {
+        "sesno": 218,
+        "session_time": "2026-08-14T00:49:55+00:00",
+        "impact_kind": "mesh"
+      },
+      {
+        "sesno": 219,
+        "session_time": "2026-08-14T00:50:38+00:00",
+        "impact_kind": "mesh"
+      },
+      {
+        "sesno": 220,
+        "session_time": "2026-08-14T00:50:43+00:00",
+        "impact_kind": "mesh"
+      },
+      {
+        "sesno": 225,
+        "session_time": "2026-08-14T13:33:52+00:00",
+        "impact_kind": "mesh"
+      },
+      {
+        "sesno": 226,
+        "session_time": "2026-08-14T13:33:56+00:00",
+        "impact_kind": "mesh"
+      },
+      {
+        "sesno": 227,
+        "session_time": "2026-08-14T13:35:47+00:00",
+        "impact_kind": "mesh"
+      },
+      {
+        "sesno": 228,
+        "session_time": "2026-08-14T13:35:52+00:00",
+        "impact_kind": "mesh"
+      },
+      {
+        "sesno": 231,
+        "session_time": "2026-08-19T00:23:15+00:00",
+        "impact_kind": "mesh"
+      },
+      {
+        "sesno": 232,
+        "session_time": "2026-08-19T00:23:21+00:00",
+        "impact_kind": "mesh"
+      },
+      {
+        "sesno": 251,
+        "session_time": "2026-08-19T19:33:23+00:00",
+        "impact_kind": "mesh"
+      },
+      {
+        "sesno": 252,
+        "session_time": "2026-08-19T19:33:30+00:00",
+        "impact_kind": "mesh"
+      },
+      {
+        "sesno": 257,
+        "session_time": "2026-08-24T23:51:10+00:00",
+        "impact_kind": "mesh"
+      },
+      {
+        "sesno": 258,
+        "session_time": "2026-08-24T23:51:16+00:00",
+        "impact_kind": "mesh"
+      },
+      {
+        "sesno": 259,
+        "session_time": "2026-08-28T06:57:40+00:00",
+        "impact_kind": "mesh"
+      },
+      {
+        "sesno": 260,
+        "session_time": "2026-08-28T06:57:46+00:00",
+        "impact_kind": "mesh"
+      },
+      {
+        "sesno": 261,
+        "session_time": "2026-08-28T08:30:51+00:00",
+        "impact_kind": "mesh"
+      },
+      {
+        "sesno": 262,
+        "session_time": "2026-08-28T08:30:56+00:00",
+        "impact_kind": "mesh"
+      },
+      {
+        "sesno": 263,
+        "session_time": "2026-08-28T09:21:24+00:00",
+        "impact_kind": "mesh"
+      },
+      {
+        "sesno": 264,
+        "session_time": "2026-08-28T09:21:30+00:00",
+        "impact_kind": "mesh"
+      },
+      {
+        "sesno": 265,
+        "session_time": "2026-09-01T12:47:20+00:00",
+        "impact_kind": "mesh"
+      },
+      {
+        "sesno": 266,
+        "session_time": "2026-09-01T12:47:25+00:00",
+        "impact_kind": "mesh"
+      },
+      {
+        "sesno": 282,
+        "session_time": "2026-09-04T16:53:08+00:00",
+        "impact_kind": "mesh"
+      },
+      {
+        "sesno": 283,
+        "session_time": "2026-09-04T17:00:31+00:00",
+        "impact_kind": "mesh"
+      },
+      {
+        "sesno": 284,
+        "session_time": "2026-09-04T23:12:11+00:00",
+        "impact_kind": "mesh"
+      },
+      {
+        "sesno": 285,
+        "session_time": "2026-09-04T23:13:27+00:00",
+        "impact_kind": "mesh"
+      },
+      {
+        "sesno": 380,
+        "session_time": "2026-09-08T03:39:39+00:00",
+        "impact_kind": "mesh"
+      },
+      {
+        "sesno": 382,
+        "session_time": "2026-09-08T03:43:23+00:00",
+        "impact_kind": "mesh"
+      },
+      {
+        "sesno": 417,
+        "session_time": "2026-09-08T09:45:37+00:00",
+        "impact_kind": "mesh"
+      },
+      {
+        "sesno": 419,
+        "session_time": "2026-09-08T09:45:46+00:00",
+        "impact_kind": "mesh"
+      },
+      {
+        "sesno": 421,
+        "session_time": "2026-09-08T09:47:02+00:00",
+        "impact_kind": "mesh"
+      },
+      {
+        "sesno": 423,
+        "session_time": "2026-09-08T09:47:10+00:00",
+        "impact_kind": "mesh"
+      },
+      {
+        "sesno": 425,
+        "session_time": "2026-09-08T09:48:06+00:00",
+        "impact_kind": "mesh"
+      },
+      {
+        "sesno": 427,
+        "session_time": "2026-09-08T09:48:14+00:00",
+        "impact_kind": "mesh"
+      },
+      {
+        "sesno": 429,
+        "session_time": "2026-09-08T10:30:50+00:00",
+        "impact_kind": "mesh"
+      },
+      {
+        "sesno": 431,
+        "session_time": "2026-09-08T10:32:58+00:00",
+        "impact_kind": "mesh"
+      },
+      {
+        "sesno": 437,
+        "session_time": "2026-09-08T11:56:55+00:00",
+        "impact_kind": "mesh"
+      },
+      {
+        "sesno": 439,
+        "session_time": "2026-09-08T12:38:27+00:00",
+        "impact_kind": "mesh"
+      },
+      {
+        "sesno": 441,
+        "session_time": "2026-09-08T16:21:52+00:00",
+        "impact_kind": "mesh"
+      },
+      {
+        "sesno": 443,
+        "session_time": "2026-09-08T16:22:01+00:00",
+        "impact_kind": "mesh"
+      },
+      {
+        "sesno": 559,
+        "session_time": "2026-09-13T07:01:03+00:00",
+        "impact_kind": "mesh"
+      },
+      {
+        "sesno": 561,
+        "session_time": "2026-09-13T07:02:38+00:00",
+        "impact_kind": "mesh"
+      },
+      {
+        "sesno": 563,
+        "session_time": "2026-09-13T07:51:10+00:00",
+        "impact_kind": "mesh"
+      },
+      {
+        "sesno": 565,
+        "session_time": "2026-09-13T07:51:56+00:00",
+        "impact_kind": "mesh"
+      },
+      {
+        "sesno": 567,
+        "session_time": "2026-09-13T08:04:19+00:00",
+        "impact_kind": "mesh"
+      },
+      {
+        "sesno": 569,
+        "session_time": "2026-09-13T08:05:00+00:00",
+        "impact_kind": "mesh"
+      },
+      {
+        "sesno": 571,
+        "session_time": "2026-09-13T08:16:09+00:00",
+        "impact_kind": "mesh"
+      },
+      {
+        "sesno": 573,
+        "session_time": "2026-09-13T08:19:46+00:00",
+        "impact_kind": "mesh"
+      },
+      {
+        "sesno": 626,
+        "session_time": "2026-09-18T11:31:48+00:00",
+        "impact_kind": "mesh"
+      }
+    ],
+    "cached": true,
+    "elapsed_ms": 2387,
+    "stats": {
+      "sessions": 627,
+      "windows_with_changes": 624,
+      "candidates": 47507,
+      "membership_checks": 47451,
+      "members_hit": 60,
+      "sets_built": 683,
+      "index_diff_ms": 1081,
+      "set_build_ms": 907,
+      "membership_ms": 676
+    }
+  },
+  "versionsStatus": 200,
+  "historyQueryRows": 18,
+  "versions": [
+    "5 · 2022/07/01 22:24 · delivery",
+    "211 · 2026/08/12 16:38 · mesh",
+    "212 · 2026/08/12 16:40 · mesh",
+    "213 · 2026/08/12 16:41 · mesh",
+    "214 · 2026/08/12 16:44 · mesh",
+    "215 · 2026/08/14 08:45 · mesh",
+    "216 · 2026/08/14 08:45 · mesh",
+    "217 · 2026/08/14 08:49 · mesh",
+    "218 · 2026/08/14 08:49 · mesh",
+    "219 · 2026/08/14 08:50 · mesh",
+    "220 · 2026/08/14 08:50 · mesh",
+    "225 · 2026/08/14 21:33 · mesh",
+    "226 · 2026/08/14 21:33 · mesh",
+    "227 · 2026/08/14 21:35 · mesh",
+    "228 · 2026/08/14 21:35 · mesh",
+    "231 · 2026/08/19 08:23 · mesh",
+    "232 · 2026/08/19 08:23 · mesh",
+    "251 · 2026/08/20 03:33 · mesh",
+    "252 · 2026/08/20 03:33 · mesh",
+    "257 · 2026/08/25 07:51 · mesh",
+    "258 · 2026/08/25 07:51 · mesh",
+    "259 · 2026/08/28 14:57 · mesh",
+    "260 · 2026/08/28 14:57 · mesh",
+    "261 · 2026/08/28 16:30 · mesh",
+    "262 · 2026/08/28 16:30 · mesh",
+    "263 · 2026/08/28 17:21 · mesh",
+    "264 · 2026/08/28 17:21 · mesh",
+    "265 · 2026/09/01 20:47 · mesh",
+    "266 · 2026/09/01 20:47 · mesh",
+    "282 · 2026/09/05 00:53 · mesh",
+    "283 · 2026/09/05 01:00 · mesh",
+    "284 · 2026/09/05 07:12 · mesh",
+    "285 · 2026/09/05 07:13 · mesh",
+    "380 · 2026/09/08 11:39 · mesh",
+    "382 · 2026/09/08 11:43 · mesh",
+    "417 · 2026/09/08 17:45 · mesh",
+    "419 · 2026/09/08 17:45 · mesh",
+    "421 · 2026/09/08 17:47 · mesh",
+    "423 · 2026/09/08 17:47 · mesh",
+    "425 · 2026/09/08 17:48 · mesh",
+    "427 · 2026/09/08 17:48 · mesh",
+    "429 · 2026/09/08 18:30 · mesh",
+    "431 · 2026/09/08 18:32 · mesh",
+    "437 · 2026/09/08 19:56 · mesh",
+    "439 · 2026/09/08 20:38 · mesh",
+    "441 · 2026/09/09 00:21 · mesh",
+    "443 · 2026/09/09 00:22 · mesh",
+    "559 · 2026/09/13 15:01 · mesh",
+    "561 · 2026/09/13 15:02 · mesh",
+    "563 · 2026/09/13 15:51 · mesh",
+    "565 · 2026/09/13 15:51 · mesh",
+    "567 · 2026/09/13 16:04 · mesh",
+    "569 · 2026/09/13 16:05 · mesh",
+    "571 · 2026/09/13 16:16 · mesh",
+    "573 · 2026/09/13 16:19 · mesh",
+    "626 · 2026/09/18 19:31 · mesh"
+  ],
+  "selectedA": "573",
+  "selectedB": "626",
+  "summaryText": "新增 0删除 0修改 1未变 8",
+  "errorText": null,
+  "viewerState": {
+    "unitRefno": "24384_23257",
+    "beforeSesno": 573,
+    "afterSesno": 626,
+    "beforeObjects": 9,
+    "afterObjects": 9,
+    "environmentLoadedRefnos": 0,
+    "activeSide": "after",
+    "viewMode": "single"
+  },
+  "showBefore": "A · sesno 5732026/09/13 16:19",
+  "showAfter": "B · sesno 6262026/09/18 19:31",
+  "environmentText": "最新环境已固定当前加载范围：0 个 refno 刷新 混合时间视图：环境始终取 dbnum 最新模型，目标单元取所选 sesno。",
+  "treeDiffBarVisible": true,
+  "treeDiffPill": "573 → 626 差异模式",
+  "splitSummary": "左 A · sesno 573 · 右 B · sesno 626",
+  "deletesAfterClose": 2,
+  "treeDiffBarAfterClose": false,
+  "ok": true,
+  "finishedAt": "2026-09-18T11:36:45.670Z",
+  "requestSummary": {
+    "GET /api/v1/model/versions": 1,
+    "POST /api/v1/model/history/{key}": 8,
+    "GET /api/v1/tasks/{id}": 2,
+    "DELETE /api/v1/model/history/{key}": 2
+  }
+}
