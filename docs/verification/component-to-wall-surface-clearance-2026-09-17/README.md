@@ -111,3 +111,9 @@ GET http://127.0.0.1:8024/api/v1/spatial/surface-clearance?source_refno=24384/22
 ### 7.6 1112 库全部 FIXING 逐枚核对：190 枚，0 错（`fixing-1112-audit-store-vs-fresh.json`）
 
 `inst_relate` 里 `generic = 'FIXING' AND dbnum = 1112` 共 **190** 行（之前写的「另 37 个」是 WALL 1 周边扫描的局部数，不是全库数）。逐枚：`:8024` `POST /model/ensure {refno: FIXING}` 现生成（回执 `generation_roots[0]` 是它所在的墙，共 13 堵）→ `:8024` `model/records {generation_root: 墙}` 取现生成的 `world_trans`；`:8022` `model/records {generation_root: FIXING}` 取存量 `world_trans`；比平移（阈值 1 mm）与四元数（1e-3，q 与 −q 同姿态）。结果 **190 / 190 一致，最大偏差 0 mm / 0**，`model_sesno` 全部 729；CWALL `17496/105799` 下 28 堵墙里的 38 枚 FIXING（昨天扫描说的那 38 个）全对——其中 `17496/137183` 是 08:40 重算修好的，其余 37 枚是否在那次重算前就对、还是随根一起被修，没有重算前的快照可断。**没有需要再重算的根。** 耗时 61 s。
+
+### 7.7 1112 库全部模型行核对：4 892 行（PANE 4 275 / FIXING 190 / SBFI 137 / GWALL 120 / FLOOR 81 / STWALL 75 / WALL 14），0 错（`dbnum-1112-all-rows-audit-store-vs-fresh.json`）
+
+用户要确认「旧二进制的 datum 摆放问题只碎在 FIXING」，索性全库核而不抽样：存量侧一句 SQL 取 `inst_relate` 里 `dbnum = 1112` 全部行的 `world_trans_d`（平移 + 四元数，4 892 行 656 KB，0.7 s）；现生成侧按根取——每遇到一行还没被任何根覆盖的，`:8024` `model/ensure {refno}` 一次拿 `generation_roots[0]`，再 `model/records {根}` 把该根全部记录一并收下（149 个根、149 次 ensure，20 s 跑完）。阈值仍是平移 1 mm / 四元数 1e-3（q 与 −q 同姿态）。**4 892 / 4 892 一致，各 noun 最大平移偏差 0.001 mm（f32 舍入）、四元数偏差 0，现生成侧一行不缺。**
+
+结论：`17496/137183` 是 1112 库里**唯一**一行落点错的存量记录——同一批 FIXING 里其余 189 枚、同样挂在 datum 下的都对，PANE / 墙族 / 楼板 / SBFI 也全对。这更像那一次生成的偶发（当时 datum 属性没读到、或半截重算写了个错的 `world_trans`），不是旧二进制系统性的 datum 摆放 bug；§5 / 计划 §9 那条按此收口。副作用：`:8024`（mem 验证实例）现在装着 1112 整库 4 892 条模型记录（149 根）。
