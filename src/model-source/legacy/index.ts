@@ -4,8 +4,9 @@
  * 这一层存在的意义是让 `usePdmsOwnerTree` / `useDbnoInstancesDtxLoader` 在 P2 / P3 改成通过端口取数时，
  * `model_source=legacy` 下的行为与今天**逐字节相同**——每个方法就是一次转发，不加缓存、不改参数、不吞错误。
  */
+import { LegacyModelVersionsRetiredError } from '../modelVersionErrors';
+
 import { legacySpatialSource } from './spatialSource';
-import { legacyModelVersionSource } from './versionSource';
 
 import type {
   AttributeSource,
@@ -13,6 +14,7 @@ import type {
   MeshSource,
   ModelRecordSource,
   ModelSource,
+  ModelVersionSource,
   PrimitiveKeypointsResult,
   TreeSource,
 } from '../ports';
@@ -93,6 +95,19 @@ const keypoints: KeypointSource = {
   },
 };
 
+async function legacyModelVersionsRetired(): Promise<never> {
+  throw new LegacyModelVersionsRetiredError();
+}
+
+/**
+ * 版本对比在 legacy 下已退役（2026-09-18，ADR 0065 / plan 2026-09-18 §7）：`/api/model/units/{refno}/versions` 与
+ * 不可变 parquet manifest 那条取数链已删，模型版本只从 gen-model-v1 取。这里只剩一句明确的退役提示，让面板给空态而不是白屏。
+ */
+const versions: ModelVersionSource = {
+  listVersions: legacyModelVersionsRetired,
+  loadVersion: legacyModelVersionsRetired,
+};
+
 export function createLegacyModelSource(): ModelSource {
   return {
     kind: 'legacy',
@@ -102,6 +117,6 @@ export function createLegacyModelSource(): ModelSource {
     attributes,
     keypoints,
     spatial: legacySpatialSource,
-    versions: legacyModelVersionSource,
+    versions,
   };
 }

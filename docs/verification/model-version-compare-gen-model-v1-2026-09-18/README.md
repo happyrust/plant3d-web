@@ -46,3 +46,10 @@
 - 右侧属性面板对已删除的 24384/26481 报 `not_found (404): dbnum 8000 会话 Some(623) 的索引里没有 24384/26481`——选中幽灵节点后按最新会话读属性，本就读不到；
   底部「属性差异暂不可用 · 锚点缺失（HTTP 404）」是 `ModelTreeAttrDiffPanel` 钉在 legacy `/api/model-history/*`（`:3100` 未起），Q7(ii) 已定不在本计划。
 - `environmentLoadedRefnos: 0`：入口 URL 没带 `show_refno`，视口本来就是空的，「最新环境模型」按 Q12 = 已加载模型 = 空；不是缺陷。
+
+## 4. legacy 链退役后的复验（17:1x，plan §7.3）
+
+- `legacy-retired/legacy-model-source-retired-notice.png`：`?model_source=legacy&unit_refno=24384_26480&compare_autorun=1` 打开面板，
+  一进来就是「legacy 数据源的版本对比已退役：去掉 ?model_source=legacy（或改为 model_source=gen-model-v1）后再打开版本对比」，
+  没有版本下拉、没有请求 legacy 库元数据、`pageerror` 0（§7.3 第 4 条）。
+- 同一台 `:8022`（`d47d747fd`）+ dev `:3111`：`e2e/model-version-compare-gen-model-v1.spec.ts` 3 过（12.3 s）——删掉 legacy 链后 v1 链一处没动。

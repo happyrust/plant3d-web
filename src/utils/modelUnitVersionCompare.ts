@@ -155,7 +155,6 @@ export type ModelUnitVersionCompareOpenDetail = {
 }
 
 export type ModelUnitVersionCompareEnvironment = {
-  generatedAt?: string
   loadedRefnos: number
   refreshing: boolean
   error?: string

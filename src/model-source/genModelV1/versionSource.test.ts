@@ -53,7 +53,6 @@ describe('genModelV1 ModelVersionSource', () => {
       { dbnum: 7997, unitRefno: '24381_145018', unitNoun: 'BRAN', sesno: 66, sessionTime: '2022-11-16T09:19:47+00:00', impactKind: 'delivery' },
       { dbnum: 7997, unitRefno: '24381_145018', unitNoun: 'BRAN', sesno: 120, sessionTime: null, impactKind: 'placement' },
     ]);
-    expect(versions[0]).not.toHaveProperty('assetSesno');
     expect(versions[0]).not.toHaveProperty('geometryKey');
   });
 
@@ -190,11 +189,6 @@ describe('genModelV1 ModelVersionSource', () => {
     await expect(source.loadVersion({
       dbnum: 7997, unitRefno: '24381_145018', unitNoun: 'BRAN', sesno: 66, sessionTime: null, impactKind: 'mesh',
     })).rejects.toThrow('仍未完成');
-  });
-
-  it('pinLatestEnvironment 不带 pin：环境 = 已加载模型，重钉走 records + forceRefresh（Q12）', async () => {
-    const source = createGenModelV1ModelVersionSource(api());
-    await expect(source.pinLatestEnvironment(7997)).resolves.toEqual({ generatedAt: null, loaderOptions: {} });
   });
 
   it('ownerMapFromHistoryRows：anc（自身 → 顶层，打包 refno）拆成逐级直接属主表', () => {

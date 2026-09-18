@@ -11,6 +11,7 @@ import {
   DEFAULT_MODEL_SOURCE_KIND,
   getGenModelV1ModelSource,
   getModelSource,
+  LegacyModelVersionsRetiredError,
   parseModelSourceKind,
   resolveModelSourceKind,
   subscribeModelSourceProgress,
@@ -127,17 +128,26 @@ describe('legacy 适配器：零逻辑委托', () => {
 
   it('records / attributes 同样原样转发', async () => {
     const source = getModelSource('legacy');
-    await source.records.instanceEntriesByRefnos(7997, ['24381_145018'], { includeOwnedTubings: false, manifestUrl: '/m.json' });
+    await source.records.instanceEntriesByRefnos(7997, ['24381_145018'], { includeOwnedTubings: false, forceRefresh: true });
     await source.attributes.uiAttr('24381_145018');
     await source.attributes.typeInfo('24381_145018');
 
     expect(legacyMocks.queryInstanceEntriesByRefnos).toHaveBeenCalledWith(
       7997,
       ['24381_145018'],
-      { includeOwnedTubings: false, manifestUrl: '/m.json' },
+      { includeOwnedTubings: false, forceRefresh: true },
     );
     expect(legacyMocks.pdmsGetUiAttr).toHaveBeenCalledWith('24381_145018');
     expect(legacyMocks.pdmsGetTypeInfo).toHaveBeenCalledWith('24381_145018');
+  });
+
+  it('versions 已退役（2026-09-18，plan §7）：两个方法都抛 LegacyModelVersionsRetiredError，不碰任何 legacy API', async () => {
+    const source = getModelSource('legacy');
+    await expect(source.versions.listVersions(7997, '24381_145018')).rejects.toBeInstanceOf(LegacyModelVersionsRetiredError);
+    await expect(source.versions.loadVersion({
+      dbnum: 7997, unitRefno: '24381_145018', unitNoun: 'BRAN', sesno: 1, sessionTime: null, impactKind: 'mesh',
+    })).rejects.toThrow('model_source=legacy');
+    expect(legacyMocks.queryInstanceEntriesByRefnos).not.toHaveBeenCalled();
   });
 
   it('spatial 三个方法原样转发到 genModelSpatialApi（参数不动、结果不改），并声明带专业维度', async () => {

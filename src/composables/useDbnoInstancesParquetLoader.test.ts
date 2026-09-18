@@ -159,27 +159,6 @@ describe('useDbnoInstancesParquetLoader', () => {
     vi.restoreAllMocks();
   });
 
-  it('严格读取 parquet 当前清单且拒绝最小交付单元清单冒充环境', async () => {
-    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
-      if (String(input).endsWith('/files/output/parquet/manifest_7997_buckets.json')) {
-        return new Response('', { status: 404 });
-      }
-      return new Response(JSON.stringify({
-        ...createManifest(7997),
-        root_refno: '24381_145018',
-      }), { status: 200 });
-    });
-    vi.stubGlobal('fetch', fetchMock);
-
-    const { fetchLatestDbnoManifest } = await import('./useDbnoInstancesParquetLoader');
-
-    await expect(fetchLatestDbnoManifest(7997)).rejects.toThrow('root_refno');
-    expect(fetchMock).toHaveBeenCalledWith(
-      expect.stringContaining('/files/output/parquet/manifest_7997.json'),
-      { cache: 'no-store' },
-    );
-  });
-
   it('ZoneStream bucket index 优先于残留的 dbnum manifest', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
@@ -228,73 +207,14 @@ describe('useDbnoInstancesParquetLoader', () => {
     vi.stubGlobal('fetch', fetchMock);
     queryMock.mockResolvedValue({ toArray: () => [] });
 
-    const { fetchLatestDbnoManifest } = await import('./useDbnoInstancesParquetLoader');
-    const latest = await fetchLatestDbnoManifest(7997);
-
-    expect(latest.manifestUrl).toContain('manifest_7997_buckets.json');
-    expect(latest.generatedAt).toBe('2026-08-04T00:00:00.000Z');
-    expect(latest.manifest.tables.instances.rows).toBe(3);
-    expect(latest.manifest.tables.transforms.rows).toBe(2);
-
     const { useDbnoInstancesParquetLoader } = await import('./useDbnoInstancesParquetLoader');
     const loader = useDbnoInstancesParquetLoader();
     expect(await loader.isParquetAvailable(7997)).toBe(true);
-    const bucketReadsBeforePinned = fetchMock.mock.calls.filter(([input]) =>
-      String(input).endsWith('/manifest_7997_buckets.json')).length;
-    await loader.queryAllRefnosByDbno(7997, {
-      manifestUrl: latest.manifestUrl,
-      pinnedManifest: latest.manifest,
-    });
+    await loader.queryAllRefnosByDbno(7997);
     const registeredUrls = registerFileURLMock.mock.calls.map(call => String(call[1]));
     expect(registeredUrls.some(url => url.includes('/generation-1/zones/24381_1/'))).toBe(true);
     expect(registeredUrls.every(url => !url.includes('__bucketed_'))).toBe(true);
     expect(fetchMock.mock.calls.some(([input]) => String(input).endsWith('/manifest_7997.json'))).toBe(false);
-    expect(fetchMock.mock.calls.filter(([input]) =>
-      String(input).endsWith('/manifest_7997_buckets.json')).length).toBe(bucketReadsBeforePinned);
-  });
-
-  it('bucket latest 网络错误时不回退残留 dbnum manifest', async () => {
-    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
-      if (String(input).endsWith('/manifest_7997_buckets.json')) throw new Error('network down');
-      return new Response(JSON.stringify(createManifest(7997)), { status: 200 });
-    });
-    vi.stubGlobal('fetch', fetchMock);
-
-    const { fetchLatestDbnoManifest } = await import('./useDbnoInstancesParquetLoader');
-    await expect(fetchLatestDbnoManifest(7997)).rejects.toThrow('network down');
-    expect(fetchMock.mock.calls.some(([input]) => String(input).endsWith('/manifest_7997.json'))).toBe(false);
-  });
-
-  it('模型提交清单必须匹配目标最小交付单元根参考号', async () => {
-    const manifestUrl = '/files/output/AvevaMarineSample/model_units/7997/24381_145018/897/manifest.json';
-    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
-      ...createManifest(7997),
-      root_refno: '24381_999999',
-    }), { status: 200 })));
-
-    const { useDbnoInstancesParquetLoader } = await import('./useDbnoInstancesParquetLoader');
-    const loader = useDbnoInstancesParquetLoader();
-
-    await expect(loader.queryAllRefnosByDbno(7997, {
-      manifestUrl,
-      expectedRootRefno: '24381_145018',
-    })).rejects.toThrow('root_refno');
-  });
-
-  it('环境替换使用已读取的清单快照，不会再次解析可变 latest 指针', async () => {
-    const manifest = createManifest(7997);
-    const fetchMock = vi.fn();
-    vi.stubGlobal('fetch', fetchMock);
-    queryMock.mockResolvedValue({ toArray: () => [] });
-
-    const { useDbnoInstancesParquetLoader } = await import('./useDbnoInstancesParquetLoader');
-    const loader = useDbnoInstancesParquetLoader();
-    await loader.queryInstanceEntriesByRefnos(7997, ['24381_145018'], {
-      manifestUrl: '/files/output/parquet/manifest_7997.json',
-      pinnedManifest: manifest,
-    });
-
-    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it('后端提示 instances manifest 时不再请求 parquet manifest', async () => {
@@ -488,78 +408,6 @@ describe('useDbnoInstancesParquetLoader', () => {
     for (const name of instanceQueryNames) {
       expect(allRefnoQueryNames).not.toContain(name);
     }
-  });
-
-  it('按模型提交 manifest URL 注册该版本目录下的 Parquet 文件', async () => {
-    const manifestUrl = '/files/output/AvevaMarineSample/model_units/7997/24381_145018/897/manifest.json';
-    window.history.replaceState({}, '', '/?backendPort=3101');
-    const resolvedManifestUrl = `http://localhost:3101${manifestUrl}`;
-    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
-      const url = String(input);
-      if (url === resolvedManifestUrl) {
-        return new Response(JSON.stringify(createManifest(7997)), { status: 200 });
-      }
-      throw new Error(`unexpected fetch: ${url}`);
-    });
-
-    vi.stubGlobal('fetch', fetchMock);
-    queryMock.mockResolvedValue({ toArray: () => [] });
-
-    const { useDbnoInstancesParquetLoader } = await import('./useDbnoInstancesParquetLoader');
-    const loader = useDbnoInstancesParquetLoader();
-    await loader.queryAllRefnosByDbno(7997, { manifestUrl });
-
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    const registeredUrls = registerFileURLMock.mock.calls.map((call) => String(call[1]));
-    expect(registeredUrls).toHaveLength(5);
-    expect(registeredUrls.every((url) => url.startsWith('http://localhost:3101/'))).toBe(true);
-    expect(registeredUrls.every((url) => url.includes('/model_units/7997/24381_145018/897/'))).toBe(true);
-    window.history.replaceState({}, '', '/');
-  });
-
-  it('兼容旧版模型提交的行字段矩阵及错误写入的模拟位移', async () => {
-    const manifestUrl = '/files/output/AvevaMarineSample/model_units/7997/24381_145018/898/manifest.json';
-    window.history.replaceState({}, '', '/?backendPort=3101');
-    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(createManifest(7997)), { status: 200 })));
-    queryMock.mockImplementation(async (sql: string) => ({
-      toArray: () => sql.includes('parquet_schema')
-        ? [{ name: 'm01', column_id: 3 }, { name: 'm10', column_id: 6 }]
-        : [{
-        refno_str: '24381_145019',
-        noun: 'ELBO',
-        owner_refno_str: '24381_145018',
-        owner_noun: 'BRAN',
-        spec_value: 0,
-        has_neg: false,
-        trans_hash: 'sim-898',
-        aabb_hash: 'aabb-898',
-        geo_index: 0,
-        geo_hash: 'geo-1',
-        geo_trans_hash: null,
-        min_x: 0, min_y: 0, min_z: 0,
-        max_x: 1, max_y: 1, max_z: 1,
-        m00: 1, m01: 0, m02: 0, m03: 100,
-        m10: 0, m11: 1, m12: 0, m13: -20,
-        m20: 0, m21: 0, m22: 1, m23: 5,
-        m30: 0, m31: 0, m32: 0, m33: 1,
-        g_m00: null, g_m10: null, g_m20: null, g_m30: null,
-        g_m01: null, g_m11: null, g_m21: null, g_m31: null,
-        g_m02: null, g_m12: null, g_m22: null, g_m32: null,
-        g_m03: null, g_m13: null, g_m23: null, g_m33: null,
-        }],
-    }));
-
-    const { useDbnoInstancesParquetLoader } = await import('./useDbnoInstancesParquetLoader');
-    const entries = await useDbnoInstancesParquetLoader().queryInstanceEntriesByRefnos(
-      7997,
-      ['24381_145019'],
-      { manifestUrl, includeOwnedTubings: false },
-    );
-    const matrix = entries.get('24381_145019')?.[0]?.matrix;
-
-    expect(matrix?.slice(3, 12).filter((_, index) => index % 4 === 0)).toEqual([0, 0, 0]);
-    expect(matrix?.slice(12, 15)).toEqual([100, -20, 5]);
-    window.history.replaceState({}, '', '/');
   });
 
   it('DuckDB 报本地文件名已注册时改用唯一文件名继续查询', async () => {

@@ -3,33 +3,45 @@ import { createApp, nextTick } from 'vue';
 
 import ModelUnitVersionComparePanel from './ModelUnitVersionComparePanel.vue';
 
-import { listModelUnitCommits } from '@/api/modelUnitVersionApi';
-import { useDbnoInstancesParquetLoader } from '@/composables/useDbnoInstancesParquetLoader';
+import type { ModelVersion, ModelVersionGeometry } from '@/model-source';
 
-vi.mock('@/api/modelUnitVersionApi', () => ({ listModelUnitCommits: vi.fn() }));
-// 面板经模型来源端口取数；这里钉住 legacy 适配器（零逻辑委托到上面两处 mock），不让默认的 gen-model-v1 源被建出来
+// 面板只经模型来源端口的 `versions` 取数；这里给一份可编程的 ModelVersionSource，不建真适配器
+const versionSourceMocks = vi.hoisted(() => ({
+  listVersions: vi.fn(),
+  loadVersion: vi.fn(),
+}));
 vi.mock('@/model-source', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/model-source')>();
-  return { ...actual, getModelSource: () => actual.getModelSource('legacy') };
+  return { ...actual, getModelSource: () => ({ kind: 'gen-model-v1', versions: versionSourceMocks }) };
 });
 vi.mock('@/composables/useDbMetaInfo', () => ({
   ensureDbMetaInfoLoaded: vi.fn().mockResolvedValue(undefined),
   getDbnumByRefno: vi.fn().mockReturnValue(7997),
 }));
-vi.mock('@/composables/useDbnoInstancesParquetLoader', () => ({
-  useDbnoInstancesParquetLoader: vi.fn(),
-}));
 
-const versions = [
-  {
-    manifest_url: '/791/manifest.json',
-    commit: { dbnum: 7997, unit_refno: '24381_145018', unit_noun: 'BRAN', sesno: 791, impact_kind: 'mesh', artifact_sesno: 791, generated_at: '2026-07-22T01:00:00Z' },
-  },
-  {
-    manifest_url: '/897/manifest.json',
-    commit: { dbnum: 7997, unit_refno: '24381_145018', unit_noun: 'BRAN', sesno: 897, impact_kind: 'mesh', artifact_sesno: 897, generated_at: '2026-07-22T02:00:00Z' },
-  },
+function version(sesno: number, sessionTime: string, extra: Partial<ModelVersion> = {}): ModelVersion {
+  return { dbnum: 7997, unitRefno: '24381_145018', unitNoun: 'BRAN', sesno, sessionTime, impactKind: 'mesh', ...extra };
+}
+
+const versions: ModelVersion[] = [
+  version(791, '2026-07-22T01:00:00Z'),
+  version(897, '2026-07-22T02:00:00Z'),
 ];
+
+function geometry(entries: Map<string, unknown[]>): ModelVersionGeometry {
+  return { refnos: [...entries.keys()], entries: entries as never, release: vi.fn().mockResolvedValue(undefined) };
+}
+
+const geometryBySesno: Record<number, () => ModelVersionGeometry> = {
+  791: () => geometry(new Map([
+    ['1_1', [{ geo_hash: 'same', geo_index: 0, matrix: [1], uniforms: { noun: 'PIPE' } }]],
+    ['1_2', [{ geo_hash: 'gone', geo_index: 0, matrix: [1], uniforms: { noun: 'VALV' } }]],
+  ])),
+  897: () => geometry(new Map([
+    ['1_1', [{ geo_hash: 'same', geo_index: 0, matrix: [1], uniforms: { noun: 'PIPE' } }]],
+    ['1_3', [{ geo_hash: 'added', geo_index: 0, matrix: [1], uniforms: { noun: 'ELBO' } }]],
+  ])),
+};
 
 async function flushUi(): Promise<void> {
   for (let i = 0; i < 6; i += 1) {
@@ -40,21 +52,8 @@ async function flushUi(): Promise<void> {
 
 describe('ModelUnitVersionComparePanel', () => {
   beforeEach(() => {
-    vi.mocked(listModelUnitCommits).mockResolvedValue(versions as never);
-    vi.mocked(useDbnoInstancesParquetLoader).mockReturnValue({
-      queryAllRefnosByDbno: vi.fn()
-        .mockResolvedValueOnce(['1_1', '1_2'])
-        .mockResolvedValueOnce(['1_1', '1_3']),
-      queryInstanceEntriesByRefnos: vi.fn()
-        .mockResolvedValueOnce(new Map([
-          ['1_1', [{ geo_hash: 'same', geo_index: 0, matrix: [1], uniforms: { noun: 'PIPE' } }]],
-          ['1_2', [{ geo_hash: 'gone', geo_index: 0, matrix: [1], uniforms: { noun: 'VALV' } }]],
-        ]))
-        .mockResolvedValueOnce(new Map([
-          ['1_1', [{ geo_hash: 'same', geo_index: 0, matrix: [1], uniforms: { noun: 'PIPE' } }]],
-          ['1_3', [{ geo_hash: 'added', geo_index: 0, matrix: [1], uniforms: { noun: 'ELBO' } }]],
-        ])),
-    } as never);
+    versionSourceMocks.listVersions.mockResolvedValue(versions);
+    versionSourceMocks.loadVersion.mockImplementation(async (item: ModelVersion) => geometryBySesno[item.sesno]!());
   });
 
   afterEach(() => {
@@ -97,15 +96,9 @@ describe('ModelUnitVersionComparePanel', () => {
       refnos: ['1_3', '1_2', '1_1'],
     }));
 
-    const parquet = vi.mocked(useDbnoInstancesParquetLoader).mock.results[0]?.value;
-    expect(parquet?.queryAllRefnosByDbno).toHaveBeenNthCalledWith(1, 7997, {
-      expectedRootRefno: '24381_145018',
-      manifestUrl: '/791/manifest.json',
-    });
-    expect(parquet?.queryAllRefnosByDbno).toHaveBeenNthCalledWith(2, 7997, {
-      expectedRootRefno: '24381_145018',
-      manifestUrl: '/897/manifest.json',
-    });
+    expect(versionSourceMocks.listVersions).toHaveBeenCalledWith(7997, '24381_145018');
+    expect(versionSourceMocks.loadVersion).toHaveBeenCalledTimes(2);
+    expect(versionSourceMocks.loadVersion.mock.calls.map(([item]) => (item as ModelVersion).sesno)).toEqual([791, 897]);
 
     window.removeEventListener('plant3d:model-unit-version-compare', listener);
     app.unmount();
@@ -195,19 +188,14 @@ describe('ModelUnitVersionComparePanel', () => {
     window.history.replaceState({}, '', originalUrl);
   });
 
-  it('两个提交复用同一 artifact 时只读取一次并显示无几何差异', async () => {
-    vi.mocked(listModelUnitCommits).mockResolvedValue([
-      versions[0],
-      { ...versions[1], manifest_url: '/791/manifest.json', commit: { ...versions[1].commit, impact_kind: 'noop', artifact_sesno: 791 } },
-    ] as never);
-    const queryAllRefnosByDbno = vi.fn().mockResolvedValue(['1_1']);
-    const queryInstanceEntriesByRefnos = vi.fn().mockResolvedValue(new Map([
+  it('两个版本 geometryKey 相同时只 loadVersion 一次并显示无几何差异', async () => {
+    versionSourceMocks.listVersions.mockResolvedValue([
+      version(791, '2026-07-22T01:00:00Z', { geometryKey: '7997:24381_145018:791' }),
+      version(897, '2026-07-22T02:00:00Z', { impactKind: 'noop', geometryKey: '7997:24381_145018:791' }),
+    ]);
+    versionSourceMocks.loadVersion.mockImplementation(async () => geometry(new Map([
       ['1_1', [{ geo_hash: 'same', geo_index: 0, matrix: [1], uniforms: { noun: 'PIPE' } }]],
-    ]));
-    vi.mocked(useDbnoInstancesParquetLoader).mockReturnValue({
-      queryAllRefnosByDbno,
-      queryInstanceEntriesByRefnos,
-    } as never);
+    ])));
 
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -221,11 +209,34 @@ describe('ModelUnitVersionComparePanel', () => {
     (host.querySelector('[data-testid="model-unit-compare-run"]') as HTMLButtonElement).click();
     await flushUi();
 
-    expect(host.querySelector('[data-testid="model-unit-compare-noop"]')?.textContent).toContain('artifact_sesno 791');
-    expect(queryAllRefnosByDbno).toHaveBeenCalledTimes(1);
-    expect(queryInstanceEntriesByRefnos).toHaveBeenCalledTimes(1);
+    expect(host.querySelector('[data-testid="model-unit-compare-noop"]')?.textContent).toContain('只加载了一次');
+    expect(versionSourceMocks.loadVersion).toHaveBeenCalledTimes(1);
 
     app.unmount();
+  });
+
+  it('?model_source=legacy：一进面板就是退役提示，查询不碰库元数据也不碰模型来源（plan §7.3 第 4 条）', async () => {
+    const originalUrl = window.location.href;
+    window.history.replaceState({}, '', '/?model_source=legacy&unit_refno=24381_145018&compare_autorun=1');
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const app = createApp(ModelUnitVersionComparePanel);
+    app.mount(host);
+    await flushUi();
+    await flushUi();
+
+    expect(host.querySelector('[data-testid="model-unit-compare-error"]')?.textContent).toContain('已退役');
+    expect(host.querySelector('[data-testid="model-unit-compare-a"]')).toBeNull();
+    expect(versionSourceMocks.listVersions).not.toHaveBeenCalled();
+
+    (host.querySelector('[data-testid="model-unit-compare-load"]') as HTMLButtonElement).click();
+    await flushUi();
+    expect(host.querySelector('[data-testid="model-unit-compare-error"]')?.textContent).toContain('model_source=legacy');
+    expect(versionSourceMocks.listVersions).not.toHaveBeenCalled();
+
+    app.unmount();
+    window.history.replaceState({}, '', originalUrl);
   });
 
   it('查询新参考号时立即清空旧版本选择', async () => {
@@ -250,11 +261,8 @@ describe('ModelUnitVersionComparePanel', () => {
     app.unmount();
   });
 
-  it('空 artifact 完成比较后仍显示无几何差异', async () => {
-    vi.mocked(useDbnoInstancesParquetLoader).mockReturnValue({
-      queryAllRefnosByDbno: vi.fn().mockResolvedValue([]),
-      queryInstanceEntriesByRefnos: vi.fn().mockResolvedValue(new Map()),
-    } as never);
+  it('两侧几何都为空时完成比较后仍显示无几何差异', async () => {
+    versionSourceMocks.loadVersion.mockImplementation(async () => geometry(new Map()));
     const host = document.createElement('div');
     document.body.appendChild(host);
     const app = createApp(ModelUnitVersionComparePanel);
@@ -272,14 +280,11 @@ describe('ModelUnitVersionComparePanel', () => {
   });
 
   it('比较请求未完成时卸载面板不会派发幽灵 open 事件', async () => {
-    let resolveRefnos!: (value: string[]) => void;
-    const pendingRefnos = new Promise<string[]>((resolve) => {
-      resolveRefnos = resolve;
+    let resolveGeometry!: (value: ModelVersionGeometry) => void;
+    const pendingGeometry = new Promise<ModelVersionGeometry>((resolve) => {
+      resolveGeometry = resolve;
     });
-    vi.mocked(useDbnoInstancesParquetLoader).mockReturnValue({
-      queryAllRefnosByDbno: vi.fn().mockReturnValue(pendingRefnos),
-      queryInstanceEntriesByRefnos: vi.fn().mockResolvedValue(new Map()),
-    } as never);
+    versionSourceMocks.loadVersion.mockReturnValue(pendingGeometry);
     const events: CustomEvent[] = [];
     const listener = (event: Event) => events.push(event as CustomEvent);
     window.addEventListener('plant3d:model-unit-version-compare', listener);
@@ -294,7 +299,7 @@ describe('ModelUnitVersionComparePanel', () => {
     await flushUi();
     (host.querySelector('[data-testid="model-unit-compare-run"]') as HTMLButtonElement).click();
     app.unmount();
-    resolveRefnos([]);
+    resolveGeometry(geometry(new Map()));
     await flushUi();
 
     expect(events.some((event) => event.detail?.action === 'open')).toBe(false);

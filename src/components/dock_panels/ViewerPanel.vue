@@ -1828,23 +1828,20 @@ function collectLoadedRefnoVisibility(primaryLayer: DTXLayer, dbnum: number): Ma
 }
 
 /**
- * 「最新环境模型」：把视口里**已加载**的该 dbnum refno 按当前数据源重钉一次并保留各自显隐（CONTEXT「模型版本查看」）。
- * 钉住什么由模型来源端口决定（legacy = 最新 manifest；gen-model-v1 = records + forceRefresh），这里不认数据源。
+ * 「最新环境模型」= 打开对比时视口里**已加载**的该 dbnum 模型（CONTEXT「模型版本查看」，Q12）：把已加载的 refno 按页面级开关
+ * 重取一遍（gen-model-v1 = records + forceRefresh），保持各自的显隐，不整库加载。
  */
 async function refreshModelUnitCompareEnvironment(
   detail: ModelUnitVersionCompareOpenDetail,
   runId: number,
-): Promise<{ generatedAt?: string; loadedRefnos: number; refreshing: false }> {
+): Promise<{ loadedRefnos: number; refreshing: false }> {
   const primaryLayer = dtxLayerRef.value;
   if (!primaryLayer) throw new Error('三维环境图层尚未就绪');
 
-  const pin = await getModelSource().versions.pinLatestEnvironment(detail.dbnum);
-  if (runId !== modelUnitCompareRunId) throw new Error('版本对比已取消');
   const visibilityByRefno = collectLoadedRefnoVisibility(primaryLayer, detail.dbnum);
   const loadedRefnos = [...visibilityByRefno.keys()];
   if (loadedRefnos.length > 0) {
     await loadDbnoInstancesForVisibleRefnosDtx(primaryLayer, detail.dbnum, loadedRefnos, {
-      ...pin.loaderOptions,
       forceReloadRefnos: loadedRefnos,
       replaceExistingObjects: true,
     });
@@ -1856,11 +1853,7 @@ async function refreshModelUnitCompareEnvironment(
     );
   }
 
-  return {
-    ...(pin.generatedAt ? { generatedAt: pin.generatedAt } : {}),
-    loadedRefnos: loadedRefnos.length,
-    refreshing: false,
-  };
+  return { loadedRefnos: loadedRefnos.length, refreshing: false };
 }
 
 function hideModelUnitCompareTarget(primaryLayer: DTXLayer, dbnum: number): void {
@@ -2174,7 +2167,6 @@ async function openModelUnitVersionCompare(detail: ModelUnitVersionCompareOpenDe
         afterSesno: detail.after.sesno,
         beforeObjects,
         afterObjects,
-        environmentGeneratedAt: environment.generatedAt ?? null,
         environmentLoadedRefnos: environment.loadedRefnos,
         activeSide: 'after',
         viewMode: DEFAULT_MODEL_UNIT_COMPARE_VIEW_MODE,

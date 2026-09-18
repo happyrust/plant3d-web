@@ -26,7 +26,6 @@ import type { InstanceEntry } from '@/utils/instances/instanceManifest';
 
 import { getParquetVersion } from '@/api/genModelRealtimeApi';
 import { buildFilesOutputUrl } from '@/lib/filesOutput';
-import { buildBackendUrl } from '@/utils/apiBase';
 import { configureLocalDuckDBExtensions, selectLocalDuckDBBundle } from '@/utils/duckdbBundles';
 import {
   describeValue,
@@ -85,8 +84,6 @@ export type ParquetManifest = {
     missing_geo_hashes?: number
     missing_owner_refnos?: number
   }
-  /** Internal immutable snapshot used when a bucket latest pointer is pinned for reload. */
-  _bucket_index?: ParquetBucketIndex
 }
 
 type ParquetBucketIndex = {
@@ -208,7 +205,6 @@ type RegisteredDbno = {
   dbno: number
   baseDirUrl: string
   manifest: ParquetManifest
-  transformLayout: TransformStorageLayout
   // duckdb local filenames (to avoid cross-dbno collision)
   files: {
     instances: string
@@ -227,15 +223,7 @@ type ParquetManifestWithBaseDir = {
   manifest: ParquetManifest
   // manifest 所在目录：用于拼接 parquet 文件 URL
   baseDir: 'parquet' | 'instances'
-  // 指定模型提交时，文件相对该不可变 manifest 所在目录解析。
-  baseDirUrl?: string
   bucketIndex?: ParquetBucketIndex | null
-}
-
-export type LatestDbnoManifest = {
-  manifestUrl: string
-  generatedAt: string
-  manifest: ParquetManifest
 }
 
 type ParquetBaseDir = 'parquet' | 'instances'
@@ -410,62 +398,15 @@ async function tryFetchManifest(
   return json;
 }
 
-function normalizeManifestRefno(value: unknown): string {
-  return String(value ?? '').trim().replace(/\//g, '_');
-}
-
-function assertManifestIdentity(
-  manifest: ParquetManifest,
-  dbno: number,
-  options: { expectedRootRefno?: string; requireAggregateRoot?: boolean } = {},
-): void {
-  if (manifest.dbnum !== dbno) {
-    throw new Error(`manifest dbnum=${manifest.dbnum} 与目标 dbnum=${dbno} 不匹配`);
-  }
-  const rootRefno = normalizeManifestRefno(manifest.root_refno);
-  if (options.requireAggregateRoot && rootRefno) {
-    throw new Error(`dbnum 最新环境 manifest 的 root_refno 必须为空，实际为 ${rootRefno}`);
-  }
-  const expectedRootRefno = normalizeManifestRefno(options.expectedRootRefno);
-  if (expectedRootRefno && rootRefno !== expectedRootRefno) {
-    throw new Error(`模型提交 manifest root_refno=${rootRefno || 'EMPTY'} 与目标 ${expectedRootRefno} 不匹配`);
-  }
-}
-
-export async function fetchLatestDbnoManifest(dbno: number): Promise<LatestDbnoManifest> {
-  const bucketIndex = await tryFetchBucketIndex(dbno, 'parquet', true);
-  if (bucketIndex) {
-    const synthetic = bucketIndexToSyntheticManifest(dbno, bucketIndex);
-    return {
-      manifestUrl: buildFilesOutputUrl(`parquet/manifest_${dbno}_buckets.json`),
-      generatedAt: synthetic.generated_at,
-      manifest: synthetic,
-    };
-  }
-  const manifest = await tryFetchManifest(dbno, 'parquet');
-  if (!manifest) throw new Error(`未找到 dbnum=${dbno} 的 parquet 最新环境 manifest`);
-  assertManifestIdentity(manifest, dbno, { requireAggregateRoot: true });
-  if (!String(manifest.generated_at || '').trim()) {
-    throw new Error(`dbnum=${dbno} 的最新环境 manifest 缺少 generated_at`);
-  }
-  return {
-    manifestUrl: buildFilesOutputUrl(`parquet/manifest_${dbno}.json`),
-    generatedAt: manifest.generated_at,
-    manifest,
-  };
-}
-
 async function tryFetchBucketIndex(
   dbno: number,
   baseDir: ParquetBaseDir,
-  strict = false,
 ): Promise<ParquetBucketIndex | null> {
   const url = buildFilesOutputUrl(`${baseDir}/manifest_${dbno}_buckets.json`);
   let resp: Response;
   try {
     resp = await fetch(url, { cache: 'no-store' });
-  } catch (error) {
-    if (strict) throw error;
+  } catch {
     // Bucket manifests are an optional optimization. Older deployments and
     // strict fetch adapters may reject the probe instead of returning 404.
     return null;
@@ -630,26 +571,13 @@ function buildInList(values: string[]): string {
   return `[${inner}]`;
 }
 
-type TransformStorageLayout = 'columns' | 'legacy-rows'
-
-function colsMajorToMatrixArray(
-  row: any,
-  prefix = '',
-  layout: TransformStorageLayout = 'columns',
-): number[] | null {
-  const keys = layout === 'legacy-rows'
-    ? [
-      'm00','m01','m02','m03',
-      'm10','m11','m12','m13',
-      'm20','m21','m22','m23',
-      'm30','m31','m32','m33',
-    ]
-    : [
-      'm00','m10','m20','m30',
-      'm01','m11','m21','m31',
-      'm02','m12','m22','m32',
-      'm03','m13','m23','m33',
-    ];
+function colsMajorToMatrixArray(row: any, prefix = ''): number[] | null {
+  const keys = [
+    'm00','m10','m20','m30',
+    'm01','m11','m21','m31',
+    'm02','m12','m22','m32',
+    'm03','m13','m23','m33',
+  ];
   const out: number[] = [];
   for (const k of keys) {
     const v = (row as any)[`${prefix}${k}`];
@@ -658,30 +586,16 @@ function colsMajorToMatrixArray(
     if (!Number.isFinite(n)) return null;
     out.push(n);
   }
-  if (layout === 'legacy-rows') {
-    // 旧版 artifact 将列主序数据写进了按行命名的字段；旧版位置模拟还会
-    // 把位移增量写入 m03/m13/m23，加载时一并归回平移分量。
-    out[12] = out[12]! + out[3]!;
-    out[13] = out[13]! + out[7]!;
-    out[14] = out[14]! + out[11]!;
-    out[3] = 0;
-    out[7] = 0;
-    out[11] = 0;
-  }
   return out;
 }
 
-function colsMajorToMatrixArrayWithPrefix(
-  row: any,
-  prefix: string,
-  layout?: TransformStorageLayout,
-): number[] | null {
+function colsMajorToMatrixArrayWithPrefix(row: any, prefix: string): number[] | null {
   const hasAnyValue = [
     'm00','m10','m20','m30','m01','m11','m21','m31',
     'm02','m12','m22','m32','m03','m13','m23','m33',
   ].some((key) => row?.[`${prefix}${key}`] !== null && row?.[`${prefix}${key}`] !== undefined);
   if (!hasAnyValue) return null;
-  return colsMajorToMatrixArray(row, prefix, layout);
+  return colsMajorToMatrixArray(row, prefix);
 }
 
 function multiplyWorldAndGeoLocal(worldCols: number[], geoCols: number[] | null): number[] {
@@ -956,54 +870,7 @@ function rowToPtsetPoint(row: any): PtsetPoint {
   };
 }
 
-async function fetchManifest(
-  dbno: number,
-  manifestUrl?: string,
-  expectedRootRefno?: string,
-  pinnedManifest?: ParquetManifest,
-): Promise<ParquetManifestWithBaseDir> {
-  if (manifestUrl) {
-    const resolvedManifestUrl = /^https?:\/\//i.test(manifestUrl)
-      ? manifestUrl
-      : buildBackendUrl(manifestUrl);
-    let manifest = pinnedManifest;
-    let bucketIndex = pinnedManifest?._bucket_index;
-    if (!manifest) {
-      const resp = await fetch(resolvedManifestUrl, { cache: 'no-store' });
-      if (!resp.ok) {
-        throw new Error(`加载模型提交 manifest 失败: HTTP ${resp.status} ${resp.statusText}`);
-      }
-      const payload = await parseJsonResponse<ParquetManifest | ParquetBucketIndex>(
-        resp,
-        resolvedManifestUrl,
-      );
-      if (payload.format === 'parquet-buckets') {
-        bucketIndex = payload;
-        manifest = bucketIndexToSyntheticManifest(dbno, payload);
-      } else {
-        manifest = payload;
-      }
-    }
-    if (!manifest || !manifest.tables?.instances?.file) {
-      failFileValidation({
-        source: resolvedManifestUrl,
-        format: 'json',
-        reason: `模型提交 manifest 与 dbno=${dbno} 不匹配或结构无效`,
-        expected: '包含 tables.instances.file 的 manifest 对象',
-        actual: describeValue(manifest),
-      });
-    }
-    assertManifestIdentity(manifest, dbno, { expectedRootRefno });
-    const cleanUrl = resolvedManifestUrl.split(/[?#]/, 1)[0] || resolvedManifestUrl;
-    const separator = cleanUrl.lastIndexOf('/');
-    return {
-      manifest,
-      baseDir: 'parquet',
-      baseDirUrl: separator > 0 ? cleanUrl.slice(0, separator) : '.',
-      bucketIndex,
-    };
-  }
-
+async function fetchManifest(dbno: number): Promise<ParquetManifestWithBaseDir> {
   const hint = await getDirectoryHint(dbno);
   if (hint?.manifestBaseDir) {
     const hintedBuckets = await tryFetchBucketIndex(dbno, hint.manifestBaseDir);
@@ -1079,7 +946,6 @@ function bucketIndexToSyntheticManifest(dbno: number, index: ParquetBucketIndex)
     generated_at: index.generated_at || new Date().toISOString(),
     dbnum: dbno,
     root_refno: null,
-    _bucket_index: index,
     ...(index.buckets.some(bucket => bucket.tables?.semantic_snap_points?.file)
       ? { semantic_snap_point_unit: { coordinate_space: 'design_world' } }
       : {}),
@@ -1119,20 +985,10 @@ function bucketIndexToSyntheticManifest(dbno: number, index: ParquetBucketIndex)
 
 async function registerDbno(
   dbno: number,
-  options: {
-    forceRefresh?: boolean
-    manifestUrl?: string
-    expectedRootRefno?: string
-    pinnedManifest?: ParquetManifest
-  } = {},
+  options: { forceRefresh?: boolean } = {},
 ): Promise<RegisteredDbno> {
   const forceRefresh = options.forceRefresh === true;
-  const cacheKey = [
-    dbno,
-    options.manifestUrl || 'current',
-    normalizeManifestRefno(options.expectedRootRefno),
-    options.pinnedManifest?.generated_at || '',
-  ].join('|');
+  const cacheKey = String(dbno);
   const cached = registeredByDbno.get(cacheKey);
   if (cached && !forceRefresh) return cached;
   const pending = registeringByDbno.get(cacheKey);
@@ -1142,13 +998,8 @@ async function registerDbno(
     await ensureDuckDB();
     if (!db || !conn) throw new Error('DuckDB not ready');
 
-    const { manifest, baseDir, baseDirUrl: exactBaseDirUrl, bucketIndex } = await fetchManifest(
-      dbno,
-      options.manifestUrl,
-      options.expectedRootRefno,
-      options.pinnedManifest,
-    );
-    const baseDirUrl = exactBaseDirUrl || buildFilesOutputUrl(baseDir);
+    const { manifest, baseDir, bucketIndex } = await fetchManifest(dbno);
+    const baseDirUrl = buildFilesOutputUrl(baseDir);
 
     const requestToken = createDuckdbRemoteQueryToken();
     const files = buildRegisteredDbnoFiles(
@@ -1190,26 +1041,10 @@ async function registerDbno(
         Promise.resolve(files.mbd_dimensions),
       ]);
 
-    let transformLayout: TransformStorageLayout = 'columns';
-    if (options.manifestUrl) {
-      const schemaRows = (await conn.query(`
-        SELECT name, min(column_id) AS column_id
-        FROM ${parquetSchema(transforms)}
-        WHERE name IN ('m01', 'm10')
-        GROUP BY name
-      `)).toArray() as any[];
-      const m01 = Number(schemaRows.find((row) => row.name === 'm01')?.column_id);
-      const m10 = Number(schemaRows.find((row) => row.name === 'm10')?.column_id);
-      if (Number.isFinite(m01) && Number.isFinite(m10) && m01 < m10) {
-        transformLayout = 'legacy-rows';
-      }
-    }
-
     const reg: RegisteredDbno = {
       dbno,
       baseDirUrl,
       manifest,
-      transformLayout,
       files: {
         instances,
         ptsets,
@@ -1407,7 +1242,7 @@ export function useDbnoInstancesParquetLoader() {
    * 最近一次 `queryInstanceEntriesByRefnos` 实际注册的清单身份（当前环境包也从这里拿到 `generated_at`）。
    * DTX 加载器据此给装进场景的 refno 记几何来源（`DtxLoadSourceStamp`），批注创建时填 `regionV1.source`。
    */
-  const lastRegisteredManifest = shallowRef<{ dbno: number; manifestUrl: string | null; generatedAt: string | null } | null>(null);
+  const lastRegisteredManifest = shallowRef<{ dbno: number; generatedAt: string | null } | null>(null);
 
   async function prewarmDuckDB(): Promise<void> {
     await ensureDuckDB();
@@ -1561,7 +1396,7 @@ export function useDbnoInstancesParquetLoader() {
         return fail('PTSET_CATA_HASH_MISSING', `refno=${normalizedRefno} 缺少 cata_hash，无法查询 ptset`);
       }
 
-      const worldTransform = colsMajorToMatrixArray(instanceRow, '', reg.transformLayout);
+      const worldTransform = colsMajorToMatrixArray(instanceRow, '');
       if (!worldTransform) {
         const transHash = String(instanceRow.trans_hash || '').trim();
         return fail(
@@ -1713,9 +1548,9 @@ export function useDbnoInstancesParquetLoader() {
         const geoHash = String(row.geo_hash || '').trim();
         if (!refnoStr || !geoHash) continue;
 
-        const worldCols = colsMajorToMatrixArray(row, '', reg.transformLayout);
+        const worldCols = colsMajorToMatrixArray(row, '');
         if (!worldCols) continue;
-        const geoLocal = colsMajorToMatrixArrayWithPrefix(row, 'g_', reg.transformLayout);
+        const geoLocal = colsMajorToMatrixArrayWithPrefix(row, 'g_');
         const matrix = new Matrix4().fromArray(multiplyWorldAndGeoLocal(worldCols, geoLocal));
 
         const local: [number, number, number] = [
@@ -1953,9 +1788,6 @@ export function useDbnoInstancesParquetLoader() {
       debug?: boolean
       forceRefresh?: boolean
       includeOwnedTubings?: boolean
-      manifestUrl?: string
-      expectedRootRefno?: string
-      pinnedManifest?: ParquetManifest
     }
   ): Promise<Map<string, InstanceEntry[]>> {
     lastError.value = null;
@@ -1973,16 +1805,10 @@ export function useDbnoInstancesParquetLoader() {
     if (!conn) throw new Error('DuckDB connection unavailable');
 
     const registerDbnoStartedAt = Date.now();
-    const reg = await registerDbno(dbno, {
-      forceRefresh: options?.forceRefresh !== false,
-      manifestUrl: options?.manifestUrl,
-      expectedRootRefno: options?.expectedRootRefno,
-      pinnedManifest: options?.pinnedManifest,
-    });
+    const reg = await registerDbno(dbno, { forceRefresh: options?.forceRefresh !== false });
     timing.phaseMs.registerDbno = Date.now() - registerDbnoStartedAt;
     lastRegisteredManifest.value = {
       dbno,
-      manifestUrl: options?.manifestUrl ?? null,
       generatedAt: String(reg.manifest.generated_at || '').trim() || null,
     };
 
@@ -2047,7 +1873,7 @@ export function useDbnoInstancesParquetLoader() {
         const refnoKey = normalizeRefnoKey(refnoStr);
         if (!refnoKey) continue;
 
-        const worldCols = colsMajorToMatrixArray(row, '', reg.transformLayout);
+        const worldCols = colsMajorToMatrixArray(row, '');
         if (!worldCols) continue;
 
         // geo local matrix（可能为空）
@@ -2061,7 +1887,7 @@ export function useDbnoInstancesParquetLoader() {
           // 如果 tg 没 join 到，字段会是 null
           const anyVal = Object.values(gRow).some((v) => v !== null && v !== undefined);
           if (!anyVal) return null;
-          const arr = colsMajorToMatrixArray(gRow, '', reg.transformLayout);
+          const arr = colsMajorToMatrixArray(gRow, '');
           return arr;
         })();
 
@@ -2188,7 +2014,7 @@ export function useDbnoInstancesParquetLoader() {
 
         // TUBI 的 trans_hash 已是世界空间完整变换矩阵（world_trans_hash），
         // 不需要再乘以 parentWorld
-        const tubiTransform = colsMajorToMatrixArray(row, '', reg.transformLayout);
+        const tubiTransform = colsMajorToMatrixArray(row, '');
         if (!tubiTransform) continue;
         const matrix = tubiTransform;
 
@@ -2246,19 +2072,11 @@ export function useDbnoInstancesParquetLoader() {
     options?: {
       limit?: number
       debug?: boolean
-      manifestUrl?: string
-      expectedRootRefno?: string
-      pinnedManifest?: ParquetManifest
     }
   ): Promise<string[]> {
     lastError.value = null;
 
-    const reg = await registerDbno(dbno, {
-      forceRefresh: true,
-      manifestUrl: options?.manifestUrl,
-      expectedRootRefno: options?.expectedRootRefno,
-      pinnedManifest: options?.pinnedManifest,
-    });
+    const reg = await registerDbno(dbno, { forceRefresh: true });
     await ensureDuckDB();
     if (!conn) throw new Error('DuckDB connection unavailable');
 

@@ -8,7 +8,7 @@
  *   `history/query tool=instances` + `tool=tubes` → 与生产 `model/records` 同一条映射（`projection_record_to_query`
  *   的 TS 对偶 + `groupInstanceEntriesByRefno`）→ `InstanceEntry[]`。`tombstone` 版本不打后端、回空集。
  *   `release()` = `DELETE model/history/{snapshot_key}`。
- * - `pinLatestEnvironment`：环境 = 视口里已加载的模型，重钉不带 pin（加载器按页面级开关走 records + forceRefresh，Q12）。
+ * 「最新环境模型」= 视口里已加载的模型，刷新环境由 ViewerPanel 按页面级开关走 records + forceRefresh（Q12），不经这里。
  *
  * 历史投影不落库、重启即丢、单次 ≤ 100 000 元素 / 300 s：这里每次 `loadVersion` 都重新 generate，不依赖上一次的快照还在。
  */
@@ -16,7 +16,6 @@ import { groupInstanceEntriesByRefno } from './instanceMapping';
 
 import type {
   ModelVersion,
-  ModelVersionEnvironmentPin,
   ModelVersionGeometry,
   ModelVersionLoadOptions,
   ModelVersionSource,
@@ -284,9 +283,5 @@ export function createGenModelV1ModelVersionSource(api: GenModelV1VersionApi = d
     };
   }
 
-  async function pinLatestEnvironment(): Promise<ModelVersionEnvironmentPin> {
-    return { generatedAt: null, loaderOptions: {} };
-  }
-
-  return { listVersions, loadVersion, pinLatestEnvironment };
+  return { listVersions, loadVersion };
 }

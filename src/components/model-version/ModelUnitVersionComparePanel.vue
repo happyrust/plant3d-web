@@ -5,7 +5,13 @@ import { GitCompare, RefreshCw, X } from 'lucide-vue-next';
 
 import { ensureDbMetaInfoLoaded, getDbnumByRefno } from '@/composables/useDbMetaInfo';
 import { dispatchTreeDiffContext } from '@/composables/useTreeVersionDiff';
-import { getModelSource, type ModelVersion, type ModelVersionGeometry } from '@/model-source';
+import {
+  getModelSource,
+  getModelSourceKind,
+  LegacyModelVersionsRetiredError,
+  type ModelVersion,
+  type ModelVersionGeometry,
+} from '@/model-source';
 import {
   buildTreeDiffModels,
   type TreeDiffDispatchInput,
@@ -27,6 +33,11 @@ import {
 // URL 入口（Q16）见 `readModelUnitVersionCompareUrl`；面板本身由 `DockLayout` 按同一个开关打开。
 // 哪些类型算最小交付单元不再由前端判（Q6）：不是单元根时由模型来源报 `NotDeliveryUnitRootError`。
 const urlConfig = readModelUnitVersionCompareUrl(window.location.search);
+/**
+ * `model_source=legacy` 下版本对比已退役（2026-09-18，plan §7.3 第 4 条）：一进面板就给退役提示，不去碰 legacy 的库元数据
+ * （那一步会先报 `[db_meta] 未命中`，把真正的原因盖住）。
+ */
+const legacyRetired = getModelSourceKind() === 'legacy';
 const unitRefno = ref(urlConfig.unitRefno);
 const dbnum = ref<number | null>(null);
 const versions = ref<ModelVersion[]>([]);
@@ -36,7 +47,7 @@ const beforeSesno = ref<number | null>(null);
 const afterSesno = ref<number | null>(null);
 const loadingVersions = ref(false);
 const comparing = ref(false);
-const error = ref<string | null>(null);
+const error = ref<string | null>(legacyRetired ? new LegacyModelVersionsRetiredError().message : null);
 const rows = ref<ModelUnitGeometryDiff[]>([]);
 const statusFilter = ref<'all' | Exclude<ModelUnitGeometryStatus, 'unchanged'>>('all');
 const includeUnchanged = ref(false);
@@ -48,7 +59,7 @@ let requestId = 0;
 const normalizedRefno = computed(() => unitRefno.value.trim().replace(/\//g, '_'));
 const selectedBefore = computed(() => versions.value.find((item) => item.sesno === beforeSesno.value) ?? null);
 const selectedAfter = computed(() => versions.value.find((item) => item.sesno === afterSesno.value) ?? null);
-/** 两个版本几何相同的承诺（legacy：同一 artifact_sesno）；键缺失时不承诺 */
+/** 两个版本几何相同的承诺（`ModelVersion.geometryKey` 相等）；键缺失时不承诺 */
 const sameGeometry = computed(() => sameGeometryKey(selectedBefore.value, selectedAfter.value));
 
 function sameGeometryKey(a: ModelVersion | null, b: ModelVersion | null): boolean {
@@ -95,10 +106,7 @@ function messageOf(value: unknown): string {
 }
 
 function versionLabel(item: ModelVersion): string {
-  const reused = item.assetSesno !== undefined && item.assetSesno !== item.sesno
-    ? ` · 复用 ${item.assetSesno}`
-    : '';
-  return `${item.sesno} · ${formatModelUnitVersionTime(item.sessionTime ?? '')} · ${item.impactKind}${reused}`;
+  return `${item.sesno} · ${formatModelUnitVersionTime(item.sessionTime ?? '')} · ${item.impactKind}`;
 }
 
 function releaseHeldGeometries(): void {
@@ -122,6 +130,10 @@ async function loadVersions(): Promise<void> {
   afterSesno.value = null;
   compareCompleted.value = false;
   const refno = normalizedRefno.value;
+  if (legacyRetired) {
+    error.value = new LegacyModelVersionsRetiredError().message;
+    return;
+  }
   if (!/^\d+_\d+$/.test(refno)) {
     error.value = '请输入最小交付单元根参考号，例如 24381_145018';
     return;
@@ -185,7 +197,7 @@ async function runCompare(): Promise<void> {
   comparing.value = true;
   error.value = null;
   try {
-    // 几何相同的承诺（legacy：同一 artifact）→ 只取一次，两侧共用
+    // 几何相同的承诺（同一 geometryKey）→ 只取一次，两侧共用
     const [beforeData, afterData] = sameGeometryKey(before, after)
       ? await loadSide(after).then((data) => [data, data] as const)
       : await Promise.all([loadSide(before), loadSide(after)]);
@@ -431,9 +443,6 @@ onBeforeUnmount(() => {
               <div class="font-semibold">A · sesno {{ compareRuntime.detail.before.sesno }}</div>
               <div class="mt-0.5 text-[10px] opacity-75">{{ formatModelUnitVersionTime(compareRuntime.detail.before.version.sessionTime ?? '') }}</div>
               <div v-if="compareRuntime.detail.before.version.impactKind === 'tombstone'" class="mt-0.5 text-[10px] opacity-75">该版本单元已删除</div>
-              <div v-else-if="compareRuntime.detail.before.version.assetSesno !== undefined" class="mt-0.5 text-[10px] opacity-75">
-                artifact {{ compareRuntime.detail.before.version.assetSesno }}
-              </div>
             </button>
             <button type="button"
               class="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1.5 text-left text-emerald-700 transition-opacity"
@@ -443,9 +452,6 @@ onBeforeUnmount(() => {
               <div class="font-semibold">B · sesno {{ compareRuntime.detail.after.sesno }}</div>
               <div class="mt-0.5 text-[10px] opacity-75">{{ formatModelUnitVersionTime(compareRuntime.detail.after.version.sessionTime ?? '') }}</div>
               <div v-if="compareRuntime.detail.after.version.impactKind === 'tombstone'" class="mt-0.5 text-[10px] opacity-75">该版本单元已删除</div>
-              <div v-else-if="compareRuntime.detail.after.version.assetSesno !== undefined" class="mt-0.5 text-[10px] opacity-75">
-                artifact {{ compareRuntime.detail.after.version.assetSesno }}
-              </div>
             </button>
           </div>
           <div v-else
@@ -464,9 +470,6 @@ onBeforeUnmount(() => {
             <div>
               <div class="font-semibold">
                 {{ compareRuntime.environment.error ? '当前环境（刷新失败）' : '最新环境' }}
-                <template v-if="compareRuntime.environment.generatedAt">
-                  · {{ formatModelUnitVersionTime(compareRuntime.environment.generatedAt) }}
-                </template>
               </div>
               <div class="mt-0.5 opacity-80">已固定当前加载范围：{{ compareRuntime.environment.loadedRefnos }} 个 refno</div>
             </div>
@@ -499,7 +502,7 @@ onBeforeUnmount(() => {
             <span class="rounded bg-slate-100 px-1.5 py-0.5 text-slate-600">未变 {{ summary.unchanged }}</span>
           </div>
           <p v-if="noGeometryDifference" class="mt-2 text-xs font-medium text-emerald-700" data-testid="model-unit-compare-noop">
-            无几何差异<span v-if="sameGeometry && selectedAfter?.assetSesno !== undefined">；A/B 复用 artifact_sesno {{ selectedAfter?.assetSesno }}</span>
+            无几何差异<span v-if="sameGeometry">；A/B 几何相同，只加载了一次</span>
           </p>
         </div>
 

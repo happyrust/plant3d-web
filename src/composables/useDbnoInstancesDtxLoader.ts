@@ -3,10 +3,7 @@ import { ref } from 'vue';
 import { Box3, BufferAttribute, BufferGeometry, Color, CylinderGeometry, Matrix4, SphereGeometry } from 'three';
 
 import { realtimeInstancesByRefnos } from '@/api/genModelRealtimeApi';
-import {
-  type ParquetManifest,
-  useDbnoInstancesParquetLoader,
-} from '@/composables/useDbnoInstancesParquetLoader';
+import { useDbnoInstancesParquetLoader } from '@/composables/useDbnoInstancesParquetLoader';
 import { useDisplayThemeStore, type DisplayTheme } from '@/composables/useDisplayThemeStore';
 import { getModelSource } from '@/model-source';
 import { type InstanceEntry } from '@/utils/instances/instanceManifest';
@@ -39,23 +36,19 @@ type LoaderOptions = {
    * - 'gen-model-v1'：gen-model `/api/v1`（ensure → records，plan 2026-09-06 P3-e）
    *
    * 页面级开关 `?model_source=gen-model-v1` 生效时，前两种会被**改写**成第三种（同一页面只该有一个几何数据源），
-   * 只有调用方自带 `instanceEntriesByRefno` / `parquetManifestUrl`（不可变清单，版本对比）时不改。
+   * 只有调用方自带 `instanceEntriesByRefno`（版本对比的 A/B 几何由模型来源端口取好后钉入）时不改。
    */
   dataSource?: 'parquet' | 'backend' | 'gen-model-v1'
   /** 人明确要求重生成（gen-model-v1 = `ensure(force=true)`）；其它数据源忽略 */
   forceRegenerate?: boolean
   includeOwnedTubings?: boolean
-  /** 不可变最小交付单元提交的 manifest URL；提供后不读取 dbno 当前包。 */
-  parquetManifestUrl?: string
-  /** 已严格读取的清单快照，避免 latest 指针在加载期间再次解析到另一版本。 */
-  parquetManifest?: ParquetManifest
-  /** 校验不可变提交确实属于该最小交付单元根。 */
+  /** 透传给模型来源的 `instanceEntriesByRefnos`（`InstanceEntryQueryOptions.expectedRootRefno`）。 */
   expectedRootRefno?: string
   /** 使用独立运行时索引，避免版本对比对象污染当前模型的 refno 映射。 */
   isolated?: boolean
   /** 隔离对象的 ID 前缀，用于区分版本侧。 */
   objectIdPrefix?: string
-  /** 调用方已按精确 manifest 读取的实例，供同 artifact 的多图层复用。 */
+  /** 调用方已取好的实例表（版本对比的 A/B 几何，`ModelVersionGeometry.entries`），供多图层复用。 */
   instanceEntriesByRefno?: Map<string, InstanceEntry[]>
 }
 
@@ -79,10 +72,8 @@ export type DtxAabbProxyEntry = {
  */
 export type DtxLoadSourceStamp = {
   dataSource: 'parquet' | 'backend' | 'gen-model-v1' | 'aabb-proxy'
-  /** parquet 环境 / 最小交付单元版本 = `${dbno}:parquet:${generated_at}`；其它路径 `null` */
+  /** parquet 当前环境 = `${dbno}:parquet:${generated_at}`；其它路径 `null` */
   modelSnapshotId: string | null
-  /** 调用方显式钉住的不可变清单 URL（版本切换 / 版本对比）；「当前环境」加载为 `null` */
-  manifestUrl: string | null
   generatedAt: string | null
   loadedAt: number
 }
@@ -772,7 +763,6 @@ export function loadDtxAabbProxyRefnos(
   const sourceStamp: DtxLoadSourceStamp = {
     dataSource: 'aabb-proxy',
     modelSnapshotId: null,
-    manifestUrl: null,
     generatedAt: null,
     loadedAt: Date.now(),
   };
@@ -907,9 +897,9 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
   const { currentTheme } = useDisplayThemeStore();
   const currentLoadTheme: DisplayTheme = currentTheme.value;
 
-  // 根据 dataSource 选项决定数据源；页面级开关切到 gen-model-v1 时改写（不可变清单的调用除外）
+  // 根据 dataSource 选项决定数据源；页面级开关切到 gen-model-v1 时改写（调用方自带实例表的调用除外）
   const modelSource = getModelSource();
-  const pinnedByCaller = !!options.instanceEntriesByRefno || !!options.parquetManifestUrl || !!options.parquetManifest;
+  const pinnedByCaller = !!options.instanceEntriesByRefno;
   const dataSource: 'parquet' | 'backend' | 'gen-model-v1' =
     !pinnedByCaller && modelSource.kind === 'gen-model-v1' ? 'gen-model-v1' : (options.dataSource || 'parquet');
   let index: Map<string, InstanceEntry[]>;
@@ -944,31 +934,23 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
     if (debug) console.log('[dtx][instances] using backend', { dbno, refnos: toLoad.length, indexSize: index.size, missing: resp.missing_refnos?.length ?? 0 });
   } else {
     const parquet = useDbnoInstancesParquetLoader();
-    if (!options.parquetManifestUrl) {
-      const available = await parquet.isParquetAvailable(dbno);
-      if (!available) {
-        throw new Error(`Parquet not available (dbno=${dbno})`);
-      }
+    const available = await parquet.isParquetAvailable(dbno);
+    if (!available) {
+      throw new Error(`Parquet not available (dbno=${dbno})`);
     }
     index = await parquet.queryInstanceEntriesByRefnos(dbno, toLoad, {
       debug,
       forceRefresh: normalizedForceReload !== null,
       includeOwnedTubings: options.includeOwnedTubings,
-      manifestUrl: options.parquetManifestUrl,
-      expectedRootRefno: options.expectedRootRefno,
-      pinnedManifest: options.parquetManifest,
     });
     if (debug) console.log('[dtx][instances] using parquet', { dbno, refnos: toLoad.length });
-    // 这次查询实际注册的清单（当前环境 / 钉住的不可变版本都从这里拿 generated_at）
-    parquetGeneratedAt = options.parquetManifest?.generated_at
-      ?? parquet.lastRegisteredManifest?.value?.generatedAt
-      ?? null;
+    // 这次查询实际注册的当前环境清单的 generated_at（批注来源身份用）
+    parquetGeneratedAt = parquet.lastRegisteredManifest?.value?.generatedAt ?? null;
   }
 
   const sourceStamp: DtxLoadSourceStamp = {
     dataSource,
     modelSnapshotId: dataSource === 'parquet' && parquetGeneratedAt ? `${dbno}:parquet:${parquetGeneratedAt}` : null,
-    manifestUrl: options.parquetManifestUrl ?? null,
     generatedAt: parquetGeneratedAt,
     loadedAt: Date.now(),
   };

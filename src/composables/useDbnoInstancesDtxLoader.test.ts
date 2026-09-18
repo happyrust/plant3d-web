@@ -8,7 +8,7 @@ afterAll(() => window.history.replaceState({}, '', '/'));
 const parquetLoaderMocks = vi.hoisted(() => ({
   isParquetAvailable: vi.fn(async () => true),
   queryInstanceEntriesByRefnos: vi.fn(async () => new Map()),
-  lastRegisteredManifest: { value: null as { dbno: number; manifestUrl: string | null; generatedAt: string | null } | null },
+  lastRegisteredManifest: { value: null as { dbno: number; generatedAt: string | null } | null },
 }));
 
 vi.mock('@/composables/useDbnoInstancesParquetLoader', () => ({
@@ -67,25 +67,6 @@ describe('useDbnoInstancesDtxLoader', () => {
     expect(typeof mod.loadDbnoInstancesForVisibleRefnosDtx).toBe('function');
     expect(typeof mod.loadDtxAabbProxyRefnos).toBe('function');
     expect(typeof mod.hasDtxDbnoCache).toBe('function');
-  });
-
-  it('指定最小交付单元版本时直接使用该 manifest，不探测当前 dbno 包', async () => {
-    const { DTXLayer } = await import('@/utils/three/dtx');
-    const mod = await import('./useDbnoInstancesDtxLoader');
-    const manifestUrl = '/files/output/AvevaMarineSample/model_units/7997/24381_145018/897/manifest.json';
-    const dtxLayer = new DTXLayer({ maxVertices: 64, maxIndices: 128, maxObjects: 8 });
-
-    await mod.loadDbnoInstancesForVisibleRefnosDtx(dtxLayer, 7997, ['24381_145018'], {
-      dataSource: 'parquet',
-      parquetManifestUrl: manifestUrl,
-    });
-
-    expect(parquetLoaderMocks.isParquetAvailable).not.toHaveBeenCalled();
-    expect(parquetLoaderMocks.queryInstanceEntriesByRefnos).toHaveBeenCalledWith(
-      7997,
-      ['24381_145018'],
-      expect.objectContaining({ manifestUrl }),
-    );
   });
 
   it('AABB 代理模型应登记到 DTX refno 索引，便于空间查询定位和显隐', async () => {
@@ -148,12 +129,11 @@ describe('useDbnoInstancesDtxLoader', () => {
     expect(mod.getDtxRefnoLoadSource(99002, '=2013286704/480')).toMatchObject({
       dataSource: 'aabb-proxy',
       modelSnapshotId: null,
-      manifestUrl: null,
       generatedAt: null,
     });
   });
 
-  it('装进场景的 refno 记几何来源身份：parquet 当前环境取实际注册清单的 generated_at，钉住的版本清单带 manifestUrl；跨库探针可查', async () => {
+  it('装进场景的 refno 记几何来源身份：parquet 当前环境取实际注册清单的 generated_at；跨库探针可查', async () => {
     const { DTXLayer } = await import('@/utils/three/dtx');
     const mod = await import('./useDbnoInstancesDtxLoader');
     const dbno = 99021;
@@ -161,7 +141,7 @@ describe('useDbnoInstancesDtxLoader', () => {
     const dtxLayer = new DTXLayer({ maxVertices: 256, maxIndices: 512, maxObjects: 16 });
 
     parquetLoaderMocks.queryInstanceEntriesByRefnos.mockImplementation(async () => {
-      parquetLoaderMocks.lastRegisteredManifest.value = { dbno, manifestUrl: null, generatedAt: '2026-09-14T10:00:00Z' };
+      parquetLoaderMocks.lastRegisteredManifest.value = { dbno, generatedAt: '2026-09-14T10:00:00Z' };
       return new Map([[refno, [makeInstanceEntry(refno)]]]);
     });
     await mod.loadDbnoInstancesForVisibleRefnosDtx(dtxLayer, dbno, [refno], { dataSource: 'parquet' });
@@ -169,33 +149,11 @@ describe('useDbnoInstancesDtxLoader', () => {
     expect(mod.getDtxRefnoLoadSource(dbno, refno)).toMatchObject({
       dataSource: 'parquet',
       modelSnapshotId: `${dbno}:parquet:2026-09-14T10:00:00Z`,
-      manifestUrl: null,
       generatedAt: '2026-09-14T10:00:00Z',
     });
     expect(mod.getDtxRefnoLoadSourceAcrossAllDbnos('=24381/900001')?.modelSnapshotId).toBe(`${dbno}:parquet:2026-09-14T10:00:00Z`);
     expect(mod.getDtxRefnoLoadSource(dbno, '24381_nothing')).toBeNull();
     expect(mod.getDtxRefnoLoadSource(dbno + 1, refno)).toBeNull();
-
-    // 钉住不可变清单（版本切换）强制重载：身份换成该清单的 generated_at，并带上 manifestUrl
-    const manifestUrl = '/files/output/AvevaMarineSample/model_units/99021/24381_900001/897/manifest.json';
-    parquetLoaderMocks.queryInstanceEntriesByRefnos.mockImplementation(async () => {
-      parquetLoaderMocks.lastRegisteredManifest.value = { dbno, manifestUrl, generatedAt: 'ignored-when-pinned' };
-      return new Map([[refno, [makeInstanceEntry(refno)]]]);
-    });
-    await mod.loadDbnoInstancesForVisibleRefnosDtx(dtxLayer, dbno, [refno], {
-      dataSource: 'parquet',
-      forceReloadRefnos: [refno],
-      replaceExistingObjects: true,
-      parquetManifestUrl: manifestUrl,
-      parquetManifest: { generated_at: '2026-09-01T00:00:00Z' } as never,
-    });
-
-    expect(mod.getDtxRefnoLoadSource(dbno, refno)).toMatchObject({
-      dataSource: 'parquet',
-      modelSnapshotId: `${dbno}:parquet:2026-09-01T00:00:00Z`,
-      manifestUrl,
-      generatedAt: '2026-09-01T00:00:00Z',
-    });
   });
 
   it('版本对比的隔离图层（isolated）加载不推进 dtxLoaderRevision——主模型没变，不该触发批注重解析', async () => {

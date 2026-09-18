@@ -24,7 +24,7 @@ src/api/reviewApi.test.ts|TS2322|Type '{ schemaVersion: 1; documentId: string; r
 src/api/reviewApi.test.ts|TS2532|Object is possibly 'undefined'.
 src/api/reviewApi.test.ts|TS2532|Object is possibly 'undefined'.
 src/api/reviewApi.test.ts|TS2532|Object is possibly 'undefined'.
-src/api/reviewApi.ts|TS2322|Type '{ title: string | undefined; models: (string | Record<string, unknown>)[]; taskId: string | undefined; records: { id: string; taskId: string; type: string; annotations: unknown[]; cloudAnnotations: unknown[]; ... 6 more ...; confirmedAt: string; }[]; ... 7 more ...; nextStepDetail: WorkflowNextStepDetail | undefined...' is not assignable to type 'WorkflowSyncData | undefined'.
+src/api/reviewApi.ts|TS2322|Type '{ title: string | undefined; models: (string | Record<string, unknown>)[]; taskId: string | undefined; records: { id: string; taskId: string; type: string; annotations: unknown[]; cloudAnnotations: unknown[]; ... N more ...; confirmedAt: string; }[]; ... N more ...; nextStepDetail: WorkflowNextStepDetail | undefined...' is not assignable to type 'WorkflowSyncData | undefined'.
 src/api/reviewApi.ts|TS2339|Property 'claims' does not exist on type '{ valid: boolean; claims?: { projectId: string; userId: string; userName?: string | undefined; formId?: string | undefined; role?: string | undefined; workflowMode?: string | undefined; exp: number; iat: number; } | undefined; error?: string | undefined; } | undefined'.
 src/api/siteRegistryApi.test.ts|TS2558|Expected 0 type arguments, but got 1.
 src/components/DockLayout.test.ts|TS2345|Argument of type '(handler: (commandId: string) => void) => () => undefined' is not assignable to parameter of type '() => () => undefined'.
@@ -47,49 +47,20 @@ src/components/dock_panels/PtsetPanelDock.vue|TS2532|Object is possibly 'undefin
 src/components/dock_panels/PtsetPanelDock.vue|TS2532|Object is possibly 'undefined'.
 src/components/dock_panels/TaskCreationPanelDock.vue|TS1192|Module '"D:/work/plant-code/old/plant3d-web/src/components/task/TaskCreationWizard.vue"' has no default export.
 src/components/dock_panels/TaskMonitorPanelDock.vue|TS1192|Module '"D:/work/plant-code/old/plant3d-web/src/components/task/TaskMonitorPanel.vue"' has no default export.
-src/components/dock_panels/ViewerPanel.vue|TS18047|'item' is possibly 'null'.
 src/components/dock_panels/ViewerPanel.vue|TS18048|'first' is possibly 'undefined'.
 src/components/dock_panels/ViewerPanel.vue|TS18048|'first' is possibly 'undefined'.
 src/components/dock_panels/ViewerPanel.vue|TS2304|Cannot find name 'quickViewReq'.
 src/components/dock_panels/ViewerPanel.vue|TS2304|Cannot find name 'rangeDrawerOpen'.
 src/components/dock_panels/ViewerPanel.vue|TS2304|Cannot find name 'rangeDrawerOpen'.
-src/components/dock_panels/ViewerPanel.vue|TS2322|Type '({ refno: string; componentKey: string | undefined; refnoU64: number | undefined; category: string | undefined; status: string | undefined; beforeState: string | undefined; afterState: string | undefined; sourceChangeCount: number | undefined; sourceNouns: string | undefined; } | null)[] | { ...; }[]' is not assignable to type '{ refno: string; componentKey?: string | undefined; refnoU64?: number | undefined; category?: string | undefined; status?: string | undefined; beforeState?: string | undefined; afterState?: string | undefined; sourceChangeCount?: number | undefined; sourceNouns?: string | undefined; }[]'.
-src/components/dock_panels/ViewerPanel.vue|TS2322|Type '{ ready: ComputedRef<boolean>; statusText: ComputedRef<string>; objectToObjectUiState: ComputedRef<{ sourceRefno: string | null; targetRefno: string | null; busy: boolean; canReset: boolean; statusText: string; }>; ... 33 more ...; selectionStore: { ...; }; }' is not assignable to type 'ToolsApi'.
-src/components/dock_panels/ViewerPanel.vue|TS2339|Property 'afterState' does not exist on type '{ refno: string; }'.
-src/components/dock_panels/ViewerPanel.vue|TS2339|Property 'afterState' does not exist on type '{ refno: string; }'.
-src/components/dock_panels/ViewerPanel.vue|TS2339|Property 'afterState' does not exist on type '{ refno: string; }'.
-src/components/dock_panels/ViewerPanel.vue|TS2339|Property 'afterState' does not exist on type '{ refno: string; }'.
-src/components/dock_panels/ViewerPanel.vue|TS2339|Property 'beforeState' does not exist on type '{ refno: string; }'.
-src/components/dock_panels/ViewerPanel.vue|TS2339|Property 'beforeState' does not exist on type '{ refno: string; }'.
-src/components/dock_panels/ViewerPanel.vue|TS2339|Property 'beforeState' does not exist on type '{ refno: string; }'.
-src/components/dock_panels/ViewerPanel.vue|TS2339|Property 'beforeState' does not exist on type '{ refno: string; }'.
-src/components/dock_panels/ViewerPanel.vue|TS2339|Property 'category' does not exist on type '{ refno: string; }'.
-src/components/dock_panels/ViewerPanel.vue|TS2339|Property 'generatedAt' does not exist on type '{ generatedAt: string; loadedRefnos: number; refreshing: false; } | { loadedRefnos: number; refreshing: false; error: string; }'.
-src/components/dock_panels/ViewerPanel.vue|TS2339|Property 'hoverText' does not exist on type '{ ready: ComputedRef<boolean>; statusText: ComputedRef<string>; objectToObjectUiState: ComputedRef<{ sourceRefno: string | null; targetRefno: string | null; busy: boolean; canReset: boolean; statusText: string; }>; ... 33 more ...; selectionStore: { ...; }; }'.
-src/components/dock_panels/ViewerPanel.vue|TS2339|Property 'sourceChangeCount' does not exist on type '{ refno: string; }'.
-src/components/dock_panels/ViewerPanel.vue|TS2339|Property 'sourceChangeCount' does not exist on type '{ refno: string; }'.
-src/components/dock_panels/ViewerPanel.vue|TS2339|Property 'status' does not exist on type '{ refno: string; }'.
-src/components/dock_panels/ViewerPanel.vue|TS2339|Property 'status' does not exist on type '{ refno: string; }'.
-src/components/dock_panels/ViewerPanel.vue|TS2339|Property 'status' does not exist on type '{ refno: string; }'.
-src/components/dock_panels/ViewerPanel.vue|TS2339|Property 'status' does not exist on type '{ refno: string; }'.
-src/components/dock_panels/ViewerPanel.vue|TS2339|Property 'status' does not exist on type '{ refno: string; }'.
-src/components/dock_panels/ViewerPanel.vue|TS2339|Property 'status' does not exist on type '{ refno: string; }'.
+src/components/dock_panels/ViewerPanel.vue|TS2322|Type '{ ready: ComputedRef<boolean>; statusText: ComputedRef<string>; objectToObjectUiState: ComputedRef<{ sourceRefno: string | null; targetRefno: string | null; busy: boolean; canReset: boolean; statusText: string; }>; ... N more ...; selectionStore: { ...; }; }' is not assignable to type 'ToolsApi'.
+src/components/dock_panels/ViewerPanel.vue|TS2339|Property 'hoverText' does not exist on type '{ ready: ComputedRef<boolean>; statusText: ComputedRef<string>; objectToObjectUiState: ComputedRef<{ sourceRefno: string | null; targetRefno: string | null; busy: boolean; canReset: boolean; statusText: string; }>; ... N more ...; selectionStore: { ...; }; }'.
 src/components/dock_panels/ViewerPanel.vue|TS2345|Argument of type '"warn"' is not assignable to parameter of type 'LogType'.
 src/components/dock_panels/ViewerPanel.vue|TS2345|Argument of type '"warn"' is not assignable to parameter of type 'LogType'.
-src/components/dock_panels/ViewerPanel.vue|TS2345|Argument of type 'Scene<Object3DEventMap>' is not assignable to parameter of type 'Group<Object3DEventMap>'.
-src/components/dock_panels/ViewerPanel.vue|TS2345|Argument of type 'Scene<Object3DEventMap>' is not assignable to parameter of type 'Group<Object3DEventMap>'.
 src/components/dock_panels/ViewerPanel.vue|TS2554|Expected 0 arguments, but got 1.
-src/components/dock_panels/ViewerPanel.vue|TS2677|A type predicate's type must be assignable to its parameter's type.
 src/components/model-tree/ModelTreePanel.vue|TS18047|'item' is possibly 'null'.
 src/components/model-tree/ModelTreePanel.vue|TS2322|Type '({ refno: string; category: string | undefined; status: string | undefined; beforeState: string | undefined; afterState: string | undefined; sourceChangeCount: number | undefined; sourceNouns: string | undefined; ownerRefno: string | undefined; } | null)[] | { ...; }[]' is not assignable to type 'TreeDiffModel[]'.
 src/components/model-tree/ModelTreePanel.vue|TS2677|A type predicate's type must be assignable to its parameter's type.
-src/components/model-version/ModelUnitVersionComparePanel.test.ts|TS2532|Object is possibly 'undefined'.
 src/components/model-version/ModelUnitVersionComparePanel.vue|TS2345|Argument of type 'Map<string, InstanceEntry[]>' is not assignable to parameter of type 'Map<string, GeometryEntryLike[]>'.
-src/components/model-version/ModelVersionComparePanel.test.ts|TS2532|Object is possibly 'undefined'.
-src/components/model-version/ModelVersionComparePanel.test.ts|TS2532|Object is possibly 'undefined'.
-src/components/model-version/ModelVersionComparePanel.vue|TS2550|Property 'replaceAll' does not exist on type 'string'. Do you need to change your target library? Try changing the 'lib' compiler option to 'es2021' or later.
-src/components/model-version/ModelVersionComparePanel.vue|TS2550|Property 'replaceAll' does not exist on type 'string'. Do you need to change your target library? Try changing the 'lib' compiler option to 'es2021' or later.
-src/components/model-version/ModelVersionComparePanel.vue|TS7006|Parameter 'part' implicitly has an 'any' type.
 src/components/review/AnnotationSheetWorkspace.test.ts|TS2769|No overload matches this call.
 src/components/review/AnnotationTableView.test.ts|TS2488|Type 'any[] | undefined' must have a '[Symbol.iterator]()' method that returns an iterator.
 src/components/review/AnnotationTableView.test.ts|TS2532|Object is possibly 'undefined'.
@@ -112,9 +83,7 @@ src/components/review/AnnotationWorkspace.vue|TS2305|Module '"@/types/auth"' has
 src/components/review/DesignerCommentHandlingPanel.test.ts|TS2556|A spread argument must either have a tuple type or be passed to a rest parameter.
 src/components/review/DesignerCommentHandlingPanel.test.ts|TS2556|A spread argument must either have a tuple type or be passed to a rest parameter.
 src/components/review/DesignerCommentHandlingPanel.vue|TS2322|Type '(record: Omit<ConfirmedRecord, "id" | "confirmedAt">) => Promise<string>' is not assignable to type '(payload: unknown) => Promise<string>'.
-src/components/review/DesignerCommentHandlingPanel.vue|TS2322|Type 'MeasurementRecord[]' is not assignable to type 'ReviewSnapshotMeasurementPayload[]'.
-src/components/review/DesignerCommentHandlingPanel.vue|TS2345|Argument of type 'ConfirmedRecord[]' is not assignable to parameter of type 'ReviewConfirmSnapshotRecordLike[]'.
-src/components/review/DesignerCommentHandlingPanel.vue|TS2345|Argument of type '{ id: string; formId?: string | undefined; title: string; description: string; modelName: string; status: "rejected" | "cancelled" | "draft" | "submitted" | "in_review" | "approved"; ... 17 more ...; returnReason?: string | undefined; } | undefined' is not assignable to parameter of type 'ReviewTask'.
+src/components/review/DesignerCommentHandlingPanel.vue|TS2345|Argument of type '{ id: string; formId?: string | undefined; title: string; description: string; modelName: string; status: "rejected" | "cancelled" | "draft" | "submitted" | "in_review" | "approved"; ... N more ...; returnReason?: string | undefined; } | undefined' is not assignable to parameter of type 'ReviewTask'.
 src/components/review/DesignerTaskList.test.ts|TS2556|A spread argument must either have a tuple type or be passed to a rest parameter.
 src/components/review/FileUpload.test.ts|TS2769|No overload matches this call.
 src/components/review/FileUpload.test.ts|TS2769|No overload matches this call.
@@ -138,14 +107,11 @@ src/components/review/ReviewCommentsTimeline.test.ts|TS2556|A spread argument mu
 src/components/review/ReviewCommentsTimeline.test.ts|TS2556|A spread argument must either have a tuple type or be passed to a rest parameter.
 src/components/review/ReviewCommentsTimeline.test.ts|TS2556|A spread argument must either have a tuple type or be passed to a rest parameter.
 src/components/review/ReviewCommentsTimeline.test.ts|TS2556|A spread argument must either have a tuple type or be passed to a rest parameter.
-src/components/review/ReviewConfirmation.vue|TS2322|Type 'MeasurementRecord[]' is not assignable to type 'ReviewSnapshotMeasurementPayload[]'.
 src/components/review/ReviewConfirmation.vue|TS2322|Type 'ReviewSnapshotMeasurementPayload[]' is not assignable to type 'MeasurementRecord[]'.
 src/components/review/ReviewConfirmation.vue|TS2322|Type 'unknown[]' is not assignable to type 'AnnotationRecord[]'.
 src/components/review/ReviewConfirmation.vue|TS2322|Type 'unknown[]' is not assignable to type 'CloudAnnotationRecord[]'.
 src/components/review/ReviewConfirmation.vue|TS2322|Type 'unknown[]' is not assignable to type 'ObbAnnotationRecord[]'.
 src/components/review/ReviewConfirmation.vue|TS2322|Type 'unknown[]' is not assignable to type 'RectAnnotationRecord[]'.
-src/components/review/ReviewConfirmation.vue|TS2345|Argument of type '{ id: string; taskId?: string | undefined; formId?: string | undefined; type: "batch"; annotations: { id: string; entityId: string; worldPos: [number, number, number]; labelWorldPos?: [number, number, number] | undefined; ... 12 more ...; screenshot?: { ...; } | undefined; }[]; ... 7 more ...; note: string; }[]' is not assignable to parameter of type 'ReviewConfirmSnapshotRecordLike[]'.
-src/components/review/ReviewPanel.test.ts|TS2322|Type 'string' is not assignable to type 'never'.
 src/components/review/ReviewPanel.test.ts|TS2322|Type '{ id: string; annotationId: string; annotationType: string; authorId: string; authorName: string; authorRole: string; content: string; createdAt: number; }' is not assignable to type 'never'.
 src/components/review/ReviewPanel.test.ts|TS2556|A spread argument must either have a tuple type or be passed to a rest parameter.
 src/components/review/ReviewPanel.test.ts|TS2556|A spread argument must either have a tuple type or be passed to a rest parameter.
@@ -154,13 +120,11 @@ src/components/review/ReviewPanel.vue|TS2322|Type '"critical"' is not assignable
 src/components/review/ReviewPanel.vue|TS2322|Type '"normal"' is not assignable to type 'SeverityBucket'.
 src/components/review/ReviewPanel.vue|TS2322|Type '"severe"' is not assignable to type 'SeverityBucket'.
 src/components/review/ReviewPanel.vue|TS2322|Type '"suggestion"' is not assignable to type 'SeverityBucket'.
-src/components/review/ReviewPanel.vue|TS2322|Type 'MeasurementRecord[]' is not assignable to type 'ReviewSnapshotMeasurementPayload[]'.
 src/components/review/ReviewPanel.vue|TS2322|Type 'ReviewSnapshotMeasurementPayload[]' is not assignable to type 'MeasurementRecord[]'.
 src/components/review/ReviewPanel.vue|TS2322|Type 'unknown[]' is not assignable to type 'AnnotationRecord[]'.
 src/components/review/ReviewPanel.vue|TS2322|Type 'unknown[]' is not assignable to type 'CloudAnnotationRecord[]'.
 src/components/review/ReviewPanel.vue|TS2322|Type 'unknown[]' is not assignable to type 'ObbAnnotationRecord[]'.
 src/components/review/ReviewPanel.vue|TS2322|Type 'unknown[]' is not assignable to type 'RectAnnotationRecord[]'.
-src/components/review/ReviewPanel.vue|TS2345|Argument of type 'ConfirmedRecord[]' is not assignable to parameter of type 'ReviewConfirmSnapshotRecordLike[]'.
 src/components/review/ReviewPanel.vue|TS2353|Object literal may only specify known properties, and 'critical' does not exist in type 'Record<SeverityBucket, number>'.
 src/components/review/ReviewPanel.vue|TS2353|Object literal may only specify known properties, and 'type' does not exist in type 'ToastPayload'.
 src/components/review/ReviewPanel.vue|TS2367|This comparison appears to be unintentional because the types 'AnnotationSeverity | undefined' and '"critical"' have no overlap.
@@ -171,9 +135,7 @@ src/components/review/ReviewerTaskList.test.ts|TS2353|Object literal may only sp
 src/components/review/ReviewerTaskList.test.ts|TS2556|A spread argument must either have a tuple type or be passed to a rest parameter.
 src/components/review/ReviewerTaskList.test.ts|TS2556|A spread argument must either have a tuple type or be passed to a rest parameter.
 src/components/review/ReviewerTaskList.test.ts|TS2556|A spread argument must either have a tuple type or be passed to a rest parameter.
-src/components/review/ReviewerTaskList.vue|TS2322|Type 'MeasurementRecord[]' is not assignable to type 'ReviewSnapshotMeasurementPayload[]'.
 src/components/review/ReviewerTaskList.vue|TS2322|Type 'WorkflowNode | undefined' is not assignable to type 'WorkflowNode'.
-src/components/review/ReviewerTaskList.vue|TS2345|Argument of type '{ id: string; taskId?: string | undefined; formId?: string | undefined; type: "batch"; annotations: { id: string; entityId: string; worldPos: [number, number, number]; labelWorldPos?: [number, number, number] | undefined; ... 12 more ...; screenshot?: { ...; } | undefined; }[]; ... 7 more ...; note: string; }[]' is not assignable to parameter of type 'ReviewConfirmSnapshotRecordLike[]'.
 src/components/review/TaskReviewDetail.test.ts|TS2556|A spread argument must either have a tuple type or be passed to a rest parameter.
 src/components/review/TaskReviewDetail.vue|TS2322|Type '{ node: string; action: string; operatorId: string; operatorName: string; comment?: string | undefined; timestamp: number; }[]' is not assignable to type 'WorkflowStep[] | { node: WorkflowNode; action: "submit" | "reject" | "return" | "approve"; operatorId: string; operatorName: string; comment?: string | undefined; timestamp: number; }[]'.
 src/components/review/annotationTableClipboard.test.ts|TS2322|Type '"severe"' is not assignable to type 'AnnotationSeverity | undefined'.
@@ -211,13 +173,11 @@ src/components/review/reviewPanelActions.test.ts|TS2322|Type '{ schemaVersion: 1
 src/components/review/reviewPanelActions.test.ts|TS2322|Type '{ schemaVersion: 1; documentId: string; records: never[]; }' is not assignable to type 'Readonly<{ schemaVersion: 2; documentId: string; records: readonly UserDimensionRecord[]; }>'.
 src/components/review/reviewPanelActions.ts|TS2322|Type 'WorkflowNode | undefined' is not assignable to type 'WorkflowNode'.
 src/components/review/reviewPanelActions.ts|TS2322|Type 'unknown[]' is not assignable to type 'ReviewSnapshotMeasurementPayload[]'.
-src/components/review/reviewPanelActions.ts|TS2322|Type 'unknown[]' is not assignable to type 'ReviewSnapshotMeasurementPayload[]'.
-src/components/review/reviewRecordReplay.test.ts|TS2322|Type '"legacy"' is not assignable to type '"distance" | "angle" | undefined'.
 src/components/review/reviewRecordReplay.ts|TS2322|Type 'string | undefined' is not assignable to type 'AnnotationType | undefined'.
 src/components/review/reviewRecordReplay.ts|TS2322|Type 'string | undefined' is not assignable to type 'AnnotationType | undefined'.
 src/components/review/reviewRecordReplay.ts|TS2322|Type 'string | undefined' is not assignable to type 'AnnotationType | undefined'.
 src/components/review/reviewRecordReplay.ts|TS2322|Type 'string | undefined' is not assignable to type 'AnnotationType | undefined'.
-src/components/review/reviewRecordReplay.ts|TS2322|Type '{ annotations: unknown[]; cloudAnnotations: unknown[]; rectAnnotations: unknown[]; obbAnnotations: unknown[]; measurements: ReviewSnapshotMeasurementPayload[]; id: string; taskId: string; ... 4 more ...; confirmedAt: string; }[]' is not assignable to type 'ReplayRecordLike[]'.
+src/components/review/reviewRecordReplay.ts|TS2322|Type '{ annotations: unknown[]; cloudAnnotations: unknown[]; rectAnnotations: unknown[]; obbAnnotations: unknown[]; measurements: ReviewSnapshotMeasurementPayload[]; id: string; taskId: string; ... N more ...; confirmedAt: string; }[]' is not assignable to type 'ReplayRecordLike[]'.
 src/components/review/reviewRecordReplay.ts|TS2322|Type '{ annotations: unknown[]; cloudAnnotations: unknown[]; rectAnnotations: unknown[]; obbAnnotations: unknown[]; measurements: ReviewSnapshotMeasurementPayload[]; id?: unknown; taskId?: unknown; formId?: unknown; confirmedAt?: unknown; }[]' is not assignable to type 'ReplayRecordLike[]'.
 src/components/review/reviewRecordReplay.ts|TS2345|Argument of type 'unknown[]' is not assignable to parameter of type 'ReviewSnapshotMeasurementPayload[]'.
 src/components/review/sections/AuxiliaryDataSection.vue|TS2322|Type '{ ObjectOne: string; ObjectTow: string; Distance: number; }[]' is not assignable to type 'CollisionItem[]'.
@@ -245,7 +205,7 @@ src/components/task/TaskStatusCard.vue|TS2339|Property 'noun_counts' does not ex
 src/components/task/TaskStatusCard.vue|TS2339|Property 'total_generated' does not exist on type '{}'.
 src/components/tools/AnnotationPanel.test.ts|TS2345|Argument of type '(annotationId: string) => Promise<{ success: boolean; comments: AnnotationComment[]; }>' is not assignable to parameter of type '() => Promise<{ success: boolean; comments: never[]; }>'.
 src/components/tools/AnnotationPanel.test.ts|TS2556|A spread argument must either have a tuple type or be passed to a rest parameter.
-src/components/tools/MeasurementPanel.vue|TS2345|Argument of type 'Element | ComponentPublicInstance<{}, {}, {}, {}, {}, {}, {}, {}, false, ComponentOptionsBase<any, any, any, any, any, any, any, any, any, {}, {}, string, {}, {}, {}, string, ComponentProvideOptions>, ... 4 more ..., any> | null' is not assignable to parameter of type 'Element | null'.
+src/components/tools/MeasurementPanel.vue|TS2345|Argument of type 'Element | ComponentPublicInstance<{}, {}, {}, {}, {}, {}, {}, {}, false, ComponentOptionsBase<any, any, any, any, any, any, any, any, any, {}, {}, string, {}, {}, {}, string, ComponentProvideOptions>, ... N more ..., any> | null' is not assignable to parameter of type 'Element | null'.
 src/components/tools/ToolManagerPanel.import.test.ts|TS7053|Element implicitly has an 'any' type because expression of type '0' can't be used to index type '{}'.
 src/components/ui/Button.vue|TS2322|Type 'unknown' is not assignable to type 'string | undefined'.
 src/components/ui/Dialog.vue|TS2339|Property '__dialogScrollLockTestReset__' does not exist on type 'Window & typeof globalThis'.
@@ -261,13 +221,12 @@ src/composables/useDbnoInstancesDtxLoader.test.ts|TS2345|Argument of type '(_dbn
 src/composables/useDbnoInstancesDtxLoader.ts|TS2345|Argument of type 'Promise<{ status: "ok"; notFoundNew: boolean; } | { status: "error" | "not_found"; notFoundNew: boolean; }>' is not assignable to parameter of type 'Promise<void>'.
 src/composables/useDbnoInstancesParquetLoader.test.ts|TS2532|Object is possibly 'undefined'.
 src/composables/useDbnoInstancesParquetLoader.ts|TS2322|Type 'boolean | undefined' is not assignable to type 'boolean'.
-src/composables/useDtxTools.cloudCreation.test.ts|TS2322|Type 'Ref<{ addGeometry: (geoHash: string, geometry: BufferGeometry<NormalBufferAttributes, BufferGeometryEventMap>) => GeometryHandle; ... 39 more ...; dispose: () => void; }, DTXLayer | { ...; }>' is not assignable to type 'Ref<DTXLayer | null, DTXLayer | null>'.
-src/composables/useDtxTools.objectMeasure.test.ts|TS2322|Type 'Ref<{ addGeometry: (geoHash: string, geometry: BufferGeometry<NormalBufferAttributes, BufferGeometryEventMap>) => GeometryHandle; ... 39 more ...; dispose: () => void; }, DTXLayer | { ...; }>' is not assignable to type 'Ref<DTXLayer | null, DTXLayer | null>'.
-src/composables/useDtxTools.objectMeasure.test.ts|TS2322|Type 'Ref<{ addGeometry: (geoHash: string, geometry: BufferGeometry<NormalBufferAttributes, BufferGeometryEventMap>) => GeometryHandle; ... 39 more ...; dispose: () => void; }, DTXLayer | { ...; }>' is not assignable to type 'Ref<DTXLayer | null, DTXLayer | null>'.
-src/composables/useDtxTools.objectMeasure.test.ts|TS2322|Type 'Ref<{ addGeometry: (geoHash: string, geometry: BufferGeometry<NormalBufferAttributes, BufferGeometryEventMap>) => GeometryHandle; ... 39 more ...; dispose: () => void; }, DTXLayer | { ...; }>' is not assignable to type 'Ref<DTXLayer | null, DTXLayer | null>'.
+src/composables/useDtxTools.cloudCreation.test.ts|TS2322|Type 'Ref<{ addGeometry: (geoHash: string, geometry: BufferGeometry<NormalBufferAttributes, BufferGeometryEventMap>) => GeometryHandle; ... N more ...; dispose: () => void; }, DTXLayer | { ...; }>' is not assignable to type 'Ref<DTXLayer | null, DTXLayer | null>'.
+src/composables/useDtxTools.objectMeasure.test.ts|TS2322|Type 'Ref<{ addGeometry: (geoHash: string, geometry: BufferGeometry<NormalBufferAttributes, BufferGeometryEventMap>) => GeometryHandle; ... N more ...; dispose: () => void; }, DTXLayer | { ...; }>' is not assignable to type 'Ref<DTXLayer | null, DTXLayer | null>'.
+src/composables/useDtxTools.objectMeasure.test.ts|TS2322|Type 'Ref<{ addGeometry: (geoHash: string, geometry: BufferGeometry<NormalBufferAttributes, BufferGeometryEventMap>) => GeometryHandle; ... N more ...; dispose: () => void; }, DTXLayer | { ...; }>' is not assignable to type 'Ref<DTXLayer | null, DTXLayer | null>'.
 src/composables/useDtxTools.objectMeasure.test.ts|TS2339|Property 'origin' does not exist on type 'MeasurementRecord'.
 src/composables/useDtxTools.objectMeasure.test.ts|TS2339|Property 'target' does not exist on type 'MeasurementRecord'.
-src/composables/useDtxTools.pickCandidateCycle.test.ts|TS2322|Type 'Ref<{ addGeometry: (geoHash: string, geometry: BufferGeometry<NormalBufferAttributes, BufferGeometryEventMap>) => GeometryHandle; ... 39 more ...; dispose: () => void; }, DTXLayer | { ...; }>' is not assignable to type 'Ref<DTXLayer | null, DTXLayer | null>'.
+src/composables/useDtxTools.pickCandidateCycle.test.ts|TS2322|Type 'Ref<{ addGeometry: (geoHash: string, geometry: BufferGeometry<NormalBufferAttributes, BufferGeometryEventMap>) => GeometryHandle; ... N more ...; dispose: () => void; }, DTXLayer | { ...; }>' is not assignable to type 'Ref<DTXLayer | null, DTXLayer | null>'.
 src/composables/useDtxTools.pickRefno.test.ts|TS2345|Argument of type 'number | undefined' is not assignable to parameter of type 'number'.
 src/composables/useDtxTools.pickRefno.test.ts|TS2345|Argument of type 'number | undefined' is not assignable to parameter of type 'number'.
 src/composables/useDtxTools.pickRefno.test.ts|TS2345|Argument of type 'number | undefined' is not assignable to parameter of type 'number'.
@@ -287,11 +246,10 @@ src/composables/useDtxTools.ts|TS2339|Property 'origin' does not exist on type '
 src/composables/useDtxTools.ts|TS2339|Property 'target' does not exist on type 'AngleMeasurementRecord | ElevationPointMeasurementRecord | ElevationDeltaMeasurementRecord'.
 src/composables/useDtxTools.ts|TS2345|Argument of type '{ x?: number | undefined; y?: number | undefined; }' is not assignable to parameter of type 'CloudPoint2D'.
 src/composables/useDtxTools.ts|TS2550|Property 'replaceAll' does not exist on type 'string'. Do you need to change your target library? Try changing the 'lib' compiler option to 'es2021' or later.
-src/composables/useMbdExternalSync.test.ts|TS2345|Argument of type '{ loadedAt: null; channel: null; sourceId: null; issues: never[]; skipped: never[]; loadError: null; }' is not assignable to parameter of type 'Readonly<{ loadedAt: number | null; channel: MbdDiagnosticsChannel | null; sourceId: string | null; issues: readonly Readonly<{ id: string; severity: MbdV2IssueSeverity; ... 5 more ...; rule_id?: string | undefined; }>[]; skipped: readonly Readonly<...>[]; layoutMode: string | null; notes: readonly string[]; loadErr...'.
+src/composables/useMbdExternalSync.test.ts|TS2345|Argument of type '{ loadedAt: null; channel: null; sourceId: null; issues: never[]; skipped: never[]; loadError: null; }' is not assignable to parameter of type 'Readonly<{ loadedAt: number | null; channel: MbdDiagnosticsChannel | null; sourceId: string | null; issues: readonly Readonly<{ id: string; severity: MbdV2IssueSeverity; ... N more ...; rule_id?: string | undefined; }>[]; skipped: readonly Readonly<...>[]; layoutMode: string | null; notes: readonly string[]; loadErr...'.
 src/composables/useMeasurementAnnotation.test.ts|TS2322|Type '{ value: Map<any, any>; }' is not assignable to type 'ShallowRef<Map<string, AnnotationBase>>'.
 src/composables/useMeasurementAnnotation.test.ts|TS2741|Property '[RefSymbol]' is missing in type '{ value: null; }' but required in type 'Ref<string | null, string | null>'.
 src/composables/useMeasurementAnnotation.test.ts|TS2741|Property '[RefSymbol]' is missing in type '{ value: null; }' but required in type 'Ref<string | null, string | null>'.
-src/composables/useModelGeneration.ts|TS2322|Type 'string | null' is not assignable to type 'string | undefined'.
 src/composables/usePanelZones.test.ts|TS2322|Type 'unknown' is not assignable to type 'PanelLike | undefined'.
 src/composables/usePanelZones.test.ts|TS2769|No overload matches this call.
 src/composables/usePipeDistanceAnnotationThree.ts|TS2305|Module '"@/dimension"' has no exported member 'ExplicitLayoutInput'.
@@ -309,16 +267,13 @@ src/composables/usePtsetSnap.test.ts|TS2532|Object is possibly 'undefined'.
 src/composables/usePtsetVisualizationThree.ts|TS2345|Argument of type 'string' is not assignable to parameter of type 'LengthUnit'.
 src/composables/usePtsetVisualizationThree.ts|TS2345|Argument of type 'string' is not assignable to parameter of type 'LengthUnit'.
 src/composables/useReviewStore.confirm.test.ts|TS2345|Argument of type '{ id: string; entityId: string; worldPos: [number, number, number]; visible: true; glyph: string; title: string; createdAt: number; }' is not assignable to parameter of type 'AnnotationRecord'.
-src/composables/useReviewStore.confirm.test.ts|TS2345|Argument of type '{ id: string; obb: { center: [number, number, number]; axes: [[number, number, number], [number, number, number], [number, number, number]]; halfSize: [number, number, number]; corners: [...]; }; ... 4 more ...; createdAt: number; }' is not assignable to parameter of type 'RectAnnotationRecord'.
+src/composables/useReviewStore.confirm.test.ts|TS2345|Argument of type '{ id: string; obb: { center: [number, number, number]; axes: [[number, number, number], [number, number, number], [number, number, number]]; halfSize: [number, number, number]; corners: [...]; }; ... N more ...; createdAt: number; }' is not assignable to parameter of type 'RectAnnotationRecord'.
 src/composables/useReviewStore.confirm.test.ts|TS2353|Object literal may only specify known properties, and 'screenSpacePoints' does not exist in type 'CloudAnnotationRecord'.
 src/composables/useReviewStore.confirm.test.ts|TS2532|Object is possibly 'undefined'.
 src/composables/useReviewStore.confirm.test.ts|TS2532|Object is possibly 'undefined'.
 src/composables/useReviewStore.confirm.test.ts|TS2532|Object is possibly 'undefined'.
 src/composables/useReviewStore.confirm.test.ts|TS2532|Object is possibly 'undefined'.
 src/composables/useReviewStore.test.ts|TS2345|Argument of type '{ id: string; entityId: string; worldPos: [number, number, number]; visible: true; glyph: string; title: string; createdAt: number; }' is not assignable to parameter of type 'AnnotationRecord'.
-src/composables/useReviewStore.ts|TS2322|Type 'MeasurementRecord[]' is not assignable to type 'ReviewSnapshotMeasurementPayload[]'.
-src/composables/useReviewStore.ts|TS2322|Type 'MeasurementRecord[]' is not assignable to type 'ReviewSnapshotMeasurementPayload[]'.
-src/composables/useReviewStore.ts|TS2345|Argument of type '{ id: string; taskId?: string | undefined; formId?: string | undefined; type: "batch"; annotations: { id: string; entityId: string; worldPos: [number, number, number]; labelWorldPos?: [number, number, number] | undefined; ... 12 more ...; screenshot?: { ...; } | undefined; }[]; ... 7 more ...; note: string; }[]' is not assignable to parameter of type 'ReviewConfirmSnapshotRecordLike[]'.
 src/composables/useReviewStore.websocket.test.ts|TS2322|Type '{ id: string; taskId: string; annotations: never[]; cloudAnnotations: never[]; rectAnnotations: never[]; obbAnnotations: never[]; measurements: never[]; confirmedAt: number; note: string; }' is not assignable to type 'never'.
 src/composables/useReviewStore.websocket.test.ts|TS2322|Type '{ node: string; action: string; operatorId: string; operatorName: string; comment: string; timestamp: number; }' is not assignable to type 'never'.
 src/composables/useReviewStore.websocket.test.ts|TS2322|Type '{ node: string; action: string; operatorId: string; operatorName: string; comment: string; timestamp: number; }' is not assignable to type 'never'.
@@ -327,9 +282,8 @@ src/composables/useReviewStore.websocket.test.ts|TS2345|Argument of type '"ws://
 src/composables/useReviewStore.websocket.test.ts|TS2353|Object literal may only specify known properties, and 'task' does not exist in type '{ success: boolean; }'.
 src/composables/useRoomInfoPanel.ts|TS2322|Type 'string | undefined' is not assignable to type 'string | null'.
 src/composables/useRoomInfoPanel.ts|TS2345|Argument of type 'string | undefined' is not assignable to parameter of type 'string'.
-src/composables/useSpatialQuery.test.ts|TS2339|Property 'centerSource' does not exist on type '{ mode: SpatialQueryMode; rangeCenterSource: "selected" | "pick" | "coordinates"; distanceCenterSource: "refno" | "coordinates"; refno: string; center: { x: number; y: number; z: number; }; ... 9 more ...; sortBy: SpatialQuerySortBy; }'.
-src/composables/useSpatialQuery.test.ts|TS2345|Argument of type '{ draft: { mode: string; rangeCenterSource: string; distanceCenterSource: string; refno: string; center: { x: number; y: number; z: number; }; radius: number; shape: string; nounText: string; keyword: string; ... 4 more ...; limit: number; }; resetQuery: Mock<...>; setMode: Mock<...>; submitQuery: Mock<...>; }' is not assignable to parameter of type 'SpatialQueryUrlStore'.
-src/composables/useSpatialQuery.test.ts|TS2345|Argument of type '{ draft: { mode: string; rangeCenterSource: string; distanceCenterSource: string; refno: string; center: { x: number; y: number; z: number; }; radius: number; shape: string; nounText: string; keyword: string; ... 4 more ...; limit: number; }; resetQuery: Mock<...>; setMode: Mock<...>; submitQuery: Mock<...>; }' is not assignable to parameter of type 'SpatialQueryUrlStore'.
+src/composables/useSpatialQuery.test.ts|TS2345|Argument of type '{ draft: { mode: string; rangeCenterSource: string; distanceCenterSource: string; refno: string; center: { x: number; y: number; z: number; }; radius: number; shape: string; nounText: string; keyword: string; ... N more ...; limit: number; }; resetQuery: Mock<...>; setMode: Mock<...>; submitQuery: Mock<...>; }' is not assignable to parameter of type 'SpatialQueryUrlStore'.
+src/composables/useSpatialQuery.test.ts|TS2345|Argument of type '{ draft: { mode: string; rangeCenterSource: string; distanceCenterSource: string; refno: string; center: { x: number; y: number; z: number; }; radius: number; shape: string; nounText: string; keyword: string; ... N more ...; limit: number; }; resetQuery: Mock<...>; setMode: Mock<...>; submitQuery: Mock<...>; }' is not assignable to parameter of type 'SpatialQueryUrlStore'.
 src/composables/useSpatialQuery.test.ts|TS2493|Tuple type '[]' of length '0' has no element at index '2'.
 src/composables/useSpatialQuery.test.ts|TS2493|Tuple type '[]' of length '0' has no element at index '4'.
 src/composables/useSpatialQuery.test.ts|TS2493|Tuple type '[]' of length '0' has no element at index '4'.
@@ -358,11 +312,6 @@ src/composables/useToolStore.persistence.test.ts|TS2322|Type '"designer"' is not
 src/composables/useToolStore.persistence.test.ts|TS2322|Type '"designer"' is not assignable to type 'UserRole'.
 src/composables/useToolStore.persistence.test.ts|TS2322|Type '"designer"' is not assignable to type 'UserRole'.
 src/composables/useToolStore.persistence.test.ts|TS2322|Type '"designer"' is not assignable to type 'UserRole'.
-src/composables/useToolStore.unifiedMeasurements.test.ts|TS2532|Object is possibly 'undefined'.
-src/composables/useToolStore.unifiedMeasurements.test.ts|TS2532|Object is possibly 'undefined'.
-src/composables/useToolStore.unifiedMeasurements.test.ts|TS2532|Object is possibly 'undefined'.
-src/composables/useToolStore.unifiedMeasurements.test.ts|TS2532|Object is possibly 'undefined'.
-src/composables/useToolStore.unifiedMeasurements.test.ts|TS2532|Object is possibly 'undefined'.
 src/composables/useUnitSettingsStore.ts|TS2367|This comparison appears to be unintentional because the types '2 | undefined' and '1' have no overlap.
 src/composables/useUserStore.createReviewTask.test.ts|TS2741|Property 'uploadedAt' is missing in type '{ id: string; name: string; url: string; size: number; mimeType: string; }' but required in type 'ReviewAttachment'.
 src/composables/useUserStore.createReviewTask.test.ts|TS2741|Property 'uploadedAt' is missing in type '{ id: string; name: string; url: string; size: number; mimeType: string; }' but required in type 'ReviewAttachment'.
@@ -401,10 +350,10 @@ src/debug/pmsReviewSimulator.ts|TS2322|Type 'string | undefined' is not assignab
 src/debug/pmsReviewSimulator.ts|TS2322|Type 'string | undefined' is not assignable to type 'string'.
 src/debug/pmsReviewSimulator.ts|TS2322|Type 'string | undefined' is not assignable to type 'string'.
 src/debug/pmsReviewSimulator.ts|TS2322|Type '{ annotationId: string; annotationType: string; title: string | undefined; description: string | undefined; stateCode: string; stateLabel: string; refnos: string[]; updatedAt: number | undefined; updatedByName: string | undefined; updatedByRole: string | undefined; note: string | undefined; }[]' is not assignable to type 'ReviewAnnotationCheckBlocker[]'.
-src/debug/pmsReviewSimulator.ts|TS2339|Property 'drawerBackdrop' does not exist on type '{ body: HTMLBodyElement; currentUserLabel: HTMLSpanElement; currentPmsUserLabel: HTMLSpanElement; roleButtons: HTMLDivElement; ... 70 more ...; workflowDialogConfirmBtn: HTMLButtonElement; }'.
-src/debug/pmsReviewSimulator.ts|TS2339|Property 'drawerBackdrop' does not exist on type '{ body: HTMLBodyElement; currentUserLabel: HTMLSpanElement; currentPmsUserLabel: HTMLSpanElement; roleButtons: HTMLDivElement; ... 70 more ...; workflowDialogConfirmBtn: HTMLButtonElement; }'.
-src/debug/pmsReviewSimulator.ts|TS2339|Property 'floatingWorkflowBtn' does not exist on type '{ body: HTMLBodyElement; currentUserLabel: HTMLSpanElement; currentPmsUserLabel: HTMLSpanElement; roleButtons: HTMLDivElement; ... 70 more ...; workflowDialogConfirmBtn: HTMLButtonElement; }'.
-src/debug/pmsReviewSimulator.ts|TS2339|Property 'floatingWorkflowBtn' does not exist on type '{ body: HTMLBodyElement; currentUserLabel: HTMLSpanElement; currentPmsUserLabel: HTMLSpanElement; roleButtons: HTMLDivElement; ... 70 more ...; workflowDialogConfirmBtn: HTMLButtonElement; }'.
+src/debug/pmsReviewSimulator.ts|TS2339|Property 'drawerBackdrop' does not exist on type '{ body: HTMLBodyElement; currentUserLabel: HTMLSpanElement; currentPmsUserLabel: HTMLSpanElement; roleButtons: HTMLDivElement; ... N more ...; workflowDialogConfirmBtn: HTMLButtonElement; }'.
+src/debug/pmsReviewSimulator.ts|TS2339|Property 'drawerBackdrop' does not exist on type '{ body: HTMLBodyElement; currentUserLabel: HTMLSpanElement; currentPmsUserLabel: HTMLSpanElement; roleButtons: HTMLDivElement; ... N more ...; workflowDialogConfirmBtn: HTMLButtonElement; }'.
+src/debug/pmsReviewSimulator.ts|TS2339|Property 'floatingWorkflowBtn' does not exist on type '{ body: HTMLBodyElement; currentUserLabel: HTMLSpanElement; currentPmsUserLabel: HTMLSpanElement; roleButtons: HTMLDivElement; ... N more ...; workflowDialogConfirmBtn: HTMLButtonElement; }'.
+src/debug/pmsReviewSimulator.ts|TS2339|Property 'floatingWorkflowBtn' does not exist on type '{ body: HTMLBodyElement; currentUserLabel: HTMLSpanElement; currentPmsUserLabel: HTMLSpanElement; roleButtons: HTMLDivElement; ... N more ...; workflowDialogConfirmBtn: HTMLButtonElement; }'.
 src/debug/pmsReviewSimulator.ts|TS2459|Module '"@/api/reviewApi"' declares 'ReviewTask' locally, but it is not exported.
 src/debug/pmsReviewSimulator.ts|TS2532|Object is possibly 'undefined'.
 src/debug/pmsReviewSimulator.ts|TS2550|Property 'replaceAll' does not exist on type 'string'. Do you need to change your target library? Try changing the 'lib' compiler option to 'es2021' or later.
@@ -413,18 +362,6 @@ src/debug/pmsReviewSimulator.ts|TS7006|Parameter 'comp' implicitly has an 'any' 
 src/debug/pmsReviewSimulator.ts|TS7006|Parameter 'comp' implicitly has an 'any' type.
 src/debug/pmsReviewSimulatorLaunchPlan.ts|TS2322|Type 'string | undefined' is not assignable to type 'string'.
 src/dimension/adapters/dtxDimensionSnapPort.test.ts|TS2322|Type 'Readonly<{ id: string; source: MeasurementPickSourceId; sceneWorld: Vec3; refno?: string | undefined; label?: string | undefined; distancePx: number; direction?: Vec3 | undefined; circle?: Readonly<...> | undefined; arc?: Readonly<...> | undefined; }> | undefined' is not assignable to type 'Readonly<{ id: string; source: MeasurementPickSourceId; sceneWorld: Vec3; refno?: string | undefined; label?: string | undefined; distancePx: number; direction?: Vec3 | undefined; circle?: Readonly<...> | undefined; arc?: Readonly<...> | undefined; }>'.
-src/dimension/adapters/mbdV2ExternalAnnotations.test.ts|TS18048|'a' is possibly 'undefined'.
-src/dimension/adapters/mbdV2ExternalAnnotations.test.ts|TS18048|'a' is possibly 'undefined'.
-src/dimension/adapters/mbdV2ExternalAnnotations.test.ts|TS18048|'a' is possibly 'undefined'.
-src/dimension/adapters/mbdV2ExternalAnnotations.test.ts|TS18048|'a' is possibly 'undefined'.
-src/dimension/adapters/mbdV2ExternalAnnotations.test.ts|TS18048|'a' is possibly 'undefined'.
-src/dimension/adapters/mbdV2ExternalAnnotations.test.ts|TS18048|'a' is possibly 'undefined'.
-src/dimension/adapters/mbdV2ExternalAnnotations.test.ts|TS18048|'b' is possibly 'undefined'.
-src/dimension/adapters/mbdV2ExternalAnnotations.test.ts|TS18048|'b' is possibly 'undefined'.
-src/dimension/adapters/mbdV2ExternalAnnotations.test.ts|TS18048|'b' is possibly 'undefined'.
-src/dimension/adapters/mbdV2ExternalAnnotations.test.ts|TS18048|'b' is possibly 'undefined'.
-src/dimension/adapters/mbdV2ExternalAnnotations.test.ts|TS18048|'b' is possibly 'undefined'.
-src/dimension/adapters/mbdV2ExternalAnnotations.test.ts|TS18048|'b' is possibly 'undefined'.
 src/dimension/adapters/reviewSnapshotAdapter.test.ts|TS2550|Property 'hasOwn' does not exist on type 'ObjectConstructor'. Do you need to change your target library? Try changing the 'lib' compiler option to 'es2022' or later.
 src/dimension/domain/migrationV5.ts|TS2550|Property 'hasOwn' does not exist on type 'ObjectConstructor'. Do you need to change your target library? Try changing the 'lib' compiler option to 'es2022' or later.
 src/dimension/domain/migrationV5.ts|TS2550|Property 'hasOwn' does not exist on type 'ObjectConstructor'. Do you need to change your target library? Try changing the 'lib' compiler option to 'es2022' or later.
@@ -443,7 +380,6 @@ src/dimension/kernel/collision/resolveLabelCollisions.test.ts|TS18048|'pinned' i
 src/dimension/kernel/collision/resolveLabelCollisions.test.ts|TS2345|Argument of type 'Readonly<{ dimensionId: string; scenePrimitives: readonly ScenePrimitive[]; primitives: readonly LayoutPrimitive[]; hitRegions: readonly HitRegion[]; labelBounds: Readonly<{ x: number; y: number; width: number; height: number; }>; labelPinned: boolean; derived: Readonly<...>; }> | undefined' is not assignable to parameter of type 'Readonly<{ dimensionId: string; scenePrimitives: readonly ScenePrimitive[]; primitives: readonly LayoutPrimitive[]; hitRegions: readonly HitRegion[]; labelBounds: Readonly<{ x: number; y: number; width: number; height: number; }>; labelPinned: boolean; derived: Readonly<...>; }>'.
 src/dimension/kernel/collision/resolveLabelCollisions.test.ts|TS2345|Argument of type 'Readonly<{ dimensionId: string; scenePrimitives: readonly ScenePrimitive[]; primitives: readonly LayoutPrimitive[]; hitRegions: readonly HitRegion[]; labelBounds: Readonly<{ x: number; y: number; width: number; height: number; }>; labelPinned: boolean; derived: Readonly<...>; }> | undefined' is not assignable to parameter of type 'Readonly<{ dimensionId: string; scenePrimitives: readonly ScenePrimitive[]; primitives: readonly LayoutPrimitive[]; hitRegions: readonly HitRegion[]; labelBounds: Readonly<{ x: number; y: number; width: number; height: number; }>; labelPinned: boolean; derived: Readonly<...>; }>'.
 src/dimension/kernel/collision/resolveLabelCollisions.test.ts|TS2345|Argument of type 'Readonly<{ dimensionId: string; scenePrimitives: readonly ScenePrimitive[]; primitives: readonly LayoutPrimitive[]; hitRegions: readonly HitRegion[]; labelBounds: Readonly<{ x: number; y: number; width: number; height: number; }>; labelPinned: boolean; derived: Readonly<...>; }> | undefined' is not assignable to parameter of type 'Readonly<{ dimensionId: string; scenePrimitives: readonly ScenePrimitive[]; primitives: readonly LayoutPrimitive[]; hitRegions: readonly HitRegion[]; labelBounds: Readonly<{ x: number; y: number; width: number; height: number; }>; labelPinned: boolean; derived: Readonly<...>; }>'.
-src/dimension/kernel/collision/resolveLabelCollisions.test.ts|TS2488|Type 'readonly [0, -1] | readonly [1, 0] | readonly [0, 1] | readonly [-1, 0] | undefined' must have a '[Symbol.iterator]()' method that returns an iterator.
 src/dimension/kernel/collision/resolveLabelCollisions.ts|TS18048|'direction' is possibly 'undefined'.
 src/dimension/kernel/collision/resolveLabelCollisions.ts|TS18048|'direction' is possibly 'undefined'.
 src/dimension/kernel/collision/resolveLabelCollisions.ts|TS2339|Property 'at' does not exist on type 'never'.
@@ -516,8 +452,6 @@ src/dimension/kernel/layout/radial.test.ts|TS2532|Object is possibly 'undefined'
 src/dimension/kernel/viewport/layoutViewport.test.ts|TS2532|Object is possibly 'undefined'.
 src/dimension/kernel/viewport/layoutViewport.test.ts|TS2532|Object is possibly 'undefined'.
 src/dimension/kernel/viewport/layoutViewport.test.ts|TS2532|Object is possibly 'undefined'.
-src/dimension/kernel/viewport/layoutViewport.ts|TS18048|'input' is possibly 'undefined'.
-src/dimension/kernel/viewport/layoutViewport.ts|TS2345|Argument of type 'NormalizedDimensionInput | Readonly<{ id: string; role: DimensionSemanticRole; labelPinned: boolean; formattedLabel: string; lines: readonly Readonly<{ ...; }>[]; ... 6 more ...; texts?: readonly Readonly<...>[] | undefined; }> | undefined' is not assignable to parameter of type 'LayoutInput'.
 src/dimension/services/localDimensionDocumentRepository.test.ts|TS2554|Expected 0 arguments, but got 1.
 src/dimension/services/localDimensionDocumentRepository.test.ts|TS2554|Expected 0 arguments, but got 1.
 src/dimension/services/localDimensionDocumentRepository.test.ts|TS2554|Expected 0 arguments, but got 1.
@@ -547,8 +481,6 @@ src/review/adapters/reviewRecordAdapter.test.ts|TS2532|Object is possibly 'undef
 src/review/adapters/reviewRecordAdapter.test.ts|TS2532|Object is possibly 'undefined'.
 src/review/adapters/reviewRecordAdapter.test.ts|TS2532|Object is possibly 'undefined'.
 src/review/adapters/toolStoreAdapter.ts|TS2719|Type 'ReplayRecordLike' is not assignable to type 'ReplayRecordLike'. Two different types with this name exist, but they are unrelated.
-src/review/adapters/workflowSyncAdapter.test.ts|TS2322|Type '{ id: string; kind: string; origin: { entityId: string; worldPos: number[]; }; corner: { entityId: string; worldPos: number[]; }; target: { entityId: string; worldPos: number[]; }; visible: boolean; createdAt: number; }' is not assignable to type 'ReviewSnapshotMeasurementPayload'.
-src/review/adapters/workflowSyncAdapter.test.ts|TS2322|Type '{ id: string; kind: string; origin: { entityId: string; worldPos: number[]; }; target: { entityId: string; worldPos: number[]; }; visible: boolean; createdAt: number; }' is not assignable to type 'ReviewSnapshotMeasurementPayload'.
 src/review/adapters/workflowSyncAdapter.ts|TS18048|'merged' is possibly 'undefined'.
 src/review/adapters/workflowSyncAdapter.ts|TS18048|'merged' is possibly 'undefined'.
 src/review/adapters/workflowSyncAdapter.ts|TS18048|'merged' is possibly 'undefined'.
@@ -574,7 +506,6 @@ src/utils/modelUnitVersionCompare.test.ts|TS18048|'movedSnapshot' is possibly 'u
 src/utils/modelUnitVersionCompare.test.ts|TS18048|'oldSnapshot' is possibly 'undefined'.
 src/utils/modelUnitVersionCompare.test.ts|TS18048|'oldSnapshot' is possibly 'undefined'.
 src/utils/modelUnitVersionCompare.test.ts|TS18048|'renamedSnapshot' is possibly 'undefined'.
-src/utils/modelUnitVersionCompare.test.ts|TS2345|Argument of type '{ manifest_url: string; commit: { sesno: number; }; }' is not assignable to parameter of type 'Pick<ModelUnitCommitData, "commit">'.
 src/utils/parseMeshGeometry.test.ts|TS2345|Argument of type 'number | undefined' is not assignable to parameter of type 'number'.
 src/utils/parseMeshGeometry.test.ts|TS2345|Argument of type 'number | undefined' is not assignable to parameter of type 'number'.
 src/utils/parseMeshGeometry.test.ts|TS2345|Argument of type 'number | undefined' is not assignable to parameter of type 'number'.
@@ -607,17 +538,8 @@ src/utils/three/dtx/materialConfig.ts|TS2322|Type 'string | undefined' is not as
 src/utils/three/dtx/selection/DTXSelectionController.test.ts|TS2348|Value of type 'Mock<Procedure | Constructable>' is not callable. Did you mean to include 'new'?
 src/utils/three/geometry/clearance/detectDtxBranchAxisDistances.test.ts|TS18048|'dx' is possibly 'undefined'.
 src/utils/three/geometry/clearance/detectDtxBranchAxisDistances.test.ts|TS18048|'dy' is possibly 'undefined'.
-src/utils/three/patches/applyMeshLineShaderCompat.ts|TS2339|Property 'meshline_vert' does not exist on type '{ alphahash_fragment: string; alphahash_pars_fragment: string; alphamap_fragment: string; alphamap_pars_fragment: string; alphatest_fragment: string; alphatest_pars_fragment: string; ... 132 more ...; sprite_frag: string; }'.
-src/utils/three/patches/applyMeshLineShaderCompat.ts|TS2339|Property 'meshline_vert' does not exist on type '{ alphahash_fragment: string; alphahash_pars_fragment: string; alphamap_fragment: string; alphamap_pars_fragment: string; alphatest_fragment: string; alphatest_pars_fragment: string; ... 132 more ...; sprite_frag: string; }'.
+src/utils/three/patches/applyMeshLineShaderCompat.ts|TS2339|Property 'meshline_vert' does not exist on type '{ alphahash_fragment: string; alphahash_pars_fragment: string; alphamap_fragment: string; alphamap_pars_fragment: string; alphatest_fragment: string; alphatest_pars_fragment: string; ... N more ...; sprite_frag: string; }'.
+src/utils/three/patches/applyMeshLineShaderCompat.ts|TS2339|Property 'meshline_vert' does not exist on type '{ alphahash_fragment: string; alphahash_pars_fragment: string; alphamap_fragment: string; alphamap_pars_fragment: string; alphatest_fragment: string; alphatest_pars_fragment: string; ... N more ...; sprite_frag: string; }'.
 src/utils/versionInfo.ts|TS18048|'dateStr' is possibly 'undefined'.
 src/utils/versionInfo.ts|TS18048|'dateStr' is possibly 'undefined'.
 src/utils/xeokitMeasurementFormat.test.ts|TS2345|Argument of type '{ id: string; kind: "elevation_point"; point: { entityId: string; worldPos: [number, number, number]; }; absoluteElevation: number; relativeElevation: number; visible: true; approximate: false; createdAt: number; }' is not assignable to parameter of type 'MeasurementLike'.
-src/utils/xeokitMeasurementFormat.ts|TS2345|Argument of type 'number | undefined' is not assignable to parameter of type 'number'.
-src/utils/xeokitMeasurementFormat.ts|TS2345|Argument of type 'number | undefined' is not assignable to parameter of type 'number'.
-src/utils/xeokitMeasurementFormat.ts|TS2345|Argument of type 'number | undefined' is not assignable to parameter of type 'number'.
-src/utils/xeokitMeasurementFormat.ts|TS2532|Object is possibly 'undefined'.
-src/utils/xeokitMeasurementFormat.ts|TS2532|Object is possibly 'undefined'.
-src/utils/xeokitMeasurementFormat.ts|TS2532|Object is possibly 'undefined'.
-src/utils/xeokitMeasurementFormat.ts|TS2532|Object is possibly 'undefined'.
-src/utils/xeokitMeasurementFormat.ts|TS2532|Object is possibly 'undefined'.
-src/utils/xeokitMeasurementFormat.ts|TS2532|Object is possibly 'undefined'.

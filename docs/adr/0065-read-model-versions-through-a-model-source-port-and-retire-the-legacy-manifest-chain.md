@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: accepted
 date: 2026-09-18
 depends_on: ADR-0045, ADR-0047
 ---
@@ -20,3 +20,10 @@ depends_on: ADR-0045, ADR-0047
 - 历史投影不落库、重启即丢、单次 ≤ 100 000 元素 / 300 s：前端遇 404 自动重生一次，退出对比时 `DELETE` 快照。
 - 删掉 release diff、版本时间线与 `IncrementalUpdatePanel` 的对比派发后，树内差异的事件通道会失去全部派发方；由单元版本对比面板补上唯一一条派发，事件改名 `plant3d:model-version-tree-diff`。
 - 执行清单见 `docs/plans/2026-09-18-model-version-compare-gen-model-v1-migration-plan.md`。
+
+**2026-09-18 追记：legacy 链已删，先于开关退役**（grill 第 4 轮 Q20–Q25，用户拍板「不等部署锚」）。删掉的是 `legacy/versionSource.ts`、
+`api/modelUnitVersionApi.ts`、parquet / DTX 加载器里「不可变清单」那几条分叉（`manifestUrl / pinnedManifest / parquetManifestUrl /
+parquetManifest`、`legacy-rows` 矩阵布局、`fetchLatestDbnoManifest`）、端口里只有 legacy 会填的 `assetSesno` 与整个
+`pinLatestEnvironment`（环境 = 视口里已加载的，刷新走页面级开关下的 records + forceRefresh），以及 `?tree_sesno=` 三件。
+`model_source=legacy` 开关本体还在（按 ADR 0054 追记的部署锚退役），该开关下版本对比只给一句 `LegacyModelVersionsRetiredError`
+的退役提示。`geometryKey` / `handle` 留作端口的通用形状。逐文件清单与出口见计划 §7。
