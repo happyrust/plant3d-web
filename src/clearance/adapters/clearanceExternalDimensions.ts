@@ -9,7 +9,8 @@ import { toLegacyApproximate } from '@/measurement/domain/computationProvenance'
  * 记录里的点已是 design-world 米（service 边界转过一次，D3），这里不再换算。
  *
  * 文字口径（D2「近似不得以精确呈现」）：`exact-surface` 直接给 `312mm`；万一进来近似档带 `≈`；
- * 相交给 `相交`；`stale` 前缀「（过期）」；命中的是墙主面且垂距在，尾巴加 `⊥`——这条最近线就是垂直于墙面的那条。
+ * 相交给 `相交`；`stale` 前缀「（过期）」；命中的是墙主面（含洞壁 `opening`）且垂距在，尾巴加 `⊥`——这条最近线就是
+ * 垂直于那面的那条。
  */
 
 export const CLEARANCE_EXTERNAL_SOURCE = 'clearance' as const;
@@ -18,6 +19,7 @@ const FACE_LABEL: Readonly<Record<ClearanceFaceKind, string>> = Object.freeze({
   inner: '墙面内侧',
   outer: '墙面外侧',
   side: '墙面',
+  opening: '洞口',
   top: '墙顶',
   bottom: '墙底',
   end: '墙端',

@@ -65,7 +65,7 @@ function unitVector(point: SpatialPosition): ComputationPoint {
   return Object.freeze([point.x, point.y, point.z]) as ComputationPoint;
 }
 
-const FACE_KINDS: ReadonlySet<string> = new Set(['inner', 'outer', 'side', 'top', 'bottom', 'end', 'unknown']);
+const FACE_KINDS: ReadonlySet<string> = new Set(['inner', 'outer', 'side', 'opening', 'top', 'bottom', 'end', 'unknown']);
 const FACE_CONFIDENCES: ReadonlySet<string> = new Set(['pca', 'geometric', 'normal-only']);
 
 function faceKind(value: string): ClearanceFaceKind {

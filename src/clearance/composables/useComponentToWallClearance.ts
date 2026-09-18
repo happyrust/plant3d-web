@@ -44,8 +44,9 @@ export function formatClearanceToast(record: ClearanceRecord): string {
   if (snapshot.intersects) return `${record.inputs.sourceRefno} 与 ${record.inputs.targetRefno} 相交（净距 0）`;
   const mm = snapshot.distanceM * 1000;
   const distance = mm < 10 ? mm.toFixed(2) : mm.toFixed(1);
-  const face = clearanceFaceLabel(snapshot.targetFace?.kind);
-  const perpendicular = snapshot.perpendicular ? '，垂直于墙面' : '';
+  const kind = snapshot.targetFace?.kind;
+  const face = clearanceFaceLabel(kind);
+  const perpendicular = snapshot.perpendicular ? (kind === 'opening' ? '，垂直于洞壁' : '，垂直于墙面') : '';
   return `外表面净距 ${distance} mm${face ? `（${face}）` : ''}${perpendicular}`;
 }
 

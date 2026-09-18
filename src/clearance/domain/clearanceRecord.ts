@@ -22,11 +22,15 @@ export type ClearanceStatus = typeof CLEARANCE_STATUSES[number];
 export const CLEARANCE_TARGET_KINDS = Object.freeze(['wall', 'any'] as const);
 export type ClearanceTargetKind = typeof CLEARANCE_TARGET_KINDS[number];
 
-/** 命中墙面：直墙两侧对称只分得出 `side`；弧墙分 `inner`（凹）/ `outer`（凸）。 */
+/**
+ * 命中墙面：直墙两侧对称只分得出 `side`；弧墙分 `inner`（凹）/ `outer`（凸）；`opening` 是洞壁
+ * （门窗 / 套管孔等布尔掏出来的面，构件在洞里时命中的就是它，也是主面、带垂距；2026-09-18 口径）。
+ */
 export const CLEARANCE_FACE_KINDS = Object.freeze([
   'inner',
   'outer',
   'side',
+  'opening',
   'top',
   'bottom',
   'end',

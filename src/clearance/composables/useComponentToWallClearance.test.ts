@@ -17,6 +17,7 @@ import {
   boxToStraightWallResponse,
   elboToCurvedWallResponse,
   intersectingResponse,
+  pipeInWallOpeningResponse,
 } from '@/clearance/testing/surfaceClearanceFixtures';
 
 const AT = new Date('2026-09-17T12:00:00.000Z');
@@ -150,5 +151,10 @@ describe('useComponentToWallClearance', () => {
     expect(formatClearanceToast(surfaceClearanceToRecord(beyondMaxDistanceResponse(), input, AT))).toContain('没有靠近到一起');
     const tiny = elboToCurvedWallResponse({ result: { ...elboToCurvedWallResponse().result!, distance_mm: 6.437, perpendicular: null, target_face: null } });
     expect(formatClearanceToast(surfaceClearanceToRecord(tiny, input, AT))).toBe('外表面净距 6.44 mm');
+  });
+
+  it('formatClearanceToast says 洞口 / 垂直于洞壁 when the hit face is a wall opening', () => {
+    const input = { sourceRefno: '24384_30001', targetRefno: '17496_105812' };
+    expect(formatClearanceToast(surfaceClearanceToRecord(pipeInWallOpeningResponse(), input, AT))).toBe('外表面净距 50.0 mm（洞口），垂直于洞壁');
   });
 });

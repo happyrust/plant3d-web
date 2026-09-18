@@ -1353,8 +1353,11 @@ export type GenModelV1SurfaceClearanceRequest = {
   debug?: boolean;
 };
 
-/** 命中墙面：直墙两侧对称只分得出 `side`；弧墙分 `inner`（凹）/ `outer`（凸）。 */
-export type SurfaceClearanceFaceKind = 'inner' | 'outer' | 'side' | 'top' | 'bottom' | 'end' | 'unknown';
+/**
+ * 命中墙面：直墙两侧对称只分得出 `side`；弧墙分 `inner`（凹）/ `outer`（凸）；`opening` 是洞壁（布尔掏出来的面，
+ * 构件在洞里时命中的就是它，也是主面、带垂距；gen-model `eabd16d5c`，2026-09-18 口径）。
+ */
+export type SurfaceClearanceFaceKind = 'inner' | 'outer' | 'side' | 'opening' | 'top' | 'bottom' | 'end' | 'unknown';
 /** `pca`：按墙的水平主轴分端 / 侧；`geometric`：按拟合的弧轴分内 / 外；`normal-only`：只有法向（顶 / 底）。 */
 export type SurfaceClearanceFaceConfidence = 'pca' | 'geometric' | 'normal-only';
 

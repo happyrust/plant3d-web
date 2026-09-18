@@ -14,6 +14,7 @@ import {
   boxToStraightWallResponse,
   elboToCurvedWallResponse,
   intersectingResponse,
+  pipeInWallOpeningResponse,
 } from '@/clearance/testing/surfaceClearanceFixtures';
 import { normalizeExternalDimension } from '@/dimension';
 
@@ -55,6 +56,13 @@ describe('clearanceExternalDimensions', () => {
       AT,
     );
     expect(clearanceDimensionText(tiny)).toBe('6.4mm');
+  });
+
+  it('labels a hit on a wall opening as 洞口 and keeps its ⊥ (opening is a main face)', () => {
+    const inHole = surfaceClearanceToRecord(pipeInWallOpeningResponse(), { sourceRefno: '24384_30001', targetRefno: '17496_105812' }, AT);
+    expect(inHole.snapshot?.targetFace?.kind).toBe('opening');
+    expect(clearanceSourceLabel(inHole)).toBe('外表面净距: 24384_30001 → 17496_105812（洞口）');
+    expect(clearanceDimensionText(inHole)).toBe('50mm ⊥');
   });
 
   it('skips records without a drawable line (no snapshot, intersecting) and says why', () => {

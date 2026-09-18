@@ -61,6 +61,34 @@ export function boxToStraightWallResponse(): SurfaceClearanceResponse {
   });
 }
 
+/**
+ * 构件在洞里（合成 G6，gen-model `eabd16d5c` 的 `g6_component_in_wall_hole_measures_to_hole_wall_not_zero`）：
+ * 穿孔的管离 y 小侧洞壁 50 mm，命中面 `opening`（洞壁，主面），垂距 = 距离。
+ */
+export function pipeInWallOpeningResponse(): SurfaceClearanceResponse {
+  return elboToCurvedWallResponse({
+    source: { refno: '24384/30001', noun: 'FTUB', leaf_count: 1, triangle_count: 12 },
+    target: { refno: '17496/105812', noun: 'STWALL', leaf_count: 1, triangle_count: 32 },
+    result: {
+      distance_mm: 50,
+      intersects: false,
+      source_point: { x: 100_100, y: 42_050, z: 1_200 },
+      target_point: { x: 100_100, y: 42_000, z: 1_200 },
+      vector: { dx: 0, dy: -50, dz: 0 },
+      source_leaf_refno: '24384/30001',
+      target_leaf_refno: '17496/105812',
+      target_leaf_noun: 'STWALL',
+      target_face: { kind: 'opening', normal: { x: 0, y: 1, z: 0 }, confidence: 'geometric' },
+      perpendicular: {
+        distance_mm: 50,
+        from: { x: 100_100, y: 42_050, z: 1_200 },
+        to: { x: 100_100, y: 42_000, z: 1_200 },
+      },
+      witness: 'closest-points',
+    },
+  });
+}
+
 /** 穿墙：`Intersecting`，两点是 AABB 交集中心。 */
 export function intersectingResponse(): SurfaceClearanceResponse {
   return elboToCurvedWallResponse({
