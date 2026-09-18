@@ -1376,10 +1376,19 @@ export type SurfaceClearanceFace = {
   confidence: SurfaceClearanceFaceConfidence | (string & {});
 };
 
+/**
+ * 垂距怎么来的（gen-model `7bcdd60df`，2026-09-18 口径）：`ray` 从源侧最近点沿面法向打到墙面；`contact` 贴合
+ * （最近距离 ≤ 垂距容差 max(1%, 0.05 mm)，不打射线，垂距 = 距离、垂足 = 目标侧最近点）；`edge` 最近点在墙的棱 / 角上、
+ * 射线落空，但两点连线与面法向几乎平行（偏差在同一容差内），取连线本身当垂距。旧二进制没有这一格。
+ */
+export type SurfaceClearancePerpendicularMethod = 'ray' | 'contact' | 'edge';
+
 export type SurfaceClearancePerpendicular = {
   distance_mm: number;
   from: SpatialPosition;
   to: SpatialPosition;
+  /** 缺失（`7bcdd60df` 之前的服务端）按 `ray` 读 */
+  method?: SurfaceClearancePerpendicularMethod | (string & {});
 };
 
 export type SurfaceClearanceResult = {

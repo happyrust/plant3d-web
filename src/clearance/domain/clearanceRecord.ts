@@ -51,10 +51,18 @@ export type ClearanceFace = Readonly<{
   confidence: ClearanceFaceConfidence;
 }>;
 
+/**
+ * 垂距怎么来的（gen-model `7bcdd60df`，2026-09-18 口径）：`ray` 沿面法向打到墙面；`contact` 贴合（距离 ≤ 容差，
+ * 垂距 = 距离）；`edge` 最近点在棱上、连线几乎沿面法向，取连线当垂距。旧记录 / 旧服务端没有这一格，按 `ray` 读。
+ */
+export const CLEARANCE_PERPENDICULAR_METHODS = Object.freeze(['ray', 'contact', 'edge'] as const);
+export type ClearancePerpendicularMethod = typeof CLEARANCE_PERPENDICULAR_METHODS[number];
+
 export type ClearancePerpendicular = Readonly<{
   distanceM: number;
   from: ComputationPoint;
   to: ComputationPoint;
+  method: ClearancePerpendicularMethod;
 }>;
 
 export type ClearanceSnapshot = Readonly<{
@@ -101,6 +109,14 @@ export type ClearanceRecord = Readonly<{
   computedAt: string;
 }>;
 
+/** 入参里的垂距可以没有 `method`（`7bcdd60df` 之前的服务端 / 已存记录），归一化后补成 `ray`。 */
+export type ClearancePerpendicularInput = Readonly<
+  Omit<ClearancePerpendicular, 'method'> & { method?: ClearancePerpendicularMethod }
+>;
+export type ClearanceSnapshotInput = Readonly<
+  Omit<ClearanceSnapshot, 'perpendicular'> & { perpendicular: ClearancePerpendicularInput | null }
+>;
+
 export type ClearanceRecordInput = Readonly<{
   id?: string;
   kind: ClearanceKind;
@@ -108,7 +124,7 @@ export type ClearanceRecordInput = Readonly<{
   sourceNoun?: string;
   targetNoun?: string;
   provenance: ComputationProvenance;
-  snapshot: ClearanceSnapshot | null;
+  snapshot: ClearanceSnapshotInput | null;
   modelVersion: ClearanceModelVersion;
   status?: ClearanceStatus;
   createdAt?: string;
@@ -121,6 +137,7 @@ const TARGET_KIND_SET: ReadonlySet<string> = new Set(CLEARANCE_TARGET_KINDS);
 const FACE_KIND_SET: ReadonlySet<string> = new Set(CLEARANCE_FACE_KINDS);
 const FACE_CONFIDENCE_SET: ReadonlySet<string> = new Set(CLEARANCE_FACE_CONFIDENCES);
 const WITNESS_SET: ReadonlySet<string> = new Set(CLEARANCE_WITNESSES);
+const PERPENDICULAR_METHOD_SET: ReadonlySet<string> = new Set(CLEARANCE_PERPENDICULAR_METHODS);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -181,10 +198,16 @@ function normalizeFace(value: unknown): ClearanceFace | null {
 function normalizePerpendicular(value: unknown): ClearancePerpendicular | null {
   if (value === null || value === undefined) return null;
   if (!isRecord(value)) throw new TypeError('snapshot.perpendicular must be an object or null');
+  // 7bcdd60df 之前的服务端 / 已存记录没有 method：那时垂距只有射线一种来源。
+  const method = value.method === undefined || value.method === null ? 'ray' : value.method;
+  if (typeof method !== 'string' || !PERPENDICULAR_METHOD_SET.has(method)) {
+    throw new TypeError(`snapshot.perpendicular.method is invalid: ${String(method)}`);
+  }
   return Object.freeze({
     distanceM: finiteNumber(value.distanceM, 'snapshot.perpendicular.distanceM', { nonNegative: true }),
     from: normalizePoint(value.from, 'snapshot.perpendicular.from'),
     to: normalizePoint(value.to, 'snapshot.perpendicular.to'),
+    method: method as ClearancePerpendicularMethod,
   });
 }
 

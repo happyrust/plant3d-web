@@ -94,6 +94,21 @@ describe('clearanceRecord', () => {
     }))).toThrow(/intersects/);
   });
 
+  it('perpendicular.method defaults to ray when absent (pre-7bcdd60df records), keeps contact / edge and rejects anything else', () => {
+    const record = createClearanceRecord(input());
+    expect(record.snapshot?.perpendicular?.method).toBe('ray');
+    const snapshot = input().snapshot!;
+    for (const method of ['contact', 'edge'] as const) {
+      const withMethod = createClearanceRecord(input({
+        snapshot: { ...snapshot, perpendicular: { ...snapshot.perpendicular!, method } },
+      }));
+      expect(withMethod.snapshot?.perpendicular?.method).toBe(method);
+    }
+    expect(() => createClearanceRecord(input({
+      snapshot: { ...snapshot, perpendicular: { ...snapshot.perpendicular!, method: 'teleport' as never } },
+    }))).toThrow(/perpendicular\.method/);
+  });
+
   it('accepts a null snapshot (beyond max distance) and an intersecting snapshot with zero distance', () => {
     const empty = createClearanceRecord(input({ snapshot: null }));
     expect(empty.snapshot).toBeNull();

@@ -11,6 +11,8 @@ import {
   boxToStraightWallResponse,
   elboToCurvedWallResponse,
   intersectingResponse,
+  sectionTouchingPaneResponse,
+  tubePastPaneCornerResponse,
 } from '@/clearance/testing/surfaceClearanceFixtures';
 
 const AT = new Date('2026-09-17T12:00:00.000Z');
@@ -46,8 +48,35 @@ describe('surfaceClearanceToRecord', () => {
     expect(snapshot.targetFace).toEqual({ kind: 'outer', normal: [-0.9998, 0.0171, 0], confidence: 'geometric' });
     expect(snapshot.perpendicular?.distanceM).toBeCloseTo(0.0645, 9);
     expect(snapshot.perpendicular?.to[0]).toBeCloseTo(120.06449, 6);
+    expect(snapshot.perpendicular?.method).toBe('ray');
     expect(snapshot.witness).toBe('closest-points');
     expect(record.modelVersion).toEqual({ sourceSesno: 586, targetSesno: 729 });
+  });
+
+  it('carries perpendicular.method through (contact / edge, gen-model 7bcdd60df) and reads a missing or unknown one as ray', () => {
+    const touching = surfaceClearanceToRecord(sectionTouchingPaneResponse(), { sourceRefno: '24383_68484', targetRefno: '24383_68491' }, AT);
+    expect(touching.snapshot?.distanceM).toBe(0);
+    expect(touching.snapshot?.intersects).toBe(false);
+    expect(touching.snapshot?.perpendicular).toEqual({
+      distanceM: 0,
+      from: [-10.147158, 12.070674, 3.07796],
+      to: [-10.147158, 12.070674, 3.07796],
+      method: 'contact',
+    });
+
+    const pastCorner = surfaceClearanceToRecord(tubePastPaneCornerResponse(), { sourceRefno: '24384_24671', targetRefno: '17496_135244' }, AT);
+    expect(pastCorner.snapshot?.perpendicular?.method).toBe('edge');
+    expect(pastCorner.snapshot?.perpendicular?.distanceM).toBeCloseTo(0.046603077, 12);
+    expect(pastCorner.snapshot?.perpendicular?.distanceM).toBe(pastCorner.snapshot?.distanceM);
+    expect(pastCorner.provenance.warnings).toEqual([]);
+
+    const legacy = elboToCurvedWallResponse();
+    delete legacy.result!.perpendicular!.method;
+    expect(surfaceClearanceToRecord(legacy, { sourceRefno: '24384_22582', targetRefno: '17496_105912' }, AT).snapshot?.perpendicular?.method).toBe('ray');
+
+    const unknown = elboToCurvedWallResponse();
+    unknown.result!.perpendicular!.method = 'teleport';
+    expect(surfaceClearanceToRecord(unknown, { sourceRefno: '24384_22582', targetRefno: '17496_105912' }, AT).snapshot?.perpendicular?.method).toBe('ray');
   });
 
   it('keeps server warnings as coded provenance warnings and a missing perpendicular as null', () => {

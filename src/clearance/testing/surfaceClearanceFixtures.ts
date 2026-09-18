@@ -1,4 +1,4 @@
-import type { SurfaceClearanceResponse } from '@/api/genModelV1Api';
+import type { SurfaceClearancePerpendicularMethod, SurfaceClearanceResponse } from '@/api/genModelV1Api';
 
 /**
  * 2026-09-17 live 真值（gen-model `a0e307588` 的 `live_component_to_wall_timing`）：
@@ -29,6 +29,7 @@ export function elboToCurvedWallResponse(overrides: Partial<SurfaceClearanceResp
         distance_mm: 64.5,
         from: { x: 120_000, y: 45_000, z: 3_200 },
         to: { x: 120_064.49, y: 44_998.9, z: 3_200 },
+        method: 'ray',
       },
       witness: 'closest-points',
     },
@@ -65,7 +66,9 @@ export function boxToStraightWallResponse(): SurfaceClearanceResponse {
  * 构件在洞里（合成 G6，gen-model `eabd16d5c` 的 `g6_component_in_wall_hole_measures_to_hole_wall_not_zero`）：
  * 穿孔的管离 y 小侧洞壁 50 mm，命中面 `opening`（洞壁，主面），垂距 = 距离。
  */
-export function pipeInWallOpeningResponse(): SurfaceClearanceResponse {
+export function pipeInWallOpeningResponse(
+  options: { perpendicularMethod?: SurfaceClearancePerpendicularMethod } = {},
+): SurfaceClearanceResponse {
   return elboToCurvedWallResponse({
     source: { refno: '24384/30001', noun: 'FTUB', leaf_count: 1, triangle_count: 12 },
     target: { refno: '17496/105812', noun: 'STWALL', leaf_count: 1, triangle_count: 32 },
@@ -83,9 +86,71 @@ export function pipeInWallOpeningResponse(): SurfaceClearanceResponse {
         distance_mm: 50,
         from: { x: 100_100, y: 42_050, z: 1_200 },
         to: { x: 100_100, y: 42_000, z: 1_200 },
+        method: options.perpendicularMethod ?? 'ray',
       },
       witness: 'closest-points',
     },
+  });
+}
+
+/**
+ * 2026-09-18 live（`:8024` `7bcdd60df` 126 对重放）：dbnum 7999 型钢 SCTN `24383/68484` 坐在 10 mm 厚 PANE `24383/68491` 上，
+ * 0 mm 贴合不相交——gen-model `83beef257` 起不打射线，垂距 = 距离 = 0、垂足 = 目标侧最近点（`method = contact`），无 warning。
+ */
+export function sectionTouchingPaneResponse(): SurfaceClearanceResponse {
+  return elboToCurvedWallResponse({
+    source: { refno: '24383/68484', noun: 'SCTN', leaf_count: 1, triangle_count: 76 },
+    target: { refno: '24383/68491', noun: 'PANE', leaf_count: 1, triangle_count: 12 },
+    result: {
+      distance_mm: 0,
+      intersects: false,
+      source_point: { x: -10_147.158, y: 12_070.674, z: 3_077.96 },
+      target_point: { x: -10_147.158, y: 12_070.674, z: 3_077.96 },
+      vector: { dx: 0, dy: 0, dz: 0 },
+      source_leaf_refno: '24383/68484',
+      target_leaf_refno: '24383/68491',
+      target_leaf_noun: 'PANE',
+      target_face: { kind: 'side', normal: { x: -0.4999996, y: 0.8660256, z: 0 }, confidence: 'pca' },
+      perpendicular: {
+        distance_mm: 0,
+        from: { x: -10_147.158, y: 12_070.674, z: 3_077.96 },
+        to: { x: -10_147.158, y: 12_070.674, z: 3_077.96 },
+        method: 'contact',
+      },
+      witness: 'closest-points',
+    },
+    model: { source_sesno: 194, target_sesno: 194 },
+  });
+}
+
+/**
+ * 2026-09-18 live（同上）：FTUB `24384/24671` 从偏离侧面法向 1° 的方向斜过转了 30° 的 PANE `17496/135244` 板角，
+ * 最近点在板角竖棱上、射线落空；gen-model `7bcdd60df` 起连线几乎沿面法向就取连线当垂距（`method = edge`）：
+ * 46.603 mm、垂足 = 棱上最近点，无 warning（之前是 `side` + `perpendicular_ray_missed`）。
+ */
+export function tubePastPaneCornerResponse(): SurfaceClearanceResponse {
+  return elboToCurvedWallResponse({
+    source: { refno: '24384/24671', noun: 'FTUB', leaf_count: 1, triangle_count: 12 },
+    target: { refno: '17496/135244', noun: 'PANE', leaf_count: 1, triangle_count: 12 },
+    result: {
+      distance_mm: 46.603077,
+      intersects: false,
+      source_point: { x: -10_385.053, y: 11_770.906, z: 1_000 },
+      target_point: { x: -10_424.999, y: 11_746.903, z: 999.99994 },
+      vector: { dx: -39.94629, dy: -24.00293, dz: -0.000061 },
+      source_leaf_refno: '24384/24671',
+      target_leaf_refno: '17496/135244',
+      target_leaf_noun: 'PANE',
+      target_face: { kind: 'side', normal: { x: 0.8660262, y: 0.4999986, z: 0 }, confidence: 'pca' },
+      perpendicular: {
+        distance_mm: 46.603077,
+        from: { x: -10_385.053, y: 11_770.906, z: 1_000 },
+        to: { x: -10_424.999, y: 11_746.903, z: 999.99994 },
+        method: 'edge',
+      },
+      witness: 'closest-points',
+    },
+    model: { source_sesno: 586, target_sesno: 729 },
   });
 }
 

@@ -18,6 +18,8 @@ import {
   elboToCurvedWallResponse,
   intersectingResponse,
   pipeInWallOpeningResponse,
+  sectionTouchingPaneResponse,
+  tubePastPaneCornerResponse,
 } from '@/clearance/testing/surfaceClearanceFixtures';
 
 const AT = new Date('2026-09-17T12:00:00.000Z');
@@ -156,5 +158,29 @@ describe('useComponentToWallClearance', () => {
   it('formatClearanceToast says 洞口 / 垂直于洞壁 when the hit face is a wall opening', () => {
     const input = { sourceRefno: '24384_30001', targetRefno: '17496_105812' };
     expect(formatClearanceToast(surfaceClearanceToRecord(pipeInWallOpeningResponse(), input, AT))).toBe('外表面净距 50.0 mm（洞口），垂直于洞壁');
+  });
+
+  it('formatClearanceToast explains contact / edge perpendiculars (gen-model 7bcdd60df method) and keeps ray as before', () => {
+    const touching = surfaceClearanceToRecord(sectionTouchingPaneResponse(), { sourceRefno: '24383_68484', targetRefno: '24383_68491' }, AT);
+    expect(touching.snapshot?.perpendicular?.method).toBe('contact');
+    expect(formatClearanceToast(touching)).toBe('外表面净距 0.00 mm（墙面），与墙面贴合，垂距即净距');
+
+    const pastCorner = surfaceClearanceToRecord(tubePastPaneCornerResponse(), { sourceRefno: '24384_24671', targetRefno: '17496_135244' }, AT);
+    expect(pastCorner.snapshot?.perpendicular?.method).toBe('edge');
+    expect(formatClearanceToast(pastCorner)).toBe('外表面净距 46.6 mm（墙面），近似垂直于墙面（最近点在墙的棱上，取连线为垂距）');
+
+    const edgeInOpening = surfaceClearanceToRecord(
+      pipeInWallOpeningResponse({ perpendicularMethod: 'edge' }),
+      { sourceRefno: '24384_30001', targetRefno: '17496_105812' },
+      AT,
+    );
+    expect(formatClearanceToast(edgeInOpening)).toBe('外表面净距 50.0 mm（洞口），近似垂直于洞壁（最近点在墙的棱上，取连线为垂距）');
+
+    // 旧服务端没有 method → ray 的老话不变
+    const legacy = elboToCurvedWallResponse();
+    delete legacy.result!.perpendicular!.method;
+    const legacyRecord = surfaceClearanceToRecord(legacy, { sourceRefno: '24384_22582', targetRefno: '17496_105912' }, AT);
+    expect(legacyRecord.snapshot?.perpendicular?.method).toBe('ray');
+    expect(formatClearanceToast(legacyRecord)).toBe('外表面净距 64.4 mm（墙面外侧），垂直于墙面');
   });
 });

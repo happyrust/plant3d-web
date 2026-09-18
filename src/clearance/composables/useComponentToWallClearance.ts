@@ -38,16 +38,33 @@ export type ComponentToWallClearanceDeps = Readonly<{
   onRecord?: (record: ClearanceRecord) => void;
 }>;
 
+/**
+ * 垂距那半句按 `perpendicular.method` 分三种（gen-model `7bcdd60df`）：`ray` 照旧「垂直于墙面 / 洞壁」；
+ * `contact` 贴合——垂距就是净距本身（0 mm 坐在板上的型钢那类）；`edge` 最近点在墙的棱 / 角上、射线落空，
+ * 两点连线偏面法向不到 1%，取连线当垂距——「近似垂直」，把来历说出来免得用户当成正对墙面打出来的。
+ */
+function perpendicularClause(snapshot: NonNullable<ClearanceRecord['snapshot']>): string {
+  const perpendicular = snapshot.perpendicular;
+  if (!perpendicular) return '';
+  const surface = snapshot.targetFace?.kind === 'opening' ? '洞壁' : '墙面';
+  switch (perpendicular.method) {
+    case 'contact':
+      return `，与${surface}贴合，垂距即净距`;
+    case 'edge':
+      return `，近似垂直于${surface}（最近点在墙的棱上，取连线为垂距）`;
+    default:
+      return `，垂直于${surface}`;
+  }
+}
+
 export function formatClearanceToast(record: ClearanceRecord): string {
   const snapshot = record.snapshot;
   if (!snapshot) return `${record.inputs.sourceRefno} → ${record.inputs.targetRefno}：给定范围内两侧网格没有靠近到一起`;
   if (snapshot.intersects) return `${record.inputs.sourceRefno} 与 ${record.inputs.targetRefno} 相交（净距 0）`;
   const mm = snapshot.distanceM * 1000;
   const distance = mm < 10 ? mm.toFixed(2) : mm.toFixed(1);
-  const kind = snapshot.targetFace?.kind;
-  const face = clearanceFaceLabel(kind);
-  const perpendicular = snapshot.perpendicular ? (kind === 'opening' ? '，垂直于洞壁' : '，垂直于墙面') : '';
-  return `外表面净距 ${distance} mm${face ? `（${face}）` : ''}${perpendicular}`;
+  const face = clearanceFaceLabel(snapshot.targetFace?.kind);
+  return `外表面净距 ${distance} mm${face ? `（${face}）` : ''}${perpendicularClause(snapshot)}`;
 }
 
 export function useComponentToWallClearance(deps: ComponentToWallClearanceDeps) {

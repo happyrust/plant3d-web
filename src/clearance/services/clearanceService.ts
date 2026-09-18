@@ -13,6 +13,7 @@ import {
   normalizeClearanceRefno,
   type ClearanceFaceConfidence,
   type ClearanceFaceKind,
+  type ClearancePerpendicularMethod,
   type ClearanceRecord,
   type ClearanceSnapshot,
   type ClearanceTargetKind,
@@ -80,6 +81,13 @@ function witness(value: string): ClearanceWitness {
   return value === 'aabb-overlap-center' ? 'aabb-overlap-center' : 'closest-points';
 }
 
+const PERPENDICULAR_METHODS: ReadonlySet<string> = new Set(['ray', 'contact', 'edge']);
+
+/** `7bcdd60df` 之前的服务端没有 `method`——那时垂距只有射线一种来源；认不出的值也按 `ray` 读，不让一格新字段拖垮整条记录。 */
+function perpendicularMethod(value: string | undefined): ClearancePerpendicularMethod {
+  return (value !== undefined && PERPENDICULAR_METHODS.has(value) ? value : 'ray') as ClearancePerpendicularMethod;
+}
+
 /**
  * 服务端 warning 是一行文本，约定形如 `code: 说明`（`perpendicular_ray_missed: …`、`beyond_max_distance: …`）；
  * 没有这个前缀的归到 `server`。
@@ -127,6 +135,7 @@ function snapshotFromResponse(response: SurfaceClearanceResponse): ClearanceSnap
         distanceM: mmToM(result.perpendicular.distance_mm),
         from: pointMmToM(result.perpendicular.from),
         to: pointMmToM(result.perpendicular.to),
+        method: perpendicularMethod(result.perpendicular.method),
       })
       : null,
     witness: witness(result.witness),
