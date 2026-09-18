@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   applyModelUnitRefnoVisibility,
   applyModelUnitVersionSide,
+  buildTreeDiffModels,
   collectModelUnitTargetObjectIds,
   compareModelUnitGeometry,
   DEFAULT_MODEL_UNIT_COMPARE_SIDE,
@@ -37,6 +38,39 @@ describe('modelUnitVersionCompare', () => {
     expect(shouldOpenModelUnitVersionCompareFromUrl('?unit_refno=24381_145018&compare_autorun=1')).toBe(true);
     expect(shouldOpenModelUnitVersionCompareFromUrl('?compare_autorun=1')).toBe(false);
     expect(shouldOpenModelUnitVersionCompareFromUrl('?unit_refno=24381_145018')).toBe(false);
+  });
+
+  it('buildTreeDiffModels：unchanged 不进树、被删的 ownerRefno 取 A 侧、tombstone 补单元根', () => {
+    const version = (sesno: number, impactKind: 'placement' | 'tombstone') => ({
+      dbnum: 8000, unitRefno: '24384_26480', unitNoun: 'EQUI', sesno, sessionTime: null, impactKind,
+    });
+    const rows = [
+      { refno: '24384_26481', noun: 'BOX', status: 'deleted' as const },
+      { refno: '24384_26483', noun: 'CYLI', status: 'added' as const },
+      { refno: '24384_26484', noun: 'BOX', status: 'unchanged' as const },
+    ];
+    const beforeOwners = new Map([['24384_26481', '24384_26480'], ['24384_26480', '24384_100']]);
+    const afterOwners = new Map([['24384_26483', '24384_26480']]);
+
+    const placement = buildTreeDiffModels({
+      dbnum: 8000, before: version(587, 'placement'), after: version(602, 'placement'), rows, beforeOwners, afterOwners,
+    });
+    expect(placement).toEqual([
+      { refno: '24384_26481', category: 'BOX', status: 'deleted', sourceNouns: 'BOX', ownerRefno: '24384_26480' },
+      { refno: '24384_26483', category: 'CYLI', status: 'added', sourceNouns: 'CYLI', ownerRefno: '24384_26480' },
+    ]);
+
+    const tombstone = buildTreeDiffModels({
+      dbnum: 8000, before: version(602, 'placement'), after: version(604, 'tombstone'), rows: [rows[0]!], beforeOwners,
+    });
+    expect(tombstone).toEqual([
+      { refno: '24384_26481', category: 'BOX', status: 'deleted', sourceNouns: 'BOX', ownerRefno: '24384_26480' },
+      { refno: '24384_26480', category: 'EQUI', status: 'deleted', sourceNouns: 'EQUI', ownerRefno: '24384_100' },
+    ]);
+
+    // 两侧都没有属主表：ownerRefno 不给（树回落挂根），不报错
+    const bare = buildTreeDiffModels({ dbnum: 8000, before: version(587, 'placement'), after: version(602, 'placement'), rows });
+    expect(bare.every((model) => model.ownerRefno === undefined)).toBe(true);
   });
 
   it('自动把较早版本放在 A、较新版本放在 B', () => {

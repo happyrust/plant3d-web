@@ -234,6 +234,12 @@ export type ModelVersionGeometry = {
   refnos: string[];
   /** 喂 `geometrySnapshotsFromInstanceEntries` / DTX 层（`instanceEntriesByRefno`）的形状 */
   entries: Map<string, InstanceEntry[]>;
+  /**
+   * 该版本下已知的直接属主（`a_b → a_b`），给模型树差异模式里「已删除节点回插到原父」用（`TreeDiffModel.ownerRefno`）。
+   * gen-model-v1 从历史投影行的 `anc`（自身 → 顶层）拆出来，链上每一级都进表；legacy 只有 parquet 行的 `owner_refno`。
+   * 尽力而为：查不到的 refno 不在表里，树会回落挂根。
+   */
+  ownerByRefno?: ReadonlyMap<string, string>;
   /** 释放服务端资源：gen-model-v1 = `DELETE /api/v1/model/history/{snapshot_key}`；legacy 空操作 */
   release(): Promise<void>;
 };

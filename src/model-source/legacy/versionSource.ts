@@ -11,6 +11,7 @@ import type {
   ModelVersionGeometry,
   ModelVersionSource,
 } from '../ports';
+import type { InstanceEntry } from '@/utils/instances/instanceManifest';
 
 import { listModelUnitCommits, type ModelUnitCommitData } from '@/api/modelUnitVersionApi';
 import { fetchLatestDbnoManifest, useDbnoInstancesParquetLoader } from '@/composables/useDbnoInstancesParquetLoader';
@@ -45,6 +46,21 @@ async function releaseNothing(): Promise<void> {
   // legacy 的版本几何是不可变 parquet，没有服务端资源要还
 }
 
+/** parquet 行的 `uniforms.owner_refno`（`a_b`）→ 直接属主表；没带的 refno 不进表，树差异模式回落挂根。 */
+function ownersFromEntries(entries: Map<string, InstanceEntry[]>): Map<string, string> {
+  const owners = new Map<string, string>();
+  for (const [refno, rows] of entries) {
+    for (const row of rows) {
+      const owner = (row.uniforms as { owner_refno?: unknown } | undefined)?.owner_refno;
+      if (typeof owner === 'string' && owner && owner !== refno) {
+        owners.set(refno, owner.replace('/', '_'));
+        break;
+      }
+    }
+  }
+  return owners;
+}
+
 export const legacyModelVersionSource: ModelVersionSource = {
   async listVersions(dbnum, unitRefno): Promise<ModelVersion[]> {
     const commits = await listModelUnitCommits(dbnum, unitRefno);
@@ -65,7 +81,7 @@ export const legacyModelVersionSource: ModelVersionSource = {
       expectedRootRefno: version.unitRefno,
       includeOwnedTubings: false,
     });
-    return { refnos, entries, release: releaseNothing };
+    return { refnos, entries, ownerByRefno: ownersFromEntries(entries), release: releaseNothing };
   },
 
   /** 与从前 `refreshModelUnitCompareEnvironment` 逐句相同：最新 manifest 连同已解析的清单一起钉住。 */

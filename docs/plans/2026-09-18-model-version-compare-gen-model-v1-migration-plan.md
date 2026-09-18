@@ -222,7 +222,9 @@ legacy 下与从前的可见差别只有一处、且不可见于用户：A/B 隔
 
 ### 4.3 树
 不做全库版本树，不做 `?tree_sesno=` 整页刷新。当前树 + `useTreeVersionDiff` 的徽章 / 幽灵节点 / 筛选；
-幽灵节点回插位置的 `ownerRefno` 从 A 侧 `history/query tool=snapshot` 的父子关系取（legacy 下从 A 侧 manifest 的 owner 列取）。
+幽灵节点回插位置的 `ownerRefno` 从 A 侧几何的属主表取（**已做，15:5x**：gen-model-v1 用 `history/query` 行自带的 `anc` 拆成逐级直接属主表
+`ModelVersionGeometry.ownerByRefno`，不必再打 `snapshot`；legacy 用 parquet 行的 `owner_refno`）；B 是 tombstone 时单元根自己也进树当 deleted 模型
+（`buildTreeDiffModels`）。
 
 ## 5. 分期
 

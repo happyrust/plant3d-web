@@ -39,8 +39,10 @@
 
 ## 3. 顺手看到的（不在本次范围）
 
-- 幽灵节点回退挂在根上（「1 个变更未能定位到树」）：A3 没给 `ownerRefno`（计划 §4.3 说从快照结构取）。`history/query tool=instances` 的行自带 `anc`（祖先链），
-  下一步可以直接用它填 `TreeDiffModel.ownerRefno`，不必再打 `snapshot`。
+- ~~幽灵节点回退挂在根上（「1 个变更未能定位到树」）~~ **15:5x 已补**：v1 适配器从 `history/query` 行的 `anc`（自身 → 顶层，打包 refno）拆出逐级
+  直接属主表 `ModelVersionGeometry.ownerByRefno`，面板 `buildTreeDiffModels` 把被删节点的 `ownerRefno` 从 A 侧取、B 是 tombstone 时把单元根自己也作为
+  deleted 模型给树。同一场景重跑（`ownerref/`）：差异模式「全部 2 / 删除 2」，SITE 1RX03-EQUI → ZONE 1RX03-CASE-DQ 各挂 2，不再有「未能定位」；
+  legacy 侧只有 parquet 行的 `owner_refno`（尽力而为）。
 - 右侧属性面板对已删除的 24384/26481 报 `not_found (404): dbnum 8000 会话 Some(623) 的索引里没有 24384/26481`——选中幽灵节点后按最新会话读属性，本就读不到；
   底部「属性差异暂不可用 · 锚点缺失（HTTP 404）」是 `ModelTreeAttrDiffPanel` 钉在 legacy `/api/model-history/*`（`:3100` 未起），Q7(ii) 已定不在本计划。
 - `environmentLoadedRefnos: 0`：入口 URL 没带 `show_refno`，视口本来就是空的，「最新环境模型」按 Q12 = 已加载模型 = 空；不是缺陷。

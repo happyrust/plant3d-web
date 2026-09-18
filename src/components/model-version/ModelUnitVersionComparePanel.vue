@@ -4,9 +4,11 @@ import { computed, markRaw, onBeforeUnmount, onMounted, ref } from 'vue';
 import { GitCompare, RefreshCw, X } from 'lucide-vue-next';
 
 import { ensureDbMetaInfoLoaded, getDbnumByRefno } from '@/composables/useDbMetaInfo';
-import { dispatchTreeDiffContext, type TreeDiffModel } from '@/composables/useTreeVersionDiff';
+import { dispatchTreeDiffContext } from '@/composables/useTreeVersionDiff';
 import { getModelSource, type ModelVersion, type ModelVersionGeometry } from '@/model-source';
 import {
+  buildTreeDiffModels,
+  type TreeDiffDispatchInput,
   compareModelUnitGeometry,
   formatModelUnitVersionTime,
   geometrySnapshotsFromInstanceEntries,
@@ -73,23 +75,15 @@ function dispatch(detail: ModelUnitVersionCompareEventDetail): void {
 }
 
 /**
- * 把本次模型几何差异送进模型树的差异模式（徽章 / 幽灵节点 / 筛选）。
- * 本面板是该通道唯一的派发方（ADR 0065 §1.4）；`unchanged` 行不进树。
- * 已删除节点的原父（`ownerRefno`，幽灵节点回插位置）现阶段不给，树回退挂根；随迁移阶段 A 从版本快照结构补上。
+ * 把本次模型几何差异送进模型树的差异模式（徽章 / 幽灵节点 / 筛选）。本面板是该通道唯一的派发方（ADR 0065 §1.4）；
+ * 模型列表怎么折（`unchanged` 不进、`ownerRefno` 从哪侧取、tombstone 补单元根）见 `buildTreeDiffModels`。
  */
-function dispatchTreeDiff(dbnumValue: number, fromSesno: number, toSesno: number, diffRows: ModelUnitGeometryDiff[]): void {
-  const models: TreeDiffModel[] = diffRows
-    .filter((row) => row.status !== 'unchanged')
-    .map((row) => ({
-      refno: row.refno,
-      category: row.noun,
-      status: row.status,
-      sourceNouns: row.noun,
-    }));
+function dispatchTreeDiff(input: TreeDiffDispatchInput): void {
+  const models = buildTreeDiffModels(input);
   dispatchTreeDiffContext({
-    dbnum: dbnumValue,
-    fromSesno,
-    toSesno,
+    dbnum: input.dbnum,
+    fromSesno: input.before.sesno,
+    toSesno: input.after.sesno,
     mode: 'compare',
     refnos: models.map((model) => model.refno),
     models,
@@ -205,7 +199,14 @@ async function runCompare(): Promise<void> {
     rows.value = compareModelUnitGeometry(beforeData.snapshots, afterData.snapshots);
     compareCompleted.value = true;
     compareActive.value = true;
-    dispatchTreeDiff(dbnum.value, before.sesno, after.sesno, rows.value);
+    dispatchTreeDiff({
+      dbnum: dbnum.value,
+      before,
+      after,
+      rows: rows.value,
+      beforeOwners: beforeData.geometry.ownerByRefno,
+      afterOwners: afterData.geometry.ownerByRefno,
+    });
     dispatch({
       action: 'open',
       dbnum: dbnum.value,

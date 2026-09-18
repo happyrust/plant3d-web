@@ -1,3 +1,4 @@
+import type { TreeDiffModel } from '@/composables/useTreeVersionDiff';
 import type { ModelVersion } from '@/model-source/ports';
 import type { InstanceEntry } from '@/utils/instances/instanceManifest';
 
@@ -200,6 +201,51 @@ export function geometrySnapshotsFromInstanceEntries(
       signature: parts.join('|'),
     };
   }).sort((a, b) => a.refno.localeCompare(b.refno));
+}
+
+export type TreeDiffDispatchInput = {
+  dbnum: number
+  before: ModelVersion
+  after: ModelVersion
+  rows: ModelUnitGeometryDiff[]
+  /** A 侧几何带的直接属主表（被删节点的原父只有 A 侧知道） */
+  beforeOwners?: ReadonlyMap<string, string>
+  /** B 侧几何带的直接属主表 */
+  afterOwners?: ReadonlyMap<string, string>
+}
+
+/**
+ * 把一次模型几何差异折成模型树差异模式（徽章 / 幽灵节点 / 筛选）要的模型列表（ADR 0065 §1.4 的桥接）。
+ * - `unchanged` 行不进树；
+ * - `ownerRefno`（幽灵节点回插到原父）：被删的从 A 侧属主表取、其余从 B 侧取，两侧都查不到就不给，树回落挂根；
+ * - B 是「已删除单元版本」（tombstone）时把单元根自己也作为一条 deleted 模型给树——否则树里只剩几个成员的幽灵、看不出整个单元没了。
+ */
+export function buildTreeDiffModels(input: TreeDiffDispatchInput): TreeDiffModel[] {
+  const ownerOf = (refno: string, status: ModelUnitGeometryStatus): string | undefined => (
+    status === 'deleted'
+      ? input.beforeOwners?.get(refno) ?? input.afterOwners?.get(refno)
+      : input.afterOwners?.get(refno) ?? input.beforeOwners?.get(refno)
+  );
+  const models: TreeDiffModel[] = input.rows
+    .filter((row) => row.status !== 'unchanged')
+    .map((row) => ({
+      refno: row.refno,
+      category: row.noun,
+      status: row.status,
+      sourceNouns: row.noun,
+      ownerRefno: ownerOf(row.refno, row.status),
+    }));
+  const unitRefno = input.after.unitRefno;
+  if (input.after.impactKind === 'tombstone' && !models.some((model) => model.refno === unitRefno)) {
+    models.push({
+      refno: unitRefno,
+      category: input.after.unitNoun,
+      status: 'deleted',
+      sourceNouns: input.after.unitNoun,
+      ownerRefno: input.beforeOwners?.get(unitRefno),
+    });
+  }
+  return models;
 }
 
 export function orderModelUnitVersionPair<T extends Pick<ModelVersion, 'sesno'>>(

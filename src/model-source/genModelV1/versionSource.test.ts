@@ -4,10 +4,11 @@ import {
   createGenModelV1ModelVersionSource,
   historyRowsToGeomInstQueries,
   MAX_PAGES,
+  ownerMapFromHistoryRows,
   type GenModelV1VersionApi,
 } from './versionSource';
 
-import { GenModelV1ApiError, type ModelVersionsResponse, type TaskEntryDto } from '@/api/genModelV1Api';
+import { GenModelV1ApiError, unpackRefno, type ModelVersionsResponse, type TaskEntryDto } from '@/api/genModelV1Api';
 import { NotDeliveryUnitRootError } from '@/model-source/modelVersionErrors';
 
 function response(partial: Partial<ModelVersionsResponse>): ModelVersionsResponse {
@@ -109,6 +110,7 @@ describe('genModelV1 ModelVersionSource', () => {
         return [{
           id: 'r1', snapshot_key: '24381_145018@66', dbnum: 7997, generic: 'VALV', source_refno: '24381_145020',
           mesh_id: 'm-valve', booled: true,
+          anc: [24381 * 2 ** 32 + 145020, 24381 * 2 ** 32 + 145018],
           world_bounds: { mins: [0, 0, 0], maxs: [1, 1, 1] },
           world_transform: { translation: [10, 20, 30], rotation: [0, 0, 0, 1], scale: [1, 1, 1] },
         }];
@@ -143,6 +145,7 @@ describe('genModelV1 ModelVersionSource', () => {
     const tube = geometry.entries.get('24381_145018')!;
     expect(tube[0]!.geo_hash).toBe('m-tube');
     expect(tube[0]!.uniforms).toMatchObject({ noun: 'TUBI', is_tubi: true, owner_noun: 'BRAN' });
+    expect(geometry.ownerByRefno?.get('24381_145020')).toBe('24381_145018');
 
     await geometry.release();
     await geometry.release();
@@ -192,6 +195,23 @@ describe('genModelV1 ModelVersionSource', () => {
   it('pinLatestEnvironment 不带 pin：环境 = 已加载模型，重钉走 records + forceRefresh（Q12）', async () => {
     const source = createGenModelV1ModelVersionSource(api());
     await expect(source.pinLatestEnvironment(7997)).resolves.toEqual({ generatedAt: null, loaderOptions: {} });
+  });
+
+  it('ownerMapFromHistoryRows：anc（自身 → 顶层，打包 refno）拆成逐级直接属主表', () => {
+    const pack = (w0: number, w1: number) => w0 * 2 ** 32 + w1;
+    const owners = ownerMapFromHistoryRows([
+      { anc: [pack(24384, 26481), pack(24384, 26480), pack(24384, 100)] }, // BOX → EQUI → ZONE
+      { anc: [pack(24384, 26482), pack(24384, 26480)] }, // 另一件成员 → EQUI（链短一截，不覆盖已知的 EQUI → ZONE）
+      { anc: [] },
+      {},
+    ]);
+    expect(owners.get('24384_26481')).toBe('24384_26480');
+    expect(owners.get('24384_26482')).toBe('24384_26480');
+    expect(owners.get('24384_26480')).toBe('24384_100');
+    expect(owners.has('24384_100')).toBe(false);
+    expect(unpackRefno(pack(24384, 26481))).toBe('24384_26481');
+    expect(unpackRefno(-1)).toBe('');
+    expect(unpackRefno('x')).toBe('');
   });
 
   it('historyRowsToGeomInstQueries：规范基本体保留 local_transform、烘焙件用单位阵并标 has_neg', () => {

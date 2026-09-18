@@ -37,6 +37,7 @@ import {
   type ModelVersionsResponse,
   type TaskEntryDto,
   type V1Transform,
+  unpackRefno,
 } from '@/api/genModelV1Api';
 import { NotDeliveryUnitRootError } from '@/model-source/modelVersionErrors';
 
@@ -169,6 +170,24 @@ export function historyRowsToGeomInstQueries(
   return items;
 }
 
+/**
+ * 历史投影行的 `anc`（自身 → 顶层，打包 refno）→ 直接属主表：链上每一级都记一条（`anc[i] → anc[i+1]`），
+ * 这样被删成员的属主自己也被删时，树的差异模式还能沿链找到最近仍存活的祖先。
+ */
+export function ownerMapFromHistoryRows(rows: readonly { anc?: number[] }[]): Map<string, string> {
+  const owners = new Map<string, string>();
+  for (const row of rows) {
+    const chain = (row.anc ?? []).map(unpackRefno);
+    for (let i = 0; i + 1 < chain.length; i += 1) {
+      const child = chain[i];
+      const parent = chain[i + 1];
+      if (!child || !parent || child === parent) continue;
+      if (!owners.has(child)) owners.set(child, parent);
+    }
+  }
+  return owners;
+}
+
 function snapshotKeyOf(task: TaskEntryDto): string | null {
   const key = task.result?.snapshot_key;
   return typeof key === 'string' && key ? key : null;
@@ -248,10 +267,15 @@ export function createGenModelV1ModelVersionSource(api: GenModelV1VersionApi = d
       Array.isArray(tubes) ? tubes : [],
     );
     const entries = groupInstanceEntriesByRefno(items);
+    const ownerByRefno = ownerMapFromHistoryRows([
+      ...(Array.isArray(instances) ? instances : []),
+      ...(Array.isArray(tubes) ? tubes : []),
+    ]);
     let released = false;
     return {
       refnos: [...entries.keys()],
       entries,
+      ownerByRefno,
       async release() {
         if (released) return;
         released = true;

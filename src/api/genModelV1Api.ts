@@ -1034,6 +1034,8 @@ export type HistoryInstanceRowDto = {
   mesh_id: string;
   world_bounds: V1Aabb | null;
   world_transform: V1Transform;
+  /** 「自身 → 顶层」的祖先链，每项是打包 refno `(word0 << 32) | word1`（< 2^53，JSON 数值安全） */
+  anc?: number[];
   /** true = 烘焙网格（`booled_id` = `mesh_id`）；false = 规范基本体，带 `local_transform` */
   booled?: boolean;
   primitive_key?: string;
@@ -1056,8 +1058,18 @@ export type HistoryTubeRowDto = {
   invalid?: boolean;
   world_bounds: V1Aabb | null;
   world_transform: V1Transform;
+  /** 同 `HistoryInstanceRowDto.anc`（从所属 BRAN 起） */
+  anc?: number[];
   [key: string]: unknown;
 };
+
+/** 打包 refno `(word0 << 32) | word1` → 本仓内部键 `a_b`；非法值给空串。 */
+export function unpackRefno(packed: unknown): string {
+  if (typeof packed !== 'number' || !Number.isFinite(packed) || packed < 0 || !Number.isInteger(packed)) return '';
+  const word0 = Math.floor(packed / 2 ** 32);
+  const word1 = packed - word0 * 2 ** 32;
+  return word0 > 0 && word1 >= 0 ? `${word0}_${word1}` : '';
+}
 
 /** `POST /api/v1/model/history/query`；`snapshot` 回回执对象（不存在为 `null`），其余三个工具回数组。 */
 export function genModelV1ModelHistoryQuery<T = unknown>(
