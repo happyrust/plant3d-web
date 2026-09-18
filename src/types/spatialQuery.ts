@@ -158,6 +158,11 @@ export type SpatialQueryResultSet = {
   dbnumGroups?: SpatialQueryDbnumGroupCount[] | null;
   /** gen-model-v1：结果覆盖的索引层（`global-tree` = 只含已生成过模型的构件）；legacy 为 null */
   coverage?: string | null;
+  /**
+   * 结果只来自查看器已加载构件的本地扫描，没打服务端：「仅看已加载 / 仅看当前可见」的点模式查询走这里
+   * （结果 ⊆ 已加载集，本地扫描对它是完备的），不分页、前端排序。
+   */
+  localOnly?: boolean;
 };
 
 export type SpatialQueryDraft = {

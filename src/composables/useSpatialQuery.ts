@@ -17,7 +17,8 @@ import type {
 
 import { enqueueParquetIncremental } from '@/api/genModelRealtimeApi';
 import { triggerBatchGenerateSse } from '@/api/genModelStreamGenerateApi';
-import { ensureDbMetaInfoLoaded, getDbnumByRefno } from '@/composables/useDbMetaInfo';
+import { isGenModelV1ApiError } from '@/api/genModelV1Api';
+import { ensureDbMetaInfoLoaded, getDbnumByRefno, tryGetDbnumByRefno } from '@/composables/useDbMetaInfo';
 import {
   findNounByRefnoAcrossAllDbnos,
   findSpecValueByRefnoAcrossAllDbnos,
@@ -34,6 +35,7 @@ import {
   type SpatialQueryAabb,
   type SpatialQueryCapabilities,
   type SpatialQueryCenterSource,
+  type SpatialQueryDbnumGroupCount,
   type SpatialQueryDraft,
   type SpatialQueryFilterOptions,
   type SpatialQueryFilters,
@@ -549,6 +551,30 @@ function toGlobalGroupCounts(serverResp: ApiSpatialQueryResult | null): Map<numb
   return new Map(serverResp.groups.map((group) => [group.spec_value, group.count]));
 }
 
+/** 服务端给的按专业全量计数 + 本地独有命中逐条加一；服务端没给分组（v1 / 纯本地）回 null，`buildGroups` 退回按页内条目数。 */
+function mergeSpecGroupCounts(
+  serverResp: ApiSpatialQueryResult | null,
+  extraItems: SpatialQueryResultItem[],
+): Map<number, number> | null {
+  const counts = toGlobalGroupCounts(serverResp);
+  if (!counts) return null;
+  for (const item of extraItems) {
+    counts.set(item.specValue, (counts.get(item.specValue) ?? 0) + 1);
+  }
+  return counts;
+}
+
+/**
+ * 查询失败的错误文本。gen-model-v1 的 503 `spatial_not_ready`（树在加载 / 重建）一类可重试错误带 `Retry-After`，
+ * 换算成秒附在后面，让人知道该等多久再点；服务端消息里已经写了「重试」的不重复。
+ */
+function formatQueryError(err: unknown): string {
+  const message = err instanceof Error ? err.message : String(err);
+  if (!isGenModelV1ApiError(err) || !err.isRetryable || /重试/.test(message)) return message;
+  const seconds = err.retryAfterMs ? Math.max(1, Math.ceil(err.retryAfterMs / 1000)) : null;
+  return seconds ? `${message}（约 ${seconds} 秒后可重试）` : `${message}（稍后重试）`;
+}
+
 function makeFilters(draft: SpatialQueryDraft): SpatialQueryFilters {
   return {
     nouns: normalizeNounText(draft.nounText),
@@ -674,7 +700,6 @@ function syncResultSetSummary(current: SpatialQueryResultSet): SpatialQueryResul
   // 顺序由服务端在分页前决定，这里不再重排，否则页内顺序会和分页切分口径冲突。
   const items = current.items;
   const total = Math.max(current.total, items.length);
-  const perPage = Math.max(1, current.perPage || current.request.limit || items.length || 1);
   // 重新提交时沿用上一轮的全量分组计数：条目的专业不会因为显隐/加载而改变。
   const globalCounts = new Map(current.groups.map((group) => [group.specValue, group.count]));
   return {
@@ -682,11 +707,28 @@ function syncResultSetSummary(current: SpatialQueryResultSet): SpatialQueryResul
     items,
     total,
     returnedCount: current.returnedCount,
-    totalPages: Math.max(1, Math.ceil(total / perPage)),
+    // 页数在合并时按服务端全量算好（本地独有命中只追加在第 1 页，不算进页数），这里不按 total 重算
+    totalPages: Math.max(1, current.totalPages),
     loadedCount: items.filter((item) => item.loaded).length,
     unloadedCount: items.filter((item) => !item.loaded).length,
     groups: buildGroups(items, globalCounts),
   };
+}
+
+/** 服务端给的按库全量计数 + 本地独有命中（有库号的）逐条加一；没有服务端分组时按条目自建。 */
+function mergeDbnumGroups(
+  serverGroups: ApiSpatialQueryResult['dbnum_groups'] | null | undefined,
+  extraItems: SpatialQueryResultItem[],
+): SpatialQueryDbnumGroupCount[] | null {
+  if (!serverGroups && extraItems.every((item) => typeof item.dbnum !== 'number')) return null;
+  const counts = new Map<number, number>((serverGroups ?? []).map((group) => [group.dbnum, group.count]));
+  for (const item of extraItems) {
+    if (typeof item.dbnum !== 'number') continue;
+    counts.set(item.dbnum, (counts.get(item.dbnum) ?? 0) + 1);
+  }
+  return Array.from(counts.entries())
+    .sort((a, b) => a[0] - b[0])
+    .map(([dbnum, count]) => ({ dbnum, count }));
 }
 
 async function loadRefnosBySource(
@@ -1231,6 +1273,8 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
         noun,
         specValue,
         specName: toSpecName(specValue),
+        // 库号供 gen-model-v1 下按库分组 / 批量加载分桶；db_meta 没加载时为 null，抽屉归「库未知」
+        dbnum: tryGetDbnumByRefno(refno),
         distance,
         loaded: true,
         visible,
@@ -1245,23 +1289,64 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
     return results;
   }
 
+  /** 查看器里该 refno 此刻是否可见；没有这个对象（未加载 / 占位）按可见算，与结果项的缺省一致。 */
+  function isViewerObjectVisible(viewer: ViewerLike, refno: string): boolean {
+    return viewer.scene.objects[refno]?.visible !== false;
+  }
+
+  type MergeResultsOptions = {
+    /** 有翻页时先取回的完整命中集合；用来判定「本地命中、但服务端整个命中集合里都没有」。 */
+    fullMatches?: SpatialQueryFullMatchSet | null;
+    /** 查看器里某 refno 当前是否可见；不给则一律按可见。 */
+    isVisible?: (refno: string) => boolean;
+  };
+
+  /**
+   * 有翻页时先取回的完整命中集合并进本地独有命中：`refnos` 补上本页条目（含本地独有），
+   * 按库 / 按专业的分桶也各加一份，「仅显示本库 / 加载本专业」才带得上它们。
+   */
+  function extendFullMatches(
+    full: SpatialQueryFullMatchSet,
+    pageItems: SpatialQueryResultItem[],
+    localOnlyItems: SpatialQueryResultItem[],
+  ): SpatialQueryFullMatchSet {
+    const refnos = uniqStrings([...full.refnos, ...pageItems.map((item) => item.refno)]);
+    if (localOnlyItems.length === 0 && refnos.length === full.refnos.length) return full;
+    const byDbnum: Record<string, string[]> = { ...full.byDbnum };
+    const bySpecValue: Record<string, string[]> = { ...full.bySpecValue };
+    for (const item of localOnlyItems) {
+      if (typeof item.dbnum === 'number') {
+        byDbnum[String(item.dbnum)] = uniqStrings([...(byDbnum[String(item.dbnum)] ?? []), item.refno]);
+      }
+      bySpecValue[String(item.specValue)] = uniqStrings([...(bySpecValue[String(item.specValue)] ?? []), item.refno]);
+    }
+    return { ...full, refnos, byDbnum, bySpecValue, total: full.total + localOnlyItems.length };
+  }
+
   function mergeResults(
     request: SpatialQueryRequest,
     localItems: SpatialQueryResultItem[],
     serverResp: ApiSpatialQueryResult | null,
     viewerLoadedRefnos?: Set<string> | null,
+    options: MergeResultsOptions = {},
   ): SpatialQueryResultSet {
     const merged = new Map<string, SpatialQueryResultItem>();
     // loaded 以查看器实际加载集为准。本地扫描结果只是「检索形状内命中」的
     // 子集：refno 模式服务端按源 AABB 表面量距离、本地按中心点量，已加载
     // 但落在两种口径差集里的构件若用 localItems 判定会被误标成未加载。
     const loadedRefnos = viewerLoadedRefnos ?? new Set(localItems.map((item) => item.refno));
+    const isVisible = options.isVisible ?? (() => true);
     const warnings: string[] = [];
     const localByRefno = new Map(localItems.map((item) => [item.refno, item]));
     const serverResults = serverResp?.results ?? [];
     const page = Math.max(1, Math.floor(serverResp?.page ?? 1));
     const perPage = Math.max(1, Math.floor(serverResp?.per_page ?? request.limit));
     const hasMore = Boolean(serverResp?.has_more ?? serverResp?.truncated ?? false);
+    /**
+     * 本地命中、但服务端整个命中集合里都没有的已加载构件（v1 树里没有 TUBI，索引也可能落后于场景）。
+     * 服务端为准、本地补漏：只在第 1 页按本地排序追加在服务端条目之后，不算进服务端的页数。
+     */
+    const localOnlyItems: SpatialQueryResultItem[] = [];
 
     if (serverResp) {
       if (hasMore) {
@@ -1275,6 +1360,11 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
       if (serverResp.truncated_results) {
         warnings.push('服务端结果集已截断，请缩小半径或过滤条件');
       }
+      // refno 路由的请求（距离查询 refno / 中心线、「当前选中」无盒兜底）中心要服务端解，「仅看已加载 / 仅看当前可见」
+      // 只能在服务端分页之后于本页内后筛：服务端不知道这两项，总数与页数按它的全量计
+      if (request.filters.onlyLoaded || request.filters.onlyVisible) {
+        warnings.push('「仅看已加载 / 仅看当前可见」只在本页内后筛，总数与页数按服务端全量计');
+      }
       // 服务端的非致命问题（中心线模式成员表取不到 → 结果可能混入 BRAN 自身构件）原样带给用户
       for (const warning of serverResp.warnings ?? []) {
         warnings.push(warning);
@@ -1287,8 +1377,10 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
           continue;
         }
         const existing = localByRefno.get(raw.refno);
-        const visible = existing?.visible ?? true;
         const loaded = loadedRefnos.has(raw.refno);
+        // 可见性直读查看器：本地扫描已按「仅看当前可见」把隐藏构件剔出 localItems，从 existing 推会缺省成「可见」而漏过过滤；
+        // 没加载的构件查看器里没有对象，沿用缺省「可见」
+        const visible = existing?.visible ?? (loaded ? isVisible(raw.refno) : true);
         const normalized = toSpatialItemFromApi(raw, loaded, visible);
 
         if (existing) {
@@ -1298,6 +1390,8 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
             noun: existing.noun !== 'UNKNOWN' ? existing.noun : normalized.noun,
             specValue: existing.specValue !== 0 ? existing.specValue : normalized.specValue,
             specName: existing.specValue !== 0 ? existing.specName : normalized.specName,
+            // 库号以服务端为准（v1 直接给），本地按 refno 查 db_meta 的只在服务端没给时兜底
+            dbnum: normalized.dbnum ?? existing.dbnum ?? null,
             // 本地扫描拿不到构件名称，只能回退成 refno；名称一律以服务端为准
             name: normalized.name,
             // 距离同样以服务端为准：排序发生在服务端，refno 模式下服务端按
@@ -1323,6 +1417,18 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
 
         merged.set(raw.refno, normalized);
       }
+
+      // 本地独有命中：要能证明它不在服务端整个命中集合里——没翻页时本页就是全集；有翻页要看先取回的全集，
+      // 取不到就不追加（否则它可能在第 3 页再出现一次）。只追加在第 1 页。关键字服务端没替它判过，这里补上。
+      const serverRefnos = new Set(serverResults.map((raw) => raw.refno));
+      const fullRefnos = options.fullMatches ? new Set(options.fullMatches.refnos) : null;
+      if (page === 1 && (!hasMore || fullRefnos)) {
+        for (const item of localItems) {
+          if (serverRefnos.has(item.refno) || fullRefnos?.has(item.refno)) continue;
+          if (!includesKeyword(item.refno, item.noun, request.filters.keyword)) continue;
+          localOnlyItems.push(item);
+        }
+      }
     } else {
       // 没有服务端结果时关键字无人判定，这里补上
       for (const item of localItems) {
@@ -1331,12 +1437,16 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
       }
     }
 
-    // 有服务端结果时沿用其顺序（已按 sort 在分页前排好）；
-    // 只有纯本地兜底路径才需要在前端排序。
+    // 有服务端结果时沿用其顺序（已按 sort 在分页前排好），本地独有命中按同一排序口径接在后面；
+    // 纯本地路径（「仅看已加载 / 仅看当前可见」、无服务端）在前端排序，且不分页——本地扫描一次给全。
     const mergedItems = Array.from(merged.values());
-    const items = serverResp ? mergedItems : sortItems(mergedItems, request.sortBy);
-    const inferredTotal = hasMore ? Math.max(items.length, page * perPage + 1) : items.length;
-    const total = Math.max(serverResp?.total_count ?? inferredTotal, items.length);
+    const items = serverResp
+      ? [...mergedItems, ...sortItems(localOnlyItems, request.sortBy)]
+      : sortItems(mergedItems, request.sortBy);
+    const inferredTotal = hasMore ? Math.max(mergedItems.length, page * perPage + 1) : mergedItems.length;
+    // 服务端口径的总数管页数；对用户显示的「共 N 项」再加上本地独有命中
+    const serverTotal = Math.max(serverResp?.total_count ?? inferredTotal, mergedItems.length);
+    const total = serverResp ? serverTotal + localOnlyItems.length : items.length;
     const loadedCount = items.filter((item) => item.loaded).length;
     const unloadedCount = items.length - loadedCount;
     const serverCenter = normalizeServerCenter(serverResp?.center);
@@ -1344,7 +1454,7 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
     return {
       request,
       items,
-      fullMatches: null,
+      fullMatches: options.fullMatches ? extendFullMatches(options.fullMatches, items, localOnlyItems) : null,
       filterOptions: normalizeServerFilterOptions(serverResp),
       center: serverCenter,
       queryBBox: queryBBoxFromResponse(serverResp),
@@ -1357,19 +1467,18 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
       resultCap: typeof serverResp?.result_cap === 'number' ? serverResp.result_cap : null,
       page,
       perPage,
-      returnedCount: serverResp?.returned_count ?? items.length,
-      totalPages: Math.max(1, Math.ceil(total / perPage)),
+      returnedCount: serverResp ? (serverResp.returned_count ?? mergedItems.length) + localOnlyItems.length : items.length,
+      totalPages: serverResp ? Math.max(1, Math.ceil(serverTotal / perPage)) : 1,
       hasMore,
       total,
       loadedCount,
       unloadedCount,
       truncated: Boolean(hasMore || serverResp?.truncated || serverResp?.truncated_candidates || serverResp?.truncated_results),
       warnings,
-      groups: buildGroups(items, toGlobalGroupCounts(serverResp)),
-      dbnumGroups: serverResp?.dbnum_groups
-        ? serverResp.dbnum_groups.map((group) => ({ dbnum: group.dbnum, count: group.count }))
-        : null,
+      groups: buildGroups(items, mergeSpecGroupCounts(serverResp, localOnlyItems)),
+      dbnumGroups: serverResp ? mergeDbnumGroups(serverResp.dbnum_groups, localOnlyItems) : mergeDbnumGroups(null, items),
       coverage: serverResp?.coverage ?? null,
+      localOnly: !serverResp,
     };
   }
 
@@ -1415,35 +1524,21 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
   }
 
   /**
-   * 取回完整命中集合，供批量操作使用。
-   *
-   * 结果没有翻页时当前页就是全集，直接复用，避免多打一次请求。
+   * 取回完整命中集合：批量操作按它作用于整个结果集，合并时也靠它判「本地命中、但服务端整个集合里都没有」。
+   * 只在结果有翻页时才打（没翻页当前页就是全集）；取不到不影响本次查询，批量操作回退到当前页。
    */
-  async function fetchFullMatches(
-    request: SpatialQueryRequest,
-    resultSetValue: SpatialQueryResultSet,
-  ): Promise<SpatialQueryFullMatchSet | null> {
-    if (!resultSetValue.hasMore) {
-      return null;
-    }
-
+  async function fetchFullMatchSet(request: SpatialQueryRequest): Promise<SpatialQueryFullMatchSet | null> {
     try {
       const resp = await fetchNearbyRefnos(toNearbyParams(request));
       if (!resp.success) return null;
-
-      const localOnly = resultSetValue.items
-        .map((item) => item.refno)
-        .filter((refno) => !resp.refnos.includes(refno));
-
       return {
-        refnos: uniqStrings([...resp.refnos, ...localOnly]),
+        refnos: uniqStrings(resp.refnos),
         byDbnum: resp.by_dbnum ?? {},
         bySpecValue: resp.by_spec_value ?? {},
         total: resp.total_count,
         truncated: Boolean(resp.truncated),
       };
     } catch {
-      // 取全集失败不影响本次查询结果，批量操作回退到当前页
       return null;
     }
   }
@@ -1533,95 +1628,154 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
     return { request: normalizeRequestFromCenter(draft.center, centerSource) };
   }
 
+  async function querySpatialServer(request: SpatialQueryRequest, page: number): Promise<ApiSpatialNearbyResult> {
+    const serverOptions = {
+      nouns: request.filters.nouns.length > 0 ? request.filters.nouns.join(',') : undefined,
+      spec_values: request.filters.specValues.length > 0 ? request.filters.specValues.join(',') : undefined,
+      keyword: request.filters.keyword || undefined,
+      sort: SORT_BY_TO_SERVER_PARAM[request.sortBy],
+      page,
+      per_page: request.limit,
+      shape: request.shape,
+      include_negative: request.filters.includeNegative,
+    };
+
+    if (isRefnoRoutedRequest(request)) {
+      return queryNearbyRefno(request.refno, request.radius, {
+        include_self: request.includeSelf ?? false,
+        nouns: serverOptions.nouns,
+        spec_values: serverOptions.spec_values,
+        keyword: serverOptions.keyword,
+        sort: serverOptions.sort,
+        page: serverOptions.page,
+        per_page: serverOptions.per_page,
+        shape: serverOptions.shape,
+        include_negative: serverOptions.include_negative,
+        ...centerlineSourceMode(request),
+      });
+    }
+    return queryNearbyPosition(request.center.x, request.center.y, request.center.z, request.radius, serverOptions);
+  }
+
+  /**
+   * 「仅看已加载 / 仅看当前可见」= 结果 ⊆ 查看器已加载集，点模式下本地扫描对它是完备的：不打服务端、不分页、前端排序。
+   * 改前这两项叠在服务端分页之后后筛：勾「仅看已加载」查 1387 项，摘要「共 1387 项，当前页 3 项」、70 页里大半页是空的。
+   * refno 路由的请求（距离查询 refno / 中心线、「当前选中」无盒兜底）中心要服务端解，仍走服务端 + 本页后筛（合并时给出提示）。
+   */
+  function isLocalOnlyRequest(request: SpatialQueryRequest): boolean {
+    return (request.filters.onlyLoaded || request.filters.onlyVisible) && !isRefnoRoutedRequest(request);
+  }
+
+  type RunQueryOptions = {
+    page: number;
+    /** 服务端解出的 center 是否写回草稿：「执行空间查询」写；翻页 / 改排序沿用旧请求，不碰草稿 */
+    syncDraft: boolean;
+  };
+
+  /** 一次查询的主体：本地扫描 / 服务端 / 全集 / 合并 / 落结果集。失败抛出，由调用方决定清不清旧结果。 */
+  async function runQuery(request: SpatialQueryRequest, options: RunQueryOptions): Promise<void> {
+    const viewer = viewerRef.value;
+
+    // 负实体判定依赖服务端清单；失败不阻断查询（响应里的 is_negative 兜底）。
+    await ensureNegativeNounsLoaded(negativeNounsFetcher);
+
+    if (isLocalOnlyRequest(request)) {
+      status.value = 'querying-local';
+      const localItems = viewer ? queryLocal(viewer, request) : [];
+      status.value = 'merging-results';
+      commitResultSet(mergeResults(request, localItems, null, viewer ? new Set(resolveLoadedRefnos(viewer)) : null));
+      status.value = 'ready';
+      return;
+    }
+
+    status.value = 'querying-server';
+    const serverResp = await querySpatialServer(request, options.page);
+    if (!serverResp.success) {
+      throw new Error(serverResp.error || '空间查询失败');
+    }
+
+    learnNegativeNounsFromFilterOptions(serverResp.filter_options);
+
+    const serverCenter = normalizeServerCenter(serverResp.center);
+    const authoritativeRequest = serverCenter
+      ? {
+        ...request,
+        center: {
+          x: serverCenter.x,
+          y: serverCenter.y,
+          z: serverCenter.z,
+        },
+      }
+      : request;
+    if (serverCenter && options.syncDraft) {
+      draft.center = {
+        x: serverCenter.x,
+        y: serverCenter.y,
+        z: serverCenter.z,
+      };
+      // 「当前选中」的 refno 兜底：服务端已按子树盒解出中心，摘要行改显示坐标
+      if (request.centerSource === 'selected') {
+        selectedCenterRefno.value = null;
+      }
+    }
+
+    // 有翻页才取全集：批量操作要整个命中集合，合并时判「本地命中但服务端整个集合都没有」也要它；没翻页当前页就是全集
+    const hasMore = Boolean(serverResp.has_more ?? serverResp.truncated ?? false);
+    const fullMatches = hasMore ? await fetchFullMatchSet(authoritativeRequest) : null;
+
+    // 本地扫描按「中心点 + 半径」画球 / 方，中心线模式的源是一条走廊、服务端也不回 center，
+    // 拿草稿里残留的中心去扫只会混进一批不相干的「本地命中」；这一档以服务端为准，loaded 标记走 viewerLoadedRefnos。
+    let localItems: SpatialQueryResultItem[] = [];
+    if (viewer && request.centerSource !== 'bran_centerline') {
+      status.value = 'querying-local';
+      localItems = queryLocal(viewer, authoritativeRequest);
+    }
+
+    status.value = 'merging-results';
+    const viewerLoadedRefnos = viewer ? new Set(resolveLoadedRefnos(viewer)) : null;
+    commitResultSet(mergeResults(authoritativeRequest, localItems, serverResp, viewerLoadedRefnos, {
+      fullMatches,
+      isVisible: viewer ? (refno) => isViewerObjectVisible(viewer, refno) : undefined,
+    }));
+    status.value = 'ready';
+  }
+
+  /** 「执行空间查询」：按当前草稿重解中心再查；失败清掉旧结果（旧结果对应的不是这份草稿）。 */
   async function submitQuery(page = 1) {
     error.value = null;
     activeResultRefno.value = null;
 
     try {
-      const viewer = viewerRef.value;
       const { request } = await resolveRequest();
-      let localItems: SpatialQueryResultItem[] = [];
-      let serverResp: ApiSpatialNearbyResult | null = null;
-
-      // 负实体判定依赖服务端清单；失败不阻断查询（响应里的 is_negative 兜底）。
-      await ensureNegativeNounsLoaded(negativeNounsFetcher);
-
-      status.value = 'querying-server';
-      const serverOptions = {
-        nouns: request.filters.nouns.length > 0 ? request.filters.nouns.join(',') : undefined,
-        spec_values: request.filters.specValues.length > 0 ? request.filters.specValues.join(',') : undefined,
-        keyword: request.filters.keyword || undefined,
-        sort: SORT_BY_TO_SERVER_PARAM[request.sortBy],
-        page,
-        per_page: request.limit,
-        shape: request.shape,
-        include_negative: request.filters.includeNegative,
-      };
-
-      if (isRefnoRoutedRequest(request)) {
-        serverResp = await queryNearbyRefno(request.refno, request.radius, {
-          include_self: request.includeSelf ?? false,
-          nouns: serverOptions.nouns,
-          spec_values: serverOptions.spec_values,
-          keyword: serverOptions.keyword,
-          sort: serverOptions.sort,
-          page: serverOptions.page,
-          per_page: serverOptions.per_page,
-          shape: serverOptions.shape,
-          include_negative: serverOptions.include_negative,
-          ...centerlineSourceMode(request),
-        });
-      } else {
-        serverResp = await queryNearbyPosition(request.center.x, request.center.y, request.center.z, request.radius, serverOptions);
-      }
-
-      if (!serverResp.success) {
-        throw new Error(serverResp.error || '空间查询失败');
-      }
-
-      learnNegativeNounsFromFilterOptions(serverResp.filter_options);
-
-      const serverCenter = normalizeServerCenter(serverResp.center);
-      const authoritativeRequest = serverCenter
-        ? {
-          ...request,
-          center: {
-            x: serverCenter.x,
-            y: serverCenter.y,
-            z: serverCenter.z,
-          },
-        }
-        : request;
-      if (serverCenter) {
-        draft.center = {
-          x: serverCenter.x,
-          y: serverCenter.y,
-          z: serverCenter.z,
-        };
-        // 「当前选中」的 refno 兜底：服务端已按子树盒解出中心，摘要行改显示坐标
-        if (request.centerSource === 'selected') {
-          selectedCenterRefno.value = null;
-        }
-      }
-
-      // 本地扫描按「中心点 + 半径」画球 / 方，中心线模式的源是一条走廊、服务端也不回 center，
-      // 拿草稿里残留的中心去扫只会混进一批不相干的「本地命中」；这一档以服务端为准，loaded 标记走 viewerLoadedRefnos。
-      if (viewer && request.centerSource !== 'bran_centerline') {
-        status.value = 'querying-local';
-        localItems = queryLocal(viewer, authoritativeRequest);
-      }
-
-      status.value = 'merging-results';
-      const viewerLoadedRefnos = viewer ? new Set(resolveLoadedRefnos(viewer)) : null;
-      const merged = mergeResults(authoritativeRequest, localItems, serverResp, viewerLoadedRefnos);
-      merged.fullMatches = await fetchFullMatches(authoritativeRequest, merged);
-      commitResultSet(merged);
-
-      status.value = 'ready';
+      await runQuery(request, { page, syncDraft: true });
     } catch (err) {
-      error.value = err instanceof Error ? err.message : String(err);
+      error.value = formatQueryError(err);
       status.value = 'error';
       clearResults();
+    }
+  }
+
+  /**
+   * 翻页 / 改排序：沿用上一次结果的请求（已解出的中心、refno、过滤条件），不重解中心、不碰草稿。
+   * 改前每次都重跑 `applyCurrentSelection`：用户在查看器里换了选中再点「下一页」，第 2 页的中心就成了新选中的、
+   * 「共 N 项」也随之换掉；点空白清掉选中再翻页直接报「请先选中一个模型」并把第 1 页清空。
+   * 失败（翻第 2 页撞上 503 `spatial_not_ready` / 网络抖动）保留旧结果，只显示错误条。
+   */
+  async function requeryResults(options: { page?: number; sortBy?: SpatialQuerySortBy } = {}) {
+    const current = resultSet.value;
+    if (!current) {
+      await submitQuery(options.page ?? 1);
+      return;
+    }
+    const request: SpatialQueryRequest = { ...current.request, sortBy: options.sortBy ?? current.request.sortBy };
+    error.value = null;
+    activeResultRefno.value = null;
+
+    try {
+      await runQuery(request, { page: options.page ?? 1, syncDraft: false });
+    } catch (err) {
+      error.value = formatQueryError(err);
+      status.value = 'error';
     }
   }
 
@@ -1857,9 +2011,23 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
     }
   }
 
+  /**
+   * 结果区显隐 / 隔离动过的构件在**第一次**被动之前的可见性：「恢复场景」按它把「全部隐藏 / 仅显示本库」隐掉的构件放回来，
+   * 不只清 X-Ray（教程 §7 写的是「恢复所有构件原始显示状态」）。连着做几步也只记最初那一份；恢复后清空。
+   */
+  const visibilitySnapshot = new Map<string, boolean>();
+
+  function snapshotVisibility(viewer: ViewerLike, refnos: string[]): void {
+    for (const refno of refnos) {
+      if (visibilitySnapshot.has(refno)) continue;
+      visibilitySnapshot.set(refno, isViewerObjectVisible(viewer, refno));
+    }
+  }
+
   function toggleResultVisible(item: SpatialQueryResultItem) {
     const viewer = viewerRef.value;
     if (!viewer) return;
+    snapshotVisibility(viewer, [item.refno]);
     const nextVisible = !item.visible;
     viewer.scene.setObjectsVisible([item.refno], nextVisible);
     item.visible = nextVisible;
@@ -1870,6 +2038,7 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
     const items = resultSet.value?.items ?? [];
     const refnos = resolveBatchRefnos();
     if (!viewer || refnos.length === 0) return;
+    snapshotVisibility(viewer, refnos);
     viewer.scene.setObjectsVisible(refnos, visible);
     items.forEach((item) => {
       item.visible = visible;
@@ -1884,6 +2053,7 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
     const items = resultSet.value?.items ?? [];
     const keep = resolveBatchRefnos();
     if (!viewer || keep.length === 0) return;
+    snapshotVisibility(viewer, keep);
     const all = viewer.scene.objectIds.slice();
     if (all.length > 0) {
       viewer.scene.setObjectsXRayed(all, true);
@@ -1898,12 +2068,36 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
     }
   }
 
+  /** 「恢复场景」：清掉隔离的 X-Ray，并把结果区显隐 / 隔离动过的构件放回动之前的可见性。 */
   function restoreScene() {
     const viewer = viewerRef.value;
     if (!viewer) return;
     const all = viewer.scene.objectIds.slice();
     if (all.length > 0) {
       viewer.scene.setObjectsXRayed(all, false);
+    }
+    if (visibilitySnapshot.size === 0) return;
+
+    const show: string[] = [];
+    const hide: string[] = [];
+    for (const [refno, visible] of visibilitySnapshot) {
+      (visible ? show : hide).push(refno);
+    }
+    if (show.length > 0) {
+      viewer.scene.setObjectsVisible(show, true);
+    }
+    if (hide.length > 0) {
+      viewer.scene.setObjectsVisible(hide, false);
+    }
+    for (const item of resultSet.value?.items ?? []) {
+      const original = visibilitySnapshot.get(item.refno);
+      if (original !== undefined) {
+        item.visible = original;
+      }
+    }
+    visibilitySnapshot.clear();
+    if (resultSet.value) {
+      commitResultSet(resultSet.value);
     }
   }
 
@@ -1915,6 +2109,7 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
     const showRefnos = resolveBatchRefnos({ specValue });
     const showSet = new Set(showRefnos);
     const hideRefnos = resolveBatchRefnos().filter((refno) => !showSet.has(refno));
+    snapshotVisibility(viewer, [...showRefnos, ...hideRefnos]);
 
     if (showRefnos.length > 0) {
       viewer.scene.setObjectsVisible(showRefnos, true);
@@ -1940,6 +2135,7 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
     const showRefnos = resolveBatchRefnos({ dbnum });
     const showSet = new Set(showRefnos);
     const hideRefnos = resolveBatchRefnos().filter((refno) => !showSet.has(refno));
+    snapshotVisibility(viewer, [...showRefnos, ...hideRefnos]);
 
     if (showRefnos.length > 0) {
       viewer.scene.setObjectsVisible(showRefnos, true);
@@ -1969,6 +2165,7 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
     applyCurrentSelection,
     startPickCenter,
     submitQuery,
+    requeryResults,
     resetQuery,
     clearResults,
     activateResult,

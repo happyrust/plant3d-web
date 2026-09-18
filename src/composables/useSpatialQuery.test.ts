@@ -92,6 +92,8 @@ import type {
   SpatialQueryResult,
 } from '@/api/genModelSpatialApi';
 
+import { GenModelV1ApiError } from '@/api/genModelV1Api';
+
 function createViewerStub() {
   const selected = new Set<string>();
   const visibility = new Map<string, boolean>([
@@ -986,9 +988,11 @@ describe('createSpatialQueryStore', () => {
     // v1 下没有 parquet，也不再起旧后端的 SSE 批量生成
     expect(batchLoadDeps.isParquetAvailable).not.toHaveBeenCalled();
     expect(batchLoadDeps.triggerBatchGenerateSse).not.toHaveBeenCalled();
-    expect(store.resultSet.value?.items.map((item) => [item.refno, item.loaded])).toEqual([
-      ['server_only', true],
-      ['server_b', true],
+    // 服务端没回、但本地扫描命中的已加载 loaded_a 以 viewer-local 追加在服务端条目之后（P5），它本来就已加载、不进批量加载
+    expect(store.resultSet.value?.items.map((item) => [item.refno, item.loaded, item.matchedBy])).toEqual([
+      ['server_only', true, 'server-spatial-index'],
+      ['server_b', true, 'server-spatial-index'],
+      ['loaded_a', true, 'viewer-local'],
     ]);
   });
 
@@ -1875,5 +1879,395 @@ describe('createSpatialQueryStore · 场景坐标 ↔ mm（plan 2026-09-13 §7 �
     // 飞行走场景坐标：mm [20,0,0,30,10,10] → [-0.98,-2,-3,-0.97,-1.99,-2.99]
     const flyCall = (viewer.cameraFlight.flyTo as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0] as { aabb: number[] };
     expectAabbClose(flyCall.aabb, [-0.98, -2, -3, -0.97, -1.99, -2.99]);
+  });
+});
+
+/** 2026-09-18 审核 P1–P8 的回归：翻页 / 排序不重解中心、可见性直读查看器、重查失败保留结果、本地独有命中、纯本地路径、恢复场景 */
+describe('createSpatialQueryStore · 审核 P1–P8', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    __resetNegativeNounRegistryForTests();
+    spatialSourceMocks.state.kind = 'legacy';
+    spatialSourceMocks.state.specValues = true;
+    spatialSourceMocks.state.branCenterline = true;
+    dbMetaMocks.ensureDbMetaInfoLoaded.mockResolvedValue(undefined);
+    dbMetaMocks.getDbnumByRefno.mockReturnValue(7997);
+  });
+
+  const toolStoreStub = () => ({ pickedQueryCenter: { value: null }, setToolMode: vi.fn(), setPickedQueryCenter: vi.fn() }) as any;
+
+  function pageResponse(page: number, perPage: number, total: number, results: SpatialQueryResult['results']): SpatialQueryResult {
+    return {
+      success: true,
+      total_count: total,
+      returned_count: results.length,
+      page,
+      per_page: perPage,
+      has_more: page * perPage < total,
+      results,
+    };
+  }
+
+  it('P1：翻页 / 改排序沿用上一次结果的请求，不按此刻的选中重解中心；清掉选中再翻页也不报错', async () => {
+    const viewer = createViewerStub();
+    const selection = { selectedRefno: { value: 'loaded_a' as string | null } };
+    const queryNearbyByPosition = vi.fn(async (_x: number, _y: number, _z: number, _r: number, options: { page?: number }): Promise<SpatialQueryResult> => {
+      const page = options.page ?? 1;
+      return pageResponse(page, 1, 3, [{ refno: `server_p${page}`, noun: 'EQUI', spec_value: 2, distance: 18 + page }]);
+    });
+
+    const store = createSpatialQueryStore({
+      viewerRef: ref(viewer),
+      selection: selection as any,
+      toolStore: toolStoreStub(),
+      queryNearbyByPosition: queryNearbyByPosition as any,
+    });
+    store.draft.mode = 'range';
+    store.draft.rangeCenterSource = 'selected';
+    store.draft.radius = 50;
+    store.draft.limit = 1;
+
+    await store.submitQuery();
+    expect(store.status.value).toBe('ready');
+    expect(queryNearbyByPosition).toHaveBeenLastCalledWith(5, 5, 5, 50, expect.objectContaining({ page: 1 }));
+    expect(store.resultSet.value?.page).toBe(1);
+    expect(store.resultSet.value?.totalPages).toBe(3);
+
+    // 用户在查看器里换了选中（loaded_b 中心 (205,5,5)）再点「下一页」：第 2 页仍以 (5,5,5) 为中心，草稿也不被改写
+    selection.selectedRefno.value = 'loaded_b';
+    viewer.scene.selectedObjectIds = ['loaded_b'];
+    await store.requeryResults({ page: 2 });
+    expect(store.status.value).toBe('ready');
+    expect(store.error.value).toBeNull();
+    expect(queryNearbyByPosition).toHaveBeenLastCalledWith(5, 5, 5, 50, expect.objectContaining({ page: 2 }));
+    expect(store.resultSet.value?.page).toBe(2);
+    expect(store.resultSet.value?.request.center).toEqual({ x: 5, y: 5, z: 5 });
+    expect(store.draft.refno).toBe('loaded_a');
+    expect(store.draft.center).toEqual({ x: 5, y: 5, z: 5 });
+
+    // 点空白清掉选中再翻页：改前报「请先选中一个模型」并把结果清空
+    selection.selectedRefno.value = null;
+    viewer.scene.selectedObjectIds = [];
+    await store.requeryResults({ page: 3 });
+    expect(store.status.value).toBe('ready');
+    expect(store.error.value).toBeNull();
+    expect(store.resultSet.value?.page).toBe(3);
+    expect(store.resultSet.value?.items.map((item) => item.refno)).toEqual(['server_p3']);
+
+    // 改排序：同一中心、回到第 1 页、只换 sort
+    await store.requeryResults({ sortBy: 'nameAsc' });
+    expect(queryNearbyByPosition).toHaveBeenLastCalledWith(5, 5, 5, 50, expect.objectContaining({ page: 1, sort: 'name' }));
+    expect(store.resultSet.value?.request.sortBy).toBe('nameAsc');
+    expect(store.resultSet.value?.page).toBe(1);
+
+    // 没有结果时 requery 退回正常提交（要解中心）：此刻没选中 → 报错
+    store.clearResults();
+    await store.requeryResults({ page: 1 });
+    expect(store.status.value).toBe('error');
+    expect(store.error.value).toBe('请先选中一个模型');
+  });
+
+  it('P4：翻页撞上 503 spatial_not_ready 保留第 1 页、错误文本带「约 N 秒后可重试」；「执行空间查询」失败仍清结果', async () => {
+    const viewer = createViewerStub();
+    const notReady = new GenModelV1ApiError({
+      code: 'spatial_not_ready',
+      status: 503,
+      path: '/api/v1/spatial/nearby',
+      message: 'spatial tree is loading',
+      retryAfterMs: 5000,
+    });
+    let failNext = false;
+    const queryNearbyByPosition = vi.fn(async (_x: number, _y: number, _z: number, _r: number, options: { page?: number }): Promise<SpatialQueryResult> => {
+      if (failNext) throw notReady;
+      const page = options.page ?? 1;
+      return pageResponse(page, 1, 2, [{ refno: `server_p${page}`, noun: 'EQUI', spec_value: 2, distance: 18 }]);
+    });
+
+    const store = createSpatialQueryStore({
+      viewerRef: ref(viewer),
+      selection: { selectedRefno: { value: 'loaded_a' } } as any,
+      toolStore: toolStoreStub(),
+      queryNearbyByPosition: queryNearbyByPosition as any,
+    });
+    store.draft.mode = 'range';
+    store.draft.rangeCenterSource = 'selected';
+    store.draft.radius = 50;
+    store.draft.limit = 1;
+
+    await store.submitQuery();
+    expect(store.resultSet.value?.items.map((item) => item.refno)).toEqual(['server_p1']);
+
+    failNext = true;
+    await store.requeryResults({ page: 2 });
+    expect(store.status.value).toBe('error');
+    expect(store.error.value).toBe('spatial tree is loading（约 5 秒后可重试）');
+    // 第 1 页还在
+    expect(store.resultSet.value?.page).toBe(1);
+    expect(store.resultSet.value?.items.map((item) => item.refno)).toEqual(['server_p1']);
+
+    // 「执行空间查询」失败：旧结果对应的不是这份草稿，照旧清掉
+    await store.submitQuery();
+    expect(store.status.value).toBe('error');
+    expect(store.error.value).toContain('约 5 秒后可重试');
+    expect(store.resultSet.value).toBeNull();
+  });
+
+  it('P3：refno 路由的请求勾「仅看当前可见」，服务端回来的「已加载但被隐藏」构件按查看器实际可见性剔掉，并提示本页后筛', async () => {
+    const viewer = createViewerStub();
+    viewer.scene.objects.loaded_a.visible = false;
+    const queryNearbyByRefno = vi.fn(async (): Promise<SpatialQueryResult> => ({
+      ...pageResponse(1, 100, 2, [
+        { refno: 'loaded_a', noun: 'PIPE', spec_value: 1, distance: 5 },
+        { refno: 'loaded_b', noun: 'PIPE', spec_value: 1, distance: 195 },
+        { refno: 'server_only', noun: 'EQUI', spec_value: 2, distance: 18 },
+      ]),
+      center: { x: 5, y: 5, z: 5, source: 'refno_aabb_center', refno: 'src' },
+    }));
+
+    const store = createSpatialQueryStore({
+      viewerRef: ref(viewer),
+      selection: { selectedRefno: { value: null } } as any,
+      toolStore: toolStoreStub(),
+      queryNearbyByRefno,
+    });
+    store.draft.mode = 'distance';
+    store.draft.distanceCenterSource = 'refno';
+    store.draft.refno = 'src';
+    store.draft.radius = 500;
+    store.draft.onlyVisible = true;
+
+    await store.submitQuery();
+    expect(store.status.value).toBe('ready');
+    // 中心要服务端解，仍走服务端；loaded_a 隐藏 → 剔掉（改前 existing 缺省成「可见」放行，眼睛图标还画成可见）；
+    // server_only 没加载、查看器里没有对象，沿用缺省可见（这一档由「仅看已加载」管）
+    expect(queryNearbyByRefno).toHaveBeenCalledTimes(1);
+    expect(store.resultSet.value?.items.map((item) => [item.refno, item.visible])).toEqual([
+      ['loaded_b', true],
+      ['server_only', true],
+    ]);
+    expect(store.resultSet.value?.localOnly).toBe(false);
+    expect(store.resultSet.value?.warnings).toEqual(expect.arrayContaining([expect.stringContaining('只在本页内后筛')]));
+  });
+
+  it('P5：本地命中、服务端整个命中集合都没有的已加载构件（TUBI）以 viewer-local 追加在第 1 页末尾，计入「共 N 项」但不进页数', async () => {
+    const viewer = createViewerStub();
+    viewer.scene.objects.local_only_tubi = { id: 'local_only_tubi', visible: true, aabb: [12, 0, 0, 15, 3, 3], noun: 'TUBI' } as any;
+    viewer.scene.objectIds.push('local_only_tubi');
+    viewer.scene.getLoadedRefnos = () => ['loaded_a', 'loaded_b', 'local_only_tubi'];
+    const aabbs: Record<string, [number, number, number, number, number, number]> = {
+      loaded_a: [0, 0, 0, 10, 10, 10],
+      loaded_b: [200, 0, 0, 210, 10, 10],
+      local_only_tubi: [12, 0, 0, 15, 3, 3],
+    };
+    viewer.scene.getAABB = vi.fn((ids: string[]) => aabbs[ids[0]!] ?? null);
+
+    // 没翻页：本页就是全集
+    const singlePage = vi.fn(async (): Promise<SpatialQueryResult> => ({
+      ...pageResponse(1, 100, 2, [
+        { refno: 'loaded_a', noun: 'PIPE', spec_value: 1, dbnum: 24381, distance: 5 },
+        { refno: 'server_only', noun: 'EQUI', spec_value: 2, dbnum: 24383, distance: 18 },
+      ]),
+      groups: [{ spec_value: 1, count: 1 }, { spec_value: 2, count: 1 }],
+      dbnum_groups: [{ dbnum: 24381, count: 1 }, { dbnum: 24383, count: 1 }],
+    }));
+    const store = createSpatialQueryStore({
+      viewerRef: ref(viewer),
+      selection: { selectedRefno: { value: 'loaded_a' } } as any,
+      toolStore: toolStoreStub(),
+      queryNearbyByPosition: singlePage,
+    });
+    store.draft.mode = 'range';
+    store.draft.rangeCenterSource = 'selected';
+    store.draft.radius = 50;
+    await store.submitQuery();
+
+    expect(store.resultSet.value?.items.map((item) => [item.refno, item.matchedBy, item.loaded])).toEqual([
+      ['loaded_a', 'merged', true],
+      ['server_only', 'server-spatial-index', false],
+      ['local_only_tubi', 'viewer-local', true],
+    ]);
+    expect(store.resultSet.value?.total).toBe(3);
+    expect(store.resultSet.value?.returnedCount).toBe(3);
+    expect(store.resultSet.value?.totalPages).toBe(1);
+    expect(store.resultSet.value?.loadedCount).toBe(2);
+    // 分组小计跟着加：TUBI 本地查不到专业 → spec 0 新成一组；按库计数（db_meta 桩给 7997）也多一组
+    expect(store.resultSet.value?.groups.map((group) => [group.specValue, group.count])).toEqual([[0, 1], [1, 1], [2, 1]]);
+    expect(store.resultSet.value?.dbnumGroups).toEqual([{ dbnum: 7997, count: 1 }, { dbnum: 24381, count: 1 }, { dbnum: 24383, count: 1 }]);
+
+    // 有翻页：要先取全集才能判「整个集合都没有」；全集里没有它 → 追加，且并进 fullMatches
+    const paged = vi.fn(async (_x: number, _y: number, _z: number, _r: number, options: { page?: number }): Promise<SpatialQueryResult> => {
+      const page = options.page ?? 1;
+      return pageResponse(page, 1, 2, page === 1
+        ? [{ refno: 'loaded_a', noun: 'PIPE', spec_value: 1, distance: 5 }]
+        : [{ refno: 'server_only', noun: 'EQUI', spec_value: 2, distance: 18 }]);
+    });
+    const nearbyRefnos = vi.fn(async (): Promise<SpatialNearbyRefnosResult> => ({
+      success: true,
+      refnos: ['loaded_a', 'server_only'],
+      by_dbnum: {},
+      by_spec_value: { '1': ['loaded_a'], '2': ['server_only'] },
+      total_count: 2,
+      truncated: false,
+      cap: 100000,
+    }));
+    const pagedStore = createSpatialQueryStore({
+      viewerRef: ref(viewer),
+      selection: { selectedRefno: { value: 'loaded_a' } } as any,
+      toolStore: toolStoreStub(),
+      queryNearbyByPosition: paged as any,
+      queryNearbyRefnos: nearbyRefnos,
+    });
+    pagedStore.draft.mode = 'range';
+    pagedStore.draft.rangeCenterSource = 'selected';
+    pagedStore.draft.radius = 50;
+    pagedStore.draft.limit = 1;
+    await pagedStore.submitQuery();
+
+    expect(nearbyRefnos).toHaveBeenCalledTimes(1);
+    expect(pagedStore.resultSet.value?.items.map((item) => item.refno)).toEqual(['loaded_a', 'local_only_tubi']);
+    expect(pagedStore.resultSet.value?.total).toBe(3);
+    expect(pagedStore.resultSet.value?.totalPages).toBe(2);
+    expect(pagedStore.resultSet.value?.fullMatches?.refnos).toEqual(['loaded_a', 'server_only', 'local_only_tubi']);
+    expect(pagedStore.resultSet.value?.fullMatches?.total).toBe(3);
+    expect(pagedStore.resultSet.value?.fullMatches?.bySpecValue['0']).toEqual(['local_only_tubi']);
+
+    // 第 2 页不再追加（它已经在第 1 页）
+    await pagedStore.requeryResults({ page: 2 });
+    expect(pagedStore.resultSet.value?.items.map((item) => item.refno)).toEqual(['server_only']);
+    expect(pagedStore.resultSet.value?.total).toBe(2);
+
+    // 全集里有它（服务端其实收了）→ 不追加，等它在自己那页出现
+    nearbyRefnos.mockResolvedValueOnce({
+      success: true,
+      refnos: ['loaded_a', 'local_only_tubi', 'server_only'],
+      by_dbnum: {},
+      by_spec_value: {},
+      total_count: 3,
+      truncated: false,
+      cap: 100000,
+    });
+    await pagedStore.submitQuery();
+    expect(pagedStore.resultSet.value?.items.map((item) => item.refno)).toEqual(['loaded_a']);
+
+    // 全集取不到（接口失败）→ 没法证明它不在别的页，不追加
+    nearbyRefnos.mockRejectedValueOnce(new Error('boom'));
+    await pagedStore.submitQuery();
+    expect(pagedStore.resultSet.value?.items.map((item) => item.refno)).toEqual(['loaded_a']);
+    expect(pagedStore.resultSet.value?.fullMatches).toBeNull();
+  });
+
+  it('P6：点模式勾「仅看已加载 / 仅看当前可见」走纯本地路径：不打服务端、不分页、前端排序、关键字本地判', async () => {
+    const viewer = createViewerStub();
+    viewer.scene.objects.loaded_c = { id: 'loaded_c', visible: false, aabb: [30, 0, 0, 40, 10, 10], noun: 'VALV' } as any;
+    viewer.scene.objectIds.push('loaded_c');
+    viewer.scene.getLoadedRefnos = () => ['loaded_a', 'loaded_b', 'loaded_c'];
+    const aabbs: Record<string, [number, number, number, number, number, number]> = {
+      loaded_a: [0, 0, 0, 10, 10, 10],
+      loaded_b: [200, 0, 0, 210, 10, 10],
+      loaded_c: [30, 0, 0, 40, 10, 10],
+    };
+    viewer.scene.getAABB = vi.fn((ids: string[]) => aabbs[ids[0]!] ?? null);
+    const queryNearbyByPosition = vi.fn();
+    const queryNearbyRefnos = vi.fn();
+
+    const store = createSpatialQueryStore({
+      viewerRef: ref(viewer),
+      selection: { selectedRefno: { value: 'loaded_a' } } as any,
+      toolStore: toolStoreStub(),
+      queryNearbyByPosition,
+      queryNearbyRefnos,
+    });
+    store.draft.mode = 'range';
+    store.draft.rangeCenterSource = 'coordinates';
+    store.draft.center = { x: 25, y: 5, z: 5 };
+    store.draft.radius = 50;
+    store.draft.limit = 1;
+    store.draft.onlyLoaded = true;
+    store.draft.sortBy = 'distanceAsc';
+
+    await store.submitQuery();
+    expect(store.status.value).toBe('ready');
+    expect(queryNearbyByPosition).not.toHaveBeenCalled();
+    expect(queryNearbyRefnos).not.toHaveBeenCalled();
+    // 已加载的三个里 loaded_b 在半径外；loaded_c 隐藏但「仅看已加载」不管可见性；由近及远：c(5) 在 a(15) 前
+    expect(store.resultSet.value?.items.map((item) => [item.refno, item.matchedBy, item.visible])).toEqual([
+      ['loaded_c', 'viewer-local', false],
+      ['loaded_a', 'viewer-local', true],
+    ]);
+    // 不分页：limit=1 也一次给全，页数 1、没有下一页（改前「共 1387 项，当前页 3 项」、70 页大半是空的）
+    expect(store.resultSet.value?.localOnly).toBe(true);
+    expect(store.resultSet.value?.total).toBe(2);
+    expect(store.resultSet.value?.returnedCount).toBe(2);
+    expect(store.resultSet.value?.totalPages).toBe(1);
+    expect(store.resultSet.value?.hasMore).toBe(false);
+    expect(store.resultSet.value?.warnings).toEqual([]);
+    expect(store.resultSet.value?.center).toBeNull();
+    expect(store.resultSet.value?.dbnumGroups).toEqual([{ dbnum: 7997, count: 2 }]);
+
+    // 「仅看当前可见」再叠上去：隐藏的 loaded_c 出局
+    store.draft.onlyVisible = true;
+    await store.submitQuery();
+    expect(store.resultSet.value?.items.map((item) => item.refno)).toEqual(['loaded_a']);
+
+    // 改排序沿用同一请求，仍是纯本地
+    store.draft.onlyVisible = false;
+    await store.submitQuery();
+    await store.requeryResults({ sortBy: 'nameAsc' });
+    expect(queryNearbyByPosition).not.toHaveBeenCalled();
+    expect(store.resultSet.value?.items.map((item) => item.refno)).toEqual(['loaded_a', 'loaded_c']);
+    expect(store.resultSet.value?.request.sortBy).toBe('nameAsc');
+
+    // 关键字没有服务端替它判，本地按 refno / noun 判
+    store.draft.keyword = 'valv';
+    await store.submitQuery();
+    expect(store.resultSet.value?.items.map((item) => item.refno)).toEqual(['loaded_c']);
+  });
+
+  it('P8：「恢复场景」除清 X-Ray 外，把「全部隐藏 / 仅显示本专业」动过的构件放回动之前的可见性；连做几步只记最初那一份', () => {
+    const viewer = createViewerStub();
+    // 查询前 loaded_b 本来就是隐藏的
+    viewer.scene.objects.loaded_b.visible = false;
+    const store = createSpatialQueryStore({
+      viewerRef: ref(viewer),
+      selection: { selectedRefno: { value: null } } as any,
+      toolStore: toolStoreStub(),
+    });
+    const item = (refno: string, specValue: number, loaded: boolean, visible: boolean) => ({
+      refno, noun: 'PIPE', specValue, specName: '未知', distance: 1, loaded, visible, matchedBy: 'merged' as const,
+    });
+    store.resultSet.value = {
+      request: {
+        mode: 'range', centerSource: 'coordinates', center: { x: 0, y: 0, z: 0 }, radius: 100, shape: 'sphere',
+        filters: { nouns: [], keyword: '', onlyLoaded: false, onlyVisible: false, includeNegative: false, specValues: [] },
+        limit: 100, sortBy: 'distanceAsc',
+      },
+      items: [item('loaded_a', 1, true, true), item('loaded_b', 2, true, false), item('server_only', 2, false, true)],
+      page: 1, perPage: 100, returnedCount: 3, totalPages: 1, hasMore: false, total: 3,
+      loadedCount: 2, unloadedCount: 1, truncated: false, warnings: [], groups: [],
+    };
+
+    store.setAllResultsVisible(false);
+    store.setAllResultsVisible(true);
+    store.showOnlySpecGroup(1);
+    store.isolateResults();
+    expect(store.resultSet.value?.items.map((i) => i.visible)).toEqual([true, true, true]);
+
+    viewer.scene.setObjectsVisible.mockClear();
+    viewer.scene.setObjectsXRayed.mockClear();
+    store.restoreScene();
+    expect(viewer.scene.setObjectsXRayed).toHaveBeenCalledWith(['loaded_a', 'loaded_b'], false);
+    // loaded_a 原本可见、server_only 查看器里没有对象按可见；loaded_b 原本就是隐藏的，放回隐藏（改前只清 X-Ray，隐掉的回不来）
+    expect(viewer.scene.setObjectsVisible).toHaveBeenCalledWith(['loaded_a', 'server_only'], true);
+    expect(viewer.scene.setObjectsVisible).toHaveBeenCalledWith(['loaded_b'], false);
+    expect(store.resultSet.value?.items.map((i) => [i.refno, i.visible])).toEqual([
+      ['loaded_a', true],
+      ['loaded_b', false],
+      ['server_only', true],
+    ]);
+
+    // 快照已清：再点一次只清 X-Ray
+    viewer.scene.setObjectsVisible.mockClear();
+    store.restoreScene();
+    expect(viewer.scene.setObjectsVisible).not.toHaveBeenCalled();
   });
 });

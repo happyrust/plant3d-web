@@ -16,6 +16,8 @@ type DraftState = SpatialQueryDraft;
 const applyCurrentSelection = vi.fn();
 const startPickCenter = vi.fn();
 const submitQuery = vi.fn();
+/** 翻页 / 改排序：沿用上一次结果的请求重查，不重解中心 */
+const requeryResults = vi.fn();
 const clearResults = vi.fn();
 const activateResult = vi.fn();
 const countLoadTargets = vi.fn((_options?: unknown) => 0);
@@ -68,6 +70,7 @@ vi.mock('@/composables/useSpatialQuery', () => ({
     applyCurrentSelection,
     startPickCenter,
     submitQuery,
+    requeryResults,
     clearResults,
     activateResult,
     countLoadTargets,
@@ -90,12 +93,22 @@ vi.mock('@/composables/useConfirmDialogStore', () => ({
 /** 让 `confirmDialog.open(...).then(run)` 那条链跑完（mock 的 async 函数要几拍微任务）。 */
 const flushMicrotasks = () => new Promise<void>((resolve) => { setTimeout(resolve, 0); });
 
+/** 房间列表的两条取数：归属解析（每个条目一发）与房间属性（每个房间一发） */
+const roomMocks = vi.hoisted(() => ({
+  resolveContainingRoomInfo: vi.fn(async (_refno: string, _options?: { includeAttrs?: boolean }): Promise<unknown> => null),
+  pdmsGetUiAttr: vi.fn(async (refno: string) => ({ success: true, refno, attrs: { TYPE: 'ROOM', NAME: `房间 ${refno}` }, full_name: null })),
+}));
+
 vi.mock('@/composables/useRoomInfoPanel', () => ({
-  resolveContainingRoomInfo: vi.fn(async () => null),
+  resolveContainingRoomInfo: roomMocks.resolveContainingRoomInfo,
   useRoomInfoPanel: () => ({
     openForRefno: vi.fn(async () => null),
     showRoomModel: vi.fn(async () => undefined),
   }),
+}));
+
+vi.mock('@/api/genModelPdmsAttrApi', () => ({
+  pdmsGetUiAttr: roomMocks.pdmsGetUiAttr,
 }));
 
 function mountDrawer() {
@@ -219,6 +232,10 @@ describe('SpatialQueryDrawer (distance 模式)', () => {
     applyCurrentSelection.mockReset();
     startPickCenter.mockReset();
     submitQuery.mockReset();
+    requeryResults.mockReset();
+    roomMocks.resolveContainingRoomInfo.mockReset();
+    roomMocks.resolveContainingRoomInfo.mockResolvedValue(null);
+    roomMocks.pdmsGetUiAttr.mockClear();
     clearResults.mockReset();
     activateResult.mockReset();
     countLoadTargets.mockReset();
@@ -424,14 +441,34 @@ describe('SpatialQueryDrawer (distance 模式)', () => {
     expect(submitQuery).not.toHaveBeenCalled();
     expect(byName.className).toContain('border-brand');
 
-    // 已有结果时切换排序需要重查，且必须回到第一页
+    // 已有结果时切换排序需要重查，且必须回到第一页：沿用上一次结果的请求只换排序（不重解中心，见 P1），不走「执行空间查询」
     stubState.resultSet.value = makeResultSet(2, { page: 2, perPage: 2, total: 6 });
     await nextTick();
     (host.querySelector('[data-testid="spatial-sort-specThenDistance"]') as HTMLButtonElement).click();
     await nextTick();
     expect(stubState.draft.sortBy).toBe('specThenDistance');
-    expect(submitQuery).toHaveBeenCalledTimes(1);
-    expect(submitQuery).toHaveBeenCalledWith();
+    expect(requeryResults).toHaveBeenCalledTimes(1);
+    expect(requeryResults).toHaveBeenCalledWith({ sortBy: 'specThenDistance' });
+    expect(submitQuery).not.toHaveBeenCalled();
+
+    unmount();
+  });
+
+  it('range 模式手输坐标：坐标格清空（v-model.number 写进 \'\'）时中心摘要显示「—」而不是抛错', async () => {
+    const { host, unmount } = mountDrawer();
+    await nextTick();
+
+    stubState.draft.mode = 'range';
+    stubState.draft.rangeCenterSource = 'coordinates';
+    stubState.draft.center = { x: 1234, y: 5678, z: 910 };
+    await nextTick();
+    expect(host.textContent).toContain('1234, 5678, 910');
+
+    // Vue 的 looseToNumber 对空串转不动，原样写回 ''；改前 centerSummary 直接 toFixed → TypeError，整段摘要渲染挂掉
+    (stubState.draft.center as unknown as { x: unknown }).x = '';
+    stubState.draft.center.z = Number.NaN;
+    await nextTick();
+    expect(host.textContent).toContain('—, 5678, —');
 
     unmount();
   });
@@ -542,7 +579,9 @@ describe('SpatialQueryDrawer (distance 模式)', () => {
     expect(nextButton).toBeTruthy();
     nextButton?.click();
     await nextTick();
-    expect(submitQuery).toHaveBeenCalledWith(2);
+    // 翻页沿用上一次结果的请求（不重解中心、失败不清旧页，见 P1 / P4），不走「执行空间查询」
+    expect(requeryResults).toHaveBeenCalledWith({ page: 2 });
+    expect(submitQuery).not.toHaveBeenCalled();
 
     stubState.resultSet.value = makeResultSet(5, {
       page: 2,
@@ -556,6 +595,79 @@ describe('SpatialQueryDrawer (distance 模式)', () => {
     expect(host.textContent).toContain('第 2 / 2 页');
     expect(host.textContent).not.toContain('24381_100001');
     expect(host.textContent).toContain('24381_100021');
+
+    unmount();
+  });
+
+  it('「仅看已加载 / 仅看当前可见」的纯本地结果（localOnly）：分页行改成「本地扫描 · 不分页」，不画翻页按钮', async () => {
+    stubState.resultSet.value = {
+      ...makeResultSet(3, { page: 1, perPage: 100, total: 3 }),
+      localOnly: true,
+    };
+
+    const { host, unmount } = mountDrawer();
+    await nextTick();
+    await expandResults(host);
+
+    expect(host.querySelector('[data-testid="spatial-local-only-hint"]')?.textContent).toContain('本地扫描（仅已加载构件）· 共 3 项 · 不分页');
+    expect(host.textContent).not.toContain('每页 100 项');
+    expect(host.querySelector('[data-testid="spatial-result-page-next"]')).toBeNull();
+    expect(host.textContent).toContain('24381_100001');
+
+    unmount();
+  });
+
+  it('房间列表：结果区收起时不解析；展开后每个条目只解一次归属（不取属性），按房间去重后每个房间只取一次属性', async () => {
+    // 3 个条目落在 2 个房间：前两条 room_a，第三条 room_b
+    roomMocks.resolveContainingRoomInfo.mockImplementation(async (refno: string) => ({
+      sourceRefno: refno,
+      roomRefno: refno === '24381_100003' ? 'room_b' : 'room_a',
+      fullName: null,
+      attrs: {},
+      refFullNames: null,
+      ancestorIds: [],
+    }));
+    stubState.resultSet.value = makeResultSet(3);
+
+    const { host, unmount } = mountDrawer();
+    await nextTick();
+    await flushMicrotasks();
+
+    // 改前结果一变就解析、收起着也打请求
+    expect(roomMocks.resolveContainingRoomInfo).not.toHaveBeenCalled();
+    expect(roomMocks.pdmsGetUiAttr).not.toHaveBeenCalled();
+
+    await expandResults(host);
+    await flushMicrotasks();
+    await nextTick();
+
+    // 归属：每个条目一发、不取属性；属性：每个房间一发（改前每个条目各打一发 ancestors + 一发属性）
+    expect(roomMocks.resolveContainingRoomInfo).toHaveBeenCalledTimes(3);
+    for (const call of roomMocks.resolveContainingRoomInfo.mock.calls) {
+      expect(call[1]).toEqual({ includeAttrs: false });
+    }
+    expect(roomMocks.pdmsGetUiAttr).toHaveBeenCalledTimes(2);
+    expect(roomMocks.pdmsGetUiAttr.mock.calls.map((call) => call[0]).sort()).toEqual(['room_a', 'room_b']);
+    expect(host.textContent).toContain('当前页涉及 2 个房间');
+    expect(host.textContent).toContain('房间 room_a');
+    expect(host.textContent).toContain('2 项');
+    expect(host.textContent).toContain('房间 room_b');
+
+    // 收起再展开同一份结果：不重复解析
+    (host.querySelector('[data-testid="spatial-results-toggle"]') as HTMLButtonElement).click();
+    await nextTick();
+    (host.querySelector('[data-testid="spatial-results-toggle"]') as HTMLButtonElement).click();
+    await nextTick();
+    await flushMicrotasks();
+    expect(roomMocks.resolveContainingRoomInfo).toHaveBeenCalledTimes(3);
+
+    // 结果换了（翻到第 2 页）：旧列表作废，展开着就按新条目重解
+    stubState.resultSet.value = makeResultSet(2, { page: 2, perPage: 3, total: 5, startIndex: 3 });
+    await nextTick();
+    await flushMicrotasks();
+    await nextTick();
+    expect(roomMocks.resolveContainingRoomInfo).toHaveBeenCalledTimes(5);
+    expect(host.textContent).toContain('当前页涉及 1 个房间');
 
     unmount();
   });

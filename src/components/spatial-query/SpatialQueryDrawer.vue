@@ -513,10 +513,13 @@
           </div>
 
           <div v-if="resultsExpanded && resultSet && resultSet.items.length > 0" class="flex items-center justify-between border-b border-gray-100 px-3 py-2 text-[11px] text-gray-500">
-            <div>
+            <div v-if="resultSet.localOnly" data-testid="spatial-local-only-hint">
+              本地扫描（仅已加载构件）· 共 {{ resultSet.total }} 项 · 不分页
+            </div>
+            <div v-else>
               每页 {{ resultSet.perPage }} 项 · 当前 {{ resultPageStart }}-{{ resultPageEnd }} / {{ resultSet.total }}
             </div>
-            <div v-if="resultTotalPages > 1" class="flex items-center gap-1.5">
+            <div v-if="!resultSet.localOnly && resultTotalPages > 1" class="flex items-center gap-1.5">
               <button type="button"
                 class="rounded-md border border-gray-200 px-2 py-1 text-[11px] text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
                 :disabled="isQueryBusy || currentResultPage <= 1"
@@ -631,6 +634,7 @@ import { ArrowUpRight, Eye, EyeOff, Loader2, MapPinned, MousePointerClick, Ruler
 
 import type { SpatialQueryMode, SpatialQueryResultItem, SpatialQuerySortBy } from '@/types/spatialQuery';
 
+import { pdmsGetUiAttr } from '@/api/genModelPdmsAttrApi';
 import { formatClearanceToast } from '@/clearance/composables/useComponentToWallClearance';
 import { useClearanceStore } from '@/clearance/stores/useClearanceStore';
 import { useConfirmDialogStore } from '@/composables/useConfirmDialogStore';
@@ -668,6 +672,7 @@ const {
   applyCurrentSelection,
   startPickCenter,
   submitQuery,
+  requeryResults,
   clearResults,
   activateResult,
   countLoadTargets,
@@ -795,12 +800,20 @@ watch(
   { immediate: true },
 );
 
+/**
+ * 坐标格清空时 `v-model.number` 会把 `''` 原样写进草稿（Vue 的 `looseToNumber` 转不动就回原字符串），
+ * 直接 `toFixed` 会让整段摘要渲染抛错；非有限数一律显示「—」，`canSubmit` 另有 `Number.isFinite` 守着不会发坏请求。
+ */
+function formatCenterCoordinate(value: unknown): string {
+  return typeof value === 'number' && Number.isFinite(value) ? value.toFixed(0) : '—';
+}
+
 const centerSummary = computed(() => {
   // 选中的 PIPE / ZONE 这类没加载几何的 owner：查看器解不出盒，查询时发 refno 由服务端按其整体盒解中心
   if (draft.mode === 'range' && draft.rangeCenterSource === 'selected' && selectedCenterRefno.value) {
     return `${selectedCenterRefno.value} · 未加载几何，查询时由服务端解中心`;
   }
-  return `${draft.center.x.toFixed(0)}, ${draft.center.y.toFixed(0)}, ${draft.center.z.toFixed(0)}`;
+  return `${formatCenterCoordinate(draft.center.x)}, ${formatCenterCoordinate(draft.center.y)}, ${formatCenterCoordinate(draft.center.z)}`;
 });
 
 const resultCenterText = computed(() => {
@@ -925,8 +938,30 @@ function attrText(attrs: Record<string, unknown>, key: string): string {
   return String(value).trim();
 }
 
+/** 房间解析的并发上限：每个条目至少一发 `room-tree/ancestors`，不限并发时一页 100 项就是 100 个并发请求。 */
+const ROOM_RESOLVE_CONCURRENCY = 4;
+
+async function mapWithConcurrency<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let next = 0;
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (next < items.length) {
+      const index = next;
+      next += 1;
+      results[index] = await fn(items[index]!);
+    }
+  });
+  await Promise.all(workers);
+  return results;
+}
+
+/**
+ * 当前页条目所在的房间。两步：先只解归属（每项一发 ancestors，不取属性）按房间去重，再每个房间取一次属性——
+ * 改前每项各打一发 ancestors + 一发 `pdmsGetUiAttr`、不去重、不限并发，一页 N 项就是 2×N 个并发请求。
+ */
 async function refreshRoomList() {
-  const seq = ++roomListSeq;
+  roomListSeq += 1;
+  const seq = roomListSeq;
   const items = resultSet.value?.items ?? [];
   roomListRows.value = [];
   roomListError.value = null;
@@ -935,11 +970,11 @@ async function refreshRoomList() {
   roomListLoading.value = true;
   try {
     const grouped = new Map<string, SpatialRoomListRow>();
-    const resolved = await Promise.all(items.map(async (item) => {
+    const resolved = await mapWithConcurrency(items, ROOM_RESOLVE_CONCURRENCY, async (item) => {
       try {
         return {
           item,
-          info: await resolveContainingRoomInfo(item.refno),
+          info: await resolveContainingRoomInfo(item.refno, { includeAttrs: false }),
         };
       } catch {
         return {
@@ -947,14 +982,11 @@ async function refreshRoomList() {
           info: null,
         };
       }
-    }));
+    });
     if (seq !== roomListSeq) return;
 
     for (const { item, info } of resolved) {
       if (!info) continue;
-      const roomType = attrText(info.attrs, 'TYPE') || 'ROOM';
-      const desc = attrText(info.attrs, 'DESC') || attrText(info.attrs, 'DESCRIPTION');
-      const name = info.fullName || attrText(info.attrs, 'NAME') || info.roomRefno;
       const existing = grouped.get(info.roomRefno);
       if (existing) {
         existing.count += 1;
@@ -962,16 +994,31 @@ async function refreshRoomList() {
       } else {
         grouped.set(info.roomRefno, {
           roomRefno: info.roomRefno,
-          name,
-          roomType,
-          desc,
+          name: info.roomRefno,
+          roomType: 'ROOM',
+          desc: '',
           count: 1,
           sourceRefnos: [item.refno],
         });
       }
     }
 
-    roomListRows.value = Array.from(grouped.values()).sort((a, b) => a.name.localeCompare(b.name));
+    const rooms = Array.from(grouped.values());
+    await mapWithConcurrency(rooms, ROOM_RESOLVE_CONCURRENCY, async (room) => {
+      try {
+        const attrResp = await pdmsGetUiAttr(room.roomRefno);
+        if (!attrResp.success) return;
+        const attrs = attrResp.attrs ?? {};
+        room.roomType = attrText(attrs, 'TYPE') || 'ROOM';
+        room.desc = attrText(attrs, 'DESC') || attrText(attrs, 'DESCRIPTION');
+        room.name = attrResp.full_name || attrText(attrs, 'NAME') || room.roomRefno;
+      } catch {
+        // 属性取不到就只显示房间 refno
+      }
+    });
+    if (seq !== roomListSeq) return;
+
+    roomListRows.value = rooms.sort((a, b) => a.name.localeCompare(b.name));
   } catch (e) {
     if (seq !== roomListSeq) return;
     roomListError.value = e instanceof Error ? e.message : String(e);
@@ -983,9 +1030,24 @@ async function refreshRoomList() {
   }
 }
 
+const roomListKey = computed(() => (resultSet.value?.items ?? []).map((item) => item.refno).join('|'));
+/** 已经为哪一份结果解析过房间；结果一变就作废 */
+let roomListResolvedKey: string | null = null;
+
+// 结果区默认收起，展开时才解析房间——改前结果一变就解析，收起着也每页打 2×N 个请求（v1 源缺省下这两条路走旧后端，
+// 那台没起就是每页 N 个失败请求）。结果换了，旧列表与在途的解析一起作废。
 watch(
-  () => (resultSet.value?.items ?? []).map((item) => item.refno).join('|'),
-  () => {
+  () => [roomListKey.value, resultsExpanded.value] as const,
+  ([key, expanded]) => {
+    if (key !== roomListResolvedKey) {
+      roomListSeq += 1;
+      roomListRows.value = [];
+      roomListError.value = null;
+      roomListLoading.value = false;
+      roomListResolvedKey = null;
+    }
+    if (!expanded || !key || roomListResolvedKey === key) return;
+    roomListResolvedKey = key;
     void refreshRoomList();
   },
   { immediate: true },
@@ -1014,11 +1076,12 @@ function expandFromMiniMode() {
   isMiniMode.value = false;
 }
 
+// 翻页沿用上一次结果的请求（已解出的中心 / refno / 过滤条件），不按此刻的选中重解中心，失败也不清掉已有页
 function setResultPage(page: number) {
   if (!Number.isFinite(page)) return;
   const nextPage = Math.min(Math.max(Math.floor(page), 1), resultTotalPages.value);
   if (nextPage === currentResultPage.value || isQueryBusy.value) return;
-  void submitQuery(nextPage);
+  void requeryResults({ page: nextPage });
 }
 
 const ALL_SORT_OPTIONS: { value: SpatialQuerySortBy; label: string; hint: string }[] = [
@@ -1035,9 +1098,10 @@ const sortOptions = computed(() =>
 function setSortBy(sortBy: SpatialQuerySortBy) {
   if (draft.sortBy === sortBy) return;
   draft.sortBy = sortBy;
-  // 排序在服务端于分页前完成，改了就必须回到第一页重查，否则页码对应的是旧顺序。
+  // 排序在服务端于分页前完成，改了就必须回到第一页重查，否则页码对应的是旧顺序；
+  // 沿用上一次结果的请求只换排序，不按此刻的选中重解中心。
   if (resultSet.value && !isQueryBusy.value) {
-    void submitQuery();
+    void requeryResults({ sortBy });
   }
 }
 
