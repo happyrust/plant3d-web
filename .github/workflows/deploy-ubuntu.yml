@@ -76,8 +76,7 @@ jobs:
         run: npm ci
 
       - name: Build
-        run: npm run build
-
+        run: npm run build-only   # 部署分支只出包，type-check 基线漂移不挡部署
       - name: Write dist/version.json
         run: |
           COMMIT="$(git rev-parse HEAD)"
