@@ -1,0 +1,108 @@
+# Ubuntu 静态部署：构建 Vite 产物并通过 SSH/rsync 同步到 Nginx 根目录。
+# 与本地脚本 deploy/deploy_frontend_bundle.sh 行为一致，便于在 GitHub 上统一审计与回滚。
+#
+# 所需仓库配置（与 plant-model-gen 的 Ubuntu 部署可对齐）：
+#   Secrets:  DEPLOY_REMOTE_PASS
+#   Variables: DEPLOY_REMOTE_HOST, DEPLOY_REMOTE_USER（可选，默认 root）,
+#              DEPLOY_PATH（可选，默认 /var/www/plant3d-web）,
+#              SERVER_NAME（可选，默认与 host 相同，写入 nginx server_name）,
+#              BACKEND_ORIGIN（可选，默认 http://127.0.0.1:3100）
+#
+# 建议在仓库 Settings → Environments 中创建 `production`，仅允许受保护分支触发，并为该环境单独配置密钥。
+
+name: Deploy Frontend To Ubuntu
+
+on:
+  workflow_dispatch:
+    inputs:
+      remote_host:
+        description: '目标服务器；留空使用变量 DEPLOY_REMOTE_HOST'
+        required: false
+        default: ''
+        type: string
+      remote_user:
+        description: 'SSH 用户；留空使用变量 DEPLOY_REMOTE_USER 或 root'
+        required: false
+        default: ''
+        type: string
+      deploy_path:
+        description: '远端静态根目录；留空使用变量 DEPLOY_PATH 或 /var/www/plant3d-web'
+        required: false
+        default: ''
+        type: string
+      server_name:
+        description: 'nginx server_name；留空使用变量 SERVER_NAME 或与 host 相同'
+        required: false
+        default: ''
+        type: string
+      backend_origin:
+        description: '反代上游（plant-model-gen web_server）；留空使用变量 BACKEND_ORIGIN'
+        required: false
+        default: ''
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-ubuntu-frontend
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Build and rsync dist
+    runs-on: ubuntu-latest
+    environment: production
+
+    env:
+      NODE_VERSION: '20'
+      REMOTE_HOST: ${{ inputs.remote_host != '' && inputs.remote_host || vars.DEPLOY_REMOTE_HOST }}
+      REMOTE_USER: ${{ inputs.remote_user != '' && inputs.remote_user || vars.DEPLOY_REMOTE_USER || 'root' }}
+      REMOTE_PASS: ${{ secrets.DEPLOY_REMOTE_PASS }}
+      DEPLOY_PATH: ${{ inputs.deploy_path != '' && inputs.deploy_path || vars.DEPLOY_PATH || '/var/www/plant3d-web' }}
+      SERVER_NAME: ${{ inputs.server_name != '' && inputs.server_name || vars.SERVER_NAME }}
+      BACKEND_ORIGIN: ${{ inputs.backend_origin != '' && inputs.backend_origin || vars.BACKEND_ORIGIN || 'http://127.0.0.1:3100' }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Write dist/version.json
+        run: |
+          COMMIT="$(git rev-parse HEAD)"
+          VERSION="$(node -p "require('./package.json').version")"
+          DATE="$(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+          cat > dist/version.json <<EOF
+          {
+            "version": "${VERSION}",
+            "commit": "${COMMIT}",
+            "buildDate": "${DATE}"
+          }
+          EOF
+
+      - name: Install deploy tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y sshpass rsync
+
+      - name: Validate deploy configuration
+        run: |
+          test -n "$REMOTE_HOST" || { echo "Set workflow input remote_host or repo variable DEPLOY_REMOTE_HOST"; exit 1; }
+          test -n "$REMOTE_PASS" || { echo "Set secret DEPLOY_REMOTE_PASS"; exit 1; }
+          test -d dist || { echo "dist missing after build"; exit 1; }
+
+      - name: Run bundle deploy script
+        run: bash deploy/deploy_frontend_bundle.sh
+        env:
+          SERVICE_NAME: nginx
