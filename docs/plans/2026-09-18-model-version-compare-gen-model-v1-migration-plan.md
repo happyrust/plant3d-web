@@ -375,5 +375,7 @@ legacy 下与从前的可见差别只有一处、且不可见于用户：A/B 隔
 - **版本对比**：`model/versions` 该 BRAN 56 版、末版 626 mesh；两份快照 `instances` 只有 24384_23262 的 translation z 不同、`mesh_id` 相同；
   浏览器 `unit_refno=24384_23257&compare_autorun=1` → A=573 B=626，**修改 1 / 未变 8**，分屏 + 树差异挂到 FTUB，关闭 DELETE × 2，pageerror 0；
   `MODEL_VERSION_E2E_UNIT=24384_23257` 跑 e2e 3 过。证据 `docs/verification/model-version-compare-gen-model-v1-2026-09-18/bran-ftub-move/` + README §6。
-- **未做 / 待定**：restore 腿（放回 U 2900）没跑；FTUB 纯 POS 变更被归成 `mesh` 而非 `placement`（gen-model-refactor 分类器口径，不在本计划）；
-  `tool=attributes` 后端仍等 `element_attributes.rs` 提交（§8）。
+- **restore 腿（19:50，用户拍板）**：`l3_suite --check-driver db8000_bran_ftub_move_restore.mac` 把 FTUBE 4 放回 U 2900（sesno 630，631 是同一次 SAVEWORK 的尾号）；
+  `:8022` 重生成 24384/23257，`model/records` z 回 2900 ~ 2930；对比 **626 → 630 = 修改 1 / 未变 8**，**573 → 630 = 0 / 0 / 0 / 未变 9「无几何差异」**——相对测试前基线净变更归零。
+  证据 `bran-ftub-move/a626-b630-*`、`a573-b630-*`、`api-evidence.json#restore_leg`，README §6.1。
+- **待定**：FTUB 纯 POS 变更被归成 `mesh` 而非 `placement`（gen-model-refactor 分类器口径，不在本计划）；`tool=attributes` 后端仍等 `element_attributes.rs` 提交（§8）。

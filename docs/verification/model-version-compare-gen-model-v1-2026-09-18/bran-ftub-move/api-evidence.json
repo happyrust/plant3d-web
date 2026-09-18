@@ -56,5 +56,23 @@
     "dev_server": "http://127.0.0.1:3111（plant3d-web 工作树 = 381ca5c2）",
     "result": "见 latest-two-summary.json / latest-two-0[1-5]-*.png",
     "e2e_spec": "MODEL_VERSION_E2E_UNIT=24384_23257 PLAYWRIGHT_PORT=3111 npx playwright test e2e/model-version-compare-gen-model-v1.spec.ts --workers=1 → 3 passed (9.2 s)"
+  },
+  "restore_leg": {
+    "when": "2026-09-18 19:50:04 起（用户拍板「跑 restore 腿把 FTUBE 4 放回 U 2900，再对比 626 → 新版，验证净变更归零」）",
+    "how": "L3_ALLOW_EXISTING_E3D_SESSION=1 l3_suite --check-driver scripts/e3d/db8000_bran_ftub_move_restore.mac --target-db-file …/ams8000_0001 --target-dbnum 8000 --aios-project AvevaMarineSample --output output/bran-ftub-restore-20260918-195004（gen-model-refactor 仓根；单用途 TTY 会话，11 s）",
+    "e3d_log": "Position … U 3400mm → POS E 10887mm N 12332mm U 2900mm → SAVEWORK 'CODEX db8000 FTUBE 4 of /C-OR-1R345-C back to U2900 (restore)'",
+    "check_driver_evidence": { "outcome": "completed", "before_sesno": 629, "after_sesno": 631 },
+    "note_on_sesno": "每次 SAVEWORK 这份库长两个会话号（apply 626/627、restore 630/631）；改动落在前一个，后一个不碰该单元，所以版本表只列 626 与 630。628/629 是同一时段另一会话对 8000 的别的改动（新增 1 根 EQUI 24384/24776），与本单元无关",
+    "gen_model_8022_incremental": [
+      { "task": "db-20260918-195007-000065", "range": "628..=630", "changes": "新增=1 修改=4", "regenerated_roots": ["24384/23257", "24384/24776"], "total_ms": 825, "finished_at": "19:50:09" },
+      { "task": "db-20260918-195014-000067", "range": "631..=631", "changes": "修改=1", "regenerated_roots": [], "total_ms": 250, "finished_at": "19:50:17" }
+    ],
+    "model_versions_after": { "count": 57, "file_latest_sesno": 631, "tail": [ { "sesno": 626, "impact_kind": "mesh" }, { "sesno": 630, "impact_kind": "mesh", "session_time": "2026-09-18 19:50:07" } ] },
+    "model_records_after": { "ftube_24384_23262": { "world_aabb_z": [2900.0, 2930.0], "world_trans_translation": [10887.0, 12332.0, 2900.0] }, "durable": true },
+    "browser": {
+      "a626_b630": { "summary": "新增 0 / 删除 0 / 修改 1 / 未变 8", "objects": "9 / 9", "tree_diff": "626 → 630 差异模式", "deletes_on_close": 2, "files": "a626-b630-*" },
+      "a573_b630": { "summary": "新增 0 / 删除 0 / 修改 0 / 未变 9 · 无几何差异", "objects": "9 / 9", "tree_diff": "不进差异模式（没有非 unchanged 行）", "deletes_on_close": 2, "files": "a573-b630-*" }
+    },
+    "verdict": "相对测试前基线 573，库的净几何变更为零；apply / restore 各自都被增量 → 版本表 → 对比面板如实反映"
   }
 }

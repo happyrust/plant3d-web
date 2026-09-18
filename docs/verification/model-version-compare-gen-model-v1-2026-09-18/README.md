@@ -85,4 +85,17 @@
   `placement`，是 gen-model-refactor 那边分类器的事，不在本计划。
 - 底部「属性历史对比 · 24384_23262 · 改」仍是「暂不可用 · unknown historical query tool "attributes"」——后端 `tool=attributes` 还没落地
   （§5 那条 blocker 未解：`element_attributes.rs` 仍未提交）。
-- 这轮测试对库的净变更还没归零：`db8000_bran_ftub_move_restore.mac`（放回 U 2900）没跑，跑不跑由用户定。
+- ~~这轮测试对库的净变更还没归零：`db8000_bran_ftub_move_restore.mac`（放回 U 2900）没跑~~ **19:50 已跑**（用户拍板），见下表。
+
+### 6.1 restore 腿：净变更归零（19:50）
+
+| 环节 | 事实 |
+|---|---|
+| E3D | `l3_suite --check-driver scripts/e3d/db8000_bran_ftub_move_restore.mac`（`L3_ALLOW_EXISTING_E3D_SESSION=1`，单用途 TTY 会话 11 s）：`U 3400 → 2900`，一次 SAVEWORK；`check-driver-evidence.json` outcome completed，before 629 → after 631 |
+| `:8022` 增量 | `[watch]` 628..=630（含别的会话同时段新增的 EQUI 24384/24776）→ 重生成 2 根含 **24384/23257**，825 ms；631 单独一批（修改 1、无模型工作） |
+| `model/versions` | 57 版，末尾 `626 mesh（19:31）· 630 mesh（19:50）`；每次 SAVEWORK 长两个会话号、改动都在前一个 |
+| `model/records` | 24384_23262 `world_aabb` z 回到 **2900 ~ 2930**、translation (10887, 12332, 2900)，`durable: true` |
+| 对比 626 → 630（`a626-b630-*`） | **修改 1 / 未变 8**（FTUB 回落），A/B 各 9 对象，树差异「626 → 630」，关闭 DELETE × 2 |
+| 对比 573 → 630（`a573-b630-*`） | **新增 0 / 删除 0 / 修改 0 / 未变 9 · 「无几何差异」**，不进差异模式（没有非 unchanged 行），关闭 DELETE × 2，pageerror 0 |
+
+结论：相对测试前的基线 573，库的净几何变更为零；apply / restore 两腿各自都被「增量 → 版本表 → 对比面板」如实反映。
