@@ -284,7 +284,7 @@ E3D parity 在现有 `src/dimension` 上演进，不创建新的尺寸 runtime�
 - 弯管/异径，验证 fallback 标签。
 - 后端 exact、现有 sampled、PCA axis 三路误差对比。
 
-**2026-09-17 状态**：这一组里只有「直管到平面墙」有了对应实机——09-17 计划 §7 的 G1–G7（合成单测 7 组全过；live：ELBO / BEND / BRAN owner × 弧墙 WALL 1、SCTN × 弧墙、BOX × 直墙 STWALL 1、BOX × CWALL owner 113 叶子、ELBO × BEND `target_kind=any`），G6「构件在洞里」的实机对与完整流真 UI 截图待验证实例（`_runs\surface-clearance-8024`，22:33 起）上补。平行 / 斜交 / 相交直管、管到柱、弯管异径 fallback、三路误差对比**未采**。
+**2026-09-17 状态**：这一组里只有「直管到平面墙」有了对应实机——09-17 计划 §7 的 G1–G7（合成单测 7 组全过；live：ELBO / BEND / BRAN owner × 弧墙 WALL 1、SCTN × 弧墙、BOX × 直墙 STWALL 1、BOX × CWALL owner 113 叶子、ELBO × BEND `target_kind=any`；PR-D 在 `:8024` 补齐 G4 穿墙 17 对——BEND `24384/24729` × GWALL `17496/118130` 等，0 + `intersects`）。**完整流真 UI 截图 ✓**（`e4b5d4a`；验证实例 `_runs\surface-clearance-8024` = 从 `a0e307588` 干净构建的 release mem 档，`:8022` / `:8023` 未动；dev `:3111` Playwright 真指针：选 ELBO `24384_22582` → 菜单「构件→墙净距」→ 一次点中墙 `17496_105912` → Enter → toast「外表面净距 64.4 mm（墙面外侧）」→ 外部尺寸源 `clearance` 0 → 1、`64mm ⊥`，`pageerror` 0）：五张截图 + HTTP 金样 `64.42777 mm` + summary / 扫描 jsonl 在 `docs/verification/component-to-wall-surface-clearance-2026-09-17/`。**G6「构件在洞里」仍无实机对**（扫过了，是数据里没有）：WALL 1 周边 126 对 AABB 相交的管 × 墙逐对打过，穿墙的 17 对全是没开洞的硬穿（即上面的 G4），38 个 FIXING 开洞周围无管件，FLOOR 无竖管贯穿——带洞路径只有合成 / 行解析单测覆盖，留待有穿孔数据的工程（09-17 计划 §7 G6 / §7.2 / §10）。平行 / 斜交 / 相交直管、管到柱、弯管异径 fallback、三路误差对比**未采**。
 
 验收：
 
