@@ -82,6 +82,24 @@ const draftSession = useAnnotationDraftSession();
 
 const isDockDensity = computed(() => props.density === 'dock');
 const typeDisplay = computed(() => getAnnotationWorkspaceTypeDisplay(props.item.type));
+
+type MeasurementLaunchAction = {
+  kind: MeasurementRecord['kind'];
+  testId: string;
+  label: string;
+  shortLabel: string;
+};
+/** 「新增测量」入口：dock 档用 shortLabel（前面带 + 号），完整 label 进 title；点标高 / 高差受 showElevationMeasurementActions 门控 */
+const measurementLaunchActions = computed<MeasurementLaunchAction[]>(() => [
+  { kind: 'distance', testId: 'distance', label: '新增距离', shortLabel: '距离' },
+  { kind: 'angle', testId: 'angle', label: '新增角度', shortLabel: '角度' },
+  ...(props.showElevationMeasurementActions
+    ? [
+      { kind: 'elevation_point' as const, testId: 'elevation-point', label: '新增点标高', shortLabel: '点标高' },
+      { kind: 'elevation_delta' as const, testId: 'elevation-delta', label: '新增高差', shortLabel: '高差' },
+    ]
+    : []),
+]);
 const isDesignerOnly = computed(() => (
   props.designerOnly ?? props.currentUserRole === UserRole.DESIGNER
 ));
@@ -271,23 +289,38 @@ function formatDateTime(timestamp: number): string {
             </div>
             <button data-testid="annotation-detail-close"
               type="button"
-              class="inline-flex shrink-0 items-center gap-1 rounded-lg border border-slate-200 px-2 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
+              class="inline-flex shrink-0 items-center gap-1 rounded-lg border border-slate-200 text-xs font-medium text-slate-600 hover:bg-slate-50"
+              :class="isDockDensity ? 'h-7 w-7 justify-center' : 'px-2 py-1.5'"
               title="收起详情"
+              aria-label="收起详情"
               @click="emit('close')">
               <ChevronUp class="h-3.5 w-3.5" />
-              收起
+              <span v-if="!isDockDensity">收起</span>
             </button>
           </div>
 
           <p class="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-slate-600">
             {{ item.description || '暂无批注描述' }}
           </p>
-          <div class="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-400">
-            <span v-if="item.type !== 'cloud' && item.refnos.length">RefNo {{ item.refnos.join(', ') }}</span>
-            <span>{{ item.commentCount }} 条讨论</span>
-            <span>{{ formatDateTime(item.activityAt) }}</span>
+          <!-- dock 档：元信息与「定位到模型」并成一行，省掉一整行按钮 -->
+          <div class="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-400"
+            :class="isDockDensity ? 'items-center justify-between' : ''">
+            <div class="flex min-w-0 flex-wrap gap-x-3 gap-y-1">
+              <span v-if="item.type !== 'cloud' && item.refnos.length">RefNo {{ item.refnos.join(', ') }}</span>
+              <span>{{ item.commentCount }} 条讨论</span>
+              <span>{{ formatDateTime(item.activityAt) }}</span>
+            </div>
+            <button v-if="isDockDensity"
+              data-testid="annotation-detail-locate"
+              type="button"
+              class="inline-flex shrink-0 items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-slate-600 hover:border-brand/40 hover:bg-brand-subtle/40"
+              @click="emit('locate', item)">
+              <LocateFixed class="h-3 w-3" />
+              定位到模型
+            </button>
           </div>
-          <button data-testid="annotation-detail-locate"
+          <button v-if="!isDockDensity"
+            data-testid="annotation-detail-locate"
             type="button"
             class="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 hover:border-brand/40 hover:bg-brand-subtle/40"
             @click="emit('locate', item)">
@@ -300,7 +333,7 @@ function formatDateTime(timestamp: number): string {
         <div data-testid="annotation-cloud-bindings"
           class="rounded-lg border border-slate-200 bg-white p-3">
           <div class="flex items-center justify-between gap-2">
-            <h4 class="text-sm font-semibold text-slate-900">
+            <h4 class="min-w-0 text-sm font-semibold text-slate-900">
               关联元素 {{ memberBindings.length }}
               <span v-if="showResolveSummary"
                 data-testid="annotation-binding-resolve-summary"
@@ -308,29 +341,91 @@ function formatDateTime(timestamp: number): string {
                 title="有关联已失效：找不到的构件只能移除，锚点不可更换">
                 可用 {{ bindingResolveSummary.usable }}/{{ bindingResolveSummary.total }}
               </span>
+              <!-- dock 档：锚点不单开一块，折进标题行；失效徽标照出，原因进 title -->
+              <span v-if="isDockDensity && anchorBinding"
+                class="ml-1 inline-flex max-w-full items-center gap-1 text-[11px] font-normal text-slate-500"
+                :data-resolve-state="resolveOf('anchor', anchorBinding.refno)?.state ?? ''"
+                :title="`${anchorLabel}（不可更换）${anchorResolveReason ? ` · ${anchorResolveReason}` : ''}`">
+                · {{ anchorLabel }}
+                <span v-if="anchorBinding.noun" class="font-semibold text-slate-700">{{ anchorBinding.noun }}</span>
+                <span class="truncate font-mono">{{ anchorBinding.refno }}</span>
+                <span v-if="anchorResolveDisplay?.showBadge"
+                  data-testid="annotation-anchor-state"
+                  class="rounded border px-1 py-px text-[10px] font-medium"
+                  :class="anchorResolveDisplay.tone">
+                  {{ anchorResolveDisplay.label }}
+                </span>
+              </span>
             </h4>
-            <div class="flex items-center gap-1">
+            <div class="flex shrink-0 items-center gap-1">
               <button v-if="canEditBindings"
                 data-testid="annotation-cloud-add-members"
                 type="button"
                 class="inline-flex items-center gap-1 rounded-md border border-slate-200 px-2 py-1 text-[11px] font-medium text-slate-600 hover:border-brand/40 hover:text-brand"
-                title="在三维视口中点选构件，Enter 确认后加入关联"
+                title="添加元素：在三维视口中点选构件，Enter 确认后加入关联"
+                aria-label="添加元素"
                 @click="emit('pick-elements', item)">
                 <Plus class="h-3 w-3" />
-                添加元素
+                {{ isDockDensity ? '添加' : '添加元素' }}
               </button>
               <button v-if="locatableMemberRefnos.length > 0"
                 data-testid="annotation-cloud-locate-all"
                 type="button"
                 class="inline-flex items-center gap-1 rounded-md border border-slate-200 px-2 py-1 text-[11px] font-medium text-slate-600 hover:border-brand/40 hover:text-brand"
+                title="定位高亮全部关联元素"
+                aria-label="定位高亮全部"
                 @click="emit('locate-elements', { item, refnos: locatableMemberRefnos })">
                 <LocateFixed class="h-3 w-3" />
-                定位高亮全部
+                {{ isDockDensity ? '高亮全部' : '定位高亮全部' }}
               </button>
             </div>
           </div>
 
-          <div v-if="memberBindings.length > 0" class="mt-2 space-y-1.5">
+          <!-- dock 档：关联元素排成芯片，点芯片本体即定位高亮；失效的不可点、只能移除 -->
+          <div v-if="isDockDensity && memberBindings.length > 0"
+            class="mt-2 flex flex-wrap gap-1.5"
+            data-testid="annotation-cloud-member-chips">
+            <div v-for="binding in memberBindings"
+              :key="binding.refno"
+              class="inline-flex max-w-full items-center gap-1 rounded-md border bg-white py-1 pl-2 pr-1 text-[11px]"
+              :class="[
+                resolveDisplayOf('member', binding.refno)?.showBadge ? 'border-amber-200' : 'border-slate-200',
+                resolveDisplayOf('member', binding.refno)?.canLocate === false ? 'opacity-70' : '',
+              ]"
+              :data-resolve-state="resolveOf('member', binding.refno)?.state ?? ''">
+              <button v-if="resolveDisplayOf('member', binding.refno)?.canLocate !== false"
+                type="button"
+                :data-testid="`annotation-cloud-locate-${binding.refno}`"
+                class="inline-flex min-w-0 items-center gap-1 text-left hover:text-brand"
+                :title="`定位高亮 ${binding.refno}`"
+                @click="emit('locate-elements', { item, refnos: [binding.refno] })">
+                <span v-if="binding.noun" class="font-semibold text-slate-700">{{ binding.noun }}</span>
+                <span class="truncate font-mono text-slate-500">{{ binding.refno }}</span>
+              </button>
+              <span v-else class="inline-flex min-w-0 items-center gap-1" :title="binding.refno">
+                <span v-if="binding.noun" class="font-semibold text-slate-700">{{ binding.noun }}</span>
+                <span class="truncate font-mono text-slate-500">{{ binding.refno }}</span>
+              </span>
+              <span v-if="resolveDisplayOf('member', binding.refno)?.showBadge"
+                :data-testid="`annotation-binding-state-${binding.refno}`"
+                class="rounded border px-1 py-px text-[10px] font-medium"
+                :class="resolveDisplayOf('member', binding.refno)?.tone"
+                :title="resolveOf('member', binding.refno)?.reason">
+                {{ resolveDisplayOf('member', binding.refno)?.label }}
+              </span>
+              <button v-if="canEditBindings"
+                type="button"
+                :data-testid="`annotation-cloud-remove-${binding.refno}`"
+                class="rounded p-0.5 text-slate-400 hover:bg-rose-50 hover:text-rose-500"
+                :title="`移除关联元素 ${binding.refno}`"
+                :aria-label="`移除关联元素 ${binding.refno}`"
+                @click="removeMember(binding.refno)">
+                <X class="h-3 w-3" />
+              </button>
+            </div>
+          </div>
+
+          <div v-else-if="memberBindings.length > 0" class="mt-2 space-y-1.5">
             <div v-for="binding in memberBindings"
               :key="binding.refno"
               class="flex items-center justify-between gap-2 rounded-md bg-slate-50 px-2.5 py-2"
@@ -374,7 +469,7 @@ function formatDateTime(timestamp: number): string {
             {{ canEditBindings ? '尚未关联元素，点「添加元素」在三维视口中点选' : '历史批注未关联元素' }}
           </p>
 
-          <div v-if="anchorBinding"
+          <div v-if="anchorBinding && !isDockDensity"
             class="mt-3 border-t border-slate-100 pt-2"
             :data-resolve-state="resolveOf('anchor', anchorBinding.refno)?.state ?? ''">
             <div class="flex items-center gap-1.5 text-[11px] font-semibold text-slate-500">
@@ -398,115 +493,124 @@ function formatDateTime(timestamp: number): string {
           </div>
         </div>
 
-        <figure v-if="screenshotUrl"
-          class="overflow-hidden rounded-lg border border-slate-200 bg-white">
-          <button data-testid="annotation-detail-screenshot-preview-trigger"
+        <!-- 证据行：normal 档上下堆叠（space-y-3 与外层同节奏）；dock 档问题截图与测量证据左右各占一半 -->
+        <div data-testid="annotation-detail-evidence-row"
+          :class="isDockDensity ? 'flex items-stretch gap-2' : 'space-y-3'">
+          <figure v-if="screenshotUrl"
+            class="overflow-hidden rounded-lg border border-slate-200 bg-white"
+            :class="isDockDensity ? 'flex min-w-0 flex-1 flex-col' : ''">
+            <button data-testid="annotation-detail-screenshot-preview-trigger"
+              type="button"
+              class="block w-full cursor-zoom-in bg-slate-50"
+              :class="isDockDensity ? 'min-h-0 flex-1' : ''"
+              title="预览问题截图"
+              @click="openScreenshotPreview">
+              <img data-testid="annotation-detail-screenshot"
+                :src="screenshotUrl"
+                :alt="`${item.title} 批注截图`"
+                class="w-full"
+                :class="isDockDensity ? 'h-24 object-cover' : 'max-h-64 object-contain'" />
+            </button>
+            <figcaption class="flex items-center justify-between gap-2 border-t border-slate-100 text-xs text-slate-500"
+              :class="isDockDensity ? 'px-2 py-1.5' : 'px-3 py-2'">
+              问题截图
+              <span class="flex items-center gap-1.5">
+                <!-- dock 档两颗按钮只留图标，文字进 title -->
+                <button data-testid="annotation-detail-screenshot-preview-button"
+                  type="button"
+                  class="inline-flex shrink-0 items-center gap-1 rounded-md border border-slate-200 bg-white py-1 text-[11px] font-medium text-slate-600 hover:border-brand/40 hover:text-brand"
+                  :class="isDockDensity ? 'px-1.5' : 'px-2'"
+                  title="预览问题截图"
+                  aria-label="预览"
+                  @click="openScreenshotPreview">
+                  <Eye class="h-3 w-3" />
+                  <span v-if="!isDockDensity">预览</span>
+                </button>
+                <button v-if="canCaptureScreenshot"
+                  data-testid="annotation-detail-screenshot-retake"
+                  type="button"
+                  class="inline-flex shrink-0 items-center gap-1 rounded-md border border-slate-200 bg-white py-1 text-[11px] font-medium text-slate-600 hover:border-brand/40 hover:text-brand disabled:cursor-not-allowed disabled:opacity-50"
+                  :class="isDockDensity ? 'px-1.5' : 'px-2'"
+                  :disabled="capturingScreenshot"
+                  title="重新拍摄当前视角并替换截图"
+                  aria-label="重拍"
+                  @click="void captureItemScreenshot()">
+                  <Camera class="h-3 w-3" :class="capturingScreenshot ? 'animate-pulse' : ''" />
+                  <span v-if="!isDockDensity">{{ capturingScreenshot ? '截图中…' : '重拍' }}</span>
+                </button>
+              </span>
+            </figcaption>
+          </figure>
+          <button v-else-if="canCaptureScreenshot"
+            data-testid="annotation-detail-screenshot-capture"
             type="button"
-            class="block w-full cursor-zoom-in bg-slate-50"
-            title="预览问题截图"
-            @click="openScreenshotPreview">
-            <img data-testid="annotation-detail-screenshot"
-              :src="screenshotUrl"
-              :alt="`${item.title} 批注截图`"
-              class="max-h-64 w-full object-contain" />
+            class="flex items-center justify-center gap-2 rounded-lg border border-dashed border-slate-300 bg-white text-xs text-slate-500 hover:border-brand/40 hover:bg-brand-subtle/40 hover:text-brand disabled:cursor-not-allowed disabled:opacity-50"
+            :class="isDockDensity ? 'min-w-0 flex-1 flex-col px-2 py-3 text-center' : 'w-full px-3 py-3'"
+            :disabled="capturingScreenshot"
+            title="拍摄当前视角 · 作为批注截图"
+            @click="void captureItemScreenshot()">
+            <Camera class="h-3.5 w-3.5" />
+            {{ capturingScreenshot ? '正在截图…' : (isDockDensity ? '拍摄截图' : '拍摄当前视角 · 作为批注截图') }}
           </button>
-          <figcaption class="flex items-center justify-between gap-2 border-t border-slate-100 px-3 py-2 text-xs text-slate-500">
-            问题截图
-            <span class="flex items-center gap-1.5">
-              <button data-testid="annotation-detail-screenshot-preview-button"
-                type="button"
-                class="inline-flex shrink-0 items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-medium text-slate-600 hover:border-brand/40 hover:text-brand"
-                @click="openScreenshotPreview">
-                <Eye class="h-3 w-3" />
-                预览
-              </button>
-              <button v-if="canCaptureScreenshot"
-                data-testid="annotation-detail-screenshot-retake"
-                type="button"
-                class="inline-flex shrink-0 items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-medium text-slate-600 hover:border-brand/40 hover:text-brand disabled:cursor-not-allowed disabled:opacity-50"
-                :disabled="capturingScreenshot"
-                title="重新拍摄当前视角并替换截图"
-                @click="void captureItemScreenshot()">
-                <Camera class="h-3 w-3" />
-                {{ capturingScreenshot ? '截图中…' : '重拍' }}
-              </button>
-            </span>
-          </figcaption>
-        </figure>
-        <button v-else-if="canCaptureScreenshot"
-          data-testid="annotation-detail-screenshot-capture"
-          type="button"
-          class="flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-slate-300 bg-white px-3 py-3 text-xs text-slate-500 hover:border-brand/40 hover:bg-brand-subtle/40 hover:text-brand disabled:cursor-not-allowed disabled:opacity-50"
-          :disabled="capturingScreenshot"
-          @click="void captureItemScreenshot()">
-          <Camera class="h-3.5 w-3.5" />
-          {{ capturingScreenshot ? '正在截图…' : '拍摄当前视角 · 作为批注截图' }}
-        </button>
 
-        <div class="rounded-lg border border-slate-200 bg-white p-3">
-          <div class="flex flex-wrap items-start justify-between gap-2">
-            <div>
-              <h4 class="flex items-center gap-1.5 text-sm font-semibold text-slate-900">
-                <Ruler class="h-4 w-4 text-brand" />
-                测量证据
-              </h4>
-              <p class="mt-1 text-xs text-slate-500">
-                仅作为当前批注的辅助证据。
-              </p>
-            </div>
-            <div v-if="showMeasurementActions" class="flex flex-wrap gap-1.5">
-              <button data-testid="annotation-detail-add-distance"
-                type="button"
-                class="rounded-lg border border-slate-200 px-2 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
-                @click="emit('start-measurement', 'distance', item)">
-                新增距离
-              </button>
-              <button data-testid="annotation-detail-add-angle"
-                type="button"
-                class="rounded-lg border border-slate-200 px-2 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
-                @click="emit('start-measurement', 'angle', item)">
-                新增角度
-              </button>
-              <template v-if="showElevationMeasurementActions">
-                <button data-testid="annotation-detail-add-elevation-point"
-                  type="button"
-                  class="rounded-lg border border-slate-200 px-2 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
-                  @click="emit('start-measurement', 'elevation_point', item)">
-                  新增点标高
-                </button>
-                <button data-testid="annotation-detail-add-elevation-delta"
-                  type="button"
-                  class="rounded-lg border border-slate-200 px-2 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
-                  @click="emit('start-measurement', 'elevation_delta', item)">
-                  新增高差
-                </button>
-              </template>
-            </div>
-          </div>
-
-          <div v-if="linkedMeasurements.length === 0"
-            class="mt-3 rounded-lg border border-dashed border-slate-200 bg-slate-50 px-3 py-4 text-xs text-slate-500">
-            当前批注还没有关联的测量证据。
-          </div>
-          <div v-else class="mt-3 space-y-2">
-            <div v-for="measurement in linkedMeasurements"
-              :key="`${measurement.engine}:${measurement.id}`"
-              class="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-              <div class="min-w-0">
-                <div class="truncate text-xs font-medium text-slate-900">
-                  {{ measurement.summary }}
-                </div>
-                <div class="mt-0.5 text-[11px] text-slate-400">
-                  {{ formatDateTime(measurement.createdAt) }}
-                </div>
+          <div class="rounded-lg border border-slate-200 bg-white"
+            :class="isDockDensity ? 'min-w-0 flex-1 p-2.5' : 'p-3'">
+            <div class="flex flex-wrap items-start justify-between gap-2">
+              <div>
+                <h4 class="flex items-center gap-1.5 text-sm font-semibold text-slate-900">
+                  <Ruler class="h-4 w-4 text-brand" />
+                  测量证据<span v-if="isDockDensity && linkedMeasurements.length > 0" class="text-slate-400">{{ linkedMeasurements.length }}</span>
+                </h4>
+                <p v-if="!isDockDensity" class="mt-1 text-xs text-slate-500">
+                  仅作为当前批注的辅助证据。
+                </p>
               </div>
-              <button :data-testid="`annotation-detail-locate-measurement-${measurement.id}`"
-                type="button"
-                class="inline-flex shrink-0 items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-medium text-slate-600 hover:border-brand/40"
-                @click="emit('locate-measurement', measurement)">
-                <LocateFixed class="h-3 w-3" />
-                定位
-              </button>
+              <!-- dock 档：四颗「新增 ×」缩成「+ 距离」这样的短标签，完整名进 title / aria-label -->
+              <div v-if="showMeasurementActions" class="flex flex-wrap gap-1.5">
+                <button v-for="action in measurementLaunchActions"
+                  :key="action.kind"
+                  :data-testid="`annotation-detail-add-${action.testId}`"
+                  type="button"
+                  class="inline-flex items-center gap-0.5 rounded-lg border border-slate-200 font-medium text-slate-600 hover:bg-slate-50"
+                  :class="isDockDensity ? 'px-1.5 py-1 text-[11px]' : 'px-2 py-1.5 text-xs'"
+                  :title="action.label"
+                  :aria-label="action.label"
+                  @click="emit('start-measurement', action.kind, item)">
+                  <Plus v-if="isDockDensity" class="h-3 w-3" />
+                  {{ isDockDensity ? action.shortLabel : action.label }}
+                </button>
+              </div>
+            </div>
+
+            <div v-if="linkedMeasurements.length === 0"
+              class="rounded-lg border border-dashed border-slate-200 bg-slate-50 text-xs text-slate-500"
+              :class="isDockDensity ? 'mt-2 px-2 py-3' : 'mt-3 px-3 py-4'">
+              当前批注还没有关联的测量证据。
+            </div>
+            <div v-else :class="isDockDensity ? 'mt-2 space-y-1.5' : 'mt-3 space-y-2'">
+              <div v-for="measurement in linkedMeasurements"
+                :key="`${measurement.engine}:${measurement.id}`"
+                class="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50"
+                :class="isDockDensity ? 'gap-2 px-2 py-1.5' : 'gap-3 px-3 py-2'">
+                <div class="min-w-0">
+                  <div class="truncate text-xs font-medium text-slate-900" :title="measurement.summary">
+                    {{ measurement.summary }}
+                  </div>
+                  <div class="mt-0.5 truncate text-[11px] text-slate-400">
+                    {{ formatDateTime(measurement.createdAt) }}
+                  </div>
+                </div>
+                <button :data-testid="`annotation-detail-locate-measurement-${measurement.id}`"
+                  type="button"
+                  class="inline-flex shrink-0 items-center gap-1 rounded-md border border-slate-200 bg-white py-1 text-[11px] font-medium text-slate-600 hover:border-brand/40"
+                  :class="isDockDensity ? 'px-1.5' : 'px-2'"
+                  title="定位到该测量"
+                  aria-label="定位"
+                  @click="emit('locate-measurement', measurement)">
+                  <LocateFixed class="h-3 w-3" />
+                  <span v-if="!isDockDensity">定位</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>

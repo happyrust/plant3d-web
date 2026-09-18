@@ -550,6 +550,66 @@ describe('ReviewPanel', () => {
     mounted.unmount();
   });
 
+  it('批注表格是页面主体：审核档案是一个默认收起的折叠区，不再分 Tab', async () => {
+    const mounted = await mountReviewPanel();
+    await settlePanel();
+
+    expect(document.querySelector('[data-testid="annotation-sheet-workspace"]')).not.toBeNull();
+    expect(document.querySelector('[data-testid="review-archive-zone"]')).not.toBeNull();
+
+    const recordsZone = document.querySelector<HTMLElement>('[data-testid="review-workbench-confirmed-records-zone"]');
+    const historyZone = document.querySelector<HTMLElement>('[data-testid="review-workbench-workflow-history-zone"]');
+    expect(recordsZone?.style.display).toBe('none');
+    expect(historyZone?.style.display).toBe('none');
+
+    // 三块辅助内容同属一个折叠区：展开后一起可见，用户不需要在 Tab 之间来回切
+    document.querySelector<HTMLButtonElement>('[data-testid="review-archive-toggle"]')?.click();
+    await settleVue();
+
+    expect(recordsZone?.style.display).not.toBe('none');
+    expect(historyZone?.style.display).not.toBe('none');
+
+    mounted.unmount();
+  });
+
+  it('dock 档：录入工具条折成两行、工具按钮用短标签但保留完整 title / aria-label', async () => {
+    const mounted = await mountReviewPanel({ density: 'dock' });
+    await settlePanel();
+
+    expect(document.querySelector('[data-panel="review"]')?.getAttribute('data-density')).toBe('dock');
+
+    // 工具按钮：可见文字缩成「文字 / 云线 / 矩形」，无障碍名与 title 仍是完整标签，既有按 title 找按钮的用法不受影响
+    const textButton = document.querySelector<HTMLButtonElement>('[data-testid="reviewer-direct-launch-annotation-text"]');
+    expect(textButton?.textContent?.trim()).toBe('文字');
+    expect(textButton?.title).toBe('文字批注');
+    expect(textButton?.getAttribute('aria-label')).toBe('文字批注');
+
+    // 两组各自撑满一行：起手工具 + 计数 一行，备注 / 确认 / 校审开关 一行
+    const toolbar = document.querySelector<HTMLElement>('[data-testid="review-entry-toolbar"]');
+    const groups = Array.from(toolbar?.children ?? []).filter((child) => child.querySelector('button')) as HTMLElement[];
+    expect(groups.length).toBeGreaterThanOrEqual(2);
+    expect(groups[0]?.classList.contains('w-full')).toBe(true);
+    expect(groups[1]?.classList.contains('w-full')).toBe(true);
+
+    // 校审开关缩成「校审」，状态由 aria-pressed 表达
+    const toggle = document.querySelector<HTMLButtonElement>('[data-testid="review-mode-toggle"]');
+    expect(toggle?.textContent?.trim()).toBe('校审');
+    expect(toggle?.getAttribute('aria-pressed')).toBe('false');
+
+    mounted.unmount();
+  });
+
+  it('normal 档：工具按钮与校审开关仍显示完整文字', async () => {
+    const mounted = await mountReviewPanel();
+    await settlePanel();
+
+    const textButton = document.querySelector<HTMLButtonElement>('[data-testid="reviewer-direct-launch-annotation-text"]');
+    expect(textButton?.textContent?.trim()).toBe('文字批注');
+    expect(document.querySelector('[data-testid="review-mode-toggle"]')?.textContent?.trim()).toBe('校审已关闭');
+
+    mounted.unmount();
+  });
+
   it('does not block the review workbench while the Viewer is still starting', async () => {
     let resolveViewer: ((ready: boolean) => void) | undefined;
     viewerWaitForReadyMock.mockImplementationOnce(() => new Promise<boolean>((resolve) => {

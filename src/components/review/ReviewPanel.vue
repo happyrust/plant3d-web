@@ -6,20 +6,14 @@ import {
   CheckCircle,
   ChevronDown,
   ClipboardCheck,
-  ClipboardList,
-  Database,
   Download,
-  FileCheck,
   Filter,
   HelpCircle,
-  History,
   MessageSquare,
-  Paperclip,
   Plus,
   RefreshCw,
   Ruler,
   Trash2,
-  X,
   XCircle,
 } from 'lucide-vue-next';
 
@@ -149,6 +143,9 @@ const props = withDefaults(defineProps<{
 }>(), {
   density: 'normal',
 });
+// dock 档（约 400–520px 宽）：头部操作等分撑满一行、录入工具条折成两行、工具按钮用短标签，
+// 否则 flex-wrap 会把「备注 / 确认 / 校审开关」拆得七零八落。完整标签仍放在 title 里。
+const isDock = computed(() => props.density === 'dock');
 
 const reviewStore = useReviewStore();
 const toolStore = useToolStore();
@@ -1095,6 +1092,7 @@ const reviewerDirectLaunchActions = computed(() => [
   {
     id: 'annotation-text',
     label: '文字批注',
+    shortLabel: '文字',
     mode: 'annotation' as const,
     description: '在当前审核任务上下文中直接进入文字批注。',
     onClick: startAnnotation,
@@ -1102,6 +1100,7 @@ const reviewerDirectLaunchActions = computed(() => [
   {
     id: 'annotation-cloud',
     label: '云线批注',
+    shortLabel: '云线',
     mode: 'annotation_cloud' as const,
     description: '保持当前任务上下文，直接启动云线批注。',
     onClick: startCloudAnnotation,
@@ -1109,6 +1108,7 @@ const reviewerDirectLaunchActions = computed(() => [
   {
     id: 'annotation-rect',
     label: '矩形批注',
+    shortLabel: '矩形',
     mode: 'annotation_rect' as const,
     description: '保持当前任务上下文，直接启动矩形批注。',
     onClick: startRectAnnotation,
@@ -1463,114 +1463,21 @@ onUnmounted(() => {
   window.removeEventListener('beforeunload', beforeUnloadGuard);
   window.removeEventListener(EMBED_LANDING_STATE_UPDATED_EVENT, handleEmbedLandingStateUpdated);
   document.removeEventListener('click', handleClickOutside);
-  document.removeEventListener('click', handleModuleMenuClickOutside, { capture: true } as EventListenerOptions);
 });
 
-// ============ Module management system ============
-
-interface ReviewModule {
-  id: string;
-  label: string;
-  icon: typeof Paperclip;
-  isDefault: boolean;
-}
-
-const REVIEW_MODULES: ReviewModule[] = [
-  { id: 'attachments', label: '\u9644\u4ef6\u6587\u4ef6', icon: Paperclip, isDefault: false },
-  { id: 'confirmedStats', label: '\u5df2\u786e\u8ba4\u6570\u636e', icon: ClipboardList, isDefault: false },
-  { id: 'dataSync', label: '\u6570\u636e\u540c\u6b65', icon: RefreshCw, isDefault: true },
-  { id: 'auxData', label: '\u8f85\u52a9\u6821\u5ba1', icon: Database, isDefault: true },
-  { id: 'workflowHistory', label: '\u5de5\u4f5c\u6d41\u5386\u53f2', icon: History, isDefault: true },
-  { id: 'confirmedRecords', label: '\u786e\u8ba4\u8bb0\u5f55', icon: FileCheck, isDefault: true },
-];
-
-const STORAGE_KEY = 'review_panel_active_modules';
-
-function loadActiveModules(): string[] {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) return JSON.parse(stored);
-  } catch { /* ignore */ }
-  return [];
-}
-
-const activeOptionalModules = ref<string[]>(loadActiveModules());
-const showModuleMenu = ref(false);
-
-const optionalModules = computed(() =>
-  REVIEW_MODULES.filter((m) => !m.isDefault)
-);
-
-const inactiveModules = computed(() =>
-  optionalModules.value.filter((m) => !activeOptionalModules.value.includes(m.id))
-);
-
-const activeModuleDetails = computed(() =>
-  optionalModules.value.filter((m) => activeOptionalModules.value.includes(m.id))
-);
-
-const stableWorkbenchZones = computed(() => [
-  {
-    id: 'workflow-history',
-    title: '工作流历史',
-    description: '保留流转节点与操作时间线，作为 M4 工作台稳定骨架的一部分。',
-  },
-  {
-    id: 'confirmed-records',
-    title: '确认记录',
-    description: '独立展示审核确认快照，与工作流历史和评论保持语义分离。',
-  },
-  {
-    id: 'aux-data',
-    title: '辅助校审数据',
-    description: '基于当前任务上下文触发外部辅助数据与碰撞查询。',
-  },
-  {
-    id: 'sync',
-    title: '数据同步（后端）',
-    description: '统一放置导入/导出能力，保持当前工作台上下文稳定。',
-  },
-]);
-
-function isModuleActive(id: string): boolean {
-  return activeOptionalModules.value.includes(id);
-}
-
-function addModule(id: string) {
-  if (!activeOptionalModules.value.includes(id)) {
-    activeOptionalModules.value = [...activeOptionalModules.value, id];
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(activeOptionalModules.value));
-  }
-  showModuleMenu.value = false;
-}
-
-function removeModule(id: string) {
-  activeOptionalModules.value = activeOptionalModules.value.filter((m) => m !== id);
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(activeOptionalModules.value));
-}
-
-function handleModuleMenuClickOutside(event: MouseEvent) {
-  const target = event.target as HTMLElement;
-  if (!target.closest('.module-menu-container')) {
-    showModuleMenu.value = false;
-  }
-}
-
-watch(showModuleMenu, (val) => {
-  if (val) {
-    document.addEventListener('click', handleModuleMenuClickOutside, { capture: true });
-  } else {
-    document.removeEventListener('click', handleModuleMenuClickOutside, { capture: true });
-  }
-});
-
-// ============ Tab / 折叠区域 ============
-type ReviewTab = 'records' | 'history' | 'attachments';
-const activeReviewTab = ref<ReviewTab>('records');
+// ============ 折叠区域 ============
+// 页面以批注表格为主体，任务详情与审核档案都是默认收起的辅助区，不再用 Tab 分页。
 const expandedTaskDetails = ref(false);
-const expandedWorkflowHistory = ref(false);
-const expandedConfirmedRecords = ref(false);
-const expandedExtras = ref(false);
+const expandedReviewArchive = ref(false);
+
+// 新手引导的「确认记录」一步指向审核档案里的区块；收起状态下它是 display:none，
+// 高亮框会量到一个零尺寸矩形，所以这一步到来时先把档案展开。
+watch(
+  () => onboarding.currentStep.value?.id,
+  (stepId) => {
+    if (stepId === 'confirmed-records') expandedReviewArchive.value = true;
+  },
+);
 
 const workflowHistoryCount = computed(() => workflow.value?.history?.length ?? 0);
 const confirmedRecordListCount = computed(() => reviewStore.sortedConfirmedRecords.value.length);
@@ -1789,7 +1696,7 @@ function handleAnnotationQueueCompleted() {
   <div class="flex h-full flex-col gap-3 overflow-y-auto p-3" data-panel="review" :data-density="props.density">
     <!-- ═══════ A. 任务头部 (紧凑) ═══════ -->
     <div v-if="currentTask"
-      class="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
+      class="shrink-0 rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
       data-testid="reviewer-landing-workspace">
       <!-- 标题行: 任务名 + 节点徽章 + 操作 -->
       <div class="flex items-center justify-between gap-2" data-guide="review-panel-header">
@@ -1803,11 +1710,13 @@ function handleAnnotationQueueCompleted() {
         </div>
         <div class="flex shrink-0 items-center gap-1.5">
           <button type="button"
-            class="inline-flex h-7 items-center gap-1 rounded-full border border-slate-200 bg-white px-3 text-xs font-medium text-slate-600 hover:bg-slate-50"
+            class="inline-flex h-7 items-center gap-1 rounded-full border border-slate-200 bg-white text-xs font-medium text-slate-600 hover:bg-slate-50"
+            :class="isDock ? 'w-7 justify-center' : 'px-3'"
             title="查看校审面板操作指南"
+            aria-label="操作指南"
             @click="onboarding.startContextualGuide('reviewPanel')">
             <HelpCircle class="h-3.5 w-3.5" />
-            操作指南
+            <span v-if="!isDock">操作指南</span>
           </button>
           <button v-if="isFilteringByTask" type="button" title="显示所有模型"
             class="h-7 rounded-full bg-warning-subtle px-3 text-xs font-medium text-warning hover:bg-warning"
@@ -1852,29 +1761,34 @@ function handleAnnotationQueueCompleted() {
           </button>
         </template>
         <template v-else>
+          <!-- dock 档三颗按钮等分撑满一行，避免 wrap 后孤零零挂一颗在第二行 -->
           <button type="button"
             class="h-8 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+            :class="isDock ? 'min-w-0 flex-1 truncate' : ''"
             :disabled="workflowLoading || workflowActionLoading || !canSubmitToNextNode"
             @click="toggleSubmitDialog">
             {{ submitActionLabel }}
           </button>
           <button type="button"
             class="h-8 rounded-md border border-danger px-3 text-sm font-medium text-danger hover:bg-danger-subtle disabled:opacity-50"
+            :class="isDock ? 'min-w-0 flex-1 truncate' : ''"
             :disabled="workflowLoading || workflowActionLoading || !canReturnToPrevNode"
             @click="toggleReturnDialog">
             驳回到设计
           </button>
-          <button type="button"
+          <button v-if="!isFilteringByTask || !isDock" type="button"
             class="h-8 rounded-md border border-input px-3 text-sm hover:bg-muted"
+            :class="isDock ? 'min-w-0 flex-1 truncate' : ''"
             @click="filterModelByTask">
             <Filter class="mr-1 inline h-3 w-3" />只显示任务构件
           </button>
           <button v-if="isFilteringByTask" type="button"
             class="h-8 rounded-md border border-input px-3 text-sm hover:bg-muted"
+            :class="isDock ? 'min-w-0 flex-1 truncate' : ''"
             @click="clearModelFilter">
             显示全部
           </button>
-          <div v-if="workflowError" class="text-xs text-danger">{{ workflowError }}</div>
+          <div v-if="workflowError" class="w-full text-xs text-danger">{{ workflowError }}</div>
         </template>
       </div>
     </div>
@@ -1902,23 +1816,32 @@ function handleAnnotationQueueCompleted() {
     </div>
 
     <!-- ═══════ B. 任务详情 (可折叠) ═══════ -->
-    <div v-if="currentTask" class="rounded-lg border border-slate-200 bg-slate-50"
+    <div v-if="currentTask" class="shrink-0 rounded-lg border border-slate-200 bg-slate-50"
       data-testid="review-workbench-context-zone">
       <button type="button"
         class="flex w-full items-center justify-between px-4 py-2.5 text-left text-sm font-semibold text-slate-700 hover:bg-slate-100 rounded-lg"
         @click="expandedTaskDetails = !expandedTaskDetails">
-        <div class="flex items-center gap-2">
-          <ClipboardCheck class="h-4 w-4 text-primary" />
-          <span>任务详情</span>
-          <span class="rounded-full bg-slate-200 px-2 py-0.5 text-[11px] text-slate-500">
-            {{ taskContext?.modelName || '-' }} · {{ taskContext?.componentCount || 0 }} 构件
+        <div class="flex min-w-0 items-center gap-2">
+          <ClipboardCheck class="h-4 w-4 shrink-0 text-primary" />
+          <span class="shrink-0">任务详情</span>
+          <!-- dock 档没地方放两枚胶囊，压成一行灰字；模型名进 title -->
+          <span v-if="isDock"
+            class="min-w-0 truncate text-[11px] font-normal text-slate-500"
+            :title="`${taskContext?.modelName || '-'} · ${currentTaskFormId}`">
+            {{ taskContext?.componentCount || 0 }} 构件 ·
+            <span :class="currentTaskHasFormalFormId ? 'text-brand' : 'text-warning'">{{ currentTaskFormId }}</span>
           </span>
-          <span class="rounded-full px-2 py-0.5 text-[11px]"
-            :class="currentTaskHasFormalFormId ? 'bg-brand-subtle text-brand' : 'bg-warning-subtle text-warning'">
-            {{ currentTaskFormId }}
-          </span>
+          <template v-else>
+            <span class="rounded-full bg-slate-200 px-2 py-0.5 text-[11px] text-slate-500">
+              {{ taskContext?.modelName || '-' }} · {{ taskContext?.componentCount || 0 }} 构件
+            </span>
+            <span class="rounded-full px-2 py-0.5 text-[11px]"
+              :class="currentTaskHasFormalFormId ? 'bg-brand-subtle text-brand' : 'bg-warning-subtle text-warning'">
+              {{ currentTaskFormId }}
+            </span>
+          </template>
         </div>
-        <ChevronDown class="h-4 w-4 transition-transform" :class="{ 'rotate-180': expandedTaskDetails }" />
+        <ChevronDown class="h-4 w-4 shrink-0 transition-transform" :class="{ 'rotate-180': expandedTaskDetails }" />
       </button>
       <div v-show="expandedTaskDetails" class="border-t border-slate-200 p-4 space-y-4">
         <section>
@@ -1977,23 +1900,95 @@ function handleAnnotationQueueCompleted() {
       </div>
     </div>
 
-    <!-- ═══════ C. 批注与测量 (合并) ═══════ -->
-    <div class="rounded-md border border-border bg-background p-3">
-      <!-- 校审模式 -->
-      <div class="flex items-center justify-between">
-        <div class="flex items-center gap-2">
-          <ClipboardCheck class="h-4 w-4 text-primary" />
-          <span class="text-sm font-semibold">批注与测量</span>
+    <!-- ═══════ C. 录入工具条：起手工具 + 计数 + 任务级确认压成表格上方一行 ═══════ -->
+    <div class="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-2 rounded-md border border-border bg-background px-3 py-2"
+      data-testid="review-entry-toolbar">
+      <!-- 第一组：起手工具 + 待确认计数。normal 档与第二组同占一行；dock 档独占第一行 -->
+      <div class="flex min-w-0 items-center gap-3" :class="isDock ? 'w-full' : ''">
+        <!-- 工具按钮：只负责在模型上起一条批注 / 测量，内容录入回表格行内完成 -->
+        <div v-if="canCreateReviewEvidence"
+          class="flex flex-wrap items-center gap-1.5"
+          data-guide="review-panel-tools"
+          data-testid="reviewer-direct-launch-annotation-zone">
+          <button v-for="action in reviewerDirectLaunchActions"
+            :key="action.id"
+            type="button"
+            class="h-7 rounded-md border px-2.5 text-xs font-medium"
+            :class="toolStore.toolMode.value === action.mode
+              ? 'border-primary bg-primary/10 text-primary'
+              : 'border-input bg-background text-slate-700 hover:bg-muted'"
+            :data-testid="`reviewer-direct-launch-${action.id}`"
+            :aria-pressed="toolStore.toolMode.value === action.mode"
+            :aria-label="action.label"
+            :title="toolStore.toolMode.value === action.mode ? `${action.label}（已启用，点击退出）` : action.label"
+            @click="action.onClick">
+            {{ isDock ? action.shortLabel : action.label }}
+          </button>
+          <div class="relative" data-testid="reviewer-direct-launch-measurement-zone">
+            <button type="button"
+              class="h-7 rounded-md border border-input bg-background px-2.5 text-xs font-medium text-slate-700 hover:bg-muted"
+              title="创建测量"
+              @click="showMeasurementMenu = !showMeasurementMenu">
+              <Plus class="mr-0.5 inline h-3 w-3" />测量
+            </button>
+            <div v-if="showMeasurementMenu"
+              class="absolute left-0 top-full z-10 mt-1 rounded-md border border-border bg-background p-1 shadow-md">
+              <button v-for="action in reviewerMeasurementActions"
+                :key="action.id"
+                type="button"
+                class="flex w-full items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-muted"
+                :data-testid="`reviewer-direct-launch-${action.id}`"
+                @click="action.onClick">
+                {{ action.label }}
+              </button>
+            </div>
+          </div>
         </div>
+
+        <!-- 待确认数据计数：dock 档只留图标 + 数字，靠右 -->
+        <div class="flex shrink-0 items-center gap-3 text-xs text-slate-600" :class="isDock ? 'ml-auto' : ''">
+          <span class="inline-flex items-center gap-1" title="待确认批注">
+            <MessageSquare class="h-3.5 w-3.5 text-brand" /><span v-if="!isDock">批注</span> <strong>{{ pendingAnnotationCount }}</strong>
+          </span>
+          <span class="inline-flex items-center gap-1" title="待确认测量">
+            <Ruler class="h-3.5 w-3.5 text-success" /><span v-if="!isDock">测量</span> <strong>{{ pendingMeasurementCount }}</strong>
+          </span>
+        </div>
+      </div>
+
+      <!-- 第二组：任务级确认（备注 · 确认 · 校审开关）。dock 档独占第二行，备注框吃掉剩余宽度 -->
+      <div class="flex items-center gap-1.5" :class="isDock ? 'w-full justify-end' : 'ml-auto flex-wrap'">
+        <template v-if="hasPendingData && canCreateReviewEvidence">
+          <input v-model="confirmNote"
+            class="h-7 rounded-md border border-input bg-background px-2 text-xs"
+            :class="isDock ? 'min-w-0 flex-1' : 'w-44'"
+            placeholder="备注（可选）" />
+          <button type="button"
+            data-command="review.confirm"
+            class="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md bg-primary px-3 text-xs text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+            :disabled="!hasUnsavedPendingData || confirmSaving"
+            @click="confirmCurrentData">
+            <CheckCircle class="h-3.5 w-3.5" />
+            {{ confirmSaving ? '保存中...' : hasUnsavedPendingData ? '确认当前数据' : '已保存' }}
+          </button>
+        </template>
         <button v-if="canCreateReviewEvidence" type="button"
-          class="h-7 rounded-md px-2.5 text-xs"
+          class="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2.5 text-xs"
           :class="
             reviewStore.reviewMode.value
               ? 'bg-primary text-primary-foreground'
               : 'border border-input bg-background hover:bg-muted'
           "
+          :aria-pressed="reviewStore.reviewMode.value"
+          :title="reviewStore.reviewMode.value ? '校审已启用，点击关闭' : '校审已关闭，点击启用'"
+          data-testid="review-mode-toggle"
           @click="reviewStore.toggleReviewMode()">
-          校审{{ reviewStore.reviewMode.value ? '已启用' : '已关闭' }}
+          <span class="relative inline-flex h-3 w-5 shrink-0 items-center rounded-full transition-colors"
+            :class="reviewStore.reviewMode.value ? 'bg-success' : 'bg-slate-300'">
+            <span class="absolute h-2 w-2 rounded-full bg-white transition-transform"
+              :class="reviewStore.reviewMode.value ? 'translate-x-2.5' : 'translate-x-0.5'" />
+          </span>
+          {{ isDock ? '校审' : `校审${reviewStore.reviewMode.value ? '已启用' : '已关闭'}` }}
         </button>
         <span v-else
           class="rounded-full border border-brand bg-brand-subtle px-2.5 py-1 text-xs font-medium text-brand">
@@ -2001,98 +1996,36 @@ function handleAnnotationQueueCompleted() {
         </span>
       </div>
 
-      <!-- 待确认数据计数 -->
-      <div class="mt-2 flex items-center gap-3 text-sm">
-        <div class="flex items-center gap-1.5">
-          <MessageSquare class="h-3.5 w-3.5 text-brand" />
-          <span>批注 <strong>{{ pendingAnnotationCount }}</strong></span>
-        </div>
-        <div class="flex items-center gap-1.5">
-          <Ruler class="h-3.5 w-3.5 text-success" />
-          <span>测量 <strong>{{ pendingMeasurementCount }}</strong></span>
-        </div>
-      </div>
       <div v-if="isExternalSjFormFocused"
-        class="mt-2 rounded-lg border border-brand bg-brand-subtle px-3 py-2 text-xs leading-5 text-brand"
+        class="w-full rounded-lg border border-brand bg-brand-subtle px-3 py-1.5 text-xs leading-5 text-brand"
         data-testid="external-sj-existing-annotations-only">
         外部流程 SJ 入口仅支持查看和处理当前单据已有批注，不能新增批注或测量证据。
       </div>
-
-      <!-- 工具按钮 -->
-      <div v-if="canCreateReviewEvidence"
-        class="mt-2 flex flex-wrap gap-1.5"
-        data-guide="review-panel-tools"
-        data-testid="reviewer-direct-launch-annotation-zone">
-        <button v-for="action in reviewerDirectLaunchActions"
-          :key="action.id"
-          type="button"
-          class="h-7 rounded-md border px-2.5 text-xs font-medium"
-          :class="toolStore.toolMode.value === action.mode
-            ? 'border-primary bg-primary/10 text-primary'
-            : 'border-input bg-background text-slate-700 hover:bg-muted'"
-          :data-testid="`reviewer-direct-launch-${action.id}`"
-          :aria-pressed="toolStore.toolMode.value === action.mode"
-          :title="toolStore.toolMode.value === action.mode ? `${action.label}（已启用，点击退出）` : action.label"
-          @click="action.onClick">
-          {{ action.label }}
-        </button>
-        <div class="relative" data-testid="reviewer-direct-launch-measurement-zone">
-          <button type="button"
-            class="h-7 rounded-md border border-input bg-background px-2.5 text-xs font-medium text-slate-700 hover:bg-muted"
-            title="创建测量"
-            @click="showMeasurementMenu = !showMeasurementMenu">
-            <Plus class="mr-0.5 inline h-3 w-3" />测量
-          </button>
-          <div v-if="showMeasurementMenu"
-            class="absolute left-0 top-full z-10 mt-1 rounded-md border border-border bg-background p-1 shadow-md">
-            <button v-for="action in reviewerMeasurementActions"
-              :key="action.id"
-              type="button"
-              class="flex w-full items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-muted"
-              :data-testid="`reviewer-direct-launch-${action.id}`"
-              @click="action.onClick">
-              {{ action.label }}
-            </button>
-          </div>
-        </div>
+      <div v-if="hasPendingData && canCreateReviewEvidence && !hasUnsavedPendingData && !confirmError && !hasUnsavedChanges"
+        class="w-full text-xs text-muted-foreground">
+        当前批注/测量已保存，新增或修改后可再次确认
       </div>
+      <div v-if="confirmError" class="w-full text-xs text-danger">{{ confirmError }}</div>
 
       <!-- U0 三行状态：本机草稿 / 云端草稿（U3 前不显示）/ 已确认到修订 N（方案 §3.6，d-565 #4） -->
       <AnnotationDraftStatusBar v-if="canCreateReviewEvidence && (currentTask || isExternalFormFocused)"
+        class="w-full"
         :status="draftSession.status.value"
         :draft-count="pendingAnnotationCount"
         :has-unconfirmed-changes="hasUnsavedChanges"
         :confirmed-record-count="currentTaskConfirmedRecords.length"
         :last-confirmed-at="lastConfirmedAt"
         :local-write-error="draftSession.state.value.localWriteError" />
-
-      <!-- 确认操作 -->
-      <div v-if="hasPendingData && canCreateReviewEvidence" class="mt-3 border-t border-slate-200 pt-3">
-        <input v-model="confirmNote"
-          class="h-8 w-full rounded-md border border-input bg-background px-3 text-sm"
-          placeholder="备注（可选）" />
-        <button type="button"
-          data-command="review.confirm"
-          class="mt-2 flex h-9 w-full items-center justify-center gap-2 rounded-md bg-primary text-sm text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-          :disabled="!hasUnsavedPendingData || confirmSaving"
-          @click="confirmCurrentData">
-          <CheckCircle class="h-4 w-4" />
-          {{ confirmSaving ? '保存中...' : hasUnsavedPendingData ? '确认当前数据' : '已保存' }}
-        </button>
-        <div v-if="!hasUnsavedPendingData && !confirmError && !hasUnsavedChanges" class="mt-1 text-xs text-muted-foreground">
-          当前批注/测量已保存，新增或修改后可再次确认
-        </div>
-        <div v-if="confirmError" class="mt-1 text-xs text-danger">{{ confirmError }}</div>
-      </div>
     </div>
 
-    <!-- ═══════ C2. 统一批注单：表格行内展开完整处理卡 ═══════ -->
+    <!-- ═══════ C2. 页面主体：批注表格，编辑就在行内展开成处理卡 ═══════ -->
     <div v-if="currentTask || isExternalFormFocused"
-      class="min-h-[480px]"
+      class="flex min-h-[480px] flex-1 flex-col"
       data-guide="annotation-list-zone"
       data-testid="reviewer-annotation-sheet-container">
       <UnattributedDraftNotice />
-      <AnnotationSheetWorkspace :items="scopedReviewerItems"
+      <AnnotationSheetWorkspace class="min-h-0 flex-1"
+        :items="scopedReviewerItems"
         :density="props.density"
         :current-annotation-id="expandedAnnotationId"
         :current-annotation-type="expandedAnnotationType"
@@ -2145,47 +2078,26 @@ function handleAnnotationQueueCompleted() {
       :form-id="activeReviewFormId"
       :task-id="currentTask?.id ?? null" />
 
-    <!-- ═══════ D. Tab 切换区域 ═══════ -->
-    <div class="rounded-lg border border-slate-200 bg-white">
-      <!-- Tab 头部 -->
-      <div class="flex items-center gap-1 rounded-t-lg border-b border-slate-200 bg-slate-100 p-1">
-        <button type="button"
-          class="rounded-md px-3 py-1.5 text-xs font-medium transition-colors"
-          :class="activeReviewTab === 'records'
-            ? 'bg-white text-slate-900 shadow-sm'
-            : 'text-slate-500 hover:text-slate-700'"
-          @click="activeReviewTab = 'records'">
-          审核记录
-          <span v-if="confirmedRecordListCount > 0"
-            class="ml-1 rounded-full bg-success-subtle px-1.5 py-0.5 text-[10px] font-semibold text-success">
-            {{ confirmedRecordListCount }}
+    <!-- ═══════ D. 审核档案：默认收起的辅助区，不再分 Tab ═══════ -->
+    <div class="shrink-0 rounded-lg border border-slate-200 bg-white"
+      data-testid="review-archive-zone">
+      <button type="button"
+        class="flex w-full items-center justify-between rounded-lg px-4 py-2.5 text-left text-sm font-semibold text-slate-700 hover:bg-slate-50"
+        data-testid="review-archive-toggle"
+        @click="expandedReviewArchive = !expandedReviewArchive">
+        <span class="flex flex-wrap items-center gap-2">
+          <span>审核档案</span>
+          <span class="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-normal text-slate-500">
+            审核记录 {{ confirmedRecordListCount }} · 历史流转 {{ workflowHistoryCount }} · {{ isDock ? '附件' : '附件材料' }}
           </span>
-        </button>
-        <button type="button"
-          class="rounded-md px-3 py-1.5 text-xs font-medium transition-colors"
-          :class="activeReviewTab === 'history'
-            ? 'bg-white text-slate-900 shadow-sm'
-            : 'text-slate-500 hover:text-slate-700'"
-          @click="activeReviewTab = 'history'">
-          历史流转
-          <span v-if="workflowHistoryCount > 0"
-            class="ml-1 rounded-full bg-brand-subtle px-1.5 py-0.5 text-[10px] font-semibold text-brand">
-            {{ workflowHistoryCount }}
-          </span>
-        </button>
-        <button type="button"
-          class="rounded-md px-3 py-1.5 text-xs font-medium transition-colors"
-          :class="activeReviewTab === 'attachments'
-            ? 'bg-white text-slate-900 shadow-sm'
-            : 'text-slate-500 hover:text-slate-700'"
-          @click="activeReviewTab = 'attachments'">
-          附件材料
-        </button>
-      </div>
+        </span>
+        <ChevronDown class="h-4 w-4 shrink-0 transition-transform" :class="{ 'rotate-180': expandedReviewArchive }" />
+      </button>
 
-      <!-- Tab: 审核记录 -->
-      <div v-show="activeReviewTab === 'records'" class="p-4"
+      <!-- 审核记录 -->
+      <div v-show="expandedReviewArchive" class="border-t border-slate-200 p-4"
         data-testid="review-workbench-confirmed-records-zone">
+        <div class="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">审核记录</div>
         <div v-if="confirmedRecordListCount === 0" class="py-4 text-center text-sm text-muted-foreground">暂无确认记录</div>
         <div v-else class="flex max-h-72 flex-col gap-2 overflow-y-auto">
           <div v-for="record in reviewStore.sortedConfirmedRecords.value"
@@ -2274,9 +2186,10 @@ function handleAnnotationQueueCompleted() {
         </div>
       </div>
 
-      <!-- Tab: 历史流转 -->
-      <div v-show="activeReviewTab === 'history'" class="p-4"
+      <!-- 历史流转 -->
+      <div v-show="expandedReviewArchive" class="border-t border-slate-200 p-4"
         data-testid="review-workbench-workflow-history-zone">
+        <div class="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">历史流转</div>
         <div v-if="workflowLoading" class="py-4 text-center text-sm text-muted-foreground">正在加载工作流...</div>
         <div v-else-if="workflowError" class="py-4 text-center text-sm text-danger">{{ workflowError }}</div>
         <div v-else-if="!workflow || workflow.history.length === 0" class="py-4 text-center text-sm text-muted-foreground">暂无历史记录</div>
@@ -2298,8 +2211,10 @@ function handleAnnotationQueueCompleted() {
         </div>
       </div>
 
-      <!-- Tab: 附件材料 -->
-      <div v-show="activeReviewTab === 'attachments'" class="space-y-4 p-4">
+      <!-- 附件材料 -->
+      <div v-show="expandedReviewArchive" class="space-y-4 border-t border-slate-200 p-4">
+        <div class="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">附件材料</div>
+
         <!-- 辅助校审数据 -->
         <section class="rounded-lg border border-slate-200 bg-slate-50 p-4"
           data-testid="review-workbench-aux-zone">

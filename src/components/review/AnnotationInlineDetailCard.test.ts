@@ -337,6 +337,104 @@ describe('AnnotationInlineDetailCard', () => {
     mounted.unmount();
   });
 
+  it('dock 档：关联元素排成芯片、锚点折进标题行、操作按钮用短标签但事件与 testid 不变', async () => {
+    currentUser.value = { id: 'author-1', role: UserRole.DESIGNER, name: '张设计' };
+    const { useToolStore } = await import('@/composables/useToolStore');
+    const store = useToolStore();
+    store.clearAll();
+    store.addCloudAnnotation({
+      id: 'annot-1',
+      objectIds: [],
+      anchorWorldPos: [0, 0, 0],
+      visible: true,
+      title: '云线批注',
+      description: '',
+      createdAt: 1,
+      authorId: 'author-1',
+      bindings: [
+        { refno: 'REF/A', role: 'anchor', noun: 'PIPE', createdAt: 1 },
+        { refno: 'REF/B', role: 'member', noun: 'VALV', createdAt: 1 },
+        { refno: 'REF/C', role: 'member', createdAt: 1 },
+      ],
+    });
+
+    const mounted = await mountCard({
+      density: 'dock',
+      item: createItem({
+        type: 'cloud',
+        authorId: 'author-1',
+        refnos: ['REF/B', 'REF/C'],
+        cloudBindings: [
+          { refno: 'REF/A', role: 'anchor', noun: 'PIPE', createdAt: 1 },
+          { refno: 'REF/B', role: 'member', noun: 'VALV', createdAt: 1 },
+          { refno: 'REF/C', role: 'member', createdAt: 1 },
+        ],
+      }),
+    });
+    const q = <T extends Element>(selector: string) => mounted.host.querySelector<T>(selector);
+
+    // 芯片列表替代逐行列表；每枚芯片带定位 / 移除两个入口，testid 与 normal 档一致
+    const chips = q<HTMLElement>('[data-testid="annotation-cloud-member-chips"]');
+    expect(chips).not.toBeNull();
+    expect(chips?.children.length).toBe(2);
+    expect(chips?.textContent).toContain('VALV');
+    expect(chips?.textContent).toContain('REF/C');
+
+    // 锚点不再单开一块，折进「关联元素」标题行
+    expect(mounted.host.textContent).toContain('云线锚点');
+    expect(mounted.host.textContent).toContain('PIPE');
+    expect(mounted.host.textContent).not.toContain('（不可更换）');
+    expect(q('[data-testid="annotation-cloud-remove-REF/A"]')).toBeNull();
+
+    // 短标签：可见文字缩短，完整名留在 aria-label
+    const addButton = q<HTMLButtonElement>('[data-testid="annotation-cloud-add-members"]');
+    expect(addButton?.textContent?.trim()).toBe('添加');
+    expect(addButton?.getAttribute('aria-label')).toBe('添加元素');
+    expect(q<HTMLButtonElement>('[data-testid="annotation-cloud-locate-all"]')?.textContent?.trim()).toBe('高亮全部');
+    const addDistance = q<HTMLButtonElement>('[data-testid="annotation-detail-add-distance"]');
+    expect(addDistance?.textContent?.trim()).toBe('距离');
+    expect(addDistance?.getAttribute('aria-label')).toBe('新增距离');
+    expect(q('[data-testid="annotation-detail-add-elevation-delta"]')).not.toBeNull();
+    // 图标化按钮：文字进 aria-label
+    expect(q<HTMLButtonElement>('[data-testid="annotation-detail-close"]')?.textContent?.trim()).toBe('');
+    expect(q<HTMLButtonElement>('[data-testid="annotation-detail-close"]')?.getAttribute('aria-label')).toBe('收起详情');
+    expect(q<HTMLButtonElement>('[data-testid="annotation-detail-locate-measurement-m-1"]')?.textContent?.trim()).toBe('');
+
+    // 证据行：问题截图与测量证据并排（flex），两块都是它的直接子元素
+    const evidenceRow = q<HTMLElement>('[data-testid="annotation-detail-evidence-row"]');
+    expect(evidenceRow?.classList.contains('flex')).toBe(true);
+    expect(evidenceRow?.children.length).toBe(2);
+    expect(evidenceRow?.children[0]?.tagName).toBe('FIGURE');
+    expect(evidenceRow?.children[0]?.classList.contains('flex-1')).toBe(true);
+    expect(evidenceRow?.children[1]?.textContent).toContain('测量证据');
+    expect(evidenceRow?.children[1]?.classList.contains('flex-1')).toBe(true);
+    expect(q<HTMLImageElement>('[data-testid="annotation-detail-screenshot"]')?.classList.contains('h-24')).toBe(true);
+
+    // 事件照旧：点芯片本体 = 单项定位高亮；× = 移除；新增距离 / 定位到模型照常转发
+    q<HTMLButtonElement>('[data-testid="annotation-cloud-locate-REF/B"]')?.click();
+    q<HTMLButtonElement>('[data-testid="annotation-cloud-locate-all"]')?.click();
+    q<HTMLButtonElement>('[data-testid="annotation-detail-add-distance"]')?.click();
+    q<HTMLButtonElement>('[data-testid="annotation-detail-locate"]')?.click();
+    q<HTMLButtonElement>('[data-testid="annotation-cloud-remove-REF/C"]')?.click();
+    await nextTick();
+
+    expect(mounted.locateElementsSpy).toHaveBeenNthCalledWith(1, {
+      item: expect.objectContaining({ id: 'annot-1' }),
+      refnos: ['REF/B'],
+    });
+    expect(mounted.locateElementsSpy).toHaveBeenNthCalledWith(2, {
+      item: expect.objectContaining({ id: 'annot-1' }),
+      refnos: ['REF/B', 'REF/C'],
+    });
+    expect(mounted.startMeasurementSpy).toHaveBeenCalledWith('distance', expect.objectContaining({ id: 'annot-1' }));
+    expect(mounted.locateSpy).toHaveBeenCalledWith(expect.objectContaining({ id: 'annot-1' }));
+    const record = store.cloudAnnotations.value.find((c) => c.id === 'annot-1');
+    expect(record?.refnos).toEqual(['REF/B']);
+
+    store.clearAll();
+    mounted.unmount();
+  });
+
   it('关联失效降级（ADR-0050）：未加载 / 不存在 / STALE 各出徽标，不存在的构件不可定位并从「定位高亮全部」剔除', async () => {
     const { useToolStore } = await import('@/composables/useToolStore');
     const { useAnnotationBindingResolve } = await import('@/composables/useAnnotationBindingResolve');
@@ -481,6 +579,23 @@ describe('AnnotationInlineDetailCard', () => {
     expect(mounted.host.querySelector<HTMLElement>('[data-testid="timeline-stub"]')?.dataset.density).toBe('dock');
 
     mounted.unmount();
+  });
+
+  it('normal 档证据区仍是上下堆叠，dock 档没截图时拍摄按钮与测量证据并排', async () => {
+    const normal = await mountCard();
+    const normalRow = normal.host.querySelector<HTMLElement>('[data-testid="annotation-detail-evidence-row"]');
+    expect(normalRow?.classList.contains('flex')).toBe(false);
+    expect(normalRow?.classList.contains('space-y-3')).toBe(true);
+    expect(normal.host.querySelector<HTMLImageElement>('[data-testid="annotation-detail-screenshot"]')?.classList.contains('max-h-64')).toBe(true);
+    normal.unmount();
+
+    const dock = await mountCard({ density: 'dock', item: createItem({ screenshot: undefined, thumbnailUrl: undefined }) });
+    const dockRow = dock.host.querySelector<HTMLElement>('[data-testid="annotation-detail-evidence-row"]');
+    expect(dockRow?.children.length).toBe(2);
+    const capture = dock.host.querySelector<HTMLButtonElement>('[data-testid="annotation-detail-screenshot-capture"]');
+    expect(capture?.textContent?.trim()).toBe('拍摄截图');
+    expect(capture?.classList.contains('flex-1')).toBe(true);
+    dock.unmount();
   });
 
   it('透传处理完成事件并支持收起', async () => {
