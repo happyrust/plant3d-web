@@ -83,6 +83,7 @@ scripts/*
 !scripts/run-gen-model-v1-frozen-source-live.ps1
 !scripts/run-gen-model-v1-p5-live.ps1
 !scripts/pms-chrome-devtools-flow.ts
+!scripts/pms-api-sniffer.ts
 !scripts/pms-plant3d-initiate-flow.ts
 !scripts/pms-contract-sequence.ts
 !scripts/review-annotation-flow-contract.ts
