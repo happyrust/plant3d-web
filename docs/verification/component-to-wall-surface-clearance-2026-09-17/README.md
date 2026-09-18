@@ -15,6 +15,8 @@
 
 前端：dev `:3111`（HMR 到 `8402b2c` 之后的工作树），页面参数 `?model_source=gen-model-v1&gm_backend_port=8024&show_refno=…`（`src/utils/apiBase.ts` 的 `gm_backend_port` 覆盖）。
 
+> **2026-09-18 08:27 后 `:8022` 已换到 `3509b93f9` 的干净 release**（用户 09-17 23:40 拍板），金样与完整流在 `:8022` 上复验一致——见 §7；上表 `:8022` 那一行是 09-17 的形态。`:8023` 未动。
+
 启动命令（cwd = 运行目录，与 `New-LocalRelease.ps1` 生成的 `Start-AMS.ps1` 同形）：
 
 ```powershell
@@ -71,3 +73,27 @@ GET http://127.0.0.1:8024/api/v1/spatial/surface-clearance?source_refno=24384/22
 - 后端：§1 的启动命令；数据 `POST /api/v1/model/ensure {"refno":…}`（ELBO / 墙各一次）。
 - 前端完整流：页面参数如 §3；窗口钩子 `window.__dtxLayer.getAllObjectsWithBounds()`（等对象数 ≥ 1）、`window.dispatchEvent(new CustomEvent('showModelByRefnos', {detail:{refnos, flyTo:false, requestId}}))` + 监听 `showModelByRefnosDone`、`window.__viewerToolStore.toolMode / pickedRefnos / pickRefnoFilter`、`window.__viewerContext.dimensionSystem.value.externalRegistry.snapshot.records`；坐标换算与 `e2e/tmp-shortest-ppoint-live.spec.ts` 的 `installFrameHelpers` 同一套（设计 m → 场景：`v.divide(scale(M)).applyMatrix4(M)`；场景 → 像素：`project(camera)`）；相机 `__dtxViewer.flyTo(eye, look, {duration: 0})`。
 - 菜单：`.hierarchical-menu-tab__trigger`（hover「测量」打开下拉）→ `.hierarchical-menu-item[data-command="clearance.componentToWall"]`；toast 是 Vuetify `v-snackbar`（success 2.2 s，用 MutationObserver 记 `.v-snackbar__content`）。
+
+## 7. `:8022` 换到 `3509b93f9` 后复验（2026-09-18 08:20–08:29；文件在 `8022-swap-2026-09-18/`）
+
+用户 09-17 23:40 拍板：把 `:8022` 换成含 `3509b93f9` 的 release 二进制（rocksdb 不丢数据，约一分钟停机），换完在 `:8022` 上重跑完整流与金样。
+
+### 7.1 换法（`swap-record.json`）
+
+- **二进制**：主工作树里有别人未提交的 `src/data_interface/model_impact.rs`（+80），直接在那儿 build 会把它带进去；于是 `git worktree add --detach .scratch\gmmc-3509b93f9 3509b93f9` 干净签出后 `cargo build --release --features http_api --bin aios-database`（共享 `D:\Rust\target`，2 m 56 s）→ `build_id 0.1.27+g3509b93f9ba0.1789690830`，`git_dirty=false`；二进制里 `rg -a` 得到 `spatial/surface-clearance` / `shared_leaves_only` / `source_within_target` 各 1 处。复制为 `_runs\review-full-8031\aios-database-3509b93f9.exe`（沿用该目录 `aios-database-<tag>.exe` / `gm-8022-<tag>.pid` / `logs\gm-8022-<tag>.log` 的命名）。用完 `git worktree remove` 掉。
+- **旧进程的形态**（换前核对）：pid 74824 `aios-database-c8d5f6b.exe`，cwd = 仓库根 `gen-model-model-cache`（那里的 `.gen-model.instance.lock` 与 `accel_tree_AvevaMarineSample.snapshot` 是它的），配置 = 仓库根 `DbOption.toml`（`store_mode = "rocksdb"`、`http_api_addr = "0.0.0.0:8022"`、`watch_dbnums = [7998, 8000]`、`room_membership = false`——与 `/health` 及日志 banner 逐项对上；`_runs\review-full-8031\DbOption.toml` 写的是 8031 / embedded-mem，不是它用的），资产目录 = 仓库根 `assets`（25 974 个 `.mesh`）。**它是提权起的**：同一用户名但 `Stop-Process` 回「拒绝访问」、CIM 读不到 ExecutablePath；本机 UAC `ConsentPromptBehaviorAdmin=0`（管理员静默提权），所以 `Start-Process powershell -Verb RunAs -ArgumentList 'Stop-Process -Id 74824 -Force'` 不弹窗就结束了它（290 ms）。
+- **起新进程**：同一 cwd、同一配置文件、`serve`，env `RUST_MIN_STACK=134217728 AIOS_OPEN_BROWSER=0 AIOS_RESTART_HANDOFF=1 RUST_BACKTRACE=1`，**非提权**（以后 agent 会话能直接管）。08:27:06 起、08:27:15 `/health ok`：**停机 9 s**。写者锁文件 `%LOCALAPPDATA%\gen-model\writer-locks\AvevaMarineSample-bb23a92e….writer.lock` 由新进程重新持有；空间树快照（epoch 1119）与库不一致 → 从库指针重建并落盘 23 898 条（< 1 s）；启动序列 1.18 s，顺手跑完一条 8191 增量（1 行）。`/health`：`rocksdb / durable`，`route_count 71`，`resident_records 0`（overlay 从空开始，读透库里的模型记录；完整流之后 117 / 2 根）。`:8023`、`:8024` 没动。
+
+### 7.2 金样（`http-surface-clearance-elbo-x-wall1.json`）
+
+`GET :8022/api/v1/spatial/surface-clearance?source_refno=24384/22582&target_refno=17496/105912&debug=1` **不用 `model/ensure` 直接 200**（ELBO / 墙的模型记录与网格都在 rocksdb + 仓库根 `assets\meshes` 里）：`distance_mm = 64.42777`，`intersects = false`，`outer / geometric`，法向 (−0.9993, 0.0368, 0)，⊥ 64.49526，两点 (−17464.125, 102.353, 2550.0) → (−17399.707, 101.229, 2550.0)，`source_sesno 619 / target_sesno 729`，`timing_ms {load 0, query 0, total 3}`，pairs 2 / 1 / 1，`warnings []`——与 §2（`:8024`）及 PR-A 进程内 live 逐字段一致。
+
+`3509b93f9` 那条修复在 `:8022` 上也是活的：FIXING `17496/137183` × WALL `17496/105912`（`target_kind=wall`）→ `target.leaf_count 1`、warning `source_within_target`；BRAN `24384/22579` × 自己的 ELBO `24384/22582`（`target_kind=any`）→ 源 3 片、`target_within_source`、0 mm；同 refno → 400。
+
+### 7.3 真 UI 完整流（`ui-full-flow-summary.json`，五张截图）
+
+页面 `http://localhost:3111/?model_source=gen-model-v1&gm_backend_port=8022&show_refno=24384_22582`（`gm_backend_port=8022` 与 `.env.development` 的缺省后端相同，显式写只是免歧义），步骤与 §3 相同：`show_refno` 选中 ELBO（4 对象）→ `showModelByRefnos` 加载墙 `ok=['17496_105912']`（117 对象，toast「已从 gen-model 加载 113 个几何实例」）→ 菜单「测量 › 构件→墙净距」→ `toolMode = pick_refno`、过滤 `CWALL / WALL / STWALL / GWALL / PANE`，toast「源构件 24384_22582：请点选一堵墙，Enter 确认、Esc 取消」→ 墙侧最近点抬高 0.55 m 投影到 (882.8, 318.6) 一次点中 `pickedRefnos = ['17496_105912']` → Enter → 前端只发一条 `GET :8022/api/v1/spatial/surface-clearance?source_refno=24384%2F22582&target_refno=17496%2F105912&target_kind=wall` → 200 → toast「**外表面净距 64.4 mm（墙面外侧），垂直于墙面**」→ `externalRegistry` `source='clearance'` 一条：`id clearance:clearance:24384_22582:17496_105912`，`sourceLabel 外表面净距: 24384_22582 → 17496_105912（墙面外侧）`，`layout.kind linear`，`authoritativeText "64mm ⊥"`，`a (−17.464125, 0.10235, 2.5500) / b (−17.399707, 0.10123, 2.5500)` m（= API 两点 ÷ 1000）→ 飞到两点、尺寸线画出；`toolMode` 回 `none`；`pageerror` 0。控制台 7 条 error 全是页面加载期的 `projects` 404 与 401（`useModelProjects` / 鉴权接口），与本功能无关。
+
+### 7.4 顺手发现：`:8022` 库里那枚 FIXING 的模型记录落点是错的（`side-finding-fixing-17496_137183-placement-8022-vs-8024.json`）
+
+同一逻辑、同一 `model_sesno 729`：`:8024`（09-17 现生成）里 FIXING `17496/137183` 的网格在 (−16364.8, −2930.1, 2106.2)——墙上 2.1 m 处，与 viewer 一致；`:8022`（rocksdb 存量记录）里在 (−2593.8, 12222.1, −5345.0)，与 8009 那行 `aabb:17496_137183`（x ≈ −2550、z −6.6…−5.3 m）同一个位置，于是 FIXING × 它所在的 WALL 在 `:8022` 上算出 **10 358.7 mm**（`:8024` 上是 0 mm 贴合）。§5 第二条「`aabb` 行只用了局部 `POS`」的根源看来在**存量模型记录本身**（`insts_flat × world_trans` 当初就摆错了），`aabb` 行只是从它算出来的；旧二进制生成时的 datum（JLDATU / PLDAT）处理与现在不同。对本功能：ELBO × WALL 1 金样两边一致，不受影响；凡 datum 下的 FIXING，`:8022` 要**重新生成那个根**（`17496/105799`，113 实例）才对，没有动它——是不是整库重建一遍模型记录由用户定。

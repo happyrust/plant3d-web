@@ -1,0 +1,190 @@
+{
+  "capturedAt": "2026-09-18T08:30:11.0170807+08:00",
+  "note": "FIXING 17496/137183 x WALL 17496/105912 target_kind=wall debug=1：:8022（rocksdb 存量模型记录）与 :8024（09-17 22:33 起的 mem 实例，model/ensure 现生成）同一二进制逻辑（3509b93f9 / aed4d6c74+同一修复），源网格落点不同。",
+  "port_8022": {
+    "build_id": "0.1.27+g3509b93f9ba0.1789690830",
+    "medium": "rocksdb",
+    "status": 200,
+    "response": {
+      "success": true,
+      "unit": "mm",
+      "method": "surface_to_surface",
+      "accuracy_class": "exact-surface",
+      "error_bound_mm": 0.5,
+      "target_kind": "wall",
+      "source": {
+        "refno": "17496/137183",
+        "noun": "FIXING",
+        "leaf_count": 1,
+        "triangle_count": 128
+      },
+      "target": {
+        "refno": "17496/105912",
+        "noun": "WALL",
+        "leaf_count": 1,
+        "triangle_count": 184
+      },
+      "result": {
+        "distance_mm": 10358.674,
+        "intersects": false,
+        "source_point": {
+          "x": -2593.8406,
+          "y": 12222.052,
+          "z": -5345.046
+        },
+        "target_point": {
+          "x": -11584.643,
+          "y": 10802.8545,
+          "z": -400.0
+        },
+        "vector": {
+          "dx": -8990.802,
+          "dy": -1419.1973,
+          "dz": 4945.046
+        },
+        "source_leaf_refno": "17496/137183",
+        "target_leaf_refno": "17496/105912",
+        "target_leaf_noun": "WALL",
+        "target_face": {
+          "kind": "bottom",
+          "normal": {
+            "x": -0.0,
+            "y": 0.0,
+            "z": -1.0
+          },
+          "confidence": "normal-only"
+        },
+        "perpendicular": null,
+        "witness": "closest-points"
+      },
+      "model": {
+        "source_sesno": 729,
+        "target_sesno": 729
+      },
+      "timing_ms": {
+        "load": 0,
+        "query": 0,
+        "total": 2
+      },
+      "warnings": [
+        "source_within_target: 源是目标的一部分（目标 1 片叶子与源重合，已从目标侧剔除），结果是源到目标其余部分的距离"
+      ],
+      "debug": {
+        "pairs_total": 1,
+        "pairs_evaluated": 1,
+        "pairs_pruned": 0,
+        "source_leaves": [
+          {
+            "refno": "17496/137183",
+            "key": "17496_137183",
+            "noun": "FIXING",
+            "triangles": 128,
+            "model_sesno": 729
+          }
+        ],
+        "target_leaves": [
+          {
+            "refno": "17496/105912",
+            "key": "17496_105912",
+            "noun": "WALL",
+            "triangles": 184,
+            "model_sesno": 729
+          }
+        ]
+      }
+    }
+  },
+  "port_8024": {
+    "build_id": "0.1.27+gaed4d6c74f6a.1789658537.dirty",
+    "medium": "mem",
+    "status": 200,
+    "response": {
+      "success": true,
+      "unit": "mm",
+      "method": "surface_to_surface",
+      "accuracy_class": "exact-surface",
+      "error_bound_mm": 0.5,
+      "target_kind": "wall",
+      "source": {
+        "refno": "17496/137183",
+        "noun": "FIXING",
+        "leaf_count": 1,
+        "triangle_count": 128
+      },
+      "target": {
+        "refno": "17496/105912",
+        "noun": "WALL",
+        "leaf_count": 1,
+        "triangle_count": 184
+      },
+      "result": {
+        "distance_mm": 0.0,
+        "intersects": false,
+        "source_point": {
+          "x": -16364.817,
+          "y": -2930.0754,
+          "z": 2106.1594
+        },
+        "target_point": {
+          "x": -16364.817,
+          "y": -2930.0754,
+          "z": 2106.1594
+        },
+        "vector": {
+          "dx": 0.0,
+          "dy": 0.0,
+          "dz": 0.0
+        },
+        "source_leaf_refno": "17496/137183",
+        "target_leaf_refno": "17496/105912",
+        "target_leaf_noun": "WALL",
+        "target_face": {
+          "kind": "end",
+          "normal": {
+            "x": -0.16043016,
+            "y": 0.90984476,
+            "z": 0.3826811
+          },
+          "confidence": "geometric"
+        },
+        "perpendicular": null,
+        "witness": "closest-points"
+      },
+      "model": {
+        "source_sesno": 729,
+        "target_sesno": 729
+      },
+      "timing_ms": {
+        "load": 0,
+        "query": 0,
+        "total": 3
+      },
+      "warnings": [
+        "source_within_target: 源是目标的一部分（目标 1 片叶子与源重合，已从目标侧剔除），结果是源到目标其余部分的距离"
+      ],
+      "debug": {
+        "pairs_total": 1,
+        "pairs_evaluated": 1,
+        "pairs_pruned": 0,
+        "source_leaves": [
+          {
+            "refno": "17496/137183",
+            "key": "17496_137183",
+            "noun": "FIXING",
+            "triangles": 128,
+            "model_sesno": 729
+          }
+        ],
+        "target_leaves": [
+          {
+            "refno": "17496/105912",
+            "key": "17496_105912",
+            "noun": "WALL",
+            "triangles": 184,
+            "model_sesno": 729
+          }
+        ]
+      }
+    }
+  }
+}

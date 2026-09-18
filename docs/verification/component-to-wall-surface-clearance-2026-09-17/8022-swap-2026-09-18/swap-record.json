@@ -1,0 +1,41 @@
+{
+  "swappedAt": "2026-09-18T08:27:06+08:00",
+  "old": {
+    "pid": 74824,
+    "exe": "_runs\\review-full-8031\\aios-database-c8d5f6b.exe",
+    "build_id": "0.1.27+gc8d5f6b92fee.1789636030.dirty",
+    "started_at": "2026-09-17T17:09:17+08:00",
+    "resident_records": 3943,
+    "resident_roots": 868,
+    "spatial_tree_entries": 23898,
+    "elevated": true
+  },
+  "new": {
+    "pid": 27760,
+    "exe": "_runs\\review-full-8031\\aios-database-3509b93f9.exe",
+    "build_id": "0.1.27+g3509b93f9ba0.1789690830",
+    "git_commit": "3509b93f9ba0",
+    "git_dirty": false,
+    "built_from": "git worktree add --detach .scratch\\gmmc-3509b93f9 3509b93f9; cargo build --release --features http_api --bin aios-database (2 m 56 s)",
+    "cwd": "D:\\work\\plant-code\\old\\gen-model-model-cache",
+    "config": "DbOption.toml（仓库根，rocksdb / 0.0.0.0:8022 / watch_dbnums [7998, 8000] / room_membership false）",
+    "env": [
+      "RUST_MIN_STACK=134217728",
+      "AIOS_OPEN_BROWSER=0",
+      "AIOS_RESTART_HANDOFF=1",
+      "RUST_BACKTRACE=1"
+    ],
+    "args": "serve",
+    "logs": "_runs\\review-full-8031\\logs\\gm-8022-3509b93f9.log / .log.err",
+    "pid_file": "_runs\\review-full-8031\\gm-8022-3509b93f9.pid",
+    "elevated": false
+  },
+  "downtime_seconds": 9,
+  "health_after_ready": {
+    "medium": "rocksdb",
+    "durable": true,
+    "spatial_tree": "23898/ready（快照 epoch 1119 与库不一致 → 从库指针重建并落盘）",
+    "resident_records": 0,
+    "route_count": 71
+  }
+}

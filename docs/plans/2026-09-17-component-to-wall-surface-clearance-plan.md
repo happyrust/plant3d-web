@@ -263,13 +263,14 @@ reducer 拒收缺 `method` / `accuracyClass` 的记录（09-11 M0 验收）。
 - **G4 live ✓ / G6 仍无实机对**：WALL 1 周边 126 对 AABB 相交的管 × 墙逐对打接口——17 对 `intersects`（硬穿墙）、4 对 0 mm 贴合、23 对 < 10 mm（贴着 12 三角形的 PANE 平板走）、其余 82 对 10 mm 以上；38 个 FIXING 开洞周围无管件、FLOOR 无竖管贯穿。带洞路径仍只有合成 / 行解析单测。
 - **顺手发现**（未改代码）：① 源是目标后代时目标叶子集合含源自己（FIXING × 其所在 WALL：`target.leaf_count 2`），一般情形自对给 0 掩盖真值，建议 `run()` 里剔除同 key 行（§9）；② 8009 里 `aabb:17496_137183` 落在 z −6.6 m，而网格 / viewer 都在墙上 2.1 m 处——datum（JLDATU / PLDAT）下 FIXING 的库内 AABB 疑似只用了局部 `POS`，与本功能无关，转 gen-model 侧。
 - **没做的**：`stale` 的真 UI 可见性（要模型换版）；带洞实机对；e2e 脚本未入仓（步骤与选择器记在验证 README §6）。
+- **2026-09-18 08:27 `:8022` 已换到 `3509b93f9`**（用户 09-17 23:40 拍板；验证 README §7）：从干净 worktree build（`0.1.27+g3509b93f9ba0`，不带别人在途的 `model_impact.rs`），旧进程是提权起的、靠本机静默 UAC 结束，新进程非提权、同 cwd / 同 `DbOption.toml`，**停机 9 s**，空间树 23 898 条从库重建，rocksdb 数据在。`:8022` 金样 **64.42777 mm** 不用 `model/ensure` 直接 200、逐字段与 `:8024` 一致；真 UI 完整流（`gm_backend_port=8022`）一次点中、一条请求、toast「外表面净距 64.4 mm（墙面外侧），垂直于墙面」、`64mm ⊥` 尺寸、`pageerror` 0；FIXING × WALL / BRAN × 自己的 ELBO 两条 warning 在 `:8022` 也活。**顺手发现**：`:8022` 库里 FIXING `17496/137183` 的存量模型记录落在 (−2594, 12222, −5345)（与错的 `aabb` 行同一位置），`:8024` 现生成的在墙上 2.1 m——§9「datum 下 FIXING」那条的根源是存量记录本身，重新生成根 `17496/105799` 才对，未动。
 
 ## 8. PR 拆分与顺序
 
 1. **PR-A（gen-model，`gen-model-model-cache` 分支）——已落地 `a0e307588`**：`fast_model/surface_clearance.rs`（参数 / 叶子加载 + 两级缓存 / `closest_points` + AABB 剪枝 / 面分类 / raycast / 响应）+ `handlers::spatial_surface_clearance` + GET 路由 + 守卫更新 + 11 条单测 + 1 条 live。**偏离**：没有去抽 `gen_world_mesh` 的磁盘支路——本模块自带只读磁盘的加载器（`gen_world_mesh` 先三角化再回退磁盘，两者口径不同），`rvm_baseline` 一字未动。
 2. **PR-B（plant3d-web）——已落地 `dbbda78`**：`genModelV1SurfaceClearance`（GET + query）；`src/clearance/domain/clearanceRecord.ts`（嵌 `ComputationProvenance`，缺合同拒收）、`services/clearanceService.ts`（mm → m 只在这里转一次；只认 `surface_to_surface / exact-surface`）、`stores/useClearanceStore.ts`（一对 inputs 一条，重算 / stale / failed）、`adapters/clearanceExternalDimensions.ts`（linear external，文字 `64mm ⊥` / `（过期）…` / `相交`）、`testing/surfaceClearanceFixtures.ts`（live 真值）；vitest 22 + API 1，type-check 新增 0。
 3. **PR-C（plant3d-web）——已落地 `8402b2c`**：`composables/useComponentToWallClearance.ts`（ribbon `clearance.componentToWall` → 源 = 当前选中 → `pick_refno` 只放行墙族 → 确认即算 → toast + 飞到两点）、`composables/useClearanceDimensionSync.ts`（store → `replaceExternalSource('clearance')`）、ViewerPanel 两条命令 + `flyToClearanceRecord`（designToWorld = mm→scene 全局矩阵 × 1000）、抽屉「净距标注」改走 `clearanceStore.compute(targetKind any)`、ribbon 两颗按钮；vitest +8，抽屉 23 条不回归。真 UI 冒烟（dev :3111 HMR，Playwright 真点击）：按钮在、未选中出 warning toast、pageerror 0。**未做**：选中 → 点墙 → 出尺寸的完整流截图与 G6「构件在洞里」实机对——都要 :8022 / :8023 换到含 `a0e307588` 的二进制。
-4. **PR-D（docs）——已落地**：09-11 计划 PR1.2 / PR1.3 / M1 金样状态同步（另一条会话，`5ea1417`）；完整流截图 + HTTP 金样 + G4 live + G6 扫描记录进 `docs/verification/component-to-wall-surface-clearance-2026-09-17/`（本笔，§7.2）。**偏离**：没换 `:8023`（mem 档、无数据、PMS e2e 在用），改在 `:8024` 并排起含 `a0e307588` 的干净 release 二进制验证；`:8022` / `:8023` 换不换、何时换仍由用户定。
+4. **PR-D（docs）——已落地**：09-11 计划 PR1.2 / PR1.3 / M1 金样状态同步（另一条会话，`5ea1417`）；完整流截图 + HTTP 金样 + G4 live + G6 扫描记录进 `docs/verification/component-to-wall-surface-clearance-2026-09-17/`（本笔，§7.2）。**偏离**：没换 `:8023`（mem 档、无数据、PMS e2e 在用），改在 `:8024` 并排起含 `a0e307588` 的干净 release 二进制验证；`:8022` / `:8023` 换不换、何时换仍由用户定。**→ 2026-09-18 `:8022` 已换到 `3509b93f9`（停机 9 s），金样 / 完整流在 `:8022` 复验一致（§7.2 末条、验证 README §7）；`:8023` 仍是旧的。**
 
 ## 9. 风险与开放问题
 
@@ -282,9 +283,9 @@ reducer 拒收缺 `method` / `accuracyClass` 的记录（09-11 M0 验收）。
 - **`model_sesno` 跨库不可比**：只在同一 dbnum 下比较两侧会话号（live 里源 24384 / 目标 17496 分属两库，586 vs 729 不是异常）。
 - **legacy 抽屉路径**：改接后 `usePipeDistanceStore` 仍被 `PipeDistanceDrawer` 用；09-11 M1 再统一。
 - **多 MDB / 身份**：沿 `ProjectReq`，两 refno 需在同一服务实例可见；跨库对（如上面 A–F）只要都在同一个 Surreal 库里就能算。
-- **:8023 / :8022 换二进制**：新路由要服务重启后才对外可用；两台都有人在用（PMS e2e / 校审全量），何时换由用户定。**PR-D 核对补充**：`:8023` 是 mem 档（重启即清库，且它几乎没有模型数据，换了也跑不了完整流）；`:8022` 是 8009 库唯一写者（rocksdb，durable，重启不丢数据，但要停校审 / dev 缺省后端一分钟左右）；并排验证用 `:8024`（`_runs\surface-clearance-8024`，mem，独立网格目录）即可，不必动那两台。
+- **:8023 / :8022 换二进制**：新路由要服务重启后才对外可用；两台都有人在用（PMS e2e / 校审全量），何时换由用户定。**PR-D 核对补充**：`:8023` 是 mem 档（重启即清库，且它几乎没有模型数据，换了也跑不了完整流）；`:8022` 是 8009 库唯一写者（rocksdb，durable，重启不丢数据，但要停校审 / dev 缺省后端一分钟左右）；并排验证用 `:8024`（`_runs\surface-clearance-8024`，mem，独立网格目录）即可，不必动那两台。**2026-09-18：`:8022` 已换（`3509b93f9`，非提权、`_runs\review-full-8031\gm-8022-3509b93f9.pid`）；`:8023` 未换。**
 - **源 ⊂ 目标（后代关系）的自对**（PR-D 实测）——**已修 `gen-model-model-cache` `3509b93f9`**：目标叶子按 `anc CONTAINS` 取，源若是目标的后代（如 FIXING × 它所在的 WALL），目标集合含源自身，自对回 0 / intersects 掩盖真值。现在 `split_shared_leaves` 把重合叶子从**祖先那一侧**剔掉（源在目标里 → 剔目标；目标在源里 → 剔源），warning `source_within_target` / `target_within_source`，剔完一侧空了 → 422 `shared_leaves_only`；单测 1 条 + live 三对（FIXING × WALL 目标 2→1 片、BRAN `24384/22579` × 自己的 ELBO 源 4→3 片、金样不变）。
-- **datum 下 FIXING 的库内 AABB**（PR-D 顺手发现，与本功能无关）：`aabb:17496_137183` 在 8009 里落在 z −6.6 m，网格与 viewer 都在 2.1 m；疑似只用了局部 `POS`，影响 `spatial/nearby` / 空间树对这类元素的定位，转 gen-model 侧。
+- **datum 下 FIXING 的库内 AABB**（PR-D 顺手发现，与本功能无关）：`aabb:17496_137183` 在 8009 里落在 z −6.6 m，网格与 viewer 都在 2.1 m；疑似只用了局部 `POS`，影响 `spatial/nearby` / 空间树对这类元素的定位，转 gen-model 侧。**2026-09-18 补**：`:8022` 换新二进制后同一对 FIXING × WALL 算出 10 358.7 mm，源网格落在与 `aabb` 行同一个错位置——错的是库里的**存量模型记录**（`insts_flat × world_trans`），`aabb` 行只是它的派生；`:8024` 现生成的记录是对的。修法是重新生成那个根（`17496/105799`）/ 全库重建，未动。
 
 ## 10. 完成定义
 
