@@ -1,0 +1,48 @@
+{
+  "at": "2026-09-18T08:40:31+08:00",
+  "request": "POST :8022/api/v1/model/ensure {\"refno\":\"17496/105799\",\"force\":true}",
+  "status": 200,
+  "elapsed_ms": 237,
+  "reply": {
+    "generation_root": "17496/105799",
+    "generation_root_noun": "CWALL",
+    "status": "Generated",
+    "model_instance_count": 168,
+    "generated_instance_count": 168,
+    "published_geometry_count": 113,
+    "published_via": "regen",
+    "source_sesno": 729,
+    "model_source": "database",
+    "durable": true
+  },
+  "write_behind": "persist_attempts 2 → 3，1 s 内 last_success，无 error；resident_records 117 → 172、roots 2 → 3",
+  "inst_relate_after": {
+    "key": "17496_137183",
+    "model_sesno": 729,
+    "world_trans_translation": [
+      -15559.963,
+      -2743.641,
+      2150.0
+    ],
+    "booled_id": "e3d_baked_v2_c3edc9f84a5197cb96e6f62ac34f609393f7e9ed3c6dc0a75c280aab41daeea5"
+  },
+  "aabb_row_before_and_after": {
+    "mins": [
+      -17195.662,
+      -3091.2188,
+      2088.0
+    ],
+    "maxs": [
+      -15549.196,
+      -2682.583,
+      2212.0
+    ],
+    "note": "08:40 重算前就已是这个值（09-17 23 点读到的是 z −6.6 m）；nearby center (−16372.43, −2886.90, 2150) source=refno_aabb_center 同样"
+  },
+  "surface_clearance": {
+    "before_regen": "10358.674 mm，sp (−2593.84, 12222.05, −5345.05)",
+    "after_regen_same_process": "仍 10358.674 mm——LEAF_MESHES 缓存键 (叶子 key, model_sesno) = (17496_137183, 729) 没变",
+    "after_cache_overflow": "0 mm 贴合 intersects=false，sp = tp = (−16364.817, −2930.0754, 2106.1594)，与 :8024 逐字一致；warning source_within_target",
+    "cache_overflow_how": "GET surface-clearance?source_refno=17496/8516(ZONE, 1789 叶 / 43 720 tri)&target_refno=24384/22582&target_kind=any → LEAF_MESHES 超 1 024 整体清空（只读请求，560 ms，结果 64.42777）"
+  }
+}
