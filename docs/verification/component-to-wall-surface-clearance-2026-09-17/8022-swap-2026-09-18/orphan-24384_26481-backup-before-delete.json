@@ -1,0 +1,177 @@
+{
+  "capturedAt": "2026-09-18T12:35:34.6453077+08:00",
+  "note": "8000 孤儿模型行（BOX 24384/26481，EQUI 24384/26480 与它在 sesno 604 一起被删，模型行没退）删除前的原样备份；成因见 gen-model-model-cache docs/evidence/2026-09-15-adr076-increment-durable-boundary.md §7 与 mem-161",
+  "store": "ws://127.0.0.1:8009 ns 1516 db AvevaMarineSample",
+  "rows": {
+    "inst_relate": {
+      "aabb": "aabb:24384_26481",
+      "aabb_d": {
+        "maxs": [
+          -2641.149,
+          8311.347,
+          4175.0
+        ],
+        "mins": [
+          -3001.391,
+          7696.573,
+          3625.0
+        ]
+      },
+      "anc": [
+        104728482572145,
+        104728482572144,
+        104728482570439,
+        104728482568063,
+        69544110456832
+      ],
+      "bad_bool": false,
+      "booled": false,
+      "dbnum": 8000,
+      "generic": "BOX",
+      "id": "inst_relate:24384_26481",
+      "in": "pe:24384_26481",
+      "insts_flat": [
+        {
+          "geo_hash": "12296242654610097853",
+          "transform": {
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              310.0,
+              590.0,
+              550.0
+            ],
+            "translation": [
+              0.0,
+              0.0,
+              0.0
+            ]
+          }
+        }
+      ],
+      "model_sesno": 603,
+      "out": "inst_info:24384_26481",
+      "solid": true,
+      "world_trans": "trans:24384_26481",
+      "world_trans_d": {
+        "rotation": [
+          -0.043619387,
+          0.99904823,
+          6.117406E-17,
+          -2.6709172E-18
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "translation": [
+          -2821.27,
+          8003.96,
+          3900.0
+        ]
+      }
+    },
+    "inst_info": {
+      "dbnum": 8000,
+      "id": "inst_info:24384_26481",
+      "model_sesno": 603,
+      "noun": "BOX"
+    },
+    "aabb": {
+      "d": {
+        "maxs": [
+          -2641.149,
+          8311.347,
+          4175.0
+        ],
+        "mins": [
+          -3001.391,
+          7696.573,
+          3625.0
+        ]
+      },
+      "id": "aabb:24384_26481"
+    },
+    "trans": {
+      "d": {
+        "rotation": [
+          -0.043619387,
+          0.99904823,
+          6.117406E-17,
+          -2.6709172E-18
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "translation": [
+          -2821.27,
+          8003.96,
+          3900.0
+        ]
+      },
+      "id": "trans:24384_26481"
+    },
+    "geo_relate_of_inst_info": {
+      "geo_type": "Pos",
+      "geom_refno": "pe:24384_26481",
+      "id": "geo_relate:[inst_info:24384_26481, inst_geo:⟨12296242654610097853⟩]",
+      "in": "inst_info:24384_26481",
+      "out": "inst_geo:⟨12296242654610097853⟩",
+      "transform": {
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          310.0,
+          590.0,
+          550.0
+        ],
+        "translation": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "visible": true
+    },
+    "pe_box": {
+      "cata_hash": "24384_26481",
+      "dbnum": 8000,
+      "deleted": true,
+      "id": "pe:24384_26481",
+      "lock": false,
+      "name": "",
+      "noun": "BOX",
+      "owner": "pe:24384_26480",
+      "refno": "BOX:24384_26481",
+      "sesno": 604,
+      "status_code": null
+    },
+    "pe_equi": {
+      "cata_hash": "24384_26480",
+      "dbnum": 8000,
+      "deleted": true,
+      "id": "pe:24384_26480",
+      "lock": false,
+      "name": "/CODEX_S5_EQUI_7F3A2B10",
+      "noun": "EQUI",
+      "owner": "pe:24384_24775",
+      "refno": "EQUI:24384_26480",
+      "sesno": 604,
+      "status_code": null
+    },
+    "inst_relate_8000_count_before": {
+      "n": 2529
+    }
+  }
+}
