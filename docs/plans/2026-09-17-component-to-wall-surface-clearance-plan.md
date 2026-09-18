@@ -226,7 +226,7 @@ reducer 拒收缺 `method` / `accuracyClass` 的记录（09-11 M0 验收）。
 | G3 | 弧墙内侧 / 外侧各一构件 | `target_face.kind` 分别 inner / outer（geometric），`error_bound_mm = 0.5`，与解析圆柱面手算差 ≤ 弦高 | 合成单测 ✓（120° 环形扇区 48 段，内外各 500 mm，误差 < 3 mm 容差内）；live ELBO / BEND / BRAN → outer、SCTN → inner |
 | G4 | 构件穿墙 | `distance = 0`、`intersects = true`、无垂距，`witness = aabb-overlap-center` | 合成单测 ✓；**live ✓（PR-D，§7.2）**：BEND `24384/24729` × GWALL `17496/118130`、BEND `24384/24742` × PANE `17496/136833` 等 17 对硬穿墙都回 0 + intersects + `aabb-overlap-center` |
 | G5 | 选 CWALL owner vs 选单块 STWALL | owner 结果 ≤ 单块结果，`target_leaf_refno` 指出命中哪块 | 合成单测 ✓（两墙两构件取最小，剪掉 ≥ 1 对）；live BOX × CWALL owner 113 叶子 → 29.14 mm 命中 GWALL `17496/118130` |
-| G6 | 带洞墙（`booled_id`）、构件在洞里 | 距洞壁的距离，不是未开洞墙的 0 | 行解析单测覆盖 `booled_id` 路；live 墙叶子全是 `e3d_baked_v2_*` 布尔后网格；**实机对仍未找到（PR-D，§7.2）**：WALL 1 周边 126 对 AABB 相交的管 × 墙里穿墙的 17 对全是没开洞的硬穿（G4），38 个 FIXING 开洞周围没有管件，FLOOR 无竖管贯穿——留待有穿孔数据的工程 |
+| G6 | 带洞墙（`booled_id`）、构件在洞里 | 距洞壁的距离，不是未开洞墙的 0 | **合成几何单测 ✓**（09-18，gen-model-model-cache `82517dbd8`：`g6_component_in_wall_hole_measures_to_hole_wall_not_zero`——200 厚直墙开 400 × 400 方孔、穿孔的管离洞壁 50 mm → 50 mm / 不相交 / 最近点在洞壁上，同一根管对实心墙回 G4 的 0 + intersects 作对照；`7de9309f9`：`hole_wall_faces_currently_classify_as_end_and_top_bottom` 钉住洞壁面分类**现状**——竖洞壁法向 ±Y 读 `end`/pca、洞底 / 洞顶读 `top` / `bottom`/normal-only，都不是主面、无垂距无 warning；这是现状不是口径）+ **行解析单测 ✓**（`booled_id` 路）；live 墙叶子全是 `e3d_baked_v2_*` 布尔后网格；**实机对仍缺（PR-D，§7.2）**：WALL 1 周边 126 对 AABB 相交的管 × 墙里穿墙的 17 对全是没开洞的硬穿（G4），38 个 FIXING 开洞周围没有管件，FLOOR 无竖管贯穿——留待有穿孔数据的工程 |
 | G7 | 源为 BRAN owner | 多叶子并集（含 `tubi_relate` 隐式管身）；`source_leaf_refno` 是某个成员 | live BRAN `24384/22659`（20 叶子 384 tri）× 弧墙 → 209.73 mm，命中成员 `24384/22679` |
 
 ### 7.1 PR-A 验证记录（2026-09-17 20:0x–20:3x，`gen-model-model-cache` → `a0e307588`）
@@ -290,7 +290,7 @@ reducer 拒收缺 `method` / `accuracyClass` 的记录（09-11 M0 验收）。
 
 ## 10. 完成定义
 
-- G1–G7 金样全过并留 curl 输入 / 输出与截图；——**2026-09-17 状态**：合成单测 7 组 ✓；live G1–G5 / G7 ✓（§7.1 + §7.2），G6 只有合成 / 行解析覆盖，实机对缺穿孔数据；curl 输入 / 输出与截图在 `docs/verification/component-to-wall-surface-clearance-2026-09-17/`。
+- G1–G7 金样全过并留 curl 输入 / 输出与截图；——**2026-09-17 状态**：合成单测 G1–G6 ✓（tests 里 `g1`–`g6` 与 §7 表一一对应，09-18 `7de9309f9` 起）；live G1–G5 / G7 ✓（§7.1 + §7.2）；G6 合成几何单测 ✓（`82517dbd8` / `7de9309f9`）+ 行解析 ✓，洞壁面分类现状 `end` / `top`，实机对仍缺穿孔数据；curl 输入 / 输出与截图在 `docs/verification/component-to-wall-surface-clearance-2026-09-17/`。
 - 前端 `clearance` 外部尺寸源在真 UI 出现，标签带精度字样，stale 可见；——**状态**：出现 ✓（`64mm ⊥`、来源标签「外表面净距」），stale 的真 UI 可见性未演示（要模型换版）。
 - `npm run type-check` / `lint` / 相关 vitest 全绿，`cargo test` 新增单测全过；——**状态** ✓（PR-A / B / C 各自记录）。
 - 决策 `d-428` 已登记（本轮已完成），09-11 计划状态已同步（PR-D）。——**状态** ✓（`5ea1417`）。
