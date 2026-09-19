@@ -11,6 +11,8 @@ const versionSourceMocks = vi.hoisted(() => ({
   listElementVersions: vi.fn(),
   loadVersion: vi.fn(),
   attributesAt: vi.fn(),
+  attributeHistory: vi.fn(),
+  diffSummary: vi.fn(),
 }));
 vi.mock('@/model-source', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/model-source')>();
@@ -106,10 +108,12 @@ describe('ModelUnitVersionComparePanel', () => {
     await flushUi();
 
     expect(host.textContent).toContain('DB 7997');
-    expect((host.querySelector('[data-testid="model-unit-compare-a"]') as HTMLSelectElement).value).toBe('791');
-    expect((host.querySelector('[data-testid="model-unit-compare-b"]') as HTMLSelectElement).value).toBe('897');
-    expect((host.querySelector('[data-testid="model-unit-compare-a"]') as HTMLSelectElement).textContent).toContain('2026');
+    expect(host.querySelector('[data-testid="model-unit-compare-a"]')?.getAttribute('data-sesno')).toBe('791');
+    expect(host.querySelector('[data-testid="model-unit-compare-b"]')?.getAttribute('data-sesno')).toBe('897');
+    expect(host.querySelector('[data-testid="model-unit-compare-timeline"]')?.textContent).toContain('2026');
 
+    (host.querySelector('[data-testid="model-unit-compare-tab-model"]') as HTMLButtonElement).click();
+    await flushUi();
     (host.querySelector('[data-testid="model-unit-compare-run"]') as HTMLButtonElement).click();
     await flushUi();
 
@@ -153,10 +157,12 @@ describe('ModelUnitVersionComparePanel', () => {
     expect(versionSourceMocks.listElementVersions).toHaveBeenCalledWith(7997, '1_2');
     expect(versionSourceMocks.listVersions).toHaveBeenCalledWith(7997, '24381_145018');
     expect(host.querySelector('[data-testid="model-unit-compare-scope"]')?.textContent).toContain('所属单元 24381_145018');
-    const options = host.querySelector('[data-testid="model-unit-compare-a"]') as HTMLSelectElement;
-    expect(options.textContent).toContain('本构件 mesh');
-    expect(options.textContent).toContain('本构件 未变');
+    const timelineText = host.querySelector('[data-testid="model-unit-compare-timeline"]')?.textContent ?? '';
+    expect(timelineText).toContain('本构件 mesh');
+    expect(timelineText).toContain('本构件 未变');
 
+    (host.querySelector('[data-testid="model-unit-compare-tab-model"]') as HTMLButtonElement).click();
+    await flushUi();
     (host.querySelector('[data-testid="model-unit-compare-run"]') as HTMLButtonElement).click();
     await flushUi();
 
@@ -172,7 +178,7 @@ describe('ModelUnitVersionComparePanel', () => {
     app.unmount();
   });
 
-  it('构件不在任何最小交付单元下：给明确原因，不去查版本表', async () => {
+  it('构件不在任何最小交付单元下：给明确说明（不是错误），不去查版本表', async () => {
     versionSourceMocks.listElementVersions.mockResolvedValue({
       ...elementTimeline, refno: '1_9', noun: 'ZONE', unitRefno: null, unitNoun: null, versions: [],
     } satisfies ModelElementVersionTimeline);
@@ -188,7 +194,8 @@ describe('ModelUnitVersionComparePanel', () => {
     (host.querySelector('[data-testid="model-unit-compare-load"]') as HTMLButtonElement).click();
     await flushUi();
 
-    expect(host.querySelector('[data-testid="model-unit-compare-error"]')?.textContent).toContain('不在任何最小交付单元下');
+    expect(host.querySelector('[data-testid="model-unit-compare-notice"]')?.textContent).toContain('不在任何最小交付单元下');
+    expect(host.querySelector('[data-testid="model-unit-compare-error"]')).toBeNull();
     expect(versionSourceMocks.listVersions).not.toHaveBeenCalled();
 
     app.unmount();
@@ -207,6 +214,8 @@ describe('ModelUnitVersionComparePanel', () => {
     input.value = '24381_145018';
     input.dispatchEvent(new Event('input'));
     (host.querySelector('[data-testid="model-unit-compare-load"]') as HTMLButtonElement).click();
+    await flushUi();
+    (host.querySelector('[data-testid="model-unit-compare-tab-model"]') as HTMLButtonElement).click();
     await flushUi();
     (host.querySelector('[data-testid="model-unit-compare-run"]') as HTMLButtonElement).click();
     await flushUi();
@@ -259,8 +268,8 @@ describe('ModelUnitVersionComparePanel', () => {
     await flushUi();
 
     // 没点任何按钮：版本已查、A/B 已按 URL 选好（791 早于 897 自动摆正）、对比已跑并派发 open
-    expect((host.querySelector('[data-testid="model-unit-compare-a"]') as HTMLSelectElement).value).toBe('791');
-    expect((host.querySelector('[data-testid="model-unit-compare-b"]') as HTMLSelectElement).value).toBe('897');
+    expect(host.querySelector('[data-testid="model-unit-compare-a"]')?.getAttribute('data-sesno')).toBe('791');
+    expect(host.querySelector('[data-testid="model-unit-compare-b"]')?.getAttribute('data-sesno')).toBe('897');
     expect(host.querySelector('[data-testid="model-unit-compare-summary"]')?.textContent).toContain('新增 1');
     expect(events.some((event) => event.detail?.action === 'open')).toBe(true);
 
@@ -280,7 +289,7 @@ describe('ModelUnitVersionComparePanel', () => {
     await flushUi();
     await flushUi();
 
-    expect((host.querySelector('[data-testid="model-unit-compare-a"]') as HTMLSelectElement).value).toBe('791');
+    expect(host.querySelector('[data-testid="model-unit-compare-a"]')?.getAttribute('data-sesno')).toBe('791');
     expect(host.querySelector('[data-testid="model-unit-compare-error"]')?.textContent).toContain('compare_a=5');
     expect(host.querySelector('[data-testid="model-unit-compare-summary"]')).toBeTruthy();
 
@@ -305,6 +314,8 @@ describe('ModelUnitVersionComparePanel', () => {
     input.value = '24381_145018';
     input.dispatchEvent(new Event('input'));
     (host.querySelector('[data-testid="model-unit-compare-load"]') as HTMLButtonElement).click();
+    await flushUi();
+    (host.querySelector('[data-testid="model-unit-compare-tab-model"]') as HTMLButtonElement).click();
     await flushUi();
     (host.querySelector('[data-testid="model-unit-compare-run"]') as HTMLButtonElement).click();
     await flushUi();
@@ -372,10 +383,208 @@ describe('ModelUnitVersionComparePanel', () => {
     input.dispatchEvent(new Event('input'));
     (host.querySelector('[data-testid="model-unit-compare-load"]') as HTMLButtonElement).click();
     await flushUi();
+    (host.querySelector('[data-testid="model-unit-compare-tab-model"]') as HTMLButtonElement).click();
+    await flushUi();
     (host.querySelector('[data-testid="model-unit-compare-run"]') as HTMLButtonElement).click();
     await flushUi();
 
     expect(host.querySelector('[data-testid="model-unit-compare-noop"]')?.textContent).toContain('无几何差异');
+    app.unmount();
+  });
+
+  it('范围开关：单元及以下缺省「所有子节点」，切「仅自身」后 A/B 保留、越界行灰掉并标「本范围无变化」（Q9 a / Q10 c）', async () => {
+    versionSourceMocks.listElementVersions.mockResolvedValue(elementTimeline);
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const app = createApp(ModelUnitVersionComparePanel);
+    app.mount(host);
+    const input = host.querySelector('[data-testid="model-unit-compare-refno"]') as HTMLInputElement;
+    input.value = '1_2';
+    input.dispatchEvent(new Event('input'));
+    (host.querySelector('[data-testid="model-unit-compare-load"]') as HTMLButtonElement).click();
+    await flushUi();
+
+    const subtree = host.querySelector('[data-testid="model-unit-compare-scope-subtree"]') as HTMLButtonElement;
+    expect(subtree.getAttribute('aria-pressed')).toBe('true');
+    expect(host.querySelector('[data-testid="model-unit-compare-timeline-head"]')?.textContent).toContain('本范围 2 版');
+    expect(host.querySelector('[data-testid="model-unit-compare-a"]')?.getAttribute('data-sesno')).toBe('791');
+    expect(host.querySelector('[data-testid="model-unit-compare-b"]')?.getAttribute('data-sesno')).toBe('897');
+
+    (host.querySelector('[data-testid="model-unit-compare-scope-self"]') as HTMLButtonElement).click();
+    await flushUi();
+    // 897 那一版构件自己没变：仅自身范围只剩 791 一版，但 897 仍是 B —— 留着、灰掉、标出来
+    expect(host.querySelector('[data-testid="model-unit-compare-timeline-head"]')?.textContent).toContain('本范围 1 版');
+    expect(host.querySelector('[data-testid="model-unit-compare-b"]')?.getAttribute('data-sesno')).toBe('897');
+    const dimmed = host.querySelector('[data-testid="model-unit-compare-timeline"] li[data-sesno="897"]');
+    expect(dimmed?.getAttribute('data-in-scope')).toBe('false');
+    expect(dimmed?.textContent).toContain('本范围无变化');
+    app.unmount();
+  });
+
+  it('时间线上点 A / B 选版本并自动摆正；「与上一版比」「与最新比」', async () => {
+    versionSourceMocks.listVersions.mockResolvedValue([
+      version(700, '2026-07-22T00:00:00Z'), version(791, '2026-07-22T01:00:00Z'), version(897, '2026-07-22T02:00:00Z'),
+    ]);
+    versionSourceMocks.listElementVersions.mockResolvedValue({
+      ...unitTimeline,
+      versions: [700, 791, 897].map((sesno) => ({ sesno, sessionTime: null, elementImpact: 'mesh' as const, unitImpact: 'mesh' as const })),
+    });
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const app = createApp(ModelUnitVersionComparePanel);
+    app.mount(host);
+    const input = host.querySelector('[data-testid="model-unit-compare-refno"]') as HTMLInputElement;
+    input.value = '24381_145018';
+    input.dispatchEvent(new Event('input'));
+    (host.querySelector('[data-testid="model-unit-compare-load"]') as HTMLButtonElement).click();
+    await flushUi();
+    const pair = () => [
+      host.querySelector('[data-testid="model-unit-compare-a"]')?.getAttribute('data-sesno'),
+      host.querySelector('[data-testid="model-unit-compare-b"]')?.getAttribute('data-sesno'),
+    ];
+    expect(pair()).toEqual(['791', '897']);
+
+    (host.querySelector('[data-testid="model-unit-compare-pick-a-700"]') as HTMLButtonElement).click();
+    await flushUi();
+    expect(pair()).toEqual(['700', '897']);
+    // 把比 B 还新的一版设成 A：两端对调
+    (host.querySelector('[data-testid="model-unit-compare-pick-b-700"]') as HTMLButtonElement).click();
+    await flushUi();
+    expect(pair()).toEqual(['', '700']);
+    (host.querySelector('[data-testid="model-unit-compare-with-latest"]') as HTMLButtonElement).click();
+    await flushUi();
+    expect(pair()).toEqual(['791', '897']);
+    (host.querySelector('[data-testid="model-unit-compare-pick-b-791"]') as HTMLButtonElement).click();
+    await flushUi();
+    expect(pair()).toEqual(['700', '791']);
+    (host.querySelector('[data-testid="model-unit-compare-with-previous"]') as HTMLButtonElement).click();
+    await flushUi();
+    expect(pair()).toEqual(['700', '791']);
+    app.unmount();
+  });
+
+  it('属性变化时间线：行带 user / comment / 属性 n，属性对比 tab 把 (A, B] 折成净差；旧服务端缺路由时照实说', async () => {
+    versionSourceMocks.attributeHistory.mockResolvedValue({
+      dbnum: 7997, refno: '24381_145018', noun: 'BRAN', unitRefno: '24381_145018', unitNoun: 'BRAN',
+      entries: [
+        { sesno: 791, sessionTime: '2026-07-22T01:00:00Z', user: 'dpc', comment: '初始交付', kind: 'created', impact: 'delivery', changedCount: 0, changes: [], members: null, owner: null, attributesUnavailable: null },
+        { sesno: 897, sessionTime: '2026-07-22T02:00:00Z', user: 'happyrust', comment: '抬管 500', kind: 'modified', impact: 'mesh', changedCount: 2,
+          changes: [
+            { name: 'POS', valueType: 'vec3', before: 'U 2900', after: 'U 3400', stamp: false },
+            { name: 'CACHID', valueType: 'int', before: '41', after: '42', stamp: true },
+          ], members: null, owner: null, attributesUnavailable: null },
+      ],
+    });
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const app = createApp(ModelUnitVersionComparePanel);
+    app.mount(host);
+    const input = host.querySelector('[data-testid="model-unit-compare-refno"]') as HTMLInputElement;
+    input.value = '24381_145018';
+    input.dispatchEvent(new Event('input'));
+    (host.querySelector('[data-testid="model-unit-compare-load"]') as HTMLButtonElement).click();
+    await flushUi();
+
+    expect(versionSourceMocks.attributeHistory).toHaveBeenCalledWith(7997, '24381_145018');
+    const row = host.querySelector('[data-testid="model-unit-compare-timeline"] li[data-sesno="897"]');
+    expect(row?.textContent).toContain('happyrust');
+    expect(row?.textContent).toContain('抬管 500');
+    expect(row?.textContent).toContain('属性 2');
+    expect(host.querySelector('[data-testid="model-unit-compare-history-missing"]')).toBeNull();
+
+    // 「仅自身」下属性对比 tab 把 791→897 折成净差：POS 变了；CACHID 是戳，缺省不列
+    (host.querySelector('[data-testid="model-unit-compare-scope-self"]') as HTMLButtonElement).click();
+    await flushUi();
+    const table = host.querySelector('[data-testid="model-unit-compare-attr-table"]');
+    expect(table?.textContent).toContain('POS');
+    expect(table?.textContent).toContain('U 2900');
+    expect(table?.textContent).toContain('U 3400');
+    expect(table?.textContent).not.toContain('CACHID');
+    expect(host.querySelector('[data-testid="model-unit-compare-attributes"]')?.textContent).toContain('1 项变化');
+    app.unmount();
+
+    // 旧服务端：没有这条路由 → 时间线仍在（版本表那一半），并照实说缺什么
+    const { ModelVersionRouteUnavailableError } = await import('@/model-source');
+    versionSourceMocks.attributeHistory.mockRejectedValue(new ModelVersionRouteUnavailableError('element/attribute-history'));
+    const host2 = document.createElement('div');
+    document.body.appendChild(host2);
+    const app2 = createApp(ModelUnitVersionComparePanel);
+    app2.mount(host2);
+    const input2 = host2.querySelector('[data-testid="model-unit-compare-refno"]') as HTMLInputElement;
+    input2.value = '24381_145018';
+    input2.dispatchEvent(new Event('input'));
+    (host2.querySelector('[data-testid="model-unit-compare-load"]') as HTMLButtonElement).click();
+    await flushUi();
+    expect(host2.querySelectorAll('[data-testid="model-unit-compare-timeline"] li')).toHaveLength(2);
+    expect(host2.querySelector('[data-testid="model-unit-compare-history-missing"]')?.textContent).toContain('element/attribute-history');
+    app2.unmount();
+  });
+
+  it('差异摘要：所有子节点下按单元分组，每组一个「在三维中对比」装那个单元的 A/B', async () => {
+    const zone: ModelElementVersionTimeline = {
+      dbnum: 7997, refno: '1_9', noun: 'ZONE', unitRefno: null, unitNoun: null, unitColumnOnly: false,
+      versions: [
+        { sesno: 791, sessionTime: '2026-07-22T01:00:00Z', elementImpact: 'delivery', unitImpact: null },
+        { sesno: 897, sessionTime: '2026-07-22T02:00:00Z', elementImpact: 'noop', unitImpact: null },
+      ],
+    };
+    versionSourceMocks.listElementVersions.mockResolvedValue(zone);
+    versionSourceMocks.diffSummary.mockResolvedValue({
+      dbnum: 7997, refno: '1_9', noun: 'ZONE', scope: 'subtree', a: 791, b: 897,
+      units: { changed: 1, unchanged: 3, total: 4, complete: true },
+      elements: { added: 1, deleted: 1, modified: 0, noop: 1 },
+      groups: [
+        { unitRefno: null, unitNoun: null, unitName: null, counts: { added: 0, deleted: 0, modified: 0, noop: 1 }, geometryChanged: false, rowsTruncated: 0,
+          rows: [{ refno: '1_9', noun: 'ZONE', status: 'noop', impact: 'noop', isNode: true }] },
+        { unitRefno: '24381_145018', unitNoun: 'BRAN', unitName: '/B1', counts: { added: 1, deleted: 1, modified: 0, noop: 0 }, geometryChanged: true, rowsTruncated: 0,
+          rows: [
+            { refno: '1_3', noun: 'ELBO', status: 'added', impact: 'delivery', isNode: false },
+            { refno: '1_2', noun: 'VALV', status: 'deleted', impact: 'tombstone', isNode: false },
+          ] },
+      ],
+      needsConfirm: false, estimatedProjections: 2, confirmThresholdUnits: 20, warnings: [],
+    });
+    const events: CustomEvent[] = [];
+    const listener = (event: Event) => events.push(event as CustomEvent);
+    window.addEventListener('plant3d:model-unit-version-compare', listener);
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const app = createApp(ModelUnitVersionComparePanel);
+    app.mount(host);
+    const input = host.querySelector('[data-testid="model-unit-compare-refno"]') as HTMLInputElement;
+    input.value = '1_9';
+    input.dispatchEvent(new Event('input'));
+    (host.querySelector('[data-testid="model-unit-compare-load"]') as HTMLButtonElement).click();
+    await flushUi();
+
+    // 容器缺省「仅自身」；切到「所有子节点」后差异摘要按 subtree 算
+    expect((host.querySelector('[data-testid="model-unit-compare-scope-self"]') as HTMLButtonElement).getAttribute('aria-pressed')).toBe('true');
+    expect(versionSourceMocks.listVersions).not.toHaveBeenCalled();
+    (host.querySelector('[data-testid="model-unit-compare-scope-subtree"]') as HTMLButtonElement).click();
+    await flushUi();
+    expect(versionSourceMocks.diffSummary).toHaveBeenLastCalledWith(7997, '1_9', 791, 897, 'subtree');
+
+    // 属性对比 tab：有变的构件清单，节点自身置顶
+    const changed = host.querySelector('[data-testid="model-unit-compare-changed-elements"]');
+    expect(changed?.textContent).toContain('本节点');
+    expect(changed?.querySelectorAll('li')).toHaveLength(3);
+
+    // 模型对比 tab：摘要 + 分组；节点自己没有单元 → 顶部按钮禁用，组里那个可点
+    (host.querySelector('[data-testid="model-unit-compare-tab-model"]') as HTMLButtonElement).click();
+    await flushUi();
+    expect(host.querySelector('[data-testid="model-unit-compare-diff-summary"]')?.textContent).toContain('变了的单元 1');
+    expect((host.querySelector('[data-testid="model-unit-compare-run"]') as HTMLButtonElement).disabled).toBe(true);
+    (host.querySelector('[data-testid="model-unit-compare-run-group-24381_145018"]') as HTMLButtonElement).click();
+    await flushUi();
+
+    expect(versionSourceMocks.loadVersion.mock.calls.map(([item]) => [(item as ModelVersion).unitRefno, (item as ModelVersion).sesno])).toEqual([
+      ['24381_145018', 791], ['24381_145018', 897],
+    ]);
+    expect(events.at(-1)?.detail).toEqual(expect.objectContaining({ action: 'open', unitRefno: '24381_145018' }));
+    expect(host.querySelector('[data-testid="model-unit-compare-summary"]')?.textContent).toContain('新增 1');
+
+    window.removeEventListener('plant3d:model-unit-version-compare', listener);
     app.unmount();
   });
 
@@ -396,6 +605,8 @@ describe('ModelUnitVersionComparePanel', () => {
     input.value = '24381_145018';
     input.dispatchEvent(new Event('input'));
     (host.querySelector('[data-testid="model-unit-compare-load"]') as HTMLButtonElement).click();
+    await flushUi();
+    (host.querySelector('[data-testid="model-unit-compare-tab-model"]') as HTMLButtonElement).click();
     await flushUi();
     (host.querySelector('[data-testid="model-unit-compare-run"]') as HTMLButtonElement).click();
     app.unmount();

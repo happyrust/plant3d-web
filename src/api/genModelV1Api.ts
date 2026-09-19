@@ -1041,6 +1041,149 @@ export function genModelV1ElementVersions(
   });
 }
 
+export type AttributeHistoryKindDto = 'created' | 'modified' | 'deleted';
+
+export type AttributeHistoryChangeDto = {
+  name: string;
+  value_type: string;
+  before: string | null;
+  after: string | null;
+  /** `CACHID` 一类编辑器缓存计数：跟着摆放一起跳，不是业务变化 */
+  stamp: boolean;
+};
+
+export type AttributeHistoryEntryDto = {
+  sesno: number;
+  session_time: string | null;
+  /** E3D 会话页记的保存人 */
+  user: string;
+  /** SAVEWORK 备注 */
+  comment: string;
+  kind: AttributeHistoryKindDto;
+  impact: ModelVersionImpactKindDto;
+  changed_count: number;
+  changes: AttributeHistoryChangeDto[];
+  members?: { added: string[]; removed: string[]; reordered: boolean };
+  /** owner 改挂 `[before, after]`（`a/b`） */
+  owner?: [string, string];
+  attributes_unavailable?: string;
+};
+
+/** `GET /api/v1/element/attribute-history` 的回执：某节点的属性变化时间线（按链序旧 → 新） */
+export type AttributeHistoryResponse = {
+  dbnum: number;
+  /** `a/b` */
+  refno: string;
+  noun: string;
+  unit_root: string | null;
+  unit_noun: string | null;
+  file_latest_sesno: number;
+  truncated: boolean;
+  entries: AttributeHistoryEntryDto[];
+  cached?: boolean;
+  elapsed_ms?: number;
+  stats?: Record<string, unknown>;
+  warnings?: string[];
+  [key: string]: unknown;
+};
+
+/**
+ * 某节点的**属性变化时间线**（gen-model-refactor ADR-081 追记二；plant3d-web ADR 0066）：谁在哪一版改了什么。
+ * 每行一个它自身记录被改过的会话，带会话 user / comment 与逐属性 before / after（与属性面板同一个渲染器出字）。
+ * 任意 refno 都受理；整条链里没有它 → 404 `REFNO_NOT_FOUND`。旧服务端没有这条路由（无信封 404）由调用方回落。
+ */
+export function genModelV1ElementAttributeHistory(
+  req: GenModelV1ModelVersionsRequest,
+  options?: GenModelV1RequestOptions,
+): Promise<AttributeHistoryResponse> {
+  return genModelV1Fetch<AttributeHistoryResponse>('/api/v1/element/attribute-history', {
+    ...options,
+    timeoutMs: options?.timeoutMs ?? MODEL_VERSIONS_TIMEOUT_MS,
+    query: {
+      dbnum: req.dbnum,
+      refno: toV1Refno(req.refno),
+      since_sesno: req.sinceSesno,
+      limit: req.limit,
+    },
+  });
+}
+
+export type NodeDiffScopeDto = 'self' | 'subtree';
+export type NodeDiffStatusDto = 'added' | 'deleted' | 'modified' | 'noop';
+
+export type NodeDiffRowDto = {
+  /** `a/b` */
+  refno: string;
+  noun: string | null;
+  status: NodeDiffStatusDto;
+  impact: ModelVersionImpactKindDto;
+  is_node: boolean;
+};
+
+export type NodeDiffCountsDto = { added: number; deleted: number; modified: number; noop: number };
+
+export type NodeDiffGroupDto = {
+  /** `a/b`；null = 这些行不在任何最小交付单元下 */
+  unit_root: string | null;
+  unit_noun: string | null;
+  unit_name: string | null;
+  counts: NodeDiffCountsDto;
+  geometry_changed: boolean;
+  rows: NodeDiffRowDto[];
+  rows_truncated: number;
+};
+
+/** `GET /api/v1/node/diff-summary` 的回执：节点 A→B 不生成几何的差异摘要，按最小交付单元分组 */
+export type NodeDiffSummaryResponse = {
+  dbnum: number;
+  /** `a/b` */
+  refno: string;
+  noun: string | null;
+  scope: NodeDiffScopeDto;
+  a: number;
+  b: number;
+  units: { changed: number; unchanged: number; total: number; complete: boolean };
+  elements: NodeDiffCountsDto;
+  groups: NodeDiffGroupDto[];
+  needs_confirm: boolean;
+  estimated_projections: number;
+  confirm_threshold_units: number;
+  elapsed_ms?: number;
+  stats?: Record<string, unknown>;
+  warnings?: string[];
+  [key: string]: unknown;
+};
+
+export type GenModelV1NodeDiffSummaryRequest = {
+  dbnum: number;
+  /** `a_b` / `a/b` */
+  refno: string;
+  a: number;
+  b: number;
+  scope: NodeDiffScopeDto;
+};
+
+/**
+ * 节点 A→B 的**差异摘要**（ADR 0066 / 词条「差异摘要」）：一次索引差分 + 模型影响判定，按所属单元分组，不生成几何。
+ * `A` 不早于 `B` → 400 `INVALID_VERSION_PAIR`；会话不在链上 → 404 `SESSION_NOT_FOUND`。旧服务端没有这条路由由调用方回落。
+ */
+export function genModelV1NodeDiffSummary(
+  req: GenModelV1NodeDiffSummaryRequest,
+  options?: GenModelV1RequestOptions,
+): Promise<NodeDiffSummaryResponse> {
+  return genModelV1Fetch<NodeDiffSummaryResponse>('/api/v1/node/diff-summary', {
+    ...options,
+    timeoutMs: options?.timeoutMs ?? MODEL_VERSIONS_TIMEOUT_MS,
+    query: {
+      dbnum: req.dbnum,
+      refno: toV1Refno(req.refno),
+      a: req.a,
+      b: req.b,
+      scope: req.scope,
+    },
+  });
+}
+
 export type GenModelV1HistoryGenerateRequest = {
   dbnum: number;
   /** `a_b` / `a/b`：单元根 */

@@ -293,6 +293,99 @@ export type ModelElementVersionTimeline = {
   unitColumnOnly: boolean;
 };
 
+/** 对比范围（CONTEXT「对比范围」）：`self` 只看节点自身那一条记录；`subtree` 节点 + 其下整棵子树。 */
+export type ModelNodeDiffScope = 'self' | 'subtree';
+
+/** 一个属性在某一会话前后的两个字；`before` / `after` 为 null = 那一侧没有这一行（或 unset）。 */
+export type ModelAttributeChange = {
+  name: string;
+  valueType: string;
+  before: string | null;
+  after: string | null;
+  /** `CACHID` 一类编辑器的戳：标出来但不算业务变化 */
+  stamp: boolean;
+};
+
+/** 属性变化时间线的一行：它自身记录被改过的一个会话（CONTEXT「属性变化时间线」）。 */
+export type ModelAttributeHistoryEntry = {
+  sesno: number;
+  sessionTime: string | null;
+  /** E3D 会话页记的保存人 */
+  user: string;
+  /** SAVEWORK 备注 */
+  comment: string;
+  kind: 'created' | 'modified' | 'deleted';
+  /** 与版本表同一词表：created → delivery，deleted → tombstone，modified → mesh / placement / noop */
+  impact: ModelVersionImpactKind;
+  /** 属性行数 + 成员表变了算一项 + owner 改挂算一项 */
+  changedCount: number;
+  changes: ModelAttributeChange[];
+  members: { added: string[]; removed: string[]; reordered: boolean } | null;
+  /** owner 改挂 `[before, after]`（`a_b`） */
+  owner: [string, string] | null;
+  /** 属性行渲染不出来的原因（模板缺失等） */
+  attributesUnavailable: string | null;
+};
+
+/** 某节点的属性变化时间线（gen-model-v1 `GET /api/v1/element/attribute-history`）。 */
+export type ModelAttributeHistory = {
+  dbnum: number;
+  /** `a_b` */
+  refno: string;
+  noun: string;
+  unitRefno: string | null;
+  unitNoun: string | null;
+  /** 按链序旧 → 新 */
+  entries: ModelAttributeHistoryEntry[];
+};
+
+export type ModelNodeDiffStatus = 'added' | 'deleted' | 'modified' | 'noop';
+
+export type ModelNodeDiffRow = {
+  /** `a_b` */
+  refno: string;
+  noun: string | null;
+  status: ModelNodeDiffStatus;
+  impact: ModelVersionImpactKind;
+  /** 就是被查询的那个节点 */
+  isNode: boolean;
+};
+
+export type ModelNodeDiffCounts = { added: number; deleted: number; modified: number; noop: number };
+
+/** 差异摘要里按最小交付单元分的一组；`unitRefno` 为 null = 这些行不在任何单元下（ZONE 自身之类）。 */
+export type ModelNodeDiffGroup = {
+  unitRefno: string | null;
+  unitNoun: string | null;
+  unitName: string | null;
+  counts: ModelNodeDiffCounts;
+  /** 这一组有没有几何要重算（决定它算不算「变了的单元」） */
+  geometryChanged: boolean;
+  rows: ModelNodeDiffRow[];
+  rowsTruncated: number;
+};
+
+/**
+ * 节点 A→B 的差异摘要（CONTEXT「差异摘要」，gen-model-v1 `GET /api/v1/node/diff-summary`）：不生成几何的一张账，
+ * 前端拿「变了的单元」去逐个 `loadVersion`，未变的一份都不算；`needsConfirm` 由服务端成本策略给。
+ */
+export type ModelNodeDiffSummary = {
+  dbnum: number;
+  /** `a_b` */
+  refno: string;
+  noun: string | null;
+  scope: ModelNodeDiffScope;
+  a: number;
+  b: number;
+  units: { changed: number; unchanged: number; total: number; complete: boolean };
+  elements: ModelNodeDiffCounts;
+  groups: ModelNodeDiffGroup[];
+  needsConfirm: boolean;
+  estimatedProjections: number;
+  confirmThresholdUnits: number;
+  warnings: string[];
+};
+
 /**
  * 版本对比取数（ADR 0065，plan `docs/plans/2026-09-18-model-version-compare-gen-model-v1-migration-plan.md` §2）。
  *
@@ -320,6 +413,23 @@ export type ModelVersionSource = {
    * 没有句柄的几何（tombstone / 空几何）直接回 `exists: false`。
    */
   attributesAt(geometry: ModelVersionGeometry, refno: string, options?: ModelVersionLoadOptions): Promise<ModelVersionAttributes>;
+  /**
+   * 某节点的属性变化时间线（ADR 0066）：谁在哪一版改了什么，带会话 user / comment 与逐属性 before / after。
+   * 服务端没有这条路由（旧构建）→ 抛 `ModelVersionRouteUnavailableError`，面板据此只给版本表那一半。
+   */
+  attributeHistory(dbnum: number, refno: string, options?: ModelVersionLoadOptions): Promise<ModelAttributeHistory>;
+  /**
+   * 节点 A→B 的差异摘要（ADR 0066）：按范围过滤、按单元分组、不生成几何。
+   * 服务端没有这条路由 → 抛 `ModelVersionRouteUnavailableError`。
+   */
+  diffSummary(
+    dbnum: number,
+    refno: string,
+    a: number,
+    b: number,
+    scope: ModelNodeDiffScope,
+    options?: ModelVersionLoadOptions,
+  ): Promise<ModelNodeDiffSummary>;
 };
 
 export type ModelSource = {

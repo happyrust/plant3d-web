@@ -1,17 +1,30 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 
-import { Search, ChevronDown, ChevronRight } from 'lucide-vue-next';
+import { Search, ChevronDown, ChevronRight, History } from 'lucide-vue-next';
 
 import Badge from '@/components/ui/Badge.vue';
 import Input from '@/components/ui/Input.vue';
 import ScrollArea from '@/components/ui/ScrollArea.vue';
+import { ensurePanelAndActivate } from '@/composables/useDockApi';
 import { useSelectionStore } from '@/composables/useSelectionStore';
 import { useToolStore } from '@/composables/useToolStore';
 import { cn } from '@/lib/utils';
+import { requestModelVersionInspect } from '@/utils/modelUnitVersionCompare';
 
 const sel = useSelectionStore();
 const toolStore = useToolStore();
+
+/**
+ * 标题栏「历史」（ADR 0066 入口之三，与模型树右键「查看历史版本」同一条路）：把当前选中的节点交给「节点版本」面板，
+ * 面板自己解它所属的最小交付单元、按类型定对比范围。已删除的幽灵行也能查——它的历史正是要看的东西。
+ */
+function inspectSelectedHistory(): void {
+  const refno = sel.selectedRefno.value;
+  if (!refno) return;
+  requestModelVersionInspect(refno);
+  ensurePanelAndActivate('modelVersionCompare');
+}
 
 // useQuery 会在 selectedRefno.value 变化时自动触发，
 // 且具备缓存机制，因此无需手动 watch 调用 loadProperties。
@@ -239,13 +252,21 @@ function isGroupCollapsed(groupId: string): boolean {
           <span class="text-xs font-medium text-foreground">属性</span>
           <Badge variant="secondary" class="text-[10px]">只读</Badge>
         </div>
-        <Badge v-if="sel.selectedRefno.value"
-          variant="outline"
-          class="max-w-[60%] truncate text-[10px]"
-          :class="sel.fullName.value ? '' : 'font-mono'"
-          :title="sel.fullName.value ? `${sel.fullName.value}\n${sel.selectedRefno.value}` : sel.selectedRefno.value">
-          {{ sel.fullName.value || sel.selectedRefno.value }}
-        </Badge>
+        <div v-if="sel.selectedRefno.value" class="flex min-w-0 max-w-[70%] items-center gap-1">
+          <Badge variant="outline"
+            class="min-w-0 truncate text-[10px]"
+            :class="sel.fullName.value ? '' : 'font-mono'"
+            :title="sel.fullName.value ? `${sel.fullName.value}\n${sel.selectedRefno.value}` : sel.selectedRefno.value">
+            {{ sel.fullName.value || sel.selectedRefno.value }}
+          </Badge>
+          <button type="button"
+            class="inline-flex shrink-0 items-center gap-0.5 rounded border border-border bg-background px-1.5 py-0.5 text-[10px] text-foreground hover:bg-muted/60"
+            :title="`查看 ${sel.selectedRefno.value} 的版本历史（属性变化时间线 + 模型对比）`"
+            data-testid="properties-history"
+            @click="inspectSelectedHistory">
+            <History class="h-3 w-3" />历史
+          </button>
+        </div>
         <span v-else class="text-[10px] text-muted-foreground">未选择</span>
       </div>
     </div>

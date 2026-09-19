@@ -17,8 +17,12 @@
 import { groupInstanceEntriesByRefno } from './instanceMapping';
 
 import type {
+  ModelAttributeHistory,
+  ModelAttributeHistoryEntry,
   ModelElementVersion,
   ModelElementVersionTimeline,
+  ModelNodeDiffScope,
+  ModelNodeDiffSummary,
   ModelVersion,
   ModelVersionAttributes,
   ModelVersionGeometry,
@@ -28,13 +32,17 @@ import type {
 
 import {
   fromV1Refno,
+  genModelV1ElementAttributeHistory,
   genModelV1ElementVersions,
   genModelV1ModelHistoryDelete,
   genModelV1ModelHistoryGenerate,
   genModelV1ModelHistoryQuery,
   genModelV1ModelVersions,
+  genModelV1NodeDiffSummary,
   genModelV1TaskGet,
   isGenModelV1ApiError,
+  type AttributeHistoryEntryDto,
+  type AttributeHistoryResponse,
   type ElementVersionsResponse,
   type GenModelV1RequestOptions,
   type GeomInstQuery,
@@ -47,7 +55,7 @@ import {
   toV1Refno,
   unpackRefno,
 } from '@/api/genModelV1Api';
-import { NotDeliveryUnitRootError } from '@/model-source/modelVersionErrors';
+import { ModelVersionRouteUnavailableError, NotDeliveryUnitRootError } from '@/model-source/modelVersionErrors';
 
 /** `since_sesno` 连续拉的页数上限（服务端每页缺省 500）；再多说明链有问题，不无限拉。 */
 export const MAX_PAGES = 20;
@@ -61,6 +69,8 @@ const IDENTITY: V1Transform = { translation: [0, 0, 0], rotation: [0, 0, 0, 1], 
 export type GenModelV1VersionApi = {
   listVersions: typeof genModelV1ModelVersions;
   listElementVersions: typeof genModelV1ElementVersions;
+  attributeHistory: typeof genModelV1ElementAttributeHistory;
+  diffSummary: typeof genModelV1NodeDiffSummary;
   historyGenerate: typeof genModelV1ModelHistoryGenerate;
   taskGet: typeof genModelV1TaskGet;
   historyQuery: typeof genModelV1ModelHistoryQuery;
@@ -73,6 +83,8 @@ export type GenModelV1VersionApi = {
 const defaultApi: GenModelV1VersionApi = {
   listVersions: genModelV1ModelVersions,
   listElementVersions: genModelV1ElementVersions,
+  attributeHistory: genModelV1ElementAttributeHistory,
+  diffSummary: genModelV1NodeDiffSummary,
   historyGenerate: genModelV1ModelHistoryGenerate,
   taskGet: genModelV1TaskGet,
   historyQuery: genModelV1ModelHistoryQuery,
@@ -311,6 +323,120 @@ export function createGenModelV1ModelVersionSource(api: GenModelV1VersionApi = d
     };
   }
 
+  function toHistoryEntry(row: AttributeHistoryEntryDto): ModelAttributeHistoryEntry {
+    return {
+      sesno: row.sesno,
+      sessionTime: row.session_time ?? null,
+      user: row.user ?? '',
+      comment: row.comment ?? '',
+      kind: row.kind,
+      impact: row.impact,
+      changedCount: row.changed_count ?? row.changes?.length ?? 0,
+      changes: (row.changes ?? []).map((change) => ({
+        name: change.name,
+        valueType: change.value_type,
+        before: change.before ?? null,
+        after: change.after ?? null,
+        stamp: !!change.stamp,
+      })),
+      members: row.members
+        ? {
+          added: row.members.added.map(fromV1Refno),
+          removed: row.members.removed.map(fromV1Refno),
+          reordered: !!row.members.reordered,
+        }
+        : null,
+      owner: row.owner ? [fromV1Refno(row.owner[0]), fromV1Refno(row.owner[1])] : null,
+      attributesUnavailable: row.attributes_unavailable ?? null,
+    };
+  }
+
+  /**
+   * 属性变化时间线（ADR 0066）：`GET element/attribute-history`，`truncated` 时同 `listVersions` 按最后一条连续拉。
+   * 旧服务端没有这条路由 → `ModelVersionRouteUnavailableError`，面板据此只给版本表那一半。
+   */
+  async function attributeHistory(
+    dbnum: number,
+    refno: string,
+    options: ModelVersionLoadOptions = {},
+  ): Promise<ModelAttributeHistory> {
+    const normalized = fromV1Refno(refno);
+    const entries: ModelAttributeHistoryEntry[] = [];
+    let sinceSesno: number | undefined;
+    for (let page = 0; page < MAX_PAGES; page += 1) {
+      let response: AttributeHistoryResponse;
+      try {
+        response = await api.attributeHistory({ dbnum, refno: normalized, sinceSesno }, { signal: options.signal });
+      } catch (error) {
+        if (page === 0 && isMissingRoute(error)) throw new ModelVersionRouteUnavailableError('element/attribute-history');
+        throw error;
+      }
+      for (const row of response.entries ?? []) entries.push(toHistoryEntry(row));
+      if (!response.truncated) {
+        return {
+          dbnum: response.dbnum,
+          refno: fromV1Refno(response.refno),
+          noun: response.noun,
+          unitRefno: response.unit_root ? fromV1Refno(response.unit_root) : null,
+          unitNoun: response.unit_noun ?? null,
+          entries,
+        };
+      }
+      const last = response.entries?.at(-1)?.sesno;
+      if (last === undefined) break;
+      sinceSesno = last;
+    }
+    throw new Error(`属性变化时间线超过 ${MAX_PAGES} 页仍未取完（dbnum ${dbnum} 节点 ${normalized}），放弃`);
+  }
+
+  /** 差异摘要（ADR 0066）：`GET node/diff-summary`；旧服务端没有这条路由 → `ModelVersionRouteUnavailableError`。 */
+  async function diffSummary(
+    dbnum: number,
+    refno: string,
+    a: number,
+    b: number,
+    scope: ModelNodeDiffScope,
+    options: ModelVersionLoadOptions = {},
+  ): Promise<ModelNodeDiffSummary> {
+    const normalized = fromV1Refno(refno);
+    let response;
+    try {
+      response = await api.diffSummary({ dbnum, refno: normalized, a, b, scope }, { signal: options.signal });
+    } catch (error) {
+      if (isMissingRoute(error)) throw new ModelVersionRouteUnavailableError('node/diff-summary');
+      throw error;
+    }
+    return {
+      dbnum: response.dbnum,
+      refno: fromV1Refno(response.refno),
+      noun: response.noun ?? null,
+      scope: response.scope,
+      a: response.a,
+      b: response.b,
+      units: response.units,
+      elements: response.elements,
+      groups: (response.groups ?? []).map((group) => ({
+        unitRefno: group.unit_root ? fromV1Refno(group.unit_root) : null,
+        unitNoun: group.unit_noun ?? null,
+        unitName: group.unit_name ?? null,
+        counts: group.counts,
+        geometryChanged: !!group.geometry_changed,
+        rows: (group.rows ?? []).map((row) => ({
+          refno: fromV1Refno(row.refno),
+          noun: row.noun ?? null,
+          status: row.status,
+          impact: row.impact,
+          isNode: !!row.is_node,
+        })),
+        rowsTruncated: group.rows_truncated ?? 0,
+      })),
+      needsConfirm: !!response.needs_confirm,
+      estimatedProjections: response.estimated_projections ?? 0,
+      confirmThresholdUnits: response.confirm_threshold_units ?? 0,
+      warnings: response.warnings ?? [],
+    };
+  }
+
   async function waitForSnapshot(taskId: string, options: GenModelV1RequestOptions): Promise<string> {
     const deadline = now() + HISTORY_TIMEOUT_MS;
     for (;;) {
@@ -398,7 +524,7 @@ export function createGenModelV1ModelVersionSource(api: GenModelV1VersionApi = d
     };
   }
 
-  return { listVersions, listElementVersions, loadVersion, attributesAt };
+  return { listVersions, listElementVersions, loadVersion, attributesAt, attributeHistory, diffSummary };
 }
 
 /** `<unit_refno>@<sesno>` → sesno；解不出给 0（只用在没有句柄的空态上）。 */

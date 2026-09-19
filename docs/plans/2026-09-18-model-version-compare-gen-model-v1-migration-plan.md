@@ -394,3 +394,27 @@ legacy 下与从前的可见差别只有一处、且不可见于用户：A/B 隔
   `:8022` 重生成 24384/23257，`model/records` z 回 2900 ~ 2930；对比 **626 → 630 = 修改 1 / 未变 8**，**573 → 630 = 0 / 0 / 0 / 未变 9「无几何差异」**——相对测试前基线净变更归零。
   证据 `bran-ftub-move/a626-b630-*`、`a573-b630-*`、`api-evidence.json#restore_leg`，README §6.1。
 - **待定**：FTUB 纯 POS 变更被归成 `mesh` 而非 `placement`（gen-model-refactor 分类器口径，不在本计划）；~~`tool=attributes` 后端仍等 `element_attributes.rs` 提交（§8）~~ 20:31 已落地、真机已过（§8 末条）。
+
+## 10. 节点版本视图（ADR 0066，用户 22:48「开写前端：面板改成范围开关 + 时间线点选 A/B，先顶着现有路由」）
+
+- **后端两条先落**（gen-model-refactor `2069a887a`，23:04）：`GET element/attribute-history`（逐会话 `ElementDelta` + 会话页 user / comment）、
+  `GET node/diff-summary?a&b&scope`（索引差分 + 模型影响，按单元分组，不生成几何）。ADR 0066 列的另两条（`node/versions?scope=subtree`、
+  `element/attribute-diff`）**未做**：属性净差前端用时间线在 (A, B] 折；容器的子树时间线暂由「手填会话号」兜。
+- **端口**：`ModelVersionSource.attributeHistory(dbnum, refno)` / `diffSummary(dbnum, refno, a, b, scope)`，类型 `ModelAttributeHistory` /
+  `ModelNodeDiffSummary`（`ports.ts`）；v1 适配器按 `truncated` 连续拉、旧构建的无信封 404 → `ModelVersionRouteUnavailableError(route)`；
+  legacy stub 照旧抛退役错。
+- **面板**（`ModelUnitVersionComparePanel.vue`，标题改「节点版本」）：受理任意 refno；**对比范围**开关 `仅自身 / 所有子节点`
+  （缺省按类型 `defaultNodeScope`，叶子置灰，切换保留 A / B、越界行灰掉标「本范围无变化」）；时间线一行 = 一个会话
+  （sesno · 时间 · user · comment · 属性 n · 影响），行上 A / B 两颗按钮点选 + 「与上一版比」「与最新比」，两个下拉删掉；
+  下半两个 tab——**属性对比**：`仅自身` 把 (A, B] 逐会话 before / after 折成净差（`foldAttributeChanges`，`CACHID` 一类标「戳」可隐），
+  `所有子节点` 列差异摘要里有变的构件、本节点置顶、点开拉它自己的时间线折净差；**模型对比**：先出差异摘要（变了的单元 N / 未变 M、
+  新增 / 删除 / 修改 / noop），`所有子节点` 下按单元分组、每组一个「在三维中对比」（一次装一个单元，多单元一次装载下一期），
+  超阈值只提示不弹确认框（后端 `needs_confirm`，装载本就逐组）。纯函数在 `utils/nodeVersionTimeline.ts`。
+- **入口**：模型树右键「查看历史版本」（已有）+ 面板输入框 + **属性面板标题栏「历史」**（`PropertiesPanel.vue`，选中谁查谁，幽灵行也能查）。
+- **旧服务端回落**：没有 `attribute-history` → 时间线只剩版本表那一列、属性 tab 提示去差异模式底部看两版逐项对比；没有 `diff-summary` →
+  `所有子节点` 的构件清单 / 分组缺席，「在三维中对比」照旧走所属单元。
+- **验证**：vitest 全仓 348 文件 / 3104 用例全绿（新增 `nodeVersionTimeline` 9、面板改写后 15、适配器 18、属性面板「历史」2）；
+  type-check 基线外只剩一条无关的 `useSpatialQuery.test.ts`；真机 HTTP（`:8033` debug `gd7b9b7027`，ams8000 639 会话）
+  `attribute-history` FTUB 24384/23262 `since_sesno=626&limit=2` → 630 一行 POS / SPAMAP before-after + SAVEWORK 备注，
+  `diff-summary` BRAN 子树 573→626 = 修改 1 / noop 1、SITE 24384/22399 子树 618→628 = 526 单元 / 变 2（FTUB 修改、BOX 新增）、
+  a>b → 400，字段与 DTO 逐个对上；`:8026`（`2f891b370`）对同一路由回 404 = 回落路径的真机对照。**页面级真机未跑**（要 dev server）。

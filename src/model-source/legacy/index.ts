@@ -108,6 +108,8 @@ const versions: ModelVersionSource = {
   listElementVersions: legacyModelVersionsRetired,
   loadVersion: legacyModelVersionsRetired,
   attributesAt: legacyModelVersionsRetired,
+  attributeHistory: legacyModelVersionsRetired,
+  diffSummary: legacyModelVersionsRetired,
 };
 
 export function createLegacyModelSource(): ModelSource {

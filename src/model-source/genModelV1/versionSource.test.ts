@@ -8,8 +8,16 @@ import {
   type GenModelV1VersionApi,
 } from './versionSource';
 
-import { GenModelV1ApiError, unpackRefno, type ElementVersionsResponse, type ModelVersionsResponse, type TaskEntryDto } from '@/api/genModelV1Api';
-import { NotDeliveryUnitRootError } from '@/model-source/modelVersionErrors';
+import {
+  GenModelV1ApiError,
+  unpackRefno,
+  type AttributeHistoryResponse,
+  type ElementVersionsResponse,
+  type ModelVersionsResponse,
+  type NodeDiffSummaryResponse,
+  type TaskEntryDto,
+} from '@/api/genModelV1Api';
+import { ModelVersionRouteUnavailableError, NotDeliveryUnitRootError } from '@/model-source/modelVersionErrors';
 
 function response(partial: Partial<ModelVersionsResponse>): ModelVersionsResponse {
   return {
@@ -37,10 +45,44 @@ function elementResponse(partial: Partial<ElementVersionsResponse> = {}): Elemen
   };
 }
 
+function attributeHistoryResponse(partial: Partial<AttributeHistoryResponse> = {}): AttributeHistoryResponse {
+  return {
+    dbnum: 8000,
+    refno: '24384/23262',
+    noun: 'FTUB',
+    unit_root: '24384/23257',
+    unit_noun: 'BRAN',
+    file_latest_sesno: 636,
+    truncated: false,
+    entries: [],
+    ...partial,
+  };
+}
+
+function diffSummaryResponse(partial: Partial<NodeDiffSummaryResponse> = {}): NodeDiffSummaryResponse {
+  return {
+    dbnum: 8000,
+    refno: '24384/23257',
+    noun: 'BRAN',
+    scope: 'subtree',
+    a: 573,
+    b: 626,
+    units: { changed: 1, unchanged: 0, total: 1, complete: true },
+    elements: { added: 0, deleted: 0, modified: 1, noop: 1 },
+    groups: [],
+    needs_confirm: false,
+    estimated_projections: 2,
+    confirm_threshold_units: 20,
+    ...partial,
+  };
+}
+
 function api(overrides: Partial<GenModelV1VersionApi> = {}): GenModelV1VersionApi {
   return {
     listVersions: vi.fn(async () => response({})),
     listElementVersions: vi.fn(async () => elementResponse()),
+    attributeHistory: vi.fn(async () => attributeHistoryResponse()),
+    diffSummary: vi.fn(async () => diffSummaryResponse()),
     historyGenerate: vi.fn(async () => ({ task_id: 't-1' })),
     taskGet: vi.fn(async () => ({ task_id: 't-1', kind: 'model-history', state: 'succeeded', result: { snapshot_key: '24381_145018@66' } }) as TaskEntryDto),
     historyQuery: vi.fn(async () => []) as unknown as GenModelV1VersionApi['historyQuery'],
@@ -348,5 +390,84 @@ describe('genModelV1 ModelVersionSource', () => {
     expect(items[1]!.insts[0]!.transform.translation).toEqual([0, 0, 0]);
     expect(items[1]!.has_neg).toBe(true);
     expect(items.every((item) => item.owner === '24381_145018')).toBe(true);
+  });
+
+  it('attributeHistory：行映成端口形状（refno 归一 a_b、成员 / owner 也归一），truncated 时按最后一条连续拉', async () => {
+    const attributeHistory = vi.fn()
+      .mockResolvedValueOnce(attributeHistoryResponse({
+        truncated: true,
+        entries: [{
+          sesno: 5, session_time: '2026-07-02T09:00:00+08:00', user: 'dpc', comment: '初始交付', kind: 'created',
+          impact: 'delivery', changed_count: 0, changes: [],
+        }],
+      }))
+      .mockResolvedValueOnce(attributeHistoryResponse({
+        entries: [{
+          sesno: 626, session_time: '2026-09-18T19:31:48+08:00', user: 'dpc', comment: 'up 500mm', kind: 'modified',
+          impact: 'mesh', changed_count: 3,
+          changes: [{ name: 'POS', value_type: 'vec3', before: '10887, 12332, 2900', after: '10887, 12332, 3400', stamp: false },
+            { name: 'CACHID', value_type: 'int', before: '41', after: '42', stamp: true }],
+          members: { added: ['24384/9'], removed: [], reordered: false },
+          owner: ['24384/1', '24384/2'],
+        }],
+      }));
+    const source = createGenModelV1ModelVersionSource(api({ attributeHistory }));
+
+    const history = await source.attributeHistory(8000, '24384/23262');
+
+    expect(attributeHistory.mock.calls.map(([req]) => (req as { sinceSesno?: number }).sinceSesno)).toEqual([undefined, 5]);
+    expect(history.refno).toBe('24384_23262');
+    expect(history.unitRefno).toBe('24384_23257');
+    expect(history.entries.map((entry) => entry.sesno)).toEqual([5, 626]);
+    expect(history.entries[1]).toMatchObject({
+      user: 'dpc', comment: 'up 500mm', kind: 'modified', impact: 'mesh', changedCount: 3,
+      members: { added: ['24384_9'], removed: [], reordered: false },
+      owner: ['24384_1', '24384_2'],
+    });
+    expect(history.entries[1]!.changes[1]).toEqual({ name: 'CACHID', valueType: 'int', before: '41', after: '42', stamp: true });
+    expect(history.entries[0]!.members).toBeNull();
+  });
+
+  it('attributeHistory / diffSummary：旧服务端没有这条路由（无信封 404）→ ModelVersionRouteUnavailableError，带信封的 404 原样抛', async () => {
+    const missing = vi.fn(async () => {
+      throw new GenModelV1ApiError({ code: 'not_found', status: 404, path: '/api/v1/node/diff-summary', message: 'HTTP 404 Not Found' });
+    });
+    const source = createGenModelV1ModelVersionSource(api({ attributeHistory: missing as never, diffSummary: missing as never }));
+
+    await expect(source.attributeHistory(8000, '24384_23262')).rejects.toBeInstanceOf(ModelVersionRouteUnavailableError);
+    await expect(source.diffSummary(8000, '24384_23257', 573, 626, 'subtree')).rejects.toBeInstanceOf(ModelVersionRouteUnavailableError);
+
+    const real404 = vi.fn(async () => {
+      throw new GenModelV1ApiError({ code: 'SESSION_NOT_FOUND' as never, status: 404, path: '/api/v1/node/diff-summary', message: '会话 9 不在链上' });
+    });
+    const strict = createGenModelV1ModelVersionSource(api({ diffSummary: real404 as never }));
+    await expect(strict.diffSummary(8000, '24384_23257', 9, 626, 'self')).rejects.toMatchObject({ code: 'SESSION_NOT_FOUND' });
+  });
+
+  it('diffSummary：分组 / 行归一成 a_b，scope 原样发给服务端', async () => {
+    const diffSummary = vi.fn(async () => diffSummaryResponse({
+      groups: [{
+        unit_root: '24384/23257', unit_noun: 'BRAN', unit_name: '/C-OR-1R345-C',
+        counts: { added: 0, deleted: 0, modified: 1, noop: 1 }, geometry_changed: true, rows_truncated: 0,
+        rows: [
+          { refno: '24384/23257', noun: 'BRAN', status: 'noop', impact: 'noop', is_node: true },
+          { refno: '24384/23262', noun: 'FTUB', status: 'modified', impact: 'mesh', is_node: false },
+        ],
+      }],
+      warnings: ['x'],
+    }));
+    const source = createGenModelV1ModelVersionSource(api({ diffSummary }));
+
+    const summary = await source.diffSummary(8000, '24384/23257', 573, 626, 'self');
+
+    expect(diffSummary).toHaveBeenCalledWith({ dbnum: 8000, refno: '24384_23257', a: 573, b: 626, scope: 'self' }, { signal: undefined });
+    expect(summary.refno).toBe('24384_23257');
+    expect(summary.units).toEqual({ changed: 1, unchanged: 0, total: 1, complete: true });
+    expect(summary.groups[0]).toMatchObject({ unitRefno: '24384_23257', unitName: '/C-OR-1R345-C', geometryChanged: true });
+    expect(summary.groups[0]!.rows.map((row) => [row.refno, row.status, row.isNode])).toEqual([
+      ['24384_23257', 'noop', true],
+      ['24384_23262', 'modified', false],
+    ]);
+    expect(summary.warnings).toEqual(['x']);
   });
 });
