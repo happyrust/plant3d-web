@@ -1,0 +1,110 @@
+{
+  "url": "http://127.0.0.1:3111/?model_source=gen-model-v1&gm_backend_port=8026&unit_refno=24384_24776&compare_autorun=1&compare_a=618&compare_b=628",
+  "side": "before",
+  "startedAt": "2026-09-19T02:46:24.058Z",
+  "elementAttributeRequests": [],
+  "pageErrors": [],
+  "steps": [
+    {
+      "at": "2026-09-19T02:46:24.243Z",
+      "name": "goto",
+      "url": "http://127.0.0.1:3111/?model_source=gen-model-v1&gm_backend_port=8026&unit_refno=24384_24776&compare_autorun=1&compare_a=618&compare_b=628"
+    },
+    {
+      "at": "2026-09-19T02:46:26.350Z",
+      "name": "compare finished",
+      "summary": "24384_24776 · 几何差异新增 1删除 0修改 0未变 1"
+    },
+    {
+      "at": "2026-09-19T02:46:26.435Z",
+      "name": "clicked row",
+      "status": "added",
+      "ghost": true,
+      "text": "24384/26495 (当前已不在)增"
+    },
+    {
+      "at": "2026-09-19T02:46:27.288Z",
+      "name": "viewer side",
+      "activeSide": "before",
+      "viewMode": "single",
+      "beforeObjects": 1,
+      "afterObjects": 2
+    },
+    {
+      "at": "2026-09-19T02:46:27.599Z",
+      "name": "camera parked",
+      "position": [
+        53279,
+        62579,
+        58750
+      ],
+      "target": [
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "at": "2026-09-19T02:46:29.243Z",
+      "name": "after locate",
+      "located": true,
+      "moved": 96816.5,
+      "camera": {
+        "position": [
+          -2208.4,
+          7231.2,
+          1906.3
+        ],
+        "target": [
+          -2821.3,
+          8004,
+          1400
+        ]
+      },
+      "notice": "该构件已删除，属性见底部属性历史对比",
+      "propertiesError": null,
+      "attrRequests": []
+    }
+  ],
+  "summaryText": "24384_24776 · 几何差异新增 1删除 0修改 0未变 1",
+  "rowStatus": "added",
+  "rowGhost": true,
+  "rowText": "24384/26495 (当前已不在)增",
+  "compareState": {
+    "activeSide": "before",
+    "viewMode": "single",
+    "beforeObjects": 1,
+    "afterObjects": 2
+  },
+  "cameraParked": {
+    "position": [
+      53279,
+      62579,
+      58750
+    ],
+    "target": [
+      0,
+      0,
+      0
+    ]
+  },
+  "attrRequestsBeforeLocate": 0,
+  "cameraAfter": {
+    "position": [
+      -2208.4,
+      7231.2,
+      1906.3
+    ],
+    "target": [
+      -2821.3,
+      8004,
+      1400
+    ]
+  },
+  "movedDistance": 96816.5,
+  "located": true,
+  "propertiesNotice": "该构件已删除，属性见底部属性历史对比",
+  "propertiesError": null,
+  "ok": true,
+  "finishedAt": "2026-09-19T02:46:29.316Z"
+}

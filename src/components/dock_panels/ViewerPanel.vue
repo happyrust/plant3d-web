@@ -2022,7 +2022,11 @@ function focusModelUnitVersionCompare(refno: string): void {
   }
   if (box.isEmpty()) return;
 
-  selectionStore.setSelectedRefno(normalized);
+  // 差异模式里定位的可能是幽灵构件（当前会话里已经没有它）：那时它已按「已删除」登记过，别用普通选中覆盖，
+  // 否则属性面板又去拉当前会话、换回 404 红条
+  const alreadyDeletedRegistered = selectionStore.selectedIsDeleted.value
+    && selectionStore.selectedRefno.value === normalized;
+  if (!alreadyDeletedRegistered) selectionStore.setSelectedRefno(normalized);
   viewer.fitClipPlanesToBox(box);
   const center = new Vector3();
   const size = new Vector3();

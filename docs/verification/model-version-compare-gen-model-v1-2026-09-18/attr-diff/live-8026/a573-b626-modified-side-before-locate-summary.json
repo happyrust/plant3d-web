@@ -1,0 +1,115 @@
+{
+  "url": "http://127.0.0.1:3111/?model_source=gen-model-v1&gm_backend_port=8026&unit_refno=24384_23257&compare_autorun=1&compare_a=573&compare_b=626",
+  "side": "before",
+  "startedAt": "2026-09-19T02:46:44.086Z",
+  "elementAttributeRequests": [
+    {
+      "refno": "24384/23262",
+      "status": 200
+    }
+  ],
+  "pageErrors": [],
+  "steps": [
+    {
+      "at": "2026-09-19T02:46:44.230Z",
+      "name": "goto",
+      "url": "http://127.0.0.1:3111/?model_source=gen-model-v1&gm_backend_port=8026&unit_refno=24384_23257&compare_autorun=1&compare_a=573&compare_b=626"
+    },
+    {
+      "at": "2026-09-19T02:46:49.064Z",
+      "name": "compare finished",
+      "summary": "24384_23257 · 几何差异新增 0删除 0修改 1未变 8"
+    },
+    {
+      "at": "2026-09-19T02:46:49.118Z",
+      "name": "clicked row",
+      "status": "modified",
+      "ghost": false,
+      "text": "FTUB FTUB改"
+    },
+    {
+      "at": "2026-09-19T02:46:50.036Z",
+      "name": "viewer side",
+      "activeSide": "before",
+      "viewMode": "single",
+      "beforeObjects": 9,
+      "afterObjects": 9
+    },
+    {
+      "at": "2026-09-19T02:46:50.348Z",
+      "name": "camera parked",
+      "position": [
+        53279,
+        62579,
+        58750
+      ],
+      "target": [
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "at": "2026-09-19T02:46:51.980Z",
+      "name": "after locate",
+      "located": true,
+      "moved": 85935.9,
+      "camera": {
+        "position": [
+          11669.1,
+          11396.8,
+          3668.5
+        ],
+        "target": [
+          11059.6,
+          12165.3,
+          3165
+        ]
+      },
+      "notice": null,
+      "propertiesError": null,
+      "attrRequests": []
+    }
+  ],
+  "summaryText": "24384_23257 · 几何差异新增 0删除 0修改 1未变 8",
+  "rowStatus": "modified",
+  "rowGhost": false,
+  "rowText": "FTUB FTUB改",
+  "compareState": {
+    "activeSide": "before",
+    "viewMode": "single",
+    "beforeObjects": 9,
+    "afterObjects": 9
+  },
+  "cameraParked": {
+    "position": [
+      53279,
+      62579,
+      58750
+    ],
+    "target": [
+      0,
+      0,
+      0
+    ]
+  },
+  "attrRequestsBeforeLocate": 1,
+  "cameraAfter": {
+    "position": [
+      11669.1,
+      11396.8,
+      3668.5
+    ],
+    "target": [
+      11059.6,
+      12165.3,
+      3165
+    ]
+  },
+  "movedDistance": 85935.9,
+  "located": true,
+  "propertiesNotice": null,
+  "propertiesError": null,
+  "ok": true,
+  "finishedAt": "2026-09-19T02:46:52.053Z"
+}

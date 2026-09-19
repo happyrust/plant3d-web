@@ -388,6 +388,10 @@ legacy 下与从前的可见差别只有一处、且不可见于用户：A/B 隔
   的首条等解析落定再决定走哪条登记（被删的仍同步登记）。真机 618→628：树里 `24384/26495 (当前已不在) 增`（`treeRowCount 5`、`unplacedHint null`，
   修前 0 / 「1 个变更未能定位」），横幅与 29 行属性不变，`element/attributes` 全程 0 条、无红条；回归 602→604 与 573→626 都照旧
   （后者仍正常发 1 条 200）。vitest 该文件 13 过。README §5.4。
+- **幽灵构件的「在 3D 中定位」（10:5x，用户点名真机验）**：`focusModelUnitVersionCompare` 并 A / B 两层的包围盒找，找不到就不动相机——
+  拿「相机动没动」当信号跑了三条（相机先停远点）：新增幽灵（只在 B 层）镜头切 A 侧、删除幽灵（只在 A 层）镜头切 B 侧、正常修改行，
+  **三条都飞到了各自的包围盒中心**，pageerror 0。顺手撞到并一起收掉：该函数里 `setSelectedRefno` 会把「已删除」登记换成普通选中 →
+  404 红条又回来了；改成「当前选中已是这个 refno 且是已删除登记时不覆盖」。README §5.4 末两行。
 - **e2e 跟上「节点版本」面板（10:3x，`367c8441`）**：`061c83b2` 之后 `e2e/model-version-compare-gen-model-v1.spec.ts` 3 条全红——
   `model-unit-compare-a/b` 从下拉变成时间线上的徽章 `<span>`，`toHaveValue` 报「Not an input element」。只改选版那几条断言：
   `<option>` 数 → 时间线 `<li>` 数、`toHaveValue` → `toHaveAttribute('data-sesno', …)`；其余检查点原样。`:8033` 3 过。
