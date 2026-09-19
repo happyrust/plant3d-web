@@ -41,7 +41,9 @@ export type NodeTimelineInput = {
 
 /**
  * 并两条时间线、按范围标 `inScope`，**新 → 旧**排。
- * - `self`：自身记录变过的会话（版本表左列或属性时间线有它）。
+ * - `self`：自身记录变过的会话（版本表左列或属性时间线有它）。**旧服务端只给得出单元那一列
+ *   （`unitColumnOnly`）时自身列是未知、不是「没变」**：这时不筛，单元表里的会话照列（行上标「本构件 ?」），
+ *   否则整条时间线会空掉、缺省 A / B 也选不出来。
  * - `subtree`：节点有所属单元时 = 单元表里的会话 ∪ 自身会话（现有路由下子树 ≈ 所属单元）；节点是容器
  *   （没有单元）时只有自身会话可列——子树列要 `node/versions?scope=subtree`，面板另给提示。
  */
@@ -81,8 +83,10 @@ export function buildNodeTimelineRows(input: NodeTimelineInput): NodeTimelineRow
     if (!row.selfImpact) row.selfImpact = entry.impact;
   }
   const hasUnit = !!input.timeline?.unitRefno;
+  // 服务端给不出自身那一列时，「自身没变」无从判断——按未知处理，别把整条时间线筛空
+  const selfColumnUnknown = input.timeline?.unitColumnOnly === true;
   for (const row of bySesno.values()) {
-    row.inScope = input.scope === 'self'
+    row.inScope = input.scope === 'self' && !selfColumnUnknown
       ? row.selfImpact !== null
       : row.selfImpact !== null || (hasUnit && row.unitImpact !== null);
   }

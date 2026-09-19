@@ -123,6 +123,8 @@ const comparedUnitRefno = computed(() => elementTimeline.value?.unitRefno ?? nor
 const queriedElementRefno = computed(() => (queriedIsUnitRoot.value ? null : elementTimeline.value?.refno ?? null));
 const nodeNoun = computed(() => elementTimeline.value?.noun || attributeHistory.value?.noun || '');
 const hasUnit = computed(() => !!elementTimeline.value?.unitRefno);
+/** 旧服务端只给得出单元那一列：自身那一列是未知，不是「没变」 */
+const selfColumnUnknown = computed(() => elementTimeline.value?.unitColumnOnly === true);
 
 const timelineRows = computed<NodeTimelineRow[]>(() => buildNodeTimelineRows({
   timeline: elementTimeline.value,
@@ -230,6 +232,12 @@ function messageOf(value: unknown): string {
 
 function impactLabel(impact: ModelVersionImpactKind | null): string {
   return impact ?? '未变';
+}
+
+/** 行上那颗徽章显示哪一列：`仅自身` 看自身列；自身列未知（旧服务端）时只剩单元那一列可显示，别谎报「未变」 */
+function rowImpact(row: NodeTimelineRow): ModelVersionImpactKind | null {
+  if (scope.value === 'self' && !selfColumnUnknown.value) return row.selfImpact;
+  return row.unitImpact ?? row.selfImpact;
 }
 
 function impactClass(impact: ModelVersionImpactKind | null): string {
@@ -856,14 +864,14 @@ onBeforeUnmount(() => {
               <span v-if="!row.inScope" class="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-500">本范围无变化</span>
               <span v-if="row.changedCount" class="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] text-amber-700">属性 {{ row.changedCount }}</span>
               <template v-if="queriedIsUnitRoot">
-                <span class="rounded px-1.5 py-0.5 text-[10px]" :class="impactClass(scope === 'self' ? row.selfImpact : (row.unitImpact ?? row.selfImpact))">
-                  {{ impactLabel(scope === 'self' ? row.selfImpact : (row.unitImpact ?? row.selfImpact)) }}
+                <span class="rounded px-1.5 py-0.5 text-[10px]" :class="impactClass(rowImpact(row))">
+                  {{ impactLabel(rowImpact(row)) }}
                 </span>
               </template>
               <template v-else>
                 <span v-if="scope === 'subtree'" class="rounded px-1.5 py-0.5 text-[10px]" :class="impactClass(row.unitImpact)">单元 {{ impactLabel(row.unitImpact) }}</span>
                 <span class="rounded px-1.5 py-0.5 text-[10px]" :class="impactClass(row.selfImpact)">
-                  本构件 {{ elementTimeline?.unitColumnOnly ? '?' : impactLabel(row.selfImpact) }}
+                  本构件 {{ selfColumnUnknown ? '?' : impactLabel(row.selfImpact) }}
                 </span>
               </template>
             </span>

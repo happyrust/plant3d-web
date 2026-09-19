@@ -87,6 +87,30 @@ describe('buildNodeTimelineRows', () => {
     expect(rows.map((row) => row.sesno)).toEqual([626, 573, 5]);
     expect(rows[2]).toMatchObject({ selfImpact: 'delivery', kind: 'created', inScope: true });
   });
+
+  it('旧服务端只给单元那一列（unitColumnOnly）：self 范围下自身列算未知、不筛，缺省 A / B 照样选得出来', () => {
+    // 2026-09-19 真机 :8026（没有 element/versions）：单元 24384_26480 当前会话已无成员 → 范围定成 self →
+    // 修前每一行都判「不在本范围」，时间线渲染出 0 行、缺省最近两版选不出来（行上本来就该画「本构件 ?」）。
+    const unitOnly: ModelElementVersionTimeline = {
+      ...timeline,
+      refno: '24384_26480',
+      noun: 'EQUI',
+      unitRefno: '24384_26480',
+      unitColumnOnly: true,
+      versions: [
+        { sesno: 587, sessionTime: 't587', elementImpact: null, unitImpact: 'mesh' },
+        { sesno: 602, sessionTime: 't602', elementImpact: null, unitImpact: 'mesh' },
+        { sesno: 604, sessionTime: 't604', elementImpact: null, unitImpact: 'tombstone' },
+      ],
+    };
+    const rows = buildNodeTimelineRows({ timeline: unitOnly, history: null, scope: 'self' });
+    expect(rows.map((row) => [row.sesno, row.inScope])).toEqual([[604, true], [602, true], [587, true]]);
+    expect(defaultNodeVersionPair(rows)).toEqual({ a: 602, b: 604 });
+    // subtree 照旧
+    expect(buildNodeTimelineRows({ timeline: unitOnly, history: null, scope: 'subtree' }).every((row) => row.inScope)).toBe(true);
+    // 新服务端（自身列给得出来）不受影响：212 那一版仍判在 self 范围外
+    expect(buildNodeTimelineRows({ timeline, history, scope: 'self' }).map((row) => row.inScope)).toEqual([true, true, false, true]);
+  });
 });
 
 describe('选 A / B', () => {
