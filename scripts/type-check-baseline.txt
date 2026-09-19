@@ -57,9 +57,6 @@ src/components/dock_panels/ViewerPanel.vue|TS2339|Property 'hoverText' does not 
 src/components/dock_panels/ViewerPanel.vue|TS2345|Argument of type '"warn"' is not assignable to parameter of type 'LogType'.
 src/components/dock_panels/ViewerPanel.vue|TS2345|Argument of type '"warn"' is not assignable to parameter of type 'LogType'.
 src/components/dock_panels/ViewerPanel.vue|TS2554|Expected 0 arguments, but got 1.
-src/components/model-tree/ModelTreePanel.vue|TS18047|'item' is possibly 'null'.
-src/components/model-tree/ModelTreePanel.vue|TS2322|Type '({ refno: string; category: string | undefined; status: string | undefined; beforeState: string | undefined; afterState: string | undefined; sourceChangeCount: number | undefined; sourceNouns: string | undefined; ownerRefno: string | undefined; } | null)[] | { ...; }[]' is not assignable to type 'TreeDiffModel[]'.
-src/components/model-tree/ModelTreePanel.vue|TS2677|A type predicate's type must be assignable to its parameter's type.
 src/components/model-version/ModelUnitVersionComparePanel.vue|TS2345|Argument of type 'Map<string, InstanceEntry[]>' is not assignable to parameter of type 'Map<string, GeometryEntryLike[]>'.
 src/components/review/AnnotationSheetWorkspace.test.ts|TS2769|No overload matches this call.
 src/components/review/AnnotationTableView.test.ts|TS2488|Type 'any[] | undefined' must have a '[Symbol.iterator]()' method that returns an iterator.
