@@ -1966,7 +1966,7 @@ describe('createSpatialQueryStore · 审核 P1–P8', () => {
     return {
       success: true,
       total_count: total,
-      returned_count: results.length,
+      returned_count: results?.length ?? 0,
       page,
       per_page: perPage,
       has_more: page * perPage < total,
