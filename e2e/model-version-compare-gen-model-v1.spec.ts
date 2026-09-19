@@ -70,14 +70,18 @@ type ViewerCompareState = {
 type OpenedPage = {
   pageErrors: string[];
   historyRequests: { method: string; url: string }[];
+  /** 右侧「属性」面板拉当前会话的请求；差异模式里选中幽灵构件时这里必须一条都没有（发了只会 404） */
+  elementAttributeRequests: string[];
 };
 
 async function openComparePage(page: Page, extra: Record<string, string>): Promise<OpenedPage> {
   const pageErrors: string[] = [];
   const historyRequests: { method: string; url: string }[] = [];
+  const elementAttributeRequests: string[] = [];
   page.on('pageerror', (error) => pageErrors.push(error.message));
   page.on('request', (request) => {
     if (/\/api\/v1\/model\/history\//.test(request.url())) historyRequests.push({ method: request.method(), url: request.url() });
+    if (/\/api\/v1\/element\/attributes/.test(request.url())) elementAttributeRequests.push(request.postData() ?? '');
   });
 
   // 掐掉 Vite HMR：别的会话改代码时 dev server 会 full-reload，把半路的对比冲掉
@@ -96,7 +100,29 @@ async function openComparePage(page: Page, extra: Record<string, string>): Promi
   });
   await page.goto(`/?${params.toString()}`, { waitUntil: 'domcontentloaded' });
   await expect(page.getByTestId('model-unit-version-compare-panel')).toBeVisible({ timeout: 60_000 });
-  return { pageErrors, historyRequests };
+  return { pageErrors, historyRequests, elementAttributeRequests };
+}
+
+/** 相机先停到这个远点，再点「在 3D 中定位」——找不到构件时 `focusModelUnitVersionCompare` 直接 return，相机纹丝不动。 */
+const PARKED_CAMERA = { x: 53_279, y: 62_579, z: 58_750 };
+
+async function parkCamera(page: Page): Promise<void> {
+  await page.evaluate((parked) => {
+    const viewer = (window as unknown as { __dtxViewer?: { camera: { position: { set(x: number, y: number, z: number): void } }; controls: { target: { set(x: number, y: number, z: number): void }; update(): void } } }).__dtxViewer;
+    if (!viewer) throw new Error('__dtxViewer 不在 window 上（只有 dev 构建才挂）');
+    viewer.camera.position.set(parked.x, parked.y, parked.z);
+    viewer.controls.target.set(0, 0, 0);
+    viewer.controls.update();
+  }, PARKED_CAMERA);
+}
+
+/** 相机离停放点多远；> 1 即「定位按钮真的把镜头飞过去了」 */
+function cameraDistanceFromParked(page: Page): Promise<number> {
+  return page.evaluate((parked) => {
+    const position = (window as unknown as { __dtxViewer?: { camera: { position: { x: number; y: number; z: number } } } }).__dtxViewer?.camera.position;
+    if (!position) return 0;
+    return Math.hypot(position.x - parked.x, position.y - parked.y, position.z - parked.z);
+  }, PARKED_CAMERA);
 }
 
 async function waitForCompare(page: Page): Promise<ViewerCompareState> {
@@ -165,7 +191,16 @@ test('缺省最近两版：compare_autorun 开面板、版本表来自服务端�
   const badgeRows = page.locator('[data-testid="model-tree-row"][data-diff-status]');
   await expect(badgeRows.first()).toBeVisible({ timeout: 30_000 });
   if (b.impact_kind === 'tombstone') {
-    await expect(page.locator('[data-testid="model-tree-row"][data-ghost="true"]').first()).toBeVisible();
+    const ghostRow = page.locator('[data-testid="model-tree-row"][data-ghost="true"]').first();
+    await expect(ghostRow).toBeVisible();
+    // B 版把它删了 → 行尾「已删除」（「当前已不在」是另一回事：B 版还在、之后才被删，见下面那条）
+    await expect(ghostRow).toContainText('已删除');
+    // 幽灵行进选中不得去拉当前会话的属性（拉了只会 404）
+    await expect(page.getByTestId('properties-deleted-notice')).toBeVisible();
+    // 「在 3D 中定位」：被删的构件只在 A 层有，两层并起来才找得到；找不到时相机不动
+    await parkCamera(page);
+    await page.getByTestId('attr-diff-locate').click();
+    await expect.poll(() => cameraDistanceFromParked(page), { timeout: 15_000 }).toBeGreaterThan(1);
   }
 
   // 关闭：每份生成过的历史快照各一条 DELETE；差异模式退出
@@ -200,6 +235,65 @@ test('compare_a / compare_b 指定两版：按 URL 选中、两侧都有几何�
 
   await page.getByTestId('model-unit-compare-close').click();
   await expect.poll(() => historyRequests.filter((r) => r.method === 'DELETE').length, { timeout: 15_000 }).toBe(2);
+  expect(pageErrors, pageErrors.join('\n')).toEqual([]);
+});
+
+/**
+ * 「B 版还在、当前会话已不在」的构件要另找一个现场：ams8000 里 EQUI `/1-LNR-Q005-PJ` = 24384/24776 下的
+ * BOX 24384/26495 —— 628 建、632 又删。换库就跳过（不写死存在性）。
+ */
+const GHOST_UNIT = process.env.MODEL_VERSION_E2E_GHOST_UNIT || '24384_24776';
+const GHOST_A = Number(process.env.MODEL_VERSION_E2E_GHOST_A || '618');
+const GHOST_B = Number(process.env.MODEL_VERSION_E2E_GHOST_B || '628');
+
+async function ghostFixtureReason(): Promise<string | null> {
+  const url = `${GEN_MODEL_BASE}/api/v1/model/versions?dbnum=${DBNUM}&refno=${GHOST_UNIT.replace('_', '/')}`;
+  let body: VersionsResponse;
+  try {
+    const response = await fetch(url);
+    if (!response.ok) return `夹具单元 ${GHOST_UNIT} 版本表 HTTP ${response.status}`;
+    body = await response.json() as VersionsResponse;
+  } catch (error) {
+    return `夹具单元 ${GHOST_UNIT} 版本表打不通：${String(error)}`;
+  }
+  const sesnos = new Set((body.versions ?? []).map((row) => row.sesno));
+  if (!sesnos.has(GHOST_A) || !sesnos.has(GHOST_B)) {
+    return `夹具单元 ${GHOST_UNIT} 没有 ${GHOST_A} / ${GHOST_B} 这两版——这条要「B 版新增、之后又被删」的现场`;
+  }
+  return null;
+}
+
+test('B 版之后又被删的构件：幽灵行标「当前已不在」且徽章仍是「增」、属性面板不拉当前会话、「在 3D 中定位」照样找得到', async ({ page }) => {
+  const reason = await ghostFixtureReason();
+  test.skip(reason !== null, reason ?? '');
+
+  const { pageErrors, elementAttributeRequests } = await openComparePage(page, {
+    unit_refno: GHOST_UNIT,
+    compare_a: String(GHOST_A),
+    compare_b: String(GHOST_B),
+  });
+  await waitForCompare(page);
+  await expect(page.getByTestId('model-tree-diff-resolving')).toHaveCount(0, { timeout: 60_000 });
+
+  // 树：解析不到它自己 → 按幽灵行挂到最近存活的祖先，徽章保留「增」、行尾标「当前已不在」，不再计「未能定位」
+  const ghostRow = page.locator('[data-testid="model-tree-row"][data-diff-status="added"][data-ghost="true"]').first();
+  await expect(ghostRow).toBeVisible({ timeout: 30_000 });
+  await expect(ghostRow).toContainText('当前已不在');
+  await expect(page.getByTestId('model-tree-diff-unplaced')).toHaveCount(0);
+
+  // 右侧「属性」面板：当前会话里没有这个构件，给提示而不是去拉（拉了就是 404 红条）
+  await ghostRow.click();
+  await expect(page.getByTestId('properties-deleted-notice')).toBeVisible();
+  expect(elementAttributeRequests, elementAttributeRequests.join('\n')).toEqual([]);
+
+  // 「在 3D 中定位」：A / B 两个隔离图层并起来找（这个构件只在 B 层有），找不到时相机不动
+  await parkCamera(page);
+  await page.getByTestId('attr-diff-locate').click();
+  await expect.poll(() => cameraDistanceFromParked(page), { timeout: 15_000 }).toBeGreaterThan(1);
+  // 定位不得把「已删除」登记换成普通选中（换了就又去拉当前会话）
+  await expect(page.getByTestId('properties-deleted-notice')).toBeVisible();
+  expect(elementAttributeRequests, elementAttributeRequests.join('\n')).toEqual([]);
+
   expect(pageErrors, pageErrors.join('\n')).toEqual([]);
 });
 

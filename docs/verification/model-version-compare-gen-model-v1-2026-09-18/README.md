@@ -123,6 +123,7 @@
 | 幽灵构件的「在 3D 中定位」（10:5x，`old/.scratch/attr-locate-live.mjs`，`*-locate-*`） | `focusModelUnitVersionCompare` 是把 A / B 两个隔离图层的包围盒**并起来**找的，找不到就直接 return（相机纹丝不动）——所以「相机动没动」就是「找没找到」的精确信号。三条都把相机先停到 (53279, 62579, 58750) 再点按钮：**新增幽灵**（只在 B 层有）镜头故意切到 A 侧 → 飞到 target (−2821.3, 8004, 1400)，位移 96816.5；**删除幽灵**（只在 A 层有，B 是 tombstone `afterObjects 0`）镜头故意切到 B 侧 → 飞到 target (−2821.3, 8004, 3900)，位移 95340.2；**正常修改行**（FTUB，非幽灵）→ 飞到 (11059.6, 12165.3, 3165)。pageerror 0 |
 | 顺手撞到并一起收掉 | 第一次跑「新增幽灵」时红条回来了：`ViewerPanel.focusModelUnitVersionCompare` 里 `selectionStore.setSelectedRefno(normalized)` 把 §5.2 的「已删除」登记又换成了普通选中 → `element/attributes {24384/26495}` 404、提示消失。加一道判断：当前选中已经是这个 refno 且是「已删除」登记时不覆盖。修后三条里两条幽灵**全程 `element/attributes` 0 条**、提示一直在，正常行不受影响 |
 | 测试 | `ModelTreePanel.versionDiff.test.ts` **13 过**（新增「新增的构件在 B 版之后又被删：解析不到自己 → 挂最近存活祖先的幽灵行，徽章仍是「增」」与「连原父都定位不到 → 回退挂根 + `ghostUnplaced`」；原两条的 `resolveTotal` 从「唯一目标数」改成「变更条数」5→6 / 1→2）；`vue-tsc` / eslint 触及文件 0 错 |
+| e2e 护栏（11:0x） | `model-version-compare-gen-model-v1.spec.ts` 新增第 4 条「B 版之后又被删的构件」：幽灵行 `[data-diff-status=added][data-ghost=true]` 可见且含「当前已不在」、无「未能定位」、点它给 `properties-deleted-notice` 且 `element/attributes` **一条都没有**、停好相机后点「在 3D 中定位」相机必须飞离停放点（找不到时 `focusModelUnitVersionCompare` 直接 return、相机不动）、飞完提示仍在且请求仍是 0。夹具（`24384_24776` 618→628）不在就整条跳过，可用 `MODEL_VERSION_E2E_GHOST_UNIT/_A/_B` 换。第 1 条的 tombstone 分支也补上「行尾『已删除』+ 提示 + 定位飞得动」。**`:8026` 4 过（13.6 s）、`:8033` 4 过（54.0 s）、`:8026` + `MODEL_VERSION_E2E_UNIT=24384_23257` 4 过（13.2 s）** |
 
 ## 6. BRAN 增量更新 → 版本对比（19:3x，`bran-ftub-move/`）
 

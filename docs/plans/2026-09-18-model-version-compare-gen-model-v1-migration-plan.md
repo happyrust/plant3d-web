@@ -392,6 +392,10 @@ legacy 下与从前的可见差别只有一处、且不可见于用户：A/B 隔
   拿「相机动没动」当信号跑了三条（相机先停远点）：新增幽灵（只在 B 层）镜头切 A 侧、删除幽灵（只在 A 层）镜头切 B 侧、正常修改行，
   **三条都飞到了各自的包围盒中心**，pageerror 0。顺手撞到并一起收掉：该函数里 `setSelectedRefno` 会把「已删除」登记换成普通选中 →
   404 红条又回来了；改成「当前选中已是这个 refno 且是已删除登记时不覆盖」。README §5.4 末两行。
+- **e2e 护栏（11:0x，防这两条再退）**：spec 新增第 4 条「B 版之后又被删的构件」——幽灵行含「当前已不在」+ 无「未能定位」+
+  `properties-deleted-notice` + `element/attributes` 0 条 + 停好相机后点「在 3D 中定位」相机必须飞离停放点 + 飞完提示仍在、请求仍 0；
+  夹具（`24384_24776` 618→628）不在就跳过（`MODEL_VERSION_E2E_GHOST_UNIT/_A/_B` 可换）。第 1 条的 tombstone 分支补「已删除」文案、
+  提示与定位。`:8026` / `:8033` / `:8026`+`24384_23257` 三轮各 **4 过**。
 - **e2e 跟上「节点版本」面板（10:3x，`367c8441`）**：`061c83b2` 之后 `e2e/model-version-compare-gen-model-v1.spec.ts` 3 条全红——
   `model-unit-compare-a/b` 从下拉变成时间线上的徽章 `<span>`，`toHaveValue` 报「Not an input element」。只改选版那几条断言：
   `<option>` 数 → 时间线 `<li>` 数、`toHaveValue` → `toHaveAttribute('data-sesno', …)`；其余检查点原样。`:8033` 3 过。
