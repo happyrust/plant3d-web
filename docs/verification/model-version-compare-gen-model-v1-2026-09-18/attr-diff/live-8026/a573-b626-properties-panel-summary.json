@@ -1,9 +1,9 @@
 {
   "url": "http://127.0.0.1:3111/?model_source=gen-model-v1&gm_backend_port=8026&unit_refno=24384_23257&compare_autorun=1&compare_a=573&compare_b=626",
-  "startedAt": "2026-09-18T14:30:01.106Z",
+  "startedAt": "2026-09-19T02:12:27.062Z",
   "elementAttributeRequests": [
     {
-      "at": "2026-09-18T14:30:04.372Z",
+      "at": "2026-09-19T02:12:29.670Z",
       "refno": "24384/23262",
       "status": 200
     }
@@ -11,56 +11,56 @@
   "pageErrors": [],
   "steps": [
     {
-      "at": "2026-09-18T14:30:01.243Z",
+      "at": "2026-09-19T02:12:27.279Z",
       "name": "goto",
       "url": "http://127.0.0.1:3111/?model_source=gen-model-v1&gm_backend_port=8026&unit_refno=24384_23257&compare_autorun=1&compare_a=573&compare_b=626"
     },
     {
-      "at": "2026-09-18T14:30:04.373Z",
+      "at": "2026-09-19T02:12:29.695Z",
       "name": "compare finished",
-      "summary": "新增 0删除 0修改 1未变 8"
+      "summary": "24384_23257 · 几何差异新增 0删除 0修改 1未变 8"
     },
     {
-      "at": "2026-09-18T14:30:05.351Z",
+      "at": "2026-09-19T02:12:30.523Z",
       "name": "before click",
       "firstRowStatus": "modified",
       "ghost": false,
       "notice": null,
       "elementAttributeRequests": [
         {
-          "at": "2026-09-18T14:30:04.372Z",
+          "at": "2026-09-19T02:12:29.670Z",
           "refno": "24384/23262",
           "status": 200
         }
       ]
     },
     {
-      "at": "2026-09-18T14:30:06.588Z",
+      "at": "2026-09-19T02:12:31.772Z",
       "name": "after click",
       "notice": null,
       "propertiesError": null,
       "elementAttributeRequests": [
         {
-          "at": "2026-09-18T14:30:04.372Z",
+          "at": "2026-09-19T02:12:29.670Z",
           "refno": "24384/23262",
           "status": 200
         }
       ]
     },
     {
-      "at": "2026-09-18T14:30:07.358Z",
+      "at": "2026-09-19T02:12:32.592Z",
       "name": "after close",
       "notice": null,
       "elementAttributeRequests": [
         {
-          "at": "2026-09-18T14:30:04.372Z",
+          "at": "2026-09-19T02:12:29.670Z",
           "refno": "24384/23262",
           "status": 200
         }
       ]
     }
   ],
-  "summaryText": "新增 0删除 0修改 1未变 8",
+  "summaryText": "24384_23257 · 几何差异新增 0删除 0修改 1未变 8",
   "firstRowStatus": "modified",
   "firstRowGhost": false,
   "firstRowText": "FTUB FTUB改",
@@ -70,5 +70,5 @@
   "propertiesErrorText": null,
   "noticeAfterClose": null,
   "ok": true,
-  "finishedAt": "2026-09-18T14:30:07.420Z"
+  "finishedAt": "2026-09-19T02:12:32.664Z"
 }

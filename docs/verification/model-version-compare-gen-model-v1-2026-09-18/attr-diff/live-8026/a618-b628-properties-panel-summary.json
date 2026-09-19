@@ -1,50 +1,50 @@
 {
-  "url": "http://127.0.0.1:3111/?model_source=gen-model-v1&gm_backend_port=8026&unit_refno=24384_26480&compare_autorun=1&compare_a=602&compare_b=604",
-  "startedAt": "2026-09-19T02:12:20.986Z",
+  "url": "http://127.0.0.1:3111/?model_source=gen-model-v1&gm_backend_port=8026&unit_refno=24384_24776&compare_autorun=1&compare_a=618&compare_b=628",
+  "startedAt": "2026-09-19T02:11:37.802Z",
   "elementAttributeRequests": [],
   "pageErrors": [],
   "steps": [
     {
-      "at": "2026-09-19T02:12:21.165Z",
+      "at": "2026-09-19T02:11:38.061Z",
       "name": "goto",
-      "url": "http://127.0.0.1:3111/?model_source=gen-model-v1&gm_backend_port=8026&unit_refno=24384_26480&compare_autorun=1&compare_a=602&compare_b=604"
+      "url": "http://127.0.0.1:3111/?model_source=gen-model-v1&gm_backend_port=8026&unit_refno=24384_24776&compare_autorun=1&compare_a=618&compare_b=628"
     },
     {
-      "at": "2026-09-19T02:12:23.454Z",
+      "at": "2026-09-19T02:11:41.509Z",
       "name": "compare finished",
-      "summary": "24384_26480 · 几何差异新增 0删除 1修改 0未变 0"
+      "summary": "24384_24776 · 几何差异新增 1删除 0修改 0未变 1"
     },
     {
-      "at": "2026-09-19T02:12:24.289Z",
+      "at": "2026-09-19T02:11:42.431Z",
       "name": "before click",
-      "firstRowStatus": "deleted",
+      "firstRowStatus": "added",
       "ghost": true,
       "notice": "该构件已删除，属性见底部属性历史对比",
       "elementAttributeRequests": []
     },
     {
-      "at": "2026-09-19T02:12:25.547Z",
+      "at": "2026-09-19T02:11:43.700Z",
       "name": "after click",
       "notice": "该构件已删除，属性见底部属性历史对比",
       "propertiesError": null,
       "elementAttributeRequests": []
     },
     {
-      "at": "2026-09-19T02:12:26.357Z",
+      "at": "2026-09-19T02:11:44.599Z",
       "name": "after close",
       "notice": null,
       "elementAttributeRequests": []
     }
   ],
-  "summaryText": "24384_26480 · 几何差异新增 0删除 1修改 0未变 0",
-  "firstRowStatus": "deleted",
+  "summaryText": "24384_24776 · 几何差异新增 1删除 0修改 0未变 1",
+  "firstRowStatus": "added",
   "firstRowGhost": true,
-  "firstRowText": "24384/26481 (已删除)删",
+  "firstRowText": "24384/26495 (当前已不在)增",
   "noticeBeforeClick": "该构件已删除，属性见底部属性历史对比",
   "elementAttributeRequestsBeforeClick": 0,
   "noticeAfterClick": "该构件已删除，属性见底部属性历史对比",
   "propertiesErrorText": null,
   "noticeAfterClose": null,
   "ok": true,
-  "finishedAt": "2026-09-19T02:12:26.444Z"
+  "finishedAt": "2026-09-19T02:11:44.736Z"
 }

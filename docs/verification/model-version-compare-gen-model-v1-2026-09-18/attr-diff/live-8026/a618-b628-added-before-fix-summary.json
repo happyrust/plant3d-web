@@ -1,6 +1,6 @@
 {
   "url": "http://127.0.0.1:3111/?model_source=gen-model-v1&gm_backend_port=8026&unit_refno=24384_24776&compare_autorun=1&compare_a=618&compare_b=628",
-  "startedAt": "2026-09-19T02:11:23.440Z",
+  "startedAt": "2026-09-18T14:54:16.041Z",
   "attributeRequests": [
     "{\"snapshot_key\":\"24384_24776@618\",\"tool\":\"attributes\",\"arguments\":{\"refno\":\"24384/26495\"}}",
     "{\"snapshot_key\":\"24384_24776@628\",\"tool\":\"attributes\",\"arguments\":{\"refno\":\"24384/26495\"}}"
@@ -12,7 +12,7 @@
       "exists": false,
       "noun": null,
       "rows": 0,
-      "elapsed_ms": 5
+      "elapsed_ms": 4
     },
     {
       "status": 200,
@@ -20,29 +20,29 @@
       "exists": true,
       "noun": "BOX",
       "rows": 29,
-      "elapsed_ms": 7
+      "elapsed_ms": 3
     }
   ],
   "pageErrors": [],
   "steps": [
     {
-      "at": "2026-09-19T02:11:23.649Z",
+      "at": "2026-09-18T14:54:16.287Z",
       "name": "goto",
       "url": "http://127.0.0.1:3111/?model_source=gen-model-v1&gm_backend_port=8026&unit_refno=24384_24776&compare_autorun=1&compare_a=618&compare_b=628"
     },
     {
-      "at": "2026-09-19T02:11:30.083Z",
+      "at": "2026-09-18T14:54:21.090Z",
       "name": "compare finished",
-      "summary": "24384_24776 · 几何差异新增 1删除 0修改 0未变 1"
+      "summary": "新增 1删除 0修改 0未变 1"
     },
     {
-      "at": "2026-09-19T02:11:30.184Z",
-      "name": "clicked changed row",
-      "status": "added",
-      "text": "24384/26495 (当前已不在)增"
+      "at": "2026-09-18T14:54:36.115Z",
+      "name": "changed row NOT in tree",
+      "unplacedHint": "1 个变更未能定位到树（已计入统计）",
+      "treeRowCount": 0
     },
     {
-      "at": "2026-09-19T02:11:30.217Z",
+      "at": "2026-09-18T14:54:36.143Z",
       "name": "attr diff panel",
       "unavailable": false,
       "missingSide": "该构件在版本 A 不存在（新建于 A 之后）",
@@ -196,17 +196,16 @@
       ]
     },
     {
-      "at": "2026-09-19T02:11:31.023Z",
+      "at": "2026-09-18T14:54:36.912Z",
       "name": "with unchanged",
       "rows": 29
     }
   ],
-  "summaryText": "24384_24776 · 几何差异新增 1删除 0修改 0未变 1",
+  "summaryText": "新增 1删除 0修改 0未变 1",
   "treeDiffPill": "618 → 628 差异模式",
-  "unplacedHint": null,
-  "treeRowCount": 5,
-  "clickedRowStatus": "added",
-  "clickedRowText": "24384/26495 (当前已不在)增",
+  "unplacedHint": "1 个变更未能定位到树（已计入统计）",
+  "treeRowCount": 0,
+  "rowNotFound": true,
   "attrPanelText": "属性历史对比24384_26495增 变更 29 / 29 显示未变 在 3D 中定位 该构件在版本 A 不存在（新建于 A 之后）属性A · sesno 618B · sesno 628CNPEOPENITEM—UNSETJGOBJBASE—UNSETJGOBJMAT—UNSETJGOBJNOTE—UNSETJGOBJZL—UNSETLEVE—0, 10MDSComment—unsetMDSCp1—unsetMDSCp2—unsetMDSCp3—unsetMDSMatRef—unsetMDSVprmMto—trueNAME—/CODEX_DB8000_EQ_ADD_BOXOBST—2ORI—0, 0, 0ORRF—0/0OWNER—24384/24776POS—0, 0, 0PSIWEIGHT—0PURP—unsetREFNO—24384/26495REPCOU—0SCRoomNo—unsetSPAMAP—1500012500TMRREF—0/0TYPE—BOXXLEN—500YLEN—400ZLEN—300 点击带徽章节点查看该构件在 A / B 两版下的属性；两侧由同一个渲染器印字，字不同就是变了",
   "unavailable": false,
   "missingSide": "该构件在版本 A 不存在（新建于 A 之后）",
@@ -360,5 +359,5 @@
   ],
   "rowsWithUnchanged": 29,
   "ok": true,
-  "finishedAt": "2026-09-19T02:11:31.023Z"
+  "finishedAt": "2026-09-18T14:54:36.912Z"
 }

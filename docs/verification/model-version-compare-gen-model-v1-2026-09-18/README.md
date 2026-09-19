@@ -93,7 +93,7 @@
 | 真机 573→626 对照（`a573-b626-properties-panel-*`） | 首条是修改的 FTUB：`element/attributes {refno: 24384/23262}` 200 一条、无提示；点行 / 关闭同样无提示 |
 | 测试 | 新增 `PropertiesPanel.deleted.test.ts` 2 条（挂真 `VueQueryPlugin`、mock `@/model-source`）：已删除登记不发查询 / 给提示 / 正常选中复位；同一 refno 缓存过 404 再按幽灵登记不漏红条。全仓 **346 文件 / 3084 用例过**；e2e 两单元各 3 过。 |
 
-### 5.3 「新增」场景：A 侧不存在的横幅（22:5x，`a618-b628-added-attr-diff-*`）
+### 5.3 「新增」场景：A 侧不存在的横幅（22:5x，修前证据 `a618-b628-added-before-fix-*`）
 
 用户点名「587→602 的 CYLI 24384/26483」——那个 CYLI 只在 `modelUnitVersionCompare.test.ts` 的夹具里；真库里 EQUI 24384/26480 从 587 到 602 十个版本
 `instances` 都只有 BOX 24384_26481 一条（587→602 = 修改 1 / 其余 0，10 份快照查完即删）。真库里的「新增」在另一条会话第 2 轮留下的
@@ -106,9 +106,21 @@
 | **顺手撞到的缺口 ①（树）** | 该 BOX 在 628 新增、632 又被删，**当前会话（636）里已不在**：`expandPathToNode(24384_26495)` 查祖先 404 → 定位不到 → 「1 个变更未能定位到树（已计入统计）」，**树里一行都没有**（`treeRowCount 0`，连祖先都不列）。差异模式的树是「当前树 + 幽灵行」，只有 `deleted` 才走幽灵；「B 版有、当前没有」的新增 / 修改行没有落点。 |
 | **顺手撞到的缺口 ②（右侧属性面板）** | 首条变更 24384_26495 进全局选中 → `element/attributes` 404 → 红条「not_found (404): … 会话 Some(636) 的索引里没有 24384/26495」。§5.2 的「已删除」登记只认 `status=deleted` 的幽灵，这条是 `added`，没兜住。 |
 
-两个缺口同一个根：**变更集里的构件不一定还在当前会话**（B 版之后又被删了）。修法候选：路径解析失败的新增 / 修改节点也按幽灵挂到 B 侧 `ownerRefno`
-链上最近存活的祖先（徽章保留「增 / 改」，行尾标「当前已不在」），`selectedIsGhost` 与全局选中的「已删除」登记一并覆盖它；首条选中等路径解析
-落定再决定走哪条登记。未动，等拍板。
+两个缺口同一个根：**变更集里的构件不一定还在当前会话**（B 版之后又被删了）。**2026-09-19 10:1x 已修（用户拍板），见 §5.4**；
+上面这一栏的修前形态留在 `a618-b628-added-before-fix-*`（`treeRowCount 0`、`unplacedHint「1 个变更未能定位到树」`）。
+
+### 5.4 B 版之后又被删的构件：幽灵行保留「增 / 改」徽章 + 行尾「当前已不在」（2026-09-19 10:1x）
+
+| 项 | 事实 |
+|---|---|
+| 修法（树） | `useTreeVersionDiff.resolvePaths` 改成**每条变更一份解析计划**：非删除的先试它自己（只要路径可见），查不到再沿 `ownerRefno` 链逐级试幽灵挂载点（挂载点必须 `expandSelf`，`buildResult` 才插幽灵行），第一个成功的祖先为准。「自己查不到」= 它在 B 版之后又被删了 → 记进 `unresolved`，`buildResult` 里和被删构件走同一条幽灵分支；徽章按 `model.status` 给（不再写死 `deleted`）。**解析没落定之前不算数**，仍记「未定位」，免得只是还没加载就先闪一行「当前已不在」。 |
+| 修法（行文案） | `ModelTreeRow`：`ghost && diffStatus !== 'deleted'` → 行尾 `(当前已不在)`（title 说明「B 版里还在、当前模型里已不在」），被删的仍是 `(已删除)`。 |
+| 修法（右侧属性面板） | 幽灵行点击本来就按 `row.ghost` 走 `selectDeletedRefno`，天然覆盖新增 / 修改的幽灵；要补的是**首条选中的时机**——`treeDiff.apply` 改为返回路径解析的 promise，`applyTreeDiffContext` 对「不是删除、当前树里又还没有」的首条**等解析落定再决定**走哪条登记（期间用户换了选中 / 退出差异模式就不再回写），被删的首条仍同步登记、不必等。 |
+| 真机 618→628（`a618-b628-added-attr-diff-*`，`old/.scratch/attr-diff-live.mjs --status added`） | 树里出现 `SITE 1RX03-EQUI → ZONE 1RX03-CASE-DQ → EQUI 1-LNR-Q005-PJ → 24384/26495 (当前已不在) 增`，**`treeRowCount 5`（修前 0）、`unplacedHint null`**；点它 → 面板仍「变更 29 / 29」+ 横幅「该构件在版本 A 不存在（新建于 A 之后）」，`@618 exists:false`（5 ms）/ `@628` BOX 29 行（7 ms）两条 200；pageerror 0 |
+| 真机 618→628 属性面板（`a618-b628-properties-panel-*`，`attr-deleted-notice-live.mjs`） | 进差异模式即「该构件已删除，属性见底部属性历史对比」（首条就是这条 `added` 幽灵，`data-ghost=true`），点它仍是提示、无 `not_found`；关闭对比 → 提示消失；**全程 `element/attributes` 0 条**，pageerror 0 |
+| 回归 602→604（删除） | 幽灵行仍 `24384/26481 (已删除) 删`、`treeRowCount 5`、横幅「该构件在版本 B 不存在（已删除）」、变更 28 / 28、`element/attributes` 0 条、pageerror 0 |
+| 回归 573→626（修改，正常行） | `FTUB 改`、变更 2 / 68、68 行；属性面板**照常发 `element/attributes {24384/23262}` 200 一条、无提示**——等解析落定再登记没有把正常行也拖成幽灵；pageerror 0 |
+| 测试 | `ModelTreePanel.versionDiff.test.ts` **13 过**（新增「新增的构件在 B 版之后又被删：解析不到自己 → 挂最近存活祖先的幽灵行，徽章仍是「增」」与「连原父都定位不到 → 回退挂根 + `ghostUnplaced`」；原两条的 `resolveTotal` 从「唯一目标数」改成「变更条数」5→6 / 1→2）；`vue-tsc` / eslint 触及文件 0 错 |
 
 ## 6. BRAN 增量更新 → 版本对比（19:3x，`bran-ftub-move/`）
 

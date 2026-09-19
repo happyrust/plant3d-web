@@ -131,8 +131,9 @@ function exitDiffMode() {
 }
 
 /**
- * 幽灵行（差异模式里已删除的构件）进全局选中：属性面板据 `selectedIsDeleted` 给「该构件已删除，属性见底部属性历史对比」、
- * 不拉当前会话的属性；树内不定位（当前树里没有它，去后端查祖先只会 404）。
+ * 幽灵行（差异模式里当前会话已经没有的构件：B 版删掉的，或 B 版之后才被删的新增 / 修改）进全局选中：
+ * 属性面板据 `selectedIsDeleted` 给「该构件已删除，属性见底部属性历史对比」、不拉当前会话的属性；
+ * 树内不定位（当前树里没有它，去后端查祖先只会 404）。
  */
 function selectDeletedRefno(refno: string) {
   if (selection.selectedRefno.value !== refno) internalTreeSelection = true;
@@ -1167,7 +1168,7 @@ function applyTreeDiffContext(rawDetail: unknown) {
   }
 
   activeTree.value = 'pdms';
-  treeDiff.apply({
+  const resolved = treeDiff.apply({
     project: typeof detail.project === 'string' ? detail.project : undefined,
     dbnum: Number.isFinite(Number(detail.dbnum)) ? Number(detail.dbnum) : undefined,
     fromSesno: Number.isFinite(Number(detail.fromSesno)) ? Number(detail.fromSesno) : undefined,
@@ -1180,13 +1181,23 @@ function applyTreeDiffContext(rawDetail: unknown) {
   });
   const first = mergedRefnos[0] ?? null;
   if (first) {
-    // 第一条变更就是被删的（tombstone 单元里常见）：按幽灵登记，右侧属性面板不去拉当前会话
     const firstModel = models.find((item) => item.refno === first);
-    const firstIsGhost = !!firstModel
-      && normalizeTreeDiffStatus(firstModel.status) === 'deleted'
-      && !pdmsTree.nodesById.value[first];
-    if (firstIsGhost) selectDeletedRefno(first);
-    else selection.setSelectedRefno(first);
+    const firstStatus = normalizeTreeDiffStatus(firstModel?.status);
+    if (firstStatus === 'deleted' && !pdmsTree.nodesById.value[first]) {
+      // 第一条变更就是被删的（tombstone 单元里常见）：当前会话里必然没有它，不用等解析
+      selectDeletedRefno(first);
+    } else if (pdmsTree.nodesById.value[first]) {
+      selection.setSelectedRefno(first);
+    } else {
+      // 还不知道它在不在当前会话：新增 / 修改的构件也可能在 B 版之后又被删了。等路径解析落定再决定走哪条
+      // 登记，免得先发一次注定 404 的 element/attributes（§5.2 那条红条就是这么来的）。
+      void resolved.then(() => {
+        // 解析这段时间里用户可能已经换了选中、或退出了差异模式
+        if (!treeDiff.isActive.value || treeDiff.selectedRefno.value !== first) return;
+        if (pdmsTree.nodesById.value[first]) selection.setSelectedRefno(first);
+        else selectDeletedRefno(first);
+      });
+    }
   }
 }
 

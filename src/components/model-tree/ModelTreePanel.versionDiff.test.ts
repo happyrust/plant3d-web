@@ -153,8 +153,9 @@ describe('useTreeVersionDiff（T015 树内差异回归）', () => {
       .map(([refno, options]) => `${refno}${options?.expandSelf ? '+self' : ''}`)
       .sort();
     expect(calls).toEqual(['gone-forever+self', 'pipeA1', 'pipeA2', 'zoneA+self', 'zoneB+self'].sort());
-    expect(diff.resolveTotal.value).toBe(5);
-    expect(diff.resolveDone.value).toBe(5);
+    // 进度按「变更条数」计（一条变更一份解析计划），共用同一个挂载点的只真查一次
+    expect(diff.resolveTotal.value).toBe(6);
+    expect(diff.resolveDone.value).toBe(6);
   });
 
   it('整单元被删（tombstone）：挂载点沿 ownerRefno 链落到最近存活祖先并被自己展开，幽灵行随之可见', async () => {
@@ -191,7 +192,7 @@ describe('useTreeVersionDiff（T015 树内差异回归）', () => {
     await untilResolveSettled(diff.resolving);
     // 只解析一个目标：zone（box 的原父 equi 也被删且不在树中 → 续链），且带 expandSelf
     expect(deps.expandPathToNode.mock.calls).toEqual([['zone', { expandSelf: true }]]);
-    expect(diff.resolveTotal.value).toBe(1);
+    expect(diff.resolveTotal.value).toBe(2);
 
     // 解析后：zone 已展开，两条幽灵行紧随其后；未变的 equiOther 不进差异行
     expect(deps.expandedIds.value.has('zone')).toBe(true);
@@ -267,7 +268,7 @@ describe('useTreeVersionDiff（T015 树内差异回归）', () => {
     expect(rowById(rows, 'del-y')).toMatchObject({ ghost: true, ghostUnplaced: true, depth: 1 });
   });
 
-  it('新增/修改节点不在树中时计入 unplacedCount（路径未解析/超上限）', () => {
+  it('新增/修改节点不在树中时计入 unplacedCount（路径解析进行中/超上限）', () => {
     const deps = makeDefaultDeps();
     const diff = useTreeVersionDiff(deps);
     diff.apply(makeContext([
@@ -275,8 +276,66 @@ describe('useTreeVersionDiff（T015 树内差异回归）', () => {
       { refno: 'pipeA1', status: 'modified' },
     ]));
 
+    // 解析还没落定：先记「未定位」，不抢着渲染成幽灵行（可能只是还没加载到）
     expect(diff.unplacedCount.value).toBe(1);
     expect(diff.rows.value.map((r) => r.id)).toEqual(['site', 'zoneA', 'pipeA1']);
+  });
+
+  it('新增的构件在 B 版之后又被删：解析不到自己 → 挂最近存活祖先的幽灵行，徽章仍是「增」', async () => {
+    // 2026-09-18 真机 618→628 的形状：BOX 24384/26495 在 628 新增、632 又被删，当前会话（636）里已不在。
+    // 修复前 expandPathToNode(box) 查祖先 404 → 「1 个变更未能定位到树」，树里一行都没有。
+    const deps = buildTreeDeps(
+      [{ id: 'site', type: 'SITE', children: [{ id: 'zone', children: [{ id: 'equi', type: 'EQUI' }] }] }],
+      ['site', 'zone'],
+    );
+    deps.expandPathToNode.mockImplementation(async (refno, options) => {
+      await flushAsync();
+      if (!deps.nodesById.value[refno]) return false; // 当前会话里没有它：后端 ancestors 404
+      const next = new Set(deps.expandedIds.value);
+      let cur: string | null = deps.nodesById.value[refno]?.parentId ?? null;
+      while (cur) {
+        next.add(cur);
+        cur = deps.nodesById.value[cur]?.parentId ?? null;
+      }
+      if (options?.expandSelf) next.add(refno);
+      deps.expandedIds.value = next;
+      return true;
+    });
+    const diff = useTreeVersionDiff(deps);
+    diff.apply(makeContext([{ refno: 'box', status: 'added', category: 'BOX', ownerRefno: 'equi' }]));
+
+    // 解析前：既不在树里、也还不能断言它没了 → 只记「未定位」
+    expect(diff.rows.value.map((r) => r.id)).toEqual([]);
+    expect(diff.unplacedCount.value).toBe(1);
+
+    await untilResolveSettled(diff.resolving);
+
+    // 先试它自己（不展开自身），失败后退到原父 equi 并把 equi 自己展开，幽灵行才有落点
+    expect(deps.expandPathToNode.mock.calls).toEqual([['box', undefined], ['equi', { expandSelf: true }]]);
+    expect(diff.rows.value.map((r) => r.id)).toEqual(['site', 'zone', 'equi', 'box']);
+    expect(rowById(diff.rows.value, 'box')).toMatchObject({
+      ghost: true, ghostUnplaced: false, diffStatus: 'added', depth: 3, type: 'BOX',
+    });
+    expect(diff.unplacedCount.value).toBe(0);
+    // 选中它 = 幽灵（右侧属性面板据此走「已删除」登记，不去拉当前会话）
+    diff.select('box');
+    expect(diff.selectedIsGhost.value).toBe(true);
+  });
+
+  it('新增的构件连原父都定位不到：回退挂根并标记 ghostUnplaced，不再计「未定位」', async () => {
+    const deps = makeDefaultDeps();
+    deps.expandPathToNode.mockImplementation(async (refno) => {
+      await flushAsync();
+      return !!deps.nodesById.value[refno];
+    });
+    const diff = useTreeVersionDiff(deps);
+    diff.apply(makeContext([{ refno: 'gone', status: 'modified', category: 'BOX', ownerRefno: 'gone-parent' }]));
+
+    await untilResolveSettled(diff.resolving);
+    expect(rowById(diff.rows.value, 'gone')).toMatchObject({
+      ghost: true, ghostUnplaced: true, diffStatus: 'modified', depth: 1,
+    });
+    expect(diff.unplacedCount.value).toBe(0);
   });
 
   it('筛选 chips：按类别过滤仍保留祖先路径且祖先 diffCount 只统计命中类别', () => {

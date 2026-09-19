@@ -20,7 +20,7 @@ const props = defineProps<{
   diffStatus?: TreeDiffStatus;
   /** 版本差异模式：后代变更数量汇总（容器节点） */
   diffCount?: number;
-  /** 版本差异模式：幽灵节点（已删除，仅展示） */
+  /** 版本差异模式：幽灵节点（当前树里没有它，仅展示） */
   ghost?: boolean;
   /** 幽灵节点因原父节点未知而挂载于根节点 */
   ghostUnplaced?: boolean;
@@ -66,11 +66,19 @@ const diffBadge = computed(() => {
   return { label: '改', cls: 'bg-warning-subtle text-warning border-transparent' };
 });
 
+/**
+ * 幽灵行有两种：B 版把它删了（徽章「删」），或它在 B 版还在、B 版之后又被删了（徽章仍是「增 / 改」）。
+ * 后者行尾标「当前已不在」，别让用户以为这次对比把它删了。
+ */
+const ghostMissingOnly = computed(() => props.ghost === true && props.diffStatus !== 'deleted');
+const ghostSuffix = computed(() => (ghostMissingOnly.value ? '(当前已不在)' : '(已删除)'));
+
 const ghostTitle = computed(() => {
   if (!props.ghost) return undefined;
-  return props.ghostUnplaced
-    ? '已删除节点：原父节点未知，挂载于根节点下；仅展示，不可定位 3D'
+  const base = ghostMissingOnly.value
+    ? '该构件在版本 B 里还在、当前模型里已不在（之后被删）：仅展示，不可定位 3D'
     : '已删除节点：仅展示，不可定位 3D';
+  return props.ghostUnplaced ? `${base}；原父节点未知，挂载于根节点下` : base;
 });
 
 /** 显示名称：PDMS 节点显示为 "NOUN NAME"，为空时用 refno 兜底 */
@@ -177,7 +185,7 @@ onUnmounted(() => {
 
       <div class="min-w-0 flex-1 leading-none">
         <div v-if="ghost" class="truncate text-xs text-muted-foreground/70">
-          <span class="line-through">{{ displayName }}</span> (已删除)
+          <span class="line-through">{{ displayName }}</span> {{ ghostSuffix }}
         </div>
         <div v-else class="truncate" :class="isNameFallback ? 'text-muted-foreground text-xs' : 'font-medium'">{{ displayName }}</div>
       </div>
