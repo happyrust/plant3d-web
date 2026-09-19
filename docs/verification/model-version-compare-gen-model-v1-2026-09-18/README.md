@@ -160,3 +160,20 @@
 | 对比 573 → 630（`a573-b630-*`） | **新增 0 / 删除 0 / 修改 0 / 未变 9 · 「无几何差异」**，不进差异模式（没有非 unchanged 行），关闭 DELETE × 2，pageerror 0 |
 
 结论：相对测试前的基线 573，库的净几何变更为零；apply / restore 两腿各自都被「增量 → 版本表 → 对比面板」如实反映。
+
+## 7. 节点版本视图（ADR 0066）页面级真机 + `:8022` 换成带新路由的 release 构建（2026-09-19 10:5x–11:1x，`node-version-view/`）
+
+前置：`:8022` 自昨晚 20:1x 起没在听（`d47d747fd` 与它连的 SurrealDB `:8009` 一并停了，那台 rocksdb 库的数据目录在盘上找不到）；
+用户 10:2x 拍板「换成带新路由的 release 构建（先确认没人在用），然后在页面上真机走一遍节点版本面板」。
+
+| 环节 | 事实 |
+|---|---|
+| 构建 | gen-model-refactor **`a382b2cf3`**（10:39，`node/versions` 那一笔）→ `git worktree add --detach .scratch\wt-nv-a382b2cf3` → `cargo build --release --features http_api --bin aios-database`（5 m 13 s，含等别的会话的 build 锁）→ 拷到 `_runs\review-full-8031\aios-database-a382b2cf3.exe` |
+| 启动 | cwd `_runs\node-versions-8022\`（`DbOption.toml` 抄自 `gen-model-model-cache` 仓库根：`http_api_addr 0.0.0.0:8022`、`watch_dbnums [7998, 8000]`、`startup_autorun = true`、`e3d31`），`serve`，非提权 `Start-Process`，env `AIOS_STORE_MODE=mem RUST_MIN_STACK=134217728 AIOS_OPEN_BROWSER=0 AIOS_RESTART_HANDOFF=1 RUST_BACKTRACE=1`，日志 `stdout.log / stderr.log`，pid `gm-8022-a382b2cf3.pid`；10:55:00 起，**2 s** 后 `/health` ok，`build_id 0.1.27+ga382b2cf3ace.1789785740`（干净、非 dirty），`medium: mem / durable: false`——**内存库：重启即重建，`:8022` 上没有任何东西是持久的**（`8022-swap-2026-09-19-a382b2cf3.json`） |
+| 后端四条路由 curl | `node/versions` SITE 24384/22399 subtree 冷算 **3.45 s**（639 会话 / 47,522 候选 / 3,786 在范围 / 640 个会话集），`since_sesno=618` 命中缓存 **20 ms** → 626 / 628 / 630 / 632 各「单元 1」；BRAN 24384/23257 subtree **57 行与 `model/versions` 逐行同序同档**（2.4 s vs 6.6 s）；FTUB 24384/23262 self **53 行与 `element/versions` 左列一致**；ZONE 24384/22400 subtree 198 行 / self 5 行；`scope=bogus` 400、不存在 refno 404、dbnum 不符 400、`since_sesno` 不在链上 404。`attribute-history` / `diff-summary` / `element/versions` 同机 200 |
+| 页面（dev `:3111` + `:8022`，`e2e/node-version-view-gen-model-v1.spec.ts`，`--workers=1`） | **2 passed（23 s）**，pageerror 0。**叶子 FTUB 24384_23262**（`leaf-*`）：`unit_refno=…&compare_autorun=1` 开面板；叶子没成员 → 缺省「仅自身」、「所有子节点」置灰；时间线「本范围 53 版」，行上 `dpc · CODEX db8000 FTUBE 4 … · 属性 2 · 本构件 mesh`；缺省 A=626 B=630 自动装所属单元 BRAN 24384_23257 → **修改 1 / 未变 8**；属性对比 tab **`A 626 → B 630 · 2 项变化`：POS `10887, 12332, 3400 → …2900`、SPAMAP `1400034000 → 1400029000`**。**容器 SITE 24384_22399**（`container-*`）：提示「子树时间线 **298** 版来自 node/versions」、手填会话号那一栏不再露出、自动跑不再报「没有几何」；缺省「仅自身」在范围 3 版（node/versions self 2 版 ∪ attribute-history 的 sesno 10：两个 UDA 被设值，模型口径不算变化）；切「所有子节点」→ 299 版全在范围、动过几何的行带「单元 n」（sesno 5 「单元 521」）；点行选 A=630 B=632 → 属性对比 tab「有变的构件 2 个」（EQUI 24384_24776 修改 · mesh、BOX 24384_26495 删除 · tombstone），点开 EQUI 拉它自己的时间线；模型对比 tab 差异摘要「变了的单元 1 / 未变 525 / 删除 1 / 修改 1」、容器自己的「在三维中对比」禁用、分组只有 EQUI 一组 → 点它 → **`24384_24776 · 删除 1 / 未变 1`**，树进 630 → 632 差异模式、幽灵行 `24384/26495（已删除）`、底部属性历史对比「该构件在版本 B 不存在」 |
+| 入口之三 | 右侧「属性」面板标题栏多了「历史」按钮（选中谁查谁，见 `leaf-model-compare.png` 右上角）；点击走 `requestModelVersionInspect + ensurePanelAndActivate('modelVersionCompare')`，单测 2 条，页面级没单独点（选中要先在树 / 三维里点对象） |
+
+顺手看到（未动）：
+- `node/versions` / `element/versions` 的「自身那一列」按模型口径（`diff_ele_data`）算，**只设 UDA 的会话不成一行**（SITE 24384/22399 的 sesno 10：`UDA:2902d6e2 = JS`、`UDA:2902d6e3 = PIPERB`），`attribute-history` 却列它——面板按并集列，所以「仅自身」多出一行 `属性 2 · noop`。两条路由口径不同是刻意的（一条问「模型变没变」、一条问「改了什么」），但前端「本范围 n 版」的数字因此 ≠ 任一条回执的行数。
+- `:8022` 现在是内存库：`dbnum_consistency.judged = 0`（模型按需懒生成），`history/generate` 与四条版本路由都不依赖它；别的会话若要 `model/records` 里的持久模型（校审 / 净距那些），得先 `dbnums/8000/model/ensure` 或把 `:8009` 那台 rocksdb 库找回来再换 `AIOS_STORE_MODE=rocksdb` 重起。

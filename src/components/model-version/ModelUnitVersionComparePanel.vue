@@ -709,6 +709,8 @@ async function autorunFromUrl(): Promise<void> {
   await loadVersions();
   // loadVersions 内部会推进 requestId；期间用户手动改了输入就不接着跑
   if (requestId !== run || timelineRows.value.length < 2) return;
+  // 容器没有自己的几何可装（几何按其下的单元分组对比），自动跑到这儿就停：面板已开、时间线已列，别报「没有可对比的几何」
+  if (!hasUnit.value) return;
   const has = (sesno: number | null): sesno is number => sesno !== null && timelineRows.value.some((item) => item.sesno === sesno);
   let fallbackNote: string | null = null;
   if (has(urlConfig.compareA) && has(urlConfig.compareB) && urlConfig.compareA !== urlConfig.compareB) {

@@ -1,0 +1,31 @@
+{
+  "swappedAt": "2026-09-19T10:55:00+08:00",
+  "reason": "节点版本视图（plant3d-web ADR 0066）的三条后端——element/attribute-history、node/diff-summary（2069a887a）与 node/versions（a382b2cf3）——要在共享 :8022 上给页面用。用户 10:2x「把 :8022 换成带新路由的 release 构建（先确认没人在用），然后在页面上真机走一遍节点版本面板」。",
+  "old": {
+    "exe": "_runs\\review-full-8031\\aios-database-d47d747fd.exe",
+    "build_id": "0.1.27+gd47d747fd… (09-18 15:32 起)",
+    "state_before_swap": ":8022 没在听（gm-8022-d47d747fd.log 最后一行 09-18 20:12；pid 88680 已不存在），它连的 SurrealDB ws://localhost:8009 也没在听，那台 rocksdb 库的数据目录在 D:\\work\\plant-code\\old 下按 CURRENT/LOCK 文件搜不到 09-18 有写入的 ams-8009——没有可以接回去的持久层",
+    "in_use": "无：端口无监听，没人在用"
+  },
+  "new": {
+    "pid_file": "_runs\\node-versions-8022\\gm-8022-a382b2cf3.pid",
+    "exe": "_runs\\review-full-8031\\aios-database-a382b2cf3.exe",
+    "sha_of_source": "gen-model-refactor a382b2cf3（分支 gen-model-refactor；含 2069a887a / 5e945f8cb / a382b2cf3）",
+    "build_id": "0.1.27+ga382b2cf3ace.1789785740",
+    "git_dirty": false,
+    "built_from": "git worktree add --detach .scratch\\wt-nv-a382b2cf3 a382b2cf3; cargo build --release --features http_api --bin aios-database（CARGO_TARGET_DIR=D:\\Rust\\target，5 m 13 s 含等别的会话的 build 锁，10:40–10:45）；D:\\Rust\\target\\release\\aios-database.exe 10:45:24 立即拷走（该路径随后被别的会话的进程占用）",
+    "launch": "cwd _runs\\node-versions-8022（DbOption.toml 抄自 gen-model-model-cache 仓库根：http_api_addr 0.0.0.0:8022 / watch_dbnums [7998, 8000] / startup_autorun true / e3d31 / project_path D:/AVEVA/Projects/E3D3.1），参数 serve，非提权 Start-Process -WindowStyle Hidden，env AIOS_STORE_MODE=mem RUST_MIN_STACK=134217728 AIOS_OPEN_BROWSER=0 AIOS_RESTART_HANDOFF=1 RUST_BACKTRACE=1，日志 stdout.log / stderr.log",
+    "store": "mem（进程内 kv-mem，ns 1516 / db AvevaMarineSample；未连 :8009）——重启即重建，没有任何东西持久；/health medium=mem durable=false，dbnum_consistency.judged=0（模型按需懒生成）",
+    "timeline": "10:55:00 起 pid 56280 → 10:55:02 /health status=ok core=ready route_count=71 build_id 0.1.27+ga382b2cf3ace.1789785740"
+  },
+  "downtime_seconds": null,
+  "checks_after": {
+    "node_versions_site_subtree": "GET node/versions?dbnum=8000&refno=24384/22399&scope=subtree → 200，冷算 3453 ms（sessions 639 / candidates 47522 / in_scope 3786 / sets_built 640 / index_diff 1503 ms / set_build 1028 ms），full table 298 行；since_sesno=618 缓存命中 20 ms → 626 / 628 / 630 / 632 各 units_changed 1",
+    "node_versions_bran_subtree_vs_model_versions": "BRAN 24384/23257 subtree 57 行，与 model/versions 57 行逐行 sesno:impact 同序同档；node/versions 2453 ms vs model/versions 6566 ms（都冷算）",
+    "node_versions_ftub_self_vs_element_versions": "FTUB 24384/23262 self 53 行，与 element/versions 左列（element_impact 非空）53 行一致；unit_root 24384/23257",
+    "node_versions_zone": "ZONE 24384/22400 subtree 198 行（2933 ms）/ self 5 行（5 delivery, 305 / 313 / 314 / 316 mesh）",
+    "errors": "scope=bogus → 400；refno 24384/1 → 404；dbnum=7997 + refno 24384/22399 → 400 INVALID_REFNO；since_sesno=99999 → 404 SESSION_NOT_FOUND",
+    "sibling_routes": "element/attribute-history（FTUB since 626 limit 1 → 630 一行）200；node/diff-summary（SITE 618→628 → units changed 2 / unchanged 524 / total 526）200；element/versions 200",
+    "page": "dev :3111 + :8022，e2e/node-version-view-gen-model-v1.spec.ts --workers=1 → 2 passed（23.2 s），pageerror 0；截图与数字见同目录 leaf-*.png/json、container-*.png/json"
+  }
+}

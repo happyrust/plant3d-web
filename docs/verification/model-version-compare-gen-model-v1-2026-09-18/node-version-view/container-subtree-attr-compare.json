@@ -1,0 +1,20 @@
+{
+  "a": 630,
+  "b": 632,
+  "rows": [
+    {
+      "refno": "24384/24776",
+      "noun": "EQUI",
+      "status": "modified",
+      "impact": "mesh",
+      "is_node": false
+    },
+    {
+      "refno": "24384/26495",
+      "noun": "BOX",
+      "status": "deleted",
+      "impact": "tombstone",
+      "is_node": false
+    }
+  ]
+}
