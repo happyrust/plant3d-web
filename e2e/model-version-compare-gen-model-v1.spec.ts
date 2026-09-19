@@ -12,7 +12,9 @@
  * 前置：gen-model 在 `GEN_MODEL_V1_BASE_URL`（缺省 `http://127.0.0.1:8022`）且带 `model/versions` 路由（ef2284f12 起），
  * 该单元至少两版；页面走 Playwright `baseURL` 的 Vite dev server。不满足就整文件跳过。
  *
- * 状态：2026-09-18 15:5x 对 :8022（d47d747fd）+ dev :3111 真机跑过（同一批检查点，见上面那份 README）。
+ * 状态：2026-09-18 15:5x 对 :8022（d47d747fd）+ dev :3111 真机跑过（同一批检查点，见上面那份 README）；
+ * 2026-09-19 10:2x 跟着 `061c83b2`（面板升级成「节点版本」）改了选版那几条断言——A / B 不再是两个 `<select>`，
+ * 而是版本时间线上的徽章（`model-unit-compare-a/b` 的 `data-sesno`）+ 每行一对 A / B 按钮，其余检查点原样。
  */
 import { expect, test, type Page } from '@playwright/test';
 
@@ -117,14 +119,14 @@ test('缺省最近两版：compare_autorun 开面板、版本表来自服务端�
   const b = versions.at(-1)!;
   const { pageErrors, historyRequests } = await openComparePage(page, {});
 
-  // 版本表：条数与服务端回执一致，选项标签带 sesno 与 impact_kind
-  const optionsA = page.locator('[data-testid="model-unit-compare-a"] option');
-  await expect(optionsA).toHaveCount(versions.length, { timeout: 120_000 });
+  // 版本表：条数与服务端回执一致，时间线每一行带 sesno 与 impact_kind
+  const timelineRow = (sesno: number) => page.locator(`[data-testid="model-unit-compare-timeline"] > li[data-sesno="${sesno}"]`);
+  await expect(page.locator('[data-testid="model-unit-compare-timeline"] > li')).toHaveCount(versions.length, { timeout: 120_000 });
   for (const version of versions) {
-    await expect(optionsA.filter({ hasText: `${version.sesno} ·` }).first()).toContainText(version.impact_kind);
+    await expect(timelineRow(version.sesno)).toContainText(version.impact_kind);
   }
-  await expect(page.getByTestId('model-unit-compare-a')).toHaveValue(String(a.sesno));
-  await expect(page.getByTestId('model-unit-compare-b')).toHaveValue(String(b.sesno));
+  await expect(page.getByTestId('model-unit-compare-a')).toHaveAttribute('data-sesno', String(a.sesno));
+  await expect(page.getByTestId('model-unit-compare-b')).toHaveAttribute('data-sesno', String(b.sesno));
 
   // 对比跑完：摘要四格都在；tombstone 末版 = 全部删除、B 侧 0 对象
   const state = await waitForCompare(page);
@@ -183,8 +185,8 @@ test('compare_a / compare_b 指定两版：按 URL 选中、两侧都有几何�
   const b = withGeometry.at(-1)!;
   const { pageErrors, historyRequests } = await openComparePage(page, { compare_a: String(a.sesno), compare_b: String(b.sesno) });
 
-  await expect(page.getByTestId('model-unit-compare-a')).toHaveValue(String(a.sesno), { timeout: 120_000 });
-  await expect(page.getByTestId('model-unit-compare-b')).toHaveValue(String(b.sesno));
+  await expect(page.getByTestId('model-unit-compare-a')).toHaveAttribute('data-sesno', String(a.sesno), { timeout: 120_000 });
+  await expect(page.getByTestId('model-unit-compare-b')).toHaveAttribute('data-sesno', String(b.sesno));
   const state = await waitForCompare(page);
   expect(state.beforeSesno).toBe(a.sesno);
   expect(state.afterSesno).toBe(b.sesno);
@@ -204,7 +206,7 @@ test('compare_a / compare_b 指定两版：按 URL 选中、两侧都有几何�
 test('URL 指定的版本不在版本表里：回落最近两版并在面板里说明', async ({ page }) => {
   const bogus = versions.at(-1)!.sesno + 100_000;
   await openComparePage(page, { compare_a: String(bogus), compare_b: String(versions.at(-1)!.sesno) });
-  await expect(page.getByTestId('model-unit-compare-a')).toHaveValue(String(versions.at(-2)!.sesno), { timeout: 120_000 });
+  await expect(page.getByTestId('model-unit-compare-a')).toHaveAttribute('data-sesno', String(versions.at(-2)!.sesno), { timeout: 120_000 });
   await waitForCompare(page);
   await expect(page.getByTestId('model-unit-compare-error')).toContainText(`compare_a=${bogus}`);
   await page.getByTestId('model-unit-compare-close').click();
