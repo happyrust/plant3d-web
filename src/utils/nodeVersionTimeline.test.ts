@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   buildNodeTimelineRows,
+  countNodeTimeline,
   defaultNodeScope,
   defaultNodeVersionPair,
   foldAttributeChanges,
@@ -124,10 +125,55 @@ describe('buildNodeTimelineRows', () => {
     ]);
   });
 
-  it('只有属性时间线（版本表还没回来）也能成行', () => {
+  it('只有属性时间线（版本表还没回来）也能成行，且不标「仅属性」（自身列没有来源，判不了）', () => {
     const rows = buildNodeTimelineRows({ timeline: null, history, scope: 'self' });
     expect(rows.map((row) => row.sesno)).toEqual([626, 573, 5]);
-    expect(rows[2]).toMatchObject({ selfImpact: 'delivery', kind: 'created', inScope: true });
+    expect(rows[2]).toMatchObject({ selfImpact: 'delivery', kind: 'created', inScope: true, attributeOnly: false });
+    expect(countNodeTimeline(rows, 'self')).toEqual({ versions: 3, attributeOnly: 0 });
+  });
+
+  it('只在属性时间线里出现的会话（UDA 之类，模型口径不成一版）标「仅属性」，「本范围 n 版」与版本表行数对得上', () => {
+    // 2026-09-19 真机 SITE 24384/22399：element/versions 左列 5 delivery / 7 noop，attribute-history 多一行 sesno 10（两个 UDA 被设值）
+    const site: ModelElementVersionTimeline = {
+      ...timeline, refno: '24384_22399', noun: 'SITE', unitRefno: null, unitNoun: null,
+      versions: [
+        { sesno: 5, sessionTime: 't5', elementImpact: 'delivery', unitImpact: null },
+        { sesno: 7, sessionTime: 't7', elementImpact: 'noop', unitImpact: null },
+      ],
+    };
+    const siteHistory: ModelAttributeHistory = {
+      dbnum: 8000, refno: '24384_22399', noun: 'SITE', unitRefno: null, unitNoun: null,
+      entries: [
+        entry(5, [], { kind: 'created', impact: 'delivery' }),
+        entry(7, [{ name: 'NAME', valueType: 'text', before: '', after: '/1RX03-EQUI', stamp: false }], { impact: 'noop' }),
+        entry(10, [
+          { name: 'UDA:2902d6e2', valueType: 'text', before: '', after: 'JS', stamp: false },
+          { name: 'UDA:2902d6e3', valueType: 'text', before: '', after: 'PIPERB', stamp: false },
+        ], { impact: 'noop' }),
+      ],
+    };
+    const rows = buildNodeTimelineRows({ timeline: site, history: siteHistory, scope: 'self' });
+    expect(rows.map((row) => [row.sesno, row.inScope, row.attributeOnly])).toEqual([[10, true, true], [7, true, false], [5, true, false]]);
+    // 版本表说 2 版，仅属性 1：两个数分开报，n 与 element/versions / node/versions 的行数一致
+    expect(countNodeTimeline(rows, 'self')).toEqual({ versions: 2, attributeOnly: 1 });
+
+    // 所有子节点下：子树列（节点版本表）没有 10，它仍是「仅属性」；子树列有的会话即便自身只改属性也算一版
+    const siteVersions: ModelNodeVersionTimeline = {
+      dbnum: 8000, refno: '24384_22399', noun: 'SITE', scope: 'subtree', unitRefno: null, unitNoun: null,
+      versions: [
+        { sesno: 5, sessionTime: 't5', impact: 'delivery', selfImpact: 'delivery', unitsChanged: 521, unitsTouched: 521 },
+        { sesno: 7, sessionTime: 't7', impact: 'noop', selfImpact: 'noop', unitsChanged: 0, unitsTouched: 0 },
+        { sesno: 626, sessionTime: 't626', impact: 'mesh', selfImpact: null, unitsChanged: 1, unitsTouched: 1 },
+      ],
+    };
+    const subtree = buildNodeTimelineRows({ timeline: site, history: siteHistory, nodeVersions: siteVersions, scope: 'subtree' });
+    expect(subtree.map((row) => [row.sesno, row.inScope, row.attributeOnly])).toEqual([[626, true, false], [10, true, true], [7, true, false], [5, true, false]]);
+    expect(countNodeTimeline(subtree, 'subtree')).toEqual({ versions: 3, attributeOnly: 1 });
+
+    // 旧服务端只给单元那一列（自身列未知）：属性时间线补上的行不标「仅属性」——判不了
+    const unitOnly: ModelElementVersionTimeline = { ...timeline, unitColumnOnly: true, versions: [{ sesno: 573, sessionTime: 't573', elementImpact: null, unitImpact: 'mesh' }] };
+    const unknown = buildNodeTimelineRows({ timeline: unitOnly, history, scope: 'self' });
+    expect(unknown.every((row) => !row.attributeOnly)).toBe(true);
   });
 
   it('旧服务端只给单元那一列（unitColumnOnly）：self 范围下自身列算未知、不筛，缺省 A / B 照样选得出来', () => {

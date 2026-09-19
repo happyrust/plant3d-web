@@ -42,6 +42,7 @@ import {
 } from '@/utils/modelUnitVersionCompare';
 import {
   buildNodeTimelineRows,
+  countNodeTimeline,
   defaultNodeScope,
   defaultNodeVersionPair,
   foldAttributeChanges,
@@ -140,7 +141,8 @@ const timelineRows = computed<NodeTimelineRow[]>(() => buildNodeTimelineRows({
   nodeVersions: nodeVersions.value,
   scope: scope.value,
 }));
-const inScopeCount = computed(() => timelineRows.value.filter((row) => row.inScope).length);
+/** 「本范围 n 版 · 仅属性 m」：n 与服务端版本表的行数对得上，m 是只在属性变化时间线里的会话（UDA 之类） */
+const timelineCounts = computed(() => countNodeTimeline(timelineRows.value, scope.value));
 /** 范围内的行 + 被选为 A/B 但已不在范围内的行（灰掉、标「本范围无变化」，Q9 a） */
 const visibleTimelineRows = computed(() => timelineRows.value.filter((row) => {
   const selected = row.sesno === beforeSesno.value || row.sesno === afterSesno.value;
@@ -247,6 +249,12 @@ function impactLabel(impact: ModelVersionImpactKind | null): string {
 function rowImpact(row: NodeTimelineRow): ModelVersionImpactKind | null {
   if (scope.value === 'self' && !selfColumnUnknown.value) return row.selfImpact;
   return row.unitImpact ?? row.selfImpact;
+}
+
+/** 单元根 / 容器的那一颗徽章要不要画成「仅属性」：显示的是自身列、且版本表没把这一会话算成一版 */
+function attributeOnlyShown(row: NodeTimelineRow): boolean {
+  if (!row.attributeOnly) return false;
+  return scope.value === 'self' ? !selfColumnUnknown.value : row.unitImpact === null;
 }
 
 function impactClass(impact: ModelVersionImpactKind | null): string {
@@ -835,7 +843,7 @@ onBeforeUnmount(() => {
       <template v-if="timelineRows.length > 0">
         <div class="mt-1 flex items-center justify-between gap-2">
           <h3 class="text-xs font-semibold text-foreground" data-testid="model-unit-compare-timeline-head">
-            版本时间线 · 本范围 {{ inScopeCount }} 版
+            版本时间线 · 本范围 {{ timelineCounts.versions }} 版<template v-if="timelineCounts.attributeOnly"> · 仅属性 {{ timelineCounts.attributeOnly }}</template>
           </h3>
           <label class="flex items-center gap-1 text-[10px] text-muted-foreground">
             <input v-model="geometryOnly" type="checkbox" />只看几何变的
@@ -911,13 +919,19 @@ onBeforeUnmount(() => {
                 :title="`这一会话有几何要重算的最小交付单元数`"
                 data-testid="model-unit-compare-units-changed">单元 {{ row.unitsChanged }}</span>
               <template v-if="queriedIsUnitRoot">
-                <span class="rounded px-1.5 py-0.5 text-[10px]" :class="impactClass(rowImpact(row))">
+                <span v-if="attributeOnlyShown(row)" class="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-600"
+                  title="这一会话只改了不进模型提取的属性（UDA 之类）：版本表不算它一版，属性变化时间线照列"
+                  data-testid="model-unit-compare-attribute-only">仅属性</span>
+                <span v-else class="rounded px-1.5 py-0.5 text-[10px]" :class="impactClass(rowImpact(row))">
                   {{ impactLabel(rowImpact(row)) }}
                 </span>
               </template>
               <template v-else>
                 <span v-if="scope === 'subtree'" class="rounded px-1.5 py-0.5 text-[10px]" :class="impactClass(row.unitImpact)">单元 {{ impactLabel(row.unitImpact) }}</span>
-                <span class="rounded px-1.5 py-0.5 text-[10px]" :class="impactClass(row.selfImpact)">
+                <span v-if="row.attributeOnly" class="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-600"
+                  title="这一会话本构件只改了不进模型提取的属性（UDA 之类）：版本表不算它一版，属性变化时间线照列"
+                  data-testid="model-unit-compare-attribute-only">本构件 仅属性</span>
+                <span v-else class="rounded px-1.5 py-0.5 text-[10px]" :class="impactClass(row.selfImpact)">
                   本构件 {{ selfColumnUnknown ? '?' : impactLabel(row.selfImpact) }}
                 </span>
               </template>

@@ -35,6 +35,12 @@ export type NodeTimelineRow = {
   /** 自身记录改了几项（属性行 + 成员 + owner）；没有时间线时为 null */
   changedCount: number | null;
   kind: ModelAttributeHistoryEntry['kind'] | null;
+  /**
+   * 这一会话节点自身只在属性变化时间线里出现、版本表（`element/versions` 左列 / `node/versions` 的 `self_impact`）没把它算成一版：
+   * 改的是不进模型提取的属性（UDA 之类），模型口径下等于原样重写。行照列（「谁在哪一版改了什么」要它），但不计入「本范围 n 版」，
+   * 行上标「仅属性」——这样版数与服务端版本表的行数对得上。
+   */
+  attributeOnly: boolean;
   /** 在当前对比范围内算不算「变了」；不算的行只在被选为 A / B 时才显示（灰掉并标「本范围无变化」） */
   inScope: boolean;
 };
@@ -71,6 +77,7 @@ export function buildNodeTimelineRows(input: NodeTimelineInput): NodeTimelineRow
         unitsChanged: null,
         changedCount: null,
         kind: null,
+        attributeOnly: false,
         inScope: false,
       };
       bySesno.set(sesno, row);
@@ -92,13 +99,19 @@ export function buildNodeTimelineRows(input: NodeTimelineInput): NodeTimelineRow
     row.unitsChanged = version.unitsChanged;
     if (!row.selfImpact) row.selfImpact = version.selfImpact;
   }
+  // 自身那一列有没有可信的来源：element/versions 的左列（旧服务端 unitColumnOnly 时是未知）或节点版本表的 self_impact
+  const selfColumnKnown = (input.timeline !== null && !input.timeline.unitColumnOnly) || nodeVersions !== null;
   for (const entry of input.history?.entries ?? []) {
     const row = ensure(entry.sesno, entry.sessionTime);
     row.user = entry.user;
     row.comment = entry.comment;
     row.changedCount = entry.changedCount;
     row.kind = entry.kind;
-    if (!row.selfImpact) row.selfImpact = entry.impact;
+    if (!row.selfImpact) {
+      // 版本表没把它算成自身的一版（改的是不进模型提取的属性）：行照列，自身列有来源时标「仅属性」，没来源就只是补上
+      row.selfImpact = entry.impact;
+      row.attributeOnly = selfColumnKnown;
+    }
   }
   const hasUnit = !!input.timeline?.unitRefno;
   const subtreeKnown = nodeVersions !== null;
@@ -110,6 +123,23 @@ export function buildNodeTimelineRows(input: NodeTimelineInput): NodeTimelineRow
       : row.selfImpact !== null || ((subtreeKnown || hasUnit) && row.unitImpact !== null);
   }
   return [...bySesno.values()].sort((x, y) => y.sesno - x.sesno);
+}
+
+/**
+ * 「本范围 n 版 · 仅属性 m」的两个数：`versions` = 范围内版本表算成一版的会话数（与服务端 `node/versions` / `element/versions` 的
+ * 行数对得上），`attributeOnly` = 范围内只有属性时间线列出来的会话数（UDA 之类，模型口径下不成一版）。
+ */
+export function countNodeTimeline(rows: NodeTimelineRow[], scope: ModelNodeDiffScope): { versions: number; attributeOnly: number } {
+  let versions = 0;
+  let attributeOnly = 0;
+  for (const row of rows) {
+    if (!row.inScope) continue;
+    // `self` 只看自身列；`subtree` 下子树列有它就仍是一版（自身只改了属性、成员却动了几何）
+    const onlyAttributes = scope === 'self' ? row.attributeOnly : row.attributeOnly && row.unitImpact === null;
+    if (onlyAttributes) attributeOnly += 1;
+    else versions += 1;
+  }
+  return { versions, attributeOnly };
 }
 
 export type NodeVersionPair = { a: number | null; b: number | null };

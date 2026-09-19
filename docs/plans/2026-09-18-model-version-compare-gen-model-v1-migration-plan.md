@@ -433,6 +433,12 @@ legacy 下与从前的可见差别只有一处、且不可见于用户：A/B 隔
   `since_sesno=618` 命中缓存 20 ms → 626 / 628 / 630 / 632 各「单元 1」；BRAN 24384/23257 子树 57 行与 `model/versions` 逐行同序同档
   （2.4 s vs 6.6 s）；FTUB 24384/23262 `self` 53 行与 `element/versions` 左列一致；ZONE 24384/22400 子树 198 行 / self 5 行；
   `scope=bogus` 400、不存在 refno 404、dbnum 不符 400、`since_sesno` 不在链上 404。
+- **「仅属性」（11:4x，用户拍板）**：只改了不进模型提取的属性（UDA 之类）的会话，`element/versions` / `node/versions`（模型口径，
+  `diff_ele_data`）不算它一版，`attribute-history` 却列它——面板按并集列，「本范围 n 版」曾因此 ≠ 任一条回执。两条路由口径不动
+  （改后端要么让 subtree 每个候选两端渲染属性——3,786 个候选 × 2 算不起，要么让 `node/versions self` ≠ `element/versions` 左列），
+  改前端：`buildNodeTimelineRows` 给只在属性时间线里的行标 `attributeOnly`（自身列有可信来源时才标，旧服务端 `unitColumnOnly` 不标），
+  `countNodeTimeline` 分两个数，标题「本范围 n 版 · 仅属性 m」，行上徽章「仅属性」替掉那颗 noop。真机 SITE 24384/22399：
+  「仅自身」= 本范围 2 版 · 仅属性 1（sesno 10：`UDA:2902d6e2 / 2902d6e3`），「所有子节点」= 298 版 · 仅属性 1；e2e 两个数各自对回执。
 - **端口**：`ModelVersionSource.attributeHistory(dbnum, refno)` / `diffSummary(dbnum, refno, a, b, scope)`，类型 `ModelAttributeHistory` /
   `ModelNodeDiffSummary`（`ports.ts`）；v1 适配器按 `truncated` 连续拉、旧构建的无信封 404 → `ModelVersionRouteUnavailableError(route)`；
   legacy stub 照旧抛退役错。

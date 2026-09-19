@@ -196,19 +196,31 @@ test('容器节点：子树时间线来自 node/versions（不再手填会话号
   await expect(page.getByTestId('model-unit-compare-notice')).toContainText(`子树时间线 ${subtree.versions.length} 版来自 node/versions`, { timeout: 120_000 });
   await expect(page.getByTestId('model-unit-compare-manual-pair')).toHaveCount(0);
   await expect(page.getByTestId('model-unit-compare-error')).toHaveCount(0);
-  // 「仅自身」的行 = 三条来源的并集：node/versions self（模型口径的记录变化）∪ attribute-history（任何属性变过，UDA 也算）
-  const selfSesnos = new Set<number>([
-    ...(self?.versions ?? subtree.versions.filter((row) => row.self_impact !== null)).map((row) => row.sesno),
-    ...(containerHistory?.entries ?? []).map((entry) => entry.sesno),
-  ]);
+  // 「仅自身」的行 = 两条来源的并集：node/versions self（模型口径的记录变化）∪ attribute-history（任何属性变过，UDA 也算）；
+  // 只在后者里的会话标「仅属性」，标题「本范围 n 版 · 仅属性 m」的 n 与 node/versions self 的行数对得上
+  const nodeSelfSesnos = new Set<number>((self?.versions ?? subtree.versions.filter((row) => row.self_impact !== null)).map((row) => row.sesno));
+  const historySesnos = (containerHistory?.entries ?? []).map((entry) => entry.sesno);
+  const selfSesnos = new Set<number>([...nodeSelfSesnos, ...historySesnos]);
+  const attributeOnly = historySesnos.filter((sesno) => !nodeSelfSesnos.has(sesno));
   const selfCount = selfSesnos.size;
   await expect(inScopeRows(page)).toHaveCount(selfCount);
+  await expect(page.getByTestId('model-unit-compare-timeline-head')).toContainText(`本范围 ${nodeSelfSesnos.size} 版`);
+  if (attributeOnly.length > 0) {
+    await expect(page.getByTestId('model-unit-compare-timeline-head')).toContainText(`仅属性 ${attributeOnly.length}`);
+    await expect(page.getByTestId('model-unit-compare-attribute-only')).toHaveCount(attributeOnly.length);
+    await expect(timelineRow(page, attributeOnly[0]!)).toContainText('仅属性');
+  }
   await evidence(page, 'container-self-timeline', { container: CONTAINER, noun: subtree.noun, selfCount, subtreeCount: subtree.versions.length });
 
   // 切「所有子节点」：每一行都在范围内，动过几何的行带「单元 n」
   await page.getByTestId('model-unit-compare-scope-subtree').click();
   const subtreeSesnos = new Set<number>([...subtree.versions.map((row) => row.sesno), ...selfSesnos]);
   await expect(inScopeRows(page)).toHaveCount(subtreeSesnos.size);
+  // 版数 = node/versions subtree 的行数；只在属性时间线里的会话仍是「仅属性」
+  const subtreeTableSesnos = new Set<number>(subtree.versions.map((row) => row.sesno));
+  const subtreeAttributeOnly = historySesnos.filter((sesno) => !subtreeTableSesnos.has(sesno));
+  await expect(page.getByTestId('model-unit-compare-timeline-head')).toContainText(`本范围 ${subtreeTableSesnos.size} 版`);
+  if (subtreeAttributeOnly.length > 0) await expect(page.getByTestId('model-unit-compare-timeline-head')).toContainText(`仅属性 ${subtreeAttributeOnly.length}`);
   const withUnits = subtree.versions.filter((row) => row.units_changed > 0);
   await expect(page.getByTestId('model-unit-compare-units-changed')).toHaveCount(withUnits.length);
   const sample = withUnits.at(-1)!;

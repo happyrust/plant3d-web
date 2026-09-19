@@ -607,6 +607,15 @@ describe('ModelUnitVersionComparePanel', () => {
     versionSourceMocks.listElementVersions.mockResolvedValue(zone);
     versionSourceMocks.listNodeVersions.mockResolvedValue(subtree);
     versionSourceMocks.diffSummary.mockRejectedValue(new ModelVersionRouteUnavailableError('node/diff-summary'));
+    // 属性变化时间线多一行 500：只设了 UDA，版本表（模型口径）不算它一版 → 行照列、标「仅属性」、不计入「本范围 n 版」
+    versionSourceMocks.attributeHistory.mockResolvedValue({
+      dbnum: 7997, refno: '1_9', noun: 'ZONE', unitRefno: null, unitNoun: null,
+      entries: [
+        { sesno: 444, sessionTime: '2026-07-20T00:00:00Z', user: 'YW', comment: '建 ZONE', kind: 'created', impact: 'delivery', changedCount: 0, changes: [], members: null, owner: null, attributesUnavailable: null },
+        { sesno: 500, sessionTime: '2026-07-21T00:00:00Z', user: '80404', comment: 'UDA', kind: 'modified', impact: 'noop', changedCount: 1,
+          changes: [{ name: 'UDA:2902d6e2', valueType: 'text', before: null, after: 'JS', stamp: false }], members: null, owner: null, attributesUnavailable: null },
+      ],
+    });
 
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -624,20 +633,26 @@ describe('ModelUnitVersionComparePanel', () => {
     expect(host.querySelector('[data-testid="model-unit-compare-notice"]')?.textContent).toContain('子树时间线 3 版来自 node/versions');
     expect(host.querySelector('[data-testid="model-unit-compare-manual-pair"]')).toBeNull();
 
-    // 容器缺省「仅自身」：只有 444（出现）/ 897（自身 noop）在范围内，791 是子树在动 → 灰掉不显示，缺省 A/B = 444 → 897
+    // 容器缺省「仅自身」：444（出现）/ 500（仅属性）/ 897（自身 noop）在范围内，791 是子树在动 → 灰掉不显示；缺省 A/B = 500 → 897
     const rows = () => [...host.querySelectorAll('[data-testid="model-unit-compare-timeline"] li')];
-    expect(rows().map((li) => li.getAttribute('data-sesno'))).toEqual(['897', '444']);
-    expect(host.querySelector('[data-testid="model-unit-compare-a"]')?.getAttribute('data-sesno')).toBe('444');
+    expect(rows().map((li) => li.getAttribute('data-sesno'))).toEqual(['897', '500', '444']);
+    expect(host.querySelector('[data-testid="model-unit-compare-a"]')?.getAttribute('data-sesno')).toBe('500');
     expect(host.querySelector('[data-testid="model-unit-compare-b"]')?.getAttribute('data-sesno')).toBe('897');
     expect(host.querySelector('[data-testid="model-unit-compare-units-changed"]')).toBeNull();
+    // 「本范围 2 版 · 仅属性 1」：2 与 node/versions self 的行数对得上；500 那一行的徽章是「仅属性」而不是 noop
+    expect(host.querySelector('[data-testid="model-unit-compare-timeline-head"]')?.textContent).toContain('本范围 2 版 · 仅属性 1');
+    const attributeOnlyChips = () => [...host.querySelectorAll('[data-testid="model-unit-compare-attribute-only"]')];
+    expect(attributeOnlyChips().map((chip) => chip.closest('li')?.getAttribute('data-sesno'))).toEqual(['500']);
 
-    // 切「所有子节点」：三版全在范围内，每行带「单元 n」
+    // 切「所有子节点」：四版全在范围内，动过几何的行带「单元 n」；500 仍是「仅属性」，版数 3 = node/versions subtree 的行数
     (host.querySelector('[data-testid="model-unit-compare-scope-subtree"]') as HTMLButtonElement).click();
     await flushUi();
-    expect(rows().map((li) => [li.getAttribute('data-sesno'), li.getAttribute('data-in-scope')])).toEqual([['897', 'true'], ['791', 'true'], ['444', 'true']]);
+    expect(rows().map((li) => [li.getAttribute('data-sesno'), li.getAttribute('data-in-scope')])).toEqual([['897', 'true'], ['791', 'true'], ['500', 'true'], ['444', 'true']]);
     expect([...host.querySelectorAll('[data-testid="model-unit-compare-units-changed"]')].map((chip) => chip.textContent?.trim())).toEqual(['单元 2', '单元 1', '单元 4']);
-    expect(host.querySelector('[data-testid="model-unit-compare-timeline-head"]')?.textContent).toContain('本范围 3 版');
+    expect(host.querySelector('[data-testid="model-unit-compare-timeline-head"]')?.textContent).toContain('本范围 3 版 · 仅属性 1');
+    expect(attributeOnlyChips().map((chip) => chip.closest('li')?.getAttribute('data-sesno'))).toEqual(['500']);
     app.unmount();
+    versionSourceMocks.attributeHistory.mockReset();
 
     // 旧服务端（没有 node/versions）：只列得出它自己那一版，手填会话号那一栏露出来、提示照实说
     versionSourceMocks.listNodeVersions.mockRejectedValue(new ModelVersionRouteUnavailableError('node/versions'));
