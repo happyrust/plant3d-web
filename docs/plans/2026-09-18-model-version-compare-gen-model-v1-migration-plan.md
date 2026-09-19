@@ -388,8 +388,15 @@ legacy 下与从前的可见差别只有一处、且不可见于用户：A/B 隔
   的首条等解析落定再决定走哪条登记（被删的仍同步登记）。真机 618→628：树里 `24384/26495 (当前已不在) 增`（`treeRowCount 5`、`unplacedHint null`，
   修前 0 / 「1 个变更未能定位」），横幅与 29 行属性不变，`element/attributes` 全程 0 条、无红条；回归 602→604 与 573→626 都照旧
   （后者仍正常发 1 条 200）。vitest 该文件 13 过。README §5.4。
-- **待办（不是本次引入）**：`e2e/model-version-compare-gen-model-v1.spec.ts` 的 3 条在 `061c83b2`（§10 面板改写）之后**全红**——
-  `model-unit-compare-a/b` 从下拉变成时间线上的徽章 `<span>`，`toHaveValue` 不再成立。归 §10 那条线收。
+- **e2e 跟上「节点版本」面板（10:3x，`367c8441`）**：`061c83b2` 之后 `e2e/model-version-compare-gen-model-v1.spec.ts` 3 条全红——
+  `model-unit-compare-a/b` 从下拉变成时间线上的徽章 `<span>`，`toHaveValue` 报「Not an input element」。只改选版那几条断言：
+  `<option>` 数 → 时间线 `<li>` 数、`toHaveValue` → `toHaveAttribute('data-sesno', …)`；其余检查点原样。`:8033` 3 过。
+- **旧服务端回落的洞（10:4x，用户拍板，`61c95d33`）**：换成 `:8026`（没有 `element/versions`）第 1、3 条仍红，不是断言口径的事——
+  `unitOnlyTimeline` 只填得出 `unitImpact`（`unitColumnOnly: true`），而该单元当前会话已无成员 → `defaultNodeScope` 定成 `self` →
+  `buildNodeTimelineRows` 按 `selfImpact !== null` 判范围 → **每一行都「不在本范围」，时间线渲染 0 行、缺省 A / B 也选不出来**
+  （行模板本来就备了「本构件 ?」的画法，却永远显示不到）。修法：`self` 那一支加「自身列未知时不筛」，退回与 `subtree` 同口径；
+  面板行徽章抽出 `rowImpact(row)`，自身列未知就显示单元那一列，不再谎报「未变」。新服务端口径一字未变。
+  新增单测 1 条；e2e 旧后端 `:8026` **3 过**、新后端 `:8033` **3 过**；type-check 0 条基线外新错。
 
 ## 9. 真管线走一遍：BRAN 增量更新 → 版本对比（19:3x，用户 18:37「测试一个 BRAN 的增量更新，然后在 plant3d-web 里通过模型对比查看」）
 
