@@ -15,6 +15,7 @@ import {
   type ElementVersionsResponse,
   type ModelVersionsResponse,
   type NodeDiffSummaryResponse,
+  type NodeVersionsResponse,
   type TaskEntryDto,
 } from '@/api/genModelV1Api';
 import { ModelVersionRouteUnavailableError, NotDeliveryUnitRootError } from '@/model-source/modelVersionErrors';
@@ -77,11 +78,27 @@ function diffSummaryResponse(partial: Partial<NodeDiffSummaryResponse> = {}): No
   };
 }
 
+function nodeVersionsResponse(partial: Partial<NodeVersionsResponse> = {}): NodeVersionsResponse {
+  return {
+    dbnum: 8000,
+    refno: '24384/22399',
+    noun: 'SITE',
+    scope: 'subtree',
+    unit_root: null,
+    unit_noun: null,
+    file_latest_sesno: 639,
+    truncated: false,
+    versions: [],
+    ...partial,
+  };
+}
+
 function api(overrides: Partial<GenModelV1VersionApi> = {}): GenModelV1VersionApi {
   return {
     listVersions: vi.fn(async () => response({})),
     listElementVersions: vi.fn(async () => elementResponse()),
     attributeHistory: vi.fn(async () => attributeHistoryResponse()),
+    nodeVersions: vi.fn(async () => nodeVersionsResponse()),
     diffSummary: vi.fn(async () => diffSummaryResponse()),
     historyGenerate: vi.fn(async () => ({ task_id: 't-1' })),
     taskGet: vi.fn(async () => ({ task_id: 't-1', kind: 'model-history', state: 'succeeded', result: { snapshot_key: '24381_145018@66' } }) as TaskEntryDto),
@@ -442,6 +459,52 @@ describe('genModelV1 ModelVersionSource', () => {
     });
     const strict = createGenModelV1ModelVersionSource(api({ diffSummary: real404 as never }));
     await expect(strict.diffSummary(8000, '24384_23257', 9, 626, 'self')).rejects.toMatchObject({ code: 'SESSION_NOT_FOUND' });
+  });
+
+  it('listNodeVersions：行映成端口形状（impact / self_impact / 两格单元数），scope 原样发给服务端，truncated 时按最后一条连续拉', async () => {
+    const nodeVersions = vi.fn()
+      .mockResolvedValueOnce(nodeVersionsResponse({
+        truncated: true,
+        versions: [
+          { sesno: 444, session_time: '2026-09-01T00:00:00+08:00', impact: 'delivery', self_impact: 'delivery', units_changed: 449, units_touched: 449 },
+          { sesno: 618, session_time: null, impact: 'mesh', self_impact: null, units_changed: 1, units_touched: 2 },
+        ],
+      }))
+      .mockResolvedValueOnce(nodeVersionsResponse({
+        versions: [{ sesno: 628, session_time: 't628', impact: 'mesh', self_impact: null, units_changed: 2, units_touched: 2 }],
+      }));
+    const source = createGenModelV1ModelVersionSource(api({ nodeVersions }));
+
+    const table = await source.listNodeVersions(8000, '24384/22399', 'subtree');
+
+    expect(nodeVersions).toHaveBeenNthCalledWith(1, { dbnum: 8000, refno: '24384_22399', scope: 'subtree', sinceSesno: undefined }, { signal: undefined });
+    expect(nodeVersions).toHaveBeenNthCalledWith(2, { dbnum: 8000, refno: '24384_22399', scope: 'subtree', sinceSesno: 618 }, { signal: undefined });
+    expect(table).toMatchObject({ dbnum: 8000, refno: '24384_22399', noun: 'SITE', scope: 'subtree', unitRefno: null, unitNoun: null });
+    expect(table.versions).toEqual([
+      { sesno: 444, sessionTime: '2026-09-01T00:00:00+08:00', impact: 'delivery', selfImpact: 'delivery', unitsChanged: 449, unitsTouched: 449 },
+      { sesno: 618, sessionTime: null, impact: 'mesh', selfImpact: null, unitsChanged: 1, unitsTouched: 2 },
+      { sesno: 628, sessionTime: 't628', impact: 'mesh', selfImpact: null, unitsChanged: 2, unitsTouched: 2 },
+    ]);
+
+    // 构件：所属单元照归一成 a_b
+    const leaf = createGenModelV1ModelVersionSource(api({
+      nodeVersions: vi.fn(async () => nodeVersionsResponse({ refno: '24384/23262', noun: 'FTUB', scope: 'self', unit_root: '24384/23257', unit_noun: 'BRAN' })),
+    }));
+    expect(await leaf.listNodeVersions(8000, '24384_23262', 'self')).toMatchObject({ refno: '24384_23262', unitRefno: '24384_23257', unitNoun: 'BRAN', scope: 'self' });
+  });
+
+  it('listNodeVersions：旧服务端没有这条路由 → ModelVersionRouteUnavailableError(node/versions)，带信封的 404 原样抛', async () => {
+    const missing = vi.fn(async () => {
+      throw new GenModelV1ApiError({ code: 'not_found', status: 404, path: '/api/v1/node/versions', message: 'HTTP 404 Not Found' });
+    });
+    const source = createGenModelV1ModelVersionSource(api({ nodeVersions: missing as never }));
+    await expect(source.listNodeVersions(8000, '24384_22399', 'subtree')).rejects.toMatchObject({ name: 'ModelVersionRouteUnavailableError', route: 'node/versions' });
+
+    const real404 = vi.fn(async () => {
+      throw new GenModelV1ApiError({ code: 'REFNO_NOT_FOUND' as never, status: 404, path: '/api/v1/node/versions', message: '整条链上都没有它' });
+    });
+    const strict = createGenModelV1ModelVersionSource(api({ nodeVersions: real404 as never }));
+    await expect(strict.listNodeVersions(8000, '24384_1', 'subtree')).rejects.toMatchObject({ code: 'REFNO_NOT_FOUND' });
   });
 
   it('diffSummary：分组 / 行归一成 a_b，scope 原样发给服务端', async () => {

@@ -12,6 +12,7 @@ import type {
   ModelAttributeHistoryEntry,
   ModelElementVersionTimeline,
   ModelNodeDiffScope,
+  ModelNodeVersionTimeline,
   ModelVersionImpactKind,
 } from '@/model-source';
 
@@ -24,8 +25,13 @@ export type NodeTimelineRow = {
   comment: string | null;
   /** 节点自身记录在这一会话的变化；null = 它自己没变 */
   selfImpact: ModelVersionImpactKind | null;
-  /** 所属单元（≈ 子树）在这一会话的折叠影响；null = 单元表里没有这一会话 */
+  /**
+   * 子树在这一会话的折叠影响：有节点版本表（`node/versions?scope=subtree`）时取它；没有时退成所属单元那一列
+   * （现有路由下子树 ≈ 所属单元）。null = 子树没动。
+   */
   unitImpact: ModelVersionImpactKind | null;
+  /** 这一会话子树里有几何要重算的最小交付单元数；没有节点版本表时为 null */
+  unitsChanged: number | null;
   /** 自身记录改了几项（属性行 + 成员 + owner）；没有时间线时为 null */
   changedCount: number | null;
   kind: ModelAttributeHistoryEntry['kind'] | null;
@@ -36,16 +42,19 @@ export type NodeTimelineRow = {
 export type NodeTimelineInput = {
   timeline: ModelElementVersionTimeline | null;
   history: ModelAttributeHistory | null;
+  /** 节点版本表（`scope=subtree`，CONTEXT「节点版本表」）；旧服务端没有这条路由 / 没去取时为 null */
+  nodeVersions?: ModelNodeVersionTimeline | null;
   scope: ModelNodeDiffScope;
 };
 
 /**
- * 并两条时间线、按范围标 `inScope`，**新 → 旧**排。
- * - `self`：自身记录变过的会话（版本表左列或属性时间线有它）。**旧服务端只给得出单元那一列
- *   （`unitColumnOnly`）时自身列是未知、不是「没变」**：这时不筛，单元表里的会话照列（行上标「本构件 ?」），
- *   否则整条时间线会空掉、缺省 A / B 也选不出来。
- * - `subtree`：节点有所属单元时 = 单元表里的会话 ∪ 自身会话（现有路由下子树 ≈ 所属单元）；节点是容器
- *   （没有单元）时只有自身会话可列——子树列要 `node/versions?scope=subtree`，面板另给提示。
+ * 并三条时间线、按范围标 `inScope`，**新 → 旧**排。
+ * - `self`：自身记录变过的会话（版本表左列 / 属性时间线 / 节点版本表的 `selfImpact` 有它）。**旧服务端只给得出
+ *   单元那一列（`unitColumnOnly`）时自身列是未知、不是「没变」**：这时不筛，单元表里的会话照列（行上标「本构件 ?」），
+ *   否则整条时间线会空掉、缺省 A / B 也选不出来；节点版本表在时自身列由它补齐，不再算未知。
+ * - `subtree`：有节点版本表（`node/versions?scope=subtree`）时 = 它的每一行——容器（SITE / ZONE）也列得出子树，
+ *   每行带 `unitsChanged`；没有时退成「单元表里的会话 ∪ 自身会话」（现有路由下子树 ≈ 所属单元），容器就只剩自身会话，
+ *   面板另给提示。
  */
 export function buildNodeTimelineRows(input: NodeTimelineInput): NodeTimelineRow[] {
   const bySesno = new Map<number, NodeTimelineRow>();
@@ -59,6 +68,7 @@ export function buildNodeTimelineRows(input: NodeTimelineInput): NodeTimelineRow
         comment: null,
         selfImpact: null,
         unitImpact: null,
+        unitsChanged: null,
         changedCount: null,
         kind: null,
         inScope: false,
@@ -69,10 +79,18 @@ export function buildNodeTimelineRows(input: NodeTimelineInput): NodeTimelineRow
     }
     return row;
   };
+  const nodeVersions = input.nodeVersions ?? null;
   for (const version of input.timeline?.versions ?? []) {
     const row = ensure(version.sesno, version.sessionTime);
     row.selfImpact = version.elementImpact;
     row.unitImpact = version.unitImpact;
+  }
+  for (const version of nodeVersions?.versions ?? []) {
+    const row = ensure(version.sesno, version.sessionTime);
+    // 节点版本表说的就是子树：它在时压过单元那一列，自身列空着的也由它补
+    row.unitImpact = version.impact;
+    row.unitsChanged = version.unitsChanged;
+    if (!row.selfImpact) row.selfImpact = version.selfImpact;
   }
   for (const entry of input.history?.entries ?? []) {
     const row = ensure(entry.sesno, entry.sessionTime);
@@ -83,12 +101,13 @@ export function buildNodeTimelineRows(input: NodeTimelineInput): NodeTimelineRow
     if (!row.selfImpact) row.selfImpact = entry.impact;
   }
   const hasUnit = !!input.timeline?.unitRefno;
-  // 服务端给不出自身那一列时，「自身没变」无从判断——按未知处理，别把整条时间线筛空
-  const selfColumnUnknown = input.timeline?.unitColumnOnly === true;
+  const subtreeKnown = nodeVersions !== null;
+  // 服务端给不出自身那一列时，「自身没变」无从判断——按未知处理，别把整条时间线筛空；节点版本表给了自身列就不算未知
+  const selfColumnUnknown = input.timeline?.unitColumnOnly === true && !subtreeKnown;
   for (const row of bySesno.values()) {
     row.inScope = input.scope === 'self' && !selfColumnUnknown
       ? row.selfImpact !== null
-      : row.selfImpact !== null || (hasUnit && row.unitImpact !== null);
+      : row.selfImpact !== null || ((subtreeKnown || hasUnit) && row.unitImpact !== null);
   }
   return [...bySesno.values()].sort((x, y) => y.sesno - x.sesno);
 }

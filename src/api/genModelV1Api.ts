@@ -1109,6 +1109,64 @@ export function genModelV1ElementAttributeHistory(
 }
 
 export type NodeDiffScopeDto = 'self' | 'subtree';
+
+export type NodeVersionDto = {
+  sesno: number;
+  session_time: string | null;
+  /** 范围内折出来的影响（节点自身出现 / 被删压过一切，否则子树里最重的一档） */
+  impact: ModelVersionImpactKindDto;
+  /** 节点自身记录那一格；null = 只有子树变了 */
+  self_impact: ModelVersionImpactKindDto | null;
+  units_changed: number;
+  units_touched: number;
+};
+
+/** `GET /api/v1/node/versions` 的回执：某节点按对比范围折叠的版本表（按链序旧 → 新） */
+export type NodeVersionsResponse = {
+  dbnum: number;
+  /** `a/b` */
+  refno: string;
+  noun: string;
+  scope: NodeDiffScopeDto;
+  /** 节点自己所属的单元根（`a/b`）；容器为 null */
+  unit_root: string | null;
+  unit_noun: string | null;
+  file_latest_sesno: number;
+  truncated: boolean;
+  versions: NodeVersionDto[];
+  cached?: boolean;
+  elapsed_ms?: number;
+  stats?: Record<string, unknown>;
+  warnings?: string[];
+  [key: string]: unknown;
+};
+
+export type GenModelV1NodeVersionsRequest = GenModelV1ModelVersionsRequest & {
+  scope: NodeDiffScopeDto;
+};
+
+/**
+ * 某节点按对比范围折叠的**版本表**（gen-model-refactor ADR-081 追记三；plant3d-web ADR 0066 / CONTEXT「节点版本表」）。
+ * `subtree` 每行 = 节点自身或其下整棵子树里任何记录变过的会话，附 `units_changed` / `units_touched`；`self` 每行 = 它自身变过的会话。
+ * 任意 refno 都受理；整条链里没有它 → 404 `REFNO_NOT_FOUND`。旧服务端没有这条路由（无信封 404）由调用方回落。
+ */
+export function genModelV1NodeVersions(
+  req: GenModelV1NodeVersionsRequest,
+  options?: GenModelV1RequestOptions,
+): Promise<NodeVersionsResponse> {
+  return genModelV1Fetch<NodeVersionsResponse>('/api/v1/node/versions', {
+    ...options,
+    timeoutMs: options?.timeoutMs ?? MODEL_VERSIONS_TIMEOUT_MS,
+    query: {
+      dbnum: req.dbnum,
+      refno: toV1Refno(req.refno),
+      scope: req.scope,
+      since_sesno: req.sinceSesno,
+      limit: req.limit,
+    },
+  });
+}
+
 export type NodeDiffStatusDto = 'added' | 'deleted' | 'modified' | 'noop';
 
 export type NodeDiffRowDto = {

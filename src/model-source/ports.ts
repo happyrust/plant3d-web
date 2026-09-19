@@ -339,6 +339,34 @@ export type ModelAttributeHistory = {
   entries: ModelAttributeHistoryEntry[];
 };
 
+/** 节点版本表的一行（CONTEXT「节点版本表」）：范围内折出来的一档影响 + 动了几个单元 + 节点自身那一格。 */
+export type ModelNodeVersion = {
+  sesno: number;
+  sessionTime: string | null;
+  /** 范围内折出来的影响：节点自身出现 / 被删压过一切，否则子树里最重的一档 */
+  impact: ModelVersionImpactKind;
+  /** 节点自身记录在这一会话的变化；null = 它自己没变（只有子树变了） */
+  selfImpact: ModelVersionImpactKind | null;
+  /** 这一会话有几何要重算的最小交付单元数 */
+  unitsChanged: number;
+  /** 这一会话记录被动过的最小交付单元数（含 noop） */
+  unitsTouched: number;
+};
+
+/** 某节点按范围折叠的版本表（gen-model-v1 `GET /api/v1/node/versions`）；容器「所有子节点」下的时间线只有它能列。 */
+export type ModelNodeVersionTimeline = {
+  dbnum: number;
+  /** `a_b` */
+  refno: string;
+  noun: string;
+  scope: ModelNodeDiffScope;
+  /** 节点自己所属的最小交付单元根（`a_b`）；容器为 null */
+  unitRefno: string | null;
+  unitNoun: string | null;
+  /** 按链序旧 → 新 */
+  versions: ModelNodeVersion[];
+};
+
 export type ModelNodeDiffStatus = 'added' | 'deleted' | 'modified' | 'noop';
 
 export type ModelNodeDiffRow = {
@@ -418,6 +446,16 @@ export type ModelVersionSource = {
    * 服务端没有这条路由（旧构建）→ 抛 `ModelVersionRouteUnavailableError`，面板据此只给版本表那一半。
    */
   attributeHistory(dbnum: number, refno: string, options?: ModelVersionLoadOptions): Promise<ModelAttributeHistory>;
+  /**
+   * 某节点按范围折叠的版本表（ADR 0066 / CONTEXT「节点版本表」）：`subtree` 下容器也列得出子树的时间线，每版附动了几个单元。
+   * 服务端没有这条路由 → 抛 `ModelVersionRouteUnavailableError`，面板据此退回「手填会话号」。
+   */
+  listNodeVersions(
+    dbnum: number,
+    refno: string,
+    scope: ModelNodeDiffScope,
+    options?: ModelVersionLoadOptions,
+  ): Promise<ModelNodeVersionTimeline>;
   /**
    * 节点 A→B 的差异摘要（ADR 0066）：按范围过滤、按单元分组、不生成几何。
    * 服务端没有这条路由 → 抛 `ModelVersionRouteUnavailableError`。

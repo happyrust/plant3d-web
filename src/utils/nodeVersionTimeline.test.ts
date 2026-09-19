@@ -10,7 +10,7 @@ import {
   pickNodeVersionSide,
 } from './nodeVersionTimeline';
 
-import type { ModelAttributeHistory, ModelAttributeHistoryEntry, ModelElementVersionTimeline } from '@/model-source';
+import type { ModelAttributeHistory, ModelAttributeHistoryEntry, ModelElementVersionTimeline, ModelNodeVersionTimeline } from '@/model-source';
 
 const timeline: ModelElementVersionTimeline = {
   dbnum: 8000,
@@ -80,6 +80,48 @@ describe('buildNodeTimelineRows', () => {
     ] };
     const rows = buildNodeTimelineRows({ timeline: container, history: null, scope: 'subtree' });
     expect(rows.map((row) => [row.sesno, row.inScope])).toEqual([[301, true], [2, true]]);
+  });
+
+  it('有节点版本表（node/versions?scope=subtree）时容器也列得出子树：每行带 unitsChanged，子树列压过单元列，自身列由它补', () => {
+    const container: ModelElementVersionTimeline = { ...timeline, refno: '24384_22399', noun: 'SITE', unitRefno: null, unitNoun: null, versions: [
+      { sesno: 444, sessionTime: 't444', elementImpact: 'delivery', unitImpact: null },
+    ] };
+    const nodeVersions: ModelNodeVersionTimeline = {
+      dbnum: 8000, refno: '24384_22399', noun: 'SITE', scope: 'subtree', unitRefno: null, unitNoun: null,
+      versions: [
+        { sesno: 444, sessionTime: 't444', impact: 'delivery', selfImpact: 'delivery', unitsChanged: 449, unitsTouched: 449 },
+        { sesno: 626, sessionTime: 't626', impact: 'mesh', selfImpact: null, unitsChanged: 1, unitsTouched: 1 },
+        { sesno: 628, sessionTime: null, impact: 'mesh', selfImpact: null, unitsChanged: 1, unitsTouched: 2 },
+        { sesno: 635, sessionTime: 't635', impact: 'noop', selfImpact: 'noop', unitsChanged: 0, unitsTouched: 0 },
+      ],
+    };
+    const subtree = buildNodeTimelineRows({ timeline: container, history: null, nodeVersions, scope: 'subtree' });
+    expect(subtree.map((row) => [row.sesno, row.inScope, row.unitImpact, row.unitsChanged])).toEqual([
+      [635, true, 'noop', 0],
+      [628, true, 'mesh', 1],
+      [626, true, 'mesh', 1],
+      [444, true, 'delivery', 449],
+    ]);
+    // self 范围：只剩节点自身动过的两版（444 出现、635 改元数据），626 / 628 是子树在动
+    const self = buildNodeTimelineRows({ timeline: container, history: null, nodeVersions, scope: 'self' });
+    expect(self.map((row) => [row.sesno, row.inScope])).toEqual([[635, true], [628, false], [626, false], [444, true]]);
+    expect(defaultNodeVersionPair(subtree)).toEqual({ a: 628, b: 635 });
+    expect(defaultNodeVersionPair(self)).toEqual({ a: 444, b: 635 });
+
+    // 单元及以下的节点：节点版本表压过单元那一列（两者本来同一件事），unitColumnOnly 也不再算未知
+    const unitOnly: ModelElementVersionTimeline = { ...timeline, unitColumnOnly: true, versions: [
+      { sesno: 573, sessionTime: 't573', elementImpact: null, unitImpact: 'mesh' },
+      { sesno: 626, sessionTime: 't626', elementImpact: null, unitImpact: 'placement' },
+    ] };
+    const leafVersions: ModelNodeVersionTimeline = {
+      dbnum: 8000, refno: '24384_23262', noun: 'FTUB', scope: 'subtree', unitRefno: '24384_23257', unitNoun: 'BRAN',
+      versions: [{ sesno: 626, sessionTime: 't626', impact: 'mesh', selfImpact: 'mesh', unitsChanged: 1, unitsTouched: 1 }],
+    };
+    const rows = buildNodeTimelineRows({ timeline: unitOnly, history: null, nodeVersions: leafVersions, scope: 'self' });
+    expect(rows.map((row) => [row.sesno, row.inScope, row.unitImpact, row.selfImpact])).toEqual([
+      [626, true, 'mesh', 'mesh'],
+      [573, false, 'mesh', null],
+    ]);
   });
 
   it('只有属性时间线（版本表还没回来）也能成行', () => {

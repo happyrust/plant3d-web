@@ -23,6 +23,8 @@ import type {
   ModelElementVersionTimeline,
   ModelNodeDiffScope,
   ModelNodeDiffSummary,
+  ModelNodeVersion,
+  ModelNodeVersionTimeline,
   ModelVersion,
   ModelVersionAttributes,
   ModelVersionGeometry,
@@ -39,6 +41,7 @@ import {
   genModelV1ModelHistoryQuery,
   genModelV1ModelVersions,
   genModelV1NodeDiffSummary,
+  genModelV1NodeVersions,
   genModelV1TaskGet,
   isGenModelV1ApiError,
   type AttributeHistoryEntryDto,
@@ -50,6 +53,7 @@ import {
   type HistoryInstanceRowDto,
   type HistoryTubeRowDto,
   type ModelVersionsResponse,
+  type NodeVersionsResponse,
   type TaskEntryDto,
   type V1Transform,
   toV1Refno,
@@ -70,6 +74,7 @@ export type GenModelV1VersionApi = {
   listVersions: typeof genModelV1ModelVersions;
   listElementVersions: typeof genModelV1ElementVersions;
   attributeHistory: typeof genModelV1ElementAttributeHistory;
+  nodeVersions: typeof genModelV1NodeVersions;
   diffSummary: typeof genModelV1NodeDiffSummary;
   historyGenerate: typeof genModelV1ModelHistoryGenerate;
   taskGet: typeof genModelV1TaskGet;
@@ -84,6 +89,7 @@ const defaultApi: GenModelV1VersionApi = {
   listVersions: genModelV1ModelVersions,
   listElementVersions: genModelV1ElementVersions,
   attributeHistory: genModelV1ElementAttributeHistory,
+  nodeVersions: genModelV1NodeVersions,
   diffSummary: genModelV1NodeDiffSummary,
   historyGenerate: genModelV1ModelHistoryGenerate,
   taskGet: genModelV1TaskGet,
@@ -389,6 +395,55 @@ export function createGenModelV1ModelVersionSource(api: GenModelV1VersionApi = d
     throw new Error(`属性变化时间线超过 ${MAX_PAGES} 页仍未取完（dbnum ${dbnum} 节点 ${normalized}），放弃`);
   }
 
+  /**
+   * 节点版本表（ADR 0066 / CONTEXT「节点版本表」）：`GET node/versions?scope=`，`truncated` 时同 `listVersions` 按最后一条连续拉。
+   * 旧服务端没有这条路由 → `ModelVersionRouteUnavailableError`，面板据此退回「手填会话号」。
+   */
+  async function listNodeVersions(
+    dbnum: number,
+    refno: string,
+    scope: ModelNodeDiffScope,
+    options: ModelVersionLoadOptions = {},
+  ): Promise<ModelNodeVersionTimeline> {
+    const normalized = fromV1Refno(refno);
+    const versions: ModelNodeVersion[] = [];
+    let sinceSesno: number | undefined;
+    for (let page = 0; page < MAX_PAGES; page += 1) {
+      let response: NodeVersionsResponse;
+      try {
+        response = await api.nodeVersions({ dbnum, refno: normalized, scope, sinceSesno }, { signal: options.signal });
+      } catch (error) {
+        if (page === 0 && isMissingRoute(error)) throw new ModelVersionRouteUnavailableError('node/versions');
+        throw error;
+      }
+      for (const row of response.versions ?? []) {
+        versions.push({
+          sesno: row.sesno,
+          sessionTime: row.session_time ?? null,
+          impact: row.impact,
+          selfImpact: row.self_impact ?? null,
+          unitsChanged: row.units_changed ?? 0,
+          unitsTouched: row.units_touched ?? 0,
+        });
+      }
+      if (!response.truncated) {
+        return {
+          dbnum: response.dbnum,
+          refno: fromV1Refno(response.refno),
+          noun: response.noun,
+          scope: response.scope ?? scope,
+          unitRefno: response.unit_root ? fromV1Refno(response.unit_root) : null,
+          unitNoun: response.unit_noun ?? null,
+          versions,
+        };
+      }
+      const last = response.versions?.at(-1)?.sesno;
+      if (last === undefined) break;
+      sinceSesno = last;
+    }
+    throw new Error(`节点版本表超过 ${MAX_PAGES} 页仍未取完（dbnum ${dbnum} 节点 ${normalized}），放弃`);
+  }
+
   /** 差异摘要（ADR 0066）：`GET node/diff-summary`；旧服务端没有这条路由 → `ModelVersionRouteUnavailableError`。 */
   async function diffSummary(
     dbnum: number,
@@ -524,7 +579,7 @@ export function createGenModelV1ModelVersionSource(api: GenModelV1VersionApi = d
     };
   }
 
-  return { listVersions, listElementVersions, loadVersion, attributesAt, attributeHistory, diffSummary };
+  return { listVersions, listElementVersions, loadVersion, attributesAt, attributeHistory, listNodeVersions, diffSummary };
 }
 
 /** `<unit_refno>@<sesno>` → sesno；解不出给 0（只用在没有句柄的空态上）。 */

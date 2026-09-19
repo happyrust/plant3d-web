@@ -3,7 +3,7 @@ import { createApp, nextTick } from 'vue';
 
 import ModelUnitVersionComparePanel from './ModelUnitVersionComparePanel.vue';
 
-import type { ModelElementVersionTimeline, ModelVersion, ModelVersionGeometry } from '@/model-source';
+import { ModelVersionRouteUnavailableError, type ModelElementVersionTimeline, type ModelNodeVersionTimeline, type ModelVersion, type ModelVersionGeometry } from '@/model-source';
 
 // 面板只经模型来源端口的 `versions` 取数；这里给一份可编程的 ModelVersionSource，不建真适配器
 const versionSourceMocks = vi.hoisted(() => ({
@@ -12,6 +12,7 @@ const versionSourceMocks = vi.hoisted(() => ({
   loadVersion: vi.fn(),
   attributesAt: vi.fn(),
   attributeHistory: vi.fn(),
+  listNodeVersions: vi.fn(),
   diffSummary: vi.fn(),
 }));
 vi.mock('@/model-source', async (importOriginal) => {
@@ -84,6 +85,8 @@ describe('ModelUnitVersionComparePanel', () => {
     versionSourceMocks.listVersions.mockResolvedValue(versions);
     versionSourceMocks.listElementVersions.mockResolvedValue(unitTimeline);
     versionSourceMocks.loadVersion.mockImplementation(async (item: ModelVersion) => geometryBySesno[item.sesno]!());
+    // 缺省当旧服务端：没有 node/versions（容器退回手填会话号）；要节点版本表的用例自己 resolve
+    versionSourceMocks.listNodeVersions.mockRejectedValue(new ModelVersionRouteUnavailableError('node/versions'));
   });
 
   afterEach(() => {
@@ -586,6 +589,71 @@ describe('ModelUnitVersionComparePanel', () => {
 
     window.removeEventListener('plant3d:model-unit-version-compare', listener);
     app.unmount();
+  });
+
+  it('容器 + 新服务端：时间线来自 node/versions（子树每版带「单元 n」），不再露出手填会话号；旧服务端才手填', async () => {
+    const zone: ModelElementVersionTimeline = {
+      dbnum: 7997, refno: '1_9', noun: 'ZONE', unitRefno: null, unitNoun: null, unitColumnOnly: false,
+      versions: [{ sesno: 444, sessionTime: '2026-07-20T00:00:00Z', elementImpact: 'delivery', unitImpact: null }],
+    };
+    const subtree: ModelNodeVersionTimeline = {
+      dbnum: 7997, refno: '1_9', noun: 'ZONE', scope: 'subtree', unitRefno: null, unitNoun: null,
+      versions: [
+        { sesno: 444, sessionTime: '2026-07-20T00:00:00Z', impact: 'delivery', selfImpact: 'delivery', unitsChanged: 4, unitsTouched: 4 },
+        { sesno: 791, sessionTime: '2026-07-22T01:00:00Z', impact: 'mesh', selfImpact: null, unitsChanged: 1, unitsTouched: 1 },
+        { sesno: 897, sessionTime: '2026-07-22T02:00:00Z', impact: 'mesh', selfImpact: 'noop', unitsChanged: 2, unitsTouched: 3 },
+      ],
+    };
+    versionSourceMocks.listElementVersions.mockResolvedValue(zone);
+    versionSourceMocks.listNodeVersions.mockResolvedValue(subtree);
+    versionSourceMocks.diffSummary.mockRejectedValue(new ModelVersionRouteUnavailableError('node/diff-summary'));
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const app = createApp(ModelUnitVersionComparePanel);
+    app.mount(host);
+    const input = host.querySelector('[data-testid="model-unit-compare-refno"]') as HTMLInputElement;
+    input.value = '1_9';
+    input.dispatchEvent(new Event('input'));
+    (host.querySelector('[data-testid="model-unit-compare-load"]') as HTMLButtonElement).click();
+    await flushUi();
+
+    // 只对容器去取节点版本表（单元及以下的子树 ≈ 所属单元，单元表已经给了）
+    expect(versionSourceMocks.listNodeVersions).toHaveBeenCalledWith(7997, '1_9', 'subtree');
+    expect(versionSourceMocks.listVersions).not.toHaveBeenCalled();
+    expect(host.querySelector('[data-testid="model-unit-compare-notice"]')?.textContent).toContain('子树时间线 3 版来自 node/versions');
+    expect(host.querySelector('[data-testid="model-unit-compare-manual-pair"]')).toBeNull();
+
+    // 容器缺省「仅自身」：只有 444（出现）/ 897（自身 noop）在范围内，791 是子树在动 → 灰掉不显示，缺省 A/B = 444 → 897
+    const rows = () => [...host.querySelectorAll('[data-testid="model-unit-compare-timeline"] li')];
+    expect(rows().map((li) => li.getAttribute('data-sesno'))).toEqual(['897', '444']);
+    expect(host.querySelector('[data-testid="model-unit-compare-a"]')?.getAttribute('data-sesno')).toBe('444');
+    expect(host.querySelector('[data-testid="model-unit-compare-b"]')?.getAttribute('data-sesno')).toBe('897');
+    expect(host.querySelector('[data-testid="model-unit-compare-units-changed"]')).toBeNull();
+
+    // 切「所有子节点」：三版全在范围内，每行带「单元 n」
+    (host.querySelector('[data-testid="model-unit-compare-scope-subtree"]') as HTMLButtonElement).click();
+    await flushUi();
+    expect(rows().map((li) => [li.getAttribute('data-sesno'), li.getAttribute('data-in-scope')])).toEqual([['897', 'true'], ['791', 'true'], ['444', 'true']]);
+    expect([...host.querySelectorAll('[data-testid="model-unit-compare-units-changed"]')].map((chip) => chip.textContent?.trim())).toEqual(['单元 2', '单元 1', '单元 4']);
+    expect(host.querySelector('[data-testid="model-unit-compare-timeline-head"]')?.textContent).toContain('本范围 3 版');
+    app.unmount();
+
+    // 旧服务端（没有 node/versions）：只列得出它自己那一版，手填会话号那一栏露出来、提示照实说
+    versionSourceMocks.listNodeVersions.mockRejectedValue(new ModelVersionRouteUnavailableError('node/versions'));
+    const old = document.createElement('div');
+    document.body.appendChild(old);
+    const oldApp = createApp(ModelUnitVersionComparePanel);
+    oldApp.mount(old);
+    const oldInput = old.querySelector('[data-testid="model-unit-compare-refno"]') as HTMLInputElement;
+    oldInput.value = '1_9';
+    oldInput.dispatchEvent(new Event('input'));
+    (old.querySelector('[data-testid="model-unit-compare-load"]') as HTMLButtonElement).click();
+    await flushUi();
+    expect(old.querySelector('[data-testid="model-unit-compare-notice"]')?.textContent).toContain('服务端还没有 node/versions');
+    expect(old.querySelector('[data-testid="model-unit-compare-manual-pair"]')).not.toBeNull();
+    expect([...old.querySelectorAll('[data-testid="model-unit-compare-timeline"] li')].map((li) => li.getAttribute('data-sesno'))).toEqual(['444']);
+    oldApp.unmount();
   });
 
   it('比较请求未完成时卸载面板不会派发幽灵 open 事件', async () => {

@@ -418,8 +418,17 @@ legacy 下与从前的可见差别只有一处、且不可见于用户：A/B 隔
 ## 10. 节点版本视图（ADR 0066，用户 22:48「开写前端：面板改成范围开关 + 时间线点选 A/B，先顶着现有路由」）
 
 - **后端两条先落**（gen-model-refactor `2069a887a`，23:04）：`GET element/attribute-history`（逐会话 `ElementDelta` + 会话页 user / comment）、
-  `GET node/diff-summary?a&b&scope`（索引差分 + 模型影响，按单元分组，不生成几何）。ADR 0066 列的另两条（`node/versions?scope=subtree`、
-  `element/attribute-diff`）**未做**：属性净差前端用时间线在 (A, B] 折；容器的子树时间线暂由「手填会话号」兜。
+  `GET node/diff-summary?a&b&scope`（索引差分 + 模型影响，按单元分组，不生成几何）。ADR 0066 列的另两条里 `element/attribute-diff`
+  **未做**（属性净差前端用时间线在 (A, B] 折）；`node/versions?scope=subtree` 09-19 10:39 落地（下一条）。
+- **第三条 `GET node/versions?scope=self|subtree`**（gen-model-refactor `a382b2cf3`，09-19 10:39，用户 10:2x「让容器节点也能列出子树时间线，
+  替掉手填会话号」）：任意节点按范围折叠的版本表，`subtree` 每行 = 子树里任何记录变过的会话，`impact` 取最重一档，附 `self_impact` /
+  `units_changed` / `units_touched`。前端：端口 `listNodeVersions(dbnum, refno, scope)`、`ModelNodeVersionTimeline`；面板**只对容器**
+  （不在任何单元下）去取 `subtree` 表（单元及以下的子树 ≈ 所属单元，单元表已经给了），`buildNodeTimelineRows` 里它压过单元那一列、
+  自身列空着的由它补，行上多一枚「单元 n」；取到了就不再露出「手填会话号」，旧服务端（无信封 404）才退回手填并照实说。
+  真机（`:8022` release `ga382b2cf3`，ams8000 639 会话）：SITE 24384/22399 子树冷算 3.45 s（47,522 候选 / 3,786 在范围 / 640 个会话集），
+  `since_sesno=618` 命中缓存 20 ms → 626 / 628 / 630 / 632 各「单元 1」；BRAN 24384/23257 子树 57 行与 `model/versions` 逐行同序同档
+  （2.4 s vs 6.6 s）；FTUB 24384/23262 `self` 53 行与 `element/versions` 左列一致；ZONE 24384/22400 子树 198 行 / self 5 行；
+  `scope=bogus` 400、不存在 refno 404、dbnum 不符 400、`since_sesno` 不在链上 404。
 - **端口**：`ModelVersionSource.attributeHistory(dbnum, refno)` / `diffSummary(dbnum, refno, a, b, scope)`，类型 `ModelAttributeHistory` /
   `ModelNodeDiffSummary`（`ports.ts`）；v1 适配器按 `truncated` 连续拉、旧构建的无信封 404 → `ModelVersionRouteUnavailableError(route)`；
   legacy stub 照旧抛退役错。

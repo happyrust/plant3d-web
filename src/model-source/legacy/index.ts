@@ -109,6 +109,7 @@ const versions: ModelVersionSource = {
   loadVersion: legacyModelVersionsRetired,
   attributesAt: legacyModelVersionsRetired,
   attributeHistory: legacyModelVersionsRetired,
+  listNodeVersions: legacyModelVersionsRetired,
   diffSummary: legacyModelVersionsRetired,
 };
 

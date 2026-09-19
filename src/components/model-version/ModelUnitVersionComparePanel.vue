@@ -15,6 +15,7 @@ import {
   type ModelNodeDiffGroup,
   type ModelNodeDiffScope,
   type ModelNodeDiffSummary,
+  type ModelNodeVersionTimeline,
   type ModelSource,
   type ModelVersion,
   type ModelVersionGeometry,
@@ -79,6 +80,13 @@ const elementTimeline = ref<ModelElementVersionTimeline | null>(null);
 /** 属性变化时间线（`attributeHistory`）；旧服务端没有这条路由时为 null，`historyUnavailable` 说明原因 */
 const attributeHistory = ref<ModelAttributeHistory | null>(null);
 const historyUnavailable = ref<string | null>(null);
+/**
+ * 节点版本表（`listNodeVersions` scope=subtree，CONTEXT「节点版本表」）：只在节点是容器（不在任何单元下）时去取——
+ * 单元及以下的子树 ≈ 所属单元，单元表已经给了。旧服务端没有这条路由时为 null，`nodeVersionsUnavailable` 说明原因，
+ * 面板退回「手填会话号」。
+ */
+const nodeVersions = ref<ModelNodeVersionTimeline | null>(null);
+const nodeVersionsUnavailable = ref<string | null>(null);
 /** 节点有没有成员：null = 没问到（模型来源没给树口），false = 叶子（「所有子节点」置灰） */
 const hasMembers = ref<boolean | null>(null);
 const scope = ref<ModelNodeDiffScope>('subtree');
@@ -129,6 +137,7 @@ const selfColumnUnknown = computed(() => elementTimeline.value?.unitColumnOnly =
 const timelineRows = computed<NodeTimelineRow[]>(() => buildNodeTimelineRows({
   timeline: elementTimeline.value,
   history: attributeHistory.value,
+  nodeVersions: nodeVersions.value,
   scope: scope.value,
 }));
 const inScopeCount = computed(() => timelineRows.value.filter((row) => row.inScope).length);
@@ -294,6 +303,25 @@ async function loadAttributeHistory(resolvedDbnum: number, refno: string): Promi
   }
 }
 
+/** 节点版本表（容器的子树时间线）：新路由，旧服务端没有就照实说、退回手填会话号 */
+async function loadNodeVersions(resolvedDbnum: number, refno: string): Promise<ModelNodeVersionTimeline | null> {
+  const fetcher = optionalSource().versions?.listNodeVersions;
+  if (typeof fetcher !== 'function') {
+    nodeVersionsUnavailable.value = '当前模型来源没有节点版本表';
+    return null;
+  }
+  try {
+    const table = await fetcher.call(getModelSource().versions, resolvedDbnum, refno, 'subtree');
+    nodeVersionsUnavailable.value = null;
+    return table;
+  } catch (cause) {
+    nodeVersionsUnavailable.value = cause instanceof ModelVersionRouteUnavailableError
+      ? '服务端还没有 node/versions：容器的子树时间线列不出来，这里只列它自己，A / B 可手填会话号'
+      : `子树时间线取不到：${messageOf(cause)}`;
+    return null;
+  }
+}
+
 /** 叶子判定：问一下树口有没有成员；没有树口（或问失败）就不判，开关照常可用 */
 async function probeMembers(refno: string): Promise<boolean | null> {
   const tree = optionalSource().tree;
@@ -316,6 +344,8 @@ async function loadVersions(): Promise<void> {
   elementTimeline.value = null;
   attributeHistory.value = null;
   historyUnavailable.value = null;
+  nodeVersions.value = null;
+  nodeVersionsUnavailable.value = null;
   hasMembers.value = null;
   diffSummary.value = null;
   diffSummaryError.value = null;
@@ -342,19 +372,28 @@ async function loadVersions(): Promise<void> {
     // 先问这个节点的两列时间线：它自己哪几版变过，以及它属于哪个交付单元（几何只按单元生成，对比得拿它去取）
     const timeline = await getModelSource().versions.listElementVersions(resolvedDbnum, refno);
     if (run !== requestId) return;
-    const [history, members] = await Promise.all([loadAttributeHistory(resolvedDbnum, refno), probeMembers(refno)]);
+    // 容器（不在任何单元下）的子树时间线只有 node/versions 能列；单元及以下的子树 ≈ 所属单元，单元表已经给了
+    const [history, members, subtree] = await Promise.all([
+      loadAttributeHistory(resolvedDbnum, refno),
+      probeMembers(refno),
+      timeline.unitRefno ? Promise.resolve(null) : loadNodeVersions(resolvedDbnum, refno),
+    ]);
     if (run !== requestId) return;
     let unitVersions: ModelVersion[] = [];
     if (timeline.unitRefno) {
       unitVersions = await getModelSource().versions.listVersions(resolvedDbnum, timeline.unitRefno);
       if (run !== requestId) return;
+    } else if (subtree) {
+      notice.value = `${refno}（${timeline.noun || '类型未知'}）不在任何最小交付单元下：几何按其下的单元分组对比（模型对比 tab），`
+        + `子树时间线 ${subtree.versions.length} 版来自 node/versions。`;
     } else {
       notice.value = `${refno}（${timeline.noun || '类型未知'}）不在任何最小交付单元下：没有可对比的几何，`
-        + '属性变化时间线照常可看；「所有子节点」的子树列要 node/versions，这里只列它自己。';
+        + `属性变化时间线照常可看；${nodeVersionsUnavailable.value ?? '子树时间线取不到'}。`;
     }
     dbnum.value = resolvedDbnum;
     elementTimeline.value = timeline;
     attributeHistory.value = history;
+    nodeVersions.value = subtree;
     hasMembers.value = members;
     versions.value = unitVersions;
     scope.value = defaultNodeScope({ unitRefno: timeline.unitRefno, hasMembers: members });
@@ -369,6 +408,7 @@ async function loadVersions(): Promise<void> {
       versions.value = [];
       elementTimeline.value = null;
       attributeHistory.value = null;
+      nodeVersions.value = null;
       dbnum.value = null;
       error.value = messageOf(cause);
     }
@@ -409,8 +449,9 @@ function compareWithLatest(): void {
 }
 
 /**
- * 手填 A / B（容器节点在「所有子节点」下的兜底）：子树的时间线要 `node/versions?scope=subtree`，现有路由下容器只列得出
- * 它自己变过的那几版；差异摘要与分组三维对比却能吃任意两个会话号，所以这里让人直接填。填完按新旧摆正。
+ * 手填 A / B（容器节点撞上旧服务端时的兜底）：子树的时间线要 `node/versions?scope=subtree`，没有这条路由的服务端上容器
+ * 只列得出它自己变过的那几版；差异摘要与分组三维对比却能吃任意两个会话号，所以这里让人直接填。填完按新旧摆正。
+ * 节点版本表取到了就不再露出这一栏。
  */
 const manualA = ref('');
 const manualB = ref('');
@@ -819,13 +860,13 @@ onBeforeUnmount(() => {
           </span>
         </div>
 
-        <form v-if="!hasUnit || scope === 'subtree'" class="mt-1.5 flex items-center gap-1 text-[10px] text-muted-foreground" data-testid="model-unit-compare-manual-pair" @submit.prevent="applyManualPair">
+        <form v-if="!hasUnit && !nodeVersions" class="mt-1.5 flex items-center gap-1 text-[10px] text-muted-foreground" data-testid="model-unit-compare-manual-pair" @submit.prevent="applyManualPair">
           <span>手填会话号</span>
           <input v-model="manualA" class="w-14 rounded border border-input bg-background px-1 py-0.5 font-mono text-[10px]" placeholder="A" inputmode="numeric" data-testid="model-unit-compare-manual-a" />
           <span>→</span>
           <input v-model="manualB" class="w-14 rounded border border-input bg-background px-1 py-0.5 font-mono text-[10px]" placeholder="B" inputmode="numeric" data-testid="model-unit-compare-manual-b" />
           <button type="submit" class="rounded border border-border bg-background px-1.5 py-0.5 text-foreground hover:bg-muted/50" data-testid="model-unit-compare-manual-apply">应用</button>
-          <span v-if="!hasUnit" class="truncate">（容器的子树时间线要新版 node/versions，先手填）</span>
+          <span class="truncate">（容器的子树时间线要新版 node/versions，先手填）</span>
         </form>
 
         <ul class="mt-2 space-y-1" data-testid="model-unit-compare-timeline">
@@ -863,6 +904,10 @@ onBeforeUnmount(() => {
             <span class="flex shrink-0 flex-wrap justify-end gap-1">
               <span v-if="!row.inScope" class="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-500">本范围无变化</span>
               <span v-if="row.changedCount" class="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] text-amber-700">属性 {{ row.changedCount }}</span>
+              <span v-if="scope === 'subtree' && row.unitsChanged !== null && row.unitsChanged > 0"
+                class="rounded bg-indigo-100 px-1.5 py-0.5 text-[10px] text-indigo-700"
+                :title="`这一会话有几何要重算的最小交付单元数`"
+                data-testid="model-unit-compare-units-changed">单元 {{ row.unitsChanged }}</span>
               <template v-if="queriedIsUnitRoot">
                 <span class="rounded px-1.5 py-0.5 text-[10px]" :class="impactClass(rowImpact(row))">
                   {{ impactLabel(rowImpact(row)) }}
