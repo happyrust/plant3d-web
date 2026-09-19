@@ -27,5 +27,15 @@
     "errors": "scope=bogus → 400；refno 24384/1 → 404；dbnum=7997 + refno 24384/22399 → 400 INVALID_REFNO；since_sesno=99999 → 404 SESSION_NOT_FOUND",
     "sibling_routes": "element/attribute-history（FTUB since 626 limit 1 → 630 一行）200；node/diff-summary（SITE 618→628 → units changed 2 / unchanged 524 / total 526）200；element/versions 200",
     "page": "dev :3111 + :8022，e2e/node-version-view-gen-model-v1.spec.ts --workers=1 → 2 passed（23.2 s），pageerror 0；截图与数字见同目录 leaf-*.png/json、container-*.png/json"
-  }
+  },
+  "restarts": [
+    {
+      "diedAt": "2026-09-19T13:47:32+08:00",
+      "cause": "pid 56280 随上一会话的终端一起没了：stdout.log 最后一行是 13:47:32 的增量检测、无退出日志；同一时刻全部会话在交接（13:46 批量导出），Start-Process 起的子进程跟终端的 Job 一起被收。端口无监听，没人在用",
+      "restartedAt": "2026-09-19T13:50:04+08:00",
+      "launch": "同一 exe / cwd / DbOption / env；改走 Invoke-CimMethod Win32_Process.Create（cmd.exe /d /s /c 包一层设 env 与 >> 重定向），父进程 WmiPrvSE，不挂在任何终端下；pid 84280（gm-8022-a382b2cf3.pid 已更新），2 s 后 /health status=ok route_count=71 build_id 0.1.27+ga382b2cf3ace.1789785740",
+      "logs": "第一段 stdout/stderr 挪到 stdout.run1-1055-1347.log / stderr.run1-1055-1347.log，新段仍是 stdout.log / stderr.log",
+      "checks_after": "node/versions SITE subtree since 618 冷算 2127 ms / self 1164 ms、attribute-history FTUB 1895 ms、diff-summary SITE 618→628 24 ms（changed 2 / unchanged 524 / total 526）、element/versions FTUB 3135 ms 全 200；e2e/node-version-view-gen-model-v1.spec.ts --workers=1 → 2 passed（11.9 s），证据落 %TEMP%（未覆盖本目录截图）"
+    }
+  ]
 }
