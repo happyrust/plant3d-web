@@ -256,6 +256,60 @@ describe('ModelUnitVersionComparePanel', () => {
     app.unmount();
   });
 
+  it('「三维只看差异」：跟着视口运行态显示，勾选派发 set-diff-only；两版没几何差异时置灰', async () => {
+    const events: CustomEvent[] = [];
+    const listener = (event: Event) => events.push(event as CustomEvent);
+    window.addEventListener('plant3d:model-unit-version-compare', listener);
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const app = createApp(ModelUnitVersionComparePanel);
+    app.mount(host);
+    // 「三维查看」那一节只在「模型对比」tab 里：先查版本表、切 tab
+    const input = host.querySelector('[data-testid="model-unit-compare-refno"]') as HTMLInputElement;
+    input.value = '24381_145018';
+    input.dispatchEvent(new Event('input'));
+    (host.querySelector('[data-testid="model-unit-compare-load"]') as HTMLButtonElement).click();
+    await flushUi();
+    (host.querySelector('[data-testid="model-unit-compare-tab-model"]') as HTMLButtonElement).click();
+    await flushUi();
+
+    const side = (sesno: number) => ({ version: version(sesno, '2026-07-22T01:00:00Z'), sesno, refnos: ['1_1'], entries: new Map() });
+    const runtime = (rows: { refno: string; noun: string; status: 'modified' | 'unchanged' }[], diffOnly: boolean) => ({
+      detail: { action: 'open', dbnum: 7997, unitRefno: '24381_145018', before: side(791), after: side(897), refnos: ['1_1'], rows },
+      status: 'ready',
+      activeSide: 'after',
+      viewMode: 'single',
+      diffOnly,
+    });
+    const publish = async (state: unknown) => {
+      window.dispatchEvent(new CustomEvent('plant3d:model-unit-version-compare-state', { detail: state }));
+      await flushUi();
+    };
+
+    await publish(runtime([{ refno: '1_1', noun: 'FTUB', status: 'modified' }], false));
+    const checkbox = host.querySelector('[data-testid="model-unit-compare-diff-only"]') as HTMLInputElement;
+    expect(checkbox).not.toBeNull();
+    expect(checkbox.disabled).toBe(false);
+    expect(checkbox.checked).toBe(false);
+
+    checkbox.checked = true;
+    checkbox.dispatchEvent(new Event('change'));
+    await flushUi();
+    expect(events.at(-1)?.detail).toEqual({ action: 'set-diff-only', diffOnly: true });
+
+    // 开关的真值在视口那边：回传 diffOnly=true 才算勾上
+    await publish(runtime([{ refno: '1_1', noun: 'FTUB', status: 'modified' }], true));
+    expect((host.querySelector('[data-testid="model-unit-compare-diff-only"]') as HTMLInputElement).checked).toBe(true);
+
+    // 全 unchanged：没有可单看的构件，置灰
+    await publish(runtime([{ refno: '1_1', noun: 'FTUB', status: 'unchanged' }], false));
+    expect((host.querySelector('[data-testid="model-unit-compare-diff-only"]') as HTMLInputElement).disabled).toBe(true);
+
+    window.removeEventListener('plant3d:model-unit-version-compare', listener);
+    app.unmount();
+  });
+
   it('URL compare_autorun=1 + compare_a/b：挂载后自动查版本、选 A/B、跑对比（Q16）', async () => {
     const originalUrl = window.location.href;
     window.history.replaceState({}, '', '/?unit_refno=24381/145018&compare_a=897&compare_b=791&compare_autorun=1');

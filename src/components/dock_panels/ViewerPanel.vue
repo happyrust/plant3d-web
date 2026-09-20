@@ -108,12 +108,18 @@ import {
   applyModelUnitRefnoVisibility,
   applyModelUnitVersionSide,
   collectModelUnitTargetObjectIds,
+  countModelUnitGeometryStatuses,
   DEFAULT_MODEL_UNIT_COMPARE_SIDE,
   DEFAULT_MODEL_UNIT_COMPARE_VIEW_MODE,
   getModelUnitCompareRenderPasses,
+  MODEL_UNIT_GEOMETRY_STATUS_COLORS,
+  MODEL_UNIT_GEOMETRY_STATUS_LABELS,
   MODEL_UNIT_VERSION_COMPARE_EVENT,
   MODEL_UNIT_VERSION_COMPARE_STATE_EVENT,
+  planModelUnitCompareObjectStyles,
+  type ModelUnitCompareHiddenObjectIds,
   type ModelUnitCompareViewMode,
+  type ModelUnitGeometryStatus,
   type ModelUnitVersionCompareEnvironment,
   type ModelUnitVersionCompareEventDetail,
   type ModelUnitVersionCompareOpenDetail,
@@ -536,7 +542,17 @@ function publishModelUnitCompareState(): void {
   window.dispatchEvent(new CustomEvent(MODEL_UNIT_VERSION_COMPARE_STATE_EVENT, { detail }));
 }
 watch(modelUnitCompareState, publishModelUnitCompareState, { deep: true });
+/** 视口角标 / 图例用：本次对比按「模型几何差异」四态的构件数（与面板徽章同一份 `rows`） */
+const modelUnitCompareStatusCounts = computed(() => (
+  modelUnitCompareState.value ? countModelUnitGeometryStatuses(modelUnitCompareState.value.detail.rows) : null
+));
+const MODEL_UNIT_COMPARE_LEGEND_ORDER: ModelUnitGeometryStatus[] = ['modified', 'added', 'deleted', 'unchanged'];
+function modelUnitCompareStatusCss(status: ModelUnitGeometryStatus): string {
+  return `#${MODEL_UNIT_GEOMETRY_STATUS_COLORS[status].toString(16).padStart(6, '0')}`;
+}
 let modelUnitCompareLayers: DTXLayer[] = [];
+/** 两侧隔离图层里 `unchanged` 的对象 id，「三维只看差异」时藏它们；随对比打开时算一次、关闭清空 */
+let modelUnitCompareHiddenObjectIds: ModelUnitCompareHiddenObjectIds | null = null;
 let modelUnitCompareOriginalVisibility = new Map<string, boolean>();
 let modelUnitCompareTargetRefnos: string[] = [];
 let modelUnitCompareCameraState: {
@@ -1860,14 +1876,35 @@ function hideModelUnitCompareTarget(primaryLayer: DTXLayer, dbnum: number): void
   ), false);
 }
 
+/** 「三维只看差异」开着才把 `unchanged` 对象交给 `applyModelUnitVersionSide` 去藏 */
+function modelUnitCompareHiddenForState(): ModelUnitCompareHiddenObjectIds | null {
+  return modelUnitCompareState.value?.diffOnly ? modelUnitCompareHiddenObjectIds : null;
+}
+
 function setModelUnitCompareSide(side: 'before' | 'after'): void {
   const state = modelUnitCompareState.value;
   if (!state || state.status !== 'ready') return;
   const [beforeLayer, afterLayer] = modelUnitCompareLayers;
-  applyModelUnitVersionSide(beforeLayer, afterLayer, side);
+  applyModelUnitVersionSide(beforeLayer, afterLayer, side, modelUnitCompareHiddenForState());
   state.activeSide = side;
   if (isDev && typeof window !== 'undefined' && (window as any).__modelUnitVersionCompare) {
     (window as any).__modelUnitVersionCompare.activeSide = side;
+  }
+  requestRender();
+}
+
+/**
+ * 「三维只看差异」：隔离图层里藏掉两版都没变的构件，只剩新增 / 删除 / 修改的（与面板列表「包含未变化」反义、同一口径）。
+ * 只改显隐，不重装几何；分屏每帧的 pass 也照它走（`renderModelUnitCompareScene`）。
+ */
+function setModelUnitCompareDiffOnly(diffOnly: boolean): void {
+  const state = modelUnitCompareState.value;
+  if (!state || state.status !== 'ready' || (state.diffOnly ?? false) === diffOnly) return;
+  state.diffOnly = diffOnly;
+  const [beforeLayer, afterLayer] = modelUnitCompareLayers;
+  applyModelUnitVersionSide(beforeLayer, afterLayer, state.activeSide, modelUnitCompareHiddenForState());
+  if (isDev && typeof window !== 'undefined' && (window as any).__modelUnitVersionCompare) {
+    (window as any).__modelUnitVersionCompare.diffOnly = diffOnly;
   }
   requestRender();
 }
@@ -1911,11 +1948,12 @@ function renderModelUnitCompareScene(viewer: DtxViewer): boolean {
     viewportSize.y,
   );
   const originalAspect = camera.aspect;
+  const hidden = modelUnitCompareHiddenForState();
   let splitRenderError: unknown = null;
   try {
     renderer.setScissorTest(true);
     for (const pass of passes) {
-      applyModelUnitVersionSide(beforeLayer, afterLayer, pass.side);
+      applyModelUnitVersionSide(beforeLayer, afterLayer, pass.side, hidden);
       renderer.setViewport(pass.x, pass.y, pass.width, pass.height);
       renderer.setScissor(pass.x, pass.y, pass.width, pass.height);
       camera.aspect = pass.width / Math.max(1, pass.height);
@@ -1926,7 +1964,7 @@ function renderModelUnitCompareScene(viewer: DtxViewer): boolean {
   } catch (error) {
     splitRenderError = error;
   } finally {
-    applyModelUnitVersionSide(beforeLayer, afterLayer, state.activeSide);
+    applyModelUnitVersionSide(beforeLayer, afterLayer, state.activeSide, hidden);
     renderer.setScissorTest(false);
     renderer.setViewport(0, 0, viewportSize.x, viewportSize.y);
     camera.aspect = originalAspect;
@@ -1972,6 +2010,7 @@ function clearModelUnitVersionCompare(): void {
   for (const layer of modelUnitCompareLayers.splice(0)) {
     disposeModelUnitCompareLayer(layer);
   }
+  modelUnitCompareHiddenObjectIds = null;
   const primaryLayer = dtxLayerRef.value;
   const detail = modelUnitCompareState.value?.detail;
   if (primaryLayer && detail) {
@@ -2127,16 +2166,23 @@ async function openModelUnitVersionCompare(detail: ModelUnitVersionCompareOpenDe
     if (sideHasGeometry(detail.after) && afterObjects === 0) {
       throw new Error(`版本 B（sesno ${detail.after.sesno}）没有可显示的几何对象`);
     }
-    const beforeColor = new Color(0x2563eb);
-    const afterColor = new Color(0x10b981);
+    // 三维里按「模型几何差异」着色（ADR 0066「三维联动」的落地）：每侧内部按 `rows` 的四态上色——修改琥珀 / 新增翠绿（只在 B）/
+    // 删除玫红（只在 A）/ 未变石板灰，与面板徽章、模型树差异模式同一套色；版本身份（A / B）由视口角标说明，不再整侧一色。
     // 比较层使用基础材质调色板着色；DTX 的颜色覆盖通道主要服务于选择态，
     // 在多 DTXLayer 并存时可能被共享的 shader program 复用为前一层纹理。
-    for (const objectId of beforeLayer.getAllObjectIds()) {
-      beforeLayer.setObjectMaterial(objectId, { color: beforeColor });
-    }
-    for (const objectId of afterLayer.getAllObjectIds()) {
-      afterLayer.setObjectMaterial(objectId, { color: afterColor });
-    }
+    const statusColors = Object.fromEntries(
+      Object.entries(MODEL_UNIT_GEOMETRY_STATUS_COLORS).map(([status, hex]) => [status, new Color(hex)]),
+    ) as Record<ModelUnitGeometryStatus, Color>;
+    const hidden: ModelUnitCompareHiddenObjectIds = { before: [], after: [] };
+    const paintCompareLayer = (layer: DTXLayer, hiddenBucket: string[]): void => {
+      for (const { objectId, status } of planModelUnitCompareObjectStyles(layer.getAllObjectIds(), detail.rows)) {
+        layer.setObjectMaterial(objectId, { color: statusColors[status] });
+        if (status === 'unchanged') hiddenBucket.push(objectId);
+      }
+    };
+    paintCompareLayer(beforeLayer, hidden.before);
+    paintCompareLayer(afterLayer, hidden.after);
+    modelUnitCompareHiddenObjectIds = hidden;
 
     ensureShowDbnumExtraLayerAttached(beforeLayer, viewer);
     ensureShowDbnumExtraLayerAttached(afterLayer, viewer);
@@ -2156,6 +2202,7 @@ async function openModelUnitVersionCompare(detail: ModelUnitVersionCompareOpenDe
       status: 'ready',
       activeSide: DEFAULT_MODEL_UNIT_COMPARE_SIDE,
       viewMode: DEFAULT_MODEL_UNIT_COMPARE_VIEW_MODE,
+      diffOnly: false,
       environment,
     };
     if (isDev) {
@@ -2168,6 +2215,9 @@ async function openModelUnitVersionCompare(detail: ModelUnitVersionCompareOpenDe
         environmentLoadedRefnos: environment.loadedRefnos,
         activeSide: 'after',
         viewMode: DEFAULT_MODEL_UNIT_COMPARE_VIEW_MODE,
+        diffOnly: false,
+        statusCounts: countModelUnitGeometryStatuses(detail.rows),
+        hiddenWhenDiffOnly: { before: hidden.before.length, after: hidden.after.length },
       };
     }
     requestRender();
@@ -2206,6 +2256,10 @@ function handleModelUnitVersionCompare(event: Event): void {
   }
   if (detail.action === 'set-view-mode') {
     setModelUnitCompareViewMode(detail.viewMode);
+    return;
+  }
+  if (detail.action === 'set-diff-only') {
+    setModelUnitCompareDiffOnly(detail.diffOnly);
     return;
   }
   if (detail.action === 'refresh-environment') {
@@ -4548,16 +4602,44 @@ onUnmounted(() => {
     <canvas ref="mainCanvas" class="viewer" />
     <div v-show="modelUnitCompareState?.viewMode !== 'split'" ref="overlayContainer" class="xeokitOverlay" />
 
-    <div v-if="modelUnitCompareState?.status === 'ready' && modelUnitCompareState.viewMode === 'split'"
+    <!-- 版本对比的视口角标：分屏两枚 A / B、单视口一枚跟着 activeSide；下面一行是「模型几何差异」四态图例 + 「只看差异」 -->
+    <div v-if="modelUnitCompareState?.status === 'ready'"
       class="pointer-events-none absolute inset-0"
       style="z-index: 930"
-      data-testid="viewer-model-unit-split-overlay">
-      <div class="absolute inset-y-0 left-1/2 border-l border-white/80 shadow-[0_0_0_1px_rgba(15,23,42,0.35)]" />
-      <div class="absolute left-3 top-3 rounded bg-blue-600/90 px-2 py-1 text-xs font-semibold text-white shadow">
-        A · sesno {{ modelUnitCompareState.detail.before.sesno }}
+      :data-testid="modelUnitCompareState.viewMode === 'split' ? 'viewer-model-unit-split-overlay' : 'viewer-model-unit-single-overlay'">
+      <template v-if="modelUnitCompareState.viewMode === 'split'">
+        <div class="absolute inset-y-0 left-1/2 border-l border-white/80 shadow-[0_0_0_1px_rgba(15,23,42,0.35)]" />
+        <div class="absolute left-3 top-3 rounded bg-blue-600/90 px-2 py-1 text-xs font-semibold text-white shadow">
+          A · sesno {{ modelUnitCompareState.detail.before.sesno }}
+        </div>
+        <div class="absolute left-[calc(50%+0.75rem)] top-3 rounded bg-emerald-600/90 px-2 py-1 text-xs font-semibold text-white shadow">
+          B · sesno {{ modelUnitCompareState.detail.after.sesno }}
+        </div>
+      </template>
+      <div v-else
+        class="absolute left-3 top-3 rounded px-2 py-1 text-xs font-semibold text-white shadow"
+        :class="modelUnitCompareState.activeSide === 'before' ? 'bg-blue-600/90' : 'bg-emerald-600/90'"
+        :data-side="modelUnitCompareState.activeSide"
+        data-testid="viewer-model-unit-side-badge">
+        {{ modelUnitCompareState.activeSide === 'before' ? 'A' : 'B' }} · sesno
+        {{ modelUnitCompareState.activeSide === 'before' ? modelUnitCompareState.detail.before.sesno : modelUnitCompareState.detail.after.sesno }}
+        <span v-if="(modelUnitCompareState.activeSide === 'before' ? modelUnitCompareState.detail.before : modelUnitCompareState.detail.after).version.impactKind === 'tombstone'"
+          class="ml-1 font-normal opacity-80">· 该版本单元已删除</span>
       </div>
-      <div class="absolute left-[calc(50%+0.75rem)] top-3 rounded bg-emerald-600/90 px-2 py-1 text-xs font-semibold text-white shadow">
-        B · sesno {{ modelUnitCompareState.detail.after.sesno }}
+      <!-- 只读图例（开关在版本对比面板「三维查看」节）：右上角 100px 的视图 gizmo 与左侧竖排工具栏都吃指针，视口里不放可点的东西；限宽让窄视口换行 -->
+      <div class="absolute left-3 top-[2.45rem] flex max-w-[calc(100%-8.5rem)] flex-wrap items-center gap-x-2 gap-y-1 rounded bg-background/85 px-2 py-1 text-[11px] text-foreground shadow backdrop-blur"
+        :data-diff-only="modelUnitCompareState.diffOnly === true ? 'true' : 'false'"
+        data-testid="viewer-model-unit-compare-legend">
+        <span v-for="status in MODEL_UNIT_COMPARE_LEGEND_ORDER"
+          :key="status"
+          class="inline-flex items-center gap-1 tabular-nums"
+          :data-status="status">
+          <span class="inline-block h-2 w-2 rounded-full" :style="{ backgroundColor: modelUnitCompareStatusCss(status) }" />
+          {{ MODEL_UNIT_GEOMETRY_STATUS_LABELS[status] }} {{ modelUnitCompareStatusCounts?.[status] ?? 0 }}
+        </span>
+        <span v-if="modelUnitCompareState.diffOnly === true"
+          class="rounded bg-foreground/85 px-1.5 py-0.5 font-medium text-background"
+          data-testid="viewer-model-unit-compare-diff-only-tag">只看差异 · 未变已藏</span>
       </div>
     </div>
 
