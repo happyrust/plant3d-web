@@ -69,6 +69,7 @@ const resultSet: SpatialQueryResultSet = {
       onlyVisible: false,
       includeNegative: false,
       specValues: [SiteSpecValue.Pipe, SiteSpecValue.Elec],
+      rooms: [],
     },
     limit: 50,
     sortBy: 'specThenDistance',

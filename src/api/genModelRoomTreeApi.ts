@@ -92,6 +92,22 @@ export function normalizeRoomTreeId(value: unknown): string {
   return raw.replace(/\b(\d+)[/,](\d+)\b/g, '$1_$2').replace(/^=/, '');
 }
 
+/**
+ * 旧后端 `room-tree/ancestors` 的祖先链里，房间是紧挨着 `room-group:` 之前的那一个模型对象 id（`a_b`）。
+ * 链上没有房间分组 → null（该构件不在任何房间下）。与 `useRoomInfoPanel.roomIdFromAncestorIds` 同一口径，
+ * 这里给 legacy `SpatialSource.roomsOf` 用（model-source 不该 import 面板 composable）。
+ */
+export function roomRefnoFromRoomTreeAncestors(ids: unknown[]): string | null {
+  const normalized = ids.map(normalizeRoomTreeId).filter(Boolean);
+  for (let i = 0; i < normalized.length; i += 1) {
+    const id = normalized[i]!;
+    if (/^\d+_\d+$/.test(id) && normalized[i + 1]?.startsWith('room-group:')) {
+      return id;
+    }
+  }
+  return null;
+}
+
 function normalizeNode(dto: RawRoomTreeNodeDto): RoomTreeNodeDto {
   return {
     ...dto,

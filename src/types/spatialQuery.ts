@@ -45,7 +45,49 @@ export type SpatialQueryFilters = {
   onlyVisible: boolean;
   includeNegative: boolean;
   specValues: number[];
+  /**
+   * 房间过滤（ADR 0067）：所选房间的 refno（`a_b`）；空 = 不按房间过滤。命中 = 房间归属含任一所选房间，
+   * 由服务端分页前过滤（本地扫描判不了归属，所以有它时本地独有命中不追加、「仅看已加载 / 仅看可见」也改走服务端）。
+   */
+  rooms: string[];
 };
+
+/** 抽屉里选中的一间房：refno 是身份，房间号 / 名字只为 chip 显示（来自 `SpatialQueryRoomOption` 或 `roomsOf` 解析）。 */
+export type SpatialQueryRoomSelection = {
+  /** `a_b` */
+  refno: string;
+  roomNum: string;
+  name: string | null;
+};
+
+/** `GET /api/v1/spatial/rooms` 的一间在册房间，可搜索下拉的一个选项。 */
+export type SpatialQueryRoomOption = {
+  /** `a_b` */
+  refno: string;
+  roomNum: string;
+  name: string | null;
+  dbnum: number | null;
+  panelCount: number;
+};
+
+/** 房间体制此刻的状态（`SpatialSource.rooms()`）：不是 `ready` / `degraded` 就整块收起，`reason` 写为什么。 */
+export type SpatialQueryRoomsStatus = {
+  status: 'idle' | 'loading' | 'ready' | 'degraded' | 'initializing' | 'disabled' | 'unsupported' | 'failed' | 'error' | (string & {});
+  reason: string | null;
+};
+
+/** 服务端给的房间过滤状态（`room_status`）；只在请求带了房间时有。 */
+export type SpatialQueryRoomStatus = {
+  rooms: { refno: string; roomNum: string }[];
+  source: string;
+  matched: number;
+  unresolved: number;
+  definitionVersion: string | null;
+  libraryAlignmentCurrent: boolean | null;
+};
+
+/** 结果分组维度（Q11）：legacy 只有按专业；v1 两维都在，缺省按专业、可切按库。 */
+export type SpatialQueryGroupDimension = 'spec' | 'dbnum';
 
 export type SpatialQueryRequest = {
   mode: SpatialQueryMode;
@@ -92,10 +134,12 @@ export type SpatialQueryDbnumGroupCount = {
 
 /**
  * 当前数据源在空间查询上的能力（来自 `getModelSource().spatial.capabilities`）。
- * `specValues=false`（gen-model-v1）时抽屉隐藏专业筛选 / 专业排序 / 专业分组，结果改按库分组。
+ * `specValues=false` 时抽屉隐藏专业筛选 / 专业排序 / 专业分组，结果改按库分组（2026-09-20 起两源都为 true，ADR 0067）。
  */
 export type SpatialQueryCapabilities = {
   specValues: boolean;
+  /** 源认不认房间过滤（gen-model-v1 true / legacy false）；服务端此刻能不能看 `roomsStatus` */
+  rooms: boolean;
   /** 距离查询能否「沿 BRAN 中心线」：legacy 有（`/query?mode=bran_centerline`），gen-model-v1 没有，抽屉据此收起那一档 */
   branCenterline: boolean;
   /** 服务端关键字匹不匹配构件名称：legacy 匹配 refno / noun / name，gen-model-v1 只匹配 refno / noun；抽屉据此切关键字文案 */
@@ -164,6 +208,8 @@ export type SpatialQueryResultSet = {
   dbnumGroups?: SpatialQueryDbnumGroupCount[] | null;
   /** gen-model-v1：结果覆盖的索引层（`global-tree` = 只含已生成过模型的构件）；legacy 为 null */
   coverage?: string | null;
+  /** 请求带了房间时服务端给的房间过滤状态（ADR 0067）；没带 / legacy 为 null */
+  roomStatus?: SpatialQueryRoomStatus | null;
   /**
    * 结果只来自查看器已加载构件的本地扫描，没打服务端：「仅看已加载 / 仅看当前可见」的点模式查询走这里
    * （结果 ⊆ 已加载集，本地扫描对它是完备的），不分页、前端排序。
@@ -185,6 +231,8 @@ export type SpatialQueryDraft = {
   onlyVisible: boolean;
   includeNegative: boolean;
   specValues: number[];
+  /** 已选房间（ADR 0067）；请求里只发 refno */
+  rooms: SpatialQueryRoomSelection[];
   limit: number;
   sortBy: SpatialQuerySortBy;
 };

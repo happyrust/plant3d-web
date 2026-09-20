@@ -1371,7 +1371,7 @@ export function genModelV1ModelHistoryDelete(
 // ---------------------------------------------------------------------------
 
 export type SpatialShape = 'sphere' | 'cube';
-/** 服务端排序；v1 没有专业维度，legacy 的 `spec_distance` 由适配器折成 `distance`。 */
+/** 服务端排序；legacy 的 `spec_distance`（先按专业再按距离）由适配器折成 `distance`，专业分组在前端按 `spec_value` 做。 */
 export type SpatialSort = 'distance' | 'name';
 
 export type SpatialPosition = { x: number; y: number; z: number };
@@ -1401,6 +1401,13 @@ export type GenModelV1SpatialNearbyRequest = {
   includeNegative?: boolean;
   /** 限定库 */
   dbnums?: number[];
+  /**
+   * 房间过滤（spec §4.13 `rooms=`，ADR 0067）：房间 refno（`a_b` / `a/b`），只保留归属含任一所选房间的候选。
+   * 不在册 → 400；房间体制不可用 → 422 `precondition`（`detail.reason = rooms_unavailable`）。
+   */
+  rooms?: string[];
+  /** 专业过滤（spec §4.13 `spec_values=`，ADR 0067）：只保留派生专业在其中的候选；0 = 其他 */
+  specValues?: number[];
   /** 从 1 起 */
   page?: number;
   /** 默认 500，上限 1000 */
@@ -1413,11 +1420,47 @@ export type SpatialNearbyItem = {
   refno: string;
   dbnum: number;
   noun: string;
+  /** 所属专业（ADR 0067：属主链上 SITE 名按 `spec_value_rules` 派生；0 = 其他）；旧服务端没有这一格 */
+  spec_value?: number;
   /** 只对本页补（§5-2），解不出为 null */
   name: string | null;
   aabb: { min: [number, number, number]; max: [number, number, number] };
   distance: number;
   within_radius: boolean;
+};
+
+/** `rooms=` 给了才有的 `room_status`（spec §4.13）：成员集从哪来、命中多少、有多少候选判不出归属。 */
+export type SpatialRoomStatus = {
+  rooms: { refno: string; room_num: string }[];
+  /** `memory` = 读透形态用常驻房间模型 + 内存投影现算；`durable` = 读 `room_relate` 边 */
+  source: 'memory' | 'durable' | (string & {});
+  matched: number;
+  /** 候选里判不出归属、已从结果剔除的条数 */
+  unresolved: number;
+  definition_version: string | null;
+  /** 落盘形态：候选所在库的房间边是否都对齐到当前代；读透形态 null */
+  library_alignment_current: boolean | null;
+};
+
+/** `GET /api/v1/spatial/rooms`（spec §4.13.4）的 `status`。 */
+export type SpatialRoomsStatus = 'ready' | 'degraded' | 'initializing' | 'disabled' | 'unsupported' | 'failed' | (string & {});
+
+export type SpatialRoomListItem = {
+  /** `a_b` */
+  refno: string;
+  room_num: string;
+  name: string | null;
+  dbnum: number | null;
+  panel_count: number;
+};
+
+export type SpatialRoomsResponse = {
+  status: SpatialRoomsStatus;
+  /** 非 ready 时为什么；没有就不出现 */
+  reason?: string;
+  definition_version: string | null;
+  /** 只有 `ready` / `degraded` 才非空；按 `room_num`、refno 排 */
+  rooms: SpatialRoomListItem[];
 };
 
 export type SpatialCenter = SpatialPosition & {
@@ -1455,7 +1498,15 @@ export type SpatialNearbyResponse = {
   candidate_cap: number;
   /** 全集按库分组的计数，不受分页影响 */
   groups: { dbnum: number; count: number }[];
-  filter_options: { nouns: { value: string; count: number; is_negative: boolean }[] };
+  /** 全集按专业分组的计数（ADR 0067）；旧服务端没有这一格 */
+  spec_groups?: { spec_value: number; count: number }[];
+  filter_options: {
+    nouns: { value: string; count: number; is_negative: boolean }[];
+    /** 候选（`rooms` 之后、`nouns` / `spec_values` 之前）按专业的计数；旧服务端没有这一格 */
+    spec_values?: { value: number; count: number }[];
+  };
+  /** 只在给了 `rooms=` 时出现 */
+  room_status?: SpatialRoomStatus;
   /** `spatial_state` 字面值（`ready` / `ready_empty`…） */
   spatial_state: string;
   /** 第一版只覆盖全局树里的盒（§5-5 按 (a)） */
@@ -1467,6 +1518,8 @@ export type SpatialNearbyRefnosResponse = {
   /** `a_b`，完整命中集合（未分页），上限 `result_cap` */
   refnos: string[];
   by_dbnum: Record<string, string[]>;
+  /** 与 `by_dbnum` 同形，键是专业值的十进制字串（ADR 0067）；旧服务端没有这一格 */
+  by_spec_value?: Record<string, string[]>;
   total_count: number;
   truncated_results: boolean;
   result_cap: number;
@@ -1476,6 +1529,8 @@ export type SpatialNearbyRefnosResponse = {
   warnings?: string[];
   radius: number;
   shape: SpatialShape | (string & {});
+  /** 只在给了 `rooms=` 时出现 */
+  room_status?: SpatialRoomStatus;
   [key: string]: unknown;
 };
 
@@ -1498,6 +1553,8 @@ function spatialNearbyQuery(req: GenModelV1SpatialNearbyRequest): Record<string,
     include_self: req.includeSelf,
     include_negative: req.includeNegative,
     dbnums: req.dbnums && req.dbnums.length > 0 ? req.dbnums.join(',') : undefined,
+    rooms: req.rooms && req.rooms.length > 0 ? req.rooms.map(toV1Refno).join(',') : undefined,
+    spec_values: req.specValues && req.specValues.length > 0 ? req.specValues.join(',') : undefined,
     page: req.page,
     per_page: req.perPage,
   };
@@ -1529,6 +1586,14 @@ export function genModelV1SpatialNearbyRefnos(
 /** `GET /api/v1/spatial/negative-nouns`：负实体 noun 全量清单（`TOTAL_NEG_NOUN_NAMES`）。 */
 export function genModelV1SpatialNegativeNouns(options?: GenModelV1RequestOptions): Promise<SpatialNegativeNounsResponse> {
   return genModelV1Fetch<SpatialNegativeNounsResponse>('/api/v1/spatial/negative-nouns', options);
+}
+
+/**
+ * `GET /api/v1/spatial/rooms`（spec §4.13.4，ADR 0067）：在册房间清单 + 房间体制此刻的状态。
+ * `status` 不是 `ready` / `degraded` 时 `rooms` 为空、`reason` 说为什么——抽屉据此整块收起房间过滤。
+ */
+export function genModelV1SpatialRooms(options?: GenModelV1RequestOptions): Promise<SpatialRoomsResponse> {
+  return genModelV1Fetch<SpatialRoomsResponse>('/api/v1/spatial/rooms', options);
 }
 
 // ---------------------------------------------------------------------------

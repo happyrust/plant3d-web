@@ -28,8 +28,12 @@ const spatialSourceMocks = vi.hoisted(() => ({
     cap: 0,
   })),
   negativeNouns: vi.fn(async (): Promise<NegativeNounsResult> => ({ success: false, nouns: [] })),
-  /** 当前「数据源」：缺省 legacy（有专业维度）；v1 用例翻成 gen-model-v1 / specValues=false */
-  state: { kind: 'legacy' as 'legacy' | 'gen-model-v1', specValues: true, branCenterline: true, keywordMatchesName: true, nameSortExact: true },
+  /** 在册房间清单（ADR 0067）；缺省「不支持」 */
+  rooms: vi.fn(async (): Promise<SpatialRoomsResult> => ({ success: true, status: 'unsupported', reason: null, definition_version: null, rooms: [] })),
+  /** 某构件所在房间；缺省没有归属 */
+  roomsOf: vi.fn(async (_refno: string): Promise<string[]> => []),
+  /** 当前「数据源」：缺省 legacy（有专业维度、不认房间）；v1 用例翻成 gen-model-v1 / rooms=true */
+  state: { kind: 'legacy' as 'legacy' | 'gen-model-v1', specValues: true, branCenterline: true, keywordMatchesName: true, nameSortExact: true, rooms: false },
 }));
 
 vi.mock('@/model-source', () => ({
@@ -39,8 +43,11 @@ vi.mock('@/model-source', () => ({
       nearby: spatialSourceMocks.nearby,
       nearbyRefnos: spatialSourceMocks.nearbyRefnos,
       negativeNouns: spatialSourceMocks.negativeNouns,
+      rooms: spatialSourceMocks.rooms,
+      roomsOf: spatialSourceMocks.roomsOf,
       capabilities: {
         specValues: spatialSourceMocks.state.specValues,
+        rooms: spatialSourceMocks.state.rooms,
         branCenterline: spatialSourceMocks.state.branCenterline,
         keywordMatchesName: spatialSourceMocks.state.keywordMatchesName,
         nameSortExact: spatialSourceMocks.state.nameSortExact,
@@ -96,6 +103,7 @@ import type {
   SpatialNearbyRefnosResult,
   SpatialNearbyResult,
   SpatialQueryResult,
+  SpatialRoomsResult,
 } from '@/api/genModelSpatialApi';
 
 import { GenModelV1ApiError } from '@/api/genModelV1Api';
@@ -905,7 +913,7 @@ describe('createSpatialQueryStore', () => {
       batchLoadRefnos,
     });
 
-    expect(store.spatialCapabilities.value).toEqual({ specValues: false, branCenterline: false, keywordMatchesName: false, nameSortExact: false });
+    expect(store.spatialCapabilities.value).toEqual({ specValues: false, rooms: false, branCenterline: false, keywordMatchesName: false, nameSortExact: false });
     store.draft.mode = 'range';
     // legacy 下范围查询默认「按专业」；v1 没有专业维度，退到由近及远
     expect(store.draft.sortBy).toBe('distanceAsc');
@@ -1027,7 +1035,7 @@ describe('createSpatialQueryStore', () => {
         center: { x: 0, y: 0, z: 0 },
         radius: 100,
         shape: 'sphere',
-        filters: { nouns: [], keyword: '', onlyLoaded: false, onlyVisible: false, includeNegative: false, specValues: [] },
+        filters: { nouns: [], keyword: '', onlyLoaded: false, onlyVisible: false, includeNegative: false, specValues: [], rooms: [] },
         limit: 100,
         sortBy: 'specThenDistance',
       },
@@ -1094,7 +1102,7 @@ describe('createSpatialQueryStore', () => {
         center: { x: 0, y: 0, z: 0 },
         radius: 100,
         shape: 'sphere',
-        filters: { nouns: [], keyword: '', onlyLoaded: false, onlyVisible: false, includeNegative: false, specValues: [] },
+        filters: { nouns: [], keyword: '', onlyLoaded: false, onlyVisible: false, includeNegative: false, specValues: [], rooms: [] },
         limit: 2,
         sortBy: 'distanceAsc',
       },
@@ -1171,7 +1179,7 @@ describe('createSpatialQueryStore', () => {
         center: { x: 0, y: 0, z: 0 },
         radius: 100,
         shape: 'sphere',
-        filters: { nouns: [], keyword: '', onlyLoaded: false, onlyVisible: false, includeNegative: false, specValues: [] },
+        filters: { nouns: [], keyword: '', onlyLoaded: false, onlyVisible: false, includeNegative: false, specValues: [], rooms: [] },
         limit: 100,
         sortBy: 'distanceAsc',
       },
@@ -1250,7 +1258,7 @@ describe('createSpatialQueryStore', () => {
         center: { x: 0, y: 0, z: 0 },
         radius: 100,
         shape: 'sphere',
-        filters: { nouns: [], keyword: '', onlyLoaded: false, onlyVisible: false, includeNegative: false, specValues: [] },
+        filters: { nouns: [], keyword: '', onlyLoaded: false, onlyVisible: false, includeNegative: false, specValues: [], rooms: [] },
         limit: 100,
         sortBy: 'distanceAsc',
       },
@@ -1324,7 +1332,7 @@ describe('createSpatialQueryStore', () => {
         center: { x: 0, y: 0, z: 0 },
         radius: 100,
         shape: 'sphere',
-        filters: { nouns: [], keyword: '', onlyLoaded: false, onlyVisible: false, includeNegative: false, specValues: [] },
+        filters: { nouns: [], keyword: '', onlyLoaded: false, onlyVisible: false, includeNegative: false, specValues: [], rooms: [] },
         limit: 100,
         sortBy: 'distanceAsc',
       },
@@ -1407,7 +1415,7 @@ describe('createSpatialQueryStore', () => {
         center: { x: 0, y: 0, z: 0 },
         radius: 100,
         shape: 'sphere',
-        filters: { nouns: [], keyword: '', onlyLoaded: false, onlyVisible: false, includeNegative: false, specValues: [] },
+        filters: { nouns: [], keyword: '', onlyLoaded: false, onlyVisible: false, includeNegative: false, specValues: [], rooms: [] },
         limit: 100,
         sortBy: 'distanceAsc',
       },
@@ -1895,7 +1903,7 @@ describe('createSpatialQueryStore · 场景坐标 ↔ mm（plan 2026-09-13 §7 �
         center: { x: 5, y: 5, z: 5 },
         radius: 100,
         shape: 'sphere',
-        filters: { nouns: [], keyword: '', onlyLoaded: false, onlyVisible: false, includeNegative: false, specValues: [] },
+        filters: { nouns: [], keyword: '', onlyLoaded: false, onlyVisible: false, includeNegative: false, specValues: [], rooms: [] },
         limit: 100,
         sortBy: 'distanceAsc',
       },
@@ -2304,7 +2312,7 @@ describe('createSpatialQueryStore · 审核 P1–P8', () => {
     store.resultSet.value = {
       request: {
         mode: 'range', centerSource: 'coordinates', center: { x: 0, y: 0, z: 0 }, radius: 100, shape: 'sphere',
-        filters: { nouns: [], keyword: '', onlyLoaded: false, onlyVisible: false, includeNegative: false, specValues: [] },
+        filters: { nouns: [], keyword: '', onlyLoaded: false, onlyVisible: false, includeNegative: false, specValues: [], rooms: [] },
         limit: 100, sortBy: 'distanceAsc',
       },
       items: [item('loaded_a', 1, true, true), item('loaded_b', 2, true, false), item('server_only', 2, false, true)],
@@ -2448,5 +2456,276 @@ describe('createSpatialQueryStore · 审核 P1–P8', () => {
     await singleStore.submitQuery();
     expect(nearbyRefnos).not.toHaveBeenCalled();
     expect(singleStore.resultSet.value?.warnings.some((warning) => warning.includes('完整命中集合'))).toBe(false);
+  });
+});
+
+describe('房间 / 专业过滤（ADR 0067，plan 2026-09-20）', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    __resetNegativeNounRegistryForTests();
+    spatialSourceMocks.state.kind = 'gen-model-v1';
+    spatialSourceMocks.state.specValues = true;
+    spatialSourceMocks.state.rooms = true;
+    spatialSourceMocks.state.branCenterline = true;
+    spatialSourceMocks.state.keywordMatchesName = false;
+    spatialSourceMocks.state.nameSortExact = false;
+    spatialSourceMocks.rooms.mockResolvedValue({
+      success: true,
+      status: 'ready',
+      reason: null,
+      definition_version: 'g1',
+      rooms: [
+        { refno: '17496_1', room_num: 'A101', name: '/A101-RM', dbnum: 17496, panel_count: 4 },
+        { refno: '17497_1', room_num: 'A101', name: '/A101-RM-B', dbnum: 17497, panel_count: 2 },
+        { refno: '17496/2', room_num: 'B202', name: null, dbnum: 17496, panel_count: 3 },
+      ],
+    });
+    spatialSourceMocks.roomsOf.mockResolvedValue([]);
+  });
+
+  function serverResult(overrides: Partial<SpatialQueryResult> = {}): SpatialQueryResult {
+    return {
+      success: true,
+      truncated: false,
+      total_count: 1,
+      returned_count: 1,
+      page: 1,
+      per_page: 100,
+      has_more: false,
+      results: [{ refno: 'server_only', noun: 'EQUI', spec_value: 2, distance: 18 }],
+      groups: [{ spec_value: 2, count: 1 }],
+      dbnum_groups: [{ dbnum: 24381, count: 1 }],
+      ...overrides,
+    };
+  }
+
+  function makeStore(overrides: Parameters<typeof createSpatialQueryStore>[0] = {}) {
+    const viewer = createViewerStub();
+    return {
+      viewer,
+      store: createSpatialQueryStore({
+        viewerRef: { value: viewer } as any,
+        selection: { selectedRefno: { value: 'loaded_a' } } as any,
+        toolStore: { pickedQueryCenter: { value: null }, setToolMode: vi.fn(), setPickedQueryCenter: vi.fn() } as any,
+        ...overrides,
+      }),
+    };
+  }
+
+  it('在册清单：源认房间才拉；status / reason / 清单归一进 roomOptions；已 ready 不重拉，force 才重拉；源不认房间直接 unsupported', async () => {
+    const { store } = makeStore();
+    expect(store.roomsStatus.value).toEqual({ status: 'idle', reason: null });
+    await store.loadRoomOptions();
+    expect(spatialSourceMocks.rooms).toHaveBeenCalledTimes(1);
+    expect(store.roomsStatus.value).toEqual({ status: 'ready', reason: null });
+    expect(store.roomOptions.value).toEqual([
+      { refno: '17496_1', roomNum: 'A101', name: '/A101-RM', dbnum: 17496, panelCount: 4 },
+      { refno: '17497_1', roomNum: 'A101', name: '/A101-RM-B', dbnum: 17497, panelCount: 2 },
+      { refno: '17496_2', roomNum: 'B202', name: null, dbnum: 17496, panelCount: 3 },
+    ]);
+    await store.loadRoomOptions();
+    expect(spatialSourceMocks.rooms).toHaveBeenCalledTimes(1);
+    await store.loadRoomOptions({ force: true });
+    expect(spatialSourceMocks.rooms).toHaveBeenCalledTimes(2);
+
+    spatialSourceMocks.rooms.mockResolvedValueOnce({ success: true, status: 'disabled', reason: 'room_membership=false', definition_version: null, rooms: [] });
+    await store.loadRoomOptions({ force: true });
+    expect(store.roomsStatus.value).toEqual({ status: 'disabled', reason: 'room_membership=false' });
+
+    spatialSourceMocks.rooms.mockRejectedValueOnce(new Error('HTTP 500'));
+    await store.loadRoomOptions({ force: true });
+    expect(store.roomsStatus.value).toEqual({ status: 'error', reason: 'HTTP 500' });
+
+    spatialSourceMocks.state.rooms = false;
+    const { store: legacy } = makeStore();
+    await legacy.loadRoomOptions();
+    expect(legacy.roomsStatus.value.status).toBe('unsupported');
+    expect(spatialSourceMocks.rooms).toHaveBeenCalledTimes(4);
+  });
+
+  it('已选房间：按 refno 去重加 / 删 / 清；手输房间号精确匹配、同号多间全加并报 duplicated、没有的进 missing', async () => {
+    const { store } = makeStore();
+    expect(store.addRooms([{ refno: '17496/9', roomNum: 'X9', name: null }, { refno: '17496_9', roomNum: 'X9', name: null }]))
+      .toEqual([{ refno: '17496_9', roomNum: 'X9', name: null }]);
+    expect(store.draft.rooms).toHaveLength(1);
+
+    const result = await store.addRoomsByNumber(' a101, B202 ; Z999 ');
+    expect(result.duplicated).toEqual(['a101']);
+    expect(result.missing).toEqual(['Z999']);
+    expect(result.added.map((room) => room.refno)).toEqual(['17496_1', '17497_1', '17496_2']);
+    expect(store.draft.rooms.map((room) => room.refno)).toEqual(['17496_9', '17496_1', '17497_1', '17496_2']);
+
+    // 再输一遍同号：已在已选里，不重复加
+    expect((await store.addRoomsByNumber('A101')).added).toEqual([]);
+
+    store.removeRoom('17497/1');
+    expect(store.draft.rooms.map((room) => room.refno)).toEqual(['17496_9', '17496_1', '17496_2']);
+    store.clearRooms();
+    expect(store.draft.rooms).toEqual([]);
+    expect(await store.addRoomsByNumber('   ')).toEqual({ added: [], missing: [], duplicated: [] });
+  });
+
+  it('「当前选中所在房间」：没选中报「请先选中」；有归属就按清单补房间号 / 名字加进已选，清单里没有的只带 refno；没归属报一句', async () => {
+    const { store } = makeStore({ selection: { selectedRefno: { value: null } } as any, viewerRef: { value: { ...createViewerStub(), scene: { ...createViewerStub().scene, selectedObjectIds: [] } } } as any });
+    expect(await store.applySelectedRefnoRooms()).toEqual({ refno: null, added: [], error: '请先选中一个模型' });
+
+    spatialSourceMocks.roomsOf.mockResolvedValueOnce(['17496/1', '17496_77']);
+    const { store: withSelection } = makeStore({ selection: { selectedRefno: { value: '24381/145018' } } as any });
+    const result = await withSelection.applySelectedRefnoRooms();
+    expect(spatialSourceMocks.roomsOf).toHaveBeenCalledWith('24381_145018');
+    expect(result).toEqual({
+      refno: '24381_145018',
+      added: [
+        { refno: '17496_1', roomNum: 'A101', name: '/A101-RM' },
+        { refno: '17496_77', roomNum: '', name: null },
+      ],
+      error: null,
+    });
+    expect(withSelection.draft.rooms).toHaveLength(2);
+
+    spatialSourceMocks.roomsOf.mockResolvedValueOnce([]);
+    const empty = await withSelection.applySelectedRefnoRooms();
+    expect(empty.added).toEqual([]);
+    expect(empty.error).toContain('不在任何在册房间');
+
+    spatialSourceMocks.roomsOf.mockRejectedValueOnce(new Error('lookup 500'));
+    expect((await withSelection.applySelectedRefnoRooms()).error).toBe('lookup 500');
+  });
+
+  it('请求：已选房间的 refno 逗号串进 rooms=（nearby 与全集 refnos 都带）；没选房间就不带这一格；roomStatus 进结果集', async () => {
+    const queryNearbyByPosition = vi.fn(async (_x: number, _y: number, _z: number, _radius: number, options?: { rooms?: string }): Promise<SpatialQueryResult> => serverResult({
+      total_count: 2,
+      has_more: true,
+      per_page: 1,
+      // 服务端只在请求带了 rooms 时给 room_status
+      ...(options?.rooms
+        ? {
+          room_status: {
+            rooms: [{ refno: '17496/1', room_num: 'A101' }],
+            source: 'memory',
+            matched: 2,
+            unresolved: 1,
+            definition_version: 'g1',
+            library_alignment_current: null,
+          },
+          warnings: ['房间过滤：1 个候选没有内存投影记录、判不出房间归属，已从结果剔除（先显示它们再查会被纳入）'],
+        }
+        : {}),
+    }));
+    const queryNearbyRefnos = vi.fn(async (): Promise<SpatialNearbyRefnosResult> => ({
+      success: true,
+      refnos: ['server_only', 'other'],
+      by_dbnum: { '24381': ['server_only', 'other'] },
+      by_spec_value: { '2': ['server_only', 'other'] },
+      total_count: 2,
+      truncated: false,
+      cap: 100000,
+    }));
+    const { store } = makeStore({ queryNearbyByPosition, queryNearbyRefnos });
+    store.draft.mode = 'range';
+    store.draft.rangeCenterSource = 'coordinates';
+    store.draft.center = { x: 500, y: 500, z: 500 };
+    store.draft.radius = 50;
+    store.draft.limit = 1;
+    store.addRooms([{ refno: '17496_1', roomNum: 'A101', name: null }, { refno: '17496_2', roomNum: 'B202', name: null }]);
+
+    await store.submitQuery();
+    expect(store.status.value).toBe('ready');
+    expect(queryNearbyByPosition).toHaveBeenCalledWith(500, 500, 500, 50, expect.objectContaining({ rooms: '17496_1,17496_2' }));
+    expect(queryNearbyRefnos).toHaveBeenCalledWith(expect.objectContaining({ rooms: '17496_1,17496_2' }));
+    expect(store.resultSet.value?.request.filters.rooms).toEqual(['17496_1', '17496_2']);
+    expect(store.resultSet.value?.roomStatus).toEqual({
+      rooms: [{ refno: '17496_1', roomNum: 'A101' }],
+      source: 'memory',
+      matched: 2,
+      unresolved: 1,
+      definitionVersion: 'g1',
+      libraryAlignmentCurrent: null,
+    });
+    expect(store.resultSet.value?.warnings.some((warning) => warning.includes('1 个候选'))).toBe(true);
+
+    store.clearRooms();
+    await store.submitQuery();
+    const lastCall = queryNearbyByPosition.mock.calls.at(-1)!;
+    expect(lastCall[4]).not.toHaveProperty('rooms');
+    expect(store.resultSet.value?.roomStatus).toBeNull();
+  });
+
+  it('带房间过滤时本地独有命中不追加（归属只有服务端判得出），「仅看已加载」也不走纯本地路径', async () => {
+    const queryNearbyByPosition = vi.fn(async (): Promise<SpatialQueryResult> => serverResult());
+    const { store } = makeStore({ queryNearbyByPosition });
+    store.draft.mode = 'range';
+    store.draft.rangeCenterSource = 'selected';
+    store.draft.radius = 50;
+
+    // 对照：没有房间过滤时，本地已加载的 loaded_a（不在服务端结果里）作为本地独有命中追加进来
+    await store.submitQuery();
+    expect(store.resultSet.value?.items.map((item) => item.refno)).toEqual(['server_only', 'loaded_a']);
+
+    store.addRooms([{ refno: '17496_1', roomNum: 'A101', name: null }]);
+    await store.submitQuery();
+    expect(store.resultSet.value?.items.map((item) => item.refno)).toEqual(['server_only']);
+    expect(store.resultSet.value?.total).toBe(1);
+
+    // 「仅看已加载」+ 房间：改前走纯本地扫描（不打服务端）；现在必须问服务端，并在本页内后筛 + 提示
+    store.draft.onlyLoaded = true;
+    queryNearbyByPosition.mockClear();
+    await store.submitQuery();
+    expect(queryNearbyByPosition).toHaveBeenCalledTimes(1);
+    expect(store.resultSet.value?.localOnly).toBe(false);
+    expect(store.resultSet.value?.items.map((item) => item.refno)).toEqual([]);
+    expect(store.resultSet.value?.warnings.some((warning) => warning.includes('以服务端房间归属为准'))).toBe(true);
+
+    store.clearRooms();
+    queryNearbyByPosition.mockClear();
+    await store.submitQuery();
+    expect(queryNearbyByPosition).not.toHaveBeenCalled();
+    expect(store.resultSet.value?.localOnly).toBe(true);
+  });
+
+  it('分组维度（Q11）：有专业维度缺省按专业、可切按库；没有专业维度的源只能按库，setGroupDimension 也拨不到专业', () => {
+    const { store } = makeStore();
+    expect(store.groupDimension.value).toBe('spec');
+    store.setGroupDimension('dbnum');
+    expect(store.groupDimension.value).toBe('dbnum');
+    store.setGroupDimension('spec');
+    expect(store.groupDimension.value).toBe('spec');
+
+    // 数据源是页面级开关（换源 = 重新建 store），所以按建 store 时的能力定初值
+    spatialSourceMocks.state.specValues = false;
+    const { store: noSpec } = makeStore();
+    expect(noSpec.groupDimension.value).toBe('dbnum');
+    noSpec.setGroupDimension('spec');
+    expect(noSpec.groupDimension.value).toBe('dbnum');
+  });
+
+  it('v1 源有了专业维度：范围查询缺省仍「先专业后距离」，spec_value 直接进结果项与分组', async () => {
+    const queryNearbyByPosition = vi.fn(async (): Promise<SpatialQueryResult> => serverResult({
+      results: [
+        { refno: 'server_only', noun: 'EQUI', spec_value: 6, dbnum: 24381, distance: 18 },
+        { refno: 'server_two', noun: 'PIPE', spec_value: 1, dbnum: 7997, distance: 20 },
+      ],
+      groups: [{ spec_value: 1, count: 1 }, { spec_value: 6, count: 1 }],
+      dbnum_groups: [{ dbnum: 7997, count: 1 }, { dbnum: 24381, count: 1 }],
+      total_count: 2,
+      returned_count: 2,
+    }));
+    const { store } = makeStore({ queryNearbyByPosition });
+    store.setMode('range');
+    expect(store.draft.sortBy).toBe('specThenDistance');
+    store.draft.rangeCenterSource = 'coordinates';
+    store.draft.center = { x: 500, y: 500, z: 500 };
+    store.draft.radius = 50;
+    await store.submitQuery();
+    expect(queryNearbyByPosition).toHaveBeenCalledWith(500, 500, 500, 50, expect.objectContaining({ sort: 'spec_distance' }));
+    expect(store.resultSet.value?.items.map((item) => [item.refno, item.specValue, item.specName])).toEqual([
+      ['server_only', 6, '结构系统'],
+      ['server_two', 1, '管道系统'],
+    ]);
+    expect(store.resultSet.value?.groups.map((group) => [group.specValue, group.specName, group.count])).toEqual([
+      [1, '管道系统', 1],
+      [6, '结构系统', 1],
+    ]);
+    expect(store.resultSet.value?.dbnumGroups).toEqual([{ dbnum: 7997, count: 1 }, { dbnum: 24381, count: 1 }]);
   });
 });

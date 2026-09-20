@@ -13,7 +13,9 @@ import type {
   SpatialQueryResult as ApiSpatialQueryResult,
   SpatialQueryResultItem as ApiSpatialQueryResultItem,
   SpatialQuerySortParam,
+  SpatialRoomsResult as ApiSpatialRoomsResult,
 } from '@/api/genModelSpatialApi';
+import type { AttributeSource } from '@/model-source/ports';
 
 import { enqueueParquetIncremental } from '@/api/genModelRealtimeApi';
 import { triggerBatchGenerateSse } from '@/api/genModelStreamGenerateApi';
@@ -40,12 +42,17 @@ import {
   type SpatialQueryFilterOptions,
   type SpatialQueryFilters,
   type SpatialQueryFullMatchSet,
+  type SpatialQueryGroupDimension,
   type SpatialQueryMode,
   type SpatialQueryPoint,
   type SpatialQueryRequest,
   type SpatialQueryResultGroup,
   type SpatialQueryResultItem,
   type SpatialQueryResultSet,
+  type SpatialQueryRoomOption,
+  type SpatialQueryRoomSelection,
+  type SpatialQueryRoomsStatus,
+  type SpatialQueryRoomStatus,
   type SpatialQueryServerCenter,
   type SpatialQueryShape,
   type SpatialQuerySortBy,
@@ -123,6 +130,10 @@ type SpatialQueryStoreOptions = {
   queryNearbyRefnos?: typeof queryNearbyRefnos;
   querySpatialIndex?: typeof querySpatialIndex;
   fetchNegativeNouns?: FetchNegativeNounsFn;
+  /** 在册房间清单（`SpatialSource.rooms()`，ADR 0067）；不注入经 `getModelSource().spatial.rooms()` */
+  fetchRooms?: () => Promise<ApiSpatialRoomsResult>;
+  /** 某构件所在房间（`SpatialSource.roomsOf()`）；不注入经 `getModelSource().spatial.roomsOf()` */
+  roomsOf?: (refno: string) => Promise<string[]>;
   createRequestId?: () => string;
   batchLoadRefnos?: BatchLoadRefnosFn;
 };
@@ -148,6 +159,7 @@ function createDefaultDraft(): SpatialQueryDraft {
     onlyVisible: false,
     includeNegative: false,
     specValues: [],
+    rooms: [],
     limit: 100,
     sortBy: DEFAULT_SORT_BY_MODE.distance,
   };
@@ -606,7 +618,49 @@ function makeFilters(draft: SpatialQueryDraft): SpatialQueryFilters {
     onlyVisible: draft.onlyVisible,
     includeNegative: draft.includeNegative,
     specValues: draft.specValues.slice(),
+    rooms: uniqStrings(draft.rooms.map((room) => room.refno)),
   };
+}
+
+/** 请求带了房间过滤：归属只有服务端判得出，本地扫描的独有命中不能追加、纯本地路径也走不了。 */
+function hasRoomFilter(request: SpatialQueryRequest): boolean {
+  return request.filters.rooms.length > 0;
+}
+
+function normalizeServerRoomStatus(raw: ApiSpatialQueryResult['room_status'] | null | undefined): SpatialQueryRoomStatus | null {
+  if (!raw) return null;
+  return {
+    rooms: (raw.rooms ?? []).map((room) => ({ refno: normalizeRefno(room.refno), roomNum: room.room_num })),
+    source: raw.source,
+    matched: raw.matched,
+    unresolved: raw.unresolved,
+    definitionVersion: raw.definition_version ?? null,
+    libraryAlignmentCurrent: typeof raw.library_alignment_current === 'boolean' ? raw.library_alignment_current : null,
+  };
+}
+
+function toRoomOption(room: ApiSpatialRoomsResult['rooms'][number]): SpatialQueryRoomOption {
+  return {
+    refno: normalizeRefno(room.refno),
+    roomNum: room.room_num,
+    name: room.name ?? null,
+    dbnum: typeof room.dbnum === 'number' ? room.dbnum : null,
+    panelCount: room.panel_count,
+  };
+}
+
+/** 手输的房间号：逗号 / 空格 / 分号分开、去重（大小写不敏感比较在调用方做，房间号本身按服务端原样显示）。 */
+function splitRoomNumbers(text: string): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const raw of text.split(/[,，;；\s]+/)) {
+    const value = raw.trim();
+    const key = value.toUpperCase();
+    if (!value || seen.has(key)) continue;
+    seen.add(key);
+    out.push(value);
+  }
+  return out;
 }
 
 /** 距离查询里以 refno 为源的两档：按源包围盒量距（`refno`）或沿 BRAN 真实中心线走廊量距（`bran_centerline`）。 */
@@ -1100,9 +1154,12 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
     ?? ((params) => spatialSource().nearbyRefnos(params));
   const negativeNounsFetcher: FetchNegativeNounsFn = options.fetchNegativeNouns
     ?? (() => spatialSource().negativeNouns());
-  /** 当前源的空间查询能力；v1 没有专业维度，抽屉据此收起专业 UI、改按库分组 */
+  const fetchRooms: () => Promise<ApiSpatialRoomsResult> = options.fetchRooms ?? (() => spatialSource().rooms());
+  const roomsOfSource: (refno: string) => Promise<string[]> = options.roomsOf ?? ((refno) => spatialSource().roomsOf(refno));
+  /** 当前源的空间查询能力；没有专业维度的源抽屉收起专业 UI、改按库分组；不认房间的源收起房间块 */
   const spatialCapabilities = computed<SpatialQueryCapabilities>(() => ({
     specValues: spatialSource().capabilities.specValues,
+    rooms: spatialSource().capabilities.rooms,
     branCenterline: spatialSource().capabilities.branCenterline,
     keywordMatchesName: spatialSource().capabilities.keywordMatchesName,
     nameSortExact: spatialSource().capabilities.nameSortExact,
@@ -1117,6 +1174,15 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
   const error = ref<string | null>(null);
   const resultSet = ref<SpatialQueryResultSet | null>(null);
   const activeResultRefno = ref<string | null>(null);
+  /** 在册房间清单（`SpatialSource.rooms()`）与房间体制状态；抽屉打开时 `loadRoomOptions()` 拉一次（ADR 0067，Q4 / Q5）。 */
+  const roomOptions = ref<SpatialQueryRoomOption[]>([]);
+  const roomsStatus = ref<SpatialQueryRoomsStatus>({ status: 'idle', reason: null });
+  let roomOptionsSeq = 0;
+  /**
+   * 结果分组维度（Q11）：两维都在时缺省按专业、可切按库；没有专业维度的源只能按库。
+   * 不放进 draft：它只管结果区怎么画，不进请求、不随「重置」清。
+   */
+  const groupDimension = ref<SpatialQueryGroupDimension>(spatialCapabilities.value.specValues ? 'spec' : 'dbnum');
   /**
    * 「当前选中」选中的是 PIPE / ZONE 这类自身与成员都没加载几何的 owner 时，查看器解不出盒；这里记下它的 refno，
    * 提交时改发 `refno=` 让服务端按子树盒解中心（口径同距离查询 refno 模式：到源盒表面量距、默认剔自身子树），
@@ -1166,6 +1232,144 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
       }
     },
   );
+
+  // 源换成没有专业维度的，分组只能按库；换回来保持用户的选择（缺省专业）。
+  watch(
+    () => spatialCapabilities.value.specValues,
+    (specValues) => {
+      if (!specValues) groupDimension.value = 'dbnum';
+    },
+    { flush: 'sync' },
+  );
+
+  function setGroupDimension(dimension: SpatialQueryGroupDimension) {
+    groupDimension.value = dimension === 'spec' && !spatialCapabilities.value.specValues ? 'dbnum' : dimension;
+  }
+
+  /**
+   * 拉在册房间清单。源不认房间（legacy）直接标 `unsupported`、不打后端；拉失败标 `error` 并保留上一份清单。
+   * `force` 为 false 时已经 ready / degraded 就不重拉（抽屉每次打开都会调一次）。
+   */
+  async function loadRoomOptions(options: { force?: boolean } = {}): Promise<SpatialQueryRoomsStatus> {
+    if (!spatialCapabilities.value.rooms) {
+      roomOptions.value = [];
+      roomsStatus.value = { status: 'unsupported', reason: '当前数据源没有房间过滤' };
+      return roomsStatus.value;
+    }
+    const settled = roomsStatus.value.status === 'ready' || roomsStatus.value.status === 'degraded';
+    if (settled && !options.force) return roomsStatus.value;
+    roomOptionsSeq += 1;
+    const seq = roomOptionsSeq;
+    roomsStatus.value = { status: 'loading', reason: null };
+    try {
+      const resp = await fetchRooms();
+      // 期间又来了一次（源切换 / 强刷）：这一份作废，以后到的那份为准
+      if (seq !== roomOptionsSeq) return roomsStatus.value;
+      if (!resp.success) {
+        roomsStatus.value = { status: 'error', reason: resp.error || '房间清单取不到' };
+        return roomsStatus.value;
+      }
+      roomOptions.value = (resp.rooms ?? []).map(toRoomOption);
+      roomsStatus.value = { status: resp.status, reason: resp.reason ?? null };
+    } catch (err) {
+      if (seq !== roomOptionsSeq) return roomsStatus.value;
+      roomsStatus.value = { status: 'error', reason: err instanceof Error ? err.message : String(err) };
+    }
+    return roomsStatus.value;
+  }
+
+  function roomSelectionFromOption(option: SpatialQueryRoomOption): SpatialQueryRoomSelection {
+    return { refno: option.refno, roomNum: option.roomNum, name: option.name };
+  }
+
+  /** 加进已选房间（按 refno 去重）；回真正新加的那几条。 */
+  function addRooms(selections: SpatialQueryRoomSelection[]): SpatialQueryRoomSelection[] {
+    const added: SpatialQueryRoomSelection[] = [];
+    for (const selection of selections) {
+      const refno = normalizeRefno(selection.refno);
+      if (!refno || draft.rooms.some((room) => room.refno === refno)) continue;
+      const next = { refno, roomNum: selection.roomNum, name: selection.name };
+      draft.rooms.push(next);
+      added.push(next);
+    }
+    return added;
+  }
+
+  function removeRoom(refno: string) {
+    const normalized = normalizeRefno(refno);
+    draft.rooms = draft.rooms.filter((room) => room.refno !== normalized);
+  }
+
+  function clearRooms() {
+    draft.rooms = [];
+  }
+
+  /**
+   * 手输房间号 → 对着在册清单精确匹配（大小写不敏感）成 refno（Q12）：同号多间**全加上**，调用方据 `duplicated` 提示；
+   * 清单里没有的房间号回在 `missing` 里。清单还没拉就先拉一次。
+   */
+  async function addRoomsByNumber(text: string): Promise<{
+    added: SpatialQueryRoomSelection[];
+    missing: string[];
+    duplicated: string[];
+  }> {
+    const numbers = splitRoomNumbers(text);
+    if (numbers.length === 0) return { added: [], missing: [], duplicated: [] };
+    await loadRoomOptions();
+    const missing: string[] = [];
+    const duplicated: string[] = [];
+    const matched: SpatialQueryRoomSelection[] = [];
+    for (const number of numbers) {
+      const hits = roomOptions.value.filter((option) => option.roomNum.toUpperCase() === number.toUpperCase());
+      if (hits.length === 0) {
+        missing.push(number);
+        continue;
+      }
+      if (hits.length > 1) duplicated.push(number);
+      matched.push(...hits.map(roomSelectionFromOption));
+    }
+    return { added: addRooms(matched), missing, duplicated };
+  }
+
+  /**
+   * 「当前选中构件所在房间」（Q4 (c)）：查看器 / 模型树当前选中 → `roomsOf` → 加进已选房间。
+   * 房间号 / 名字从在册清单补，清单里没有（不在册的房间不会出现在清单里）就只显示 refno。
+   */
+  async function applySelectedRefnoRooms(): Promise<{ refno: string | null; added: SpatialQueryRoomSelection[]; error: string | null }> {
+    const viewer = viewerRef.value;
+    const selectedRefno = selection.selectedRefno.value || viewer?.scene.selectedObjectIds[0] || null;
+    if (!selectedRefno) {
+      return { refno: null, added: [], error: '请先选中一个模型' };
+    }
+    const refno = normalizeRefno(selectedRefno);
+    try {
+      const [rooms] = await Promise.all([roomsOfSource(refno), loadRoomOptions()]);
+      if (rooms.length === 0) {
+        return { refno, added: [], error: `${refno} 不在任何在册房间里（或它的房间归属还没算）` };
+      }
+      const selections = rooms.map((roomRefno) => {
+        const normalized = normalizeRefno(roomRefno);
+        const option = roomOptions.value.find((candidate) => candidate.refno === normalized);
+        return option ? roomSelectionFromOption(option) : { refno: normalized, roomNum: '', name: null };
+      });
+      return { refno, added: addRooms(selections), error: null };
+    } catch (err) {
+      return { refno, added: [], error: err instanceof Error ? err.message : String(err) };
+    }
+  }
+
+  /** 结果区「房间列表」用：某构件所在房间 refno（两源都答得出）。 */
+  function roomsOf(refno: string): Promise<string[]> {
+    return roomsOfSource(normalizeRefno(refno));
+  }
+
+  /**
+   * 房间元素的属性（名称 / TYPE / DESC），走当前源的属性端口——改前抽屉直接打旧后端 `pdmsGetUiAttr`，v1 源下那台没起就每个房间一次失败请求。
+   * 在册清单里有的房间先用清单的名字，这里只补 TYPE / DESC。
+   */
+  function roomAttributes(refno: string): ReturnType<AttributeSource['uiAttr']> {
+    return getModelSource().attributes.uiAttr(normalizeRefno(refno));
+  }
 
   /** 「每页数量」填空 / 非正整数时不让提交（请求侧另有缺省兜底，这里是让用户看见按钮灰掉、去补那一格）。 */
   const hasValidPageLimit = computed(() => isValidPageLimit(draft.limit));
@@ -1406,6 +1610,10 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
       if (request.sortBy === 'nameAsc' && options.nameSortExact === false) {
         warnings.push('「按名称」在当前源不按名称排整个命中集合：服务端按 Noun / Refno 近似排、只为本页补名字，跨页顺序不是名称序');
       }
+      // 房间过滤下（ADR 0067）归属只有服务端判得出：本地扫描的独有命中不追加（下面按 hasRoomFilter 跳过），说一句
+      if (hasRoomFilter(request) && (request.filters.onlyLoaded || request.filters.onlyVisible)) {
+        warnings.push('按房间过滤时结果以服务端房间归属为准：查看器里已加载但服务端索引里没有的构件不会补进来');
+      }
       // 全集有服务端上限（v1 result_cap 100000 / legacy 中心线一页 10000），超出时跨页批量操作只动取到的这部分；
       // 全集取不到（接口失败）时退回只动当前页——两种都要说，否则「全部隐藏」静默地少动一批
       if (options.fullMatches?.truncated) {
@@ -1470,9 +1678,10 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
 
       // 本地独有命中：要能证明它不在服务端整个命中集合里——没翻页时本页就是全集；有翻页要看先取回的全集，
       // 取不到就不追加（否则它可能在第 3 页再出现一次）。只追加在第 1 页。关键字服务端没替它判过，这里补上。
+      // 带房间过滤时一条都不追加：本地扫描判不了房间归属，追加进来的就是没过房间条件的（ADR 0067）。
       const serverRefnos = new Set(serverResults.map((raw) => raw.refno));
       const fullRefnos = options.fullMatches ? new Set(options.fullMatches.refnos) : null;
-      if (page === 1 && (!hasMore || fullRefnos)) {
+      if (page === 1 && (!hasMore || fullRefnos) && !hasRoomFilter(request)) {
         for (const item of localItems) {
           if (serverRefnos.has(item.refno) || fullRefnos?.has(item.refno)) continue;
           if (!includesKeyword(item.refno, item.noun, request.filters.keyword)) continue;
@@ -1528,8 +1737,14 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
       groups: buildGroups(items, mergeSpecGroupCounts(serverResp, localOnlyItems)),
       dbnumGroups: serverResp ? mergeDbnumGroups(serverResp.dbnum_groups, localOnlyItems) : mergeDbnumGroups(null, items),
       coverage: serverResp?.coverage ?? null,
+      roomStatus: normalizeServerRoomStatus(serverResp?.room_status),
       localOnly: !serverResp,
     };
+  }
+
+  /** 房间过滤只在有房间时才带这一格：老用例对请求参数做精确断言，没给就不多一个键。 */
+  function roomsParam(request: SpatialQueryRequest): Pick<ApiSpatialNearbyParams, 'rooms'> {
+    return hasRoomFilter(request) ? { rooms: request.filters.rooms.join(',') } : {};
   }
 
   function toNearbyParams(request: SpatialQueryRequest): ApiSpatialNearbyParams {
@@ -1541,6 +1756,7 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
       keyword: request.filters.keyword || undefined,
       sort: SORT_BY_TO_SERVER_PARAM[request.sortBy],
       include_negative: request.filters.includeNegative,
+      ...roomsParam(request),
     };
 
     if (isRefnoRoutedRequest(request)) {
@@ -1689,6 +1905,7 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
       per_page: request.limit,
       shape: request.shape,
       include_negative: request.filters.includeNegative,
+      ...roomsParam(request),
     };
 
     if (isRefnoRoutedRequest(request)) {
@@ -1702,6 +1919,7 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
         per_page: serverOptions.per_page,
         shape: serverOptions.shape,
         include_negative: serverOptions.include_negative,
+        ...roomsParam(request),
         ...centerlineSourceMode(request),
       });
     }
@@ -1712,9 +1930,12 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
    * 「仅看已加载 / 仅看当前可见」= 结果 ⊆ 查看器已加载集，点模式下本地扫描对它是完备的：不打服务端、不分页、前端排序。
    * 改前这两项叠在服务端分页之后后筛：勾「仅看已加载」查 1387 项，摘要「共 1387 项，当前页 3 项」、70 页里大半页是空的。
    * refno 路由的请求（距离查询 refno / 中心线、「当前选中」无盒兜底）中心要服务端解，仍走服务端 + 本页后筛（合并时给出提示）。
+   * 带房间过滤的请求同样走服务端：房间归属只有服务端判得出（ADR 0067）。
    */
   function isLocalOnlyRequest(request: SpatialQueryRequest): boolean {
-    return (request.filters.onlyLoaded || request.filters.onlyVisible) && !isRefnoRoutedRequest(request);
+    return (request.filters.onlyLoaded || request.filters.onlyVisible)
+      && !isRefnoRoutedRequest(request)
+      && !hasRoomFilter(request);
   }
 
   type RunQueryOptions = {
@@ -2217,6 +2438,18 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
     canSubmit,
     hasValidPageLimit,
     spatialCapabilities,
+    roomOptions,
+    roomsStatus,
+    groupDimension,
+    setGroupDimension,
+    loadRoomOptions,
+    addRooms,
+    removeRoom,
+    clearRooms,
+    addRoomsByNumber,
+    applySelectedRefnoRooms,
+    roomsOf,
+    roomAttributes,
     setMode,
     applyCurrentSelection,
     startPickCenter,

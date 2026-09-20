@@ -93,6 +93,11 @@ export type SpatialNearbyParams = {
   nouns?: string;
   /** 专业过滤（逗号分隔，如 "1,3"） */
   spec_values?: string;
+  /**
+   * 房间过滤（逗号分隔的房间 refno `a_b`，ADR 0067）：只保留房间归属含任一所选房间的候选。
+   * 只有 gen-model-v1 源认它（`capabilities.rooms`）；legacy 后端没有这一格，`queryNearbySpatial` 不发。
+   */
+  rooms?: string;
   /** 关键字过滤：服务端对 refno / noun / name 做包含匹配，分页前生效 */
   keyword?: string;
   /** 排序方式：服务端在分页前排序，默认 distance */
@@ -110,6 +115,40 @@ export type SpatialNearbyParams = {
 };
 
 export type SpatialNearbyOptions = Omit<SpatialNearbyParams, 'refno' | 'x' | 'y' | 'z' | 'radius'>;
+
+/** `rooms` 给了才有的房间过滤状态（gen-model-v1 `room_status`，spec §4.13）。 */
+export type SpatialRoomStatus = {
+  rooms: { refno: string; room_num: string }[];
+  /** `memory` = 读透形态现算；`durable` = 读 `room_relate` 边 */
+  source: string;
+  matched: number;
+  /** 候选里判不出归属、已从结果剔除的条数 */
+  unresolved: number;
+  definition_version: string | null;
+  library_alignment_current: boolean | null;
+};
+
+/** `SpatialSource.rooms()` 的结果：在册房间清单 + 房间体制状态（gen-model-v1 `GET /api/v1/spatial/rooms`）。 */
+export type SpatialRoomsStatus = 'ready' | 'degraded' | 'initializing' | 'disabled' | 'unsupported' | 'failed' | (string & {});
+
+export type SpatialRoomOption = {
+  /** `a_b` */
+  refno: string;
+  room_num: string;
+  name: string | null;
+  dbnum: number | null;
+  panel_count: number;
+};
+
+export type SpatialRoomsResult = {
+  success: boolean;
+  status: SpatialRoomsStatus;
+  /** 非 ready 时为什么 */
+  reason?: string | null;
+  definition_version?: string | null;
+  rooms: SpatialRoomOption[];
+  error?: string;
+};
 
 export type SpatialQueryResult = {
   success: boolean;
@@ -155,7 +194,9 @@ export type SpatialQueryResult = {
   coverage?: string;
   /** gen-model-v1 源：服务端空间树状态字面值 */
   spatial_state?: string;
-  /** 服务端非致命问题（目前只有 `/query?mode=bran_centerline` 预取 BRAN 成员表时会产生），查询照常完成 */
+  /** gen-model-v1 源、给了 `rooms` 时：房间过滤的来源与缺口（ADR 0067）；legacy 没有 */
+  room_status?: SpatialRoomStatus;
+  /** 服务端非致命问题（`/query?mode=bran_centerline` 预取 BRAN 成员表、v1 房间过滤的缺口），查询照常完成 */
   warnings?: string[];
   error?: string;
 };
@@ -699,6 +740,9 @@ export type SpatialNearbyRefnosResult = {
   /** 是否因为超过服务端硬上限被截断 */
   truncated: boolean;
   cap: number;
+  /** gen-model-v1 源、给了 `rooms` 时（ADR 0067）；legacy 没有 */
+  room_status?: SpatialRoomStatus;
+  warnings?: string[];
   error?: string;
 };
 

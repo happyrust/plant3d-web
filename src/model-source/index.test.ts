@@ -164,7 +164,9 @@ describe('legacy 适配器：零逻辑委托', () => {
     expect(nearby).toEqual({ success: true, results: [] });
     expect(refnos.total_count).toBe(0);
     expect(negative).toEqual({ success: true, nouns: ['NBOX'] });
-    expect(source.spatial.capabilities).toEqual({ specValues: true, branCenterline: true, keywordMatchesName: true, nameSortExact: true });
+    expect(source.spatial.capabilities).toEqual({ specValues: true, branCenterline: true, keywordMatchesName: true, nameSortExact: true, rooms: false });
+    // 旧后端没有房间过滤：清单直接回 unsupported，不打后端（ADR 0067，Q5）。
+    expect(await source.spatial.rooms()).toMatchObject({ success: true, status: 'unsupported', rooms: [] });
   });
 
   it('网格 URL 模板与 useDbnoInstancesDtxLoader 现有写法逐字相同', () => {
@@ -184,8 +186,9 @@ describe('legacy 适配器：零逻辑委托', () => {
     expect(source.attributes.typeInfo).not.toBe(legacy.attributes.typeInfo);
     expect(source.attributes.uiAttr).not.toBe(legacy.attributes.uiAttr);
     expect(source.spatial.nearby).not.toBe(legacy.spatial.nearby);
-    expect(source.spatial.capabilities).toEqual({ specValues: false, branCenterline: true, keywordMatchesName: false, nameSortExact: false });
-    expect(legacy.spatial.capabilities).toEqual({ specValues: true, branCenterline: true, keywordMatchesName: true, nameSortExact: true });
+    // 2026-09-20 起 v1 也有专业维度（服务端按 SITE 名派生，ADR 0067）并多房间过滤。
+    expect(source.spatial.capabilities).toEqual({ specValues: true, branCenterline: true, keywordMatchesName: false, nameSortExact: false, rooms: true });
+    expect(legacy.spatial.capabilities).toEqual({ specValues: true, branCenterline: true, keywordMatchesName: true, nameSortExact: true, rooms: false });
     expect(legacyMocks.e3dGetWorldRoot).not.toHaveBeenCalled();
     expect(legacyMocks.queryInstanceEntriesByRefnos).not.toHaveBeenCalled();
     expect(legacyMocks.pdmsGetTypeInfo).not.toHaveBeenCalled();

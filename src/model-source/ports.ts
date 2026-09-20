@@ -36,6 +36,7 @@ import type {
   SpatialNearbyParams,
   SpatialNearbyRefnosResult,
   SpatialNearbyResult,
+  SpatialRoomsResult,
 } from '@/api/genModelSpatialApi';
 import type { PrimitiveKeyPointCandidate } from '@/composables/useDbnoInstancesParquetLoader';
 import type { InstanceEntry } from '@/utils/instances/instanceManifest';
@@ -158,8 +159,16 @@ export type KeypointSource = {
 
 /** 空间查询源在两种后端下的能力差异，抽屉据此增减 UI。 */
 export type SpatialSourceCapabilities = {
-  /** 结果带专业（`spec_value`）维度：legacy 有；gen-model-v1 的几何投影里没有这一列（plan §5-1 按 (a)：隐藏专业筛选 / 分组，改按 dbnum）。 */
+  /**
+   * 结果带专业（`spec_value`）维度：legacy 有；gen-model-v1 自 2026-09-20 起也有（ADR 0067：服务端按属主链上 SITE 名的
+   * 关键字派生，与 legacy 同一规则），此前 plan 2026-09-13 §5-1「v1 隐藏专业维度」作废。
+   */
   readonly specValues: boolean;
+  /**
+   * 认不认 `rooms` 过滤、有没有 `rooms()` 清单（ADR 0067）：gen-model-v1 有（`/api/v1/spatial/rooms` + `nearby?rooms=`），
+   * legacy 没有。这是「源会不会」；服务端此刻「能不能」（开关关 / 模型未就绪）看 `rooms()` 回来的 `status`。
+   */
+  readonly rooms: boolean;
   /**
    * `nearby / nearbyRefnos` 认不认 `source_mode: 'bran_centerline'`（沿 BRAN 真实中心线走廊量距）：
    * legacy 走 `/query?mode=bran_centerline`；gen-model-v1 的 `GLOBAL_AABB_TREE` 只有包围盒，没有这一档。
@@ -195,6 +204,17 @@ export type SpatialSource = {
   nearbyRefnos(params: SpatialNearbyParams): Promise<SpatialNearbyRefnosResult>;
   /** 负实体 noun 全量清单；唯一事实源在服务端（`TOTAL_NEG_NOUN_NAMES`），前端不自带硬编码。 */
   negativeNouns(): Promise<NegativeNounsResult>;
+  /**
+   * 在册房间清单 + 房间体制此刻的状态（ADR 0067，Q4 / Q5）：抽屉打开时拉一次画可搜索下拉；`status` 不是 `ready` / `degraded`
+   * 就整块收起并写 `reason`。不支持房间过滤的源（legacy）回 `{ success: true, status: 'unsupported', rooms: [] }`，不打后端。
+   */
+  rooms(): Promise<SpatialRoomsResult>;
+  /**
+   * 某构件所在房间的 refno（`a_b`，任一归属、按归属强弱序，去重）。两源都答得出：legacy 走旧后端 `room-tree/ancestors`
+   * （房间 = `room-group:` 之前那一级），gen-model-v1 走 `POST /api/v1/query` 的 `e3d.room.lookup`。
+   * 「当前选中所在房间」与结果区「房间列表」都吃它；解不出归属回空数组，取数失败才抛。
+   */
+  roomsOf(refno: string): Promise<string[]>;
   readonly capabilities: SpatialSourceCapabilities;
 };
 

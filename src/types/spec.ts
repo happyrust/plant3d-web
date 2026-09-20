@@ -1,5 +1,9 @@
 /**
- * 专业枚举类型，对应后端的 SiteSpecValue
+ * 专业枚举类型，对应后端的 SiteSpecValue（`CONTEXT.md`「专业」：按所属 SITE 名称关键字派生的学科分类）。
+ *
+ * 1–4 是 legacy 后端一直在给的四档；5 土建 / 6 结构 legacy 规则（`spec_info.rs::site_name_to_spec_value`：CIVI / ARCH → 5、
+ * STRU → 6）早就会派生、gen-model-v1 自 2026-09-20 起按同一规则派生（ADR 0067），前端此前只认到 4、会把它们印成
+ * 「未知专业(5)」——现在补齐两档。
  */
 export enum SiteSpecValue {
   Unknown = 0,  // 未知或其他
@@ -7,6 +11,8 @@ export enum SiteSpecValue {
   Elec = 2,     // 电气系统
   Inst = 3,     // 仪表系统
   Hvac = 4,     // 暖通空调系统
+  Civil = 5,    // 土建 / 建筑
+  Stru = 6,     // 结构
 }
 
 export const SITE_SPEC_OPTIONS = [
@@ -14,6 +20,8 @@ export const SITE_SPEC_OPTIONS = [
   { value: SiteSpecValue.Elec, label: '电气系统' },
   { value: SiteSpecValue.Inst, label: '仪表系统' },
   { value: SiteSpecValue.Hvac, label: '暖通空调系统' },
+  { value: SiteSpecValue.Civil, label: '土建系统' },
+  { value: SiteSpecValue.Stru, label: '结构系统' },
 ] as const;
 
 /**
@@ -25,6 +33,8 @@ export const SITE_SPEC_OPTIONS_WITH_UNKNOWN = [
   { value: SiteSpecValue.Elec, label: '电气', fullLabel: '电气系统' },
   { value: SiteSpecValue.Inst, label: '仪表', fullLabel: '仪表系统' },
   { value: SiteSpecValue.Hvac, label: '暖通', fullLabel: '暖通空调系统' },
+  { value: SiteSpecValue.Civil, label: '土建', fullLabel: '土建 / 建筑系统' },
+  { value: SiteSpecValue.Stru, label: '结构', fullLabel: '结构系统' },
   { value: SiteSpecValue.Unknown, label: '其他', fullLabel: '未分类 / 其他' },
 ] as const;
 
@@ -34,6 +44,8 @@ export const SITE_SPEC_OPTIONS_WITH_UNKNOWN = [
  * - Elec  → 黄  (amber-100 / amber-800)
  * - Inst  → 绿  (emerald-100 / emerald-800)
  * - Hvac  → 紫  (violet-100 / violet-700)
+ * - Civil → 橙  (orange-100 / orange-800)
+ * - Stru  → 青  (teal-100 / teal-800)
  * - Unknown → 灰 (gray-100 / gray-500)
  */
 export type SpecBadgeStyle = {
@@ -47,6 +59,8 @@ export const SPEC_BADGE_STYLES: Record<SiteSpecValue, SpecBadgeStyle> = {
   [SiteSpecValue.Elec]: { bg: '#FEF3C7', fg: '#92400E', border: '#FDE68A' },
   [SiteSpecValue.Inst]: { bg: '#D1FAE5', fg: '#065F46', border: '#A7F3D0' },
   [SiteSpecValue.Hvac]: { bg: '#EDE9FE', fg: '#6D28D9', border: '#DDD6FE' },
+  [SiteSpecValue.Civil]: { bg: '#FFEDD5', fg: '#9A3412', border: '#FED7AA' },
+  [SiteSpecValue.Stru]: { bg: '#CCFBF1', fg: '#115E59', border: '#99F6E4' },
   [SiteSpecValue.Unknown]: { bg: '#F3F4F6', fg: '#6B7280', border: '#E5E7EB' },
 };
 
@@ -72,6 +86,10 @@ export function getSpecValueName(specValue: number | string): string {
       return '仪表系统';
     case SiteSpecValue.Hvac:
       return '暖通空调系统';
+    case SiteSpecValue.Civil:
+      return '土建系统';
+    case SiteSpecValue.Stru:
+      return '结构系统';
     default:
       return `未知专业(${value})`;
   }
@@ -94,6 +112,10 @@ export function getSpecValueShortName(specValue: number | string): string {
       return '仪表';
     case SiteSpecValue.Hvac:
       return '暖通';
+    case SiteSpecValue.Civil:
+      return '土建';
+    case SiteSpecValue.Stru:
+      return '结构';
     default:
       return `未知(${value})`;
   }
