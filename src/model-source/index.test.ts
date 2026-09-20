@@ -164,9 +164,11 @@ describe('legacy 适配器：零逻辑委托', () => {
     expect(nearby).toEqual({ success: true, results: [] });
     expect(refnos.total_count).toBe(0);
     expect(negative).toEqual({ success: true, nouns: ['NBOX'] });
-    expect(source.spatial.capabilities).toEqual({ specValues: true, branCenterline: true, keywordMatchesName: true, nameSortExact: true, rooms: false });
+    expect(source.spatial.capabilities).toEqual({ specValues: true, branCenterline: true, keywordMatchesName: true, nameSortExact: true, rooms: false, tree: false });
     // 旧后端没有房间过滤：清单直接回 unsupported，不打后端（ADR 0067，Q5）。
     expect(await source.spatial.rooms()).toMatchObject({ success: true, status: 'unsupported', rooms: [] });
+    // 也没有房间层级树：回 success:false + unsupported，store 据此退回平铺分组（ADR 0068）。
+    expect(await source.spatial.tree({ ...params, rooms: '1_1' })).toMatchObject({ success: false, unsupported: true, rooms: [], total_count: 0 });
   });
 
   it('网格 URL 模板与 useDbnoInstancesDtxLoader 现有写法逐字相同', () => {
@@ -187,8 +189,8 @@ describe('legacy 适配器：零逻辑委托', () => {
     expect(source.attributes.uiAttr).not.toBe(legacy.attributes.uiAttr);
     expect(source.spatial.nearby).not.toBe(legacy.spatial.nearby);
     // 2026-09-20 起 v1 也有专业维度（服务端按 SITE 名派生，ADR 0067）并多房间过滤。
-    expect(source.spatial.capabilities).toEqual({ specValues: true, branCenterline: true, keywordMatchesName: false, nameSortExact: false, rooms: true });
-    expect(legacy.spatial.capabilities).toEqual({ specValues: true, branCenterline: true, keywordMatchesName: true, nameSortExact: true, rooms: false });
+    expect(source.spatial.capabilities).toEqual({ specValues: true, branCenterline: true, keywordMatchesName: false, nameSortExact: false, rooms: true, tree: true });
+    expect(legacy.spatial.capabilities).toEqual({ specValues: true, branCenterline: true, keywordMatchesName: true, nameSortExact: true, rooms: false, tree: false });
     expect(legacyMocks.e3dGetWorldRoot).not.toHaveBeenCalled();
     expect(legacyMocks.queryInstanceEntriesByRefnos).not.toHaveBeenCalled();
     expect(legacyMocks.pdmsGetTypeInfo).not.toHaveBeenCalled();

@@ -8,6 +8,7 @@
  *
  * 房间（ADR 0067）：旧后端没有 `rooms=` 过滤与房间清单，`capabilities.rooms = false`、`rooms()` 回 `unsupported`，不打后端；
  * `roomsOf` 仍答得出——走它自己的 `room-tree/ancestors`（房间 = `room-group:` 之前那一级），给「房间列表」用。
+ * 房间层级树（ADR 0068）同样没有：`capabilities.tree = false`、`tree()` 回 `success:false`，不打后端。
  */
 import type { SpatialSource } from '../ports';
 
@@ -15,6 +16,7 @@ import { roomRefnoFromRoomTreeAncestors, roomTreeGetAncestors } from '@/api/genM
 import { fetchNegativeNouns, queryNearbyRefnos, queryNearbySpatial } from '@/api/genModelSpatialApi';
 
 export const LEGACY_SPATIAL_ROOMS_UNSUPPORTED_REASON = 'legacy 数据源（旧后端 :3100）没有房间过滤；切到 gen-model-v1 数据源';
+export const LEGACY_SPATIAL_TREE_UNSUPPORTED_REASON = 'legacy 数据源（旧后端 :3100）没有房间层级树；切到 gen-model-v1 数据源';
 
 export const legacySpatialSource: SpatialSource = {
   nearby: (params) => queryNearbySpatial(params),
@@ -35,5 +37,19 @@ export const legacySpatialSource: SpatialSource = {
     const room = roomRefnoFromRoomTreeAncestors(resp.ids);
     return room ? [room] : [];
   },
-  capabilities: { specValues: true, branCenterline: true, keywordMatchesName: true, nameSortExact: true, rooms: false },
+  tree: async () => ({
+    success: false,
+    unsupported: true,
+    error: LEGACY_SPATIAL_TREE_UNSUPPORTED_REASON,
+    total_count: 0,
+    candidate_count: 0,
+    truncated_candidates: false,
+    candidate_cap: 0,
+    leaves_inline: true,
+    leaf_cap: 0,
+    leaf_count: 0,
+    delivery_unit_types: [],
+    rooms: [],
+  }),
+  capabilities: { specValues: true, branCenterline: true, keywordMatchesName: true, nameSortExact: true, rooms: false, tree: false },
 };

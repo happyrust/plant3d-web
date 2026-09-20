@@ -32,8 +32,23 @@ const spatialSourceMocks = vi.hoisted(() => ({
   rooms: vi.fn(async (): Promise<SpatialRoomsResult> => ({ success: true, status: 'unsupported', reason: null, definition_version: null, rooms: [] })),
   /** 某构件所在房间；缺省没有归属 */
   roomsOf: vi.fn(async (_refno: string): Promise<string[]> => []),
-  /** 当前「数据源」：缺省 legacy（有专业维度、不认房间）；v1 用例翻成 gen-model-v1 / rooms=true */
-  state: { kind: 'legacy' as 'legacy' | 'gen-model-v1', specValues: true, branCenterline: true, keywordMatchesName: true, nameSortExact: true, rooms: false },
+  /** 房间层级树（ADR 0068）；缺省「不支持」，store 退回平铺 */
+  tree: vi.fn(async (_params: SpatialNearbyParams, _only?: SpatialTreeLeafSelector): Promise<SpatialTreeResult> => ({
+    success: false,
+    unsupported: true,
+    error: 'tree not mocked',
+    total_count: 0,
+    candidate_count: 0,
+    truncated_candidates: false,
+    candidate_cap: 0,
+    leaves_inline: true,
+    leaf_cap: 0,
+    leaf_count: 0,
+    delivery_unit_types: [],
+    rooms: [],
+  })),
+  /** 当前「数据源」：缺省 legacy（有专业维度、不认房间、没有树）；v1 用例翻成 gen-model-v1 / rooms=true / tree=true */
+  state: { kind: 'legacy' as 'legacy' | 'gen-model-v1', specValues: true, branCenterline: true, keywordMatchesName: true, nameSortExact: true, rooms: false, tree: false },
 }));
 
 vi.mock('@/model-source', () => ({
@@ -45,12 +60,14 @@ vi.mock('@/model-source', () => ({
       negativeNouns: spatialSourceMocks.negativeNouns,
       rooms: spatialSourceMocks.rooms,
       roomsOf: spatialSourceMocks.roomsOf,
+      tree: spatialSourceMocks.tree,
       capabilities: {
         specValues: spatialSourceMocks.state.specValues,
         rooms: spatialSourceMocks.state.rooms,
         branCenterline: spatialSourceMocks.state.branCenterline,
         keywordMatchesName: spatialSourceMocks.state.keywordMatchesName,
         nameSortExact: spatialSourceMocks.state.nameSortExact,
+        tree: spatialSourceMocks.state.tree,
       },
     },
   }),
@@ -104,6 +121,8 @@ import type {
   SpatialNearbyResult,
   SpatialQueryResult,
   SpatialRoomsResult,
+  SpatialTreeLeafSelector,
+  SpatialTreeResult,
 } from '@/api/genModelSpatialApi';
 
 import { GenModelV1ApiError } from '@/api/genModelV1Api';
@@ -913,7 +932,7 @@ describe('createSpatialQueryStore', () => {
       batchLoadRefnos,
     });
 
-    expect(store.spatialCapabilities.value).toEqual({ specValues: false, rooms: false, branCenterline: false, keywordMatchesName: false, nameSortExact: false });
+    expect(store.spatialCapabilities.value).toEqual({ specValues: false, rooms: false, branCenterline: false, keywordMatchesName: false, nameSortExact: false, tree: false });
     store.draft.mode = 'range';
     // legacy 下范围查询默认「按专业」；v1 没有专业维度，退到由近及远
     expect(store.draft.sortBy).toBe('distanceAsc');
@@ -2727,5 +2746,259 @@ describe('房间 / 专业过滤（ADR 0067，plan 2026-09-20）', () => {
       [6, '结构系统', 1],
     ]);
     expect(store.resultSet.value?.dbnumGroups).toEqual([{ dbnum: 7997, count: 1 }, { dbnum: 24381, count: 1 }]);
+  });
+});
+
+describe('房间层级树（ADR 0068，plan 2026-09-20 spatial-room-hierarchy-tree）', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    __resetNegativeNounRegistryForTests();
+    spatialSourceMocks.state.kind = 'gen-model-v1';
+    spatialSourceMocks.state.specValues = true;
+    spatialSourceMocks.state.rooms = true;
+    spatialSourceMocks.state.tree = true;
+    spatialSourceMocks.state.branCenterline = true;
+    spatialSourceMocks.state.keywordMatchesName = false;
+    spatialSourceMocks.state.nameSortExact = false;
+  });
+
+  /** 两间房、跨房构件 shared_b（R2 里也出）、一个「其他构件」PANE；loaded_a 在查看器里已加载。 */
+  function treeResult(overrides: Partial<SpatialTreeResult> = {}): SpatialTreeResult {
+    return {
+      success: true,
+      total_count: 4,
+      candidate_count: 6,
+      truncated_candidates: false,
+      candidate_cap: 200000,
+      leaves_inline: true,
+      leaf_cap: 5000,
+      leaf_count: 5,
+      inlined: null,
+      delivery_unit_types: ['BRAN', 'HANG', 'SUPPO', 'EQUI'],
+      center: { x: 5, y: 5, z: 5, source: 'refno_aabb_center' },
+      radius: 3000,
+      shape: 'sphere',
+      room_status: { rooms: [{ refno: 'room_1', room_num: 'R1' }, { refno: 'room_2', room_num: 'R2' }], source: 'memory', matched: 4, unresolved: 0, definition_version: 'g1', library_alignment_current: null },
+      rooms: [
+        {
+          refno: 'room_1',
+          room_num: 'R1',
+          name: '/R1-RM',
+          count: 4,
+          specs: [
+            {
+              spec_value: 0,
+              count: 1,
+              unit_types: [],
+              others: { count: 1, by_noun: [{ noun: 'PANE', count: 1, min_distance: 30, elements: [{ refno: 'pane_1', noun: 'PANE', distance: 30 }] }] },
+            },
+            {
+              spec_value: 1,
+              count: 3,
+              unit_types: [
+                {
+                  noun: 'BRAN',
+                  count: 3,
+                  units: [
+                    {
+                      refno: 'bran_1',
+                      noun: 'BRAN',
+                      name: '/B1',
+                      count: 3,
+                      min_distance: 0,
+                      elements: [
+                        { refno: 'loaded_a', noun: 'TUBI', distance: 0 },
+                        { refno: 'server_only', noun: 'ELBO', distance: 15 },
+                        { refno: 'shared_b', noun: 'TUBI', distance: 20, shared_rooms: 2 },
+                      ],
+                    },
+                  ],
+                },
+              ],
+              others: { count: 0, by_noun: [] },
+            },
+          ],
+        },
+        {
+          refno: 'room_2',
+          room_num: 'R2',
+          name: null,
+          count: 1,
+          specs: [
+            {
+              spec_value: 1,
+              count: 1,
+              unit_types: [{ noun: 'BRAN', count: 1, units: [{ refno: 'bran_1', noun: 'BRAN', name: '/B1', count: 1, min_distance: 20, elements: [{ refno: 'shared_b', noun: 'TUBI', distance: 20, shared_rooms: 2 }] }] }],
+              others: { count: 0, by_noun: [] },
+            },
+          ],
+        },
+      ],
+      ...overrides,
+    };
+  }
+
+  function facetResult(): SpatialQueryResult {
+    return {
+      success: true,
+      total_count: 5,
+      returned_count: 1,
+      page: 1,
+      per_page: 1,
+      has_more: true,
+      results: [{ refno: 'loaded_a', noun: 'TUBI', spec_value: 1, distance: 0 }],
+      filter_options: { include_negative: false, nouns: [{ value: 'TUBI', count: 3 }, { value: 'PANE', count: 1 }], spec_values: [{ value: 1, count: 3 }, { value: 0, count: 1 }] },
+      groups: [{ spec_value: 0, count: 1 }, { spec_value: 1, count: 4 }],
+      dbnum_groups: [{ dbnum: 24381, count: 5 }],
+    };
+  }
+
+  function makeStore(overrides: Parameters<typeof createSpatialQueryStore>[0] = {}) {
+    const viewer = createViewerStub();
+    const store = createSpatialQueryStore({
+      viewerRef: { value: viewer } as any,
+      selection: { selectedRefno: { value: 'loaded_a' } } as any,
+      toolStore: { pickedQueryCenter: { value: null }, setToolMode: vi.fn(), setPickedQueryCenter: vi.fn() } as any,
+      ...overrides,
+    });
+    store.setMode('range');
+    store.draft.rangeCenterSource = 'coordinates';
+    store.draft.center = { x: 500, y: 500, z: 500 };
+    store.draft.radius = 3000;
+    store.addRooms([{ refno: 'room_1', roomNum: 'R1', name: '/R1-RM' }, { refno: 'room_2', roomNum: 'R2', name: null }]);
+    return { viewer, store };
+  }
+
+  it('选了房间且源有树：打树路由（带 rooms）+ 同参 nearby 只取 1 条拿 facet；结果集带 tree，items = 叶子按 refno 去重、按请求排序（范围缺省先专业后距离），total = 去重数、不分页、全集 = 整树', async () => {
+    const fetchTree = vi.fn(async () => treeResult());
+    const queryNearbyByPosition = vi.fn(async () => facetResult());
+    const queryNearbyRefnos = vi.fn();
+    const { store } = makeStore({ fetchTree, queryNearbyByPosition, queryNearbyRefnos });
+
+    await store.submitQuery();
+
+    expect(store.status.value).toBe('ready');
+    expect(store.error.value).toBeNull();
+    expect(fetchTree).toHaveBeenCalledTimes(1);
+    expect(fetchTree.mock.calls[0]![0]).toEqual(expect.objectContaining({ x: 500, y: 500, z: 500, radius: 3000, rooms: 'room_1,room_2' }));
+    // facet 那一发只取 1 条
+    expect(queryNearbyByPosition).toHaveBeenCalledWith(500, 500, 500, 3000, expect.objectContaining({ per_page: 1, page: 1, rooms: 'room_1,room_2' }));
+    // 叶子内联：全集就是整树，不另打 refnos
+    expect(queryNearbyRefnos).not.toHaveBeenCalled();
+
+    const result = store.resultSet.value!;
+    expect(result.tree?.total_count).toBe(4);
+    expect(result.items.map((item) => item.refno)).toEqual(['pane_1', 'loaded_a', 'server_only', 'shared_b']);
+    expect(result.items.map((item) => item.specValue)).toEqual([0, 1, 1, 1]);
+    expect(result.items.find((item) => item.refno === 'loaded_a')?.loaded).toBe(true);
+    expect(result.items.find((item) => item.refno === 'server_only')?.loaded).toBe(false);
+    expect(result.total).toBe(4);
+    expect(result.totalPages).toBe(1);
+    expect(result.hasMore).toBe(false);
+    // 全集按树的遍历序（房间 → 专业 → 单元 → 构件），跨房构件只出现一次
+    expect(result.fullMatches?.refnos).toEqual(['pane_1', 'loaded_a', 'server_only', 'shared_b']);
+    expect(result.fullMatches?.bySpecValue).toEqual({ '0': ['pane_1'], '1': ['loaded_a', 'server_only', 'shared_b'] });
+    // facet / 按库分组来自那一发 nearby，专业分组按树去重数
+    expect(result.filterOptions?.specValues.map((spec) => [spec.value, spec.count])).toEqual([[1, 3], [0, 1]]);
+    expect(result.dbnumGroups).toEqual([{ dbnum: 24381, count: 5 }]);
+    expect(result.groups.map((group) => [group.specValue, group.count])).toEqual([[0, 1], [1, 3]]);
+    expect(result.roomStatus?.matched).toBe(4);
+    expect(result.center).toEqual(expect.objectContaining({ x: 5, y: 5, z: 5 }));
+    // 服务端解出的中心写回草稿（与平铺态同）
+    expect(store.draft.center).toEqual({ x: 5, y: 5, z: 5 });
+  });
+
+  it('树路由「不支持」（源 / 旧构建没这条）退回平铺分组：nearby 按草稿每页数打、结果集没有 tree；真错误（房间体制不可用）直接报错清结果', async () => {
+    const queryNearbyByPosition = vi.fn(async () => ({ ...facetResult(), per_page: 100, has_more: false, total_count: 1 }));
+    const { store } = makeStore({ queryNearbyByPosition });
+
+    await store.submitQuery();
+    expect(store.status.value).toBe('ready');
+    expect(spatialSourceMocks.tree).toHaveBeenCalledTimes(1);
+    // 树不支持 → 平铺：nearby 只打一次、每页数是草稿的（不是 facet 那一发的 1）
+    const perPages = queryNearbyByPosition.mock.calls.map((call) => (call as unknown[])[4] as { per_page?: number }).map((options) => options.per_page);
+    expect(perPages).toEqual([1, 100]);
+    expect(store.resultSet.value?.tree).toBeUndefined();
+    expect(store.resultSet.value?.items.map((item) => item.refno)).toEqual(['loaded_a']);
+
+    const fetchTree = vi.fn(async (): Promise<SpatialTreeResult> => ({ ...treeResult(), success: false, error: '房间过滤此刻不可用（disabled）', rooms: [] }));
+    const { store: failing } = makeStore({ fetchTree, queryNearbyByPosition });
+    await failing.submitQuery();
+    expect(failing.status.value).toBe('error');
+    expect(failing.error.value).toBe('房间过滤此刻不可用（disabled）');
+    expect(failing.resultSet.value).toBeNull();
+
+    // 没选房间：树一次都不打
+    const { store: noRooms } = makeStore({ fetchTree, queryNearbyByPosition });
+    noRooms.clearRooms();
+    fetchTree.mockClear();
+    await noRooms.submitQuery();
+    expect(fetchTree).not.toHaveBeenCalled();
+    expect(noRooms.resultSet.value?.tree).toBeUndefined();
+  });
+
+  it('叶子未内联（超上限）：items 空、warning 说构件太多、全集另取 refnos；expandTreeLeaves 按 unit= 补叶子并并进 items；节点动作按 refno 作用', async () => {
+    const stripped = (): SpatialTreeResult => {
+      const tree = treeResult({ leaves_inline: false, leaf_count: 6000 });
+      for (const room of tree.rooms) {
+        for (const spec of room.specs) {
+          for (const group of spec.unit_types) for (const unit of group.units) delete unit.elements;
+          for (const group of spec.others.by_noun) delete group.elements;
+        }
+      }
+      return tree;
+    };
+    const fetchTree = vi.fn(async (_params: SpatialNearbyParams, only?: SpatialTreeLeafSelector): Promise<SpatialTreeResult> => {
+      if (only && 'unit' in only) {
+        const partial = stripped();
+        partial.inlined = `unit:${only.unit}`;
+        partial.rooms[0]!.specs[1]!.unit_types[0]!.units[0]!.elements = [
+          { refno: 'loaded_a', noun: 'TUBI', distance: 0 },
+          { refno: 'server_only', noun: 'ELBO', distance: 15 },
+          { refno: 'shared_b', noun: 'TUBI', distance: 20, shared_rooms: 2 },
+        ];
+        partial.rooms[1]!.specs[0]!.unit_types[0]!.units[0]!.elements = [{ refno: 'shared_b', noun: 'TUBI', distance: 20, shared_rooms: 2 }];
+        return partial;
+      }
+      return stripped();
+    });
+    const queryNearbyByPosition = vi.fn(async () => facetResult());
+    const queryNearbyRefnos = vi.fn(async (): Promise<SpatialNearbyRefnosResult> => ({
+      success: true,
+      refnos: ['loaded_a', 'server_only', 'shared_b', 'pane_1'],
+      by_dbnum: {},
+      by_spec_value: { '1': ['loaded_a', 'server_only', 'shared_b'], '0': ['pane_1'] },
+      total_count: 4,
+      truncated: false,
+      cap: 100000,
+    }));
+    const { store, viewer } = makeStore({ fetchTree, queryNearbyByPosition, queryNearbyRefnos });
+
+    await store.submitQuery();
+    const result = store.resultSet.value!;
+    expect(result.tree?.leaves_inline).toBe(false);
+    expect(result.items).toEqual([]);
+    expect(result.total).toBe(4);
+    expect(queryNearbyRefnos).toHaveBeenCalledTimes(1);
+    expect(result.fullMatches?.refnos).toEqual(['loaded_a', 'server_only', 'shared_b', 'pane_1']);
+    expect(result.warnings.some((warning) => warning.includes('6000') && warning.includes('5000'))).toBe(true);
+
+    await store.expandTreeLeaves({ unit: 'bran_1' });
+    expect(fetchTree).toHaveBeenLastCalledWith(expect.objectContaining({ rooms: 'room_1,room_2' }), { unit: 'bran_1' });
+    const expanded = store.resultSet.value!;
+    expect(expanded.tree?.rooms[0]?.specs[1]?.unit_types[0]?.units[0]?.elements?.map((leaf) => leaf.refno)).toEqual(['loaded_a', 'server_only', 'shared_b']);
+    expect(expanded.tree?.rooms[1]?.specs[0]?.unit_types[0]?.units[0]?.elements?.length).toBe(1);
+    // PANE 组还没取，仍没有 elements
+    expect(expanded.tree?.rooms[0]?.specs[0]?.others.by_noun[0]?.elements).toBeUndefined();
+    expect(expanded.items.map((item) => [item.refno, item.loaded])).toEqual([['loaded_a', true], ['server_only', false], ['shared_b', false]]);
+
+    // 节点动作：只留这几个可见 / 隔离
+    store.showOnlyRefnos(['loaded_a']);
+    expect(viewer.scene.setObjectsVisible).toHaveBeenCalledWith(['loaded_a'], true);
+    expect(viewer.scene.setObjectsVisible).toHaveBeenCalledWith(['server_only', 'shared_b', 'pane_1'], false);
+    expect(store.resultSet.value?.items.find((item) => item.refno === 'server_only')?.visible).toBe(false);
+    store.isolateRefnos(['shared_b', 'loaded_a']);
+    expect(viewer.scene.setObjectsXRayed).toHaveBeenCalledWith(['loaded_a', 'loaded_b'], true);
+    expect(viewer.scene.setObjectsXRayed).toHaveBeenCalledWith(['shared_b', 'loaded_a'], false);
   });
 });

@@ -1,3 +1,5 @@
+import type { SpatialTreeResult } from '@/api/genModelSpatialApi';
+
 export type SpatialQueryMode = 'range' | 'distance';
 
 /**
@@ -146,6 +148,8 @@ export type SpatialQueryCapabilities = {
   keywordMatchesName: boolean;
   /** 「按名称」是不是真按名称排整个命中集合：legacy 是；gen-model-v1 按 noun / refno 近似排、只为本页补名字，抽屉与结果区据此提示 */
   nameSortExact: boolean;
+  /** 源有没有房间层级树（ADR 0068）：gen-model-v1 有，选了房间的查询以树代替平铺分组；legacy 没有 */
+  tree: boolean;
 };
 
 export type SpatialQueryFilterOptions = {
@@ -215,6 +219,11 @@ export type SpatialQueryResultSet = {
    * （结果 ⊆ 已加载集，本地扫描对它是完备的），不分页、前端排序。
    */
   localOnly?: boolean;
+  /**
+   * 房间层级树（ADR 0068）：选了房间且源支持时由服务端一次聚合，结果区以它代替平铺分组。`items` 是它的叶子摊平
+   * （按 refno 去重，叶子未内联时为空）、`total` = 它的 `total_count`、不分页。没选房间 / legacy 为 null。
+   */
+  tree?: SpatialTreeResult | null;
 };
 
 export type SpatialQueryDraft = {

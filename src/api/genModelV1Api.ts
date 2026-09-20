@@ -1674,6 +1674,141 @@ export type SpatialClearanceGroup = {
   group: string;
   nouns: string[];
   /** 距离升序，已按 `max_per_group` 截断；`target_groups` 分桶下空桶保留（并出 warning） */
+// ---- 房间层级树（spec §4.13.5 / §4.13.6；ADR 0068）----
+
+/** 树里的一个构件（叶子）；`shared_rooms` 只在它属于 ≥ 2 间所选房间时出现。 */
+export type SpatialTreeLeaf = {
+  /** `a_b` */
+  refno: string;
+  noun: string;
+  distance: number;
+  shared_rooms?: number;
+};
+
+/** 一个最小交付单元（BRAN / EQUI…）；`elements` 省略 = 叶子超上限未内联（按 `unit=` 另取）。 */
+export type SpatialTreeUnit = {
+  refno: string;
+  noun: string;
+  name: string | null;
+  count: number;
+  min_distance: number;
+  elements?: SpatialTreeLeaf[];
+};
+
+export type SpatialTreeUnitType = {
+  noun: string;
+  count: number;
+  units: SpatialTreeUnit[];
+};
+
+/** 「其他构件」里按 noun 的一组；`elements` 省略同上（按 `other_noun=` 另取）。 */
+export type SpatialTreeOtherNoun = {
+  noun: string;
+  count: number;
+  min_distance: number;
+  elements?: SpatialTreeLeaf[];
+};
+
+export type SpatialTreeSpec = {
+  spec_value: number;
+  count: number;
+  /** 按 `delivery_unit_types` 配置表顺序 */
+  unit_types: SpatialTreeUnitType[];
+  /** 不属任何最小交付单元的构件，按 noun 分 */
+  others: { count: number; by_noun: SpatialTreeOtherNoun[] };
+};
+
+export type SpatialTreeRoom = {
+  refno: string;
+  room_num: string;
+  name: string | null;
+  /** 该房间下按 refno 去重的构件数 */
+  count: number;
+  /** `spec_value` 升序，0「其他」在前 */
+  specs: SpatialTreeSpec[];
+};
+
+export type SpatialTreeResponse = {
+  center: SpatialCenter;
+  radius: number;
+  shape: SpatialShape | (string & {});
+  /** 全树按 refno 去重的构件数（跨房构件只算一次） */
+  total_count: number;
+  candidate_count: number;
+  truncated_candidates: boolean;
+  candidate_cap: number;
+  /** false = 叶子省略了（超上限，或只按 `unit=` / `other_noun=` 内联了一组） */
+  leaves_inline: boolean;
+  leaf_cap: number;
+  /** 叶子放置数（跨房构件每间房各算一次） */
+  leaf_count: number;
+  /** 只内联了一组时是哪一组：`unit:a_b` / `other_noun:PANE` */
+  inlined?: string;
+  delivery_unit_types: string[];
+  /** 按 `room_num`、refno 排 */
+  rooms: SpatialTreeRoom[];
+  room_status: SpatialRoomStatus;
+  warnings?: string[];
+  spatial_state: string;
+  coverage: 'global-tree' | (string & {});
+  [key: string]: unknown;
+};
+
+/** 叶子超上限后只取一组：单元 refno 或「其他构件」里的一个 noun，二选一。 */
+export type SpatialTreeLeafSelector = { unit: string } | { otherNoun: string };
+
+function spatialTreeLeafQuery(only: SpatialTreeLeafSelector | undefined): Record<string, QueryValue> {
+  if (!only) return {};
+  return 'unit' in only ? { unit: toV1Refno(only.unit) } : { other_noun: only.otherNoun };
+}
+
+/**
+ * `GET /api/v1/spatial/nearby/tree`（spec §4.13.5，ADR 0068）：同 `nearby` 的一次查询折成
+ * 房间 → 专业 → 最小交付单元类型 → 单元 → 构件 的层级树。`rooms` 必给（服务端 400）；`sort / page / perPage` 不发。
+ */
+export function genModelV1SpatialNearbyTree(
+  req: GenModelV1SpatialNearbyRequest,
+  only?: SpatialTreeLeafSelector,
+  options?: GenModelV1RequestOptions,
+): Promise<SpatialTreeResponse> {
+  const { page: _page, perPage: _perPage, sort: _sort, ...rest } = req;
+  return genModelV1Fetch<SpatialTreeResponse>('/api/v1/spatial/nearby/tree', {
+    ...options,
+    query: { ...spatialNearbyQuery(rest), ...spatialTreeLeafQuery(only) },
+  });
+}
+
+/** `rooms/{refno}/tree` 可带的过滤：范围就是这间房，`radius` 是房间盒的外扩量（mm，缺省 0）。 */
+export type GenModelV1SpatialRoomTreeRequest = Pick<
+  GenModelV1SpatialNearbyRequest,
+  'nouns' | 'keyword' | 'includeNegative' | 'dbnums' | 'specValues'
+> & { margin?: number };
+
+/**
+ * `GET /api/v1/spatial/rooms/{refno}/tree`（spec §4.13.6，ADR 0068）：一间在册房间的房间层级树——以房间自身的包围盒
+ * 为范围、`rooms=` 它自己、不算它自己的面板；响应同 `nearby/tree`，`rooms[]` 恒一条。房间没生成过面板模型 → 404。
+ */
+export function genModelV1SpatialRoomTree(
+  roomRefno: string,
+  req: GenModelV1SpatialRoomTreeRequest = {},
+  only?: SpatialTreeLeafSelector,
+  options?: GenModelV1RequestOptions,
+): Promise<SpatialTreeResponse> {
+  const room = toV1Refno(roomRefno).replace('/', '_');
+  return genModelV1Fetch<SpatialTreeResponse>(`/api/v1/spatial/rooms/${encodeURIComponent(room)}/tree`, {
+    ...options,
+    query: {
+      radius: req.margin,
+      nouns: req.nouns && req.nouns.length > 0 ? req.nouns.join(',') : undefined,
+      keyword: req.keyword,
+      include_negative: req.includeNegative,
+      dbnums: req.dbnums && req.dbnums.length > 0 ? req.dbnums.join(',') : undefined,
+      spec_values: req.specValues && req.specValues.length > 0 ? req.specValues.join(',') : undefined,
+      ...spatialTreeLeafQuery(only),
+    },
+  });
+}
+
   candidates: SpatialClearanceCandidate[];
 };
 

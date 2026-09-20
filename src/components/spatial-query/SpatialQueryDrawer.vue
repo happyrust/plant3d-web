@@ -550,7 +550,7 @@
             </div>
           </div>
 
-          <div v-if="resultsExpanded && resultSet && resultSet.items.length > 0" class="border-b border-gray-100 px-3 py-2">
+          <div v-if="resultsExpanded && resultSet && resultSet.items.length > 0 && !treeResult" class="border-b border-gray-100 px-3 py-2">
             <div class="mb-2 flex items-center justify-between gap-2">
               <div>
                 <div class="text-xs font-semibold text-gray-900">房间列表</div>
@@ -608,11 +608,11 @@
             暂无结果，执行一次空间查询后会在这里{{ groupDimensionLabel }}分组显示。
           </div>
 
-          <div v-else-if="resultsExpanded && resultSet && resultSet.items.length === 0 && !isQueryBusy" class="px-3 py-6 text-center text-xs text-gray-400">
+          <div v-else-if="resultsExpanded && resultSet && resultSet.items.length === 0 && !isQueryBusy && !treeResult" class="px-3 py-6 text-center text-xs text-gray-400">
             当前条件下没有匹配结果。
           </div>
 
-          <div v-if="resultsExpanded && resultSet && resultSet.items.length > 0" class="flex items-center justify-between border-b border-gray-100 px-3 py-2 text-[11px] text-gray-500">
+          <div v-if="resultsExpanded && resultSet && resultSet.items.length > 0 && !treeResult" class="flex items-center justify-between border-b border-gray-100 px-3 py-2 text-[11px] text-gray-500">
             <div v-if="resultSet.localOnly" data-testid="spatial-local-only-hint">
               本地扫描（仅已加载构件）· 共 {{ resultSet.total }} 项 · 不分页
             </div>
@@ -644,7 +644,21 @@
             结果仅含已生成过模型的构件（空间索引只收已生成的包围盒）；从未显示过的构件不在其中，先显示它们再查会被纳入。
           </div>
 
-          <div v-if="resultsExpanded && resultSet && resultSet.items.length > 0 && canToggleGroupDimension"
+          <!-- 房间层级树（ADR 0068）：选了房间就是树，房间列表 / 分页 / 分组开关都不再出现 -->
+          <div v-if="resultsExpanded && treeResult" class="max-h-[420px] overflow-y-auto px-2 py-2" data-testid="spatial-tree-panel">
+            <SpatialResultTree :tree="treeResult"
+              :items="resultSet?.items ?? []"
+              :active-refno="activeResultRefno"
+              :busy="isQueryBusy"
+              @focus="focusItem"
+              @toggle-visible="toggleVisibility"
+              @load="loadTreeNode"
+              @show-only="showOnlyRefnos"
+              @isolate="isolateRefnos"
+              @expand="expandTreeLeaves" />
+          </div>
+
+          <div v-if="resultsExpanded && resultSet && resultSet.items.length > 0 && canToggleGroupDimension && !treeResult"
             class="flex items-center justify-between border-b border-gray-100 px-3 py-1.5 text-[11px] text-gray-500"
             data-testid="spatial-group-dimension">
             <span>结果分组</span>
@@ -662,7 +676,7 @@
             </div>
           </div>
 
-          <div v-if="resultsExpanded && resultSet && resultSet.items.length > 0" class="max-h-[280px] overflow-y-auto px-3 py-2.5">
+          <div v-if="resultsExpanded && resultSet && resultSet.items.length > 0 && !treeResult" class="max-h-[280px] overflow-y-auto px-3 py-2.5">
             <div v-for="group in displayGroups" :key="`${group.kind}:${group.key}`" class="mb-3 last:mb-0" data-testid="spatial-result-group">
               <div class="mb-1.5 flex items-center justify-between">
                 <div>
@@ -750,6 +764,8 @@ import { computed, ref, watch } from 'vue';
 
 import { ArrowUpRight, Eye, EyeOff, Loader2, MapPinned, MousePointerClick, Ruler, Search, X } from 'lucide-vue-next';
 
+import SpatialResultTree from './SpatialResultTree.vue';
+
 import type {
   SpatialQueryGroupDimension,
   SpatialQueryMode,
@@ -815,12 +831,27 @@ const {
   loadResults,
   showOnlySpecGroup,
   showOnlyDbnumGroup,
+  showOnlyRefnos,
+  isolateRefnos,
+  expandTreeLeaves,
   toggleResultVisible,
   setAllResultsVisible,
   isolateResults,
   restoreScene,
 } = spatialQuery;
 const confirmDialog = useConfirmDialogStore();
+
+/** 房间层级树（ADR 0068）：选了房间且源支持时 store 给的树；有它结果区就画树、不画平铺分组 */
+const treeResult = computed(() => resultSet.value?.tree ?? null);
+
+/** 树节点「加载」：节点下全部构件，跟分组按钮一样超阈值先确认。 */
+function loadTreeNode(refnos: string[], label: string) {
+  if (refnos.length === 0) return;
+  const options = { refnos, flyTo: true };
+  runAfterLargeBatchConfirm(countLoadTargets(options), `「加载」（${label}）`, () => {
+    void loadResults(options);
+  });
+}
 
 /**
  * 当前源有没有专业维度：legacy 一直有，gen-model-v1 自 2026-09-20 起也有（服务端按 SITE 名派生，ADR 0067）；
@@ -1114,6 +1145,14 @@ const statusLabel = computed(() => {
 const summaryText = computed(() => {
   if (!resultSet.value) {
     return `支持范围查询与距离查询，结果会${groupDimensionLabel.value}分组。`;
+  }
+  // 树态（ADR 0068）：全集一次给、按 refno 去重、不分页——没有「当前页」；跨房构件只算一次
+  if (resultSet.value.tree) {
+    const rooms = resultSet.value.tree.rooms.length;
+    const loaded = resultSet.value.tree.leaves_inline
+      ? `，已加载 ${resultSet.value.loadedCount} 项，未加载 ${resultSet.value.unloadedCount} 项`
+      : '';
+    return `共 ${resultSet.value.total} 项（去重）· ${rooms} 间房${loaded}`;
   }
   return `共 ${resultSet.value.total} 项，当前页 ${resultSet.value.returnedCount} 项，已加载 ${resultSet.value.loadedCount} 项，未加载 ${resultSet.value.unloadedCount} 项`;
 });

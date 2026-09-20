@@ -150,6 +150,87 @@ export type SpatialRoomsResult = {
   error?: string;
 };
 
+// ---- 房间层级树（ADR 0068；只有 gen-model-v1 源有，legacy 回 `success:false`）----
+
+/** 树里的一个构件；`a_b`。`shared_rooms` 只在它属于 ≥ 2 间所选房间时出现。 */
+export type SpatialTreeLeafNode = {
+  refno: string;
+  noun: string;
+  distance: number;
+  shared_rooms?: number;
+};
+
+/** 一个最小交付单元；`elements` 缺 = 叶子未内联（超上限，按单元另取）。 */
+export type SpatialTreeUnitNode = {
+  refno: string;
+  noun: string;
+  name: string | null;
+  count: number;
+  min_distance: number;
+  elements?: SpatialTreeLeafNode[];
+};
+
+export type SpatialTreeUnitTypeNode = {
+  noun: string;
+  count: number;
+  units: SpatialTreeUnitNode[];
+};
+
+/** 「其他构件」里按 noun 的一组；`elements` 缺同上（按 noun 另取）。 */
+export type SpatialTreeOtherNounNode = {
+  noun: string;
+  count: number;
+  min_distance: number;
+  elements?: SpatialTreeLeafNode[];
+};
+
+export type SpatialTreeSpecNode = {
+  spec_value: number;
+  count: number;
+  unit_types: SpatialTreeUnitTypeNode[];
+  others: { count: number; by_noun: SpatialTreeOtherNounNode[] };
+};
+
+export type SpatialTreeRoomNode = {
+  refno: string;
+  room_num: string;
+  name: string | null;
+  count: number;
+  specs: SpatialTreeSpecNode[];
+};
+
+/** 叶子超上限后只取一组：单元 refno 或「其他构件」里的一个 noun。 */
+export type SpatialTreeLeafSelector = { unit: string } | { otherNoun: string };
+
+/**
+ * `SpatialSource.tree()` 的结果：服务端一次聚合的 房间 → 专业 → 最小交付单元类型 → 单元 → 构件（ADR 0068）。
+ * 所有 count 按 refno 去重；`total_count` 全树去重（跨房构件只算一次）；`leaves_inline=false` 时 `elements` 都缺、
+ * 按 `SpatialTreeLeafSelector` 再取一组（那一次响应 `inlined` 说明是哪一组）。
+ */
+export type SpatialTreeResult = {
+  success: boolean;
+  error?: string;
+  /** `success:false` 里「源 / 服务端构建没有这条路由」那一档：store 据此退回平铺分组，别的失败是真错误 */
+  unsupported?: boolean;
+  total_count: number;
+  candidate_count: number;
+  truncated_candidates: boolean;
+  candidate_cap: number;
+  leaves_inline: boolean;
+  leaf_cap: number;
+  leaf_count: number;
+  inlined?: string | null;
+  delivery_unit_types: string[];
+  rooms: SpatialTreeRoomNode[];
+  center?: SpatialNearbyCenter | null;
+  radius?: number;
+  shape?: string;
+  room_status?: SpatialRoomStatus | null;
+  warnings?: string[];
+  coverage?: string;
+  spatial_state?: string;
+};
+
 export type SpatialQueryResult = {
   success: boolean;
   results?: SpatialQueryResultItem[];

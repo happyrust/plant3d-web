@@ -24,12 +24,16 @@ import type {
   SpatialNearbyResult,
   SpatialQueryResultItem,
   SpatialRoomsResult,
+  SpatialTreeLeafNode,
+  SpatialTreeLeafSelector,
+  SpatialTreeResult,
 } from '@/api/genModelSpatialApi';
 
 import {
   fromV1Refno,
   genModelV1SpatialNearby,
   genModelV1SpatialNearbyRefnos,
+  genModelV1SpatialNearbyTree,
   genModelV1SpatialNegativeNouns,
   genModelV1SpatialRooms,
   isGenModelV1ApiError,
@@ -38,6 +42,8 @@ import {
   type SpatialNearbyRefnosResponse,
   type SpatialNearbyResponse,
   type SpatialRoomsResponse,
+  type SpatialTreeLeaf,
+  type SpatialTreeResponse,
 } from '@/api/genModelV1Api';
 import { genModelV1RoomLookup, roomRefnosOf } from '@/api/genModelV1RoomApi';
 
@@ -49,6 +55,8 @@ export type SpatialApi = {
   rooms?: typeof genModelV1SpatialRooms;
   /** `e3d.room.lookup`；老测试桩没给它时 `roomsOf()` 回空 */
   roomLookup?: typeof genModelV1RoomLookup;
+  /** `GET /api/v1/spatial/nearby/tree`（ADR 0068）；老测试桩没给它时 `tree()` 回 `success:false` */
+  nearbyTree?: typeof genModelV1SpatialNearbyTree;
 };
 
 export const defaultSpatialApi: SpatialApi = {
@@ -57,6 +65,7 @@ export const defaultSpatialApi: SpatialApi = {
   negativeNouns: genModelV1SpatialNegativeNouns,
   rooms: genModelV1SpatialRooms,
   roomLookup: genModelV1RoomLookup,
+  nearbyTree: genModelV1SpatialNearbyTree,
 };
 
 /**
@@ -70,7 +79,7 @@ export const defaultSpatialApi: SpatialApi = {
  * 关键字只匹配 refno / noun，不匹配名称（spec §4.13；名称只对本页补）。
  * 同一个原因，`sort=name` 不按名称排全集：服务端按 noun / refno 作近似序、只为本页补名字（`sort_hits`），抽屉在「按名称」下提示。
  *
- * 房间：`rooms=` 过滤 + `GET /spatial/rooms` 清单（spec §4.13.4）。
+ * 房间：`rooms=` 过滤 + `GET /spatial/rooms` 清单（spec §4.13.4）。房间层级树：`nearby/tree`（spec §4.13.5，ADR 0068）。
  */
 export const GEN_MODEL_V1_SPATIAL_CAPABILITIES: SpatialSourceCapabilities = {
   specValues: true,
@@ -78,6 +87,7 @@ export const GEN_MODEL_V1_SPATIAL_CAPABILITIES: SpatialSourceCapabilities = {
   keywordMatchesName: false,
   nameSortExact: false,
   rooms: true,
+  tree: true,
 };
 
 function isFiniteNumber(value: unknown): value is number {
@@ -241,6 +251,96 @@ export function spatialRoomsToLegacyResult(resp: SpatialRoomsResponse): SpatialR
   };
 }
 
+function toTreeLeaves(raw: SpatialTreeLeaf[] | undefined): SpatialTreeLeafNode[] | undefined {
+  if (!raw) return undefined;
+  return raw.map((leaf) => ({
+    refno: fromV1Refno(leaf.refno),
+    noun: leaf.noun,
+    distance: leaf.distance,
+    ...(typeof leaf.shared_rooms === 'number' ? { shared_rooms: leaf.shared_rooms } : {}),
+  }));
+}
+
+/** v1 `spatial/nearby/tree` 响应 → 端口形状：refno 归一 `a_b`，层级与计数原样。`elements` 缺就保持缺（叶子未内联）。 */
+export function spatialTreeToLegacyResult(resp: SpatialTreeResponse): SpatialTreeResult {
+  return {
+    success: true,
+    total_count: resp.total_count,
+    candidate_count: resp.candidate_count,
+    truncated_candidates: Boolean(resp.truncated_candidates),
+    candidate_cap: resp.candidate_cap,
+    leaves_inline: Boolean(resp.leaves_inline),
+    leaf_cap: resp.leaf_cap,
+    leaf_count: resp.leaf_count,
+    inlined: resp.inlined ?? null,
+    delivery_unit_types: resp.delivery_unit_types ?? [],
+    rooms: (resp.rooms ?? []).map((room) => ({
+      refno: fromV1Refno(room.refno),
+      room_num: room.room_num,
+      name: room.name ?? null,
+      count: room.count,
+      specs: (room.specs ?? []).map((spec) => ({
+        spec_value: spec.spec_value,
+        count: spec.count,
+        unit_types: (spec.unit_types ?? []).map((group) => ({
+          noun: group.noun,
+          count: group.count,
+          units: (group.units ?? []).map((unit) => {
+            const elements = toTreeLeaves(unit.elements);
+            return {
+              refno: fromV1Refno(unit.refno),
+              noun: unit.noun,
+              name: unit.name ?? null,
+              count: unit.count,
+              min_distance: unit.min_distance,
+              ...(elements ? { elements } : {}),
+            };
+          }),
+        })),
+        others: {
+          count: spec.others?.count ?? 0,
+          by_noun: (spec.others?.by_noun ?? []).map((group) => {
+            const elements = toTreeLeaves(group.elements);
+            return {
+              noun: group.noun,
+              count: group.count,
+              min_distance: group.min_distance,
+              ...(elements ? { elements } : {}),
+            };
+          }),
+        },
+      })),
+    })),
+    center: { x: resp.center.x, y: resp.center.y, z: resp.center.z, source: resp.center.source },
+    radius: resp.radius,
+    shape: resp.shape,
+    room_status: resp.room_status ?? null,
+    ...(resp.warnings && resp.warnings.length > 0 ? { warnings: resp.warnings } : {}),
+    coverage: resp.coverage,
+    spatial_state: resp.spatial_state,
+  };
+}
+
+/** 树路由拿不到时（旧构建 404 / 服务端没这条）的一句话；store 据此退回平铺分组。 */
+export const SPATIAL_TREE_UNSUPPORTED_MESSAGE = '当前服务端构建没有 /api/v1/spatial/nearby/tree（旧版），房间层级树不可用';
+
+function emptyTreeFailure(error: string, unsupported = false): SpatialTreeResult {
+  return {
+    success: false,
+    ...(unsupported ? { unsupported: true } : {}),
+    error,
+    total_count: 0,
+    candidate_count: 0,
+    truncated_candidates: false,
+    candidate_cap: 0,
+    leaves_inline: true,
+    leaf_cap: 0,
+    leaf_count: 0,
+    delivery_unit_types: [],
+    rooms: [],
+  };
+}
+
 /** refno 模式的中心构件在投影与空间树里都没有盒：还没生成过模型，先显示它（§5-3 按 (a)）。 */
 export function spatialCenterNotFoundMessage(refno: string): string {
   return `构件 ${fromV1Refno(refno)} 还没有生成过模型，空间索引里没有它的包围盒；请先显示该构件，再按距离查询`;
@@ -318,6 +418,25 @@ export function createGenModelV1SpatialSource(options: GenModelV1SpatialSourceOp
     async roomsOf(refno): Promise<string[]> {
       if (!api.roomLookup) return [];
       return roomRefnosOf(await api.roomLookup(refno));
+    },
+    async tree(params, only?: SpatialTreeLeafSelector): Promise<SpatialTreeResult> {
+      if (!api.nearbyTree) return emptyTreeFailure(SPATIAL_TREE_UNSUPPORTED_MESSAGE, true);
+      const request = toV1SpatialNearbyRequest(params);
+      try {
+        return spatialTreeToLegacyResult(await api.nearbyTree(request, only));
+      } catch (error) {
+        if (isGenModelV1ApiError(error) && error.isNotFound) {
+          // refno 模式中心没盒 vs 旧构建没有这条路由：前者有 refno、消息同 nearby；后者退回平铺分组
+          return request.refno
+            ? emptyTreeFailure(spatialCenterNotFoundMessage(request.refno))
+            : emptyTreeFailure(SPATIAL_TREE_UNSUPPORTED_MESSAGE, true);
+        }
+        const unavailable = roomsUnavailableDetail(error);
+        if (unavailable) {
+          return emptyTreeFailure(spatialRoomsUnavailableMessage(unavailable.status, unavailable.reason));
+        }
+        throw error;
+      }
     },
     capabilities: GEN_MODEL_V1_SPATIAL_CAPABILITIES,
   };

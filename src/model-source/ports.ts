@@ -37,6 +37,8 @@ import type {
   SpatialNearbyRefnosResult,
   SpatialNearbyResult,
   SpatialRoomsResult,
+  SpatialTreeLeafSelector,
+  SpatialTreeResult,
 } from '@/api/genModelSpatialApi';
 import type { PrimitiveKeyPointCandidate } from '@/composables/useDbnoInstancesParquetLoader';
 import type { InstanceEntry } from '@/utils/instances/instanceManifest';
@@ -184,6 +186,11 @@ export type SpatialSourceCapabilities = {
    * 作近似序（spec §4.13：名称要回元素记录读 `NAME`，对全部候选做会拖成秒级），抽屉据此在「按名称」下给提示。
    */
   readonly nameSortExact: boolean;
+  /**
+   * 有没有房间层级树（ADR 0068）：gen-model-v1 有（`nearby/tree`，选了房间的查询以树代替平铺分组），legacy 没有。
+   * 与 `rooms` 一样是「源会不会」；树态还要求本次请求带了房间（Q4：没选房间不建树）。
+   */
+  readonly tree: boolean;
 };
 
 /**
@@ -215,6 +222,12 @@ export type SpatialSource = {
    * 「当前选中所在房间」与结果区「房间列表」都吃它；解不出归属回空数组，取数失败才抛。
    */
   roomsOf(refno: string): Promise<string[]>;
+  /**
+   * 房间层级树（ADR 0068）：同 `nearby` 的一组条件（必须带 `rooms`）由服务端一次折成 房间 → 专业 → 最小交付单元类型 →
+   * 单元 → 构件，覆盖全集、不分页、计数按 refno 去重；`page / per_page / sort` 被忽略。叶子超上限时 `leaves_inline=false`，
+   * 用 `only` 再取一组。不支持的源（legacy）回 `{ success: false, rooms: [] , error }`，不打后端。
+   */
+  tree(params: SpatialNearbyParams, only?: SpatialTreeLeafSelector): Promise<SpatialTreeResult>;
   readonly capabilities: SpatialSourceCapabilities;
 };
 

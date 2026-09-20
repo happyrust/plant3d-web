@@ -14,12 +14,16 @@ import type {
   SpatialQueryResultItem as ApiSpatialQueryResultItem,
   SpatialQuerySortParam,
   SpatialRoomsResult as ApiSpatialRoomsResult,
+  SpatialTreeLeafNode,
+  SpatialTreeLeafSelector,
+  SpatialTreeResult,
 } from '@/api/genModelSpatialApi';
 import type { AttributeSource } from '@/model-source/ports';
 
 import { enqueueParquetIncremental } from '@/api/genModelRealtimeApi';
 import { triggerBatchGenerateSse } from '@/api/genModelStreamGenerateApi';
 import { isGenModelV1ApiError } from '@/api/genModelV1Api';
+import { forEachTreeLeaf, fullMatchesFromTree, mergeTreeLeaves, treeToNearbyResult } from '@/composables/spatialTree';
 import { ensureDbMetaInfoLoaded, getDbnumByRefno, tryGetDbnumByRefno } from '@/composables/useDbMetaInfo';
 import {
   findNounByRefnoAcrossAllDbnos,
@@ -134,6 +138,8 @@ type SpatialQueryStoreOptions = {
   fetchRooms?: () => Promise<ApiSpatialRoomsResult>;
   /** 某构件所在房间（`SpatialSource.roomsOf()`）；不注入经 `getModelSource().spatial.roomsOf()` */
   roomsOf?: (refno: string) => Promise<string[]>;
+  /** 房间层级树（`SpatialSource.tree()`，ADR 0068）；不注入经 `getModelSource().spatial.tree()` */
+  fetchTree?: (params: ApiSpatialNearbyParams, only?: SpatialTreeLeafSelector) => Promise<SpatialTreeResult>;
   createRequestId?: () => string;
   batchLoadRefnos?: BatchLoadRefnosFn;
 };
@@ -1156,6 +1162,8 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
     ?? (() => spatialSource().negativeNouns());
   const fetchRooms: () => Promise<ApiSpatialRoomsResult> = options.fetchRooms ?? (() => spatialSource().rooms());
   const roomsOfSource: (refno: string) => Promise<string[]> = options.roomsOf ?? ((refno) => spatialSource().roomsOf(refno));
+  const fetchTree: NonNullable<SpatialQueryStoreOptions['fetchTree']> = options.fetchTree
+    ?? ((params, only) => spatialSource().tree(params, only));
   /** 当前源的空间查询能力；没有专业维度的源抽屉收起专业 UI、改按库分组；不认房间的源收起房间块 */
   const spatialCapabilities = computed<SpatialQueryCapabilities>(() => ({
     specValues: spatialSource().capabilities.specValues,
@@ -1163,6 +1171,7 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
     branCenterline: spatialSource().capabilities.branCenterline,
     keywordMatchesName: spatialSource().capabilities.keywordMatchesName,
     nameSortExact: spatialSource().capabilities.nameSortExact,
+    tree: spatialSource().capabilities.tree,
   }));
   const nextRequestId = options.createRequestId ?? createRequestId;
   const batchLoadRefnos = options.batchLoadRefnos ?? ((refnos: string[], loadOptions?: BatchLoadOptions) => {
@@ -1810,7 +1819,8 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
     }
   }
 
-  type BatchScope = { specValue?: number; dbnum?: number };
+  /** `refnos`：树节点动作直接给它名下的构件（ADR 0068），不再按专业 / 库取 */
+  type BatchScope = { specValue?: number; dbnum?: number; refnos?: string[] };
   /**
    * 批量操作跨不跨页：`all` = 整个命中集合（取不到全集时退回当前页），「只加载未加载」、分组按钮、全部显示、隔离用它——
    * 它们的语义都是「结果里的全部」；`current` = 只动当前页列出的条目，只有「加载当前页」用它——摘要行的「当前页 N 项」数的就是这一页。
@@ -1822,6 +1832,7 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
   function resolveBatchRefnos(options: BatchScope & { pages?: BatchPages } = {}): string[] {
     const current = resultSet.value;
     if (!current) return [];
+    if (options.refnos) return uniqStrings(options.refnos.map(normalizeRefno));
 
     const full = options.pages === 'current' ? null : current.fullMatches;
     if (full) {
@@ -1895,14 +1906,15 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
     return { request: normalizeRequestFromCenter(draft.center, centerSource) };
   }
 
-  async function querySpatialServer(request: SpatialQueryRequest, page: number): Promise<ApiSpatialNearbyResult> {
+  /** `perPage` 只有树态拿 facet 那一发覆盖成 1（ADR 0068）；平铺态一律按草稿的每页数。 */
+  async function querySpatialServer(request: SpatialQueryRequest, page: number, perPage?: number): Promise<ApiSpatialNearbyResult> {
     const serverOptions = {
       nouns: request.filters.nouns.length > 0 ? request.filters.nouns.join(',') : undefined,
       spec_values: request.filters.specValues.length > 0 ? request.filters.specValues.join(',') : undefined,
       keyword: request.filters.keyword || undefined,
       sort: SORT_BY_TO_SERVER_PARAM[request.sortBy],
       page,
-      per_page: request.limit,
+      per_page: perPage ?? request.limit,
       shape: request.shape,
       include_negative: request.filters.includeNegative,
       ...roomsParam(request),
@@ -1961,6 +1973,11 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
     }
 
     status.value = 'querying-server';
+    // 选了房间且源有房间层级树（ADR 0068）：改打树路由，结果区以树代替平铺分组；树拿不到（旧构建没这条路由）退回平铺
+    if (hasRoomFilter(request) && spatialSource().capabilities.tree) {
+      const handled = await runTreeQuery(request, options, viewer);
+      if (handled) return;
+    }
     const serverResp = await querySpatialServer(request, options.page);
     if (!serverResp.success) {
       throw new Error(serverResp.error || '空间查询失败');
@@ -2012,6 +2029,90 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
       nameSortExact: spatialSource().capabilities.nameSortExact,
     }));
     status.value = 'ready';
+  }
+
+  /**
+   * 树态的一次查询（ADR 0068）：树路由与同参 `nearby`（只取 1 条，拿 facet 计数 / 按库分组）并行；树的叶子摊平成一页交给
+   * `mergeResults`（loaded / visible / warnings 原样），`total` = 树的去重数、不分页；叶子内联时整树就是全集，未内联另取
+   * `nearby/refnos`。树路由不成功（旧构建 404 / 服务端没这条）回 `false`，调用方退回平铺分组。
+   */
+  async function runTreeQuery(request: SpatialQueryRequest, options: RunQueryOptions, viewer: ViewerLike | null): Promise<boolean> {
+    const params = toNearbyParams(request);
+    const [treeResp, facets] = await Promise.all([
+      fetchTree(params),
+      querySpatialServer(request, 1, 1).catch(() => null),
+    ]);
+    if (!treeResp.success) {
+      // 房间体制不可用 / 中心没盒这类是真错误（nearby 也会同样失败），直接抛；「源 / 构建没有这条路由」才退回平铺
+      if (!treeResp.unsupported && treeResp.error) {
+        throw new Error(treeResp.error);
+      }
+      return false;
+    }
+    if (facets?.success) {
+      learnNegativeNounsFromFilterOptions(facets.filter_options);
+    }
+    const serverResp = treeToNearbyResult(treeResp, request.sortBy, facets?.success ? facets : null);
+    const serverCenter = normalizeServerCenter(serverResp.center);
+    const authoritativeRequest = serverCenter
+      ? { ...request, center: { x: serverCenter.x, y: serverCenter.y, z: serverCenter.z } }
+      : request;
+    if (serverCenter && options.syncDraft) {
+      draft.center = { x: serverCenter.x, y: serverCenter.y, z: serverCenter.z };
+      if (request.centerSource === 'selected') {
+        selectedCenterRefno.value = null;
+      }
+    }
+    const fullMatches = treeResp.leaves_inline ? fullMatchesFromTree(treeResp) : await fetchFullMatchSet(authoritativeRequest);
+    status.value = 'merging-results';
+    const viewerLoadedRefnos = viewer ? new Set(resolveLoadedRefnos(viewer)) : null;
+    const merged = mergeResults(authoritativeRequest, [], serverResp, viewerLoadedRefnos, {
+      fullMatches,
+      fullMatchesUnavailable: !treeResp.leaves_inline && !fullMatches,
+      isVisible: viewer ? (refno) => isViewerObjectVisible(viewer, refno) : undefined,
+      nameSortExact: spatialSource().capabilities.nameSortExact,
+    });
+    if (!treeResp.leaves_inline) {
+      merged.warnings.push(`构件太多（${treeResp.leaf_count} 项，超过 ${treeResp.leaf_cap}），树里先只给计数；展开单元或构件类型时再取该组构件`);
+    }
+    commitResultSet({ ...merged, tree: treeResp, page: 1, totalPages: 1, hasMore: false });
+    status.value = 'ready';
+    return true;
+  }
+
+  /**
+   * 叶子未内联时，按选择器（单元 refno / 其他构件里的一个 noun）把那一组的构件补进树里；补进来的构件同时并进 `items`
+   * （loaded / visible 按查看器算），节点动作与行动作才有东西可动。失败只记 `error`，树照旧。
+   */
+  async function expandTreeLeaves(only: SpatialTreeLeafSelector): Promise<void> {
+    const current = resultSet.value;
+    if (!current?.tree) return;
+    try {
+      const partial = await fetchTree(toNearbyParams(current.request), only);
+      if (!partial.success) {
+        throw new Error(partial.error || '取该组构件失败');
+      }
+      const latest = resultSet.value;
+      if (!latest?.tree || latest.request !== current.request) return;
+      const tree = mergeTreeLeaves(latest.tree, partial);
+      const viewer = viewerRef.value;
+      const loadedRefnos = viewer ? new Set(resolveLoadedRefnos(viewer)) : new Set<string>();
+      const known = new Set(latest.items.map((item) => item.refno));
+      const added: SpatialQueryResultItem[] = [];
+      forEachTreeLeaf(partial, (leaf, specValue) => {
+        if (known.has(leaf.refno)) return;
+        known.add(leaf.refno);
+        const loaded = loadedRefnos.has(leaf.refno);
+        added.push(toSpatialItemFromApi(
+          { refno: leaf.refno, noun: leaf.noun, spec_value: specValue, distance: leaf.distance },
+          loaded,
+          loaded && viewer ? isViewerObjectVisible(viewer, leaf.refno) : true,
+        ));
+      });
+      commitResultSet({ ...latest, tree, items: [...latest.items, ...added] });
+    } catch (err) {
+      error.value = formatQueryError(err);
+    }
   }
 
   /** 「执行空间查询」：按当前草稿重解中心再查；失败清掉旧结果（旧结果对应的不是这份草稿）。 */
@@ -2145,7 +2246,7 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
       viewerRef.value ? resolveLoadedRefnos(viewerRef.value) : [],
     );
 
-    return resolveBatchRefnos({ specValue: options.specValue, dbnum: options.dbnum, pages: options.pages }).map((refno) => {
+    return resolveBatchRefnos({ specValue: options.specValue, dbnum: options.dbnum, refnos: options.refnos, pages: options.pages }).map((refno) => {
       const existing = byRefno.get(refno);
       if (existing) return existing;
 
@@ -2402,6 +2503,51 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
     }
   }
 
+  /** 树节点的「仅显示」（ADR 0068）：只留这些构件可见，结果里别的全隐；隐藏范围按全集（叶子内联时就是整树）。 */
+  function showOnlyRefnos(refnos: string[]) {
+    const viewer = viewerRef.value;
+    const items = resultSet.value?.items ?? [];
+    if (!viewer || refnos.length === 0) return;
+
+    const showRefnos = resolveBatchRefnos({ refnos });
+    const showSet = new Set(showRefnos);
+    const hideRefnos = resolveBatchRefnos().filter((refno) => !showSet.has(refno));
+    snapshotVisibility(viewer, [...showRefnos, ...hideRefnos]);
+
+    viewer.scene.setObjectsVisible(showRefnos, true);
+    if (hideRefnos.length > 0) {
+      viewer.scene.setObjectsVisible(hideRefnos, false);
+    }
+    items.forEach((item) => {
+      item.visible = showSet.has(item.refno);
+    });
+    if (resultSet.value) {
+      commitResultSet(resultSet.value);
+    }
+  }
+
+  /** 树节点的「隔离」（ADR 0068）：场景里其余全部 X-Ray，只有这些构件实体显示。 */
+  function isolateRefnos(refnos: string[]) {
+    const viewer = viewerRef.value;
+    const items = resultSet.value?.items ?? [];
+    const keep = resolveBatchRefnos({ refnos });
+    if (!viewer || keep.length === 0) return;
+    snapshotVisibility(viewer, keep);
+    const all = viewer.scene.objectIds.slice();
+    if (all.length > 0) {
+      viewer.scene.setObjectsXRayed(all, true);
+    }
+    viewer.scene.setObjectsXRayed(keep, false);
+    viewer.scene.setObjectsVisible(keep, true);
+    const keepSet = new Set(keep);
+    items.forEach((item) => {
+      if (keepSet.has(item.refno)) item.visible = true;
+    });
+    if (resultSet.value) {
+      commitResultSet(resultSet.value);
+    }
+  }
+
   /** `showOnlySpecGroup` 的按库版：gen-model-v1 源下结果按 dbnum 分组，「仅显示本库」走这里。 */
   function showOnlyDbnumGroup(dbnum: number) {
     const viewer = viewerRef.value;
@@ -2462,6 +2608,9 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
     loadResults,
     showOnlySpecGroup,
     showOnlyDbnumGroup,
+    showOnlyRefnos,
+    isolateRefnos,
+    expandTreeLeaves,
     toggleResultVisible,
     setAllResultsVisible,
     isolateResults,

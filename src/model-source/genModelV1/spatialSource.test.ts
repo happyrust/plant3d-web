@@ -2,11 +2,13 @@ import { describe, expect, it, vi } from 'vitest';
 
 import {
   GEN_MODEL_V1_SPATIAL_CAPABILITIES,
+  SPATIAL_TREE_UNSUPPORTED_MESSAGE,
   createGenModelV1SpatialSource,
   spatialCenterNotFoundMessage,
   spatialNearbyRefnosToLegacyResult,
   spatialNearbyToLegacyResult,
   spatialRoomsUnavailableMessage,
+  spatialTreeToLegacyResult,
   toV1SpatialNearbyRequest,
 } from './spatialSource';
 
@@ -16,7 +18,96 @@ import {
   GenModelV1ApiError,
   type SpatialNearbyRefnosResponse,
   type SpatialNearbyResponse,
+  type SpatialTreeResponse,
 } from '@/api/genModelV1Api';
+
+/** 与 gen-model `GET /api/v1/spatial/nearby/tree`（spec §4.13.5，ADR 0068）同形：两间房、跨房构件、一个未内联的单元。 */
+function treeResponse(overrides: Partial<SpatialTreeResponse> = {}): SpatialTreeResponse {
+  return {
+    center: { x: 10, y: 20, z: 30, source: 'refno_aabb_center' },
+    radius: 3000,
+    shape: 'sphere',
+    total_count: 3,
+    candidate_count: 5,
+    truncated_candidates: false,
+    candidate_cap: 200000,
+    leaves_inline: true,
+    leaf_cap: 5000,
+    leaf_count: 4,
+    delivery_unit_types: ['BRAN', 'HANG', 'SUPPO', 'EQUI'],
+    rooms: [
+      {
+        refno: '24381/35580',
+        room_num: 'R432',
+        name: '/1RX-RM04-R432',
+        count: 3,
+        specs: [
+          {
+            spec_value: 0,
+            count: 1,
+            unit_types: [],
+            others: {
+              count: 1,
+              by_noun: [{ noun: 'PANE', count: 1, min_distance: 4, elements: [{ refno: '24381/4090', noun: 'PANE', distance: 4 }] }],
+            },
+          },
+          {
+            spec_value: 3,
+            count: 2,
+            unit_types: [
+              {
+                noun: 'BRAN',
+                count: 2,
+                units: [
+                  {
+                    refno: '24381/1200',
+                    noun: 'BRAN',
+                    name: '/B1',
+                    count: 2,
+                    min_distance: 1,
+                    elements: [
+                      { refno: '24381/1240', noun: 'TUBI', distance: 1 },
+                      { refno: '24381/1241', noun: 'ELBO', distance: 2, shared_rooms: 2 },
+                    ],
+                  },
+                ],
+              },
+            ],
+            others: { count: 0, by_noun: [] },
+          },
+        ],
+      },
+      {
+        refno: '24381/1407',
+        room_num: 'R143',
+        name: null,
+        count: 1,
+        specs: [
+          {
+            spec_value: 3,
+            count: 1,
+            unit_types: [
+              { noun: 'BRAN', count: 1, units: [{ refno: '24381/1200', noun: 'BRAN', name: '/B1', count: 1, min_distance: 2 }] },
+            ],
+            others: { count: 0, by_noun: [] },
+          },
+        ],
+      },
+    ],
+    room_status: {
+      rooms: [{ refno: '24381_35580', room_num: 'R432' }, { refno: '24381_1407', room_num: 'R143' }],
+      source: 'memory',
+      matched: 3,
+      unresolved: 0,
+      definition_version: 'v1',
+      library_alignment_current: null,
+    },
+    warnings: ['房间过滤：1 个候选没有内存投影记录'],
+    spatial_state: 'ready',
+    coverage: 'global-tree',
+    ...overrides,
+  };
+}
 
 /** 与 gen-model `GET /api/v1/spatial/nearby`（spec §4.13 / plan §3.1）同形。 */
 function nearbyResponse(overrides: Partial<SpatialNearbyResponse> = {}): SpatialNearbyResponse {
@@ -393,7 +484,7 @@ describe('gen-model-v1 spatialSource', () => {
     expect(refnos).toMatchObject({ success: true, refnos: ['24383_71586'], by_dbnum: { '24383': ['24383_71586'] } });
 
     expect(await source.negativeNouns()).toEqual({ success: true, nouns: ['NBOX', 'NCYL'] });
-    expect(source.capabilities).toEqual({ specValues: true, branCenterline: true, keywordMatchesName: false, nameSortExact: false, rooms: true });
+    expect(source.capabilities).toEqual({ specValues: true, branCenterline: true, keywordMatchesName: false, nameSortExact: false, rooms: true, tree: true });
     expect(GEN_MODEL_V1_SPATIAL_CAPABILITIES.specValues).toBe(true);
     expect(GEN_MODEL_V1_SPATIAL_CAPABILITIES.rooms).toBe(true);
   });
@@ -440,6 +531,62 @@ describe('gen-model-v1 spatialSource', () => {
     expect(result.center?.source).toBe('bran_centerline');
     expect(result.warnings).toEqual(['1 个成员没有长度（穿过件），不参与走廊']);
     expect(spatialNearbyToLegacyResult({ refno: '24381_145018', radius: 1500 }, nearbyResponse())).not.toHaveProperty('warnings');
+  });
+
+  it('房间层级树（ADR 0068）：refno 归一 a_b、五层原样、未内联的单元不带 elements、room_status / warnings 带出；请求与 nearby 同译、不发 sort / page', async () => {
+    const mapped = spatialTreeToLegacyResult(treeResponse());
+    expect(mapped.success).toBe(true);
+    expect(mapped).toMatchObject({ total_count: 3, leaf_count: 4, leaves_inline: true, leaf_cap: 5000, inlined: null, delivery_unit_types: ['BRAN', 'HANG', 'SUPPO', 'EQUI'] });
+    expect(mapped.rooms.map((room) => [room.refno, room.room_num, room.name, room.count])).toEqual([
+      ['24381_35580', 'R432', '/1RX-RM04-R432', 3],
+      ['24381_1407', 'R143', null, 1],
+    ]);
+    const r432 = mapped.rooms[0]!;
+    expect(r432.specs.map((spec) => [spec.spec_value, spec.count])).toEqual([[0, 1], [3, 2]]);
+    expect(r432.specs[0]!.others.by_noun[0]).toEqual({ noun: 'PANE', count: 1, min_distance: 4, elements: [{ refno: '24381_4090', noun: 'PANE', distance: 4 }] });
+    const unit = r432.specs[1]!.unit_types[0]!.units[0]!;
+    expect(unit).toMatchObject({ refno: '24381_1200', noun: 'BRAN', name: '/B1', count: 2, min_distance: 1 });
+    expect(unit.elements).toEqual([
+      { refno: '24381_1240', noun: 'TUBI', distance: 1 },
+      { refno: '24381_1241', noun: 'ELBO', distance: 2, shared_rooms: 2 },
+    ]);
+    const notInlined = mapped.rooms[1]!.specs[0]!.unit_types[0]!.units[0]!;
+    expect('elements' in notInlined).toBe(false);
+    expect(mapped.room_status?.matched).toBe(3);
+    expect(mapped.warnings).toEqual(['房间过滤：1 个候选没有内存投影记录']);
+    expect(mapped.center).toEqual({ x: 10, y: 20, z: 30, source: 'refno_aabb_center' });
+
+    const api = {
+      nearby: vi.fn(async () => nearbyResponse()),
+      nearbyRefnos: vi.fn(async (): Promise<SpatialNearbyRefnosResponse> => ({ refnos: [], by_dbnum: {}, total_count: 0, truncated_results: false, result_cap: 100000, center: { x: 0, y: 0, z: 0, source: 'position' }, radius: 1, shape: 'sphere' })),
+      negativeNouns: vi.fn(async () => ({ nouns: [] })),
+      nearbyTree: vi.fn(async () => treeResponse()),
+    };
+    const source = createGenModelV1SpatialSource({ api });
+    const result = await source.tree({ refno: '24381_35580', radius: 3000, rooms: '24381_35580,24381_1407', sort: 'spec_distance', page: 2, per_page: 100, spec_values: '3' }, { unit: '24381_1200' });
+    expect(result.success).toBe(true);
+    expect(api.nearbyTree).toHaveBeenCalledWith(
+      expect.objectContaining({ refno: '24381_35580', radius: 3000, rooms: ['24381_35580', '24381_1407'], specValues: [3], sort: 'spec_distance', page: 2, perPage: 100 }),
+      { unit: '24381_1200' },
+    );
+    expect(source.capabilities.tree).toBe(true);
+
+    // 桩没给 nearbyTree（旧测试桩 / 旧构建）：success:false + unsupported，store 退回平铺
+    const bare = createGenModelV1SpatialSource({ api: { nearby: api.nearby, nearbyRefnos: api.nearbyRefnos, negativeNouns: api.negativeNouns } });
+    expect(await bare.tree({ x: 1, y: 2, z: 3, radius: 800, rooms: '1_1' })).toMatchObject({ success: false, unsupported: true, error: SPATIAL_TREE_UNSUPPORTED_MESSAGE, rooms: [], total_count: 0 });
+
+    // 旧构建 404：点模式 = 没有这条路由（unsupported）；refno 模式 = 中心没盒（同 nearby 的那一句，不是 unsupported）
+    const notFound = new GenModelV1ApiError({ code: 'not_found', message: 'nope', status: 404, path: '/api/v1/spatial/nearby/tree' });
+    const failing = createGenModelV1SpatialSource({ api: { ...api, nearbyTree: vi.fn(async () => { throw notFound; }) } });
+    expect(await failing.tree({ x: 1, y: 2, z: 3, radius: 800, rooms: '1_1' })).toMatchObject({ success: false, unsupported: true });
+    const missingCenter = await failing.tree({ refno: '24381_404', radius: 800, rooms: '1_1' });
+    expect(missingCenter).toMatchObject({ success: false, error: spatialCenterNotFoundMessage('24381_404') });
+    expect(missingCenter.unsupported).toBeUndefined();
+
+    // 房间体制不可用（422 rooms_unavailable）折成 success:false + 那一句，不是 unsupported
+    const unavailable = new GenModelV1ApiError({ code: 'precondition', message: 'x', status: 422, path: '/api/v1/spatial/nearby/tree', detail: { reason: 'rooms_unavailable', status: 'disabled', message: 'room_membership=false' } });
+    const disabled = createGenModelV1SpatialSource({ api: { ...api, nearbyTree: vi.fn(async () => { throw unavailable; }) } });
+    expect(await disabled.tree({ x: 1, y: 2, z: 3, radius: 800, rooms: '1_1' })).toMatchObject({ success: false, error: spatialRoomsUnavailableMessage('disabled', 'room_membership=false') });
   });
 
   it('错误分型：refno 模式 not_found 折成 success:false + 「先显示该构件」；spatial_not_ready 原样抛出且 isRetryable；点模式 not_found 也原样抛', async () => {

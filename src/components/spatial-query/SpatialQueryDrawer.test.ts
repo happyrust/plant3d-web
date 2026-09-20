@@ -96,7 +96,7 @@ const stubState = {
   /** 「每页数量」是否为正整数（store 算，抽屉据此标红输入框） */
   hasValidPageLimit: ref(true) as Ref<boolean>,
   /** legacy 源有专业维度、没有房间过滤；gen-model-v1 的用例按需翻 */
-  spatialCapabilities: ref<SpatialQueryCapabilities>({ specValues: true, branCenterline: true, keywordMatchesName: true, nameSortExact: true, rooms: false }) as Ref<SpatialQueryCapabilities>,
+  spatialCapabilities: ref<SpatialQueryCapabilities>({ specValues: true, branCenterline: true, keywordMatchesName: true, nameSortExact: true, rooms: false, tree: false }) as Ref<SpatialQueryCapabilities>,
   /** 在册房间清单与房间体制状态（store 的 `loadRoomOptions` 填） */
   roomOptions: ref<SpatialQueryRoomOption[]>([]) as Ref<SpatialQueryRoomOption[]>,
   roomsStatus: ref<SpatialQueryRoomsStatus>({ status: 'idle', reason: null }) as Ref<SpatialQueryRoomsStatus>,
@@ -189,7 +189,7 @@ function resetDraft() {
   stubState.selectedCenterRefno.value = null;
   stubState.canSubmit.value = true;
   stubState.hasValidPageLimit.value = true;
-  stubState.spatialCapabilities.value = { specValues: true, branCenterline: true, keywordMatchesName: true, nameSortExact: true, rooms: false };
+  stubState.spatialCapabilities.value = { specValues: true, branCenterline: true, keywordMatchesName: true, nameSortExact: true, rooms: false, tree: false };
 }
 
 function makeResultSet(count: number, options: { page?: number; perPage?: number; total?: number; hasMore?: boolean; startIndex?: number } = {}): SpatialQueryResultSet {
@@ -349,7 +349,7 @@ describe('SpatialQueryDrawer (distance 模式)', () => {
     expect(boxHint?.textContent).toContain('整个包围盒');
 
     // gen-model-v1 没有中心线：按钮消失，已选的那一档退回「通过 Refno」
-    stubState.spatialCapabilities.value = { specValues: false, branCenterline: false, keywordMatchesName: false, nameSortExact: false, rooms: false };
+    stubState.spatialCapabilities.value = { specValues: false, branCenterline: false, keywordMatchesName: false, nameSortExact: false, rooms: false, tree: false };
     await nextTick();
 
     expect(host.querySelector('[data-testid="distance-source-bran-centerline"]')).toBeNull();
@@ -540,7 +540,7 @@ describe('SpatialQueryDrawer (distance 模式)', () => {
     expect((host.querySelector('[data-testid="spatial-keyword-input"]') as HTMLInputElement).placeholder).toContain('名称');
 
     // gen-model-v1：服务端不按名称匹配，文案不再许诺「名称」（改前写死「Refno / 名称」）
-    stubState.spatialCapabilities.value = { specValues: false, branCenterline: false, keywordMatchesName: false, nameSortExact: false, rooms: false };
+    stubState.spatialCapabilities.value = { specValues: false, branCenterline: false, keywordMatchesName: false, nameSortExact: false, rooms: false, tree: false };
     await nextTick();
     expect(host.querySelector('[data-testid="spatial-keyword-label"]')?.textContent).toContain('关键字（Refno / Noun）');
     expect(host.querySelector('[data-testid="spatial-keyword-label"]')?.textContent).not.toContain('名称');
@@ -575,7 +575,7 @@ describe('SpatialQueryDrawer (distance 模式)', () => {
     expect(byName().title).toBe('按构件名称升序');
 
     // gen-model-v1：只为本页补名字、全集按 Noun / Refno 近似排 → 按钮下方提示 + tooltip 说明
-    stubState.spatialCapabilities.value = { specValues: false, branCenterline: false, keywordMatchesName: false, nameSortExact: false, rooms: false };
+    stubState.spatialCapabilities.value = { specValues: false, branCenterline: false, keywordMatchesName: false, nameSortExact: false, rooms: false, tree: false };
     await nextTick();
     expect(hint()?.textContent).toContain('当前源不按名称排整个命中集合');
     expect(byName().title).toContain('近似');
@@ -825,7 +825,7 @@ describe('SpatialQueryDrawer (distance 模式)', () => {
   });
 
   it('房间过滤：v1 源打开抽屉就拉清单；服务端 disabled 时整块换成一句原因；error 时给「重试」', async () => {
-    stubState.spatialCapabilities.value = { specValues: true, branCenterline: true, keywordMatchesName: false, nameSortExact: false, rooms: true };
+    stubState.spatialCapabilities.value = { specValues: true, branCenterline: true, keywordMatchesName: false, nameSortExact: false, rooms: true, tree: true };
     stubState.roomsStatus.value = { status: 'disabled', reason: 'room_membership=false：服务端未开启房间归属计算' };
 
     const { host, unmount } = mountDrawer();
@@ -852,7 +852,7 @@ describe('SpatialQueryDrawer (distance 模式)', () => {
   });
 
   it('房间过滤：ready 时可搜索下拉按房间号 / 名称过滤、点选加进已选 chip、× 移除、「当前选中所在房间」走 store', async () => {
-    stubState.spatialCapabilities.value = { specValues: true, branCenterline: true, keywordMatchesName: false, nameSortExact: false, rooms: true };
+    stubState.spatialCapabilities.value = { specValues: true, branCenterline: true, keywordMatchesName: false, nameSortExact: false, rooms: true, tree: true };
     stubState.roomsStatus.value = { status: 'ready', reason: null };
     stubState.roomOptions.value = [
       { refno: '17496_1', roomNum: 'A101', name: '/A101-RM', dbnum: 17496, panelCount: 4 },
@@ -906,7 +906,7 @@ describe('SpatialQueryDrawer (distance 模式)', () => {
 
   it('房间过滤：回车按房间号精确加入（走 store 的 addRoomsByNumber），同号多间 / 没匹配到各提示一句', async () => {
     const { emitToast } = await import('@/ribbon/toastBus');
-    stubState.spatialCapabilities.value = { specValues: true, branCenterline: true, keywordMatchesName: false, nameSortExact: false, rooms: true };
+    stubState.spatialCapabilities.value = { specValues: true, branCenterline: true, keywordMatchesName: false, nameSortExact: false, rooms: true, tree: true };
     stubState.roomsStatus.value = { status: 'ready', reason: null };
     stubState.roomOptions.value = [{ refno: '17496_1', roomNum: 'A101', name: null, dbnum: 17496, panelCount: 4 }];
     roomStoreMocks.addRoomsByNumber.mockImplementation(async (text: string) => {
@@ -944,7 +944,7 @@ describe('SpatialQueryDrawer (distance 模式)', () => {
   });
 
   it('结果分组维度（Q11）：两维都在时画「按专业 | 按库」切换，切到按库后组头按库、按钮改「加载本库」；legacy 没有库分组就不画切换', async () => {
-    stubState.spatialCapabilities.value = { specValues: true, branCenterline: true, keywordMatchesName: false, nameSortExact: false, rooms: true };
+    stubState.spatialCapabilities.value = { specValues: true, branCenterline: true, keywordMatchesName: false, nameSortExact: false, rooms: true, tree: true };
     const set = makeResultSet(2);
     set.items[0]!.specValue = 1;
     set.items[0]!.specName = '管道系统';
@@ -978,7 +978,7 @@ describe('SpatialQueryDrawer (distance 模式)', () => {
 
     // legacy：没有 dbnumGroups → 不画切换、按专业
     stubState.groupDimension.value = 'spec';
-    stubState.spatialCapabilities.value = { specValues: true, branCenterline: true, keywordMatchesName: true, nameSortExact: true, rooms: false };
+    stubState.spatialCapabilities.value = { specValues: true, branCenterline: true, keywordMatchesName: true, nameSortExact: true, rooms: false, tree: false };
     const legacySet = makeResultSet(1);
     legacySet.dbnumGroups = null;
     stubState.resultSet.value = legacySet;
@@ -1236,7 +1236,7 @@ describe('SpatialQueryDrawer (distance 模式)', () => {
   });
 
   it('gen-model-v1（无专业维度）：收起专业过滤与「按专业」排序，结果按库分组、组头用服务端全量计数、组按钮走 dbnum 路径，并提示覆盖面', async () => {
-    stubState.spatialCapabilities.value = { specValues: false, branCenterline: false, keywordMatchesName: false, nameSortExact: false, rooms: false };
+    stubState.spatialCapabilities.value = { specValues: false, branCenterline: false, keywordMatchesName: false, nameSortExact: false, rooms: false, tree: false };
     const base = makeResultSet(3);
     base.items[0]!.dbnum = 24381;
     base.items[1]!.dbnum = 24383;
