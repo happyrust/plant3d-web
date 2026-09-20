@@ -16,6 +16,9 @@
  *   PMS_CONTRACT_USER       PMS 用户（SJ/JH/SH/PZ）
  */
 
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 import {
   buildAuthLoginRequest,
   buildCachePreloadPayload,
@@ -487,7 +490,24 @@ async function main(): Promise<void> {
   }
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+/**
+ * 只有被直接执行（`npx tsx scripts/pms-contract-sequence.ts`）才跑 main；被 pms-simulator-bootstrap
+ * 当模块 import 时不跑。不能拿 `import.meta.url === \`file://${process.argv[1]}\`` 比：Windows 下
+ * argv[1] 是 `D:\\work\\...\\pms-contract-sequence.ts`，import.meta.url 是 `file:///D:/work/...`，
+ * 永远不相等——脚本会一个字不打、exit 0 静默退出，看起来像「通过」。这里按文件系统路径比
+ * （`path.relative` 在 win32 上不分大小写）。
+ */
+function isDirectInvocation(): boolean {
+  const entry = process.argv[1];
+  if (!entry) return false;
+  try {
+    return path.relative(path.resolve(entry), fileURLToPath(import.meta.url)) === '';
+  } catch {
+    return false;
+  }
+}
+
+if (isDirectInvocation()) {
   main().catch((e) => {
     console.error('契约序列异常:', e);
     process.exit(1);
