@@ -4,8 +4,9 @@
  *
  * 抽屉「范围 / 距离查询」改打 `GET /api/v1/spatial/{nearby, nearby/refnos, negative-nouns, rooms}`（spec §4.13），候选来自
  * 服务进程内的 `GLOBAL_AABB_TREE`；这里把 legacy 形状的入参 / 出参与 v1 契约互译，`useSpatialQuery` 一行不改：
- * - 入参：`x,y,z` → `position`；`nouns` / `spec_values` / `rooms` 逗号串 → 数组；`sort=spec_distance` → `distance`
- *   （服务端不按专业排全集，专业分组在前端按 `spec_value` 做）；`per_page` 缺省时沿用旧参数 `max_results`；
+ * - 入参：`x,y,z` → `position`；`nouns` / `spec_values` / `rooms` 逗号串 → 数组；`sort` 三档（`distance` / `name` /
+ *   `spec_distance`）同名直通——`spec_distance` 服务端先按专业再按距离排**全集**，抽屉「按专业」因此跨页成立
+ *   （2026-09-20 复审前折成 `distance`，只剩页内分组）；`per_page` 缺省时沿用旧参数 `max_results`；
  *   refno 的 `a_b` → `a/b` 由 API 基座做；`source_mode=bran_centerline` 原样转成 v1 的 `source_mode`。
  * - 出参：refno 归一 `a_b`；`spec_value` 直取服务端派生值（旧服务端没有这一格 → 0）；`filter_options.spec_values` /
  *   专业 `groups` / `by_spec_value` 都从服务端同名格映射；服务端的 dbnum 分组仍放进 `dbnum_groups`；
@@ -96,6 +97,23 @@ function splitCsvNumbers(value: string | undefined): number[] | undefined {
   return items && items.length > 0 ? items : undefined;
 }
 
+/**
+ * legacy 的排序参数 → v1 `sort`：三档同名直通（`spec_distance` 2026-09-20 起服务端也认——先按专业再按距离、跨页成立；
+ * 此前折成 `distance`，「按专业」在 v1 下只剩页内分组）。没给就不发；别的值退到 `distance`。
+ */
+function toV1Sort(sort: SpatialNearbyParams['sort']): GenModelV1SpatialNearbyRequest['sort'] {
+  switch (sort) {
+    case undefined:
+      return undefined;
+    case 'name':
+    case 'spec_distance':
+    case 'distance':
+      return sort;
+    default:
+      return 'distance';
+  }
+}
+
 /** legacy `SpatialNearbyParams` → v1 请求。`refno` 与 `x,y,z` 谁在就用谁，都缺 / 三个坐标不全交给服务端 400。 */
 export function toV1SpatialNearbyRequest(params: SpatialNearbyParams): GenModelV1SpatialNearbyRequest {
   const refno = params.refno?.trim();
@@ -111,7 +129,7 @@ export function toV1SpatialNearbyRequest(params: SpatialNearbyParams): GenModelV
     shape: params.shape,
     nouns: splitCsv(params.nouns),
     keyword: params.keyword?.trim() || undefined,
-    sort: params.sort === 'name' ? 'name' : params.sort ? 'distance' : undefined,
+    sort: toV1Sort(params.sort),
     includeSelf: params.include_self,
     includeNegative: params.include_negative,
     // 老用例对请求做 toEqual：没给就不带这两格，老断言原样成立。

@@ -220,6 +220,16 @@ spec_value_rules = [
 4. **PR-D（docs）**：教程 `SPATIAL_QUERY_TUTORIAL.md` §5 / §6 / §9；本计划状态与完成备注；真机验证记录（§6）。
    **完成（除真机记录）**：教程 §5 过滤表加「房间过滤」行、专业行改口径，§6 分组切换，§9 差别表 六处 → 七处 + 房间列表改接；`CONTEXT.md`「空间查询」
    三词条；ADR 0067；本计划。真机验证记录待实例起来后补进 §6。
+5. **复审修正（2026-09-20 11:00–11:40，fable-5-1-61 对四个 PR 实读后）**：
+   - 后端 `gen-model-model-cache@805170bd4`：(1) `nearby` / `nearby_refnos` 的后半程（过滤 / 派生专业 / 排序 / 切页 / 补 name）挪进
+     `spawn_blocking`——`filter_candidates` 现在要对每个候选调 `spec_value_of`（回记录读 OWNER，首个大半径查询可达 `CANDIDATE_CAP` 200k 次同步读），
+     原先跑在 tokio worker 上；`ElementAttributes` 加 `Send`、入参改 `Arc<dyn ElementAttributes>`。(2) `spatial_discipline` 共享记忆的 Mutex
+     只罩查表 / 写回，记录读在锁外（`try_lock` 探针单测钉住），并发查询不再在 I/O 上串行。(3) `sort=spec_distance`（`SortBy::SpecDistance`：
+     `spec_value` 升序再距离 / dbnum / refno）——此前 v1 不认这一档、适配器折成 `distance`，抽屉「按专业」在 v1 下只剩页内分组、跨页不是专业序。
+     `cargo test --lib -- spatial` 74 → 76，clippy 本切片 0。spec §4.13 `sort` 三档。
+   - 前端：适配器 `spec_distance` 同名直通（`toV1Sort`），`SpatialSort` 类型加这一档；`spatialSource` 11 用例改断言 + 兜底分支。
+   - 未改（记在案）：源切到 legacy 时 `draft.rooms` 不随 `capabilities.rooms=false` 清空（模型源是页面级开关，换源要刷新，线上撞不到）；
+     落盘路径（`resolve_members_durable` / `library_alignment_current`）只有单测、没有真机可验（`:8022` 开关关着）。
 
 ## 6. 验收 / 联调步骤（命令在你自己的终端跑；服务是长驻进程，本会话不代跑）
 
@@ -247,6 +257,7 @@ spec_value_rules = [
 ## 7. 风险与开放问题
 
 - **首个大半径查询的专业派生成本**：5 万候选 ≈ 5 万次记录读（同 `name_of` 代价），之后靠记忆；若真机 > 1 s，退到按库预算一张 refno → 专业表（一次全库遍历）。
+  2026-09-20 复审后这一段已在 `spawn_blocking` 里跑、记忆锁不罩记录读（§5 第 5 条）——慢也只慢这一条请求，不再拖住别的请求。
 - **读透形态判不出归属的候选**：树从快照恢复而投影为空（进程重启后没再 ensure 的根）→ `unresolved`，从结果剔除并 warning；要它们进来先显示一次（ensure）。
 - **读透形态现算成本**：`MemoryRoomCalculator` 对每条候选记录做面板 AABB 预筛 + 跨面板者顶点点检查（读 `.mesh`）；房间级半径下候选百到千级，预期几十 ms；
   100 m 级要量。

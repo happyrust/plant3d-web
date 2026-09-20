@@ -1371,8 +1371,11 @@ export function genModelV1ModelHistoryDelete(
 // ---------------------------------------------------------------------------
 
 export type SpatialShape = 'sphere' | 'cube';
-/** 服务端排序；legacy 的 `spec_distance`（先按专业再按距离）由适配器折成 `distance`，专业分组在前端按 `spec_value` 做。 */
-export type SpatialSort = 'distance' | 'name';
+/**
+ * 服务端排序（spec §4.13 `sort`）：`distance` 距离升序；`name` 名字只对本页解、全集按 noun / refno 近似序；
+ * `spec_distance`（2026-09-20 起）先按 `spec_value` 升序再按距离，与 legacy 同名档——抽屉「按专业」跨页成立。三种都是全序。
+ */
+export type SpatialSort = 'distance' | 'name' | 'spec_distance';
 
 export type SpatialPosition = { x: number; y: number; z: number };
 

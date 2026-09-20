@@ -66,7 +66,7 @@ function nearbyResponse(overrides: Partial<SpatialNearbyResponse> = {}): Spatial
 }
 
 describe('gen-model-v1 spatialSource', () => {
-  it('入参：点模式 x,y,z → position，nouns / spec_values / rooms 逗号串拆数组，spec_distance 折成 distance，per_page 缺省用 max_results', () => {
+  it('入参：点模式 x,y,z → position，nouns / spec_values / rooms 逗号串拆数组，sort=spec_distance 同名直通（服务端按专业再距离排全集），per_page 缺省用 max_results', () => {
     const req = toV1SpatialNearbyRequest({
       x: 1,
       y: 2,
@@ -89,7 +89,7 @@ describe('gen-model-v1 spatialSource', () => {
       shape: 'cube',
       nouns: ['EQUI', 'PIPE', 'TUBI'],
       keyword: 'P-101',
-      sort: 'distance',
+      sort: 'spec_distance',
       includeSelf: undefined,
       includeNegative: false,
       specValues: [1, 3],
@@ -98,6 +98,9 @@ describe('gen-model-v1 spatialSource', () => {
       perPage: 250,
     });
     expect(req).not.toHaveProperty('spec_values');
+    // 三档同名直通；不认识的值（老调用方拼出来的）退到 distance，不发一个服务端会 400 的名字。
+    expect(toV1SpatialNearbyRequest({ x: 1, y: 2, z: 3, radius: 1, sort: 'distance' }).sort).toBe('distance');
+    expect(toV1SpatialNearbyRequest({ x: 1, y: 2, z: 3, radius: 1, sort: 'spec' as unknown as SpatialNearbyParams['sort'] }).sort).toBe('distance');
     // 没给房间 / 专业就不带这两格（老断言原样成立）；专业值不是整数的丢掉。
     const plain = toV1SpatialNearbyRequest({ x: 1, y: 2, z: 3, radius: 1, spec_values: 'pipe' });
     expect(plain).not.toHaveProperty('rooms');
