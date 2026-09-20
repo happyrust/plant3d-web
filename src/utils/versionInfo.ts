@@ -87,6 +87,24 @@ function normalizeVersionInfo(raw: unknown): VersionInfo | null {
   return { version, commit, buildDate };
 }
 
+/**
+ * gen-model `/api/v1/health` 里的版本三元组：`version`（如 `0.1.28`）与 `build_id`
+ * （`<semver>+g<commit>.<unix 秒>`，如 `0.1.28+g65dacd576ebd.1789896841`）。旧后端的 `/api/version`
+ * 2026-09-20 随 legacy 退役，「关于」对话框的后端一栏改读这里。
+ */
+export function versionInfoFromGenModelHealth(health: unknown): VersionInfo | null {
+  if (!health || typeof health !== 'object') return null;
+  const obj = health as Record<string, unknown>;
+  const version = pickString(obj, 'version');
+  if (!version) return null;
+  const buildId = pickString(obj, 'build_id') ?? '';
+  const m = buildId.match(/\+g([0-9a-f]+)(?:\.(\d{9,}))?/i);
+  const commit = m?.[1] ?? '未知';
+  const seconds = m?.[2] ? Number(m[2]) : NaN;
+  const buildDate = Number.isFinite(seconds) ? formatMsAsBeijing(seconds * 1000) : '未知';
+  return { version, commit, buildDate };
+}
+
 export async function loadVersionInfo(url: string): Promise<VersionInfo | null> {
   const response = await fetch(url, {
     headers: {
