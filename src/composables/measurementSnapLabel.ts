@@ -45,13 +45,13 @@ export function getCachedNounForRefno(refno: string | null | undefined): string 
 /**
  * 异步预取 refno 的元素类型（fire-and-forget，带去重）。
  * 查询失败缓存 null，避免对同一 refno 反复请求。
- * e3d API 走动态 import：避免测量链路静态背上 DuckDB-WASM 依赖。
+ * 模型数据源走动态 import：避免测量链路静态背上整套适配器。
  */
 export function requestNounForRefno(refno: string | null | undefined): void {
   if (!refno || nounByRefno.has(refno) || pendingNounRefnos.has(refno)) return;
   pendingNounRefnos.add(refno);
-  import('@/api/genModelE3dApi')
-    .then(({ e3dGetNode }) => e3dGetNode(refno))
+  import('@/model-source')
+    .then(({ getModelSource }) => getModelSource().tree.node(refno))
     .then((response) => {
       const noun = response?.node?.noun?.trim() || null;
       nounByRefno.set(refno, noun);

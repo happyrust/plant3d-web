@@ -17,15 +17,20 @@ const mocks = vi.hoisted(() => ({
   })),
 }));
 
-vi.mock('@/api/genModelPdmsAttrApi', () => ({
-  pdmsGetTypeInfo: mocks.pdmsGetTypeInfo,
-  pdmsGetUiAttr: mocks.pdmsGetUiAttr,
-}));
-
-vi.mock('@/api/genModelE3dApi', () => ({
-  e3dGetAncestors: mocks.e3dGetAncestors,
-  e3dGetSubtreeRefnos: mocks.e3dGetSubtreeRefnos,
-  e3dSearch: mocks.e3dSearch,
+// 取数走 `getModelSource()` 的 attributes / tree 端口（旧后端 API 模块 2026-09-20 随 legacy 退役），mock 名字沿用旧函数名。
+vi.mock('@/model-source', () => ({
+  getModelSource: () => ({
+    kind: 'gen-model-v1',
+    attributes: {
+      typeInfo: (refno: string) => mocks.pdmsGetTypeInfo(refno),
+      uiAttr: (refno: string) => mocks.pdmsGetUiAttr(refno),
+    },
+    tree: {
+      ancestors: (refno: string) => mocks.e3dGetAncestors(refno),
+      subtreeRefnos: (refno: string, params?: unknown) => mocks.e3dGetSubtreeRefnos(refno, params),
+      search: (req: unknown) => mocks.e3dSearch(req),
+    },
+  }),
 }));
 
 const selectionState = {

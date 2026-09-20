@@ -329,30 +329,6 @@ describe('ModelUnitVersionComparePanel', () => {
     app.unmount();
   });
 
-  it('?model_source=legacy：一进面板就是退役提示，查询不碰库元数据也不碰模型来源（plan §7.3 第 4 条）', async () => {
-    const originalUrl = window.location.href;
-    window.history.replaceState({}, '', '/?model_source=legacy&unit_refno=24381_145018&compare_autorun=1');
-
-    const host = document.createElement('div');
-    document.body.appendChild(host);
-    const app = createApp(ModelUnitVersionComparePanel);
-    app.mount(host);
-    await flushUi();
-    await flushUi();
-
-    expect(host.querySelector('[data-testid="model-unit-compare-error"]')?.textContent).toContain('已退役');
-    expect(host.querySelector('[data-testid="model-unit-compare-a"]')).toBeNull();
-    expect(versionSourceMocks.listVersions).not.toHaveBeenCalled();
-
-    (host.querySelector('[data-testid="model-unit-compare-load"]') as HTMLButtonElement).click();
-    await flushUi();
-    expect(host.querySelector('[data-testid="model-unit-compare-error"]')?.textContent).toContain('model_source=legacy');
-    expect(versionSourceMocks.listVersions).not.toHaveBeenCalled();
-
-    app.unmount();
-    window.history.replaceState({}, '', originalUrl);
-  });
-
   it('查询新参考号时立即清空旧版本选择', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);

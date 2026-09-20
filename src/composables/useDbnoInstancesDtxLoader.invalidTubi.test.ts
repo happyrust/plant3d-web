@@ -1,32 +1,17 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // gen-model `is_invalid_tubi` 告警色（plan 2026-09-06 §8 Q2）：装入时画琥珀色、计数，重刷材质时保住。
-// 记录源只是把 uniforms 交给加载链，所以这里借 parquet 的 mock 形状喂实例即可——标记在 uniforms 上，与数据源无关。
-// 缺省数据源自 2026-09-09 起是 gen-model-v1（会把 `dataSource: 'parquet'` 改写成 v1），这里显式钉回 legacy 才走得到 parquet mock。
-beforeAll(() => window.history.replaceState({}, '', '?model_source=legacy'));
-afterAll(() => window.history.replaceState({}, '', '/'));
-
-const parquetLoaderMocks = vi.hoisted(() => ({
-  isParquetAvailable: vi.fn(async () => true),
-  queryInstanceEntriesByRefnos: vi.fn(async () => new Map()),
+// 记录源只是把 uniforms 交给加载链，这里 mock 掉 `getModelSource().records` 直接喂实例——标记在 uniforms 上。
+const recordSourceMocks = vi.hoisted(() => ({
+  instanceEntriesByRefnos: vi.fn(async () => new Map()),
 }));
 
-vi.mock('@/composables/useDbnoInstancesParquetLoader', () => ({
-  useDbnoInstancesParquetLoader: () => ({
-    isParquetAvailable: parquetLoaderMocks.isParquetAvailable,
-    queryInstanceEntriesByRefnos: parquetLoaderMocks.queryInstanceEntriesByRefnos,
+vi.mock('@/model-source', () => ({
+  getModelSource: () => ({
+    kind: 'gen-model-v1',
+    records: { instanceEntriesByRefnos: recordSourceMocks.instanceEntriesByRefnos },
+    meshes: { meshUrl: (geoHash: string) => `/api/v1/meshes/${geoHash}.mesh` },
   }),
-}));
-
-vi.mock('@/api/genModelRealtimeApi', () => ({
-  realtimeInstancesByRefnos: vi.fn(async () => ({ items: [], missing_refnos: [] })),
-}));
-
-vi.mock('@/utils/parseGlbGeometry', () => ({
-  parseGlbGeometryResult: vi.fn(() => ({
-    ok: false,
-    error: Object.assign(new Error('invalid test GLB'), { issue: null }),
-  })),
 }));
 
 vi.mock('@/composables/useDisplayThemeStore', () => ({
@@ -50,18 +35,17 @@ function tubi(refno: string, extra: Record<string, unknown> = {}) {
 async function loadWith(dbno: number, insts: ReturnType<typeof tubi>[]) {
   const { DTXLayer } = await import('@/utils/three/dtx');
   const mod = await import('./useDbnoInstancesDtxLoader');
-  parquetLoaderMocks.queryInstanceEntriesByRefnos.mockResolvedValue(new Map([[BRAN, insts]]));
+  recordSourceMocks.instanceEntriesByRefnos.mockResolvedValue(new Map([[BRAN, insts]]));
   const layer = new DTXLayer({ maxVertices: 512, maxIndices: 1024, maxObjects: 8 });
   const addObject = vi.spyOn(layer, 'addObject');
-  const result = await mod.loadDbnoInstancesForVisibleRefnosDtx(layer, dbno, [BRAN], { dataSource: 'parquet' });
+  const result = await mod.loadDbnoInstancesForVisibleRefnosDtx(layer, dbno, [BRAN], { dataSource: 'gen-model-v1' });
   const colorByObjectId = new Map(addObject.mock.calls.map((call) => [call[0], call[3]!.getHexString()]));
   return { mod, layer, result, colorByObjectId };
 }
 
 beforeEach(() => {
   vi.clearAllMocks();
-  parquetLoaderMocks.isParquetAvailable.mockResolvedValue(true);
-  parquetLoaderMocks.queryInstanceEntriesByRefnos.mockResolvedValue(new Map());
+  recordSourceMocks.instanceEntriesByRefnos.mockResolvedValue(new Map());
 });
 
 describe('useDbnoInstancesDtxLoader · is_invalid_tubi 告警色', () => {

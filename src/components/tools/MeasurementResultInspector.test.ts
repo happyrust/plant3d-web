@@ -165,39 +165,38 @@ describe('MeasurementResultInspector', () => {
   });
 
   it('recomputes rows for an explicit WRT and keeps the last frame after an error', async () => {
-    const pdmsGetTransform = vi.fn(async (refno: string) => {
-      if (refno === '7_8') {
-        return {
-          success: true,
-          refno,
-          owner: '7_1',
-          world_transform: [
-            0, 1, 0, 0,
-            -1, 0, 0, 0,
-            0, 0, 1, 0,
-            10000, 20000, 30000, 1,
-          ],
-        };
-      }
+    // The reference-frame port takes the element placement from gen-model-v1 `element/ptset`
+    // (`world_transform`, column-major mm) and the owner / noun hint from the tree node; both are
+    // answered locally so nothing goes to the network. An unknown refno is a v1 `not_found` error.
+    vi.doMock('@/api/genModelV1Api', async (importOriginal) => {
+      const actual = await importOriginal<typeof import('@/api/genModelV1Api')>();
       return {
-        success: false,
-        refno,
-        owner: null,
-        world_transform: null,
-        error_message: 'element not found',
+        ...actual,
+        genModelV1ElementPtset: vi.fn(async ({ refno }: { refno: string }) => {
+          if (refno === '7_8') {
+            return {
+              refno,
+              noun: 'EQUI',
+              ptset: [],
+              world_transform: [
+                0, 1, 0, 0,
+                -1, 0, 0, 0,
+                0, 0, 1, 0,
+                10000, 20000, 30000, 1,
+              ],
+              source: 'e3d-model',
+            };
+          }
+          throw new actual.GenModelV1ApiError({
+            code: 'not_found',
+            status: 404,
+            path: '/api/v1/element/ptset',
+            message: 'element not found',
+            detail: null,
+          });
+        }),
       };
     });
-    vi.doMock('@/api/genModelPdmsAttrApi', async (importOriginal) => ({
-      ...await importOriginal<typeof import('@/api/genModelPdmsAttrApi')>(),
-      pdmsGetTransform,
-    }));
-    // The reference-frame port follows the model source: pin `legacy` so the transform comes from
-    // the mocked `/api/pdms/transform` (under gen-model-v1 it would ask `element/ptset` instead),
-    // and answer the tree-node lookup (owner / noun hint) locally so nothing goes to the network.
-    vi.doMock('@/model-source/kind', async (importOriginal) => ({
-      ...await importOriginal<typeof import('@/model-source/kind')>(),
-      getModelSourceKind: () => 'legacy' as const,
-    }));
     vi.doMock('@/model-source', async (importOriginal) => ({
       ...await importOriginal<typeof import('@/model-source')>(),
       getModelSource: () => ({

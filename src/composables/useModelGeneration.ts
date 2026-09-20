@@ -3,20 +3,16 @@ import type { Ref } from 'vue';
 
 import type { VisibleInstsIncomplete, VisibleInstsResponse } from '@/api/genModelE3dTypes';
 
-import { enqueueParquetIncremental, getParquetVersion } from '@/api/genModelRealtimeApi';
-import { triggerBatchGenerateSse } from '@/api/genModelStreamGenerateApi';
-import { modelRegenerateByRefno, modelShowByRefno } from '@/api/genModelTaskApi';
 import { useConfirmDialogStore } from '@/composables/useConfirmDialogStore';
 import { useConsoleStore } from '@/composables/useConsoleStore';
 import { ensureDbMetaInfoLoaded, tryGetDbnumByRefno } from '@/composables/useDbMetaInfo';
 import { isDtxRefnoLoaded, loadDbnoInstancesForVisibleRefnosDtx } from '@/composables/useDbnoInstancesDtxLoader';
-import { useDbnoInstancesParquetLoader } from '@/composables/useDbnoInstancesParquetLoader';
 import { useModelLoadStatus } from '@/composables/useModelLoadStatus';
 import { getGenModelV1ModelSource, getModelSource, subscribeModelSourceProgress, type GenModelV1ModelSource } from '@/model-source';
 import { emitToast } from '@/ribbon/toastBus';
 
 /**
- * 全局开关：是否显式启用自动生成（SSE 流式生成、自动导出 parquet）
+ * 全局开关：是否显式启用自动生成
  * 默认 false（关闭自动补生成）；仅支持 query 参数：
  * - query: `dtx_enable_auto_generation=1`
  */
@@ -33,21 +29,7 @@ function shouldEnableAutoGeneration(): boolean {
   return false;
 }
 
-/** URL `data_source=json|parquet|backend` 强制数据源；未指定时走默认优先级。 */
-function preferredDataSourceFromUrl(): 'json' | 'parquet' | 'backend' | null {
-  if (typeof window === 'undefined') return null;
-  try {
-    const raw = (new URLSearchParams(window.location.search).get('data_source') || '')
-      .trim()
-      .toLowerCase();
-    if (raw === 'json' || raw === 'parquet' || raw === 'backend') return raw;
-  } catch {
-    // ignore
-  }
-  return null;
-}
-
-/** `?show_dbnum_full=1`：整库入口不做「安全概览」预算，全量装（与 ViewerPanel 的 parquet 整库同一开关）。 */
+/** `?show_dbnum_full=1`：整库入口不做「安全概览」预算，全量装。 */
 function isShowDbnumFullRequested(): boolean {
   if (typeof window === 'undefined') return false;
   try {
@@ -135,13 +117,6 @@ export type ShowModelByDbnumResult = {
 
 function normalizeRefnoString(refno: string): string {
   return String(refno || '').trim().replace('/', '_');
-}
-
-function toBackendRefno(refno: string): string {
-  const normalized = normalizeRefnoString(refno);
-  const m = normalized.match(/^(\d+)_(\d+)$/);
-  if (m) return `${m[1]}/${m[2]}`;
-  return normalized;
 }
 
 function uniqStrings(list: string[]): string[] {
@@ -299,7 +274,6 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
   const lastLoadDebug = ref<ModelLoadDebugInfo | null>(null);
 
   const loadedRoots = new Set<string>();
-  const PARQUET_VERSION_POLL_INTERVAL_MS = 3000;
 
   function syncGlobalLoadStatus() {
     modelLoadStatus.update({
@@ -372,242 +346,6 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
     return totals;
   }
 
-  async function loadGeneratedRefnos(
-    dtxLayer: any,
-    dbno: number,
-    refnos: string[],
-    anyViewer: { __dtxAfterInstancesLoaded?: (dbno: number, loadedRefnos: string[]) => void }
-  ): Promise<{
-    loadedRefnos: number
-    skippedRefnos: number
-    loadedObjects: number
-    missingRefnos: string[]
-  }> {
-    if (refnos.length === 0) {
-      return { loadedRefnos: 0, skippedRefnos: 0, loadedObjects: 0, missingRefnos: [] };
-    }
-
-    statusMessage.value = '正在加载实时生成模型...';
-    progress.value = Math.max(progress.value, 96);
-
-    const result = await loadDbnoInstancesForVisibleRefnosDtx(dtxLayer, dbno, refnos, {
-      lodAssetKey: 'L1',
-      debug: false,
-      dataSource: 'backend',
-      forceReloadRefnos: refnos,
-    });
-    anyViewer.__dtxAfterInstancesLoaded?.(dbno, refnos);
-    return result;
-  }
-
-  async function pollParquetVersionAfterEnqueue(
-    dbno: number,
-    baselineRevision: number,
-    maxWaitMs = 3 * 60 * 1000
-  ): Promise<{ updated: boolean; revision: number; error?: string }> {
-    const startedAt = Date.now();
-    let lastError = '';
-
-    while (Date.now() - startedAt < maxWaitMs) {
-      await sleep(PARQUET_VERSION_POLL_INTERVAL_MS);
-      try {
-        const version = await getParquetVersion(dbno);
-        const revision = Number(version.revision || 0);
-        if (revision > baselineRevision) {
-          return { updated: true, revision };
-        }
-        if (!version.running && Number(version.pending_count || 0) <= 0) {
-          return {
-            updated: false,
-            revision,
-            error: version.last_error || undefined,
-          };
-        }
-      } catch (e) {
-        lastError = e instanceof Error ? e.message : String(e);
-      }
-    }
-
-    return {
-      updated: false,
-      revision: baselineRevision,
-      error: lastError || '版本轮询超时',
-    };
-  }
-
-  async function ensureParquetAvailableByAutoExport(
-    dbno: number,
-    candidateRefnos: string[]
-  ): Promise<boolean> {
-    const parquetLoader = useDbnoInstancesParquetLoader();
-    if (await parquetLoader.isParquetAvailable(dbno)) return true;
-
-    if (!AUTO_GENERATION_ENABLED) {
-      console.warn(`[model-generation] parquet 缺失，当前默认不自动导出 dbno=${dbno}`);
-      consoleStore.addLog('warning', `[model-load] parquet 缺失，当前默认不自动导出 dbno=${dbno}`);
-      return false;
-    }
-
-    const normalized = uniqStrings(candidateRefnos.map((r) => normalizeRefnoString(r))).filter(Boolean);
-    if (normalized.length === 0) return false;
-    const backendRefnos = normalized.map((r) => toBackendRefno(r));
-
-    let baselineRevision = 0;
-    try {
-      const version = await getParquetVersion(dbno);
-      baselineRevision = Number(version.revision || 0);
-    } catch {
-      baselineRevision = 0;
-    }
-
-    statusMessage.value = `检测到 parquet 缺失，正在自动导出（${backendRefnos.length} 个 refno）...`;
-    progress.value = Math.max(progress.value, 20);
-    consoleStore.addLog('info', `[model-load] parquet 缺失，触发自动导出 dbno=${dbno} refno_count=${backendRefnos.length}`);
-
-    const exportResp = await modelShowByRefno({
-      db_num: dbno,
-      refnos: backendRefnos,
-      gen_model: true,
-      gen_mesh: true,
-      regen_model: false,
-      gen_parquet: true,
-    });
-
-    if (!exportResp?.success) {
-      consoleStore.addLog(
-        'error',
-        `[model-load] 自动导出 parquet 失败 dbno=${dbno} message=${exportResp?.message ?? 'unknown'}`
-      );
-      return false;
-    }
-
-    const timeoutMs = 10 * 60 * 1000;
-    const startedAt = Date.now();
-    while (Date.now() - startedAt < timeoutMs) {
-      if (await parquetLoader.isParquetAvailable(dbno)) {
-        consoleStore.addLog('info', `[model-load] parquet 已可用 dbno=${dbno}`);
-        return true;
-      }
-      await sleep(2000);
-    }
-
-    const poll = await pollParquetVersionAfterEnqueue(dbno, baselineRevision, 2 * 60 * 1000);
-    if (poll.updated && (await parquetLoader.isParquetAvailable(dbno))) {
-      consoleStore.addLog('info', `[model-load] parquet 版本更新后可用 dbno=${dbno} revision=${poll.revision}`);
-      return true;
-    }
-    if (poll.error) {
-      consoleStore.addLog('error', `[model-load] 自动导出后 parquet 仍不可用 dbno=${dbno} err=${poll.error}`);
-    }
-
-    return await parquetLoader.isParquetAvailable(dbno);
-  }
-
-  async function handleMissingRefnos(
-    dtxLayer: any,
-    dbno: number,
-    missingRefnos: string[],
-    anyViewer: { __dtxAfterInstancesLoaded?: (dbno: number, loadedRefnos: string[]) => void }
-  ): Promise<{ loadedObjects: number; failedRefnos: string[] }> {
-    const normalizedMissing = uniqStrings(missingRefnos.map((r) => normalizeRefnoString(r))).filter(Boolean);
-    if (normalizedMissing.length === 0) {
-      return { loadedObjects: 0, failedRefnos: [] };
-    }
-
-    if (!AUTO_GENERATION_ENABLED) {
-      console.warn(`[model-generation] 发现 ${normalizedMissing.length} 个缺失模型，已按默认策略跳过自动生成`);
-      consoleStore.addLog(
-        'warning',
-        `[model-load] 发现 ${normalizedMissing.length} 个缺失模型，已按默认策略跳过自动生成 dbno=${dbno}`
-      );
-      return { loadedObjects: 0, failedRefnos: normalizedMissing };
-    }
-
-    showProgressModal.value = true;
-    statusMessage.value = `发现 ${normalizedMissing.length} 个缺失模型，正在实时生成...`;
-    totalCount.value = normalizedMissing.length;
-    currentIndex.value = 0;
-    currentRefno.value = '';
-
-    let loadedObjects = 0;
-    let failedRefnos: string[] = [];
-    const backendMissing = new Set<string>();
-    let baselineRevision = 0;
-    let enqueuedAny = false;
-
-    try {
-      try {
-        const version = await getParquetVersion(dbno);
-        baselineRevision = Number(version.revision || 0);
-      } catch (e) {
-        console.warn('[model-generation] 读取 parquet 版本失败，继续执行实时加载', e);
-      }
-
-      const result = await triggerBatchGenerateSse(normalizedMissing, {
-        onUpdate: (u) => {
-          statusMessage.value = u.message || '';
-          if (u.currentRefno) {
-            currentRefno.value = normalizeRefnoString(u.currentRefno);
-          }
-          currentIndex.value = Math.max(0, Math.min(u.totalCount || normalizedMissing.length, u.completedCount || 0));
-          if (u.stage === 'exportInstances') {
-            progress.value = Math.max(95, Math.min(99, 95 + u.percent * 0.04));
-          } else {
-            progress.value = Math.max(60, Math.min(95, 60 + u.percent * 0.35));
-          }
-        },
-        onBatchDone: async (u) => {
-          const readyRefnos = uniqStrings(u.readyRefnos.map((r) => normalizeRefnoString(r))).filter(Boolean);
-          if (readyRefnos.length === 0) return;
-
-          const loadResult = await loadGeneratedRefnos(dtxLayer, dbno, readyRefnos, anyViewer);
-          loadedObjects += loadResult.loadedObjects;
-          for (const missingRefno of loadResult.missingRefnos) {
-            backendMissing.add(normalizeRefnoString(missingRefno));
-          }
-
-          try {
-            await enqueueParquetIncremental(dbno, readyRefnos);
-            enqueuedAny = true;
-          } catch (e) {
-            console.warn('[model-generation] parquet 增量入队失败', e);
-          }
-        },
-        skipOnError: true,
-        exportInstances: false,
-        mergeInstances: false,
-      });
-
-      failedRefnos = uniqStrings(result.failedRefnos.map((r) => normalizeRefnoString(r))).filter(Boolean);
-      if (failedRefnos.length > 0) {
-        console.warn(`[model-generation] ${failedRefnos.length} refnos failed to generate:`, failedRefnos);
-      }
-
-      if (enqueuedAny) {
-        statusMessage.value = '正在轮询 parquet 版本，等待离线缓存更新...';
-        const poll = await pollParquetVersionAfterEnqueue(dbno, baselineRevision);
-        if (poll.updated) {
-          consoleStore.addLog('info', `[model-load] parquet 版本已更新 dbno=${dbno} revision=${poll.revision}`);
-        } else if (poll.error) {
-          consoleStore.addLog('error', `[model-load] parquet 版本轮询未更新 dbno=${dbno} err=${poll.error}`);
-        }
-      }
-    } catch (e) {
-      console.error('[model-generation] Batch generate failed:', e);
-      const msg = e instanceof Error ? e.message : String(e);
-      consoleStore.addLog('error', `[model-load] 实时生成失败 dbno=${dbno} err=${msg}`);
-      failedRefnos = normalizedMissing;
-    } finally {
-      showProgressModal.value = false;
-      totalCount.value = 0;
-      currentIndex.value = 0;
-      currentRefno.value = '';
-    }
-
-    const mergedFailed = uniqStrings([...failedRefnos, ...Array.from(backendMissing)]);
-    return { loadedObjects, failedRefnos: mergedFailed };
-  }
-
   function checkRefnoExists(refno: string): boolean {
     if (loadedRoots.has(refno)) return true;
     const v = viewer as any;
@@ -642,8 +380,8 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
           const anyViewer = viewer as any;
           let aabb = anyViewer?.scene?.getAABB?.([normalizedRoot]) ?? null;
           // gen-model-v1 下子树 refno 集是逐节点 BFS（一个 ZONE 几百次请求），而这里只是给「已加载的东西」飞一下；
-          // 不是真加载过的（树占位）直接落到下面的加载路，加载完自会 flyTo。legacy 一次请求，照旧。
-          const subtreeLookupWorthIt = genuinelyLoaded || getModelSource().kind !== 'gen-model-v1';
+          // 不是真加载过的（树占位）直接落到下面的加载路，加载完自会 flyTo。
+          const subtreeLookupWorthIt = genuinelyLoaded;
           if (!aabb && subtreeLookupWorthIt) {
             try {
               const { refnos } = await querySubtreeRefnos(normalizedRoot);
@@ -775,9 +513,9 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
           (visibleErr ? ` err=${visibleErr}` : '')
       );
       if (!visibleOk && visibleErr) {
-        consoleStore.addLog('warning', `[model-load] 查询加载范围失败，将尝试从 Parquet 加载：${visibleErr}`);
+        consoleStore.addLog('warning', `[model-load] 查询加载范围失败：${visibleErr}`);
         emitToast({
-          message: `[警告] 查询加载范围失败，将尝试从 Parquet 加载：${visibleErr}`,
+          message: `[警告] 查询加载范围失败：${visibleErr}`,
           level: 'warning',
         });
       } else if (visibleOk && visibleRefnos.length === 0 && scopeIncomplete) {
@@ -838,416 +576,106 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
 
       // ========== gen-model-v1（plan 2026-09-06 P3-f）==========
       // 显式显示 = ensure(force=false) → records（D5-A），已在 visibleInsts 里做过一遍并进了记录缓存，这里只是把
-      // 缓存里的实例装进 DTX；重生成 = ensure(force=true)。旧后端的 realtime / parquet / SSE 那几条路一律不走。
-      if (getModelSource().kind === 'gen-model-v1') {
-        const loadRefnos = loadScope.actualLoadRefnos;
-        // regenerate（人要求重算）= ensure(force=true) 并替换场景里的旧对象。前端只吃自己 ensure 出来的数据，
-        // 没有「服务端替你重算了、这里被动重载」这一路（2026-09-09 用户口径，收口计划 §12）。
-        const regenerate = loadOptions?.regenerate === true;
-        statusMessage.value = regenerate
-          ? `正在重新生成 ${normalizedRoot}（gen-model）...`
-          : `从 gen-model 加载 ${loadRefnos.length} 个 refno...`;
-        progress.value = 30;
-        syncGlobalLoadStatus();
-        const v1Result = await loadGenModelV1Refnos(
-          dtxLayer,
-          dbno,
-          loadRefnos,
-          anyViewer,
-          { regenerate, replace: regenerate },
-          [30, 95],
-          `从 gen-model 加载 ${normalizedRoot}`,
-        );
-        if (typeof anyViewer.scene?.ensureRefnos === 'function') {
-          anyViewer.scene.ensureRefnos(loadRefnos, { computeAabb: false });
-        }
-        if (loadOptions?.flyTo) {
-          try {
-            const flyTargets = loadRefnos.length > 5000 ? loadRefnos.slice(0, 5000) : loadRefnos;
-            const aabb = anyViewer.scene?.getAABB?.(flyTargets) ?? null;
-            if (aabb) anyViewer.cameraFlight?.flyTo?.({ aabb, duration: 0.8, fit: true });
-          } catch {
-            // ignore flyTo errors
-          }
-        }
-        lastLoadDebug.value = {
-          refno: normalizedRoot,
-          dbno,
-          visibleInsts: { ok: visibleOk, count: visibleRefnos.length, error: visibleErr },
-          componentRefnos: { count: loadScope.componentRefnos.length, sample: loadScope.componentRefnos.slice(0, 10) },
-          loadRefnos: { count: loadRefnos.length, sample: loadRefnos.slice(0, 10) },
-          scopeDecision: {
-            rootNoun: loadScope.rootNoun,
-            branHangRootInjected: loadScope.branHangRootInjected,
-            typeInfoError: loadScope.typeInfoError,
-          },
-          result: {
-            loadedRefnos: v1Result.loadedRefnos,
-            skippedRefnos: v1Result.skippedRefnos,
-            loadedObjects: v1Result.loadedObjects,
-          },
-          ms: Date.now() - startedAt,
-        };
-        const mesh404 = v1Result.mesh404;
-        const noGeo = v1Result.noGeo;
-        consoleStore.addLog(
-          'info',
-          `[model-load] gen-model-v1 root=${normalizedRoot} dbno=${dbno} loaded_refnos=${v1Result.loadedRefnos} skipped=${v1Result.skippedRefnos} objects=${v1Result.loadedObjects} invalid_tubi=${v1Result.invalidTubi} mesh404=${mesh404} no_geo=${noGeo} ms=${Date.now() - startedAt}`
-        );
-        if (v1Result.invalidTubi > 0) {
-          consoleStore.addLog('warning', `[model-load] refno=${normalizedRoot} 有 ${v1Result.invalidTubi} 段无效直管（is_invalid_tubi），已画成告警色`);
-        }
-        progress.value = 100;
-        // 收集没完成（有根 pending / 预算外 / 出错）：已取得的构件照画，但这个节点**不**记进 loadedRoots——
-        // 记了就会被 genuinelyLoaded 短路，恰好恢复的那几根永远补不上。记录源那边同样不备忘未收齐的结果，
-        // 下一次普通显示会重新 ensure → records 把剩下的根补齐（B1）。
-        const collectionIncomplete = scopeIncomplete !== null;
-        if (v1Result.loadedObjects > 0) {
-          if (collectionIncomplete) {
-            statusMessage.value = regenerate ? `重新生成部分完成 (gen-model，${incompleteTail})` : `部分加载 (gen-model，${incompleteTail})`;
-            syncGlobalLoadStatus();
-            consoleStore.addLog(
-              'warning',
-              `[model-load] gen-model-v1 refno=${normalizedRoot} 收集未完成（${incompleteTail}），已画 ${v1Result.loadedObjects} 个实例，未记为已加载；再显示一次可补齐`,
-            );
-            emitToast({
-              message: `[提示] 已从 gen-model 加载 ${v1Result.loadedObjects} 个几何实例，但 ${incompleteTail}；稍后再显示一次 ${normalizedRoot} 可补齐`,
-              level: 'warning',
-            });
-            return true;
-          }
-          loadedRoots.add(normalizedRoot);
-          statusMessage.value = regenerate ? '重新生成完成 (gen-model)' : '加载完成 (gen-model)';
-          syncGlobalLoadStatus();
-          emitToast({ message: `[成功] 已从 gen-model 加载 ${v1Result.loadedObjects} 个几何实例`, level: 'success' });
-          return true;
-        }
-        if (v1Result.skippedRefnos > 0 && v1Result.loadedRefnos === 0) {
-          // 全部已在场景里（缓存命中），不是失败；没收齐的照样不记 loadedRoots
-          statusMessage.value = collectionIncomplete ? `部分加载 (gen-model，${incompleteTail})` : '已加载 (gen-model)';
-          syncGlobalLoadStatus();
-          if (collectionIncomplete) {
-            consoleStore.addLog('warning', `[model-load] gen-model-v1 refno=${normalizedRoot} 已取得的构件都在场景中，但收集未完成（${incompleteTail}）`);
-          }
-          return true;
-        }
-        statusMessage.value = collectionIncomplete ? `模型尚未就绪 (gen-model，${incompleteTail})` : '无可见几何实例 (gen-model)';
-        syncGlobalLoadStatus();
-        const hint = collectionIncomplete
-          ? incompleteTail
-          : mesh404 > 0 ? `网格缺失 ${mesh404} 个 refno` : noGeo > 0 ? `${noGeo} 个 refno 没有几何记录` : '服务端未返回可绘制实例';
-        consoleStore.addLog('warning', `[model-load] gen-model-v1 未绘制实例 refno=${normalizedRoot}：${hint}`);
-        emitToast({ message: `[警告] 加载结束但未绘制实例（refno=${normalizedRoot}）：${hint}`, level: 'warning' });
-        return false;
-      }
-
-      if (loadOptions?.regenerate) {
-        statusMessage.value = `正在重新生成 ${normalizedRoot}...`;
-        progress.value = 20;
-        showProgressModal.value = true;
-        syncGlobalLoadStatus();
-        consoleStore.addLog(
-          'info',
-          `[model-regen] start root=${normalizedRoot} dbno=${dbno} component_count=${loadScope.actualLoadRefnos.length}`
-        );
-
-        const regen = await modelRegenerateByRefno({
-          refnos: [toBackendRefno(normalizedRoot)],
-          db_num: dbno,
-          gen_parquet: false,
-        });
-        if (!regen?.success) {
-          throw new Error(regen?.message || `模型重新生成失败：${normalizedRoot}`);
-        }
-
-        statusMessage.value = '重新生成完成，正在替换场景模型...';
-        progress.value = 80;
-        syncGlobalLoadStatus();
-        const regeneratedRefnos = loadScope.actualLoadRefnos;
-        const regenerated = await loadDbnoInstancesForVisibleRefnosDtx(
-          dtxLayer,
-          dbno,
-          regeneratedRefnos,
-          {
-            lodAssetKey: 'L1',
-            debug: false,
-            dataSource: 'backend',
-            forceReloadRefnos: regeneratedRefnos,
-            replaceExistingObjects: true,
-            forceRefreshGeometries: true,
-          }
-        );
-        anyViewer.__dtxAfterInstancesLoaded?.(dbno, regeneratedRefnos);
-        if (regenerated.loadedObjects <= 0) {
-          throw new Error(`重新生成完成，但后端未返回可绘制实例：${normalizedRoot}`);
-        }
-
-        loadedRoots.add(normalizedRoot);
-        progress.value = 100;
-        statusMessage.value = `重新生成完成（${regenerated.loadedObjects} 个几何实例）`;
-        syncGlobalLoadStatus();
-        if (loadOptions.flyTo) {
-          const aabb = anyViewer.scene?.getAABB?.(regeneratedRefnos) ?? null;
-          if (aabb) anyViewer.cameraFlight?.flyTo?.({ aabb, duration: 0.8, fit: true });
-        }
-        consoleStore.addLog(
-          'info',
-          `[model-regen] done root=${normalizedRoot} dbno=${dbno} loaded_objects=${regenerated.loadedObjects}`
-        );
-        emitToast({ message: `[成功] ${normalizedRoot} 已重新生成并替换`, level: 'success' });
-        return true;
-      }
-
-      try {
-        const loadRefnos = loadScope.actualLoadRefnos;
-        statusMessage.value = `从后端实时数据加载 dbno=${dbno}...`;
-        progress.value = 20;
-        syncGlobalLoadStatus();
-
-        const backendResult = await loadDbnoInstancesForVisibleRefnosDtx(dtxLayer, dbno, loadRefnos, {
-          lodAssetKey: 'L1',
-          debug: false,
-          dataSource: 'backend',
-          forceReloadRefnos: loadRefnos,
-        });
-        anyViewer.__dtxAfterInstancesLoaded?.(dbno, loadRefnos);
-
-        if (typeof anyViewer.scene?.ensureRefnos === 'function') {
-          anyViewer.scene.ensureRefnos(loadRefnos, { computeAabb: false });
-        }
-
-        if (loadOptions?.flyTo) {
-          try {
-            const flyTargets = loadRefnos.length > 5000 ? loadRefnos.slice(0, 5000) : loadRefnos;
-            const aabb = anyViewer.scene?.getAABB?.(flyTargets) ?? null;
-            if (aabb) {
-              anyViewer.cameraFlight?.flyTo?.({ aabb, duration: 0.8, fit: true });
-            }
-          } catch {
-            // ignore flyTo errors
-          }
-        }
-
-        lastLoadDebug.value = {
-          refno: normalizedRoot,
-          dbno,
-          visibleInsts: { ok: visibleOk, count: visibleRefnos.length, error: visibleErr },
-          componentRefnos: { count: loadScope.componentRefnos.length, sample: loadScope.componentRefnos.slice(0, 10) },
-          loadRefnos: { count: loadRefnos.length, sample: loadRefnos.slice(0, 10) },
-          scopeDecision: {
-            rootNoun: loadScope.rootNoun,
-            branHangRootInjected: loadScope.branHangRootInjected,
-            typeInfoError: loadScope.typeInfoError,
-          },
-          result: {
-            loadedRefnos: backendResult.loadedRefnos,
-            skippedRefnos: backendResult.skippedRefnos,
-            loadedObjects: backendResult.loadedObjects,
-          },
-          ms: Date.now() - startedAt,
-        };
-
-        if (backendResult.loadedObjects > 0) {
-          loadedRoots.add(normalizedRoot);
-          statusMessage.value = '加载完成 (Backend)';
-          progress.value = 100;
-          syncGlobalLoadStatus();
-          emitToast({ message: `[成功] 已通过后端实时数据加载 ${backendResult.loadedObjects} 个几何实例`, level: 'success' });
-          return true;
-        }
-
-        consoleStore.addLog(
-          'warning',
-          `[model-load] 后端实时数据未返回可绘制实例 refno=${normalizedRoot} dbno=${dbno}，继续尝试 Parquet/JSON`
-        );
-      } catch (backendError) {
-        consoleStore.addLog(
-          'warning',
-          `[model-load] 后端实时加载失败，继续尝试 Parquet/JSON dbno=${dbno} err=${backendError instanceof Error ? backendError.message : String(backendError)}`
-        );
-      }
-
-      // ========== Parquet 优先路径（不可用时自动导出） ==========
-      // URL data_source=json 时跳过 parquet，直接用已修复的 instances JSON
-      const forcedSource = preferredDataSourceFromUrl();
-      const parquetLoader = useDbnoInstancesParquetLoader();
-      let parquetAvailable =
-        forcedSource === 'json' || forcedSource === 'backend'
-          ? false
-          : await parquetLoader.isParquetAvailable(dbno);
-
-      if (!parquetAvailable && forcedSource !== 'json' && forcedSource !== 'backend') {
-        const exportTargets = loadScope.actualLoadRefnos;
-        parquetAvailable = await ensureParquetAvailableByAutoExport(dbno, exportTargets);
-      }
-
-      if (parquetAvailable) {
-        consoleStore.addLog('info', `[model-load] 使用 Parquet 数据源 dbno=${dbno}`);
-        statusMessage.value = `从 Parquet 加载 dbno=${dbno}...`;
-        progress.value = 20;
-        syncGlobalLoadStatus();
-
-        const loadRefnos = loadScope.actualLoadRefnos;
-
-        statusMessage.value = `加载 ${loadRefnos.length} 个 refno (Parquet)...`;
-        progress.value = 60;
-        syncGlobalLoadStatus();
-
-        const LOAD_BATCH_SIZE = VISIBLE_REFNOS_PAGE_SIZE;
-        const total = loadRefnos.length;
-        const batchTotal = Math.ceil(total / LOAD_BATCH_SIZE);
-        let totalLoaded = 0;
-        let totalSkipped = 0;
-        let totalObjects = 0;
-        const missingAll: string[] = [];
-
-        for (let start = 0; start < total; start += LOAD_BATCH_SIZE) {
-          const end = Math.min(total, start + LOAD_BATCH_SIZE);
-          const batch = loadRefnos.slice(start, end);
-          const batchIndex = Math.floor(start / LOAD_BATCH_SIZE) + 1;
-          statusMessage.value = `加载批次 ${batchIndex}/${batchTotal} (${end}/${total}) [Parquet]`;
-          progress.value = Math.max(60, Math.min(95, 60 + Math.floor((end / total) * 35)));
-          syncGlobalLoadStatus();
-
-          const result = await loadDbnoInstancesForVisibleRefnosDtx(dtxLayer, dbno, batch, {
-            lodAssetKey: 'L1',
-            debug: false,
-            dataSource: 'parquet',
-          });
-          anyViewer.__dtxAfterInstancesLoaded?.(dbno, batch);
-          totalLoaded += result.loadedRefnos;
-          totalSkipped += result.skippedRefnos;
-          totalObjects += result.loadedObjects;
-          if (result.missingRefnos.length > 0) missingAll.push(...result.missingRefnos);
-        }
-
-        if (missingAll.length > 0) {
-          const realtimeResult = await handleMissingRefnos(dtxLayer, dbno, uniqStrings(missingAll), anyViewer);
-          totalObjects += realtimeResult.loadedObjects;
-        }
-
-        if (loadOptions?.flyTo) {
-          try {
-            const av = viewer as any;
-            const max = 5000;
-            const flyRefnos = loadRefnos.length > max ? loadRefnos.slice(0, max) : loadRefnos;
-            const aabb = av?.scene?.getAABB?.(flyRefnos) ?? null;
-            if (aabb) {
-              av?.cameraFlight?.flyTo?.({ aabb, duration: 0.8, fit: true });
-            }
-          } catch { /* ignore flyTo errors */ }
-        }
-
-        lastLoadDebug.value = {
-          refno: normalizedRoot,
-          dbno,
-          visibleInsts: { ok: visibleOk, count: visibleRefnos.length, error: visibleErr },
-          componentRefnos: { count: loadScope.componentRefnos.length, sample: loadScope.componentRefnos.slice(0, 10) },
-          loadRefnos: { count: loadRefnos.length, sample: loadRefnos.slice(0, 10) },
-          scopeDecision: {
-            rootNoun: loadScope.rootNoun,
-            branHangRootInjected: loadScope.branHangRootInjected,
-            typeInfoError: loadScope.typeInfoError,
-          },
-          result: { loadedRefnos: totalLoaded, skippedRefnos: totalSkipped, loadedObjects: totalObjects },
-          ms: Date.now() - startedAt,
-        };
-        if (totalObjects > 0) {
-          loadedRoots.add(normalizedRoot);
-        }
-        const noNewRefnosLoaded = totalLoaded === 0;
-        statusMessage.value = totalObjects > 0 ? '加载完成 (Parquet)' : '无可见几何实例';
-        progress.value = 100;
-        syncGlobalLoadStatus();
-        if (totalObjects === 0) {
-          if (noNewRefnosLoaded) {
-            consoleStore.addLog(
-              'info',
-              `[model-load] refno=${normalizedRoot} 本次未新增实例，已存在于场景或缓存中，跳过重复提示`
-            );
-          } else {
-            const message = `[警告] 加载结束但未绘制任何实例（refno=${normalizedRoot}）。请检查左侧可见性（眼睛图标）或 Parquet 是否包含该范围几何`;
-            consoleStore.addLog('warning', `[model-load] ${message}`);
-          }
-        } else {
-          emitToast({ message: `[成功] 已加载 ${totalObjects} 个几何实例`, level: 'success' });
-        }
-        return true;
-      }
-
+      // 缓存里的实例装进 DTX；重生成 = ensure(force=true)。（旧后端的 realtime / parquet / SSE 那几条路 2026-09-20 随 legacy 删除。）
       const loadRefnos = loadScope.actualLoadRefnos;
-
-      if (AUTO_GENERATION_ENABLED) {
+      // regenerate（人要求重算）= ensure(force=true) 并替换场景里的旧对象。前端只吃自己 ensure 出来的数据，
+      // 没有「服务端替你重算了、这里被动重载」这一路（2026-09-09 用户口径，收口计划 §12）。
+      const regenerate = loadOptions?.regenerate === true;
+      statusMessage.value = regenerate
+        ? `正在重新生成 ${normalizedRoot}（gen-model）...`
+        : `从 gen-model 加载 ${loadRefnos.length} 个 refno...`;
+      progress.value = 30;
+      syncGlobalLoadStatus();
+      const v1Result = await loadGenModelV1Refnos(
+        dtxLayer,
+        dbno,
+        loadRefnos,
+        anyViewer,
+        { regenerate, replace: regenerate },
+        [30, 95],
+        `从 gen-model 加载 ${normalizedRoot}`,
+      );
+      if (typeof anyViewer.scene?.ensureRefnos === 'function') {
+        anyViewer.scene.ensureRefnos(loadRefnos, { computeAabb: false });
+      }
+      if (loadOptions?.flyTo) {
         try {
-          statusMessage.value = `从后端实时数据加载 dbno=${dbno}...`;
-          progress.value = 20;
-          syncGlobalLoadStatus();
-
-          const backendResult = await loadDbnoInstancesForVisibleRefnosDtx(dtxLayer, dbno, loadRefnos, {
-            lodAssetKey: 'L1',
-            debug: false,
-            dataSource: 'backend',
-            forceReloadRefnos: loadRefnos,
-          });
-          anyViewer.__dtxAfterInstancesLoaded?.(dbno, loadRefnos);
-
-          if (typeof anyViewer.scene?.ensureRefnos === 'function') {
-            anyViewer.scene.ensureRefnos(loadRefnos, { computeAabb: false });
-          }
-
-          if (loadOptions?.flyTo) {
-            try {
-              const flyTargets = loadRefnos.length > 5000 ? loadRefnos.slice(0, 5000) : loadRefnos;
-              const aabb = anyViewer.scene?.getAABB?.(flyTargets) ?? null;
-              if (aabb) {
-                anyViewer.cameraFlight?.flyTo?.({ aabb, duration: 0.8, fit: true });
-              }
-            } catch {
-              // ignore flyTo errors
-            }
-          }
-
-          lastLoadDebug.value = {
-            refno: normalizedRoot,
-            dbno,
-            visibleInsts: { ok: visibleOk, count: visibleRefnos.length, error: visibleErr },
-            componentRefnos: { count: loadScope.componentRefnos.length, sample: loadScope.componentRefnos.slice(0, 10) },
-            loadRefnos: { count: loadRefnos.length, sample: loadRefnos.slice(0, 10) },
-            scopeDecision: {
-              rootNoun: loadScope.rootNoun,
-              branHangRootInjected: loadScope.branHangRootInjected,
-              typeInfoError: loadScope.typeInfoError,
-            },
-            result: {
-              loadedRefnos: backendResult.loadedRefnos,
-              skippedRefnos: backendResult.skippedRefnos,
-              loadedObjects: backendResult.loadedObjects,
-            },
-            ms: Date.now() - startedAt,
-          };
-
-          if (backendResult.loadedObjects > 0) {
-            loadedRoots.add(normalizedRoot);
-            statusMessage.value = '加载完成 (Backend)';
-            progress.value = 100;
-            syncGlobalLoadStatus();
-            emitToast({ message: `[成功] 已通过后端实时数据加载 ${backendResult.loadedObjects} 个几何实例`, level: 'success' });
-            return true;
-          }
-
-          consoleStore.addLog(
-            'warning',
-            `[model-load] 后端实时数据未返回可绘制实例 refno=${normalizedRoot} dbno=${dbno}`
-          );
-        } catch (backendError) {
-          consoleStore.addLog(
-            'warning',
-            `[model-load] 后端实时加载失败 dbno=${dbno} err=${backendError instanceof Error ? backendError.message : String(backendError)}`
-          );
+          const flyTargets = loadRefnos.length > 5000 ? loadRefnos.slice(0, 5000) : loadRefnos;
+          const aabb = anyViewer.scene?.getAABB?.(flyTargets) ?? null;
+          if (aabb) anyViewer.cameraFlight?.flyTo?.({ aabb, duration: 0.8, fit: true });
+        } catch {
+          // ignore flyTo errors
         }
       }
-
-      throw new Error(`Parquet 不可用且自动导出失败 (dbno=${dbno})`);
+      lastLoadDebug.value = {
+        refno: normalizedRoot,
+        dbno,
+        visibleInsts: { ok: visibleOk, count: visibleRefnos.length, error: visibleErr },
+        componentRefnos: { count: loadScope.componentRefnos.length, sample: loadScope.componentRefnos.slice(0, 10) },
+        loadRefnos: { count: loadRefnos.length, sample: loadRefnos.slice(0, 10) },
+        scopeDecision: {
+          rootNoun: loadScope.rootNoun,
+          branHangRootInjected: loadScope.branHangRootInjected,
+          typeInfoError: loadScope.typeInfoError,
+        },
+        result: {
+          loadedRefnos: v1Result.loadedRefnos,
+          skippedRefnos: v1Result.skippedRefnos,
+          loadedObjects: v1Result.loadedObjects,
+        },
+        ms: Date.now() - startedAt,
+      };
+      const mesh404 = v1Result.mesh404;
+      const noGeo = v1Result.noGeo;
+      consoleStore.addLog(
+        'info',
+        `[model-load] gen-model-v1 root=${normalizedRoot} dbno=${dbno} loaded_refnos=${v1Result.loadedRefnos} skipped=${v1Result.skippedRefnos} objects=${v1Result.loadedObjects} invalid_tubi=${v1Result.invalidTubi} mesh404=${mesh404} no_geo=${noGeo} ms=${Date.now() - startedAt}`
+      );
+      if (v1Result.invalidTubi > 0) {
+        consoleStore.addLog('warning', `[model-load] refno=${normalizedRoot} 有 ${v1Result.invalidTubi} 段无效直管（is_invalid_tubi），已画成告警色`);
+      }
+      progress.value = 100;
+      // 收集没完成（有根 pending / 预算外 / 出错）：已取得的构件照画，但这个节点**不**记进 loadedRoots——
+      // 记了就会被 genuinelyLoaded 短路，恰好恢复的那几根永远补不上。记录源那边同样不备忘未收齐的结果，
+      // 下一次普通显示会重新 ensure → records 把剩下的根补齐（B1）。
+      const collectionIncomplete = scopeIncomplete !== null;
+      if (v1Result.loadedObjects > 0) {
+        if (collectionIncomplete) {
+          statusMessage.value = regenerate ? `重新生成部分完成 (gen-model，${incompleteTail})` : `部分加载 (gen-model，${incompleteTail})`;
+          syncGlobalLoadStatus();
+          consoleStore.addLog(
+            'warning',
+            `[model-load] gen-model-v1 refno=${normalizedRoot} 收集未完成（${incompleteTail}），已画 ${v1Result.loadedObjects} 个实例，未记为已加载；再显示一次可补齐`,
+          );
+          emitToast({
+            message: `[提示] 已从 gen-model 加载 ${v1Result.loadedObjects} 个几何实例，但 ${incompleteTail}；稍后再显示一次 ${normalizedRoot} 可补齐`,
+            level: 'warning',
+          });
+          return true;
+        }
+        loadedRoots.add(normalizedRoot);
+        statusMessage.value = regenerate ? '重新生成完成 (gen-model)' : '加载完成 (gen-model)';
+        syncGlobalLoadStatus();
+        emitToast({ message: `[成功] 已从 gen-model 加载 ${v1Result.loadedObjects} 个几何实例`, level: 'success' });
+        return true;
+      }
+      if (v1Result.skippedRefnos > 0 && v1Result.loadedRefnos === 0) {
+        // 全部已在场景里（缓存命中），不是失败；没收齐的照样不记 loadedRoots
+        statusMessage.value = collectionIncomplete ? `部分加载 (gen-model，${incompleteTail})` : '已加载 (gen-model)';
+        syncGlobalLoadStatus();
+        if (collectionIncomplete) {
+          consoleStore.addLog('warning', `[model-load] gen-model-v1 refno=${normalizedRoot} 已取得的构件都在场景中，但收集未完成（${incompleteTail}）`);
+        }
+        return true;
+      }
+      statusMessage.value = collectionIncomplete ? `模型尚未就绪 (gen-model，${incompleteTail})` : '无可见几何实例 (gen-model)';
+      syncGlobalLoadStatus();
+      const hint = collectionIncomplete
+        ? incompleteTail
+        : mesh404 > 0 ? `网格缺失 ${mesh404} 个 refno` : noGeo > 0 ? `${noGeo} 个 refno 没有几何记录` : '服务端未返回可绘制实例';
+      consoleStore.addLog('warning', `[model-load] gen-model-v1 未绘制实例 refno=${normalizedRoot}：${hint}`);
+      emitToast({ message: `[警告] 加载结束但未绘制实例（refno=${normalizedRoot}）：${hint}`, level: 'warning' });
+      return false;
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       error.value = msg;
@@ -1532,123 +960,9 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         throw new Error(`Invalid dbnum: ${dbno}`);
       }
 
-      // gen-model-v1（P3-c）：整库 = 该库全部 SITE 逐个 ensure。
+      // 整库 = 该库全部 SITE 逐个 ensure（P3-c）。
       // （2026-09-18 起不再有「带 manifestUrl 把某个版本装进主层」的分支：版本只在隔离图层里看，见 plan 2026-09-18 Q18。）
-      const genModelV1 = getGenModelV1ModelSource();
-      if (genModelV1) {
-        return await showModelByDbnumGenModelV1(genModelV1, dbno, { flyTo: loadOptions?.flyTo });
-      }
-
-      const parquetLoader = useDbnoInstancesParquetLoader();
-      statusMessage.value = `Checking model files for dbnum=${dbno}...`;
-      progress.value = 10;
-      syncGlobalLoadStatus();
-
-      let parquetAvailable = await parquetLoader.isParquetAvailable(dbno);
-      if (!parquetAvailable) {
-        parquetAvailable = await ensureParquetAvailableByAutoExport(dbno, []);
-      }
-      if (!parquetAvailable) {
-        throw new Error(`Model files not found for dbnum=${dbno}`);
-      }
-
-      statusMessage.value = `Loading refnos for dbnum=${dbno}...`;
-      progress.value = 25;
-      syncGlobalLoadStatus();
-      const loadRefnos = await parquetLoader.queryAllRefnosByDbno(dbno, { debug: false });
-      const uniqueRefnos = uniqStrings(loadRefnos.map((r) => normalizeRefnoString(r))).filter(Boolean);
-      if (uniqueRefnos.length === 0) {
-        statusMessage.value = 'Model is empty (0 instances)';
-        progress.value = 100;
-        syncGlobalLoadStatus();
-        const message = `[警告] dbno=${dbno} 的 Parquet 中没有任何 refno，无法加载模型`;
-        consoleStore.addLog('warning', `[model-load] ${message}`);
-        emitDebugWarningToast(message);
-        return { loaded: true, instanceCount: 0, refnoCount: 0, refnos: [] };
-      }
-
-      const anyViewer = viewer as unknown as {
-        __dtxLayer?: unknown
-        __dtxAfterInstancesLoaded?: (dbno: number, loadedRefnos: string[]) => void
-        scene?: { getAABB?: (ids: string[]) => unknown }
-        cameraFlight?: { flyTo?: (options: { aabb?: unknown; duration?: number; fit?: boolean }) => void }
-      };
-      const dtxLayer = anyViewer.__dtxLayer as any;
-      if (!dtxLayer) {
-        throw new Error('DTXLayer 未初始化，无法加载模型');
-      }
-
-      totalCount.value = uniqueRefnos.length;
-      currentIndex.value = 0;
-
-      const LOAD_BATCH_SIZE = VISIBLE_REFNOS_PAGE_SIZE;
-      let totalLoadedRefnos = 0;
-      let totalSkippedRefnos = 0;
-      let totalLoadedObjects = 0;
-      const missingAll: string[] = [];
-
-      for (let start = 0; start < uniqueRefnos.length; start += LOAD_BATCH_SIZE) {
-        const end = Math.min(uniqueRefnos.length, start + LOAD_BATCH_SIZE);
-        const batch = uniqueRefnos.slice(start, end);
-        currentIndex.value = end;
-        statusMessage.value = `Loading model batch ${Math.ceil(end / LOAD_BATCH_SIZE)}/${Math.ceil(uniqueRefnos.length / LOAD_BATCH_SIZE)}...`;
-        progress.value = Math.max(35, Math.min(92, 35 + Math.floor((end / uniqueRefnos.length) * 55)));
-        syncGlobalLoadStatus();
-
-        const result = await loadDbnoInstancesForVisibleRefnosDtx(dtxLayer, dbno, batch, {
-          lodAssetKey: 'L1',
-          debug: false,
-          dataSource: 'parquet',
-          forceReloadRefnos: batch,
-        });
-        anyViewer.__dtxAfterInstancesLoaded?.(dbno, batch);
-        totalLoadedRefnos += result.loadedRefnos;
-        totalSkippedRefnos += result.skippedRefnos;
-        totalLoadedObjects += result.loadedObjects;
-        if (result.missingRefnos.length > 0) {
-          missingAll.push(...result.missingRefnos);
-        }
-      }
-
-      const uniqueMissing = uniqStrings(missingAll.map((r) => normalizeRefnoString(r))).filter(Boolean);
-      if (uniqueMissing.length > 0) {
-        const realtimeResult = await handleMissingRefnos(dtxLayer, dbno, uniqueMissing, anyViewer);
-        totalLoadedObjects += realtimeResult.loadedObjects;
-      }
-
-      if (loadOptions?.flyTo) {
-        try {
-          const flyTargets = uniqueRefnos.length > 5000 ? uniqueRefnos.slice(0, 5000) : uniqueRefnos;
-          const aabb = anyViewer.scene?.getAABB?.(flyTargets) ?? null;
-          if (aabb) {
-            anyViewer.cameraFlight?.flyTo?.({ aabb, duration: 0.8, fit: true });
-          }
-        } catch {
-          // ignore flyTo errors
-        }
-      }
-
-      progress.value = 100;
-      statusMessage.value = totalLoadedObjects > 0 ? 'Model loaded' : 'Model is empty (0 instances)';
-      syncGlobalLoadStatus();
-      consoleStore.addLog(
-        'info',
-        `[model-load] Model loaded dbno=${dbno} refno_count=${uniqueRefnos.length} loaded_refnos=${totalLoadedRefnos} skipped_refnos=${totalSkippedRefnos} instance_count=${totalLoadedObjects}`
-      );
-      if (totalLoadedObjects === 0) {
-        emitToast({
-          message: `[警告] dbno=${dbno} 加载完成但未绘制实例（可能全部被跳过或几何缺失）`,
-          level: 'warning',
-        });
-      } else {
-        emitToast({ message: `[成功] dbno=${dbno} 已加载 ${totalLoadedObjects} 个实例`, level: 'success' });
-      }
-      return {
-        loaded: true,
-        instanceCount: totalLoadedObjects,
-        refnoCount: uniqueRefnos.length,
-        refnos: uniqueRefnos,
-      };
+      return await showModelByDbnumGenModelV1(getGenModelV1ModelSource(), dbno, { flyTo: loadOptions?.flyTo });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       error.value = msg;

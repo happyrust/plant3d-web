@@ -1,36 +1,17 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-// 这个文件测的是 legacy 链路（parquet / backend 记录源 + `/files/meshes/**.glb`）；
-// 缺省数据源自 2026-09-09 起是 gen-model-v1（会把 `dataSource: 'parquet'` 改写成 v1），这里显式钉回 legacy。
-beforeAll(() => window.history.replaceState({}, '', '?model_source=legacy'));
-afterAll(() => window.history.replaceState({}, '', '/'));
-
-const parquetLoaderMocks = vi.hoisted(() => ({
-  isParquetAvailable: vi.fn(async () => true),
-  queryInstanceEntriesByRefnos: vi.fn(async () => new Map()),
-  lastRegisteredManifest: { value: null as { dbno: number; generatedAt: string | null } | null },
+// 记录源经 `getModelSource().records`（gen-model-v1 ensure → records）喂给加载链；这里 mock 掉数据源，
+// 只测加载链本身（实例 → DTX 对象、来源身份、隔离图层、直管归属…）。
+const recordSourceMocks = vi.hoisted(() => ({
+  instanceEntriesByRefnos: vi.fn(async () => new Map()),
 }));
 
-vi.mock('@/composables/useDbnoInstancesParquetLoader', () => ({
-  useDbnoInstancesParquetLoader: () => ({
-    isParquetAvailable: parquetLoaderMocks.isParquetAvailable,
-    queryInstanceEntriesByRefnos: parquetLoaderMocks.queryInstanceEntriesByRefnos,
-    lastRegisteredManifest: parquetLoaderMocks.lastRegisteredManifest,
+vi.mock('@/model-source', () => ({
+  getModelSource: () => ({
+    kind: 'gen-model-v1',
+    records: { instanceEntriesByRefnos: recordSourceMocks.instanceEntriesByRefnos },
+    meshes: { meshUrl: (geoHash: string) => `/api/v1/meshes/${geoHash}.mesh` },
   }),
-}));
-
-vi.mock('@/api/genModelRealtimeApi', () => ({
-  realtimeInstancesByRefnos: vi.fn(async () => ({
-    items: [],
-    missing_refnos: [],
-  })),
-}));
-
-vi.mock('@/utils/parseGlbGeometry', () => ({
-  parseGlbGeometryResult: vi.fn(() => ({
-    ok: false,
-    error: Object.assign(new Error('invalid test GLB'), { issue: null }),
-  })),
 }));
 
 vi.mock('@/composables/useDisplayThemeStore', () => ({
@@ -41,9 +22,7 @@ vi.mock('@/composables/useDisplayThemeStore', () => ({
 
 beforeEach(() => {
   vi.clearAllMocks();
-  parquetLoaderMocks.isParquetAvailable.mockResolvedValue(true);
-  parquetLoaderMocks.queryInstanceEntriesByRefnos.mockResolvedValue(new Map());
-  parquetLoaderMocks.lastRegisteredManifest.value = null;
+  recordSourceMocks.instanceEntriesByRefnos.mockResolvedValue(new Map());
 });
 
 // geo_hash '1' 是前端本地生成的基础几何（单位盒），不走网络；来源身份测试不关心几何本身。
@@ -133,25 +112,22 @@ describe('useDbnoInstancesDtxLoader', () => {
     });
   });
 
-  it('装进场景的 refno 记几何来源身份：parquet 当前环境取实际注册清单的 generated_at；跨库探针可查', async () => {
+  it('装进场景的 refno 记几何来源身份（gen-model-v1，快照身份暂为 null）；跨库探针可查', async () => {
     const { DTXLayer } = await import('@/utils/three/dtx');
     const mod = await import('./useDbnoInstancesDtxLoader');
     const dbno = 99021;
     const refno = '24381_900001';
     const dtxLayer = new DTXLayer({ maxVertices: 256, maxIndices: 512, maxObjects: 16 });
 
-    parquetLoaderMocks.queryInstanceEntriesByRefnos.mockImplementation(async () => {
-      parquetLoaderMocks.lastRegisteredManifest.value = { dbno, generatedAt: '2026-09-14T10:00:00Z' };
-      return new Map([[refno, [makeInstanceEntry(refno)]]]);
-    });
-    await mod.loadDbnoInstancesForVisibleRefnosDtx(dtxLayer, dbno, [refno], { dataSource: 'parquet' });
+    recordSourceMocks.instanceEntriesByRefnos.mockResolvedValue(new Map([[refno, [makeInstanceEntry(refno)]]]));
+    await mod.loadDbnoInstancesForVisibleRefnosDtx(dtxLayer, dbno, [refno], { dataSource: 'gen-model-v1' });
 
     expect(mod.getDtxRefnoLoadSource(dbno, refno)).toMatchObject({
-      dataSource: 'parquet',
-      modelSnapshotId: `${dbno}:parquet:2026-09-14T10:00:00Z`,
-      generatedAt: '2026-09-14T10:00:00Z',
+      dataSource: 'gen-model-v1',
+      modelSnapshotId: null,
+      generatedAt: null,
     });
-    expect(mod.getDtxRefnoLoadSourceAcrossAllDbnos('=24381/900001')?.modelSnapshotId).toBe(`${dbno}:parquet:2026-09-14T10:00:00Z`);
+    expect(mod.getDtxRefnoLoadSourceAcrossAllDbnos('=24381/900001')?.dataSource).toBe('gen-model-v1');
     expect(mod.getDtxRefnoLoadSource(dbno, '24381_nothing')).toBeNull();
     expect(mod.getDtxRefnoLoadSource(dbno + 1, refno)).toBeNull();
   });
@@ -161,12 +137,12 @@ describe('useDbnoInstancesDtxLoader', () => {
     const mod = await import('./useDbnoInstancesDtxLoader');
     const dbno = 99022;
     const refno = '24381_900002';
-    parquetLoaderMocks.queryInstanceEntriesByRefnos.mockResolvedValue(new Map([[refno, [makeInstanceEntry(refno)]]]));
+    recordSourceMocks.instanceEntriesByRefnos.mockResolvedValue(new Map([[refno, [makeInstanceEntry(refno)]]]));
 
     const isolatedLayer = new DTXLayer({ maxVertices: 256, maxIndices: 512, maxObjects: 16 });
     const revisionBefore = mod.dtxLoaderRevision.value;
     const isolatedResult = await mod.loadDbnoInstancesForVisibleRefnosDtx(isolatedLayer, dbno, [refno], {
-      dataSource: 'parquet',
+      dataSource: 'gen-model-v1',
       isolated: true,
       objectIdPrefix: 'cmp-before',
     });
@@ -175,7 +151,7 @@ describe('useDbnoInstancesDtxLoader', () => {
 
     // 同样的一批装进主图层则 +1
     const primaryLayer = new DTXLayer({ maxVertices: 256, maxIndices: 512, maxObjects: 16 });
-    await mod.loadDbnoInstancesForVisibleRefnosDtx(primaryLayer, dbno, [refno], { dataSource: 'parquet' });
+    await mod.loadDbnoInstancesForVisibleRefnosDtx(primaryLayer, dbno, [refno], { dataSource: 'gen-model-v1' });
     expect(mod.dtxLoaderRevision.value).toBe(revisionBefore + 1);
   });
 
@@ -187,7 +163,7 @@ describe('useDbnoInstancesDtxLoader', () => {
     const tubiRefno = '24381_145715';
     const dbno = 99001;
 
-    parquetLoaderMocks.queryInstanceEntriesByRefnos.mockResolvedValue(new Map([
+    recordSourceMocks.instanceEntriesByRefnos.mockResolvedValue(new Map([
       [elboRefno, [
         {
           geo_hash: '1',
@@ -231,7 +207,7 @@ describe('useDbnoInstancesDtxLoader', () => {
     });
 
     await mod.loadDbnoInstancesForVisibleRefnosDtx(dtxLayer, dbno, [elboRefno], {
-      dataSource: 'parquet',
+      dataSource: 'gen-model-v1',
       debug: false,
     });
 
@@ -247,7 +223,7 @@ describe('useDbnoInstancesDtxLoader', () => {
     const branRefno = '24381_145712';
     const dbno = 99002;
 
-    parquetLoaderMocks.queryInstanceEntriesByRefnos.mockResolvedValue(new Map([
+    recordSourceMocks.instanceEntriesByRefnos.mockResolvedValue(new Map([
       [elboRefno, [
         {
           geo_hash: '3',
@@ -291,7 +267,7 @@ describe('useDbnoInstancesDtxLoader', () => {
     });
 
     const result = await mod.loadDbnoInstancesForVisibleRefnosDtx(dtxLayer, dbno, [elboRefno], {
-      dataSource: 'parquet',
+      dataSource: 'gen-model-v1',
       debug: false,
     });
 
@@ -325,7 +301,7 @@ describe('useDbnoInstancesDtxLoader', () => {
     const fetchMock = vi.fn(async () => new Response(null, { status: 404 }));
 
     vi.stubGlobal('fetch', fetchMock);
-    parquetLoaderMocks.queryInstanceEntriesByRefnos.mockImplementation(async (_dbno: number, refnos: string[]) => {
+    recordSourceMocks.instanceEntriesByRefnos.mockImplementation(async (_dbno: number, refnos: string[]) => {
       return new Map(refnos.map((refno) => [refno, [makeEntry(refno)]]));
     });
 
@@ -336,18 +312,18 @@ describe('useDbnoInstancesDtxLoader', () => {
     });
 
     await mod.loadDbnoInstancesForVisibleRefnosDtx(dtxLayer, dbno, ['24381_1'], {
-      dataSource: 'parquet',
+      dataSource: 'gen-model-v1',
       debug: false,
     });
     await mod.loadDbnoInstancesForVisibleRefnosDtx(dtxLayer, dbno, ['24381_2'], {
-      dataSource: 'parquet',
+      dataSource: 'gen-model-v1',
       debug: false,
     });
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
 
     await mod.loadDbnoInstancesForVisibleRefnosDtx(dtxLayer, dbno, ['24381_2'], {
-      dataSource: 'parquet',
+      dataSource: 'gen-model-v1',
       debug: false,
       forceReloadRefnos: ['24381_2'],
     });
@@ -360,7 +336,7 @@ describe('useDbnoInstancesDtxLoader', () => {
     const mod = await import('./useDbnoInstancesDtxLoader');
     const dbno = 99004;
     const refno = '24381_76693';
-    parquetLoaderMocks.queryInstanceEntriesByRefnos.mockResolvedValue(new Map([[
+    recordSourceMocks.instanceEntriesByRefnos.mockResolvedValue(new Map([[
       refno,
       [{
         geo_hash: '1',
@@ -376,12 +352,12 @@ describe('useDbnoInstancesDtxLoader', () => {
     const dtxLayer = new DTXLayer({ maxVertices: 128, maxIndices: 256, maxObjects: 8 });
 
     await mod.loadDbnoInstancesForVisibleRefnosDtx(dtxLayer, dbno, [refno], {
-      dataSource: 'parquet',
+      dataSource: 'gen-model-v1',
     });
     const oldIds = mod.resolveDtxObjectIdsByRefno(dbno, refno);
 
     await mod.loadDbnoInstancesForVisibleRefnosDtx(dtxLayer, dbno, [refno], {
-      dataSource: 'parquet',
+      dataSource: 'gen-model-v1',
       forceReloadRefnos: [refno],
       replaceExistingObjects: true,
     });
@@ -409,17 +385,17 @@ describe('useDbnoInstancesDtxLoader', () => {
       ],
       uniforms: { refno, noun: 'STRT', owner_refno: '24381_76692', owner_noun: 'BRAN' },
     });
-    parquetLoaderMocks.queryInstanceEntriesByRefnos
+    recordSourceMocks.instanceEntriesByRefnos
       .mockResolvedValueOnce(new Map([[refno, [entry('1')]]]))
       .mockResolvedValueOnce(new Map([[refno, [entry('missing-mesh')]]]));
     vi.stubGlobal('fetch', vi.fn(async () => new Response(null, { status: 404 })));
     const dtxLayer = new DTXLayer({ maxVertices: 128, maxIndices: 256, maxObjects: 8 });
 
-    await mod.loadDbnoInstancesForVisibleRefnosDtx(dtxLayer, dbno, [refno], { dataSource: 'parquet' });
+    await mod.loadDbnoInstancesForVisibleRefnosDtx(dtxLayer, dbno, [refno], { dataSource: 'gen-model-v1' });
     const oldId = mod.resolveDtxObjectIdsByRefno(dbno, refno)[0]!;
 
     await expect(mod.loadDbnoInstancesForVisibleRefnosDtx(dtxLayer, dbno, [refno], {
-      dataSource: 'parquet',
+      dataSource: 'gen-model-v1',
       forceReloadRefnos: [refno],
       replaceExistingObjects: true,
     })).rejects.toThrow('替换模型所需几何不完整');
@@ -433,7 +409,7 @@ describe('useDbnoInstancesDtxLoader', () => {
     const mod = await import('./useDbnoInstancesDtxLoader');
     const dbno = 99010;
     const refno = '24381_76695';
-    parquetLoaderMocks.queryInstanceEntriesByRefnos.mockResolvedValue(new Map([[
+    recordSourceMocks.instanceEntriesByRefnos.mockResolvedValue(new Map([[
       refno,
       [{
         geo_hash: '1',
@@ -442,14 +418,14 @@ describe('useDbnoInstancesDtxLoader', () => {
       }],
     ]]));
     const dtxLayer = new DTXLayer({ maxVertices: 128, maxIndices: 256, maxObjects: 8 });
-    await mod.loadDbnoInstancesForVisibleRefnosDtx(dtxLayer, dbno, [refno], { dataSource: 'parquet' });
+    await mod.loadDbnoInstancesForVisibleRefnosDtx(dtxLayer, dbno, [refno], { dataSource: 'gen-model-v1' });
     const oldId = mod.resolveDtxObjectIdsByRefno(dbno, refno)[0]!;
     vi.spyOn(dtxLayer, 'addObject').mockImplementationOnce(() => {
       throw new Error('simulated addObject failure');
     });
 
     await expect(mod.loadDbnoInstancesForVisibleRefnosDtx(dtxLayer, dbno, [refno], {
-      dataSource: 'parquet',
+      dataSource: 'gen-model-v1',
       forceReloadRefnos: [refno],
       replaceExistingObjects: true,
     })).rejects.toThrow();
@@ -476,18 +452,18 @@ describe('useDbnoInstancesDtxLoader', () => {
         spec_value: actualRefno === childRefno ? 42 : 0,
       },
     });
-    parquetLoaderMocks.queryInstanceEntriesByRefnos
+    recordSourceMocks.instanceEntriesByRefnos
       .mockResolvedValueOnce(new Map([[refno, [entry(refno, 'BRAN')]]]))
       .mockResolvedValue(new Map([[refno, [entry(refno, 'BRAN'), entry(childRefno, 'ELBO')]]]));
     const dtxLayer = new DTXLayer({ maxVertices: 128, maxIndices: 256, maxObjects: 8 });
-    await mod.loadDbnoInstancesForVisibleRefnosDtx(dtxLayer, dbno, [refno], { dataSource: 'parquet' });
+    await mod.loadDbnoInstancesForVisibleRefnosDtx(dtxLayer, dbno, [refno], { dataSource: 'gen-model-v1' });
     const oldId = mod.resolveDtxObjectIdsByRefno(dbno, refno)[0]!;
     vi.spyOn(dtxLayer, 'recompile').mockImplementationOnce(() => {
       throw new Error('simulated recompile failure');
     });
 
     await expect(mod.loadDbnoInstancesForVisibleRefnosDtx(dtxLayer, dbno, [refno], {
-      dataSource: 'parquet',
+      dataSource: 'gen-model-v1',
       forceReloadRefnos: [refno],
       replaceExistingObjects: true,
     })).rejects.toThrow('simulated recompile failure');
@@ -500,7 +476,7 @@ describe('useDbnoInstancesDtxLoader', () => {
     expect(mod.getDtxRefnoTransform(dbno, childRefno)).toBeUndefined();
 
     await mod.loadDbnoInstancesForVisibleRefnosDtx(dtxLayer, dbno, [refno], {
-      dataSource: 'parquet',
+      dataSource: 'gen-model-v1',
       forceReloadRefnos: [refno],
       replaceExistingObjects: true,
     });
@@ -512,7 +488,7 @@ describe('useDbnoInstancesDtxLoader', () => {
     const mod = await import('./useDbnoInstancesDtxLoader');
     const dbno = 99005;
     const refno = '24381_145018';
-    parquetLoaderMocks.queryInstanceEntriesByRefnos.mockResolvedValue(new Map([[
+    recordSourceMocks.instanceEntriesByRefnos.mockResolvedValue(new Map([[
       refno,
       [{
         geo_hash: '1',
@@ -523,10 +499,10 @@ describe('useDbnoInstancesDtxLoader', () => {
     const primary = new DTXLayer({ maxVertices: 128, maxIndices: 256, maxObjects: 8 });
     const compare = new DTXLayer({ maxVertices: 128, maxIndices: 256, maxObjects: 8 });
 
-    await mod.loadDbnoInstancesForVisibleRefnosDtx(primary, dbno, [refno], { dataSource: 'parquet' });
+    await mod.loadDbnoInstancesForVisibleRefnosDtx(primary, dbno, [refno], { dataSource: 'gen-model-v1' });
     const primaryIds = mod.resolveDtxObjectIdsByRefno(dbno, refno);
     await mod.loadDbnoInstancesForVisibleRefnosDtx(compare, dbno, [refno], {
-      dataSource: 'parquet',
+      dataSource: 'gen-model-v1',
       isolated: true,
       objectIdPrefix: 'unit-compare:a',
     });
@@ -540,7 +516,7 @@ describe('useDbnoInstancesDtxLoader', () => {
     const mod = await import('./useDbnoInstancesDtxLoader');
     const dbno = 99006;
     const refno = '24381_145018';
-    parquetLoaderMocks.queryInstanceEntriesByRefnos.mockResolvedValue(new Map([[
+    recordSourceMocks.instanceEntriesByRefnos.mockResolvedValue(new Map([[
       refno,
       [{
         geo_hash: 'shared-pending-mesh',
@@ -560,10 +536,10 @@ describe('useDbnoInstancesDtxLoader', () => {
     try {
       const loading = Promise.all([
         mod.loadDbnoInstancesForVisibleRefnosDtx(before, dbno, [refno], {
-          dataSource: 'parquet', isolated: true, objectIdPrefix: 'unit-compare:a',
+          dataSource: 'gen-model-v1', isolated: true, objectIdPrefix: 'unit-compare:a',
         }),
         mod.loadDbnoInstancesForVisibleRefnosDtx(after, dbno, [refno], {
-          dataSource: 'parquet', isolated: true, objectIdPrefix: 'unit-compare:b',
+          dataSource: 'gen-model-v1', isolated: true, objectIdPrefix: 'unit-compare:b',
         }),
       ]);
       await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
@@ -584,18 +560,18 @@ describe('useDbnoInstancesDtxLoader', () => {
     const root = '24381_145018';
     const child = '24381_145019';
     const matrix = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
-    parquetLoaderMocks.queryInstanceEntriesByRefnos.mockResolvedValue(new Map([
+    recordSourceMocks.instanceEntriesByRefnos.mockResolvedValue(new Map([
       [root, [{ geo_hash: '1', matrix, uniforms: { refno: root, noun: 'BRAN', owner_refno: '', owner_noun: '' } }]],
       [child, [{ geo_hash: '1', matrix, uniforms: { refno: child, noun: 'ELBO', owner_refno: root, owner_noun: 'BRAN' } }]],
     ]));
     const layer = new DTXLayer({ maxVertices: 128, maxIndices: 256, maxObjects: 8 });
 
-    await mod.loadDbnoInstancesForVisibleRefnosDtx(layer, dbno, [root, child], { dataSource: 'parquet' });
+    await mod.loadDbnoInstancesForVisibleRefnosDtx(layer, dbno, [root, child], { dataSource: 'gen-model-v1' });
 
     expect(mod.resolveDtxObjectIdsByUnitRefno(dbno, root).sort()).toEqual(layer.getAllObjectIds().sort());
   });
 
-  it('提供预读实例索引时不应再次查询 parquet', async () => {
+  it('提供预读实例索引时不应再向数据源取实例', async () => {
     const { DTXLayer } = await import('@/utils/three/dtx');
     const mod = await import('./useDbnoInstancesDtxLoader');
     const refno = '24381_145018';
@@ -610,12 +586,12 @@ describe('useDbnoInstancesDtxLoader', () => {
     const layer = new DTXLayer({ maxVertices: 128, maxIndices: 256, maxObjects: 8 });
 
     await mod.loadDbnoInstancesForVisibleRefnosDtx(layer, 99008, [refno], {
-      dataSource: 'parquet',
+      dataSource: 'gen-model-v1',
       isolated: true,
       instanceEntriesByRefno: entries,
     });
 
-    expect(parquetLoaderMocks.queryInstanceEntriesByRefnos).not.toHaveBeenCalled();
+    expect(recordSourceMocks.instanceEntriesByRefnos).not.toHaveBeenCalled();
     expect(layer.getAllObjectIds()).toHaveLength(1);
   });
 });

@@ -17,14 +17,27 @@ async function flushAsyncWork() {
   await nextTick();
 }
 
-vi.mock('@/api/genModelPdmsAttrApi', () => ({
-  pdmsGetUiAttr: vi.fn(async (refno: string) => ({
-    full_name: `Hull/${refno}`,
-    attrs: {
-      NAME: `Component ${refno}`,
-      NOUN: '管道',
+vi.mock('@/model-source', () => ({
+  getModelSource: () => ({
+    kind: 'gen-model-v1',
+    attributes: {
+      uiAttr: vi.fn(async (refno: string) => ({
+        success: true,
+        refno,
+        full_name: `Hull/${refno}`,
+        attrs: {
+          NAME: `Component ${refno}`,
+          NOUN: '管道',
+        },
+      })),
+      typeInfo: vi.fn(async (refno: string) => ({ success: true, refno, noun: 'BRAN' })),
     },
-  })),
+    tree: {
+      ancestors: vi.fn(async (refno: string) => ({ success: true, refnos: [refno] })),
+      subtreeRefnos: vi.fn(async (refno: string) => ({ success: true, refnos: [refno], truncated: false })),
+      search: vi.fn(async () => ({ success: true, items: [] })),
+    },
+  }),
 }));
 
 vi.mock('@/components/review/AssociatedFilesList.vue', () => ({

@@ -72,10 +72,6 @@ vi.mock('@/api/genModelV1Api', async (importOriginal) => ({
   genModelV1SpatialCenterline: (refno: string) => genModelV1SpatialCenterline(refno),
 }));
 
-const sourceKindState: { kind: 'gen-model-v1' | 'legacy' } = { kind: 'gen-model-v1' };
-vi.mock('@/model-source/kind', () => ({
-  getModelSourceKind: () => sourceKindState.kind,
-}));
 
 import {
   computeApproxNearestBetweenObjects,
@@ -346,7 +342,6 @@ describe('useDtxTools object measure tree flow', () => {
 
   it('管-管间距：两次点选解到两条 BRAN，取两条中心线，平行直段的中心距写进结果落点（一对一条），状态报「已写入」（plan 2026-09-16 §3.3 ④）', async () => {
     installTwoParallelBrans();
-    sourceKindState.kind = 'gen-model-v1';
     const recordBranParallelSpacing = vi.fn();
     const tools = createPipeToPipeTools([
       { objectId: 'o:24381_1001:0', point: new Vector3(0, 0, 0) },
@@ -380,7 +375,6 @@ describe('useDtxTools object measure tree flow', () => {
 
   it('管-管间距：点到不属于 BRAN 的构件、同一条 BRAN 点两次都只提示；没接落点时只报状态不写；没有平行直段直说', async () => {
     installTwoParallelBrans();
-    sourceKindState.kind = 'gen-model-v1';
     // 第二条 BRAN 改成与第一条垂直：没有平行直段
     centerlineByRefno.set('24381_2000', {
       refno: '24381_2000', dbnum: 24381, segment_count: 1, outside_diameter_mm: null, centerline_bbox: null, warnings: [],
@@ -409,20 +403,4 @@ describe('useDtxTools object measure tree flow', () => {
     expect(tools.statusText.value).not.toContain('暂不创建尺寸');
   });
 
-  it('管-管间距：legacy 数据源没有中心线接口，第二次点选只提示、不请求、不写', async () => {
-    installTwoParallelBrans();
-    sourceKindState.kind = 'legacy';
-    const recordBranParallelSpacing = vi.fn();
-    const tools = createPipeToPipeTools([
-      { objectId: 'o:24381_1001:0', point: new Vector3(0, 0, 0) },
-      { objectId: 'o:24381_1002:0', point: new Vector3(3, 0, 0) },
-    ], recordBranParallelSpacing);
-    await nextTick();
-    await clickTwoPipes(tools);
-
-    expect(genModelV1SpatialCenterline).not.toHaveBeenCalled();
-    expect(recordBranParallelSpacing).not.toHaveBeenCalled();
-    expect(tools.statusText.value).toBe('管-管间距：当前数据源没有 BRAN 中心线接口（/api/v1/spatial/centerline），请切到 gen-model-v1 数据源');
-    sourceKindState.kind = 'gen-model-v1';
-  });
 });

@@ -7,8 +7,6 @@ import { ensureDbMetaInfoLoaded, getDbnumByRefno } from '@/composables/useDbMeta
 import { dispatchTreeDiffContext, type TreeDiffAttributesAt } from '@/composables/useTreeVersionDiff';
 import {
   getModelSource,
-  getModelSourceKind,
-  LegacyModelVersionsRetiredError,
   ModelVersionRouteUnavailableError,
   type ModelAttributeHistory,
   type ModelElementVersionTimeline,
@@ -67,11 +65,6 @@ import {
 
 // URL 入口（Q16）见 `readModelUnitVersionCompareUrl`；面板本身由 `DockLayout` 按同一个开关打开。
 const urlConfig = readModelUnitVersionCompareUrl(window.location.search);
-/**
- * `model_source=legacy` 下版本对比已退役（2026-09-18，plan §7.3 第 4 条）：一进面板就给退役提示，不去碰 legacy 的库元数据
- * （那一步会先报 `[db_meta] 未命中`，把真正的原因盖住）。
- */
-const legacyRetired = getModelSourceKind() === 'legacy';
 const unitRefno = ref(urlConfig.unitRefno);
 const dbnum = ref<number | null>(null);
 /** 所属单元的版本表（几何只按单元生成，A/B 历史投影要拿它的 `ModelVersion` 去 `loadVersion`） */
@@ -97,7 +90,7 @@ const beforeSesno = ref<number | null>(null);
 const afterSesno = ref<number | null>(null);
 const loadingVersions = ref(false);
 const comparing = ref(false);
-const error = ref<string | null>(legacyRetired ? new LegacyModelVersionsRetiredError().message : null);
+const error = ref<string | null>(null);
 /** 非致命的说明（没有几何可比、旧服务端缺路由等），与 `error` 分开显示 */
 const notice = ref<string | null>(null);
 const rows = ref<ModelUnitGeometryDiff[]>([]);
@@ -365,10 +358,6 @@ async function loadVersions(): Promise<void> {
   afterSesno.value = null;
   compareCompleted.value = false;
   const refno = normalizedRefno.value;
-  if (legacyRetired) {
-    error.value = new LegacyModelVersionsRetiredError().message;
-    return;
-  }
   if (!/^\d+_\d+$/.test(refno)) {
     error.value = '请输入节点参考号（构件 / 单元根 / 容器），例如 24384_23262';
     return;

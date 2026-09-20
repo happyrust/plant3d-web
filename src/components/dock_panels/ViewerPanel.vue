@@ -24,8 +24,7 @@ import {
   Vector3,
 } from 'three';
 
-import { pdmsGetUiAttr, type PtsetResponse } from '@/api/genModelPdmsAttrApi';
-import { fetchMbdV2PipeData } from '@/api/mbdV2Api';
+import type { PtsetResponse } from '@/api/genModelPdmsAttrApi';
 import {
   reviewRecordCreate,
   reviewRecordGetByTaskId,
@@ -58,16 +57,12 @@ import {
   resolveDtxObjectIdsByUnitRefno,
   resolveDtxRefnoByObjectId,
 } from '@/composables/useDbnoInstancesDtxLoader';
-import { useDbnoInstancesParquetLoader } from '@/composables/useDbnoInstancesParquetLoader';
 import { useDisplayThemeStore, type DisplayTheme } from '@/composables/useDisplayThemeStore';
 import { ensurePanelAndActivate } from '@/composables/useDockApi';
 import { useDtxTools } from '@/composables/useDtxTools';
-import { useMbdDiagnosticsStore } from '@/composables/useMbdDiagnosticsStore';
-import { createMbdExternalSync } from '@/composables/useMbdExternalSync';
 import { MeasurementAnnotationManager } from '@/composables/useMeasurementAnnotation';
 import { useModelGeneration } from '@/composables/useModelGeneration';
 import { useModelLoadStatus } from '@/composables/useModelLoadStatus';
-import { queryDirectChildrenPtsetSummaryWithRuntimeFallback } from '@/composables/usePtsetRuntimeLookup';
 import { collectPtsetEntries } from '@/composables/usePtsetVisualizationEntries';
 import { usePtsetVisualizationThree } from '@/composables/usePtsetVisualizationThree';
 import { useReviewStore } from '@/composables/useReviewStore';
@@ -105,7 +100,7 @@ import {
   type DimensionDocumentState,
   type DimensionSystem,
 } from '@/dimension';
-import { getOutputProjectFromUrl } from '@/lib/filesOutput';
+import { getOutputProjectFromUrl } from '@/lib/currentProject';
 import { getModelSource } from '@/model-source';
 import { onCommand } from '@/ribbon/commandBus';
 import { emitToast } from '@/ribbon/toastBus';
@@ -166,7 +161,6 @@ const spatialComputeStore = useSpatialCompute();
 const viewerContext = useViewerContext();
 const backgroundStore = useBackgroundStore();
 const displayThemeStore = useDisplayThemeStore();
-const mbdDiagnosticsStore = useMbdDiagnosticsStore();
 const clearanceStore = useClearanceStore();
 
 const initError = ref<string | null>(null);
@@ -1215,7 +1209,7 @@ function finiteNumberAttr(attrs: Record<string, unknown>, key: string): number |
 
 async function describeNoGeometryReason(refno: string): Promise<string | null> {
   try {
-    const resp = await pdmsGetUiAttr(refno);
+    const resp = await getModelSource().attributes.uiAttr(refno);
     if (!resp.success || !resp.attrs) return null;
 
     const type = String(resp.attrs.TYPE || '').trim().toUpperCase();
@@ -2608,30 +2602,6 @@ function bindLocalDimensionAutosave(system: DimensionSystem): void {
   offLocalDimensionAutosave = system.document.subscribe(() => schedule());
 }
 
-const mbdExternalSync = createMbdExternalSync({
-  fetchPipeData: fetchMbdV2PipeData,
-  queryParquetDimensions: (dbno, options) =>
-    useDbnoInstancesParquetLoader().queryMbdDimensionsByDbno(dbno, options),
-  diagnostics: mbdDiagnosticsStore,
-  getSearch: () => window.location.search,
-  emitToast,
-});
-
-function syncMbdExternalDimensions(
-  system: DimensionSystem,
-  options: Readonly<{ forceRefresh?: boolean }> = {},
-): Promise<void> {
-  return mbdExternalSync.sync(system, {
-    ...options,
-    isCancelled: () => dimensionSystem !== system || dimensionMountDisposed,
-  });
-}
-
-function handleMbdLocationChange(): void {
-  if (!dimensionSystem) return;
-  void syncMbdExternalDimensions(dimensionSystem, { forceRefresh: true });
-}
-
 async function initializeDimensionViewport(): Promise<void> {
   const initializationVersion = ++dimensionInitializationVersion;
   const inputCanvas = mainCanvas.value;
@@ -2721,7 +2691,6 @@ async function initializeDimensionViewport(): Promise<void> {
   }
 
   dimensionSystem = result.system;
-  void syncMbdExternalDimensions(result.system);
   result.system.pointer.setEditSessionFactory((target) => {
     if (!['label', 'dimension', 'arc', 'leader'].includes(target.part)) {
       return null;
@@ -3117,12 +3086,6 @@ function onToolbarSpatialQueryClick(): void {
   openSpatialQueryDrawer(spatialQueryStore.draft.mode);
 }
 
-function onToolbarRoomShowAllClick(): void {
-  // 以“房间树当前选中房间”为准：由 ModelTreePanel 消费请求并执行 isolate/flyTo。
-  quickViewReq.requestShowSelectedRoomModels();
-  ensurePanelAndActivate('modelTree');
-}
-
 function onToolbarPipeNetworkClick(): void {
   emitToast({ message: '管网（BRAN）功能建设中（占位）' });
 }
@@ -3450,7 +3413,6 @@ onMounted(async () => {
       requestRender();
     }
     if (dimensionSystem) {
-      void syncMbdExternalDimensions(dimensionSystem, { forceRefresh: true });
       void dimensionSystem.refreshAnchors().then((report) => {
         if (report.invalidated > 0) {
           emitToast({
@@ -3711,14 +3673,9 @@ onMounted(async () => {
           return;
         }
 
-        // data_source=parquet|backend；未指定默认 parquet（DuckDB WASM）
-        const normalizedSource = String(new URLSearchParams(window.location.search).get('data_source') || '')
-          .trim()
-          .toLowerCase();
-        const ds: 'parquet' | 'backend' = normalizedSource === 'backend' ? 'backend' : 'parquet';
-        console.log(`[show_refno] refno=${showRefno} -> dbnum=${dbno}, dataSource=${ds}`);
+        console.log(`[show_refno] refno=${showRefno} -> dbnum=${dbno}`);
 
-        // 先查询可见子实例（容器节点本身在 Parquet 中没有几何数据）
+        // 先查询可见子实例（容器节点本身没有几何数据）
         let loadRefnos = [showRefno];
         let visibleInstsUserHint: string | null = null;
         let noGeometryReason: string | null = null;
@@ -3746,7 +3703,7 @@ onMounted(async () => {
           dtxLayer,
           dbno,
           loadRefnos,
-          { lodAssetKey: 'L1', debug: true, dataSource: ds }
+          { lodAssetKey: 'L1', debug: true, dataSource: 'gen-model-v1' }
         );
         (compat as any).__dtxAfterInstancesLoaded?.(dbno, loadRefnos);
 
@@ -3778,7 +3735,7 @@ onMounted(async () => {
     })();
   }
 
-  // show_dbnum URL 参数：按 dbno 直接走 Parquet 全量加载。
+  // show_dbnum URL 参数：整库加载（gen-model-v1：该库全部 SITE 逐个 ensure → records）。
   if (showDbnumValue !== null && !showRefno && demoMode !== 'primitives') {
     const dbno = showDbnumValue;
     if (Number.isFinite(dbno) && dbno > 0) {
@@ -3805,252 +3762,24 @@ onMounted(async () => {
             noGeoRowsRefnos: 0,
           });
 
-          // gen-model-v1（plan P3-c / P3-f）：整库 = 该库全部 SITE 逐个 ensure → records，分批装入；进度与收尾在 useModelGeneration 里。
-          // 下面的 parquet 分层 / 预算 / Tile LOD 都是 parquet 全量加载的事，v1 不走。
-          if (getModelSource().kind === 'gen-model-v1') {
-            const generation = modelGenerationRef.value;
-            if (!generation) throw new Error('模型加载器未初始化');
-            emitToast({ message: `[信息] 正在从 gen-model 加载 dbnum=${dbno} 的全部 SITE…`, level: 'info' });
-            const v1Result = await generation.showModelByDbnum(dbno, { flyTo: true });
-            requestRender();
-            publishShowDbnumLoadResult({
-              status: !v1Result.loaded ? 'error' : v1Result.instanceCount === 0 ? 'empty' : v1Result.budgetLimited ? 'partial' : 'loaded',
-              source: 'gen-model-v1',
-              refnoCount: v1Result.refnoCount,
-              loadedRefnos: v1Result.refnoCount,
-              loadedObjects: v1Result.instanceCount,
-              budgetLimited: v1Result.budgetLimited === true,
-            });
-            return;
-          }
-
-          emitToast({ message: `[信息] 正在加载 dbnum=${dbno} 的 Parquet 模型…`, level: 'info' });
-          const autoFitKey = `dtx_autofit_dbno_${dbno}`;
-          let shouldAutoFit = true;
-          try {
-            shouldAutoFit = sessionStorage.getItem(autoFitKey) !== '1';
-          } catch {}
-
-          const parquetLoader = useDbnoInstancesParquetLoader();
-          const available = await parquetLoader.isParquetAvailable(dbno);
-          if (!available) {
-            publishShowDbnumLoadResult({
-              status: 'error',
-              error: `dbnum=${dbno} 未找到 Parquet 数据`,
-            });
-            emitToast({
-              message: `[错误] dbnum=${dbno} 未找到 Parquet 数据`,
-              level: 'error',
-            });
-            return;
-          }
-
-          const allRefnos = await parquetLoader.queryAllRefnosByDbno(dbno, {
-            debug: isDev,
-          });
-          if (allRefnos.length === 0) {
-            publishShowDbnumLoadResult({
-              status: 'empty',
-              refnoCount: 0,
-              loadedRefnos: 0,
-              skippedRefnos: 0,
-              loadedObjects: 0,
-              missingRefnos: 0,
-              mesh404Refnos: 0,
-              mesh404GeoHashes: 0,
-              noGeoRowsRefnos: 0,
-            });
-            emitToast({
-              message: `[警告] dbnum=${dbno} 没有可加载的 refno`,
-              level: 'warning',
-            });
-            return;
-          }
-
-          emitToast({
-            message: `[信息] 发现 ${allRefnos.length} 个 refno，开始分批加载…`,
-            level: 'info',
-          });
-          publishShowDbnumLoadResult({
-            status: 'loading',
-            refnoCount: allRefnos.length,
-            loadedRefnos: 0,
-            skippedRefnos: 0,
-            loadedObjects: 0,
-            missingRefnos: 0,
-            mesh404Refnos: 0,
-            mesh404GeoHashes: 0,
-            noGeoRowsRefnos: 0,
-          });
-
-          const LOAD_BATCH_SIZE = SHOW_DBNUM_LOAD_BATCH_SIZE;
-          const fullLoad = new URLSearchParams(window.location.search)
-            .get('show_dbnum_full') === '1';
-          let loadedRefnos = 0;
-          let skippedRefnos = 0;
-          let loadedObjects = 0;
-          let loadedTriangles = 0;
-          let missingRefnos = 0;
-          let budgetLimited = false;
-          const missingNoGeoRows = new Set<string>();
-          const missingMesh404Refnos = new Set<string>();
-          const missingMesh404GeoHashes = new Set<string>();
-          let activeShowDbnumLayer = dtxLayer;
-          if (typeof window !== 'undefined') {
-            (window as any).__dtxShowDbnumLayers = () => getShowDbnumAllLayers(dtxLayer);
-          }
-
-          for (let start = 0; start < allRefnos.length; start += LOAD_BATCH_SIZE) {
-            const end = Math.min(allRefnos.length, start + LOAD_BATCH_SIZE);
-            const batch = allRefnos.slice(start, end);
-            const batchResult = await loadDbnoInstancesForVisibleRefnosDtx(
-              activeShowDbnumLayer,
-              dbno,
-              batch,
-              { lodAssetKey: 'L1', debug: isDev, dataSource: 'parquet', includeOwnedTubings: false }
-            );
-            (compat as any).__dtxAfterInstancesLoaded?.(dbno, batch);
-            if (activeShowDbnumLayer !== dtxLayer) {
-              activeShowDbnumLayer.setGlobalModelMatrix(dtxLayer.getGlobalModelMatrix());
-              ensureShowDbnumExtraLayerAttached(activeShowDbnumLayer, dtxViewer);
-            }
-
-            loadedRefnos += batchResult.loadedRefnos;
-            skippedRefnos += batchResult.skippedRefnos;
-            loadedObjects += batchResult.loadedObjects;
-            missingRefnos += batchResult.missingRefnos.length;
-            for (const r of batchResult.missingBreakdown.noGeoRowsRefnos) {
-              missingNoGeoRows.add(r);
-            }
-            for (const r of batchResult.missingBreakdown.mesh404Refnos) {
-              missingMesh404Refnos.add(r);
-            }
-            for (const gh of batchResult.missingBreakdown.mesh404GeoHashes) {
-              missingMesh404GeoHashes.add(gh);
-            }
-            const activeLayerStats = activeShowDbnumLayer.getStats();
-            loadedTriangles = getShowDbnumAllLayers(dtxLayer).reduce(
-              (sum, layer) => sum + layer.getStats().drawTriangleCount,
-              0,
-            );
-            publishShowDbnumLoadResult({
-              status: 'loading',
-              refnoCount: allRefnos.length,
-              loadedRefnos,
-              skippedRefnos,
-              loadedObjects,
-              missingRefnos,
-              mesh404Refnos: missingMesh404Refnos.size,
-              mesh404GeoHashes: missingMesh404GeoHashes.size,
-              noGeoRowsRefnos: missingNoGeoRows.size,
-              layerCount: getShowDbnumAllLayers(dtxLayer).length,
-              activeLayerObjects: activeLayerStats.totalObjects,
-              activeLayerTriangles: activeLayerStats.drawTriangleCount,
-            });
-
-            if (end < allRefnos.length) {
-              if (shouldStopShowDbnumLoad({
-                objects: loadedObjects,
-                triangles: loadedTriangles,
-              }, fullLoad)) {
-                budgetLimited = true;
-                break;
-              }
-              if (shouldRollShowDbnumLayer(activeShowDbnumLayer)) {
-                activeShowDbnumLayer = createShowDbnumDtxLayer(dtxViewer, dtxLayer);
-                publishShowDbnumLoadResult({
-                  status: 'loading',
-                  refnoCount: allRefnos.length,
-                  loadedRefnos,
-                  skippedRefnos,
-                  loadedObjects,
-                  missingRefnos,
-                  mesh404Refnos: missingMesh404Refnos.size,
-                  mesh404GeoHashes: missingMesh404GeoHashes.size,
-                  noGeoRowsRefnos: missingNoGeoRows.size,
-                  layerCount: getShowDbnumAllLayers(dtxLayer).length,
-                  activeLayerObjects: 0,
-                  activeLayerTriangles: 0,
-                });
-              }
-              await new Promise<void>((resolve) =>
-                requestAnimationFrame(() => resolve())
-              );
-            }
-          }
-
-          // show_dbnum 路径下也需要初始化 Tile LOD（不走常规 dbno 切换流）
-          try {
-            tileLodInitializedDbno = dbno;
-            tileLodControllerRef.value?.setManifest(dbno, {
-              dbno,
-              source: 'parquet',
-            });
-            tileLodControllerRef.value?.requestUpdate(dtxViewer.camera);
-          } catch {
-            // ignore
-          }
-
+          // 整库 = 该库全部 SITE 逐个 ensure → records，分批装入（plan P3-c / P3-f）；进度与收尾在 useModelGeneration 里。
+          const generation = modelGenerationRef.value;
+          if (!generation) throw new Error('模型加载器未初始化');
+          emitToast({ message: `[信息] 正在从 gen-model 加载 dbnum=${dbno} 的全部 SITE…`, level: 'info' });
+          const v1Result = await generation.showModelByDbnum(dbno, { flyTo: true });
           requestRender();
-          if (dimensionSystem) {
-            void syncMbdExternalDimensions(dimensionSystem, {
-              forceRefresh: true,
-            });
-            void dimensionSystem.refreshAnchors();
-          }
-          if (shouldAutoFit) {
-            const combinedBox = computeDtxLayersBoundingBox(getShowDbnumAllLayers(dtxLayer));
-            if (combinedBox) {
-              fitDtxViewerToBox(dtxViewer, combinedBox, 0);
-              try {
-                cadGridRef.value?.fitToBoundingBox(combinedBox);
-              } catch {
-                // ignore
-              }
-            } else {
-              fitDtxViewerToFocusBox(dtxViewer, dtxLayer, 0);
-            }
-            requestRender();
-            try {
-              sessionStorage.setItem(autoFitKey, '1');
-            } catch {}
-          }
-          const summary =
-            `${budgetLimited ? `安全概览 ${loadedRefnos}/${allRefnos.length} 个 refno，` : ''}` +
-            `对象 ${loadedObjects}（已加载 ${loadedRefnos}，跳过 ${skippedRefnos}，缺失 ${missingRefnos}；` +
-            `mesh 缺失 ${missingMesh404Refnos.size}/hash ${missingMesh404GeoHashes.size}，无几何 ${missingNoGeoRows.size}）`;
           publishShowDbnumLoadResult({
-            status: loadedObjects === 0 ? 'empty' : budgetLimited ? 'partial' : 'loaded',
-            refnoCount: allRefnos.length,
-            loadedRefnos,
-            skippedRefnos,
-            loadedObjects,
-            missingRefnos,
-            mesh404Refnos: missingMesh404Refnos.size,
-            mesh404GeoHashes: missingMesh404GeoHashes.size,
-            noGeoRowsRefnos: missingNoGeoRows.size,
-            layerCount: getShowDbnumAllLayers(dtxLayer).length,
-            loadedTriangles,
-            budgetLimited,
-            summary,
+            status: !v1Result.loaded ? 'error' : v1Result.instanceCount === 0 ? 'empty' : v1Result.budgetLimited ? 'partial' : 'loaded',
+            source: 'gen-model-v1',
+            refnoCount: v1Result.refnoCount,
+            loadedRefnos: v1Result.refnoCount,
+            loadedObjects: v1Result.instanceCount,
+            budgetLimited: v1Result.budgetLimited === true,
           });
-          if (loadedObjects === 0) {
-            emitToast({
-              message: `[警告] 加载结束但未绘制实例。${summary}`,
-              level: 'warning',
-            });
-          } else if (budgetLimited) {
-            emitToast({
-              message: `[提示] ${summary}。请从模型树按需加载；诊断全量加载可加 show_dbnum_full=1。`,
-              level: 'warning',
-            });
-          } else {
-            emitToast({ message: `[成功] ${summary}`, level: 'success' });
-          }
         } catch (e) {
           const msg = e instanceof Error ? e.message : String(e);
           publishShowDbnumLoadResult({ status: 'error', error: msg });
-          console.error('[ViewerPanel] show_dbnum Parquet 加载失败:', e);
+          console.error('[ViewerPanel] show_dbnum 加载失败:', e);
           emitToast({ message: `[错误] 加载失败：${msg}`, level: 'error' });
         }
       })();
@@ -4098,12 +3827,7 @@ onMounted(async () => {
           level: 'info',
         });
 
-        // 3. 加载实例到 DTX（data_source=parquet|backend；未指定默认 parquet，即 DuckDB WASM）
-        const normalizedSource = String(new URLSearchParams(window.location.search).get('data_source') || '')
-          .trim()
-          .toLowerCase();
-        const ds: 'parquet' | 'backend' = normalizedSource === 'backend' ? 'backend' : 'parquet';
-        console.log(`[debug_refno] dataSource=${ds}`);
+        // 3. 加载实例到 DTX（gen-model-v1 ensure → records）
         const result = await loadDbnoInstancesForVisibleRefnosDtx(
           dtxLayer,
           dbno,
@@ -4111,7 +3835,7 @@ onMounted(async () => {
           {
             lodAssetKey: 'L1',
             debug: true,
-            dataSource: ds,
+            dataSource: 'gen-model-v1',
             forceReloadRefnos: refnos,
             replaceExistingObjects: true,
             includeOwnedTubings: true,
@@ -4455,16 +4179,10 @@ onMounted(async () => {
           return;
         }
 
-        // 取数走 ModelSource.keypoints 端口：legacy 仍是 parquet 优先 + 旧后端兜底（成员一层的
-        // parquet 摘要由下面这条 childSummaries 传进去，与之前逐字相同），gen-model-v1 走 element/ptset。
+        // 取数走 ModelSource.keypoints 端口（gen-model-v1 `element/ptset`，成员点集 `include_members` 一次回）。
         const modelSource = getModelSource();
         const { entries, self, memberErrors } = await collectPtsetEntries(
-          {
-            keypoints: modelSource.keypoints,
-            childSummaries: modelSource.kind === 'legacy'
-              ? (db, owner) => queryDirectChildrenPtsetSummaryWithRuntimeFallback(useDbnoInstancesParquetLoader(), db, owner)
-              : null,
-          },
+          { keypoints: modelSource.keypoints },
           dbno,
           refnoKey,
         );
@@ -4639,7 +4357,6 @@ onMounted(async () => {
 
   attachPicking();
   attachToolsInput();
-  window.addEventListener('popstate', handleMbdLocationChange);
   await initializeDimensionViewport();
   requestRender();
 });
@@ -4647,8 +4364,6 @@ onMounted(async () => {
 onUnmounted(() => {
   viewerContext.viewerError.value = null;
   dimensionMountDisposed = true;
-  window.removeEventListener('popstate', handleMbdLocationChange);
-  mbdExternalSync.invalidate();
   dimensionInitializationVersion += 1;
   dimensionSystem?.dispose();
   dimensionSystem = null;
@@ -5094,13 +4809,6 @@ onUnmounted(() => {
         @click.stop="onToolbarSpatialQueryClick">
         <Search class="h-[18px] w-[18px]" />
         <span class="pointer-events-none absolute left-full top-1/2 z-[960] ml-2 -translate-y-1/2 whitespace-nowrap rounded-md bg-foreground px-2 py-1 text-[11px] leading-none text-background opacity-0 shadow-md transition-opacity duration-100 group-hover:opacity-100">空间查询</span>
-      </button>
-
-      <button type="button"
-        class="group relative inline-flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-        @click.stop="onToolbarRoomShowAllClick">
-        <House class="h-[18px] w-[18px]" />
-        <span class="pointer-events-none absolute left-full top-1/2 z-[960] ml-2 -translate-y-1/2 whitespace-nowrap rounded-md bg-foreground px-2 py-1 text-[11px] leading-none text-background opacity-0 shadow-md transition-opacity duration-100 group-hover:opacity-100">显示所在房间全部模型（以房间树选中房间为准）</span>
       </button>
 
       <button type="button"

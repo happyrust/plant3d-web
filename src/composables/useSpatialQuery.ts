@@ -3,11 +3,11 @@ import { computed, reactive, ref, watch, type Ref } from 'vue';
 import { Box3, Matrix4, Vector3 } from 'three';
 
 import type {
-  fetchNegativeNouns,
-  queryNearbyByRefno,
-  queryNearbyByPosition,
-  queryNearbyRefnos,
-  querySpatialIndex,
+  FetchNegativeNounsFn,
+  QueryNearbyByPositionFn,
+  QueryNearbyByRefnoFn,
+  QueryNearbyRefnosFn,
+  QuerySpatialIndexFn,
   SpatialNearbyParams as ApiSpatialNearbyParams,
   SpatialNearbyResult as ApiSpatialNearbyResult,
   SpatialQueryResult as ApiSpatialQueryResult,
@@ -20,8 +20,6 @@ import type {
 } from '@/api/genModelSpatialApi';
 import type { AttributeSource } from '@/model-source/ports';
 
-import { enqueueParquetIncremental } from '@/api/genModelRealtimeApi';
-import { triggerBatchGenerateSse } from '@/api/genModelStreamGenerateApi';
 import { isGenModelV1ApiError } from '@/api/genModelV1Api';
 import { forEachTreeLeaf, fullMatchesFromTree, mergeTreeLeaves, treeToNearbyResult } from '@/composables/spatialTree';
 import { ensureDbMetaInfoLoaded, getDbnumByRefno, tryGetDbnumByRefno } from '@/composables/useDbMetaInfo';
@@ -31,8 +29,6 @@ import {
   loadDtxAabbProxyRefnos,
   loadDbnoInstancesForVisibleRefnosDtx,
 } from '@/composables/useDbnoInstancesDtxLoader';
-import { useDbnoInstancesParquetLoader } from '@/composables/useDbnoInstancesParquetLoader';
-import { AUTO_GENERATION_ENABLED } from '@/composables/useModelGeneration';
 import { useSelectionStore } from '@/composables/useSelectionStore';
 import { useToolStore } from '@/composables/useToolStore';
 import { showModelByRefnosWithAck, useViewerContext, waitForViewerReady } from '@/composables/useViewerContext';
@@ -129,10 +125,10 @@ type SpatialQueryStoreOptions = {
   viewerRef?: Ref<ViewerLike | null>;
   selection?: SelectionLike;
   toolStore?: ToolStoreLike;
-  queryNearbyByPosition?: typeof queryNearbyByPosition;
-  queryNearbyByRefno?: typeof queryNearbyByRefno;
-  queryNearbyRefnos?: typeof queryNearbyRefnos;
-  querySpatialIndex?: typeof querySpatialIndex;
+  queryNearbyByPosition?: QueryNearbyByPositionFn;
+  queryNearbyByRefno?: QueryNearbyByRefnoFn;
+  queryNearbyRefnos?: QueryNearbyRefnosFn;
+  querySpatialIndex?: QuerySpatialIndexFn;
   fetchNegativeNouns?: FetchNegativeNounsFn;
   /** 在册房间清单（`SpatialSource.rooms()`，ADR 0067）；不注入经 `getModelSource().spatial.rooms()` */
   fetchRooms?: () => Promise<ApiSpatialRoomsResult>;
@@ -184,7 +180,6 @@ const negativeNounRegistry = new Set<string>();
 let negativeNounsFetched = false;
 let negativeNounsFetching: Promise<void> | null = null;
 
-type FetchNegativeNounsFn = typeof fetchNegativeNouns;
 
 function registerNegativeNoun(noun: string): void {
   const normalized = noun.trim().toUpperCase();
@@ -819,7 +814,6 @@ async function loadRefnosBySource(
   dtxLayer: unknown,
   dbno: number,
   refnos: string[],
-  source: 'parquet' | 'backend',
   options: { forceReload?: boolean } = {},
 ): Promise<{ ok: string[]; missing: string[] }> {
   const ok: string[] = [];
@@ -829,7 +823,7 @@ async function loadRefnosBySource(
     const result = await loadDbnoInstancesForVisibleRefnosDtx(dtxLayer as any, dbno, batch, {
       lodAssetKey: 'L1',
       debug: false,
-      dataSource: source,
+      dataSource: 'gen-model-v1',
       forceReloadRefnos: options.forceReload ? batch : undefined,
     });
     viewer.__dtxAfterInstancesLoaded?.(dbno, batch);
@@ -847,59 +841,6 @@ async function loadRefnosBySource(
     ok: uniqStrings(ok),
     missing: uniqStrings(missing),
   };
-}
-
-async function generateMissingRefnos(
-  viewer: ViewerRuntimeLike,
-  dtxLayer: unknown,
-  dbno: number,
-  refnos: string[],
-): Promise<{ ok: string[]; fail: string[] }> {
-  const okSet = new Set<string>();
-  const backendMissing = new Set<string>();
-  const normalized = uniqStrings(refnos);
-  if (normalized.length === 0) {
-    return { ok: [], fail: [] };
-  }
-
-  try {
-    const result = await triggerBatchGenerateSse(normalized, {
-      onBatchDone: async (update) => {
-        const readyRefnos = uniqStrings(update.readyRefnos.map((item) => normalizeRefno(item)));
-        if (readyRefnos.length === 0) return;
-
-        const loadResult = await loadRefnosBySource(viewer, dtxLayer, dbno, readyRefnos, 'backend', {
-          forceReload: true,
-        });
-        loadResult.ok.forEach((refno) => okSet.add(refno));
-        loadResult.missing.forEach((refno) => backendMissing.add(refno));
-
-        try {
-          await enqueueParquetIncremental(dbno, readyRefnos);
-        } catch {
-          // ignore parquet incremental enqueue failures for spatial-query batch load
-        }
-      },
-      skipOnError: true,
-      exportInstances: false,
-      mergeInstances: false,
-    });
-
-    const failed = uniqStrings([
-      ...result.failedRefnos.map((item) => normalizeRefno(item)),
-      ...Array.from(backendMissing),
-    ]).filter((refno) => !okSet.has(refno));
-
-    return {
-      ok: uniqStrings(Array.from(okSet)),
-      fail: failed,
-    };
-  } catch {
-    return {
-      ok: uniqStrings(Array.from(okSet)),
-      fail: normalized.filter((refno) => !okSet.has(refno)),
-    };
-  }
 }
 
 async function batchLoadSpatialQueryRefnos(
@@ -929,9 +870,8 @@ async function batchLoadSpatialQueryRefnos(
 
   const failMap = new Map<string, string | null>();
   const groupedByDbno = new Map<number, string[]>();
-  // gen-model-v1 下没有 parquet，也没有旧后端的 SSE 批量生成：`loadRefnosBySource(...,'backend')` 经 DTX 加载链
-  // 已改走 `records.instanceEntriesByRefnos`（内部 ensure → records），缺失就是「没有可渲染几何」，不再另起生成
-  const genModelV1 = getModelSource().kind === 'gen-model-v1';
+  // 经 DTX 加载链走 `records.instanceEntriesByRefnos`（内部 ensure → records），缺失就是「没有可渲染几何」；
+  // legacy 的 parquet 优先 / 旧后端 SSE 批量生成两条路 2026-09-20 退役。
 
   try {
     await ensureDbMetaInfoLoaded();
@@ -955,7 +895,6 @@ async function batchLoadSpatialQueryRefnos(
     }
   }
 
-  const parquetLoader = genModelV1 ? null : useDbnoInstancesParquetLoader();
   const okSet = new Set<string>();
 
   for (const [dbno, groupRefnos] of groupedByDbno.entries()) {
@@ -965,43 +904,17 @@ async function batchLoadSpatialQueryRefnos(
     let pending = normalizedGroup.slice();
     const groupOk = new Set<string>();
 
-    const parquetAvailable = parquetLoader ? await parquetLoader.isParquetAvailable(dbno) : false;
-    if (parquetAvailable) {
-      try {
-        const parquetResult = await loadRefnosBySource(viewer, dtxLayer, dbno, pending, 'parquet');
-        parquetResult.ok.forEach((refno) => groupOk.add(refno));
-        pending = parquetResult.missing;
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        pending.forEach((refno) => failMap.set(refno, message));
-        pending = normalizedGroup.filter((refno) => !groupOk.has(refno));
-      }
-    }
-
-    if (pending.length > 0) {
-      try {
-        const backendResult = await loadRefnosBySource(viewer, dtxLayer, dbno, pending, 'backend', {
-          forceReload: parquetAvailable,
-        });
-        backendResult.ok.forEach((refno) => {
-          groupOk.add(refno);
-          failMap.delete(refno);
-        });
-        pending = backendResult.missing;
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        pending.forEach((refno) => failMap.set(refno, message));
-        pending = [];
-      }
-    }
-
-    if (pending.length > 0 && AUTO_GENERATION_ENABLED && !genModelV1) {
-      const generated = await generateMissingRefnos(viewer, dtxLayer, dbno, pending);
-      generated.ok.forEach((refno) => {
+    try {
+      const loadResult = await loadRefnosBySource(viewer, dtxLayer, dbno, pending);
+      loadResult.ok.forEach((refno) => {
         groupOk.add(refno);
         failMap.delete(refno);
       });
-      pending = generated.fail;
+      pending = loadResult.missing;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      pending.forEach((refno) => failMap.set(refno, message));
+      pending = [];
     }
 
     pending.forEach((refno) => {
@@ -1152,11 +1065,11 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
   const toolStore = options.toolStore ?? useToolStore();
   // 数据源按调用时刻解析（`getModelSource()` 每次读 URL 开关），不在建 store 时钉死
   const spatialSource = () => getModelSource().spatial;
-  const queryNearbyPosition: typeof queryNearbyByPosition = options.queryNearbyByPosition
+  const queryNearbyPosition: QueryNearbyByPositionFn = options.queryNearbyByPosition
     ?? ((x, y, z, radius, nearbyOptions) => spatialSource().nearby({ x, y, z, radius, ...nearbyOptions }));
-  const queryNearbyRefno: typeof queryNearbyByRefno = options.queryNearbyByRefno
+  const queryNearbyRefno: QueryNearbyByRefnoFn = options.queryNearbyByRefno
     ?? ((refno, radius, nearbyOptions) => spatialSource().nearby({ refno, radius, ...nearbyOptions }));
-  const fetchNearbyRefnos: typeof queryNearbyRefnos = options.queryNearbyRefnos
+  const fetchNearbyRefnos: QueryNearbyRefnosFn = options.queryNearbyRefnos
     ?? ((params) => spatialSource().nearbyRefnos(params));
   const negativeNounsFetcher: FetchNegativeNounsFn = options.fetchNegativeNouns
     ?? (() => spatialSource().negativeNouns());

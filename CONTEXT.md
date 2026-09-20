@@ -330,11 +330,11 @@ _Avoid_: 按需模型生成、模型资产补齐
 ## 模型数据源
 
 **模型数据源 (Model Source)**:
-模型树、三维几何、网格与构件属性四条取数链共同指向的那一个后端口径；一个页面同一时刻只有一个，由 `?model_source=` → `VITE_MODEL_SOURCE` → 默认 `gen-model-v1`（2026-09-09 起；此前默认 `legacy`）决定。两个种类：`legacy`（旧后端 `:3100` + parquet / DuckDB-WASM，开关保留一个发布周期）与 `gen-model-v1`（gen-model `/api/v1`）。它是页面级开关，不是某次加载的参数。
-_Avoid_: `data_source`（那是 legacy 内部 parquet | backend 的选择）、后端地址、数据库
+模型树、三维几何、网格与构件属性四条取数链共同指向的那一个后端口径。2026-09-20 起只有 `gen-model-v1`（gen-model `/api/v1`）一种：`legacy`（旧后端 `:3100` + parquet / DuckDB-WASM）随生产切换退役，`?model_source=` / `VITE_MODEL_SOURCE` 开关一并删除（2026-09-09 翻默认，2026-09-20 删开关）。取数一律经数据源端口，不直接调 API 模块。
+_Avoid_: `data_source`（legacy 内部 parquet | backend 的选择，已随其退役）、后端地址、数据库
 
 **数据源端口 (Model Source Port)**:
-取数点与数据源之间的四个接口：`TreeSource`（根 / 子节点 / 祖先 / 搜索 / 子树 / 可见实例）、`ModelRecordSource`（`refno → InstanceEntry[]`）、`MeshSource`（`geo_hash → 网格 URL`：legacy 给 `.glb`，gen-model-v1 给 `.mesh` rkyv 直连，DTX 加载链按后缀选解析器）、`AttributeSource`（属性面板 / 类型）。接口形状等于 legacy 函数的形状，所以 legacy 适配器是零逻辑委托；gen-model-v1 适配器负责把 `EleTreeNode` / `GeomInstQuery` / `element/attributes` 映射成这些形状。测量参考系（wrt）的元素帧也跟随当前数据源，但没进这四个接口：`legacy` 走 `:3100 /api/pdms/transform`，`gen-model-v1` 取 `element/ptset` 的 `world_transform`（同是 `get_world_mat4` 的局部→世界矩阵），owner / 元素类型取树节点（d-533）。
+取数点与数据源之间的四个接口：`TreeSource`（根 / 子节点 / 祖先 / 搜索 / 子树 / 可见实例）、`ModelRecordSource`（`refno → InstanceEntry[]`）、`MeshSource`（`geo_hash → 网格 URL`：gen-model-v1 给 `.mesh` rkyv 直连，`parseMeshGeometry` 解；legacy 的 `.glb` 与 GLB 解析器已随其退役）、`AttributeSource`（属性面板 / 类型）。接口形状沿用 legacy 时代的函数形状（历史原因：当年 legacy 适配器是零逻辑委托）；gen-model-v1 适配器负责把 `EleTreeNode` / `GeomInstQuery` / `element/attributes` 映射成这些形状。测量参考系（wrt）的元素帧没进这四个接口：取 `element/ptset` 的 `world_transform`（`get_world_mat4` 的局部→世界矩阵），owner / 元素类型取树节点（d-533）。
 _Avoid_: API 客户端、fetch 封装、拿 `element/attributes` 的 stored POS / ORI 自己拼元素帧（那是相对属主的）
 
 **虚拟根 (Virtual Root)**:

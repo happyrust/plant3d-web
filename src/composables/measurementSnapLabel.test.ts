@@ -7,14 +7,16 @@ import {
   requestNounForRefno,
 } from './measurementSnapLabel';
 
-vi.mock('@/api/genModelE3dApi', () => ({
-  e3dGetNode: vi.fn(async (refno: string) => {
-    if (refno === '24381_145018') {
-      return { success: true, node: { refno, name: '/100-A', noun: 'VALVE' } };
-    }
-    if (refno === 'boom') throw new Error('network');
-    return { success: true, node: null };
-  }),
+const treeNode = vi.hoisted(() => vi.fn(async (refno: string) => {
+  if (refno === '24381_145018') {
+    return { success: true, node: { refno, name: '/100-A', noun: 'VALVE' } };
+  }
+  if (refno === 'boom') throw new Error('network');
+  return { success: true, node: null };
+}));
+
+vi.mock('@/model-source', () => ({
+  getModelSource: () => ({ tree: { node: treeNode } }),
 }));
 
 describe('formatMeasurementSnapLabel', () => {
@@ -55,10 +57,9 @@ describe('noun 缓存', () => {
     });
     expect(getCachedNounForRefno('boom')).toBeNull();
 
-    const { e3dGetNode } = await import('@/api/genModelE3dApi');
-    const callsBefore = vi.mocked(e3dGetNode).mock.calls.length;
+    const callsBefore = treeNode.mock.calls.length;
     requestNounForRefno('24381_145018');
     requestNounForRefno('boom');
-    expect(vi.mocked(e3dGetNode).mock.calls.length).toBe(callsBefore);
+    expect(treeNode.mock.calls.length).toBe(callsBefore);
   });
 });

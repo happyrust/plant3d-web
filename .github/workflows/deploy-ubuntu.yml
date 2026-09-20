@@ -6,7 +6,7 @@
 #   Variables: DEPLOY_REMOTE_HOST, DEPLOY_REMOTE_USER（可选，默认 root）,
 #              DEPLOY_PATH（可选，默认 /var/www/plant3d-web）,
 #              SERVER_NAME（可选，默认与 host 相同，写入 nginx server_name）,
-#              BACKEND_ORIGIN（可选，默认 http://127.0.0.1:3100）
+#              BACKEND_ORIGIN（可选，默认 http://127.0.0.1:8022，即 gen-model / aios-database）
 #
 # 建议在仓库 Settings → Environments 中创建 `production`，仅允许受保护分支触发，并为该环境单独配置密钥。
 
@@ -36,7 +36,7 @@ on:
         default: ''
         type: string
       backend_origin:
-        description: '反代上游（plant-model-gen web_server）；留空使用变量 BACKEND_ORIGIN'
+        description: '反代上游（gen-model / aios-database，/api 全部指向它）；留空使用变量 BACKEND_ORIGIN'
         required: false
         default: ''
         type: string
@@ -61,7 +61,7 @@ jobs:
       REMOTE_PASS: ${{ secrets.DEPLOY_REMOTE_PASS }}
       DEPLOY_PATH: ${{ inputs.deploy_path != '' && inputs.deploy_path || vars.DEPLOY_PATH || '/var/www/plant3d-web' }}
       SERVER_NAME: ${{ inputs.server_name != '' && inputs.server_name || vars.SERVER_NAME }}
-      BACKEND_ORIGIN: ${{ inputs.backend_origin != '' && inputs.backend_origin || vars.BACKEND_ORIGIN || 'http://127.0.0.1:3100' }}
+      BACKEND_ORIGIN: ${{ inputs.backend_origin != '' && inputs.backend_origin || vars.BACKEND_ORIGIN || 'http://127.0.0.1:8022' }}
 
     steps:
       - uses: actions/checkout@v4

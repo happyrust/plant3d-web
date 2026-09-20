@@ -3,7 +3,6 @@ import { computed, nextTick, onMounted, ref, watch } from 'vue';
 
 import { authVerifyToken } from '@/api/reviewApi';
 import AboutDialog from '@/components/AboutDialog.vue';
-import DashboardLayout from '@/components/dashboard/DashboardLayout.vue';
 import DockLayout from '@/components/DockLayout.vue';
 import OnboardingOverlay from '@/components/onboarding/OnboardingOverlay.vue';
 import ReviewGuideCenter from '@/components/onboarding/ReviewGuideCenter.vue';
@@ -25,7 +24,6 @@ const extensionHeight = computed(() => {
 });
 
 const urlParams = new URLSearchParams(window.location.search);
-const showBenchmark = urlParams.get('benchmark') === 'true';
 const requestedOutputProject = urlParams.get('output_project')?.trim() ?? '';
 const hasRequestedOutputProject = requestedOutputProject.length > 0;
 
@@ -35,7 +33,9 @@ const onboarding = useOnboardingGuide();
 // 带 user_token 的嵌入链接一进来就置 pending：否则首帧先挂一次 DockLayout，onMounted 里置 pending
 // 又把它卸掉、预选完项目再挂第二次——第一份实例的异步启动链还在跑，会把 postMessage 桥泄漏成两份。
 const embedBootstrapPending = ref(Boolean(urlParams.get('user_token')?.trim()));
-const showDashboardLayout = computed(() =>
+// 工程还没落定（`useModelProjects` 首屏解析中）：旧的「概览 / 项目卡片」首页随 legacy 工作台 2026-09-20 退役，
+// 这一刻只留空白占位，工程一落定就挂 DockLayout。
+const projectPending = computed(() =>
   !currentProject.value && !embedBootstrapPending.value && !hasRequestedOutputProject,
 );
 
@@ -101,7 +101,7 @@ onMounted(() => {
     <OnboardingOverlay />
     <ReviewGuideCenter />
     
-    <DashboardLayout v-if="showDashboardLayout" />
+    <div v-if="projectPending" class="h-screen w-full" data-testid="project-bootstrap-loading" />
     <div v-else-if="embedBootstrapPending" class="h-screen w-full" data-testid="embed-bootstrap-loading" />
     
     <template v-else>
@@ -145,9 +145,6 @@ onMounted(() => {
       </v-app-bar>
 
       <v-main class="flex-1 min-h-0 d-flex flex-row" style="flex: 1 1 auto;">
-        <div v-if="showBenchmark" style="width: 400px; border-right: 1px solid #333; overflow: hidden;">
-          <BenchmarkView />
-        </div>
         <div class="flex-1 min-h-0">
           <DockLayout />
         </div>

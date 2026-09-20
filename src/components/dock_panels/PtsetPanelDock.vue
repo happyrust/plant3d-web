@@ -1,16 +1,12 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 
-import type { PtsetResponse } from '@/api/genModelPdmsAttrApi';
+import type { PtsetBatchItemResponse, PtsetResponse } from '@/api/genModelPdmsAttrApi';
 
 import PtsetPanel from '@/components/tools/PtsetPanel.vue';
 import { getDbnumByRefno } from '@/composables/useDbMetaInfo';
-import { useDbnoInstancesParquetLoader, type ParquetPtsetChildSummary } from '@/composables/useDbnoInstancesParquetLoader';
-import {
-  queryDirectChildrenPtsetSummaryWithRuntimeFallback,
-  queryPtsetWithRuntimeFallback,
-} from '@/composables/usePtsetRuntimeLookup';
 import { useViewerContext } from '@/composables/useViewerContext';
+import { getModelSource } from '@/model-source';
 
 const props = defineProps<{
   params: {
@@ -21,7 +17,8 @@ const props = defineProps<{
 }>();
 
 const ctx = useViewerContext();
-const parquetLoader = useDbnoInstancesParquetLoader();
+/** 取数走 `ModelSource.keypoints`（gen-model-v1 `element/ptset`，成员点集 `include_members` 一次回）。 */
+const keypoints = getModelSource().keypoints;
 
 const ptsetVis = computed(() => ctx.ptsetVis.value);
 const currentRefno = computed(() => ptsetVis.value?.currentRefno.value ?? null);
@@ -62,14 +59,16 @@ function resolveDbno(refno: string): number | null {
   }
 }
 
-function buildBranchItem(summary: ParquetPtsetChildSummary): BranchPtsetItem {
+function buildBranchItem(item: PtsetBatchItemResponse): BranchPtsetItem {
+  const refno = normalizeRefnoKey(item.refno || item.input_refno) ?? String(item.input_refno ?? '');
+  const success = item.success && (item.ptset?.length ?? 0) > 0;
   return {
-    refno: summary.refno,
-    noun: summary.noun,
-    name: summary.name,
-    success: summary.success,
-    ptCount: summary.ptCount,
-    errorMessage: summary.errorMessage ?? (summary.success ? null : '未找到 ptset 数据'),
+    refno,
+    noun: item.noun ?? '',
+    name: refno,
+    success,
+    ptCount: item.ptset?.length ?? 0,
+    errorMessage: item.error_message ?? (success ? null : '未找到 ptset 数据'),
   };
 }
 
@@ -94,9 +93,12 @@ async function loadBranchInspector(targetRefno = contextRefno.value) {
       return;
     }
 
-    const summaries = await queryDirectChildrenPtsetSummaryWithRuntimeFallback(parquetLoader, dbno, rootRefno);
+    const members = await keypoints.memberPtsets(dbno, rootRefno);
     if (seq !== branchLoadSeq) return;
-    branchItems.value = summaries.map(buildBranchItem);
+    branchItems.value = (members.results ?? []).map(buildBranchItem);
+    if (branchItems.value.length === 0 && members.error_message) {
+      branchError.value = members.error_message;
+    }
   } catch (error) {
     if (seq !== branchLoadSeq) return;
     branchError.value = error instanceof Error ? error.message : String(error);
@@ -117,7 +119,7 @@ async function renderBranchChild(refno: string) {
     return;
   }
 
-  const resp = await queryPtsetWithRuntimeFallback(parquetLoader, dbno, normalized);
+  const resp = await keypoints.ptset(dbno, normalized);
   if (!resp.success || resp.ptset.length === 0) {
     branchError.value = resp.error_message || `未找到 ${normalized} 的点集数据`;
     branchRenderedAll.value = false;
@@ -145,7 +147,7 @@ async function renderAllBranchChildren() {
   for (const item of successItems) {
     const dbno = resolveDbno(item.refno);
     if (dbno == null) continue;
-    const resp = await queryPtsetWithRuntimeFallback(parquetLoader, dbno, item.refno);
+    const resp = await keypoints.ptset(dbno, item.refno);
     if (resp.success && resp.ptset.length > 0) {
       loaded.push({ refno: item.refno, response: resp });
     }

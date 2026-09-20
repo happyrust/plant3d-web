@@ -1,12 +1,12 @@
 import { useConsoleStore } from './useConsoleStore';
 import { useViewerContext } from './useViewerContext';
 
-import { e3dSearch } from '@/api/genModelE3dApi';
-import { e3dParquetResolveDbnumForRefno } from '@/api/genModelE3dParquetApi';
-import { pdmsGetUiAttr, pdmsGetTransform } from '@/api/genModelPdmsAttrApi';
+import { pdmsGetTransform } from '@/api/genModelPdmsAttrApi';
 import { useModelProjects } from '@/composables/useModelProjects';
 import { getModelTreeInstance } from '@/composables/useModelTreeStore';
+import { ensureDbMetaInfoLoaded, tryGetDbnumByRefno } from '@/composables/useDbMetaInfo';
 import { setGlobalSelectedRefno } from '@/composables/useSelectionStore';
+import { getModelSource } from '@/model-source';
 import {
   extractPosition,
   computeRelativeTransform,
@@ -93,11 +93,12 @@ export function usePdmsConsoleCommands() {
       return;
     }
 
-    // Handle Q DBNUM - 查询数据库编号（通过 db_meta_info.json 的 ref0_to_dbnum 映射）
+    // Handle Q DBNUM - 查询数据库编号（`/api/v1/dbnums` 的 ref0 → dbnum 映射）
     if (cmd === 'DBNUM') {
       if (id) {
         try {
-          const dbnum = await e3dParquetResolveDbnumForRefno(id);
+          await ensureDbMetaInfoLoaded();
+          const dbnum = tryGetDbnumByRefno(id);
           if (dbnum != null) {
             store.addLog('output', `DBNUM: ${dbnum}`);
           } else {
@@ -123,7 +124,7 @@ export function usePdmsConsoleCommands() {
     if (!id) return;
 
     try {
-      const resp = await pdmsGetUiAttr(id);
+      const resp = await getModelSource().attributes.uiAttr(id);
       if (!resp.success) {
         store.addLog('error', resp.error_message || 'Failed to fetch attributes');
         return;
@@ -420,7 +421,7 @@ export function usePdmsConsoleCommands() {
     store.addLog('input', `Searching for '${name}'...`);
 
     try {
-      const resp = await e3dSearch({ keyword: name, limit: 10 });
+      const resp = await getModelSource().tree.search({ keyword: name, limit: 10 });
       if (resp.success && resp.items.length > 0) {
         const match = resp.items.find(i => i.name === name || i.name === `/${name}`) || resp.items[0];
 

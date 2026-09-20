@@ -1,12 +1,9 @@
 /**
- * files/output 路径构造工具
+ * 当前模型工程（`output_project` URL 参数 / `useModelProjects.applyProject` 落下的那一个）的进程内状态。
  *
- * 约定：
- * - 未指定 output_project：使用 `/files/output/<rel>`（兼容旧目录结构）
- * - 指定 output_project：使用 `/files/output/<project>/<rel>`（多项目并存）
+ * 原先住在 `lib/filesOutput.ts`，跟旧后端 `/files/output/<project>/…` 的 URL 构造放在一起；2026-09-20 legacy 退役后
+ * 只剩这份「现在是哪个工程」的状态——批注草稿 scope、工具 store 的持久化键、尺寸文档的存储 scope 都按它分桶。
  */
-
-import { buildBackendUrl } from '@/utils/apiBase';
 
 let currentProjectPath: string | null = null;
 
@@ -33,14 +30,15 @@ export function setCurrentProjectPath(path: string | null) {
     try {
       listener(next);
     } catch (err) {
-      console.warn('[filesOutput] project path listener failed:', err);
+      console.warn('[currentProject] project path listener failed:', err);
     }
   }
 }
 
+/** 当前工程：先看 `setCurrentProjectPath` 落下的，再看 URL `output_project`；都没有为 null。 */
 export function getOutputProjectFromUrl(): string | null {
   if (currentProjectPath) return currentProjectPath;
-  
+
   if (typeof window === 'undefined') return null;
   try {
     const q = new URLSearchParams(window.location.search);
@@ -51,13 +49,3 @@ export function getOutputProjectFromUrl(): string | null {
     return null;
   }
 }
-
-export function buildFilesOutputUrl(relPath: string): string {
-  const rel = String(relPath || '').replace(/^\/+/, '');
-  const project = getOutputProjectFromUrl();
-  const path = project
-    ? `/files/output/${encodeURIComponent(project)}/${rel}`
-    : `/files/output/${rel}`;
-  return buildBackendUrl(path);
-}
-

@@ -9,8 +9,6 @@ import {
   resetSpatialComputeStore,
 } from './useSpatialCompute';
 
-import type { ModelSourceKind } from '@/model-source/ports';
-
 vi.mock('@/composables/useViewerContext', () => ({
   useViewerContext: () => ({
     viewerRef: { value: null },
@@ -23,16 +21,10 @@ vi.mock('@/composables/useSelectionStore', () => ({
   }),
 }));
 
-// BRAN 净距按数据源分流：这组用例默认站在 legacy 一侧，v1 那几条自己切。
-const sourceKindState: { kind: ModelSourceKind } = { kind: 'legacy' };
-vi.mock('@/model-source/kind', () => ({
-  getModelSourceKind: () => sourceKindState.kind,
-}));
 
 describe('useSpatialCompute BRAN nearest clearance', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
-    sourceKindState.kind = 'legacy';
     resetSpatialComputeStore();
   });
 
@@ -55,16 +47,15 @@ describe('useSpatialCompute BRAN nearest clearance', () => {
     expect(store.currentScenarioMeta.value.fields).toEqual(['searchRadius', 'excludeNouns']);
     expect(store.currentScenarioState.value.excludeNouns).toBe('WELD,ATTA');
     expect(store.currentScenarioState.value.nounFacets).toEqual([]);
-    expect(store.currentScenarioMeta.value.endpoint).toBe('/api/sqlite-spatial/nearest-clearance');
+    expect(store.currentScenarioMeta.value.endpoint).toBe('/api/v1/spatial/nearest-clearance');
   });
 
-  it('shows the gen-model-v1 endpoint for the BRAN scenario when that source is active; other scenarios untouched', () => {
-    sourceKindState.kind = 'gen-model-v1';
+  it('BRAN 净距是唯一场景（旧后端 /api/space/* 的六个支架场景 2026-09-20 随 legacy 退役），走 gen-model-v1 端点', () => {
     const store = createSpatialComputeStore();
 
-    expect(store.scenarioList.find((item) => item.key === 'branNearestClearance')?.endpoint).toBe('/api/v1/spatial/nearest-clearance');
-    expect(store.scenarioList.find((item) => item.key === 'wallDistance')?.endpoint).toBe('/api/space/wall-distance');
-    store.setActiveScenario('branNearestClearance');
+    expect(store.scenarioList.map((item) => item.key)).toEqual(['branNearestClearance']);
+    expect(store.scenarioList[0]?.endpoint).toBe('/api/v1/spatial/nearest-clearance');
+    expect(store.activeScenario.value).toBe('branNearestClearance');
     expect(store.currentSummary.value).toContain('/api/v1/spatial/nearest-clearance');
   });
 
@@ -107,10 +98,10 @@ describe('useSpatialCompute BRAN nearest clearance', () => {
     await store.submitScenario('branNearestClearance');
 
     const url = new URL(String(fetchMock.mock.calls[0]?.[0]), 'http://localhost');
-    expect(url.pathname).toBe('/api/sqlite-spatial/nearest-clearance');
+    expect(url.pathname).toBe('/api/v1/spatial/nearest-clearance');
     expect(Object.fromEntries(url.searchParams)).toEqual({
       source_mode: 'bran_centerline',
-      source_refno: '24381_145018',
+      source_refno: '24381/145018',
       group_by: 'noun',
       exclude_nouns: 'WELD,ATTA',
       radius: '5000',
@@ -365,7 +356,6 @@ describe('useSpatialCompute BRAN nearest clearance', () => {
     };
 
     it('sends the panel fields as v1 query params (refno as a/b, group_by=noun, max_per_group) and builds the facet', async () => {
-      sourceKindState.kind = 'gen-model-v1';
       const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify(v1Response), { status: 200 }));
       vi.stubGlobal('fetch', fetchMock);
       const store = createSpatialComputeStore();
@@ -412,7 +402,6 @@ describe('useSpatialCompute BRAN nearest clearance', () => {
     });
 
     it('surfaces the v1 error envelope message (422: source is not a BRAN) and clears stale rows', async () => {
-      sourceKindState.kind = 'gen-model-v1';
       const fetchMock = vi.fn()
         .mockResolvedValueOnce(new Response(JSON.stringify(v1Response), { status: 200 }))
         .mockResolvedValueOnce(new Response(

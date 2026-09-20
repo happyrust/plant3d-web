@@ -22,18 +22,6 @@ export class NotDeliveryUnitRootError extends Error {
 }
 
 /**
- * `model_source=legacy` 下的版本对比已退役（2026-09-18，ADR 0065；plan 2026-09-18 §7）：legacy 的
- * `/api/model/units/{refno}/versions` 与不可变 parquet manifest 那条取数链删掉了，模型版本只从 gen-model-v1 取。
- * legacy 适配器的 `versions` 只剩这一句话，让面板给出明确的空态而不是白屏。
- */
-export class LegacyModelVersionsRetiredError extends Error {
-  constructor() {
-    super('legacy 数据源的版本对比已退役：去掉 ?model_source=legacy（或改为 model_source=gen-model-v1）后再打开版本对比');
-    this.name = 'LegacyModelVersionsRetiredError';
-  }
-}
-
-/**
  * 服务端是旧构建、没有这条路由（axum 无信封的 404）。节点版本视图（ADR 0066）的两条新路由
  * `element/attribute-history` / `node/diff-summary` 都可能撞上它：面板据此回落到现有路由能给的那一半，
  * 并照实说「要新版服务端」，而不是把它当成「没有变化」。

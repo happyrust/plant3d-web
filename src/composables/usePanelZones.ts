@@ -14,11 +14,11 @@ export const ZONE_PANELS: Record<ZoneName, string[]> = {
   left: ['modelTree'],
   right: [
     'measurement', 'dimension', 'annotation', 'manager', 'properties',
-    'modelQuery', 'ptset', 'materialConfig', 'review',
-    'initiateReview', 'reviewerTasks', 'myTasks', 'resubmissionTasks',
-    'taskMonitor', 'taskCreation', 'incrementalUpdate', 'modelExport', 'hydraulic', 'roomInfo', 'roomStatus', 'spatialCompute', 'dashboard',
+    'ptset', 'annotationStyle', 'materialConfig', 'review',
+    'initiateReview', 'reviewerTasks', 'myTasks', 'designerCommentHandling',
+    'modelVersionCompare', 'reviewAttachmentPreview', 'hydraulic', 'spatialCompute',
   ],
-  bottom: ['console', 'parquetDebug'],
+  bottom: ['console'],
 };
 
 /** Reverse lookup: panelId -> zone name */

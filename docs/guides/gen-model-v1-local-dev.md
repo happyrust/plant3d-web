@@ -1,8 +1,8 @@
-# 本地联调：gen-model `:8022` + plant3d-web `:3101`（`model_source=gen-model-v1`）
+# 本地联调：gen-model `:8022` + plant3d-web `:3101`
 
 模型树与三维几何从 gen-model `/api/v1` 取数的联调步骤、URL 开关、验证脚本与常见故障。设计见 `docs/adr/0054-load-model-tree-and-geometry-from-gen-model-v1.md`，落地记录见 `docs/plans/2026-09-06-gen-model-v1-tree-and-viewer-adapter-plan.md` §8。
 
-**2026-09-09 起 `gen-model-v1` 是缺省数据源**：不带参数打开页面就走 gen-model，所以 gen-model 不在时树是空的、徽标红点（见 §7）；要回旧链路写 `?model_source=legacy`（或 `VITE_MODEL_SOURCE=legacy`），legacy 开关保留一个发布周期。
+**gen-model 是唯一数据源**（2026-09-09 翻默认，2026-09-20 删掉 legacy 链与开关）：不带参数打开页面就走 gen-model，所以 gen-model 不在时树是空的、徽标红点（见 §7）。旧后端 `:3100` 与 `?model_source=legacy` / `VITE_MODEL_SOURCE` 都已不存在。
 
 ## 1. 起 gen-model
 
@@ -50,10 +50,9 @@ npm run dev          # http://127.0.0.1:3101
 ```ini
 # VITE_GEN_MODEL_V1_BASE_URL=http://localhost:8022   # 可省：dev 缺省就是直连 :8022；写 /gm 走 Vite 代理
 # VITE_GEN_MODEL_V1_PROXY_TARGET=http://localhost:8022   # /gm 代理的上游（仅 dev）
-# VITE_MODEL_SOURCE=gen-model-v1                         # 缺省 gen-model-v1（2026-09-09 起）；写 legacy 整站回旧链路
 ```
 
-旧后端 `VITE_GEN_MODEL_API_BASE_URL=http://localhost:3100` 那一行**不要动**：尺寸标注、MBD、校审等还在 `:3100`；过渡期一个页面同时挂两个后端是预期形态。
+同源 `/api`（校审 / 认证 / 用户 / 附件）的 dev 代理上游也是 gen-model（`vite.config.ts` 缺省 `http://localhost:8022`）；`VITE_GEN_MODEL_API_BASE_URL` 若还留着旧的 `:3100` 请删掉或改成 `:8022`，那台后端 2026-09-20 起已退役。
 
 ### 2.1 生产部署
 
@@ -72,9 +71,9 @@ npm run dev          # http://127.0.0.1:3101
 
 | 参数 | 作用 |
 | --- | --- |
-| `model_source=gen-model-v1` | 本页面模型树 / 几何 / 网格 / 属性全部走 gen-model；**2026-09-09 起这就是缺省**，不写也一样。`model_source=legacy` = 旧链路（逐字节同前，保留一个发布周期）。**2026-09-12 起测量的 P-Point 也在这个开关下**：v1 源走 `POST /api/v1/element/ptset`（服务端须含 `feature/element-ptset-api` 的构建，旧服务端回 404/405 → 面板提示无 P-Point），legacy 源仍读 `ptsets.parquet` / `:3100 /api/pdms/ptset`；基本体 / PLINE 关键点 v1 源暂无接口（提示条会说明） |
+| ~~`model_source=`~~ | **2026-09-20 起已删**：数据源只有 gen-model，带这个参数打开页面与不带一样。**2026-09-12 起测量的 P-Point 也在这个开关下**：v1 源走 `POST /api/v1/element/ptset`（服务端须含 `feature/element-ptset-api` 的构建，旧服务端回 404/405 → 面板提示无 P-Point），legacy 源仍读 `ptsets.parquet` / `:3100 /api/pdms/ptset`；基本体 / PLINE 关键点 v1 源暂无接口（提示条会说明） |
 | `gm_backend_port=18082` / `gm_backend=http://10.0.0.5:8022` / `gm_backend=/gm` | 本页面 gen-model 地址，压过环境变量；`/gm` 仅在 dev Vite 或部署方显式 rewrite 时可用 |
-| `gm_health=1` | 在 legacy 下也把树顶部的 gen-model 徽标挂出来（只看健康与库三态，不动场景、不起同步） |
+| ~~`gm_health=1`~~ | 2026-09-20 起徽标常驻，这个参数不再需要 |
 | `show_refno=24381_145018` | 启动即显示这个节点（v1 下 = `ensure → records`） |
 | `debug_refno=24381_145018` | 同上，但强制重载并替换旧对象 |
 | `show_dbnum=7997` | 整库，两条路自动选（收口计划 §17，2026-09-10 起）。**服务端整库入口**（读透 / kv-mem 形态、且服务端含 spec §4.5.3 的构建）：`POST dbnums/7997/model/ensure` 起任务（202，服务端自己枚举全部生成根，e3d-model 流水线 16 路并行、按片提交进投影）→ 每 2 s 只查这一个 `task_id`（进度「服务端生成 N/M」）+ `GET dbnums/7997/model/roots?ready=1`，**新就绪的根立刻取 `records` 装进视口**（「已进视口 K 根」）——几何边生成边出现，第一片 16 根提交就能看见，不等整库生成完（plan 2026-09-10 §12「实时」）。服务端是 `dadbd821d` 那版（roots 行没有 `ready`）时退化为等终态再整取。前端一根也不催。**逐 SITE 老路**（服务端没有那条路由 404 → 记一次以后不再试；该库以 rocksdb 为准 409 → 只退这一次）：`tree/roots` 里该库的全部 SITE 逐个 `ensure → records`，进度按 SITE。**database 形态的 409（摄入形态里已初始化的库，如本机 `:18122` 的 7997）2026-09-14 起不再干等逐 SITE**：退回之前先 `GET dbnums/7997/model/roots?ready=1` 把服务端**已经生成好的根**多根 `records` 抽进视口（直读 rocksdb，64 根一批几百毫秒；控制台「已先取进服务端已生成的 N/M 根，其余走逐 SITE 兼容路径」），逐 SITE 只负责催其余的根；逐 SITE 之后每 10 s 再抽一次 `?ready=1`（SITE 级 ensure 超时进 pending 的那些根，服务端在后台继续生成、新就绪的立刻进视口，进度「服务端生成 N/M 根 · 已进视口 K 根」），直到全部就绪 / 1 min 没有新就绪的根 / 预算用尽 / 2 h。实测 7997（6772 根，2943 根已就绪）：刷新后 22 s 视口里 12 064 个构件，改前逐 SITE 兼容路径 21.7 min 只装到 133 个。两条路的 `records` 都按**多根批量**取（一次 ≤64 根，spec §4.5.2），生成根数不设预算，缺省只守 50 000 个构件（撞到 toast 会说「未轮到 N 个 SITE」），加 `show_dbnum_full=1` 连构件数也不限。服务端是不认识 `generation_roots` 的旧版（如 0.1.21 出厂包）时前端自动退回逐根（每根一次 `records`，0.5–10 s，几千根的库要几十分钟）——network 面板里第一发是 `dbnums/{dbnum}/model/ensure` 还是 `model/ensure`、`model/records` 的请求体有没有 `generation_roots`，走的哪条路一眼可辨 |
@@ -111,14 +110,9 @@ pwsh scripts/verify-gen-model-v1.ps1 -BaseUrl http://127.0.0.1:8022 -Dbnum 7997 
 | `model/records` 的 `source` | `model-memory` | 库就绪了 `model-database`，否则 `model-memory` |
 | 服务重启后 | 投影全没：再点显示会重新生成（整库任务也只活在进程内） | 已初始化的库以 rocksdb 为准，重启即接上 |
 
-## 6. 两源对拍（翻默认开关时的证据链）
+## 6. 对拍（翻默认时的证据链；legacy 那一侧 2026-09-20 起已不可复现）
 
-同一 refno 开两个 tab：
-
-```text
-?model_source=legacy&show_refno=24381_145018&data_source=parquet
-?model_source=gen-model-v1&show_refno=24381_145018
-```
+2026-09-20 前同一 refno 开两个 tab（`?model_source=legacy&…&data_source=parquet` 与 `?model_source=gen-model-v1&…`）比对象数与 AABB；legacy 链删掉后只剩下面第二种口径能跑。历史记录：
 
 比 `loadedObjects`、场景 AABB（控制台 `__dtxViewer` 的 `sceneBoundingBox`）逐轴差 ≤ 1 mm、截图肉眼一致；再取一个 EQUI、一个 SUPPO、一个 ZONE 重复。legacy 那边需要 `:3100` 旧后端在跑。自动化版本是 `e2e/gen-model-v1-two-source-parity.spec.ts`：第一条用例就是这组对拍（legacy 输出目录缺 `scene_tree_parquet/` 时带原因 skip），第二条「v1 浏览器对象数 == `model/records` 逐根条数」不依赖 legacy，翻默认后当回归钉子一直跑。
 
@@ -138,7 +132,7 @@ pwsh scripts/verify-gen-model-v1.ps1 -BaseUrl http://127.0.0.1:8022 -Dbnum 7997 
 
 ## 8. 回退
 
-任何时候加 `?model_source=legacy`（或整站 `VITE_MODEL_SOURCE=legacy`）就回到旧链路——两套代码都在，legacy 路径没有改过一行行为；2026-09-09 之前缺省就是 legacy，现在要显式写。相关源码：`src/model-source/**`、`src/api/genModelV1Api.ts`、`src/composables/useGenModelV1Health.ts`（`genModelV1Ws.ts` / `useGenModelV1ModelSync.ts` 已于 2026-09-09 下线）。
+**2026-09-20 起没有前端侧回退**：legacy 链已从代码里删除（ADR 0054 追记），要回旧链路只能 checkout `codex/retire-legacy-model-source` 合并前的提交并把 `:3100` 后端与 parquet 输出重新架起来。相关源码：`src/model-source/**`、`src/api/genModelV1Api.ts`、`src/composables/useGenModelV1Health.ts`（`genModelV1Ws.ts` / `useGenModelV1ModelSync.ts` 已于 2026-09-09 下线）。
 
 ## 9. 校审域（review）——要 `rocksdb` 档才开，`mem` 出厂档下四前缀 503
 

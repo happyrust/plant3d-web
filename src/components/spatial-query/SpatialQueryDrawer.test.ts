@@ -135,13 +135,6 @@ vi.mock('@/composables/useConfirmDialogStore', () => ({
 /** 让 `confirmDialog.open(...).then(run)` 那条链跑完（mock 的 async 函数要几拍微任务）。 */
 const flushMicrotasks = () => new Promise<void>((resolve) => { setTimeout(resolve, 0); });
 
-vi.mock('@/composables/useRoomInfoPanel', () => ({
-  useRoomInfoPanel: () => ({
-    openForRefno: vi.fn(async () => null),
-    showRoomModel: vi.fn(async () => undefined),
-  }),
-}));
-
 vi.mock('@/ribbon/toastBus', () => ({
   emitToast: vi.fn(),
 }));

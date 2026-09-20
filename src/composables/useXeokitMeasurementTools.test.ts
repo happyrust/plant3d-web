@@ -1,14 +1,83 @@
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { nextTick, ref, shallowRef } from 'vue';
 
 import * as THREE from 'three';
 
 import { worldDistanceAidChildId } from '@/measurement/aids/worldDistanceAidPlan';
 
-// 本文件的 P-Point / 基本体关键点用例 mock 的是 parquet loader 与 `:3100` ptset API，
-// 那是 `legacy` 数据源的取数（2026-09-12 起测量关键点经 `getModelSource().keypoints` 端口）；
-// 缺省源是 gen-model-v1，这里钉回 legacy 让这些 mock 继续生效（同 useDbnoInstancesDtxLoader.test.ts）。
-beforeAll(() => window.history.replaceState({}, '', '?model_source=legacy'));
+// 本文件的 P-Point / 基本体关键点用例把 `getModelSource().keypoints` 端口整个 mock 掉（2026-09-12 起测量关键点经这个端口取数）。
+// 用例正文沿用 2026-09-20 legacy 退役前的写法——「parquet 表」与「`:3100` ptset API 兜底」两组 mock 分别对应
+// 端口的 `primitiveKeypoints` / `ptset` 与 `ptset` 兜底 / `memberPtsets`，语义按退役前 legacy 适配器的组合方式复现：
+// ptset 先看 parquet、没有点再问 API；成员点集走 API children；基本体 + PLINE 两张表 allSettled 后平铺。
+type KeypointPortMockState = {
+  parquet: Record<string, (...args: any[]) => Promise<any>>;
+  pdmsApi: Record<string, (...args: any[]) => Promise<any>>;
+  plineSnapPoints: ((refno: string) => any[]) | null;
+};
+const keypointPortMockState: KeypointPortMockState = { parquet: {}, pdmsApi: {}, plineSnapPoints: null };
+
+function resetKeypointPortMocks(): void {
+  keypointPortMockState.parquet = {};
+  keypointPortMockState.pdmsApi = {};
+  keypointPortMockState.plineSnapPoints = null;
+}
+
+const MISSING_PTSET = (refno: string) => ({
+  success: false, refno, ptset: [], world_transform: null, unit_info: null, error_code: 'PTSET_POINTS_MISSING', error_message: '无点',
+});
+const MISSING_CHILDREN = (refno: string) => ({
+  success: false, refno, results: [], total_count: 0, success_count: 0, failed_count: 0, error_message: '无子构件点集',
+});
+
+function mockKeypointPort(patch: Partial<KeypointPortMockState>): void {
+  if (patch.parquet) keypointPortMockState.parquet = { ...keypointPortMockState.parquet, ...patch.parquet };
+  if (patch.pdmsApi) keypointPortMockState.pdmsApi = { ...keypointPortMockState.pdmsApi, ...patch.pdmsApi };
+  if (patch.plineSnapPoints !== undefined) keypointPortMockState.plineSnapPoints = patch.plineSnapPoints;
+  vi.doMock('@/model-source', async (importOriginal) => {
+    const original = await importOriginal<typeof import('@/model-source')>();
+    const state = keypointPortMockState;
+    const keypoints = {
+      async ptset(dbno: number, refno: string, options?: any) {
+        const fromParquet = state.parquet.queryPtsetByRefnoFromParquet
+          ? await state.parquet.queryPtsetByRefnoFromParquet(dbno, refno, options)
+          : null;
+        if (fromParquet?.success && (fromParquet.ptset?.length ?? 0) > 0) return fromParquet;
+        if (state.pdmsApi.pdmsGetPtsetWithContext) return state.pdmsApi.pdmsGetPtsetWithContext(refno, { dbno });
+        return fromParquet ?? MISSING_PTSET(refno);
+      },
+      async memberPtsets(dbno: number, ownerRefno: string) {
+        if (state.pdmsApi.pdmsGetPtsetChildrenWithContext) return state.pdmsApi.pdmsGetPtsetChildrenWithContext(ownerRefno, { dbno });
+        return MISSING_CHILDREN(ownerRefno);
+      },
+      async primitiveKeypoints(dbno: number, refno: string, options?: any) {
+        const results = await Promise.allSettled([
+          state.parquet.queryPrimitiveKeypointsByRefnoFromParquet?.(dbno, refno, options) ?? Promise.resolve([]),
+          state.parquet.querySemanticSnapPointsByRefnoFromParquet?.(dbno, refno, options) ?? Promise.resolve([]),
+        ]);
+        return {
+          items: results.flatMap((result) => (result.status === 'fulfilled' ? result.value : [])),
+          errors: results.flatMap((result) => (result.status === 'rejected' ? [String(result.reason)] : [])),
+          plineSnapPoints: state.plineSnapPoints ? state.plineSnapPoints(refno) : [],
+        };
+      },
+    };
+    const tree = {
+      node: async (refno: string) => ({ success: false, node: null, error_message: `mock: no tree node for ${refno}` }),
+      ancestors: async (refno: string) => ({ success: false, refnos: [], error_message: `mock: no ancestors for ${refno}` }),
+    };
+    // 弧半径（`elementArcRadiusCache`：ELBO 走 SPRE → CATR → PARA）读 `attributes.uiAttr`，对应退役前 mock 的 `pdmsGetUiAttr`。
+    const attributes = {
+      uiAttr: async (refno: string) => (state.pdmsApi.pdmsGetUiAttr
+        ? state.pdmsApi.pdmsGetUiAttr(refno)
+        : { success: false, refno, attrs: {}, error_message: 'mock: no uiAttr' }),
+      typeInfo: async (refno: string) => ({ success: false, refno, error_message: 'mock: no typeInfo' }),
+    };
+    return {
+      ...original,
+      getModelSource: () => ({ kind: 'gen-model-v1', keypoints, tree, attributes }),
+    };
+  });
+}
 
 describe('useXeokitMeasurementTools', () => {
   beforeEach(() => {
@@ -31,6 +100,7 @@ describe('useXeokitMeasurementTools', () => {
     };
     localStorage.clear();
     vi.resetModules();
+    resetKeypointPortMocks();
   });
 
   /**
@@ -638,28 +708,26 @@ describe('useXeokitMeasurementTools', () => {
     vi.doMock('@/composables/useDbnoInstancesDtxLoader', () => ({
       getDtxRefnoTransform: vi.fn(() => null),
     }));
-    vi.doMock('@/composables/useDbnoInstancesParquetLoader', () => ({
-      useDbnoInstancesParquetLoader: () => ({
-        queryPtsetByRefnoFromParquet: vi.fn(async (_dbno: number, refno: string) => ({
-          success: true,
-          refno,
-          ptset: [{
-            number: 1,
-            pt: [0, 0, 0],
-            dir: null,
-            dir_flag: 0,
-            ref_dir: null,
-            pbore: 100,
-            pwidth: 0,
-            pheight: 0,
-            pconnect: '',
-          }],
-          world_transform: null,
-          unit_info: { source_unit: 'mm', target_unit: 'mm', conversion_factor: 1 },
-          error_message: null,
-        })),
-      }),
-    }));
+    mockKeypointPort({ parquet: {
+      queryPtsetByRefnoFromParquet: vi.fn(async (_dbno: number, refno: string) => ({
+        success: true,
+        refno,
+        ptset: [{
+          number: 1,
+          pt: [0, 0, 0],
+          dir: null,
+          dir_flag: 0,
+          ref_dir: null,
+          pbore: 100,
+          pwidth: 0,
+          pheight: 0,
+          pconnect: '',
+        }],
+        world_transform: null,
+        unit_info: { source_unit: 'mm', target_unit: 'mm', conversion_factor: 1 },
+        error_message: null,
+      })),
+    } });
 
     const [{ useToolStore }, { useXeokitMeasurementTools }, { useXeokitMeasurementStyleStore }] = await Promise.all([
       import('@/composables/useToolStore'),
@@ -726,29 +794,27 @@ describe('useXeokitMeasurementTools', () => {
     vi.doMock('@/composables/useDbnoInstancesDtxLoader', () => ({
       getDtxRefnoTransform: vi.fn(() => null),
     }));
-    vi.doMock('@/composables/useDbnoInstancesParquetLoader', () => ({
-      useDbnoInstancesParquetLoader: () => ({
-        queryPtsetByRefnoFromParquet: vi.fn(async (_dbno: number, refno: string) => ({
-          success: true,
-          refno,
-          ptset: [{
-            number: 1,
-            pt: [0, 0, 0],
-            // P-point 轴线沿 +Z：E3D PPOINT 的 getLine()。
-            dir: [0, 0, 1],
-            dir_flag: 1,
-            ref_dir: null,
-            pbore: 100,
-            pwidth: 0,
-            pheight: 0,
-            pconnect: '',
-          }],
-          world_transform: null,
-          unit_info: { source_unit: 'mm', target_unit: 'mm', conversion_factor: 1 },
-          error_message: null,
-        })),
-      }),
-    }));
+    mockKeypointPort({ parquet: {
+      queryPtsetByRefnoFromParquet: vi.fn(async (_dbno: number, refno: string) => ({
+        success: true,
+        refno,
+        ptset: [{
+          number: 1,
+          pt: [0, 0, 0],
+          // P-point 轴线沿 +Z：E3D PPOINT 的 getLine()。
+          dir: [0, 0, 1],
+          dir_flag: 1,
+          ref_dir: null,
+          pbore: 100,
+          pwidth: 0,
+          pheight: 0,
+          pconnect: '',
+        }],
+        world_transform: null,
+        unit_info: { source_unit: 'mm', target_unit: 'mm', conversion_factor: 1 },
+        error_message: null,
+      })),
+    } });
 
     const [{ useToolStore }, { useXeokitMeasurementTools }, { useXeokitMeasurementStyleStore }] = await Promise.all([
       import('@/composables/useToolStore'),
@@ -971,11 +1037,9 @@ describe('useXeokitMeasurementTools', () => {
     vi.doMock('@/composables/useDbnoInstancesDtxLoader', () => ({
       getDtxRefnoTransform: vi.fn(() => null),
     }));
-    vi.doMock('@/composables/useDbnoInstancesParquetLoader', () => ({
-      useDbnoInstancesParquetLoader: () => ({
-        queryPtsetByRefnoFromParquet: vi.fn(() => ptsetResponse),
-      }),
-    }));
+    mockKeypointPort({ parquet: {
+      queryPtsetByRefnoFromParquet: vi.fn(() => ptsetResponse),
+    } });
 
     const [{ useToolStore }, { useXeokitMeasurementTools }, { useXeokitMeasurementStyleStore }] = await Promise.all([
       import('@/composables/useToolStore'),
@@ -1069,11 +1133,9 @@ describe('useXeokitMeasurementTools', () => {
     vi.doMock('@/composables/useDbnoInstancesDtxLoader', () => ({
       getDtxRefnoTransform: vi.fn(() => null),
     }));
-    vi.doMock('@/composables/useDbnoInstancesParquetLoader', () => ({
-      useDbnoInstancesParquetLoader: () => ({
-        queryPtsetByRefnoFromParquet: vi.fn(() => pendingPtset),
-      }),
-    }));
+    mockKeypointPort({ parquet: {
+      queryPtsetByRefnoFromParquet: vi.fn(() => pendingPtset),
+    } });
 
     const [{ useToolStore }, { useXeokitMeasurementTools }, { useXeokitMeasurementStyleStore }] = await Promise.all([
       import('@/composables/useToolStore'),
@@ -1141,20 +1203,18 @@ describe('useXeokitMeasurementTools', () => {
     vi.doMock('@/composables/useDbnoInstancesDtxLoader', () => ({
       getDtxRefnoTransform: vi.fn(() => null),
     }));
-    vi.doMock('@/composables/useDbnoInstancesParquetLoader', () => ({
-      useDbnoInstancesParquetLoader: () => ({
-        queryPtsetByRefnoFromParquet: vi.fn(async () => ({
-          success: false,
-          refno: '24381_145018',
-          ptset: [],
-          world_transform: null,
-          unit_info: null,
-          error_code: 'PTSET_POINTS_MISSING',
-          error_message: 'cata_hash=elbo-a 未找到 ptset 点',
-        })),
-      }),
-    }));
-    vi.doMock('@/api/genModelPdmsAttrApi', () => ({
+    mockKeypointPort({ parquet: {
+      queryPtsetByRefnoFromParquet: vi.fn(async () => ({
+        success: false,
+        refno: '24381_145018',
+        ptset: [],
+        world_transform: null,
+        unit_info: null,
+        error_code: 'PTSET_POINTS_MISSING',
+        error_message: 'cata_hash=elbo-a 未找到 ptset 点',
+      })),
+    } });
+    mockKeypointPort({ pdmsApi: {
       pdmsGetPtsetWithContext: vi.fn(async () => ({
         success: true,
         refno: '24381_145018',
@@ -1175,7 +1235,7 @@ describe('useXeokitMeasurementTools', () => {
         unit_info: { source_unit: 'mm', target_unit: 'mm', conversion_factor: 1 },
         error_message: null,
       })),
-    }));
+    } });
 
     const [{ useToolStore }, { useXeokitMeasurementTools }, { useXeokitMeasurementStyleStore }] = await Promise.all([
       import('@/composables/useToolStore'),
@@ -1725,7 +1785,7 @@ describe('useXeokitMeasurementTools', () => {
 
   describe('测量 hover 关键点显示', () => {
     it('根构件自身无 P-Point 时回落直属子构件点集并渲染标记', async () => {
-      vi.doMock('@/api/genModelPdmsAttrApi', () => ({
+      mockKeypointPort({ pdmsApi: {
         pdmsGetPtsetWithContext: vi.fn(async (refno: string) => ({
           success: false,
           refno,
@@ -1763,7 +1823,7 @@ describe('useXeokitMeasurementTools', () => {
           success_count: 1,
           failed_count: 0,
         })),
-      }));
+      } });
 
       const [{ useToolStore }, { useXeokitMeasurementTools }, { useXeokitMeasurementStyleStore }] = await Promise.all([
         import('@/composables/useToolStore'),
@@ -1817,7 +1877,7 @@ describe('useXeokitMeasurementTools', () => {
       }, { timeout: 3000 });
 
       tools.dispose();
-      vi.doUnmock('@/api/genModelPdmsAttrApi');
+      resetKeypointPortMocks();
     });
   });
 
@@ -2603,12 +2663,10 @@ describe('useXeokitMeasurementTools', () => {
       vi.doMock('@/composables/useDbnoInstancesDtxLoader', () => ({
         getDtxRefnoTransform: vi.fn(() => null),
       }));
-      vi.doMock('@/composables/useDbnoInstancesParquetLoader', () => ({
-        useDbnoInstancesParquetLoader: () => ({
-          queryPtsetByRefnoFromParquet: vi.fn(async (_dbno: number, refno: string) => noPoints(refno)),
-        }),
-      }));
-      vi.doMock('@/api/genModelPdmsAttrApi', () => ({
+      mockKeypointPort({ parquet: {
+        queryPtsetByRefnoFromParquet: vi.fn(async (_dbno: number, refno: string) => noPoints(refno)),
+      } });
+      mockKeypointPort({ pdmsApi: {
         pdmsGetPtsetWithContext: vi.fn(async (refno: string) => noPoints(refno)),
         pdmsGetPtsetChildrenWithContext: vi.fn(async () => {
           const results = [
@@ -2635,7 +2693,7 @@ describe('useXeokitMeasurementTools', () => {
             error_message: null,
           };
         }),
-      }));
+      } });
 
       const [{ useToolStore }, { useXeokitMeasurementTools }, { useXeokitMeasurementStyleStore }] = await Promise.all([
         import('@/composables/useToolStore'),
@@ -2820,23 +2878,21 @@ describe('useXeokitMeasurementTools', () => {
         )),
         resolveDtxNounByRefno: vi.fn((_dbno: number, refno: string) => nounByRefno[refno] ?? null),
       }));
-      vi.doMock('@/composables/useDbnoInstancesParquetLoader', () => ({
-        useDbnoInstancesParquetLoader: () => ({
-          queryPtsetByRefnoFromParquet: vi.fn(async (_dbno: number, refno: string) => {
-            const ptset = ptsetByRefno[refno] ?? [];
-            return {
-              success: ptset.length > 0,
-              refno,
-              noun: nounByRefno[refno] ?? null,
-              ptset,
-              world_transform: worldTransformByRefno[refno] ?? null,
-              unit_info: { source_unit: 'mm', target_unit: 'mm', conversion_factor: 1 },
-              error_code: ptset.length > 0 ? null : 'PTSET_POINTS_MISSING',
-              error_message: ptset.length > 0 ? null : '设计基本体没有目录 P 点',
-            };
-          }),
+      mockKeypointPort({ parquet: {
+        queryPtsetByRefnoFromParquet: vi.fn(async (_dbno: number, refno: string) => {
+          const ptset = ptsetByRefno[refno] ?? [];
+          return {
+            success: ptset.length > 0,
+            refno,
+            noun: nounByRefno[refno] ?? null,
+            ptset,
+            world_transform: worldTransformByRefno[refno] ?? null,
+            unit_info: { source_unit: 'mm', target_unit: 'mm', conversion_factor: 1 },
+            error_code: ptset.length > 0 ? null : 'PTSET_POINTS_MISSING',
+            error_message: ptset.length > 0 ? null : '设计基本体没有目录 P 点',
+          };
         }),
-      }));
+      } });
       // 弧的半径按 E3D 的取法从属性来（`elementArcRadiusCache`）：ELBO 走 SPRE → SPCO `CATR` → SCOM `PARA` 第 2 项，
       // BEND 走元素自己的 `RADI`。G 的目录参数「100, 300, 450」→ parameter[2] = 300 mm，正是它两腿 90° 弯的半径。
       const uiAttrByRefno: Record<string, Record<string, unknown>> = {
@@ -2845,7 +2901,7 @@ describe('useXeokitMeasurementTools', () => {
         '13246/700001': { CATR: '13246/700002' },
         '13246/700002': { GTYP: 'ELBO', PARA: '100, 300, 450' },
       };
-      vi.doMock('@/api/genModelPdmsAttrApi', () => ({
+      mockKeypointPort({ pdmsApi: {
         pdmsGetPtsetWithContext: vi.fn(async (refno: string) => ({
           success: false, refno, ptset: [], world_transform: null, unit_info: null, error_code: 'PTSET_POINTS_MISSING', error_message: '无点',
         })),
@@ -2857,7 +2913,7 @@ describe('useXeokitMeasurementTools', () => {
           refno,
           attrs: uiAttrByRefno[refno] ?? {},
         })),
-      }));
+      } });
 
       const [{ useToolStore }, { useXeokitMeasurementTools }, { useXeokitMeasurementStyleStore }] = await Promise.all([
         import('@/composables/useToolStore'),
@@ -3418,25 +3474,7 @@ describe('useXeokitMeasurementTools', () => {
           world: designMm(point.scene),
           label: `${point.noun} ${point.refno}`,
         }));
-        vi.doMock('@/model-source', async (importOriginal) => {
-          const original = await importOriginal<typeof import('@/model-source')>();
-          return {
-            ...original,
-            getModelSource: (...args: Parameters<typeof original.getModelSource>) => {
-              const source = original.getModelSource(...args);
-              return {
-                ...source,
-                keypoints: {
-                  ...source.keypoints,
-                  primitiveKeypoints: async (dbno: number, refno: string, queryOptions?: any) => {
-                    const base = await source.keypoints.primitiveKeypoints(dbno, refno, queryOptions);
-                    return { ...base, plineSnapPoints: refno === refnoS ? snapPoints : [] };
-                  },
-                },
-              };
-            },
-          };
-        });
+        mockKeypointPort({ plineSnapPoints: (refno: string) => (refno === refnoS ? snapPoints : []) });
       }
       const plineCandidates = [
         plineEnd('NA', '起点', [1, 4, 6], 0), plineEnd('NA', '终点', [3, 4, 6], 0),
@@ -3452,33 +3490,31 @@ describe('useXeokitMeasurementTools', () => {
         getDtxRefnoTransform: vi.fn(() => null),
         resolveDtxNounByRefno: vi.fn((_dbno: number, refno: string) => (refno === refnoS ? 'SCTN' : 'ELBO')),
       }));
-      vi.doMock('@/composables/useDbnoInstancesParquetLoader', () => ({
-        useDbnoInstancesParquetLoader: () => ({
-          queryPtsetByRefnoFromParquet: vi.fn(async (_dbno: number, refno: string) => {
-            const ptset = refno === refnoC ? ptsetC : [];
-            return {
-              success: ptset.length > 0,
-              refno,
-              noun: refno === refnoS ? 'SCTN' : 'ELBO',
-              ptset,
-              world_transform: null,
-              unit_info: { source_unit: 'mm', target_unit: 'mm', conversion_factor: 1 },
-              error_code: ptset.length > 0 ? null : 'PTSET_POINTS_MISSING',
-              error_message: ptset.length > 0 ? null : '型材没有目录 P 点',
-            };
-          }),
-          queryPrimitiveKeypointsByRefnoFromParquet: vi.fn(async () => []),
-          querySemanticSnapPointsByRefnoFromParquet: vi.fn(async (_dbno: number, refno: string) => (refno === refnoS ? plineCandidates : [])),
+      mockKeypointPort({ parquet: {
+        queryPtsetByRefnoFromParquet: vi.fn(async (_dbno: number, refno: string) => {
+          const ptset = refno === refnoC ? ptsetC : [];
+          return {
+            success: ptset.length > 0,
+            refno,
+            noun: refno === refnoS ? 'SCTN' : 'ELBO',
+            ptset,
+            world_transform: null,
+            unit_info: { source_unit: 'mm', target_unit: 'mm', conversion_factor: 1 },
+            error_code: ptset.length > 0 ? null : 'PTSET_POINTS_MISSING',
+            error_message: ptset.length > 0 ? null : '型材没有目录 P 点',
+          };
         }),
-      }));
-      vi.doMock('@/api/genModelPdmsAttrApi', () => ({
+        queryPrimitiveKeypointsByRefnoFromParquet: vi.fn(async () => []),
+        querySemanticSnapPointsByRefnoFromParquet: vi.fn(async (_dbno: number, refno: string) => (refno === refnoS ? plineCandidates : [])),
+      } });
+      mockKeypointPort({ pdmsApi: {
         pdmsGetPtsetWithContext: vi.fn(async (refno: string) => ({
           success: false, refno, ptset: [], world_transform: null, unit_info: null, error_code: 'PTSET_POINTS_MISSING', error_message: '无点',
         })),
         pdmsGetPtsetChildrenWithContext: vi.fn(async (refno: string) => ({
           success: false, refno, results: [], total_count: 0, success_count: 0, failed_count: 0, error_message: '无子构件点集',
         })),
-      }));
+      } });
 
       const [{ useToolStore }, { useXeokitMeasurementTools }, { useXeokitMeasurementStyleStore }] = await Promise.all([
         import('@/composables/useToolStore'),

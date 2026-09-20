@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import type { PtsetBatchItemResponse, PtsetChildrenResponse, PtsetPoint, PtsetResponse } from '@/api/genModelPdmsAttrApi';
-import type { ParquetPtsetChildSummary } from '@/composables/useDbnoInstancesParquetLoader';
 
 import { collectPtsetEntries } from '@/composables/usePtsetVisualizationEntries';
 
@@ -58,10 +57,6 @@ function children(refno: string, items: PtsetBatchItemResponse[]): PtsetChildren
   };
 }
 
-function summary(refno: string, ptCount: number, errorMessage: string | null = null): ParquetPtsetChildSummary {
-  return { refno, noun: 'ELBO', name: '', success: ptCount > 0, ptCount, errorMessage };
-}
-
 describe('collectPtsetEntries', () => {
   it('自身有点：只显示自身，不去问成员', async () => {
     const memberPtsets = vi.fn();
@@ -76,7 +71,7 @@ describe('collectPtsetEntries', () => {
     expect(memberPtsets).not.toHaveBeenCalled();
   });
 
-  it('自身没点 + 没给 childSummaries（gen-model-v1）：成员的点随 memberPtsets 一起回来，不再逐个问', async () => {
+  it('自身没点：成员的点随 memberPtsets 一起回来，不再逐个问', async () => {
     const self = vi.fn(async () => ptset('24381_145018', 0));
     const result = await collectPtsetEntries(
       {
@@ -101,32 +96,6 @@ describe('collectPtsetEntries', () => {
     });
     expect(result.entries[0]!.response.world_transform).toHaveLength(16);
     expect(result.memberErrors).toEqual(['24381_145020 没有目录 P 点']);
-  });
-
-  it('自身没点 + 给了 childSummaries（legacy）：按摘要逐个取，零点成员跳过、原因留给提示', async () => {
-    const perRefno: Record<string, PtsetResponse> = {
-      '24381_145019': ptset('24381_145019', 3),
-      '24381_145021': ptset('24381_145021', 0),
-    };
-    const memberPtsets = vi.fn();
-    const result = await collectPtsetEntries(
-      {
-        keypoints: {
-          ptset: async (_dbno, refno) => perRefno[refno] ?? ptset(refno, 0),
-          memberPtsets,
-        },
-        childSummaries: async () => [
-          summary('24381_145019', 3),
-          summary('24381_145020', 0, '24381_145020 未找到 ptset 数据'),
-          summary('24381_145021', 1),
-        ],
-      },
-      7997,
-      '24381_145018',
-    );
-    expect(memberPtsets).not.toHaveBeenCalled();
-    expect(result.entries.map((e) => e.refno)).toEqual(['24381_145019']);
-    expect(result.memberErrors).toEqual(['24381_145020 未找到 ptset 数据', '24381_145021 没有目录 P 点']);
   });
 
   it('自身与成员都没点：entries 空，self 与成员原因都留着给调用方拼提示', async () => {

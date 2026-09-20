@@ -2,17 +2,10 @@
  * 「点集可视化」这一次要显示哪些构件的哪些点：自身有 P 点就显示自身，自身没有就摊开直属成员
  * （BRAN / EQUI 这类容器本身没有 PTSE，点在成员上）。
  *
- * 取数一律走 `ModelSource.keypoints` 端口，两种数据源都能用。在此之前这条链直接调
- * `queryPtsetWithRuntimeFallback`（parquet + 旧后端 `/api/pdms/ptset`）——**gen-model-v1 档下这两处都没有
- * 数据，点集面板一直是空的**，而同一份 P 点测量捕捉早就通过端口用上了（`element/ptset`）。
- *
- * 成员那一层两条路：
- * - legacy 仍先看 parquet 摘要再逐个取（旧后端 children 接口不随模型快照锁定，见
- *   `usePtsetRuntimeLookup` 里的 ponytail 注释）——由调用方把 `childSummaries` 传进来，行为逐字不变；
- * - gen-model-v1 不传 `childSummaries`，直接用端口的 `memberPtsets`：成员的点随同一次响应回来，不用再逐个问。
+ * 取数一律走 `ModelSource.keypoints` 端口（gen-model-v1 `element/ptset`）；成员那一层用端口的 `memberPtsets`：
+ * 成员的点随同一次响应回来，不用再逐个问。legacy 的「parquet 摘要再逐个取」那条路（`childSummaries`）2026-09-20 随其退役。
  */
 import type { PtsetBatchItemResponse, PtsetResponse } from '@/api/genModelPdmsAttrApi';
-import type { ParquetPtsetChildSummary } from '@/composables/useDbnoInstancesParquetLoader';
 import type { KeypointSource } from '@/model-source/ports';
 
 export type PtsetEntry = { refno: string; response: PtsetResponse };
@@ -28,8 +21,6 @@ export type PtsetEntriesResult = {
 
 export type PtsetEntriesDeps = {
   keypoints: Pick<KeypointSource, 'ptset' | 'memberPtsets'>;
-  /** legacy 专用：成员一层的 parquet 优先摘要；gen-model-v1 传 null / 不传 */
-  childSummaries?: ((dbno: number, ownerRefno: string) => Promise<ParquetPtsetChildSummary[]>) | null;
 };
 
 function normalizeRefnoKey(raw: string | null | undefined): string {
@@ -67,20 +58,6 @@ export async function collectPtsetEntries(
 
   const entries: PtsetEntry[] = [];
   const memberErrors: string[] = [];
-
-  if (deps.childSummaries) {
-    const summaries = await deps.childSummaries(dbno, key);
-    for (const summary of summaries) {
-      if (!summary.success || summary.ptCount <= 0) {
-        if (summary.errorMessage) memberErrors.push(summary.errorMessage);
-        continue;
-      }
-      const response = await deps.keypoints.ptset(dbno, summary.refno);
-      if (hasPoints(response)) entries.push({ refno: normalizeRefnoKey(summary.refno), response });
-      else if (response.error_message) memberErrors.push(response.error_message);
-    }
-    return { entries, self, memberErrors };
-  }
 
   const members = await deps.keypoints.memberPtsets(dbno, key);
   for (const item of members.results ?? []) {

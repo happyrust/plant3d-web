@@ -9,6 +9,8 @@
     "paths": {
       "@/*": ["./src/*"]
     },
-    "types": ["vuetify"]
+    // `node`：`src/testing` / 若干 *.test.ts 引 `node:fs` 与 `process`，`src` 里也用了 `Array.prototype.at`（@types/node 的
+    // RelativeIndexable 补的）。此前这些类型是被 legacy 的 DuckDB-WASM 依赖顺带拉进全局的，2026-09-20 那条链删掉后显式声明。
+    "types": ["vuetify", "node"]
   }
 }

@@ -11,7 +11,7 @@ import {
 } from './useMeasurementPickSources';
 
 import { DEFAULT_PTSET_SNAP_PX } from '@/composables/usePtsetSnap';
-import { getOutputProjectFromUrl } from '@/lib/filesOutput';
+import { getOutputProjectFromUrl } from '@/lib/currentProject';
 import {
   DEFAULT_MEASUREMENT_PICK_LAYER,
   normalizeMeasurementPickLayer,

@@ -1,18 +1,12 @@
 /**
- * 模型数据源开关与入口（plan P1-3）。
+ * 模型数据源入口（plan P1-3）。
  *
- * `resolveModelSourceKind()`（见 `./kind.ts`）：`?model_source=` → `VITE_MODEL_SOURCE` → 默认 `gen-model-v1`（2026-09-09 起）。
- * `getModelSource()`：按当前开关给一份 `ModelSource`（进程内每种一份，惰性建）。
- *
- * `gen-model-v1` 接了树（P2）、几何记录（P3）、网格 URL（P0-1）与 `typeInfo`；`uiAttr` 仍委托 legacy（P4-1），见 `genModelV1/index.ts`。
- * `spatial`（抽屉范围 / 距离查询）2026-09-13 起进端口：legacy 委托 `/api/sqlite-spatial/*`，v1 适配器另计划的 P3 接入。
- * 只想判「现在是哪个源」的模块请引 `./kind`，别把整套适配器（含 DuckDB）拖进来。
+ * 2026-09-20 起只有一种源：`gen-model-v1`（gen-model `/api/v1`）。legacy（旧后端 `:3100` + parquet / DuckDB-WASM）
+ * 适配器与 `?model_source=` / `VITE_MODEL_SOURCE` 开关随生产切换一并退役（ADR 0054 追记）。
+ * `getModelSource()` 给进程内唯一一份 `GenModelV1ModelSource`（惰性建、首次取用时 `activate()`）。
+ * 只想判「现在是哪个源」的模块请引 `./kind`，别把整套适配器拖进来。
  */
 import { createGenModelV1ModelSource, type GenModelV1EnsureProgress, type GenModelV1ModelSource } from './genModelV1';
-import { getModelSourceKind } from './kind';
-import { createLegacyModelSource } from './legacy';
-
-import type { ModelSource, ModelSourceKind } from './ports';
 
 export * from './ports';
 export * from './kind';
@@ -20,51 +14,29 @@ export * from './modelVersionErrors';
 export type { GenModelV1EnsureProgress, GenModelV1ModelSource } from './genModelV1';
 export type { CollectDbnumProgress, CollectDbnumResult } from './genModelV1';
 
-const instances = new Map<ModelSourceKind, ModelSource>();
+let instance: GenModelV1ModelSource | null = null;
 
-function createModelSource(kind: ModelSourceKind): ModelSource {
-  if (kind === 'gen-model-v1') {
-    const source = createGenModelV1ModelSource();
-    source.activate();
-    return source;
+/** 取数据源；进程内只建一份。 */
+export function getModelSource(): GenModelV1ModelSource {
+  if (!instance) {
+    instance = createGenModelV1ModelSource();
+    instance.activate();
   }
-  return createLegacyModelSource();
+  return instance;
 }
 
-/** 按当前开关取数据源；同一种类进程内只建一份。 */
-export function getModelSource(kind: ModelSourceKind = getModelSourceKind()): ModelSource {
-  let source = instances.get(kind);
-  if (!source) {
-    source = createModelSource(kind);
-    instances.set(kind, source);
-  }
-  return source;
+/** 带扩展能力的那份源（进度 / 整库收集，P3-c）。legacy 退役后与 `getModelSource()` 是同一份，保留名字给现有调用方。 */
+export function getGenModelV1ModelSource(): GenModelV1ModelSource {
+  return getModelSource();
 }
 
-function noopUnsubscribe(): void {
-  // legacy 源没有进度可听
-}
-
-/** 当前开关是 gen-model-v1 时给带扩展能力的那份源（进度 / 整库收集，P3-c）；legacy 下为 null。 */
-export function getGenModelV1ModelSource(): GenModelV1ModelSource | null {
-  const source = getModelSource();
-  return source.kind === 'gen-model-v1' ? (source as GenModelV1ModelSource) : null;
-}
-
-/**
- * 订阅 gen-model-v1 的逐根 ensure → records 进度（显示流程里 `visibleInsts` 内部那次 ensure 只能从这里听）。
- * legacy 下不订阅、回一个空的退订函数。
- */
+/** 订阅 gen-model-v1 的逐根 ensure → records 进度（显示流程里 `visibleInsts` 内部那次 ensure 只能从这里听）。 */
 export function subscribeModelSourceProgress(listener: (progress: GenModelV1EnsureProgress) => void): () => void {
-  const source = getGenModelV1ModelSource();
-  if (!source) return noopUnsubscribe;
-  return source.records.subscribeProgress(listener);
+  return getModelSource().records.subscribeProgress(listener);
 }
 
 /** 测试用：清掉已建实例。 */
 export function __resetModelSourceForTests(): void {
-  for (const source of instances.values()) {
-    if (source.kind === 'gen-model-v1') (source as GenModelV1ModelSource).dispose();
-  }
-  instances.clear();
+  instance?.dispose();
+  instance = null;
 }

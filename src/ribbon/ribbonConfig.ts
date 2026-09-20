@@ -142,15 +142,8 @@ const ALL_RIBBON_TABS: RibbonTabConfig[] = [
         label: '查询',
         items: [
           { kind: 'button', id: 'space_calc.range_query', label: '空间查询', icon: 'search', commandId: 'panel.spatialQuery' },
-          { kind: 'button', id: 'space_calc.suppo_compute', label: '支架空间计算', icon: 'calculator', commandId: 'panel.spatialCompute' },
-        ],
-      },
-      {
-        id: 'space_calc.room',
-        label: '房间计算',
-        items: [
-          { kind: 'button', id: 'space_calc.room_compute', label: '构建房间关系', icon: 'home', commandId: 'room.compute' },
-          { kind: 'button', id: 'space_calc.room_status', label: '计算状态', icon: 'activity', commandId: 'panel.roomStatus' },
+          // 旧后端 `/api/space/*` 的六个支架场景与 `/api/room-tree` 房间计算 2026-09-20 随 legacy 退役（D1），Dock 只剩 BRAN 中心线净距。
+          { kind: 'button', id: 'space_calc.bran_clearance', label: '中心线净距', icon: 'calculator', commandId: 'panel.spatialCompute' },
         ],
       },
     ],
@@ -203,38 +196,16 @@ const ALL_RIBBON_TABS: RibbonTabConfig[] = [
     ],
   },
   {
-    id: 'debug',
-    label: '调试',
-    groups: [
-      {
-        id: 'debug.basic',
-        label: '调试',
-        items: [
-          { kind: 'button', id: 'debug.parquetSql', label: 'Parquet SQL', icon: 'database', commandId: 'panel.parquetDebug' },
-        ],
-      },
-    ],
-  },
-  {
     id: 'task',
     label: '任务',
     groups: [
       {
         id: 'task.create',
-        label: '新建任务',
+        label: '模型',
         items: [
-          { kind: 'button', id: 'task.dataParsing', label: '数据解析', icon: 'database', commandId: 'task.createDataParsing' },
-          { kind: 'button', id: 'task.modelGen', label: '模型生成', icon: 'cube', commandId: 'task.createModelGeneration' },
-          { kind: 'button', id: 'task.incrementalUpdate', label: '增量更新', icon: 'activity', commandId: 'panel.incrementalUpdate' },
+          // 旧后端的任务创建 / 监控 / 导出 / 增量更新 / Parquet SQL 调试 2026-09-20 随 legacy 退役（D1）：
+          // gen-model 自己监听 E3D 库变化做增量，模型「变了什么」看版本对比。
           { kind: 'button', id: 'task.modelVersionCompare', label: '版本对比', icon: 'compare', commandId: 'panel.modelVersionCompare' },
-          { kind: 'button', id: 'task.modelExport', label: '导出模型', icon: 'download', commandId: 'task.createModelExport' },
-        ],
-      },
-      {
-        id: 'task.monitor',
-        label: '监控',
-        items: [
-          { kind: 'button', id: 'task.monitor', label: '任务监控', icon: 'monitor', commandId: 'panel.taskMonitor' },
         ],
       },
     ],
@@ -269,6 +240,7 @@ const ALL_RIBBON_TABS: RibbonTabConfig[] = [
   },
 ];
 
+// 「调试」页签随 Parquet SQL 面板退役后已空；`showDebugUi` 仍留给别处的调试入口判定。
 const BASE_RIBBON_TABS: RibbonTabConfig[] = showDebugUi
   ? ALL_RIBBON_TABS
   : ALL_RIBBON_TABS.filter((tab) => tab.id !== 'debug');

@@ -50,7 +50,7 @@ import { resetAnnotationUxFlagCache, setAnnotationUxFlag } from './useAnnotation
 import type { AnnotationDraftJournal } from './useToolStore';
 import type { AnnotationScope } from '@/review/domain/annotationScope';
 
-import { setCurrentProjectPath } from '@/lib/filesOutput';
+import { setCurrentProjectPath } from '@/lib/currentProject';
 
 describe('computeAnnotationDraftScope / deriveTaskReviewRound（纯函数）', () => {
   it('有任务：taskId 身份、round 只认任务上显式的 reviewRound', () => {

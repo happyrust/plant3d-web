@@ -1,13 +1,18 @@
 import { ref, computed } from 'vue';
 
+import { genModelV1Health } from '@/api/genModelV1Api';
 import { recordRecentProject } from '@/composables/dashboardRecentProjects';
 import { refreshToolStorePersistedScope } from '@/composables/useToolStore';
-import { setCurrentProjectPath } from '@/lib/filesOutput';
-import { buildBackendUrl } from '@/utils/apiBase';
+import { setCurrentProjectPath } from '@/lib/currentProject';
 
-/** 无 URL 指定时的默认模型工程（output 目录名）；与后端项目 name 对齐 */
+/** 无 URL 指定、后端也没答出工程名时的默认模型工程；与 gen-model `DbOption.toml` 的项目名对齐 */
 export const DEFAULT_MODEL_PROJECT_PATH = 'AvevaMarineSample';
 
+/**
+ * 一个模型工程。gen-model 一个服务进程只服务一个 E3D 项目（`/api/v1/health` 的 `project`），
+ * 所以清单里通常只有一项；`id` / `path` 都是项目名（PMS 登记的 `project_id` 也是它）。
+ * 旧后端 `/api/projects` 的多工程清单 2026-09-20 随 legacy 退役。
+ */
 export type ModelProject = {
   id: string;
   name: string;
@@ -51,6 +56,17 @@ function buildRequestedOutputProject(): ModelProject | null {
     path: requested.projectPath,
     showDbnum: readRequestedShowDbnum(),
     default: false,
+  };
+}
+
+function buildNamedProject(name: string, description = '', isDefault = false): ModelProject {
+  return {
+    id: name,
+    name,
+    description,
+    path: name,
+    thumbnail: '/favicon.ico',
+    default: isDefault,
   };
 }
 
@@ -110,7 +126,7 @@ export function useModelProjects() {
     }
   }
 
-  // 加载项目列表
+  /** 加载工程清单：gen-model `/api/v1/health` 答出的那一个项目（`project` / `mdb`），没答就用默认工程。 */
   async function loadProjects() {
     if (loadProjectsInFlight) {
       return loadProjectsInFlight;
@@ -119,29 +135,12 @@ export function useModelProjects() {
     loadProjectsInFlight = (async () => {
       isLoading.value = true;
       try {
-        // 从后端 API 加载项目列表；若 URL 带 backend/backendPort，直接请求该站点后端。
-        const response = await fetch(buildBackendUrl('/api/projects', { fallbackUrl: 'http://localhost:3100' }));
-        if (!response.ok) {
-          throw new Error(`Failed to load projects: ${response.status} ${response.statusText}`);
-        }
-
-        const data = await response.json();
-        // 后端返回 {items: ProjectItem[], total, page, per_page}
-        const items: Record<string, unknown>[] = data.items || [];
-
-        // 将后端 ProjectItem 映射为前端 ModelProject
-        // 后端字段: name, version, url, env, status, owner, ...
-        // name 同时作为 output 目录名（path）
-        projects.value = items.map((item) => ({
-          id: String(item.id || item.name || ''),
-          name: String(item.name || ''),
-          description: String(item.notes || item.env || ''),
-          path: String(item.name || ''),
-          showDbnum: typeof item.show_dbnum === 'number' ? item.show_dbnum : undefined,
-          thumbnail: '/favicon.ico',
-          updatedAt: item.updated_at ? String(item.updated_at) : undefined,
-          default: false,
-        }));
+        const health = await genModelV1Health();
+        const projectName = String(health.project || '').trim();
+        const served = projectName
+          ? [buildNamedProject(projectName, health.mdb ? `MDB ${health.mdb}` : '', true)]
+          : [];
+        projects.value = served;
 
         const requested = readRequestedProject();
         const matchedProject = projects.value.find((project) =>
@@ -152,37 +151,20 @@ export function useModelProjects() {
         if (matchedProject) {
           applyProject(matchedProject, false);
         } else if (requested.projectPath) {
-          // 后端项目列表中没有匹配项（可能未注册），
-          // 但 URL 明确指定了项目，直接根据 URL 参数构造项目
-          const autoProject = buildRequestedOutputProject() ?? {
-            id: requested.projectPath,
-            name: requested.projectPath,
-            description: '',
-            path: requested.projectPath,
-            default: false,
-          };
+          // 服务端答的不是 URL 指定的那个工程，但 URL 明确要它：照 URL 建一条并落为当前工程
+          const autoProject = buildRequestedOutputProject() ?? buildNamedProject(requested.projectPath);
           ensureProjectListed(autoProject);
           applyProject(autoProject, false);
+        } else if (served.length > 0) {
+          // gen-model 只服务一个项目：不带参数就直接进它（PMS 的 project_id 不匹配也只能是它）
+          applyProject(served[0]!, false);
         } else {
-          // 简化入口：未在 URL 指定项目时固定默认工程，避免先进入项目卡片页
-          const path = DEFAULT_MODEL_PROJECT_PATH;
-          let fallback = projects.value.find(
-            (p) => p.path === path || p.name === path || p.id === path,
-          );
-          if (!fallback) {
-            fallback = {
-              id: path,
-              name: path,
-              description: '',
-              path,
-              default: true,
-            };
-            projects.value = [...projects.value, fallback];
-          }
+          const fallback = buildNamedProject(DEFAULT_MODEL_PROJECT_PATH, '', true);
+          projects.value = [fallback];
           applyProject(fallback, false);
         }
       } catch (error) {
-        console.error('Failed to load model projects from API:', error);
+        console.error('Failed to load model project from gen-model /api/v1/health:', error);
         const requested = readRequestedProject();
         const requestedProject = buildRequestedOutputProject();
         if (requestedProject) {
@@ -190,15 +172,8 @@ export function useModelProjects() {
           applyProject(requestedProject, true);
           return;
         }
-        projects.value = [];
-        // 设置默认项目以防后端不可达
-        const fallbackProject = {
-          id: DEFAULT_MODEL_PROJECT_PATH,
-          name: DEFAULT_MODEL_PROJECT_PATH,
-          description: '',
-          path: DEFAULT_MODEL_PROJECT_PATH,
-          default: true,
-        };
+        // 后端不可达：落到默认工程以防白屏
+        const fallbackProject = buildNamedProject(DEFAULT_MODEL_PROJECT_PATH, '', true);
         projects.value = [fallbackProject];
         // URL 若已指定其它项目，应避免静默落到默认 AMS；此处仍用 fallback 仅作兜底，但用 emit 让监听方与工具作用域一致
         const shouldEmit = !!(requested.projectPath || requested.projectId);

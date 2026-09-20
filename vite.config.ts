@@ -1,12 +1,9 @@
 import { execSync } from 'node:child_process';
-import { createHash } from 'node:crypto';
-import { copyFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
-import type { IncomingMessage, ServerResponse } from 'node:http';
-import { dirname, resolve } from 'node:path';
+import { readFileSync } from 'node:fs';
 import { fileURLToPath, URL } from 'node:url';
 
 import vue from '@vitejs/plugin-vue';
-import { defineConfig, loadEnv, type Plugin, type ViteDevServer } from 'vite';
+import { defineConfig, loadEnv } from 'vite';
 
 import vuetify from 'vite-plugin-vuetify';
 
@@ -22,7 +19,7 @@ function readPkgVersion(): string {
   }
 }
 
-/** 与 plant-model-gen build.rs 的 `git rev-parse HEAD` 一致，便于与后端 About 信息对齐 */
+/** 与后端 build.rs 的 `git rev-parse HEAD` 一致，便于与后端 About 信息对齐 */
 function resolveGitFullCommit(): string {
   const fromEnv =
     process.env.GIT_COMMIT_FULL ?? process.env.GITHUB_SHA ?? process.env.GIT_COMMIT;
@@ -38,21 +35,14 @@ function resolveGitFullCommit(): string {
   }
 }
 
-function inferBackendPortFromApiBase(apiBase: string | undefined): string {
-  if (!apiBase) return '';
-  try {
-    const parsed = new URL(apiBase);
-    if (parsed.port) return parsed.port;
-    return parsed.protocol === 'https:' ? '443' : '80';
-  } catch {
-    return '';
-  }
-}
+/**
+ * gen-model（aios-database）默认监听端口：`/api/v1`（模型树 + 三维模型）、`/api/review` `/api/auth` `/api/users`（校审）、
+ * `/files/review_attachments`（附件）全在这一个进程上。旧后端 plant-model-gen `:3100` 2026-09-20 退役。
+ */
+const GEN_MODEL_DEFAULT_TARGET = 'http://localhost:8022';
 
-const GEN_MODEL_V1_DEFAULT_TARGET = 'http://localhost:8022';
-
-/** `/gm` 代理的上游：只接受 http(s) 绝对地址；`/gm` 一类相对写法不能当上游，跳过。 */
-function resolveGenModelV1ProxyTarget(...candidates: (string | undefined)[]): string {
+/** 代理上游：只接受 http(s) 绝对地址；`/gm` 一类相对写法不能当上游，跳过。 */
+function resolveProxyTarget(...candidates: (string | undefined)[]): string {
   for (const candidate of candidates) {
     const trimmed = candidate?.trim();
     if (!trimmed) continue;
@@ -65,7 +55,7 @@ function resolveGenModelV1ProxyTarget(...candidates: (string | undefined)[]): st
       // 相对前缀或非法 URL：不是上游，看下一个候选
     }
   }
-  return GEN_MODEL_V1_DEFAULT_TARGET;
+  return GEN_MODEL_DEFAULT_TARGET;
 }
 
 function normalizeBasePath(basePath: string | undefined): string {
@@ -75,154 +65,22 @@ function normalizeBasePath(basePath: string | undefined): string {
   return withLeadingSlash.endsWith('/') ? withLeadingSlash : `${withLeadingSlash}/`;
 }
 
-const DUCKDB_ASSET_FILES = [
-  'duckdb-browser-mvp.worker.js',
-  'duckdb-browser-eh.worker.js',
-  'duckdb-browser-coi.worker.js',
-  'duckdb-browser-coi.pthread.worker.js',
-  'duckdb-mvp.wasm',
-  'duckdb-eh.wasm',
-  'duckdb-coi.wasm',
-] as const;
-
-const DUCKDB_EXTENSION_ASSET_FILES = [
-  'v1.5.3/wasm_eh/parquet.duckdb_extension.wasm',
-  'v1.5.3/wasm_mvp/parquet.duckdb_extension.wasm',
-  'v1.5.3/wasm_threads/parquet.duckdb_extension.wasm',
-] as const;
-
-const MBD_FIXTURES_DIR = resolve(__dirname, 'src/fixtures/mbd-v2');
-const MBD_SAFE_REFNO = /^[A-Za-z0-9_-]+$/;
-
-/**
- * Dev-only mock for the MBD V2 pipe API. Serves a hand-authored / CLI-generated
- * `MbdV2PipeData` fixture from `src/fixtures/mbd-v2/<refno>.json` for
- * `GET /api/mbd/v2/pipe/<refno>`, so `?dimension_demo=1&mbd_refno=<refno>`
- * renders simulated 3D dimension annotations with no backend running. It is
- * wired through the `/api` proxy `bypass` hook (which runs ahead of the proxy),
- * and returns `false` for any refno without a matching fixture so real MBD
- * traffic still reaches the backend untouched. Returns `true` once it has fully
- * answered the request.
- */
-function tryServeMbdV2Fixture(
-  req: IncomingMessage,
-  res: ServerResponse,
-): boolean {
-  const match = (req.url ?? '').match(/^\/api\/mbd\/v2\/pipe\/([^/?]+)/);
-  if (!match) return false;
-  const refno = decodeURIComponent(match[1]);
-  if (!MBD_SAFE_REFNO.test(refno)) return false;
-  const fixturePath = resolve(MBD_FIXTURES_DIR, `${refno}.json`);
-  if (!existsSync(fixturePath)) return false;
-  res.statusCode = 200;
-  res.setHeader('Content-Type', 'application/json; charset=utf-8');
-  res.setHeader('Cache-Control', 'no-cache');
-  res.end(readFileSync(fixturePath));
-  return true;
-}
-
-function duckDBAssetSourceDir(): string {
-  return fileURLToPath(
-    new URL('./node_modules/@duckdb/duckdb-wasm/dist/', import.meta.url)
-  );
-}
-
-function duckDBExtensionAssetSourceDir(): string {
-  return resolve(__dirname, 'public/duckdb/extensions');
-}
-
-function resolveDuckDBAssetVersion(): string {
-  const sourceDir = duckDBAssetSourceDir();
-  const extensionSourceDir = duckDBExtensionAssetSourceDir();
-  const hash = createHash('sha256');
-  for (const fileName of DUCKDB_ASSET_FILES) {
-    const source = resolve(sourceDir, fileName);
-    if (!existsSync(source)) {
-      throw new Error(`DuckDB WASM asset not found: ${source}`);
-    }
-    hash.update(fileName);
-    hash.update(readFileSync(source));
-  }
-  for (const fileName of DUCKDB_EXTENSION_ASSET_FILES) {
-    const source = resolve(extensionSourceDir, fileName);
-    if (!existsSync(source)) {
-      throw new Error(`DuckDB WASM extension asset not found: ${source}`);
-    }
-    hash.update(`extensions/${fileName}`);
-    hash.update(readFileSync(source));
-  }
-  return hash.digest('hex').slice(0, 16);
-}
-
-function copyDuckDBWasmAssetsPlugin(): Plugin {
-  let outDir = 'dist';
-  const sourceDir = duckDBAssetSourceDir();
-  const extensionSourceDir = duckDBExtensionAssetSourceDir();
-
-  return {
-    name: 'copy-duckdb-wasm-assets',
-    configResolved(config) {
-      outDir = config.build.outDir || 'dist';
-    },
-    configureServer(server: ViteDevServer) {
-      server.middlewares.use('/duckdb', (req, res, next) => {
-        const fileName = decodeURIComponent((req.url ?? '').split('?', 1)[0]).replace(/^\/+/, '');
-        let source: string | null = null;
-        if (DUCKDB_ASSET_FILES.includes(fileName as (typeof DUCKDB_ASSET_FILES)[number])) {
-          source = resolve(sourceDir, fileName);
-        } else if (fileName.startsWith('extensions/')) {
-          const extensionFileName = fileName.slice('extensions/'.length);
-          if (DUCKDB_EXTENSION_ASSET_FILES.includes(extensionFileName as (typeof DUCKDB_EXTENSION_ASSET_FILES)[number])) {
-            source = resolve(extensionSourceDir, extensionFileName);
-          }
-        }
-
-        if (!source) {
-          next();
-          return;
-        }
-
-        res.statusCode = 200;
-        res.setHeader(
-          'Content-Type',
-          fileName.endsWith('.wasm') ? 'application/wasm' : 'text/javascript; charset=utf-8'
-        );
-        res.setHeader('Cache-Control', 'no-cache');
-        res.end(readFileSync(source));
-      });
-    },
-    closeBundle() {
-      const targetDir = resolve(__dirname, outDir, 'duckdb');
-      mkdirSync(targetDir, { recursive: true });
-
-      for (const fileName of DUCKDB_ASSET_FILES) {
-        const source = resolve(sourceDir, fileName);
-        copyFileSync(source, resolve(targetDir, fileName));
-      }
-
-      for (const fileName of DUCKDB_EXTENSION_ASSET_FILES) {
-        const source = resolve(extensionSourceDir, fileName);
-        const target = resolve(targetDir, 'extensions', fileName);
-        mkdirSync(dirname(target), { recursive: true });
-        copyFileSync(source, target);
-      }
-    },
-  };
-}
-
-
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
-  const inferredPort = inferBackendPortFromApiBase(env.VITE_GEN_MODEL_API_BASE_URL);
-  const isLikelyMisconfiguredBackendPort = inferredPort === '8080' || inferredPort === '3000' || inferredPort === '3001';
-  const backendPort = env.VITE_BACKEND_PORT || (isLikelyMisconfiguredBackendPort ? '3100' : inferredPort || '3100');
-  const backendTarget = (env.VITE_BACKEND_URL || env.VITE_API_BASE_URL || `http://localhost:${backendPort}`).replace(/\/$/, '');
-  // gen-model `/api/v1`（模型树 + 三维模型新数据源）：dev 默认直连 :8022（CORS 已放开）；
+  // 同源 `/api`（校审 / 认证 / 用户 / 附件）的 dev 代理上游：与 gen-model `/api/v1` 是同一个进程。
+  // 优先 VITE_BACKEND_URL / VITE_GEN_MODEL_API_BASE_URL（旧名字，仍认），再取 gen-model 的绝对地址，缺省 :8022。
+  const backendTarget = resolveProxyTarget(
+    env.VITE_BACKEND_URL,
+    env.VITE_API_BASE_URL,
+    env.VITE_GEN_MODEL_API_BASE_URL,
+    env.VITE_GEN_MODEL_V1_PROXY_TARGET,
+    env.VITE_GEN_MODEL_V1_BASE_URL,
+  );
+  // gen-model `/api/v1`（模型树 + 三维模型）：dev 默认直连 :8022（CORS 已放开）；
   // dev 不想跨域时把 VITE_GEN_MODEL_V1_BASE_URL 写成 `/gm`，请求落到下面的代理。
   // 生产无配置由 apiBase.ts 走空 base（同源 /api/v1），不会使用这条 Vite dev proxy。
-  // 代理上游优先取 VITE_GEN_MODEL_V1_PROXY_TARGET，再取绝对形式的 VITE_GEN_MODEL_V1_BASE_URL。
-  const genModelV1Target = resolveGenModelV1ProxyTarget(
+  const genModelV1Target = resolveProxyTarget(
     env.VITE_GEN_MODEL_V1_PROXY_TARGET,
     env.VITE_GEN_MODEL_V1_BASE_URL,
   );
@@ -231,7 +89,6 @@ export default defineConfig(({ mode }) => {
   const beijingTime = new Date(now.getTime() + 8 * 60 * 60 * 1000);
   const frontendBuildIso = beijingTime.toISOString();
   const basePath = normalizeBasePath(env.VITE_BASE_PATH);
-  const duckDBAssetVersion = resolveDuckDBAssetVersion();
 
   return {
     base: basePath,
@@ -239,7 +96,6 @@ export default defineConfig(({ mode }) => {
       __FRONTEND_APP_VERSION__: JSON.stringify(readPkgVersion()),
       __FRONTEND_GIT_COMMIT__: JSON.stringify(resolveGitFullCommit()),
       __FRONTEND_BUILD_ISO__: JSON.stringify(frontendBuildIso),
-      __DUCKDB_ASSET_VERSION__: JSON.stringify(duckDBAssetVersion),
     },
     plugins: [
       vue({
@@ -248,7 +104,6 @@ export default defineConfig(({ mode }) => {
       vuetify({
         autoImport: true,
       }),
-      copyDuckDBWasmAssetsPlugin(),
     ],
     server: {
       host: true,
@@ -258,37 +113,13 @@ export default defineConfig(({ mode }) => {
         '/api': {
           target: backendTarget,
           changeOrigin: true,
-          // Dev-only MBD fixture channel: `/api/mbd/v2/pipe/<refno>` with a
-          // matching `src/fixtures/mbd-v2/<refno>.json` is answered locally so
-          // simulated dimension annotations render with no backend. Any other
-          // refno / `/api` request falls through to the real backend.
-          bypass(req, res) {
-            if (res && tryServeMbdV2Fixture(req, res)) {
-              // Response already ended; returning a string makes Vite short-
-              // circuit (it checks res.writableEnded) instead of proxying.
-              return req.url;
-            }
-            return undefined;
-          },
         },
-        '/files': {
-          target: backendTarget,
-          changeOrigin: true,
-          // 强制所有 /files 请求走后端（plant-model-gen）。
-          // 说明：此前存在“若 public/files 下存在同名文件则由前端静态服务返回”的旁路逻辑，
-          // 会造成数据源不一致（本地文件意外覆盖后端 output 目录）。
-          // 按项目约定，/files 始终对应后端 output 根目录。
-        },
-        '/static/xeokit-sdk.es.js': {
-          target: backendTarget,
-          changeOrigin: true,
-        },
-        '/model-version': {
+        // 校审附件下载（gen-model `PLANT_ASSET_ROOT`）；旧后端的 `/files/output` parquet 与 `/files/meshes` GLB 已随 legacy 退役。
+        '/files/review_attachments': {
           target: backendTarget,
           changeOrigin: true,
         },
         // gen-model /api/v1 同源代理：`/gm/api/v1/tree/roots` → `${genModelV1Target}/api/v1/tree/roots`。
-        // 与上面 `/api` 那条（旧后端 :3100）是两个后端，前缀不重叠，不能合并。
         '/gm': {
           target: genModelV1Target,
           changeOrigin: true,
@@ -301,10 +132,6 @@ export default defineConfig(({ mode }) => {
       alias: {
         '@': fileURLToPath(new URL('./src', import.meta.url))
       }
-    },
-    // 配置 parquet-wasm WASM 加载
-    optimizeDeps: {
-      exclude: ['parquet-wasm'],
     },
     assetsInclude: ['**/*.wasm'],
     build: {

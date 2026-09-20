@@ -39,7 +39,6 @@ import {
   type EmbedLandingState,
 } from './embedRoleLanding';
 import FileUploadSection, { type UploadedFile } from './FileUploadSection.vue';
-import LogDrawer from './LogDrawer.vue';
 import ReviewAuxData from './ReviewAuxData.vue';
 import ReviewDataSync from './ReviewDataSync.vue';
 import {
@@ -170,7 +169,6 @@ const embedLandingState = ref<EmbedLandingState | null>(null);
 const persistedEmbedParams = ref(readPersistedEmbedModeParams());
 const showDebugUi = isReviewDebugUiEnabled();
 // spec 003-review-log-viewer：日志抽屉 flag 门控（默认关闭，零行为变化）
-const logDrawerEnabled = isReviewFlagEnabled('REVIEW_H_LOG_DRAWER');
 
 function syncEmbedLandingStateFromStorage() {
   if (typeof sessionStorage === 'undefined') return;
@@ -2072,11 +2070,6 @@ function handleAnnotationQueueCompleted() {
       :loading="workflowActionLoading"
       @update:visible="(visible) => { if (!visible) closeReturnDialog(); }"
       @confirm="(targetNode, reason) => { returnTargetNode = targetNode; returnReason = reason; void handleReturnToNode(); }" />
-
-    <!-- 日志抽屉（spec 003-review-log-viewer，flag 门控） -->
-    <LogDrawer v-if="logDrawerEnabled"
-      :form-id="activeReviewFormId"
-      :task-id="currentTask?.id ?? null" />
 
     <!-- ═══════ D. 审核档案：默认收起的辅助区，不再分 Tab ═══════ -->
     <div class="shrink-0 rounded-lg border border-slate-200 bg-white"

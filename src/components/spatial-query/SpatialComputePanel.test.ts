@@ -13,10 +13,6 @@ vi.mock('@/composables/useSelectionStore', () => ({
   useSelectionStore: () => ({ selectedRefno: { value: '' } }),
 }));
 
-vi.mock('@/model-source/kind', () => ({
-  getModelSourceKind: () => 'legacy' as const,
-}));
-
 function candidate(refno: string, noun: string, distance: number) {
   return {
     refno,
