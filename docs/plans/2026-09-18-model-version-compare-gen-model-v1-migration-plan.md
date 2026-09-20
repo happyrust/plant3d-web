@@ -483,3 +483,21 @@ legacy 下与从前的可见差别只有一处、且不可见于用户：A/B 隔
   e2e `model-version-compare-gen-model-v1.spec.ts` 第 1 条加角标 / 图例 / 开关断言：缺省单元 `24384_26480`（tombstone）**4 过（19.2 s）**、`MODEL_VERSION_E2E_UNIT=24384_23257` **4 过（12.5 s）**。
 - **顺手看到（不在本轮）**：分屏 render pass 出来的颜色比单视口暗一档（老截图 `bran-ftub-move/a626-b630-04-split.png` 的蓝 / 绿同样发暗），四态色在分屏里成了深棕 / 藏青、
   仍分得开但不如单视口——split 路径直接 `renderer.render`，单视口有选中时走 `selection.renderOutline()`，两条路的色彩空间 / 后处理不一致，先记着。
+
+### 11.1 点 A / B 构件 → 属性面板读那一版（交接清单第 4 条，用户 2026-09-21 01:0x 拍板「也做了」）
+
+- **现状核出来的**：GPU 拾取只认主图层的 picking mesh（`DTXSelectionController.pick` → `this._dtxLayer.getPickingMesh()`），A / B 隔离图层里的构件根本点不到——
+  `parseRefnoFromObjectId` 又只认 `o:` 前缀。所以从前在对比里点单元，要么什么都不选、要么选到后面的环境构件；「读的是当前会话」还算好的。分屏时拾取整体关着，本条只做单视口。
+- **做法**：
+  - 事件：`ModelUnitVersionCompareOpenDetail.attributesAt?`（`ModelUnitCompareAttributesAt`：哪一侧、哪个 refno → 那一版的 `ModelVersionAttributes`），面板派 `open` 时闭包住两份版本几何——与树差异模式底部那块（`TreeDiffContext.attributesAt`）同一个取数口。`sideFromCompareObjectId`：`unit-compare:a:` → A、`:b:` → B。
+  - `ViewerPanel.onUp`：对比就位（单视口）时先对**当前显示那一侧**的隔离图层做 CPU 射线拾取（`getVisibleObjectIds` → 包围盒粗筛 → `raycastObject` 精测，取最近），
+    比主图层 GPU 命中更近（主图层的目标单元已隐藏，剩下只会是环境）就选它：`selectionStore.setSelectedRefnoAtVersion(refno, { sesno, label, load })`，
+    `load` = `attributesAt(side, refno)` → `modelVersionAttributesToUiAttr`（`model-source/genModelV1/attributeSource.ts`，行与 `element/attributes` 同型、走同一条 `elementAttributesToUiAttr`，面板印同一个字；那一版里不存在 → `success:false` 带说明）。
+    没带 `attributesAt`（旧夹具）退回普通选中。退出对比时钉住的选中一并清掉（那一版的快照马上被 DELETE）。dev 钩子 `__modelUnitVersionCompare.lastPick`。
+  - `useSelectionStore`：「版本钉住」`SelectedVersionPin { sesno, label, load }`，与「已删除」登记并列——查询函数换成 `pin.load`、sesno 掺进 query key（同一 refno 当前会话 / 某一版各自缓存），
+    任何一次正常选中复位；`setGlobalSelectedRefnoAtVersion` / `getGlobalSelectedVersionPin` / store 的 `setSelectedRefnoAtVersion` / `selectedVersionPin`。
+  - `PropertiesPanel`：标题下一条琥珀横幅「属性来自版本 A · sesno 626（版本对比里点到的那一版，不是当前会话）」（`properties-version-pin-notice`，`data-sesno`）。
+  - 词汇：CONTEXT「单视口版本切换」加一句 + _Avoid_「点 A 版构件却显示当前会话属性」。
+- **验证**：vitest 39 过（新增 `PropertiesPanel.versionPin.test.ts` 2 条、`attributeSource` +2、纯函数 +1 断言、面板 open 事件带 `attributesAt` +1 断言）；type-check 基线外 0 新增；ESLint 触及 11 文件只剩那条 HEAD 就有的。
+  真机（`3d-diff-color/a626-b630-pick-*`）：单视口 B 点 FTUB → `lastPick {side after, sesno 630}`、横幅「B · sesno 630」、**POS 10887, 12332, 2900**，发的是 `history/query {snapshot_key 24384_23257@630, tool attributes}`、`element/attributes` 0 条；
+  切 A 再点（A 那版位置不同、重投影）→ 「A · sesno 626」、**POS 10887, 12332, 3400**、`snapshot_key …@626`；点空处横幅撤掉；再钉一次后退出对比横幅撤掉；pageerror 0。README §8.1。

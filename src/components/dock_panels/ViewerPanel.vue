@@ -20,6 +20,7 @@ import {
   Box3,
   Color,
   Matrix4,
+  Raycaster,
   Vector2,
   Vector3,
 } from 'three';
@@ -101,7 +102,7 @@ import {
   type DimensionSystem,
 } from '@/dimension';
 import { getOutputProjectFromUrl } from '@/lib/currentProject';
-import { getModelSource } from '@/model-source';
+import { getModelSource, modelVersionAttributesToUiAttr } from '@/model-source';
 import { onCommand } from '@/ribbon/commandBus';
 import { emitToast } from '@/ribbon/toastBus';
 import {
@@ -117,7 +118,10 @@ import {
   MODEL_UNIT_VERSION_COMPARE_EVENT,
   MODEL_UNIT_VERSION_COMPARE_STATE_EVENT,
   planModelUnitCompareObjectStyles,
+  refnoFromCompareObjectId,
+  sideFromCompareObjectId,
   type ModelUnitCompareHiddenObjectIds,
+  type ModelUnitCompareSide,
   type ModelUnitCompareViewMode,
   type ModelUnitGeometryStatus,
   type ModelUnitVersionCompareEnvironment,
@@ -2033,6 +2037,8 @@ function clearModelUnitVersionCompare(): void {
   }
   modelUnitCompareCameraState = null;
   modelUnitCompareState.value = null;
+  // 钉在某一版上的选中随对比一起退：那一版的快照马上被面板 DELETE，留着只会是一份取不回来的旧属性
+  if (selectionStore.selectedVersionPin.value) selectionStore.clearSelection();
   if (isDev && typeof window !== 'undefined') {
     delete (window as any).__modelUnitVersionCompare;
   }
@@ -2301,6 +2307,73 @@ function parseRefnoFromObjectId(objectId: string): string | null {
   return parts.length >= 3 ? (parts[1] ?? null) : null;
 }
 
+/** 画布坐标 → 世界射线（与 `DTXSelectionController.pickPoints` 同一套换算） */
+function canvasRay(canvasPos: Vector2, canvas: HTMLCanvasElement, camera: DtxViewer['camera']): Raycaster {
+  const rect = canvas.getBoundingClientRect();
+  const ndc = new Vector2((canvasPos.x / Math.max(1, rect.width)) * 2 - 1, -(canvasPos.y / Math.max(1, rect.height)) * 2 + 1);
+  const raycaster = new Raycaster();
+  camera.updateMatrixWorld(true);
+  raycaster.setFromCamera(ndc, camera);
+  return raycaster;
+}
+
+type ModelUnitComparePick = {
+  objectId: string
+  refno: string
+  side: ModelUnitCompareSide
+  distance: number
+}
+
+/**
+ * 版本对比里在三维点构件：GPU 拾取只认主图层的 picking mesh，A / B 隔离图层里的构件点不到。这里对**当前显示那一侧**的
+ * 隔离图层做一次 CPU 射线拾取（包围盒粗筛 → 三角面精测，单元只有几十到几百件），回最近命中；分屏时拾取整体关着，不进这里。
+ */
+function pickModelUnitCompareObject(raycaster: Raycaster): ModelUnitComparePick | null {
+  const state = modelUnitCompareState.value;
+  if (!state || state.status !== 'ready' || state.viewMode !== 'single') return null;
+  const layer = modelUnitCompareLayers[state.activeSide === 'before' ? 0 : 1];
+  if (!layer) return null;
+  const { origin, direction } = raycaster.ray;
+  const box = new Box3();
+  let best: { objectId: string; distance: number } | null = null;
+  for (const objectId of layer.getVisibleObjectIds()) {
+    const bounds = layer.getObjectBoundingBoxInto(objectId, box);
+    if (!bounds || bounds.isEmpty() || !raycaster.ray.intersectsBox(bounds)) continue;
+    const hit = layer.raycastObject(objectId, origin, direction);
+    if (hit && (!best || hit.distance < best.distance)) best = { objectId, distance: hit.distance };
+  }
+  if (!best) return null;
+  const rawRefno = refnoFromCompareObjectId(best.objectId);
+  const side = sideFromCompareObjectId(best.objectId);
+  if (!rawRefno || !side) return null;
+  return { objectId: best.objectId, refno: normalizeCompareRefno(rawRefno) || rawRefno, side, distance: best.distance };
+}
+
+/**
+ * 点到了 A / B 隔离图层的构件：属性面板钉到**那一版**（`setSelectedRefnoAtVersion`，属性经面板带来的 `attributesAt` 取自那一侧的
+ * 版本几何句柄），不查当前会话——当前会话里它可能已经改了、甚至没了。派发方没带 `attributesAt`（旧夹具）就退回普通选中。
+ */
+function selectModelUnitCompareObject(pick: ModelUnitComparePick): void {
+  const state = modelUnitCompareState.value;
+  if (!state) return;
+  const detail = state.detail;
+  const attributesAt = detail.attributesAt;
+  if (!attributesAt) {
+    selectionStore.setSelectedRefno(pick.refno);
+    return;
+  }
+  const sesno = pick.side === 'before' ? detail.before.sesno : detail.after.sesno;
+  const label = pick.side === 'before' ? 'A' : 'B';
+  selectionStore.setSelectedRefnoAtVersion(pick.refno, {
+    sesno,
+    label,
+    load: async () => modelVersionAttributesToUiAttr(pick.refno, await attributesAt(pick.side, pick.refno)),
+  });
+  if (isDev && typeof window !== 'undefined' && (window as any).__modelUnitVersionCompare) {
+    (window as any).__modelUnitVersionCompare.lastPick = { objectId: pick.objectId, refno: pick.refno, side: pick.side, sesno, label };
+  }
+}
+
 function attachPicking() {
   const canvas = mainCanvas.value;
   const sel = selectionControllerRef.value;
@@ -2385,6 +2458,26 @@ function attachPicking() {
       }
       requestRender();
       return;
+    }
+
+    // 版本对比（单视口）：先问 A / B 隔离图层。它们不在主图层的 picking mesh 里，GPU 拾取看不见；命中且比主图层的命中更近
+    // （主图层里目标单元已隐藏，剩下的只会是环境模型）就选它、属性面板钉到那一版。
+    const viewerForPick = dtxViewerRef.value;
+    if (viewerForPick && modelUnitCompareState.value?.status === 'ready') {
+      const raycaster = canvasRay(pos, canvas, viewerForPick.camera);
+      const comparePick = pickModelUnitCompareObject(raycaster);
+      if (comparePick) {
+        const primaryDistance = hit
+          ? dtxLayerRef.value?.raycastObject(hit.objectId, raycaster.ray.origin, raycaster.ray.direction)?.distance ?? Infinity
+          : Infinity;
+        if (comparePick.distance <= primaryDistance) {
+          const prev = compat.scene.selectedObjectIds;
+          if (prev.length > 0) compat.scene.setObjectsSelected(prev, false);
+          selectModelUnitCompareObject(comparePick);
+          requestRender();
+          return;
+        }
+      }
     }
 
     if (!hit) {

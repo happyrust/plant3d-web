@@ -629,6 +629,9 @@ async function runCompareVersions(before: ModelVersion, after: ModelVersion, uni
       },
       refnos: rows.value.map((row) => row.refno),
       rows: rows.value,
+      // 三维里点到 A / B 隔离图层的构件时，属性面板钉到那一版：与树差异模式底部那块同一个取数口（句柄闭包在几何里）
+      attributesAt: (side, refno, signal) =>
+        getModelSource().versions.attributesAt(side === 'before' ? beforeData.geometry : afterData.geometry, refno, { signal }),
     });
     focusQueriedElement();
   } catch (cause) {

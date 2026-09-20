@@ -1,5 +1,5 @@
 import type { TreeDiffModel } from '@/composables/useTreeVersionDiff';
-import type { ModelVersion } from '@/model-source/ports';
+import type { ModelVersion, ModelVersionAttributes } from '@/model-source/ports';
 import type { InstanceEntry } from '@/utils/instances/instanceManifest';
 
 export type ModelUnitGeometryStatus = 'added' | 'deleted' | 'modified' | 'unchanged'
@@ -241,6 +241,16 @@ export function formatModelUnitVersionTime(generatedAt: string): string {
     });
 }
 
+/**
+ * 「哪一侧、哪个 refno」→ 那个模型版本下的属性。面板闭包住本次持有的两份版本几何（句柄在里面），
+ * ViewerPanel 在三维里点到 A / B 隔离图层的构件时用它把属性面板钉到那一版（不查当前会话）。
+ */
+export type ModelUnitCompareAttributesAt = (
+  side: ModelUnitCompareSide,
+  refno: string,
+  signal?: AbortSignal,
+) => Promise<ModelVersionAttributes>
+
 export type ModelUnitVersionCompareOpenDetail = {
   action: 'open'
   dbnum: number
@@ -249,6 +259,15 @@ export type ModelUnitVersionCompareOpenDetail = {
   after: ModelUnitVersionSide
   refnos: string[]
   rows: ModelUnitGeometryDiff[]
+  /** 缺省没有（旧派发方 / 测试夹具）：那就点不出版本属性，三维里点 A / B 构件只按 refno 普通选中 */
+  attributesAt?: ModelUnitCompareAttributesAt
+}
+
+/** 视口里点到的隔离图层对象：`unit-compare:a:<refno>:<n>` → A 侧、`unit-compare:b:…` → B 侧；别的对象 id 回 null */
+export function sideFromCompareObjectId(objectId: string): ModelUnitCompareSide | null {
+  if (objectId.startsWith('unit-compare:a:')) return 'before';
+  if (objectId.startsWith('unit-compare:b:')) return 'after';
+  return null;
 }
 
 export type ModelUnitVersionCompareEnvironment = {

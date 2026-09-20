@@ -17,6 +17,7 @@ import {
   readModelUnitVersionCompareUrl,
   refnoFromCompareObjectId,
   shouldOpenModelUnitVersionCompareFromUrl,
+  sideFromCompareObjectId,
   type ModelUnitGeometryDiff,
   type ModelUnitGeometrySnapshot,
 } from './modelUnitVersionCompare';
@@ -130,6 +131,10 @@ describe('modelUnitVersionCompare', () => {
     expect(refnoFromCompareObjectId('unit-compare:a:24384_23262:5')).toBe('24384_23262');
     expect(refnoFromCompareObjectId('o:24384_23262:0')).toBe('24384_23262');
     expect(refnoFromCompareObjectId('bare')).toBeNull();
+    // 三维里点到的对象属于哪一侧（属性面板据此钉到 A / B 那版）；主图层的 `o:` 对象不算
+    expect(sideFromCompareObjectId('unit-compare:a:24384_23262:5')).toBe('before');
+    expect(sideFromCompareObjectId('unit-compare:b:24384_23262:9')).toBe('after');
+    expect(sideFromCompareObjectId('o:24384_23262:0')).toBeNull();
 
     // A 侧：修改琥珀 / 删除玫红 / 未变灰；派生对象（rows 里没有的 refno）不乱标
     expect(planModelUnitCompareObjectStyles([

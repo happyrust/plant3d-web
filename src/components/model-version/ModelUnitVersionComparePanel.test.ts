@@ -135,6 +135,15 @@ describe('ModelUnitVersionComparePanel', () => {
     expect(versionSourceMocks.loadVersion).toHaveBeenCalledTimes(2);
     expect(versionSourceMocks.loadVersion.mock.calls.map(([item]) => (item as ModelVersion).sesno)).toEqual([791, 897]);
 
+    // open 事件带取数口：ViewerPanel 在三维点到 A / B 构件时用它把属性面板钉到那一版——按侧交回对应那份版本几何
+    const attributesAt = events.at(-1)?.detail.attributesAt as ((side: string, refno: string) => Promise<unknown>) | undefined;
+    expect(typeof attributesAt).toBe('function');
+    versionSourceMocks.attributesAt.mockResolvedValue({ sesno: 897, exists: true, noun: 'ELBO', attributes: [] });
+    await attributesAt!('after', '1_3');
+    const [geometryArg, refnoArg] = versionSourceMocks.attributesAt.mock.calls.at(-1)!;
+    expect(refnoArg).toBe('1_3');
+    expect((geometryArg as { refnos: string[] }).refnos).toEqual(['1_1', '1_3']);
+
     window.removeEventListener('plant3d:model-unit-version-compare', listener);
     app.unmount();
   });

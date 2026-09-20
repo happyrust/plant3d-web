@@ -8,7 +8,8 @@
   - 从前 A 整侧蓝、B 整侧绿，只说明版本身份，哪件变了三维里看不出（面板算好的 `rows` 进了 ViewerPanel 却没人用）。现在每一版内部按四态上色：修改琥珀 / 新增翠绿（只在 B）/ 删除玫红（只在 A）/ 未变石板灰，与面板徽章、模型树差异模式同一套色（ADR 0066「三维联动」的落地，CONTEXT「模型几何差异」加了一句）。
   - 视口角标：单视口一枚跟着当前显示的版本（「B · sesno 630」），分屏两枚照旧；角标下只读图例列四态计数，「只看差异」开着时多一枚标签。
   - 面板「三维查看」节新增「三维只看差异」：隔离图层里藏掉两版都没变的构件，只改显隐不重装几何，分屏两侧同样生效；没有几何差异时置灰。与列表「包含未变化」同一口径、各自开关。
-  - 验证：vitest 26 过（纯函数 +2、面板 +1）、type-check 基线外 0 新增、e2e `model-version-compare-gen-model-v1.spec.ts` 两个夹具各 4 过；真机截图 `docs/verification/model-version-compare-gen-model-v1-2026-09-18/3d-diff-color/`（README §8，plan §11）。
+  - 单视口里点到 A / B 那版的构件，右侧属性面板读的是**那一版**的属性（`history/query tool=attributes`，与树差异模式底部同一取数口），标题下注明「属性来自版本 A · sesno n」；从前隔离图层的构件根本点不到（GPU 拾取只认主图层）。`useSelectionStore` 新增「版本钉住」选中，任何正常选中复位，退出对比一并清掉。
+  - 验证：vitest 39 过（纯函数 +2、面板 +1、属性面板钉住 +2、属性折算 +2）、type-check 基线外 0 新增、e2e `model-version-compare-gen-model-v1.spec.ts` 两个夹具各 4 过；真机截图 `docs/verification/model-version-compare-gen-model-v1-2026-09-18/3d-diff-color/`（README §8 / §8.1，plan §11 / §11.1）。
 
 - **legacy 模型数据源退役：前端只剩 gen-model `/api/v1`，旧后端 `:3100` 相关代码、依赖与 UI 入口一并删除** (2026-09-20)
   - 生产当天切到 gen-model（ADR 0054 2026-09-18 追记定的锚）：删 `src/model-source/legacy/` 与 `?model_source=` / `VITE_MODEL_SOURCE` 开关，`ModelSourceKind` 只剩 `'gen-model-v1'`，`getModelSource()` 进程内一份。

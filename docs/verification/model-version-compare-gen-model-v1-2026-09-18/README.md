@@ -209,3 +209,20 @@ e2e `e2e/model-version-compare-gen-model-v1.spec.ts` 第 1 条加角标 / 图例
 顺手看到：
 - **分屏比单视口暗一档**（老截图 `bran-ftub-move/a626-b630-04-split.png` 的蓝 / 绿同样发暗，不是这轮引入）：四态色在分屏里成了深棕 / 藏青，仍分得开。split 路径直接 `renderer.render`，单视口有选中时走 `selection.renderOutline()`，两条路的色彩空间 / 后处理不一致——记在 plan §11，不在本轮。
 - 「三维只看差异」与列表「包含未变化」同一口径、各自开关：列表缺省只列差异，三维缺省整单元都在（留着看变了的那件在哪），没并成一个开关是有意的。
+
+### 8.1 点 A / B 构件 → 属性面板读那一版（2026-09-21 01:3x，`3d-diff-color/a626-b630-pick-*`，plan §11.1）
+
+先核了现状：GPU 拾取只认主图层的 picking mesh，A / B 隔离图层的构件**根本点不到**（`parseRefnoFromObjectId` 也只认 `o:`）——从前在对比里点单元要么没反应、要么选到后面的环境构件。
+修法见 plan §11.1：当前显示那一侧的隔离图层做 CPU 射线拾取，命中就把选中钉到那一版（`setSelectedRefnoAtVersion`），属性经面板带来的 `attributesAt` 取自那一侧的版本几何快照。
+脚本 `old\.scratch\mvc-3d-pick-version-attrs-run.mjs`：先点列表修改行飞到 FTUB，再把它在隔离图层里的包围盒中心投影到画布坐标去点（A / B 两版位置差 500 mm，各自重投影）。
+
+| 步 | 截图 | 事实 |
+|---|---|---|
+| 单视口 B 点 FTUB | `a626-b630-pick-01-side-b-pinned.png` | `lastPick {objectId unit-compare:b:24384_23262:4, side after, sesno 630}`；右侧属性面板标题下琥珀横幅 **「属性来自版本 B · sesno 630（版本对比里点到的那一版，不是当前会话）」**，**POS 10887, 12332, 2900**；这一步发的请求只有 `POST history/query {snapshot_key "24384_23257@630", tool "attributes", arguments {refno "24384/23262"}}`，`element/attributes` **0 条** |
+| 切 A 再点 FTUB | `a626-b630-pick-02-side-a-pinned.png` | `lastPick {…:a:…, side before, sesno 626}`；横幅 **「A · sesno 626」**，**POS 10887, 12332, 3400**（挪了 500 的那一版）；请求 `snapshot_key "24384_23257@626"`，`element/attributes` 0 条 |
+| 点画布空处 | — | 普通清空：横幅计数 0 |
+| 再钉一次后退出对比 | `a626-b630-pick-03-closed.png` | 横幅计数 0（钉住随对比一起清，那一版快照已 DELETE） |
+
+pageerror 0；console error 仍是那 5 条环境噪音。`a626-b630-pick-version-attrs-summary.json` 有每步投影坐标、`lastPick`、横幅文本与请求体。
+单测：`PropertiesPanel.versionPin.test.ts` 2 条（钉住走 `load` 不发 `uiAttr`、横幅带 sesno、普通选中复位且当前会话值不串、B 版另一份缓存；那一版不存在给说明）、`attributeSource.test.ts` +2（同型折算 / 不存在）、纯函数 `sideFromCompareObjectId`、面板 open 事件带 `attributesAt` 断言；e2e `model-version-compare-gen-model-v1.spec.ts` 回归：缺省单元 **4 passed 13.0 s**、`24384_23257` **4 passed 12.3 s**。
+分屏时拾取整体是关着的（`onDown` / `onUp` 直接 return），本条只覆盖单视口。
