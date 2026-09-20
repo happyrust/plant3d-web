@@ -1,8 +1,8 @@
 <template>
-  <div v-if="!leaves" class="ml-5 px-1 py-1 text-[11px] text-gray-400" data-testid="spatial-tree-leaves-pending">
+  <div v-if="!leaves" class="ml-4 px-1 py-1 text-[11px] text-gray-400" data-testid="spatial-tree-leaves-pending">
     取构件中…
   </div>
-  <div v-else class="ml-3 border-l border-gray-100 pl-1.5">
+  <div v-else class="ml-2 border-l border-gray-100 pl-1">
     <div v-for="leaf in leaves"
       :key="leaf.refno"
       class="flex items-center gap-1 rounded-md px-1 py-0.5"
@@ -10,15 +10,15 @@
       data-testid="spatial-tree-leaf"
       :data-refno="leaf.refno">
       <button type="button"
-        class="min-w-0 flex-1 truncate text-left font-mono text-[11px]"
+        class="flex min-w-0 flex-1 items-center gap-1 text-left font-mono text-[11px]"
         :class="itemOf(leaf).loaded ? 'text-gray-800' : 'text-gray-400'"
-        :title="itemOf(leaf).loaded ? leaf.refno : `${leaf.refno} · 未加载`"
+        :title="leafTitle(leaf)"
         @click="emit('focus', itemOf(leaf))">
-        {{ leaf.refno }}
-        <span class="ml-1 font-sans text-gray-500">{{ leaf.noun }}</span>
-        <span class="ml-1 font-sans text-gray-400">{{ formatDistance(leaf.distance) }}</span>
+        <span class="truncate">{{ leaf.refno }}</span>
+        <span class="shrink-0 font-sans text-gray-500">{{ leaf.noun }}</span>
+        <span class="shrink-0 font-sans text-gray-400">{{ formatDistance(leaf.distance) }}</span>
         <span v-if="leaf.shared_rooms && leaf.shared_rooms > 1"
-          class="ml-1 rounded bg-warning-subtle px-1 font-sans text-[10px] text-warning"
+          class="shrink-0 rounded bg-warning-subtle px-1 font-sans text-[10px] text-warning"
           data-testid="spatial-tree-shared">
           跨 {{ leaf.shared_rooms }} 房
         </span>
@@ -50,6 +50,7 @@ import type { SpatialQueryResultItem } from '@/types/spatialQuery';
 
 /**
  * 房间层级树的一组叶子（构件）：一行一个——refno · noun · 距离（· 跨 N 房），未加载灰字；眼睛切显隐、箭头定位。
+ * refno 是唯一会被截的段（noun / 距离 / 跨房标 `shrink-0`），整行文字连名字（store 里有才有）都在 `title` 里。
  * `leaves` 还没到（服务端超上限、正在按 `unit=` / `other_noun=` 取）时一句「取构件中…」。
  */
 const props = defineProps<{
@@ -69,6 +70,19 @@ const METERS_TO_MM = 1000;
 function formatDistance(distance: number): string {
   const meters = distance / METERS_TO_MM;
   return `${meters >= 10 ? meters.toFixed(0) : meters.toFixed(2)} m`;
+}
+
+/** 叶子行的 title：refno · noun · 距离（· 名字，store 里有且不是 refno 本身才有）（· 跨 N 房）（· 未加载） */
+function leafTitle(leaf: SpatialTreeLeafNode): string {
+  const item = itemOf(leaf);
+  return [
+    leaf.refno,
+    leaf.noun,
+    formatDistance(leaf.distance),
+    item.name && item.name !== leaf.refno ? item.name : null,
+    leaf.shared_rooms && leaf.shared_rooms > 1 ? `跨 ${leaf.shared_rooms} 房` : null,
+    item.loaded ? null : '未加载',
+  ].filter(Boolean).join(' · ');
 }
 
 function itemOf(leaf: SpatialTreeLeafNode): SpatialQueryResultItem {

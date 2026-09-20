@@ -2870,7 +2870,7 @@ describe('房间层级树（ADR 0068，plan 2026-09-20 spatial-room-hierarchy-tr
   }
 
   it('选了房间且源有树：打树路由（带 rooms）+ 同参 nearby 只取 1 条拿 facet；结果集带 tree，items = 叶子按 refno 去重、按请求排序（范围缺省先专业后距离），total = 去重数、不分页、全集 = 整树', async () => {
-    const fetchTree = vi.fn(async () => treeResult());
+    const fetchTree = vi.fn(async (_params: SpatialNearbyParams, _only?: SpatialTreeLeafSelector): Promise<SpatialTreeResult> => treeResult());
     const queryNearbyByPosition = vi.fn(async () => facetResult());
     const queryNearbyRefnos = vi.fn();
     const { store } = makeStore({ fetchTree, queryNearbyByPosition, queryNearbyRefnos });

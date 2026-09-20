@@ -194,6 +194,16 @@ include_negative, dbnums, rooms, spec_values`），**`rooms=` 必填**（没给 
    不带 `rooms=` / 不在册 / 坏路径 / `x,y,z` / 两个选择器同给 → 400。耗时：3 m 461 ms（热 434），100 m 单房 2.95 s，60 房 3.6 s，`rooms/{refno}/tree` 216 ms。
 2. **PR-B（plant3d-web）**：类型 / 端口 / 适配器 / store / `SpatialResultTree.vue` / 抽屉树态 + 单测。验收：既有空间查询单测不回归；新增全绿；
    `eslint` 0；`type-check` 基线外 0 新增；`:8027` 真机选 R432 出树、计数对得上服务端。
+   **完成**：`plant3d-web@fb2ed9a3`（18:02）。vitest 空间套件 112 passed（store 48 → 51、适配器 11 → 12、`spatialTree` 纯函数 5）；
+   真机（dev `:3111` + `:8027` = `65dacd576`）选 R432 → 树、「共 1055 项（去重）· 1 间房」= 服务端 `total_count`，加 R143 → 两房 661 + 1055 / 去重 1056、
+   「跨 2 房」11 处；清房间回平铺 1302（`docs/verification/spatial-room-hierarchy-tree-2026-09-20/ui/tree-01…03.png`）。
+   **补（行文字截断，20:14）**：336 px 抽屉里 `R432 · /1RX-RM…` / `BRAN · 17…` 被截——原因是三个动作按钮 `opacity-0` 仍占行宽 1/3。
+   改为：动作绝对定位叠在标题单元格右端、平时 `invisible`、行悬停 / 行内键盘焦点（`group-has-[:focus-visible]`）才显，计数始终贴右；
+   房间行只显房号、单元行只显名字（没名字才 refno）、「其他构件」只四个字，名字 / refno / 说明 / 构件数全进 `title`；
+   距离、「N 个单元」等短尾巴 `shrink-0`；层级缩进 18 → 12 px。顺带核出 **Vuetify `main.css` 的 `.opacity-0` / `.pointer-events-none` 带 `!important`**，
+   会压掉 Tailwind 的 `group-hover:opacity-100`——改前那三个按钮在真机上悬停根本不出现（Playwright 把 opacity 0 当可见，e2e 没拦住）。
+   新增 `SpatialResultTree.test.ts` 7 项（五层渲染 / 计数 / title / 动作叠放 / 展开取叶 / 跨房标 / 空态）。真机复核：12 行主标识 ≤ 28 字的都不再溢出、
+   计数右缘离面板右缘 12 px、悬停动作可见且不盖计数（`ui/tree-04…06.png`、`tree-rows-truncation-summary.json`）。
 3. **PR-B2（plant3d-web）**：结果区剪辑 + e2e 断言跟改。验收：单测 / e2e 全绿（e2e 在 `:8027` 上跑）。
 4. **PR-C（docs）**：教程 `SPATIAL_QUERY_TUTORIAL.md` 树态一节；本计划状态；真机验证记录 `docs/verification/spatial-room-hierarchy-tree-2026-09-20/`。
 
@@ -224,6 +234,10 @@ include_negative, dbnums, rooms, spec_values`），**`rooms=` 必填**（没给 
 - **跨房构件在两房都出现**：树里的 `count` 之和 ≠ `total_count`，摘要写「共 N 项（去重）」避免对不上的疑问。
 - **ROOM 标签页与场景显隐**：分组节点是合成 id，没有场景对象；勾选状态由子构件推导（`useRoomTree` 现有 `getCheckState` 已是推导式）。
 - **legacy**：不画树、ROOM 标签页照旧走 `:3100`；`capabilities.tree=false`。
+- **Tailwind 与 Vuetify 同名工具类**：Vuetify `main.css` 的 `.opacity-0…100` / `.pointer-events-none|auto` / `.bg-white` 等带 `!important`，
+  Tailwind 的 `hover:` / `group-hover:` 变体压不过。悬停显隐一律用 `invisible` / `visible`（visibility），别用 opacity；仓里另有 14 处
+  `opacity-N … group-hover:opacity-100`（`ViewerPanel` 侧栏 tooltip 11、`PipeDistanceDrawer` 2、`AnnotationScreenshotCard` 1）疑似同病（未逐个真机核），
+  PR-B2 剪辑时不顺手改，另开一条。
 
 ## 8. 关键位置速查
 

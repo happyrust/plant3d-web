@@ -15,14 +15,14 @@
           <ChevronDown v-if="isOpen(roomId(room), true)" class="h-3.5 w-3.5" />
           <ChevronRight v-else class="h-3.5 w-3.5" />
         </button>
-        <span class="min-w-0 flex-1 truncate font-semibold text-gray-900" :title="room.name ?? room.refno">
-          {{ room.room_num }}<span v-if="room.name" class="font-normal text-gray-500"> · {{ room.name }}</span>
-        </span>
+        <div class="relative min-w-0 flex-1">
+          <div class="truncate font-semibold text-gray-900" :title="roomTitle(room)">{{ room.room_num }}</div>
+          <SpatialResultTreeNodeActions :target="{ kind: 'room', node: room }" :busy="busy" @load="onLoad" @show-only="onShowOnly" @isolate="onIsolate" />
+        </div>
         <span class="shrink-0 font-mono text-[11px] text-gray-500" data-testid="spatial-tree-count">{{ room.count }}</span>
-        <SpatialResultTreeNodeActions :target="{ kind: 'room', node: room }" :busy="busy" @load="onLoad" @show-only="onShowOnly" @isolate="onIsolate" />
       </div>
 
-      <div v-if="isOpen(roomId(room), true)" class="ml-3 border-l border-gray-100 pl-1.5">
+      <div v-if="isOpen(roomId(room), true)" class="ml-2 border-l border-gray-100 pl-1">
         <!-- 专业 -->
         <div v-for="spec in room.specs" :key="spec.spec_value" data-testid="spatial-tree-spec" :data-spec-value="spec.spec_value">
           <div class="group flex items-center gap-1 rounded-md px-1 py-0.5 hover:bg-gray-50">
@@ -35,12 +35,14 @@
               <ChevronRight v-else class="h-3.5 w-3.5" />
             </button>
             <span class="inline-block h-2 w-2 shrink-0 rounded-full" :style="{ backgroundColor: getSpecBadgeStyle(spec.spec_value).fg }" />
-            <span class="min-w-0 flex-1 truncate font-medium text-gray-800">{{ getSpecValueName(spec.spec_value) }}</span>
+            <div class="relative min-w-0 flex-1">
+              <div class="truncate font-medium text-gray-800" :title="`${getSpecValueName(spec.spec_value)} · 专业 ${spec.spec_value}`">{{ getSpecValueName(spec.spec_value) }}</div>
+              <SpatialResultTreeNodeActions :target="{ kind: 'spec', node: spec }" :busy="busy" @load="onLoad" @show-only="onShowOnly" @isolate="onIsolate" />
+            </div>
             <span class="shrink-0 font-mono text-[11px] text-gray-500" data-testid="spatial-tree-count">{{ spec.count }}</span>
-            <SpatialResultTreeNodeActions :target="{ kind: 'spec', node: spec }" :busy="busy" @load="onLoad" @show-only="onShowOnly" @isolate="onIsolate" />
           </div>
 
-          <div v-if="isOpen(specId(room, spec), true)" class="ml-3 border-l border-gray-100 pl-1.5">
+          <div v-if="isOpen(specId(room, spec), true)" class="ml-2 border-l border-gray-100 pl-1">
             <!-- 最小交付单元类型 -->
             <div v-for="group in spec.unit_types" :key="group.noun" data-testid="spatial-tree-unit-type" :data-noun="group.noun">
               <div class="group flex items-center gap-1 rounded-md px-1 py-0.5 hover:bg-gray-50">
@@ -52,14 +54,17 @@
                   <ChevronDown v-if="isOpen(unitTypeId(room, spec, group), true)" class="h-3.5 w-3.5" />
                   <ChevronRight v-else class="h-3.5 w-3.5" />
                 </button>
-                <span class="min-w-0 flex-1 truncate text-gray-700">
-                  {{ group.noun }}<span class="text-gray-400"> · {{ group.units.length }} 个单元</span>
-                </span>
+                <div class="relative min-w-0 flex-1">
+                  <div class="flex min-w-0 items-center gap-1 text-gray-700" :title="`${group.noun} · ${group.units.length} 个单元 · ${group.count} 个构件`">
+                    <span class="truncate">{{ group.noun }}</span>
+                    <span class="shrink-0 text-[11px] text-gray-400">{{ group.units.length }} 个单元</span>
+                  </div>
+                  <SpatialResultTreeNodeActions :target="{ kind: 'unitType', node: group }" :busy="busy" @load="onLoad" @show-only="onShowOnly" @isolate="onIsolate" />
+                </div>
                 <span class="shrink-0 font-mono text-[11px] text-gray-500" data-testid="spatial-tree-count">{{ group.count }}</span>
-                <SpatialResultTreeNodeActions :target="{ kind: 'unitType', node: group }" :busy="busy" @load="onLoad" @show-only="onShowOnly" @isolate="onIsolate" />
               </div>
 
-              <div v-if="isOpen(unitTypeId(room, spec, group), true)" class="ml-3 border-l border-gray-100 pl-1.5">
+              <div v-if="isOpen(unitTypeId(room, spec, group), true)" class="ml-2 border-l border-gray-100 pl-1">
                 <!-- 单元 -->
                 <div v-for="unit in group.units" :key="unit.refno" data-testid="spatial-tree-unit" :data-refno="unit.refno">
                   <div class="group flex items-center gap-1 rounded-md px-1 py-0.5 hover:bg-gray-50">
@@ -71,11 +76,14 @@
                       <ChevronDown v-if="isOpen(unitId(room, unit), false)" class="h-3.5 w-3.5" />
                       <ChevronRight v-else class="h-3.5 w-3.5" />
                     </button>
-                    <span class="min-w-0 flex-1 truncate text-gray-800" :title="unit.refno">
-                      {{ unit.name || unit.refno }}<span class="text-gray-400"> · {{ formatDistance(unit.min_distance) }}</span>
-                    </span>
+                    <div class="relative min-w-0 flex-1">
+                      <div class="flex min-w-0 items-center gap-1 text-gray-800" :title="unitTitle(unit)">
+                        <span class="truncate">{{ unit.name || unit.refno }}</span>
+                        <span class="shrink-0 text-[11px] tabular-nums text-gray-400">{{ formatDistance(unit.min_distance) }}</span>
+                      </div>
+                      <SpatialResultTreeNodeActions :target="{ kind: 'unit', node: unit }" :busy="busy" expandable @load="onLoad" @show-only="onShowOnly" @isolate="onIsolate" />
+                    </div>
                     <span class="shrink-0 font-mono text-[11px] text-gray-500" data-testid="spatial-tree-count">{{ unit.count }}</span>
-                    <SpatialResultTreeNodeActions :target="{ kind: 'unit', node: unit }" :busy="busy" expandable @load="onLoad" @show-only="onShowOnly" @isolate="onIsolate" />
                   </div>
                   <SpatialResultTreeLeaves v-if="isOpen(unitId(room, unit), false)"
                     :leaves="unit.elements"
@@ -98,14 +106,14 @@
                   <ChevronDown v-if="isOpen(othersId(room, spec), false)" class="h-3.5 w-3.5" />
                   <ChevronRight v-else class="h-3.5 w-3.5" />
                 </button>
-                <span class="min-w-0 flex-1 truncate text-gray-700">
-                  其他构件<span class="text-gray-400"> · 不属任何最小交付单元</span>
-                </span>
+                <div class="relative min-w-0 flex-1">
+                  <div class="truncate text-gray-700" :title="`其他构件 · 不属任何最小交付单元的构件，按 noun 分 · ${spec.others.count} 个`">其他构件</div>
+                  <SpatialResultTreeNodeActions :target="{ kind: 'others', node: spec.others }" :busy="busy" @load="onLoad" @show-only="onShowOnly" @isolate="onIsolate" />
+                </div>
                 <span class="shrink-0 font-mono text-[11px] text-gray-500" data-testid="spatial-tree-count">{{ spec.others.count }}</span>
-                <SpatialResultTreeNodeActions :target="{ kind: 'others', node: spec.others }" :busy="busy" @load="onLoad" @show-only="onShowOnly" @isolate="onIsolate" />
               </div>
 
-              <div v-if="isOpen(othersId(room, spec), false)" class="ml-3 border-l border-gray-100 pl-1.5">
+              <div v-if="isOpen(othersId(room, spec), false)" class="ml-2 border-l border-gray-100 pl-1">
                 <div v-for="group in spec.others.by_noun" :key="group.noun" data-testid="spatial-tree-other-noun" :data-noun="group.noun">
                   <div class="group flex items-center gap-1 rounded-md px-1 py-0.5 hover:bg-gray-50">
                     <button type="button"
@@ -116,11 +124,14 @@
                       <ChevronDown v-if="isOpen(otherNounId(room, spec, group), false)" class="h-3.5 w-3.5" />
                       <ChevronRight v-else class="h-3.5 w-3.5" />
                     </button>
-                    <span class="min-w-0 flex-1 truncate text-gray-800">
-                      {{ group.noun }}<span class="text-gray-400"> · {{ formatDistance(group.min_distance) }}</span>
-                    </span>
+                    <div class="relative min-w-0 flex-1">
+                      <div class="flex min-w-0 items-center gap-1 text-gray-800" :title="`${group.noun} · 不属任何最小交付单元 · 最近 ${formatDistance(group.min_distance)} · ${group.count} 个`">
+                        <span class="truncate">{{ group.noun }}</span>
+                        <span class="shrink-0 text-[11px] tabular-nums text-gray-400">{{ formatDistance(group.min_distance) }}</span>
+                      </div>
+                      <SpatialResultTreeNodeActions :target="{ kind: 'otherNoun', node: group }" :busy="busy" expandable @load="onLoad" @show-only="onShowOnly" @isolate="onIsolate" />
+                    </div>
                     <span class="shrink-0 font-mono text-[11px] text-gray-500" data-testid="spatial-tree-count">{{ group.count }}</span>
-                    <SpatialResultTreeNodeActions :target="{ kind: 'otherNoun', node: group }" :busy="busy" expandable @load="onLoad" @show-only="onShowOnly" @isolate="onIsolate" />
                   </div>
                   <SpatialResultTreeLeaves v-if="isOpen(otherNounId(room, spec, group), false)"
                     :leaves="group.elements"
@@ -167,6 +178,10 @@ const METERS_TO_MM = 1000;
  * 每一层一行（标题 · 计数 · 悬停出 加载 / 仅显示 / 隔离），叶子一行（refno · noun · 距离，未加载灰字）。
  * 缺省房间 / 专业 / 单元类型展开、单元与其他构件收起。叶子未内联（服务端超上限）的单元 / noun 组第一次展开时
  * `expand` 让 store 去取那一组。
+ *
+ * 行文字（336 px 抽屉）：只把一个主标识放行上——房间行是房号、单元行是名字（没有名字才 refno）、其他构件行只四个字；
+ * 名字 / refno / 说明 / 构件数全进 `title`，悬停可读。距离、「N 个单元」这类短尾巴 `shrink-0` 不被截，长的主标识 `truncate`。
+ * 三个动作按钮不占行宽（见 `SpatialResultTreeNodeActions`），计数始终贴右。
  */
 const props = defineProps<{
   tree: SpatialTreeResult;
@@ -222,6 +237,16 @@ const otherNounId = (room: SpatialTreeRoomNode, spec: SpatialTreeSpecNode, group
 function formatDistance(distance: number): string {
   const meters = distance / METERS_TO_MM;
   return `${meters >= 10 ? meters.toFixed(0) : meters.toFixed(2)} m`;
+}
+
+/** 房间行的 title：房号 · 名字 · refno · 构件数（行上只显房号） */
+function roomTitle(room: SpatialTreeRoomNode): string {
+  return [room.room_num, room.name, room.refno, `${room.count} 个构件`].filter(Boolean).join(' · ');
+}
+
+/** 单元行的 title：名字 · noun refno · 最近距离 · 构件数（行上只显名字，没名字才显 refno） */
+function unitTitle(unit: SpatialTreeUnitNode): string {
+  return [unit.name, `${unit.noun} ${unit.refno}`, `最近 ${formatDistance(unit.min_distance)}`, `${unit.count} 个构件`].filter(Boolean).join(' · ');
 }
 
 function onLoad(refnos: string[], label: string): void {
