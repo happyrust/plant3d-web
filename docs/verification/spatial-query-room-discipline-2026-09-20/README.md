@@ -75,12 +75,14 @@ $stamp = Get-Date -Format yyyyMMdd-HHmmss
 ## 5. e2e `e2e/spatial-query-gen-model-v1-ui.spec.ts` 首次真机：**9 passed / 1 skipped**
 
 `PLAYWRIGHT_PORT=3111 GEN_MODEL_V1_BASE_URL=http://127.0.0.1:8027 npx playwright test e2e/spatial-query-gen-model-v1-ui.spec.ts --workers=1`：
-13:37 上一会话首次跑绿（当时 `test-results/.last-run.json` 记 `passed`），15:49 本会话复跑 **9 passed / 1 skipped（拾取中心要 `--headed`），36.8 s**。这份 spec 09-13 入仓时标「未真机验证」，本轮为它改了两类东西（同一 commit）：
+13:37 上一会话首次跑绿（当时 `test-results/.last-run.json` 记 `passed`），15:49 本会话复跑 **9 passed / 1 skipped（拾取中心要 `--headed`），36.8 s**；16:50 加了两句中心口径 hint（见下）后再跑 **9 passed**，DOM 追加不影响既有断言。这份 spec 09-13 入仓时标「未真机验证」，本轮为它改了两类东西（同一 commit）：
 
 - **口径翻过来（ADR 0067）**：第 1 条原断言 v1 下 `spec-filter` 与「按专业」排序档**不存在**，现改为 `spec-filter` / `room-filter` / `spatial-sort-specThenDistance` **都在**，并加一段：点「按专业」→ 请求 `sort=spec_distance`、页内 `spec_value` 非降、同专业内距离非降。`expectedRowOrder` 缺省按专业分组（v1 抽屉缺省即按专业），`StoreResultItem` 加 `specValue`。
 - **三处不是功能问题的真机修正**：(1) 测试里裸 `import('/src/…')` 在 HMR 过的 dev 上会另起一份模块实例（store 不是页面那份，还撞 vue-query 注入报错）——helper 加 `installAppModuleResolver`，从 `performance.getEntriesByType('resource')` 找页面实际加载的带 `?t=` 戳的 URL；(2) Windows 上 Chrome 剪贴板回读是 CRLF，按 `/\r?\n/` 切；(3) 树里同一 refno 多条条目（发现 B），store 按 refno 合并成一条：服务端页序按去重后的集合比，「已加载」按 store 条目数比（不再等于服务端 `returned_count`：本机那一页 37 条 / 去重后 22 项）。
 
 `eslint` 两个 e2e 文件 0；`npm run type-check` 基线外仍只有别的会话那条 `versionSource.test.ts`（e2e 不在 tsc 范围，Playwright 自己编译、跑过即证）。
+
+**中心口径 hint（发现 A 定案后落到 UI，`plant3d-web@95b14c92`）**：把 refno 中心（量到构件整个包围盒）与点中心（量到一个点）的差摆到用户面前——距离查询「通过 Refno」下一句 `data-testid=distance-refno-box-hint`「半径量到所选构件整个包围盒表面、不是到一个点……要按离某点 N 米查改用通过坐标」，范围查询「当前选中」下一句 `range-selected-center-hint`「以包围盒中心点量距、未加载几何则按整个包围盒解算」；教程 `SPATIAL_QUERY_TUTORIAL.md` §3/§8 同步（带 R432 refno≈3900 vs 点≈1300 的例子）。真机核（`:3111 + :8027`，临时 spec 跑完即删）：范围「当前选中」下 `range-selected-center-hint` 可见含「包围盒」、切「手输坐标」消失；距离「通过 Refno」下 `distance-refno-box-hint` 可见含「整个包围盒」、切「通过坐标」消失——**1 passed**。`SpatialQueryDrawer.test.ts` 两处既有用例补了同款断言，34 passed。
 
 ## 6. 复验（15:49–15:58 同进程；16:17 重启复验 + 16:38 两种查询中心对拍）与顺手发现
 
