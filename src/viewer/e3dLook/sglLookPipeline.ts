@@ -27,6 +27,7 @@ import {
   Object3D,
   PerspectiveCamera,
   RGBAFormat,
+  SRGBColorSpace,
   Scene,
   ShaderMaterial,
   Texture,
@@ -379,6 +380,17 @@ void main() {
 
 type RtFilter = MinificationTextureFilter & MagnificationTextureFilter;
 
+const _srgbTmp = { r: 0, g: 0, b: 0 };
+
+/**
+ * E3D 的颜色表是 sRGB 字节直接写进 8-bit 目标、不做任何转换；three 的 Color 内部存线性值，
+ * 所以上传前要取回 sRGB 分量，才能让 `#828282` 真的显示成 (130,130,130)。
+ */
+function setSrgb(target: Vector3, color: Color): void {
+  color.getRGB(_srgbTmp, SRGBColorSpace);
+  target.set(_srgbTmp.r, _srgbTmp.g, _srgbTmp.b);
+}
+
 function makeRT(w: number, h: number, type: TextureDataType, filter: RtFilter, depthBuffer: boolean): WebGLRenderTarget {
   return new WebGLRenderTarget(Math.max(1, w), Math.max(1, h), {
     type,
@@ -706,7 +718,7 @@ export class SglLookPipeline {
       u.uRadiusPx.value = Math.max(1, p.hlr.radiusPx);
       u.uDepthThreshold.value = p.hlr.depthThreshold;
       u.uNormalThreshold.value = p.hlr.normalThreshold;
-      u.uEdgeColor.value.set(p.hlr.edgeColor.r, p.hlr.edgeColor.g, p.hlr.edgeColor.b);
+      setSrgb(u.uEdgeColor.value, p.hlr.edgeColor);
       this._fsq.material = this._hlrMaterial;
       renderer.setRenderTarget(this._hlrRT);
       this._fsq.render(renderer);
@@ -721,9 +733,9 @@ export class SglLookPipeline {
     cu.uUseHlr.value = useHlr ? 1 : 0;
     cu.uUseAo.value = useAo && aoTexture ? 1 : 0;
     cu.uUseGradient.value = useGradient ? 1 : 0;
-    cu.uBgTop.value.set(p.background.top.r, p.background.top.g, p.background.top.b);
-    cu.uBgBottom.value.set(p.background.bottom.r, p.background.bottom.g, p.background.bottom.b);
-    cu.uBgFlat.value.set(p.background.flat.r, p.background.flat.g, p.background.flat.b);
+    setSrgb(cu.uBgTop.value, p.background.top);
+    setSrgb(cu.uBgBottom.value, p.background.bottom);
+    setSrgb(cu.uBgFlat.value, p.background.flat);
     this._fsq.material = this._compositeMaterial;
     renderer.setRenderTarget(target);
     if (target) renderer.clear(true, true, false);

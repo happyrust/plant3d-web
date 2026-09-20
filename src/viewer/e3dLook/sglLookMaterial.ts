@@ -19,6 +19,7 @@ import {
   CubeTexture,
   FrontSide,
   type IUniform,
+  SRGBColorSpace,
   ShaderMaterial,
   Vector3,
   Vector4
@@ -30,9 +31,15 @@ export interface SglSceneLightParams {
   ambient: number;
   /** Kd：漫反射系数 */
   diffuse: number;
-  /** HLSL 第 3 槽（`Ks`）：Blinn-Phong 高光系数。C++ getter 叫 Reflection，默认 0.35。 */
+  /**
+   * HLSL `Ks`（cbuffer 偏移 712）：Blinn-Phong 高光系数，默认 0.3。
+   * 上传函数 `sub_1000B970` 把 C++ `Specular`（+12）写到这一槽——C++ 名与 HLSL 名一致，不是 memcpy 交叉。
+   */
   specular: number;
-  /** HLSL 第 4 槽（`Kr`）：环境反射亮度系数。C++ getter 叫 Specular，默认 0.3。 */
+  /**
+   * HLSL `Kr`（cbuffer 偏移 716）：环境立方体贴图反射系数，默认 0.35。
+   * 来自 C++ `Reflection`（+8）；E3D 视图设置「Reflection」滑块（PML 默认 0.8）改的就是它。
+   */
   reflection: number;
   /** Kse：高光指数 */
   specularExponent: number;
@@ -40,12 +47,18 @@ export interface SglSceneLightParams {
   lightEyePos: readonly [number, number, number];
 }
 
-/** `CSglSceneLightParams::CSglSceneLightParams()`（sglDx11 3.1 @0x1005a1b0）的常量。 */
+/**
+ * `CSglSceneLightParams::CSglSceneLightParams()`（sglDx11 3.1 @0x1005a1b0）的常量：
+ * {Ambient 0.5, Diffuse 0.8, Reflection 0.35, Specular 0.3, Exponent 64, eye (0,0,1)}，
+ * 经 `sub_1000B970` 装进 cbuffer 后 Ks=Specular=0.3、Kr=Reflection=0.35（2026-09-20 第二轮坐实）。
+ * 这是 SGL 的 C++ 兜底值；E3D 3.1 的 PML 视图默认（gphviewopt）会再覆盖成
+ * brightness 0.7 / colourDepth 0 / reflection 0.8 / mirrorEffect 0 / spotSize 0，见 SGL_E3D31_VIEW_DEFAULT_LIGHT。
+ */
 export const SGL_DEFAULT_LIGHT: Readonly<SglSceneLightParams> = Object.freeze({
   ambient: 0.5,
   diffuse: 0.8,
-  specular: 0.35,
-  reflection: 0.3,
+  specular: 0.3,
+  reflection: 0.35,
   specularExponent: 64,
   lightEyePos: [0, 0, 1] as const,
 });
@@ -58,6 +71,22 @@ export const SGL_LIGHT_STRATEGIES: Readonly<Record<'default' | 'flat70' | 'unlit
   default: SGL_DEFAULT_LIGHT,
   flat70: Object.freeze({ ambient: 0.7, diffuse: 0, specular: 0, reflection: 0, specularExponent: 0, lightEyePos: [0, 0, 1] as const }),
   unlit: Object.freeze({ ambient: 1.0, diffuse: 0, specular: 0, reflection: 0, specularExponent: 0, lightEyePos: [0, 0, 1] as const }),
+});
+
+/**
+ * E3D 3.1 出厂视图设置（`PMLLIB\common\objects\gphviewopt.pmlobj` `.default()`）经
+ * VIEW 属性 79..84 → `SGL_set_view_attribute_real(61..68)` 写进策略 1 的值：
+ * brightness=Ka 0.7、colourDepth=Kd 0、reflection=Kr 0.8、mirrorEffect=Ks 0、spotSize=Kse 0、torch (0,0,1)。
+ * 也就是说未改过设置的 E3D 3.1 视图没有漫反射/高光，全靠 0.7·颜色 + 0.8·环境立方体反射出体积感。
+ * （本机那台经修补启动的 E3D 没走这条 PML 路径，实测吻合的是 SGL_DEFAULT_LIGHT。）
+ */
+export const SGL_E3D31_VIEW_DEFAULT_LIGHT: Readonly<SglSceneLightParams> = Object.freeze({
+  ambient: 0.7,
+  diffuse: 0,
+  specular: 0,
+  reflection: 0.8,
+  specularExponent: 0,
+  lightEyePos: [0, 0, 1] as const,
 });
 
 export interface SglLookMaterialOptions {
@@ -198,9 +227,16 @@ export type SglLookUniforms = {
   uUp: IUniform<Vector3>;
 };
 
+const _rgbTmp = { r: 0, g: 0, b: 0 };
+
+/** E3D 颜色表是 sRGB 字节直写；three 的 Color 内部是线性值，取回 sRGB 分量再上传 */
+function colorToSrgb(c: Color): { r: number; g: number; b: number } {
+  return c.getRGB(_rgbTmp, SRGBColorSpace);
+}
+
 function createUniforms(options: SglLookMaterialOptions): SglLookUniforms {
   const light: SglSceneLightParams = { ...SGL_DEFAULT_LIGHT, ...(options.light ?? {}) };
-  const color = new Color(options.color ?? 0xffffff);
+  const color = colorToSrgb(new Color(options.color ?? 0xffffff));
   const up = options.up ?? new Vector3(0, 0, 1);
   return {
     uColor: { value: new Vector4(color.r, color.g, color.b, 1) },
@@ -242,14 +278,14 @@ export class SglLookMaterial extends ShaderMaterial {
     this.name = 'SglLookMaterial';
   }
 
-  /** 元素颜色（无顶点色 / 实例色时生效） */
+  /** 元素颜色（无顶点色 / 实例色时生效）；uniform 里存的是 sRGB 分量 */
   get color(): Color {
     const v = this.sglUniforms.uColor.value;
-    return new Color(v.x, v.y, v.z);
+    return new Color().setRGB(v.x, v.y, v.z, SRGBColorSpace);
   }
 
   set color(c: Color | number | string) {
-    const cc = new Color(c);
+    const cc = colorToSrgb(new Color(c));
     const v = this.sglUniforms.uColor.value;
     v.set(cc.r, cc.g, cc.b, v.w);
   }

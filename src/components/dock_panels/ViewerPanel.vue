@@ -664,9 +664,10 @@ function sceneDirectionToDesign(
 const cameraViewMode = ref<CameraViewMode>('cad_weak');
 const globalEdgeEnabled = ref(false);
 // E3D 外观（SGL 复刻，docs/rendering/e3d-sgl-look-prototype.md）：光照公式 + HLR 边线 + HBAO
+// 2026-09-20 与本机 E3D 3.1 真机同视角对参：那台的增强边线 / 伪阴影都是关的、背景纯灰 #828282，所以子开关默认关
 const sglLookEnabled = ref(false);
-const sglLookHlrEnabled = ref(true);
-const sglLookAoEnabled = ref(true);
+const sglLookHlrEnabled = ref(false);
+const sglLookAoEnabled = ref(false);
 const sglPipelineRef = shallowRef<SglLookPipeline | null>(null);
 const globalEdgeThresholdAngle = ref(20);
 const focusTransparencyEnabled = ref(false);
@@ -3213,8 +3214,8 @@ onMounted(async () => {
   focusTransparencyEnabled.value = false;
   focusDimOpacityPercent.value = 20;
   sglLookEnabled.value = false;
-  sglLookHlrEnabled.value = true;
-  sglLookAoEnabled.value = true;
+  sglLookHlrEnabled.value = false;
+  sglLookAoEnabled.value = false;
   try {
     // DEV: localStorage.setItem('dtx_continuous_render','1') 可打开持续渲染（用于 profile）
     continuousRender =
@@ -3314,7 +3315,8 @@ onMounted(async () => {
   applyBackground(backgroundStore.mode.value);
   applyCameraViewMode(cameraViewMode.value);
 
-  // E3D 外观后处理管线：DTX 材质自己出法线/深度（providers），背景沿用视图设置
+  // E3D 外观后处理管线：DTX 材质自己出法线/深度（providers）；背景由管线按 E3D 真机口径直写
+  // （纯灰 #828282，不过 tone mapping——走 scene.background 会被 ACES/曝光抬成 162）
   try {
     // 场景在 modelUnit=mm/m 时都已按米摆放（loader 里 mm×0.001），阈值/半径按米给
     const sceneInMetres = unitSettings.modelUnit.value !== 'raw';
@@ -3323,11 +3325,13 @@ onMounted(async () => {
       {
         hlr: { depthThreshold: sceneInMetres ? 0.05 : 50 },
         ao: { radius: sceneInMetres ? 0.4 : 400, blurSharpness: sceneInMetres ? 10 : 0.01 },
+        background: { gradient: false, flat: new Color(0x828282) },
       },
-      { useSceneBackground: true, normalDepthSource: 'providers' },
+      { useSceneBackground: false, normalDepthSource: 'providers' },
     );
     sglPipeline.setSize(canvas.clientWidth || canvas.width, canvas.clientHeight || canvas.height);
     sglPipelineRef.value = sglPipeline;
+    if (isDev) (window as any).__sglLookPipeline = sglPipeline;
   } catch (e) {
     console.warn('[ViewerPanel] E3D 外观管线初始化失败', e);
   }
@@ -5339,7 +5343,7 @@ onUnmounted(() => {
                 </button>
               </div>
               <div class="text-[11px] text-muted-foreground">
-                单头灯 Blinn-Phong + 灰度反射，边线/AO 走 sglDx11 同款后处理（选中轮廓与版本分屏时暂不套用）。
+                单头灯 Blinn-Phong + 灰度反射，背景纯灰 #828282（同本机 E3D 真机）；边线/AO 是 sglDx11 同款后处理，E3D 真机默认关（选中轮廓与版本分屏时暂不套用）。
               </div>
             </div>
 

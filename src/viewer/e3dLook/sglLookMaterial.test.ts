@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   SGL_DEFAULT_LIGHT,
+  SGL_E3D31_VIEW_DEFAULT_LIGHT,
   SGL_LIGHT_STRATEGIES,
   SGL_LOOK_SHADERS,
   SglLookMaterial,
@@ -10,13 +11,22 @@ import {
 import { SGL_PIPELINE_SHADERS, createDefaultSglPipelineParams } from './sglLookPipeline';
 
 describe('SglLookMaterial —— 与 sglDx11 逆向口径对齐', () => {
-  it('默认光照常量等于 CSglSceneLightParams 构造函数里的值', () => {
+  it('默认光照常量等于 CSglSceneLightParams 构造函数里的值（Ks=Specular 0.3，Kr=Reflection 0.35）', () => {
     expect(SGL_DEFAULT_LIGHT).toEqual({
       ambient: 0.5,
       diffuse: 0.8,
-      specular: 0.35,
-      reflection: 0.3,
+      specular: 0.3,
+      reflection: 0.35,
       specularExponent: 64,
+      lightEyePos: [0, 0, 1],
+    });
+    // E3D 3.1 PML 出厂视图设置（gphviewopt.default）：无漫反射/高光，0.7 环境 + 0.8 立方体反射
+    expect(SGL_E3D31_VIEW_DEFAULT_LIGHT).toEqual({
+      ambient: 0.7,
+      diffuse: 0,
+      specular: 0,
+      reflection: 0.8,
+      specularExponent: 0,
       lightEyePos: [0, 0, 1],
     });
     expect(SGL_LIGHT_STRATEGIES.flat70.ambient).toBe(0.7);
