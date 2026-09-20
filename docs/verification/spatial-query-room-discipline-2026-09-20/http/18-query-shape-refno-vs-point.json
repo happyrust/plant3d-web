@@ -1,0 +1,92 @@
+{
+  "at": "2026-09-20T16:38:54.7875836+08:00",
+  "base": "http://127.0.0.1:8027",
+  "note": "同一棵已就绪的树上，refno 中心（measure=到房间盒的 aabb_min_distance）与点中心（measure=到中心点的 aabb_point_distance）是两种查询，数各不同，都对。这解释了 13:17 金样(refno) 3934/3940 与 15:5x 复验(point) 1302 的差，与树状态无关。",
+  "health_tree": {
+    "state": "ready",
+    "entries": 61807,
+    "db_epoch": 132
+  },
+  "refno_center": {
+    "source": "refno_aabb_center",
+    "center": [
+      -6379.5703,
+      -11350.16,
+      5030.0
+    ],
+    "baseline_total": 3934,
+    "baseline_cand": 3940,
+    "rooms_total": 1303,
+    "rooms_matched": 1298
+  },
+  "point_center": {
+    "source": "position",
+    "center": [
+      -6379.5703,
+      -11350.16,
+      5030.0
+    ],
+    "baseline_total": 1302,
+    "baseline_cand": 1302,
+    "rooms_total": 1059,
+    "rooms_matched": 1055
+  },
+  "wall_24381_4102": {
+    "under_refno_center": [
+      {
+        "refno": "24381_4102",
+        "noun": "GWALL",
+        "distance": 0.0,
+        "box": [
+          -2510.0022,
+          -7319.37,
+          3220.0,
+          -2450.0,
+          -6639.63,
+          6400.0
+        ]
+      },
+      {
+        "refno": "24381_4102",
+        "noun": "GWALL",
+        "distance": 0.0,
+        "box": [
+          -2510.0022,
+          -7319.37,
+          3220.0,
+          -2450.0,
+          -6639.63,
+          6400.0
+        ]
+      }
+    ],
+    "under_point_center": [
+      {
+        "refno": "24381_4102",
+        "noun": "GWALL",
+        "distance": 5587.5596,
+        "box": [
+          -2510.0022,
+          -7319.37,
+          3220.0,
+          -2450.0,
+          -6639.63,
+          6400.0
+        ]
+      },
+      {
+        "refno": "24381_4102",
+        "noun": "GWALL",
+        "distance": 5587.5596,
+        "box": [
+          -2510.0022,
+          -7319.37,
+          3220.0,
+          -2450.0,
+          -6639.63,
+          6400.0
+        ]
+      }
+    ]
+  }
+}
