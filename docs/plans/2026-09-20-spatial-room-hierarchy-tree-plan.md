@@ -6,7 +6,10 @@
 > 词条：`CONTEXT.md`「房间层级树」「其他构件」；决策：ADR 0068。共识登记 zhimo `d-157`。
 > 前端基线 `plant3d-web@1dec21bb`；后端基线 `gen-model-model-cache@805170bd4`（`codex/model-projection-cache`，`:8027` 验证实例的来源）。
 >
-> 状态：**计划已定，PR-A 起干**（2026-09-20 16:3x）。各 PR 完成备注见 §5。
+> 状态：**第一批 PR-A / B / B2 / C 完成**（2026-09-20 16:3x 起干，2026-09-21 00:3x 收第一批）。各 PR 完成备注见 §5。
+> **第二批 PR-D 待定**：2026-09-20 21:16 合入的 legacy 退役（`plant3d-web@0b2e317c`，其 D1）已把模型树的 ROOM 页签连同 `useRoomTree` /
+> `genModelRoomTreeApi` 整个删掉——§4.5 写的「改经端口、legacy 适配器包现有 API」没有对象了，PR-D 变成**新建**一个只有 v1 的房间浏览页签，
+> 而退役那条计划把它拨掉的理由（gen-model 没有对应接口）已被 PR-A 的 `rooms/{refno}/tree` 补上；要不要建、建成什么样，见 §4.5 末的改法，等用户拍板。
 
 ## 0. 一句话
 
@@ -172,6 +175,13 @@ include_negative, dbnums, rooms, spec_values`），**`rooms=` 必填**（没给 
 - `useRoomTree.ts` 改经端口；`ModelTreePanel.vue` 的 ROOM 标签在 v1 源下顶上加房间搜索框（按房间号 / 名字过滤根列表）；显隐勾选 / 选中 / 定位沿用。
 - 单测：v1 适配器展平（五层 id 与 parent 关系、构件 id = refno）、`roots()` 排序与搜索；`useRoomTree` 在两种适配器下的 children 加载。
 
+**2026-09-21 改法（legacy 退役后）**：上面三条的前提没了——`plant3d-web@0b2e317c`（21:16 合入 main）删掉了 ROOM 页签、`useRoomTree.ts`（766 行）、
+`genModelRoomTreeApi.ts`、`RoomInfoPanel` / `RoomStatusPanelDock`，`ModelTreePanel.vue` 只剩 PDMS 一棵树（注释「旧后端 /api/room-tree/* 的 ROOM 页签
+2026-09-20 随 legacy 退役（D1）」）。若仍要 PR-D，就是**新建**：`RoomTreeSource` 只有 v1 一份实现（`roots()` = `/spatial/rooms` 平铺、`children(room)` =
+`rooms/{refno}/tree` 展成上面那五层 id）；`ModelTreePanel.vue` 重新加一个「房间」页签 + 顶部搜索框，行组件复用 `ModelTreeRow`（分组节点是合成 id、无场景对象，
+勾选状态由子构件推导）；`useRoomTree` 按新端口重写一份精简版（不再有 legacy 的 `room-group` / `comp-group` 那套）。没有 legacy 适配器、也没有「两种适配器下」的单测。
+替代方案：不建页签，抽屉树态已经覆盖「某间房里有什么」（在房间块选一间、半径开大即等价于 `rooms/{refno}/tree`），PR-D 取消。二选一等用户定。
+
 ### 4.6 词条与 ADR
 
 - `CONTEXT.md`「空间查询」加：**房间层级树**、**其他构件**。
@@ -215,15 +225,20 @@ include_negative, dbnums, rooms, spec_values`），**`rooms=` 必填**（没给 
    vue-tsc 本切片 0 新增。e2e：`resultRow` helper 改按 `data-refno` 找（有名字的行上不显 refno）、新增 `openCopyRefnosMenu`；
    「结果动作」用例加图标排 / 旧按钮不在 / 单行 title 断言；「大数量确认」用例每页改 1000（平铺态只补本页，20 / 页凑不出 > 200）。
    **真机**（2026-09-21 00:20–00:27，dev `:3111` + `:8027` = `65dacd576`、7997 整库已 ensure）：`spatial-query-gen-model-v1-ui.spec.ts` `--workers=1`
-   **9 passed / 1 skipped**（拾取中心要 `--headed`；日志 `docs/verification/spatial-room-hierarchy-tree-2026-09-20/e2e-…-0020.log`）。截图
+   **9 passed / 1 skipped**（拾取中心要 `--headed`；日志 `docs/verification/spatial-room-hierarchy-tree-2026-09-20/e2e-…-0020.txt`）。截图
    `ui/trim-01…04`（+ `trim-summary.json`）：R432 中心 3 m 平铺态一排七个图标（`aria-label` 与上面一致）、摘要第二行 `56 未知 · 1177 仪表 · 69 土建 · 中心 -6380, -11350, 5030 · position`、
    覆盖面一句 + title 全文、构件行单行 `24381_1409 · PANE · 0 m · 未加载`（title）、复制二选「本页 68 / 全部命中 1227」；选 R432 → 树态：「加载未加载（整棵树）」、
    复制只剩「全部（去重）1055」、房间列表 / 分页 / 分组开关 0 个；pageerror 0、错误横幅 0。
 4. **PR-C（docs）**：教程 `SPATIAL_QUERY_TUTORIAL.md` 树态一节；本计划状态；真机验证记录 `docs/verification/spatial-room-hierarchy-tree-2026-09-20/`。
+   **完成**（2026-09-21 00:3x）：教程 §6.1「选了房间：房间层级树」+ §7 房间列表段改口（经 v1 lookup、树态不画）+ 目录；验证目录 README（§1 环境含
+   `AIOS_STORE_MODE=mem` 那条坑、§3 38 项 HTTP 金样逐条、§4 树态三步、§5 截断复核、§6 剪辑真机 + e2e 9 passed、§7 文件表）、金样脚本
+   `spatial-tree-check.ps1` 入仓、HTTP 13 个 json、UI 13 张图 + 3 份 summary、e2e 日志；上位目录补 16:07 的同屏截图 `ui-09…11` + summary。
+   CHANGELOG 未加条目（`CHANGELOG.md` 此刻被另一条会话暂存着模型树命名那条，不抢同一文件；要加就在它提交后单独一条）。
 
 第二批：
 
 5. **PR-D（plant3d-web）**：`RoomTreeSource` 端口 + 两个适配器 + `useRoomTree` 改经端口 + ROOM 标签页搜索框 + 单测；真机 ROOM 标签页截图。
+   **待定**：legacy 退役已删掉 ROOM 页签，改法与替代方案见 §4.5 末；等用户定「新建 v1 房间页签」还是「取消，抽屉树态已覆盖」。
 
 ## 6. 验收 / 联调步骤
 

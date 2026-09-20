@@ -1,0 +1,500 @@
+{
+  "status": 200,
+  "elapsed_ms": 5084,
+  "rooms_requested": 60,
+  "total_count": 15578,
+  "leaf_count": 23591,
+  "leaf_cap": 5000,
+  "leaves_inline": false,
+  "room_status": {
+    "rooms": [
+      {
+        "refno": "24381_780",
+        "room_num": "R201"
+      },
+      {
+        "refno": "24381_789",
+        "room_num": "R210"
+      },
+      {
+        "refno": "24381_802",
+        "room_num": "R211"
+      },
+      {
+        "refno": "24381_813",
+        "room_num": "R215"
+      },
+      {
+        "refno": "24381_835",
+        "room_num": "R212"
+      },
+      {
+        "refno": "24381_853",
+        "room_num": "R213"
+      },
+      {
+        "refno": "24381_868",
+        "room_num": "R214"
+      },
+      {
+        "refno": "24381_881",
+        "room_num": "R220"
+      },
+      {
+        "refno": "24381_894",
+        "room_num": "R221"
+      },
+      {
+        "refno": "24381_913",
+        "room_num": "R222"
+      },
+      {
+        "refno": "24381_927",
+        "room_num": "R223"
+      },
+      {
+        "refno": "24381_946",
+        "room_num": "R224"
+      },
+      {
+        "refno": "24381_959",
+        "room_num": "R230"
+      },
+      {
+        "refno": "24381_972",
+        "room_num": "R231"
+      },
+      {
+        "refno": "24381_1008",
+        "room_num": "R232"
+      },
+      {
+        "refno": "24381_1038",
+        "room_num": "R233"
+      },
+      {
+        "refno": "24381_1068",
+        "room_num": "R234"
+      },
+      {
+        "refno": "24381_1084",
+        "room_num": "R241"
+      },
+      {
+        "refno": "24381_1115",
+        "room_num": "R261"
+      },
+      {
+        "refno": "24381_1128",
+        "room_num": "R262"
+      },
+      {
+        "refno": "24381_1141",
+        "room_num": "R263"
+      },
+      {
+        "refno": "24381_1154",
+        "room_num": "R286"
+      },
+      {
+        "refno": "24381_1164",
+        "room_num": "R101"
+      },
+      {
+        "refno": "24381_1184",
+        "room_num": "R112"
+      },
+      {
+        "refno": "24381_1202",
+        "room_num": "R113"
+      },
+      {
+        "refno": "24381_1219",
+        "room_num": "R114"
+      },
+      {
+        "refno": "24381_1235",
+        "room_num": "R122"
+      },
+      {
+        "refno": "24381_1249",
+        "room_num": "R123"
+      },
+      {
+        "refno": "24381_1261",
+        "room_num": "R124"
+      },
+      {
+        "refno": "24381_1283",
+        "room_num": "R132"
+      },
+      {
+        "refno": "24381_1313",
+        "room_num": "R133"
+      },
+      {
+        "refno": "24381_1352",
+        "room_num": "R134"
+      },
+      {
+        "refno": "24381_1368",
+        "room_num": "R141"
+      },
+      {
+        "refno": "24381_1389",
+        "room_num": "R142"
+      },
+      {
+        "refno": "24381_1407",
+        "room_num": "R143"
+      },
+      {
+        "refno": "24381_1443",
+        "room_num": "R144"
+      },
+      {
+        "refno": "24381_1453",
+        "room_num": "R145"
+      },
+      {
+        "refno": "24381_1476",
+        "room_num": "R161"
+      },
+      {
+        "refno": "24381_1489",
+        "room_num": "R162"
+      },
+      {
+        "refno": "24381_1502",
+        "room_num": "R163"
+      },
+      {
+        "refno": "24381_5012",
+        "room_num": "L582"
+      },
+      {
+        "refno": "24381_5020",
+        "room_num": "L598"
+      },
+      {
+        "refno": "24381_5028",
+        "room_num": "L591"
+      },
+      {
+        "refno": "24381_5036",
+        "room_num": "L593"
+      },
+      {
+        "refno": "24381_5044",
+        "room_num": "L587"
+      },
+      {
+        "refno": "24381_5052",
+        "room_num": "L572"
+      },
+      {
+        "refno": "24381_5062",
+        "room_num": "L505"
+      },
+      {
+        "refno": "24381_5080",
+        "room_num": "L506"
+      },
+      {
+        "refno": "24381_5088",
+        "room_num": "L507"
+      },
+      {
+        "refno": "24381_5096",
+        "room_num": "L574"
+      },
+      {
+        "refno": "24381_5104",
+        "room_num": "L508"
+      },
+      {
+        "refno": "24381_5112",
+        "room_num": "L509"
+      },
+      {
+        "refno": "24381_5120",
+        "room_num": "L588"
+      },
+      {
+        "refno": "24381_5128",
+        "room_num": "L583"
+      },
+      {
+        "refno": "24381_5136",
+        "room_num": "L573"
+      },
+      {
+        "refno": "24381_5147",
+        "room_num": "L575"
+      },
+      {
+        "refno": "24381_34849",
+        "room_num": "R301"
+      },
+      {
+        "refno": "24381_34869",
+        "room_num": "R310"
+      },
+      {
+        "refno": "24381_34892",
+        "room_num": "R311"
+      },
+      {
+        "refno": "24381_36943",
+        "room_num": "R000"
+      }
+    ],
+    "source": "memory",
+    "matched": 15578,
+    "unresolved": 0,
+    "definition_version": "72979202d292cb57761a3c7daec8c96f834587d574704ef12f9da8129f394211",
+    "library_alignment_current": null
+  },
+  "rooms": [
+    {
+      "room_num": "L505",
+      "count": 56
+    },
+    {
+      "room_num": "L506",
+      "count": 46
+    },
+    {
+      "room_num": "L507",
+      "count": 71
+    },
+    {
+      "room_num": "L508",
+      "count": 81
+    },
+    {
+      "room_num": "L509",
+      "count": 61
+    },
+    {
+      "room_num": "L572",
+      "count": 15
+    },
+    {
+      "room_num": "L573",
+      "count": 24
+    },
+    {
+      "room_num": "L574",
+      "count": 0
+    },
+    {
+      "room_num": "L575",
+      "count": 158
+    },
+    {
+      "room_num": "L582",
+      "count": 3
+    },
+    {
+      "room_num": "L583",
+      "count": 13
+    },
+    {
+      "room_num": "L587",
+      "count": 1
+    },
+    {
+      "room_num": "L588",
+      "count": 6
+    },
+    {
+      "room_num": "L591",
+      "count": 0
+    },
+    {
+      "room_num": "L593",
+      "count": 0
+    },
+    {
+      "room_num": "L598",
+      "count": 5
+    },
+    {
+      "room_num": "R000",
+      "count": 543
+    },
+    {
+      "room_num": "R101",
+      "count": 29
+    },
+    {
+      "room_num": "R112",
+      "count": 34
+    },
+    {
+      "room_num": "R113",
+      "count": 442
+    },
+    {
+      "room_num": "R114",
+      "count": 721
+    },
+    {
+      "room_num": "R122",
+      "count": 553
+    },
+    {
+      "room_num": "R123",
+      "count": 5
+    },
+    {
+      "room_num": "R124",
+      "count": 267
+    },
+    {
+      "room_num": "R132",
+      "count": 434
+    },
+    {
+      "room_num": "R133",
+      "count": 157
+    },
+    {
+      "room_num": "R134",
+      "count": 93
+    },
+    {
+      "room_num": "R141",
+      "count": 2201
+    },
+    {
+      "room_num": "R142",
+      "count": 1348
+    },
+    {
+      "room_num": "R143",
+      "count": 1429
+    },
+    {
+      "room_num": "R144",
+      "count": 9262
+    },
+    {
+      "room_num": "R145",
+      "count": 20
+    },
+    {
+      "room_num": "R161",
+      "count": 28
+    },
+    {
+      "room_num": "R162",
+      "count": 4
+    },
+    {
+      "room_num": "R163",
+      "count": 40
+    },
+    {
+      "room_num": "R201",
+      "count": 27
+    },
+    {
+      "room_num": "R210",
+      "count": 606
+    },
+    {
+      "room_num": "R211",
+      "count": 151
+    },
+    {
+      "room_num": "R212",
+      "count": 96
+    },
+    {
+      "room_num": "R213",
+      "count": 406
+    },
+    {
+      "room_num": "R214",
+      "count": 226
+    },
+    {
+      "room_num": "R215",
+      "count": 324
+    },
+    {
+      "room_num": "R220",
+      "count": 92
+    },
+    {
+      "room_num": "R221",
+      "count": 297
+    },
+    {
+      "room_num": "R222",
+      "count": 260
+    },
+    {
+      "room_num": "R223",
+      "count": 24
+    },
+    {
+      "room_num": "R224",
+      "count": 79
+    },
+    {
+      "room_num": "R230",
+      "count": 237
+    },
+    {
+      "room_num": "R231",
+      "count": 437
+    },
+    {
+      "room_num": "R232",
+      "count": 419
+    },
+    {
+      "room_num": "R233",
+      "count": 297
+    },
+    {
+      "room_num": "R234",
+      "count": 87
+    },
+    {
+      "room_num": "R241",
+      "count": 461
+    },
+    {
+      "room_num": "R261",
+      "count": 12
+    },
+    {
+      "room_num": "R262",
+      "count": 5
+    },
+    {
+      "room_num": "R263",
+      "count": 32
+    },
+    {
+      "room_num": "R286",
+      "count": 1
+    },
+    {
+      "room_num": "R301",
+      "count": 41
+    },
+    {
+      "room_num": "R310",
+      "count": 336
+    },
+    {
+      "room_num": "R311",
+      "count": 488
+    }
+  ]
+}

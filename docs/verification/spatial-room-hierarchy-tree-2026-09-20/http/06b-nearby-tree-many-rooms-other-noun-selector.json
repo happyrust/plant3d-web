@@ -1,0 +1,663 @@
+{
+  "status": 200,
+  "elapsed_ms": 4103,
+  "inlined": "other_noun:PANE",
+  "groups": [
+    {
+      "noun": "PANE",
+      "count": 48,
+      "min_distance": 50236.91,
+      "elements": [
+        {
+          "refno": "24381_7020",
+          "noun": "PANE",
+          "distance": 50236.91
+        },
+        {
+          "refno": "24381_7050",
+          "noun": "PANE",
+          "distance": 50236.91
+        },
+        {
+          "refno": "24381_6996",
+          "noun": "PANE",
+          "distance": 50237.45
+        },
+        {
+          "refno": "24381_7014",
+          "noun": "PANE",
+          "distance": 50292.645
+        },
+        {
+          "refno": "24381_7044",
+          "noun": "PANE",
+          "distance": 50292.645
+        },
+        {
+          "refno": "24381_7056",
+          "noun": "PANE",
+          "distance": 50293.184
+        },
+        {
+          "refno": "24381_7026",
+          "noun": "PANE",
+          "distance": 50349.113
+        },
+        {
+          "refno": "24381_7038",
+          "noun": "PANE",
+          "distance": 50349.113
+        },
+        {
+          "refno": "24381_7032",
+          "noun": "PANE",
+          "distance": 50349.652
+        },
+        {
+          "refno": "24381_7002",
+          "noun": "PANE",
+          "distance": 50372.445
+        },
+        {
+          "refno": "24381_7405",
+          "noun": "PANE",
+          "distance": 50395.668
+        },
+        {
+          "refno": "24381_7399",
+          "noun": "PANE",
+          "distance": 50451.23
+        },
+        {
+          "refno": "24381_7417",
+          "noun": "PANE",
+          "distance": 50507.523
+        },
+        {
+          "refno": "24381_7597",
+          "noun": "PANE",
+          "distance": 50531.74
+        },
+        {
+          "refno": "24381_7591",
+          "noun": "PANE",
+          "distance": 50594.875
+        },
+        {
+          "refno": "24381_7429",
+          "noun": "PANE",
+          "distance": 50731.85
+        },
+        {
+          "refno": "24381_7423",
+          "noun": "PANE",
+          "distance": 50931.02
+        },
+        {
+          "refno": "24381_7411",
+          "noun": "PANE",
+          "distance": 50986.785
+        },
+        {
+          "refno": "24381_7435",
+          "noun": "PANE",
+          "distance": 51838.156
+        },
+        {
+          "refno": "24381_7453",
+          "noun": "PANE",
+          "distance": 51894.87
+        },
+        {
+          "refno": "24381_7585",
+          "noun": "PANE",
+          "distance": 53439.85
+        },
+        {
+          "refno": "24381_7459",
+          "noun": "PANE",
+          "distance": 53777.617
+        },
+        {
+          "refno": "24381_7441",
+          "noun": "PANE",
+          "distance": 53813.08
+        },
+        {
+          "refno": "24381_6857",
+          "noun": "PANE",
+          "distance": 54354.14
+        },
+        {
+          "refno": "24381_11257",
+          "noun": "PANE",
+          "distance": 54503.695
+        },
+        {
+          "refno": "24381_11263",
+          "noun": "PANE",
+          "distance": 54914.285
+        },
+        {
+          "refno": "24381_7465",
+          "noun": "PANE",
+          "distance": 55684.227
+        },
+        {
+          "refno": "24381_7447",
+          "noun": "PANE",
+          "distance": 55737.027
+        },
+        {
+          "refno": "24381_13699",
+          "noun": "PANE",
+          "distance": 55936.79
+        },
+        {
+          "refno": "24381_5548",
+          "noun": "PANE",
+          "distance": 55993.785
+        },
+        {
+          "refno": "24381_5542",
+          "noun": "PANE",
+          "distance": 56048.613
+        },
+        {
+          "refno": "24381_7579",
+          "noun": "PANE",
+          "distance": 56135.727
+        },
+        {
+          "refno": "24381_6455",
+          "noun": "PANE",
+          "distance": 56281.645
+        },
+        {
+          "refno": "24381_6553",
+          "noun": "PANE",
+          "distance": 56415.51
+        },
+        {
+          "refno": "24381_6559",
+          "noun": "PANE",
+          "distance": 56415.51
+        },
+        {
+          "refno": "24381_6547",
+          "noun": "PANE",
+          "distance": 56549.36
+        },
+        {
+          "refno": "24381_7567",
+          "noun": "PANE",
+          "distance": 56749.27
+        },
+        {
+          "refno": "24381_6541",
+          "noun": "PANE",
+          "distance": 56761.43
+        },
+        {
+          "refno": "24381_6517",
+          "noun": "PANE",
+          "distance": 57147.867
+        },
+        {
+          "refno": "24381_6535",
+          "noun": "PANE",
+          "distance": 57147.867
+        },
+        {
+          "refno": "24381_6523",
+          "noun": "PANE",
+          "distance": 57201.586
+        },
+        {
+          "refno": "24381_6529",
+          "noun": "PANE",
+          "distance": 57201.586
+        },
+        {
+          "refno": "24381_7561",
+          "noun": "PANE",
+          "distance": 57738.566
+        },
+        {
+          "refno": "24381_11269",
+          "noun": "PANE",
+          "distance": 58047.414
+        },
+        {
+          "refno": "24381_11275",
+          "noun": "PANE",
+          "distance": 58456.777
+        },
+        {
+          "refno": "24381_7573",
+          "noun": "PANE",
+          "distance": 59128.35
+        },
+        {
+          "refno": "24381_7555",
+          "noun": "PANE",
+          "distance": 59453.96
+        },
+        {
+          "refno": "24381_7549",
+          "noun": "PANE",
+          "distance": 59752.113
+        }
+      ]
+    },
+    {
+      "noun": "PANE",
+      "count": 33,
+      "min_distance": 50442.387,
+      "elements": [
+        {
+          "refno": "24381_6876",
+          "noun": "PANE",
+          "distance": 50442.387
+        },
+        {
+          "refno": "24381_6888",
+          "noun": "PANE",
+          "distance": 50547.94
+        },
+        {
+          "refno": "24381_7284",
+          "noun": "PANE",
+          "distance": 50625.125
+        },
+        {
+          "refno": "24381_7158",
+          "noun": "PANE",
+          "distance": 50804.887
+        },
+        {
+          "refno": "24381_7068",
+          "noun": "PANE",
+          "distance": 50835.03
+        },
+        {
+          "refno": "24381_7290",
+          "noun": "PANE",
+          "distance": 50911.22
+        },
+        {
+          "refno": "24381_7062",
+          "noun": "PANE",
+          "distance": 50935.934
+        },
+        {
+          "refno": "24381_7074",
+          "noun": "PANE",
+          "distance": 51080.703
+        },
+        {
+          "refno": "24381_7164",
+          "noun": "PANE",
+          "distance": 51144.582
+        },
+        {
+          "refno": "24381_7296",
+          "noun": "PANE",
+          "distance": 51298.938
+        },
+        {
+          "refno": "24381_7302",
+          "noun": "PANE",
+          "distance": 51550.77
+        },
+        {
+          "refno": "24381_7170",
+          "noun": "PANE",
+          "distance": 51552.246
+        },
+        {
+          "refno": "24381_9499",
+          "noun": "PANE",
+          "distance": 51732.02
+        },
+        {
+          "refno": "24381_14311",
+          "noun": "PANE",
+          "distance": 51744.85
+        },
+        {
+          "refno": "24381_6882",
+          "noun": "PANE",
+          "distance": 51837.41
+        },
+        {
+          "refno": "24381_9513",
+          "noun": "PANE",
+          "distance": 51896.008
+        },
+        {
+          "refno": "24381_9527",
+          "noun": "PANE",
+          "distance": 52068.89
+        },
+        {
+          "refno": "24381_14317",
+          "noun": "PANE",
+          "distance": 52347.61
+        },
+        {
+          "refno": "24381_7308",
+          "noun": "PANE",
+          "distance": 52349.29
+        },
+        {
+          "refno": "24381_14305",
+          "noun": "PANE",
+          "distance": 52416.66
+        },
+        {
+          "refno": "24381_6814",
+          "noun": "PANE",
+          "distance": 53828.19
+        },
+        {
+          "refno": "24381_6851",
+          "noun": "PANE",
+          "distance": 55318.68
+        },
+        {
+          "refno": "24381_6754",
+          "noun": "PANE",
+          "distance": 57141.19
+        },
+        {
+          "refno": "24381_6736",
+          "noun": "PANE",
+          "distance": 57373.008
+        },
+        {
+          "refno": "24381_6748",
+          "noun": "PANE",
+          "distance": 58451.805
+        },
+        {
+          "refno": "24381_6712",
+          "noun": "PANE",
+          "distance": 58481.2
+        },
+        {
+          "refno": "24381_6730",
+          "noun": "PANE",
+          "distance": 58495.785
+        },
+        {
+          "refno": "24381_6676",
+          "noun": "PANE",
+          "distance": 58665.125
+        },
+        {
+          "refno": "24381_6718",
+          "noun": "PANE",
+          "distance": 59131.797
+        },
+        {
+          "refno": "24381_14125",
+          "noun": "PANE",
+          "distance": 59461.082
+        },
+        {
+          "refno": "24381_6724",
+          "noun": "PANE",
+          "distance": 59578.426
+        },
+        {
+          "refno": "24381_6742",
+          "noun": "PANE",
+          "distance": 59621.574
+        },
+        {
+          "refno": "24381_14119",
+          "noun": "PANE",
+          "distance": 59918.55
+        }
+      ]
+    },
+    {
+      "noun": "PANE",
+      "count": 46,
+      "min_distance": 52795.285,
+      "elements": [
+        {
+          "refno": "24381_7314",
+          "noun": "PANE",
+          "distance": 52795.285
+        },
+        {
+          "refno": "24381_7320",
+          "noun": "PANE",
+          "distance": 53845.445
+        },
+        {
+          "refno": "24381_9457",
+          "noun": "PANE",
+          "distance": 54141.86
+        },
+        {
+          "refno": "24381_14365",
+          "noun": "PANE",
+          "distance": 54370.82
+        },
+        {
+          "refno": "24381_9471",
+          "noun": "PANE",
+          "distance": 54383.992
+        },
+        {
+          "refno": "24381_9485",
+          "noun": "PANE",
+          "distance": 54632.78
+        },
+        {
+          "refno": "24381_14359",
+          "noun": "PANE",
+          "distance": 55010.57
+        },
+        {
+          "refno": "24381_7326",
+          "noun": "PANE",
+          "distance": 55039.277
+        },
+        {
+          "refno": "24381_14371",
+          "noun": "PANE",
+          "distance": 55578.91
+        },
+        {
+          "refno": "24381_9415",
+          "noun": "PANE",
+          "distance": 55891.402
+        },
+        {
+          "refno": "24381_7332",
+          "noun": "PANE",
+          "distance": 56000.78
+        },
+        {
+          "refno": "24381_9429",
+          "noun": "PANE",
+          "distance": 56177.5
+        },
+        {
+          "refno": "24381_6906",
+          "noun": "PANE",
+          "distance": 56456.117
+        },
+        {
+          "refno": "24381_9443",
+          "noun": "PANE",
+          "distance": 56469.63
+        },
+        {
+          "refno": "24381_6864",
+          "noun": "PANE",
+          "distance": 56533.6
+        },
+        {
+          "refno": "24381_6966",
+          "noun": "PANE",
+          "distance": 56641.168
+        },
+        {
+          "refno": "24381_6954",
+          "noun": "PANE",
+          "distance": 56685.668
+        },
+        {
+          "refno": "24381_7338",
+          "noun": "PANE",
+          "distance": 57034.004
+        },
+        {
+          "refno": "24381_6972",
+          "noun": "PANE",
+          "distance": 57219.977
+        },
+        {
+          "refno": "24381_6960",
+          "noun": "PANE",
+          "distance": 57560.41
+        },
+        {
+          "refno": "24381_6978",
+          "noun": "PANE",
+          "distance": 57691.785
+        },
+        {
+          "refno": "24381_7344",
+          "noun": "PANE",
+          "distance": 58501.86
+        },
+        {
+          "refno": "24381_7350",
+          "noun": "PANE",
+          "distance": 59113.902
+        },
+        {
+          "refno": "24381_9387",
+          "noun": "PANE",
+          "distance": 59301.97
+        },
+        {
+          "refno": "24381_9401",
+          "noun": "PANE",
+          "distance": 59729.266
+        },
+        {
+          "refno": "24381_7176",
+          "noun": "PANE",
+          "distance": 59955.715
+        },
+        {
+          "refno": "24381_7140",
+          "noun": "PANE",
+          "distance": 60236.055
+        },
+        {
+          "refno": "24381_7146",
+          "noun": "PANE",
+          "distance": 61773.383
+        },
+        {
+          "refno": "24381_14335",
+          "noun": "PANE",
+          "distance": 61797.5
+        },
+        {
+          "refno": "24381_7152",
+          "noun": "PANE",
+          "distance": 62354.746
+        },
+        {
+          "refno": "24381_14323",
+          "noun": "PANE",
+          "distance": 62451.293
+        },
+        {
+          "refno": "24381_14329",
+          "noun": "PANE",
+          "distance": 62991.49
+        },
+        {
+          "refno": "24381_7182",
+          "noun": "PANE",
+          "distance": 63245.973
+        },
+        {
+          "refno": "24381_14353",
+          "noun": "PANE",
+          "distance": 65130.1
+        },
+        {
+          "refno": "24381_14341",
+          "noun": "PANE",
+          "distance": 65746.766
+        },
+        {
+          "refno": "24381_10481",
+          "noun": "PANE",
+          "distance": 66298.62
+        },
+        {
+          "refno": "24381_10607",
+          "noun": "PANE",
+          "distance": 66509.61
+        },
+        {
+          "refno": "24381_10593",
+          "noun": "PANE",
+          "distance": 67045.375
+        },
+        {
+          "refno": "24381_14347",
+          "noun": "PANE",
+          "distance": 67198.99
+        },
+        {
+          "refno": "24381_10495",
+          "noun": "PANE",
+          "distance": 67359.86
+        },
+        {
+          "refno": "24381_10509",
+          "noun": "PANE",
+          "distance": 68443.96
+        },
+        {
+          "refno": "24381_10523",
+          "noun": "PANE",
+          "distance": 69539.34
+        },
+        {
+          "refno": "24381_10579",
+          "noun": "PANE",
+          "distance": 70478.99
+        },
+        {
+          "refno": "24381_10537",
+          "noun": "PANE",
+          "distance": 70645.49
+        },
+        {
+          "refno": "24381_10565",
+          "noun": "PANE",
+          "distance": 70995.27
+        },
+        {
+          "refno": "24381_10551",
+          "noun": "PANE",
+          "distance": 71513.73
+        }
+      ]
+    }
+  ]
+}

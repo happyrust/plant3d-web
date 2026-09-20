@@ -1,0 +1,58 @@
+{
+  "no_rooms": {
+    "status": 400,
+    "body": {
+      "code": "bad_request",
+      "message": "nearby/tree 需要 rooms=（房间层级树以所选房间为根；不按房间过滤请用 nearby）",
+      "detail": null
+    }
+  },
+  "unknown_room": {
+    "status": 400,
+    "body": {
+      "code": "bad_request",
+      "message": "rooms 里的 1/1 不是在册房间（名字不含房间关键词或房间号不合规），可先 GET /api/v1/spatial/rooms 看清单",
+      "detail": null
+    }
+  },
+  "bad_path": {
+    "status": 400,
+    "body": {
+      "code": "bad_request",
+      "message": "房间 refno 格式非法（应为 a_b）: abc",
+      "detail": null
+    }
+  },
+  "xyz": {
+    "status": 400,
+    "body": {
+      "code": "bad_request",
+      "message": "rooms/{refno}/tree 以房间自身为范围，不接受 refno / x,y,z",
+      "detail": null
+    }
+  },
+  "unknown_room_path": {
+    "status": 400,
+    "body": {
+      "code": "bad_request",
+      "message": "rooms 里的 1/1 不是在册房间（名字不含房间关键词或房间号不合规），可先 GET /api/v1/spatial/rooms 看清单",
+      "detail": null
+    }
+  },
+  "bad_unit": {
+    "status": 400,
+    "body": {
+      "code": "bad_request",
+      "message": "unit 格式非法（应为单元 refno，a/b 或 a_b）: zzz",
+      "detail": null
+    }
+  },
+  "both_selectors": {
+    "status": 400,
+    "body": {
+      "code": "bad_request",
+      "message": "unit 与 other_noun 二选一，不能同时给",
+      "detail": null
+    }
+  }
+}

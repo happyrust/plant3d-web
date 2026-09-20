@@ -1,0 +1,55 @@
+{
+  "gen_model": "http://127.0.0.1:8027",
+  "room": "24381_35580",
+  "room_num": "R432",
+  "steps": [
+    {
+      "step": "tree",
+      "server_total": 1055,
+      "summary_total": 1055,
+      "room_count": 1055,
+      "spec_counts": [
+        4,
+        1051
+      ],
+      "unit_types": [
+        "BRAN",
+        "EQUI"
+      ],
+      "others_blocks": 1,
+      "leaves_inline": true,
+      "leaf_count": 1055
+    },
+    {
+      "step": "unit-expanded",
+      "unit": "24381_148125",
+      "unit_count": 11,
+      "leaves": 11
+    },
+    {
+      "step": "two-rooms",
+      "server_total": 1056,
+      "summary_total": 1056,
+      "room_counts": [
+        "661",
+        "1055"
+      ],
+      "shared_badges_visible": 11
+    },
+    {
+      "step": "room-cleared",
+      "total": 1302
+    }
+  ],
+  "tree_calls": [
+    {
+      "status": 200,
+      "url": "/api/v1/spatial/nearby/tree?x=-6379.5703&y=-11350.16&z=5030&radius=3000&shape=sphere&include_negative=false&rooms=24381%2F35580"
+    },
+    {
+      "status": 200,
+      "url": "/api/v1/spatial/nearby/tree?x=-6379.5703&y=-11350.16&z=5030&radius=3000&shape=sphere&include_negative=false&rooms=24381%2F35580%2C24381%2F1407"
+    }
+  ],
+  "page_errors": []
+}

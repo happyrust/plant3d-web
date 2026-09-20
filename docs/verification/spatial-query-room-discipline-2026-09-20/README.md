@@ -115,3 +115,4 @@ $stamp = Get-Date -Format yyyyMMdd-HHmmss
 | `http/17-repro-tree-settle-1617.jsonl` `-summary.json` | 16:17 WMI 重启 + 整库 ensure + 176 次采样（点中心）：点中心稳定 1302、探针墙全程 5587.56（排查中间步，只证点中心稳） |
 | `http/18-query-shape-refno-vs-point.json` | 16:38 决定性对拍：当前树上 refno 中心 3934/3940、点中心 1302，`24381_4102` 两种中心下 0 vs 5587.56——发现 A 定案：查询中心不同，非树异常 |
 | `ui/ui-01`–`ui-08-*.png` `ui/ui-room-filter-flow-summary.json` | 真 UI 完整流八张截图与数字 |
+| `ui/ui-09`–`ui-11-*.png` `ui/ui-same-screen-summary.json` | 16:07 按用户要求补的**同屏**截图（视口 1440×1700，抽屉 1394 px 三块不滚动）：`ui-09` 房间块 chip `R432` + 专业 chips `仪表(1051) / 其他(8)` + 结果分组「按专业 \| 按库」同屏、`ui-09b` 只裁抽屉、`ui-10` 切「按库」（组标题「库 7997」）、`ui-11` 再点「仪表」重查（共 1051；重查后抽屉回顶部，切换按钮在折线下）；各块 bounding box 在 summary 里 |

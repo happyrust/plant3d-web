@@ -1,0 +1,152 @@
+{
+  "gen_model": "http://127.0.0.1:8027",
+  "room": "24381_35580",
+  "room_num": "R432",
+  "radius_m": 3,
+  "viewport": {
+    "width": 1440,
+    "height": 1700
+  },
+  "steps": [
+    {
+      "step": "same-screen-by-spec",
+      "params": {
+        "x": "-6379.5703",
+        "y": "-11350.16",
+        "z": "5030",
+        "radius": "3000",
+        "shape": "sphere",
+        "sort": "spec_distance",
+        "include_negative": "false",
+        "rooms": "24381/35580",
+        "page": "1",
+        "per_page": "100"
+      },
+      "total_count": 1059,
+      "summary": {
+        "total": 1059,
+        "currentPage": 100,
+        "loaded": 0,
+        "unloaded": 96
+      },
+      "room_chip": "R432 · /1RX-RM04-R432",
+      "spec_chips": [
+        "仪表(1051)",
+        "其他(8)"
+      ],
+      "group_titles": [
+        "未知或其他",
+        "仪表系统"
+      ],
+      "boxes": {
+        "drawer": {
+          "x": 698,
+          "y": 112,
+          "width": 336,
+          "height": 1394
+        },
+        "room_filter": {
+          "x": 722,
+          "y": 261,
+          "width": 288,
+          "height": 116
+        },
+        "spec_filter": {
+          "x": 722,
+          "y": 387,
+          "width": 288,
+          "height": 66
+        },
+        "group_dimension": {
+          "x": 712,
+          "y": 1173,
+          "width": 308,
+          "height": 39.5
+        }
+      }
+    },
+    {
+      "step": "same-screen-by-dbnum",
+      "group_titles": [
+        "库 7997"
+      ],
+      "boxes": {
+        "drawer": {
+          "x": 698,
+          "y": 112,
+          "width": 336,
+          "height": 1394
+        },
+        "room_filter": {
+          "x": 722,
+          "y": 261,
+          "width": 288,
+          "height": 116
+        },
+        "spec_filter": {
+          "x": 722,
+          "y": 387,
+          "width": 288,
+          "height": 66
+        },
+        "group_dimension": {
+          "x": 712,
+          "y": 1173,
+          "width": 308,
+          "height": 39.5
+        }
+      }
+    },
+    {
+      "step": "same-screen-room-plus-spec",
+      "spec_value": 3,
+      "params": {
+        "x": "-6379.5703",
+        "y": "-11350.16",
+        "z": "5030",
+        "radius": "3000",
+        "shape": "sphere",
+        "sort": "spec_distance",
+        "include_negative": "false",
+        "rooms": "24381/35580",
+        "spec_values": "3",
+        "page": "1",
+        "per_page": "100"
+      },
+      "total_count": 1051,
+      "summary": {
+        "total": 1051,
+        "currentPage": 100,
+        "loaded": 0,
+        "unloaded": 100
+      },
+      "boxes": {
+        "drawer": {
+          "x": 698,
+          "y": 172,
+          "width": 336,
+          "height": 1394
+        },
+        "room_filter": {
+          "x": 722,
+          "y": 957,
+          "width": 288,
+          "height": 116
+        },
+        "spec_filter": {
+          "x": 722,
+          "y": 1083,
+          "width": 288,
+          "height": 66
+        },
+        "group_dimension": {
+          "x": 712,
+          "y": 1869,
+          "width": 308,
+          "height": 39.5
+        }
+      }
+    }
+  ],
+  "page_errors": []
+}

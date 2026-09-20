@@ -1,0 +1,143 @@
+{
+  "gen_model": "http://127.0.0.1:8027",
+  "room": "R432",
+  "server_total": 1055,
+  "server_rooms": [
+    {
+      "room_num": "R432",
+      "name": "/1RX-RM04-R432",
+      "count": 1055
+    }
+  ],
+  "metrics": {
+    "panel_width": 308,
+    "rows": [
+      {
+        "text": "R432 加载 仅显示 隔离 1055",
+        "title": "R432 · /1RX-RM04-R432 · 24381_35580 · 1055 个构件",
+        "truncated": false,
+        "count": "1055",
+        "gap_right_of_count_px": 12,
+        "actions_visibility": "hidden",
+        "actions_position": "absolute"
+      },
+      {
+        "text": "未知或其他 加载 仅显示 隔离 4",
+        "title": "未知或其他 · 专业 0",
+        "truncated": false,
+        "count": "4",
+        "gap_right_of_count_px": 12,
+        "actions_visibility": "hidden",
+        "actions_position": "absolute"
+      },
+      {
+        "text": "其他构件 加载 仅显示 隔离 4",
+        "title": "其他构件 · 不属任何最小交付单元的构件，按 noun 分 · 4 个",
+        "truncated": false,
+        "count": "4",
+        "gap_right_of_count_px": 12,
+        "actions_visibility": "hidden",
+        "actions_position": "absolute"
+      },
+      {
+        "text": "仪表系统 加载 仅显示 隔离 1051",
+        "title": "仪表系统 · 专业 3",
+        "truncated": false,
+        "count": "1051",
+        "gap_right_of_count_px": 12,
+        "actions_visibility": "hidden",
+        "actions_position": "absolute"
+      },
+      {
+        "text": "BRAN17 个单元 加载 仅显示 隔离 116",
+        "title": "BRAN · 17 个单元 · 116 个构件",
+        "truncated": false,
+        "count": "116",
+        "gap_right_of_count_px": 12,
+        "actions_visibility": "hidden",
+        "actions_position": "absolute"
+      },
+      {
+        "text": "/Copy-of-1RCS0307-1R900040.21 m 加载 仅显示 隔离 11",
+        "title": "/Copy-of-1RCS0307-1R90004 · BRAN 24381_148125 · 最近 0.21 m · 11 个构件",
+        "truncated": false,
+        "count": "11",
+        "gap_right_of_count_px": 12,
+        "actions_visibility": "hidden",
+        "actions_position": "absolute"
+      },
+      {
+        "text": "/Copy-of-1RCS0637-1R900081.24 m 加载 仅显示 隔离 9",
+        "title": "/Copy-of-1RCS0637-1R90008 · BRAN 24381_148197 · 最近 1.24 m · 9 个构件",
+        "truncated": false,
+        "count": "9",
+        "gap_right_of_count_px": 12,
+        "actions_visibility": "hidden",
+        "actions_position": "absolute"
+      },
+      {
+        "text": "/Copy-(2)-of-1RCS803MP-YK/883VP1.42 m 加载 仅显示 隔离 7",
+        "title": "/Copy-(2)-of-1RCS803MP-YK/883VP · BRAN 24381_105498 · 最近 1.42 m · 7 个构件",
+        "truncated": true,
+        "count": "7",
+        "gap_right_of_count_px": 12,
+        "actions_visibility": "hidden",
+        "actions_position": "absolute"
+      },
+      {
+        "text": "/Copy-of-1RCS0881-1R900111.43 m 加载 仅显示 隔离 8",
+        "title": "/Copy-of-1RCS0881-1R90011 · BRAN 24381_148235 · 最近 1.43 m · 8 个构件",
+        "truncated": false,
+        "count": "8",
+        "gap_right_of_count_px": 12,
+        "actions_visibility": "hidden",
+        "actions_position": "absolute"
+      },
+      {
+        "text": "/Copy-of-1RCS0884-1R900371.44 m 加载 仅显示 隔离 9",
+        "title": "/Copy-of-1RCS0884-1R90037 · BRAN 24381_148256 · 最近 1.44 m · 9 个构件",
+        "truncated": false,
+        "count": "9",
+        "gap_right_of_count_px": 12,
+        "actions_visibility": "hidden",
+        "actions_position": "absolute"
+      },
+      {
+        "text": "/Copy-(2)-of-1RCS801MP/802MP-YK/881VP1.47 m 加载 仅显示 隔离 7",
+        "title": "/Copy-(2)-of-1RCS801MP/802MP-YK/881VP · BRAN 24381_105402 · 最近 1.47 m · 7 个构件",
+        "truncated": true,
+        "count": "7",
+        "gap_right_of_count_px": 12,
+        "actions_visibility": "hidden",
+        "actions_position": "absolute"
+      },
+      {
+        "text": "/Copy-(2)-of-1TFM063MN-TUBE/973VL1.55 m 加载 仅显示 隔离 13",
+        "title": "/Copy-(2)-of-1TFM063MN-TUBE/973VL · BRAN 24381_105935 · 最近 1.55 m · 13 个构件",
+        "truncated": true,
+        "count": "13",
+        "gap_right_of_count_px": 12,
+        "actions_visibility": "hidden",
+        "actions_position": "absolute"
+      }
+    ],
+    "leaves": [
+      {
+        "text": "24381_148127BEND0.21 m",
+        "title": "24381_148127 · BEND · 0.21 m · 未加载",
+        "refno_truncated": false
+      },
+      {
+        "text": "24381_148126WELD0.75 m",
+        "title": "24381_148126 · WELD · 0.75 m · 未加载",
+        "refno_truncated": false
+      },
+      {
+        "text": "24381_148128BEND1.21 m",
+        "title": "24381_148128 · BEND · 1.21 m · 未加载",
+        "refno_truncated": false
+      }
+    ]
+  },
+  "page_errors": []
+}

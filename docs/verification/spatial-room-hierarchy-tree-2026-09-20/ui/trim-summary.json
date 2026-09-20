@@ -1,0 +1,75 @@
+{
+  "gen_model": "http://127.0.0.1:8027",
+  "viewport": "1440x1500",
+  "steps": [
+    {
+      "step": "flat",
+      "server_total": 1302,
+      "summary": {
+        "total": 1302,
+        "currentPage": 100,
+        "loaded": 0,
+        "unloaded": 68
+      },
+      "action_labels": [
+        "加载未加载（本页）",
+        "全部显示",
+        "全部隐藏",
+        "隔离结果",
+        "恢复场景",
+        "复制 Refno",
+        "清空"
+      ],
+      "rows_on_page": 68,
+      "first_row_title": "24381_1409 · PANE · 0 m · 未加载",
+      "coverage_text": "只含已生成过模型的构件",
+      "coverage_title": "结果只含已生成过模型的构件（空间索引只收已生成的包围盒）；从未显示过的构件不在其中，先显示它们再查会被纳入。",
+      "center_text": "· 中心 -6380, -11350, 5030 · position",
+      "actions_box": {
+        "x": 724,
+        "y": 858,
+        "width": 284,
+        "height": 36
+      },
+      "drawer_box": {
+        "x": 698,
+        "y": 172,
+        "width": 336,
+        "height": 1230
+      }
+    },
+    {
+      "step": "copy-menu",
+      "options": [
+        "本页 68",
+        "全部命中 1227"
+      ]
+    },
+    {
+      "step": "tree",
+      "server_total": 1055,
+      "room_count": 1055,
+      "summary_text": "共 1055 项（去重）· 1 间房，已加载 0 项，未加载 1055 项",
+      "action_labels": [
+        "加载未加载（整棵树）",
+        "全部显示",
+        "全部隐藏",
+        "隔离结果",
+        "恢复场景",
+        "复制 Refno",
+        "清空"
+      ],
+      "room_rows_block_present": 0,
+      "pagination_present": 0,
+      "group_toggle_present": 0
+    },
+    {
+      "step": "tree-copy-menu",
+      "options": [
+        "全部（去重） 1055"
+      ]
+    }
+  ],
+  "page_errors": [],
+  "error_banner_count": 0
+}

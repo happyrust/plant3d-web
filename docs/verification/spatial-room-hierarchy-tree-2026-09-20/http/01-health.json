@@ -1,0 +1,33 @@
+{
+  "status": 200,
+  "elapsed_ms": 107,
+  "build_id": "0.1.28+g65dacd576ebd.1789896841",
+  "started_at": "2026-09-20T17:37:01.872431200+08:00",
+  "room_membership": true,
+  "delivery_unit_types": [
+    "BRAN",
+    "HANG",
+    "SUPPO",
+    "EQUI"
+  ],
+  "spatial_tree": {
+    "state": "ready",
+    "ready": true,
+    "startup_verdict": "reused",
+    "format_version": 4,
+    "entries": 61807,
+    "usable_pointer_rows": null,
+    "invalid_pointer_rows": null,
+    "file_epoch": 0,
+    "db_epoch": 43,
+    "drift": true,
+    "snapshot_watermarks": {},
+    "db_watermarks": {},
+    "snapshot_sha256": "82868717e3e4bca7be1b03f6170ab3b4ec47831f357a7ade6022238a234b6567",
+    "last_verified_at": 1789897021,
+    "last_rebuild_attempts": 0,
+    "last_error": null
+  },
+  "resident_records": 52386,
+  "resident_roots": 6772
+}

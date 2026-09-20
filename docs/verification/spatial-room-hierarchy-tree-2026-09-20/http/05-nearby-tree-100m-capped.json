@@ -1,0 +1,39 @@
+{
+  "status": 200,
+  "elapsed_ms": 5875,
+  "total_count": 1298,
+  "leaf_count": 1298,
+  "leaf_cap": 5000,
+  "leaves_inline": true,
+  "rooms": [
+    {
+      "room_num": "R432",
+      "count": 1298,
+      "specs": [
+        {
+          "spec_value": 0,
+          "count": 5,
+          "unit_types": [],
+          "others": 5
+        },
+        {
+          "spec_value": 3,
+          "count": 1293,
+          "unit_types": [
+            {
+              "noun": "BRAN",
+              "count": 226,
+              "units": 28
+            },
+            {
+              "noun": "EQUI",
+              "count": 1067,
+              "units": 45
+            }
+          ],
+          "others": 0
+        }
+      ]
+    }
+  ]
+}
