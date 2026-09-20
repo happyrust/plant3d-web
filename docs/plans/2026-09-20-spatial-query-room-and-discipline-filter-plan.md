@@ -6,8 +6,10 @@
 > 前端基线 `plant3d-web@715b8f2e`（工作树里 `genModelV1Api.ts` / `ports.ts` / `legacy/index.ts` 有已收尾会话的未提交改动，本计划只改不重叠区域、提交时 `git add -p` 只收自己的 hunk）；
 > 后端基线 `gen-model-model-cache@b64262136`（`codex/model-projection-cache`，`:8022` 二进制的来源；用户 Q8 拍板落这条线）。
 >
-> 状态：**PR-A / B / C / D 四个 PR 已提交（2026-09-20 09:47–11:00），真机验证待做**——等用户指定验证库并起一台
-> `room_membership=true` 的实例（§6；此刻 `:8022` / `:3100` 都没在听，PR-A 的 release 二进制也还没构建）。各 PR 完成备注见 §5。
+> 状态：**PR-A / B / C / D 四个 PR + 复审修正已提交（2026-09-20 09:47–11:40），真机已验（13:15–13:37，复验 15:49–15:58）**——
+> 验证库 AMS 7997、并排实例 `:8027`（`gen-model-model-cache@805170bd4` release、mem 档、`room_membership=true`）：HTTP 金样 50 项 + 复验 39 项全过、
+> 真 UI 完整流八张截图、e2e `spatial-query-gen-model-v1-ui.spec.ts` 首次真机 9 passed / 1 skipped。记录
+> `docs/verification/spatial-query-room-discipline-2026-09-20/README.md`，摘要见 §6；各 PR 完成备注见 §5。
 
 ## 0. 一句话
 
@@ -218,8 +220,9 @@ spec_value_rules = [
    `versionSource.test.ts`，属在飞的版本对比改动，不在本 PR）。房间过滤 / 分组切换 / 房间列表全部只经 store（`roomsOf` / `roomAttributes`），
    抽屉不再 import `resolveContainingRoomInfo` / `pdmsGetUiAttr`。
 4. **PR-D（docs）**：教程 `SPATIAL_QUERY_TUTORIAL.md` §5 / §6 / §9；本计划状态与完成备注；真机验证记录（§6）。
-   **完成（除真机记录）**：教程 §5 过滤表加「房间过滤」行、专业行改口径，§6 分组切换，§9 差别表 六处 → 七处 + 房间列表改接；`CONTEXT.md`「空间查询」
-   三词条；ADR 0067；本计划。真机验证记录待实例起来后补进 §6。
+   **完成**：教程 §5 过滤表加「房间过滤」行、专业行改口径，§6 分组切换，§9 差别表 六处 → 七处 + 房间列表改接；`CONTEXT.md`「空间查询」
+   三词条；ADR 0067；本计划。真机验证记录 `docs/verification/spatial-query-room-discipline-2026-09-20/`（README + 22 份 JSON + 8 张截图）与本计划 §6 第 6 条，
+   随 e2e 口径翻转一起提交。
 5. **复审修正（2026-09-20 11:00–11:40，fable-5-1-61 对四个 PR 实读后）**：
    - 后端 `gen-model-model-cache@805170bd4`：(1) `nearby` / `nearby_refnos` 的后半程（过滤 / 派生专业 / 排序 / 切页 / 补 name）挪进
      `spawn_blocking`——`filter_candidates` 现在要对每个候选调 `spec_value_of`（回记录读 OWNER，首个大半径查询可达 `CANDIDATE_CAP` 200k 次同步读），
@@ -233,12 +236,12 @@ spec_value_rules = [
 
 ## 6. 验收 / 联调步骤（命令在你自己的终端跑；服务是长驻进程，本会话不代跑）
 
-> 2026-09-20 11:00 状态：四个 PR 已提交，本节一步都还没跑。前提缺两样：(1) **PR-A 的 release 二进制**——`D:\Rust\target` 里此刻没有
-> `aios-database` 的产物、也没有 `aios_database-*` 的依赖缓存，`_runs\*\aios-database-*.exe` 全是 09-18 之前的，要按第 2 步冷构建一次
-> （用独立 `CARGO_TARGET_DIR`，别与共享目录里在飞的构建互相判陈旧）；(2) **验证库**——用户待指定。候选：AMS 设计库 **7997**
-> （`_runs\*\DbOption.toml` 注释：房间名形如 `/1RX-RM03-R301`、末段过 `^[A-Z]\d{3}$`，09-08 起有在册面板逾百块）。
-> 端口建议 `:8027`（8022–8026 / 8031–8033 已被别的运行目录占名），运行目录 `_runs\spatial-rooms-8027`，配置从 `surface-clearance-8024\DbOption.toml`
-> 复制、只改 `http_api_addr` 与 `room_membership = true`。
+> 2026-09-20 11:00 状态：四个 PR 已提交，本节一步都还没跑。前提缺两样：(1) **PR-A 的 release 二进制**——要按第 2 步冷构建一次
+> （用独立 `CARGO_TARGET_DIR`，别与共享目录里在飞的构建互相判陈旧）；(2) **验证库**——用户待指定。候选：AMS 设计库 **7997**。
+> 端口建议 `:8027`，运行目录 `_runs\spatial-rooms-8027`，配置从 `surface-clearance-8024\DbOption.toml` 复制、只改 `http_api_addr` 与 `room_membership = true`。
+>
+> **2026-09-20 11:51 用户拍板 AMS 7997 → 13:15 `:8027` 起来（用户按 `805170bd4` 构建）→ 13:15–13:37 第 1–5 步全部跑完，15:49–15:58 复验；结果见第 6 条，
+> 全文与证据 `docs/verification/spatial-query-room-discipline-2026-09-20/`。**
 
 1. 后端单测：`cd D:\work\plant-code\old\gen-model-model-cache && cargo test --lib -- spatial && cargo clippy --lib --tests`。
 2. 干净 worktree 构建（不带别人在途改动）：`git worktree add --detach .scratch\wt-spatial-rooms <sha> && cd .scratch\wt-spatial-rooms && cargo build --release --features http_api --bin aios-database`。
@@ -253,14 +256,32 @@ spec_value_rules = [
 5. 前端：`npx vitest run src/composables/useSpatialQuery.test.ts src/model-source src/api/genModelV1Api.test.ts src/api/genModelSpatialApi.test.ts src/components/spatial-query src/types`；
    `npm run lint`；`npm run type-check`；`?model_source=gen-model-v1&gm_backend_port=80xx` 下抽屉：房间块出现、选房间后「共 N 项」变小、专业 chips 出现、
    「按专业 | 按库」切换、房间列表可解析；`?model_source=legacy` 下房间块收起、其余同改前。
+6. **真机结果（2026-09-20，`:8027` = `805170bd4` release / mem 档 / `room_membership=true` / AMS 7997 整库 ensure 6772 根 90 s）**：
+   - 第 4 步 HTTP（`http/00-summary.json` 50 项全过；15:55 复验 `http/16-recheck-1555.json` 39 项全过）：`/spatial/rooms` `ready` 215 间；以 `R432 = 24381_35580`
+     盒中心 r = 3 m——13:17 基线 3934 / `rooms=` **1303**（`matched 1298 / unresolved 0 / source memory / library_alignment_current null`），
+     15:55 同参 1302 / **1059**（`matched 1055`；差异是空间树自己在 13:17–13:32 间变了盒，见 README §6 A，两组数各自满足全部恒等式）；
+     `spec_groups` / `groups` / `filter_options.spec_values` 三处和都 = `total_count`；`spec_values=3` = `spec_groups[3]`、facet 不收窄；
+     `sort=spec_distance` 两页并起来 = 全集、跨页专业序成立、大小写不敏感；`refnos` 数 = `total_count`、`by_spec_value` 桶和 = 总数；
+     `rooms=1_1` / `abc` / `spec_values=x` / `sort=bogus` 四条 400、`rooms=` 空串 = 不给；`e3d.room.lookup` 交叉核对：答得出的 11 条命中样本全在 R432、9 条滤掉样本全不在。
+     **未验**：`422 rooms_unavailable`（要一台 `room_membership=false` 的新二进制实例）、落盘形态（`room_relate` / `library_alignment_current`）。
+   - 第 5 步前端：真 UI 完整流（`ui/`，八张截图）1302 → 选 R432 → **1059** → 专业 chip「仪表(1051)」→ 1051 → 清房间 → 1302，「按专业 | 按库」组标题
+     「未知或其他 / 仪表系统」↔「库 7997」，房间列表 7 间含 R432（92 项），legacy 下房间块不画，`pageerror` 0；
+     e2e `spatial-query-gen-model-v1-ui.spec.ts` 首次真机 **9 passed / 1 skipped**（口径按 ADR 0067 翻过来 + 三处真机修正，见 README §5）；
+     `eslint` 0；`type-check` 基线外仍只有别的会话那条。
+   - 计时：首个 100 m（61 807 候选、冷记忆）**1096 ms** → 热 247 ms；3 m `+rooms=` 228–466 ms；100 m `+rooms=` **3.4–4.9 s**（读透现算 61 801 候选）。
 
 ## 7. 风险与开放问题
 
 - **首个大半径查询的专业派生成本**：5 万候选 ≈ 5 万次记录读（同 `name_of` 代价），之后靠记忆；若真机 > 1 s，退到按库预算一张 refno → 专业表（一次全库遍历）。
   2026-09-20 复审后这一段已在 `spawn_blocking` 里跑、记忆锁不罩记录读（§5 第 5 条）——慢也只慢这一条请求，不再拖住别的请求。
+  **真机（§6 第 6 条）：61 807 候选冷记忆 1096 ms、热 247 ms——正卡在 1 s 线上，只此一发；要不要上「按库预算专业表」那条退路，待用户定。**
 - **读透形态判不出归属的候选**：树从快照恢复而投影为空（进程重启后没再 ensure 的根）→ `unresolved`，从结果剔除并 warning；要它们进来先显示一次（ensure）。
+  真机整库 ensure 后 12 间试探房 + 两轮金样 `unresolved` 全为 0。
 - **读透形态现算成本**：`MemoryRoomCalculator` 对每条候选记录做面板 AABB 预筛 + 跨面板者顶点点检查（读 `.mesh`）；房间级半径下候选百到千级，预期几十 ms；
-  100 m 级要量。
+  100 m 级要量。**真机：3 m（1302–3940 候选）228–466 ms；100 m（61 801 候选）3.4–4.9 s。**
+- **空间树在整库发布后的头两分钟盒不是最终的盒**（真机顺手发现，README §6 A）：同心同半径 `candidate_count` 3940 → 1302，墙 / 板类条目 13:17 回 `distance 0`、
+  15:5x 回真实距离，中间没有任何重建日志。与本计划的过滤无关（两种状态下恒等式都成立），记给空间树那条线。
+- **树里同一 refno 多条条目**（README §6 B）：`total_count` 按条目、`room_status.matched` 按 refno；前端 store 按 refno 合并，抽屉「共 N 项」是服务端条目数。
 - **房间号撞车**：线上只收 refno；手输房间号同号多间全选并提示，用户可再删。
 - **`room_membership=false` 的部署**：房间块整块收起，抽屉一句话写明；专业维度不受影响。
 - **spec 5 / 6 在 legacy**：legacy 服务端早就会派生 5 / 6，前端补枚举后 legacy 源同样显示「土建 / 结构」。

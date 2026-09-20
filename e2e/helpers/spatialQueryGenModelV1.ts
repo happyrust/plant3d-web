@@ -94,10 +94,34 @@ export type SpatialUiPage = {
  * 打开页面（gen-model-v1 源 + 夹具 BRAN），等场景与查看器就绪，再经 `openSpatialQuery` 事件把抽屉打开。
  * Vite HMR 的 websocket 不接到服务端：并行会话改 plant3d-web 时整页刷新会把查看器和抽屉一起拆掉（§7 22:32 的教训）。
  */
+/**
+ * 浏览器侧：把 `/src/x.ts` 解成页面实际加载的那个模块 URL。Vite dev 对 HMR 更新过的模块在 URL 上挂 `?t=<stamp>`，
+ * 此后每次整页加载都用带戳的 URL；测试里裸 `import('/src/x.ts')` 会另起一份模块实例，模块级单例（`useSpatialQuery` /
+ * `useViewerContext` / `useSelectionStore`）就不再是页面那一份——store 在 setup 之外重建还会撞上 vue-query 的注入上下文报错
+ * （2026-09-20 在跑了一天的 dev :3111 上真机撞到）。没在资源表里（从没更新过）就还用裸路径。
+ */
+type AppModuleWindow = Window & { __appModuleUrl?: (path: string) => string };
+
+async function installAppModuleResolver(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    (window as AppModuleWindow).__appModuleUrl = (path: string) => {
+      const hit = performance.getEntriesByType('resource').map((entry) => entry.name).find((name) => {
+        try {
+          return new URL(name).pathname === path;
+        } catch {
+          return false;
+        }
+      });
+      return hit ?? path;
+    };
+  });
+}
+
 export async function openSpatialUiPage(page: Page, options: SpatialUiPageOptions = {}): Promise<SpatialUiPage> {
   const withModel = options.withModel ?? true;
   const pageErrors: string[] = [];
   page.on('pageerror', (error) => pageErrors.push(error.message));
+  await installAppModuleResolver(page);
 
   const devHost = new URL(test.info().project.use.baseURL ?? 'http://127.0.0.1:3101').host;
   await page.routeWebSocket((url) => url.host === devHost, () => {
@@ -134,8 +158,8 @@ export async function openSpatialUiPage(page: Page, options: SpatialUiPageOption
 export async function waitForModelLoaded(page: Page, dbnum: number = FIXTURE.dbnum): Promise<void> {
   await expect.poll(
     async () => page.evaluate(() =>
-      // @ts-expect-error -- browser-side Vite module is available in the live dev server.
-      import('/src/composables/useViewerContext.ts').then((mod) => {
+      // 页面实际加载的那份模块（见 installAppModuleResolver）；裸路径会另起一份 viewerRef 为空的实例
+      import((window as AppModuleWindow).__appModuleUrl?.('/src/composables/useViewerContext.ts') ?? '/src/composables/useViewerContext.ts').then((mod) => {
         const viewer = mod.useViewerContext().viewerRef.value as { __dtxLastLoadedDbno?: number } | null;
         return viewer?.__dtxLastLoadedDbno ?? null;
       }),
@@ -194,7 +218,7 @@ export async function fillCenter(
 }
 
 export type NearbyResponseBody = {
-  results?: { refno: string; noun: string; dbnum: number | null; name: string | null; distance: number }[];
+  results?: { refno: string; noun: string; dbnum: number | null; name: string | null; distance: number; spec_value?: number }[];
   center?: { x: number; y: number; z: number; source: string };
   total_count?: number;
   returned_count?: number;
@@ -238,8 +262,7 @@ export async function readNearby(response: Response): Promise<NearbyExchange> {
 /** 等 store 从「查询中」回到 ready / error（点按钮那一刻 status 已同步离开 ready，这里不会把上一轮的 ready 当成这一轮的）。 */
 export async function waitForSettled(page: Page): Promise<void> {
   await expect.poll(async () => page.evaluate(() =>
-    // @ts-expect-error -- browser-side Vite module is available in the live dev server.
-    import('/src/composables/useSpatialQuery.ts').then((mod) => mod.useSpatialQuery().status.value as string),
+    import((window as AppModuleWindow).__appModuleUrl?.('/src/composables/useSpatialQuery.ts') ?? '/src/composables/useSpatialQuery.ts').then((mod) => mod.useSpatialQuery().status.value as string),
   ), { timeout: 60_000, intervals: [100, 250, 500] }).toMatch(/^(ready|error|idle)$/);
 }
 
@@ -330,8 +353,7 @@ export async function sceneOverview(page: Page): Promise<{ loadedRefnos: string[
 /** 把某个 refno 设成全局选中（与查看器点选 / 模型树点选写的是同一个 store）。 */
 export async function selectRefno(page: Page, refno: string): Promise<void> {
   await page.evaluate((id) =>
-    // @ts-expect-error -- browser-side Vite module is available in the live dev server.
-    import('/src/composables/useSelectionStore.ts').then((mod) => {
+    import((window as AppModuleWindow).__appModuleUrl?.('/src/composables/useSelectionStore.ts') ?? '/src/composables/useSelectionStore.ts').then((mod) => {
       mod.setGlobalSelectedRefno(id);
     }), refno);
 }
@@ -343,6 +365,8 @@ export type StoreResultItem = {
   loaded: boolean;
   visible: boolean;
   distance: number | null;
+  /** 服务端派生的专业值（ADR 0067 起 v1 也有；本地独有项由 store 补 0） */
+  specValue: number;
 };
 
 export type StoreState = {
@@ -357,8 +381,7 @@ export type StoreState = {
 /** 抽屉 store 的几格状态（模块级单例，与页面里的抽屉同一份）。 */
 export async function readStoreState(page: Page): Promise<StoreState> {
   return page.evaluate(() =>
-    // @ts-expect-error -- browser-side Vite module is available in the live dev server.
-    import('/src/composables/useSpatialQuery.ts').then((mod) => {
+    import((window as AppModuleWindow).__appModuleUrl?.('/src/composables/useSpatialQuery.ts') ?? '/src/composables/useSpatialQuery.ts').then((mod) => {
       const store = mod.useSpatialQuery();
       const items = (store.resultSet.value?.items ?? []) as StoreResultItem[];
       return {
@@ -372,6 +395,7 @@ export async function readStoreState(page: Page): Promise<StoreState> {
           loaded: item.loaded,
           visible: item.visible,
           distance: item.distance,
+          specValue: typeof item.specValue === 'number' ? item.specValue : 0,
         })),
         total: store.resultSet.value?.total ?? null,
         fullMatchesCount: store.resultSet.value?.fullMatches?.refnos.length ?? null,
@@ -381,13 +405,14 @@ export async function readStoreState(page: Page): Promise<StoreState> {
 }
 
 /**
- * 结果区的行序 = 按库分组（dbnum 升序，没库号的归「库未知」排最前）、组内保持 store 顺序（服务端页序 + 末尾的本地独有项）。
+ * 结果区的行序 = 分组（缺省**按专业**：spec_value 升序、0「其他」排最前——ADR 0067 起 v1 源有专业维度、抽屉缺省按专业分组；
+ * 切到「按库」则 dbnum 升序、没库号的归「库未知」排最前）、组内保持 store 顺序（服务端页序 + 末尾的本地独有项）。
  * 用 store 的条目算出应有的 DOM 顺序，与 `resultRowRefnos` 对。
  */
-export function expectedRowOrder(items: StoreResultItem[]): string[] {
+export function expectedRowOrder(items: StoreResultItem[], dimension: 'spec' | 'dbnum' = 'spec'): string[] {
   const groups = new Map<number, string[]>();
   for (const item of items) {
-    const key = item.dbnum ?? -1;
+    const key = dimension === 'dbnum' ? (item.dbnum ?? -1) : item.specValue;
     const list = groups.get(key) ?? [];
     list.push(item.refno);
     groups.set(key, list);

@@ -1,0 +1,1523 @@
+{
+  "status": 200,
+  "elapsed_ms": 235,
+  "json": {
+    "status": "ready",
+    "definition_version": "72979202d292cb57761a3c7daec8c96f834587d574704ef12f9da8129f394211",
+    "rooms": [
+      {
+        "refno": "24381_5062",
+        "room_num": "L505",
+        "name": "/1LR-RM05-L505",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_5080",
+        "room_num": "L506",
+        "name": "/1LR-RM05-L506",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_5088",
+        "room_num": "L507",
+        "name": "/1LR-RM05-L507",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_5104",
+        "room_num": "L508",
+        "name": "/1LR-RM05-L508",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_5112",
+        "room_num": "L509",
+        "name": "/1LR-RM05-L509",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_5052",
+        "room_num": "L572",
+        "name": "/1LR-RM05-L572",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_5136",
+        "room_num": "L573",
+        "name": "/1LR-RM05-L573",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_5096",
+        "room_num": "L574",
+        "name": "/1LR-RM05-L574",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_5147",
+        "room_num": "L575",
+        "name": "/1LR-RM05-L575",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_5012",
+        "room_num": "L582",
+        "name": "/1LR-RM05-L582",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_5128",
+        "room_num": "L583",
+        "name": "/1LR-RM05-L583",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_5044",
+        "room_num": "L587",
+        "name": "/1LR-RM05-L587",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_5120",
+        "room_num": "L588",
+        "name": "/1LR-RM05-L588",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_5028",
+        "room_num": "L591",
+        "name": "/1LR-RM05-L591",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_5036",
+        "room_num": "L593",
+        "name": "/1LR-RM05-L593",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_5020",
+        "room_num": "L598",
+        "name": "/1LR-RM05-L598",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_36943",
+        "room_num": "R000",
+        "name": "/1RX-RM13-R000",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_1164",
+        "room_num": "R101",
+        "name": "/1RX-RM01-R101",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_1181",
+        "room_num": "R111",
+        "name": "/1RX-RM01-R111",
+        "dbnum": 7997,
+        "panel_count": 0
+      },
+      {
+        "refno": "24381_1184",
+        "room_num": "R112",
+        "name": "/1RX-RM01-R112",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_1202",
+        "room_num": "R113",
+        "name": "/1RX-RM01-R113",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_1219",
+        "room_num": "R114",
+        "name": "/1RX-RM01-R114",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_1232",
+        "room_num": "R121",
+        "name": "/1RX-RM01-R121",
+        "dbnum": 7997,
+        "panel_count": 0
+      },
+      {
+        "refno": "24381_1235",
+        "room_num": "R122",
+        "name": "/1RX-RM01-R122",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_1249",
+        "room_num": "R123",
+        "name": "/1RX-RM01-R123",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_1261",
+        "room_num": "R124",
+        "name": "/1RX-RM01-R124",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_1280",
+        "room_num": "R131",
+        "name": "/1RX-RM01-R131",
+        "dbnum": 7997,
+        "panel_count": 0
+      },
+      {
+        "refno": "24381_1283",
+        "room_num": "R132",
+        "name": "/1RX-RM01-R132",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_1313",
+        "room_num": "R133",
+        "name": "/1RX-RM01-R133",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_1352",
+        "room_num": "R134",
+        "name": "/1RX-RM01-R134",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_1365",
+        "room_num": "R140",
+        "name": "/1RX-RM01-R140",
+        "dbnum": 7997,
+        "panel_count": 0
+      },
+      {
+        "refno": "24381_1368",
+        "room_num": "R141",
+        "name": "/1RX-RM01-R141",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_1389",
+        "room_num": "R142",
+        "name": "/1RX-RM01-R142",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_1407",
+        "room_num": "R143",
+        "name": "/1RX-RM01-R143",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_1443",
+        "room_num": "R144",
+        "name": "/1RX-RM01-R144",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_1453",
+        "room_num": "R145",
+        "name": "/1RX-RM01-R145",
+        "dbnum": 7997,
+        "panel_count": 2
+      },
+      {
+        "refno": "24381_1476",
+        "room_num": "R161",
+        "name": "/1RX-RM01-R161",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_1489",
+        "room_num": "R162",
+        "name": "/1RX-RM01-R162",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_1502",
+        "room_num": "R163",
+        "name": "/1RX-RM01-R163",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_780",
+        "room_num": "R201",
+        "name": "/1RX-RM02-R201",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_789",
+        "room_num": "R210",
+        "name": "/1RX-RM02-R210",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_802",
+        "room_num": "R211",
+        "name": "/1RX-RM02-R211",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_835",
+        "room_num": "R212",
+        "name": "/1RX-RM02-R212",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_853",
+        "room_num": "R213",
+        "name": "/1RX-RM02-R213",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_868",
+        "room_num": "R214",
+        "name": "/1RX-RM02-R214",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_813",
+        "room_num": "R215",
+        "name": "/1RX-RM02-R215",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_881",
+        "room_num": "R220",
+        "name": "/1RX-RM02-R220",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_894",
+        "room_num": "R221",
+        "name": "/1RX-RM02-R221",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_913",
+        "room_num": "R222",
+        "name": "/1RX-RM02-R222",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_927",
+        "room_num": "R223",
+        "name": "/1RX-RM02-R223",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_946",
+        "room_num": "R224",
+        "name": "/1RX-RM02-R224",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_959",
+        "room_num": "R230",
+        "name": "/1RX-RM02-R230",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_972",
+        "room_num": "R231",
+        "name": "/1RX-RM02-R231",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_1008",
+        "room_num": "R232",
+        "name": "/1RX-RM02-R232",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_1038",
+        "room_num": "R233",
+        "name": "/1RX-RM02-R233",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_1068",
+        "room_num": "R234",
+        "name": "/1RX-RM02-R234",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_1081",
+        "room_num": "R240",
+        "name": "/1RX-RM02-R240",
+        "dbnum": 7997,
+        "panel_count": 0
+      },
+      {
+        "refno": "24381_1084",
+        "room_num": "R241",
+        "name": "/1RX-RM02-R241",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_1103",
+        "room_num": "R242",
+        "name": "/1RX-RM02-R242",
+        "dbnum": 7997,
+        "panel_count": 0
+      },
+      {
+        "refno": "24381_1106",
+        "room_num": "R243",
+        "name": "/1RX-RM02-R243",
+        "dbnum": 7997,
+        "panel_count": 0
+      },
+      {
+        "refno": "24381_1109",
+        "room_num": "R244",
+        "name": "/1RX-RM02-R244",
+        "dbnum": 7997,
+        "panel_count": 0
+      },
+      {
+        "refno": "24381_1112",
+        "room_num": "R246",
+        "name": "/1RX-RM02-R246",
+        "dbnum": 7997,
+        "panel_count": 0
+      },
+      {
+        "refno": "24381_1115",
+        "room_num": "R261",
+        "name": "/1RX-RM02-R261",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_1128",
+        "room_num": "R262",
+        "name": "/1RX-RM02-R262",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_1141",
+        "room_num": "R263",
+        "name": "/1RX-RM02-R263",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_1154",
+        "room_num": "R286",
+        "name": "/1RX-RM02-R286",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_34849",
+        "room_num": "R301",
+        "name": "/1RX-RM03-R301",
+        "dbnum": 7997,
+        "panel_count": 2
+      },
+      {
+        "refno": "24381_34869",
+        "room_num": "R310",
+        "name": "/1RX-RM03-R310",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_34892",
+        "room_num": "R311",
+        "name": "/1RX-RM03-R311",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_34919",
+        "room_num": "R312",
+        "name": "/1RX-RM03-R312",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_34930",
+        "room_num": "R313",
+        "name": "/1RX-RM03-R313",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_34948",
+        "room_num": "R320",
+        "name": "/1RX-RM03-R320",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_34978",
+        "room_num": "R321",
+        "name": "/1RX-RM03-R321",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_34997",
+        "room_num": "R322",
+        "name": "/1RX-RM03-R322",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_35013",
+        "room_num": "R323",
+        "name": "/1RX-RM03-R323",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_35031",
+        "room_num": "R330",
+        "name": "/1RX-RM03-R330",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_35083",
+        "room_num": "R331",
+        "name": "/1RX-RM03-R331",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_35095",
+        "room_num": "R332",
+        "name": "/1RX-RM03-R332",
+        "dbnum": 7997,
+        "panel_count": 2
+      },
+      {
+        "refno": "24381_35117",
+        "room_num": "R333",
+        "name": "/1RX-RM03-R333",
+        "dbnum": 7997,
+        "panel_count": 2
+      },
+      {
+        "refno": "24381_35226",
+        "room_num": "R341",
+        "name": "/1RX-RM03-R341",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_35253",
+        "room_num": "R342",
+        "name": "/1RX-RM03-R342",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_35269",
+        "room_num": "R343",
+        "name": "/1RX-RM03-R343",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_35284",
+        "room_num": "R344",
+        "name": "/1RX-RM03-R344",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_35174",
+        "room_num": "R345",
+        "name": "/1RX-RM03-R345",
+        "dbnum": 7997,
+        "panel_count": 2
+      },
+      {
+        "refno": "24381_35194",
+        "room_num": "R346",
+        "name": "/1RX-RM03-R346",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_35294",
+        "room_num": "R361",
+        "name": "/1RX-RM03-R361",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_35307",
+        "room_num": "R362",
+        "name": "/1RX-RM03-R362",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_35320",
+        "room_num": "R363",
+        "name": "/1RX-RM03-R363",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_35333",
+        "room_num": "R386",
+        "name": "/1RX-RM03-R386",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_35400",
+        "room_num": "R401",
+        "name": "/1RX-RM04-R401",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_35409",
+        "room_num": "R410",
+        "name": "/1RX-RM04-R410",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_35422",
+        "room_num": "R411",
+        "name": "/1RX-RM04-R411",
+        "dbnum": 7997,
+        "panel_count": 3
+      },
+      {
+        "refno": "24381_35445",
+        "room_num": "R412",
+        "name": "/1RX-RM04-R412",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_35455",
+        "room_num": "R413",
+        "name": "/1RX-RM04-R413",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_35473",
+        "room_num": "R420",
+        "name": "/1RX-RM04-R420",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_35486",
+        "room_num": "R421",
+        "name": "/1RX-RM04-R421",
+        "dbnum": 7997,
+        "panel_count": 3
+      },
+      {
+        "refno": "24381_35508",
+        "room_num": "R422",
+        "name": "/1RX-RM04-R422",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_35518",
+        "room_num": "R423",
+        "name": "/1RX-RM04-R423",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_35538",
+        "room_num": "R430",
+        "name": "/1RX-RM04-R430",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_35558",
+        "room_num": "R431",
+        "name": "/1RX-RM04-R431",
+        "dbnum": 7997,
+        "panel_count": 3
+      },
+      {
+        "refno": "24381_35580",
+        "room_num": "R432",
+        "name": "/1RX-RM04-R432",
+        "dbnum": 7997,
+        "panel_count": 2
+      },
+      {
+        "refno": "24381_35601",
+        "room_num": "R433",
+        "name": "/1RX-RM04-R433",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_35621",
+        "room_num": "R440",
+        "name": "/1RX-RM04-R440",
+        "dbnum": 7997,
+        "panel_count": 5
+      },
+      {
+        "refno": "24381_35683",
+        "room_num": "R441",
+        "name": "/1RX-RM04-R441",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_35692",
+        "room_num": "R442",
+        "name": "/1RX-RM04-R442",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_35706",
+        "room_num": "R444",
+        "name": "/1RX-RM04-R444",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_35716",
+        "room_num": "R445",
+        "name": "/1RX-RM04-R445",
+        "dbnum": 7997,
+        "panel_count": 2
+      },
+      {
+        "refno": "24381_35343",
+        "room_num": "R446",
+        "name": "/1RX-RM04-R446",
+        "dbnum": 7997,
+        "panel_count": 2
+      },
+      {
+        "refno": "24381_35747",
+        "room_num": "R461",
+        "name": "/1RX-RM04-R461",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_35760",
+        "room_num": "R462",
+        "name": "/1RX-RM04-R462",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_35773",
+        "room_num": "R463",
+        "name": "/1RX-RM04-R463",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_35786",
+        "room_num": "R486",
+        "name": "/1RX-RM04-R486",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_35805",
+        "room_num": "R501",
+        "name": "/1RX-RM05-R501",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_35817",
+        "room_num": "R510",
+        "name": "/1RX-RM05-R510",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_35830",
+        "room_num": "R511",
+        "name": "/1RX-RM05-R511",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_35842",
+        "room_num": "R512",
+        "name": "/1RX-RM05-R512",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_35855",
+        "room_num": "R520",
+        "name": "/1RX-RM05-R520",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_35876",
+        "room_num": "R521",
+        "name": "/1RX-RM05-R521",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_35888",
+        "room_num": "R522",
+        "name": "/1RX-RM05-R522",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_35900",
+        "room_num": "R530",
+        "name": "/1RX-RM05-R530",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_35913",
+        "room_num": "R531",
+        "name": "/1RX-RM05-R531",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_35929",
+        "room_num": "R532",
+        "name": "/1RX-RM05-R532",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_35796",
+        "room_num": "R540",
+        "name": "/1RX-RM05-R540",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_35981",
+        "room_num": "R541",
+        "name": "/1RX-RM05-R541",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_35990",
+        "room_num": "R542",
+        "name": "/1RX-RM05-R542",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_36010",
+        "room_num": "R544",
+        "name": "/1RX-RM05-R544",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_35945",
+        "room_num": "R545",
+        "name": "/1RX-RM05-R545",
+        "dbnum": 7997,
+        "panel_count": 2
+      },
+      {
+        "refno": "24381_36020",
+        "room_num": "R561",
+        "name": "/1RX-RM05-R561",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_36033",
+        "room_num": "R562",
+        "name": "/1RX-RM05-R562",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_36046",
+        "room_num": "R563",
+        "name": "/1RX-RM05-R563",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_36059",
+        "room_num": "R586",
+        "name": "/1RX-RM05-R586",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_36069",
+        "room_num": "R601",
+        "name": "/1RX-RM06-R601",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_36081",
+        "room_num": "R610",
+        "name": "/1RX-RM06-R610",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_36094",
+        "room_num": "R611",
+        "name": "/1RX-RM06-R611",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_36106",
+        "room_num": "R612",
+        "name": "/1RX-RM06-R612",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_36119",
+        "room_num": "R620",
+        "name": "/1RX-RM06-R620",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_36141",
+        "room_num": "R621",
+        "name": "/1RX-RM06-R621",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_36153",
+        "room_num": "R622",
+        "name": "/1RX-RM06-R622",
+        "dbnum": 7997,
+        "panel_count": 2
+      },
+      {
+        "refno": "24381_36313",
+        "room_num": "R623",
+        "name": "/1RX-RM06-R623",
+        "dbnum": 7997,
+        "panel_count": 2
+      },
+      {
+        "refno": "24381_36173",
+        "room_num": "R630",
+        "name": "/1RX-RM06-R630",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_36186",
+        "room_num": "R631",
+        "name": "/1RX-RM06-R631",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_36202",
+        "room_num": "R632",
+        "name": "/1RX-RM06-R632",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_36217",
+        "room_num": "R640",
+        "name": "/1RX-RM06-R640",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_36226",
+        "room_num": "R641",
+        "name": "/1RX-RM06-R641",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_36235",
+        "room_num": "R642",
+        "name": "/1RX-RM06-R642",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_36255",
+        "room_num": "R644",
+        "name": "/1RX-RM06-R644",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_36265",
+        "room_num": "R661",
+        "name": "/1RX-RM06-R661",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_36278",
+        "room_num": "R662",
+        "name": "/1RX-RM06-R662",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_36291",
+        "room_num": "R663",
+        "name": "/1RX-RM06-R663",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_36304",
+        "room_num": "R686",
+        "name": "/1RX-RM06-R686",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_36350",
+        "room_num": "R701",
+        "name": "/1RX-RM07-R701",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_36363",
+        "room_num": "R710",
+        "name": "/1RX-RM07-R710",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_36376",
+        "room_num": "R711",
+        "name": "/1RX-RM07-R711",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_36390",
+        "room_num": "R712",
+        "name": "/1RX-RM07-R712",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_36402",
+        "room_num": "R720",
+        "name": "/1RX-RM07-R720",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_36415",
+        "room_num": "R721",
+        "name": "/1RX-RM07-R721",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_36432",
+        "room_num": "R722",
+        "name": "/1RX-RM07-R722",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_36445",
+        "room_num": "R730",
+        "name": "/1RX-RM07-R730",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_36465",
+        "room_num": "R731",
+        "name": "/1RX-RM07-R731",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_36479",
+        "room_num": "R732",
+        "name": "/1RX-RM07-R732",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_36491",
+        "room_num": "R740",
+        "name": "/1RX-RM07-R740",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_36522",
+        "room_num": "R741",
+        "name": "/1RX-RM07-R741",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_36531",
+        "room_num": "R742",
+        "name": "/1RX-RM07-R742",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_36551",
+        "room_num": "R744",
+        "name": "/1RX-RM07-R744",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_36506",
+        "room_num": "R749",
+        "name": "/1RX-RM07-R749",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_36561",
+        "room_num": "R761",
+        "name": "/1RX-RM07-R761",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_36574",
+        "room_num": "R762",
+        "name": "/1RX-RM07-R762",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_36587",
+        "room_num": "R763",
+        "name": "/1RX-RM07-R763",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_36600",
+        "room_num": "R786",
+        "name": "/1RX-RM07-R786",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_36610",
+        "room_num": "R801",
+        "name": "/1RX-RM08-R801",
+        "dbnum": 7997,
+        "panel_count": 2
+      },
+      {
+        "refno": "24381_36670",
+        "room_num": "R811",
+        "name": "/1RX-RM08-R811",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_36684",
+        "room_num": "R821",
+        "name": "/1RX-RM08-R821",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_36700",
+        "room_num": "R831",
+        "name": "/1RX-RM08-R831",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_36714",
+        "room_num": "R840",
+        "name": "/1RX-RM08-R840",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_36744",
+        "room_num": "R844",
+        "name": "/1RX-RM08-R844",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_36728",
+        "room_num": "R849",
+        "name": "/1RX-RM08-R849",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_36754",
+        "room_num": "R886",
+        "name": "/1RX-RM08-R886",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_36775",
+        "room_num": "R971",
+        "name": "/1RX-RM10-R971",
+        "dbnum": 7997,
+        "panel_count": 3
+      },
+      {
+        "refno": "24381_36878",
+        "room_num": "R971",
+        "name": "/1RX-RM11-R971",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_36841",
+        "room_num": "R972",
+        "name": "/1RX-RM11-R972",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_36903",
+        "room_num": "R972",
+        "name": "/1RX-RM12-R972",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24384_26248",
+        "room_num": "R972",
+        "name": "/Copy-of-1RX-RM12-R972",
+        "dbnum": 8000,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_36812",
+        "room_num": "R973",
+        "name": "/1RX-RM10-R973",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_36889",
+        "room_num": "R973",
+        "name": "/1RX-RM11-R973",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_36853",
+        "room_num": "R974",
+        "name": "/1RX-RM11-R974",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_36916",
+        "room_num": "R974",
+        "name": "/1RX-RM12-R974",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_36764",
+        "room_num": "R975",
+        "name": "/1RX-RM10-R975",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_36865",
+        "room_num": "R975",
+        "name": "/1RX-RM11-R975",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_36827",
+        "room_num": "R976",
+        "name": "/1RX-RM11-R976",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_36929",
+        "room_num": "R976",
+        "name": "/1RX-RM12-R976",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_33772",
+        "room_num": "S110",
+        "name": "/1SL-RM01-S110",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_33723",
+        "room_num": "S111",
+        "name": "/1SL-RM01-S111",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_33780",
+        "room_num": "S112",
+        "name": "/1SL-RM01-S112",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_33731",
+        "room_num": "S113",
+        "name": "/1SL-RM01-S113",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_33739",
+        "room_num": "S114",
+        "name": "/1SL-RM01-S114",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_33747",
+        "room_num": "S115",
+        "name": "/1SL-RM01-S115",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_33764",
+        "room_num": "S116",
+        "name": "/1SL-RM01-S116",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_33755",
+        "room_num": "S117",
+        "name": "/1SL-RM01-S117",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_33715",
+        "room_num": "S171",
+        "name": "/1SL-RM01-S171",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_33670",
+        "room_num": "S173",
+        "name": "/1SL-RM01-S173",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_33707",
+        "room_num": "S181",
+        "name": "/1SL-RM01-S181",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_33796",
+        "room_num": "S183",
+        "name": "/1SL-RM01-S183",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_33788",
+        "room_num": "S185",
+        "name": "/1SL-RM00-S185",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_24862",
+        "room_num": "S920",
+        "name": "/1SR-RM09-S920",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_24853",
+        "room_num": "S921",
+        "name": "/1SR-RM09-S921",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_24844",
+        "room_num": "S922",
+        "name": "/1SR-RM09-S922",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_24835",
+        "room_num": "S923",
+        "name": "/1SR-RM09-S923",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_24804",
+        "room_num": "S924",
+        "name": "/1SR-RM09-S924",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_24735",
+        "room_num": "S925",
+        "name": "/1SR-RM09-S925",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_24795",
+        "room_num": "S980",
+        "name": "/1SR-RM09-S980",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_24780",
+        "room_num": "S982",
+        "name": "/1SR-RM09-S982",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_24770",
+        "room_num": "S986",
+        "name": "/1SR-RM09-S986",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_24761",
+        "room_num": "S992",
+        "name": "/1SR-RM09-S992",
+        "dbnum": 7997,
+        "panel_count": 1
+      },
+      {
+        "refno": "24381_24758",
+        "room_num": "S994",
+        "name": "/1SR-RM09-S994",
+        "dbnum": 7997,
+        "panel_count": 0
+      },
+      {
+        "refno": "24381_24743",
+        "room_num": "S996",
+        "name": "/1SR-RM09-S996",
+        "dbnum": 7997,
+        "panel_count": 2
+      }
+    ]
+  },
+  "headers": {
+    "access-control-allow-origin": "*",
+    "access-control-expose-headers": "*",
+    "content-length": "20470",
+    "content-type": "application/json",
+    "date": "Sun, 20 Sep 2026 05:15:18 GMT",
+    "vary": "origin, access-control-request-method, access-control-request-headers"
+  }
+}

@@ -1,0 +1,434 @@
+{
+  "base": "http://127.0.0.1:8027",
+  "room": {
+    "refno": "24381_35580",
+    "room_num": "R432",
+    "name": "/1RX-RM04-R432",
+    "dbnum": 7997,
+    "panel_count": 2
+  },
+  "started_at": "2026-09-20T15:55:17.7930357+08:00",
+  "finished_at": "2026-09-20T15:55:25.6540097+08:00",
+  "health": {
+    "build_id": "0.1.28+g805170bd41d7.1789880404",
+    "started_at": "2026-09-20T13:15:03.554360200+08:00",
+    "room_membership": true,
+    "data_face": "read-through",
+    "spatial_tree": {
+      "state": "ready",
+      "entries": 61801,
+      "db_epoch": 44,
+      "drift": true,
+      "last_verified_at": 1789881302
+    },
+    "resident_records": 52386,
+    "resident_roots": 6773
+  },
+  "center": {
+    "x": -6379.5703,
+    "y": -11350.16,
+    "z": 5030.0,
+    "source": "refno_aabb_center"
+  },
+  "baseline": {
+    "total_count": 1302,
+    "candidate_count": 1302,
+    "unique_refnos": 1227,
+    "dup_groups": 50,
+    "spec_groups": [
+      {
+        "spec_value": 0,
+        "count": 56
+      },
+      {
+        "spec_value": 3,
+        "count": 1177
+      },
+      {
+        "spec_value": 5,
+        "count": 69
+      }
+    ],
+    "elapsed_ms": 38
+  },
+  "rooms": {
+    "total_count": 1059,
+    "unique_refnos": 1055,
+    "room_status": {
+      "rooms": [
+        {
+          "refno": "24381_35580",
+          "room_num": "R432"
+        }
+      ],
+      "source": "memory",
+      "matched": 1055,
+      "unresolved": 0,
+      "definition_version": "72979202d292cb57761a3c7daec8c96f834587d574704ef12f9da8129f394211",
+      "library_alignment_current": null
+    },
+    "spec_groups": [
+      {
+        "spec_value": 0,
+        "count": 8
+      },
+      {
+        "spec_value": 3,
+        "count": 1051
+      }
+    ],
+    "filter_spec_values": [
+      {
+        "value": 3,
+        "count": 1051
+      },
+      {
+        "value": 0,
+        "count": 8
+      }
+    ],
+    "page_spec_distribution": {
+      "3": 992,
+      "0": 8
+    },
+    "elapsed_ms": 228
+  },
+  "spec": {
+    "spec_value": 3,
+    "total_count": 1051,
+    "elapsed_ms": 213
+  },
+  "spec_distance": {
+    "per_page": 530.0,
+    "p1": 530,
+    "p2": 529,
+    "p1_last_spec": 3,
+    "p2_first_spec": 3
+  },
+  "refnos": {
+    "total_count": 1059,
+    "by_spec_value_sizes": [
+      {
+        "0": 8
+      },
+      {
+        "3": 1051
+      }
+    ],
+    "elapsed_ms": 212
+  },
+  "timing_100m": {
+    "first_100m": {
+      "status": 200,
+      "elapsed_ms": 296,
+      "candidate_count": 61801,
+      "total_count": 61801,
+      "spec_groups": [
+        {
+          "spec_value": 0,
+          "count": 16029
+        },
+        {
+          "spec_value": 3,
+          "count": 31129
+        },
+        {
+          "spec_value": 4,
+          "count": 13517
+        },
+        {
+          "spec_value": 5,
+          "count": 1126
+        }
+      ]
+    },
+    "second_100m": {
+      "status": 200,
+      "elapsed_ms": 249,
+      "total_count": 61801
+    },
+    "rooms_100m": {
+      "status": 200,
+      "elapsed_ms": 4931,
+      "total_count": 1303,
+      "room_status": {
+        "rooms": [
+          {
+            "refno": "24381_35580",
+            "room_num": "R432"
+          }
+        ],
+        "source": "memory",
+        "matched": 1298,
+        "unresolved": 0,
+        "definition_version": "72979202d292cb57761a3c7daec8c96f834587d574704ef12f9da8129f394211",
+        "library_alignment_current": null
+      }
+    },
+    "spec_distance_100m": {
+      "status": 200,
+      "elapsed_ms": 191,
+      "total_count": 61801
+    }
+  },
+  "checks": [
+    {
+      "name": "health 200",
+      "pass": true,
+      "detail": "status=200 build=0.1.28+g805170bd41d7.1789880404 started_at=2026-09-20T13:15:03.554360200+08:00"
+    },
+    {
+      "name": "health room_membership=true",
+      "pass": true,
+      "detail": true
+    },
+    {
+      "name": "/spatial/rooms 200 且 status ready",
+      "pass": true,
+      "detail": "200 ready rooms=215 elapsed_ms=5"
+    },
+    {
+      "name": "/spatial/rooms 含目标房间 24381_35580",
+      "pass": true,
+      "detail": {
+        "refno": "24381_35580",
+        "room_num": "R432",
+        "name": "/1RX-RM04-R432",
+        "dbnum": 7997,
+        "panel_count": 2
+      }
+    },
+    {
+      "name": "房间中心 = nearby?refno= 的 refno_aabb_center",
+      "pass": true,
+      "detail": {
+        "x": -6379.5703,
+        "y": -11350.16,
+        "z": 5030.0,
+        "source": "refno_aabb_center"
+      }
+    },
+    {
+      "name": "基线 nearby 200、不带 room_status",
+      "pass": true,
+      "detail": "total=1302 cand=1302 elapsed_ms=38"
+    },
+    {
+      "name": "基线 results[].spec_value 每条都带（整数）",
+      "pass": true,
+      "detail": "returned=1000"
+    },
+    {
+      "name": "rooms= nearby 200",
+      "pass": true,
+      "detail": "elapsed_ms=228"
+    },
+    {
+      "name": "rooms= total_count < 基线 total_count",
+      "pass": true,
+      "detail": "1059 < 1302"
+    },
+    {
+      "name": "room_status.source=memory、rooms[0]=所选房间、unresolved=0、library_alignment_current=null",
+      "pass": true,
+      "detail": {
+        "rooms": [
+          {
+            "refno": "24381_35580",
+            "room_num": "R432"
+          }
+        ],
+        "source": "memory",
+        "matched": 1055,
+        "unresolved": 0,
+        "definition_version": "72979202d292cb57761a3c7daec8c96f834587d574704ef12f9da8129f394211",
+        "library_alignment_current": null
+      }
+    },
+    {
+      "name": "rooms= spec_groups 之和 = total_count",
+      "pass": true,
+      "detail": "1059 vs 1059"
+    },
+    {
+      "name": "rooms= groups(dbnum) 之和 = total_count",
+      "pass": true,
+      "detail": "1059 vs 1059"
+    },
+    {
+      "name": "rooms= filter_options.spec_values 之和 = total_count",
+      "pass": true,
+      "detail": [
+        {
+          "value": 3,
+          "count": 1051
+        },
+        {
+          "value": 0,
+          "count": 8
+        }
+      ]
+    },
+    {
+      "name": "rooms= 本页 spec_value 非全 0",
+      "pass": true,
+      "detail": {
+        "3": 992,
+        "0": 8
+      }
+    },
+    {
+      "name": "refnos 不带 rooms：总数 = 基线 total_count、无 room_status",
+      "pass": true,
+      "detail": "1302 vs 1302"
+    },
+    {
+      "name": "refnos(rooms=)：refnos 数 = total_count = nearby(rooms=) total_count",
+      "pass": true,
+      "detail": "1059 / 1059 / 1059"
+    },
+    {
+      "name": "refnos(rooms=) 全集 ⊂ 基线全集",
+      "pass": true,
+      "detail": "0 条不在基线全集里"
+    },
+    {
+      "name": "refnos(rooms=) by_spec_value 各桶之和 = total_count",
+      "pass": true,
+      "detail": "1059 vs 1059"
+    },
+    {
+      "name": "room_status.matched = rooms= 全集按 refno 去重后的条数",
+      "pass": true,
+      "detail": "matched 1055 vs unique 1055 vs total_count 1059"
+    },
+    {
+      "name": "nearby(rooms=) 本页 ⊂ refnos(rooms=) 全集",
+      "pass": true,
+      "detail": "1000 / 1055"
+    },
+    {
+      "name": "spec_values=3：200、结果全是该专业",
+      "pass": true,
+      "detail": "200 1000 条 elapsed_ms=213"
+    },
+    {
+      "name": "spec_values=3：total_count = rooms= 的 spec_groups[3]",
+      "pass": true,
+      "detail": "1051"
+    },
+    {
+      "name": "spec_values= 不收窄 filter_options.spec_values",
+      "pass": true,
+      "detail": {
+        "with": [
+          {
+            "value": 3,
+            "count": 1051
+          },
+          {
+            "value": 0,
+            "count": 8
+          }
+        ],
+        "without": [
+          {
+            "value": 3,
+            "count": 1051
+          },
+          {
+            "value": 0,
+            "count": 8
+          }
+        ]
+      }
+    },
+    {
+      "name": "spec_values= 不收窄 filter_options.nouns",
+      "pass": true,
+      "detail": null
+    },
+    {
+      "name": "spec_values= 之后 spec_groups 只剩该专业",
+      "pass": true,
+      "detail": [
+        {
+          "spec_value": 3,
+          "count": 1051
+        }
+      ]
+    },
+    {
+      "name": "spec_values=0,3：total = 各桶之和 = rooms= total_count",
+      "pass": true,
+      "detail": "1059"
+    },
+    {
+      "name": "sort=spec_distance 第 1 页：spec_value 升序、同专业距离升序",
+      "pass": true,
+      "detail": "530 条 elapsed_ms=207"
+    },
+    {
+      "name": "sort=spec_distance 第 2 页同上",
+      "pass": true,
+      "detail": "529 条"
+    },
+    {
+      "name": "sort=spec_distance 跨页：第 1 页末 spec_value <= 第 2 页首",
+      "pass": true,
+      "detail": "3 <= 3"
+    },
+    {
+      "name": "sort=spec_distance 两页并起来 = refnos(rooms=) 全集（多重集）",
+      "pass": true,
+      "detail": "530+529 vs 1059"
+    },
+    {
+      "name": "sort=SPEC_DISTANCE 大小写不敏感",
+      "pass": true,
+      "detail": 200
+    },
+    {
+      "name": "rooms=两间：200、total >= 单间、room_status.rooms 两条",
+      "pass": true,
+      "detail": "total=1059 rooms=[{\"refno\":\"24381_5062\",\"room_num\":\"L505\"},{\"refno\":\"24381_35580\",\"room_num\":\"R432\"}]"
+    },
+    {
+      "name": "不在册房间 rooms=1_1 -> 400 bad_request",
+      "pass": true,
+      "detail": "400 rooms 里的 1/1 不是在册房间（名字不含房间关键词或房间号不合规），可先 GET /api/v1/spatial/rooms 看清单"
+    },
+    {
+      "name": "rooms=abc -> 400",
+      "pass": true,
+      "detail": "400 rooms 必须是逗号分隔的房间 refno（a/b 或 a_b，收到 abc）"
+    },
+    {
+      "name": "spec_values=x -> 400",
+      "pass": true,
+      "detail": "400 spec_values 必须是逗号分隔的专业值整数（收到 x）"
+    },
+    {
+      "name": "sort=bogus -> 400 且消息列出三档",
+      "pass": true,
+      "detail": "400 sort 只接受 distance/name/spec_distance（收到 bogus）"
+    },
+    {
+      "name": "rooms=（空串）= 不给：200、无 room_status",
+      "pass": true,
+      "detail": 200
+    },
+    {
+      "name": "100 m 点查询 200（记忆已热，进程没重启）",
+      "pass": true,
+      "detail": "296 ms / 249 ms, total 61801"
+    },
+    {
+      "name": "100 m + rooms= 200",
+      "pass": true,
+      "detail": "4931 ms, total 1303, unresolved 0"
+    }
+  ],
+  "pass": 39,
+  "fail": 0
+}

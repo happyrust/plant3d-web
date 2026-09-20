@@ -1,0 +1,1052 @@
+{
+  "status": 200,
+  "elapsed_ms": 47,
+  "json": {
+    "status": "ok",
+    "core": {
+      "status": "ready",
+      "route_count": 71,
+      "snapshot_epoch": 71,
+      "session_vector": [
+        {
+          "dbnum": 1112,
+          "sesno": 729,
+          "generation": 1
+        },
+        {
+          "dbnum": 5052,
+          "sesno": 190,
+          "generation": 1
+        },
+        {
+          "dbnum": 5053,
+          "sesno": 134,
+          "generation": 1
+        },
+        {
+          "dbnum": 5054,
+          "sesno": 48,
+          "generation": 1
+        },
+        {
+          "dbnum": 5100,
+          "sesno": 27,
+          "generation": 1
+        },
+        {
+          "dbnum": 5101,
+          "sesno": 7,
+          "generation": 1
+        },
+        {
+          "dbnum": 5200,
+          "sesno": 30,
+          "generation": 1
+        },
+        {
+          "dbnum": 6000,
+          "sesno": 33,
+          "generation": 1
+        },
+        {
+          "dbnum": 6001,
+          "sesno": 2,
+          "generation": 1
+        },
+        {
+          "dbnum": 6002,
+          "sesno": 18,
+          "generation": 1
+        },
+        {
+          "dbnum": 6003,
+          "sesno": 4,
+          "generation": 1
+        },
+        {
+          "dbnum": 6890,
+          "sesno": 280,
+          "generation": 1
+        },
+        {
+          "dbnum": 7000,
+          "sesno": 274,
+          "generation": 1
+        },
+        {
+          "dbnum": 7001,
+          "sesno": 270,
+          "generation": 1
+        },
+        {
+          "dbnum": 7002,
+          "sesno": 98,
+          "generation": 1
+        },
+        {
+          "dbnum": 7003,
+          "sesno": 19,
+          "generation": 1
+        },
+        {
+          "dbnum": 7004,
+          "sesno": 29,
+          "generation": 1
+        },
+        {
+          "dbnum": 7006,
+          "sesno": 17,
+          "generation": 1
+        },
+        {
+          "dbnum": 7007,
+          "sesno": 2873,
+          "generation": 1
+        },
+        {
+          "dbnum": 7008,
+          "sesno": 47,
+          "generation": 1
+        },
+        {
+          "dbnum": 7009,
+          "sesno": 479,
+          "generation": 1
+        },
+        {
+          "dbnum": 7010,
+          "sesno": 20,
+          "generation": 1
+        },
+        {
+          "dbnum": 7011,
+          "sesno": 641,
+          "generation": 1
+        },
+        {
+          "dbnum": 7014,
+          "sesno": 33,
+          "generation": 1
+        },
+        {
+          "dbnum": 7015,
+          "sesno": 511,
+          "generation": 1
+        },
+        {
+          "dbnum": 7021,
+          "sesno": 105,
+          "generation": 1
+        },
+        {
+          "dbnum": 7022,
+          "sesno": 254,
+          "generation": 1
+        },
+        {
+          "dbnum": 7026,
+          "sesno": 28,
+          "generation": 1
+        },
+        {
+          "dbnum": 7027,
+          "sesno": 445,
+          "generation": 1
+        },
+        {
+          "dbnum": 7029,
+          "sesno": 16,
+          "generation": 1
+        },
+        {
+          "dbnum": 7034,
+          "sesno": 23,
+          "generation": 1
+        },
+        {
+          "dbnum": 7043,
+          "sesno": 13,
+          "generation": 1
+        },
+        {
+          "dbnum": 7044,
+          "sesno": 66,
+          "generation": 1
+        },
+        {
+          "dbnum": 7045,
+          "sesno": 20,
+          "generation": 1
+        },
+        {
+          "dbnum": 7046,
+          "sesno": 12,
+          "generation": 1
+        },
+        {
+          "dbnum": 7047,
+          "sesno": 44,
+          "generation": 1
+        },
+        {
+          "dbnum": 7048,
+          "sesno": 54,
+          "generation": 1
+        },
+        {
+          "dbnum": 7320,
+          "sesno": 306,
+          "generation": 1
+        },
+        {
+          "dbnum": 7321,
+          "sesno": 77,
+          "generation": 1
+        },
+        {
+          "dbnum": 7322,
+          "sesno": 4491,
+          "generation": 1
+        },
+        {
+          "dbnum": 7323,
+          "sesno": 277,
+          "generation": 1
+        },
+        {
+          "dbnum": 7324,
+          "sesno": 1362,
+          "generation": 1
+        },
+        {
+          "dbnum": 7325,
+          "sesno": 3180,
+          "generation": 1
+        },
+        {
+          "dbnum": 7326,
+          "sesno": 639,
+          "generation": 1
+        },
+        {
+          "dbnum": 7327,
+          "sesno": 1470,
+          "generation": 1
+        },
+        {
+          "dbnum": 7328,
+          "sesno": 40,
+          "generation": 1
+        },
+        {
+          "dbnum": 7329,
+          "sesno": 221,
+          "generation": 1
+        },
+        {
+          "dbnum": 7330,
+          "sesno": 41,
+          "generation": 1
+        },
+        {
+          "dbnum": 7331,
+          "sesno": 23,
+          "generation": 1
+        },
+        {
+          "dbnum": 7332,
+          "sesno": 22,
+          "generation": 1
+        },
+        {
+          "dbnum": 7333,
+          "sesno": 1724,
+          "generation": 1
+        },
+        {
+          "dbnum": 7334,
+          "sesno": 312,
+          "generation": 1
+        },
+        {
+          "dbnum": 7350,
+          "sesno": 207,
+          "generation": 1
+        },
+        {
+          "dbnum": 7351,
+          "sesno": 116,
+          "generation": 1
+        },
+        {
+          "dbnum": 7352,
+          "sesno": 50,
+          "generation": 1
+        },
+        {
+          "dbnum": 7353,
+          "sesno": 97,
+          "generation": 1
+        },
+        {
+          "dbnum": 7354,
+          "sesno": 266,
+          "generation": 1
+        },
+        {
+          "dbnum": 7355,
+          "sesno": 15,
+          "generation": 1
+        },
+        {
+          "dbnum": 7356,
+          "sesno": 14,
+          "generation": 1
+        },
+        {
+          "dbnum": 7360,
+          "sesno": 121,
+          "generation": 1
+        },
+        {
+          "dbnum": 7600,
+          "sesno": 17,
+          "generation": 1
+        },
+        {
+          "dbnum": 7741,
+          "sesno": 90,
+          "generation": 1
+        },
+        {
+          "dbnum": 7742,
+          "sesno": 63,
+          "generation": 1
+        },
+        {
+          "dbnum": 7997,
+          "sesno": 339,
+          "generation": 1
+        },
+        {
+          "dbnum": 7998,
+          "sesno": 14,
+          "generation": 1
+        },
+        {
+          "dbnum": 7999,
+          "sesno": 200,
+          "generation": 1
+        },
+        {
+          "dbnum": 8000,
+          "sesno": 640,
+          "generation": 1
+        },
+        {
+          "dbnum": 250700,
+          "sesno": 23,
+          "generation": 1
+        },
+        {
+          "dbnum": 250701,
+          "sesno": 14,
+          "generation": 1
+        },
+        {
+          "dbnum": 250702,
+          "sesno": 29,
+          "generation": 1
+        },
+        {
+          "dbnum": 250705,
+          "sesno": 9,
+          "generation": 1
+        }
+      ],
+      "stale_dbnums": [],
+      "failed_dbnums": [],
+      "problems": [],
+      "last_targeted_refresh": null,
+      "open_db_count": 0,
+      "open_dbnums": [],
+      "cached_elements": 0,
+      "source_reads": {
+        "database_opens": 518,
+        "scan_calls": 0,
+        "scanned_elements": 0,
+        "index_point_lookups": 1611
+      }
+    },
+    "mirror": {
+      "status": "ready",
+      "endpoint": "embedded:mem",
+      "watermark_mirror_enabled": false,
+      "watermark_mirrored_dbnums": 0,
+      "spool_depth": 0,
+      "spool_bytes": 0,
+      "spool_oldest_age_ms": null,
+      "last_error": null,
+      "last_success": "2026-09-20T05:15:18.509556600+00:00"
+    },
+    "features": {
+      "room": {
+        "status": "available",
+        "generation": "72979202d292cb57761a3c7daec8c96f834587d574704ef12f9da8129f394211",
+        "executor": "memory"
+      },
+      "history": {
+        "status": "available"
+      },
+      "operations": {
+        "status": "available"
+      }
+    },
+    "degraded_sections": [],
+    "blocking_conditions": [],
+    "project": "AvevaMarineSample",
+    "mdb": "/ALL",
+    "namespace": "1516",
+    "mdb_closure": {
+      "status": "ok",
+      "project": "AvevaMarineSample",
+      "mdb": "/ALL",
+      "roots": [
+        {
+          "path": "D:\\AVEVA\\Projects\\E3D3.1",
+          "reachable": true,
+          "codes_seen": [
+            "acp",
+            "acw",
+            "ams",
+            "aps",
+            "scb",
+            "tes",
+            "zdj"
+          ],
+          "problem": null,
+          "scan_ms": 0
+        }
+      ],
+      "projects": [
+        {
+          "name": "AvevaMarineSample",
+          "codes": [
+            "AMS"
+          ],
+          "is_main": true,
+          "root_index": 0,
+          "project_dir": "D:\\AVEVA\\Projects\\E3D3.1\\AvevaMarineSample",
+          "db_dirs": [
+            "D:\\AVEVA\\Projects\\E3D3.1\\AvevaMarineSample\\ams000"
+          ],
+          "dbnums": [
+            1112,
+            7997,
+            7998,
+            7999,
+            8000,
+            7000,
+            6890,
+            5052,
+            5100,
+            5053,
+            5200,
+            7332,
+            7330,
+            7331,
+            7329,
+            7353,
+            7324,
+            7352,
+            7350,
+            7354,
+            7327,
+            7356,
+            7333,
+            7326,
+            7322,
+            7351,
+            7334,
+            7741,
+            7742,
+            5054,
+            5101
+          ],
+          "shadowed": []
+        },
+        {
+          "name": "ZDJ",
+          "codes": [
+            "ZDJ"
+          ],
+          "is_main": false,
+          "root_index": 0,
+          "project_dir": "D:\\AVEVA\\Projects\\E3D3.1\\ZDJ",
+          "db_dirs": [
+            "D:\\AVEVA\\Projects\\E3D3.1\\ZDJ\\ZDJ000"
+          ],
+          "dbnums": [
+            7600
+          ],
+          "shadowed": []
+        },
+        {
+          "name": "SCB",
+          "codes": [
+            "SCB"
+          ],
+          "is_main": false,
+          "root_index": 0,
+          "project_dir": "D:\\AVEVA\\Projects\\E3D3.1\\SCB",
+          "db_dirs": [
+            "D:\\AVEVA\\Projects\\E3D3.1\\SCB\\scb000"
+          ],
+          "dbnums": [
+            6000,
+            6001,
+            6002,
+            6003
+          ],
+          "shadowed": []
+        },
+        {
+          "name": "AvevaCatalogue",
+          "codes": [
+            "ACP"
+          ],
+          "is_main": false,
+          "root_index": 0,
+          "project_dir": "D:\\AVEVA\\Projects\\E3D3.1\\AvevaCatalogue",
+          "db_dirs": [
+            "D:\\AVEVA\\Projects\\E3D3.1\\AvevaCatalogue\\acp000"
+          ],
+          "dbnums": [
+            7043,
+            7044,
+            7010,
+            7027,
+            7021,
+            7026,
+            7022,
+            7046,
+            7006,
+            7014,
+            7015,
+            7002,
+            7029,
+            7323,
+            7007,
+            7004,
+            7008,
+            7034,
+            7047,
+            7048,
+            250702,
+            250705,
+            250700,
+            250701,
+            7001,
+            7003,
+            7009,
+            7045,
+            7011,
+            7320,
+            7321,
+            7325,
+            7328,
+            7360
+          ],
+          "shadowed": []
+        },
+        {
+          "name": "AvevaPlantSample",
+          "codes": [
+            "APS"
+          ],
+          "is_main": false,
+          "root_index": 0,
+          "project_dir": "D:\\AVEVA\\Projects\\E3D3.1\\AvevaPlantSample",
+          "db_dirs": [
+            "D:\\AVEVA\\Projects\\E3D3.1\\AvevaPlantSample\\aps000"
+          ],
+          "dbnums": [
+            7355
+          ],
+          "shadowed": []
+        }
+      ],
+      "seen_projects": [
+        {
+          "name": "AvevaCatalogue",
+          "codes": [
+            "ACP"
+          ],
+          "root_index": 0,
+          "project_dir": "D:\\AVEVA\\Projects\\E3D3.1\\AvevaCatalogue"
+        },
+        {
+          "name": "AvevaMarineSample",
+          "codes": [
+            "AMS"
+          ],
+          "root_index": 0,
+          "project_dir": "D:\\AVEVA\\Projects\\E3D3.1\\AvevaMarineSample"
+        },
+        {
+          "name": "AvevaPlantSample",
+          "codes": [
+            "APS"
+          ],
+          "root_index": 0,
+          "project_dir": "D:\\AVEVA\\Projects\\E3D3.1\\AvevaPlantSample"
+        },
+        {
+          "name": "YCYK-E3D",
+          "codes": [
+            "ACW"
+          ],
+          "root_index": 0,
+          "project_dir": "D:\\AVEVA\\Projects\\E3D3.1\\E3D3.1-slyk-project\\YCYK-E3D"
+        },
+        {
+          "name": "SCB",
+          "codes": [
+            "SCB"
+          ],
+          "root_index": 0,
+          "project_dir": "D:\\AVEVA\\Projects\\E3D3.1\\SCB"
+        },
+        {
+          "name": "TEST",
+          "codes": [
+            "TES"
+          ],
+          "root_index": 0,
+          "project_dir": "D:\\AVEVA\\Projects\\E3D3.1\\TEST"
+        },
+        {
+          "name": "YCYK-E3D",
+          "codes": [
+            "ACW"
+          ],
+          "root_index": 0,
+          "project_dir": "D:\\AVEVA\\Projects\\E3D3.1\\YCYK-E3D"
+        },
+        {
+          "name": "ZDJ",
+          "codes": [
+            "ZDJ"
+          ],
+          "root_index": 0,
+          "project_dir": "D:\\AVEVA\\Projects\\E3D3.1\\ZDJ"
+        }
+      ],
+      "unresolved": [],
+      "problems": [],
+      "declaration_error": null,
+      "sys": "D:\\AVEVA\\Projects\\E3D3.1\\AvevaMarineSample\\ams000\\amssys"
+    },
+    "dabacon_tags": {
+      "status": "pending",
+      "scope": "startup",
+      "refreshing": false,
+      "sample_age_ms": null,
+      "release_selection": "diagnostic_only"
+    },
+    "http": {
+      "bind_addr": "127.0.0.1:8027",
+      "public_addr": "127.0.0.1:8027"
+    },
+    "data_read_mode": "direct",
+    "data_face": "read-through",
+    "read_through": {
+      "queue_depth": 0,
+      "queued": 0,
+      "succeeded": 0,
+      "failed": 0,
+      "degraded_reason": null,
+      "last_success_unix_ms": null,
+      "spool_depth": 0,
+      "spool_bytes": 0,
+      "spool_oldest_age_ms": null,
+      "spool_capacity_bytes": 0
+    },
+    "version": "0.1.28",
+    "build_id": "0.1.28+g805170bd41d7.1789880404",
+    "started_at": "2026-09-20T13:15:03.554360200+08:00",
+    "capabilities": {
+      "dbnum_model_ensure": true,
+      "dbnum_model_ready_roots": true,
+      "model_records_batch_max_roots": 64,
+      "mesh_formats": [
+        "mesh",
+        "glb"
+      ],
+      "room_complete_publication_ack": true,
+      "room_rebuild_executor": "memory"
+    },
+    "queue_paused": false,
+    "startup_autorun": true,
+    "auto_initialize_new_dbnums": false,
+    "awaiting_manual_initialization": [],
+    "data_incremental": true,
+    "model_incremental": true,
+    "room_membership": true,
+    "model_cache": {
+      "resident_records": 0,
+      "resident_roots": 0,
+      "write_behind": {
+        "accepting": true,
+        "worker_alive": false,
+        "worker_restarts": 0,
+        "persist_attempts": 0,
+        "persist_retries": 0,
+        "blocked_transitions": 0,
+        "ack_mismatches": 0,
+        "last_attempt_at": null,
+        "pending_unique_roots": 0,
+        "in_flight_roots": 0,
+        "retrying_roots": 0,
+        "blocked_roots": 0,
+        "superseded_submissions": 0,
+        "stale_jobs_dropped": 0,
+        "oldest_pending_ms": null,
+        "last_success_at": null,
+        "last_error": null,
+        "blocked_samples": [],
+        "rows_upserted": 0,
+        "rows_removed": 0,
+        "receipts_written": 0,
+        "commits": 0,
+        "room_edges_written": 0,
+        "max_transaction_bytes": 0
+      },
+      "store_reachable": true,
+      "degraded_read_only": false
+    },
+    "delivery_unit_types": [
+      "BRAN",
+      "HANG",
+      "SUPPO",
+      "EQUI"
+    ],
+    "auto_work_armed": true,
+    "initialization": {
+      "epoch_id": 0,
+      "status": "model_ready",
+      "current_phase": null,
+      "data_ready": true,
+      "model_ready": true,
+      "model_in_flight": false,
+      "model_phase_open": true,
+      "startup_reconcile_pending": false,
+      "startup_rooms_pending": false,
+      "room_bootstrap": {
+        "status": "ready",
+        "dbnums_total": 0,
+        "dbnums_done": 0,
+        "dbnums_failed": 0,
+        "roots_total": 0,
+        "roots_ready": 0,
+        "roots_failed": 0,
+        "current_dbnum": null,
+        "stage": "complete",
+        "room_edges_written": 0,
+        "max_transaction_bytes": 0,
+        "elapsed_ms": 0,
+        "rss_mib": null,
+        "failure_samples": []
+      },
+      "startup": null,
+      "startup_data_wait_degraded": null,
+      "phases": {},
+      "blockers": [],
+      "blocked_by": [],
+      "shadowed": []
+    },
+    "worker_alive": false,
+    "worker_idle_secs": null,
+    "active_dependency": null,
+    "parse_errors": null,
+    "geom_errors": null,
+    "idle_round_panic": null,
+    "batch_failures": null,
+    "catalogue_reconcile": null,
+    "model_concurrency": {
+      "mode": "adaptive",
+      "execution_group_size": 16,
+      "effective_root_inflight": 1,
+      "root_inflight_max": 2,
+      "completed_total": 0,
+      "failed_total": 0,
+      "shape_queue_depth": 0,
+      "shape_producer_blocked_micros": 0,
+      "shape_sql_bytes": 0,
+      "shape_instances_written": 0,
+      "surreal_read_p50_micros": null,
+      "surreal_read_p95_micros": null,
+      "surreal_read_p99_micros": null,
+      "surreal_write_p50_micros": null,
+      "surreal_write_p95_micros": null,
+      "surreal_write_p99_micros": null,
+      "surreal_retries": 0,
+      "process_cpu_percent": 0.8359456658363342,
+      "process_rss_bytes": 163184640
+    },
+    "geometry_concurrency": {
+      "quota": 16,
+      "active": 0,
+      "waiting": 0,
+      "permit_wait_micros": 8,
+      "active_permit_micros": 60787,
+      "observed_micros": 15342339
+    },
+    "runtime_lag": {
+      "sampling": false,
+      "sample_period_ms": 100,
+      "samples": 0,
+      "observed_total": 0,
+      "p50_micros": null,
+      "p95_micros": null,
+      "p99_micros": null,
+      "max_micros": null
+    },
+    "spatial_serial": {
+      "waiting": 0,
+      "wait_micros": 2,
+      "held_micros": 738
+    },
+    "sul_db": {
+      "connected": true,
+      "ping_ms": 0,
+      "disconnects_total": 0,
+      "last_disconnect_at": null,
+      "last_disconnect_error": null,
+      "endpoint": "embedded:mem",
+      "medium": "mem",
+      "durable": false
+    },
+    "dbnum_consistency": {
+      "judged": 0,
+      "in_sync": 0,
+      "lagging": 0,
+      "not_judged": 0,
+      "chasing_roots": 0,
+      "dead_roots": 0,
+      "lazy_roots": 0,
+      "lagging_samples": []
+    },
+    "dbnum_consistency_observation": {
+      "sample_age_ms": 14974,
+      "refresh_interval_ms": 30000,
+      "refreshing": false,
+      "last_error": null
+    },
+    "spatial_tree": {
+      "state": "ready_empty",
+      "ready": true,
+      "startup_verdict": "reused",
+      "format_version": 4,
+      "entries": 0,
+      "usable_pointer_rows": null,
+      "invalid_pointer_rows": null,
+      "file_epoch": 0,
+      "db_epoch": 0,
+      "drift": false,
+      "snapshot_watermarks": {},
+      "db_watermarks": {},
+      "snapshot_sha256": "82868717e3e4bca7be1b03f6170ab3b4ec47831f357a7ade6022238a234b6567",
+      "last_verified_at": 1789881302,
+      "last_rebuild_attempts": 0,
+      "last_error": null
+    },
+    "room_build": {
+      "resident": {
+        "startup": {
+          "blocked": null,
+          "summary": "[房间初始化] latest 文件 [] → 215 间房 / 230 块在册面板 / 230 块有几何 / 0 块无几何 / 网格 230/230 键 0.6 MB 耗时 228ms",
+          "expected_dbnums": [],
+          "duration_ms": 228,
+          "rss_bytes": 160317440,
+          "at": "2026-09-20T13:15:03.204933700+08:00"
+        },
+        "last_swap": null,
+        "models": [
+          {
+            "form": "latest",
+            "key": "1ea8af834201dd2873199d9ad092aed47d448c3ebb2028f5b8bc04413380d1df",
+            "digest": "5e94adb20a94409947ec2b395af94e06670281f146b7ef572d11a1d6fa4500ec",
+            "rooms": 215,
+            "registered_panels": 230,
+            "panels_with_geometry": 230,
+            "missing_panels": 0,
+            "missing_geometry": [],
+            "unusable_panels": 0,
+            "missing_dbnums": [],
+            "problems": 0,
+            "meshes_cached": 230,
+            "mesh_keys_expected": 230,
+            "mesh_keys_warmed": 230,
+            "mesh_warm_failed": 0,
+            "mesh_bytes": 626028
+          }
+        ],
+        "unwatched_missing_geometry_notice": null,
+        "status": "ready",
+        "generation": "72979202d292cb57761a3c7daec8c96f834587d574704ef12f9da8129f394211",
+        "completed_at": "2026-09-20T13:15:03.205247500+08:00",
+        "enabled": true,
+        "mdb_dbnums_expected": [
+          1112,
+          6003,
+          7009,
+          7011,
+          7015,
+          7022,
+          7027,
+          7048,
+          7321,
+          7324,
+          7326,
+          7327,
+          7329,
+          7330,
+          7331,
+          7332,
+          7333,
+          7334,
+          7350,
+          7352,
+          7353,
+          7354,
+          7356,
+          7741,
+          7997,
+          7998,
+          7999,
+          8000,
+          250705
+        ],
+        "mdb_dbnums_loaded": [
+          1112,
+          6003,
+          7009,
+          7011,
+          7015,
+          7022,
+          7027,
+          7048,
+          7321,
+          7324,
+          7326,
+          7327,
+          7329,
+          7330,
+          7331,
+          7332,
+          7333,
+          7334,
+          7350,
+          7352,
+          7353,
+          7354,
+          7356,
+          7741,
+          7997,
+          7998,
+          7999,
+          8000,
+          250705
+        ],
+        "mdb_dbnums_missing": [],
+        "startup_duration_ms": 228,
+        "last_failure": null,
+        "rebuild_backoff": null,
+        "swap_ledger": {
+          "entries": 0,
+          "capacity": 64,
+          "oldest_age_ms": null,
+          "segments": []
+        },
+        "rooms": 215,
+        "registered_panels": 230,
+        "panels_ready": 230,
+        "missing_panels": 0,
+        "missing_dbnums": [],
+        "mesh_keys_expected": 230,
+        "mesh_keys_warmed": 230,
+        "mesh_warm_failed": 0,
+        "mesh_bytes": 626028,
+        "topology_digest": "5e94adb20a94409947ec2b395af94e06670281f146b7ef572d11a1d6fa4500ec",
+        "geometry_digest": "a2384b9eff169b5f857662d2275811685fb844134ab40c21243fc5406201502e",
+        "source_sessions": {
+          "1112": 729,
+          "6003": 4,
+          "7009": 479,
+          "7011": 641,
+          "7015": 511,
+          "7022": 254,
+          "7027": 445,
+          "7048": 54,
+          "7321": 77,
+          "7324": 1362,
+          "7326": 639,
+          "7327": 1470,
+          "7329": 221,
+          "7330": 41,
+          "7331": 23,
+          "7332": 22,
+          "7333": 1724,
+          "7334": 312,
+          "7350": 207,
+          "7352": 50,
+          "7353": 97,
+          "7354": 266,
+          "7356": 14,
+          "7741": 90,
+          "7997": 339,
+          "7998": 14,
+          "7999": 200,
+          "8000": 640,
+          "250705": 9
+        }
+      },
+      "bootstrap": {
+        "status": "ready",
+        "dbnums_total": 0,
+        "dbnums_done": 0,
+        "dbnums_failed": 0,
+        "roots_total": 0,
+        "roots_ready": 0,
+        "roots_failed": 0,
+        "current_dbnum": null,
+        "stage": "complete",
+        "room_edges_written": 0,
+        "max_transaction_bytes": 0,
+        "elapsed_ms": 0,
+        "rss_mib": null,
+        "failure_samples": []
+      },
+      "parked": {}
+    },
+    "static_assets": true,
+    "debug_dbnums": [],
+    "watch_dbnums": [
+      7998,
+      8000
+    ],
+    "watch_dbnums_origin": "DbOption.toml 的 watch_dbnums",
+    "model_incremental_types": [],
+    "model_incremental_types_origin": null,
+    "in_memory_db": true
+  },
+  "headers": {
+    "access-control-allow-origin": "*",
+    "access-control-expose-headers": "*",
+    "content-length": "13416",
+    "content-type": "application/json",
+    "date": "Sun, 20 Sep 2026 05:15:18 GMT",
+    "vary": "origin, access-control-request-method, access-control-request-headers"
+  }
+}

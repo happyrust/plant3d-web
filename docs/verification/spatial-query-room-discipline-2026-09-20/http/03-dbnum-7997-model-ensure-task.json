@@ -1,0 +1,105 @@
+{
+  "started": {
+    "status": 202,
+    "elapsed_ms": 630,
+    "json": {
+      "task_id": "dbnum-model-ensure-7997-20260920-131518-000000",
+      "dbnum": 7997,
+      "expected_roots": 6772,
+      "already_ready": 0,
+      "source_sesno": 339,
+      "state": "running",
+      "model_source": "memory",
+      "model_source_reason": "read-through",
+      "durable": false
+    },
+    "headers": {
+      "access-control-allow-origin": "*",
+      "access-control-expose-headers": "*",
+      "content-length": "227",
+      "content-type": "application/json",
+      "date": "Sun, 20 Sep 2026 05:15:18 GMT",
+      "vary": "origin, access-control-request-method, access-control-request-headers"
+    }
+  },
+  "final": {
+    "status": 200,
+    "elapsed_ms": 2,
+    "json": {
+      "task_id": "dbnum-model-ensure-7997-20260920-131518-000000",
+      "kind": "dbnum_model_ensure",
+      "state": "succeeded",
+      "project": "AvevaMarineSample",
+      "created_at": "2026-09-20T13:15:19.400794200+08:00",
+      "started_at": "2026-09-20T13:15:19.400794200+08:00",
+      "finished_at": "2026-09-20T13:16:46.485468900+08:00",
+      "dbnum": 7997,
+      "db_type": "DESI",
+      "units_done": 6772,
+      "total_units": 6772,
+      "events_seen": 1,
+      "current_stage": "generate",
+      "stage_started_at": "2026-09-20T13:15:19.400794200+08:00",
+      "stage_last_progress_at": "2026-09-20T13:16:46.024361700+08:00",
+      "detail": {
+        "dbnum": 7997,
+        "expected_roots": 6772,
+        "already_ready": 0,
+        "ready_roots": 6772,
+        "room_ready_roots": 6772,
+        "failed_roots": 0,
+        "durable": false,
+        "purpose": "on_demand",
+        "room_generation": "72979202d292cb57761a3c7daec8c96f834587d574704ef12f9da8129f394211",
+        "publication": {
+          "process_store": true,
+          "durable": false
+        },
+        "frozen_source": {
+          "file": "ams7997_0001",
+          "db_type": "DESI",
+          "source_sesno": 339,
+          "opened_len": 71149568,
+          "token_sha256": "3b964c66d7c22c820427b3cffb58aca132d524a1319682075c96f9aef2a2db05"
+        },
+        "pipeline": "e3d-model generate_and_persist_roots"
+      },
+      "result": {
+        "expected": 6772,
+        "already_ready": 0,
+        "newly_ready": 6772,
+        "ready": 6772,
+        "reported_completed": 6772,
+        "room_edges_written": 66135,
+        "rows_upserted": 66442,
+        "commits": 43,
+        "max_transaction_bytes": 3316837,
+        "failed": 0,
+        "missing": 0,
+        "missing_samples": [],
+        "failure_samples": [],
+        "failure_samples_truncated": 0,
+        "error": null,
+        "source_sesno": 339,
+        "durable": false
+      },
+      "steps": [
+        {
+          "name": "generate",
+          "at": "2026-09-20T13:15:19.400794200+08:00",
+          "ms": 87084,
+          "ok": true
+        }
+      ]
+    },
+    "headers": {
+      "access-control-allow-origin": "*",
+      "access-control-expose-headers": "*",
+      "content-length": "1486",
+      "content-type": "application/json",
+      "date": "Sun, 20 Sep 2026 05:16:48 GMT",
+      "vary": "origin, access-control-request-method, access-control-request-headers"
+    }
+  },
+  "elapsed_s": 90
+}

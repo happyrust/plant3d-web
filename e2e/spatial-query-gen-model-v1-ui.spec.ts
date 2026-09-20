@@ -12,7 +12,11 @@
  * 前置：gen-model 在 `GEN_MODEL_V1_BASE_URL`（缺省 `http://127.0.0.1:8022`）、空间树 ready、服务认得 AvevaMarineSample（7997）；
  * 页面走 Playwright `baseURL` 的 Vite dev server。不满足就整文件跳过。想轻一点：`--workers=1`；「拾取中心」只在 `--headed` 下跑。
  *
- * 状态：**未真机验证**（整理进仓时起不了服务；写法与 §7 记录逐条对照，跑出来的差异按记录逐条核）。
+ * 状态：**2026-09-20 真机跑过一遍**——dev `:3111` + `:8027`（`gen-model-model-cache@805170bd4` release、mem 档、`room_membership=true`、
+ * 7997 整库 ensure 后 61 807 条），`--workers=1` 下 9 passed / 1 skipped（拾取中心要 `--headed`）。当天顺手修的三处不是功能问题：
+ * 裸 `import('/src/…')` 在 HMR 过的 dev 上另起模块实例（改经 `__appModuleUrl`）、Windows 剪贴板 CRLF、
+ * 树里同一 refno 多条条目时 store 按 refno 去重（比对按去重后的集合）。记录见
+ * `docs/verification/spatial-query-room-discipline-2026-09-20/README.md` §3。
  */
 import { expect, test } from '@playwright/test';
 
@@ -58,7 +62,7 @@ function serverRefnos(body: NearbyResponseBody): string[] {
   return (body.results ?? []).map((item) => item.refno);
 }
 
-test('范围 · 手输坐标：球形 2 m 发 x/y/z + shape + per_page，摘要与行序对得上服务端页，v1 源有覆盖面提示、无专业筛选；立方体 ≥ 球形；排序参数透传且按距离非降', async ({ page }) => {
+test('范围 · 手输坐标：球形 2 m 发 x/y/z + shape + per_page，摘要与行序对得上服务端页，v1 源有覆盖面提示、专业筛选 / 房间块 / 「按专业」在（ADR 0067）；立方体 ≥ 球形；排序参数透传：按距离非降、按专业发 spec_distance 且页内 spec_value 非降', async ({ page }) => {
   const { pageErrors } = await openSpatialUiPage(page, { mode: 'range' });
   const center = await fetchServerCenter(FIXTURE.bran);
   expect(center, `nearby?refno=${toSlashRefno(FIXTURE.bran)} 应给出 refno_aabb_center`).not.toBeNull();
@@ -83,17 +87,22 @@ test('范围 · 手输坐标：球形 2 m 发 x/y/z + shape + per_page，摘要�
   const viewerLocal = store.items.filter((item) => item.matchedBy === 'viewer-local');
   expect(summary.total).toBe((sphere.body.total_count ?? 0) + viewerLocal.length);
   expect(summary.currentPage).toBe((sphere.body.returned_count ?? 0) + viewerLocal.length);
-  // store 里服务端条目沿用服务端页序，本地独有接在后面
-  expect(store.items.slice(0, serverRefnos(sphere.body).length).map((item) => item.refno)).toEqual(serverRefnos(sphere.body));
+  // store 里服务端条目沿用服务端页序，本地独有接在后面。按 refno 去重后比：整库 ensure 过的树里同一 refno 会有多条条目
+  // （2026-09-20 :8027 上 61 807 条 / 47 751 个 refno，见 docs/verification/spatial-query-room-discipline-2026-09-20），store 按 refno 合并成一条
+  const serverPageUnique = [...new Set(serverRefnos(sphere.body))];
+  expect(store.items.slice(0, serverPageUnique.length).map((item) => item.refno)).toEqual(serverPageUnique);
 
   await expandResults(page);
   expect(await resultRowRefnos(page)).toEqual(expectedRowOrder(store.items));
   await expect(page.getByTestId('spatial-coverage-hint')).toBeVisible();
-  await expect(page.getByTestId('spec-filter')).toHaveCount(0);
-  await expect(page.getByTestId('spatial-sort-specThenDistance')).toHaveCount(0);
 
   // 立方体：边长 2r 的盒包住同半径的球，命中只多不少
   await expandAdvanced(page);
+  // ADR 0067（2026-09-20）：v1 源也有专业维度（服务端按 SITE 名派生）与房间过滤块——此前这里断言两者**不存在**。
+  // 房间块画不画只看源认不认（v1 认）；服务端此刻能不能（room_membership 开关 / 模型就绪）是块里的一句话，不在这里断言。
+  await expect(page.getByTestId('spec-filter')).toBeVisible();
+  await expect(page.getByTestId('room-filter')).toHaveCount(1);
+  await expect(page.getByTestId('spatial-sort-specThenDistance')).toBeVisible();
   await page.getByRole('button', { name: '立方体', exact: true }).click();
   const cube = await submitAndCapture(page, (params) => params.get('shape') === 'cube');
   expect(cube.status).toBe(200);
@@ -114,6 +123,20 @@ test('范围 · 手输坐标：球形 2 m 发 x/y/z + shape + per_page，摘要�
     expect(distances[i]!, `距离序第 ${i} 项`).toBeGreaterThanOrEqual(distances[i - 1]!);
   }
   await expect(page.getByTestId('spatial-sort-name-hint')).toHaveCount(0);
+
+  // 「按专业」：适配器同名直通 sort=spec_distance（2026-09-20 起服务端认这一档），页内 spec_value 非降、同专业内距离非降
+  const bySpec = nextNearby(page, (params) => params.get('sort') === 'spec_distance');
+  await page.getByTestId('spatial-sort-specThenDistance').click();
+  const specPage = (await bySpec).body.results ?? [];
+  for (let i = 1; i < specPage.length; i += 1) {
+    const prev = specPage[i - 1]!;
+    const next = specPage[i]!;
+    expect(next.spec_value ?? 0, `专业序第 ${i} 项`).toBeGreaterThanOrEqual(prev.spec_value ?? 0);
+    if ((next.spec_value ?? 0) === (prev.spec_value ?? 0)) {
+      expect(next.distance, `同专业第 ${i} 项按距离`).toBeGreaterThanOrEqual(prev.distance);
+    }
+  }
+  await page.getByTestId('spatial-sort-distanceAsc').click();
 
   await expect(errorBanner(page)).toHaveCount(0);
   expect(pageErrors, pageErrors.join('\n')).toEqual([]);
@@ -305,18 +328,24 @@ test('结果动作：全部显示 → 结果全可见；隔离 → 其余 X-Ray�
     return state.selected && state.visible;
   }, { timeout: 30_000 }).toBe(true);
 
-  // 复制当前页 Refno：剪贴板一行一个、按显示顺序
+  // 复制当前页 Refno：剪贴板一行一个，按 store 里当前页的顺序（服务端页序 + 末尾的本地独有项；`copyCurrentPageRefnos` 取
+  // `pagedResultItems`，不是分组后的 DOM 顺序——按专业分组时两者不同），条数与结果区行数相同
   const rows = await resultRowRefnos(page);
   await page.getByTestId('copy-current-page-refnos').click();
   await expect(page.getByText(`已复制 ${rows.length} 个当前页 Refno`)).toBeVisible();
   const clipboard = await page.evaluate(() => navigator.clipboard.readText());
-  expect(clipboard.split('\n')).toEqual(rows);
+  // Windows 上 Chrome 剪贴板回读的是 CRLF
+  const copied = clipboard.split(/\r?\n/);
+  expect(copied).toEqual(refnos);
+  expect([...copied].sort()).toEqual([...rows].sort());
 
   // 加载当前页：这一页的未加载全部补上
   await page.getByRole('button', { name: '加载当前页', exact: true }).click();
   await expect.poll(async () => (await readSummary(page)).unloaded, { timeout: 180_000, intervals: [1000, 2000, 5000] }).toBe(0);
   const after = await readSummary(page);
-  expect(after.loaded).toBe(after.currentPage);
+  // 「已加载」按 store 里的条目数（按 refno 去重）算；摘要的「当前页 N 项」是服务端 returned_count，树里同一 refno 有多条条目时
+  // 两个数不相等（2026-09-20 :8027 上 37 vs 22，见 docs/verification/spatial-query-room-discipline-2026-09-20 的顺手发现），不是没加载完
+  expect(after.loaded).toBe((await readStoreState(page)).items.length);
 
   await expect(errorBanner(page)).toHaveCount(0);
   expect(pageErrors, pageErrors.join('\n')).toEqual([]);
@@ -465,8 +494,7 @@ test('拾取中心（仅 headed）：点到构件表面后摘要换成拾取点�
   const fractions = [0.5, 0.4, 0.6, 0.3, 0.7];
   const samples = fractions.flatMap((fy) => fractions.map((fx) => ({ x: box.width * fx, y: box.height * fy })));
   const readPicked = () => page.evaluate(() =>
-    // @ts-expect-error -- browser-side Vite module is available in the live dev server.
-    import('/src/composables/useToolStore.ts').then((mod) => (mod.useToolStore().pickedQueryCenter.value ?? null) as { entityId: string } | null),
+    import((window as Window & { __appModuleUrl?: (path: string) => string }).__appModuleUrl?.('/src/composables/useToolStore.ts') ?? '/src/composables/useToolStore.ts').then((mod) => (mod.useToolStore().pickedQueryCenter.value ?? null) as { entityId: string } | null),
   );
   const hits: string[] = [];
   let pickedRefno: string | null = null;

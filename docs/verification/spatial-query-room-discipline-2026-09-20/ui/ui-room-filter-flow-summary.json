@@ -1,0 +1,118 @@
+{
+  "gen_model": "http://127.0.0.1:8027",
+  "room": "24381_35580",
+  "room_num": "R432",
+  "radius_m": 3,
+  "steps": [
+    {
+      "step": "baseline",
+      "params": {
+        "x": "-6379.5703",
+        "y": "-11350.16",
+        "z": "5030",
+        "radius": "3000",
+        "shape": "sphere",
+        "sort": "spec_distance",
+        "include_negative": "false",
+        "page": "1",
+        "per_page": "100"
+      },
+      "total_count": 1302,
+      "summary": {
+        "total": 1302,
+        "currentPage": 100,
+        "loaded": 0,
+        "unloaded": 68
+      }
+    },
+    {
+      "step": "room-selected",
+      "placeholder": "搜索房间号 / 名称（在册 215 间），回车按房间号精确加入",
+      "dropdown_options": 1,
+      "chip": "R432 · /1RX-RM04-R432"
+    },
+    {
+      "step": "room-filtered",
+      "params": {
+        "x": "-6379.5703",
+        "y": "-11350.16",
+        "z": "5030",
+        "radius": "3000",
+        "shape": "sphere",
+        "sort": "spec_distance",
+        "include_negative": "false",
+        "rooms": "24381/35580",
+        "page": "1",
+        "per_page": "100"
+      },
+      "total_count": 1059,
+      "summary": {
+        "total": 1059,
+        "currentPage": 100,
+        "loaded": 0,
+        "unloaded": 96
+      },
+      "room_status": {
+        "rooms": [
+          {
+            "refno": "24381_35580",
+            "room_num": "R432"
+          }
+        ],
+        "source": "memory",
+        "matched": 1055,
+        "unresolved": 0,
+        "definition_version": "72979202d292cb57761a3c7daec8c96f834587d574704ef12f9da8129f394211",
+        "library_alignment_current": null
+      },
+      "warnings": []
+    },
+    {
+      "step": "group-dimension",
+      "spec_titles": [
+        "未知或其他",
+        "仪表系统"
+      ],
+      "dbnum_titles": [
+        "库 7997"
+      ]
+    },
+    {
+      "step": "room-list",
+      "rows": 7,
+      "texts": [
+        "/1RX-RM01-R13224381_1283FRMW11 项房间号 信息 显示",
+        "/1RX-RM01-R14324381_1407FRMW86 项房间号 信息 显示",
+        "/1RX-RM01-R14424381_1443FRMW92 项房间号 信息 显示",
+        "/1RX-RM02-R23124381_972FRMW1 项房间号 信息 显示",
+        "/1RX-RM03-R33224381_35095FRMW5 项房间号 信息 显示",
+        "/1RX-RM04-R43224381_35580FRMW92 项反应堆冷却剂泵环路3 信息 显示",
+        "/1RX-RM05-R53224381_35929FRMW1 项反应堆冷却剂泵环路3 信息 显示"
+      ]
+    },
+    {
+      "step": "spec-chip",
+      "spec_value": 3,
+      "chip": "仪表(1051)",
+      "params": {
+        "x": "-6379.5703",
+        "y": "-11350.16",
+        "z": "5030",
+        "radius": "3000",
+        "shape": "sphere",
+        "sort": "spec_distance",
+        "include_negative": "false",
+        "rooms": "24381/35580",
+        "spec_values": "3",
+        "page": "1",
+        "per_page": "100"
+      },
+      "total_count": 1051
+    },
+    {
+      "step": "room-cleared",
+      "total_count": 1302
+    }
+  ],
+  "page_errors": []
+}

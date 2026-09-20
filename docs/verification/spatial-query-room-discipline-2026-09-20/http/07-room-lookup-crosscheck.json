@@ -1,0 +1,278 @@
+{
+  "room": "24381_35580",
+  "in_room_sample": [
+    {
+      "refno": "24381_4090",
+      "status": 409,
+      "calculation_status": null,
+      "rooms": [],
+      "panels": 0
+    },
+    {
+      "refno": "24381_4096",
+      "status": 409,
+      "calculation_status": null,
+      "rooms": [],
+      "panels": 0
+    },
+    {
+      "refno": "24381_4257",
+      "status": 409,
+      "calculation_status": null,
+      "rooms": [],
+      "panels": 0
+    },
+    {
+      "refno": "24381_4480",
+      "status": 409,
+      "calculation_status": null,
+      "rooms": [],
+      "panels": 0
+    },
+    {
+      "refno": "24381_4486",
+      "status": 409,
+      "calculation_status": null,
+      "rooms": [],
+      "panels": 0
+    },
+    {
+      "refno": "24381_101694",
+      "status": 200,
+      "calculation_status": "computed",
+      "rooms": [
+        "24381_35580",
+        "24381_1407",
+        "24381_1443"
+      ],
+      "panels": 3
+    },
+    {
+      "refno": "24381_101696",
+      "status": 200,
+      "calculation_status": "computed",
+      "rooms": [
+        "24381_35580",
+        "24381_1407",
+        "24381_1443"
+      ],
+      "panels": 3
+    },
+    {
+      "refno": "24381_101698",
+      "status": 200,
+      "calculation_status": "computed",
+      "rooms": [
+        "24381_35580",
+        "24381_1407",
+        "24381_1443"
+      ],
+      "panels": 3
+    },
+    {
+      "refno": "24381_171246",
+      "status": 200,
+      "calculation_status": "computed",
+      "rooms": [
+        "24381_35580",
+        "24381_1283",
+        "24381_1443"
+      ],
+      "panels": 3
+    },
+    {
+      "refno": "24381_171250",
+      "status": 200,
+      "calculation_status": "computed",
+      "rooms": [
+        "24381_35580",
+        "24381_1443",
+        "24381_1407"
+      ],
+      "panels": 3
+    },
+    {
+      "refno": "24381_171252",
+      "status": 200,
+      "calculation_status": "computed",
+      "rooms": [
+        "24381_35580",
+        "24381_1443",
+        "24381_1283"
+      ],
+      "panels": 3
+    },
+    {
+      "refno": "24381_171253",
+      "status": 200,
+      "calculation_status": "computed",
+      "rooms": [
+        "24381_35580",
+        "24381_1443",
+        "24381_1283"
+      ],
+      "panels": 3
+    },
+    {
+      "refno": "24381_171254",
+      "status": 200,
+      "calculation_status": "computed",
+      "rooms": [
+        "24381_35580",
+        "24381_1443",
+        "24381_1283"
+      ],
+      "panels": 3
+    },
+    {
+      "refno": "24381_171255",
+      "status": 200,
+      "calculation_status": "computed",
+      "rooms": [
+        "24381_35580",
+        "24381_1283",
+        "24381_1443"
+      ],
+      "panels": 3
+    },
+    {
+      "refno": "24381_171256",
+      "status": 200,
+      "calculation_status": "computed",
+      "rooms": [
+        "24381_35580",
+        "24381_1283",
+        "24381_1443"
+      ],
+      "panels": 3
+    },
+    {
+      "refno": "24381_171312",
+      "status": 200,
+      "calculation_status": "computed",
+      "rooms": [
+        "24381_1407",
+        "24381_1443",
+        "24381_35095",
+        "24381_35580",
+        "24381_35601",
+        "24381_35117"
+      ],
+      "panels": 6
+    }
+  ],
+  "outside_sample": [
+    {
+      "refno": "24381_1143",
+      "status": 200,
+      "calculation_status": "computed",
+      "rooms": [],
+      "panels": 0
+    },
+    {
+      "refno": "24381_1285",
+      "status": 200,
+      "calculation_status": "computed",
+      "rooms": [],
+      "panels": 0
+    },
+    {
+      "refno": "24381_1409",
+      "status": 200,
+      "calculation_status": "computed",
+      "rooms": [],
+      "panels": 0
+    },
+    {
+      "refno": "24381_1445",
+      "status": 200,
+      "calculation_status": "computed",
+      "rooms": [],
+      "panels": 0
+    },
+    {
+      "refno": "24381_1504",
+      "status": 200,
+      "calculation_status": "computed",
+      "rooms": [],
+      "panels": 0
+    },
+    {
+      "refno": "24381_3997",
+      "status": 409,
+      "calculation_status": null,
+      "rooms": [],
+      "panels": 0
+    },
+    {
+      "refno": "24381_4102",
+      "status": 409,
+      "calculation_status": null,
+      "rooms": [],
+      "panels": 0
+    },
+    {
+      "refno": "24381_4108",
+      "status": 409,
+      "calculation_status": null,
+      "rooms": [],
+      "panels": 0
+    },
+    {
+      "refno": "24381_4263",
+      "status": 409,
+      "calculation_status": null,
+      "rooms": [],
+      "panels": 0
+    },
+    {
+      "refno": "24381_4403",
+      "status": 409,
+      "calculation_status": null,
+      "rooms": [],
+      "panels": 0
+    },
+    {
+      "refno": "24381_4468",
+      "status": 409,
+      "calculation_status": null,
+      "rooms": [],
+      "panels": 0
+    },
+    {
+      "refno": "24381_4474",
+      "status": 409,
+      "calculation_status": null,
+      "rooms": [],
+      "panels": 0
+    },
+    {
+      "refno": "24381_35033",
+      "status": 200,
+      "calculation_status": "computed",
+      "rooms": [],
+      "panels": 0
+    },
+    {
+      "refno": "24381_35105",
+      "status": 200,
+      "calculation_status": "computed",
+      "rooms": [],
+      "panels": 0
+    },
+    {
+      "refno": "24381_35119",
+      "status": 200,
+      "calculation_status": "computed",
+      "rooms": [],
+      "panels": 0
+    },
+    {
+      "refno": "24381_35322",
+      "status": 200,
+      "calculation_status": "computed",
+      "rooms": [],
+      "panels": 0
+    }
+  ]
+}

@@ -1,0 +1,713 @@
+{
+  "status": 200,
+  "elapsed_ms": 447,
+  "json": {
+    "results": [
+      {
+        "refno": "24381_101694",
+        "dbnum": 7997,
+        "noun": "CYLI",
+        "spec_value": 3,
+        "name": null,
+        "aabb": {
+          "min": [
+            -5812.775,
+            -9425.936,
+            6173.46
+          ],
+          "max": [
+            -5763.2026,
+            -9376.363,
+            6273.46
+          ]
+        },
+        "distance": 0,
+        "within_radius": true
+      },
+      {
+        "refno": "24381_101696",
+        "dbnum": 7997,
+        "noun": "CYLI",
+        "spec_value": 3,
+        "name": null,
+        "aabb": {
+          "min": [
+            -6138.8594,
+            -10261.261,
+            6030.5
+          ],
+          "max": [
+            -6089.287,
+            -10211.688,
+            6130.5
+          ]
+        },
+        "distance": 0,
+        "within_radius": true
+      },
+      {
+        "refno": "24381_101698",
+        "dbnum": 7997,
+        "noun": "CYLI",
+        "spec_value": 3,
+        "name": null,
+        "aabb": {
+          "min": [
+            -6265.371,
+            -10901.428,
+            5683
+          ],
+          "max": [
+            -6197.415,
+            -10793.794,
+            5733
+          ]
+        },
+        "distance": 0,
+        "within_radius": true
+      },
+      {
+        "refno": "24381_101700",
+        "dbnum": 7997,
+        "noun": "CYLI",
+        "spec_value": 3,
+        "name": null,
+        "aabb": {
+          "min": [
+            -4508.2046,
+            -13864.818,
+            5920
+          ],
+          "max": [
+            -4458.6323,
+            -13815.246,
+            6020
+          ]
+        },
+        "distance": 0,
+        "within_radius": true
+      },
+      {
+        "refno": "24381_101702",
+        "dbnum": 7997,
+        "noun": "CYLI",
+        "spec_value": 3,
+        "name": null,
+        "aabb": {
+          "min": [
+            -4557.441,
+            -13951.857,
+            5920
+          ],
+          "max": [
+            -4507.8687,
+            -13902.285,
+            6020
+          ]
+        },
+        "distance": 0,
+        "within_radius": true
+      },
+      {
+        "refno": "24381_101704",
+        "dbnum": 7997,
+        "noun": "CYLI",
+        "spec_value": 3,
+        "name": null,
+        "aabb": {
+          "min": [
+            -4606.683,
+            -14038.888,
+            5920
+          ],
+          "max": [
+            -4557.111,
+            -13989.315,
+            6020
+          ]
+        },
+        "distance": 0,
+        "within_radius": true
+      },
+      {
+        "refno": "24381_101706",
+        "dbnum": 7997,
+        "noun": "CYLI",
+        "spec_value": 3,
+        "name": null,
+        "aabb": {
+          "min": [
+            -4655.8853,
+            -10771.907,
+            6108
+          ],
+          "max": [
+            -4606.313,
+            -10722.335,
+            6158
+          ]
+        },
+        "distance": 0,
+        "within_radius": true
+      },
+      {
+        "refno": "24381_101708",
+        "dbnum": 7997,
+        "noun": "CYLI",
+        "spec_value": 3,
+        "name": null,
+        "aabb": {
+          "min": [
+            -5038.711,
+            -10652.514,
+            6108
+          ],
+          "max": [
+            -4989.1387,
+            -10602.941,
+            6158
+          ]
+        },
+        "distance": 0,
+        "within_radius": true
+      },
+      {
+        "refno": "24381_101718",
+        "dbnum": 7997,
+        "noun": "BOX",
+        "spec_value": 3,
+        "name": null,
+        "aabb": {
+          "min": [
+            -4620.778,
+            -10247.248,
+            5788.55
+          ],
+          "max": [
+            -4481.505,
+            -10107.976,
+            5888.55
+          ]
+        },
+        "distance": 0,
+        "within_radius": true
+      },
+      {
+        "refno": "24381_101720",
+        "dbnum": 7997,
+        "noun": "BOX",
+        "spec_value": 3,
+        "name": null,
+        "aabb": {
+          "min": [
+            -5197.805,
+            -10526.1455,
+            5788.55
+          ],
+          "max": [
+            -5089.47,
+            -10417.811,
+            5888.55
+          ]
+        },
+        "distance": 0,
+        "within_radius": true
+      },
+      {
+        "refno": "24381_101722",
+        "dbnum": 7997,
+        "noun": "BOX",
+        "spec_value": 3,
+        "name": null,
+        "aabb": {
+          "min": [
+            -4658.907,
+            -10904.351,
+            5788.55
+          ],
+          "max": [
+            -4526.0146,
+            -10771.458,
+            5888.55
+          ]
+        },
+        "distance": 0,
+        "within_radius": true
+      },
+      {
+        "refno": "24381_101724",
+        "dbnum": 7997,
+        "noun": "BOX",
+        "spec_value": 3,
+        "name": null,
+        "aabb": {
+          "min": [
+            -4924.774,
+            -10767.349,
+            6053.96
+          ],
+          "max": [
+            -4858.3276,
+            -10700.902,
+            6103.96
+          ]
+        },
+        "distance": 0,
+        "within_radius": true
+      },
+      {
+        "refno": "24381_101726",
+        "dbnum": 7997,
+        "noun": "BOX",
+        "spec_value": 3,
+        "name": null,
+        "aabb": {
+          "min": [
+            -4976.9004,
+            -10734.147,
+            6053.96
+          ],
+          "max": [
+            -4906.717,
+            -10663.964,
+            6103.96
+          ]
+        },
+        "distance": 0,
+        "within_radius": true
+      },
+      {
+        "refno": "24381_101728",
+        "dbnum": 7997,
+        "noun": "BOX",
+        "spec_value": 3,
+        "name": null,
+        "aabb": {
+          "min": [
+            -5034.144,
+            -10400.494,
+            6053.96
+          ],
+          "max": [
+            -4967.6978,
+            -10334.048,
+            6103.96
+          ]
+        },
+        "distance": 0,
+        "within_radius": true
+      },
+      {
+        "refno": "24381_103096",
+        "dbnum": 7997,
+        "noun": "BOX",
+        "spec_value": 3,
+        "name": "/Copy-of-RCS907MV",
+        "aabb": {
+          "min": [
+            -2960.35,
+            -9029.42,
+            4932.76
+          ],
+          "max": [
+            -2860.35,
+            -8929.42,
+            5032.76
+          ]
+        },
+        "distance": 0,
+        "within_radius": true
+      },
+      {
+        "refno": "24381_103154",
+        "dbnum": 7997,
+        "noun": "CYLI",
+        "spec_value": 3,
+        "name": null,
+        "aabb": {
+          "min": [
+            -4325.4,
+            -14108.82,
+            6018
+          ],
+          "max": [
+            -4225.4,
+            -14008.82,
+            6118
+          ]
+        },
+        "distance": 0,
+        "within_radius": true
+      },
+      {
+        "refno": "24381_103156",
+        "dbnum": 7997,
+        "noun": "CYLI",
+        "spec_value": 3,
+        "name": null,
+        "aabb": {
+          "min": [
+            -4372.99,
+            -14215.7,
+            6018
+          ],
+          "max": [
+            -4272.99,
+            -14115.7,
+            6118
+          ]
+        },
+        "distance": 0,
+        "within_radius": true
+      },
+      {
+        "refno": "24381_103158",
+        "dbnum": 7997,
+        "noun": "CYLI",
+        "spec_value": 3,
+        "name": null,
+        "aabb": {
+          "min": [
+            -4420.58,
+            -14322.58,
+            6018
+          ],
+          "max": [
+            -4320.58,
+            -14222.58,
+            6118
+          ]
+        },
+        "distance": 0,
+        "within_radius": true
+      },
+      {
+        "refno": "24381_103210",
+        "dbnum": 7997,
+        "noun": "CYLI",
+        "spec_value": 3,
+        "name": null,
+        "aabb": {
+          "min": [
+            -4155.4175,
+            -8633.432,
+            4386.631
+          ],
+          "max": [
+            -4014.9624,
+            -8496.448,
+            4514.709
+          ]
+        },
+        "distance": 0,
+        "within_radius": true
+      },
+      {
+        "refno": "24381_103212",
+        "dbnum": 7997,
+        "noun": "CYLI",
+        "spec_value": 3,
+        "name": null,
+        "aabb": {
+          "min": [
+            -3326.2776,
+            -9179.462,
+            4386.631
+          ],
+          "max": [
+            -3185.8225,
+            -9042.479,
+            4514.709
+          ]
+        },
+        "distance": 0,
+        "within_radius": true
+      },
+      {
+        "refno": "24381_103240",
+        "dbnum": 7997,
+        "noun": "CYLI",
+        "spec_value": 3,
+        "name": null,
+        "aabb": {
+          "min": [
+            -7927.84,
+            -10605.66,
+            4870.63
+          ],
+          "max": [
+            -7827.84,
+            -10505.66,
+            4970.63
+          ]
+        },
+        "distance": 0,
+        "within_radius": true
+      },
+      {
+        "refno": "24381_103242",
+        "dbnum": 7997,
+        "noun": "CYLI",
+        "spec_value": 3,
+        "name": null,
+        "aabb": {
+          "min": [
+            -8017.7495,
+            -10668.56,
+            4870.08
+          ],
+          "max": [
+            -7918.1304,
+            -10568.94,
+            4970.08
+          ]
+        },
+        "distance": 0,
+        "within_radius": true
+      },
+      {
+        "refno": "24381_105031",
+        "dbnum": 7997,
+        "noun": "REDU",
+        "spec_value": 3,
+        "name": null,
+        "aabb": {
+          "min": [
+            -4247.12,
+            -8009.1,
+            3795.5
+          ],
+          "max": [
+            -4211.38,
+            -7973.36,
+            3827
+          ]
+        },
+        "distance": 0,
+        "within_radius": true
+      },
+      {
+        "refno": "24381_105032",
+        "dbnum": 7997,
+        "noun": "BEND",
+        "spec_value": 3,
+        "name": null,
+        "aabb": {
+          "min": [
+            -4272.083,
+            -8023.2114,
+            3608.7107
+          ],
+          "max": [
+            -4224.5576,
+            -7986.5376,
+            3663.4636
+          ]
+        },
+        "distance": 0,
+        "within_radius": true
+      },
+      {
+        "refno": "24381_105033",
+        "dbnum": 7997,
+        "noun": "BEND",
+        "spec_value": 3,
+        "name": null,
+        "aabb": {
+          "min": [
+            -4438.6826,
+            -8139.2827,
+            3560.2964
+          ],
+          "max": [
+            -4391.157,
+            -8102.6084,
+            3615.0493
+          ]
+        },
+        "distance": 0,
+        "within_radius": true
+      }
+    ],
+    "center": {
+      "x": -6379.5703,
+      "y": -11350.16,
+      "z": 5030,
+      "source": "refno_aabb_center"
+    },
+    "radius": 3000,
+    "shape": "sphere",
+    "total_count": 1293,
+    "returned_count": 1000,
+    "page": 1,
+    "per_page": 1000,
+    "has_more": true,
+    "candidate_count": 3940,
+    "truncated_candidates": false,
+    "candidate_cap": 200000,
+    "groups": [
+      {
+        "dbnum": 7997,
+        "count": 1293
+      }
+    ],
+    "spec_groups": [
+      {
+        "spec_value": 3,
+        "count": 1293
+      }
+    ],
+    "filter_options": {
+      "nouns": [
+        {
+          "value": "CYLI",
+          "count": 444,
+          "is_negative": false
+        },
+        {
+          "value": "BOX",
+          "count": 251,
+          "is_negative": false
+        },
+        {
+          "value": "EXTR",
+          "count": 246,
+          "is_negative": false
+        },
+        {
+          "value": "BEND",
+          "count": 110,
+          "is_negative": false
+        },
+        {
+          "value": "CONE",
+          "count": 51,
+          "is_negative": false
+        },
+        {
+          "value": "WELD",
+          "count": 46,
+          "is_negative": false
+        },
+        {
+          "value": "RTOR",
+          "count": 40,
+          "is_negative": false
+        },
+        {
+          "value": "ATTA",
+          "count": 26,
+          "is_negative": false
+        },
+        {
+          "value": "PYRA",
+          "count": 19,
+          "is_negative": false
+        },
+        {
+          "value": "VALV",
+          "count": 13,
+          "is_negative": false
+        },
+        {
+          "value": "OLET",
+          "count": 10,
+          "is_negative": false
+        },
+        {
+          "value": "CTOR",
+          "count": 9,
+          "is_negative": false
+        },
+        {
+          "value": "COUP",
+          "count": 8,
+          "is_negative": false
+        },
+        {
+          "value": "REDU",
+          "count": 6,
+          "is_negative": false
+        },
+        {
+          "value": "SNOU",
+          "count": 6,
+          "is_negative": false
+        },
+        {
+          "value": "ELBO",
+          "count": 4,
+          "is_negative": false
+        },
+        {
+          "value": "GWALL",
+          "count": 4,
+          "is_negative": false
+        },
+        {
+          "value": "PANE",
+          "count": 4,
+          "is_negative": false
+        },
+        {
+          "value": "STWALL",
+          "count": 2,
+          "is_negative": false
+        },
+        {
+          "value": "TEE",
+          "count": 2,
+          "is_negative": false
+        },
+        {
+          "value": "DISH",
+          "count": 1,
+          "is_negative": false
+        },
+        {
+          "value": "UNIO",
+          "count": 1,
+          "is_negative": false
+        }
+      ],
+      "spec_values": [
+        {
+          "value": 3,
+          "count": 1293
+        },
+        {
+          "value": 0,
+          "count": 10
+        }
+      ]
+    },
+    "room_status": {
+      "rooms": [
+        {
+          "refno": "24381_35580",
+          "room_num": "R432"
+        }
+      ],
+      "source": "memory",
+      "matched": 1298,
+      "unresolved": 0,
+      "definition_version": "72979202d292cb57761a3c7daec8c96f834587d574704ef12f9da8129f394211",
+      "library_alignment_current": null
+    },
+    "spatial_state": "ready",
+    "coverage": "global-tree",
+    "_results_truncated": {
+      "kept": 25,
+      "total": 1000,
+      "note": "落盘时截短；total_count / returned_count / groups 等计数字段是完整响应的"
+    }
+  },
+  "headers": {
+    "access-control-allow-origin": "*",
+    "access-control-expose-headers": "*",
+    "content-length": "199944",
+    "content-type": "application/json",
+    "date": "Sun, 20 Sep 2026 05:16:57 GMT",
+    "vary": "origin, access-control-request-method, access-control-request-headers"
+  }
+}

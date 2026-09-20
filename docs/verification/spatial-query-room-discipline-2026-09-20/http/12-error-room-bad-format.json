@@ -1,0 +1,17 @@
+{
+  "status": 400,
+  "elapsed_ms": 1,
+  "json": {
+    "code": "bad_request",
+    "message": "rooms 必须是逗号分隔的房间 refno（a/b 或 a_b，收到 abc）",
+    "detail": null
+  },
+  "headers": {
+    "access-control-allow-origin": "*",
+    "access-control-expose-headers": "*",
+    "content-length": "121",
+    "content-type": "application/json",
+    "date": "Sun, 20 Sep 2026 05:16:58 GMT",
+    "vary": "origin, access-control-request-method, access-control-request-headers"
+  }
+}

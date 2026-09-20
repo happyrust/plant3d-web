@@ -1,0 +1,60 @@
+{
+  "center": {
+    "x": -6379.5703,
+    "y": -11350.16,
+    "z": 5030,
+    "source": "refno_aabb_center"
+  },
+  "first_100m": {
+    "status": 200,
+    "elapsed_ms": 1096,
+    "candidate_count": 61807,
+    "total_count": 61807,
+    "spec_groups": [
+      {
+        "spec_value": 0,
+        "count": 16029
+      },
+      {
+        "spec_value": 3,
+        "count": 31129
+      },
+      {
+        "spec_value": 4,
+        "count": 13517
+      },
+      {
+        "spec_value": 5,
+        "count": 1132
+      }
+    ]
+  },
+  "second_100m_memo_warm": {
+    "status": 200,
+    "elapsed_ms": 247,
+    "total_count": 61807
+  },
+  "rooms_100m": {
+    "status": 200,
+    "elapsed_ms": 3381,
+    "total_count": 1303,
+    "room_status": {
+      "rooms": [
+        {
+          "refno": "24381_35580",
+          "room_num": "R432"
+        }
+      ],
+      "source": "memory",
+      "matched": 1298,
+      "unresolved": 0,
+      "definition_version": "72979202d292cb57761a3c7daec8c96f834587d574704ef12f9da8129f394211",
+      "library_alignment_current": null
+    }
+  },
+  "spec_distance_100m": {
+    "status": 200,
+    "elapsed_ms": 318,
+    "total_count": 61807
+  }
+}

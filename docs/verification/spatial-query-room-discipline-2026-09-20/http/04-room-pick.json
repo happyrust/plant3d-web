@@ -1,0 +1,324 @@
+{
+  "radius_mm": 3000,
+  "trials": [
+    {
+      "room": {
+        "refno": "24381_35621",
+        "room_num": "R440",
+        "name": "/1RX-RM04-R440",
+        "dbnum": 7997,
+        "panel_count": 5
+      },
+      "ensure": {
+        "status": 200,
+        "result": "AlreadyAvailable",
+        "generation_root": "24381/35621"
+      },
+      "rooms_query": {
+        "status": 200,
+        "total_count": 515,
+        "matched": 505,
+        "unresolved": 0,
+        "elapsed_ms": 500
+      },
+      "baseline": {
+        "status": 200,
+        "total_count": 4856,
+        "candidate_count": 4871
+      }
+    },
+    {
+      "room": {
+        "refno": "24381_35422",
+        "room_num": "R411",
+        "name": "/1RX-RM04-R411",
+        "dbnum": 7997,
+        "panel_count": 3
+      },
+      "ensure": {
+        "status": 200,
+        "result": "AlreadyAvailable",
+        "generation_root": "24381/35422"
+      },
+      "rooms_query": {
+        "status": 200,
+        "total_count": 703,
+        "matched": 680,
+        "unresolved": 0,
+        "elapsed_ms": 403
+      },
+      "baseline": {
+        "status": 200,
+        "total_count": 3343,
+        "candidate_count": 3352
+      }
+    },
+    {
+      "room": {
+        "refno": "24381_35486",
+        "room_num": "R421",
+        "name": "/1RX-RM04-R421",
+        "dbnum": 7997,
+        "panel_count": 3
+      },
+      "ensure": {
+        "status": 200,
+        "result": "AlreadyAvailable",
+        "generation_root": "24381/35486"
+      },
+      "rooms_query": {
+        "status": 200,
+        "total_count": 718,
+        "matched": 713,
+        "unresolved": 0,
+        "elapsed_ms": 582
+      },
+      "baseline": {
+        "status": 200,
+        "total_count": 5976,
+        "candidate_count": 5985
+      }
+    },
+    {
+      "room": {
+        "refno": "24381_35558",
+        "room_num": "R431",
+        "name": "/1RX-RM04-R431",
+        "dbnum": 7997,
+        "panel_count": 3
+      },
+      "ensure": {
+        "status": 200,
+        "result": "AlreadyAvailable",
+        "generation_root": "24381/35558"
+      },
+      "rooms_query": {
+        "status": 200,
+        "total_count": 720,
+        "matched": 705,
+        "unresolved": 0,
+        "elapsed_ms": 560
+      },
+      "baseline": {
+        "status": 200,
+        "total_count": 4586,
+        "candidate_count": 4595
+      }
+    },
+    {
+      "room": {
+        "refno": "24381_36775",
+        "room_num": "R971",
+        "name": "/1RX-RM10-R971",
+        "dbnum": 7997,
+        "panel_count": 3
+      },
+      "ensure": {
+        "status": 200,
+        "result": "AlreadyAvailable",
+        "generation_root": "24381/36775"
+      },
+      "rooms_query": {
+        "status": 200,
+        "total_count": 0,
+        "matched": 0,
+        "unresolved": 0,
+        "elapsed_ms": 3
+      },
+      "baseline": {
+        "status": 200,
+        "total_count": 23,
+        "candidate_count": 32
+      }
+    },
+    {
+      "room": {
+        "refno": "24381_1453",
+        "room_num": "R145",
+        "name": "/1RX-RM01-R145",
+        "dbnum": 7997,
+        "panel_count": 2
+      },
+      "ensure": {
+        "status": 200,
+        "result": "AlreadyAvailable",
+        "generation_root": "24381/1453"
+      },
+      "rooms_query": {
+        "status": 200,
+        "total_count": 22,
+        "matched": 20,
+        "unresolved": 0,
+        "elapsed_ms": 274
+      },
+      "baseline": {
+        "status": 200,
+        "total_count": 1649,
+        "candidate_count": 1655
+      }
+    },
+    {
+      "room": {
+        "refno": "24381_34849",
+        "room_num": "R301",
+        "name": "/1RX-RM03-R301",
+        "dbnum": 7997,
+        "panel_count": 2
+      },
+      "ensure": {
+        "status": 200,
+        "result": "AlreadyAvailable",
+        "generation_root": "24381/34849"
+      },
+      "rooms_query": {
+        "status": 200,
+        "total_count": 58,
+        "matched": 41,
+        "unresolved": 0,
+        "elapsed_ms": 302
+      },
+      "baseline": {
+        "status": 200,
+        "total_count": 2686,
+        "candidate_count": 2692
+      }
+    },
+    {
+      "room": {
+        "refno": "24381_35095",
+        "room_num": "R332",
+        "name": "/1RX-RM03-R332",
+        "dbnum": 7997,
+        "panel_count": 2
+      },
+      "ensure": {
+        "status": 200,
+        "result": "AlreadyAvailable",
+        "generation_root": "24381/35095"
+      },
+      "rooms_query": {
+        "status": 200,
+        "total_count": 973,
+        "matched": 941,
+        "unresolved": 0,
+        "elapsed_ms": 493
+      },
+      "baseline": {
+        "status": 200,
+        "total_count": 4461,
+        "candidate_count": 4467
+      }
+    },
+    {
+      "room": {
+        "refno": "24381_35117",
+        "room_num": "R333",
+        "name": "/1RX-RM03-R333",
+        "dbnum": 7997,
+        "panel_count": 2
+      },
+      "ensure": {
+        "status": 200,
+        "result": "AlreadyAvailable",
+        "generation_root": "24381/35117"
+      },
+      "rooms_query": {
+        "status": 200,
+        "total_count": 608,
+        "matched": 555,
+        "unresolved": 0,
+        "elapsed_ms": 702
+      },
+      "baseline": {
+        "status": 200,
+        "total_count": 6416,
+        "candidate_count": 6422
+      }
+    },
+    {
+      "room": {
+        "refno": "24381_35174",
+        "room_num": "R345",
+        "name": "/1RX-RM03-R345",
+        "dbnum": 7997,
+        "panel_count": 2
+      },
+      "ensure": {
+        "status": 200,
+        "result": "AlreadyAvailable",
+        "generation_root": "24381/35174"
+      },
+      "rooms_query": {
+        "status": 200,
+        "total_count": 884,
+        "matched": 825,
+        "unresolved": 0,
+        "elapsed_ms": 463
+      },
+      "baseline": {
+        "status": 200,
+        "total_count": 4340,
+        "candidate_count": 4346
+      }
+    },
+    {
+      "room": {
+        "refno": "24381_35580",
+        "room_num": "R432",
+        "name": "/1RX-RM04-R432",
+        "dbnum": 7997,
+        "panel_count": 2
+      },
+      "ensure": {
+        "status": 200,
+        "result": "AlreadyAvailable",
+        "generation_root": "24381/35580"
+      },
+      "rooms_query": {
+        "status": 200,
+        "total_count": 1303,
+        "matched": 1298,
+        "unresolved": 0,
+        "elapsed_ms": 453
+      },
+      "baseline": {
+        "status": 200,
+        "total_count": 3934,
+        "candidate_count": 3940
+      }
+    },
+    {
+      "room": {
+        "refno": "24381_35716",
+        "room_num": "R445",
+        "name": "/1RX-RM04-R445",
+        "dbnum": 7997,
+        "panel_count": 2
+      },
+      "ensure": {
+        "status": 200,
+        "result": "AlreadyAvailable",
+        "generation_root": "24381/35716"
+      },
+      "rooms_query": {
+        "status": 200,
+        "total_count": 2,
+        "matched": 1,
+        "unresolved": 0,
+        "elapsed_ms": 40
+      },
+      "baseline": {
+        "status": 200,
+        "total_count": 778,
+        "candidate_count": 784
+      }
+    }
+  ],
+  "picked": {
+    "refno": "24381_35580",
+    "room_num": "R432",
+    "name": "/1RX-RM04-R432",
+    "dbnum": 7997,
+    "panel_count": 2
+  }
+}

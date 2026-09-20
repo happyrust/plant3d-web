@@ -1,0 +1,17 @@
+{
+  "status": 400,
+  "elapsed_ms": 0,
+  "json": {
+    "code": "bad_request",
+    "message": "sort 只接受 distance/name/spec_distance（收到 bogus）",
+    "detail": null
+  },
+  "headers": {
+    "access-control-allow-origin": "*",
+    "access-control-expose-headers": "*",
+    "content-length": "109",
+    "content-type": "application/json",
+    "date": "Sun, 20 Sep 2026 05:16:58 GMT",
+    "vary": "origin, access-control-request-method, access-control-request-headers"
+  }
+}

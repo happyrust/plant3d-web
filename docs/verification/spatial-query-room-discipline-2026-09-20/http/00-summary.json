@@ -1,0 +1,798 @@
+{
+  "base": "http://127.0.0.1:8027",
+  "dbnum": 7997,
+  "radius_mm": 3000,
+  "started_at": "2026-09-20T05:15:18.484Z",
+  "stages": {
+    "health": {
+      "status": 200,
+      "build": "0.1.28+g805170bd41d7.1789880404",
+      "git_commit": null,
+      "room_membership": true,
+      "features_room": {
+        "status": "available",
+        "generation": "72979202d292cb57761a3c7daec8c96f834587d574704ef12f9da8129f394211",
+        "executor": "memory"
+      },
+      "spatial_tree": {
+        "state": "ready_empty",
+        "entries": 0,
+        "db_watermarks": {}
+      },
+      "store": {
+        "connected": true,
+        "ping_ms": 0,
+        "disconnects_total": 0,
+        "last_disconnect_at": null,
+        "last_disconnect_error": null,
+        "endpoint": "embedded:mem",
+        "medium": "mem",
+        "durable": false
+      },
+      "model_cache": {
+        "resident_records": 0,
+        "resident_roots": 0,
+        "write_behind": {
+          "accepting": true,
+          "worker_alive": false,
+          "worker_restarts": 0,
+          "persist_attempts": 0,
+          "persist_retries": 0,
+          "blocked_transitions": 0,
+          "ack_mismatches": 0,
+          "last_attempt_at": null,
+          "pending_unique_roots": 0,
+          "in_flight_roots": 0,
+          "retrying_roots": 0,
+          "blocked_roots": 0,
+          "superseded_submissions": 0,
+          "stale_jobs_dropped": 0,
+          "oldest_pending_ms": null,
+          "last_success_at": null,
+          "last_error": null,
+          "blocked_samples": [],
+          "rows_upserted": 0,
+          "rows_removed": 0,
+          "receipts_written": 0,
+          "commits": 0,
+          "room_edges_written": 0,
+          "max_transaction_bytes": 0
+        },
+        "store_reachable": true,
+        "degraded_read_only": false
+      }
+    },
+    "rooms": {
+      "status": "ready",
+      "reason": null,
+      "definition_version": "72979202d292cb57761a3c7daec8c96f834587d574704ef12f9da8129f394211",
+      "total": 215,
+      "in_dbnum": 214,
+      "with_panels_in_dbnum": 204,
+      "dbnums": [
+        7997,
+        8000
+      ],
+      "sample": [
+        {
+          "refno": "24381_5062",
+          "room_num": "L505",
+          "name": "/1LR-RM05-L505",
+          "dbnum": 7997,
+          "panel_count": 1
+        },
+        {
+          "refno": "24381_5080",
+          "room_num": "L506",
+          "name": "/1LR-RM05-L506",
+          "dbnum": 7997,
+          "panel_count": 1
+        },
+        {
+          "refno": "24381_5088",
+          "room_num": "L507",
+          "name": "/1LR-RM05-L507",
+          "dbnum": 7997,
+          "panel_count": 1
+        },
+        {
+          "refno": "24381_5104",
+          "room_num": "L508",
+          "name": "/1LR-RM05-L508",
+          "dbnum": 7997,
+          "panel_count": 1
+        },
+        {
+          "refno": "24381_5112",
+          "room_num": "L509",
+          "name": "/1LR-RM05-L509",
+          "dbnum": 7997,
+          "panel_count": 1
+        }
+      ],
+      "elapsed_ms": 235
+    },
+    "bulk": {
+      "accepted": 202,
+      "task_id": "dbnum-model-ensure-7997-20260920-131518-000000",
+      "expected_roots": 6772,
+      "already_ready": 0,
+      "final_state": "succeeded",
+      "units_done": 6772,
+      "total_units": 6772,
+      "result": {
+        "expected": 6772,
+        "already_ready": 0,
+        "newly_ready": 6772,
+        "ready": 6772,
+        "reported_completed": 6772,
+        "room_edges_written": 66135,
+        "rows_upserted": 66442,
+        "commits": 43,
+        "max_transaction_bytes": 3316837,
+        "failed": 0,
+        "missing": 0,
+        "missing_samples": [],
+        "failure_samples": [],
+        "failure_samples_truncated": 0,
+        "error": null,
+        "source_sesno": 339,
+        "durable": false
+      },
+      "elapsed_s": 90
+    },
+    "queries": {
+      "room": {
+        "refno": "24381_35580",
+        "room_num": "R432",
+        "name": "/1RX-RM04-R432",
+        "dbnum": 7997,
+        "panel_count": 2
+      },
+      "radius_mm": 3000,
+      "baseline": {
+        "total_count": 3934,
+        "candidate_count": 3940,
+        "has_room_status": false,
+        "spec_groups": [
+          {
+            "spec_value": 0,
+            "count": 198
+          },
+          {
+            "spec_value": 3,
+            "count": 3497
+          },
+          {
+            "spec_value": 4,
+            "count": 113
+          },
+          {
+            "spec_value": 5,
+            "count": 126
+          }
+        ],
+        "filter_spec_values": [
+          {
+            "value": 3,
+            "count": 3497
+          },
+          {
+            "value": 0,
+            "count": 198
+          },
+          {
+            "value": 5,
+            "count": 126
+          },
+          {
+            "value": 4,
+            "count": 113
+          }
+        ],
+        "elapsed_ms": 31
+      },
+      "rooms": {
+        "total_count": 1303,
+        "returned": 1000,
+        "room_status": {
+          "rooms": [
+            {
+              "refno": "24381_35580",
+              "room_num": "R432"
+            }
+          ],
+          "source": "memory",
+          "matched": 1298,
+          "unresolved": 0,
+          "definition_version": "72979202d292cb57761a3c7daec8c96f834587d574704ef12f9da8129f394211",
+          "library_alignment_current": null
+        },
+        "spec_groups": [
+          {
+            "spec_value": 0,
+            "count": 10
+          },
+          {
+            "spec_value": 3,
+            "count": 1293
+          }
+        ],
+        "filter_spec_values": [
+          {
+            "value": 3,
+            "count": 1293
+          },
+          {
+            "value": 0,
+            "count": 10
+          }
+        ],
+        "spec_value_distribution_on_page": {
+          "0": 10,
+          "3": 990
+        },
+        "elapsed_ms": 466
+      },
+      "spec": {
+        "spec_value": 3,
+        "total_count": 1293,
+        "expected": 1293,
+        "elapsed_ms": 447
+      },
+      "refnos": {
+        "total_count": 1303,
+        "refnos": 1303,
+        "by_spec_value_sizes": {
+          "0": 10,
+          "3": 1293
+        },
+        "room_status": {
+          "rooms": [
+            {
+              "refno": "24381_35580",
+              "room_num": "R432"
+            }
+          ],
+          "source": "memory",
+          "matched": 1298,
+          "unresolved": 0,
+          "definition_version": "72979202d292cb57761a3c7daec8c96f834587d574704ef12f9da8129f394211",
+          "library_alignment_current": null
+        },
+        "elapsed_ms": 460
+      },
+      "timing_100m": {
+        "center": {
+          "x": -6379.5703,
+          "y": -11350.16,
+          "z": 5030,
+          "source": "refno_aabb_center"
+        },
+        "first_100m": {
+          "status": 200,
+          "elapsed_ms": 1096,
+          "candidate_count": 61807,
+          "total_count": 61807,
+          "spec_groups": [
+            {
+              "spec_value": 0,
+              "count": 16029
+            },
+            {
+              "spec_value": 3,
+              "count": 31129
+            },
+            {
+              "spec_value": 4,
+              "count": 13517
+            },
+            {
+              "spec_value": 5,
+              "count": 1132
+            }
+          ]
+        },
+        "second_100m_memo_warm": {
+          "status": 200,
+          "elapsed_ms": 247,
+          "total_count": 61807
+        },
+        "rooms_100m": {
+          "status": 200,
+          "elapsed_ms": 3381,
+          "total_count": 1303,
+          "room_status": {
+            "rooms": [
+              {
+                "refno": "24381_35580",
+                "room_num": "R432"
+              }
+            ],
+            "source": "memory",
+            "matched": 1298,
+            "unresolved": 0,
+            "definition_version": "72979202d292cb57761a3c7daec8c96f834587d574704ef12f9da8129f394211",
+            "library_alignment_current": null
+          }
+        },
+        "spec_distance_100m": {
+          "status": 200,
+          "elapsed_ms": 318,
+          "total_count": 61807
+        }
+      }
+    }
+  },
+  "finished_at": "2026-09-20T05:17:04.190Z",
+  "checks": [
+    {
+      "name": "health 200",
+      "pass": true,
+      "detail": "status=200 build=\"0.1.28+g805170bd41d7.1789880404\""
+    },
+    {
+      "name": "health room_membership=true",
+      "pass": true,
+      "detail": true
+    },
+    {
+      "name": "/spatial/rooms 200 且 status ready|degraded",
+      "pass": true,
+      "detail": "200 ready "
+    },
+    {
+      "name": "/spatial/rooms 含 dbnum 7997 的在册房间（panel_count>0）",
+      "pass": true,
+      "detail": {
+        "status": "ready",
+        "reason": null,
+        "definition_version": "72979202d292cb57761a3c7daec8c96f834587d574704ef12f9da8129f394211",
+        "total": 215,
+        "in_dbnum": 214,
+        "with_panels_in_dbnum": 204,
+        "dbnums": [
+          7997,
+          8000
+        ],
+        "sample": [
+          {
+            "refno": "24381_5062",
+            "room_num": "L505",
+            "name": "/1LR-RM05-L505",
+            "dbnum": 7997,
+            "panel_count": 1
+          },
+          {
+            "refno": "24381_5080",
+            "room_num": "L506",
+            "name": "/1LR-RM05-L506",
+            "dbnum": 7997,
+            "panel_count": 1
+          },
+          {
+            "refno": "24381_5088",
+            "room_num": "L507",
+            "name": "/1LR-RM05-L507",
+            "dbnum": 7997,
+            "panel_count": 1
+          },
+          {
+            "refno": "24381_5104",
+            "room_num": "L508",
+            "name": "/1LR-RM05-L508",
+            "dbnum": 7997,
+            "panel_count": 1
+          },
+          {
+            "refno": "24381_5112",
+            "room_num": "L509",
+            "name": "/1LR-RM05-L509",
+            "dbnum": 7997,
+            "panel_count": 1
+          }
+        ],
+        "elapsed_ms": 235
+      }
+    },
+    {
+      "name": "/spatial/rooms 按 room_num、refno 排序",
+      "pass": true
+    },
+    {
+      "name": "dbnum 7997 整库 ensure 202",
+      "pass": true,
+      "detail": "202"
+    },
+    {
+      "name": "dbnum 7997 整库 ensure 终态 succeeded|partial",
+      "pass": true,
+      "detail": {
+        "accepted": 202,
+        "task_id": "dbnum-model-ensure-7997-20260920-131518-000000",
+        "expected_roots": 6772,
+        "already_ready": 0,
+        "final_state": "succeeded",
+        "units_done": 6772,
+        "total_units": 6772,
+        "result": {
+          "expected": 6772,
+          "already_ready": 0,
+          "newly_ready": 6772,
+          "ready": 6772,
+          "reported_completed": 6772,
+          "room_edges_written": 66135,
+          "rows_upserted": 66442,
+          "commits": 43,
+          "max_transaction_bytes": 3316837,
+          "failed": 0,
+          "missing": 0,
+          "missing_samples": [],
+          "failure_samples": [],
+          "failure_samples_truncated": 0,
+          "error": null,
+          "source_sesno": 339,
+          "durable": false
+        },
+        "elapsed_s": 90
+      }
+    },
+    {
+      "name": "找到一间 nearby(rooms=) 命中 > 0 且 < 不带 rooms 的房间",
+      "pass": true,
+      "detail": "R432 24381_35580 total 1303 / 3934"
+    },
+    {
+      "name": "基线 nearby 200 且不带 room_status（老响应一字不变）",
+      "pass": true,
+      "detail": "keys=results,center,radius,shape,total_count,returned_count,page,per_page,has_more,candidate_count,truncated_candidates,candidate_cap,groups,spec_groups,filter_options,spatial_state,coverage"
+    },
+    {
+      "name": "基线 results[].spec_value 每条都带（整数）",
+      "pass": true
+    },
+    {
+      "name": "rooms= nearby 200",
+      "pass": true,
+      "detail": "200 "
+    },
+    {
+      "name": "rooms= total_count < 基线 total_count（只含该房成员）",
+      "pass": true,
+      "detail": "1303 < 3934"
+    },
+    {
+      "name": "rooms= 本页结果 ⊂ 基线全集（refnos 不带 rooms）",
+      "pass": true,
+      "detail": "0 条不在基线全集里"
+    },
+    {
+      "name": "rooms= 全集（refnos）⊂ 基线全集",
+      "pass": true,
+      "detail": "1303 / 3934"
+    },
+    {
+      "name": "room_status.source = memory（读透形态现算）",
+      "pass": true,
+      "detail": {
+        "rooms": [
+          {
+            "refno": "24381_35580",
+            "room_num": "R432"
+          }
+        ],
+        "source": "memory",
+        "matched": 1298,
+        "unresolved": 0,
+        "definition_version": "72979202d292cb57761a3c7daec8c96f834587d574704ef12f9da8129f394211",
+        "library_alignment_current": null
+      }
+    },
+    {
+      "name": "room_status.rooms[0] = 所选房间",
+      "pass": true,
+      "detail": [
+        {
+          "refno": "24381_35580",
+          "room_num": "R432"
+        }
+      ]
+    },
+    {
+      "name": "room_status.matched = rooms= 全集去重后的条数（matched 按 refno 去重计，total_count 含树里的重复条目）",
+      "pass": true,
+      "detail": "matched 1298 vs unique 1298 vs total_count 1303"
+    },
+    {
+      "name": "room_status.unresolved = 0（整库 ensure 后每个候选都有投影记录）",
+      "pass": true,
+      "detail": "0; warnings=[]"
+    },
+    {
+      "name": "room_status.library_alignment_current = null（读透）",
+      "pass": true,
+      "detail": null
+    },
+    {
+      "name": "rooms= 结果 spec_value 非全 0",
+      "pass": true,
+      "detail": {
+        "0": 10,
+        "3": 990
+      }
+    },
+    {
+      "name": "rooms= spec_groups 之和 = total_count",
+      "pass": true,
+      "detail": "1303 vs 1303"
+    },
+    {
+      "name": "rooms= groups(dbnum) 之和 = total_count",
+      "pass": true,
+      "detail": "1303 vs 1303"
+    },
+    {
+      "name": "rooms= filter_options.spec_values 之和 = total_count（rooms 之后、无别的过滤）",
+      "pass": true,
+      "detail": [
+        {
+          "value": 3,
+          "count": 1293
+        },
+        {
+          "value": 0,
+          "count": 10
+        }
+      ]
+    },
+    {
+      "name": "e3d.room.lookup：rooms= 命中的样本（lookup 答得出的）都归属该房",
+      "pass": true,
+      "detail": "11/16 可比：24381_101694:computed:24381_35580|24381_1407|24381_1443 24381_101696:computed:24381_35580|24381_1407|24381_1443 24381_101698:computed:24381_35580|24381_1407|24381_1443 24381_171246:computed:24381_35580|24381_1283|24381_1443 24381_171250:computed:24381_35580|24381_1443|24381_1407 24381_171252:computed:24381_35580|24381_1443|24381_1283 24381_171253:computed:24381_35580|24381_1443|24381_1283 24381_171254:computed:24381_35580|24381_1443|24381_1283 24381_171255:computed:24381_35580|24381_1283|24381_1443 24381_171256:computed:24381_35580|24381_1283|24381_1443 24381_171312:computed:24381_1407|24381_1443|24381_35095|24381_35580|24381_35601|24381_35117"
+    },
+    {
+      "name": "e3d.room.lookup：被 rooms= 滤掉的样本（lookup 答得出的）都不归属该房",
+      "pass": true,
+      "detail": "9/16 可比：24381_1143:computed:- 24381_1285:computed:- 24381_1409:computed:- 24381_1445:computed:- 24381_1504:computed:- 24381_35033:computed:- 24381_35105:computed:- 24381_35119:computed:- 24381_35322:computed:-"
+    },
+    {
+      "name": "rooms=两间：200、total ≥ 单间、room_status.rooms 两条",
+      "pass": true,
+      "detail": "200 total=1303 rooms=[{\"refno\":\"24381_5062\",\"room_num\":\"L505\"},{\"refno\":\"24381_35580\",\"room_num\":\"R432\"}]"
+    },
+    {
+      "name": "spec_values=3：200、结果全是该专业",
+      "pass": true,
+      "detail": "200 1000 条"
+    },
+    {
+      "name": "spec_values=3：total_count = rooms= 的 spec_groups[3]",
+      "pass": true,
+      "detail": "1293 vs 1293"
+    },
+    {
+      "name": "spec_values= 不收窄 filter_options.spec_values",
+      "pass": true,
+      "detail": {
+        "with": [
+          {
+            "value": 3,
+            "count": 1293
+          },
+          {
+            "value": 0,
+            "count": 10
+          }
+        ],
+        "without": [
+          {
+            "value": 3,
+            "count": 1293
+          },
+          {
+            "value": 0,
+            "count": 10
+          }
+        ]
+      }
+    },
+    {
+      "name": "spec_values= 不收窄 filter_options.nouns",
+      "pass": true
+    },
+    {
+      "name": "spec_values= 之后 spec_groups 只剩该专业",
+      "pass": true,
+      "detail": [
+        {
+          "spec_value": 3,
+          "count": 1293
+        }
+      ]
+    },
+    {
+      "name": "spec_values=0,3：total = 两桶之和",
+      "pass": true,
+      "detail": "1303"
+    },
+    {
+      "name": "sort=spec_distance 页内：spec_value 升序、同专业距离升序（第 1 页）",
+      "pass": true,
+      "detail": "652 条 0000000000333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333"
+    },
+    {
+      "name": "sort=spec_distance 页内（第 2 页）",
+      "pass": true,
+      "detail": "651 条 333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333"
+    },
+    {
+      "name": "sort=spec_distance 跨页：第 1 页末 spec_value ≤ 第 2 页首",
+      "pass": true,
+      "detail": "3 ≤ 3"
+    },
+    {
+      "name": "sort=spec_distance 两页并起来 = rooms= 全集（refnos，多重集）",
+      "pass": true,
+      "detail": "652+651 vs 1303"
+    },
+    {
+      "name": "sort=SPEC_DISTANCE 大小写不敏感",
+      "pass": true
+    },
+    {
+      "name": "refnos：200、refnos 数 = total_count = nearby(rooms=) 的 total_count",
+      "pass": true,
+      "detail": "1303 / 1303 / 1303"
+    },
+    {
+      "name": "refnos：by_spec_value 各桶之和 = total_count",
+      "pass": true,
+      "detail": {
+        "0": 10,
+        "3": 1293
+      }
+    },
+    {
+      "name": "nearby(rooms=) 本页 ⊂ refnos(rooms=) 全集",
+      "pass": true,
+      "detail": "1000 / 1303"
+    },
+    {
+      "name": "refnos：带 room_status",
+      "pass": true,
+      "detail": {
+        "rooms": [
+          {
+            "refno": "24381_35580",
+            "room_num": "R432"
+          }
+        ],
+        "source": "memory",
+        "matched": 1298,
+        "unresolved": 0,
+        "definition_version": "72979202d292cb57761a3c7daec8c96f834587d574704ef12f9da8129f394211",
+        "library_alignment_current": null
+      }
+    },
+    {
+      "name": "refnos 不带 rooms：无 room_status、总数 = 基线 total_count",
+      "pass": true,
+      "detail": "3934 vs 3934"
+    },
+    {
+      "name": "不在册房间 rooms=1_1 → 400 bad_request，消息指向 /spatial/rooms",
+      "pass": true,
+      "detail": "400 {\"code\":\"bad_request\",\"message\":\"rooms 里的 1/1 不是在册房间（名字不含房间关键词或房间号不合规），可先 GET /api/v1/spatial/rooms 看清单\",\"detail\":null}"
+    },
+    {
+      "name": "rooms=abc → 400",
+      "pass": true,
+      "detail": "400 rooms 必须是逗号分隔的房间 refno（a/b 或 a_b，收到 abc）"
+    },
+    {
+      "name": "spec_values=x → 400",
+      "pass": true,
+      "detail": "400 spec_values 必须是逗号分隔的专业值整数（收到 x）"
+    },
+    {
+      "name": "sort=bogus → 400 且消息列出三档",
+      "pass": true,
+      "detail": "400 sort 只接受 distance/name/spec_distance（收到 bogus）"
+    },
+    {
+      "name": "rooms=（空串）= 不给：200、无 room_status",
+      "pass": true,
+      "detail": "200"
+    },
+    {
+      "name": "100 m 点查询（专业派生）首发 200",
+      "pass": true,
+      "detail": "1096 ms, candidates 61807, total 61807"
+    },
+    {
+      "name": "100 m 点查询第二发（记忆命中）不慢于首发（容 50 ms 抖动）",
+      "pass": true,
+      "detail": "247 ms vs 1096 ms"
+    },
+    {
+      "name": "100 m + rooms= 200",
+      "pass": true,
+      "detail": "3381 ms, total 1303, unresolved 0"
+    }
+  ],
+  "findings": [
+    {
+      "name": "空间树里同一 refno 有多条条目（与 rooms= 无关：基线全集也重复）",
+      "detail": {
+        "baseline_total": 3934,
+        "baseline_unique": 3707,
+        "baseline_dup_groups": 182,
+        "baseline_dup_samples": [
+          [
+            "24381_1143",
+            3
+          ],
+          [
+            "24381_1285",
+            3
+          ],
+          [
+            "24381_1409",
+            3
+          ],
+          [
+            "24381_1445",
+            3
+          ],
+          [
+            "24381_1504",
+            3
+          ]
+        ],
+        "rooms_total": 1303,
+        "rooms_unique": 1298,
+        "rooms_dup_samples": [
+          [
+            "24381_4090",
+            2
+          ],
+          [
+            "24381_4096",
+            2
+          ],
+          [
+            "24381_4257",
+            2
+          ],
+          [
+            "24381_4480",
+            2
+          ],
+          [
+            "24381_4486",
+            2
+          ]
+        ]
+      }
+    },
+    {
+      "name": "e3d.room.lookup 对部分构件回非 200（rooms= 过滤不经它，两边口径独立）",
+      "detail": [
+        "24381_4090:409",
+        "24381_4096:409",
+        "24381_4257:409",
+        "24381_4480:409",
+        "24381_4486:409",
+        "24381_3997:409",
+        "24381_4102:409",
+        "24381_4108:409",
+        "24381_4263:409",
+        "24381_4403:409",
+        "24381_4468:409",
+        "24381_4474:409"
+      ]
+    }
+  ],
+  "pass": 50,
+  "fail": 0
+}
