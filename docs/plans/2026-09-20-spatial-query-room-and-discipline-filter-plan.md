@@ -259,7 +259,7 @@ spec_value_rules = [
 6. **真机结果（2026-09-20，`:8027` = `805170bd4` release / mem 档 / `room_membership=true` / AMS 7997 整库 ensure 6772 根 90 s）**：
    - 第 4 步 HTTP（`http/00-summary.json` 50 项全过；15:55 复验 `http/16-recheck-1555.json` 39 项全过）：`/spatial/rooms` `ready` 215 间；以 `R432 = 24381_35580`
      盒中心 r = 3 m——13:17 基线 3934 / `rooms=` **1303**（`matched 1298 / unresolved 0 / source memory / library_alignment_current null`），
-     15:55 同参 1302 / **1059**（`matched 1055`；差异是空间树自己在 13:17–13:32 间变了盒，见 README §6 A，两组数各自满足全部恒等式）；
+     15:55 同参 1302 / **1059**（`matched 1055`；两组数是同一查询打在两种树状态上——13:17 撞上一次性大盒异常、干净重启复不出来，见 README §6 A，两组各自满足全部恒等式）；
      `spec_groups` / `groups` / `filter_options.spec_values` 三处和都 = `total_count`；`spec_values=3` = `spec_groups[3]`、facet 不收窄；
      `sort=spec_distance` 两页并起来 = 全集、跨页专业序成立、大小写不敏感；`refnos` 数 = `total_count`、`by_spec_value` 桶和 = 总数；
      `rooms=1_1` / `abc` / `spec_values=x` / `sort=bogus` 四条 400、`rooms=` 空串 = 不给；`e3d.room.lookup` 交叉核对：答得出的 11 条命中样本全在 R432、9 条滤掉样本全不在。
@@ -279,8 +279,9 @@ spec_value_rules = [
   真机整库 ensure 后 12 间试探房 + 两轮金样 `unresolved` 全为 0。
 - **读透形态现算成本**：`MemoryRoomCalculator` 对每条候选记录做面板 AABB 预筛 + 跨面板者顶点点检查（读 `.mesh`）；房间级半径下候选百到千级，预期几十 ms；
   100 m 级要量。**真机：3 m（1302–3940 候选）228–466 ms；100 m（61 801 候选）3.4–4.9 s。**
-- **空间树在整库发布后的头两分钟盒不是最终的盒**（真机顺手发现，README §6 A）：同心同半径 `candidate_count` 3940 → 1302，墙 / 板类条目 13:17 回 `distance 0`、
-  15:5x 回真实距离，中间没有任何重建日志。与本计划的过滤无关（两种状态下恒等式都成立），记给空间树那条线。
+- **13:17 那份基线 3940 是一次性异常，干净重启复不出来**（真机顺手发现，README §6 A）：同心同半径 `candidate_count` 13:17 = 3940（墙 / 板类条目 `distance 0`）、
+  15:5x = 1302；照用户指示 WMI 重启 + 整库 ensure + 176 次采样（`http/17-repro-tree-settle-*`），candidate 只出现 0 / 1302、探针墙全程 5587 mm、整段没变一次——3940 复不出来。
+  先前「发布后有两分钟安定窗口」的猜测被证否，根因在空间树那条线（本轮没动它）。与本计划的过滤无关：两种树状态下恒等式都成立。
 - **树里同一 refno 多条条目**（README §6 B）：`total_count` 按条目、`room_status.matched` 按 refno；前端 store 按 refno 合并，抽屉「共 N 项」是服务端条目数。
 - **房间号撞车**：线上只收 refno；手输房间号同号多间全选并提示，用户可再删。
 - **`room_membership=false` 的部署**：房间块整块收起，抽屉一句话写明；专业维度不受影响。

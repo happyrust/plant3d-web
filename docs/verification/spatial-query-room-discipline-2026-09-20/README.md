@@ -1,4 +1,4 @@
-# 空间查询 · 房间过滤 + 专业过滤——HTTP 金样 + 真 UI 完整流 + e2e 首次真机（2026-09-20 13:15–13:37；复验 15:49–15:58）
+# 空间查询 · 房间过滤 + 专业过滤——HTTP 金样 + 真 UI 完整流 + e2e 首次真机（2026-09-20 13:15–13:37；复验 15:49–15:58；重启复验 16:17）
 
 计划：`docs/plans/2026-09-20-spatial-query-room-and-discipline-filter-plan.md`（§6 真机步骤；本文是它的记录）。决策 ADR 0067、共识 zhimo `d-137`。
 后端 `gen-model-model-cache` PR-A `3707c5b1d` + 复审修正 `805170bd4`（`spawn_blocking` / 记忆锁 / `sort=spec_distance`）；
@@ -68,7 +68,7 @@ $stamp = Get-Date -Format yyyyMMdd-HHmmss
 | 7 | 清空房间 → 重查 | 请求不带 `rooms`，摘要回到 1302 | — |
 | 8 | `?model_source=legacy` | `room-filter` 整块不画（`capabilities.rooms = false`；`:3100` 没在听，树是空的，其余 UI 同改前） | `ui-08-legacy-no-room-block.png` |
 
-> 这里的 1302 / 1059 与 §3 的 3934 / 1303 不是一回事的两组数：中心、半径、房间都相同，差在**空间树的状态**——见 §6 发现 A。两组数各自都满足契约里的全部恒等式。
+> 这里的 1302 / 1059 与 §3 的 3934 / 1303 是同一查询打在**两种空间树状态**上的两组数（中心 / 半径 / 房间都相同）：§3 那次撞上 13:17 的一次性大盒异常（3940 候选），15:5x 起及干净重启后都是稳态 1302——见 §6 发现 A。两组数各自都满足契约里的全部恒等式。
 
 ## 5. e2e `e2e/spatial-query-gen-model-v1-ui.spec.ts` 首次真机：**9 passed / 1 skipped**
 
@@ -80,11 +80,13 @@ $stamp = Get-Date -Format yyyyMMdd-HHmmss
 
 `eslint` 两个 e2e 文件 0；`npm run type-check` 基线外仍只有别的会话那条 `versionSource.test.ts`（e2e 不在 tsc 范围，Playwright 自己编译、跑过即证）。
 
-## 6. 复验（15:49–15:58，同一进程没重启）与顺手发现
+## 6. 复验（15:49–15:58 同进程；16:17 干净重启复验发现 A）与顺手发现
 
 `http/16-recheck-1555.json`：同一套恒等式换一份脚本再跑一遍，**39 项 39 过 / 0 败**——基线 `1302`（`candidate 1302`、1227 个 refno）；`rooms=` **1059**（`matched 1055 / unresolved 0 / memory`，`spec_groups {0: 8, 3: 1051}`，三处和都 = 1059）；`spec_values=3` 1051；`sort=spec_distance` 530 + 529 两页并起来 = 全集、跨页 3 ≤ 3；`refnos` 1059、`by_spec_value {0: 8, 3: 1051}`；五条出错路径同 §3；100 m 296 / 249 ms、`+rooms=` **4931 ms**、`spec_distance` 191 ms。真 UI 流同参重跑：1302 → 1059 → 1051 → 1302，房间列表 7 间，`pageerror` 0（截图没覆盖 `ui/`，数字与 13:33 那份逐格相同）。
 
-- **A · 空间树在 13:17–13:32 之间自己变了（与本轮改动无关）**：同一中心 / 半径，`candidate_count` 3940 → 1302，2482 个 refno 出圈、2 个进圈；而 100 m 全集只从 61 807 变到 61 801（只少了 6 条 spec 5），说明是**条目的盒变了**，不是条目没了。样本：GWALL `24381_4102`（盒 x ∈ [−2510, −2450]、y ∈ [−7319, −6640]，离中心 5.6 m）13:17 回 `distance 0 / within_radius true`，15:5x 回 `distance 5587.56`、盒一字未变；13:17 基线页前 25 条全是 `distance 0` 的 PANE / GWALL / STWALL / WALL。中间没有任何 ensure / 重建 / 校验日志（`stdout` 只有 e2e 对夹具 BRAN `24381/145018` 的模型请求；`/health` `spatial_tree.last_verified_at` 仍是启动那一刻），13:35 那次单根 `24381/41031` 的发布应是 e2e「加载当前页」触发的、与这 2482 条无关。**整库 ensure 刚发布完的那两分钟里，墙 / 板类条目在树上的盒不是最终的盒**——是空间树自己的事（发布与树条目落定之间的窗口；本轮没查它的代码、没动它），记给空间树那条线。`100 m + rooms=` 在两种状态下都回 `1303 / 1298`，即 R432 全部成员就是这 1303 条，13:17 那份 3 m 结果之所以「全员命中」，是当时的盒把整间房都塞进了 3 m 圆。
+- **A · 13:17 那份基线 3940 是一次性异常，干净重启复不出来（与本轮改动无关）**：13:17 同一中心 / 半径 `candidate_count` 3940（页前 25 条全是 `distance 0` 的 PANE / GWALL / STWALL / WALL），15:5x 变 1302，2482 个 refno 出圈；而 100 m 全集只从 61 807 变到 61 801，说明是**条目的盒变了**不是条目没了。样本 GWALL `24381_4102`（盒一字未变）13:17 回 `distance 0 / within_radius true`、15:5x 回 `distance 5587.56`。
+  为定因**照用户指示重启复验**（`http/17-repro-tree-settle-1617.jsonl` + `-summary.json`）：WMI `Win32_Process.Create` 起新进程（pid 49744，同 exe / env / `AIOS_STORE_MODE=mem`）→ `/health ok`、树 `ready_empty/0`（`startup_verdict reused`）→ 整库 ensure 6772 根 97 s → 之后**每 2 s 采一次共 176 次、连测约 6 分钟**（含中途照 13:18 e2e 那样对夹具 BRAN 单根 ensure 一次）。结果：`candidate_count` **只出现过两个值——0（树还空）与 1302（树一populate 就是它）**，从没到过 3940；探针 GWALL `24381_4102` 132 次采样**全部 5587.56**、一次 0 都没有；`candidate_changed = null`（发布完到测试结束整段没变一次）。**即：干净重启 + ensure 后树直接落在 1302 的稳态，3940 复不出来。** 所以 §3 那份 3940 / 3934 是原进程（当天经历过 13:05 从库指针重建 + 多次重启）里一次性的盒异常，不是「发布后有个两分钟安定窗口」这种可复现的机制——先前的这个猜测被这次重启证否，根因在空间树那条线（本轮没查它的代码、没动它），要复现得从当天那串重启的时序去找。`100 m + rooms=` 在两种状态下都回 `1303 / 1298`，即 R432 全部成员就是这 1303 条，13:17 那份 3 m 结果之所以「全员命中」，是当时那批异常大盒把整间房都塞进了 3 m 圆。
+  → **对本期功能的影响：无。** 契约里的每条恒等式（`total = spec_groups 和 = groups 和 = filter facet 和`、`refnos = total`、`by_spec_value` 桶和、跨页专业序、四条 400）在 3940 与 1302 两种树状态下**都成立**（§3 的 50 项、§6 复验的 39 项、重启后隐含再验），过滤 / 派生 / 分页只消费树给的候选，不关心盒是不是最终盒。
 - **B · 树里同一 refno 有多条条目**（基线也如此，与 `rooms=` 无关）：13:17 基线 3934 条 / 3707 个 refno（182 组重复，`24381_1143` 3 条），15:5x 1302 / 1227（50 组）；100 m 61 801 条 / 47 751 个 refno。`total_count` 按条目计、`room_status.matched` 按 refno 计，两者相差正好是重复条目数（1303 vs 1298、1059 vs 1055）。前端 store 按 refno 合并，抽屉「共 N 项」报的是服务端条目数——e2e 按此对齐（§5）。
 - **C · `e3d.room.lookup` 对一部分构件回 409 `updating / model is not ready`**（GWALL `24381_4090` 等墙类；同批 `24381_101694` 200、列出 R432 / R143 / R144 三间）。`rooms=` 过滤不经 lookup（直接拿投影记录喂 `MemoryRoomCalculator`），所以这些墙照常被判归属；两条路径口径独立，lookup 那边为什么把墙判成 not ready 另查。
 - **D · 读透形态现算成本量到了**：3 m（1302 候选）`+rooms=` 228–466 ms；100 m（61 801 候选）`+rooms=` 3.4–4.9 s——计划 §7「100 m 级要量」的答案；在 `spawn_blocking` 里，不拖别的请求。
@@ -106,4 +108,5 @@ $stamp = Get-Date -Format yyyyMMdd-HHmmss
 | `http/11`–`14-error-*.json` | 四条 400 |
 | `http/15-timing-100m.json` | 100 m 四发计时 |
 | `http/16-recheck-1555.json` | 15:55 复验（39 项）含当时 `/health` 树状态 |
+| `http/17-repro-tree-settle-1617.jsonl` `-summary.json` | 16:17 WMI 重启 + 整库 ensure + 176 次采样：candidate 只出现 0 / 1302，3940 复不出来（发现 A 的证否） |
 | `ui/ui-01`–`ui-08-*.png` `ui/ui-room-filter-flow-summary.json` | 真 UI 完整流八张截图与数字 |

@@ -1,0 +1,210 @@
+{
+  "started_at": "2026-09-20T16:17:06.9018912+08:00",
+  "run": "D:\\work\\plant-code\\old\\_runs\\spatial-rooms-8027",
+  "exe": "aios-database-805170bd4.exe",
+  "base": "http://127.0.0.1:8027",
+  "center_query": "x=-6379.5703&y=-11350.16&z=5030&shape=sphere",
+  "probe_refno": "24381_4102",
+  "pre_restart": {
+    "pid": 47604,
+    "created": "2026-09-20T13:15:01.4816790+08:00",
+    "tree": {
+      "state": "ready",
+      "entries": 61813,
+      "db_epoch": 105,
+      "file_epoch": 0,
+      "drift": true,
+      "last_verified_at": 1789881302,
+      "resident_records": 52386,
+      "resident_roots": 6773,
+      "last_targeted_refresh": {
+        "dbnum": 7742,
+        "db_type": "PADD",
+        "kind": "file_replaced",
+        "from": {
+          "generation": 2,
+          "identity": {
+            "len": 325632,
+            "modified": 1789891398565
+          },
+          "latest_sesno": 63,
+          "base_sesno": 62
+        },
+        "to": {
+          "generation": 3,
+          "identity": {
+            "len": 325632,
+            "modified": 1789891637887
+          },
+          "latest_sesno": 63,
+          "base_sesno": 62
+        },
+        "roots_seen": 0,
+        "roots_regenerated": 0,
+        "roots_retired": 0,
+        "receipts_invalidated": 0,
+        "outcome": "catalogue_change_recorded_only",
+        "at_unix_ms": 1789891959201
+      },
+      "snapshot_epoch": 127
+    },
+    "nearby_3m": {
+      "candidate_count": 1302,
+      "total_count": 1302,
+      "spatial_state": "ready",
+      "elapsed_ms": 49
+    },
+    "probe": {
+      "refno": "24381_4102",
+      "distance": 5587.5596,
+      "within": true
+    }
+  },
+  "stopped_at": "2026-09-20T16:17:09.7357972+08:00",
+  "restart": {
+    "at": "2026-09-20T16:17:12.2405671+08:00",
+    "cmd_pid": 86084,
+    "pid": 49744,
+    "log_stamp": "20260920-161710",
+    "launch": "Invoke-CimMethod Win32_Process.Create（cmd.exe /d /s /c 包一层设 env 与 >> 重定向；AIOS_STORE_MODE=mem）"
+  },
+  "health_after_start": {
+    "at": "2026-09-20T16:17:13.3032800+08:00",
+    "build_id": "0.1.28+g805170bd41d7.1789880404",
+    "started_at": "2026-09-20T16:17:12.245547900+08:00",
+    "room_membership": true,
+    "tree": {
+      "state": "ready_empty",
+      "entries": 0,
+      "startup_verdict": "reused",
+      "db_epoch": 0,
+      "file_epoch": 0,
+      "drift": false
+    },
+    "rooms": null,
+    "panels": null
+  },
+  "ensure": {
+    "at": "2026-09-20T16:17:16.6014488+08:00",
+    "status": 202,
+    "task_id": "dbnum-model-ensure-7997-20260920-161716-000000",
+    "expected_roots": 6772,
+    "finished_at": "2026-09-20T16:18:53.3326989+08:00",
+    "final_state": "succeeded",
+    "elapsed_s": 97,
+    "result": {
+      "expected": 6772,
+      "already_ready": 0,
+      "newly_ready": 6772,
+      "ready": 6772,
+      "reported_completed": 6772,
+      "room_edges_written": 66135,
+      "rows_upserted": 66442,
+      "commits": 43,
+      "max_transaction_bytes": 3316837,
+      "failed": 0,
+      "missing": 0,
+      "missing_samples": [],
+      "failure_samples": [],
+      "failure_samples_truncated": 0,
+      "error": null,
+      "source_sesno": 339,
+      "durable": false
+    }
+  },
+  "first_candidate_after_finish": 1302,
+  "single_ensure_probe": {
+    "at": "2026-09-20T16:21:57.3962594+08:00",
+    "status": 200,
+    "body": {
+      "requested_refno": "24381/145018",
+      "generation_root": "24381/145018",
+      "generation_root_noun": "BRAN",
+      "status": "Generated",
+      "model_available": true,
+      "model_instance_count": 22,
+      "generated_instance_count": 22,
+      "generation_root_count": 1,
+      "generation_roots": [
+        "24381/145018"
+      ],
+      "cached_root_count": 0,
+      "generated_root_count": 1,
+      "dbnum": 7997,
+      "model_source": "memory",
+      "model_source_reason": "read-through",
+      "durable": false,
+      "snapshot_epoch": 0,
+      "publication_status": "ready",
+      "mirror": {
+        "queue_depth": 0,
+        "queued": 0,
+        "succeeded": 0,
+        "failed": 0,
+        "degraded_reason": null,
+        "last_success_unix_ms": null,
+        "spool_depth": 0,
+        "spool_bytes": 0,
+        "spool_oldest_age_ms": null,
+        "spool_capacity_bytes": 0
+      }
+    },
+    "candidate_before": 1302
+  },
+  "finished_at": "2026-09-20T16:23:59.6431077+08:00",
+  "samples": 176,
+  "last": {
+    "tree": {
+      "state": "ready",
+      "entries": 61807,
+      "db_epoch": 55,
+      "file_epoch": 0,
+      "drift": true,
+      "last_verified_at": 1789892231,
+      "resident_records": 52386,
+      "resident_roots": 6772,
+      "last_targeted_refresh": {
+        "dbnum": 7742,
+        "db_type": "PADD",
+        "kind": "file_replaced",
+        "from": {
+          "generation": 1,
+          "identity": {
+            "len": 325632,
+            "modified": 1789892098019
+          },
+          "latest_sesno": 63,
+          "base_sesno": 62
+        },
+        "to": {
+          "generation": 2,
+          "identity": {
+            "len": 325632,
+            "modified": 1789892470591
+          },
+          "latest_sesno": 63,
+          "base_sesno": 62
+        },
+        "roots_seen": 0,
+        "roots_regenerated": 0,
+        "roots_retired": 0,
+        "receipts_invalidated": 0,
+        "outcome": "catalogue_change_recorded_only",
+        "at_unix_ms": 1789892472167
+      },
+      "snapshot_epoch": 99
+    },
+    "nearby_3m": {
+      "candidate_count": 1302,
+      "total_count": 1302,
+      "spatial_state": "ready",
+      "elapsed_ms": 8
+    },
+    "probe": {
+      "refno": "24381_4102",
+      "distance": 5587.5596,
+      "within": true
+    }
+  },
+  "jsonl": "17-repro-tree-settle-1617.jsonl"
+}
