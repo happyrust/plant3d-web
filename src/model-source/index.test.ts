@@ -4,35 +4,17 @@ import {
   __resetGenModelV1ServiceLifecycleForTests,
   observeGenModelV1Health,
 } from './genModelV1/serviceLifecycle';
-import { legacyMeshUrl } from './legacy';
 
 import {
   __resetModelSourceForTests,
   DEFAULT_MODEL_SOURCE_KIND,
   getGenModelV1ModelSource,
   getModelSource,
-  LegacyModelVersionsRetiredError,
-  parseModelSourceKind,
-  resolveModelSourceKind,
+  getModelSourceKind,
+  MODEL_SOURCE_KINDS,
   subscribeModelSourceProgress,
   type GenModelV1ModelSource,
 } from './index';
-
-const legacyMocks = vi.hoisted(() => ({
-  e3dGetWorldRoot: vi.fn(async () => ({ success: true, node: { refno: '24381_1', name: 'WORL', noun: 'WORL' } })),
-  e3dGetNode: vi.fn(async (refno: string) => ({ success: true, node: { refno, name: refno, noun: 'BRAN' } })),
-  e3dGetChildren: vi.fn(async (refno: string) => ({ success: true, parent_refno: refno, children: [], truncated: false })),
-  e3dGetAncestors: vi.fn(async (refno: string) => ({ success: true, refnos: [refno] })),
-  e3dSearch: vi.fn(async () => ({ success: true, items: [] })),
-  e3dGetSubtreeRefnos: vi.fn(async (refno: string) => ({ success: true, refnos: [refno], truncated: false })),
-  e3dGetVisibleInsts: vi.fn(async (refno: string) => ({ success: true, refno, refnos: [] })),
-  pdmsGetUiAttr: vi.fn(async (refno: string) => ({ success: true, refno, attrs: {} })),
-  pdmsGetTypeInfo: vi.fn(async (refno: string) => ({ success: true, refno, noun: 'BRAN' })),
-  queryInstanceEntriesByRefnos: vi.fn(async () => new Map()),
-  queryNearbySpatial: vi.fn(async () => ({ success: true, results: [] })),
-  queryNearbyRefnos: vi.fn(async () => ({ success: true, refnos: [], by_dbnum: {}, by_spec_value: {}, total_count: 0, truncated: false, cap: 0 })),
-  fetchNegativeNouns: vi.fn(async () => ({ success: true, nouns: ['NBOX'] })),
-}));
 
 vi.mock('@/composables/useGenModelV1Health', () => ({
   currentDbnumModelCapability: () => 'unknown',
@@ -42,164 +24,38 @@ vi.mock('@/composables/useGenModelV1Health', () => ({
   useGenModelV1Health: () => ({ activateDataSource: () => () => {} }),
 }));
 
-vi.mock('@/api/genModelE3dApi', () => ({
-  e3dGetWorldRoot: legacyMocks.e3dGetWorldRoot,
-  e3dGetNode: legacyMocks.e3dGetNode,
-  e3dGetChildren: legacyMocks.e3dGetChildren,
-  e3dGetAncestors: legacyMocks.e3dGetAncestors,
-  e3dSearch: legacyMocks.e3dSearch,
-  e3dGetSubtreeRefnos: legacyMocks.e3dGetSubtreeRefnos,
-  e3dGetVisibleInsts: legacyMocks.e3dGetVisibleInsts,
-}));
-
-vi.mock('@/api/genModelPdmsAttrApi', () => ({
-  pdmsGetUiAttr: legacyMocks.pdmsGetUiAttr,
-  pdmsGetTypeInfo: legacyMocks.pdmsGetTypeInfo,
-}));
-
-vi.mock('@/composables/useDbnoInstancesParquetLoader', () => ({
-  useDbnoInstancesParquetLoader: () => ({
-    queryInstanceEntriesByRefnos: legacyMocks.queryInstanceEntriesByRefnos,
-  }),
-}));
-
-vi.mock('@/api/genModelSpatialApi', () => ({
-  queryNearbySpatial: legacyMocks.queryNearbySpatial,
-  queryNearbyRefnos: legacyMocks.queryNearbyRefnos,
-  fetchNegativeNouns: legacyMocks.fetchNegativeNouns,
-}));
-
 beforeEach(() => {
   __resetModelSourceForTests();
   __resetGenModelV1ServiceLifecycleForTests();
   vi.clearAllMocks();
 });
 
-describe('resolveModelSourceKind（?model_source= → VITE_MODEL_SOURCE → gen-model-v1）', () => {
-  it('默认 gen-model-v1（2026-09-09 D8 翻默认）：不带参数、不设环境变量就走 v1', () => {
+describe('数据源种类（legacy 已于 2026-09-20 退役）', () => {
+  it('只剩 gen-model-v1：缺省值、清单与 getModelSourceKind 三者一致，URL 参数不再参与', () => {
     expect(DEFAULT_MODEL_SOURCE_KIND).toBe('gen-model-v1');
-    expect(resolveModelSourceKind({})).toBe('gen-model-v1');
-    expect(resolveModelSourceKind({ search: '?show_refno=24381_145018' })).toBe('gen-model-v1');
-  });
-
-  it('legacy 开关保留一个发布周期：URL 参数或环境变量任一写 legacy 就回旧链路', () => {
-    expect(resolveModelSourceKind({ search: '?model_source=legacy' })).toBe('legacy');
-    expect(resolveModelSourceKind({ envValue: 'legacy' })).toBe('legacy');
-    expect(resolveModelSourceKind({ search: '?show_refno=24381_145018', envValue: 'legacy' })).toBe('legacy');
-  });
-
-  it('URL 参数压过环境变量', () => {
-    expect(resolveModelSourceKind({ search: '?model_source=gen-model-v1', envValue: 'legacy' })).toBe('gen-model-v1');
-    expect(resolveModelSourceKind({ search: '?model_source=legacy', envValue: 'gen-model-v1' })).toBe('legacy');
-    expect(resolveModelSourceKind({ envValue: 'gen-model-v1' })).toBe('gen-model-v1');
-  });
-
-  it('接受几种顺手写法，认不出的值忽略（落回缺省 gen-model-v1）', () => {
-    expect(parseModelSourceKind('V1')).toBe('gen-model-v1');
-    expect(parseModelSourceKind('gen_model_v1')).toBe('gen-model-v1');
-    expect(parseModelSourceKind('parquet')).toBe('legacy');
-    expect(parseModelSourceKind('surreal')).toBeNull();
-    expect(resolveModelSourceKind({ search: '?model_source=surreal' })).toBe('gen-model-v1');
-    expect(resolveModelSourceKind({ search: '?model_source=surreal', envValue: 'legacy' })).toBe('legacy');
+    expect(MODEL_SOURCE_KINDS).toEqual(['gen-model-v1']);
+    window.history.replaceState({}, '', '?model_source=legacy');
+    try {
+      expect(getModelSourceKind()).toBe('gen-model-v1');
+      expect(getModelSource().kind).toBe('gen-model-v1');
+    } finally {
+      window.history.replaceState({}, '', '/');
+    }
   });
 });
 
-describe('legacy 适配器：零逻辑委托', () => {
-  it('tree 的每个方法都是对现有 e3d* 函数的一次转发，参数原样', async () => {
-    const source = getModelSource('legacy');
-    expect(source.kind).toBe('legacy');
-
-    await source.tree.worldRoot();
-    await source.tree.node('24381_1');
-    await source.tree.children('24381_2', 50);
-    await source.tree.ancestors('24381_145018');
-    await source.tree.search({ keyword: 'PIPE', nouns: ['ZONE'], limit: 20 });
-    await source.tree.subtreeRefnos('24381_2', { includeSelf: true, maxDepth: 3 });
-    await source.tree.visibleInsts('24381_145018');
-
-    expect(legacyMocks.e3dGetWorldRoot).toHaveBeenCalledTimes(1);
-    expect(legacyMocks.e3dGetNode).toHaveBeenCalledWith('24381_1');
-    expect(legacyMocks.e3dGetChildren).toHaveBeenCalledWith('24381_2', 50);
-    expect(legacyMocks.e3dGetAncestors).toHaveBeenCalledWith('24381_145018');
-    expect(legacyMocks.e3dSearch).toHaveBeenCalledWith({ keyword: 'PIPE', nouns: ['ZONE'], limit: 20 });
-    expect(legacyMocks.e3dGetSubtreeRefnos).toHaveBeenCalledWith('24381_2', { includeSelf: true, maxDepth: 3 });
-    expect(legacyMocks.e3dGetVisibleInsts).toHaveBeenCalledWith('24381_145018');
-  });
-
-  it('records / attributes 同样原样转发', async () => {
-    const source = getModelSource('legacy');
-    await source.records.instanceEntriesByRefnos(7997, ['24381_145018'], { includeOwnedTubings: false, forceRefresh: true });
-    await source.attributes.uiAttr('24381_145018');
-    await source.attributes.typeInfo('24381_145018');
-
-    expect(legacyMocks.queryInstanceEntriesByRefnos).toHaveBeenCalledWith(
-      7997,
-      ['24381_145018'],
-      { includeOwnedTubings: false, forceRefresh: true },
-    );
-    expect(legacyMocks.pdmsGetUiAttr).toHaveBeenCalledWith('24381_145018');
-    expect(legacyMocks.pdmsGetTypeInfo).toHaveBeenCalledWith('24381_145018');
-  });
-
-  it('versions 已退役（2026-09-18，plan §7）：两个方法都抛 LegacyModelVersionsRetiredError，不碰任何 legacy API', async () => {
-    const source = getModelSource('legacy');
-    await expect(source.versions.listVersions(7997, '24381_145018')).rejects.toBeInstanceOf(LegacyModelVersionsRetiredError);
-    await expect(source.versions.loadVersion({
-      dbnum: 7997, unitRefno: '24381_145018', unitNoun: 'BRAN', sesno: 1, sessionTime: null, impactKind: 'mesh',
-    })).rejects.toThrow('model_source=legacy');
-    expect(legacyMocks.queryInstanceEntriesByRefnos).not.toHaveBeenCalled();
-  });
-
-  it('spatial 三个方法原样转发到 genModelSpatialApi（参数不动、结果不改），并声明带专业维度', async () => {
-    const source = getModelSource('legacy');
-    const params = { refno: '24381_145018', radius: 5000, shape: 'cube' as const, nouns: 'EQUI,PIPE', page: 2, per_page: 50 };
-
-    const nearby = await source.spatial.nearby(params);
-    const refnos = await source.spatial.nearbyRefnos(params);
-    const negative = await source.spatial.negativeNouns();
-
-    expect(legacyMocks.queryNearbySpatial).toHaveBeenCalledWith(params);
-    expect(legacyMocks.queryNearbyRefnos).toHaveBeenCalledWith(params);
-    expect(legacyMocks.fetchNegativeNouns).toHaveBeenCalledTimes(1);
-    expect(nearby).toEqual({ success: true, results: [] });
-    expect(refnos.total_count).toBe(0);
-    expect(negative).toEqual({ success: true, nouns: ['NBOX'] });
-    expect(source.spatial.capabilities).toEqual({ specValues: true, branCenterline: true, keywordMatchesName: true, nameSortExact: true, rooms: false, tree: false });
-    // 旧后端没有房间过滤：清单直接回 unsupported，不打后端（ADR 0067，Q5）。
-    expect(await source.spatial.rooms()).toMatchObject({ success: true, status: 'unsupported', rooms: [] });
-    // 也没有房间层级树：回 success:false + unsupported，store 据此退回平铺分组（ADR 0068）。
-    expect(await source.spatial.tree({ ...params, rooms: '1_1' })).toMatchObject({ success: false, unsupported: true, rooms: [], total_count: 0 });
-  });
-
-  it('网格 URL 模板与 useDbnoInstancesDtxLoader 现有写法逐字相同', () => {
-    expect(legacyMeshUrl('abc123', 'L1')).toMatch(/\/files\/meshes\/lod_L1\/abc123_L1\.glb$/);
-    expect(getModelSource('legacy').meshes.meshUrl('abc123', 'L1')).toBe(legacyMeshUrl('abc123', 'L1'));
-  });
-
-  it('gen-model-v1：树 / 几何记录 / 网格 / 属性 / 空间查询全部走 /api/v1，一个旧后端函数都不碰；同种类只建一份', () => {
-    const source = getModelSource('gen-model-v1');
-    const legacy = getModelSource('legacy');
+describe('gen-model-v1 数据源', () => {
+  it('树 / 几何记录 / 网格 / 属性 / 空间查询全部走 /api/v1；进程内只建一份', () => {
+    const source = getModelSource();
     expect(source.kind).toBe('gen-model-v1');
-    expect(getModelSource('gen-model-v1')).toBe(source);
+    expect(getModelSource()).toBe(source);
     expect(source.meshes.meshUrl('12240963882128803248', 'L1')).toMatch(/\/api\/v1\/meshes\/12240963882128803248\.mesh$/);
-
-    expect(source.tree.worldRoot).not.toBe(legacy.tree.worldRoot);
-    expect(source.records.instanceEntriesByRefnos).not.toBe(legacy.records.instanceEntriesByRefnos);
-    expect(source.attributes.typeInfo).not.toBe(legacy.attributes.typeInfo);
-    expect(source.attributes.uiAttr).not.toBe(legacy.attributes.uiAttr);
-    expect(source.spatial.nearby).not.toBe(legacy.spatial.nearby);
     // 2026-09-20 起 v1 也有专业维度（服务端按 SITE 名派生，ADR 0067）并多房间过滤。
     expect(source.spatial.capabilities).toEqual({ specValues: true, branCenterline: true, keywordMatchesName: false, nameSortExact: false, rooms: true, tree: true });
-    expect(legacy.spatial.capabilities).toEqual({ specValues: true, branCenterline: true, keywordMatchesName: true, nameSortExact: true, rooms: false, tree: false });
-    expect(legacyMocks.e3dGetWorldRoot).not.toHaveBeenCalled();
-    expect(legacyMocks.queryInstanceEntriesByRefnos).not.toHaveBeenCalled();
-    expect(legacyMocks.pdmsGetTypeInfo).not.toHaveBeenCalled();
-    expect(legacyMocks.pdmsGetUiAttr).not.toHaveBeenCalled();
-    expect(legacyMocks.queryNearbySpatial).not.toHaveBeenCalled();
   });
 
-  it('gen-model-v1：树的 visibleInsts 与几何加载共用记录源缓存（一次显示只 ensure 一次）', async () => {
-    const source = getModelSource('gen-model-v1');
+  it('树的 visibleInsts 与几何加载共用记录源缓存（一次显示只 ensure 一次）', async () => {
+    const source = getModelSource();
     const records = source.records as { ensureAndCollect: (refno: string) => Promise<unknown>; peek: (refno: string) => unknown };
     const spy = vi.spyOn(records, 'ensureAndCollect').mockResolvedValue({
       refno: '24381_145018', generationRoots: ['24381_145018'], items: [], pending: [], empty: [], truncatedRoots: [], errors: {}, statuses: {},
@@ -209,27 +65,18 @@ describe('legacy 适配器：零逻辑委托', () => {
     spy.mockRestore();
   });
 
-  it('getGenModelV1ModelSource / subscribeModelSourceProgress：legacy 下是 null 与空订阅；缺省（v1）下给带 collectDbnum 的那份源', () => {
-    window.history.replaceState({}, '', '?model_source=legacy');
-    try {
-      expect(getGenModelV1ModelSource()).toBeNull();
-      const unsubscribe = subscribeModelSourceProgress(() => {});
-      expect(typeof unsubscribe).toBe('function');
-      unsubscribe();
-    } finally {
-      window.history.replaceState({}, '', '/');
-    }
-
-    // 测试环境没有 ?model_source=，缺省 gen-model-v1（2026-09-09 起）
+  it('getGenModelV1ModelSource / subscribeModelSourceProgress：给带 collectDbnum 的那份源，订阅回退订函数', () => {
     const source = getGenModelV1ModelSource();
-    expect(source).not.toBeNull();
-    expect(source).toBe(getModelSource('gen-model-v1'));
-    expect(typeof source!.collectDbnum).toBe('function');
-    expect(typeof source!.records.subscribeProgress).toBe('function');
+    expect(source).toBe(getModelSource());
+    expect(typeof source.collectDbnum).toBe('function');
+    expect(typeof source.records.subscribeProgress).toBe('function');
+    const unsubscribe = subscribeModelSourceProgress(() => {});
+    expect(typeof unsubscribe).toBe('function');
+    unsubscribe();
   });
 
-  it('gen-model-v1 数据源订阅服务代次：重启时清 records 与 tree 缓存，但不替换数据源实例', () => {
-    const source = getModelSource('gen-model-v1') as GenModelV1ModelSource;
+  it('订阅服务代次：重启时清 records 与 tree 缓存，但不替换数据源实例', () => {
+    const source = getModelSource() as GenModelV1ModelSource;
     const recordsInvalidate = vi.spyOn(source.records, 'invalidate');
     const treeInvalidate = vi.spyOn(
       source.tree as typeof source.tree & { invalidate(): void },
@@ -239,6 +86,6 @@ describe('legacy 适配器：零逻辑委托', () => {
     observeGenModelV1Health({ status: 'ok', started_at: 'new' }, '/gm');
     expect(recordsInvalidate).toHaveBeenCalledOnce();
     expect(treeInvalidate).toHaveBeenCalledOnce();
-    expect(getModelSource('gen-model-v1')).toBe(source);
+    expect(getModelSource()).toBe(source);
   });
 });

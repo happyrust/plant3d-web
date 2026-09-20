@@ -1,30 +1,17 @@
 import { test, expect } from '@playwright/test';
 
 /**
- * P8-2 两源对拍（收口计划 2026-09-09 §2）：同一 refno 分别经
- * `?model_source=legacy&data_source=parquet` 与 `?model_source=gen-model-v1`
- * 走 show_refno 整链加载，比：
- * - DTX 实际登记的对象数（`__dtxLayer.getAllObjectsWithBounds().length`）
- * - sceneBoundingBox 逐轴差 ≤ 1 mm（场景单位 mm）
- * 四类节点：BRAN（D6 样本）+ ZONE（该 BRAN 的祖先，两侧必有）+ EQUI + SUPPO
- * （后两类从 gen-model /api/v1/search 现选，dbnum=7997 优先——legacy parquet 覆盖它）。
+ * v1 浏览器整链 ↔ 服务端 records 对拍（收口计划 2026-09-09 §2 P8-2 的「替代口径」，legacy 退役后是唯一口径）：
+ * 同一 refno 经 `show_refno` 整链加载后，DTX 实际登记的对象数（`__dtxLayer.getAllObjectsWithBounds().length`）
+ * 必须等于 `/api/v1/model/records` 逐根取回的条数（前端一条不丢、一条不多），弹窗里的 loadedObjects 与之互证。
+ * 四类节点：BRAN（D6 样本）+ ZONE（该 BRAN 的祖先）+ EQUI + SUPPO（后两类从 gen-model /api/v1/search 现选，dbnum=7997 优先）。
  *
- * 前置：gen-model（默认 :8022）与旧后端 legacy（默认 :3100）都在跑；少任何一个就 skip。
- *
- * legacy 侧的 show_refno 靠 `visible-insts`（DuckDB-WASM 读 `scene_tree_parquet/pdms_tree_{dbnum}.parquet`）
- * 把容器展开成有几何的叶子；旧后端输出目录里**没有这份树 parquet 时**，legacy 只能画根 refno 自己
- * 拥有的直管（BRAN）或什么都画不出（ZONE/EQUI），对拍结果是环境残缺、不是回归——这里先探一遍，
- * 缺就 skip 并把原因打出来（2026-09-09 plant-server 检出的形态，见母计划 §8.13）。
- * 差异 >1 mm 时先按 R2 归因数据水位再查代码。
- *
- * 第二条用例不依赖 legacy：v1 浏览器整链登记的对象数必须等于 `/api/v1/model/records`
- * 逐根取回的条数（前端一条不丢、一条不多）——legacy 参照不可用时这是能自动跑的最强口径。
+ * 前置：gen-model（默认 :8022）在跑；不在就 skip。
+ * 旧后端 legacy（:3100 + parquet）那一侧的两源对拍 2026-09-20 随 legacy 退役删除。
  */
 const GEN_BASE = process.env.GEN_MODEL_V1_BASE_URL || 'http://127.0.0.1:8022';
-const LEGACY_BASE = process.env.LEGACY_BASE_URL || 'http://127.0.0.1:3100';
 const OUTPUT_PROJECT = process.env.OUTPUT_PROJECT || 'AvevaMarineSample';
 const DBNUM = 7997;
-const TOLERANCE_MM = 1;
 
 type LoadOutcome = {
   objects: number
@@ -39,15 +26,6 @@ async function reachable(url: string): Promise<boolean> {
   try {
     await fetch(url);
     return true; // 任何 HTTP 应答都算「在」，只有连接拒绝才算「不在」
-  } catch {
-    return false;
-  }
-}
-
-async function headOk(url: string): Promise<boolean> {
-  try {
-    const resp = await fetch(url, { method: 'HEAD' });
-    return resp.ok;
   } catch {
     return false;
   }
@@ -74,23 +52,6 @@ async function collectTargets(): Promise<Target[]> {
   }
   console.log('[two-source] targets:', JSON.stringify(targets));
   return targets;
-}
-
-/** 两边数据水位（R2）：legacy parquet 导出时间 vs gen-model 看到的库 sesno。 */
-async function logDataWaterLevel(): Promise<void> {
-  try {
-    const manifest = (await (await fetch(`${LEGACY_BASE}/files/output/${encodeURIComponent(OUTPUT_PROJECT)}/parquet/manifest_${DBNUM}.json`)).json()) as { generated_at?: string };
-    console.log(`[two-source] legacy parquet manifest_${DBNUM} generated_at=${manifest.generated_at ?? '?'}`);
-  } catch {
-    console.log(`[two-source] legacy parquet manifest_${DBNUM} 读不到`);
-  }
-  try {
-    const dbnums = (await (await fetch(`${GEN_BASE}/api/v1/dbnums`)).json()) as { dbnums?: { dbnum: number; file_latest_sesno?: number }[] };
-    const row = dbnums.dbnums?.find((d) => d.dbnum === DBNUM);
-    console.log(`[two-source] gen-model dbnum ${DBNUM} file_latest_sesno=${row?.file_latest_sesno ?? '?'}`);
-  } catch {
-    console.log('[two-source] gen-model /dbnums 读不到');
-  }
 }
 
 /** gen-model 侧的对象数 oracle：ensure → generation_roots → 逐根 records，条数按前端 modelRecords.ts 同一口径累加。 */
@@ -131,17 +92,14 @@ const fmt = (b: LoadOutcome['bbox']) =>
 
 async function loadOnce(
   page: import('@playwright/test').Page,
-  source: 'legacy' | 'gen-model-v1',
   refno: string,
   kind: string,
   screenshotPrefix: string,
 ): Promise<LoadOutcome> {
   const params = new URLSearchParams({
-    model_source: source,
     output_project: OUTPUT_PROJECT,
     show_refno: refno,
   });
-  if (source === 'legacy') params.set('data_source', 'parquet');
 
   let loadFinished = false;
   let toastObjects: number | null = null;
@@ -187,57 +145,14 @@ async function loadOnce(
         },
       };
     });
-    await page.screenshot({ path: `e2e/screenshots/${screenshotPrefix}-${kind}-${source}.png` });
+    await page.screenshot({ path: `e2e/screenshots/${screenshotPrefix}-${kind}-gen-model-v1.png` });
     return { ...outcome, toastObjects };
   } finally {
     page.off('console', onConsole);
   }
 }
 
-test('P8-2 四类节点两源对拍：对象数相同、包围盒逐轴 ≤1mm', async ({ page }) => {
-  test.setTimeout(20 * 60_000);
-  if (!(await reachable(`${GEN_BASE}/api/v1/health`))) test.skip(true, `gen-model 不在 ${GEN_BASE}`);
-  if (!(await reachable(LEGACY_BASE))) test.skip(true, `legacy 不在 ${LEGACY_BASE}`);
-  const treeParquet = `${LEGACY_BASE}/files/output/${encodeURIComponent(OUTPUT_PROJECT)}/scene_tree_parquet/pdms_tree_${DBNUM}.parquet`;
-  if (!(await headOk(treeParquet))) {
-    test.skip(
-      true,
-      `legacy 输出目录缺 scene_tree_parquet/pdms_tree_${DBNUM}.parquet（${treeParquet} 非 200）：` +
-        'legacy 的 show_refno 无法把容器展开成有几何的叶子，对拍只会比出环境残缺，不是回归。' +
-        '要跑两源对拍，先用旧导出链补齐 legacy 的树 parquet；此前以 v1 浏览器对象数 == records 条数（下一条用例）作替代口径。',
-    );
-  }
-  await logDataWaterLevel();
-  const targets = await collectTargets();
-
-  const failures: string[] = [];
-  for (const { kind, refno } of targets) {
-    const legacy = await loadOnce(page, 'legacy', refno, kind, 'two-source');
-    const v1 = await loadOnce(page, 'gen-model-v1', refno, kind, 'two-source');
-    console.log(`[two-source] ${kind} ${refno}: legacy objects=${legacy.objects} bbox=${fmt(legacy.bbox)}`);
-    console.log(`[two-source] ${kind} ${refno}: v1     objects=${v1.objects} bbox=${fmt(v1.bbox)}`);
-
-    if (legacy.objects !== v1.objects) {
-      failures.push(`${kind} ${refno}: 对象数 legacy=${legacy.objects} vs v1=${v1.objects}`);
-    }
-    if (!legacy.bbox || !v1.bbox) {
-      failures.push(`${kind} ${refno}: bbox 缺失 legacy=${fmt(legacy.bbox)} v1=${fmt(v1.bbox)}`);
-      continue;
-    }
-    for (const side of ['min', 'max'] as const) {
-      for (let axis = 0; axis < 3; axis++) {
-        const delta = Math.abs(legacy.bbox[side][axis] - v1.bbox[side][axis]);
-        if (delta > TOLERANCE_MM) {
-          failures.push(`${kind} ${refno}: bbox.${side}[${'xyz'[axis]}] Δ=${delta.toFixed(3)}mm`);
-        }
-      }
-    }
-  }
-
-  expect(failures, failures.join('\n')).toEqual([]);
-});
-
-test('P8-2 替代口径：v1 浏览器整链登记的对象数 == /api/v1/model/records 逐根条数', async ({ page }) => {
+test('v1 浏览器整链登记的对象数 == /api/v1/model/records 逐根条数', async ({ page }) => {
   test.setTimeout(20 * 60_000);
   if (!(await reachable(`${GEN_BASE}/api/v1/health`))) test.skip(true, `gen-model 不在 ${GEN_BASE}`);
   const targets = await collectTargets();
@@ -245,7 +160,7 @@ test('P8-2 替代口径：v1 浏览器整链登记的对象数 == /api/v1/model/
   const failures: string[] = [];
   for (const { kind, refno } of targets) {
     const expected = await v1RecordsCount(refno);
-    const v1 = await loadOnce(page, 'gen-model-v1', refno, kind, 'v1-vs-records');
+    const v1 = await loadOnce(page, refno, kind, 'v1-vs-records');
     console.log(
       `[v1-vs-records] ${kind} ${refno}: records=${expected} dtxObjects=${v1.objects} toastObjects=${v1.toastObjects ?? '?'} bbox=${fmt(v1.bbox)}`,
     );

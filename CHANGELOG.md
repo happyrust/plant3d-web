@@ -4,6 +4,14 @@
 
 ### 变更
 
+- **legacy 模型数据源退役：前端只剩 gen-model `/api/v1`，旧后端 `:3100` 相关代码、依赖与 UI 入口一并删除** (2026-09-20)
+  - 生产当天切到 gen-model（ADR 0054 2026-09-18 追记定的锚）：删 `src/model-source/legacy/` 与 `?model_source=` / `VITE_MODEL_SOURCE` 开关，`ModelSourceKind` 只剩 `'gen-model-v1'`，`getModelSource()` 进程内一份。
+  - 删整条 parquet / DuckDB-WASM 链（`useDbnoInstancesParquetLoader`、`genModelE3dParquetApi`、`usePtsetRuntimeLookup`、`duckdbBundles`、`useDuckDBModelLoader`、`useParquetSqlStore`、`useSceneTreeLoader`、`public/duckdb`，依赖 `@duckdb/duckdb-wasm` `apache-arrow` `parquet-wasm` `surrealdb`）与 `.glb` 网格分支；`lib/filesOutput.ts` 只剩当前工程状态，改名 `lib/currentProject.ts`。
+  - 删旧后端取数模块 `genModelE3dApi` / `genModelSearchApi` / `genModelIndexTreeApi` / `pipelineAnnotationApi`，`genModelPdmsAttrApi` 只留类型 + 由 v1 实现的 `pdmsGetTransform`；调用方（`useReviewDeliveryUnit` `measurementPathLookup` `measurementSnapLabel` `InitiateReviewPanel` `usePdmsConsoleCommands` `ViewerPanel` `PtsetPanelDock`）改走 `getModelSource()` 的 tree / attributes / keypoints 端口。`useModelProjects` 改读 `/api/v1/health.project`（gen-model 一个进程一个项目）。`usePipeDistanceStore.autoDetectBrans` 由旧后端 `/api/space/nearest-points` 一发算全部目标，改为逐对调 `/api/v1/spatial/surface-clearance`（`target_kind=any`），某一对 `result: null` 或 404 只记 warning、不拖垮整批。`genModelSpatialApi.ts` 只剩类型。「关于」对话框的后端版本改读 `/api/v1/health` 的 `version` + `build_id`（`<semver>+g<commit>.<unix 秒>`），旧 `/api/version` 在 gen-model 上是 404。
+  - gen-model 没有对应接口的旧后端功能拨掉 UI 入口（D1）：房间树页签 / 房间计算 / 房型房间信息、`/api/space/*` 六个支架场景（「空间计算」Dock 只剩 BRAN 中心线净距，改名「中心线净距」）、MBD v2 外部尺寸（含 `useMbdExternalSync` / 诊断面板 / `mbd-v2` 夹具 / vite 夹具通道）、工作台 / 项目卡片首页、任务创建 / 监控 / 模型导出、增量更新面板、校审日志抽屉、站点注册、Parquet SQL 调试页签、SurrealDB 直连基准页（`BenchmarkView` / `?benchmark`）、模型树「过滤结果分组」；`usePanelZones.ZONE_PANELS` 同步到 DockLayout 实际注册的面板集合；`useModelGeneration` / `useSpatialQuery` / `useDbnoInstancesDtxLoader` 里 realtime / parquet / SSE 回退路径删除。
+  - 配置与部署：`vite.config.ts` 去掉 DuckDB 资产管线与 MBD 夹具，dev `/api` 代理指 `:8022`；`deploy/nginx_remote.conf` `/api` → `:8022`，`/files/` 整前缀兜底到 `:8022`（附件那条 `/files/review_attachments/` 由后端分流片段 `aios-review-split.conf` 提供，站点文件不能再写同名 location——真机 `nginx -t` 报 duplicate location 后改成更短前缀兜底）；`deploy-ubuntu.yml` / `deploy_frontend_bundle.sh` / `deploy/README.md` 的 `BACKEND_ORIGIN` 缺省 `http://127.0.0.1:8022`。`tsconfig.app.json` 显式加 `"node"` types——此前 `@types/node`（含 `Array.prototype.at`）是被 DuckDB 依赖顺带拉进全局的。
+  - 测试：删 legacy 专用用例（parity 的两源对拍、`?model_source=legacy` 路由、`spatial-query-real-bran` 真机、`dimension-real-ams-bran-version`、`dimension-mbd-v2-fixture`），其余改成 mock `getModelSource()`；`npm run type-check` 基线之外只剩 worktree 绝对路径 / 联合类型顺序两类签名差异（非新错误），vitest 全量与改前基线对比见提交说明。
+
 - **云线批注改为世界锚定 billboard，并每帧贴合关联构件的屏幕投影** (2026-07-31)
   - `screen2d` 云线此前画在 HTML/SVG overlay 上，只有锚点参与相机投影：云线本身与三维层割裂，无法参与深度排序，尺寸恒定为拖框时的像素值。相机一转，被框住的构件就跑到云线外面，云线不再指认它所标记的东西。现在改为在 WebGL 里绘制世界锚定的 billboard 云线，与 `bbox3d` 同处一个渲染层。模式名与 `anchorWorldPos` / `screenOffset` / `cloudSize` 数据字段保持不变，数据模型未动。
   - `buildCloudBillboardPolyline()` 每帧用相机 right/up 基向量在世界空间展开波浪折线；`worldPerPixelAt()` 做像素→世界换算，使线宽与波幅在推拉相机时保持恒定像素观感。billboard 平面深度取关联 AABB 中心的 ndcZ，让像素→世界换算与投影落在同一深度。
@@ -102,6 +110,11 @@
   - 关联文档：`docs/plans/2026-05-18-reviewer-split-table-data-source-unification-plan.md`、`开发文档/三维校审/审核面板批注表格视图回归事故复盘-2026-05-17.md` §12
 
 ### 修复
+
+- **评论列表里的 Debug 形态 id（`String("comment-…")`）解包成裸 id，时间线上删 / 改评论重新打得中** (2026-09-20)
+  - gen-model 校审域三处把 SurrealDB 行主键按 Rust `Debug` 写进响应体（`GET /api/review/comments/by-annotation/*`、`GET /api/review/tasks/{id}/history`、workflow sync 的评论），后端用 `record_id_debug_shape_matches_the_legacy_sdk` 钉住了这个形态（旧端同形）；而建评论回执与 `DELETE|PATCH /api/review/comments/item/{id}` 认的都是裸 `comment-…`。前端 `normalizeAnnotationComment` 原样 `String(raw.id)`，时间线拿列表 id 去删 → 404「评论不存在」。
+  - 新增 `unwrapRecordIdDebugShape()`：`String("x")` → `x`（Debug 转义按 JSON 解）、`Number(7)` → `7`，裸 id 原样；接在 `normalizeAnnotationComment`（`id` / `replyToId`）、`normalizeWorkflowSyncResponse`（records / annotationComments 的 id）与 `reviewTaskGetHistory` 上。
+  - 验证：`reviewApi.test.ts` 新增 6 例（含 by-annotation → delete 的 fetch 级往返、history 解包）54/54；本机 gen-model `:8031`（0.1.27，`PLANT_REVIEW_ALLOW_EPHEMERAL_STORE=1`）真机：经前端 `reviewCommentGetByAnnotation` 取回的 id 与建评论回执逐字相同，再删 200；改前同一路径拿列表 id 删是 404。
 
 - **Quicktest 模型加载离线化与聚焦修复** (2026-06-09)
   - DuckDB-WASM 初始化后统一设置 `custom_extension_repository` 到同源 `/duckdb/extensions`，`parquet_scan()` 不再访问公网 `extensions.duckdb.org` 下载 `parquet.duckdb_extension.wasm`

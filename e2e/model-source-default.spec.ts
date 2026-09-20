@@ -1,20 +1,20 @@
 import { test, expect } from '@playwright/test';
 
 /**
- * P8-5 翻默认（收口计划 2026-09-09 §2 / D8）：缺省数据源自 2026-09-09 起是 `gen-model-v1`。
+ * 路由钉子（收口计划 2026-09-09 §2 / D8 翻默认；2026-09-20 legacy 退役后收紧）：数据源只有 `gen-model-v1`。
  *
  * - 不带任何参数打开页面：页面判定的数据源是 `gen-model-v1`，模型树 / 库元信息 / 徽标发出的
- *   请求全部落在 gen-model `/api/v1/*`，一发旧链路（`/api/e3d/*`、`/api/pdms/*`、
+ *   请求全部落在 gen-model `/api/v1/*`，一发旧链路（`/api/e3d/*`、`/api/pdms/*`、`/api/projects`、
  *   `/files/output/**`、`/files/meshes/**`）都没有；
- * - `?model_source=legacy`：反过来，旧链路照走、一发 `/api/v1/*` 都没有（开关保留一个发布周期）。
+ * - `?model_source=legacy` 已不是开关：带着它打开页面结果与不带一样（旧链路零请求）。
  *
- * 只看「请求发往哪里」，不看应答——gen-model / 旧后端在不在都能跑，是翻默认后的路由钉子，
- * 不是 live 对拍（live 对拍见 gen-model-v1-two-source-parity.spec.ts）。
- * 页面其它面板（尺寸 / MBD / 校审）对旧后端 `/api/*` 的请求不属于模型数据源，这里不计。
+ * 只看「请求发往哪里」，不看应答——gen-model 在不在都能跑，不是 live 对拍
+ * （live 对拍见 gen-model-v1-two-source-parity.spec.ts）。
+ * 页面其它面板（尺寸 / 校审）对同源 `/api/review*` `/api/auth*` 的请求不属于模型数据源，这里不计。
  */
 
 const V1_MARKERS = ['/api/v1/health', '/api/v1/tree/', '/api/v1/dbnums', '/api/v1/tasks', '/api/v1/search', '/api/v1/model/', '/api/v1/element/', '/api/v1/meshes/'];
-const LEGACY_MARKERS = ['/api/e3d/', '/api/pdms/', '/files/output/', '/files/meshes/'];
+const LEGACY_MARKERS = ['/api/e3d/', '/api/pdms/', '/api/projects', '/api/search/pdms', '/files/output/', '/files/meshes/'];
 
 type Routed = { v1: string[]; legacy: string[] };
 
@@ -56,9 +56,9 @@ test('不带参数打开页面：数据源是 gen-model-v1，模型取数只发�
   expect(routed.legacy, `缺省 v1 下不该有旧链路请求: ${routed.legacy.join(', ')}`).toEqual([]);
 });
 
-test('?model_source=legacy：仍回旧链路，/api/v1 零请求', async ({ page }) => {
+test('?model_source=legacy 已退役：仍是 gen-model-v1，旧链路零请求', async ({ page }) => {
   const { kind, routed } = await openAndCollect(page, '/?model_source=legacy');
-  expect(kind).toBe('legacy');
-  expect(routed.legacy.length).toBeGreaterThan(0);
-  expect(routed.v1, `legacy 下不该有 gen-model 请求: ${routed.v1.join(', ')}`).toEqual([]);
+  expect(kind).toBe('gen-model-v1');
+  expect(routed.v1.length).toBeGreaterThan(0);
+  expect(routed.legacy, `legacy 开关已删，不该有旧链路请求: ${routed.legacy.join(', ')}`).toEqual([]);
 });

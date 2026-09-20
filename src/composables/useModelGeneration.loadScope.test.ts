@@ -1,21 +1,21 @@
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-// 这个文件测的是 legacy 链路（`/api/e3d/visible-insts` / `subtree-refnos` / `pdms/type-info`）；
-// 缺省数据源自 2026-09-09 起是 gen-model-v1，这里显式钉回 legacy。
-beforeAll(() => window.history.replaceState({}, '', '?model_source=legacy'));
-afterAll(() => window.history.replaceState({}, '', '/'));
-
+// 加载范围的解析只依赖数据源端口（tree.visibleInsts / tree.subtreeRefnos / attributes.typeInfo），这里把端口 mock 掉。
 const e3dGetVisibleInstsMock = vi.fn();
 const e3dGetSubtreeRefnosMock = vi.fn();
 const pdmsGetTypeInfoMock = vi.fn();
 
-vi.mock('@/api/genModelE3dApi', () => ({
-  e3dGetVisibleInsts: e3dGetVisibleInstsMock,
-  e3dGetSubtreeRefnos: e3dGetSubtreeRefnosMock,
-}));
-
-vi.mock('@/api/genModelPdmsAttrApi', () => ({
-  pdmsGetTypeInfo: pdmsGetTypeInfoMock,
+vi.mock('@/model-source', () => ({
+  getModelSource: () => ({
+    kind: 'gen-model-v1',
+    tree: {
+      visibleInsts: (refno: string) => e3dGetVisibleInstsMock(refno),
+      subtreeRefnos: (refno: string, params?: unknown) => e3dGetSubtreeRefnosMock(refno, params),
+    },
+    attributes: { typeInfo: (refno: string) => pdmsGetTypeInfoMock(refno) },
+  }),
+  getGenModelV1ModelSource: () => null,
+  subscribeModelSourceProgress: () => () => {},
 }));
 
 describe('queryLoadScopeRefnos', () => {

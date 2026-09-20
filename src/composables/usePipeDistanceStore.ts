@@ -7,7 +7,7 @@ import { computed, ref } from 'vue';
 
 import type { Vec3 } from '@/types/vec3';
 
-import { postSpaceNearestPoints } from '@/api/genModelSpatialApi';
+import { genModelV1SurfaceClearance, isGenModelV1ApiError } from '@/api/genModelV1Api';
 
 export type PipeDistanceResult = {
   id: string;
@@ -145,44 +145,53 @@ export function usePipeDistanceStore() {
     isDetecting.value = true;
     detectError.value = null;
 
-    // 第一个作为源，其余为目标：服务端按源逐个算最近点。
+    // 第一个作为源，其余为目标：逐对向 gen-model `/api/v1/spatial/surface-clearance`（`target_kind=any`）要外表面最近点。
+    // 旧后端 `/api/space/nearest-points` 一发算全部目标的路 2026-09-20 随 legacy 退役；这里一对一发，结果形状不变（E3D 世界 mm）。
     const [sourceRefno, ...targetRefnos] = branRefnos;
 
     try {
-      const resp = await postSpaceNearestPoints({
-        source_refno: sourceRefno!,
-        target_refnos: targetRefnos,
-        max_results: targetRefnos.length,
-      });
-
-      if (!resp.success) {
-        detectError.value = resp.error || '净距计算失败';
-        results.value = [];
-        activeResultIndex.value = null;
-        return;
-      }
-
       const transform = options.transformPoint;
       const toVec3 = (point: { x: number; y: number; z: number }): Vec3 => {
         const raw: Vec3 = [point.x, point.y, point.z];
         return transform?.(raw) ?? raw;
       };
 
-      results.value = resp.results.map((item) => ({
-        id: `${sourceRefno}__${item.refno}`,
-        distance: item.distance_mm,
-        pipeA: sourceRefno!,
-        pipeB: item.refno,
-        start: toVec3(item.source_point),
-        end: toVec3(item.target_point),
+      const warnings: string[] = [];
+      const settled = await Promise.all(targetRefnos.map(async (targetRefno) => {
+        try {
+          const resp = await genModelV1SurfaceClearance({
+            sourceRefno: sourceRefno!,
+            targetRefno,
+            targetKind: 'any',
+            perpendicular: false,
+          });
+          if (!resp.result) {
+            warnings.push(`${targetRefno}：${resp.warnings.join('；') || '两侧网格在最大距离内没有靠近'}`);
+            return null;
+          }
+          return {
+            id: `${sourceRefno}__${targetRefno}`,
+            distance: resp.result.distance_mm,
+            pipeA: sourceRefno!,
+            pipeB: targetRefno,
+            start: toVec3(resp.result.source_point),
+            end: toVec3(resp.result.target_point),
+          } satisfies PipeDistanceResult;
+        } catch (error) {
+          const message = isGenModelV1ApiError(error) ? error.message : error instanceof Error ? error.message : String(error);
+          warnings.push(`${targetRefno}：${message}`);
+          return null;
+        }
       }));
+
+      results.value = settled.filter((item): item is PipeDistanceResult => item !== null);
       activeResultIndex.value = results.value.length > 0 ? 0 : null;
 
       if (results.value.length === 0) {
-        detectError.value = '未找到可标注的净距结果';
-      } else if (resp.warnings.length > 0) {
-        // 服务端退回包围盒口径时如实告知，避免把粗筛距离当成精确净距
-        detectError.value = resp.warnings.join('；');
+        detectError.value = warnings.length > 0 ? warnings.join('；') : '未找到可标注的净距结果';
+      } else if (warnings.length > 0) {
+        // 有几对没算出来就如实列出，别让「N 条结果」盖住缺的那几对
+        detectError.value = warnings.join('；');
       }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);

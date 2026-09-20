@@ -27,8 +27,7 @@ import type { DTXLayer, DTXSelectionController } from '@/utils/three/dtx';
 import type { DtxCompatViewer } from '@/viewer/dtx/DtxCompatViewer';
 import type { DtxViewer } from '@/viewer/dtx/DtxViewer';
 
-import { queryPipeWallDistanceCandidates, type PipeWallDistanceCandidate } from '@/api/genModelSpatialApi';
-import { genModelV1SpatialCenterline } from '@/api/genModelV1Api';
+import { genModelV1SpatialCenterline, genModelV1SpatialNearestClearance } from '@/api/genModelV1Api';
 import { reviewAttachmentDelete } from '@/api/reviewApi';
 import { setAnnotationProcessingEntryTarget } from '@/components/review/annotationProcessingEntry';
 import { isExternalSjFormFocusedMode, readPersistedEmbedModeParams } from '@/components/review/embedRoleLanding';
@@ -72,7 +71,6 @@ import { buildCloudBindings, getCloudMemberRefnos, useToolStore, type Annotation
 import { useUnitSettingsStore } from '@/composables/useUnitSettingsStore';
 import { useUserStore } from '@/composables/useUserStore';
 import { SOLVESPACE_DIMENSION_THEME, isWorldSegmentBlocked } from '@/dimension';
-import { getModelSourceKind } from '@/model-source/kind';
 import {
   DEFAULT_CLOUD_REGION_RENDER_STYLE,
   liftScreenPolylineToBillboard,
@@ -729,6 +727,13 @@ const PIPE_STRUCTURE_BACKEND_MAX_CANDIDATES = 20;
 const PIPE_STRUCTURE_FRONTEND_TOP_CANDIDATES = 5;
 const PIPE_STRUCTURE_SOURCE_SAMPLE_LIMIT = 128;
 const PIPE_STRUCTURE_DEFAULT_NOUNS = ['WALL', 'COLUMN'];
+
+/** 管-墙/柱候选的最小形状（退役前 `/api/space/wall-distance` 的候选行，现由 v1 `nearest-clearance` 的候选折出来）。 */
+type PipeWallDistanceCandidate = {
+  refno: string;
+  noun: string;
+  distance_mm: number;
+};
 const OBJECT_TO_OBJECT_VERTEX_SAMPLE_LIMIT = 64;
 
 type PipeMeasureResult = {
@@ -788,13 +793,6 @@ export type ApproxNearestBetweenObjectsResult = {
 
 function normalizeRefnoKey(raw: string): string {
   return String(raw || '').trim().replace(/\//g, '_');
-}
-
-function toBackendRefno(raw: string): string {
-  const normalized = normalizeRefnoKey(raw);
-  const matched = normalized.match(/^(\d+)_(\d+)$/);
-  if (!matched) return normalized;
-  return `${matched[1]}/${matched[2]}`;
 }
 
 function parseDbnumFromRefno(raw: string): number | null {
@@ -3468,11 +3466,6 @@ export function useDtxTools(options: {
     source: PipeToPipeBranCandidate,
     target: PipeToPipeBranCandidate,
   ): Promise<boolean> {
-    if (getModelSourceKind() !== 'gen-model-v1') {
-      clearPipeToPipeCandidate();
-      setPipeMeasureStatus('管-管间距：当前数据源没有 BRAN 中心线接口（/api/v1/spatial/centerline），请切到 gen-model-v1 数据源');
-      return false;
-    }
     const pair = `${source.branRefno} ↔ ${target.branRefno}`;
     setPipeMeasureStatus(`管-管间距：正在取 ${pair} 两条 BRAN 的中心线…`);
     const [sourceLine, targetLine] = await Promise.all([
@@ -3622,18 +3615,24 @@ export function useDtxTools(options: {
     pipeMeasureBusy.value = true;
     try {
       setPipeMeasureStatus('正在查询墙/柱候选…');
-      const response = await queryPipeWallDistanceCandidates({
-        dbnum,
-        source_refno: toBackendRefno(sourceRefno),
-        target_nouns: PIPE_STRUCTURE_DEFAULT_NOUNS,
-        max_candidates: PIPE_STRUCTURE_BACKEND_MAX_CANDIDATES,
+      // 候选来自 gen-model `/api/v1/spatial/nearest-clearance`：沿所属 BRAN 中心线按类型找半径内最近的墙 / 柱
+      // （旧后端 `/api/space/wall-distance` 2026-09-20 随 legacy 退役）。拾中的是管件时先找它所属的 BRAN。
+      const sourceBranRefno = findOwnerBranRefnoAcrossAllDbnos(sourceRefno) ?? sourceRefno;
+      const response = await genModelV1SpatialNearestClearance({
+        sourceRefno: sourceBranRefno,
+        sourceMode: 'bran_centerline',
+        targetNouns: PIPE_STRUCTURE_DEFAULT_NOUNS,
+        groupBy: 'noun',
+        maxPerGroup: PIPE_STRUCTURE_BACKEND_MAX_CANDIDATES,
+        scope: 'all_loaded',
       });
-      if (response.status !== 'success' || !response.data) {
-        setPipeMeasureStatus(response.message || '候选查询失败');
-        return;
-      }
-
-      const candidates = (response.data.candidates || []).slice(0, PIPE_STRUCTURE_FRONTEND_TOP_CANDIDATES);
+      // 失败走 HTTP 错误信封（`GenModelV1ApiError`，由外层 catch 报状态），200 里 success 恒为 true
+      const candidates: PipeWallDistanceCandidate[] = (response.nearest_by_group ?? [])
+        .flatMap((group) => group.candidates ?? [])
+        .filter((candidate) => PIPE_STRUCTURE_DEFAULT_NOUNS.includes(String(candidate.noun || '').toUpperCase()))
+        .sort((a, b) => a.distance_mm - b.distance_mm)
+        .slice(0, PIPE_STRUCTURE_FRONTEND_TOP_CANDIDATES)
+        .map((candidate) => ({ refno: candidate.refno, noun: candidate.noun, distance_mm: candidate.distance_mm }));
       if (candidates.length === 0) {
         setPipeMeasureStatus('未找到可用墙/柱候选');
         return;

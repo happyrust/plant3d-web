@@ -20,27 +20,15 @@ import DimensionSemanticList from './DimensionSemanticList.vue';
 import DimensionToolbar from './DimensionToolbar.vue';
 
 import type { DimensionBoundAction } from './dimensionBoundActions';
-import type { MbdPrimitive } from '../adapters/mbdV2Contract';
 import type { ExternalDimensionRecord } from '../adapters/normalizeExternalDimensions';
 import type { UserDimensionRecord } from '../domain/types';
 import type { LayoutResult } from '../kernel/types';
 
-import {
-  useMbdDiagnosticsStore,
-  type MbdDiagnosticsSnapshot,
-} from '@/composables/useMbdDiagnosticsStore';
 import { useUserStore } from '@/composables/useUserStore';
 import { useViewerContext } from '@/composables/useViewerContext';
 import { emitToast } from '@/ribbon/toastBus';
 
 type DimensionListItem = UserDimensionRecord | ExternalDimensionRecord;
-
-/**
- * rs-mbd 自报的阶段性排版模式。契约还没有「本次交付覆盖哪些图元类别」的显式
- * 声明，在它出现之前，用已知的阶段模式名兜住「标注不完整」这个事实——未移植
- * 的类别不会产生任何 issue，光看诊断列表看不出缺了什么。
- */
-const PARTIAL_LAYOUT_MODES: readonly string[] = ['linear_mvp'];
 
 defineProps<{
   params?: {
@@ -145,166 +133,13 @@ const items = computed(() => [
   ),
 ]);
 
-const mbdDiagnostics = useMbdDiagnosticsStore().snapshot;
-const diagnosticsBySeverity = computed(() => {
-  const groups: Record<'error' | 'warning' | 'info', MbdDiagnosticsSnapshot['issues'][number][]> = {
-    error: [],
-    warning: [],
-    info: [],
-  };
-  for (const issue of mbdDiagnostics.value.issues) {
-    groups[issue.severity].push(issue);
-  }
-  return groups;
-});
-const diagnosticsCount = computed(() =>
-  mbdDiagnostics.value.issues.length + mbdDiagnostics.value.skipped.length);
-const diagnosticsVisible = computed(() =>
-  diagnosticsCount.value > 0
-  || mbdDiagnostics.value.loadError !== null
-  || mbdDiagnostics.value.layoutMode !== null);
-const incompleteLayoutMode = computed(() => {
-  const mode = mbdDiagnostics.value.layoutMode;
-  return mode !== null && PARTIAL_LAYOUT_MODES.includes(mode) ? mode : null;
-});
-
-function locateIssueRefno(refno: string): void {
-  window.dispatchEvent(new CustomEvent('showModelByRefnos', {
-    detail: { refnos: [refno], flyTo: true },
-  }));
-}
-
-/**
- * MBD 图元类别过滤（2026-09-12 长度尺寸显示优化 QW3）。真正的过滤在
- * `useMbdExternalSync` 读 URL `mbd_kinds`；这里只是把那个参数做成勾选框：
- * 改 URL → 派发 `popstate` → ViewerPanel 走同一条 `handleMbdLocationChange`
- * 重新同步。`Record` 钉住契约的全部 kind，契约新增 kind 时这里会编译失败。
- */
-const MBD_KIND_LABELS: Readonly<Record<MbdPrimitive['kind'], string>> = {
-  linear_dim: '长度尺寸',
-  angle_dim: '安装角',
-  slope_mark: '坡度',
-  weld_mark: '焊缝',
-  label: '位号标签',
-  leader_line: '引线',
-  aid_line: '辅助线',
-  aid_arc: '辅助弧',
-  aid_circle: '辅助圆',
-  aid_point: '辅助点',
-  aid_text: '辅助文字',
-};
-const MBD_KINDS = Object.keys(MBD_KIND_LABELS) as readonly MbdPrimitive['kind'][];
-
-function readMbdKindFilter(): ReadonlySet<string> | null {
-  if (typeof window === 'undefined') return null;
-  const kinds = (new URLSearchParams(window.location.search).get('mbd_kinds') ?? '')
-    .split(',')
-    .map(kind => kind.trim().toLowerCase())
-    .filter(kind => kind.length > 0);
-  return kinds.length > 0 ? new Set(kinds) : null;
-}
-
-const mbdKindFilter = ref<ReadonlySet<string> | null>(readMbdKindFilter());
-const mbdRecordCount = computed(() =>
-  externalRecords.value.filter(record => record.source === 'mbd').length);
-const shownMbdKindCount = computed(() =>
-  MBD_KINDS.filter(kind => isMbdKindShown(kind)).length);
-
-function isMbdKindShown(kind: string): boolean {
-  return mbdKindFilter.value === null || mbdKindFilter.value.has(kind);
-}
-
-function writeMbdKinds(kinds: readonly string[] | null): void {
-  const url = new URL(window.location.href);
-  if (kinds === null) url.searchParams.delete('mbd_kinds');
-  else url.searchParams.set('mbd_kinds', kinds.join(','));
-  window.history.pushState({}, '', url);
-  window.dispatchEvent(new Event('popstate'));
-}
-
-function setMbdKindShown(kind: string, shown: boolean): void {
-  const next = new Set(mbdKindFilter.value ?? MBD_KINDS);
-  if (shown) next.add(kind);
-  else next.delete(kind);
-  if (next.size === 0) return;
-  writeMbdKinds(
-    next.size === MBD_KINDS.length ? null : MBD_KINDS.filter(item => next.has(item)),
-  );
-}
-
-function showOnlyMbdKind(kind: MbdPrimitive['kind']): void {
-  writeMbdKinds([kind]);
-}
-
-function showAllMbdKinds(): void {
-  writeMbdKinds(null);
-}
-
-/**
- * 分级显示（LOD，S3）的面板开关与统计。开关同样只改 URL（`mbd_lod=0` = 关）并派发
- * `popstate`，由同步层剥掉 `lod` 提示；统计读最近一次布局里 MBD 记录的 `derived.lodHidden`。
- */
-function readMbdLodDisabled(): boolean {
-  if (typeof window === 'undefined') return false;
-  return new URLSearchParams(window.location.search).get('mbd_lod')?.trim() === '0';
-}
-
-const mbdLodDisabled = ref(readMbdLodDisabled());
-
-function setMbdLodEnabled(enabled: boolean): void {
-  const url = new URL(window.location.href);
-  if (enabled) url.searchParams.delete('mbd_lod');
-  else url.searchParams.set('mbd_lod', '0');
-  window.history.pushState({}, '', url);
-  window.dispatchEvent(new Event('popstate'));
-}
-
-const mbdLodHidden = computed(() => {
-  const mbdIds = new Set(
-    externalRecords.value.filter(record => record.source === 'mbd').map(record => record.id),
-  );
-  const summary = { total: 0, secondaryFar: 0, detailFar: 0, shortLine: 0, overlap: 0 };
-  for (const layout of viewportLayouts.value) {
-    if (!mbdIds.has(layout.dimensionId)) continue;
-    const reason = layout.derived.lodHidden;
-    if (!reason) continue;
-    summary.total += 1;
-    if (reason === 'secondary-far') summary.secondaryFar += 1;
-    else if (reason === 'detail-far') summary.detailFar += 1;
-    else if (reason === 'overlap') summary.overlap += 1;
-    else summary.shortLine += 1;
-  }
-  return summary;
-});
-
-/**
- * 三维标注呈现（2026-09-12 参考图风格：尺寸线沿 dim_dir 外移、数字在三维平面里置于线上方、
- * 实心箭头；标签按卡片 / 方框 / 药丸式 billboard 带引线出图）的面板开关。同样只改 URL
- * （`mbd_3d=0` = 关）并派发 `popstate`，由同步层剥掉 mapper 打的 `dimension3d` / `tag`，
- * 内核回到求解器原位几何的平面呈现。
- */
-function readMbd3dDisabled(): boolean {
-  if (typeof window === 'undefined') return false;
-  return new URLSearchParams(window.location.search).get('mbd_3d')?.trim() === '0';
-}
-
-const mbd3dDisabled = ref(readMbd3dDisabled());
-
-function setMbd3dEnabled(enabled: boolean): void {
-  const url = new URL(window.location.href);
-  if (enabled) url.searchParams.delete('mbd_3d');
-  else url.searchParams.set('mbd_3d', '0');
-  window.history.pushState({}, '', url);
-  window.dispatchEvent(new Event('popstate'));
-}
-
 /**
  * 显示模式（S4，2026-09-13）：`engineering`（默认）每条尺寸照工程图样全画；`inspection`
  * 让内核在每次完整布局后对每条尺寸的探测点（数字 / 标签锚点）向相机做一次射线求交，
  * 被模型挡住的整条淡化到 `theme.inspection.occludedAlpha`、其余 `visibleAlpha`（叠层在整帧
  * 之后直接画进 sRGB 画布，ADR 0064：0.35 / 0.65 就是约 35 % / 65 % 的对比），不隐藏。
- * 状态记在 URL `mbd_mode=inspection` 上，但**不走 `popstate` 重拉 payload**——模式只关系到
- * 呈现，直接交给 `viewport.setDisplayMode`；浏览器前进 / 后退带来的 `popstate` 仍会把它同步回来。
+ * 状态记在 URL `mbd_mode=inspection` 上（参数名沿用 MBD 时代），模式只关系到呈现，直接交给
+ * `viewport.setDisplayMode`；浏览器前进 / 后退带来的 `popstate` 会把它同步回来。
  */
 function setMbdDisplayMode(mode: MbdDisplayMode): void {
   const url = new URL(window.location.href);
@@ -315,24 +150,18 @@ function setMbdDisplayMode(mode: MbdDisplayMode): void {
   viewerContext.dimensionSystem.value?.viewport.setDisplayMode(mode);
 }
 
-/** 检视模式下最近一次布局里 MBD 记录的遮挡统计（只数画出来的）。 */
-const mbdOcclusion = computed(() => {
-  const mbdIds = new Set(
-    externalRecords.value.filter(record => record.source === 'mbd').map(record => record.id),
-  );
+/** 检视模式下最近一次布局里各条尺寸的遮挡统计（只数画出来的）。 */
+const dimensionOcclusion = computed(() => {
   const summary = { occluded: 0, visible: 0 };
   for (const layout of viewportLayouts.value) {
-    if (!mbdIds.has(layout.dimensionId) || layout.primitives.length === 0) continue;
+    if (layout.primitives.length === 0) continue;
     if (layout.derived.occluded) summary.occluded += 1;
     else summary.visible += 1;
   }
   return summary;
 });
 
-function syncMbdDebugStateFromLocation(): void {
-  mbdKindFilter.value = readMbdKindFilter();
-  mbdLodDisabled.value = readMbdLodDisabled();
-  mbd3dDisabled.value = readMbd3dDisabled();
+function syncDisplayModeFromLocation(): void {
   const mode = readMbdDisplayMode();
   if (mode !== mbdDisplayMode.value) {
     mbdDisplayMode.value = mode;
@@ -341,11 +170,11 @@ function syncMbdDebugStateFromLocation(): void {
 }
 
 if (typeof window !== 'undefined') {
-  window.addEventListener('popstate', syncMbdDebugStateFromLocation);
+  window.addEventListener('popstate', syncDisplayModeFromLocation);
 }
 onUnmounted(() => {
   if (typeof window !== 'undefined') {
-    window.removeEventListener('popstate', syncMbdDebugStateFromLocation);
+    window.removeEventListener('popstate', syncDisplayModeFromLocation);
   }
 });
 const recoveryPreview = computed(() => {
@@ -535,80 +364,9 @@ function act(
         </button>
       </div>
     </div>
-    <div v-if="incompleteLayoutMode"
-      class="m-2 rounded border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900"
-      data-testid="mbd-incomplete-annotation">
-      <div class="font-semibold">本分支标注不完整</div>
-      <div class="mt-1">
-        求解器以 {{ incompleteLayoutMode }} 模式产出，只覆盖部分标注类别。
-        未产出的类别不会出现在下方诊断里，请勿据此判断标注已完整。
-      </div>
-    </div>
-    <div v-if="mbdDiagnostics.channel"
-      class="m-2 rounded border border-slate-200 bg-slate-50 p-2 text-xs text-slate-700"
-      data-testid="mbd-kind-filter">
-      <div class="flex items-center justify-between gap-2">
-        <span class="font-semibold">MBD 图元类别（显示 {{ mbdRecordCount }} 条）</span>
-        <span class="flex gap-1">
-          <button type="button"
-            class="rounded border px-1.5 py-0.5"
-            data-testid="mbd-kind-only-linear"
-            @click="showOnlyMbdKind('linear_dim')">
-            只看长度
-          </button>
-          <button type="button"
-            class="rounded border px-1.5 py-0.5 disabled:opacity-40"
-            data-testid="mbd-kind-all"
-            :disabled="mbdKindFilter === null"
-            @click="showAllMbdKinds()">
-            全部
-          </button>
-        </span>
-      </div>
-      <div class="mt-1 flex flex-wrap gap-x-3 gap-y-1">
-        <label v-for="kind in MBD_KINDS"
-          :key="kind"
-          class="flex items-center gap-1">
-          <input type="checkbox"
-            :data-mbd-kind="kind"
-            :checked="isMbdKindShown(kind)"
-            :disabled="isMbdKindShown(kind) && shownMbdKindCount === 1"
-            @change="setMbdKindShown(kind, ($event.target as HTMLInputElement).checked)" />
-          <span>{{ MBD_KIND_LABELS[kind] }}</span>
-        </label>
-      </div>
-      <div class="mt-1 flex flex-wrap items-center justify-between gap-2"
-        data-testid="mbd-lod">
-        <label class="flex items-center gap-1">
-          <input type="checkbox"
-            data-testid="mbd-lod-enabled"
-            :checked="!mbdLodDisabled"
-            @change="setMbdLodEnabled(($event.target as HTMLInputElement).checked)" />
-          <span>分级显示（LOD）</span>
-        </label>
-        <span data-testid="mbd-lod-hidden">
-          <template v-if="mbdLodDisabled">已关闭，每条尺寸照常出图</template>
-          <template v-else>
-            LOD 隐藏 {{ mbdLodHidden.total }} 条（atta 远景 {{ mbdLodHidden.secondaryFar }} / 短段 {{ mbdLodHidden.shortLine }} / 相压 {{ mbdLodHidden.overlap }} / 细节 {{ mbdLodHidden.detailFar }}）
-          </template>
-        </span>
-      </div>
-      <div class="mt-1 flex flex-wrap items-center justify-between gap-2"
-        data-testid="mbd-3d">
-        <label class="flex items-center gap-1">
-          <input type="checkbox"
-            data-testid="mbd-3d-enabled"
-            :checked="!mbd3dDisabled"
-            @change="setMbd3dEnabled(($event.target as HTMLInputElement).checked)" />
-          <span>三维标注呈现（尺寸线外移 / 数字在线上方 / 实心箭头 / 标签卡片带引线）</span>
-        </label>
-        <span data-testid="mbd-3d-state">
-          <template v-if="mbd3dDisabled">已关闭，按求解器原位几何平面出图</template>
-          <template v-else>开</template>
-        </span>
-      </div>
-      <div class="mt-1 flex flex-wrap items-center justify-between gap-2"
-        data-testid="mbd-mode">
+    <div class="m-2 rounded border border-slate-200 bg-slate-50 p-2 text-xs text-slate-700"
+      data-testid="mbd-mode">
+      <div class="flex flex-wrap items-center justify-between gap-2">
         <span class="flex flex-wrap items-center gap-2">
           <span>显示模式</span>
           <label class="flex items-center gap-1">
@@ -632,79 +390,12 @@ function act(
         </span>
         <span data-testid="mbd-mode-state">
           <template v-if="mbdDisplayMode === 'inspection'">
-            被遮挡 {{ mbdOcclusion.occluded }} 条 / 可见 {{ mbdOcclusion.visible }} 条
+            被遮挡 {{ dimensionOcclusion.occluded }} 条 / 可见 {{ dimensionOcclusion.visible }} 条
           </template>
           <template v-else>每条尺寸照工程图样全画</template>
         </span>
       </div>
     </div>
-    <details v-if="diagnosticsVisible"
-      class="m-2 rounded border border-slate-200 bg-slate-50 p-2 text-xs text-slate-700"
-      data-testid="mbd-diagnostics">
-      <summary class="cursor-pointer font-semibold">
-        MBD 诊断（{{ diagnosticsCount }}）
-        <span v-if="mbdDiagnostics.channel" class="font-normal opacity-70">
-          {{ mbdDiagnostics.channel === 'api' ? '实时' : 'parquet' }}
-          · {{ mbdDiagnostics.sourceId }}
-        </span>
-      </summary>
-      <div v-if="mbdDiagnostics.loadError"
-        class="mt-2 font-semibold text-red-700"
-        data-testid="mbd-load-error">
-        装载失败：{{ mbdDiagnostics.loadError }}
-      </div>
-      <div v-for="severity in (['error', 'warning', 'info'] as const)"
-        :key="severity">
-        <template v-if="diagnosticsBySeverity[severity].length > 0">
-          <div class="mt-2 font-semibold"
-            :class="{
-              'text-red-700': severity === 'error',
-              'text-amber-700': severity === 'warning',
-            }">
-            {{ severity }}（{{ diagnosticsBySeverity[severity].length }}）
-          </div>
-          <div v-for="issue in diagnosticsBySeverity[severity]"
-            :key="issue.id"
-            class="mt-1 flex items-center justify-between gap-2"
-            :data-issue-id="issue.id">
-            <span class="min-w-0 break-all">
-              [{{ issue.category }}] {{ issue.message }}
-            </span>
-            <button v-if="issue.refno"
-              type="button"
-              class="shrink-0 rounded border px-1.5 py-0.5"
-              :data-locate-refno="issue.refno"
-              @click="locateIssueRefno(issue.refno)">
-              定位 {{ issue.refno }}
-            </button>
-          </div>
-        </template>
-      </div>
-      <template v-if="mbdDiagnostics.skipped.length > 0">
-        <div class="mt-2 font-semibold">
-          跳过图元（{{ mbdDiagnostics.skipped.length }}）
-        </div>
-        <div v-for="entry in mbdDiagnostics.skipped"
-          :key="entry.id"
-          class="mt-1 break-all"
-          :data-skipped-id="entry.id">
-          {{ entry.id }}：{{ entry.reason }}
-        </div>
-      </template>
-      <template v-if="mbdDiagnostics.layoutMode || mbdDiagnostics.notes.length > 0">
-        <div class="mt-2 font-semibold">求解器自报</div>
-        <div v-if="mbdDiagnostics.layoutMode"
-          class="mt-1"
-          data-testid="mbd-layout-mode">
-          排版模式：{{ mbdDiagnostics.layoutMode }}
-        </div>
-        <div v-for="note in mbdDiagnostics.notes"
-          :key="note"
-          class="mt-1 break-all">
-          {{ note }}
-        </div>
-      </template>
-    </details>
     <div class="min-h-0 flex-1">
       <DimensionSemanticList :items="items"
         :selected-id="selectedId"

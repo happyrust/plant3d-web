@@ -5,7 +5,7 @@ import { isAnnotationUxFlagEnabled } from '@/composables/useAnnotationUxFlags';
 import { useReviewStore } from '@/composables/useReviewStore';
 import { useToolStore, type AnnotationDraftJournal } from '@/composables/useToolStore';
 import { useUserStore } from '@/composables/useUserStore';
-import { getOutputProjectFromUrl, onCurrentProjectPathChange } from '@/lib/filesOutput';
+import { getOutputProjectFromUrl, onCurrentProjectPathChange } from '@/lib/currentProject';
 import {
   buildAnnotationScope,
   canonicalizeReviewRound,

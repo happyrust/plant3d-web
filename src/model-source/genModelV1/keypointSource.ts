@@ -22,9 +22,8 @@
  * 一切 `GenModelV1ApiError` 折成 `success:false + error_message`（与属性源同一做法）；`not_found` 也是
  * 一种「没有」——refno 不在所钉会话里，测量工具把它当无 P-Point 处理即可，不抛。
  */
-import type { KeypointQueryOptions, KeypointSource, PlineSnapPointCandidate, PrimitiveKeypointsResult } from '../ports';
+import type { KeypointQueryOptions, KeypointSource, PlineSnapPointCandidate, PrimitiveKeyPointCandidate, PrimitiveKeypointsResult } from '../ports';
 import type { PtsetChildrenResponse, PtsetPoint, PtsetResponse } from '@/api/genModelPdmsAttrApi';
-import type { PrimitiveKeyPointCandidate } from '@/composables/useDbnoInstancesParquetLoader';
 
 import {
   fromV1Refno,

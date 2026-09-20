@@ -9,10 +9,12 @@ import {
   reviewAnnotationCheck,
   reviewAttachmentUpload,
   reviewCommentDelete,
+  reviewCommentGetByAnnotation,
   reviewCommentUpdate,
   reviewGetEmbedUrl,
   reviewRecordCreate,
   reviewRecordGetByTaskId,
+  reviewTaskGetHistory,
   reviewTaskGetList,
   reviewTaskSubmitToNext,
   reviewVerifyWorkflow,
@@ -23,6 +25,7 @@ import {
   normalizeAnnotationComment,
   normalizeAnnotationReviewStateView,
   ReviewApiHttpError,
+  unwrapRecordIdDebugShape,
 } from './reviewApi';
 
 describe('reviewApi base url defaults', () => {
@@ -1466,5 +1469,89 @@ describe('normalizeAnnotationComment', () => {
       annotation_type: 'invalid_type',
     });
     expect(comment.annotationType).toBe('text');
+  });
+
+  it('unwraps gen-model Debug-shaped record ids (String("…")) on id and replyToId', () => {
+    const comment = normalizeAnnotationComment({
+      id: 'String("comment-f7c04cba-f8b2-4762-8b61-5b641cb685f9")',
+      annotation_id: 'anno-1',
+      annotation_type: 'text',
+      reply_to_id: 'String("comment-parent")',
+      content: 'x',
+    });
+    expect(comment.id).toBe('comment-f7c04cba-f8b2-4762-8b61-5b641cb685f9');
+    expect(comment.replyToId).toBe('comment-parent');
+  });
+});
+
+describe('unwrapRecordIdDebugShape', () => {
+  it('returns bare ids untouched', () => {
+    expect(unwrapRecordIdDebugShape('comment-1')).toBe('comment-1');
+    expect(unwrapRecordIdDebugShape('')).toBe('');
+    expect(unwrapRecordIdDebugShape(undefined)).toBe('');
+    expect(unwrapRecordIdDebugShape(42)).toBe('42');
+  });
+
+  it('unwraps String("…") and Number(…) Debug shapes, including Rust string escapes', () => {
+    expect(unwrapRecordIdDebugShape('String("comment-abc")')).toBe('comment-abc');
+    expect(unwrapRecordIdDebugShape('  String("comment-abc")  ')).toBe('comment-abc');
+    expect(unwrapRecordIdDebugShape('Number(7)')).toBe('7');
+    expect(unwrapRecordIdDebugShape('String("a\\"b")')).toBe('a"b');
+  });
+
+  it('leaves look-alikes that are not the Debug shape alone', () => {
+    expect(unwrapRecordIdDebugShape('String(comment-1')).toBe('String(comment-1');
+    expect(unwrapRecordIdDebugShape('Stringy("x")')).toBe('Stringy("x")');
+  });
+});
+
+describe('Debug-shaped ids coming back from the review backend', () => {
+  it('reviewCommentGetByAnnotation hands back bare ids the delete/patch routes accept', async () => {
+    const fetchMock = vi.fn(async (url: string) => new Response(JSON.stringify(
+      url.includes('/comments/by-annotation/')
+        ? {
+          success: true,
+          comments: [{
+            id: 'String("comment-98f8c735-17f3-454a-a446-adabb30a61a9")',
+            annotationId: 'anno-1',
+            annotationType: 'text',
+            authorId: 'SJ',
+            authorName: 'SJ',
+            authorRole: 'sj',
+            content: 'probe',
+            replyToId: null,
+            createdAt: '2026-09-20T12:00:00Z',
+          }],
+        }
+        : { success: true },
+    ), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await reviewCommentGetByAnnotation('anno-1', 'text', { taskId: 'task-1' });
+    expect(result.success).toBe(true);
+    expect(result.comments.map((comment) => comment.id)).toEqual(['comment-98f8c735-17f3-454a-a446-adabb30a61a9']);
+
+    await reviewCommentDelete(result.comments[0]!.id);
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      expect.stringMatching(/\/api\/review\/comments\/item\/comment-98f8c735-17f3-454a-a446-adabb30a61a9$/),
+      expect.objectContaining({ method: 'DELETE' }),
+    );
+  });
+
+  it('reviewTaskGetHistory unwraps history row ids and keeps the rest of the payload', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({
+        success: true,
+        history: [
+          { id: 'String("history-1")', taskId: 'task-1', action: 'created', userId: 'SJ', userName: 'SJ', timestamp: 1 },
+          { id: 'history-2', taskId: 'task-1', action: 'submitted', userId: 'SJ', userName: 'SJ', timestamp: 2 },
+        ],
+      }), { status: 200 }),
+    ));
+
+    const result = await reviewTaskGetHistory('task-1');
+    expect(result.success).toBe(true);
+    expect(result.history.map((item) => item.id)).toEqual(['history-1', 'history-2']);
+    expect(result.history[0]).toMatchObject({ action: 'created', timestamp: 1 });
   });
 });

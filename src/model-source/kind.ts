@@ -1,47 +1,13 @@
 /**
- * 数据源种类的解析（不带任何适配器依赖，谁都能引）。
+ * 数据源种类（不带任何适配器依赖，谁都能引）。
  *
- * `?model_source=` → `VITE_MODEL_SOURCE` → 默认 `gen-model-v1`（2026-09-09 起；`legacy` 仍可显式切回）。
- * 适配器本体在 `./index.ts`，它把这里的函数再导出一遍。
+ * 2026-09-20 legacy 退役后只剩 `gen-model-v1`：`?model_source=` 与 `VITE_MODEL_SOURCE` 两个开关一并删除，
+ * 这里不再解析 URL / 环境变量，只把唯一的种类给出来——留着这个模块是让「只想判现在是哪个源」的调用方
+ * 不必把整套适配器拖进来（与退役前同一条理由）。
  */
-import { DEFAULT_MODEL_SOURCE_KIND, MODEL_SOURCE_KINDS, type ModelSourceKind } from './ports';
+import { DEFAULT_MODEL_SOURCE_KIND, type ModelSourceKind } from './ports';
 
-export function parseModelSourceKind(raw: string | null | undefined): ModelSourceKind | null {
-  const value = raw?.trim().toLowerCase();
-  if (!value) return null;
-  // 允许几种顺手的写法，落库只有两个正式名字。
-  if (value === 'gen-model-v1' || value === 'gen_model_v1' || value === 'genmodelv1' || value === 'v1') {
-    return 'gen-model-v1';
-  }
-  if (value === 'legacy' || value === 'old' || value === 'parquet') return 'legacy';
-  return (MODEL_SOURCE_KINDS as readonly string[]).includes(value) ? (value as ModelSourceKind) : null;
-}
-
-export type ResolveModelSourceKindOptions = {
-  /** `window.location.search` */
-  search?: string | null;
-  /** `VITE_MODEL_SOURCE` */
-  envValue?: string | null;
-};
-
-export function resolveModelSourceKind(options: ResolveModelSourceKindOptions): ModelSourceKind {
-  if (options.search) {
-    const fromQuery = parseModelSourceKind(new URLSearchParams(options.search).get('model_source'));
-    if (fromQuery) return fromQuery;
-  }
-  const fromEnv = parseModelSourceKind(options.envValue);
-  if (fromEnv) return fromEnv;
-  return DEFAULT_MODEL_SOURCE_KIND;
-}
-
-/** 当前页面生效的数据源种类（每次读 URL，便于同一 tab 改参数刷新后立刻切换）。 */
+/** 当前页面生效的数据源种类：恒为 `gen-model-v1`。 */
 export function getModelSourceKind(): ModelSourceKind {
-  return resolveModelSourceKind({
-    search: typeof window !== 'undefined' ? window.location?.search : null,
-    envValue: (import.meta.env as unknown as { VITE_MODEL_SOURCE?: string }).VITE_MODEL_SOURCE,
-  });
-}
-
-export function isGenModelV1Source(): boolean {
-  return getModelSourceKind() === 'gen-model-v1';
+  return DEFAULT_MODEL_SOURCE_KIND;
 }

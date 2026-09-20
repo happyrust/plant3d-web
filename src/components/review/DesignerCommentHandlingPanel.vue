@@ -530,10 +530,11 @@ watch(
       }
       return;
     }
-    if (!returnedTasks.value.length) return;
+    const firstReturnedTask = returnedTasks.value[0];
+    if (!firstReturnedTask) return;
     const activeTask = reviewStore.currentTask.value;
     if (activeTask && returnedTasks.value.some((task) => task.id === activeTask.id)) return;
-    await selectTask(returnedTasks.value[0]);
+    await selectTask(firstReturnedTask);
   },
   { immediate: true },
 );

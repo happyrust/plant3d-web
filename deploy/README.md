@@ -2,14 +2,16 @@
 
 ## 目标
 
-将前端静态文件部署到 Ubuntu 服务器的 `/var/www/plant3d-web`，并由 Nginx 对外提供站点，同时把 `/api`、`/files` 反代到后端 `web_server`。
+将前端静态文件部署到 Ubuntu 服务器的 `/var/www/plant3d-web`，并由 Nginx 对外提供站点，同时把 `/api`（含 `/api/v1`）与 `/files/review_attachments` 反代到 gen-model（`aios-database`）。
+
+2026-09-20 起前端只有这一个后端：旧后端 plant-model-gen `web_server`（`:3100`，parquet / GLB / SurrealDB 直连）已退役，`VITE_MODEL_SOURCE=legacy` 开关随之删除，构建不再需要任何 `VITE_*` 变量。
 
 ## 默认约定
 
 - 服务器：`123.57.182.243`
 - 用户：`root`
 - 前端目录：`/var/www/plant3d-web`
-- 后端反代：`http://127.0.0.1:3100`
+- 后端反代：`http://127.0.0.1:8022`（gen-model / aios-database）
 - 站点入口：`http://123.57.182.243/`
 
 ## 自动化部署
@@ -30,7 +32,7 @@ REMOTE_USER=root \
 REMOTE_PASS='***' \
 SERVER_NAME=123.57.182.243 \
 DEPLOY_PATH=/var/www/plant3d-web \
-BACKEND_ORIGIN=http://127.0.0.1:3100 \
+BACKEND_ORIGIN=http://127.0.0.1:8022 \
 ./deploy_frontend_bundle.sh
 ```
 
@@ -47,7 +49,7 @@ BACKEND_ORIGIN=http://127.0.0.1:3100 \
   - `DEPLOY_REMOTE_USER`（可选，默认 `root`）
   - `DEPLOY_PATH`（可选，默认 `/var/www/plant3d-web`）
   - `SERVER_NAME`（可选，默认与 host 相同）
-  - `BACKEND_ORIGIN`（可选，默认 `http://127.0.0.1:3100`）
+  - `BACKEND_ORIGIN`（可选，默认 `http://127.0.0.1:8022`）
 - Secrets:
   - `DEPLOY_REMOTE_PASS`
 
@@ -57,13 +59,7 @@ BACKEND_ORIGIN=http://127.0.0.1:3100 \
 
 ## 与后端联动
 
-若在 `plant-model-gen` 仓库执行：
-
-```bash
-./shells/deploy_all_with_frontend.sh
-```
-
-后端总控脚本会自动调用本仓 `deploy/deploy_frontend_bundle.sh`，因此此前缺失前端脚本导致的联动部署断点已被补齐。
+gen-model 的 `deploy/linux/install_backend.sh` 在服务器上维护 `/etc/nginx/snippets/aios-review-split*.conf`（校审域与附件的分流片段），本模板 `include` 它；两边都指向同一个 `:8022`，先部署哪一边都行。
 
 ## 服务器前置条件
 
@@ -72,7 +68,7 @@ Ubuntu 服务器至少需要安装：
 - `nginx`
 - `rsync`
 - `sshpass`
-- 已在 `127.0.0.1:3100` 监听的后端 `web_server`
+- 已在 `127.0.0.1:8022` 监听的 gen-model `aios-database`（`/api/v1/health` 返回 200）
 
 安装 Nginx 示例：
 
@@ -94,8 +90,8 @@ sudo systemctl start nginx
 
 ```bash
 curl -I http://123.57.182.243/
-curl -I http://123.57.182.243/api/health
-curl -I http://123.57.182.243/files/
+curl -I http://123.57.182.243/api/v1/health
+curl -I http://123.57.182.243/api/review/health
 ```
 
 ## 目录结构

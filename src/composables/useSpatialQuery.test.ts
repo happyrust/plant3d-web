@@ -78,8 +78,6 @@ const batchLoadDeps = vi.hoisted(() => ({
     loadedRefnos: refnos,
     missingRefnos: [] as string[],
   })),
-  isParquetAvailable: vi.fn(async () => false),
-  triggerBatchGenerateSse: vi.fn(async () => ({ failedRefnos: [] as string[] })),
 }));
 
 vi.mock('@/composables/useDbnoInstancesDtxLoader', async (importOriginal) => {
@@ -90,14 +88,6 @@ vi.mock('@/composables/useDbnoInstancesDtxLoader', async (importOriginal) => {
     loadDbnoInstancesForVisibleRefnosDtx: batchLoadDeps.loadDbnoInstancesForVisibleRefnosDtx,
   };
 });
-
-vi.mock('@/composables/useDbnoInstancesParquetLoader', () => ({
-  useDbnoInstancesParquetLoader: () => ({ isParquetAvailable: batchLoadDeps.isParquetAvailable }),
-}));
-
-vi.mock('@/api/genModelStreamGenerateApi', () => ({
-  triggerBatchGenerateSse: batchLoadDeps.triggerBatchGenerateSse,
-}));
 
 vi.mock('@/composables/useDbMetaInfo', () => ({
   ensureDbMetaInfoLoaded: dbMetaMocks.ensureDbMetaInfoLoaded,
@@ -973,7 +963,7 @@ describe('createSpatialQueryStore', () => {
     ]);
   });
 
-  it('gen-model-v1：缺省批量加载跳过 parquet 与旧后端 SSE 生成，按结果自带 dbnum 分桶直接走 backend 加载', async () => {
+  it('批量加载按结果自带 dbnum 分桶，直接经数据源（gen-model-v1）加载', async () => {
     spatialSourceMocks.state.kind = 'gen-model-v1';
     spatialSourceMocks.state.specValues = false;
     spatialSourceMocks.state.branCenterline = false;
@@ -1021,10 +1011,7 @@ describe('createSpatialQueryStore', () => {
     const calls = batchLoadDeps.loadDbnoInstancesForVisibleRefnosDtx.mock.calls.map((call) => [call[1], call[2]]);
     expect(calls).toEqual(expect.arrayContaining([[24383, ['server_only']], [24381, ['server_b']]]));
     expect(calls).toHaveLength(2);
-    expect(batchLoadDeps.loadDbnoInstancesForVisibleRefnosDtx.mock.calls[0]![3]).toEqual(expect.objectContaining({ dataSource: 'backend' }));
-    // v1 下没有 parquet，也不再起旧后端的 SSE 批量生成
-    expect(batchLoadDeps.isParquetAvailable).not.toHaveBeenCalled();
-    expect(batchLoadDeps.triggerBatchGenerateSse).not.toHaveBeenCalled();
+    expect(batchLoadDeps.loadDbnoInstancesForVisibleRefnosDtx.mock.calls[0]![3]).toEqual(expect.objectContaining({ dataSource: 'gen-model-v1' }));
     // 服务端没回、但本地扫描命中的已加载 loaded_a 以 viewer-local 追加在服务端条目之后（P5），它本来就已加载、不进批量加载
     expect(store.resultSet.value?.items.map((item) => [item.refno, item.loaded, item.matchedBy])).toEqual([
       ['server_only', true, 'server-spatial-index'],

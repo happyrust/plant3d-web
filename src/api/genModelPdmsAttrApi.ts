@@ -1,5 +1,9 @@
-import { getBackendApiBaseUrl } from '@/utils/apiBase';
-
+/**
+ * 属性 / 点集 / 变换的响应形状。这些形状是旧后端 `/api/pdms/*` 定下来的契约，gen-model-v1 适配器
+ * （`model-source/genModelV1/{attributeSource,keypointSource}.ts`）按同一形状给，调用方一行不改。
+ * 旧后端的取数函数（`pdmsGetUiAttr` / `pdmsGetPtset*` / `pdmsGetTypeInfo` / `pdmsGetOwnsChildren`）2026-09-20 随 legacy 退役：
+ * 属性走 `getModelSource().attributes`，点集走 `getModelSource().keypoints`；只剩下面的 `pdmsGetTransform` 改由 gen-model-v1 实现。
+ */
 /** 属性来源的诊断（只有 gen-model-v1 直读源给；旧后端没有这一格） */
 export type PdmsUiAttrDiagnostics = {
   /** `e3d-io` 等 */
@@ -116,111 +120,6 @@ export type PtsetChildrenResponse = PtsetBatchQueryResponse & {
   error_message?: string | null;
 }
 
-function getBaseUrl(): string {
-  return getBackendApiBaseUrl();
-}
-
-async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
-  const base = getBaseUrl().replace(/\/$/, '');
-  const url = `${base}${path.startsWith('/') ? '' : '/'}${path}`;
-
-  const resp = await fetch(url, {
-    ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(init?.headers || {}),
-    },
-  });
-
-  if (!resp.ok) {
-    const text = await resp.text().catch(() => '');
-
-    if (resp.status === 404 && !text.trim()) {
-      const message =
-        `HTTP 404 at ${url}\n` +
-        '后端可能没有挂载这个 API（例如 web_server 路由装配遗漏），或请求路径拼写错误。\n' +
-        '请优先检查 plant-model-gen 的路由装配。';
-      console.warn('[pdms-api]', message);
-      throw new Error(message);
-    }
-
-    const message = `HTTP ${resp.status} ${resp.statusText} at ${url}: ${text}`;
-    if (resp.status >= 500) {
-      console.error('[pdms-api]', message);
-    }
-
-    throw new Error(message);
-  }
-
-  return (await resp.json()) as T;
-}
-
-export async function pdmsGetUiAttr(refno: string): Promise<PdmsUiAttrResponse> {
-  return await fetchJson<PdmsUiAttrResponse>(`/api/pdms/ui-attr/${encodeURIComponent(refno)}`);
-}
-
-/**
- * 获取指定元件的 ptset（点集）数据
- * @param refno 元件参考号，格式为 "24383_84631"
- * @returns 包含点集信息的响应
- */
-export async function pdmsGetPtset(refno: string): Promise<PtsetResponse> {
-  return await fetchJson<PtsetResponse>(`/api/pdms/ptset/${encodeURIComponent(refno)}`);
-}
-
-/**
- * 获取 ptset（带上下文）
- *
- * 说明：当前后端 ptset 接口不依赖 dbno/batch_id；这里保留签名以便与 ViewerPanel 的“快照一致性”逻辑对齐。
- */
-export async function pdmsGetPtsetWithContext(
-  refno: string,
-  ctx?: PtsetQueryContext,
-): Promise<PtsetResponse> {
-  const search = new URLSearchParams();
-  if (ctx?.dbno !== undefined) {
-    search.set('dbno', String(ctx.dbno));
-  }
-  if (ctx?.batchId) {
-    search.set('batch_id', String(ctx.batchId));
-  }
-  const qs = search.toString();
-  return await fetchJson<PtsetResponse>(
-    `/api/pdms/ptset/${encodeURIComponent(refno)}${qs ? `?${qs}` : ''}`,
-  );
-}
-
-export async function pdmsBatchGetPtsetWithContext(
-  refnos: string[],
-  ctx?: PtsetQueryContext,
-): Promise<PtsetBatchQueryResponse> {
-  return await fetchJson<PtsetBatchQueryResponse>('/api/pdms/ptset/batch-query', {
-    method: 'POST',
-    body: JSON.stringify({
-      refnos,
-      dbno: ctx?.dbno,
-      batch_id: ctx?.batchId ?? undefined,
-    }),
-  });
-}
-
-export async function pdmsGetPtsetChildrenWithContext(
-  refno: string,
-  ctx?: PtsetQueryContext,
-): Promise<PtsetChildrenResponse> {
-  const search = new URLSearchParams();
-  if (ctx?.dbno !== undefined) {
-    search.set('dbno', String(ctx.dbno));
-  }
-  if (ctx?.batchId) {
-    search.set('batch_id', String(ctx.batchId));
-  }
-  const qs = search.toString();
-  return await fetchJson<PtsetChildrenResponse>(
-    `/api/pdms/ptset/children/${encodeURIComponent(refno)}${qs ? `?${qs}` : ''}`,
-  );
-}
-
 /**
  * 变换矩阵查询响应
  */
@@ -235,16 +134,44 @@ export type TransformResponse = {
 }
 
 /**
- * 获取指定元件的变换矩阵和 owner
+ * 获取指定元件的世界变换矩阵和 owner（`/api/pdms/transform` 形状）。
+ *
+ * gen-model-v1 实现：`world_transform` 取 `element/ptset` 的 `world_transform`（列主序 mm 的 local→world 矩阵，
+ * 与旧后端同一份 `aios_core::transform::get_world_mat4`），`owner` 取树节点。找不到构件回 `success: false`。
  * @param refno 元件参考号，格式为 "24383_84631"
- * @returns 包含变换矩阵和 owner 的响应
  */
 export async function pdmsGetTransform(refno: string): Promise<TransformResponse> {
-  return await fetchJson<TransformResponse>(`/api/pdms/transform/${encodeURIComponent(refno)}`);
+  const [{ genModelV1ElementPtset, isGenModelV1ApiError }, { getModelSource }] = await Promise.all([
+    import('@/api/genModelV1Api'),
+    import('@/model-source'),
+  ]);
+  const [ptset, node] = await Promise.all([
+    genModelV1ElementPtset({ refno }).catch((error: unknown) => {
+      if (isGenModelV1ApiError(error) && error.isNotFound) return null;
+      throw error;
+    }),
+    getModelSource().tree.node(refno).then((resp) => resp?.node ?? null).catch(() => null),
+  ]);
+  const owner = typeof node?.owner === 'string' && node.owner.trim() !== '' ? node.owner.trim() : null;
+  if (!ptset) {
+    return {
+      success: false,
+      refno,
+      world_transform: null,
+      owner,
+      error_message: `Element ${refno} not found in gen-model-v1`,
+    };
+  }
+  return {
+    success: true,
+    refno: ptset.refno ?? refno,
+    world_transform: Array.isArray(ptset.world_transform) ? (ptset.world_transform as number[]) : null,
+    owner,
+  };
 }
 
 // ========================
-// PDMS 模型查询辅助（后端 SurrealDB）
+// PDMS 模型查询辅助
 // ========================
 
 export type PdmsTypeInfoResponse = {
@@ -254,27 +181,4 @@ export type PdmsTypeInfoResponse = {
   owner_refno?: string | null;
   owner_noun?: string | null;
   error_message?: string | null;
-}
-
-export type PdmsChildrenResponse = {
-  success: boolean;
-  refno: string;
-  children: string[];
-  error_message?: string | null;
-}
-
-/**
- * 获取 noun / owner_noun（用于 BRAN/HANG 规则；后端查询 SurrealDB）
- */
-export async function pdmsGetTypeInfo(refno: string): Promise<PdmsTypeInfoResponse> {
-  const qs = new URLSearchParams({ refno: String(refno || '') }).toString();
-  return await fetchJson<PdmsTypeInfoResponse>(`/api/pdms/type-info?${qs}`);
-}
-
-/**
- * 获取 pe->owns 子节点（用于 BRAN/HANG children；后端查询 SurrealDB）
- */
-export async function pdmsGetOwnsChildren(refno: string): Promise<PdmsChildrenResponse> {
-  const qs = new URLSearchParams({ refno: String(refno || '') }).toString();
-  return await fetchJson<PdmsChildrenResponse>(`/api/pdms/children?${qs}`);
 }

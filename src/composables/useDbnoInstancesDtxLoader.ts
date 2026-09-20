@@ -2,12 +2,9 @@ import { ref } from 'vue';
 
 import { Box3, BufferAttribute, BufferGeometry, Color, CylinderGeometry, Matrix4, SphereGeometry } from 'three';
 
-import { realtimeInstancesByRefnos } from '@/api/genModelRealtimeApi';
-import { useDbnoInstancesParquetLoader } from '@/composables/useDbnoInstancesParquetLoader';
 import { useDisplayThemeStore, type DisplayTheme } from '@/composables/useDisplayThemeStore';
 import { getModelSource } from '@/model-source';
 import { type InstanceEntry } from '@/utils/instances/instanceManifest';
-import { parseGlbGeometryResult } from '@/utils/parseGlbGeometry';
 import { parseMeshGeometryResult } from '@/utils/parseMeshGeometry';
 import { DTXLayer } from '@/utils/three/dtx';
 import {
@@ -27,18 +24,14 @@ type LoaderOptions = {
   forceReloadRefnos?: string[]
   /** 隐藏 refno 现有对象并用本次结果替换，避免强制重载后新旧模型叠加。 */
   replaceExistingObjects?: boolean
-  /** 即使 geoHash 未变化也重新拉取 GLB，用于显式模型重建。 */
+  /** 即使 geoHash 未变化也重新拉取网格，用于显式模型重建。 */
   forceRefreshGeometries?: boolean
   /**
-   * 数据源选择：
-   * - 'parquet'：默认，DuckDB WASM 查 parquet（失败则抛错）
-   * - 'backend'：实时查库（用于 parquet miss 回填）
-   * - 'gen-model-v1'：gen-model `/api/v1`（ensure → records，plan 2026-09-06 P3-e）
-   *
-   * 页面级开关 `?model_source=gen-model-v1` 生效时，前两种会被**改写**成第三种（同一页面只该有一个几何数据源），
-   * 只有调用方自带 `instanceEntriesByRefno`（版本对比的 A/B 几何由模型来源端口取好后钉入）时不改。
+   * 数据源：只剩 `'gen-model-v1'`（gen-model `/api/v1`，ensure → records，plan 2026-09-06 P3-e）；
+   * legacy 的 `'parquet'` / `'backend'` 两档 2026-09-20 退役。调用方自带 `instanceEntriesByRefno`
+   * （版本对比的 A/B 几何由模型来源端口取好后钉入）时不经数据源。
    */
-  dataSource?: 'parquet' | 'backend' | 'gen-model-v1'
+  dataSource?: 'gen-model-v1'
   /** 人明确要求重生成（gen-model-v1 = `ensure(force=true)`）；其它数据源忽略 */
   forceRegenerate?: boolean
   includeOwnedTubings?: boolean
@@ -67,12 +60,12 @@ export type DtxAabbProxyEntry = {
 
 /**
  * 一次装载的几何来源身份（2026-09-14 云线范围体方案 §15 ③ / P0）：只记不用，供批注创建时填
- * `regionV1.source.modelSnapshotId`。拿不到身份就 `null`——backend 实时查询没有快照概念；
- * gen-model-v1 records 回包带 `snapshot_epoch` / `session_vector`，但 `src/model-source` 适配层尚未透传，先留空。
+ * `regionV1.source.modelSnapshotId`。拿不到身份就 `null`——gen-model-v1 records 回包带 `snapshot_epoch` /
+ * `session_vector`，但 `src/model-source` 适配层尚未透传，先留空（legacy parquet 的 `${dbno}:parquet:${generated_at}` 已随其退役）。
  */
 export type DtxLoadSourceStamp = {
-  dataSource: 'parquet' | 'backend' | 'gen-model-v1' | 'aabb-proxy'
-  /** parquet 当前环境 = `${dbno}:parquet:${generated_at}`；其它路径 `null` */
+  dataSource: 'gen-model-v1' | 'aabb-proxy'
+  /** 目前一律 `null`（见上） */
   modelSnapshotId: string | null
   generatedAt: string | null
   loadedAt: number
@@ -85,7 +78,7 @@ type DbnoRuntimeCache = {
   /** 记录曾经 404 的 geoHash；用于触发按 refno 的自动生成，并在后续 forceReload 时重新拉取 GLB */
   notFoundGeoHash: Set<string>
   failedGeoHash: Set<string>
-  loadingGeoHash: Map<string, Promise<void>>
+  loadingGeoHash: Map<string, Promise<unknown>>
   objectCounter: number
   refnoToObjectIds: Map<string, string[]>
   objectIdToRefno: Map<string, string>
@@ -360,9 +353,8 @@ async function ensureGeometryForGeoHash(
       return { status: 'ok' as const, notFoundNew: false };
     }
 
-    // URL 模板由数据源给：legacy = `/files/meshes/lod_{L}/{hash}_{L}.glb`（逐字同前），
-    // gen-model-v1 = `/api/v1/meshes/{hash}.mesh`（rkyv 原样直连，2026-09-09 拍板）。
-    // 两种线上形态解析出同一份 {positions, indices, normals?}，按后缀选解析器。
+    // URL 模板由数据源给：gen-model-v1 = `/api/v1/meshes/{hash}.mesh`（rkyv 原样直连，2026-09-09 拍板；
+    // legacy 的 `/files/meshes/lod_{L}/{hash}_{L}.glb` 与 GLB 解析 2026-09-20 一并退役）。
     const meshUrl = getModelSource().meshes.meshUrl(geoHash, lodAssetKey);
     let geometry: BufferGeometry | null = null;
     let notFound = false;
@@ -385,9 +377,7 @@ async function ensureGeometryForGeoHash(
       }
       if (resp.ok) {
         const meshData = await resp.arrayBuffer();
-        const parseResult = meshUrl.endsWith('.mesh')
-          ? parseMeshGeometryResult(meshData, meshUrl)
-          : await parseGlbGeometryResult(meshData, meshUrl);
+        const parseResult = parseMeshGeometryResult(meshData, meshUrl);
         if (parseResult.ok) {
           const parsed = parseResult.data;
           const g = new BufferGeometry();
@@ -897,19 +887,13 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
   const { currentTheme } = useDisplayThemeStore();
   const currentLoadTheme: DisplayTheme = currentTheme.value;
 
-  // 根据 dataSource 选项决定数据源；页面级开关切到 gen-model-v1 时改写（调用方自带实例表的调用除外）
-  const modelSource = getModelSource();
-  const pinnedByCaller = !!options.instanceEntriesByRefno;
-  const dataSource: 'parquet' | 'backend' | 'gen-model-v1' =
-    !pinnedByCaller && modelSource.kind === 'gen-model-v1' ? 'gen-model-v1' : (options.dataSource || 'parquet');
+  // 实例表：调用方自带的优先，否则经数据源端口向 gen-model-v1 取（ensure → records）
   let index: Map<string, InstanceEntry[]>;
-  let parquetGeneratedAt: string | null = null;
 
   if (options.instanceEntriesByRefno) {
     index = options.instanceEntriesByRefno;
-  } else if (dataSource === 'gen-model-v1') {
-    const source = modelSource.kind === 'gen-model-v1' ? modelSource : getModelSource('gen-model-v1');
-    index = await source.records.instanceEntriesByRefnos(dbno, toLoad, {
+  } else {
+    index = await getModelSource().records.instanceEntriesByRefnos(dbno, toLoad, {
       debug,
       forceRefresh: normalizedForceReload !== null,
       forceRegenerate: options.forceRegenerate === true,
@@ -917,41 +901,12 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
       expectedRootRefno: options.expectedRootRefno,
     });
     if (debug) console.log('[dtx][instances] using gen-model-v1', { dbno, refnos: toLoad.length, indexSize: index.size });
-  } else if (dataSource === 'backend') {
-    const resp = await realtimeInstancesByRefnos(dbno, toLoad, {
-      includeTubings: true,
-      enableHoles: true,
-    });
-    if (!resp.success) {
-      throw new Error(resp.message || `后端实时查询失败 (dbno=${dbno})`);
-    }
-    index = new Map();
-    for (const [rawRefno, entries] of Object.entries(resp.instances_by_refno || {})) {
-      const refnoKey = normalizeRefnoKey(rawRefno);
-      if (!refnoKey) continue;
-      index.set(refnoKey, Array.isArray(entries) ? entries : []);
-    }
-    if (debug) console.log('[dtx][instances] using backend', { dbno, refnos: toLoad.length, indexSize: index.size, missing: resp.missing_refnos?.length ?? 0 });
-  } else {
-    const parquet = useDbnoInstancesParquetLoader();
-    const available = await parquet.isParquetAvailable(dbno);
-    if (!available) {
-      throw new Error(`Parquet not available (dbno=${dbno})`);
-    }
-    index = await parquet.queryInstanceEntriesByRefnos(dbno, toLoad, {
-      debug,
-      forceRefresh: normalizedForceReload !== null,
-      includeOwnedTubings: options.includeOwnedTubings,
-    });
-    if (debug) console.log('[dtx][instances] using parquet', { dbno, refnos: toLoad.length });
-    // 这次查询实际注册的当前环境清单的 generated_at（批注来源身份用）
-    parquetGeneratedAt = parquet.lastRegisteredManifest?.value?.generatedAt ?? null;
   }
 
   const sourceStamp: DtxLoadSourceStamp = {
-    dataSource,
-    modelSnapshotId: dataSource === 'parquet' && parquetGeneratedAt ? `${dbno}:parquet:${parquetGeneratedAt}` : null,
-    generatedAt: parquetGeneratedAt,
+    dataSource: 'gen-model-v1',
+    modelSnapshotId: null,
+    generatedAt: null,
     loadedAt: Date.now(),
   };
 

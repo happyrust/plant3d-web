@@ -43,7 +43,6 @@ import {
 import { clearReviewAttachmentPreview } from '@/composables/useReviewAttachmentPreview';
 import { useReviewStore } from '@/composables/useReviewStore';
 import { setGlobalSelectedRefno } from '@/composables/useSelectionStore';
-import { useTaskCreationStore } from '@/composables/useTaskCreationStore';
 import { useToolStore } from '@/composables/useToolStore';
 import { useUserStore } from '@/composables/useUserStore';
 import { showModelByRefnosWithAck, useViewerContext, waitForViewerReady } from '@/composables/useViewerContext';
@@ -96,7 +95,6 @@ const api = ref<DockApi | null>(null);
 const reviewStore = useReviewStore();
 const toolStore = useToolStore();
 const userStore = useUserStore();
-const taskCreationStore = useTaskCreationStore();
 const viewerContext = useViewerContext();
 
 let offCommand: (() => void) | null = null;
@@ -520,10 +518,8 @@ function createDefaultLayout(dockApi: DockApi) {
   closePanelIfExists(dockApi, 'nearbyQuery');
   closePanelIfExists(dockApi, 'viewer');
   closePanelIfExists(dockApi, 'console');
-  closePanelIfExists(dockApi, 'dashboard');
   closePanelIfExists(dockApi, 'modelVersionCompare');
   closePanelIfExists(dockApi, 'reviewAttachmentPreview');
-  closePanelIfExists(dockApi, 'roomInfo');
   closePanelIfExists(dockApi, 'spatialCompute');
 
   const viewerPanel = dockApi.addPanel({
@@ -615,24 +611,16 @@ function createEmbedFocusedLayout(
     'nearbyQuery',
     'viewer',
     'console',
-    'dashboard',
     'review',
     'initiateReview',
     'reviewerTasks',
     'myTasks',
     'designerCommentHandling',
     'resubmissionTasks',
-    'taskMonitor',
-    'taskCreation',
-    'incrementalUpdate',
     'modelVersionCompare',
     'reviewAttachmentPreview',
-    'modelExport',
     'materialConfig',
-    'roomInfo',
-    'roomStatus',
     'spatialCompute',
-    'parquetDebug',
   ].forEach((panelId) => {
     closePanelIfExists(dockApi, panelId);
   });
@@ -866,42 +854,6 @@ function ensurePanel(panelId: string) {
           : undefined,
     });
   }
-  if (normalizedPanelId === 'taskMonitor') {
-    return addPanelSafely(dockApi, {
-      id: 'taskMonitor',
-      component: 'TaskMonitorPanel',
-      title: '任务监控',
-      position: measurementPanel
-        ? { referencePanel: measurementPanel, direction: 'within' }
-        : viewerPanel
-          ? { referencePanel: viewerPanel, direction: 'right' }
-          : undefined,
-    });
-  }
-  if (normalizedPanelId === 'taskCreation') {
-    return addPanelSafely(dockApi, {
-      id: 'taskCreation',
-      component: 'TaskCreationPanel',
-      title: '创建任务',
-      position: measurementPanel
-        ? { referencePanel: measurementPanel, direction: 'within' }
-        : viewerPanel
-          ? { referencePanel: viewerPanel, direction: 'right' }
-          : undefined,
-    });
-  }
-  if (normalizedPanelId === 'incrementalUpdate') {
-    return addPanelSafely(dockApi, {
-      id: 'incrementalUpdate',
-      component: 'IncrementalUpdatePanel',
-      title: '增量更新',
-      position: measurementPanel
-        ? { referencePanel: measurementPanel, direction: 'within' }
-        : viewerPanel
-          ? { referencePanel: viewerPanel, direction: 'right' }
-          : undefined,
-    });
-  }
   if (normalizedPanelId === 'modelVersionCompare') {
     return addPanelSafely(dockApi, {
       id: 'modelVersionCompare',
@@ -922,30 +874,6 @@ function ensurePanel(panelId: string) {
         : undefined,
     });
   }
-  if (normalizedPanelId === 'modelExport') {
-    return addPanelSafely(dockApi, {
-      id: 'modelExport',
-      component: 'ModelExportPanel',
-      title: '导出模型',
-      position: measurementPanel
-        ? { referencePanel: measurementPanel, direction: 'within' }
-        : viewerPanel
-          ? { referencePanel: viewerPanel, direction: 'right' }
-          : undefined,
-    });
-  }
-  if (normalizedPanelId === 'dashboard') {
-    return addPanelSafely(dockApi, {
-      id: 'dashboard',
-      component: 'DashboardPanel',
-      title: '概览',
-      position: measurementPanel
-        ? { referencePanel: measurementPanel, direction: 'within' }
-        : viewerPanel
-          ? { referencePanel: viewerPanel, direction: 'right' }
-          : undefined,
-    });
-  }
   if (normalizedPanelId === 'console') {
     return addPanelSafely(dockApi, {
       id: 'console',
@@ -956,45 +884,11 @@ function ensurePanel(panelId: string) {
         : undefined,
     });
   }
-  if (normalizedPanelId === 'parquetDebug') {
-    return addPanelSafely(dockApi, {
-      id: 'parquetDebug',
-      component: 'ParquetDebugPanel',
-      title: 'Parquet SQL',
-      position: viewerPanel
-        ? { referencePanel: viewerPanel, direction: 'below' }
-        : undefined,
-    });
-  }
-  if (normalizedPanelId === 'roomStatus') {
-    return addPanelSafely(dockApi, {
-      id: 'roomStatus',
-      component: 'RoomStatusPanel',
-      title: '房间计算状态',
-      position: measurementPanel
-        ? { referencePanel: measurementPanel, direction: 'within' }
-        : viewerPanel
-          ? { referencePanel: viewerPanel, direction: 'right' }
-          : undefined,
-    });
-  }
-  if (normalizedPanelId === 'roomInfo') {
-    return addPanelSafely(dockApi, {
-      id: 'roomInfo',
-      component: 'RoomInfoPanel',
-      title: '房型房间信息',
-      position: measurementPanel
-        ? { referencePanel: measurementPanel, direction: 'within' }
-        : viewerPanel
-          ? { referencePanel: viewerPanel, direction: 'right' }
-          : undefined,
-    });
-  }
   if (normalizedPanelId === 'spatialCompute') {
     return addPanelSafely(dockApi, {
       id: 'spatialCompute',
       component: 'SpatialComputePanel',
-      title: '支架空间计算',
+      title: '中心线净距',
       position: measurementPanel
         ? { referencePanel: measurementPanel, direction: 'within' }
         : viewerPanel
@@ -1267,9 +1161,6 @@ function handleRibbonCommand(commandId: string) {
     case 'panel.initiateReview':
       openPanel('initiateReview');
       return;
-    case 'panel.dashboard':
-      togglePanel('dashboard');
-      return;
     case 'panel.resubmissionTasks':
       if (shouldCollapseExternalFormPanelsToReview()) {
         // 外部 form_id 模式确认需要审核侧处理时，「退回任务」收敛到 review 面板。
@@ -1307,35 +1198,14 @@ function handleRibbonCommand(commandId: string) {
       }
       return;
     }
-    case 'panel.monitor':
-      togglePanel('taskMonitor');
-      return;
     case 'panel.console':
       togglePanel('console');
-      return;
-    case 'panel.taskMonitor':
-      togglePanel('taskMonitor');
-      return;
-    case 'panel.taskCreation':
-      togglePanel('taskCreation');
-      return;
-    case 'panel.incrementalUpdate':
-      togglePanel('incrementalUpdate');
       return;
     case 'panel.modelVersionCompare':
       togglePanel('modelVersionCompare');
       return;
     case 'panel.reviewAttachmentPreview':
       openPanel('reviewAttachmentPreview');
-      return;
-    case 'panel.parquetDebug':
-      togglePanel('parquetDebug');
-      return;
-    case 'panel.roomStatus':
-      togglePanel('roomStatus');
-      return;
-    case 'panel.roomInfo':
-      togglePanel('roomInfo');
       return;
 
     // zone toggle commands
@@ -1347,24 +1217,6 @@ function handleRibbonCommand(commandId: string) {
       return;
     case 'zone.toggleRight':
       handleZoneToggle('right');
-      return;
-
-    case 'room.compute':
-      // 触发房间计算，同时打开状态面板
-      togglePanel('roomStatus');
-      return;
-
-    // task creation with preset type
-    case 'task.createDataParsing':
-      taskCreationStore.setPresetType('DataParsingWizard');
-      togglePanel('taskCreation');
-      return;
-    case 'task.createModelGeneration':
-      taskCreationStore.setPresetType('DataGeneration');
-      togglePanel('taskCreation');
-      return;
-    case 'task.createModelExport':
-      togglePanel('modelExport');
       return;
 
     // layout commands

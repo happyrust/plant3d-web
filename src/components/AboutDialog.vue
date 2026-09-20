@@ -30,12 +30,14 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch } from 'vue';
 
+import { genModelV1Health } from '@/api/genModelV1Api';
 import { onCommand } from '@/ribbon/commandBus';
 import {
   displayVersionText,
   getDefaultFrontendVersion,
   loadVersionInfo,
   UNKNOWN_VERSION_INFO,
+  versionInfoFromGenModelHealth,
 } from '@/utils/versionInfo';
 
 const dialog = ref(false);
@@ -54,8 +56,9 @@ async function refreshVersionInfo() {
     console.warn('Failed to load frontend version', e);
   }
 
+  // 后端 = gen-model：版本 / 提交 / 构建时刻在 `/api/v1/health` 的 version + build_id 里（旧 `/api/version` 已退役）
   try {
-    const version = await loadVersionInfo('/api/version');
+    const version = versionInfoFromGenModelHealth(await genModelV1Health());
     if (version) {
       backendVersion.value = version;
     }

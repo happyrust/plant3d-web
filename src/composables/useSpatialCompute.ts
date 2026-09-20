@@ -1,41 +1,23 @@
 import { computed, reactive, ref } from 'vue';
 
-import type { ModelSourceKind } from '@/model-source/ports';
-
-import {
-  postSpaceFitting,
-  postSpaceFittingOffset,
-  postSpaceSteelRelative,
-  postSpaceSuppoTrays,
-  postSpaceTraySpan,
-  postSpaceWallDistance,
-  queryBranCenterlineNearestClearance,
-  type BranNearestClearanceCandidate,
-  type BranNearestClearanceGroupResult,
-  type BranNearestClearanceResponse,
-  type BranParallelSpacingDetail,
-  type SpaceComputeFittingData,
-  type SpaceComputeFittingOffsetData,
-  type SpaceComputeSteelRelativeData,
-  type SpaceComputeSuppoTrayData,
-  type SpaceComputeTraySpanData,
-  type SpaceComputeWallDistanceData,
-  type SpaceEnvelope,
+import type {
+  BranNearestClearanceCandidate,
+  BranNearestClearanceGroupResult,
+  BranNearestClearanceResponse,
+  BranParallelSpacingDetail,
 } from '@/api/genModelSpatialApi';
+
 import { genModelV1SpatialNearestClearance } from '@/api/genModelV1Api';
 import { type BranParallelRunPair, describeStraightRun } from '@/composables/branParallelSpacing';
 import { useSelectionStore } from '@/composables/useSelectionStore';
 import { useViewerContext } from '@/composables/useViewerContext';
-import { getModelSourceKind } from '@/model-source/kind';
 
-export type SpatialComputeScenarioKey =
-  | 'fittingOffset'
-  | 'fitting'
-  | 'wallDistance'
-  | 'steelRelative'
-  | 'suppoTrays'
-  | 'traySpan'
-  | 'branNearestClearance';
+/**
+ * 「空间计算」Dock 只剩 BRAN 中心线最近清距一个场景。旧后端 `/api/space/*` 的六个支架场景
+ * （预埋板偏移 / 对应预埋板 / 距墙 / 钢结构相对定位 / 对应桥架 / 桥架跨度）gen-model 没有对应接口，
+ * 2026-09-20 随 legacy 退役一并拨掉（D1）。
+ */
+export type SpatialComputeScenarioKey = 'branNearestClearance';
 
 export type SpatialComputeResultRow = {
   refno: string;
@@ -158,26 +140,8 @@ type SpatialComputeScenarioMeta = {
   fields: SpatialComputeScenarioField[];
 };
 
-type SpatialComputeResultData =
-  | SpaceComputeFittingData
-  | SpaceComputeFittingOffsetData
-  | SpaceComputeWallDistanceData
-  | SpaceComputeSteelRelativeData
-  | SpaceComputeSuppoTrayData
-  | SpaceComputeTraySpanData
-  | null;
-
-type SpatialComputeResultEnvelope = SpaceEnvelope<SpatialComputeResultData>;
-
-/**
- * BRAN 净距是唯一按数据源分流的场景（plan `docs/plans/2026-09-16-bran-centerline-nearest-clearance-v1-dev-plan.md`
- * §3.3，D5 取「`useSpatialCompute` 内按 kind 分流」）：其余六个场景只有旧后端 `/api/space/*` 一种实现。
- * legacy 打 `/api/sqlite-spatial/nearest-clearance`；gen-model-v1 打 `/api/v1/spatial/nearest-clearance`，两边出参同形。
- */
-const BRAN_NEAREST_CLEARANCE_ENDPOINT: Record<ModelSourceKind, string> = {
-  legacy: '/api/sqlite-spatial/nearest-clearance',
-  'gen-model-v1': '/api/v1/spatial/nearest-clearance',
-};
+/** BRAN 净距的取数路径（plan `docs/plans/2026-09-16-bran-centerline-nearest-clearance-v1-dev-plan.md` §3.3）。 */
+const BRAN_NEAREST_CLEARANCE_ENDPOINT = '/api/v1/spatial/nearest-clearance';
 
 /**
  * BRAN 净距按 `group_by=noun` 查：半径内每个 NOUN 自成一桶、按最近距离排桶，`noun_counts` 直接当类型 facet
@@ -190,71 +154,10 @@ export const BRAN_CLEARANCE_DEFAULT_EXCLUDE_NOUNS = 'WELD,ATTA';
 
 const SCENARIO_META: SpatialComputeScenarioMeta[] = [
   {
-    key: 'fittingOffset',
-    title: '支架与预埋板偏移',
-    description: '返回 anchor、panel 与偏移向量。',
-    endpoint: '/api/space/fitting-offset',
-    exampleRefno: '24383/88342',
-    sourceLabel: 'SUPPO Refno',
-    sourceHelp: '格式示例：24383_88342',
-    fields: ['tolerance'],
-  },
-  {
-    key: 'fitting',
-    title: '支架对应预埋板',
-    description: '返回板件编号、中心点与匹配方式。',
-    endpoint: '/api/space/fitting',
-    exampleRefno: '24383/89904',
-    sourceLabel: 'SUPPO Refno',
-    sourceHelp: '格式示例：24383_89904',
-    fields: ['tolerance'],
-  },
-  {
-    key: 'wallDistance',
-    title: '距墙 / 定位块',
-    description: '返回最近目标与候选列表。',
-    endpoint: '/api/space/wall-distance',
-    exampleRefno: '24383/88342',
-    sourceLabel: 'SUPPO Refno',
-    sourceHelp: '格式示例：24383_88342',
-    fields: ['searchRadius', 'targetNouns'],
-  },
-  {
-    key: 'steelRelative',
-    title: '与钢结构相对定位',
-    description: '返回最近钢构点位与向量。',
-    endpoint: '/api/space/steel-relative',
-    exampleRefno: '24383/89904',
-    sourceLabel: 'SUPPO Refno',
-    sourceHelp: '格式示例：24383_89904',
-    fields: ['searchRadius'],
-  },
-  {
-    key: 'suppoTrays',
-    title: '支架对应桥架',
-    description: '返回命中的 BRAN / SCTN 列表。',
-    endpoint: '/api/space/suppo-trays',
-    exampleRefno: '24383/89904',
-    sourceLabel: 'SUPPO Refno',
-    sourceHelp: '格式示例：24383_89904',
-    fields: ['tolerance'],
-  },
-  {
-    key: 'traySpan',
-    title: '桥架跨度',
-    description: '返回同一 BRAN 上左右相邻支架。',
-    endpoint: '/api/space/tray-span',
-    exampleRefno: '24383/87412',
-    sourceLabel: 'SUPPO Refno',
-    sourceHelp: '格式示例：24383_87412',
-    fields: ['neighborWindow'],
-  },
-  {
     key: 'branNearestClearance',
     title: 'BRAN 中心线最近清距',
     description: '沿 BRAN 中心线按类型找半径内最近的构件（墙 / 柱 / 设备 / 支架…），每类默认标注最近 1 条。',
-    // 建 store 时按当前数据源换成对应后端的路径（见 `createSpatialComputeStore`）。
-    endpoint: BRAN_NEAREST_CLEARANCE_ENDPOINT.legacy,
+    endpoint: BRAN_NEAREST_CLEARANCE_ENDPOINT,
     exampleRefno: '24381_145018',
     sourceLabel: 'BRAN Refno',
     sourceHelp: 'BRAN 格式示例：24381_145018 或 24381/145018',
@@ -278,60 +181,6 @@ const DEFAULT_STATE_BY_SCENARIO: Record<
     | 'candidateProvenance'
   >
 > = {
-  fittingOffset: {
-    suppoRefno: '24383/88342',
-    tolerance: '',
-    suppoType: '',
-    searchRadius: '',
-    targetNouns: '',
-    excludeNouns: '',
-    neighborWindow: '',
-  },
-  fitting: {
-    suppoRefno: '24383/89904',
-    tolerance: '',
-    suppoType: '',
-    searchRadius: '',
-    targetNouns: '',
-    excludeNouns: '',
-    neighborWindow: '',
-  },
-  wallDistance: {
-    suppoRefno: '24383/88342',
-    tolerance: '',
-    suppoType: 'S2',
-    searchRadius: '5000',
-    targetNouns: '',
-    excludeNouns: '',
-    neighborWindow: '',
-  },
-  steelRelative: {
-    suppoRefno: '24383/89904',
-    tolerance: '',
-    suppoType: '',
-    searchRadius: '8000',
-    targetNouns: '',
-    excludeNouns: '',
-    neighborWindow: '',
-  },
-  suppoTrays: {
-    suppoRefno: '24383/89904',
-    tolerance: '',
-    suppoType: '',
-    searchRadius: '',
-    targetNouns: '',
-    excludeNouns: '',
-    neighborWindow: '',
-  },
-  traySpan: {
-    suppoRefno: '24383/87412',
-    tolerance: '',
-    suppoType: '',
-    searchRadius: '',
-    targetNouns: '',
-    excludeNouns: '',
-    neighborWindow: '5000',
-  },
   branNearestClearance: {
     suppoRefno: '24381_145018',
     tolerance: '',
@@ -342,14 +191,6 @@ const DEFAULT_STATE_BY_SCENARIO: Record<
     neighborWindow: '',
   },
 };
-
-function normalizeSuppoRefno(raw: string): string {
-  const value = String(raw || '').trim();
-  if (!value) return '';
-  const wrapped = value.match(/[⟨<]([^⟩>]+)[⟩>]/)?.[1] ?? value;
-  const core = wrapped.replace(/^pe:/i, '').replace(/^=/, '').trim();
-  return core.replace(/,/g, '/').replace(/_/g, '/');
-}
 
 export function normalizeBranComputeRefno(raw: string): string {
   const value = String(raw || '').trim();
@@ -385,93 +226,6 @@ function clearScenarioResults(state: SpatialComputeScenarioState): void {
   state.drawnCandidateKeys = [];
   state.excludedSelfMembers = 0;
   state.candidateProvenance = {};
-}
-
-function extractResultRows(key: SpatialComputeScenarioKey, envelope: SpatialComputeResultEnvelope): SpatialComputeResultRow[] {
-  if (envelope.status !== 'success' || !envelope.data) return [];
-  const d = envelope.data;
-  switch (key) {
-    case 'fittingOffset': {
-      const v = d as SpaceComputeFittingOffsetData;
-      return [{
-        refno: v.panel_refno,
-        noun: 'PANEL',
-        distanceMm: v.length,
-        label: v.within ? '偏移在容差内' : '偏移超出容差',
-      }];
-    }
-    case 'fitting': {
-      const v = d as SpaceComputeFittingData;
-      return [{
-        refno: v.panel_refno,
-        noun: 'PANEL',
-        distanceMm: null,
-        label: `${v.match_method} · ${v.covered ? '已覆盖' : '未覆盖'}`,
-      }];
-    }
-    case 'wallDistance': {
-      const v = d as SpaceComputeWallDistanceData;
-      const rows: SpatialComputeResultRow[] = [];
-      if (v.target) {
-        rows.push({
-          refno: v.target.refno,
-          noun: v.target.noun,
-          distanceMm: v.target.distance_mm,
-          label: '最近目标',
-        });
-      }
-      for (const c of v.candidates ?? []) {
-        rows.push({
-          refno: c.refno,
-          noun: c.noun,
-          distanceMm: c.distance_mm,
-          label: '候选',
-        });
-      }
-      return rows;
-    }
-    case 'steelRelative': {
-      const v = d as SpaceComputeSteelRelativeData;
-      return [{
-        refno: v.steel_refno,
-        noun: v.steel_noun,
-        distanceMm: v.length,
-        label: v.within ? '距离在范围内' : '距离超出范围',
-      }];
-    }
-    case 'suppoTrays': {
-      const v = d as SpaceComputeSuppoTrayData;
-      return (v.trays ?? []).map((t) => ({
-        refno: t.tray_section_refno,
-        noun: 'SCTN',
-        distanceMm: null,
-        label: `BRAN ${t.bran_refno} · ${t.support_type}`,
-      }));
-    }
-    case 'traySpan': {
-      const v = d as SpaceComputeTraySpanData;
-      const rows: SpatialComputeResultRow[] = [];
-      if (v.left_suppo_refno) {
-        rows.push({
-          refno: v.left_suppo_refno,
-          noun: 'SUPPO',
-          distanceMm: v.left_distance ?? null,
-          label: '左侧相邻支架',
-        });
-      }
-      if (v.right_suppo_refno) {
-        rows.push({
-          refno: v.right_suppo_refno,
-          noun: 'SUPPO',
-          distanceMm: v.right_distance ?? null,
-          label: '右侧相邻支架',
-        });
-      }
-      return rows;
-    }
-    case 'branNearestClearance':
-      return [];
-  }
 }
 
 /**
@@ -685,34 +439,21 @@ type BranNearestClearanceQuery = {
 };
 
 /**
- * 按数据源取 BRAN 净距。两条路径的响应同形（plan §3.2），这里统一按 legacy 的 `BranNearestClearanceResponse` 往下交，
- * v1 那一支的返回值赋给它就是这条「同形」契约的编译期检查。
+ * 取 BRAN 净距（gen-model-v1 `/api/v1/spatial/nearest-clearance`）。响应形状沿用 legacy 时代的 `BranNearestClearanceResponse`
+ * （plan §3.2「两边同形」），v1 的返回值赋给它就是这条契约的编译期检查。
  *
- * 请求口径两边一致：`source_mode=bran_centerline` 显式发（不吃服务端缺省）、`group_by=noun` 且不给任何目标 = 半径内全部类型
- * （负几何服务端默认剔）、`max_per_group` 每类多取几条供列表勾选、`scope=all_loaded`。`surface` 等 v1 独有的格留给服务端缺省
+ * 请求口径：`source_mode=bran_centerline` 显式发（不吃服务端缺省）、`group_by=noun` 且不给任何目标 = 半径内全部类型
+ * （负几何服务端默认剔）、`max_per_group` 每类多取几条供列表勾选、`scope=all_loaded`。`surface` 等格留给服务端缺省
  * （D4 未拍板：净距是否缺省扣外径）。
  */
-async function fetchBranNearestClearance(
-  kind: ModelSourceKind,
-  query: BranNearestClearanceQuery,
-): Promise<BranNearestClearanceResponse> {
-  if (kind === 'gen-model-v1') {
-    return await genModelV1SpatialNearestClearance({
-      sourceRefno: query.sourceRefno,
-      sourceMode: 'bran_centerline',
-      groupBy: 'noun',
-      excludeNouns: query.excludeNouns,
-      radius: query.radius,
-      maxPerGroup: BRAN_CLEARANCE_MAX_PER_NOUN,
-      scope: 'all_loaded',
-    });
-  }
-  return await queryBranCenterlineNearestClearance({
-    source_refno: query.sourceRefno,
-    group_by: 'noun',
-    exclude_nouns: query.excludeNouns,
+async function fetchBranNearestClearance(query: BranNearestClearanceQuery): Promise<BranNearestClearanceResponse> {
+  return await genModelV1SpatialNearestClearance({
+    sourceRefno: query.sourceRefno,
+    sourceMode: 'bran_centerline',
+    groupBy: 'noun',
+    excludeNouns: query.excludeNouns,
     radius: query.radius,
-    max_per_group: BRAN_CLEARANCE_MAX_PER_NOUN,
+    maxPerGroup: BRAN_CLEARANCE_MAX_PER_NOUN,
     scope: 'all_loaded',
   });
 }
@@ -734,33 +475,19 @@ function parseOptionalNumber(raw: string | number | null | undefined, fieldLabel
   return value;
 }
 
-function formatResponse(response: SpatialComputeResultEnvelope): string {
-  return JSON.stringify(response, null, 2);
-}
-
 export function createSpatialComputeStore() {
   const viewerContext = useViewerContext();
   const selection = useSelectionStore();
   const panelMode = ref<'query' | 'compute'>('compute');
-  const activeScenario = ref<SpatialComputeScenarioKey>('fittingOffset');
+  const activeScenario = ref<SpatialComputeScenarioKey>('branNearestClearance');
   const scenarioExpanded = ref(false);
   const requestTokens: Record<string, number> = {};
   let nextRequestToken = 0;
-  // 数据源随页面加载定死（`?model_source=` / `VITE_MODEL_SOURCE`），建 store 时读一次即可；面板上显示的路径与实际请求同源。
-  const sourceKind = getModelSourceKind();
   const scenarios = reactive<Record<SpatialComputeScenarioKey, SpatialComputeScenarioState>>({
-    fittingOffset: createScenarioState('fittingOffset'),
-    fitting: createScenarioState('fitting'),
-    wallDistance: createScenarioState('wallDistance'),
-    steelRelative: createScenarioState('steelRelative'),
-    suppoTrays: createScenarioState('suppoTrays'),
-    traySpan: createScenarioState('traySpan'),
     branNearestClearance: createScenarioState('branNearestClearance'),
   });
 
-  const scenarioList: SpatialComputeScenarioMeta[] = SCENARIO_META.map((meta) =>
-    meta.key === 'branNearestClearance' ? { ...meta, endpoint: BRAN_NEAREST_CLEARANCE_ENDPOINT[sourceKind] } : meta,
-  );
+  const scenarioList: SpatialComputeScenarioMeta[] = [...SCENARIO_META];
   const currentScenarioMeta = computed(() => scenarioList.find((item) => item.key === activeScenario.value) ?? scenarioList[0]!);
   const currentScenarioState = computed(() => scenarios[activeScenario.value]);
   const isBusy = computed(() => Object.values(scenarios).some((item) => item.loading));
@@ -788,24 +515,18 @@ export function createSpatialComputeStore() {
     const viewer = viewerContext.viewerRef.value;
     const selectedRefno = selection.selectedRefno.value || viewer?.scene.selectedObjectIds[0] || null;
     if (!selectedRefno) {
-      currentScenarioState.value.error = activeScenario.value === 'branNearestClearance'
-        ? '请先在三维里选中一个 BRAN'
-        : '请先在三维里选中一个支架';
+      currentScenarioState.value.error = '请先在三维里选中一个 BRAN';
       return;
     }
-    currentScenarioState.value.suppoRefno = activeScenario.value === 'branNearestClearance'
-      ? normalizeBranComputeRefno(selectedRefno)
-      : normalizeSuppoRefno(selectedRefno);
+    currentScenarioState.value.suppoRefno = normalizeBranComputeRefno(selectedRefno);
     currentScenarioState.value.error = '';
   }
 
   async function submitScenario(key: SpatialComputeScenarioKey = activeScenario.value) {
     const state = scenarios[key];
-    const refno = key === 'branNearestClearance'
-      ? normalizeBranComputeRefno(state.suppoRefno)
-      : normalizeSuppoRefno(state.suppoRefno);
+    const refno = normalizeBranComputeRefno(state.suppoRefno);
     if (!refno) {
-      state.error = key === 'branNearestClearance' ? '请输入完整 BRAN refno' : '请输入完整 suppo_refno';
+      state.error = '请输入完整 BRAN refno';
       state.responseText = '';
       clearScenarioResults(state);
       return;
@@ -820,78 +541,23 @@ export function createSpatialComputeStore() {
     clearScenarioResults(state);
 
     try {
-      let response: SpatialComputeResultEnvelope;
-      switch (key) {
-        case 'fitting':
-          response = await postSpaceFitting({
-            suppo_refno: refno,
-            tolerance: parseOptionalNumber(state.tolerance, 'tolerance'),
-          });
-          break;
-        case 'fittingOffset':
-          response = await postSpaceFittingOffset({
-            suppo_refno: refno,
-            tolerance: parseOptionalNumber(state.tolerance, 'tolerance'),
-          });
-          break;
-        case 'wallDistance': {
-          const targetNouns = state.targetNouns
-            .split(',')
-            .map((item) => item.trim())
-            .filter(Boolean);
-          response = await postSpaceWallDistance({
-            suppo_refno: refno,
-            search_radius: parseOptionalNumber(state.searchRadius, 'search_radius'),
-            target_nouns: targetNouns.length > 0 ? targetNouns : undefined,
-          });
-          break;
-        }
-        case 'steelRelative':
-          response = await postSpaceSteelRelative({
-            suppo_refno: refno,
-            search_radius: parseOptionalNumber(state.searchRadius, 'search_radius'),
-          });
-          break;
-        case 'suppoTrays':
-          response = await postSpaceSuppoTrays({
-            suppo_refno: refno,
-            tolerance: parseOptionalNumber(state.tolerance, 'tolerance'),
-          });
-          break;
-        case 'traySpan':
-          response = await postSpaceTraySpan({
-            suppo_refno: refno,
-            neighbor_window: parseOptionalNumber(state.neighborWindow, 'neighbor_window'),
-          });
-          break;
-        case 'branNearestClearance': {
-          const branResponse = await fetchBranNearestClearance(sourceKind, {
-            sourceRefno: refno,
-            excludeNouns: splitCsv(state.excludeNouns),
-            radius: parseOptionalNumber(state.searchRadius, 'radius') ?? 5000,
-          });
-          if (requestTokens[key] !== token) return;
-          state.responseText = JSON.stringify(branResponse, null, 2);
-          if (!branResponse.success) {
-            state.error = branResponse.error || branResponse.message || '请求失败';
-            clearScenarioResults(state);
-            return;
-          }
-          state.branGroups = normalizeBranNearestGroups(branResponse.nearest_by_group);
-          state.nounFacets = buildBranNounFacets(state.branGroups, branResponse.noun_counts);
-          state.drawnCandidateKeys = defaultDrawnCandidateKeys(state.branGroups);
-          state.excludedSelfMembers = branResponse.excluded_self_members ?? 0;
-          applyBranSelection(state);
-          return;
-        }
-      }
+      const branResponse = await fetchBranNearestClearance({
+        sourceRefno: refno,
+        excludeNouns: splitCsv(state.excludeNouns),
+        radius: parseOptionalNumber(state.searchRadius, 'radius') ?? 5000,
+      });
       if (requestTokens[key] !== token) return;
-      state.responseText = formatResponse(response);
-      state.resultRows = extractResultRows(key, response);
-      state.annotationCandidates = [];
-      if (response.status === 'error') {
-        state.error = response.message || '请求失败';
+      state.responseText = JSON.stringify(branResponse, null, 2);
+      if (!branResponse.success) {
+        state.error = branResponse.error || branResponse.message || '请求失败';
+        clearScenarioResults(state);
+        return;
       }
+      state.branGroups = normalizeBranNearestGroups(branResponse.nearest_by_group);
+      state.nounFacets = buildBranNounFacets(state.branGroups, branResponse.noun_counts);
+      state.drawnCandidateKeys = defaultDrawnCandidateKeys(state.branGroups);
+      state.excludedSelfMembers = branResponse.excluded_self_members ?? 0;
+      applyBranSelection(state);
     } catch (error) {
       if (requestTokens[key] !== token) return;
       state.error = error instanceof Error ? error.message : String(error);

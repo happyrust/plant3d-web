@@ -1,45 +1,12 @@
 // Visual harness for the misc token migration
-// (RoomInfoPanel / ObjectMeasureDrawer / Button variants).
+// (ObjectMeasureDrawer / Button variants; RoomInfoPanel 随 legacy 房间树 2026-09-20 退役).
 // Mounted by /harness/misc.html; shots via scripts/visual-baseline/shot.mjs
 // (no .shots.mjs scenario: plain render, full-page single shot).
 import { createApp, h } from 'vue';
 
-import { VueQueryPlugin } from '@tanstack/vue-query';
-
 import '@/assets/tailwind.css';
 import ObjectMeasureDrawer from '@/components/tools/ObjectMeasureDrawer.vue';
-import RoomInfoPanel from '@/components/tools/RoomInfoPanel.vue';
 import Button from '@/components/ui/Button.vue';
-import { useRoomInfoPanel } from '@/composables/useRoomInfoPanel';
-
-const RoomInfoHarness = {
-  setup() {
-    const roomInfo = useRoomInfoPanel();
-    roomInfo.current.value = {
-      sourceRefno: '24381_145018',
-      roomRefno: '24381_9001',
-      fullName: '=24381/RM-A-102',
-      attrs: {
-        TYPE: 'ROOM',
-        DESC: '电气设备间',
-        OWNER: '=24381/ZONE-A',
-        ELEV: '+3.500',
-        AREA: '42.5 m2',
-        FIRE: 'F1',
-        DEPT: 'E',
-      },
-      refFullNames: { OWNER: '=24381/ZONE-A' },
-      ancestorIds: [],
-    };
-    roomInfo.error.value = '示例错误：未解析到 24381_999 的所在房间';
-    roomInfo.modelError.value = '房间模型加载失败: 24381_9001（示例警告条）';
-    return () => h(RoomInfoPanel);
-  },
-};
-
-const roomApp = createApp(RoomInfoHarness);
-roomApp.use(VueQueryPlugin);
-roomApp.mount('#room-info');
 
 createApp({
   render: () =>

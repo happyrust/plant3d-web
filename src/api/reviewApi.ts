@@ -864,7 +864,7 @@ function normalizeWorkflowSyncResponse(raw: RawWorkflowSyncResponse): WorkflowSy
       taskId: data.taskId || data.task_id,
       records: Array.isArray(data.records)
         ? data.records.map((record) => ({
-          id: String(record.id || ''),
+          id: unwrapRecordIdDebugShape(record.id || ''),
           taskId: String(record.taskId || record.task_id || ''),
           type: String(record.type || 'batch'),
           annotations: Array.isArray(record.annotations) ? record.annotations : [],
@@ -898,7 +898,7 @@ function normalizeWorkflowSyncResponse(raw: RawWorkflowSyncResponse): WorkflowSy
         : [],
       annotationComments: Array.isArray(data.annotationComments)
         ? data.annotationComments.map((comment) => ({
-          id: String(comment.id || ''),
+          id: unwrapRecordIdDebugShape(comment.id || ''),
           annotationId: String(comment.annotationId || comment.annotation_id || ''),
           annotationType: String(comment.annotationType || comment.annotation_type || ''),
           authorId: String(comment.authorId || comment.author_id || ''),
@@ -910,7 +910,7 @@ function normalizeWorkflowSyncResponse(raw: RawWorkflowSyncResponse): WorkflowSy
         }))
         : Array.isArray(data.annotation_comments)
           ? data.annotation_comments.map((comment) => ({
-            id: String(comment.id || ''),
+            id: unwrapRecordIdDebugShape(comment.id || ''),
             annotationId: String(comment.annotationId || comment.annotation_id || ''),
             annotationType: String(comment.annotationType || comment.annotation_type || ''),
             authorId: String(comment.authorId || comment.author_id || ''),
@@ -1468,9 +1468,16 @@ export async function reviewRecordClearByTaskId(taskId: string): Promise<ReviewA
  * GET /api/review/tasks/{taskId}/history
  */
 export async function reviewTaskGetHistory(taskId: string): Promise<ReviewHistoryResponse> {
-  return await fetchJson<ReviewHistoryResponse>(
+  const response = await fetchJson<ReviewHistoryResponse>(
     `/api/review/tasks/${encodeURIComponent(taskId)}/history`
   );
+  // 后端把历史行主键按 Debug 形态（`String("…")`）写出，见 unwrapRecordIdDebugShape。
+  return {
+    ...response,
+    history: Array.isArray(response.history)
+      ? response.history.map((item) => ({ ...item, id: unwrapRecordIdDebugShape(item.id) }))
+      : response.history,
+  };
 }
 
 // ============ 评论 API ============
@@ -2176,9 +2183,35 @@ export function normalizeReviewAttachment(raw: Record<string, unknown>): ReviewA
   };
 }
 
+/**
+ * 把后端按 Rust `Debug` 写出来的行主键解回裸 id。
+ *
+ * gen-model 校审域有三处把 SurrealDB 行主键写成 `format!("{:?}", r.id.id)` 直接进响应体——
+ * `GET /api/review/comments/by-annotation/{id}`、`GET /api/review/tasks/{id}/history`、`sync/export`
+ * （后端 `web_service/review/common.rs` 用 `record_id_debug_shape_matches_the_legacy_sdk` 钉住了这个形态，
+ * 旧端 plant-model-gen 同形）。于是列表里的评论 id 长成 `String("comment-…")`，而建评论回执、
+ * `DELETE|PATCH /api/review/comments/item/{id}` 认的都是裸 `comment-…`——拿列表 id 回调会 404「评论不存在」。
+ * 这里统一解包：`String("x")` → `x`（Debug 转义按 JSON 解，解不开就去引号）、`Number(7)` → `7`；裸 id 原样返回。
+ */
+export function unwrapRecordIdDebugShape(value: unknown): string {
+  const text = String(value ?? '');
+  const match = /^(String|Number)\((.*)\)$/s.exec(text.trim());
+  if (!match) return text;
+  const kind = match[1];
+  const inner = (match[2] ?? '').trim();
+  if (kind === 'String' && inner.length >= 2 && inner.startsWith('"') && inner.endsWith('"')) {
+    try {
+      return String(JSON.parse(inner));
+    } catch {
+      return inner.slice(1, -1);
+    }
+  }
+  return inner;
+}
+
 export function normalizeAnnotationComment(raw: Record<string, unknown>): AnnotationComment {
   return {
-    id: String(raw.id || ''),
+    id: unwrapRecordIdDebugShape(raw.id || ''),
     annotationId: String(raw.annotationId || raw.annotation_id || ''),
     annotationType: normalizeAnnotationType(raw.annotationType || raw.annotation_type),
     authorId: String(raw.authorId || raw.author_id || ''),
@@ -2186,8 +2219,8 @@ export function normalizeAnnotationComment(raw: Record<string, unknown>): Annota
     authorRole: normalizeUserRole(raw.authorRole || raw.author_role),
     content: String(raw.content || ''),
     replyToId: raw.replyToId
-      ? String(raw.replyToId)
-      : (raw.reply_to_id ? String(raw.reply_to_id) : undefined),
+      ? unwrapRecordIdDebugShape(raw.replyToId)
+      : (raw.reply_to_id ? unwrapRecordIdDebugShape(raw.reply_to_id) : undefined),
     createdAt: normalizeTimestamp(raw.created_at || raw.createdAt) || Date.now(),
     updatedAt: normalizeTimestamp(raw.updated_at || raw.updatedAt),
   };

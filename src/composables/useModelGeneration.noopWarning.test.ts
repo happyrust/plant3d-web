@@ -1,10 +1,8 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-// 这个文件测的是 legacy 链路（`/api/e3d/subtree-refnos` + parquet / backend 加载）；
-// 缺省数据源自 2026-09-09 起是 gen-model-v1，这里显式钉回 legacy。
-beforeAll(() => window.history.replaceState({}, '', '?model_source=legacy'));
-afterAll(() => window.history.replaceState({}, '', '/'));
-
+// 占位节点 / DTX 缓存的判定只依赖数据源端口（tree.subtreeRefnos / visibleInsts / attributes.typeInfo）与加载器 mock。
+// 「本次未新增实例」与「重新生成」两条 legacy（parquet / backend）语义的用例 2026-09-20 随 legacy 退役删除；
+// v1 下同一类行为见 `useModelGeneration.genModelV1.test.ts`。
 const emitToastMock = vi.fn();
 const addLogMock = vi.fn();
 const beginMock = vi.fn();
@@ -12,22 +10,20 @@ const updateMock = vi.fn();
 const finishMock = vi.fn();
 const loadInstancesMock = vi.fn();
 const getSubtreeRefnosMock = vi.fn();
-const isParquetAvailableMock = vi.fn();
 const isDtxRefnoLoadedMock = vi.fn();
-const regenerateByRefnoMock = vi.fn();
 
-vi.mock('@/api/genModelE3dApi', () => ({
-  e3dGetSubtreeRefnos: getSubtreeRefnosMock,
-}));
-
-vi.mock('@/api/genModelRealtimeApi', () => ({
-  enqueueParquetIncremental: vi.fn(),
-  getParquetVersion: vi.fn(),
-}));
-
-vi.mock('@/api/genModelTaskApi', () => ({
-  modelRegenerateByRefno: regenerateByRefnoMock,
-  modelShowByRefno: vi.fn(),
+vi.mock('@/model-source', () => ({
+  getModelSource: () => ({
+    kind: 'gen-model-v1',
+    tree: {
+      subtreeRefnos: (refno: string, params?: unknown) => getSubtreeRefnosMock(refno, params),
+      visibleInsts: vi.fn(async (refno: string) => ({ success: true, refno, refnos: [refno] })),
+    },
+    attributes: { typeInfo: vi.fn(async (refno: string) => ({ success: true, refno, noun: 'BRAN' })) },
+    records: { subscribeProgress: () => () => {} },
+  }),
+  getGenModelV1ModelSource: () => null,
+  subscribeModelSourceProgress: () => () => {},
 }));
 
 vi.mock('@/composables/useConfirmDialogStore', () => ({
@@ -53,17 +49,6 @@ vi.mock('@/composables/useDbnoInstancesDtxLoader', () => ({
   loadDbnoInstancesForVisibleRefnosDtx: loadInstancesMock,
 }));
 
-vi.mock('@/api/genModelStreamGenerateApi', () => ({
-  triggerBatchGenerateSse: vi.fn(),
-}));
-
-vi.mock('@/composables/useDbnoInstancesParquetLoader', () => ({
-  useDbnoInstancesParquetLoader: () => ({
-    isParquetAvailable: isParquetAvailableMock,
-    queryAllRefnoKeys: vi.fn(),
-  }),
-}));
-
 vi.mock('@/composables/useModelLoadStatus', () => ({
   useModelLoadStatus: () => ({
     begin: beginMock,
@@ -85,8 +70,6 @@ describe('useModelGeneration', () => {
       refnos: ['24381_145018'],
       truncated: false,
     });
-    isParquetAvailableMock.mockResolvedValue(true);
-    regenerateByRefnoMock.mockResolvedValue({ success: true, message: 'ok' });
     loadInstancesMock.mockResolvedValue({
       loadedRefnos: 0,
       skippedRefnos: 1,
@@ -99,41 +82,6 @@ describe('useModelGeneration', () => {
       },
       sceneBoundingBox: null,
     });
-  });
-
-  it('当模型已在场景中且这次没有新增实例时，不应再弹“未绘制任何实例”的警告', async () => {
-    const viewer = {
-      scene: {
-        objects: {
-          '24381_145018': {},
-        },
-        getAABB: vi.fn(() => ({ min: [0, 0, 0], max: [1, 1, 1] })),
-      },
-      __dtxLayer: {
-        hasObject: vi.fn(() => false),
-        getBoundingBox: vi.fn(() => null),
-      },
-      cameraFlight: {
-        flyTo: vi.fn(),
-      },
-    } as any;
-
-    const { useModelGeneration } = await import('./useModelGeneration');
-    const gen = useModelGeneration({
-      viewer,
-      db_num: 7997,
-    });
-
-    const ok = await gen.showModelByRefno('24381/145018', { flyTo: true });
-
-    expect(gen.error.value).toBeNull();
-    expect(ok).toBe(true);
-    expect(loadInstancesMock).toHaveBeenCalled();
-    expect(emitToastMock).not.toHaveBeenCalledWith(expect.objectContaining({ level: 'warning' }));
-    expect(addLogMock).toHaveBeenCalledWith(
-      'info',
-      expect.stringContaining('本次未新增实例')
-    );
   });
 
   it('当场景里只有占位节点时，不应弹出占位重载警告', async () => {
@@ -196,52 +144,4 @@ describe('useModelGeneration', () => {
     expect(viewer.__dtxLayer.hasObject).not.toHaveBeenCalled();
   });
 
-  it('显式重新生成完成后应从 backend 强制替换旧对象与几何', async () => {
-    loadInstancesMock.mockResolvedValueOnce({
-      loadedRefnos: 1,
-      skippedRefnos: 0,
-      loadedObjects: 2,
-      missingRefnos: [],
-      missingBreakdown: {
-        noGeoRowsRefnos: [],
-        mesh404Refnos: [],
-        mesh404GeoHashes: [],
-      },
-      sceneBoundingBox: null,
-    });
-    const viewer = {
-      scene: {
-        objects: { '24381_76692': {} },
-        getAABB: vi.fn(() => ({ min: [0, 0, 0], max: [1, 1, 1] })),
-      },
-      __dtxLayer: {
-        hasObject: vi.fn(() => true),
-      },
-      cameraFlight: { flyTo: vi.fn() },
-    } as any;
-
-    const { useModelGeneration } = await import('./useModelGeneration');
-    const gen = useModelGeneration({ viewer, db_num: 7997 });
-    const ok = await gen.showModelByRefno('24381_76692', {
-      flyTo: true,
-      regenerate: true,
-    });
-
-    expect(ok).toBe(true);
-    expect(regenerateByRefnoMock).toHaveBeenCalledWith({
-      refnos: ['24381/76692'],
-      db_num: 7997,
-      gen_parquet: false,
-    });
-    expect(loadInstancesMock).toHaveBeenCalledWith(
-      viewer.__dtxLayer,
-      7997,
-      expect.any(Array),
-      expect.objectContaining({
-        dataSource: 'backend',
-        replaceExistingObjects: true,
-        forceRefreshGeometries: true,
-      })
-    );
-  });
 });

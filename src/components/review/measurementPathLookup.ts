@@ -3,13 +3,9 @@ import {
   normalizeMeasurementEntityId,
 } from './measurementDisplay';
 
-import {
-  e3dGetAncestors,
-  e3dGetNode,
-  type AncestorsResponse,
-  type NodeResponse,
-  type TreeNodeDto,
-} from '@/api/genModelE3dApi';
+import type { AncestorsResponse, NodeResponse, TreeNodeDto } from '@/api/genModelE3dTypes';
+
+import { getModelSource } from '@/model-source';
 
 export type MeasurementPathLookupStatus = 'invalid' | 'fallback' | 'resolved' | 'error';
 
@@ -105,8 +101,8 @@ async function resolveMeasurementEntityPathUncached(
     return createFallbackResult(rawEntityId, refno, 'invalid');
   }
 
-  const getAncestors = deps.getAncestors ?? e3dGetAncestors;
-  const getNode = deps.getNode ?? e3dGetNode;
+  const getAncestors = deps.getAncestors ?? ((target: string) => getModelSource().tree.ancestors(target));
+  const getNode = deps.getNode ?? ((target: string) => getModelSource().tree.node(target));
 
   try {
     const ancestorsResp = await getAncestors(refno);

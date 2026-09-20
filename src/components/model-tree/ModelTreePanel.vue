@@ -6,7 +6,6 @@ import { Filter, GitCompare, Plus, Search, X } from 'lucide-vue-next';
 
 import type { DtxCompatViewer } from '@/viewer/dtx/DtxCompatViewer';
 
-import { pdmsSearch, type PdmsSearchItem } from '@/api/genModelSearchApi';
 import GenModelV1HealthBadge from '@/components/model-tree/GenModelV1HealthBadge.vue';
 import ModelGenerationProgressModal from '@/components/model-tree/ModelGenerationProgressModal.vue';
 import ModelTreeRow from '@/components/model-tree/ModelTreeRow.vue';
@@ -15,9 +14,6 @@ import { ensurePanelAndActivate } from '@/composables/useDockApi';
 import { useModelGeneration } from '@/composables/useModelGeneration';
 import { setModelTreeInstance } from '@/composables/useModelTreeStore';
 import { usePdmsOwnerTree, NOUN_TYPES } from '@/composables/usePdmsOwnerTree';
-import { useQuickViewRequestStore } from '@/composables/useQuickViewRequestStore';
-import { useRoomInfoPanel } from '@/composables/useRoomInfoPanel';
-import { useRoomTree } from '@/composables/useRoomTree';
 import { useSelectionStore } from '@/composables/useSelectionStore';
 import { useToolStore } from '@/composables/useToolStore';
 import {
@@ -30,46 +26,30 @@ import {
   type TreeDiffModel,
 } from '@/composables/useTreeVersionDiff';
 import { cn } from '@/lib/utils';
-import { isGenModelV1Source } from '@/model-source/kind';
 import { MODEL_UNIT_VERSION_COMPARE_EVENT, requestModelVersionInspect } from '@/utils/modelUnitVersionCompare';
 
 const props = defineProps<{
   viewer: DtxCompatViewer | null;
 }>();
 
-/**
- * gen-model 连接徽标（plan 2026-09-06 P1-4）：只在数据源切到 gen-model-v1（`?model_source=gen-model-v1`）
- * 或显式 `?gm_health=1` 时挂出来；legacy 下不渲染、也不发探针请求。
- */
-const showGenModelV1Badge = computed(() => {
-  if (isGenModelV1Source()) return true;
-  try {
-    return new URLSearchParams(window.location.search).get('gm_health') === '1';
-  } catch {
-    return false;
-  }
-});
+/** gen-model 连接徽标（plan 2026-09-06 P1-4）：legacy 退役后 gen-model-v1 是唯一数据源，徽标常驻。 */
+const showGenModelV1Badge = true;
 
-const activeTree = ref<'pdms' | 'room'>('pdms');
-
+// 只剩 PDMS 一棵树：旧后端 `/api/room-tree/*` 的 ROOM 页签 2026-09-20 随 legacy 退役（D1）。
 const pdmsViewerRef = shallowRef<DtxCompatViewer | null>(props.viewer);
-const roomViewerRef = shallowRef<DtxCompatViewer | null>(null);
 
 console.log('[ModelTreePanel] initial props.viewer:', props.viewer ? 'exists' : 'null');
 
 watch(
-  () => [props.viewer, activeTree.value] as const,
-  ([v, t]) => {
-    console.log('[ModelTreePanel] watch triggered, viewer:', v ? 'exists' : 'null', 'activeTree:', t);
-    pdmsViewerRef.value = t === 'pdms' ? v : null;
-    roomViewerRef.value = t === 'room' ? v : null;
+  () => props.viewer,
+  (v) => {
+    console.log('[ModelTreePanel] watch triggered, viewer:', v ? 'exists' : 'null');
+    pdmsViewerRef.value = v;
   },
   { immediate: true }
 );
 
 const pdmsTree = usePdmsOwnerTree(pdmsViewerRef);
-// 房间树仅在 tab=room 时启用，避免其副作用影响 PDMS 模型树（显隐/选中回放等）
-const roomTree = useRoomTree(roomViewerRef, computed(() => activeTree.value === 'room'));
 
 // 版本差异模式（树内差异标注）：由 MODEL_VERSION_TREE_DIFF_EVENT 事件驱动（派发方：模型版本对比面板）
 const treeDiff = useTreeVersionDiff({
@@ -85,27 +65,23 @@ setModelTreeInstance(pdmsTree);
 
 const selection = useSelectionStore();
 const toolStore = useToolStore();
-const quickViewReq = useQuickViewRequestStore();
-const roomInfoPanel = useRoomInfoPanel();
-
-const isRoomTree = computed(() => activeTree.value === 'room');
 
 // Debug: 用于排查点击 eye（显示/隐藏）导致卡死的问题。
 // - true: 禁用“显示时自动 showModelByRefno 加载/生成”，仅走树的 setVisible。
 // - false: 保持原行为。
 const DEBUG_SKIP_EYE_AUTO_GENERATE = false;
 
-const expandedIds = computed(() => (isRoomTree.value ? roomTree.expandedIds.value : pdmsTree.expandedIds.value));
-const flatRows = computed(() => (isRoomTree.value ? roomTree.flatRows.value : pdmsTree.flatRows.value));
-const filterText = computed(() => (isRoomTree.value ? roomTree.filterText.value : pdmsTree.filterText.value));
-const typeQuery = computed(() => (isRoomTree.value ? roomTree.typeQuery.value : pdmsTree.typeQuery.value));
-const filteredTypes = computed(() => (isRoomTree.value ? roomTree.filteredTypes.value : pdmsTree.filteredTypes.value));
-const searchLoading = computed(() => (isRoomTree.value ? roomTree.searchLoading.value : pdmsTree.searchLoading.value));
-const searchError = computed(() => (isRoomTree.value ? roomTree.searchError.value : pdmsTree.searchError.value));
-const searchItems = computed(() => (isRoomTree.value ? roomTree.searchItems.value : pdmsTree.searchItems.value));
+const expandedIds = computed(() => pdmsTree.expandedIds.value);
+const flatRows = computed(() => pdmsTree.flatRows.value);
+const filterText = computed(() => pdmsTree.filterText.value);
+const typeQuery = computed(() => pdmsTree.typeQuery.value);
+const filteredTypes = computed(() => pdmsTree.filteredTypes.value);
+const searchLoading = computed(() => pdmsTree.searchLoading.value);
+const searchError = computed(() => pdmsTree.searchError.value);
+const searchItems = computed(() => pdmsTree.searchItems.value);
 
 // ------- 版本差异模式：模板用扁平状态（嵌套 ref 在模板中不会自动解包） -------
-const diffActive = computed(() => treeDiff.isActive.value && !isRoomTree.value);
+const diffActive = computed(() => treeDiff.isActive.value);
 const diffFilter = treeDiff.filter;
 const diffCounts = treeDiff.counts;
 const diffVersionLabel = treeDiff.versionPairLabel;
@@ -142,51 +118,32 @@ function selectDeletedRefno(refno: string) {
 
 /** 虚拟列表实际渲染的行：差异模式下为“变更节点 + 祖先 + 幽灵节点”过滤视图 */
 const displayRows = computed<DiffFlatRow[]>(() => (
-  !isRoomTree.value && treeDiff.isActive.value ? treeDiff.rows.value : flatRows.value
+  treeDiff.isActive.value ? treeDiff.rows.value : flatRows.value
 ));
 
 function setFilter(text: string) {
-  if (isRoomTree.value) {
-    roomTree.setFilter(text);
-  } else {
-    pdmsTree.setFilter(text);
-  }
+  pdmsTree.setFilter(text);
 }
 
 function setTypeQuery(text: string) {
-  if (isRoomTree.value) {
-    roomTree.setTypeQuery(text);
-  } else {
-    pdmsTree.setTypeQuery(text);
-  }
+  pdmsTree.setTypeQuery(text);
 }
 
 function toggleType(type: string) {
-  if (isRoomTree.value) {
-    roomTree.toggleType(type);
-  } else {
-    pdmsTree.toggleType(type);
-  }
+  pdmsTree.toggleType(type);
 }
 
 function selectAllTypes() {
-  if (!isRoomTree.value) {
-    pdmsTree.selectAllTypes();
-  }
+  pdmsTree.selectAllTypes();
 }
 
 function clearAllTypes() {
-  if (isRoomTree.value) {
-    roomTree.selectedTypes.value = new Set();
-  } else {
-    pdmsTree.clearAllTypes();
-  }
+  pdmsTree.clearAllTypes();
 }
 
 const customTypeInput = ref('');
 
 function addCustomType() {
-  if (isRoomTree.value) return;
   const success = pdmsTree.addCustomType(customTypeInput.value);
   if (success) {
     customTypeInput.value = '';
@@ -194,19 +151,15 @@ function addCustomType() {
 }
 
 function removeCustomType(type: string) {
-  if (!isRoomTree.value) {
-    pdmsTree.removeCustomType(type);
-  }
+  pdmsTree.removeCustomType(type);
 }
 
-const customTypes = computed(() => {
-  return isRoomTree.value ? [] : Array.from(pdmsTree.customTypes.value);
-});
+const customTypes = computed(() => Array.from(pdmsTree.customTypes.value));
 
 const loadingVisibleIds = ref<Set<string>>(new Set());
 
 function setNodeLoading(id: string, loading: boolean) {
-  const normalizedId = isRoomTree.value ? id : normalizeRefnoKeyLike(id);
+  const normalizedId = normalizeRefnoKeyLike(id);
   if (!normalizedId) return;
   const next = new Set(loadingVisibleIds.value);
   if (loading) {
@@ -218,19 +171,14 @@ function setNodeLoading(id: string, loading: boolean) {
 }
 
 function isNodeLoading(id: string) {
-  return loadingVisibleIds.value.has(isRoomTree.value ? id : normalizeRefnoKeyLike(id));
+  return loadingVisibleIds.value.has(normalizeRefnoKeyLike(id));
 }
 
 function toggleExpand(id: string) {
-  if (isRoomTree.value) {
-    roomTree.toggleExpand(id);
-  } else {
-    pdmsTree.toggleExpand(id);
-  }
+  pdmsTree.toggleExpand(id);
 }
 
 function getCheckState(id: string) {
-  if (isRoomTree.value) return roomTree.getCheckState(id);
   const state = pdmsTree.getCheckState(id);
   if (state === 'unchecked') return state;
   if (!isRefnoLike(id)) return state;
@@ -254,7 +202,7 @@ watch(
 
 async function setVisible(id: string, visible: boolean) {
   // Only auto-generate for PDMS tree and when trying to show (visible = true)
-  const shouldTryGenerate = !DEBUG_SKIP_EYE_AUTO_GENERATE && !isRoomTree.value && visible && modelGenerationState.value;
+  const shouldTryGenerate = !DEBUG_SKIP_EYE_AUTO_GENERATE && visible && modelGenerationState.value;
 
   if (shouldTryGenerate) {
     // Check if it looks like a refno (123/456 or 123_456)
@@ -281,20 +229,10 @@ async function setVisible(id: string, visible: boolean) {
   }
 
   // Call the original setVisible logic
-  if (isRoomTree.value) {
-    roomTree.setVisible(id, visible);
-  } else {
-    await pdmsTree.setVisible(id, visible);
-  }
+  await pdmsTree.setVisible(id, visible);
 }
 
 function selectByRowIndex(index: number, ev: MouseEvent) {
-  if (isRoomTree.value) {
-    roomTree.selectByRowIndex(index, ev);
-    handleSelectionChanged(roomTree.selectedIds.value);
-    return;
-  }
-
   if (treeDiff.isActive.value) {
     const row = displayRows.value[index];
     if (!row) return;
@@ -323,16 +261,10 @@ function isRefnoLike(id: string): boolean {
 }
 
 function treeNodeRefno(id: string): string {
-  if (isRoomTree.value) {
-    const node = roomTree.nodesById.value[id];
-    return node?.refno || (isRefnoLike(id) ? normalizeRefnoKeyLike(id) : '');
-  }
   return isRefnoLike(id) ? normalizeRefnoKeyLike(id) : '';
 }
 
 function handleSelectionChanged(selected: Set<string>) {
-  // 约定：全局 selection（属性面板/查询等）只绑定 PDMS refno，房间树 id 不写入
-  if (isRoomTree.value) return;
   internalTreeSelection = true;
   const normalized = Array.from(selected)
     .filter((id) => !!id && isRefnoLike(id))
@@ -356,31 +288,19 @@ function handleSelectionChanged(selected: Set<string>) {
 }
 
 function flyTo(id: string) {
-  if (isRoomTree.value) {
-    roomTree.flyTo(id);
-  } else {
-    void pdmsTree.flyTo(id);
-  }
+  void pdmsTree.flyTo(id);
 }
 
 function isolateXray(id: string) {
-  if (isRoomTree.value) {
-    roomTree.isolateXray(id);
-  } else {
-    void pdmsTree.isolateXray(id);
-  }
+  void pdmsTree.isolateXray(id);
 }
 
 function clearXrayScene() {
-  if (isRoomTree.value) {
-    roomTree.clearXray();
-  } else {
-    pdmsTree.clearXray();
-  }
+  pdmsTree.clearXray();
 }
 
 function isTypeSelected(type: string) {
-  return isRoomTree.value ? roomTree.selectedTypes.value.has(type) : pdmsTree.selectedTypes.value.has(type);
+  return pdmsTree.selectedTypes.value.has(type);
 }
 
 function isExpanded(id: string) {
@@ -388,7 +308,7 @@ function isExpanded(id: string) {
 }
 
 function isSelected(id: string) {
-  return isRoomTree.value ? roomTree.selectedIds.value.has(id) : pdmsTree.selectedIds.value.has(id);
+  return pdmsTree.selectedIds.value.has(id);
 }
 
 function rowAt(index: number) {
@@ -409,287 +329,6 @@ const contextNodeId = ref<string | null>(null);
 const searchPopoverOpen = ref(false);
 const typePopoverOpen = ref(false);
 
-// ========================
-// 类型筛选：查看过滤结果（分组面板）
-// - 通过后端 /api/search/pdms（Meilisearch）做可分页查询
-// - 支持“按 SITE(dbnum) 分组”开关
-// ========================
-type FilterGroupState = {
-  open: boolean;
-  total: number;
-  offset: number;
-  items: PdmsSearchItem[];
-  loading: boolean;
-  error: string | null;
-};
-
-type SiteGroupState = {
-  open: boolean;
-  total: number;
-  nounCounts: Record<string, number>;
-  nounLoading: boolean;
-  nounError: string | null;
-  nounGroups: Record<string, FilterGroupState>;
-};
-
-const filterResultsOpen = ref(false);
-const filterResultsGroupBySite = ref(true);
-const filterResultsLoading = ref(false);
-const filterResultsError = ref<string | null>(null);
-const filterResultsFacet = ref<Record<string, Record<string, number>> | null>(null);
-
-const nounGroups = ref<Record<string, FilterGroupState>>({});
-const siteGroups = ref<Record<string, SiteGroupState>>({});
-
-const FILTER_RESULTS_PAGE_SIZE = 200;
-
-function selectedPdmsNouns(): string[] {
-  if (isRoomTree.value) return [];
-  return Array.from(pdmsTree.selectedTypes.value).map((t) => String(t || '').trim().toUpperCase()).filter(Boolean);
-}
-
-function currentKeyword(): string | undefined {
-  const q = String(filterText.value || '').trim();
-  return q ? q : undefined;
-}
-
-async function refreshFilterResultsFacets() {
-  if (isRoomTree.value) return;
-
-  const nouns = selectedPdmsNouns();
-  if (nouns.length === 0) {
-    filterResultsFacet.value = null;
-    nounGroups.value = {};
-    siteGroups.value = {};
-    return;
-  }
-
-  filterResultsLoading.value = true;
-  filterResultsError.value = null;
-  try {
-    const resp = await pdmsSearch({
-      keyword: currentKeyword(),
-      nouns,
-      offset: 0,
-      limit: 1,
-      facets: true,
-    });
-    if (!resp.success) {
-      filterResultsFacet.value = null;
-      filterResultsError.value = resp.error_message || 'search failed';
-      return;
-    }
-
-    filterResultsFacet.value = resp.facet_distribution || null;
-
-    const nounFacet = (resp.facet_distribution && resp.facet_distribution['noun']) || {};
-    const siteFacet = (resp.facet_distribution && resp.facet_distribution['site']) || {};
-
-    // 初始化 nounGroups（用于“无 SITE 分组”模式）
-    const nextNounGroups: Record<string, FilterGroupState> = {};
-    for (const noun of nouns) {
-      nextNounGroups[noun] = {
-        open: false,
-        total: Number(nounFacet[noun] ?? 0),
-        offset: 0,
-        items: [],
-        loading: false,
-        error: null,
-      };
-    }
-    nounGroups.value = nextNounGroups;
-
-    // 初始化 siteGroups（用于“按 SITE 分组”模式）
-    const nextSiteGroups: Record<string, SiteGroupState> = {};
-    const sites = Object.keys(siteFacet).sort((a, b) => {
-      const na = Number(a);
-      const nb = Number(b);
-      if (Number.isFinite(na) && Number.isFinite(nb)) return na - nb;
-      return a.localeCompare(b);
-    });
-    for (const site of sites) {
-      nextSiteGroups[site] = {
-        open: false,
-        total: Number(siteFacet[site] ?? 0),
-        nounCounts: {},
-        nounLoading: false,
-        nounError: null,
-        nounGroups: {},
-      };
-    }
-    siteGroups.value = nextSiteGroups;
-  } catch (e) {
-    filterResultsFacet.value = null;
-    filterResultsError.value = e instanceof Error ? e.message : String(e);
-  } finally {
-    filterResultsLoading.value = false;
-  }
-}
-
-async function openFilterResults() {
-  if (isRoomTree.value) return;
-  filterResultsOpen.value = true;
-  searchPopoverOpen.value = false;
-  typePopoverOpen.value = false;
-  await refreshFilterResultsFacets();
-}
-
-function closeFilterResults() {
-  filterResultsOpen.value = false;
-}
-
-async function loadNounGroup(noun: string, opts?: { site?: string; append?: boolean }) {
-  if (isRoomTree.value) return;
-
-  const append = opts?.append ?? false;
-  const site = opts?.site;
-
-  const key = String(noun || '').trim().toUpperCase();
-  if (!key) return;
-
-  const group = site
-    ? siteGroups.value[site]?.nounGroups?.[key]
-    : nounGroups.value[key];
-  if (!group) return;
-
-  group.loading = true;
-  group.error = null;
-  try {
-    const resp = await pdmsSearch({
-      keyword: currentKeyword(),
-      nouns: [key],
-      site,
-      offset: append ? group.offset : 0,
-      limit: FILTER_RESULTS_PAGE_SIZE,
-      facets: false,
-    });
-    if (!resp.success) {
-      group.error = resp.error_message || 'search failed';
-      return;
-    }
-
-    const nextItems = Array.isArray(resp.items) ? resp.items : [];
-    group.total = typeof resp.total === 'number' ? resp.total : group.total;
-    group.items = append ? group.items.concat(nextItems) : nextItems;
-    group.offset = group.items.length;
-  } catch (e) {
-    group.error = e instanceof Error ? e.message : String(e);
-  } finally {
-    group.loading = false;
-  }
-}
-
-async function toggleNounGroupOpen(noun: string) {
-  const key = String(noun || '').trim().toUpperCase();
-  const group = nounGroups.value[key];
-  if (!group) return;
-  group.open = !group.open;
-  if (group.open && group.items.length === 0 && !group.loading) {
-    await loadNounGroup(key);
-  }
-}
-
-async function toggleSiteGroupOpen(site: string) {
-  const s = String(site || '').trim();
-  const siteGroup = siteGroups.value[s];
-  if (!siteGroup) return;
-
-  siteGroup.open = !siteGroup.open;
-  if (!siteGroup.open) return;
-
-  // 首次展开：加载该 site 下的 noun facet（用于二级分组计数）
-  if (Object.keys(siteGroup.nounCounts).length === 0 && !siteGroup.nounLoading) {
-    const nouns = selectedPdmsNouns();
-    siteGroup.nounLoading = true;
-    siteGroup.nounError = null;
-    try {
-      const resp = await pdmsSearch({
-        keyword: currentKeyword(),
-        nouns,
-        site: s,
-        offset: 0,
-        limit: 1,
-        facets: true,
-      });
-      if (!resp.success) {
-        siteGroup.nounError = resp.error_message || 'search failed';
-        return;
-      }
-      const nounFacet = (resp.facet_distribution && resp.facet_distribution['noun']) || {};
-      siteGroup.nounCounts = nounFacet;
-
-      const next: Record<string, FilterGroupState> = {};
-      for (const noun of nouns) {
-        next[noun] = {
-          open: false,
-          total: Number(nounFacet[noun] ?? 0),
-          offset: 0,
-          items: [],
-          loading: false,
-          error: null,
-        };
-      }
-      siteGroup.nounGroups = next;
-    } catch (e) {
-      siteGroup.nounError = e instanceof Error ? e.message : String(e);
-    } finally {
-      siteGroup.nounLoading = false;
-    }
-  }
-}
-
-async function toggleSiteNounGroupOpen(site: string, noun: string) {
-  const s = String(site || '').trim();
-  const key = String(noun || '').trim().toUpperCase();
-  const siteGroup = siteGroups.value[s];
-  const group = siteGroup?.nounGroups?.[key];
-  if (!siteGroup || !group) return;
-
-  group.open = !group.open;
-  if (group.open && group.items.length === 0 && !group.loading) {
-    await loadNounGroup(key, { site: s });
-  }
-}
-
-let filterResultsRefreshTimer: number | null = null;
-
-// 面板打开时：随筛选条件变化自动刷新分组（轻量防抖）
-watch(
-  () => [
-    filterResultsOpen.value,
-    filterResultsGroupBySite.value,
-    String(filterText.value || '').trim(),
-    isRoomTree.value ? '' : Array.from(pdmsTree.selectedTypes.value).sort().join('|'),
-  ] as const,
-  ([open]) => {
-    if (!open) return;
-    if (filterResultsRefreshTimer !== null) {
-      clearTimeout(filterResultsRefreshTimer);
-    }
-    filterResultsRefreshTimer = window.setTimeout(() => {
-      filterResultsRefreshTimer = null;
-      void refreshFilterResultsFacets();
-    }, 250);
-  },
-);
-
-// 切换 tab 时关闭结果面板，避免“PDMS 结果”挂在 ROOM 上
-watch(
-  () => activeTree.value,
-  () => {
-    filterResultsOpen.value = false;
-  },
-);
-
-watch(
-  () => quickViewReq.request.value,
-  (req) => {
-    if (!req || req.kind !== 'show_selected_room_models') return;
-    quickViewReq.clear();
-    void showSelectedRoomModelsFromQuickRequest();
-  },
-);
-
 const rowVirtualizer = useVirtualizer({
   count: displayRows.value.length,
   getScrollElement: () => containerRef.value,
@@ -697,7 +336,7 @@ const rowVirtualizer = useVirtualizer({
   overscan: 10
 });
 
-const activeRootId = computed(() => (isRoomTree.value ? roomTree.rootIds.value[0] : pdmsTree.rootIds.value[0]));
+const activeRootId = computed(() => pdmsTree.rootIds.value[0]);
 
 let selectionSyncSeq = 0;
 let internalTreeSelection = false;
@@ -705,7 +344,7 @@ let internalTreeSelection = false;
 watch(
   () => toolStore.toolMode.value,
   (mode, prev) => {
-    if (mode === 'measure_object_to_object' || prev !== 'measure_object_to_object' || isRoomTree.value) return;
+    if (mode === 'measure_object_to_object' || prev !== 'measure_object_to_object') return;
     if (pdmsTree.selectedIds.value.size <= 1) return;
 
     const active = normalizeRefnoKeyLike(selection.selectedRefno.value || Array.from(pdmsTree.selectedIds.value)[0] || '');
@@ -719,8 +358,8 @@ watch(
 );
 
 watch(
-  () => [selection.selectedRefno.value, activeTree.value, activeRootId.value] as const,
-  ([refno, tab]) => {
+  () => [selection.selectedRefno.value, activeRootId.value] as const,
+  ([refno]) => {
     selectionSyncSeq++;
     const seq = selectionSyncSeq;
 
@@ -729,8 +368,6 @@ watch(
       internalTreeSelection = false;
       return;
     }
-
-    if (tab === 'room') return;
 
     if (!refno || !isRefnoLike(refno)) {
       if (pdmsTree.selectedIds.value.size > 0) {
@@ -811,7 +448,6 @@ function getPdmsTreeE2ESnapshot(rawRefno?: string) {
     : displayRows.value.slice(0, 80);
 
   return {
-    activeTree: activeTree.value,
     rootIds: [...pdmsTree.rootIds.value],
     expandedIds: [...pdmsTree.expandedIds.value],
     selectedIds: [...pdmsTree.selectedIds.value],
@@ -850,7 +486,6 @@ async function focusPdmsTreeRefnoForE2E(rawRefno: string) {
   let error: string | null = null;
 
   try {
-    activeTree.value = 'pdms';
     await nextTick();
     await pdmsTree.focusNodeById(targetId, {
       flyTo: false,
@@ -903,8 +538,7 @@ function openContextMenu(nodeId: string, ev: MouseEvent) {
   ev.preventDefault();
   ev.stopPropagation();
   // 幽灵节点（已删除、不在当前树中）仅展示，不提供右键操作
-  if (!isRoomTree.value
-    && treeDiff.isActive.value
+  if (treeDiff.isActive.value
     && !pdmsTree.nodesById.value[normalizeRefnoKeyLike(nodeId)]) {
     return;
   }
@@ -967,21 +601,17 @@ onMounted(async () => {
     
     try {
       // 1. 先在树中定位
-      if (isRoomTree.value) {
-        await roomTree.focusNodeById(refno);
-      } else {
-        await pdmsTree.focusNodeById(refno);
-      }
+      await pdmsTree.focusNodeById(refno);
       
       console.log('[ModelTreePanel] Node located in tree:', refno);
 
       // 1.5. 设置全局 selection 触发树滚动居中
-      if (!isRoomTree.value && isRefnoLike(refno)) {
+      if (isRefnoLike(refno)) {
         selection.setSelectedRefno(normalizeRefnoKeyLike(refno));
       }
       
       // 2. 然后调用 show-by-refno 加载模型
-      if (!isRoomTree.value && isRefnoLike(refno) && modelGenerationState.value) {
+      if (isRefnoLike(refno) && modelGenerationState.value) {
         const exists = modelGenerationState.value.checkRefnoExists(refno);
         
         if (!exists) {
@@ -1035,12 +665,10 @@ onUnmounted(() => {
 });
 
 const typesButtonLabel = computed(() => {
-  const size = isRoomTree.value ? roomTree.selectedTypes.value.size : pdmsTree.selectedTypes.value.size;
+  const size = pdmsTree.selectedTypes.value.size;
   if (size === 0) return '类型：全部';
   if (size === 1) {
-    const only = isRoomTree.value
-      ? Array.from(roomTree.selectedTypes.value)[0]
-      : Array.from(pdmsTree.selectedTypes.value)[0];
+    const only = Array.from(pdmsTree.selectedTypes.value)[0];
     return `类型：${only}`;
   }
   return `类型：已选 ${size} 个`;
@@ -1081,18 +709,13 @@ function onTouchStartStop(ev: TouchEvent) {
 function clearFilters() {
   setFilter('');
   setTypeQuery('');
-  if (isRoomTree.value) {
-    roomTree.selectedTypes.value = new Set();
-  } else {
-    pdmsTree.selectedTypes.value = new Set();
-  }
+  pdmsTree.selectedTypes.value = new Set();
 
   searchPopoverOpen.value = false;
   typePopoverOpen.value = false;
 }
 
 function getSearchItemId(item: unknown): string {
-  if (isRoomTree.value) return String((item as { id?: unknown }).id ?? '');
   return String((item as { refno?: unknown }).refno ?? '');
 }
 
@@ -1167,7 +790,6 @@ function applyTreeDiffContext(rawDetail: unknown) {
     return;
   }
 
-  activeTree.value = 'pdms';
   const resolved = treeDiff.apply({
     project: typeof detail.project === 'string' ? detail.project : undefined,
     dbnum: Number.isFinite(Number(detail.dbnum)) ? Number(detail.dbnum) : undefined,
@@ -1213,85 +835,13 @@ function locateModelVersionCompareRefno(refno: string): void {
   window.dispatchEvent(new CustomEvent(MODEL_UNIT_VERSION_COMPARE_EVENT, { detail: { action: 'focus', refno: target } }));
 }
 
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => window.setTimeout(resolve, ms));
-}
-
-async function waitForRoomTreeReady(timeoutMs = 6000): Promise<boolean> {
-  const start = Date.now();
-  while (Date.now() - start < timeoutMs) {
-    if (roomTree.rootIds.value.length > 0) return true;
-    await delay(120);
-  }
-  return roomTree.rootIds.value.length > 0;
-}
-
-function selectedRoomIdFromRoomTree(): string | null {
-  const selected = Array.from(roomTree.selectedIds.value);
-  for (const id of selected) {
-    const node = roomTree.nodesById.value[id];
-    if (node?.type === 'ROOM') return id;
-  }
-
-  for (const id of selected) {
-    const node = roomTree.nodesById.value[id];
-    const parentId = node?.parentId ?? null;
-    const parent = parentId ? roomTree.nodesById.value[parentId] : null;
-    if (parent?.type === 'ROOM') return parent.id;
-  }
-
-  return null;
-}
-
-async function showSelectedRoomModelsFromQuickRequest() {
-  const activeRoomId = activeTree.value === 'room' ? selectedRoomIdFromRoomTree() : null;
-  const selectedRefno = normalizeRefnoKeyLike(selection.selectedRefno.value || selection.selectedRefnos.value.at(-1) || '');
-  const targetRefno = activeRoomId || selectedRefno;
-
-  activeTree.value = 'room';
-  await nextTick();
-
-  const ready = await waitForRoomTreeReady();
-  if (!ready) return;
-
-  let roomId = activeRoomId;
-  if (!roomId && targetRefno) {
-    try {
-      roomId = await roomTree.focusContainingRoomForRefno(targetRefno, {
-        flyTo: false,
-        syncSceneSelection: false,
-        clearSearch: true,
-      });
-    } catch (e) {
-      if (import.meta.env.DEV) {
-        console.warn('[model-tree] focusContainingRoomForRefno failed', e);
-      }
-    }
-  }
-
-  if (!roomId) return;
-
-  roomTree.selectedIds.value = new Set([roomId]);
-  if (modelGenerationState.value) {
-    await modelGenerationState.value.showModelByRefno(roomId, { flyTo: true });
-  }
-  roomTree.isolateXray(roomId);
-  roomTree.flyTo(roomId);
-  selection.setSelectedRefno(roomId);
-  ensurePanelAndActivate('properties');
-}
-
 async function focusAndCenterInTree(id: string) {
   const seq = ++focusAndCenterSeq;
-  const targetId = isRoomTree.value ? id : normalizeRefnoKeyLike(id);
+  const targetId = normalizeRefnoKeyLike(id);
 
   try {
     // “搜索结果定位”仅需在树里展开/选中并滚动到居中；避免触发三维飞行与场景选中同步。
-    if (isRoomTree.value) {
-      await roomTree.focusNodeById(targetId, { flyTo: false, syncSceneSelection: false, clearSearch: false });
-    } else {
-      await pdmsTree.focusNodeById(targetId, { flyTo: false, syncSceneSelection: false, clearSearch: false });
-    }
+    await pdmsTree.focusNodeById(targetId, { flyTo: false, syncSceneSelection: false, clearSearch: false });
   } catch (e) {
     if (import.meta.env.DEV) {
       console.warn('[model-tree] focusAndCenterInTree failed', e);
@@ -1331,34 +881,9 @@ async function focusAndCenterInTree(id: string) {
 }
 
 async function onPickSearchItem(refno: string) {
-  const targetId = isRoomTree.value ? refno : normalizeRefnoKeyLike(refno);
+  const targetId = normalizeRefnoKeyLike(refno);
   try {
-    if (isRoomTree.value) {
-      roomTree.setFilter('');
-      const roomId = await roomTree.focusContainingRoomForRefno(targetId, {
-        flyTo: true,
-        syncSceneSelection: false,
-        clearSearch: true,
-      });
-      if (roomId) {
-        roomTree.selectedIds.value = new Set([roomId]);
-        if (modelGenerationState.value) {
-          await modelGenerationState.value.showModelByRefno(roomId, { flyTo: true });
-        }
-        roomTree.isolateXray(roomId);
-        roomTree.flyTo(roomId);
-        selection.setSelectedRefno(roomId);
-        ensurePanelAndActivate('properties');
-      } else {
-        await roomTree.focusNodeById(targetId, {
-          flyTo: true,
-          syncSceneSelection: false,
-          clearSearch: true,
-        });
-      }
-    } else {
-      await pdmsTree.focusNodeById(targetId);
-    }
+    await pdmsTree.focusNodeById(targetId);
   } catch (e) {
     if (import.meta.env.DEV) {
       console.warn('[model-tree] focusNodeById failed', e);
@@ -1412,7 +937,7 @@ async function showNode() {
   const id = contextNodeId.value;
 
   // 右键“显示”是显式操作：若是 PDMS refno，则优先触发加载并飞行聚焦。
-  if (!isRoomTree.value && isRefnoLike(id) && modelGenerationState.value && !DEBUG_SKIP_EYE_AUTO_GENERATE) {
+  if (isRefnoLike(id) && modelGenerationState.value && !DEBUG_SKIP_EYE_AUTO_GENERATE) {
     try {
       await modelGenerationState.value.showModelByRefno(id, { flyTo: true });
     } finally {
@@ -1426,7 +951,7 @@ async function showNode() {
 }
 
 async function regenerateNode() {
-  if (!contextNodeId.value || isRoomTree.value || !modelGenerationState.value) return;
+  if (!contextNodeId.value || !modelGenerationState.value) return;
   const id = normalizeRefnoKeyLike(contextNodeId.value);
   if (!isRefnoLike(id)) return;
   closeContextMenu();
@@ -1484,41 +1009,6 @@ function viewVersionHistory() {
   closeContextMenu();
 }
 
-async function showContainingRoomFromContext(showModels: boolean) {
-  if (!contextNodeId.value) return;
-
-  const targetRefno = treeNodeRefno(contextNodeId.value);
-  if (!targetRefno) return;
-  closeContextMenu();
-
-  activeTree.value = 'room';
-  await nextTick();
-
-  const ready = await waitForRoomTreeReady();
-  if (!ready) return;
-
-  const roomId = await roomTree.focusContainingRoomForRefno(targetRefno, {
-    flyTo: showModels,
-    syncSceneSelection: false,
-    clearSearch: true,
-  });
-  if (!roomId) return;
-
-  roomTree.selectedIds.value = new Set([roomId]);
-  await roomInfoPanel.openForRefno(targetRefno);
-  if (showModels && modelGenerationState.value) {
-    await modelGenerationState.value.showModelByRefno(roomId, { flyTo: true });
-    roomTree.isolateXray(roomId);
-    roomTree.flyTo(roomId);
-  }
-  selection.setSelectedRefno(roomId);
-}
-
-const contextNodeCanShowRoom = computed(() => {
-  const id = contextNodeId.value;
-  return !!id && !!treeNodeRefno(id);
-});
-
 // MBD 标注：右键菜单已移除
 
 function onSearchEnter(value: string) {
@@ -1544,18 +1034,9 @@ function onSearchEnter(value: string) {
     <div class="sticky top-0 z-20 border-b border-border/60 bg-background/95 px-3 py-2 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div class="relative flex items-center gap-2">
         <div class="flex h-8 items-center rounded-md bg-muted p-1 text-muted-foreground">
-          <button type="button"
-            class="inline-flex h-full items-center justify-center rounded-sm px-3 text-xs font-medium transition-all"
-            :class="activeTree === 'pdms' ? 'bg-background text-foreground shadow-sm' : 'hover:bg-background/50 hover:text-foreground'"
-            @click="activeTree = 'pdms'">
+          <span class="inline-flex h-full items-center justify-center rounded-sm bg-background px-3 text-xs font-medium text-foreground shadow-sm">
             PDMS
-          </button>
-          <button type="button"
-            class="inline-flex h-full items-center justify-center rounded-sm px-3 text-xs font-medium transition-all"
-            :class="activeTree === 'room' ? 'bg-background text-foreground shadow-sm' : 'hover:bg-background/50 hover:text-foreground'"
-            @click="activeTree = 'room'">
-            ROOM
-          </button>
+          </span>
         </div>
 
         <GenModelV1HealthBadge v-if="showGenModelV1Badge" />
@@ -1646,7 +1127,7 @@ function onSearchEnter(value: string) {
 
           <div class="mb-2 flex items-center justify-between">
             <span class="text-sm">{{ typesButtonLabel }}</span>
-            <div v-if="!isRoomTree" class="flex items-center gap-1">
+            <div class="flex items-center gap-1">
               <button type="button"
                 class="rounded px-2 py-0.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
                 @click="selectAllTypes">
@@ -1666,8 +1147,8 @@ function onSearchEnter(value: string) {
 
           <div class="max-h-56 overflow-auto pr-1">
             <!-- 预定义类型 -->
-            <div v-if="!isRoomTree" class="mb-1 text-xs text-muted-foreground">常用类型</div>
-            <template v-for="t in (isRoomTree ? filteredTypes : NOUN_TYPES.filter(n => !typeQuery || n.toLowerCase().includes(typeQuery.toLowerCase())))" :key="t">
+            <div class="mb-1 text-xs text-muted-foreground">常用类型</div>
+            <template v-for="t in NOUN_TYPES.filter(n => !typeQuery || n.toLowerCase().includes(typeQuery.toLowerCase()))" :key="t">
               <label class="flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-sm hover:bg-muted">
                 <input type="checkbox"
                   class="h-4 w-4"
@@ -1678,7 +1159,7 @@ function onSearchEnter(value: string) {
             </template>
 
             <!-- 自定义类型 -->
-            <template v-if="!isRoomTree && customTypes.length > 0">
+            <template v-if="customTypes.length > 0">
               <div class="mb-1 mt-2 text-xs text-muted-foreground">自定义类型</div>
               <div v-for="t in customTypes" :key="t" class="flex items-center gap-1">
                 <label class="flex flex-1 cursor-pointer items-center gap-2 rounded px-2 py-1 text-sm hover:bg-muted">
@@ -1698,7 +1179,7 @@ function onSearchEnter(value: string) {
           </div>
 
           <!-- 添加自定义类型 -->
-          <div v-if="!isRoomTree" class="mt-2 flex items-center gap-1 border-t border-border pt-2">
+          <div class="mt-2 flex items-center gap-1 border-t border-border pt-2">
             <input v-model="customTypeInput" class="h-7 flex-1 rounded-md border border-input bg-background px-2 text-sm"
               placeholder="添加自定义类型"
               @keydown.enter="addCustomType" />
@@ -1708,134 +1189,7 @@ function onSearchEnter(value: string) {
               <Plus class="h-4 w-4" />
             </button>
           </div>
-
-          <!-- 应用：打开“过滤结果分组”面板（筛选本身已即时生效） -->
-          <div v-if="!isRoomTree" class="mt-2 flex items-center justify-between border-t border-border pt-2">
-            <label class="flex items-center gap-2 text-xs text-muted-foreground">
-              <input v-model="filterResultsGroupBySite"
-                type="checkbox"
-                class="h-4 w-4" />
-              按 SITE 分组
-            </label>
-            <button type="button"
-              class="rounded-md bg-muted px-3 py-1 text-sm text-foreground hover:bg-muted/70"
-              @click="openFilterResults">
-              应用
-            </button>
-          </div>
         </div>
-      </div>
-    </div>
-
-    <!-- 过滤结果面板：按 SITE(dbnum) / noun 分组展示；单击/双击可定位到树 -->
-    <div v-if="filterResultsOpen && !isRoomTree"
-      class="mb-2 rounded-md border border-border bg-background p-2">
-      <div class="flex items-center justify-between gap-2">
-        <div class="min-w-0">
-          <div class="truncate text-sm font-medium">过滤结果（{{ filterResultsGroupBySite ? '按 SITE 分组' : '按类型分组' }}）</div>
-          <div class="truncate text-xs text-muted-foreground">
-            已选类型：{{ Array.from(pdmsTree.selectedTypes.value).join(', ') || '（无）' }}
-            <span v-if="filterText && String(filterText).trim()"> · 关键字：{{ String(filterText).trim() }}</span>
-          </div>
-        </div>
-        <button type="button"
-          class="rounded px-2 py-1 text-sm text-muted-foreground hover:bg-muted hover:text-foreground"
-          @click="closeFilterResults">
-          关闭
-        </button>
-      </div>
-
-      <div class="mt-2">
-        <div v-if="filterResultsLoading" class="text-sm text-muted-foreground">加载中...</div>
-        <div v-else-if="filterResultsError" class="text-sm text-destructive">{{ filterResultsError }}</div>
-
-        <template v-else>
-          <!-- 按类型分组 -->
-          <div v-if="!filterResultsGroupBySite" class="space-y-2">
-            <div v-for="(g, noun) in nounGroups" :key="noun" class="rounded border border-border/60">
-              <button type="button"
-                class="flex w-full items-center justify-between gap-2 px-2 py-1 text-left hover:bg-muted"
-                @click="toggleNounGroupOpen(noun)">
-                <div class="truncate text-sm">{{ noun }}</div>
-                <div class="text-xs text-muted-foreground">{{ g.total }}</div>
-              </button>
-              <div v-if="g.open" class="border-t border-border/60 p-2">
-                <div v-if="g.loading" class="text-sm text-muted-foreground">加载中...</div>
-                <div v-else-if="g.error" class="text-sm text-destructive">{{ g.error }}</div>
-                <div v-else class="max-h-56 overflow-auto">
-                  <button v-for="item in g.items"
-                    :key="item.refno"
-                    type="button"
-                    class="w-full rounded px-2 py-1 text-left text-sm hover:bg-muted"
-                    @click="onPickSearchItemClick(item.refno)"
-                    @dblclick.prevent="() => { onPickSearchItemDblClick(item.refno); filterResultsOpen = false; }">
-                    <div class="truncate">{{ item.name }}</div>
-                    <div class="-mt-0.5 truncate text-xs text-muted-foreground">{{ item.noun }} · {{ item.refno }}</div>
-                  </button>
-                  <button v-if="g.items.length < g.total"
-                    type="button"
-                    class="mt-1 w-full rounded px-2 py-1 text-sm text-muted-foreground hover:bg-muted hover:text-foreground"
-                    @click="loadNounGroup(noun, { append: true })">
-                    查看更多（{{ g.items.length }}/{{ g.total }}）
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- 按 SITE 分组 -->
-          <div v-else class="space-y-2">
-            <div v-for="(sg, site) in siteGroups" :key="site" class="rounded border border-border/60">
-              <button type="button"
-                class="flex w-full items-center justify-between gap-2 px-2 py-1 text-left hover:bg-muted"
-                @click="toggleSiteGroupOpen(site)">
-                <div class="truncate text-sm">SITE {{ site }}</div>
-                <div class="text-xs text-muted-foreground">{{ sg.total }}</div>
-              </button>
-
-              <div v-if="sg.open" class="border-t border-border/60 p-2">
-                <div v-if="sg.nounLoading" class="text-sm text-muted-foreground">加载分组中...</div>
-                <div v-else-if="sg.nounError" class="text-sm text-destructive">{{ sg.nounError }}</div>
-
-                <div v-else class="space-y-2">
-                  <div v-for="(g, noun) in sg.nounGroups" :key="`${site}_${noun}`" class="rounded border border-border/40">
-                    <button type="button"
-                      class="flex w-full items-center justify-between gap-2 px-2 py-1 text-left hover:bg-muted"
-                      @click="toggleSiteNounGroupOpen(site, noun)">
-                      <div class="truncate text-sm">{{ noun }}</div>
-                      <div class="text-xs text-muted-foreground">{{ g.total }}</div>
-                    </button>
-                    <div v-if="g.open" class="border-t border-border/40 p-2">
-                      <div v-if="g.loading" class="text-sm text-muted-foreground">加载中...</div>
-                      <div v-else-if="g.error" class="text-sm text-destructive">{{ g.error }}</div>
-                      <div v-else class="max-h-48 overflow-auto">
-                        <button v-for="item in g.items"
-                          :key="item.refno"
-                          type="button"
-                          class="w-full rounded px-2 py-1 text-left text-sm hover:bg-muted"
-                          @click="onPickSearchItemClick(item.refno)"
-                          @dblclick.prevent="() => { onPickSearchItemDblClick(item.refno); filterResultsOpen = false; }">
-                          <div class="truncate">{{ item.name }}</div>
-                          <div class="-mt-0.5 truncate text-xs text-muted-foreground">{{ item.noun }} · {{ item.refno }}</div>
-                        </button>
-                        <button v-if="g.items.length < g.total"
-                          type="button"
-                          class="mt-1 w-full rounded px-2 py-1 text-sm text-muted-foreground hover:bg-muted hover:text-foreground"
-                          @click="loadNounGroup(noun, { site, append: true })">
-                          查看更多（{{ g.items.length }}/{{ g.total }}）
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div v-if="Object.keys(siteGroups).length === 0" class="text-sm text-muted-foreground">
-              无结果
-            </div>
-          </div>
-        </template>
       </div>
     </div>
 
@@ -1949,7 +1303,7 @@ function onSearchEnter(value: string) {
           @click="hideNode">
           隐藏
         </button>
-        <button v-if="!isRoomTree && contextNodeId && isRefnoLike(contextNodeId)" type="button"
+        <button v-if="contextNodeId && isRefnoLike(contextNodeId)" type="button"
           data-testid="model-tree-regenerate-model"
           :data-refno="contextNodeId"
           class="w-full rounded px-2 py-1 text-left text-sm text-warning hover:bg-muted"
@@ -1973,19 +1327,6 @@ function onSearchEnter(value: string) {
           @click="viewVersionHistory">
           查看历史版本
         </button>
-        <template v-if="contextNodeCanShowRoom">
-          <div class="my-1 h-px bg-border" />
-          <button type="button"
-            class="w-full rounded px-2 py-1 text-left text-sm hover:bg-muted"
-            @click="showContainingRoomFromContext(false)">
-            查看所在房间信息
-          </button>
-          <button type="button"
-            class="w-full rounded px-2 py-1 text-left text-sm hover:bg-muted"
-            @click="showContainingRoomFromContext(true)">
-            显示所在房间模型
-          </button>
-        </template>
       </div>
     </Teleport>
 

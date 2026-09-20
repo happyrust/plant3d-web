@@ -6,31 +6,21 @@ import { ReferenceFrameResolver } from './referenceFrameResolver';
 import { GenModelV1ApiError } from '@/api/genModelV1Api';
 
 /**
- * The port's **default** lookups follow the active model source:
- * - `gen-model-v1`: world placement from `element/ptset` (`world_transform`, column-major mm),
- *   owner + noun from the tree node (one shared request per refno);
- * - `legacy`: `:3100 /api/pdms/transform` as before.
+ * The port's **default** lookups: world placement from gen-model-v1 `element/ptset` (`world_transform`,
+ * column-major mm), owner + noun from the tree node (one shared request per refno).
+ * (The `legacy` `:3100 /api/pdms/transform` branch was retired on 2026-09-20.)
  */
 const state = vi.hoisted(() => ({
-  kind: 'gen-model-v1' as 'legacy' | 'gen-model-v1',
   ptset: vi.fn<(req: { refno: string }) => Promise<unknown>>(),
   node: vi.fn<(refno: string) => Promise<unknown>>(),
-  legacyTransform: vi.fn<(refno: string) => Promise<unknown>>(),
 }));
 
-vi.mock('@/model-source/kind', () => ({
-  getModelSourceKind: () => state.kind,
-}));
 vi.mock('@/model-source', () => ({
   getModelSource: () => ({ tree: { node: state.node } }),
 }));
 vi.mock('@/api/genModelV1Api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api/genModelV1Api')>();
   return { ...actual, genModelV1ElementPtset: state.ptset };
-});
-vi.mock('@/api/genModelPdmsAttrApi', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/api/genModelPdmsAttrApi')>();
-  return { ...actual, pdmsGetTransform: state.legacyTransform };
 });
 
 /** EQUI 24381/109581 on gen-model `:8024`: ORI 0,0,-25 composed with its ZONE → 25° about Z, mm translation. */
@@ -62,10 +52,8 @@ function nodeResponse(refno: string, noun: string, owner: string | null) {
 
 describe('reference-frame port · default lookups follow the model source', () => {
   beforeEach(() => {
-    state.kind = 'gen-model-v1';
     state.ptset.mockReset();
     state.node.mockReset();
-    state.legacyTransform.mockReset();
   });
   afterEach(() => {
     vi.clearAllMocks();
@@ -96,7 +84,6 @@ describe('reference-frame port · default lookups follow the model source', () =
     // The transform lookup (owner) and the type lookup (noun) share one tree-node request.
     expect(state.node).toHaveBeenCalledTimes(1);
     expect(state.node).toHaveBeenCalledWith('24381_109581');
-    expect(state.legacyTransform).not.toHaveBeenCalled();
   });
 
   it('gen-model-v1: Owner mode walks CE → tree-node owner → that element\'s ptset placement', async () => {
@@ -138,7 +125,6 @@ describe('reference-frame port · default lookups follow the model source', () =
     state.ptset.mockRejectedValueOnce(new Error('gen-model offline'));
     const offline = await port.elementByRefno('24381_109581');
     expect(offline).toMatchObject({ ok: false, reason: 'unavailable' });
-    expect(state.legacyTransform).not.toHaveBeenCalled();
   });
 
   it('gen-model-v1: a missing tree node only costs the owner / noun, not the frame', async () => {
@@ -152,24 +138,4 @@ describe('reference-frame port · default lookups follow the model source', () =
     expect(frame.value.provenance.resolvedOwnerRefno).toBeNull();
   });
 
-  it('legacy: keeps the :3100 /api/pdms/transform contract and never touches gen-model', async () => {
-    state.kind = 'legacy';
-    state.legacyTransform.mockResolvedValue({
-      success: true,
-      refno: '24381_100',
-      world_transform: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 1000, 2000, 3000, 1],
-      owner: '24381/10',
-    });
-    state.node.mockImplementation(async (refno) => nodeResponse(refno, 'EQUI', '24381/10'));
-    const port = createPdmsTransformReferenceFramePort({ currentElementRefno: () => null });
-    const frame = await new ReferenceFrameResolver(port).resolve('=24381/100');
-    expect(frame.ok).toBe(true);
-    if (!frame.ok) throw new Error(frame.error.message);
-    expect(frame.value.origin).toEqual([1, 2, 3]);
-    expect(frame.value.noun).toBe('EQUI');
-    expect(frame.value.provenance.resolvedOwnerRefno).toBe('24381_10');
-    expect(frame.value.provenance.element?.source).toBe('pdms-transform-api');
-    expect(state.legacyTransform).toHaveBeenCalledWith('24381_100');
-    expect(state.ptset).not.toHaveBeenCalled();
-  });
 });

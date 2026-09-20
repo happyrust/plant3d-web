@@ -1,6 +1,6 @@
 import { computed, ref, shallowRef, watch } from 'vue';
 
-import type { TreeNodeDto } from '@/api/genModelE3dApi';
+import type { TreeNodeDto } from '@/api/genModelE3dTypes';
 import type { CheckState, FlatRow, TreeNode } from '@/composables/useModelTree';
 import type { DtxCompatViewer } from '@/viewer/dtx/DtxCompatViewer';
 

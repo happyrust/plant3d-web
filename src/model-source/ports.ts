@@ -10,9 +10,9 @@
  * - `SpatialSource`：抽屉「范围 / 距离查询」的邻近查询（2026-09-13 加入，见下）；
  * - `ModelVersionSource`：版本对比的「模型版本」列表 / 几何（2026-09-18 加入，ADR 0065；legacy 侧同日退役，只剩退役提示）。
  *
- * 接口形状**故意等于**现有 legacy 函数的形状（`NodeResponse` / `ChildrenResponse` / `Map<string, InstanceEntry[]>` …），
- * 这样 `legacy` 适配器是零逻辑的委托，大量 `*.test.ts` 依赖的旧函数签名一个都不动；`genModelV1` 适配器
- * 负责把 `EleTreeNode` / `GeomInstQuery` 映射成这些形状（P2 / P3）。
+ * 接口形状沿用 legacy 时代的函数形状（`NodeResponse` / `ChildrenResponse` / `Map<string, InstanceEntry[]>` …），
+ * `genModelV1` 适配器负责把 `EleTreeNode` / `GeomInstQuery` 映射成这些形状（P2 / P3）。
+ * legacy 适配器（旧后端 `:3100` + parquet / DuckDB-WASM）已于 2026-09-20 退役，只剩 gen-model-v1 一种源。
  *
  * 这里只有类型，没有运行时代码。
  */
@@ -40,20 +40,54 @@ import type {
   SpatialTreeLeafSelector,
   SpatialTreeResult,
 } from '@/api/genModelSpatialApi';
-import type { PrimitiveKeyPointCandidate } from '@/composables/useDbnoInstancesParquetLoader';
 import type { InstanceEntry } from '@/utils/instances/instanceManifest';
 
-/** 数据源种类。`legacy` = 旧后端 `:3100` + parquet / DuckDB-WASM；`gen-model-v1` = gen-model `/api/v1`。 */
-export type ModelSourceKind = 'legacy' | 'gen-model-v1';
+/**
+ * 数据源种类。只剩 `gen-model-v1`（gen-model `/api/v1`）：`legacy`（旧后端 `:3100` + parquet / DuckDB-WASM）
+ * 2026-09-20 随生产切换退役，`?model_source=` / `VITE_MODEL_SOURCE` 开关一并删除。
+ */
+export type ModelSourceKind = 'gen-model-v1';
 
-export const MODEL_SOURCE_KINDS: readonly ModelSourceKind[] = ['legacy', 'gen-model-v1'];
+export const MODEL_SOURCE_KINDS: readonly ModelSourceKind[] = ['gen-model-v1'];
+
+/** 缺省（也是唯一）数据源。2026-09-09 翻到 `gen-model-v1`，2026-09-20 legacy 退役后不再有第二个值。 */
+export const DEFAULT_MODEL_SOURCE_KIND: ModelSourceKind = 'gen-model-v1';
 
 /**
- * 缺省数据源。2026-09-09 起为 `gen-model-v1`（收口计划 2026-09-09 D8：数据级对拍 v1 ⊇ legacy + 浏览器 / records
- * 三类节点逐条相等，母计划 §8.13）；`legacy` 经 `?model_source=legacy` / `VITE_MODEL_SOURCE=legacy` 仍可切回，
- * 开关保留一个发布周期。
+ * 测量捕捉的基本体 / PLINE 语义关键点候选（世界坐标 mm，已按 world_transform × geo_local 折叠）。
+ * 原先定义在 legacy 的 parquet loader 里（`primitive_keypoints.parquet` 的行形状），2026-09-20 随 legacy 退役挪到端口：
+ * gen-model-v1 的 `element/plines` 起 / 终点也按这个形状给（`keypointSource.ts`），测量工具只认这一种。
  */
-export const DEFAULT_MODEL_SOURCE_KIND: ModelSourceKind = 'gen-model-v1';
+export type PrimitiveKeyPointCandidate = {
+  id: string;
+  refno: string;
+  objectId: string;
+  geoHash: string;
+  geoIndex: number;
+  keypointIndex: number;
+  kind: string;
+  source: string;
+  label?: string;
+  local: [number, number, number];
+  world: [number, number, number];
+  hasDir: boolean;
+  dir: [number, number, number] | null;
+  /**
+   * PLINE 端点（`kind` `pline_start` / `pline_end`）：E3D `PLSTCUT / PLENCUT`——这一端按 `DRNS / DRNE`
+   * 斜切后的位置（世界系，同 `world`）；平头端面没有。Pick Settings「Pline End Position = Cut」时用它当端点。
+   */
+  plineCut?: [number, number, number] | null;
+  circle?: {
+    center: [number, number, number];
+    rim: [number, number, number];
+    normal: [number, number, number];
+  };
+  arc?: {
+    center: [number, number, number];
+    rim: [number, number, number];
+    normal: [number, number, number];
+  };
+};
 
 export type SubtreeRefnosParams = {
   includeSelf?: boolean;
@@ -450,8 +484,7 @@ export type ModelNodeDiffSummary = {
 /**
  * 版本对比取数（ADR 0065，plan `docs/plans/2026-09-18-model-version-compare-gen-model-v1-migration-plan.md` §2）。
  *
- * - `gen-model-v1`：`GET /api/v1/model/versions` + `model/history/generate | query`（`genModelV1/versionSource.ts`）；
- * - `legacy`：已退役（2026-09-18，plan §7），两个方法都抛 `LegacyModelVersionsRetiredError`。
+ * - `gen-model-v1`：`GET /api/v1/model/versions` + `model/history/generate | query`（`genModelV1/versionSource.ts`）。
  * 面板与 ViewerPanel 只认 `ModelVersion` / `ModelVersionGeometry`。「最新环境模型」= 打开对比时视口里已加载的该 dbnum
  * 模型（CONTEXT，Q12），刷新环境走页面级开关下的 records + forceRefresh，不经这里。
  */

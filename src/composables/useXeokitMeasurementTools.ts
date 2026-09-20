@@ -57,10 +57,9 @@ import { useXeokitMeasurementStyleStore } from './useXeokitMeasurementStyleStore
 import { getXeokitOverlayPalette } from './xeokitMeasurementUi';
 
 import type { UseAnnotationThreeReturn } from './useAnnotationThree';
-import type { PrimitiveKeyPointCandidate } from './useDbnoInstancesParquetLoader';
 import type { PtsetChildrenResponse, PtsetResponse } from '@/api/genModelPdmsAttrApi';
 import type { DimensionSystem, ExternalDimensionRecord } from '@/dimension';
-import type { PlineSnapPointCandidate, PrimitiveKeypointsResult } from '@/model-source/ports';
+import type { PlineSnapPointCandidate, PrimitiveKeyPointCandidate, PrimitiveKeypointsResult } from '@/model-source/ports';
 import type { DTXLayer, DTXSelectionController } from '@/utils/three/dtx';
 import type { DtxCompatViewer } from '@/viewer/dtx/DtxCompatViewer';
 import type { DtxViewer } from '@/viewer/dtx/DtxViewer';

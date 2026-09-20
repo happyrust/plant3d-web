@@ -9,7 +9,7 @@ import type {
   ReferenceFrameElementData,
 } from '@/measurement/reference-frame/types';
 
-import { pdmsGetTransform, type TransformResponse } from '@/api/genModelPdmsAttrApi';
+import type { TransformResponse } from '@/api/genModelPdmsAttrApi';
 import {
   deriveSectionBasisFromPlines,
   type SectionPlineSample,
@@ -17,17 +17,16 @@ import {
 import { normalizeReferenceFrameRefno } from '@/measurement/reference-frame/referenceFrameResolver';
 
 /**
- * What a transform lookup hands back: the legacy `/api/pdms/transform` contract, optionally
- * naming where it came from (`source`) so the frame provenance can tell the two backends apart.
+ * What a transform lookup hands back: the `/api/pdms/transform`-shaped contract inherited from the
+ * retired legacy backend, optionally naming where it came from (`source`) for the frame provenance.
  */
 export type ReferenceFrameTransformResponse = TransformResponse & Readonly<{ source?: string }>;
 
 export type PdmsTransformReferenceFramePortOptions = Readonly<{
   currentElementRefno: () => MaybePromise<string | null>;
   /**
-   * Element world placement lookup. Defaults to the active model source: legacy `:3100`
-   * `/api/pdms/transform`; gen-model-v1 `element/ptset` (`world_transform`, column-major mm) with
-   * the owner taken from the tree node.
+   * Element world placement lookup. Defaults to gen-model-v1 `element/ptset` (`world_transform`,
+   * column-major mm) with the owner taken from the tree node.
    */
   fetchTransform?: (refno: string) => Promise<ReferenceFrameTransformResponse>;
   /**
@@ -57,14 +56,9 @@ type TransformAdaptOptions = Readonly<{
   sectionBasis?: ReferenceFrameBasis | null;
 }>;
 
-/**
- * Default p-line lookup: gen-model-v1 `element/plines`. Only that source has section offsets
- * (legacy p-lines come from parquet without them), so under `legacy` this resolves to `null`.
- */
+/** Default p-line lookup: gen-model-v1 `element/plines` (the only source carrying section offsets). */
 async function fetchPlinesFromGenModel(refno: string): Promise<readonly SectionPlineSample[] | null> {
   try {
-    const { getModelSourceKind } = await import('@/model-source/kind');
-    if (getModelSourceKind() !== 'gen-model-v1') return null;
     const { genModelV1ElementPlines } = await import('@/api/genModelV1Api');
     const response = await genModelV1ElementPlines({ refno });
     return Array.isArray(response?.plines) ? response.plines : null;
@@ -77,9 +71,8 @@ type ModelSourceNode = Readonly<{ noun: string | null; owner: string | null }>;
 type ModelSourceNodeLookup = () => Promise<ModelSourceNode | null>;
 
 /**
- * The active model source's tree node (noun + owner live there under both `legacy` and
- * `gen-model-v1`). Loaded lazily so the measurement chain does not statically depend on the
- * model-source bundle (DuckDB-WASM under legacy). Any failure → `null`: the node only feeds hints.
+ * The model source's tree node (noun + owner live there). Loaded lazily so the measurement chain
+ * does not statically depend on the model-source bundle. Any failure → `null`: the node only feeds hints.
  */
 async function lookupModelSourceNode(refno: string): Promise<ModelSourceNode | null> {
   try {
@@ -105,18 +98,15 @@ function memoizedNodeLookup(refno: string): ModelSourceNodeLookup {
 }
 
 /**
- * Default transform lookup. `legacy` keeps the `:3100 /api/pdms/transform` contract. Under
- * `gen-model-v1` that backend does not know the refnos, so the element's world placement comes
- * from `element/ptset` — its `world_transform` is the same column-major mm local→world matrix
- * (`aios_core::transform::get_world_mat4` on both sides) — and the owner from the tree node.
+ * Default transform lookup: the element's world placement comes from gen-model-v1 `element/ptset`
+ * — its `world_transform` is the column-major mm local→world matrix (`aios_core::transform::get_world_mat4`,
+ * the same one the retired `:3100 /api/pdms/transform` served) — and the owner from the tree node.
  * A 404 is a plain "not found"; other failures propagate as "unavailable".
  */
 async function fetchTransformFromModelSource(
   refno: string,
   node: ModelSourceNodeLookup,
 ): Promise<ReferenceFrameTransformResponse> {
-  const { getModelSourceKind } = await import('@/model-source/kind');
-  if (getModelSourceKind() !== 'gen-model-v1') return pdmsGetTransform(refno);
   const { genModelV1ElementPtset, isGenModelV1ApiError } = await import('@/api/genModelV1Api');
   const [ptset, nodeInfo] = await Promise.all([
     genModelV1ElementPtset({ refno }).catch((error: unknown) => {

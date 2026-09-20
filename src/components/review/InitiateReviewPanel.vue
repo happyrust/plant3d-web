@@ -20,8 +20,9 @@ import { resolvePassiveWorkflowMode } from './workflowMode';
 import type { UploadedFile } from './FileUploadSection.vue';
 import type { ReviewComponent } from '@/types/auth';
 
-import { e3dSearch, type TreeNodeDto } from '@/api/genModelE3dApi';
-import { pdmsGetUiAttr } from '@/api/genModelPdmsAttrApi';
+import type { TreeNodeDto } from '@/api/genModelE3dTypes';
+
+import { getModelSource } from '@/model-source';
 import Button from '@/components/ui/Button.vue';
 import Card from '@/components/ui/Card.vue';
 import Input from '@/components/ui/Input.vue';
@@ -271,7 +272,7 @@ async function addComponentByRefno(refno: string): Promise<boolean> {
     });
     if (selectedComponents.value.some((c) => c.refNo === deliveryUnitRefno)) return true;
 
-    const resp = await pdmsGetUiAttr(deliveryUnitRefno);
+    const resp = await getModelSource().attributes.uiAttr(deliveryUnitRefno);
     const name =
       (resp.full_name && resp.full_name.trim()) ||
       (resp.attrs?.NAME as string) ||
@@ -324,7 +325,7 @@ async function handleManualComponentSubmit() {
   const requestSeq = ++componentSearchRequestSeq;
 
   try {
-    const resp = await e3dSearch({ keyword, limit: 20 });
+    const resp = await getModelSource().tree.search({ keyword, limit: 20 });
     if (requestSeq !== componentSearchRequestSeq) return;
     if (!resp.success) {
       componentSearchError.value = resp.error_message || '构件搜索失败，请稍后重试。';

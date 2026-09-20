@@ -7,7 +7,7 @@ REMOTE_USER="${REMOTE_USER:-root}"
 REMOTE_PASS="${REMOTE_PASS:-}"
 DEPLOY_PATH="${DEPLOY_PATH:-/var/www/plant3d-web}"
 SERVER_NAME="${SERVER_NAME:-$REMOTE_HOST}"
-BACKEND_ORIGIN="${BACKEND_ORIGIN:-http://127.0.0.1:3100}"
+BACKEND_ORIGIN="${BACKEND_ORIGIN:-http://127.0.0.1:8022}"
 SERVICE_NAME="${SERVICE_NAME:-nginx}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -71,7 +71,7 @@ BACKEND_ORIGIN_ESCAPED="$(escape_sed_replacement "$BACKEND_ORIGIN")"
 SERVER_NAME_ESCAPED="$(escape_sed_replacement "$SERVER_NAME")"
 sed \
   -e "s/server_name 123\\.57\\.182\\.243;/server_name ${SERVER_NAME_ESCAPED};/" \
-  -e "s#http://127\\.0\\.0\\.1:3100#${BACKEND_ORIGIN_ESCAPED}#g" \
+  -e "s#http://127\\.0\\.0\\.1:8022#${BACKEND_ORIGIN_ESCAPED}#g" \
   "$NGINX_TEMPLATE" > "$TMP_NGINX_CONF"
 
 log "Building frontend bundle in $PROJECT_DIR"

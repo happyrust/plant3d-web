@@ -778,8 +778,9 @@ import { formatClearanceToast } from '@/clearance/composables/useComponentToWall
 import { useClearanceStore } from '@/clearance/stores/useClearanceStore';
 import { useConfirmDialogStore } from '@/composables/useConfirmDialogStore';
 import { findNounByRefnoAcrossAllDbnos } from '@/composables/useDbnoInstancesDtxLoader';
-import { useRoomInfoPanel } from '@/composables/useRoomInfoPanel';
+import { setGlobalSelectedRefno } from '@/composables/useSelectionStore';
 import { useSpatialQuery } from '@/composables/useSpatialQuery';
+import { showModelByRefnosWithAck } from '@/composables/useViewerContext';
 import { emitToast } from '@/ribbon/toastBus';
 import {
   SITE_SPEC_OPTIONS_WITH_UNKNOWN,
@@ -796,7 +797,6 @@ const emit = defineEmits<{
 }>();
 
 const spatialQuery = useSpatialQuery();
-const roomInfoPanel = useRoomInfoPanel();
 const clearanceStore = useClearanceStore();
 const {
   draft,
@@ -1363,14 +1363,24 @@ watch(
   { immediate: true },
 );
 
+/** 房间行：选中房间构件（属性面板据此显示它的属性）。旧后端的「房型房间信息」面板 2026-09-20 随 legacy 退役。 */
 function openRoomInfo(room: SpatialRoomListRow) {
-  void roomInfoPanel.openForRefno(room.roomRefno);
+  setGlobalSelectedRefno(room.roomRefno);
 }
 
+/** 房间行「显示」：按 refno 经数据源加载房间模型并飞过去（与退役前 `useRoomInfoPanel.showRoomModel` 同一条加载路）。 */
 function showRoomModel(room: SpatialRoomListRow) {
   void (async () => {
-    await roomInfoPanel.openForRefno(room.roomRefno);
-    await roomInfoPanel.showRoomModel(room.roomRefno);
+    setGlobalSelectedRefno(room.roomRefno);
+    const result = await showModelByRefnosWithAck({
+      refnos: [room.roomRefno],
+      flyTo: true,
+      timeoutMs: 20_000,
+      ensureViewerReady: true,
+    });
+    if (result.error || result.fail.length > 0) {
+      emitToast({ message: result.error || result.fail[0]?.error || `房间模型加载失败: ${room.roomRefno}`, level: 'error' });
+    }
   })();
 }
 

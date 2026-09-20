@@ -23,7 +23,7 @@ import type {
 
 import { isAnnotationUxFlagEnabled } from '@/composables/useAnnotationUxFlags';
 import { useUserStore } from '@/composables/useUserStore';
-import { getOutputProjectFromUrl } from '@/lib/filesOutput';
+import { getOutputProjectFromUrl } from '@/lib/currentProject';
 import {
   archiveLegacyDimensionBridge,
   archiveLegacyDimensions,

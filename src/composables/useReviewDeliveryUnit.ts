@@ -1,5 +1,4 @@
-import { e3dGetAncestors, e3dGetSubtreeRefnos } from '@/api/genModelE3dApi';
-import { pdmsGetTypeInfo } from '@/api/genModelPdmsAttrApi';
+import { getModelSource } from '@/model-source';
 
 export const MIN_REVIEW_DELIVERY_UNIT_NOUNS = new Set([
   'BRAN',
@@ -41,7 +40,7 @@ async function getPdmsTypeInfoSafe(
   options?: ResolveReviewDeliveryUnitOptions,
 ): Promise<ReviewDeliveryTypeInfo> {
   try {
-    const resp = await pdmsGetTypeInfo(refno);
+    const resp = await getModelSource().attributes.typeInfo(refno);
     if (resp.success) {
       return {
         noun: resp.noun,
@@ -65,7 +64,7 @@ async function findNearestDeliveryUnitAncestor(
   options?: ResolveReviewDeliveryUnitOptions,
 ): Promise<string | null> {
   try {
-    const resp = await e3dGetAncestors(refno);
+    const resp = await getModelSource().tree.ancestors(refno);
     if (!resp.success || !Array.isArray(resp.refnos)) return null;
     const ancestors = [...resp.refnos].map((item) => normalizeReviewDeliveryRefno(item)).filter(Boolean).reverse();
     for (const ancestorRefno of ancestors) {
@@ -86,7 +85,7 @@ async function findSingleDeliveryUnitDescendant(
   options?: ResolveReviewDeliveryUnitOptions,
 ): Promise<string | null> {
   try {
-    const resp = await e3dGetSubtreeRefnos(refno, {
+    const resp = await getModelSource().tree.subtreeRefnos(refno, {
       includeSelf: true,
       maxDepth: DELIVERY_UNIT_SUBTREE_MAX_DEPTH,
       limit: DELIVERY_UNIT_SUBTREE_LIMIT,

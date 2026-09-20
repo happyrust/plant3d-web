@@ -8,13 +8,15 @@ const mocks = vi.hoisted(() => ({
   e3dGetSubtreeRefnos: vi.fn(),
 }));
 
-vi.mock('@/api/genModelPdmsAttrApi', () => ({
-  pdmsGetTypeInfo: mocks.pdmsGetTypeInfo,
-}));
-
-vi.mock('@/api/genModelE3dApi', () => ({
-  e3dGetAncestors: mocks.e3dGetAncestors,
-  e3dGetSubtreeRefnos: mocks.e3dGetSubtreeRefnos,
+vi.mock('@/model-source', () => ({
+  getModelSource: () => ({
+    kind: 'gen-model-v1',
+    attributes: { typeInfo: (refno: string) => mocks.pdmsGetTypeInfo(refno) },
+    tree: {
+      ancestors: (refno: string) => mocks.e3dGetAncestors(refno),
+      subtreeRefnos: (refno: string, params?: unknown) => mocks.e3dGetSubtreeRefnos(refno, params),
+    },
+  }),
 }));
 
 describe('resolveReviewDeliveryUnitRefno', () => {

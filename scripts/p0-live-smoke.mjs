@@ -67,24 +67,12 @@ async function runModelGate() {
 }
 
 async function runMeasurementGate() {
-  const base = (process.env.PLANT3D_API_BASE || 'http://127.0.0.1:3100').replace(/\/$/, '');
-  await requireEndpoint(
-    '模型版本 API',
-    `${base}/api/model/units/24381_145018/versions?dbnum=7997`,
-  );
-  await requireEndpoint(
-    'MBD V2 API',
-    `${base}/api/mbd/v2/pipe/${encodeURIComponent('24381_145018')}`,
-  );
+  // 旧后端（:3100）的模型版本 API / MBD V2 API 与相应真机用例 2026-09-20 随 legacy 退役；尺寸系统只剩 dev 冒烟。
   run(npx, [
     'playwright',
     'test',
-    'e2e/dimension-real-ams-bran-version.spec.ts',
     'e2e/dimension-app-dev-smoke.spec.ts',
-    'e2e/dimension-mbd-v2-fixture.spec.ts',
-  ], {
-    PLANT3D_API_BASE: base,
-  });
+  ]);
 }
 
 async function runReviewGate() {
