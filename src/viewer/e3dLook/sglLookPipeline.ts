@@ -24,6 +24,7 @@ import {
   type MinificationTextureFilter,
   NearestFilter,
   NoBlending,
+  Object3D,
   PerspectiveCamera,
   RGBAFormat,
   Scene,
@@ -91,6 +92,41 @@ export interface SglLookPipelineParams {
   background: SglBackgroundParams;
   /** Sgl_View_Effects_Parameters::_legacy_mode：全部效果关闭 */
   legacyMode: boolean;
+}
+
+/** 构造时可只给部分字段，其余用默认 */
+export interface SglLookPipelineParamsInit {
+  hlr?: Partial<SglHlrParams>;
+  ao?: Partial<SglAoParams>;
+  background?: Partial<SglBackgroundParams>;
+  legacyMode?: boolean;
+}
+
+/**
+ * 自己能输出「眼空间面法线 + 线性深度」的材质（如 DTXMaterial：顶点来自纹理，没法用 overrideMaterial）。
+ * 管线在法线/深度通道前调 `setSglNormalDepthOutput(true)`，画完调 `false`。
+ */
+export interface SglNormalDepthProvider {
+  setSglNormalDepthOutput(enabled: boolean): void;
+}
+
+export function isSglNormalDepthProvider(material: unknown): material is Material & SglNormalDepthProvider {
+  return !!material && typeof (material as SglNormalDepthProvider).setSglNormalDepthOutput === 'function';
+}
+
+export interface SglLookPipelineOptions {
+  /**
+   * 颜色通道是否保留 `scene.background`（三维视图自己管背景时用）。
+   * false（默认）= 管线自己按 params.background 画渐变 / 纯色。
+   */
+  useSceneBackground?: boolean;
+  /**
+   * 法线/深度从哪来：
+   * - 'override'：scene.overrideMaterial 画所有普通 Mesh（默认，给 BufferGeometry 场景）
+   * - 'providers'：只画实现了 SglNormalDepthProvider 的材质（DTX 场景）
+   * - 'both'：两者都画
+   */
+  normalDepthSource?: 'override' | 'providers' | 'both';
 }
 
 export function createDefaultSglPipelineParams(): SglLookPipelineParams {
@@ -403,12 +439,22 @@ interface CompositeUniforms {
   uBgFlat: IUniform<Vector3>;
 }
 
+interface RenderableRecord {
+  object: Object3D;
+  visible: boolean;
+  isProviderMesh: boolean;
+  isMesh: boolean;
+}
+
 export class SglLookPipeline {
   readonly params: SglLookPipelineParams;
+  readonly options: Required<SglLookPipelineOptions>;
 
   private readonly _renderer: WebGLRenderer;
   private readonly _size = new Vector2(1, 1);
   private readonly _ndType: TextureDataType;
+  private readonly _renderables: RenderableRecord[] = [];
+  private readonly _providerMaterials = new Set<Material & SglNormalDepthProvider>();
 
   private _colorRT: WebGLRenderTarget;
   private _ndRT: WebGLRenderTarget;
@@ -474,7 +520,7 @@ export class SglLookPipeline {
 
   private readonly _tmpColor = new Color();
 
-  constructor(renderer: WebGLRenderer, params?: Partial<SglLookPipelineParams>) {
+  constructor(renderer: WebGLRenderer, params?: SglLookPipelineParamsInit, options?: SglLookPipelineOptions) {
     this._renderer = renderer;
     const defaults = createDefaultSglPipelineParams();
     this.params = {
@@ -482,6 +528,10 @@ export class SglLookPipeline {
       ao: { ...defaults.ao, ...(params?.ao ?? {}) },
       background: { ...defaults.background, ...(params?.background ?? {}) },
       legacyMode: params?.legacyMode ?? defaults.legacyMode,
+    };
+    this.options = {
+      useSceneBackground: options?.useSceneBackground ?? false,
+      normalDepthSource: options?.normalDepthSource ?? 'override',
     };
 
     // 线性深度按模型单位存，mm 级模型轻松过 65504 → 有浮点色附件就用 32 位
@@ -569,21 +619,43 @@ export class SglLookPipeline {
     const prevBackground = scene.background;
 
     renderer.autoClear = false;
+    // 法线/深度通道绝不画背景（背景像素要留深度 0）
     scene.background = null;
 
-    // ② 面法线 + 线性深度（背景清 0）
+    // ② 面法线 + 线性深度
+    this._collectRenderables(scene);
+    const source = this.options.normalDepthSource;
     renderer.setRenderTarget(this._ndRT);
     renderer.setClearColor(0x000000, 0);
     renderer.clear(true, true, false);
-    scene.overrideMaterial = this._ndMaterial;
-    renderer.render(scene, camera);
-    scene.overrideMaterial = prevOverride;
+    if (source !== 'providers') {
+      // 普通 Mesh 走 overrideMaterial；provider 网格与线/点/精灵先藏起来
+      for (const r of this._renderables) {
+        if (r.visible && (r.isProviderMesh || !r.isMesh)) r.object.visible = false;
+      }
+      scene.overrideMaterial = this._ndMaterial;
+      renderer.render(scene, camera);
+      scene.overrideMaterial = prevOverride;
+      for (const r of this._renderables) r.object.visible = r.visible;
+    }
+    if (source !== 'override' && this._providerMaterials.size > 0) {
+      // provider 网格自己输出法线/深度；其它可渲染对象全部藏起来
+      for (const r of this._renderables) {
+        if (r.visible && !r.isProviderMesh) r.object.visible = false;
+      }
+      for (const m of this._providerMaterials) m.setSglNormalDepthOutput(true);
+      renderer.render(scene, camera);
+      for (const m of this._providerMaterials) m.setSglNormalDepthOutput(false);
+      for (const r of this._renderables) r.object.visible = r.visible;
+    }
 
-    // ① 正常着色（背景清透明，合成时用 alpha 与渐变混）
+    // ① 正常着色（自绘背景时清透明，合成用 alpha 与渐变混；沿用场景背景时由 three 画背景）
+    scene.background = this.options.useSceneBackground ? prevBackground : null;
     renderer.setRenderTarget(this._colorRT);
     renderer.setClearColor(0x000000, 0);
     renderer.clear(true, true, false);
     renderer.render(scene, camera);
+    scene.background = null;
 
     // ③④ HBAO + 模糊
     let aoTexture: Texture | null = null;
@@ -684,6 +756,28 @@ export class SglLookPipeline {
     for (const rt of [this._colorRT, this._ndRT, this._aoRT, this._blurRTa, this._blurRTb, this._hlrRT]) rt.dispose();
     for (const m of [this._ndMaterial, this._aoMaterial, this._blurMaterial, this._hlrMaterial, this._compositeMaterial]) m.dispose();
     this._fsq.dispose();
+  }
+
+  /** 一次遍历：记下所有可渲染对象的可见性，并找出实现了 SglNormalDepthProvider 的材质 */
+  private _collectRenderables(scene: Scene): void {
+    this._renderables.length = 0;
+    this._providerMaterials.clear();
+    scene.traverseVisible((object) => {
+      const anyObj = object as Object3D & { isMesh?: boolean; isLine?: boolean; isPoints?: boolean; isSprite?: boolean; material?: Material | Material[] };
+      const isMesh = anyObj.isMesh === true;
+      if (!isMesh && !anyObj.isLine && !anyObj.isPoints && !anyObj.isSprite) return;
+      let isProviderMesh = false;
+      if (isMesh && anyObj.material) {
+        const mats = Array.isArray(anyObj.material) ? anyObj.material : [anyObj.material];
+        for (const m of mats) {
+          if (isSglNormalDepthProvider(m)) {
+            isProviderMesh = true;
+            this._providerMaterials.add(m);
+          }
+        }
+      }
+      this._renderables.push({ object, visible: object.visible, isProviderMesh, isMesh });
+    });
   }
 
   private _updateCameraUniforms(camera: Camera, w: number, h: number): void {

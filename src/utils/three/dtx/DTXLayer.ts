@@ -42,6 +42,8 @@ import { DTXGeometry } from './DTXGeometry';
 import { DTXMaterial } from './DTXMaterial';
 import { DTXPickingMaterial } from './DTXPickingMaterial';
 
+import type { SglSceneLightParams } from '@/viewer/e3dLook/sglLookMaterial';
+
 // ========== 类型定义 ==========
 
 /**
@@ -928,6 +930,43 @@ export class DTXLayer {
     return this._globalModelMatrix.clone();
   }
 
+  // ========== SGL（AVEVA E3D sglDx11）口径光照 ==========
+
+  /**
+   * 切换两条通道材质的光照模型：true = E3D SGL 公式（docs/rendering/e3d-sgl-look-prototype.md），false = 原 PBR。
+   * compile() 之前调用会记住，材质建好后再套上。
+   */
+  setSglLighting(enabled: boolean, params?: Partial<SglSceneLightParams>): void {
+    this._sglLightingEnabled = enabled;
+    if (params) this._sglLightParams = { ...this._sglLightParams, ...params };
+    this._applySglLighting();
+  }
+
+  get sglLightingEnabled(): boolean {
+    return this._sglLightingEnabled;
+  }
+
+  /** 解析环境（天顶 / 地面亮度）与世界上方向 */
+  setSglEnv(skyLum: number, groundLum: number, up?: Vector3): void {
+    this._sglEnv = { skyLum, groundLum, up: up ? up.clone() : this._sglEnv.up };
+    for (const m of [this._material, this._transparentMaterial]) {
+      m?.setSglEnv(skyLum, groundLum, this._sglEnv.up);
+    }
+  }
+
+  private _sglLightingEnabled = false;
+  private _sglLightParams: Partial<SglSceneLightParams> = {};
+  private _sglEnv: { skyLum: number; groundLum: number; up: Vector3 } = { skyLum: 0.75, groundLum: 0.25, up: new Vector3(0, 0, 1) };
+
+  private _applySglLighting(): void {
+    for (const m of [this._material, this._transparentMaterial]) {
+      if (!m) continue;
+      m.setSglLighting(this._sglLightingEnabled);
+      m.setSglLightParams(this._sglLightParams);
+      m.setSglEnv(this._sglEnv.skyLum, this._sglEnv.groundLum, this._sglEnv.up);
+    }
+  }
+
   /**
    * 创建顶点位置纹理
    * 使用 Float32 (RGBA32F) 存储，避免全局 16bit 量化在大场景下导致小几何体退化。
@@ -1266,6 +1305,8 @@ export class DTXLayer {
     this._transparentMesh.renderOrder = 1;
 
     this._syncRenderPassVisibility();
+    // compile() 之前设过 SGL 口径的话，材质建好后补上
+    this._applySglLighting();
 
     // 创建 GPU Picking 材质与网格
     this._pickingMaterial = new DTXPickingMaterial({

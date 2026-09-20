@@ -140,6 +140,7 @@ import { loadDtxPrimitiveDemo } from '@/viewer/dtx/dtxPrimitiveDemo';
 import { DTXTileLodController } from '@/viewer/dtx/DTXTileLodController';
 import { DtxViewer, type BackgroundMode } from '@/viewer/dtx/DtxViewer';
 import { shouldStopShowDbnumLoad } from '@/viewer/dtx/showDbnumLoadPolicy';
+import { SglLookPipeline } from '@/viewer/e3dLook';
 
 defineProps<{
     params: {
@@ -312,6 +313,47 @@ function onGlobalEdgeEnabledChange(enabled: boolean): void {
     localStorage.setItem('dtx_global_edges', enabled ? '1' : '0');
   } catch {
     // ignore
+  }
+}
+
+/** 把 E3D 外观开关同步到 DTX 材质（光照公式）与后处理管线（HLR / AO） */
+function applySglLook(): void {
+  const enabled = sglLookEnabled.value;
+  dtxLayerRef.value?.setSglLighting(enabled);
+  for (const layer of showDbnumExtraDtxLayers) layer.setSglLighting(enabled);
+  const pipeline = sglPipelineRef.value;
+  if (pipeline) {
+    pipeline.params.hlr.enabled = sglLookHlrEnabled.value;
+    pipeline.params.ao.enabled = sglLookAoEnabled.value;
+  }
+  requestRender();
+}
+
+function onSglLookEnabledChange(enabled: boolean): void {
+  sglLookEnabled.value = enabled;
+  applySglLook();
+  safeLsSet('dtx_look', enabled ? 'sgl' : 'pbr');
+}
+
+function onSglLookHlrChange(enabled: boolean): void {
+  sglLookHlrEnabled.value = enabled;
+  applySglLook();
+  safeLsSet('dtx_look_hlr', enabled ? '1' : '0');
+}
+
+function onSglLookAoChange(enabled: boolean): void {
+  sglLookAoEnabled.value = enabled;
+  applySglLook();
+  safeLsSet('dtx_look_ao', enabled ? '1' : '0');
+}
+
+/** 主场景那一笔：E3D 外观开着就走 SGL 后处理管线，否则直出 */
+function renderMainScene(dtxViewer: DtxViewer): void {
+  const pipeline = sglPipelineRef.value;
+  if (sglLookEnabled.value && pipeline) {
+    pipeline.render(dtxViewer.scene, dtxViewer.camera, null);
+  } else {
+    dtxViewer.renderer.render(dtxViewer.scene, dtxViewer.camera);
   }
 }
 
@@ -621,6 +663,11 @@ function sceneDirectionToDesign(
 
 const cameraViewMode = ref<CameraViewMode>('cad_weak');
 const globalEdgeEnabled = ref(false);
+// E3D 外观（SGL 复刻，docs/rendering/e3d-sgl-look-prototype.md）：光照公式 + HLR 边线 + HBAO
+const sglLookEnabled = ref(false);
+const sglLookHlrEnabled = ref(true);
+const sglLookAoEnabled = ref(true);
+const sglPipelineRef = shallowRef<SglLookPipeline | null>(null);
 const globalEdgeThresholdAngle = ref(20);
 const focusTransparencyEnabled = ref(false);
 const focusDimOpacityPercent = ref(20);
@@ -2918,6 +2965,7 @@ function handleResize() {
 
   const rect = el.getBoundingClientRect();
   dtxViewer.setSize(rect.width, rect.height);
+  sglPipelineRef.value?.setSize(rect.width, rect.height);
   selectionControllerRef.value?.resize(rect.width, rect.height);
   tileLodControllerRef.value?.setViewportSize(rect.width, rect.height);
   dimensionSystem?.notifyViewerChanged();
@@ -2971,7 +3019,7 @@ function renderFrameImmediate() {
     selection.renderOutline();
     renderDimensionOverlay(dtxViewer);
   } else {
-    dtxViewer.renderer.render(dtxViewer.scene, dtxViewer.camera);
+    renderMainScene(dtxViewer);
     renderDimensionOverlay(dtxViewer);
   }
 
@@ -3071,7 +3119,7 @@ function renderFrame() {
       selection.renderOutline();
       renderDimensionOverlay(dtxViewer);
     } else {
-      dtxViewer.renderer.render(dtxViewer.scene, dtxViewer.camera);
+      renderMainScene(dtxViewer);
       renderDimensionOverlay(dtxViewer);
     }
 
@@ -3164,6 +3212,9 @@ onMounted(async () => {
   globalEdgeThresholdAngle.value = 20;
   focusTransparencyEnabled.value = false;
   focusDimOpacityPercent.value = 20;
+  sglLookEnabled.value = false;
+  sglLookHlrEnabled.value = true;
+  sglLookAoEnabled.value = true;
   try {
     // DEV: localStorage.setItem('dtx_continuous_render','1') 可打开持续渲染（用于 profile）
     continuousRender =
@@ -3227,6 +3278,20 @@ onMounted(async () => {
         Number(focusOpacityRaw),
       );
     }
+
+    // E3D 外观：?dtx_look=sgl|pbr，子开关 dtx_look_hlr / dtx_look_ao（'0' 关）
+    const lookRaw = q.get('dtx_look') || localStorage.getItem('dtx_look');
+    if (lookRaw !== null && lookRaw !== undefined) {
+      sglLookEnabled.value = String(lookRaw).trim().toLowerCase() === 'sgl';
+    }
+    const lookHlrRaw = q.get('dtx_look_hlr') || localStorage.getItem('dtx_look_hlr');
+    if (lookHlrRaw !== null && lookHlrRaw !== undefined) {
+      sglLookHlrEnabled.value = String(lookHlrRaw).trim() !== '0';
+    }
+    const lookAoRaw = q.get('dtx_look_ao') || localStorage.getItem('dtx_look_ao');
+    if (lookAoRaw !== null && lookAoRaw !== undefined) {
+      sglLookAoEnabled.value = String(lookAoRaw).trim() !== '0';
+    }
   } catch {
     // ignore
   }
@@ -3248,6 +3313,24 @@ onMounted(async () => {
   dtxViewerRef.value = dtxViewer;
   applyBackground(backgroundStore.mode.value);
   applyCameraViewMode(cameraViewMode.value);
+
+  // E3D 外观后处理管线：DTX 材质自己出法线/深度（providers），背景沿用视图设置
+  try {
+    // 场景在 modelUnit=mm/m 时都已按米摆放（loader 里 mm×0.001），阈值/半径按米给
+    const sceneInMetres = unitSettings.modelUnit.value !== 'raw';
+    const sglPipeline = new SglLookPipeline(
+      dtxViewer.renderer,
+      {
+        hlr: { depthThreshold: sceneInMetres ? 0.05 : 50 },
+        ao: { radius: sceneInMetres ? 0.4 : 400, blurSharpness: sceneInMetres ? 10 : 0.01 },
+      },
+      { useSceneBackground: true, normalDepthSource: 'providers' },
+    );
+    sglPipeline.setSize(canvas.clientWidth || canvas.width, canvas.clientHeight || canvas.height);
+    sglPipelineRef.value = sglPipeline;
+  } catch (e) {
+    console.warn('[ViewerPanel] E3D 外观管线初始化失败', e);
+  }
 
   // CAD Grid：Three.js 常规渲染对象（与 DTX 混合渲染）
   try {
@@ -3276,6 +3359,7 @@ onMounted(async () => {
   });
   dtxLayer.setRenderer(dtxViewer.renderer);
   dtxLayerRef.value = dtxLayer;
+  applySglLook();
 
   // 全局工程边线：深灰细线（无填充），用于接近 CAD 轮廓观感
   const globalEdgeOverlay = new DTXOverlayHighlighter(dtxViewer.scene, {
@@ -4793,6 +4877,13 @@ onUnmounted(() => {
   }
 
   try {
+    sglPipelineRef.value?.dispose();
+  } catch {
+    // ignore
+  }
+  sglPipelineRef.value = null;
+
+  try {
     dtxViewerRef.value?.dispose();
   } catch {
     // ignore
@@ -5216,6 +5307,39 @@ onUnmounted(() => {
                 @input="onGlobalEdgeThresholdInput(globalEdgeThresholdAngle)" />
               <div class="text-[11px] text-muted-foreground">
                 角度越小，边线越密；建议 15~25。
+              </div>
+            </div>
+
+            <!-- E3D 外观（SGL 复刻） -->
+            <div class="space-y-1">
+              <div class="flex items-center justify-between">
+                <label class="text-xs text-muted-foreground">E3D 外观（SGL 复刻）</label>
+                <button type="button"
+                  class="rounded-md border px-2 py-1 text-xs transition-colors hover:bg-muted"
+                  :class="sglLookEnabled ? 'border-ring bg-muted font-medium' : 'border-border text-muted-foreground'"
+                  data-testid="viewer-sgl-look-toggle"
+                  @click.stop="onSglLookEnabledChange(!sglLookEnabled)">
+                  {{ sglLookEnabled ? '已开启' : '已关闭' }}
+                </button>
+              </div>
+              <div class="grid grid-cols-2 gap-1.5">
+                <button type="button"
+                  class="h-8 rounded-md border px-2 text-xs transition-colors hover:bg-muted"
+                  :class="sglLookHlrEnabled ? 'border-ring bg-muted font-medium' : 'border-border text-muted-foreground'"
+                  :disabled="!sglLookEnabled"
+                  @click.stop="onSglLookHlrChange(!sglLookHlrEnabled)">
+                  HLR 边线 {{ sglLookHlrEnabled ? '开' : '关' }}
+                </button>
+                <button type="button"
+                  class="h-8 rounded-md border px-2 text-xs transition-colors hover:bg-muted"
+                  :class="sglLookAoEnabled ? 'border-ring bg-muted font-medium' : 'border-border text-muted-foreground'"
+                  :disabled="!sglLookEnabled"
+                  @click.stop="onSglLookAoChange(!sglLookAoEnabled)">
+                  伪阴影 AO {{ sglLookAoEnabled ? '开' : '关' }}
+                </button>
+              </div>
+              <div class="text-[11px] text-muted-foreground">
+                单头灯 Blinn-Phong + 灰度反射，边线/AO 走 sglDx11 同款后处理（选中轮廓与版本分屏时暂不套用）。
               </div>
             </div>
 

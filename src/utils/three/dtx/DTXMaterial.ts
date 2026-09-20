@@ -15,13 +15,17 @@
  */
 
 import {
+  type Blending,
   ShaderMaterial,
   DataTexture,
   Vector3,
   Matrix4,
   Color,
-  GLSL3
+  GLSL3,
+  NoBlending
 } from 'three';
+
+import { SGL_DEFAULT_LIGHT, type SglSceneLightParams } from '@/viewer/e3dLook/sglLookMaterial';
 
 // ========== Shader 代码 ==========
 
@@ -61,6 +65,7 @@ flat out float vRoughness;
 flat out uint vFlags;
 out vec3 vWorldPosition;
 out vec3 vWorldNormal;
+out vec3 vViewPosition;
 
 // === 对数深度缓冲 + per-object depth bias（解决 Z-fighting）===
 #ifdef USE_LOGDEPTHBUF
@@ -180,8 +185,10 @@ void main() {
     return;
   }
 
-  // 11. 投影
-  gl_Position = projectionMatrix * viewMatrix * worldPosition;
+  // 11. 投影（眼空间位置给 SGL 口径的面法线 / 线性深度用）
+  vec4 viewPosition = viewMatrix * worldPosition;
+  vViewPosition = viewPosition.xyz;
+  gl_Position = projectionMatrix * viewPosition;
 
   // 12. 对数深度缓冲 + per-object depth bias
   #ifdef USE_LOGDEPTHBUF
@@ -203,6 +210,7 @@ flat in float vRoughness;
 flat in uint vFlags;
 in vec3 vWorldPosition;
 in vec3 vWorldNormal;
+in vec3 vViewPosition;
 
 // === 光照 ===
 uniform vec3 ambientLight;
@@ -213,6 +221,20 @@ uniform vec3 lightColor1;
 // 0=all, 1=opaque, 2=transparent
 uniform int renderPass;
 uniform float alphaCutoff;
+
+// === SGL（AVEVA E3D sglDx11）口径光照：1 = 用 SGL 公式替代 PBR ===
+uniform int sglLighting;
+uniform float sglKa;
+uniform float sglKd;
+uniform float sglKs;
+uniform float sglKr;
+uniform float sglKse;
+uniform vec3 sglLampDirEye;
+uniform float sglEnvSkyLum;
+uniform float sglEnvGroundLum;
+uniform vec3 sglUp;
+// 1 = 输出 (眼空间面法线, 线性深度) 供 HLR / AO 后处理
+uniform int sglOutput;
 
 // === 对数深度缓冲 + per-object depth bias ===
 #ifdef USE_LOGDEPTHBUF
@@ -275,6 +297,17 @@ void main() {
     discard;
   }
 
+  if (sglOutput == 1) {
+    // SGL MRT1/MRT2 等价物：位置导数叉乘得到的眼空间面法线 + 线性深度（背景由清屏留 0）
+    vec3 faceN = normalize(cross(dFdx(vViewPosition), dFdy(vViewPosition)));
+    fragColor = vec4(faceN, -vViewPosition.z);
+    #ifdef USE_LOGDEPTHBUF
+      float ndBackFaceBias = gl_FrontFacing ? 0.0 : 5.0e-7;
+      gl_FragDepth = log2(vFragDepth) * logDepthBufFC * 0.5 + vDepthBias + ndBackFaceBias;
+    #endif
+    return;
+  }
+
   vec3 N = normalize(vWorldNormal);
   // 背面法线翻转：确保双面渲染时法线始终朝向相机
   if (!gl_FrontFacing) {
@@ -283,13 +316,32 @@ void main() {
   vec3 V = normalize(cameraPosition - vWorldPosition);
 
   vec3 albedo = vColor.rgb;
+  vec3 finalColor;
 
-  vec3 ambient = ambientLight * albedo;
-  vec3 directLight0 = calculatePBR(N, V, normalize(lightDirection0), albedo, vMetalness, vRoughness, lightColor0);
-  vec3 directLight1 = calculatePBR(N, V, normalize(lightDirection1), albedo, vMetalness, vRoughness, lightColor1);
+  if (sglLighting == 1) {
+    // AVEVA E3D sglDx11 前向着色：单头灯 Blinn-Phong + 灰度环境反射
+    //   rgb = c·(Ka + Kd·N·L) + Ks·pow(N·H,Kse)·N·L + Kr·lum(env)
+    mat3 viewRot = mat3(viewMatrix);
+    vec3 Nv = normalize(viewRot * N);
+    vec3 Vv = normalize(viewRot * V);
+    vec3 L = normalize(sglLampDirEye);
+    vec3 H = normalize(Vv + L);
+    float ndl = dot(Nv, L);
+    float ndh = dot(Nv, H);
+    float spec = (ndl >= 0.0 && ndh >= 0.0) ? pow(max(ndh, 1e-6), sglKse) * ndl : 0.0;
+    ndl = max(ndl, 0.0);
+    vec3 Rw = reflect(-V, N);
+    float envT = clamp(dot(Rw, sglUp) * 0.5 + 0.5, 0.0, 1.0);
+    float envLum = mix(sglEnvGroundLum, sglEnvSkyLum, envT);
+    finalColor = albedo * (sglKa + sglKd * ndl) + sglKs * spec + sglKr * envLum;
+  } else {
+    vec3 ambient = ambientLight * albedo;
+    vec3 directLight0 = calculatePBR(N, V, normalize(lightDirection0), albedo, vMetalness, vRoughness, lightColor0);
+    vec3 directLight1 = calculatePBR(N, V, normalize(lightDirection1), albedo, vMetalness, vRoughness, lightColor1);
 
-  // 输出保持线性空间，由 renderer 的 toneMapping/outputColorSpace 统一处理（与地形一致）
-  vec3 finalColor = ambient + directLight0 + directLight1;
+    // 输出保持线性空间，由 renderer 的 toneMapping/outputColorSpace 统一处理（与地形一致）
+    finalColor = ambient + directLight0 + directLight1;
+  }
 
   fragColor = vec4(finalColor, vColor.a);
 
@@ -366,7 +418,20 @@ export class DTXMaterial extends ShaderMaterial {
         lightDirection1: { value: new Vector3(-1, 0.4, -1).normalize() },
         lightColor1: { value: new Vector3(0, 0, 0) },
         renderPass: { value: options.renderPass ?? 0 },
-        alphaCutoff: { value: options.alphaCutoff ?? 0.999 }
+        alphaCutoff: { value: options.alphaCutoff ?? 0.999 },
+
+        // SGL（E3D sglDx11）口径光照，默认关；数值 = CSglSceneLightParams 反编译出的默认
+        sglLighting: { value: 0 },
+        sglKa: { value: SGL_DEFAULT_LIGHT.ambient },
+        sglKd: { value: SGL_DEFAULT_LIGHT.diffuse },
+        sglKs: { value: SGL_DEFAULT_LIGHT.specular },
+        sglKr: { value: SGL_DEFAULT_LIGHT.reflection },
+        sglKse: { value: SGL_DEFAULT_LIGHT.specularExponent },
+        sglLampDirEye: { value: new Vector3(...SGL_DEFAULT_LIGHT.lightEyePos) },
+        sglEnvSkyLum: { value: 0.75 },
+        sglEnvGroundLum: { value: 0.25 },
+        sglUp: { value: new Vector3(0, 0, 1) },
+        sglOutput: { value: 0 }
       },
       // 重要：启用 WebGL2 的 GLSL 3.0 语法
       glslVersion: GLSL3
@@ -401,8 +466,63 @@ export class DTXMaterial extends ShaderMaterial {
     // 注意：当 shader 代码结构变化（如新增 uniform/global 变换）时必须升级该 key，
     // 否则 Three.js 可能复用旧 program 导致新逻辑不生效。
     // v11: fragment shader 加 backFaceBias（z-fighting Tier 1，docs/issues/dtx-model-z-fighting-flicker-2026-04-29.md）
-    return 'DTXMaterial_v11';
+    // v12: SGL（E3D sglDx11）口径光照分支 + 面法线/线性深度输出（docs/rendering/e3d-sgl-look-prototype.md）
+    return 'DTXMaterial_v12';
   }
+
+  // ========== SGL（E3D）口径 ==========
+
+  /** 切换光照模型：true = sglDx11 公式，false = 原 PBR */
+  setSglLighting(enabled: boolean): void {
+    this.uniforms.sglLighting!.value = enabled ? 1 : 0;
+  }
+
+  get sglLightingEnabled(): boolean {
+    return this.uniforms.sglLighting!.value === 1;
+  }
+
+  /** 写入一套 Ka/Kd/Ks/Kr/Kse/LampDir（缺省项不动） */
+  setSglLightParams(params: Partial<SglSceneLightParams>): void {
+    const u = this.uniforms;
+    if (params.ambient !== undefined) u.sglKa!.value = params.ambient;
+    if (params.diffuse !== undefined) u.sglKd!.value = params.diffuse;
+    if (params.specular !== undefined) u.sglKs!.value = params.specular;
+    if (params.reflection !== undefined) u.sglKr!.value = params.reflection;
+    if (params.specularExponent !== undefined) u.sglKse!.value = params.specularExponent;
+    if (params.lightEyePos) (u.sglLampDirEye!.value as Vector3).set(...params.lightEyePos);
+  }
+
+  /** 解析环境（天顶 / 地面亮度）与世界上方向 */
+  setSglEnv(skyLum: number, groundLum: number, up?: Vector3): void {
+    this.uniforms.sglEnvSkyLum!.value = skyLum;
+    this.uniforms.sglEnvGroundLum!.value = groundLum;
+    if (up) (this.uniforms.sglUp!.value as Vector3).copy(up);
+  }
+
+  /**
+   * SglLookPipeline 的法线/深度通道：开着时片元输出 (眼空间面法线, 线性深度)，
+   * 并临时关掉混合、打开深度写入，让半透明通道也能进 HLR / AO；关掉时还原。
+   */
+  setSglNormalDepthOutput(enabled: boolean): void {
+    if (enabled) {
+      if (this._sglNdSaved) return;
+      this._sglNdSaved = { blending: this.blending, depthWrite: this.depthWrite, transparent: this.transparent };
+      this.uniforms.sglOutput!.value = 1;
+      this.blending = NoBlending;
+      this.depthWrite = true;
+      this.transparent = false;
+    } else {
+      const saved = this._sglNdSaved;
+      if (!saved) return;
+      this._sglNdSaved = null;
+      this.uniforms.sglOutput!.value = 0;
+      this.blending = saved.blending;
+      this.depthWrite = saved.depthWrite;
+      this.transparent = saved.transparent;
+    }
+  }
+
+  private _sglNdSaved: { blending: Blending; depthWrite: boolean; transparent: boolean } | null = null;
 
   /**
    * 设置光照参数

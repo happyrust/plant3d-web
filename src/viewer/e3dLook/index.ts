@@ -11,8 +11,12 @@ export {
   SGL_PIPELINE_SHADERS,
   SglLookPipeline,
   createDefaultSglPipelineParams,
+  isSglNormalDepthProvider,
   type SglAoParams,
   type SglBackgroundParams,
   type SglHlrParams,
-  type SglLookPipelineParams
+  type SglLookPipelineOptions,
+  type SglLookPipelineParams,
+  type SglLookPipelineParamsInit,
+  type SglNormalDepthProvider
 } from './sglLookPipeline';
