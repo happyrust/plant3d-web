@@ -101,6 +101,9 @@
                 <span>{{ centerSummary }}</span>
               </div>
             </div>
+            <p v-if="draft.rangeCenterSource === 'selected'" class="mt-2 text-[11px] leading-relaxed text-gray-400" data-testid="range-selected-center-hint">
+              「当前选中」以所选构件包围盒的中心点为圆心量距；若该构件未加载几何，则改由服务端按其「整个包围盒」解算中心，构件越大「附近」越靠外。要精确按某一点量距，请用「手输坐标」。
+            </p>
           </section>
         </template>
 
@@ -159,6 +162,9 @@
               </div>
               <p v-if="isBranCenterlineSource" class="text-[11px] leading-relaxed text-gray-400">
                 沿该 BRAN 各段中心线量到候选包围盒的最近距离；半径即走廊外扩距离。
+              </p>
+              <p v-else class="text-[11px] leading-relaxed text-gray-400" data-testid="distance-refno-box-hint">
+                半径量的是到所选构件「整个包围盒」表面的最近距离，不是到一个点：构件越大（整间房 / 整根 BRAN / 大设备），「附近」的范围越大。要按「离某一点 N 米」查，请改用「通过坐标」。
               </p>
             </div>
           </section>

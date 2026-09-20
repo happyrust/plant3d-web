@@ -338,6 +338,15 @@ describe('SpatialQueryDrawer (distance 模式)', () => {
     expect(host.textContent).toContain('拾取起始 BRAN');
     expect(host.textContent).toContain('走廊外扩距离');
     expect(host.querySelector('[data-testid="distance-source-bran-centerline"]')?.className).toContain('bg-brand-subtle');
+    // 中心线档不画「量到整个包围盒」提示（那句只针对普通 refno 档）
+    expect(host.querySelector('[data-testid="distance-refno-box-hint"]')).toBeNull();
+
+    // 回到「通过 Refno」：给出「半径量到整个包围盒表面、不是到一个点」的口径提示
+    stubState.draft.distanceCenterSource = 'refno';
+    await nextTick();
+    const boxHint = host.querySelector('[data-testid="distance-refno-box-hint"]');
+    expect(boxHint).toBeTruthy();
+    expect(boxHint?.textContent).toContain('整个包围盒');
 
     // gen-model-v1 没有中心线：按钮消失，已选的那一档退回「通过 Refno」
     stubState.spatialCapabilities.value = { specValues: false, branCenterline: false, keywordMatchesName: false, nameSortExact: false, rooms: false };
@@ -653,6 +662,14 @@ describe('SpatialQueryDrawer (distance 模式)', () => {
     const allLabels = Array.from(host.querySelectorAll('label')) as HTMLLabelElement[];
     const radiusLabel = allLabels.find((label) => label.textContent?.includes('查询半径 (m)'));
     expect(radiusLabel).toBeDefined();
+
+    // 「当前选中」档给出「以包围盒中心点量距、未加载几何则按整个包围盒解」的口径提示；切到手输坐标即消失
+    const selectedHint = host.querySelector('[data-testid="range-selected-center-hint"]');
+    expect(selectedHint).toBeTruthy();
+    expect(selectedHint?.textContent).toContain('包围盒');
+    stubState.draft.rangeCenterSource = 'coordinates';
+    await nextTick();
+    expect(host.querySelector('[data-testid="range-selected-center-hint"]')).toBeNull();
 
     unmount();
   });
