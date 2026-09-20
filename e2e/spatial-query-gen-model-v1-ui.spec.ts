@@ -4,7 +4,11 @@
  * 由 plan `docs/plans/2026-09-13-spatial-range-query-gen-model-v1-memory-tree-plan.md` §7
  * 「功能测试记录（2026-09-14 01:30）」那批 `%TEMP%\spatial-ui-*.mjs` 脚本（32 项自动检查 + headed 补核的「拾取中心」）
  * 整理而来，用例逐条对应那份记录：手输坐标 / 形状 / 排序、翻页、过滤、当前选中（BRAN 子树盒 · 叶子 · owner 兜底）、
- * 结果动作（全部显示 / 隔离 / 恢复 / 眼睛 / 飞行 / 复制 / 加载当前页）、大数量确认框、距离查询、错误路径、URL 入口、拾取中心。
+ * 结果动作（全部显示 / 隔离 / 恢复 / 眼睛 / 飞行 / 复制 / 加载未加载）、大数量确认框、距离查询、错误路径、URL 入口、拾取中心。
+ *
+ * 2026-09-20 PR-B2（plan `2026-09-20-spatial-room-hierarchy-tree-plan.md` §4.4）把结果区剪辑成一排图标：动作按 `aria-label` 找
+ * （「全部显示」等名字不变）；「加载当前页」并进「加载未加载」（平铺态只补本页，`data-testid="spatial-load-unloaded"`）；
+ * 「复制 Refno」点开二选（本页 / 全部）；构件行单行 `spatial-result-row`；查询中心并进摘要第二行；覆盖面提示缩成一句、全文在 title。
  *
  * 数量断言一律**取自服务端响应**而不写死（记录里的 16 / 1387 项是当时那棵 54 979 条的树给的；换台服务数字就不同）：
  * 翻页 / 确认框这类要「结果够多」的用例在结果不够时 `test.skip` 说明原因。
@@ -31,6 +35,7 @@ import {
   fetchServerCenter,
   fillCenter,
   nextNearby,
+  openCopyRefnosMenu,
   openSpatialUiPage,
   paramPoint,
   probeGenModelForSpatialUi,
@@ -275,7 +280,7 @@ test('当前选中：BRAN 取子树盒中心 = 服务端 refno_aabb_center；叶
   expect(pageErrors, pageErrors.join('\n')).toEqual([]);
 });
 
-test('结果动作：全部显示 → 结果全可见；隔离 → 其余 X-Ray；恢复 → X-Ray 清零；单行眼睛；飞行定位选中目标；复制当前页 Refno；加载当前页把未加载清零；全程无错误横幅', async ({ page, context }) => {
+test('结果动作（一排图标）：全部显示 → 结果全可见；隔离 → 其余 X-Ray；恢复 → X-Ray 清零；单行眼睛；飞行定位选中目标；复制 Refno 二选「本页」；加载未加载把本页未加载清零；旧文字按钮不在；全程无错误横幅', async ({ page, context }) => {
   await context.grantPermissions(['clipboard-read', 'clipboard-write']);
   const { pageErrors } = await openSpatialUiPage(page, { mode: 'range' });
   const center = (await fetchServerCenter(FIXTURE.bran))!;
@@ -287,11 +292,29 @@ test('结果动作：全部显示 → 结果全可见；隔离 → 其余 X-Ray�
   expect(query.status).toBe(200);
   const summary = await readSummary(page);
   expect(summary.total).toBeGreaterThan(0);
+
+  // PR-B2 剪辑：动作是一排带 title 的图标，不展开结果就在标题区；旧的文字按钮一个不留
+  const actions = page.getByTestId('spatial-result-actions');
+  await expect(actions).toBeVisible();
+  expect(await actions.locator('button').evaluateAll((nodes) => nodes.map((node) => node.getAttribute('aria-label')))).toEqual([
+    '加载未加载（本页）', '全部显示', '全部隐藏', '隔离结果', '恢复场景', '复制 Refno', '清空',
+  ]);
+  for (const gone of ['加载当前页', '只加载未加载', '复制当前页 Refno', '复制已返回 Refno']) {
+    await expect(page.getByRole('button', { name: gone, exact: true })).toHaveCount(0);
+  }
   await expandResults(page);
 
   const items = (await readStoreState(page)).items;
   const refnos = items.map((item) => item.refno);
   const resultSet = new Set(refnos);
+
+  // 构件行单行：每条一行 `spatial-result-row`，refno 在 `data-refno` 上；名字 / refno / noun / 距离进 title（行上不再有「已加载 / 未加载」chip）
+  const firstRow = resultRow(page, refnos[0]!);
+  await expect(firstRow).toBeVisible();
+  const firstTitle = (await firstRow.locator('button[title]').first().getAttribute('title')) ?? '';
+  expect(firstTitle, 'title 应带 refno').toContain(refnos[0]!);
+  expect(firstTitle, 'title 应带距离').toMatch(/\d m/);
+  await expect(firstRow).not.toContainText(/已加载|未加载/);
 
   // 全部显示：每个结果 refno 在场景里都有对象且可见
   await page.getByRole('button', { name: '全部显示', exact: true }).click();
@@ -328,19 +351,24 @@ test('结果动作：全部显示 → 结果全可见；隔离 → 其余 X-Ray�
     return state.selected && state.visible;
   }, { timeout: 30_000 }).toBe(true);
 
-  // 复制当前页 Refno：剪贴板一行一个，按 store 里当前页的顺序（服务端页序 + 末尾的本地独有项；`copyCurrentPageRefnos` 取
-  // `pagedResultItems`，不是分组后的 DOM 顺序——按专业分组时两者不同），条数与结果区行数相同
+  // 复制 Refno → 二选「本页」：剪贴板一行一个，按 store 里当前页的顺序（服务端页序 + 末尾的本地独有项；`copyCurrentPageRefnos` 取
+  // `pagedResultItems`，不是分组后的 DOM 顺序——按专业分组时两者不同），条数与结果区行数相同；菜单点完收起
   const rows = await resultRowRefnos(page);
-  await page.getByTestId('copy-current-page-refnos').click();
+  const copyMenu = await openCopyRefnosMenu(page);
+  await expect(copyMenu.currentPage).toContainText('本页');
+  await expect(copyMenu.currentPage).toContainText(String(rows.length));
+  await copyMenu.currentPage.click();
   await expect(page.getByText(`已复制 ${rows.length} 个当前页 Refno`)).toBeVisible();
+  await expect(page.getByTestId('copy-refnos-options')).toHaveCount(0);
   const clipboard = await page.evaluate(() => navigator.clipboard.readText());
   // Windows 上 Chrome 剪贴板回读的是 CRLF
   const copied = clipboard.split(/\r?\n/);
   expect(copied).toEqual(refnos);
   expect([...copied].sort()).toEqual([...rows].sort());
 
-  // 加载当前页：这一页的未加载全部补上
-  await page.getByRole('button', { name: '加载当前页', exact: true }).click();
+  // 加载未加载（平铺态 = 本页）：这一页的未加载全部补上；2 m 内一页凑不到 > 200 个待加载，不弹确认
+  await page.getByTestId('spatial-load-unloaded').click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
   await expect.poll(async () => (await readSummary(page)).unloaded, { timeout: 180_000, intervals: [1000, 2000, 5000] }).toBe(0);
   const after = await readSummary(page);
   // 「已加载」按 store 里的条目数（按 refno 去重）算；摘要的「当前页 N 项」是服务端 returned_count，树里同一 refno 有多条条目时
@@ -351,20 +379,19 @@ test('结果动作：全部显示 → 结果全可见；隔离 → 其余 X-Ray�
   expect(pageErrors, pageErrors.join('\n')).toEqual([]);
 });
 
-test('大数量确认：「只加载未加载」超过 200 项先弹确认框并显示数量；取消后不发 ensure / records、摘要不变', async ({ page }) => {
+test('大数量确认：「加载未加载」（平铺态 = 本页）超过 200 项先弹确认框并显示数量；取消后不发 ensure / records、摘要不变', async ({ page }) => {
   const { pageErrors } = await openSpatialUiPage(page, { mode: 'range' });
   const center = (await fetchServerCenter(FIXTURE.bran))!;
   await fillCenter(page, center);
   await setRadiusMeters(page, 100);
-  await setPageLimit(page, 20);
+  // PR-B2 起「加载未加载」在平铺态只补本页：要凑出 > 200 个待加载得把每页数量开大（上限 1000）
+  await setPageLimit(page, 1000);
 
   const query = await submitAndCapture(page);
   expect(query.status).toBe(200);
   const summary = await readSummary(page);
-  const loadedInViewer = (await sceneOverview(page)).loadedRefnos.length;
-  test.skip(summary.total - loadedInViewer <= 200, `100 m 内共 ${summary.total} 项、已加载 ${loadedInViewer}，凑不出 > 200 个待加载`);
+  test.skip(summary.unloaded <= 200, `100 m 内一页 ${summary.currentPage} 项、未加载 ${summary.unloaded}，凑不出 > 200 个待加载`);
   const fullCount = (await readStoreState(page)).fullMatchesCount;
-  expect(fullCount, '有翻页时应先取回完整命中集合').not.toBeNull();
 
   const loadRequests: string[] = [];
   page.on('request', (request) => {
@@ -374,16 +401,19 @@ test('大数量确认：「只加载未加载」超过 200 项先弹确认框并
     }
   });
 
-  await page.getByRole('button', { name: '只加载未加载', exact: true }).click();
+  await page.getByTestId('spatial-load-unloaded').click();
   const dialog = page.getByRole('dialog');
   await expect(dialog).toBeVisible();
   await expect(dialog).toContainText('加载数量较多');
   const message = (await dialog.textContent()) ?? '';
+  expect(message).toContain('「加载未加载」将加载');
   const matched = message.match(/将加载 (\d+) 个模型（超过 200 个）/);
   expect(matched, `确认框正文应带数量：${message}`).toBeTruthy();
   const count = Number(matched![1]);
   expect(count).toBeGreaterThan(200);
-  expect(count).toBeLessThanOrEqual(fullCount!);
+  // 数量 = 本页未加载数（按 store 条目去重后算，与摘要同源）；取回了全集时也不会超过全集
+  expect(count).toBe(summary.unloaded);
+  if (fullCount !== null) expect(count).toBeLessThanOrEqual(fullCount);
   await expect(dialog.getByRole('button', { name: `加载 ${count} 个` })).toBeVisible();
 
   await dialog.getByRole('button', { name: '取消', exact: true }).click();

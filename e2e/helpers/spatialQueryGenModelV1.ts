@@ -300,9 +300,25 @@ export async function resultRowRefnos(page: Page): Promise<string[]> {
     .evaluateAll((nodes) => nodes.map((node) => (node as HTMLElement).dataset.refno ?? ''));
 }
 
-/** 结果区里 refno 那一行（外层整行按钮）。 */
+/**
+ * 结果区里某个 refno 的那一行（PR-B2 剪辑后是单行 `spatial-result-row`，`data-refno` 标 refno；有名字的构件行上显名字、
+ * refno 只在 title 里，所以按属性找而不按文字找）。
+ */
 export function resultRow(page: Page, refno: string) {
-  return page.locator('[data-testid="spatial-result-group"] > div > button').filter({ hasText: refno }).first();
+  return page.locator(`[data-testid="spatial-result-row"][data-refno="${refno}"]`).first();
+}
+
+/**
+ * 结果动作里的「复制 Refno」是一个按钮点开二选（PR-B2 剪辑）：点开菜单后返回「本页」/「全部」两个选项的定位器
+ * （树态没有「本页」）。
+ */
+export async function openCopyRefnosMenu(page: Page) {
+  await page.getByTestId('copy-refnos-menu').click();
+  await expect(page.getByTestId('copy-refnos-options')).toBeVisible();
+  return {
+    currentPage: page.getByTestId('copy-current-page-refnos'),
+    all: page.getByTestId('copy-all-returned-refnos'),
+  };
 }
 
 export function errorBanner(page: Page) {

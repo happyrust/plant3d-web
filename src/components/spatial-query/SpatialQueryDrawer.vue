@@ -471,8 +471,10 @@
                 <div class="mt-0.5 text-[11px] text-gray-500">
                   {{ summaryText }}
                 </div>
-                <div v-if="resultSet" class="mt-0.5 truncate text-[11px] text-gray-400">
-                  {{ resultBreakdown }}
+                <!-- 第二行：按专业 / 按库的小计 + 查询中心（并进来的，改前是单独一块），一行放不下截断、悬停看全文 -->
+                <div v-if="resultSet && resultDetailLine" class="mt-0.5 truncate text-[11px] text-gray-400" :title="resultDetailLine">
+                  <span>{{ resultBreakdownParts }}</span>
+                  <span v-if="resultCenterText" data-testid="spatial-result-center">{{ resultBreakdownParts ? ' · ' : '' }}{{ resultCenterText }}</span>
                 </div>
               </div>
               <button v-if="resultSet"
@@ -483,63 +485,73 @@
                 {{ resultsExpanded ? '收起结果' : '查看结果' }}
               </button>
             </div>
-            <div v-if="resultSet" class="mt-2 grid grid-cols-3 gap-1.5">
-              <button type="button"
-                class="rounded-md border border-gray-200 px-2 py-1.5 text-xs text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
-                :disabled="isQueryBusy"
-                @click="loadCurrentResults">
-                加载当前页
-              </button>
-              <button type="button"
-                class="rounded-md border border-gray-200 px-2 py-1.5 text-xs text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
-                :disabled="isQueryBusy"
-                @click="loadUnloadedResults">
-                只加载未加载
-              </button>
-              <button type="button"
-                class="rounded-md border border-gray-200 px-2 py-1.5 text-xs text-gray-600 hover:bg-gray-50"
-                @click="clearResults">
-                清空
-              </button>
-            </div>
-          </div>
 
-          <div v-if="resultSet && resultsExpanded" class="border-b border-gray-100 px-3 py-2">
-            <div class="grid grid-cols-2 gap-1.5">
-              <button type="button" class="rounded-md border border-gray-200 px-2 py-1.5 text-xs text-gray-600 hover:bg-gray-50" @click="showAll">
-                全部显示
-              </button>
-              <button type="button" class="rounded-md border border-gray-200 px-2 py-1.5 text-xs text-gray-600 hover:bg-gray-50" @click="hideAll">
-                全部隐藏
-              </button>
-              <button type="button" class="rounded-md border border-gray-200 px-2 py-1.5 text-xs text-gray-600 hover:bg-gray-50" @click="isolateAll">
-                隔离结果
-              </button>
-              <button type="button" class="rounded-md border border-gray-200 px-2 py-1.5 text-xs text-gray-600 hover:bg-gray-50" @click="restoreAll">
-                恢复场景
-              </button>
+            <!-- 结果动作：一排图标（PR-B2 剪辑）。加载未加载 · 全显 / 全隐 · 隔离 / 恢复 · 复制（二选）· 清空；每个带 title -->
+            <div v-if="resultSet" class="mt-2 flex items-center gap-0.5" data-testid="spatial-result-actions">
               <button type="button"
-                class="rounded-md border border-gray-200 px-2 py-1.5 text-xs text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
-                :disabled="pagedResultItems.length === 0"
-                data-testid="copy-current-page-refnos"
-                @click="copyCurrentPageRefnos">
-                复制当前页 Refno
+                class="rounded-md p-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-800 disabled:cursor-not-allowed disabled:opacity-40"
+                :disabled="isQueryBusy"
+                :title="loadUnloadedTitle"
+                :aria-label="loadUnloadedTitle"
+                data-testid="spatial-load-unloaded"
+                @click="loadUnloadedResults">
+                <Download class="h-4 w-4" />
               </button>
-              <button type="button"
-                class="rounded-md border border-gray-200 px-2 py-1.5 text-xs text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
-                :disabled="allReturnedRefnos.length === 0"
-                data-testid="copy-all-returned-refnos"
-                @click="copyAllReturnedRefnos">
-                复制已返回 Refno
+              <span class="mx-0.5 h-4 w-px bg-gray-200" aria-hidden="true" />
+              <button type="button" class="rounded-md p-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-800" title="全部显示" aria-label="全部显示" @click="showAll">
+                <Eye class="h-4 w-4" />
+              </button>
+              <button type="button" class="rounded-md p-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-800" title="全部隐藏" aria-label="全部隐藏" @click="hideAll">
+                <EyeOff class="h-4 w-4" />
+              </button>
+              <span class="mx-0.5 h-4 w-px bg-gray-200" aria-hidden="true" />
+              <button type="button" class="rounded-md p-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-800" title="隔离结果" aria-label="隔离结果" @click="isolateAll">
+                <Focus class="h-4 w-4" />
+              </button>
+              <button type="button" class="rounded-md p-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-800" title="恢复场景" aria-label="恢复场景" @click="restoreAll">
+                <RotateCcw class="h-4 w-4" />
+              </button>
+              <span class="mx-0.5 h-4 w-px bg-gray-200" aria-hidden="true" />
+              <div class="relative">
+                <button type="button"
+                  class="rounded-md p-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-800 disabled:cursor-not-allowed disabled:opacity-40"
+                  :class="copyMenuOpen ? 'bg-gray-100 text-gray-800' : ''"
+                  :disabled="allReturnedRefnos.length === 0"
+                  title="复制 Refno"
+                  aria-label="复制 Refno"
+                  :aria-expanded="copyMenuOpen"
+                  data-testid="copy-refnos-menu"
+                  @click="copyMenuOpen = !copyMenuOpen">
+                  <Copy class="h-4 w-4" />
+                </button>
+                <div v-if="copyMenuOpen"
+                  class="absolute left-0 top-full z-10 mt-1 flex min-w-[9rem] flex-col rounded-md border border-gray-200 bg-white py-1 text-xs text-gray-700 shadow-lg"
+                  data-testid="copy-refnos-options">
+                  <button v-if="!treeResult"
+                    type="button"
+                    class="px-3 py-1.5 text-left hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
+                    :disabled="pagedResultItems.length === 0"
+                    data-testid="copy-current-page-refnos"
+                    @click="copyCurrentPageRefnos">
+                    本页 <span class="font-mono text-gray-400">{{ pagedResultItems.length }}</span>
+                  </button>
+                  <button type="button"
+                    class="px-3 py-1.5 text-left hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
+                    :disabled="allMatchedRefnos.length === 0"
+                    data-testid="copy-all-returned-refnos"
+                    @click="copyAllReturnedRefnos">
+                    {{ treeResult ? '全部（去重）' : '全部命中' }} <span class="font-mono text-gray-400">{{ allMatchedRefnos.length }}</span>
+                  </button>
+                </div>
+              </div>
+              <div class="flex-1" />
+              <button type="button" class="rounded-md p-1.5 text-gray-500 hover:bg-gray-100 hover:text-danger" title="清空" aria-label="清空" @click="clearResults">
+                <Eraser class="h-4 w-4" />
               </button>
             </div>
-            <div v-if="copyStatus" class="mt-1.5 text-[11px] text-success">
+            <div v-if="copyStatus" class="mt-1 text-[11px] text-success">
               {{ copyStatus }}
             </div>
-          </div>
-
-          <div v-if="resultsExpanded && resultCenterText" class="border-b border-gray-100 px-3 py-2 text-[11px] text-gray-500" data-testid="spatial-result-center">
-            {{ resultCenterText }}
           </div>
 
           <div v-if="resultsExpanded && resultSet?.warnings.length" class="space-y-1.5 border-b border-gray-100 px-3 py-2">
@@ -638,10 +650,13 @@
             </div>
           </div>
 
+          <!-- 覆盖面：一句灰字，悬停看全文（PR-B2 剪辑；改前两行长句） -->
           <div v-if="resultsExpanded && resultSet && resultSet.coverage === 'global-tree'"
-            class="border-b border-gray-100 bg-gray-50 px-3 py-2 text-[11px] text-gray-500"
-            data-testid="spatial-coverage-hint">
-            结果仅含已生成过模型的构件（空间索引只收已生成的包围盒）；从未显示过的构件不在其中，先显示它们再查会被纳入。
+            class="flex items-center gap-1 border-b border-gray-100 px-3 py-1 text-[11px] text-gray-400"
+            data-testid="spatial-coverage-hint"
+            :title="COVERAGE_HINT_FULL">
+            <Info class="h-3 w-3 shrink-0" />
+            <span>只含已生成过模型的构件</span>
           </div>
 
           <!-- 房间层级树（ADR 0068）：选了房间就是树，房间列表 / 分页 / 分组开关都不再出现 -->
@@ -702,54 +717,46 @@
                 </div>
               </div>
 
-              <div class="space-y-1.5">
-                <button v-for="item in group.items"
+              <!-- 构件行：一行一个（PR-B2 剪辑；改前 3 行卡片 + 3 个 chip）——名字（没有才 refno）· noun · 距离，未加载灰字；refno / 名字 / 状态进 title -->
+              <div class="space-y-0.5">
+                <div v-for="item in group.items"
                   :key="item.refno"
-                  type="button"
-                  class="w-full rounded-lg border px-2.5 py-1.5 text-left transition-colors"
-                  :class="activeResultRefno === item.refno ? 'border-brand bg-brand-subtle' : 'border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50'"
-                  @click="focusItem(item)">
-                  <div class="flex items-start justify-between gap-2">
-                    <div class="min-w-0">
-                      <div class="truncate text-xs font-medium text-gray-900">{{ item.name || item.refno }}</div>
-                      <div class="mt-0.5 truncate font-mono text-[11px] text-gray-500">{{ item.refno }}</div>
-                      <div class="mt-1 flex flex-wrap gap-1">
-                        <span class="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] text-gray-500">{{ item.noun || 'UNKNOWN' }}</span>
-                        <span class="rounded-full px-2 py-0.5 text-[11px]" :class="item.loaded ? 'bg-success-subtle text-success' : 'bg-warning-subtle text-warning'">
-                          {{ item.loaded ? '已加载' : '未加载' }}
-                        </span>
-                        <span v-if="item.distance !== null" class="rounded-full bg-brand-subtle px-2 py-0.5 text-[11px] text-brand">
-                          {{ formatDistance(item.distance) }}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div class="flex shrink-0 items-center gap-1">
-                      <button type="button"
-                        class="rounded-md p-1 text-gray-500 hover:bg-white hover:text-gray-800"
-                        :title="item.visible ? '隐藏' : '显示'"
-                        @click.stop="toggleVisibility(item)">
-                        <Eye v-if="item.visible" class="h-4 w-4" />
-                        <EyeOff v-else class="h-4 w-4" />
-                      </button>
-                      <button type="button"
-                        class="rounded-md p-1 text-gray-500 hover:bg-white hover:text-gray-800"
-                        title="飞行定位"
-                        data-testid="locate-spatial-result"
-                        :data-refno="item.refno"
-                        @click.stop="focusItem(item)">
-                        <ArrowUpRight class="h-4 w-4" />
-                      </button>
-                      <button v-if="canAnnotatePipeDistance(item)"
-                        type="button"
-                        class="rounded-md p-1 text-gray-500 hover:bg-white hover:text-gray-800"
-                        title="按管径净距标注"
-                        @click.stop="annotatePipeDistance(item)">
-                        <Ruler class="h-4 w-4" />
-                      </button>
-                    </div>
-                  </div>
-                </button>
+                  class="flex items-center gap-1 rounded-md px-1.5 py-1 transition-colors"
+                  :class="activeResultRefno === item.refno ? 'bg-brand-subtle' : 'hover:bg-gray-50'"
+                  data-testid="spatial-result-row"
+                  :data-refno="item.refno">
+                  <button type="button"
+                    class="flex min-w-0 flex-1 items-center gap-1.5 text-left text-xs"
+                    :class="item.loaded ? 'text-gray-800' : 'text-gray-400'"
+                    :title="resultItemTitle(item)"
+                    @click="focusItem(item)">
+                    <span class="truncate" :class="hasDisplayName(item) ? '' : 'font-mono text-[11px]'">{{ hasDisplayName(item) ? item.name : item.refno }}</span>
+                    <span class="shrink-0 text-[11px] text-gray-500">{{ item.noun || 'UNKNOWN' }}</span>
+                    <span v-if="item.distance !== null" class="shrink-0 text-[11px] tabular-nums text-gray-400">{{ formatDistance(item.distance) }}</span>
+                  </button>
+                  <button type="button"
+                    class="shrink-0 rounded-md p-1 text-gray-500 hover:bg-white hover:text-gray-800"
+                    :title="item.visible ? '隐藏' : '显示'"
+                    @click.stop="toggleVisibility(item)">
+                    <Eye v-if="item.visible" class="h-3.5 w-3.5" />
+                    <EyeOff v-else class="h-3.5 w-3.5" />
+                  </button>
+                  <button type="button"
+                    class="shrink-0 rounded-md p-1 text-gray-500 hover:bg-white hover:text-gray-800"
+                    title="飞行定位"
+                    data-testid="locate-spatial-result"
+                    :data-refno="item.refno"
+                    @click.stop="focusItem(item)">
+                    <ArrowUpRight class="h-3.5 w-3.5" />
+                  </button>
+                  <button v-if="canAnnotatePipeDistance(item)"
+                    type="button"
+                    class="shrink-0 rounded-md p-1 text-gray-500 hover:bg-white hover:text-gray-800"
+                    title="按管径净距标注"
+                    @click.stop="annotatePipeDistance(item)">
+                    <Ruler class="h-3.5 w-3.5" />
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -762,7 +769,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 
-import { ArrowUpRight, Eye, EyeOff, Loader2, MapPinned, MousePointerClick, Ruler, Search, X } from 'lucide-vue-next';
+import { ArrowUpRight, Copy, Download, Eraser, Eye, EyeOff, Focus, Info, Loader2, MapPinned, MousePointerClick, RotateCcw, Ruler, Search, X } from 'lucide-vue-next';
 
 import SpatialResultTree from './SpatialResultTree.vue';
 
@@ -1061,7 +1068,8 @@ function clearSpecs(): void {
   draft.specValues = [];
 }
 
-const resultBreakdown = computed<string>(() => {
+/** 按专业 / 按库的小计，不带「共 N 项」（那句在摘要第一行）：`4 未知 · 1051 仪表` / `5 库24381 · 3 库24383` */
+const resultBreakdownParts = computed<string>(() => {
   if (!resultSet.value) return '';
   const parts = !groupByDbnum.value
     ? resultSet.value.groups
@@ -1070,11 +1078,46 @@ const resultBreakdown = computed<string>(() => {
     : (resultSet.value.dbnumGroups ?? [])
       .filter((group) => group.count > 0)
       .map((group) => `${group.count} 库${group.dbnum}`);
-  if (parts.length === 0) {
-    return `共 ${resultSet.value.total} 项`;
-  }
-  return `共 ${resultSet.value.total} 项 · ${parts.join(' · ')}`;
+  return parts.join(' · ');
 });
+
+/** 迷你模式那一行：`共 N 项 · 小计…` */
+const resultBreakdown = computed<string>(() => {
+  if (!resultSet.value) return '';
+  const parts = resultBreakdownParts.value;
+  return parts ? `共 ${resultSet.value.total} 项 · ${parts}` : `共 ${resultSet.value.total} 项`;
+});
+
+/** 摘要第二行全文（title 用）：小计 + 查询中心 */
+const resultDetailLine = computed<string>(() => [resultBreakdownParts.value, resultCenterText.value].filter(Boolean).join(' · '));
+
+/** 覆盖面提示全文（行上只放一句，悬停看这段） */
+const COVERAGE_HINT_FULL = '结果只含已生成过模型的构件（空间索引只收已生成的包围盒）；从未显示过的构件不在其中，先显示它们再查会被纳入。';
+
+/** 结果动作里的「复制」是一个按钮点开二选（本页 / 全部），这是它的开合；结果集一换就收起 */
+const copyMenuOpen = ref(false);
+watch(resultSet, () => {
+  copyMenuOpen.value = false;
+});
+
+/** 「加载未加载」的语义：树态没有页，补整棵树里没加载的；平铺态只补本页 */
+const loadUnloadedTitle = computed(() => (treeResult.value ? '加载未加载（整棵树）' : '加载未加载（本页）'));
+
+/** store 把没名字的构件 `name` 填成 refno 本身；这种不算「有名字」，行上仍显 refno */
+function hasDisplayName(item: SpatialQueryResultItem): boolean {
+  return Boolean(item.name && item.name !== item.refno);
+}
+
+/** 构件行 title：名字（有才有）· refno · noun · 距离 · 未加载（没加载才有） */
+function resultItemTitle(item: SpatialQueryResultItem): string {
+  return [
+    hasDisplayName(item) ? item.name : null,
+    item.refno,
+    item.noun || 'UNKNOWN',
+    item.distance !== null ? formatDistance(item.distance) : null,
+    item.loaded ? null : '未加载',
+  ].filter(Boolean).join(' · ');
+}
 
 const showCoordinateInputs = computed(() => {
   return (draft.mode === 'range' && (draft.rangeCenterSource === 'coordinates' || draft.rangeCenterSource === 'pick'))
@@ -1171,6 +1214,12 @@ const pagedResultItems = computed(() => {
 
 const allReturnedRefnos = computed(() => {
   return uniqueRefnosInOrder(resultSet.value?.items ?? []);
+});
+
+/** 「复制 · 全部」：整个命中集合（跨页，取回了全集才有），取不到时退回已返回的条目（树态两者相同） */
+const allMatchedRefnos = computed(() => {
+  const full = resultSet.value?.fullMatches?.refnos;
+  return full && full.length > 0 ? full : allReturnedRefnos.value;
 });
 
 /** 结果区的一组：按专业（`key` = spec_value）或按库（`key` = dbnum），由 `groupDimension` 决定（Q11）。 */
@@ -1535,12 +1584,7 @@ function restoreAll() {
   restoreScene();
 }
 
-// 「加载当前页」只动这一页；「只加载未加载」把整个命中集合里没加载的都补上（跨页，用户 2026-09-14 拍板保持全集语义）。
-function loadCurrentResults() {
-  void loadResults({ pages: 'current', flyTo: true });
-}
-
-/** 跨页的批量加载超过这个数先弹确认并显示数量（用户 2026-09-14 拍板：> 200 项）；1387 项那次点下去 3 分钟没回来。 */
+/** 批量加载超过这个数先弹确认并显示数量（用户 2026-09-14 拍板：> 200 项）；1387 项那次点下去 3 分钟没回来。 */
 const LARGE_BATCH_LOAD_CONFIRM_THRESHOLD = 200;
 
 /**
@@ -1561,9 +1605,15 @@ function runAfterLargeBatchConfirm(count: number, what: string, run: () => void)
   });
 }
 
+/**
+ * 「加载未加载」（PR-B2 把「加载当前页」与「只加载未加载」并成这一个）：树态没有页，补整棵树里没加载的；
+ * 平铺态只补本页没加载的（改前「只加载未加载」跨页取全集，1387 项那次点下去 3 分钟没回来——要整批就把每页数量调大）。
+ */
 function loadUnloadedResults() {
-  const options = { onlyUnloaded: true, flyTo: true };
-  runAfterLargeBatchConfirm(countLoadTargets(options), '「只加载未加载」', () => {
+  const options = treeResult.value
+    ? { onlyUnloaded: true, flyTo: true }
+    : { pages: 'current' as const, onlyUnloaded: true, flyTo: true };
+  runAfterLargeBatchConfirm(countLoadTargets(options), '「加载未加载」', () => {
     void loadResults(options);
   });
 }
@@ -1614,11 +1664,14 @@ async function copyRefnos(refnos: string[], label: string) {
 }
 
 function copyCurrentPageRefnos() {
+  copyMenuOpen.value = false;
   void copyRefnos(uniqueRefnosInOrder(pagedResultItems.value), '当前页');
 }
 
+/** 「全部」：整个命中集合（取回了全集才是跨页的），树态 = 整棵树去重 */
 function copyAllReturnedRefnos() {
-  void copyRefnos(allReturnedRefnos.value, '已返回');
+  copyMenuOpen.value = false;
+  void copyRefnos(allMatchedRefnos.value, treeResult.value ? '' : '命中');
 }
 
 function setModeAndKeepDraft(mode: SpatialQueryMode) {

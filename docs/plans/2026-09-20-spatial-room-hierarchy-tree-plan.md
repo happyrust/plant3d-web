@@ -205,6 +205,20 @@ include_negative, dbnums, rooms, spec_values`），**`rooms=` 必填**（没给 
    新增 `SpatialResultTree.test.ts` 7 项（五层渲染 / 计数 / title / 动作叠放 / 展开取叶 / 跨房标 / 空态）。真机复核：12 行主标识 ≤ 28 字的都不再溢出、
    计数右缘离面板右缘 12 px、悬停动作可见且不盖计数（`ui/tree-04…06.png`、`tree-rows-truncation-summary.json`）。
 3. **PR-B2（plant3d-web）**：结果区剪辑 + e2e 断言跟改。验收：单测 / e2e 全绿（e2e 在 `:8027` 上跑）。
+   **完成**：抽屉模板 / 脚本由 fable-5-1-12 剪完（21:15 前，随 retire-merge 前的 stash 进了暂存区）；fable-5-1-27 接手补齐单测 / e2e / 教程并提交。
+   剪辑落地：九个按钮 → 一排七个图标（`spatial-result-actions`：加载未加载 · 全显 / 全隐 · 隔离 / 恢复 · 复制 Refno（点开二选 本页 / 全部）· 清空，
+   `aria-label` = `title`），不必展开结果就在标题区；「加载当前页」并进「加载未加载」——平铺态 `{ pages: 'current', onlyUnloaded: true }`（title 标「本页」），
+   树态 `{ onlyUnloaded: true }`（标「整棵树」）；「复制 · 全部」取 `fullMatches.refnos`（全集）、树态只有它（「全部（去重）」）；
+   查询中心并进摘要第二行（`spatial-result-center` 是那行里的 span，整行进 `title`）；覆盖面缩成「只含已生成过模型的构件」+ `title` 全文；
+   构件行三行卡片 → 单行 `spatial-result-row[data-refno]`（名字 / 没名字则 refno · noun · 距离，未加载灰字，title = 名字 · refno · noun · 距离 · 未加载）。
+   单测：`SpatialQueryDrawer.test.ts` 6 条旧断言改写 + 新增 5 条（图标排 / 复制二选 ×2 / 单行卡片 / 树态动作），空间套件 7 文件 **119 passed**；eslint 0；
+   vue-tsc 本切片 0 新增。e2e：`resultRow` helper 改按 `data-refno` 找（有名字的行上不显 refno）、新增 `openCopyRefnosMenu`；
+   「结果动作」用例加图标排 / 旧按钮不在 / 单行 title 断言；「大数量确认」用例每页改 1000（平铺态只补本页，20 / 页凑不出 > 200）。
+   **真机**（2026-09-21 00:20–00:27，dev `:3111` + `:8027` = `65dacd576`、7997 整库已 ensure）：`spatial-query-gen-model-v1-ui.spec.ts` `--workers=1`
+   **9 passed / 1 skipped**（拾取中心要 `--headed`；日志 `docs/verification/spatial-room-hierarchy-tree-2026-09-20/e2e-…-0020.log`）。截图
+   `ui/trim-01…04`（+ `trim-summary.json`）：R432 中心 3 m 平铺态一排七个图标（`aria-label` 与上面一致）、摘要第二行 `56 未知 · 1177 仪表 · 69 土建 · 中心 -6380, -11350, 5030 · position`、
+   覆盖面一句 + title 全文、构件行单行 `24381_1409 · PANE · 0 m · 未加载`（title）、复制二选「本页 68 / 全部命中 1227」；选 R432 → 树态：「加载未加载（整棵树）」、
+   复制只剩「全部（去重）1055」、房间列表 / 分页 / 分组开关 0 个；pageerror 0、错误横幅 0。
 4. **PR-C（docs）**：教程 `SPATIAL_QUERY_TUTORIAL.md` 树态一节；本计划状态；真机验证记录 `docs/verification/spatial-room-hierarchy-tree-2026-09-20/`。
 
 第二批：

@@ -3,6 +3,7 @@ import { createApp, h, nextTick, reactive, ref, type Ref } from 'vue';
 
 import SpatialQueryDrawer from './SpatialQueryDrawer.vue';
 
+import type { SpatialTreeResult } from '@/api/genModelSpatialApi';
 import type {
   SpatialQueryCapabilities,
   SpatialQueryDraft,
@@ -1031,26 +1032,76 @@ describe('SpatialQueryDrawer (distance 模式)', () => {
     unmount();
   });
 
-  it('可复制当前页 refno，按当前展示顺序输出', async () => {
+  /** 结果动作那一排（PR-B2 剪辑后全是图标，靠 `aria-label` / `title` 找） */
+  function actionButton(host: HTMLElement, label: string): HTMLButtonElement | null {
+    return host.querySelector(`[data-testid="spatial-result-actions"] button[aria-label="${label}"]`) as HTMLButtonElement | null;
+  }
+
+  /** 「复制 Refno」是一个按钮点开二选：返回打开后的两个选项（树态 / 没有页时 `currentPage` 为 null） */
+  async function openCopyMenu(host: HTMLElement) {
+    const menu = host.querySelector('[data-testid="copy-refnos-menu"]') as HTMLButtonElement | null;
+    expect(menu).toBeTruthy();
+    expect(host.querySelector('[data-testid="copy-refnos-options"]')).toBeNull();
+    menu?.click();
+    await nextTick();
+    expect(host.querySelector('[data-testid="copy-refnos-options"]')).toBeTruthy();
+    return {
+      currentPage: host.querySelector('[data-testid="copy-current-page-refnos"]') as HTMLButtonElement | null,
+      all: host.querySelector('[data-testid="copy-all-returned-refnos"]') as HTMLButtonElement | null,
+    };
+  }
+
+  it('PR-B2 剪辑：结果动作收成一排图标——旧的九个文字按钮不再出现，动作行不必展开结果就在标题区', async () => {
+    stubState.resultSet.value = makeResultSet(2);
+
+    const { host, unmount } = mountDrawer();
+    await nextTick();
+
+    const texts = (Array.from(host.querySelectorAll('button')) as HTMLButtonElement[]).map((button) => button.textContent?.trim() ?? '');
+    for (const gone of ['加载当前页', '只加载未加载', '全部显示', '全部隐藏', '隔离结果', '恢复场景', '复制当前页 Refno', '复制已返回 Refno', '清空']) {
+      expect(texts, `旧按钮「${gone}」不该再以文字出现`).not.toContain(gone);
+    }
+    const actions = host.querySelector('[data-testid="spatial-result-actions"]');
+    expect(actions).toBeTruthy();
+    expect(Array.from(actions!.querySelectorAll('button')).map((button) => button.getAttribute('aria-label'))).toEqual([
+      '加载未加载（本页）', '全部显示', '全部隐藏', '隔离结果', '恢复场景', '复制 Refno', '清空',
+    ]);
+    // 每个图标都带 title（悬停可读）
+    for (const button of Array.from(actions!.querySelectorAll('button'))) {
+      expect(button.getAttribute('title')).toBe(button.getAttribute('aria-label'));
+    }
+
+    actionButton(host, '清空')?.click();
+    await nextTick();
+    expect(clearResults).toHaveBeenCalledTimes(1);
+
+    unmount();
+  });
+
+  it('复制 Refno 点开二选：「本页」按当前展示顺序输出；菜单缺省收起、复制后收起', async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     vi.stubGlobal('navigator', { clipboard: { writeText } });
     stubState.resultSet.value = makeResultSet(3);
 
     const { host, unmount } = mountDrawer();
     await nextTick();
-    await expandResults(host);
 
-    const copyButton = host.querySelector('[data-testid="copy-current-page-refnos"]') as HTMLButtonElement | null;
-    expect(copyButton).toBeTruthy();
-    copyButton?.click();
+    const { currentPage } = await openCopyMenu(host);
+    expect(currentPage).toBeTruthy();
+    expect(currentPage?.textContent).toContain('本页');
+    expect(currentPage?.textContent).toContain('3');
+    currentPage?.click();
     await nextTick();
 
     expect(writeText).toHaveBeenCalledWith('24381_100001\n24381_100002\n24381_100003');
+    expect(host.querySelector('[data-testid="copy-refnos-options"]')).toBeNull();
+    await flushMicrotasks();
+    expect(host.textContent).toContain('已复制 3 个当前页 Refno');
 
     unmount();
   });
 
-  it('可复制全部已返回 refno，去重后保持结果顺序', async () => {
+  it('复制 Refno「全部命中」：取回了全集就复制整个命中集合（跨页）；没有全集时退回已返回条目去重后保持结果顺序', async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     vi.stubGlobal('navigator', { clipboard: { writeText } });
     const resultSet = makeResultSet(3);
@@ -1063,53 +1114,65 @@ describe('SpatialQueryDrawer (distance 模式)', () => {
 
     const { host, unmount } = mountDrawer();
     await nextTick();
-    await expandResults(host);
 
-    const copyButton = host.querySelector('[data-testid="copy-all-returned-refnos"]') as HTMLButtonElement | null;
-    expect(copyButton).toBeTruthy();
-    copyButton?.click();
+    let menu = await openCopyMenu(host);
+    expect(menu.all?.textContent).toContain('全部命中');
+    expect(menu.all?.textContent).toContain('3');
+    menu.all?.click();
     await nextTick();
+    expect(writeText).toHaveBeenLastCalledWith('24381_100001\n24381_100002\n24381_100003');
 
-    expect(writeText).toHaveBeenCalledWith('24381_100001\n24381_100002\n24381_100003');
+    // 有全集（翻页时 store 取回的 `fullMatches`）：复制的是全集，条数按全集算
+    stubState.resultSet.value = {
+      ...makeResultSet(3, { perPage: 3, total: 5 }),
+      fullMatches: { refnos: ['24381_100001', '24381_100002', '24381_100003', '24381_100004', '24381_100005'], byDbnum: {}, bySpecValue: {}, total: 5, truncated: false },
+    };
+    await nextTick();
+    menu = await openCopyMenu(host);
+    expect(menu.all?.textContent).toContain('5');
+    menu.all?.click();
+    await nextTick();
+    expect(writeText).toHaveBeenLastCalledWith('24381_100001\n24381_100002\n24381_100003\n24381_100004\n24381_100005');
+    await flushMicrotasks();
+    expect(host.textContent).toContain('已复制 5 个命中 Refno');
 
     unmount();
   });
 
-  it('加载当前页只动当前页（pages: current）；只加载未加载仍按整个命中集合补加载', async () => {
+  it('「加载未加载」平铺态只补本页（pages: current + onlyUnloaded），title 标「本页」；「加载当前页」已并进它', async () => {
     stubState.resultSet.value = makeResultSet(2);
 
     const { host, unmount } = mountDrawer();
     await nextTick();
 
-    const allButtons = Array.from(host.querySelectorAll('button')) as HTMLButtonElement[];
-    allButtons.find((button) => button.textContent?.includes('加载当前页'))?.click();
+    const button = host.querySelector('[data-testid="spatial-load-unloaded"]') as HTMLButtonElement | null;
+    expect(button).toBeTruthy();
+    expect(button?.getAttribute('title')).toBe('加载未加载（本页）');
+    button?.click();
     await nextTick();
-    expect(loadResults).toHaveBeenCalledWith({ pages: 'current', flyTo: true });
-
-    allButtons.find((button) => button.textContent?.includes('只加载未加载'))?.click();
-    await nextTick();
-    expect(loadResults).toHaveBeenCalledWith({ onlyUnloaded: true, flyTo: true });
+    expect(loadResults).toHaveBeenCalledTimes(1);
+    expect(loadResults).toHaveBeenCalledWith({ pages: 'current', onlyUnloaded: true, flyTo: true });
 
     unmount();
   });
 
-  it('「只加载未加载」超过 200 项先弹确认并显示数量：不超过直接加载，取消不加载，确认才加载', async () => {
+  it('「加载未加载」超过 200 项先弹确认并显示数量：不超过直接加载，取消不加载，确认才加载', async () => {
     stubState.resultSet.value = makeResultSet(2);
 
     const { host, unmount } = mountDrawer();
     await nextTick();
     const clickUnloaded = () => {
-      (Array.from(host.querySelectorAll('button')) as HTMLButtonElement[])
-        .find((button) => button.textContent?.includes('只加载未加载'))?.click();
+      (host.querySelector('[data-testid="spatial-load-unloaded"]') as HTMLButtonElement | null)?.click();
     };
+    const expectedOptions = { pages: 'current', onlyUnloaded: true, flyTo: true };
 
     // 正好 200：不弹框，直接加载；数量按 loadResults 同一套取法算
     countLoadTargets.mockReturnValue(200);
     clickUnloaded();
     await nextTick();
-    expect(countLoadTargets).toHaveBeenCalledWith({ onlyUnloaded: true, flyTo: true });
+    expect(countLoadTargets).toHaveBeenCalledWith(expectedOptions);
     expect(confirmOpen).not.toHaveBeenCalled();
-    expect(loadResults).toHaveBeenCalledWith({ onlyUnloaded: true, flyTo: true });
+    expect(loadResults).toHaveBeenCalledWith(expectedOptions);
 
     // 1367：弹框、显示数量；取消 → 不加载
     loadResults.mockClear();
@@ -1120,7 +1183,7 @@ describe('SpatialQueryDrawer (distance 模式)', () => {
     expect(confirmOpen).toHaveBeenCalledTimes(1);
     const dialog = confirmOpen.mock.calls[0]![0];
     expect(dialog.title).toBe('加载数量较多');
-    expect(dialog.message).toContain('「只加载未加载」将加载 1367 个模型');
+    expect(dialog.message).toContain('「加载未加载」将加载 1367 个模型');
     expect(dialog.message).toContain('超过 200 个');
     expect(dialog.confirmText).toBe('加载 1367 个');
     expect(loadResults).not.toHaveBeenCalled();
@@ -1130,29 +1193,58 @@ describe('SpatialQueryDrawer (distance 模式)', () => {
     await flushMicrotasks();
     expect(confirmOpen).toHaveBeenCalledTimes(2);
     expect(loadResults).toHaveBeenCalledTimes(1);
-    expect(loadResults).toHaveBeenCalledWith({ onlyUnloaded: true, flyTo: true });
+    expect(loadResults).toHaveBeenCalledWith(expectedOptions);
 
     unmount();
   });
 
-  it('查看器动作按钮可显示、隐藏、隔离、恢复当前结果集', async () => {
+  it('查看器动作图标可显示、隐藏、隔离、恢复当前结果集', async () => {
     stubState.resultSet.value = makeResultSet(2);
 
     const { host, unmount } = mountDrawer();
     await nextTick();
-    await expandResults(host);
 
-    const allButtons = Array.from(host.querySelectorAll('button')) as HTMLButtonElement[];
-    allButtons.find((button) => button.textContent?.includes('全部显示'))?.click();
-    allButtons.find((button) => button.textContent?.includes('全部隐藏'))?.click();
-    allButtons.find((button) => button.textContent?.includes('隔离结果'))?.click();
-    allButtons.find((button) => button.textContent?.includes('恢复场景'))?.click();
+    actionButton(host, '全部显示')?.click();
+    actionButton(host, '全部隐藏')?.click();
+    actionButton(host, '隔离结果')?.click();
+    actionButton(host, '恢复场景')?.click();
     await nextTick();
 
     expect(setAllResultsVisible).toHaveBeenCalledWith(true);
     expect(setAllResultsVisible).toHaveBeenCalledWith(false);
     expect(isolateResults).toHaveBeenCalledTimes(1);
     expect(restoreScene).toHaveBeenCalledTimes(1);
+
+    unmount();
+  });
+
+  it('构件行单行（PR-B2 剪辑）：有名字显名字、refno 进 title；没名字显 refno；未加载灰字；title = 名字 · refno · noun · 距离 · 未加载', async () => {
+    const resultSet = makeResultSet(2);
+    resultSet.items[0] = { ...resultSet.items[0]!, name: '/C-IY-1R330-B', loaded: true, distance: 1234 };
+    resultSet.groups[0]!.items = resultSet.items;
+    stubState.resultSet.value = resultSet;
+
+    const { host, unmount } = mountDrawer();
+    await nextTick();
+    await expandResults(host);
+
+    const rows = Array.from(host.querySelectorAll('[data-testid="spatial-result-row"]')) as HTMLElement[];
+    expect(rows.map((row) => row.dataset.refno)).toEqual(['24381_100001', '24381_100002']);
+
+    const named = rows[0]!.querySelector('button[title]') as HTMLButtonElement;
+    expect(named.textContent).toContain('/C-IY-1R330-B');
+    expect(named.textContent).not.toContain('24381_100001');
+    expect(named.getAttribute('title')).toBe('/C-IY-1R330-B · 24381_100001 · PIPE · 1.234 m');
+    expect(named.className).toContain('text-gray-800');
+
+    // store 把没名字的构件 `name` 填成 refno 本身：行上显 refno（等宽），title 不重复名字、尾巴带「未加载」
+    const unnamed = rows[1]!.querySelector('button[title]') as HTMLButtonElement;
+    expect(unnamed.textContent).toContain('24381_100002');
+    expect(unnamed.getAttribute('title')).toBe('24381_100002 · PIPE · 0.001 m · 未加载');
+    expect(unnamed.className).toContain('text-gray-400');
+
+    // 旧卡片的三个 chip（「已加载 / 未加载」字样）不再画在行上
+    expect(rows[1]!.textContent).not.toContain('未加载');
 
     unmount();
   });
@@ -1245,7 +1337,10 @@ describe('SpatialQueryDrawer (distance 模式)', () => {
     const { host, unmount } = mountDrawer();
     await nextTick();
 
-    expect(host.textContent).toContain('共 9 项 · 5 库24381 · 3 库24383 · 1 库24390');
+    // PR-B2 剪辑：摘要第二行只放小计（「共 N 项」在第一行），整行进 title
+    expect(host.textContent).toContain('5 库24381 · 3 库24383 · 1 库24390');
+    expect(host.textContent).not.toContain('共 9 项 · 5 库24381');
+    expect(host.querySelector('[title="5 库24381 · 3 库24383 · 1 库24390"]')).toBeTruthy();
     expect(host.textContent).not.toContain('按专业分组');
 
     (host.querySelector('[data-testid="spatial-advanced-toggle"]') as HTMLButtonElement | null)?.click();
@@ -1256,7 +1351,11 @@ describe('SpatialQueryDrawer (distance 模式)', () => {
     expect(host.querySelector('[data-testid="spatial-sort-nameAsc"]')).toBeTruthy();
 
     await expandResults(host);
-    expect(host.querySelector('[data-testid="spatial-coverage-hint"]')?.textContent).toContain('仅含已生成过模型的构件');
+    // PR-B2 剪辑：覆盖面缩成一句，全文在 title
+    const coverageHint = host.querySelector('[data-testid="spatial-coverage-hint"]');
+    expect(coverageHint?.textContent?.trim()).toBe('只含已生成过模型的构件');
+    expect(coverageHint?.getAttribute('title')).toContain('空间索引只收已生成的包围盒');
+    expect(coverageHint?.getAttribute('title')).toContain('先显示它们再查会被纳入');
     const titles = Array.from(host.querySelectorAll('[data-testid="spatial-result-group-title"]')).map((el) => el.textContent?.trim());
     expect(titles).toEqual(['库 24381', '库 24383', '库 24390']);
     const groups = Array.from(host.querySelectorAll('[data-testid="spatial-result-group"]'));
@@ -1294,6 +1393,86 @@ describe('SpatialQueryDrawer (distance 模式)', () => {
     await flushMicrotasks();
     expect(loadResults).toHaveBeenCalledTimes(1);
     expect(loadResults).toHaveBeenCalledWith({ dbnum: 24381, flyTo: true });
+
+    unmount();
+  });
+
+  it('树态（ADR 0068，选了房间）：结果区是层级树，房间列表 / 分页 / 分组开关不出现；「加载未加载」补整棵树（无 pages）；复制只给「全部（去重）」', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal('navigator', { clipboard: { writeText } });
+    stubState.spatialCapabilities.value = { specValues: true, branCenterline: true, keywordMatchesName: false, nameSortExact: false, rooms: true, tree: true };
+    stubState.draft.rooms = [{ refno: '24381_35580', roomNum: 'R432', name: '/1RX-RM04-R432' }];
+
+    const tree: SpatialTreeResult = {
+      success: true,
+      total_count: 3,
+      candidate_count: 9,
+      truncated_candidates: false,
+      candidate_cap: 200000,
+      leaves_inline: true,
+      leaf_cap: 5000,
+      leaf_count: 3,
+      inlined: null,
+      delivery_unit_types: ['BRAN', 'HANG', 'SUPPO', 'EQUI'],
+      center: { x: 1, y: 2, z: 3, source: 'refno_aabb_center' },
+      radius: 3000,
+      shape: 'sphere',
+      warnings: [],
+      coverage: 'global-tree',
+      spatial_state: 'ready',
+      rooms: [{
+        refno: '24381_35580',
+        room_num: 'R432',
+        name: '/1RX-RM04-R432',
+        count: 3,
+        specs: [
+          { spec_value: 0, count: 1, unit_types: [], others: { count: 1, by_noun: [{ noun: 'PANE', count: 1, min_distance: 900, elements: [{ refno: '24381_100003', noun: 'PANE', distance: 900 }] }] } },
+          {
+            spec_value: 3,
+            count: 2,
+            unit_types: [{ noun: 'BRAN', count: 2, units: [{ refno: '24381_1200', noun: 'BRAN', name: '/C-IY-1R330-B', count: 2, min_distance: 100, elements: [{ refno: '24381_100001', noun: 'TUBI', distance: 100 }, { refno: '24381_100002', noun: 'ELBO', distance: 200 }] }] }],
+            others: { count: 0, by_noun: [] },
+          },
+        ],
+      }],
+    };
+    const base = makeResultSet(3, { perPage: 3, total: 3 });
+    stubState.resultSet.value = {
+      ...base,
+      tree,
+      fullMatches: { refnos: ['24381_100001', '24381_100002', '24381_100003'], byDbnum: {}, bySpecValue: {}, total: 3, truncated: false },
+      coverage: 'global-tree',
+    };
+
+    const { host, unmount } = mountDrawer();
+    await nextTick();
+
+    // 「加载未加载」：树态没有页，补整棵树里没加载的
+    const loadUnloaded = host.querySelector('[data-testid="spatial-load-unloaded"]') as HTMLButtonElement | null;
+    expect(loadUnloaded?.getAttribute('title')).toBe('加载未加载（整棵树）');
+    loadUnloaded?.click();
+    await nextTick();
+    expect(loadResults).toHaveBeenCalledWith({ onlyUnloaded: true, flyTo: true });
+
+    // 复制：没有「本页」，只有「全部（去重）」= 整棵树去重后的 refno
+    const menu = await openCopyMenu(host);
+    expect(menu.currentPage).toBeNull();
+    expect(menu.all?.textContent).toContain('全部（去重）');
+    expect(menu.all?.textContent).toContain('3');
+    menu.all?.click();
+    await nextTick();
+    expect(writeText).toHaveBeenCalledWith('24381_100001\n24381_100002\n24381_100003');
+    await flushMicrotasks();
+    expect(host.textContent).toContain('已复制 3 个 Refno');
+
+    await expandResults(host);
+    expect(host.querySelector('[data-testid="spatial-tree-panel"]')).toBeTruthy();
+    expect(host.textContent).toContain('R432');
+    expect(host.querySelector('[data-testid="spatial-result-group"]')).toBeNull();
+    expect(host.querySelector('[data-testid="spatial-group-dimension"]')).toBeNull();
+    expect(host.querySelector('[data-testid="spatial-result-page-prev"]')).toBeNull();
+    expect(host.querySelector('[data-testid="spatial-room-row"]')).toBeNull();
+    expect(host.textContent).not.toContain('房间列表');
 
     unmount();
   });
