@@ -111,6 +111,11 @@
 
 ### 修复
 
+- **评论列表里的 Debug 形态 id（`String("comment-…")`）解包成裸 id，时间线上删 / 改评论重新打得中** (2026-09-20)
+  - gen-model 校审域三处把 SurrealDB 行主键按 Rust `Debug` 写进响应体（`GET /api/review/comments/by-annotation/*`、`GET /api/review/tasks/{id}/history`、workflow sync 的评论），后端用 `record_id_debug_shape_matches_the_legacy_sdk` 钉住了这个形态（旧端同形）；而建评论回执与 `DELETE|PATCH /api/review/comments/item/{id}` 认的都是裸 `comment-…`。前端 `normalizeAnnotationComment` 原样 `String(raw.id)`，时间线拿列表 id 去删 → 404「评论不存在」。
+  - 新增 `unwrapRecordIdDebugShape()`：`String("x")` → `x`（Debug 转义按 JSON 解）、`Number(7)` → `7`，裸 id 原样；接在 `normalizeAnnotationComment`（`id` / `replyToId`）、`normalizeWorkflowSyncResponse`（records / annotationComments 的 id）与 `reviewTaskGetHistory` 上。
+  - 验证：`reviewApi.test.ts` 新增 6 例（含 by-annotation → delete 的 fetch 级往返、history 解包）54/54；本机 gen-model `:8031`（0.1.27，`PLANT_REVIEW_ALLOW_EPHEMERAL_STORE=1`）真机：经前端 `reviewCommentGetByAnnotation` 取回的 id 与建评论回执逐字相同，再删 200；改前同一路径拿列表 id 删是 404。
+
 - **Quicktest 模型加载离线化与聚焦修复** (2026-06-09)
   - DuckDB-WASM 初始化后统一设置 `custom_extension_repository` 到同源 `/duckdb/extensions`，`parquet_scan()` 不再访问公网 `extensions.duckdb.org` 下载 `parquet.duckdb_extension.wasm`
   - Vite 构建复制 `wasm_eh` / `wasm_mvp` / `wasm_threads` 三份 parquet extension 到 `dist/duckdb/extensions/v1.5.3/...`，开发服务器也支持同路径本地返回
