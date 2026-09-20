@@ -1674,6 +1674,9 @@ export type SpatialClearanceGroup = {
   group: string;
   nouns: string[];
   /** 距离升序，已按 `max_per_group` 截断；`target_groups` 分桶下空桶保留（并出 warning） */
+  candidates: SpatialClearanceCandidate[];
+};
+
 // ---- 房间层级树（spec §4.13.5 / §4.13.6；ADR 0068）----
 
 /** 树里的一个构件（叶子）；`shared_rooms` 只在它属于 ≥ 2 间所选房间时出现。 */
@@ -1808,9 +1811,6 @@ export function genModelV1SpatialRoomTree(
     },
   });
 }
-
-  candidates: SpatialClearanceCandidate[];
-};
 
 export type SpatialClearanceSource = {
   kind: SpatialClearanceSourceMode | (string & {});
