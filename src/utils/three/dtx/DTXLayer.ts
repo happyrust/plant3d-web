@@ -17,6 +17,7 @@ import {
   BufferAttribute,
   BufferGeometry,
   Color,
+  CubeTexture,
   DataTexture,
   DirectionalLight,
   FloatType,
@@ -946,7 +947,7 @@ export class DTXLayer {
     return this._sglLightingEnabled;
   }
 
-  /** 解析环境（天顶 / 地面亮度）与世界上方向 */
+  /** 解析环境（天顶 / 地面亮度）与世界上方向（没有立方体贴图时的兜底） */
   setSglEnv(skyLum: number, groundLum: number, up?: Vector3): void {
     this._sglEnv = { skyLum, groundLum, up: up ? up.clone() : this._sglEnv.up };
     for (const m of [this._material, this._transparentMaterial]) {
@@ -954,9 +955,25 @@ export class DTXLayer {
     }
   }
 
+  /**
+   * sglDx11 内嵌的环境立方体贴图（`loadSgl31EnvCube()`），SGL 口径的反射项采它；null = 退回天/地兜底。
+   * compile() 之前调用会记住，材质建好后再套上。贴图的生命周期由调用方管。
+   */
+  setSglEnvMap(envMap: CubeTexture | null): void {
+    this._sglEnvMap = envMap;
+    for (const m of [this._material, this._transparentMaterial]) {
+      m?.setSglEnvMap(envMap);
+    }
+  }
+
+  get sglEnvMap(): CubeTexture | null {
+    return this._sglEnvMap;
+  }
+
   private _sglLightingEnabled = false;
   private _sglLightParams: Partial<SglSceneLightParams> = {};
   private _sglEnv: { skyLum: number; groundLum: number; up: Vector3 } = { skyLum: 0.75, groundLum: 0.25, up: new Vector3(0, 0, 1) };
+  private _sglEnvMap: CubeTexture | null = null;
 
   private _applySglLighting(): void {
     for (const m of [this._material, this._transparentMaterial]) {
@@ -964,6 +981,7 @@ export class DTXLayer {
       m.setSglLighting(this._sglLightingEnabled);
       m.setSglLightParams(this._sglLightParams);
       m.setSglEnv(this._sglEnv.skyLum, this._sglEnv.groundLum, this._sglEnv.up);
+      m.setSglEnvMap(this._sglEnvMap);
     }
   }
 

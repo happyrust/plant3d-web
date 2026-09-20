@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
+import { Color, CubeTexture, LinearFilter, NoColorSpace, Vector3 } from 'three';
+
+import {
+  SGL31_ENVCUBE_FACE_FILES,
+  configureSglEnvCubeTexture,
+  envCubeRotationForUp,
+  sgl31EnvCubeUrls
+} from './sglEnvCube';
 import {
   SGL_DEFAULT_LIGHT,
   SGL_E3D31_VIEW_DEFAULT_LIGHT,
@@ -8,7 +16,20 @@ import {
   SglLookMaterial,
   translucencyToAlpha
 } from './sglLookMaterial';
-import { SGL_PIPELINE_SHADERS, createDefaultSglPipelineParams } from './sglLookPipeline';
+import {
+  E3D_BACKGROUND_GREY,
+  E3D_GRADIENT_BOTTOM_T,
+  E3D_GRADIENT_TOP_T,
+  SGL_PIPELINE_SHADERS,
+  createDefaultSglPipelineParams,
+  sglDefaultGradientEndColour
+} from './sglLookPipeline';
+import {
+  DEFAULT_SGL_LOOK_PRESET,
+  SGL_LOOK_PRESETS,
+  applySglLookPresetToPipelineParams,
+  parseSglLookPresetId
+} from './sglLookPresets';
 
 describe('SglLookMaterial —— 与 sglDx11 逆向口径对齐', () => {
   it('默认光照常量等于 CSglSceneLightParams 构造函数里的值（Ks=Specular 0.3，Kr=Reflection 0.35）', () => {
@@ -60,11 +81,62 @@ describe('SglLookMaterial —— 与 sglDx11 逆向口径对齐', () => {
 
   it('片元着色器保留 sglDx11 的公式骨架', () => {
     const fs = SGL_LOOK_SHADERS.fragment;
-    // 高光带 NdotL 门控与乘子，反射取灰度，最终 c*(Ka+Kd*ndl) + Ks*spec + Kr*envLum
+    // 高光带 NdotL 门控与乘子，反射采立方体贴图（世界 R 经 uEnvRot 换到贴图空间）逐通道乘 Kr，
+    // 最终 c*(Ka+Kd*ndl) + Ks*spec + Kr*env（3.1 dxbc_044：mul r2, env, Kr → mad Ks*spec → mad Ka*c → mad Kd*ndl*c）
     expect(fs).toContain('pow(max(ndh, 1e-6), uKse) * ndl');
-    expect(fs).toContain('(e.r + e.g + e.b) * (1.0 / 3.0)');
-    expect(fs).toContain('c * (uKa + uKd * ndl) + uKs * spec + uKr * envLum');
+    expect(fs).toContain('textureCube(uEnvMap, uEnvRot * Rw).rgb');
+    expect(fs).toContain('c * (uKa + uKd * ndl) + uKs * spec + uKr * env');
     expect(fs).not.toContain('colorspace_fragment');
+  });
+
+  it('环境贴图：默认没有 → 解析兜底；setEnvMap 切到贴图；setUp 改旋转', () => {
+    const m = new SglLookMaterial();
+    expect(m.envMap).toBeNull();
+    expect(m.sglUniforms.uUseEnvMap.value).toBe(0);
+    const tex = new CubeTexture();
+    m.setEnvMap(tex);
+    expect(m.envMap).toBe(tex);
+    expect(m.sglUniforms.uUseEnvMap.value).toBe(1);
+    // 默认 Z-up：(x, y, z) → (x, z, −y)
+    const r = new Vector3(0.2, 0.5, 0.8).applyMatrix3(m.sglUniforms.uEnvRot.value);
+    expect([r.x, r.y, r.z].map((v) => Math.round(v * 1000) / 1000)).toEqual([0.2, 0.8, -0.5]);
+    m.setUp(new Vector3(0, 1, 0));
+    const r2 = new Vector3(0.2, 0.5, 0.8).applyMatrix3(m.sglUniforms.uEnvRot.value);
+    expect([r2.x, r2.y, r2.z]).toEqual([0.2, 0.5, 0.8]);
+    m.setEnvMap(null);
+    expect(m.sglUniforms.uUseEnvMap.value).toBe(0);
+  });
+});
+
+describe('sglEnvCube —— sglDx11 内嵌环境立方体贴图的口径', () => {
+  it('Z-up 世界的反射向量按 sglDx11 的 (x, z, −y) 换到贴图空间，Y-up 世界不动', () => {
+    const zUp = envCubeRotationForUp(new Vector3(0, 0, 1));
+    const v = new Vector3(1, 2, 3).applyMatrix3(zUp);
+    expect([v.x, v.y, v.z]).toEqual([1, 3, -2]);
+    // 世界 +Z（天顶）→ 贴图 +Y；世界 −Z → 贴图 −Y
+    const up = new Vector3(0, 0, 1).applyMatrix3(zUp);
+    expect([up.x, up.y, up.z]).toEqual([0, 1, 0]);
+    const yUp = envCubeRotationForUp(new Vector3(0, 1, 0));
+    const w = new Vector3(1, 2, 3).applyMatrix3(yUp);
+    expect([w.x, w.y, w.z]).toEqual([1, 2, 3]);
+  });
+
+  it('六面顺序 +X −X +Y −Y +Z −Z，URL 挂在 BASE_URL 下', () => {
+    expect(SGL31_ENVCUBE_FACE_FILES).toEqual(['px.png', 'nx.png', 'py.png', 'ny.png', 'pz.png', 'nz.png']);
+    const urls = sgl31EnvCubeUrls('/app');
+    expect(urls).toHaveLength(6);
+    expect(urls[0]).toBe('/app/texture/e3d/sgl31-envcube/px.png');
+    expect(urls[5]).toBe('/app/texture/e3d/sgl31-envcube/nz.png');
+    expect(sgl31EnvCubeUrls()[0]!.endsWith('texture/e3d/sgl31-envcube/px.png')).toBe(true);
+  });
+
+  it('贴图按 D3D 采样口径配置：无 mip、双线性、不做 sRGB 解码、不翻 Y', () => {
+    const tex = configureSglEnvCubeTexture(new CubeTexture());
+    expect(tex.generateMipmaps).toBe(false);
+    expect(tex.minFilter).toBe(LinearFilter);
+    expect(tex.magFilter).toBe(LinearFilter);
+    expect(tex.colorSpace).toBe(NoColorSpace);
+    expect(tex.flipY).toBe(false);
   });
 });
 
@@ -77,11 +149,74 @@ describe('SglLookPipeline 参数与着色器', () => {
     expect(p.legacyMode).toBe(false);
   });
 
-  it('法线/深度 MRT 用位置导数叉乘，HLR 用二阶深度差分的远侧 + 法线折痕', () => {
+  it('背景按 E3D 3.1：grey #828282 在上、端色白在下，渐变 t 顶 0.233 / 底 0.9', () => {
+    const p = createDefaultSglPipelineParams();
+    expect(E3D_BACKGROUND_GREY).toBe(0x828282);
+    expect(p.background.top.getHex()).toBe(0x828282);
+    expect(p.background.bottom.getHex()).toBe(0xffffff);
+    expect(p.background.flat.getHex()).toBe(0x828282);
+    expect(p.background.gradientTopT).toBeCloseTo(0.35 / 1.5, 6);
+    expect(p.background.gradientBottomT).toBeCloseTo(0.9, 6);
+    expect(E3D_GRADIENT_TOP_T).toBeCloseTo(0.2333, 3);
+    expect(E3D_GRADIENT_BOTTOM_T).toBeCloseTo(0.9, 6);
+    // 端色算法（HLS 亮度拉满）对任何背景色都给白
+    expect(sglDefaultGradientEndColour(new Color(0x828282)).getHex()).toBe(0xffffff);
+    expect(sglDefaultGradientEndColour(0x0000ff).getHex()).toBe(0xffffff);
+  });
+
+  it('法线/深度 MRT 用位置导数叉乘，HLR 用二阶深度差分的远侧 + 法线折痕，合成里渐变用 uBgGradT 区间', () => {
     expect(SGL_PIPELINE_SHADERS.normalDepthFragment).toContain('cross(dFdx(vViewPos), dFdy(vViewPos))');
     expect(SGL_PIPELINE_SHADERS.hlr).toContain('(b.a - c.a) - (c.a - a.a)');
     expect(SGL_PIPELINE_SHADERS.hlr).toContain('d2 < -uDepthThreshold');
     expect(SGL_PIPELINE_SHADERS.hlr).toContain('< uNormalThreshold');
     expect(SGL_PIPELINE_SHADERS.composite).toContain('col * hlr * ao');
+    expect(SGL_PIPELINE_SHADERS.composite).toContain('mix(uBgGradT.y, uBgGradT.x, vUv.y)');
+    expect(SGL_PIPELINE_SHADERS.composite).toContain('mix(uBgTop, uBgBottom, t)');
+  });
+});
+
+describe('SglLookPresets —— 出厂 E3D 3.1 与本机真机两套口径', () => {
+  it('默认预设是出厂 E3D 3.1：光照 {0.7,0,0,0.8,0}，边线 / 伪阴影 / 渐变全开，背景 grey→白', () => {
+    expect(DEFAULT_SGL_LOOK_PRESET).toBe('e3d31-factory');
+    const f = SGL_LOOK_PRESETS['e3d31-factory'];
+    expect(f.light).toEqual(SGL_E3D31_VIEW_DEFAULT_LIGHT);
+    expect(f.hlr && f.ao && f.gradient).toBe(true);
+    expect(f.background).toBe(0x828282);
+    expect(f.gradientEnd).toBe(0xffffff);
+  });
+
+  it('本机真机预设：SGL C++ 默认光照，边线 / 伪阴影 / 渐变全关，背景纯灰', () => {
+    const m = SGL_LOOK_PRESETS['sgl-machine'];
+    expect(m.light).toEqual(SGL_DEFAULT_LIGHT);
+    expect(m.hlr || m.ao || m.gradient).toBe(false);
+    expect(m.background).toBe(0x828282);
+  });
+
+  it('applySglLookPresetToPipelineParams 只动开关与背景色，不碰 HBAO / HLR 数值', () => {
+    const p = createDefaultSglPipelineParams();
+    p.ao.radius = 123;
+    p.hlr.depthThreshold = 7;
+    p.background.top.setHex(0x123456);
+    applySglLookPresetToPipelineParams(p, SGL_LOOK_PRESETS['sgl-machine']);
+    expect(p.hlr.enabled).toBe(false);
+    expect(p.ao.enabled).toBe(false);
+    expect(p.background.gradient).toBe(false);
+    expect(p.background.top.getHex()).toBe(0x828282);
+    expect(p.background.bottom.getHex()).toBe(0xffffff);
+    expect(p.background.flat.getHex()).toBe(0x828282);
+    expect(p.ao.radius).toBe(123);
+    expect(p.hlr.depthThreshold).toBe(7);
+    applySglLookPresetToPipelineParams(p, SGL_LOOK_PRESETS['e3d31-factory']);
+    expect(p.hlr.enabled && p.ao.enabled && p.background.gradient).toBe(true);
+    expect(p.legacyMode).toBe(false);
+  });
+
+  it('URL / localStorage 短写解析', () => {
+    expect(parseSglLookPresetId('factory')).toBe('e3d31-factory');
+    expect(parseSglLookPresetId('E3D31-Factory')).toBe('e3d31-factory');
+    expect(parseSglLookPresetId('machine')).toBe('sgl-machine');
+    expect(parseSglLookPresetId('sgl-machine')).toBe('sgl-machine');
+    expect(parseSglLookPresetId('nope')).toBeNull();
+    expect(parseSglLookPresetId(null)).toBeNull();
   });
 });

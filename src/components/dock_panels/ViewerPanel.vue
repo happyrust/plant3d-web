@@ -19,6 +19,7 @@ import {
 import {
   Box3,
   Color,
+  type CubeTexture,
   Matrix4,
   Vector2,
   Vector3,
@@ -140,7 +141,15 @@ import { loadDtxPrimitiveDemo } from '@/viewer/dtx/dtxPrimitiveDemo';
 import { DTXTileLodController } from '@/viewer/dtx/DTXTileLodController';
 import { DtxViewer, type BackgroundMode } from '@/viewer/dtx/DtxViewer';
 import { shouldStopShowDbnumLoad } from '@/viewer/dtx/showDbnumLoadPolicy';
-import { SglLookPipeline } from '@/viewer/e3dLook';
+import {
+  DEFAULT_SGL_LOOK_PRESET,
+  SGL_LOOK_PRESETS,
+  SglLookPipeline,
+  applySglLookPresetToPipelineParams,
+  loadSgl31EnvCube,
+  parseSglLookPresetId,
+  type SglLookPresetId,
+} from '@/viewer/e3dLook';
 
 defineProps<{
     params: {
@@ -316,17 +325,45 @@ function onGlobalEdgeEnabledChange(enabled: boolean): void {
   }
 }
 
-/** 把 E3D 外观开关同步到 DTX 材质（光照公式）与后处理管线（HLR / AO） */
+/**
+ * 把 E3D 外观开关同步到 DTX 材质（光照公式 + 预设的光照常量 + 环境立方体贴图）
+ * 与后处理管线（HLR / AO / 背景渐变）。
+ */
 function applySglLook(): void {
   const enabled = sglLookEnabled.value;
-  dtxLayerRef.value?.setSglLighting(enabled);
-  for (const layer of showDbnumExtraDtxLayers) layer.setSglLighting(enabled);
+  const preset = SGL_LOOK_PRESETS[sglLookPreset.value];
+  for (const layer of getSglDtxLayers()) {
+    layer.setSglLighting(enabled, preset.light);
+    layer.setSglEnvMap(sglEnvCubeRef.value);
+  }
   const pipeline = sglPipelineRef.value;
   if (pipeline) {
+    // 预设先把背景色 / 渐变端色写进去，再按面板上的三个子开关覆盖开关位
+    applySglLookPresetToPipelineParams(pipeline.params, preset);
     pipeline.params.hlr.enabled = sglLookHlrEnabled.value;
     pipeline.params.ao.enabled = sglLookAoEnabled.value;
+    pipeline.params.background.gradient = sglLookGradientEnabled.value;
   }
   requestRender();
+}
+
+function getSglDtxLayers(): DTXLayer[] {
+  const primary = dtxLayerRef.value;
+  return primary ? [primary, ...showDbnumExtraDtxLayers] : [...showDbnumExtraDtxLayers];
+}
+
+/** 切预设：光照常量换掉，三个子开关回到该预设的出厂位 */
+function onSglLookPresetChange(id: SglLookPresetId): void {
+  const preset = SGL_LOOK_PRESETS[id];
+  sglLookPreset.value = id;
+  sglLookHlrEnabled.value = preset.hlr;
+  sglLookAoEnabled.value = preset.ao;
+  sglLookGradientEnabled.value = preset.gradient;
+  applySglLook();
+  safeLsSet('dtx_look_preset', id);
+  safeLsSet('dtx_look_hlr', preset.hlr ? '1' : '0');
+  safeLsSet('dtx_look_ao', preset.ao ? '1' : '0');
+  safeLsSet('dtx_look_gradient', preset.gradient ? '1' : '0');
 }
 
 function onSglLookEnabledChange(enabled: boolean): void {
@@ -345,6 +382,33 @@ function onSglLookAoChange(enabled: boolean): void {
   sglLookAoEnabled.value = enabled;
   applySglLook();
   safeLsSet('dtx_look_ao', enabled ? '1' : '0');
+}
+
+function onSglLookGradientChange(enabled: boolean): void {
+  sglLookGradientEnabled.value = enabled;
+  applySglLook();
+  safeLsSet('dtx_look_gradient', enabled ? '1' : '0');
+}
+
+/** sglDx11 内嵌的环境立方体贴图：页面里只加载一次，加载完套到所有 DTX 层上 */
+function ensureSglEnvCubeLoaded(): void {
+  if (sglEnvCubeRef.value || sglEnvCubeLoading) return;
+  sglEnvCubeLoading = true;
+  loadSgl31EnvCube()
+    .then((tex) => {
+      sglEnvCubeLoading = false;
+      if (sglLookDisposed) {
+        tex.dispose();
+        return;
+      }
+      sglEnvCubeRef.value = tex;
+      for (const layer of getSglDtxLayers()) layer.setSglEnvMap(tex);
+      requestRender();
+    })
+    .catch((e: unknown) => {
+      sglEnvCubeLoading = false;
+      console.warn('[ViewerPanel] E3D 环境立方体贴图加载失败，反射退回天/地两段灰度', e);
+    });
 }
 
 /** 主场景那一笔：E3D 外观开着就走 SGL 后处理管线，否则直出 */
@@ -663,12 +727,17 @@ function sceneDirectionToDesign(
 
 const cameraViewMode = ref<CameraViewMode>('cad_weak');
 const globalEdgeEnabled = ref(false);
-// E3D 外观（SGL 复刻，docs/rendering/e3d-sgl-look-prototype.md）：光照公式 + HLR 边线 + HBAO
-// 2026-09-20 与本机 E3D 3.1 真机同视角对参：那台的增强边线 / 伪阴影都是关的、背景纯灰 #828282，所以子开关默认关
+// E3D 外观（SGL 复刻，docs/rendering/e3d-sgl-look-prototype.md）：光照公式 + 环境立方体贴图 + HLR 边线 + HBAO + 背景渐变
+// 预设默认「出厂 E3D 3.1」（边线 / 伪阴影 / 渐变全开，0.7·c + 0.8·env）；「本机真机」对应 2026-09-20 对参的那台（全关、0.5/0.8 Blinn-Phong）
 const sglLookEnabled = ref(false);
-const sglLookHlrEnabled = ref(false);
-const sglLookAoEnabled = ref(false);
+const sglLookPreset = ref<SglLookPresetId>(DEFAULT_SGL_LOOK_PRESET);
+const sglLookHlrEnabled = ref(SGL_LOOK_PRESETS[DEFAULT_SGL_LOOK_PRESET].hlr);
+const sglLookAoEnabled = ref(SGL_LOOK_PRESETS[DEFAULT_SGL_LOOK_PRESET].ao);
+const sglLookGradientEnabled = ref(SGL_LOOK_PRESETS[DEFAULT_SGL_LOOK_PRESET].gradient);
 const sglPipelineRef = shallowRef<SglLookPipeline | null>(null);
+const sglEnvCubeRef = shallowRef<CubeTexture | null>(null);
+let sglEnvCubeLoading = false;
+let sglLookDisposed = false;
 const globalEdgeThresholdAngle = ref(20);
 const focusTransparencyEnabled = ref(false);
 const focusDimOpacityPercent = ref(20);
@@ -1814,6 +1883,9 @@ function createShowDbnumDtxLayer(dtxViewer: DtxViewer, sourceLayer: DTXLayer): D
   });
   layer.setRenderer(dtxViewer.renderer);
   layer.setGlobalModelMatrix(sourceLayer.getGlobalModelMatrix());
+  // 新层跟主层同一套 E3D 外观口径（光照常量 + 环境立方体贴图）
+  layer.setSglLighting(sglLookEnabled.value, SGL_LOOK_PRESETS[sglLookPreset.value].light);
+  layer.setSglEnvMap(sglEnvCubeRef.value);
   showDbnumExtraDtxLayers.push(layer);
   if (typeof window !== 'undefined') {
     (window as any).__dtxShowDbnumExtraLayers = showDbnumExtraDtxLayers;
@@ -3214,8 +3286,11 @@ onMounted(async () => {
   focusTransparencyEnabled.value = false;
   focusDimOpacityPercent.value = 20;
   sglLookEnabled.value = false;
-  sglLookHlrEnabled.value = false;
-  sglLookAoEnabled.value = false;
+  sglLookPreset.value = DEFAULT_SGL_LOOK_PRESET;
+  sglLookHlrEnabled.value = SGL_LOOK_PRESETS[DEFAULT_SGL_LOOK_PRESET].hlr;
+  sglLookAoEnabled.value = SGL_LOOK_PRESETS[DEFAULT_SGL_LOOK_PRESET].ao;
+  sglLookGradientEnabled.value = SGL_LOOK_PRESETS[DEFAULT_SGL_LOOK_PRESET].gradient;
+  sglLookDisposed = false;
   try {
     // DEV: localStorage.setItem('dtx_continuous_render','1') 可打开持续渲染（用于 profile）
     continuousRender =
@@ -3280,10 +3355,18 @@ onMounted(async () => {
       );
     }
 
-    // E3D 外观：?dtx_look=sgl|pbr，子开关 dtx_look_hlr / dtx_look_ao（'0' 关）
+    // E3D 外观：?dtx_look=sgl|pbr，预设 dtx_look_preset=factory|machine（缺省 factory），
+    // 子开关 dtx_look_hlr / dtx_look_ao / dtx_look_gradient（'0' 关；缺省随预设）
     const lookRaw = q.get('dtx_look') || localStorage.getItem('dtx_look');
     if (lookRaw !== null && lookRaw !== undefined) {
       sglLookEnabled.value = String(lookRaw).trim().toLowerCase() === 'sgl';
+    }
+    const lookPreset = parseSglLookPresetId(q.get('dtx_look_preset') || localStorage.getItem('dtx_look_preset'));
+    if (lookPreset) {
+      sglLookPreset.value = lookPreset;
+      sglLookHlrEnabled.value = SGL_LOOK_PRESETS[lookPreset].hlr;
+      sglLookAoEnabled.value = SGL_LOOK_PRESETS[lookPreset].ao;
+      sglLookGradientEnabled.value = SGL_LOOK_PRESETS[lookPreset].gradient;
     }
     const lookHlrRaw = q.get('dtx_look_hlr') || localStorage.getItem('dtx_look_hlr');
     if (lookHlrRaw !== null && lookHlrRaw !== undefined) {
@@ -3292,6 +3375,10 @@ onMounted(async () => {
     const lookAoRaw = q.get('dtx_look_ao') || localStorage.getItem('dtx_look_ao');
     if (lookAoRaw !== null && lookAoRaw !== undefined) {
       sglLookAoEnabled.value = String(lookAoRaw).trim() !== '0';
+    }
+    const lookGradientRaw = q.get('dtx_look_gradient') || localStorage.getItem('dtx_look_gradient');
+    if (lookGradientRaw !== null && lookGradientRaw !== undefined) {
+      sglLookGradientEnabled.value = String(lookGradientRaw).trim() !== '0';
     }
   } catch {
     // ignore
@@ -3315,8 +3402,8 @@ onMounted(async () => {
   applyBackground(backgroundStore.mode.value);
   applyCameraViewMode(cameraViewMode.value);
 
-  // E3D 外观后处理管线：DTX 材质自己出法线/深度（providers）；背景由管线按 E3D 真机口径直写
-  // （纯灰 #828282，不过 tone mapping——走 scene.background 会被 ACES/曝光抬成 162）
+  // E3D 外观后处理管线：DTX 材质自己出法线/深度（providers）；背景由管线按 E3D 口径直写
+  // （grey #828282 → 白的 D2D 式渐变，或纯灰；不过 tone mapping——走 scene.background 会被 ACES/曝光抬成 162）
   try {
     // 场景在 modelUnit=mm/m 时都已按米摆放（loader 里 mm×0.001），阈值/半径按米给
     const sceneInMetres = unitSettings.modelUnit.value !== 'raw';
@@ -3325,16 +3412,18 @@ onMounted(async () => {
       {
         hlr: { depthThreshold: sceneInMetres ? 0.05 : 50 },
         ao: { radius: sceneInMetres ? 0.4 : 400, blurSharpness: sceneInMetres ? 10 : 0.01 },
-        background: { gradient: false, flat: new Color(0x828282) },
       },
       { useSceneBackground: false, normalDepthSource: 'providers' },
     );
+    applySglLookPresetToPipelineParams(sglPipeline.params, SGL_LOOK_PRESETS[sglLookPreset.value]);
     sglPipeline.setSize(canvas.clientWidth || canvas.width, canvas.clientHeight || canvas.height);
     sglPipelineRef.value = sglPipeline;
     if (isDev) (window as any).__sglLookPipeline = sglPipeline;
   } catch (e) {
     console.warn('[ViewerPanel] E3D 外观管线初始化失败', e);
   }
+  // 反射用的环境立方体贴图（六张 5 KB 的 PNG），开不开 E3D 外观都先拉，切开关时不闪
+  ensureSglEnvCubeLoaded();
 
   // CAD Grid：Three.js 常规渲染对象（与 DTX 混合渲染）
   try {
@@ -4886,6 +4975,13 @@ onUnmounted(() => {
     // ignore
   }
   sglPipelineRef.value = null;
+  sglLookDisposed = true;
+  try {
+    sglEnvCubeRef.value?.dispose();
+  } catch {
+    // ignore
+  }
+  sglEnvCubeRef.value = null;
 
   try {
     dtxViewerRef.value?.dispose();
@@ -5327,23 +5423,42 @@ onUnmounted(() => {
                 </button>
               </div>
               <div class="grid grid-cols-2 gap-1.5">
+                <button v-for="preset in SGL_LOOK_PRESETS" :key="preset.id" type="button"
+                  class="h-8 rounded-md border px-2 text-xs transition-colors hover:bg-muted"
+                  :class="sglLookPreset === preset.id ? 'border-ring bg-muted font-medium' : 'border-border text-muted-foreground'"
+                  :disabled="!sglLookEnabled"
+                  :title="preset.description"
+                  :data-testid="`viewer-sgl-look-preset-${preset.id}`"
+                  @click.stop="onSglLookPresetChange(preset.id)">
+                  {{ preset.label }}
+                </button>
+              </div>
+              <div class="grid grid-cols-3 gap-1.5">
                 <button type="button"
                   class="h-8 rounded-md border px-2 text-xs transition-colors hover:bg-muted"
                   :class="sglLookHlrEnabled ? 'border-ring bg-muted font-medium' : 'border-border text-muted-foreground'"
                   :disabled="!sglLookEnabled"
                   @click.stop="onSglLookHlrChange(!sglLookHlrEnabled)">
-                  HLR 边线 {{ sglLookHlrEnabled ? '开' : '关' }}
+                  边线 {{ sglLookHlrEnabled ? '开' : '关' }}
                 </button>
                 <button type="button"
                   class="h-8 rounded-md border px-2 text-xs transition-colors hover:bg-muted"
                   :class="sglLookAoEnabled ? 'border-ring bg-muted font-medium' : 'border-border text-muted-foreground'"
                   :disabled="!sglLookEnabled"
                   @click.stop="onSglLookAoChange(!sglLookAoEnabled)">
-                  伪阴影 AO {{ sglLookAoEnabled ? '开' : '关' }}
+                  伪阴影 {{ sglLookAoEnabled ? '开' : '关' }}
+                </button>
+                <button type="button"
+                  class="h-8 rounded-md border px-2 text-xs transition-colors hover:bg-muted"
+                  :class="sglLookGradientEnabled ? 'border-ring bg-muted font-medium' : 'border-border text-muted-foreground'"
+                  :disabled="!sglLookEnabled"
+                  @click.stop="onSglLookGradientChange(!sglLookGradientEnabled)">
+                  渐变 {{ sglLookGradientEnabled ? '开' : '关' }}
                 </button>
               </div>
               <div class="text-[11px] text-muted-foreground">
-                单头灯 Blinn-Phong + 灰度反射，背景纯灰 #828282（同本机 E3D 真机）；边线/AO 是 sglDx11 同款后处理，E3D 真机默认关（选中轮廓与版本分屏时暂不套用）。
+                {{ SGL_LOOK_PRESETS[sglLookPreset].description }}
+                反射采 sglDx11 内嵌的环境立方体贴图；边线 / 伪阴影是 sglDx11 同款后处理（选中轮廓与版本分屏时暂不套用）。
               </div>
             </div>
 

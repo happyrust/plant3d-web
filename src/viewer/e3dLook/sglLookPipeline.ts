@@ -76,15 +76,38 @@ export interface SglAoParams {
   halfRes: boolean;
 }
 
+/** PDMS 颜色表 `grey`（索引 1）= #828282，E3D 3.1 出厂背景色（真机截图 130,130,130） */
+export const E3D_BACKGROUND_GREY = 0x828282;
+
+/**
+ * 背景渐变端色未显式设置时 sglDx11 的算法（`bucketbg_10075b00.c`）：
+ * 背景色 → Windows HLS（0..240），`S ← S×0.1`，`L ← 255`，再 HLS→RGB。
+ * L ≥ 240 时 HLS→RGB 三个分量都 ≥ 240，×255/240 后 ≥ 255 → 任何背景色都得到纯白。
+ */
+export function sglDefaultGradientEndColour(_background: Color | number = E3D_BACKGROUND_GREY): Color {
+  return new Color(0xffffff);
+}
+
+/**
+ * E3D 3.1 用 Direct2D 画渐变（`DrawBackground_0x10021500.c`）：渐变线从视口上方 0.35H 到下方 1.15H
+ * （上 = 背景色，下 = 端色），所以可见区里的渐变参数 t 从顶部 0.35/1.5 ≈ 0.233 到底部 1.35/1.5 = 0.9。
+ */
+export const E3D_GRADIENT_TOP_T = 0.35 / 1.5;
+export const E3D_GRADIENT_BOTTOM_T = 1.35 / 1.5;
+
 export interface SglBackgroundParams {
   /** SGL_BACKGROUND_GRADIENT（E3D 默认 ON） */
   gradient: boolean;
-  /** 渐变顶部色 */
+  /** 渐变起点色 = 背景色，在上（E3D 3.1 出厂 grey #828282） */
   top: Color;
-  /** 渐变底部色 */
+  /** 渐变端色，在下（E3D 3.1 未设端色时 = 白，见 sglDefaultGradientEndColour） */
   bottom: Color;
   /** 关掉渐变时的纯色背景 */
   flat: Color;
+  /** 渐变参数 t 在视口顶部的取值（E3D 3.1：0.35/1.5） */
+  gradientTopT: number;
+  /** 渐变参数 t 在视口底部的取值（E3D 3.1：1.35/1.5） */
+  gradientBottomT: number;
 }
 
 export interface SglLookPipelineParams {
@@ -153,9 +176,11 @@ export function createDefaultSglPipelineParams(): SglLookPipelineParams {
     },
     background: {
       gradient: true,
-      top: new Color(0x2b4a6e),
-      bottom: new Color(0xa9bccf),
-      flat: new Color(0x8c9cad),
+      top: new Color(E3D_BACKGROUND_GREY),
+      bottom: sglDefaultGradientEndColour(E3D_BACKGROUND_GREY),
+      flat: new Color(E3D_BACKGROUND_GREY),
+      gradientTopT: E3D_GRADIENT_TOP_T,
+      gradientBottomT: E3D_GRADIENT_BOTTOM_T,
     },
     legacyMode: false,
   };
@@ -351,7 +376,11 @@ void main() {
 }
 `;
 
-/** 合成：colour × HLR × AO，背景处填渐变 */
+/**
+ * 合成：colour × HLR × AO，背景处填渐变。
+ * 渐变照 E3D 3.1 的 D2D 线性渐变：上 = 背景色（uBgTop）、下 = 端色（uBgBottom），
+ * 渐变参数 t 在视口顶/底取 uBgGradT.x / uBgGradT.y（出厂 0.233 / 0.9，渐变线伸到视口外）。
+ */
 const COMPOSITE_FRAGMENT = /* glsl */ `
 precision highp float;
 uniform sampler2D tColor;
@@ -364,11 +393,13 @@ uniform float uUseGradient;
 uniform vec3 uBgTop;
 uniform vec3 uBgBottom;
 uniform vec3 uBgFlat;
+uniform vec2 uBgGradT;
 varying vec2 vUv;
 
 void main() {
   vec4 c = texture2D(tColor, vUv);
-  vec3 bg = (uUseGradient > 0.5) ? mix(uBgBottom, uBgTop, vUv.y) : uBgFlat;
+  float t = mix(uBgGradT.y, uBgGradT.x, vUv.y);
+  vec3 bg = (uUseGradient > 0.5) ? mix(uBgTop, uBgBottom, t) : uBgFlat;
   vec3 col = mix(bg, c.rgb, c.a);
   vec3 hlr = (uUseHlr > 0.5) ? texture2D(tHLR, vUv).rgb : vec3(1.0);
   float ao = (uUseAo > 0.5) ? texture2D(tAO, vUv).r : 1.0;
@@ -449,6 +480,7 @@ interface CompositeUniforms {
   uBgTop: IUniform<Vector3>;
   uBgBottom: IUniform<Vector3>;
   uBgFlat: IUniform<Vector3>;
+  uBgGradT: IUniform<Vector2>;
 }
 
 interface RenderableRecord {
@@ -521,6 +553,7 @@ export class SglLookPipeline {
     uBgTop: { value: new Vector3() },
     uBgBottom: { value: new Vector3() },
     uBgFlat: { value: new Vector3() },
+    uBgGradT: { value: new Vector2(E3D_GRADIENT_TOP_T, E3D_GRADIENT_BOTTOM_T) },
   };
 
   private readonly _ndMaterial: ShaderMaterial;
@@ -736,6 +769,7 @@ export class SglLookPipeline {
     setSrgb(cu.uBgTop.value, p.background.top);
     setSrgb(cu.uBgBottom.value, p.background.bottom);
     setSrgb(cu.uBgFlat.value, p.background.flat);
+    cu.uBgGradT.value.set(p.background.gradientTopT, p.background.gradientBottomT);
     this._fsq.material = this._compositeMaterial;
     renderer.setRenderTarget(target);
     if (target) renderer.clear(true, true, false);

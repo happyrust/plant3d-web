@@ -1,13 +1,22 @@
 /**
  * E3D 渲染效果复刻原型的演示页入口（`/e3d-look-demo.html`，dev 下直接开）。
- * 右侧面板可切 HLR / AO / 背景渐变 / legacy，调 Ka Kd Ks Kr Kse 与 AO/HLR 参数，看合成结果或各中间图。
+ * 右侧面板可切预设（出厂 E3D 3.1 / 本机真机）、HLR / AO / 背景渐变 / legacy、环境立方体贴图，
+ * 调 Ka Kd Ks Kr Kse 与 AO/HLR 参数，看合成结果或各中间图。
  */
 
-import { Color, FloatType, PerspectiveCamera, Scene, WebGLRenderer } from 'three';
+import { Color, type CubeTexture, FloatType, PerspectiveCamera, Scene, WebGLRenderer } from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 
-import { SGL_DEFAULT_LIGHT, SGL_LIGHT_STRATEGIES, SglLookMaterial, translucencyToAlpha } from '../sglLookMaterial';
+import { loadSgl31EnvCube } from '../sglEnvCube';
+import { SGL_LIGHT_STRATEGIES, SglLookMaterial, translucencyToAlpha } from '../sglLookMaterial';
 import { SglLookPipeline } from '../sglLookPipeline';
+import {
+  DEFAULT_SGL_LOOK_PRESET,
+  SGL_LOOK_PRESETS,
+  applySglLookPresetToPipelineParams,
+  parseSglLookPresetId,
+  type SglLookPresetId
+} from '../sglLookPresets';
 
 import { buildDemoPlant, type DemoPlant } from './buildDemoPlant';
 
@@ -19,6 +28,12 @@ interface DemoHandle {
   plant: DemoPlant;
   renderOnce: () => void;
   setView: (name: 'iso' | 'front' | 'top') => void;
+  /** 切预设（光照常量 + HLR/AO/渐变开关 + 背景色） */
+  setPreset: (id: SglLookPresetId) => void;
+  /** 环境立方体贴图（加载完才非空） */
+  envCube: CubeTexture | null;
+  /** 反射是否采立方体贴图（false = 解析天/地兜底） */
+  setEnvCubeEnabled: (on: boolean) => void;
   frames: number;
 }
 
@@ -67,10 +82,35 @@ function main(): void {
   setView((params.get('view') as 'iso' | 'front' | 'top' | null) ?? 'iso');
 
   const pipeline = new SglLookPipeline(renderer);
+  const allMaterials: SglLookMaterial[] = [...plant.materials, plant.roomMaterial];
+
+  // 预设：?preset=factory|machine（缺省出厂 E3D 3.1），再由 ?legacy/ao/hlr/gradient 单项覆盖
+  let activePreset: SglLookPresetId = parseSglLookPresetId(params.get('preset')) ?? DEFAULT_SGL_LOOK_PRESET;
+  const applyPreset = (id: SglLookPresetId): void => {
+    activePreset = id;
+    const preset = SGL_LOOK_PRESETS[id];
+    applySglLookPresetToPipelineParams(pipeline.params, preset);
+    for (const m of allMaterials) m.setLight(preset.light);
+  };
+  applyPreset(activePreset);
   if (params.get('legacy') === '1') pipeline.params.legacyMode = true;
   if (params.get('ao') === '0') pipeline.params.ao.enabled = false;
   if (params.get('hlr') === '0') pipeline.params.hlr.enabled = false;
   if (params.get('gradient') === '0') pipeline.params.background.gradient = false;
+
+  // sglDx11 内嵌的环境立方体贴图；?envcube=0 用解析天/地兜底对比
+  let envCube: CubeTexture | null = null;
+  let envCubeEnabled = params.get('envcube') !== '0';
+  const applyEnvCube = (): void => {
+    for (const m of allMaterials) m.setEnvMap(envCubeEnabled ? envCube : null);
+  };
+  loadSgl31EnvCube()
+    .then((tex) => {
+      envCube = tex;
+      handle.envCube = tex;
+      applyEnvCube();
+    })
+    .catch((e: unknown) => console.warn('[e3d-look-demo] 环境立方体贴图加载失败', e));
 
   const resize = (): void => {
     const w = canvasHost.clientWidth || 1;
@@ -138,10 +178,10 @@ function main(): void {
     parent.appendChild(row);
   };
 
-  const allMaterials: SglLookMaterial[] = [...plant.materials, plant.roomMaterial];
   const setLight = (key: 'ambient' | 'diffuse' | 'specular' | 'reflection' | 'specularExponent', v: number): void => {
     for (const m of allMaterials) m.setLight({ [key]: v });
   };
+  const currentLight = (): ReturnType<SglLookMaterial['getLight']> => allMaterials[0]!.getLight();
 
   // 视图
   const sView = section('视图');
@@ -154,17 +194,35 @@ function main(): void {
   sView.appendChild(viewRow);
   addCheckbox(sView, 'legacy 模式（全部效果关，= _legacy_mode）', () => pipeline.params.legacyMode, (v) => { pipeline.params.legacyMode = v; });
 
+  // 预设
+  const sPreset = section('预设（切换后光照 / 开关 / 背景一起换，滑块显示值需刷新页面）');
+  const presetRow = el('div', 'row');
+  const presetButtons = new Map<SglLookPresetId, HTMLButtonElement>();
+  const refreshPresetButtons = (): void => {
+    for (const [id, b] of presetButtons) b.style.fontWeight = id === activePreset ? 'bold' : 'normal';
+  };
+  for (const preset of Object.values(SGL_LOOK_PRESETS)) {
+    const b = el('button', undefined, preset.label);
+    b.title = preset.description;
+    b.addEventListener('click', () => { applyPreset(preset.id); refreshPresetButtons(); });
+    presetButtons.set(preset.id, b);
+    presetRow.appendChild(b);
+  }
+  refreshPresetButtons();
+  sPreset.appendChild(presetRow);
+  addCheckbox(sPreset, '环境立方体贴图（sglDx11 gEnvTexture；关 = 解析天/地兜底）', () => envCubeEnabled, (v) => { envCubeEnabled = v; applyEnvCube(); });
+
   // 光照（材质）
-  const sLight = section('光照 / 材质（CSglSceneLightParams 默认值）');
-  addSlider(sLight, 'Ka 环境', 0, 1.5, 0.01, () => SGL_DEFAULT_LIGHT.ambient, (v) => setLight('ambient', v));
-  addSlider(sLight, 'Kd 漫反射', 0, 1.5, 0.01, () => SGL_DEFAULT_LIGHT.diffuse, (v) => setLight('diffuse', v));
-  addSlider(sLight, 'Ks 高光（槽3）', 0, 1.5, 0.01, () => SGL_DEFAULT_LIGHT.specular, (v) => setLight('specular', v));
-  addSlider(sLight, 'Kr 反射（槽4）', 0, 1.5, 0.01, () => SGL_DEFAULT_LIGHT.reflection, (v) => setLight('reflection', v));
-  addSlider(sLight, 'Kse 指数', 1, 256, 1, () => SGL_DEFAULT_LIGHT.specularExponent, (v) => setLight('specularExponent', v));
+  const sLight = section('光照 / 材质（Ka Kd Ks Kr Kse，当前预设值）');
+  addSlider(sLight, 'Ka 环境', 0, 1.5, 0.01, () => currentLight().ambient, (v) => setLight('ambient', v));
+  addSlider(sLight, 'Kd 漫反射', 0, 1.5, 0.01, () => currentLight().diffuse, (v) => setLight('diffuse', v));
+  addSlider(sLight, 'Ks 高光', 0, 1.5, 0.01, () => currentLight().specular, (v) => setLight('specular', v));
+  addSlider(sLight, 'Kr 反射', 0, 1.5, 0.01, () => currentLight().reflection, (v) => setLight('reflection', v));
+  addSlider(sLight, 'Kse 指数', 0, 256, 1, () => currentLight().specularExponent, (v) => setLight('specularExponent', v));
   const env = { sky: 0.75, ground: 0.25 };
   const applyEnv = (): void => { for (const m of allMaterials) m.setAnalyticEnv(env.sky, env.ground); };
-  addSlider(sLight, '环境天顶亮度', 0, 1, 0.01, () => env.sky, (v) => { env.sky = v; applyEnv(); });
-  addSlider(sLight, '环境地面亮度', 0, 1, 0.01, () => env.ground, (v) => { env.ground = v; applyEnv(); });
+  addSlider(sLight, '兜底天顶亮度', 0, 1, 0.01, () => env.sky, (v) => { env.sky = v; applyEnv(); });
+  addSlider(sLight, '兜底地面亮度', 0, 1, 0.01, () => env.ground, (v) => { env.ground = v; applyEnv(); });
   const strategyRow = el('div', 'row');
   strategyRow.appendChild(el('span', 'name', '策略'));
   for (const name of ['default', 'flat70', 'unlit'] as const) {
@@ -197,11 +255,13 @@ function main(): void {
   addCheckbox(sAo, '半分辨率', () => pipeline.params.ao.halfRes, (v) => { pipeline.params.ao.halfRes = v; });
 
   // 背景
-  const sBg = section('背景（effect_bg_gradient）');
+  const sBg = section('背景（effect_bg_gradient，E3D 3.1：上 = 背景色 grey，下 = 端色白，t 0.233→0.9）');
   addCheckbox(sBg, '渐变', () => pipeline.params.background.gradient, (v) => { pipeline.params.background.gradient = v; });
-  addColor(sBg, '顶', () => pipeline.params.background.top, (c) => { pipeline.params.background.top.copy(c); });
-  addColor(sBg, '底', () => pipeline.params.background.bottom, (c) => { pipeline.params.background.bottom.copy(c); });
+  addColor(sBg, '背景色（上）', () => pipeline.params.background.top, (c) => { pipeline.params.background.top.copy(c); });
+  addColor(sBg, '端色（下）', () => pipeline.params.background.bottom, (c) => { pipeline.params.background.bottom.copy(c); });
   addColor(sBg, '纯色', () => pipeline.params.background.flat, (c) => { pipeline.params.background.flat.copy(c); });
+  addSlider(sBg, 't@顶', 0, 1, 0.01, () => pipeline.params.background.gradientTopT, (v) => { pipeline.params.background.gradientTopT = v; });
+  addSlider(sBg, 't@底', 0, 1, 0.01, () => pipeline.params.background.gradientBottomT, (v) => { pipeline.params.background.gradientBottomT = v; });
 
   // ---------------- 渲染循环 ----------------
   const handle: DemoHandle = {
@@ -216,6 +276,9 @@ function main(): void {
       handle.frames += 1;
     },
     setView,
+    setPreset: (id) => { applyPreset(id); refreshPresetButtons(); },
+    envCube: null,
+    setEnvCubeEnabled: (on) => { envCubeEnabled = on; applyEnvCube(); },
     frames: 0,
   };
   window.__e3dLookDemo = handle;

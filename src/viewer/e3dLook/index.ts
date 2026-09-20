@@ -1,5 +1,6 @@
 export {
   SGL_DEFAULT_LIGHT,
+  SGL_E3D31_VIEW_DEFAULT_LIGHT,
   SGL_LIGHT_STRATEGIES,
   SGL_LOOK_SHADERS,
   SglLookMaterial,
@@ -8,10 +9,14 @@ export {
   type SglSceneLightParams
 } from './sglLookMaterial';
 export {
+  E3D_BACKGROUND_GREY,
+  E3D_GRADIENT_BOTTOM_T,
+  E3D_GRADIENT_TOP_T,
   SGL_PIPELINE_SHADERS,
   SglLookPipeline,
   createDefaultSglPipelineParams,
   isSglNormalDepthProvider,
+  sglDefaultGradientEndColour,
   type SglAoParams,
   type SglBackgroundParams,
   type SglHlrParams,
@@ -20,3 +25,22 @@ export {
   type SglLookPipelineParamsInit,
   type SglNormalDepthProvider
 } from './sglLookPipeline';
+export {
+  SGL31_ENVCUBE_DIR,
+  SGL31_ENVCUBE_FACE_FILES,
+  configureSglEnvCubeTexture,
+  createSglEnvCubeTexture,
+  envCubeRotationForUp,
+  loadSgl31EnvCube,
+  sgl31EnvCubeUrls,
+  type LoadSglEnvCubeOptions
+} from './sglEnvCube';
+export {
+  DEFAULT_SGL_LOOK_PRESET,
+  SGL_LOOK_PRESETS,
+  applySglLookPresetToPipelineParams,
+  isSglLookPresetId,
+  parseSglLookPresetId,
+  type SglLookPreset,
+  type SglLookPresetId
+} from './sglLookPresets';

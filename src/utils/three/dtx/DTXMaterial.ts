@@ -19,12 +19,15 @@ import {
   ShaderMaterial,
   DataTexture,
   Vector3,
+  Matrix3,
   Matrix4,
   Color,
+  CubeTexture,
   GLSL3,
   NoBlending
 } from 'three';
 
+import { envCubeRotationForUp } from '@/viewer/e3dLook/sglEnvCube';
 import { SGL_DEFAULT_LIGHT, type SglSceneLightParams } from '@/viewer/e3dLook/sglLookMaterial';
 
 // ========== Shader 代码 ==========
@@ -233,6 +236,11 @@ uniform vec3 sglLampDirEye;
 uniform float sglEnvSkyLum;
 uniform float sglEnvGroundLum;
 uniform vec3 sglUp;
+// sglDx11 内嵌的环境立方体贴图（gEnvTexture）；sglUseEnvMap=0 时退回天/地两段灰度
+uniform samplerCube sglEnvMap;
+uniform int sglUseEnvMap;
+// 世界 → 立方体贴图空间：Z-up 世界的 R 换成 (R.x, R.z, -R.y)
+uniform mat3 sglEnvRot;
 // 1 = 输出 (眼空间面法线, 线性深度) 供 HLR / AO 后处理
 uniform int sglOutput;
 
@@ -319,8 +327,8 @@ void main() {
   vec3 finalColor;
 
   if (sglLighting == 1) {
-    // AVEVA E3D sglDx11 前向着色：单头灯 Blinn-Phong + 灰度环境反射
-    //   rgb = c·(Ka + Kd·N·L) + Ks·pow(N·H,Kse)·N·L + Kr·lum(env)
+    // AVEVA E3D sglDx11 前向着色：单头灯 Blinn-Phong + 环境立方体贴图反射
+    //   rgb = c·(Ka + Kd·N·L) + Ks·pow(N·H,Kse)·N·L + Kr·env(reflect(-V,N)).rgb
     mat3 viewRot = mat3(viewMatrix);
     vec3 Nv = normalize(viewRot * N);
     vec3 Vv = normalize(viewRot * V);
@@ -331,9 +339,14 @@ void main() {
     float spec = (ndl >= 0.0 && ndh >= 0.0) ? pow(max(ndh, 1e-6), sglKse) * ndl : 0.0;
     ndl = max(ndl, 0.0);
     vec3 Rw = reflect(-V, N);
-    float envT = clamp(dot(Rw, sglUp) * 0.5 + 0.5, 0.0, 1.0);
-    float envLum = mix(sglEnvGroundLum, sglEnvSkyLum, envT);
-    finalColor = albedo * (sglKa + sglKd * ndl) + sglKs * spec + sglKr * envLum;
+    vec3 env;
+    if (sglUseEnvMap == 1) {
+      env = texture(sglEnvMap, sglEnvRot * Rw).rgb;
+    } else {
+      float envT = clamp(dot(Rw, sglUp) * 0.5 + 0.5, 0.0, 1.0);
+      env = vec3(mix(sglEnvGroundLum, sglEnvSkyLum, envT));
+    }
+    finalColor = albedo * (sglKa + sglKd * ndl) + sglKs * spec + sglKr * env;
   } else {
     vec3 ambient = ambientLight * albedo;
     vec3 directLight0 = calculatePBR(N, V, normalize(lightDirection0), albedo, vMetalness, vRoughness, lightColor0);
@@ -431,6 +444,9 @@ export class DTXMaterial extends ShaderMaterial {
         sglEnvSkyLum: { value: 0.75 },
         sglEnvGroundLum: { value: 0.25 },
         sglUp: { value: new Vector3(0, 0, 1) },
+        sglEnvMap: { value: null },
+        sglUseEnvMap: { value: 0 },
+        sglEnvRot: { value: envCubeRotationForUp(new Vector3(0, 0, 1)) },
         sglOutput: { value: 0 }
       },
       // 重要：启用 WebGL2 的 GLSL 3.0 语法
@@ -467,7 +483,8 @@ export class DTXMaterial extends ShaderMaterial {
     // 否则 Three.js 可能复用旧 program 导致新逻辑不生效。
     // v11: fragment shader 加 backFaceBias（z-fighting Tier 1，docs/issues/dtx-model-z-fighting-flicker-2026-04-29.md）
     // v12: SGL（E3D sglDx11）口径光照分支 + 面法线/线性深度输出（docs/rendering/e3d-sgl-look-prototype.md）
-    return 'DTXMaterial_v12';
+    // v13: SGL 分支接入环境立方体贴图（sglEnvMap / sglUseEnvMap / sglEnvRot），反射改逐通道
+    return 'DTXMaterial_v13';
   }
 
   // ========== SGL（E3D）口径 ==========
@@ -492,11 +509,24 @@ export class DTXMaterial extends ShaderMaterial {
     if (params.lightEyePos) (u.sglLampDirEye!.value as Vector3).set(...params.lightEyePos);
   }
 
-  /** 解析环境（天顶 / 地面亮度）与世界上方向 */
+  /** 解析环境（天顶 / 地面亮度）与世界上方向；up 同时决定立方体贴图的旋转 */
   setSglEnv(skyLum: number, groundLum: number, up?: Vector3): void {
     this.uniforms.sglEnvSkyLum!.value = skyLum;
     this.uniforms.sglEnvGroundLum!.value = groundLum;
-    if (up) (this.uniforms.sglUp!.value as Vector3).copy(up);
+    if (up) {
+      (this.uniforms.sglUp!.value as Vector3).copy(up);
+      envCubeRotationForUp(up, this.uniforms.sglEnvRot!.value as Matrix3);
+    }
+  }
+
+  /** sglDx11 内嵌的环境立方体贴图（`loadSgl31EnvCube()`）；null = 退回天/地两段灰度 */
+  setSglEnvMap(envMap: CubeTexture | null): void {
+    this.uniforms.sglEnvMap!.value = envMap;
+    this.uniforms.sglUseEnvMap!.value = envMap ? 1 : 0;
+  }
+
+  get sglEnvMap(): CubeTexture | null {
+    return (this.uniforms.sglEnvMap!.value as CubeTexture | null) ?? null;
   }
 
   /**

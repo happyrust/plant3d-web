@@ -7,7 +7,7 @@
  *   L = normalize(LampDir)  V = normalize(眼 - p)  N = normalize(n)  H = normalize(V + L)
  *   rgb = colour * (Ka + Kd * max(N·L, 0))
  *       + Ks * pow(max(N·H, 0), Kse) * max(N·L, 0)      // 白色高光，不乘物体色
- *       + Kr * lum(env(reflect(-V, N)))                 // 环境贴图只取灰度
+ *       + Kr * env(reflect(-V, N)).rgb                  // 环境立方体贴图（sglDx11 内嵌的灰度贴图，见 sglEnvCube.ts）
  *   a   = colour.a                                      // 半透明 = 顶点 alpha
  *
  * 单盏「头灯」（LightEyePos 默认 (0,0,1)，眼空间 +Z），无衰减、无阴影、无 gamma/tonemap。
@@ -19,11 +19,14 @@ import {
   CubeTexture,
   FrontSide,
   type IUniform,
+  Matrix3,
   SRGBColorSpace,
   ShaderMaterial,
   Vector3,
   Vector4
 } from 'three';
+
+import { envCubeRotationForUp } from './sglEnvCube';
 
 /** 对应 sglDx11 `CSglSceneLightParams`（32 字节：Ka Kd slot3 slot4 Kse eye.xyz）。 */
 export interface SglSceneLightParams {
@@ -96,12 +99,12 @@ export interface SglLookMaterialOptions {
   opacity?: number;
   /** 光照参数，缺省 SGL_DEFAULT_LIGHT */
   light?: Partial<SglSceneLightParams>;
-  /** 环境立方体贴图；不给就用解析天空/地面两段灰度 */
+  /** 环境立方体贴图（sglDx11 内嵌的那张，`loadSgl31EnvCube()`）；不给就用解析天空/地面两段灰度兜底 */
   envMap?: CubeTexture | null;
   /** 解析环境：天顶亮度 / 地面亮度（0..1） */
   envSkyLum?: number;
   envGroundLum?: number;
-  /** 世界「上」方向，E3D 是 Z-up */
+  /** 世界「上」方向，E3D 是 Z-up；决定反射向量怎么换到立方体贴图的 Y-up 空间（`envCubeRotationForUp`） */
   up?: Vector3;
   /** 是否读顶点色 attribute（`color`，vec3 或 vec4） */
   vertexColors?: boolean;
@@ -157,6 +160,8 @@ uniform float uUseEnvMap;
 uniform float uEnvSkyLum;
 uniform float uEnvGroundLum;
 uniform vec3 uUp;
+// 世界 → 立方体贴图空间（sglDx11：Z-up 世界的 R 换成 (R.x, R.z, -R.y) 再 texCUBE）
+uniform mat3 uEnvRot;
 
 varying vec3 vViewPos;
 varying vec3 vNormalView;
@@ -187,19 +192,19 @@ void main() {
   float spec = (ndl >= 0.0 && ndh >= 0.0) ? pow(max(ndh, 1e-6), uKse) * ndl : 0.0;
   ndl = max(ndl, 0.0);
 
-  // 环境反射：只取亮度（sglDx11 对 cube 采样结果 (r+g+b)/3）
+  // 环境反射：sglDx11 3.1 ps（dxbc_044）= Kr * texCUBE(gEnvTexture, (R.x, R.z, -R.y)).rgb，逐通道
   vec3 Rw = viewToWorldRot() * reflect(-V, N);
-  float envLum;
+  vec3 env;
   if (uUseEnvMap > 0.5) {
-    vec3 e = textureCube(uEnvMap, Rw).rgb;
-    envLum = (e.r + e.g + e.b) * (1.0 / 3.0);
+    env = textureCube(uEnvMap, uEnvRot * Rw).rgb;
   } else {
+    // 没有贴图时用天/地两段灰度兜底
     float t = clamp(dot(Rw, uUp) * 0.5 + 0.5, 0.0, 1.0);
-    envLum = mix(uEnvGroundLum, uEnvSkyLum, t);
+    env = vec3(mix(uEnvGroundLum, uEnvSkyLum, t));
   }
 
   vec3 c = vColor.rgb;
-  vec3 rgb = c * (uKa + uKd * ndl) + uKs * spec + uKr * envLum;
+  vec3 rgb = c * (uKa + uKd * ndl) + uKs * spec + uKr * env;
   gl_FragColor = vec4(rgb, vColor.a * uOpacity);
 }
 `;
@@ -225,6 +230,7 @@ export type SglLookUniforms = {
   uEnvSkyLum: IUniform<number>;
   uEnvGroundLum: IUniform<number>;
   uUp: IUniform<Vector3>;
+  uEnvRot: IUniform<Matrix3>;
 };
 
 const _rgbTmp = { r: 0, g: 0, b: 0 };
@@ -252,6 +258,7 @@ function createUniforms(options: SglLookMaterialOptions): SglLookUniforms {
     uEnvSkyLum: { value: options.envSkyLum ?? 0.75 },
     uEnvGroundLum: { value: options.envGroundLum ?? 0.25 },
     uUp: { value: up.clone() },
+    uEnvRot: { value: envCubeRotationForUp(up) },
   };
 }
 
@@ -330,9 +337,21 @@ export class SglLookMaterial extends ShaderMaterial {
     };
   }
 
+  /** 环境立方体贴图（null = 退回解析天/地兜底） */
   setEnvMap(envMap: CubeTexture | null): this {
     this.sglUniforms.uEnvMap.value = envMap;
     this.sglUniforms.uUseEnvMap.value = envMap ? 1 : 0;
+    return this;
+  }
+
+  get envMap(): CubeTexture | null {
+    return this.sglUniforms.uEnvMap.value;
+  }
+
+  /** 世界「上」方向：同时更新解析环境的天/地分界与立方体贴图的旋转 */
+  setUp(up: Vector3): this {
+    this.sglUniforms.uUp.value.copy(up);
+    envCubeRotationForUp(up, this.sglUniforms.uEnvRot.value);
     return this;
   }
 
