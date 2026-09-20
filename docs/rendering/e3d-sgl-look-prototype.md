@@ -52,6 +52,22 @@ a   = colour.a                                      // 半透明 = 1 − 百分�
 
 两套都采同一张环境立方体贴图（贴图在 sglDx11 里是固定的，只是 Kr 不同）。`applySglLookPresetToPipelineParams` 只动开关与背景色，不碰 HBAO / HLR 数值。
 
+### 2.1 元素颜色 / 材质（`pdmsColourTable.ts` + 显示主题 `e3dFactory`）
+
+- E3D 没有「材质」，只有**颜色索引 + 半透明**；颜色索引查 PDMS 颜色表。`pdmsColourTable.ts` 由逆向出的
+  `e3d31-colour-table.json` 生成（365 项：1..16 基本色、17..272 调色板 + 61 个名字覆盖、296/298..303 固定辅助色、305..365 字典色；
+  hex 按 `ColourTableManager` 的 `(int)(x·255)` 截断）。`pdmsColourHex('lightgrey' | 271 | 'pdms:lightgrey')`。
+  **PDMS 色名与 CSS 不是一套**：PDMS lightgrey = #bdbdbd（CSS #d3d3d3）、grey = #828282（CSS gray #808080）、red = #bc0000、orange = #ffbe00。
+- 出厂图形颜色（`gphcolopt.pmlobj .default()`，`E3D_GRAPHICS_COLOUR_DEFAULTS`）：Add element / Visible = **lightgrey**，CE yellow，active orange，
+  aids blue，highlight white，tracing magenta，背景 grey；Design 模块 **`autoColour = false`**（只有 Spooler 预置 Spool cyan / Field green 两条规则）。
+  所以没配自动着色规则的 E3D 把所有元素画成一色 lightgrey——§5.1 那台真机就是这样。
+- web 侧落法：`model-display.config.json` 新增显示主题 **`e3dFactory`（「E3D 出厂」）**，只有一条 `baseMaterial: { color: 'pdms:lightgrey' }`
+  （`ThemeConfig.baseMaterial` 是本轮新加的字段：nounAccents / disciplineMaterials / owner 覆盖都没命中时用它，压过类型基色；`instanceConfigs`
+  的按元素覆盖仍最高，对应 E3D 对单个元素 `COLOUR`）。`materialConfig` 的颜色字符串新增 `pdms:<名|号>` 写法，查不到落兜底色而不是交给 three 当 CSS 名。
+- 联动：开「E3D 外观」/ 切预设时显示主题自动切到预设的 `displayTheme`（两套预设都是 `e3dFactory`），并记住之前的主题（`dtx_look_prev_theme`）；
+  关 E3D 外观时若主题还是它就切回去。E3D 外观开着时手动点「E3D 专业色」等其它主题不受干扰（要 E3D 光照 + 专业配色就这么用）。
+- 未做：CE / 选中高亮仍是 web 自己的颜色（E3D 是 yellow / white）；项目自定义的 autocolour 规则要真机导出 `gphcolopt` 选项文件再翻成主题规则。
+
 ## 3. 后处理链（`SglLookPipeline`）
 
 | 步 | 做法 | 参数（默认） |
@@ -114,10 +130,19 @@ npm run dev                       # 然后打开 http://127.0.0.1:3101/e3d-look-
   无头 Chrome（SwiftShader）对 dev 构建的演示页 7 种变体截图 + 像素统计 13/13 通过：无 console error；六面贴图确有被拉取并套到材质；
   出厂预设背景顶 (159,159,159) / 底 (242,242,242)（= mix(#828282, 白, 0.233 / 0.9)），关渐变与真机预设为纯 (130,130,130)；
   贴图开/关几何区平均亮度 0.464 vs 0.590（反射项确实来自贴图）；出厂预设暗像素 2.86%（边线）vs 真机预设 0%。
-- **未验证**：立方体贴图的朝向（六面对世界方向的映射）只按 dxbc_044 的 `(x, z, −y)` 换法复刻，还没在未修补的 E3D 3.1 上同视角对参（§6.3）。
+- **未验证**：立方体贴图的朝向（六面对世界方向的映射）只按 dxbc_044 的 `(x, z, −y)` 换法复刻，还没在未修补的 E3D 3.1 上同视角对参（§6.2）。
+
+## 5.4 第四轮：元素颜色按 E3D 颜色表（2026-09-21）
+
+- `pdmsColourTable.ts`（生成，365 项 + 61 色字典 + 出厂图形颜色常量），`materialConfig` 支持 `pdms:` 颜色引用与 `ThemeConfig.baseMaterial`，
+  `model-display.config.json` 新增主题 `e3dFactory`（全 lightgrey #bdbdbd），`DisplayTheme` 加 `e3dFactory`，ViewerPanel 主题按钮加「E3D 出厂」
+  （原「E3D」改名「E3D 专业色」），E3D 外观预设联动切主题并可回退。详见 §2.1。
+- 验证：`vitest`：`pdmsColourTable` 5/5、`materialConfig` 22/22、`useDisplayThemeStore` 5/5、`e3dLook` 15/15、DTX 目录 + 加载器共 65/65；
+  `type-check` 基线外仍只有既有 4 条 worktree 路径错误；ESLint 通过。**未做浏览器截图**：主题切换走的是既有的
+  `applyMaterialConfigToLoadedDtx → setObjectMaterial` 路径，没改渲染代码。
 
 ## 6. 下一步
 
-1. `e3d31-colour-table.json` → `pdmsColourTable.ts`，元素默认色 lightgrey、背景 grey，按 PDMS 颜色号/名映射。
-2. HBAO / 模糊参数按 §5.2 数值对齐（当前 400 mm/8 方向/6 步/AngleBias 0.1/Contrast 1.25/模糊半径 4；E3D 3.1 为 392.73 mm/8/4/30°/Attenuation 0.2/Contrast 1.25/模糊 12）。
-3. 在未修补的 E3D 3.1 上（或补跑 `!!gphViewOpt.applyToView`）复核出厂外观与立方体贴图朝向；`SHINY`(30) / `TRANSLUCENCY_STYLE`(51) 分支仍未读。
+1. HBAO / 模糊参数按 §5.2 数值对齐（当前 400 mm/8 方向/6 步/AngleBias 0.1/Contrast 1.25/模糊半径 4；E3D 3.1 为 392.73 mm/8/4/30°/Attenuation 0.2/Contrast 1.25/模糊 12）。
+2. 在未修补的 E3D 3.1 上（或补跑 `!!gphViewOpt.applyToView`）复核出厂外观与立方体贴图朝向；`SHINY`(30) / `TRANSLUCENCY_STYLE`(51) 分支仍未读。
+3. 选中 / CE 高亮改 E3D 口径（yellow / white）；如项目有自定义 autocolour 规则，导出 `gphcolopt` 选项文件翻成 `themes.*` 规则（颜色用 `pdms:` 名）。

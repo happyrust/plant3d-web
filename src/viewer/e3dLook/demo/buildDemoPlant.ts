@@ -15,27 +15,34 @@ import {
   TorusGeometry
 } from 'three';
 
+import { pdmsColourHex } from '../pdmsColourTable';
 import { SglLookMaterial, translucencyToAlpha } from '../sglLookMaterial';
 
-/** 近似 PDMS 颜色表里的几个常用名（RGB 取 X11 同名色） */
+const pdms = (name: string): number => {
+  const hex = pdmsColourHex(name);
+  if (hex === undefined) throw new Error(`buildDemoPlant: PDMS 颜色表里没有 ${name}`);
+  return hex;
+};
+
+/** 演示配色：PDMS 颜色表（E3D 3.1 真实 RGB，`pdmsColourTable.ts`）里的几个常用名 */
 export const DEMO_PDMS_COLOURS = Object.freeze({
-  Grey: 0x808080,
-  Lightgrey: 0xd3d3d3,
-  Darkgrey: 0x505050,
-  Orange: 0xffa500,
-  Salmon: 0xfa8072,
-  Tomato: 0xff6347,
-  Cyan: 0x00ffff,
-  Aquamarine: 0x7fffd4,
-  Turquoise: 0x40e0d0,
-  Magenta: 0xff00ff,
-  Yellow: 0xffff00,
-  Green: 0x00ff00,
-  Steelblue: 0x4682b4,
-  Peachpuff: 0xffdab9,
-  Brown: 0xa52a2a,
-  White: 0xffffff,
-} as const);
+  Grey: pdms('grey'),
+  Lightgrey: pdms('lightgrey'),
+  Darkgrey: pdms('darkgrey'),
+  Orange: pdms('orange'),
+  Salmon: pdms('salmon'),
+  Tomato: pdms('tomato'),
+  Cyan: pdms('cyan'),
+  Aquamarine: pdms('aquamarine'),
+  Turquoise: pdms('turquoise'),
+  Magenta: pdms('magenta'),
+  Yellow: pdms('yellow'),
+  Green: pdms('green'),
+  Steelblue: pdms('steelblue'),
+  Wheat: pdms('wheat'),
+  Brown: pdms('brown'),
+  White: pdms('white'),
+});
 
 export type DemoPdmsColourName = keyof typeof DEMO_PDMS_COLOURS;
 
@@ -168,7 +175,7 @@ export function buildDemoPlant(): DemoPlant {
   add(groups.equipment, new CylinderGeometry(180, 180, 1600, 24), DEMO_PDMS_COLOURS.Aquamarine, px - 800, py, 1700 + 300, [HALF_PI, 0, 0]);
 
   // —— 半透明房间（测半透明 + 半透明边线） ——
-  const roomMaterial = new SglLookMaterial({ color: DEMO_PDMS_COLOURS.Peachpuff, opacity: translucencyToAlpha(60) });
+  const roomMaterial = new SglLookMaterial({ color: DEMO_PDMS_COLOURS.Wheat, opacity: translucencyToAlpha(60) });
   roomMaterial.name = 'SglLook#room';
   const room = new Mesh(new BoxGeometry(4000, 3200, 3000), roomMaterial);
   room.position.set(7500, 3000, 1500);

@@ -60,7 +60,7 @@ import {
   resolveDtxRefnoByObjectId,
 } from '@/composables/useDbnoInstancesDtxLoader';
 import { useDbnoInstancesParquetLoader } from '@/composables/useDbnoInstancesParquetLoader';
-import { useDisplayThemeStore, type DisplayTheme } from '@/composables/useDisplayThemeStore';
+import { isDisplayTheme, useDisplayThemeStore, type DisplayTheme } from '@/composables/useDisplayThemeStore';
 import { ensurePanelAndActivate } from '@/composables/useDockApi';
 import { useDtxTools } from '@/composables/useDtxTools';
 import { useMbdDiagnosticsStore } from '@/composables/useMbdDiagnosticsStore';
@@ -352,7 +352,7 @@ function getSglDtxLayers(): DTXLayer[] {
   return primary ? [primary, ...showDbnumExtraDtxLayers] : [...showDbnumExtraDtxLayers];
 }
 
-/** 切预设：光照常量换掉，三个子开关回到该预设的出厂位 */
+/** 切预设：光照常量换掉，三个子开关回到该预设的出厂位，元素颜色切到预设指定的显示主题 */
 function onSglLookPresetChange(id: SglLookPresetId): void {
   const preset = SGL_LOOK_PRESETS[id];
   sglLookPreset.value = id;
@@ -364,12 +364,46 @@ function onSglLookPresetChange(id: SglLookPresetId): void {
   safeLsSet('dtx_look_hlr', preset.hlr ? '1' : '0');
   safeLsSet('dtx_look_ao', preset.ao ? '1' : '0');
   safeLsSet('dtx_look_gradient', preset.gradient ? '1' : '0');
+  if (sglLookEnabled.value) syncSglLookDisplayTheme(true);
 }
 
 function onSglLookEnabledChange(enabled: boolean): void {
   sglLookEnabled.value = enabled;
   applySglLook();
   safeLsSet('dtx_look', enabled ? 'sgl' : 'pbr');
+  syncSglLookDisplayTheme(enabled);
+}
+
+const SGL_LOOK_PREV_THEME_KEY = 'dtx_look_prev_theme';
+
+/**
+ * E3D 外观与元素颜色联动：开 E3D 外观 / 切预设时把显示主题切到预设的 `displayTheme`（e3dFactory，全 lightgrey），
+ * 并记住之前的主题；关 E3D 外观时若主题还是预设那套就切回去。用户在 E3D 外观开着时手动换主题不受影响。
+ */
+function syncSglLookDisplayTheme(enabled: boolean): void {
+  const preset = SGL_LOOK_PRESETS[sglLookPreset.value];
+  const current = displayThemeStore.currentTheme.value;
+  if (enabled) {
+    if (current === preset.displayTheme) return;
+    // 记住用户自己选的（非预设）主题，关 E3D 外观时切回去
+    if (!isSglLookPresetTheme(current)) safeLsSet(SGL_LOOK_PREV_THEME_KEY, current);
+    void onDisplayThemeChange(preset.displayTheme);
+    return;
+  }
+  let prev: string | null = null;
+  try {
+    prev = localStorage.getItem(SGL_LOOK_PREV_THEME_KEY);
+    localStorage.removeItem(SGL_LOOK_PREV_THEME_KEY);
+  } catch {
+    // ignore
+  }
+  if (isSglLookPresetTheme(current) && isDisplayTheme(prev) && prev !== current) {
+    void onDisplayThemeChange(prev);
+  }
+}
+
+function isSglLookPresetTheme(theme: string | null): boolean {
+  return Object.values(SGL_LOOK_PRESETS).some((p) => p.displayTheme === theme);
 }
 
 function onSglLookHlrChange(enabled: boolean): void {
@@ -1235,8 +1269,14 @@ function onBackgroundChange(mode: BackgroundMode): void {
   applyBackground(mode);
 }
 
-const displayThemePresets: { mode: DisplayTheme; label: string; colorHint: string }[] = [
-  { mode: 'e3d', label: 'E3D', colorHint: '#4682B4' },
+const displayThemePresets: { mode: DisplayTheme; label: string; colorHint: string; title?: string }[] = [
+  { mode: 'e3d', label: 'E3D 专业色', colorHint: '#4682B4', title: 'web 自定的 E3D 风格：类型基色 + 专业着色 + 重点构件强调' },
+  {
+    mode: 'e3dFactory',
+    label: 'E3D 出厂',
+    colorHint: '#bdbdbd',
+    title: '出厂 E3D 3.1：autocolour 关，所有元素 Add element colour = lightgrey #bdbdbd（PDMS 颜色表）',
+  },
   { mode: 'default', label: '默认', colorHint: '#90a4ae' },
   { mode: 'design3d', label: '三维设计', colorHint: '#4CAF50' },
 ];
@@ -5349,7 +5389,8 @@ onUnmounted(() => {
                   type="button"
                   class="flex h-8 items-center gap-1.5 rounded-md border px-2 text-xs transition-colors hover:bg-muted"
                   :class="displayThemeStore.currentTheme.value === preset.mode ? 'border-ring bg-muted font-medium' : 'border-border'"
-                  :title="preset.label"
+                  :title="preset.title ?? preset.label"
+                  :data-testid="`viewer-display-theme-${preset.mode}`"
                   @click.stop="onDisplayThemeChange(preset.mode)">
                   <span class="inline-block h-4 w-4 shrink-0 rounded-full border border-border"
                     :style="{ background: preset.colorHint }" />

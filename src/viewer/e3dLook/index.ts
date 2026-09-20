@@ -36,6 +36,19 @@ export {
   type LoadSglEnvCubeOptions
 } from './sglEnvCube';
 export {
+  E3D_DEFAULT_ELEMENT_COLOUR,
+  E3D_GRAPHICS_COLOUR_DEFAULTS,
+  PDMS_COLOUR_DICTIONARY,
+  PDMS_COLOUR_TABLE,
+  isPdmsColourRef,
+  normalizePdmsColourName,
+  pdmsColourByIndex,
+  pdmsColourByName,
+  pdmsColourHex,
+  pdmsHexString,
+  type PdmsColourEntry
+} from './pdmsColourTable';
+export {
   DEFAULT_SGL_LOOK_PRESET,
   SGL_LOOK_PRESETS,
   applySglLookPresetToPipelineParams,

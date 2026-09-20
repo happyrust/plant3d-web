@@ -7,6 +7,7 @@
 import { Color, type CubeTexture, FloatType, PerspectiveCamera, Scene, WebGLRenderer } from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 
+import { E3D_DEFAULT_ELEMENT_COLOUR } from '../pdmsColourTable';
 import { loadSgl31EnvCube } from '../sglEnvCube';
 import { SGL_LIGHT_STRATEGIES, SglLookMaterial, translucencyToAlpha } from '../sglLookMaterial';
 import { SglLookPipeline } from '../sglLookPipeline';
@@ -34,6 +35,8 @@ interface DemoHandle {
   envCube: CubeTexture | null;
   /** 反射是否采立方体贴图（false = 解析天/地兜底） */
   setEnvCubeEnabled: (on: boolean) => void;
+  /** 元素颜色：true = 出厂 E3D（全部 lightgrey #bdbdbd），false = 演示配色（PDMS 颜色表） */
+  setFactoryColours: (on: boolean) => void;
   frames: number;
 }
 
@@ -111,6 +114,14 @@ function main(): void {
       applyEnvCube();
     })
     .catch((e: unknown) => console.warn('[e3d-look-demo] 环境立方体贴图加载失败', e));
+
+  // 元素颜色：?colours=factory 用出厂 E3D 的一色 lightgrey（autocolour 关时所有元素都是 Add element colour），缺省演示配色
+  const demoColours = new Map(allMaterials.map((m) => [m, m.color] as const));
+  let factoryColours = params.get('colours') === 'factory';
+  const applyColours = (): void => {
+    for (const m of allMaterials) m.color = factoryColours ? E3D_DEFAULT_ELEMENT_COLOUR : demoColours.get(m)!;
+  };
+  applyColours();
 
   const resize = (): void => {
     const w = canvasHost.clientWidth || 1;
@@ -211,6 +222,7 @@ function main(): void {
   refreshPresetButtons();
   sPreset.appendChild(presetRow);
   addCheckbox(sPreset, '环境立方体贴图（sglDx11 gEnvTexture；关 = 解析天/地兜底）', () => envCubeEnabled, (v) => { envCubeEnabled = v; applyEnvCube(); });
+  addCheckbox(sPreset, '出厂颜色：全部 lightgrey #bdbdbd（autocolour 关；关 = PDMS 颜色表演示配色）', () => factoryColours, (v) => { factoryColours = v; applyColours(); });
 
   // 光照（材质）
   const sLight = section('光照 / 材质（Ka Kd Ks Kr Kse，当前预设值）');
@@ -279,6 +291,7 @@ function main(): void {
     setPreset: (id) => { applyPreset(id); refreshPresetButtons(); },
     envCube: null,
     setEnvCubeEnabled: (on) => { envCubeEnabled = on; applyEnvCube(); },
+    setFactoryColours: (on) => { factoryColours = on; applyColours(); },
     frames: 0,
   };
   window.__e3dLookDemo = handle;

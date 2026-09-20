@@ -64,4 +64,20 @@ describe('useDisplayThemeStore', () => {
     expect(localStorage.getItem('viewer_display_theme_v2')).toBe('e3d');
     expect(store.currentTheme.value).toBe('e3d');
   });
+
+  it('e3dFactory（出厂 E3D：全 lightgrey）是合法主题，可持久化回读；乱值回退 e3d', async () => {
+    localStorage.setItem('viewer_display_theme_v2', 'e3dFactory');
+    const { useDisplayThemeStore, isDisplayTheme, DISPLAY_THEMES } = await import('./useDisplayThemeStore');
+
+    expect(useDisplayThemeStore().currentTheme.value).toBe('e3dFactory');
+    expect(DISPLAY_THEMES).toEqual(['default', 'design3d', 'e3d', 'e3dFactory']);
+    expect(isDisplayTheme('e3dFactory')).toBe(true);
+    expect(isDisplayTheme('nope')).toBe(false);
+    expect(isDisplayTheme(null)).toBe(false);
+
+    localStorage.setItem('viewer_display_theme_v2', 'nope');
+    vi.resetModules();
+    const mod = await import('./useDisplayThemeStore');
+    expect(mod.useDisplayThemeStore().currentTheme.value).toBe('e3d');
+  });
 });

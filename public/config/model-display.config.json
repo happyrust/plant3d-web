@@ -349,6 +349,17 @@
           }
         }
       }
+    },
+    "e3dFactory": {
+      "name": "E3D 出厂",
+      "comments": "出厂 E3D 3.1（gphcolopt.default）：autocolour 关、Add element colour = lightgrey，所有元素一色 #bdbdbd；颜色写 pdms:<名|号> 查 E3D 颜色表（pdmsColourTable.ts）。SGL 光照下 metalness/roughness 不参与。",
+      "baseMaterial": {
+        "name": "E3D Add element colour（lightgrey）",
+        "color": "pdms:lightgrey",
+        "metalness": 0.1,
+        "roughness": 0.6,
+        "opacity": 1
+      }
     }
   }
 }

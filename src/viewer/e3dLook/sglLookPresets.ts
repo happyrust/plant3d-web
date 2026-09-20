@@ -19,6 +19,8 @@ import {
   type SglLookPipelineParams
 } from './sglLookPipeline';
 
+import type { DisplayTheme } from '@/composables/useDisplayThemeStore';
+
 export type SglLookPresetId = 'e3d31-factory' | 'sgl-machine';
 
 export interface SglLookPreset {
@@ -38,6 +40,11 @@ export interface SglLookPreset {
   background: number;
   /** 渐变端色（在下） */
   gradientEnd: number;
+  /**
+   * 元素颜色走哪套显示主题：两台 E3D 都是 autocolour 关、Add element colour = lightgrey，
+   * 即 `e3dFactory`（所有元素 #bdbdbd，`model-display.config.json` themes.e3dFactory.baseMaterial）。
+   */
+  displayTheme: DisplayTheme;
 }
 
 export const SGL_LOOK_PRESETS: Readonly<Record<SglLookPresetId, Readonly<SglLookPreset>>> = Object.freeze({
@@ -45,25 +52,27 @@ export const SGL_LOOK_PRESETS: Readonly<Record<SglLookPresetId, Readonly<SglLook
     id: 'e3d31-factory' as const,
     label: '出厂 E3D 3.1',
     description:
-      'PML gphviewopt 出厂视图：边线 / 伪阴影 / 渐变全开，光照 0.7·颜色 + 0.8·环境立方体反射（无漫反射、无高光），背景 grey→白渐变。',
+      'PML gphviewopt 出厂视图：边线 / 伪阴影 / 渐变全开，光照 0.7·颜色 + 0.8·环境立方体反射（无漫反射、无高光），背景 grey→白渐变，元素一色 lightgrey。',
     light: SGL_E3D31_VIEW_DEFAULT_LIGHT,
     hlr: true,
     ao: true,
     gradient: true,
     background: E3D_BACKGROUND_GREY,
     gradientEnd: 0xffffff,
+    displayTheme: 'e3dFactory',
   }),
   'sgl-machine': Object.freeze({
     id: 'sgl-machine' as const,
     label: '本机真机',
     description:
-      '本机修补启动的 E3D 3.1（未跑 PML 视图默认）：边线 / 伪阴影 / 渐变全关，SGL C++ 默认光照 0.5/0.8 Blinn-Phong + 0.35 反射，背景纯灰 #828282。',
+      '本机修补启动的 E3D 3.1（未跑 PML 视图默认）：边线 / 伪阴影 / 渐变全关，SGL C++ 默认光照 0.5/0.8 Blinn-Phong + 0.35 反射，背景纯灰 #828282，元素一色 lightgrey。',
     light: SGL_DEFAULT_LIGHT,
     hlr: false,
     ao: false,
     gradient: false,
     background: E3D_BACKGROUND_GREY,
     gradientEnd: 0xffffff,
+    displayTheme: 'e3dFactory',
   }),
 });
 
