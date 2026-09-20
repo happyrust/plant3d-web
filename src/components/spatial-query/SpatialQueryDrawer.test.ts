@@ -6,8 +6,11 @@ import SpatialQueryDrawer from './SpatialQueryDrawer.vue';
 import type {
   SpatialQueryCapabilities,
   SpatialQueryDraft,
+  SpatialQueryGroupDimension,
   SpatialQueryResultItem,
   SpatialQueryResultSet,
+  SpatialQueryRoomOption,
+  SpatialQueryRoomsStatus,
   SpatialQueryStatus,
 } from '@/types/spatialQuery';
 
@@ -33,6 +36,36 @@ const restoreScene = vi.fn();
 const setMode = vi.fn((mode: SpatialQueryDraft['mode']) => {
   stubState.draft.mode = mode;
 });
+/** 房间过滤（ADR 0067）：清单拉取 / 增删 / 「当前选中所在房间」/ 归属解析 / 房间属性，全部由 store 给，抽屉只画 */
+const roomStoreMocks = {
+  setGroupDimension: vi.fn((dimension: SpatialQueryGroupDimension) => {
+    stubState.groupDimension.value = dimension;
+  }),
+  loadRoomOptions: vi.fn(async () => stubState.roomsStatus.value),
+  addRooms: vi.fn((selections: { refno: string; roomNum: string; name: string | null }[]) => {
+    const added: typeof selections = [];
+    for (const selection of selections) {
+      if (stubState.draft.rooms.some((room) => room.refno === selection.refno)) continue;
+      stubState.draft.rooms.push(selection);
+      added.push(selection);
+    }
+    return added;
+  }),
+  removeRoom: vi.fn((refno: string) => {
+    stubState.draft.rooms = stubState.draft.rooms.filter((room) => room.refno !== refno);
+  }),
+  clearRooms: vi.fn(() => {
+    stubState.draft.rooms = [];
+  }),
+  addRoomsByNumber: vi.fn(async (_text: string) => ({ added: [] as { refno: string; roomNum: string; name: string | null }[], missing: [] as string[], duplicated: [] as string[] })),
+  applySelectedRefnoRooms: vi.fn(async () => ({ refno: null as string | null, added: [] as { refno: string; roomNum: string; name: string | null }[], error: null as string | null })),
+  /** 结果区「房间列表」：每个条目一发归属（回房间 refno 列表） */
+  roomsOf: vi.fn(async (_refno: string): Promise<string[]> => []),
+  /** 每个房间一发属性 */
+  roomAttributes: vi.fn(async (refno: string): Promise<{ success: boolean; refno: string; attrs: Record<string, unknown>; full_name: string | null }> => (
+    { success: true, refno, attrs: { TYPE: 'ROOM', NAME: `房间 ${refno}` }, full_name: null }
+  )),
+};
 
 const stubState = {
   draft: reactive<DraftState>({
@@ -49,6 +82,7 @@ const stubState = {
     onlyVisible: false,
     includeNegative: false,
     specValues: [],
+    rooms: [],
     limit: 200,
     sortBy: 'distanceAsc',
   }) as DraftState,
@@ -61,13 +95,19 @@ const stubState = {
   canSubmit: ref(true) as Ref<boolean>,
   /** 「每页数量」是否为正整数（store 算，抽屉据此标红输入框） */
   hasValidPageLimit: ref(true) as Ref<boolean>,
-  /** legacy 源有专业维度；gen-model-v1 的用例把它翻成 false */
-  spatialCapabilities: ref<SpatialQueryCapabilities>({ specValues: true, branCenterline: true, keywordMatchesName: true, nameSortExact: true }) as Ref<SpatialQueryCapabilities>,
+  /** legacy 源有专业维度、没有房间过滤；gen-model-v1 的用例按需翻 */
+  spatialCapabilities: ref<SpatialQueryCapabilities>({ specValues: true, branCenterline: true, keywordMatchesName: true, nameSortExact: true, rooms: false }) as Ref<SpatialQueryCapabilities>,
+  /** 在册房间清单与房间体制状态（store 的 `loadRoomOptions` 填） */
+  roomOptions: ref<SpatialQueryRoomOption[]>([]) as Ref<SpatialQueryRoomOption[]>,
+  roomsStatus: ref<SpatialQueryRoomsStatus>({ status: 'idle', reason: null }) as Ref<SpatialQueryRoomsStatus>,
+  /** 结果分组维度（Q11）：缺省按专业 */
+  groupDimension: ref<SpatialQueryGroupDimension>('spec') as Ref<SpatialQueryGroupDimension>,
 };
 
 vi.mock('@/composables/useSpatialQuery', () => ({
   useSpatialQuery: () => ({
     ...stubState,
+    ...roomStoreMocks,
     setMode,
     applyCurrentSelection,
     startPickCenter,
@@ -95,22 +135,15 @@ vi.mock('@/composables/useConfirmDialogStore', () => ({
 /** 让 `confirmDialog.open(...).then(run)` 那条链跑完（mock 的 async 函数要几拍微任务）。 */
 const flushMicrotasks = () => new Promise<void>((resolve) => { setTimeout(resolve, 0); });
 
-/** 房间列表的两条取数：归属解析（每个条目一发）与房间属性（每个房间一发） */
-const roomMocks = vi.hoisted(() => ({
-  resolveContainingRoomInfo: vi.fn(async (_refno: string, _options?: { includeAttrs?: boolean }): Promise<unknown> => null),
-  pdmsGetUiAttr: vi.fn(async (refno: string) => ({ success: true, refno, attrs: { TYPE: 'ROOM', NAME: `房间 ${refno}` }, full_name: null })),
-}));
-
 vi.mock('@/composables/useRoomInfoPanel', () => ({
-  resolveContainingRoomInfo: roomMocks.resolveContainingRoomInfo,
   useRoomInfoPanel: () => ({
     openForRefno: vi.fn(async () => null),
     showRoomModel: vi.fn(async () => undefined),
   }),
 }));
 
-vi.mock('@/api/genModelPdmsAttrApi', () => ({
-  pdmsGetUiAttr: roomMocks.pdmsGetUiAttr,
+vi.mock('@/ribbon/toastBus', () => ({
+  emitToast: vi.fn(),
 }));
 
 function mountDrawer() {
@@ -144,6 +177,7 @@ function resetDraft() {
     onlyVisible: false,
     includeNegative: false,
     specValues: [],
+    rooms: [],
     limit: 200,
     sortBy: 'distanceAsc',
   };
@@ -155,7 +189,7 @@ function resetDraft() {
   stubState.selectedCenterRefno.value = null;
   stubState.canSubmit.value = true;
   stubState.hasValidPageLimit.value = true;
-  stubState.spatialCapabilities.value = { specValues: true, branCenterline: true, keywordMatchesName: true, nameSortExact: true };
+  stubState.spatialCapabilities.value = { specValues: true, branCenterline: true, keywordMatchesName: true, nameSortExact: true, rooms: false };
 }
 
 function makeResultSet(count: number, options: { page?: number; perPage?: number; total?: number; hasMore?: boolean; startIndex?: number } = {}): SpatialQueryResultSet {
@@ -195,6 +229,7 @@ function makeResultSet(count: number, options: { page?: number; perPage?: number
         onlyVisible: false,
         includeNegative: false,
         specValues: [],
+        rooms: [],
       },
       limit: perPage,
       sortBy: 'distanceAsc',
@@ -236,9 +271,19 @@ describe('SpatialQueryDrawer (distance 模式)', () => {
     startPickCenter.mockReset();
     submitQuery.mockReset();
     requeryResults.mockReset();
-    roomMocks.resolveContainingRoomInfo.mockReset();
-    roomMocks.resolveContainingRoomInfo.mockResolvedValue(null);
-    roomMocks.pdmsGetUiAttr.mockClear();
+    roomStoreMocks.roomsOf.mockReset();
+    roomStoreMocks.roomsOf.mockResolvedValue([]);
+    roomStoreMocks.roomAttributes.mockClear();
+    roomStoreMocks.loadRoomOptions.mockClear();
+    roomStoreMocks.addRooms.mockClear();
+    roomStoreMocks.removeRoom.mockClear();
+    roomStoreMocks.clearRooms.mockClear();
+    roomStoreMocks.addRoomsByNumber.mockClear();
+    roomStoreMocks.applySelectedRefnoRooms.mockClear();
+    roomStoreMocks.setGroupDimension.mockClear();
+    stubState.roomOptions.value = [];
+    stubState.roomsStatus.value = { status: 'idle', reason: null };
+    stubState.groupDimension.value = 'spec';
     clearResults.mockReset();
     activateResult.mockReset();
     countLoadTargets.mockReset();
@@ -295,7 +340,7 @@ describe('SpatialQueryDrawer (distance 模式)', () => {
     expect(host.querySelector('[data-testid="distance-source-bran-centerline"]')?.className).toContain('bg-brand-subtle');
 
     // gen-model-v1 没有中心线：按钮消失，已选的那一档退回「通过 Refno」
-    stubState.spatialCapabilities.value = { specValues: false, branCenterline: false, keywordMatchesName: false, nameSortExact: false };
+    stubState.spatialCapabilities.value = { specValues: false, branCenterline: false, keywordMatchesName: false, nameSortExact: false, rooms: false };
     await nextTick();
 
     expect(host.querySelector('[data-testid="distance-source-bran-centerline"]')).toBeNull();
@@ -486,7 +531,7 @@ describe('SpatialQueryDrawer (distance 模式)', () => {
     expect((host.querySelector('[data-testid="spatial-keyword-input"]') as HTMLInputElement).placeholder).toContain('名称');
 
     // gen-model-v1：服务端不按名称匹配，文案不再许诺「名称」（改前写死「Refno / 名称」）
-    stubState.spatialCapabilities.value = { specValues: false, branCenterline: false, keywordMatchesName: false, nameSortExact: false };
+    stubState.spatialCapabilities.value = { specValues: false, branCenterline: false, keywordMatchesName: false, nameSortExact: false, rooms: false };
     await nextTick();
     expect(host.querySelector('[data-testid="spatial-keyword-label"]')?.textContent).toContain('关键字（Refno / Noun）');
     expect(host.querySelector('[data-testid="spatial-keyword-label"]')?.textContent).not.toContain('名称');
@@ -521,7 +566,7 @@ describe('SpatialQueryDrawer (distance 模式)', () => {
     expect(byName().title).toBe('按构件名称升序');
 
     // gen-model-v1：只为本页补名字、全集按 Noun / Refno 近似排 → 按钮下方提示 + tooltip 说明
-    stubState.spatialCapabilities.value = { specValues: false, branCenterline: false, keywordMatchesName: false, nameSortExact: false };
+    stubState.spatialCapabilities.value = { specValues: false, branCenterline: false, keywordMatchesName: false, nameSortExact: false, rooms: false };
     await nextTick();
     expect(hint()?.textContent).toContain('当前源不按名称排整个命中集合');
     expect(byName().title).toContain('近似');
@@ -678,16 +723,9 @@ describe('SpatialQueryDrawer (distance 模式)', () => {
     unmount();
   });
 
-  it('房间列表：结果区收起时不解析；展开后每个条目只解一次归属（不取属性），按房间去重后每个房间只取一次属性', async () => {
+  it('房间列表：结果区收起时不解析；展开后每个条目只解一次归属（经 store 的 roomsOf，不取属性），按房间去重后每个房间只取一次属性（经 store 的 roomAttributes）', async () => {
     // 3 个条目落在 2 个房间：前两条 room_a，第三条 room_b
-    roomMocks.resolveContainingRoomInfo.mockImplementation(async (refno: string) => ({
-      sourceRefno: refno,
-      roomRefno: refno === '24381_100003' ? 'room_b' : 'room_a',
-      fullName: null,
-      attrs: {},
-      refFullNames: null,
-      ancestorIds: [],
-    }));
+    roomStoreMocks.roomsOf.mockImplementation(async (refno: string) => [refno === '24381_100003' ? 'room_b' : 'room_a']);
     stubState.resultSet.value = makeResultSet(3);
 
     const { host, unmount } = mountDrawer();
@@ -695,20 +733,17 @@ describe('SpatialQueryDrawer (distance 模式)', () => {
     await flushMicrotasks();
 
     // 改前结果一变就解析、收起着也打请求
-    expect(roomMocks.resolveContainingRoomInfo).not.toHaveBeenCalled();
-    expect(roomMocks.pdmsGetUiAttr).not.toHaveBeenCalled();
+    expect(roomStoreMocks.roomsOf).not.toHaveBeenCalled();
+    expect(roomStoreMocks.roomAttributes).not.toHaveBeenCalled();
 
     await expandResults(host);
     await flushMicrotasks();
     await nextTick();
 
-    // 归属：每个条目一发、不取属性；属性：每个房间一发（改前每个条目各打一发 ancestors + 一发属性）
-    expect(roomMocks.resolveContainingRoomInfo).toHaveBeenCalledTimes(3);
-    for (const call of roomMocks.resolveContainingRoomInfo.mock.calls) {
-      expect(call[1]).toEqual({ includeAttrs: false });
-    }
-    expect(roomMocks.pdmsGetUiAttr).toHaveBeenCalledTimes(2);
-    expect(roomMocks.pdmsGetUiAttr.mock.calls.map((call) => call[0]).sort()).toEqual(['room_a', 'room_b']);
+    // 归属：每个条目一发、不取属性；属性：每个房间一发（改前每个条目各打一发 ancestors + 一发属性，且打的是旧后端）
+    expect(roomStoreMocks.roomsOf).toHaveBeenCalledTimes(3);
+    expect(roomStoreMocks.roomAttributes).toHaveBeenCalledTimes(2);
+    expect(roomStoreMocks.roomAttributes.mock.calls.map((call) => call[0]).sort()).toEqual(['room_a', 'room_b']);
     expect(host.textContent).toContain('当前页涉及 2 个房间');
     expect(host.textContent).toContain('房间 room_a');
     expect(host.textContent).toContain('2 项');
@@ -720,15 +755,218 @@ describe('SpatialQueryDrawer (distance 模式)', () => {
     (host.querySelector('[data-testid="spatial-results-toggle"]') as HTMLButtonElement).click();
     await nextTick();
     await flushMicrotasks();
-    expect(roomMocks.resolveContainingRoomInfo).toHaveBeenCalledTimes(3);
+    expect(roomStoreMocks.roomsOf).toHaveBeenCalledTimes(3);
 
     // 结果换了（翻到第 2 页）：旧列表作废，展开着就按新条目重解
     stubState.resultSet.value = makeResultSet(2, { page: 2, perPage: 3, total: 5, startIndex: 3 });
     await nextTick();
     await flushMicrotasks();
     await nextTick();
-    expect(roomMocks.resolveContainingRoomInfo).toHaveBeenCalledTimes(5);
+    expect(roomStoreMocks.roomsOf).toHaveBeenCalledTimes(5);
     expect(host.textContent).toContain('当前页涉及 1 个房间');
+
+    unmount();
+  });
+
+  it('房间列表：一个构件横跨两间房就在两间房里各计一次；归属取数失败的条目跳过；在册清单里有的房间先用清单的名字', async () => {
+    stubState.roomOptions.value = [{ refno: 'room_a', roomNum: 'A101', name: '/A101-RM', dbnum: 17496, panelCount: 4 }];
+    roomStoreMocks.roomsOf.mockImplementation(async (refno: string) => {
+      if (refno === '24381_100001') return ['room_a', 'room_b'];
+      if (refno === '24381_100002') throw new Error('lookup failed');
+      return ['room_b'];
+    });
+    roomStoreMocks.roomAttributes.mockImplementation(async (refno: string) => ({ success: refno === 'room_b', refno, attrs: { TYPE: 'ROOM', DESC: '走廊' }, full_name: null }));
+    stubState.resultSet.value = makeResultSet(3);
+
+    const { host, unmount } = mountDrawer();
+    await nextTick();
+    await expandResults(host);
+    await flushMicrotasks();
+    await nextTick();
+
+    expect(host.textContent).toContain('当前页涉及 2 个房间');
+    // room_a：属性取不到（success:false）→ 名字来自在册清单
+    expect(host.textContent).toContain('/A101-RM');
+    // room_b：两条（100001 横跨 + 100003）
+    const rows = Array.from(host.querySelectorAll('[data-testid="spatial-room-row"]')).map((row) => row.textContent ?? '');
+    expect(rows.some((row) => row.includes('room_b') && row.includes('2 项'))).toBe(true);
+    expect(rows.some((row) => row.includes('/A101-RM') && row.includes('1 项'))).toBe(true);
+
+    unmount();
+  });
+
+  // ---- 房间过滤（ADR 0067）----
+
+  it('房间过滤：legacy 源（capabilities.rooms=false）不画房间块、也不拉清单', async () => {
+    const { host, unmount } = mountDrawer();
+    await nextTick();
+    (host.querySelector('[data-testid="spatial-advanced-toggle"]') as HTMLButtonElement).click();
+    await nextTick();
+    expect(host.querySelector('[data-testid="room-filter"]')).toBeNull();
+    expect(roomStoreMocks.loadRoomOptions).not.toHaveBeenCalled();
+    unmount();
+  });
+
+  it('房间过滤：v1 源打开抽屉就拉清单；服务端 disabled 时整块换成一句原因；error 时给「重试」', async () => {
+    stubState.spatialCapabilities.value = { specValues: true, branCenterline: true, keywordMatchesName: false, nameSortExact: false, rooms: true };
+    stubState.roomsStatus.value = { status: 'disabled', reason: 'room_membership=false：服务端未开启房间归属计算' };
+
+    const { host, unmount } = mountDrawer();
+    await nextTick();
+    expect(roomStoreMocks.loadRoomOptions).toHaveBeenCalledTimes(1);
+    (host.querySelector('[data-testid="spatial-advanced-toggle"]') as HTMLButtonElement).click();
+    await nextTick();
+
+    const block = host.querySelector('[data-testid="room-filter"]');
+    expect(block).not.toBeNull();
+    const unavailable = host.querySelector('[data-testid="room-filter-unavailable"]');
+    expect(unavailable?.textContent).toContain('服务端未开启房间归属计算');
+    expect(unavailable?.textContent).toContain('room_membership=false');
+    expect(host.querySelector('[data-testid="room-search-input"]')).toBeNull();
+    expect(host.querySelector('[data-testid="room-filter-retry"]')).toBeNull();
+
+    stubState.roomsStatus.value = { status: 'error', reason: 'HTTP 500' };
+    await nextTick();
+    expect(host.querySelector('[data-testid="room-filter-unavailable"]')?.textContent).toContain('房间清单取不到');
+    (host.querySelector('[data-testid="room-filter-retry"]') as HTMLButtonElement).click();
+    expect(roomStoreMocks.loadRoomOptions).toHaveBeenLastCalledWith({ force: true });
+
+    unmount();
+  });
+
+  it('房间过滤：ready 时可搜索下拉按房间号 / 名称过滤、点选加进已选 chip、× 移除、「当前选中所在房间」走 store', async () => {
+    stubState.spatialCapabilities.value = { specValues: true, branCenterline: true, keywordMatchesName: false, nameSortExact: false, rooms: true };
+    stubState.roomsStatus.value = { status: 'ready', reason: null };
+    stubState.roomOptions.value = [
+      { refno: '17496_1', roomNum: 'A101', name: '/A101-RM', dbnum: 17496, panelCount: 4 },
+      { refno: '17496_2', roomNum: 'A102', name: '/A102-RM', dbnum: 17496, panelCount: 3 },
+      { refno: '17496_3', roomNum: 'B201', name: '/B201-RM 泵房', dbnum: 17496, panelCount: 6 },
+    ];
+
+    const { host, unmount } = mountDrawer();
+    await nextTick();
+    (host.querySelector('[data-testid="spatial-advanced-toggle"]') as HTMLButtonElement).click();
+    await nextTick();
+
+    const input = host.querySelector('[data-testid="room-search-input"]') as HTMLInputElement;
+    expect(input).not.toBeNull();
+    expect(input.placeholder).toContain('在册 3 间');
+    input.dispatchEvent(new Event('focus'));
+    await nextTick();
+    expect(host.querySelectorAll('[data-testid="room-option"]')).toHaveLength(3);
+
+    input.value = '泵房';
+    input.dispatchEvent(new Event('input'));
+    await nextTick();
+    const options = host.querySelectorAll('[data-testid="room-option"]');
+    expect(options).toHaveLength(1);
+    expect(options[0]?.getAttribute('data-room-refno')).toBe('17496_3');
+    options[0]!.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+    await nextTick();
+    expect(roomStoreMocks.addRooms).toHaveBeenCalledWith([{ refno: '17496_3', roomNum: 'B201', name: '/B201-RM 泵房' }]);
+    const chips = host.querySelectorAll('[data-testid="room-chip"]');
+    expect(chips).toHaveLength(1);
+    expect(chips[0]?.textContent).toContain('B201');
+    expect(chips[0]?.textContent).toContain('/B201-RM 泵房');
+    expect(input.value).toBe('');
+
+    // 已选的不再出现在下拉里
+    input.dispatchEvent(new Event('focus'));
+    await nextTick();
+    expect(Array.from(host.querySelectorAll('[data-testid="room-option"]')).map((el) => el.getAttribute('data-room-refno'))).toEqual(['17496_1', '17496_2']);
+
+    (host.querySelector('[data-testid="room-use-selected"]') as HTMLButtonElement).click();
+    await flushMicrotasks();
+    expect(roomStoreMocks.applySelectedRefnoRooms).toHaveBeenCalledTimes(1);
+
+    (chips[0]!.querySelector('button') as HTMLButtonElement).click();
+    await nextTick();
+    expect(roomStoreMocks.removeRoom).toHaveBeenCalledWith('17496_3');
+    expect(host.querySelectorAll('[data-testid="room-chip"]')).toHaveLength(0);
+
+    unmount();
+  });
+
+  it('房间过滤：回车按房间号精确加入（走 store 的 addRoomsByNumber），同号多间 / 没匹配到各提示一句', async () => {
+    const { emitToast } = await import('@/ribbon/toastBus');
+    stubState.spatialCapabilities.value = { specValues: true, branCenterline: true, keywordMatchesName: false, nameSortExact: false, rooms: true };
+    stubState.roomsStatus.value = { status: 'ready', reason: null };
+    stubState.roomOptions.value = [{ refno: '17496_1', roomNum: 'A101', name: null, dbnum: 17496, panelCount: 4 }];
+    roomStoreMocks.addRoomsByNumber.mockImplementation(async (text: string) => {
+      if (text === 'A101') {
+        const added = [{ refno: '17496_1', roomNum: 'A101', name: null }, { refno: '17497_1', roomNum: 'A101', name: null }];
+        stubState.draft.rooms.push(...added);
+        return { added, missing: [], duplicated: ['A101'] };
+      }
+      return { added: [], missing: [text], duplicated: [] };
+    });
+
+    const { host, unmount } = mountDrawer();
+    await nextTick();
+    (host.querySelector('[data-testid="spatial-advanced-toggle"]') as HTMLButtonElement).click();
+    await nextTick();
+    const input = host.querySelector('[data-testid="room-search-input"]') as HTMLInputElement;
+
+    input.value = 'A101';
+    input.dispatchEvent(new Event('input'));
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
+    await flushMicrotasks();
+    await nextTick();
+    expect(roomStoreMocks.addRoomsByNumber).toHaveBeenCalledWith('A101');
+    expect(host.querySelectorAll('[data-testid="room-chip"]')).toHaveLength(2);
+    expect(vi.mocked(emitToast)).toHaveBeenCalledWith(expect.objectContaining({ level: 'info', message: expect.stringContaining('对应多间房') }));
+    expect(input.value).toBe('');
+
+    input.value = 'Z999';
+    input.dispatchEvent(new Event('input'));
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
+    await flushMicrotasks();
+    expect(vi.mocked(emitToast)).toHaveBeenCalledWith(expect.objectContaining({ level: 'warning', message: expect.stringContaining('Z999') }));
+
+    unmount();
+  });
+
+  it('结果分组维度（Q11）：两维都在时画「按专业 | 按库」切换，切到按库后组头按库、按钮改「加载本库」；legacy 没有库分组就不画切换', async () => {
+    stubState.spatialCapabilities.value = { specValues: true, branCenterline: true, keywordMatchesName: false, nameSortExact: false, rooms: true };
+    const set = makeResultSet(2);
+    set.items[0]!.specValue = 1;
+    set.items[0]!.specName = '管道系统';
+    set.items[0]!.dbnum = 24381;
+    set.items[1]!.specValue = 6;
+    set.items[1]!.specName = '结构系统';
+    set.items[1]!.dbnum = 7997;
+    set.groups = [
+      { specValue: 1, specName: '管道系统', count: 1, items: [set.items[0]!] },
+      { specValue: 6, specName: '结构系统', count: 1, items: [set.items[1]!] },
+    ];
+    set.dbnumGroups = [{ dbnum: 24381, count: 1 }, { dbnum: 7997, count: 1 }];
+    stubState.resultSet.value = set;
+
+    const { host, unmount } = mountDrawer();
+    await nextTick();
+    await expandResults(host);
+    await nextTick();
+
+    expect(host.querySelector('[data-testid="spatial-group-dimension"]')).not.toBeNull();
+    let titles = Array.from(host.querySelectorAll('[data-testid="spatial-result-group-title"]')).map((el) => el.textContent?.trim());
+    expect(titles).toEqual(['管道系统', '结构系统']);
+    expect(host.querySelector('[data-testid="spatial-result-group-load"]')?.textContent).toContain('加载本专业');
+
+    (host.querySelector('[data-testid="spatial-group-dimension-dbnum"]') as HTMLButtonElement).click();
+    await nextTick();
+    expect(roomStoreMocks.setGroupDimension).toHaveBeenCalledWith('dbnum');
+    titles = Array.from(host.querySelectorAll('[data-testid="spatial-result-group-title"]')).map((el) => el.textContent?.trim());
+    expect(titles).toEqual(['库 7997', '库 24381']);
+    expect(host.querySelector('[data-testid="spatial-result-group-load"]')?.textContent).toContain('加载本库');
+
+    // legacy：没有 dbnumGroups → 不画切换、按专业
+    stubState.groupDimension.value = 'spec';
+    stubState.spatialCapabilities.value = { specValues: true, branCenterline: true, keywordMatchesName: true, nameSortExact: true, rooms: false };
+    const legacySet = makeResultSet(1);
+    legacySet.dbnumGroups = null;
+    stubState.resultSet.value = legacySet;
+    await nextTick();
+    expect(host.querySelector('[data-testid="spatial-group-dimension"]')).toBeNull();
 
     unmount();
   });
@@ -981,7 +1219,7 @@ describe('SpatialQueryDrawer (distance 模式)', () => {
   });
 
   it('gen-model-v1（无专业维度）：收起专业过滤与「按专业」排序，结果按库分组、组头用服务端全量计数、组按钮走 dbnum 路径，并提示覆盖面', async () => {
-    stubState.spatialCapabilities.value = { specValues: false, branCenterline: false, keywordMatchesName: false, nameSortExact: false };
+    stubState.spatialCapabilities.value = { specValues: false, branCenterline: false, keywordMatchesName: false, nameSortExact: false, rooms: false };
     const base = makeResultSet(3);
     base.items[0]!.dbnum = 24381;
     base.items[1]!.dbnum = 24383;

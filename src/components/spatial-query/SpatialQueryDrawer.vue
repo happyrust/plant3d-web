@@ -293,6 +293,89 @@
                 placeholder="例如：PIPE,EQUI,BRAN"
                 class="h-8 w-full rounded-md border border-gray-200 bg-white px-2.5 font-mono text-xs text-gray-900 outline-none focus:border-brand" />
             </label>
+            <div v-if="hasRoomDimension" class="text-xs text-gray-500" data-testid="room-filter">
+              <div class="mb-1 flex items-center justify-between">
+                <span>房间过滤</span>
+                <div v-if="roomsReady" class="flex items-center gap-2 text-[11px]">
+                  <button type="button"
+                    class="text-gray-500 transition-colors hover:text-brand disabled:cursor-not-allowed disabled:opacity-50"
+                    :disabled="roomActionBusy"
+                    data-testid="room-use-selected"
+                    title="把查看器 / 模型树里当前选中构件所在的房间加进过滤"
+                    @click="useSelectedRefnoRooms">
+                    当前选中所在房间
+                  </button>
+                  <span class="text-gray-300">·</span>
+                  <button type="button"
+                    class="text-gray-500 transition-colors hover:text-brand disabled:cursor-not-allowed disabled:opacity-50"
+                    :disabled="draft.rooms.length === 0"
+                    data-testid="room-clear"
+                    @click="clearRooms">
+                    清空
+                  </button>
+                </div>
+              </div>
+              <div v-if="roomsLoading" class="text-[11px] text-gray-400" data-testid="room-filter-loading">
+                正在读取在册房间清单…
+              </div>
+              <div v-else-if="!roomsReady" class="flex items-start justify-between gap-2 rounded-md border border-gray-200 bg-white px-2.5 py-1.5 text-[11px] text-gray-400" data-testid="room-filter-unavailable">
+                <span>{{ roomsUnavailableText }}</span>
+                <button v-if="roomsStatus.status === 'error'"
+                  type="button"
+                  class="shrink-0 text-gray-500 hover:text-brand"
+                  data-testid="room-filter-retry"
+                  @click="retryLoadRooms">
+                  重试
+                </button>
+              </div>
+              <template v-else>
+                <div v-if="draft.rooms.length > 0" class="mb-1.5 flex flex-wrap gap-1.5" data-testid="room-selected">
+                  <span v-for="room in draft.rooms"
+                    :key="room.refno"
+                    class="inline-flex items-center gap-1 rounded-full border border-brand bg-brand-subtle px-2 py-0.5 text-[11px] text-brand"
+                    :title="room.refno"
+                    data-testid="room-chip"
+                    :data-room-refno="room.refno">
+                    {{ roomChipLabel(room) }}
+                    <button type="button" class="rounded-full hover:bg-white/60" :aria-label="`移除房间 ${roomChipLabel(room)}`" @click="removeRoom(room.refno)">
+                      <X class="h-3 w-3" />
+                    </button>
+                  </span>
+                </div>
+                <div class="relative">
+                  <input v-model="roomSearchText"
+                    type="text"
+                    :placeholder="roomOptions.length > 0 ? `搜索房间号 / 名称（在册 ${roomOptions.length} 间），回车按房间号精确加入` : '在册房间清单为空'"
+                    :disabled="roomOptions.length === 0 || roomActionBusy"
+                    data-testid="room-search-input"
+                    class="h-8 w-full rounded-md border border-gray-200 bg-white px-2.5 text-xs text-gray-900 outline-none focus:border-brand disabled:cursor-not-allowed disabled:opacity-50"
+                    @focus="roomSearchFocused = true"
+                    @blur="roomSearchFocused = false"
+                    @keydown.enter.prevent="submitRoomSearch" />
+                  <ul v-if="showRoomDropdown"
+                    class="absolute z-20 mt-1 max-h-44 w-full overflow-y-auto rounded-md border border-gray-200 bg-white py-1 shadow-lg"
+                    data-testid="room-options">
+                    <li v-for="option in filteredRoomOptions" :key="option.refno">
+                      <button type="button"
+                        class="flex w-full items-center justify-between gap-2 px-2.5 py-1 text-left text-[11px] text-gray-700 hover:bg-gray-50"
+                        data-testid="room-option"
+                        :data-room-refno="option.refno"
+                        @mousedown.prevent="pickRoomOption(option)">
+                        <span class="truncate">
+                          <span class="font-mono font-medium text-gray-900">{{ option.roomNum }}</span>
+                          <span v-if="option.name && option.name !== option.roomNum" class="ml-1 text-gray-500">{{ option.name }}</span>
+                        </span>
+                        <span class="shrink-0 font-mono text-[10px] text-gray-400">{{ option.refno }}</span>
+                      </button>
+                    </li>
+                  </ul>
+                </div>
+                <p class="mt-1 text-[10px] text-gray-400">
+                  未选 = 不按房间过滤；已选多间 = 只保留房间归属含任一所选房间的构件（横跨两间房的两边都算）。
+                  <span v-if="roomsStatus.status === 'degraded' && roomsStatus.reason">房间模型有缺口：{{ roomsStatus.reason }}</span>
+                </p>
+              </template>
+            </div>
             <div v-if="hasSpecDimension" class="text-xs text-gray-500" data-testid="spec-filter">
               <div class="mb-1 flex items-center justify-between">
                 <span>专业过滤</span>
@@ -484,7 +567,8 @@
             <div v-if="roomListRows.length > 0" class="max-h-40 space-y-1.5 overflow-y-auto">
               <div v-for="room in roomListRows"
                 :key="room.roomRefno"
-                class="rounded-md border border-gray-200 bg-gray-50 px-2 py-1.5">
+                class="rounded-md border border-gray-200 bg-gray-50 px-2 py-1.5"
+                data-testid="spatial-room-row">
                 <div class="flex items-start justify-between gap-2">
                   <button type="button"
                     class="min-w-0 text-left"
@@ -552,6 +636,24 @@
             class="border-b border-gray-100 bg-gray-50 px-3 py-2 text-[11px] text-gray-500"
             data-testid="spatial-coverage-hint">
             结果仅含已生成过模型的构件（空间索引只收已生成的包围盒）；从未显示过的构件不在其中，先显示它们再查会被纳入。
+          </div>
+
+          <div v-if="resultsExpanded && resultSet && resultSet.items.length > 0 && canToggleGroupDimension"
+            class="flex items-center justify-between border-b border-gray-100 px-3 py-1.5 text-[11px] text-gray-500"
+            data-testid="spatial-group-dimension">
+            <span>结果分组</span>
+            <div class="inline-flex rounded-md border border-gray-200 bg-white p-0.5">
+              <button v-for="option in GROUP_DIMENSION_OPTIONS"
+                :key="option.value"
+                type="button"
+                class="rounded px-2 py-0.5 text-[11px] transition-colors"
+                :class="groupDimension === option.value ? 'bg-brand-subtle text-brand' : 'text-gray-500 hover:bg-gray-50'"
+                :data-testid="`spatial-group-dimension-${option.value}`"
+                :aria-pressed="groupDimension === option.value"
+                @click="setGroupDimension(option.value)">
+                {{ option.label }}
+              </button>
+            </div>
           </div>
 
           <div v-if="resultsExpanded && resultSet && resultSet.items.length > 0" class="max-h-[280px] overflow-y-auto px-3 py-2.5">
@@ -642,14 +744,19 @@ import { computed, ref, watch } from 'vue';
 
 import { ArrowUpRight, Eye, EyeOff, Loader2, MapPinned, MousePointerClick, Ruler, Search, X } from 'lucide-vue-next';
 
-import type { SpatialQueryMode, SpatialQueryResultItem, SpatialQuerySortBy } from '@/types/spatialQuery';
+import type {
+  SpatialQueryGroupDimension,
+  SpatialQueryMode,
+  SpatialQueryResultItem,
+  SpatialQueryRoomOption,
+  SpatialQuerySortBy,
+} from '@/types/spatialQuery';
 
-import { pdmsGetUiAttr } from '@/api/genModelPdmsAttrApi';
 import { formatClearanceToast } from '@/clearance/composables/useComponentToWallClearance';
 import { useClearanceStore } from '@/clearance/stores/useClearanceStore';
 import { useConfirmDialogStore } from '@/composables/useConfirmDialogStore';
 import { findNounByRefnoAcrossAllDbnos } from '@/composables/useDbnoInstancesDtxLoader';
-import { resolveContainingRoomInfo, useRoomInfoPanel } from '@/composables/useRoomInfoPanel';
+import { useRoomInfoPanel } from '@/composables/useRoomInfoPanel';
 import { useSpatialQuery } from '@/composables/useSpatialQuery';
 import { emitToast } from '@/ribbon/toastBus';
 import {
@@ -658,7 +765,7 @@ import {
   getSpecValueShortName,
 } from '@/types/spec';
 
-defineProps<{
+const props = defineProps<{
   open: boolean;
 }>();
 
@@ -679,6 +786,18 @@ const {
   canSubmit,
   hasValidPageLimit,
   spatialCapabilities,
+  roomOptions,
+  roomsStatus,
+  groupDimension,
+  setGroupDimension,
+  loadRoomOptions,
+  addRooms,
+  removeRoom,
+  clearRooms,
+  addRoomsByNumber,
+  applySelectedRefnoRooms,
+  roomsOf,
+  roomAttributes,
   setMode: setSpatialQueryMode,
   applyCurrentSelection,
   startPickCenter,
@@ -698,12 +817,136 @@ const {
 const confirmDialog = useConfirmDialogStore();
 
 /**
- * 当前源有没有专业维度（legacy 有，gen-model-v1 没有——plan 2026-09-13 空间范围查询 §5-1 按 (a)）：
- * 没有就收起专业过滤 / 「按专业」排序，结果改按库（dbnum）分组。
+ * 当前源有没有专业维度：legacy 一直有，gen-model-v1 自 2026-09-20 起也有（服务端按 SITE 名派生，ADR 0067）；
+ * 没有就收起专业过滤 / 「按专业」排序，结果只能按库（dbnum）分组。
  */
 const hasSpecDimension = computed(() => spatialCapabilities.value.specValues);
-const groupDimensionLabel = computed(() => (hasSpecDimension.value ? '按专业' : '按库'));
-const groupUnitLabel = computed(() => (hasSpecDimension.value ? '专业' : '库'));
+/** 两维都在才画「按专业 | 按库」切换（Q11 (b)）：专业维度 + 服务端给了 `dbnumGroups`（gen-model-v1）；只剩一维就按那一维。 */
+const canToggleGroupDimension = computed(() => hasSpecDimension.value && (resultSet.value?.dbnumGroups?.length ?? 0) > 0);
+const groupByDbnum = computed(() => groupDimension.value === 'dbnum' || !hasSpecDimension.value);
+const groupDimensionLabel = computed(() => (groupByDbnum.value ? '按库' : '按专业'));
+const groupUnitLabel = computed(() => (groupByDbnum.value ? '库' : '专业'));
+const GROUP_DIMENSION_OPTIONS: { value: SpatialQueryGroupDimension; label: string }[] = [
+  { value: 'spec', label: '按专业' },
+  { value: 'dbnum', label: '按库' },
+];
+
+// ---- 房间过滤（ADR 0067，Q4 / Q5 / Q12）----
+
+/** 源认房间过滤才画这一块（legacy 不画）；服务端此刻能不能看 `roomsStatus`。 */
+const hasRoomDimension = computed(() => spatialCapabilities.value.rooms);
+const roomsReady = computed(() => roomsStatus.value.status === 'ready' || roomsStatus.value.status === 'degraded');
+const roomsLoading = computed(() => roomsStatus.value.status === 'loading' || roomsStatus.value.status === 'idle');
+/** 房间体制不可用时写给人看的一句（`disabled` / `initializing` / `unsupported` / `failed` / `error`）。 */
+const roomsUnavailableText = computed(() => {
+  const { status: roomsState, reason } = roomsStatus.value;
+  const head = (() => {
+    switch (roomsState) {
+      case 'disabled':
+        return '服务端未开启房间归属计算，房间过滤不可用';
+      case 'initializing':
+        return '服务端房间模型正在装载，稍后再试';
+      case 'unsupported':
+        return '当前服务端不支持房间过滤';
+      case 'failed':
+        return '服务端房间模型不可用';
+      case 'error':
+        return '房间清单取不到';
+      default:
+        return '房间过滤此刻不可用';
+    }
+  })();
+  return reason ? `${head}（${reason}）` : head;
+});
+const roomSearchText = ref('');
+const roomSearchFocused = ref(false);
+const roomActionBusy = ref(false);
+const ROOM_OPTION_LIMIT = 50;
+const selectedRoomRefnos = computed(() => new Set(draft.rooms.map((room) => room.refno)));
+/** 下拉候选：按房间号 / 名称 / refno 包含匹配（大小写不敏感），已选的不再列，最多 50 条。 */
+const filteredRoomOptions = computed<SpatialQueryRoomOption[]>(() => {
+  const needle = roomSearchText.value.trim().toLowerCase();
+  const out: SpatialQueryRoomOption[] = [];
+  for (const option of roomOptions.value) {
+    if (selectedRoomRefnos.value.has(option.refno)) continue;
+    if (needle) {
+      const haystack = `${option.roomNum} ${option.name ?? ''} ${option.refno}`.toLowerCase();
+      if (!haystack.includes(needle)) continue;
+    }
+    out.push(option);
+    if (out.length >= ROOM_OPTION_LIMIT) break;
+  }
+  return out;
+});
+const showRoomDropdown = computed(() => roomSearchFocused.value && roomsReady.value && filteredRoomOptions.value.length > 0);
+
+function roomChipLabel(room: { refno: string; roomNum: string; name: string | null }): string {
+  if (room.roomNum) return room.name && room.name !== room.roomNum ? `${room.roomNum} · ${room.name}` : room.roomNum;
+  return room.name || room.refno;
+}
+
+function pickRoomOption(option: SpatialQueryRoomOption): void {
+  addRooms([{ refno: option.refno, roomNum: option.roomNum, name: option.name }]);
+  roomSearchText.value = '';
+}
+
+/** 回车：先精确匹配房间号（同号多间全选并提示）；没匹配到而下拉里只剩一条就取它。 */
+async function submitRoomSearch(): Promise<void> {
+  const text = roomSearchText.value.trim();
+  if (!text) return;
+  roomActionBusy.value = true;
+  try {
+    const result = await addRoomsByNumber(text);
+    if (result.added.length > 0) {
+      roomSearchText.value = '';
+      if (result.duplicated.length > 0) {
+        emitToast({
+          level: 'info',
+          message: `房间号 ${result.duplicated.join('、')} 对应多间房，已全部选上（可在已选里删掉不要的）`,
+        });
+      }
+      return;
+    }
+    if (filteredRoomOptions.value.length === 1) {
+      pickRoomOption(filteredRoomOptions.value[0]!);
+      return;
+    }
+    if (result.missing.length > 0) {
+      emitToast({ level: 'warning', message: `在册房间里没有房间号 ${result.missing.join('、')}` });
+    }
+  } finally {
+    roomActionBusy.value = false;
+  }
+}
+
+async function useSelectedRefnoRooms(): Promise<void> {
+  roomActionBusy.value = true;
+  try {
+    const result = await applySelectedRefnoRooms();
+    if (result.error) {
+      emitToast({ level: 'warning', message: result.error });
+      return;
+    }
+    if (result.added.length === 0) {
+      emitToast({ level: 'info', message: `${result.refno} 所在房间已经在已选里` });
+    }
+  } finally {
+    roomActionBusy.value = false;
+  }
+}
+
+function retryLoadRooms(): void {
+  void loadRoomOptions({ force: true });
+}
+
+// 抽屉打开 / 源切到认房间的，拉一次在册清单（已 ready 不重拉）。
+watch(
+  () => [props.open, hasRoomDimension.value] as const,
+  ([open, supported]) => {
+    if (open && supported) void loadRoomOptions();
+  },
+  { immediate: true },
+);
 /** 关键字文案随源切：legacy 服务端按 Refno / Noun / 名称匹配，gen-model-v1 只按 Refno / Noun（名称只对本页补，全集不匹配）。 */
 const keywordLabel = computed(() => (spatialCapabilities.value.keywordMatchesName ? '关键字（Refno / Noun / 名称）' : '关键字（Refno / Noun）'));
 const keywordPlaceholder = computed(() => (
@@ -783,7 +1026,7 @@ function clearSpecs(): void {
 
 const resultBreakdown = computed<string>(() => {
   if (!resultSet.value) return '';
-  const parts = hasSpecDimension.value
+  const parts = !groupByDbnum.value
     ? resultSet.value.groups
       .filter((group) => group.count > 0)
       .map((group) => `${group.count} ${getSpecValueShortName(group.specValue)}`)
@@ -885,7 +1128,7 @@ const allReturnedRefnos = computed(() => {
   return uniqueRefnosInOrder(resultSet.value?.items ?? []);
 });
 
-/** 结果区的一组：legacy 按专业（`key` = spec_value），gen-model-v1 按库（`key` = dbnum）。 */
+/** 结果区的一组：按专业（`key` = spec_value）或按库（`key` = dbnum），由 `groupDimension` 决定（Q11）。 */
 type DisplayGroup = {
   kind: 'spec' | 'dbnum';
   key: number;
@@ -898,7 +1141,7 @@ type DisplayGroup = {
 const UNKNOWN_DBNUM_KEY = -1;
 
 const displayGroups = computed<DisplayGroup[]>(() => {
-  const byDbnum = !hasSpecDimension.value;
+  const byDbnum = groupByDbnum.value;
   const keyOf = (item: SpatialQueryResultItem): number =>
     byDbnum ? (typeof item.dbnum === 'number' ? item.dbnum : UNKNOWN_DBNUM_KEY) : item.specValue;
 
@@ -974,8 +1217,10 @@ async function mapWithConcurrency<T, R>(items: T[], limit: number, fn: (item: T)
 }
 
 /**
- * 当前页条目所在的房间。两步：先只解归属（每项一发 ancestors，不取属性）按房间去重，再每个房间取一次属性——
+ * 当前页条目所在的房间。两步：先只解归属（每项一发 `roomsOf`，不取属性）按房间去重，再每个房间取一次属性——
  * 改前每项各打一发 ancestors + 一发 `pdmsGetUiAttr`、不去重、不限并发，一页 N 项就是 2×N 个并发请求。
+ * 归属与属性都经当前数据源（legacy 走旧后端 room-tree / 属性接口，gen-model-v1 走 `e3d.room.lookup` / `element/attributes`，ADR 0067 Q7）；
+ * 一个构件横跨几间房就在几间房里各计一次。在册清单里有的房间先拿清单的房间号 / 名字。
  */
 async function refreshRoomList() {
   roomListSeq += 1;
@@ -992,46 +1237,48 @@ async function refreshRoomList() {
       try {
         return {
           item,
-          info: await resolveContainingRoomInfo(item.refno, { includeAttrs: false }),
+          rooms: await roomsOf(item.refno),
         };
       } catch {
         return {
           item,
-          info: null,
+          rooms: [] as string[],
         };
       }
     });
     if (seq !== roomListSeq) return;
 
-    for (const { item, info } of resolved) {
-      if (!info) continue;
-      const existing = grouped.get(info.roomRefno);
-      if (existing) {
-        existing.count += 1;
-        existing.sourceRefnos.push(item.refno);
-      } else {
-        grouped.set(info.roomRefno, {
-          roomRefno: info.roomRefno,
-          name: info.roomRefno,
-          roomType: 'ROOM',
-          desc: '',
-          count: 1,
-          sourceRefnos: [item.refno],
-        });
+    for (const { item, rooms: itemRooms } of resolved) {
+      for (const roomRefno of itemRooms) {
+        const existing = grouped.get(roomRefno);
+        if (existing) {
+          existing.count += 1;
+          existing.sourceRefnos.push(item.refno);
+        } else {
+          const option = roomOptions.value.find((candidate) => candidate.refno === roomRefno);
+          grouped.set(roomRefno, {
+            roomRefno,
+            name: option?.name || option?.roomNum || roomRefno,
+            roomType: 'ROOM',
+            desc: '',
+            count: 1,
+            sourceRefnos: [item.refno],
+          });
+        }
       }
     }
 
     const rooms = Array.from(grouped.values());
     await mapWithConcurrency(rooms, ROOM_RESOLVE_CONCURRENCY, async (room) => {
       try {
-        const attrResp = await pdmsGetUiAttr(room.roomRefno);
+        const attrResp = await roomAttributes(room.roomRefno);
         if (!attrResp.success) return;
         const attrs = attrResp.attrs ?? {};
         room.roomType = attrText(attrs, 'TYPE') || 'ROOM';
         room.desc = attrText(attrs, 'DESC') || attrText(attrs, 'DESCRIPTION');
-        room.name = attrResp.full_name || attrText(attrs, 'NAME') || room.roomRefno;
+        room.name = attrResp.full_name || attrText(attrs, 'NAME') || room.name;
       } catch {
-        // 属性取不到就只显示房间 refno
+        // 属性取不到就只显示清单里的名字 / 房间 refno
       }
     });
     if (seq !== roomListSeq) return;
