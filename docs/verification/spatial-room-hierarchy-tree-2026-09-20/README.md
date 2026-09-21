@@ -98,6 +98,7 @@
 | `e2e-spatial-query-gen-model-v1-ui-2026-09-21-0020.txt` | PR-B2 后 e2e 全量输出（9 passed / 1 skipped） |
 | `ui/room-tab-01…08-*.png` `ui/room-tab-summary.json` | 模型树「房间」页签真机十步（§8；summary 里带请求账与逐层对照） |
 | `e2e-model-tree-room-tab-gen-model-v1-2026-09-21-1711.txt` `…-1725.txt` | 房间页签 e2e 三条首次真机（3 passed）与加上页签记忆 / 选中联动第 ④ 条后（4 passed），§8 末 |
+| `design/R1-drawer-flat.png` `R2-drawer-room-tree.png` `R3-model-tree-room-tab.png` `R4-ui-to-api-map.png` | 设计稿 `ui/空间查询/room-hierarchy-tree.pen` 四帧导出（2×，pen.dev `Export`；R3 / R4 的状态标已改「已合入」）——抽屉平铺态 / 抽屉树态 / 模型树「房间」页签 / 界面动作 → 请求 → 状态 |
 
 ## 8. 模型树「房间」页签真机（2026-09-21 16:52–16:54；PR-D `92d928fc`；`ui/room-tab-01…08.png`、`ui/room-tab-summary.json`）
 

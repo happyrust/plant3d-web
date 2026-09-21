@@ -7,12 +7,13 @@
 > 设计稿：`ui/空间查询/room-hierarchy-tree.pen`（`14ece7b6`，六帧：R0 说明 · R1 抽屉平铺态 · R2 抽屉树态 · R3 模型树「房间」页签 · R4 界面→接口映射 · L 实时页面）。
 > 前端基线：plant3d-web `main@14ece7b6` + 工作树未提交的 PR-D 代码（§1.2）；后端 `gen-model-model-cache@65dacd576`（`:8027` 验证实例，mem 档、`room_membership=true`、AMS 7997 已 ensure）。
 >
-> 状态：**Plannotator 已批准**（2026-09-21 16:43，`{"decision":"approved"}`，无批注）——D1–D7 按 §6 推荐项执行。
+> 状态：**全部完成（2026-09-21 17:3x）**——Plannotator 16:43 `approved` 无批注，D1–D7 按 §6 推荐项执行；P0 / P1-a / P1-b / P2 / P3-a / P3-b / P3-d 逐项见下；P3-c 按 D6 不做。
+> 提交链：`14ece7b6` 设计稿 → `79d3e16c` 本计划 → `92d928fc` PR-D 代码 → `b414a70d` 真机 + 文档 → `1d0ba873` CHANGELOG 行尾 → `0b0e01ed` e2e 三条 → `71c0b6a3` P3-a/b → （本笔）P3-d 导图 + 设计稿状态标。
 > **P1-a 真机 → P0 提交 → P2 文档 已完成（16:52–17:1x）**：真机十步全过（README §8）；PR-D 一笔 `plant3d-web@92d928fc`（9 文件 +1730，别人的 hunk 一个没碰）；
 > 上位计划 §4.5 / §5 改完成、教程 §6.1.1 + §9 一行、CHANGELOG 一条覆盖 ADR 0068、CONTEXT 词条改口。
 > **P1-b e2e 已完成（17:11）**：`e2e/model-tree-room-tab-gen-model-v1.spec.ts` 三条（D2 新建），`:3111` + `:8027` `--workers=1` **3 passed / 11.2 s**，日志入验证目录。
 > **P3-a 页签记忆 + P3-b 选中联动 已完成（17:25）**：`modelTreeTab.ts`（localStorage，单测 3）、`useRoomTree.revealRefno`（单测 +1）、`RoomTreePanel` 联动 watch；e2e 加第 ④ 条 **4 passed / 15.1 s**。
-> **P3-d 未做**（要在 pen.dev 里打开那份 .pen 才能 Export）；P3-c 按 D6 不做。
+> **P3-d 已完成（17:29）**：R1–R4 四帧 `Export` 2× PNG 进 `docs/verification/spatial-room-hierarchy-tree-2026-09-20/design/`；顺手把设计稿 R3 / R4 / R0 的「PR-D 未提交」状态标改成「已合入」并保存。P3-c 按 D6 不做。
 
 ## 0. 一句话
 
