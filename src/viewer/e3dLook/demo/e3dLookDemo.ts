@@ -37,7 +37,7 @@ interface DemoHandle {
   setEnvCubeEnabled: (on: boolean) => void;
   /** 元素颜色：true = 出厂 E3D（全部 lightgrey #bdbdbd），false = 演示配色（PDMS 颜色表） */
   setFactoryColours: (on: boolean) => void;
-  /** 演示用「辅助对象」（userData.sglEdges = false 的蓝球） */
+  /** 演示用「辅助对象」（userData.sglHandle = true 的蓝球） */
   aid: Mesh;
   frames: number;
 }
@@ -73,11 +73,12 @@ function main(): void {
   const plant = buildDemoPlant();
   scene.add(plant.root);
 
-  // 一个「辅助对象」（E3D aids，颜色 blue）：userData.sglEdges = false → 不参与边线（EnhancedEdgesHandles 默认关），仍写深度
+  // 一个「辅助对象」（E3D aids，颜色 blue）：userData.sglHandle = true → 默认不参与边线（EnhancedEdgesHandles 关）
+  // 也不参与伪阴影（PseudoShadowsHandles 关），仍写深度
   const aidMaterial = new SglLookMaterial({ color: pdmsColourHex(E3D_GRAPHICS_COLOUR_DEFAULTS.aids)! });
   const aid = new Mesh(new SphereGeometry(450, 32, 16), aidMaterial);
   aid.position.set(-7000, -6500, 450);
-  aid.userData.sglEdges = false;
+  aid.userData.sglHandle = true;
   aid.name = 'demo-aid';
   scene.add(aid);
 
@@ -110,9 +111,11 @@ function main(): void {
   if (params.get('ao') === '0') pipeline.params.ao.enabled = false;
   if (params.get('hlr') === '0') pipeline.params.hlr.enabled = false;
   if (params.get('gradient') === '0') pipeline.params.background.gradient = false;
-  // ?translucentEdges=0 半透明不画边（EnhancedEdgesTranslucent）；?handleEdges=1 辅助对象也画边（EnhancedEdgesHandles）
+  // ?translucentEdges=0 半透明不画边（EnhancedEdgesTranslucent）；?handleEdges=1 辅助对象也画边（EnhancedEdgesHandles）；
+  // ?handleShadows=1 辅助对象也受 / 投伪阴影（PseudoShadowsHandles）
   if (params.get('translucentEdges') === '0') pipeline.params.hlr.translucentEdges = false;
   if (params.get('handleEdges') === '1') pipeline.params.hlr.handleEdges = true;
+  if (params.get('handleShadows') === '1') pipeline.params.ao.handleShadows = true;
   // ?aa=0|none 关；?aa=fxaa；?aa=2|4|8 = MSAA 采样数（缺省随预设：出厂 4× MSAA）
   const aaRaw = params.get('aa');
   if (aaRaw === '0' || aaRaw === 'none') pipeline.params.aa.mode = 'none';
@@ -278,7 +281,7 @@ function main(): void {
   addSlider(sHlr, '梯度方向 |dot| 阈值', 0.99, 1, 0.0001, () => pipeline.params.hlr.gradientDotThreshold, (v) => { pipeline.params.hlr.gradientDotThreshold = v; });
   addSlider(sHlr, '半径 px', 1, 4, 1, () => pipeline.params.hlr.radiusPx, (v) => { pipeline.params.hlr.radiusPx = v; });
   addCheckbox(sHlr, '半透明也画边（EnhancedEdgesTranslucent，E3D 默认开；房间盒）', () => pipeline.params.hlr.translucentEdges, (v) => { pipeline.params.hlr.translucentEdges = v; });
-  addCheckbox(sHlr, '辅助对象也画边（EnhancedEdgesHandles，E3D 默认关；左前方蓝球）', () => pipeline.params.hlr.handleEdges, (v) => { pipeline.params.hlr.handleEdges = v; });
+  addCheckbox(sHlr, '辅助对象也画边（EnhancedEdgesHandles，E3D 默认关；左前方蓝球 userData.sglHandle）', () => pipeline.params.hlr.handleEdges, (v) => { pipeline.params.hlr.handleEdges = v; });
   addColor(sHlr, '边线色', () => pipeline.params.hlr.edgeColor, (c) => { pipeline.params.hlr.edgeColor.copy(c); });
 
   // AO
@@ -293,6 +296,7 @@ function main(): void {
   addSlider(sAo, '模糊半径 px', 0, 16, 1, () => pipeline.params.ao.blurRadius, (v) => { pipeline.params.ao.blurRadius = v; });
   addCheckbox(sAo, '模糊锐度按 E3D 每帧算：16 / (深度范围 / 2)（关 = 用下面的固定值）', () => pipeline.params.ao.blurSharpnessAuto, (v) => { pipeline.params.ao.blurSharpnessAuto = v; });
   addSlider(sAo, '固定模糊锐度 1/mm', 0, 0.1, 0.001, () => pipeline.params.ao.blurSharpness, (v) => { pipeline.params.ao.blurSharpness = v; });
+  addCheckbox(sAo, '辅助对象也受 / 投伪阴影（PseudoShadowsHandles，E3D 默认关；左前方蓝球）', () => pipeline.params.ao.handleShadows, (v) => { pipeline.params.ao.handleShadows = v; });
   addCheckbox(sAo, '半分辨率（E3D 没有）', () => pipeline.params.ao.halfRes, (v) => { pipeline.params.ao.halfRes = v; });
 
   // 抗锯齿

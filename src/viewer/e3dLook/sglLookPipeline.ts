@@ -107,6 +107,11 @@ export interface SglAoParams {
    * （可渲染 Mesh 的包围盒 + `SglLookPipelineOptions.extraSceneBounds`，在相机眼空间取 [近, 远]）。见 `e3dBlurSharpnessForDepthRange`。
    */
   blurSharpnessAuto: boolean;
+  /**
+   * SGL_PSEUDO_SHADOWS_HANDLES（视图属性 22，E3D 默认 OFF）：辅助对象（`userData.sglHandle === true` 的 Mesh）是否参与伪阴影。
+   * 不参与 = 既不接收 AO 也不遮挡邻居（后一半是推断：sglDx11 里这类对象的 AO 处理没读到）。
+   */
+  handleShadows: boolean;
   /** 半分辩率算 AO（省时间；E3D 没有这项，默认关） */
   halfRes: boolean;
 }
@@ -255,33 +260,52 @@ export function sglHlrSamplesFor(params: Pick<SglLookPipelineParams, 'aa' | 'leg
  * 自己能输出「眼空间面法线 + 线性深度」的材质（如 DTXMaterial：顶点来自纹理，没法用 overrideMaterial）。
  * 管线在法线/深度通道前调 `setSglNormalDepthOutput(true)`，画完调 `false`。
  */
+/** 法线/深度输出里每个像素的效果参与标记（sglDx11 法线纹理 .w 里的位） */
+export interface SglEffectFlags {
+  /** 参与 HLR 边线（EnhancedEdges*） */
+  edges: boolean;
+  /** 参与 HBAO 伪阴影（PseudoShadows*）：既接收也遮挡 */
+  shadows: boolean;
+}
+
 export interface SglNormalDepthProvider {
   setSglNormalDepthOutput(enabled: boolean): void;
   /**
-   * 可选：法线/深度输出里的「参与边线」标记（sglDx11 法线纹理 .w 的 bit0；这里约定不参与的把法线缩到 0.5 长）。
-   * 管线在法线/深度通道前按 `SglHlrParams.translucentEdges / handleEdges` 决定后调用。
+   * 可选：法线/深度输出里的效果参与标记（sglDx11 法线纹理 .w 的位；这里编码进法线长度，见 `sglEffectFlagScale`）。
+   * 管线在法线/深度通道前按 `SglHlrParams.translucentEdges / handleEdges` 与 `SglAoParams.handleShadows` 决定后调用。
    */
-  setSglEdgeParticipation?(participates: boolean): void;
+  setSglEffectParticipation?(flags: SglEffectFlags): void;
   /** 可选：材质本来是不是半透明通道（setSglNormalDepthOutput(true) 期间 `transparent` 会被临时关掉，所以单独给） */
   readonly sglIsTranslucentPass?: boolean;
 }
 
-/**
- * 一个可渲染 Mesh 这一帧是否参与 HLR 边线（sglDx11 法线纹理 .w bit0 的取值规则）：
- * `userData.sglEdges === false` 的是辅助对象（handles / aids）→ 看 `handleEdges`；半透明材质 → 看 `translucentEdges`；其余参与。
- */
-export function sglEdgeParticipationFor(
-  hlr: Pick<SglHlrParams, 'translucentEdges' | 'handleEdges'>,
-  object: { userData?: Record<string, unknown> },
-  translucent: boolean,
-): boolean {
-  if (object.userData?.sglEdges === false) return hlr.handleEdges;
-  if (translucent) return hlr.translucentEdges;
-  return true;
+/** 辅助对象（handles / aids）的标记：`object.userData.sglHandle === true`（兼容早先的 `sglEdges === false`） */
+export function isSglHandleObject(object: { userData?: Record<string, unknown> }): boolean {
+  return object.userData?.sglHandle === true || object.userData?.sglEdges === false;
 }
 
-/** 法线/深度纹理里「参与边线」标记的编码：参与 = 单位法线，不参与 = 法线 × 该值 */
-export const SGL_EDGE_FLAG_OFF_SCALE = 0.5;
+/**
+ * 一个可渲染 Mesh 这一帧的效果参与标记（sglDx11 法线纹理 .w 位的取值规则）：
+ * 辅助对象 → 边线看 `hlr.handleEdges`（EnhancedEdgesHandles）、伪阴影看 `ao.handleShadows`（PseudoShadowsHandles）；
+ * 半透明材质 → 边线看 `hlr.translucentEdges`（EnhancedEdgesTranslucent），伪阴影照常；其余全参与。
+ */
+export function sglEffectParticipationFor(
+  params: { hlr: Pick<SglHlrParams, 'translucentEdges' | 'handleEdges'>; ao: Pick<SglAoParams, 'handleShadows'> },
+  object: { userData?: Record<string, unknown> },
+  translucent: boolean,
+): SglEffectFlags {
+  if (isSglHandleObject(object)) return { edges: params.hlr.handleEdges, shadows: params.ao.handleShadows };
+  if (translucent) return { edges: params.hlr.translucentEdges, shadows: true };
+  return { edges: true, shadows: true };
+}
+
+/**
+ * 效果标记编码进法线长度（法线/深度纹理 rgb = 法线 × 该值）：
+ * 1.0 = 边线 + 伪阴影，0.75 = 仅伪阴影，0.5 = 仅边线，0.25 = 都不参与。GLSL 里 `round(length·4) − 1` 得两位码：bit0 边线、bit1 伪阴影。
+ */
+export function sglEffectFlagScale(flags: SglEffectFlags): number {
+  return 0.25 * (1 + (flags.edges ? 1 : 0) + (flags.shadows ? 2 : 0));
+}
 
 export function isSglNormalDepthProvider(material: unknown): material is Material & SglNormalDepthProvider {
   return !!material && typeof (material as SglNormalDepthProvider).setSglNormalDepthOutput === 'function';
@@ -331,6 +355,7 @@ export function createDefaultSglPipelineParams(): SglLookPipelineParams {
       blurRadius: E3D31_HBAO.blurRadius,
       blurSharpness: 0.01,
       blurSharpnessAuto: true,
+      handleShadows: false,
       halfRes: false,
     },
     background: {
@@ -389,17 +414,19 @@ void main() {
 
 const ND_FRAGMENT = /* glsl */ `
 varying vec3 vViewPos;
-// 「参与边线」标记：1 = 参与（单位法线），0.5 = 不参与（法线缩到 0.5 长；sglDx11 是法线纹理 .w 的 bit0）
-uniform float uEdgeFlag;
+// 效果参与标记编码进法线长度：1.0 = 边线+伪阴影，0.75 = 仅伪阴影，0.5 = 仅边线，0.25 = 都不（sglDx11 是法线纹理 .w 的位）
+uniform float uEffectFlag;
 void main() {
   vec3 n = normalize(cross(dFdx(vViewPos), dFdy(vViewPos)));
-  gl_FragColor = vec4(n * uEdgeFlag, -vViewPos.z);
+  gl_FragColor = vec4(n * uEffectFlag, -vViewPos.z);
 }
 `;
 
-/** 法线/深度纹理里的「参与边线」标记：法线长度 > 0.75 即参与（不参与的被缩到 0.5） */
-const SGL_EDGE_FLAG_GLSL = /* glsl */ `
-bool sglEdgeParticipant(vec3 n) { return dot(n, n) > 0.5625; }
+/** 法线/深度纹理里的效果参与标记：round(length·4) − 1 → 两位码，bit0 = 边线，bit1 = 伪阴影（零法线 → −1，都不参与） */
+const SGL_EFFECT_FLAG_GLSL = /* glsl */ `
+int sglEffectCode(vec3 n) { return int(floor(length(n) * 4.0 + 0.5)) - 1; }
+bool sglEdgeParticipant(vec3 n) { int c = sglEffectCode(n); return c == 1 || c == 3; }
+bool sglShadowParticipant(vec3 n) { return sglEffectCode(n) >= 2; }
 `;
 
 /** 深度重建 + HBAO（法线模式） */
@@ -421,6 +448,7 @@ uniform float uAttenuation;
 uniform float uContrast;
 varying vec2 vUv;
 ${SGL_BG_DEPTH_GLSL}
+${SGL_EFFECT_FLAG_GLSL}
 
 vec3 viewPos(vec2 uv, float depth) {
   vec2 ndc = uv * 2.0 - 1.0;
@@ -437,7 +465,8 @@ float hash12(vec2 p) {
 void main() {
   vec4 nd = texture2D(tND, vUv);
   float depth = nd.a;
-  if (sglIsBackground(depth)) { gl_FragColor = vec4(1.0); return; }
+  // 背景、以及不参与伪阴影的对象（PseudoShadowsHandles 关时的辅助对象）不接收 AO
+  if (sglIsBackground(depth) || !sglShadowParticipant(nd.rgb)) { gl_FragColor = vec4(1.0); return; }
   vec3 P = viewPos(vUv, depth);
   vec3 N = normalize(nd.rgb);
 
@@ -466,7 +495,8 @@ void main() {
       vec2 uvS = vUv + dir * (stepPix * (float(s) + 1.0 + 0.5 * jitter)) * uInvResolution;
       if (uvS.x < 0.0 || uvS.y < 0.0 || uvS.x > 1.0 || uvS.y > 1.0) break;
       vec4 ndS = texture2D(tND, uvS);
-      if (sglIsBackground(ndS.a)) continue;
+      // 不参与伪阴影的对象也不遮挡邻居
+      if (sglIsBackground(ndS.a) || !sglShadowParticipant(ndS.rgb)) continue;
       vec3 S = viewPos(uvS, ndS.a);
       vec3 H = S - P;
       float len2 = dot(H, H);
@@ -545,7 +575,7 @@ uniform float uGradientStep;
 uniform vec3 uEdgeColor;
 varying vec2 vUv;
 ${SGL_BG_DEPTH_GLSL}
-${SGL_EDGE_FLAG_GLSL}
+${SGL_EFFECT_FLAG_GLSL}
 
 // 「有标记」= 是几何且参与边线（sglDx11 法线纹理 .w bit0）
 bool flagged(vec4 s) { return sglIsGeometry(s.a) && sglEdgeParticipant(s.rgb); }
@@ -714,8 +744,8 @@ interface RenderableRecord {
   visible: boolean;
   isProviderMesh: boolean;
   isMesh: boolean;
-  /** 这一帧参与 HLR 边线（法线/深度里的标记）；非 Mesh 恒 true（它们本来就不进法线/深度通道） */
-  edgeParticipant: boolean;
+  /** 这一帧的效果参与标记编码（`sglEffectFlagScale`）；非 Mesh 恒 1（它们本来就不进法线/深度通道） */
+  effectScale: number;
 }
 
 export class SglLookPipeline {
@@ -727,8 +757,8 @@ export class SglLookPipeline {
   private readonly _ndType: TextureDataType;
   private readonly _renderables: RenderableRecord[] = [];
   private readonly _providerMaterials = new Set<Material & SglNormalDepthProvider>();
-  /** 本帧是否有不参与边线的普通 Mesh（决定 overrideMaterial 的法线/深度通道要不要画第二趟） */
-  private _hasNonParticipantMesh = false;
+  /** 本帧普通 Mesh 出现过的效果标记编码（overrideMaterial 的法线/深度通道按编码分趟画） */
+  private readonly _effectScales = new Set<number>();
   /** 本帧可渲染 Mesh 的 world 包围盒 ∪ extraSceneBounds（blurSharpnessAuto 用） */
   private readonly _frameBounds = new Box3();
   private readonly _tmpBox = new Box3();
@@ -852,7 +882,7 @@ export class SglLookPipeline {
       fragmentShader: ND_FRAGMENT,
       blending: NoBlending,
       toneMapped: false,
-      uniforms: { uEdgeFlag: { value: 1 } },
+      uniforms: { uEffectFlag: { value: 1 } },
     });
     this._ndMaterial.name = 'SglLookNormalDepth';
 
@@ -990,21 +1020,16 @@ export class SglLookPipeline {
     this._clearNormalDepth();
     if (source !== 'providers') {
       // 普通 Mesh 走 overrideMaterial；provider 网格与线/点/精灵先藏起来。
-      // 「参与边线」标记是 overrideMaterial 的 uniform，所以参与 / 不参与的 Mesh 分两趟画（共用深度缓冲，遮挡关系不变）
-      for (const r of this._renderables) {
-        if (r.visible && (r.isProviderMesh || !r.isMesh || !r.edgeParticipant)) r.object.visible = false;
-      }
+      // 效果标记是 overrideMaterial 的 uniform，所以按标记编码分趟画（共用深度缓冲，遮挡关系不变；全参与时只有一趟）
       scene.overrideMaterial = this._ndMaterial;
-      this._ndMaterial.uniforms.uEdgeFlag!.value = 1;
-      renderer.render(scene, camera);
-      if (this._hasNonParticipantMesh) {
+      for (const scale of this._effectScales) {
         for (const r of this._renderables) {
-          r.object.visible = r.visible && r.isMesh && !r.isProviderMesh && !r.edgeParticipant;
+          r.object.visible = r.visible && r.isMesh && !r.isProviderMesh && r.effectScale === scale;
         }
-        this._ndMaterial.uniforms.uEdgeFlag!.value = SGL_EDGE_FLAG_OFF_SCALE;
+        this._ndMaterial.uniforms.uEffectFlag!.value = scale;
         renderer.render(scene, camera);
-        this._ndMaterial.uniforms.uEdgeFlag!.value = 1;
       }
+      this._ndMaterial.uniforms.uEffectFlag!.value = 1;
       scene.overrideMaterial = prevOverride;
       for (const r of this._renderables) r.object.visible = r.visible;
     }
@@ -1182,8 +1207,8 @@ export class SglLookPipeline {
     this._renderables.length = 0;
     this._providerMaterials.clear();
     this._frameBounds.makeEmpty();
-    this._hasNonParticipantMesh = false;
-    const hlr = this.params.hlr;
+    this._effectScales.clear();
+    const params = this.params;
     scene.traverseVisible((object) => {
       const anyObj = object as Object3D & {
         isMesh?: boolean;
@@ -1210,13 +1235,18 @@ export class SglLookPipeline {
           }
         }
       }
-      // 这一帧参与 HLR 边线吗（sglDx11 法线纹理 .w bit0）：辅助对象看 handleEdges，半透明看 translucentEdges
-      const edgeParticipant = !isMesh || sglEdgeParticipationFor(hlr, object, translucent);
-      if (isMesh && !edgeParticipant && !isProviderMesh) this._hasNonParticipantMesh = true;
-      if (isProviderMesh && anyObj.material) {
-        const mats = Array.isArray(anyObj.material) ? anyObj.material : [anyObj.material];
-        for (const m of mats) {
-          if (isSglNormalDepthProvider(m)) m.setSglEdgeParticipation?.(edgeParticipant);
+      // 这一帧的效果参与标记（sglDx11 法线纹理 .w 的位）：辅助对象看 handleEdges / handleShadows，半透明看 translucentEdges
+      let effectScale = 1;
+      if (isMesh) {
+        const flags = sglEffectParticipationFor(params, object, translucent);
+        effectScale = sglEffectFlagScale(flags);
+        if (isProviderMesh && anyObj.material) {
+          const mats = Array.isArray(anyObj.material) ? anyObj.material : [anyObj.material];
+          for (const m of mats) {
+            if (isSglNormalDepthProvider(m)) m.setSglEffectParticipation?.(flags);
+          }
+        } else {
+          this._effectScales.add(effectScale);
         }
       }
       if (collectBounds && isMesh && !isProviderMesh) {
@@ -1233,7 +1263,7 @@ export class SglLookPipeline {
           this._frameBounds.union(this._tmpBox.copy(local).applyMatrix4(object.matrixWorld));
         }
       }
-      this._renderables.push({ object, visible: object.visible, isProviderMesh, isMesh, edgeParticipant });
+      this._renderables.push({ object, visible: object.visible, isProviderMesh, isMesh, effectScale });
     });
   }
 

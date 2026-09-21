@@ -75,10 +75,10 @@ a   = colour.a                                      // 半透明 = 1 − 百分�
 
 | 步 | 做法 | 参数（默认） |
 |---|---|---|
-| 法线/深度 | `overrideMaterial`（或 DTX 这类 provider 材质自己出）：rgb = `normalize(cross(dFdx(viewPos), dFdy(viewPos)))`（面法线，同 sglDx11 MRT1），a = 线性深度；背景清成哨兵 **1e18**（`SGL_BACKGROUND_DEPTH`，同 sglDx11，`clearBufferfv` 直写）；RGBA32F | — |
-| HBAO | NVIDIA HBAO 法线模式，参数名同 sglDx11 | `E3D31_HBAO`（= 3.1 硬编码，§5.6）：R **392.7327**（场景单位 mm；ViewerPanel 按米 ×0.001）、8 方向、**4 步**、AngleBias **30°**、Attenuation **0.2**、Contrast 1.25 |
+| 法线/深度 | `overrideMaterial`（或 DTX 这类 provider 材质自己出）：rgb = `normalize(cross(dFdx(viewPos), dFdy(viewPos)))`（面法线，同 sglDx11 MRT1）× 效果参与标记，a = 线性深度；背景清成哨兵 **1e18**（`SGL_BACKGROUND_DEPTH`，同 sglDx11，`clearBufferfv` 直写）；RGBA32F。标记编码进法线长度（`sglEffectFlagScale`，§5.9 / §5.10；sglDx11 是法线纹理 .w 的位）：**1.0** = 边线 + 伪阴影，**0.75** = 仅伪阴影，**0.5** = 仅边线，**0.25** = 都不；`sglEffectParticipationFor()`：`userData.sglHandle === true` 的辅助对象看 `hlr.handleEdges` / `ao.handleShadows`，半透明材质边线看 `hlr.translucentEdges`，其余全参与 | `translucentEdges` ON、`handleEdges` OFF、`handleShadows` OFF（= E3D `EnhancedEdgesTranslucent / EnhancedEdgesHandles / PseudoShadowsHandles` 默认） |
+| HBAO | NVIDIA HBAO 法线模式，参数名同 sglDx11；不参与伪阴影的像素 AO = 1，采样到不参与的邻居跳过（不遮挡） | `E3D31_HBAO`（= 3.1 硬编码，§5.6）：R **392.7327**（场景单位 mm；ViewerPanel 按米 ×0.001）、8 方向、**4 步**、AngleBias **30°**、Attenuation **0.2**、Contrast 1.25 |
 | 模糊 | 深度感知可分离模糊，权重 exp(−r²·Falloff − (Δz·s)²)（同 sglDx11 dxbc_003） | 半径 **12** px、Falloff = 1/(2·((R+1)/2)²) = 0.01183；锐度 `blurSharpnessAuto`（默认开）= **16 / (本帧深度范围 / 2)**，深度范围 = 可渲染 Mesh 包围盒 ∪ `extraSceneBounds`（DTX 层）在眼空间的 [近, 远]；关掉则用固定 `blurSharpness` |
-| HLR | 逐句照 sglDx11 HLR PS（§5.8 / §5.9）：「有标记」= 几何且参与边线（法线纹理 .w bit0 ↔ 这里法线长度 1 / 0.5）；只看右 / 下邻居；① 中心无标记：邻居有标记且（中心是背景 或 dC−dN > 50）→ 边；② 中心有标记、邻居无标记：邻居是背景 或 dC−dN < −50 → 边；③ 都有标记：\|Δd\| > 50 且左/上也有标记且 \|dot(normalize(dC−dP, h), normalize(dC−dN, −h))\| < 0.9999（h = 1000·像素步长）→ 边；④ \|N·N′\| < 0.6 → 边。采样档位 = MSAA 采样数（§5.7）：法线/深度与 HLR 通道按 `sglHlrSupersampleGrid()` 超采样（4 → 2×2），邻居仍取 1 个屏幕像素远 | 50 mm、0.9999、1000（深度 mm；米场景 ×0.001）、0.6、边线黑；`translucentEdges` ON（半透明参与）、`handleEdges` OFF（`userData.sglEdges === false` 的辅助对象不参与） |
+| HLR | 逐句照 sglDx11 HLR PS（§5.8 / §5.9）：「有标记」= 几何且参与边线（法线纹理 .w bit0 ↔ 这里法线长度编码的 bit0）；只看右 / 下邻居；① 中心无标记：邻居有标记且（中心是背景 或 dC−dN > 50）→ 边；② 中心有标记、邻居无标记：邻居是背景 或 dC−dN < −50 → 边；③ 都有标记：\|Δd\| > 50 且左/上也有标记且 \|dot(normalize(dC−dP, h), normalize(dC−dN, −h))\| < 0.9999（h = 1000·像素步长）→ 边；④ \|N·N′\| < 0.6 → 边。采样档位 = MSAA 采样数（§5.7）：法线/深度与 HLR 通道按 `sglHlrSupersampleGrid()` 超采样（4 → 2×2），邻居仍取 1 个屏幕像素远 | 50 mm、0.9999、1000（深度 mm；米场景 ×0.001）、0.6、边线黑；`translucentEdges` ON（半透明参与）、`handleEdges` OFF（`userData.sglHandle === true` 的辅助对象不参与） |
 | 合成 | `colour × HLR × AO`；HLR 对本像素的 kx×ky 个子像素取平均（= sglDx11 MSAA 版 HLR PS 的 Σ/N）；背景 `mix(top, bottom, t)`，`t = mix(gradientBottomT, gradientTopT, uv.y)` | 按 E3D 3.1 D2D 渐变：上 = 背景色 grey #828282、下 = 端色白（端色未设时 HLS 亮度拉满 → 任何背景色都得白），t 顶 0.35/1.5 ≈ 0.233 / 底 1.35/1.5 = 0.9 → 屏幕上 #9f9f9f→#f2f2f2（第三轮已对齐） |
 | 抗锯齿 | `aa.mode`：'msaa' = 颜色通道用 `samples` 倍 MSAA 目标（three `WebGLRenderTarget.samples`，截到 `maxSamples`）+ 上述 HLR 超采样；'fxaa' = 合成后再过 three 的 FXAA 3.11（HLR 档位退回 1）；'none' | 出厂 **msaa 4**（`Sgl_View_Parameters` +780；`gphviewopt antiAlias = true(4)`）；FXAA 与 MSAA 互斥（+764） |
 | legacy | `_legacy_mode`：全部效果关、纯色背景（HLR 档位 1；MSAA 由视图参数管，不受影响） | — |
@@ -249,9 +249,46 @@ npm run dev                       # 然后打开 http://127.0.0.1:3101/e3d-look-
   （纯黑 1.08% → 1.01%），蓝球默认无轮廓、`handleEdges=1` 才有（框内纯黑 87 → 172，`shots/aid-zoom.png`：球把身后鞍座的边线正确挡掉）。
   DTX harness **22/22**：半透明盒 c 默认有轮廓（框内纯黑 301），`translucentEdges=0` → 0，旁边不透明盒 a 303 → 303 不变。**未与真机对参**。
 
+## 5.10 第十轮：PseudoShadowsHandles——标记再分一位（2026-09-21）
+
+- E3D 侧：`Sgl_View_Effects_Parameters` 默认 `PseudoShadowsHandles = 0`（视图属性 22）、`PseudoShadowsLaser = 0`（21）：辅助对象不参与伪阴影。
+  sglDx11 里这类对象在 AO 通道怎么处理没读到，这里按「既不接收也不遮挡邻居」实现（推断）。
+- 编码改成两位（`sglEffectFlagScale`）：法线长度 **1.0** = 边线 + 伪阴影，**0.75** = 仅伪阴影，**0.5** = 仅边线，**0.25** = 都不；
+  GLSL `round(length·4) − 1` 得两位码，bit0 边线（`sglEdgeParticipant`）、bit1 伪阴影（`sglShadowParticipant`）。
+  `SglAoParams.handleShadows`（默认 false）；`sglEffectParticipationFor(params, object, translucent) → { edges, shadows }`：
+  辅助对象（**`userData.sglHandle === true`**，兼容 `sglEdges === false`）→ `{ hlr.handleEdges, ao.handleShadows }`；半透明 → `{ hlr.translucentEdges, true }`；其余 `{ true, true }`。
+  AO 通道：中心不参与 → AO = 1；采样到不参与的邻居 → 跳过（不遮挡）。overrideMaterial 的法线/深度通道按出现过的编码分趟画（全参与仍是一趟）。
+  provider 接口改为 `setSglEffectParticipation(flags)`；`DTXMaterial` program key → **v16**（`sglEffectFlag`）。
+- 演示页蓝球改用 `userData.sglHandle = true`，AO 段加「辅助对象也受 / 投伪阴影」开关与 `?handleShadows=1`。
+- 验证：`vitest` e3dLook 21 + DTXMaterial.sgl 3，连 DTX 目录 74/74；`type-check` 基线外仍只有既有 4 条；ESLint 通过。
+  无头 Chrome 演示页 18 变体 **33/33**：蓝球蓝色像素平均亮度默认 0.3433 ≈ 关 AO 的 0.3463（不接收 AO，差的 0.003 是模糊从邻居渗进来的），
+  `handleShadows=1` → 0.3339（被压暗）；边线 / 半透明 / AA / 颜色各项照旧。
+  DTX harness 12 变体 **29/29**（新增第二个 DTX 层当辅助对象：0.8 m 蓝盒 d 坐在盒 a 顶面上，`mesh.userData.sglHandle = true`，相机俯视）：
+  默认 d 无轮廓（框内纯黑 10，都是深蓝侧面的零星像素）、`handleEdges=1` → 239；d 自身平均亮度 0.3430 ≈ 关 AO 的 0.3435，
+  a 顶面环绕 d 的 12 px 环 0.7834 ≈ 关 AO 的 0.7911（不遮挡邻居）；`handleShadows=1` → d 0.3251、环 0.7671（既接收也遮挡）；
+  `handleEdges` 单开环亮度不变；盒 a / b / c 的轮廓、CE / highlight、半透明标记、AA 各项与上一轮完全一致。**未与真机对参**。
+
+## 5.11 主界面真模型（gen-model :8022，AvevaMarineSample，2026-09-21）
+
+- 有界脚本（起 Vite dev :3127 → 无头 Chrome(SwiftShader) → 截图 → 杀 dev）打开主界面 ViewerPanel：
+  `?model_source=gen-model-v1&gm_backend=http://127.0.0.1:8022&output_project=AvevaMarineSample&dtx_grid=0&dtx_look=sgl|pbr` + `show_refno=24381_145018` / `show_dbnum=7997`。
+  每张读回 `window.__sglLookPipeline` / `__dtxLayer`：hlr / ao / gradient 全开，aa msaa/4、颜色 RT samples 4、HLR 2×2，半径 0.3927 m、HLR 阈值 0.05 m、
+  gradientStep 1；显示主题自动切到 `e3dFactory`；DTX 层 `sglLightingEnabled = true` 且环境立方体贴图已套（`dtx_look=pbr` 时 `sglLightingEnabled = false`，管线不介入）。无着色器错误。
+- **BRAN 24381_145018**（22 个对象，7.6 s 进视口）：本帧深度范围 34.1 m → 模糊锐度 0.937。`shots/bran-sgl.png`：定位后整支为 CE yellow，
+  阀门 / 法兰 lightgrey + 黑边线，背景 grey→白渐变；`bran-pbr.png` 是同视角的 web 口径对照。v16 落地后重跑一遍，结果相同。
+- **整库 7997**（`show_dbnum`，服务端整库入口逐根生成、逐根进视口：13 个 SITE / 6772 根 / 48 371 refno，**66 442** 个实例，SGL 144 s、PBR 75 s——前者是首轮含服务端生成，后者命中缓存）：
+  本帧深度范围 177 m → 模糊锐度 0.181。`shots/db7997-sgl.png` / `db7997-sgl-vs-pbr.png`（左 SGL 右 PBR）：
+  罩壳 / 平台 / 甲板一色 lightgrey + 1 px 黑边线，平台脚下、甲板槛边有 HBAO 软阴影，穹顶上是环境立方体的高光反射，背景渐变；PBR 侧是暗灰漫反射、无边线、平背景。
+- 观察到的差距（都不是 bug，是尚未建模的 E3D 阶段）：整库视距下远处的管架 / 电缆托架密集处成了一团黑线——边线恒 1 px 不随距离衰减；
+  sglDx11 的合成通道按开关 4 选 1（`Combined_slot5_10007ac0.c`：`RenderColorPass / RenderColorHLRDeclutter / RenderColorHBAOBlur / RenderColorHLRDeclutterHBAOBlur`），
+  HLR 开时合成读的是 `g_txHLRDeclutter`——HLR 之后还有一级 **Declutter**（第一轮报告「HLR 去杂：半透明 / 密集场景减线」），还没读、没做，见 §6。
+- 控制台里的 403 / 500 来自旧后端 :3100 的项目列表 / parquet-version 接口没起（vite 代理 ECONNREFUSED），与渲染无关。
+
 ## 6. 下一步
 
 1. 在未修补的 E3D 3.1 上（或补跑 `!!gphViewOpt.applyToView`）复核出厂外观、立方体贴图朝向、HBAO 强度 / 模糊锐度（§5.6 的深度范围累计方式是推断）、抗锯齿边线覆盖率（§5.7）与边线取向（§5.8）；`SHINY`(30) / `TRANSLUCENCY_STYLE`(51) 分支仍未读。
-2. `PseudoShadowsHandles = 0`（辅助对象不受伪阴影）与 `EnhancedEdgesLaser`（激光点云）尚未建模——现在参与标记只管边线，AO 对所有几何一视同仁；
-   ViewerPanel 里若以后有 DTX 层专门装辅助几何，可给对应 Mesh 设 `userData.sglEdges = false`。
+2. `EnhancedEdgesLaser` / `PseudoShadowsLaser`（激光点云）与半透明对象的 AO 归属（E3D 半透明可能根本不进 MRT）尚未建模；
+   ViewerPanel 里若以后有 DTX 层专门装辅助几何，可给对应 Mesh 设 `userData.sglHandle = true`。
+   sglDx11 HLR 之后的 **Declutter** 级（合成读 `g_txHLRDeclutter`，第一轮报告「HLR 去杂」）没读：整库视距下远处密集管架的边线糊成一团（§5.11），
+   大概率就是它在管——先在 `sgl-decomp-3.1` / `dxbc-3.1-sgl` 里找 Declutter 的常量缓冲与 PS。
 3. 如项目有自定义 autocolour 规则，导出 `gphcolopt` 选项文件翻成 `themes.*` 规则（颜色用 `pdms:` 名）；active orange / aids blue / tracing magenta 尚未接。

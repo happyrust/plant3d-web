@@ -23,14 +23,15 @@ import {
   E3D_GRADIENT_BOTTOM_T,
   E3D_GRADIENT_TOP_T,
   SGL_BACKGROUND_DEPTH,
-  SGL_EDGE_FLAG_OFF_SCALE,
   SGL_PIPELINE_SHADERS,
   createDefaultSglPipelineParams,
   e3dBlurSharpnessForDepthRange,
   eyeDepthRangeOfBox,
+  isSglHandleObject,
   sglBlurFalloffForRadius,
   sglDefaultGradientEndColour,
-  sglEdgeParticipationFor,
+  sglEffectFlagScale,
+  sglEffectParticipationFor,
   sglHlrSamplesFor,
   sglHlrSupersampleGrid
 } from './sglLookPipeline';
@@ -284,28 +285,45 @@ describe('SglLookPipeline 参数与着色器', () => {
     expect(s).not.toContain('(b.a - c.a) - (c.a - a.a)');
   });
 
-  it('「参与边线」标记 = sglDx11 法线纹理 .w bit0：法线长度 1 / 0.5 编码，dxbc 里无标记几何的两条分支也照搬', () => {
+  it('效果参与标记 = sglDx11 法线纹理 .w 的位：两位码编码进法线长度，边线 / 伪阴影各一位', () => {
     const p = createDefaultSglPipelineParams();
     expect(p.hlr.translucentEdges).toBe(true); // EnhancedEdgesTranslucent 默认 ON
     expect(p.hlr.handleEdges).toBe(false); // EnhancedEdgesHandles 默认 OFF
-    expect(SGL_EDGE_FLAG_OFF_SCALE).toBe(0.5);
-    // 参与规则：辅助对象看 handleEdges，半透明看 translucentEdges，其余参与
-    const hlr = { translucentEdges: true, handleEdges: false };
-    expect(sglEdgeParticipationFor(hlr, { userData: {} }, false)).toBe(true);
-    expect(sglEdgeParticipationFor(hlr, { userData: {} }, true)).toBe(true);
-    expect(sglEdgeParticipationFor({ ...hlr, translucentEdges: false }, { userData: {} }, true)).toBe(false);
-    expect(sglEdgeParticipationFor(hlr, { userData: { sglEdges: false } }, false)).toBe(false);
-    expect(sglEdgeParticipationFor({ ...hlr, handleEdges: true }, { userData: { sglEdges: false } }, false)).toBe(true);
-    expect(sglEdgeParticipationFor({ ...hlr, handleEdges: true }, { userData: { sglEdges: false } }, true)).toBe(true);
-    expect(sglEdgeParticipationFor(hlr, {}, false)).toBe(true);
-    // 法线/深度着色器写 n × 标记；HLR 按长度识别，并有 dxbc 的「无标记但非背景」分支
-    expect(SGL_PIPELINE_SHADERS.normalDepthFragment).toContain('gl_FragColor = vec4(n * uEdgeFlag, -vViewPos.z);');
+    expect(p.ao.handleShadows).toBe(false); // PseudoShadowsHandles 默认 OFF
+    // 编码：1.0 = 边线+伪阴影，0.75 = 仅伪阴影，0.5 = 仅边线，0.25 = 都不
+    expect(sglEffectFlagScale({ edges: true, shadows: true })).toBe(1);
+    expect(sglEffectFlagScale({ edges: false, shadows: true })).toBe(0.75);
+    expect(sglEffectFlagScale({ edges: true, shadows: false })).toBe(0.5);
+    expect(sglEffectFlagScale({ edges: false, shadows: false })).toBe(0.25);
+    // 参与规则：辅助对象（userData.sglHandle，兼容 sglEdges === false）看 handleEdges / handleShadows，半透明看 translucentEdges，其余全参与
+    const base = { hlr: { translucentEdges: true, handleEdges: false }, ao: { handleShadows: false } };
+    expect(sglEffectParticipationFor(base, { userData: {} }, false)).toEqual({ edges: true, shadows: true });
+    expect(sglEffectParticipationFor(base, { userData: {} }, true)).toEqual({ edges: true, shadows: true });
+    expect(sglEffectParticipationFor({ ...base, hlr: { ...base.hlr, translucentEdges: false } }, { userData: {} }, true)).toEqual({ edges: false, shadows: true });
+    expect(sglEffectParticipationFor(base, { userData: { sglHandle: true } }, false)).toEqual({ edges: false, shadows: false });
+    expect(sglEffectParticipationFor(base, { userData: { sglEdges: false } }, false)).toEqual({ edges: false, shadows: false });
+    expect(sglEffectParticipationFor({ hlr: { translucentEdges: true, handleEdges: true }, ao: { handleShadows: false } }, { userData: { sglHandle: true } }, true)).toEqual({ edges: true, shadows: false });
+    expect(sglEffectParticipationFor({ hlr: { translucentEdges: true, handleEdges: false }, ao: { handleShadows: true } }, { userData: { sglHandle: true } }, false)).toEqual({ edges: false, shadows: true });
+    expect(sglEffectParticipationFor(base, {}, false)).toEqual({ edges: true, shadows: true });
+    expect(isSglHandleObject({ userData: { sglHandle: true } })).toBe(true);
+    expect(isSglHandleObject({ userData: { sglHandle: false } })).toBe(false);
+    expect(isSglHandleObject({})).toBe(false);
+    // 法线/深度着色器写 n × 标记；HLR / AO 按长度解码
+    expect(SGL_PIPELINE_SHADERS.normalDepthFragment).toContain('gl_FragColor = vec4(n * uEffectFlag, -vViewPos.z);');
+    for (const s of [SGL_PIPELINE_SHADERS.hlr, SGL_PIPELINE_SHADERS.ao]) {
+      expect(s).toContain('int sglEffectCode(vec3 n) { return int(floor(length(n) * 4.0 + 0.5)) - 1; }');
+      expect(s).toContain('bool sglEdgeParticipant(vec3 n) { int c = sglEffectCode(n); return c == 1 || c == 3; }');
+      expect(s).toContain('bool sglShadowParticipant(vec3 n) { return sglEffectCode(n) >= 2; }');
+    }
+    // HLR：「有标记」= 几何且参与边线，dxbc 的「无标记但非背景」两条分支照搬
     const s = SGL_PIPELINE_SHADERS.hlr;
-    expect(s).toContain('bool sglEdgeParticipant(vec3 n) { return dot(n, n) > 0.5625; }');
     expect(s).toContain('bool flagged(vec4 s) { return sglIsGeometry(s.a) && sglEdgeParticipant(s.rgb); }');
     expect(s).toContain('if (!flagC) return flagN && (sglIsBackground(c.a) || c.a - next.a > uDepthThreshold);');
     expect(s).toContain('if (!flagN) return sglIsBackground(next.a) || c.a - next.a < -uDepthThreshold;');
     expect(s).toContain('abs(c.a - next.a) > uDepthThreshold && flagged(prev)');
+    // AO：不参与伪阴影的既不接收也不遮挡
+    expect(SGL_PIPELINE_SHADERS.ao).toContain('if (sglIsBackground(depth) || !sglShadowParticipant(nd.rgb)) { gl_FragColor = vec4(1.0); return; }');
+    expect(SGL_PIPELINE_SHADERS.ao).toContain('if (sglIsBackground(ndS.a) || !sglShadowParticipant(ndS.rgb)) continue;');
   });
 });
 

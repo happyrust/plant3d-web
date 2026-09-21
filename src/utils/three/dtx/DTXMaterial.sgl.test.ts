@@ -17,22 +17,28 @@ function makeMaterial(transparent = false): DTXMaterial {
 }
 
 describe('DTXMaterial —— SGL 法线/深度输出的「参与边线」标记', () => {
-  it('是 SglNormalDepthProvider，program key 随着色器结构升级到 v15', () => {
+  it('是 SglNormalDepthProvider，program key 随着色器结构升级到 v16', () => {
     const m = makeMaterial();
     expect(isSglNormalDepthProvider(m)).toBe(true);
-    expect(m.customProgramCacheKey()).toBe('DTXMaterial_v15');
+    expect(m.customProgramCacheKey()).toBe('DTXMaterial_v16');
   });
 
-  it('默认参与（sglEdgeFlag = 1）；关掉后法线缩到 0.5 长；片元着色器里法线乘该标记', () => {
+  it('默认边线 + 伪阴影都参与（sglEffectFlag = 1）；两位标记编码进法线长度；片元着色器里法线乘该标记', () => {
     const m = makeMaterial();
-    expect(m.uniforms.sglEdgeFlag!.value).toBe(1);
-    expect(m.sglEdgeParticipates).toBe(true);
-    m.setSglEdgeParticipation(false);
-    expect(m.uniforms.sglEdgeFlag!.value).toBe(0.5);
-    expect(m.sglEdgeParticipates).toBe(false);
-    m.setSglEdgeParticipation(true);
-    expect(m.uniforms.sglEdgeFlag!.value).toBe(1);
-    expect(m.fragmentShader).toContain('fragColor = vec4(faceN * sglEdgeFlag, -vViewPosition.z);');
+    expect(m.uniforms.sglEffectFlag!.value).toBe(1);
+    expect(m.sglEffectFlags).toEqual({ edges: true, shadows: true });
+    m.setSglEffectParticipation({ edges: false, shadows: true });
+    expect(m.uniforms.sglEffectFlag!.value).toBe(0.75);
+    expect(m.sglEffectFlags).toEqual({ edges: false, shadows: true });
+    m.setSglEffectParticipation({ edges: true, shadows: false });
+    expect(m.uniforms.sglEffectFlag!.value).toBe(0.5);
+    expect(m.sglEffectFlags).toEqual({ edges: true, shadows: false });
+    m.setSglEffectParticipation({ edges: false, shadows: false });
+    expect(m.uniforms.sglEffectFlag!.value).toBe(0.25);
+    expect(m.sglEffectFlags).toEqual({ edges: false, shadows: false });
+    m.setSglEffectParticipation({ edges: true, shadows: true });
+    expect(m.uniforms.sglEffectFlag!.value).toBe(1);
+    expect(m.fragmentShader).toContain('fragColor = vec4(faceN * sglEffectFlag, -vViewPosition.z);');
   });
 
   it('sglIsTranslucentPass 在法线/深度输出期间（transparent 被临时关掉）仍给出材质本来的半透明属性', () => {
