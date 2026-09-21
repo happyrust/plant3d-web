@@ -1,0 +1,150 @@
+{
+  "url": "http://127.0.0.1:3111/?model_source=gen-model-v1&gm_backend_port=8022&unit_refno=24384_23257&compare_autorun=1&compare_a=626&compare_b=630",
+  "scenario": "a626-b630",
+  "startedAt": "2026-09-20T16:31:43.338Z",
+  "pageErrors": [],
+  "consoleErrors": [
+    "[vite] failed to connect to websocket.\nyour current setup:\n  (browser) 127.0.0.1:3111/ <--[HTTP]--> 127.0.0.1:3111/ (server)\n  (browser) 127.0.0.1:3111/ <--[WebSocket (failing)]--> 127.0.0.1:3111/ (server)\nCheck out your Vite / network configuration and https://vite.dev/config/server-options.html#se",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)"
+  ],
+  "steps": [
+    {
+      "at": "2026-09-20T16:31:43.484Z",
+      "name": "goto",
+      "url": "http://127.0.0.1:3111/?model_source=gen-model-v1&gm_backend_port=8022&unit_refno=24384_23257&compare_autorun=1&compare_a=626&compare_b=630"
+    },
+    {
+      "at": "2026-09-20T16:31:47.524Z",
+      "name": "compare ready",
+      "summary": "24384_23257 · 几何差异新增 0删除 0修改 1未变 8",
+      "viewer": {
+        "unitRefno": "24384_23257",
+        "beforeSesno": 626,
+        "afterSesno": 630,
+        "beforeObjects": 9,
+        "afterObjects": 9,
+        "environmentLoadedRefnos": 0,
+        "activeSide": "after",
+        "viewMode": "single",
+        "diffOnly": false,
+        "statusCounts": {
+          "added": 0,
+          "deleted": 0,
+          "modified": 1,
+          "unchanged": 8
+        },
+        "hiddenWhenDiffOnly": {
+          "before": 8,
+          "after": 8
+        }
+      }
+    },
+    {
+      "at": "2026-09-20T16:31:47.622Z",
+      "name": "single B",
+      "badge": "B · sesno 630",
+      "legend": "修改 1 新增 0 删除 0 未变 8",
+      "panelToggle": 1
+    },
+    {
+      "at": "2026-09-20T16:31:48.734Z",
+      "name": "focus modified row",
+      "row": "修改24384_23262FTUB"
+    },
+    {
+      "at": "2026-09-20T16:31:49.469Z",
+      "name": "diff only on (panel)",
+      "diffOnly": true,
+      "legendAttr": "true",
+      "legendTag": "只看差异 · 未变已藏",
+      "panelChecked": true
+    },
+    {
+      "at": "2026-09-20T16:31:50.087Z",
+      "name": "side A",
+      "badge": "A · sesno 626"
+    },
+    {
+      "at": "2026-09-20T16:31:51.416Z",
+      "name": "split",
+      "overlay": "A · sesno 626 B · sesno 630 修改 1 新增 0 删除 0 未变 8只看差异 · 未变已藏"
+    },
+    {
+      "at": "2026-09-20T16:31:52.334Z",
+      "name": "diff only off (panel)",
+      "legendAttr": "false",
+      "tagCount": 0
+    },
+    {
+      "at": "2026-09-20T16:31:53.702Z",
+      "name": "closed",
+      "overlays": 0,
+      "viewer": null
+    }
+  ],
+  "summaryText": "24384_23257 · 几何差异新增 0删除 0修改 1未变 8",
+  "viewerStateOpen": {
+    "unitRefno": "24384_23257",
+    "beforeSesno": 626,
+    "afterSesno": 630,
+    "beforeObjects": 9,
+    "afterObjects": 9,
+    "environmentLoadedRefnos": 0,
+    "activeSide": "after",
+    "viewMode": "single",
+    "diffOnly": false,
+    "statusCounts": {
+      "added": 0,
+      "deleted": 0,
+      "modified": 1,
+      "unchanged": 8
+    },
+    "hiddenWhenDiffOnly": {
+      "before": 8,
+      "after": 8
+    }
+  },
+  "singleOverlayVisible": true,
+  "sideBadgeDefault": "B · sesno 630",
+  "sideBadgeDataSide": "after",
+  "legendText": "修改 1 新增 0 删除 0 未变 8",
+  "panelDiffOnlyPresent": 1,
+  "firstRowText": "修改24384_23262FTUB",
+  "viewerDiffOnly": {
+    "unitRefno": "24384_23257",
+    "beforeSesno": 626,
+    "afterSesno": 630,
+    "beforeObjects": 9,
+    "afterObjects": 9,
+    "environmentLoadedRefnos": 0,
+    "activeSide": "after",
+    "viewMode": "single",
+    "diffOnly": true,
+    "statusCounts": {
+      "added": 0,
+      "deleted": 0,
+      "modified": 1,
+      "unchanged": 8
+    },
+    "hiddenWhenDiffOnly": {
+      "before": 8,
+      "after": 8
+    }
+  },
+  "legendDiffOnlyAttr": "true",
+  "legendDiffOnlyTag": "只看差异 · 未变已藏",
+  "panelToggleChecked": true,
+  "sideBadgeA": "A · sesno 626",
+  "sideBadgeADataSide": "before",
+  "splitOverlayVisible": true,
+  "splitOverlayText": "A · sesno 626 B · sesno 630 修改 1 新增 0 删除 0 未变 8只看差异 · 未变已藏",
+  "legendDiffOnlyAttrAfterOff": "false",
+  "legendDiffOnlyTagCountAfterOff": 0,
+  "overlayAfterClose": 0,
+  "viewerStateAfterClose": null,
+  "ok": true,
+  "finishedAt": "2026-09-20T16:31:53.702Z"
+}

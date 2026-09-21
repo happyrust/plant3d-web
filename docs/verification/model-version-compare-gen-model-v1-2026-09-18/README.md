@@ -178,3 +178,51 @@
 - ~~`node/versions` / `element/versions` 的「自身那一列」按模型口径（`diff_ele_data`）算，**只设 UDA 的会话不成一行**（SITE 24384/22399 的 sesno 10：`UDA:2902d6e2 = JS`、`UDA:2902d6e3 = PIPERB`），`attribute-history` 却列它——面板按并集列，所以「仅自身」多出一行 `属性 2 · noop`，前端「本范围 n 版」的数字 ≠ 任一条回执的行数。~~ **11:4x 用户拍板改面板**：两条路由口径不动（一条问「模型变没变」、一条问「改了什么」），面板把只在属性时间线里的会话标 **「仅属性」**、不计入版数——标题「本范围 2 版 · 仅属性 1」（`container-self-timeline.png`），2 = `node/versions?scope=self` 行数；切「所有子节点」= 「本范围 298 版 · 仅属性 1」，298 = subtree 行数。e2e 断言两个数各自与回执对得上，2 passed。
 - `:8022` 现在是内存库：`dbnum_consistency.judged = 0`（模型按需懒生成），`history/generate` 与四条版本路由都不依赖它；别的会话若要 `model/records` 里的持久模型（校审 / 净距那些），得先 `dbnums/8000/model/ensure` 或把 `:8009` 那台 rocksdb 库找回来再换 `AIOS_STORE_MODE=rocksdb` 重起。
 - **13:47:32 `:8022`（pid 56280）随上一会话的终端一起没了**：`stdout.log` 最后一行 13:47:32 的增量检测、没有任何退出日志；同一时刻全部会话在交接（13:46 批量导出），`Start-Process` 起的子进程跟终端的 Job 一起被收——昨晚 20:12 `d47d747fd` 那次多半也是这么没的（`:3111` 的 vite 是用户自己 cmd 里起的，所以活着）。13:50:04 接班会话用同一 exe / cwd / env 重起，**改走 `Win32_Process.Create`（父进程 WmiPrvSE，不挂在任何终端下）**，pid 84280，2 s 后 health ok（内存库、重启即重建，缓存全冷）；五条路由 200，e2e 2 passed（11.9 s）。第一段日志挪到 `stdout.run1-1055-1347.log`，`8022-swap-2026-09-19-a382b2cf3.json` 追了 `restarts[0]`。
+
+## 8. 三维按差异着色 + 单视口角标 + 「三维只看差异」（2026-09-21 00:1x，`3d-diff-color/`，plan §11）
+
+用户 20:36 拍板 A（ADR 0066「三维联动」的落地）。前置：`:8022` 已由别的会话重起（pid 31780，`0.1.27+ga382b2cf3`，内存库），无需再起；dev `:3111`（本仓工作树）。
+脚本：`old\.scratch\mvc-3d-diff-color-run.mjs`（Playwright headless chromium，一次性，不入库；`routeWebSocket` 掐掉 HMR）。
+入口：`/?model_source=gen-model-v1&gm_backend_port=8022&unit_refno=24384_23257&compare_autorun=1&compare_a=626&compare_b=630`（§6.1 那例：FTUB 24384_23262 U 3400 → 2900，**修改 1 / 未变 8**）。
+
+| 步 | 截图 | 事实 |
+|---|---|---|
+| 对比就位（单视口缺省 B） | `a626-b630-01-single-b-colored.png` | 整根 BRAN 石板灰、只有 FTUB 那一段琥珀；左上角标 **「B · sesno 630」**（绿），下一行只读图例 **「修改 1 新增 0 删除 0 未变 8」**；`__modelUnitVersionCompare`：A/B 各 9 对象、`statusCounts {modified 1, unchanged 8}`、`hiddenWhenDiffOnly {before 8, after 8}`、`diffOnly false` |
+| 点列表修改行定位 | `a626-b630-02-single-b-focus-modified.png` | 飞到 FTUB：琥珀那段贴着灰管；面板「三维查看」节 A / B 卡下多了「三维只看差异」勾选（未勾） |
+| 面板勾「三维只看差异」 | `a626-b630-03-single-b-diff-only.png` | 视口只剩那根琥珀 FTUB；运行态 `diffOnly true`，视口图例多出 **「只看差异 · 未变已藏」** 标签（`data-diff-only="true"`），面板勾选按回传的运行态勾上 |
+| 切 A | `a626-b630-04-single-a-diff-only.png` | 角标变 **「A · sesno 626」**（蓝），仍只剩 FTUB（A 那版的位置） |
+| 双视口分屏 | `a626-b630-05-split-diff-only.png` | 左右两枚角标「A · sesno 626」「B · sesno 630」照旧 + 图例（带标签）；两侧各只剩 FTUB，**左高右低 = 那 500 mm**——两版不叠加、各在各的设计坐标 |
+| 面板取消勾选 | `a626-b630-06-split-all.png` | 两侧整单元回来（未变灰、FTUB 琥珀），图例标签撤掉（`data-diff-only="false"`、标签计数 0） |
+| 退出 | `a626-b630-07-closed.png` | 角标 / 图例撤掉（两种 overlay 计数 0），`__modelUnitVersionCompare` 回 null |
+
+pageerror **0**；console error 5 条全是环境噪音（vite HMR websocket 被脚本掐掉 1 条、`/files/*` 503 4 条，与从前各轮相同）。`a626-b630-3d-diff-color-summary.json` 有每步的文本与运行态。
+
+**开关为什么不放视口里**：第一版在图例里放了勾选框，e2e 缺省 1280×720 下视口只有三百来像素宽，`.dtx-viewport-gizmo`（右上 100px，z 1000）和左侧竖排工具栏（`left-3 top-1/2`，z 940）
+先后把它盖住——Playwright `click` 一直 `intercepts pointer events` 重试到超时（第 1 条 5.4 min 才红）。视口里那两样都吃指针，可点的东西不该挤在它们中间；改成只读标签、开关只留面板「三维查看」节（A / B、单视口 / 分屏都在那儿），角标 / 图例限宽 `calc(100% - 8.5rem)` 让窄视口换行。
+
+e2e `e2e/model-version-compare-gen-model-v1.spec.ts` 第 1 条加角标 / 图例 / 开关断言（缺省 B 角标、切 A 角标、分屏两枚角标且单视口角标计数 0、图例四格 = 摘要四格、有差异时开关开 / 关 → 运行态 `diffOnly` + 图例 `data-diff-only` + 标签有 / 无；无差异时置灰）：
+`PLAYWRIGHT_PORT=3111` 缺省单元 `24384_26480`（末版 tombstone）**4 passed（19.2 s）**；`MODEL_VERSION_E2E_UNIT=24384_23257`（修改 1）**4 passed（12.5 s）**。
+
+单测：`modelUnitVersionCompare.test.ts` 10 过（+2：`applyModelUnitVersionSide` 带 hidden 只写显示那一侧 / 四态计划 + 计数 + 色值）、`ModelUnitVersionComparePanel.test.ts` 16 过（+1：勾选派发 `set-diff-only`、回传才算勾上、全 unchanged 置灰）。
+`node scripts/type-check.mjs` 基线外 0 新增；ESLint 触及文件只剩 `ViewerPanel.vue:27` 那条 import 分组空行（HEAD `10579537` 合并就有，未动）。
+
+顺手看到：
+- **分屏比单视口暗一档**（老截图 `bran-ftub-move/a626-b630-04-split.png` 的蓝 / 绿同样发暗，不是这轮引入）：四态色在分屏里成了深棕 / 藏青，仍分得开。split 路径直接 `renderer.render`，单视口有选中时走 `selection.renderOutline()`，两条路的色彩空间 / 后处理不一致——记在 plan §11，不在本轮。
+- 「三维只看差异」与列表「包含未变化」同一口径、各自开关：列表缺省只列差异，三维缺省整单元都在（留着看变了的那件在哪），没并成一个开关是有意的。
+
+### 8.1 点 A / B 构件 → 属性面板读那一版（2026-09-21 01:3x，`3d-diff-color/a626-b630-pick-*`，plan §11.1）
+
+先核了现状：GPU 拾取只认主图层的 picking mesh，A / B 隔离图层的构件**根本点不到**（`parseRefnoFromObjectId` 也只认 `o:`）——从前在对比里点单元要么没反应、要么选到后面的环境构件。
+修法见 plan §11.1：当前显示那一侧的隔离图层做 CPU 射线拾取，命中就把选中钉到那一版（`setSelectedRefnoAtVersion`），属性经面板带来的 `attributesAt` 取自那一侧的版本几何快照。
+脚本 `old\.scratch\mvc-3d-pick-version-attrs-run.mjs`：先点列表修改行飞到 FTUB，再把它在隔离图层里的包围盒中心投影到画布坐标去点（A / B 两版位置差 500 mm，各自重投影）。
+
+| 步 | 截图 | 事实 |
+|---|---|---|
+| 单视口 B 点 FTUB | `a626-b630-pick-01-side-b-pinned.png` | `lastPick {objectId unit-compare:b:24384_23262:4, side after, sesno 630}`；右侧属性面板标题下琥珀横幅 **「属性来自版本 B · sesno 630（版本对比里点到的那一版，不是当前会话）」**，**POS 10887, 12332, 2900**；这一步发的请求只有 `POST history/query {snapshot_key "24384_23257@630", tool "attributes", arguments {refno "24384/23262"}}`，`element/attributes` **0 条** |
+| 切 A 再点 FTUB | `a626-b630-pick-02-side-a-pinned.png` | `lastPick {…:a:…, side before, sesno 626}`；横幅 **「A · sesno 626」**，**POS 10887, 12332, 3400**（挪了 500 的那一版）；请求 `snapshot_key "24384_23257@626"`，`element/attributes` 0 条 |
+| 点画布空处 | — | 普通清空：横幅计数 0 |
+| 再钉一次后退出对比 | `a626-b630-pick-03-closed.png` | 横幅计数 0（钉住随对比一起清，那一版快照已 DELETE） |
+
+pageerror 0；console error 仍是那 5 条环境噪音。`a626-b630-pick-version-attrs-summary.json` 有每步投影坐标、`lastPick`、横幅文本与请求体。
+单测：`PropertiesPanel.versionPin.test.ts` 2 条（钉住走 `load` 不发 `uiAttr`、横幅带 sesno、普通选中复位且当前会话值不串、B 版另一份缓存；那一版不存在给说明）、`attributeSource.test.ts` +2（同型折算 / 不存在）、纯函数 `sideFromCompareObjectId`、面板 open 事件带 `attributesAt` 断言；e2e `model-version-compare-gen-model-v1.spec.ts` 回归：缺省单元 **4 passed 13.0 s**、`24384_23257` **4 passed 12.3 s**。
+分屏时拾取整体是关着的（`onDown` / `onUp` 直接 return），本条只覆盖单视口。

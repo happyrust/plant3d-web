@@ -6,13 +6,19 @@ import {
   buildTreeDiffModels,
   collectModelUnitTargetObjectIds,
   compareModelUnitGeometry,
+  countModelUnitGeometryStatuses,
   DEFAULT_MODEL_UNIT_COMPARE_SIDE,
   DEFAULT_MODEL_UNIT_COMPARE_VIEW_MODE,
   getModelUnitCompareRenderPasses,
   geometrySnapshotsFromInstanceEntries,
+  MODEL_UNIT_GEOMETRY_STATUS_COLORS,
   orderModelUnitVersionPair,
+  planModelUnitCompareObjectStyles,
   readModelUnitVersionCompareUrl,
+  refnoFromCompareObjectId,
   shouldOpenModelUnitVersionCompareFromUrl,
+  sideFromCompareObjectId,
+  type ModelUnitGeometryDiff,
   type ModelUnitGeometrySnapshot,
 } from './modelUnitVersionCompare';
 
@@ -89,6 +95,68 @@ describe('modelUnitVersionCompare', () => {
 
     expect(before.setAllVisible).toHaveBeenCalledWith(true);
     expect(after.setAllVisible).toHaveBeenCalledWith(false);
+  });
+
+  it('「三维只看差异」：只把当前显示那一侧的 unchanged 对象藏掉，另一侧整层已关不再多写', () => {
+    const before = { setAllVisible: vi.fn(), setObjectsVisible: vi.fn() };
+    const after = { setAllVisible: vi.fn(), setObjectsVisible: vi.fn() };
+    const hidden = { before: ['unit-compare:a:1_1:0'], after: ['unit-compare:b:1_1:3'] };
+
+    applyModelUnitVersionSide(before, after, 'after', hidden);
+    expect(after.setAllVisible).toHaveBeenCalledWith(true);
+    expect(after.setObjectsVisible).toHaveBeenCalledWith(['unit-compare:b:1_1:3'], false);
+    expect(before.setObjectsVisible).not.toHaveBeenCalled();
+
+    // 不开开关（null）就是老行为：整层显 / 隐，不碰单个对象
+    vi.clearAllMocks();
+    applyModelUnitVersionSide(before, after, 'before', null);
+    expect(before.setAllVisible).toHaveBeenCalledWith(true);
+    expect(before.setObjectsVisible).not.toHaveBeenCalled();
+    expect(after.setObjectsVisible).not.toHaveBeenCalled();
+
+    // 该侧没有 unchanged 时不发空数组
+    vi.clearAllMocks();
+    applyModelUnitVersionSide(before, after, 'before', { before: [], after: ['x'] });
+    expect(before.setObjectsVisible).not.toHaveBeenCalled();
+  });
+
+  it('三维按「模型几何差异」着色：对象 id 里的 refno 查 rows 定四态，查不到按 unchanged；计数与面板徽章同一份 rows', () => {
+    const rows: ModelUnitGeometryDiff[] = [
+      { refno: '24384_23262', noun: 'FTUB', status: 'modified' },
+      { refno: '24384_23270', noun: 'ELBO', status: 'added' },
+      { refno: '24384_23258', noun: 'TUBI', status: 'deleted' },
+      { refno: '24384_23259', noun: 'TUBI', status: 'unchanged' },
+    ];
+
+    expect(refnoFromCompareObjectId('unit-compare:a:24384_23262:5')).toBe('24384_23262');
+    expect(refnoFromCompareObjectId('o:24384_23262:0')).toBe('24384_23262');
+    expect(refnoFromCompareObjectId('bare')).toBeNull();
+    // 三维里点到的对象属于哪一侧（属性面板据此钉到 A / B 那版）；主图层的 `o:` 对象不算
+    expect(sideFromCompareObjectId('unit-compare:a:24384_23262:5')).toBe('before');
+    expect(sideFromCompareObjectId('unit-compare:b:24384_23262:9')).toBe('after');
+    expect(sideFromCompareObjectId('o:24384_23262:0')).toBeNull();
+
+    // A 侧：修改琥珀 / 删除玫红 / 未变灰；派生对象（rows 里没有的 refno）不乱标
+    expect(planModelUnitCompareObjectStyles([
+      'unit-compare:a:24384_23262:0',
+      'unit-compare:a:24384/23258:1',
+      'unit-compare:a:24384_23259:2',
+      'unit-compare:a:24384_99999:3',
+    ], rows)).toEqual([
+      { objectId: 'unit-compare:a:24384_23262:0', status: 'modified' },
+      { objectId: 'unit-compare:a:24384/23258:1', status: 'deleted' },
+      { objectId: 'unit-compare:a:24384_23259:2', status: 'unchanged' },
+      { objectId: 'unit-compare:a:24384_99999:3', status: 'unchanged' },
+    ]);
+    // B 侧：新增翠绿
+    expect(planModelUnitCompareObjectStyles(['unit-compare:b:24384_23270:7'], rows)).toEqual([
+      { objectId: 'unit-compare:b:24384_23270:7', status: 'added' },
+    ]);
+
+    expect(countModelUnitGeometryStatuses(rows)).toEqual({ added: 1, deleted: 1, modified: 1, unchanged: 1 });
+    expect(countModelUnitGeometryStatuses([])).toEqual({ added: 0, deleted: 0, modified: 0, unchanged: 0 });
+    // 与面板徽章 / 模型树差异模式同一套 Tailwind 色值（emerald-500 / rose-500 / amber-500 / slate-400）
+    expect(MODEL_UNIT_GEOMETRY_STATUS_COLORS).toEqual({ added: 0x10b981, deleted: 0xf43f5e, modified: 0xf59e0b, unchanged: 0x94a3b8 });
   });
 
   it('版本查看默认单视口，分屏时左 A 右 B 且完整覆盖奇数宽度', () => {

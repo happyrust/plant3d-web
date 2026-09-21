@@ -1,5 +1,5 @@
 import type { TreeDiffModel } from '@/composables/useTreeVersionDiff';
-import type { ModelVersion } from '@/model-source/ports';
+import type { ModelVersion, ModelVersionAttributes } from '@/model-source/ports';
 import type { InstanceEntry } from '@/utils/instances/instanceManifest';
 
 export type ModelUnitGeometryStatus = 'added' | 'deleted' | 'modified' | 'unchanged'
@@ -105,19 +105,94 @@ export function getModelUnitCompareRenderPasses(
 
 type VersionVisibilityLayer = {
   setAllVisible: (visible: boolean) => void
+  setObjectsVisible?: (objectIds: string[], visible: boolean) => void
 }
 
 type ObjectVisibilityLayer = {
   setObjectVisible: (objectId: string, visible: boolean) => void
 }
 
+/** 「三维只看差异」时两侧各自要藏起来的对象（`unchanged` 那些） */
+export type ModelUnitCompareHiddenObjectIds = {
+  before: string[]
+  after: string[]
+}
+
+/**
+ * 按当前显示的那一侧开关两个版本层；`hidden` 给了就再把该侧的 `unchanged` 对象藏掉（「三维只看差异」）。
+ * 分屏每一帧按 pass 调两次 + 复位一次，所以这里只做 O(n) 的显隐写入，不重建任何东西。
+ */
 export function applyModelUnitVersionSide(
   beforeLayer: VersionVisibilityLayer | undefined,
   afterLayer: VersionVisibilityLayer | undefined,
   side: ModelUnitCompareSide,
+  hidden: ModelUnitCompareHiddenObjectIds | null = null,
 ): void {
   beforeLayer?.setAllVisible(side === 'before');
   afterLayer?.setAllVisible(side === 'after');
+  if (!hidden) return;
+  if (side === 'before' && hidden.before.length > 0) beforeLayer?.setObjectsVisible?.(hidden.before, false);
+  if (side === 'after' && hidden.after.length > 0) afterLayer?.setObjectsVisible?.(hidden.after, false);
+}
+
+/**
+ * 三维里按「模型几何差异」着色（CONTEXT「模型版本查看」）：与面板徽章、模型树差异模式同一套色——
+ * 新增 emerald / 删除 rose / 修改 amber / 未变 slate。版本身份（A / B）不再靠整侧一色，改由视口角标说明。
+ */
+export const MODEL_UNIT_GEOMETRY_STATUS_COLORS: Record<ModelUnitGeometryStatus, number> = {
+  added: 0x10b981,
+  deleted: 0xf43f5e,
+  modified: 0xf59e0b,
+  unchanged: 0x94a3b8,
+};
+
+export const MODEL_UNIT_GEOMETRY_STATUS_LABELS: Record<ModelUnitGeometryStatus, string> = {
+  added: '新增',
+  deleted: '删除',
+  modified: '修改',
+  unchanged: '未变',
+};
+
+export type ModelUnitGeometryStatusCounts = Record<ModelUnitGeometryStatus, number>
+
+export function countModelUnitGeometryStatuses(rows: readonly ModelUnitGeometryDiff[]): ModelUnitGeometryStatusCounts {
+  const counts: ModelUnitGeometryStatusCounts = { added: 0, deleted: 0, modified: 0, unchanged: 0 };
+  for (const row of rows) counts[row.status] += 1;
+  return counts;
+}
+
+function normalizeStatusRefno(refno: string): string {
+  return refno.trim().replace(/\//g, '_');
+}
+
+/** 隔离图层的对象 id 形如 `unit-compare:a:<refno>:<n>`（`useDbnoInstancesDtxLoader` 的 `objectIdPrefix:refnoKey:counter`）：取倒数第二段。 */
+export function refnoFromCompareObjectId(objectId: string): string | null {
+  const parts = objectId.split(':');
+  if (parts.length < 3) return null;
+  const refno = parts[parts.length - 2]?.trim() ?? '';
+  return refno ? refno : null;
+}
+
+export type ModelUnitCompareObjectStyle = {
+  objectId: string
+  status: ModelUnitGeometryStatus
+}
+
+/**
+ * 给一侧图层里的每个对象定「模型几何差异」状态：按对象 id 里的 refno 查 `rows`；查不到的（派生管身归到 owner 之类）
+ * 按 `unchanged`——宁可少标，不乱标。返回值只是计划，真正上色 / 显隐由调用方对图层执行。
+ */
+export function planModelUnitCompareObjectStyles(
+  objectIds: readonly string[],
+  rows: readonly ModelUnitGeometryDiff[],
+): ModelUnitCompareObjectStyle[] {
+  const statusByRefno = new Map<string, ModelUnitGeometryStatus>();
+  for (const row of rows) statusByRefno.set(normalizeStatusRefno(row.refno), row.status);
+  return objectIds.map((objectId) => {
+    const refno = refnoFromCompareObjectId(objectId);
+    const status = refno ? statusByRefno.get(normalizeStatusRefno(refno)) : undefined;
+    return { objectId, status: status ?? 'unchanged' };
+  });
 }
 
 export function collectModelUnitTargetObjectIds(
@@ -166,6 +241,16 @@ export function formatModelUnitVersionTime(generatedAt: string): string {
     });
 }
 
+/**
+ * 「哪一侧、哪个 refno」→ 那个模型版本下的属性。面板闭包住本次持有的两份版本几何（句柄在里面），
+ * ViewerPanel 在三维里点到 A / B 隔离图层的构件时用它把属性面板钉到那一版（不查当前会话）。
+ */
+export type ModelUnitCompareAttributesAt = (
+  side: ModelUnitCompareSide,
+  refno: string,
+  signal?: AbortSignal,
+) => Promise<ModelVersionAttributes>
+
 export type ModelUnitVersionCompareOpenDetail = {
   action: 'open'
   dbnum: number
@@ -174,6 +259,15 @@ export type ModelUnitVersionCompareOpenDetail = {
   after: ModelUnitVersionSide
   refnos: string[]
   rows: ModelUnitGeometryDiff[]
+  /** 缺省没有（旧派发方 / 测试夹具）：那就点不出版本属性，三维里点 A / B 构件只按 refno 普通选中 */
+  attributesAt?: ModelUnitCompareAttributesAt
+}
+
+/** 视口里点到的隔离图层对象：`unit-compare:a:<refno>:<n>` → A 侧、`unit-compare:b:…` → B 侧；别的对象 id 回 null */
+export function sideFromCompareObjectId(objectId: string): ModelUnitCompareSide | null {
+  if (objectId.startsWith('unit-compare:a:')) return 'before';
+  if (objectId.startsWith('unit-compare:b:')) return 'after';
+  return null;
 }
 
 export type ModelUnitVersionCompareEnvironment = {
@@ -187,6 +281,8 @@ export type ModelUnitVersionCompareRuntimeState = {
   status: 'loading' | 'ready' | 'error'
   activeSide: ModelUnitCompareSide
   viewMode: ModelUnitCompareViewMode
+  /** 「三维只看差异」：隔离图层里藏掉 `unchanged` 的对象；缺省 false（两版整体都在） */
+  diffOnly?: boolean
   environment?: ModelUnitVersionCompareEnvironment
   error?: string
 }
@@ -197,6 +293,7 @@ export type ModelUnitVersionCompareEventDetail =
   | { action: 'close' }
   | { action: 'set-side'; side: ModelUnitCompareSide }
   | { action: 'set-view-mode'; viewMode: ModelUnitCompareViewMode }
+  | { action: 'set-diff-only'; diffOnly: boolean }
   | { action: 'refresh-environment' }
   | { action: 'request-state' }
 

@@ -13,6 +13,8 @@ export * from './kind';
 export * from './modelVersionErrors';
 export type { GenModelV1EnsureProgress, GenModelV1ModelSource } from './genModelV1';
 export type { CollectDbnumProgress, CollectDbnumResult } from './genModelV1';
+/** 某模型版本下的属性 → 属性面板契约（版本对比里点 A / B 构件时属性面板钉到那一版用） */
+export { modelVersionAttributesToUiAttr } from './genModelV1/attributeSource';
 
 let instance: GenModelV1ModelSource | null = null;
 

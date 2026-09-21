@@ -1,4 +1,4 @@
-import { computed, ref } from 'vue';
+import { computed, ref, shallowRef } from 'vue';
 
 import { useQuery } from '@tanstack/vue-query';
 
@@ -11,6 +11,19 @@ const selectedRefno = ref<string | null>(null);
  * 任何一次正常选中都把它复位。
  */
 const selectedIsDeleted = ref(false);
+
+/**
+ * 「版本钉住」的选中：版本对比里在三维点到 A / B 隔离图层的构件，属性面板要读的是**那一版**的属性，不是当前会话的。
+ * `load` 由派发方闭包住那一侧的版本几何句柄（`ModelVersionSource.attributesAt`），这里只管替掉查询函数、
+ * 把 sesno 掺进 query key（同一 refno 当前会话 / 某一版各自缓存）。任何一次正常选中都把它复位。
+ */
+export type SelectedVersionPin = {
+  sesno: number;
+  /** 视口 / 面板上的版本身份：`A` / `B` */
+  label: string;
+  load: () => Promise<PdmsUiAttrResponse>;
+};
+const selectedVersionPin = shallowRef<SelectedVersionPin | null>(null);
 
 /**
  * 属性取数经数据源端口（plan 2026-09-06 P4-1）：legacy = `pdmsGetUiAttr`（旧后端 /api/pdms/ui-attr），
@@ -38,11 +51,12 @@ function normalizeSelection(refnos: (string | null | undefined)[]): string[] {
 function setSelectionState(
   refnos: (string | null | undefined)[],
   activeRefno?: string | null,
-  options?: { deleted?: boolean },
+  options?: { deleted?: boolean; versionPin?: SelectedVersionPin | null },
 ) {
   const next = normalizeSelection(refnos);
   selectedRefnos.value = next;
   selectedIsDeleted.value = next.length > 0 && options?.deleted === true;
+  selectedVersionPin.value = next.length > 0 ? options?.versionPin ?? null : null;
   if (next.length === 0) {
     selectedRefno.value = null;
     return;
@@ -64,9 +78,20 @@ export function setGlobalSelectedDeletedRefno(refno: string) {
   setSelectionState([refno], refno, { deleted: true });
 }
 
+/** 选中某个模型版本下的构件（版本对比里点 A / B 隔离图层）：属性按 `pin.load` 取那一版的，不查当前会话。 */
+export function setGlobalSelectedRefnoAtVersion(refno: string, pin: SelectedVersionPin) {
+  setSelectionState([refno], refno, { versionPin: pin });
+}
+
 /** 当前选中是否是「已删除」登记（见 `selectedIsDeleted`）；不建 TanStack Query 观察者。 */
 export function getGlobalSelectedIsDeleted(): boolean {
   return selectedIsDeleted.value;
+}
+
+/** 当前选中钉在哪一版（见 `selectedVersionPin`）；没钉回 null。不建 TanStack Query 观察者。 */
+export function getGlobalSelectedVersionPin(): Pick<SelectedVersionPin, 'sesno' | 'label'> | null {
+  const pin = selectedVersionPin.value;
+  return pin ? { sesno: pin.sesno, label: pin.label } : null;
 }
 
 /** Read the current element without creating a TanStack Query observer. */
@@ -76,8 +101,12 @@ export function getGlobalSelectedRefno(): string | null {
 
 function usePdmsUiAttrQuery(refno: { value: string | null }) {
   return useQuery({
-    queryKey: computed(() => ['pdms', 'ui-attr', refno.value]),
-    queryFn: () => fetchUiAttr(refno.value!),
+    // 钉住版本时 sesno 进 key：同一 refno 的「当前会话」与「某一版」各自缓存，切回普通选中不会拿到那一版的旧值
+    queryKey: computed(() => ['pdms', 'ui-attr', refno.value, selectedVersionPin.value ? `sesno:${selectedVersionPin.value.sesno}` : 'current']),
+    queryFn: () => {
+      const pin = selectedVersionPin.value;
+      return pin ? pin.load() : fetchUiAttr(refno.value!);
+    },
     // 已删除登记的选中不发查询：当前会话里没有它，发了只会 404
     enabled: computed(() => !!refno.value && !selectedIsDeleted.value),
     staleTime: 5 * 60 * 1000, // 5 minutes
@@ -131,6 +160,11 @@ export function useSelectionStore() {
     setSelectionState([refno], refno, { deleted: true });
   }
 
+  /** 选中某个模型版本下的构件（版本对比里点 A / B 隔离图层）：属性面板读那一版，标题栏注明来源。 */
+  function setSelectedRefnoAtVersion(refno: string, pin: SelectedVersionPin) {
+    setSelectionState([refno], refno, { versionPin: pin });
+  }
+
   function setSelectedRefnos(refnos: (string | null | undefined)[], activeRefno?: string | null) {
     setSelectionState(refnos, activeRefno);
   }
@@ -157,6 +191,11 @@ export function useSelectionStore() {
     selectedRefno,
     selectedRefnos,
     selectedIsDeleted: computed(() => selectedIsDeleted.value),
+    /** 当前选中钉在哪一版（`{ sesno, label }`）；普通选中为 null */
+    selectedVersionPin: computed(() => {
+      const pin = selectedVersionPin.value;
+      return pin ? { sesno: pin.sesno, label: pin.label } : null;
+    }),
     propertiesLoading,
     propertiesError,
     propertiesData,
@@ -169,6 +208,7 @@ export function useSelectionStore() {
     isSelected,
     setSelectedRefno,
     setSelectedDeletedRefno,
+    setSelectedRefnoAtVersion,
     setSelectedRefnos,
     toggleSelectedRefno,
   };

@@ -457,3 +457,47 @@ legacy 下与从前的可见差别只有一处、且不可见于用户：A/B 隔
   `attribute-history` FTUB 24384/23262 `since_sesno=626&limit=2` → 630 一行 POS / SPAMAP before-after + SAVEWORK 备注，
   `diff-summary` BRAN 子树 573→626 = 修改 1 / noop 1、SITE 24384/22399 子树 618→628 = 526 单元 / 变 2（FTUB 修改、BOX 新增）、
   a>b → 400，字段与 DTO 逐个对上；`:8026`（`2f891b370`）对同一路由回 404 = 回落路径的真机对照。**页面级真机未跑**（要 dev server）。
+
+## 11. 三维按差异着色 + 单视口角标 + 「三维只看差异」（2026-09-20 20:36 用户拍板 A；ADR 0066「三维联动」的落地，不新开 ADR）
+
+- **缺口**（交接核出来的）：面板算好的 `rows`（新增 / 删除 / 修改 / 未变）随 `open` 事件进了 ViewerPanel 却一个字没用——三维里 A 整侧蓝 `#2563eb`、
+  B 整侧绿 `#10b981`，FTUB 挪 500 mm 那例哪根动了三维里毫无标记，得回面板点行才飞过去；单视口没有版本角标（只有分屏画了 A / B）；几百件里 1 件变了，
+  未变构件占满视野。设计稿 S2b 说的「三维联动」到这一步是断的。
+- **做法**：
+  - 纯函数（`utils/modelUnitVersionCompare.ts`）：`MODEL_UNIT_GEOMETRY_STATUS_COLORS / _LABELS`（emerald / rose / amber / slate，与面板徽章、模型树差异模式同一套 Tailwind 色值）、
+    `countModelUnitGeometryStatuses`、`refnoFromCompareObjectId`（隔离图层对象 id `unit-compare:a:<refno>:<n>` 取倒数第二段）、`planModelUnitCompareObjectStyles`
+    （按对象 id 里的 refno 查 `rows` 定四态；查不到的——派生管身归到 owner 之类——按 `unchanged`，宁可少标不乱标）；`applyModelUnitVersionSide` 第四参 `hidden`
+    （该侧 `unchanged` 对象 id，只在显示那一侧写显隐）；运行态多 `diffOnly`、事件多 `set-diff-only`。
+  - `ViewerPanel.vue`：打开时按计划给两侧对象 `setObjectMaterial` 四态色（仍走材质调色板，不碰颜色覆盖通道）、顺手收集两侧 `unchanged` 对象 id；
+    `set-diff-only` 只改显隐不重装几何，分屏每帧的两个 pass 与复位同样带 `hidden`；视口角标——单视口一枚跟着 `activeSide`（A 蓝 / B 绿，tombstone 侧注「该版本单元已删除」）、
+    分屏两枚照旧；角标下一行**只读**图例：四态计数 + 开着「只看差异」时一枚「只看差异 · 未变已藏」标签（`data-diff-only`）；dev 钩子 `__modelUnitVersionCompare` 加 `diffOnly / statusCounts / hiddenWhenDiffOnly`。
+    视口里不放可点的东西：右上 100px 的视图 gizmo（z 1000）和左侧竖排工具栏（z 940）都吃指针，窄视口下第一版放在图例里的勾选框被它们盖住、e2e 点不到（README §8）；图例限宽让窄视口换行。
+  - 面板「三维查看」节：A / B（或分屏摘要）下多一枚「三维只看差异」勾选（`model-unit-compare-diff-only`），真值在视口运行态、回传才算勾上；本次没有非 unchanged 行时置灰。
+    它与列表的「包含未变化」是同一口径、**各自开关**：列表缺省只列差异、三维缺省整单元都在（留着看变了的那件在哪）——没并成一个开关是有意的。
+  - 词汇：CONTEXT「模型几何差异」加「三维里按此着色」一句，_Avoid_ 加「整侧一色」。交接清单第 4 条（点 A 侧构件右侧属性面板读的仍是当前会话）**未动**，下一期。
+- **验证**：vitest `modelUnitVersionCompare.test.ts` 10 + `ModelUnitVersionComparePanel.test.ts` 16 全过（纯函数 +2、面板 +1）；`node scripts/type-check.mjs` 基线外 0 新增；
+  ESLint 触及 5 个文件只剩 `ViewerPanel.vue:27` import 分组空行——HEAD（21:16 合并）就有、未动。真机 dev `:3111` + `:8022`（`a382b2cf3`，别的会话已重起、无需再起）
+  FTUB 24384_23257 626→630：单视口 B 缺省 = 石板灰 BRAN + 琥珀 FTUB、角标「B · sesno 630」、图例「修改 1 新增 0 删除 0 未变 8」；面板勾「三维只看差异」只剩那根 FTUB，
+  图例出「只看差异 · 未变已藏」标签、`hiddenWhenDiffOnly {before 8, after 8}`；切 A 角标「A · sesno 626」；分屏两枚角标 + 图例、两侧各只剩 FTUB（A 高 B 低 = 那 500 mm）；
+  取消勾选整单元回来、标签撤掉；退出角标 / 图例撤掉；pageerror 0。证据 `docs/verification/model-version-compare-gen-model-v1-2026-09-18/3d-diff-color/`，README §8。
+  e2e `model-version-compare-gen-model-v1.spec.ts` 第 1 条加角标 / 图例 / 开关断言：缺省单元 `24384_26480`（tombstone）**4 过（19.2 s）**、`MODEL_VERSION_E2E_UNIT=24384_23257` **4 过（12.5 s）**。
+- **顺手看到（不在本轮）**：分屏 render pass 出来的颜色比单视口暗一档（老截图 `bran-ftub-move/a626-b630-04-split.png` 的蓝 / 绿同样发暗），四态色在分屏里成了深棕 / 藏青、
+  仍分得开但不如单视口——split 路径直接 `renderer.render`，单视口有选中时走 `selection.renderOutline()`，两条路的色彩空间 / 后处理不一致，先记着。
+
+### 11.1 点 A / B 构件 → 属性面板读那一版（交接清单第 4 条，用户 2026-09-21 01:0x 拍板「也做了」）
+
+- **现状核出来的**：GPU 拾取只认主图层的 picking mesh（`DTXSelectionController.pick` → `this._dtxLayer.getPickingMesh()`），A / B 隔离图层里的构件根本点不到——
+  `parseRefnoFromObjectId` 又只认 `o:` 前缀。所以从前在对比里点单元，要么什么都不选、要么选到后面的环境构件；「读的是当前会话」还算好的。分屏时拾取整体关着，本条只做单视口。
+- **做法**：
+  - 事件：`ModelUnitVersionCompareOpenDetail.attributesAt?`（`ModelUnitCompareAttributesAt`：哪一侧、哪个 refno → 那一版的 `ModelVersionAttributes`），面板派 `open` 时闭包住两份版本几何——与树差异模式底部那块（`TreeDiffContext.attributesAt`）同一个取数口。`sideFromCompareObjectId`：`unit-compare:a:` → A、`:b:` → B。
+  - `ViewerPanel.onUp`：对比就位（单视口）时先对**当前显示那一侧**的隔离图层做 CPU 射线拾取（`getVisibleObjectIds` → 包围盒粗筛 → `raycastObject` 精测，取最近），
+    比主图层 GPU 命中更近（主图层的目标单元已隐藏，剩下只会是环境）就选它：`selectionStore.setSelectedRefnoAtVersion(refno, { sesno, label, load })`，
+    `load` = `attributesAt(side, refno)` → `modelVersionAttributesToUiAttr`（`model-source/genModelV1/attributeSource.ts`，行与 `element/attributes` 同型、走同一条 `elementAttributesToUiAttr`，面板印同一个字；那一版里不存在 → `success:false` 带说明）。
+    没带 `attributesAt`（旧夹具）退回普通选中。退出对比时钉住的选中一并清掉（那一版的快照马上被 DELETE）。dev 钩子 `__modelUnitVersionCompare.lastPick`。
+  - `useSelectionStore`：「版本钉住」`SelectedVersionPin { sesno, label, load }`，与「已删除」登记并列——查询函数换成 `pin.load`、sesno 掺进 query key（同一 refno 当前会话 / 某一版各自缓存），
+    任何一次正常选中复位；`setGlobalSelectedRefnoAtVersion` / `getGlobalSelectedVersionPin` / store 的 `setSelectedRefnoAtVersion` / `selectedVersionPin`。
+  - `PropertiesPanel`：标题下一条琥珀横幅「属性来自版本 A · sesno 626（版本对比里点到的那一版，不是当前会话）」（`properties-version-pin-notice`，`data-sesno`）。
+  - 词汇：CONTEXT「单视口版本切换」加一句 + _Avoid_「点 A 版构件却显示当前会话属性」。
+- **验证**：vitest 39 过（新增 `PropertiesPanel.versionPin.test.ts` 2 条、`attributeSource` +2、纯函数 +1 断言、面板 open 事件带 `attributesAt` +1 断言）；type-check 基线外 0 新增；ESLint 触及 11 文件只剩那条 HEAD 就有的。
+  真机（`3d-diff-color/a626-b630-pick-*`）：单视口 B 点 FTUB → `lastPick {side after, sesno 630}`、横幅「B · sesno 630」、**POS 10887, 12332, 2900**，发的是 `history/query {snapshot_key 24384_23257@630, tool attributes}`、`element/attributes` 0 条；
+  切 A 再点（A 那版位置不同、重投影）→ 「A · sesno 626」、**POS 10887, 12332, 3400**、`snapshot_key …@626`；点空处横幅撤掉；再钉一次后退出对比横幅撤掉；pageerror 0。README §8.1。
