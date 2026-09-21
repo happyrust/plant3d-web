@@ -9,13 +9,17 @@ export {
   type SglSceneLightParams
 } from './sglLookMaterial';
 export {
+  E3D31_HBAO,
   E3D_BACKGROUND_GREY,
   E3D_GRADIENT_BOTTOM_T,
   E3D_GRADIENT_TOP_T,
   SGL_PIPELINE_SHADERS,
   SglLookPipeline,
   createDefaultSglPipelineParams,
+  e3dBlurSharpnessForDepthRange,
+  eyeDepthRangeOfBox,
   isSglNormalDepthProvider,
+  sglBlurFalloffForRadius,
   sglDefaultGradientEndColour,
   type SglAoParams,
   type SglBackgroundParams,

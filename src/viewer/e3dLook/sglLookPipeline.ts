@@ -9,18 +9,22 @@
  *   ⑥ 合成 final = colour × HLR × AO；背景处填纵向渐变（effect_bg_gradient）
  *
  * `legacyMode` 对应 SGL 的 `Sgl_View_Effects_Parameters::_legacy_mode`：一把关掉所有效果。
- * 参数默认值里带「E3D」注释的来自逆向；其余（AO 半径等）是逆向还没拿到的，先给合理值并暴露成可调。
+ * 参数默认值来自 3.1 sglDx11 逆向（HBAO / 模糊见 `E3D31_HBAO`，HLR 阈值见 `SglHlrParams`）；`halfRes` 等 E3D 没有的项默认关。
  */
 
 import {
+  Box3,
+  type BufferGeometry,
   Camera,
   Color,
   FloatType,
   HalfFloatType,
   type IUniform,
+  type InstancedMesh,
   LinearFilter,
   type MagnificationTextureFilter,
   Material,
+  Matrix4,
   type MinificationTextureFilter,
   NearestFilter,
   NoBlending,
@@ -56,24 +60,82 @@ export interface SglHlrParams {
 export interface SglAoParams {
   /** SGL_PSEUDO_SHADOWS（E3D 叫「伪阴影」，默认 ON） */
   enabled: boolean;
-  /** g_R：采样半径，模型单位 */
+  /** g_R：采样半径，模型单位（E3D 3.1：392.7327，场景单位 mm） */
   radius: number;
-  /** g_NumDir */
+  /** g_NumDir（E3D 3.1：8） */
   numDirs: number;
-  /** g_NumSteps */
+  /** g_NumSteps（E3D 3.1：4） */
   numSteps: number;
-  /** g_AngleBias（弧度） */
+  /** g_AngleBias（弧度；E3D 3.1：30°） */
   angleBias: number;
-  /** g_Attenuation */
+  /** g_Attenuation（E3D 3.1：0.2） */
   attenuation: number;
-  /** g_Contrast */
+  /** g_Contrast（E3D 3.1：1.25） */
   contrast: number;
-  /** g_BlurRadius（像素） */
+  /** g_BlurRadius（像素；E3D 3.1：12，Falloff 由它算：1/(2·((R+1)/2)²)） */
   blurRadius: number;
-  /** g_Sharpness：深度权重 exp(-(dz·sharpness)²)，模型单位的倒数 */
+  /**
+   * 模糊的深度权重 exp(−(Δz·sharpness)²)，模型单位的倒数（= NVIDIA g_Sharpness 的平方根）。
+   * `blurSharpnessAuto` 开着时这是兜底值（算不出深度范围的帧用）。
+   */
   blurSharpness: number;
-  /** 半分辨率算 AO（省时间；E3D 未知） */
+  /**
+   * 按 E3D 3.1 每帧算模糊锐度（`Blur_slot4`）：sharpness = 16 / (depthRange / 2)，depthRange = 本帧几何的线性深度范围
+   * （可渲染 Mesh 的包围盒 + `SglLookPipelineOptions.extraSceneBounds`，在相机眼空间取 [近, 远]）。见 `e3dBlurSharpnessForDepthRange`。
+   */
+  blurSharpnessAuto: boolean;
+  /** 半分辩率算 AO（省时间；E3D 没有这项，默认关） */
   halfRes: boolean;
+}
+
+/**
+ * E3D 3.1 sglDx11 硬编码的 HBAO / 双边模糊数值：`HBAO_slot4_100084d0.c` 每帧写进常量缓冲
+ * （NumSteps 4、NumDir 8、R 392.7327、AngleBias 0.5236、Attenuation 0.2、Contrast 1.25），
+ * `Blur_realctor_sub_10006E50.c` 构造（BlurRadius 12、Sharpness 分子 16）。半径按场景单位，E3D 场景单位是 mm。
+ */
+export const E3D31_HBAO = Object.freeze({
+  radius: 392.7327,
+  numDirs: 8,
+  numSteps: 4,
+  angleBias: Math.PI / 6,
+  attenuation: 0.2,
+  contrast: 1.25,
+  blurRadius: 12,
+  /** g_Sharpness = (sharpnessNumerator / (depthRange / 2))² */
+  sharpnessNumerator: 16,
+} as const);
+
+/** NVIDIA HBAO 同款：g_BlurFalloff = 1 / (2·σ²)，σ = (R + 1) / 2 */
+export function sglBlurFalloffForRadius(blurRadius: number): number {
+  const sigma = (blurRadius + 1) / 2;
+  return 1 / (2 * sigma * sigma);
+}
+
+/**
+ * E3D 3.1 每帧的模糊深度锐度（`Blur_slot4_10007260.c`）：半深度范围 h = depthRange × 0.5，h > 0.001 时
+ * g_Sharpness = (16 / h)²，否则沿用上一帧（返回 null）。返回本管线口径的值（权重 exp(−(Δz·s)²)，即 g_Sharpness 的平方根 = 16 / h）。
+ */
+export function e3dBlurSharpnessForDepthRange(depthRange: number): number | null {
+  const half = depthRange * 0.5;
+  if (!(half > 0.001)) return null;
+  return E3D31_HBAO.sharpnessNumerator / half;
+}
+
+const _rangeCorner = new Vector3();
+
+/** world 空间包围盒在相机眼空间的线性深度区间（8 个角点到相机平面的距离 −z，可能含负值 = 相机后方），写进 out.x/y = [min, max] */
+export function eyeDepthRangeOfBox(box: Box3, viewMatrix: Matrix4, out: Vector2): Vector2 {
+  let min = Infinity;
+  let max = -Infinity;
+  for (let i = 0; i < 8; i++) {
+    _rangeCorner
+      .set(i & 1 ? box.max.x : box.min.x, i & 2 ? box.max.y : box.min.y, i & 4 ? box.max.z : box.min.z)
+      .applyMatrix4(viewMatrix);
+    const d = -_rangeCorner.z;
+    if (d < min) min = d;
+    if (d > max) max = d;
+  }
+  return out.set(min, max);
 }
 
 /** PDMS 颜色表 `grey`（索引 1）= #828282，E3D 3.1 出厂背景色（真机截图 130,130,130） */
@@ -151,6 +213,11 @@ export interface SglLookPipelineOptions {
    * - 'both'：两者都画
    */
   normalDepthSource?: 'override' | 'providers' | 'both';
+  /**
+   * 额外的 world 空间场景包围盒（每帧回调，写进 target 并返回；返回 null / 空盒 = 没有）。
+   * 给几何存在纹理里、Mesh 自身没有包围盒的层（DTXLayer）用：`blurSharpnessAuto` 的深度范围 = 可渲染 Mesh 包围盒 ∪ 这里给的盒。
+   */
+  extraSceneBounds?: (target: Box3) => Box3 | null;
 }
 
 export function createDefaultSglPipelineParams(): SglLookPipelineParams {
@@ -164,14 +231,15 @@ export function createDefaultSglPipelineParams(): SglLookPipelineParams {
     },
     ao: {
       enabled: true,
-      radius: 400,
-      numDirs: 8,
-      numSteps: 6,
-      angleBias: 0.1,
-      attenuation: 1.0,
-      contrast: 1.25,
-      blurRadius: 4,
+      radius: E3D31_HBAO.radius,
+      numDirs: E3D31_HBAO.numDirs,
+      numSteps: E3D31_HBAO.numSteps,
+      angleBias: E3D31_HBAO.angleBias,
+      attenuation: E3D31_HBAO.attenuation,
+      contrast: E3D31_HBAO.contrast,
+      blurRadius: E3D31_HBAO.blurRadius,
       blurSharpness: 0.01,
+      blurSharpnessAuto: true,
       halfRes: false,
     },
     background: {
@@ -499,6 +567,12 @@ export class SglLookPipeline {
   private readonly _ndType: TextureDataType;
   private readonly _renderables: RenderableRecord[] = [];
   private readonly _providerMaterials = new Set<Material & SglNormalDepthProvider>();
+  /** 本帧可渲染 Mesh 的 world 包围盒 ∪ extraSceneBounds（blurSharpnessAuto 用） */
+  private readonly _frameBounds = new Box3();
+  private readonly _tmpBox = new Box3();
+  private readonly _tmpRange = new Vector2();
+  private _lastDepthRange: number | null = null;
+  private _lastBlurSharpness: number | null = null;
 
   private _colorRT: WebGLRenderTarget;
   private _ndRT: WebGLRenderTarget;
@@ -515,21 +589,21 @@ export class SglLookPipeline {
     uInvFocalLen: { value: new Vector2(1, 1) },
     uOrthoOffset: { value: new Vector2(0, 0) },
     uIsPerspective: { value: 1 },
-    uR: { value: 1 },
-    uInvSqrR: { value: 1 },
-    uNumDirs: { value: 8 },
-    uNumSteps: { value: 6 },
-    uAngleBias: { value: 0.1 },
-    uAttenuation: { value: 1 },
-    uContrast: { value: 1.25 },
+    uR: { value: E3D31_HBAO.radius },
+    uInvSqrR: { value: 1 / (E3D31_HBAO.radius * E3D31_HBAO.radius) },
+    uNumDirs: { value: E3D31_HBAO.numDirs },
+    uNumSteps: { value: E3D31_HBAO.numSteps },
+    uAngleBias: { value: E3D31_HBAO.angleBias },
+    uAttenuation: { value: E3D31_HBAO.attenuation },
+    uContrast: { value: E3D31_HBAO.contrast },
   };
 
   private readonly _blurUniforms: BlurUniforms = {
     tSource: { value: null },
     tND: { value: null },
     uStep: { value: new Vector2(0, 0) },
-    uRadius: { value: 4 },
-    uFalloff: { value: 0.1 },
+    uRadius: { value: E3D31_HBAO.blurRadius },
+    uFalloff: { value: sglBlurFalloffForRadius(E3D31_HBAO.blurRadius) },
     uSharpness: { value: 0.01 },
   };
 
@@ -577,6 +651,7 @@ export class SglLookPipeline {
     this.options = {
       useSceneBackground: options?.useSceneBackground ?? false,
       normalDepthSource: options?.normalDepthSource ?? 'override',
+      extraSceneBounds: options?.extraSceneBounds ?? (() => null),
     };
 
     // 线性深度按模型单位存，mm 级模型轻松过 65504 → 有浮点色附件就用 32 位
@@ -668,7 +743,7 @@ export class SglLookPipeline {
     scene.background = null;
 
     // ② 面法线 + 线性深度
-    this._collectRenderables(scene);
+    this._collectRenderables(scene, useAo && p.ao.blurSharpnessAuto);
     const source = this.options.normalDepthSource;
     renderer.setRenderTarget(this._ndRT);
     renderer.setClearColor(0x000000, 0);
@@ -722,12 +797,11 @@ export class SglLookPipeline {
       aoTexture = this._aoRT.texture;
       const radius = Math.max(0, Math.min(16, Math.round(p.ao.blurRadius)));
       if (radius > 0) {
-        const sigma = (radius + 1) / 2;
         const bu = this._blurUniforms;
         bu.tND.value = this._ndRT.texture;
         bu.uRadius.value = radius;
-        bu.uFalloff.value = 1 / (2 * sigma * sigma);
-        bu.uSharpness.value = p.ao.blurSharpness;
+        bu.uFalloff.value = sglBlurFalloffForRadius(radius);
+        bu.uSharpness.value = p.ao.blurSharpnessAuto ? this._autoBlurSharpness(camera) : p.ao.blurSharpness;
         this._fsq.material = this._blurMaterial;
 
         bu.tSource.value = this._aoRT.texture;
@@ -798,18 +872,63 @@ export class SglLookPipeline {
     return this._ndType;
   }
 
+  /** 最近一次按 E3D 口径算出的本帧线性深度范围（模型单位；还没算出来过为 null） */
+  get lastDepthRange(): number | null {
+    return this._lastDepthRange;
+  }
+
+  /** 最近一次实际用在模糊里的深度锐度（`blurSharpnessAuto` 开着时 = 16 / (depthRange / 2)） */
+  get lastBlurSharpness(): number | null {
+    return this._lastBlurSharpness;
+  }
+
+  /**
+   * E3D 3.1 `Blur_slot4` 的每帧锐度：本帧几何在眼空间的线性深度范围 → 16 / (range / 2)。
+   * 范围来自 `_collectRenderables` 累的 Mesh 包围盒 ∪ `extraSceneBounds`；相机后方的部分截到 near；
+   * 算不出（没有包围盒 / 范围 ≤ 0.002）时沿用上一帧，再没有就用 params.ao.blurSharpness。
+   */
+  private _autoBlurSharpness(camera: Camera): number {
+    const extra = this.options.extraSceneBounds(this._tmpBox.makeEmpty());
+    if (extra && !extra.isEmpty()) this._frameBounds.union(extra);
+    if (!this._frameBounds.isEmpty()) {
+      eyeDepthRangeOfBox(this._frameBounds, camera.matrixWorldInverse, this._tmpRange);
+      const near = (camera as PerspectiveCamera).near ?? 0;
+      const min = Math.max(this._tmpRange.x, near > 0 ? near : 0);
+      const range = this._tmpRange.y - min;
+      const sharpness = e3dBlurSharpnessForDepthRange(range);
+      if (sharpness !== null) {
+        this._lastDepthRange = range;
+        this._lastBlurSharpness = sharpness;
+      }
+    }
+    if (this._lastBlurSharpness === null) this._lastBlurSharpness = this.params.ao.blurSharpness;
+    return this._lastBlurSharpness;
+  }
+
   dispose(): void {
     for (const rt of [this._colorRT, this._ndRT, this._aoRT, this._blurRTa, this._blurRTb, this._hlrRT]) rt.dispose();
     for (const m of [this._ndMaterial, this._aoMaterial, this._blurMaterial, this._hlrMaterial, this._compositeMaterial]) m.dispose();
     this._fsq.dispose();
   }
 
-  /** 一次遍历：记下所有可渲染对象的可见性，并找出实现了 SglNormalDepthProvider 的材质 */
-  private _collectRenderables(scene: Scene): void {
+  /**
+   * 一次遍历：记下所有可渲染对象的可见性，找出实现了 SglNormalDepthProvider 的材质；
+   * collectBounds 时顺带把普通 Mesh 的 world 包围盒并进 _frameBounds（provider 网格的几何在纹理里，包围盒靠 extraSceneBounds）
+   */
+  private _collectRenderables(scene: Scene, collectBounds = false): void {
     this._renderables.length = 0;
     this._providerMaterials.clear();
+    this._frameBounds.makeEmpty();
     scene.traverseVisible((object) => {
-      const anyObj = object as Object3D & { isMesh?: boolean; isLine?: boolean; isPoints?: boolean; isSprite?: boolean; material?: Material | Material[] };
+      const anyObj = object as Object3D & {
+        isMesh?: boolean;
+        isLine?: boolean;
+        isPoints?: boolean;
+        isSprite?: boolean;
+        isInstancedMesh?: boolean;
+        material?: Material | Material[];
+        geometry?: BufferGeometry;
+      };
       const isMesh = anyObj.isMesh === true;
       if (!isMesh && !anyObj.isLine && !anyObj.isPoints && !anyObj.isSprite) return;
       let isProviderMesh = false;
@@ -820,6 +939,20 @@ export class SglLookPipeline {
             isProviderMesh = true;
             this._providerMaterials.add(m);
           }
+        }
+      }
+      if (collectBounds && isMesh && !isProviderMesh) {
+        let local: Box3 | null = null;
+        if (anyObj.isInstancedMesh) {
+          const im = anyObj as unknown as InstancedMesh;
+          if (!im.boundingBox) im.computeBoundingBox();
+          local = im.boundingBox;
+        } else if (anyObj.geometry) {
+          if (!anyObj.geometry.boundingBox) anyObj.geometry.computeBoundingBox();
+          local = anyObj.geometry.boundingBox;
+        }
+        if (local && !local.isEmpty()) {
+          this._frameBounds.union(this._tmpBox.copy(local).applyMatrix4(object.matrixWorld));
         }
       }
       this._renderables.push({ object, visible: object.visible, isProviderMesh, isMesh });

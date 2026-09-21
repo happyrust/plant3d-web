@@ -143,6 +143,7 @@ import { DtxViewer, type BackgroundMode } from '@/viewer/dtx/DtxViewer';
 import { shouldStopShowDbnumLoad } from '@/viewer/dtx/showDbnumLoadPolicy';
 import {
   DEFAULT_SGL_LOOK_PRESET,
+  E3D31_HBAO,
   E3D_GRAPHICS_COLOUR_DEFAULTS,
   SGL_LOOK_PRESETS,
   SglLookPipeline,
@@ -3484,15 +3485,26 @@ onMounted(async () => {
   // E3D 外观后处理管线：DTX 材质自己出法线/深度（providers）；背景由管线按 E3D 口径直写
   // （grey #828282 → 白的 D2D 式渐变，或纯灰；不过 tone mapping——走 scene.background 会被 ACES/曝光抬成 162）
   try {
-    // 场景在 modelUnit=mm/m 时都已按米摆放（loader 里 mm×0.001），阈值/半径按米给
+    // 场景在 modelUnit=mm/m 时都已按米摆放（loader 里 mm×0.001），E3D 的 mm 数值（HLR 阈值 50、HBAO 半径 392.73）按米换算
     const sceneInMetres = unitSettings.modelUnit.value !== 'raw';
+    const mmToScene = sceneInMetres ? 0.001 : 1;
     const sglPipeline = new SglLookPipeline(
       dtxViewer.renderer,
       {
-        hlr: { depthThreshold: sceneInMetres ? 0.05 : 50 },
-        ao: { radius: sceneInMetres ? 0.4 : 400, blurSharpness: sceneInMetres ? 10 : 0.01 },
+        hlr: { depthThreshold: 50 * mmToScene },
+        // 模糊锐度默认按 E3D 每帧从深度范围算（blurSharpnessAuto），这里只是算不出时的兜底
+        ao: { radius: E3D31_HBAO.radius * mmToScene, blurSharpness: sceneInMetres ? 10 : 0.01 },
       },
-      { useSceneBackground: false, normalDepthSource: 'providers' },
+      {
+        useSceneBackground: false,
+        normalDepthSource: 'providers',
+        // DTX 几何在纹理里，Mesh 没有包围盒：深度范围用各 DTX 层的场景包围盒
+        extraSceneBounds: (target) => {
+          target.makeEmpty();
+          for (const layer of getSglDtxLayers()) target.union(layer.getBoundingBox());
+          return target;
+        },
+      },
     );
     applySglLookPresetToPipelineParams(sglPipeline.params, SGL_LOOK_PRESETS[sglLookPreset.value]);
     sglPipeline.setSize(canvas.clientWidth || canvas.width, canvas.clientHeight || canvas.height);

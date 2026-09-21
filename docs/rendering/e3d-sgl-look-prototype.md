@@ -76,8 +76,8 @@ a   = colour.a                                      // 半透明 = 1 − 百分�
 | 步 | 做法 | 参数（默认） |
 |---|---|---|
 | 法线/深度 | `overrideMaterial`：rgb = `normalize(cross(dFdx(viewPos), dFdy(viewPos)))`（面法线，同 sglDx11 MRT1），a = 线性深度，背景 0；RGBA32F | — |
-| HBAO | NVIDIA HBAO 法线模式，参数名同 sglDx11 | 代码现值 R 400 mm、8 方向、6 步、AngleBias 0.1、Attenuation 1、Contrast 1.25；E3D 3.1 实际硬编码 R 392.73、8 方向、**4 步**、AngleBias **30°**、Attenuation **0.2**、Contrast 1.25（§5.2，待对齐） |
-| 模糊 | 深度感知可分离模糊 | 代码现值半径 4 px、锐度 0.01 /mm；E3D 3.1 半径 **12**、Falloff 0.01183、Sharpness (16/(深度范围/2))²（§5.2，待对齐） |
+| HBAO | NVIDIA HBAO 法线模式，参数名同 sglDx11 | `E3D31_HBAO`（= 3.1 硬编码，§5.6）：R **392.7327**（场景单位 mm；ViewerPanel 按米 ×0.001）、8 方向、**4 步**、AngleBias **30°**、Attenuation **0.2**、Contrast 1.25 |
+| 模糊 | 深度感知可分离模糊，权重 exp(−r²·Falloff − (Δz·s)²)（同 sglDx11 dxbc_003） | 半径 **12** px、Falloff = 1/(2·((R+1)/2)²) = 0.01183；锐度 `blurSharpnessAuto`（默认开）= **16 / (本帧深度范围 / 2)**，深度范围 = 可渲染 Mesh 包围盒 ∪ `extraSceneBounds`（DTX 层）在眼空间的 [近, 远]；关掉则用固定 `blurSharpness` |
 | HLR | ① 邻居是背景 → 轮廓；② 二阶深度差分 d2 < −阈值（中心在台阶远侧，对应 sglDx11「lt 50 < center − neighbour」）；③ 法线 \|cos\| < 0.6 | 阈值 50 mm、0.6、半径 1 px、边线黑 |
 | 合成 | `colour × HLR × AO`；背景 `mix(top, bottom, t)`，`t = mix(gradientBottomT, gradientTopT, uv.y)` | 按 E3D 3.1 D2D 渐变：上 = 背景色 grey #828282、下 = 端色白（端色未设时 HLS 亮度拉满 → 任何背景色都得白），t 顶 0.35/1.5 ≈ 0.233 / 底 1.35/1.5 = 0.9 → 屏幕上 #9f9f9f→#f2f2f2（第三轮已对齐） |
 | legacy | `_legacy_mode`：全部效果关、纯色背景 | — |
@@ -164,8 +164,29 @@ npm run dev                       # 然后打开 http://127.0.0.1:3101/e3d-look-
   背景 (130,130,130)；出厂预设下 CE (255,255,79)、highlight (249,249,249)、未选中 (220,220,220)，渐变顶 160 / 底 242；
   web 口径（composer 描边路径）两个选中都是品红 (191,43,164)，未选中中性；全程无 console / 着色器错误。**未在主界面真模型上截图**（要后端）。
 
+## 5.6 第六轮：HBAO / 模糊参数对齐 E3D 3.1（2026-09-21）
+
+- 数值来源：`HBAO_slot4_100084d0.c`（每帧写常量缓冲：NumSteps 4 / NumDir 8 / R 392.7327 / AngleBias 0.5236 / Attenuation 0.2 / Contrast 1.25）、
+  `Blur_realctor_sub_10006E50.c`（BlurRadius 12，Falloff = 1/(2·((R+1)/2)²)，Sharpness = (16 / this[3])²，this[3] 默认 1）、
+  `Blur_slot4_10007260.c`（每帧：半深度范围 h = frameParams[+1908]·0.5，h > 0.001 时 this[3] = h、Sharpness = (16/h)²）、
+  `dxbc_003_000a25c8.asm`（模糊 PS：w = exp(−r²·g_BlurFalloff − Δz²·g_Sharpness)，r 从 −R 到 +R，Σw·c / Σw）。
+- 落地：`E3D31_HBAO` 常量 + `sglBlurFalloffForRadius()` + `e3dBlurSharpnessForDepthRange()` + `eyeDepthRangeOfBox()`；
+  `createDefaultSglPipelineParams()` 的 AO 段全部换成 E3D 值；`SglAoParams.blurSharpnessAuto`（默认 true）= 每帧按深度范围算锐度，
+  本管线的 `uSharpness` 是 g_Sharpness 的平方根（权重写成 exp(−(Δz·s)²)，数学等价）。
+  深度范围 = `_collectRenderables` 顺带并出的可渲染 Mesh world 包围盒（InstancedMesh 用 `computeBoundingBox`）∪ 新选项
+  `extraSceneBounds`（ViewerPanel 传各 DTX 层 `getBoundingBox()` 的并集，因为 DTX 几何在纹理里、Mesh 没有包围盒），
+  在眼空间取 8 个角点的 [近, 远]，近端截到 camera.near；h ≤ 0.001 沿用上一帧，从没算出来过用 `blurSharpness` 兜底。
+  `frameParams[+1908]` 的累计方式（是否就是可见几何包围体的深度范围）反编译里没看到，这里按「范围 = 远 − 近」实现，属推断。
+- ViewerPanel：HLR 阈值与 HBAO 半径统一按 `mmToScene` 换算（米场景 0.05 / 0.3927327）；演示页 AO 段加「模糊锐度按 E3D 每帧算」开关，
+  状态行显示本帧深度范围与锐度；`lastDepthRange` / `lastBlurSharpness` 供调试。
+- 验证：`vitest src/viewer/e3dLook` 23/23（新增：E3D 常量与默认值、g_inv_R / g_sqr_R 反推、Falloff / 锐度公式与 ≤ 0.001 沿用、
+  模糊着色器权重形式、`eyeDepthRangeOfBox` 正常 / 相机在盒内两例）；`type-check` 基线外仍只有既有 4 条 worktree 路径错误；ESLint 通过。
+  无头 Chrome 演示页 9 变体 16/16 仍过（背景 159/242、130，HLR 暗像素 2.86% vs 0%），状态行 iso 深度范围 27450 mm → 锐度 0.00117，
+  front 15471 → 0.00207，top 7301 → 0.00438；DTX harness 17/17：`extraSceneBounds` 给出 2 m 深度范围 → 锐度 16，半径 0.3927327 m，
+  选中 / CE 染色结果与 §5.5 一致，无着色器错误。**未与真机 AO 对参**（§5.1 那台 AO 关着，需要跑 `!!gphViewOpt.applyToView` 的机器）。
+
 ## 6. 下一步
 
-1. HBAO / 模糊参数按 §5.2 数值对齐（当前 400 mm/8 方向/6 步/AngleBias 0.1/Contrast 1.25/模糊半径 4；E3D 3.1 为 392.73 mm/8/4/30°/Attenuation 0.2/Contrast 1.25/模糊 12）。
-2. 在未修补的 E3D 3.1 上（或补跑 `!!gphViewOpt.applyToView`）复核出厂外观与立方体贴图朝向；`SHINY`(30) / `TRANSLUCENCY_STYLE`(51) 分支仍未读。
+1. 出厂 4× AA（MSAA / HLR 档位随采样数）还没做；HLR 采样档位现在固定 1 px。
+2. 在未修补的 E3D 3.1 上（或补跑 `!!gphViewOpt.applyToView`）复核出厂外观、立方体贴图朝向与 HBAO 强度 / 模糊锐度（§5.6 的深度范围累计方式是推断）；`SHINY`(30) / `TRANSLUCENCY_STYLE`(51) 分支仍未读。
 3. 如项目有自定义 autocolour 规则，导出 `gphcolopt` 选项文件翻成 `themes.*` 规则（颜色用 `pdms:` 名）；active orange / aids blue / tracing magenta 尚未接。

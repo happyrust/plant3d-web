@@ -262,9 +262,10 @@ function main(): void {
   addSlider(sAo, 'AngleBias', 0, 0.8, 0.01, () => pipeline.params.ao.angleBias, (v) => { pipeline.params.ao.angleBias = v; });
   addSlider(sAo, 'Attenuation', 0, 2, 0.05, () => pipeline.params.ao.attenuation, (v) => { pipeline.params.ao.attenuation = v; });
   addSlider(sAo, 'Contrast', 0, 3, 0.05, () => pipeline.params.ao.contrast, (v) => { pipeline.params.ao.contrast = v; });
-  addSlider(sAo, '模糊半径 px', 0, 12, 1, () => pipeline.params.ao.blurRadius, (v) => { pipeline.params.ao.blurRadius = v; });
-  addSlider(sAo, '模糊深度锐度 1/mm', 0, 0.1, 0.001, () => pipeline.params.ao.blurSharpness, (v) => { pipeline.params.ao.blurSharpness = v; });
-  addCheckbox(sAo, '半分辨率', () => pipeline.params.ao.halfRes, (v) => { pipeline.params.ao.halfRes = v; });
+  addSlider(sAo, '模糊半径 px', 0, 16, 1, () => pipeline.params.ao.blurRadius, (v) => { pipeline.params.ao.blurRadius = v; });
+  addCheckbox(sAo, '模糊锐度按 E3D 每帧算：16 / (深度范围 / 2)（关 = 用下面的固定值）', () => pipeline.params.ao.blurSharpnessAuto, (v) => { pipeline.params.ao.blurSharpnessAuto = v; });
+  addSlider(sAo, '固定模糊锐度 1/mm', 0, 0.1, 0.001, () => pipeline.params.ao.blurSharpness, (v) => { pipeline.params.ao.blurSharpness = v; });
+  addCheckbox(sAo, '半分辨率（E3D 没有）', () => pipeline.params.ao.halfRes, (v) => { pipeline.params.ao.halfRes = v; });
 
   // 背景
   const sBg = section('背景（effect_bg_gradient，E3D 3.1：上 = 背景色 grey，下 = 端色白，t 0.233→0.9）');
@@ -305,7 +306,10 @@ function main(): void {
     const now = performance.now();
     if (now - lastStats > 500) {
       const fps = (framesSince * 1000) / (now - lastStats);
-      statsLine.textContent = `${fps.toFixed(0)} fps · 帧 ${(now - t0).toFixed(1)} ms · ${renderer.domElement.width}×${renderer.domElement.height} · 深度附件 ${pipeline.normalDepthType === FloatType ? 'float32' : 'half'}`;
+      const range = pipeline.lastDepthRange;
+      const sharp = pipeline.lastBlurSharpness;
+      const blurInfo = range !== null && sharp !== null ? ` · 深度范围 ${range.toFixed(0)} mm → 模糊锐度 ${sharp.toFixed(4)}` : '';
+      statsLine.textContent = `${fps.toFixed(0)} fps · 帧 ${(now - t0).toFixed(1)} ms · ${renderer.domElement.width}×${renderer.domElement.height} · 深度附件 ${pipeline.normalDepthType === FloatType ? 'float32' : 'half'}${blurInfo}`;
       lastStats = now;
       framesSince = 0;
     }
