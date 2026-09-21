@@ -69,6 +69,7 @@ e2e/*
 !e2e/fixtures/*.json
 !e2e/spatial-query-real-bran.spec.ts
 !e2e/spatial-query-gen-model-v1-ui.spec.ts
+!e2e/model-tree-room-tab-gen-model-v1.spec.ts
 !e2e/model-version-compare-gen-model-v1.spec.ts
 !e2e/node-version-view-gen-model-v1.spec.ts
 !e2e/mbd-real-bran-standalone.spec.ts

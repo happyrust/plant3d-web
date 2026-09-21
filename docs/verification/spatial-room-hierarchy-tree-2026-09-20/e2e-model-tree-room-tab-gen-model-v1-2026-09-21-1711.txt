@@ -1,0 +1,15 @@
+(node:78484) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+
+Running 3 tests using 1 worker
+
+(node:45580) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:45580) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.
+(node:45580) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ok 1 e2e\model-tree-room-tab-gen-model-v1.spec.ts:116:1 › 切到「房间」页签：状态句「在册 N 间房」N = /spatial/rooms 条数、搜索框 placeholder 同数；搜房间号只剩匹配的行；搜不着给「没有匹配的房间」；切回 PDMS 房间面板隐藏、再切回来还在；无 pageerror (2.9s)
+  ok 2 e2e\model-tree-room-tab-gen-model-v1.spec.ts:150:1 › 展开一间房：一发 rooms/{refno}/tree；房间 / 专业 / 单元类型 / 其他构件 / 前几个单元 / 构件 各行的文字与计数逐层等于响应；从没生成过面板模型的房间展开只给一句「还没有包围盒」 (2.7s)
+  ok 3 e2e\model-tree-room-tab-gen-model-v1.spec.ts:219:1 › 右键单元「加载模型（N 个构件）」：ensure + records 后单元的构件几何都进场景；构件行眼睛切显隐落到 scene.objects[refno].visible；切到 PDMS 再切回房间展开态与已加载行都还在 (4.0s)
+
+  3 passed (11.2s)
