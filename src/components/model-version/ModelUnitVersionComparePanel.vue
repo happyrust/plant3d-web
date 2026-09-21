@@ -4,6 +4,7 @@ import { computed, markRaw, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { GitCompare, RefreshCw, X } from 'lucide-vue-next';
 
 import { ensureDbMetaInfoLoaded, getDbnumByRefno } from '@/composables/useDbMetaInfo';
+import { ensurePanelAndActivate } from '@/composables/useDockApi';
 import { dispatchTreeDiffContext, type TreeDiffAttributesAt } from '@/composables/useTreeVersionDiff';
 import {
   getModelSource,
@@ -12,6 +13,7 @@ import {
   type ModelElementVersionTimeline,
   type ModelNodeDiffGroup,
   type ModelNodeDiffScope,
+  type ModelNodeDiffStatus,
   type ModelNodeDiffSummary,
   type ModelNodeVersionTimeline,
   type ModelSource,
@@ -46,6 +48,7 @@ import {
   defaultNodeScope,
   defaultNodeVersionPair,
   emptyNetDiffText,
+  filterNodeTimelineRows,
   foldAttributeChanges,
   pairWithLatest,
   pairWithPrevious,
@@ -103,6 +106,8 @@ const rows = ref<ModelUnitGeometryDiff[]>([]);
 const statusFilter = ref<'all' | Exclude<ModelUnitGeometryStatus, 'unchanged'>>('all');
 const includeUnchanged = ref(false);
 const geometryOnly = ref(false);
+/** 「只看自身变的」（设计稿 S2，`所有子节点` 下才露出）：子树动了、节点自身没动的会话不列；自身列未知（旧服务端）时置灰不筛 */
+const selfOnly = ref(false);
 const activeTab = ref<'attributes' | 'model'>('attributes');
 const compareActive = ref(false);
 const compareRuntime = ref<ModelUnitVersionCompareRuntimeState | null>(null);
@@ -151,15 +156,13 @@ const timelineRows = computed<NodeTimelineRow[]>(() => buildNodeTimelineRows({
 }));
 /** 「本范围 n 版 · 仅属性 m」：n 与服务端版本表的行数对得上，m 是只在属性变化时间线里的会话（UDA 之类） */
 const timelineCounts = computed(() => countNodeTimeline(timelineRows.value, scope.value));
-/** 范围内的行 + 被选为 A/B 但已不在范围内的行（灰掉、标「本范围无变化」，Q9 a） */
-const visibleTimelineRows = computed(() => timelineRows.value.filter((row) => {
-  const selected = row.sesno === beforeSesno.value || row.sesno === afterSesno.value;
-  if (!row.inScope && !selected) return false;
-  if (geometryOnly.value && !selected) {
-    const impact = scope.value === 'self' ? row.selfImpact : row.unitImpact ?? row.selfImpact;
-    if (!impact || impact === 'noop') return false;
-  }
-  return true;
+/** 范围内的行 + 被选为 A/B 但已不在范围内的行（灰掉、标「本范围无变化」，Q9 a）；两个勾选各筛一维（`filterNodeTimelineRows`） */
+const visibleTimelineRows = computed(() => filterNodeTimelineRows(timelineRows.value, {
+  scope: scope.value,
+  selected: [beforeSesno.value, afterSesno.value],
+  geometryOnly: geometryOnly.value,
+  selfOnly: selfOnly.value,
+  selfColumnUnknown: selfColumnUnknown.value,
 }));
 const selectedBefore = computed(() => versionFor(beforeSesno.value));
 const selectedAfter = computed(() => versionFor(afterSesno.value));
@@ -748,6 +751,26 @@ function focusRow(refno: string): void {
 }
 
 /**
+ * 属性对比 tab（`所有子节点`）每行的「定位」（设计稿 S3）：走版本对比事件的 `focus`——三维里装着 A / B 时飞到隔离图层里的它
+ * （幽灵也找得到），没装时 ViewerPanel 回落到主图层（环境模型）里的同一 refno；哪儿都没有就不动相机。
+ * B 侧已删且三维里没装 A / B 时按钮置灰：当前会话里已经没有它，环境模型里找不到。
+ */
+function canLocateElement(row: { status: ModelNodeDiffStatus }): boolean {
+  return compareActive.value || row.status !== 'deleted';
+}
+
+function locateElementTitle(row: { status: ModelNodeDiffStatus }): string {
+  if (!canLocateElement(row)) return 'B 版已删除，当前模型里没有它；先「在三维中对比」再定位';
+  return compareActive.value ? '飞到三维里 A / B 那一版的它' : '飞到当前模型里的它（已加载时）';
+}
+
+function locateElement(row: { refno: string; status: ModelNodeDiffStatus }): void {
+  if (!canLocateElement(row)) return;
+  ensurePanelAndActivate('viewer');
+  focusRow(row.refno);
+}
+
+/**
  * 查的是单元里的某个构件时，对比一跑完就把结果收窄到它：它那一行如果是 `unchanged`（两版几何一样）
  * 就先把「包含未变化」打开，否则列表里根本看不见它，然后选中并在三维里定位过去。
  */
@@ -949,9 +972,15 @@ onBeforeUnmount(() => {
           <h3 class="text-xs font-semibold text-foreground" data-testid="model-unit-compare-timeline-head">
             版本时间线 · 本范围 {{ timelineCounts.versions }} 版<template v-if="timelineCounts.attributeOnly"> · 仅属性 {{ timelineCounts.attributeOnly }}</template>
           </h3>
-          <label class="flex items-center gap-1 text-[10px] text-muted-foreground">
-            <input v-model="geometryOnly" type="checkbox" />只看几何变的
-          </label>
+          <span class="flex items-center gap-2 text-[10px] text-muted-foreground">
+            <label v-if="scope === 'subtree'" class="flex items-center gap-1" :class="selfColumnUnknown ? 'opacity-50' : ''"
+              :title="selfColumnUnknown ? '服务端没给出节点自身那一列，分不出哪些会话是它自己变的' : '只列节点自身记录变过的会话（含只改了属性的）；子树里别的构件动了、它自己没动的不列'">
+              <input v-model="selfOnly" type="checkbox" :disabled="selfColumnUnknown" data-testid="model-unit-compare-self-only" />只看自身变的
+            </label>
+            <label class="flex items-center gap-1">
+              <input v-model="geometryOnly" type="checkbox" data-testid="model-unit-compare-geometry-only" />只看几何变的
+            </label>
+          </span>
         </div>
         <p v-if="historyUnavailable" class="mt-1 text-[10px] text-amber-600" data-testid="model-unit-compare-history-missing">{{ historyUnavailable }}</p>
 
@@ -1129,15 +1158,24 @@ onBeforeUnmount(() => {
               <div class="text-[11px] font-semibold text-foreground">A {{ beforeSesno }} → B {{ afterSesno }} · 有变的构件 {{ changedElementRows.length }} 个</div>
               <ul class="mt-2 space-y-1" data-testid="model-unit-compare-changed-elements">
                 <li v-for="row in changedElementRows" :key="row.refno" class="rounded-md border" :class="row.isNode ? 'border-primary bg-primary/5' : 'border-border'">
-                  <button type="button" class="flex w-full items-center gap-2 px-2 py-1.5 text-left text-xs hover:bg-muted/40"
-                    :data-testid="`model-unit-compare-element-${row.refno}`"
-                    @click="toggleElementDiff(row.refno)">
-                    <span class="text-[10px] text-muted-foreground">{{ expandedElement === row.refno ? '▾' : '▸' }}</span>
-                    <span class="font-mono font-semibold">{{ row.noun }} {{ row.refno }}</span>
-                    <span v-if="row.isNode" class="rounded bg-primary/10 px-1 py-0.5 text-[10px] text-primary">本节点</span>
-                    <span v-if="row.unitRefno && row.unitRefno !== row.refno" class="truncate text-[10px] text-muted-foreground">{{ row.unitNoun }} {{ row.unitRefno }} 下</span>
-                    <span class="ml-auto rounded px-1.5 py-0.5 text-[10px]" :class="STATUS_CLASS[row.status]">{{ STATUS_LABEL[row.status] }} · {{ row.impact }}</span>
-                  </button>
+                  <div class="flex items-stretch">
+                    <button type="button" class="flex min-w-0 flex-1 items-center gap-2 px-2 py-1.5 text-left text-xs hover:bg-muted/40"
+                      :data-testid="`model-unit-compare-element-${row.refno}`"
+                      @click="toggleElementDiff(row.refno)">
+                      <span class="text-[10px] text-muted-foreground">{{ expandedElement === row.refno ? '▾' : '▸' }}</span>
+                      <span class="font-mono font-semibold">{{ row.noun }} {{ row.refno }}</span>
+                      <span v-if="row.isNode" class="rounded bg-primary/10 px-1 py-0.5 text-[10px] text-primary">本节点</span>
+                      <span v-if="row.unitRefno && row.unitRefno !== row.refno" class="truncate text-[10px] text-muted-foreground">{{ row.unitNoun }} {{ row.unitRefno }} 下</span>
+                      <span class="ml-auto rounded px-1.5 py-0.5 text-[10px]" :class="STATUS_CLASS[row.status]">{{ STATUS_LABEL[row.status] }} · {{ row.impact }}</span>
+                    </button>
+                    <button type="button" class="shrink-0 border-l border-border px-2 text-[10px] text-muted-foreground hover:bg-muted/40 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+                      :data-testid="`model-unit-compare-element-locate-${row.refno}`"
+                      :disabled="!canLocateElement(row)"
+                      :title="locateElementTitle(row)"
+                      @click.stop="locateElement(row)">
+                      定位
+                    </button>
+                  </div>
                   <div v-if="expandedElement === row.refno" class="border-t border-border px-2 py-1.5 text-[10px]" :data-testid="`model-unit-compare-element-diff-${row.refno}`">
                     <template v-if="elementDiffs.get(row.refno) === 'loading'">正在算它的属性净差…</template>
                     <template v-else-if="typeof elementDiffs.get(row.refno) === 'string'">

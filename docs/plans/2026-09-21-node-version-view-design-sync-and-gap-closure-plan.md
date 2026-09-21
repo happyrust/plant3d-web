@@ -164,3 +164,16 @@ P0（半天）→ P1-a / P1-b（半天）→ P3-a / P3-b（半天）→ P1-c（D
 - **仍在工作树、未提交**：P3-a / P3-b 那 39 行（`ModelUnitVersionComparePanel.vue` / `ViewerPanel.vue` / `modelUnitVersionCompare.ts`）——归 P3 时补单测 + 文档再提；
   设计稿 S4 / S5 PNG 与本计划随 `docs(plan)` 另一笔提交。
 - **教训**：共享工作树上别用 `--amend`（别的会话随时会在你后面提交）；按 hunk 拆提交要带上下文（`-U3` + `apply -R`），不要 `-U0`。
+
+### P1-a / P1-b（2026-09-21 16:5x–17:0x）
+
+- **P1-a「只看自身变的」**：`filterNodeTimelineRows(rows, { scope, selected, geometryOnly, selfOnly, selfColumnUnknown })` 收掉面板里原来内联的筛法，
+  `selfOnly` 只在 `subtree` 下生效、`selfColumnUnknown` 时不筛；面板时间线头 `scope === 'subtree'` 才露出勾选（`data-testid="model-unit-compare-self-only"`，
+  自身列未知时 `disabled` + title 说明），与「只看几何变的」（补了 `data-testid="model-unit-compare-geometry-only"`）并排。
+- **P1-b「定位」**：属性对比 tab 每行右侧一颗（`model-unit-compare-element-locate-<refno>`），`locateElement` = `ensurePanelAndActivate('viewer')` + 派 `focus`；
+  `canLocateElement`：`compareActive || status !== 'deleted'`（B 侧已删且没装 A / B 时置灰）。`ViewerPanel.focusModelUnitVersionCompare` 去掉「没装 A / B 就 return」，
+  A / B 两层找不到时回落到主图层 `o:<refno>:` 前缀的对象并起包围盒；回落找到的按普通选中（「已删除」登记的保护只对隔离图层命中生效）；哪儿都没有仍不动相机。
+- **验证**：vitest `nodeVersionTimeline.test.ts` +2（selfOnly / 叠加 / 未知列 / 选中保留）、面板 +2（勾选露出与筛行、定位派事件与置灰）→ 两文件 32 过；
+  `node scripts/type-check.mjs` 基线外 0 新增；ESLint 只剩 `ViewerPanel.vue:28` 那条既有的。**真机未跑**、e2e 未跑（dev `:3111` 未起）——`node-version-view` 容器那条
+  加「只看自身变的」断言留到下次起 dev 时一并补。
+- 设计稿：G1 / G2 两处实现追上设计稿，S2 / S3 不用改。

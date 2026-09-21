@@ -144,6 +144,40 @@ export function countNodeTimeline(rows: NodeTimelineRow[], scope: ModelNodeDiffS
   return { versions, attributeOnly };
 }
 
+/** 时间线头上的两个勾选 + 当前范围 / 选择，决定哪些行画出来（`filterNodeTimelineRows`）。 */
+export type NodeTimelineFilter = {
+  scope: ModelNodeDiffScope;
+  /** 被选为 A / B 的会话号：不在范围内 / 被勾选筛掉也照样留着（面板灰掉并标「本范围无变化」） */
+  selected: readonly (number | null)[];
+  /** 「只看几何变的」：这一范围里影响为 null / noop 的行不列 */
+  geometryOnly: boolean;
+  /**
+   * 「只看自身变的」（设计稿 S2；只在 `subtree` 下有意义——`self` 范围本来就只列自身变过的）：子树动了、节点自身记录没动的会话不列。
+   * 「自身变过」含只改了属性的会话（`attributeOnly`）——问的是「我自己动了没」，不是「几何变没变」。
+   */
+  selfOnly: boolean;
+  /** 旧服务端只给得出单元那一列（`unitColumnOnly`）：自身列是未知、不是「没变」，`selfOnly` 不筛（面板把勾选置灰） */
+  selfColumnUnknown: boolean;
+};
+
+/**
+ * 面板时间线实际画出来的行：范围外的只在被选为 A / B 时留着；两个勾选各筛一维、可叠加；被选中的行永远不被勾选筛掉
+ * （否则 A / B 徽章会指着一行看不见的东西）。
+ */
+export function filterNodeTimelineRows(rows: NodeTimelineRow[], filter: NodeTimelineFilter): NodeTimelineRow[] {
+  return rows.filter((row) => {
+    const selected = filter.selected.includes(row.sesno);
+    if (selected) return true;
+    if (!row.inScope) return false;
+    if (filter.geometryOnly) {
+      const impact = filter.scope === 'self' ? row.selfImpact : row.unitImpact ?? row.selfImpact;
+      if (!impact || impact === 'noop') return false;
+    }
+    if (filter.selfOnly && filter.scope === 'subtree' && !filter.selfColumnUnknown && row.selfImpact === null) return false;
+    return true;
+  });
+}
+
 export type NodeVersionPair = { a: number | null; b: number | null };
 
 /** 缺省选择：B = 范围内最新一版，A = 它的上一版（范围内）；不够两版时 A 为 null。 */

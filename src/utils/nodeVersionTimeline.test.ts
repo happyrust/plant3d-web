@@ -5,6 +5,7 @@ import {
   countNodeTimeline,
   defaultNodeScope,
   defaultNodeVersionPair,
+  filterNodeTimelineRows,
   foldAttributeChanges,
   pairWithLatest,
   pairWithPrevious,
@@ -198,6 +199,37 @@ describe('buildNodeTimelineRows', () => {
     expect(buildNodeTimelineRows({ timeline: unitOnly, history: null, scope: 'subtree' }).every((row) => row.inScope)).toBe(true);
     // 新服务端（自身列给得出来）不受影响：212 那一版仍判在 self 范围外
     expect(buildNodeTimelineRows({ timeline, history, scope: 'self' }).map((row) => row.inScope)).toEqual([true, true, false, true]);
+  });
+});
+
+describe('filterNodeTimelineRows（时间线头上的两个勾选）', () => {
+  // subtree 范围：5 自身 delivery / 212 只有单元在动（自身 null）/ 573、626 自身 mesh；再并一条只改属性的 600（selfImpact 由属性时间线补、attributeOnly）
+  const rows = buildNodeTimelineRows({
+    timeline,
+    history: { ...history, entries: [...history.entries, entry(600, [{ name: 'UDA:X', valueType: 'text', before: null, after: 'JS', stamp: false }], { impact: 'noop' })] },
+    scope: 'subtree',
+  });
+  const sesnos = (list: ReturnType<typeof filterNodeTimelineRows>) => list.map((row) => row.sesno);
+  const base = { scope: 'subtree' as const, selected: [] as number[], geometryOnly: false, selfOnly: false, selfColumnUnknown: false };
+
+  it('「只看自身变的」：子树动了、自身没动的会话（212）不列，只改属性的（600）算自身变过、照列；被选为 A / B 的行永远留着', () => {
+    expect(sesnos(filterNodeTimelineRows(rows, base))).toEqual([626, 600, 573, 212, 5]);
+    expect(sesnos(filterNodeTimelineRows(rows, { ...base, selfOnly: true }))).toEqual([626, 600, 573, 5]);
+    expect(sesnos(filterNodeTimelineRows(rows, { ...base, selfOnly: true, selected: [212, 626] }))).toEqual([626, 600, 573, 212, 5]);
+    // `self` 范围本来就只列自身变过的，这个勾选不再多筛什么
+    const selfRows = buildNodeTimelineRows({ timeline, history, scope: 'self' });
+    expect(sesnos(filterNodeTimelineRows(selfRows, { ...base, scope: 'self', selfOnly: true }))).toEqual(sesnos(filterNodeTimelineRows(selfRows, { ...base, scope: 'self' })));
+  });
+
+  it('自身列未知（旧服务端 unitColumnOnly）时「只看自身变的」不筛；两个勾选可叠加，「只看几何变的」把 noop / 无影响的行去掉', () => {
+    expect(sesnos(filterNodeTimelineRows(rows, { ...base, selfOnly: true, selfColumnUnknown: true }))).toEqual([626, 600, 573, 212, 5]);
+    // 600 在 subtree 范围下的影响 = unitImpact ?? selfImpact = noop → 「只看几何变的」去掉它；再叠「只看自身变的」去掉 212
+    expect(sesnos(filterNodeTimelineRows(rows, { ...base, geometryOnly: true }))).toEqual([626, 573, 212, 5]);
+    expect(sesnos(filterNodeTimelineRows(rows, { ...base, geometryOnly: true, selfOnly: true }))).toEqual([626, 573, 5]);
+    // 范围外的行（inScope=false）只有被选中才显示
+    const outOfScope = rows.map((row) => ({ ...row, inScope: row.sesno !== 573 }));
+    expect(sesnos(filterNodeTimelineRows(outOfScope, base))).toEqual([626, 600, 212, 5]);
+    expect(sesnos(filterNodeTimelineRows(outOfScope, { ...base, selected: [573] }))).toEqual([626, 600, 573, 212, 5]);
   });
 });
 

@@ -751,6 +751,132 @@ describe('ModelUnitVersionComparePanel', () => {
     oldApp.unmount();
   });
 
+  it('「只看自身变的」：只在所有子节点下露出，勾上后子树动了、自身没动的会话不列，被选为 A / B 的行留着（设计稿 S2，P1-a）', async () => {
+    const zone: ModelElementVersionTimeline = {
+      dbnum: 7997, refno: '1_9', noun: 'ZONE', unitRefno: null, unitNoun: null, unitColumnOnly: false,
+      versions: [{ sesno: 444, sessionTime: '2026-07-20T00:00:00Z', elementImpact: 'delivery', unitImpact: null }],
+    };
+    const subtree: ModelNodeVersionTimeline = {
+      dbnum: 7997, refno: '1_9', noun: 'ZONE', scope: 'subtree', unitRefno: null, unitNoun: null,
+      versions: [
+        { sesno: 444, sessionTime: '2026-07-20T00:00:00Z', impact: 'delivery', selfImpact: 'delivery', unitsChanged: 4, unitsTouched: 4 },
+        { sesno: 700, sessionTime: '2026-07-21T00:00:00Z', impact: 'mesh', selfImpact: null, unitsChanged: 1, unitsTouched: 1 },
+        { sesno: 791, sessionTime: '2026-07-22T01:00:00Z', impact: 'mesh', selfImpact: null, unitsChanged: 1, unitsTouched: 1 },
+        { sesno: 897, sessionTime: '2026-07-22T02:00:00Z', impact: 'mesh', selfImpact: 'noop', unitsChanged: 2, unitsTouched: 3 },
+      ],
+    };
+    versionSourceMocks.listElementVersions.mockResolvedValue(zone);
+    versionSourceMocks.listNodeVersions.mockResolvedValue(subtree);
+    versionSourceMocks.diffSummary.mockRejectedValue(new ModelVersionRouteUnavailableError('node/diff-summary'));
+    versionSourceMocks.attributeHistory.mockRejectedValue(new ModelVersionRouteUnavailableError('element/attribute-history'));
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const app = createApp(ModelUnitVersionComparePanel);
+    app.mount(host);
+    const input = host.querySelector('[data-testid="model-unit-compare-refno"]') as HTMLInputElement;
+    input.value = '1_9';
+    input.dispatchEvent(new Event('input'));
+    (host.querySelector('[data-testid="model-unit-compare-load"]') as HTMLButtonElement).click();
+    await flushUi();
+
+    const rows = () => [...host.querySelectorAll('[data-testid="model-unit-compare-timeline"] li')].map((li) => li.getAttribute('data-sesno'));
+    const selfOnly = () => host.querySelector('[data-testid="model-unit-compare-self-only"]') as HTMLInputElement | null;
+    // 容器缺省「仅自身」：本来就只列自身变过的，勾选不露出
+    expect(selfOnly()).toBeNull();
+    expect(rows()).toEqual(['897', '444']);
+
+    (host.querySelector('[data-testid="model-unit-compare-scope-subtree"]') as HTMLButtonElement).click();
+    await flushUi();
+    expect(rows()).toEqual(['897', '791', '700', '444']);
+    expect(selfOnly()).not.toBeNull();
+    expect(selfOnly()!.disabled).toBe(false);
+    // A / B 仍是切范围前的 444 → 897；点 791 当 A 再勾「只看自身变的」：700 藏掉，791 因被选中留着
+    (host.querySelector('[data-testid="model-unit-compare-pick-a-791"]') as HTMLButtonElement).click();
+    await flushUi();
+    expect(host.querySelector('[data-testid="model-unit-compare-a"]')?.getAttribute('data-sesno')).toBe('791');
+    selfOnly()!.click();
+    await flushUi();
+    expect(rows()).toEqual(['897', '791', '444']);
+    // 再叠「只看几何变的」：897 自身 noop 但子树 mesh → 留；结果不变
+    (host.querySelector('[data-testid="model-unit-compare-geometry-only"]') as HTMLInputElement).click();
+    await flushUi();
+    expect(rows()).toEqual(['897', '791', '444']);
+    // 切回「仅自身」勾选收起、范围外的 791 灰掉留着
+    (host.querySelector('[data-testid="model-unit-compare-scope-self"]') as HTMLButtonElement).click();
+    await flushUi();
+    expect(selfOnly()).toBeNull();
+    expect([...host.querySelectorAll('[data-testid="model-unit-compare-timeline"] li')].map((li) => [li.getAttribute('data-sesno'), li.getAttribute('data-in-scope')])).toEqual([['897', 'true'], ['791', 'false'], ['444', 'true']]);
+    app.unmount();
+    versionSourceMocks.attributeHistory.mockReset();
+  });
+
+  it('属性对比 tab 每行「定位」：派版本对比事件 focus；B 侧已删的行在三维没装 A / B 时置灰，装了以后能定位（设计稿 S3，P1-b）', async () => {
+    const zone: ModelElementVersionTimeline = {
+      dbnum: 7997, refno: '1_9', noun: 'ZONE', unitRefno: null, unitNoun: null, unitColumnOnly: false,
+      versions: [
+        { sesno: 791, sessionTime: '2026-07-22T01:00:00Z', elementImpact: 'delivery', unitImpact: null },
+        { sesno: 897, sessionTime: '2026-07-22T02:00:00Z', elementImpact: 'noop', unitImpact: null },
+      ],
+    };
+    versionSourceMocks.listElementVersions.mockResolvedValue(zone);
+    versionSourceMocks.diffSummary.mockResolvedValue({
+      dbnum: 7997, refno: '1_9', noun: 'ZONE', scope: 'subtree', a: 791, b: 897,
+      units: { changed: 1, unchanged: 3, total: 4, complete: true },
+      elements: { added: 1, deleted: 1, modified: 0, noop: 1 },
+      groups: [
+        { unitRefno: null, unitNoun: null, unitName: null, counts: { added: 0, deleted: 0, modified: 0, noop: 1 }, geometryChanged: false, rowsTruncated: 0,
+          rows: [{ refno: '1_9', noun: 'ZONE', status: 'noop', impact: 'noop', isNode: true }] },
+        { unitRefno: '24381_145018', unitNoun: 'BRAN', unitName: '/B1', counts: { added: 1, deleted: 1, modified: 0, noop: 0 }, geometryChanged: true, rowsTruncated: 0,
+          rows: [
+            { refno: '1_3', noun: 'ELBO', status: 'added', impact: 'delivery', isNode: false },
+            { refno: '1_2', noun: 'VALV', status: 'deleted', impact: 'tombstone', isNode: false },
+          ] },
+      ],
+      needsConfirm: false, estimatedProjections: 2, confirmThresholdUnits: 20, warnings: [],
+    });
+    const events: CustomEvent[] = [];
+    const listener = (event: Event) => events.push(event as CustomEvent);
+    window.addEventListener('plant3d:model-unit-version-compare', listener);
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const app = createApp(ModelUnitVersionComparePanel);
+    app.mount(host);
+    const input = host.querySelector('[data-testid="model-unit-compare-refno"]') as HTMLInputElement;
+    input.value = '1_9';
+    input.dispatchEvent(new Event('input'));
+    (host.querySelector('[data-testid="model-unit-compare-load"]') as HTMLButtonElement).click();
+    await flushUi();
+    (host.querySelector('[data-testid="model-unit-compare-scope-subtree"]') as HTMLButtonElement).click();
+    await flushUi();
+
+    const locate = (refno: string) => host.querySelector(`[data-testid="model-unit-compare-element-locate-${refno}"]`) as HTMLButtonElement;
+    // 每行一颗「定位」；三维里还没装 A / B：新增 / 本节点的可点（回落到环境模型），B 侧已删的置灰
+    expect(host.querySelectorAll('[data-testid^="model-unit-compare-element-locate-"]')).toHaveLength(3);
+    expect(locate('1_3').disabled).toBe(false);
+    expect(locate('1_2').disabled).toBe(true);
+    expect(locate('1_2').title).toContain('先「在三维中对比」');
+    locate('1_3').click();
+    expect(events.at(-1)?.detail).toEqual({ action: 'focus', refno: '1_3' });
+    // 点「定位」不展开那一行
+    expect(host.querySelector('[data-testid="model-unit-compare-element-diff-1_3"]')).toBeNull();
+
+    // 装上 A / B（模型对比 tab 里那组「在三维中对比」）以后，被删的构件在 A 层找得到 → 可点
+    (host.querySelector('[data-testid="model-unit-compare-tab-model"]') as HTMLButtonElement).click();
+    await flushUi();
+    (host.querySelector('[data-testid="model-unit-compare-run-group-24381_145018"]') as HTMLButtonElement).click();
+    await flushUi();
+    (host.querySelector('[data-testid="model-unit-compare-tab-attributes"]') as HTMLButtonElement).click();
+    await flushUi();
+    expect(locate('1_2').disabled).toBe(false);
+    locate('1_2').click();
+    expect(events.at(-1)?.detail).toEqual({ action: 'focus', refno: '1_2' });
+
+    window.removeEventListener('plant3d:model-unit-version-compare', listener);
+    app.unmount();
+  });
+
   it('比较请求未完成时卸载面板不会派发幽灵 open 事件', async () => {
     let resolveGeometry!: (value: ModelVersionGeometry) => void;
     const pendingGeometry = new Promise<ModelVersionGeometry>((resolve) => {

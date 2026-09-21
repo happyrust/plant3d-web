@@ -2053,10 +2053,15 @@ function clearModelUnitVersionCompare(): void {
   requestRender();
 }
 
+/**
+ * 版本对比事件的 `focus`：先在 A / B 隔离图层里找（两层都找，被删的构件在 A 层也找得到），没装 A / B 或这个 refno 不在装着的那个单元里
+ * （容器差异摘要 / 属性对比 tab 里别的单元的构件，设计稿 S3「定位」）就回落到主图层（环境模型）里的同一 refno；哪儿都没有就不动相机
+ * （e2e 拿「相机动没动」当信号）。
+ */
 function focusModelUnitVersionCompare(refno: string): void {
   const viewer = dtxViewerRef.value;
   const normalized = normalizeCompareRefno(refno);
-  if (!viewer || !normalized || modelUnitCompareLayers.length === 0) return;
+  if (!viewer || !normalized) return;
 
   const box = new Box3();
   const objectBox = new Box3();
@@ -2067,11 +2072,22 @@ function focusModelUnitVersionCompare(refno: string): void {
       if (found && !found.isEmpty()) box.union(found);
     }
   }
+  const inCompareLayers = !box.isEmpty();
+  if (!inCompareLayers) {
+    const primary = dtxLayerRef.value;
+    const prefix = `o:${normalized}:`;
+    for (const objectId of primary?.getAllObjectIds() ?? []) {
+      if (!objectId.startsWith(prefix)) continue;
+      const found = primary!.getObjectBoundingBoxInto(objectId, objectBox);
+      if (found && !found.isEmpty()) box.union(found);
+    }
+  }
   if (box.isEmpty()) return;
 
   // 差异模式里定位的可能是幽灵构件（当前会话里已经没有它）：那时它已按「已删除」登记过，别用普通选中覆盖，
-  // 否则属性面板又去拉当前会话、换回 404 红条
-  const alreadyDeletedRegistered = selectionStore.selectedIsDeleted.value
+  // 否则属性面板又去拉当前会话、换回 404 红条。回落到主图层找到的一定是当前会话里有的，普通选中即可。
+  const alreadyDeletedRegistered = inCompareLayers
+    && selectionStore.selectedIsDeleted.value
     && selectionStore.selectedRefno.value === normalized;
   if (!alreadyDeletedRegistered) selectionStore.setSelectedRefno(normalized);
   viewer.fitClipPlanesToBox(box);
