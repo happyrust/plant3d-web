@@ -25,6 +25,8 @@ import {
   compareModelUnitGeometry,
   formatModelUnitVersionTime,
   geometrySnapshotsFromInstanceEntries,
+  modelUnitGroupSideImpactKinds,
+  modelUnitVersionAbsentNote,
   MODEL_UNIT_VERSION_COMPARE_EVENT,
   MODEL_UNIT_VERSION_COMPARE_STATE_EVENT,
   MODEL_VERSION_INSPECT_EVENT,
@@ -659,18 +661,23 @@ async function runCompare(): Promise<void> {
   await runCompareVersions(before, after, comparedUnitRefno.value);
 }
 
-/** `所有子节点` 下某一组（某个最小交付单元）的 A/B：合成该单元在 A / B 两版的 `ModelVersion`，同一条装载路 */
+/**
+ * `所有子节点` 下某一组（某个最小交付单元）的 A/B：合成该单元在 A / B 两版的 `ModelVersion`，同一条装载路。
+ * A / B 是节点子树的会话、单元不一定两版都在：单元根那行 `deleted` / `added` 的那一侧标 `tombstone`（`modelUnitGroupSideImpactKinds`），
+ * 不然去 `history/generate` 一个它不存在的会话会 404 进不了三维（README §8.4）。
+ */
 async function runCompareGroup(group: ModelNodeDiffGroup): Promise<void> {
   if (dbnum.value === null || !group.unitRefno || !pairReady.value) return;
-  const make = (sesno: number): ModelVersion => ({
+  const kinds = modelUnitGroupSideImpactKinds(group);
+  const make = (sesno: number, impactKind: ModelVersionImpactKind): ModelVersion => ({
     dbnum: dbnum.value!,
     unitRefno: group.unitRefno!,
     unitNoun: group.unitNoun ?? '',
     sesno,
     sessionTime: timelineRows.value.find((row) => row.sesno === sesno)?.sessionTime ?? null,
-    impactKind: 'mesh',
+    impactKind,
   });
-  await runCompareVersions(make(beforeSesno.value!), make(afterSesno.value!), group.unitRefno);
+  await runCompareVersions(make(beforeSesno.value!, kinds.before), make(afterSesno.value!, kinds.after), group.unitRefno);
 }
 
 async function runCompareVersions(before: ModelVersion, after: ModelVersion, unit: string): Promise<void> {
@@ -1267,7 +1274,7 @@ onBeforeUnmount(() => {
                   @click="setCompareSide('before')">
                   <div class="font-semibold">A · sesno {{ compareRuntime.detail.before.sesno }}</div>
                   <div class="mt-0.5 text-[10px] opacity-75">{{ formatModelUnitVersionTime(compareRuntime.detail.before.version.sessionTime ?? '') }}</div>
-                  <div v-if="compareRuntime.detail.before.version.impactKind === 'tombstone'" class="mt-0.5 text-[10px] opacity-75">该版本单元已删除</div>
+                  <div v-if="compareRuntime.detail.before.version.impactKind === 'tombstone'" class="mt-0.5 text-[10px] opacity-75">{{ modelUnitVersionAbsentNote('before') }}</div>
                 </button>
                 <button type="button"
                   class="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1.5 text-left text-emerald-700 transition-opacity"
@@ -1276,7 +1283,7 @@ onBeforeUnmount(() => {
                   @click="setCompareSide('after')">
                   <div class="font-semibold">B · sesno {{ compareRuntime.detail.after.sesno }}</div>
                   <div class="mt-0.5 text-[10px] opacity-75">{{ formatModelUnitVersionTime(compareRuntime.detail.after.version.sessionTime ?? '') }}</div>
-                  <div v-if="compareRuntime.detail.after.version.impactKind === 'tombstone'" class="mt-0.5 text-[10px] opacity-75">该版本单元已删除</div>
+                  <div v-if="compareRuntime.detail.after.version.impactKind === 'tombstone'" class="mt-0.5 text-[10px] opacity-75">{{ modelUnitVersionAbsentNote('after') }}</div>
                 </button>
               </div>
               <div v-else

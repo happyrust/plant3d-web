@@ -1,0 +1,346 @@
+{
+  "url": "http://127.0.0.1:3111/?model_source=gen-model-v1&gm_backend_port=8022&unit_refno=24384_23257&compare_autorun=1&compare_a=626&compare_b=630",
+  "scenario": "a626-b630",
+  "target": "24384_23262",
+  "startedAt": "2026-09-21T02:15:26.374Z",
+  "pageErrors": [],
+  "consoleErrors": [
+    "[vite] failed to connect to websocket.\nyour current setup:\n  (browser) 127.0.0.1:3111/ <--[HTTP]--> 127.0.0.1:3111/ (server)\n  (browser) 127.0.0.1:3111/ <--[WebSocket (failing)]--> 127.0.0.1:3111/ (server)\nCheck out your Vite / network configuration and https://vite.dev/config/server-options.html#se",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)"
+  ],
+  "attributeRequests": [
+    {
+      "kind": "history/query attributes",
+      "body": "{\"snapshot_key\":\"24384_23257@626\",\"tool\":\"attributes\",\"arguments\":{\"refno\":\"24384/23262\"}}"
+    },
+    {
+      "kind": "history/query attributes",
+      "body": "{\"snapshot_key\":\"24384_23257@630\",\"tool\":\"attributes\",\"arguments\":{\"refno\":\"24384/23262\"}}"
+    },
+    {
+      "kind": "element/attributes",
+      "body": "{\"refno\":\"24384/23262\"}"
+    },
+    {
+      "kind": "history/query attributes",
+      "body": "{\"snapshot_key\":\"24384_23257@630\",\"tool\":\"attributes\",\"arguments\":{\"refno\":\"24384/23262\"}}"
+    },
+    {
+      "kind": "history/query attributes",
+      "body": "{\"snapshot_key\":\"24384_23257@626\",\"tool\":\"attributes\",\"arguments\":{\"refno\":\"24384/23262\"}}"
+    }
+  ],
+  "steps": [
+    {
+      "at": "2026-09-21T02:15:26.528Z",
+      "name": "goto",
+      "url": "http://127.0.0.1:3111/?model_source=gen-model-v1&gm_backend_port=8022&unit_refno=24384_23257&compare_autorun=1&compare_a=626&compare_b=630"
+    },
+    {
+      "at": "2026-09-21T02:15:30.561Z",
+      "name": "compare ready",
+      "viewer": {
+        "unitRefno": "24384_23257",
+        "beforeSesno": 626,
+        "afterSesno": 630,
+        "beforeObjects": 9,
+        "afterObjects": 9,
+        "environmentLoadedRefnos": 0,
+        "activeSide": "after",
+        "viewMode": "single",
+        "diffOnly": false,
+        "statusCounts": {
+          "added": 0,
+          "deleted": 0,
+          "modified": 1,
+          "unchanged": 8
+        },
+        "hiddenWhenDiffOnly": {
+          "before": 8,
+          "after": 8
+        }
+      }
+    },
+    {
+      "at": "2026-09-21T02:15:32.725Z",
+      "name": "split on",
+      "viewer": {
+        "unitRefno": "24384_23257",
+        "beforeSesno": 626,
+        "afterSesno": 630,
+        "beforeObjects": 9,
+        "afterObjects": 9,
+        "environmentLoadedRefnos": 0,
+        "activeSide": "after",
+        "viewMode": "split",
+        "diffOnly": false,
+        "statusCounts": {
+          "added": 0,
+          "deleted": 0,
+          "modified": 1,
+          "unchanged": 8
+        },
+        "hiddenWhenDiffOnly": {
+          "before": 8,
+          "after": 8
+        }
+      }
+    },
+    {
+      "at": "2026-09-21T02:15:32.727Z",
+      "name": "project B (right pass)",
+      "objectId": "unit-compare:b:24384_23262:4",
+      "visible": true,
+      "pass": {
+        "side": "after",
+        "x": 225,
+        "y": 0,
+        "width": 225,
+        "height": 727
+      },
+      "x": 687.499999999998,
+      "y": 694.4803365595887,
+      "ndcFull": {
+        "x": -9.013908344942678e-15,
+        "y": -0.6822017511955674,
+        "z": 0.9995338502717271
+      },
+      "ndcPass": {
+        "x": -1.8027816689885357e-14,
+        "y": -0.6822017511955674
+      }
+    },
+    {
+      "at": "2026-09-21T02:15:34.210Z",
+      "name": "pickRightB",
+      "point": {
+        "x": 687.499999999998,
+        "y": 694.4803365595887
+      },
+      "pick": {
+        "objectId": "unit-compare:b:24384_23262:4",
+        "refno": "24384_23262",
+        "side": "after",
+        "sesno": 630,
+        "label": "B",
+        "viewMode": "split"
+      },
+      "notice": "属性来自版本 B · sesno 630 （版本对比里点到的那一版，不是当前会话）",
+      "pos": "10887, 12332, 2900",
+      "requests": [
+        {
+          "kind": "history/query attributes",
+          "body": "{\"snapshot_key\":\"24384_23257@630\",\"tool\":\"attributes\",\"arguments\":{\"refno\":\"24384/23262\"}}"
+        }
+      ],
+      "ok": true
+    },
+    {
+      "at": "2026-09-21T02:15:34.279Z",
+      "name": "project A (left pass)",
+      "objectId": "unit-compare:a:24384_23262:4",
+      "visible": false,
+      "pass": {
+        "side": "before",
+        "x": 0,
+        "y": 0,
+        "width": 225,
+        "height": 727
+      },
+      "x": 462.4999999999975,
+      "y": 141.23057628852848,
+      "ndcFull": {
+        "x": -1.1096325797539385e-14,
+        "y": 0.8398058423974456,
+        "z": 0.999391525573733
+      },
+      "ndcPass": {
+        "x": -2.219265159507877e-14,
+        "y": 0.8398058423974456
+      }
+    },
+    {
+      "at": "2026-09-21T02:15:35.701Z",
+      "name": "pickLeftA",
+      "point": {
+        "x": 462.4999999999975,
+        "y": 141.23057628852848
+      },
+      "pick": {
+        "objectId": "unit-compare:a:24384_23262:4",
+        "refno": "24384_23262",
+        "side": "before",
+        "sesno": 626,
+        "label": "A",
+        "viewMode": "split"
+      },
+      "notice": "属性来自版本 A · sesno 626 （版本对比里点到的那一版，不是当前会话）",
+      "pos": "10887, 12332, 3400",
+      "requests": [
+        {
+          "kind": "history/query attributes",
+          "body": "{\"snapshot_key\":\"24384_23257@626\",\"tool\":\"attributes\",\"arguments\":{\"refno\":\"24384/23262\"}}"
+        }
+      ],
+      "ok": true
+    },
+    {
+      "at": "2026-09-21T02:15:35.791Z",
+      "name": "visibility restored after cross-side pick",
+      "aVisible": false,
+      "bVisible": true,
+      "activeSide": "after"
+    },
+    {
+      "at": "2026-09-21T02:15:38.074Z",
+      "name": "pickLeftADiffOnly",
+      "point": {
+        "x": 462.4999999999975,
+        "y": 141.23057628852848
+      },
+      "pick": {
+        "objectId": "unit-compare:a:24384_23262:4",
+        "refno": "24384_23262",
+        "side": "before",
+        "sesno": 626,
+        "label": "A",
+        "viewMode": "split"
+      },
+      "notice": "属性来自版本 A · sesno 626 （版本对比里点到的那一版，不是当前会话）",
+      "pos": "10887, 12332, 3400",
+      "requests": [],
+      "ok": true
+    },
+    {
+      "at": {
+        "x": 740,
+        "y": 750
+      },
+      "name": "blank click (right pass)",
+      "noticeCount": 0
+    },
+    {
+      "at": "2026-09-21T02:15:41.106Z",
+      "name": "pickSingleB",
+      "point": {
+        "x": 574.999999999998,
+        "y": 694.4803365595868
+      },
+      "pick": {
+        "objectId": "unit-compare:b:24384_23262:4",
+        "refno": "24384_23262",
+        "side": "after",
+        "sesno": 630,
+        "label": "B",
+        "viewMode": "single"
+      },
+      "notice": "属性来自版本 B · sesno 630 （版本对比里点到的那一版，不是当前会话）",
+      "pos": "10887, 12332, 2900",
+      "requests": [],
+      "ok": true
+    },
+    {
+      "at": "2026-09-21T02:15:42.492Z",
+      "name": "closed",
+      "noticeCount": 0
+    }
+  ],
+  "pickRightB": {
+    "point": {
+      "x": 687.499999999998,
+      "y": 694.4803365595887
+    },
+    "pick": {
+      "objectId": "unit-compare:b:24384_23262:4",
+      "refno": "24384_23262",
+      "side": "after",
+      "sesno": 630,
+      "label": "B",
+      "viewMode": "split"
+    },
+    "notice": "属性来自版本 B · sesno 630 （版本对比里点到的那一版，不是当前会话）",
+    "pos": "10887, 12332, 2900",
+    "requests": [
+      {
+        "kind": "history/query attributes",
+        "body": "{\"snapshot_key\":\"24384_23257@630\",\"tool\":\"attributes\",\"arguments\":{\"refno\":\"24384/23262\"}}"
+      }
+    ],
+    "ok": true
+  },
+  "pickLeftA": {
+    "point": {
+      "x": 462.4999999999975,
+      "y": 141.23057628852848
+    },
+    "pick": {
+      "objectId": "unit-compare:a:24384_23262:4",
+      "refno": "24384_23262",
+      "side": "before",
+      "sesno": 626,
+      "label": "A",
+      "viewMode": "split"
+    },
+    "notice": "属性来自版本 A · sesno 626 （版本对比里点到的那一版，不是当前会话）",
+    "pos": "10887, 12332, 3400",
+    "requests": [
+      {
+        "kind": "history/query attributes",
+        "body": "{\"snapshot_key\":\"24384_23257@626\",\"tool\":\"attributes\",\"arguments\":{\"refno\":\"24384/23262\"}}"
+      }
+    ],
+    "ok": true
+  },
+  "visibilityAfterSwap": {
+    "aVisible": false,
+    "bVisible": true,
+    "activeSide": "after"
+  },
+  "pickLeftADiffOnly": {
+    "point": {
+      "x": 462.4999999999975,
+      "y": 141.23057628852848
+    },
+    "pick": {
+      "objectId": "unit-compare:a:24384_23262:4",
+      "refno": "24384_23262",
+      "side": "before",
+      "sesno": 626,
+      "label": "A",
+      "viewMode": "split"
+    },
+    "notice": "属性来自版本 A · sesno 626 （版本对比里点到的那一版，不是当前会话）",
+    "pos": "10887, 12332, 3400",
+    "requests": [],
+    "ok": true
+  },
+  "hiddenWhenDiffOnly": {
+    "before": 8,
+    "after": 8
+  },
+  "noticeAfterBlankClick": 0,
+  "pickSingleB": {
+    "point": {
+      "x": 574.999999999998,
+      "y": 694.4803365595868
+    },
+    "pick": {
+      "objectId": "unit-compare:b:24384_23262:4",
+      "refno": "24384_23262",
+      "side": "after",
+      "sesno": 630,
+      "label": "B",
+      "viewMode": "single"
+    },
+    "notice": "属性来自版本 B · sesno 630 （版本对比里点到的那一版，不是当前会话）",
+    "pos": "10887, 12332, 2900",
+    "requests": [],
+    "ok": true
+  },
+  "noticeAfterClose": 0,
+  "ok": true,
+  "finishedAt": "2026-09-21T02:15:42.492Z"
+}

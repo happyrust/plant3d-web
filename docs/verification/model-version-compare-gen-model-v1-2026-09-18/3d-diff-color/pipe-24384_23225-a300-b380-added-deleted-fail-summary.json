@@ -1,0 +1,196 @@
+{
+  "url": "http://127.0.0.1:3111/?model_source=gen-model-v1&gm_backend_port=8022&unit_refno=24384_23225&compare_autorun=1&compare_a=300&compare_b=380",
+  "scenario": "pipe-24384_23225-a300-b380",
+  "pipe": "24384_23225",
+  "a": 300,
+  "b": 380,
+  "startedAt": "2026-09-21T03:59:01.073Z",
+  "pageErrors": [],
+  "consoleErrors": [
+    "[vite] failed to connect to websocket.\nyour current setup:\n  (browser) 127.0.0.1:3111/ <--[HTTP]--> 127.0.0.1:3111/ (server)\n  (browser) 127.0.0.1:3111/ <--[WebSocket (failing)]--> 127.0.0.1:3111/ (server)\nCheck out your Vite / network configuration and https://vite.dev/config/server-options.html#se",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)"
+  ],
+  "attributeRequests": [],
+  "steps": [
+    {
+      "at": "2026-09-21T03:59:01.241Z",
+      "name": "goto",
+      "url": "http://127.0.0.1:3111/?model_source=gen-model-v1&gm_backend_port=8022&unit_refno=24384_23225&compare_autorun=1&compare_a=300&compare_b=380"
+    },
+    {
+      "at": "2026-09-21T03:59:34.048Z",
+      "name": "panel open (autorun stops for container)",
+      "scope": "DB 8000 · 24384_23225（PIPE） · 容器，不属于任何最小交付单元",
+      "notice": "24384_23225（PIPE）不在任何最小交付单元下：几何按其下的单元分组对比（模型对比 tab），子树时间线 150 版来自 node/versions。",
+      "scopeSelfPressed": "true",
+      "timelineHead": "版本时间线 · 本范围 49 版",
+      "defaultPair": {
+        "a": 524,
+        "b": 532
+      },
+      "runDisabled": null,
+      "viewer": null
+    },
+    {
+      "at": "2026-09-21T03:59:34.443Z",
+      "name": "scope=subtree",
+      "timelineHead": "版本时间线 · 本范围 150 版",
+      "rows": 150
+    },
+    {
+      "at": "2026-09-21T03:59:34.948Z",
+      "name": "pair picked",
+      "a": 300,
+      "b": 380
+    },
+    {
+      "at": "2026-09-21T03:59:35.432Z",
+      "name": "diff summary (subtree)",
+      "summary": "A 300 → B 380 · 差异摘要（未生成几何）变了的单元 5未变单元 16新增 20删除 6修改 2noop 1",
+      "groups": [
+        {
+          "unit": "24384_23257",
+          "row": "BRAN 24384_23257/C-OR-1R345-C修改 1noop 1在三维中对比"
+        },
+        {
+          "unit": "24384_26324",
+          "row": "BRAN 24384_26324/test_pipe删除 4在三维中对比"
+        },
+        {
+          "unit": "24384_26326",
+          "row": "BRAN 24384_26326/test_tray删除 2在三维中对比"
+        },
+        {
+          "unit": "32576_12",
+          "row": "BRAN 32576_12/CODEX_DB8000_PIPE_SCR_A新增 9在三维中对比"
+        },
+        {
+          "unit": "32576_22",
+          "row": "BRAN 32576_22/CODEX_DB8000_PIPE_SCR_B新增 11在三维中对比"
+        }
+      ],
+      "runDisabled": true
+    },
+    {
+      "at": "2026-09-21T03:59:37.359Z",
+      "name": "group 24384_26324: FAILED to enter 3D",
+      "error": "历史投影任务 model-history-20260921-115935-000106 失败：REFNO_NOT_FOUND_AT_SESSION: refno 24384/26324 is not in the element index of dbnum 8000 at session 380",
+      "toast": [],
+      "button": "在三维中对比"
+    },
+    {
+      "at": "2026-09-21T03:59:39.242Z",
+      "name": "group 32576_22: FAILED to enter 3D",
+      "error": "历史投影任务 model-history-20260921-115937-000107 失败：REFNO_NOT_FOUND_AT_SESSION: refno 32576/22 is not in the element index of dbnum 8000 at session 300",
+      "toast": [],
+      "button": "在三维中对比"
+    },
+    {
+      "at": "2026-09-21T03:59:39.948Z",
+      "name": "closed",
+      "viewer": null,
+      "overlayCount": 0,
+      "noticeCount": 0,
+      "groupButtonTexts": [
+        "在三维中对比",
+        "在三维中对比",
+        "在三维中对比",
+        "在三维中对比",
+        "在三维中对比"
+      ]
+    }
+  ],
+  "groups": [
+    {
+      "unit": "24384_26324",
+      "row": "BRAN 24384_26324/test_pipe删除 4在三维中对比",
+      "picks": [],
+      "target": {
+        "refno": "24384_26325",
+        "noun": "VALV",
+        "status": "deleted"
+      },
+      "viewer": null,
+      "error": "历史投影任务 model-history-20260921-115935-000106 失败：REFNO_NOT_FOUND_AT_SESSION: refno 24384/26324 is not in the element index of dbnum 8000 at session 380",
+      "toast": [],
+      "buttonText": "在三维中对比"
+    },
+    {
+      "unit": "32576_22",
+      "row": "BRAN 32576_22/CODEX_DB8000_PIPE_SCR_B新增 11在三维中对比",
+      "picks": [],
+      "target": {
+        "refno": "32576_17",
+        "noun": "FTUB",
+        "status": "added"
+      },
+      "viewer": null,
+      "error": "历史投影任务 model-history-20260921-115937-000107 失败：REFNO_NOT_FOUND_AT_SESSION: refno 32576/22 is not in the element index of dbnum 8000 at session 300",
+      "toast": [],
+      "buttonText": "在三维中对比"
+    }
+  ],
+  "initial": {
+    "scope": "DB 8000 · 24384_23225（PIPE） · 容器，不属于任何最小交付单元",
+    "notice": "24384_23225（PIPE）不在任何最小交付单元下：几何按其下的单元分组对比（模型对比 tab），子树时间线 150 版来自 node/versions。",
+    "scopeSelfPressed": "true",
+    "timelineHead": "版本时间线 · 本范围 49 版",
+    "defaultPair": {
+      "a": 524,
+      "b": 532
+    },
+    "runDisabled": null,
+    "viewer": null
+  },
+  "dbnum": 8000,
+  "subtree": {
+    "timelineHead": "版本时间线 · 本范围 150 版",
+    "rows": 150
+  },
+  "pair": {
+    "a": 300,
+    "b": 380
+  },
+  "diffSummary": "A 300 → B 380 · 差异摘要（未生成几何）变了的单元 5未变单元 16新增 20删除 6修改 2noop 1",
+  "panelGroups": [
+    {
+      "unit": "24384_23257",
+      "row": "BRAN 24384_23257/C-OR-1R345-C修改 1noop 1在三维中对比"
+    },
+    {
+      "unit": "24384_26324",
+      "row": "BRAN 24384_26324/test_pipe删除 4在三维中对比"
+    },
+    {
+      "unit": "24384_26326",
+      "row": "BRAN 24384_26326/test_tray删除 2在三维中对比"
+    },
+    {
+      "unit": "32576_12",
+      "row": "BRAN 32576_12/CODEX_DB8000_PIPE_SCR_A新增 9在三维中对比"
+    },
+    {
+      "unit": "32576_22",
+      "row": "BRAN 32576_22/CODEX_DB8000_PIPE_SCR_B新增 11在三维中对比"
+    }
+  ],
+  "runDisabledInSubtree": true,
+  "closed": {
+    "viewer": null,
+    "overlayCount": 0,
+    "noticeCount": 0,
+    "groupButtonTexts": [
+      "在三维中对比",
+      "在三维中对比",
+      "在三维中对比",
+      "在三维中对比",
+      "在三维中对比"
+    ]
+  },
+  "ok": false,
+  "finishedAt": "2026-09-21T03:59:40.026Z"
+}

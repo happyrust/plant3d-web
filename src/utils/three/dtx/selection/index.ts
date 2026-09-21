@@ -7,8 +7,8 @@ export { ObjectsKdTree, MarqueePickMode, FrustumIntersection } from './ObjectsKd
 export type { KdTreeObject } from './ObjectsKdTree';
 export { SelectionManager } from './SelectionManager';
 export type { SelectionManagerOptions, SelectionChangedEvent } from './SelectionManager';
-export { GPUPicker } from './GPUPicker';
-export type { PickResult } from './GPUPicker';
+export { GPUPicker, computePickViewOffset } from './GPUPicker';
+export type { PickResult, PickViewport, PickViewOffset } from './GPUPicker';
 export { DTXSelectionController } from './DTXSelectionController';
 export type {
   DTXSelectionControllerOptions,

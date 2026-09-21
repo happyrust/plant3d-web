@@ -225,4 +225,89 @@ e2e `e2e/model-version-compare-gen-model-v1.spec.ts` 第 1 条加角标 / 图例
 
 pageerror 0；console error 仍是那 5 条环境噪音。`a626-b630-pick-version-attrs-summary.json` 有每步投影坐标、`lastPick`、横幅文本与请求体。
 单测：`PropertiesPanel.versionPin.test.ts` 2 条（钉住走 `load` 不发 `uiAttr`、横幅带 sesno、普通选中复位且当前会话值不串、B 版另一份缓存；那一版不存在给说明）、`attributeSource.test.ts` +2（同型折算 / 不存在）、纯函数 `sideFromCompareObjectId`、面板 open 事件带 `attributesAt` 断言；e2e `model-version-compare-gen-model-v1.spec.ts` 回归：缺省单元 **4 passed 13.0 s**、`24384_23257` **4 passed 12.3 s**。
-分屏时拾取整体是关着的（`onDown` / `onUp` 直接 return），本条只覆盖单视口。
+分屏时拾取整体是关着的（`onDown` / `onUp` 直接 return），本条只覆盖单视口——分屏见 §8.2。
+
+### 8.2 分屏里点左 A / 右 B 构件 → 属性面板读那一版（2026-09-21 09:4x，`3d-diff-color/a626-b630-splitpick-*`，plan §11.1「分屏拾取」）
+
+之前分屏时 `onDown` / `onUp` 直接 return：GPU 拾取按整幅相机算、对不上左右两格画面。现在指针落在哪一格就按那一格的视口与宽高比造射线（`locateModelUnitComparePass` + `splitCompareRay`），对那一侧的隔离图层做 CPU 射线拾取，非当前显示侧拾取前临时开层、测完复位；主图层（环境）的 GPU 拾取把那一格当子视口（`sel.pick(pos, viewport)`），之后环境选中 / A–B 比远近 / 点空清空全部照单视口那一套走。分屏每格也走描边合成器，选中的环境构件两格都有描边。
+脚本 `old\.scratch\mvc-3d-split-pick-run.mjs`（无环境）与 `mvc-3d-split-env-pick-run.mjs`（`show_refno=24384_23225` 带上那条 PIPE 的其他 BRAN 当环境）：把目标在 A / B 隔离图层里的包围盒中心按那一格重投影（透视下 ndcX 与 aspect 成反比：`ndcX_pass = ndcX_full · aspect_full / aspect_pass`，ndcY 不变）再点。视口 1600×1000 下画布只有 450×727，每格 225 px 宽。
+
+**一个坑**：第一版想「临时把相机 aspect 改成那一格的 + 指针换成整幅上的等价位置」再喂 `GPUPicker`，真机 RGBA 全 0、CPU 射线却命中——`GPUPicker` 用 `setViewOffset(fullWidth, fullHeight, …)` 裁小窗，而 three 的 `setViewOffset` **会把 aspect 置成 `fullWidth / fullHeight`**，改的 aspect 被抹掉。所以整幅必须就是那一格：`GPUPicker.pick` / `DTXSelectionController.pick` 加可选 `viewport`，`computePickViewOffset` 按子视口算整幅与偏移（`GPUPicker.test.ts`）。
+
+| 步 | 截图 | 事实 |
+|---|---|---|
+| 右格 B 点 FTUB | `a626-b630-splitpick-01-right-b-pinned.png` | `lastPick {objectId unit-compare:b:24384_23262:4, side after, sesno 630, viewMode split}`；横幅「属性来自版本 B · sesno 630」，**POS 10887, 12332, 2900**；只发 `POST history/query {snapshot_key "24384_23257@630", tool "attributes", arguments {refno "24384/23262"}}`，`element/attributes` 0 条 |
+| 左格 A 点 FTUB（A 版位置差 500，重投影） | `a626-b630-splitpick-02-left-a-pinned.png` | `lastPick {…:a:…, side before, sesno 626, viewMode split}`；横幅「A · sesno 626」，**POS 10887, 12332, 3400**；`snapshot_key "24384_23257@626"`。拾完立刻查两层：A 层该对象 `isObjectVisible` false、B 层 true、`activeSide after`——临时开层已复位 |
+| 「三维只看差异」开着再点左格 | — | 照样 `{side before, sesno 626}`（hidden 只藏两侧各 8 件 unchanged，修改件在） |
+| 点右格空处 | — | 横幅计数 0（普通清空） |
+| 切回单视口再点 | `a626-b630-splitpick-03-single-again.png` | `{side after, sesno 630, viewMode single}`，单视口路径没坏 |
+| 退出对比 | — | 横幅计数 0 |
+
+带环境（`a626-b630-splitenv-*`，主图层 94 件环境、`environmentLoadedRefnos 103`）：
+
+| 步 | 截图 | 事实 |
+|---|---|---|
+| 右格点环境件（格内投影面积最大的那件 `o:24384_26315:172`） | `a626-b630-splitenv-01-right-env-selected.png` | **普通选中** `24384_26315`：`lastPick` 空、无横幅，属性面板 REFNO `=24384/26315`，发的是 `element/attributes {refno "24384/26315"}`（当前会话）；两格里那件都是描边色 |
+| 左格点同一件 | — | 同样普通选中、无横幅（属性已缓存、不再发请求） |
+| 右格点 B 版 FTUB | `a626-b630-splitenv-02-right-b-pinned.png` | `{side after, sesno 630, viewMode split}`，横幅「B · sesno 630」，`snapshot_key …@630`——环境在场时 A / B 命中比环境更近才选它 |
+| 左格点 A 版 FTUB | `a626-b630-splitenv-03-left-a-pinned.png` | `{side before, sesno 626}`，横幅「A · sesno 626」，`…@626` |
+| 再点环境件 | — | 横幅撤掉、回到普通选中 |
+| 退出对比 | — | 横幅计数 0 |
+
+pageerror 0；console error 仍是那 5 条环境噪音。`a626-b630-split-pick-summary.json` / `a626-b630-split-env-pick-summary.json` 有每步投影坐标（含 pass、整幅 / 格内 NDC）、`lastPick`、选中 refno、横幅文本与请求体。
+单测：`modelUnitVersionCompare.test.ts` +1（`locateModelUnitComparePass`：左 / 右格 NDC、分界线归右格、格外 null、单视口等价整幅）、`GPUPicker.test.ts` +2（`computePickViewOffset`：缺省整幅 / dpr / 子视口偏移 / 贴边夹住）。e2e `model-version-compare-gen-model-v1.spec.ts` 回归（`PLAYWRIGHT_PORT=3111`）：缺省单元 `24384_26480` **4 passed 12.1 s**、`MODEL_VERSION_E2E_UNIT=24384_23257` **4 passed 12.6 s**。
+
+### 8.3 分屏走描边合成器的开销（2026-09-21 10:3x，`3d-diff-color/split-perf-*.json`）
+
+用户要先看性能再定要不要留。脚本 `old\.scratch\mvc-3d-split-perf-run.mjs`：把 `renderer.render` 与 `requestAnimationFrame` 包一层，用 `EXT_disjoint_timer_query_webgl2` 包住每个 rAF 回调里的全部 GL 命令读 GPU 纳秒；左键按住拖相机 ~3 s（OrbitControls 旋转，每 40 ms 一步），每档 ~280 帧。「直接 render」那档是在页里把 `selection.hasOutline` 临时置成 `() => false`，代码没加开关。
+`--gpu` = headless 也用 `--use-gl=angle --use-angle=d3d11 --ignore-gpu-blocklist` 拿真显卡（缺省 headless 落在 SwiftShader 软渲染）。
+
+真显卡 **AMD Radeon RX 590**，视口 2560×1440 → 画布 930×1164，GPU 每帧毫秒（avg / p50 / p95 / max），全部档位 rAF 都是 60 fps：
+
+| 场景 | 单视口 · 合成器（今天的单视口） | 分屏 · 合成器 ×2（新） | 分屏 · 直接 render ×2（旧） | 单视口 · 直接 render（参照） |
+|---|---|---|---|---|
+| PIPE 环境 94 件（主图层 206 件） | 1.22 / 0.96 / 2.35 / 4.57 | **3.73 / 2.42 / 9.56 / 10.12** | 1.51 / 0.90 / 5.17 / 8.11 | 0.45 / 0.35 / 0.84 / 4.06 |
+| 同上 · 选中一件环境构件（描边有活干） | 1.34 / 1.09 / 2.41 / 5.92 | **4.29 / 3.23 / 9.62 / 10.36** | — | — |
+| ZONE 环境 1939 件 | 2.49 / 1.81 / 4.67 / 7.67 | **6.13 / 7.33 / 8.08 / 12.95** | 4.13 / 3.58 / 8.14 / 8.83 | 2.13 / 2.38 / 2.74 / 5.31 |
+| 同上 · 选中一件 | 3.67 / 3.30 / 5.26 / 5.78 | **6.23 / 7.05 / 9.47 / 12.89** | — | — |
+
+- 合成器每格的固定开销 ≈ **0.8–1.1 ms**（RenderPass 之外的 OutlinePass 掩膜 / 边缘 / 模糊 + FXAA + OutputPass，全按画布分辨率跑），分屏两格就是两份；场景越大它占的比例越小（ZONE 里分屏合成器 6.1 ms vs 直接 4.1 ms，+50%；PIPE 里 3.7 vs 1.5，+150%）。
+- CPU 端（`renderer.render` 提交 + rAF 回调墙钟）三档都 < 1.3 ms，不是瓶颈。
+- 按像素数外推 4K（3840×2160 ≈ 8.3 MP，是这次画布的 7.7 倍）：合成器每格 ≈ 7–8 ms，分屏两格 ≈ 15 ms 加上场景本身——这块显卡上 4K 分屏会掉到 60 fps 以下；单视口本来就付一份，4K 也只剩 ~8 ms 余量。
+- **软渲染**（缺省 headless 的 SwiftShader，视口 1600×1000 → 画布 450×727，PIPE 环境）：单视口合成器 **20.8 fps**、分屏合成器 **11.4 fps**、分屏直接 render 60 fps、单视口直接 render 60 fps——没有显卡加速（远程桌面 / 虚拟机）时合成器本来就重，分屏再翻一倍。
+- 若退回直接 render：选中的环境构件仍看得见——`SelectionManager.select` 会经 `setObjectColor` 把它覆成选中色（橙 `0xff8800`），只是没有描边、分屏比单视口暗一档那条老问题留着。
+
+### 8.4 从一根管道（容器）进分屏：差异摘要按单元分组 → 逐组三维 → 分屏（2026-09-21 11:5x，`3d-diff-color/pipe-24384_23225-a300-b380-*`）
+
+用户「查看一个管道的不同版本的分屏展示」。PIPE `24384_23225`（DB 8000）是容器、不属于任何最小交付单元；三维对比仍是**单元级**（一次装一个单元的 A / B），管道这一级的入口是「所有子节点」范围下的差异摘要按单元分组、逐组「在三维中对比」。
+脚本 `old\.scratch\mvc-3d-pipe-split-run.mjs`（`--pipe 24384_23225 --a 300 --b 380 --units …`，真显卡 headless）。A 300 → B 380 这一段里 PIPE 下 5 个单元变过（改 / 删 / 增各有），拿它当样本。
+
+| 步 | 截图 | 事实 |
+|---|---|---|
+| 打开 `/?…&unit_refno=24384_23225&compare_autorun=1&compare_a=300&compare_b=380` | — | 面板开、时间线列出即停（容器没有自己的几何可装）：缺省范围**仅自身**（CONTEXT 口径），本范围 49 版、缺省 **A 524 → B 532**（它自己最后两版 mesh）；`compare_a / compare_b` 对容器**不生效**——`autorunFromUrl` 到 `!hasUnit` 就 return，URL 那对没套到时间线上；主按钮「在三维中对比」置灰（title「不在任何最小交付单元下，没有几何」） |
+| 切「所有子节点」→ 时间线点 A 300 / B 380 → 模型对比 tab | `pipe-24384_23225-a300-b380-01-panel-subtree-diff-summary.png` | 时间线 150 版（来自 `node/versions`，每行「单元 n」）；摘要 **A 300 → B 380 · 变了的单元 5 / 未变 16 · 新增 20 删除 6 修改 2 noop 1**，分 5 组各带「在三维中对比」：BRAN `24384_23257` 修改 1 noop 1、`24384_26324` 删除 4、`24384_26326` 删除 2、`32576_12` 新增 9、`32576_22` 新增 11（PIPE 自身那一行 `unit_root null` 的孤儿组不出按钮）；主按钮仍置灰 |
+| 组 `24384_23257`「在三维中对比」 | `…-02-24384_23257-single.png` | `__modelUnitVersionCompare {unitRefno 24384_23257, 300→380, A / B 各 9 件, modified 1 unchanged 8}`；角标「B · sesno 380」、图例「修改 1 新增 0 删除 0 未变 8」；组按钮变「三维中」，面板「三维查看 24384_23257 · DB 8000」，树进「300 → 380 差异模式」 |
+| 双视口分屏 | `…-02-24384_23257-split.png` | 两枚角标「A · sesno 300」「B · sesno 380」、单视口角标 0；面板「左 A · sesno 300 · 右 B · sesno 380」；两格各一根 BRAN、FTUB 琥珀、**左低右高**（POS Z 2900 → 3400，与属性历史对比那格一致） |
+| 右格点 FTUB → 左格点 FTUB（各按格重投影） | `…-02-24384_23257-split-left-a-pinned.png` | 右：`lastPick {side after, sesno 380, viewMode split}`、横幅「属性来自版本 B · sesno 380」、只发 `history/query {snapshot_key "24384_23257@380", tool attributes, refno 24384/23262}`；左：`{side before, sesno 300}`、「A · sesno 300」、`…@300`；两次拾取 `element/attributes` 0 条 |
+| 组 `24384_26324`（删除 4）「在三维中对比」 | `…-03-24384_26324-deleted-error.png` | **进不去**：面板报「历史投影任务 … 失败：REFNO_NOT_FOUND_AT_SESSION: refno 24384/26324 is not in the element index of dbnum 8000 at session 380」，三维空着、组按钮仍「在三维中对比」 |
+| 组 `32576_22`（新增 11）「在三维中对比」 | `…-04-32576_22-added-error.png` | 同样进不去：「… refno 32576/22 … at session 300」 |
+| 退出 | — | 运行态 null、两种 overlay 0、横幅 0，五个组按钮全部回「在三维中对比」 |
+
+pageerror 0；console error 6 条 = 从前那 5 条环境噪音 + 1 条 404 = `GET :8022/api/v1/element/attribute-diff?dbnum=8000&refno=24384/23225&a=524&b=532`（容器「仅自身」缺省对 524 → 532 的属性净差；这版 `:8022` 没有这条路由，面板按「旧服务端拉时间线折」回落，是预期的探路 404）。`…-added-deleted-fail-summary.json` 留着两组修前的面板报错原文。
+
+**发现 → 修（用户 12:1x 拍板「修」）**：
+- **容器分组入口装不了 A 或 B 那侧不存在的单元**：`ModelUnitVersionComparePanel.runCompareGroup` 合成两侧 `ModelVersion` 时 `impactKind` 写死 `'mesh'`，适配器就去 `history/generate` 那一版——单元在 B 已删（或 A 还没建）就 404。单元根入口没这问题：`model/versions` 那一行自带 `tombstone`，`loadVersion` 回空集、视口显示删除空态。
+  修法：纯函数 `modelUnitGroupSideImpactKinds(group)` 按摘要组里单元根那一行判——`status deleted` → B 侧 `tombstone`、`status added` → A 侧 `tombstone`，单元根那行没列出来（截断）/ 孤儿组不猜；注脚 `modelUnitVersionAbsentNote(side)`：B 侧仍「该版本单元已删除」，A 侧「该版本没有这个单元」（多半是还没建），面板 A / B 卡与视口角标（单视口一枚、分屏两枚）同一句。
+- 换组 = 面板先 `close` 再 `open`，视口 `viewMode` 回缺省单视口——从管道逐组看，每换一个单元都要再点一次「双视口分屏」（未动）。
+- 容器的 `compare_a / compare_b` URL 参数被忽略（见第一行）；要给容器直达某两版，`autorunFromUrl` 得在 `!hasUnit` 之前先把这对套上（不跑对比）（未动）。
+
+**修后真机**（同一脚本、同三组一次跑完，`pipe-24384_23225-a300-b380-split-summary.json`）：
+
+| 组 | 截图 | 事实 |
+|---|---|---|
+| `24384_23257`（修改 1） | 同上 `…-02-*` | 与修前一致：分屏两枚角标、右格钉 B 380 / 左格钉 A 300 |
+| `24384_26324`（删除 4，B 时整单元已删） | `…-03-24384_26324-split-left-a-pinned.png` | 进得去了：`{beforeObjects 1, afterObjects 0, statusCounts {deleted 1}}`，单视口角标「B · sesno 380 · 该版本单元已删除」；分屏角标「A · sesno 300」「B · sesno 380 · 该版本单元已删除」，左格 VALV 玫红、右格空；左格点 VALV `24384_26325` → `{side before, sesno 300}`、横幅「A · sesno 300」、`history/query {snapshot_key 24384_26324@300}`；右格同一位置点下去（B 那版没有它）→ 横幅 0、选中空；属性历史对比那格「该构件在版本 B 不存在（已删除）」 |
+| `32576_22`（新增 11，A 时还没建） | `…-04-32576_22-split-right-b-pinned.png` | `{beforeObjects 0, afterObjects 10, statusCounts {added 10}}`；分屏角标「A · sesno 300 · 该版本没有这个单元」「B · sesno 380」，左格空、右格整根 BRAN 翠绿；右格点 FTUB `32576_17` → `{side after, sesno 380}`、横幅「B · sesno 380」、`snapshot_key 32576_22@380`；左格同一位置 → 横幅 0；属性历史对比那格「该构件在版本 A 不存在（新建于 A 之后）」 |
+| 退出 | — | 运行态 null、overlay 0、横幅 0、五个组按钮全回「在三维中对比」；pageerror 0，console 仍是那 6 条 |
+
+单测：`modelUnitVersionCompare.test.ts` +1（两侧 impactKind 五种情形 + 注脚），`ModelUnitVersionComparePanel.test.ts` 分组用例 +2 段（单元根 deleted / added → `loadVersion` 收到的 impactKind、`open` 事件两侧、A / B 卡注脚各说各的），5 个相关文件 **39 过**；`type-check` 基线外 0 新增；ESLint 只剩 `ViewerPanel.vue:28` 那条 HEAD 就有的；e2e `PLAYWRIGHT_PORT=3111` 缺省单元 **4 passed 13.1 s**（其中 B 卡「该版本单元已删除」断言不变）、`24384_23257` **4 passed 13.1 s**。

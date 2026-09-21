@@ -1,0 +1,411 @@
+{
+  "url": "http://127.0.0.1:3111/?model_source=gen-model-v1&gm_backend_port=8022&unit_refno=24384_23257&compare_autorun=1&show_refno=24384_23225&show_refno_select=0&compare_a=626&compare_b=630",
+  "scenario": "a626-b630",
+  "target": "24384_23262",
+  "showRefno": "24384_23225",
+  "startedAt": "2026-09-21T02:13:12.061Z",
+  "pageErrors": [],
+  "consoleErrors": [
+    "[vite] failed to connect to websocket.\nyour current setup:\n  (browser) 127.0.0.1:3111/ <--[HTTP]--> 127.0.0.1:3111/ (server)\n  (browser) 127.0.0.1:3111/ <--[WebSocket (failing)]--> 127.0.0.1:3111/ (server)\nCheck out your Vite / network configuration and https://vite.dev/config/server-options.html#se",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)"
+  ],
+  "attributeRequests": [
+    {
+      "kind": "history/query attributes",
+      "body": "{\"snapshot_key\":\"24384_23257@626\",\"tool\":\"attributes\",\"arguments\":{\"refno\":\"24384/23262\"}}"
+    },
+    {
+      "kind": "history/query attributes",
+      "body": "{\"snapshot_key\":\"24384_23257@630\",\"tool\":\"attributes\",\"arguments\":{\"refno\":\"24384/23262\"}}"
+    },
+    {
+      "kind": "element/attributes",
+      "body": "{\"refno\":\"24384/23262\"}"
+    },
+    {
+      "kind": "element/attributes",
+      "body": "{\"refno\":\"24384/26315\"}"
+    },
+    {
+      "kind": "history/query attributes",
+      "body": "{\"snapshot_key\":\"24384_23257@630\",\"tool\":\"attributes\",\"arguments\":{\"refno\":\"24384/23262\"}}"
+    },
+    {
+      "kind": "history/query attributes",
+      "body": "{\"snapshot_key\":\"24384_23257@626\",\"tool\":\"attributes\",\"arguments\":{\"refno\":\"24384/23262\"}}"
+    }
+  ],
+  "steps": [
+    {
+      "at": "2026-09-21T02:13:12.208Z",
+      "name": "goto",
+      "url": "http://127.0.0.1:3111/?model_source=gen-model-v1&gm_backend_port=8022&unit_refno=24384_23257&compare_autorun=1&show_refno=24384_23225&show_refno_select=0&compare_a=626&compare_b=630"
+    },
+    {
+      "at": "2026-09-21T02:13:17.047Z",
+      "name": "compare ready + environment",
+      "mainVisible": 94,
+      "mainEnv": 94,
+      "state": {
+        "unitRefno": "24384_23257",
+        "beforeSesno": 626,
+        "afterSesno": 630,
+        "beforeObjects": 9,
+        "afterObjects": 9,
+        "environmentLoadedRefnos": 103,
+        "activeSide": "after",
+        "viewMode": "single",
+        "diffOnly": false,
+        "statusCounts": {
+          "added": 0,
+          "deleted": 0,
+          "modified": 1,
+          "unchanged": 8
+        },
+        "hiddenWhenDiffOnly": {
+          "before": 8,
+          "after": 8
+        }
+      }
+    },
+    {
+      "at": "2026-09-21T02:13:18.200Z",
+      "name": "environment candidates (right pass)",
+      "total": 94,
+      "inside": 34,
+      "top": [
+        {
+          "objectId": "o:24384_26315:172",
+          "refno": "24384_26315",
+          "x": 784.602731658499,
+          "y": 334.9409336038984,
+          "dist": 11.67120252748341,
+          "size": 1.4484394451808942,
+          "screenSize": 0.12410370240513788
+        },
+        {
+          "objectId": "o:32576_15:181",
+          "refno": "32576_15",
+          "x": 775.1629037992043,
+          "y": 510.63827715677775,
+          "dist": 12.892974092021403,
+          "size": 1.4484394451808942,
+          "screenSize": 0.11234331464896344
+        },
+        {
+          "objectId": "o:32576_5:191",
+          "refno": "32576_5",
+          "x": 775.1629037992043,
+          "y": 510.63827715677775,
+          "dist": 12.892974092021403,
+          "size": 1.4484394451808942,
+          "screenSize": 0.11234331464896344
+        },
+        {
+          "objectId": "o:32576_25:199",
+          "refno": "32576_25",
+          "x": 775.1629037992043,
+          "y": 510.63827715677775,
+          "dist": 12.892974092021403,
+          "size": 1.4484394451808942,
+          "screenSize": 0.11234331464896344
+        },
+        {
+          "objectId": "o:32576_21:186",
+          "refno": "32576_21",
+          "x": 586.1327468521147,
+          "y": 397.5612559505066,
+          "dist": 14.303113778700023,
+          "size": 1.5501722005495093,
+          "screenSize": 0.10838005098288471
+        },
+        {
+          "objectId": "o:32576_11:188",
+          "refno": "32576_11",
+          "x": 586.1327468521147,
+          "y": 397.5612559505066,
+          "dist": 14.303113778700023,
+          "size": 1.5501722005495093,
+          "screenSize": 0.10838005098288471
+        }
+      ]
+    },
+    {
+      "at": "2026-09-21T02:13:49.860Z",
+      "name": "pickEnvRight",
+      "point": {
+        "x": 785,
+        "y": 335
+      },
+      "lastPick": null,
+      "selected": [
+        "24384_26315"
+      ],
+      "noticeCount": 0,
+      "notice": "",
+      "requests": [
+        {
+          "kind": "element/attributes",
+          "body": "{\"refno\":\"24384/26315\"}"
+        }
+      ],
+      "panelRefno": "24384/26315"
+    },
+    {
+      "at": "2026-09-21T02:13:49.860Z",
+      "name": "env pick judged",
+      "ok": true,
+      "expected": "24384_26315",
+      "selected": [
+        "24384_26315"
+      ]
+    },
+    {
+      "at": "2026-09-21T02:14:21.573Z",
+      "name": "pickEnvLeft",
+      "point": {
+        "x": 560,
+        "y": 335
+      },
+      "lastPick": null,
+      "selected": [
+        "24384_26315"
+      ],
+      "noticeCount": 0,
+      "notice": "",
+      "requests": [],
+      "panelRefno": "24384/26315"
+    },
+    {
+      "at": "2026-09-21T02:14:21.574Z",
+      "name": "project B (right pass)",
+      "objectId": "unit-compare:b:24384_23262:4",
+      "x": 625.89556880642,
+      "y": 535.4082747068076,
+      "ndcX": -0.5475949439429336,
+      "ndcY": -0.2445894764974074,
+      "ndcZ": 0.9843010996561135,
+      "inside": true
+    },
+    {
+      "at": "2026-09-21T02:14:23.197Z",
+      "name": "pickRightB",
+      "point": {
+        "x": 626,
+        "y": 535
+      },
+      "lastPick": {
+        "objectId": "unit-compare:b:24384_23262:4",
+        "refno": "24384_23262",
+        "side": "after",
+        "sesno": 630,
+        "label": "B",
+        "viewMode": "split"
+      },
+      "selected": [
+        "24384_23262"
+      ],
+      "noticeCount": 1,
+      "notice": "属性来自版本 B · sesno 630 （版本对比里点到的那一版，不是当前会话）",
+      "requests": [
+        {
+          "kind": "history/query attributes",
+          "body": "{\"snapshot_key\":\"24384_23257@630\",\"tool\":\"attributes\",\"arguments\":{\"refno\":\"24384/23262\"}}"
+        }
+      ],
+      "panelRefno": "24384/23262"
+    },
+    {
+      "at": "2026-09-21T02:14:23.281Z",
+      "name": "project A (left pass)",
+      "objectId": "unit-compare:a:24384_23262:4",
+      "x": 399.3271473979195,
+      "y": 494.4987844022922,
+      "ndcX": -0.561536467574049,
+      "ndcY": -0.13204617442171165,
+      "ndcZ": 0.9838963202180212,
+      "inside": true
+    },
+    {
+      "at": "2026-09-21T02:14:24.898Z",
+      "name": "pickLeftA",
+      "point": {
+        "x": 399,
+        "y": 494
+      },
+      "lastPick": {
+        "objectId": "unit-compare:a:24384_23262:4",
+        "refno": "24384_23262",
+        "side": "before",
+        "sesno": 626,
+        "label": "A",
+        "viewMode": "split"
+      },
+      "selected": [
+        "24384_23262"
+      ],
+      "noticeCount": 1,
+      "notice": "属性来自版本 A · sesno 626 （版本对比里点到的那一版，不是当前会话）",
+      "requests": [
+        {
+          "kind": "history/query attributes",
+          "body": "{\"snapshot_key\":\"24384_23257@626\",\"tool\":\"attributes\",\"arguments\":{\"refno\":\"24384/23262\"}}"
+        }
+      ],
+      "panelRefno": "24384/23262"
+    },
+    {
+      "at": "2026-09-21T02:14:56.609Z",
+      "name": "pickEnvAgain",
+      "point": {
+        "x": 785,
+        "y": 335
+      },
+      "lastPick": null,
+      "selected": [
+        "24384_26315"
+      ],
+      "noticeCount": 0,
+      "notice": "",
+      "requests": [],
+      "panelRefno": "24384/26315"
+    }
+  ],
+  "environment": {
+    "mainVisible": 94,
+    "mainEnv": 94,
+    "state": {
+      "unitRefno": "24384_23257",
+      "beforeSesno": 626,
+      "afterSesno": 630,
+      "beforeObjects": 9,
+      "afterObjects": 9,
+      "environmentLoadedRefnos": 103,
+      "activeSide": "after",
+      "viewMode": "single",
+      "diffOnly": false,
+      "statusCounts": {
+        "added": 0,
+        "deleted": 0,
+        "modified": 1,
+        "unchanged": 8
+      },
+      "hiddenWhenDiffOnly": {
+        "before": 8,
+        "after": 8
+      }
+    }
+  },
+  "pickEnvRight": {
+    "point": {
+      "x": 785,
+      "y": 335
+    },
+    "lastPick": null,
+    "selected": [
+      "24384_26315"
+    ],
+    "noticeCount": 0,
+    "notice": "",
+    "requests": [
+      {
+        "kind": "element/attributes",
+        "body": "{\"refno\":\"24384/26315\"}"
+      }
+    ],
+    "panelRefno": "24384/26315",
+    "expectedRefno": "24384_26315",
+    "ok": true
+  },
+  "pickEnvLeft": {
+    "point": {
+      "x": 560,
+      "y": 335
+    },
+    "lastPick": null,
+    "selected": [
+      "24384_26315"
+    ],
+    "noticeCount": 0,
+    "notice": "",
+    "requests": [],
+    "panelRefno": "24384/26315",
+    "expectedRefno": "24384_26315",
+    "ok": true
+  },
+  "pickRightB": {
+    "point": {
+      "x": 626,
+      "y": 535
+    },
+    "lastPick": {
+      "objectId": "unit-compare:b:24384_23262:4",
+      "refno": "24384_23262",
+      "side": "after",
+      "sesno": 630,
+      "label": "B",
+      "viewMode": "split"
+    },
+    "selected": [
+      "24384_23262"
+    ],
+    "noticeCount": 1,
+    "notice": "属性来自版本 B · sesno 630 （版本对比里点到的那一版，不是当前会话）",
+    "requests": [
+      {
+        "kind": "history/query attributes",
+        "body": "{\"snapshot_key\":\"24384_23257@630\",\"tool\":\"attributes\",\"arguments\":{\"refno\":\"24384/23262\"}}"
+      }
+    ],
+    "panelRefno": "24384/23262",
+    "ok": true
+  },
+  "pickLeftA": {
+    "point": {
+      "x": 399,
+      "y": 494
+    },
+    "lastPick": {
+      "objectId": "unit-compare:a:24384_23262:4",
+      "refno": "24384_23262",
+      "side": "before",
+      "sesno": 626,
+      "label": "A",
+      "viewMode": "split"
+    },
+    "selected": [
+      "24384_23262"
+    ],
+    "noticeCount": 1,
+    "notice": "属性来自版本 A · sesno 626 （版本对比里点到的那一版，不是当前会话）",
+    "requests": [
+      {
+        "kind": "history/query attributes",
+        "body": "{\"snapshot_key\":\"24384_23257@626\",\"tool\":\"attributes\",\"arguments\":{\"refno\":\"24384/23262\"}}"
+      }
+    ],
+    "panelRefno": "24384/23262",
+    "ok": true
+  },
+  "pickEnvAgain": {
+    "point": {
+      "x": 785,
+      "y": 335
+    },
+    "lastPick": null,
+    "selected": [
+      "24384_26315"
+    ],
+    "noticeCount": 0,
+    "notice": "",
+    "requests": [],
+    "panelRefno": "24384/26315",
+    "ok": true
+  },
+  "noticeAfterClose": 0,
+  "ok": true,
+  "finishedAt": "2026-09-21T02:14:57.949Z"
+}

@@ -1,0 +1,204 @@
+{
+  "url": "http://127.0.0.1:3111/?model_source=gen-model-v1&gm_backend_port=8022&unit_refno=24384_23257&compare_autorun=1&show_refno=24384_23225&show_refno_select=0&compare_a=626&compare_b=630",
+  "label": "pipe-2560x1440-gpu",
+  "viewport": {
+    "vw": 2560,
+    "vh": 1440
+  },
+  "startedAt": "2026-09-21T02:30:12.626Z",
+  "pageErrors": [],
+  "scenarios": {
+    "single · composer (今天的单视口)": {
+      "frames": 286,
+      "rafFps": 60,
+      "renderCallsPerFrame": 14,
+      "gpuMs": {
+        "n": 279,
+        "avg": 1.22,
+        "p50": 0.96,
+        "p95": 2.35,
+        "max": 4.57
+      },
+      "cpuRenderMs": {
+        "n": 286,
+        "avg": 0.55,
+        "p50": 0.5,
+        "p95": 0.8,
+        "max": 1.2
+      },
+      "frameWallMs": {
+        "n": 286,
+        "avg": 0.92,
+        "p50": 0.9,
+        "p95": 1.2,
+        "max": 1.6
+      }
+    },
+    "split · composer ×2 (新)": {
+      "frames": 286,
+      "rafFps": 60,
+      "renderCallsPerFrame": 27,
+      "gpuMs": {
+        "n": 279,
+        "avg": 3.73,
+        "p50": 2.42,
+        "p95": 9.56,
+        "max": 10.12
+      },
+      "cpuRenderMs": {
+        "n": 286,
+        "avg": 0.87,
+        "p50": 0.8,
+        "p95": 1.4,
+        "max": 2.4
+      },
+      "frameWallMs": {
+        "n": 286,
+        "avg": 1.26,
+        "p50": 1.2,
+        "p95": 2,
+        "max": 3.2
+      }
+    },
+    "split · direct ×2 (旧)": {
+      "frames": 282,
+      "rafFps": 59.6,
+      "renderCallsPerFrame": 5,
+      "gpuMs": {
+        "n": 275,
+        "avg": 1.51,
+        "p50": 0.9,
+        "p95": 5.17,
+        "max": 8.11
+      },
+      "cpuRenderMs": {
+        "n": 282,
+        "avg": 0.71,
+        "p50": 0.5,
+        "p95": 1.2,
+        "max": 32
+      },
+      "frameWallMs": {
+        "n": 282,
+        "avg": 0.96,
+        "p50": 0.7,
+        "p95": 1.8,
+        "max": 32.2
+      }
+    },
+    "single · direct (参照：单视口若不走合成器)": {
+      "frames": 284,
+      "rafFps": 60,
+      "renderCallsPerFrame": 3,
+      "gpuMs": {
+        "n": 277,
+        "avg": 0.45,
+        "p50": 0.35,
+        "p95": 0.84,
+        "max": 4.06
+      },
+      "cpuRenderMs": {
+        "n": 284,
+        "avg": 0.4,
+        "p50": 0.4,
+        "p95": 0.5,
+        "max": 0.7
+      },
+      "frameWallMs": {
+        "n": 284,
+        "avg": 0.63,
+        "p50": 0.6,
+        "p95": 0.8,
+        "max": 1
+      }
+    },
+    "single · composer · 有选中描边": {
+      "frames": 285,
+      "rafFps": 60,
+      "renderCallsPerFrame": 14,
+      "gpuMs": {
+        "n": 278,
+        "avg": 1.34,
+        "p50": 1.09,
+        "p95": 2.41,
+        "max": 5.92
+      },
+      "cpuRenderMs": {
+        "n": 285,
+        "avg": 0.51,
+        "p50": 0.5,
+        "p95": 0.7,
+        "max": 1
+      },
+      "frameWallMs": {
+        "n": 285,
+        "avg": 0.77,
+        "p50": 0.8,
+        "p95": 1,
+        "max": 1.3
+      }
+    },
+    "split · composer ×2 · 有选中描边": {
+      "frames": 283,
+      "rafFps": 60,
+      "renderCallsPerFrame": 27,
+      "gpuMs": {
+        "n": 276,
+        "avg": 4.29,
+        "p50": 3.23,
+        "p95": 9.62,
+        "max": 10.36
+      },
+      "cpuRenderMs": {
+        "n": 283,
+        "avg": 0.74,
+        "p50": 0.7,
+        "p95": 1,
+        "max": 1.6
+      },
+      "frameWallMs": {
+        "n": 283,
+        "avg": 1.01,
+        "p50": 1,
+        "p95": 1.3,
+        "max": 1.8
+      }
+    }
+  },
+  "scene": {
+    "canvas": {
+      "w": 930,
+      "h": 1164
+    },
+    "pixelRatio": 1,
+    "mainEnvObjects": 94,
+    "mainAllObjects": 206,
+    "compare": {
+      "unitRefno": "24384_23257",
+      "beforeSesno": 626,
+      "afterSesno": 630,
+      "beforeObjects": 9,
+      "afterObjects": 9,
+      "environmentLoadedRefnos": 103,
+      "activeSide": "after",
+      "viewMode": "single",
+      "diffOnly": false,
+      "statusCounts": {
+        "added": 0,
+        "deleted": 0,
+        "modified": 1,
+        "unchanged": 8
+      },
+      "hiddenWhenDiffOnly": {
+        "before": 8,
+        "after": 8
+      }
+    },
+    "hasOutline": true,
+    "gpu": "ANGLE (AMD, AMD Radeon RX590 GME (0x00006FDF) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+    "gpuTimerQuery": true
+  },
+  "selectedForOutline": [],
+  "ok": true,
+  "finishedAt": "2026-09-21T02:32:02.677Z"
+}

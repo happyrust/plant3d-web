@@ -507,3 +507,18 @@ legacy 下与从前的可见差别只有一处、且不可见于用户：A/B 隔
 - **验证**：vitest 39 过（新增 `PropertiesPanel.versionPin.test.ts` 2 条、`attributeSource` +2、纯函数 +1 断言、面板 open 事件带 `attributesAt` +1 断言）；type-check 基线外 0 新增；ESLint 触及 11 文件只剩那条 HEAD 就有的。
   真机（`3d-diff-color/a626-b630-pick-*`）：单视口 B 点 FTUB → `lastPick {side after, sesno 630}`、横幅「B · sesno 630」、**POS 10887, 12332, 2900**，发的是 `history/query {snapshot_key 24384_23257@630, tool attributes}`、`element/attributes` 0 条；
   切 A 再点（A 那版位置不同、重投影）→ 「A · sesno 626」、**POS 10887, 12332, 3400**、`snapshot_key …@626`；点空处横幅撤掉；再钉一次后退出对比横幅撤掉；pageerror 0。README §8.1。
+- **分屏拾取（用户 2026-09-21 09:3x 追加「分屏也开拾取，点 A / B 构件同样读那一版」）**：分屏里 GPU 拾取按整幅相机算、与左右两格画面对不上，所以之前 `onDown` / `onUp` 直接 return。现在 `onUp` 在分屏就位时走一条独立路径：
+  - `locateModelUnitComparePass`（纯函数）：指针落到左 A / 右 B 哪一格 + 这一格内的 NDC（pass 的 `y` 是 WebGL 左下原点，先翻；正压分界线归右格；格外 null；单视口一格等价整幅）。
+  - `splitCompareRay`：照 `renderModelUnitCompareScene` 每个 pass 的做法把相机 `aspect` 临时改成那一格的再 `setFromCamera`，用完复位；指针 CSS px 与 renderer 尺寸按比例换一下防 canvas 被 CSS 缩放。
+  - `pickModelUnitCompareObject(raycaster, side)` 多一个 `side`：帧尾两层已复位成 `activeSide` 的显隐、另一侧整层关着（`raycastObject` 对不可见对象直接回 null），拾非当前侧前临时 `applyModelUnitVersionSide(side, hidden)`、`finally` 复位，「只看差异」的 hidden 照样生效。
+  - **环境构件（主图层）也按格拾取**（用户 2026-09-21 09:5x 追加「分屏里环境构件也要能选」）：`GPUPicker` 靠 `setViewOffset(fullWidth, fullHeight, …)` 在整幅里裁 3×3 小窗渲染，而 three 的 `setViewOffset` 会把相机 aspect 置成 `fullWidth / fullHeight`——
+    所以先前「临时改 aspect + 换等价位置」的路子被它抹掉（真机 RGBA 全 0，CPU 射线却命中），改成给 `GPUPicker.pick` / `DTXSelectionController.pick` 加可选 `viewport`（子视口：画布坐标、左上原点），整幅就是那一格、偏移按格内算（`computePickViewOffset` 纯函数）。
+    `onUp` 分屏时 `sel.pick(pos, pass 的子视口)`，之后环境选中 / A–B 拾取比远近 / 点空清空全部照单视口那一套走，`lastPick` 多带 `viewMode`。
+  - **分屏每格走描边合成器**：`renderModelUnitCompareScene` 有 `selection.hasOutline()` 就每格 `renderOutline()`（RenderPass → OutlinePass → FXAA → OutputPass 到当前 viewport / scissor），选中的环境构件两格都有描边；顺带把「分屏比单视口暗一档」（§11 顺手看到）抹平——两条路现在是同一条。
+  - 验证：vitest 纯函数 +1、`GPUPicker.test.ts` +2（子视口偏移 / 缺省整幅 / dpr / 贴边夹住），六个相关文件 45 过；type-check 基线外 0 新增；ESLint 触及文件只剩那条 HEAD 就有的；e2e 两夹具各 4 过（12.1 s / 12.6 s）。
+    真机 README §8.2：无环境（`3d-diff-color/a626-b630-splitpick-*`）右格点 FTUB → `{side after, sesno 630, viewMode split}`、横幅「B · sesno 630」、POS …2900、`snapshot_key …@630`；左格点（重投影）→ `{side before, sesno 626}`、POS …3400、`…@626`，拾完 A 层该对象不可见 / B 层可见（复位到 activeSide）；「只看差异」开着左格照样点到修改件；点右格空处横幅撤掉；切回单视口再点 `viewMode single`；退出对比横幅撤掉。
+    带环境（`show_refno=24384_23225` 那条 PIPE 的 94 件，`3d-diff-color/a626-b630-splitenv-*`）：右格点环境件 `24384_26315` → 普通选中、`element/attributes {refno 24384/26315}`、无横幅、两格都描边；左格点同一件同样；再点右格 B 版 FTUB → 钉 630、左格 A 版 → 钉 626；再点环境 → 横幅撤掉；退出对比 0；pageerror 0。
+- **从容器（PIPE）逐组进分屏（用户 2026-09-21 10:4x「查看一个管道的不同版本的分屏展示」，README §8.4）**：三维对比仍是单元级，管道这一级的入口是「所有子节点」范围 → 差异摘要按单元分组 → 逐组「在三维中对比」→ 分屏。真机里改过的单元一路通；
+  **A 时还没建 / B 时已删的单元进不了**——`runCompareGroup` 合成两侧 `ModelVersion` 时 `impactKind` 写死 `'mesh'`，适配器去 `history/generate` 一个它不存在的会话 → 404 `REFNO_NOT_FOUND_AT_SESSION`。单元根入口没这问题（`model/versions` 行自带 tombstone）。
+  修法：`modelUnitGroupSideImpactKinds(group)`（纯函数）按摘要组里单元根那一行判——`deleted` → B 侧 `tombstone`、`added` → A 侧 `tombstone`（适配器回空集、视口那一格空态），单元根那行没列出来（截断）/ 孤儿组不猜；注脚 `modelUnitVersionAbsentNote(side)`：B 侧仍「该版本单元已删除」（e2e 断言不变），A 侧「该版本没有这个单元」（多半是还没建，也可能删过又建回），分屏两枚角标也带注脚。
+  顺手看到、未动：容器的 `compare_a / compare_b` URL 参数不生效（`autorunFromUrl` 到 `!hasUnit` 就 return）；换组 = close 再 open，分屏回单视口。

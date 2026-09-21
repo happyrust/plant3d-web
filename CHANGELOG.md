@@ -9,6 +9,15 @@
   - 端口 `ModelVersionSource.attributeDiff` + 类型 `ModelAttributeDiff`（`ports.ts`）；v1 适配器 `attributeDiff` → `ModelVersionRouteUnavailableError('element/attribute-diff')`；面板两条来路归一成 `AttributeNetDiffView`（`viewFromAttributeDiff / viewFromFold / emptyNetDiffText`，`utils/nodeVersionTimeline.ts`）。
   - 验证：`versionSource.test.ts` +1（回执映射 a_b 归一 / 无路由抛错）、版本对比相关 9 个测试文件 86 过；**真机未验**——运行中的 `:8022`（`a382b2cf3`）没有这条路由、走的是回落，后端 gen-model-refactor `src/fast_model/attribute_diff.rs` 尚未提交。
 
+- **从容器（PIPE 等）的差异摘要分组进三维：A 时还没建 / B 时已删的单元也能进了** (2026-09-21)
+  - 之前 `runCompareGroup` 合成两侧版本时一律按「有几何」装，单元在那一版不存在就去生成一个不存在会话的历史投影，后端 404 `REFNO_NOT_FOUND_AT_SESSION`、面板报「历史投影任务失败」进不了三维。现在按摘要组里单元根那一行判：`deleted` → B 侧、`added` → A 侧按「已删除单元版本」（空集）装，分屏那一格空着并在角标注明；A 侧注脚说「该版本没有这个单元」（多半是还没建），B 侧仍是「该版本单元已删除」。
+  - 验证：vitest 纯函数 +1、面板用例 +2 段，type-check 基线外 0 新增；真机 PIPE `24384_23225` A 300 → B 380 三组（改 / 删 / 增）见 `docs/verification/model-version-compare-gen-model-v1-2026-09-18/README.md` §8.4。
+
+- **版本对比分屏也能点构件：左格读版本 A、右格读版本 B 的属性，环境构件照常选中** (2026-09-21)
+  - 之前分屏时三维点击整体关着（GPU 拾取按整幅相机算、对不上左右两格画面）。现在指针落在哪一格就按那一格的视口与宽高比造射线：A / B 隔离图层做 CPU 射线拾取，命中把属性面板钉到那一版（与单视口同一条路，非当前显示侧拾取前临时开层、测完复位，「三维只看差异」照样生效）；主图层（环境）的 GPU 拾取把那一格当子视口——`GPUPicker.pick` / `DTXSelectionController.pick` 新增可选 `viewport`（three 的 `setViewOffset` 会把 aspect 置成整幅的，整幅必须就是那一格）；点空处普通清空。
+  - 分屏每格改走描边合成器：选中的环境构件两格都有描边，分屏与单视口的色彩 / 后处理也一致了（之前分屏暗一档）。
+  - 验证：vitest 纯函数 +1、`GPUPicker.test.ts` +2，type-check 基线外 0 新增，e2e 两夹具各 4 过；真机 `docs/verification/model-version-compare-gen-model-v1-2026-09-18/3d-diff-color/a626-b630-splitpick-*`（无环境）与 `a626-b630-splitenv-*`（带环境）（README §8.2，plan §11.1「分屏拾取」）。
+
 - **版本对比的三维按「模型几何差异」着色，单视口加版本角标，新增「三维只看差异」** (2026-09-21)
   - 从前 A 整侧蓝、B 整侧绿，只说明版本身份，哪件变了三维里看不出（面板算好的 `rows` 进了 ViewerPanel 却没人用）。现在每一版内部按四态上色：修改琥珀 / 新增翠绿（只在 B）/ 删除玫红（只在 A）/ 未变石板灰，与面板徽章、模型树差异模式同一套色（ADR 0066「三维联动」的落地，CONTEXT「模型几何差异」加了一句）。
   - 视口角标：单视口一枚跟着当前显示的版本（「B · sesno 630」），分屏两枚照旧；角标下只读图例列四态计数，「只看差异」开着时多一枚标签。

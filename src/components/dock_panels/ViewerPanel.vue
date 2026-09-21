@@ -113,14 +113,17 @@ import {
   DEFAULT_MODEL_UNIT_COMPARE_SIDE,
   DEFAULT_MODEL_UNIT_COMPARE_VIEW_MODE,
   getModelUnitCompareRenderPasses,
+  locateModelUnitComparePass,
   MODEL_UNIT_GEOMETRY_STATUS_COLORS,
   MODEL_UNIT_GEOMETRY_STATUS_LABELS,
   MODEL_UNIT_VERSION_COMPARE_EVENT,
   MODEL_UNIT_VERSION_COMPARE_STATE_EVENT,
+  modelUnitVersionAbsentNote,
   planModelUnitCompareObjectStyles,
   refnoFromCompareObjectId,
   sideFromCompareObjectId,
   type ModelUnitCompareHiddenObjectIds,
+  type ModelUnitCompareRenderPass,
   type ModelUnitCompareSide,
   type ModelUnitCompareViewMode,
   type ModelUnitGeometryStatus,
@@ -131,7 +134,7 @@ import {
   type ModelUnitVersionSide,
 } from '@/utils/modelUnitVersionCompare';
 import { SlopeAnnotation3D, WeldAnnotation3D } from '@/utils/three/annotation';
-import { DTXLayer, DTXSelectionController, DTXViewCullController } from '@/utils/three/dtx';
+import { DTXLayer, DTXSelectionController, DTXViewCullController, type PickViewport } from '@/utils/three/dtx';
 import { DynamicPivotController } from '@/utils/three/dtx/DynamicPivotController';
 import { loadModelDisplayConfig } from '@/utils/three/dtx/materialConfig';
 import { DTXOverlayHighlighter } from '@/utils/three/dtx/selection/DTXOverlayHighlighter';
@@ -1937,7 +1940,11 @@ function isModelUnitSplitCompareReady(): boolean {
     && modelUnitCompareLayers.length === 2;
 }
 
-function renderModelUnitCompareScene(viewer: DtxViewer): boolean {
+/**
+ * 分屏：同一相机改 aspect、scissor 左右两格各画一遍。有描边合成器就每格走 `selection.renderOutline()`（与单视口同一条渲染路——
+ * 分屏里选中的环境构件两格都有描边，色彩空间 / 后处理也和单视口一致），没有才直接 `renderer.render`。
+ */
+function renderModelUnitCompareScene(viewer: DtxViewer, selection: DTXSelectionController | null): boolean {
   const state = modelUnitCompareState.value;
   const [beforeLayer, afterLayer] = modelUnitCompareLayers;
   if (!state || !beforeLayer || !afterLayer || !isModelUnitSplitCompareReady()) return false;
@@ -1962,7 +1969,8 @@ function renderModelUnitCompareScene(viewer: DtxViewer): boolean {
       renderer.setScissor(pass.x, pass.y, pass.width, pass.height);
       camera.aspect = pass.width / Math.max(1, pass.height);
       camera.updateProjectionMatrix();
-      renderer.render(viewer.scene, camera);
+      if (selection?.hasOutline()) selection.renderOutline();
+      else renderer.render(viewer.scene, camera);
       renderDimensionOverlay(viewer);
     }
   } catch (error) {
@@ -2325,28 +2333,85 @@ type ModelUnitComparePick = {
 }
 
 /**
- * 版本对比里在三维点构件：GPU 拾取只认主图层的 picking mesh，A / B 隔离图层里的构件点不到。这里对**当前显示那一侧**的
- * 隔离图层做一次 CPU 射线拾取（包围盒粗筛 → 三角面精测，单元只有几十到几百件），回最近命中；分屏时拾取整体关着，不进这里。
+ * 版本对比里在三维点构件：GPU 拾取只认主图层的 picking mesh，A / B 隔离图层里的构件点不到。这里对 `side` 那一侧的隔离图层做一次
+ * CPU 射线拾取（包围盒粗筛 → 三角面精测，单元只有几十到几百件），回最近命中。单视口 `side` 就是当前显示那一侧；分屏按指针落的
+ * 那一格传（`splitCompareRay`）——帧尾两层已复位成 `activeSide` 的显隐、另一侧整层关着（`raycastObject` 对不可见对象直接回 null），
+ * 所以拾非当前侧前照 `renderModelUnitCompareScene` 每个 pass 的做法临时开那一侧，测完复位。
  */
-function pickModelUnitCompareObject(raycaster: Raycaster): ModelUnitComparePick | null {
+function pickModelUnitCompareObject(raycaster: Raycaster, side: ModelUnitCompareSide): ModelUnitComparePick | null {
   const state = modelUnitCompareState.value;
-  if (!state || state.status !== 'ready' || state.viewMode !== 'single') return null;
-  const layer = modelUnitCompareLayers[state.activeSide === 'before' ? 0 : 1];
+  if (!state || state.status !== 'ready') return null;
+  const [beforeLayer, afterLayer] = modelUnitCompareLayers;
+  const layer = side === 'before' ? beforeLayer : afterLayer;
   if (!layer) return null;
-  const { origin, direction } = raycaster.ray;
-  const box = new Box3();
-  let best: { objectId: string; distance: number } | null = null;
-  for (const objectId of layer.getVisibleObjectIds()) {
-    const bounds = layer.getObjectBoundingBoxInto(objectId, box);
-    if (!bounds || bounds.isEmpty() || !raycaster.ray.intersectsBox(bounds)) continue;
-    const hit = layer.raycastObject(objectId, origin, direction);
-    if (hit && (!best || hit.distance < best.distance)) best = { objectId, distance: hit.distance };
+  const swapSide = side !== state.activeSide;
+  const hidden = modelUnitCompareHiddenForState();
+  if (swapSide) applyModelUnitVersionSide(beforeLayer, afterLayer, side, hidden);
+  try {
+    const { origin, direction } = raycaster.ray;
+    const box = new Box3();
+    let best: { objectId: string; distance: number } | null = null;
+    for (const objectId of layer.getVisibleObjectIds()) {
+      const bounds = layer.getObjectBoundingBoxInto(objectId, box);
+      if (!bounds || bounds.isEmpty() || !raycaster.ray.intersectsBox(bounds)) continue;
+      const hit = layer.raycastObject(objectId, origin, direction);
+      if (hit && (!best || hit.distance < best.distance)) best = { objectId, distance: hit.distance };
+    }
+    if (!best) return null;
+    const rawRefno = refnoFromCompareObjectId(best.objectId);
+    const pickedSide = sideFromCompareObjectId(best.objectId);
+    if (!rawRefno || !pickedSide) return null;
+    return { objectId: best.objectId, refno: normalizeCompareRefno(rawRefno) || rawRefno, side: pickedSide, distance: best.distance };
+  } finally {
+    if (swapSide) applyModelUnitVersionSide(beforeLayer, afterLayer, state.activeSide, hidden);
   }
-  if (!best) return null;
-  const rawRefno = refnoFromCompareObjectId(best.objectId);
-  const side = sideFromCompareObjectId(best.objectId);
-  if (!rawRefno || !side) return null;
-  return { objectId: best.objectId, refno: normalizeCompareRefno(rawRefno) || rawRefno, side, distance: best.distance };
+}
+
+type SplitCompareRay = {
+  raycaster: Raycaster
+  side: ModelUnitCompareSide
+  pass: ModelUnitCompareRenderPass
+  /** 指针换到 renderer 尺寸下的画布坐标（左上原点） */
+  pos: Vector2
+  /** 那一格在画布坐标（左上原点）里的矩形，给主图层的 GPU 拾取当子视口 */
+  viewport: PickViewport
+}
+
+/**
+ * 分屏：指针落在左 A / 右 B 哪一格，就按那一格的视口与宽高比造射线——`renderModelUnitCompareScene` 每个 pass 正是这样改相机画的，
+ * 整幅相机算出的 NDC 在分屏里对不上画面。指针是 CSS px、pass 按 renderer 尺寸算，二者通常相等，按比例换一下防 canvas 被 CSS 缩放。
+ * 回 null = 点在两格之外（理论上不会）。
+ */
+function splitCompareRay(canvasPos: Vector2, canvas: HTMLCanvasElement, viewer: DtxViewer): SplitCompareRay | null {
+  const state = modelUnitCompareState.value;
+  if (!state || state.status !== 'ready') return null;
+  const rect = canvas.getBoundingClientRect();
+  const size = viewer.renderer.getSize(new Vector2());
+  const x = canvasPos.x * (size.x / Math.max(1, rect.width));
+  const y = canvasPos.y * (size.y / Math.max(1, rect.height));
+  const passes = getModelUnitCompareRenderPasses(state.viewMode, state.activeSide, size.x, size.y);
+  const located = locateModelUnitComparePass(passes, x, y, size.y);
+  if (!located) return null;
+  const camera = viewer.camera;
+  const originalAspect = camera.aspect;
+  try {
+    camera.aspect = located.pass.width / Math.max(1, located.pass.height);
+    camera.updateProjectionMatrix();
+    camera.updateMatrixWorld(true);
+    const raycaster = new Raycaster();
+    raycaster.setFromCamera(new Vector2(located.ndcX, located.ndcY), camera);
+    return {
+      raycaster,
+      side: located.pass.side,
+      pass: located.pass,
+      pos: new Vector2(x, y),
+      // pass 的 y 是 WebGL 左下原点，子视口要左上原点
+      viewport: { x: located.pass.x, y: size.y - located.pass.y - located.pass.height, width: located.pass.width, height: located.pass.height },
+    };
+  } finally {
+    camera.aspect = originalAspect;
+    camera.updateProjectionMatrix();
+  }
 }
 
 /**
@@ -2370,7 +2435,9 @@ function selectModelUnitCompareObject(pick: ModelUnitComparePick): void {
     load: async () => modelVersionAttributesToUiAttr(pick.refno, await attributesAt(pick.side, pick.refno)),
   });
   if (isDev && typeof window !== 'undefined' && (window as any).__modelUnitVersionCompare) {
-    (window as any).__modelUnitVersionCompare.lastPick = { objectId: pick.objectId, refno: pick.refno, side: pick.side, sesno, label };
+    (window as any).__modelUnitVersionCompare.lastPick = {
+      objectId: pick.objectId, refno: pick.refno, side: pick.side, sesno, label, viewMode: state.viewMode,
+    };
   }
 }
 
@@ -2387,8 +2454,7 @@ function attachPicking() {
   };
 
   const onDown = (e: PointerEvent) => {
-    if (isModelUnitSplitCompareReady()) return;
-    // 工具模式开启时，交由 tools
+    // 工具模式开启时，交由 tools（版本对比分屏进入时已把工具模式收成 none，分屏里的点击同样走这里记起点）
     if (store.toolMode.value && store.toolMode.value !== 'none') return;
     if (e.button !== 0) return;
     clickState.down = { x: e.clientX, y: e.clientY };
@@ -2405,14 +2471,9 @@ function attachPicking() {
   };
 
   const onUp = (e: PointerEvent) => {
-    if (isModelUnitSplitCompareReady()) {
-      clickState.down = null;
-      clickState.moved = false;
-      clickState.pointerId = null;
-      return;
-    }
-    // 工具模式开启时，交由 tools
-    if (store.toolMode.value && store.toolMode.value !== 'none') return;
+    const splitReady = isModelUnitSplitCompareReady();
+    // 工具模式开启时，交由 tools（版本对比分屏进入时已把工具模式收成 none）
+    if (!splitReady && store.toolMode.value && store.toolMode.value !== 'none') return;
 
     // Shift+拖拽：框选由 useDtxTools 处理，这里不做 click picking
     if (e.shiftKey) {
@@ -2424,13 +2485,22 @@ function attachPicking() {
 
     const moved = clickState.moved;
     clickState.down = null;
+    const down = clickState.down;
     clickState.moved = false;
     clickState.pointerId = null;
     if (moved) return;
 
     const rect = canvas.getBoundingClientRect();
+    // 分屏只认从本画布按下的左键单击
+    if (splitReady && (!down || e.button !== 0)) return;
     const pos = new Vector2(e.clientX - rect.left, e.clientY - rect.top);
-    const hit = sel.pick(pos);
+    const viewerForPick = dtxViewerRef.value;
+    // 版本对比分屏：整幅相机在分屏里对不上画面——指针落在左 A / 右 B 哪一格，就按那一格造射线、主图层的 GPU 拾取也把那一格当子视口
+    // （`GPUPicker` 的 `setViewOffset` 会把 aspect 置成整幅的，整幅必须就是这一格）；下面的环境选中 / A / B 隔离图层拾取 / 点空清空
+    // 全部照单视口那一套走。
+    const splitRay = splitReady && viewerForPick ? splitCompareRay(pos, canvas, viewerForPick) : null;
+    if (splitReady && !splitRay) return;
+    const hit = splitRay ? sel.pick(splitRay.pos, splitRay.viewport) : sel.pick(pos);
 
     // Ctrl/Cmd 键：追加/切换选中模式
     const additive = e.ctrlKey || e.metaKey;
@@ -2460,12 +2530,11 @@ function attachPicking() {
       return;
     }
 
-    // 版本对比（单视口）：先问 A / B 隔离图层。它们不在主图层的 picking mesh 里，GPU 拾取看不见；命中且比主图层的命中更近
-    // （主图层里目标单元已隐藏，剩下的只会是环境模型）就选它、属性面板钉到那一版。
-    const viewerForPick = dtxViewerRef.value;
+    // 版本对比：先问 A / B 隔离图层。它们不在主图层的 picking mesh 里，GPU 拾取看不见；命中且比主图层的命中更近
+    // （主图层里目标单元已隐藏，剩下的只会是环境模型）就选它、属性面板钉到那一版。单视口问当前显示那一侧，分屏问指针落的那一格。
     if (viewerForPick && modelUnitCompareState.value?.status === 'ready') {
-      const raycaster = canvasRay(pos, canvas, viewerForPick.camera);
-      const comparePick = pickModelUnitCompareObject(raycaster);
+      const raycaster = splitRay ? splitRay.raycaster : canvasRay(pos, canvas, viewerForPick.camera);
+      const comparePick = pickModelUnitCompareObject(raycaster, splitRay ? splitRay.side : modelUnitCompareState.value.activeSide);
       if (comparePick) {
         const primaryDistance = hit
           ? dtxLayerRef.value?.raycastObject(hit.objectId, raycaster.ray.origin, raycaster.ray.direction)?.distance ?? Infinity
@@ -3081,7 +3150,7 @@ function renderFrameImmediate() {
   }
 
   const selection = selectionControllerRef.value;
-  if (renderModelUnitCompareScene(dtxViewer)) {
+  if (renderModelUnitCompareScene(dtxViewer, selection)) {
     // 分屏共享同一场景和相机；版本层显隐由两个 viewport 的 render pass 控制。
   } else if (selection?.hasOutline()) {
     selection.renderOutline();
@@ -3181,7 +3250,7 @@ function renderFrame() {
     }
 
     const selection = selectionControllerRef.value;
-    if (renderModelUnitCompareScene(dtxViewer)) {
+    if (renderModelUnitCompareScene(dtxViewer, selection)) {
       // 分屏共享同一场景和相机；版本层显隐由两个 viewport 的 render pass 控制。
     } else if (selection?.hasOutline()) {
       selection.renderOutline();
@@ -4706,9 +4775,11 @@ onUnmounted(() => {
           A · sesno {{ modelUnitCompareState.detail.before.sesno }}
         </div>
         <div class="absolute left-[calc(50%+0.75rem)] top-3 rounded bg-emerald-600/90 px-2 py-1 text-xs font-semibold text-white shadow">
+          <span v-if="modelUnitCompareState.detail.before.version.impactKind === 'tombstone'" class="ml-1 font-normal opacity-80">· {{ modelUnitVersionAbsentNote('before') }}</span>
           B · sesno {{ modelUnitCompareState.detail.after.sesno }}
         </div>
       </template>
+          <span v-if="modelUnitCompareState.detail.after.version.impactKind === 'tombstone'" class="ml-1 font-normal opacity-80">· {{ modelUnitVersionAbsentNote('after') }}</span>
       <div v-else
         class="absolute left-3 top-3 rounded px-2 py-1 text-xs font-semibold text-white shadow"
         :class="modelUnitCompareState.activeSide === 'before' ? 'bg-blue-600/90' : 'bg-emerald-600/90'"
@@ -4717,7 +4788,7 @@ onUnmounted(() => {
         {{ modelUnitCompareState.activeSide === 'before' ? 'A' : 'B' }} · sesno
         {{ modelUnitCompareState.activeSide === 'before' ? modelUnitCompareState.detail.before.sesno : modelUnitCompareState.detail.after.sesno }}
         <span v-if="(modelUnitCompareState.activeSide === 'before' ? modelUnitCompareState.detail.before : modelUnitCompareState.detail.after).version.impactKind === 'tombstone'"
-          class="ml-1 font-normal opacity-80">· 该版本单元已删除</span>
+          class="ml-1 font-normal opacity-80">· {{ modelUnitVersionAbsentNote(modelUnitCompareState.activeSide) }}</span>
       </div>
       <!-- 只读图例（开关在版本对比面板「三维查看」节）：右上角 100px 的视图 gizmo 与左侧竖排工具栏都吃指针，视口里不放可点的东西；限宽让窄视口换行 -->
       <div class="absolute left-3 top-[2.45rem] flex max-w-[calc(100%-8.5rem)] flex-wrap items-center gap-x-2 gap-y-1 rounded bg-background/85 px-2 py-1 text-[11px] text-foreground shadow backdrop-blur"

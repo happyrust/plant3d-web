@@ -1,0 +1,982 @@
+{
+  "url": "http://127.0.0.1:3111/?model_source=gen-model-v1&gm_backend_port=8022&unit_refno=24384_23225&compare_autorun=1&compare_a=300&compare_b=380",
+  "scenario": "pipe-24384_23225-a300-b380",
+  "pipe": "24384_23225",
+  "a": 300,
+  "b": 380,
+  "startedAt": "2026-09-21T04:22:58.030Z",
+  "pageErrors": [],
+  "consoleErrors": [
+    "[vite] failed to connect to websocket.\nyour current setup:\n  (browser) 127.0.0.1:3111/ <--[HTTP]--> 127.0.0.1:3111/ (server)\n  (browser) 127.0.0.1:3111/ <--[WebSocket (failing)]--> 127.0.0.1:3111/ (server)\nCheck out your Vite / network configuration and https://vite.dev/config/server-options.html#se",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)"
+  ],
+  "attributeRequests": [
+    {
+      "kind": "history/query",
+      "body": "{\"snapshot_key\":\"24384_23257@300\",\"tool\":\"attributes\",\"arguments\":{\"refno\":\"24384/23262\"}}"
+    },
+    {
+      "kind": "history/query",
+      "body": "{\"snapshot_key\":\"24384_23257@380\",\"tool\":\"attributes\",\"arguments\":{\"refno\":\"24384/23262\"}}"
+    },
+    {
+      "kind": "element/attributes",
+      "body": "{\"refno\":\"24384/23262\"}"
+    },
+    {
+      "kind": "history/query",
+      "body": "{\"snapshot_key\":\"24384_23257@380\",\"tool\":\"attributes\",\"arguments\":{\"refno\":\"24384/23262\"}}"
+    },
+    {
+      "kind": "history/query",
+      "body": "{\"snapshot_key\":\"24384_23257@300\",\"tool\":\"attributes\",\"arguments\":{\"refno\":\"24384/23262\"}}"
+    },
+    {
+      "kind": "history/query",
+      "body": "{\"snapshot_key\":\"24384_26324@300\",\"tool\":\"attributes\",\"arguments\":{\"refno\":\"24384/26325\"}}"
+    },
+    {
+      "kind": "history/query",
+      "body": "{\"snapshot_key\":\"24384_26324@300\",\"tool\":\"attributes\",\"arguments\":{\"refno\":\"24384/26325\"}}"
+    },
+    {
+      "kind": "history/query",
+      "body": "{\"snapshot_key\":\"32576_22@380\",\"tool\":\"attributes\",\"arguments\":{\"refno\":\"32576/17\"}}"
+    },
+    {
+      "kind": "element/attributes",
+      "body": "{\"refno\":\"32576/17\"}"
+    },
+    {
+      "kind": "history/query",
+      "body": "{\"snapshot_key\":\"32576_22@380\",\"tool\":\"attributes\",\"arguments\":{\"refno\":\"32576/17\"}}"
+    }
+  ],
+  "steps": [
+    {
+      "at": "2026-09-21T04:22:58.188Z",
+      "name": "goto",
+      "url": "http://127.0.0.1:3111/?model_source=gen-model-v1&gm_backend_port=8022&unit_refno=24384_23225&compare_autorun=1&compare_a=300&compare_b=380"
+    },
+    {
+      "at": "2026-09-21T04:23:30.953Z",
+      "name": "panel open (autorun stops for container)",
+      "scope": "DB 8000 · 24384_23225（PIPE） · 容器，不属于任何最小交付单元",
+      "notice": "24384_23225（PIPE）不在任何最小交付单元下：几何按其下的单元分组对比（模型对比 tab），子树时间线 150 版来自 node/versions。",
+      "scopeSelfPressed": "true",
+      "timelineHead": "版本时间线 · 本范围 49 版",
+      "defaultPair": {
+        "a": 524,
+        "b": 532
+      },
+      "runDisabled": null,
+      "viewer": null
+    },
+    {
+      "at": "2026-09-21T04:23:31.351Z",
+      "name": "scope=subtree",
+      "timelineHead": "版本时间线 · 本范围 150 版",
+      "rows": 150
+    },
+    {
+      "at": "2026-09-21T04:23:31.866Z",
+      "name": "pair picked",
+      "a": 300,
+      "b": 380
+    },
+    {
+      "at": "2026-09-21T04:23:32.355Z",
+      "name": "diff summary (subtree)",
+      "summary": "A 300 → B 380 · 差异摘要（未生成几何）变了的单元 5未变单元 16新增 20删除 6修改 2noop 1",
+      "groups": [
+        {
+          "unit": "24384_23257",
+          "row": "BRAN 24384_23257/C-OR-1R345-C修改 1noop 1在三维中对比"
+        },
+        {
+          "unit": "24384_26324",
+          "row": "BRAN 24384_26324/test_pipe删除 4在三维中对比"
+        },
+        {
+          "unit": "24384_26326",
+          "row": "BRAN 24384_26326/test_tray删除 2在三维中对比"
+        },
+        {
+          "unit": "32576_12",
+          "row": "BRAN 32576_12/CODEX_DB8000_PIPE_SCR_A新增 9在三维中对比"
+        },
+        {
+          "unit": "32576_22",
+          "row": "BRAN 32576_22/CODEX_DB8000_PIPE_SCR_B新增 11在三维中对比"
+        }
+      ],
+      "runDisabled": true
+    },
+    {
+      "at": "2026-09-21T04:23:34.372Z",
+      "name": "group 24384_23257: entered 3D",
+      "viewer": {
+        "unitRefno": "24384_23257",
+        "beforeSesno": 300,
+        "afterSesno": 380,
+        "beforeObjects": 9,
+        "afterObjects": 9,
+        "environmentLoadedRefnos": 0,
+        "activeSide": "after",
+        "viewMode": "single",
+        "diffOnly": false,
+        "statusCounts": {
+          "added": 0,
+          "deleted": 0,
+          "modified": 1,
+          "unchanged": 8
+        },
+        "hiddenWhenDiffOnly": {
+          "before": 8,
+          "after": 8
+        }
+      },
+      "runtime": "24384_23257 · DB 8000",
+      "summary": "24384_23257 · 几何差异新增 0删除 0修改 1未变 8",
+      "button": "三维中",
+      "badge": "B · sesno 380",
+      "legend": "修改 1 新增 0 删除 0 未变 8",
+      "target": {
+        "refno": "24384_23262",
+        "noun": "FTUB",
+        "status": "modified"
+      }
+    },
+    {
+      "at": "2026-09-21T04:23:35.431Z",
+      "name": "group 24384_23257: split",
+      "overlayCount": 1,
+      "badges": [
+        "A · sesno 300",
+        "B · sesno 380"
+      ],
+      "singleBadgeCount": 0,
+      "splitSummary": "左 A · sesno 300 · 右 B · sesno 380",
+      "viewer": {
+        "unitRefno": "24384_23257",
+        "beforeSesno": 300,
+        "afterSesno": 380,
+        "beforeObjects": 9,
+        "afterObjects": 9,
+        "environmentLoadedRefnos": 0,
+        "activeSide": "after",
+        "viewMode": "split",
+        "diffOnly": false,
+        "statusCounts": {
+          "added": 0,
+          "deleted": 0,
+          "modified": 1,
+          "unchanged": 8
+        },
+        "hiddenWhenDiffOnly": {
+          "before": 8,
+          "after": 8
+        }
+      }
+    },
+    {
+      "at": "2026-09-21T04:23:35.531Z",
+      "name": "group 24384_23257: project B",
+      "objectId": "unit-compare:b:24384_23262:4",
+      "visible": true,
+      "x": 624.3271473979194,
+      "y": 494.49878440229236,
+      "ndcPass": {
+        "x": -0.56153646757405,
+        "y": -0.13204617442171201
+      },
+      "inside": true
+    },
+    {
+      "at": "2026-09-21T04:24:06.776Z",
+      "name": "group 24384_23257: right B click 24384_23262",
+      "label": "group 24384_23257: right B click 24384_23262",
+      "clicked": {
+        "x": 624,
+        "y": 494
+      },
+      "lastPick": {
+        "objectId": "unit-compare:b:24384_23262:4",
+        "refno": "24384_23262",
+        "side": "after",
+        "sesno": 380,
+        "label": "B",
+        "viewMode": "split"
+      },
+      "noticeCount": 1,
+      "notice": "属性来自版本 B · sesno 380 （版本对比里点到的那一版，不是当前会话）",
+      "selected": [
+        "24384_23262"
+      ],
+      "propertiesRefno": "",
+      "requests": [
+        {
+          "kind": "history/query",
+          "body": "{\"snapshot_key\":\"24384_23257@380\",\"tool\":\"attributes\",\"arguments\":{\"refno\":\"24384/23262\"}}"
+        }
+      ]
+    },
+    {
+      "at": "2026-09-21T04:24:06.778Z",
+      "name": "group 24384_23257: project A",
+      "objectId": "unit-compare:a:24384_23262:4",
+      "visible": false,
+      "x": 400.89556880642,
+      "y": 535.4082747068077,
+      "ndcPass": {
+        "x": -0.5475949439429336,
+        "y": -0.2445894764974076
+      },
+      "inside": true
+    },
+    {
+      "at": "2026-09-21T04:24:38.004Z",
+      "name": "group 24384_23257: left A click 24384_23262",
+      "label": "group 24384_23257: left A click 24384_23262",
+      "clicked": {
+        "x": 401,
+        "y": 535
+      },
+      "lastPick": {
+        "objectId": "unit-compare:a:24384_23262:4",
+        "refno": "24384_23262",
+        "side": "before",
+        "sesno": 300,
+        "label": "A",
+        "viewMode": "split"
+      },
+      "noticeCount": 1,
+      "notice": "属性来自版本 A · sesno 300 （版本对比里点到的那一版，不是当前会话）",
+      "selected": [
+        "24384_23262"
+      ],
+      "propertiesRefno": "",
+      "requests": [
+        {
+          "kind": "history/query",
+          "body": "{\"snapshot_key\":\"24384_23257@300\",\"tool\":\"attributes\",\"arguments\":{\"refno\":\"24384/23262\"}}"
+        }
+      ]
+    },
+    {
+      "at": "2026-09-21T04:24:39.510Z",
+      "name": "group 24384_26324: entered 3D",
+      "viewer": {
+        "unitRefno": "24384_26324",
+        "beforeSesno": 300,
+        "afterSesno": 380,
+        "beforeObjects": 1,
+        "afterObjects": 0,
+        "environmentLoadedRefnos": 0,
+        "activeSide": "after",
+        "viewMode": "single",
+        "diffOnly": false,
+        "statusCounts": {
+          "added": 0,
+          "deleted": 1,
+          "modified": 0,
+          "unchanged": 0
+        },
+        "hiddenWhenDiffOnly": {
+          "before": 0,
+          "after": 0
+        }
+      },
+      "runtime": "24384_26324 · DB 8000",
+      "summary": "24384_26324 · 几何差异新增 0删除 1修改 0未变 0",
+      "button": "三维中",
+      "badge": "B · sesno 380 · 该版本单元已删除",
+      "legend": "修改 0 新增 0 删除 1 未变 0",
+      "target": {
+        "refno": "24384_26325",
+        "noun": "VALV",
+        "status": "deleted"
+      }
+    },
+    {
+      "at": "2026-09-21T04:24:40.591Z",
+      "name": "group 24384_26324: split",
+      "overlayCount": 1,
+      "badges": [
+        "A · sesno 300",
+        "B · sesno 380 · 该版本单元已删除"
+      ],
+      "singleBadgeCount": 0,
+      "splitSummary": "左 A · sesno 300 · 右 B · sesno 380",
+      "viewer": {
+        "unitRefno": "24384_26324",
+        "beforeSesno": 300,
+        "afterSesno": 380,
+        "beforeObjects": 1,
+        "afterObjects": 0,
+        "environmentLoadedRefnos": 0,
+        "activeSide": "after",
+        "viewMode": "split",
+        "diffOnly": false,
+        "statusCounts": {
+          "added": 0,
+          "deleted": 1,
+          "modified": 0,
+          "unchanged": 0
+        },
+        "hiddenWhenDiffOnly": {
+          "before": 0,
+          "after": 0
+        }
+      }
+    },
+    {
+      "at": "2026-09-21T04:24:40.685Z",
+      "name": "group 24384_26324: project A (deleted)",
+      "objectId": "unit-compare:a:24384_26325:0",
+      "visible": false,
+      "x": 462.5000000000003,
+      "y": 446.5,
+      "ndcPass": {
+        "x": 2.5936446786371935e-15,
+        "y": 0
+      },
+      "inside": true
+    },
+    {
+      "at": "2026-09-21T04:25:11.920Z",
+      "name": "group 24384_26324: left A click deleted 24384_26325",
+      "label": "group 24384_26324: left A click deleted 24384_26325",
+      "clicked": {
+        "x": 463,
+        "y": 447
+      },
+      "lastPick": {
+        "objectId": "unit-compare:a:24384_26325:0",
+        "refno": "24384_26325",
+        "side": "before",
+        "sesno": 300,
+        "label": "A",
+        "viewMode": "split"
+      },
+      "noticeCount": 1,
+      "notice": "属性来自版本 A · sesno 300 （版本对比里点到的那一版，不是当前会话）",
+      "selected": [
+        "24384_26325"
+      ],
+      "propertiesRefno": "",
+      "requests": [
+        {
+          "kind": "history/query",
+          "body": "{\"snapshot_key\":\"24384_26324@300\",\"tool\":\"attributes\",\"arguments\":{\"refno\":\"24384/26325\"}}"
+        }
+      ]
+    },
+    {
+      "at": "2026-09-21T04:26:23.304Z",
+      "name": "group 24384_26324: right B click same spot (B has nothing)",
+      "label": "group 24384_26324: right B click same spot (B has nothing)",
+      "clicked": {
+        "x": 688,
+        "y": 447
+      },
+      "lastPick": {
+        "objectId": "unit-compare:a:24384_26325:0",
+        "refno": "24384_26325",
+        "side": "before",
+        "sesno": 300,
+        "label": "A",
+        "viewMode": "split"
+      },
+      "noticeCount": 0,
+      "notice": "",
+      "selected": [],
+      "propertiesRefno": "",
+      "requests": []
+    },
+    {
+      "at": "2026-09-21T04:26:25.192Z",
+      "name": "group 32576_22: entered 3D",
+      "viewer": {
+        "unitRefno": "32576_22",
+        "beforeSesno": 300,
+        "afterSesno": 380,
+        "beforeObjects": 0,
+        "afterObjects": 10,
+        "environmentLoadedRefnos": 0,
+        "activeSide": "after",
+        "viewMode": "single",
+        "diffOnly": false,
+        "statusCounts": {
+          "added": 10,
+          "deleted": 0,
+          "modified": 0,
+          "unchanged": 0
+        },
+        "hiddenWhenDiffOnly": {
+          "before": 0,
+          "after": 0
+        }
+      },
+      "runtime": "32576_22 · DB 8000",
+      "summary": "32576_22 · 几何差异新增 10删除 0修改 0未变 0",
+      "button": "三维中",
+      "badge": "B · sesno 380",
+      "legend": "修改 0 新增 10 删除 0 未变 0",
+      "target": {
+        "refno": "32576_17",
+        "noun": "FTUB",
+        "status": "added"
+      }
+    },
+    {
+      "at": "2026-09-21T04:26:26.265Z",
+      "name": "group 32576_22: split",
+      "overlayCount": 1,
+      "badges": [
+        "A · sesno 300 · 该版本没有这个单元",
+        "B · sesno 380"
+      ],
+      "singleBadgeCount": 0,
+      "splitSummary": "左 A · sesno 300 · 右 B · sesno 380",
+      "viewer": {
+        "unitRefno": "32576_22",
+        "beforeSesno": 300,
+        "afterSesno": 380,
+        "beforeObjects": 0,
+        "afterObjects": 10,
+        "environmentLoadedRefnos": 0,
+        "activeSide": "after",
+        "viewMode": "split",
+        "diffOnly": false,
+        "statusCounts": {
+          "added": 10,
+          "deleted": 0,
+          "modified": 0,
+          "unchanged": 0
+        },
+        "hiddenWhenDiffOnly": {
+          "before": 0,
+          "after": 0
+        }
+      }
+    },
+    {
+      "at": "2026-09-21T04:26:26.360Z",
+      "name": "group 32576_22: project B (added)",
+      "objectId": "unit-compare:b:32576_17:0",
+      "visible": true,
+      "x": 625.1212154481536,
+      "y": 515.2106409391408,
+      "ndcPass": {
+        "x": -0.554478084905301,
+        "y": -0.18902514701276701
+      },
+      "inside": true
+    },
+    {
+      "at": "2026-09-21T04:26:57.602Z",
+      "name": "group 32576_22: right B click added 32576_17",
+      "label": "group 32576_22: right B click added 32576_17",
+      "clicked": {
+        "x": 625,
+        "y": 515
+      },
+      "lastPick": {
+        "objectId": "unit-compare:b:32576_17:0",
+        "refno": "32576_17",
+        "side": "after",
+        "sesno": 380,
+        "label": "B",
+        "viewMode": "split"
+      },
+      "noticeCount": 1,
+      "notice": "属性来自版本 B · sesno 380 （版本对比里点到的那一版，不是当前会话）",
+      "selected": [
+        "32576_17"
+      ],
+      "propertiesRefno": "",
+      "requests": [
+        {
+          "kind": "history/query",
+          "body": "{\"snapshot_key\":\"32576_22@380\",\"tool\":\"attributes\",\"arguments\":{\"refno\":\"32576/17\"}}"
+        }
+      ]
+    },
+    {
+      "at": "2026-09-21T04:28:08.940Z",
+      "name": "group 32576_22: left A click same spot (A has nothing)",
+      "label": "group 32576_22: left A click same spot (A has nothing)",
+      "clicked": {
+        "x": 400,
+        "y": 515
+      },
+      "lastPick": {
+        "objectId": "unit-compare:b:32576_17:0",
+        "refno": "32576_17",
+        "side": "after",
+        "sesno": 380,
+        "label": "B",
+        "viewMode": "split"
+      },
+      "noticeCount": 0,
+      "notice": "",
+      "selected": [],
+      "propertiesRefno": "",
+      "requests": []
+    },
+    {
+      "at": "2026-09-21T04:28:09.624Z",
+      "name": "closed",
+      "viewer": null,
+      "overlayCount": 0,
+      "noticeCount": 0,
+      "groupButtonTexts": [
+        "在三维中对比",
+        "在三维中对比",
+        "在三维中对比",
+        "在三维中对比",
+        "在三维中对比"
+      ]
+    }
+  ],
+  "groups": [
+    {
+      "unit": "24384_23257",
+      "row": "BRAN 24384_23257/C-OR-1R345-C修改 1noop 1在三维中对比",
+      "picks": [
+        {
+          "label": "group 24384_23257: right B click 24384_23262",
+          "clicked": {
+            "x": 624,
+            "y": 494
+          },
+          "lastPick": {
+            "objectId": "unit-compare:b:24384_23262:4",
+            "refno": "24384_23262",
+            "side": "after",
+            "sesno": 380,
+            "label": "B",
+            "viewMode": "split"
+          },
+          "noticeCount": 1,
+          "notice": "属性来自版本 B · sesno 380 （版本对比里点到的那一版，不是当前会话）",
+          "selected": [
+            "24384_23262"
+          ],
+          "propertiesRefno": "",
+          "requests": [
+            {
+              "kind": "history/query",
+              "body": "{\"snapshot_key\":\"24384_23257@380\",\"tool\":\"attributes\",\"arguments\":{\"refno\":\"24384/23262\"}}"
+            }
+          ]
+        },
+        {
+          "label": "group 24384_23257: left A click 24384_23262",
+          "clicked": {
+            "x": 401,
+            "y": 535
+          },
+          "lastPick": {
+            "objectId": "unit-compare:a:24384_23262:4",
+            "refno": "24384_23262",
+            "side": "before",
+            "sesno": 300,
+            "label": "A",
+            "viewMode": "split"
+          },
+          "noticeCount": 1,
+          "notice": "属性来自版本 A · sesno 300 （版本对比里点到的那一版，不是当前会话）",
+          "selected": [
+            "24384_23262"
+          ],
+          "propertiesRefno": "",
+          "requests": [
+            {
+              "kind": "history/query",
+              "body": "{\"snapshot_key\":\"24384_23257@300\",\"tool\":\"attributes\",\"arguments\":{\"refno\":\"24384/23262\"}}"
+            }
+          ]
+        }
+      ],
+      "target": {
+        "refno": "24384_23262",
+        "noun": "FTUB",
+        "status": "modified"
+      },
+      "viewer": {
+        "unitRefno": "24384_23257",
+        "beforeSesno": 300,
+        "afterSesno": 380,
+        "beforeObjects": 9,
+        "afterObjects": 9,
+        "environmentLoadedRefnos": 0,
+        "activeSide": "after",
+        "viewMode": "single",
+        "diffOnly": false,
+        "statusCounts": {
+          "added": 0,
+          "deleted": 0,
+          "modified": 1,
+          "unchanged": 8
+        },
+        "hiddenWhenDiffOnly": {
+          "before": 8,
+          "after": 8
+        }
+      },
+      "runtime": "24384_23257 · DB 8000",
+      "summaryInPanel": "24384_23257 · 几何差异新增 0删除 0修改 1未变 8",
+      "buttonText": "三维中",
+      "singleBadge": "B · sesno 380",
+      "legend": "修改 1 新增 0 删除 0 未变 8",
+      "viewModeBeforeSplitClick": "single",
+      "split": {
+        "overlayCount": 1,
+        "badges": [
+          "A · sesno 300",
+          "B · sesno 380"
+        ],
+        "singleBadgeCount": 0,
+        "splitSummary": "左 A · sesno 300 · 右 B · sesno 380",
+        "viewer": {
+          "unitRefno": "24384_23257",
+          "beforeSesno": 300,
+          "afterSesno": 380,
+          "beforeObjects": 9,
+          "afterObjects": 9,
+          "environmentLoadedRefnos": 0,
+          "activeSide": "after",
+          "viewMode": "split",
+          "diffOnly": false,
+          "statusCounts": {
+            "added": 0,
+            "deleted": 0,
+            "modified": 1,
+            "unchanged": 8
+          },
+          "hiddenWhenDiffOnly": {
+            "before": 8,
+            "after": 8
+          }
+        }
+      }
+    },
+    {
+      "unit": "24384_26324",
+      "row": "BRAN 24384_26324/test_pipe删除 4在三维中对比",
+      "picks": [
+        {
+          "label": "group 24384_26324: left A click deleted 24384_26325",
+          "clicked": {
+            "x": 463,
+            "y": 447
+          },
+          "lastPick": {
+            "objectId": "unit-compare:a:24384_26325:0",
+            "refno": "24384_26325",
+            "side": "before",
+            "sesno": 300,
+            "label": "A",
+            "viewMode": "split"
+          },
+          "noticeCount": 1,
+          "notice": "属性来自版本 A · sesno 300 （版本对比里点到的那一版，不是当前会话）",
+          "selected": [
+            "24384_26325"
+          ],
+          "propertiesRefno": "",
+          "requests": [
+            {
+              "kind": "history/query",
+              "body": "{\"snapshot_key\":\"24384_26324@300\",\"tool\":\"attributes\",\"arguments\":{\"refno\":\"24384/26325\"}}"
+            }
+          ]
+        },
+        {
+          "label": "group 24384_26324: right B click same spot (B has nothing)",
+          "clicked": {
+            "x": 688,
+            "y": 447
+          },
+          "lastPick": {
+            "objectId": "unit-compare:a:24384_26325:0",
+            "refno": "24384_26325",
+            "side": "before",
+            "sesno": 300,
+            "label": "A",
+            "viewMode": "split"
+          },
+          "noticeCount": 0,
+          "notice": "",
+          "selected": [],
+          "propertiesRefno": "",
+          "requests": []
+        }
+      ],
+      "target": {
+        "refno": "24384_26325",
+        "noun": "VALV",
+        "status": "deleted"
+      },
+      "viewer": {
+        "unitRefno": "24384_26324",
+        "beforeSesno": 300,
+        "afterSesno": 380,
+        "beforeObjects": 1,
+        "afterObjects": 0,
+        "environmentLoadedRefnos": 0,
+        "activeSide": "after",
+        "viewMode": "single",
+        "diffOnly": false,
+        "statusCounts": {
+          "added": 0,
+          "deleted": 1,
+          "modified": 0,
+          "unchanged": 0
+        },
+        "hiddenWhenDiffOnly": {
+          "before": 0,
+          "after": 0
+        }
+      },
+      "runtime": "24384_26324 · DB 8000",
+      "summaryInPanel": "24384_26324 · 几何差异新增 0删除 1修改 0未变 0",
+      "buttonText": "三维中",
+      "singleBadge": "B · sesno 380 · 该版本单元已删除",
+      "legend": "修改 0 新增 0 删除 1 未变 0",
+      "viewModeBeforeSplitClick": "single",
+      "split": {
+        "overlayCount": 1,
+        "badges": [
+          "A · sesno 300",
+          "B · sesno 380 · 该版本单元已删除"
+        ],
+        "singleBadgeCount": 0,
+        "splitSummary": "左 A · sesno 300 · 右 B · sesno 380",
+        "viewer": {
+          "unitRefno": "24384_26324",
+          "beforeSesno": 300,
+          "afterSesno": 380,
+          "beforeObjects": 1,
+          "afterObjects": 0,
+          "environmentLoadedRefnos": 0,
+          "activeSide": "after",
+          "viewMode": "split",
+          "diffOnly": false,
+          "statusCounts": {
+            "added": 0,
+            "deleted": 1,
+            "modified": 0,
+            "unchanged": 0
+          },
+          "hiddenWhenDiffOnly": {
+            "before": 0,
+            "after": 0
+          }
+        }
+      }
+    },
+    {
+      "unit": "32576_22",
+      "row": "BRAN 32576_22/CODEX_DB8000_PIPE_SCR_B新增 11在三维中对比",
+      "picks": [
+        {
+          "label": "group 32576_22: right B click added 32576_17",
+          "clicked": {
+            "x": 625,
+            "y": 515
+          },
+          "lastPick": {
+            "objectId": "unit-compare:b:32576_17:0",
+            "refno": "32576_17",
+            "side": "after",
+            "sesno": 380,
+            "label": "B",
+            "viewMode": "split"
+          },
+          "noticeCount": 1,
+          "notice": "属性来自版本 B · sesno 380 （版本对比里点到的那一版，不是当前会话）",
+          "selected": [
+            "32576_17"
+          ],
+          "propertiesRefno": "",
+          "requests": [
+            {
+              "kind": "history/query",
+              "body": "{\"snapshot_key\":\"32576_22@380\",\"tool\":\"attributes\",\"arguments\":{\"refno\":\"32576/17\"}}"
+            }
+          ]
+        },
+        {
+          "label": "group 32576_22: left A click same spot (A has nothing)",
+          "clicked": {
+            "x": 400,
+            "y": 515
+          },
+          "lastPick": {
+            "objectId": "unit-compare:b:32576_17:0",
+            "refno": "32576_17",
+            "side": "after",
+            "sesno": 380,
+            "label": "B",
+            "viewMode": "split"
+          },
+          "noticeCount": 0,
+          "notice": "",
+          "selected": [],
+          "propertiesRefno": "",
+          "requests": []
+        }
+      ],
+      "target": {
+        "refno": "32576_17",
+        "noun": "FTUB",
+        "status": "added"
+      },
+      "viewer": {
+        "unitRefno": "32576_22",
+        "beforeSesno": 300,
+        "afterSesno": 380,
+        "beforeObjects": 0,
+        "afterObjects": 10,
+        "environmentLoadedRefnos": 0,
+        "activeSide": "after",
+        "viewMode": "single",
+        "diffOnly": false,
+        "statusCounts": {
+          "added": 10,
+          "deleted": 0,
+          "modified": 0,
+          "unchanged": 0
+        },
+        "hiddenWhenDiffOnly": {
+          "before": 0,
+          "after": 0
+        }
+      },
+      "runtime": "32576_22 · DB 8000",
+      "summaryInPanel": "32576_22 · 几何差异新增 10删除 0修改 0未变 0",
+      "buttonText": "三维中",
+      "singleBadge": "B · sesno 380",
+      "legend": "修改 0 新增 10 删除 0 未变 0",
+      "viewModeBeforeSplitClick": "single",
+      "split": {
+        "overlayCount": 1,
+        "badges": [
+          "A · sesno 300 · 该版本没有这个单元",
+          "B · sesno 380"
+        ],
+        "singleBadgeCount": 0,
+        "splitSummary": "左 A · sesno 300 · 右 B · sesno 380",
+        "viewer": {
+          "unitRefno": "32576_22",
+          "beforeSesno": 300,
+          "afterSesno": 380,
+          "beforeObjects": 0,
+          "afterObjects": 10,
+          "environmentLoadedRefnos": 0,
+          "activeSide": "after",
+          "viewMode": "split",
+          "diffOnly": false,
+          "statusCounts": {
+            "added": 10,
+            "deleted": 0,
+            "modified": 0,
+            "unchanged": 0
+          },
+          "hiddenWhenDiffOnly": {
+            "before": 0,
+            "after": 0
+          }
+        }
+      }
+    }
+  ],
+  "failedResponses": [
+    {
+      "status": 503,
+      "url": "http://127.0.0.1:3111/api/users"
+    },
+    {
+      "status": 503,
+      "url": "http://127.0.0.1:3111/api/users/reviewers"
+    },
+    {
+      "status": 503,
+      "url": "http://127.0.0.1:3111/api/users/me"
+    },
+    {
+      "status": 503,
+      "url": "http://127.0.0.1:3111/api/review/tasks?requester_id=SJ"
+    },
+    {
+      "status": 404,
+      "url": "http://localhost:8022/api/v1/element/attribute-diff?dbnum=8000&refno=24384%2F23225&a=524&b=532"
+    }
+  ],
+  "initial": {
+    "scope": "DB 8000 · 24384_23225（PIPE） · 容器，不属于任何最小交付单元",
+    "notice": "24384_23225（PIPE）不在任何最小交付单元下：几何按其下的单元分组对比（模型对比 tab），子树时间线 150 版来自 node/versions。",
+    "scopeSelfPressed": "true",
+    "timelineHead": "版本时间线 · 本范围 49 版",
+    "defaultPair": {
+      "a": 524,
+      "b": 532
+    },
+    "runDisabled": null,
+    "viewer": null
+  },
+  "dbnum": 8000,
+  "subtree": {
+    "timelineHead": "版本时间线 · 本范围 150 版",
+    "rows": 150
+  },
+  "pair": {
+    "a": 300,
+    "b": 380
+  },
+  "diffSummary": "A 300 → B 380 · 差异摘要（未生成几何）变了的单元 5未变单元 16新增 20删除 6修改 2noop 1",
+  "panelGroups": [
+    {
+      "unit": "24384_23257",
+      "row": "BRAN 24384_23257/C-OR-1R345-C修改 1noop 1在三维中对比"
+    },
+    {
+      "unit": "24384_26324",
+      "row": "BRAN 24384_26324/test_pipe删除 4在三维中对比"
+    },
+    {
+      "unit": "24384_26326",
+      "row": "BRAN 24384_26326/test_tray删除 2在三维中对比"
+    },
+    {
+      "unit": "32576_12",
+      "row": "BRAN 32576_12/CODEX_DB8000_PIPE_SCR_A新增 9在三维中对比"
+    },
+    {
+      "unit": "32576_22",
+      "row": "BRAN 32576_22/CODEX_DB8000_PIPE_SCR_B新增 11在三维中对比"
+    }
+  ],
+  "runDisabledInSubtree": true,
+  "closed": {
+    "viewer": null,
+    "overlayCount": 0,
+    "noticeCount": 0,
+    "groupButtonTexts": [
+      "在三维中对比",
+      "在三维中对比",
+      "在三维中对比",
+      "在三维中对比",
+      "在三维中对比"
+    ]
+  },
+  "ok": true,
+  "finishedAt": "2026-09-21T04:28:09.689Z"
+}

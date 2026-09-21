@@ -11,7 +11,10 @@ import {
   DEFAULT_MODEL_UNIT_COMPARE_VIEW_MODE,
   getModelUnitCompareRenderPasses,
   geometrySnapshotsFromInstanceEntries,
+  locateModelUnitComparePass,
   MODEL_UNIT_GEOMETRY_STATUS_COLORS,
+  modelUnitGroupSideImpactKinds,
+  modelUnitVersionAbsentNote,
   orderModelUnitVersionPair,
   planModelUnitCompareObjectStyles,
   readModelUnitVersionCompareUrl,
@@ -170,6 +173,30 @@ describe('modelUnitVersionCompare', () => {
     ]);
   });
 
+  it('分屏拾取：指针落在左 A / 右 B 哪一格就按那一格算 NDC，分界线归右格，格外为 null', () => {
+    const passes = getModelUnitCompareRenderPasses('split', 'after', 1001, 600);
+    const left = locateModelUnitComparePass(passes, 200, 100, 600);
+    expect(left?.pass.side).toBe('before');
+    expect(left?.ndcX).toBeCloseTo(-0.2, 6);
+    expect(left?.ndcY).toBeCloseTo(2 / 3, 6);
+
+    const right = locateModelUnitComparePass(passes, 750.5, 300, 600);
+    expect(right?.pass.side).toBe('after');
+    expect(right?.ndcX).toBeCloseTo(0, 6);
+    expect(right?.ndcY).toBeCloseTo(0, 6);
+
+    expect(locateModelUnitComparePass(passes, 500, 300, 600)?.pass.side).toBe('after');
+    expect(locateModelUnitComparePass(passes, 499.9, 300, 600)?.pass.side).toBe('before');
+    expect(locateModelUnitComparePass(passes, 1001, 300, 600)).toBeNull();
+    expect(locateModelUnitComparePass(passes, 200, 600, 600)).toBeNull();
+
+    // 单视口一格覆盖整幅：等价于整幅 NDC
+    const single = locateModelUnitComparePass(getModelUnitCompareRenderPasses('single', 'before', 1001, 600), 500.5, 150, 600);
+    expect(single?.pass.side).toBe('before');
+    expect(single?.ndcX).toBeCloseTo(0, 6);
+    expect(single?.ndcY).toBeCloseTo(0.5, 6);
+  });
+
   it('只收集目标完整子树对象并按 refno 显隐状态恢复', () => {
     const ids = collectModelUnitTargetObjectIds(
       '1_10',
@@ -219,5 +246,25 @@ describe('modelUnitVersionCompare', () => {
 
     expect(renamedSnapshot.signature).toBe(oldSnapshot.signature);
     expect(movedSnapshot.signature).not.toBe(oldSnapshot.signature);
+  });
+
+  it('容器分组进三维：单元根那行 deleted → B 侧 tombstone、added → A 侧 tombstone，其余两侧都装；注脚按侧说话', () => {
+    const rows = (rootStatus: string) => [
+      { refno: '24384_26324', status: rootStatus },
+      { refno: '24384_26330', status: rootStatus === 'noop' ? 'modified' : rootStatus },
+    ];
+    // B 时单元已删：A 照装、B 空集（不去 history/generate 一个它不存在的会话）
+    expect(modelUnitGroupSideImpactKinds({ unitRefno: '24384_26324', rows: rows('deleted') })).toEqual({ before: 'mesh', after: 'tombstone' });
+    // A 时单元还没建：A 空集、B 照装
+    expect(modelUnitGroupSideImpactKinds({ unitRefno: '24384_26324', rows: rows('added') })).toEqual({ before: 'tombstone', after: 'mesh' });
+    // 单元根自己没变（成员改了）/ 修改：两侧都在
+    expect(modelUnitGroupSideImpactKinds({ unitRefno: '24384_26324', rows: rows('noop') })).toEqual({ before: 'mesh', after: 'mesh' });
+    expect(modelUnitGroupSideImpactKinds({ unitRefno: '24384_26324', rows: rows('modified') })).toEqual({ before: 'mesh', after: 'mesh' });
+    // 单元根那行没列出来（截断）/ 孤儿组：不猜，两侧都装
+    expect(modelUnitGroupSideImpactKinds({ unitRefno: '24384_26324', rows: [{ refno: '24384_26330', status: 'deleted' }] })).toEqual({ before: 'mesh', after: 'mesh' });
+    expect(modelUnitGroupSideImpactKinds({ unitRefno: null, rows: rows('deleted') })).toEqual({ before: 'mesh', after: 'mesh' });
+
+    expect(modelUnitVersionAbsentNote('after')).toBe('该版本单元已删除');
+    expect(modelUnitVersionAbsentNote('before')).toBe('该版本没有这个单元');
   });
 });

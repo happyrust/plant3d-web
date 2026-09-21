@@ -45,6 +45,48 @@ export type PickResult = {
  */
 export type ObjectIndexToIdMapper = (index: number) => string | null;
 
+/**
+ * 拾取所在的子视口（画布坐标、左上原点、CSS px）。同一画布切几格各自渲染（版本对比分屏：同一相机改 aspect、scissor 左右两格）时，
+ * 视锥要按**这一格**的位置与宽高比裁——`setViewOffset(fullWidth, fullHeight, …)` 会把相机 aspect 置成 `fullWidth / fullHeight`，
+ * 所以整幅必须就是这一格，不能是整个 renderer。不给 = 整幅画布（原行为）。
+ */
+export type PickViewport = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
+export type PickViewOffset = {
+  fullWidth: number;
+  fullHeight: number;
+  offsetX: number;
+  offsetY: number;
+  viewSize: number;
+};
+
+/**
+ * 算 `setViewOffset` 的四个尺寸：整幅 = 子视口（缺省整个 renderer）的像素尺寸，小窗 = 以指针为中心的 `(2r+1)²`，夹在整幅之内。
+ * 纯函数，单测直接打。
+ */
+export function computePickViewOffset(
+  canvasPos: { x: number; y: number },
+  rendererSize: { x: number; y: number },
+  pixelRatio: number,
+  pickRadius: number,
+  viewport?: PickViewport | null,
+): PickViewOffset {
+  const region = viewport ?? { x: 0, y: 0, width: rendererSize.x, height: rendererSize.y };
+  const fullWidth = Math.max(1, Math.floor(region.width * pixelRatio));
+  const fullHeight = Math.max(1, Math.floor(region.height * pixelRatio));
+  const viewSize = pickRadius * 2 + 1;
+  const cx = Math.floor((canvasPos.x - region.x) * pixelRatio);
+  const cy = Math.floor((canvasPos.y - region.y) * pixelRatio);
+  const offsetX = Math.max(0, Math.min(fullWidth - viewSize, cx - pickRadius));
+  const offsetY = Math.max(0, Math.min(fullHeight - viewSize, cy - pickRadius));
+  return { fullWidth, fullHeight, offsetX, offsetY, viewSize };
+}
+
 // ========== GPUPicker 类 ==========
 
 /**
@@ -102,12 +144,13 @@ export class GPUPicker {
   }
 
   /**
-   * 通过 Canvas 坐标拾取
+   * 通过 Canvas 坐标拾取；`viewport` 给了就按那一格子视口裁视锥（见 `PickViewport`）
    */
   pick(
     canvasPos: Vector2,
     camera: Camera,
-    pickingMesh: Mesh | null
+    pickingMesh: Mesh | null,
+    viewport?: PickViewport | null
   ): PickResult | null {
     if (!pickingMesh || !this._objectIndexToId) {
       return null;
@@ -124,7 +167,7 @@ export class GPUPicker {
       this._pickingScene.add(pickingMesh);
 
       // 创建拾取相机 (裁剪到点击位置)
-      const pickCamera = this._createPickCamera(canvasPos, camera);
+      const pickCamera = this._createPickCamera(canvasPos, camera, viewport);
 
       // 渲染到离屏目标
       this._renderer.setRenderTarget(this._pickingTarget);
@@ -177,23 +220,16 @@ export class GPUPicker {
   /**
    * 创建拾取相机
    */
-  private _createPickCamera(canvasPos: Vector2, camera: Camera): Camera {
+  private _createPickCamera(canvasPos: Vector2, camera: Camera, viewport?: PickViewport | null): Camera {
     const pickCamera = camera.clone() as PerspectiveCamera | OrthographicCamera;
     const pixelRatio = this._renderer.getPixelRatio ? this._renderer.getPixelRatio() : 1;
     const rendererSize = this._renderer.getSize(new Vector2());
-    const fullWidth = Math.max(1, Math.floor(rendererSize.x * pixelRatio));
-    const fullHeight = Math.max(1, Math.floor(rendererSize.y * pixelRatio));
+    const { fullWidth, fullHeight, offsetX, offsetY, viewSize } = computePickViewOffset(
+      canvasPos, rendererSize, pixelRatio, this._pickRadius, viewport,
+    );
 
-    const viewSize = this._pickRadius * 2 + 1;
-    const cx = Math.floor(canvasPos.x * pixelRatio);
-    const cy = Math.floor(canvasPos.y * pixelRatio);
-
-    let offsetX = cx - this._pickRadius;
-    let offsetY = cy - this._pickRadius;
-    offsetX = Math.max(0, Math.min(fullWidth - viewSize, offsetX));
-    offsetY = Math.max(0, Math.min(fullHeight - viewSize, offsetY));
-
-    // 使用 Three.js 标准的 viewOffset 裁剪投影视锥，避免手改 projectionMatrix 导致拾取失效
+    // 使用 Three.js 标准的 viewOffset 裁剪投影视锥，避免手改 projectionMatrix 导致拾取失效；
+    // 注意 setViewOffset 会把 aspect 置成 fullWidth / fullHeight——子视口拾取靠的正是这一点
     if (pickCamera instanceof PerspectiveCamera || pickCamera instanceof OrthographicCamera) {
       pickCamera.setViewOffset(fullWidth, fullHeight, offsetX, offsetY, viewSize, viewSize);
       pickCamera.updateProjectionMatrix();

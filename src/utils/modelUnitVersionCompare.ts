@@ -103,6 +103,41 @@ export function getModelUnitCompareRenderPasses(
   ];
 }
 
+/** 指针落在哪个 pass 里 + 在这一格内的 NDC（分屏拾取按那一格的视口与宽高比造射线） */
+export type ModelUnitComparePassHit = {
+  pass: ModelUnitCompareRenderPass
+  ndcX: number
+  ndcY: number
+}
+
+/**
+ * 分屏拾取：画布坐标（左上原点）落在哪个 pass 里，以及在这一格内的 NDC。pass 的 `x / y` 是 WebGL 视口坐标（左下原点），
+ * 所以指针 y 先翻成从底往上量；正压在分界线上的点归右格（`x >= pass.x`）；落在所有格之外回 null。
+ * 单视口只有一格、覆盖整幅，走这里等价于整幅 NDC。
+ */
+export function locateModelUnitComparePass(
+  passes: readonly ModelUnitCompareRenderPass[],
+  x: number,
+  y: number,
+  canvasHeight: number,
+): ModelUnitComparePassHit | null {
+  for (let i = passes.length - 1; i >= 0; i -= 1) {
+    const pass = passes[i]!;
+    if (pass.width <= 0 || pass.height <= 0) continue;
+    if (x < pass.x || x >= pass.x + pass.width) continue;
+    // 这一格在左上原点坐标里占 [top, bottom)：顶边算在内、底边（= 下一格或画布外）不算
+    const top = canvasHeight - (pass.y + pass.height);
+    const bottom = canvasHeight - pass.y;
+    if (y < top || y >= bottom) continue;
+    return {
+      pass,
+      ndcX: ((x - pass.x) / pass.width) * 2 - 1,
+      ndcY: ((canvasHeight - y - pass.y) / pass.height) * 2 - 1,
+    };
+  }
+  return null;
+}
+
 type VersionVisibilityLayer = {
   setAllVisible: (visible: boolean) => void
   setObjectsVisible?: (objectIds: string[], visible: boolean) => void
@@ -272,6 +307,30 @@ export function sideFromCompareObjectId(objectId: string): ModelUnitCompareSide 
 
 export type ModelUnitVersionCompareEnvironment = {
   loadedRefnos: number
+/**
+ * 那一侧是 `tombstone`（该版本下整个单元不存在）时角标 / A-B 卡上的注脚。B 侧只可能是「已删除」；A 侧多半是「还没建」
+ * （容器分组入口里 A 早于单元创建），也可能删过又建回——说中性的。
+ */
+export function modelUnitVersionAbsentNote(side: ModelUnitCompareSide): string {
+  return side === 'after' ? '该版本单元已删除' : '该版本没有这个单元';
+}
+
+/**
+ * 容器「所有子节点」的差异摘要里某一组（某个最小交付单元）的 A / B 两侧该按哪种 `impactKind` 装：A / B 是节点子树的会话，
+ * 单元不一定两版都在——单元根那一行 `deleted` = B 时已删、`added` = A 时还没建，那一侧标 `tombstone`（适配器回空集、
+ * 视口显示空态）；否则去 `history/generate` 一个它不存在的会话会 404 `REFNO_NOT_FOUND_AT_SESSION`。单元根那行没列出来（截断）就按两侧都在。
+ */
+export function modelUnitGroupSideImpactKinds(group: {
+  unitRefno: string | null
+  rows: readonly { refno: string; status: 'added' | 'deleted' | 'modified' | 'noop' | (string & {}) }[]
+}): { before: ModelVersion['impactKind']; after: ModelVersion['impactKind'] } {
+  const root = group.unitRefno ? group.rows.find((row) => row.refno === group.unitRefno) : undefined;
+  return {
+    before: root?.status === 'added' ? 'tombstone' : 'mesh',
+    after: root?.status === 'deleted' ? 'tombstone' : 'mesh',
+  };
+}
+
   refreshing: boolean
   error?: string
 }

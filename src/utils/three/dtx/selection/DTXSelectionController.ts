@@ -19,7 +19,7 @@ import { DTXOutlineHelper, type OutlineStyle } from '../outline/DTXOutlineHelper
 
 import { DTXOverlayHighlighter, type DTXOverlayHighlightStyle } from './DTXOverlayHighlighter';
 import { EventEmitter } from './EventEmitter';
-import { GPUPicker, type PickResult } from './GPUPicker';
+import { GPUPicker, type PickResult, type PickViewport } from './GPUPicker';
 import { ObjectsKdTree } from './ObjectsKdTree';
 import { SelectionManager } from './SelectionManager';
 
@@ -168,10 +168,11 @@ export class DTXSelectionController extends EventEmitter {
     this._outlineHelper?.resize(width, height);
   }
 
-  pick(canvasPos: Vector2): PickResult | null {
+  /** GPU 拾取；`viewport` 给了就按那一格子视口裁视锥（同一画布切几格各自渲染时用，见 `PickViewport`） */
+  pick(canvasPos: Vector2, viewport?: PickViewport | null): PickResult | null {
     const pickingMesh = this._dtxLayer.getPickingMesh();
     if (!pickingMesh) return null;
-    return this._gpuPicker.pick(canvasPos, this._camera, pickingMesh);
+    return this._gpuPicker.pick(canvasPos, this._camera, pickingMesh, viewport);
   }
 
   /**

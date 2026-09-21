@@ -583,6 +583,17 @@ describe('ModelUnitVersionComparePanel', () => {
             { refno: '1_3', noun: 'ELBO', status: 'added', impact: 'delivery', isNode: false },
             { refno: '1_2', noun: 'VALV', status: 'deleted', impact: 'tombstone', isNode: false },
           ] },
+        // 整个单元在 B 已删（单元根自己那行 deleted）/ 在 A 还没建（单元根 added）
+        { unitRefno: '24381_200', unitNoun: 'BRAN', unitName: '/B2', counts: { added: 0, deleted: 2, modified: 0, noop: 0 }, geometryChanged: true, rowsTruncated: 0,
+          rows: [
+            { refno: '24381_200', noun: 'BRAN', status: 'deleted', impact: 'tombstone', isNode: false },
+            { refno: '24381_201', noun: 'FTUB', status: 'deleted', impact: 'tombstone', isNode: false },
+          ] },
+        { unitRefno: '24381_300', unitNoun: 'BRAN', unitName: '/B3', counts: { added: 2, deleted: 0, modified: 0, noop: 0 }, geometryChanged: true, rowsTruncated: 0,
+          rows: [
+            { refno: '24381_301', noun: 'FTUB', status: 'added', impact: 'delivery', isNode: false },
+            { refno: '24381_300', noun: 'BRAN', status: 'added', impact: 'delivery', isNode: false },
+          ] },
       ],
       needsConfirm: false, estimatedProjections: 2, confirmThresholdUnits: 20, warnings: [],
     });
@@ -610,7 +621,8 @@ describe('ModelUnitVersionComparePanel', () => {
     // 属性对比 tab：有变的构件清单，节点自身置顶
     const changed = host.querySelector('[data-testid="model-unit-compare-changed-elements"]');
     expect(changed?.textContent).toContain('本节点');
-    expect(changed?.querySelectorAll('li')).toHaveLength(3);
+    // 节点自身 + B1 的 2 行 + B2 的 2 行 + B3 的 2 行
+    expect(changed?.querySelectorAll('li')).toHaveLength(7);
 
     // 模型对比 tab：摘要 + 分组；节点自己没有单元 → 顶部按钮禁用，组里那个可点
     (host.querySelector('[data-testid="model-unit-compare-tab-model"]') as HTMLButtonElement).click();
@@ -620,11 +632,40 @@ describe('ModelUnitVersionComparePanel', () => {
     (host.querySelector('[data-testid="model-unit-compare-run-group-24381_145018"]') as HTMLButtonElement).click();
     await flushUi();
 
-    expect(versionSourceMocks.loadVersion.mock.calls.map(([item]) => [(item as ModelVersion).unitRefno, (item as ModelVersion).sesno])).toEqual([
-      ['24381_145018', 791], ['24381_145018', 897],
+    const loadCalls = () => versionSourceMocks.loadVersion.mock.calls.map(([item]) => [(item as ModelVersion).unitRefno, (item as ModelVersion).sesno, (item as ModelVersion).impactKind]);
+    expect(loadCalls()).toEqual([
+      ['24381_145018', 791, 'mesh'], ['24381_145018', 897, 'mesh'],
     ]);
     expect(events.at(-1)?.detail).toEqual(expect.objectContaining({ action: 'open', unitRefno: '24381_145018' }));
     expect(host.querySelector('[data-testid="model-unit-compare-summary"]')?.textContent).toContain('新增 1');
+
+    // 单元在 B 已删：B 侧按 tombstone 装（适配器回空集），不去 history/generate 一个它不存在的会话；卡上注「已删除」
+    versionSourceMocks.loadVersion.mockClear();
+    versionSourceMocks.loadVersion.mockImplementation(async (item: ModelVersion) => (
+      item.impactKind === 'tombstone' ? geometry(new Map()) : geometryBySesno[item.sesno]!()
+    ));
+    (host.querySelector('[data-testid="model-unit-compare-run-group-24381_200"]') as HTMLButtonElement).click();
+    await flushUi();
+    expect(loadCalls()).toEqual([['24381_200', 791, 'mesh'], ['24381_200', 897, 'tombstone']]);
+    const openDeleted = events.at(-1)?.detail as { action: string; unitRefno: string; before: { version: ModelVersion }; after: { version: ModelVersion } };
+    expect(openDeleted).toEqual(expect.objectContaining({ action: 'open', unitRefno: '24381_200' }));
+    expect([openDeleted.before.version.impactKind, openDeleted.after.version.impactKind]).toEqual(['mesh', 'tombstone']);
+    window.dispatchEvent(new CustomEvent('plant3d:model-unit-version-compare-state', { detail: { detail: openDeleted, status: 'ready', activeSide: 'after', viewMode: 'single' } }));
+    await flushUi();
+    expect(host.querySelector('[data-testid="model-unit-compare-show-after"]')?.textContent).toContain('该版本单元已删除');
+    expect(host.querySelector('[data-testid="model-unit-compare-show-before"]')?.textContent).not.toContain('该版本');
+
+    // 单元在 A 还没建：A 侧按 tombstone 装，卡上说「没有这个单元」而不是「已删除」
+    versionSourceMocks.loadVersion.mockClear();
+    (host.querySelector('[data-testid="model-unit-compare-run-group-24381_300"]') as HTMLButtonElement).click();
+    await flushUi();
+    expect(loadCalls()).toEqual([['24381_300', 791, 'tombstone'], ['24381_300', 897, 'mesh']]);
+    const openAdded = events.at(-1)?.detail as typeof openDeleted;
+    expect([openAdded.before.version.impactKind, openAdded.after.version.impactKind]).toEqual(['tombstone', 'mesh']);
+    window.dispatchEvent(new CustomEvent('plant3d:model-unit-version-compare-state', { detail: { detail: openAdded, status: 'ready', activeSide: 'after', viewMode: 'single' } }));
+    await flushUi();
+    expect(host.querySelector('[data-testid="model-unit-compare-show-before"]')?.textContent).toContain('该版本没有这个单元');
+    expect(host.querySelector('[data-testid="model-unit-compare-show-after"]')?.textContent).not.toContain('该版本');
 
     window.removeEventListener('plant3d:model-unit-version-compare', listener);
     app.unmount();
