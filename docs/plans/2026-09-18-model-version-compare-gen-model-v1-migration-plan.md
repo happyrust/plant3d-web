@@ -457,6 +457,12 @@ legacy 下与从前的可见差别只有一处、且不可见于用户：A/B 隔
   `attribute-history` FTUB 24384/23262 `since_sesno=626&limit=2` → 630 一行 POS / SPAMAP before-after + SAVEWORK 备注，
   `diff-summary` BRAN 子树 573→626 = 修改 1 / noop 1、SITE 24384/22399 子树 618→628 = 526 单元 / 变 2（FTUB 修改、BOX 新增）、
   a>b → 400，字段与 DTO 逐个对上；`:8026`（`2f891b370`）对同一路由回 404 = 回落路径的真机对照。**页面级真机未跑**（要 dev server）。
+- **属性净差接 `element/attribute-diff`（2026-09-21，ADR 0066 列的第四条路由，前端半边）**：上面「`element/attribute-diff` 未做（属性净差前端用时间线在 (A, B] 折）」改口——
+  端口 `ModelVersionSource.attributeDiff(dbnum, refno, a, b)` / 类型 `ModelAttributeDiff`（`kind` created / modified / deleted / unchanged、`impact` 与版本表同词表、`members` / `owner` 两端真差、`attributesUnavailable`）；
+  v1 适配器 `GET element/attribute-diff?dbnum&refno&a&b`，无信封 404 → `ModelVersionRouteUnavailableError`；面板 `仅自身` 的节点自己与 `所有子节点` 下点开的构件同一条取数路：先 `attributeDiff`，
+  没有这条路由记一次（`attributeDiffUnavailable`）回落到折时间线，两条来路归一成 `AttributeNetDiffView`（`viewFromAttributeDiff / viewFromFold / emptyNetDiffText`），表底写明取数口径。
+  后端 gen-model-refactor `src/fast_model/attribute_diff.rs` 尚未提交、`:8022`（`a382b2cf3`）仍 404 走回落，**真机未验**；验证：`versionSource.test.ts` +1（回执映射 / 无路由抛错）。
+  收口计划：`docs/plans/2026-09-21-node-version-view-design-sync-and-gap-closure-plan.md`（P0-b / P2-c）。
 
 ## 11. 三维按差异着色 + 单视口角标 + 「三维只看差异」（2026-09-20 20:36 用户拍板 A；ADR 0066「三维联动」的落地，不新开 ADR）
 

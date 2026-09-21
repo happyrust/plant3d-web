@@ -22,9 +22,9 @@ export class NotDeliveryUnitRootError extends Error {
 }
 
 /**
- * 服务端是旧构建、没有这条路由（axum 无信封的 404）。节点版本视图（ADR 0066）的两条新路由
- * `element/attribute-history` / `node/diff-summary` 都可能撞上它：面板据此回落到现有路由能给的那一半，
- * 并照实说「要新版服务端」，而不是把它当成「没有变化」。
+ * 服务端是旧构建、没有这条路由（axum 无信封的 404）。节点版本视图（ADR 0066）的四条新路由
+ * `element/attribute-history` / `element/attribute-diff` / `node/versions` / `node/diff-summary` 都可能撞上它：
+ * 面板据此回落到现有路由能给的那一半，并照实说「要新版服务端」，而不是把它当成「没有变化」。
  */
 export class ModelVersionRouteUnavailableError extends Error {
   readonly route: string;

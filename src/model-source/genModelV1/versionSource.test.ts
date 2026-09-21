@@ -11,6 +11,7 @@ import {
 import {
   GenModelV1ApiError,
   unpackRefno,
+  type AttributeDiffResponse,
   type AttributeHistoryResponse,
   type ElementVersionsResponse,
   type ModelVersionsResponse,
@@ -60,6 +61,24 @@ function attributeHistoryResponse(partial: Partial<AttributeHistoryResponse> = {
   };
 }
 
+function attributeDiffResponse(partial: Partial<AttributeDiffResponse> = {}): AttributeDiffResponse {
+  return {
+    dbnum: 8000,
+    refno: '24384/23262',
+    noun: 'FTUB',
+    unit_root: '24384/23257',
+    unit_noun: 'BRAN',
+    file_latest_sesno: 636,
+    a: 573,
+    b: 626,
+    kind: 'modified',
+    impact: 'placement',
+    changed_count: 0,
+    changes: [],
+    ...partial,
+  };
+}
+
 function diffSummaryResponse(partial: Partial<NodeDiffSummaryResponse> = {}): NodeDiffSummaryResponse {
   return {
     dbnum: 8000,
@@ -98,6 +117,7 @@ function api(overrides: Partial<GenModelV1VersionApi> = {}): GenModelV1VersionAp
     listVersions: vi.fn(async () => response({})),
     listElementVersions: vi.fn(async () => elementResponse()),
     attributeHistory: vi.fn(async () => attributeHistoryResponse()),
+    attributeDiff: vi.fn(async () => attributeDiffResponse()),
     nodeVersions: vi.fn(async () => nodeVersionsResponse()),
     diffSummary: vi.fn(async () => diffSummaryResponse()),
     historyGenerate: vi.fn(async () => ({ task_id: 't-1' })),
@@ -459,6 +479,43 @@ describe('genModelV1 ModelVersionSource', () => {
     });
     const strict = createGenModelV1ModelVersionSource(api({ diffSummary: real404 as never }));
     await expect(strict.diffSummary(8000, '24384_23257', 9, 626, 'self')).rejects.toMatchObject({ code: 'SESSION_NOT_FOUND' });
+  });
+
+  it('attributeDiff：回执映成端口形状（refno / unit / 成员 / owner 归一 a_b、attributes_unavailable → null），旧服务端无路由 → ModelVersionRouteUnavailableError', async () => {
+    const attributeDiff = vi.fn().mockResolvedValue(attributeDiffResponse({
+      kind: 'modified',
+      impact: 'placement',
+      changed_count: 2,
+      changes: [{ name: 'POS', value_type: 'vec3', before: '10887, 12332, 2900', after: '10887, 12332, 3400', stamp: false }],
+      members: { added: ['24384/9'], removed: ['24384/8'], reordered: true },
+      owner: ['24384/1', '24384/2'],
+      warnings: ['w1'],
+    }));
+    const source = createGenModelV1ModelVersionSource(api({ attributeDiff }));
+
+    const diff = await source.attributeDiff(8000, '24384/23262', 573, 626);
+
+    // 发给服务端的 refno 归一成 a_b
+    expect(attributeDiff.mock.calls.map(([req]) => req)[0]).toMatchObject({ dbnum: 8000, refno: '24384_23262', a: 573, b: 626 });
+    expect(diff).toMatchObject({
+      refno: '24384_23262',
+      unitRefno: '24384_23257',
+      unitNoun: 'BRAN',
+      kind: 'modified',
+      impact: 'placement',
+      changedCount: 2,
+      members: { added: ['24384_9'], removed: ['24384_8'], reordered: true },
+      owner: ['24384_1', '24384_2'],
+      attributesUnavailable: null,
+      warnings: ['w1'],
+    });
+
+    // 旧服务端没有这条路由（无信封 404）→ 回落信号
+    const missing = vi.fn(async () => {
+      throw new GenModelV1ApiError({ code: 'not_found', status: 404, path: '/api/v1/element/attribute-diff', message: 'HTTP 404 Not Found' });
+    });
+    const stale = createGenModelV1ModelVersionSource(api({ attributeDiff: missing as never }));
+    await expect(stale.attributeDiff(8000, '24384_23262', 573, 626)).rejects.toBeInstanceOf(ModelVersionRouteUnavailableError);
   });
 
   it('listNodeVersions：行映成端口形状（impact / self_impact / 两格单元数），scope 原样发给服务端，truncated 时按最后一条连续拉', async () => {

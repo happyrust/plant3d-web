@@ -1119,6 +1119,70 @@ export function genModelV1ElementAttributeHistory(
   });
 }
 
+export type AttributeDiffKindDto = 'created' | 'modified' | 'deleted' | 'unchanged';
+
+/** `GET /api/v1/element/attribute-diff` 的回执：某节点 A / B 两版之间的属性净差（两端直接读终态，不折时间线） */
+export type AttributeDiffResponse = {
+  dbnum: number;
+  /** `a/b` */
+  refno: string;
+  noun: string;
+  unit_root: string | null;
+  unit_noun: string | null;
+  file_latest_sesno: number;
+  a: number;
+  b: number;
+  /** created = A 侧不存在；deleted = B 侧不存在；unchanged = 两端一字没差、影响也判不出 */
+  kind: AttributeDiffKindDto;
+  /** 与版本表同一词表：created → delivery，deleted → tombstone，modified → mesh / placement / noop；unchanged 为 null */
+  impact: ModelVersionImpactKindDto | null;
+  /** `changes.length` + 成员表有差算一项 + owner 改挂算一项 */
+  changed_count: number;
+  /** created 列 B 侧全部已设的属性（before 空）；deleted 列 A 侧全部已设的属性（after 空） */
+  changes: AttributeHistoryChangeDto[];
+  /** 成员表两端的真差；没差不占字段 */
+  members?: { added: string[]; removed: string[]; reordered: boolean };
+  /** owner 改挂 `[A 侧, B 侧]`（`a/b`） */
+  owner?: [string, string];
+  /** 某一端属性行渲染不出来的原因（模板缺失等）；此时 `changes` 可能为空但 `kind` / `impact` 仍成立 */
+  attributes_unavailable?: string;
+  elapsed_ms?: number;
+  stats?: Record<string, unknown>;
+  warnings?: string[];
+  [key: string]: unknown;
+};
+
+export type GenModelV1AttributeDiffRequest = {
+  dbnum: number;
+  /** `a_b` / `a/b`，任意节点 */
+  refno: string;
+  /** 较早的一版（链序在 `b` 之前，否则 400 `INVALID_VERSION_PAIR`） */
+  a: number;
+  b: number;
+};
+
+/**
+ * 某节点 A / B 两版之间的**属性净差**（gen-model-refactor ADR-081 追记四；plant3d-web ADR 0066 / CONTEXT「属性净差」）。
+ * 服务端两个会话各钉一个 `DbSet`，属性面板同一个渲染器两端各出一次字，字不同就是变了；成员增删 / 重排与 owner 改挂另列，
+ * `impact` 走生成路同一把尺子。不折时间线、不要快照，毫秒级。`A` 不早于 `B` → 400 `INVALID_VERSION_PAIR`；会话不在链上 → 404
+ * `SESSION_NOT_FOUND`；两端都不存在 → 404 `REFNO_NOT_FOUND`。旧服务端没有这条路由（无信封 404）由调用方回落。
+ */
+export function genModelV1ElementAttributeDiff(
+  req: GenModelV1AttributeDiffRequest,
+  options?: GenModelV1RequestOptions,
+): Promise<AttributeDiffResponse> {
+  return genModelV1Fetch<AttributeDiffResponse>('/api/v1/element/attribute-diff', {
+    ...options,
+    timeoutMs: options?.timeoutMs ?? MODEL_VERSIONS_TIMEOUT_MS,
+    query: {
+      dbnum: req.dbnum,
+      refno: toV1Refno(req.refno),
+      a: req.a,
+      b: req.b,
+    },
+  });
+}
+
 export type NodeDiffScopeDto = 'self' | 'subtree';
 
 export type NodeVersionDto = {

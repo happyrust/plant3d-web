@@ -1,13 +1,15 @@
 /**
- * 节点版本视图（ADR 0066，CONTEXT「节点版本视图 / 对比范围 / 属性变化时间线」）的纯函数：
+ * 节点版本视图（ADR 0066，CONTEXT「节点版本视图 / 对比范围 / 属性变化时间线 / 属性净差」）的纯函数：
  * 把构件版本时间线（`listElementVersions`，两列五态）与属性变化时间线（`attributeHistory`，user / comment /
- * 逐属性 before-after）并成面板上的一条时间线，按**对比范围**筛行；在时间线上选 A / B；把一段区间内的逐会话属性
- * 变化折成 A→B 的净差。都不碰后端、不碰 DOM，面板只负责调用与渲染。
+ * 逐属性 before-after）并成面板上的一条时间线，按**对比范围**筛行；在时间线上选 A / B；把属性净差（服务端
+ * `element/attribute-diff` 直接给的，或旧服务端下由时间线在 (A, B] 里折出来的）归成面板上同一种形状。都不碰后端、
+ * 不碰 DOM，面板只负责调用与渲染。
  *
  * 会话序：前端拿不到会话链，这里按 `sesno` 数值当链序（dabacon 的 sesno 沿链单调，ADR-081 的真机语料从没见过例外）。
  */
 import type {
   ModelAttributeChange,
+  ModelAttributeDiff,
   ModelAttributeHistory,
   ModelAttributeHistoryEntry,
   ModelElementVersionTimeline,
@@ -208,8 +210,10 @@ export type FoldedAttributeDiff = {
 };
 
 /**
- * 把属性变化时间线在 (A, B] 里的逐会话 before / after 折成净差：同名属性取最早那次的 before、最晚那次的 after，
- * 两头一样就不算变。`CACHID` 一类戳原样保留 `stamp` 标记，由界面决定怎么显示。
+ * **旧服务端的回落**：把属性变化时间线在 (A, B] 里的逐会话 before / after 折成净差：同名属性取最早那次的 before、最晚那次的
+ * after，两头一样就不算变。`CACHID` 一类戳原样保留 `stamp` 标记，由界面决定怎么显示。新服务端上净差由
+ * `element/attribute-diff` 两端直接读终态给出（见 `viewFromAttributeDiff`），不再走这里——折出来的成员 / owner 只能说「动过」，
+ * 服务端给的是两端的真差。
  */
 export function foldAttributeChanges(entries: ModelAttributeHistoryEntry[], a: number, b: number): FoldedAttributeDiff {
   const inRange = entries
@@ -243,6 +247,93 @@ export function foldAttributeChanges(entries: ModelAttributeHistoryEntry[], a: n
     ownerTouched,
     sessions: inRange.length,
   };
+}
+
+/**
+ * 属性对比 tab 上一格净差的统一形状（CONTEXT「属性净差」）：服务端 `element/attribute-diff` 直接给的（`server`），或旧服务端下
+ * 由属性变化时间线在 (A, B] 里折出来的（`folded`）。面板只认这一种，两条来路在这里归一。
+ */
+export type AttributeNetDiffView = {
+  /** `server` = 服务端两端直接读终态；`folded` = 旧服务端，把时间线在 (A, B] 里折 */
+  source: 'server' | 'folded';
+  /**
+   * created = A 侧不存在；deleted = B 侧不存在；unchanged = 两端一字没差、影响也判不出。`folded` 只判得出
+   * created / deleted（区间里有那一行），其余为 null（折出来的看不出「记录重写但字没变」）。
+   */
+  kind: ModelAttributeDiff['kind'] | null;
+  /** 与版本表同一词表；`folded` 给不出，为 null */
+  impact: ModelVersionImpactKind | null;
+  /** 净差行（含戳，由界面决定显示）；`hops` 在 `server` 下一律 1 */
+  changes: FoldedAttributeChange[];
+  /** 成员表两端的真差（`server`）；`folded` 给不出，只有 `membersTouched` */
+  members: { added: string[]; removed: string[]; reordered: boolean } | null;
+  /** owner 改挂 `[A 侧, B 侧]`（`server`）；`folded` 给不出，只有 `ownerTouched` */
+  owner: [string, string] | null;
+  /** `folded`：(A, B] 里成员表 / owner 有没有动过（净差看不出来，只提示）；`server` 下与 `members` / `owner` 非空同义 */
+  membersTouched: boolean;
+  ownerTouched: boolean;
+  /** `folded`：(A, B] 里它被建 / 被删的那一版；`server` 下为 null（`kind` 已经说了） */
+  createdAt: number | null;
+  deletedAt: number | null;
+  /** `folded`：折了几个会话；`server` 下为 null */
+  sessions: number | null;
+  /** 某一端属性行渲染不出来的原因（`server`）；此时 `changes` 可能为空但 `kind` / `impact` 仍成立 */
+  attributesUnavailable: string | null;
+  warnings: string[];
+};
+
+/** 服务端 `element/attribute-diff` 的回执 → 面板的一格净差。 */
+export function viewFromAttributeDiff(diff: ModelAttributeDiff): AttributeNetDiffView {
+  return {
+    source: 'server',
+    kind: diff.kind,
+    impact: diff.impact,
+    changes: diff.changes.map((change) => ({ ...change, hops: 1 })),
+    members: diff.members,
+    owner: diff.owner,
+    membersTouched: diff.members !== null,
+    ownerTouched: diff.owner !== null,
+    createdAt: null,
+    deletedAt: null,
+    sessions: null,
+    attributesUnavailable: diff.attributesUnavailable,
+    warnings: diff.warnings,
+  };
+}
+
+/** 旧服务端：时间线在 (A, B] 里折出来的净差 → 面板的一格净差。 */
+export function viewFromFold(fold: FoldedAttributeDiff): AttributeNetDiffView {
+  return {
+    source: 'folded',
+    kind: fold.deletedAt !== null ? 'deleted' : fold.createdAt !== null ? 'created' : null,
+    impact: null,
+    changes: fold.changes,
+    members: null,
+    owner: null,
+    membersTouched: fold.membersTouched,
+    ownerTouched: fold.ownerTouched,
+    createdAt: fold.createdAt,
+    deletedAt: fold.deletedAt,
+    sessions: fold.sessions,
+    attributesUnavailable: null,
+    warnings: [],
+  };
+}
+
+/**
+ * 净差表里一行属性都没有时该说什么：`visible` 是按「含戳」筛完剩下的行数——筛掉的全是戳就提示勾「含戳」，
+ * 其余按来路与 `kind` 照实说（两端一字没差 / 只有成员 owner 动了 / 记录重写但字没变 / 折出来为零）。
+ */
+export function emptyNetDiffText(view: AttributeNetDiffView, visible: number): string | null {
+  if (visible > 0) return null;
+  if (view.changes.length > 0) return '只有戳（CACHID 一类）变了，勾「含戳」查看';
+  if (view.source === 'folded') return view.sessions === 0 ? '这段区间里它自己一次都没改过' : '净差为零（改过又改回来了）';
+  if (view.attributesUnavailable) return `属性行渲染不出来：${view.attributesUnavailable}`;
+  if (view.kind === 'unchanged') return '两端一字没差（原样换页不是它的一版）';
+  if (view.members || view.owner) return '属性一字没差，只有成员表 / owner 动了';
+  if (view.kind === 'created') return 'B 侧没有已设的属性';
+  if (view.kind === 'deleted') return 'A 侧没有已设的属性';
+  return '记录重写但渲染出来的字没变';
 }
 
 /**

@@ -4,6 +4,11 @@
 
 ### 变更
 
+- **属性对比的「属性净差」改接 `element/attribute-diff`：A / B 两端直接读终态，成员 / owner 给真差；旧服务端回落到折时间线** (2026-09-21)
+  - 之前「仅自身」的属性对比与「所有子节点」下点开一个构件，都是把属性变化时间线在 (A, B] 里逐会话 before / after 折成净差——改过又改回去的会被算成变化，成员增删 / 重排与 owner 改挂只能说「动过」。现在先问服务端 `GET /api/v1/element/attribute-diff?dbnum&refno&a&b`（ADR 0066 列的第四条路由：两端各钉一个会话、同一个属性渲染器两端各出一次字），`kind` created / modified / deleted / unchanged，`impact` 与版本表同一词表，`members` / `owner` 是两端的真差；服务端没有这条路由（无信封 404）记一次、回落到折时间线，表底写明取数口径。
+  - 端口 `ModelVersionSource.attributeDiff` + 类型 `ModelAttributeDiff`（`ports.ts`）；v1 适配器 `attributeDiff` → `ModelVersionRouteUnavailableError('element/attribute-diff')`；面板两条来路归一成 `AttributeNetDiffView`（`viewFromAttributeDiff / viewFromFold / emptyNetDiffText`，`utils/nodeVersionTimeline.ts`）。
+  - 验证：`versionSource.test.ts` +1（回执映射 a_b 归一 / 无路由抛错）、版本对比相关 9 个测试文件 86 过；**真机未验**——运行中的 `:8022`（`a382b2cf3`）没有这条路由、走的是回落，后端 gen-model-refactor `src/fast_model/attribute_diff.rs` 尚未提交。
+
 - **版本对比的三维按「模型几何差异」着色，单视口加版本角标，新增「三维只看差异」** (2026-09-21)
   - 从前 A 整侧蓝、B 整侧绿，只说明版本身份，哪件变了三维里看不出（面板算好的 `rows` 进了 ViewerPanel 却没人用）。现在每一版内部按四态上色：修改琥珀 / 新增翠绿（只在 B）/ 删除玫红（只在 A）/ 未变石板灰，与面板徽章、模型树差异模式同一套色（ADR 0066「三维联动」的落地，CONTEXT「模型几何差异」加了一句）。
   - 视口角标：单视口一枚跟着当前显示的版本（「B · sesno 630」），分屏两枚照旧；角标下只读图例列四态计数，「只看差异」开着时多一枚标签。

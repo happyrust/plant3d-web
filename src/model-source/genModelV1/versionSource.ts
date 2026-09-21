@@ -10,6 +10,9 @@
  *   `release()` = `DELETE model/history/{snapshot_key}`；`handle` = snapshot_key，给 `attributesAt` 用。
  * - `attributesAt`：`history/query tool=attributes { refno }`（属性历史对比，契约见 gen-model-refactor ADR-081 候选条），
  *   行与 `element/attributes` 同型；没有句柄的几何（tombstone）不打后端、回 `exists: false`。
+ * - 节点版本视图（ADR 0066）的四条：`attributeHistory`（`element/attribute-history`）、`attributeDiff`（`element/attribute-diff`）、
+ *   `listNodeVersions`（`node/versions`）、`diffSummary`（`node/diff-summary`）；旧服务端没有那条路由（无信封 404）一律抛
+ *   `ModelVersionRouteUnavailableError`，面板据此回落、照实说。
  * 「最新环境模型」= 视口里已加载的模型，刷新环境由 ViewerPanel 按页面级开关走 records + forceRefresh（Q12），不经这里。
  *
  * 历史投影不落库、重启即丢、单次 ≤ 100 000 元素 / 300 s：这里每次 `loadVersion` 都重新 generate，不依赖上一次的快照还在。
@@ -17,6 +20,7 @@
 import { groupInstanceEntriesByRefno } from './instanceMapping';
 
 import type {
+  ModelAttributeDiff,
   ModelAttributeHistory,
   ModelAttributeHistoryEntry,
   ModelElementVersion,
@@ -34,6 +38,7 @@ import type {
 
 import {
   fromV1Refno,
+  genModelV1ElementAttributeDiff,
   genModelV1ElementAttributeHistory,
   genModelV1ElementVersions,
   genModelV1ModelHistoryDelete,
@@ -44,6 +49,7 @@ import {
   genModelV1NodeVersions,
   genModelV1TaskGet,
   isGenModelV1ApiError,
+  type AttributeHistoryChangeDto,
   type AttributeHistoryEntryDto,
   type AttributeHistoryResponse,
   type ElementVersionsResponse,
@@ -74,6 +80,7 @@ export type GenModelV1VersionApi = {
   listVersions: typeof genModelV1ModelVersions;
   listElementVersions: typeof genModelV1ElementVersions;
   attributeHistory: typeof genModelV1ElementAttributeHistory;
+  attributeDiff: typeof genModelV1ElementAttributeDiff;
   nodeVersions: typeof genModelV1NodeVersions;
   diffSummary: typeof genModelV1NodeDiffSummary;
   historyGenerate: typeof genModelV1ModelHistoryGenerate;
@@ -89,6 +96,7 @@ const defaultApi: GenModelV1VersionApi = {
   listVersions: genModelV1ModelVersions,
   listElementVersions: genModelV1ElementVersions,
   attributeHistory: genModelV1ElementAttributeHistory,
+  attributeDiff: genModelV1ElementAttributeDiff,
   nodeVersions: genModelV1NodeVersions,
   diffSummary: genModelV1NodeDiffSummary,
   historyGenerate: genModelV1ModelHistoryGenerate,
@@ -329,6 +337,31 @@ export function createGenModelV1ModelVersionSource(api: GenModelV1VersionApi = d
     };
   }
 
+  /** 属性变化时间线与属性净差同一种 `changes` 行、同一种 `members` / `owner`（服务端两条路由共用一个渲染器出字）。 */
+  function toChanges(changes: AttributeHistoryChangeDto[] | undefined): ModelAttributeHistoryEntry['changes'] {
+    return (changes ?? []).map((change) => ({
+      name: change.name,
+      valueType: change.value_type,
+      before: change.before ?? null,
+      after: change.after ?? null,
+      stamp: !!change.stamp,
+    }));
+  }
+
+  function toMembers(members: AttributeHistoryEntryDto['members']): ModelAttributeHistoryEntry['members'] {
+    return members
+      ? {
+        added: members.added.map(fromV1Refno),
+        removed: members.removed.map(fromV1Refno),
+        reordered: !!members.reordered,
+      }
+      : null;
+  }
+
+  function toOwner(owner: AttributeHistoryEntryDto['owner']): ModelAttributeHistoryEntry['owner'] {
+    return owner ? [fromV1Refno(owner[0]), fromV1Refno(owner[1])] : null;
+  }
+
   function toHistoryEntry(row: AttributeHistoryEntryDto): ModelAttributeHistoryEntry {
     return {
       sesno: row.sesno,
@@ -338,21 +371,9 @@ export function createGenModelV1ModelVersionSource(api: GenModelV1VersionApi = d
       kind: row.kind,
       impact: row.impact,
       changedCount: row.changed_count ?? row.changes?.length ?? 0,
-      changes: (row.changes ?? []).map((change) => ({
-        name: change.name,
-        valueType: change.value_type,
-        before: change.before ?? null,
-        after: change.after ?? null,
-        stamp: !!change.stamp,
-      })),
-      members: row.members
-        ? {
-          added: row.members.added.map(fromV1Refno),
-          removed: row.members.removed.map(fromV1Refno),
-          reordered: !!row.members.reordered,
-        }
-        : null,
-      owner: row.owner ? [fromV1Refno(row.owner[0]), fromV1Refno(row.owner[1])] : null,
+      changes: toChanges(row.changes),
+      members: toMembers(row.members),
+      owner: toOwner(row.owner),
       attributesUnavailable: row.attributes_unavailable ?? null,
     };
   }
@@ -393,6 +414,44 @@ export function createGenModelV1ModelVersionSource(api: GenModelV1VersionApi = d
       sinceSesno = last;
     }
     throw new Error(`属性变化时间线超过 ${MAX_PAGES} 页仍未取完（dbnum ${dbnum} 节点 ${normalized}），放弃`);
+  }
+
+  /**
+   * 属性净差（ADR 0066 / CONTEXT「属性净差」）：`GET element/attribute-diff?a&b`，一次回执、不分页。
+   * 旧服务端没有这条路由 → `ModelVersionRouteUnavailableError`，面板据此回落到把属性变化时间线在 (A, B] 里折。
+   */
+  async function attributeDiff(
+    dbnum: number,
+    refno: string,
+    a: number,
+    b: number,
+    options: ModelVersionLoadOptions = {},
+  ): Promise<ModelAttributeDiff> {
+    const normalized = fromV1Refno(refno);
+    let response;
+    try {
+      response = await api.attributeDiff({ dbnum, refno: normalized, a, b }, { signal: options.signal });
+    } catch (error) {
+      if (isMissingRoute(error)) throw new ModelVersionRouteUnavailableError('element/attribute-diff');
+      throw error;
+    }
+    return {
+      dbnum: response.dbnum,
+      refno: fromV1Refno(response.refno),
+      noun: response.noun,
+      unitRefno: response.unit_root ? fromV1Refno(response.unit_root) : null,
+      unitNoun: response.unit_noun ?? null,
+      a: response.a,
+      b: response.b,
+      kind: response.kind,
+      impact: response.impact ?? null,
+      changedCount: response.changed_count ?? response.changes?.length ?? 0,
+      changes: toChanges(response.changes),
+      members: toMembers(response.members),
+      owner: toOwner(response.owner),
+      attributesUnavailable: response.attributes_unavailable ?? null,
+      warnings: response.warnings ?? [],
+    };
   }
 
   /**
@@ -579,7 +638,7 @@ export function createGenModelV1ModelVersionSource(api: GenModelV1VersionApi = d
     };
   }
 
-  return { listVersions, listElementVersions, loadVersion, attributesAt, attributeHistory, listNodeVersions, diffSummary };
+  return { listVersions, listElementVersions, loadVersion, attributesAt, attributeHistory, attributeDiff, listNodeVersions, diffSummary };
 }
 
 /** `<unit_refno>@<sesno>` → sesno；解不出给 0（只用在没有句柄的空态上）。 */

@@ -43,21 +43,25 @@ import {
   countNodeTimeline,
   defaultNodeScope,
   defaultNodeVersionPair,
+  emptyNetDiffText,
   foldAttributeChanges,
   pairWithLatest,
   pairWithPrevious,
   pickNodeVersionSide,
-  type FoldedAttributeDiff,
+  viewFromAttributeDiff,
+  viewFromFold,
+  type AttributeNetDiffView,
   type NodeTimelineRow,
 } from '@/utils/nodeVersionTimeline';
 
 /**
- * 节点版本视图（ADR 0066；CONTEXT「节点版本视图 / 对比范围 / 属性变化时间线 / 差异摘要」）。
+ * 节点版本视图（ADR 0066；CONTEXT「节点版本视图 / 对比范围 / 属性变化时间线 / 属性净差 / 差异摘要」）。
  *
  * 任意节点一个面板：上半是属性变化时间线（谁在哪一版改了什么），下半两个 tab（属性对比 / 模型对比），三块受同一个
  * **对比范围**开关约束（`仅自身` / `所有子节点`）。取数经 `ModelVersionSource`：
  * - 现有路由：`listElementVersions`（两列五态）+ `listVersions`（所属单元的版本表）+ `loadVersion`（A/B 历史投影）；
- * - 新路由（旧服务端没有时回落、照实说）：`attributeHistory`（user / comment / 逐属性 before-after）与 `diffSummary`
+ * - 新路由（旧服务端没有时回落、照实说）：`attributeHistory`（user / comment / 逐属性 before-after）、`attributeDiff`
+ *   （A / B 两版的属性净差，服务端两端直接读终态；没有时回落到把时间线在 (A, B] 里折）与 `diffSummary`
  *   （A→B 不生成几何的差异摘要，按单元分组）。
  * 三维对比仍是单元级的（几何只按单元生成）：`所有子节点` 下差异摘要按单元分组，每组一个「在三维中对比」，一次装一个单元
  * （多单元一次装载是下一期的活，见 ADR 0066）。
@@ -107,11 +111,20 @@ const diffSummary = ref<ModelNodeDiffSummary | null>(null);
 const diffSummaryError = ref<string | null>(null);
 const diffSummaryUnavailable = ref(false);
 const loadingSummary = ref(false);
-/** `所有子节点` 下属性对比展开的构件 → 它的属性时间线折出来的净差 */
+/**
+ * `仅自身` 下属性对比的那一格净差（CONTEXT「属性净差」）：服务端 `attributeDiff` 直接给；旧服务端没有这条路由时回落到把
+ * 属性变化时间线在 (A, B] 里折（`source: 'folded'`，界面照实说）。`attributeDiffUnavailable` 记一次，不再反复打。
+ */
+const selfDiff = ref<AttributeNetDiffView | null>(null);
+const selfDiffError = ref<string | null>(null);
+const loadingSelfDiff = ref(false);
+const attributeDiffUnavailable = ref(false);
+/** `所有子节点` 下属性对比展开的构件 → 它的净差（同一条取数路：先 `attributeDiff`，没有再拉它的时间线折） */
 const expandedElement = ref<string | null>(null);
-const elementFolds = ref(new Map<string, FoldedAttributeDiff | 'loading' | string>());
+const elementDiffs = ref(new Map<string, AttributeNetDiffView | 'loading' | string>());
 let requestId = 0;
 let summaryRequestId = 0;
+let selfDiffRequestId = 0;
 
 const normalizedRefno = computed(() => unitRefno.value.trim().replace(/\//g, '_'));
 /** 查的那个节点自己就是单元根时，两列说的是同一件事，界面上不再多说一遍 */
@@ -152,12 +165,10 @@ const selectedAfter = computed(() => versionFor(afterSesno.value));
 const sameGeometry = computed(() => sameGeometryKey(selectedBefore.value, selectedAfter.value));
 const pairReady = computed(() => beforeSesno.value !== null && afterSesno.value !== null && beforeSesno.value < afterSesno.value);
 
-/** 属性对比（仅自身）：把属性时间线在 (A, B] 里的逐会话变化折成净差 */
-const selfFold = computed<FoldedAttributeDiff | null>(() => {
-  if (!pairReady.value || !attributeHistory.value) return null;
-  return foldAttributeChanges(attributeHistory.value.entries, beforeSesno.value!, afterSesno.value!);
-});
-const selfFoldVisible = computed(() => (selfFold.value?.changes ?? []).filter((change) => includeUnchanged.value || !change.stamp));
+/** 属性对比（仅自身）表里实际列出的行：戳（`CACHID` 一类）缺省不列，勾「含戳」才列 */
+const selfDiffVisible = computed(() => (selfDiff.value?.changes ?? []).filter((change) => includeUnchanged.value || !change.stamp));
+/** 「n 项变化」只数属性行（不含戳）；成员 / owner 另说一句 */
+const selfDiffCount = computed(() => (selfDiff.value?.changes ?? []).filter((change) => !change.stamp).length);
 /** `所有子节点` 下属性对比的构件清单：差异摘要里有变的行，节点自身置顶（Q12 a） */
 const changedElementRows = computed(() => {
   const summary = diffSummary.value;
@@ -269,6 +280,30 @@ const STATUS_CLASS: Record<string, string> = {
   unchanged: 'bg-slate-100 text-slate-600',
   noop: 'bg-slate-100 text-slate-600',
 };
+/** 属性净差的去向（服务端 `kind`）：created = A 侧不存在，deleted = B 侧不存在 */
+const DIFF_KIND_LABEL: Record<string, string> = { created: 'A 侧不存在 · 新建', modified: '修改', deleted: 'B 侧不存在 · 已删', unchanged: '两端一字没差' };
+const DIFF_KIND_CLASS: Record<string, string> = {
+  created: 'bg-emerald-100 text-emerald-700',
+  modified: 'bg-amber-100 text-amber-700',
+  deleted: 'bg-rose-100 text-rose-700',
+  unchanged: 'bg-slate-100 text-slate-600',
+};
+
+/** 成员表两端真差的一句话：`新增 n · 移除 m · 重排` */
+function membersText(members: NonNullable<AttributeNetDiffView['members']>): string {
+  const parts: string[] = [];
+  if (members.added.length) parts.push(`新增 ${members.added.length}（${members.added.slice(0, 3).join('、')}${members.added.length > 3 ? '…' : ''}）`);
+  if (members.removed.length) parts.push(`移除 ${members.removed.length}（${members.removed.slice(0, 3).join('、')}${members.removed.length > 3 ? '…' : ''}）`);
+  if (members.reordered) parts.push('重排');
+  return parts.join(' · ');
+}
+
+/** 一格净差的取数口径，写在表底：服务端两端直接读终态，还是旧服务端下折出来的 */
+function diffSourceText(view: AttributeNetDiffView): string {
+  return view.source === 'server'
+    ? '取数：服务端 element/attribute-diff——A / B 各钉一个会话、同一个属性渲染器两端各出一次字，直接读终态；未变的属性不列。'
+    : '取数：服务端还没有 element/attribute-diff，这里把 (A, B] 里逐会话的 before / after 折成净差；成员 / owner 只能说「动过」。';
+}
 
 function releaseHeldGeometries(): void {
   const held = heldGeometries;
@@ -351,7 +386,10 @@ async function loadVersions(): Promise<void> {
   diffSummary.value = null;
   diffSummaryError.value = null;
   diffSummaryUnavailable.value = false;
-  elementFolds.value = new Map();
+  selfDiff.value = null;
+  selfDiffError.value = null;
+  attributeDiffUnavailable.value = false;
+  elementDiffs.value = new Map();
   expandedElement.value = null;
   dbnum.value = null;
   beforeSesno.value = null;
@@ -473,12 +511,68 @@ function normalizeSelectedPair(): void {
   afterSesno.value = after.sesno;
 }
 
+/**
+ * 一格净差的取数路（`仅自身` 的节点自己与 `所有子节点` 下点开的构件同一条）：先问服务端 `attributeDiff`（两端直接读终态、
+ * 成员 / owner 是真差）；旧服务端没有这条路由就记一次、回落到把属性变化时间线在 (A, B] 里折——节点自己的时间线已在手上
+ * （`knownHistory`），构件的现拉。两条都没有就抛，界面照实说。
+ */
+async function netDiffOf(refno: string, a: number, b: number, knownHistory: ModelAttributeHistory | null): Promise<AttributeNetDiffView> {
+  const source = optionalSource().versions;
+  const diffFetcher = source?.attributeDiff;
+  if (!attributeDiffUnavailable.value && typeof diffFetcher === 'function') {
+    try {
+      return viewFromAttributeDiff(await diffFetcher.call(getModelSource().versions, dbnum.value!, refno, a, b));
+    } catch (cause) {
+      if (!(cause instanceof ModelVersionRouteUnavailableError)) throw cause;
+      attributeDiffUnavailable.value = true;
+    }
+  } else {
+    attributeDiffUnavailable.value = true;
+  }
+  let history = knownHistory;
+  if (!history) {
+    const historyFetcher = source?.attributeHistory;
+    if (typeof historyFetcher !== 'function') throw new Error('当前模型来源既没有属性净差也没有属性变化时间线');
+    history = await historyFetcher.call(getModelSource().versions, dbnum.value!, refno);
+  }
+  return viewFromFold(foldAttributeChanges(history.entries, a, b));
+}
+
+/** `仅自身` 的属性对比：A/B 一变就重取；只在范围是 `仅自身` 时取（三块同进同出，`所有子节点` 下是构件清单） */
+async function loadSelfDiff(): Promise<void> {
+  const run = ++selfDiffRequestId;
+  selfDiff.value = null;
+  selfDiffError.value = null;
+  if (dbnum.value === null || !pairReady.value || scope.value !== 'self' || !elementTimeline.value) return;
+  const refno = elementTimeline.value.refno;
+  const history = attributeHistory.value;
+  loadingSelfDiff.value = true;
+  try {
+    const view = await netDiffOf(refno, beforeSesno.value!, afterSesno.value!, history);
+    if (run !== selfDiffRequestId) return;
+    selfDiff.value = view;
+  } catch (cause) {
+    if (run !== selfDiffRequestId) return;
+    // 两条路都没有：服务端缺 attribute-diff、时间线也取不到（原因在 historyUnavailable）
+    const routeMissing = cause instanceof ModelVersionRouteUnavailableError;
+    selfDiffError.value = routeMissing && historyUnavailable.value
+      ? `服务端既没有 element/attribute-diff，${historyUnavailable.value}`
+      : messageOf(cause);
+  } finally {
+    if (run === selfDiffRequestId) loadingSelfDiff.value = false;
+  }
+}
+
+watch([beforeSesno, afterSesno, scope, dbnum], () => {
+  void loadSelfDiff();
+});
+
 /** 差异摘要（新路由）：A/B 或范围一变就重算；旧服务端没有这条路由只记一次，不再反复打 */
 async function loadDiffSummary(): Promise<void> {
   const run = ++summaryRequestId;
   diffSummary.value = null;
   diffSummaryError.value = null;
-  elementFolds.value = new Map();
+  elementDiffs.value = new Map();
   expandedElement.value = null;
   if (dbnum.value === null || !pairReady.value || diffSummaryUnavailable.value || !elementTimeline.value) return;
   const fetcher = optionalSource().versions?.diffSummary;
@@ -511,32 +605,33 @@ watch([beforeSesno, afterSesno, scope, dbnum], () => {
   void loadDiffSummary();
 });
 
-/** `所有子节点` 下展开一个构件：拉它自己的属性时间线，折成 (A, B] 的净差 */
-async function toggleElementFold(refno: string): Promise<void> {
+/** 展开的构件那一格已经算出来的净差；还在算 / 失败（字串）时为 null */
+function elementDiffView(refno: string): AttributeNetDiffView | null {
+  const entry = elementDiffs.value.get(refno);
+  return entry && typeof entry === 'object' ? entry : null;
+}
+
+/** `所有子节点` 下展开一个构件：取它 A / B 两版的属性净差（服务端直接给；旧服务端拉它的时间线折）。节点自己那一行复用手上的时间线。 */
+async function toggleElementDiff(refno: string): Promise<void> {
   if (expandedElement.value === refno) {
     expandedElement.value = null;
     return;
   }
   expandedElement.value = refno;
-  if (elementFolds.value.has(refno) || dbnum.value === null || !pairReady.value) return;
-  const fetcher = optionalSource().versions?.attributeHistory;
-  if (typeof fetcher !== 'function') {
-    elementFolds.value.set(refno, '当前模型来源没有属性变化时间线');
-    return;
-  }
-  const next = new Map(elementFolds.value);
+  if (elementDiffs.value.has(refno) || dbnum.value === null || !pairReady.value) return;
+  const next = new Map(elementDiffs.value);
   next.set(refno, 'loading');
-  elementFolds.value = next;
+  elementDiffs.value = next;
+  const knownHistory = refno === elementTimeline.value?.refno ? attributeHistory.value : null;
   try {
-    const history = await fetcher.call(getModelSource().versions, dbnum.value, refno);
-    const folded = foldAttributeChanges(history.entries, beforeSesno.value!, afterSesno.value!);
-    const done = new Map(elementFolds.value);
-    done.set(refno, folded);
-    elementFolds.value = done;
+    const view = await netDiffOf(refno, beforeSesno.value!, afterSesno.value!, knownHistory);
+    const done = new Map(elementDiffs.value);
+    done.set(refno, view);
+    elementDiffs.value = done;
   } catch (cause) {
-    const failed = new Map(elementFolds.value);
-    failed.set(refno, cause instanceof ModelVersionRouteUnavailableError ? '服务端还没有 element/attribute-history' : messageOf(cause));
-    elementFolds.value = failed;
+    const failed = new Map(elementDiffs.value);
+    failed.set(refno, cause instanceof ModelVersionRouteUnavailableError ? `服务端既没有 element/attribute-diff 也没有 ${cause.route}` : messageOf(cause));
+    elementDiffs.value = failed;
   }
 }
 
@@ -962,40 +1057,59 @@ onBeforeUnmount(() => {
         <section v-if="activeTab === 'attributes'" class="mt-2" data-testid="model-unit-compare-attributes">
           <p v-if="!pairReady" class="py-3 text-center text-xs text-muted-foreground">先在时间线上选好 A / B（A 早于 B）</p>
           <template v-else-if="scope === 'self'">
-            <div v-if="!attributeHistory" class="rounded-md border border-border bg-muted/20 p-2 text-[11px] text-muted-foreground">
-              {{ historyUnavailable ?? '没有属性变化时间线' }}。跑一次「在三维中对比」后，模型树差异模式底部仍有 A / B 两版的属性逐项对比。
+            <p v-if="loadingSelfDiff" class="py-3 text-center text-xs text-muted-foreground" data-testid="model-unit-compare-attr-loading">正在算属性净差…</p>
+            <div v-else-if="selfDiffError" class="rounded-md border border-border bg-muted/20 p-2 text-[11px] text-muted-foreground" data-testid="model-unit-compare-attr-error">
+              {{ selfDiffError }}。跑一次「在三维中对比」后，模型树差异模式底部仍有 A / B 两版的属性逐项对比。
             </div>
-            <template v-else-if="selfFold">
+            <template v-else-if="selfDiff">
               <div class="flex items-center justify-between gap-2 text-[11px]">
-                <span class="font-semibold text-foreground">A {{ beforeSesno }} → B {{ afterSesno }} · {{ selfFold.changes.filter((c) => !c.stamp).length }} 项变化</span>
+                <span class="font-semibold text-foreground">
+                  A {{ beforeSesno }} → B {{ afterSesno }} · {{ selfDiffCount }} 项变化
+                  <span v-if="selfDiff.kind" class="ml-1 rounded px-1.5 py-0.5 text-[10px] font-normal" :class="DIFF_KIND_CLASS[selfDiff.kind]" data-testid="model-unit-compare-attr-kind">
+                    {{ DIFF_KIND_LABEL[selfDiff.kind] }}<template v-if="selfDiff.impact"> · {{ selfDiff.impact }}</template>
+                  </span>
+                </span>
                 <label class="flex items-center gap-1 text-muted-foreground">
                   <input v-model="includeUnchanged" type="checkbox" />含戳
                 </label>
               </div>
-              <p v-if="selfFold.createdAt !== null || selfFold.deletedAt !== null" class="mt-1 text-[10px] text-amber-700">
-                <template v-if="selfFold.createdAt !== null">该节点在 sesno {{ selfFold.createdAt }} 被创建；</template>
-                <template v-if="selfFold.deletedAt !== null">在 sesno {{ selfFold.deletedAt }} 被删除；</template>
+              <p v-if="selfDiff.kind === 'created' && selfDiff.source === 'server'" class="mt-1 text-[10px] text-amber-700">
+                该节点在 A（sesno {{ beforeSesno }}）侧不存在：列的是 B 侧全部已设的属性，before 为空。
+              </p>
+              <p v-else-if="selfDiff.kind === 'deleted' && selfDiff.source === 'server'" class="mt-1 text-[10px] text-amber-700">
+                该节点在 B（sesno {{ afterSesno }}）侧已删除：列的是 A 侧全部已设的属性，after 为空。
+              </p>
+              <p v-else-if="selfDiff.createdAt !== null || selfDiff.deletedAt !== null" class="mt-1 text-[10px] text-amber-700">
+                <template v-if="selfDiff.createdAt !== null">该节点在 sesno {{ selfDiff.createdAt }} 被创建；</template>
+                <template v-if="selfDiff.deletedAt !== null">在 sesno {{ selfDiff.deletedAt }} 被删除；</template>
                 A 侧不存在的属性 before 为空。
               </p>
-              <p v-if="selfFold.membersTouched || selfFold.ownerTouched" class="mt-1 text-[10px] text-muted-foreground">
-                这段区间里<template v-if="selfFold.membersTouched">成员表动过</template><template v-if="selfFold.membersTouched && selfFold.ownerTouched">、</template><template v-if="selfFold.ownerTouched">owner 改挂过</template>（净差看不出来，看时间线逐行）。
+              <p v-if="selfDiff.members || selfDiff.owner" class="mt-1 text-[10px] text-muted-foreground" data-testid="model-unit-compare-attr-members">
+                <template v-if="selfDiff.members">成员 {{ membersText(selfDiff.members) }}</template>
+                <template v-if="selfDiff.members && selfDiff.owner">；</template>
+                <template v-if="selfDiff.owner">owner {{ selfDiff.owner[0] }} → {{ selfDiff.owner[1] }}</template>
               </p>
-              <div class="mt-2 overflow-hidden rounded-md border border-border" data-testid="model-unit-compare-attr-table">
+              <p v-else-if="selfDiff.membersTouched || selfDiff.ownerTouched" class="mt-1 text-[10px] text-muted-foreground">
+                这段区间里<template v-if="selfDiff.membersTouched">成员表动过</template><template v-if="selfDiff.membersTouched && selfDiff.ownerTouched">、</template><template v-if="selfDiff.ownerTouched">owner 改挂过</template>（折出来的净差看不出来，看时间线逐行）。
+              </p>
+              <p v-if="selfDiff.attributesUnavailable" class="mt-1 text-[10px] text-amber-700">属性行渲染不出来：{{ selfDiff.attributesUnavailable }}（去向与影响档仍成立）</p>
+              <div class="mt-2 overflow-hidden rounded-md border border-border" data-testid="model-unit-compare-attr-table" :data-source="selfDiff.source">
                 <div class="grid grid-cols-[76px_1fr_1fr] gap-2 bg-muted/40 px-2 py-1 text-[10px] text-muted-foreground">
                   <span>属性</span><span class="font-semibold text-blue-700">A · {{ beforeSesno }}</span><span class="font-semibold text-emerald-700">B · {{ afterSesno }}</span>
                 </div>
-                <div v-for="change in selfFoldVisible" :key="change.name"
+                <div v-for="change in selfDiffVisible" :key="change.name"
                   class="grid grid-cols-[76px_1fr_1fr] gap-2 border-t border-border px-2 py-1 text-[10px]"
                   :class="change.stamp ? 'bg-slate-50 text-slate-500' : 'bg-amber-50/60'">
                   <span class="font-mono font-semibold">{{ change.name }}<span v-if="change.stamp" class="ml-1 rounded bg-slate-200 px-1 text-[9px] font-normal">戳</span><span v-if="change.hops > 1" class="ml-1 text-[9px] font-normal text-muted-foreground">×{{ change.hops }}</span></span>
                   <span class="break-all font-mono text-muted-foreground">{{ change.before ?? '—' }}</span>
                   <span class="break-all font-mono font-semibold text-foreground">{{ change.after ?? '—' }}</span>
                 </div>
-                <p v-if="selfFoldVisible.length === 0" class="border-t border-border px-2 py-2 text-center text-[10px] text-muted-foreground">
-                  {{ selfFold.sessions === 0 ? '这段区间里它自己一次都没改过' : '净差为零（改过又改回来了）' }}
+                <p v-if="selfDiffVisible.length === 0" class="border-t border-border px-2 py-2 text-center text-[10px] text-muted-foreground">
+                  {{ emptyNetDiffText(selfDiff, 0) }}
                 </p>
               </div>
-              <p class="mt-1 text-[10px] text-muted-foreground">取数：(A, B] 里逐会话的 before / after 折成净差，不生成几何；未变的属性不列。</p>
+              <p v-if="selfDiff.warnings.length" class="mt-1 text-[10px] text-muted-foreground">{{ selfDiff.warnings[0] }}</p>
+              <p class="mt-1 text-[10px] text-muted-foreground" data-testid="model-unit-compare-attr-source">{{ diffSourceText(selfDiff) }}</p>
             </template>
           </template>
           <template v-else>
@@ -1010,29 +1124,32 @@ onBeforeUnmount(() => {
                 <li v-for="row in changedElementRows" :key="row.refno" class="rounded-md border" :class="row.isNode ? 'border-primary bg-primary/5' : 'border-border'">
                   <button type="button" class="flex w-full items-center gap-2 px-2 py-1.5 text-left text-xs hover:bg-muted/40"
                     :data-testid="`model-unit-compare-element-${row.refno}`"
-                    @click="toggleElementFold(row.refno)">
+                    @click="toggleElementDiff(row.refno)">
                     <span class="text-[10px] text-muted-foreground">{{ expandedElement === row.refno ? '▾' : '▸' }}</span>
                     <span class="font-mono font-semibold">{{ row.noun }} {{ row.refno }}</span>
                     <span v-if="row.isNode" class="rounded bg-primary/10 px-1 py-0.5 text-[10px] text-primary">本节点</span>
                     <span v-if="row.unitRefno && row.unitRefno !== row.refno" class="truncate text-[10px] text-muted-foreground">{{ row.unitNoun }} {{ row.unitRefno }} 下</span>
                     <span class="ml-auto rounded px-1.5 py-0.5 text-[10px]" :class="STATUS_CLASS[row.status]">{{ STATUS_LABEL[row.status] }} · {{ row.impact }}</span>
                   </button>
-                  <div v-if="expandedElement === row.refno" class="border-t border-border px-2 py-1.5 text-[10px]">
-                    <template v-if="elementFolds.get(row.refno) === 'loading'">正在拉它的属性时间线…</template>
-                    <template v-else-if="typeof elementFolds.get(row.refno) === 'string'">
-                      <span class="text-amber-700">{{ elementFolds.get(row.refno) }}</span>
+                  <div v-if="expandedElement === row.refno" class="border-t border-border px-2 py-1.5 text-[10px]" :data-testid="`model-unit-compare-element-diff-${row.refno}`">
+                    <template v-if="elementDiffs.get(row.refno) === 'loading'">正在算它的属性净差…</template>
+                    <template v-else-if="typeof elementDiffs.get(row.refno) === 'string'">
+                      <span class="text-amber-700">{{ elementDiffs.get(row.refno) }}</span>
                     </template>
-                    <template v-else-if="elementFolds.get(row.refno)">
-                      <div v-for="change in (elementFolds.get(row.refno) as FoldedAttributeDiff).changes" :key="change.name"
+                    <template v-else-if="elementDiffView(row.refno)">
+                      <p v-if="elementDiffView(row.refno)!.kind === 'created' && elementDiffView(row.refno)!.source === 'server'" class="text-amber-700">A 侧不存在：列的是 B 侧全部已设的属性</p>
+                      <p v-else-if="elementDiffView(row.refno)!.kind === 'deleted' && elementDiffView(row.refno)!.source === 'server'" class="text-amber-700">B 侧已删除：列的是 A 侧全部已设的属性</p>
+                      <div v-for="change in elementDiffView(row.refno)!.changes" :key="change.name"
                         class="grid grid-cols-[76px_1fr_1fr] gap-2 py-0.5" :class="change.stamp ? 'text-slate-500' : ''">
                         <span class="font-mono font-semibold">{{ change.name }}<span v-if="change.stamp" class="ml-1 rounded bg-slate-200 px-1 text-[9px] font-normal">戳</span></span>
                         <span class="break-all font-mono text-muted-foreground">{{ change.before ?? '—' }}</span>
                         <span class="break-all font-mono font-semibold">{{ change.after ?? '—' }}</span>
                       </div>
-                      <p v-if="(elementFolds.get(row.refno) as FoldedAttributeDiff).changes.length === 0" class="text-muted-foreground">
-                        {{ row.status === 'added' ? 'A 侧不存在（新增）' : row.status === 'deleted' ? 'B 侧不存在（已删）' : '属性净差为零（记录重写但字没变）' }}
-                      </p>
-                      <p v-if="(elementFolds.get(row.refno) as FoldedAttributeDiff).membersTouched" class="text-muted-foreground">成员表动过（增删或重排）</p>
+                      <p v-if="elementDiffView(row.refno)!.changes.length === 0" class="text-muted-foreground">{{ emptyNetDiffText(elementDiffView(row.refno)!, 0) }}</p>
+                      <p v-if="elementDiffView(row.refno)!.members" class="text-muted-foreground">成员 {{ membersText(elementDiffView(row.refno)!.members!) }}</p>
+                      <p v-else-if="elementDiffView(row.refno)!.membersTouched" class="text-muted-foreground">成员表动过（增删或重排）</p>
+                      <p v-if="elementDiffView(row.refno)!.owner" class="text-muted-foreground">owner {{ elementDiffView(row.refno)!.owner![0] }} → {{ elementDiffView(row.refno)!.owner![1] }}</p>
+                      <p v-if="elementDiffView(row.refno)!.source === 'folded'" class="text-muted-foreground">服务端还没有 element/attribute-diff：这是把它的时间线在 (A, B] 里折出来的</p>
                     </template>
                   </div>
                 </li>

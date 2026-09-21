@@ -406,6 +406,36 @@ export type ModelAttributeHistory = {
   entries: ModelAttributeHistoryEntry[];
 };
 
+/**
+ * 节点 A / B 两版之间的属性净差（CONTEXT「属性净差」，gen-model-v1 `GET /api/v1/element/attribute-diff`）：服务端两端各钉一个会话
+ * 直接读终态、同一个渲染器两端各出一次字，不折时间线——改过又改回去的天然不算；成员 / owner 给的是两端的真差。
+ */
+export type ModelAttributeDiff = {
+  dbnum: number;
+  /** `a_b` */
+  refno: string;
+  noun: string;
+  unitRefno: string | null;
+  unitNoun: string | null;
+  a: number;
+  b: number;
+  /** created = A 侧不存在；deleted = B 侧不存在；unchanged = 两端一字没差、影响也判不出（原样换页不是它的一版） */
+  kind: 'created' | 'modified' | 'deleted' | 'unchanged';
+  /** 与版本表同一词表：created → delivery，deleted → tombstone，modified → mesh / placement / noop；unchanged 为 null */
+  impact: ModelVersionImpactKind | null;
+  /** 属性行数 + 成员表有差算一项 + owner 改挂算一项 */
+  changedCount: number;
+  /** created 列 B 侧全部已设的属性（before 空）；deleted 列 A 侧全部已设的属性（after 空） */
+  changes: ModelAttributeChange[];
+  /** 成员表两端的真差（`a_b`）；没差为 null */
+  members: { added: string[]; removed: string[]; reordered: boolean } | null;
+  /** owner 改挂 `[A 侧, B 侧]`（`a_b`）；没改为 null */
+  owner: [string, string] | null;
+  /** 某一端属性行渲染不出来的原因（模板缺失等）；此时 `changes` 可能为空但 `kind` / `impact` 仍成立 */
+  attributesUnavailable: string | null;
+  warnings: string[];
+};
+
 /** 节点版本表的一行（CONTEXT「节点版本表」）：范围内折出来的一档影响 + 动了几个单元 + 节点自身那一格。 */
 export type ModelNodeVersion = {
   sesno: number;
@@ -512,6 +542,18 @@ export type ModelVersionSource = {
    * 服务端没有这条路由（旧构建）→ 抛 `ModelVersionRouteUnavailableError`，面板据此只给版本表那一半。
    */
   attributeHistory(dbnum: number, refno: string, options?: ModelVersionLoadOptions): Promise<ModelAttributeHistory>;
+  /**
+   * 某节点 A / B 两版之间的属性净差（ADR 0066 / CONTEXT「属性净差」）：服务端两端各钉一个会话直接读终态，不折时间线、不要快照；
+   * 成员增删 / 重排与 owner 改挂给的是两端的真差。「仅自身」的属性对比与「所有子节点」下点开一个构件都吃它。
+   * 服务端没有这条路由（旧构建）→ 抛 `ModelVersionRouteUnavailableError`，面板据此回落到把属性变化时间线在 (A, B] 里折。
+   */
+  attributeDiff(
+    dbnum: number,
+    refno: string,
+    a: number,
+    b: number,
+    options?: ModelVersionLoadOptions,
+  ): Promise<ModelAttributeDiff>;
   /**
    * 某节点按范围折叠的版本表（ADR 0066 / CONTEXT「节点版本表」）：`subtree` 下容器也列得出子树的时间线，每版附动了几个单元。
    * 服务端没有这条路由 → 抛 `ModelVersionRouteUnavailableError`，面板据此退回「手填会话号」。
