@@ -131,3 +131,4 @@
 `RoomTreePanel` 在页签前台时监听全局选中调它并 `scrollToIndex` 居中，树内点选用 `internalSelection` 标记不反弹（与 PDMS 树同法）。e2e 第 ④ 条：切到「房间」→ 整页刷新仍在「房间」（tab 带 `shadow-sm`、面板可见）→
 只展开房间层 → 外部 `setGlobalSelectedRefno` 单元最后一个构件 → 该行出现、`data-selected=true`、在视口内、单元类型 / 单元行都展开、选中行只此一行 → 选单元 refno 落在单元行 → 树内点另一构件全局选中跟着变且不反弹 → 切回 PDMS 记 `pdms`。
 同命令 **4 passed（15.1 s）**，日志 `e2e-model-tree-room-tab-gen-model-v1-2026-09-21-1725.txt`；vitest 页签 3 文件 17 passed；type-check 基线外 0；eslint 0。
+**回归复跑**（17:3x，PR-D 全部合入后）：抽屉那份 `spatial-query-gen-model-v1-ui.spec.ts` 同机 `--workers=1` **9 passed / 1 skipped（25.8 s）**，与 09-21 00:20 基线一致——页签改动没碰到抽屉。
