@@ -94,6 +94,12 @@ function main(): void {
     controls.update();
   };
   setView((params.get('view') as 'iso' | 'front' | 'top' | null) ?? 'iso');
+  // ?dist=6：相机沿视线拉远 6 倍（看远处密集边线 / 去杂效果）
+  const dist = Number(params.get('dist'));
+  if (Number.isFinite(dist) && dist > 0 && dist !== 1) {
+    camera.position.sub(controls.target).multiplyScalar(dist).add(controls.target);
+    controls.update();
+  }
 
   const pipeline = new SglLookPipeline(renderer);
   const allMaterials: SglLookMaterial[] = [...plant.materials, plant.roomMaterial, aidMaterial];
@@ -116,6 +122,10 @@ function main(): void {
   if (params.get('translucentEdges') === '0') pipeline.params.hlr.translucentEdges = false;
   if (params.get('handleEdges') === '1') pipeline.params.hlr.handleEdges = true;
   if (params.get('handleShadows') === '1') pipeline.params.ao.handleShadows = true;
+  // ?declutter=0 关掉 HLR 去杂（sglDx11 HLRDeclutter，E3D 3.1 边线开着就跑）；?declutterMax=0.5 改 g_MaxColour
+  if (params.get('declutter') === '0') pipeline.params.hlr.declutter = false;
+  const declutterMax = Number(params.get('declutterMax'));
+  if (Number.isFinite(declutterMax) && declutterMax > 0) pipeline.params.hlr.declutterMax = declutterMax;
   // ?aa=0|none 关；?aa=fxaa；?aa=2|4|8 = MSAA 采样数（缺省随预设：出厂 4× MSAA）
   const aaRaw = params.get('aa');
   if (aaRaw === '0' || aaRaw === 'none') pipeline.params.aa.mode = 'none';
@@ -282,6 +292,9 @@ function main(): void {
   addSlider(sHlr, '半径 px', 1, 4, 1, () => pipeline.params.hlr.radiusPx, (v) => { pipeline.params.hlr.radiusPx = v; });
   addCheckbox(sHlr, '半透明也画边（EnhancedEdgesTranslucent，E3D 默认开；房间盒）', () => pipeline.params.hlr.translucentEdges, (v) => { pipeline.params.hlr.translucentEdges = v; });
   addCheckbox(sHlr, '辅助对象也画边（EnhancedEdgesHandles，E3D 默认关；左前方蓝球 userData.sglHandle）', () => pipeline.params.hlr.handleEdges, (v) => { pipeline.params.hlr.handleEdges = v; });
+  addCheckbox(sHlr, '去杂（HLRDeclutter：2×2 窗口边线密集处淡线，E3D 3.1 边线开着就跑）', () => pipeline.params.hlr.declutter, (v) => { pipeline.params.hlr.declutter = v; });
+  addSlider(sHlr, '去杂 g_MinColour', 0, 0.44, 0.01, () => pipeline.params.hlr.declutterMin, (v) => { pipeline.params.hlr.declutterMin = v; });
+  addSlider(sHlr, '去杂 g_MaxColour', 0.01, 0.45, 0.01, () => pipeline.params.hlr.declutterMax, (v) => { pipeline.params.hlr.declutterMax = v; });
   addColor(sHlr, '边线色', () => pipeline.params.hlr.edgeColor, (c) => { pipeline.params.hlr.edgeColor.copy(c); });
 
   // AO
@@ -367,7 +380,7 @@ function main(): void {
       const sharp = pipeline.lastBlurSharpness;
       const blurInfo = range !== null && sharp !== null ? ` · 深度范围 ${range.toFixed(0)} mm → 模糊锐度 ${sharp.toFixed(4)}` : '';
       const ss = pipeline.hlrSupersample;
-      const aaInfo = ` · AA ${pipeline.params.aa.mode === 'msaa' ? `MSAA ${pipeline.colorSamples || 1}×` : pipeline.params.aa.mode} · HLR ${ss.x}×${ss.y}`;
+      const aaInfo = ` · AA ${pipeline.params.aa.mode === 'msaa' ? `MSAA ${pipeline.colorSamples || 1}×` : pipeline.params.aa.mode} · HLR ${ss.x}×${ss.y}${pipeline.params.hlr.enabled && pipeline.params.hlr.declutter ? ' 去杂' : ''}`;
       statsLine.textContent = `${fps.toFixed(0)} fps · 帧 ${(now - t0).toFixed(1)} ms · ${renderer.domElement.width}×${renderer.domElement.height} · 深度附件 ${pipeline.normalDepthType === FloatType ? 'float32' : 'half'}${blurInfo}${aaInfo}`;
       lastStats = now;
       framesSince = 0;

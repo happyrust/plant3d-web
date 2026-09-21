@@ -79,7 +79,8 @@ a   = colour.a                                      // 半透明 = 1 − 百分�
 | HBAO | NVIDIA HBAO 法线模式，参数名同 sglDx11；不参与伪阴影的像素 AO = 1，采样到不参与的邻居跳过（不遮挡） | `E3D31_HBAO`（= 3.1 硬编码，§5.6）：R **392.7327**（场景单位 mm；ViewerPanel 按米 ×0.001）、8 方向、**4 步**、AngleBias **30°**、Attenuation **0.2**、Contrast 1.25 |
 | 模糊 | 深度感知可分离模糊，权重 exp(−r²·Falloff − (Δz·s)²)（同 sglDx11 dxbc_003） | 半径 **12** px、Falloff = 1/(2·((R+1)/2)²) = 0.01183；锐度 `blurSharpnessAuto`（默认开）= **16 / (本帧深度范围 / 2)**，深度范围 = 可渲染 Mesh 包围盒 ∪ `extraSceneBounds`（DTX 层）在眼空间的 [近, 远]；关掉则用固定 `blurSharpness` |
 | HLR | 逐句照 sglDx11 HLR PS（§5.8 / §5.9）：「有标记」= 几何且参与边线（法线纹理 .w bit0 ↔ 这里法线长度编码的 bit0）；只看右 / 下邻居；① 中心无标记：邻居有标记且（中心是背景 或 dC−dN > 50）→ 边；② 中心有标记、邻居无标记：邻居是背景 或 dC−dN < −50 → 边；③ 都有标记：\|Δd\| > 50 且左/上也有标记且 \|dot(normalize(dC−dP, h), normalize(dC−dN, −h))\| < 0.9999（h = 1000·像素步长）→ 边；④ \|N·N′\| < 0.6 → 边。采样档位 = MSAA 采样数（§5.7）：法线/深度与 HLR 通道按 `sglHlrSupersampleGrid()` 超采样（4 → 2×2），邻居仍取 1 个屏幕像素远 | 50 mm、0.9999、1000（深度 mm；米场景 ×0.001）、0.6、边线黑；`translucentEdges` ON（半透明参与）、`handleEdges` OFF（`userData.sglHandle === true` 的辅助对象不参与） |
-| 合成 | `colour × HLR × AO`；HLR 对本像素的 kx×ky 个子像素取平均（= sglDx11 MSAA 版 HLR PS 的 Σ/N）；背景 `mix(top, bottom, t)`，`t = mix(gradientBottomT, gradientTopT, uv.y)` | 按 E3D 3.1 D2D 渐变：上 = 背景色 grey #828282、下 = 端色白（端色未设时 HLS 亮度拉满 → 任何背景色都得白），t 顶 0.35/1.5 ≈ 0.233 / 底 1.35/1.5 = 0.9 → 屏幕上 #9f9f9f→#f2f2f2（第三轮已对齐） |
+| HLR 去杂 | 逐句照 sglDx11 `HLRDeclutter` PS（`dxbc_031`，§5.12）：屏幕分辩率，每个样本先对 kx×ky 个 HLR 子像素取平均；`sum = Σ(本像素、左、上、左上) × 1/9`（循环写的是 `j < y+1`，只有 4 个样本），`t = saturate((sum − g_MinColour) / (g_MaxColour − g_MinColour))`，`out = lerp(1, HLR, t)`：单根线保留 74% 黑度、L 角 37%、窗口全是边（密集处）整条淡掉。合成读它而不是 HLR（3.1 边线开着就一定过这一级） | `declutter` ON、`g_MinColour` **0.0**、`g_MaxColour` **0.3**（`HLRDeclutter_slot2` 每帧写死） |
+| 合成 | `colour × HLR(去杂后) × AO`；去杂关时 HLR 对本像素的 kx×ky 个子像素取平均（= sglDx11 MSAA 版 HLR PS 的 Σ/N）；背景 `mix(top, bottom, t)`，`t = mix(gradientBottomT, gradientTopT, uv.y)` | 按 E3D 3.1 D2D 渐变：上 = 背景色 grey #828282、下 = 端色白（端色未设时 HLS 亮度拉满 → 任何背景色都得白），t 顶 0.35/1.5 ≈ 0.233 / 底 1.35/1.5 = 0.9 → 屏幕上 #9f9f9f→#f2f2f2（第三轮已对齐） |
 | 抗锯齿 | `aa.mode`：'msaa' = 颜色通道用 `samples` 倍 MSAA 目标（three `WebGLRenderTarget.samples`，截到 `maxSamples`）+ 上述 HLR 超采样；'fxaa' = 合成后再过 three 的 FXAA 3.11（HLR 档位退回 1）；'none' | 出厂 **msaa 4**（`Sgl_View_Parameters` +780；`gphviewopt antiAlias = true(4)`）；FXAA 与 MSAA 互斥（+764） |
 | legacy | `_legacy_mode`：全部效果关、纯色背景（HLR 档位 1；MSAA 由视图参数管，不受影响） | — |
 
@@ -281,14 +282,33 @@ npm run dev                       # 然后打开 http://127.0.0.1:3101/e3d-look-
   罩壳 / 平台 / 甲板一色 lightgrey + 1 px 黑边线，平台脚下、甲板槛边有 HBAO 软阴影，穹顶上是环境立方体的高光反射，背景渐变；PBR 侧是暗灰漫反射、无边线、平背景。
 - 观察到的差距（都不是 bug，是尚未建模的 E3D 阶段）：整库视距下远处的管架 / 电缆托架密集处成了一团黑线——边线恒 1 px 不随距离衰减；
   sglDx11 的合成通道按开关 4 选 1（`Combined_slot5_10007ac0.c`：`RenderColorPass / RenderColorHLRDeclutter / RenderColorHBAOBlur / RenderColorHLRDeclutterHBAOBlur`），
-  HLR 开时合成读的是 `g_txHLRDeclutter`——HLR 之后还有一级 **Declutter**（第一轮报告「HLR 去杂：半透明 / 密集场景减线」），还没读、没做，见 §6。
+  HLR 开时合成读的是 `g_txHLRDeclutter`——HLR 之后还有一级 **Declutter**（第一轮报告「HLR 去杂：半透明 / 密集场景减线」），第十二轮接上了，见 §5.12。
 - 控制台里的 403 / 500 来自旧后端 :3100 的项目列表 / parquet-version 接口没起（vite 代理 ECONNREFUSED），与渲染无关。
+
+## 5.12 第十二轮：HLR 去杂（sglDx11 HLRDeclutter，2026-09-21）
+
+- 从哪里读的：`DeferredOperatorFactory_sub_10013C70.c` 建 `CSglDx11DeferredShaderOperatorHLRDeclutter`（PS `unk_100BD680` 1380 字节、VS `unk_100BDBF0` 692 字节、
+  16 字节常量缓冲）；RVA − 文件偏移 = 0x1A00 → PS 就是 **`dxbc_031_000bbc80`**（`cbuffer once { g_MinColour; g_MaxColour }`，`tColour` t0）。
+  `HLRDeclutter_slot2_10008b80.c` 每帧：RT = 去杂纹理、SRV = HLR 纹理、`UpdateSubresource` 写常量 **(0.0, 0.3)**（`0x3E99999A`）、画全屏三角。
+  `Combined_slot5_10007ac0.c` 合成按开关 4 选 1：`RenderColorPass / RenderColorHLRDeclutter / RenderColorHBAOBlur / RenderColorHLRDeclutterHBAOBlur`——
+  边线开着合成读的一定是 `g_txHLRDeclutter`（`dxbc_006/011/014/015/020/021`：rgb 乘它、alpha = `max(1 − declutter.a, colour.a)`），没有「HLR 不去杂」的路。
+- PS 逐句：`c = tColour[x,y].x`；`for j in [y−1, y+1) for i in [x−1, x+1): sum += tColour[i,j].x × 0.111111`（**只有 2×2 = 4 个样本，权重却是 1/9**——HLSL 大概写的是
+  `j < y+1`）；`t = saturate((sum − g_MinColour) / (g_MaxColour − g_MinColour))`；`out.rgba = 1 + t·(c − 1)`。数值：单根 1 px 线（窗口里 2 个非边样本 → sum 2/9 → t 0.74）
+  只剩 74% 黑度，L 角（1 个非边 → 0.37）更淡，≥ 3 个非边 → 原样，窗口全是边（密集处）→ t = 0 → 线整个淡掉。
+- web 侧：`DECLUTTER_FRAGMENT` 新通道（屏幕分辩率 `_declutterRT`，每个样本先对 kx×ky 个 HLR 子像素取平均 = sglDx11 MSAA 版 HLR PS 自己的 Σ/N；窗口取本像素、左、
+  屏幕上方（GL 的 +y）、左上；越界夹到边缘像素；边线值取 rgb 均值——E3D 边线恒黑时与 `.x` 相同，这里 `edgeColor` 可以不是黑）。合成开着去杂时读它、`uHlrSupersample = 1×1`。
+  `SglHlrParams.declutter`（默认 **true**）/ `declutterMin` 0 / `declutterMax` 0.3；常量 `E3D31_HLR_DECLUTTER`；`debugTextures.hlrDeclutter`。
+  演示页 HLR 段加「去杂」开关与两个常量滑块、`?declutter=0` / `?declutterMax=`、`?dist=6`（相机拉远看密集边线）；状态行 `HLR 2×2 去杂`。
+- 验证：`vitest` e3dLook 22 + DTX 目录 **75/75**；`type-check` 基线外仍只有既有 4 条；ESLint 通过。
+  无头 Chrome 演示页 24 变体 **37/37**（纯黑口径的旧检查改用 `declutter=0` 变体）：出厂色近景「线」像素（亮度 < 0.25）1.58% → 0.64%、纯黑 1.08% → 0.06%
+  （单根线变 74% 黑度的深灰线，密集处淡掉），`dist=6` 远景线像素 0.21% → 0.05%、整图变亮，无边线时 0.00%；背景渐变 / AO 不受影响。
+  对照图 `%TEMP%\e3dlook-envcube\shots\declutter-near-compare.png`（左关右开：阀门群、管口的密线被淡掉，主轮廓仍在）、`declutter-far-compare.png`（远景黑团 → 干净的浅线）。
+  DTX harness 13 变体 **32/32**：去杂开着 CE / highlight / 未选中颜色不变，盒 a 轮廓纯黑 303 → 4、线像素 316 → 291；旧 29 项照旧。
+  主界面整库 7997 同视角开 / 关去杂各一张（`%TEMP%\e3dlook-real-main\shots\db7997-sgl.png` / `db7997-sgl-nodeclutter.png`），见下。**未与真机对参**。
 
 ## 6. 下一步
 
-1. 在未修补的 E3D 3.1 上（或补跑 `!!gphViewOpt.applyToView`）复核出厂外观、立方体贴图朝向、HBAO 强度 / 模糊锐度（§5.6 的深度范围累计方式是推断）、抗锯齿边线覆盖率（§5.7）与边线取向（§5.8）；`SHINY`(30) / `TRANSLUCENCY_STYLE`(51) 分支仍未读。
+1. 在未修补的 E3D 3.1 上（或补跑 `!!gphViewOpt.applyToView`）复核出厂外观、立方体贴图朝向、HBAO 强度 / 模糊锐度（§5.6 的深度范围累计方式是推断）、抗锯齿边线覆盖率（§5.7）、边线取向（§5.8）与去杂后的线黑度（§5.12：单根线 74%）；`SHINY`(30) / `TRANSLUCENCY_STYLE`(51) 分支仍未读。
 2. `EnhancedEdgesLaser` / `PseudoShadowsLaser`（激光点云）与半透明对象的 AO 归属（E3D 半透明可能根本不进 MRT）尚未建模；
    ViewerPanel 里若以后有 DTX 层专门装辅助几何，可给对应 Mesh 设 `userData.sglHandle = true`。
-   sglDx11 HLR 之后的 **Declutter** 级（合成读 `g_txHLRDeclutter`，第一轮报告「HLR 去杂」）没读：整库视距下远处密集管架的边线糊成一团（§5.11），
-   大概率就是它在管——先在 `sgl-decomp-3.1` / `dxbc-3.1-sgl` 里找 Declutter 的常量缓冲与 PS。
 3. 如项目有自定义 autocolour 规则，导出 `gphcolopt` 选项文件翻成 `themes.*` 规则（颜色用 `pdms:` 名）；active orange / aids blue / tracing magenta 尚未接。

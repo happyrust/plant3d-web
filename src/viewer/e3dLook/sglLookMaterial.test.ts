@@ -18,6 +18,7 @@ import {
 } from './sglLookMaterial';
 import {
   E3D31_HBAO,
+  E3D31_HLR_DECLUTTER,
   E3D31_MSAA_SAMPLES,
   E3D_BACKGROUND_GREY,
   E3D_GRADIENT_BOTTOM_T,
@@ -324,6 +325,36 @@ describe('SglLookPipeline 参数与着色器', () => {
     // AO：不参与伪阴影的既不接收也不遮挡
     expect(SGL_PIPELINE_SHADERS.ao).toContain('if (sglIsBackground(depth) || !sglShadowParticipant(nd.rgb)) { gl_FragColor = vec4(1.0); return; }');
     expect(SGL_PIPELINE_SHADERS.ao).toContain('if (sglIsBackground(ndS.a) || !sglShadowParticipant(ndS.rgb)) continue;');
+  });
+
+  it('HLR 去杂 = sglDx11 HLRDeclutter（dxbc_031）：默认开，g_MinColour 0 / g_MaxColour 0.3，2×2 窗口（本像素、左、上、左上）× 1/9，out = lerp(1, c, t)', () => {
+    expect(E3D31_HLR_DECLUTTER.minColour).toBe(0);
+    expect(E3D31_HLR_DECLUTTER.maxColour).toBe(0.3);
+    expect(E3D31_HLR_DECLUTTER.sampleWeight).toBeCloseTo(0.111111, 6);
+    const p = createDefaultSglPipelineParams();
+    expect(p.hlr.declutter).toBe(true);
+    expect(p.hlr.declutterMin).toBe(0);
+    expect(p.hlr.declutterMax).toBe(0.3);
+    const s = SGL_PIPELINE_SHADERS.declutter;
+    // 每个样本先对 kx×ky 个 HLR 子像素取平均（sglDx11 MSAA 版 HLR PS 自己的 Σ/N），越界夹到边缘
+    expect(s).toContain('px = clamp(px, ivec2(0), uResolution - 1);');
+    expect(s).toContain('acc += texelFetch(tHLR, base + ivec2(i, j), 0).rgb;');
+    // 窗口：本像素 + 左 (−1, 0) + 上 (0, +1，GL 的屏幕上方) + 左上 (−1, +1)，权重 1/9
+    expect(s).toContain('hlrResolved(px + ivec2(-1, 0))');
+    expect(s).toContain('hlrResolved(px + ivec2(0, 1))');
+    expect(s).toContain('hlrResolved(px + ivec2(-1, 1))');
+    expect(s).toContain(') * uSampleWeight;');
+    expect(s).not.toContain('ivec2(1, 0)');
+    expect(s).not.toContain('ivec2(0, -1)');
+    // t = saturate((sum − min) / (max − min))；out = 1 + t·(c − 1)
+    expect(s).toContain('clamp((sum - uMinColour) / max(1.0e-6, uMaxColour - uMinColour), 0.0, 1.0)');
+    expect(s).toContain('gl_FragColor = vec4(mix(vec3(1.0), c, t), 1.0);');
+    // 数值口径：单根线（2 个非边样本）保留 74% 黑度，L 角 37%，全是边 → 0（线淡掉），≥ 3 个非边 → 原样
+    const t = (nonEdge: number) => Math.min(1, Math.max(0, (nonEdge / 9 - 0) / (0.3 - 0)));
+    expect(t(2)).toBeCloseTo(0.7407, 3);
+    expect(t(1)).toBeCloseTo(0.3704, 3);
+    expect(t(0)).toBe(0);
+    expect(t(3)).toBe(1);
   });
 });
 

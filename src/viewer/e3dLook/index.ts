@@ -10,6 +10,7 @@ export {
 } from './sglLookMaterial';
 export {
   E3D31_HBAO,
+  E3D31_HLR_DECLUTTER,
   E3D31_MSAA_SAMPLES,
   E3D_BACKGROUND_GREY,
   E3D_GRADIENT_BOTTOM_T,

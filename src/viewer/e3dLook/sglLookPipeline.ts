@@ -76,6 +76,16 @@ export interface SglHlrParams {
    * SGL_ENHANCED_EDGES_HANDLES（视图属性 12，E3D 默认 OFF）：辅助对象（handles / aids，`object.userData.sglEdges === false` 的 Mesh）是否参与边线。
    */
   handleEdges: boolean;
+  /**
+   * HLR 之后的「去杂」级（sglDx11 `CSglDx11DeferredShaderOperatorHLRDeclutter`，3.1 里 EnhancedEdges 开着就一定跑，
+   * 合成读的是它的输出 `g_txHLRDeclutter`）：边线密集处把线淡掉、单根线保留。默认 true = E3D 口径；false = 直接用 HLR 输出。
+   * 算法见 `DECLUTTER_FRAGMENT`。
+   */
+  declutter: boolean;
+  /** 去杂 `g_MinColour`（E3D 3.1 每帧写死 0.0）：2×2 窗口的 HLR 均值（÷9）低于它 → 线完全淡掉 */
+  declutterMin: number;
+  /** 去杂 `g_MaxColour`（E3D 3.1 每帧写死 0.3）：2×2 窗口的 HLR 均值（÷9）高于它 → 线原样保留 */
+  declutterMax: number;
   /** 边线颜色（与颜色相乘；黑 = 纯黑线） */
   edgeColor: Color;
 }
@@ -131,6 +141,17 @@ export const E3D31_HBAO = Object.freeze({
   blurRadius: 12,
   /** g_Sharpness = (sharpnessNumerator / (depthRange / 2))² */
   sharpnessNumerator: 16,
+} as const);
+
+/**
+ * E3D 3.1 sglDx11 HLR 去杂级（`HLRDeclutter_slot2_10008b80.c` 每帧写进常量缓冲 `once`）：
+ * `g_MinColour` 0.0、`g_MaxColour` 0.3（`0x3E99999A`）。PS 是 `dxbc_031`（RVA 0x100BD680，1380 字节）。
+ */
+export const E3D31_HLR_DECLUTTER = Object.freeze({
+  minColour: 0.0,
+  maxColour: 0.3,
+  /** 2×2 窗口每个样本的权重（dxbc 里写死 0.111111 = 1/9，虽然窗口只有 4 个样本） */
+  sampleWeight: 1 / 9,
 } as const);
 
 /** NVIDIA HBAO 同款：g_BlurFalloff = 1 / (2·σ²)，σ = (R + 1) / 2 */
@@ -342,6 +363,9 @@ export function createDefaultSglPipelineParams(): SglLookPipelineParams {
       radiusPx: 1,
       translucentEdges: true,
       handleEdges: false,
+      declutter: true,
+      declutterMin: E3D31_HLR_DECLUTTER.minColour,
+      declutterMax: E3D31_HLR_DECLUTTER.maxColour,
       edgeColor: new Color(0x000000),
     },
     ao: {
@@ -613,6 +637,54 @@ void main() {
 `;
 
 /**
+ * HLR 去杂（逐句照 sglDx11 `dxbc_031`，`CSglDx11DeferredShaderOperatorHLRDeclutter` 的 PS）：
+ *   c   = HLR(x, y).x                                  —— 本像素的边线值（0 = 边，1 = 无边）
+ *   sum = Σ_{i∈{x−1,x}, j∈{y−1,y}} HLR(i, j).x × 1/9   —— 2×2 窗口：本像素、左、上、左上（D3D 行向下，y−1 是屏幕上方；
+ *                                                        循环写的是 `j < y+1`，所以只有 4 个样本，权重却是 1/9）
+ *   t   = saturate((sum − g_MinColour) / (g_MaxColour − g_MinColour))      —— 0.0 / 0.3
+ *   out = 1 + t·(c − 1) = lerp(1, c, t)，rgba 同值
+ * 效果：单根线（窗口里 2 个非边样本，sum = 2/9 → t = 0.74）保留 74% 黑度；L 角（1 个非边 → t = 0.37）更淡；
+ * 窗口全是边（密集处）→ t = 0 → 线整个淡掉。合成里 rgb 乘它、alpha 取 max(1 − out, colour.a)。
+ * 这里跑在屏幕分辩率上，每个样本先对 kx×ky 个 HLR 子像素取平均（= sglDx11 MSAA 版 HLR PS 自己做的 Σ/N），
+ * 边线值取 rgb 均值（E3D 边线恒黑，.x 与均值相同；这里的 edgeColor 可以不是黑）。越界样本夹到边缘像素（D3D `ld` 越界回 0，只差在最外一圈）。
+ */
+const DECLUTTER_FRAGMENT = /* glsl */ `
+precision highp float;
+uniform sampler2D tHLR;
+uniform ivec2 uHlrSupersample;
+uniform ivec2 uResolution;
+uniform float uMinColour;
+uniform float uMaxColour;
+uniform float uSampleWeight;
+varying vec2 vUv;
+
+vec3 hlrResolved(ivec2 px) {
+  px = clamp(px, ivec2(0), uResolution - 1);
+  ivec2 base = px * uHlrSupersample;
+  vec3 acc = vec3(0.0);
+  for (int j = 0; j < 4; j++) {
+    if (j >= uHlrSupersample.y) break;
+    for (int i = 0; i < 4; i++) {
+      if (i >= uHlrSupersample.x) break;
+      acc += texelFetch(tHLR, base + ivec2(i, j), 0).rgb;
+    }
+  }
+  return acc / float(uHlrSupersample.x * uHlrSupersample.y);
+}
+
+float edgeValue(vec3 hlr) { return dot(hlr, vec3(1.0 / 3.0)); }
+
+void main() {
+  ivec2 px = ivec2(gl_FragCoord.xy);
+  vec3 c = hlrResolved(px);
+  // 屏幕上方在 GL 里是 +y（D3D 的 y−1）
+  float sum = (edgeValue(c) + edgeValue(hlrResolved(px + ivec2(-1, 0))) + edgeValue(hlrResolved(px + ivec2(0, 1))) + edgeValue(hlrResolved(px + ivec2(-1, 1)))) * uSampleWeight;
+  float t = clamp((sum - uMinColour) / max(1.0e-6, uMaxColour - uMinColour), 0.0, 1.0);
+  gl_FragColor = vec4(mix(vec3(1.0), c, t), 1.0);
+}
+`;
+
+/**
  * 合成：colour × HLR × AO，背景处填渐变。
  * 渐变照 E3D 3.1 的 D2D 线性渐变：上 = 背景色（uBgTop）、下 = 端色（uBgBottom），
  * 渐变参数 t 在视口顶/底取 uBgGradT.x / uBgGradT.y（出厂 0.233 / 0.9，渐变线伸到视口外）。
@@ -724,6 +796,15 @@ interface HlrUniforms {
   uEdgeColor: IUniform<Vector3>;
 }
 
+interface DeclutterUniforms {
+  tHLR: IUniform<Texture | null>;
+  uHlrSupersample: IUniform<Vector2>;
+  uResolution: IUniform<Vector2>;
+  uMinColour: IUniform<number>;
+  uMaxColour: IUniform<number>;
+  uSampleWeight: IUniform<number>;
+}
+
 interface CompositeUniforms {
   tColor: IUniform<Texture | null>;
   tND: IUniform<Texture | null>;
@@ -772,6 +853,8 @@ export class SglLookPipeline {
   private _blurRTa: WebGLRenderTarget;
   private _blurRTb: WebGLRenderTarget;
   private _hlrRT: WebGLRenderTarget;
+  /** HLR 去杂输出（屏幕分辩率，已对子像素取过平均）；合成开着去杂时读它 */
+  private _declutterRT: WebGLRenderTarget;
   /** FXAA 时合成先落到这里，再做 FXAA 到 target */
   private _compositeRT: WebGLRenderTarget;
   /** 颜色通道当前的 MSAA 采样数（0 = 无） */
@@ -817,6 +900,15 @@ export class SglLookPipeline {
     uEdgeColor: { value: new Vector3(0, 0, 0) },
   };
 
+  private readonly _declutterUniforms: DeclutterUniforms = {
+    tHLR: { value: null },
+    uHlrSupersample: { value: new Vector2(1, 1) },
+    uResolution: { value: new Vector2(1, 1) },
+    uMinColour: { value: E3D31_HLR_DECLUTTER.minColour },
+    uMaxColour: { value: E3D31_HLR_DECLUTTER.maxColour },
+    uSampleWeight: { value: E3D31_HLR_DECLUTTER.sampleWeight },
+  };
+
   /** 法线/深度目标的清屏值：法线 0、深度 = 背景哨兵 1e18（gl.clearColor 会截到 [0,1]，浮点附件得走 clearBufferfv） */
   private readonly _ndClear = new Float32Array([0, 0, 0, SGL_BACKGROUND_DEPTH]);
 
@@ -839,6 +931,7 @@ export class SglLookPipeline {
   private readonly _aoMaterial: ShaderMaterial;
   private readonly _blurMaterial: ShaderMaterial;
   private readonly _hlrMaterial: ShaderMaterial;
+  private readonly _declutterMaterial: ShaderMaterial;
   private readonly _compositeMaterial: ShaderMaterial;
   private readonly _fxaaMaterial: ShaderMaterial;
   private readonly _fsq: FullScreenQuad;
@@ -875,6 +968,7 @@ export class SglLookPipeline {
     this._blurRTa = makeRT(w, h, UnsignedByteType, LinearFilter, false);
     this._blurRTb = makeRT(w, h, UnsignedByteType, LinearFilter, false);
     this._hlrRT = makeRT(w, h, UnsignedByteType, NearestFilter, false);
+    this._declutterRT = makeRT(w, h, UnsignedByteType, NearestFilter, false);
     this._compositeRT = makeRT(w, h, UnsignedByteType, LinearFilter, false);
 
     this._ndMaterial = new ShaderMaterial({
@@ -900,6 +994,7 @@ export class SglLookPipeline {
     this._aoMaterial = fsqMaterial(AO_FRAGMENT, this._aoUniforms as unknown as Record<string, IUniform>);
     this._blurMaterial = fsqMaterial(BLUR_FRAGMENT, this._blurUniforms as unknown as Record<string, IUniform>);
     this._hlrMaterial = fsqMaterial(HLR_FRAGMENT, this._hlrUniforms as unknown as Record<string, IUniform>);
+    this._declutterMaterial = fsqMaterial(DECLUTTER_FRAGMENT, this._declutterUniforms as unknown as Record<string, IUniform>);
     this._compositeMaterial = fsqMaterial(COMPOSITE_FRAGMENT, this._compositeUniforms as unknown as Record<string, IUniform>);
     // FXAA 3.11（three 的 FXAAShader 移植版；sglDx11 3.1 用的也是 FXAA 3.11，参数 gQualitySubPix / EdgeThreshold / EdgeThresholdMin）
     this._fxaaMaterial = new ShaderMaterial({
@@ -950,6 +1045,7 @@ export class SglLookPipeline {
     sglHlrSupersampleGrid(sglHlrSamplesFor(this.params), this._hlrSupersample);
     this._ndRT.setSize(w * this._hlrSupersample.x, h * this._hlrSupersample.y);
     this._hlrRT.setSize(w * this._hlrSupersample.x, h * this._hlrSupersample.y);
+    this._declutterRT.setSize(w, h);
     this._compositeRT.setSize(w, h);
     const aw = this.params.ao.halfRes ? Math.max(1, Math.round(w / 2)) : w;
     const ah = this.params.ao.halfRes ? Math.max(1, Math.round(h / 2)) : h;
@@ -1109,16 +1205,32 @@ export class SglLookPipeline {
       this._fsq.render(renderer);
     }
 
-    // ⑥ 合成（HLR 子像素取平均 = sglDx11 MSAA 版 HLR 的 Σ/N）；FXAA 时先落中间目标
+    // ⑤b HLR 去杂（sglDx11 HLRDeclutter：屏幕分辩率，2×2 窗口；输出已对子像素取过平均，合成不再平均）
+    const useDeclutter = useHlr && p.hlr.declutter;
+    if (useDeclutter) {
+      const du = this._declutterUniforms;
+      du.tHLR.value = this._hlrRT.texture;
+      du.uHlrSupersample.value.copy(ss);
+      du.uResolution.value.set(w, h);
+      du.uMinColour.value = p.hlr.declutterMin;
+      du.uMaxColour.value = p.hlr.declutterMax;
+      du.uSampleWeight.value = E3D31_HLR_DECLUTTER.sampleWeight;
+      this._fsq.material = this._declutterMaterial;
+      renderer.setRenderTarget(this._declutterRT);
+      this._fsq.render(renderer);
+    }
+
+    // ⑥ 合成（HLR 子像素取平均 = sglDx11 MSAA 版 HLR 的 Σ/N；去杂开着时读去杂输出，已是屏幕分辩率）；FXAA 时先落中间目标
     const cu = this._compositeUniforms;
     cu.tColor.value = this._colorRT.texture;
     cu.tND.value = this._ndRT.texture;
-    cu.tHLR.value = useHlr ? this._hlrRT.texture : null;
+    cu.tHLR.value = useHlr ? (useDeclutter ? this._declutterRT.texture : this._hlrRT.texture) : null;
     cu.tAO.value = aoTexture;
     cu.uUseHlr.value = useHlr ? 1 : 0;
     cu.uUseAo.value = useAo && aoTexture ? 1 : 0;
     cu.uUseGradient.value = useGradient ? 1 : 0;
-    cu.uHlrSupersample.value.copy(ss);
+    if (useDeclutter) cu.uHlrSupersample.value.set(1, 1);
+    else cu.uHlrSupersample.value.copy(ss);
     setSrgb(cu.uBgTop.value, p.background.top);
     setSrgb(cu.uBgBottom.value, p.background.bottom);
     setSrgb(cu.uBgFlat.value, p.background.flat);
@@ -1145,13 +1257,14 @@ export class SglLookPipeline {
   }
 
   /** 中间结果，供调试面板看 */
-  get debugTextures(): { color: Texture; normalDepth: Texture; ao: Texture; aoBlurred: Texture; hlr: Texture } {
+  get debugTextures(): { color: Texture; normalDepth: Texture; ao: Texture; aoBlurred: Texture; hlr: Texture; hlrDeclutter: Texture } {
     return {
       color: this._colorRT.texture,
       normalDepth: this._ndRT.texture,
       ao: this._aoRT.texture,
       aoBlurred: this._blurRTb.texture,
       hlr: this._hlrRT.texture,
+      hlrDeclutter: this._declutterRT.texture,
     };
   }
 
@@ -1194,8 +1307,8 @@ export class SglLookPipeline {
   }
 
   dispose(): void {
-    for (const rt of [this._colorRT, this._ndRT, this._aoRT, this._blurRTa, this._blurRTb, this._hlrRT, this._compositeRT]) rt.dispose();
-    for (const m of [this._ndMaterial, this._aoMaterial, this._blurMaterial, this._hlrMaterial, this._compositeMaterial, this._fxaaMaterial]) m.dispose();
+    for (const rt of [this._colorRT, this._ndRT, this._aoRT, this._blurRTa, this._blurRTb, this._hlrRT, this._declutterRT, this._compositeRT]) rt.dispose();
+    for (const m of [this._ndMaterial, this._aoMaterial, this._blurMaterial, this._hlrMaterial, this._declutterMaterial, this._compositeMaterial, this._fxaaMaterial]) m.dispose();
     this._fsq.dispose();
   }
 
@@ -1288,5 +1401,6 @@ export const SGL_PIPELINE_SHADERS = Object.freeze({
   ao: AO_FRAGMENT,
   blur: BLUR_FRAGMENT,
   hlr: HLR_FRAGMENT,
+  declutter: DECLUTTER_FRAGMENT,
   composite: COMPOSITE_FRAGMENT,
 });
