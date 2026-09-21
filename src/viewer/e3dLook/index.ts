@@ -14,6 +14,7 @@ export {
   E3D_BACKGROUND_GREY,
   E3D_GRADIENT_BOTTOM_T,
   E3D_GRADIENT_TOP_T,
+  SGL_BACKGROUND_DEPTH,
   SGL_PIPELINE_SHADERS,
   SglLookPipeline,
   createDefaultSglPipelineParams,

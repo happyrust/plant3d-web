@@ -258,6 +258,7 @@ function main(): void {
   addCheckbox(sHlr, '启用', () => pipeline.params.hlr.enabled, (v) => { pipeline.params.hlr.enabled = v; });
   addSlider(sHlr, '深度阈值 mm', 1, 500, 1, () => pipeline.params.hlr.depthThreshold, (v) => { pipeline.params.hlr.depthThreshold = v; });
   addSlider(sHlr, '法线 |cos| 阈值', 0, 1, 0.01, () => pipeline.params.hlr.normalThreshold, (v) => { pipeline.params.hlr.normalThreshold = v; });
+  addSlider(sHlr, '梯度方向 |dot| 阈值', 0.99, 1, 0.0001, () => pipeline.params.hlr.gradientDotThreshold, (v) => { pipeline.params.hlr.gradientDotThreshold = v; });
   addSlider(sHlr, '半径 px', 1, 4, 1, () => pipeline.params.hlr.radiusPx, (v) => { pipeline.params.hlr.radiusPx = v; });
   addColor(sHlr, '边线色', () => pipeline.params.hlr.edgeColor, (c) => { pipeline.params.hlr.edgeColor.copy(c); });
 

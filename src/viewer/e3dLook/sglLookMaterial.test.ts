@@ -22,6 +22,7 @@ import {
   E3D_BACKGROUND_GREY,
   E3D_GRADIENT_BOTTOM_T,
   E3D_GRADIENT_TOP_T,
+  SGL_BACKGROUND_DEPTH,
   SGL_PIPELINE_SHADERS,
   createDefaultSglPipelineParams,
   e3dBlurSharpnessForDepthRange,
@@ -243,14 +244,42 @@ describe('SglLookPipeline 参数与着色器', () => {
     expect(SGL_PIPELINE_SHADERS.composite).toContain('acc / float(uHlrSupersample.x * uHlrSupersample.y)');
   });
 
-  it('法线/深度 MRT 用位置导数叉乘，HLR 用二阶深度差分的远侧 + 法线折痕，合成里渐变用 uBgGradT 区间', () => {
+  it('法线/深度 MRT 用位置导数叉乘，背景深度哨兵 1e18（AO / 模糊 / HLR 都按它判背景），合成里渐变用 uBgGradT 区间', () => {
+    expect(SGL_BACKGROUND_DEPTH).toBe(1e18);
     expect(SGL_PIPELINE_SHADERS.normalDepthFragment).toContain('cross(dFdx(vViewPos), dFdy(vViewPos))');
-    expect(SGL_PIPELINE_SHADERS.hlr).toContain('(b.a - c.a) - (c.a - a.a)');
-    expect(SGL_PIPELINE_SHADERS.hlr).toContain('d2 < -uDepthThreshold');
-    expect(SGL_PIPELINE_SHADERS.hlr).toContain('< uNormalThreshold');
+    for (const s of [SGL_PIPELINE_SHADERS.ao, SGL_PIPELINE_SHADERS.blur, SGL_PIPELINE_SHADERS.hlr]) {
+      expect(s).toContain('const float SGL_BG_DEPTH = 1.0e18;');
+      expect(s).toContain('sglIsBackground');
+      expect(s).not.toContain('<= 0.0) continue');
+    }
     expect(SGL_PIPELINE_SHADERS.composite).toContain('col * hlr * ao');
     expect(SGL_PIPELINE_SHADERS.composite).toContain('mix(uBgGradT.y, uBgGradT.x, vUv.y)');
     expect(SGL_PIPELINE_SHADERS.composite).toContain('mix(uBgTop, uBgBottom, t)');
+  });
+
+  it('HLR 判据 = sglDx11 dxbc 版：右/下邻居、背景邻接、|Δd| > 50 且梯度方向 |dot| < 0.9999（h = 1000·像素步长）、|N·N′| < 0.6', () => {
+    const p = createDefaultSglPipelineParams();
+    expect(p.hlr.depthThreshold).toBe(50);
+    expect(p.hlr.normalThreshold).toBe(0.6);
+    expect(p.hlr.gradientDotThreshold).toBe(0.9999);
+    expect(p.hlr.gradientStep).toBe(1000);
+    const s = SGL_PIPELINE_SHADERS.hlr;
+    // ① / ② 背景邻接
+    expect(s).toContain('if (!geoC) return geoN;');
+    expect(s).toContain('if (!geoN) return true;');
+    // ③ 台阶：|dC − dN| > 阈值、prev 是几何、两梯度向量 (dC−dP, h) / (dC−dN, −h) 归一化后 |dot| < 0.9999
+    expect(s).toContain('abs(c.a - next.a) > uDepthThreshold && sglIsGeometry(prev.a)');
+    expect(s).toContain('normalize(vec2(c.a - prev.a, h))');
+    expect(s).toContain('normalize(vec2(c.a - next.a, -h))');
+    expect(s).toContain('abs(dot(v1, v2)) < uGradientDotThreshold');
+    expect(s).toContain('vec2 h = uGradientStep * stepUv;');
+    // ④ 法线折痕
+    expect(s).toContain('< uNormalThreshold');
+    // 只看右 / 下（uv −y = 屏幕向下），左 / 上只进梯度判据
+    expect(s).toContain('edgeAlong(c, right, left, h.x) || edgeAlong(c, down, up, h.y)');
+    expect(s).toContain('vec4 down = texture2D(tND, vUv - vec2(0.0, stepUv.y));');
+    // 旧的二阶差分判据已删
+    expect(s).not.toContain('(b.a - c.a) - (c.a - a.a)');
   });
 });
 

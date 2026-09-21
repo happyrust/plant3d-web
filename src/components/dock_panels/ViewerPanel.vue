@@ -3507,7 +3507,8 @@ onMounted(async () => {
     const sglPipeline = new SglLookPipeline(
       dtxViewer.renderer,
       {
-        hlr: { depthThreshold: 50 * mmToScene },
+        // HLR 梯度判据里的像素步长常量 1000 也是 mm 量级，随场景单位一起换算
+        hlr: { depthThreshold: 50 * mmToScene, gradientStep: 1000 * mmToScene },
         // 模糊锐度默认按 E3D 每帧从深度范围算（blurSharpnessAuto），这里只是算不出时的兜底
         ao: { radius: E3D31_HBAO.radius * mmToScene, blurSharpness: sceneInMetres ? 10 : 0.01 },
       },

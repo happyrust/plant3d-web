@@ -2,10 +2,10 @@
  * SglLookPipeline —— 复刻 AVEVA E3D（SGL DX11 后端）的后处理链：
  *
  *   ① 场景一趟正常着色（SglLookMaterial）→ colorRT
- *   ② 场景一趟 overrideMaterial → ndRT：rgb = 眼空间「面」法线（位置导数叉乘，同 sglDx11 MRT1），a = 线性深度（背景 = 0）
+ *   ② 场景一趟 overrideMaterial → ndRT：rgb = 眼空间「面」法线（位置导数叉乘，同 sglDx11 MRT1），a = 线性深度（背景 = 哨兵 1e18，同 sglDx11）
  *   ③ HBAO（NVIDIA 同款参数：R / NumDirs / NumSteps / AngleBias / Attenuation / Contrast，法线模式）→ aoRT
  *   ④ 双边模糊 X/Y（BlurRadius / BlurFalloff / Sharpness）
- *   ⑤ HLR 边线：中心比邻居远 > 深度阈值（sglDx11 默认 50）或法线 |cos| < 0.6 → 边
+ *   ⑤ HLR 边线：逐句照 sglDx11 HLR PS —— 背景/几何邻接、|Δ深度| > 50 且深度梯度方向变了（|dot| < 0.9999）、法线 |cos| < 0.6 → 边
  *   ⑥ 合成 final = colour × HLR × AO；背景处填纵向渐变（effect_bg_gradient）
  *   ⑦ 抗锯齿：出厂 4× MSAA —— 颜色通道用硬件 MSAA 目标，法线/深度 + HLR 通道按采样数超采样后在合成里取平均
  *      （sglDx11 的 HLR PS 按采样数分 1/2/4/8 四档，逐采样判边再 Σ/N）；或 3.1 新增的 FXAA（此时 HLR 档位 1）
@@ -55,7 +55,17 @@ export interface SglHlrParams {
   depthThreshold: number;
   /** 法线夹角阈值：|cos| < 该值判边（sglDx11 常量 0.6） */
   normalThreshold: number;
-  /** 采样半径（像素），对应 sglDx11 的 4 档质量 */
+  /**
+   * 深度梯度方向判据：|dot(normalize(dC−dPrev, h), normalize(dC−dNext, −h))| < 该值 → 台阶（sglDx11 常量 0.9999）。
+   * 平面无论多陡两向量反向平行、|dot| = 1；只有梯度方向变了（真台阶）才判边。
+   */
+  gradientDotThreshold: number;
+  /**
+   * 梯度向量里的像素步长常量 h = gradientStep · 屏幕 InvResolution：sglDx11 用 1000（深度单位 mm）。
+   * 深度不是 mm 时按比例给（米场景 → 1），否则 h 与深度差不在一个量级、判据失真。
+   */
+  gradientStep: number;
+  /** 邻居距离（屏幕像素）；sglDx11 固定 1，这里留作可调 */
   radiusPx: number;
   /** 边线颜色（与颜色相乘；黑 = 纯黑线） */
   edgeColor: Color;
@@ -270,6 +280,8 @@ export function createDefaultSglPipelineParams(): SglLookPipelineParams {
       enabled: true,
       depthThreshold: 50,
       normalThreshold: 0.6,
+      gradientDotThreshold: 0.9999,
+      gradientStep: 1000,
       radiusPx: 1,
       edgeColor: new Color(0x000000),
     },
@@ -305,6 +317,18 @@ export function createDefaultSglPipelineParams(): SglLookPipelineParams {
 // ---------------------------------------------------------------------------
 // GLSL
 // ---------------------------------------------------------------------------
+
+/**
+ * sglDx11 深度纹理的背景哨兵：1e18（dxbc 里的 `999999984306749440.0`）。法线/深度目标清成 (0,0,0,1e18)，
+ * 几何写线性深度；半浮点目标里 1e18 存成 inf，所以判背景用 ≥ 1e17 而不是 ==。
+ */
+export const SGL_BACKGROUND_DEPTH = 1e18;
+
+const SGL_BG_DEPTH_GLSL = /* glsl */ `
+const float SGL_BG_DEPTH = 1.0e18;
+bool sglIsBackground(float d) { return d >= 1.0e17; }
+bool sglIsGeometry(float d) { return d < 1.0e17; }
+`;
 
 const FSQ_VERTEX = /* glsl */ `
 varying vec2 vUv;
@@ -354,6 +378,7 @@ uniform float uAngleBias;
 uniform float uAttenuation;
 uniform float uContrast;
 varying vec2 vUv;
+${SGL_BG_DEPTH_GLSL}
 
 vec3 viewPos(vec2 uv, float depth) {
   vec2 ndc = uv * 2.0 - 1.0;
@@ -370,7 +395,7 @@ float hash12(vec2 p) {
 void main() {
   vec4 nd = texture2D(tND, vUv);
   float depth = nd.a;
-  if (depth <= 0.0) { gl_FragColor = vec4(1.0); return; }
+  if (sglIsBackground(depth)) { gl_FragColor = vec4(1.0); return; }
   vec3 P = viewPos(vUv, depth);
   vec3 N = normalize(nd.rgb);
 
@@ -399,7 +424,7 @@ void main() {
       vec2 uvS = vUv + dir * (stepPix * (float(s) + 1.0 + 0.5 * jitter)) * uInvResolution;
       if (uvS.x < 0.0 || uvS.y < 0.0 || uvS.x > 1.0 || uvS.y > 1.0) break;
       vec4 ndS = texture2D(tND, uvS);
-      if (ndS.a <= 0.0) continue;
+      if (sglIsBackground(ndS.a)) continue;
       vec3 S = viewPos(uvS, ndS.a);
       vec3 H = S - P;
       float len2 = dot(H, H);
@@ -427,10 +452,11 @@ uniform float uRadius;
 uniform float uFalloff;
 uniform float uSharpness;
 varying vec2 vUv;
+${SGL_BG_DEPTH_GLSL}
 
 void main() {
   float centerDepth = texture2D(tND, vUv).a;
-  if (centerDepth <= 0.0) { gl_FragColor = vec4(1.0); return; }
+  if (sglIsBackground(centerDepth)) { gl_FragColor = vec4(1.0); return; }
   float total = 0.0;
   float wsum = 0.0;
   for (int i = -16; i <= 16; i++) {
@@ -438,7 +464,7 @@ void main() {
     if (abs(fi) > uRadius) continue;
     vec2 uvS = vUv + uStep * fi;
     float d = texture2D(tND, uvS).a;
-    if (d <= 0.0) continue;
+    if (sglIsBackground(d)) continue;
     float dz = (d - centerDepth) * uSharpness;
     float w = exp(-fi * fi * uFalloff) * exp(-dz * dz);
     total += texture2D(tSource, uvS).r * w;
@@ -450,15 +476,18 @@ void main() {
 `;
 
 /**
- * HLR：按 sglDx11 dxbc_045 的三条判据 ——
- *   ① 轮廓：邻居是背景（深度 0）→ 几何一侧画线；
- *   ② 深度台阶：沿 x / y 两轴取左右邻居做二阶差分 (dR − d) − (d − dL)。
- *      sglDx11 用归一化后的 (Δ像素, Δ深度) 向量点积 < 0.9999 判「梯度方向变了」，并只在
- *      「中心比邻居远 > 50」的一侧画（lt 50 < center − neighbour）。这里等价地取 d2 < −阈值：
- *      中心落在远侧的台阶才画线；平坦表面无论多倾斜二阶差分都≈0，不会整片变黑；
- *   ③ 法线折痕：|N·N'| < 0.6（盒子这类 90° 折边由它负责）。
+ * HLR：逐句照 sglDx11 的 HLR PS（dxbc_045 单采样；dxbc_029 / 028 / 027 是 2 / 4 / 8 采样版，每个采样点同一判据再 Σ/N）。
+ * 那边的输入是深度纹理（背景哨兵 1e18）+ 法线纹理（.w 的 bit0 = 「有法线的几何」）；这里深度 ≠ 哨兵 即几何。
+ * 只看 右(+1 px) 与 下(+1 px) 两个邻居，左 / 上 只在梯度方向判据里用：
+ *   ① 中心是背景：右或下是几何 → 边（轮廓画在几何左 / 上外侧的背景像素上；sglDx11 里「中心非背景但无法线标记、
+ *      且比几何邻居远 > 50」的分支这里没有对应物 —— 本管线所有几何都出法线）；
+ *   ② 中心是几何、邻居是背景 → 边（几何右 / 下侧的轮廓画在几何像素上）；
+ *   ③ 都是几何：|dC − dN| > 50 且 左/上 邻居也是几何 且 |dot(normalize(dC − dP, h), normalize(dC − dN, −h))| < 0.9999 → 边。
+ *      h = 1000 · 屏幕 InvResolution（sglDx11 的 `cb1[0] × (0, −1000, 0, 1000)`，深度单位 mm）：平面无论多陡两向量反向平行、|dot| = 1，
+ *      只有深度梯度方向变了（真台阶）才判边，且画在台阶左 / 上侧那个像素上；
+ *   ④ 否则 |N·N'| < 0.6 → 边（盒子这类 90° 折边由它负责）。
  * 超采样（HLR 采样档位 > 1）时本通道跑在 kx×ky 倍分辨率上，邻居仍取 1 个屏幕像素远（= kx / ky 个子像素），
- * 同 sglDx11 MSAA 版 HLR 对每个采样点用同一采样序号读 ±1 像素邻居。
+ * 同 sglDx11 MSAA 版对每个采样点用同一采样序号读 ±1 像素邻居。uv 的 −y 是屏幕向下（= D3D 纹理坐标的 +y）。
  */
 const HLR_FRAGMENT = /* glsl */ `
 precision highp float;
@@ -468,29 +497,40 @@ uniform float uRadiusPx;
 uniform vec2 uSupersample;
 uniform float uDepthThreshold;
 uniform float uNormalThreshold;
+uniform float uGradientDotThreshold;
+uniform float uGradientStep;
 uniform vec3 uEdgeColor;
 varying vec2 vUv;
+${SGL_BG_DEPTH_GLSL}
 
-bool creaseAlong(vec4 c, vec2 offs) {
-  vec4 a = texture2D(tND, vUv - offs);
-  vec4 b = texture2D(tND, vUv + offs);
-  // ① 任一侧是背景 → 轮廓
-  if (a.a <= 0.0 || b.a <= 0.0) return true;
-  // ② 二阶深度差分：d2 < 0 说明中心在台阶的远侧（sglDx11 只在远侧画）
-  float d2 = (b.a - c.a) - (c.a - a.a);
-  if (d2 < -uDepthThreshold) return true;
-  // ③ 法线折痕
-  vec3 n = normalize(c.rgb);
-  if (abs(dot(n, normalize(a.rgb))) < uNormalThreshold) return true;
-  if (abs(dot(n, normalize(b.rgb))) < uNormalThreshold) return true;
-  return false;
+// 一个方向的判边：next = 右 / 下，prev = 左 / 上，h = 该轴的 1000·像素步长。true = 边
+bool edgeAlong(vec4 c, vec4 next, vec4 prev, float h) {
+  bool geoC = sglIsGeometry(c.a);
+  bool geoN = sglIsGeometry(next.a);
+  // ① 中心是背景（sglDx11: 中心深度 == 1e18 → 邻居有法线标记即边）
+  if (!geoC) return geoN;
+  // ② 邻居是背景（sglDx11: 邻居无法线标记且深度 == 1e18 → 边）
+  if (!geoN) return true;
+  // ③ 深度台阶 + 梯度方向变化（sglDx11: lt 50 < |dC − dN|，|dot| < 0.9999，且 prev 有法线标记）
+  if (abs(c.a - next.a) > uDepthThreshold && sglIsGeometry(prev.a)) {
+    vec2 v1 = normalize(vec2(c.a - prev.a, h));
+    vec2 v2 = normalize(vec2(c.a - next.a, -h));
+    if (abs(dot(v1, v2)) < uGradientDotThreshold) return true;
+  }
+  // ④ 法线折痕（sglDx11: |dot(nC, nN)| < 0.6）
+  return abs(dot(normalize(c.rgb), normalize(next.rgb))) < uNormalThreshold;
 }
 
 void main() {
   vec4 c = texture2D(tND, vUv);
-  if (c.a <= 0.0) { gl_FragColor = vec4(1.0); return; }
-  vec2 r = uInvResolution * uRadiusPx * uSupersample;
-  bool edge = creaseAlong(c, vec2(r.x, 0.0)) || creaseAlong(c, vec2(0.0, r.y));
+  // 1 个屏幕像素（超采样时 = kx / ky 个子像素）；h 按屏幕像素步长算，不随超采样变
+  vec2 stepUv = uInvResolution * uRadiusPx * uSupersample;
+  vec2 h = uGradientStep * stepUv;
+  vec4 right = texture2D(tND, vUv + vec2(stepUv.x, 0.0));
+  vec4 left = texture2D(tND, vUv - vec2(stepUv.x, 0.0));
+  vec4 down = texture2D(tND, vUv - vec2(0.0, stepUv.y));
+  vec4 up = texture2D(tND, vUv + vec2(0.0, stepUv.y));
+  bool edge = edgeAlong(c, right, left, h.x) || edgeAlong(c, down, up, h.y);
   gl_FragColor = edge ? vec4(uEdgeColor, 1.0) : vec4(1.0);
 }
 `;
@@ -602,6 +642,8 @@ interface HlrUniforms {
   uSupersample: IUniform<Vector2>;
   uDepthThreshold: IUniform<number>;
   uNormalThreshold: IUniform<number>;
+  uGradientDotThreshold: IUniform<number>;
+  uGradientStep: IUniform<number>;
   uEdgeColor: IUniform<Vector3>;
 }
 
@@ -689,8 +731,13 @@ export class SglLookPipeline {
     uSupersample: { value: new Vector2(1, 1) },
     uDepthThreshold: { value: 50 },
     uNormalThreshold: { value: 0.6 },
+    uGradientDotThreshold: { value: 0.9999 },
+    uGradientStep: { value: 1000 },
     uEdgeColor: { value: new Vector3(0, 0, 0) },
   };
+
+  /** 法线/深度目标的清屏值：法线 0、深度 = 背景哨兵 1e18（gl.clearColor 会截到 [0,1]，浮点附件得走 clearBufferfv） */
+  private readonly _ndClear = new Float32Array([0, 0, 0, SGL_BACKGROUND_DEPTH]);
 
   private readonly _compositeUniforms: CompositeUniforms = {
     tColor: { value: null },
@@ -829,6 +876,21 @@ export class SglLookPipeline {
     this._blurRTb.setSize(aw, ah);
   }
 
+  /**
+   * 清法线/深度目标：颜色附件写 (0,0,0,1e18)，深度附件清 1。
+   * 目标已由 setRenderTarget 绑定；浮点附件用 clearBufferfv 才能写进 > 1 的哨兵（WebGL1 没有它时退回 clear 到 0 —— 那时 sglIsBackground 判不出，
+   * 但本管线本来就要求 WebGL2）。
+   */
+  private _clearNormalDepth(): void {
+    const gl = this._renderer.getContext() as WebGL2RenderingContext;
+    if (typeof gl.clearBufferfv === 'function') {
+      gl.clearBufferfv(gl.COLOR, 0, this._ndClear);
+      this._renderer.clear(false, true, false);
+    } else {
+      this._renderer.clear(true, true, false);
+    }
+  }
+
   /** 颜色通道实际用的 MSAA 采样数（0 = 无；设备上限见 renderer.capabilities.maxSamples） */
   get colorSamples(): number {
     return this._colorSamples;
@@ -868,12 +930,12 @@ export class SglLookPipeline {
     // 法线/深度通道绝不画背景（背景像素要留深度 0）
     scene.background = null;
 
-    // ② 面法线 + 线性深度
+    // ② 面法线 + 线性深度（背景深度 = 哨兵 1e18，同 sglDx11）
     this._collectRenderables(scene, useAo && p.ao.blurSharpnessAuto);
     const source = this.options.normalDepthSource;
     renderer.setRenderTarget(this._ndRT);
     renderer.setClearColor(0x000000, 0);
-    renderer.clear(true, true, false);
+    this._clearNormalDepth();
     if (source !== 'providers') {
       // 普通 Mesh 走 overrideMaterial；provider 网格与线/点/精灵先藏起来
       for (const r of this._renderables) {
@@ -952,6 +1014,8 @@ export class SglLookPipeline {
       u.uSupersample.value.copy(ss);
       u.uDepthThreshold.value = p.hlr.depthThreshold;
       u.uNormalThreshold.value = p.hlr.normalThreshold;
+      u.uGradientDotThreshold.value = p.hlr.gradientDotThreshold;
+      u.uGradientStep.value = p.hlr.gradientStep;
       setSrgb(u.uEdgeColor.value, p.hlr.edgeColor);
       this._fsq.material = this._hlrMaterial;
       renderer.setRenderTarget(this._hlrRT);

@@ -75,10 +75,10 @@ a   = colour.a                                      // 半透明 = 1 − 百分�
 
 | 步 | 做法 | 参数（默认） |
 |---|---|---|
-| 法线/深度 | `overrideMaterial`：rgb = `normalize(cross(dFdx(viewPos), dFdy(viewPos)))`（面法线，同 sglDx11 MRT1），a = 线性深度，背景 0；RGBA32F | — |
+| 法线/深度 | `overrideMaterial`（或 DTX 这类 provider 材质自己出）：rgb = `normalize(cross(dFdx(viewPos), dFdy(viewPos)))`（面法线，同 sglDx11 MRT1），a = 线性深度；背景清成哨兵 **1e18**（`SGL_BACKGROUND_DEPTH`，同 sglDx11，`clearBufferfv` 直写）；RGBA32F | — |
 | HBAO | NVIDIA HBAO 法线模式，参数名同 sglDx11 | `E3D31_HBAO`（= 3.1 硬编码，§5.6）：R **392.7327**（场景单位 mm；ViewerPanel 按米 ×0.001）、8 方向、**4 步**、AngleBias **30°**、Attenuation **0.2**、Contrast 1.25 |
 | 模糊 | 深度感知可分离模糊，权重 exp(−r²·Falloff − (Δz·s)²)（同 sglDx11 dxbc_003） | 半径 **12** px、Falloff = 1/(2·((R+1)/2)²) = 0.01183；锐度 `blurSharpnessAuto`（默认开）= **16 / (本帧深度范围 / 2)**，深度范围 = 可渲染 Mesh 包围盒 ∪ `extraSceneBounds`（DTX 层）在眼空间的 [近, 远]；关掉则用固定 `blurSharpness` |
-| HLR | ① 邻居是背景 → 轮廓；② 二阶深度差分 d2 < −阈值（中心在台阶远侧，对应 sglDx11「lt 50 < center − neighbour」）；③ 法线 \|cos\| < 0.6。采样档位 = MSAA 采样数（§5.7）：法线/深度与 HLR 通道按 `sglHlrSupersampleGrid()` 超采样（4 → 2×2），邻居仍取 1 个屏幕像素远 | 阈值 50 mm、0.6、半径 1 px、边线黑 |
+| HLR | 逐句照 sglDx11 HLR PS（§5.8）：只看右 / 下邻居；① 中心是背景、邻居是几何 → 边；② 中心是几何、邻居是背景 → 边；③ 都是几何：\|Δd\| > 50 且左/上也是几何且 \|dot(normalize(dC−dP, h), normalize(dC−dN, −h))\| < 0.9999（h = 1000·像素步长）→ 边；④ \|N·N′\| < 0.6 → 边。采样档位 = MSAA 采样数（§5.7）：法线/深度与 HLR 通道按 `sglHlrSupersampleGrid()` 超采样（4 → 2×2），邻居仍取 1 个屏幕像素远 | 50 mm、0.9999、1000（深度 mm；米场景 ×0.001）、0.6、边线黑 |
 | 合成 | `colour × HLR × AO`；HLR 对本像素的 kx×ky 个子像素取平均（= sglDx11 MSAA 版 HLR PS 的 Σ/N）；背景 `mix(top, bottom, t)`，`t = mix(gradientBottomT, gradientTopT, uv.y)` | 按 E3D 3.1 D2D 渐变：上 = 背景色 grey #828282、下 = 端色白（端色未设时 HLS 亮度拉满 → 任何背景色都得白），t 顶 0.35/1.5 ≈ 0.233 / 底 1.35/1.5 = 0.9 → 屏幕上 #9f9f9f→#f2f2f2（第三轮已对齐） |
 | 抗锯齿 | `aa.mode`：'msaa' = 颜色通道用 `samples` 倍 MSAA 目标（three `WebGLRenderTarget.samples`，截到 `maxSamples`）+ 上述 HLR 超采样；'fxaa' = 合成后再过 three 的 FXAA 3.11（HLR 档位退回 1）；'none' | 出厂 **msaa 4**（`Sgl_View_Parameters` +780；`gphviewopt antiAlias = true(4)`）；FXAA 与 MSAA 互斥（+764） |
 | legacy | `_legacy_mode`：全部效果关、纯色背景（HLR 档位 1；MSAA 由视图参数管，不受影响） | — |
@@ -208,8 +208,28 @@ npm run dev                       # 然后打开 http://127.0.0.1:3101/e3d-look-
   背景渐变 159 / 242 不受影响。DTX harness 20/20：DTX 路径下 msaa 4 / HLR 2×2，CE / highlight 颜色与无 AA 时一致，盒子轮廓纯黑 2414 → 880、覆盖率灰 0 → 1985。
   **未与真机对参**；MSAA 采样点位置（旋转网格）与本实现的有序网格不同，边线覆盖率在斜线上会有细微差别。
 
+## 5.8 第八轮：HLR 判据改成 dxbc 版（2026-09-21）
+
+- 逐句读 `dxbc_029_000b93c8.asm`（2 采样版；045 / 028 / 027 同判据）：输入 `g_txDepth`（背景哨兵 `999999984306749440.0` = 1e18）与
+  `g_txNormals`（rgb = (n+1)/2，.w 经 `floor(31·w + 0.5) & 1` 取 bit0 = 「有法线的几何」标记）。每个采样点：
+  1. 中心标记 0（背景或无法线对象）：右 / 下邻居标记 1 且（中心是背景 或 dC − dN > 50）→ 边，即轮廓画在几何**左 / 上外侧**的像素上；
+  2. 中心标记 1：邻居标记 0 → 邻居是背景 → 边；邻居非背景 → dC − dN < −50 → 边；
+  3. 邻居标记 1：`50 < |dC − dN|` 且 左/上 标记 1 且 `|dot(normalize(dC − dP, +1000/W), normalize(dC − dN, −1000/W))| < 0.9999` → 边
+     （平面无论多陡两向量反向平行、|dot| = 1；只有深度梯度方向变了才是台阶，画在台阶左 / 上侧那个像素）；否则 `|dot(nC, nN)| < 0.6` → 边；
+  4. 横向没判出边再做纵向；结果 0 / 1 → 各采样点 Σ/N。
+- 落地：`HLR_FRAGMENT` 重写成 `edgeAlong(c, right, left, h.x) || edgeAlong(c, down, up, h.y)`（uv −y = 屏幕向下 = D3D 纹理 +y），
+  `SglHlrParams` 新增 `gradientDotThreshold` 0.9999、`gradientStep` 1000（h = gradientStep · 屏幕 InvResolution · radiusPx；深度不是 mm 时按比例给，
+  ViewerPanel 米场景传 1）。旧的二阶差分判据删掉。法线/深度目标背景改清成哨兵 **1e18**（`SGL_BACKGROUND_DEPTH`；`gl.clearColor` 会截到 [0,1]，
+  用 `clearBufferfv` 直写；半浮点目标里存成 inf，所以 GLSL 用 `d ≥ 1e17` 判背景），AO / 模糊 / HLR 统一用 `sglIsBackground()`。
+  本管线所有几何都出法线，所以 dxbc 里「标记 0 但非背景」（handles / laser 这类不参与边线的对象）的分支没有对应物，注释里标明。
+- 效果差异：轮廓从「几何两侧各 1 px」变成「左 / 上在背景侧、右 / 下在几何侧各 1 px」，台阶只画一侧，线更细；演示页纯黑像素 1.82% → 1.09%（4× AA）。
+- 验证：`vitest src/viewer/e3dLook` 25/25（新增：默认 0.9999 / 1000、着色器四条判据与右/下取向、哨兵常量进 AO / 模糊 / HLR、旧判据已删）；
+  `type-check` 基线外仍只有既有 4 条；ESLint 通过。无头 Chrome 演示页 15 变体 **28/28**：无着色器错误；边线量级合理（1.09%，关 HLR 0.00%）；
+  AO 在哨兵改动后仍压暗几何（0.538 → 0.513）、背景不受影响；AA / 渐变 / 颜色各项照旧。DTX harness 20/20（`gradientStep` 1，
+  轮廓覆盖率灰 0 → 2591 / 纯黑 2148 → 604）。**未与真机对参**。
+
 ## 6. 下一步
 
-1. 在未修补的 E3D 3.1 上（或补跑 `!!gphViewOpt.applyToView`）复核出厂外观、立方体贴图朝向、HBAO 强度 / 模糊锐度（§5.6 的深度范围累计方式是推断）与抗锯齿边线覆盖率（§5.7）；`SHINY`(30) / `TRANSLUCENCY_STYLE`(51) 分支仍未读。
-2. HLR 判据可再向 dxbc 版靠：`|dot| < 0.9999` 的梯度方向判据、1e18 背景哨兵；`EnhancedEdgesTranslucent`（半透明也画边）尚未区分。
+1. 在未修补的 E3D 3.1 上（或补跑 `!!gphViewOpt.applyToView`）复核出厂外观、立方体贴图朝向、HBAO 强度 / 模糊锐度（§5.6 的深度范围累计方式是推断）、抗锯齿边线覆盖率（§5.7）与边线取向（§5.8）；`SHINY`(30) / `TRANSLUCENCY_STYLE`(51) 分支仍未读。
+2. 法线纹理 .w 的「参与边线」标记（handles / laser / `EnhancedEdgesTranslucent` 半透明是否画边）尚未建模：现在所有几何一律出法线、一律参与边线。
 3. 如项目有自定义 autocolour 规则，导出 `gphcolopt` 选项文件翻成 `themes.*` 规则（颜色用 `pdms:` 名）；active orange / aids blue / tracing magenta 尚未接。
