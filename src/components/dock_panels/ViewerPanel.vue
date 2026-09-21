@@ -346,6 +346,7 @@ function applySglLook(): void {
     pipeline.params.hlr.enabled = sglLookHlrEnabled.value;
     pipeline.params.ao.enabled = sglLookAoEnabled.value;
     pipeline.params.background.gradient = sglLookGradientEnabled.value;
+    pipeline.params.aa.mode = sglLookAaEnabled.value ? 'msaa' : 'none';
   }
   const selection = selectionControllerRef.value;
   if (selection) applySglSelectionStyle(selection, enabled);
@@ -394,11 +395,13 @@ function onSglLookPresetChange(id: SglLookPresetId): void {
   sglLookHlrEnabled.value = preset.hlr;
   sglLookAoEnabled.value = preset.ao;
   sglLookGradientEnabled.value = preset.gradient;
+  sglLookAaEnabled.value = preset.antiAlias;
   applySglLook();
   safeLsSet('dtx_look_preset', id);
   safeLsSet('dtx_look_hlr', preset.hlr ? '1' : '0');
   safeLsSet('dtx_look_ao', preset.ao ? '1' : '0');
   safeLsSet('dtx_look_gradient', preset.gradient ? '1' : '0');
+  safeLsSet('dtx_look_aa', preset.antiAlias ? '1' : '0');
   if (sglLookEnabled.value) syncSglLookDisplayTheme(true);
 }
 
@@ -457,6 +460,12 @@ function onSglLookGradientChange(enabled: boolean): void {
   sglLookGradientEnabled.value = enabled;
   applySglLook();
   safeLsSet('dtx_look_gradient', enabled ? '1' : '0');
+}
+
+function onSglLookAaChange(enabled: boolean): void {
+  sglLookAaEnabled.value = enabled;
+  applySglLook();
+  safeLsSet('dtx_look_aa', enabled ? '1' : '0');
 }
 
 /** sglDx11 内嵌的环境立方体贴图：页面里只加载一次，加载完套到所有 DTX 层上 */
@@ -803,6 +812,7 @@ const sglLookPreset = ref<SglLookPresetId>(DEFAULT_SGL_LOOK_PRESET);
 const sglLookHlrEnabled = ref(SGL_LOOK_PRESETS[DEFAULT_SGL_LOOK_PRESET].hlr);
 const sglLookAoEnabled = ref(SGL_LOOK_PRESETS[DEFAULT_SGL_LOOK_PRESET].ao);
 const sglLookGradientEnabled = ref(SGL_LOOK_PRESETS[DEFAULT_SGL_LOOK_PRESET].gradient);
+const sglLookAaEnabled = ref(SGL_LOOK_PRESETS[DEFAULT_SGL_LOOK_PRESET].antiAlias);
 const sglPipelineRef = shallowRef<SglLookPipeline | null>(null);
 const sglEnvCubeRef = shallowRef<CubeTexture | null>(null);
 let sglEnvCubeLoading = false;
@@ -3365,6 +3375,7 @@ onMounted(async () => {
   sglLookHlrEnabled.value = SGL_LOOK_PRESETS[DEFAULT_SGL_LOOK_PRESET].hlr;
   sglLookAoEnabled.value = SGL_LOOK_PRESETS[DEFAULT_SGL_LOOK_PRESET].ao;
   sglLookGradientEnabled.value = SGL_LOOK_PRESETS[DEFAULT_SGL_LOOK_PRESET].gradient;
+  sglLookAaEnabled.value = SGL_LOOK_PRESETS[DEFAULT_SGL_LOOK_PRESET].antiAlias;
   sglLookDisposed = false;
   try {
     // DEV: localStorage.setItem('dtx_continuous_render','1') 可打开持续渲染（用于 profile）
@@ -3431,7 +3442,7 @@ onMounted(async () => {
     }
 
     // E3D 外观：?dtx_look=sgl|pbr，预设 dtx_look_preset=factory|machine（缺省 factory），
-    // 子开关 dtx_look_hlr / dtx_look_ao / dtx_look_gradient（'0' 关；缺省随预设）
+    // 子开关 dtx_look_hlr / dtx_look_ao / dtx_look_gradient / dtx_look_aa（'0' 关；缺省随预设）
     const lookRaw = q.get('dtx_look') || localStorage.getItem('dtx_look');
     if (lookRaw !== null && lookRaw !== undefined) {
       sglLookEnabled.value = String(lookRaw).trim().toLowerCase() === 'sgl';
@@ -3442,6 +3453,7 @@ onMounted(async () => {
       sglLookHlrEnabled.value = SGL_LOOK_PRESETS[lookPreset].hlr;
       sglLookAoEnabled.value = SGL_LOOK_PRESETS[lookPreset].ao;
       sglLookGradientEnabled.value = SGL_LOOK_PRESETS[lookPreset].gradient;
+      sglLookAaEnabled.value = SGL_LOOK_PRESETS[lookPreset].antiAlias;
     }
     const lookHlrRaw = q.get('dtx_look_hlr') || localStorage.getItem('dtx_look_hlr');
     if (lookHlrRaw !== null && lookHlrRaw !== undefined) {
@@ -3454,6 +3466,10 @@ onMounted(async () => {
     const lookGradientRaw = q.get('dtx_look_gradient') || localStorage.getItem('dtx_look_gradient');
     if (lookGradientRaw !== null && lookGradientRaw !== undefined) {
       sglLookGradientEnabled.value = String(lookGradientRaw).trim() !== '0';
+    }
+    const lookAaRaw = q.get('dtx_look_aa') || localStorage.getItem('dtx_look_aa');
+    if (lookAaRaw !== null && lookAaRaw !== undefined) {
+      sglLookAaEnabled.value = String(lookAaRaw).trim() !== '0';
     }
     // 一上来就开着 E3D 外观、而用户从没自己选过显示主题：元素颜色也按预设走（e3dFactory）。
     // 选过主题（localStorage 里有）就尊重那次选择，不动。
@@ -5528,7 +5544,7 @@ onUnmounted(() => {
                   {{ preset.label }}
                 </button>
               </div>
-              <div class="grid grid-cols-3 gap-1.5">
+              <div class="grid grid-cols-4 gap-1.5">
                 <button type="button"
                   class="h-8 rounded-md border px-2 text-xs transition-colors hover:bg-muted"
                   :class="sglLookHlrEnabled ? 'border-ring bg-muted font-medium' : 'border-border text-muted-foreground'"
@@ -5550,10 +5566,18 @@ onUnmounted(() => {
                   @click.stop="onSglLookGradientChange(!sglLookGradientEnabled)">
                   渐变 {{ sglLookGradientEnabled ? '开' : '关' }}
                 </button>
+                <button type="button"
+                  class="h-8 rounded-md border px-2 text-xs transition-colors hover:bg-muted"
+                  :class="sglLookAaEnabled ? 'border-ring bg-muted font-medium' : 'border-border text-muted-foreground'"
+                  :disabled="!sglLookEnabled"
+                  title="出厂 4× MSAA：颜色通道多重采样，边线按 4 个采样点判边取平均"
+                  @click.stop="onSglLookAaChange(!sglLookAaEnabled)">
+                  抗锯齿 {{ sglLookAaEnabled ? '开' : '关' }}
+                </button>
               </div>
               <div class="text-[11px] text-muted-foreground">
                 {{ SGL_LOOK_PRESETS[sglLookPreset].description }}
-                反射采 sglDx11 内嵌的环境立方体贴图；边线 / 伪阴影是 sglDx11 同款后处理；选中按 E3D 染色（CE yellow、其余 white，无描边）；版本分屏时暂不套用。
+                反射采 sglDx11 内嵌的环境立方体贴图；边线 / 伪阴影 / 4× 抗锯齿是 sglDx11 同款后处理；选中按 E3D 染色（CE yellow、其余 white，无描边）；版本分屏时暂不套用。
               </div>
             </div>
 

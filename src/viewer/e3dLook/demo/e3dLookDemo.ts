@@ -1,6 +1,6 @@
 /**
  * E3D 渲染效果复刻原型的演示页入口（`/e3d-look-demo.html`，dev 下直接开）。
- * 右侧面板可切预设（出厂 E3D 3.1 / 本机真机）、HLR / AO / 背景渐变 / legacy、环境立方体贴图，
+ * 右侧面板可切预设（出厂 E3D 3.1 / 本机真机）、HLR / AO / 背景渐变 / 抗锯齿 / legacy、环境立方体贴图，
  * 调 Ka Kd Ks Kr Kse 与 AO/HLR 参数，看合成结果或各中间图。
  */
 
@@ -10,7 +10,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { E3D_DEFAULT_ELEMENT_COLOUR } from '../pdmsColourTable';
 import { loadSgl31EnvCube } from '../sglEnvCube';
 import { SGL_LIGHT_STRATEGIES, SglLookMaterial, translucencyToAlpha } from '../sglLookMaterial';
-import { SglLookPipeline } from '../sglLookPipeline';
+import { SglLookPipeline, type SglMsaaSamples } from '../sglLookPipeline';
 import {
   DEFAULT_SGL_LOOK_PRESET,
   SGL_LOOK_PRESETS,
@@ -100,6 +100,14 @@ function main(): void {
   if (params.get('ao') === '0') pipeline.params.ao.enabled = false;
   if (params.get('hlr') === '0') pipeline.params.hlr.enabled = false;
   if (params.get('gradient') === '0') pipeline.params.background.gradient = false;
+  // ?aa=0|none 关；?aa=fxaa；?aa=2|4|8 = MSAA 采样数（缺省随预设：出厂 4× MSAA）
+  const aaRaw = params.get('aa');
+  if (aaRaw === '0' || aaRaw === 'none') pipeline.params.aa.mode = 'none';
+  else if (aaRaw === 'fxaa') pipeline.params.aa.mode = 'fxaa';
+  else if (aaRaw === '2' || aaRaw === '4' || aaRaw === '8') {
+    pipeline.params.aa.mode = 'msaa';
+    pipeline.params.aa.samples = Number(aaRaw) as SglMsaaSamples;
+  }
 
   // sglDx11 内嵌的环境立方体贴图；?envcube=0 用解析天/地兜底对比
   let envCube: CubeTexture | null = null;
@@ -267,6 +275,30 @@ function main(): void {
   addSlider(sAo, '固定模糊锐度 1/mm', 0, 0.1, 0.001, () => pipeline.params.ao.blurSharpness, (v) => { pipeline.params.ao.blurSharpness = v; });
   addCheckbox(sAo, '半分辨率（E3D 没有）', () => pipeline.params.ao.halfRes, (v) => { pipeline.params.ao.halfRes = v; });
 
+  // 抗锯齿
+  const sAa = section('抗锯齿（出厂 4× MSAA；HLR 采样档位随采样数；FXAA 与 MSAA 互斥）');
+  const aaRow = el('div', 'row');
+  const aaButtons = new Map<string, HTMLButtonElement>();
+  const aaKey = (): string => (pipeline.params.aa.mode === 'msaa' ? `msaa${pipeline.params.aa.samples}` : pipeline.params.aa.mode);
+  const refreshAaButtons = (): void => {
+    for (const [k, b] of aaButtons) b.style.fontWeight = k === aaKey() ? 'bold' : 'normal';
+  };
+  const aaChoices: [string, string, () => void][] = [
+    ['none', '关', () => { pipeline.params.aa.mode = 'none'; }],
+    ['msaa2', 'MSAA 2×', () => { pipeline.params.aa.mode = 'msaa'; pipeline.params.aa.samples = 2; }],
+    ['msaa4', 'MSAA 4×（出厂）', () => { pipeline.params.aa.mode = 'msaa'; pipeline.params.aa.samples = 4; }],
+    ['msaa8', 'MSAA 8×', () => { pipeline.params.aa.mode = 'msaa'; pipeline.params.aa.samples = 8; }],
+    ['fxaa', 'FXAA', () => { pipeline.params.aa.mode = 'fxaa'; }],
+  ];
+  for (const [key, label, apply] of aaChoices) {
+    const b = el('button', undefined, label);
+    b.addEventListener('click', () => { apply(); refreshAaButtons(); });
+    aaButtons.set(key, b);
+    aaRow.appendChild(b);
+  }
+  refreshAaButtons();
+  sAa.appendChild(aaRow);
+
   // 背景
   const sBg = section('背景（effect_bg_gradient，E3D 3.1：上 = 背景色 grey，下 = 端色白，t 0.233→0.9）');
   addCheckbox(sBg, '渐变', () => pipeline.params.background.gradient, (v) => { pipeline.params.background.gradient = v; });
@@ -309,7 +341,9 @@ function main(): void {
       const range = pipeline.lastDepthRange;
       const sharp = pipeline.lastBlurSharpness;
       const blurInfo = range !== null && sharp !== null ? ` · 深度范围 ${range.toFixed(0)} mm → 模糊锐度 ${sharp.toFixed(4)}` : '';
-      statsLine.textContent = `${fps.toFixed(0)} fps · 帧 ${(now - t0).toFixed(1)} ms · ${renderer.domElement.width}×${renderer.domElement.height} · 深度附件 ${pipeline.normalDepthType === FloatType ? 'float32' : 'half'}${blurInfo}`;
+      const ss = pipeline.hlrSupersample;
+      const aaInfo = ` · AA ${pipeline.params.aa.mode === 'msaa' ? `MSAA ${pipeline.colorSamples || 1}×` : pipeline.params.aa.mode} · HLR ${ss.x}×${ss.y}`;
+      statsLine.textContent = `${fps.toFixed(0)} fps · 帧 ${(now - t0).toFixed(1)} ms · ${renderer.domElement.width}×${renderer.domElement.height} · 深度附件 ${pipeline.normalDepthType === FloatType ? 'float32' : 'half'}${blurInfo}${aaInfo}`;
       lastStats = now;
       framesSince = 0;
     }

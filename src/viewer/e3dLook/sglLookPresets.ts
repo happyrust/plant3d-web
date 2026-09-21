@@ -13,6 +13,7 @@
 
 import { SGL_DEFAULT_LIGHT, SGL_E3D31_VIEW_DEFAULT_LIGHT, type SglSceneLightParams } from './sglLookMaterial';
 import {
+  E3D31_MSAA_SAMPLES,
   E3D_BACKGROUND_GREY,
   E3D_GRADIENT_BOTTOM_T,
   E3D_GRADIENT_TOP_T,
@@ -36,6 +37,8 @@ export interface SglLookPreset {
   ao: boolean;
   /** SGL_BACKGROUND_GRADIENT */
   gradient: boolean;
+  /** 抗锯齿（gphviewopt `antiAlias`，出厂 true = 4× MSAA；HLR 采样档位随之） */
+  antiAlias: boolean;
   /** 背景色（渐变时在上；纯色时整屏） */
   background: number;
   /** 渐变端色（在下） */
@@ -52,11 +55,12 @@ export const SGL_LOOK_PRESETS: Readonly<Record<SglLookPresetId, Readonly<SglLook
     id: 'e3d31-factory' as const,
     label: '出厂 E3D 3.1',
     description:
-      'PML gphviewopt 出厂视图：边线 / 伪阴影 / 渐变全开，光照 0.7·颜色 + 0.8·环境立方体反射（无漫反射、无高光），背景 grey→白渐变，元素一色 lightgrey。',
+      'PML gphviewopt 出厂视图：边线 / 伪阴影 / 渐变 / 4× 抗锯齿全开，光照 0.7·颜色 + 0.8·环境立方体反射（无漫反射、无高光），背景 grey→白渐变，元素一色 lightgrey。',
     light: SGL_E3D31_VIEW_DEFAULT_LIGHT,
     hlr: true,
     ao: true,
     gradient: true,
+    antiAlias: true,
     background: E3D_BACKGROUND_GREY,
     gradientEnd: 0xffffff,
     displayTheme: 'e3dFactory',
@@ -65,11 +69,12 @@ export const SGL_LOOK_PRESETS: Readonly<Record<SglLookPresetId, Readonly<SglLook
     id: 'sgl-machine' as const,
     label: '本机真机',
     description:
-      '本机修补启动的 E3D 3.1（未跑 PML 视图默认）：边线 / 伪阴影 / 渐变全关，SGL C++ 默认光照 0.5/0.8 Blinn-Phong + 0.35 反射，背景纯灰 #828282，元素一色 lightgrey。',
+      '本机修补启动的 E3D 3.1（未跑 PML 视图默认）：边线 / 伪阴影 / 渐变 / 抗锯齿全关，SGL C++ 默认光照 0.5/0.8 Blinn-Phong + 0.35 反射，背景纯灰 #828282，元素一色 lightgrey。',
     light: SGL_DEFAULT_LIGHT,
     hlr: false,
     ao: false,
     gradient: false,
+    antiAlias: false,
     background: E3D_BACKGROUND_GREY,
     gradientEnd: 0xffffff,
     displayTheme: 'e3dFactory',
@@ -92,11 +97,13 @@ export function parseSglLookPresetId(raw: string | null | undefined): SglLookPre
   return null;
 }
 
-/** 把预设的开关与背景色写进管线参数（HBAO / HLR 的数值参数不动） */
+/** 把预设的开关与背景色写进管线参数（HBAO / HLR 的数值参数、MSAA 采样数不动；抗锯齿开 = 4× MSAA） */
 export function applySglLookPresetToPipelineParams(params: SglLookPipelineParams, preset: Readonly<SglLookPreset>): void {
   params.hlr.enabled = preset.hlr;
   params.ao.enabled = preset.ao;
   params.background.gradient = preset.gradient;
+  params.aa.mode = preset.antiAlias ? 'msaa' : 'none';
+  if (preset.antiAlias) params.aa.samples = E3D31_MSAA_SAMPLES;
   params.background.top.setHex(preset.background);
   params.background.bottom.setHex(preset.gradientEnd);
   params.background.flat.setHex(preset.background);

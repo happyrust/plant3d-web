@@ -18,6 +18,7 @@ import {
 } from './sglLookMaterial';
 import {
   E3D31_HBAO,
+  E3D31_MSAA_SAMPLES,
   E3D_BACKGROUND_GREY,
   E3D_GRADIENT_BOTTOM_T,
   E3D_GRADIENT_TOP_T,
@@ -26,7 +27,9 @@ import {
   e3dBlurSharpnessForDepthRange,
   eyeDepthRangeOfBox,
   sglBlurFalloffForRadius,
-  sglDefaultGradientEndColour
+  sglDefaultGradientEndColour,
+  sglHlrSamplesFor,
+  sglHlrSupersampleGrid
 } from './sglLookPipeline';
 import {
   DEFAULT_SGL_LOOK_PRESET,
@@ -220,6 +223,26 @@ describe('SglLookPipeline 参数与着色器', () => {
     expect(out.y).toBeCloseTo(13, 6);
   });
 
+  it('抗锯齿默认 4× MSAA（Sgl_View_Parameters +780），HLR 采样档位 = 采样数，FXAA / 关 / legacy 时退回 1', () => {
+    expect(E3D31_MSAA_SAMPLES).toBe(4);
+    const p = createDefaultSglPipelineParams();
+    expect(p.aa).toEqual({ mode: 'msaa', samples: 4 });
+    expect(sglHlrSamplesFor(p)).toBe(4);
+    expect(sglHlrSamplesFor({ aa: { mode: 'msaa', samples: 8 }, legacyMode: false })).toBe(8);
+    expect(sglHlrSamplesFor({ aa: { mode: 'fxaa', samples: 4 }, legacyMode: false })).toBe(1);
+    expect(sglHlrSamplesFor({ aa: { mode: 'none', samples: 4 }, legacyMode: false })).toBe(1);
+    expect(sglHlrSamplesFor({ aa: { mode: 'msaa', samples: 4 }, legacyMode: true })).toBe(1);
+    // 档位 → 法线/深度与 HLR 通道的超采样网格，kx·ky = 档位
+    expect(sglHlrSupersampleGrid(1).toArray()).toEqual([1, 1]);
+    expect(sglHlrSupersampleGrid(2).toArray()).toEqual([2, 1]);
+    expect(sglHlrSupersampleGrid(4).toArray()).toEqual([2, 2]);
+    expect(sglHlrSupersampleGrid(8).toArray()).toEqual([4, 2]);
+    // HLR 邻居仍是 1 个屏幕像素（× 超采样倍数），合成里对子像素取平均（= sglDx11 MSAA 版 HLR 的 Σ/N）
+    expect(SGL_PIPELINE_SHADERS.hlr).toContain('uInvResolution * uRadiusPx * uSupersample');
+    expect(SGL_PIPELINE_SHADERS.composite).toContain('texelFetch(tHLR, base + ivec2(i, j), 0)');
+    expect(SGL_PIPELINE_SHADERS.composite).toContain('acc / float(uHlrSupersample.x * uHlrSupersample.y)');
+  });
+
   it('法线/深度 MRT 用位置导数叉乘，HLR 用二阶深度差分的远侧 + 法线折痕，合成里渐变用 uBgGradT 区间', () => {
     expect(SGL_PIPELINE_SHADERS.normalDepthFragment).toContain('cross(dFdx(vViewPos), dFdy(vViewPos))');
     expect(SGL_PIPELINE_SHADERS.hlr).toContain('(b.a - c.a) - (c.a - a.a)');
@@ -232,23 +255,23 @@ describe('SglLookPipeline 参数与着色器', () => {
 });
 
 describe('SglLookPresets —— 出厂 E3D 3.1 与本机真机两套口径', () => {
-  it('默认预设是出厂 E3D 3.1：光照 {0.7,0,0,0.8,0}，边线 / 伪阴影 / 渐变全开，背景 grey→白', () => {
+  it('默认预设是出厂 E3D 3.1：光照 {0.7,0,0,0.8,0}，边线 / 伪阴影 / 渐变 / 抗锯齿全开，背景 grey→白', () => {
     expect(DEFAULT_SGL_LOOK_PRESET).toBe('e3d31-factory');
     const f = SGL_LOOK_PRESETS['e3d31-factory'];
     expect(f.light).toEqual(SGL_E3D31_VIEW_DEFAULT_LIGHT);
-    expect(f.hlr && f.ao && f.gradient).toBe(true);
+    expect(f.hlr && f.ao && f.gradient && f.antiAlias).toBe(true);
     expect(f.background).toBe(0x828282);
     expect(f.gradientEnd).toBe(0xffffff);
   });
 
-  it('本机真机预设：SGL C++ 默认光照，边线 / 伪阴影 / 渐变全关，背景纯灰', () => {
+  it('本机真机预设：SGL C++ 默认光照，边线 / 伪阴影 / 渐变 / 抗锯齿全关，背景纯灰', () => {
     const m = SGL_LOOK_PRESETS['sgl-machine'];
     expect(m.light).toEqual(SGL_DEFAULT_LIGHT);
-    expect(m.hlr || m.ao || m.gradient).toBe(false);
+    expect(m.hlr || m.ao || m.gradient || m.antiAlias).toBe(false);
     expect(m.background).toBe(0x828282);
   });
 
-  it('applySglLookPresetToPipelineParams 只动开关与背景色，不碰 HBAO / HLR 数值', () => {
+  it('applySglLookPresetToPipelineParams 只动开关与背景色，不碰 HBAO / HLR 数值；抗锯齿开 = 4× MSAA', () => {
     const p = createDefaultSglPipelineParams();
     p.ao.radius = 123;
     p.hlr.depthThreshold = 7;
@@ -257,13 +280,16 @@ describe('SglLookPresets —— 出厂 E3D 3.1 与本机真机两套口径', () 
     expect(p.hlr.enabled).toBe(false);
     expect(p.ao.enabled).toBe(false);
     expect(p.background.gradient).toBe(false);
+    expect(p.aa.mode).toBe('none');
     expect(p.background.top.getHex()).toBe(0x828282);
     expect(p.background.bottom.getHex()).toBe(0xffffff);
     expect(p.background.flat.getHex()).toBe(0x828282);
     expect(p.ao.radius).toBe(123);
     expect(p.hlr.depthThreshold).toBe(7);
+    p.aa.samples = 8;
     applySglLookPresetToPipelineParams(p, SGL_LOOK_PRESETS['e3d31-factory']);
     expect(p.hlr.enabled && p.ao.enabled && p.background.gradient).toBe(true);
+    expect(p.aa).toEqual({ mode: 'msaa', samples: 4 });
     expect(p.legacyMode).toBe(false);
   });
 

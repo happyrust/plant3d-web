@@ -10,6 +10,7 @@ export {
 } from './sglLookMaterial';
 export {
   E3D31_HBAO,
+  E3D31_MSAA_SAMPLES,
   E3D_BACKGROUND_GREY,
   E3D_GRADIENT_BOTTOM_T,
   E3D_GRADIENT_TOP_T,
@@ -21,8 +22,13 @@ export {
   isSglNormalDepthProvider,
   sglBlurFalloffForRadius,
   sglDefaultGradientEndColour,
+  sglHlrSamplesFor,
+  sglHlrSupersampleGrid,
+  type SglAaMode,
+  type SglAaParams,
   type SglAoParams,
   type SglBackgroundParams,
+  type SglMsaaSamples,
   type SglHlrParams,
   type SglLookPipelineOptions,
   type SglLookPipelineParams,

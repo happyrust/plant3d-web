@@ -78,22 +78,23 @@ a   = colour.a                                      // 半透明 = 1 − 百分�
 | 法线/深度 | `overrideMaterial`：rgb = `normalize(cross(dFdx(viewPos), dFdy(viewPos)))`（面法线，同 sglDx11 MRT1），a = 线性深度，背景 0；RGBA32F | — |
 | HBAO | NVIDIA HBAO 法线模式，参数名同 sglDx11 | `E3D31_HBAO`（= 3.1 硬编码，§5.6）：R **392.7327**（场景单位 mm；ViewerPanel 按米 ×0.001）、8 方向、**4 步**、AngleBias **30°**、Attenuation **0.2**、Contrast 1.25 |
 | 模糊 | 深度感知可分离模糊，权重 exp(−r²·Falloff − (Δz·s)²)（同 sglDx11 dxbc_003） | 半径 **12** px、Falloff = 1/(2·((R+1)/2)²) = 0.01183；锐度 `blurSharpnessAuto`（默认开）= **16 / (本帧深度范围 / 2)**，深度范围 = 可渲染 Mesh 包围盒 ∪ `extraSceneBounds`（DTX 层）在眼空间的 [近, 远]；关掉则用固定 `blurSharpness` |
-| HLR | ① 邻居是背景 → 轮廓；② 二阶深度差分 d2 < −阈值（中心在台阶远侧，对应 sglDx11「lt 50 < center − neighbour」）；③ 法线 \|cos\| < 0.6 | 阈值 50 mm、0.6、半径 1 px、边线黑 |
-| 合成 | `colour × HLR × AO`；背景 `mix(top, bottom, t)`，`t = mix(gradientBottomT, gradientTopT, uv.y)` | 按 E3D 3.1 D2D 渐变：上 = 背景色 grey #828282、下 = 端色白（端色未设时 HLS 亮度拉满 → 任何背景色都得白），t 顶 0.35/1.5 ≈ 0.233 / 底 1.35/1.5 = 0.9 → 屏幕上 #9f9f9f→#f2f2f2（第三轮已对齐） |
-| legacy | `_legacy_mode`：全部效果关、纯色背景 | — |
+| HLR | ① 邻居是背景 → 轮廓；② 二阶深度差分 d2 < −阈值（中心在台阶远侧，对应 sglDx11「lt 50 < center − neighbour」）；③ 法线 \|cos\| < 0.6。采样档位 = MSAA 采样数（§5.7）：法线/深度与 HLR 通道按 `sglHlrSupersampleGrid()` 超采样（4 → 2×2），邻居仍取 1 个屏幕像素远 | 阈值 50 mm、0.6、半径 1 px、边线黑 |
+| 合成 | `colour × HLR × AO`；HLR 对本像素的 kx×ky 个子像素取平均（= sglDx11 MSAA 版 HLR PS 的 Σ/N）；背景 `mix(top, bottom, t)`，`t = mix(gradientBottomT, gradientTopT, uv.y)` | 按 E3D 3.1 D2D 渐变：上 = 背景色 grey #828282、下 = 端色白（端色未设时 HLS 亮度拉满 → 任何背景色都得白），t 顶 0.35/1.5 ≈ 0.233 / 底 1.35/1.5 = 0.9 → 屏幕上 #9f9f9f→#f2f2f2（第三轮已对齐） |
+| 抗锯齿 | `aa.mode`：'msaa' = 颜色通道用 `samples` 倍 MSAA 目标（three `WebGLRenderTarget.samples`，截到 `maxSamples`）+ 上述 HLR 超采样；'fxaa' = 合成后再过 three 的 FXAA 3.11（HLR 档位退回 1）；'none' | 出厂 **msaa 4**（`Sgl_View_Parameters` +780；`gphviewopt antiAlias = true(4)`）；FXAA 与 MSAA 互斥（+764） |
+| legacy | `_legacy_mode`：全部效果关、纯色背景（HLR 档位 1；MSAA 由视图参数管，不受影响） | — |
 
 ## 4. 怎么跑
 
 ```powershell
 npm run dev                       # 然后打开 http://127.0.0.1:3101/e3d-look-demo.html
 # URL 开关：?view=iso|front|top  &preset=factory|machine(缺省 factory)  &envcube=0(反射退回解析兜底)
-#          &hlr=0  &ao=0  &gradient=0  &legacy=1  &keep=1(保留绘制缓冲便于截图)
+#          &hlr=0  &ao=0  &gradient=0  &aa=0|fxaa|2|4|8(缺省随预设：出厂 4× MSAA)  &legacy=1  &keep=1(保留绘制缓冲便于截图)
 ```
 
 右侧面板可切预设、开关环境立方体贴图，实时改 Ka/Kd/Ks/Kr/Kse、兜底天/地亮度、策略、房间半透明、HLR/AO/背景参数（含渐变 t 区间）。
 
 主界面 ViewerPanel：`?dtx_look=sgl` 开 E3D 外观，`dtx_look_preset=factory|machine`（缺省 factory），
-子开关 `dtx_look_hlr / dtx_look_ao / dtx_look_gradient`（`0` 关，缺省随预设）；同名 localStorage 键记住上次选择。
+子开关 `dtx_look_hlr / dtx_look_ao / dtx_look_gradient / dtx_look_aa`（`0` 关，缺省随预设）；同名 localStorage 键记住上次选择。
 
 单元测试：`npx vitest run src/viewer/e3dLook`（若 `node_modules` 是 junction，改用
 `node <真实路径>/node_modules/vitest/vitest.mjs run src/viewer/e3dLook`，否则 vitest 双实例会报「No test suite found」）。
@@ -185,8 +186,30 @@ npm run dev                       # 然后打开 http://127.0.0.1:3101/e3d-look-
   front 15471 → 0.00207，top 7301 → 0.00438；DTX harness 17/17：`extraSceneBounds` 给出 2 m 深度范围 → 锐度 16，半径 0.3927327 m，
   选中 / CE 染色结果与 §5.5 一致，无着色器错误。**未与真机 AO 对参**（§5.1 那台 AO 关着，需要跑 `!!gphViewOpt.applyToView` 的机器）。
 
+## 5.7 第七轮：出厂 4× 抗锯齿（2026-09-21）
+
+- E3D 侧：`Sgl_View_Parameters` 构造默认多重采样开、采样数 4（+780）、FXAA 关（+764），两者互斥；`gphviewopt` 出厂 `antiAlias = true(4)`。
+  HLR 的 PS 按采样数分 4 档（dxbc_045 = 1 采样；dxbc_029 / 028 / 027 = `Texture2DMS<2/4/8>`）：对每个采样序号 s 用 `ldms(…, s)` 读中心与
+  ±1 像素邻居（同一 s）各判一次边（0 = 边 / 1 = 无边），最后 `Σ/N`（dxbc_029 末尾 `add r0.x, r3.x, r3.z; mul o0.xyz, r0.x, 0.5`）；
+  FXAA 开或 legacy 时用 1 采样版。判据本体与 1 采样版一致（1e18 背景哨兵、`50 < Δ`、`|dot| < 0.9999` 梯度方向、`|N·N'| < 0.6`）。
+- web 侧（WebGL2 读不到多重采样纹理的单个采样点，等价改写）：
+  - `SglAaParams { mode: 'none' | 'msaa' | 'fxaa', samples: 1|2|4|8 }`，默认 `msaa 4`（`E3D31_MSAA_SAMPLES`）；预设加 `antiAlias`（出厂 true、真机 false），
+    `applySglLookPresetToPipelineParams` 写 `aa.mode`（开 = 4× MSAA）。
+  - 颜色通道：`_colorRT` 建成 `samples = min(采样数, renderer.capabilities.maxSamples)` 的 MSAA 目标（three 在 `render()` 末尾 blit 解析），采样数变了重建。
+  - HLR 档位：`sglHlrSamplesFor()`（msaa → 采样数；fxaa / none / legacy → 1）→ `sglHlrSupersampleGrid()` 得 (kx, ky)（1→1×1，2→2×1，4→2×2，8→4×2）；
+    法线/深度 RT 与 HLR RT 按 (kx, ky) 放大，HLR 着色器邻居距离 = `uInvResolution · radiusPx · uSupersample`（仍是 1 个屏幕像素），
+    合成着色器 `texelFetch` 本像素的 kx×ky 个子像素取平均（= Σ/N，有序网格代替 MSAA 采样点）。AO / 模糊读法线/深度用 Nearest 采样 → 相当于取一个采样点。
+  - FXAA：合成先落 `_compositeRT`，再用 three `FXAAShader`（FXAA 3.11，与 sglDx11 3.1 同源）到目标。
+  - ViewerPanel 子开关「抗锯齿」（`dtx_look_aa`），演示页「抗锯齿」段（关 / MSAA 2× 4× 8× / FXAA）与 `?aa=`，状态行显示 `AA MSAA 4× · HLR 2×2`。
+- 验证：`vitest src/viewer/e3dLook` 24/24（新增：默认 msaa 4、档位选择、超采样网格、着色器里的邻居距离与 Σ/N、预设 antiAlias）；
+  `type-check` 基线外仍只有既有 4 条 worktree 路径错误；ESLint 通过。无头 Chrome（SwiftShader，maxSamples 4）演示页 13 变体 **24/24**：
+  出厂 = msaa/4、颜色 RT samples 4、HLR 2×2；`aa=0` → 0 / 1×1；FXAA → 0 / 1×1 无报错；8× → HLR 4×2、颜色 samples 截到 4；2× → 2×1 / samples 2；
+  抗锯齿后纯黑像素 2.86% → 1.82%、覆盖率灰 8.0% → 10.0%（`shots/aa-compare-zoom.png`：无 AA 的锯齿斜线 vs MSAA 的覆盖率渐变 vs FXAA 的平滑）；
+  背景渐变 159 / 242 不受影响。DTX harness 20/20：DTX 路径下 msaa 4 / HLR 2×2，CE / highlight 颜色与无 AA 时一致，盒子轮廓纯黑 2414 → 880、覆盖率灰 0 → 1985。
+  **未与真机对参**；MSAA 采样点位置（旋转网格）与本实现的有序网格不同，边线覆盖率在斜线上会有细微差别。
+
 ## 6. 下一步
 
-1. 出厂 4× AA（MSAA / HLR 档位随采样数）还没做；HLR 采样档位现在固定 1 px。
-2. 在未修补的 E3D 3.1 上（或补跑 `!!gphViewOpt.applyToView`）复核出厂外观、立方体贴图朝向与 HBAO 强度 / 模糊锐度（§5.6 的深度范围累计方式是推断）；`SHINY`(30) / `TRANSLUCENCY_STYLE`(51) 分支仍未读。
+1. 在未修补的 E3D 3.1 上（或补跑 `!!gphViewOpt.applyToView`）复核出厂外观、立方体贴图朝向、HBAO 强度 / 模糊锐度（§5.6 的深度范围累计方式是推断）与抗锯齿边线覆盖率（§5.7）；`SHINY`(30) / `TRANSLUCENCY_STYLE`(51) 分支仍未读。
+2. HLR 判据可再向 dxbc 版靠：`|dot| < 0.9999` 的梯度方向判据、1e18 背景哨兵；`EnhancedEdgesTranslucent`（半透明也画边）尚未区分。
 3. 如项目有自定义 autocolour 规则，导出 `gphcolopt` 选项文件翻成 `themes.*` 规则（颜色用 `pdms:` 名）；active orange / aids blue / tracing magenta 尚未接。

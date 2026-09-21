@@ -7,6 +7,8 @@
  *   ④ 双边模糊 X/Y（BlurRadius / BlurFalloff / Sharpness）
  *   ⑤ HLR 边线：中心比邻居远 > 深度阈值（sglDx11 默认 50）或法线 |cos| < 0.6 → 边
  *   ⑥ 合成 final = colour × HLR × AO；背景处填纵向渐变（effect_bg_gradient）
+ *   ⑦ 抗锯齿：出厂 4× MSAA —— 颜色通道用硬件 MSAA 目标，法线/深度 + HLR 通道按采样数超采样后在合成里取平均
+ *      （sglDx11 的 HLR PS 按采样数分 1/2/4/8 四档，逐采样判边再 Σ/N）；或 3.1 新增的 FXAA（此时 HLR 档位 1）
  *
  * `legacyMode` 对应 SGL 的 `Sgl_View_Effects_Parameters::_legacy_mode`：一把关掉所有效果。
  * 参数默认值来自 3.1 sglDx11 逆向（HBAO / 模糊见 `E3D31_HBAO`，HLR 阈值见 `SglHlrParams`）；`halfRes` 等 E3D 没有的项默认关。
@@ -36,6 +38,7 @@ import {
   ShaderMaterial,
   Texture,
   type TextureDataType,
+  UniformsUtils,
   UnsignedByteType,
   Vector2,
   Vector3,
@@ -43,6 +46,7 @@ import {
   WebGLRenderTarget
 } from 'three';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
+import { FXAAShader } from 'three/examples/jsm/shaders/FXAAShader.js';
 
 export interface SglHlrParams {
   /** SGL_ENHANCED_EDGES（E3D 默认 ON） */
@@ -172,10 +176,29 @@ export interface SglBackgroundParams {
   gradientBottomT: number;
 }
 
+export type SglAaMode = 'none' | 'msaa' | 'fxaa';
+export type SglMsaaSamples = 1 | 2 | 4 | 8;
+
+/**
+ * 抗锯齿（`Sgl_View_Parameters`：多重采样开、采样数 4 @+780；FXAA 关 @+764；两者互斥）。
+ * 出厂 `gphviewopt` `antiAlias = true(4)` → 4× MSAA。
+ */
+export interface SglAaParams {
+  /** 'msaa' = 多重采样（E3D 出厂）；'fxaa' = 3.1 新增的 FXAA 后处理（HLR 采样档位退回 1）；'none' = 关 */
+  mode: SglAaMode;
+  /**
+   * MSAA 采样数（`MULTISAMPLING_COUNT`，1/2/4/8，出厂 4）。颜色通道用硬件 MSAA；
+   * HLR 采样档位 = 同一个数：sglDx11 的 HLR PS 对每个采样点各判一次边再取平均（dxbc_027/028/029 的 Texture2DMS 版本），
+   * WebGL2 读不到多重采样纹理的单个采样点，这里改成把法线/深度与 HLR 通道按 `sglHlrSupersampleGrid()` 超采样、合成时盒式平均，效果等价（有序网格）。
+   */
+  samples: SglMsaaSamples;
+}
+
 export interface SglLookPipelineParams {
   hlr: SglHlrParams;
   ao: SglAoParams;
   background: SglBackgroundParams;
+  aa: SglAaParams;
   /** Sgl_View_Effects_Parameters::_legacy_mode：全部效果关闭 */
   legacyMode: boolean;
 }
@@ -185,7 +208,28 @@ export interface SglLookPipelineParamsInit {
   hlr?: Partial<SglHlrParams>;
   ao?: Partial<SglAoParams>;
   background?: Partial<SglBackgroundParams>;
+  aa?: Partial<SglAaParams>;
   legacyMode?: boolean;
+}
+
+/** E3D 3.1 出厂抗锯齿：4× 多重采样 */
+export const E3D31_MSAA_SAMPLES: SglMsaaSamples = 4;
+
+/**
+ * HLR 采样档位（= MSAA 采样数；FXAA / 关抗锯齿时为 1）→ 法线/深度与 HLR 通道每轴的超采样倍数 (kx, ky)：
+ * 1 → 1×1，2 → 2×1，4 → 2×2，8 → 4×2。合成时对 kx×ky 个子像素的边线结果取平均，对应 sglDx11 HLR PS 的 Σ/N。
+ */
+export function sglHlrSupersampleGrid(samples: number, out: Vector2 = new Vector2()): Vector2 {
+  if (samples >= 8) return out.set(4, 2);
+  if (samples >= 4) return out.set(2, 2);
+  if (samples >= 2) return out.set(2, 1);
+  return out.set(1, 1);
+}
+
+/** 本轮 HLR 实际用的采样档位：MSAA 时 = 采样数，FXAA / 无抗锯齿 / legacy 时 1（同 sglDx11 的档位选择） */
+export function sglHlrSamplesFor(params: Pick<SglLookPipelineParams, 'aa' | 'legacyMode'>): number {
+  if (params.legacyMode) return 1;
+  return params.aa.mode === 'msaa' ? params.aa.samples : 1;
 }
 
 /**
@@ -249,6 +293,10 @@ export function createDefaultSglPipelineParams(): SglLookPipelineParams {
       flat: new Color(E3D_BACKGROUND_GREY),
       gradientTopT: E3D_GRADIENT_TOP_T,
       gradientBottomT: E3D_GRADIENT_BOTTOM_T,
+    },
+    aa: {
+      mode: 'msaa',
+      samples: E3D31_MSAA_SAMPLES,
     },
     legacyMode: false,
   };
@@ -409,12 +457,15 @@ void main() {
  *      「中心比邻居远 > 50」的一侧画（lt 50 < center − neighbour）。这里等价地取 d2 < −阈值：
  *      中心落在远侧的台阶才画线；平坦表面无论多倾斜二阶差分都≈0，不会整片变黑；
  *   ③ 法线折痕：|N·N'| < 0.6（盒子这类 90° 折边由它负责）。
+ * 超采样（HLR 采样档位 > 1）时本通道跑在 kx×ky 倍分辨率上，邻居仍取 1 个屏幕像素远（= kx / ky 个子像素），
+ * 同 sglDx11 MSAA 版 HLR 对每个采样点用同一采样序号读 ±1 像素邻居。
  */
 const HLR_FRAGMENT = /* glsl */ `
 precision highp float;
 uniform sampler2D tND;
 uniform vec2 uInvResolution;
 uniform float uRadiusPx;
+uniform vec2 uSupersample;
 uniform float uDepthThreshold;
 uniform float uNormalThreshold;
 uniform vec3 uEdgeColor;
@@ -438,7 +489,7 @@ bool creaseAlong(vec4 c, vec2 offs) {
 void main() {
   vec4 c = texture2D(tND, vUv);
   if (c.a <= 0.0) { gl_FragColor = vec4(1.0); return; }
-  vec2 r = uInvResolution * uRadiusPx;
+  vec2 r = uInvResolution * uRadiusPx * uSupersample;
   bool edge = creaseAlong(c, vec2(r.x, 0.0)) || creaseAlong(c, vec2(0.0, r.y));
   gl_FragColor = edge ? vec4(uEdgeColor, 1.0) : vec4(1.0);
 }
@@ -448,6 +499,7 @@ void main() {
  * 合成：colour × HLR × AO，背景处填渐变。
  * 渐变照 E3D 3.1 的 D2D 线性渐变：上 = 背景色（uBgTop）、下 = 端色（uBgBottom），
  * 渐变参数 t 在视口顶/底取 uBgGradT.x / uBgGradT.y（出厂 0.233 / 0.9，渐变线伸到视口外）。
+ * HLR 通道若是超采样的（uHlrSupersample > 1），对本像素对应的 kx×ky 个子像素取平均 —— 即 sglDx11 MSAA 版 HLR 的 Σ/N。
  */
 const COMPOSITE_FRAGMENT = /* glsl */ `
 precision highp float;
@@ -458,18 +510,32 @@ uniform sampler2D tAO;
 uniform float uUseHlr;
 uniform float uUseAo;
 uniform float uUseGradient;
+uniform ivec2 uHlrSupersample;
 uniform vec3 uBgTop;
 uniform vec3 uBgBottom;
 uniform vec3 uBgFlat;
 uniform vec2 uBgGradT;
 varying vec2 vUv;
 
+vec3 hlrAverage() {
+  ivec2 base = ivec2(gl_FragCoord.xy) * uHlrSupersample;
+  vec3 acc = vec3(0.0);
+  for (int j = 0; j < 4; j++) {
+    if (j >= uHlrSupersample.y) break;
+    for (int i = 0; i < 4; i++) {
+      if (i >= uHlrSupersample.x) break;
+      acc += texelFetch(tHLR, base + ivec2(i, j), 0).rgb;
+    }
+  }
+  return acc / float(uHlrSupersample.x * uHlrSupersample.y);
+}
+
 void main() {
   vec4 c = texture2D(tColor, vUv);
   float t = mix(uBgGradT.y, uBgGradT.x, vUv.y);
   vec3 bg = (uUseGradient > 0.5) ? mix(uBgTop, uBgBottom, t) : uBgFlat;
   vec3 col = mix(bg, c.rgb, c.a);
-  vec3 hlr = (uUseHlr > 0.5) ? texture2D(tHLR, vUv).rgb : vec3(1.0);
+  vec3 hlr = (uUseHlr > 0.5) ? hlrAverage() : vec3(1.0);
   float ao = (uUseAo > 0.5) ? texture2D(tAO, vUv).r : 1.0;
   gl_FragColor = vec4(col * hlr * ao, 1.0);
 }
@@ -490,7 +556,7 @@ function setSrgb(target: Vector3, color: Color): void {
   target.set(_srgbTmp.r, _srgbTmp.g, _srgbTmp.b);
 }
 
-function makeRT(w: number, h: number, type: TextureDataType, filter: RtFilter, depthBuffer: boolean): WebGLRenderTarget {
+function makeRT(w: number, h: number, type: TextureDataType, filter: RtFilter, depthBuffer: boolean, samples = 0): WebGLRenderTarget {
   return new WebGLRenderTarget(Math.max(1, w), Math.max(1, h), {
     type,
     format: RGBAFormat,
@@ -499,6 +565,7 @@ function makeRT(w: number, h: number, type: TextureDataType, filter: RtFilter, d
     depthBuffer,
     stencilBuffer: false,
     generateMipmaps: false,
+    samples,
   });
 }
 
@@ -532,6 +599,7 @@ interface HlrUniforms {
   tND: IUniform<Texture | null>;
   uInvResolution: IUniform<Vector2>;
   uRadiusPx: IUniform<number>;
+  uSupersample: IUniform<Vector2>;
   uDepthThreshold: IUniform<number>;
   uNormalThreshold: IUniform<number>;
   uEdgeColor: IUniform<Vector3>;
@@ -545,6 +613,7 @@ interface CompositeUniforms {
   uUseHlr: IUniform<number>;
   uUseAo: IUniform<number>;
   uUseGradient: IUniform<number>;
+  uHlrSupersample: IUniform<Vector2>;
   uBgTop: IUniform<Vector3>;
   uBgBottom: IUniform<Vector3>;
   uBgFlat: IUniform<Vector3>;
@@ -580,6 +649,12 @@ export class SglLookPipeline {
   private _blurRTa: WebGLRenderTarget;
   private _blurRTb: WebGLRenderTarget;
   private _hlrRT: WebGLRenderTarget;
+  /** FXAA 时合成先落到这里，再做 FXAA 到 target */
+  private _compositeRT: WebGLRenderTarget;
+  /** 颜色通道当前的 MSAA 采样数（0 = 无） */
+  private _colorSamples = 0;
+  /** 法线/深度与 HLR 通道当前的超采样倍数 */
+  private readonly _hlrSupersample = new Vector2(1, 1);
 
   private readonly _aoUniforms: AoUniforms = {
     tND: { value: null },
@@ -611,6 +686,7 @@ export class SglLookPipeline {
     tND: { value: null },
     uInvResolution: { value: new Vector2(1, 1) },
     uRadiusPx: { value: 1 },
+    uSupersample: { value: new Vector2(1, 1) },
     uDepthThreshold: { value: 50 },
     uNormalThreshold: { value: 0.6 },
     uEdgeColor: { value: new Vector3(0, 0, 0) },
@@ -624,6 +700,7 @@ export class SglLookPipeline {
     uUseHlr: { value: 1 },
     uUseAo: { value: 1 },
     uUseGradient: { value: 1 },
+    uHlrSupersample: { value: new Vector2(1, 1) },
     uBgTop: { value: new Vector3() },
     uBgBottom: { value: new Vector3() },
     uBgFlat: { value: new Vector3() },
@@ -635,6 +712,7 @@ export class SglLookPipeline {
   private readonly _blurMaterial: ShaderMaterial;
   private readonly _hlrMaterial: ShaderMaterial;
   private readonly _compositeMaterial: ShaderMaterial;
+  private readonly _fxaaMaterial: ShaderMaterial;
   private readonly _fsq: FullScreenQuad;
 
   private readonly _tmpColor = new Color();
@@ -646,6 +724,7 @@ export class SglLookPipeline {
       hlr: { ...defaults.hlr, ...(params?.hlr ?? {}) },
       ao: { ...defaults.ao, ...(params?.ao ?? {}) },
       background: { ...defaults.background, ...(params?.background ?? {}) },
+      aa: { ...defaults.aa, ...(params?.aa ?? {}) },
       legacyMode: params?.legacyMode ?? defaults.legacyMode,
     };
     this.options = {
@@ -661,12 +740,14 @@ export class SglLookPipeline {
     const dpr = renderer.getPixelRatio();
     const w = Math.round(this._size.x * dpr);
     const h = Math.round(this._size.y * dpr);
-    this._colorRT = makeRT(w, h, UnsignedByteType, LinearFilter, true);
+    this._colorSamples = this._wantedColorSamples();
+    this._colorRT = makeRT(w, h, UnsignedByteType, LinearFilter, true, this._colorSamples);
     this._ndRT = makeRT(w, h, this._ndType, NearestFilter, true);
     this._aoRT = makeRT(w, h, UnsignedByteType, LinearFilter, false);
     this._blurRTa = makeRT(w, h, UnsignedByteType, LinearFilter, false);
     this._blurRTb = makeRT(w, h, UnsignedByteType, LinearFilter, false);
     this._hlrRT = makeRT(w, h, UnsignedByteType, NearestFilter, false);
+    this._compositeRT = makeRT(w, h, UnsignedByteType, LinearFilter, false);
 
     this._ndMaterial = new ShaderMaterial({
       vertexShader: ND_VERTEX,
@@ -691,6 +772,17 @@ export class SglLookPipeline {
     this._blurMaterial = fsqMaterial(BLUR_FRAGMENT, this._blurUniforms as unknown as Record<string, IUniform>);
     this._hlrMaterial = fsqMaterial(HLR_FRAGMENT, this._hlrUniforms as unknown as Record<string, IUniform>);
     this._compositeMaterial = fsqMaterial(COMPOSITE_FRAGMENT, this._compositeUniforms as unknown as Record<string, IUniform>);
+    // FXAA 3.11（three 的 FXAAShader 移植版；sglDx11 3.1 用的也是 FXAA 3.11，参数 gQualitySubPix / EdgeThreshold / EdgeThresholdMin）
+    this._fxaaMaterial = new ShaderMaterial({
+      vertexShader: FXAAShader.vertexShader,
+      fragmentShader: FXAAShader.fragmentShader,
+      uniforms: UniformsUtils.clone(FXAAShader.uniforms),
+      blending: NoBlending,
+      depthTest: false,
+      depthWrite: false,
+      toneMapped: false,
+    });
+    this._fxaaMaterial.name = 'SglLookFxaa';
 
     this._fsq = new FullScreenQuad(this._compositeMaterial);
   }
@@ -698,17 +790,53 @@ export class SglLookPipeline {
   /** 以 CSS 像素给尺寸；内部按 renderer 的 pixelRatio 放大 */
   setSize(width: number, height: number): void {
     this._size.set(Math.max(1, width), Math.max(1, height));
+    this._ensureTargets();
+  }
+
+  /** 颜色通道要的 MSAA 采样数：'msaa' 模式下取 params.aa.samples（截到设备上限），其余 0 */
+  private _wantedColorSamples(): number {
+    if (this.params.aa.mode !== 'msaa') return 0;
+    const max = this._renderer.capabilities.maxSamples ?? 0;
+    const want = Math.max(1, Math.min(8, Math.round(this.params.aa.samples)));
+    const s = Math.min(want, max);
+    return s > 1 ? s : 0;
+  }
+
+  /**
+   * 按当前尺寸 / 抗锯齿参数整理各目标：颜色 RT 的 MSAA 采样数变了就重建；
+   * 法线/深度与 HLR 通道按 HLR 采样档位超采样（kx×ky）；AO 目标按 halfRes。尺寸没变时 setSize 是空操作。
+   */
+  private _ensureTargets(): void {
     const dpr = this._renderer.getPixelRatio();
     const w = Math.round(this._size.x * dpr);
     const h = Math.round(this._size.y * dpr);
-    this._colorRT.setSize(w, h);
-    this._ndRT.setSize(w, h);
-    this._hlrRT.setSize(w, h);
+    const samples = this._wantedColorSamples();
+    if (samples !== this._colorSamples) {
+      this._colorRT.dispose();
+      this._colorRT = makeRT(w, h, UnsignedByteType, LinearFilter, true, samples);
+      this._colorSamples = samples;
+    } else {
+      this._colorRT.setSize(w, h);
+    }
+    sglHlrSupersampleGrid(sglHlrSamplesFor(this.params), this._hlrSupersample);
+    this._ndRT.setSize(w * this._hlrSupersample.x, h * this._hlrSupersample.y);
+    this._hlrRT.setSize(w * this._hlrSupersample.x, h * this._hlrSupersample.y);
+    this._compositeRT.setSize(w, h);
     const aw = this.params.ao.halfRes ? Math.max(1, Math.round(w / 2)) : w;
     const ah = this.params.ao.halfRes ? Math.max(1, Math.round(h / 2)) : h;
     this._aoRT.setSize(aw, ah);
     this._blurRTa.setSize(aw, ah);
     this._blurRTb.setSize(aw, ah);
+  }
+
+  /** 颜色通道实际用的 MSAA 采样数（0 = 无；设备上限见 renderer.capabilities.maxSamples） */
+  get colorSamples(): number {
+    return this._colorSamples;
+  }
+
+  /** HLR 通道实际用的超采样倍数 (kx, ky)，kx·ky = HLR 采样档位 */
+  get hlrSupersample(): Vector2 {
+    return this._hlrSupersample.clone();
   }
 
   /** 画一帧到 target（null = 屏幕） */
@@ -719,17 +847,15 @@ export class SglLookPipeline {
     const useAo = effectsOn && p.ao.enabled;
     const useHlr = effectsOn && p.hlr.enabled;
     const useGradient = effectsOn && p.background.gradient;
+    const useFxaa = p.aa.mode === 'fxaa';
 
-    // AO 目标尺寸随 halfRes 变
+    // 目标尺寸 / MSAA 采样数 / HLR 超采样随参数变（尺寸没变时是空操作）
+    this._ensureTargets();
     const w = this._colorRT.width;
     const h = this._colorRT.height;
-    const aw = p.ao.halfRes ? Math.max(1, Math.round(w / 2)) : w;
-    const ah = p.ao.halfRes ? Math.max(1, Math.round(h / 2)) : h;
-    if (this._aoRT.width !== aw || this._aoRT.height !== ah) {
-      this._aoRT.setSize(aw, ah);
-      this._blurRTa.setSize(aw, ah);
-      this._blurRTb.setSize(aw, ah);
-    }
+    const aw = this._aoRT.width;
+    const ah = this._aoRT.height;
+    const ss = this._hlrSupersample;
 
     const prevTarget = renderer.getRenderTarget();
     const prevClearColor = renderer.getClearColor(this._tmpColor).clone();
@@ -817,12 +943,13 @@ export class SglLookPipeline {
       }
     }
 
-    // ⑤ HLR
+    // ⑤ HLR（在 kx×ky 倍分辨率上跑，邻居距离仍是 1 个屏幕像素）
     if (useHlr) {
       const u = this._hlrUniforms;
       u.tND.value = this._ndRT.texture;
-      u.uInvResolution.value.set(1 / w, 1 / h);
+      u.uInvResolution.value.set(1 / this._ndRT.width, 1 / this._ndRT.height);
       u.uRadiusPx.value = Math.max(1, p.hlr.radiusPx);
+      u.uSupersample.value.copy(ss);
       u.uDepthThreshold.value = p.hlr.depthThreshold;
       u.uNormalThreshold.value = p.hlr.normalThreshold;
       setSrgb(u.uEdgeColor.value, p.hlr.edgeColor);
@@ -831,7 +958,7 @@ export class SglLookPipeline {
       this._fsq.render(renderer);
     }
 
-    // ⑥ 合成
+    // ⑥ 合成（HLR 子像素取平均 = sglDx11 MSAA 版 HLR 的 Σ/N）；FXAA 时先落中间目标
     const cu = this._compositeUniforms;
     cu.tColor.value = this._colorRT.texture;
     cu.tND.value = this._ndRT.texture;
@@ -840,11 +967,21 @@ export class SglLookPipeline {
     cu.uUseHlr.value = useHlr ? 1 : 0;
     cu.uUseAo.value = useAo && aoTexture ? 1 : 0;
     cu.uUseGradient.value = useGradient ? 1 : 0;
+    cu.uHlrSupersample.value.copy(ss);
     setSrgb(cu.uBgTop.value, p.background.top);
     setSrgb(cu.uBgBottom.value, p.background.bottom);
     setSrgb(cu.uBgFlat.value, p.background.flat);
     cu.uBgGradT.value.set(p.background.gradientTopT, p.background.gradientBottomT);
     this._fsq.material = this._compositeMaterial;
+    if (useFxaa) {
+      renderer.setRenderTarget(this._compositeRT);
+      this._fsq.render(renderer);
+      // ⑦ FXAA（3.1 的可选后处理，与 MSAA 互斥；开着时 HLR 档位已是 1）
+      const fu = this._fxaaMaterial.uniforms;
+      fu.tDiffuse!.value = this._compositeRT.texture;
+      (fu.resolution!.value as Vector2).set(1 / w, 1 / h);
+      this._fsq.material = this._fxaaMaterial;
+    }
     renderer.setRenderTarget(target);
     if (target) renderer.clear(true, true, false);
     this._fsq.render(renderer);
@@ -906,8 +1043,8 @@ export class SglLookPipeline {
   }
 
   dispose(): void {
-    for (const rt of [this._colorRT, this._ndRT, this._aoRT, this._blurRTa, this._blurRTb, this._hlrRT]) rt.dispose();
-    for (const m of [this._ndMaterial, this._aoMaterial, this._blurMaterial, this._hlrMaterial, this._compositeMaterial]) m.dispose();
+    for (const rt of [this._colorRT, this._ndRT, this._aoRT, this._blurRTa, this._blurRTb, this._hlrRT, this._compositeRT]) rt.dispose();
+    for (const m of [this._ndMaterial, this._aoMaterial, this._blurMaterial, this._hlrMaterial, this._compositeMaterial, this._fxaaMaterial]) m.dispose();
     this._fsq.dispose();
   }
 
