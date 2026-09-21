@@ -19,6 +19,11 @@ export type SelectionManagerOptions = {
   selectionColor?: Color | number | string;
   /** 高亮颜色 (悬停效果) */
   highlightColor?: Color | number | string;
+  /**
+   * 「当前元素」颜色：给最近一次 select() 选进来的那批对象（E3D 的 CE，yellow），
+   * 更早追加选中的仍用 selectionColor（E3D 的 highlight，white）。不设则全部用 selectionColor。
+   */
+  primarySelectionColor?: Color | number | string | null;
   /** 是否允许多选 (默认 true) */
   multiSelect?: boolean;
 }
@@ -50,8 +55,12 @@ export class SelectionManager extends EventEmitter {
   private _selected = new Set<string>();
   /** 当前高亮的对象 ID */
   private _highlighted: string | null = null;
+  /** 最近一次 select() 选进来的那批（E3D 的 CE），只在设了 primarySelectionColor 时有区别 */
+  private _primary = new Set<string>();
   /** 选中颜色 */
   private _selectionColor: Color;
+  /** 「当前元素」颜色（null = 不区分） */
+  private _primarySelectionColor: Color | null;
   /** 高亮颜色 */
   private _highlightColor: Color;
   /** 是否允许多选 */
@@ -63,6 +72,7 @@ export class SelectionManager extends EventEmitter {
     super();
 
     this._selectionColor = this._toColor(options.selectionColor ?? 0xff8800);
+    this._primarySelectionColor = options.primarySelectionColor != null ? this._toColor(options.primarySelectionColor) : null;
     this._highlightColor = this._toColor(options.highlightColor ?? 0xffaa44);
     this._multiSelect = options.multiSelect ?? true;
   }
@@ -95,14 +105,27 @@ export class SelectionManager extends EventEmitter {
       this._selected.clear();
     }
 
+    // 「当前元素」换成这一批（始终记着，方便之后再打开 primarySelectionColor）；上一批还留在选中集里的退成普通选中色
+    if (ids.length > 0) {
+      const demoted = this._primarySelectionColor
+        ? Array.from(this._primary).filter((id) => this._selected.has(id) && !ids.includes(id))
+        : [];
+      this._primary.clear();
+      for (const id of ids) this._primary.add(id);
+      for (const id of demoted) this._updateObjectColor(id, this._selectionColor);
+    }
+
     // 添加新选中
     for (const id of ids) {
       if (!this._selected.has(id)) {
         if (this._multiSelect || this._selected.size === 0) {
           this._selected.add(id);
           added.push(id);
-          this._updateObjectColor(id, this._selectionColor);
+          this._updateObjectColor(id, this._colorFor(id));
         }
+      } else if (this._primarySelectionColor && this._primary.has(id)) {
+        // 已选中的对象被重新点成当前元素：刷成 CE 色
+        this._updateObjectColor(id, this._colorFor(id));
       }
     }
 
@@ -110,6 +133,11 @@ export class SelectionManager extends EventEmitter {
     if (added.length > 0 || removed.length > 0) {
       this._emitSelectionChanged(added, removed);
     }
+  }
+
+  /** 选中对象该用的颜色：当前元素批用 primarySelectionColor（若设），其余 selectionColor */
+  private _colorFor(objectId: string): Color {
+    return this._primarySelectionColor && this._primary.has(objectId) ? this._primarySelectionColor : this._selectionColor;
   }
 
   /**
@@ -127,6 +155,7 @@ export class SelectionManager extends EventEmitter {
 
     for (const id of ids) {
       if (this._selected.delete(id)) {
+        this._primary.delete(id);
         removed.push(id);
         this._updateObjectColor(id, null);
       }
@@ -161,7 +190,14 @@ export class SelectionManager extends EventEmitter {
     }
 
     this._selected.clear();
+    this._primary.clear();
     this._emitSelectionChanged([], removed);
+  }
+
+  /** 最近一次 select() 选进来、仍在选中集里的对象（E3D 的 CE）；未设 primarySelectionColor 时为空 */
+  getPrimarySelected(): string[] {
+    if (!this._primarySelectionColor) return [];
+    return Array.from(this._primary).filter((id) => this._selected.has(id));
   }
 
   /**
@@ -240,8 +276,26 @@ export class SelectionManager extends EventEmitter {
 
     // 更新已选中对象的颜色
     for (const id of this._selected) {
-      this._updateObjectColor(id, this._selectionColor);
+      this._updateObjectColor(id, this._colorFor(id));
     }
+  }
+
+  /**
+   * 设置「当前元素」颜色（null = 取消区分，全部用 selectionColor）。
+   * 已选中对象立即按新口径刷色；打开时最近一批（若还记着）成为当前元素，否则整个选中集都算当前元素。
+   */
+  setPrimarySelectionColor(color: Color | number | string | null): void {
+    this._primarySelectionColor = color != null ? this._toColor(color) : null;
+    if (this._primarySelectionColor && this._primary.size === 0) {
+      for (const id of this._selected) this._primary.add(id);
+    }
+    for (const id of this._selected) {
+      this._updateObjectColor(id, this._colorFor(id));
+    }
+  }
+
+  getPrimarySelectionColor(): Color | null {
+    return this._primarySelectionColor ? this._primarySelectionColor.clone() : null;
   }
 
   /**

@@ -143,11 +143,13 @@ import { DtxViewer, type BackgroundMode } from '@/viewer/dtx/DtxViewer';
 import { shouldStopShowDbnumLoad } from '@/viewer/dtx/showDbnumLoadPolicy';
 import {
   DEFAULT_SGL_LOOK_PRESET,
+  E3D_GRAPHICS_COLOUR_DEFAULTS,
   SGL_LOOK_PRESETS,
   SglLookPipeline,
   applySglLookPresetToPipelineParams,
   loadSgl31EnvCube,
   parseSglLookPresetId,
+  pdmsColourHex,
   type SglLookPresetId,
 } from '@/viewer/e3dLook';
 
@@ -344,7 +346,39 @@ function applySglLook(): void {
     pipeline.params.ao.enabled = sglLookAoEnabled.value;
     pipeline.params.background.gradient = sglLookGradientEnabled.value;
   }
+  const selection = selectionControllerRef.value;
+  if (selection) applySglSelectionStyle(selection, enabled);
   requestRender();
+}
+
+/** web 自己的选中口径：整体染成品红 + OutlinePass 粉色描边（E3D 外观关时） */
+const WEB_SELECTION_COLOR = 0xff4fd8;
+const WEB_HOVER_COLOR = 0xffaa44;
+/** E3D 口径（gphcolopt.default）：CE yellow、其余选中 / 悬停 = highlight white，整体染色、没有描边 */
+const E3D_CE_COLOUR = pdmsColourHex(E3D_GRAPHICS_COLOUR_DEFAULTS.ce)!;
+const E3D_HIGHLIGHT_COLOUR = pdmsColourHex(E3D_GRAPHICS_COLOUR_DEFAULTS.highlight)!;
+
+/**
+ * 选中 / CE 高亮跟 E3D 外观联动：开着时最近一次选进来的元素（CE）整体染 yellow、更早追加选中的染 white，
+ * 关掉 OutlinePass 描边（E3D 没有描边）；关掉时回到 web 自己的品红 + 描边。
+ */
+function applySglSelectionStyle(selection: DTXSelectionController, e3d: boolean): void {
+  if (e3d) {
+    selection.setPrimarySelectionColor(E3D_CE_COLOUR);
+    selection.setSelectionColor(E3D_HIGHLIGHT_COLOUR);
+    selection.setHighlightColor(E3D_HIGHLIGHT_COLOUR);
+    selection.setOutlineEnabled(false);
+  } else {
+    selection.setPrimarySelectionColor(null);
+    selection.setSelectionColor(WEB_SELECTION_COLOR);
+    selection.setHighlightColor(WEB_HOVER_COLOR);
+    selection.setOutlineEnabled(true);
+  }
+}
+
+/** E3D 外观开着时主场景走 SGL 管线（HLR / AO / 渐变背景），选中靠染色而不是 OutlinePass 的 composer */
+function useSglLookRenderPath(): boolean {
+  return sglLookEnabled.value && !!sglPipelineRef.value;
 }
 
 function getSglDtxLayers(): DTXLayer[] {
@@ -3128,7 +3162,7 @@ function renderFrameImmediate() {
   const selection = selectionControllerRef.value;
   if (renderModelUnitCompareScene(dtxViewer)) {
     // 分屏共享同一场景和相机；版本层显隐由两个 viewport 的 render pass 控制。
-  } else if (selection?.hasOutline()) {
+  } else if (selection?.hasOutline() && !useSglLookRenderPath()) {
     selection.renderOutline();
     renderDimensionOverlay(dtxViewer);
   } else {
@@ -3228,7 +3262,7 @@ function renderFrame() {
     const selection = selectionControllerRef.value;
     if (renderModelUnitCompareScene(dtxViewer)) {
       // 分屏共享同一场景和相机；版本层显隐由两个 viewport 的 render pass 控制。
-    } else if (selection?.hasOutline()) {
+    } else if (selection?.hasOutline() && !useSglLookRenderPath()) {
       selection.renderOutline();
       renderDimensionOverlay(dtxViewer);
     } else {
@@ -3420,6 +3454,11 @@ onMounted(async () => {
     if (lookGradientRaw !== null && lookGradientRaw !== undefined) {
       sglLookGradientEnabled.value = String(lookGradientRaw).trim() !== '0';
     }
+    // 一上来就开着 E3D 外观、而用户从没自己选过显示主题：元素颜色也按预设走（e3dFactory）。
+    // 选过主题（localStorage 里有）就尊重那次选择，不动。
+    if (sglLookEnabled.value && localStorage.getItem('viewer_display_theme_v2') === null) {
+      syncSglLookDisplayTheme(true);
+    }
   } catch {
     // ignore
   }
@@ -3533,7 +3572,8 @@ onMounted(async () => {
     camera: dtxViewer.camera,
     renderer: dtxViewer.renderer,
     container: canvas,
-    selectionColor: 0xff4fd8,
+    selectionColor: WEB_SELECTION_COLOR,
+    highlightColor: WEB_HOVER_COLOR,
     enableOutline: true,
     highlightMode: 'outline',
     outlineStyle: {
@@ -3545,6 +3585,8 @@ onMounted(async () => {
     },
   });
   selectionControllerRef.value = selectionController;
+  // E3D 外观开着就按 E3D 口径染色（CE yellow / highlight white，无描边）
+  applySglSelectionStyle(selectionController, sglLookEnabled.value);
 
   // 初始化动态 Pivot 控制器
   const pivotController = new DynamicPivotController(
@@ -5499,7 +5541,7 @@ onUnmounted(() => {
               </div>
               <div class="text-[11px] text-muted-foreground">
                 {{ SGL_LOOK_PRESETS[sglLookPreset].description }}
-                反射采 sglDx11 内嵌的环境立方体贴图；边线 / 伪阴影是 sglDx11 同款后处理（选中轮廓与版本分屏时暂不套用）。
+                反射采 sglDx11 内嵌的环境立方体贴图；边线 / 伪阴影是 sglDx11 同款后处理；选中按 E3D 染色（CE yellow、其余 white，无描边）；版本分屏时暂不套用。
               </div>
             </div>
 

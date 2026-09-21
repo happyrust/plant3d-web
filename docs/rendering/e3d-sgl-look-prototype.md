@@ -66,7 +66,10 @@ a   = colour.a                                      // 半透明 = 1 − 百分�
   的按元素覆盖仍最高，对应 E3D 对单个元素 `COLOUR`）。`materialConfig` 的颜色字符串新增 `pdms:<名|号>` 写法，查不到落兜底色而不是交给 three 当 CSS 名。
 - 联动：开「E3D 外观」/ 切预设时显示主题自动切到预设的 `displayTheme`（两套预设都是 `e3dFactory`），并记住之前的主题（`dtx_look_prev_theme`）；
   关 E3D 外观时若主题还是它就切回去。E3D 外观开着时手动点「E3D 专业色」等其它主题不受干扰（要 E3D 光照 + 专业配色就这么用）。
-- 未做：CE / 选中高亮仍是 web 自己的颜色（E3D 是 yellow / white）；项目自定义的 autocolour 规则要真机导出 `gphcolopt` 选项文件再翻成主题规则。
+- 选中 / CE 高亮（§5.5）：E3D 外观开着时按 `E3D_GRAPHICS_COLOUR_DEFAULTS` 染色——最近一次选进来的那批元素是 **CE = yellow**，更早追加选中的是
+  **highlight = white**，整体染色、没有描边（E3D 没有 OutlinePass 那种轮廓）；关掉 E3D 外观回到 web 自己的品红整体染色 + OutlinePass 描边。
+  `SelectionManager` 新增 `primarySelectionColor`（null = 不区分，全部用 `selectionColor`），`DTXSelectionController.setPrimarySelectionColor()` 透传。
+- 未做：项目自定义的 autocolour 规则要真机导出 `gphcolopt` 选项文件再翻成主题规则。
 
 ## 3. 后处理链（`SglLookPipeline`）
 
@@ -141,8 +144,28 @@ npm run dev                       # 然后打开 http://127.0.0.1:3101/e3d-look-
   `type-check` 基线外仍只有既有 4 条 worktree 路径错误；ESLint 通过。**未做浏览器截图**：主题切换走的是既有的
   `applyMaterialConfigToLoadedDtx → setObjectMaterial` 路径，没改渲染代码。
 
+## 5.5 第五轮：选中 / CE 高亮按 E3D 口径 + DTX 颜色的 sRGB 还原（2026-09-21）
+
+- `SelectionManager`：新增「当前元素」批（`_primary`，= 最近一次 `select()` 选进来的那批 objectId）与 `primarySelectionColor`；
+  设了它时 CE 批用 CE 色、其余选中用 `selectionColor`，Ctrl 追加选中会把上一批退成普通选中色，重新点已选中的元素会把它提成 CE；
+  `setPrimarySelectionColor(null)` 回到单色。`DTXSelectionController` 透传 `primarySelectionColor` / `highlightColor` 选项与
+  `setPrimarySelectionColor()` / `setHighlightColor()` / `getPrimarySelected()`。
+- ViewerPanel `applySglSelectionStyle()`：E3D 外观开 → CE yellow #ffff00、其它选中与悬停 white #ffffff、`setOutlineEnabled(false)`；
+  关 → 品红 #ff4fd8 + 悬停 #ffaa44 + 描边。渲染路径：E3D 外观开着时主场景一律走 `SglLookPipeline`（之前 `hasOutline()` 恒真，
+  只要建了 OutlineHelper 就走 composer，SGL 后处理在 ViewerPanel 里其实从没生效过），选中靠 DTX 的颜色覆盖纹理染色。
+  一上来就开着 E3D 外观且用户从没选过显示主题时，也把主题切到预设的 `e3dFactory`。
+- `DTXMaterial` program key → **v14**：SGL 分支的 `c` 先 `sglLinearToSrgb(albedo)` 再进公式。调色板 / 颜色覆盖纹理里存的是 three 的线性值
+  （`ColorManagement` 默认开，`new Color(0xbdbdbd).r = 0.509`），而 sglDx11 直接拿颜色表字节 ÷255 算、UNORM 目标直写不做 sRGB 编解码；
+  不还原的话 lightgrey 在 DTX 路径里会画成 130 而不是 189（`SglLookMaterial` 早就在 CPU 侧取 sRGB 分量上传，两条路径现在一致）。
+- 验证：`vitest`：新增 `SelectionManager.test.ts` 4/4（默认单色、CE / 追加退色 / 重选提级 / 取消清空、运行时切口径、悬停），
+  selection 目录 + e3dLook + DTX 目录共 65/65；`type-check` 基线外仍只有既有 4 条 worktree 路径错误；ESLint 通过。
+  无头 Chrome（SwiftShader）临时 harness（真实 `DTXLayer` + `DTXMaterial` + `DTXSelectionController` + `SglLookPipeline`，三个 lightgrey 盒子，
+  `select(['a'])` 再 `select('b', true)`）像素探针 15/15：Ka=1 直出时未选中 = (189,189,189)（v14 生效）、CE = (255,255,0)、highlight = (255,255,255)、
+  背景 (130,130,130)；出厂预设下 CE (255,255,79)、highlight (249,249,249)、未选中 (220,220,220)，渐变顶 160 / 底 242；
+  web 口径（composer 描边路径）两个选中都是品红 (191,43,164)，未选中中性；全程无 console / 着色器错误。**未在主界面真模型上截图**（要后端）。
+
 ## 6. 下一步
 
 1. HBAO / 模糊参数按 §5.2 数值对齐（当前 400 mm/8 方向/6 步/AngleBias 0.1/Contrast 1.25/模糊半径 4；E3D 3.1 为 392.73 mm/8/4/30°/Attenuation 0.2/Contrast 1.25/模糊 12）。
 2. 在未修补的 E3D 3.1 上（或补跑 `!!gphViewOpt.applyToView`）复核出厂外观与立方体贴图朝向；`SHINY`(30) / `TRANSLUCENCY_STYLE`(51) 分支仍未读。
-3. 选中 / CE 高亮改 E3D 口径（yellow / white）；如项目有自定义 autocolour 规则，导出 `gphcolopt` 选项文件翻成 `themes.*` 规则（颜色用 `pdms:` 名）。
+3. 如项目有自定义 autocolour 规则，导出 `gphcolopt` 选项文件翻成 `themes.*` 规则（颜色用 `pdms:` 名）；active orange / aids blue / tracing magenta 尚未接。

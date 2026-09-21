@@ -254,6 +254,11 @@ uniform int sglOutput;
 // === 输出 ===
 out vec4 fragColor;
 
+// 线性 → sRGB（three 的 sRGBTransferOETF 同款），SGL 分支把颜色还原成 E3D 颜色表的字节值
+vec3 sglLinearToSrgb(vec3 lin) {
+  return mix(pow(lin, vec3(0.41666)) * 1.055 - vec3(0.055), lin * 12.92, vec3(lessThanEqual(lin, vec3(0.0031308))));
+}
+
 // === PBR 光照计算（简化版）===
 vec3 calculatePBR(vec3 N, vec3 V, vec3 L, vec3 albedo, float metalness, float roughness, vec3 lightColor) {
   vec3 H = normalize(V + L);
@@ -329,6 +334,9 @@ void main() {
   if (sglLighting == 1) {
     // AVEVA E3D sglDx11 前向着色：单头灯 Blinn-Phong + 环境立方体贴图反射
     //   rgb = c·(Ka + Kd·N·L) + Ks·pow(N·H,Kse)·N·L + Kr·env(reflect(-V,N)).rgb
+    // c 是 E3D 颜色表的 sRGB 字节直接 ÷255（sglDx11 在 UNORM 目标上直写，不做 sRGB 解码）；
+    // 调色板 / 覆盖色里存的是 three 的线性值，先转回 sRGB 再进公式，lightgrey 才会是 189 而不是 130
+    vec3 c = sglLinearToSrgb(albedo);
     mat3 viewRot = mat3(viewMatrix);
     vec3 Nv = normalize(viewRot * N);
     vec3 Vv = normalize(viewRot * V);
@@ -346,7 +354,7 @@ void main() {
       float envT = clamp(dot(Rw, sglUp) * 0.5 + 0.5, 0.0, 1.0);
       env = vec3(mix(sglEnvGroundLum, sglEnvSkyLum, envT));
     }
-    finalColor = albedo * (sglKa + sglKd * ndl) + sglKs * spec + sglKr * env;
+    finalColor = c * (sglKa + sglKd * ndl) + sglKs * spec + sglKr * env;
   } else {
     vec3 ambient = ambientLight * albedo;
     vec3 directLight0 = calculatePBR(N, V, normalize(lightDirection0), albedo, vMetalness, vRoughness, lightColor0);
@@ -484,7 +492,8 @@ export class DTXMaterial extends ShaderMaterial {
     // v11: fragment shader 加 backFaceBias（z-fighting Tier 1，docs/issues/dtx-model-z-fighting-flicker-2026-04-29.md）
     // v12: SGL（E3D sglDx11）口径光照分支 + 面法线/线性深度输出（docs/rendering/e3d-sgl-look-prototype.md）
     // v13: SGL 分支接入环境立方体贴图（sglEnvMap / sglUseEnvMap / sglEnvRot），反射改逐通道
-    return 'DTXMaterial_v13';
+    // v14: SGL 分支的 c 先从线性转回 sRGB 字节值（E3D 颜色表口径）
+    return 'DTXMaterial_v14';
   }
 
   // ========== SGL（E3D）口径 ==========
