@@ -10,6 +10,7 @@ import GenModelV1HealthBadge from '@/components/model-tree/GenModelV1HealthBadge
 import ModelGenerationProgressModal from '@/components/model-tree/ModelGenerationProgressModal.vue';
 import ModelTreeRow from '@/components/model-tree/ModelTreeRow.vue';
 import ModelVersionAttrDiffPanel from '@/components/model-tree/ModelVersionAttrDiffPanel.vue';
+import RoomTreePanel from '@/components/model-tree/RoomTreePanel.vue';
 import { ensurePanelAndActivate } from '@/composables/useDockApi';
 import { useModelGeneration } from '@/composables/useModelGeneration';
 import { setModelTreeInstance } from '@/composables/useModelTreeStore';
@@ -34,6 +35,13 @@ const props = defineProps<{
 
 /** gen-model 连接徽标（plan 2026-09-06 P1-4）：legacy 退役后 gen-model-v1 是唯一数据源，徽标常驻。 */
 const showGenModelV1Badge = true;
+
+/**
+ * 页签：PDMS 属主树 / 「房间」（ADR 0068 房间层级树，`RoomTreePanel`，2026-09-21 起；退役掉的旧 ROOM 页签走的是旧后端）。
+ * 搜索 / 类型筛选 / 差异模式 / 右键菜单都只属于 PDMS 树；两棵树都 `v-show` 常驻，切回来时展开与勾选状态还在。
+ */
+const activeTab = ref<'pdms' | 'room'>('pdms');
+const isPdmsTab = computed(() => activeTab.value === 'pdms');
 
 // 只剩 PDMS 一棵树：旧后端 `/api/room-tree/*` 的 ROOM 页签 2026-09-20 随 legacy 退役（D1）。
 const pdmsViewerRef = shallowRef<DtxCompatViewer | null>(props.viewer);
@@ -735,6 +743,15 @@ function clearFilters() {
   typePopoverOpen.value = false;
 }
 
+/** 切页签：PDMS 的两个弹层与右键菜单一起收起，别挂在「房间」页上。 */
+function switchTab(tab: 'pdms' | 'room') {
+  if (activeTab.value === tab) return;
+  activeTab.value = tab;
+  searchPopoverOpen.value = false;
+  typePopoverOpen.value = false;
+  closeContextMenu();
+}
+
 function getSearchItemId(item: unknown): string {
   return String((item as { refno?: unknown }).refno ?? '');
 }
@@ -1053,17 +1070,31 @@ function onSearchEnter(value: string) {
     @touchstart.passive="onTouchStartStop">
     <div class="sticky top-0 z-20 border-b border-border/60 bg-background/95 px-3 py-2 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div class="relative flex items-center gap-2">
-        <div class="flex h-8 items-center rounded-md bg-muted p-1 text-muted-foreground">
-          <span class="inline-flex h-full items-center justify-center rounded-sm bg-background px-3 text-xs font-medium text-foreground shadow-sm">
+        <div class="flex h-8 items-center rounded-md bg-muted p-1 text-muted-foreground" data-testid="model-tree-tabs">
+          <button type="button"
+            class="inline-flex h-full items-center justify-center rounded-sm px-3 text-xs font-medium transition-colors"
+            :class="isPdmsTab ? 'bg-background text-foreground shadow-sm' : 'hover:text-foreground'"
+            data-testid="model-tree-tab-pdms"
+            @mousedown.stop
+            @click="switchTab('pdms')">
             PDMS
-          </span>
+          </button>
+          <button type="button"
+            class="inline-flex h-full items-center justify-center rounded-sm px-3 text-xs font-medium transition-colors"
+            :class="!isPdmsTab ? 'bg-background text-foreground shadow-sm' : 'hover:text-foreground'"
+            title="在册房间 → 专业 → 最小交付单元 → 构件（服务端聚合，ADR 0068）"
+            data-testid="model-tree-tab-room"
+            @mousedown.stop
+            @click="switchTab('room')">
+            房间
+          </button>
         </div>
 
         <GenModelV1HealthBadge v-if="showGenModelV1Badge" />
 
         <div class="flex-1" />
 
-        <div class="flex items-center gap-0.5">
+        <div v-if="isPdmsTab" class="flex items-center gap-0.5">
           <button type="button"
             data-model-tree-popover-trigger="true"
             class="inline-flex h-7 w-7 items-center justify-center rounded-sm text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -1226,7 +1257,7 @@ function onSearchEnter(value: string) {
     </div>
 
     <!-- 版本差异模式工具条：版本对胶囊 + 差异筛选 chips -->
-    <div v-if="diffActive"
+    <div v-if="diffActive && isPdmsTab"
       class="border-b border-border bg-brand-subtle px-3 py-2"
       data-testid="model-tree-diff-bar">
       <div class="flex items-center justify-between gap-2">
@@ -1266,7 +1297,8 @@ function onSearchEnter(value: string) {
       </div>
     </div>
 
-    <div ref="containerRef"
+    <div v-show="isPdmsTab"
+      ref="containerRef"
       class="relative min-h-0 flex-1 overflow-auto rounded-md border border-border bg-background p-2">
       <div class="relative w-full"
         :style="{ height: `${totalSize}px` }">
@@ -1294,8 +1326,14 @@ function onSearchEnter(value: string) {
       </div>
     </div>
 
+    <!-- 「房间」页签（ADR 0068）：在册房间平铺 + 展开一间房是服务端聚合的层级树；v-show 常驻，切回来状态还在 -->
+    <RoomTreePanel v-show="!isPdmsTab"
+      class="min-h-0 flex-1"
+      :viewer="props.viewer"
+      :active="!isPdmsTab" />
+
     <!-- 版本差异模式：选中变更构件在 A / B 两版下的属性逐项对比（取数口随差异上下文来，没有就不显示） -->
-    <ModelVersionAttrDiffPanel v-if="diffActive && diffSelectedModel && diffContext?.attributesAt"
+    <ModelVersionAttrDiffPanel v-if="isPdmsTab && diffActive && diffSelectedModel && diffContext?.attributesAt"
       class="max-h-[45%] shrink-0"
       :model="diffSelectedModel"
       :from-sesno="diffContext?.fromSesno"

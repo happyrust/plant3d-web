@@ -16,7 +16,7 @@
  *   `spatial_not_ready`（503）的 `isRetryable` 为真，调用方据此提示「稍后重试」；`rooms=` 给了而房间体制不可用的
  *   422 `precondition`（`detail.reason = rooms_unavailable`）折成 `success:false` + `detail.status` 那一句。
  */
-import type { SpatialSource, SpatialSourceCapabilities } from '../ports';
+import type { SpatialRoomTreeOptions, SpatialSource, SpatialSourceCapabilities } from '../ports';
 import type {
   NegativeNounsResult,
   SpatialNearbyParams,
@@ -35,6 +35,7 @@ import {
   genModelV1SpatialNearbyRefnos,
   genModelV1SpatialNearbyTree,
   genModelV1SpatialNegativeNouns,
+  genModelV1SpatialRoomTree,
   genModelV1SpatialRooms,
   isGenModelV1ApiError,
   type GenModelV1SpatialNearbyRequest,
@@ -57,6 +58,8 @@ export type SpatialApi = {
   roomLookup?: typeof genModelV1RoomLookup;
   /** `GET /api/v1/spatial/nearby/tree`（ADR 0068）；老测试桩没给它时 `tree()` 回 `success:false` */
   nearbyTree?: typeof genModelV1SpatialNearbyTree;
+  /** `GET /api/v1/spatial/rooms/{refno}/tree`（ADR 0068，模型树「房间」页签）；老测试桩没给它时 `roomTree()` 回 `success:false` */
+  roomTree?: typeof genModelV1SpatialRoomTree;
 };
 
 export const defaultSpatialApi: SpatialApi = {
@@ -66,6 +69,7 @@ export const defaultSpatialApi: SpatialApi = {
   rooms: genModelV1SpatialRooms,
   roomLookup: genModelV1RoomLookup,
   nearbyTree: genModelV1SpatialNearbyTree,
+  roomTree: genModelV1SpatialRoomTree,
 };
 
 /**
@@ -434,6 +438,30 @@ export function createGenModelV1SpatialSource(options: GenModelV1SpatialSourceOp
         const unavailable = roomsUnavailableDetail(error);
         if (unavailable) {
           return emptyTreeFailure(spatialRoomsUnavailableMessage(unavailable.status, unavailable.reason));
+        }
+        throw error;
+      }
+    },
+    async roomTree(roomRefno, options?: SpatialRoomTreeOptions, only?: SpatialTreeLeafSelector): Promise<SpatialTreeResult> {
+      if (!api.roomTree) return emptyTreeFailure(SPATIAL_TREE_UNSUPPORTED_MESSAGE, true);
+      try {
+        return spatialTreeToLegacyResult(await api.roomTree(roomRefno, {
+          margin: options?.margin,
+          nouns: options?.nouns,
+          keyword: options?.keyword,
+          includeNegative: options?.includeNegative,
+          dbnums: options?.dbnums,
+          specValues: options?.specValues,
+        }, only));
+      } catch (error) {
+        if (isGenModelV1ApiError(error)) {
+          // 404：房间从没生成过面板模型（没有盒）；400：不在册 / 路径坏——都折成一句原因，页签在房间行下显示
+          if (error.isNotFound) return emptyTreeFailure(`房间 ${fromV1Refno(roomRefno)} 还没有包围盒（从未生成过面板模型），先显示它再展开`);
+          if (error.status === 400) return emptyTreeFailure(error.message || `房间 ${fromV1Refno(roomRefno)} 不在册`);
+          const unavailable = roomsUnavailableDetail(error);
+          if (unavailable) {
+            return emptyTreeFailure(spatialRoomsUnavailableMessage(unavailable.status, unavailable.reason));
+          }
         }
         throw error;
       }

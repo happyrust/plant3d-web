@@ -589,6 +589,47 @@ describe('gen-model-v1 spatialSource', () => {
     expect(await disabled.tree({ x: 1, y: 2, z: 3, radius: 800, rooms: '1_1' })).toMatchObject({ success: false, error: spatialRoomsUnavailableMessage('disabled', 'room_membership=false') });
   });
 
+  it('roomTree()（ADR 0068，模型树「房间」页签）：把房间 refno 与过滤 / 选择器交给 rooms/{refno}/tree，响应同 tree() 映射；桩没给 → unsupported；404 / 400 / 422 各折成一句', async () => {
+    const api = {
+      nearby: vi.fn(async () => nearbyResponse()),
+      nearbyRefnos: vi.fn(async (): Promise<SpatialNearbyRefnosResponse> => ({ refnos: [], by_dbnum: {}, total_count: 0, truncated_results: false, result_cap: 100000, center: { x: 0, y: 0, z: 0, source: 'position' }, radius: 1, shape: 'sphere' })),
+      negativeNouns: vi.fn(async () => ({ nouns: [] })),
+      roomTree: vi.fn(async () => treeResponse()),
+    };
+    const source = createGenModelV1SpatialSource({ api });
+    const result = await source.roomTree('24381_35580', { margin: 500, nouns: ['PANE'], specValues: [3] }, { otherNoun: 'PANE' });
+    expect(result.success).toBe(true);
+    expect(result.rooms[0]).toMatchObject({ refno: '24381_35580', room_num: 'R432', count: 3 });
+    expect(api.roomTree).toHaveBeenCalledWith(
+      '24381_35580',
+      { margin: 500, nouns: ['PANE'], keyword: undefined, includeNegative: undefined, dbnums: undefined, specValues: [3] },
+      { otherNoun: 'PANE' },
+    );
+    // 不带过滤：全 undefined 的过滤对象 + 没有选择器
+    await source.roomTree('24381_35580');
+    expect(api.roomTree).toHaveBeenLastCalledWith('24381_35580', { margin: undefined, nouns: undefined, keyword: undefined, includeNegative: undefined, dbnums: undefined, specValues: undefined }, undefined);
+
+    const bare = createGenModelV1SpatialSource({ api: { nearby: api.nearby, nearbyRefnos: api.nearbyRefnos, negativeNouns: api.negativeNouns } });
+    expect(await bare.roomTree('24381_35580')).toMatchObject({ success: false, unsupported: true, error: SPATIAL_TREE_UNSUPPORTED_MESSAGE, rooms: [] });
+
+    // 404 = 房间从没生成过面板模型（没有盒）；400 = 不在册 / 路径坏（服务端那句原样）；422 = 房间体制不可用
+    const notFound = new GenModelV1ApiError({ code: 'not_found', message: 'nope', status: 404, path: '/api/v1/spatial/rooms/24381_35580/tree' });
+    const missing = await createGenModelV1SpatialSource({ api: { ...api, roomTree: vi.fn(async () => { throw notFound; }) } }).roomTree('24381_35580');
+    expect(missing.success).toBe(false);
+    expect(missing.unsupported).toBeUndefined();
+    expect(missing.error).toContain('24381_35580');
+    expect(missing.error).toContain('包围盒');
+    const badRequest = new GenModelV1ApiError({ code: 'bad_request', message: 'rooms 里的 1/1 不是在册房间', status: 400, path: '/api/v1/spatial/rooms/1_1/tree' });
+    expect(await createGenModelV1SpatialSource({ api: { ...api, roomTree: vi.fn(async () => { throw badRequest; }) } }).roomTree('1_1'))
+      .toMatchObject({ success: false, error: 'rooms 里的 1/1 不是在册房间' });
+    const unavailable = new GenModelV1ApiError({ code: 'precondition', message: 'x', status: 422, path: '/api/v1/spatial/rooms/24381_35580/tree', detail: { reason: 'rooms_unavailable', status: 'disabled', message: 'room_membership=false' } });
+    expect(await createGenModelV1SpatialSource({ api: { ...api, roomTree: vi.fn(async () => { throw unavailable; }) } }).roomTree('24381_35580'))
+      .toMatchObject({ success: false, error: spatialRoomsUnavailableMessage('disabled', 'room_membership=false') });
+    // 别的错误（503 spatial_not_ready）原样抛
+    const notReady = new GenModelV1ApiError({ code: 'spatial_not_ready', message: 'tree building', status: 503, path: '/api/v1/spatial/rooms/24381_35580/tree' });
+    await expect(createGenModelV1SpatialSource({ api: { ...api, roomTree: vi.fn(async () => { throw notReady; }) } }).roomTree('24381_35580')).rejects.toBe(notReady);
+  });
+
   it('错误分型：refno 模式 not_found 折成 success:false + 「先显示该构件」；spatial_not_ready 原样抛出且 isRetryable；点模式 not_found 也原样抛', async () => {
     const notFound = new GenModelV1ApiError({ code: 'not_found', status: 404, path: '/api/v1/spatial/nearby', message: 'no aabb for refno' });
     const notReady = new GenModelV1ApiError({

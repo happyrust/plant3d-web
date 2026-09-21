@@ -262,7 +262,23 @@ export type SpatialSource = {
    * 用 `only` 再取一组。不支持的源（legacy）回 `{ success: false, rooms: [] , error }`，不打后端。
    */
   tree(params: SpatialNearbyParams, only?: SpatialTreeLeafSelector): Promise<SpatialTreeResult>;
+  /**
+   * 一间在册房间的房间层级树（ADR 0068，`GET /api/v1/spatial/rooms/{refno}/tree`，spec §4.13.6）：以房间自身的包围盒为范围、
+   * `rooms=` 它自己、不算它自己的面板；响应同 `tree()`，`rooms[]` 恒一条。模型树「房间」页签展开一间房时吃它（plan
+   * 2026-09-20-spatial-room-hierarchy-tree §4.5）。房间没生成过面板模型 → `success:false`（`error` 是原因）；房间体制不可用同 `tree()`。
+   */
+  roomTree(roomRefno: string, options?: SpatialRoomTreeOptions, only?: SpatialTreeLeafSelector): Promise<SpatialTreeResult>;
   readonly capabilities: SpatialSourceCapabilities;
+};
+
+/** `roomTree()` 的可选过滤：`margin` 是房间盒的外扩量（mm，缺省 0 = 与房间盒相交），其余同 `nearby` 的同名过滤。 */
+export type SpatialRoomTreeOptions = {
+  margin?: number;
+  nouns?: string[];
+  keyword?: string;
+  includeNegative?: boolean;
+  dbnums?: number[];
+  specValues?: number[];
 };
 
 /** 一个模型版本对模型的影响；五态词表沿用 ADR 0045（前端与词汇表都在用），gen-model-v1 `model/versions` 按同一词表给。 */
