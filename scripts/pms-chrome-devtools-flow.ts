@@ -709,7 +709,14 @@ async function main(): Promise<void> {
       const bran = (process.env.PMS_TARGET_BRAN_REFNO || PMS_DEFAULT_TEST_BRAN_REFNO).trim();
       const branAlt = bran.includes('_') ? bran.replace(/_/g, '/') : bran.replace(/\//g, '_');
       let reviewEntryCandidates: PmsReviewEntryCandidate[] = [];
-      let reviewLookupNeedles = uniqNeedles([pkg]);
+      /**
+       * 回查 PMS 列表的匹配键：包名之外再带上本次发起拿到的 form_id。
+       * 真实 PowerPMS 的三维校审单列表并不存我们的编校审包名，但会把 embed-url 回的 form_id 存成
+       * ModelFormId 并显示在行里（2026-09-21 真机核对）；列表接口也不是可嗅探的 JSON，
+       * 只靠包名会在「严格校验 / extended 回查」处找不到刚建的记录。
+       */
+      const createdFormId = submitResult.createResult?.formId?.trim() || null;
+      let reviewLookupNeedles = uniqNeedles([createdFormId, pkg]);
       if (pmsApiSniffer) {
         console.error('[cdp] 回到三维校审单以触发列表接口…');
         await page.bringToFront().catch(() => undefined);
@@ -747,6 +754,7 @@ async function main(): Promise<void> {
           console.error('[cdp] PMS 候选记录：未能从已捕获 JSON 中提取到可用的结构化记录，将只能按包名回查列表');
         }
         reviewLookupNeedles = uniqNeedles([
+          createdFormId,
           ...reviewEntryCandidates.flatMap((candidate) => [
             candidate.modelFormId,
             candidate.formId,
