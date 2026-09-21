@@ -25,14 +25,18 @@ import {
   buildTreeDiffModels,
   type TreeDiffDispatchInput,
   compareModelUnitGeometry,
+  countGroupProjections,
   formatModelUnitVersionTime,
   geometrySnapshotsFromInstanceEntries,
+  mergeModelUnitVersionSides,
   modelUnitGroupSideImpactKinds,
   modelUnitVersionAbsentNote,
+  MODEL_UNIT_COMPARE_MAX_UNITS,
   MODEL_UNIT_VERSION_COMPARE_EVENT,
   MODEL_UNIT_VERSION_COMPARE_STATE_EVENT,
   MODEL_VERSION_INSPECT_EVENT,
   orderModelUnitVersionPair,
+  pickMostChangedGroups,
   readModelUnitVersionCompareUrl,
   takePendingModelVersionInspect,
   type ModelUnitCompareSide,
@@ -41,6 +45,8 @@ import {
   type ModelUnitGeometryStatus,
   type ModelUnitVersionCompareEventDetail,
   type ModelUnitVersionCompareRuntimeState,
+  type ModelUnitVersionCompareUnit,
+  type ModelUnitVersionSide,
 } from '@/utils/modelUnitVersionCompare';
 import {
   buildNodeTimelineRows,
@@ -70,8 +76,9 @@ import {
  * - 新路由（旧服务端没有时回落、照实说）：`attributeHistory`（user / comment / 逐属性 before-after）、`attributeDiff`
  *   （A / B 两版的属性净差，服务端两端直接读终态；没有时回落到把时间线在 (A, B] 里折）与 `diffSummary`
  *   （A→B 不生成几何的差异摘要，按单元分组）。
- * 三维对比仍是单元级的（几何只按单元生成）：`所有子节点` 下差异摘要按单元分组，每组一个「在三维中对比」，一次装一个单元
- * （多单元一次装载是下一期的活，见 ADR 0066）。
+ * 三维对比是单元级的（几何只按单元生成）：`所有子节点` 下差异摘要按单元分组，每组一个「在三维中对比」装那一个单元；不止一组时
+ * 还有一颗总按钮把变了的单元**一起**进三维（`runCompareGroups`，按份并发 ≤ 2、进度「n / m 份」、一发 `open` 带 `units[]`；
+ * 超过 `MODEL_UNIT_COMPARE_MAX_UNITS` 或服务端 `needsConfirm` 先弹确认：全部 / 先装变化最大的 N 个 / 取消，见 ADR 0066、收口计划 P2-a / P2-b）。
  */
 
 // URL 入口（Q16）见 `readModelUnitVersionCompareUrl`；面板本身由 `DockLayout` 按同一个开关打开。
@@ -116,8 +123,15 @@ const activeTab = ref<'attributes' | 'model'>('attributes');
 const compareActive = ref(false);
 const compareRuntime = ref<ModelUnitVersionCompareRuntimeState | null>(null);
 const compareCompleted = ref(false);
-/** 三维里当前装的是哪个单元（`所有子节点` 下可能不是节点自己所属的那个） */
-const comparedInViewer = ref<string | null>(null);
+/** 三维里当前装的是哪几个单元（`所有子节点` 下可能不是节点自己所属的那个；多单元一次装载时是一串） */
+const comparedInViewer = ref<string[]>([]);
+/**
+ * 多单元一次装载（P2-a）的进度卡「正在生成历史投影 n / m」：份 = 要去 `history/generate` 的「单元@sesno」（tombstone 侧不算、
+ * 同 geometryKey 的两侧算一份）；`current` 是正在装的那几份。单单元也走这条（m ≤ 2），卡只在 m > 2 时露出。
+ */
+const compareProgress = ref<{ done: number; total: number; current: string[] } | null>(null);
+/** P2-b 阈值确认（设计稿 S2b ②）：待确认的那批组；null = 没在问 */
+const pendingGroupsConfirm = ref<ModelNodeDiffGroup[] | null>(null);
 const diffSummary = ref<ModelNodeDiffSummary | null>(null);
 const diffSummaryError = ref<string | null>(null);
 const diffSummaryUnavailable = ref(false);
@@ -239,19 +253,33 @@ function dispatch(detail: ModelUnitVersionCompareEventDetail): void {
  * 把本次模型几何差异送进模型树的差异模式（徽章 / 幽灵节点 / 筛选）。本面板是该通道唯一的派发方（ADR 0065 §1.4）；
  * 模型列表怎么折（`unchanged` 不进、`ownerRefno` 从哪侧取、tombstone 补单元根）见 `buildTreeDiffModels`。
  */
-function dispatchTreeDiff(input: TreeDiffDispatchInput, geometries: { before: ModelVersionGeometry; after: ModelVersionGeometry }): void {
-  const models = buildTreeDiffModels(input);
-  // 属性历史对比的取数口：闭包住本次对比持有的两份版本几何（句柄在里面），树那边只认「哪一侧、哪个 refno」
-  const attributesAt: TreeDiffAttributesAt = (side, refno, signal) =>
-    getModelSource().versions.attributesAt(side === 'before' ? geometries.before : geometries.after, refno, { signal });
+type TreeDiffUnit = { input: TreeDiffDispatchInput; geometries: { before: ModelVersionGeometry; after: ModelVersionGeometry } };
+
+/**
+ * 「哪一侧、哪个 refno」→ 该去哪份版本几何里取属性：多单元一次装载时每个单元一对句柄，按 refno 在那一侧的 `refnos` 里找它属于哪份；
+ * 找不到（单元根自己 / 幽灵）就退到第一份。单单元就只有一份。
+ */
+function attributesAtFor(units: readonly TreeDiffUnit[]): TreeDiffAttributesAt {
+  const pick = (side: ModelUnitCompareSide, refno: string): ModelVersionGeometry => {
+    const hit = units.length > 1 ? units.find((unit) => unit.geometries[side].refnos.includes(refno)) : undefined;
+    return (hit ?? units[0]!).geometries[side];
+  };
+  return (side, refno, signal) => getModelSource().versions.attributesAt(pick(side, refno), refno, { signal });
+}
+
+/** 模型树差异模式：每个单元各折一份模型列表（B 侧 tombstone 的单元根也进树）拼起来；`attributesAt` 闭包住本次持有的全部版本几何 */
+function dispatchTreeDiff(units: readonly TreeDiffUnit[]): void {
+  const first = units[0];
+  if (!first) return;
+  const models = units.flatMap((unit) => buildTreeDiffModels(unit.input));
   dispatchTreeDiffContext({
-    dbnum: input.dbnum,
-    fromSesno: input.before.sesno,
-    toSesno: input.after.sesno,
+    dbnum: first.input.dbnum,
+    fromSesno: first.input.before.sesno,
+    toSesno: first.input.after.sesno,
     mode: 'compare',
     refnos: models.map((model) => model.refno),
     models,
-    attributesAt,
+    attributesAt: attributesAtFor(units),
   });
 }
 
@@ -406,6 +434,7 @@ async function loadVersions(): Promise<void> {
   elementDiffs.value = new Map();
   expandedElement.value = null;
   timelineExpanded.value = false;
+  pendingGroupsConfirm.value = null;
   dbnum.value = null;
   beforeSesno.value = null;
   afterSesno.value = null;
@@ -589,6 +618,8 @@ async function loadDiffSummary(): Promise<void> {
   diffSummaryError.value = null;
   elementDiffs.value = new Map();
   expandedElement.value = null;
+  // 摘要换了，还没答的阈值确认框问的是上一份摘要的组，一并收掉
+  pendingGroupsConfirm.value = null;
   if (dbnum.value === null || !pairReady.value || diffSummaryUnavailable.value || !elementTimeline.value) return;
   const fetcher = optionalSource().versions?.diffSummary;
   if (typeof fetcher !== 'function') {
@@ -679,8 +710,8 @@ async function runCompare(): Promise<void> {
  * A / B 是节点子树的会话、单元不一定两版都在：单元根那行 `deleted` / `added` 的那一侧标 `tombstone`（`modelUnitGroupSideImpactKinds`），
  * 不然去 `history/generate` 一个它不存在的会话会 404 进不了三维（README §8.4）。
  */
-async function runCompareGroup(group: ModelNodeDiffGroup): Promise<void> {
-  if (dbnum.value === null || !group.unitRefno || !pairReady.value) return;
+/** 某一组（某个最小交付单元）在 A / B 两个会话下的 `ModelVersion`：单元根那行 `deleted` / `added` 的那一侧标 `tombstone` */
+function groupVersions(group: ModelNodeDiffGroup): { unitRefno: string; unitNoun: string; before: ModelVersion; after: ModelVersion } {
   const kinds = modelUnitGroupSideImpactKinds(group);
   const make = (sesno: number, impactKind: ModelVersionImpactKind): ModelVersion => ({
     dbnum: dbnum.value!,
@@ -690,72 +721,180 @@ async function runCompareGroup(group: ModelNodeDiffGroup): Promise<void> {
     sessionTime: timelineRows.value.find((row) => row.sesno === sesno)?.sessionTime ?? null,
     impactKind,
   });
-  await runCompareVersions(make(beforeSesno.value!, kinds.before), make(afterSesno.value!, kinds.after), group.unitRefno);
+  return { unitRefno: group.unitRefno!, unitNoun: group.unitNoun ?? '', before: make(beforeSesno.value!, kinds.before), after: make(afterSesno.value!, kinds.after) };
 }
 
+async function runCompareGroup(group: ModelNodeDiffGroup): Promise<void> {
+  if (dbnum.value === null || !group.unitRefno || !pairReady.value) return;
+  await runCompareUnits([groupVersions(group)]);
+}
+
+/**
+ * 设计稿 S2 那一颗总按钮：差异摘要里变了的单元**一起**进三维（P2-a）。超过上限 `MODEL_UNIT_COMPARE_MAX_UNITS` 或服务端说要确认
+ * （`needsConfirm`）就先问（P2-b，`pendingGroupsConfirm`）：全部生成 / 先装变化最大的 N 个 / 取消。
+ */
+function runCompareGroups(groups: readonly ModelNodeDiffGroup[]): void {
+  const usable = groups.filter((group) => group.unitRefno);
+  if (dbnum.value === null || !pairReady.value || usable.length === 0) return;
+  if (usable.length > MODEL_UNIT_COMPARE_MAX_UNITS || diffSummary.value?.needsConfirm) {
+    pendingGroupsConfirm.value = usable;
+    return;
+  }
+  void runCompareUnits(usable.map(groupVersions));
+}
+
+/** 确认框的三个答案：全部 / 先装变化最大的 N 个 / 取消 */
+function confirmGroups(choice: 'all' | 'top' | 'cancel'): void {
+  const groups = pendingGroupsConfirm.value;
+  pendingGroupsConfirm.value = null;
+  if (!groups || choice === 'cancel') return;
+  const picked = choice === 'all' ? groups : pickMostChangedGroups(groups, MODEL_UNIT_COMPARE_MAX_UNITS);
+  void runCompareUnits(picked.map(groupVersions));
+}
+
+/** 总按钮 / 确认框上的「N 个单元 · 约 M 份历史投影」 */
+const groupsProjectionText = computed(() => `${geometryGroups.value.length} 个单元 · 约 ${countGroupProjections(geometryGroups.value)} 份历史投影`);
+
+/** 节点自己所属的那个单元（旧面板同一条路）/ 单独一组：与多单元同一条装载路，只是 detail 不带 `units` */
 async function runCompareVersions(before: ModelVersion, after: ModelVersion, unit: string): Promise<void> {
+  await runCompareUnits([{ unitRefno: unit, unitNoun: after.unitNoun, before, after }]);
+}
+
+type UnitPair = { unitRefno: string; unitNoun: string; before: ModelVersion; after: ModelVersion };
+
+/**
+ * 装载路（单单元与多单元同一条）：按份取几何（并发 ≤ 2，进度进 `compareProgress`）→ 每单元各比一份差异 → 树差异模式 → 一发 `open`。
+ * 多单元时 `open` 的 `before` / `after` 是各单元并起来的一侧、`rows` 拼起来、`units` 各自一份、`unitRefno` 是查的那个容器；
+ * 单单元 detail 与从前逐字相同（不带 `units`）。几何相同的承诺（同一 geometryKey）→ 那个单元只取一次、两侧共用。
+ */
+async function runCompareUnits(pairs: readonly UnitPair[]): Promise<void> {
   // 换单元（容器逐组）/ 换版本重开：视口的单视口 / 分屏跟上一轮走，不用每组再点一次「双视口分屏」
   const keepViewMode = compareRuntime.value?.status === 'ready' ? compareRuntime.value.viewMode : undefined;
   closeCompare();
   rows.value = [];
   compareCompleted.value = false;
-  if (dbnum.value === null) return;
+  if (dbnum.value === null || pairs.length === 0) return;
   const run = ++requestId;
   comparing.value = true;
   error.value = null;
   activeTab.value = 'model';
+  const loaded = new Map<string, { before: LoadedSide; after: LoadedSide }>();
+  const taken: LoadedSide[] = [];
   try {
-    // 几何相同的承诺（同一 geometryKey）→ 只取一次，两侧共用
-    const [beforeData, afterData] = sameGeometryKey(before, after)
-      ? await loadSide(after).then((data) => [data, data] as const)
-      : await Promise.all([loadSide(before), loadSide(after)]);
+    // 一份 = 一次 loadSide；同 geometryKey 只取 B 那一份两侧共用。tombstone 侧适配器回空集、不去服务端，不算进度里的份
+    type Task = { label: string; counts: boolean; run: () => Promise<void> };
+    const tasks: Task[] = [];
+    const partial = new Map<string, { before?: LoadedSide; after?: LoadedSide }>();
+    for (const pair of pairs) {
+      const slot: { before?: LoadedSide; after?: LoadedSide } = {};
+      partial.set(pair.unitRefno, slot);
+      const label = (version: ModelVersion) => `${pair.unitNoun || '单元'} ${pair.unitRefno}@${version.sesno}`;
+      if (sameGeometryKey(pair.before, pair.after)) {
+        tasks.push({ label: label(pair.after), counts: true, run: async () => { const data = await loadSide(pair.after); taken.push(data); slot.before = data; slot.after = data; } });
+      } else {
+        tasks.push({ label: label(pair.before), counts: pair.before.impactKind !== 'tombstone', run: async () => { const data = await loadSide(pair.before); taken.push(data); slot.before = data; } });
+        tasks.push({ label: label(pair.after), counts: pair.after.impactKind !== 'tombstone', run: async () => { const data = await loadSide(pair.after); taken.push(data); slot.after = data; } });
+      }
+    }
+    const total = tasks.filter((task) => task.counts).length;
+    compareProgress.value = { done: 0, total, current: [] };
+    const queue = tasks.slice();
+    // 并发 ≤ 2 的小工位：一份失败 / 本次被更新的请求作废，就不再开新的份；正在飞的那份等它落地再一起还回去（不然那份快照漏掉）
+    const failure: { current: { cause: unknown } | null } = { current: null };
+    const worker = async (): Promise<void> => {
+      for (let task = queue.shift(); task && !failure.current && run === requestId; task = queue.shift()) {
+        if (task.counts) compareProgress.value = { ...compareProgress.value!, current: [...compareProgress.value!.current, task.label] };
+        try {
+          await task.run();
+        } catch (cause) {
+          failure.current ??= { cause };
+          return;
+        }
+        if (task.counts && run === requestId) {
+          const progress = compareProgress.value!;
+          compareProgress.value = { done: progress.done + 1, total, current: progress.current.filter((item) => item !== task.label) };
+        }
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(2, tasks.length) }, () => worker()));
+    if (failure.current) throw failure.current.cause;
     if (run !== requestId) {
       // 本次比较已被更新的请求作废：几何拿到了也不留，直接还给来源
-      heldGeometries = [...new Set([beforeData.geometry, afterData.geometry])];
-      releaseHeldGeometries();
+      releaseTaken();
       return;
     }
-    heldGeometries = [...new Set([beforeData.geometry, afterData.geometry])];
-    rows.value = compareModelUnitGeometry(beforeData.snapshots, afterData.snapshots);
+    for (const [unitRefno, slot] of partial) loaded.set(unitRefno, { before: slot.before!, after: slot.after! });
+    heldGeometries = [...new Set(taken.map((data) => data.geometry))];
+
+    const units: ModelUnitVersionCompareUnit[] = pairs.map((pair) => {
+      const data = loaded.get(pair.unitRefno)!;
+      const side = (version: ModelVersion, item: LoadedSide): ModelUnitVersionSide => ({
+        version, sesno: version.sesno, refnos: item.refnos, entries: markRaw(item.geometry.entries),
+      });
+      return {
+        unitRefno: pair.unitRefno,
+        unitNoun: pair.unitNoun,
+        before: side(pair.before, data.before),
+        after: side(pair.after, data.after),
+        rows: compareModelUnitGeometry(data.before.snapshots, data.after.snapshots),
+      };
+    });
+    rows.value = units.flatMap((unit) => unit.rows);
     compareCompleted.value = true;
     compareActive.value = true;
-    comparedInViewer.value = unit;
-    dispatchTreeDiff({
-      dbnum: dbnum.value,
-      before,
-      after,
-      rows: rows.value,
-      beforeOwners: beforeData.geometry.ownerByRefno,
-      afterOwners: afterData.geometry.ownerByRefno,
-    }, { before: beforeData.geometry, after: afterData.geometry });
+    comparedInViewer.value = units.map((unit) => unit.unitRefno);
+    const treeUnits: TreeDiffUnit[] = units.map((unit) => {
+      const data = loaded.get(unit.unitRefno)!;
+      return {
+        input: {
+          dbnum: dbnum.value!,
+          before: unit.before.version,
+          after: unit.after.version,
+          rows: unit.rows,
+          beforeOwners: data.before.geometry.ownerByRefno,
+          afterOwners: data.after.geometry.ownerByRefno,
+        },
+        geometries: { before: data.before.geometry, after: data.after.geometry },
+      };
+    });
+    dispatchTreeDiff(treeUnits);
+    const single = units.length === 1 ? units[0]! : null;
+    const container = { dbnum: dbnum.value, unitRefno: normalizedRefno.value, unitNoun: nodeNoun.value };
     dispatch({
       action: 'open',
       dbnum: dbnum.value,
-      unitRefno: unit,
-      before: {
-        version: before,
-        sesno: before.sesno,
-        refnos: beforeData.refnos,
-        entries: markRaw(beforeData.geometry.entries),
-      },
-      after: {
-        version: after,
-        sesno: after.sesno,
-        refnos: afterData.refnos,
-        entries: markRaw(afterData.geometry.entries),
-      },
+      unitRefno: single ? single.unitRefno : normalizedRefno.value,
+      before: single ? single.before : mergeModelUnitVersionSides(units, 'before', container),
+      after: single ? single.after : mergeModelUnitVersionSides(units, 'after', container),
       refnos: rows.value.map((row) => row.refno),
       rows: rows.value,
       // 三维里点到 A / B 隔离图层的构件时，属性面板钉到那一版：与树差异模式底部那块同一个取数口（句柄闭包在几何里）
-      attributesAt: (side, refno, signal) =>
-        getModelSource().versions.attributesAt(side === 'before' ? beforeData.geometry : afterData.geometry, refno, { signal }),
+      attributesAt: attributesAtFor(treeUnits),
       ...(keepViewMode ? { viewMode: keepViewMode } : {}),
+      ...(single ? {} : { units }),
     });
     focusQueriedElement();
   } catch (cause) {
     if (run === requestId) error.value = messageOf(cause);
+    // 半路失败（或作废后才失败）：本次已取到的几份还回去，别留着快照
+    releaseTaken();
   } finally {
-    if (run === requestId) comparing.value = false;
+    if (run === requestId) {
+      comparing.value = false;
+      compareProgress.value = null;
+    }
+  }
+
+  /** 把本次取到的几份几何还给来源（只动本次的，别的请求持有的不碰） */
+  function releaseTaken(): void {
+    const mine = new Set(taken.map((data) => data.geometry));
+    heldGeometries = heldGeometries.filter((geometry) => !mine.has(geometry));
+    taken.length = 0;
+    for (const geometry of mine) {
+      void geometry.release().catch((reason) => {
+        console.warn('[ModelUnitVersionComparePanel] release version geometry failed', reason);
+      });
+    }
   }
 }
 
@@ -801,6 +940,11 @@ function setCompareSide(side: ModelUnitCompareSide): void {
   dispatch({ action: 'set-side', side });
 }
 
+/** 多单元一次装载时，这一侧不存在（tombstone）的那几个单元根：A / B 卡上列出来（并起来的那一侧只有全空才标 tombstone） */
+function absentUnits(detail: ModelUnitVersionCompareRuntimeState['detail'], side: ModelUnitCompareSide): string[] {
+  return (detail.units ?? []).filter((unit) => unit[side].version.impactKind === 'tombstone').map((unit) => unit.unitRefno);
+}
+
 function setCompareViewMode(viewMode: ModelUnitCompareViewMode): void {
   dispatch({ action: 'set-view-mode', viewMode });
 }
@@ -824,7 +968,7 @@ function closeCompare(): void {
   // 先落自己的状态再派发：`handleCompareLifecycle` 会同步收到这一发 close，看到已不活跃就不再重复处理
   compareActive.value = false;
   compareRuntime.value = null;
-  comparedInViewer.value = null;
+  comparedInViewer.value = [];
   releaseHeldGeometries();
   if (wasActive) {
     dispatch({ action: 'close' });
@@ -840,7 +984,7 @@ function handleCompareLifecycle(event: Event): void {
   // 视口侧关掉对比（ViewerPanel 的关闭按钮）：树的差异模式一并退出，持有的版本几何一并释放
   compareActive.value = false;
   compareRuntime.value = null;
-  comparedInViewer.value = null;
+  comparedInViewer.value = [];
   releaseHeldGeometries();
   dispatchTreeDiffContext(null);
 }
@@ -1258,8 +1402,8 @@ onBeforeUnmount(() => {
               <span class="rounded bg-amber-100 px-1.5 py-0.5 text-amber-700">修改 {{ diffSummary.elements.modified }}</span>
               <span class="rounded bg-slate-100 px-1.5 py-0.5 text-slate-600">noop {{ diffSummary.elements.noop }}</span>
             </div>
-            <p v-if="diffSummary.needsConfirm" class="mt-1 text-[10px] text-amber-700">
-              变了的单元超过阈值 {{ diffSummary.confirmThresholdUnits }} 个（约 {{ diffSummary.estimatedProjections }} 份历史投影）：这里一次只装一个单元，逐组点开看。
+            <p v-if="diffSummary.needsConfirm" class="mt-1 text-[10px] text-amber-700" data-testid="model-unit-compare-needs-confirm">
+              变了的单元超过阈值 {{ diffSummary.confirmThresholdUnits }} 个（服务端估约 {{ diffSummary.estimatedProjections }} 份历史投影）：一起进三维前会先问一句，也可以逐组点开看。
             </p>
             <p v-if="diffSummary.warnings.length" class="mt-1 text-[10px] text-muted-foreground">{{ diffSummary.warnings[0] }}</p>
           </div>
@@ -1278,10 +1422,76 @@ onBeforeUnmount(() => {
             </button>
           </div>
 
+          <!-- 多单元一次装载的进度（P2-a，设计稿 S2b「正在生成历史投影 3 / 4」）：份 = 要去 history/generate 的单元@sesno；单单元（≤ 2 份）不露 -->
+          <div v-if="compareProgress && compareProgress.total > 2"
+            class="mt-2 rounded-md border border-indigo-200 bg-indigo-50/40 p-2 text-[11px] text-indigo-900"
+            data-testid="model-unit-compare-progress"
+            :data-done="compareProgress.done"
+            :data-total="compareProgress.total">
+            <div class="flex items-center justify-between gap-2">
+              <span class="font-semibold">正在生成历史投影 {{ compareProgress.done }} / {{ compareProgress.total }}</span>
+              <span class="truncate font-mono text-[10px] opacity-75">{{ compareProgress.current.join(' · ') }}</span>
+            </div>
+            <div class="mt-1 h-1.5 overflow-hidden rounded bg-indigo-100">
+              <div class="h-full rounded bg-indigo-500 transition-[width]" :style="{ width: `${Math.round((compareProgress.done / Math.max(1, compareProgress.total)) * 100)}%` }" />
+            </div>
+          </div>
+
+          <!-- 阈值确认（P2-b，设计稿 S2b ②）：超过一次装载上限或服务端说要确认时先问；「先装变化最大的 N 个」按组内变更数排 -->
+          <div v-if="pendingGroupsConfirm"
+            class="mt-2 rounded-md border border-amber-300 bg-amber-50/70 p-2 text-[11px] text-amber-900"
+            data-testid="model-unit-compare-confirm"
+            role="alertdialog">
+            <div class="font-semibold">
+              一次要装 {{ pendingGroupsConfirm.length }} 个单元、约 {{ countGroupProjections(pendingGroupsConfirm) }} 份历史投影
+              <template v-if="pendingGroupsConfirm.length > MODEL_UNIT_COMPARE_MAX_UNITS">，超过一次装载上限 {{ MODEL_UNIT_COMPARE_MAX_UNITS }} 个</template>
+              <template v-else-if="diffSummary?.needsConfirm">，服务端提示超过阈值 {{ diffSummary.confirmThresholdUnits }} 个</template>
+            </div>
+            <div class="mt-0.5 opacity-80">每份都要服务端按会话重算一遍几何，多的话要等一会儿；装进来的单元越多，三维里越挤。</div>
+            <div class="mt-1.5 flex flex-wrap gap-1.5">
+              <button type="button"
+                class="rounded-md bg-primary px-2 py-1 text-[11px] font-medium text-primary-foreground"
+                data-testid="model-unit-compare-confirm-all"
+                @click="confirmGroups('all')">
+                全部生成
+              </button>
+              <button v-if="pendingGroupsConfirm.length > MODEL_UNIT_COMPARE_MAX_UNITS"
+                type="button"
+                class="rounded-md border border-amber-400 bg-background px-2 py-1 text-[11px] text-foreground hover:bg-muted/50"
+                data-testid="model-unit-compare-confirm-top"
+                @click="confirmGroups('top')">
+                先装变化最大的 {{ MODEL_UNIT_COMPARE_MAX_UNITS }} 个
+              </button>
+              <button type="button"
+                class="rounded-md border border-border bg-background px-2 py-1 text-[11px] text-muted-foreground hover:text-foreground"
+                data-testid="model-unit-compare-confirm-cancel"
+                @click="confirmGroups('cancel')">
+                取消
+              </button>
+            </div>
+          </div>
+
+          <!-- 设计稿 S2 那一颗总按钮：变了的单元一起进三维（P2-a）；只有一组时没必要，组里那颗就是。放在分组列表外（e2e 数的是列表里的 div） -->
+          <div v-if="scope === 'subtree' && geometryGroups.length > 1"
+            class="mt-2 flex items-center gap-2 rounded-md border border-dashed border-indigo-300 bg-indigo-50/30 px-2 py-1.5 text-xs"
+            data-testid="model-unit-compare-run-groups-row">
+            <div class="min-w-0 flex-1">
+              <div class="font-semibold text-foreground">全部变了的单元一起进三维</div>
+              <div class="text-[10px] text-muted-foreground">{{ groupsProjectionText }}<template v-if="geometryGroups.length > MODEL_UNIT_COMPARE_MAX_UNITS">（超过一次装载上限 {{ MODEL_UNIT_COMPARE_MAX_UNITS }}，会先问）</template></div>
+            </div>
+            <button type="button"
+              class="shrink-0 rounded-md bg-primary px-2 py-1 text-[11px] font-medium text-primary-foreground disabled:opacity-50"
+              :disabled="comparing || pendingGroupsConfirm !== null"
+              :title="`把这 ${geometryGroups.length} 个单元的 A / B 一起装进三维（每份历史投影都要服务端按会话重算）`"
+              data-testid="model-unit-compare-run-groups"
+              @click="runCompareGroups(geometryGroups)">
+              {{ comparedInViewer.length > 1 && comparedInViewer.length === geometryGroups.length ? '三维中' : '在三维中对比' }}
+            </button>
+          </div>
           <div v-if="scope === 'subtree' && geometryGroups.length > 0" class="mt-2 space-y-1" data-testid="model-unit-compare-groups">
             <div v-for="group in geometryGroups" :key="group.unitRefno ?? 'orphan'"
               class="flex items-center gap-2 rounded-md border px-2 py-1.5 text-xs"
-              :class="comparedInViewer === group.unitRefno ? 'border-indigo-300 bg-indigo-50/50' : 'border-border'">
+              :class="group.unitRefno && comparedInViewer.includes(group.unitRefno) ? 'border-indigo-300 bg-indigo-50/50' : 'border-border'">
               <div class="min-w-0 flex-1">
                 <div class="truncate font-mono font-semibold">{{ group.unitNoun }} {{ group.unitRefno }}<span v-if="group.unitName" class="ml-1 font-sans text-[10px] font-normal text-muted-foreground">{{ group.unitName }}</span></div>
                 <div class="flex flex-wrap gap-1 text-[10px]">
@@ -1296,7 +1506,7 @@ onBeforeUnmount(() => {
                 :disabled="comparing"
                 :data-testid="`model-unit-compare-run-group-${group.unitRefno}`"
                 @click="runCompareGroup(group)">
-                {{ comparedInViewer === group.unitRefno ? '三维中' : '在三维中对比' }}
+                {{ group.unitRefno && comparedInViewer.includes(group.unitRefno) ? (comparedInViewer.length > 1 ? '三维中 · 只看这组' : '三维中') : '在三维中对比' }}
               </button>
             </div>
           </div>
@@ -1307,8 +1517,9 @@ onBeforeUnmount(() => {
             <div class="flex items-center justify-between gap-2">
               <div class="min-w-0">
                 <div class="text-xs font-semibold text-foreground">三维查看</div>
-                <div class="truncate font-mono text-[10px] text-muted-foreground">
-                  {{ compareRuntime.detail.unitRefno }} · DB {{ compareRuntime.detail.dbnum }}
+                <div class="truncate font-mono text-[10px] text-muted-foreground" data-testid="model-unit-compare-runtime-title">
+                  <template v-if="compareRuntime.detail.units?.length">{{ compareRuntime.detail.units.length }} 个单元 · {{ compareRuntime.detail.unitRefno }} 下 · </template>
+                  <template v-else>{{ compareRuntime.detail.unitRefno }} · </template>DB {{ compareRuntime.detail.dbnum }}
                 </div>
               </div>
               <button type="button"
@@ -1355,6 +1566,9 @@ onBeforeUnmount(() => {
                   <div class="font-semibold">A · sesno {{ compareRuntime.detail.before.sesno }}</div>
                   <div class="mt-0.5 text-[10px] opacity-75">{{ formatModelUnitVersionTime(compareRuntime.detail.before.version.sessionTime ?? '') }}</div>
                   <div v-if="compareRuntime.detail.before.version.impactKind === 'tombstone'" class="mt-0.5 text-[10px] opacity-75">{{ modelUnitVersionAbsentNote('before') }}</div>
+                  <div v-else-if="absentUnits(compareRuntime.detail, 'before').length" class="mt-0.5 text-[10px] opacity-75" data-testid="model-unit-compare-absent-before">
+                    {{ absentUnits(compareRuntime.detail, 'before').length }} 个单元{{ modelUnitVersionAbsentNote('before') }}：{{ absentUnits(compareRuntime.detail, 'before').join('、') }}
+                  </div>
                 </button>
                 <button type="button"
                   class="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1.5 text-left text-emerald-700 transition-opacity"
@@ -1364,6 +1578,9 @@ onBeforeUnmount(() => {
                   <div class="font-semibold">B · sesno {{ compareRuntime.detail.after.sesno }}</div>
                   <div class="mt-0.5 text-[10px] opacity-75">{{ formatModelUnitVersionTime(compareRuntime.detail.after.version.sessionTime ?? '') }}</div>
                   <div v-if="compareRuntime.detail.after.version.impactKind === 'tombstone'" class="mt-0.5 text-[10px] opacity-75">{{ modelUnitVersionAbsentNote('after') }}</div>
+                  <div v-else-if="absentUnits(compareRuntime.detail, 'after').length" class="mt-0.5 text-[10px] opacity-75" data-testid="model-unit-compare-absent-after">
+                    {{ absentUnits(compareRuntime.detail, 'after').length }} 个单元{{ modelUnitVersionAbsentNote('after') }}：{{ absentUnits(compareRuntime.detail, 'after').join('、') }}
+                  </div>
                 </button>
               </div>
               <div v-else
@@ -1419,7 +1636,10 @@ onBeforeUnmount(() => {
 
           <template v-if="compareCompleted">
             <div class="mt-3 rounded-md border border-border bg-muted/20 p-2" data-testid="model-unit-compare-summary">
-              <div v-if="comparedInViewer" class="mb-1 font-mono text-[10px] text-muted-foreground">{{ comparedInViewer }} · 几何差异</div>
+              <div v-if="comparedInViewer.length" class="mb-1 font-mono text-[10px] text-muted-foreground" data-testid="model-unit-compare-summary-title">
+                <template v-if="comparedInViewer.length === 1">{{ comparedInViewer[0] }} · 几何差异</template>
+                <template v-else>{{ comparedInViewer.length }} 个单元 · 几何差异（{{ comparedInViewer.join('、') }}）</template>
+              </div>
               <div class="flex flex-wrap gap-1.5 text-[11px]">
                 <span class="rounded bg-emerald-100 px-1.5 py-0.5 text-emerald-700">新增 {{ summary.added }}</span>
                 <span class="rounded bg-rose-100 px-1.5 py-0.5 text-rose-700">删除 {{ summary.deleted }}</span>

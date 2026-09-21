@@ -80,6 +80,12 @@ async function flushUi(): Promise<void> {
   }
 }
 
+/** 一串顺序的 await（多单元一次装载几十份）六个 tick 刷不完：刷到条件成立为止，最多 `rounds` 轮 */
+async function flushUntil(predicate: () => boolean, rounds = 80): Promise<void> {
+  for (let i = 0; i < rounds && !predicate(); i += 1) await flushUi();
+  expect(predicate()).toBe(true);
+}
+
 describe('ModelUnitVersionComparePanel', () => {
   beforeEach(() => {
     versionSourceMocks.listVersions.mockResolvedValue(versions);
@@ -1084,5 +1090,219 @@ describe('ModelUnitVersionComparePanel', () => {
 
     expect(events.some((event) => event.detail?.action === 'open')).toBe(false);
     window.removeEventListener('plant3d:model-unit-version-compare', listener);
+  });
+
+  /** 容器 1_9 + 三组变了的单元（B1 两侧都在 / B2 在 B 已删 / B3 在 A 还没建）的差异摘要夹具；`extraGroups` 追加更多组（P2-b 超上限用） */
+  function containerSummaryFixture(extraGroups = 0, needsConfirm = false) {
+    const zone: ModelElementVersionTimeline = {
+      dbnum: 7997, refno: '1_9', noun: 'ZONE', unitRefno: null, unitNoun: null, unitColumnOnly: false,
+      versions: [
+        { sesno: 791, sessionTime: '2026-07-22T01:00:00Z', elementImpact: 'delivery', unitImpact: null },
+        { sesno: 897, sessionTime: '2026-07-22T02:00:00Z', elementImpact: 'noop', unitImpact: null },
+      ],
+    };
+    versionSourceMocks.listElementVersions.mockResolvedValue(zone);
+    const group = (unitRefno: string, name: string, counts: { added: number; deleted: number; modified: number; noop: number }, rows: { refno: string; noun: string; status: 'added' | 'deleted' | 'modified' | 'noop' }[]) => ({
+      unitRefno, unitNoun: 'BRAN', unitName: name, counts, geometryChanged: true, rowsTruncated: 0,
+      rows: rows.map((row) => ({ ...row, impact: row.status === 'deleted' ? 'tombstone' : 'delivery', isNode: false })),
+    });
+    const groups = [
+      group('24381_145018', '/B1', { added: 1, deleted: 1, modified: 0, noop: 0 }, [{ refno: '1_3', noun: 'ELBO', status: 'added' }, { refno: '1_2', noun: 'VALV', status: 'deleted' }]),
+      group('24381_200', '/B2', { added: 0, deleted: 2, modified: 0, noop: 0 }, [{ refno: '24381_200', noun: 'BRAN', status: 'deleted' }, { refno: '24381_201', noun: 'FTUB', status: 'deleted' }]),
+      group('24381_300', '/B3', { added: 2, deleted: 0, modified: 0, noop: 0 }, [{ refno: '24381_301', noun: 'FTUB', status: 'added' }, { refno: '24381_300', noun: 'BRAN', status: 'added' }]),
+      // 追加的组：变更数递增（第 i 组 modified = i），排「变化最大」时最后几组最大
+      ...Array.from({ length: extraGroups }, (_, i) => group(`24381_${400 + i}`, `/X${i}`, { added: 0, deleted: 0, modified: i + 1, noop: 0 }, [{ refno: `24381_${400 + i}`, noun: 'BRAN', status: 'modified' }])),
+    ];
+    versionSourceMocks.diffSummary.mockResolvedValue({
+      dbnum: 7997, refno: '1_9', noun: 'ZONE', scope: 'subtree', a: 791, b: 897,
+      units: { changed: groups.length, unchanged: 3, total: groups.length + 3, complete: true },
+      elements: { added: 3, deleted: 3, modified: 0, noop: 0 },
+      groups: [
+        { unitRefno: null, unitNoun: null, unitName: null, counts: { added: 0, deleted: 0, modified: 0, noop: 1 }, geometryChanged: false, rowsTruncated: 0,
+          rows: [{ refno: '1_9', noun: 'ZONE', status: 'noop', impact: 'noop', isNode: true }] },
+        ...groups,
+      ],
+      needsConfirm, estimatedProjections: groups.length * 2, confirmThresholdUnits: 20, warnings: [],
+    });
+    // 每个单元自己的几何：refno 带单元前缀，791 → 897 各有一处变化；tombstone 侧空集
+    versionSourceMocks.loadVersion.mockImplementation(async (item: ModelVersion) => {
+      if (item.impactKind === 'tombstone') return geometry(new Map());
+      const entry = (hash: string) => [{ geo_hash: hash, geo_index: 0, matrix: [1], uniforms: { noun: 'FTUB' } }];
+      return geometry(new Map([
+        [`${item.unitRefno}`, entry('root')],
+        [`${item.unitRefno}_m1`, entry(item.sesno === 791 ? 'old' : 'new')],
+      ]));
+    });
+    return { groups };
+  }
+
+  async function mountContainerModelTab(): Promise<{ host: HTMLDivElement; app: ReturnType<typeof createApp>; events: CustomEvent[]; listener: (event: Event) => void }> {
+    const events: CustomEvent[] = [];
+    const listener = (event: Event) => events.push(event as CustomEvent);
+    window.addEventListener('plant3d:model-unit-version-compare', listener);
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const app = createApp(ModelUnitVersionComparePanel);
+    app.mount(host);
+    const input = host.querySelector('[data-testid="model-unit-compare-refno"]') as HTMLInputElement;
+    input.value = '1_9';
+    input.dispatchEvent(new Event('input'));
+    (host.querySelector('[data-testid="model-unit-compare-load"]') as HTMLButtonElement).click();
+    await flushUi();
+    (host.querySelector('[data-testid="model-unit-compare-scope-subtree"]') as HTMLButtonElement).click();
+    await flushUi();
+    (host.querySelector('[data-testid="model-unit-compare-tab-model"]') as HTMLButtonElement).click();
+    await flushUi();
+    return { host, app, events, listener };
+  }
+
+  it('多单元一次装载（P2-a）：总按钮把变了的单元一起进三维——按份并发 ≤ 2 取几何、进度「n / m」、一发 open 带 units、两侧并起来、A / B 卡列出不存在的单元', async () => {
+    containerSummaryFixture();
+    // 卡住 loadVersion 好看进度：每次调用登记一个待决 promise，测试里逐个放行
+    const pending: { item: ModelVersion; resolve: (geometry: ModelVersionGeometry) => void }[] = [];
+    const realLoad = versionSourceMocks.loadVersion.getMockImplementation()!;
+    versionSourceMocks.loadVersion.mockImplementation((item: ModelVersion) => new Promise<ModelVersionGeometry>((resolve) => { pending.push({ item, resolve }); }));
+    const release = async (count: number) => {
+      for (let i = 0; i < count; i += 1) {
+        const next = pending.shift()!;
+        next.resolve(await realLoad(next.item));
+      }
+      await flushUi();
+    };
+    const { host, app, events, listener } = await mountContainerModelTab();
+
+    // 三组（> 1）才有总按钮；文案带单元数与份数（B1 两侧 2 份 + B2 A 侧 1 份 + B3 B 侧 1 份 = 4）
+    const runAll = host.querySelector('[data-testid="model-unit-compare-run-groups"]') as HTMLButtonElement;
+    expect(runAll).not.toBeNull();
+    expect(runAll.parentElement?.textContent).toContain('3 个单元 · 约 4 份历史投影');
+    expect(host.querySelector('[data-testid="model-unit-compare-confirm"]')).toBeNull();
+    runAll.click();
+    await flushUi();
+
+    // 并发 ≤ 2：先只飞两份（B1@791、B1@897）；进度卡 0 / 4，正在装的两份都列着；总按钮与逐组按钮都置灰
+    expect(pending.map((p) => [p.item.unitRefno, p.item.sesno, p.item.impactKind])).toEqual([['24381_145018', 791, 'mesh'], ['24381_145018', 897, 'mesh']]);
+    const progress = () => host.querySelector('[data-testid="model-unit-compare-progress"]');
+    expect(progress()?.getAttribute('data-done')).toBe('0');
+    expect(progress()?.getAttribute('data-total')).toBe('4');
+    expect(progress()?.textContent).toContain('正在生成历史投影 0 / 4');
+    expect(progress()?.textContent).toContain('BRAN 24381_145018@791');
+    expect(runAll.disabled).toBe(true);
+    expect((host.querySelector('[data-testid="model-unit-compare-run-group-24381_200"]') as HTMLButtonElement).disabled).toBe(true);
+
+    // 放行两份 → 2 / 4，接着飞 B2 的两份（B 侧 tombstone 不算份、适配器回空集）
+    await release(2);
+    expect(progress()?.getAttribute('data-done')).toBe('2');
+    expect(pending.map((p) => [p.item.unitRefno, p.item.sesno, p.item.impactKind])).toEqual([['24381_200', 791, 'mesh'], ['24381_200', 897, 'tombstone']]);
+    await release(2);
+    expect(progress()?.getAttribute('data-done')).toBe('3');
+    expect(pending.map((p) => [p.item.unitRefno, p.item.sesno, p.item.impactKind])).toEqual([['24381_300', 791, 'tombstone'], ['24381_300', 897, 'mesh']]);
+    await release(2);
+
+    // 全部装完：进度卡收掉，一发 open——unitRefno 是容器、units 三个、两侧并起来（B 侧 B2 没有、A 侧 B3 没有）、rows 是三组拼起来的
+    expect(progress()).toBeNull();
+    const open = events.filter((event) => event.detail?.action === 'open');
+    expect(open).toHaveLength(1);
+    const detail = open[0]!.detail as { unitRefno: string; units: { unitRefno: string; before: { version: ModelVersion }; after: { version: ModelVersion; refnos: string[] }; rows: { refno: string; status: string }[] }[]; before: { version: ModelVersion; refnos: string[] }; after: { version: ModelVersion; refnos: string[] }; rows: { refno: string; status: string }[] };
+    expect(detail.unitRefno).toBe('1_9');
+    expect(detail.units.map((unit) => unit.unitRefno)).toEqual(['24381_145018', '24381_200', '24381_300']);
+    expect(detail.before.version).toEqual(expect.objectContaining({ unitRefno: '1_9', unitNoun: 'ZONE', sesno: 791, impactKind: 'mesh' }));
+    expect(detail.after.version).toEqual(expect.objectContaining({ unitRefno: '1_9', sesno: 897, impactKind: 'mesh' }));
+    expect(detail.before.refnos).toEqual(['24381_145018', '24381_145018_m1', '24381_200', '24381_200_m1']);
+    expect(detail.after.refnos).toEqual(['24381_145018', '24381_145018_m1', '24381_300', '24381_300_m1']);
+    expect(detail.units[1]!.after.version.impactKind).toBe('tombstone');
+    expect(detail.units[2]!.before.version.impactKind).toBe('tombstone');
+    // 每单元各比一份：B1 改 1 未变 1、B2 删 2、B3 增 2 → 拼起来
+    expect(detail.rows.map((row) => `${row.refno}:${row.status}`)).toEqual([
+      '24381_145018_m1:modified', '24381_145018:unchanged',
+      '24381_200:deleted', '24381_200_m1:deleted',
+      '24381_300:added', '24381_300_m1:added',
+    ]);
+    expect(detail.units[0]!.rows).toHaveLength(2);
+    expect(host.querySelector('[data-testid="model-unit-compare-summary"]')?.textContent).toContain('新增 2');
+    expect(host.querySelector('[data-testid="model-unit-compare-summary"]')?.textContent).toContain('删除 2');
+    expect(host.querySelector('[data-testid="model-unit-compare-summary"]')?.textContent).toContain('修改 1');
+    expect(host.querySelector('[data-testid="model-unit-compare-summary-title"]')?.textContent).toContain('3 个单元 · 几何差异');
+    // 三组都标「三维中」，总按钮也是
+    expect(host.querySelector('[data-testid="model-unit-compare-run-group-24381_200"]')?.textContent).toContain('三维中');
+    expect(runAll.textContent).toContain('三维中');
+
+    // 视口就位：运行态卡说「3 个单元 · 1_9 下」，A 卡列 B3（A 时没建）、B 卡列 B2（B 时已删）
+    window.dispatchEvent(new CustomEvent('plant3d:model-unit-version-compare-state', { detail: { detail, status: 'ready', activeSide: 'after', viewMode: 'single' } }));
+    await flushUi();
+    expect(host.querySelector('[data-testid="model-unit-compare-runtime-title"]')?.textContent).toContain('3 个单元 · 1_9 下');
+    expect(host.querySelector('[data-testid="model-unit-compare-absent-before"]')?.textContent).toContain('1 个单元该版本没有这个单元：24381_300');
+    expect(host.querySelector('[data-testid="model-unit-compare-absent-after"]')?.textContent).toContain('1 个单元该版本单元已删除：24381_200');
+
+    // 再点某一组 → 只看这组（单单元 detail 不带 units），其余组不再标「三维中」
+    (host.querySelector('[data-testid="model-unit-compare-run-group-24381_145018"]') as HTMLButtonElement).click();
+    await flushUi();
+    await release(2);
+    const single = events.filter((event) => event.detail?.action === 'open').at(-1)!.detail as { unitRefno: string; units?: unknown };
+    expect(single.unitRefno).toBe('24381_145018');
+    expect(single.units).toBeUndefined();
+    expect(host.querySelector('[data-testid="model-unit-compare-run-group-24381_200"]')?.textContent).toContain('在三维中对比');
+
+    window.removeEventListener('plant3d:model-unit-version-compare', listener);
+    app.unmount();
+  });
+
+  it('阈值确认（P2-b）：超过一次装载上限 20 个 / 服务端 needsConfirm 时先问——取消不装；「先装变化最大的 20 个」按变更数挑；「全部生成」照单全装', async () => {
+    // 3 + 19 = 22 组 > 20
+    const { groups } = containerSummaryFixture(19);
+    const { host, app, events, listener } = await mountContainerModelTab();
+    const runAll = host.querySelector('[data-testid="model-unit-compare-run-groups"]') as HTMLButtonElement;
+    expect(runAll.parentElement?.textContent).toContain('22 个单元');
+    expect(runAll.parentElement?.textContent).toContain('超过一次装载上限 20');
+    const confirm = () => host.querySelector('[data-testid="model-unit-compare-confirm"]');
+
+    // 问：三个答案都在；没去取任何几何
+    runAll.click();
+    await flushUi();
+    expect(confirm()?.textContent).toContain('一次要装 22 个单元');
+    expect(confirm()?.textContent).toContain('超过一次装载上限 20 个');
+    expect(versionSourceMocks.loadVersion).not.toHaveBeenCalled();
+    expect(runAll.disabled).toBe(true);
+    (host.querySelector('[data-testid="model-unit-compare-confirm-cancel"]') as HTMLButtonElement).click();
+    await flushUi();
+    expect(confirm()).toBeNull();
+    expect(versionSourceMocks.loadVersion).not.toHaveBeenCalled();
+    expect(runAll.disabled).toBe(false);
+
+    // 先装变化最大的 20 个：变更数 B1 / B2 / B3 = 2、X_i = i + 1（1..19）→ 从大到小取 20，同分按摘要顺序，掉的是 X1（2，排在 B1–B3 之后）与 X0（1）
+    runAll.click();
+    await flushUi();
+    (host.querySelector('[data-testid="model-unit-compare-confirm-top"]') as HTMLButtonElement).click();
+    await flushUntil(() => events.some((event) => event.detail?.action === 'open'));
+    const detail = events.filter((event) => event.detail?.action === 'open').at(-1)!.detail as { units: { unitRefno: string }[] };
+    expect(detail.units).toHaveLength(20);
+    const loadedUnits = new Set(detail.units.map((unit) => unit.unitRefno));
+    expect(loadedUnits.has('24381_400')).toBe(false);
+    expect(loadedUnits.has('24381_401')).toBe(false);
+    expect(loadedUnits.has('24381_145018')).toBe(true);
+    expect(loadedUnits.has('24381_418')).toBe(true);
+    expect(groups.length).toBe(22);
+
+    // 服务端 needsConfirm（不超上限）也问，但没有「先装 20 个」那一颗；全部生成 → 3 组都装
+    versionSourceMocks.loadVersion.mockClear();
+    containerSummaryFixture(0, true);
+    (host.querySelector('[data-testid="model-unit-compare-scope-self"]') as HTMLButtonElement).click();
+    await flushUi();
+    (host.querySelector('[data-testid="model-unit-compare-scope-subtree"]') as HTMLButtonElement).click();
+    await flushUi();
+    expect(host.querySelector('[data-testid="model-unit-compare-needs-confirm"]')).not.toBeNull();
+    (host.querySelector('[data-testid="model-unit-compare-run-groups"]') as HTMLButtonElement).click();
+    await flushUi();
+    expect(confirm()?.textContent).toContain('服务端提示超过阈值 20 个');
+    expect(host.querySelector('[data-testid="model-unit-compare-confirm-top"]')).toBeNull();
+    const opensBefore = events.filter((event) => event.detail?.action === 'open').length;
+    (host.querySelector('[data-testid="model-unit-compare-confirm-all"]') as HTMLButtonElement).click();
+    await flushUntil(() => events.filter((event) => event.detail?.action === 'open').length > opensBefore);
+    expect(confirm()).toBeNull();
+    const all = events.filter((event) => event.detail?.action === 'open').at(-1)!.detail as { units: { unitRefno: string }[] };
+    expect(all.units.map((unit) => unit.unitRefno)).toEqual(['24381_145018', '24381_200', '24381_300']);
+    expect(versionSourceMocks.loadVersion).toHaveBeenCalledTimes(6);
+
+    window.removeEventListener('plant3d:model-unit-version-compare', listener);
+    app.unmount();
   });
 });

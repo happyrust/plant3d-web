@@ -118,6 +118,7 @@ import {
   MODEL_UNIT_GEOMETRY_STATUS_LABELS,
   MODEL_UNIT_VERSION_COMPARE_EVENT,
   MODEL_UNIT_VERSION_COMPARE_STATE_EVENT,
+  modelUnitCompareUnitRefnos,
   modelUnitVersionAbsentNote,
   planModelUnitCompareObjectStyles,
   refnoFromCompareObjectId,
@@ -562,6 +563,8 @@ let modelUnitCompareLayers: DTXLayer[] = [];
 let modelUnitCompareHiddenObjectIds: ModelUnitCompareHiddenObjectIds | null = null;
 let modelUnitCompareOriginalVisibility = new Map<string, boolean>();
 let modelUnitCompareTargetRefnos: string[] = [];
+/** 本次对比装的单元根（多单元一次装载时一串）：环境里按整单元藏的按它 */
+let modelUnitCompareTargetUnitRefnos: string[] = [];
 let modelUnitCompareCameraState: {
   position: Vector3;
   target: Vector3;
@@ -1874,9 +1877,9 @@ async function refreshModelUnitCompareEnvironment(
 }
 
 function hideModelUnitCompareTarget(primaryLayer: DTXLayer, dbnum: number): void {
-  const unitRefno = modelUnitCompareTargetRefnos[0] || '';
+  const unitRefnos = modelUnitCompareTargetUnitRefnos.length ? modelUnitCompareTargetUnitRefnos : [modelUnitCompareTargetRefnos[0] || ''];
   primaryLayer.setObjectsVisible(collectModelUnitTargetObjectIds(
-    unitRefno,
+    unitRefnos,
     modelUnitCompareTargetRefnos,
     (refno) => resolveDtxObjectIdsByRefno(dbnum, refno),
     (refno) => resolveDtxObjectIdsByUnitRefno(dbnum, refno),
@@ -2034,6 +2037,7 @@ function clearModelUnitVersionCompare(): void {
   }
   modelUnitCompareOriginalVisibility = new Map();
   modelUnitCompareTargetRefnos = [];
+  modelUnitCompareTargetUnitRefnos = [];
   const viewer = dtxViewerRef.value;
   if (viewer && modelUnitCompareCameraState) {
     viewer.camera.position.copy(modelUnitCompareCameraState.position);
@@ -2147,8 +2151,11 @@ async function openModelUnitVersionCompare(detail: ModelUnitVersionCompareOpenDe
       refreshing: false as const,
       error: environmentResult.error,
     };
+    // 多单元一次装载（detail.units）：每个单元根都算目标，环境里整单元藏掉；unitRefno 那时是容器、没几何，列进来无害
+    modelUnitCompareTargetUnitRefnos = modelUnitCompareUnitRefnos(detail).map(normalizeCompareRefno).filter(Boolean);
     modelUnitCompareTargetRefnos = Array.from(new Set([
       detail.unitRefno,
+      ...modelUnitCompareTargetUnitRefnos,
       ...detail.before.refnos.map(normalizeCompareRefno).filter(Boolean),
       ...detail.after.refnos.map(normalizeCompareRefno).filter(Boolean),
     ]));
@@ -2238,6 +2245,7 @@ async function openModelUnitVersionCompare(detail: ModelUnitVersionCompareOpenDe
     if (isDev) {
       (window as any).__modelUnitVersionCompare = {
         unitRefno: detail.unitRefno,
+        units: modelUnitCompareUnitRefnos(detail),
         beforeSesno: detail.before.sesno,
         afterSesno: detail.after.sesno,
         beforeObjects,

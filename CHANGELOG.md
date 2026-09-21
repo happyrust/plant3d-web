@@ -4,6 +4,12 @@
 
 ### 变更
 
+- **版本对比：容器下变了的单元可以一起进三维（总按钮 + 进度「正在生成历史投影 n / m」），超过 20 个或服务端说要确认时先弹确认框** (2026-09-21)
+  - 以前 `所有子节点` 的模型对比只能逐组「在三维中对比」、一次装一个单元（设计稿 S2 画的是一颗总按钮）。现在不止一组时分组列表上方多一颗「全部变了的单元一起进三维」（`model-unit-compare-run-groups`，注「N 个单元 · 约 M 份历史投影」）：按份（单元@sesno，tombstone 侧不算）并发 ≤ 2 去 `history/generate`，进度卡 `model-unit-compare-progress`「正在生成历史投影 n / m · 正在装的那几份」，装完一发 `open`——`before` / `after` 是各单元并起来的一侧（`mergeModelUnitVersionSides`：entries 合表、refnos 拼接、身份借容器、每个单元都不存在才整侧 tombstone）、`rows` 拼起来、`units[]` 各自一份、`unitRefno` 是容器；ViewerPanel 环境里按每个单元根整单元藏（`collectModelUnitTargetObjectIds` 接一串根），`__modelUnitVersionCompare.units`。四态着色 / 角标 / 「三维只看差异」/ 分屏拾取 / 点 A / B 构件读那一版（`attributesAt` 按 refno 找它属于哪份几何）对多单元同样成立；树差异模式每单元各折一份拼起来（B 侧 tombstone 的单元根也进树）。
+  - 面板：运行态卡「N 个单元 · <容器> 下」，A / B 卡列出这一侧不存在的单元（「1 个单元该版本单元已删除：…」），几何差异摘要标题「N 个单元 · 几何差异（…）」，被装的组都标「三维中」（多单元时「三维中 · 只看这组」，点它 = 只看那一组）。单单元 `open` detail 与从前逐字相同（不带 `units`）。
+  - 确认框（`model-unit-compare-confirm`，设计稿 S2b ②）：超过一次装载上限 `MODEL_UNIT_COMPARE_MAX_UNITS = 20` 个、或服务端 `needsConfirm`，先问「全部生成 / 先装变化最大的 20 个（`pickMostChangedGroups`：按 added + deleted + modified 排，noop 不算）/ 取消」；A / B 或范围一换、换节点重载，没答的框一并收掉。差异摘要下那行 `needs_confirm` 提示改口。
+  - 半路失败 / 被更新的请求作废：本次已取到的几份几何都还回去（不再漏快照）。验证：vitest `modelUnitVersionCompare.test.ts` +2、`ModelUnitVersionComparePanel.test.ts` +2（并发与进度逐步放行、两侧并起来、A / B 卡注脚、只看这组；22 组先问 / 取消 / 先装 20 / needsConfirm 全部）→ 版本对比相关 9 文件 99 过；type-check 基线外 0 新增；ESLint 触及文件只剩 `ViewerPanel.vue:28` 那条既有的。**真机 / e2e 未跑**（`:8022` 未起）；e2e 容器那条加了「不止一组且 ≤ 20 就点总按钮」的守卫段。收口计划 P2-a / P2-b（D3「做，上限 20」/ D4「绑定」）。
+
 - **节点版本面板的时间线缺省只列最近 20 版，更早的折成一行「加载更早 n 版…」点开全列** (2026-09-21)
   - 叶子 53 版、容器子树 298 版以前一次全列，面板要滚很久才到 A / B 按钮和两个 tab。现在照设计稿 S1：只画最近 20 行，底下一行「加载更早 n 版…」（`data-testid="model-unit-compare-timeline-more"`，`data-hidden` = 折起的版数）点开全列；**取数不变**（版本表早已整表取回，点开不再请求服务端），「本范围 n 版 · 仅属性 m」仍按全表数。
   - 画出来的是从最近那一版起**连续的一段**：被选为 A / B 的行一定在里面——URL `compare_a` / 「与上一版比」把 A 选到很早的会话时，切点顺延到它、它之后的全露出来，只折它之前的。点开后切范围 / 勾筛选不折回，换节点重载才折回。纯函数 `sliceNodeTimelineRows`（`utils/nodeVersionTimeline.ts`），`NODE_TIMELINE_INITIAL_ROWS = 20`。

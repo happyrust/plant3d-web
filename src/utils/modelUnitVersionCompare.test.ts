@@ -6,16 +6,21 @@ import {
   buildTreeDiffModels,
   collectModelUnitTargetObjectIds,
   compareModelUnitGeometry,
+  countGroupProjections,
   countModelUnitGeometryStatuses,
   DEFAULT_MODEL_UNIT_COMPARE_SIDE,
   DEFAULT_MODEL_UNIT_COMPARE_VIEW_MODE,
   getModelUnitCompareRenderPasses,
   geometrySnapshotsFromInstanceEntries,
   locateModelUnitComparePass,
+  mergeModelUnitVersionSides,
+  MODEL_UNIT_COMPARE_MAX_UNITS,
   MODEL_UNIT_GEOMETRY_STATUS_COLORS,
+  modelUnitCompareUnitRefnos,
   modelUnitGroupSideImpactKinds,
   modelUnitVersionAbsentNote,
   orderModelUnitVersionPair,
+  pickMostChangedGroups,
   planModelUnitCompareObjectStyles,
   readModelUnitVersionCompareUrl,
   refnoFromCompareObjectId,
@@ -23,6 +28,7 @@ import {
   sideFromCompareObjectId,
   type ModelUnitGeometryDiff,
   type ModelUnitGeometrySnapshot,
+  type ModelUnitVersionSide,
 } from './modelUnitVersionCompare';
 
 function snapshot(refno: string, signature: string): ModelUnitGeometrySnapshot {
@@ -266,5 +272,68 @@ describe('modelUnitVersionCompare', () => {
 
     expect(modelUnitVersionAbsentNote('after')).toBe('该版本单元已删除');
     expect(modelUnitVersionAbsentNote('before')).toBe('该版本没有这个单元');
+  });
+
+  it('多单元一次装载（P2-a）：各单元一侧并成一侧——entries 合表、refnos 拼接、身份借容器、只有全空才是 tombstone；单元根一串给环境藏', () => {
+    const version = (unitRefno: string, sesno: number, impactKind: 'mesh' | 'tombstone' = 'mesh') => ({ dbnum: 8000, unitRefno, unitNoun: 'BRAN', sesno, sessionTime: `t${sesno}`, impactKind });
+    const side = (unitRefno: string, sesno: number, refnos: string[], impactKind: 'mesh' | 'tombstone' = 'mesh'): ModelUnitVersionSide => ({
+      version: version(unitRefno, sesno, impactKind),
+      sesno,
+      refnos,
+      entries: new Map(refnos.map((refno) => [refno, [{ geo_hash: refno, geo_index: 0, matrix: [1], uniforms: { noun: 'FTUB' } }]])) as never,
+    });
+    const units = [
+      { unitRefno: 'u_1', unitNoun: 'BRAN', before: side('u_1', 300, ['u_1', 'e_11']), after: side('u_1', 380, ['u_1', 'e_11', 'e_12']), rows: [] },
+      // B 时已删：after 空集 tombstone
+      { unitRefno: 'u_2', unitNoun: 'BRAN', before: side('u_2', 300, ['u_2', 'e_21']), after: side('u_2', 380, [], 'tombstone'), rows: [] },
+      // A 时还没建：before 空集 tombstone
+      { unitRefno: 'u_3', unitNoun: 'BRAN', before: side('u_3', 300, [], 'tombstone'), after: side('u_3', 380, ['u_3']), rows: [] },
+    ];
+    const container = { dbnum: 8000, unitRefno: 'c_1', unitNoun: 'PIPE' };
+    const before = mergeModelUnitVersionSides(units, 'before', container);
+    expect(before.refnos).toEqual(['u_1', 'e_11', 'u_2', 'e_21']);
+    expect([...before.entries.keys()]).toEqual(['u_1', 'e_11', 'u_2', 'e_21']);
+    expect(before.version).toEqual({ dbnum: 8000, unitRefno: 'c_1', unitNoun: 'PIPE', sesno: 300, sessionTime: 't300', impactKind: 'mesh' });
+    expect(before.sesno).toBe(300);
+    const after = mergeModelUnitVersionSides(units, 'after', container);
+    expect(after.refnos).toEqual(['u_1', 'e_11', 'e_12', 'u_3']);
+    expect(after.version.impactKind).toBe('mesh');
+    // 每个单元这一侧都不存在才整侧 tombstone
+    expect(mergeModelUnitVersionSides([units[1]!, units[1]!], 'after', container).version.impactKind).toBe('tombstone');
+    expect(mergeModelUnitVersionSides([], 'after', container)).toEqual({ version: { ...container, sesno: 0, sessionTime: null, impactKind: 'mesh' }, sesno: 0, refnos: [], entries: new Map() });
+
+    expect(modelUnitCompareUnitRefnos({ unitRefno: 'c_1', units })).toEqual(['u_1', 'u_2', 'u_3']);
+    expect(modelUnitCompareUnitRefnos({ unitRefno: 'u_1' })).toEqual(['u_1']);
+    expect(modelUnitCompareUnitRefnos({ unitRefno: 'u_1', units: [] })).toEqual(['u_1']);
+    // 环境里藏：每个单元根整单元 + 列到的 refno；单串写法与从前相同
+    const byUnit = (root: string) => [`o:${root}:0`, `o:${root}-m:1`];
+    const byRefno = (refno: string) => [`o:${refno}:9`];
+    expect(collectModelUnitTargetObjectIds(['u_1', 'u_3'], ['e_11'], byRefno, byUnit)).toEqual(['o:u_1:0', 'o:u_1-m:1', 'o:u_3:0', 'o:u_3-m:1', 'o:e_11:9']);
+    expect(collectModelUnitTargetObjectIds('u_1', ['e_11'], byRefno, byUnit)).toEqual(['o:u_1:0', 'o:u_1-m:1', 'o:e_11:9']);
+  });
+
+  it('阈值确认（P2-b）：「先装变化最大的 N 个」按 added + deleted + modified 排、noop 不算、同分保持摘要顺序；份数 = 两侧各一份、tombstone 侧不算', () => {
+    const group = (unitRefno: string, counts: Partial<{ added: number; deleted: number; modified: number; noop: number }>, rootStatus: 'added' | 'deleted' | 'modified' = 'modified') => ({
+      unitRefno,
+      counts: { added: 0, deleted: 0, modified: 0, noop: 0, ...counts },
+      rows: [{ refno: unitRefno, status: rootStatus }],
+    });
+    const groups = [
+      group('g_1', { modified: 1, noop: 9 }),
+      group('g_2', { added: 5 }),
+      group('g_3', { deleted: 2, modified: 1 }),
+      group('g_4', { modified: 1 }),
+      group('g_5', { added: 2, deleted: 1 }),
+    ];
+    expect(pickMostChangedGroups(groups, 3).map((item) => item.unitRefno)).toEqual(['g_2', 'g_3', 'g_5']);
+    // 同分（g_1 / g_4 都是 1）按原顺序；取满就全给
+    expect(pickMostChangedGroups(groups, 5).map((item) => item.unitRefno)).toEqual(['g_2', 'g_3', 'g_5', 'g_1', 'g_4']);
+    expect(pickMostChangedGroups(groups, 0)).toEqual([]);
+    expect(pickMostChangedGroups(groups, -1)).toEqual([]);
+    expect(MODEL_UNIT_COMPARE_MAX_UNITS).toBe(20);
+
+    // 份数：两侧都在 2 份、B 已删 1 份、A 没建 1 份
+    expect(countGroupProjections([group('g_1', {}), group('g_2', {}, 'deleted'), group('g_3', {}, 'added')])).toBe(4);
+    expect(countGroupProjections([])).toBe(0);
   });
 });

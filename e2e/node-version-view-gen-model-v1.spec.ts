@@ -34,6 +34,7 @@ type HistoryResponse = { entries: HistoryEntry[] };
 type DiffSummaryResponse = {
   units: { changed: number; unchanged: number; total: number };
   groups: { unit_root: string | null; unit_noun: string | null; geometry_changed: boolean; rows: { refno: string; status: string }[] }[];
+  needs_confirm?: boolean;
 };
 
 test.setTimeout(420_000);
@@ -277,6 +278,20 @@ test('容器节点：子树时间线来自 node/versions（不再手填会话号
   await expect(page.getByTestId('model-unit-compare-summary')).toContainText(underscore(first.unit_root!));
   await expect(page.getByTestId(`model-unit-compare-run-group-${underscore(first.unit_root!)}`)).toContainText('三维中');
   await evidence(page, 'container-subtree-group-3d-compare', { unit: first.unit_root, a: aRow.sesno, b: bRow.sesno, compareText });
+
+  // 2026-09-21 起（收口计划 P2-a）：不止一组时有一颗总按钮，变了的单元一起进三维；≤ 20 组且服务端没说要确认就直接装（多了会先弹确认框，这里不进那条路）
+  if (geometryGroups.length > 1 && geometryGroups.length <= 20 && !summary.needs_confirm) {
+    await page.getByTestId('model-unit-compare-run-groups').click();
+    await expect(page.getByTestId('model-unit-compare-summary-title')).toContainText(`${geometryGroups.length} 个单元`, { timeout: 240_000 });
+    await page.waitForFunction(
+      (count) => (window as unknown as { __modelUnitVersionCompare?: { units?: string[] } }).__modelUnitVersionCompare?.units?.length === count,
+      geometryGroups.length,
+      { timeout: 120_000 },
+    );
+    await expect(page.getByTestId('model-unit-compare-run-groups')).toContainText('三维中');
+    await expect(page.getByTestId('model-unit-compare-runtime-title')).toContainText(`${geometryGroups.length} 个单元`);
+    await evidence(page, 'container-subtree-all-groups-3d-compare', { units: geometryGroups.map((g) => g.unit_root), a: aRow.sesno, b: bRow.sesno });
+  }
 
   await page.getByTestId('model-unit-compare-close').click();
   expect(apiRequests.filter((r) => /node\/versions\?/.test(r.url)).length).toBeGreaterThanOrEqual(1);

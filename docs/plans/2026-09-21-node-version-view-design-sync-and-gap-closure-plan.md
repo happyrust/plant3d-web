@@ -8,7 +8,7 @@
 > 九帧导出 `docs/plans/2026-09-18-node-version-view-design/`（S0–S3 / F1 / F2 重导后字节数与 09-18 22:18 那批逐一相同 = 定稿帧确实没动）。
 > 前端基线：plant3d-web `main@0bc598e1`（PR #79 已合）+ 工作树未提交改动（§1.3）；后端 gen-model-refactor `0b2bf527b` + 未提交 `src/fast_model/attribute_diff.rs`。
 >
-> 状态：用户 16:3x 拍板 **「D1–D6 全按推荐，直接从 P0 开干」**；**P0 / P1-a / P1-b / P3-a / P3-b / P1-c 已完成**（§8 执行记录），剩 P2-a + P2-b（D3 / D4）、P3-c（D6）、P2-c（等后端）。
+> 状态：用户 16:3x 拍板 **「D1–D6 全按推荐，直接从 P0 开干」**；**P0 / P1-a / P1-b / P3-a / P3-b / P1-c / P2-a / P2-b 已完成**（§8 执行记录），剩 P3-c（D6）、P2-c（等后端）。
 
 ## 0. 一句话
 
@@ -86,10 +86,10 @@
 
 ### P2 · 设计有、实现不一样 · 要拍板（2–3 天）
 
-- **P2-a（G4）多单元一次装载**：面板 `runCompareGroups(groups)`——按摘要组顺序两侧 `loadVersion`（并发 ≤ 2），每装好一组就派 `open`（或新增 `append` 事件）进隔离图层，
+- **P2-a（G4）✅（19:4x）多单元一次装载**：面板 `runCompareGroups(groups)`——按摘要组顺序两侧 `loadVersion`（并发 ≤ 2），每装好一组就派 `open`（或新增 `append` 事件）进隔离图层，
   进度卡「正在生成历史投影 n / m · <unit>@<sesno>」按份数走（tombstone 侧不计份）；`open` detail 从单单元扩成 `units[]`，四态计划 `planModelUnitCompareObjectStyles` 仍按 refno 查 rows、不受影响；
   退出 DELETE 全部快照；「三维只看差异」/ 角标 / 分屏拾取对多单元同样成立（角标只说版本，不说单元）。拍板 **D3**：做不做；缺省上限（建议 ≤ 20 单元，超过走 P2-b）。
-- **P2-b（G5）阈值确认对话框**：`diffSummary.needsConfirm` 时弹确认（全部生成 / 先装变化最大的 N 个 / 取消），阈值与预估份数由后端给（核 `node/diff-summary` 回执字段名：`needs_confirm` /
+- **P2-b（G5）✅（19:4x）阈值确认对话框**：`diffSummary.needsConfirm` 时弹确认（全部生成 / 先装变化最大的 N 个 / 取消），阈值与预估份数由后端给（核 `node/diff-summary` 回执字段名：`needs_confirm` /
   预估份数字段——README §7 记的是 `needs_confirm`，份数字段要核）；「先装 N 个」排序按组内变更数。**依赖 P2-a**。拍板 **D4**：与 P2-a 绑定（P2-a 不做则本条也不做，逐组装载本就不超阈值）。
 - **P2-c（G6）成员 / owner 真差**：前端已暂存消费 `members.added / removed / reordered` 与 `owner [A, B]`；等 gen-model-refactor `attribute_diff.rs` 提交并起到 `:8022` 后真机
   （SITE 24384/22399 573→628 子树点开 BRAN 24384_23257 应出「成员重排」，EQUI 24384_24776 出「成员 +1」），e2e 容器那条加断言。拍板 **D5**：后端那半由谁 / 何时提交（正在改的是另一条会话）。
@@ -203,3 +203,30 @@ P0（半天）→ P1-a / P1-b（半天）→ P3-a / P3-b（半天）→ P1-c（D
   「本范围 25 版」按全表、缺省 A / B 在段内、点开 25 行且不再 `listVersions`、换节点重载折回）→ 两文件 **37 过**；type-check 基线外 0 新增；ESLint 触及 6 文件 0。
   **真机 / e2e 未跑**：`:3111` 在，但它连的 `:8022` 没起（`:8027` 那台是房间线的构建，没有版本路由）。
 - 设计稿：S1 画的就是这个样子（「加载更早 47 版…」一行），不用改。
+
+### P2-a / P2-b（2026-09-21 19:2x–19:5x，D3「做，上限 20」/ D4「绑定」）
+
+- **装载路合一**：`runCompareUnits(pairs)` 单单元与多单元同一条——每单元 A / B 两侧各一份 `loadSide`（同 geometryKey 只取一份两侧共用、tombstone 侧适配器回空集不算份），
+  两个工位并发 ≤ 2 顺序领活，进度 `compareProgress { done, total, current[] }`（份 > 2 才露卡，单单元不露）；一份失败 / 本次被更新的请求作废就不再开新份，
+  本次已取到的几份全部还回去（`releaseTaken`，从前半路失败会漏快照）。装完每单元各比一份差异（`compareModelUnitGeometry`）、树差异模式每单元各折一份拼起来
+  （`dispatchTreeDiff(units[])`，B 侧 tombstone 的单元根照旧进树）、`attributesAt` 按 refno 找它属于哪份几何，然后**一发** `open`。
+- **`open` detail 扩成多单元而 ViewerPanel 几乎不动**：`before` / `after` 用 `mergeModelUnitVersionSides` 把各单元那一侧并成一侧（entries 合表、refnos 拼接、`version` 借容器身份 +
+  第一个单元的 sesno、每个单元都不存在才整侧 `tombstone`），`rows` 拼起来，`units[]` 各自一份，`unitRefno` = 容器；单单元 detail 与从前**逐字相同**（不带 `units`）。
+  ViewerPanel 只改三处：目标 refno 加上每个单元根、环境按每个单元根整单元藏（`collectModelUnitTargetObjectIds` 接 `string | string[]`）、`__modelUnitVersionCompare.units`。
+  四态着色（按 refno 查 rows）/ 角标 / 「只看差异」/ 分屏拾取 / 点 A / B 构件读那一版，对合起来的一侧原样成立。
+- **与计划原文的出入**：计划写「每装好一组就派 `open`（或新增 `append` 事件）」——实际是**装完一发 `open`**：ViewerPanel 的 `openModelUnitVersionCompare` 是一次性的
+  （清层 → 藏环境 → 建两层 → 装 → 上色 → fit），逐组 append 要它可重入（再进层、重 fit、重上色、重算 hidden），改动面大过收益；进度在面板卡上看，装完一起进三维。
+  阈值确认做成面板里的**内嵌卡**（`role="alertdialog"`）而不是模态框：同一面板里答，不抢焦点、不遮三维。
+- **P2-b**：`runCompareGroups` 在 `groups.length > MODEL_UNIT_COMPARE_MAX_UNITS(20) || diffSummary.needsConfirm` 时把那批组放进 `pendingGroupsConfirm` 先问；
+  「全部生成」/「先装变化最大的 20 个」（`pickMostChangedGroups`：added + deleted + modified 从大到小、noop 不算、同分保持摘要顺序；只在超上限时露出）/「取消」。
+  换 A / B、换范围（`loadDiffSummary`）、换节点重载都收掉没答的框。总按钮 `model-unit-compare-run-groups` 只在不止一组时露出，注「N 个单元 · 约 M 份历史投影」
+  （`countGroupProjections` 客户端按 tombstone 侧算，服务端 `estimatedProjections` 只在 `needs_confirm` 那行提示里说）。
+- **面板文案**：运行态卡「N 个单元 · <容器> 下 · DB」；A / B 卡「n 个单元该版本单元已删除：…」/「…该版本没有这个单元：…」（`absentUnits`）；几何差异摘要标题
+  「N 个单元 · 几何差异（…）」；被装的组标「三维中」，多单元时「三维中 · 只看这组」（点它 = 只看那一组）。差异摘要下那行 `needs_confirm` 提示改口（不再说「一次只装一个」）。
+  面板文件头注释、09-18 plan §10「多单元一次装载下一期」改口。
+- **验证**：vitest `modelUnitVersionCompare.test.ts` +2（合侧 / 单元根一串 / 藏环境；挑变化最大 / 份数）、`ModelUnitVersionComparePanel.test.ts` +2（三组：并发 ≤ 2 逐步放行看进度 0/4 → 2/4 → 3/4、
+  一发 `open` 带 `units` 三个、两侧并起来、rows 拼接、A / B 卡注脚、再点一组回单单元；22 组：先问 / 取消不装 / 先装 20 个掉的是 X0 与 X1 / `needsConfirm` 全部生成 6 份）
+  → 版本对比相关 9 文件 **99 过**；type-check 基线外 0 新增；ESLint 只剩 `ViewerPanel.vue:28` 那条既有的。**真机 / e2e 未跑**（`:8022` 未起）——e2e 容器那条加了守卫段
+  （不止一组且 ≤ 20 且服务端没说要确认才点总按钮，断言摘要标题「N 个单元」、`__modelUnitVersionCompare.units.length`、总按钮「三维中」）；真机夹具 SITE 24384/22399 630→632 只有一组，走不到那段，
+  要看多单元得挑 PIPE 24384_23225 300→380（5 组）那样的对。
+- 设计稿：S2 那一颗总按钮与 S2b「正在生成历史投影 3 / 4」/ 确认框 ②，实现追上了；S4 注 6 那句「一次一个单元，S2 画的一颗总按钮 + 进度未做」**待改口**（Pencil 活动文件仍是别的会话的）。

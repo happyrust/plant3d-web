@@ -230,13 +230,17 @@ export function planModelUnitCompareObjectStyles(
   });
 }
 
+/** 环境（主图层）里要藏掉的对象：按单元根整单元藏（多单元一次装载时每个单元根都藏）+ 两侧几何列到的每个 refno */
 export function collectModelUnitTargetObjectIds(
-  unitRefno: string,
+  unitRefno: string | readonly string[],
   targetRefnos: string[],
   resolveByRefno: (refno: string) => string[],
   resolveByUnitRefno: (unitRefno: string) => string[],
 ): string[] {
-  const objectIds = new Set(resolveByUnitRefno(unitRefno));
+  const objectIds = new Set<string>();
+  for (const root of typeof unitRefno === 'string' ? [unitRefno] : unitRefno) {
+    for (const objectId of resolveByUnitRefno(root)) objectIds.add(objectId);
+  }
   for (const refno of targetRefnos) {
     for (const objectId of resolveByRefno(refno)) objectIds.add(objectId);
   }
@@ -286,18 +290,102 @@ export type ModelUnitCompareAttributesAt = (
   signal?: AbortSignal,
 ) => Promise<ModelVersionAttributes>
 
+/**
+ * 多单元一次装载（容器「所有子节点」差异摘要里变了的单元一起进三维，设计稿 S2 那一颗总按钮，收口计划 P2-a）里的一个单元：
+ * 两侧各自的版本身份与几何，`rows` 是它自己的几何差异行（`ModelUnitVersionCompareOpenDetail.rows` 的对应子集）。
+ */
+export type ModelUnitVersionCompareUnit = {
+  unitRefno: string
+  unitNoun: string
+  before: ModelUnitVersionSide
+  after: ModelUnitVersionSide
+  rows: ModelUnitGeometryDiff[]
+}
+
 export type ModelUnitVersionCompareOpenDetail = {
   action: 'open'
   dbnum: number
+  /** 单单元：就是那个单元根；多单元（`units`）：查的那个容器节点 */
   unitRefno: string
+  /**
+   * 单单元：那个单元的两侧。多单元：各单元两侧**并起来**的一侧（`mergeModelUnitVersionSides`）——ViewerPanel 只认一张 `entries` 表 /
+   * 一份 `refnos`，`version.impactKind` 只在每个单元这一侧都不存在时才是 `tombstone`（单个单元不存在的注脚看 `units[].before/after`）。
+   */
   before: ModelUnitVersionSide
   after: ModelUnitVersionSide
   refnos: string[]
+  /** 单单元：它的几何差异行；多单元：全部单元的行拼起来（refno 不会跨单元重复，按 refno 查四态照旧） */
   rows: ModelUnitGeometryDiff[]
   /** 缺省没有（旧派发方 / 测试夹具）：那就点不出版本属性，三维里点 A / B 构件只按 refno 普通选中 */
   attributesAt?: ModelUnitCompareAttributesAt
   /** 就位后的初始视图模式；缺省单视口。面板换单元 / 换版本重开时把上一轮的带过来（容器逐组看不用每组再点一次分屏） */
   viewMode?: ModelUnitCompareViewMode
+  /** 多单元一次装载时才有：各单元各自的两侧与差异行；没有 = 单单元（`unitRefno` / `before` / `after` 就是它） */
+  units?: ModelUnitVersionCompareUnit[]
+}
+
+/** `open` detail 里装了哪几个单元根（单单元就是 `unitRefno` 自己）：环境里要藏的、A / B 卡上要列的都按它 */
+export function modelUnitCompareUnitRefnos(detail: Pick<ModelUnitVersionCompareOpenDetail, 'unitRefno' | 'units'>): string[] {
+  return detail.units?.length ? detail.units.map((unit) => unit.unitRefno) : [detail.unitRefno];
+}
+
+/**
+ * 多单元一次装载：把各单元的某一侧并成 ViewerPanel 要的一侧——`entries` 合成一张表（构件只属于一个单元，键不会撞）、`refnos` 拼起来，
+ * `version` 借 `identity`（容器）的身份 + 第一个单元那一侧的 sesno / sessionTime；`impactKind` 只在每个单元这一侧都是 `tombstone` 时才是
+ * `tombstone`（那一侧整个空、视口出空态），否则 `mesh`。
+ */
+export function mergeModelUnitVersionSides(
+  units: readonly ModelUnitVersionCompareUnit[],
+  side: ModelUnitCompareSide,
+  identity: Pick<ModelVersion, 'dbnum' | 'unitRefno' | 'unitNoun'>,
+): ModelUnitVersionSide {
+  const sides = units.map((unit) => unit[side]);
+  const first = sides[0];
+  const entries = new Map<string, InstanceEntry[]>();
+  const refnos: string[] = [];
+  for (const item of sides) {
+    for (const [refno, list] of item.entries) entries.set(refno, list);
+    refnos.push(...item.refnos);
+  }
+  const allAbsent = sides.length > 0 && sides.every((item) => item.version.impactKind === 'tombstone');
+  return {
+    version: {
+      ...identity,
+      sesno: first?.sesno ?? 0,
+      sessionTime: first?.version.sessionTime ?? null,
+      impactKind: allAbsent ? 'tombstone' : 'mesh',
+    },
+    sesno: first?.sesno ?? 0,
+    refnos,
+    entries,
+  };
+}
+
+/** 多单元一次装载的缺省上限（收口计划 D3）：超过走确认框（P2-b），「先装变化最大的 N 个」也按它 */
+export const MODEL_UNIT_COMPARE_MAX_UNITS = 20;
+
+/** 「先装变化最大的 N 个」（设计稿 S2b ②）：按组内 added + deleted + modified 从大到小取前 N（noop 不算变化），同分保持摘要顺序 */
+export function pickMostChangedGroups<T extends { counts: { added: number; deleted: number; modified: number } }>(
+  groups: readonly T[],
+  limit: number,
+): T[] {
+  const changes = (group: T): number => group.counts.added + group.counts.deleted + group.counts.modified;
+  return groups
+    .map((group, index) => ({ group, index }))
+    .sort((x, y) => changes(y.group) - changes(x.group) || x.index - y.index)
+    .slice(0, Math.max(0, limit))
+    .map((item) => item.group);
+}
+
+/**
+ * 多单元一次装载要去 `history/generate` 的份数（进度卡「n / m 份」的 m、总按钮上的「约 m 份历史投影」）：每单元 A / B 各一份，
+ * `tombstone` 的那一侧不算（适配器回空集，不去服务端）。
+ */
+export function countGroupProjections(groups: readonly Parameters<typeof modelUnitGroupSideImpactKinds>[0][]): number {
+  return groups.reduce((sum, group) => {
+    const kinds = modelUnitGroupSideImpactKinds(group);
+    return sum + (kinds.before === 'tombstone' ? 0 : 1) + (kinds.after === 'tombstone' ? 0 : 1);
+  }, 0);
 }
 
 /** 视口里点到的隔离图层对象：`unit-compare:a:<refno>:<n>` → A 侧、`unit-compare:b:…` → B 侧；别的对象 id 回 null */
