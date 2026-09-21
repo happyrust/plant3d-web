@@ -5,10 +5,12 @@
     <link rel="icon" href="/favicon.ico">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>plant3d-web - 3D 模型查看</title>
-    <!-- pencil-new design system: Fira Code = monospace data layer (IDs / numbers / engineering tags); Noto Sans SC = UI -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Noto+Sans+SC:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!--
+      pencil-new design system: Fira Code = monospace data layer (IDs / numbers / engineering tags)。
+      字体由 src/main.ts 从 @fontsource/fira-code 本地打包，不再引 Google Fonts 外链：
+      那条 <link rel="stylesheet"> 是渲染阻塞的，境内连不上时整页白到超时（PMS iframe 白屏 20–30 s，2026-09-21）。
+      Noto Sans SC 从未被任何样式引用，随外链一并去掉，UI 继续用系统无衬线。
+    -->
   </head>
   <body>
     <div id="app"></div>

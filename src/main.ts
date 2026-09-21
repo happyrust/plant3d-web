@@ -1,3 +1,7 @@
+// Fira Code（tailwind `font-mono`，ID / 数字 / 工程标签的等宽数据层）本地打包，替代 index.html 里原来的 Google Fonts 外链。
+import '@fontsource/fira-code/400.css';
+import '@fontsource/fira-code/500.css';
+import '@fontsource/fira-code/600.css';
 import '@/assets/tailwind.css';
 import '@/assets/main.scss';
 import '@/utils/three/patches/applyMeshLineShaderCompat';

@@ -44,6 +44,7 @@
     "deploy:ubuntu": "bash deploy/deploy_frontend_bundle.sh"
   },
   "dependencies": {
+    "@fontsource/fira-code": "^5.3.0",
     "@fontsource/roboto-mono": "^5.2.8",
     "@hufe921/canvas-editor": "^0.9.123",
     "@lume/three-meshline": "^4.0.5",
