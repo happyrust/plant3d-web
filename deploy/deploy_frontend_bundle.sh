@@ -112,10 +112,13 @@ run_remote "set -e; \
 log "Uploading nginx configuration"
 run_rsync_file "$TMP_NGINX_CONF" "$REMOTE_USER@$REMOTE_HOST:/tmp/plant3d-web.conf"
 run_remote "set -e; \
+  stamp=\$(date -u '+%Y%m%dT%H%M%SZ'); \
   if [ -d /etc/nginx/sites-available ]; then \
+    [ -f /etc/nginx/sites-available/plant3d-web ] && cp -p /etc/nginx/sites-available/plant3d-web /etc/nginx/sites-available/plant3d-web.bak-\$stamp; \
     mv /tmp/plant3d-web.conf /etc/nginx/sites-available/plant3d-web; \
     ln -sf /etc/nginx/sites-available/plant3d-web /etc/nginx/sites-enabled/plant3d-web; \
   elif [ -d /etc/nginx/conf.d ]; then \
+    [ -f /etc/nginx/conf.d/plant3d-web.conf ] && cp -p /etc/nginx/conf.d/plant3d-web.conf /etc/nginx/conf.d/plant3d-web.conf.bak-\$stamp; \
     mv /tmp/plant3d-web.conf /etc/nginx/conf.d/plant3d-web.conf; \
   else \
     echo 'Unsupported nginx layout' >&2; \
