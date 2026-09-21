@@ -877,6 +877,58 @@ describe('ModelUnitVersionComparePanel', () => {
     app.unmount();
   });
 
+  it('时间线缺省只画最近 20 行 + 「加载更早 n 版…」；点开全列；「本范围 n 版」仍按全表；换节点重载折回去（设计稿 S1，P1-c）', async () => {
+    // 25 版的单元根：sesno 10, 20, …, 250
+    const many = Array.from({ length: 25 }, (_, i) => version((i + 1) * 10, `2026-07-${String(1 + Math.floor(i / 2)).padStart(2, '0')}T0${i % 2}:00:00Z`));
+    versionSourceMocks.listVersions.mockResolvedValue(many);
+    versionSourceMocks.listElementVersions.mockResolvedValue({
+      ...unitTimeline,
+      versions: many.map((item) => ({ sesno: item.sesno, sessionTime: item.sessionTime, elementImpact: 'mesh', unitImpact: 'mesh' })),
+    });
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const app = createApp(ModelUnitVersionComparePanel);
+    app.mount(host);
+    const load = async (refno: string) => {
+      const input = host.querySelector('[data-testid="model-unit-compare-refno"]') as HTMLInputElement;
+      input.value = refno;
+      input.dispatchEvent(new Event('input'));
+      (host.querySelector('[data-testid="model-unit-compare-load"]') as HTMLButtonElement).click();
+      await flushUi();
+    };
+    const rows = () => [...host.querySelectorAll('[data-testid="model-unit-compare-timeline"] > li')].map((li) => Number(li.getAttribute('data-sesno')));
+    const more = () => host.querySelector('[data-testid="model-unit-compare-timeline-more"]') as HTMLButtonElement | null;
+
+    await load('24381/145018');
+    // 计数按全表；画出来的只有最近 20 行（最新在前），底下一行「加载更早 5 版…」
+    expect(host.querySelector('[data-testid="model-unit-compare-timeline-head"]')?.textContent).toContain('本范围 25 版');
+    expect(rows()).toHaveLength(20);
+    expect(rows()[0]).toBe(250);
+    expect(rows().at(-1)).toBe(60);
+    expect(more()).not.toBeNull();
+    expect(more()!.getAttribute('data-hidden')).toBe('5');
+    expect(more()!.textContent).toContain('加载更早 5 版');
+    // 缺省 A / B = 最近两版，就在画出来的那段里
+    expect(host.querySelector('[data-testid="model-unit-compare-a"]')?.getAttribute('data-sesno')).toBe('240');
+    expect(host.querySelector('[data-testid="model-unit-compare-b"]')?.getAttribute('data-sesno')).toBe('250');
+
+    // 点开：全列、那一行消失；不再请求服务端（版本表早已取回）
+    const listCalls = versionSourceMocks.listVersions.mock.calls.length;
+    more()!.click();
+    await flushUi();
+    expect(rows()).toHaveLength(25);
+    expect(rows().at(-1)).toBe(10);
+    expect(more()).toBeNull();
+    expect(versionSourceMocks.listVersions.mock.calls.length).toBe(listCalls);
+
+    // 换个节点重载：折回缺省 20 行
+    await load('24381_145018');
+    expect(rows()).toHaveLength(20);
+    expect(more()!.getAttribute('data-hidden')).toBe('5');
+    app.unmount();
+  });
+
   it('容器 + URL compare_a/b：那对套到时间线上（本范围没有、子树有就切「所有子节点」）、落到模型对比 tab，不跑对比；不在时间线里则提示（P3-a）', async () => {
     const zone: ModelElementVersionTimeline = {
       dbnum: 7997, refno: '1_9', noun: 'ZONE', unitRefno: null, unitNoun: null, unitColumnOnly: false,

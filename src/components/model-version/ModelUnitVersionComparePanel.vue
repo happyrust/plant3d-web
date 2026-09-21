@@ -50,9 +50,11 @@ import {
   emptyNetDiffText,
   filterNodeTimelineRows,
   foldAttributeChanges,
+  NODE_TIMELINE_INITIAL_ROWS,
   pairWithLatest,
   pairWithPrevious,
   pickNodeVersionSide,
+  sliceNodeTimelineRows,
   viewFromAttributeDiff,
   viewFromFold,
   type AttributeNetDiffView,
@@ -108,6 +110,8 @@ const includeUnchanged = ref(false);
 const geometryOnly = ref(false);
 /** 「只看自身变的」（设计稿 S2，`所有子节点` 下才露出）：子树动了、节点自身没动的会话不列；自身列未知（旧服务端）时置灰不筛 */
 const selfOnly = ref(false);
+/** 时间线「加载更早 n 版…」点开了没（设计稿 S1）：缺省只画最近 `NODE_TIMELINE_INITIAL_ROWS` 行；换节点重载时折回去，切范围 / 勾选不折 */
+const timelineExpanded = ref(false);
 const activeTab = ref<'attributes' | 'model'>('attributes');
 const compareActive = ref(false);
 const compareRuntime = ref<ModelUnitVersionCompareRuntimeState | null>(null);
@@ -163,6 +167,11 @@ const visibleTimelineRows = computed(() => filterNodeTimelineRows(timelineRows.v
   geometryOnly: geometryOnly.value,
   selfOnly: selfOnly.value,
   selfColumnUnknown: selfColumnUnknown.value,
+}));
+/** 实际画出来的那一段 + 折起的更早版数（`sliceNodeTimelineRows`）：被选为 A / B 的行一定在画出来的那段里 */
+const timelineSlice = computed(() => sliceNodeTimelineRows(visibleTimelineRows.value, {
+  expanded: timelineExpanded.value,
+  selected: [beforeSesno.value, afterSesno.value],
 }));
 const selectedBefore = computed(() => versionFor(beforeSesno.value));
 const selectedAfter = computed(() => versionFor(afterSesno.value));
@@ -396,6 +405,7 @@ async function loadVersions(): Promise<void> {
   attributeDiffUnavailable.value = false;
   elementDiffs.value = new Map();
   expandedElement.value = null;
+  timelineExpanded.value = false;
   dbnum.value = null;
   beforeSesno.value = null;
   afterSesno.value = null;
@@ -1037,7 +1047,7 @@ onBeforeUnmount(() => {
         </form>
 
         <ul class="mt-2 space-y-1" data-testid="model-unit-compare-timeline">
-          <li v-for="row in visibleTimelineRows"
+          <li v-for="row in timelineSlice.rows"
             :key="row.sesno"
             class="flex items-center gap-2 rounded-md border px-2 py-1.5 text-xs"
             :class="[
@@ -1095,6 +1105,14 @@ onBeforeUnmount(() => {
             </span>
           </li>
         </ul>
+        <button v-if="timelineSlice.hidden > 0" type="button"
+          class="mt-1 w-full rounded-md border border-dashed border-border px-2 py-1.5 text-[11px] text-muted-foreground hover:bg-muted/40 hover:text-foreground"
+          :title="`缺省只列最近 ${NODE_TIMELINE_INITIAL_ROWS} 版；点开列全（版本表早已取回，不再请求服务端）`"
+          data-testid="model-unit-compare-timeline-more"
+          :data-hidden="timelineSlice.hidden"
+          @click="timelineExpanded = true">
+          加载更早 {{ timelineSlice.hidden }} 版…
+        </button>
 
         <div class="mt-3 grid grid-cols-2 gap-1 rounded-md bg-muted p-1 text-xs" data-testid="model-unit-compare-tabs">
           <button type="button" class="rounded px-2 py-1.5"

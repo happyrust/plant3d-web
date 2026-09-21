@@ -8,7 +8,7 @@
 > 九帧导出 `docs/plans/2026-09-18-node-version-view-design/`（S0–S3 / F1 / F2 重导后字节数与 09-18 22:18 那批逐一相同 = 定稿帧确实没动）。
 > 前端基线：plant3d-web `main@0bc598e1`（PR #79 已合）+ 工作树未提交改动（§1.3）；后端 gen-model-refactor `0b2bf527b` + 未提交 `src/fast_model/attribute_diff.rs`。
 >
-> 状态：用户 16:3x 拍板 **「D1–D6 全按推荐，直接从 P0 开干」**；**P0 已完成**（§8 执行记录），P1 起待做。
+> 状态：用户 16:3x 拍板 **「D1–D6 全按推荐，直接从 P0 开干」**；**P0 / P1-a / P1-b / P3-a / P3-b / P1-c 已完成**（§8 执行记录），剩 P2-a + P2-b（D3 / D4）、P3-c（D6）、P2-c（等后端）。
 
 ## 0. 一句话
 
@@ -81,7 +81,7 @@
   （自身列未知 `unitColumnOnly` 时置灰、不筛）；`utils/nodeVersionTimeline.ts` 的筛行纯函数加一维；与「只看几何变的」可叠加。单测 +2；e2e `node-version-view` 容器那条加断言（勾上后行数 ≤ 未勾）。
 - **P1-b（G2）✅（16:5x）S3 每行「定位」**：属性对比 tab 的构件行加「定位」——已装 A/B 时派版本对比事件 `focus`（走 `focusModelUnitVersionCompare`，并 A/B 两层包围盒找，幽灵也能飞）；
   没装时 `locateRefno` 飞环境模型；当前树里没有的（B 版之后又被删）且没装 A/B 时按钮置灰、title 说明。单测 +1（两种分支各派什么事件）。
-- **P1-c（G3）「加载更早 n 版…」**：拍板 **D2**——(a) 不做（v1 全表冷 2–7 s、`since_sesno` 命中缓存 20 ms，用户没抱怨）；(b) **只改展示**：缺省渲染最近 20 行 + 一行「加载更早 n 版…」
+- **P1-c（G3）✅（19:0x，选 (b)）「加载更早 n 版…」**：拍板 **D2**——(a) 不做（v1 全表冷 2–7 s、`since_sesno` 命中缓存 20 ms，用户没抱怨）；(b) **只改展示**：缺省渲染最近 20 行 + 一行「加载更早 n 版…」
   点开全列，取数不动；(c) 取数也分页（`limit` + 「加载更早」再拉）。**推荐 (b)**——设计稿的样子、零后端、不影响 e2e 数字（计数仍按全表）。
 
 ### P2 · 设计有、实现不一样 · 要拍板（2–3 天）
@@ -187,3 +187,19 @@ P0（半天）→ P1-a / P1-b（半天）→ P3-a / P3-b（半天）→ P1-c（D
 - **验证**：vitest 面板 20 过；type-check 基线外 0 新增；ESLint 只剩 `ViewerPanel.vue:28` 那条既有的。**真机 / e2e 未跑**（dev `:3111` 未起）——e2e 两条变体（容器 URL 直达、管道分组换组仍分屏）留待下次起 dev。
 - 设计稿：S4 注 6 那句「换组 = close 再 open，分屏回单视口（未动）」**待改口**——Pencil MCP 只对编辑器里当前活动的 .pen 生效，此刻活动的是别的会话正在改的
   `ui/空间查询/room-hierarchy-tree.pen`，不抢焦点；等 `node-version-history.pen` 再被打开时改一句并重导 `S4-3d-linkage-live.png`。
+- 提交 `aaa2d2c2`。顺带查清 CHANGELOG 行尾的来龙去脉（逐提交按字节数）：`0bc598e1` 起纯 LF；`ecc65fb7`（本计划 P0-b）用脚本插条目时带进 4 行 CRLF（混行尾）；
+  `b414a70d`（别的会话）整文件转成 CRLF；`1d0ba873` 号称「恢复 LF」但 blob 仍是 245 行全 CRLF——没恢复成；之后所有提交（含本计划的）都是全 CRLF。
+  本仓 `*.md` 624 个 CRLF / 36 个 LF / 5 个混，`src/**` 也是 CRLF 为主，没有 `.editorconfig` / `.gitattributes` / prettier `endOfLine`——**CHANGELOG 现状（全 CRLF）与仓内多数一致，不再改**；要统一行尾是另一件事（加 `.gitattributes` 一次性归一），不在本计划。
+
+### P1-c（2026-09-21 18:4x–19:0x，D2 选 (b) 只改展示）
+
+- `sliceNodeTimelineRows(rows, { expanded, selected, initial = NODE_TIMELINE_INITIAL_ROWS(20) })` → `{ rows, hidden }`：从最近那版起连续切 20 行，被选为 A / B 的行在折起那段里时切点顺延到它
+  （URL `compare_a` / 「与上一版比」选到很早的会话也看得见），`expanded` 或不够 20 行时整表 / `hidden = 0`。
+- 面板：`timelineExpanded`（`loadVersions` 重载折回；切范围 / 勾筛选不折）→ `timelineSlice = slice(visibleTimelineRows)`；`<ul>` 只画 `timelineSlice.rows`，`</ul>` 后一颗
+  `model-unit-compare-timeline-more`（`data-hidden`，文案「加载更早 n 版…」，title 说明不再请求服务端）。计数 `timelineCounts` 仍按全表。
+- e2e：`model-version-compare-gen-model-v1.spec.ts` 数全表前先等第一行可见、点开那一行（3 s 内没有 = 没折）；`node-version-view-gen-model-v1.spec.ts` 加 `expandTimeline()`，叶子那条断言折起时正好 20 行 + 有「加载更早」、点开后那一行消失，
+  容器切「所有子节点」后先点开再数 `inScopeRows`。**计划 §1 说「不影响 e2e 数字」不对**——e2e 是数 `li` 的，不改 spec 就会挂（叶子 53 版、子树 298 版），这次一并改了。
+- **验证**：vitest `nodeVersionTimeline.test.ts` +2（切 20 / 折数 / 点开 / 不够 20 不折；选中顺延 / 选在前 20 不多露 / null 不算 / 选最早全列）、面板 +1（25 版：20 行 + 「加载更早 5 版」、
+  「本范围 25 版」按全表、缺省 A / B 在段内、点开 25 行且不再 `listVersions`、换节点重载折回）→ 两文件 **37 过**；type-check 基线外 0 新增；ESLint 触及 6 文件 0。
+  **真机 / e2e 未跑**：`:3111` 在，但它连的 `:8022` 没起（`:8027` 那台是房间线的构建，没有版本路由）。
+- 设计稿：S1 画的就是这个样子（「加载更早 47 版…」一行），不用改。

@@ -4,6 +4,11 @@
 
 ### 变更
 
+- **节点版本面板的时间线缺省只列最近 20 版，更早的折成一行「加载更早 n 版…」点开全列** (2026-09-21)
+  - 叶子 53 版、容器子树 298 版以前一次全列，面板要滚很久才到 A / B 按钮和两个 tab。现在照设计稿 S1：只画最近 20 行，底下一行「加载更早 n 版…」（`data-testid="model-unit-compare-timeline-more"`，`data-hidden` = 折起的版数）点开全列；**取数不变**（版本表早已整表取回，点开不再请求服务端），「本范围 n 版 · 仅属性 m」仍按全表数。
+  - 画出来的是从最近那一版起**连续的一段**：被选为 A / B 的行一定在里面——URL `compare_a` / 「与上一版比」把 A 选到很早的会话时，切点顺延到它、它之后的全露出来，只折它之前的。点开后切范围 / 勾筛选不折回，换节点重载才折回。纯函数 `sliceNodeTimelineRows`（`utils/nodeVersionTimeline.ts`），`NODE_TIMELINE_INITIAL_ROWS = 20`。
+  - e2e 两个 spec 数全表前先点开那一行（不够 20 行就没这一行，等 3 s 当没折）。验证：vitest `nodeVersionTimeline.test.ts` +2、`ModelUnitVersionComparePanel.test.ts` +1（两文件 37 过）；type-check 基线外 0 新增；ESLint 触及文件 0。**真机 / e2e 未跑**（`:8022` 未起，`:3111` 在但连的是它）。收口计划 `docs/plans/2026-09-21-node-version-view-design-sync-and-gap-closure-plan.md` P1-c（D2 选「只改展示」）。
+
 - **版本对比：容器的 `compare_a / compare_b` URL 直达；从管道逐组进三维时分屏不再每组掉回单视口** (2026-09-21)
   - 容器（PIPE / ZONE 等）没有自己的几何可跑，`compare_autorun=1` 到这儿以前直接停、URL 那对被忽略。现在把那对套到时间线上：本范围里有就选上，只有子树里有就先切「所有子节点」，再落到模型对比 tab 看分组即停（不跑对比、不装几何）；哪个范围都没有就提示原文、范围与缺省 A / B 不动。
   - 换单元 / 换版本重开 = 面板先 `close` 再 `open`，视口以前每次都回缺省单视口。现在 `open` 事件带上一轮就位运行态的 `viewMode`（`ModelUnitVersionCompareOpenDetail.viewMode?`），ViewerPanel 就位后照它切（缺省单视口不做事，测量工具等照单视口→分屏那条路收）。

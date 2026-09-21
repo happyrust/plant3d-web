@@ -146,7 +146,10 @@ test('缺省最近两版：compare_autorun 开面板、版本表来自服务端�
   const { pageErrors, historyRequests } = await openComparePage(page, {});
 
   // 版本表：条数与服务端回执一致，时间线每一行带 sesno 与 impact_kind
+  // （2026-09-21 起时间线缺省只画最近 20 行、更早的折成「加载更早 n 版…」——数全表前先点开；不够 20 行就没这一行）
   const timelineRow = (sesno: number) => page.locator(`[data-testid="model-unit-compare-timeline"] > li[data-sesno="${sesno}"]`);
+  await expect(page.locator('[data-testid="model-unit-compare-timeline"] > li').first()).toBeVisible({ timeout: 120_000 });
+  await page.getByTestId('model-unit-compare-timeline-more').click({ timeout: 3_000 }).catch(() => undefined);
   await expect(page.locator('[data-testid="model-unit-compare-timeline"] > li')).toHaveCount(versions.length, { timeout: 120_000 });
   for (const version of versions) {
     await expect(timelineRow(version.sesno)).toContainText(version.impact_kind);

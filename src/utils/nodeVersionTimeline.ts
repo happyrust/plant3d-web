@@ -178,6 +178,34 @@ export function filterNodeTimelineRows(rows: NodeTimelineRow[], filter: NodeTime
   });
 }
 
+/** 时间线缺省画出来的行数（设计稿 S1「加载更早 n 版…」）；取数不分页，只是展示上先折起更早的 */
+export const NODE_TIMELINE_INITIAL_ROWS = 20;
+
+export type NodeTimelineSlice = {
+  /** 实际画出来的行（从最近那一版起连续的一段） */
+  rows: NodeTimelineRow[];
+  /** 折起来没画的更早版数；0 = 全列出来了（没有「加载更早」那一行） */
+  hidden: number;
+};
+
+/**
+ * 时间线缺省只画最近 `initial` 行，其余折成一行「加载更早 n 版…」（点开 = `expanded`，整表全列）。
+ * 切的是**连续的一段**（从最近那一版往前数），被选为 A / B 的行一定在这一段里——切点顺延到它，所以 URL / 「与最新比」把 A 选在
+ * 很早的会话时，A 与它之后的全部会话都露出来，「加载更早」只折它之前的。计数（「本范围 n 版」）不看这里，仍按全表。
+ */
+export function sliceNodeTimelineRows(
+  rows: NodeTimelineRow[],
+  options: { expanded: boolean; selected: readonly (number | null)[]; initial?: number },
+): NodeTimelineSlice {
+  const initial = options.initial ?? NODE_TIMELINE_INITIAL_ROWS;
+  if (options.expanded || rows.length <= initial) return { rows, hidden: 0 };
+  let cut = initial;
+  rows.forEach((row, index) => {
+    if (index >= cut && options.selected.includes(row.sesno)) cut = index + 1;
+  });
+  return { rows: rows.slice(0, cut), hidden: rows.length - cut };
+}
+
 export type NodeVersionPair = { a: number | null; b: number | null };
 
 /** 缺省选择：B = 范围内最新一版，A = 它的上一版（范围内）；不够两版时 A 为 null。 */

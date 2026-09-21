@@ -7,9 +7,12 @@ import {
   defaultNodeVersionPair,
   filterNodeTimelineRows,
   foldAttributeChanges,
+  NODE_TIMELINE_INITIAL_ROWS,
   pairWithLatest,
   pairWithPrevious,
   pickNodeVersionSide,
+  sliceNodeTimelineRows,
+  type NodeTimelineRow,
 } from './nodeVersionTimeline';
 
 import type { ModelAttributeHistory, ModelAttributeHistoryEntry, ModelElementVersionTimeline, ModelNodeVersionTimeline } from '@/model-source';
@@ -230,6 +233,41 @@ describe('filterNodeTimelineRows（时间线头上的两个勾选）', () => {
     const outOfScope = rows.map((row) => ({ ...row, inScope: row.sesno !== 573 }));
     expect(sesnos(filterNodeTimelineRows(outOfScope, base))).toEqual([626, 600, 212, 5]);
     expect(sesnos(filterNodeTimelineRows(outOfScope, { ...base, selected: [573] }))).toEqual([626, 600, 573, 212, 5]);
+  });
+});
+
+describe('sliceNodeTimelineRows（缺省只画最近 20 行 + 「加载更早 n 版…」）', () => {
+  // 53 版（叶子 FTUB 24384_23262 真机就是这个数），最近的在前：sesno 530, 520, …, 10
+  const rows: NodeTimelineRow[] = Array.from({ length: 53 }, (_, i) => ({
+    sesno: (53 - i) * 10, sessionTime: null, user: null, comment: null, selfImpact: 'mesh', unitImpact: 'mesh', unitsChanged: null,
+    changedCount: null, kind: null, attributeOnly: false, inScope: true,
+  }));
+  const sesnos = (slice: ReturnType<typeof sliceNodeTimelineRows>) => slice.rows.map((row) => row.sesno);
+
+  it('缺省切最近 20 行、折起 33；点开全列；不够 20 行的不折', () => {
+    expect(NODE_TIMELINE_INITIAL_ROWS).toBe(20);
+    const folded = sliceNodeTimelineRows(rows, { expanded: false, selected: [] });
+    expect(folded.rows).toHaveLength(20);
+    expect(sesnos(folded)[0]).toBe(530);
+    expect(sesnos(folded).at(-1)).toBe(340);
+    expect(folded.hidden).toBe(33);
+    expect(sliceNodeTimelineRows(rows, { expanded: true, selected: [] })).toEqual({ rows, hidden: 0 });
+    expect(sliceNodeTimelineRows(rows.slice(0, 20), { expanded: false, selected: [] })).toEqual({ rows: rows.slice(0, 20), hidden: 0 });
+    expect(sliceNodeTimelineRows(rows.slice(0, 21), { expanded: false, selected: [] }).hidden).toBe(1);
+  });
+
+  it('被选为 A / B 的行在折起那一段里时切点顺延到它（连续，不跳行）；选在前 20 里不多露', () => {
+    // A = sesno 100（第 44 行）：画到它为止 44 行，折 9
+    const deep = sliceNodeTimelineRows(rows, { expanded: false, selected: [100, 530] });
+    expect(deep.rows).toHaveLength(44);
+    expect(sesnos(deep).at(-1)).toBe(100);
+    expect(deep.hidden).toBe(9);
+    // 选中的行都在前 20 里：照旧 20
+    expect(sliceNodeTimelineRows(rows, { expanded: false, selected: [520, 530] }).rows).toHaveLength(20);
+    // null（还没选）不算
+    expect(sliceNodeTimelineRows(rows, { expanded: false, selected: [null, null] }).hidden).toBe(33);
+    // 选在最早一版：全列、折 0
+    expect(sliceNodeTimelineRows(rows, { expanded: false, selected: [10, 530] })).toEqual({ rows, hidden: 0 });
   });
 });
 

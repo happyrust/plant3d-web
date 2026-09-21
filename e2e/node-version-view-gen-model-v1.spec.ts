@@ -115,6 +115,13 @@ async function openPanel(page: Page, refno: string): Promise<Opened> {
 const timelineRows = (page: Page) => page.locator('[data-testid="model-unit-compare-timeline"] > li');
 const inScopeRows = (page: Page) => page.locator('[data-testid="model-unit-compare-timeline"] > li[data-in-scope="true"]');
 const timelineRow = (page: Page, sesno: number) => page.locator(`[data-testid="model-unit-compare-timeline"] > li[data-sesno="${sesno}"]`);
+/**
+ * 2026-09-21 起时间线缺省只画最近 20 行，更早的折成一行「加载更早 n 版…」（设计稿 S1，收口计划 P1-c）：
+ * 要数全表 / 点更早那几行前先点开；不够 20 行就没这一行，等 3 s 没等到就当没折。点开后换范围不再折回（换节点重载才折）。
+ */
+async function expandTimeline(page: Page): Promise<void> {
+  await page.getByTestId('model-unit-compare-timeline-more').click({ timeout: 3_000 }).catch(() => undefined);
+}
 
 async function evidence(page: Page, name: string, data?: unknown): Promise<void> {
   if (!EVIDENCE_DIR) return;
@@ -139,6 +146,13 @@ test('叶子构件：时间线带 user / comment / 属性 n，叶子缺省「仅
   // 时间线：范围内行数 = element/versions 里它自己变过的行数（叶子没有成员 → 缺省「仅自身」、「所有子节点」置灰，Q10 c）；
   // 夹具要是带成员的构件，缺省就是「所有子节点」、行数 = 两列并起来的行数
   await expect(timelineRows(page).first()).toBeVisible({ timeout: 120_000 });
+  // 缺省折起（叶子 FTUB 24384_23262 有 53 版；缺省 A / B 是最近两版，就在画出来的 20 行里）：先看得见「加载更早 n 版…」再点开数全表
+  if (selfRows.length > 20) {
+    await expect(page.getByTestId('model-unit-compare-timeline-more')).toContainText('加载更早');
+    await expect(timelineRows(page)).toHaveCount(20);
+  }
+  await expandTimeline(page);
+  await expect(page.getByTestId('model-unit-compare-timeline-more')).toHaveCount(0);
   const subtreeDisabled = await page.getByTestId('model-unit-compare-scope-subtree').isDisabled();
   if (subtreeDisabled) {
     await expect(page.getByTestId('model-unit-compare-scope-self')).toHaveAttribute('aria-pressed', 'true');
@@ -215,11 +229,13 @@ test('容器节点：子树时间线来自 node/versions（不再手填会话号
   // 切「所有子节点」：每一行都在范围内，动过几何的行带「单元 n」
   await page.getByTestId('model-unit-compare-scope-subtree').click();
   const subtreeSesnos = new Set<number>([...subtree.versions.map((row) => row.sesno), ...selfSesnos]);
-  await expect(inScopeRows(page)).toHaveCount(subtreeSesnos.size);
   // 版数 = node/versions subtree 的行数；只在属性时间线里的会话仍是「仅属性」
   const subtreeTableSesnos = new Set<number>(subtree.versions.map((row) => row.sesno));
   const subtreeAttributeOnly = historySesnos.filter((sesno) => !subtreeTableSesnos.has(sesno));
   await expect(page.getByTestId('model-unit-compare-timeline-head')).toContainText(`本范围 ${subtreeTableSesnos.size} 版`);
+  // 子树 298 版缺省折起（标题的数字按全表；画出来的从最近那版连续到被选为 A / B 的行、至少 20 行）：点开再数行
+  await expandTimeline(page);
+  await expect(inScopeRows(page)).toHaveCount(subtreeSesnos.size);
   if (subtreeAttributeOnly.length > 0) await expect(page.getByTestId('model-unit-compare-timeline-head')).toContainText(`仅属性 ${subtreeAttributeOnly.length}`);
   const withUnits = subtree.versions.filter((row) => row.units_changed > 0);
   await expect(page.getByTestId('model-unit-compare-units-changed')).toHaveCount(withUnits.length);
