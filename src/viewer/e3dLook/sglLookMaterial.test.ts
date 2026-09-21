@@ -23,12 +23,14 @@ import {
   E3D_GRADIENT_BOTTOM_T,
   E3D_GRADIENT_TOP_T,
   SGL_BACKGROUND_DEPTH,
+  SGL_EDGE_FLAG_OFF_SCALE,
   SGL_PIPELINE_SHADERS,
   createDefaultSglPipelineParams,
   e3dBlurSharpnessForDepthRange,
   eyeDepthRangeOfBox,
   sglBlurFalloffForRadius,
   sglDefaultGradientEndColour,
+  sglEdgeParticipationFor,
   sglHlrSamplesFor,
   sglHlrSupersampleGrid
 } from './sglLookPipeline';
@@ -264,11 +266,11 @@ describe('SglLookPipeline 参数与着色器', () => {
     expect(p.hlr.gradientDotThreshold).toBe(0.9999);
     expect(p.hlr.gradientStep).toBe(1000);
     const s = SGL_PIPELINE_SHADERS.hlr;
-    // ① / ② 背景邻接
-    expect(s).toContain('if (!geoC) return geoN;');
-    expect(s).toContain('if (!geoN) return true;');
-    // ③ 台阶：|dC − dN| > 阈值、prev 是几何、两梯度向量 (dC−dP, h) / (dC−dN, −h) 归一化后 |dot| < 0.9999
-    expect(s).toContain('abs(c.a - next.a) > uDepthThreshold && sglIsGeometry(prev.a)');
+    // ① / ② 无标记（背景 / 不参与）邻接
+    expect(s).toContain('if (!flagC) return flagN && (sglIsBackground(c.a) || c.a - next.a > uDepthThreshold);');
+    expect(s).toContain('if (!flagN) return sglIsBackground(next.a) || c.a - next.a < -uDepthThreshold;');
+    // ③ 台阶：|dC − dN| > 阈值、prev 有标记、两梯度向量 (dC−dP, h) / (dC−dN, −h) 归一化后 |dot| < 0.9999
+    expect(s).toContain('abs(c.a - next.a) > uDepthThreshold && flagged(prev)');
     expect(s).toContain('normalize(vec2(c.a - prev.a, h))');
     expect(s).toContain('normalize(vec2(c.a - next.a, -h))');
     expect(s).toContain('abs(dot(v1, v2)) < uGradientDotThreshold');
@@ -280,6 +282,30 @@ describe('SglLookPipeline 参数与着色器', () => {
     expect(s).toContain('vec4 down = texture2D(tND, vUv - vec2(0.0, stepUv.y));');
     // 旧的二阶差分判据已删
     expect(s).not.toContain('(b.a - c.a) - (c.a - a.a)');
+  });
+
+  it('「参与边线」标记 = sglDx11 法线纹理 .w bit0：法线长度 1 / 0.5 编码，dxbc 里无标记几何的两条分支也照搬', () => {
+    const p = createDefaultSglPipelineParams();
+    expect(p.hlr.translucentEdges).toBe(true); // EnhancedEdgesTranslucent 默认 ON
+    expect(p.hlr.handleEdges).toBe(false); // EnhancedEdgesHandles 默认 OFF
+    expect(SGL_EDGE_FLAG_OFF_SCALE).toBe(0.5);
+    // 参与规则：辅助对象看 handleEdges，半透明看 translucentEdges，其余参与
+    const hlr = { translucentEdges: true, handleEdges: false };
+    expect(sglEdgeParticipationFor(hlr, { userData: {} }, false)).toBe(true);
+    expect(sglEdgeParticipationFor(hlr, { userData: {} }, true)).toBe(true);
+    expect(sglEdgeParticipationFor({ ...hlr, translucentEdges: false }, { userData: {} }, true)).toBe(false);
+    expect(sglEdgeParticipationFor(hlr, { userData: { sglEdges: false } }, false)).toBe(false);
+    expect(sglEdgeParticipationFor({ ...hlr, handleEdges: true }, { userData: { sglEdges: false } }, false)).toBe(true);
+    expect(sglEdgeParticipationFor({ ...hlr, handleEdges: true }, { userData: { sglEdges: false } }, true)).toBe(true);
+    expect(sglEdgeParticipationFor(hlr, {}, false)).toBe(true);
+    // 法线/深度着色器写 n × 标记；HLR 按长度识别，并有 dxbc 的「无标记但非背景」分支
+    expect(SGL_PIPELINE_SHADERS.normalDepthFragment).toContain('gl_FragColor = vec4(n * uEdgeFlag, -vViewPos.z);');
+    const s = SGL_PIPELINE_SHADERS.hlr;
+    expect(s).toContain('bool sglEdgeParticipant(vec3 n) { return dot(n, n) > 0.5625; }');
+    expect(s).toContain('bool flagged(vec4 s) { return sglIsGeometry(s.a) && sglEdgeParticipant(s.rgb); }');
+    expect(s).toContain('if (!flagC) return flagN && (sglIsBackground(c.a) || c.a - next.a > uDepthThreshold);');
+    expect(s).toContain('if (!flagN) return sglIsBackground(next.a) || c.a - next.a < -uDepthThreshold;');
+    expect(s).toContain('abs(c.a - next.a) > uDepthThreshold && flagged(prev)');
   });
 });
 

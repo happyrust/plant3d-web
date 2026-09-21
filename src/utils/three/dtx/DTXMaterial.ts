@@ -243,6 +243,8 @@ uniform int sglUseEnvMap;
 uniform mat3 sglEnvRot;
 // 1 = 输出 (眼空间面法线, 线性深度) 供 HLR / AO 后处理
 uniform int sglOutput;
+// 法线/深度输出里的「参与边线」标记（sglDx11 法线纹理 .w 的 bit0）：1 = 参与（法线单位长），0.5 = 不参与（法线缩到 0.5 长）
+uniform float sglEdgeFlag;
 
 // === 对数深度缓冲 + per-object depth bias ===
 #ifdef USE_LOGDEPTHBUF
@@ -311,9 +313,9 @@ void main() {
   }
 
   if (sglOutput == 1) {
-    // SGL MRT1/MRT2 等价物：位置导数叉乘得到的眼空间面法线 + 线性深度（背景由清屏留 0）
+    // SGL MRT1/MRT2 等价物：位置导数叉乘得到的眼空间面法线（× 参与边线标记）+ 线性深度（背景由清屏留哨兵 1e18）
     vec3 faceN = normalize(cross(dFdx(vViewPosition), dFdy(vViewPosition)));
-    fragColor = vec4(faceN, -vViewPosition.z);
+    fragColor = vec4(faceN * sglEdgeFlag, -vViewPosition.z);
     #ifdef USE_LOGDEPTHBUF
       float ndBackFaceBias = gl_FrontFacing ? 0.0 : 5.0e-7;
       gl_FragDepth = log2(vFragDepth) * logDepthBufFC * 0.5 + vDepthBias + ndBackFaceBias;
@@ -455,7 +457,8 @@ export class DTXMaterial extends ShaderMaterial {
         sglEnvMap: { value: null },
         sglUseEnvMap: { value: 0 },
         sglEnvRot: { value: envCubeRotationForUp(new Vector3(0, 0, 1)) },
-        sglOutput: { value: 0 }
+        sglOutput: { value: 0 },
+        sglEdgeFlag: { value: 1 }
       },
       // 重要：启用 WebGL2 的 GLSL 3.0 语法
       glslVersion: GLSL3
@@ -493,7 +496,8 @@ export class DTXMaterial extends ShaderMaterial {
     // v12: SGL（E3D sglDx11）口径光照分支 + 面法线/线性深度输出（docs/rendering/e3d-sgl-look-prototype.md）
     // v13: SGL 分支接入环境立方体贴图（sglEnvMap / sglUseEnvMap / sglEnvRot），反射改逐通道
     // v14: SGL 分支的 c 先从线性转回 sRGB 字节值（E3D 颜色表口径）
-    return 'DTXMaterial_v14';
+    // v15: 法线/深度输出加「参与边线」标记（sglEdgeFlag，法线长度 1 / 0.5）
+    return 'DTXMaterial_v15';
   }
 
   // ========== SGL（E3D）口径 ==========
@@ -562,6 +566,23 @@ export class DTXMaterial extends ShaderMaterial {
   }
 
   private _sglNdSaved: { blending: Blending; depthWrite: boolean; transparent: boolean } | null = null;
+
+  /**
+   * 法线/深度输出里的「参与 HLR 边线」标记（对应 sglDx11 法线纹理 .w 的 bit0；E3D 的 EnhancedEdgesTranslucent / Handles 由管线按材质决定后写进来）：
+   * 不参与的把法线缩到 0.5 长，HLR 通道按长度识别；AO 照常归一化，不受影响。
+   */
+  setSglEdgeParticipation(participates: boolean): void {
+    this.uniforms.sglEdgeFlag!.value = participates ? 1 : 0.5;
+  }
+
+  get sglEdgeParticipates(): boolean {
+    return this.uniforms.sglEdgeFlag!.value === 1;
+  }
+
+  /** setSglNormalDepthOutput(true) 期间 transparent 被临时关掉；这里给出材质本来的半透明属性 */
+  get sglIsTranslucentPass(): boolean {
+    return this._sglNdSaved ? this._sglNdSaved.transparent : this.transparent;
+  }
 
   /**
    * 设置光照参数

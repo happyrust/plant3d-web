@@ -78,7 +78,7 @@ a   = colour.a                                      // 半透明 = 1 − 百分�
 | 法线/深度 | `overrideMaterial`（或 DTX 这类 provider 材质自己出）：rgb = `normalize(cross(dFdx(viewPos), dFdy(viewPos)))`（面法线，同 sglDx11 MRT1），a = 线性深度；背景清成哨兵 **1e18**（`SGL_BACKGROUND_DEPTH`，同 sglDx11，`clearBufferfv` 直写）；RGBA32F | — |
 | HBAO | NVIDIA HBAO 法线模式，参数名同 sglDx11 | `E3D31_HBAO`（= 3.1 硬编码，§5.6）：R **392.7327**（场景单位 mm；ViewerPanel 按米 ×0.001）、8 方向、**4 步**、AngleBias **30°**、Attenuation **0.2**、Contrast 1.25 |
 | 模糊 | 深度感知可分离模糊，权重 exp(−r²·Falloff − (Δz·s)²)（同 sglDx11 dxbc_003） | 半径 **12** px、Falloff = 1/(2·((R+1)/2)²) = 0.01183；锐度 `blurSharpnessAuto`（默认开）= **16 / (本帧深度范围 / 2)**，深度范围 = 可渲染 Mesh 包围盒 ∪ `extraSceneBounds`（DTX 层）在眼空间的 [近, 远]；关掉则用固定 `blurSharpness` |
-| HLR | 逐句照 sglDx11 HLR PS（§5.8）：只看右 / 下邻居；① 中心是背景、邻居是几何 → 边；② 中心是几何、邻居是背景 → 边；③ 都是几何：\|Δd\| > 50 且左/上也是几何且 \|dot(normalize(dC−dP, h), normalize(dC−dN, −h))\| < 0.9999（h = 1000·像素步长）→ 边；④ \|N·N′\| < 0.6 → 边。采样档位 = MSAA 采样数（§5.7）：法线/深度与 HLR 通道按 `sglHlrSupersampleGrid()` 超采样（4 → 2×2），邻居仍取 1 个屏幕像素远 | 50 mm、0.9999、1000（深度 mm；米场景 ×0.001）、0.6、边线黑 |
+| HLR | 逐句照 sglDx11 HLR PS（§5.8 / §5.9）：「有标记」= 几何且参与边线（法线纹理 .w bit0 ↔ 这里法线长度 1 / 0.5）；只看右 / 下邻居；① 中心无标记：邻居有标记且（中心是背景 或 dC−dN > 50）→ 边；② 中心有标记、邻居无标记：邻居是背景 或 dC−dN < −50 → 边；③ 都有标记：\|Δd\| > 50 且左/上也有标记且 \|dot(normalize(dC−dP, h), normalize(dC−dN, −h))\| < 0.9999（h = 1000·像素步长）→ 边；④ \|N·N′\| < 0.6 → 边。采样档位 = MSAA 采样数（§5.7）：法线/深度与 HLR 通道按 `sglHlrSupersampleGrid()` 超采样（4 → 2×2），邻居仍取 1 个屏幕像素远 | 50 mm、0.9999、1000（深度 mm；米场景 ×0.001）、0.6、边线黑；`translucentEdges` ON（半透明参与）、`handleEdges` OFF（`userData.sglEdges === false` 的辅助对象不参与） |
 | 合成 | `colour × HLR × AO`；HLR 对本像素的 kx×ky 个子像素取平均（= sglDx11 MSAA 版 HLR PS 的 Σ/N）；背景 `mix(top, bottom, t)`，`t = mix(gradientBottomT, gradientTopT, uv.y)` | 按 E3D 3.1 D2D 渐变：上 = 背景色 grey #828282、下 = 端色白（端色未设时 HLS 亮度拉满 → 任何背景色都得白），t 顶 0.35/1.5 ≈ 0.233 / 底 1.35/1.5 = 0.9 → 屏幕上 #9f9f9f→#f2f2f2（第三轮已对齐） |
 | 抗锯齿 | `aa.mode`：'msaa' = 颜色通道用 `samples` 倍 MSAA 目标（three `WebGLRenderTarget.samples`，截到 `maxSamples`）+ 上述 HLR 超采样；'fxaa' = 合成后再过 three 的 FXAA 3.11（HLR 档位退回 1）；'none' | 出厂 **msaa 4**（`Sgl_View_Parameters` +780；`gphviewopt antiAlias = true(4)`）；FXAA 与 MSAA 互斥（+764） |
 | legacy | `_legacy_mode`：全部效果关、纯色背景（HLR 档位 1；MSAA 由视图参数管，不受影响） | — |
@@ -89,6 +89,7 @@ a   = colour.a                                      // 半透明 = 1 − 百分�
 npm run dev                       # 然后打开 http://127.0.0.1:3101/e3d-look-demo.html
 # URL 开关：?view=iso|front|top  &preset=factory|machine(缺省 factory)  &envcube=0(反射退回解析兜底)
 #          &hlr=0  &ao=0  &gradient=0  &aa=0|fxaa|2|4|8(缺省随预设：出厂 4× MSAA)  &legacy=1  &keep=1(保留绘制缓冲便于截图)
+#          &translucentEdges=0(半透明房间盒不画边)  &handleEdges=1(左前方蓝色辅助球也画边)
 ```
 
 右侧面板可切预设、开关环境立方体贴图，实时改 Ka/Kd/Ks/Kr/Kse、兜底天/地亮度、策略、房间半透明、HLR/AO/背景参数（含渐变 t 区间）。
@@ -228,8 +229,29 @@ npm run dev                       # 然后打开 http://127.0.0.1:3101/e3d-look-
   AO 在哨兵改动后仍压暗几何（0.538 → 0.513）、背景不受影响；AA / 渐变 / 颜色各项照旧。DTX harness 20/20（`gradientStep` 1，
   轮廓覆盖率灰 0 → 2591 / 纯黑 2148 → 604）。**未与真机对参**。
 
+## 5.9 第九轮：「参与边线」标记——EnhancedEdgesTranslucent / EnhancedEdgesHandles（2026-09-21）
+
+- E3D 侧：`Sgl_View_Effects_Parameters` 默认 `EnhancedEdgesTranslucent = 1`（视图属性 13）、`EnhancedEdgesHandles = 0`（12）、`EnhancedEdgesLaser = 0`（11）；
+  法线纹理 .w 的 bit0 就是每个像素「参与边线」的标记（§5.8 的 dxbc 读法），不参与的对象照常写深度、只是标记 0 ——
+  它自己不会被描边，但挡在它前面的参与几何在轮廓处仍画线（① 分支 dC − dN > 50 / ② 分支 dC − dN < −50 就是给这种情况的）。
+- web 侧编码：法线/深度纹理里参与 = 单位法线，不参与 = 法线 × 0.5（`SGL_EDGE_FLAG_OFF_SCALE`），HLR 用 `dot(n,n) > 0.75²` 识别；AO / 模糊照常归一化，不受影响。
+  - `SglHlrParams.translucentEdges`（默认 true）/ `handleEdges`（默认 false）；`sglEdgeParticipationFor(hlr, object, translucent)`：
+    `object.userData.sglEdges === false` 的 Mesh 是辅助对象（handles / aids）→ 看 `handleEdges`；材质 `transparent` → 看 `translucentEdges`；其余参与。
+  - overrideMaterial 路径：`ND_FRAGMENT` 加 `uEdgeFlag`，参与 / 不参与的 Mesh 分两趟画（共用深度缓冲）；
+  - provider 路径：`SglNormalDepthProvider` 新增可选 `setSglEdgeParticipation()` 与 `sglIsTranslucentPass`（因为 `setSglNormalDepthOutput(true)` 期间
+    `transparent` 被临时关掉），`_collectRenderables` 按每个 provider 网格决定后写进材质。`DTXMaterial`（program key → **v15**）：
+    `sglEdgeFlag` uniform，`fragColor = vec4(faceN * sglEdgeFlag, depth)`；DTX 的半透明通道材质就是 `transparent: true` 那份，
+    所以「选中聚焦半透明」压成 20% 的对象也按 `translucentEdges` 走（E3D 默认仍画边）。
+  - ViewerPanel 走 providers 模式，非 DTX 的辅助 Mesh（标注 / 量测 / pivot）本来就不进法线/深度通道，行为等同 handles = 0。
+  - 演示页加一个 aids 蓝球（`userData.sglEdges = false`，颜色不随出厂色切换）与两个开关 / URL 参数。
+- 验证：`vitest` e3dLook 26/26 + 新 `DTXMaterial.sgl.test.ts` 3/3（provider 判定、v15、标记 1 / 0.5、`sglIsTranslucentPass` 在 ND 输出期间仍正确），
+  连 DTX 目录 74/74；`type-check` 基线外仍只有既有 4 条；ESLint 通过。无头 Chrome 演示页 17 变体 **31/31**：`translucentEdges=0` 房间盒轮廓消失
+  （纯黑 1.08% → 1.01%），蓝球默认无轮廓、`handleEdges=1` 才有（框内纯黑 87 → 172，`shots/aid-zoom.png`：球把身后鞍座的边线正确挡掉）。
+  DTX harness **22/22**：半透明盒 c 默认有轮廓（框内纯黑 301），`translucentEdges=0` → 0，旁边不透明盒 a 303 → 303 不变。**未与真机对参**。
+
 ## 6. 下一步
 
 1. 在未修补的 E3D 3.1 上（或补跑 `!!gphViewOpt.applyToView`）复核出厂外观、立方体贴图朝向、HBAO 强度 / 模糊锐度（§5.6 的深度范围累计方式是推断）、抗锯齿边线覆盖率（§5.7）与边线取向（§5.8）；`SHINY`(30) / `TRANSLUCENCY_STYLE`(51) 分支仍未读。
-2. 法线纹理 .w 的「参与边线」标记（handles / laser / `EnhancedEdgesTranslucent` 半透明是否画边）尚未建模：现在所有几何一律出法线、一律参与边线。
+2. `PseudoShadowsHandles = 0`（辅助对象不受伪阴影）与 `EnhancedEdgesLaser`（激光点云）尚未建模——现在参与标记只管边线，AO 对所有几何一视同仁；
+   ViewerPanel 里若以后有 DTX 层专门装辅助几何，可给对应 Mesh 设 `userData.sglEdges = false`。
 3. 如项目有自定义 autocolour 规则，导出 `gphcolopt` 选项文件翻成 `themes.*` 规则（颜色用 `pdms:` 名）；active orange / aids blue / tracing magenta 尚未接。

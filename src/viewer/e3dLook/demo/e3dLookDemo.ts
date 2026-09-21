@@ -4,10 +4,10 @@
  * 调 Ka Kd Ks Kr Kse 与 AO/HLR 参数，看合成结果或各中间图。
  */
 
-import { Color, type CubeTexture, FloatType, PerspectiveCamera, Scene, WebGLRenderer } from 'three';
+import { Color, type CubeTexture, FloatType, Mesh, PerspectiveCamera, Scene, SphereGeometry, WebGLRenderer } from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 
-import { E3D_DEFAULT_ELEMENT_COLOUR } from '../pdmsColourTable';
+import { E3D_DEFAULT_ELEMENT_COLOUR, E3D_GRAPHICS_COLOUR_DEFAULTS, pdmsColourHex } from '../pdmsColourTable';
 import { loadSgl31EnvCube } from '../sglEnvCube';
 import { SGL_LIGHT_STRATEGIES, SglLookMaterial, translucencyToAlpha } from '../sglLookMaterial';
 import { SglLookPipeline, type SglMsaaSamples } from '../sglLookPipeline';
@@ -37,6 +37,8 @@ interface DemoHandle {
   setEnvCubeEnabled: (on: boolean) => void;
   /** 元素颜色：true = 出厂 E3D（全部 lightgrey #bdbdbd），false = 演示配色（PDMS 颜色表） */
   setFactoryColours: (on: boolean) => void;
+  /** 演示用「辅助对象」（userData.sglEdges = false 的蓝球） */
+  aid: Mesh;
   frames: number;
 }
 
@@ -71,6 +73,14 @@ function main(): void {
   const plant = buildDemoPlant();
   scene.add(plant.root);
 
+  // 一个「辅助对象」（E3D aids，颜色 blue）：userData.sglEdges = false → 不参与边线（EnhancedEdgesHandles 默认关），仍写深度
+  const aidMaterial = new SglLookMaterial({ color: pdmsColourHex(E3D_GRAPHICS_COLOUR_DEFAULTS.aids)! });
+  const aid = new Mesh(new SphereGeometry(450, 32, 16), aidMaterial);
+  aid.position.set(-7000, -6500, 450);
+  aid.userData.sglEdges = false;
+  aid.name = 'demo-aid';
+  scene.add(aid);
+
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.target.set(0, 0, 2600);
   controls.enableDamping = false;
@@ -85,7 +95,7 @@ function main(): void {
   setView((params.get('view') as 'iso' | 'front' | 'top' | null) ?? 'iso');
 
   const pipeline = new SglLookPipeline(renderer);
-  const allMaterials: SglLookMaterial[] = [...plant.materials, plant.roomMaterial];
+  const allMaterials: SglLookMaterial[] = [...plant.materials, plant.roomMaterial, aidMaterial];
 
   // 预设：?preset=factory|machine（缺省出厂 E3D 3.1），再由 ?legacy/ao/hlr/gradient 单项覆盖
   let activePreset: SglLookPresetId = parseSglLookPresetId(params.get('preset')) ?? DEFAULT_SGL_LOOK_PRESET;
@@ -100,6 +110,9 @@ function main(): void {
   if (params.get('ao') === '0') pipeline.params.ao.enabled = false;
   if (params.get('hlr') === '0') pipeline.params.hlr.enabled = false;
   if (params.get('gradient') === '0') pipeline.params.background.gradient = false;
+  // ?translucentEdges=0 半透明不画边（EnhancedEdgesTranslucent）；?handleEdges=1 辅助对象也画边（EnhancedEdgesHandles）
+  if (params.get('translucentEdges') === '0') pipeline.params.hlr.translucentEdges = false;
+  if (params.get('handleEdges') === '1') pipeline.params.hlr.handleEdges = true;
   // ?aa=0|none 关；?aa=fxaa；?aa=2|4|8 = MSAA 采样数（缺省随预设：出厂 4× MSAA）
   const aaRaw = params.get('aa');
   if (aaRaw === '0' || aaRaw === 'none') pipeline.params.aa.mode = 'none';
@@ -127,7 +140,11 @@ function main(): void {
   const demoColours = new Map(allMaterials.map((m) => [m, m.color] as const));
   let factoryColours = params.get('colours') === 'factory';
   const applyColours = (): void => {
-    for (const m of allMaterials) m.color = factoryColours ? E3D_DEFAULT_ELEMENT_COLOUR : demoColours.get(m)!;
+    // 辅助对象的 aids 蓝不随 autocolour / Add element colour 变，保持
+    for (const m of allMaterials) {
+      if (m === aidMaterial) continue;
+      m.color = factoryColours ? E3D_DEFAULT_ELEMENT_COLOUR : demoColours.get(m)!;
+    }
   };
   applyColours();
 
@@ -260,6 +277,8 @@ function main(): void {
   addSlider(sHlr, '法线 |cos| 阈值', 0, 1, 0.01, () => pipeline.params.hlr.normalThreshold, (v) => { pipeline.params.hlr.normalThreshold = v; });
   addSlider(sHlr, '梯度方向 |dot| 阈值', 0.99, 1, 0.0001, () => pipeline.params.hlr.gradientDotThreshold, (v) => { pipeline.params.hlr.gradientDotThreshold = v; });
   addSlider(sHlr, '半径 px', 1, 4, 1, () => pipeline.params.hlr.radiusPx, (v) => { pipeline.params.hlr.radiusPx = v; });
+  addCheckbox(sHlr, '半透明也画边（EnhancedEdgesTranslucent，E3D 默认开；房间盒）', () => pipeline.params.hlr.translucentEdges, (v) => { pipeline.params.hlr.translucentEdges = v; });
+  addCheckbox(sHlr, '辅助对象也画边（EnhancedEdgesHandles，E3D 默认关；左前方蓝球）', () => pipeline.params.hlr.handleEdges, (v) => { pipeline.params.hlr.handleEdges = v; });
   addColor(sHlr, '边线色', () => pipeline.params.hlr.edgeColor, (c) => { pipeline.params.hlr.edgeColor.copy(c); });
 
   // AO
@@ -326,6 +345,7 @@ function main(): void {
     envCube: null,
     setEnvCubeEnabled: (on) => { envCubeEnabled = on; applyEnvCube(); },
     setFactoryColours: (on) => { factoryColours = on; applyColours(); },
+    aid,
     frames: 0,
   };
   window.__e3dLookDemo = handle;

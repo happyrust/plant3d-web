@@ -67,6 +67,15 @@ export interface SglHlrParams {
   gradientStep: number;
   /** 邻居距离（屏幕像素）；sglDx11 固定 1，这里留作可调 */
   radiusPx: number;
+  /**
+   * SGL_ENHANCED_EDGES_TRANSLUCENT（视图属性 13，E3D 默认 ON）：半透明几何（材质 transparent）是否参与边线。
+   * 不参与的几何仍写深度，只是法线/深度里的「参与」标记为 0：它自己不会被描边，但挡在它前面的参与几何仍会在轮廓处画线（同 sglDx11）。
+   */
+  translucentEdges: boolean;
+  /**
+   * SGL_ENHANCED_EDGES_HANDLES（视图属性 12，E3D 默认 OFF）：辅助对象（handles / aids，`object.userData.sglEdges === false` 的 Mesh）是否参与边线。
+   */
+  handleEdges: boolean;
   /** 边线颜色（与颜色相乘；黑 = 纯黑线） */
   edgeColor: Color;
 }
@@ -248,7 +257,31 @@ export function sglHlrSamplesFor(params: Pick<SglLookPipelineParams, 'aa' | 'leg
  */
 export interface SglNormalDepthProvider {
   setSglNormalDepthOutput(enabled: boolean): void;
+  /**
+   * 可选：法线/深度输出里的「参与边线」标记（sglDx11 法线纹理 .w 的 bit0；这里约定不参与的把法线缩到 0.5 长）。
+   * 管线在法线/深度通道前按 `SglHlrParams.translucentEdges / handleEdges` 决定后调用。
+   */
+  setSglEdgeParticipation?(participates: boolean): void;
+  /** 可选：材质本来是不是半透明通道（setSglNormalDepthOutput(true) 期间 `transparent` 会被临时关掉，所以单独给） */
+  readonly sglIsTranslucentPass?: boolean;
 }
+
+/**
+ * 一个可渲染 Mesh 这一帧是否参与 HLR 边线（sglDx11 法线纹理 .w bit0 的取值规则）：
+ * `userData.sglEdges === false` 的是辅助对象（handles / aids）→ 看 `handleEdges`；半透明材质 → 看 `translucentEdges`；其余参与。
+ */
+export function sglEdgeParticipationFor(
+  hlr: Pick<SglHlrParams, 'translucentEdges' | 'handleEdges'>,
+  object: { userData?: Record<string, unknown> },
+  translucent: boolean,
+): boolean {
+  if (object.userData?.sglEdges === false) return hlr.handleEdges;
+  if (translucent) return hlr.translucentEdges;
+  return true;
+}
+
+/** 法线/深度纹理里「参与边线」标记的编码：参与 = 单位法线，不参与 = 法线 × 该值 */
+export const SGL_EDGE_FLAG_OFF_SCALE = 0.5;
 
 export function isSglNormalDepthProvider(material: unknown): material is Material & SglNormalDepthProvider {
   return !!material && typeof (material as SglNormalDepthProvider).setSglNormalDepthOutput === 'function';
@@ -283,6 +316,8 @@ export function createDefaultSglPipelineParams(): SglLookPipelineParams {
       gradientDotThreshold: 0.9999,
       gradientStep: 1000,
       radiusPx: 1,
+      translucentEdges: true,
+      handleEdges: false,
       edgeColor: new Color(0x000000),
     },
     ao: {
@@ -354,10 +389,17 @@ void main() {
 
 const ND_FRAGMENT = /* glsl */ `
 varying vec3 vViewPos;
+// 「参与边线」标记：1 = 参与（单位法线），0.5 = 不参与（法线缩到 0.5 长；sglDx11 是法线纹理 .w 的 bit0）
+uniform float uEdgeFlag;
 void main() {
   vec3 n = normalize(cross(dFdx(vViewPos), dFdy(vViewPos)));
-  gl_FragColor = vec4(n, -vViewPos.z);
+  gl_FragColor = vec4(n * uEdgeFlag, -vViewPos.z);
 }
+`;
+
+/** 法线/深度纹理里的「参与边线」标记：法线长度 > 0.75 即参与（不参与的被缩到 0.5） */
+const SGL_EDGE_FLAG_GLSL = /* glsl */ `
+bool sglEdgeParticipant(vec3 n) { return dot(n, n) > 0.5625; }
 `;
 
 /** 深度重建 + HBAO（法线模式） */
@@ -477,12 +519,13 @@ void main() {
 
 /**
  * HLR：逐句照 sglDx11 的 HLR PS（dxbc_045 单采样；dxbc_029 / 028 / 027 是 2 / 4 / 8 采样版，每个采样点同一判据再 Σ/N）。
- * 那边的输入是深度纹理（背景哨兵 1e18）+ 法线纹理（.w 的 bit0 = 「有法线的几何」）；这里深度 ≠ 哨兵 即几何。
+ * 那边的输入是深度纹理（背景哨兵 1e18）+ 法线纹理（.w 的 bit0 = 「参与边线」标记）；这里深度 ≠ 哨兵 即几何，
+ * 法线长度 > 0.75 即参与（不参与的几何 —— 半透明关了 EnhancedEdgesTranslucent、handles 关了 EnhancedEdgesHandles —— 法线被缩到 0.5 长）。
  * 只看 右(+1 px) 与 下(+1 px) 两个邻居，左 / 上 只在梯度方向判据里用：
- *   ① 中心是背景：右或下是几何 → 边（轮廓画在几何左 / 上外侧的背景像素上；sglDx11 里「中心非背景但无法线标记、
- *      且比几何邻居远 > 50」的分支这里没有对应物 —— 本管线所有几何都出法线）；
- *   ② 中心是几何、邻居是背景 → 边（几何右 / 下侧的轮廓画在几何像素上）；
- *   ③ 都是几何：|dC − dN| > 50 且 左/上 邻居也是几何 且 |dot(normalize(dC − dP, h), normalize(dC − dN, −h))| < 0.9999 → 边。
+ *   ① 中心无标记（背景或不参与的几何）：邻居有标记 且（中心是背景 或 dC − dN > 50）→ 边
+ *      （参与几何的轮廓画在它左 / 上外侧的背景 / 不参与几何像素上；不参与几何自己不会被描边）；
+ *   ② 中心有标记、邻居无标记：邻居是背景 → 边；否则 dC − dN < −50（中心更近）→ 边（参与几何右 / 下侧的轮廓画在几何像素上）；
+ *   ③ 都有标记：|dC − dN| > 50 且 左/上 邻居也有标记 且 |dot(normalize(dC − dP, h), normalize(dC − dN, −h))| < 0.9999 → 边。
  *      h = 1000 · 屏幕 InvResolution（sglDx11 的 `cb1[0] × (0, −1000, 0, 1000)`，深度单位 mm）：平面无论多陡两向量反向平行、|dot| = 1，
  *      只有深度梯度方向变了（真台阶）才判边，且画在台阶左 / 上侧那个像素上；
  *   ④ 否则 |N·N'| < 0.6 → 边（盒子这类 90° 折边由它负责）。
@@ -502,17 +545,21 @@ uniform float uGradientStep;
 uniform vec3 uEdgeColor;
 varying vec2 vUv;
 ${SGL_BG_DEPTH_GLSL}
+${SGL_EDGE_FLAG_GLSL}
+
+// 「有标记」= 是几何且参与边线（sglDx11 法线纹理 .w bit0）
+bool flagged(vec4 s) { return sglIsGeometry(s.a) && sglEdgeParticipant(s.rgb); }
 
 // 一个方向的判边：next = 右 / 下，prev = 左 / 上，h = 该轴的 1000·像素步长。true = 边
 bool edgeAlong(vec4 c, vec4 next, vec4 prev, float h) {
-  bool geoC = sglIsGeometry(c.a);
-  bool geoN = sglIsGeometry(next.a);
-  // ① 中心是背景（sglDx11: 中心深度 == 1e18 → 邻居有法线标记即边）
-  if (!geoC) return geoN;
-  // ② 邻居是背景（sglDx11: 邻居无法线标记且深度 == 1e18 → 边）
-  if (!geoN) return true;
-  // ③ 深度台阶 + 梯度方向变化（sglDx11: lt 50 < |dC − dN|，|dot| < 0.9999，且 prev 有法线标记）
-  if (abs(c.a - next.a) > uDepthThreshold && sglIsGeometry(prev.a)) {
+  bool flagC = flagged(c);
+  bool flagN = flagged(next);
+  // ① 中心无标记（sglDx11: flag(C)==0 → flag(N) && (dC == 1e18 || dC − dN > 50)）
+  if (!flagC) return flagN && (sglIsBackground(c.a) || c.a - next.a > uDepthThreshold);
+  // ② 邻居无标记（sglDx11: flag(N)==0 → dN == 1e18 || dC − dN < −50）
+  if (!flagN) return sglIsBackground(next.a) || c.a - next.a < -uDepthThreshold;
+  // ③ 深度台阶 + 梯度方向变化（sglDx11: lt 50 < |dC − dN|，|dot| < 0.9999，且 prev 有标记）
+  if (abs(c.a - next.a) > uDepthThreshold && flagged(prev)) {
     vec2 v1 = normalize(vec2(c.a - prev.a, h));
     vec2 v2 = normalize(vec2(c.a - next.a, -h));
     if (abs(dot(v1, v2)) < uGradientDotThreshold) return true;
@@ -667,6 +714,8 @@ interface RenderableRecord {
   visible: boolean;
   isProviderMesh: boolean;
   isMesh: boolean;
+  /** 这一帧参与 HLR 边线（法线/深度里的标记）；非 Mesh 恒 true（它们本来就不进法线/深度通道） */
+  edgeParticipant: boolean;
 }
 
 export class SglLookPipeline {
@@ -678,6 +727,8 @@ export class SglLookPipeline {
   private readonly _ndType: TextureDataType;
   private readonly _renderables: RenderableRecord[] = [];
   private readonly _providerMaterials = new Set<Material & SglNormalDepthProvider>();
+  /** 本帧是否有不参与边线的普通 Mesh（决定 overrideMaterial 的法线/深度通道要不要画第二趟） */
+  private _hasNonParticipantMesh = false;
   /** 本帧可渲染 Mesh 的 world 包围盒 ∪ extraSceneBounds（blurSharpnessAuto 用） */
   private readonly _frameBounds = new Box3();
   private readonly _tmpBox = new Box3();
@@ -801,6 +852,7 @@ export class SglLookPipeline {
       fragmentShader: ND_FRAGMENT,
       blending: NoBlending,
       toneMapped: false,
+      uniforms: { uEdgeFlag: { value: 1 } },
     });
     this._ndMaterial.name = 'SglLookNormalDepth';
 
@@ -937,12 +989,22 @@ export class SglLookPipeline {
     renderer.setClearColor(0x000000, 0);
     this._clearNormalDepth();
     if (source !== 'providers') {
-      // 普通 Mesh 走 overrideMaterial；provider 网格与线/点/精灵先藏起来
+      // 普通 Mesh 走 overrideMaterial；provider 网格与线/点/精灵先藏起来。
+      // 「参与边线」标记是 overrideMaterial 的 uniform，所以参与 / 不参与的 Mesh 分两趟画（共用深度缓冲，遮挡关系不变）
       for (const r of this._renderables) {
-        if (r.visible && (r.isProviderMesh || !r.isMesh)) r.object.visible = false;
+        if (r.visible && (r.isProviderMesh || !r.isMesh || !r.edgeParticipant)) r.object.visible = false;
       }
       scene.overrideMaterial = this._ndMaterial;
+      this._ndMaterial.uniforms.uEdgeFlag!.value = 1;
       renderer.render(scene, camera);
+      if (this._hasNonParticipantMesh) {
+        for (const r of this._renderables) {
+          r.object.visible = r.visible && r.isMesh && !r.isProviderMesh && !r.edgeParticipant;
+        }
+        this._ndMaterial.uniforms.uEdgeFlag!.value = SGL_EDGE_FLAG_OFF_SCALE;
+        renderer.render(scene, camera);
+        this._ndMaterial.uniforms.uEdgeFlag!.value = 1;
+      }
       scene.overrideMaterial = prevOverride;
       for (const r of this._renderables) r.object.visible = r.visible;
     }
@@ -1120,6 +1182,8 @@ export class SglLookPipeline {
     this._renderables.length = 0;
     this._providerMaterials.clear();
     this._frameBounds.makeEmpty();
+    this._hasNonParticipantMesh = false;
+    const hlr = this.params.hlr;
     scene.traverseVisible((object) => {
       const anyObj = object as Object3D & {
         isMesh?: boolean;
@@ -1133,13 +1197,26 @@ export class SglLookPipeline {
       const isMesh = anyObj.isMesh === true;
       if (!isMesh && !anyObj.isLine && !anyObj.isPoints && !anyObj.isSprite) return;
       let isProviderMesh = false;
+      let translucent = false;
       if (isMesh && anyObj.material) {
         const mats = Array.isArray(anyObj.material) ? anyObj.material : [anyObj.material];
         for (const m of mats) {
           if (isSglNormalDepthProvider(m)) {
             isProviderMesh = true;
             this._providerMaterials.add(m);
+            translucent = translucent || (m.sglIsTranslucentPass ?? m.transparent);
+          } else {
+            translucent = translucent || m.transparent;
           }
+        }
+      }
+      // 这一帧参与 HLR 边线吗（sglDx11 法线纹理 .w bit0）：辅助对象看 handleEdges，半透明看 translucentEdges
+      const edgeParticipant = !isMesh || sglEdgeParticipationFor(hlr, object, translucent);
+      if (isMesh && !edgeParticipant && !isProviderMesh) this._hasNonParticipantMesh = true;
+      if (isProviderMesh && anyObj.material) {
+        const mats = Array.isArray(anyObj.material) ? anyObj.material : [anyObj.material];
+        for (const m of mats) {
+          if (isSglNormalDepthProvider(m)) m.setSglEdgeParticipation?.(edgeParticipant);
         }
       }
       if (collectBounds && isMesh && !isProviderMesh) {
@@ -1156,7 +1233,7 @@ export class SglLookPipeline {
           this._frameBounds.union(this._tmpBox.copy(local).applyMatrix4(object.matrixWorld));
         }
       }
-      this._renderables.push({ object, visible: object.visible, isProviderMesh, isMesh });
+      this._renderables.push({ object, visible: object.visible, isProviderMesh, isMesh, edgeParticipant });
     });
   }
 
