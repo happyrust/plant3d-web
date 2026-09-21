@@ -1,0 +1,93 @@
+{
+  "startedAt": "2026-09-21T10:35:50.384Z",
+  "steps": [
+    {
+      "name": "01-tab-remembered",
+      "at": "2026-09-21T10:35:53.232Z",
+      "storedBeforeReload": "room",
+      "roomTabActiveAfterReload": true,
+      "statusText": "在册 215 间房  · 展开一间房看 专业 → 最小交付单元 → 构件"
+    },
+    {
+      "name": "02-selection-sync",
+      "at": "2026-09-21T10:35:54.098Z",
+      "target": "24381_105033",
+      "selected": "true",
+      "unitRowVisible": true,
+      "rows": [
+        "ROOM R432 · /1RX-RM04-R432 · 1298 个构件",
+        "未知或其他 · 5",
+        "仪表系统 · 1293",
+        "BRAN · 28 个单元 · 226",
+        "BRAN Copy-of-1RCS380MP-YK/301VP · 3",
+        "REDU 24381_105031",
+        "BEND 24381_105032",
+        "BEND 24381_105033",
+        "BRAN Copy-of-1RCS381MP-YK/303VP · 6",
+        "BRAN Copy-of-1RCS382MP-YK/305VP · 2",
+        "BRAN Copy-of-1RCS383MP-YK/307VP · 1",
+        "BRAN Copy-(2)-of-1RCS801MP/802MP-YK/881VP · 11",
+        "BRAN Copy-(2)-of-1RCS803MP-YK/883VP · 11",
+        "BRAN Copy-(2)-of-1RCS804MP-YK/884VP · 15",
+        "BRAN Copy-(2)-of-1TFM063MN-TUBE/974VL · 25",
+        "BRAN Copy-(2)-of-1TFM063MN-TUBE/973VL · 22",
+        "BRAN Copy-of-1RCS0046-1R90013 · 2",
+        "BRAN Copy-of-1RCS0380B-1R90026 · 5",
+        "BRAN Copy-of-1RCS0383B-1R90029 · 5",
+        "BRAN Copy-of-1RCS0382B-1R90028 · 5",
+        "BRAN Copy-of-1RCS0381B-1R90027 · 4",
+        "BRAN Copy-of-1RCS302-1R90001 · 17",
+        "BRAN Copy-of-1RCS302-1R90038 · 4",
+        "BRAN Copy-of-1RCS0303-1R90002 · 7",
+        "BRAN Copy-of-1RCS0303-1R90039 · 3",
+        "BRAN Copy-of-1RCS0304-1R90003 · 5",
+        "BRAN Copy-of-1RCS0307-1R90004 · 11",
+        "BRAN Copy-of-1RCS0310-1R90006 · 11",
+        "BRAN Copy-of-1RCS0637-1R90008 · 9",
+        "BRAN Copy-of-1RCS0639-1R90009 · 7",
+        "BRAN Copy-of-1RCS0662-1R90010 · 5",
+        "BRAN Copy-of-1RCS0881-1R90011 · 8",
+        "BRAN Copy-of-1RCS0883-1R90036 · 6",
+        "BRAN Copy-of-1RCS0884-1R90037 · 9",
+        "BRAN Copy-of-1RCS0009/B1 · 7"
+      ]
+    },
+    {
+      "name": "03-loaded",
+      "at": "2026-09-21T10:35:56.900Z",
+      "loaded": [
+        "24381_105031",
+        "24381_105032",
+        "24381_105033"
+      ]
+    },
+    {
+      "name": "04-drawer-tree",
+      "at": "2026-09-21T10:35:59.611Z",
+      "treeUrl": "?x=-6379.57&y=-11350.16&z=5030&radius=3000&shape=sphere&include_negative=false&rooms=24381/35580",
+      "treeStatus": 200,
+      "total_count": 1055,
+      "leaves_inline": true,
+      "rooms": [
+        "R432:1055"
+      ],
+      "summaryText": "共 1055 项（去重）· 1 间房，已加载 0 项，未加载 1055 项",
+      "loadedElementsInsideTree": [],
+      "drawerRows": {
+        "rooms": "R432 加载 仅显示 隔离 1055",
+        "specs": [
+          "未知或其他 加载 仅显示 隔离 4",
+          "仪表系统 加载 仅显示 隔离 1051"
+        ],
+        "unitTypes": [
+          "BRAN17 个单元 加载 仅显示 隔离 116",
+          "EQUI28 个单元 加载 仅显示 隔离 935"
+        ],
+        "firstUnit": "/Copy-of-1RCS0307-1R900040.21 m 加载 仅显示 隔离 11",
+        "firstUnitLeafCount": 11
+      }
+    }
+  ],
+  "pageErrors": [],
+  "finishedAt": "2026-09-21T10:35:59.763Z"
+}

@@ -1,4 +1,4 @@
-# 空间查询 · 房间层级树——HTTP 金样 + 抽屉树态真机 + 行文字截断复核 + 结果区剪辑真机 + 模型树「房间」页签真机（2026-09-20 17:26–18:07、20:13；2026-09-21 00:20–00:27、16:52–16:54）
+# 空间查询 · 房间层级树——HTTP 金样 + 抽屉树态真机 + 行文字截断复核 + 结果区剪辑真机 + 模型树「房间」页签真机 + 两批合入后同屏确认（2026-09-20 17:26–18:07、20:13；2026-09-21 00:20–00:27、16:52–16:54、18:35）
 
 计划：`docs/plans/2026-09-20-spatial-room-hierarchy-tree-plan.md`（§6 真机步骤；本文是它的记录）。决策 ADR 0068、共识 zhimo `d-157`；
 上位记录 `docs/verification/spatial-query-room-discipline-2026-09-20/`（房间 / 专业过滤，ADR 0067）。
@@ -98,6 +98,7 @@
 | `e2e-spatial-query-gen-model-v1-ui-2026-09-21-0020.txt` | PR-B2 后 e2e 全量输出（9 passed / 1 skipped） |
 | `ui/room-tab-01…08-*.png` `ui/room-tab-summary.json` | 模型树「房间」页签真机十步（§8；summary 里带请求账与逐层对照） |
 | `e2e-model-tree-room-tab-gen-model-v1-2026-09-21-1711.txt` `…-1725.txt` | 房间页签 e2e 三条首次真机（3 passed）与加上页签记忆 / 选中联动第 ④ 条后（4 passed），§8 末 |
+| `ui/final-01…04b-*.png` `ui/final-summary.json` | 两批全部合入后（main @ `7779b876`）的本地同屏确认四步（§8 末）：页签记忆过整页刷新 / 外部选中联动到已展开的房 / 右键加载进三维 / 抽屉树态与房间页签同屏；summary 带逐行文字、树请求 URL 与「已加载 0」的交叉核对 |
 | `design/R1-drawer-flat.png` `R2-drawer-room-tree.png` `R3-model-tree-room-tab.png` `R4-ui-to-api-map.png` | 设计稿 `ui/空间查询/room-hierarchy-tree.pen` 四帧导出（2×，pen.dev `Export`；R3 / R4 的状态标已改「已合入」）——抽屉平铺态 / 抽屉树态 / 模型树「房间」页签 / 界面动作 → 请求 → 状态 |
 
 ## 8. 模型树「房间」页签真机（2026-09-21 16:52–16:54；PR-D `92d928fc`；`ui/room-tab-01…08.png`、`ui/room-tab-summary.json`）
@@ -132,3 +133,14 @@
 只展开房间层 → 外部 `setGlobalSelectedRefno` 单元最后一个构件 → 该行出现、`data-selected=true`、在视口内、单元类型 / 单元行都展开、选中行只此一行 → 选单元 refno 落在单元行 → 树内点另一构件全局选中跟着变且不反弹 → 切回 PDMS 记 `pdms`。
 同命令 **4 passed（15.1 s）**，日志 `e2e-model-tree-room-tab-gen-model-v1-2026-09-21-1725.txt`；vitest 页签 3 文件 17 passed；type-check 基线外 0；eslint 0。
 **回归复跑**（17:3x，PR-D 全部合入后）：抽屉那份 `spatial-query-gen-model-v1-ui.spec.ts` 同机 `--workers=1` **9 passed / 1 skipped（25.8 s）**，与 09-21 00:20 基线一致——页签改动没碰到抽屉。
+
+**两批合入后的本地同屏确认**（18:35，main @ `7779b876`；同一台 `:3111` + `:8027`，Playwright 无头 1600×1000，仓外一次性脚本；`ui/final-01…04b-*.png`、`ui/final-summary.json`）：
+
+| 步 | 动作 | 看到 | 图 |
+| --- | --- | --- | --- |
+| 1 | 切「房间」→ 整页刷新 | 刷新前 `localStorage['plant3d.modelTree.activeTab'] = room`；刷新后「房间」页签仍在前台（`shadow-sm`）、状态句「在册 215 间房 · 展开一间房看 专业 → 最小交付单元 → 构件」、215 行房间平铺 | `final-01-tab-remembered-after-reload.png` |
+| 2 | 搜 `R432`、只展开房间层 → 外部 `setGlobalSelectedRefno('24381_105033')` | 树自己把 `仪表系统 → BRAN · 28 个单元 → Copy-of-1RCS380MP-YK/301VP` 三层祖先展开，`BEND 24381_105033` 行 `data-selected=true` 且只此一行选中；虚拟列表可见 35 行，文字与 §8 第 3 步金样一致（`1298 个构件` / `未知或其他 · 5` / `仪表系统 · 1293` / `BRAN · 28 个单元 · 226` / `Copy-of-1RCS380MP-YK/301VP · 3` / `REDU 24381_105031` …） | `final-02-selection-sync.png` |
+| 3 | 右键单元行 → 「加载模型（3 个构件）」 | `scene.getLoadedRefnos()` 含 `24381_105031 / 105032 / 105033`，三维里出现这段管线，属性面板停在 `/Copy-of-1RCS380MP-YK/301VP`（右键即选中） | `final-03-unit-loaded-in-3d.png` |
+| 4 | 打开抽屉「范围」：手输 R432 盒中心 `-6379.57, -11350.16, 5030`、r = 3 m、房间 `R432` → 执行；收起「更多条件」，展开树里首个 BRAN 单元 | 一发 `nearby/tree?x…&radius=3000&shape=sphere&rooms=24381/35580` 200，`leaves_inline=true`；摘要「共 **1055** 项（去重）· 1 间房，已加载 0 项，未加载 1055 项」；树 `R432 1055 → 未知或其他 4 / 仪表系统 1051 → BRAN 17 个单元 116 / EQUI 28 个单元 935 → /Copy-of-1RCS0307-1R90004 0.21 m · 11` → 11 条叶子行（refno · noun · 距离 · 眼睛 / 飞行）。左侧房间页签同屏仍是 R432 五层（1298 / 28 单元 / 226）——**同一间房两套数**：页签是整房（`rooms/{refno}/tree`），抽屉是 3 m 球内（`nearby/tree`），与 §2 两种中心的口径一致 | `final-04-drawer-tree-and-room-tab.png`（整页）/ `final-04b-drawer-tree-panel.png`（树面板） |
+
+「已加载 0 项」交叉核对：树响应 JSON 里**不含**第 3 步加载的三个 refno（`loadedElementsInsideTree = []`——那条 BRAN 的 `HPOS -4229, -7991, 3814` 离中心约 4.2 m，在 3 m 球外），摘要为 0 是对的。`pageerror` **0**。
