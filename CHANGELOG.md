@@ -4,6 +4,13 @@
 
 ### 变更
 
+- **空间查询选了房间就是一棵「房间层级树」，结果区剪成一排图标 + 单行；模型树新增「房间」页签浏览同一棵树** (2026-09-20 / 21，ADR 0068)
+  - 之前抽屉「范围 / 距离查询」的结果只有平铺分组 + 分页，命中属于哪间房、哪个最小交付单元看不出来；结果区堆了九个文字按钮、三行卡片和两行长提示；模型树的 ROOM 页签随 legacy 退役一起删了。现在：
+    - **抽屉树态**：「更多条件」里选了 ≥ 1 间房再执行，服务端一次聚合 `GET /api/v1/spatial/nearby/tree`（`rooms=` 必填，不分页、按 refno 去重、叶子随树内联、超过 5000 个放置改为按单元 / noun 组另取），结果区换成 房间 → 专业 → 最小交付单元类型 → 单元 → 构件 五层，不属任何单元的构件归专业下「其他构件」按 noun 分；横跨多间房的构件每间房下都出现、标「跨 N 房」、总数只算一次；每层悬停出 加载 / 仅显示 / 隔离；树态下房间列表 / 分页 / 「按专业 | 按库」开关不再出现。清掉房间回平铺。
+    - **结果区剪辑**：九个按钮收成一排七个图标（加载未加载 · 全显 / 全隐 · 隔离 / 恢复 · 复制 Refno 点开二选本页 / 全部 · 清空），构件行三行卡片改单行 `refno · noun · 距离`（未加载灰字，名字有就替代 refno 显示），查询中心并进摘要第二行，覆盖面提示缩成一句、全文进 title；「加载当前页」并进「加载未加载」（平铺态只补本页、树态补整棵树）。
+    - **模型树「房间」页签**：PDMS / 房间 两页签，房间页签把在册房间平铺一层（`GET /api/v1/spatial/rooms`，房号自然序 + 搜索框），展开一间房吃 `GET /api/v1/spatial/rooms/{refno}/tree`（房间自己的包围盒为范围）展成同一棵五层树；行是模型树的行——眼睛切显隐、勾选由子构件推导，右键 聚焦 / 隔离 / 显隐 / 加载模型（N 个构件，> 200 先确认）/ 查看属性；没生成过面板模型的房间展开时一句原因；两棵树常驻，切页签状态不丢。
+  - 验证：vitest 空间 6 文件 + 页签 2 文件 128 passed；type-check 基线外 0；eslint 0；e2e `spatial-query-gen-model-v1-ui.spec.ts` 9 passed / 1 skipped；真机 `:8027`（`gen-model-model-cache@65dacd576`，AMS 7997）：HTTP 金样 38 / 38、抽屉树态 R432 1055 / 两房去重 1056、剪辑四图、房间页签十步逐层 = `rooms/24381_35580/tree`（1298 / 5 / 1293 / BRAN 28 单元 226 / EQUI 45 单元 1067），见 `docs/verification/spatial-room-hierarchy-tree-2026-09-20/README.md` §3–§6、§8。设计稿 `ui/空间查询/room-hierarchy-tree.pen`；计划 `docs/plans/2026-09-20-spatial-room-hierarchy-tree-plan.md`、`docs/plans/2026-09-21-model-tree-room-tab-pr-d-closeout-plan.md`。
+
 - **属性对比的「属性净差」改接 `element/attribute-diff`：A / B 两端直接读终态，成员 / owner 给真差；旧服务端回落到折时间线** (2026-09-21)
   - 之前「仅自身」的属性对比与「所有子节点」下点开一个构件，都是把属性变化时间线在 (A, B] 里逐会话 before / after 折成净差——改过又改回去的会被算成变化，成员增删 / 重排与 owner 改挂只能说「动过」。现在先问服务端 `GET /api/v1/element/attribute-diff?dbnum&refno&a&b`（ADR 0066 列的第四条路由：两端各钉一个会话、同一个属性渲染器两端各出一次字），`kind` created / modified / deleted / unchanged，`impact` 与版本表同一词表，`members` / `owner` 是两端的真差；服务端没有这条路由（无信封 404）记一次、回落到折时间线，表底写明取数口径。
   - 端口 `ModelVersionSource.attributeDiff` + 类型 `ModelAttributeDiff`（`ports.ts`）；v1 适配器 `attributeDiff` → `ModelVersionRouteUnavailableError('element/attribute-diff')`；面板两条来路归一成 `AttributeNetDiffView`（`viewFromAttributeDiff / viewFromFold / emptyNetDiffText`，`utils/nodeVersionTimeline.ts`）。

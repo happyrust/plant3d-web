@@ -1,9 +1,9 @@
-# 空间查询 · 房间层级树——HTTP 金样 + 抽屉树态真机 + 行文字截断复核 + 结果区剪辑真机（2026-09-20 17:26–18:07、20:13；2026-09-21 00:20–00:27）
+# 空间查询 · 房间层级树——HTTP 金样 + 抽屉树态真机 + 行文字截断复核 + 结果区剪辑真机 + 模型树「房间」页签真机（2026-09-20 17:26–18:07、20:13；2026-09-21 00:20–00:27、16:52–16:54）
 
 计划：`docs/plans/2026-09-20-spatial-room-hierarchy-tree-plan.md`（§6 真机步骤；本文是它的记录）。决策 ADR 0068、共识 zhimo `d-157`；
 上位记录 `docs/verification/spatial-query-room-discipline-2026-09-20/`（房间 / 专业过滤，ADR 0067）。
 后端 `gen-model-model-cache` PR-A `06b067b51`（树路由 + `member_rooms` + 单元根派生）+ 补 `65dacd576`（树路由先核房间在册再扫树）；
-前端 plant3d-web PR-B `fb2ed9a3`（端口 / 适配器 / store 树态 / `SpatialResultTree`）+ 补 `37b40691`（行文字截断）+ PR-B2 `f9c07ea5`（结果区剪辑）。
+前端 plant3d-web PR-B `fb2ed9a3`（端口 / 适配器 / store 树态 / `SpatialResultTree`）+ 补 `37b40691`（行文字截断）+ PR-B2 `f9c07ea5`（结果区剪辑）+ PR-D `92d928fc`（模型树「房间」页签，§8）。
 脚本：HTTP 金样 `spatial-tree-check.ps1`（在本目录，可重跑，见 §3）；抽屉截图的 Playwright 临时 spec 在仓外（一次性，跑完即删）；e2e 那份在仓（§6）。
 
 ## 1. 环境：`:8027` 换成 PR-A 二进制（mem 档、`room_membership=true`）
@@ -96,3 +96,25 @@
 | `ui/tree-04…06-*.png` `ui/tree-rows-truncation-summary.json` | 行文字截断复核（§5） |
 | `ui/trim-01…04-*.png` `ui/trim-summary.json` | 结果区剪辑（§6） |
 | `e2e-spatial-query-gen-model-v1-ui-2026-09-21-0020.txt` | PR-B2 后 e2e 全量输出（9 passed / 1 skipped） |
+| `ui/room-tab-01…08-*.png` `ui/room-tab-summary.json` | 模型树「房间」页签真机十步（§8；summary 里带请求账与逐层对照） |
+
+## 8. 模型树「房间」页签真机（2026-09-21 16:52–16:54；PR-D `92d928fc`；`ui/room-tab-01…08.png`、`ui/room-tab-summary.json`）
+
+计划 `docs/plans/2026-09-21-model-tree-room-tab-pr-d-closeout-plan.md` §P1-a。同一台 `:8027`（`65dacd576`，7997 已 ensure，`/spatial/rooms` `ready` 215 间）+ dev `:3111`（工作树 = PR-D 代码），
+页面 `?model_source=gen-model-v1&gm_backend=http://127.0.0.1:8027&output_project=AvevaMarineSample`（不带 `show_refno`，场景一开始是空的），Playwright 无头 1600×1000，仓外一次性脚本。
+金样取自同机 `GET /spatial/rooms/24381_35580/tree`（R432：`total_count` 1298 / 专业 0 = 5（其他构件 5）/ 专业 3 = 1293 = BRAN 28 单元 226 + EQUI 45 单元 1067；首个 BRAN 单元 `24381_105030` `/Copy-of-1RCS380MP-YK/301VP` 3 个构件）。
+
+| 步 | 动作 | 看到 | 图 |
+| --- | --- | --- | --- |
+| 1 | 模型树面板切「房间」 | 一发 `GET /spatial/rooms` 200；状态句「在册 215 间房 · 展开一间房看 专业 → 最小交付单元 → 构件」，搜索框 placeholder「搜索房间号 / 名称（在册 215 间）」；虚拟列表渲染 35 行 | `room-tab-01-roots.png` |
+| 2 | 搜 `R432` | 「匹配 1 / 215 间房」，一行 `ROOM R432 · /1RX-RM04-R432` | `room-tab-02-search-r432.png` |
+| 3 | 展开 R432 → 仪表系统 → BRAN → 首个单元 | 一发 `rooms/24381_35580/tree` 200；行文字**逐层等于金样**：`R432 · /1RX-RM04-R432 · 1298 个构件` / `未知或其他 · 5` / `仪表系统 · 1293` / `BRAN · 28 个单元 · 226` / `EQUI · 45 个单元 · 1067` / `Copy-of-1RCS380MP-YK/301VP · 3`（行上去掉了名字的前导 `/`，与 PDMS 树同一规矩）/ 三条构件行 `REDU 24381_105031` `BEND 24381_105032` `BEND 24381_105033`；9 项对照全 ok | `room-tab-03-five-levels.png` |
+| 4 | 右键单元行 | 菜单七项：聚焦飞行 / 隔离（XRAY 其它）/ 取消隔离 / 显示 / 隐藏 / **加载模型（3 个构件）** / 查看属性；右键同时选中该单元，属性面板切到 `/Copy-of-1RCS380MP-YK/301VP` | `room-tab-04-context-menu.png` |
+| 5 | 点「加载模型（3 个构件）」 | 三对 `model/ensure` + `model/records` 200；`scene.getLoadedRefnos()` 从不含三个 refno 变为全含（点之前 `scene.objects[refno]` 已有占位对象、`loaded=false`），相机飞过去；toast「已从 gen-model 加载 58 个几何实例」 | `room-tab-05-loaded-full-page.png` |
+| 6 | 点构件行 `24381_105031` 的眼睛 | `scene.objects['24381_105031'].visible === false`，行上眼睛变红叉；再点一次回 `true` | `room-tab-06-element-hidden.png` |
+| 7 | 搜 `ZZZ-不存在` | 「匹配 0 / 215 间房」+ 「没有匹配的房间」 | — |
+| 8 | 搜 `R131`（`24381_1280`，`panel_count` 0）→ 展开 | `rooms/24381_1280/tree` **404** → 树上方一句 `R131 · /1RX-RM01-R131：房间 24381_1280 还没有包围盒（从未生成过面板模型），先显示它再展开`，行仍在、不出子级 | `room-tab-07-no-box-room-error.png` |
+| 9 | 切回 PDMS 再切回房间 | PDMS 页 37 行可见、房间面板隐藏；切回来 R432 那棵**原样在**（展开态、计数、已加载的三条构件行都在——两棵树 `v-show` 常驻） | `room-tab-08-state-kept-after-tab-switch.png` |
+| 10 | 点刷新 | `reset()` + 重拉 `/spatial/rooms`：回到 215 行、R432 折回无计数的一行（刷新就是清空，按设计） | — |
+
+`pageerror` **0**；请求账全在 `room-tab-summary.json`（`requests[]`）。**未验**：`room_membership=false` 时的「服务端未开启房间归属计算」状态句（要一台关着开关的实例，本轮不起）；「查看属性」「聚焦飞行」两项菜单没点（属性面板在第 4 步已随右键选中切过去）。

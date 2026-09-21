@@ -7,7 +7,9 @@
 > 设计稿：`ui/空间查询/room-hierarchy-tree.pen`（`14ece7b6`，六帧：R0 说明 · R1 抽屉平铺态 · R2 抽屉树态 · R3 模型树「房间」页签 · R4 界面→接口映射 · L 实时页面）。
 > 前端基线：plant3d-web `main@14ece7b6` + 工作树未提交的 PR-D 代码（§1.2）；后端 `gen-model-model-cache@65dacd576`（`:8027` 验证实例，mem 档、`room_membership=true`、AMS 7997 已 ensure）。
 >
-> 状态：**Plannotator 已批准**（2026-09-21 16:43，`{"decision":"approved"}`，无批注）——D1–D7 按 §6 推荐项执行；P0–P3 尚未开工。
+> 状态：**Plannotator 已批准**（2026-09-21 16:43，`{"decision":"approved"}`，无批注）——D1–D7 按 §6 推荐项执行。
+> **P1-a 真机 → P0 提交 → P2 文档 已完成（16:52–17:1x）**：真机十步全过（README §8）；PR-D 一笔 `plant3d-web@92d928fc`（9 文件 +1730，别人的 hunk 一个没碰）；
+> 上位计划 §4.5 / §5 改完成、教程 §6.1.1 + §9 一行、CHANGELOG 一条覆盖 ADR 0068、CONTEXT 词条改口。**P1-b e2e、P3-a/b/d 未开工**（P3-c 按 D6 不做）。
 
 ## 0. 一句话
 

@@ -1,0 +1,360 @@
+{
+  "startedAt": "2026-09-21T08:54:37.457Z",
+  "base": "http://127.0.0.1:3111",
+  "genModel": "http://127.0.0.1:8027",
+  "steps": [
+    {
+      "name": "01-roots",
+      "at": "2026-09-21T08:54:40.334Z",
+      "statusText": "在册 215 间房  · 展开一间房看 专业 → 最小交付单元 → 构件",
+      "rowsRendered": 35,
+      "placeholder": "搜索房间号 / 名称（在册 215 间）",
+      "tabClassesBeforeClick": {
+        "pdmsClass": "inline-flex h-full items-center justify-center rounded-sm px-3 text-xs font-medium transition-colors bg-background text-foreground shadow-sm",
+        "roomClass": "inline-flex h-full items-center justify-center rounded-sm px-3 text-xs font-medium transition-colors hover:text-foreground"
+      },
+      "pdmsHiddenNow": 0
+    },
+    {
+      "name": "02-search-r432",
+      "at": "2026-09-21T08:54:40.440Z",
+      "statusText": "匹配 1 / 215 间房  · 展开一间房看 专业 → 最小交付单元 → 构件",
+      "rows": [
+        {
+          "id": "24381_35580",
+          "type": "ROOM",
+          "text": "ROOM R432 · /1RX-RM04-R432"
+        }
+      ]
+    },
+    {
+      "name": "03-five-levels",
+      "at": "2026-09-21T08:54:41.314Z",
+      "afterRoomExpand": [
+        "ROOM R432 · /1RX-RM04-R432 · 1298 个构件",
+        "未知或其他 · 5",
+        "仪表系统 · 1293"
+      ],
+      "afterSpecExpand": [
+        "ROOM R432 · /1RX-RM04-R432 · 1298 个构件",
+        "未知或其他 · 5",
+        "仪表系统 · 1293",
+        "BRAN · 28 个单元 · 226",
+        "EQUI · 45 个单元 · 1067"
+      ],
+      "rowsNow": 35,
+      "checks": [
+        {
+          "id": "24381_35580",
+          "found": true,
+          "text": "ROOM R432 · /1RX-RM04-R432 · 1298 个构件",
+          "needle": "R432 · /1RX-RM04-R432 · 1298 个构件",
+          "ok": true
+        },
+        {
+          "id": "spec:24381_35580:0",
+          "found": true,
+          "text": "未知或其他 · 5",
+          "needle": "未知或其他 · 5",
+          "ok": true
+        },
+        {
+          "id": "spec:24381_35580:3",
+          "found": true,
+          "text": "仪表系统 · 1293",
+          "needle": "仪表系统 · 1293",
+          "ok": true
+        },
+        {
+          "id": "utype:24381_35580:3:BRAN",
+          "found": true,
+          "text": "BRAN · 28 个单元 · 226",
+          "needle": "BRAN · 28 个单元 · 226",
+          "ok": true
+        },
+        {
+          "id": "utype:24381_35580:3:EQUI",
+          "found": true,
+          "text": "EQUI · 45 个单元 · 1067",
+          "needle": "EQUI · 45 个单元 · 1067",
+          "ok": true
+        },
+        {
+          "id": "24381_105030",
+          "found": true,
+          "text": "BRAN Copy-of-1RCS380MP-YK/301VP · 3",
+          "needle": "Copy-of-1RCS380MP-YK/301VP · 3",
+          "ok": true
+        },
+        {
+          "id": "24381_105031",
+          "found": true,
+          "text": "REDU 24381_105031",
+          "needle": "24381_105031",
+          "ok": true
+        },
+        {
+          "id": "24381_105032",
+          "found": true,
+          "text": "BEND 24381_105032",
+          "needle": "24381_105032",
+          "ok": true
+        },
+        {
+          "id": "24381_105033",
+          "found": true,
+          "text": "BEND 24381_105033",
+          "needle": "24381_105033",
+          "ok": true
+        }
+      ],
+      "allOk": true
+    },
+    {
+      "name": "04-load-models",
+      "at": "2026-09-21T08:54:43.277Z",
+      "menuItems": [
+        "聚焦飞行",
+        "隔离（XRAY 其它）",
+        "取消隔离",
+        "显示",
+        "隐藏",
+        "加载模型（3 个构件）",
+        "查看属性"
+      ],
+      "sceneBefore": [
+        {
+          "r": "24381_105031",
+          "loaded": false,
+          "object": true,
+          "visible": true
+        },
+        {
+          "r": "24381_105032",
+          "loaded": false,
+          "object": true,
+          "visible": true
+        },
+        {
+          "r": "24381_105033",
+          "loaded": false,
+          "object": true,
+          "visible": true
+        }
+      ],
+      "sceneAfter": [
+        {
+          "r": "24381_105031",
+          "loaded": true,
+          "object": true,
+          "visible": true
+        },
+        {
+          "r": "24381_105032",
+          "loaded": true,
+          "object": true,
+          "visible": true
+        },
+        {
+          "r": "24381_105033",
+          "loaded": true,
+          "object": true,
+          "visible": true
+        }
+      ],
+      "requestsDuringLoad": [
+        "200 /api/v1/model/ensure",
+        "200 /api/v1/model/records",
+        "200 /api/v1/model/ensure",
+        "200 /api/v1/model/records",
+        "200 /api/v1/model/ensure",
+        "200 /api/v1/model/records"
+      ]
+    },
+    {
+      "name": "05-toggle-visible",
+      "at": "2026-09-21T08:54:43.779Z",
+      "refno": "24381_105031",
+      "sceneVisible": false,
+      "unitRowText": "BRAN Copy-of-1RCS380MP-YK/301VP · 3"
+    },
+    {
+      "name": "05b-toggle-visible-back",
+      "at": "2026-09-21T08:54:43.944Z",
+      "sceneVisible": true
+    },
+    {
+      "name": "06-no-match",
+      "at": "2026-09-21T08:54:43.958Z",
+      "statusText": "匹配 0 / 215 间房  · 展开一间房看 专业 → 最小交付单元 → 构件"
+    },
+    {
+      "name": "07-no-box-room",
+      "at": "2026-09-21T08:54:44.110Z",
+      "statusText": "匹配 1 / 215 间房  · 展开一间房看 专业 → 最小交付单元 → 构件",
+      "error": "R131 · /1RX-RM01-R131：房间 24381_1280 还没有包围盒（从未生成过面板模型），先显示它再展开",
+      "rows": [
+        {
+          "id": "24381_1280",
+          "type": "ROOM",
+          "text": "ROOM R131 · /1RX-RM01-R131"
+        }
+      ]
+    },
+    {
+      "name": "09-back-to-pdms",
+      "at": "2026-09-21T08:54:44.528Z",
+      "roomPanelVisible": false,
+      "pdmsRowsVisible": 37
+    },
+    {
+      "name": "09b-back-to-room-state-kept",
+      "at": "2026-09-21T08:54:45.107Z",
+      "rows": [
+        "ROOM R432 · /1RX-RM04-R432 · 1298 个构件",
+        "未知或其他 · 5",
+        "仪表系统 · 1293",
+        "BRAN · 28 个单元 · 226",
+        "BRAN Copy-of-1RCS380MP-YK/301VP · 3",
+        "REDU 24381_105031",
+        "BEND 24381_105032",
+        "BEND 24381_105033",
+        "BRAN Copy-of-1RCS381MP-YK/303VP · 6",
+        "BRAN Copy-of-1RCS382MP-YK/305VP · 2",
+        "BRAN Copy-of-1RCS383MP-YK/307VP · 1",
+        "BRAN Copy-(2)-of-1RCS801MP/802MP-YK/881VP · 11",
+        "BRAN Copy-(2)-of-1RCS803MP-YK/883VP · 11",
+        "BRAN Copy-(2)-of-1RCS804MP-YK/884VP · 15",
+        "BRAN Copy-(2)-of-1TFM063MN-TUBE/974VL · 25",
+        "BRAN Copy-(2)-of-1TFM063MN-TUBE/973VL · 22",
+        "BRAN Copy-of-1RCS0046-1R90013 · 2",
+        "BRAN Copy-of-1RCS0380B-1R90026 · 5",
+        "BRAN Copy-of-1RCS0383B-1R90029 · 5",
+        "BRAN Copy-of-1RCS0382B-1R90028 · 5",
+        "BRAN Copy-of-1RCS0381B-1R90027 · 4",
+        "BRAN Copy-of-1RCS302-1R90001 · 17",
+        "BRAN Copy-of-1RCS302-1R90038 · 4",
+        "BRAN Copy-of-1RCS0303-1R90002 · 7",
+        "BRAN Copy-of-1RCS0303-1R90039 · 3",
+        "BRAN Copy-of-1RCS0304-1R90003 · 5",
+        "BRAN Copy-of-1RCS0307-1R90004 · 11",
+        "BRAN Copy-of-1RCS0310-1R90006 · 11",
+        "BRAN Copy-of-1RCS0637-1R90008 · 9",
+        "BRAN Copy-of-1RCS0639-1R90009 · 7",
+        "BRAN Copy-of-1RCS0662-1R90010 · 5",
+        "BRAN Copy-of-1RCS0881-1R90011 · 8",
+        "BRAN Copy-of-1RCS0883-1R90036 · 6",
+        "BRAN Copy-of-1RCS0884-1R90037 · 9"
+      ],
+      "specRowStillThere": 1,
+      "unitElementsStillThere": 1
+    },
+    {
+      "name": "10-refresh-resets",
+      "at": "2026-09-21T08:54:45.277Z",
+      "statusText": "在册 215 间房  · 展开一间房看 专业 → 最小交付单元 → 构件",
+      "rows": 35
+    },
+    {
+      "name": "10b-after-refresh-collapsed",
+      "at": "2026-09-21T08:54:45.291Z",
+      "r432RowCountless": [
+        "ROOM R432 · /1RX-RM04-R432"
+      ]
+    }
+  ],
+  "requests": [
+    {
+      "at": "2026-09-21T08:54:40.000Z",
+      "status": 200,
+      "url": "/api/v1/spatial/rooms"
+    },
+    {
+      "at": "2026-09-21T08:54:40.834Z",
+      "status": 200,
+      "url": "/api/v1/spatial/rooms/24381_35580/tree"
+    },
+    {
+      "at": "2026-09-21T08:54:41.698Z",
+      "status": 200,
+      "url": "/api/v1/model/ensure"
+    },
+    {
+      "at": "2026-09-21T08:54:41.710Z",
+      "status": 200,
+      "url": "/api/v1/model/records"
+    },
+    {
+      "at": "2026-09-21T08:54:42.011Z",
+      "status": 200,
+      "url": "/api/v1/model/ensure"
+    },
+    {
+      "at": "2026-09-21T08:54:42.023Z",
+      "status": 200,
+      "url": "/api/v1/model/records"
+    },
+    {
+      "at": "2026-09-21T08:54:42.128Z",
+      "status": 200,
+      "url": "/api/v1/model/ensure"
+    },
+    {
+      "at": "2026-09-21T08:54:42.229Z",
+      "status": 200,
+      "url": "/api/v1/model/records"
+    },
+    {
+      "at": "2026-09-21T08:54:44.084Z",
+      "status": 404,
+      "url": "/api/v1/spatial/rooms/24381_1280/tree"
+    },
+    {
+      "at": "2026-09-21T08:54:45.252Z",
+      "status": 200,
+      "url": "/api/v1/spatial/rooms"
+    }
+  ],
+  "pageErrors": [],
+  "golden": {
+    "build_id": "0.1.28+g65dacd576ebd.1789896841",
+    "rooms": 215,
+    "roomsStatus": "ready",
+    "room": {
+      "refno": "24381_35580",
+      "room_num": "R432",
+      "name": "/1RX-RM04-R432",
+      "count": 1298,
+      "total_count": 1298,
+      "leaf_count": 1298,
+      "leaves_inline": true
+    },
+    "spec0": {
+      "count": 5,
+      "others": 5
+    },
+    "spec3": {
+      "count": 1293,
+      "others": 0
+    },
+    "bran": {
+      "count": 226,
+      "units": 28
+    },
+    "equi": {
+      "count": 1067,
+      "units": 45
+    },
+    "unit": {
+      "refno": "24381_105030",
+      "name": "/Copy-of-1RCS380MP-YK/301VP",
+      "count": 3,
+      "elements": [
+        "24381_105031",
+        "24381_105032",
+        "24381_105033"
+      ]
+    }
+  },
+  "finishedAt": "2026-09-21T08:54:45.291Z"
+}
