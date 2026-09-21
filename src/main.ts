@@ -26,6 +26,7 @@ import ModelVersionComparePanelDock from '@/components/dock_panels/ModelVersionC
 import ParquetDebugPanelDock from '@/components/dock_panels/ParquetDebugPanelDock.vue';
 import PropertiesPanelDock from '@/components/dock_panels/PropertiesPanelDock.vue';
 import PtsetPanelDock from '@/components/dock_panels/PtsetPanelDock.vue';
+import RenderModeSettingsPanelDock from '@/components/dock_panels/RenderModeSettingsPanelDock.vue';
 import ResubmissionTaskListPanelDock from '@/components/dock_panels/ResubmissionTaskListPanelDock.vue';
 import ReviewAttachmentPreviewPanelDock from '@/components/dock_panels/ReviewAttachmentPreviewPanelDock.vue';
 import ReviewerTaskListPanelDock from '@/components/dock_panels/ReviewerTaskListPanelDock.vue';
@@ -71,6 +72,7 @@ app.component('RoomInfoPanel', RoomInfoPanelDock);
 app.component('RoomStatusPanel', RoomStatusPanelDock);
 app.component('SpatialComputePanel', SpatialComputePanelDock);
 app.component('DtxMaterialConfigPanel', DtxMaterialConfigPanelDock);
+app.component('RenderModeSettingsPanel', RenderModeSettingsPanelDock);
 app.component('DashboardPanel', DashboardPanelDock);
 app.component('BenchmarkView', BenchmarkView);
 

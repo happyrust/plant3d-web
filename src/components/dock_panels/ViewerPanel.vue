@@ -71,6 +71,7 @@ import { useModelLoadStatus } from '@/composables/useModelLoadStatus';
 import { queryDirectChildrenPtsetSummaryWithRuntimeFallback } from '@/composables/usePtsetRuntimeLookup';
 import { collectPtsetEntries } from '@/composables/usePtsetVisualizationEntries';
 import { usePtsetVisualizationThree } from '@/composables/usePtsetVisualizationThree';
+import { useRenderLookStore } from '@/composables/useRenderLookStore';
 import { useReviewStore } from '@/composables/useReviewStore';
 import { useSelectionStore } from '@/composables/useSelectionStore';
 import { useSpatialCompute } from '@/composables/useSpatialCompute';
@@ -142,14 +143,12 @@ import { DTXTileLodController } from '@/viewer/dtx/DTXTileLodController';
 import { DtxViewer, type BackgroundMode } from '@/viewer/dtx/DtxViewer';
 import { shouldStopShowDbnumLoad } from '@/viewer/dtx/showDbnumLoadPolicy';
 import {
-  DEFAULT_SGL_LOOK_PRESET,
   E3D31_HBAO,
   E3D_GRAPHICS_COLOUR_DEFAULTS,
   SGL_LOOK_PRESETS,
   SglLookPipeline,
   applySglLookPresetToPipelineParams,
   loadSgl31EnvCube,
-  parseSglLookPresetId,
   pdmsColourHex,
   type SglLookPresetId,
 } from '@/viewer/e3dLook';
@@ -388,28 +387,13 @@ function getSglDtxLayers(): DTXLayer[] {
   return primary ? [primary, ...showDbnumExtraDtxLayers] : [...showDbnumExtraDtxLayers];
 }
 
-/** 切预设：光照常量换掉，三个子开关回到该预设的出厂位，元素颜色切到预设指定的显示主题 */
+/** 切预设：光照常量换掉，四个子开关回到该预设的出厂位（落盘在 store），显示主题联动与管线套用走下面的 watch */
 function onSglLookPresetChange(id: SglLookPresetId): void {
-  const preset = SGL_LOOK_PRESETS[id];
-  sglLookPreset.value = id;
-  sglLookHlrEnabled.value = preset.hlr;
-  sglLookAoEnabled.value = preset.ao;
-  sglLookGradientEnabled.value = preset.gradient;
-  sglLookAaEnabled.value = preset.antiAlias;
-  applySglLook();
-  safeLsSet('dtx_look_preset', id);
-  safeLsSet('dtx_look_hlr', preset.hlr ? '1' : '0');
-  safeLsSet('dtx_look_ao', preset.ao ? '1' : '0');
-  safeLsSet('dtx_look_gradient', preset.gradient ? '1' : '0');
-  safeLsSet('dtx_look_aa', preset.antiAlias ? '1' : '0');
-  if (sglLookEnabled.value) syncSglLookDisplayTheme(true);
+  renderLookStore.setPreset(id);
 }
 
 function onSglLookEnabledChange(enabled: boolean): void {
-  sglLookEnabled.value = enabled;
-  applySglLook();
-  safeLsSet('dtx_look', enabled ? 'sgl' : 'pbr');
-  syncSglLookDisplayTheme(enabled);
+  renderLookStore.setEnabled(enabled);
 }
 
 const SGL_LOOK_PREV_THEME_KEY = 'dtx_look_prev_theme';
@@ -445,27 +429,19 @@ function isSglLookPresetTheme(theme: string | null): boolean {
 }
 
 function onSglLookHlrChange(enabled: boolean): void {
-  sglLookHlrEnabled.value = enabled;
-  applySglLook();
-  safeLsSet('dtx_look_hlr', enabled ? '1' : '0');
+  renderLookStore.setHlr(enabled);
 }
 
 function onSglLookAoChange(enabled: boolean): void {
-  sglLookAoEnabled.value = enabled;
-  applySglLook();
-  safeLsSet('dtx_look_ao', enabled ? '1' : '0');
+  renderLookStore.setAo(enabled);
 }
 
 function onSglLookGradientChange(enabled: boolean): void {
-  sglLookGradientEnabled.value = enabled;
-  applySglLook();
-  safeLsSet('dtx_look_gradient', enabled ? '1' : '0');
+  renderLookStore.setGradient(enabled);
 }
 
 function onSglLookAaChange(enabled: boolean): void {
-  sglLookAaEnabled.value = enabled;
-  applySglLook();
-  safeLsSet('dtx_look_aa', enabled ? '1' : '0');
+  renderLookStore.setAa(enabled);
 }
 
 /** sglDx11 内嵌的环境立方体贴图：页面里只加载一次，加载完套到所有 DTX 层上 */
@@ -807,12 +783,41 @@ const cameraViewMode = ref<CameraViewMode>('cad_weak');
 const globalEdgeEnabled = ref(false);
 // E3D 外观（SGL 复刻，docs/rendering/e3d-sgl-look-prototype.md）：光照公式 + 环境立方体贴图 + HLR 边线 + HBAO + 背景渐变
 // 预设默认「出厂 E3D 3.1」（边线 / 伪阴影 / 渐变全开，0.7·c + 0.8·env）；「本机真机」对应 2026-09-20 对参的那台（全关、0.5/0.8 Blinn-Phong）
-const sglLookEnabled = ref(false);
-const sglLookPreset = ref<SglLookPresetId>(DEFAULT_SGL_LOOK_PRESET);
-const sglLookHlrEnabled = ref(SGL_LOOK_PRESETS[DEFAULT_SGL_LOOK_PRESET].hlr);
-const sglLookAoEnabled = ref(SGL_LOOK_PRESETS[DEFAULT_SGL_LOOK_PRESET].ao);
-const sglLookGradientEnabled = ref(SGL_LOOK_PRESETS[DEFAULT_SGL_LOOK_PRESET].gradient);
-const sglLookAaEnabled = ref(SGL_LOOK_PRESETS[DEFAULT_SGL_LOOK_PRESET].antiAlias);
+// 状态放在 useRenderLookStore（含 localStorage 落盘），「设置 → 渲染模式」面板与这里的齿轮弹层改的是同一份；
+// 改动经下面的 watch 套到 DTX 材质 / 后处理管线 / 选中样式 / 显示主题上。
+const renderLookStore = useRenderLookStore();
+const sglLookEnabled = renderLookStore.enabled;
+const sglLookPreset = renderLookStore.preset;
+const sglLookHlrEnabled = renderLookStore.hlr;
+const sglLookAoEnabled = renderLookStore.ao;
+const sglLookGradientEnabled = renderLookStore.gradient;
+const sglLookAaEnabled = renderLookStore.aa;
+/** onMounted 里 URL 覆盖 / 首次主题联动跑完之前，watch 不做显示主题联动（那段有自己的「用户没选过主题才联动」规则） */
+let sglLookInitDone = false;
+
+// 开关 / 预设变了（无论来自这里的齿轮弹层、「设置 → 渲染模式」面板还是 URL）：元素颜色跟着切显示主题。
+// flush: 'sync' 是为了让 onMounted 里 URL 覆盖那一段写 store 时能被 sglLookInitDone 挡住（那段自己决定要不要联动）。
+watch(
+  [sglLookEnabled, sglLookPreset],
+  ([enabled, preset], [prevEnabled, prevPreset]) => {
+    if (!sglLookInitDone) return;
+    if (enabled !== prevEnabled) {
+      syncSglLookDisplayTheme(enabled);
+    } else if (enabled && preset !== prevPreset) {
+      syncSglLookDisplayTheme(true);
+    }
+  },
+  { flush: 'sync' },
+);
+
+// 六个量任一变了就把整套外观重新套到 DTX 层 / 管线 / 选中样式上（切预设一次改五个量，这里合成一次）
+watch(
+  [sglLookEnabled, sglLookPreset, sglLookHlrEnabled, sglLookAoEnabled, sglLookGradientEnabled, sglLookAaEnabled],
+  () => {
+    applySglLook();
+  },
+);
+
 const sglPipelineRef = shallowRef<SglLookPipeline | null>(null);
 const sglEnvCubeRef = shallowRef<CubeTexture | null>(null);
 let sglEnvCubeLoading = false;
@@ -3370,12 +3375,9 @@ onMounted(async () => {
   globalEdgeThresholdAngle.value = 20;
   focusTransparencyEnabled.value = false;
   focusDimOpacityPercent.value = 20;
-  sglLookEnabled.value = false;
-  sglLookPreset.value = DEFAULT_SGL_LOOK_PRESET;
-  sglLookHlrEnabled.value = SGL_LOOK_PRESETS[DEFAULT_SGL_LOOK_PRESET].hlr;
-  sglLookAoEnabled.value = SGL_LOOK_PRESETS[DEFAULT_SGL_LOOK_PRESET].ao;
-  sglLookGradientEnabled.value = SGL_LOOK_PRESETS[DEFAULT_SGL_LOOK_PRESET].gradient;
-  sglLookAaEnabled.value = SGL_LOOK_PRESETS[DEFAULT_SGL_LOOK_PRESET].antiAlias;
+  // E3D 外观状态在 renderLookStore（模块级，跨面板重挂保留），这里只重读一次落盘值，URL 覆盖在下面
+  renderLookStore.hydrateFromStorage();
+  sglLookInitDone = false;
   sglLookDisposed = false;
   try {
     // DEV: localStorage.setItem('dtx_continuous_render','1') 可打开持续渲染（用于 profile）
@@ -3441,36 +3443,9 @@ onMounted(async () => {
       );
     }
 
-    // E3D 外观：?dtx_look=sgl|pbr，预设 dtx_look_preset=factory|machine（缺省 factory），
+    // E3D 外观：落盘值 store 已经读了；URL 只覆盖本次：?dtx_look=sgl|pbr，预设 dtx_look_preset=factory|machine，
     // 子开关 dtx_look_hlr / dtx_look_ao / dtx_look_gradient / dtx_look_aa（'0' 关；缺省随预设）
-    const lookRaw = q.get('dtx_look') || localStorage.getItem('dtx_look');
-    if (lookRaw !== null && lookRaw !== undefined) {
-      sglLookEnabled.value = String(lookRaw).trim().toLowerCase() === 'sgl';
-    }
-    const lookPreset = parseSglLookPresetId(q.get('dtx_look_preset') || localStorage.getItem('dtx_look_preset'));
-    if (lookPreset) {
-      sglLookPreset.value = lookPreset;
-      sglLookHlrEnabled.value = SGL_LOOK_PRESETS[lookPreset].hlr;
-      sglLookAoEnabled.value = SGL_LOOK_PRESETS[lookPreset].ao;
-      sglLookGradientEnabled.value = SGL_LOOK_PRESETS[lookPreset].gradient;
-      sglLookAaEnabled.value = SGL_LOOK_PRESETS[lookPreset].antiAlias;
-    }
-    const lookHlrRaw = q.get('dtx_look_hlr') || localStorage.getItem('dtx_look_hlr');
-    if (lookHlrRaw !== null && lookHlrRaw !== undefined) {
-      sglLookHlrEnabled.value = String(lookHlrRaw).trim() !== '0';
-    }
-    const lookAoRaw = q.get('dtx_look_ao') || localStorage.getItem('dtx_look_ao');
-    if (lookAoRaw !== null && lookAoRaw !== undefined) {
-      sglLookAoEnabled.value = String(lookAoRaw).trim() !== '0';
-    }
-    const lookGradientRaw = q.get('dtx_look_gradient') || localStorage.getItem('dtx_look_gradient');
-    if (lookGradientRaw !== null && lookGradientRaw !== undefined) {
-      sglLookGradientEnabled.value = String(lookGradientRaw).trim() !== '0';
-    }
-    const lookAaRaw = q.get('dtx_look_aa') || localStorage.getItem('dtx_look_aa');
-    if (lookAaRaw !== null && lookAaRaw !== undefined) {
-      sglLookAaEnabled.value = String(lookAaRaw).trim() !== '0';
-    }
+    renderLookStore.applyQueryOverrides(q);
     // 一上来就开着 E3D 外观、而用户从没自己选过显示主题：元素颜色也按预设走（e3dFactory）。
     // 选过主题（localStorage 里有）就尊重那次选择，不动。
     if (sglLookEnabled.value && localStorage.getItem('viewer_display_theme_v2') === null) {
@@ -3479,6 +3454,7 @@ onMounted(async () => {
   } catch {
     // ignore
   }
+  sglLookInitDone = true;
 
   let dtxViewer: DtxViewer;
   try {
@@ -5579,6 +5555,7 @@ onUnmounted(() => {
               <div class="text-[11px] text-muted-foreground">
                 {{ SGL_LOOK_PRESETS[sglLookPreset].description }}
                 反射采 sglDx11 内嵌的环境立方体贴图；边线 / 伪阴影 / 4× 抗锯齿是 sglDx11 同款后处理；选中按 E3D 染色（CE yellow、其余 white，无描边）；版本分屏时暂不套用。
+                完整说明见「设置 → 渲染模式」。
               </div>
             </div>
 

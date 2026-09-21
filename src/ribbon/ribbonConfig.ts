@@ -244,6 +244,13 @@ const ALL_RIBBON_TABS: RibbonTabConfig[] = [
     label: '设置',
     groups: [
       {
+        id: 'settings.render',
+        label: '渲染',
+        items: [
+          { kind: 'button', id: 'settings.renderMode', label: '渲染模式', icon: 'cube', commandId: 'settings.renderMode' },
+        ],
+      },
+      {
         id: 'settings.style',
         label: '样式',
         items: [

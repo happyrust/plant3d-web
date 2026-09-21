@@ -98,6 +98,12 @@ npm run dev                       # 然后打开 http://127.0.0.1:3101/e3d-look-
 主界面 ViewerPanel：`?dtx_look=sgl` 开 E3D 外观，`dtx_look_preset=factory|machine`（缺省 factory），
 子开关 `dtx_look_hlr / dtx_look_ao / dtx_look_gradient / dtx_look_aa`（`0` 关，缺省随预设）；同名 localStorage 键记住上次选择。
 
+界面入口（2026-09-21 第十三轮）：Ribbon **「设置 → 渲染 → 渲染模式」** 打开 `RenderModeSettingsPanel` dock 面板
+（`src/components/tools/RenderModeSettingsPanel.vue`），选「web 标准（PBR）/ E3D 外观」、E3D 预设、四个后处理开关，
+带「恢复预设出厂位」和当前设置对应的 URL 参数提示；查看器齿轮弹层里原来那组按钮保留。两处改的是同一份状态
+`useRenderLookStore`（`src/composables/useRenderLookStore.ts`，localStorage 键还是上面那组 `dtx_look*`），
+ViewerPanel 用 `watch` 把它套到 DTX 材质 / 后处理管线 / 选中样式 / 显示主题联动上；URL 参数只覆盖本次、不落盘。
+
 单元测试：`npx vitest run src/viewer/e3dLook`（若 `node_modules` 是 junction，改用
 `node <真实路径>/node_modules/vitest/vitest.mjs run src/viewer/e3dLook`，否则 vitest 双实例会报「No test suite found」）。
 

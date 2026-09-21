@@ -806,6 +806,18 @@ function ensurePanel(panelId: string) {
           : undefined,
     });
   }
+  if (panelId === 'renderModeSettings') {
+    return addPanelSafely(dockApi, {
+      id: 'renderModeSettings',
+      component: 'RenderModeSettingsPanel',
+      title: '渲染模式',
+      position: measurementPanel
+        ? { referencePanel: measurementPanel, direction: 'within' }
+        : viewerPanel
+          ? { referencePanel: viewerPanel, direction: 'right' }
+          : undefined,
+    });
+  }
   if (normalizedPanelId === 'review') {
     return addPanelSafely(dockApi, {
       id: 'review',
@@ -1250,6 +1262,9 @@ function handleRibbonCommand(commandId: string) {
       return;
     case 'annotation.settings':
       togglePanel('annotationStyle');
+      return;
+    case 'settings.renderMode':
+      togglePanel('renderModeSettings');
       return;
     case 'panel.review':
       togglePanel('review');

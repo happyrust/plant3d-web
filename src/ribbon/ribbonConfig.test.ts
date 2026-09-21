@@ -109,6 +109,23 @@ describe('RIBBON_TABS', () => {
     )))).toBe(true);
   });
 
+  it('设置菜单提供渲染模式入口', async () => {
+    vi.resetModules();
+    window.history.replaceState({}, '', '/?output_project=AvevaMarineSample');
+
+    const { RIBBON_TABS } = await import('./ribbonConfig');
+    const settingsTab = RIBBON_TABS.find((tab) => tab.id === 'settings');
+    const renderGroup = settingsTab?.groups.find((group) => group.id === 'settings.render');
+
+    expect(renderGroup?.label).toBe('渲染');
+    expect(renderGroup?.items.some((item) => (
+      item.kind === 'button'
+        && item.id === 'settings.renderMode'
+        && item.label === '渲染模式'
+        && item.commandId === 'settings.renderMode'
+    ))).toBe(true);
+  });
+
   it('尺寸面板与命令入口在 cutover 后常驻导出', async () => {
     vi.resetModules();
     window.history.replaceState({}, '', '/?output_project=AvevaMarineSample');
