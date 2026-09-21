@@ -1,0 +1,166 @@
+# 节点版本视图 · 设计稿回写与「设计有 / 实现无」缺口收口 开发计划
+
+> 日期：2026-09-21。来源：用户「分析现在版本查看对比实现的进度」→「现在的 pencil 界面是否已经有了」→
+> 「把设计稿补到当前实现：不动已定稿的 S0–S3，新增 S4 / S5 两帧并重新导出 PNG，然后用 plannotator 制定开发计划」。
+> 上位计划：`docs/plans/2026-09-18-model-version-compare-gen-model-v1-migration-plan.md`（§10 节点版本视图、§11 / §11.1 三维联动）；决策 ADR 0066；
+> 词条 `CONTEXT.md`「模型版本查看」一节。
+> 设计稿：`plant-10/design/node-version-history.pen`——**09-21 16:24 新增 S4「三维联动实况」与 S5「树差异模式」**，S0–S3 / F1 / F2 一字未动；
+> 九帧导出 `docs/plans/2026-09-18-node-version-view-design/`（S0–S3 / F1 / F2 重导后字节数与 09-18 22:18 那批逐一相同 = 定稿帧确实没动）。
+> 前端基线：plant3d-web `main@0bc598e1`（PR #79 已合）+ 工作树未提交改动（§1.3）；后端 gen-model-refactor `0b2bf527b` + 未提交 `src/fast_model/attribute_diff.rs`。
+>
+> 状态：用户 16:3x 拍板 **「D1–D6 全按推荐，直接从 P0 开干」**；**P0 已完成**（§8 执行记录），P1 起待做。
+
+## 0. 一句话
+
+设计稿与实现在 09-18 22:48 定稿后分叉：实现多出一整套三维联动与树差异模式（已回写成 S4 / S5），设计稿里则有**六处**实现没做或做法不同。
+本计划先把工作树里混在一起的三份改动分开提交（P0），再按「便宜的先做、要拍板的等拍板、依赖后端的等后端」收那六处（P1–P3），
+每项写清做法、验证与设计稿回写点。不改后端口径的事只记不做。
+
+## 1. 已核实的基线（2026-09-21 15:5x–16:2x 查证）
+
+### 1.1 已合入 `main` 的部分
+
+| 层 | 状态 | 要点 |
+|---|---|---|
+| 取数迁移（09-18 计划 §1–§7） | ✅ | B / A1 / A2 / A3 + legacy 版本链退役六组；09-20 `0b2e317c` 整个 legacy 数据源退役 |
+| 端口 `ModelVersionSource` | ✅ | `listVersions / listElementVersions / loadVersion / attributesAt / attributeHistory / listNodeVersions / diffSummary`；旧服务端 404 → `ModelVersionRouteUnavailableError` 回落 |
+| 节点版本视图（ADR 0066，`061c83b2`） | ✅ | 范围开关、时间线点选 A/B、与上一版比 / 与最新比、属性对比 tab（时间线折净差）、模型对比 tab（差异摘要按单元分组 → 逐组「在三维中对比」）、「仅属性」（`91e7480f`）、三入口 |
+| 模型树差异模式 | ✅ | 徽章 / 幽灵行 /「当前已不在」/ 底部 `ModelVersionAttrDiffPanel` /「在 3D 中定位」/ 属性面板「已删除」登记 |
+| 三维联动（§11 / §11.1，PR #79） | ✅ | 四态着色、单视口角标 + 图例、「三维只看差异」、单视口点 A/B 构件 → 属性面板读那一版 |
+| e2e | ✅ | `model-version-compare-gen-model-v1.spec.ts` 4 条 × 两夹具、`node-version-view-gen-model-v1.spec.ts` 2 条 |
+
+### 1.2 设计稿 vs 实现（逐帧读 .pen 文字核出来的）
+
+**设计有 · 实现有** ✅：三入口、范围开关 + 叶子置灰、时间线一行一会话（user / comment / 属性 n / 影响芯片 /「单元 n」）、「只看几何变的」、
+「与上一版比 / 与最新比」、点两行选 A/B、属性对比 tab（戳 / 显示未变）、差异摘要五格、按单元分组 + 「包含未变化」、S3「本节点」置顶、
+切回仅自身时 A/B 保留 + 「本范围无变化」灰行 + 空态、运行态卡（单视口 / 分屏 / A-B 卡 / 环境刷新）。
+
+**设计有 · 实现没有或不一样** ⚠️（本计划的对象）：
+
+| # | 设计稿 | 实现现状 | 收口 |
+|---|---|---|---|
+| G1 | S2 时间线「只看自身变的」筛选 | 没做（只有「只看几何变的」，`ModelUnitVersionComparePanel.vue:977`） | P1-a |
+| G2 | S3 属性对比 tab 每行「定位」 | 面板里没有（`定位` 只出现在注释；只有树差异模式底部那块有「在 3D 中定位」） | P1-b |
+| G3 | S1「加载更早 47 版…」分页 | 适配器按 `since_sesno` 连续拉全表（≤ 20 页），时间线一次全列 | P1-c（拍板 D2） |
+| G4 | S2 一颗「在三维中对比（N 个单元 · M 份历史投影）」+ S2b「正在生成历史投影 3 / 4」进度 | 每组一颗按钮、一次装一个单元（面板头注「多单元一次装载下一期」） | P2-a（拍板 D3） |
+| G5 | S2b ② 超 20 单元确认对话框（全部生成 / 先装 20 / 取消 / 继续） | 只在摘要下出一行 `needsConfirm` 琥珀提示（`:1205`），不弹框 | P2-b（拍板 D4） |
+| G6 | S3「成员 +1 / 成员重排」 | 折时间线那条路只能说「动过」；已暂存的 `attributeDiff` 才给两端真差，后端路由未提交 | P2-c（拍板 D5） |
+
+**实现有 · 设计稿没画** 🆕（09-19 之后加的，**本轮已回写成 S4 / S5**）：「仅属性」徽章与「本范围 n 版 · 仅属性 m」；三维四态着色 + 角标 / 图例 +
+「三维只看差异」；点 A/B 构件 → 属性面板「属性来自版本 A · sesno n」横幅（单视口 + 分屏）；容器分组进三维的侧注脚；树差异模式整套
+（幽灵行三种、底部属性历史对比三种横幅、属性面板「该构件已删除」）；旧服务端回落文案。
+
+### 1.3 工作树未提交（`git status`，09-21 16:0x）
+
+- **未暂存**（16 文件 +609/−87）：分屏拾取 + 环境按格 GPU 拾取 + 每格描边合成器（README §8.2 / §8.3）、容器分组 tombstone 侧（§8.4）；
+  `CHANGELOG` / `CONTEXT` / plan §11.1 / README 都已写。**都已真机验、单测 / e2e 过，只差 commit。**
+- **已暂存**（19 文件 +817/−271，混了三件事）：① `attributeDiff`（端口 + v1 适配器 + `genModelV1Api` DTO + 面板 `viewFromAttributeDiff / viewFromFold /
+  emptyNetDiffText` + `nodeVersionTimeline` 纯函数 + 测试）——**没有 CHANGELOG 条目、plan §10 没记**；② 模型树无名构件短名（09-20，CHANGELOG 已有条目）；
+  ③ 净距 `SpatialClearance*` 类型 + surface-clearance 两份文档（另一条线）。
+- 后端：`gen-model-refactor/src/fast_model/attribute_diff.rs` **untracked**、`handlers.rs` modified；运行中的 `:8022`（`a382b2cf3`）对 `element/attribute-diff` 回 404。
+
+### 1.4 本轮验证
+
+工作树现状 `npx vitest run` 九个版本对比相关文件（面板 / 纯函数 / 时间线 / v1 适配器 / 树差异 / 属性历史面板 / 属性面板钉住 & 已删除 / GPUPicker）：
+**9 文件 / 86 用例全绿**（2.4 s）。全仓 vitest、e2e、真机本轮未跑。
+
+## 2. 分期
+
+### P0 · 收工作树（不写新功能，半天）
+
+- **P0-a** 未暂存的 16 文件按两件事提交：`feat(viewer): 版本对比分屏也能点构件——按格造射线、环境 GPU 拾取子视口、每格描边合成器（plan §11.1，README §8.2 / §8.3）`
+  与 `fix(model-version): 容器分组进三维时 A 时没建 / B 时已删的单元按 tombstone 侧装（README §8.4）`；CHANGELOG 两条已在。
+- **P0-b** 已暂存的拆三笔：`feat(model-version): 属性净差接 element/attribute-diff，旧服务端回落折时间线（ADR 0066 第四条路由，前端半边）` —— **补 CHANGELOG 条目 + plan 09-18 §10 追记一条**；
+  `feat(model-tree): 无名构件按 E3D 规矩起名，默认短名可切全称`（CHANGELOG 条目已在）；`SpatialClearance*` 类型 + 两份文档退回未暂存，交给净距那条线的会话。
+- 出口：全仓 vitest 全绿；`node scripts/type-check.mjs` 基线外 0；ESLint 触及文件 0；`PLAYWRIGHT_PORT=3111 npx playwright test e2e/model-version-compare-gen-model-v1.spec.ts e2e/node-version-view-gen-model-v1.spec.ts --workers=1` 全过。
+- 拍板 **D1**：`attributeDiff` 前端半边现在提交（有回落、后端没路由时行为与今天一样）还是等后端 `attribute_diff.rs` 落地一起？**推荐现在提交**。
+
+### P1 · 设计有、实现无 · 便宜的（纯前端，1 天）
+
+- **P1-a（G1）「只看自身变的」**：`所有子节点` 下时间线头加勾选 `selfOnly`（`data-testid="model-unit-compare-self-only"`），筛 `row.selfImpact !== null || row.attributeChangeCount > 0`
+  （自身列未知 `unitColumnOnly` 时置灰、不筛）；`utils/nodeVersionTimeline.ts` 的筛行纯函数加一维；与「只看几何变的」可叠加。单测 +2；e2e `node-version-view` 容器那条加断言（勾上后行数 ≤ 未勾）。
+- **P1-b（G2）S3 每行「定位」**：属性对比 tab 的构件行加「定位」——已装 A/B 时派版本对比事件 `focus`（走 `focusModelUnitVersionCompare`，并 A/B 两层包围盒找，幽灵也能飞）；
+  没装时 `locateRefno` 飞环境模型；当前树里没有的（B 版之后又被删）且没装 A/B 时按钮置灰、title 说明。单测 +1（两种分支各派什么事件）。
+- **P1-c（G3）「加载更早 n 版…」**：拍板 **D2**——(a) 不做（v1 全表冷 2–7 s、`since_sesno` 命中缓存 20 ms，用户没抱怨）；(b) **只改展示**：缺省渲染最近 20 行 + 一行「加载更早 n 版…」
+  点开全列，取数不动；(c) 取数也分页（`limit` + 「加载更早」再拉）。**推荐 (b)**——设计稿的样子、零后端、不影响 e2e 数字（计数仍按全表）。
+
+### P2 · 设计有、实现不一样 · 要拍板（2–3 天）
+
+- **P2-a（G4）多单元一次装载**：面板 `runCompareGroups(groups)`——按摘要组顺序两侧 `loadVersion`（并发 ≤ 2），每装好一组就派 `open`（或新增 `append` 事件）进隔离图层，
+  进度卡「正在生成历史投影 n / m · <unit>@<sesno>」按份数走（tombstone 侧不计份）；`open` detail 从单单元扩成 `units[]`，四态计划 `planModelUnitCompareObjectStyles` 仍按 refno 查 rows、不受影响；
+  退出 DELETE 全部快照；「三维只看差异」/ 角标 / 分屏拾取对多单元同样成立（角标只说版本，不说单元）。拍板 **D3**：做不做；缺省上限（建议 ≤ 20 单元，超过走 P2-b）。
+- **P2-b（G5）阈值确认对话框**：`diffSummary.needsConfirm` 时弹确认（全部生成 / 先装变化最大的 N 个 / 取消），阈值与预估份数由后端给（核 `node/diff-summary` 回执字段名：`needs_confirm` /
+  预估份数字段——README §7 记的是 `needs_confirm`，份数字段要核）；「先装 N 个」排序按组内变更数。**依赖 P2-a**。拍板 **D4**：与 P2-a 绑定（P2-a 不做则本条也不做，逐组装载本就不超阈值）。
+- **P2-c（G6）成员 / owner 真差**：前端已暂存消费 `members.added / removed / reordered` 与 `owner [A, B]`；等 gen-model-refactor `attribute_diff.rs` 提交并起到 `:8022` 后真机
+  （SITE 24384/22399 573→628 子树点开 BRAN 24384_23257 应出「成员重排」，EQUI 24384_24776 出「成员 +1」），e2e 容器那条加断言。拍板 **D5**：后端那半由谁 / 何时提交（正在改的是另一条会话）。
+
+### P3 · 实现自己记下的缺口（设计稿没提，1 天）
+
+- **P3-a** 容器的 `compare_a / compare_b` URL 参数不生效：`autorunFromUrl` 在 `!hasUnit` 之前先把这对套到时间线（不跑对比、不装几何）；不在表里照旧回落最近两版并提示。单测 +1；e2e 容器那条加 URL 变体。
+- **P3-b** 换组分屏回单视口：`runCompareGroup` close→open 时把当前 `viewMode` 带进 `open` detail（`viewMode?: 'single' | 'split'`），ViewerPanel 就位后按它切；缺省仍单视口。单测 +1；e2e 管道分组一条。
+- **P3-c** 分屏描边合成器去留（README §8.3：RX 590 每格 +0.8–1.1 ms、软渲染 11 fps）：拍板 **D6**——(a) 留（两条路一致、选中两格描边）；(b) 退回直接 render（选中靠 `setObjectColor` 橙色，分屏暗一档回来）；
+  (c) **留，但无硬件加速时自动退回**（`WEBGL_debug_renderer_info` 认出 SwiftShader / llvmpipe 就走直接 render）。**推荐 (c)**。
+- **P3-d** FTUB 纯 POS 变更被归 `mesh` 而非 `placement`：gen-model-refactor 分类器口径，**不在本计划**，只记。
+
+## 3. 设计稿回写点
+
+- S4 / S5 已按 09-21 实现回写（本轮）。S0–S3 / F1 / F2 不动。
+- P1-a / P1-b / P2-a / P2-b 做完 = 实现追上设计稿，**设计稿不用改**；P1-c 选 (b) 同样不用改。
+- P3-a / P3-b 做完改 S4 注 6 那句「换组 = close 再 open，分屏回单视口（未动）」；P3-c 拍板后改 S4 注 5 末句「去留待拍板」。
+- 每次改 .pen 后重导九帧到 `docs/plans/2026-09-18-node-version-view-design/`（导出名按帧：`S4-3d-linkage-live.png` / `S5-tree-diff-mode.png`）。
+
+## 4. 验证口径（每项都要）
+
+- vitest 涉及文件全绿；`node scripts/type-check.mjs` 基线外 0 新增；ESLint 触及文件 0（`ViewerPanel.vue:27/28` 那条 import 分组空行是 HEAD 就有的，不算）。
+- e2e：`PLAYWRIGHT_PORT=3111 npx playwright test e2e/model-version-compare-gen-model-v1.spec.ts e2e/node-version-view-gen-model-v1.spec.ts --workers=1`（dev `:3111` + `:8022`；缺省夹具 `24384_26480` 与 `MODEL_VERSION_E2E_UNIT=24384_23257` 各跑一遍）。
+- 真机截图 + 请求账进 `docs/verification/model-version-compare-gen-model-v1-2026-09-18/`，README 追一节；CHANGELOG 一条；09-18 plan 追记。
+- 声称完成必附「跑了什么、结果如何」；跑不了的标未验证 + 原因。
+
+## 5. 明确不做
+
+- 不做后端 diff 接口、不做全库版本树、不找回 release 线（沿 09-18 计划 §6）。
+- 不改 `element/versions` / `node/versions` 的模型口径（「仅属性」按前端并集处理，09-19 拍板）。
+- 不动 S0–S3 / F1 / F2 定稿帧；不并「三维只看差异」与「包含未变化」两个开关（有意分开）。
+- 分类器 `mesh` vs `placement` 口径（P3-d）不在本仓。
+
+## 6. 要拍的决策
+
+| # | 问题 | 选项 | 推荐 |
+|---|---|---|---|
+| D1 | `attributeDiff` 前端半边何时提交 | 现在 / 等后端一起 | 现在（有回落，行为不变） |
+| D2 | 「加载更早 n 版…」 | 不做 / 只改展示（最近 20 行 + 展开）/ 取数也分页 | 只改展示 |
+| D3 | 多单元一次装载 | 不做（保持逐组）/ 做，缺省上限 ≤ 20 单元 | 做，上限 20 |
+| D4 | 阈值确认对话框 | 与 D3 绑定 / 独立 | 绑定 |
+| D5 | 后端 `element/attribute-diff` 落地 | 谁 / 何时提交 `attribute_diff.rs` | 等另一条会话提交后接真机 |
+| D6 | 分屏描边合成器 | 留 / 退回直接 render / 留但软渲染自动退回 | 留但软渲染自动退回 |
+
+## 7. 顺序建议
+
+P0（半天）→ P1-a / P1-b（半天）→ P3-a / P3-b（半天）→ P1-c（D2 定后 2 小时）→ P2-a + P2-b（D3 / D4 定后 2 天）→ P3-c（D6 定后半天）→ P2-c（等 D5）。
+
+## 8. 执行记录
+
+### P0（2026-09-21 16:3x–16:4x）
+
+工作树是多条会话共用的，三笔都用临时索引（`GIT_INDEX_FILE`）从 HEAD 树 + 指定 blob / hunk 拼出来提交，**没有碰别的会话暂存着的内容**
+（`history.txt`、`PropertiesPanel.deleted.test.ts` 那一行、`genModelV1Api.ts` 里净距块的搬家、两份 surface-clearance 文档仍留在暂存区；
+房间层级树 PR-D 那批未跟踪 / 未暂存文件一律没动）。
+
+| 提交 | 内容 | 备注 |
+|---|---|---|
+| `0f7b46ed` `feat(model-tree)` | 无名构件短名（9 文件，CHANGELOG 条目原已在） | `genModelV1Api.ts` 只取 `EleTreeNodeDto` 那一个 hunk |
+| `ecc65fb7` `feat(model-version)` | `attributeDiff` 前端半边（9 文件）+ **新写** CHANGELOG 条目 + 09-18 plan §10 追记 | D1 按推荐「现在提交」；真机未验（`:8022` 无此路由，走回落） |
+| `fc726fd3` `feat(viewer)` | 分屏拾取 + 每格描边合成器 + 容器分组 tombstone 侧（34 文件，含 3d-diff-color 证据 24 个） | **P0-a 原定两笔并成一笔**：§8.2 / §8.4 的 hunk 在 `ViewerPanel.vue` / 纯函数 / 测试 / 四份文档里交错，拆开要按 hunk 手切、中间态难保证能编译，改为一笔、提交说明分两段写 |
+| `1cac05b1` `fix(viewer)` | 修正 `fc726fd3` 三处错位 | 见下条 |
+
+- **`fc726fd3` 的错位与修正**：为了把工作树里已写好但无单测无文档的 P3-a / P3-b 代码（容器 `compare_a/b` 套时间线、换组保留 `viewMode`）留在工作树不入这笔，
+  三个文件按 hunk 排除后用 `-U0` 补丁进临时索引；被排除 hunk 之后的行号漂移，`ViewerPanel.vue` 两段（`attachPicking` 的 `const down` 落到清空之后；分屏两枚角标的 tombstone
+  `<span>` 错格）与 `modelUnitVersionCompare.ts` 一段（`ModelUnitVersionCompareEnvironment` 类型块拆散）插错了位置——**`fc726fd3` 本身不可编译**。
+  `1cac05b1` 用工作树内容反向去掉 P3 hunk（带上下文）重建三个文件，与工作树逐字一致。中途一次 `--amend` 落到了别的会话刚提交的 `14ece7b6` 上，
+  已把 `14ece7b6` 原样放回、修正另起 `1cac05b1`；一次被 shell 包装层改写的 `git commit-tree` 误把别的会话的暂存内容提交成 `601ced69`，已 `reset --soft` 撤回、暂存区复原。
+- **验证（HEAD `1cac05b1`，另开 detached worktree `D:\tmp\wt-head` + node_modules junction）**：vitest 版本对比 / 模型树相关 10 文件 **100 用例全绿**；
+  `node scripts/type-check.mjs` 504 条 / 基线 539，基线外只有 `pmsContractSequence.test.ts` TS6307 一条——是 worktree 绝对路径不同造成的基线键漂移，与本轮改动无关；
+  ESLint 22 个触及文件只剩 `ViewerPanel.vue:28` 那条 HEAD 就有的 import 分组空行。**未跑**：全仓 vitest、e2e（dev `:3111` / `:8022` 未起）。
+- **仍在工作树、未提交**：P3-a / P3-b 那 39 行（`ModelUnitVersionComparePanel.vue` / `ViewerPanel.vue` / `modelUnitVersionCompare.ts`）——归 P3 时补单测 + 文档再提；
+  设计稿 S4 / S5 PNG 与本计划随 `docs(plan)` 另一笔提交。
+- **教训**：共享工作树上别用 `--amend`（别的会话随时会在你后面提交）；按 hunk 拆提交要带上下文（`-U3` + `apply -R`），不要 `-U0`。
