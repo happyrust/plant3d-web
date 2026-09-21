@@ -296,6 +296,8 @@ export type ModelUnitVersionCompareOpenDetail = {
   rows: ModelUnitGeometryDiff[]
   /** 缺省没有（旧派发方 / 测试夹具）：那就点不出版本属性，三维里点 A / B 构件只按 refno 普通选中 */
   attributesAt?: ModelUnitCompareAttributesAt
+  /** 就位后的初始视图模式；缺省单视口。面板换单元 / 换版本重开时把上一轮的带过来（容器逐组看不用每组再点一次分屏） */
+  viewMode?: ModelUnitCompareViewMode
 }
 
 /** 视口里点到的隔离图层对象：`unit-compare:a:<refno>:<n>` → A 侧、`unit-compare:b:…` → B 侧；别的对象 id 回 null */

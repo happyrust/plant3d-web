@@ -2250,6 +2250,8 @@ async function openModelUnitVersionCompare(detail: ModelUnitVersionCompareOpenDe
         hiddenWhenDiffOnly: { before: hidden.before.length, after: hidden.after.length },
       };
     }
+    // 面板换单元 / 换版本重开时带来的上一轮视图模式（容器逐组看不用每组再点分屏）：走同一条切换路，测量工具等照样收
+    if (detail.viewMode && detail.viewMode !== DEFAULT_MODEL_UNIT_COMPARE_VIEW_MODE) setModelUnitCompareViewMode(detail.viewMode);
     requestRender();
   } catch (error) {
     if (runId !== modelUnitCompareRunId) {

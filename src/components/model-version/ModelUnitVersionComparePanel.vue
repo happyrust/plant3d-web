@@ -684,6 +684,8 @@ async function runCompareGroup(group: ModelNodeDiffGroup): Promise<void> {
 }
 
 async function runCompareVersions(before: ModelVersion, after: ModelVersion, unit: string): Promise<void> {
+  // 换单元（容器逐组）/ 换版本重开：视口的单视口 / 分屏跟上一轮走，不用每组再点一次「双视口分屏」
+  const keepViewMode = compareRuntime.value?.status === 'ready' ? compareRuntime.value.viewMode : undefined;
   closeCompare();
   rows.value = [];
   compareCompleted.value = false;
@@ -737,6 +739,7 @@ async function runCompareVersions(before: ModelVersion, after: ModelVersion, uni
       // 三维里点到 A / B 隔离图层的构件时，属性面板钉到那一版：与树差异模式底部那块同一个取数口（句柄闭包在几何里）
       attributesAt: (side, refno, signal) =>
         getModelSource().versions.attributesAt(side === 'before' ? beforeData.geometry : afterData.geometry, refno, { signal }),
+      ...(keepViewMode ? { viewMode: keepViewMode } : {}),
     });
     focusQueriedElement();
   } catch (cause) {
@@ -837,22 +840,43 @@ function handleCompareRuntime(event: Event): void {
   compareActive.value = compareRuntime.value !== null;
 }
 
-/** URL `compare_autorun=1`：查版本 → 按 `compare_a` / `compare_b` 选（缺省最近两版）→ 跑对比。 */
+/**
+ * URL `compare_autorun=1`：查版本 → 按 `compare_a` / `compare_b` 选（缺省最近两版）→ 跑对比。
+ * 容器没有自己的几何可跑：把那对套到时间线上（本范围没有、子树有就切「所有子节点」），落到模型对比 tab 看分组即停。
+ */
 async function autorunFromUrl(): Promise<void> {
   if (!urlConfig.autorun || !urlConfig.unitRefno) return;
   const run = requestId + 1;
   await loadVersions();
   // loadVersions 内部会推进 requestId；期间用户手动改了输入就不接着跑
   if (requestId !== run || timelineRows.value.length < 2) return;
-  // 容器没有自己的几何可装（几何按其下的单元分组对比），自动跑到这儿就停：面板已开、时间线已列，别报「没有可对比的几何」
-  if (!hasUnit.value) return;
+  const wantPair = urlConfig.compareA !== null && urlConfig.compareB !== null && urlConfig.compareA !== urlConfig.compareB;
+  const fallbackText = `URL 指定的版本 compare_a=${urlConfig.compareA ?? '-'} / compare_b=${urlConfig.compareB ?? '-'} 不在该节点的时间线里，已回落到最近两版`;
+  if (!hasUnit.value) {
+    // 容器（几何按其下的单元分组对比）：面板已开、时间线已列；URL 那对要在本范围内才套，仅子树里有就切过去；没给就到此为止
+    if (!wantPair) return;
+    const pairIn = (rows: NodeTimelineRow[]): boolean =>
+      [urlConfig.compareA, urlConfig.compareB].every((sesno) => rows.some((row) => row.sesno === sesno && row.inScope));
+    if (!pairIn(timelineRows.value) && hasMembers.value !== false
+      && pairIn(buildNodeTimelineRows({ timeline: elementTimeline.value, history: attributeHistory.value, nodeVersions: nodeVersions.value, scope: 'subtree' }))) {
+      scope.value = 'subtree';
+    }
+    if (pairIn(timelineRows.value)) {
+      beforeSesno.value = Math.min(urlConfig.compareA!, urlConfig.compareB!);
+      afterSesno.value = Math.max(urlConfig.compareA!, urlConfig.compareB!);
+      activeTab.value = 'model';
+    } else {
+      error.value = fallbackText;
+    }
+    return;
+  }
   const has = (sesno: number | null): sesno is number => sesno !== null && timelineRows.value.some((item) => item.sesno === sesno);
   let fallbackNote: string | null = null;
   if (has(urlConfig.compareA) && has(urlConfig.compareB) && urlConfig.compareA !== urlConfig.compareB) {
     beforeSesno.value = urlConfig.compareA;
     afterSesno.value = urlConfig.compareB;
   } else if (urlConfig.compareA !== null || urlConfig.compareB !== null) {
-    fallbackNote = `URL 指定的版本 compare_a=${urlConfig.compareA ?? '-'} / compare_b=${urlConfig.compareB ?? '-'} 不在该节点的时间线里，已回落到最近两版`;
+    fallbackNote = fallbackText;
   }
   await runCompare();
   // runCompare 会先清 error；回落提示放在它之后，且不盖住真正的失败

@@ -284,7 +284,7 @@ pageerror 0；console error 仍是那 5 条环境噪音。`a626-b630-split-pick-
 
 | 步 | 截图 | 事实 |
 |---|---|---|
-| 打开 `/?…&unit_refno=24384_23225&compare_autorun=1&compare_a=300&compare_b=380` | — | 面板开、时间线列出即停（容器没有自己的几何可装）：缺省范围**仅自身**（CONTEXT 口径），本范围 49 版、缺省 **A 524 → B 532**（它自己最后两版 mesh）；`compare_a / compare_b` 对容器**不生效**——`autorunFromUrl` 到 `!hasUnit` 就 return，URL 那对没套到时间线上；主按钮「在三维中对比」置灰（title「不在任何最小交付单元下，没有几何」） |
+| 打开 `/?…&unit_refno=24384_23225&compare_autorun=1&compare_a=300&compare_b=380` | — | 面板开、时间线列出即停（容器没有自己的几何可装）：缺省范围**仅自身**（CONTEXT 口径），本范围 49 版、缺省 **A 524 → B 532**（它自己最后两版 mesh）；`compare_a / compare_b` 对容器**不生效**——`autorunFromUrl` 到 `!hasUnit` 就 return，URL 那对没套到时间线上（**17:1x 已修**，见下「发现 → 修」P3-a）；主按钮「在三维中对比」置灰（title「不在任何最小交付单元下，没有几何」） |
 | 切「所有子节点」→ 时间线点 A 300 / B 380 → 模型对比 tab | `pipe-24384_23225-a300-b380-01-panel-subtree-diff-summary.png` | 时间线 150 版（来自 `node/versions`，每行「单元 n」）；摘要 **A 300 → B 380 · 变了的单元 5 / 未变 16 · 新增 20 删除 6 修改 2 noop 1**，分 5 组各带「在三维中对比」：BRAN `24384_23257` 修改 1 noop 1、`24384_26324` 删除 4、`24384_26326` 删除 2、`32576_12` 新增 9、`32576_22` 新增 11（PIPE 自身那一行 `unit_root null` 的孤儿组不出按钮）；主按钮仍置灰 |
 | 组 `24384_23257`「在三维中对比」 | `…-02-24384_23257-single.png` | `__modelUnitVersionCompare {unitRefno 24384_23257, 300→380, A / B 各 9 件, modified 1 unchanged 8}`；角标「B · sesno 380」、图例「修改 1 新增 0 删除 0 未变 8」；组按钮变「三维中」，面板「三维查看 24384_23257 · DB 8000」，树进「300 → 380 差异模式」 |
 | 双视口分屏 | `…-02-24384_23257-split.png` | 两枚角标「A · sesno 300」「B · sesno 380」、单视口角标 0；面板「左 A · sesno 300 · 右 B · sesno 380」；两格各一根 BRAN、FTUB 琥珀、**左低右高**（POS Z 2900 → 3400，与属性历史对比那格一致） |
@@ -298,8 +298,12 @@ pageerror 0；console error 6 条 = 从前那 5 条环境噪音 + 1 条 404 = `G
 **发现 → 修（用户 12:1x 拍板「修」）**：
 - **容器分组入口装不了 A 或 B 那侧不存在的单元**：`ModelUnitVersionComparePanel.runCompareGroup` 合成两侧 `ModelVersion` 时 `impactKind` 写死 `'mesh'`，适配器就去 `history/generate` 那一版——单元在 B 已删（或 A 还没建）就 404。单元根入口没这问题：`model/versions` 那一行自带 `tombstone`，`loadVersion` 回空集、视口显示删除空态。
   修法：纯函数 `modelUnitGroupSideImpactKinds(group)` 按摘要组里单元根那一行判——`status deleted` → B 侧 `tombstone`、`status added` → A 侧 `tombstone`，单元根那行没列出来（截断）/ 孤儿组不猜；注脚 `modelUnitVersionAbsentNote(side)`：B 侧仍「该版本单元已删除」，A 侧「该版本没有这个单元」（多半是还没建），面板 A / B 卡与视口角标（单视口一枚、分屏两枚）同一句。
-- 换组 = 面板先 `close` 再 `open`，视口 `viewMode` 回缺省单视口——从管道逐组看，每换一个单元都要再点一次「双视口分屏」（未动）。
-- 容器的 `compare_a / compare_b` URL 参数被忽略（见第一行）；要给容器直达某两版，`autorunFromUrl` 得在 `!hasUnit` 之前先把这对套上（不跑对比）（未动）。
+- ~~换组 = 面板先 `close` 再 `open`，视口 `viewMode` 回缺省单视口——从管道逐组看，每换一个单元都要再点一次「双视口分屏」（未动）。~~
+  **2026-09-21 17:1x 已修（收口计划 P3-b）**：`runCompareVersions` 在 `close` 之前记下就位运行态的 `viewMode`，随 `open` 事件带过去（`ModelUnitVersionCompareOpenDetail.viewMode?`），
+  ViewerPanel 就位后按它 `setModelUnitCompareViewMode`（缺省单视口不做事）——从管道逐组看，分屏一直是分屏。单测：面板 +1（三组连开：不带 / 带 split / 带 single）。
+- ~~容器的 `compare_a / compare_b` URL 参数被忽略（见第一行）；要给容器直达某两版，`autorunFromUrl` 得在 `!hasUnit` 之前先把这对套上（不跑对比）（未动）。~~
+  **2026-09-21 17:1x 已修（收口计划 P3-a）**：`autorunFromUrl` 对容器把那对套到时间线上——本范围里有就选上，只有子树里有就先切「所有子节点」，落到模型对比 tab 看分组即停（不跑对比、不装几何）；
+  哪个范围都没有就提示原文、范围与缺省 A / B 不动。单测：面板 +1（切范围套上 / 不在链上提示）。**两条真机未跑**（dev `:3111` 未起），e2e 变体留待下次起 dev 时补。
 
 **修后真机**（同一脚本、同三组一次跑完，`pipe-24384_23225-a300-b380-split-summary.json`）：
 

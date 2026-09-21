@@ -877,6 +877,134 @@ describe('ModelUnitVersionComparePanel', () => {
     app.unmount();
   });
 
+  it('容器 + URL compare_a/b：那对套到时间线上（本范围没有、子树有就切「所有子节点」）、落到模型对比 tab，不跑对比；不在时间线里则提示（P3-a）', async () => {
+    const zone: ModelElementVersionTimeline = {
+      dbnum: 7997, refno: '1_9', noun: 'ZONE', unitRefno: null, unitNoun: null, unitColumnOnly: false,
+      versions: [
+        { sesno: 444, sessionTime: '2026-07-20T00:00:00Z', elementImpact: 'delivery', unitImpact: null },
+        { sesno: 897, sessionTime: '2026-07-22T02:00:00Z', elementImpact: 'noop', unitImpact: null },
+      ],
+    };
+    const subtree: ModelNodeVersionTimeline = {
+      dbnum: 7997, refno: '1_9', noun: 'ZONE', scope: 'subtree', unitRefno: null, unitNoun: null,
+      versions: [
+        { sesno: 444, sessionTime: '2026-07-20T00:00:00Z', impact: 'delivery', selfImpact: 'delivery', unitsChanged: 4, unitsTouched: 4 },
+        { sesno: 791, sessionTime: '2026-07-22T01:00:00Z', impact: 'mesh', selfImpact: null, unitsChanged: 1, unitsTouched: 1 },
+        { sesno: 897, sessionTime: '2026-07-22T02:00:00Z', impact: 'mesh', selfImpact: 'noop', unitsChanged: 2, unitsTouched: 3 },
+      ],
+    };
+    versionSourceMocks.listElementVersions.mockResolvedValue(zone);
+    versionSourceMocks.listNodeVersions.mockResolvedValue(subtree);
+    versionSourceMocks.diffSummary.mockRejectedValue(new ModelVersionRouteUnavailableError('node/diff-summary'));
+    versionSourceMocks.attributeHistory.mockRejectedValue(new ModelVersionRouteUnavailableError('element/attribute-history'));
+    const events: CustomEvent[] = [];
+    const listener = (event: Event) => events.push(event as CustomEvent);
+    window.addEventListener('plant3d:model-unit-version-compare', listener);
+    const originalUrl = window.location.href;
+
+    // 791 只在子树时间线里（自身没动）：缺省「仅自身」套不上 → 自动切「所有子节点」，A=791 B=897，落到模型对比 tab，不去 loadVersion / 派 open
+    window.history.replaceState({}, '', '/?unit_refno=1_9&compare_a=897&compare_b=791&compare_autorun=1');
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const app = createApp(ModelUnitVersionComparePanel);
+    app.mount(host);
+    await flushUi();
+    await flushUi();
+    expect((host.querySelector('[data-testid="model-unit-compare-scope-subtree"]') as HTMLButtonElement).getAttribute('aria-pressed')).toBe('true');
+    expect(host.querySelector('[data-testid="model-unit-compare-a"]')?.getAttribute('data-sesno')).toBe('791');
+    expect(host.querySelector('[data-testid="model-unit-compare-b"]')?.getAttribute('data-sesno')).toBe('897');
+    expect((host.querySelector('[data-testid="model-unit-compare-tab-model"]') as HTMLButtonElement).getAttribute('aria-pressed')).toBe('true');
+    expect(versionSourceMocks.loadVersion).not.toHaveBeenCalled();
+    expect(events.some((event) => event.detail?.action === 'open')).toBe(false);
+    expect(host.querySelector('[data-testid="model-unit-compare-error"]')).toBeNull();
+    app.unmount();
+
+    // 那对哪个范围都没有（5 不在链上）：提示原文含 compare_a=5，范围与缺省 A / B 不动（仅自身 444 → 897）
+    window.history.replaceState({}, '', '/?unit_refno=1_9&compare_a=5&compare_b=897&compare_autorun=1');
+    const host2 = document.createElement('div');
+    document.body.appendChild(host2);
+    const app2 = createApp(ModelUnitVersionComparePanel);
+    app2.mount(host2);
+    await flushUi();
+    await flushUi();
+    expect((host2.querySelector('[data-testid="model-unit-compare-scope-self"]') as HTMLButtonElement).getAttribute('aria-pressed')).toBe('true');
+    expect(host2.querySelector('[data-testid="model-unit-compare-a"]')?.getAttribute('data-sesno')).toBe('444');
+    expect(host2.querySelector('[data-testid="model-unit-compare-b"]')?.getAttribute('data-sesno')).toBe('897');
+    expect(host2.querySelector('[data-testid="model-unit-compare-error"]')?.textContent).toContain('compare_a=5');
+    expect(versionSourceMocks.loadVersion).not.toHaveBeenCalled();
+    app2.unmount();
+
+    window.removeEventListener('plant3d:model-unit-version-compare', listener);
+    window.history.replaceState({}, '', originalUrl);
+    versionSourceMocks.attributeHistory.mockReset();
+  });
+
+  it('换组 / 换版本重开时 open 事件带上一轮的 viewMode（分屏不用每组再点一次）；没有就位的运行态就不带（P3-b）', async () => {
+    const zone: ModelElementVersionTimeline = {
+      dbnum: 7997, refno: '1_9', noun: 'ZONE', unitRefno: null, unitNoun: null, unitColumnOnly: false,
+      versions: [
+        { sesno: 791, sessionTime: '2026-07-22T01:00:00Z', elementImpact: 'delivery', unitImpact: null },
+        { sesno: 897, sessionTime: '2026-07-22T02:00:00Z', elementImpact: 'noop', unitImpact: null },
+      ],
+    };
+    versionSourceMocks.listElementVersions.mockResolvedValue(zone);
+    const group = (unitRefno: string) => ({
+      unitRefno, unitNoun: 'BRAN', unitName: `/${unitRefno}`, counts: { added: 1, deleted: 0, modified: 0, noop: 0 }, geometryChanged: true, rowsTruncated: 0,
+      rows: [{ refno: `${unitRefno}_1`, noun: 'ELBO', status: 'added', impact: 'delivery', isNode: false }],
+    });
+    versionSourceMocks.diffSummary.mockResolvedValue({
+      dbnum: 7997, refno: '1_9', noun: 'ZONE', scope: 'subtree', a: 791, b: 897,
+      units: { changed: 3, unchanged: 0, total: 3, complete: true },
+      elements: { added: 3, deleted: 0, modified: 0, noop: 0 },
+      groups: [group('24381_145018'), group('24381_200'), group('24381_300')],
+      needsConfirm: false, estimatedProjections: 6, confirmThresholdUnits: 20, warnings: [],
+    });
+    const events: CustomEvent[] = [];
+    const listener = (event: Event) => events.push(event as CustomEvent);
+    window.addEventListener('plant3d:model-unit-version-compare', listener);
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const app = createApp(ModelUnitVersionComparePanel);
+    app.mount(host);
+    const input = host.querySelector('[data-testid="model-unit-compare-refno"]') as HTMLInputElement;
+    input.value = '1_9';
+    input.dispatchEvent(new Event('input'));
+    (host.querySelector('[data-testid="model-unit-compare-load"]') as HTMLButtonElement).click();
+    await flushUi();
+    (host.querySelector('[data-testid="model-unit-compare-scope-subtree"]') as HTMLButtonElement).click();
+    await flushUi();
+    (host.querySelector('[data-testid="model-unit-compare-tab-model"]') as HTMLButtonElement).click();
+    await flushUi();
+    const lastOpen = () => events.filter((event) => event.detail?.action === 'open').at(-1)?.detail as { unitRefno: string; viewMode?: string };
+    const ready = (detail: unknown, viewMode: 'single' | 'split') => {
+      window.dispatchEvent(new CustomEvent('plant3d:model-unit-version-compare-state', { detail: { detail, status: 'ready', activeSide: 'after', viewMode } }));
+    };
+
+    // 第一组：之前没有运行态 → open 不带 viewMode（视口按缺省单视口）
+    (host.querySelector('[data-testid="model-unit-compare-run-group-24381_145018"]') as HTMLButtonElement).click();
+    await flushUi();
+    expect(lastOpen()).toEqual(expect.objectContaining({ unitRefno: '24381_145018' }));
+    expect(lastOpen().viewMode).toBeUndefined();
+
+    // 视口就位并被切成分屏；换到第二组 → open 带 viewMode: 'split'
+    ready(lastOpen(), 'split');
+    await flushUi();
+    (host.querySelector('[data-testid="model-unit-compare-run-group-24381_200"]') as HTMLButtonElement).click();
+    await flushUi();
+    expect(lastOpen()).toEqual(expect.objectContaining({ unitRefno: '24381_200', viewMode: 'split' }));
+
+    // 视口回到单视口后换第三组 → 带 'single'（ViewerPanel 对缺省值不做事）
+    ready(lastOpen(), 'single');
+    await flushUi();
+    (host.querySelector('[data-testid="model-unit-compare-run-group-24381_300"]') as HTMLButtonElement).click();
+    await flushUi();
+    expect(lastOpen()).toEqual(expect.objectContaining({ unitRefno: '24381_300', viewMode: 'single' }));
+
+    window.removeEventListener('plant3d:model-unit-version-compare', listener);
+    app.unmount();
+  });
+
   it('比较请求未完成时卸载面板不会派发幽灵 open 事件', async () => {
     let resolveGeometry!: (value: ModelVersionGeometry) => void;
     const pendingGeometry = new Promise<ModelVersionGeometry>((resolve) => {

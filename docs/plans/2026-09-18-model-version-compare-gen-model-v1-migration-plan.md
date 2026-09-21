@@ -457,12 +457,12 @@ legacy 下与从前的可见差别只有一处、且不可见于用户：A/B 隔
   `attribute-history` FTUB 24384/23262 `since_sesno=626&limit=2` → 630 一行 POS / SPAMAP before-after + SAVEWORK 备注，
   `diff-summary` BRAN 子树 573→626 = 修改 1 / noop 1、SITE 24384/22399 子树 618→628 = 526 单元 / 变 2（FTUB 修改、BOX 新增）、
   a>b → 400，字段与 DTO 逐个对上；`:8026`（`2f891b370`）对同一路由回 404 = 回落路径的真机对照。**页面级真机未跑**（要 dev server）。
-- **属性净差接 `element/attribute-diff`（2026-09-21，ADR 0066 列的第四条路由，前端半边）**：上面「`element/attribute-diff` 未做（属性净差前端用时间线在 (A, B] 折）」改口——
-  端口 `ModelVersionSource.attributeDiff(dbnum, refno, a, b)` / 类型 `ModelAttributeDiff`（`kind` created / modified / deleted / unchanged、`impact` 与版本表同词表、`members` / `owner` 两端真差、`attributesUnavailable`）；
-  v1 适配器 `GET element/attribute-diff?dbnum&refno&a&b`，无信封 404 → `ModelVersionRouteUnavailableError`；面板 `仅自身` 的节点自己与 `所有子节点` 下点开的构件同一条取数路：先 `attributeDiff`，
-  没有这条路由记一次（`attributeDiffUnavailable`）回落到折时间线，两条来路归一成 `AttributeNetDiffView`（`viewFromAttributeDiff / viewFromFold / emptyNetDiffText`），表底写明取数口径。
-  后端 gen-model-refactor `src/fast_model/attribute_diff.rs` 尚未提交、`:8022`（`a382b2cf3`）仍 404 走回落，**真机未验**；验证：`versionSource.test.ts` +1（回执映射 / 无路由抛错）。
-  收口计划：`docs/plans/2026-09-21-node-version-view-design-sync-and-gap-closure-plan.md`（P0-b / P2-c）。
+- **属性净差接 `element/attribute-diff`（2026-09-21，ADR 0066 列的第四条路由，前端半边）**：上面「`element/attribute-diff` 未做（属性净差前端用时间线在 (A, B] 折）」改口——
+  端口 `ModelVersionSource.attributeDiff(dbnum, refno, a, b)` / 类型 `ModelAttributeDiff`（`kind` created / modified / deleted / unchanged、`impact` 与版本表同词表、`members` / `owner` 两端真差、`attributesUnavailable`）；
+  v1 适配器 `GET element/attribute-diff?dbnum&refno&a&b`，无信封 404 → `ModelVersionRouteUnavailableError`；面板 `仅自身` 的节点自己与 `所有子节点` 下点开的构件同一条取数路：先 `attributeDiff`，
+  没有这条路由记一次（`attributeDiffUnavailable`）回落到折时间线，两条来路归一成 `AttributeNetDiffView`（`viewFromAttributeDiff / viewFromFold / emptyNetDiffText`），表底写明取数口径。
+  后端 gen-model-refactor `src/fast_model/attribute_diff.rs` 尚未提交、`:8022`（`a382b2cf3`）仍 404 走回落，**真机未验**；验证：`versionSource.test.ts` +1（回执映射 / 无路由抛错）。
+  收口计划：`docs/plans/2026-09-21-node-version-view-design-sync-and-gap-closure-plan.md`（P0-b / P2-c）。
 
 ## 11. 三维按差异着色 + 单视口角标 + 「三维只看差异」（2026-09-20 20:36 用户拍板 A；ADR 0066「三维联动」的落地，不新开 ADR）
 
@@ -521,4 +521,6 @@ legacy 下与从前的可见差别只有一处、且不可见于用户：A/B 隔
 - **从容器（PIPE）逐组进分屏（用户 2026-09-21 10:4x「查看一个管道的不同版本的分屏展示」，README §8.4）**：三维对比仍是单元级，管道这一级的入口是「所有子节点」范围 → 差异摘要按单元分组 → 逐组「在三维中对比」→ 分屏。真机里改过的单元一路通；
   **A 时还没建 / B 时已删的单元进不了**——`runCompareGroup` 合成两侧 `ModelVersion` 时 `impactKind` 写死 `'mesh'`，适配器去 `history/generate` 一个它不存在的会话 → 404 `REFNO_NOT_FOUND_AT_SESSION`。单元根入口没这问题（`model/versions` 行自带 tombstone）。
   修法：`modelUnitGroupSideImpactKinds(group)`（纯函数）按摘要组里单元根那一行判——`deleted` → B 侧 `tombstone`、`added` → A 侧 `tombstone`（适配器回空集、视口那一格空态），单元根那行没列出来（截断）/ 孤儿组不猜；注脚 `modelUnitVersionAbsentNote(side)`：B 侧仍「该版本单元已删除」（e2e 断言不变），A 侧「该版本没有这个单元」（多半是还没建，也可能删过又建回），分屏两枚角标也带注脚。
-  顺手看到、未动：容器的 `compare_a / compare_b` URL 参数不生效（`autorunFromUrl` 到 `!hasUnit` 就 return）；换组 = close 再 open，分屏回单视口。
+  ~~顺手看到、未动：容器的 `compare_a / compare_b` URL 参数不生效（`autorunFromUrl` 到 `!hasUnit` 就 return）；换组 = close 再 open，分屏回单视口。~~
+  **两条 2026-09-21 17:1x 已修**（收口计划 `2026-09-21-node-version-view-design-sync-and-gap-closure-plan.md` P3-a / P3-b）：容器的 URL 那对套到时间线上（本范围没有、子树有就切「所有子节点」，落到模型对比 tab 即停）；
+  换组 / 换版本重开时 `open` 事件带上一轮 `viewMode`，ViewerPanel 就位后照它切。README §8.4 末两条改口。

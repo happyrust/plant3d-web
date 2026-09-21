@@ -77,9 +77,9 @@
 
 ### P1 · 设计有、实现无 · 便宜的（纯前端，1 天）
 
-- **P1-a（G1）「只看自身变的」**：`所有子节点` 下时间线头加勾选 `selfOnly`（`data-testid="model-unit-compare-self-only"`），筛 `row.selfImpact !== null || row.attributeChangeCount > 0`
+- **P1-a（G1）✅（16:5x）「只看自身变的」**：`所有子节点` 下时间线头加勾选 `selfOnly`（`data-testid="model-unit-compare-self-only"`），筛 `row.selfImpact !== null || row.attributeChangeCount > 0`
   （自身列未知 `unitColumnOnly` 时置灰、不筛）；`utils/nodeVersionTimeline.ts` 的筛行纯函数加一维；与「只看几何变的」可叠加。单测 +2；e2e `node-version-view` 容器那条加断言（勾上后行数 ≤ 未勾）。
-- **P1-b（G2）S3 每行「定位」**：属性对比 tab 的构件行加「定位」——已装 A/B 时派版本对比事件 `focus`（走 `focusModelUnitVersionCompare`，并 A/B 两层包围盒找，幽灵也能飞）；
+- **P1-b（G2）✅（16:5x）S3 每行「定位」**：属性对比 tab 的构件行加「定位」——已装 A/B 时派版本对比事件 `focus`（走 `focusModelUnitVersionCompare`，并 A/B 两层包围盒找，幽灵也能飞）；
   没装时 `locateRefno` 飞环境模型；当前树里没有的（B 版之后又被删）且没装 A/B 时按钮置灰、title 说明。单测 +1（两种分支各派什么事件）。
 - **P1-c（G3）「加载更早 n 版…」**：拍板 **D2**——(a) 不做（v1 全表冷 2–7 s、`since_sesno` 命中缓存 20 ms，用户没抱怨）；(b) **只改展示**：缺省渲染最近 20 行 + 一行「加载更早 n 版…」
   点开全列，取数不动；(c) 取数也分页（`limit` + 「加载更早」再拉）。**推荐 (b)**——设计稿的样子、零后端、不影响 e2e 数字（计数仍按全表）。
@@ -96,8 +96,8 @@
 
 ### P3 · 实现自己记下的缺口（设计稿没提，1 天）
 
-- **P3-a** 容器的 `compare_a / compare_b` URL 参数不生效：`autorunFromUrl` 在 `!hasUnit` 之前先把这对套到时间线（不跑对比、不装几何）；不在表里照旧回落最近两版并提示。单测 +1；e2e 容器那条加 URL 变体。
-- **P3-b** 换组分屏回单视口：`runCompareGroup` close→open 时把当前 `viewMode` 带进 `open` detail（`viewMode?: 'single' | 'split'`），ViewerPanel 就位后按它切；缺省仍单视口。单测 +1；e2e 管道分组一条。
+- **P3-a ✅（17:1x）** 容器的 `compare_a / compare_b` URL 参数不生效：`autorunFromUrl` 在 `!hasUnit` 之前先把这对套到时间线（不跑对比、不装几何）；不在表里照旧回落最近两版并提示。单测 +1；e2e 容器那条加 URL 变体。
+- **P3-b ✅（17:1x）** 换组分屏回单视口：`runCompareGroup` close→open 时把当前 `viewMode` 带进 `open` detail（`viewMode?: 'single' | 'split'`），ViewerPanel 就位后按它切；缺省仍单视口。单测 +1；e2e 管道分组一条。
 - **P3-c** 分屏描边合成器去留（README §8.3：RX 590 每格 +0.8–1.1 ms、软渲染 11 fps）：拍板 **D6**——(a) 留（两条路一致、选中两格描边）；(b) 退回直接 render（选中靠 `setObjectColor` 橙色，分屏暗一档回来）；
   (c) **留，但无硬件加速时自动退回**（`WEBGL_debug_renderer_info` 认出 SwiftShader / llvmpipe 就走直接 render）。**推荐 (c)**。
 - **P3-d** FTUB 纯 POS 变更被归 `mesh` 而非 `placement`：gen-model-refactor 分类器口径，**不在本计划**，只记。
@@ -177,3 +177,13 @@ P0（半天）→ P1-a / P1-b（半天）→ P3-a / P3-b（半天）→ P1-c（D
   `node scripts/type-check.mjs` 基线外 0 新增；ESLint 只剩 `ViewerPanel.vue:28` 那条既有的。**真机未跑**、e2e 未跑（dev `:3111` 未起）——`node-version-view` 容器那条
   加「只看自身变的」断言留到下次起 dev 时一并补。
 - 设计稿：G1 / G2 两处实现追上设计稿，S2 / S3 不用改。
+
+### P3-a / P3-b（2026-09-21 17:0x–17:2x）
+
+- 代码是 P0 之前就在工作树里的那 36 行（别的会话写的，当时无单测无文档、README 还写着「未动」）：`autorunFromUrl` 的容器分支（`wantPair` / `pairIn` / 切 `subtree` / 落 `model` tab / 提示原文）、
+  `runCompareVersions` 在 `close` 前记 `keepViewMode` 随 `open` 带走、`ModelUnitVersionCompareOpenDetail.viewMode?`、ViewerPanel 就位后 `setModelUnitCompareViewMode(detail.viewMode)`。逐行核过，没改。
+- 补：面板单测 +2（P3-a：791 只在子树里 → 自动切「所有子节点」、A=791 B=897、模型对比 tab、不 `loadVersion` 不派 `open`；`compare_a=5` 不在链上 → 提示、范围与缺省 A / B 不动。
+  P3-b：三组连开，第一组 `open` 不带 `viewMode`，视口就位成 split 后第二组带 `'split'`，回 single 后第三组带 `'single'`）；README §8.4 末两条、09-18 plan §11.1 末句改口；CHANGELOG 一条。
+- **验证**：vitest 面板 20 过；type-check 基线外 0 新增；ESLint 只剩 `ViewerPanel.vue:28` 那条既有的。**真机 / e2e 未跑**（dev `:3111` 未起）——e2e 两条变体（容器 URL 直达、管道分组换组仍分屏）留待下次起 dev。
+- 设计稿：S4 注 6 那句「换组 = close 再 open，分屏回单视口（未动）」**待改口**——Pencil MCP 只对编辑器里当前活动的 .pen 生效，此刻活动的是别的会话正在改的
+  `ui/空间查询/room-hierarchy-tree.pen`，不抢焦点；等 `node-version-history.pen` 再被打开时改一句并重导 `S4-3d-linkage-live.png`。

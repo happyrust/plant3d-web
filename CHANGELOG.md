@@ -4,6 +4,11 @@
 
 ### 变更
 
+- **版本对比：容器的 `compare_a / compare_b` URL 直达；从管道逐组进三维时分屏不再每组掉回单视口** (2026-09-21)
+  - 容器（PIPE / ZONE 等）没有自己的几何可跑，`compare_autorun=1` 到这儿以前直接停、URL 那对被忽略。现在把那对套到时间线上：本范围里有就选上，只有子树里有就先切「所有子节点」，再落到模型对比 tab 看分组即停（不跑对比、不装几何）；哪个范围都没有就提示原文、范围与缺省 A / B 不动。
+  - 换单元 / 换版本重开 = 面板先 `close` 再 `open`，视口以前每次都回缺省单视口。现在 `open` 事件带上一轮就位运行态的 `viewMode`（`ModelUnitVersionCompareOpenDetail.viewMode?`），ViewerPanel 就位后照它切（缺省单视口不做事，测量工具等照单视口→分屏那条路收）。
+  - 验证：vitest `ModelUnitVersionComparePanel.test.ts` +2（20 过）；type-check 基线外 0 新增；ESLint 触及文件只剩 `ViewerPanel.vue:28` 那条既有的。**真机 / e2e 未跑**（dev `:3111` 未起）。README §8.4 末两条与 plan §11.1 末句改口；收口计划 P3-a / P3-b。
+
 - **节点版本面板补齐设计稿两处：时间线「只看自身变的」筛选 + 属性对比 tab 每行「定位」** (2026-09-21)
   - 「只看自身变的」（设计稿 S2）只在「所有子节点」下露出：子树里别的构件动了、节点自身记录没动的会话不列；只改了属性的会话算自身变过、照列；被选为 A / B 的行永远留着；自身列未知（旧服务端只给单元那一列）时置灰不筛。与「只看几何变的」可叠加。两个勾选的筛法收成纯函数 `filterNodeTimelineRows`（`utils/nodeVersionTimeline.ts`）。
   - 「定位」（设计稿 S3）：「所有子节点」下属性对比 tab 有变的构件清单每行一颗，走版本对比事件的 `focus`——三维里装着 A / B 时飞到隔离图层里的它（幽灵也找得到）；没装时 `ViewerPanel.focusModelUnitVersionCompare` 新增回落：到主图层（环境模型）里找同一 refno（`o:<refno>:` 前缀）再飞，哪儿都没有就不动相机。B 侧已删且三维里没装 A / B 时按钮置灰（当前会话里已没有它）。点「定位」顺手激活三维查看器面板，不展开那一行。
