@@ -24,6 +24,11 @@ const props = defineProps<{
   ghost?: boolean;
   /** 幽灵节点因原父节点未知而挂载于根节点 */
   ghostUnplaced?: boolean;
+  /**
+   * 无名构件显示整条 E3D 默认全名（`ZONE 4 of SITE 2`）而不是短名（`ZONE 4`）。
+   * 默认关：E3D 自己的模型树显示的就是短名；整条一直挂在行的 title 上。
+   */
+  fullNames?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -52,7 +57,20 @@ function fallbackRefnoLabel(id: string): string {
   return id && id.includes('_') ? id.replace('_', '/') : id || '';
 }
 
-const rawDisplayName = computed(() => normalizePdmsName(props.row.name));
+/** 这一行拿哪个名字画：无名构件默认短名，开了「显示全称」或没有短名就是 `name`。 */
+const nameSource = computed(() => {
+  const short = props.row.shortName;
+  if (props.fullNames || !short) return props.row.name;
+  return short;
+});
+const rawDisplayName = computed(() => normalizePdmsName(nameSource.value));
+/** 短名与整条不同（= 无名构件）时，整条挂在 title 上；幽灵行的 title 另有说法，让它优先。 */
+const fullNameTitle = computed(() => {
+  if (props.ghost) return undefined;
+  const short = props.row.shortName;
+  if (!short || short === props.row.name || props.fullNames) return undefined;
+  return props.row.name;
+});
 const nameLooksLikeRefno = computed(() => {
   const id = props.row.id;
   const name = rawDisplayName.value;
@@ -162,7 +180,7 @@ onUnmounted(() => {
     :data-selected="selected ? 'true' : 'false'"
     :data-diff-status="diffStatus || undefined"
     :data-ghost="ghost ? 'true' : undefined"
-    :title="ghostTitle"
+    :title="ghostTitle ?? fullNameTitle"
     @mouseenter="onMouseEnter"
     @mouseleave="onMouseLeave"
     @mousedown.prevent="onSelect"

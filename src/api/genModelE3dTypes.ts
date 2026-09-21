@@ -1,11 +1,16 @@
 export type TreeNodeDto = {
   refno: string;
+  /** 显示名；gen-model-v1 下无名构件是 E3D 的整条默认全名（`ZONE 4 of SITE 2`） */
   name: string;
   noun: string;
   owner?: string | null;
   children_count?: number | null;
   /** 所属库号；只有 gen-model-v1 数据源给（服务端骨架解出），legacy 源没有这一格 */
   dbnum?: number | null;
+  /** 无名构件的短形态（`ZONE 4`）；只有 gen-model-v1 数据源给，且只在与 `name` 不同时带 */
+  short_name?: string | null;
+  /** 文件里存的 NAME，无名构件为 `null`；只有 gen-model-v1 数据源给 */
+  stored_name?: string | null;
 };
 
 export type NodeResponse = {

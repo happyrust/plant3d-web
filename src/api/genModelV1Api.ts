@@ -370,16 +370,27 @@ export async function genModelV1Fetch<T>(path: string, request: InternalRequest 
 
 export type SessionVectorEntry = { dbnum: number; sesno: number };
 
-/** `EleTreeNode` 原样序列化 + HTTP 层外包的 `dbnum`（spec §4.10）。`refno` / `owner` 是 `a_b`。 */
+/**
+ * `EleTreeNode` 原样序列化 + HTTP 层外包的 `dbnum` / `short_name` / `stored_name`（spec §4.10）。
+ * `refno` / `owner` 是 `a_b`。
+ */
 export type EleTreeNodeDto = {
   refno: string;
   noun: string;
+  /**
+   * E3D 的 `FLNM`：有名字就是 NAME；无名构件是 e3d-io 按位置起的整条
+   * （`ZONE 4 of SITE 2`、`BEND 3 of BRANCH /C-IY-1R330-B`；WORLD 不进名字，无名 SITE 就是 `SITE 2`）。
+   */
   name: string;
   owner: string;
   order: number;
   children_count: number;
   /** Ref0 不在本 MDB 骨架里时为 `null`——「答不出」，不是 0 号库。 */
   dbnum?: number | null;
+  /** 模型树一行显示的短形态：无名 `ZONE 4` / `SITE 2`，有名与 `name` 相同。老服务端不给。 */
+  short_name?: string | null;
+  /** 文件里存的 NAME；无名构件为 `null`。老服务端不给。 */
+  stored_name?: string | null;
   op?: unknown;
   mod_cnt?: number | null;
   children_updated?: unknown;

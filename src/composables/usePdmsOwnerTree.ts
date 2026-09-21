@@ -58,8 +58,10 @@ function dtoToTreeNode(dto: TreeNodeDto, parentId: string | null): TreeNode {
     parentId,
     childrenIds: [],
   };
-  // 只有 gen-model-v1 的 DTO 带 dbnum；legacy 的节点对象与从前逐字段相同
+  // 只有 gen-model-v1 的 DTO 带 dbnum / short_name；legacy 的节点对象与从前逐字段相同
   if (typeof dto.dbnum === 'number' && Number.isFinite(dto.dbnum)) node.dbnum = dto.dbnum;
+  const shortName = typeof dto.short_name === 'string' ? dto.short_name.trim() : '';
+  if (shortName && shortName !== dto.name) node.shortName = shortName;
   return node;
 }
 
@@ -239,6 +241,7 @@ export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
         hasChildren: hasChildren(id, node),
       };
       if (node.dbnum !== undefined) row.dbnum = node.dbnum;
+      if (node.shortName !== undefined) row.shortName = node.shortName;
       out.push(row);
 
       const shouldExpand = filterActive || expandedIds.value.has(id);

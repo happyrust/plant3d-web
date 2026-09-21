@@ -19,6 +19,12 @@
   - 配置与部署：`vite.config.ts` 去掉 DuckDB 资产管线与 MBD 夹具，dev `/api` 代理指 `:8022`；`deploy/nginx_remote.conf` `/api` → `:8022`，`/files/` 整前缀兜底到 `:8022`（附件那条 `/files/review_attachments/` 由后端分流片段 `aios-review-split.conf` 提供，站点文件不能再写同名 location——真机 `nginx -t` 报 duplicate location 后改成更短前缀兜底）；`deploy-ubuntu.yml` / `deploy_frontend_bundle.sh` / `deploy/README.md` 的 `BACKEND_ORIGIN` 缺省 `http://127.0.0.1:8022`。`tsconfig.app.json` 显式加 `"node"` types——此前 `@types/node`（含 `Array.prototype.at`）是被 DuckDB 依赖顺带拉进全局的。
   - 测试：删 legacy 专用用例（parity 的两源对拍、`?model_source=legacy` 路由、`spatial-query-real-bran` 真机、`dimension-real-ams-bran-version`、`dimension-mbd-v2-fixture`），其余改成 mock `getModelSource()`；`npm run type-check` 基线之外只剩 worktree 绝对路径 / 联合类型顺序两类签名差异（非新错误），vitest 全量与改前基线对比见提交说明。
 
+- **模型树无名构件按 E3D 规矩起名，默认显示短名，可切全称** (2026-09-20)
+  - gen-model-v1 的 `/tree/roots|children` 节点从此带三个名字（spec §4.10）：`name` 是 E3D 的 `FLNM`——有名字就是 NAME，无名构件是 e3d-io 按位置拼的整条（`ZONE 4 of SITE 2`、`BEND 3 of BRANCH /C-IY-1R330-B`；WORLD 不进名字，无名 SITE 就是 `SITE 2`）；`short_name` 是短形态（`ZONE 4`）；`stored_name` 是文件里存的 NAME，无名为 `null`。2026-09-20 之前无名节点的 `name` 是 noun 本身（`SITE`）。
+  - `EleTreeNodeDto` / `TreeNodeDto` / `TreeNode` / `FlatRow` 各多一格：`eleTreeNodeToDto` 只在服务端给了 `short_name` 且与 `name` 不同（即无名构件）时带上，`stored_name` 服务端给了就透传——老服务端回包转出来的 DTO 与从前逐字段相同，legacy 源不受影响。
+  - `ModelTreeRow` 默认画短名，整条挂在行的 `title` 上；类型筛选弹层里多一个「无名构件显示全称」勾选（`data-testid="model-tree-full-names"`），勾上后直接画整条。选择按浏览器落进 `localStorage`（`plant3d-web.modelTree.fullNames`），换字段不重查。
+  - 验证：`treeSource.test.ts` 新增一例（三种回包形状），14/14 过；改动范围内 `eslint` 零问题、`vue-tsc` 无新增（仓库基线 564 条既有错误，改动文件里的 5 条均在改动之前就在）。
+
 - **云线批注改为世界锚定 billboard，并每帧贴合关联构件的屏幕投影** (2026-07-31)
   - `screen2d` 云线此前画在 HTML/SVG overlay 上，只有锚点参与相机投影：云线本身与三维层割裂，无法参与深度排序，尺寸恒定为拖框时的像素值。相机一转，被框住的构件就跑到云线外面，云线不再指认它所标记的东西。现在改为在 WebGL 里绘制世界锚定的 billboard 云线，与 `bbox3d` 同处一个渲染层。模式名与 `anchorWorldPos` / `screenOffset` / `cloudSize` 数据字段保持不变，数据模型未动。
   - `buildCloudBillboardPolyline()` 每帧用相机 right/up 基向量在世界空间展开波浪折线；`worldPerPixelAt()` 做像素→世界换算，使线宽与波幅在推拉相机时保持恒定像素观感。billboard 平面深度取关联 AABB 中心的 ndcZ，让像素→世界换算与投影落在同一深度。

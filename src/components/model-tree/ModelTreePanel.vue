@@ -329,6 +329,26 @@ const contextNodeId = ref<string | null>(null);
 const searchPopoverOpen = ref(false);
 const typePopoverOpen = ref(false);
 
+// 无名构件显示短名（`ZONE 4`，默认）还是 E3D 整条默认全名（`ZONE 4 of SITE 2`）。
+// 两种形态服务端一次都给（gen-model spec §4.10 `name` / `short_name`），这里只是换个字段画，
+// 不重查；选择按浏览器落盘。
+const FULL_NAMES_STORAGE_KEY = 'plant3d-web.modelTree.fullNames';
+const showFullNames = ref(readFullNamesPreference());
+function readFullNamesPreference(): boolean {
+  try {
+    return globalThis.localStorage?.getItem(FULL_NAMES_STORAGE_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+watch(showFullNames, (on) => {
+  try {
+    globalThis.localStorage?.setItem(FULL_NAMES_STORAGE_KEY, on ? '1' : '0');
+  } catch {
+    // 私密模式 / 配额满：这次的选择只在本页有效，不值得报错。
+  }
+});
+
 const rowVirtualizer = useVirtualizer({
   count: displayRows.value.length,
   getScrollElement: () => containerRef.value,
@@ -1178,6 +1198,18 @@ function onSearchEnter(value: string) {
             </template>
           </div>
 
+          <!-- 无名构件的名字：默认短名（ZONE 4），勾上显示 E3D 整条默认全名（ZONE 4 of SITE 2） -->
+          <div class="mt-2 border-t border-border pt-2">
+            <label class="flex items-center gap-2 text-xs text-muted-foreground"
+              title="没有名字的构件按 E3D 规则起名：默认显示短名，勾上显示整条（含所属层级）；整条一直挂在行的悬停提示上">
+              <input v-model="showFullNames"
+                type="checkbox"
+                class="h-4 w-4"
+                data-testid="model-tree-full-names" />
+              无名构件显示全称
+            </label>
+          </div>
+
           <!-- 添加自定义类型 -->
           <div class="mt-2 flex items-center gap-1 border-t border-border pt-2">
             <input v-model="customTypeInput" class="h-7 flex-1 rounded-md border border-input bg-background px-2 text-sm"
@@ -1253,6 +1285,7 @@ function onSearchEnter(value: string) {
             :diff-count="rowAt(vr.index)!.diffCount"
             :ghost="rowAt(vr.index)!.ghost"
             :ghost-unplaced="rowAt(vr.index)!.ghostUnplaced"
+            :full-names="showFullNames"
             @toggle-expand="toggleExpand"
             @toggle-visible="setVisible"
             @select="selectByRowIndex"

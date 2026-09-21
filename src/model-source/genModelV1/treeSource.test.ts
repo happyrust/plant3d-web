@@ -64,6 +64,21 @@ describe('EleTreeNode → TreeNodeDto', () => {
       refno: '24381_145018', owner: '24381_101410', dbnum: 7997,
     });
   });
+
+  it('short_name 只在与 name 不同（无名构件）时带上；stored_name 服务端给了就透传，null 保持 null', () => {
+    // 2026-09-20 起的服务端：无名 ZONE 的 name 是整条 FLNM，short_name 是短名，stored_name 是 null
+    const unnamed: EleTreeNodeDto = { ...ZONE_A2, name: 'ZONE 4 of SITE 2', short_name: 'ZONE 4', stored_name: null };
+    expect(eleTreeNodeToDto(unnamed, '9304_2')).toEqual({
+      refno: '17496_8517', name: 'ZONE 4 of SITE 2', noun: 'ZONE', owner: '9304_2', children_count: 0, dbnum: null,
+      short_name: 'ZONE 4', stored_name: null,
+    });
+    // 有名字的构件：short_name 与 name 相同，不带——树上本来就显示 name
+    const named: EleTreeNodeDto = { ...BRAN, short_name: '/B1', stored_name: '/B1' };
+    expect(eleTreeNodeToDto(named)).toEqual({ ...eleTreeNodeToDto(BRAN), stored_name: '/B1' });
+    // 老服务端两格都不给：DTO 与从前逐字段相同
+    expect(eleTreeNodeToDto(BRAN)).not.toHaveProperty('short_name');
+    expect(eleTreeNodeToDto(BRAN)).not.toHaveProperty('stored_name');
+  });
 });
 
 describe('createGenModelV1TreeSource', () => {

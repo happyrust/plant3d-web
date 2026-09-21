@@ -62,11 +62,16 @@ export function isVirtualRootId(id: string): boolean {
   return typeof id === 'string' && id.startsWith(GEN_MODEL_V1_ROOT_PREFIX);
 }
 
-/** `EleTreeNode`（+ 外包的 `dbnum`）→ 现有树 DTO。名称空时退回 noun（服务端已这么做，这里再兜一次）。 */
+/**
+ * `EleTreeNode`（+ 外包的 `dbnum` / `short_name` / `stored_name`）→ 现有树 DTO。
+ * 名称空时退回 noun（服务端已这么做，这里再兜一次）。`short_name` 只在服务端给了、且与
+ * `name` 不同（即无名构件）时带上；`stored_name` 只在服务端给了这一格时带上——老服务端的
+ * 回包转出来的 DTO 与从前逐字段相同。
+ */
 export function eleTreeNodeToDto(node: EleTreeNodeDto, parentId?: string | null): TreeNodeDto {
   const noun = (node.noun ?? '').trim();
   const name = (node.name ?? '').trim() || noun;
-  return {
+  const dto: TreeNodeDto = {
     refno: fromV1Refno(node.refno),
     name,
     noun,
@@ -74,6 +79,10 @@ export function eleTreeNodeToDto(node: EleTreeNodeDto, parentId?: string | null)
     children_count: typeof node.children_count === 'number' ? node.children_count : null,
     dbnum: typeof node.dbnum === 'number' ? node.dbnum : null,
   };
+  const shortName = typeof node.short_name === 'string' ? node.short_name.trim() : '';
+  if (shortName && shortName !== name) dto.short_name = shortName;
+  if (node.stored_name !== undefined) dto.stored_name = node.stored_name ?? null;
+  return dto;
 }
 
 export function virtualRootDto(roots: TreeRootsResponse): TreeNodeDto {
