@@ -311,6 +311,31 @@ export function refnosUnder(id: string, nodes: Record<string, RoomTreeNode>): st
   return out;
 }
 
+/**
+ * 节点下（含自身）的 BRAN 单元 refno（去重）。直管挂在 BRAN 自己的 refno 上（`deliveryUnitScene.ts`），单元级及以上的
+ * 显隐 / 隔离要把它们一起带上；构件行不经这里。HANG / EQUI 单元没有直管，不给。
+ */
+export function branUnitRefnosUnder(id: string, nodes: Record<string, RoomTreeNode>): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  const stack = [id];
+  const visited = new Set<string>();
+  while (stack.length > 0) {
+    const cur = stack.pop()!;
+    if (visited.has(cur)) continue;
+    visited.add(cur);
+    const node = nodes[cur];
+    if (!node) continue;
+    if (node.kind === 'unit' && node.type === 'BRAN' && node.refno && !seen.has(node.refno)) {
+      seen.add(node.refno);
+      out.push(node.refno);
+      continue;
+    }
+    for (let i = node.childrenIds.length - 1; i >= 0; i--) stack.push(node.childrenIds[i]!);
+  }
+  return out;
+}
+
 /** 节点下还没内联叶子的单元 / noun 组（要先按各自的选择器补一次才有全部 refno）。 */
 export function pendingLeafNodesUnder(id: string, nodes: Record<string, RoomTreeNode>): RoomTreeNode[] {
   const out: RoomTreeNode[] = [];

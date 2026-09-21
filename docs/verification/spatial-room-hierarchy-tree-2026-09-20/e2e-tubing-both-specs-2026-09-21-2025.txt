@@ -1,0 +1,27 @@
+(node:82748) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+
+Running 14 tests using 1 worker
+
+(node:44504) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:44504) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.
+(node:44504) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ok  1 e2e\model-tree-room-tab-gen-model-v1.spec.ts:117:1 › 切到「房间」页签：状态句「在册 N 间房」N = /spatial/rooms 条数、搜索框 placeholder 同数；搜房间号只剩匹配的行；搜不着给「没有匹配的房间」；切回 PDMS 房间面板隐藏、再切回来还在；无 pageerror (1.7s)
+  ok  2 e2e\model-tree-room-tab-gen-model-v1.spec.ts:151:1 › 展开一间房：一发 rooms/{refno}/tree；房间 / 专业 / 单元类型 / 其他构件 / 前几个单元 / 构件 各行的文字与计数逐层等于响应；从没生成过面板模型的房间展开只给一句「还没有包围盒」 (2.0s)
+  ok  3 e2e\model-tree-room-tab-gen-model-v1.spec.ts:220:1 › 页签记忆 + 选中联动：切到「房间」后刷新页面仍停在「房间」（localStorage）；外部选中一个已展开房里的构件 → 页签展开到它、选中、滚到可见；选中单元 refno 落在单元行；树内点选写回全局选中且不反弹 (2.6s)
+  ok  4 e2e\model-tree-room-tab-gen-model-v1.spec.ts:278:1 › 右键单元「加载模型（N 个构件）」：ensure + records 后单元的构件几何都进场景；构件行眼睛切显隐落到 scene.objects[refno].visible；切到 PDMS 再切回房间展开态与已加载行都还在 (3.7s)
+  ok  5 e2e\spatial-query-gen-model-v1-ui.spec.ts:71:1 › 范围 · 手输坐标：球形 2 m 发 x/y/z + shape + per_page，摘要与行序对得上服务端页，v1 源有覆盖面提示、专业筛选 / 房间块 / 「按专业」在（ADR 0067）；立方体 ≥ 球形；排序参数透传：按距离非降、按专业发 spec_distance 且页内 spec_value 非降 (3.2s)
+  ok  6 e2e\spatial-query-gen-model-v1-ui.spec.ts:151:1 › 翻页：下一页发 page=2、首条换了、总数不变；上一页回到 page=1 首条复原 (3.0s)
+  ok  7 e2e\spatial-query-gen-model-v1-ui.spec.ts:190:1 › 过滤：Noun 类型透传且 total_count = filter_options 里该 noun 的计数；关键字只命中含它的 refno；「显示负实体」翻 include_negative (3.0s)
+  ok  8 e2e\spatial-query-gen-model-v1-ui.spec.ts:233:1 › 当前选中：BRAN 取子树盒中心 = 服务端 refno_aabb_center；叶子 VALV 同理；没加载几何的 PIPE 走 refno 兜底由服务端解中心，解完摘要回到坐标 (2.9s)
+  ok  9 e2e\spatial-query-gen-model-v1-ui.spec.ts:284:1 › 结果动作（一排图标）：全部显示 → 结果全可见；隔离 → 其余 X-Ray；恢复 → X-Ray 清零；单行眼睛；飞行定位选中目标；复制 Refno 二选「本页」；加载未加载把本页未加载清零；旧文字按钮不在；全程无错误横幅 (3.2s)
+  ok 10 e2e\spatial-query-gen-model-v1-ui.spec.ts:390:1 › 大数量确认：「加载未加载」（平铺态 = 本页）超过 200 项先弹确认框并显示数量；取消后不发 ensure / records、摘要不变 (4.5s)
+  ok 11 e2e\spatial-query-gen-model-v1-ui.spec.ts:437:1 › 距离 · 通过 Refno：发 refno= + include_self=false，中心行给 refno_aabb_center，结果不含源构件，每行带净距标注按钮；通过坐标走点模式 (2.0s)
+  ok 12 e2e\spatial-query-gen-model-v1-ui.spec.ts:476:1 › 错误路径：树里没有的 refno 折成「…还没生成过模型」提示；refno 为空时「执行空间查询」禁用；整轮无 pageerror (1.4s)
+  ok 13 e2e\spatial-query-gen-model-v1-ui.spec.ts:492:1 › URL 入口：spatial_refno + spatial_radius(m) + spatial_autorun 自动打开抽屉并按 refno / 2000 mm 发一次查询 (1.2s)
+  -  14 e2e\spatial-query-gen-model-v1-ui.spec.ts:521:1 › 拾取中心（仅 headed）：点到构件表面后摘要换成拾取点，查 1 m 的请求中心就是它，被点的构件在结果里且距离 0
+
+  1 skipped
+  13 passed (36.2s)

@@ -7,6 +7,9 @@
  * 显隐 / 选中 / 定位 / 隔离只作用于该节点下**已知**的构件 refno（场景对象键 `a_b`），未加载几何的构件靠 `useSceneGraphOps` 把状态
  * 写进 compat scene、实例加载时回放；勾选状态由子构件推导（分组节点是合成 id，没有场景对象）。退役前的 `useRoomTree`（走旧后端
  * `/api/room-tree/*`）已随 legacy 删除，本文件是按新端口重写的精简版：没有 `room-group` / `comp-group` 那两层，也没有类型筛选。
+ *
+ * 管件要带直段（2026-09-21，`deliveryUnitScene.ts`）：直管挂在 BRAN 自己的 refno 上、树上不列，所以单元级及以上的显隐 / 隔离
+ * 除了节点下列出的构件，还带上这些构件所属 BRAN 的整体（BRAN 自己 + 记录缓存里它的全部构件）；构件行的眼睛与定位不扩。
  */
 import { computed, ref, shallowRef } from 'vue';
 
@@ -15,8 +18,10 @@ import type { CheckState, FlatRow } from '@/composables/useModelTree';
 import type { SpatialSource } from '@/model-source/ports';
 import type { DtxCompatViewer } from '@/viewer/dtx/DtxCompatViewer';
 
+import { sceneCompanionsOf } from '@/composables/deliveryUnitScene';
 import {
   ancestorsOf,
+  branUnitRefnosUnder,
   flattenRoomTree,
   isRoomNodeId,
   pendingLeafNodesUnder,
@@ -41,6 +46,11 @@ export type RoomTreeRootsStatus = {
 export type RoomTreeOptions = {
   /** 数据源按调用时刻解析（与 `useSpatialQuery` 同法），测试注桩 */
   source?: () => SpatialSource;
+  /**
+   * 「管件带直段」：节点下的构件 + 节点下的 BRAN 单元 → 场景里还该一起显隐 / 隔离的 refno（BRAN 自己 + 它在记录缓存里的全部构件）。
+   * 缺省 `sceneCompanionsOf`（读 gen-model 记录缓存，不发请求）；测试注桩。
+   */
+  sceneCompanions?: (refnos: string[], branUnitRefnos: string[]) => string[];
 };
 
 /** 房间号自然序（`R43` < `R432`，字母段按字典序）。 */
@@ -52,6 +62,7 @@ function compareRoomNum(a: SpatialRoomOption, b: SpatialRoomOption): number {
 
 export function useRoomTree(viewerRef: { value: DtxCompatViewer | null }, options: RoomTreeOptions = {}) {
   const source = options.source ?? (() => getModelSource().spatial);
+  const sceneCompanions = options.sceneCompanions ?? sceneCompanionsOf;
   const sceneGraph = useSceneGraphOps(viewerRef);
 
   const roots = ref<SpatialRoomOption[]>([]);
@@ -240,6 +251,26 @@ export function useRoomTree(viewerRef: { value: DtxCompatViewer | null }, option
     return refnosUnder(nodeId, nodesById.value);
   }
 
+  /**
+   * 显隐 / 隔离作用的场景 refno：节点下的构件 + 它们所属 BRAN 的整体（直管挂在 BRAN 自己的 refno 上，`deliveryUnitScene.ts`）。
+   * 构件行不扩（一个管件就是一个管件，E3D 口径）；「加载模型」不用它——加载链本来就按生成根把整条 BRAN 装进来。
+   */
+  async function collectSceneRefnos(nodeId: string): Promise<string[]> {
+    const refnos = await collectRefnos(nodeId);
+    const node = nodesById.value[nodeId];
+    if (!node || node.kind === 'element') return refnos;
+    const companions = sceneCompanions(refnos, branUnitRefnosUnder(nodeId, nodesById.value));
+    if (companions.length === 0) return refnos;
+    const seen = new Set(refnos);
+    const out = refnos.slice();
+    for (const refno of companions) {
+      if (!refno || seen.has(refno)) continue;
+      seen.add(refno);
+      out.push(refno);
+    }
+    return out;
+  }
+
   function hasChildren(node: RoomTreeNode): boolean {
     if (node.kind === 'element') return false;
     if (node.kind === 'room') return node.count === null || node.count > 0 || node.childrenIds.length > 0;
@@ -318,9 +349,9 @@ export function useRoomTree(viewerRef: { value: DtxCompatViewer | null }, option
     checkStateById.value = new Map(checks);
   }
 
-  /** 眼睛：节点下全部构件显 / 隐（未内联的先补），勾选状态整枝改、父链重算。 */
+  /** 眼睛：节点下全部构件显 / 隐（未内联的先补；单元级及以上连所属 BRAN 的直段一起），勾选状态整枝改、父链重算。 */
   async function setVisible(id: string, visible: boolean): Promise<void> {
-    const refnos = await collectRefnos(id);
+    const refnos = await collectSceneRefnos(id);
     if (refnos.length > 0) sceneGraph.setVisible(refnos, visible);
     setCheckStateDeep(id, visible ? 'checked' : 'unchecked');
     recomputeParents(id);
@@ -395,8 +426,9 @@ export function useRoomTree(viewerRef: { value: DtxCompatViewer | null }, option
     return true;
   }
 
+  /** 隔离（其余 XRAY）：单元级及以上连所属 BRAN 的直段一起留实体，管件不会孤零零悬着。 */
   async function isolateXray(id: string): Promise<void> {
-    const keep = await collectRefnos(id);
+    const keep = await collectSceneRefnos(id);
     sceneGraph.isolate(keep);
   }
 
@@ -470,6 +502,7 @@ export function useRoomTree(viewerRef: { value: DtxCompatViewer | null }, option
     ensureRoomTree,
     ensureLeaves,
     collectRefnos,
+    collectSceneRefnos,
     setVisible,
     getCheckState,
     isNodeLoading,

@@ -1,4 +1,4 @@
-# 空间查询 · 房间层级树——HTTP 金样 + 抽屉树态真机 + 行文字截断复核 + 结果区剪辑真机 + 模型树「房间」页签真机 + 两批合入后同屏确认（2026-09-20 17:26–18:07、20:13；2026-09-21 00:20–00:27、16:52–16:54、18:35）
+# 空间查询 · 房间层级树——HTTP 金样 + 抽屉树态真机 + 行文字截断复核 + 结果区剪辑真机 + 模型树「房间」页签真机 + 两批合入后同屏确认 + 管件带直段（2026-09-20 17:26–18:07、20:13；2026-09-21 00:20–00:27、16:52–16:54、18:35、20:1x）
 
 计划：`docs/plans/2026-09-20-spatial-room-hierarchy-tree-plan.md`（§6 真机步骤；本文是它的记录）。决策 ADR 0068、共识 zhimo `d-157`；
 上位记录 `docs/verification/spatial-query-room-discipline-2026-09-20/`（房间 / 专业过滤，ADR 0067）。
@@ -99,6 +99,8 @@
 | `ui/room-tab-01…08-*.png` `ui/room-tab-summary.json` | 模型树「房间」页签真机十步（§8；summary 里带请求账与逐层对照） |
 | `e2e-model-tree-room-tab-gen-model-v1-2026-09-21-1711.txt` `…-1725.txt` | 房间页签 e2e 三条首次真机（3 passed）与加上页签记忆 / 选中联动第 ④ 条后（4 passed），§8 末 |
 | `ui/final-01…04b-*.png` `ui/final-summary.json` | 两批全部合入后（main @ `7779b876`）的本地同屏确认四步（§8 末）：页签记忆过整页刷新 / 外部选中联动到已展开的房 / 右键加载进三维 / 抽屉树态与房间页签同屏；summary 带逐行文字、树请求 URL 与「已加载 0」的交叉核对 |
+| `e2e-tubing-both-specs-2026-09-21-2025.txt` | 管件带直段合入后两份 e2e 同机复跑 13 passed / 1 skipped（§9 末） |
+| `ui/tubing-01…05-*.png` `ui/tubing-summary.json` | 管件带直段五步（§9）：抽屉「加载」单元把 BRAN 直管 + 范围外管件一起装 / 「隔离」直管实体、另一条 BRAN XRAY / 「全部隐藏」直管随隐 / 房间页签单元「隔离」/ 眼睛；summary 每步带各 refno 名下的 DTX 对象数、visible / xrayed |
 | `design/R1-drawer-flat.png` `R2-drawer-room-tree.png` `R3-model-tree-room-tab.png` `R4-ui-to-api-map.png` | 设计稿 `ui/空间查询/room-hierarchy-tree.pen` 四帧导出（2×，pen.dev `Export`；R3 / R4 的状态标已改「已合入」）——抽屉平铺态 / 抽屉树态 / 模型树「房间」页签 / 界面动作 → 请求 → 状态 |
 
 ## 8. 模型树「房间」页签真机（2026-09-21 16:52–16:54；PR-D `92d928fc`；`ui/room-tab-01…08.png`、`ui/room-tab-summary.json`）
@@ -144,3 +146,25 @@
 | 4 | 打开抽屉「范围」：手输 R432 盒中心 `-6379.57, -11350.16, 5030`、r = 3 m、房间 `R432` → 执行；收起「更多条件」，展开树里首个 BRAN 单元 | 一发 `nearby/tree?x…&radius=3000&shape=sphere&rooms=24381/35580` 200，`leaves_inline=true`；摘要「共 **1055** 项（去重）· 1 间房，已加载 0 项，未加载 1055 项」；树 `R432 1055 → 未知或其他 4 / 仪表系统 1051 → BRAN 17 个单元 116 / EQUI 28 个单元 935 → /Copy-of-1RCS0307-1R90004 0.21 m · 11` → 11 条叶子行（refno · noun · 距离 · 眼睛 / 飞行）。左侧房间页签同屏仍是 R432 五层（1298 / 28 单元 / 226）——**同一间房两套数**：页签是整房（`rooms/{refno}/tree`），抽屉是 3 m 球内（`nearby/tree`），与 §2 两种中心的口径一致 | `final-04-drawer-tree-and-room-tab.png`（整页）/ `final-04b-drawer-tree-panel.png`（树面板） |
 
 「已加载 0 项」交叉核对：树响应 JSON 里**不含**第 3 步加载的三个 refno（`loadedElementsInsideTree = []`——那条 BRAN 的 `HPOS -4229, -7991, 3814` 离中心约 4.2 m，在 3 m 球外），摘要为 0 是对的。`pageerror` **0**。
+
+## 9. 管件带直段（2026-09-21 20:1x；ADR 0068 追记，方案 A；`ui/tubing-01…05-*.png`、`ui/tubing-summary.json`）
+
+**起因**：验收时用户提「如果是管件，需要显示对应的直段」。核数据：`model/records` 里 BRAN `24381_105030` 58 条 = 36 个管件 + **22 段 TUBI，全部挂在 BRAN 自己的 refno 上**（`refno == owner`，`generic = TUBI`），
+空间索引（`nearby/tree` / `rooms/{refno}/tree`）里**没有 TUBI**。改前三处不一致：房间页签「加载模型」走生成根整条装（直段在）；抽屉「加载」只画命中的管件 refno（直段没有）；
+两棵树单元级「隔离 / 仅显示 / 眼睛」的 refno 集里没有 BRAN 自己（直段被 XRAY / 隐掉）。改法：`composables/deliveryUnitScene.ts` 只读记录缓存认属主、取整根；抽屉批量加载装完命中项再装 BRAN 整体；
+单元级及以上动作与「全部显示 / 隐藏 / 隔离结果」带上 BRAN 整体；构件行不扩。
+
+同一台 `:3111` + `:8027`，Playwright 无头 1600×1000，仓外一次性脚本；先在房间页签装 BRAN `24381_105030`（22 段直管），再在抽屉（R432 盒中心 3 m + 房间 R432 → 树）对首个 BRAN 单元 `/Copy-of-1RCS0307-1R90004`（`24381_148125`，11 个命中管件）操作——两条 BRAN 都在场景里，隔离 / 显隐的差别看得见。
+
+| 步 | 动作 | 看到（`tubing-summary.json` 里的场景账） | 图 |
+| --- | --- | --- | --- |
+| 1 | 抽屉树 单元行「加载」 | 改前只会画 11 个命中管件；现在 `24381_148125` 名下 **13 个 TUBI 对象**（`o:24381_148125:n`）+ 范围外的 9 个管件一起进场景（这条 BRAN 共 20 管件 + 13 段直管 = 21 个 refno），`getLoadedRefnos()` 58 → 三维里是一整条带弯头、阀门的管线 | `tubing-01-drawer-unit-loaded-with-tubing.png` |
+| 2 | 单元行「隔离」 | `24381_148125`（直管）与它的管件 `xrayed=false`，房间页签装的 `24381_105030` 及其管件 `xrayed=true`——管件不悬空、别的 BRAN 变半透明 | `tubing-02-drawer-unit-isolated-other-bran-xrayed.png` |
+| 3 | 「恢复场景」→ 单元行「仅显示」→ 摘要下「全部隐藏」→「全部显示」 | 仅显示后直管 `visible=true`；全部隐藏后 `24381_148125` 直管 `visible=false`（随命中管件一起隐）、`24381_105030` 不是结果、不动；全部显示回 `true` | `tubing-03-drawer-hide-all-tubing-hidden-other-bran-stays.png` |
+| 4 | 房间页签 单元 `Copy-of-1RCS380MP-YK/301VP` 右键「隔离（XRAY 其它）」 | `24381_105030`（22 段直管）与三个管件 `xrayed=false`，抽屉那条 `24381_148125` `xrayed=true` | `tubing-04-room-tab-unit-isolated-tubing-solid.png` |
+| 5 | 「取消隔离」→ 单元行眼睛 → 再点回 → 构件行 `REDU 24381_105031` 眼睛 | 单元眼睛：直管与三个管件一起 `visible=false`，`24381_148125` 不动；再点全回 `true`；构件行眼睛只隐 `24381_105031`，直管与另两个管件 `visible=true` | `tubing-05-room-tab-unit-hidden-tubing-hidden.png` |
+
+`pageerror` **0**。单测：`deliveryUnitScene.test.ts` 4 例（属主只认 `owner_noun == BRAN`、BRAN 自己 / EQUI / 无 owner_noun / 没几何 / 没记录都不扩、源没建时退成不扩）、`spatialTree` +1（`branUnitRefnosCoveredBy` 跨房单元按任一房那份盖住即算、未内联不算）、
+`roomTreeNodes` +1（`branUnitRefnosUnder`）、`useRoomTree` +1 + 2 例改口、`useSpatialQuery` +3 + 1 例改口 → 13 文件 163 过；type-check 基线外 0；eslint 触及文件 0。
+**e2e 回归**：两份 spec 同机 `--workers=1` **13 passed / 1 skipped（36.2 s）**，日志 `e2e-tubing-both-specs-2026-09-21-2025.txt`。抽屉那份第 5 条「隔离结果 → 其余 X-Ray」的断言改口：
+夹具 BRAN `24381_145018` 的整体（它自己 = 直管，已加载、盒在半径内时会以 viewer-local 进结果；+ 它范围外的管件）跟着留实体，此外的对象仍全部 X-Ray（helper 新增 `fetchGenerationRootRefnos`，走 `model/records` 读整根成员）。

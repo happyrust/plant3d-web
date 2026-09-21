@@ -454,6 +454,30 @@ export async function fetchServerCenter(refno: string, options: { waitMs?: numbe
   }
 }
 
+/**
+ * 一个生成根（BRAN）在 gen-model 记录里的全部 refno（`a_b`，含根自己——隐式直管 TUBI 就挂在根的 refno 上）。
+ * 走 `POST model/records`（读接口；`show_refno` 已把这一根生成过，不用再 ensure）。「管件带直段」的 e2e 用它算命中管件所属 BRAN 的整体。
+ */
+export async function fetchGenerationRootRefnos(root: string): Promise<Set<string>> {
+  const out = new Set<string>([root.replace(/\//g, '_')]);
+  let cursor: number | null | undefined = undefined;
+  for (;;) {
+    const response = await fetch(`${GEN_MODEL_BASE}/api/v1/model/records`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ generation_root: toSlashRefno(root), limit: 5000, ...(cursor != null ? { cursor } : {}) }),
+    });
+    if (!response.ok) throw new Error(`model/records ${root} → HTTP ${response.status}`);
+    const body = await response.json() as { items?: { refno?: string }[]; cursor?: number | null };
+    for (const item of body.items ?? []) {
+      const refno = String(item.refno ?? '').replace(/\//g, '_');
+      if (refno) out.add(refno);
+    }
+    if (body.cursor == null) return out;
+    cursor = body.cursor;
+  }
+}
+
 export function expectPointClose(actual: { x: number; y: number; z: number }, expected: { x: number; y: number; z: number }, toleranceMm = 1): void {
   expect(Math.abs(actual.x - expected.x), `x ${actual.x} vs ${expected.x}`).toBeLessThanOrEqual(toleranceMm);
   expect(Math.abs(actual.y - expected.y), `y ${actual.y} vs ${expected.y}`).toBeLessThanOrEqual(toleranceMm);

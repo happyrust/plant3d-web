@@ -51,9 +51,29 @@ const spatialSourceMocks = vi.hoisted(() => ({
   state: { kind: 'legacy' as 'legacy' | 'gen-model-v1', specValues: true, branCenterline: true, keywordMatchesName: true, nameSortExact: true, rooms: false, tree: false },
 }));
 
+/**
+ * 管件带直段（`deliveryUnitScene.ts`）读的 gen-model 记录缓存：缺省什么都没记（不扩）；用例往 `entries` / `leaves` 里放。
+ * `peek(refno)` 回该构件的实例条目（`uniforms.owner_refno / owner_noun` 认属主），`leavesOfRoot(root)` 回整根的构件。
+ */
+const recordCacheMocks = vi.hoisted(() => ({
+  entries: new Map<string, { uniforms: Record<string, unknown> }[]>(),
+  leaves: new Map<string, string[]>(),
+  branFitting(refno: string, bran: string) {
+    this.entries.set(refno, [{ uniforms: { refno, owner_refno: bran, owner_noun: 'BRAN' } }]);
+  },
+  reset() {
+    this.entries.clear();
+    this.leaves.clear();
+  },
+}));
+
 vi.mock('@/model-source', () => ({
   getModelSource: () => ({
     kind: spatialSourceMocks.state.kind,
+    records: {
+      peek: (refno: string) => recordCacheMocks.entries.get(refno),
+      leavesOfRoot: (root: string) => recordCacheMocks.leaves.get(root) ?? [],
+    },
     spatial: {
       nearby: spatialSourceMocks.nearby,
       nearbyRefnos: spatialSourceMocks.nearbyRefnos,
@@ -94,6 +114,11 @@ vi.mock('@/composables/useDbMetaInfo', () => ({
   getDbnumByRefno: dbMetaMocks.getDbnumByRefno,
   tryGetDbnumByRefno: dbMetaMocks.getDbnumByRefno,
 }));
+
+// 记录缓存桩每个用例从空开始：缺省没有任何构件认得出 BRAN 属主，「管件带直段」不扩，既有用例的调用形状不变
+beforeEach(() => {
+  recordCacheMocks.reset();
+});
 
 import {
   __resetNegativeNounRegistryForTests,
@@ -1018,6 +1043,65 @@ describe('createSpatialQueryStore', () => {
       ['server_b', true, 'server-spatial-index'],
       ['loaded_a', true, 'viewer-local'],
     ]);
+  });
+
+  it('管件带直段：批量加载命中的管件后，按记录缓存把所属 BRAN 整体（BRAN 自己的 refno = 直管 + 范围外构件）再装一批并置可见；不算命中、不进结果计数', async () => {
+    spatialSourceMocks.state.kind = 'gen-model-v1';
+    spatialSourceMocks.state.specValues = false;
+    spatialSourceMocks.state.branCenterline = false;
+    const viewer = createViewerStub();
+    viewer.__dtxLayer = { id: 'dtx' };
+    spatialSourceMocks.nearby.mockResolvedValueOnce({
+      success: true,
+      total_count: 2,
+      returned_count: 2,
+      page: 1,
+      per_page: 100,
+      has_more: false,
+      results: [
+        { refno: 'elbo_1', noun: 'ELBO', spec_value: 0, dbnum: 24381, distance: 18, aabb: { min: { x: 20, y: 0, z: 0 }, max: { x: 30, y: 10, z: 10 } } },
+        { refno: 'nozz_1', noun: 'NOZZ', spec_value: 0, dbnum: 24381, distance: 30, aabb: { min: { x: 40, y: 0, z: 0 }, max: { x: 50, y: 10, z: 10 } } },
+      ],
+    } satisfies SpatialQueryResult);
+    // 第一批 ensure → records 把整根记录写进缓存：elbo_1 属于 BRAN bran_1，这根还有范围外的 bend_9；nozz_1 是 EQUI 的，不扩
+    batchLoadDeps.loadDbnoInstancesForVisibleRefnosDtx.mockImplementation(async (_layer, _dbno, refnos, _options) => {
+      if (refnos.includes('elbo_1')) {
+        recordCacheMocks.branFitting('elbo_1', 'bran_1');
+        recordCacheMocks.branFitting('bend_9', 'bran_1');
+        recordCacheMocks.leaves.set('bran_1', ['elbo_1', 'bend_9', 'bran_1']);
+        recordCacheMocks.entries.set('nozz_1', [{ uniforms: { refno: 'nozz_1', owner_refno: 'equi_1', owner_noun: 'EQUI' } }]);
+      }
+      for (const refno of refnos) {
+        viewer.scene.objects[refno] = { id: refno, visible: true, aabb: [0, 0, 0, 1, 1, 1] };
+        viewer.scene.objectIds.push(refno);
+      }
+      return { loadedRefnos: refnos, missingRefnos: [] };
+    });
+
+    const store = createSpatialQueryStore({
+      viewerRef: ref(viewer),
+      selection: { selectedRefno: { value: 'loaded_a' } } as any,
+      toolStore: { pickedQueryCenter: { value: null }, setToolMode: vi.fn(), setPickedQueryCenter: vi.fn() } as any,
+    });
+    store.draft.mode = 'range';
+    store.draft.rangeCenterSource = 'selected';
+    store.draft.radius = 50;
+    await store.submitQuery();
+    viewer.scene.setObjectsVisible.mockClear();
+    await store.loadResults({ onlyUnloaded: true, flyTo: false });
+
+    expect(store.error.value).toBeNull();
+    const calls = batchLoadDeps.loadDbnoInstancesForVisibleRefnosDtx.mock.calls.map((call) => [call[1], call[2]]);
+    // 第一批：命中的两个；第二批：bran_1 的整体里还没在批里的——BRAN 自己（直管挂这儿）+ 范围外的 bend_9
+    expect(calls).toEqual([[24381, ['elbo_1', 'nozz_1']], [24381, ['bran_1', 'bend_9']]]);
+    // 命中项与伴随的 BRAN 整体都置可见
+    expect(viewer.scene.setObjectsVisible).toHaveBeenCalledWith(['elbo_1', 'nozz_1'], true);
+    expect(viewer.scene.setObjectsVisible).toHaveBeenCalledWith(['bran_1', 'bend_9'], true);
+    // 结果里只有命中项（服务端两条 + 本地扫描命中的 loaded_a），伴随的 bran_1 / bend_9 不进结果
+    const items = store.resultSet.value?.items ?? [];
+    expect(items.map((item) => item.refno).sort()).toEqual(['elbo_1', 'loaded_a', 'nozz_1']);
+    expect(items.every((item) => item.loaded)).toBe(true);
+    expect(store.resultSet.value?.unloadedCount).toBe(0);
   });
 
   it('批量加载当前筛选结果时应走精确 refno 批量加载并刷新统计', async () => {
@@ -2979,13 +3063,93 @@ describe('房间层级树（ADR 0068，plan 2026-09-20 spatial-room-hierarchy-tr
     expect(expanded.tree?.rooms[0]?.specs[0]?.others.by_noun[0]?.elements).toBeUndefined();
     expect(expanded.items.map((item) => [item.refno, item.loaded])).toEqual([['loaded_a', true], ['server_only', false], ['shared_b', false]]);
 
-    // 节点动作：只留这几个可见 / 隔离
+    // 节点动作：只留这几个可见 / 隔离。「结果里别的全隐」那一档连树里 BRAN 单元自己的 refno（直管挂在它名下）一起隐，
+    // 记录缓存空时就只有单元自己；只盖住单元一部分的动作不带单元
     store.showOnlyRefnos(['loaded_a']);
     expect(viewer.scene.setObjectsVisible).toHaveBeenCalledWith(['loaded_a'], true);
-    expect(viewer.scene.setObjectsVisible).toHaveBeenCalledWith(['server_only', 'shared_b', 'pane_1'], false);
+    expect(viewer.scene.setObjectsVisible).toHaveBeenCalledWith(['server_only', 'shared_b', 'pane_1', 'bran_1'], false);
     expect(store.resultSet.value?.items.find((item) => item.refno === 'server_only')?.visible).toBe(false);
+    // R2 下 bran_1 只列了 shared_b，动作盖住了它 → 按 R2 那份算整个单元，带上 bran_1 自己
     store.isolateRefnos(['shared_b', 'loaded_a']);
     expect(viewer.scene.setObjectsXRayed).toHaveBeenCalledWith(['loaded_a', 'loaded_b'], true);
-    expect(viewer.scene.setObjectsXRayed).toHaveBeenCalledWith(['shared_b', 'loaded_a'], false);
+    expect(viewer.scene.setObjectsXRayed).toHaveBeenCalledWith(['shared_b', 'loaded_a', 'bran_1'], false);
+  });
+
+  it('管件带直段：单元级「仅显示 / 隔离」与「全部显示 / 隐藏 / 隔离结果」连所属 BRAN 的整体（BRAN 自己 = 直管 + 范围外构件）一起动；叶子行的眼睛不扩；恢复场景把它们也放回去', async () => {
+    const fetchTree = vi.fn(async (): Promise<SpatialTreeResult> => treeResult());
+    const queryNearbyByPosition = vi.fn(async () => facetResult());
+    // 记录缓存：bran_1 整根 = 三个在范围里的叶子 + 范围外的 bend_9；直管挂在 bran_1 自己名下
+    recordCacheMocks.branFitting('server_only', 'bran_1');
+    recordCacheMocks.branFitting('shared_b', 'bran_1');
+    recordCacheMocks.leaves.set('bran_1', ['loaded_a', 'server_only', 'shared_b', 'bend_9', 'bran_1']);
+    const { store, viewer } = makeStore({ fetchTree, queryNearbyByPosition });
+    await store.submitQuery();
+    expect(store.resultSet.value?.tree).toBeTruthy();
+
+    // 单元级「仅显示」bran_1：留 三个叶子 + bran_1（直管）+ bend_9，隐掉 pane_1；结果项的 visible 只按命中项算
+    viewer.scene.setObjectsVisible.mockClear();
+    store.showOnlyRefnos(['loaded_a', 'server_only', 'shared_b']);
+    expect(viewer.scene.setObjectsVisible).toHaveBeenCalledWith(['loaded_a', 'server_only', 'shared_b', 'bran_1', 'bend_9'], true);
+    expect(viewer.scene.setObjectsVisible).toHaveBeenCalledWith(['pane_1'], false);
+    expect(store.resultSet.value?.items.map((item) => [item.refno, item.visible])).toEqual([
+      ['pane_1', false], ['loaded_a', true], ['server_only', true], ['shared_b', true],
+    ]);
+
+    // 「仅显示」其他构件 PANE：bran_1 整体连叶子一起隐掉，不留光管
+    viewer.scene.setObjectsVisible.mockClear();
+    store.showOnlyRefnos(['pane_1']);
+    expect(viewer.scene.setObjectsVisible).toHaveBeenCalledWith(['pane_1'], true);
+    expect(viewer.scene.setObjectsVisible).toHaveBeenCalledWith(['loaded_a', 'server_only', 'shared_b', 'bran_1', 'bend_9'], false);
+
+    // 单元级「隔离」：留实体的含 bran_1 与 bend_9
+    viewer.scene.setObjectsXRayed.mockClear();
+    store.isolateRefnos(['loaded_a', 'server_only', 'shared_b']);
+    expect(viewer.scene.setObjectsXRayed).toHaveBeenCalledWith(['loaded_a', 'server_only', 'shared_b', 'bran_1', 'bend_9'], false);
+
+    // 「全部隐藏 / 全部显示 / 隔离结果」：全集 + 树里全部 BRAN 单元的整体
+    viewer.scene.setObjectsVisible.mockClear();
+    store.setAllResultsVisible(false);
+    expect(viewer.scene.setObjectsVisible).toHaveBeenCalledWith(['pane_1', 'loaded_a', 'server_only', 'shared_b', 'bran_1', 'bend_9'], false);
+    viewer.scene.setObjectsXRayed.mockClear();
+    store.isolateResults();
+    expect(viewer.scene.setObjectsXRayed).toHaveBeenCalledWith(['pane_1', 'loaded_a', 'server_only', 'shared_b', 'bran_1', 'bend_9'], false);
+
+    // 叶子行的眼睛：一个管件就是一个管件，不带直段
+    viewer.scene.setObjectsVisible.mockClear();
+    store.toggleResultVisible(store.resultSet.value!.items.find((item) => item.refno === 'server_only')!);
+    expect(viewer.scene.setObjectsVisible).toHaveBeenCalledTimes(1);
+    expect(viewer.scene.setObjectsVisible).toHaveBeenCalledWith(['server_only'], expect.any(Boolean));
+
+    // 恢复场景：快照里有 bran_1 / bend_9（第一次动之前查看器里没有对象按可见），一起放回
+    viewer.scene.setObjectsVisible.mockClear();
+    store.restoreScene();
+    const restoreCalls = viewer.scene.setObjectsVisible.mock.calls as [string[], boolean][];
+    const restored = restoreCalls.find((call) => call[1] === true)?.[0] ?? [];
+    expect(restored).toEqual(expect.arrayContaining(['bran_1', 'bend_9']));
+  });
+
+  it('管件带直段：sceneCompanions 可注桩——收到动作的 refno 与树里被整个盖住的 BRAN 单元，回什么就多动什么；记录缓存空时缺省不扩', async () => {
+    const fetchTree = vi.fn(async (): Promise<SpatialTreeResult> => treeResult());
+    const queryNearbyByPosition = vi.fn(async () => facetResult());
+    const sceneCompanions = vi.fn((_refnos: string[], units: string[]) => units.map((unit) => `${unit}:tubi`));
+    const { store, viewer } = makeStore({ fetchTree, queryNearbyByPosition, sceneCompanions });
+    await store.submitQuery();
+
+    viewer.scene.setObjectsXRayed.mockClear();
+    store.isolateRefnos(['loaded_a', 'server_only', 'shared_b']);
+    expect(sceneCompanions).toHaveBeenCalledWith(['loaded_a', 'server_only', 'shared_b'], ['bran_1']);
+    expect(viewer.scene.setObjectsXRayed).toHaveBeenCalledWith(['loaded_a', 'server_only', 'shared_b', 'bran_1:tubi'], false);
+    // 只盖住单元的一部分（R1 下 bran_1 还有 shared_b 没盖住，R2 下 bran_1 只列了 shared_b）：不算整个单元
+    store.isolateRefnos(['loaded_a', 'server_only']);
+    expect(sceneCompanions).toHaveBeenLastCalledWith(['loaded_a', 'server_only'], []);
+
+    // 缺省实现 + 空记录缓存：整个盖住的单元只多带它自己的 refno（直管挂在它名下，未加载时也先把状态写进 compat scene 等回放），没有别的
+    const plain = makeStore({ fetchTree, queryNearbyByPosition });
+    await plain.store.submitQuery();
+    plain.viewer.scene.setObjectsXRayed.mockClear();
+    plain.store.isolateRefnos(['loaded_a', 'server_only', 'shared_b']);
+    expect(plain.viewer.scene.setObjectsXRayed).toHaveBeenCalledWith(['loaded_a', 'server_only', 'shared_b', 'bran_1'], false);
+    plain.store.isolateRefnos(['loaded_a', 'server_only']);
+    expect(plain.viewer.scene.setObjectsXRayed).toHaveBeenLastCalledWith(['loaded_a', 'server_only'], false);
   });
 });

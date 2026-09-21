@@ -4,6 +4,7 @@ import type { SpatialRoomOption, SpatialTreeResult } from '@/api/genModelSpatial
 
 import {
   ancestorsOf,
+  branUnitRefnosUnder,
   elementNodeId,
   flattenRoomTree,
   isRoomNodeId,
@@ -164,5 +165,18 @@ describe('roomTreeNodes', () => {
     expect(ancestorsOf('elem:24381_35580:24381_1241', nodes)).toEqual(['room:24381_35580', 'spec:24381_35580:3', 'utype:24381_35580:3:BRAN', 'unit:24381_35580:24381_1200']);
     expect(ancestorsOf('room:24381_35580', nodes)).toEqual([]);
     expect(ancestorsOf('nope', nodes)).toEqual([]);
+  });
+
+  it('branUnitRefnosUnder（管件带直段）：节点下含自身的 BRAN 单元 refno；EQUI 单元、其他构件、构件行不给', () => {
+    const nodes = flattenRoomTree('24381_35580', roomTree(), ROOM)!;
+    expect(branUnitRefnosUnder('room:24381_35580', nodes)).toEqual(['24381_1200']);
+    expect(branUnitRefnosUnder('spec:24381_35580:3', nodes)).toEqual(['24381_1200']);
+    expect(branUnitRefnosUnder('utype:24381_35580:3:BRAN', nodes)).toEqual(['24381_1200']);
+    expect(branUnitRefnosUnder('unit:24381_35580:24381_1200', nodes), '单元自己').toEqual(['24381_1200']);
+    expect(branUnitRefnosUnder('utype:24381_35580:3:EQUI', nodes), 'EQUI 没有直管').toEqual([]);
+    expect(branUnitRefnosUnder('unit:24381_35580:24381_7000', nodes)).toEqual([]);
+    expect(branUnitRefnosUnder('elem:24381_35580:24381_1241', nodes), '构件行不扩').toEqual([]);
+    expect(branUnitRefnosUnder('others:24381_35580:3', nodes)).toEqual([]);
+    expect(branUnitRefnosUnder('nope', nodes)).toEqual([]);
   });
 });

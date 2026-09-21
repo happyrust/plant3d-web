@@ -4,6 +4,11 @@
 
 ### 变更
 
+- **房间层级树里的管件带直段：抽屉加载命中的管件按整条 BRAN 装，单元级显隐 / 隔离 / 仅显示连直管一起** (2026-09-21，ADR 0068 追记)
+  - gen-model 把 BRAN 的隐式直管（TUBI）全挂在 **BRAN 自己的 refno** 上（直管没有独立 refno），空间索引里一条 TUBI 都没有，两棵树的叶子只有管件。改前抽屉「加载 / 加载未加载」只画命中的管件 refno——弯头、焊口悬空没有管；单元级「隔离 / 仅显示 / 眼睛」的 refno 集里也没有 BRAN 自己，直管被当「别的」XRAY / 隐掉。模型树「加载模型」走的是生成根那条链，整条 BRAN 一直是齐的——三处不一致。
+  - 现在（用户 2026-09-21 拍板方案 A，只改前端）：新 `composables/deliveryUnitScene.ts` 只读 gen-model 记录缓存——`branOwnerOfLoaded(refno)` 认管件所属 BRAN（`owner_noun == BRAN`，HANG / EQUI 根没有直管不扩）、`deliveryUnitSceneRefnos(bran)` = BRAN 自己 + 这一根缓存里的全部构件（含范围 / 房间外的）。① 抽屉批量加载（`batchLoadSpatialQueryRefnos`）装完命中项后按属主再装一批 BRAN 整体并置可见——记录已在缓存里、不多打接口，装进来的不算命中、不进 loaded / unloaded 计数；② 抽屉「仅显示 / 隔离」（单元级及以上，动作的 refno 集盖住单元列出的全部叶子才算整个单元，`spatialTree.branUnitRefnosCoveredBy`）与「全部显示 / 隐藏 / 隔离结果」（树里全部 BRAN 单元）都带上 BRAN 整体，隐掉的那一侧也带（不留没有管件的光管）；③ 房间页签单元级及以上的眼睛 / 显示 / 隐藏 / 隔离同样（`roomTreeNodes.branUnitRefnosUnder` + `useRoomTree.collectSceneRefnos`）。构件行的眼睛 / 定位、「加载模型」的计数不变。`sceneCompanions` 两处都可注桩。
+  - 验证：vitest `deliveryUnitScene.test.ts` 新 4 例、`spatialTree` +1、`roomTreeNodes` +1、`useRoomTree` +1（既有 2 例断言改口）、`useSpatialQuery` +3（既有 1 例改口）→ 空间 / 页签相关 13 文件 163 过；type-check 基线外 0；eslint 触及文件 0。真机 `:3111` + `:8027`（AMS 7997）五步：抽屉「加载」单元 `/Copy-of-1RCS0307-1R90004`（11 个命中管件）→ BRAN 24381_148125 名下 13 段直管 + 范围外 9 个管件一起进场景；「隔离」它 → 直管实体、房间页签装的另一条 BRAN 24381_105030（22 段直管）XRAY；「全部隐藏」→ 直管随之隐、另一条不动；房间页签单元「隔离」/ 眼睛 → 22 段直管跟着实体 / 隐藏，构件行眼睛只隐自己；`pageerror` 0。图与账 `docs/verification/spatial-room-hierarchy-tree-2026-09-20/ui/tubing-01…05-*.png`、`tubing-summary.json`，README §9。
+
 - **版本对比分屏的描边合成器留着，认出软渲染（SwiftShader / llvmpipe / Microsoft Basic Render Driver）就自动退回直接渲染** (2026-09-21)
   - 09-21 上午量过：合成器每格固定 +0.8–1.1 ms，真显卡上分屏仍 60 fps，但软渲染（远程桌面 / 虚拟机 / 无驱动、缺省 headless）下分屏只剩 11 fps、直接 render 60 fps。现在 `utils/three/webglRendererInfo.ts` 读 `WEBGL_debug_renderer_info` 的显卡串（读不到按真显卡处理），软渲染时分屏每格直接 `renderer.render`——选中的环境构件按选中色显示、没有描边，帧率优先；真显卡照旧两格都描边。按上下文定一次、缓存；`localStorage['plant3d-web.viewer.splitOutline'] = 'compositor' | 'direct'` 可强制（排障）。
   - 就位后运行态多一格 `splitOutline { compositor, renderer }`（`__modelUnitVersionCompare.splitOutline` 同），面板分屏摘要下软渲染时照实说一句（`model-unit-compare-split-direct-render`）。

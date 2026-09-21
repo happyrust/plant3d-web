@@ -21,7 +21,15 @@ import type {
 import type { AttributeSource } from '@/model-source/ports';
 
 import { isGenModelV1ApiError } from '@/api/genModelV1Api';
-import { forEachTreeLeaf, fullMatchesFromTree, mergeTreeLeaves, treeToNearbyResult } from '@/composables/spatialTree';
+import { sceneCompanionsOf } from '@/composables/deliveryUnitScene';
+import {
+  branUnitRefnosCoveredBy,
+  branUnitRefnosOfTree,
+  forEachTreeLeaf,
+  fullMatchesFromTree,
+  mergeTreeLeaves,
+  treeToNearbyResult,
+} from '@/composables/spatialTree';
 import { ensureDbMetaInfoLoaded, getDbnumByRefno, tryGetDbnumByRefno } from '@/composables/useDbMetaInfo';
 import {
   findNounByRefnoAcrossAllDbnos,
@@ -138,6 +146,11 @@ type SpatialQueryStoreOptions = {
   fetchTree?: (params: ApiSpatialNearbyParams, only?: SpatialTreeLeafSelector) => Promise<SpatialTreeResult>;
   createRequestId?: () => string;
   batchLoadRefnos?: BatchLoadRefnosFn;
+  /**
+   * 「管件带直段」（2026-09-21，`deliveryUnitScene.ts`）：一批结果构件 + 树里被整个盖住的 BRAN 单元 → 场景里还该跟着一起
+   * 显隐 / 隔离的 refno（BRAN 自己——直管挂在这儿——+ 记录缓存里它的全部构件）。缺省 `sceneCompanionsOf`（只读记录缓存）；测试注桩。
+   */
+  sceneCompanions?: (refnos: string[], branUnitRefnos: string[]) => string[];
 };
 
 /** 各模式的默认排序：范围查询更关心分专业浏览，距离查询更关心由近及远。 */
@@ -815,9 +828,10 @@ async function loadRefnosBySource(
   dbno: number,
   refnos: string[],
   options: { forceReload?: boolean } = {},
-): Promise<{ ok: string[]; missing: string[] }> {
+): Promise<{ ok: string[]; missing: string[]; companions: string[] }> {
   const ok: string[] = [];
   const missing: string[] = [];
+  const companions: string[] = [];
 
   for (const batch of chunkBySize(refnos, 1000)) {
     const result = await loadDbnoInstancesForVisibleRefnosDtx(dtxLayer as any, dbno, batch, {
@@ -828,18 +842,39 @@ async function loadRefnosBySource(
     });
     viewer.__dtxAfterInstancesLoaded?.(dbno, batch);
     const missingSet = new Set(result.missingRefnos.map((item) => normalizeRefno(item)));
+    const loadedInBatch: string[] = [];
     for (const refno of batch) {
       if (missingSet.has(refno)) {
         missing.push(refno);
       } else {
         ok.push(refno);
+        loadedInBatch.push(refno);
+      }
+    }
+
+    // 管件带直段（2026-09-21，`deliveryUnitScene.ts`）：命中的是管件时，把它所属 BRAN 的整体——BRAN 自己的 refno（直管全挂在这儿）
+    // + 记录缓存里这一根的其余构件——一起装进来。记录在上面那次 ensure → records 已经整根进了缓存，这里不多打接口、只补画；
+    // 已在场景里的照旧被加载链跳过。与模型树「加载模型」按生成根整条装的行为对齐，管件不再悬空。
+    const branCompanions = sceneCompanionsOf(loadedInBatch);
+    if (branCompanions.length > 0) {
+      const extra = await loadDbnoInstancesForVisibleRefnosDtx(dtxLayer as any, dbno, branCompanions, {
+        lodAssetKey: 'L1',
+        debug: false,
+        dataSource: 'gen-model-v1',
+      });
+      viewer.__dtxAfterInstancesLoaded?.(dbno, branCompanions);
+      const extraMissing = new Set(extra.missingRefnos.map((item) => normalizeRefno(item)));
+      for (const refno of branCompanions) {
+        if (!extraMissing.has(refno)) companions.push(refno);
       }
     }
   }
 
+  const okSet = new Set(ok);
   return {
     ok: uniqStrings(ok),
     missing: uniqStrings(missing),
+    companions: uniqStrings(companions).filter((refno) => !okSet.has(refno)),
   };
 }
 
@@ -903,6 +938,7 @@ async function batchLoadSpatialQueryRefnos(
 
     let pending = normalizedGroup.slice();
     const groupOk = new Set<string>();
+    let groupCompanions: string[] = [];
 
     try {
       const loadResult = await loadRefnosBySource(viewer, dtxLayer, dbno, pending);
@@ -910,6 +946,7 @@ async function batchLoadSpatialQueryRefnos(
         groupOk.add(refno);
         failMap.delete(refno);
       });
+      groupCompanions = loadResult.companions;
       pending = loadResult.missing;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -931,6 +968,12 @@ async function batchLoadSpatialQueryRefnos(
         okSet.add(refno);
         failMap.delete(refno);
       });
+    }
+    // 跟着命中管件一起装进来的 BRAN 整体（直管 + 范围外的构件）：与命中项一样置可见；不算命中、不进 ok / fail、不进结果计数
+    const loadedCompanions = groupCompanions.filter((refno) => !okSet.has(refno) && !normalizedGroup.includes(refno));
+    if (loadedCompanions.length > 0) {
+      viewer.scene.ensureRefnos(loadedCompanions);
+      viewer.scene.setObjectsVisible(loadedCompanions, true);
     }
   }
 
@@ -1090,6 +1133,7 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
   const batchLoadRefnos = options.batchLoadRefnos ?? ((refnos: string[], loadOptions?: BatchLoadOptions) => {
     return batchLoadSpatialQueryRefnos(viewerRef, refnos, loadOptions);
   });
+  const sceneCompanions = options.sceneCompanions ?? sceneCompanionsOf;
 
   const draft = reactive<SpatialQueryDraft>(createDefaultDraft());
   const status = ref<SpatialQueryStatus>('idle');
@@ -1766,6 +1810,21 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
       .map((item) => item.refno);
   }
 
+  /**
+   * 管件带直段（2026-09-21，`deliveryUnitScene.ts`）：一批要显隐 / 隔离的结果 refno，连同它们所属 BRAN 的整体——BRAN 自己的 refno
+   * （gen-model 把隐式直管全挂在这儿，树上不列）+ 记录缓存里这一根的其余构件（范围外、树上没列的）。属主按记录缓存认；树态下再把
+   * 动作整个盖住的 BRAN 单元也算上（单元下的构件可能都没几何记录，靠属主认不出）。`all` = 「结果里的全部」那一档还带上树里全部 BRAN 单元。
+   * 结果项自己的 loaded / visible 计数不含这些伴随 refno——它们不是命中。
+   */
+  function withCompanions(refnos: string[], scope: 'given' | 'all' = 'given'): string[] {
+    if (refnos.length === 0) return refnos;
+    const tree = resultSet.value?.tree ?? null;
+    const units = tree ? (scope === 'all' ? branUnitRefnosOfTree(tree) : branUnitRefnosCoveredBy(tree, refnos)) : [];
+    const companions = sceneCompanions(refnos, units);
+    if (companions.length === 0) return refnos;
+    return uniqStrings([...refnos, ...companions]);
+  }
+
   /** 结果自带的 refno → dbnum（v1 服务端给的），连同全集的 by_dbnum 一起交给批量加载，省掉逐个查库号。 */
   function collectDbnumHints(items: SpatialQueryResultItem[]): Map<string, number> {
     const hints = new Map<string, number>();
@@ -2326,7 +2385,7 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
   function setAllResultsVisible(visible: boolean) {
     const viewer = viewerRef.value;
     const items = resultSet.value?.items ?? [];
-    const refnos = resolveBatchRefnos();
+    const refnos = withCompanions(resolveBatchRefnos(), 'all');
     if (!viewer || refnos.length === 0) return;
     snapshotVisibility(viewer, refnos);
     viewer.scene.setObjectsVisible(refnos, visible);
@@ -2341,7 +2400,7 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
   function isolateResults() {
     const viewer = viewerRef.value;
     const items = resultSet.value?.items ?? [];
-    const keep = resolveBatchRefnos();
+    const keep = withCompanions(resolveBatchRefnos(), 'all');
     if (!viewer || keep.length === 0) return;
     snapshotVisibility(viewer, keep);
     const all = viewer.scene.objectIds.slice();
@@ -2396,9 +2455,9 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
     const items = resultSet.value?.items ?? [];
     if (!viewer || items.length === 0) return;
 
-    const showRefnos = resolveBatchRefnos({ specValue });
+    const showRefnos = withCompanions(resolveBatchRefnos({ specValue }));
     const showSet = new Set(showRefnos);
-    const hideRefnos = resolveBatchRefnos().filter((refno) => !showSet.has(refno));
+    const hideRefnos = withCompanions(resolveBatchRefnos(), 'all').filter((refno) => !showSet.has(refno));
     snapshotVisibility(viewer, [...showRefnos, ...hideRefnos]);
 
     if (showRefnos.length > 0) {
@@ -2416,15 +2475,18 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
     }
   }
 
-  /** 树节点的「仅显示」（ADR 0068）：只留这些构件可见，结果里别的全隐；隐藏范围按全集（叶子内联时就是整树）。 */
+  /**
+   * 树节点的「仅显示」（ADR 0068）：只留这些构件可见，结果里别的全隐；隐藏范围按全集（叶子内联时就是整树）。
+   * 管件带直段：留下的与隐掉的都连所属 BRAN 的整体一起（直管挂在 BRAN 自己的 refno 上，不带就成了悬空管件 / 没有管件的光管）。
+   */
   function showOnlyRefnos(refnos: string[]) {
     const viewer = viewerRef.value;
     const items = resultSet.value?.items ?? [];
     if (!viewer || refnos.length === 0) return;
 
-    const showRefnos = resolveBatchRefnos({ refnos });
+    const showRefnos = withCompanions(resolveBatchRefnos({ refnos }));
     const showSet = new Set(showRefnos);
-    const hideRefnos = resolveBatchRefnos().filter((refno) => !showSet.has(refno));
+    const hideRefnos = withCompanions(resolveBatchRefnos(), 'all').filter((refno) => !showSet.has(refno));
     snapshotVisibility(viewer, [...showRefnos, ...hideRefnos]);
 
     viewer.scene.setObjectsVisible(showRefnos, true);
@@ -2439,11 +2501,11 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
     }
   }
 
-  /** 树节点的「隔离」（ADR 0068）：场景里其余全部 X-Ray，只有这些构件实体显示。 */
+  /** 树节点的「隔离」（ADR 0068）：场景里其余全部 X-Ray，只有这些构件实体显示——管件连所属 BRAN 的直段一起留实体。 */
   function isolateRefnos(refnos: string[]) {
     const viewer = viewerRef.value;
     const items = resultSet.value?.items ?? [];
-    const keep = resolveBatchRefnos({ refnos });
+    const keep = withCompanions(resolveBatchRefnos({ refnos }));
     if (!viewer || keep.length === 0) return;
     snapshotVisibility(viewer, keep);
     const all = viewer.scene.objectIds.slice();
@@ -2467,9 +2529,9 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
     const items = resultSet.value?.items ?? [];
     if (!viewer || items.length === 0) return;
 
-    const showRefnos = resolveBatchRefnos({ dbnum });
+    const showRefnos = withCompanions(resolveBatchRefnos({ dbnum }));
     const showSet = new Set(showRefnos);
-    const hideRefnos = resolveBatchRefnos().filter((refno) => !showSet.has(refno));
+    const hideRefnos = withCompanions(resolveBatchRefnos(), 'all').filter((refno) => !showSet.has(refno));
     snapshotVisibility(viewer, [...showRefnos, ...hideRefnos]);
 
     if (showRefnos.length > 0) {

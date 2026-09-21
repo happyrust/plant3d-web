@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  branUnitRefnosCoveredBy,
+  branUnitRefnosOfTree,
   forEachTreeLeaf,
   fullMatchesFromTree,
   mergeTreeLeaves,
@@ -101,6 +103,27 @@ describe('spatialTree（ADR 0068 纯函数）', () => {
     expect(treeNodeLeavesInline({ kind: 'spec', node: s1.specs[1]! })).toBe(false);
     expect(treeNodeLeavesInline({ kind: 'room', node: s1 })).toBe(false);
     expect(treeNodeRefnos({ kind: 'unitType', node: s1.specs[1]!.unit_types[0]! }), '未内联的单元没有 refno 可给').toEqual([]);
+  });
+
+  it('branUnitRefnosCoveredBy：动作的 refno 集把某间房下该 BRAN 单元列出的叶子全包住才算盖住，跨房单元只出一次；EQUI 不算；未内联的单元不算。branUnitRefnosOfTree 列全树 BRAN 单元', () => {
+    const t = tree();
+    // 单元级 / 更高层动作给的就是它名下全部叶子
+    expect(branUnitRefnosCoveredBy(t, treeNodeRefnos({ kind: 'unit', node: t.rooms[0]!.specs[1]!.unit_types[0]!.units[0]! }))).toEqual(['b1']);
+    expect(branUnitRefnosCoveredBy(t, treeNodeRefnos({ kind: 'room', node: t.rooms[0]! }))).toEqual(['b1']);
+    // R2 下 b1 只列了跨房的 x1：在 R2 对它做单元动作也算盖住整条 BRAN
+    expect(branUnitRefnosCoveredBy(t, ['x1'])).toEqual(['b1']);
+    // 只给 t1：R1 下 b1 还有 x1 没盖住，R2 下 b1 没有 t1 → 不算
+    expect(branUnitRefnosCoveredBy(t, ['t1'])).toEqual([]);
+    // EQUI 单元没有直管，不给
+    expect(branUnitRefnosCoveredBy(t, ['n1'])).toEqual([]);
+    expect(branUnitRefnosCoveredBy(t, [])).toEqual([]);
+
+    const stripped = tree();
+    for (const room of stripped.rooms) for (const spec of room.specs) for (const group of spec.unit_types) for (const unit of group.units) delete unit.elements;
+    expect(branUnitRefnosCoveredBy(stripped, ['t1', 'x1']), '叶子未内联：还不知道有哪些，不算盖住').toEqual([]);
+
+    expect(branUnitRefnosOfTree(t)).toEqual(['b1']);
+    expect(branUnitRefnosOfTree(stripped), '列单元不看叶子').toEqual(['b1']);
   });
 
   it('treeToNearbyResult：叶子按 refno 去重摊成一页、按请求排序、不分页；专业分组按去重数；facet 有就用 facet 的', () => {

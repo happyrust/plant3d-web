@@ -4,11 +4,37 @@ import type { SpatialRoomsResult, SpatialTreeLeafSelector, SpatialTreeResult } f
 import type { SpatialSource } from '@/model-source/ports';
 import type { DtxCompatViewer } from '@/viewer/dtx/DtxCompatViewer';
 
+/**
+ * 管件带直段（2026-09-21，`deliveryUnitScene.ts`）读的 gen-model 记录缓存：BRAN 24381_1200 的两条在册管件 + 一条房间外的 24381_1242，
+ * 直管挂在 BRAN 自己的 refno 上；EQUI 24381_7000 的构件不扩。
+ */
+const recordMocks = vi.hoisted(() => {
+  const BRAN = '24381_1200';
+  const owned = new Set(['24381_1240', '24381_1241', '24381_1242']);
+  const entry = (refno: string, ownerRefno: string, ownerNoun: string) => ({
+    geo_hash: 'g', matrix: [], geo_index: 0, color_index: 0, name_index: 0, site_name_index: 0, lod_mask: 1,
+    uniforms: { refno, owner_refno: ownerRefno, owner_noun: ownerNoun },
+  });
+  return {
+    peek: (refno: string) => {
+      if (owned.has(refno)) return [entry(refno, BRAN, 'BRAN')];
+      if (refno === '24381_7001' || refno === '24381_7002') return [entry(refno, '24381_7000', 'EQUI')];
+      return undefined;
+    },
+    leavesOfRoot: (root: string) => (root === BRAN ? [...owned, BRAN] : []),
+  };
+});
+
+vi.mock('@/model-source', () => ({
+  getModelSource: () => ({ records: recordMocks }),
+}));
+
 import { useRoomTree } from '@/composables/useRoomTree';
 
 /**
  * 「房间」页签的状态（ADR 0068，plan 2026-09-20 spatial-room-hierarchy-tree §4.5）：在册房间平铺 + 搜索、展开一间房才取树且只取一次、
  * 未内联的单元展开时按选择器补叶子、眼睛作用于节点下全部构件并推导父链勾选、选中 / 定位 / 隔离只碰场景里已有的对象。
+ * 管件带直段：单元级及以上的显隐 / 隔离连所属 BRAN 的整体（BRAN 自己 + 记录缓存里它的全部构件）一起；构件行、定位、选中不扩。
  */
 
 function roomsResult(overrides: Partial<SpatialRoomsResult> = {}): SpatialRoomsResult {
@@ -228,7 +254,7 @@ describe('useRoomTree', () => {
     expect(roomTree).toHaveBeenCalledTimes(2);
   });
 
-  it('眼睛：节点下全部构件（先补齐未内联的）写进场景显隐，勾选整枝改、父链推导 indeterminate / unchecked；setVisible 回 true 只对已加载对象生效', async () => {
+  it('眼睛：节点下全部构件（先补齐未内联的）写进场景显隐，勾选整枝改、父链推导 indeterminate / unchecked；setVisible 回 true 只对已加载对象生效；单元级及以上连所属 BRAN 的整体（直段 + 房间外构件）一起', async () => {
     const viewer = makeViewer(['24381_1240', '24381_7001']);
     const { source, roomTree } = makeSource();
     const tree = useRoomTree({ value: viewer }, { source: () => source });
@@ -236,10 +262,11 @@ describe('useRoomTree', () => {
     tree.toggleExpand('room:24381_35580');
     await flush();
 
-    // 隐藏 BRAN 单元：两条构件 → setObjectsVisible(false)；单元与其下 unchecked、专业 / 房间 indeterminate
+    // 隐藏 BRAN 单元：两条构件 + BRAN 自己（直管挂在它名下）+ 记录里房间外的 24381_1242 → setObjectsVisible(false)；单元与其下 unchecked、专业 / 房间 indeterminate
     await tree.setVisible('unit:24381_35580:24381_1200', false);
     await flush();
-    expect(viewer.scene.setObjectsVisible).toHaveBeenCalledWith(['24381_1240', '24381_1241'], false);
+    expect(viewer.scene.setObjectsVisible).toHaveBeenCalledWith(['24381_1240', '24381_1241', '24381_1200', '24381_1242'], false);
+    expect(await tree.collectRefnos('unit:24381_35580:24381_1200'), '「加载模型」仍只数节点下列出的构件').toEqual(['24381_1240', '24381_1241']);
     expect(tree.getCheckState('unit:24381_35580:24381_1200')).toBe('unchecked');
     expect(tree.getCheckState('elem:24381_35580:24381_1241')).toBe('unchecked');
     expect(tree.getCheckState('utype:24381_35580:3:BRAN')).toBe('unchecked');
@@ -247,22 +274,22 @@ describe('useRoomTree', () => {
     expect(tree.getCheckState('room:24381_35580')).toBe('indeterminate');
     expect(tree.getCheckState('utype:24381_35580:3:EQUI')).toBe('checked');
 
-    // 隐藏整间房：EQUI 单元的叶子未内联 → 先按 unit= 补，再把五个 refno 都写进去；全树 unchecked
+    // 隐藏整间房：EQUI 单元的叶子未内联 → 先按 unit= 补，再把四个构件 + BRAN 整体（自己 + 房间外的 1242）都写进去；全树 unchecked
     await tree.setVisible('room:24381_35580', false);
     await flush();
     expect(roomTree).toHaveBeenLastCalledWith('24381_35580', undefined, { unit: '24381_7000' });
     const lastCall = (viewer.scene.setObjectsVisible as ReturnType<typeof vi.fn>).mock.calls.at(-1)!;
-    expect([...(lastCall[0] as string[])].sort()).toEqual(['24381_1240', '24381_1241', '24381_7001', '24381_7002']);
+    expect([...(lastCall[0] as string[])].sort()).toEqual(['24381_1200', '24381_1240', '24381_1241', '24381_1242', '24381_7001', '24381_7002']);
     expect(lastCall[1]).toBe(false);
     expect(tree.getCheckState('room:24381_35580')).toBe('unchecked');
     expect(tree.getCheckState('unit:24381_35580:24381_7000')).toBe('unchecked');
     expect(tree.getCheckState('elem:24381_35580:24381_7002')).toBe('unchecked');
 
-    // 再显示 EQUI 单元：它这一枝 checked，房间回到 indeterminate
+    // 再显示 EQUI 单元：它这一枝 checked，房间回到 indeterminate；它名下混着的 ELBO 24381_1241 是管件 → 所属 BRAN 整体跟着显
     await tree.setVisible('unit:24381_35580:24381_7000', true);
     await flush();
     expect(tree.getCheckState('unit:24381_35580:24381_7000')).toBe('checked');
-    expect(viewer.scene.setObjectsVisible).toHaveBeenLastCalledWith(['24381_7001', '24381_7002', '24381_1241'], true);
+    expect(viewer.scene.setObjectsVisible).toHaveBeenLastCalledWith(['24381_7001', '24381_7002', '24381_1241', '24381_1200', '24381_1240', '24381_1242'], true);
     expect(tree.getCheckState('utype:24381_35580:3:EQUI')).toBe('checked');
     expect(tree.getCheckState('room:24381_35580')).toBe('indeterminate');
   });
@@ -299,11 +326,29 @@ describe('useRoomTree', () => {
     expect(viewer.cameraFlight.flyTo).toHaveBeenCalledTimes(1);
     expect(await tree.flyTo('utype:24381_35580:3:EQUI')).toBe(false);
 
+    // 隔离单元：其余 XRAY，留实体的是两条构件 + BRAN 自己（直段）+ 房间外的 1242——管件不悬空
     await tree.isolateXray('unit:24381_35580:24381_1200');
     expect(viewer.scene.setObjectsXRayed).toHaveBeenCalledWith(['24381_1240'], true);
-    expect(viewer.scene.setObjectsXRayed).toHaveBeenCalledWith(['24381_1240', '24381_1241'], false);
+    expect(viewer.scene.setObjectsXRayed).toHaveBeenCalledWith(['24381_1240', '24381_1241', '24381_1200', '24381_1242'], false);
     tree.clearXray();
     expect(viewer.scene.setObjectsXRayed).toHaveBeenLastCalledWith(['24381_1240'], false);
+
+    // 构件行不扩：隔离一个 ELBO 就只留它自己
+    await tree.isolateXray('elem:24381_35580:24381_1241');
+    expect(viewer.scene.setObjectsXRayed).toHaveBeenLastCalledWith(['24381_1241'], false);
+  });
+
+  it('sceneCompanions 可注桩：注入的函数收到节点下的构件与 BRAN 单元 refno，回什么就多动什么', async () => {
+    const viewer = makeViewer(['24381_1240']);
+    const { source } = makeSource();
+    const sceneCompanions = vi.fn((_refnos: string[], units: string[]) => units.map((unit) => `${unit}:tubi`));
+    const tree = useRoomTree({ value: viewer }, { source: () => source, sceneCompanions });
+    await tree.loadRoots();
+    tree.toggleExpand('room:24381_35580');
+    await flush();
+    expect(await tree.collectSceneRefnos('utype:24381_35580:3:BRAN')).toEqual(['24381_1240', '24381_1241', '24381_1200:tubi']);
+    expect(sceneCompanions).toHaveBeenLastCalledWith(['24381_1240', '24381_1241'], ['24381_1200']);
+    expect(await tree.collectSceneRefnos('elem:24381_35580:24381_1240'), '构件行不问').toEqual(['24381_1240']);
   });
 
   it('revealRefno（外部选中联动）：refno 在已取过树的房里 → 展开到它、单选它、回 flatRows 下标；a/b 形式也认；单元 refno 落在单元行；没取过树的房 / 不在树里 → null 且不动展开', async () => {

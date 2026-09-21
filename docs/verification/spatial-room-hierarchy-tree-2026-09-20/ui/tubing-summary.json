@@ -1,0 +1,295 @@
+{
+  "startedAt": "2026-09-21T12:14:46.652Z",
+  "steps": [
+    {
+      "name": "00-room-tab-load",
+      "at": "2026-09-21T12:14:49.785Z",
+      "account": {
+        "24381_105030": {
+          "objects": 22,
+          "loaded": true,
+          "visible": true,
+          "xrayed": false
+        },
+        "24381_105031": {
+          "objects": 1,
+          "loaded": true,
+          "visible": true,
+          "xrayed": false
+        },
+        "24381_105032": {
+          "objects": 1,
+          "loaded": true,
+          "visible": true,
+          "xrayed": false
+        },
+        "24381_105033": {
+          "objects": 1,
+          "loaded": true,
+          "visible": true,
+          "xrayed": false
+        }
+      }
+    },
+    {
+      "name": "01-drawer-unit-load",
+      "at": "2026-09-21T12:14:52.527Z",
+      "unit": "24381_148125",
+      "unitName": "/Copy-of-1RCS0307-1R90004",
+      "leafCount": 11,
+      "before": {
+        "24381_148125": {
+          "objects": 0,
+          "loaded": false,
+          "visible": null,
+          "xrayed": null
+        },
+        "24381_148127": {
+          "objects": 0,
+          "loaded": false,
+          "visible": null,
+          "xrayed": null
+        },
+        "24381_148126": {
+          "objects": 0,
+          "loaded": false,
+          "visible": null,
+          "xrayed": null
+        }
+      },
+      "afterLoad": {
+        "24381_148125": {
+          "objects": 13,
+          "loaded": true,
+          "visible": true,
+          "xrayed": false
+        },
+        "24381_148127": {
+          "objects": 1,
+          "loaded": true,
+          "visible": true,
+          "xrayed": false
+        },
+        "24381_148126": {
+          "objects": 1,
+          "loaded": true,
+          "visible": true,
+          "xrayed": false
+        },
+        "24381_148128": {
+          "objects": 1,
+          "loaded": true,
+          "visible": true,
+          "xrayed": false
+        }
+      },
+      "loadedRefnosInScene": 58
+    },
+    {
+      "name": "02-drawer-unit-isolate",
+      "at": "2026-09-21T12:14:54.578Z",
+      "account": {
+        "24381_148125": {
+          "objects": 13,
+          "loaded": true,
+          "visible": true,
+          "xrayed": false
+        },
+        "24381_148127": {
+          "objects": 1,
+          "loaded": true,
+          "visible": true,
+          "xrayed": false
+        },
+        "24381_105030": {
+          "objects": 22,
+          "loaded": true,
+          "visible": true,
+          "xrayed": true
+        },
+        "24381_105031": {
+          "objects": 1,
+          "loaded": true,
+          "visible": true,
+          "xrayed": true
+        }
+      }
+    },
+    {
+      "name": "03-drawer-show-only-then-hide-all",
+      "at": "2026-09-21T12:14:57.560Z",
+      "showOnlyAccount": {
+        "24381_148125": {
+          "objects": 13,
+          "loaded": true,
+          "visible": true,
+          "xrayed": false
+        },
+        "24381_148127": {
+          "objects": 1,
+          "loaded": true,
+          "visible": true,
+          "xrayed": false
+        }
+      },
+      "hideAllAccount": {
+        "24381_148125": {
+          "objects": 13,
+          "loaded": true,
+          "visible": false,
+          "xrayed": false
+        },
+        "24381_148127": {
+          "objects": 1,
+          "loaded": true,
+          "visible": false,
+          "xrayed": false
+        },
+        "24381_105030": {
+          "objects": 22,
+          "loaded": true,
+          "visible": true,
+          "xrayed": false
+        }
+      }
+    },
+    {
+      "name": "03b-drawer-show-all",
+      "at": "2026-09-21T12:14:59.363Z",
+      "account": {
+        "24381_148125": {
+          "objects": 13,
+          "loaded": true,
+          "visible": true,
+          "xrayed": false
+        },
+        "24381_148127": {
+          "objects": 1,
+          "loaded": true,
+          "visible": true,
+          "xrayed": false
+        }
+      }
+    },
+    {
+      "name": "04-room-tab-unit-isolate",
+      "at": "2026-09-21T12:15:00.400Z",
+      "account": {
+        "24381_105030": {
+          "objects": 22,
+          "loaded": true,
+          "visible": true,
+          "xrayed": false
+        },
+        "24381_105031": {
+          "objects": 1,
+          "loaded": true,
+          "visible": true,
+          "xrayed": false
+        },
+        "24381_105032": {
+          "objects": 1,
+          "loaded": true,
+          "visible": true,
+          "xrayed": false
+        },
+        "24381_105033": {
+          "objects": 1,
+          "loaded": true,
+          "visible": true,
+          "xrayed": false
+        },
+        "24381_148125": {
+          "objects": 13,
+          "loaded": true,
+          "visible": true,
+          "xrayed": true
+        }
+      }
+    },
+    {
+      "name": "05-room-tab-unit-eye",
+      "at": "2026-09-21T12:15:04.409Z",
+      "roomHidden": {
+        "24381_105030": {
+          "objects": 22,
+          "loaded": true,
+          "visible": false,
+          "xrayed": false
+        },
+        "24381_105031": {
+          "objects": 1,
+          "loaded": true,
+          "visible": false,
+          "xrayed": false
+        },
+        "24381_105032": {
+          "objects": 1,
+          "loaded": true,
+          "visible": false,
+          "xrayed": false
+        },
+        "24381_105033": {
+          "objects": 1,
+          "loaded": true,
+          "visible": false,
+          "xrayed": false
+        },
+        "24381_148125": {
+          "objects": 13,
+          "loaded": true,
+          "visible": true,
+          "xrayed": false
+        }
+      },
+      "roomShown": {
+        "24381_105030": {
+          "objects": 22,
+          "loaded": true,
+          "visible": true,
+          "xrayed": false
+        },
+        "24381_105031": {
+          "objects": 1,
+          "loaded": true,
+          "visible": true,
+          "xrayed": false
+        },
+        "24381_105032": {
+          "objects": 1,
+          "loaded": true,
+          "visible": true,
+          "xrayed": false
+        },
+        "24381_105033": {
+          "objects": 1,
+          "loaded": true,
+          "visible": true,
+          "xrayed": false
+        }
+      },
+      "elementHidden": {
+        "24381_105030": {
+          "objects": 22,
+          "loaded": true,
+          "visible": true,
+          "xrayed": false
+        },
+        "24381_105031": {
+          "objects": 1,
+          "loaded": true,
+          "visible": false,
+          "xrayed": false
+        },
+        "24381_105032": {
+          "objects": 1,
+          "loaded": true,
+          "visible": true,
+          "xrayed": false
+        }
+      }
+    }
+  ],
+  "pageErrors": [],
+  "finishedAt": "2026-09-21T12:15:04.409Z"
+}

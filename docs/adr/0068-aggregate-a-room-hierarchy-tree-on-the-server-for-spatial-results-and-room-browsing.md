@@ -33,3 +33,9 @@ depends_on: ADR-0067
   新组件 `SpatialResultTree.vue`；树态下房间列表 / 分页 / 分组开关不再出现。结果区顺势剪辑（图标排 / 单行卡片 / 缩句）另一个 PR。
 - ROOM 标签页经新端口 `RoomTreeSource`：legacy 适配器包现有 `room-tree` API，v1 适配器用 `/spatial/rooms` 平铺在册房间、展开一间房走 `rooms/{refno}/tree`。
 - 词条：`房间层级树` / `其他构件` 入 `CONTEXT.md`「空间查询」。计划 `docs/plans/2026-09-20-spatial-room-hierarchy-tree-plan.md`。
+
+**追记（2026-09-21，管件带直段）**：树的叶子只有管件——gen-model 把 BRAN 的隐式直管（TUBI）挂在 BRAN 自己的 refno 上、空间索引里不收 TUBI。
+只按叶子 refno 做加载 / 显隐 / 隔离，管件会悬空。用户拍板**前端按整条 BRAN 走**（方案 A；把 TUBI 入索引当伪构件的方案 B 未取）：
+抽屉批量加载命中管件后按记录缓存里的属主再装它所属 BRAN 的整体（BRAN 自己 + 缓存里这一根的全部构件），单元级及以上的仅显示 / 隔离 / 显隐
+与「全部显示 / 隐藏 / 隔离结果」都带上这份整体；构件行的眼睛 / 定位不扩。代价是范围 / 房间之外的那段 BRAN 也会画出来，与模型树「加载模型」
+按生成根整条装的既有行为对齐。实现 `composables/deliveryUnitScene.ts`，只读记录缓存、不多打接口。

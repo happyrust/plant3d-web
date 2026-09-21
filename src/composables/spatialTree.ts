@@ -83,6 +83,53 @@ export function treeNodeRefnos(target: SpatialTreeActionNode): string[] {
   return out;
 }
 
+/**
+ * 一次节点动作「整个盖住」的 BRAN 单元 refno（去重，按树序）：动作的 refno 集包含了该单元已内联的全部叶子才算。
+ * 单元级及以上的动作（单元 / 单元类型 / 专业 / 房间）天然满足；叶子行的眼睛不经这里。叶子未内联的单元不算（还不知道有哪些）。
+ * 直管挂在 BRAN 自己的 refno 上（`deliveryUnitScene.ts`），调用方拿这份去把整条 BRAN 一起显隐 / 隔离；HANG / EQUI 没有直管，不给。
+ */
+export function branUnitRefnosCoveredBy(tree: SpatialTreeResult, refnos: Iterable<string>): string[] {
+  const set = new Set<string>();
+  for (const refno of refnos) set.add(refno);
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const room of tree.rooms) {
+    for (const spec of room.specs) {
+      for (const group of spec.unit_types) {
+        if (group.noun !== 'BRAN') continue;
+        for (const unit of group.units) {
+          if (seen.has(unit.refno)) continue;
+          const leaves = unit.elements;
+          if (!Array.isArray(leaves) || leaves.length === 0) continue;
+          if (!leaves.every((leaf) => set.has(leaf.refno))) continue;
+          seen.add(unit.refno);
+          out.push(unit.refno);
+        }
+      }
+    }
+  }
+  return out;
+}
+
+/** 全树里的 BRAN 单元 refno（去重，按树序）——「全部显示 / 隐藏 / 隔离结果」把它们的直段一起带上。 */
+export function branUnitRefnosOfTree(tree: SpatialTreeResult): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const room of tree.rooms) {
+    for (const spec of room.specs) {
+      for (const group of spec.unit_types) {
+        if (group.noun !== 'BRAN') continue;
+        for (const unit of group.units) {
+          if (seen.has(unit.refno)) continue;
+          seen.add(unit.refno);
+          out.push(unit.refno);
+        }
+      }
+    }
+  }
+  return out;
+}
+
 /** 一个节点的叶子是不是都在（未内联的单元 / noun 组 `elements` 键不存在）。 */
 export function treeNodeLeavesInline(target: SpatialTreeActionNode): boolean {
   switch (target.kind) {

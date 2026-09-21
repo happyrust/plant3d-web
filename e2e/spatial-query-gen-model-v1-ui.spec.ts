@@ -32,6 +32,7 @@ import {
   expandResults,
   expectPointClose,
   expectedRowOrder,
+  fetchGenerationRootRefnos,
   fetchServerCenter,
   fillCenter,
   nextNearby,
@@ -323,13 +324,20 @@ test('结果动作（一排图标）：全部显示 → 结果全可见；隔离
     return refnos.every((refno) => states[refno]!.present && states[refno]!.visible);
   }, { timeout: 30_000 }).toBe(true);
 
-  // 隔离结果：结果之外的对象全部 X-Ray，结果自己不 X-Ray
+  // 隔离结果：结果自己不 X-Ray；命中管件所属 BRAN 的整体——BRAN 自己的 refno（隐式直管 TUBI 全挂在它名下；服务端索引不收它，
+  // 但它已加载、盒在半径内时会以 viewer-local 进结果）+ 它范围外的其余管件——跟着留实体（管件带直段，2026-09-21，ADR 0068 追记）；此外的对象全部 X-Ray
+  const branMembers = await fetchGenerationRootRefnos(FIXTURE.bran);
+  expect(refnos.some((refno) => refno !== FIXTURE.bran && branMembers.has(refno)), '2 m 内应命中夹具 BRAN 自己的管件').toBe(true);
   await page.getByRole('button', { name: '隔离结果', exact: true }).click();
   await expect.poll(async () => {
     const overview = await sceneOverview(page);
-    const others = overview.objectIds.filter((id) => !resultSet.has(id));
     const xrayed = new Set(overview.xrayedIds);
-    return others.length > 0 && others.every((id) => xrayed.has(id)) && refnos.every((refno) => !xrayed.has(refno));
+    const companions = overview.objectIds.filter((id) => !resultSet.has(id) && branMembers.has(id));
+    const others = overview.objectIds.filter((id) => !resultSet.has(id) && !branMembers.has(id));
+    return refnos.every((refno) => !xrayed.has(refno))
+      && overview.objectIds.includes(FIXTURE.bran) && !xrayed.has(FIXTURE.bran)
+      && companions.every((id) => !xrayed.has(id))
+      && others.length > 0 && others.every((id) => xrayed.has(id));
   }, { timeout: 15_000 }).toBe(true);
 
   // 恢复场景：X-Ray 清零
