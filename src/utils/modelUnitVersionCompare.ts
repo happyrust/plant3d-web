@@ -305,8 +305,6 @@ export function sideFromCompareObjectId(objectId: string): ModelUnitCompareSide 
   return null;
 }
 
-export type ModelUnitVersionCompareEnvironment = {
-  loadedRefnos: number
 /**
  * 那一侧是 `tombstone`（该版本下整个单元不存在）时角标 / A-B 卡上的注脚。B 侧只可能是「已删除」；A 侧多半是「还没建」
  * （容器分组入口里 A 早于单元创建），也可能删过又建回——说中性的。
@@ -331,6 +329,8 @@ export function modelUnitGroupSideImpactKinds(group: {
   };
 }
 
+export type ModelUnitVersionCompareEnvironment = {
+  loadedRefnos: number
   refreshing: boolean
   error?: string
 }

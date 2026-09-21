@@ -2483,16 +2483,16 @@ function attachPicking() {
       return;
     }
 
+    const down = clickState.down;
     const moved = clickState.moved;
     clickState.down = null;
-    const down = clickState.down;
     clickState.moved = false;
     clickState.pointerId = null;
     if (moved) return;
-
-    const rect = canvas.getBoundingClientRect();
     // 分屏只认从本画布按下的左键单击
     if (splitReady && (!down || e.button !== 0)) return;
+
+    const rect = canvas.getBoundingClientRect();
     const pos = new Vector2(e.clientX - rect.left, e.clientY - rect.top);
     const viewerForPick = dtxViewerRef.value;
     // 版本对比分屏：整幅相机在分屏里对不上画面——指针落在左 A / 右 B 哪一格，就按那一格造射线、主图层的 GPU 拾取也把那一格当子视口
@@ -4773,13 +4773,13 @@ onUnmounted(() => {
         <div class="absolute inset-y-0 left-1/2 border-l border-white/80 shadow-[0_0_0_1px_rgba(15,23,42,0.35)]" />
         <div class="absolute left-3 top-3 rounded bg-blue-600/90 px-2 py-1 text-xs font-semibold text-white shadow">
           A · sesno {{ modelUnitCompareState.detail.before.sesno }}
+          <span v-if="modelUnitCompareState.detail.before.version.impactKind === 'tombstone'" class="ml-1 font-normal opacity-80">· {{ modelUnitVersionAbsentNote('before') }}</span>
         </div>
         <div class="absolute left-[calc(50%+0.75rem)] top-3 rounded bg-emerald-600/90 px-2 py-1 text-xs font-semibold text-white shadow">
-          <span v-if="modelUnitCompareState.detail.before.version.impactKind === 'tombstone'" class="ml-1 font-normal opacity-80">· {{ modelUnitVersionAbsentNote('before') }}</span>
           B · sesno {{ modelUnitCompareState.detail.after.sesno }}
+          <span v-if="modelUnitCompareState.detail.after.version.impactKind === 'tombstone'" class="ml-1 font-normal opacity-80">· {{ modelUnitVersionAbsentNote('after') }}</span>
         </div>
       </template>
-          <span v-if="modelUnitCompareState.detail.after.version.impactKind === 'tombstone'" class="ml-1 font-normal opacity-80">· {{ modelUnitVersionAbsentNote('after') }}</span>
       <div v-else
         class="absolute left-3 top-3 rounded px-2 py-1 text-xs font-semibold text-white shadow"
         :class="modelUnitCompareState.activeSide === 'before' ? 'bg-blue-600/90' : 'bg-emerald-600/90'"
