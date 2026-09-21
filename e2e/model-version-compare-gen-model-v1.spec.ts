@@ -171,12 +171,40 @@ test('缺省最近两版：compare_autorun 开面板、版本表来自服务端�
   }
   if (a.impact_kind !== 'tombstone') expect(state.beforeObjects).toBeGreaterThan(0);
 
+  // 视口角标：单视口缺省显 B，角标跟 activeSide；图例四格与面板摘要同一份 rows（ADR 0066 三维联动）
+  await expect(page.getByTestId('viewer-model-unit-side-badge')).toContainText(`B · sesno ${b.sesno}`);
+  const legend = page.getByTestId('viewer-model-unit-compare-legend');
+  await expect(legend).toContainText(`修改 ${counts.modified}`);
+  await expect(legend).toContainText(`新增 ${counts.added}`);
+  await expect(legend).toContainText(`删除 ${counts.deleted}`);
+  await expect(legend).toContainText(`未变 ${counts.unchanged}`);
+  // 「三维只看差异」（开关在面板「三维查看」节，视口图例只读回显）：有差异才能开；开 / 关都要在运行态与图例上看得见
+  const hasDifference = counts.added + counts.deleted + counts.modified > 0;
+  const panelDiffOnly = page.getByTestId('model-unit-compare-diff-only');
+  if (hasDifference) {
+    await expect(panelDiffOnly).toBeEnabled();
+    await panelDiffOnly.click();
+    await page.waitForFunction(() => (window as unknown as { __modelUnitVersionCompare?: { diffOnly?: boolean } }).__modelUnitVersionCompare?.diffOnly === true);
+    await expect(legend).toHaveAttribute('data-diff-only', 'true');
+    await expect(page.getByTestId('viewer-model-unit-compare-diff-only-tag')).toBeVisible();
+    await panelDiffOnly.click();
+    await page.waitForFunction(() => (window as unknown as { __modelUnitVersionCompare?: { diffOnly?: boolean } }).__modelUnitVersionCompare?.diffOnly === false);
+    await expect(legend).toHaveAttribute('data-diff-only', 'false');
+    await expect(page.getByTestId('viewer-model-unit-compare-diff-only-tag')).toHaveCount(0);
+  } else {
+    await expect(panelDiffOnly).toBeDisabled();
+  }
+
   // 单视口切到 A，再进双视口分屏
   await page.getByTestId('model-unit-compare-show-before').click();
   await page.waitForFunction(() => (window as unknown as { __modelUnitVersionCompare?: { activeSide?: string } }).__modelUnitVersionCompare?.activeSide === 'before');
+  await expect(page.getByTestId('viewer-model-unit-side-badge')).toContainText(`A · sesno ${a.sesno}`);
   await page.getByTestId('model-unit-compare-split-mode').click();
   await expect(page.getByTestId('model-unit-compare-split-summary')).toContainText(`左 A · sesno ${a.sesno}`);
   await expect(page.getByTestId('model-unit-compare-split-summary')).toContainText(`右 B · sesno ${b.sesno}`);
+  await expect(page.getByTestId('viewer-model-unit-split-overlay')).toContainText(`A · sesno ${a.sesno}`);
+  await expect(page.getByTestId('viewer-model-unit-split-overlay')).toContainText(`B · sesno ${b.sesno}`);
+  await expect(page.getByTestId('viewer-model-unit-side-badge')).toHaveCount(0);
 
   // 模型树差异模式：桥接事件把非 unchanged 行送进树；tombstone 时单元根自己也进树
   await expect(page.getByTestId('model-tree-diff-bar')).toBeVisible();

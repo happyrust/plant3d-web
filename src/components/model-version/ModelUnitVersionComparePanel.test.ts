@@ -135,6 +135,15 @@ describe('ModelUnitVersionComparePanel', () => {
     expect(versionSourceMocks.loadVersion).toHaveBeenCalledTimes(2);
     expect(versionSourceMocks.loadVersion.mock.calls.map(([item]) => (item as ModelVersion).sesno)).toEqual([791, 897]);
 
+    // open 事件带取数口：ViewerPanel 在三维点到 A / B 构件时用它把属性面板钉到那一版——按侧交回对应那份版本几何
+    const attributesAt = events.at(-1)?.detail.attributesAt as ((side: string, refno: string) => Promise<unknown>) | undefined;
+    expect(typeof attributesAt).toBe('function');
+    versionSourceMocks.attributesAt.mockResolvedValue({ sesno: 897, exists: true, noun: 'ELBO', attributes: [] });
+    await attributesAt!('after', '1_3');
+    const [geometryArg, refnoArg] = versionSourceMocks.attributesAt.mock.calls.at(-1)!;
+    expect(refnoArg).toBe('1_3');
+    expect((geometryArg as { refnos: string[] }).refnos).toEqual(['1_1', '1_3']);
+
     window.removeEventListener('plant3d:model-unit-version-compare', listener);
     app.unmount();
   });
@@ -253,6 +262,60 @@ describe('ModelUnitVersionComparePanel', () => {
     expect(treeDiffEvents[1]?.detail).toEqual({ refnos: [], models: [] });
 
     window.removeEventListener('plant3d:model-version-tree-diff', listener);
+    app.unmount();
+  });
+
+  it('「三维只看差异」：跟着视口运行态显示，勾选派发 set-diff-only；两版没几何差异时置灰', async () => {
+    const events: CustomEvent[] = [];
+    const listener = (event: Event) => events.push(event as CustomEvent);
+    window.addEventListener('plant3d:model-unit-version-compare', listener);
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const app = createApp(ModelUnitVersionComparePanel);
+    app.mount(host);
+    // 「三维查看」那一节只在「模型对比」tab 里：先查版本表、切 tab
+    const input = host.querySelector('[data-testid="model-unit-compare-refno"]') as HTMLInputElement;
+    input.value = '24381_145018';
+    input.dispatchEvent(new Event('input'));
+    (host.querySelector('[data-testid="model-unit-compare-load"]') as HTMLButtonElement).click();
+    await flushUi();
+    (host.querySelector('[data-testid="model-unit-compare-tab-model"]') as HTMLButtonElement).click();
+    await flushUi();
+
+    const side = (sesno: number) => ({ version: version(sesno, '2026-07-22T01:00:00Z'), sesno, refnos: ['1_1'], entries: new Map() });
+    const runtime = (rows: { refno: string; noun: string; status: 'modified' | 'unchanged' }[], diffOnly: boolean) => ({
+      detail: { action: 'open', dbnum: 7997, unitRefno: '24381_145018', before: side(791), after: side(897), refnos: ['1_1'], rows },
+      status: 'ready',
+      activeSide: 'after',
+      viewMode: 'single',
+      diffOnly,
+    });
+    const publish = async (state: unknown) => {
+      window.dispatchEvent(new CustomEvent('plant3d:model-unit-version-compare-state', { detail: state }));
+      await flushUi();
+    };
+
+    await publish(runtime([{ refno: '1_1', noun: 'FTUB', status: 'modified' }], false));
+    const checkbox = host.querySelector('[data-testid="model-unit-compare-diff-only"]') as HTMLInputElement;
+    expect(checkbox).not.toBeNull();
+    expect(checkbox.disabled).toBe(false);
+    expect(checkbox.checked).toBe(false);
+
+    checkbox.checked = true;
+    checkbox.dispatchEvent(new Event('change'));
+    await flushUi();
+    expect(events.at(-1)?.detail).toEqual({ action: 'set-diff-only', diffOnly: true });
+
+    // 开关的真值在视口那边：回传 diffOnly=true 才算勾上
+    await publish(runtime([{ refno: '1_1', noun: 'FTUB', status: 'modified' }], true));
+    expect((host.querySelector('[data-testid="model-unit-compare-diff-only"]') as HTMLInputElement).checked).toBe(true);
+
+    // 全 unchanged：没有可单看的构件，置灰
+    await publish(runtime([{ refno: '1_1', noun: 'FTUB', status: 'unchanged' }], false));
+    expect((host.querySelector('[data-testid="model-unit-compare-diff-only"]') as HTMLInputElement).disabled).toBe(true);
+
+    window.removeEventListener('plant3d:model-unit-version-compare', listener);
     app.unmount();
   });
 

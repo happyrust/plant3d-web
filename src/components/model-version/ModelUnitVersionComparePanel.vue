@@ -629,6 +629,9 @@ async function runCompareVersions(before: ModelVersion, after: ModelVersion, uni
       },
       refnos: rows.value.map((row) => row.refno),
       rows: rows.value,
+      // 三维里点到 A / B 隔离图层的构件时，属性面板钉到那一版：与树差异模式底部那块同一个取数口（句柄闭包在几何里）
+      attributesAt: (side, refno, signal) =>
+        getModelSource().versions.attributesAt(side === 'before' ? beforeData.geometry : afterData.geometry, refno, { signal }),
     });
     focusQueriedElement();
   } catch (cause) {
@@ -663,6 +666,16 @@ function setCompareSide(side: ModelUnitCompareSide): void {
 function setCompareViewMode(viewMode: ModelUnitCompareViewMode): void {
   dispatch({ action: 'set-view-mode', viewMode });
 }
+
+/** 「三维只看差异」：与列表的「包含未变化」同一口径、各自开关（列表缺省只列差异，三维缺省整单元都在、留着环境看位置） */
+function setCompareDiffOnly(diffOnly: boolean): void {
+  dispatch({ action: 'set-diff-only', diffOnly });
+}
+
+/** 视口那边正在对比的那份 `rows` 里有没有非 unchanged 的行（没有就把「三维只看差异」置灰） */
+const compareRuntimeHasGeometryDifference = computed(() => (
+  (compareRuntime.value?.detail.rows ?? []).some((row) => row.status !== 'unchanged')
+));
 
 function refreshCompareEnvironment(): void {
   dispatch({ action: 'refresh-environment' });
@@ -1156,6 +1169,18 @@ onBeforeUnmount(() => {
                 <span class="px-1">·</span>
                 右 B · sesno {{ compareRuntime.detail.after.sesno }}
               </div>
+              <label class="mt-2 flex items-center gap-1.5 text-[11px] text-muted-foreground"
+                :class="compareRuntimeHasGeometryDifference ? '' : 'opacity-60'"
+                :title="compareRuntimeHasGeometryDifference
+                  ? '三维里藏掉两版都没变的构件，只剩新增 / 删除 / 修改；着色与下方徽章同一套'
+                  : '本次对比没有几何差异，三维里没有可单看的构件'">
+                <input type="checkbox"
+                  :checked="compareRuntime.diffOnly === true"
+                  :disabled="!compareRuntimeHasGeometryDifference"
+                  data-testid="model-unit-compare-diff-only"
+                  @change="setCompareDiffOnly(($event.target as HTMLInputElement).checked)" />
+                三维只看差异
+              </label>
             </template>
 
             <div v-if="compareRuntime.environment"

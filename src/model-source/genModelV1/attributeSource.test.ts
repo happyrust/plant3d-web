@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { createGenModelV1AttributeSource, elementAttributesToUiAttr, typeInfoFromTree, uiAttrKey } from './attributeSource';
+import { createGenModelV1AttributeSource, elementAttributesToUiAttr, modelVersionAttributesToUiAttr, typeInfoFromTree, uiAttrKey } from './attributeSource';
 
 import type { TreeSource } from '../ports';
 import type { NodeResponse } from '@/api/genModelE3dTypes';
@@ -117,5 +117,32 @@ describe('createGenModelV1AttributeSource', () => {
 
     const ok = createGenModelV1AttributeSource({ tree, api: { elementAttributes: vi.fn(async () => RESPONSE) as never } });
     expect((await ok.uiAttr('24381/145018')).attrs.TYPE).toBe('BRAN');
+  });
+});
+
+describe('modelVersionAttributesToUiAttr（版本对比里点 A / B 构件，属性面板钉到那一版）', () => {
+  it('行与 element/attributes 同型：走同一条折算——unset 不进、UDA 加冒号、real 转数值、NAME 当 full_name；source 标 history@sesno', () => {
+    const ui = modelVersionAttributesToUiAttr('24384_23262', {
+      sesno: 626,
+      exists: true,
+      noun: 'FTUB',
+      attributes: [
+        { name: 'NAME', valueType: 'text', display: '/C-OR-1R345-C/FTUB4', isUnset: false, isUda: false },
+        { name: 'HEIG', valueType: 'real', display: '480', isUnset: false, isUda: false },
+        { name: 'DESC', valueType: 'text', display: '', isUnset: true, isUda: false },
+        { name: 'MYUDA', valueType: 'text', display: 'JS', isUnset: false, isUda: true },
+      ],
+    });
+    expect(ui.success).toBe(true);
+    expect(ui.attrs).toEqual({ NAME: '/C-OR-1R345-C/FTUB4', HEIG: 480, ':MYUDA': 'JS' });
+    expect(ui.full_name).toBe('/C-OR-1R345-C/FTUB4');
+    expect(ui.diagnostics?.source).toBe('history@626');
+  });
+
+  it('那一版里不存在：success:false 带说明，不是错误抛出', () => {
+    const ui = modelVersionAttributesToUiAttr('24384_26495', { sesno: 618, exists: false, noun: null, attributes: [] });
+    expect(ui.success).toBe(false);
+    expect(ui.attrs).toEqual({});
+    expect(ui.error_message).toContain('618');
   });
 });

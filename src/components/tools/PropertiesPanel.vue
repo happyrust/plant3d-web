@@ -271,6 +271,15 @@ function isGroupCollapsed(groupId: string): boolean {
       </div>
     </div>
 
+    <!-- 版本钉住（版本对比里在三维点了 A / B 隔离图层的构件）：下面列的是那一版的属性，不是当前会话的 -->
+    <div v-if="sel.selectedVersionPin.value"
+      class="flex-shrink-0 border-b border-amber-200 bg-amber-50/80 px-3 py-1.5 text-[11px] text-amber-900"
+      :data-sesno="sel.selectedVersionPin.value.sesno"
+      data-testid="properties-version-pin-notice">
+      属性来自版本 <span class="font-semibold">{{ sel.selectedVersionPin.value.label }} · sesno {{ sel.selectedVersionPin.value.sesno }}</span>
+      （版本对比里点到的那一版，不是当前会话）
+    </div>
+
     <!-- 搜索框 -->
     <div v-if="sel.propertiesData.value" class="flex-shrink-0 border-b border-border px-2 py-1.5">
       <div class="relative">

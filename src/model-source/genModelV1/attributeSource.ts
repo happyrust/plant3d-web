@@ -11,7 +11,7 @@
  *
  * 一切 `GenModelV1ApiError` 折成 `{ success:false, error_message }`，与旧后端契约同形。
  */
-import type { AttributeSource, TreeSource } from '../ports';
+import type { AttributeSource, ModelVersionAttributes, TreeSource } from '../ports';
 import type { PdmsTypeInfoResponse, PdmsUiAttrResponse } from '@/api/genModelPdmsAttrApi';
 
 import { genModelV1ElementAttributes, isGenModelV1ApiError, type ElementAttribute, type ElementAttributesResponse } from '@/api/genModelV1Api';
@@ -91,6 +91,29 @@ export function elementAttributesToUiAttr(refno: string, resp: ElementAttributes
       shape_conflicts: shapeConflicts,
     },
   };
+}
+
+/**
+ * 某个模型版本下的属性（`history/query tool=attributes`，`ModelVersionSource.attributesAt`）→ 属性面板契约。
+ * 行与 `element/attributes` 同型，所以走同一条 `elementAttributesToUiAttr`（unset 不进、UDA 加 `:`、bool / 数值转型），
+ * 面板印出来的字与当前会话那条路一模一样；该 refno 在那一版不存在 → `success:false` 带一句说明（正常态，不是 404）。
+ */
+export function modelVersionAttributesToUiAttr(refno: string, attributes: ModelVersionAttributes): PdmsUiAttrResponse {
+  if (!attributes.exists) {
+    return { success: false, refno, attrs: {}, error_message: `该构件在 sesno ${attributes.sesno} 那一版不存在` };
+  }
+  return elementAttributesToUiAttr(refno, {
+    source: `history@${attributes.sesno}`,
+    complete: true,
+    attributes: attributes.attributes.map((row) => ({
+      name: row.name,
+      value_type: row.valueType,
+      display: row.display,
+      is_unset: row.isUnset,
+      editable: false,
+      is_uda: row.isUda,
+    })),
+  });
 }
 
 /** `pdmsGetTypeInfo` 的 v1 版：noun 与属主都在树节点上，两跳 `node()` 就够。 */
