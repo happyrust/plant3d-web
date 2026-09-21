@@ -1589,6 +1589,13 @@ onBeforeUnmount(() => {
                 左 A · sesno {{ compareRuntime.detail.before.sesno }}
                 <span class="px-1">·</span>
                 右 B · sesno {{ compareRuntime.detail.after.sesno }}
+                <!-- P3-c：软渲染（远程桌面 / 虚拟机 / 无显卡驱动）下分屏不走描边合成器，照实说 -->
+                <div v-if="compareRuntime.splitOutline && !compareRuntime.splitOutline.compositor"
+                  class="mt-1 text-[10px] text-amber-700"
+                  :title="compareRuntime.splitOutline.renderer ?? ''"
+                  data-testid="model-unit-compare-split-direct-render">
+                  这台机子是软渲染（{{ compareRuntime.splitOutline.renderer ?? '显卡串未知' }}）：分屏走直接渲染、不走描边合成器——选中的环境构件按选中色显示、没有描边，帧率优先。
+                </div>
               </div>
               <label class="mt-2 flex items-center gap-1.5 text-[11px] text-muted-foreground"
                 :class="compareRuntimeHasGeometryDifference ? '' : 'opacity-60'"

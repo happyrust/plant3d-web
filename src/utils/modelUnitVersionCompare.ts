@@ -425,6 +425,16 @@ export type ModelUnitVersionCompareEnvironment = {
   error?: string
 }
 
+/**
+ * 分屏每格走不走描边合成器（收口计划 P3-c，D6「留，但软渲染自动退回」）：真显卡走合成器（选中的环境构件两格都描边、色彩空间与单视口一致）；
+ * 认出 SwiftShader / llvmpipe 一类软渲染就退回直接 `renderer.render`（合成器每格 +0.8–1.1 ms 固定开销，软渲染下分屏只剩 11 fps，README §8.3）。
+ */
+export type ModelUnitCompareSplitOutline = {
+  compositor: boolean
+  /** `WEBGL_debug_renderer_info` 读到的显卡 / 驱动串；读不到为 null（那就按真显卡处理） */
+  renderer: string | null
+}
+
 export type ModelUnitVersionCompareRuntimeState = {
   detail: ModelUnitVersionCompareOpenDetail
   status: 'loading' | 'ready' | 'error'
@@ -433,6 +443,8 @@ export type ModelUnitVersionCompareRuntimeState = {
   /** 「三维只看差异」：隔离图层里藏掉 `unchanged` 的对象；缺省 false（两版整体都在） */
   diffOnly?: boolean
   environment?: ModelUnitVersionCompareEnvironment
+  /** 就位后才有：分屏走合成器还是直接 render，面板在分屏摘要下照实说 */
+  splitOutline?: ModelUnitCompareSplitOutline
   error?: string
 }
 

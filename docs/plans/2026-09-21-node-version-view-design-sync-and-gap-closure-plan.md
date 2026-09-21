@@ -8,7 +8,7 @@
 > 九帧导出 `docs/plans/2026-09-18-node-version-view-design/`（S0–S3 / F1 / F2 重导后字节数与 09-18 22:18 那批逐一相同 = 定稿帧确实没动）。
 > 前端基线：plant3d-web `main@0bc598e1`（PR #79 已合）+ 工作树未提交改动（§1.3）；后端 gen-model-refactor `0b2bf527b` + 未提交 `src/fast_model/attribute_diff.rs`。
 >
-> 状态：用户 16:3x 拍板 **「D1–D6 全按推荐，直接从 P0 开干」**；**P0 / P1-a / P1-b / P3-a / P3-b / P1-c / P2-a / P2-b 已完成**（§8 执行记录），剩 P3-c（D6）、P2-c（等后端）。
+> 状态：用户 16:3x 拍板 **「D1–D6 全按推荐，直接从 P0 开干」**；**P0 / P1 / P3-a / P3-b / P3-c / P2-a / P2-b 全部完成**（§8 执行记录），只剩 **P2-c**（等后端 `attribute_diff.rs` 提交）与设计稿 S4 注 5 / 注 6 改口（等 .pen 被打开）。
 
 ## 0. 一句话
 
@@ -98,7 +98,7 @@
 
 - **P3-a ✅（17:1x）** 容器的 `compare_a / compare_b` URL 参数不生效：`autorunFromUrl` 在 `!hasUnit` 之前先把这对套到时间线（不跑对比、不装几何）；不在表里照旧回落最近两版并提示。单测 +1；e2e 容器那条加 URL 变体。
 - **P3-b ✅（17:1x）** 换组分屏回单视口：`runCompareGroup` close→open 时把当前 `viewMode` 带进 `open` detail（`viewMode?: 'single' | 'split'`），ViewerPanel 就位后按它切；缺省仍单视口。单测 +1；e2e 管道分组一条。
-- **P3-c** 分屏描边合成器去留（README §8.3：RX 590 每格 +0.8–1.1 ms、软渲染 11 fps）：拍板 **D6**——(a) 留（两条路一致、选中两格描边）；(b) 退回直接 render（选中靠 `setObjectColor` 橙色，分屏暗一档回来）；
+- **P3-c ✅（19:5x，选 (c)）** 分屏描边合成器去留（README §8.3：RX 590 每格 +0.8–1.1 ms、软渲染 11 fps）：拍板 **D6**——(a) 留（两条路一致、选中两格描边）；(b) 退回直接 render（选中靠 `setObjectColor` 橙色，分屏暗一档回来）；
   (c) **留，但无硬件加速时自动退回**（`WEBGL_debug_renderer_info` 认出 SwiftShader / llvmpipe 就走直接 render）。**推荐 (c)**。
 - **P3-d** FTUB 纯 POS 变更被归 `mesh` 而非 `placement`：gen-model-refactor 分类器口径，**不在本计划**，只记。
 
@@ -230,3 +230,15 @@ P0（半天）→ P1-a / P1-b（半天）→ P3-a / P3-b（半天）→ P1-c（D
   （不止一组且 ≤ 20 且服务端没说要确认才点总按钮，断言摘要标题「N 个单元」、`__modelUnitVersionCompare.units.length`、总按钮「三维中」）；真机夹具 SITE 24384/22399 630→632 只有一组，走不到那段，
   要看多单元得挑 PIPE 24384_23225 300→380（5 组）那样的对。
 - 设计稿：S2 那一颗总按钮与 S2b「正在生成历史投影 3 / 4」/ 确认框 ②，实现追上了；S4 注 6 那句「一次一个单元，S2 画的一颗总按钮 + 进度未做」**待改口**（Pencil 活动文件仍是别的会话的）。
+
+### P3-c（2026-09-21 19:5x，D6 选 (c)「留，但软渲染自动退回」）
+
+- `utils/three/webglRendererInfo.ts`：`readWebGLRendererInfo(gl)` 先读 `WEBGL_debug_renderer_info.UNMASKED_RENDERER_WEBGL`、没扩展退回 `gl.RENDERER`、抛错 / 没上下文当不知道；
+  `isSoftwareRendererName` 认 SwiftShader / llvmpipe / softpipe / Microsoft Basic Render Driver / software rasterizer 一类。**读不到不降级**（Chrome 缺省 `RENDERER` 只回「WebKit WebGL」）。
+- ViewerPanel：`resolveModelUnitCompareSplitOutline(viewer)` 按上下文定一次、缓存，`localStorage['plant3d-web.viewer.splitOutline']` = `compositor` / `direct` 可强制；
+  `renderModelUnitCompareScene` 的 `useCompositor = selection.hasOutline() && splitOutline.compositor`；就位后 `state.splitOutline` + `__modelUnitVersionCompare.splitOutline`。
+  单视口那条路不动（合成器照旧）。
+- 面板：分屏摘要下软渲染时一句「这台机子是软渲染（<显卡串>）：分屏走直接渲染、不走描边合成器……」（`model-unit-compare-split-direct-render`）。
+- **验证**：vitest `webglRendererInfo.test.ts` 2 例（名字识别 9 正 3 负；扩展 / 回落 / 空值 / 抛错 / null）、面板 +1 → 版本对比相关 10 文件 **102 过**；type-check 基线外 0 新增；ESLint 只剩 `ViewerPanel.vue:28` 既有的。
+  **真机未跑**（`:8022` 未起）——下次起 dev 时缺省 headless（SwiftShader）与 `--gpu` 各看一眼 `__modelUnitVersionCompare.splitOutline`，README §8.3 已写怎么看。
+- 设计稿：S4 注 5 末句「去留待拍板」**待改口**为「留，软渲染自动退回直接 render」（Pencil 活动文件仍是别的会话的）。

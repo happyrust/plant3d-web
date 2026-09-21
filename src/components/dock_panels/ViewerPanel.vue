@@ -126,6 +126,7 @@ import {
   type ModelUnitCompareHiddenObjectIds,
   type ModelUnitCompareRenderPass,
   type ModelUnitCompareSide,
+  type ModelUnitCompareSplitOutline,
   type ModelUnitCompareViewMode,
   type ModelUnitGeometryStatus,
   type ModelUnitVersionCompareEnvironment,
@@ -139,6 +140,7 @@ import { DTXLayer, DTXSelectionController, DTXViewCullController, type PickViewp
 import { DynamicPivotController } from '@/utils/three/dtx/DynamicPivotController';
 import { loadModelDisplayConfig } from '@/utils/three/dtx/materialConfig';
 import { DTXOverlayHighlighter } from '@/utils/three/dtx/selection/DTXOverlayHighlighter';
+import { readWebGLRendererInfo } from '@/utils/three/webglRendererInfo';
 import {
   buildMeasurementComponentsText,
   buildMeasurementValueText,
@@ -1944,8 +1946,29 @@ function isModelUnitSplitCompareReady(): boolean {
 }
 
 /**
- * 分屏：同一相机改 aspect、scissor 左右两格各画一遍。有描边合成器就每格走 `selection.renderOutline()`（与单视口同一条渲染路——
- * 分屏里选中的环境构件两格都有描边，色彩空间 / 后处理也和单视口一致），没有才直接 `renderer.render`。
+ * 分屏每格走不走描边合成器（收口计划 P3-c，D6「留，但软渲染自动退回」）：按这块 WebGL 上下文的显卡串定一次、缓存——
+ * 认出 SwiftShader / llvmpipe / Microsoft Basic Render Driver 一类软渲染就退回直接 `renderer.render`（README §8.3：软渲染下合成器分屏 11 fps、
+ * 直接 render 60 fps）；读不到显卡串按真显卡处理。`localStorage['plant3d-web.viewer.splitOutline']` = `compositor` / `direct` 可强制（排障用）。
+ */
+let modelUnitCompareSplitOutlineCache: ModelUnitCompareSplitOutline | null = null;
+function resolveModelUnitCompareSplitOutline(viewer: DtxViewer): ModelUnitCompareSplitOutline {
+  if (modelUnitCompareSplitOutlineCache) return modelUnitCompareSplitOutlineCache;
+  const info = readWebGLRendererInfo(viewer.renderer.getContext());
+  let compositor = !info.software;
+  try {
+    const forced = window.localStorage?.getItem('plant3d-web.viewer.splitOutline');
+    if (forced === 'compositor') compositor = true;
+    else if (forced === 'direct') compositor = false;
+  } catch {
+    // localStorage 不可用就按探测结果
+  }
+  modelUnitCompareSplitOutlineCache = { compositor, renderer: info.renderer };
+  return modelUnitCompareSplitOutlineCache;
+}
+
+/**
+ * 分屏：同一相机改 aspect、scissor 左右两格各画一遍。有描边合成器（且不是软渲染）就每格走 `selection.renderOutline()`（与单视口同一条渲染路——
+ * 分屏里选中的环境构件两格都有描边，色彩空间 / 后处理也和单视口一致），没有 / 软渲染才直接 `renderer.render`（选中的环境构件仍按选中色显示，只是没描边）。
  */
 function renderModelUnitCompareScene(viewer: DtxViewer, selection: DTXSelectionController | null): boolean {
   const state = modelUnitCompareState.value;
@@ -1963,6 +1986,7 @@ function renderModelUnitCompareScene(viewer: DtxViewer, selection: DTXSelectionC
   );
   const originalAspect = camera.aspect;
   const hidden = modelUnitCompareHiddenForState();
+  const useCompositor = !!selection?.hasOutline() && resolveModelUnitCompareSplitOutline(viewer).compositor;
   let splitRenderError: unknown = null;
   try {
     renderer.setScissorTest(true);
@@ -1972,7 +1996,7 @@ function renderModelUnitCompareScene(viewer: DtxViewer, selection: DTXSelectionC
       renderer.setScissor(pass.x, pass.y, pass.width, pass.height);
       camera.aspect = pass.width / Math.max(1, pass.height);
       camera.updateProjectionMatrix();
-      if (selection?.hasOutline()) selection.renderOutline();
+      if (useCompositor) selection!.renderOutline();
       else renderer.render(viewer.scene, camera);
       renderDimensionOverlay(viewer);
     }
@@ -2234,6 +2258,7 @@ async function openModelUnitVersionCompare(detail: ModelUnitVersionCompareOpenDe
       }
     }
 
+    const splitOutline = resolveModelUnitCompareSplitOutline(viewer);
     modelUnitCompareState.value = {
       detail,
       status: 'ready',
@@ -2241,11 +2266,13 @@ async function openModelUnitVersionCompare(detail: ModelUnitVersionCompareOpenDe
       viewMode: DEFAULT_MODEL_UNIT_COMPARE_VIEW_MODE,
       diffOnly: false,
       environment,
+      splitOutline,
     };
     if (isDev) {
       (window as any).__modelUnitVersionCompare = {
         unitRefno: detail.unitRefno,
         units: modelUnitCompareUnitRefnos(detail),
+        splitOutline,
         beforeSesno: detail.before.sesno,
         afterSesno: detail.after.sesno,
         beforeObjects,

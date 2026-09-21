@@ -1246,6 +1246,44 @@ describe('ModelUnitVersionComparePanel', () => {
     app.unmount();
   });
 
+  it('分屏描边合成器（P3-c）：视口说这台是软渲染、分屏走直接 render 时，分屏摘要下照实说；真显卡 / 没说不露', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const app = createApp(ModelUnitVersionComparePanel);
+    app.mount(host);
+    const input = host.querySelector('[data-testid="model-unit-compare-refno"]') as HTMLInputElement;
+    input.value = '24381/145018';
+    input.dispatchEvent(new Event('input'));
+    (host.querySelector('[data-testid="model-unit-compare-load"]') as HTMLButtonElement).click();
+    await flushUi();
+    (host.querySelector('[data-testid="model-unit-compare-tab-model"]') as HTMLButtonElement).click();
+    await flushUi();
+    (host.querySelector('[data-testid="model-unit-compare-run"]') as HTMLButtonElement).click();
+    await flushUi();
+    const detail = { unitRefno: '24381_145018', dbnum: 7997, before: { sesno: 791, version: version(791, '2026-07-22T01:00:00Z') }, after: { sesno: 897, version: version(897, '2026-07-22T02:00:00Z') }, rows: [] };
+    const state = (extra: Record<string, unknown>) => window.dispatchEvent(new CustomEvent('plant3d:model-unit-version-compare-state', { detail: { detail, status: 'ready', activeSide: 'after', viewMode: 'split', ...extra } }));
+    const note = () => host.querySelector('[data-testid="model-unit-compare-split-direct-render"]');
+
+    state({ splitOutline: { compositor: false, renderer: 'ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero)), SwiftShader driver)' } });
+    await flushUi();
+    expect(host.querySelector('[data-testid="model-unit-compare-split-summary"]')).not.toBeNull();
+    expect(note()?.textContent).toContain('软渲染');
+    expect(note()?.textContent).toContain('SwiftShader');
+    expect(note()?.textContent).toContain('不走描边合成器');
+
+    state({ splitOutline: { compositor: true, renderer: 'ANGLE (AMD, AMD Radeon RX 590 Series Direct3D11 vs_5_0 ps_5_0, D3D11)' } });
+    await flushUi();
+    expect(note()).toBeNull();
+    // 旧视口（没这一格）/ 单视口：不露
+    state({});
+    await flushUi();
+    expect(note()).toBeNull();
+    state({ splitOutline: { compositor: false, renderer: null }, viewMode: 'single' });
+    await flushUi();
+    expect(note()).toBeNull();
+    app.unmount();
+  });
+
   it('阈值确认（P2-b）：超过一次装载上限 20 个 / 服务端 needsConfirm 时先问——取消不装；「先装变化最大的 20 个」按变更数挑；「全部生成」照单全装', async () => {
     // 3 + 19 = 22 组 > 20
     const { groups } = containerSummaryFixture(19);

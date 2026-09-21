@@ -4,6 +4,11 @@
 
 ### 变更
 
+- **版本对比分屏的描边合成器留着，认出软渲染（SwiftShader / llvmpipe / Microsoft Basic Render Driver）就自动退回直接渲染** (2026-09-21)
+  - 09-21 上午量过：合成器每格固定 +0.8–1.1 ms，真显卡上分屏仍 60 fps，但软渲染（远程桌面 / 虚拟机 / 无驱动、缺省 headless）下分屏只剩 11 fps、直接 render 60 fps。现在 `utils/three/webglRendererInfo.ts` 读 `WEBGL_debug_renderer_info` 的显卡串（读不到按真显卡处理），软渲染时分屏每格直接 `renderer.render`——选中的环境构件按选中色显示、没有描边，帧率优先；真显卡照旧两格都描边。按上下文定一次、缓存；`localStorage['plant3d-web.viewer.splitOutline'] = 'compositor' | 'direct'` 可强制（排障）。
+  - 就位后运行态多一格 `splitOutline { compositor, renderer }`（`__modelUnitVersionCompare.splitOutline` 同），面板分屏摘要下软渲染时照实说一句（`model-unit-compare-split-direct-render`）。
+  - 验证：vitest `webglRendererInfo.test.ts` 新文件 2 例（名字识别 / 扩展与回落 / 抛错当不知道）、面板 +1（软渲染说一句、真显卡 / 单视口不露）→ 版本对比相关 10 文件 102 过；type-check 基线外 0 新增；ESLint 触及文件只剩 `ViewerPanel.vue:28` 那条既有的。**真机未跑**（`:8022` 未起）。README §8.3 追记；收口计划 P3-c（D6）。
+
 - **版本对比：容器下变了的单元可以一起进三维（总按钮 + 进度「正在生成历史投影 n / m」），超过 20 个或服务端说要确认时先弹确认框** (2026-09-21)
   - 以前 `所有子节点` 的模型对比只能逐组「在三维中对比」、一次装一个单元（设计稿 S2 画的是一颗总按钮）。现在不止一组时分组列表上方多一颗「全部变了的单元一起进三维」（`model-unit-compare-run-groups`，注「N 个单元 · 约 M 份历史投影」）：按份（单元@sesno，tombstone 侧不算）并发 ≤ 2 去 `history/generate`，进度卡 `model-unit-compare-progress`「正在生成历史投影 n / m · 正在装的那几份」，装完一发 `open`——`before` / `after` 是各单元并起来的一侧（`mergeModelUnitVersionSides`：entries 合表、refnos 拼接、身份借容器、每个单元都不存在才整侧 tombstone）、`rows` 拼起来、`units[]` 各自一份、`unitRefno` 是容器；ViewerPanel 环境里按每个单元根整单元藏（`collectModelUnitTargetObjectIds` 接一串根），`__modelUnitVersionCompare.units`。四态着色 / 角标 / 「三维只看差异」/ 分屏拾取 / 点 A / B 构件读那一版（`attributesAt` 按 refno 找它属于哪份几何）对多单元同样成立；树差异模式每单元各折一份拼起来（B 侧 tombstone 的单元根也进树）。
   - 面板：运行态卡「N 个单元 · <容器> 下」，A / B 卡列出这一侧不存在的单元（「1 个单元该版本单元已删除：…」），几何差异摘要标题「N 个单元 · 几何差异（…）」，被装的组都标「三维中」（多单元时「三维中 · 只看这组」，点它 = 只看那一组）。单单元 `open` detail 与从前逐字相同（不带 `units`）。

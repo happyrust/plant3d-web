@@ -276,6 +276,10 @@ pageerror 0；console error 仍是那 5 条环境噪音。`a626-b630-split-pick-
 - 按像素数外推 4K（3840×2160 ≈ 8.3 MP，是这次画布的 7.7 倍）：合成器每格 ≈ 7–8 ms，分屏两格 ≈ 15 ms 加上场景本身——这块显卡上 4K 分屏会掉到 60 fps 以下；单视口本来就付一份，4K 也只剩 ~8 ms 余量。
 - **软渲染**（缺省 headless 的 SwiftShader，视口 1600×1000 → 画布 450×727，PIPE 环境）：单视口合成器 **20.8 fps**、分屏合成器 **11.4 fps**、分屏直接 render 60 fps、单视口直接 render 60 fps——没有显卡加速（远程桌面 / 虚拟机）时合成器本来就重，分屏再翻一倍。
 - 若退回直接 render：选中的环境构件仍看得见——`SelectionManager.select` 会经 `setObjectColor` 把它覆成选中色（橙 `0xff8800`），只是没有描边、分屏比单视口暗一档那条老问题留着。
+- **2026-09-21 19:5x 拍板落地（收口计划 P3-c，D6「留，但软渲染自动退回」）**：合成器留着；`resolveModelUnitCompareSplitOutline` 按这块 WebGL 上下文的显卡串定一次（`utils/three/webglRendererInfo.ts` 读
+  `WEBGL_debug_renderer_info` 的 `UNMASKED_RENDERER_WEBGL`，认 SwiftShader / llvmpipe / softpipe / Microsoft Basic Render Driver），软渲染就每格直接 `renderer.render`；读不到显卡串按真显卡处理。
+  排障可用 `localStorage['plant3d-web.viewer.splitOutline'] = 'compositor' | 'direct'` 强制。就位后 `ModelUnitVersionCompareRuntimeState.splitOutline { compositor, renderer }` 与 `__modelUnitVersionCompare.splitOutline`
+  都能看到，面板分屏摘要下软渲染时照实说一句（`model-unit-compare-split-direct-render`）。**真机未跑**（`:8022` 未起）；缺省 headless（SwiftShader）跑 e2e 时分屏应走直接 render，`--gpu` 时走合成器——下次起 dev 时两档各看一眼 `__modelUnitVersionCompare.splitOutline`。
 
 ### 8.4 从一根管道（容器）进分屏：差异摘要按单元分组 → 逐组三维 → 分屏（2026-09-21 11:5x，`3d-diff-color/pipe-24384_23225-a300-b380-*`）
 
