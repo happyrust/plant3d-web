@@ -9,6 +9,7 @@ import type { DtxCompatViewer } from '@/viewer/dtx/DtxCompatViewer';
 import GenModelV1HealthBadge from '@/components/model-tree/GenModelV1HealthBadge.vue';
 import ModelGenerationProgressModal from '@/components/model-tree/ModelGenerationProgressModal.vue';
 import ModelTreeRow from '@/components/model-tree/ModelTreeRow.vue';
+import { readModelTreeTab, writeModelTreeTab, type ModelTreeTab } from '@/components/model-tree/modelTreeTab';
 import ModelVersionAttrDiffPanel from '@/components/model-tree/ModelVersionAttrDiffPanel.vue';
 import RoomTreePanel from '@/components/model-tree/RoomTreePanel.vue';
 import { ensurePanelAndActivate } from '@/composables/useDockApi';
@@ -39,8 +40,9 @@ const showGenModelV1Badge = true;
 /**
  * 页签：PDMS 属主树 / 「房间」（ADR 0068 房间层级树，`RoomTreePanel`，2026-09-21 起；退役掉的旧 ROOM 页签走的是旧后端）。
  * 搜索 / 类型筛选 / 差异模式 / 右键菜单都只属于 PDMS 树；两棵树都 `v-show` 常驻，切回来时展开与勾选状态还在。
+ * 上次停在哪一页记在 localStorage（`modelTreeTab.ts`，收口计划 P3-a），刷新回来还在那一页。
  */
-const activeTab = ref<'pdms' | 'room'>('pdms');
+const activeTab = ref<ModelTreeTab>(readModelTreeTab());
 const isPdmsTab = computed(() => activeTab.value === 'pdms');
 
 // 只剩 PDMS 一棵树：旧后端 `/api/room-tree/*` 的 ROOM 页签 2026-09-20 随 legacy 退役（D1）。
@@ -743,10 +745,11 @@ function clearFilters() {
   typePopoverOpen.value = false;
 }
 
-/** 切页签：PDMS 的两个弹层与右键菜单一起收起，别挂在「房间」页上。 */
-function switchTab(tab: 'pdms' | 'room') {
+/** 切页签：PDMS 的两个弹层与右键菜单一起收起，别挂在「房间」页上；记住这一页。 */
+function switchTab(tab: ModelTreeTab) {
   if (activeTab.value === tab) return;
   activeTab.value = tab;
+  writeModelTreeTab(tab);
   searchPopoverOpen.value = false;
   typePopoverOpen.value = false;
   closeContextMenu();

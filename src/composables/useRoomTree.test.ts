@@ -306,6 +306,39 @@ describe('useRoomTree', () => {
     expect(viewer.scene.setObjectsXRayed).toHaveBeenLastCalledWith(['24381_1240'], false);
   });
 
+  it('revealRefno（外部选中联动）：refno 在已取过树的房里 → 展开到它、单选它、回 flatRows 下标；a/b 形式也认；单元 refno 落在单元行；没取过树的房 / 不在树里 → null 且不动展开', async () => {
+    const { source, roomTree } = makeSource();
+    const tree = useRoomTree({ value: null }, { source: () => source });
+    await tree.loadRoots();
+
+    // 树还没取：找不到，也不去拉
+    expect(tree.revealRefno('24381_1241')).toBeNull();
+    expect(roomTree).not.toHaveBeenCalled();
+
+    tree.toggleExpand('room:24381_35580');
+    await flush();
+    // 只展开了房间这一层；联动要把 专业 → 单元类型 → 单元 一路展开
+    const hit = tree.revealRefno('24381/1241');
+    expect(hit).not.toBeNull();
+    expect(hit!.id).toBe('elem:24381_35580:24381_1241');
+    expect(tree.expandedIds.value.has('spec:24381_35580:3')).toBe(true);
+    expect(tree.expandedIds.value.has('utype:24381_35580:3:BRAN')).toBe(true);
+    expect(tree.expandedIds.value.has('unit:24381_35580:24381_1200')).toBe(true);
+    expect(Array.from(tree.selectedIds.value)).toEqual(['elem:24381_35580:24381_1241']);
+    expect(tree.flatRows.value[hit!.index]?.id).toBe('elem:24381_35580:24381_1241');
+    expect(tree.isRowSelected('elem:24381_35580:24381_1241')).toBe(true);
+
+    // 单元的 refno → 单元行
+    const unitHit = tree.revealRefno('24381_7000');
+    expect(unitHit?.id).toBe('unit:24381_35580:24381_7000');
+    expect(Array.from(tree.selectedIds.value)).toEqual(['unit:24381_35580:24381_7000']);
+
+    // 树里没有的构件：null，选中不变
+    expect(tree.revealRefno('1_1')).toBeNull();
+    expect(Array.from(tree.selectedIds.value)).toEqual(['unit:24381_35580:24381_7000']);
+    expect(roomTree).toHaveBeenCalledTimes(1);
+  });
+
   it('reset：清空清单 / 节点 / 展开 / 勾选，再 loadRoots 重新拉', async () => {
     const { source, rooms } = makeSource();
     const tree = useRoomTree({ value: null }, { source: () => source });

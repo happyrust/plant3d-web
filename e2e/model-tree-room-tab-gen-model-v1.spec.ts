@@ -4,6 +4,7 @@
  * 三条用例对应 09-21 真机十步（`docs/verification/spatial-room-hierarchy-tree-2026-09-20/README.md` §8）：
  * ① 切页签 / 在册计数 / 搜索 / 无匹配 / 切回 PDMS；② 展开一间房逐层计数 = `GET /api/v1/spatial/rooms/{refno}/tree` 响应 + 无盒房间的一句原因；
  * ③ 右键单元「加载模型（N 个构件）」→ 几何进场景 → 眼睛切显隐 → 切页签状态保留。
+ * ④（收口计划 P3-a / P3-b）页签记忆：切到「房间」后整页刷新仍在「房间」；选中联动：外部 `setGlobalSelectedRefno` 一个已取过树的房里的构件 → 展开到它、选中、滚到可见；树内点选不反弹。
  *
  * 数量断言一律取自服务端响应，不写死；夹具房间优先 R432（`24381_35580`，AMS 7997），不在册就取清单第一间有盒的房。
  * 前置同抽屉那份：gen-model 在 `GEN_MODEL_V1_BASE_URL`、空间树 ready、认得 7997；房间体制不是 ready / degraded（`room_membership=false` 等）整文件跳过。
@@ -12,7 +13,7 @@
  */
 import { expect, test, type Locator, type Page } from '@playwright/test';
 
-import { GEN_MODEL_BASE, openSpatialUiPage, probeGenModelForSpatialUi, sceneOverview } from './helpers/spatialQueryGenModelV1';
+import { GEN_MODEL_BASE, openSpatialUiPage, probeGenModelForSpatialUi, sceneOverview, selectRefno } from './helpers/spatialQueryGenModelV1';
 
 test.setTimeout(300_000);
 
@@ -212,6 +213,64 @@ test('展开一间房：一发 rooms/{refno}/tree；房间 / 专业 / 单元类�
       expect(status).toBe(200);
     }
   }
+
+  expect(pageErrors).toEqual([]);
+});
+
+test('页签记忆 + 选中联动：切到「房间」后刷新页面仍停在「房间」（localStorage）；外部选中一个已展开房里的构件 → 页签展开到它、选中、滚到可见；选中单元 refno 落在单元行；树内点选写回全局选中且不反弹', async ({ page }) => {
+  const rooms = await fetchRooms();
+  const fixture = await pickFixtureRoom(rooms.rooms);
+  test.skip(fixture === null, '清单里前几间房都没有 rooms/{refno}/tree');
+  const picked = pickLoadableUnit(fixture!.tree);
+  test.skip(picked === null, '夹具房里没有叶子已内联的单元');
+  const { room } = fixture!;
+  const { spec, unitType, unit } = picked!;
+  const { pageErrors } = await openRoomTab(page);
+
+  // P3-a：切到「房间」已记进 localStorage；整页刷新后模型树面板直接停在「房间」
+  expect(await page.evaluate(() => localStorage.getItem('plant3d.modelTree.activeTab'))).toBe('room');
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.waitForSelector('canvas', { timeout: 60_000 });
+  await page.waitForFunction(() => !!(window as unknown as { __xeokitViewer?: { scene?: unknown } }).__xeokitViewer?.scene, null, { timeout: 60_000 });
+  const onboardingClose = page.getByRole('button', { name: '关闭向导', exact: true });
+  if (await onboardingClose.isVisible().catch(() => false)) await onboardingClose.click({ force: true }).catch(() => undefined);
+  await expect(page.getByTestId('model-tree-tab-room')).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId('model-tree-tab-room')).toHaveClass(/shadow-sm/);
+  await expect(page.getByTestId('model-tree-tab-pdms')).not.toHaveClass(/shadow-sm/);
+  await expect(page.getByTestId('room-tree-panel')).toBeVisible();
+  await expect(page.getByTestId('room-tree-status')).toContainText(/在册 \d+ 间房/, { timeout: 60_000 });
+
+  // P3-b：只展开房间这一层，然后从外部选中该房里某个单元的一个构件
+  await expandFixtureRoom(page, room);
+  await expect(rowById(page, `spec:${room.refno}:${spec.spec_value}`)).toBeVisible();
+  const target = unit.elements![unit.elements!.length - 1]!.refno;
+  await expect(rowById(page, target)).toHaveCount(0);
+  await selectRefno(page, target);
+  const targetRow = rowById(page, target);
+  await expect(targetRow).toBeVisible({ timeout: 10_000 });
+  await expect(targetRow).toHaveAttribute('data-selected', 'true');
+  await expect(targetRow).toBeInViewport();
+  await expect(rowById(page, `utype:${room.refno}:${spec.spec_value}:${unitType.noun}`)).toBeVisible();
+  await expect(rowById(page, unit.refno)).toBeVisible();
+  await expect(page.locator('[data-testid="room-tree-body"] [data-testid="model-tree-row"][data-selected="true"]')).toHaveCount(1);
+
+  // 单元的 refno → 单元行被选中（构件行不再选中）
+  await selectRefno(page, unit.refno);
+  await expect(rowById(page, unit.refno)).toHaveAttribute('data-selected', 'true');
+  await expect(targetRow).toHaveAttribute('data-selected', 'false');
+
+  // 树内点选另一个构件：全局选中跟着变，且行选中就是点的那一行（没有被联动反弹回去）
+  const other = unit.elements![0]!.refno;
+  await rowById(page, other).click();
+  await expect(rowById(page, other)).toHaveAttribute('data-selected', 'true');
+  await expect.poll(() => page.evaluate(() =>
+    import((window as unknown as { __appModuleUrl?: (path: string) => string }).__appModuleUrl?.('/src/composables/useSelectionStore.ts') ?? '/src/composables/useSelectionStore.ts')
+      .then((mod) => mod.getGlobalSelectedRefno() as string | null)), { timeout: 5_000 }).toBe(other);
+  await expect(page.locator('[data-testid="room-tree-body"] [data-testid="model-tree-row"][data-selected="true"]')).toHaveCount(1);
+
+  // 切回 PDMS 也记住
+  await page.getByTestId('model-tree-tab-pdms').click();
+  expect(await page.evaluate(() => localStorage.getItem('plant3d.modelTree.activeTab'))).toBe('pdms');
 
   expect(pageErrors).toEqual([]);
 });

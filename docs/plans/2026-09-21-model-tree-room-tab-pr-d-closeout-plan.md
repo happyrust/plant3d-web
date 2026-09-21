@@ -10,7 +10,9 @@
 > 状态：**Plannotator 已批准**（2026-09-21 16:43，`{"decision":"approved"}`，无批注）——D1–D7 按 §6 推荐项执行。
 > **P1-a 真机 → P0 提交 → P2 文档 已完成（16:52–17:1x）**：真机十步全过（README §8）；PR-D 一笔 `plant3d-web@92d928fc`（9 文件 +1730，别人的 hunk 一个没碰）；
 > 上位计划 §4.5 / §5 改完成、教程 §6.1.1 + §9 一行、CHANGELOG 一条覆盖 ADR 0068、CONTEXT 词条改口。
-> **P1-b e2e 已完成（17:11）**：`e2e/model-tree-room-tab-gen-model-v1.spec.ts` 三条（D2 新建），`:3111` + `:8027` `--workers=1` **3 passed / 11.2 s**，日志入验证目录。**P3-a/b/d 未开工**（P3-c 按 D6 不做）。
+> **P1-b e2e 已完成（17:11）**：`e2e/model-tree-room-tab-gen-model-v1.spec.ts` 三条（D2 新建），`:3111` + `:8027` `--workers=1` **3 passed / 11.2 s**，日志入验证目录。
+> **P3-a 页签记忆 + P3-b 选中联动 已完成（17:25）**：`modelTreeTab.ts`（localStorage，单测 3）、`useRoomTree.revealRefno`（单测 +1）、`RoomTreePanel` 联动 watch；e2e 加第 ④ 条 **4 passed / 15.1 s**。
+> **P3-d 未做**（要在 pen.dev 里打开那份 .pen 才能 Export）；P3-c 按 D6 不做。
 
 ## 0. 一句话
 

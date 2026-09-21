@@ -16,7 +16,7 @@ import ModelTreeRow from '@/components/model-tree/ModelTreeRow.vue';
 import { useConfirmDialogStore } from '@/composables/useConfirmDialogStore';
 import { ensurePanelAndActivate } from '@/composables/useDockApi';
 import { useRoomTree } from '@/composables/useRoomTree';
-import { setGlobalSelectedRefno } from '@/composables/useSelectionStore';
+import { setGlobalSelectedRefno, useSelectionStore } from '@/composables/useSelectionStore';
 import { showModelByRefnosWithAck } from '@/composables/useViewerContext';
 import { cn } from '@/lib/utils';
 import { emitToast } from '@/ribbon/toastBus';
@@ -30,6 +30,7 @@ const props = defineProps<{
 const viewerRef = computed(() => props.viewer);
 const tree = useRoomTree(viewerRef);
 const confirmDialog = useConfirmDialogStore();
+const selection = useSelectionStore();
 
 /** 批量加载超过这个数先弹确认（与抽屉同阈值，用户 2026-09-14 拍板） */
 const LARGE_BATCH_LOAD_CONFIRM_THRESHOLD = 200;
@@ -104,10 +105,41 @@ function onToggleVisible(id: string, visible: boolean) {
   void tree.setVisible(id, visible);
 }
 
+/** 树内点选写全局选中时置位：下面的联动 watch 见到它就不再反过来展开 / 滚动（与 PDMS 树的 `internalTreeSelection` 同法）。 */
+let internalSelection = false;
+
+function publishSelection(refno: string) {
+  if (selection.selectedRefno.value !== refno) internalSelection = true;
+  setGlobalSelectedRefno(refno);
+}
+
 function onSelect(index: number, ev: MouseEvent) {
   const refno = tree.selectByRowIndex(index, ev);
-  if (refno) setGlobalSelectedRefno(refno);
+  if (refno) publishSelection(refno);
 }
+
+/**
+ * 外部选中联动（收口计划 P3-b，D5）：查看器 / 抽屉 / PDMS 树里选中一个构件，若它在页签里**已经取过树的房**下，展开到它、选中并滚到可见；
+ * 只在页签在前台时做，不为它去拉没展开的房。
+ */
+let revealSeq = 0;
+watch(
+  () => [selection.selectedRefno.value, props.active ?? true] as const,
+  async ([refno, active]) => {
+    if (internalSelection) {
+      internalSelection = false;
+      return;
+    }
+    if (!active || !refno) return;
+    const hit = tree.revealRefno(refno);
+    if (!hit || hit.index < 0) return;
+    const seq = ++revealSeq;
+    await nextTick();
+    if (seq !== revealSeq || !containerRef.value) return;
+    rowVirtualizer.value.measure();
+    rowVirtualizer.value.scrollToIndex(hit.index, { align: 'center' });
+  },
+);
 
 // ---- 右键菜单 ----
 const contextMenuOpen = ref(false);
@@ -214,7 +246,7 @@ function viewProperties() {
   const node = contextNode.value;
   closeContextMenu();
   if (node?.refno) {
-    setGlobalSelectedRefno(node.refno);
+    publishSelection(node.refno);
     ensurePanelAndActivate('properties');
   }
 }

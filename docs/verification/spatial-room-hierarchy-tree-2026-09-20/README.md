@@ -97,7 +97,7 @@
 | `ui/trim-01…04-*.png` `ui/trim-summary.json` | 结果区剪辑（§6） |
 | `e2e-spatial-query-gen-model-v1-ui-2026-09-21-0020.txt` | PR-B2 后 e2e 全量输出（9 passed / 1 skipped） |
 | `ui/room-tab-01…08-*.png` `ui/room-tab-summary.json` | 模型树「房间」页签真机十步（§8；summary 里带请求账与逐层对照） |
-| `e2e-model-tree-room-tab-gen-model-v1-2026-09-21-1711.txt` | 房间页签 e2e 三条首次真机（3 passed，§8 末） |
+| `e2e-model-tree-room-tab-gen-model-v1-2026-09-21-1711.txt` `…-1725.txt` | 房间页签 e2e 三条首次真机（3 passed）与加上页签记忆 / 选中联动第 ④ 条后（4 passed），§8 末 |
 
 ## 8. 模型树「房间」页签真机（2026-09-21 16:52–16:54；PR-D `92d928fc`；`ui/room-tab-01…08.png`、`ui/room-tab-summary.json`）
 
@@ -124,3 +124,9 @@
 ② 展开夹具房逐层文字与计数 = `rooms/{refno}/tree` 响应（专业行尾计数、单元类型「NOUN · n 个单元 · count」、其他构件、前 3 个单元、前 5 个构件）+ `panel_count` 0 的房 404 → 一句「还没有包围盒」；
 ③ 右键「加载模型（N 个构件）」→ ensure + records → 单元的构件全部进 `getLoadedRefnos()` → 眼睛切 `visible` false / true → 切页签状态保留。数量全部取自服务端响应；房间体制非 ready / degraded 整文件跳过。
 `PLAYWRIGHT_PORT=3111 GEN_MODEL_V1_BASE_URL=http://127.0.0.1:8027 npx playwright test e2e/model-tree-room-tab-gen-model-v1.spec.ts --workers=1` → **3 passed（11.2 s）**，日志 `e2e-model-tree-room-tab-gen-model-v1-2026-09-21-1711.txt`；eslint 0。
+
+**P3-a 页签记忆 + P3-b 选中联动**（17:2x，收口计划 D4 / D5 按推荐）：`modelTreeTab.ts` 把当前页签记进 `localStorage['plant3d.modelTree.activeTab']`（坏值 / 读写异常当 PDMS，单测 3 例）；
+`useRoomTree.revealRefno(refno)`——refno（`a_b` / `a/b`，构件或单元）在**已取过树的房**里就展开祖先、单选、回 `flatRows` 下标（优先已展开的房；没取过树的房不拉、树里没有回 null，单测 +1），
+`RoomTreePanel` 在页签前台时监听全局选中调它并 `scrollToIndex` 居中，树内点选用 `internalSelection` 标记不反弹（与 PDMS 树同法）。e2e 第 ④ 条：切到「房间」→ 整页刷新仍在「房间」（tab 带 `shadow-sm`、面板可见）→
+只展开房间层 → 外部 `setGlobalSelectedRefno` 单元最后一个构件 → 该行出现、`data-selected=true`、在视口内、单元类型 / 单元行都展开、选中行只此一行 → 选单元 refno 落在单元行 → 树内点另一构件全局选中跟着变且不反弹 → 切回 PDMS 记 `pdms`。
+同命令 **4 passed（15.1 s）**，日志 `e2e-model-tree-room-tab-gen-model-v1-2026-09-21-1725.txt`；vitest 页签 3 文件 17 passed；type-check 基线外 0；eslint 0。

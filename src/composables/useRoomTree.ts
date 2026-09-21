@@ -404,6 +404,30 @@ export function useRoomTree(viewerRef: { value: DtxCompatViewer | null }, option
     sceneGraph.clearIsolation();
   }
 
+  /**
+   * 外部选中联动（收口计划 P3-b，D5）：某个 refno（构件或单元，`a_b` / `a/b` 都收）若已在**取过树的房**里，展开到它、单选它，
+   * 回它在 `flatRows` 里的下标供滚动；优先当前已展开的房。**不**为了它去拉没展开的房（那要先问归属再拉整树），也不碰场景选中
+   * （选中本来就从场景 / 别的面板来）。找不到回 null。
+   */
+  function revealRefno(refno: string): { id: string; index: number } | null {
+    const key = refno.replace('/', '_');
+    const nodes = nodesById.value;
+    let hit: RoomTreeNode | null = null;
+    for (const node of Object.values(nodes)) {
+      if ((node.kind !== 'element' && node.kind !== 'unit') || node.refno !== key) continue;
+      if (!roomTreeLoaded.has(node.roomRefno)) continue;
+      if (!hit || (expandedIds.value.has(roomNodeId(node.roomRefno)) && !expandedIds.value.has(roomNodeId(hit.roomRefno)))) hit = node;
+    }
+    if (!hit) return null;
+    const expanded = new Set(expandedIds.value);
+    for (const ancestor of ancestorsOf(hit.id, nodes)) expanded.add(ancestor);
+    expandedIds.value = expanded;
+    selectedIds.value = new Set([hit.id]);
+    const index = flatRows.value.findIndex((row) => row.id === hit!.id);
+    lastAnchorIndex.value = index >= 0 ? index : null;
+    return { id: hit.id, index };
+  }
+
   /** 某构件 refno 所在的房间根 id（同一构件可能在多间房下——按节点表里出现的全部房间）。 */
   function roomIdsOfRefno(refno: string): string[] {
     const out: string[] = [];
@@ -455,6 +479,7 @@ export function useRoomTree(viewerRef: { value: DtxCompatViewer | null }, option
     flyTo,
     isolateXray,
     clearXray,
+    revealRefno,
     roomIdsOfRefno,
     isRoomNodeId,
     reset,
