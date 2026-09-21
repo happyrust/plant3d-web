@@ -12,6 +12,8 @@
   - **设置 → 渲染模式**（新 dock 面板 `RenderModeSettingsPanel`）：「web 标准（PBR）/ E3D 外观」卡片、E3D 预设、四个后处理开关（偏离预设标「已改」、一键恢复出厂位）、当前设置对应的 URL 参数提示。状态抽成 `useRenderLookStore`（沿用 `dtx_look*` localStorage 键，URL 参数 `?dtx_look=sgl&dtx_look_preset=factory|machine&dtx_look_hlr/ao/gradient/aa=0` 只覆盖本次），查看器齿轮弹层里的原按钮与之双向同步；开 E3D 外观时显示主题自动切 `e3dFactory` 并记住之前的主题，关掉切回。
   - 已知偏差 / 未做：MSAA 采样点用有序网格代替 D3D 旋转网格；`EnhancedEdgesLaser` / `PseudoShadowsLaser`、半透明对象 AO 归属、`SHINY`(30) / `TRANSLUCENCY_STYLE`(51)、项目自定义 autocolour 规则导入、active orange / aids blue / tracing magenta 未接。**除光照公式外所有效果尚未与真机 E3D 同视角对参**（本机那台 E3D 由修补脚本启动、没跑 `applyToView`，边线 / AO / AA / 渐变全关）——下一步见文档 §6。
   - 验证：`vitest` e3dLook 27 + DTX 目录 + `useRenderLookStore` 5 + `RenderModeSettingsPanel` 4 + ribbon，共 114/114；`type-check` 基线外仍只有既有 4 条 worktree 路径错误；ESLint 通过。无头 Chrome（SwiftShader）演示页 24 变体像素统计 37/37、DTX harness 32/32；主界面真模型 BRAN 24381_145018 与整库 7997（66 442 实例）SGL / PBR 各一张截图 + 设置面板冒烟（切模式 / 预设 / 开关 → 管线与主题联动）。
+
+- **云线批注改为世界锚定 billboard，并每帧贴合关联构件的屏幕投影** (2026-07-31)
   - `screen2d` 云线此前画在 HTML/SVG overlay 上，只有锚点参与相机投影：云线本身与三维层割裂，无法参与深度排序，尺寸恒定为拖框时的像素值。相机一转，被框住的构件就跑到云线外面，云线不再指认它所标记的东西。现在改为在 WebGL 里绘制世界锚定的 billboard 云线，与 `bbox3d` 同处一个渲染层。模式名与 `anchorWorldPos` / `screenOffset` / `cloudSize` 数据字段保持不变，数据模型未动。
   - `buildCloudBillboardPolyline()` 每帧用相机 right/up 基向量在世界空间展开波浪折线；`worldPerPixelAt()` 做像素→世界换算，使线宽与波幅在推拉相机时保持恒定像素观感。billboard 平面深度取关联 AABB 中心的 ndcZ，让像素→世界换算与投影落在同一深度。
   - 新增 `computeFittedCloudRectFromCorners()`：每帧把关联构件合并 AABB 的 8 个角投影到屏幕求 2D 外接矩形，再外扩 `CLOUD_FIT_PADDING_PX = 14`，保证任意机位下被绑定的构件都落在云线框内。**拖框尺寸由「云线尺寸」降级为最小尺寸兜底**；AABB 缺失、或有角点越过近/远平面（相机钻进目标内部）时，回退到锚点 + 偏移的固定尺寸布局。
