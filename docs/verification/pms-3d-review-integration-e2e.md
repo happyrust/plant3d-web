@@ -139,7 +139,7 @@ annotation-states?form_id=FORM-CB658BB5921A:
 
 1. **「待保存证据」弹层拦住画云线**：弹层固定在视口中央，云线拖拽起点落在它范围内就变成选中页面文字，云线不出、也不报错；要先点弹层的 `svg.lucide-x` 关掉才能画。真实用户会碰到，建议弹层不占画布（贴边 / 可折叠）或对画布放行 pointer 事件。**已修**：`151290c1`（云线锚点就绪 / OBB 框画 / 框选目标时该卡放行 pointer 事件并降级显示 `data-canvas-drag-armed=true`，浮层栈容器改为各卡自接事件）；2026-09-22 用本地 build 在 9446 headless 上做 A/B 真机复验通过——同一落点旧包只选中文字、新包成云线，做法与数据见 §6.3.1。
 2. **文字 / 锚点点击落空无反馈**：默认视角下管子很细，点空只是状态停在「点击模型表面创建」，没有任何提示；要先放大再点。建议落空给一次 toast 或状态闪动。
-3. **备注「可选」但实为必填**：设计「不需解决」与校核「驳回」不填备注只弹 toast、不提交（`ReviewCommentsTimeline.vue` `canSubmitReviewAction`），而 `textarea` 占位符写的是「可选」。改占位符文案或在未填时禁用提交按钮即可。
+3. **备注「可选」但实为必填**：设计「不需解决」与校核「驳回」不填备注只弹 toast、不提交（`ReviewCommentsTimeline.vue` `canSubmitReviewAction`），而 `textarea` 占位符写的是「可选」。改占位符文案或在未填时禁用提交按钮即可。**已修**：`151290c1`（占位符跟所选动作走，选了「不需解决」/「驳回」写「（必填：…）」并加 `aria-required`、框描黄、框下一行提示、提交按钮 `title` 同文；填了就消。按钮不禁用，toast 拦截照旧）；2026-09-22 用本地 build 在 9446 上两侧真机复验通过（做法同 §6.3.1，不提交、只读 DOM）：**SJ**（`打开批注单` → 详情 → `[data-testid=review-action-note]`）未选「处理备注（已修改可不填；不需解决必填原因）」→ 点「不需解决」变「处理备注（必填：为什么不需解决，依据是什么）」+ `aria-required=true` + `border-amber-400` + `[data-testid=review-action-note-required-hint]`「「不需解决」需先填写原因，才能提交处理结果」→ 填原因后提示消、清空又回来 → 点「已修改」变「处理备注（可选，例如修改说明）」；**JH** 同理：「决定备注（同意可不填；驳回必填原因）」→「驳回」→「决定备注（必填：驳回原因，设计要按这个重新处理）」+ 提示「「驳回」需先填写驳回原因，才能提交确认结果」→「同意」→「决定备注（可选，例如同意理由）」。对照线上旧包 `index-3hv8nOec`：SJ 一律「处理备注（可选，例如修改说明）」、JH 一律「决定备注（可选，例如同意理由或驳回意见）」，选什么都不变、无提示。
 4. **统计条漏计**（TC-2 已见，真手画再次复现）：`AnnotationTableView.vue` 表头只摆 `pending` / `fixed`，已同意 / 已驳回 / 不需解决 都不计入「已处理」，终态显示「共 2 · 待处理 0 · 已处理 0」。
 5. **未解释的一次自动确认**：文字批注在没点「确认完成」之前就已作为「修订 1」落库（校审面板显示「已确认到修订 1 · 有未确认修改」），怀疑内联编辑器的 Tab / blur 或随后的锚点点击误触了确认按钮，当时截图对不上，标「待核实」。
 
@@ -211,6 +211,7 @@ Start-Process 'C:\Program Files\Google\Chrome\Application\chrome.exe' -ArgumentL
 | 点锚点 | 别按「画布中心 + 偏移」点——会点到浮层卡 / 工具栏（本次曾误点工具栏「错误类型」下拉，把文字批注严重度 `PATCH …/severity` 成「原则错误」，之后 `PATCH severity=null` 还原）。改为 CDP `Page.captureScreenshot` → 页内 `<canvas>` 解码 → 找选中高亮紫红（r>140、b>140、g<130）的实心 9×9 像素块、且 `elementFromPoint` 为 `CANVAS` 的点 |
 | 拖拽起点 | 卡放行后 `elementFromPoint` 会穿到底下，底下可能恰好是已有批注的悬浮气泡（它自己接 pointer 事件，与本卡无关）；要在卡上挑一个底下就是 canvas 的文字点（本次是「批注」计数数字）。对照组旧包里卡自己接事件，探测时临时把卡 `pointer-events: none` 找同一处落点，探完恢复 |
 | 已批准的单 | JH 仍能本地画，但自动截图 `POST /api/review/attachments` 403（既非发起人也非当前 `pz` 节点负责人），toast「云线已创建，但自动截图失败，可在批注面板重拍」，云线照常生成；不点「确认当前数据」服务端不落任何记录 |
+| 换角色（要 SJ 的页面） | `user_token` 是按人签的 JWT，拿不到就没法开设计侧：在 `browser.newContext()`（独立 cookie / localStorage，不和 JH 的本机草稿串）里登 PMS（账号见 `AGENTS.md`）→ 三维校审单 → 该记录「查看」→ 读嵌入 iframe 的 `src`（含 SJ token，24 h 有效，可缓存）。PMS 给的是 `http://`，站点会 302 到 `https://`，拦截按主机名匹配而不是 origin。设计侧落地页没有校审面板，先点浮层「打开批注单」（`[data-testid=annotation-overlay-details-toggle]`）才有 `annotation-table-view`。脚本 `%TEMP%\pms-getzy-probe\placeholder-check.mjs`（`ROLE=SJ|JH`、`MODE=local|online`） |
 
 A/B 结果（同一锚点 (944,730)、同一卡上落点、拖 140×110 px；`FORM-CB658BB5921A`，2026-09-22 14:57 / 14:59）：
 
@@ -312,6 +313,7 @@ Playwright / CDP 用 `registerPlant3dAutomationReviewInitScript(context)` 在上
 
 ## 9. 变更记录
 
+- 2026-09-22（下午，二）：§5.1 第 3 条标已修（`151290c1`）并记 SJ / JH 两侧本地 build 真机复验的占位符 / 提示 / `aria-required` 实测值与旧包对照；§6.3.1 补「换角色」一行（独立 context 登 PMS 取 SJ token、http→https 按主机名拦、设计侧先点「打开批注单」）。
 - 2026-09-22（下午）：§5.1 第 1 条标已修（`151290c1`）；新增 §6.3.1「拦截换包」本地 build 真机复验做法（worktree build → `page.route` 换 document + `/assets` → 像素找锚点 → 卡上挑底下是 canvas 的落点）与新旧包 A/B 结果；§6.3「画云线」行改口：`151290c1` 起不必先关「待保存证据」。
 - 2026-09-22：补 TC-3 真手画批注回路（09-21 20:41–21:13 实跑，`FORM-CB658BB5921A`：文字 + 云线真手画、设计「不需解决」、校核「批注驳回」、第 3 轮同意 → approved，8 条 history）；§5.1 记真手画暴露的 5 个嵌入页交互问题；§6.3 记 headless Chrome 真点画布的做法与选择器；时序图补批注驳回支路。
 - 2026-09-21：按真实 PMS 两条链（TC-1 正向、TC-2 驳回回路）重写；补各角色入口、送审 / 驳回对话框、批注处理链、服务端断言、口径问题清单；`test:pms:cdp:full` 严格校验改为按 form_id 回查（`7af7a6c2`）。
