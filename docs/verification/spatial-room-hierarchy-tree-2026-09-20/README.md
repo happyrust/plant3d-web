@@ -86,6 +86,8 @@
 | `spatial-tree-check.ps1` | HTTP 金样脚本（§3；参数 `-Base / -Room / -RoomSlash / -SecondRoom / -Bran / -Dbnum / -Out / -Sha / -SkipEnsure`，缺省 `:8027` / R432 / `24381_105030` / 7997）；2026-09-22 加第 9 段 `tubes=1` 三条（§10） |
 | `http/00b-summary-2aab735df.json` `03c-nearby-tree-single-room-tubes.json` `07c-room-tree-tubes.json` `07c-room-tree-tubes-account.json` | 后端 T1（`2aab735df`）上 41 项全过的汇总；3 m 球 / 整房 `tubes=1` 整树（159 / 162 段直段）与账（§10） |
 | `http/05c-nearby-tree-100m-many-rooms-tubes.json` `00c-tubes-summary.json` | 仓外一次性脚本 `tubes-check.ps1` 的 100 m 多房 `tubes=1` 账（1893 段、未截断、3092 ms）与 24 项汇总（§10） |
+| `ui/tubes-tree-01…04-*.png` `ui/tubes-tree-summary.json` | 树里列出直段前端四步（§11）：抽屉 BRAN 单元下的直段行与摘要 / 点直段行选中 BRAN / 房间页签只读 TUBI 行 / 右键两项；summary 带两条树请求 URL、每条直段行的文字 / title / 键、选中 refno |
+| `e2e-tube-rows-both-specs-2026-09-22-1629.txt` | T3 后两份 e2e 同机复跑 15 passed / 1 skipped（各 +1 直段行用例，§11） |
 | `http/00-summary.json` | 17:43 全流程汇总：38 项检查、耗时、各场景关键数 |
 | `http/01-health.json` `02-dbnum-model-ensure-task.json` | `/health` 与整库 ensure 的 202 回执 + 终态 |
 | `http/03-nearby-tree-single-room.json` `03b-nearby-refnos-single-room.json` | 单房整树（1298 叶子）与同参 refnos 全集 |
@@ -200,4 +202,24 @@
 `distance 0` 穿过 R432 的房间盒，两端管件在范围里却被 `rooms=` 判成非成员（邻房的）。小计划 D4 的兜底「两端都解不出按单元的房归」把它们也收了进来；收窄成「任一端在范围里（是候选）却不是所选房间成员 = 属于别处、不列，
 两端都不在范围里才兜底」后整房 168 → **159**、3 m 球 284 → **162**、100 m 多房 2260 → **1893**，单测夹具加一个范围里的非成员 GWALL + 一段挂它的直管钉住。
 
-**前端**（T3，另一笔）：类型 / 端口 / 两棵树的直段行与计数句、e2e +2，见小计划 §3.2。
+**前端**（T3）：见 §11。
+
+## 11. 树里列出直段——前端 T3 真机（2026-09-22 16:2x–16:4x；`ui/tubes-tree-01…04-*.png`、`ui/tubes-tree-summary.json`、`e2e-tube-rows-both-specs-2026-09-22-1629.txt`）
+
+同一台 dev `:3111`（工作树 = 本笔）+ `:8027`（`2aab735df`，§10），Playwright 无头 1600×1000，仓外一次性脚本 `.scratch\tubes-verify\ui-tubes.mjs`；页面不带模型（场景空，只看树与选中）。
+改动：`SpatialSource.tree()` / `roomTree()` 恒带 `tubes=1`；抽屉 BRAN 单元下新 `SpatialResultTreeTubes.vue` 直段行、单元行尾「N 段直管」、各层 title 与摘要的计数句；
+房间页签 `roomTreeNodes` 多 `tube` 节点、`ModelTreeRow` 只读行；`useSpatialQuery.focusTreeTube` / `useRoomTree.flyTo` 按直段盒飞（`resolveSceneWorldTransform` mm → 场景）。
+
+| 步 | 动作 | 看到（`tubes-tree-summary.json`） | 图 |
+| --- | --- | --- | --- |
+| 1 | 抽屉：R432 盒中心 3 m 球 + 房间 R432 → 树；展开首个 BRAN 单元 `/Copy-of-1RCS0307-1R90004`（`24381_148125`） | 请求 `nearby/tree?x=…&radius=3000&shape=sphere&rooms=24381/35580&tubes=1`；树 `total_count 1055 / total_tube_count 78 / leaf_count 1133`；摘要「**共 1055 项（去重）· 78 段直管 · 1 间房**，已加载 0 项，未加载 1055 项」；单元行「/Copy-of-1RCS0307-1R90004 · 0.21 m · **9 段直管** · 11」，title「… · 11 个构件 · 9 段直管」；11 个构件行之后 **9 条直段行**：「直管 BEND → BEND 1.35 m」「直管 WELD → BEND 433 mm」「直管 BEND → BEND 500 mm」…，title「直管 BEND → BEND · 1.35 m · 距 0.19 m · 24381_148127 → 24381_148128」，`data-tube-key` = `24381_148125#24381_148127-24381_148128#0` | `tubes-tree-01-drawer-bran-unit-with-tube-rows.png` |
+| 2 | 点第一条直段行 | 全局选中 = **`24381_148125`**（所属 BRAN）：PDMS 树展开到 `BRAN Copy-of-1RCS0307-1R90004`、属性面板切到它（TYPE BRAN）；相机按直段盒 `[-6219.8, -11489.16, 3817] → [-6186.4, -11455.76, 5168]`（mm → 场景）飞（场景为空，飞行只在单测里钉） | `tubes-tree-02-drawer-tube-row-click-selects-bran-and-flies.png` |
+| 3 | 房间页签：搜 R432 → 展开 → 仪表系统 → BRAN → 单元 `Copy-of-1RCS383MP-YK/307VP`（`24381_105297`，1 管件 + 1 直段） | 请求 `rooms/24381_35580/tree?tubes=1`（`1298 / 159 / 1457`）；房间行「ROOM R432 · /1RX-RM04-R432 · **1298 个构件 · 159 段直管**」；单元行「BRAN Copy-of-1RCS383MP-YK/307VP · 1 · **1 段直管**」；构件行 `BEND 24381/105298` 之后一条 **`TUBI BRAN → BEND · 96 mm`**（`data-node-type TUBI`、`data-read-only true`、行内 **0 个按钮**——没有展开箭头、没有眼睛；title「直管 BRAN → BEND · 96 mm · 距 0 m · 24381_105297 → 24381_105298 · 属 BRAN 24381_105297」）；点它 `data-selected=true`、全局选中 = `24381_105297`、属性面板显示该 BRAN | `tubes-tree-03-room-tab-bran-unit-tube-rows.png` |
+| 4 | 右键那条直段行 | 菜单只有 **「聚焦飞行」「查看属性」**（没有隔离 / 显隐 / 加载模型——直管随单元级动作走） | `tubes-tree-04-room-tab-tube-row-context-menu.png` |
+
+`pageerror` **0**。单测：`spatialTree` +3（键 / 标签 / 长度 / 计数句、`treeNodeTubes` 去重且不进 refno 集、`mergeTreeLeaves` 连 `tubes` 一起并 / 老服务端只填 `elements`）、`SpatialResultTree` +1（直段行 / 尾巴 / title / 无效小标 / focusTube / 老服务端照旧）、
+`roomTreeNodes` +1（`tube` 节点、三个 `*Under` 跳过、老服务端没有）、`useRoomTree` +1（flatRows 顺序、点行回 BRAN、聚焦按盒飞、眼睛无效、单元级动作不变）、`spatialSource` 扩 1（映射 + 老服务端一个直段键都没有）→ 11 文件 163 过；
+type-check 新增 0；eslint 触及文件 0 错误（`useSpatialQuery.ts:198` 一条既有的空行 warning 不是本笔）。
+**e2e**：两份 spec 各 +1，同机 `--workers=1` **15 passed / 1 skipped（1.0 m）**，日志 `e2e-tube-rows-both-specs-2026-09-22-1629.txt`——抽屉那条断 `nearby/tree` 带 `tubes=1`、直段行数 = 响应里该单元 `tubes.length`、构件行在前、无效小标数、摘要「M 段直管」、点行全局选中 = BRAN；
+房间页签那条断 `rooms/{refno}/tree` 带 `tubes=1`、房间行 / 单元行的「M 段直管」、TUBI 行数 = 响应、紧跟最后一个构件行、`data-read-only` 且 0 个按钮、点行选中 BRAN、右键两项。两条在老服务端（响应没有 `total_tube_count`）上整条跳过。
+**不做**（D5 (ii) → T4）：逐段眼睛；**T2**（`model/records` 直段元数据 + `tubi_relate` 落 `route_ordinal`）仍是后端另一笔。

@@ -148,6 +148,85 @@ test('范围 · 手输坐标：球形 2 m 发 x/y/z + shape + per_page，摘要�
   expect(pageErrors, pageErrors.join('\n')).toEqual([]);
 });
 
+type TreeTubeBody = { ordinal: number; from: string; to: string; from_noun: string; to_noun: string; distance: number; length: number; invalid: boolean };
+type TreeUnitBody = { refno: string; noun: string; name: string | null; count: number; tube_count?: number; elements?: { refno: string }[]; tubes?: TreeTubeBody[] };
+type TreeResponseBody = {
+  total_count: number;
+  total_tube_count?: number;
+  leaves_inline: boolean;
+  rooms: { refno: string; count: number; tube_count?: number; specs: { spec_value: number; unit_types: { noun: string; units: TreeUnitBody[] }[] }[] }[];
+};
+
+test('房间层级树 · 直段行（方案 B）：选了房间的查询打 nearby/tree 且恒带 tubes=1；BRAN 单元行尾「N 段直管」、展开后构件行之后的直段行数 = 响应里该单元 tubes.length、无效段带小标；摘要带「M 段直管」；点直段行 = 全局选中所属 BRAN；老服务端（响应没有 total_tube_count）整条用例跳过', async ({ page }) => {
+  const room = '24381_35580';
+  const { pageErrors } = await openSpatialUiPage(page, { mode: 'range' });
+  const center = await fetchServerCenter(room);
+  test.skip(center === null, `nearby?refno=${toSlashRefno(room)} 没给出中心（房间 R432 不在这台服务上）`);
+
+  await fillCenter(page, center!);
+  await setRadiusMeters(page, 3);
+  await expandAdvanced(page);
+  await expect(page.getByTestId('room-filter')).toHaveCount(1);
+  const roomInput = page.getByTestId('room-search-input');
+  test.skip(!(await roomInput.isEnabled().catch(() => false)), '房间过滤此刻不可用（房间体制未就绪）');
+  await roomInput.fill('R432');
+  await roomInput.press('Enter');
+  await expect(page.locator('[data-testid="room-chip"][data-room-refno="24381_35580"]')).toBeVisible();
+
+  const pendingTree = page.waitForResponse((response) => new URL(response.url()).pathname.endsWith('/api/v1/spatial/nearby/tree') && !new URL(response.url()).searchParams.has('unit'), { timeout: 60_000 });
+  await page.getByRole('button', { name: '执行空间查询', exact: true }).click();
+  const treeResponse = await pendingTree;
+  expect(treeResponse.status()).toBe(200);
+  const treeUrl = new URL(treeResponse.url());
+  expect(treeUrl.searchParams.get('tubes'), '两条树路由恒带 tubes=1').toBe('1');
+  expect(treeUrl.searchParams.get('rooms'), 'v1 请求里 refno 一律 a/b').toBe(toSlashRefno(room));
+  const tree = await treeResponse.json() as TreeResponseBody;
+  await waitForSettled(page);
+  test.skip(typeof tree.total_tube_count !== 'number', '服务端不认 tubes=1（老构建），树里没有直段信息');
+
+  await expandResults(page);
+  await expect(page.getByTestId('spatial-tree-panel')).toBeVisible({ timeout: 30_000 });
+  // 摘要：共 N 项（去重）· M 段直管 · 1 间房…
+  if ((tree.total_tube_count ?? 0) > 0) {
+    await expect(page.locator(`text=/共\\s*${tree.total_count}\\s*项（去重）· ${tree.total_tube_count} 段直管/`)).toBeVisible();
+  }
+
+  // 找一个带直段、叶子已内联的 BRAN 单元
+  const roomNode = tree.rooms.find((entry) => entry.refno === room) ?? tree.rooms[0]!;
+  const withTubes = roomNode.specs.flatMap((spec) => spec.unit_types.filter((group) => group.noun === 'BRAN').flatMap((group) => group.units))
+    .find((unit) => (unit.tubes?.length ?? 0) > 0 && Array.isArray(unit.elements));
+  test.skip(!withTubes, '响应里没有带直段的 BRAN 单元（或叶子未内联）');
+  const unit = withTubes!;
+  const unitEl = page.locator(`[data-testid="spatial-tree-panel"] [data-testid="spatial-tree-unit"][data-refno="${unit.refno}"]`).first();
+  await expect(unitEl).toBeVisible();
+  await expect(unitEl.getByTestId('spatial-tree-tube-count').first()).toHaveText(`${unit.tube_count} 段直管`);
+  await unitEl.getByTestId('spatial-tree-toggle').first().click();
+  const leafRows = unitEl.locator('[data-testid="spatial-tree-leaf"]');
+  const tubeRows = unitEl.locator('[data-testid="spatial-tree-tube-row"]');
+  await expect(leafRows).toHaveCount(unit.elements!.length);
+  await expect(tubeRows).toHaveCount(unit.tubes!.length);
+  // 构件行在前、直段行在后；行文字「直管 A → B 长度」；无效段带小标
+  const firstTube = unit.tubes![0]!;
+  await expect(tubeRows.first()).toContainText(`${firstTube.from_noun} → ${firstTube.to_noun}`);
+  expect(await tubeRows.first().evaluate((el, leafCount) => {
+    const leaves = el.parentElement!.parentElement!.querySelectorAll('[data-testid="spatial-tree-leaf"]');
+    return leaves.length === leafCount && !!leaves[leafCount - 1] && (leaves[leafCount - 1]!.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
+  }, unit.elements!.length), '直段行排在构件行之后').toBe(true);
+  const invalidCount = unit.tubes!.filter((tube) => tube.invalid).length;
+  await expect(unitEl.locator('[data-testid="spatial-tree-tube-invalid"]')).toHaveCount(invalidCount);
+  // 直段行没有眼睛
+  await expect(tubeRows.first().locator('[data-testid="spatial-tree-leaf-visibility"]')).toHaveCount(0);
+
+  // 点直段行：全局选中 = 所属 BRAN
+  await tubeRows.first().locator('button[title]').first().click();
+  await expect.poll(() => page.evaluate(() =>
+    import((window as Window & { __appModuleUrl?: (path: string) => string }).__appModuleUrl?.('/src/composables/useSelectionStore.ts') ?? '/src/composables/useSelectionStore.ts')
+      .then((mod) => mod.getGlobalSelectedRefno() as string | null)), { timeout: 10_000 }).toBe(unit.refno);
+
+  await expect(errorBanner(page)).toHaveCount(0);
+  expect(pageErrors, pageErrors.join('\n')).toEqual([]);
+});
+
 test('翻页：下一页发 page=2、首条换了、总数不变；上一页回到 page=1 首条复原', async ({ page }) => {
   const { pageErrors } = await openSpatialUiPage(page, { mode: 'range' });
   const center = (await fetchServerCenter(FIXTURE.bran))!;

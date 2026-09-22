@@ -17,6 +17,8 @@ import type {
   SpatialTreeLeafNode,
   SpatialTreeLeafSelector,
   SpatialTreeResult,
+  SpatialTreeTubeNode,
+  SpatialTreeUnitNode,
 } from '@/api/genModelSpatialApi';
 import type { AttributeSource } from '@/model-source/ports';
 
@@ -2087,6 +2089,28 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
     }
   }
 
+  /**
+   * 直段行（方案 B，D5 (i) 只读 + 定位）：点一段直管 = 选中它所属的 BRAN（全局选中 + 查看器高亮，属性面板跟着切到 BRAN），
+   * 相机按服务端给的直段世界盒（mm → 场景坐标）飞过去。不加载模型、不改显隐——直管挂在 BRAN 自己的 refno 上、随单元级动作走，
+   * 逐段显隐要对象级状态（T4 另议）。查看器没就绪就只写全局选中。
+   */
+  async function focusTreeTube(unit: SpatialTreeUnitNode, tube: SpatialTreeTubeNode): Promise<void> {
+    selection.setSelectedRefno?.(unit.refno);
+    const ready = await waitForViewerReady({ timeoutMs: 4_000, viewerRef: viewerRef as Ref<unknown | null> });
+    const viewer = viewerRef.value;
+    if (!ready || !viewer) return;
+    const previous = viewer.scene.selectedObjectIds.slice();
+    if (previous.length > 0) {
+      viewer.scene.setObjectsSelected(previous, false);
+    }
+    viewer.scene.ensureRefnos([unit.refno]);
+    viewer.scene.setObjectsSelected([unit.refno], true);
+    const [min, max] = [tube.aabb?.min, tube.aabb?.max];
+    const aabb6: Aabb6 | null = min && max ? [min[0], min[1], min[2], max[0], max[1], max[2]] : null;
+    if (!isFiniteAabb6(aabb6)) return;
+    viewer.cameraFlight.flyTo({ aabb: resolveSceneWorldTransform(viewer).aabbToScene(aabb6!), fit: true, duration: 0.8 });
+  }
+
   /** 「执行空间查询」：按当前草稿重解中心再查；失败清掉旧结果（旧结果对应的不是这份草稿）。 */
   async function submitQuery(page = 1) {
     error.value = null;
@@ -2586,6 +2610,7 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
     showOnlyRefnos,
     isolateRefnos,
     expandTreeLeaves,
+    focusTreeTube,
     toggleResultVisible,
     setAllResultsVisible,
     isolateResults,

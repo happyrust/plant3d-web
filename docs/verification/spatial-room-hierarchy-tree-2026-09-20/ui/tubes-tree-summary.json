@@ -1,0 +1,342 @@
+{
+  "started_at": "2026-09-22T08:36:19.734Z",
+  "dev": "http://127.0.0.1:3111",
+  "gm": "http://127.0.0.1:8027",
+  "room": "24381_35580",
+  "steps": [
+    {
+      "step": 1,
+      "what": "抽屉树态：BRAN 单元展开，构件行之后是直段行",
+      "summary_text": "共 1055 项（去重）· 78 段直管 · 1 间房，已加载 0 项，未加载 1055 项",
+      "unit_row_text": "/Copy-of-1RCS0307-1R90004\n0.21 m\n9 段直管",
+      "unit_title": "/Copy-of-1RCS0307-1R90004 · BRAN 24381_148125 · 最近 0.21 m · 11 个构件 · 9 段直管",
+      "tube_rows": [
+        {
+          "key": "24381_148125#24381_148127-24381_148128#0",
+          "text": "直管 BEND → BEND 1.35 m",
+          "title": "直管 BEND → BEND · 1.35 m · 距 0.19 m · 24381_148127 → 24381_148128",
+          "invalid": false
+        },
+        {
+          "key": "24381_148125#24381_148126-24381_148127#0",
+          "text": "直管 WELD → BEND 433 mm",
+          "title": "直管 WELD → BEND · 433 mm · 距 0.42 m · 24381_148126 → 24381_148127",
+          "invalid": false
+        },
+        {
+          "key": "24381_148125#24381_148128-24381_148129#0",
+          "text": "直管 BEND → BEND 500 mm",
+          "title": "直管 BEND → BEND · 500 mm · 距 1.36 m · 24381_148128 → 24381_148129",
+          "invalid": false
+        },
+        {
+          "key": "24381_148125#24381_148129-24381_148130#0",
+          "text": "直管 BEND → BEND 166 mm",
+          "title": "直管 BEND → BEND · 166 mm · 距 1.51 m · 24381_148129 → 24381_148130",
+          "invalid": false
+        },
+        {
+          "key": "24381_148125#24381_148130-24381_148131#0",
+          "text": "直管 BEND → BEND 166 mm",
+          "title": "直管 BEND → BEND · 166 mm · 距 1.67 m · 24381_148130 → 24381_148131",
+          "invalid": false
+        },
+        {
+          "key": "24381_148125#24381_148131-24381_148132#0",
+          "text": "直管 BEND → BEND 166 mm",
+          "title": "直管 BEND → BEND · 166 mm · 距 1.78 m · 24381_148131 → 24381_148132",
+          "invalid": false
+        },
+        {
+          "key": "24381_148125#24381_148132-24381_148133#0",
+          "text": "直管 BEND → WELD 307 mm",
+          "title": "直管 BEND → WELD · 307 mm · 距 1.88 m · 24381_148132 → 24381_148133",
+          "invalid": false
+        },
+        {
+          "key": "24381_148125#24381_148135-24381_148136#0",
+          "text": "直管 WELD → BEND 305 mm",
+          "title": "直管 WELD → BEND · 305 mm · 距 2.11 m · 24381_148135 → 24381_148136",
+          "invalid": false
+        },
+        {
+          "key": "24381_148125#24381_148136-24381_148138#0",
+          "text": "直管 BEND → BEND 3.02 m",
+          "title": "直管 BEND → BEND · 3.02 m · 距 2.59 m · 24381_148136 → 24381_148138",
+          "invalid": false
+        }
+      ],
+      "leaf_rows": 11
+    },
+    {
+      "step": 2,
+      "what": "点直段行：全局选中 = 所属 BRAN，相机飞到直段盒",
+      "selected_refno": "24381_148125",
+      "expected_bran": "24381_148125",
+      "camera": null,
+      "first_tube_aabb": {
+        "min": [
+          -6219.8,
+          -11489.16,
+          3817
+        ],
+        "max": [
+          -6186.4,
+          -11455.76,
+          5168
+        ]
+      }
+    },
+    {
+      "step": 3,
+      "what": "房间页签：同一 BRAN 单元的构件行之后是只读 TUBI 行；点行选中所属 BRAN",
+      "room_row_text": "ROOM R432 · /1RX-RM04-R432 · 1298 个构件 · 159 段直管",
+      "unit_row_text": "BRAN Copy-of-1RCS383MP-YK/307VP · 1 · 1 段直管",
+      "tube_rows": [
+        {
+          "id": "tube:24381_35580:24381_105297#24381_105297-24381_105298#0",
+          "type": "TUBI",
+          "text": "TUBI BRAN → BEND · 96 mm",
+          "title": "直管 BRAN → BEND · 96 mm · 距 0 m · 24381_105297 → 24381_105298 · 属 BRAN 24381_105297",
+          "readOnly": "true",
+          "selected": "true",
+          "buttons": 0
+        }
+      ],
+      "server_tubes": 1,
+      "selected_refno": "24381_105297",
+      "context_menu": [
+        "聚焦飞行",
+        "查看属性"
+      ]
+    }
+  ],
+  "pageErrors": [],
+  "tree_request": "http://127.0.0.1:8027/api/v1/spatial/nearby/tree?x=-6379.5703&y=-11350.16&z=5030&radius=3000&shape=sphere&include_negative=false&rooms=24381%2F35580&tubes=1",
+  "tree": {
+    "total_count": 1055,
+    "total_tube_count": 78,
+    "leaf_count": 1133,
+    "leaves_inline": true,
+    "rooms": [
+      {
+        "room_num": "R432",
+        "count": 1055,
+        "tube_count": 78
+      }
+    ]
+  },
+  "unit": {
+    "refno": "24381_148125",
+    "name": "/Copy-of-1RCS0307-1R90004",
+    "count": 11,
+    "tube_count": 9,
+    "tubes": [
+      {
+        "ordinal": 0,
+        "from": "24381_148127",
+        "to": "24381_148128",
+        "from_noun": "BEND",
+        "to_noun": "BEND",
+        "distance": 191.51472,
+        "length": 1351,
+        "aabb": {
+          "min": [
+            -6219.8,
+            -11489.16,
+            3817
+          ],
+          "max": [
+            -6186.4,
+            -11455.76,
+            5168
+          ]
+        },
+        "invalid": false
+      },
+      {
+        "ordinal": 0,
+        "from": "24381_148126",
+        "to": "24381_148127",
+        "from_noun": "WELD",
+        "to_noun": "BEND",
+        "distance": 419.93347,
+        "length": 433.0122,
+        "aabb": {
+          "min": [
+            -6074.239,
+            -11392.577,
+            5318.3
+          ],
+          "max": [
+            -5697.079,
+            -11121.957,
+            5351.7
+          ]
+        },
+        "invalid": false
+      },
+      {
+        "ordinal": 0,
+        "from": "24381_148128",
+        "to": "24381_148129",
+        "from_noun": "BEND",
+        "to_noun": "BEND",
+        "distance": 1363.3,
+        "length": 499.9992,
+        "aabb": {
+          "min": [
+            -6851.693,
+            -11445.368,
+            3633.3
+          ],
+          "max": [
+            -6360.0874,
+            -11283.691,
+            3666.7
+          ]
+        },
+        "invalid": false
+      },
+      {
+        "ordinal": 0,
+        "from": "24381_148129",
+        "to": "24381_148130",
+        "from_noun": "BEND",
+        "to_noun": "BEND",
+        "distance": 1514.335,
+        "length": 165.99731,
+        "aabb": {
+          "min": [
+            -7110.998,
+            -11582.573,
+            3633.3
+          ],
+          "max": [
+            -7035.772,
+            -11413.587,
+            3666.7
+          ]
+        },
+        "invalid": false
+      },
+      {
+        "ordinal": 0,
+        "from": "24381_148130",
+        "to": "24381_148131",
+        "from_noun": "BEND",
+        "to_noun": "BEND",
+        "distance": 1667.0801,
+        "length": 165.99731,
+        "aabb": {
+          "min": [
+            -7464.063,
+            -11712.468,
+            3633.3
+          ],
+          "max": [
+            -7295.077,
+            -11637.242,
+            3666.7
+          ]
+        },
+        "invalid": false
+      },
+      {
+        "ordinal": 0,
+        "from": "24381_148131",
+        "to": "24381_148132",
+        "from_noun": "BEND",
+        "to_noun": "BEND",
+        "distance": 1776.5912,
+        "length": 165.99731,
+        "aabb": {
+          "min": [
+            -7593.958,
+            -11453.163,
+            3633.3
+          ],
+          "max": [
+            -7518.732,
+            -11284.177,
+            3666.7
+          ]
+        },
+        "invalid": false
+      },
+      {
+        "ordinal": 0,
+        "from": "24381_148132",
+        "to": "24381_148133",
+        "from_noun": "BEND",
+        "to_noun": "WELD",
+        "distance": 1879.2615,
+        "length": 306.50378,
+        "aabb": {
+          "min": [
+            -7953.332,
+            -11100.099,
+            3633.3
+          ],
+          "max": [
+            -7648.6274,
+            -10988.509,
+            3666.7
+          ]
+        },
+        "invalid": false
+      },
+      {
+        "ordinal": 0,
+        "from": "24381_148135",
+        "to": "24381_148136",
+        "from_noun": "WELD",
+        "to_noun": "BEND",
+        "distance": 2111.4785,
+        "length": 304.50754,
+        "aabb": {
+          "min": [
+            -8260.013,
+            -11017.411,
+            3633.3
+          ],
+          "max": [
+            -7957.2373,
+            -10906.332,
+            3666.7
+          ]
+        },
+        "invalid": false
+      },
+      {
+        "ordinal": 0,
+        "from": "24381_148136",
+        "to": "24381_148138",
+        "from_noun": "BEND",
+        "to_noun": "BEND",
+        "distance": 2585.1252,
+        "length": 3016,
+        "aabb": {
+          "min": [
+            -8433.7,
+            -10895.94,
+            467
+          ],
+          "max": [
+            -8400.3,
+            -10862.54,
+            3483
+          ]
+        },
+        "invalid": false
+      }
+    ]
+  },
+  "room_tree": {
+    "request": "http://127.0.0.1:8027/api/v1/spatial/rooms/24381_35580/tree?tubes=1",
+    "total_count": 1298,
+    "total_tube_count": 159,
+    "leaf_count": 1457
+  },
+  "finished_at": "2026-09-22T08:36:25.434Z"
+}

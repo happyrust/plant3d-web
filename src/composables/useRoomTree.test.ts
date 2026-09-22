@@ -338,6 +338,61 @@ describe('useRoomTree', () => {
     expect(viewer.scene.setObjectsXRayed).toHaveBeenLastCalledWith(['24381_1241'], false);
   });
 
+  it('直段行（方案 B）：展开 BRAN 单元后构件行之后进 flatRows、没有子节点；点行回所属 BRAN 的 refno 且场景里选中 BRAN；聚焦按直段盒（mm → 场景）飞、不要求加载；眼睛对它无效；单元级显隐 / 隔离不受影响', async () => {
+    const withTubes = r432Tree();
+    const b1 = withTubes.rooms[0]!.specs[0]!.unit_types[0]!.units[0]!;
+    b1.tube_count = 2;
+    b1.tubes = [
+      { ordinal: 0, from: '24381_1200', to: '24381_1240', from_noun: 'BRAN', to_noun: 'TUBI', distance: 100, length: 141.5, aabb: { min: [10, 20, 30], max: [11, 21, 31] }, invalid: false },
+      { ordinal: 0, from: '24381_1240', to: '24381_1241', from_noun: 'TUBI', to_noun: 'ELBO', distance: 150, length: 2500, aabb: { min: [0, 0, 0], max: [2, 1, 1] }, invalid: true },
+    ];
+    withTubes.rooms[0]!.tube_count = 2;
+    withTubes.total_tube_count = 2;
+    const viewer = makeViewer(['24381_1240']);
+    const { source } = makeSource({ roomTree: vi.fn(async () => withTubes) as unknown as SpatialSource['roomTree'] });
+    const tree = useRoomTree({ value: viewer }, { source: () => source });
+    await tree.loadRoots();
+    tree.toggleExpand('room:24381_35580');
+    await flush();
+    tree.toggleExpand('spec:24381_35580:3');
+    tree.toggleExpand('utype:24381_35580:3:BRAN');
+    tree.toggleExpand('unit:24381_35580:24381_1200');
+    const rows = tree.flatRows.value;
+    const unitIndex = rows.findIndex((row) => row.id === 'unit:24381_35580:24381_1200');
+    const tubeId = 'tube:24381_35580:24381_1200#24381_1200-24381_1240#0';
+    expect(rows.slice(unitIndex, unitIndex + 5).map((row) => row.id)).toEqual([
+      'unit:24381_35580:24381_1200',
+      'elem:24381_35580:24381_1240',
+      'elem:24381_35580:24381_1241',
+      tubeId,
+      'tube:24381_35580:24381_1200#24381_1240-24381_1241#0',
+    ]);
+    const tubeRow = rows.find((row) => row.id === tubeId)!;
+    expect(tubeRow).toMatchObject({ type: 'TUBI', name: 'BRAN → TUBI · 142 mm', hasChildren: false, depth: 4 });
+    expect(tubeRow.refno).toBeUndefined();
+    expect(rows.find((row) => row.id === 'unit:24381_35580:24381_1200')!.name).toBe('/B1 · 2 · 2 段直管');
+
+    const click = (opts: Partial<MouseEvent> = {}) => ({ metaKey: false, ctrlKey: false, shiftKey: false, ...opts } as MouseEvent);
+    expect(tree.selectByRowIndex(rows.indexOf(tubeRow), click()), '点直段行 = 选中所属 BRAN').toBe('24381_1200');
+    await flush();
+    expect(viewer.scene.setObjectsSelected).toHaveBeenLastCalledWith(['24381_1200'], true);
+
+    // 聚焦：不看场景里有没有对象，按服务端给的直段盒飞（没有 DTX 全局矩阵 → 恒等换算，mm 原样）
+    expect(await tree.flyTo(tubeId)).toBe(true);
+    expect(viewer.scene.getAABB).not.toHaveBeenCalled();
+    expect(viewer.cameraFlight.flyTo).toHaveBeenLastCalledWith({ aabb: [10, 20, 30, 11, 21, 31] });
+
+    // 眼睛对直段行无效：不写场景、不改勾选
+    await tree.setVisible(tubeId, false);
+    expect(viewer.scene.setObjectsVisible).not.toHaveBeenCalled();
+    expect(tree.getCheckState(tubeId)).toBe('checked');
+
+    // 单元级隔离照旧：构件 + BRAN 自己（直段）+ 房间外构件；直段行不在 refno 集里
+    expect(await tree.collectRefnos('unit:24381_35580:24381_1200')).toEqual(['24381_1240', '24381_1241']);
+    expect(await tree.collectSceneRefnos('unit:24381_35580:24381_1200')).toEqual(['24381_1240', '24381_1241', '24381_1200', '24381_1242']);
+    expect(await tree.collectSceneRefnos(tubeId)).toEqual([]);
+  });
+
   it('sceneCompanions 可注桩：注入的函数收到节点下的构件与 BRAN 单元 refno，回什么就多动什么', async () => {
     const viewer = makeViewer(['24381_1240']);
     const { source } = makeSource();

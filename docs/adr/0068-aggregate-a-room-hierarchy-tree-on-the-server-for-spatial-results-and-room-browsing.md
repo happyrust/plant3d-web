@@ -39,3 +39,15 @@ depends_on: ADR-0067
 抽屉批量加载命中管件后按记录缓存里的属主再装它所属 BRAN 的整体（BRAN 自己 + 缓存里这一根的全部构件），单元级及以上的仅显示 / 隔离 / 显隐
 与「全部显示 / 隐藏 / 隔离结果」都带上这份整体；构件行的眼睛 / 定位不扩。代价是范围 / 房间之外的那段 BRAN 也会画出来，与模型树「加载模型」
 按生成根整条装的既有行为对齐。实现 `composables/deliveryUnitScene.ts`，只读记录缓存、不多打接口。
+
+**追记 ②（2026-09-22，树里 / 计数里列出直段——方案 B）**：用户接着要「树里也要看到直段」。**不把 TUBI 塞进空间树**（gen-model ADR-072 D4 保持），
+改为服务端**按单元补**：`nearby/tree` / `rooms/{refno}/tree` 加 opt-in `tubes=1`，折完管件后按树里出现的每个 BRAN 单元读它根名下的管身记录（投影有回执取投影，
+否则冷读 `tubi_relate`），直段按与管件同一把尺过范围、按两端管件的房间归属挂到该房的单元下，输出 `units[].tubes[]{ordinal, from, to, from_noun, to_noun, distance,
+length, aabb, invalid, shared_rooms?}` 与各层 `tube_count`、顶层 `total_tube_count`；`count` / `total_count` 不变、直段放置数计入 `leaf_count` 共用 `leaf_cap`；
+缺省关、关着时响应逐字节相同（小计划 `docs/plans/2026-09-21-room-tree-tube-segments-plan.md`，D1–D7 全按推荐；后端执行计划
+gen-model-model-cache `docs/plans/2026-09-22-room-tree-tube-segments-backend-dev-plan.md`，spec §4.13.5「`tubes=1`」；`86bf22f51` + `2aab735df`）。
+前端（T3）：`SpatialSource.tree()` / `roomTree()` 恒带 `tubes=1`，端口类型多 `SpatialTreeTubeNode` / `tube_count` / `total_tube_count`；抽屉 BRAN 单元下构件行之后
+一组只读直段行（`SpatialResultTreeTubes.vue`：「直管 · A → B · 长度」、无效 / 跨房小标，点行 = 选中所属 BRAN + 按直段盒飞），单元行尾「N 段直管」、各层 title
+与摘要带「M 段直管」；房间页签 `roomTreeNodes` 多 `tube` 节点（`tube:<房>:<单元>#<from>-<to>#<ordinal>`，`ModelTreeRow` 只读行、无眼睛 / 勾选，右键只有聚焦 / 查看属性），
+`refnosUnder` / `branUnitRefnosUnder` / `pendingLeafNodesUnder` 跳过它；直段行不进任何 refno 集，方案 A 的单元级动作原样。**D5 取 (i) 只读 + 定位**，逐段眼睛（要
+`model/records` 直段元数据 + 对象级显隐）另立 T4。已知漏洞：管件全在范围外、只有直段穿过范围的「孤直段」列不出。

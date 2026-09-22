@@ -27,6 +27,7 @@ import type {
   SpatialTreeLeafNode,
   SpatialTreeLeafSelector,
   SpatialTreeResult,
+  SpatialTreeTubeNode,
 } from '@/api/genModelSpatialApi';
 
 import {
@@ -45,6 +46,7 @@ import {
   type SpatialRoomsResponse,
   type SpatialTreeLeaf,
   type SpatialTreeResponse,
+  type SpatialTreeTube,
 } from '@/api/genModelV1Api';
 import { genModelV1RoomLookup, roomRefnosOf } from '@/api/genModelV1RoomApi';
 
@@ -265,11 +267,35 @@ function toTreeLeaves(raw: SpatialTreeLeaf[] | undefined): SpatialTreeLeafNode[]
   }));
 }
 
+/** 直段行（`tubes=1`）：两端 refno 归一 `a_b`，其余原样；`tubes` 缺就保持缺（与 `elements` 同一套内联规则）。 */
+function toTreeTubes(raw: SpatialTreeTube[] | undefined): SpatialTreeTubeNode[] | undefined {
+  if (!raw) return undefined;
+  return raw.map((tube) => ({
+    ordinal: tube.ordinal,
+    from: fromV1Refno(tube.from),
+    to: fromV1Refno(tube.to),
+    from_noun: tube.from_noun,
+    to_noun: tube.to_noun,
+    distance: tube.distance,
+    length: tube.length,
+    aabb: tube.aabb,
+    invalid: Boolean(tube.invalid),
+    ...(typeof tube.shared_rooms === 'number' ? { shared_rooms: tube.shared_rooms } : {}),
+  }));
+}
+
+/** 服务端认 `tubes=1` 时各层都有 `tube_count`（关着 / 老构建一格都没有）；缺就不写这一格。 */
+function tubeCountOf(node: { tube_count?: number }): { tube_count: number } | Record<string, never> {
+  return typeof node.tube_count === 'number' ? { tube_count: node.tube_count } : {};
+}
+
 /** v1 `spatial/nearby/tree` 响应 → 端口形状：refno 归一 `a_b`，层级与计数原样。`elements` 缺就保持缺（叶子未内联）。 */
 export function spatialTreeToLegacyResult(resp: SpatialTreeResponse): SpatialTreeResult {
   return {
     success: true,
     total_count: resp.total_count,
+    ...(typeof resp.total_tube_count === 'number' ? { total_tube_count: resp.total_tube_count } : {}),
+    ...(typeof resp.tubes_truncated === 'boolean' ? { tubes_truncated: resp.tubes_truncated } : {}),
     candidate_count: resp.candidate_count,
     truncated_candidates: Boolean(resp.truncated_candidates),
     candidate_cap: resp.candidate_cap,
@@ -283,21 +309,27 @@ export function spatialTreeToLegacyResult(resp: SpatialTreeResponse): SpatialTre
       room_num: room.room_num,
       name: room.name ?? null,
       count: room.count,
+      ...tubeCountOf(room),
       specs: (room.specs ?? []).map((spec) => ({
         spec_value: spec.spec_value,
         count: spec.count,
+        ...tubeCountOf(spec),
         unit_types: (spec.unit_types ?? []).map((group) => ({
           noun: group.noun,
           count: group.count,
+          ...tubeCountOf(group),
           units: (group.units ?? []).map((unit) => {
             const elements = toTreeLeaves(unit.elements);
+            const tubes = toTreeTubes(unit.tubes);
             return {
               refno: fromV1Refno(unit.refno),
               noun: unit.noun,
               name: unit.name ?? null,
               count: unit.count,
+              ...tubeCountOf(unit),
               min_distance: unit.min_distance,
               ...(elements ? { elements } : {}),
+              ...(tubes ? { tubes } : {}),
             };
           }),
         })),

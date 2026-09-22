@@ -1763,19 +1763,45 @@ export type SpatialTreeLeaf = {
   shared_rooms?: number;
 };
 
-/** 一个最小交付单元（BRAN / EQUI…）；`elements` 省略 = 叶子超上限未内联（按 `unit=` 另取）。 */
+/**
+ * BRAN 单元下的一段直管（隐式管身；`tubes=1`，spec §4.13.5，2026-09-22）。身份是 `(单元 refno, from, to, ordinal)`：直管没有自己的
+ * refno、不计入任何 `count`。`from` / `to` 是两端管件的 `a_b`——容器头 / 尾那一段的一端是 BRAN 自己（`*_noun` 为 `BRAN`）；
+ * `length` 是直管长度（mm）；`aabb` 是世界盒（mm，与 `nearby` 结果的 `aabb` 同形），定位飞行用。
+ */
+export type SpatialTreeTube = {
+  ordinal: number;
+  from: string;
+  to: string;
+  from_noun: string;
+  to_noun: string;
+  /** 到中心（点 / 目标盒 / 走廊）的最小表面距离，mm——与管件同一把尺 */
+  distance: number;
+  length: number;
+  aabb: { min: [number, number, number]; max: [number, number, number] };
+  /** 标记为无效的直管（`is_invalid_tubi`） */
+  invalid: boolean;
+  shared_rooms?: number;
+};
+
+/**
+ * 一个最小交付单元（BRAN / EQUI…）；`elements` 省略 = 叶子超上限未内联（按 `unit=` 另取）。
+ * `tube_count` / `tubes` 只在 `tubes=1` 且服务端认这个参数时出现（老服务端没有）；`tubes` 与 `elements` 同一套内联规则。
+ */
 export type SpatialTreeUnit = {
   refno: string;
   noun: string;
   name: string | null;
   count: number;
+  tube_count?: number;
   min_distance: number;
   elements?: SpatialTreeLeaf[];
+  tubes?: SpatialTreeTube[];
 };
 
 export type SpatialTreeUnitType = {
   noun: string;
   count: number;
+  tube_count?: number;
   units: SpatialTreeUnit[];
 };
 
@@ -1790,6 +1816,7 @@ export type SpatialTreeOtherNoun = {
 export type SpatialTreeSpec = {
   spec_value: number;
   count: number;
+  tube_count?: number;
   /** 按 `delivery_unit_types` 配置表顺序 */
   unit_types: SpatialTreeUnitType[];
   /** 不属任何最小交付单元的构件，按 noun 分 */
@@ -1802,6 +1829,8 @@ export type SpatialTreeRoom = {
   name: string | null;
   /** 该房间下按 refno 去重的构件数 */
   count: number;
+  /** 该房间下的直段放置数（`tubes=1` 才有；不计入 `count`） */
+  tube_count?: number;
   /** `spec_value` 升序，0「其他」在前 */
   specs: SpatialTreeSpec[];
 };
@@ -1812,6 +1841,10 @@ export type SpatialTreeResponse = {
   shape: SpatialShape | (string & {});
   /** 全树按 refno 去重的构件数（跨房构件只算一次） */
   total_count: number;
+  /** 全树按身份去重的直段数（`tubes=1` 且服务端认这个参数才有；老服务端缺 = 树里没有直段） */
+  total_tube_count?: number;
+  /** BRAN 单元数超过读根预算（500），只为最近的那些补了直段 */
+  tubes_truncated?: boolean;
   candidate_count: number;
   truncated_candidates: boolean;
   candidate_cap: number;
@@ -1841,6 +1874,12 @@ function spatialTreeLeafQuery(only: SpatialTreeLeafSelector | undefined): Record
 }
 
 /**
+ * 两条树路由恒带 `tubes=1`（spec §4.13.5「`tubes=1`」，2026-09-22）：BRAN 单元下补直段行与各层 `tube_count`。
+ * 服务端缺省关、老构建不认这个参数（响应里就没有 `total_tube_count`），所以恒带无害；前端按响应里有没有这些键画。
+ */
+const SPATIAL_TREE_TUBES_QUERY: Record<string, QueryValue> = { tubes: 1 };
+
+/**
  * `GET /api/v1/spatial/nearby/tree`（spec §4.13.5，ADR 0068）：同 `nearby` 的一次查询折成
  * 房间 → 专业 → 最小交付单元类型 → 单元 → 构件 的层级树。`rooms` 必给（服务端 400）；`sort / page / perPage` 不发。
  */
@@ -1852,7 +1891,7 @@ export function genModelV1SpatialNearbyTree(
   const { page: _page, perPage: _perPage, sort: _sort, ...rest } = req;
   return genModelV1Fetch<SpatialTreeResponse>('/api/v1/spatial/nearby/tree', {
     ...options,
-    query: { ...spatialNearbyQuery(rest), ...spatialTreeLeafQuery(only) },
+    query: { ...spatialNearbyQuery(rest), ...SPATIAL_TREE_TUBES_QUERY, ...spatialTreeLeafQuery(only) },
   });
 }
 
@@ -1882,6 +1921,7 @@ export function genModelV1SpatialRoomTree(
       include_negative: req.includeNegative,
       dbnums: req.dbnums && req.dbnums.length > 0 ? req.dbnums.join(',') : undefined,
       spec_values: req.specValues && req.specValues.length > 0 ? req.specValues.join(',') : undefined,
+      ...SPATIAL_TREE_TUBES_QUERY,
       ...spatialTreeLeafQuery(only),
     },
   });

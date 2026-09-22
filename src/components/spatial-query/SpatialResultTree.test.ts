@@ -3,7 +3,7 @@ import { createApp, h, nextTick } from 'vue';
 
 import SpatialResultTree from './SpatialResultTree.vue';
 
-import type { SpatialTreeResult } from '@/api/genModelSpatialApi';
+import type { SpatialTreeResult, SpatialTreeTubeNode, SpatialTreeUnitNode } from '@/api/genModelSpatialApi';
 import type { SpatialQueryResultItem } from '@/types/spatialQuery';
 
 /**
@@ -100,12 +100,13 @@ type Emitted = {
   showOnly: string[][][];
   isolate: string[][][];
   expand: unknown[][];
+  focusTube: [SpatialTreeUnitNode, SpatialTreeTubeNode][];
 };
 
 let unmountCurrent: (() => void) | null = null;
 
 function mountTree(options: { tree?: SpatialTreeResult; items?: SpatialQueryResultItem[]; activeRefno?: string | null; busy?: boolean } = {}) {
-  const emitted: Emitted = { focus: [], toggleVisible: [], load: [], showOnly: [], isolate: [], expand: [] };
+  const emitted: Emitted = { focus: [], toggleVisible: [], load: [], showOnly: [], isolate: [], expand: [], focusTube: [] };
   const host = document.createElement('div');
   document.body.appendChild(host);
   const app = createApp({
@@ -120,6 +121,7 @@ function mountTree(options: { tree?: SpatialTreeResult; items?: SpatialQueryResu
       onShowOnly: (refnos: string[]) => emitted.showOnly.push([refnos]),
       onIsolate: (refnos: string[]) => emitted.isolate.push([refnos]),
       onExpand: (selector: unknown) => emitted.expand.push([selector]),
+      onFocusTube: (unit: SpatialTreeUnitNode, tube: SpatialTreeTubeNode) => emitted.focusTube.push([unit, tube]),
     }),
   });
   app.mount(host);
@@ -337,6 +339,79 @@ describe('SpatialResultTree（ADR 0068 房间层级树）', () => {
     q(pane, 'spatial-tree-toggle')[0]!.click();
     await nextTick();
     expect(emitted.expand[1]).toEqual([{ otherNoun: 'PANE' }]);
+  });
+
+  it('直段行（方案 B）：BRAN 单元展开后构件行之后列直段——「直管 · A → B · 长度」、无效小标、跨房小标；单元行尾「N 段直管」、各层 title 带「· M 段直管」；点行 / 箭头发 focusTube；老服务端没给就一切照旧', async () => {
+    const withTubes = tree({ total_tube_count: 3 });
+    const r1 = withTubes.rooms[0]!;
+    r1.tube_count = 3;
+    r1.specs[1]!.tube_count = 3;
+    r1.specs[1]!.unit_types[0]!.tube_count = 3;
+    r1.specs[1]!.unit_types[1]!.tube_count = 0;
+    r1.specs[1]!.unit_types[1]!.units[0]!.tube_count = 0;
+    const b1 = r1.specs[1]!.unit_types[0]!.units[0]!;
+    b1.tube_count = 3;
+    const seg = (from: string, to: string, ordinal: number, extra: Partial<SpatialTreeTubeNode> = {}): SpatialTreeTubeNode => ({
+      ordinal, from, to, from_noun: from === 'b1' ? 'BRAN' : 'TUBI', to_noun: 'ELBO', distance: 210, length: 141.5,
+      aabb: { min: [0, 0, 0], max: [1, 1, 1] }, invalid: false, ...extra,
+    });
+    b1.tubes = [seg('b1', 't1', 0), seg('t1', 'x1', 0, { shared_rooms: 2, length: 2500 }), seg('t1', 'x1', 1, { invalid: true })];
+
+    const { host, emitted } = mountTree({ tree: withTubes });
+    const roomEl = q(host, 'spatial-tree-room')[0]!;
+    expect(roomEl.querySelector<HTMLElement>('[title]')!.title).toContain('4 个构件 · 3 段直管');
+    const b1El = q(roomEl, 'spatial-tree-unit')[0]!;
+    expect(text(q(b1El, 'spatial-tree-tube-count')[0])).toBe('3 段直管');
+    expect(b1El.querySelector<HTMLElement>('[title]')!.title).toContain('2 个构件 · 3 段直管');
+    // EQUI 单元 tube_count=0：不画尾巴，title 仍说 0 段
+    const e1El = q(roomEl, 'spatial-tree-unit')[1]!;
+    expect(q(e1El, 'spatial-tree-tube-count')).toHaveLength(0);
+    expect(e1El.querySelector<HTMLElement>('[title]')!.title).toContain('1 个构件 · 0 段直管');
+    // 收起时不画
+    expect(q(b1El, 'spatial-tree-tube-row')).toHaveLength(0);
+
+    q(b1El, 'spatial-tree-toggle')[0]!.click();
+    await nextTick();
+    const leaves = q(b1El, 'spatial-tree-leaf');
+    const rows = q(b1El, 'spatial-tree-tube-row');
+    expect(rows).toHaveLength(3);
+    expect(rows.map((el) => el.dataset.tubeKey)).toEqual(['b1#b1-t1#0', 'b1#t1-x1#0', 'b1#t1-x1#1']);
+    // 构件行在前、直段行在后
+    expect(leaves[1]!.compareDocumentPosition(rows[0]!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const firstButton = rows[0]!.querySelector<HTMLButtonElement>('button[title]')!;
+    const [mark, label, length] = Array.from(firstButton.children) as [HTMLElement, HTMLElement, HTMLElement];
+    expect([text(mark), text(label), text(length)]).toEqual(['直管', 'BRAN → ELBO', '142 mm']);
+    expect(label.className, '两端 noun 是唯一可截段').toContain('truncate');
+    expect(mark.className).toContain('shrink-0');
+    expect(length.className).toContain('shrink-0');
+    expect(firstButton.title).toBe('直管 BRAN → ELBO · 142 mm · 距 0.21 m · b1 → t1');
+    expect(text(q(rows[1]!, 'spatial-tree-shared')[0])).toBe('跨 2 房');
+    expect(text(rows[1]!.querySelector('button[title]'))).toContain('2.5 m');
+    expect(q(rows[2]!, 'spatial-tree-tube-invalid')).toHaveLength(1);
+    expect(rows[2]!.dataset.invalid).toBe('true');
+    expect(rows[2]!.querySelector<HTMLButtonElement>('button[title]')!.title).toContain('第 2 段 · 无效直管');
+    // 直段行没有眼睛
+    expect(q(rows[0]!, 'spatial-tree-leaf-visibility')).toHaveLength(0);
+
+    rows[0]!.querySelector<HTMLButtonElement>('button[title]')!.click();
+    q(rows[2]!, 'spatial-tree-tube-locate')[0]!.click();
+    expect(emitted.focusTube).toHaveLength(2);
+    expect(emitted.focusTube[0]![0].refno).toBe('b1');
+    expect(emitted.focusTube[0]![1]).toMatchObject({ from: 'b1', to: 't1', ordinal: 0 });
+    expect(emitted.focusTube[1]![1]).toMatchObject({ ordinal: 1, invalid: true });
+    expect(emitted.focus, '直段行不走构件的 focus').toHaveLength(0);
+    unmountCurrent?.();
+
+    // 老服务端：没有 tube_count / tubes——尾巴、直段行都没有，title 只说构件数
+    const legacy = mountTree();
+    const legacyUnit = q(legacy.host, 'spatial-tree-unit')[0]!;
+    expect(q(legacyUnit, 'spatial-tree-tube-count')).toHaveLength(0);
+    expect(legacyUnit.querySelector<HTMLElement>('[title]')!.title).toContain('2 个构件');
+    expect(legacyUnit.querySelector<HTMLElement>('[title]')!.title).not.toContain('直管');
+    q(legacyUnit, 'spatial-tree-toggle')[0]!.click();
+    await nextTick();
+    expect(q(legacyUnit, 'spatial-tree-tube-row')).toHaveLength(0);
+    expect(q(legacyUnit, 'spatial-tree-tubes')).toHaveLength(0);
   });
 
   it('busy 时动作按钮全部禁用；没有房间命中时给一句空态', () => {

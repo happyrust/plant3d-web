@@ -555,6 +555,36 @@ describe('gen-model-v1 spatialSource', () => {
     expect(mapped.room_status?.matched).toBe(3);
     expect(mapped.warnings).toEqual(['房间过滤：1 个候选没有内存投影记录']);
     expect(mapped.center).toEqual({ x: 10, y: 20, z: 30, source: 'refno_aabb_center' });
+    // 老服务端（不认 tubes=1）：一个直段键都没有
+    expect('total_tube_count' in mapped).toBe(false);
+    expect('tube_count' in r432).toBe(false);
+    expect('tubes' in unit).toBe(false);
+
+    // 直段（方案 B）：各层 tube_count、单元 tubes（两端 refno 归一 a_b）、顶层 total_tube_count / tubes_truncated 原样带出
+    const withTubes = treeResponse();
+    withTubes.total_tube_count = 2;
+    withTubes.tubes_truncated = false;
+    const rawRoom = withTubes.rooms[0]!;
+    rawRoom.tube_count = 2;
+    rawRoom.specs[1]!.tube_count = 2;
+    rawRoom.specs[1]!.unit_types[0]!.tube_count = 2;
+    rawRoom.specs[1]!.unit_types[0]!.units[0]!.tube_count = 2;
+    rawRoom.specs[1]!.unit_types[0]!.units[0]!.tubes = [
+      { ordinal: 0, from: '24381/1200', to: '24381/1240', from_noun: 'BRAN', to_noun: 'TUBI', distance: 1, length: 141.5, aabb: { min: [0, 0, 0], max: [1, 1, 1] }, invalid: false },
+      { ordinal: 1, from: '24381_1240', to: '24381_1241', from_noun: 'TUBI', to_noun: 'ELBO', distance: 2, length: 2500, aabb: { min: [1, 0, 0], max: [3, 1, 1] }, invalid: true, shared_rooms: 2 },
+    ];
+    const mappedTubes = spatialTreeToLegacyResult(withTubes);
+    expect(mappedTubes).toMatchObject({ total_tube_count: 2, tubes_truncated: false });
+    expect(mappedTubes.rooms[0]!.tube_count).toBe(2);
+    expect(mappedTubes.rooms[0]!.specs[1]!.tube_count).toBe(2);
+    expect(mappedTubes.rooms[0]!.specs[1]!.unit_types[0]!.tube_count).toBe(2);
+    expect('tube_count' in mappedTubes.rooms[0]!.specs[0]!, '没给的层不写').toBe(false);
+    expect(mappedTubes.rooms[0]!.specs[1]!.unit_types[0]!.units[0]!).toMatchObject({ tube_count: 2 });
+    expect(mappedTubes.rooms[0]!.specs[1]!.unit_types[0]!.units[0]!.tubes).toEqual([
+      { ordinal: 0, from: '24381_1200', to: '24381_1240', from_noun: 'BRAN', to_noun: 'TUBI', distance: 1, length: 141.5, aabb: { min: [0, 0, 0], max: [1, 1, 1] }, invalid: false },
+      { ordinal: 1, from: '24381_1240', to: '24381_1241', from_noun: 'TUBI', to_noun: 'ELBO', distance: 2, length: 2500, aabb: { min: [1, 0, 0], max: [3, 1, 1] }, invalid: true, shared_rooms: 2 },
+    ]);
+    expect('tubes' in mappedTubes.rooms[1]!.specs[0]!.unit_types[0]!.units[0]!, '未内联的单元 tubes 也缺').toBe(false);
 
     const api = {
       nearby: vi.fn(async () => nearbyResponse()),

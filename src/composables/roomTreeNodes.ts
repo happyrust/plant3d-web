@@ -4,9 +4,12 @@
  * （专业下另有「其他构件」按 noun 分）展成带 parent / children 的节点表，行组件沿用 `ModelTreeRow`（`name` / `type` / `refno`）。
  *
  * 节点 id：`room:<房间 refno>`、`spec:<房间>:<spec_value>`、`utype:<房间>:<spec_value>:<NOUN>`、`others:<房间>:<spec_value>`、
- * `unit:<房间>:<单元 refno>`、`onoun:<房间>:<spec_value>:<NOUN>`、构件 `elem:<房间>:<refno>`。构件 / 单元的场景对象键放在 `refno`（`a_b`），
- * 显隐 / 选中 / 定位按它作用；分组节点是合成 id、没有场景对象，勾选状态由子构件推导。同一构件在两间房下各有一个节点（id 带房间），
- * 与抽屉树态「跨房构件两间房下都出现」一致。纯函数，不碰 Vue。
+ * `unit:<房间>:<单元 refno>`、`onoun:<房间>:<spec_value>:<NOUN>`、构件 `elem:<房间>:<refno>`、直段 `tube:<房间>:<单元>#<from>-<to>#<ordinal>`。
+ * 构件 / 单元的场景对象键放在 `refno`（`a_b`），显隐 / 选中 / 定位按它作用；分组节点是合成 id、没有场景对象，勾选状态由子构件推导。
+ * 同一构件在两间房下各有一个节点（id 带房间），与抽屉树态「跨房构件两间房下都出现」一致。纯函数，不碰 Vue。
+ *
+ * 直段行（方案 B，2026-09-22；服务端 `tubes=1`）：BRAN 单元的构件行之后再列它的直段——没有 refno、不是构件，`refnosUnder` /
+ * `pendingLeafNodesUnder` / `branUnitRefnosUnder` 都跳过它；勾选 / 眼睛不画（直管随单元级动作走），点行选中所属 BRAN、聚焦按直段盒飞。
  */
 import type {
   SpatialRoomOption,
@@ -14,13 +17,14 @@ import type {
   SpatialTreeLeafSelector,
   SpatialTreeResult,
   SpatialTreeRoomNode,
+  SpatialTreeTubeNode,
   SpatialTreeUnitNode,
 } from '@/api/genModelSpatialApi';
 
-import { treeNodeLeavesInline } from '@/composables/spatialTree';
+import { countPhrase, formatTubeLength, treeNodeLeavesInline, tubeKey, tubeLabel } from '@/composables/spatialTree';
 import { getSpecValueName } from '@/types/spec';
 
-export type RoomTreeNodeKind = 'room' | 'spec' | 'unitType' | 'unit' | 'others' | 'otherNoun' | 'element';
+export type RoomTreeNodeKind = 'room' | 'spec' | 'unitType' | 'unit' | 'others' | 'otherNoun' | 'element' | 'tube';
 
 export type RoomTreeNode = {
   id: string;
@@ -46,6 +50,8 @@ export type RoomTreeNode = {
   sharedRooms?: number;
   /** 悬停全文 */
   title: string;
+  /** 直段行才有：所属 BRAN 单元的 refno（点行 = 选中它）与服务端给的那段直管（`aabb` 定位用） */
+  tube?: { unitRefno: string; tube: SpatialTreeTubeNode };
 };
 
 export const ROOM_NODE_PREFIX = 'room:';
@@ -71,13 +77,17 @@ export function otherNounNodeId(roomRefno: string, specValue: number, noun: stri
 export function elementNodeId(roomRefno: string, refno: string): string {
   return `elem:${roomRefno}:${refno}`;
 }
+/** 直段行：`tube:<房间>:<单元>#<from>-<to>#<ordinal>`（`tubeKey`，与服务端四元组同一身份）。 */
+export function tubeNodeId(roomRefno: string, unitRefno: string, tube: Pick<SpatialTreeTubeNode, 'from' | 'to' | 'ordinal'>): string {
+  return `tube:${roomRefno}:${tubeKey(unitRefno, tube)}`;
+}
 
 /** 任一节点 id 所属的房间 refno；不是本页签的 id 回 null。 */
 export function roomRefnoOfNodeId(id: string): string | null {
   const parts = id.split(':');
   if (parts.length < 2) return null;
   const kind = parts[0];
-  if (kind === 'room' || kind === 'spec' || kind === 'utype' || kind === 'others' || kind === 'unit' || kind === 'onoun' || kind === 'elem') {
+  if (kind === 'room' || kind === 'spec' || kind === 'utype' || kind === 'others' || kind === 'unit' || kind === 'onoun' || kind === 'elem' || kind === 'tube') {
     return parts[1] || null;
   }
   return null;
@@ -100,10 +110,10 @@ export function ancestorsOf(id: string, nodes: Record<string, RoomTreeNode>): st
   return out;
 }
 
-/** 房间行的名字：房号 · 名字（· N 个构件，树取回后才有）。 */
-function roomLabel(roomNum: string, name: string | null | undefined, count: number | null): string {
+/** 房间行的名字：房号 · 名字（· N 个构件（· M 段直管），树取回后才有）。 */
+function roomLabel(roomNum: string, name: string | null | undefined, count: number | null, tubeCount?: number): string {
   const parts = [roomNum, name || null];
-  if (typeof count === 'number') parts.push(`${count} 个构件`);
+  if (typeof count === 'number') parts.push(countPhrase(count, tubeCount));
   return parts.filter(Boolean).join(' · ');
 }
 
@@ -152,12 +162,13 @@ function leafNode(roomRefno: string, parentId: string, leaf: SpatialTreeLeafNode
 
 function unitNode(roomRefno: string, parentId: string, unit: SpatialTreeUnitNode): RoomTreeNode {
   const inline = Array.isArray(unit.elements);
+  const tubeTail = unit.tube_count ? ` · ${unit.tube_count} 段直管` : '';
   return {
     id: unitNodeId(roomRefno, unit.refno),
     kind: 'unit',
     parentId,
     childrenIds: [],
-    name: `${unit.name || unit.refno} · ${unit.count}`,
+    name: `${unit.name || unit.refno} · ${unit.count}${tubeTail}`,
     type: unit.noun,
     refno: unit.refno,
     roomRefno,
@@ -165,7 +176,40 @@ function unitNode(roomRefno: string, parentId: string, unit: SpatialTreeUnitNode
     leavesInline: inline,
     ...(inline ? {} : { leafSelector: { unit: unit.refno } }),
     distance: unit.min_distance,
-    title: [unit.name, `${unit.noun} ${unit.refno}`, `最近 ${formatDistance(unit.min_distance)}`, `${unit.count} 个构件`].filter(Boolean).join(' · '),
+    title: [unit.name, `${unit.noun} ${unit.refno}`, `最近 ${formatDistance(unit.min_distance)}`, countPhrase(unit.count, unit.tube_count)].filter(Boolean).join(' · '),
+  };
+}
+
+/**
+ * 直段行（方案 B，D5 (i)）：`ModelTreeRow` 按「NOUN NAME」画，所以 `type: 'TUBI'`、`name` 是「REDU → BEND · 141 mm」（无效直管尾加「无效」）
+ * ——行上读作「TUBI REDU → BEND · 141 mm」。没有 refno（不是场景对象、不进任何 refno 集），`count: 0`（不是构件）。
+ */
+function tubeNode(roomRefno: string, parentId: string, unitRefno: string, tube: SpatialTreeTubeNode): RoomTreeNode {
+  const invalid = tube.invalid ? ' · 无效' : '';
+  const shared = typeof tube.shared_rooms === 'number' && tube.shared_rooms > 1 ? `跨 ${tube.shared_rooms} 房` : null;
+  return {
+    id: tubeNodeId(roomRefno, unitRefno, tube),
+    kind: 'tube',
+    parentId,
+    childrenIds: [],
+    name: `${tubeLabel(tube)} · ${formatTubeLength(tube.length)}${invalid}`,
+    type: 'TUBI',
+    roomRefno,
+    count: 0,
+    leavesInline: true,
+    distance: tube.distance,
+    ...(typeof tube.shared_rooms === 'number' ? { sharedRooms: tube.shared_rooms } : {}),
+    title: [
+      `直管 ${tubeLabel(tube)}`,
+      formatTubeLength(tube.length),
+      `距 ${formatDistance(tube.distance)}`,
+      `${tube.from} → ${tube.to}`,
+      tube.ordinal > 0 ? `第 ${tube.ordinal + 1} 段` : null,
+      tube.invalid ? '无效直管' : null,
+      shared,
+      `属 BRAN ${unitRefno}`,
+    ].filter(Boolean).join(' · '),
+    tube: { unitRefno, tube },
   };
 }
 
@@ -185,13 +229,13 @@ export function flattenRoomTree(roomRefno: string, tree: SpatialTreeResult, root
     kind: 'room',
     parentId: null,
     childrenIds: [],
-    name: roomLabel(room.room_num || root?.room_num || roomRefno, room.name ?? root?.name ?? null, room.count),
+    name: roomLabel(room.room_num || root?.room_num || roomRefno, room.name ?? root?.name ?? null, room.count, room.tube_count),
     type: 'ROOM',
     refno: roomRefno,
     roomRefno,
     count: room.count,
     leavesInline: treeNodeLeavesInline({ kind: 'room', node: room }),
-    title: [room.room_num, room.name, roomRefno, `${room.count} 个构件`, tree.leaves_inline ? null : `构件 ${tree.leaf_count} 个放置 > 上限 ${tree.leaf_cap}，按单元展开时再取`]
+    title: [room.room_num, room.name, roomRefno, countPhrase(room.count, room.tube_count), tree.leaves_inline ? null : `构件 ${tree.leaf_count} 个放置 > 上限 ${tree.leaf_cap}，按单元展开时再取`]
       .filter(Boolean).join(' · '),
   };
   nodes[rootId] = roomNode;
@@ -208,7 +252,7 @@ export function flattenRoomTree(roomRefno: string, tree: SpatialTreeResult, root
       roomRefno,
       count: spec.count,
       leavesInline: treeNodeLeavesInline({ kind: 'spec', node: spec }),
-      title: `${getSpecValueName(spec.spec_value)} · 专业 ${spec.spec_value} · ${spec.count} 个构件`,
+      title: `${getSpecValueName(spec.spec_value)} · 专业 ${spec.spec_value} · ${countPhrase(spec.count, spec.tube_count)}`,
     };
     nodes[specId] = specNode;
     roomNode.childrenIds.push(specId);
@@ -225,7 +269,7 @@ export function flattenRoomTree(roomRefno: string, tree: SpatialTreeResult, root
         roomRefno,
         count: group.count,
         leavesInline: treeNodeLeavesInline({ kind: 'unitType', node: group }),
-        title: `${group.noun} · ${group.units.length} 个最小交付单元 · ${group.count} 个构件`,
+        title: `${group.noun} · ${group.units.length} 个最小交付单元 · ${countPhrase(group.count, group.tube_count)}`,
       };
       nodes[groupId] = groupNode;
       specNode.childrenIds.push(groupId);
@@ -236,6 +280,12 @@ export function flattenRoomTree(roomRefno: string, tree: SpatialTreeResult, root
         groupNode.childrenIds.push(node.id);
         for (const leaf of unit.elements ?? []) {
           const child = leafNode(roomRefno, node.id, leaf);
+          nodes[child.id] = child;
+          node.childrenIds.push(child.id);
+        }
+        // 直段行（方案 B）：构件行之后；`tubes` 与 `elements` 一起来、一起缺
+        for (const tube of unit.tubes ?? []) {
+          const child = tubeNode(roomRefno, node.id, unit.refno, tube);
           nodes[child.id] = child;
           node.childrenIds.push(child.id);
         }

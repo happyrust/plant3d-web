@@ -3,15 +3,20 @@ import { describe, expect, it } from 'vitest';
 import {
   branUnitRefnosCoveredBy,
   branUnitRefnosOfTree,
+  countPhrase,
   forEachTreeLeaf,
+  formatTubeLength,
   fullMatchesFromTree,
   mergeTreeLeaves,
   treeNodeLeavesInline,
   treeNodeRefnos,
+  treeNodeTubes,
   treeToNearbyResult,
+  tubeKey,
+  tubeLabel,
 } from './spatialTree';
 
-import type { SpatialTreeResult } from '@/api/genModelSpatialApi';
+import type { SpatialTreeResult, SpatialTreeTubeNode } from '@/api/genModelSpatialApi';
 
 /** 两间房：R1 里 BRAN b1（两条）+ EQUI e1（一条）+ 其他构件 PANE 一条；R2 里 b1 的一条跨房构件。 */
 function tree(overrides: Partial<SpatialTreeResult> = {}): SpatialTreeResult {
@@ -196,5 +201,102 @@ describe('spatialTree（ADR 0068 纯函数）', () => {
     const merged2 = mergeTreeLeaves(merged, withNoun);
     expect(merged2.rooms[0]!.specs[0]!.others.by_noun[0]!.elements?.map((leaf) => leaf.refno)).toEqual(['p1']);
     expect(merged2.rooms[0]!.specs[1]!.unit_types[0]!.units[0]!.elements?.length, '上一轮补的单元叶子还在').toBe(2);
+  });
+
+  // ---- 直段（方案 B，服务端 tubes=1）----
+
+  function tube(from: string, to: string, ordinal = 0, extra: Partial<SpatialTreeTubeNode> = {}): SpatialTreeTubeNode {
+    return {
+      ordinal,
+      from,
+      to,
+      from_noun: from === 'b1' ? 'BRAN' : 'ELBO',
+      to_noun: to === 'b1' ? 'BRAN' : 'REDU',
+      distance: 1,
+      length: 141.5,
+      aabb: { min: [0, 0, 0], max: [1, 1, 1] },
+      invalid: false,
+      ...extra,
+    };
+  }
+
+  /** 与 `tree()` 同形，BRAN b1 在两间房下各带直段（一段跨两房只算一次），各层 `tube_count`，顶层 `total_tube_count`。 */
+  function treeWithTubes(): SpatialTreeResult {
+    const base = tree({ total_tube_count: 3, tubes_truncated: false, leaf_count: 5 + 4 });
+    const r1 = base.rooms[0]!;
+    const r2 = base.rooms[1]!;
+    r1.tube_count = 3;
+    r1.specs[0]!.tube_count = 0;
+    r1.specs[1]!.tube_count = 3;
+    r1.specs[1]!.unit_types[0]!.tube_count = 3;
+    r1.specs[1]!.unit_types[1]!.tube_count = 0;
+    r1.specs[1]!.unit_types[1]!.units[0]!.tube_count = 0;
+    const b1InR1 = r1.specs[1]!.unit_types[0]!.units[0]!;
+    b1InR1.tube_count = 3;
+    b1InR1.tubes = [tube('b1', 't1'), tube('t1', 'x1', 0, { shared_rooms: 2 }), tube('t1', 'x1', 1, { invalid: true, length: 2500 })];
+    r2.tube_count = 1;
+    r2.specs[0]!.tube_count = 1;
+    r2.specs[0]!.unit_types[0]!.tube_count = 1;
+    const b1InR2 = r2.specs[0]!.unit_types[0]!.units[0]!;
+    b1InR2.tube_count = 1;
+    b1InR2.tubes = [tube('t1', 'x1', 0, { shared_rooms: 2 })];
+    return base;
+  }
+
+  it('tubeKey / tubeLabel / formatTubeLength / countPhrase：身份键与服务端四元组同形，长度 < 1 m 整 mm、≥ 1 m 两位小数去尾零，计数句只在有 tube_count 时带直段', () => {
+    expect(tubeKey('b1', tube('t1', 'x1', 2))).toBe('b1#t1-x1#2');
+    expect(tubeLabel(tube('b1', 't1'))).toBe('BRAN → REDU');
+    expect(tubeLabel(tube('t1', 'b1'))).toBe('ELBO → BRAN');
+    expect(tubeLabel({ from_noun: '', to_noun: 'REDU' })).toBe('? → REDU');
+    expect(formatTubeLength(141.5)).toBe('142 mm');
+    expect(formatTubeLength(999.6)).toBe('1000 mm');
+    expect(formatTubeLength(2500)).toBe('2.5 m');
+    expect(formatTubeLength(3016)).toBe('3.02 m');
+    expect(formatTubeLength(1000)).toBe('1 m');
+    expect(formatTubeLength(Number.NaN)).toBe('');
+    expect(countPhrase(4, undefined)).toBe('4 个构件');
+    expect(countPhrase(4, 0)).toBe('4 个构件 · 0 段直管');
+    expect(countPhrase(4, 3)).toBe('4 个构件 · 3 段直管');
+  });
+
+  it('treeNodeTubes：单元级及以上按身份键去重、保持树序，其他构件没有直段；tubes 缺的单元不算；直段不进任何 refno 集', () => {
+    const t = treeWithTubes();
+    const room1 = t.rooms[0]!;
+    const keys = (target: Parameters<typeof treeNodeTubes>[0]) => treeNodeTubes(target).map(({ unit, tube: seg }) => tubeKey(unit.refno, seg));
+    expect(keys({ kind: 'room', node: room1 })).toEqual(['b1#b1-t1#0', 'b1#t1-x1#0', 'b1#t1-x1#1']);
+    expect(keys({ kind: 'spec', node: room1.specs[1]! })).toEqual(['b1#b1-t1#0', 'b1#t1-x1#0', 'b1#t1-x1#1']);
+    expect(keys({ kind: 'unitType', node: room1.specs[1]!.unit_types[0]! })).toHaveLength(3);
+    expect(keys({ kind: 'unit', node: room1.specs[1]!.unit_types[1]!.units[0]! })).toEqual([]);
+    expect(keys({ kind: 'others', node: room1.specs[0]!.others })).toEqual([]);
+    expect(keys({ kind: 'otherNoun', node: room1.specs[0]!.others.by_noun[0]! })).toEqual([]);
+    // 跨房那一段在 R2 下也列，但整树按键去重只算一次
+    const all = new Set<string>();
+    for (const room of t.rooms) for (const key of keys({ kind: 'room', node: room })) all.add(key);
+    expect(all.size).toBe(3);
+    expect(t.total_tube_count).toBe(3);
+    // 构件 refno 集不受直段影响
+    expect(treeNodeRefnos({ kind: 'unit', node: room1.specs[1]!.unit_types[0]!.units[0]! })).toEqual(['t1', 'x1']);
+    expect(branUnitRefnosCoveredBy(t, ['t1', 'x1'])).toEqual(['b1']);
+    expect(fullMatchesFromTree(t).refnos).toEqual(['p1', 't1', 'x1', 'n1']);
+    const withoutTubes = tree();
+    expect(keys({ kind: 'room', node: withoutTubes.rooms[0]! })).toEqual([]);
+  });
+
+  it('mergeTreeLeaves：按 unit= 补回来的单元连 tubes 一起填；补回来的没有 tubes（老服务端）就只填 elements', () => {
+    const base = treeWithTubes();
+    for (const room of base.rooms) for (const spec of room.specs) for (const g of spec.unit_types) for (const u of g.units) { delete u.elements; delete u.tubes; }
+    const partial = treeWithTubes();
+    for (const room of partial.rooms) for (const spec of room.specs) for (const g of spec.unit_types) for (const u of g.units) if (u.refno !== 'b1') { delete u.elements; delete u.tubes; }
+    const merged = mergeTreeLeaves(base, partial);
+    expect(merged.rooms[0]!.specs[1]!.unit_types[0]!.units[0]!.tubes?.map((seg) => tubeKey('b1', seg))).toEqual(['b1#b1-t1#0', 'b1#t1-x1#0', 'b1#t1-x1#1']);
+    expect(merged.rooms[1]!.specs[0]!.unit_types[0]!.units[0]!.tubes).toHaveLength(1);
+    expect(merged.rooms[0]!.specs[1]!.unit_types[1]!.units[0]!.tubes, '没点到的单元不动').toBeUndefined();
+    expect(base.rooms[0]!.specs[1]!.unit_types[0]!.units[0]!.tubes, '不改入参').toBeUndefined();
+
+    const legacyPartial = tree({ leaves_inline: false, inlined: 'unit:b1' });
+    const mergedLegacy = mergeTreeLeaves(base, legacyPartial);
+    const unit = mergedLegacy.rooms[0]!.specs[1]!.unit_types[0]!.units[0]!;
+    expect(unit.elements?.map((leaf) => leaf.refno)).toEqual(['t1', 'x1']);
+    expect(unit.tubes).toBeUndefined();
   });
 });

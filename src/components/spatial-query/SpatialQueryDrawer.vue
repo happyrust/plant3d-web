@@ -670,7 +670,8 @@
               @load="loadTreeNode"
               @show-only="showOnlyRefnos"
               @isolate="isolateRefnos"
-              @expand="expandTreeLeaves" />
+              @expand="expandTreeLeaves"
+              @focus-tube="focusTreeTube" />
           </div>
 
           <div v-if="resultsExpanded && resultSet && resultSet.items.length > 0 && canToggleGroupDimension && !treeResult"
@@ -841,6 +842,7 @@ const {
   showOnlyRefnos,
   isolateRefnos,
   expandTreeLeaves,
+  focusTreeTube,
   toggleResultVisible,
   setAllResultsVisible,
   isolateResults,
@@ -1189,13 +1191,16 @@ const summaryText = computed(() => {
   if (!resultSet.value) {
     return `支持范围查询与距离查询，结果会${groupDimensionLabel.value}分组。`;
   }
-  // 树态（ADR 0068）：全集一次给、按 refno 去重、不分页——没有「当前页」；跨房构件只算一次
+  // 树态（ADR 0068）：全集一次给、按 refno 去重、不分页——没有「当前页」；跨房构件只算一次。
+  // 直段（方案 B）另说一句「M 段直管」——不是构件、不进「共 N 项」，服务端没给（老构建）就不说。
   if (resultSet.value.tree) {
     const rooms = resultSet.value.tree.rooms.length;
     const loaded = resultSet.value.tree.leaves_inline
       ? `，已加载 ${resultSet.value.loadedCount} 项，未加载 ${resultSet.value.unloadedCount} 项`
       : '';
-    return `共 ${resultSet.value.total} 项（去重）· ${rooms} 间房${loaded}`;
+    const tubeCount = resultSet.value.tree.total_tube_count;
+    const tubes = typeof tubeCount === 'number' && tubeCount > 0 ? `${tubeCount} 段直管 · ` : '';
+    return `共 ${resultSet.value.total} 项（去重）· ${tubes}${rooms} 间房${loaded}`;
   }
   return `共 ${resultSet.value.total} 项，当前页 ${resultSet.value.returnedCount} 项，已加载 ${resultSet.value.loadedCount} 项，未加载 ${resultSet.value.unloadedCount} 项`;
 });

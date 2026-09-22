@@ -33,7 +33,10 @@ import {
 } from '@/composables/roomTreeNodes';
 import { mergeTreeLeaves } from '@/composables/spatialTree';
 import { useSceneGraphOps } from '@/composables/useSceneGraph';
+import { resolveSceneWorldTransform } from '@/composables/useSpatialQuery';
 import { getModelSource } from '@/model-source';
+
+type Aabb6 = [number, number, number, number, number, number];
 
 export type RoomTreeRootsStatus = {
   status: 'idle' | 'loading' | 'ready' | 'unavailable' | 'error';
@@ -272,7 +275,7 @@ export function useRoomTree(viewerRef: { value: DtxCompatViewer | null }, option
   }
 
   function hasChildren(node: RoomTreeNode): boolean {
-    if (node.kind === 'element') return false;
+    if (node.kind === 'element' || node.kind === 'tube') return false;
     if (node.kind === 'room') return node.count === null || node.count > 0 || node.childrenIds.length > 0;
     if (node.childrenIds.length > 0) return true;
     return !node.leavesInline && (node.count ?? 0) > 0;
@@ -349,8 +352,12 @@ export function useRoomTree(viewerRef: { value: DtxCompatViewer | null }, option
     checkStateById.value = new Map(checks);
   }
 
-  /** 眼睛：节点下全部构件显 / 隐（未内联的先补；单元级及以上连所属 BRAN 的直段一起），勾选状态整枝改、父链重算。 */
+  /**
+   * 眼睛：节点下全部构件显 / 隐（未内联的先补；单元级及以上连所属 BRAN 的直段一起），勾选状态整枝改、父链重算。
+   * 直段行没有眼睛（D5 (i)：直管随单元级动作走，逐段显隐要对象级状态，T4 另议）——传进来就什么都不做。
+   */
   async function setVisible(id: string, visible: boolean): Promise<void> {
+    if (nodesById.value[id]?.kind === 'tube') return;
     const refnos = await collectSceneRefnos(id);
     if (refnos.length > 0) sceneGraph.setVisible(refnos, visible);
     setCheckStateDeep(id, visible ? 'checked' : 'unchecked');
@@ -377,13 +384,16 @@ export function useRoomTree(viewerRef: { value: DtxCompatViewer | null }, option
     const union = new Set<string>();
     for (const id of selectedIds.value) {
       for (const refno of refnosUnder(id, nodesById.value)) union.add(refno);
+      // 直段行：高亮它所属的 BRAN（直管挂在 BRAN 自己的 refno 上，场景里那个键就是它的直管）
+      const tube = nodesById.value[id]?.tube;
+      if (tube) union.add(tube.unitRefno);
     }
     if (union.size > 0) sceneGraph.setSelected(Array.from(union), true);
   }
 
   /**
-   * 行选中（单击 / Ctrl 多选 / Shift 连选，与 PDMS 树同手势）。回这次选中里唯一的场景键（单元 / 构件行的 refno），
-   * 调用方拿它设全局选中（属性面板跟着切）；选了分组节点或多行回 null。
+   * 行选中（单击 / Ctrl 多选 / Shift 连选，与 PDMS 树同手势）。回这次选中里唯一的场景键（单元 / 构件行的 refno；
+   * 直段行回它所属 BRAN 的 refno，D5 (i)「点行 = 选中所属 BRAN」），调用方拿它设全局选中（属性面板跟着切）；选了分组节点或多行回 null。
    */
   function selectByRowIndex(index: number, ev: MouseEvent): string | null {
     const rows = flatRows.value;
@@ -408,17 +418,31 @@ export function useRoomTree(viewerRef: { value: DtxCompatViewer | null }, option
     syncSceneSelection();
     if (selectedIds.value.size !== 1) return null;
     const only = nodesById.value[Array.from(selectedIds.value)[0]!];
-    return only && (only.kind === 'element' || only.kind === 'unit') && only.refno ? only.refno : null;
+    if (!only) return null;
+    if (only.kind === 'tube') return only.tube?.unitRefno ?? null;
+    return (only.kind === 'element' || only.kind === 'unit') && only.refno ? only.refno : null;
   }
 
   function isRowSelected(id: string): boolean {
     return selectedIds.value.has(id);
   }
 
-  /** 飞到节点下已加载几何的构件的并集盒；一个都没加载就回 false（调用方提示先加载）。 */
+  /**
+   * 飞到节点下已加载几何的构件的并集盒；一个都没加载就回 false（调用方提示先加载）。
+   * 直段行按服务端给的直段世界盒（mm → 场景坐标）飞，不要求加载。
+   */
   async function flyTo(id: string): Promise<boolean> {
     const viewer = viewerRef.value;
     if (!viewer) return false;
+    const tube = nodesById.value[id]?.tube;
+    if (tube) {
+      const { min, max } = tube.tube.aabb ?? {};
+      if (!min || !max) return false;
+      const aabb6: Aabb6 = [min[0], min[1], min[2], max[0], max[1], max[2]];
+      if (!aabb6.every((value) => Number.isFinite(value))) return false;
+      viewer.cameraFlight.flyTo({ aabb: resolveSceneWorldTransform(viewer as unknown as Parameters<typeof resolveSceneWorldTransform>[0]).aabbToScene(aabb6) });
+      return true;
+    }
     const refnos = (await collectRefnos(id)).filter((refno) => !!viewer.scene.objects[refno]);
     if (refnos.length === 0) return false;
     const aabb = viewer.scene.getAABB(refnos);

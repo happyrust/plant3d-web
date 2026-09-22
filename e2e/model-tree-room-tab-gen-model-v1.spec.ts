@@ -338,3 +338,86 @@ test('右键单元「加载模型（N 个构件）」：ensure + records 后单�
 
   expect(pageErrors).toEqual([]);
 });
+
+type TreeTubeBody = { ordinal: number; from: string; to: string; from_noun: string; to_noun: string; distance: number; length: number; invalid: boolean };
+type RoomTreeTubesResponse = RoomTreeResponse & {
+  total_tube_count?: number;
+  rooms: { refno: string; count: number; tube_count?: number; specs: (TreeSpec & { unit_types: { noun: string; count: number; units: (TreeUnit & { tube_count?: number; tubes?: TreeTubeBody[] })[] }[] })[] }[];
+};
+
+test('直段行（方案 B）：页签的 rooms/{refno}/tree 恒带 tubes=1；房间行「N 个构件 · M 段直管」、BRAN 单元行尾「M 段直管」、展开后构件行之后的 TUBI 行数 = 响应里该单元 tubes.length；直段行没有眼睛与勾选、点它 = 选中所属 BRAN、右键只有聚焦 / 查看属性；老服务端整条跳过', async ({ page }) => {
+  const rooms = await fetchRooms();
+  const fixture = await pickFixtureRoom(rooms.rooms);
+  test.skip(fixture === null, '清单里前几间房都没有 rooms/{refno}/tree');
+  const { room } = fixture!;
+  const probe = await fetch(`${GEN_MODEL_BASE}/api/v1/spatial/rooms/${encodeURIComponent(room.refno)}/tree?tubes=1`);
+  expect(probe.ok).toBe(true);
+  const truth = await probe.json() as RoomTreeTubesResponse;
+  test.skip(typeof truth.total_tube_count !== 'number', '服务端不认 tubes=1（老构建），树里没有直段信息');
+  const node = truth.rooms[0]!;
+  // 虚拟列表一屏约 18 行：挑构件 + 直段最少的那个 BRAN 单元，展开后它的子行能同时在屏上
+  type PickedUnit = { spec: TreeSpec; unitType: { noun: string }; unit: TreeUnit & { tube_count?: number; tubes?: TreeTubeBody[] } };
+  const candidates: PickedUnit[] = [];
+  for (const spec of node.specs) {
+    for (const unitType of spec.unit_types) {
+      if (unitType.noun !== 'BRAN') continue;
+      for (const unit of unitType.units) {
+        if ((unit.tubes?.length ?? 0) > 0 && Array.isArray(unit.elements) && unit.elements.length > 0) candidates.push({ spec, unitType, unit });
+      }
+    }
+  }
+  candidates.sort((a, b) => (a.unit.elements!.length + a.unit.tubes!.length) - (b.unit.elements!.length + b.unit.tubes!.length));
+  const picked = candidates.find((candidate) => candidate.unit.elements!.length + candidate.unit.tubes!.length <= 12) ?? null;
+  test.skip(picked === null, '夹具房里没有带直段、叶子已内联且子行 ≤ 12 的 BRAN 单元');
+  const { spec, unitType, unit } = picked!;
+  const { pageErrors } = await openRoomTab(page);
+
+  // 页签自己那一发也带 tubes=1
+  const pending = page.waitForResponse((response) => new URL(response.url()).pathname.endsWith(`/api/v1/spatial/rooms/${room.refno}/tree`), { timeout: 60_000 });
+  await searchRoom(page, room.room_num);
+  await expandRow(page, room.refno);
+  const response = await pending;
+  expect(new URL(response.url()).searchParams.get('tubes')).toBe('1');
+  await expect(rowById(page, room.refno)).toContainText(`${node.count} 个构件 · ${node.tube_count} 段直管`, { timeout: 30_000 });
+
+  await expandRow(page, `spec:${room.refno}:${spec.spec_value}`);
+  await expandRow(page, `utype:${room.refno}:${spec.spec_value}:${unitType.noun}`);
+  await expect(rowById(page, unit.refno)).toContainText(`${displayName(unit.name, unit.refno)} · ${unit.count} · ${unit.tube_count} 段直管`);
+  await expandRow(page, unit.refno);
+  await rowById(page, unit.refno).scrollIntoViewIfNeeded();
+  await expect(rowById(page, unit.elements![0]!.refno)).toBeVisible();
+
+  const tubeRows = page.locator(`[data-testid="room-tree-body"] [data-testid="model-tree-row"][data-refno^="tube:${room.refno}:${unit.refno}#"]`);
+  await expect(tubeRows).toHaveCount(unit.tubes!.length);
+  const first = unit.tubes![0]!;
+  const firstRow = tubeRows.first();
+  await expect(firstRow).toHaveAttribute('data-node-type', 'TUBI');
+  await expect(firstRow).toHaveAttribute('data-read-only', 'true');
+  await expect(firstRow).toContainText(`${first.from_noun} → ${first.to_noun}`);
+  expect(await firstRow.locator('button').count(), '直段行没有展开箭头、没有眼睛').toBe(0);
+  // 直段行紧跟在该单元最后一个构件行之后
+  const lastLeaf = rowById(page, unit.elements![unit.elements!.length - 1]!.refno);
+  expect(await lastLeaf.evaluate((el, tubeKeyPrefix) => {
+    const rows = Array.from(el.closest('[data-testid="room-tree-body"]')!.querySelectorAll<HTMLElement>('[data-testid="model-tree-row"]'));
+    const leafIndex = rows.indexOf(el as HTMLElement);
+    return rows[leafIndex + 1]?.dataset.refno?.startsWith(tubeKeyPrefix) ?? false;
+  }, `tube:${room.refno}:${unit.refno}#`)).toBe(true);
+
+  // 点直段行：行选中、全局选中 = 所属 BRAN
+  await firstRow.click();
+  await expect(firstRow).toHaveAttribute('data-selected', 'true');
+  await expect.poll(() => page.evaluate(() =>
+    import((window as AppModuleWindow).__appModuleUrl?.('/src/composables/useSelectionStore.ts') ?? '/src/composables/useSelectionStore.ts')
+      .then((mod) => mod.getGlobalSelectedRefno() as string | null)), { timeout: 10_000 }).toBe(unit.refno);
+
+  // 右键：只有聚焦飞行 / 查看属性（直管随单元级动作走）
+  await firstRow.click({ button: 'right' });
+  const menu = page.locator('[data-room-tree-context-menu="true"]');
+  await expect(menu).toBeVisible();
+  await expect(menu.locator('button')).toHaveText(['聚焦飞行', '查看属性']);
+  await expect(page.getByTestId('room-tree-load-models')).toHaveCount(0);
+  await page.keyboard.press('Escape');
+  await page.mouse.click(5, 5);
+
+  expect(pageErrors).toEqual([]);
+});

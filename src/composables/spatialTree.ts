@@ -13,10 +13,74 @@ import type {
   SpatialTreeResult,
   SpatialTreeRoomNode,
   SpatialTreeSpecNode,
+  SpatialTreeTubeNode,
   SpatialTreeUnitNode,
   SpatialTreeUnitTypeNode,
 } from '@/api/genModelSpatialApi';
 import type { SpatialQueryFullMatchSet, SpatialQuerySortBy } from '@/types/spatialQuery';
+
+// ---- 直段（方案 B，2026-09-22；服务端 `tubes=1`）----
+
+/**
+ * 直段的身份键：`<单元 refno>#<from>-<to>#<ordinal>`——与服务端 `(BRAN, from, to, ordinal)` 四元组同一身份，拼成一个字串好当
+ * Map 键 / 节点 id。直段没有 refno，**不进任何 refno 集**（`treeNodeRefnos` / `branUnitRefnosCoveredBy` 都不看它）；
+ * 单元级动作已经带整条 BRAN（`deliveryUnitScene.ts`），直段行只是读出来、可定位。
+ */
+export function tubeKey(unitRefno: string, tube: Pick<SpatialTreeTubeNode, 'from' | 'to' | 'ordinal'>): string {
+  return `${unitRefno}#${tube.from}-${tube.to}#${tube.ordinal}`;
+}
+
+/** 直段行的主标识：两端 noun「REDU → BEND」；读不出的一端画 `?`（容器头 / 尾那一端服务端给 `BRAN`）。 */
+export function tubeLabel(tube: Pick<SpatialTreeTubeNode, 'from_noun' | 'to_noun'>): string {
+  return `${tube.from_noun || '?'} → ${tube.to_noun || '?'}`;
+}
+
+/** 直管长度：< 1 m 用整 mm，≥ 1 m 两位小数的 m（去尾零）。 */
+export function formatTubeLength(mm: number): string {
+  if (!Number.isFinite(mm)) return '';
+  if (mm < 1000) return `${Math.round(mm)} mm`;
+  return `${(mm / 1000).toFixed(2).replace(/0+$/, '').replace(/\.$/, '')} m`;
+}
+
+/** 一个节点下已内联的全部直段（每条带所属单元；按身份键去重、保持树序）。`tubes` 缺的单元不算——与 `elements` 同一套内联规则。 */
+export function treeNodeTubes(target: SpatialTreeActionNode): { unit: SpatialTreeUnitNode; tube: SpatialTreeTubeNode }[] {
+  const seen = new Set<string>();
+  const out: { unit: SpatialTreeUnitNode; tube: SpatialTreeTubeNode }[] = [];
+  const pushUnit = (unit: SpatialTreeUnitNode) => {
+    for (const tube of unit.tubes ?? []) {
+      const key = tubeKey(unit.refno, tube);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({ unit, tube });
+    }
+  };
+  const pushSpec = (spec: SpatialTreeSpecNode) => {
+    for (const group of spec.unit_types) for (const unit of group.units) pushUnit(unit);
+  };
+  switch (target.kind) {
+    case 'room':
+      for (const spec of target.node.specs) pushSpec(spec);
+      break;
+    case 'spec':
+      pushSpec(target.node);
+      break;
+    case 'unitType':
+      for (const unit of target.node.units) pushUnit(unit);
+      break;
+    case 'unit':
+      pushUnit(target.node);
+      break;
+    case 'others':
+    case 'otherNoun':
+      break;
+  }
+  return out;
+}
+
+/** 计数句「N 个构件 · M 段直管」：服务端没给 `tube_count`（老构建 / 关着）就只说构件。 */
+export function countPhrase(count: number, tubeCount: number | undefined): string {
+  return typeof tubeCount === 'number' ? `${count} 个构件 · ${tubeCount} 段直管` : `${count} 个构件`;
+}
 
 /** 树里可以挂动作的节点：房间 / 专业 / 单元类型 / 单元 / 其他构件（整块）/ 其他构件里的一个 noun 组。 */
 export type SpatialTreeActionNode =
@@ -241,17 +305,19 @@ export function fullMatchesFromTree(tree: SpatialTreeResult): SpatialQueryFullMa
 }
 
 /**
- * 把按 `unit=` / `other_noun=` 补回来的叶子合进已有的树：同一单元 refno / 同一 noun 组的 `elements` 用新响应里的填上，
- * 别的节点不动。回一棵新树（不改入参）。
+ * 把按 `unit=` / `other_noun=` 补回来的叶子合进已有的树：同一单元 refno / 同一 noun 组的 `elements` 用新响应里的填上
+ * （单元的 `tubes` 跟 `elements` 一起来、一起填——同一套内联规则），别的节点不动。回一棵新树（不改入参）。
  */
 export function mergeTreeLeaves(tree: SpatialTreeResult, partial: SpatialTreeResult): SpatialTreeResult {
-  const unitLeaves = new Map<string, SpatialTreeLeafNode[]>();
+  const unitLeaves = new Map<string, Pick<SpatialTreeUnitNode, 'elements' | 'tubes'>>();
   const otherLeaves = new Map<string, SpatialTreeLeafNode[]>();
   for (const room of partial.rooms) {
     for (const spec of room.specs) {
       for (const group of spec.unit_types) {
         for (const unit of group.units) {
-          if (unit.elements) unitLeaves.set(`${room.refno}|${unit.refno}`, unit.elements);
+          if (unit.elements) {
+            unitLeaves.set(`${room.refno}|${unit.refno}`, { elements: unit.elements, ...(unit.tubes ? { tubes: unit.tubes } : {}) });
+          }
         }
       }
       for (const group of spec.others.by_noun) {
@@ -268,8 +334,8 @@ export function mergeTreeLeaves(tree: SpatialTreeResult, partial: SpatialTreeRes
         unit_types: spec.unit_types.map((group) => ({
           ...group,
           units: group.units.map((unit) => {
-            const elements = unitLeaves.get(`${room.refno}|${unit.refno}`);
-            return elements ? { ...unit, elements } : unit;
+            const filled = unitLeaves.get(`${room.refno}|${unit.refno}`);
+            return filled ? { ...unit, ...filled } : unit;
           }),
         })),
         others: {

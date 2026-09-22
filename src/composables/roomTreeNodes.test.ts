@@ -179,4 +179,51 @@ describe('roomTreeNodes', () => {
     expect(branUnitRefnosUnder('others:24381_35580:3', nodes)).toEqual([]);
     expect(branUnitRefnosUnder('nope', nodes)).toEqual([]);
   });
+
+  it('直段行（方案 B）：BRAN 单元的构件行之后吐 tube 节点——id tube:<房>:<单元>#<from>-<to>#<ordinal>、type TUBI、名字「A → B · 长度（· 无效）」、没有 refno、count 0；单元名字尾「M 段直管」、各层 title 带「· M 段直管」；三个 *Under 都跳过它；老服务端没给就没有', () => {
+    const withTubes = roomTree({ total_tube_count: 2 });
+    const room = withTubes.rooms[0]!;
+    room.tube_count = 2;
+    room.specs[1]!.tube_count = 2;
+    room.specs[1]!.unit_types[0]!.tube_count = 2;
+    const b1 = room.specs[1]!.unit_types[0]!.units[0]!;
+    b1.tube_count = 2;
+    b1.tubes = [
+      { ordinal: 0, from: '24381_1200', to: '24381_1240', from_noun: 'BRAN', to_noun: 'TUBI', distance: 100, length: 141.5, aabb: { min: [0, 0, 0], max: [1, 1, 1] }, invalid: false },
+      { ordinal: 1, from: '24381_1240', to: '24381_1241', from_noun: 'TUBI', to_noun: 'ELBO', distance: 150, length: 2500, aabb: { min: [1, 0, 0], max: [3, 1, 1] }, invalid: true, shared_rooms: 2 },
+    ];
+    const nodes = flattenRoomTree('24381_35580', withTubes, ROOM)!;
+    const unitId = 'unit:24381_35580:24381_1200';
+    const unit = nodes[unitId]!;
+    expect(unit.name).toBe('/B1 · 2 · 2 段直管');
+    expect(unit.title).toContain('2 个构件 · 2 段直管');
+    expect(nodes['room:24381_35580']!.name).toBe('R432 · /1RX-RM04-R432 · 7 个构件 · 2 段直管');
+    expect(nodes['spec:24381_35580:3']!.title).toContain('6 个构件 · 2 段直管');
+    expect(nodes['utype:24381_35580:3:BRAN']!.title).toContain('2 个构件 · 2 段直管');
+    expect(nodes['utype:24381_35580:3:EQUI']!.title, '没给 tube_count 的层只说构件').toBe('EQUI · 1 个最小交付单元 · 3 个构件');
+
+    const tubeIds = ['tube:24381_35580:24381_1200#24381_1200-24381_1240#0', 'tube:24381_35580:24381_1200#24381_1240-24381_1241#1'];
+    expect(unit.childrenIds).toEqual(['elem:24381_35580:24381_1240', 'elem:24381_35580:24381_1241', ...tubeIds]);
+    const first = nodes[tubeIds[0]!]!;
+    expect(first).toMatchObject({ kind: 'tube', parentId: unitId, type: 'TUBI', name: 'BRAN → TUBI · 142 mm', count: 0, leavesInline: true, distance: 100, roomRefno: '24381_35580' });
+    expect(first.refno).toBeUndefined();
+    expect(first.tube).toEqual({ unitRefno: '24381_1200', tube: b1.tubes[0] });
+    expect(first.title).toBe('直管 BRAN → TUBI · 142 mm · 距 0.1 m · 24381_1200 → 24381_1240 · 属 BRAN 24381_1200');
+    const second = nodes[tubeIds[1]!]!;
+    expect(second.name).toBe('TUBI → ELBO · 2.5 m · 无效');
+    expect(second.sharedRooms).toBe(2);
+    expect(second.title).toContain('第 2 段 · 无效直管 · 跨 2 房');
+    expect(roomRefnoOfNodeId(tubeIds[0]!)).toBe('24381_35580');
+    expect(ancestorsOf(tubeIds[0]!, nodes)).toEqual(['room:24381_35580', 'spec:24381_35580:3', 'utype:24381_35580:3:BRAN', unitId]);
+
+    expect(refnosUnder(unitId, nodes), '直段没有 refno').toEqual(['24381_1240', '24381_1241']);
+    expect(refnosUnder(tubeIds[0]!, nodes)).toEqual([]);
+    expect(branUnitRefnosUnder(tubeIds[0]!, nodes), '直段行不扩到 BRAN').toEqual([]);
+    expect(pendingLeafNodesUnder(unitId, nodes)).toEqual([]);
+
+    const legacy = flattenRoomTree('24381_35580', roomTree(), ROOM)!;
+    expect(legacy[unitId]!.name).toBe('/B1 · 2');
+    expect(legacy[unitId]!.childrenIds).toHaveLength(2);
+    expect(Object.values(legacy).some((node) => node.kind === 'tube')).toBe(false);
+  });
 });

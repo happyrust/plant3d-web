@@ -139,19 +139,42 @@ export type SpatialTreeLeafNode = {
   shared_rooms?: number;
 };
 
-/** 一个最小交付单元；`elements` 缺 = 叶子未内联（超上限，按单元另取）。 */
+/**
+ * BRAN 单元下的一段直管（隐式管身；方案 B，2026-09-22）：身份 `(单元 refno, from, to, ordinal)`，没有自己的 refno、不计入任何 `count`。
+ * `from` / `to` 是两端管件的 `a_b`（容器头 / 尾那一段的一端是 BRAN 自己，`*_noun` 为 `BRAN`）；`length` 直管长度 mm；`aabb` 世界盒 mm，定位用。
+ */
+export type SpatialTreeTubeNode = {
+  ordinal: number;
+  from: string;
+  to: string;
+  from_noun: string;
+  to_noun: string;
+  distance: number;
+  length: number;
+  aabb: { min: [number, number, number]; max: [number, number, number] };
+  invalid: boolean;
+  shared_rooms?: number;
+};
+
+/**
+ * 一个最小交付单元；`elements` 缺 = 叶子未内联（超上限，按单元另取）。
+ * `tube_count` / `tubes` 只有认 `tubes=1` 的服务端才给（老服务端两格都缺 = 没有直段信息）；`tubes` 与 `elements` 同一套内联规则。
+ */
 export type SpatialTreeUnitNode = {
   refno: string;
   noun: string;
   name: string | null;
   count: number;
+  tube_count?: number;
   min_distance: number;
   elements?: SpatialTreeLeafNode[];
+  tubes?: SpatialTreeTubeNode[];
 };
 
 export type SpatialTreeUnitTypeNode = {
   noun: string;
   count: number;
+  tube_count?: number;
   units: SpatialTreeUnitNode[];
 };
 
@@ -166,6 +189,7 @@ export type SpatialTreeOtherNounNode = {
 export type SpatialTreeSpecNode = {
   spec_value: number;
   count: number;
+  tube_count?: number;
   unit_types: SpatialTreeUnitTypeNode[];
   others: { count: number; by_noun: SpatialTreeOtherNounNode[] };
 };
@@ -175,6 +199,7 @@ export type SpatialTreeRoomNode = {
   room_num: string;
   name: string | null;
   count: number;
+  tube_count?: number;
   specs: SpatialTreeSpecNode[];
 };
 
@@ -192,11 +217,16 @@ export type SpatialTreeResult = {
   /** `success:false` 里「源 / 服务端构建没有这条路由」那一档：store 据此退回平铺分组，别的失败是真错误 */
   unsupported?: boolean;
   total_count: number;
+  /** 全树按身份去重的直段数；缺 = 服务端不认 `tubes=1`，树里没有直段信息（计数句不画「N 段直管」） */
+  total_tube_count?: number;
+  /** BRAN 单元数超过服务端读根预算，只为最近的那些补了直段（`warnings` 里也有一句） */
+  tubes_truncated?: boolean;
   candidate_count: number;
   truncated_candidates: boolean;
   candidate_cap: number;
   leaves_inline: boolean;
   leaf_cap: number;
+  /** 叶子放置数；服务端认 `tubes=1` 时直段放置也算在里面（与 `leaf_cap` 共用） */
   leaf_count: number;
   inlined?: string | null;
   delivery_unit_types: string[];

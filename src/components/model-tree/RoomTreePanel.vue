@@ -149,6 +149,12 @@ const contextNodeId = ref<string | null>(null);
 const contextNode = computed(() => (contextNodeId.value ? tree.nodesById.value[contextNodeId.value] ?? null : null));
 const contextRefnoCount = computed(() => contextNode.value?.count ?? null);
 const contextIsElementOrUnit = computed(() => contextNode.value?.kind === 'element' || contextNode.value?.kind === 'unit');
+const contextIsTube = computed(() => contextNode.value?.kind === 'tube');
+
+/** 直段行（方案 B）：只读——不画眼睛，title 挂两端 refno / 距离 / 所属 BRAN */
+function isTubeRow(id: string): boolean {
+  return tree.nodesById.value[id]?.kind === 'tube';
+}
 
 function clamp(x: number, y: number, width: number, height: number) {
   const margin = 8;
@@ -245,8 +251,10 @@ async function loadNodeModels() {
 function viewProperties() {
   const node = contextNode.value;
   closeContextMenu();
-  if (node?.refno) {
-    publishSelection(node.refno);
+  // 直段行没有 refno：看它所属 BRAN 的属性
+  const refno = node?.refno ?? node?.tube?.unitRefno;
+  if (refno) {
+    publishSelection(refno);
     ensurePanelAndActivate('properties');
   }
 }
@@ -312,6 +320,8 @@ function viewProperties() {
             :selected="tree.isRowSelected(rowAt(vr.index)!.id)"
             :check-state="tree.getCheckState(rowAt(vr.index)!.id)"
             :loading="tree.isNodeLoading(rowAt(vr.index)!.id)"
+            :read-only="isTubeRow(rowAt(vr.index)!.id)"
+            :row-title="isTubeRow(rowAt(vr.index)!.id) ? tree.nodesById.value[rowAt(vr.index)!.id]?.title : undefined"
             @toggle-expand="tree.toggleExpand"
             @toggle-visible="onToggleVisible"
             @select="onSelect"
@@ -327,18 +337,21 @@ function viewProperties() {
         :class="cn('fixed z-[9999] w-44 rounded-md border border-border bg-background p-1 shadow-md')"
         :style="{ left: `${contextMenuPos.x}px`, top: `${contextMenuPos.y}px` }">
         <button type="button" class="w-full rounded px-2 py-1 text-left text-sm hover:bg-muted" @click="focusNode">聚焦飞行</button>
-        <button type="button" class="w-full rounded px-2 py-1 text-left text-sm hover:bg-muted" @click="isolateNode">隔离（XRAY 其它）</button>
-        <button type="button" class="w-full rounded px-2 py-1 text-left text-sm hover:bg-muted" @click="clearXray">取消隔离</button>
-        <div class="my-1 h-px bg-border" />
-        <button type="button" class="w-full rounded px-2 py-1 text-left text-sm hover:bg-muted" @click="showNode">显示</button>
-        <button type="button" class="w-full rounded px-2 py-1 text-left text-sm hover:bg-muted" @click="hideNode">隐藏</button>
-        <button type="button"
-          class="w-full rounded px-2 py-1 text-left text-sm hover:bg-muted"
-          data-testid="room-tree-load-models"
-          @click="loadNodeModels">
-          加载模型{{ contextRefnoCount !== null ? `（${contextRefnoCount} 个构件）` : '' }}
-        </button>
-        <template v-if="contextIsElementOrUnit">
+        <!-- 直段行（方案 B，D5 (i) 只读）：只有聚焦与查看所属 BRAN 的属性——直管随 BRAN 单元的动作走，隔离 / 显隐 / 加载去单元行 -->
+        <template v-if="!contextIsTube">
+          <button type="button" class="w-full rounded px-2 py-1 text-left text-sm hover:bg-muted" @click="isolateNode">隔离（XRAY 其它）</button>
+          <button type="button" class="w-full rounded px-2 py-1 text-left text-sm hover:bg-muted" @click="clearXray">取消隔离</button>
+          <div class="my-1 h-px bg-border" />
+          <button type="button" class="w-full rounded px-2 py-1 text-left text-sm hover:bg-muted" @click="showNode">显示</button>
+          <button type="button" class="w-full rounded px-2 py-1 text-left text-sm hover:bg-muted" @click="hideNode">隐藏</button>
+          <button type="button"
+            class="w-full rounded px-2 py-1 text-left text-sm hover:bg-muted"
+            data-testid="room-tree-load-models"
+            @click="loadNodeModels">
+            加载模型{{ contextRefnoCount !== null ? `（${contextRefnoCount} 个构件）` : '' }}
+          </button>
+        </template>
+        <template v-if="contextIsElementOrUnit || contextIsTube">
           <div class="my-1 h-px bg-border" />
           <button type="button" class="w-full rounded px-2 py-1 text-left text-sm hover:bg-muted" @click="viewProperties">查看属性</button>
         </template>
