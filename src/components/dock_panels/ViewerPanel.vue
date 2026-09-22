@@ -1,6 +1,6 @@
 <!-- @ts-nocheck -->
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue';
 
 import {
   Aperture,
@@ -105,6 +105,7 @@ import { getOutputProjectFromUrl } from '@/lib/currentProject';
 import { getModelSource, modelVersionAttributesToUiAttr } from '@/model-source';
 import { onCommand } from '@/ribbon/commandBus';
 import { emitToast } from '@/ribbon/toastBus';
+import { DEFAULT_DROPDOWN_PLACEMENT, resolveDropdownPlacement, type DropdownPlacement } from '@/utils/dropdownPlacement';
 import {
   applyModelUnitRefnoVisibility,
   applyModelUnitVersionSide,
@@ -486,6 +487,9 @@ watch(
 // 统一工具栏（显示 / 测量 / 视图 分组，原左右两条竖排图标条合并）
 const leftToolbarRef = ref<HTMLDivElement | null>(null);
 const leftToolbarOpenMeasureMenu = ref(false);
+// 「测量」下拉菜单的竖向落位（issue #81）：矮容器里按剩余空间向上翻 / 限高，不再固定 top-0 被容器底边裁掉
+const leftMeasureMenuRef = ref<HTMLDivElement | null>(null);
+const leftMeasureMenuPlacement = ref<DropdownPlacement>({ ...DEFAULT_DROPDOWN_PLACEMENT });
 const hasSelectedRefno = computed(() => !!selectionStore.selectedRefno.value);
 const isMeasureModeActive = computed(() => {
   const mode = store.toolMode.value;
@@ -1446,8 +1450,29 @@ function exitXeokitMeasureMode(): void {
   requestRender();
 }
 
+function placeLeftMeasureMenu(): void {
+  const menu = leftMeasureMenuRef.value;
+  const anchor = menu?.parentElement;
+  const container = containerRef.value;
+  if (!menu || !anchor || !container) return;
+  const a = anchor.getBoundingClientRect();
+  const c = container.getBoundingClientRect();
+  leftMeasureMenuPlacement.value = resolveDropdownPlacement({
+    anchorTop: a.top,
+    anchorBottom: a.bottom,
+    containerTop: c.top,
+    containerBottom: c.bottom,
+    menuHeight: menu.getBoundingClientRect().height,
+  });
+}
+
 function toggleLeftMeasureMenu(): void {
-  leftToolbarOpenMeasureMenu.value = !leftToolbarOpenMeasureMenu.value;
+  const next = !leftToolbarOpenMeasureMenu.value;
+  leftToolbarOpenMeasureMenu.value = next;
+  if (!next) return;
+  // 先按缺省（向下、不限高）渲染一帧量出自然高度，再决定翻不翻 / 限不限高
+  leftMeasureMenuPlacement.value = { ...DEFAULT_DROPDOWN_PLACEMENT };
+  void nextTick(placeLeftMeasureMenu);
 }
 
 function onLeftMeasureDistanceClick(): void {
@@ -5044,53 +5069,61 @@ onUnmounted(() => {
             class="pointer-events-none absolute left-full top-1/2 z-[960] ml-2 -translate-y-1/2 whitespace-nowrap rounded-md bg-foreground px-2 py-1 text-[11px] leading-none text-background opacity-0 shadow-md transition-opacity duration-100 group-hover:opacity-100">测量（长度/角度/标高/间距）</span>
         </button>
 
+        <!-- 落位由 placeLeftMeasureMenu 决定：下方放得下 top-0 向下开，否则 bottom-0 向上翻，两头都放不下就限高滚动（#81） -->
         <div v-if="leftToolbarOpenMeasureMenu"
-          class="absolute left-full top-0 ml-1.5 flex w-32 flex-col gap-0.5 rounded-lg border border-border bg-background/95 p-1 shadow-lg backdrop-blur"
-          style="z-index: 941">
+          ref="leftMeasureMenuRef"
+          class="absolute left-full ml-1.5 flex w-32 flex-col gap-0.5 rounded-lg border border-border bg-background/95 p-1 shadow-lg backdrop-blur"
+          :class="leftMeasureMenuPlacement.up ? 'bottom-0' : 'top-0'"
+          :style="{
+            zIndex: 941,
+            maxHeight: leftMeasureMenuPlacement.maxHeight != null ? `${leftMeasureMenuPlacement.maxHeight}px` : undefined,
+            overflowY: leftMeasureMenuPlacement.maxHeight != null ? 'auto' : undefined,
+          }"
+          data-testid="left-measure-menu">
           <button type="button"
-            class="flex h-7 items-center gap-1.5 rounded-md px-2 text-left text-xs hover:bg-muted"
+            class="flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2 text-left text-xs hover:bg-muted"
             :class="store.toolMode.value === 'xeokit_measure_distance' ? 'bg-muted' : ''"
             @click.stop="onLeftMeasureDistanceClick">
             <Ruler class="h-3.5 w-3.5" />
             <span>长度测量</span>
           </button>
           <button type="button"
-            class="flex h-7 items-center gap-1.5 rounded-md px-2 text-left text-xs hover:bg-muted"
+            class="flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2 text-left text-xs hover:bg-muted"
             :class="store.toolMode.value === 'xeokit_measure_elevation_point' ? 'bg-muted' : ''"
             @click.stop="onLeftMeasureElevationPointClick">
             <Ruler class="h-3.5 w-3.5" />
             <span>点标高</span>
           </button>
           <button type="button"
-            class="flex h-7 items-center gap-1.5 rounded-md px-2 text-left text-xs hover:bg-muted"
+            class="flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2 text-left text-xs hover:bg-muted"
             :class="store.toolMode.value === 'xeokit_measure_elevation_delta' ? 'bg-muted' : ''"
             @click.stop="onLeftMeasureElevationDeltaClick">
             <Ruler class="h-3.5 w-3.5" />
             <span>高差</span>
           </button>
           <button type="button"
-            class="flex h-7 items-center gap-1.5 rounded-md px-2 text-left text-xs hover:bg-muted"
+            class="flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2 text-left text-xs hover:bg-muted"
             :class="store.toolMode.value === 'xeokit_measure_angle' ? 'bg-muted' : ''"
             @click.stop="onLeftMeasureAngleClick">
             <Ruler class="h-3.5 w-3.5" />
             <span>角度测量</span>
           </button>
           <button type="button"
-            class="flex h-7 items-center gap-1.5 rounded-md px-2 text-left text-xs hover:bg-muted"
+            class="flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2 text-left text-xs hover:bg-muted"
             :class="store.toolMode.value === 'measure_object_to_object' ? 'bg-muted' : ''"
             @click.stop="onLeftMeasureObjectToObjectClick">
             <Ruler class="h-3.5 w-3.5" />
             <span>构件最近点</span>
           </button>
           <button type="button"
-            class="flex h-7 items-center gap-1.5 rounded-md px-2 text-left text-xs hover:bg-muted"
+            class="flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2 text-left text-xs hover:bg-muted"
             :class="store.toolMode.value === 'measure_pipe_to_structure' ? 'bg-muted' : ''"
             @click.stop="onLeftMeasurePipeToStructureClick">
             <Ruler class="h-3.5 w-3.5" />
             <span>管-墙/柱</span>
           </button>
           <button type="button"
-            class="flex h-7 items-center gap-1.5 rounded-md px-2 text-left text-xs hover:bg-muted"
+            class="flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2 text-left text-xs hover:bg-muted"
             :class="store.toolMode.value === 'measure_pipe_to_pipe' ? 'bg-muted' : ''"
             @click.stop="onLeftMeasurePipeToPipeClick">
             <Ruler class="h-3.5 w-3.5" />

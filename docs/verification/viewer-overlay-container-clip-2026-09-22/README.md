@@ -50,9 +50,24 @@ URL 直开：`spatial_refno=24381_145018&spatial_radius=3&spatial_radius_unit=m&
 
 图：`cua-spatial-05-before-82vh-hmr.png`（改前）、`cua-spatial-06-after-open.png`（改后刚打开，有滚动条、圆角底边在容器内）、`cua-spatial-07-after-results-scrolled.png`（展开结果滚到房间列表底部）、`cua-spatial-08-after-bottom-row-click-loaded.png`（真点底部行「显示」后加载成功）。
 
-### 2.3 顺手发现（本轮未改）
+### 2.3 顺手发现 → issue #81（同日修）
 
-`cua-related-measure-menu-clipped.png`：左侧竖排工具栏（`top-1/2` 居中）的「测量」下拉菜单在 416 px 高的容器里同样被容器底边裁掉最后两项（「管-墙/柱」「管-管」只露半行）。同一根因（绝对定位子元素超出 `overflow: hidden` 的容器），菜单需要的是「向上翻 / 限高滚动」而非本轮的 `max-h` 方案，另开处理。
+`cua-related-measure-menu-clipped.png`：左侧竖排工具栏（`top-1/2` 居中）的「测量」下拉菜单在 416 px 高的容器里同样被容器底边裁掉最后两项（「管-墙/柱」「管-管」只露半行）。同一根因（绝对定位子元素超出 `overflow: hidden` 的容器），但菜单挂在按钮的 `.relative` 包裹里，百分比 `max-h` 对它无效，改成按剩余空间落位——见 §2.4。
+
+### 2.4 「测量」下拉菜单按剩余空间向上翻（issue [#81](https://github.com/happyrust/plant3d-web/issues/81)）
+
+改法：新增纯函数 `src/utils/dropdownPlacement.ts` `resolveDropdownPlacement`（下方放得下向下开；否则上方放得下向上翻；两头都放不下选空间大的一侧限高滚动），`ViewerPanel.vue` 打开菜单时先按缺省渲染一帧量自然高度，`nextTick` 后按容器 / 按钮 `getBoundingClientRect` 落位，`top-0` ↔ `bottom-0` 切换、限高进 `:style`，菜单项加 `shrink-0`。
+
+同一容器（83→499）、同一按钮（330→366）、菜单自然高 217 px：
+
+| | 菜单 top→bottom | 落位 | 在容器内 | 「管-管」 |
+| --- | --- | --- | --- | --- |
+| 改前 `top-0` | 330→547 | 向下 | ✗ 超出 48 px，末两项被裁 | 只露半行，点不到 |
+| 改后 | 149→366 | `bottom-0` 向上翻，不限高 | ✓ | 7 项 `elementFromPoint` 全命中；**真点「管-管」→ 进入「管-管 最近点测量」向导** |
+
+图：`cua-menu-01-after-flip-up.png`（菜单向上翻、7 项全在容器内）、`cua-menu-02-after-pipe-to-pipe-click.png`（真点「管-管」后向导与底部提示条出现）。单测 `src/utils/dropdownPlacement.test.ts` 6 例（向下 / 翻上 / 边界差 1 px / 两头放不下限高两侧 / margin 与负空间钳位 / 缺省值）。
+
+顺手看到但未改：`MeasurementWizard` 的向导卡在 825 px 宽的容器里左边被裁一截（横向的另一类问题，与本目录两条竖向裁切无关）。
 
 ## 3. 单测 / lint
 
