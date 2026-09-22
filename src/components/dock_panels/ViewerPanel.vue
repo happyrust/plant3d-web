@@ -490,6 +490,9 @@ const leftToolbarOpenMeasureMenu = ref(false);
 // 「测量」下拉菜单的竖向落位（issue #81）：矮容器里按剩余空间向上翻 / 限高，不再固定 top-0 被容器底边裁掉
 const leftMeasureMenuRef = ref<HTMLDivElement | null>(null);
 const leftMeasureMenuPlacement = ref<DropdownPlacement>({ ...DEFAULT_DROPDOWN_PLACEMENT });
+// 「查看工具设置」弹层同法（issue #81 收尾）：内容较高，矮容器里同样按剩余空间翻向 / 限高滚动，别硬 bottom-0 顶出容器
+const leftSettingsPopupRef = ref<HTMLDivElement | null>(null);
+const leftSettingsPopupPlacement = ref<DropdownPlacement>({ up: true, maxHeight: null });
 const hasSelectedRefno = computed(() => !!selectionStore.selectedRefno.value);
 const isMeasureModeActive = computed(() => {
   const mode = store.toolMode.value;
@@ -3384,10 +3387,29 @@ function onToolbarPipeNetworkClick(): void {
   emitToast({ message: '管网（BRAN）功能建设中（占位）' });
 }
 
+function placeLeftSettingsPopup(): void {
+  const popup = leftSettingsPopupRef.value;
+  const anchor = popup?.parentElement;
+  const container = containerRef.value;
+  if (!popup || !anchor || !container) return;
+  const a = anchor.getBoundingClientRect();
+  const c = container.getBoundingClientRect();
+  leftSettingsPopupPlacement.value = resolveDropdownPlacement({
+    anchorTop: a.top,
+    anchorBottom: a.bottom,
+    containerTop: c.top,
+    containerBottom: c.bottom,
+    menuHeight: popup.getBoundingClientRect().height,
+  });
+}
+
 function toggleToolbarSettings(): void {
   toolbarSettingsOpen.value = !toolbarSettingsOpen.value;
   if (toolbarSettingsOpen.value) {
     spatialQueryOpen.value = false;
+    // 先按缺省向上（bottom-0，设置键在工具栏底部）渲染一帧量高度，再决定翻不翻 / 限不限高
+    leftSettingsPopupPlacement.value = { up: true, maxHeight: null };
+    void nextTick(placeLeftSettingsPopup);
   }
 }
 
@@ -5163,9 +5185,17 @@ onUnmounted(() => {
             class="pointer-events-none absolute left-full top-1/2 z-[960] ml-2 -translate-y-1/2 whitespace-nowrap rounded-md bg-foreground px-2 py-1 text-[11px] leading-none text-background opacity-0 shadow-md transition-opacity duration-100 group-hover:opacity-100">查看工具设置</span>
         </button>
 
+        <!-- 落位由 placeLeftSettingsPopup 决定：下方放得下 top-0，否则 bottom-0 向上翻；两头都放不下限高滚动（#81 收尾） -->
         <div v-if="toolbarSettingsOpen"
-          class="absolute bottom-0 left-full ml-1.5 w-72 rounded-xl border border-border bg-background/95 p-3 shadow-lg backdrop-blur"
-          style="z-index: 941"
+          ref="leftSettingsPopupRef"
+          class="absolute left-full ml-1.5 w-72 rounded-xl border border-border bg-background/95 p-3 shadow-lg backdrop-blur"
+          :class="leftSettingsPopupPlacement.up ? 'bottom-0' : 'top-0'"
+          :style="{
+            zIndex: 941,
+            maxHeight: leftSettingsPopupPlacement.maxHeight != null ? `${leftSettingsPopupPlacement.maxHeight}px` : undefined,
+            overflowY: leftSettingsPopupPlacement.maxHeight != null ? 'auto' : undefined,
+          }"
+          data-testid="left-settings-popup"
           @pointerdown.stop
           @wheel.stop>
           <div class="text-sm font-medium">查看工具设置</div>

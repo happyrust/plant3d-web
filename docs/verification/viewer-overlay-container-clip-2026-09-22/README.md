@@ -67,6 +67,8 @@ URL 直开：`spatial_refno=24381_145018&spatial_radius=3&spatial_radius_unit=m&
 
 图：`cua-menu-01-after-flip-up.png`（菜单向上翻、7 项全在容器内）、`cua-menu-02-after-pipe-to-pipe-click.png`（真点「管-管」后向导与底部提示条出现）。单测 `src/utils/dropdownPlacement.test.ts` 6 例（向下 / 翻上 / 边界差 1 px / 两头放不下限高两侧 / margin 与负空间钳位 / 缺省值）。
 
+左侧工具栏另一个弹层「查看工具设置」（`toolbarSettingsOpen`）同法接入 `resolveDropdownPlacement`（它挂在工具栏最底的齿轮上、内容 648 px 高，原来硬 `bottom-0` 没限高，矮容器里顶部溢出 ≈232 px）。cua 真机（容器 416 px 高，齿轮 anchor 372→408）：弹层判为向上（`bottom-0`），自然高 648 → 限高 399 + `overflow-y: auto`，落在容器内 8→408、末行「查询条件…已统一移…」`elementFromPoint` 命中。图 `cua-settings-popup-capped.png`。工具栏其余是显示 / 隐藏 / X-ray / 定位等单键（只有 hover 提示气泡、无弹层），不涉及。
+
 顺手看到：`MeasurementWizard` 的向导卡在 825 px 宽的容器里左边被裁一截 → issue #82，见 §2.5。
 
 ### 2.5 `MeasurementWizard` 向导卡左半张被裁 + 与抽屉相撞（issue [#82](https://github.com/happyrust/plant3d-web/issues/82)）
