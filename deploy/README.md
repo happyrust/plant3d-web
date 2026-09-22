@@ -38,7 +38,33 @@ BACKEND_ORIGIN=http://127.0.0.1:8022 \
 
 兼容入口 `deploy_remote.sh` 仍可使用，但其内部已转发到 `deploy_frontend_bundle.sh`。
 
-## GitHub Actions（Ubuntu CI）
+## 用 GitHub Actions 部署（本机没有服务器密码 / sshpass / rsync 时的首选）
+
+上面的本地脚本要 `REMOTE_PASS`（root 密码）+ `sshpass` + `rsync`；Windows 上三样通常都没有（Git Bash 没 rsync / sshpass，WSL 不一定起得来）。仓库的 `Deploy Frontend To Ubuntu` workflow 已把密码放在 secret 里，直接用 `gh` 触发即可，2026-09-21 / 09-22 两次上线都是这么部的：
+
+```bash
+gh auth status                                          # 已登录 github.com 即可
+gh workflow run deploy-ubuntu.yml --ref main            # 也可 --ref deploy/<日期分支>
+gh run list --workflow deploy-ubuntu.yml --limit 2      # 拿到 run id
+gh run watch <run-id> --exit-status                     # 约 2 分钟：npm ci → build-only → 写 version.json → rsync → nginx 模板 → reload
+```
+
+验收：
+
+```bash
+curl -s https://123.57.182.243/version.json             # commit / buildDate 由部署脚本写入，应等于刚推的 HEAD
+curl -sI https://123.57.182.243/ | grep -i last-modified
+curl -s https://123.57.182.243/ | grep -o 'assets/index-[^"]*'   # bundle hash 应变
+```
+
+注意：
+
+- 部的是**整个分支**（`--ref` 指到哪就部到哪），不能只挑某几笔；想只上一部分就先切一个 `deploy/<日期>` 分支再 `--ref` 它。
+- 仓库 `production` environment 目前没有分支保护 / 审批规则，`main` 与任何分支都能直接触发。
+- 部署脚本会用 `nginx_remote.conf`（只有 `listen 80; listen 3100;`）覆盖 `sites-available/plant3d-web`（先留 `.bak-<时间戳>`）。线上的 HTTPS（443）不在这个文件里，09-21 / 09-22 两次覆盖后 `https://` 照常，不用担心；但若日后把 443 合进这个站点文件，务必同步改模板。
+- 上线后可用 `docs/verification/pms-3d-review-integration-e2e.md` §6.3.1 里的三个脚本 `MODE=online` 直接在线上包上复验。
+
+### 仓库配置
 
 仓库已提供可手动触发的 workflow：`Deploy Frontend To Ubuntu`（见 `.github/workflows/deploy-ubuntu.yml`）。
 

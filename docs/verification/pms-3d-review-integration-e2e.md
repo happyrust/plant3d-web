@@ -221,6 +221,14 @@ A/B 结果（同一锚点 (944,730)、同一卡上落点、拖 140×110 px；`FO
 | 起点 `elementFromPoint` | `canvas.viewer` | 卡内计数 `div`（`annotation-overlay-root` 之下） |
 | 松开后 | 弹「刚创建云线的详情」（`annotation-cloud-detail-severity-general` / `-description` 都在）、横幅「云线已创建」、卡计数 批注 2→3、「当前模型关联批注」多出「云线批注 2」、画布出现新云线虚线框；`getSelection()` 为空 | 无云线、状态仍停在「锚点已就绪，请拖拽绘制云线轮廓」；`getSelection()` =「打开批注单 待保存证据 批注 2」——§5.1 第 1 条原样复现 |
 
+**上线后在线上包上再跑一遍（2026-09-22 16:35 部署，同日 16:36–16:38 复验）**：走仓库的 GitHub Actions `Deploy Frontend To Ubuntu`（`gh workflow run deploy-ubuntu.yml --ref main`，1 分 59 秒；做法见 `deploy/README.md`「用 GitHub Actions 部署」），上线 main `cf7d8f0e`（含 `151290c1` / `749fa0e5` / `9888922b` / `8e5f290d` / `05f3b576`），`https://123.57.182.243/version.json` = `{commit: cf7d8f0e…, buildDate: 2026-09-22 08:35:14 UTC}`，首页 bundle `index-alRAXGtB.js`，80 / 3100 / 443 三个入口同一 `Last-Modified`。三个脚本全部 `MODE=online`、不拦截、直接跑线上包：
+
+| 脚本 | 线上包读数（与本地 build 一致） |
+| --- | --- |
+| `local-build-cloud.mjs`（§5.1 第 1 条） | 锚点就绪时卡 `data-canvas-drag-armed=true` / `pointer-events: none` / opacity 0.6 / 提示行在；起点卡上「批注」计数 (1058,672) → `canvas.viewer`；松开后详情框 + 「云线已创建」，**云线生成**（`POST /api/review/attachments` 403 照旧，已批准单的预期） |
+| `placeholder-check.mjs` JH / SJ（§5.1 第 3 条） | JH「决定备注（同意可不填；驳回必填原因）」→ 驳回 →「决定备注（必填：驳回原因，设计要按这个重新处理）」+ `aria-required` + 描黄 + 提示，填了消，同意 →「决定备注（可选，例如同意理由）」；SJ 同理（不需解决 / 已修改）。没提交任何动作 |
+| `stats-check.mjs` JH / SJ（§5.1 第 4 条） | 两侧「共 2 条 · 待处理 0 · 已处理 0 · 已通过 2」、两行「已同意」；`GET annotation-states` JH 1 次（本地 build 时 2 次，这次后一下落在窗内）、SJ 1 次 |
+
 ### 6.4 CDP 脚本环境变量（`scripts/pms-chrome-devtools-flow.ts`）
 
 | 变量 | 说明 |
@@ -313,6 +321,7 @@ Playwright / CDP 用 `registerPlant3dAutomationReviewInitScript(context)` 在上
 
 ## 9. 变更记录
 
+- 2026-09-22（下午，五）：§6.3.1 追记上线（Actions 部 main `cf7d8f0e`，16:35）与三项线上包复验读数——云线拖拽 / 备注占位符 / 统计条与 annotation-states 次数，均与本地 build 一致。
 - 2026-09-22（下午，四）：§5.1 第 4 条追记 4c——`syncAnnotationReviewStates` 同参在飞合并 + 1.2 s 短窗复用，JH 侧一进页 10 次 GET → 2 次。
 - 2026-09-22（下午，三）：§5.1 第 4 条标已修（统计条三药丸 + 设计面板拉 annotation-states，记两侧本地 build 复验读数）。
 - 2026-09-22（下午，二）：§5.1 第 3 条标已修（`151290c1`）并记 SJ / JH 两侧本地 build 真机复验的占位符 / 提示 / `aria-required` 实测值与旧包对照；§6.3.1 补「换角色」一行（独立 context 登 PMS 取 SJ token、http→https 按主机名拦、设计侧先点「打开批注单」）。
