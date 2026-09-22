@@ -363,5 +363,5 @@ pageerror 0；console error 6 条 = 从前那 5 条环境噪音 + 1 条 404 = `G
 - **三档各跑一遍，全绿**（`e2e-summary.json`）：Chrome 缺省 headless **7 passed 28.9 s**；`PLAYWRIGHT_GPU=1` **7 passed 28.9 s**；`PLAYWRIGHT_SOFTWARE_GL=1` **7 passed 29.0 s**。pageerror 三档都是 0。
   `playwright.config.ts` 新认 `PLAYWRIGHT_GPU` / `PLAYWRIGHT_SOFTWARE_GL` 两个开关（`launchOptions.args`），别的 spec 不给就是从前的行为。
 - **教程配图**：`docs/guides/images/model-version-view/01…10`（同一台 `:8022`，1600×1000，真显卡；`10-split-direct-render-note.png` 是 SwiftShader 档），`MODEL_VERSION_VIEW_TUTORIAL.md` 各节嵌入。
-- **仍未验**：~~P2-c 成员 / owner 真差（后端 `attribute_diff.rs` 仍 untracked 在 gen-model-refactor 工作树里，`:8022` 这版没有 `element/attribute-diff`，容器「仅自身」缺省对 524 → 532 那条 404 照旧是预期的探路）~~ **15:3x 拿后端工作树编了一份换到 `:8022`，P2-c 真机 + e2e 见 §5.5**；设计稿 S4 注 5 / 注 6 改口（Pencil 里现在没有打开任何 .pen）。
+- **仍未验**：~~P2-c 成员 / owner 真差（后端 `attribute_diff.rs` 仍 untracked 在 gen-model-refactor 工作树里，`:8022` 这版没有 `element/attribute-diff`，容器「仅自身」缺省对 524 → 532 那条 404 照旧是预期的探路）~~ **15:3x 拿后端工作树编了一份换到 `:8022`，P2-c 真机 + e2e 见 §5.5**；~~设计稿 S4 注 5 / 注 6 改口（Pencil 里现在没有打开任何 .pen）~~ **15:5x 已改口并重导 `S4-3d-linkage-live.png`**（收口计划 §3 / §8 末）。
 - 前端是**工作树**（HEAD `151290c1` + 别的会话未提交的空间查询 / 校审改动），不是干净 HEAD；那些改动不碰版本对比这条线的文件。

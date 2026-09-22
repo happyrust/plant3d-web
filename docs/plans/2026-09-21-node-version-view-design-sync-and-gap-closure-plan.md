@@ -8,7 +8,8 @@
 > 九帧导出 `docs/plans/2026-09-18-node-version-view-design/`（S0–S3 / F1 / F2 重导后字节数与 09-18 22:18 那批逐一相同 = 定稿帧确实没动）。
 > 前端基线：plant3d-web `main@0bc598e1`（PR #79 已合）+ 工作树未提交改动（§1.3）；后端 gen-model-refactor `0b2bf527b` + 未提交 `src/fast_model/attribute_diff.rs`。
 >
-> 状态：用户 16:3x 拍板 **「D1–D6 全按推荐，直接从 P0 开干」**；**P0 / P1 / P3-a / P3-b / P3-c / P2-a / P2-b 全部完成**（§8 执行记录），只剩 **P2-c**（等后端 `attribute_diff.rs` 提交）与设计稿 S4 注 5 / 注 6 改口（等 .pen 被打开）。
+> 状态：用户 16:3x 拍板 **「D1–D6 全按推荐，直接从 P0 开干」**；**P0 / P1 / P3-a / P3-b / P3-c / P2-a / P2-b 全部完成**（§8 执行记录），~~只剩 **P2-c**（等后端 `attribute_diff.rs` 提交）与设计稿 S4 注 5 / 注 6 改口（等 .pen 被打开）~~
+> **09-22 全部收完**：十笔真机 / e2e 补齐（三档显卡）、P2-c 真机（`:8022` 换成后端工作树构建）、S4 注 5 / 注 6 改口 + 重导——见 §8 末三节。后端 `attribute_diff.rs` 那半仍由另一条会话提交。
 
 ## 0. 一句话
 
@@ -107,6 +108,9 @@
 - S4 / S5 已按 09-21 实现回写（本轮）。S0–S3 / F1 / F2 不动。
 - P1-a / P1-b / P2-a / P2-b 做完 = 实现追上设计稿，**设计稿不用改**；P1-c 选 (b) 同样不用改。
 - P3-a / P3-b 做完改 S4 注 6 那句「换组 = close 再 open，分屏回单视口（未动）」；P3-c 拍板后改 S4 注 5 末句「去留待拍板」。
+  **✅ 09-22 15:5x 改口**（`plant-10/design/node-version-history.pen` 15:57 存盘）：注 5 末句 → 「09-21 拍板：留，认出软渲染（SwiftShader / llvmpipe / Microsoft Basic Render Driver）就自动退回直接 render，分屏摘要下照实说一句（P3-c，09-22 两档真机都过）」；
+  注 6 → 「不止一组时一颗总按钮『全部变了的单元一起进三维』（按份并发 ≤ 2、进度『正在生成历史投影 n / m』，> 20 个或服务端要确认先问；S2 / S2b，P2-a / P2-b）；换组 = close 再 open，分屏跟着保持不掉回单视口（P3-b）」；
+  分屏那格的 Footnote 里「去留待拍板（README §8.3）」同步改「留着，软渲染自动退回直接 render（README §8.3 / §8.5）」。Notes 列 576 高、没有裁切；只重导了 S4 一帧（`S4-3d-linkage-live.png` 3120×1524），其余八帧一字未动不重导。
 - 每次改 .pen 后重导九帧到 `docs/plans/2026-09-18-node-version-view-design/`（导出名按帧：`S4-3d-linkage-live.png` / `S5-tree-diff-mode.png`）。
 
 ## 4. 验证口径（每项都要）
@@ -264,3 +268,7 @@ P0（半天）→ P1-a / P1-b（半天）→ P3-a / P3-b（半天）→ P1-c（D
 - **§2 P2-c 写的「BRAN 24384_23257 应出『成员重排』」不成立**：attribute-history 里它在 (573, 628] 只有 626 一条（CACHID / noop / 无 members），服务端真差也没 members，两条路由一致——是计划把段写错了；EQUI 24776 那条成立（时间线 +26484 / −26484 / +26495 三跳，净差 +26495 一条，正是「净差 vs 折」的差别）。
 - e2e：叶子那条净差来路按服务端有无路由断言 `server` / `folded` + 戳缺省不列；**新第四条**（没路由就跳过）逐行拿 `element/attribute-diff`、挑成员 / owner 有差的点开断言。两份 spec 对这台 **8 passed（31.6 s）**，pageerror 0。
 - 后端一提交 / 一改，这台 `.dirty` 就过时了；换正式构建按 README §5.5 那行重起。
+
+### 设计稿 S4 注 5 / 注 6 改口（2026-09-22 15:5x）
+
+Pencil MCP 只认编辑器里打开着的 .pen，`cursor --reuse-window` 把 `plant-10/design/node-version-history.pen` 开进当前窗口后按 §3 改了三处文字（注 5 / 注 6 / 分屏 Footnote），`Get` 核过 Notes 列无 `problems`、截图无裁切；Ctrl+S 存盘（15:57:14，587,225 B；plant-10 不是 git 仓）；`Export` 只导 S4 一帧覆盖 `S4-3d-linkage-live.png`。**收口计划到此全部收完**：P0 / P1 / P2 / P3 十笔真机 + e2e、P2-c 真机、设计稿回写。
