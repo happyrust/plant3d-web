@@ -229,6 +229,13 @@ A/B 结果（同一锚点 (944,730)、同一卡上落点、拖 140×110 px；`FO
 | `placeholder-check.mjs` JH / SJ（§5.1 第 3 条） | JH「决定备注（同意可不填；驳回必填原因）」→ 驳回 →「决定备注（必填：驳回原因，设计要按这个重新处理）」+ `aria-required` + 描黄 + 提示，填了消，同意 →「决定备注（可选，例如同意理由）」；SJ 同理（不需解决 / 已修改）。没提交任何动作 |
 | `stats-check.mjs` JH / SJ（§5.1 第 4 条） | 两侧「共 2 条 · 待处理 0 · 已处理 0 · 已通过 2」、两行「已同意」；`GET annotation-states` JH 1 次（本地 build 时 2 次，这次后一下落在窗内）、SJ 1 次 |
 
+**第二次上线复验（2026-09-22 20:10 部署 main `a9358f09`，20:34–20:36 复验）**：同一 workflow（run `35725606280`，1 分 42 秒），比 `cf7d8f0e` 多 6 笔（`8323151c` 房间树直段 T3、`0e7316c3` / `40c946b6` 查看器浮层裁切修复、`4240a58c` / `095a2a0a` docs、`a9358f09`），`version.json` = `{commit: a9358f09…, buildDate: 2026-09-22 12:11:46 UTC}`，bundle `index-Bq92dgMb.js`，80 / 3100 / 443 同一套。三个脚本 `MODE=online` 读数与上表逐项相同：云线生成（起点仍是卡上「批注」计数 (1058,672) → `canvas.viewer`，`attachments` 403 照旧）；JH / SJ 占位符 / `aria-required` / 描黄 / 提示四态一致、没提交动作；两侧「共 2 条 · 待处理 0 · 已处理 0 · 已通过 2」两行「已同意」，`GET annotation-states` JH 1 次（+451 ms）、SJ 1 次（点「打开批注单」后）。三脚本 `document.scripts` 都只有 `index-Bq92dgMb.js`、`served-from-local: 0`。这次前置多了两步：
+
+- **9446 headless Chrome 不是常驻的**（进程不在、CDP 不通）：`chrome.exe --headless=new --remote-debugging-port=9446 --remote-allow-origins=* --user-data-dir=%TEMP%\chrome-9446-profile --window-size=1478,852 --ignore-certificate-errors --disable-gpu about:blank`——站点 `http` 会 302 到自签 `https`，默认 context 靠 `--ignore-certificate-errors` 免证书错（SJ 的独立 context 本来就带 `ignoreHTTPSErrors`）。验完 `Stop-Process` + 删 profile，云线的本机草稿随之消失，不必跑 `local-build-cleanup.mjs`。
+- **缓存 token 到期 / 不在时，取嵌入地址不必再在 PMS 列表里找行**：上面「换角色」那一行的找行法对 JH 不好使（JH 登进去的列表视图只显示「三维校审单 设计|日期」，没有 FORM id），改成登 PMS 后在页内 `POST /HD/GetZyModeInfo`（`application/x-www-form-urlencoded`；JH `username=JH&project=AvevaMarineSample&role=proofread` → 签出 `role=jd`，SJ `role=SJ` → `sj`，就是 PMS 自己开记录时发的那条），回 `{ip_addr, token}`，拼成 `http://123.57.182.243/review/3d-view?form_id=<FORM>&user_token=<jwt>&output_project=AvevaMarineSample`（与 PMS 拼出来的形状一致；token 按人签、不带 form，24 h 有效）。脚本 `%TEMP%\pms-getzy-probe\fetch-embed-urls.mjs`（`ROLES=JH,SJ`，写 `embed-url-<ROLE>.txt`，并把默认标签导到 JH 嵌入页供 JH 侧脚本 `page.url()` 取用；账号见 `AGENTS.md`，密码只走 `PMS_E2E_PASSWORD`）。
+
+日志与截图（仓外）：`%TEMP%\pms-getzy-probe\online-a9358f09-{fetch-urls,cloud,placeholder-JH,placeholder-SJ,stats-JH,stats-SJ}.log`、`lb-online-1790080467616-{loaded,located,armed,after-drag}.png`、`ph-{JH,SJ}-online-1790080*-s{0,1,2,4}-*.png`、`st-{JH,SJ}-online-1790080*.png`。
+
 ### 6.4 CDP 脚本环境变量（`scripts/pms-chrome-devtools-flow.ts`）
 
 | 变量 | 说明 |
@@ -321,6 +328,7 @@ Playwright / CDP 用 `registerPlant3dAutomationReviewInitScript(context)` 在上
 
 ## 9. 变更记录
 
+- 2026-09-22（晚）：§6.3.1 追记第二次上线（Actions 部 main `a9358f09`，20:10）与三项线上包复验读数（与 16:36 那轮逐项相同）；补两条前置做法——9446 headless Chrome 不常驻时自拉、缓存 token 失效时登 PMS 直接 `POST /HD/GetZyModeInfo` 铸 token 拼嵌入地址（JH 列表视图无 FORM id，找行法不通）。
 - 2026-09-22（下午，五）：§6.3.1 追记上线（Actions 部 main `cf7d8f0e`，16:35）与三项线上包复验读数——云线拖拽 / 备注占位符 / 统计条与 annotation-states 次数，均与本地 build 一致。
 - 2026-09-22（下午，四）：§5.1 第 4 条追记 4c——`syncAnnotationReviewStates` 同参在飞合并 + 1.2 s 短窗复用，JH 侧一进页 10 次 GET → 2 次。
 - 2026-09-22（下午，三）：§5.1 第 4 条标已修（统计条三药丸 + 设计面板拉 annotation-states，记两侧本地 build 复验读数）。
