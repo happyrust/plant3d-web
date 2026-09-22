@@ -1,6 +1,8 @@
 <template>
+  <!-- 镜像副本（2026-09-07 基线快照，非当前实现；当前实现见 src/components/spatial-query/SpatialQueryDrawer.vue）。
+       2026-09-22 随 issue #80 同步：max-h 不能按视口 vh 算，要按查看器容器算——这里 top 120px = 7.5rem，再留 1.5rem 底边距 → calc(100%-9rem)。 -->
   <div v-if="open"
-    class="pointer-events-auto absolute right-[60px] top-[120px] z-[950] flex max-h-[85vh] w-[440px] flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xl"
+    class="pointer-events-auto absolute right-[60px] top-[120px] z-[950] flex max-h-[calc(100%-9rem)] w-[440px] flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xl"
     @pointerdown.stop
     @wheel.stop>
     <div class="flex items-center justify-between border-b border-gray-100 px-4 py-3">
