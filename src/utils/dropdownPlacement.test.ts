@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { DEFAULT_DROPDOWN_PLACEMENT, resolveDropdownPlacement } from './dropdownPlacement';
+import { DEFAULT_DROPDOWN_PLACEMENT, measureNaturalHeight, resolveDropdownPlacement } from './dropdownPlacement';
 
 // 容器 83→499（416 px，与 #81 真机一致），菜单 7 项自然高 216 px
 const container = { containerTop: 83, containerBottom: 499 };
@@ -41,5 +41,33 @@ describe('resolveDropdownPlacement', () => {
 
   it('缺省落位是向下、不限高', () => {
     expect(DEFAULT_DROPDOWN_PLACEMENT).toEqual({ up: false, maxHeight: null });
+  });
+});
+
+describe('measureNaturalHeight（#83：开着缩窗重算时要量不限高的高度）', () => {
+  it('量的时候把内联 max-height / overflow-y 清掉，量完原样恢复', () => {
+    const el = document.createElement('div');
+    el.style.maxHeight = '476px';
+    el.style.overflowY = 'auto';
+    const seen: { maxHeight: string; overflowY: string }[] = [];
+    el.getBoundingClientRect = () => {
+      seen.push({ maxHeight: el.style.maxHeight, overflowY: el.style.overflowY });
+      // 没限高时的自然高度
+      return { height: 648, width: 288, top: 0, left: 0, right: 288, bottom: 648, x: 0, y: 0, toJSON: () => ({}) } as DOMRect;
+    };
+
+    expect(measureNaturalHeight(el)).toBe(648);
+    expect(seen).toEqual([{ maxHeight: '', overflowY: '' }]);
+    expect(el.style.maxHeight).toBe('476px');
+    expect(el.style.overflowY).toBe('auto');
+  });
+
+  it('本来没限高的元素量完也不会多出内联样式', () => {
+    const el = document.createElement('div');
+    el.getBoundingClientRect = () => ({ height: 217 } as DOMRect);
+    expect(measureNaturalHeight(el)).toBe(217);
+    expect(el.style.maxHeight).toBe('');
+    expect(el.style.overflowY).toBe('');
+    expect(el.getAttribute('style') ?? '').not.toMatch(/max-height|overflow/);
   });
 });

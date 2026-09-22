@@ -99,6 +99,23 @@ cua 真机（容器 825，空间查询抽屉同时开）：卡 64→424（360 �
 
 `pageerror` 0。（`ObjectMeasureDrawer` 的「结束测量」在 §2.1 的专项里已真点验证过；本回归里 cua 的滚轮事件没能落到该抽屉正文——是 cua `scroll` 在此窗口的坐标落点问题，非产品问题，故该抽屉滚到底的真点未在本回归复跑。）
 
+### 2.7 弹层开着时容器缩矮要重算落位（issue [#83](https://github.com/happyrust/plant3d-web/issues/83)，§4.2 顺手发现 ① 的修复）
+
+根因：#81 的落位只在 toggle 打开那一刻算一次。修法：容器已有的 `ResizeObserver` 回调里 `replaceOpenLeftToolbarPopups()` 重跑开着的弹层的 place；量高度改用 `measureNaturalHeight(el)`（同步清掉上一轮内联 `max-height` / `overflow-y` 量自然高度再恢复），否则会拿已限高的高度越算越小。
+
+Playwright headless 拦截换包 A/B（`pms-3d-review-integration-e2e.md` §6.3.1 做法：本地 `vite build` 的 dist 对线上后端 123.57.182.243；同页同 URL，视口 1692×839 → 容器 83→650（567）打开，再 `setViewportSize` 到 1692×659 → 容器 83→513（430），最后放大回去）：
+
+| | 线上旧包 `index-Bq92dgMb.js`（改前） | 修后 build `index-BdRWNvCA.js` |
+| --- | --- | --- |
+| 「测量」下拉 高容器打开 | `top-0` 406→624，在容器内 | 同 |
+| 缩矮后 | 仍 `top-0` 337→555，**超出容器底 42 px** | **`bottom-0` 翻上 155→373**，在容器内 |
+| 放大回去 | `top-0` 406→624 | `top-0` 406→624（又向下开） |
+| 「查看工具设置」高容器打开 | `bottom-0` + `max-height 475px`，92→567 | 同 |
+| 缩矮后 | 仍 `max-height 475px`，23→498，**顶出容器 60 px**（标题与「场景背景」被裁） | **重算 `max-height 407px`**，91→498，在容器内 |
+| 放大回去 | 92→567 | 92→567，`max-height` 回 475 |
+
+`pageerror` 两侧 0。图：`resize-83-menu-online.png` / `resize-83-menu-local.png`（缩矮后的菜单）、`resize-83-settings-online.png` / `resize-83-settings-local.png`（缩矮后的弹层）。单测 `dropdownPlacement.test.ts` 6 → 8 例。脚本 `%TEMP%\overlay-clip-online\resize-check.mjs`（仓外，`MODE=online|local`）。
+
 ## 3. 单测 / lint
 
 `npx vitest run src/components/spatial-query/SpatialQueryDrawer.test.ts src/composables/useDtxTools.objectMeasure.test.ts src/utils/dropdownPlacement.test.ts` → 3 文件 49 过；`npx eslint` 触及的 `.vue` / `.ts` 0 问题（`ViewerPanel.vue` 只剩第 28 行既有那条 import 分组）；tailwindcss CLI 探针确认产出 `max-height: calc(100% - 7.5rem)` / `calc(100% - 9rem)`。
@@ -128,7 +145,7 @@ cua 真机（容器 825，空间查询抽屉同时开）：卡 64→424（360 �
 
 注入后 `pageerror` / `console.error` 0；`document.scripts` 只有 `/assets/index-Bq92dgMb.js`。
 
-顺手看到（不属于 #80–#82，未改）：① 弹层落位只在打开那一刻算，窗口随后缩小不会重算——矮容器一节里先前在高容器打开的「查看工具设置」弹层缩窗后仍是 23→499 / `max-height 476`，顶出容器 60 px，关掉重开才按新容器落位；② 结果列表滚到底时最末一行（`24381_36083 PANE`）动作按钮中心点 `elementFromPoint` 未命中，上一行命中并真点成功，未深究。
+顺手看到（不属于 #80–#82）：① 弹层落位只在打开那一刻算，窗口随后缩小不会重算——矮容器一节里先前在高容器打开的「查看工具设置」弹层缩窗后仍是 23→499 / `max-height 476`，顶出容器 60 px，关掉重开才按新容器落位 → issue [#83](https://github.com/happyrust/plant3d-web/issues/83)（同日修，见 §2.7）；② 结果列表滚到底时最末一行（`24381_36083 PANE`）动作按钮中心点 `elementFromPoint` 未命中，上一行命中并真点成功，未深究。
 
 ## 备注
 

@@ -105,7 +105,7 @@ import { getOutputProjectFromUrl } from '@/lib/currentProject';
 import { getModelSource, modelVersionAttributesToUiAttr } from '@/model-source';
 import { onCommand } from '@/ribbon/commandBus';
 import { emitToast } from '@/ribbon/toastBus';
-import { DEFAULT_DROPDOWN_PLACEMENT, resolveDropdownPlacement, type DropdownPlacement } from '@/utils/dropdownPlacement';
+import { DEFAULT_DROPDOWN_PLACEMENT, measureNaturalHeight, resolveDropdownPlacement, type DropdownPlacement } from '@/utils/dropdownPlacement';
 import {
   applyModelUnitRefnoVisibility,
   applyModelUnitVersionSide,
@@ -1465,7 +1465,8 @@ function placeLeftMeasureMenu(): void {
     anchorBottom: a.bottom,
     containerTop: c.top,
     containerBottom: c.bottom,
-    menuHeight: menu.getBoundingClientRect().height,
+    // 开着重算时元素上还挂着上一轮的限高，要量不限高的自然高度（#83）
+    menuHeight: measureNaturalHeight(menu),
   });
 }
 
@@ -1476,6 +1477,16 @@ function toggleLeftMeasureMenu(): void {
   // 先按缺省（向下、不限高）渲染一帧量出自然高度，再决定翻不翻 / 限不限高
   leftMeasureMenuPlacement.value = { ...DEFAULT_DROPDOWN_PLACEMENT };
   void nextTick(placeLeftMeasureMenu);
+}
+
+/**
+ * 弹层开着时容器一变矮（拖控制台分隔条、缩窗、折叠面板）就重算落位（issue #83）：
+ * 落位原来只在 toggle 打开那一刻算一次，缩矮后「测量」下拉不翻上、「查看工具设置」弹层仍按旧限高顶出容器。
+ * 由容器的 ResizeObserver 回调调用；两个弹层都没开时什么也不做。
+ */
+function replaceOpenLeftToolbarPopups(): void {
+  if (leftToolbarOpenMeasureMenu.value) placeLeftMeasureMenu();
+  if (toolbarSettingsOpen.value) placeLeftSettingsPopup();
 }
 
 function onLeftMeasureDistanceClick(): void {
@@ -3399,7 +3410,8 @@ function placeLeftSettingsPopup(): void {
     anchorBottom: a.bottom,
     containerTop: c.top,
     containerBottom: c.bottom,
-    menuHeight: popup.getBoundingClientRect().height,
+    // 同「测量」下拉：开着重算时量不限高的自然高度（#83）
+    menuHeight: measureNaturalHeight(popup),
   });
 }
 
@@ -4667,7 +4679,11 @@ onMounted(async () => {
   window.addEventListener('keydown', onKeydown);
   offKeydown = () => window.removeEventListener('keydown', onKeydown);
 
-  resizeObserver = new ResizeObserver(() => handleResize());
+  resizeObserver = new ResizeObserver(() => {
+    handleResize();
+    // 容器变矮 / 变高时把开着的「测量」下拉 / 「查看工具设置」弹层重新落位（#83）
+    replaceOpenLeftToolbarPopups();
+  });
   resizeObserver.observe(container);
   handleResize();
 

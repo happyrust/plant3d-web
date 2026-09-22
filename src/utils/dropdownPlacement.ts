@@ -45,3 +45,20 @@ export function resolveDropdownPlacement(input: DropdownPlacementInput): Dropdow
   const up = spaceAbove > spaceBelow;
   return { up, maxHeight: up ? spaceAbove : spaceBelow };
 }
+
+/**
+ * 量弹层「不限高时」的自然高度（issue #83）。
+ *
+ * 弹层开着时容器一变矮要重算落位，但这时元素上还挂着上一轮的内联 `max-height` / `overflow-y`，
+ * 直接 `getBoundingClientRect().height` 量到的是已限高的高度，会在「限高 → 更矮的限高」之间越算越小、
+ * 或误判成放得下。这里同步清掉那两条内联样式量一次再恢复——都在同一个 JS 任务里完成，不掉帧、不闪。
+ */
+export function measureNaturalHeight(el: HTMLElement): number {
+  const { maxHeight, overflowY } = el.style;
+  el.style.maxHeight = '';
+  el.style.overflowY = '';
+  const height = el.getBoundingClientRect().height;
+  el.style.maxHeight = maxHeight;
+  el.style.overflowY = overflowY;
+  return height;
+}
