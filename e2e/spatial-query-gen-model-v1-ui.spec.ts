@@ -157,7 +157,7 @@ type TreeResponseBody = {
   rooms: { refno: string; count: number; tube_count?: number; specs: { spec_value: number; unit_types: { noun: string; units: TreeUnitBody[] }[] }[] }[];
 };
 
-test('房间层级树 · 直段行（方案 B）：选了房间的查询打 nearby/tree 且恒带 tubes=1；BRAN 单元行尾「N 段直管」、展开后构件行之后的直段行数 = 响应里该单元 tubes.length、无效段带小标；摘要带「M 段直管」；点直段行 = 全局选中所属 BRAN；老服务端（响应没有 total_tube_count）整条用例跳过', async ({ page }) => {
+test('房间层级树 · 直段行（方案 B）：选了房间的查询打 nearby/tree 且恒带 tubes=1；BRAN 单元行尾「N 段直管」、展开后构件行之后的直段行数 = 响应里该单元 tubes.length、无效段带小标；摘要带「M 段直管」；点直段行 = 全局选中所属 BRAN；逐段眼睛（T4）：未加载先提示，单元「加载」后只藏那一段（scene.isTubeSegmentVisible）、单元「仅显示」整条覆盖清掉逐段隐藏；老服务端（响应没有 total_tube_count）整条用例跳过', async ({ page }) => {
   const room = '24381_35580';
   const { pageErrors } = await openSpatialUiPage(page, { mode: 'range' });
   const center = await fetchServerCenter(room);
@@ -214,14 +214,75 @@ test('房间层级树 · 直段行（方案 B）：选了房间的查询打 near
   }, unit.elements!.length), '直段行排在构件行之后').toBe(true);
   const invalidCount = unit.tubes!.filter((tube) => tube.invalid).length;
   await expect(unitEl.locator('[data-testid="spatial-tree-tube-invalid"]')).toHaveCount(invalidCount);
-  // 直段行没有眼睛
+  // 直段行的眼睛是自己的一颗（逐段），不是构件行那颗；BRAN 没加载时 data-tube-loaded=false
   await expect(tubeRows.first().locator('[data-testid="spatial-tree-leaf-visibility"]')).toHaveCount(0);
+  const firstEye = tubeRows.first().getByTestId('spatial-tree-tube-visibility');
+  await expect(firstEye).toHaveCount(1);
+  await expect(tubeRows.first()).toHaveAttribute('data-tube-loaded', 'false');
 
   // 点直段行：全局选中 = 所属 BRAN
   await tubeRows.first().locator('button[title]').first().click();
   await expect.poll(() => page.evaluate(() =>
     import((window as Window & { __appModuleUrl?: (path: string) => string }).__appModuleUrl?.('/src/composables/useSelectionStore.ts') ?? '/src/composables/useSelectionStore.ts')
       .then((mod) => mod.getGlobalSelectedRefno() as string | null)), { timeout: 10_000 }).toBe(unit.refno);
+
+  // 逐段眼睛（T4）：身份键 = tubeKey(BRAN, 段)，与 model/records 记录一级的 tube 同一个四元组
+  const tubeKey = `${unit.refno}#${firstTube.from}-${firstTube.to}#${firstTube.ordinal}`;
+  type TubeWindow = Window & {
+    __appModuleUrl?: (path: string) => string;
+    __xeokitViewer: { scene: { objects: Record<string, { visible?: boolean } | undefined>; isTubeSegmentVisible?: (key: string) => boolean | null } };
+  };
+  const tubeState = () => page.evaluate(async (key) => {
+    const w = window as unknown as TubeWindow;
+    const mod = await import(w.__appModuleUrl?.('/src/composables/useDbnoInstancesDtxLoader.ts') ?? '/src/composables/useDbnoInstancesDtxLoader.ts');
+    return {
+      loaded: mod.isDtxTubeSegmentLoadedAcrossAllDbnos(key) as boolean,
+      hidden: mod.isDtxTubeSegmentHidden(key) as boolean,
+      sceneVisible: w.__xeokitViewer.scene.isTubeSegmentVisible?.(key) ?? null,
+    };
+  }, tubeKey);
+  // 未加载：点眼睛 → 提示先加载所属 BRAN，什么都没藏
+  await firstEye.click();
+  await expect(page.getByText('这段直管还没装进场景').first()).toBeVisible({ timeout: 10_000 });
+  expect(await tubeState()).toEqual({ loaded: false, hidden: false, sceneVisible: null });
+
+  // 单元「加载」→ 整条 BRAN 进场景（服务端 T2 起 records 带 tube，加载链据此登记直段键）→ 行变 data-tube-loaded=true
+  // （三个小动作 invisible、行悬停才可见：悬停单元标题行上的展开箭头，别悬到展开后的子行上）
+  const hoverUnitRow = () => unitEl.getByTestId('spatial-tree-toggle').first().hover();
+  await hoverUnitRow();
+  await unitEl.getByTestId('spatial-tree-node-load').first().click();
+  const confirm = page.getByRole('button', { name: /^加载 \d+ 个$/ });
+  if (await confirm.isVisible().catch(() => false)) await confirm.click();
+  await expect.poll(async () => (await tubeState()).loaded, { timeout: 240_000, intervals: [1000, 2000, 5000] }).toBe(true);
+  await expect(tubeRows.first()).toHaveAttribute('data-tube-loaded', 'true', { timeout: 10_000 });
+  expect((await tubeState()).sceneVisible, '刚装进来：这一段可见').toBe(true);
+
+  // 点眼睛：只这一段隐（data-tube-hidden、scene.isTubeSegmentVisible=false），所属 BRAN 的 refno 状态不动；再点回来
+  await firstEye.click();
+  await expect(tubeRows.first()).toHaveAttribute('data-tube-hidden', 'true', { timeout: 10_000 });
+  expect(await tubeState()).toEqual({ loaded: true, hidden: true, sceneVisible: false });
+  expect(await page.evaluate((refno) => {
+    const object = (window as unknown as TubeWindow).__xeokitViewer.scene.objects[refno];
+    return object ? object.visible !== false : null;
+  }, unit.refno), '所属 BRAN 的 refno 级状态不动').not.toBe(false);
+  if (unit.tubes!.length > 1) {
+    const second = unit.tubes![1]!;
+    expect((await page.evaluate((key) => (window as unknown as TubeWindow).__xeokitViewer.scene.isTubeSegmentVisible?.(key) ?? null,
+      `${unit.refno}#${second.from}-${second.to}#${second.ordinal}`)), '同一 BRAN 的别的段不受影响').toBe(true);
+  }
+  await firstEye.click();
+  await expect(tubeRows.first()).not.toHaveAttribute('data-tube-hidden', 'true', { timeout: 10_000 });
+  expect((await tubeState()).sceneVisible).toBe(true);
+
+  // 再藏一段，然后单元「仅显示」（refno 级）：整条 BRAN 照 refno 走，逐段隐藏被清掉、这一段跟着亮回来
+  await firstEye.click();
+  await expect(tubeRows.first()).toHaveAttribute('data-tube-hidden', 'true', { timeout: 10_000 });
+  await hoverUnitRow();
+  await unitEl.getByTestId('spatial-tree-node-show-only').first().click();
+  await expect(tubeRows.first()).not.toHaveAttribute('data-tube-hidden', 'true', { timeout: 10_000 });
+  expect(await tubeState()).toEqual({ loaded: true, hidden: false, sceneVisible: true });
+  const restore = page.getByRole('button', { name: '恢复场景', exact: true });
+  if (await restore.isVisible().catch(() => false)) await restore.click();
 
   await expect(errorBanner(page)).toHaveCount(0);
   expect(pageErrors, pageErrors.join('\n')).toEqual([]);

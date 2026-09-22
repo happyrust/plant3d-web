@@ -51,3 +51,13 @@ gen-model-model-cache `docs/plans/2026-09-22-room-tree-tube-segments-backend-dev
 与摘要带「M 段直管」；房间页签 `roomTreeNodes` 多 `tube` 节点（`tube:<房>:<单元>#<from>-<to>#<ordinal>`，`ModelTreeRow` 只读行、无眼睛 / 勾选，右键只有聚焦 / 查看属性），
 `refnosUnder` / `branUnitRefnosUnder` / `pendingLeafNodesUnder` 跳过它；直段行不进任何 refno 集，方案 A 的单元级动作原样。**D5 取 (i) 只读 + 定位**，逐段眼睛（要
 `model/records` 直段元数据 + 对象级显隐）另立 T4。已知漏洞：管件全在范围外、只有直段穿过范围的「孤直段」列不出。
+
+**追记 ③（2026-09-22，逐段眼睛——D5 (ii)，T2 + T4）**：服务端 T2（gen-model-model-cache `6ad84ca80`）给 `model/records` 的管身记录在**记录一级**加了
+`tube{ordinal, from, to}`——与树路由直段的 `(BRAN = refno, from, to, ordinal)` 是同一个四元组（spec §4.5.2「`tube`」），`tubi_relate` 行同时落盘 `route_ordinal`。
+前端 T4 据此把直段行对上场景里的直管对象：`instanceMapping` 把它折进 `uniforms.tube`，`useDbnoInstancesDtxLoader` 登记 `tubeKey(BRAN, 段) → objectId`
+（`tubeObjectIdByKey`，跨库可查），`DtxCompatScene.setTubeSegmentsVisible(keys, visible)` 按键只显 / 隐那一个对象。**对象级、不进 refno 状态表**：
+逐段隐藏是 `useDbnoInstancesDtxLoader.dtxHiddenTubeKeys` 里的一层覆盖，`setObjectsVisible(BRAN)` / 显隐回放一来整条 BRAN 照 refno 状态走、这层按 BRAN 前缀清掉
+（refno 级动作仍是权威）。对象没装进场景就什么都不做、由 UI 提示先加载所属 BRAN——不做「未加载先记下、装进来再回放」，那会与「加载后 `setObjectsVisible(BRAN, true)`」
+互相打架。两棵树的直段行都长出眼睛（抽屉 `SpatialResultTreeTubes.vue` 的 `spatial-tree-tube-visibility`、页签 `ModelTreeRow` 的眼睛——`readOnly` 随之退役，
+`useRoomTree.setVisible` 对 `tube` 节点走 `setTubeSegmentsVisible`，勾选态先看覆盖表再看勾选表，所以抽屉里藏起来的段页签里同样是暗的，右键多「显示 / 隐藏」）。
+老服务端（记录里没有 `tube`）下眼睛画淡、点了提示先加载——与「没加载」同一种回答。

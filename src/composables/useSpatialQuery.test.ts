@@ -138,6 +138,8 @@ import type {
   SpatialRoomsResult,
   SpatialTreeLeafSelector,
   SpatialTreeResult,
+  SpatialTreeTubeNode,
+  SpatialTreeUnitNode,
 } from '@/api/genModelSpatialApi';
 
 import { GenModelV1ApiError } from '@/api/genModelV1Api';
@@ -3151,5 +3153,35 @@ describe('房间层级树（ADR 0068，plan 2026-09-20 spatial-room-hierarchy-tr
     expect(plain.viewer.scene.setObjectsXRayed).toHaveBeenCalledWith(['loaded_a', 'server_only', 'shared_b', 'bran_1'], false);
     plain.store.isolateRefnos(['loaded_a', 'server_only']);
     expect(plain.viewer.scene.setObjectsXRayed).toHaveBeenLastCalledWith(['loaded_a', 'server_only'], false);
+  });
+
+  it('逐段眼睛（T4）：toggleTreeTubeVisible 只叫 scene.setTubeSegmentsVisible([tubeKey], 目标态)、不碰 refno 级显隐；方向看对象级覆盖表（藏着就显）；对象没装进来回 tube-not-loaded；查看器没这一档回 unsupported', async () => {
+    const { markDtxTubeSegmentsHidden, clearDtxTubeSegmentOverrides } = await import('@/composables/useDbnoInstancesDtxLoader');
+    const { store, viewer } = makeStore();
+    const unit = { refno: 'bran_1', noun: 'BRAN', name: '/B1', count: 1, min_distance: 0 } as SpatialTreeUnitNode;
+    const tube = {
+      ordinal: 0, from: 'bran_1', to: 'loaded_a', from_noun: 'BRAN', to_noun: 'ELBO', distance: 0, length: 100,
+      aabb: { min: [0, 0, 0], max: [1, 1, 1] }, invalid: false,
+    } as SpatialTreeTubeNode;
+    const key = 'bran_1#bran_1-loaded_a#0';
+
+    // 查看器桩没有 setTubeSegmentsVisible（旧查看器）：不可用、不碰别的
+    expect(store.toggleTreeTubeVisible(unit, tube)).toBe('unsupported');
+    expect(viewer.scene.setObjectsVisible).not.toHaveBeenCalled();
+
+    // 对象没装进场景：scene 回空 → tube-not-loaded（提示先加载由抽屉做）
+    viewer.scene.setTubeSegmentsVisible = vi.fn((_keys: string[], _visible: boolean): string[] => []);
+    expect(store.toggleTreeTubeVisible(unit, tube)).toBe('tube-not-loaded');
+    expect(viewer.scene.setTubeSegmentsVisible).toHaveBeenLastCalledWith([key], false);
+
+    // 装进来了：可见 → 藏（visible=false）；覆盖表里藏着 → 显（visible=true）；始终只动那一段，refno 级 setObjectsVisible 一次都不叫
+    viewer.scene.setTubeSegmentsVisible = vi.fn((keys: string[], _visible: boolean): string[] => keys);
+    expect(store.toggleTreeTubeVisible(unit, tube)).toBe('applied');
+    expect(viewer.scene.setTubeSegmentsVisible).toHaveBeenLastCalledWith([key], false);
+    markDtxTubeSegmentsHidden([key], true);
+    expect(store.toggleTreeTubeVisible(unit, tube)).toBe('applied');
+    expect(viewer.scene.setTubeSegmentsVisible).toHaveBeenLastCalledWith([key], true);
+    clearDtxTubeSegmentOverrides(['bran_1']);
+    expect(viewer.scene.setObjectsVisible).not.toHaveBeenCalled();
   });
 });

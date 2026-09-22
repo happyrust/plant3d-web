@@ -29,12 +29,7 @@ const props = defineProps<{
    * 默认关：E3D 自己的模型树显示的就是短名；整条一直挂在行的 title 上。
    */
   fullNames?: boolean;
-  /**
-   * 只读行：不画眼睛（房间页签的直段行，方案 B D5 (i)——直管没有自己的场景对象、随所属 BRAN 单元的动作走）。
-   * 选中 / 右键照常。
-   */
-  readOnly?: boolean;
-  /** 只读行悬停全文（`FlatRow` 没有 title 位，直段行的两端 refno / 距离从这里挂） */
+  /** 行的悬停全文（`FlatRow` 没有 title 位；房间页签的直段行把两端 refno / 距离 / 所属 BRAN 挂在这里） */
   rowTitle?: string;
 }>();
 
@@ -187,7 +182,6 @@ onUnmounted(() => {
     :data-selected="selected ? 'true' : 'false'"
     :data-diff-status="diffStatus || undefined"
     :data-ghost="ghost ? 'true' : undefined"
-    :data-read-only="readOnly ? 'true' : undefined"
     :title="ghostTitle ?? rowTitle ?? fullNameTitle"
     @mouseenter="onMouseEnter"
     @mouseleave="onMouseLeave"
@@ -230,8 +224,7 @@ onUnmounted(() => {
         {{ diffCount }}
       </span>
 
-      <span v-if="readOnly" class="h-6 w-6 shrink-0" />
-      <button v-else-if="!ghost" type="button" class="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-sm text-muted-foreground hover:bg-muted hover:text-foreground focus:opacity-100 transition-opacity disabled:cursor-wait disabled:opacity-100" :class="!isVisible ? 'opacity-100 text-destructive/70' : showEyeIcon || props.loading ? 'opacity-100' : 'opacity-0'" :disabled="props.loading" @mousedown.stop @click="onToggleVisible">
+      <button v-if="!ghost" type="button" class="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-sm text-muted-foreground hover:bg-muted hover:text-foreground focus:opacity-100 transition-opacity disabled:cursor-wait disabled:opacity-100" :class="!isVisible ? 'opacity-100 text-destructive/70' : showEyeIcon || props.loading ? 'opacity-100' : 'opacity-0'" :disabled="props.loading" @mousedown.stop @click="onToggleVisible">
         <LoaderCircle v-if="props.loading" class="h-3.5 w-3.5 animate-spin" />
         <Eye v-if="isVisible" class="h-3.5 w-3.5" />
         <EyeOff v-else-if="!props.loading" class="h-3.5 w-3.5" />

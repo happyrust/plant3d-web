@@ -112,6 +112,16 @@ export function useSceneGraphOps(viewerRef: { value: DtxCompatViewer | null }) {
     }
   }
 
+  /**
+   * 逐段眼睛（方案 B T4）：按直段身份键显 / 隐单个直管对象——对象级、不进 refno 状态表，也不排队（没有「未加载先记下」
+   * 这一说：对象不在场景里就什么都不做）。回真正作用到了的键；查看器没就绪回空。
+   */
+  function setTubeSegmentsVisible(keys: string[], visible: boolean): string[] {
+    const viewer = viewerRef.value;
+    if (!viewer || !keys || keys.length === 0) return [];
+    return viewer.scene.setTubeSegmentsVisible(keys, visible);
+  }
+
   function isolate(keepIds: string[]) {
     const viewer = viewerRef.value;
     if (!viewer) return;
@@ -136,6 +146,7 @@ export function useSceneGraphOps(viewerRef: { value: DtxCompatViewer | null }) {
   return {
     setVisible,
     setSelected,
+    setTubeSegmentsVisible,
     flush,
     isolate,
     clearIsolation,

@@ -671,7 +671,8 @@
               @show-only="showOnlyRefnos"
               @isolate="isolateRefnos"
               @expand="expandTreeLeaves"
-              @focus-tube="focusTreeTube" />
+              @focus-tube="focusTreeTube"
+              @toggle-tube-visible="toggleTreeTubeVisibility" />
           </div>
 
           <div v-if="resultsExpanded && resultSet && resultSet.items.length > 0 && canToggleGroupDimension && !treeResult"
@@ -774,6 +775,7 @@ import { ArrowUpRight, Copy, Download, Eraser, Eye, EyeOff, Focus, Info, Loader2
 
 import SpatialResultTree from './SpatialResultTree.vue';
 
+import type { SpatialTreeTubeNode, SpatialTreeUnitNode } from '@/api/genModelSpatialApi';
 import type {
   SpatialQueryGroupDimension,
   SpatialQueryMode,
@@ -843,6 +845,7 @@ const {
   isolateRefnos,
   expandTreeLeaves,
   focusTreeTube,
+  toggleTreeTubeVisible,
   toggleResultVisible,
   setAllResultsVisible,
   isolateResults,
@@ -1539,6 +1542,14 @@ function focusItem(item: SpatialQueryResultItem) {
 
 function toggleVisibility(item: SpatialQueryResultItem) {
   toggleResultVisible(item);
+}
+
+/** 直段行的眼睛（逐段，T4）：对象没装进场景时 store 回 `'tube-not-loaded'`，提示先加载所属 BRAN。 */
+function toggleTreeTubeVisibility(unit: SpatialTreeUnitNode, tube: SpatialTreeTubeNode) {
+  const result = toggleTreeTubeVisible(unit, tube);
+  if (result === 'tube-not-loaded') {
+    emitToast({ level: 'info', message: '这段直管还没装进场景：先对所属 BRAN 单元「加载」，再逐段显隐' });
+  }
 }
 
 function normalizePipeDistanceRefno(refno: string): string {

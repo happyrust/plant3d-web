@@ -10,15 +10,29 @@
  *
  * `uniforms`：`refno`（构件，`a_b`）、`noun`（`generic`；直管统一 `TUBI`，DTX 层靠它把直管挂到属主）、
  * `owner_refno`（**生成根**，不是直接属主——`model/records` 就是按根投影出来的）、`owner_noun`（能从同批记录里
- * 认出来就填，认不出留空让加载链自己推）、`is_invalid_tubi`（画告警色用，plan §8 Q2）。
+ * 认出来就填，认不出留空让加载链自己推）、`is_invalid_tubi`（画告警色用，plan §8 Q2）、`tube`（直管的直段身份
+ * `{ordinal, from, to}`，两端折成 `a_b`；服务端 T2 起才给，DTX 层拿它把对象登进 `tubeKey` 索引供逐段眼睛用，T4）。
  */
 import { Matrix4, Quaternion, Vector3 } from 'three';
 
 import type { InstanceEntry } from '@/utils/instances/instanceManifest';
 
-import { fromV1Refno, type GeomInstQuery, type V1Aabb, type V1Transform } from '@/api/genModelV1Api';
+import { fromV1Refno, type GeomInstQuery, type GeomInstTube, type V1Aabb, type V1Transform } from '@/api/genModelV1Api';
 
 const IDENTITY: V1Transform = { translation: [0, 0, 0], rotation: [0, 0, 0, 1], scale: [1, 1, 1] };
+
+/** `uniforms.tube`：直管对象的直段身份（两端已折成 `a_b`），与树路由 `TreeTube` 的 `from` / `to` / `ordinal` 同形。 */
+export type InstanceTubeIdentity = { ordinal: number; from: string; to: string };
+
+/** 记录一级的 `tube` → `uniforms.tube`；缺任一端或序号不是非负整数（老服务端 / 两端缺失的历史行）就不给。 */
+export function tubeIdentityOf(tube: GeomInstTube | null | undefined): InstanceTubeIdentity | null {
+  if (!tube) return null;
+  const from = fromV1Refno(String(tube.from ?? ''));
+  const to = fromV1Refno(String(tube.to ?? ''));
+  const ordinal = Number(tube.ordinal);
+  if (!from || !to || !Number.isInteger(ordinal) || ordinal < 0) return null;
+  return { ordinal, from, to };
+}
 
 function isFiniteTriple(value: unknown): value is [number, number, number] {
   return Array.isArray(value) && value.length === 3 && value.every((n) => typeof n === 'number' && Number.isFinite(n));
@@ -94,6 +108,7 @@ export function geomInstQueryToInstanceEntries(item: GeomInstQuery, context: Ins
   const aabb = aabbToEntryAabb(item.world_aabb);
   const worldMatrix = transformToMatrix(item.world_trans).toArray();
   const ownerNoun = owner ? context.nounByRefno?.get(owner) ?? '' : '';
+  const tubeIdentity = tubeIdentityOf(item.tube);
   const out: InstanceEntry[] = [];
   for (const inst of item.insts ?? []) {
     const geoHash = String(inst.geo_hash ?? '').trim();
@@ -109,6 +124,8 @@ export function geomInstQueryToInstanceEntries(item: GeomInstQuery, context: Ins
       is_invalid_tubi: inst.is_invalid_tubi === true,
       has_neg: item.has_neg === true,
     };
+    // 直段身份只挂在直管实例上（一条管身记录恰好一个实例）；构件记录没有 tube，老服务端也没有
+    if (isTubi && tubeIdentity) uniforms.tube = tubeIdentity;
     const entry: InstanceEntry = {
       geo_hash: geoHash,
       matrix: composeInstanceMatrix(item.world_trans, inst.transform),

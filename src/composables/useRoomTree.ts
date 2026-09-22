@@ -10,6 +10,8 @@
  *
  * 管件要带直段（2026-09-21，`deliveryUnitScene.ts`）：直管挂在 BRAN 自己的 refno 上、树上不列，所以单元级及以上的显隐 / 隔离
  * 除了节点下列出的构件，还带上这些构件所属 BRAN 的整体（BRAN 自己 + 记录缓存里它的全部构件）；构件行的眼睛与定位不扩。
+ * 直段行（方案 B，2026-09-22）在 BRAN 单元的构件行之后列出；它的眼睛是**逐段**的（T4）：只动场景里那一段直管对象
+ * （`DtxCompatScene.setTubeSegmentsVisible`，对象级、不进 refno 状态表），所属 BRAN 的 refno 级动作一来整条覆盖。
  */
 import { computed, ref, shallowRef } from 'vue';
 
@@ -31,7 +33,8 @@ import {
   roomRootNode,
   type RoomTreeNode,
 } from '@/composables/roomTreeNodes';
-import { mergeTreeLeaves } from '@/composables/spatialTree';
+import { mergeTreeLeaves, tubeKey } from '@/composables/spatialTree';
+import { isDtxTubeSegmentHidden, isDtxTubeSegmentLoadedAcrossAllDbnos } from '@/composables/useDbnoInstancesDtxLoader';
 import { useSceneGraphOps } from '@/composables/useSceneGraph';
 import { resolveSceneWorldTransform } from '@/composables/useSpatialQuery';
 import { getModelSource } from '@/model-source';
@@ -54,7 +57,13 @@ export type RoomTreeOptions = {
    * 缺省 `sceneCompanionsOf`（读 gen-model 记录缓存，不发请求）；测试注桩。
    */
   sceneCompanions?: (refnos: string[], branUnitRefnos: string[]) => string[];
+  /** 逐段眼睛（T4）：这一段直管是否被单独藏起来了 / 对象是否已在场景里。缺省读 DTX 加载链的运行时索引；测试注桩。 */
+  tubeSegmentHidden?: (key: string) => boolean;
+  tubeSegmentLoaded?: (key: string) => boolean;
 };
+
+/** 逐段眼睛点在没装进场景的直段上时 `setVisible` 的回答（调用方据此提示先加载所属 BRAN）。 */
+export type RoomTreeSetVisibleResult = 'applied' | 'tube-not-loaded';
 
 /** 房间号自然序（`R43` < `R432`，字母段按字典序）。 */
 function compareRoomNum(a: SpatialRoomOption, b: SpatialRoomOption): number {
@@ -66,6 +75,8 @@ function compareRoomNum(a: SpatialRoomOption, b: SpatialRoomOption): number {
 export function useRoomTree(viewerRef: { value: DtxCompatViewer | null }, options: RoomTreeOptions = {}) {
   const source = options.source ?? (() => getModelSource().spatial);
   const sceneCompanions = options.sceneCompanions ?? sceneCompanionsOf;
+  const tubeSegmentHidden = options.tubeSegmentHidden ?? isDtxTubeSegmentHidden;
+  const tubeSegmentLoaded = options.tubeSegmentLoaded ?? isDtxTubeSegmentLoadedAcrossAllDbnos;
   const sceneGraph = useSceneGraphOps(viewerRef);
 
   const roots = ref<SpatialRoomOption[]>([]);
@@ -333,6 +344,21 @@ export function useRoomTree(viewerRef: { value: DtxCompatViewer | null }, option
     }
   }
 
+  /** 直段行的身份键（`tubeKey(所属 BRAN, 段)`，与场景对象索引 / 抽屉同一个键）；不是直段行回 null。 */
+  function tubeKeyOfNode(node: RoomTreeNode | undefined): string | null {
+    return node?.kind === 'tube' && node.tube ? tubeKey(node.tube.unitRefno, node.tube.tube) : null;
+  }
+
+  /**
+   * 一个节点的勾选状态：直段行先看对象级覆盖（在抽屉里被单独藏起来的段这里也画成暗眼睛，两棵树同一份真相），
+   * 再看勾选表（单元级动作整枝改下来的）；其它节点只看勾选表，缺省 checked。
+   */
+  function checkStateOf(id: string, checks: Map<string, CheckState>): CheckState {
+    const key = tubeKeyOfNode(nodesById.value[id]);
+    if (key && tubeSegmentHidden(key)) return 'unchecked';
+    return checks.get(id) ?? 'checked';
+  }
+
   function recomputeParents(id: string) {
     const nodes = nodesById.value;
     const checks = checkStateById.value;
@@ -343,7 +369,7 @@ export function useRoomTree(viewerRef: { value: DtxCompatViewer | null }, option
       let unchecked = 0;
       let indeterminate = false;
       for (const child of parent.childrenIds) {
-        const state = checks.get(child) ?? 'checked';
+        const state = checkStateOf(child, checks);
         if (state === 'indeterminate') { indeterminate = true; break; }
         if (state === 'checked') checked++; else unchecked++;
       }
@@ -354,18 +380,35 @@ export function useRoomTree(viewerRef: { value: DtxCompatViewer | null }, option
 
   /**
    * 眼睛：节点下全部构件显 / 隐（未内联的先补；单元级及以上连所属 BRAN 的直段一起），勾选状态整枝改、父链重算。
-   * 直段行没有眼睛（D5 (i)：直管随单元级动作走，逐段显隐要对象级状态，T4 另议）——传进来就什么都不做。
+   * 直段行（逐段眼睛，方案 B T4）：只动场景里**那一段**直管对象（`DtxCompatScene.setTubeSegmentsVisible`，对象级、不进 refno
+   * 状态表），所属 BRAN 的 refno 级动作一来整条覆盖；对象还没装进场景就什么都不做、回 `'tube-not-loaded'`（调用方提示先加载）。
    */
-  async function setVisible(id: string, visible: boolean): Promise<void> {
-    if (nodesById.value[id]?.kind === 'tube') return;
+  async function setVisible(id: string, visible: boolean): Promise<RoomTreeSetVisibleResult> {
+    const node = nodesById.value[id];
+    const key = tubeKeyOfNode(node);
+    if (key) {
+      const applied = sceneGraph.setTubeSegmentsVisible([key], visible);
+      if (applied.length === 0) return 'tube-not-loaded';
+      const checks = checkStateById.value;
+      checks.set(id, visible ? 'checked' : 'unchecked');
+      recomputeParents(id);
+      return 'applied';
+    }
     const refnos = await collectSceneRefnos(id);
     if (refnos.length > 0) sceneGraph.setVisible(refnos, visible);
     setCheckStateDeep(id, visible ? 'checked' : 'unchecked');
     recomputeParents(id);
+    return 'applied';
   }
 
   function getCheckState(id: string): CheckState {
-    return checkStateById.value.get(id) ?? 'checked';
+    return checkStateOf(id, checkStateById.value);
+  }
+
+  /** 直段行的对象是否已在场景里（眼睛可点）；不是直段行回 false。 */
+  function isTubeSegmentLoaded(id: string): boolean {
+    const key = tubeKeyOfNode(nodesById.value[id]);
+    return key ? tubeSegmentLoaded(key) : false;
   }
 
   function isNodeLoading(id: string): boolean {
@@ -529,6 +572,7 @@ export function useRoomTree(viewerRef: { value: DtxCompatViewer | null }, option
     collectSceneRefnos,
     setVisible,
     getCheckState,
+    isTubeSegmentLoaded,
     isNodeLoading,
     nodeError,
     selectByRowIndex,

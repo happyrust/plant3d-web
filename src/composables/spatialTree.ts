@@ -24,7 +24,8 @@ import type { SpatialQueryFullMatchSet, SpatialQuerySortBy } from '@/types/spati
 /**
  * 直段的身份键：`<单元 refno>#<from>-<to>#<ordinal>`——与服务端 `(BRAN, from, to, ordinal)` 四元组同一身份，拼成一个字串好当
  * Map 键 / 节点 id。直段没有 refno，**不进任何 refno 集**（`treeNodeRefnos` / `branUnitRefnosCoveredBy` 都不看它）；
- * 单元级动作已经带整条 BRAN（`deliveryUnitScene.ts`），直段行只是读出来、可定位。
+ * 单元级动作已经带整条 BRAN（`deliveryUnitScene.ts`）。同一个键也是 DTX 加载链里直管对象的索引键（`model/records` 记录一级的
+ * `tube` → `useDbnoInstancesDtxLoader.tubeObjectIdByKey`），逐段眼睛按它找到场景里那一段（T4）。
  */
 export function tubeKey(unitRefno: string, tube: Pick<SpatialTreeTubeNode, 'from' | 'to' | 'ordinal'>): string {
   return `${unitRefno}#${tube.from}-${tube.to}#${tube.ordinal}`;

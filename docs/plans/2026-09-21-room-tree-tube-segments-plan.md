@@ -7,7 +7,9 @@
 > 状态：**D1–D7 全按推荐拍板（2026-09-22 11:19）；T1 后端已落地**（gen-model-model-cache `fa744490a` 执行计划 / `86bf22f51` 代码 / `2aab735df` 归房收窄——
 > D4 落地时收窄成「任一端在范围里却不是所选房间成员 = 属于别处、不列，两端都不在范围里才兜底」，真机 R432 整房 159 段；spec §4.13.5「`tubes=1`」）；
 > **T3 前端已落地**（plant3d-web `8323151c`；`TreeTube.aabb` 按服务端实际形状 `{min, max}`，不是 §3.1 写的 `[[f32;3];2]`）；验证账
-> `docs/verification/spatial-room-hierarchy-tree-2026-09-20/README.md` §10 / §11。**T2 / T4 未做**。
+> `docs/verification/spatial-room-hierarchy-tree-2026-09-20/README.md` §10 / §11。**T2 已落地**（gen-model-model-cache `6ad84ca80`：`tube` 放在 `model/records`
+> **记录一级**而不是 §3.1 B3 写的 `GeomInst.tube?`——`insts[]` 的元素是 `aios_core` 的类型；`tubi_relate` 落 `route_ordinal`；spec §4.5.2「`tube`」）；
+> **T4 已落地**（plant3d-web，本仓：F5 + F3(D5-ii) 逐段眼睛，`DtxCompatScene.setTubeSegmentsVisible` 对象级、不进 refno 状态表；ADR 0068 追记 ③，验证账 README §12）。
 
 ## 0. 一句话
 

@@ -101,12 +101,21 @@ type Emitted = {
   isolate: string[][][];
   expand: unknown[][];
   focusTube: [SpatialTreeUnitNode, SpatialTreeTubeNode][];
+  toggleTubeVisible: [SpatialTreeUnitNode, SpatialTreeTubeNode][];
 };
 
 let unmountCurrent: (() => void) | null = null;
 
-function mountTree(options: { tree?: SpatialTreeResult; items?: SpatialQueryResultItem[]; activeRefno?: string | null; busy?: boolean } = {}) {
-  const emitted: Emitted = { focus: [], toggleVisible: [], load: [], showOnly: [], isolate: [], expand: [], focusTube: [] };
+function mountTree(options: {
+  tree?: SpatialTreeResult;
+  items?: SpatialQueryResultItem[];
+  activeRefno?: string | null;
+  busy?: boolean;
+  /** 直段行眼睛的状态桩（逐段眼睛，T4）：不给时组件读 DTX 加载链的运行时索引（测试里空表 → 全部「未装进场景」） */
+  tubeSegmentHidden?: (key: string) => boolean;
+  tubeSegmentLoaded?: (key: string) => boolean;
+} = {}) {
+  const emitted: Emitted = { focus: [], toggleVisible: [], load: [], showOnly: [], isolate: [], expand: [], focusTube: [], toggleTubeVisible: [] };
   const host = document.createElement('div');
   document.body.appendChild(host);
   const app = createApp({
@@ -115,6 +124,8 @@ function mountTree(options: { tree?: SpatialTreeResult; items?: SpatialQueryResu
       items: options.items ?? [],
       activeRefno: options.activeRefno ?? null,
       busy: options.busy ?? false,
+      ...(options.tubeSegmentHidden ? { tubeSegmentHidden: options.tubeSegmentHidden } : {}),
+      ...(options.tubeSegmentLoaded ? { tubeSegmentLoaded: options.tubeSegmentLoaded } : {}),
       onFocus: (value: SpatialQueryResultItem) => emitted.focus.push([value]),
       onToggleVisible: (value: SpatialQueryResultItem) => emitted.toggleVisible.push([value]),
       onLoad: (refnos: string[], label: string) => emitted.load.push([refnos, label]),
@@ -122,6 +133,7 @@ function mountTree(options: { tree?: SpatialTreeResult; items?: SpatialQueryResu
       onIsolate: (refnos: string[]) => emitted.isolate.push([refnos]),
       onExpand: (selector: unknown) => emitted.expand.push([selector]),
       onFocusTube: (unit: SpatialTreeUnitNode, tube: SpatialTreeTubeNode) => emitted.focusTube.push([unit, tube]),
+      onToggleTubeVisible: (unit: SpatialTreeUnitNode, tube: SpatialTreeTubeNode) => emitted.toggleTubeVisible.push([unit, tube]),
     }),
   });
   app.mount(host);
@@ -390,8 +402,12 @@ describe('SpatialResultTree（ADR 0068 房间层级树）', () => {
     expect(q(rows[2]!, 'spatial-tree-tube-invalid')).toHaveLength(1);
     expect(rows[2]!.dataset.invalid).toBe('true');
     expect(rows[2]!.querySelector<HTMLButtonElement>('button[title]')!.title).toContain('第 2 段 · 无效直管');
-    // 直段行没有眼睛
+    // 直段行的眼睛是自己的一颗（逐段，T4），不是构件行那颗；没装进场景时画淡、title 说先加载
     expect(q(rows[0]!, 'spatial-tree-leaf-visibility')).toHaveLength(0);
+    const eye0 = q(rows[0]!, 'spatial-tree-tube-visibility')[0] as HTMLButtonElement;
+    expect(eye0.title).toContain('还没装进场景');
+    expect(rows[0]!.dataset.tubeLoaded).toBe('false');
+    expect(rows[0]!.dataset.tubeHidden).toBeUndefined();
 
     rows[0]!.querySelector<HTMLButtonElement>('button[title]')!.click();
     q(rows[2]!, 'spatial-tree-tube-locate')[0]!.click();
@@ -400,6 +416,28 @@ describe('SpatialResultTree（ADR 0068 房间层级树）', () => {
     expect(emitted.focusTube[0]![1]).toMatchObject({ from: 'b1', to: 't1', ordinal: 0 });
     expect(emitted.focusTube[1]![1]).toMatchObject({ ordinal: 1, invalid: true });
     expect(emitted.focus, '直段行不走构件的 focus').toHaveLength(0);
+    // 眼睛发 toggleTubeVisible（没装进来也发——由 store 决定提示先加载），不走构件的 toggleVisible、不触发 focusTube
+    eye0.click();
+    expect(emitted.toggleTubeVisible).toHaveLength(1);
+    expect(emitted.toggleTubeVisible[0]![0].refno).toBe('b1');
+    expect(emitted.toggleTubeVisible[0]![1]).toMatchObject({ from: 'b1', to: 't1', ordinal: 0 });
+    expect(emitted.toggleVisible).toHaveLength(0);
+    expect(emitted.focusTube).toHaveLength(2);
+    unmountCurrent?.();
+
+    // 逐段眼睛的三态（状态桩）：装进来且可见 → 亮眼睛「隐藏这段直管」；被单独藏起来 → 暗眼睛「显示这段直管」+ data-tube-hidden，行文字变灰
+    const hidden = new Set(['b1#t1-x1#0']);
+    const loaded = new Set(['b1#b1-t1#0', 'b1#t1-x1#0']);
+    const staged = mountTree({ tree: withTubes, tubeSegmentHidden: (key) => hidden.has(key), tubeSegmentLoaded: (key) => loaded.has(key) });
+    const stagedUnit = q(q(staged.host, 'spatial-tree-room')[0]!, 'spatial-tree-unit')[0]!;
+    q(stagedUnit, 'spatial-tree-toggle')[0]!.click();
+    await nextTick();
+    const stagedRows = q(stagedUnit, 'spatial-tree-tube-row');
+    expect(stagedRows.map((el) => [el.dataset.tubeLoaded, el.dataset.tubeHidden ?? null])).toEqual([['true', null], ['true', 'true'], ['false', null]]);
+    expect((q(stagedRows[0]!, 'spatial-tree-tube-visibility')[0] as HTMLButtonElement).title).toContain('隐藏这段直管');
+    expect((q(stagedRows[1]!, 'spatial-tree-tube-visibility')[0] as HTMLButtonElement).title).toBe('显示这段直管');
+    expect(stagedRows[1]!.querySelector<HTMLButtonElement>('button[title]')!.className).toContain('text-gray-400');
+    expect(stagedRows[0]!.querySelector<HTMLButtonElement>('button[title]')!.className).not.toContain('text-gray-400');
     unmountCurrent?.();
 
     // 老服务端：没有 tube_count / tubes——尾巴、直段行都没有，title 只说构件数

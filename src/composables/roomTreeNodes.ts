@@ -9,7 +9,8 @@
  * 同一构件在两间房下各有一个节点（id 带房间），与抽屉树态「跨房构件两间房下都出现」一致。纯函数，不碰 Vue。
  *
  * 直段行（方案 B，2026-09-22；服务端 `tubes=1`）：BRAN 单元的构件行之后再列它的直段——没有 refno、不是构件，`refnosUnder` /
- * `pendingLeafNodesUnder` / `branUnitRefnosUnder` 都跳过它；勾选 / 眼睛不画（直管随单元级动作走），点行选中所属 BRAN、聚焦按直段盒飞。
+ * `pendingLeafNodesUnder` / `branUnitRefnosUnder` 都跳过它；点行选中所属 BRAN、聚焦按直段盒飞；眼睛是逐段的（T4，
+ * `useRoomTree.setVisible` 按 `tubeKey` 只动那一段直管对象），单元级动作一来整条覆盖。
  */
 import type {
   SpatialRoomOption,

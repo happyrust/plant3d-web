@@ -1,0 +1,386 @@
+{
+  "base": "http://127.0.0.1:8027",
+  "phase": "after",
+  "build_id": "0.1.30+g2aab735dfa9e.1790079793.dirty",
+  "room": "24381_35580",
+  "bran_units": 28,
+  "per_bran": [
+    {
+      "refno": "24381_105030",
+      "status": 200,
+      "elapsed_ms": 10,
+      "records": 58,
+      "tubi": 22,
+      "with_tube": 22,
+      "tree_tubes": 3,
+      "tree_matched": 3,
+      "strip_equal": true
+    },
+    {
+      "refno": "24381_105154",
+      "status": 200,
+      "elapsed_ms": 8,
+      "records": 59,
+      "tubi": 25,
+      "with_tube": 25,
+      "tree_tubes": 5,
+      "tree_matched": 5,
+      "strip_equal": true
+    },
+    {
+      "refno": "24381_105222",
+      "status": 200,
+      "elapsed_ms": 10,
+      "records": 58,
+      "tubi": 26,
+      "with_tube": 26,
+      "tree_tubes": 3,
+      "tree_matched": 3,
+      "strip_equal": true
+    },
+    {
+      "refno": "24381_105297",
+      "status": 200,
+      "elapsed_ms": 7,
+      "records": 63,
+      "tubi": 30,
+      "with_tube": 30,
+      "tree_tubes": 1,
+      "tree_matched": 1,
+      "strip_equal": true
+    },
+    {
+      "refno": "24381_105402",
+      "status": 200,
+      "elapsed_ms": 7,
+      "records": 35,
+      "tubi": 15,
+      "with_tube": 15,
+      "tree_tubes": 8,
+      "tree_matched": 8,
+      "strip_equal": true
+    },
+    {
+      "refno": "24381_105498",
+      "status": 200,
+      "elapsed_ms": 8,
+      "records": 33,
+      "tubi": 15,
+      "with_tube": 15,
+      "tree_tubes": 8,
+      "tree_matched": 8,
+      "strip_equal": true
+    },
+    {
+      "refno": "24381_105574",
+      "status": 200,
+      "elapsed_ms": 7,
+      "records": 41,
+      "tubi": 18,
+      "with_tube": 18,
+      "tree_tubes": 12,
+      "tree_matched": 12,
+      "strip_equal": true
+    },
+    {
+      "refno": "24381_105860",
+      "status": 200,
+      "elapsed_ms": 8,
+      "records": 113,
+      "tubi": 41,
+      "with_tube": 41,
+      "tree_tubes": 12,
+      "tree_matched": 12,
+      "strip_equal": true
+    },
+    {
+      "refno": "24381_105935",
+      "status": 200,
+      "elapsed_ms": 7,
+      "records": 70,
+      "tubi": 27,
+      "with_tube": 27,
+      "tree_tubes": 12,
+      "tree_matched": 12,
+      "strip_equal": true
+    },
+    {
+      "refno": "24381_145218",
+      "status": 200,
+      "elapsed_ms": 6,
+      "records": 25,
+      "tubi": 9,
+      "with_tube": 9,
+      "tree_tubes": 2,
+      "tree_matched": 2,
+      "strip_equal": true
+    },
+    {
+      "refno": "24381_146531",
+      "status": 200,
+      "elapsed_ms": 7,
+      "records": 8,
+      "tubi": 3,
+      "with_tube": 3,
+      "tree_tubes": 3,
+      "tree_matched": 3,
+      "strip_equal": true
+    },
+    {
+      "refno": "24381_146572",
+      "status": 200,
+      "elapsed_ms": 5,
+      "records": 8,
+      "tubi": 3,
+      "with_tube": 3,
+      "tree_tubes": 3,
+      "tree_matched": 3,
+      "strip_equal": true
+    },
+    {
+      "refno": "24381_146645",
+      "status": 200,
+      "elapsed_ms": 6,
+      "records": 8,
+      "tubi": 3,
+      "with_tube": 3,
+      "tree_tubes": 3,
+      "tree_matched": 3,
+      "strip_equal": true
+    },
+    {
+      "refno": "24381_146653",
+      "status": 200,
+      "elapsed_ms": 6,
+      "records": 6,
+      "tubi": 2,
+      "with_tube": 2,
+      "tree_tubes": 2,
+      "tree_matched": 2,
+      "strip_equal": true
+    },
+    {
+      "refno": "24381_148048",
+      "status": 200,
+      "elapsed_ms": 6,
+      "records": 31,
+      "tubi": 14,
+      "with_tube": 14,
+      "tree_tubes": 14,
+      "tree_matched": 14,
+      "strip_equal": true
+    },
+    {
+      "refno": "24381_148068",
+      "status": 200,
+      "elapsed_ms": 6,
+      "records": 17,
+      "tubi": 8,
+      "with_tube": 8,
+      "tree_tubes": 4,
+      "tree_matched": 4,
+      "strip_equal": true
+    },
+    {
+      "refno": "24381_148084",
+      "status": 200,
+      "elapsed_ms": 6,
+      "records": 13,
+      "tubi": 6,
+      "with_tube": 6,
+      "tree_tubes": 6,
+      "tree_matched": 6,
+      "strip_equal": true
+    },
+    {
+      "refno": "24381_148092",
+      "status": 200,
+      "elapsed_ms": 7,
+      "records": 15,
+      "tubi": 7,
+      "with_tube": 7,
+      "tree_tubes": 3,
+      "tree_matched": 3,
+      "strip_equal": true
+    },
+    {
+      "refno": "24381_148116",
+      "status": 200,
+      "elapsed_ms": 7,
+      "records": 11,
+      "tubi": 6,
+      "with_tube": 6,
+      "tree_tubes": 6,
+      "tree_matched": 6,
+      "strip_equal": true
+    },
+    {
+      "refno": "24381_148125",
+      "status": 200,
+      "elapsed_ms": 7,
+      "records": 33,
+      "tubi": 13,
+      "with_tube": 13,
+      "tree_tubes": 8,
+      "tree_matched": 8,
+      "strip_equal": true
+    },
+    {
+      "refno": "24381_148166",
+      "status": 200,
+      "elapsed_ms": 7,
+      "records": 20,
+      "tubi": 8,
+      "with_tube": 8,
+      "tree_tubes": 8,
+      "tree_matched": 8,
+      "strip_equal": true
+    },
+    {
+      "refno": "24381_148197",
+      "status": 200,
+      "elapsed_ms": 6,
+      "records": 13,
+      "tubi": 4,
+      "with_tube": 4,
+      "tree_tubes": 4,
+      "tree_matched": 4,
+      "strip_equal": true
+    },
+    {
+      "refno": "24381_148210",
+      "status": 200,
+      "elapsed_ms": 7,
+      "records": 18,
+      "tubi": 8,
+      "with_tube": 8,
+      "tree_tubes": 6,
+      "tree_matched": 6,
+      "strip_equal": true
+    },
+    {
+      "refno": "24381_148224",
+      "status": 200,
+      "elapsed_ms": 8,
+      "records": 11,
+      "tubi": 3,
+      "with_tube": 3,
+      "tree_tubes": 3,
+      "tree_matched": 3,
+      "strip_equal": true
+    },
+    {
+      "refno": "24381_148235",
+      "status": 200,
+      "elapsed_ms": 5,
+      "records": 15,
+      "tubi": 7,
+      "with_tube": 7,
+      "tree_tubes": 7,
+      "tree_matched": 7,
+      "strip_equal": true
+    },
+    {
+      "refno": "24381_148246",
+      "status": 200,
+      "elapsed_ms": 6,
+      "records": 10,
+      "tubi": 4,
+      "with_tube": 4,
+      "tree_tubes": 4,
+      "tree_matched": 4,
+      "strip_equal": true
+    },
+    {
+      "refno": "24381_148256",
+      "status": 200,
+      "elapsed_ms": 5,
+      "records": 14,
+      "tubi": 5,
+      "with_tube": 5,
+      "tree_tubes": 5,
+      "tree_matched": 5,
+      "strip_equal": true
+    },
+    {
+      "refno": "24381_159941",
+      "status": 200,
+      "elapsed_ms": 6,
+      "records": 20,
+      "tubi": 8,
+      "with_tube": 8,
+      "tree_tubes": 4,
+      "tree_matched": 4,
+      "strip_equal": true
+    }
+  ],
+  "started_at": "2026-09-22T20:29:38.2424753+08:00",
+  "finished_at": "2026-09-22T20:29:38.7450136+08:00",
+  "checks": [
+    {
+      "name": "health build_id 带 2aab735df",
+      "pass": true,
+      "detail": "0.1.30+g2aab735dfa9e.1790079793.dirty"
+    },
+    {
+      "name": "dbnum 7997 整库 ensure 202",
+      "pass": true,
+      "detail": "task=dbnum-model-ensure-7997-20260922-202813-000000 expected_roots=6772"
+    },
+    {
+      "name": "dbnum 7997 整库 ensure 终态 succeeded|partial",
+      "pass": true,
+      "detail": "state=succeeded units=6772/6772 failed=0 room_edges=66135 elapsed=79s"
+    },
+    {
+      "name": "rooms/24381_35580/tree?tubes=1 200",
+      "pass": true,
+      "detail": "elapsed_ms=2782 total_count=1298 total_tube_count=159"
+    },
+    {
+      "name": "每条 BRAN 的 model/records 200",
+      "pass": true,
+      "detail": "max_elapsed_ms=10"
+    },
+    {
+      "name": "TUBI 记录数 = 带 tube 的记录数（340），构件记录不带 tube",
+      "pass": true,
+      "detail": "records=826 tubi=340 with_tube=340 non_tubi_with_tube=0"
+    },
+    {
+      "name": "tube 形状：ordinal 非负整数、from/to 为 a_b、refno = 容器 BRAN、insts 恰一条 is_tubi",
+      "pass": true,
+      "detail": "bad=0 ordinal>0: 0"
+    },
+    {
+      "name": "同一 BRAN 内 (from, to, ordinal) 唯一",
+      "pass": true,
+      "detail": "dup=0"
+    },
+    {
+      "name": "房间树 tubes=1 的每条直段 (from, to, ordinal) 都能在该 BRAN 的 model/records tube 里找到",
+      "pass": true,
+      "detail": "tree_tubes=159 matched=159"
+    },
+    {
+      "name": "去掉 tube 后 items 与旧二进制逐字相同（28 根）",
+      "pass": true,
+      "detail": "equal=28/28"
+    },
+    {
+      "name": "非 BRAN 单元 EQUI 24381_101693 的 records 里没有任何 tube 键",
+      "pass": true,
+      "detail": "records=1"
+    }
+  ],
+  "totals": {
+    "records": 826,
+    "tubi": 340,
+    "with_tube": 340,
+    "tree_tubes": 159,
+    "tree_matched": 159,
+    "strip_equal": "28/28",
+    "max_records_elapsed_ms": 10,
+    "ordinal_gt0": 0
+  }
+}

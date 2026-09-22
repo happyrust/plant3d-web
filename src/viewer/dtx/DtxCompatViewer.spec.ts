@@ -9,16 +9,26 @@ import { DTXLayer } from '@/utils/three/dtx';
 const {
   hasDtxDbnoCacheMock,
   resolveDtxObjectIdsByRefnoMock,
+  resolveDtxTubeObjectIdsByKeysMock,
+  markDtxTubeSegmentsHiddenMock,
+  clearDtxTubeSegmentOverridesMock,
   tryGetDbnumByRefnoMock,
 } = vi.hoisted(() => ({
   hasDtxDbnoCacheMock: vi.fn(),
   resolveDtxObjectIdsByRefnoMock: vi.fn(),
+  resolveDtxTubeObjectIdsByKeysMock: vi.fn(),
+  markDtxTubeSegmentsHiddenMock: vi.fn(),
+  clearDtxTubeSegmentOverridesMock: vi.fn(),
   tryGetDbnumByRefnoMock: vi.fn(),
 }));
 
 vi.mock('@/composables/useDbnoInstancesDtxLoader', () => ({
   hasDtxDbnoCache: hasDtxDbnoCacheMock,
   resolveDtxObjectIdsByRefno: resolveDtxObjectIdsByRefnoMock,
+  resolveDtxObjectIdsByUnitRefno: vi.fn(() => []),
+  resolveDtxTubeObjectIdsByKeys: resolveDtxTubeObjectIdsByKeysMock,
+  markDtxTubeSegmentsHidden: markDtxTubeSegmentsHiddenMock,
+  clearDtxTubeSegmentOverrides: clearDtxTubeSegmentOverridesMock,
 }));
 
 vi.mock('@/composables/useDbMetaInfo', () => ({
@@ -31,6 +41,10 @@ describe('DtxCompatScene', () => {
     hasDtxDbnoCacheMock.mockReturnValue(false);
     resolveDtxObjectIdsByRefnoMock.mockReset();
     resolveDtxObjectIdsByRefnoMock.mockReturnValue([]);
+    resolveDtxTubeObjectIdsByKeysMock.mockReset();
+    resolveDtxTubeObjectIdsByKeysMock.mockReturnValue([]);
+    markDtxTubeSegmentsHiddenMock.mockReset();
+    clearDtxTubeSegmentOverridesMock.mockReset();
     tryGetDbnumByRefnoMock.mockReset();
     tryGetDbnumByRefnoMock.mockReturnValue(100);
   });
@@ -162,5 +176,54 @@ describe('DtxCompatScene', () => {
     expect(scene.objects['100_2']?.xrayed).toBe(true);
     expect(layer.isObjectVisible('o:100_2:0')).toBe(true);
     expect(layer.getObjectOpacity('o:100_2:0')).toBeLessThan(1);
+  });
+
+  it('逐段眼睛（方案 B T4）：setTubeSegmentsVisible 按直段键只藏那一个直管对象、不进 refno 状态表、覆盖表只记作用到的键；refno 级 setObjectsVisible / 显隐回放一来整条覆盖并清掉该 BRAN 的覆盖', () => {
+    const layer = new DTXLayer({ maxVertices: 256, maxIndices: 512, maxObjects: 8 });
+    layer.addGeometry('box', new BoxGeometry(1, 1, 1));
+    layer.addObject('o:100_1:0', 'box', new Matrix4());
+    layer.addObject('o:100_1:1', 'box', new Matrix4().makeTranslation(2, 0, 0));
+    layer.addObject('o:100_1:2', 'box', new Matrix4().makeTranslation(4, 0, 0));
+    resolveDtxObjectIdsByRefnoMock.mockImplementation((_dbno: number, refno: string) => (refno === '100_1' ? ['o:100_1:0', 'o:100_1:1', 'o:100_1:2'] : []));
+    hasDtxDbnoCacheMock.mockReturnValue(true);
+    const index = new Map([['100_1#100_5-100_6#0', 'o:100_1:1'], ['100_1#100_6-100_7#0', 'o:100_1:2']]);
+    resolveDtxTubeObjectIdsByKeysMock.mockImplementation((keys: string[]) => keys.map((key) => index.get(key)).filter((id): id is string => !!id));
+
+    const scene = new DtxCompatScene({ dtxLayer: layer });
+    scene.ensureRefnos(['100_1'], { computeAabb: false });
+
+    // 藏一段：只那一个对象隐、别的两个照旧；refno 状态仍 visible；覆盖表只记作用到的键（没装进来的键不记）
+    expect(scene.setTubeSegmentsVisible(['100_1#100_5-100_6#0', '100_1#nope-x#0'], false)).toEqual(['100_1#100_5-100_6#0']);
+    expect(layer.isObjectVisible('o:100_1:1')).toBe(false);
+    expect(layer.isObjectVisible('o:100_1:0')).toBe(true);
+    expect(layer.isObjectVisible('o:100_1:2')).toBe(true);
+    expect(scene.objects['100_1']?.visible).toBe(true);
+    expect(markDtxTubeSegmentsHiddenMock).toHaveBeenLastCalledWith(['100_1#100_5-100_6#0'], true);
+    expect(scene.isTubeSegmentVisible('100_1#100_5-100_6#0')).toBe(false);
+    expect(scene.isTubeSegmentVisible('100_1#100_6-100_7#0')).toBe(true);
+    expect(scene.isTubeSegmentVisible('100_1#nope-x#0'), '没装进来的键').toBeNull();
+    // 全没装进来：不动、不记
+    markDtxTubeSegmentsHiddenMock.mockClear();
+    expect(scene.setTubeSegmentsVisible(['100_1#nope-x#0'], false)).toEqual([]);
+    expect(markDtxTubeSegmentsHiddenMock).not.toHaveBeenCalled();
+
+    // refno 级显示：整条 BRAN（含被单独藏起来的那段）都亮回来，覆盖按 BRAN 清
+    scene.setObjectsVisible(['100_1'], true);
+    expect(layer.isObjectVisible('o:100_1:1')).toBe(true);
+    expect(clearDtxTubeSegmentOverridesMock).toHaveBeenLastCalledWith(['100_1']);
+
+    // 再藏一段，然后 refno 级隐藏 + 回放（applyStateToRefnos 只对真写了显隐的 refno 清覆盖）
+    scene.setTubeSegmentsVisible(['100_1#100_6-100_7#0'], false);
+    clearDtxTubeSegmentOverridesMock.mockClear();
+    scene.setObjectsVisible(['100_1'], false);
+    expect(clearDtxTubeSegmentOverridesMock).toHaveBeenLastCalledWith(['100_1']);
+    clearDtxTubeSegmentOverridesMock.mockClear();
+    scene.applyStateToRefnos(['100_1']);
+    expect(clearDtxTubeSegmentOverridesMock).toHaveBeenLastCalledWith(['100_1']);
+    // 可见且不 forceVisible 的回放没写显隐：不清覆盖
+    scene.objects['100_1']!.visible = true;
+    clearDtxTubeSegmentOverridesMock.mockClear();
+    scene.applyStateToRefnos(['100_1']);
+    expect(clearDtxTubeSegmentOverridesMock).toHaveBeenLastCalledWith([]);
   });
 });

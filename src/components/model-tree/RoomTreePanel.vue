@@ -101,8 +101,12 @@ function onSearchInput(ev: Event) {
   tree.setFilter((ev.target as HTMLInputElement).value);
 }
 
-function onToggleVisible(id: string, visible: boolean) {
-  void tree.setVisible(id, visible);
+const TUBE_NOT_LOADED_MESSAGE = '这段直管还没装进场景：先对所属 BRAN 单元「加载模型」，再逐段显隐';
+
+/** 眼睛：构件 / 分组按 refno 走；直段行逐段（T4）——对象没装进来时提示先加载所属 BRAN，勾选不变。 */
+async function onToggleVisible(id: string, visible: boolean) {
+  const result = await tree.setVisible(id, visible);
+  if (result === 'tube-not-loaded') emitToast({ message: TUBE_NOT_LOADED_MESSAGE, level: 'info' });
 }
 
 /** 树内点选写全局选中时置位：下面的联动 watch 见到它就不再反过来展开 / 滚动（与 PDMS 树的 `internalTreeSelection` 同法）。 */
@@ -151,7 +155,7 @@ const contextRefnoCount = computed(() => contextNode.value?.count ?? null);
 const contextIsElementOrUnit = computed(() => contextNode.value?.kind === 'element' || contextNode.value?.kind === 'unit');
 const contextIsTube = computed(() => contextNode.value?.kind === 'tube');
 
-/** 直段行（方案 B）：只读——不画眼睛，title 挂两端 refno / 距离 / 所属 BRAN */
+/** 直段行（方案 B）：title 挂两端 refno / 距离 / 所属 BRAN；眼睛是逐段的（T4），右键没有隔离 / 加载（那是单元级的事） */
 function isTubeRow(id: string): boolean {
   return tree.nodesById.value[id]?.kind === 'tube';
 }
@@ -212,13 +216,13 @@ function clearXray() {
 function showNode() {
   const id = contextNodeId.value;
   closeContextMenu();
-  if (id) void tree.setVisible(id, true);
+  if (id) void onToggleVisible(id, true);
 }
 
 function hideNode() {
   const id = contextNodeId.value;
   closeContextMenu();
-  if (id) void tree.setVisible(id, false);
+  if (id) void onToggleVisible(id, false);
 }
 
 /** 「加载模型」：节点下全部构件经数据源 ensure → records 进查看器并飞过去；> 200 个先确认。 */
@@ -320,7 +324,6 @@ function viewProperties() {
             :selected="tree.isRowSelected(rowAt(vr.index)!.id)"
             :check-state="tree.getCheckState(rowAt(vr.index)!.id)"
             :loading="tree.isNodeLoading(rowAt(vr.index)!.id)"
-            :read-only="isTubeRow(rowAt(vr.index)!.id)"
             :row-title="isTubeRow(rowAt(vr.index)!.id) ? tree.nodesById.value[rowAt(vr.index)!.id]?.title : undefined"
             @toggle-expand="tree.toggleExpand"
             @toggle-visible="onToggleVisible"
@@ -337,13 +340,15 @@ function viewProperties() {
         :class="cn('fixed z-[9999] w-44 rounded-md border border-border bg-background p-1 shadow-md')"
         :style="{ left: `${contextMenuPos.x}px`, top: `${contextMenuPos.y}px` }">
         <button type="button" class="w-full rounded px-2 py-1 text-left text-sm hover:bg-muted" @click="focusNode">聚焦飞行</button>
-        <!-- 直段行（方案 B，D5 (i) 只读）：只有聚焦与查看所属 BRAN 的属性——直管随 BRAN 单元的动作走，隔离 / 显隐 / 加载去单元行 -->
+        <!-- 直段行（方案 B）：聚焦 + 逐段显 / 隐（T4，只动那一段直管对象）+ 查看所属 BRAN 的属性；隔离 / 加载是单元级的事，去单元行 -->
         <template v-if="!contextIsTube">
           <button type="button" class="w-full rounded px-2 py-1 text-left text-sm hover:bg-muted" @click="isolateNode">隔离（XRAY 其它）</button>
           <button type="button" class="w-full rounded px-2 py-1 text-left text-sm hover:bg-muted" @click="clearXray">取消隔离</button>
-          <div class="my-1 h-px bg-border" />
-          <button type="button" class="w-full rounded px-2 py-1 text-left text-sm hover:bg-muted" @click="showNode">显示</button>
-          <button type="button" class="w-full rounded px-2 py-1 text-left text-sm hover:bg-muted" @click="hideNode">隐藏</button>
+        </template>
+        <div class="my-1 h-px bg-border" />
+        <button type="button" class="w-full rounded px-2 py-1 text-left text-sm hover:bg-muted" @click="showNode">显示</button>
+        <button type="button" class="w-full rounded px-2 py-1 text-left text-sm hover:bg-muted" @click="hideNode">隐藏</button>
+        <template v-if="!contextIsTube">
           <button type="button"
             class="w-full rounded px-2 py-1 text-left text-sm hover:bg-muted"
             data-testid="room-tree-load-models"

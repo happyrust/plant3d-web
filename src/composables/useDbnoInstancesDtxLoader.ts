@@ -1,7 +1,8 @@
-import { ref } from 'vue';
+import { ref, shallowRef } from 'vue';
 
 import { Box3, BufferAttribute, BufferGeometry, Color, CylinderGeometry, Matrix4, SphereGeometry } from 'three';
 
+import { tubeKey } from '@/composables/spatialTree';
 import { useDisplayThemeStore, type DisplayTheme } from '@/composables/useDisplayThemeStore';
 import { getModelSource } from '@/model-source';
 import { type InstanceEntry } from '@/utils/instances/instanceManifest';
@@ -92,11 +93,93 @@ type DbnoRuntimeCache = {
   invalidTubiObjectIds: Set<string>
   /** 直管对象（noun `TUBI` / gen-model `is_tubi`）：测量拾取层按它把对象当 E3D TUBING 拾成轴线 */
   tubiObjectIds: Set<string>
+  /**
+   * 直段身份键 `tubeKey(BRAN, {from, to, ordinal})` → 直管对象 id（方案 B T4「逐段眼睛」）：`model/records` 的管身记录带 `tube`
+   * （服务端 T2 起）才登得进来；房间层级树的直段行拿同一个键找到场景里那一段。老服务端下是空表。
+   */
+  tubeObjectIdByKey: Map<string, string>
+  /** 上表的反向：替换 / 回滚时按对象把键一起收掉 */
+  objectIdToTubeKey: Map<string, string>
   /** refno → 最近一次把它装进场景的那批加载的来源身份（只记不用，见 `DtxLoadSourceStamp`） */
   refnoLoadSource: Map<string, DtxLoadSourceStamp>
 }
 
 const cachesByDbno = new Map<number, DbnoRuntimeCache>();
+
+/**
+ * 逐段眼睛的对象级显隐覆盖（方案 B T4，plan `2026-09-21-room-tree-tube-segments-plan.md` §3.2 F5）：被单独藏起来的直段身份键。
+ * **不进 refno 状态表**（`DtxCompatScene.objects`）——它只是对象一级的一层覆盖：refno 级动作（`setObjectsVisible(BRAN)`、
+ * 显隐回放）一来整条 BRAN 照 refno 状态走，这一层随之清掉（`clearDtxTubeSegmentOverrides`）。整份换新以便 `computed` / 模板跟着变。
+ */
+const hiddenTubeKeys = shallowRef<ReadonlySet<string>>(new Set());
+
+/** 当前被单独藏起来的直段身份键（只读；改用 `markDtxTubeSegmentsHidden` / `clearDtxTubeSegmentOverrides`）。 */
+export const dtxHiddenTubeKeys = hiddenTubeKeys;
+
+/** 这一段直管是否被逐段眼睛单独藏起来了（响应式：在 `computed` / 模板里读会跟着变）。 */
+export function isDtxTubeSegmentHidden(key: string): boolean {
+  return hiddenTubeKeys.value.has(key);
+}
+
+/** 记下 / 取消一批直段的单独隐藏。只改这层覆盖，不碰场景——场景那一笔由 `DtxCompatScene.setTubeSegmentsVisible` 一起做。 */
+export function markDtxTubeSegmentsHidden(keys: string[], hidden: boolean): void {
+  if (keys.length === 0) return;
+  const next = new Set(hiddenTubeKeys.value);
+  let changed = false;
+  for (const key of keys) {
+    if (!key) continue;
+    if (hidden ? !next.has(key) : next.has(key)) {
+      if (hidden) next.add(key); else next.delete(key);
+      changed = true;
+    }
+  }
+  if (changed) hiddenTubeKeys.value = next;
+}
+
+/**
+ * refno 级显隐作用到这些 BRAN 之后调用：它们名下直段的单独隐藏全部作废（整条 BRAN 已按 refno 状态统一显 / 隐）。
+ * 键形如 `<BRAN refno>#<from>-<to>#<ordinal>`，按 `<refno>#` 前缀收。
+ */
+export function clearDtxTubeSegmentOverrides(refnos: string[]): void {
+  if (refnos.length === 0 || hiddenTubeKeys.value.size === 0) return;
+  const prefixes = refnos
+    .map((refno) => normalizeRefnoKey(String(refno ?? '')))
+    .filter((refno) => !!refno)
+    .map((refno) => `${refno}#`);
+  if (prefixes.length === 0) return;
+  const next = new Set<string>();
+  let changed = false;
+  for (const key of hiddenTubeKeys.value) {
+    if (prefixes.some((prefix) => key.startsWith(prefix))) changed = true;
+    else next.add(key);
+  }
+  if (changed) hiddenTubeKeys.value = next;
+}
+
+/** 直段身份键 → 场景对象 id（跨库；没装进来的键跳过）。 */
+export function resolveDtxTubeObjectIdsByKeys(keys: string[]): string[] {
+  const out: string[] = [];
+  for (const key of keys) {
+    if (!key) continue;
+    for (const cache of cachesByDbno.values()) {
+      const objectId = cache.tubeObjectIdByKey?.get(key);
+      if (objectId) {
+        out.push(objectId);
+        break;
+      }
+    }
+  }
+  return out;
+}
+
+/** 这一段直管的对象是否已在场景里（所属 BRAN 装过且服务端给了 `tube`）。读 `dtxLoaderRevision` 可让 `computed` 跟着装载刷新。 */
+export function isDtxTubeSegmentLoadedAcrossAllDbnos(key: string): boolean {
+  if (!key) return false;
+  for (const cache of cachesByDbno.values()) {
+    if (cache.tubeObjectIdByKey?.has(key)) return true;
+  }
+  return false;
+}
 const AABB_PROXY_GEO_HASH = '__spatial_query_aabb_proxy_box';
 
 /**
@@ -166,6 +249,8 @@ function createRuntimeCache(): DbnoRuntimeCache {
     refnoToSpecValue: new Map(),
     invalidTubiObjectIds: new Set(),
     tubiObjectIds: new Set(),
+    tubeObjectIdByKey: new Map(),
+    objectIdToTubeKey: new Map(),
     refnoLoadSource: new Map(),
   };
 }
@@ -178,6 +263,8 @@ function getCache(dbno: number): DbnoRuntimeCache {
     if (!existing.failedGeoHash) existing.failedGeoHash = new Set();
     if (!existing.invalidTubiObjectIds) existing.invalidTubiObjectIds = new Set();
     if (!existing.tubiObjectIds) existing.tubiObjectIds = new Set();
+    if (!existing.tubeObjectIdByKey) existing.tubeObjectIdByKey = new Map();
+    if (!existing.objectIdToTubeKey) existing.objectIdToTubeKey = new Map();
     if (!existing.refnoLoadSource) existing.refnoLoadSource = new Map();
     return existing;
   }
@@ -989,6 +1076,8 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
       loadedRefnos: new Set(cache.loadedRefnos),
       invalidTubiObjectIds: new Set(cache.invalidTubiObjectIds),
       tubiObjectIds: new Set(cache.tubiObjectIds),
+      tubeObjectIdByKey: new Map(cache.tubeObjectIdByKey),
+      objectIdToTubeKey: new Map(cache.objectIdToTubeKey),
       refnoLoadSource: new Map(cache.refnoLoadSource),
     }
     : null;
@@ -997,6 +1086,13 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
       const previousObjectIds = cache.refnoToObjectIds.get(refno) ?? [];
       if (previousObjectIds.length > 0) {
         dtxLayer.setObjectsVisible(previousObjectIds, false);
+      }
+      // 旧对象退场，它们的直段身份键一起收掉（新对象登记时再建）
+      for (const objectId of previousObjectIds) {
+        const key = cache.objectIdToTubeKey.get(objectId);
+        if (key === undefined) continue;
+        cache.objectIdToTubeKey.delete(objectId);
+        if (cache.tubeObjectIdByKey.get(key) === objectId) cache.tubeObjectIdByKey.delete(key);
       }
       cache.refnoToObjectIds.set(refno, []);
       cache.loadedRefnos.delete(refno);
@@ -1129,6 +1225,23 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
         }
         if (noun === 'TUBI' || (inst as any).uniforms?.is_tubi === true) {
           cache.tubiObjectIds.add(objectId);
+          // 直段身份（服务端 T2 起 `model/records` 记录一级的 tube，经 instanceMapping 折进 uniforms.tube）：
+          // 键 = tubeKey(容器 BRAN = 记录的 refno, from, to, ordinal)，与房间层级树 tubes=1 的直段行同一个键（逐段眼睛，T4）。
+          const tubeIdentity = (inst as any).uniforms?.tube as { ordinal?: unknown; from?: unknown; to?: unknown } | undefined;
+          if (
+            tubeIdentity
+            && typeof tubeIdentity.from === 'string' && tubeIdentity.from
+            && typeof tubeIdentity.to === 'string' && tubeIdentity.to
+            && Number.isInteger(tubeIdentity.ordinal)
+          ) {
+            const key = tubeKey(actualRefnoKey, {
+              from: normalizeRefnoKey(tubeIdentity.from) || tubeIdentity.from,
+              to: normalizeRefnoKey(tubeIdentity.to) || tubeIdentity.to,
+              ordinal: tubeIdentity.ordinal as number,
+            });
+            cache.tubeObjectIdByKey.set(key, objectId);
+            cache.objectIdToTubeKey.set(objectId, key);
+          }
         }
         loadedObjects++;
 
@@ -1213,6 +1326,8 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
       cache.loadedRefnos = replacementSnapshot.loadedRefnos;
       cache.invalidTubiObjectIds = replacementSnapshot.invalidTubiObjectIds;
       cache.tubiObjectIds = replacementSnapshot.tubiObjectIds;
+      cache.tubeObjectIdByKey = replacementSnapshot.tubeObjectIdByKey;
+      cache.objectIdToTubeKey = replacementSnapshot.objectIdToTubeKey;
       cache.refnoLoadSource = replacementSnapshot.refnoLoadSource;
       try {
         dtxLayer.recompile();

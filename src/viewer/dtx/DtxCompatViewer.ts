@@ -5,7 +5,14 @@ import type { DTXSelectionController } from '@/utils/three/dtx';
 import type { DtxViewer } from '@/viewer/dtx/DtxViewer';
 
 import { tryGetDbnumByRefno } from '@/composables/useDbMetaInfo';
-import { hasDtxDbnoCache, resolveDtxObjectIdsByRefno, resolveDtxObjectIdsByUnitRefno } from '@/composables/useDbnoInstancesDtxLoader';
+import {
+  clearDtxTubeSegmentOverrides,
+  hasDtxDbnoCache,
+  markDtxTubeSegmentsHidden,
+  resolveDtxObjectIdsByRefno,
+  resolveDtxObjectIdsByUnitRefno,
+  resolveDtxTubeObjectIdsByKeys,
+} from '@/composables/useDbnoInstancesDtxLoader';
 
 export type Aabb6 = [number, number, number, number, number, number]
 
@@ -195,7 +202,37 @@ export class DtxCompatScene {
     if (objectIdsToApply.size > 0) {
       this._dtxLayer.setObjectsVisible(Array.from(objectIdsToApply), visible);
     }
+    // refno 级动作是权威：整条 BRAN 的对象都照它走了，名下直段的逐段隐藏（对象级覆盖）随之作废
+    clearDtxTubeSegmentOverrides(refnos);
     this._onDirty?.();
+  }
+
+  /**
+   * 逐段眼睛（方案 B T4，plan `2026-09-21-room-tree-tube-segments-plan.md` §3.2 F5）：按直段身份键
+   * `tubeKey(BRAN, {from, to, ordinal})` 显 / 隐**单个直管对象**。对象级、不进 `objects` 的 refno 状态表：
+   * `setObjectsVisible(BRAN)` / 显隐回放一来整条 BRAN 照 refno 状态走、这层覆盖清空。没装进场景的键什么都不做，
+   * 也不记（等装进来再点）。回真正作用到了的键。
+   */
+  setTubeSegmentsVisible(keys: string[], visible: boolean): string[] {
+    const applied: string[] = [];
+    for (const key of keys) {
+      if (!key) continue;
+      const [objectId] = resolveDtxTubeObjectIdsByKeys([key]);
+      if (!objectId) continue;
+      this._dtxLayer.setObjectVisible(objectId, visible);
+      applied.push(key);
+    }
+    if (applied.length === 0) return applied;
+    markDtxTubeSegmentsHidden(applied, !visible);
+    this._onDirty?.();
+    return applied;
+  }
+
+  /** 这一段直管在场景里是否可见；对象没装进来回 `null`。 */
+  isTubeSegmentVisible(key: string): boolean | null {
+    const [objectId] = resolveDtxTubeObjectIdsByKeys([key]);
+    if (!objectId) return null;
+    return this._dtxLayer.isObjectVisible(objectId);
   }
 
   setObjectsSelected(refnos: string[], selected: boolean): void {
@@ -265,6 +302,8 @@ export class DtxCompatScene {
     const toShow = new Set<string>();
     const toHide = new Set<string>();
     const toSelect = new Set<string>();
+    /** 显隐真写到了对象上的 refno：它们名下直段的逐段隐藏随之作废（只判 visible 不写的那些不动） */
+    const visibilityTouched: string[] = [];
 
     for (const refno of refnos) {
       const st = this.objects[refno];
@@ -275,9 +314,11 @@ export class DtxCompatScene {
 
       if (!st.visible) {
         for (const objectId of objectIds) toHide.add(objectId);
+        visibilityTouched.push(refno);
       } else if (forceVisible) {
         // 仅在明确需要时才强制把对象设为可见（避免对大规模加载造成无意义的写入）
         for (const objectId of objectIds) toShow.add(objectId);
+        visibilityTouched.push(refno);
       }
 
       if (st.selected) {
@@ -287,6 +328,7 @@ export class DtxCompatScene {
 
     if (toHide.size > 0) this._dtxLayer.setObjectsVisible(Array.from(toHide), false);
     if (toShow.size > 0) this._dtxLayer.setObjectsVisible(Array.from(toShow), true);
+    clearDtxTubeSegmentOverrides(visibilityTouched);
     this._applyXrayToRefnos(refnos);
 
     if (this._selection) {

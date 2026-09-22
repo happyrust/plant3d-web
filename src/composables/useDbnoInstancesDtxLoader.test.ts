@@ -132,6 +132,61 @@ describe('useDbnoInstancesDtxLoader', () => {
     expect(mod.getDtxRefnoLoadSource(dbno + 1, refno)).toBeNull();
   });
 
+  it('逐段眼睛（方案 B T4）：直管实例的 uniforms.tube 登进 tubeKey(BRAN, from, to, ordinal) → 对象 id 索引，跨库可查；没有 tube 的直管 / 构件不登；对象级隐藏覆盖表独立于 refno 状态，按 BRAN 前缀清', async () => {
+    const { DTXLayer } = await import('@/utils/three/dtx');
+    const mod = await import('./useDbnoInstancesDtxLoader');
+    const dbno = 99031;
+    const bran = '24381_105030';
+    const tube = (from: string, to: string, ordinal: number, withIdentity = true) => ({
+      ...makeInstanceEntry(bran, '1', 'TUBI'),
+      uniforms: {
+        refno: bran, noun: 'TUBI', owner_refno: bran, owner_noun: 'BRAN', is_tubi: true, is_invalid_tubi: false, spec_value: 0,
+        ...(withIdentity ? { tube: { ordinal, from, to } } : {}),
+      },
+    });
+    const dtxLayer = new DTXLayer({ maxVertices: 512, maxIndices: 1024, maxObjects: 16 });
+    recordSourceMocks.instanceEntriesByRefnos.mockResolvedValue(new Map([[bran, [
+      // 两端写法 a/b 也归一成 a_b；同 (from, to) 第二段 ordinal=1；一条老服务端形态（没有 tube）；一个构件
+      tube('24381/105031', '24381_105032', 0),
+      tube('24381_105032', '24381_105033', 0),
+      tube('24381_105032', '24381_105033', 1),
+      tube('24381_105040', '24381_105041', 0, false),
+      { ...makeInstanceEntry(bran, '1', 'BEND'), uniforms: { refno: '24381_105031', noun: 'BEND', owner_refno: bran, owner_noun: 'BRAN', spec_value: 0 } },
+    ]]]));
+    await mod.loadDbnoInstancesForVisibleRefnosDtx(dtxLayer, dbno, [bran], { dataSource: 'gen-model-v1' });
+
+    const k0 = '24381_105030#24381_105031-24381_105032#0';
+    const k1 = '24381_105030#24381_105032-24381_105033#0';
+    const k2 = '24381_105030#24381_105032-24381_105033#1';
+    const ids = mod.resolveDtxTubeObjectIdsByKeys([k0, k1, k2, '24381_105030#24381_105040-24381_105041#0', 'nope#a-b#0']);
+    expect(ids).toHaveLength(3);
+    expect(new Set(ids).size, '三段各自一个对象').toBe(3);
+    for (const id of ids) {
+      expect(mod.isDtxTubiObject(dbno, id)).toBe(true);
+      expect(mod.resolveDtxRefnoByObjectId(dbno, id)).toBe(bran);
+      expect(dtxLayer.hasObject(id)).toBe(true);
+    }
+    expect(mod.isDtxTubeSegmentLoadedAcrossAllDbnos(k2)).toBe(true);
+    expect(mod.isDtxTubeSegmentLoadedAcrossAllDbnos('24381_105030#24381_105040-24381_105041#0'), '没有 tube 的直管不登').toBe(false);
+    // 直管对象总数 4（含没身份的那段），构件不进直管表
+    expect(mod.listDtxTubiObjectIdsForRefno(bran)).toHaveLength(4);
+
+    // 对象级隐藏覆盖表：标 / 清 / 读都响应式地换整份；按 BRAN 前缀清，别的 BRAN 不受影响
+    expect(mod.isDtxTubeSegmentHidden(k0)).toBe(false);
+    mod.markDtxTubeSegmentsHidden([k0, 'other_1#x-y#0'], true);
+    expect(mod.isDtxTubeSegmentHidden(k0)).toBe(true);
+    expect(mod.dtxHiddenTubeKeys.value.has('other_1#x-y#0')).toBe(true);
+    mod.markDtxTubeSegmentsHidden([k0], false);
+    expect(mod.isDtxTubeSegmentHidden(k0)).toBe(false);
+    mod.markDtxTubeSegmentsHidden([k0, k1], true);
+    mod.clearDtxTubeSegmentOverrides(['24381/105030']);
+    expect(mod.isDtxTubeSegmentHidden(k0)).toBe(false);
+    expect(mod.isDtxTubeSegmentHidden(k1)).toBe(false);
+    expect(mod.isDtxTubeSegmentHidden('other_1#x-y#0'), '别的 BRAN 的覆盖不动').toBe(true);
+    mod.clearDtxTubeSegmentOverrides(['other_1']);
+    expect(mod.dtxHiddenTubeKeys.value.size).toBe(0);
+  });
+
   it('版本对比的隔离图层（isolated）加载不推进 dtxLoaderRevision——主模型没变，不该触发批注重解析', async () => {
     const { DTXLayer } = await import('@/utils/three/dtx');
     const mod = await import('./useDbnoInstancesDtxLoader');

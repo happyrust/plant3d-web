@@ -345,7 +345,7 @@ type RoomTreeTubesResponse = RoomTreeResponse & {
   rooms: { refno: string; count: number; tube_count?: number; specs: (TreeSpec & { unit_types: { noun: string; count: number; units: (TreeUnit & { tube_count?: number; tubes?: TreeTubeBody[] })[] }[] })[] }[];
 };
 
-test('直段行（方案 B）：页签的 rooms/{refno}/tree 恒带 tubes=1；房间行「N 个构件 · M 段直管」、BRAN 单元行尾「M 段直管」、展开后构件行之后的 TUBI 行数 = 响应里该单元 tubes.length；直段行没有眼睛与勾选、点它 = 选中所属 BRAN、右键只有聚焦 / 查看属性；老服务端整条跳过', async ({ page }) => {
+test('直段行（方案 B）：页签的 rooms/{refno}/tree 恒带 tubes=1；房间行「N 个构件 · M 段直管」、BRAN 单元行尾「M 段直管」、展开后构件行之后的 TUBI 行数 = 响应里该单元 tubes.length；点它 = 选中所属 BRAN、右键聚焦 / 显示 / 隐藏 / 查看属性；逐段眼睛（T4）：未加载先提示，加载 BRAN 后只藏那一段（scene.isTubeSegmentVisible）、单元级眼睛整条覆盖并清掉逐段隐藏；老服务端整条跳过', async ({ page }) => {
   const rooms = await fetchRooms();
   const fixture = await pickFixtureRoom(rooms.rooms);
   test.skip(fixture === null, '清单里前几间房都没有 rooms/{refno}/tree');
@@ -392,9 +392,9 @@ test('直段行（方案 B）：页签的 rooms/{refno}/tree 恒带 tubes=1；�
   const first = unit.tubes![0]!;
   const firstRow = tubeRows.first();
   await expect(firstRow).toHaveAttribute('data-node-type', 'TUBI');
-  await expect(firstRow).toHaveAttribute('data-read-only', 'true');
+  await expect(firstRow).not.toHaveAttribute('data-read-only', 'true');
   await expect(firstRow).toContainText(`${first.from_noun} → ${first.to_noun}`);
-  expect(await firstRow.locator('button').count(), '直段行没有展开箭头、没有眼睛').toBe(0);
+  expect(await firstRow.locator('button').count(), '直段行没有展开箭头，只有一颗逐段的眼睛').toBe(1);
   // 直段行紧跟在该单元最后一个构件行之后
   const lastLeaf = rowById(page, unit.elements![unit.elements!.length - 1]!.refno);
   expect(await lastLeaf.evaluate((el, tubeKeyPrefix) => {
@@ -410,14 +410,71 @@ test('直段行（方案 B）：页签的 rooms/{refno}/tree 恒带 tubes=1；�
     import((window as AppModuleWindow).__appModuleUrl?.('/src/composables/useSelectionStore.ts') ?? '/src/composables/useSelectionStore.ts')
       .then((mod) => mod.getGlobalSelectedRefno() as string | null)), { timeout: 10_000 }).toBe(unit.refno);
 
-  // 右键：只有聚焦飞行 / 查看属性（直管随单元级动作走）
+  // 右键：聚焦飞行 / 显示 / 隐藏（逐段）/ 查看属性——没有隔离与加载（那是单元级的事）
   await firstRow.click({ button: 'right' });
   const menu = page.locator('[data-room-tree-context-menu="true"]');
   await expect(menu).toBeVisible();
-  await expect(menu.locator('button')).toHaveText(['聚焦飞行', '查看属性']);
+  await expect(menu.locator('button')).toHaveText(['聚焦飞行', '显示', '隐藏', '查看属性']);
   await expect(page.getByTestId('room-tree-load-models')).toHaveCount(0);
   await page.keyboard.press('Escape');
   await page.mouse.click(5, 5);
+  await expect(menu).toBeHidden();
+
+  // 逐段眼睛（T4）：身份键 = tubeKey(BRAN, 段)，与 model/records 记录一级的 tube 同一个四元组
+  const tubeKey = `${unit.refno}#${first.from}-${first.to}#${first.ordinal}`;
+  type TubeWindow = Window & {
+    __appModuleUrl?: (path: string) => string;
+    __xeokitViewer: { scene: { objects: Record<string, { visible?: boolean } | undefined>; isTubeSegmentVisible?: (key: string) => boolean | null } };
+  };
+  const tubeState = () => page.evaluate(async (key) => {
+    const w = window as unknown as TubeWindow;
+    const mod = await import(w.__appModuleUrl?.('/src/composables/useDbnoInstancesDtxLoader.ts') ?? '/src/composables/useDbnoInstancesDtxLoader.ts');
+    return {
+      loaded: mod.isDtxTubeSegmentLoadedAcrossAllDbnos(key) as boolean,
+      hidden: mod.isDtxTubeSegmentHidden(key) as boolean,
+      sceneVisible: w.__xeokitViewer.scene.isTubeSegmentVisible?.(key) ?? null,
+    };
+  }, tubeKey);
+  // 未加载：点眼睛 → 提示先加载所属 BRAN，什么都没藏
+  expect(await tubeState()).toEqual({ loaded: false, hidden: false, sceneVisible: null });
+  await firstRow.hover();
+  await firstRow.locator('button').last().click();
+  await expect(page.getByText('这段直管还没装进场景').first()).toBeVisible({ timeout: 10_000 });
+  expect((await tubeState()).hidden).toBe(false);
+
+  // 给所属 BRAN 单元「加载模型」→ 直管对象进场景（服务端 T2 起 records 带 tube，加载链据此登记直段键）
+  await rowById(page, unit.refno).click({ button: 'right' });
+  await page.getByTestId('room-tree-load-models').click();
+  const confirm = page.getByRole('button', { name: /^加载 \d+ 个$/ });
+  if (await confirm.isVisible().catch(() => false)) await confirm.click();
+  await expect.poll(async () => (await tubeState()).loaded, { timeout: 240_000, intervals: [1000, 2000, 5000] }).toBe(true);
+  expect((await tubeState()).sceneVisible, '刚装进来：这一段可见').toBe(true);
+
+  // 点直段行的眼睛：只这一段隐；所属 BRAN 的 refno 状态仍 visible；再点回来
+  await firstRow.hover();
+  await firstRow.locator('button').last().click();
+  await expect.poll(async () => (await tubeState()).sceneVisible, { timeout: 10_000 }).toBe(false);
+  expect((await tubeState()).hidden).toBe(true);
+  expect(await page.evaluate((refno) => {
+    const object = (window as unknown as TubeWindow).__xeokitViewer.scene.objects[refno];
+    return object ? object.visible !== false : null;
+  }, unit.refno), '所属 BRAN 的 refno 级状态不动').not.toBe(false);
+  await firstRow.hover();
+  await firstRow.locator('button').last().click();
+  await expect.poll(async () => (await tubeState()).sceneVisible, { timeout: 10_000 }).toBe(true);
+
+  // 再藏一段，然后单元级眼睛隐 → 显：整条 BRAN 照 refno 走，逐段隐藏被清掉、这一段跟着亮回来
+  await firstRow.hover();
+  await firstRow.locator('button').last().click();
+  await expect.poll(async () => (await tubeState()).hidden, { timeout: 10_000 }).toBe(true);
+  const unitRow = rowById(page, unit.refno);
+  await unitRow.hover();
+  await unitRow.locator('button').last().click();
+  await expect.poll(async () => (await tubeState()).sceneVisible, { timeout: 10_000 }).toBe(false);
+  await unitRow.hover();
+  await unitRow.locator('button').last().click();
+  await expect.poll(async () => (await tubeState()).sceneVisible, { timeout: 10_000 }).toBe(true);
+  expect((await tubeState()).hidden, '单元级动作一来逐段隐藏作废').toBe(false);
 
   expect(pageErrors).toEqual([]);
 });

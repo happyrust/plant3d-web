@@ -31,11 +31,13 @@ import {
   fullMatchesFromTree,
   mergeTreeLeaves,
   treeToNearbyResult,
+  tubeKey,
 } from '@/composables/spatialTree';
 import { ensureDbMetaInfoLoaded, getDbnumByRefno, tryGetDbnumByRefno } from '@/composables/useDbMetaInfo';
 import {
   findNounByRefnoAcrossAllDbnos,
   findSpecValueByRefnoAcrossAllDbnos,
+  isDtxTubeSegmentHidden,
   loadDtxAabbProxyRefnos,
   loadDbnoInstancesForVisibleRefnosDtx,
 } from '@/composables/useDbnoInstancesDtxLoader';
@@ -83,6 +85,8 @@ type ViewerLike = {
     setObjectsSelected: (refnos: string[], selected: boolean) => void;
     setObjectsXRayed: (refnos: string[], xrayed: boolean) => void;
     ensureRefnos: (refnos: string[]) => void;
+    /** 逐段眼睛（T4，`DtxCompatScene.setTubeSegmentsVisible`）：回真正作用到了的直段键；旧查看器 / 测试桩没有它时直段眼睛不可用。 */
+    setTubeSegmentsVisible?: (keys: string[], visible: boolean) => string[];
   };
   cameraFlight: {
     flyTo: (options: { aabb?: [number, number, number, number, number, number] | null; duration?: number; fit?: boolean }) => void;
@@ -2111,6 +2115,20 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
     viewer.cameraFlight.flyTo({ aabb: resolveSceneWorldTransform(viewer).aabbToScene(aabb6!), fit: true, duration: 0.8 });
   }
 
+  /**
+   * 直段行的眼睛（方案 B T4「逐段眼睛」）：只显 / 隐场景里**那一段**直管对象（`DtxCompatScene.setTubeSegmentsVisible`，按
+   * `tubeKey(BRAN, 段)` 找对象；对象级、不进 refno 状态表，也不进 `resultSet.items`——直段不是构件）。所属 BRAN 的 refno 级动作
+   * （构件眼睛、全部显 / 隐、只显 / 隔离…）一来整条覆盖、这层清空。对象没装进场景（BRAN 未加载 / 老服务端没给 `tube`）什么都不做，
+   * 回 `'tube-not-loaded'`（调用方提示先加载）；查看器没有这一档能力回 `'unsupported'`。
+   */
+  function toggleTreeTubeVisible(unit: SpatialTreeUnitNode, tube: SpatialTreeTubeNode): 'applied' | 'tube-not-loaded' | 'unsupported' {
+    const viewer = viewerRef.value;
+    if (!viewer?.scene.setTubeSegmentsVisible) return 'unsupported';
+    const key = tubeKey(unit.refno, tube);
+    const applied = viewer.scene.setTubeSegmentsVisible([key], isDtxTubeSegmentHidden(key));
+    return applied.length > 0 ? 'applied' : 'tube-not-loaded';
+  }
+
   /** 「执行空间查询」：按当前草稿重解中心再查；失败清掉旧结果（旧结果对应的不是这份草稿）。 */
   async function submitQuery(page = 1) {
     error.value = null;
@@ -2611,6 +2629,7 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
     isolateRefnos,
     expandTreeLeaves,
     focusTreeTube,
+    toggleTreeTubeVisible,
     toggleResultVisible,
     setAllResultsVisible,
     isolateResults,

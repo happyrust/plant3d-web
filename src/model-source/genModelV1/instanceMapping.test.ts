@@ -9,6 +9,7 @@ import {
   geomInstQueryToInstanceEntries,
   groupInstanceEntriesByRefno,
   transformToMatrix,
+  tubeIdentityOf,
 } from './instanceMapping';
 
 import type { GeomInstQuery, V1Transform } from '@/api/genModelV1Api';
@@ -121,6 +122,29 @@ describe('geomInstQueryToInstanceEntries', () => {
     }));
     expect(entry!.uniforms).toMatchObject({ refno: '24381_145018', owner_refno: '24381_145018', noun: 'TUBI', owner_noun: 'BRAN', is_tubi: true, is_invalid_tubi: true });
     expect(entry!.refno_transform).toBeUndefined();
+  });
+
+  it('直段身份（T2 → T4）：管身记录一级的 tube 折成 uniforms.tube{ordinal, from, to}（两端归一 a_b）；构件记录 / 老服务端没有 tube 就不给；两端缺失或序号非法不给', () => {
+    const tubing = (tube: GeomInstQuery['tube']) => record({
+      refno: '24381/145018',
+      owner: '24381_145018',
+      generic: 'TUBI',
+      insts: [{ geo_hash: 't1', transform: IDENTITY, is_tubi: true, is_invalid_tubi: false }],
+      ...(tube === undefined ? {} : { tube }),
+    });
+    expect(geomInstQueryToInstanceEntries(tubing({ ordinal: 2, from: '24381/145019', to: '24381_145035' }))[0]!.uniforms.tube)
+      .toEqual({ ordinal: 2, from: '24381_145019', to: '24381_145035' });
+    expect(tubeIdentityOf({ ordinal: 0, from: '24381_1', to: '24381_2' })).toEqual({ ordinal: 0, from: '24381_1', to: '24381_2' });
+    // 老服务端：键不出现
+    expect('tube' in geomInstQueryToInstanceEntries(tubing(undefined))[0]!.uniforms).toBe(false);
+    // 构件记录带了 tube（不该发生）也不挂：直段身份只属于直管实例
+    const [fitting] = geomInstQueryToInstanceEntries(record({ tube: { ordinal: 0, from: '24381_1', to: '24381_2' } }));
+    expect('tube' in fitting!.uniforms).toBe(false);
+    // 两端缺失 / 序号非法
+    expect(tubeIdentityOf({ ordinal: 0, from: '', to: '24381_2' })).toBeNull();
+    expect(tubeIdentityOf({ ordinal: -1, from: '24381_1', to: '24381_2' })).toBeNull();
+    expect(tubeIdentityOf({ ordinal: Number.NaN, from: '24381_1', to: '24381_2' })).toBeNull();
+    expect(tubeIdentityOf(null)).toBeNull();
   });
 
   it('没有 insts / 空 geo_hash / 缺 world_aabb 的记录不崩：产出空数组或 aabb=null', () => {

@@ -88,6 +88,8 @@
 | `http/05c-nearby-tree-100m-many-rooms-tubes.json` `00c-tubes-summary.json` | 仓外一次性脚本 `tubes-check.ps1` 的 100 m 多房 `tubes=1` 账（1893 段、未截断、3092 ms）与 24 项汇总（§10） |
 | `ui/tubes-tree-01…04-*.png` `ui/tubes-tree-summary.json` | 树里列出直段前端四步（§11）：抽屉 BRAN 单元下的直段行与摘要 / 点直段行选中 BRAN / 房间页签只读 TUBI 行 / 右键两项；summary 带两条树请求 URL、每条直段行的文字 / title / 键、选中 refno |
 | `e2e-tube-rows-both-specs-2026-09-22-1629.txt` | T3 后两份 e2e 同机复跑 15 passed / 1 skipped（各 +1 直段行用例，§11） |
+| `http/00d-t2-records-tube-summary.json` | T2 真机账（§12）：`:8027` 换上 T2 二进制后 R432 28 根 BRAN 的 `model/records` 逐根 记录数 / TUBI 数 / 带 `tube` 数 / 树里直段数与对上数 / 去 `tube` 后与旧版逐字相同，11 项检查 |
+| `e2e-tube-eyes-both-specs-2026-09-22-2117.txt` | T4 后两份 e2e 同机复跑 15 passed / 1 skipped（两条直段用例各扩逐段眼睛一段，§12） |
 | `http/00-summary.json` | 17:43 全流程汇总：38 项检查、耗时、各场景关键数 |
 | `http/01-health.json` `02-dbnum-model-ensure-task.json` | `/health` 与整库 ensure 的 202 回执 + 终态 |
 | `http/03-nearby-tree-single-room.json` `03b-nearby-refnos-single-room.json` | 单房整树（1298 叶子）与同参 refnos 全集 |
@@ -223,3 +225,25 @@ type-check 新增 0；eslint 触及文件 0 错误（`useSpatialQuery.ts:198` �
 **e2e**：两份 spec 各 +1，同机 `--workers=1` **15 passed / 1 skipped（1.0 m）**，日志 `e2e-tube-rows-both-specs-2026-09-22-1629.txt`——抽屉那条断 `nearby/tree` 带 `tubes=1`、直段行数 = 响应里该单元 `tubes.length`、构件行在前、无效小标数、摘要「M 段直管」、点行全局选中 = BRAN；
 房间页签那条断 `rooms/{refno}/tree` 带 `tubes=1`、房间行 / 单元行的「M 段直管」、TUBI 行数 = 响应、紧跟最后一个构件行、`data-read-only` 且 0 个按钮、点行选中 BRAN、右键两项。两条在老服务端（响应没有 `total_tube_count`）上整条跳过。
 **不做**（D5 (ii) → T4）：逐段眼睛；**T2**（`model/records` 直段元数据 + `tubi_relate` 落 `route_ordinal`）仍是后端另一笔。
+
+## 12. 直段身份对上场景对象——后端 T2 真机 + 前端 T4 逐段眼睛（2026-09-22 20:28–21:2x；`http/00d-t2-records-tube-summary.json`、`e2e-tube-eyes-both-specs-2026-09-22-2117.txt`）
+
+**T2 后端**（gen-model-model-cache `6ad84ca80`，账在它的 changelog）：`:8027` 三换——20:28 收掉 `2aab735df`（pid 88560），`Win32_Process.Create` 起 `aios-database-2aab735df-t2.exe`
+（`0.1.30+g2aab735dfa9e.1790079793.dirty`，= `2aab735df` + T2，出自钉住旧 vendor 的 worktree `.scratch\t2\`——主仓当时因 vendor `e3d-io` 新变体编不过），7997 整库 ensure 6772 根 / `failed 0` / 79 s。
+仓外脚本 `.scratch\tubes-verify\t2-records-check.ps1`（换前 `-Phase before` 先把 R432 整房 28 根 BRAN 的 `model/records` 存下）→ 换后 `-Phase after` **11 / 11**（`00d…`）：
+826 条记录里 **340 条 TUBI 条条带 `tube{ordinal, from, to}`**、构件记录与 EQUI 根一条不带；同 BRAN 内 `(from, to, ordinal)` 唯一；`rooms/24381_35580/tree?tubes=1` 的 **159 段直段逐条**
+在所属 BRAN 的 `tube` 里找得到（树与记录同一四元组坐实）；去掉 `tube` 后 28 根 `items` 与换前旧二进制**逐字相同**；`spatial-tree-check.ps1 -SkipEnsure` **41 / 41**。
+本房 `ordinal` 全 0（同 `(from, to)` 多段本就罕见）；走的是投影路（`source=model-memory`，mem 档全库常驻），冷读路与补号由后端 `mem://` 单测钉。
+
+**T4 前端**（本仓）：`GeomInstQuery.tube?` → `instanceMapping` 折进直管实例的 `uniforms.tube` → `useDbnoInstancesDtxLoader` 登记 `tubeKey(BRAN, 段) → objectId` →
+`DtxCompatScene.setTubeSegmentsVisible(keys, visible)` 只动那一个对象（对象级覆盖表 `dtxHiddenTubeKeys`，不进 refno 状态表；`setObjectsVisible(BRAN)` / 显隐回放一来按 BRAN 清）；
+抽屉直段行多一颗眼睛（`spatial-tree-tube-visibility`，三态），房间页签 `tube` 节点不再只读、眼睛走 `useRoomTree.setVisible` 的直段分支、右键多「显示 / 隐藏」。
+单测：`instanceMapping` +1（记录一级 `tube` → `uniforms.tube`、两端归一、构件 / 老服务端 / 缺端不给）、`useDbnoInstancesDtxLoader` +1（登记 / 跨库查 / 没身份的直管不登 / 覆盖表标清）、
+`DtxCompatViewer` +1（只藏一个对象、refno 状态不动、覆盖只记作用到的键、refno 级显隐与回放清覆盖）、`useSpatialQuery` +1（`toggleTreeTubeVisible` 三种回答与方向）、
+`SpatialResultTree` 扩 1（眼睛三态 / `data-tube-*` / 发 `toggleTubeVisible`）、`useRoomTree` 扩 1（未加载 `tube-not-loaded`、装进来只叫 `setTubeSegmentsVisible`、勾选与父链半选、覆盖表同真相）→ 11 文件 176 过；
+type-check 新增 0；eslint 触及文件 0 错误（`useSpatialQuery.ts` 那条既有空行 warning 不是本笔）。
+**e2e**（同机 `:8027` T2 二进制 + Playwright 自起的 dev `:3101`，`--workers=1`）：两份直段 spec 各扩一段——
+抽屉：直段行有自己的眼睛、`data-tube-loaded=false`；点眼睛 → toast「这段直管还没装进场景…」、覆盖表没记；单元「加载」→ `isDtxTubeSegmentLoadedAcrossAllDbnos(key)` 为真、行 `data-tube-loaded=true`、`scene.isTubeSegmentVisible(key)=true`；
+点眼睛 → `data-tube-hidden=true`、`isTubeSegmentVisible=false`、所属 BRAN 的 `scene.objects[bran].visible` 不动、同 BRAN 别的段仍可见；再点回来；再藏一段后单元「仅显示」→ 覆盖被清、这一段亮回来。
+房间页签：TUBI 行不再 `data-read-only`、恰 1 个按钮（眼睛）、右键「聚焦飞行 / 显示 / 隐藏 / 查看属性」；未加载点眼睛 toast；单元「加载模型」后点眼睛只藏那一段、BRAN 的 refno 状态不动；再藏一段 → 单元行眼睛隐 / 显 → 这一段跟着亮、覆盖表清空。
+首跑抽屉那条败在悬停：三个小动作 `invisible`、要悬到单元标题行上（悬整个单元容器会落到展开后的子行），改悬展开箭头后过；复跑两份 **15 passed / 1 skipped**（见日志）。`pageerror` **0**。

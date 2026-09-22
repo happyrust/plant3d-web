@@ -98,7 +98,10 @@
                   <SpatialResultTreeTubes v-if="isOpen(unitId(room, unit), false) && unit.tubes"
                     :unit="unit"
                     :tubes="unit.tubes"
-                    @focus-tube="onFocusTube" />
+                    :segment-hidden="tubeSegmentHidden"
+                    :segment-loaded="tubeSegmentLoaded"
+                    @focus-tube="onFocusTube"
+                    @toggle-tube-visible="onToggleTubeVisible" />
                 </div>
               </div>
             </div>
@@ -194,9 +197,9 @@ const METERS_TO_MM = 1000;
  * 名字 / refno / 说明 / 构件数全进 `title`，悬停可读。距离、「N 个单元」这类短尾巴 `shrink-0` 不被截，长的主标识 `truncate`。
  * 三个动作按钮不占行宽（见 `SpatialResultTreeNodeActions`），计数始终贴右。
  *
- * 直段（方案 B，2026-09-22）：服务端认 `tubes=1` 时 BRAN 单元下多一组只读直段行（`SpatialResultTreeTubes`，构件行之后），
+ * 直段（方案 B，2026-09-22）：服务端认 `tubes=1` 时 BRAN 单元下多一组直段行（`SpatialResultTreeTubes`，构件行之后），
  * 单元行尾巴「N 段直管」，各层 `title` 的计数句改成「N 个构件 · M 段直管」；计数格仍是构件数——直段不是构件。
- * 老服务端没有这些键时一切照旧。
+ * 直段行点行 / 箭头选中所属 BRAN 并定位（D5 (i)），眼睛逐段显隐那一段直管对象（T4，D5 (ii)）；老服务端没有这些键时一切照旧。
  */
 const props = defineProps<{
   tree: SpatialTreeResult;
@@ -204,6 +207,9 @@ const props = defineProps<{
   items: SpatialQueryResultItem[];
   activeRefno: string | null;
   busy?: boolean;
+  /** 直段行眼睛的状态源（测试注桩；缺省读 DTX 加载链的运行时索引，见 `SpatialResultTreeTubes`） */
+  tubeSegmentHidden?: (key: string) => boolean;
+  tubeSegmentLoaded?: (key: string) => boolean;
 }>();
 
 const emit = defineEmits<{
@@ -215,6 +221,8 @@ const emit = defineEmits<{
   expand: [selector: SpatialTreeLeafSelector];
   /** 直段行：选中所属 BRAN + 按直段盒定位（D5 (i)） */
   focusTube: [unit: SpatialTreeUnitNode, tube: SpatialTreeTubeNode];
+  /** 直段行的眼睛：只显 / 隐那一段直管对象（T4） */
+  toggleTubeVisible: [unit: SpatialTreeUnitNode, tube: SpatialTreeTubeNode];
 }>();
 
 const itemsByRefno = computed(() => new Map(props.items.map((item) => [item.refno, item])));
@@ -278,6 +286,10 @@ function onLoad(refnos: string[], label: string): void {
 
 function onFocusTube(unit: SpatialTreeUnitNode, tube: SpatialTreeTubeNode): void {
   emit('focusTube', unit, tube);
+}
+
+function onToggleTubeVisible(unit: SpatialTreeUnitNode, tube: SpatialTreeTubeNode): void {
+  emit('toggleTubeVisible', unit, tube);
 }
 
 function onShowOnly(refnos: string[]): void {

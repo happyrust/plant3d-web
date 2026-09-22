@@ -488,6 +488,19 @@ export type GeomInst = {
   is_invalid_tubi: boolean;
 };
 
+/**
+ * 隐式管身记录的直段身份（spec §4.5.2「`tube`」，方案 B T2）：与房间层级树 `tubes=1` 的直段 `(BRAN = refno, from, to, ordinal)`
+ * 是同一个四元组——前端拿它把树里的直段行对上场景里的直管对象（逐段眼睛，T4）。老服务端没有这一格。
+ */
+export type GeomInstTube = {
+  /** 同 `(from, to)` 内的序号，常为 0 */
+  ordinal: number;
+  /** 离开侧管件，`a_b` */
+  from: string;
+  /** 到达侧管件，`a_b` */
+  to: string;
+};
+
 /** 一个构件下的一组几何实例（`model/records` 的 item）。`owner` 填的是生成根，不是直接属主。 */
 export type GeomInstQuery = {
   /** `a_b` */
@@ -502,6 +515,8 @@ export type GeomInstQuery = {
   generic: string;
   pts: unknown;
   date: unknown;
+  /** 隐式管身（`generic = TUBI`）才有；构件记录没有这一格（键不出现） */
+  tube?: GeomInstTube;
 };
 
 export type ModelRecordsResponse = {

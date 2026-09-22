@@ -110,8 +110,11 @@ function makeSource(overrides: Partial<SpatialSource> = {}) {
   return { source, rooms, roomTree };
 }
 
-/** 最小可用的 compat viewer：objects 表 + 显隐 / 选中 / xray / AABB / 飞行都记调用 */
-function makeViewer(loaded: string[]) {
+/**
+ * 最小可用的 compat viewer：objects 表 + 显隐 / 选中 / xray / AABB / 飞行都记调用。
+ * `loadedTubeKeys`：场景里已有对象的直段身份键——`setTubeSegmentsVisible` 只对它们生效、回作用到的键（与 `DtxCompatScene` 同约定）。
+ */
+function makeViewer(loaded: string[], loadedTubeKeys = new Set<string>()) {
   const objects: Record<string, { visible: boolean; selected: boolean; xrayed: boolean }> = {};
   for (const id of loaded) objects[id] = { visible: true, selected: false, xrayed: false };
   const scene = {
@@ -122,6 +125,7 @@ function makeViewer(loaded: string[]) {
     setObjectsVisible: vi.fn((ids: string[], visible: boolean) => { for (const id of ids) if (objects[id]) objects[id]!.visible = visible; }),
     setObjectsSelected: vi.fn((ids: string[], selected: boolean) => { for (const id of ids) if (objects[id]) objects[id]!.selected = selected; }),
     setObjectsXRayed: vi.fn((ids: string[], xrayed: boolean) => { for (const id of ids) if (objects[id]) objects[id]!.xrayed = xrayed; }),
+    setTubeSegmentsVisible: vi.fn((keys: string[], _visible: boolean) => keys.filter((key) => loadedTubeKeys.has(key))),
     getAABB: vi.fn((ids: string[]) => [0, 0, 0, ids.length, 1, 1]),
   };
   const cameraFlight = { flyTo: vi.fn() };
@@ -338,7 +342,7 @@ describe('useRoomTree', () => {
     expect(viewer.scene.setObjectsXRayed).toHaveBeenLastCalledWith(['24381_1241'], false);
   });
 
-  it('直段行（方案 B）：展开 BRAN 单元后构件行之后进 flatRows、没有子节点；点行回所属 BRAN 的 refno 且场景里选中 BRAN；聚焦按直段盒（mm → 场景）飞、不要求加载；眼睛对它无效；单元级显隐 / 隔离不受影响', async () => {
+  it('直段行（方案 B）：展开 BRAN 单元后构件行之后进 flatRows、没有子节点；点行回所属 BRAN 的 refno 且场景里选中 BRAN；聚焦按直段盒（mm → 场景）飞、不要求加载；眼睛逐段（T4）：对象没装进来回 tube-not-loaded、装进来只动那一段、勾选与父链跟着变、抽屉藏的段这里也暗；单元级显隐 / 隔离不受影响', async () => {
     const withTubes = r432Tree();
     const b1 = withTubes.rooms[0]!.specs[0]!.unit_types[0]!.units[0]!;
     b1.tube_count = 2;
@@ -348,9 +352,16 @@ describe('useRoomTree', () => {
     ];
     withTubes.rooms[0]!.tube_count = 2;
     withTubes.total_tube_count = 2;
-    const viewer = makeViewer(['24381_1240']);
+    /** 场景里已有对象的直段键（DTX 加载链的 tubeObjectIdByKey）与逐段隐藏覆盖表（两个桩，`DtxCompatScene` 真实现里由它维护） */
+    const loadedTubeKeys = new Set<string>();
+    const hiddenTubeKeys = new Set<string>();
+    const viewer = makeViewer(['24381_1240'], loadedTubeKeys);
     const { source } = makeSource({ roomTree: vi.fn(async () => withTubes) as unknown as SpatialSource['roomTree'] });
-    const tree = useRoomTree({ value: viewer }, { source: () => source });
+    const tree = useRoomTree({ value: viewer }, {
+      source: () => source,
+      tubeSegmentHidden: (key) => hiddenTubeKeys.has(key),
+      tubeSegmentLoaded: (key) => loadedTubeKeys.has(key),
+    });
     await tree.loadRoots();
     tree.toggleExpand('room:24381_35580');
     await flush();
@@ -382,10 +393,34 @@ describe('useRoomTree', () => {
     expect(viewer.scene.getAABB).not.toHaveBeenCalled();
     expect(viewer.cameraFlight.flyTo).toHaveBeenLastCalledWith({ aabb: [10, 20, 30, 11, 21, 31] });
 
-    // 眼睛对直段行无效：不写场景、不改勾选
-    await tree.setVisible(tubeId, false);
+    // 逐段眼睛（T4）：对象还没装进场景 → 'tube-not-loaded'，不写 refno 级显隐、勾选不变
+    const tubeKey1 = '24381_1200#24381_1200-24381_1240#0';
+    const tubeKey2 = '24381_1200#24381_1240-24381_1241#0';
+    expect(tree.isTubeSegmentLoaded(tubeId)).toBe(false);
+    expect(await tree.setVisible(tubeId, false)).toBe('tube-not-loaded');
+    expect(viewer.scene.setTubeSegmentsVisible).toHaveBeenLastCalledWith([tubeKey1], false);
     expect(viewer.scene.setObjectsVisible).not.toHaveBeenCalled();
     expect(tree.getCheckState(tubeId)).toBe('checked');
+
+    // 装进来后：只动那一段（scene.setTubeSegmentsVisible），refno 级 setObjectsVisible 一次都不叫；勾选 unchecked、单元与祖先 indeterminate
+    loadedTubeKeys.add(tubeKey1).add(tubeKey2);
+    expect(tree.isTubeSegmentLoaded(tubeId)).toBe(true);
+    expect(await tree.setVisible(tubeId, false)).toBe('applied');
+    expect(viewer.scene.setTubeSegmentsVisible).toHaveBeenLastCalledWith([tubeKey1], false);
+    expect(viewer.scene.setObjectsVisible).not.toHaveBeenCalled();
+    expect(tree.getCheckState(tubeId)).toBe('unchecked');
+    expect(tree.getCheckState('unit:24381_35580:24381_1200')).toBe('indeterminate');
+    expect(tree.getCheckState('room:24381_35580')).toBe('indeterminate');
+    expect(await tree.setVisible(tubeId, true)).toBe('applied');
+    expect(viewer.scene.setTubeSegmentsVisible).toHaveBeenLastCalledWith([tubeKey1], true);
+    expect(tree.getCheckState(tubeId)).toBe('checked');
+    expect(tree.getCheckState('unit:24381_35580:24381_1200')).toBe('checked');
+
+    // 在抽屉里被单独藏起来的段（对象级覆盖表）这里同样画成暗眼睛——两棵树同一份真相
+    hiddenTubeKeys.add(tubeKey2);
+    expect(tree.getCheckState('tube:24381_35580:24381_1200#24381_1240-24381_1241#0')).toBe('unchecked');
+    hiddenTubeKeys.clear();
+    expect(tree.getCheckState('tube:24381_35580:24381_1200#24381_1240-24381_1241#0')).toBe('checked');
 
     // 单元级隔离照旧：构件 + BRAN 自己（直段）+ 房间外构件；直段行不在 refno 集里
     expect(await tree.collectRefnos('unit:24381_35580:24381_1200')).toEqual(['24381_1240', '24381_1241']);
