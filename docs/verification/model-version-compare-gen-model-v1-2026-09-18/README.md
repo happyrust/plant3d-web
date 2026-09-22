@@ -125,6 +125,22 @@
 | 测试 | `ModelTreePanel.versionDiff.test.ts` **13 过**（新增「新增的构件在 B 版之后又被删：解析不到自己 → 挂最近存活祖先的幽灵行，徽章仍是「增」」与「连原父都定位不到 → 回退挂根 + `ghostUnplaced`」；原两条的 `resolveTotal` 从「唯一目标数」改成「变更条数」5→6 / 1→2）；`vue-tsc` / eslint 触及文件 0 错 |
 | e2e 护栏（11:0x） | `model-version-compare-gen-model-v1.spec.ts` 新增第 4 条「B 版之后又被删的构件」：幽灵行 `[data-diff-status=added][data-ghost=true]` 可见且含「当前已不在」、无「未能定位」、点它给 `properties-deleted-notice` 且 `element/attributes` **一条都没有**、停好相机后点「在 3D 中定位」相机必须飞离停放点（找不到时 `focusModelUnitVersionCompare` 直接 return、相机不动）、飞完提示仍在且请求仍是 0。夹具（`24384_24776` 618→628）不在就整条跳过，可用 `MODEL_VERSION_E2E_GHOST_UNIT/_A/_B` 换。第 1 条的 tombstone 分支也补上「行尾『已删除』+ 提示 + 定位飞得动」。**`:8026` 4 过（13.6 s）、`:8033` 4 过（54.0 s）、`:8026` + `MODEL_VERSION_E2E_UNIT=24384_23257` 4 过（13.2 s）** |
 
+### 5.5 属性净差走服务端 `element/attribute-diff`（收口计划 P2-c，2026-09-22 15:3x–15:4x，`closeout-0922/attrdiff-*`）
+
+前端半边 `ecc65fb7`（09-21）一直只有回落路可验；后端 gen-model-refactor `src/fast_model/attribute_diff.rs` 至今 **untracked**、`handlers.rs` / `web_service/mod.rs` modified 在工作树里没提交。用户 15:3x 拍板「拿工作树编一份换到 `:8022`」：
+
+| 步 | 事实 |
+|---|---|
+| 构建 | gen-model-refactor **工作树**（HEAD `0b2bf527b` + 那条会话未提交的 attribute_diff 一摄）`cargo build --release --features http_api --bin aios-database`，`CARGO_TARGET_DIR=D:\Rust\target`，**3 m 09 s**（15:33–15:36），只有 `unused dependency cc` 一条警告 → 拷成 `_runs\review-full-8031\aios-database-attrdiff-wt-0b2bf527b.exe`（213,993,984 B） |
+| 换 `:8022` | 收掉 14:55 起的 a382b2cf3（pid 17932），日志挪到 `stdout.run4-a382b2cf3-0922-1455-to-1536.log`；同 cwd `_runs\node-versions-8022` / DbOption / env（`AIOS_STORE_MODE=mem`…）`Win32_Process.Create` 起，15:37:06，**pid 61404**（`gm-8022-attrdiff-wt.pid`），health `0.1.30+g0b2bf527bc4e.1790062375.dirty`、`history available`、内存库；`node/versions` / `model/versions` 照旧 200 |
+| 路由（curl 级） | `element/attribute-diff?dbnum=8000&refno=24384/23262&a=626&b=630` → 200 1414 ms（冷）：`kind modified · impact placement · changed_count 2 · changes POS（10887, 12332, 3400 → …2900）+ SPAMAP（stamp true）`；`24384/23257 573→628` → `modified · noop · changes CACHID（戳）`、**没有 `members`**；`24384/24776 573→628` → `modified · mesh · changes CACHID（戳）· members.added [24384/26495]`；`24384/24775`（ZONE，孤儿）→ `changes []`、`members.added [24384/26482]`、warnings「owner 链上没有最小交付单元」。都是几十 ms |
+| 页面 · 叶子（`leaf-self-attr-compare.json`） | FTUB 24384_23262 A 626 → B 630 属性对比 tab：`data-source="server"`，标题「**1 项变化** · 修改 · placement」，表里只有 POS；**SPAMAP 这版服务端标成戳**（`attribute_history.rs` 那一摄也改了口径，a382b2cf3 上它是 `stamp false`、README §7 记的「2 项变化」就是它），缺省不列、勾「含戳」才出；表底「取数：服务端 element/attribute-diff——A / B 各钉一个会话…」 |
+| 页面 · 容器子树（`attrdiff-24384_24776.*` / `attrdiff-24384_24775.*`） | SITE 24384_22399「所有子节点」A 573 → B 628「有变的构件 7 个」；点开 **EQUI 24384_24776** → `CACHID 戳 16 → 21` + **「成员 新增 1（24384_26495）」**；点开 **ZONE 24384_24775** → 「属性一字没差，只有成员表 / owner 动了」+「成员 新增 1（24384_26482）」；两处都**没有**「服务端还没有 element/attribute-diff：这是把它的时间线在 (A, B] 里折出来的」/「成员表动过（增删或重排）」那两句；每点开一行发一条 `element/attribute-diff`，不再拉整条时间线 |
+| 计划里写的期望 vs 事实 | 计划 §2 P2-c 写「BRAN 24384_23257 应出『成员重排』、EQUI 24384_24776 出『成员 +1』」：**后者成立，前者不成立**——`element/attribute-history` 里 BRAN 23257 在 (573, 628] 只有 626 一条（CACHID、noop、无 members），服务端真差也没有 members，两条路由口径一致，是计划那句写错了段。EQUI 24776 这一段倒是「净差 vs 折时间线」的好例子：时间线 608 +26484 / 618 −26484 / 628 +26495，折出来只能说「成员表动过」，服务端给的净差是 **+26495 一条** |
+| e2e | `node-version-view` 叶子那条：净差表 `data-source` 按服务端有没有这条路由断言 `server` / `folded`、表底那句同；戳（按 attribute-history 的 `stamp`）缺省不列、勾「含戳」才列。**新第四条**（服务端没这条路由就跳过）：`node/diff-summary` 573→628 的每行各拿一份 `element/attribute-diff`，挑成员 / owner 有差的最多 3 行点开，断言「成员 新增 n / 移除 n / 重排」、「owner A → B」、首个非戳属性名、没有「折出来的」那两句；样本 `24384/24776 成员 +1`、`24384/24775 成员 +1`。两份 spec 对这台 **8 passed（31.6 s）**，pageerror 0 |
+
+后端那半仍没提交：这台 `:8022` 跑的是别人工作树的快照，他们一提交 / 一改，这里的 `build_id … .dirty` 就对不上了——换回正式构建时按上面那行重起即可。
+
 ## 6. BRAN 增量更新 → 版本对比（19:3x，`bran-ftub-move/`）
 
 用户 18:37「测试一个 BRAN 的增量更新，然后通过在 plant3d-web 里通过模型对比来查看」。这次不再是 EQUI 夹具，而是一条真正的管线支管，
@@ -347,5 +363,5 @@ pageerror 0；console error 6 条 = 从前那 5 条环境噪音 + 1 条 404 = `G
 - **三档各跑一遍，全绿**（`e2e-summary.json`）：Chrome 缺省 headless **7 passed 28.9 s**；`PLAYWRIGHT_GPU=1` **7 passed 28.9 s**；`PLAYWRIGHT_SOFTWARE_GL=1` **7 passed 29.0 s**。pageerror 三档都是 0。
   `playwright.config.ts` 新认 `PLAYWRIGHT_GPU` / `PLAYWRIGHT_SOFTWARE_GL` 两个开关（`launchOptions.args`），别的 spec 不给就是从前的行为。
 - **教程配图**：`docs/guides/images/model-version-view/01…10`（同一台 `:8022`，1600×1000，真显卡；`10-split-direct-render-note.png` 是 SwiftShader 档），`MODEL_VERSION_VIEW_TUTORIAL.md` 各节嵌入。
-- **仍未验**：P2-c 成员 / owner 真差（后端 `attribute_diff.rs` 仍 untracked 在 gen-model-refactor 工作树里，`:8022` 这版没有 `element/attribute-diff`，容器「仅自身」缺省对 524 → 532 那条 404 照旧是预期的探路）；设计稿 S4 注 5 / 注 6 改口（Pencil 里现在没有打开任何 .pen）。
+- **仍未验**：~~P2-c 成员 / owner 真差（后端 `attribute_diff.rs` 仍 untracked 在 gen-model-refactor 工作树里，`:8022` 这版没有 `element/attribute-diff`，容器「仅自身」缺省对 524 → 532 那条 404 照旧是预期的探路）~~ **15:3x 拿后端工作树编了一份换到 `:8022`，P2-c 真机 + e2e 见 §5.5**；设计稿 S4 注 5 / 注 6 改口（Pencil 里现在没有打开任何 .pen）。
 - 前端是**工作树**（HEAD `151290c1` + 别的会话未提交的空间查询 / 校审改动），不是干净 HEAD；那些改动不碰版本对比这条线的文件。

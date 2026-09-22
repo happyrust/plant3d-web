@@ -1,0 +1,37 @@
+{
+  "refno": "24384/24775",
+  "a": 573,
+  "b": 628,
+  "diff": {
+    "dbnum": 8000,
+    "refno": "24384/24775",
+    "noun": "ZONE",
+    "unit_root": null,
+    "unit_noun": null,
+    "file_latest_sesno": 640,
+    "a": 573,
+    "b": 628,
+    "kind": "modified",
+    "impact": "mesh",
+    "changed_count": 1,
+    "changes": [],
+    "members": {
+      "added": [
+        "24384/26482"
+      ],
+      "removed": [],
+      "reordered": false
+    },
+    "elapsed_ms": 25,
+    "stats": {
+      "sets_built": 2,
+      "set_build_ms": 1,
+      "render_ms": 1,
+      "impact_ms": 0
+    },
+    "warnings": [
+      "24384/24775 的 owner 链上没有最小交付单元（类型集 BRAN / HANG / SUPPO / EQUI）"
+    ]
+  },
+  "text": "属性一字没差，只有成员表 / owner 动了成员 新增 1（24384_26482）"
+}

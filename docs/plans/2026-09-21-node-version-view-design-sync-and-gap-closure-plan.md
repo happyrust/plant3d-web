@@ -91,7 +91,7 @@
   退出 DELETE 全部快照；「三维只看差异」/ 角标 / 分屏拾取对多单元同样成立（角标只说版本，不说单元）。拍板 **D3**：做不做；缺省上限（建议 ≤ 20 单元，超过走 P2-b）。
 - **P2-b（G5）✅（19:4x）阈值确认对话框**：`diffSummary.needsConfirm` 时弹确认（全部生成 / 先装变化最大的 N 个 / 取消），阈值与预估份数由后端给（核 `node/diff-summary` 回执字段名：`needs_confirm` /
   预估份数字段——README §7 记的是 `needs_confirm`，份数字段要核）；「先装 N 个」排序按组内变更数。**依赖 P2-a**。拍板 **D4**：与 P2-a 绑定（P2-a 不做则本条也不做，逐组装载本就不超阈值）。
-- **P2-c（G6）成员 / owner 真差**：前端已暂存消费 `members.added / removed / reordered` 与 `owner [A, B]`；等 gen-model-refactor `attribute_diff.rs` 提交并起到 `:8022` 后真机
+- **P2-c（G6）成员 / owner 真差 ✅（09-22 15:4x 真机 + e2e，见 §8 末；后端那半仍未提交，`:8022` 跑的是工作树快照）**：前端已暂存消费 `members.added / removed / reordered` 与 `owner [A, B]`；等 gen-model-refactor `attribute_diff.rs` 提交并起到 `:8022` 后真机
   （SITE 24384/22399 573→628 子树点开 BRAN 24384_23257 应出「成员重排」，EQUI 24384_24776 出「成员 +1」），e2e 容器那条加断言。拍板 **D5**：后端那半由谁 / 何时提交（正在改的是另一条会话）。
 
 ### P3 · 实现自己记下的缺口（设计稿没提，1 天）
@@ -255,4 +255,12 @@ P0（半天）→ P1-a / P1-b（半天）→ P3-a / P3-b（半天）→ P1-c（D
   **本机 Chrome 新 headless 缺省就拿到真显卡**——P3-c 记录里「缺省 headless 落在 SwiftShader」是 09-21 一次性脚本用 chromium 的情形，e2e 要看软渲染那条路得显式 `PLAYWRIGHT_SOFTWARE_GL=1`。
 - **P2-b 确认框 e2e 到不了**：ams8000 任何一段都凑不出 > 20 组（SITE 全程 5 → 632 只有 8 组几何变过），只在单测里。
 - **教程配图**：`docs/guides/images/model-version-view/01…10` 嵌进 `MODEL_VERSION_VIEW_TUTORIAL.md`（09-21 写教程时欠的）。
-- **仍欠**：P2-c（后端 `attribute_diff.rs` 仍 untracked）；S4 注 5 / 注 6 改口（Pencil 里现在没打开任何 .pen）。
+- **仍欠**：~~P2-c（后端 `attribute_diff.rs` 仍 untracked）~~（下一段）；S4 注 5 / 注 6 改口（Pencil 里现在没打开任何 .pen）。
+
+### P2-c 真机 / e2e（2026-09-22 15:3x–15:4x，用户拍板「拿工作树编一份换到 :8022」）
+
+- 后端那半还是没提交（`attribute_diff.rs` untracked、`handlers.rs` / `mod.rs` / `attribute_history.rs` modified）。按用户拍板拿 gen-model-refactor **工作树**编 release（3 m 09 s）→ `_runs\review-full-8031\aios-database-attrdiff-wt-0b2bf527b.exe`，收掉 a382b2cf3 那台、同 cwd / env 起到 `:8022`（pid 61404，`0.1.30+g0b2bf527bc4e.dirty`）。
+- 真机（README §5.5）：叶子 FTUB 626 → 630 净差表 `data-source=server`、「1 项变化」只列 POS——**这版服务端把 SPAMAP 标成戳**（a382b2cf3 上不是，§7 记的「2 项变化」就是它），勾「含戳」才出；容器子树 573 → 628 点开 EQUI 24384_24776 →「成员 新增 1（24384_26495）」、ZONE 24384_24775 →「属性一字没差，只有成员表 / owner 动了」+「成员 新增 1（24384_26482）」，两处都不再有「折出来的」那句。
+- **§2 P2-c 写的「BRAN 24384_23257 应出『成员重排』」不成立**：attribute-history 里它在 (573, 628] 只有 626 一条（CACHID / noop / 无 members），服务端真差也没 members，两条路由一致——是计划把段写错了；EQUI 24776 那条成立（时间线 +26484 / −26484 / +26495 三跳，净差 +26495 一条，正是「净差 vs 折」的差别）。
+- e2e：叶子那条净差来路按服务端有无路由断言 `server` / `folded` + 戳缺省不列；**新第四条**（没路由就跳过）逐行拿 `element/attribute-diff`、挑成员 / owner 有差的点开断言。两份 spec 对这台 **8 passed（31.6 s）**，pageerror 0。
+- 后端一提交 / 一改，这台 `.dirty` 就过时了；换正式构建按 README §5.5 那行重起。

@@ -38,7 +38,7 @@ type ElementVersionRow = { sesno: number; element_impact: string | null; unit_im
 type ElementVersionsResponse = { noun: string; unit_root: string | null; versions: ElementVersionRow[]; truncated: boolean };
 type NodeVersionRow = { sesno: number; impact: string; self_impact: string | null; units_changed: number };
 type NodeVersionsResponse = { noun: string; unit_root: string | null; versions: NodeVersionRow[]; truncated: boolean };
-type HistoryEntry = { sesno: number; user: string; comment: string; impact: string | null; changed_count: number; changes: { name: string }[] };
+type HistoryEntry = { sesno: number; user: string; comment: string; impact: string | null; changed_count: number; changes: { name: string; stamp?: boolean }[] };
 type HistoryResponse = { entries: HistoryEntry[] };
 type DiffSummaryResponse = {
   units: { changed: number; unchanged: number; total: number };
@@ -62,6 +62,19 @@ let leafHistory: HistoryResponse | null = null;
 let containerSubtree: NodeVersionsResponse | null = null;
 let containerSelf: NodeVersionsResponse | null = null;
 let containerHistory: HistoryResponse | null = null;
+/** 服务端有没有 `element/attribute-diff`（gen-model-refactor attribute_diff.rs 那一笔）：有 → 净差两端直接读终态（`source=server`）；没有 → 折时间线 */
+let attributeDiffStatus = 404;
+
+type AttributeDiffResponse = {
+  kind: string;
+  changed_count: number;
+  changes: { name: string; before: string | null; after: string | null; stamp: boolean }[];
+  members?: { added: string[]; removed: string[]; reordered: boolean };
+  owner?: [string, string];
+};
+/** P2-c 的样本段：SITE 24384/22399 子树 573 → 628 里 BRAN 24384/23257 成员重排、EQUI 24384/24776 成员 +1（BOX 24384/26495 建于 628） */
+const ATTRDIFF_A = Number(process.env.NODE_VERSION_E2E_ATTRDIFF_A || '573');
+const ATTRDIFF_B = Number(process.env.NODE_VERSION_E2E_ATTRDIFF_B || '628');
 
 /** 门：服务在、三条新路由都在、夹具形状够用。数字留给用例。 */
 async function probe(): Promise<string | null> {
@@ -89,6 +102,9 @@ async function probe(): Promise<string | null> {
   const selfRows = leafVersions.versions.filter((row) => row.element_impact !== null);
   if (selfRows.length < 2) return `${LEAF} 自身只变过 ${selfRows.length} 版，不够折净差`;
   if ((containerSubtree.versions.length) < 3) return `${CONTAINER} 子树只有 ${containerSubtree.versions.length} 版`;
+  attributeDiffStatus = (await getJson<AttributeDiffResponse>(
+    `element/attribute-diff?dbnum=${DBNUM}&refno=${slash(LEAF)}&a=${selfRows.at(-2)!.sesno}&b=${selfRows.at(-1)!.sesno}`,
+  )).status;
   return null;
 }
 
@@ -222,10 +238,24 @@ test('叶子构件：时间线带 user / comment / 属性 n，叶子缺省「仅
   const table = page.getByTestId('model-unit-compare-attr-table');
   await expect(table).toBeVisible();
   const between = history.entries.filter((entry) => entry.sesno > a && entry.sesno <= b);
-  const names = [...new Set(between.flatMap((entry) => entry.changes.map((change) => change.name)))];
+  const changesBetween = between.flatMap((entry) => entry.changes);
+  const names = [...new Set(changesBetween.filter((change) => !change.stamp).map((change) => change.name))];
+  // 戳（`CACHID` 一类，服务端 `stamp: true`；attribute_diff 那一笔起 `SPAMAP` 也算戳）缺省不列，勾「含戳」才列
+  const stampNames = [...new Set(changesBetween.filter((change) => change.stamp).map((change) => change.name))].filter((name) => !names.includes(name));
   for (const name of names) await expect(table).toContainText(name);
+  for (const name of stampNames) await expect(table).not.toContainText(name);
+  if (stampNames.length) {
+    await page.getByLabel('含戳').check();
+    for (const name of stampNames) await expect(table).toContainText(name);
+    await page.getByLabel('含戳').uncheck();
+  }
+  // 净差的来路照实写在表底：服务端带 element/attribute-diff 就两端直接读终态（`server`），否则折时间线（`folded`）——P2-c
+  const source = attributeDiffStatus === 200 ? 'server' : 'folded';
+  await expect(table).toHaveAttribute('data-source', source);
+  await expect(page.getByTestId('model-unit-compare-attr-source')).toContainText(source === 'server' ? '取数：服务端 element/attribute-diff' : '服务端还没有 element/attribute-diff');
+  test.info().annotations.push({ type: 'attribute-diff source', description: `${source}（element/attribute-diff HTTP ${attributeDiffStatus}）` });
   const attrText = (await page.getByTestId('model-unit-compare-attributes').textContent()) ?? '';
-  await evidence(page, 'leaf-self-attr-compare', { leaf: LEAF, a, b, names, attrText });
+  await evidence(page, 'leaf-self-attr-compare', { leaf: LEAF, a, b, names, stampNames, source, attrText });
 
   // 「退出」在模型对比 tab 的三维查看区里
   await page.getByTestId('model-unit-compare-tab-model').click();
@@ -523,5 +553,67 @@ test('容器 URL 直达 compare_a / compare_b → 全部变了的单元一起进
   // 换组时上一轮的快照已经还回去，退出时这一轮的也还——生成过的每一份都有一条 DELETE
   await expect.poll(() => apiRequests.filter((r) => r.method === 'DELETE' && /model\/history\//.test(r.url)).length, { timeout: 15_000 }).toBe(generated);
   test.info().annotations.push({ type: 'history/generate', description: `${generated} 份（${geometryGroups.length} 组，${absentSides} 侧不存在）` });
+  expect(pageErrors, pageErrors.join('\n')).toEqual([]);
+});
+
+/** 一行成员差在面板上的写法（`membersText`）：新增 n（…）· 移除 n（…）· 重排 */
+function expectedMemberPieces(members: NonNullable<AttributeDiffResponse['members']>): string[] {
+  const pieces: string[] = [];
+  if (members.added.length) pieces.push(`新增 ${members.added.length}`);
+  if (members.removed.length) pieces.push(`移除 ${members.removed.length}`);
+  if (members.reordered) pieces.push('重排');
+  return pieces;
+}
+
+test('服务端带 element/attribute-diff：「所有子节点」里有变的构件点开是两端真差——成员增删 / 重排、owner 改挂另列，不再说「折出来的」（收口计划 P2-c）', async ({ page }) => {
+  test.skip(attributeDiffStatus === 404, '服务端没有 element/attribute-diff 路由（要 gen-model-refactor attribute_diff.rs 那一笔的构建）');
+  const summary = (await getJson<DiffSummaryResponse>(`node/diff-summary?dbnum=${DBNUM}&refno=${slash(CONTAINER)}&a=${ATTRDIFF_A}&b=${ATTRDIFF_B}&scope=subtree`)).body;
+  test.skip(!summary, `${CONTAINER} ${ATTRDIFF_A} → ${ATTRDIFF_B} 的 node/diff-summary 拿不到`);
+  const rows = summary!.groups.flatMap((group) => group.rows);
+  // 每行拿服务端的真差；成员 / owner 有差的那些当断言样本（最多取 3 行点开）
+  const diffs = new Map<string, AttributeDiffResponse>();
+  for (const row of rows.slice(0, 16)) {
+    const diff = await getJson<AttributeDiffResponse>(`element/attribute-diff?dbnum=${DBNUM}&refno=${row.refno}&a=${ATTRDIFF_A}&b=${ATTRDIFF_B}`);
+    if (diff.body) diffs.set(row.refno, diff.body);
+  }
+  const samples = [...diffs.entries()].filter(([, diff]) => diff.members || diff.owner).slice(0, 3);
+  test.skip(samples.length === 0, `${CONTAINER} ${ATTRDIFF_A} → ${ATTRDIFF_B} 里没有成员 / owner 有差的构件，换一段`);
+  test.info().annotations.push({
+    type: 'attribute-diff samples',
+    description: samples.map(([refno, diff]) => `${refno}：${diff.members ? `成员 +${diff.members.added.length} -${diff.members.removed.length}${diff.members.reordered ? ' 重排' : ''}` : ''}${diff.owner ? ` owner ${diff.owner[0]} → ${diff.owner[1]}` : ''}（属性 ${diff.changes.length}）`).join('；'),
+  });
+
+  const { pageErrors, apiRequests } = await openPanel(page, CONTAINER);
+  await expect(page.getByTestId('model-unit-compare-scope-self')).toHaveAttribute('aria-pressed', 'true', { timeout: 120_000 });
+  await page.getByTestId('model-unit-compare-scope-subtree').click();
+  await expandTimeline(page);
+  await page.getByTestId(`model-unit-compare-pick-b-${ATTRDIFF_B}`).click();
+  await page.getByTestId(`model-unit-compare-pick-a-${ATTRDIFF_A}`).click();
+  await expect(page.getByTestId('model-unit-compare-a')).toHaveAttribute('data-sesno', String(ATTRDIFF_A));
+  await expect(page.getByTestId('model-unit-compare-b')).toHaveAttribute('data-sesno', String(ATTRDIFF_B));
+  await expect(page.getByTestId('model-unit-compare-attributes')).toContainText(`A ${ATTRDIFF_A} → B ${ATTRDIFF_B} · 有变的构件 ${rows.length} 个`, { timeout: 120_000 });
+
+  for (const [refno, diff] of samples) {
+    await page.getByTestId(`model-unit-compare-element-${underscore(refno)}`).click();
+    const detail = page.getByTestId(`model-unit-compare-element-diff-${underscore(refno)}`);
+    await expect(detail).toBeVisible();
+    await expect(detail).not.toContainText('正在算', { timeout: 60_000 });
+    // 服务端的真差：成员按「新增 n / 移除 n / 重排」、owner 按「A → B」各说一句；不再有「折出来的」那行
+    if (diff.members) {
+      await expect(detail).toContainText('成员 ');
+      for (const piece of expectedMemberPieces(diff.members)) await expect(detail).toContainText(piece);
+    }
+    if (diff.owner) await expect(detail).toContainText(`owner ${diff.owner[0]} → ${diff.owner[1]}`);
+    await expect(detail).not.toContainText('服务端还没有 element/attribute-diff');
+    await expect(detail).not.toContainText('成员表动过（增删或重排）');
+    const visibleChanges = diff.changes.filter((change) => !change.stamp);
+    if (visibleChanges.length) await expect(detail).toContainText(visibleChanges[0]!.name);
+    await evidence(page, `attrdiff-${underscore(refno)}`, { refno, a: ATTRDIFF_A, b: ATTRDIFF_B, diff, text: await detail.textContent() });
+    await page.getByTestId(`model-unit-compare-element-${underscore(refno)}`).click();
+    await expect(detail).toHaveCount(0);
+  }
+
+  // 请求真的走了服务端那条路由，而且是每点开一行发一条（不再拉它的整条时间线来折）
+  expect(apiRequests.filter((r) => /element\/attribute-diff\?/.test(r.url)).length).toBeGreaterThanOrEqual(samples.length);
   expect(pageErrors, pageErrors.join('\n')).toEqual([]);
 });

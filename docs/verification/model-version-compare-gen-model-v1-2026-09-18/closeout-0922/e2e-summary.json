@@ -26,8 +26,26 @@
     { "when": "15:07", "mode": "PLAYWRIGHT_GPU=1", "result": "7 passed（28.9 s）", "splitOutline": { "compositor": true, "renderer": "ANGLE (AMD, AMD Radeon RX590 GME (0x00006FDF) Direct3D11 vs_5_0 ps_5_0, D3D11)" } },
     { "when": "15:10", "mode": "PLAYWRIGHT_SOFTWARE_GL=1", "result": "7 passed（29.0 s）", "splitOutline": { "compositor": false, "renderer": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)" } },
     { "when": "15:14", "mode": "Chrome 缺省 headless · 容器用例（两个勾选挪到选好 A / B 之后）", "result": "1 passed（6.9 s）", "annotations": { "timeline filters": "全表 299 · 只看自身变的 5 · 只看几何变的 297（A 630 / B 632）" } },
-    { "when": "15:19–15:20", "mode": "定稿后三档连跑：Chrome 缺省 / PLAYWRIGHT_GPU=1 / PLAYWRIGHT_SOFTWARE_GL=1", "result": "7 passed（25.1 s）/ 7 passed（25.5 s）/ 7 passed（31.1 s）", "splitOutline": "前两档 compositor true（RX590 D3D11），第三档 compositor false（SwiftShader）", "eslint": "e2e 两份 + playwright.config.ts → 0" }
+    { "when": "15:19–15:20", "mode": "定稿后三档连跑：Chrome 缺省 / PLAYWRIGHT_GPU=1 / PLAYWRIGHT_SOFTWARE_GL=1", "result": "7 passed（25.1 s）/ 7 passed（25.5 s）/ 7 passed（31.1 s）", "splitOutline": "前两档 compositor true（RX590 D3D11），第三档 compositor false（SwiftShader）", "eslint": "e2e 两份 + playwright.config.ts → 0" },
+    { "when": "15:38–15:43", "mode": "P2-c：:8022 换成 gen-model-refactor 工作树构建（0.1.30+g0b2bf527bc4e.dirty，pid 61404，含未提交的 attribute_diff.rs）· Chrome 缺省", "result": "第一遍 7 passed / 1 failed（叶子那条：这版服务端把 SPAMAP 标成戳、缺省不列，spec 原按 attribute-history 的 changes 名字全要看见）→ spec 改成按 stamp 分两组（戳勾「含戳」才列）→ 叶子 1 passed → 两份 spec 8 passed（31.6 s）", "annotations": { "attribute-diff source": "server（element/attribute-diff HTTP 200）", "attribute-diff samples": "24384/24776：成员 +1 -0（属性 1）；24384/24775：成员 +1 -0（属性 0）" } }
   ],
+  "p2c": {
+    "build": "gen-model-refactor 工作树（HEAD 0b2bf527b + untracked attribute_diff.rs / modified handlers.rs mod.rs attribute_history.rs unit_versions.rs web_service/mod.rs），cargo build --release --features http_api --bin aios-database，3 m 09 s（15:33–15:36），CARGO_TARGET_DIR=D:\\Rust\\target → _runs\\review-full-8031\\aios-database-attrdiff-wt-0b2bf527b.exe（213,993,984 B）",
+    "swap": "15:37:06 收 pid 17932（a382b2cf3，日志 → stdout.run4-a382b2cf3-0922-1455-to-1536.log），同 cwd / DbOption / env Win32_Process.Create 起 pid 61404（gm-8022-attrdiff-wt.pid）；health degraded(dbnum_consistency only) build_id 0.1.30+g0b2bf527bc4e.1790062375.dirty history available in_memory_db true",
+    "routes": {
+      "element/attribute-diff 24384/23262 626→630": "200 1414 ms 冷：modified · placement · changes POS(10887, 12332, 3400 → …2900) + SPAMAP(stamp true)",
+      "element/attribute-diff 24384/23257 573→628": "200 69 ms：modified · noop · changes CACHID(stamp) · 无 members（计划写的「成员重排」不成立，attribute-history 同段也只有 626 CACHID 一条）",
+      "element/attribute-diff 24384/24776 573→628": "200 67 ms：modified · mesh · changes CACHID(stamp) · members.added [24384/26495]（时间线 608 +26484 / 618 −26484 / 628 +26495，净差 +26495）",
+      "element/attribute-diff 24384/24775 573→628": "200：ZONE 孤儿 · changes [] · members.added [24384/26482] · warnings owner 链上没有最小交付单元",
+      "node/versions / model/versions": "200 照旧"
+    },
+    "finding": "这版服务端 attribute-history / attribute-diff 都把 SPAMAP 标成 stamp（a382b2cf3 上 stamp false）——面板缺省不列戳，所以叶子 626→630 从「2 项变化」变成「1 项变化」；不是前端问题，是后端 WIP 改了戳的口径",
+    "files": {
+      "leaf-self-attr-compare.png/.json": "叶子净差表 data-source=server、只列 POS、SPAMAP 进 stampNames",
+      "attrdiff-24384_24776.png/.json": "EQUI 点开：CACHID 戳 16→21 + 成员 新增 1（24384_26495）",
+      "attrdiff-24384_24775.png/.json": "ZONE 点开：属性一字没差，只有成员表 / owner 动了 + 成员 新增 1（24384_26482）"
+    }
+  },
   "annotations": {
     "history/generate（第三条）": "8 份（5 组，4 侧不存在）；DELETE 8 = 生成数",
     "pageerror": "三档都是 0"
@@ -40,7 +58,7 @@
   },
   "notReached": {
     "P2-b 阈值确认框": "ams8000 任何一段都凑不出 > 20 组（SITE 5 → 632 只有 8 组几何变过，needs_confirm 一直 false）；只在单测里",
-    "P2-c 成员 / owner 真差": "后端 gen-model-refactor src/fast_model/attribute_diff.rs 仍 untracked；这版 :8022 没有 element/attribute-diff（容器「仅自身」缺省 524 → 532 那条 404 照旧是预期的探路）",
+    "P2-c 成员 / owner 真差": "15:3x 起已验（见 p2c）；后端那半仍未提交，:8022 跑的是工作树 .dirty 快照",
     "设计稿 S4 注 5 / 注 6": "Pencil 里现在没打开任何 .pen"
   },
   "files": {

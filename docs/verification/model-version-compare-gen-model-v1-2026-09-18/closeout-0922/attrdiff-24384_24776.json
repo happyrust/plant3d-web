@@ -1,0 +1,42 @@
+{
+  "refno": "24384/24776",
+  "a": 573,
+  "b": 628,
+  "diff": {
+    "dbnum": 8000,
+    "refno": "24384/24776",
+    "noun": "EQUI",
+    "unit_root": "24384/24776",
+    "unit_noun": "EQUI",
+    "file_latest_sesno": 640,
+    "a": 573,
+    "b": 628,
+    "kind": "modified",
+    "impact": "mesh",
+    "changed_count": 2,
+    "changes": [
+      {
+        "name": "CACHID",
+        "value_type": "word",
+        "before": "16",
+        "after": "21",
+        "stamp": true
+      }
+    ],
+    "members": {
+      "added": [
+        "24384/26495"
+      ],
+      "removed": [],
+      "reordered": false
+    },
+    "elapsed_ms": 22,
+    "stats": {
+      "sets_built": 2,
+      "set_build_ms": 0,
+      "render_ms": 0,
+      "impact_ms": 0
+    }
+  },
+  "text": "CACHID戳1621成员 新增 1（24384_26495）"
+}
