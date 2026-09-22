@@ -37,21 +37,22 @@ function cancel() {
 
 <style scoped>
 /*
- * 顶部居中挂在查看器容器（.viewer-panel-container，position: relative; overflow: hidden）里：
- * left/right 各留 12px、width: fit-content + margin auto 居中，所以卡永远在容器里；宽度随 statusText
- * 长到 480px 就换行。以前没有 max-width，一句 70 字的提示把卡撑到 750px，再叠上宿主用内联
- * left: 12px 覆盖了 left 却没覆盖 translateX(-50%)，左半张卡整个画在容器外面被裁掉。
- * 位置只在这里定，宿主不要再用内联样式改 left / transform。
+ * 挂在查看器容器（.viewer-panel-container，position: relative; overflow: hidden）左上角、左侧竖排工具栏右边：
+ * left 64px = 工具栏 left 12px + 宽 48px + 4px 间隙（矮容器里工具栏顶到 y≈14，放 12px 会压住它顶上的按钮），
+ * right 12px 兜底、width: fit-content，所以卡永远在容器里、也不碰左侧工具栏。
+ * max-width 360px：右上角的空间查询 / 构件最近点抽屉在 right 56–60px、宽 336–340px，360 宽的卡从 64 起到 424，
+ * 常规视口（查看器 ≳820px 宽）刚好落在工具栏与抽屉之间；statusText 长就在这 360 里折两三行。
+ * 以前没有 max-width，一句 70 字的提示把卡撑到 750px，再叠上宿主用内联 left: 12px 覆盖了 left 却没覆盖
+ * translateX(-50%)，左半张卡整个画在容器外面被裁掉。位置只在这里定，宿主不要再用内联样式改 left / transform。
  */
 .measurement-wizard-card {
   position: absolute;
   top: 12px;
-  left: 12px;
+  left: 64px;
   right: 12px;
   width: fit-content;
-  min-width: min(300px, 100%);
-  max-width: 480px; /* 再宽会压到右上角的导航立方 */
-  margin: 0 auto;
+  min-width: min(300px, calc(100% - 76px)); /* 76 = left 64 + right 12，超窄容器里也不越右边界 */
+  max-width: 360px;
   z-index: 940;
   box-sizing: border-box;
   

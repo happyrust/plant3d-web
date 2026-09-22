@@ -69,24 +69,37 @@ URL 直开：`spatial_refno=24381_145018&spatial_radius=3&spatial_radius_unit=m&
 
 顺手看到：`MeasurementWizard` 的向导卡在 825 px 宽的容器里左边被裁一截 → issue #82，见 §2.5。
 
-### 2.5 `MeasurementWizard` 向导卡左半张被裁（issue [#82](https://github.com/happyrust/plant3d-web/issues/82)）
+### 2.5 `MeasurementWizard` 向导卡左半张被裁 + 与抽屉相撞（issue [#82](https://github.com/happyrust/plant3d-web/issues/82)）
 
-不是容器窄的问题，任何宽度都裁：组件 scoped CSS 是 `left: 50%; transform: translateX(-50%)`（居中），宿主 `ViewerPanel` 用内联 `style="left: 12px"` 把它改到左上角，却没覆盖 `transform`，于是卡向左平移了自身一半；又没有 `max-width`，「管-管」那句 70 字的 statusText 把卡撑到 650–750 px，左半张画在容器外面被 `overflow: hidden` 裁掉，同时压住左侧工具栏顶上的按钮。
+**裁切**不是容器窄的问题，任何宽度都裁：组件 scoped CSS 是 `left: 50%; transform: translateX(-50%)`（居中），宿主 `ViewerPanel` 用内联 `style="left: 12px"` 把它改到左上角，却没覆盖 `transform`，于是卡向左平移了自身一半；又没有 `max-width`，「管-管」那句 70 字的 statusText 把卡撑到 650–750 px，左半张画在容器外面被 `overflow: hidden` 裁掉，同时压住左侧工具栏顶上的按钮。
 
-改法：位置只在组件里定——`top: 12px; left: 12px; right: 12px; width: fit-content; margin: 0 auto`（顶部居中，永远在容器里），`min-width: min(300px, 100%)`、`max-width: 480px`（再宽压到右上角导航立方）、正文 `overflow-wrap: anywhere`，`z-index: 940` 与其他浮层同层；宿主删掉内联 position / top / left / z-index。
+**相撞**：本轮 cua 真机验收时发现，先按上面「顶部居中」修，卡在 825 px 宽的查看器里居中到 172→652，而空间查询抽屉在 433→769——两者重叠 219 px，卡右侧的按钮压在抽屉上点不到。所以最终不放顶部居中，改成贴左侧工具栏右边。
 
-Playwright headless（dev `:3111` + `:8027`，工具栏「测量」→「管-管」，改前用内联样式回灌 `left: 12px + translateX(-50%)`、无 max-width，同页同容器）：
+改法（位置只在组件里定，宿主删掉内联 `style`）：`top: 12px; left: 64px`（= 工具栏 left 12 + 宽 48 + 4 间隙，不压工具栏）`; right: 12px; width: fit-content`（永远在容器里）`; min-width: min(300px, calc(100% - 76px))`（超窄容器不越右边界）`; max-width: 360px`（360 宽从 64 起到 424，常规视口 ≳820 px 刚好落在工具栏与右上抽屉之间）`;` 正文 `overflow-wrap: anywhere; z-index: 940`。
 
-| 视口 → 容器 | 改前 卡 left→right（宽） | 左边被裁 | 改后 卡 left→right（宽） | 居中偏差 | 文字行数 |
-| --- | --- | --- | --- | --- | --- |
-| 1366×768 → 350→1016（666） | 35→689（654） | **315 px** | 443→923（480） | 0 | 2 |
-| 1024×700 → 350→674（324） | 206→518（312） | **144 px** | 362→662（300） | 0 | 3 |
+Playwright headless（dev `:3111` + `:8027`，工具栏「测量」→「管-管」，无抽屉，改前用内联样式回灌 `left: 12px + translateX(-50%)`、无 max-width，同页同容器）：
 
-`pageerror` 0；「取消测量」两种状态都可命中（它在卡的右侧，裁的是左半张的标题与正文开头）。图：`wizard-01-before-1366x768.png` / `wizard-02-after-1366x768.png`、`wizard-01-before-1024x700.png` / `wizard-02-after-1024x700.png`。cua 那张 `cua-menu-02-after-pipe-to-pipe-click.png` 左上角就是改前的样子（825 px 容器）。
+| 视口 → 容器 | 改前 卡 left→right（宽） | 左边被裁 | 改后 卡 left→right（宽，容器内） | 文字行数 |
+| --- | --- | --- | --- | --- |
+| 1366×768 → 350→1016（666） | 35→689（654） | **315 px** | 414→774（360，✓） | 3 |
+| 1024×700 → 350→674（324） | 206→518（312） | **144 px** | 414→662（248，✓，随窄容器缩） | 4 |
+
+cua 真机（容器 825，空间查询抽屉同时开）：卡 64→424（360 宽）居中在工具栏右 57 与抽屉左 433 之间，`overlapsToolbar=false`、`overlapsDrawer=false`、「取消测量」`elementFromPoint` 命中。`pageerror` 0。图：`wizard-01-before-*.png`（改前左裁）/ `wizard-02-after-*.png`（改后无抽屉）/ `wizard-03-beside-open-drawer.png`（改后 + 抽屉并存，卡完整夹在中间）。
+
+## 2.6 三个修复共处一屏的回归（cua 真机，2026-09-22 二次拉起）
+
+同一台 Chromium、同一 1692×826 CSS 视口 / 825 px 查看器容器，一次连跑把 #80 / #81 / #82 串起来验证互不打架：
+
+1. URL 直开空间查询抽屉（`spatial_autorun`）→ 抽屉 `max-h-[calc(100%-7.5rem)]`、结果可滚到底（#80）。
+2. 点「测量」→ 菜单 `bottom-0` 向上翻、7 项全在容器内（#81 回归，图 `cua-menu-03-regression-flip-up.png`）。
+3. 点「管-管」→ 向导卡在**抽屉仍开**时落在工具栏与抽屉之间、不裁不撞、「取消测量」可点（#82，图 `wizard-03-beside-open-drawer.png`）。
+4. 点「构件最近点」→ `ObjectMeasureDrawer` `max-h-[calc(100%-9rem)]`、底边 475 < 容器底 499、正文可滚（#80，CDP 读数）。
+
+`pageerror` 0。（`ObjectMeasureDrawer` 的「结束测量」在 §2.1 的专项里已真点验证过；本回归里 cua 的滚轮事件没能落到该抽屉正文——是 cua `scroll` 在此窗口的坐标落点问题，非产品问题，故该抽屉滚到底的真点未在本回归复跑。）
 
 ## 3. 单测 / lint
 
-`npx vitest run src/components/spatial-query/SpatialQueryDrawer.test.ts src/composables/useDtxTools.objectMeasure.test.ts` → 2 文件 43 过；`npx eslint` 两个 `.vue` 0 问题；tailwindcss CLI 探针确认产出 `max-height: calc(100% - 7.5rem)` / `calc(100% - 9rem)`。
+`npx vitest run src/components/spatial-query/SpatialQueryDrawer.test.ts src/composables/useDtxTools.objectMeasure.test.ts src/utils/dropdownPlacement.test.ts` → 3 文件 49 过；`npx eslint` 触及的 `.vue` / `.ts` 0 问题（`ViewerPanel.vue` 只剩第 28 行既有那条 import 分组）；tailwindcss CLI 探针确认产出 `max-height: calc(100% - 7.5rem)` / `calc(100% - 9rem)`。
 
 ## 备注
 
