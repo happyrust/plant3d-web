@@ -21,6 +21,7 @@ import {
   reviewCommentDelete,
   reviewCommentUpdate,
 } from '@/api/reviewApi';
+import { invalidateAnnotationReviewStatesCache } from '@/composables/useAnnotationReviewStateSync';
 import { useCommentThread } from '@/composables/useCommentThread';
 import { useReviewStore } from '@/composables/useReviewStore';
 import { useToolStore } from '@/composables/useToolStore';
@@ -601,6 +602,8 @@ async function applyReviewAction(action: AnnotationReviewAction) {
         emitToast({ message: resp.errorMessage || '更新批注处理状态失败', level: 'error' });
         return;
       }
+      // 服务端状态刚变：作废 syncAnnotationReviewStates 短窗里这张单据的旧回包，免得面板紧接着 sync 把旧状态写回来
+      invalidateAnnotationReviewStatesCache(formId);
       persistedState = await resolvePersistedReviewState({
         formId,
         taskId,

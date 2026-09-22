@@ -4,6 +4,11 @@
 
 ### 变更
 
+- **批注处理状态拉取（`syncAnnotationReviewStates`）同参在飞合并 + 1.2 s 短窗复用：校审面板一进页对同一单据不再连发 10 次 `GET /api/review/annotation-states`** (2026-09-22)
+  - 真机：JH 打开嵌入页，`ReviewPanel` 几个 watch（聚焦单据 / 当前任务 / 已确认记录恢复完）各自触发，1.3 s 内对同一 `form_id` 发了 10 次同参 GET（+845 / +1236 / +1238 / +1277 / +1759 / +1771 / +1789 / +1944 / +1954 / +2122 ms），回包一模一样。现在 `useAnnotationReviewStateSync.ts` 按 `form_id|task_id` 记一张表：同 key 还在飞就共用那份 promise；成功回包后 `ANNOTATION_REVIEW_STATES_FRESH_WINDOW_MS`（1200 ms）内同参再调直接复用；失败（抛错 / `success=false`）不进窗、下一次照常重发；`force: true` 绕开。只合并「取回包」，写 store 仍由每个调用方按自己的 U0 `shouldApply` 各自决定。
+  - 新导出 `invalidateAnnotationReviewStatesCache(formId?)`：`ReviewCommentsTimeline` 提交处理动作（`annotation-states/apply`）成功后调一次，作废该单据的窗，免得面板紧接着 sync 把旧回包写回去、盖掉刚提交的状态。
+  - 验证：vitest `useAnnotationReviewStateSync.test.ts` 5 过（新增 3：并发只发一次且各按守卫写 / 窗内复用、换 taskId 与 force 重发、窗外重发 / 失败不进窗与 invalidate 重发）；`src/components/review` 45 文件 469 过；eslint 三文件 0；type-check 新增 0。真机（本地 build 拦截换包，9446）：JH 侧 10 → **2** 次（+1053 / +2761 ms，第二次在窗外是后续 watch 正常再拉），SJ 侧 1 次，两侧行状态「已同意」与统计条「共 2 · 待处理 0 · 已处理 0 · 已通过 2」不变。
+
 - **批注表格统计条改三颗药丸（待处理 / 已处理 / 已通过，相加 = 共 N）；设计侧「批注处理」面板打开时也拉一次批注处理状态，不再把已同意的批注全显示成「待处理」** (2026-09-22，09-21 真手画 TC-3 暴露的 §5.1 第 4 条 + 09-22 复验时发现的 4b)
   - 统计条原来只统 `pending` / `fixed`，已同意 / 已驳回 / 不需解决 哪都不进，终态两条都「已同意」时显示「待处理 0 · 已处理 0」。现在 `AnnotationTableView` 复用 `buildAnnotationWorkspaceSummary`（设计面板五张卡同一份计数），口径同 `isAnnotationActionableForRole`：待处理 = pending + rejected（要设计动手）、已处理 = fixed + wont_fix（设计已处理、等校核定）、已通过 = approved；三颗药丸各带 `data-testid="annotation-table-summary-{pending,handled,approved}"`。
   - `DesignerCommentHandlingPanel` 之前从不请求 `annotation-states`（只有 `ReviewPanel` 调 `syncAnnotationReviewStates`，点开某条详情时 `ReviewCommentsTimeline` 才单条拉），设计侧整页看到的都是本地默认的「待处理」、「已修改 / 不需解决」按钮照样可点。现在聚焦单据 / 当前任务一变就拉一次：外部 PMS 嵌入按 form 维度（SJ / JH 内部 taskId 可能不同），内部任务且单据一致时带 taskId；带 U0 回执守卫，请求期间切了任务不写。
