@@ -1674,84 +1674,6 @@ export function genModelV1SpatialRooms(options?: GenModelV1RequestOptions): Prom
   return genModelV1Fetch<SpatialRoomsResponse>('/api/v1/spatial/rooms', options);
 }
 
-// ---------------------------------------------------------------------------
-// BRAN 中心线最近净距（spec §4.13；plan `docs/plans/2026-09-16-bran-centerline-nearest-clearance-v1-dev-plan.md` §3.2）
-// ---------------------------------------------------------------------------
-
-/** `bran_centerline`（缺省）：沿 BRAN 真实中心线（含隐式管身）量距；`aabb`：按源整盒量距，源不必是 BRAN。 */
-export type SpatialClearanceSourceMode = 'bran_centerline' | 'aabb';
-/** `target_groups`（缺省）：每个预置组一桶；`noun`：半径内每个 NOUN 自成一桶。 */
-export type SpatialClearanceGroupBy = 'target_groups' | 'noun';
-/** `all_loaded`（缺省）：不限库；`same_dbnum`：只看与源同库的候选。给了 `dbnums` 就按显式库号，这一格忽略。 */
-export type SpatialClearanceScope = 'all_loaded' | 'same_dbnum';
-
-export type GenModelV1SpatialNearestClearanceRequest = {
-  /** 源构件，`a_b` / `a/b`。中心线模式必须是 BRAN（不是 → 422 `precondition`；库里没有 → 404）；`aabb` 模式任意有盒的构件 */
-  sourceRefno: string;
-  sourceMode?: SpatialClearanceSourceMode;
-  /** 预置组：`wall` = WALL/PANE/GWALL/STWALL，`column` = COLU/SCTN/GENSEC；服务端收逗号分隔 */
-  targetGroups?: string[];
-  /** 直接点名的 NOUN 白名单，与 `targetGroups` 可并用。`target_groups` 分桶下两者都不给 → 400（与 legacy 同，默认值由调用方补） */
-  targetNouns?: string[];
-  groupBy?: SpatialClearanceGroupBy;
-  /** 目标过滤之后再剔掉的噪声类型（`WELD,ATTA`），两种分桶方式都生效 */
-  excludeNouns?: string[];
-  /** mm；缺省 5000，上限同 `/nearby` */
-  radius?: number;
-  scope?: SpatialClearanceScope;
-  dbnums?: number[];
-  /** 每桶最多几条；缺省 1，服务端钳到 1..100 */
-  maxPerGroup?: number;
-  /** 缺省 **false**（与 `/nearby` 相反：净距场景没人要自己），自身 = 投影子树 ∪ BRAN 成员 */
-  includeSelf?: boolean;
-  /** 距离从管外表面起算（扣 `outside_diameter/2`，不小于 0）；只在中心线模式下有意义，`aabb` 下服务端忽略并出 warning。v1 独有 */
-  surface?: boolean;
-  debug?: boolean;
-};
-
-export type SpatialClearanceVector = { dx: number; dy: number; dz: number };
-/** 净距接口的盒是 `{x,y,z}` 对象（与 `/nearby` 的三元组不同），尺寸系统直接吃。 */
-export type SpatialClearanceAabb = { min: SpatialPosition; max: SpatialPosition };
-
-export type SpatialClearanceNearest = {
-  /** 中心线模式是命中的那一段（隐式管身为 `a_b~c_d`）；`aabb` 模式是源自己 */
-  source_segment_refno: string;
-  /** 段在成员序里的位置；`aabb` 模式为 null */
-  source_segment_order: number | null;
-  source_point: SpatialPosition;
-  target_point: SpatialPosition;
-  vector: SpatialClearanceVector;
-};
-
-/** 可以直接画的那条尺寸：两个端点 + 标注值（mm）。 */
-export type SpatialClearanceAnnotation = {
-  start_point: SpatialPosition;
-  end_point: SpatialPosition;
-  label_mm: number;
-};
-
-export type SpatialClearanceCandidate = {
-  /** `a_b` */
-  refno: string;
-  noun: string;
-  /** 答不出为 null */
-  dbnum: number | null;
-  distance_mm: number;
-  /** 源与目标盒相交（距离 0） */
-  intersects: boolean;
-  aabb: SpatialClearanceAabb;
-  nearest: SpatialClearanceNearest;
-  annotation: SpatialClearanceAnnotation;
-};
-
-export type SpatialClearanceGroup = {
-  /** `target_groups` 分桶是组名（`wall` / `column`），`noun` 分桶是 NOUN 名 */
-  group: string;
-  nouns: string[];
-  /** 距离升序，已按 `max_per_group` 截断；`target_groups` 分桶下空桶保留（并出 warning） */
-  candidates: SpatialClearanceCandidate[];
-};
-
 // ---- 房间层级树（spec §4.13.5 / §4.13.6；ADR 0068）----
 
 /** 树里的一个构件（叶子）；`shared_rooms` 只在它属于 ≥ 2 间所选房间时出现。 */
@@ -1926,6 +1848,84 @@ export function genModelV1SpatialRoomTree(
     },
   });
 }
+
+// ---------------------------------------------------------------------------
+// BRAN 中心线最近净距（spec §4.13；plan `docs/plans/2026-09-16-bran-centerline-nearest-clearance-v1-dev-plan.md` §3.2）
+// ---------------------------------------------------------------------------
+
+/** `bran_centerline`（缺省）：沿 BRAN 真实中心线（含隐式管身）量距；`aabb`：按源整盒量距，源不必是 BRAN。 */
+export type SpatialClearanceSourceMode = 'bran_centerline' | 'aabb';
+/** `target_groups`（缺省）：每个预置组一桶；`noun`：半径内每个 NOUN 自成一桶。 */
+export type SpatialClearanceGroupBy = 'target_groups' | 'noun';
+/** `all_loaded`（缺省）：不限库；`same_dbnum`：只看与源同库的候选。给了 `dbnums` 就按显式库号，这一格忽略。 */
+export type SpatialClearanceScope = 'all_loaded' | 'same_dbnum';
+
+export type GenModelV1SpatialNearestClearanceRequest = {
+  /** 源构件，`a_b` / `a/b`。中心线模式必须是 BRAN（不是 → 422 `precondition`；库里没有 → 404）；`aabb` 模式任意有盒的构件 */
+  sourceRefno: string;
+  sourceMode?: SpatialClearanceSourceMode;
+  /** 预置组：`wall` = WALL/PANE/GWALL/STWALL，`column` = COLU/SCTN/GENSEC；服务端收逗号分隔 */
+  targetGroups?: string[];
+  /** 直接点名的 NOUN 白名单，与 `targetGroups` 可并用。`target_groups` 分桶下两者都不给 → 400（与 legacy 同，默认值由调用方补） */
+  targetNouns?: string[];
+  groupBy?: SpatialClearanceGroupBy;
+  /** 目标过滤之后再剔掉的噪声类型（`WELD,ATTA`），两种分桶方式都生效 */
+  excludeNouns?: string[];
+  /** mm；缺省 5000，上限同 `/nearby` */
+  radius?: number;
+  scope?: SpatialClearanceScope;
+  dbnums?: number[];
+  /** 每桶最多几条；缺省 1，服务端钳到 1..100 */
+  maxPerGroup?: number;
+  /** 缺省 **false**（与 `/nearby` 相反：净距场景没人要自己），自身 = 投影子树 ∪ BRAN 成员 */
+  includeSelf?: boolean;
+  /** 距离从管外表面起算（扣 `outside_diameter/2`，不小于 0）；只在中心线模式下有意义，`aabb` 下服务端忽略并出 warning。v1 独有 */
+  surface?: boolean;
+  debug?: boolean;
+};
+
+export type SpatialClearanceVector = { dx: number; dy: number; dz: number };
+/** 净距接口的盒是 `{x,y,z}` 对象（与 `/nearby` 的三元组不同），尺寸系统直接吃。 */
+export type SpatialClearanceAabb = { min: SpatialPosition; max: SpatialPosition };
+
+export type SpatialClearanceNearest = {
+  /** 中心线模式是命中的那一段（隐式管身为 `a_b~c_d`）；`aabb` 模式是源自己 */
+  source_segment_refno: string;
+  /** 段在成员序里的位置；`aabb` 模式为 null */
+  source_segment_order: number | null;
+  source_point: SpatialPosition;
+  target_point: SpatialPosition;
+  vector: SpatialClearanceVector;
+};
+
+/** 可以直接画的那条尺寸：两个端点 + 标注值（mm）。 */
+export type SpatialClearanceAnnotation = {
+  start_point: SpatialPosition;
+  end_point: SpatialPosition;
+  label_mm: number;
+};
+
+export type SpatialClearanceCandidate = {
+  /** `a_b` */
+  refno: string;
+  noun: string;
+  /** 答不出为 null */
+  dbnum: number | null;
+  distance_mm: number;
+  /** 源与目标盒相交（距离 0） */
+  intersects: boolean;
+  aabb: SpatialClearanceAabb;
+  nearest: SpatialClearanceNearest;
+  annotation: SpatialClearanceAnnotation;
+};
+
+export type SpatialClearanceGroup = {
+  /** `target_groups` 分桶是组名（`wall` / `column`），`noun` 分桶是 NOUN 名 */
+  group: string;
+  nouns: string[];
+  /** 距离升序，已按 `max_per_group` 截断；`target_groups` 分桶下空桶保留（并出 warning） */
+  candidates: SpatialClearanceCandidate[];
+};
 
 export type SpatialClearanceSource = {
   kind: SpatialClearanceSourceMode | (string & {});

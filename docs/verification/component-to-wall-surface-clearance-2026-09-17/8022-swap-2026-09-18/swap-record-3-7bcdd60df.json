@@ -1,0 +1,39 @@
+{
+  "swappedAt": "2026-09-18T11:54:12+08:00",
+  "reason": "gen-model-model-cache 7bcdd60df：把 :8022 带上 09-18 的四条 surface-clearance 口径——eabd16d5c 洞壁 opening、0dce7fee2 落空换面读 end / top、83beef257 贴合不打射线（contact）、7bcdd60df 棱上连线当垂距（edge）+ perpendicular_ray_missed 删除 + perpendicular.method。用户 11:4x 拍板「把 :8022 换到 7bcdd60df，非提权同 cwd 重起，停机约 10 s，换完跑金样 + 完整流复验」",
+  "old": {
+    "pid": 45700,
+    "exe": "_runs\\review-full-8031\\aios-database-994f2e0cc.exe",
+    "build_id": "0.1.27+g994f2e0cc00a.1789693424",
+    "started": "2026-09-18T09:12:38+08:00",
+    "elevated": false,
+    "resident_records_before_stop": 0
+  },
+  "new": {
+    "pid": 57636,
+    "exe": "_runs\\review-full-8031\\aios-database-7bcdd60df.exe",
+    "sha256_prefix": "71E635277019E6EC",
+    "same_binary_as": "_runs\\surface-clearance-8024\\aios-database-7bcdd60d.exe（:8024 11:28 四换用的那一份，直接复制；D:\\Rust\\target\\release 里的 exe 11:40 已被别的构建覆盖，没再从那儿取）",
+    "build_id": "0.1.27+g7bcdd60df238.1789700589",
+    "git_commit": "7bcdd60df238",
+    "git_dirty": false,
+    "built_from": "git worktree add --detach .scratch\\wt-7bcdd60df-edge 7bcdd60df; cargo build --release --features http_api --bin aios-database（2 m 45 s，11:03–11:05）",
+    "launch": "同 08:27 / 09:12 那两次：cwd 仓库根 gen-model-model-cache、仓库根 DbOption.toml（rocksdb @ 8009，watch_dbnums 7998 / 8000）、serve、非提权（本会话直接 Start-Process；ExecutablePath / CIM 对非提权调用方可读），env RUST_MIN_STACK=134217728 AIOS_OPEN_BROWSER=0 AIOS_RESTART_HANDOFF=1 RUST_BACKTRACE=1；日志 logs\\gm-8022-7bcdd60df.log(.err)，pid 写 gm-8022-7bcdd60df.pid",
+    "timeline": "11:54:11.3 Stop-Process 45700（264 ms 退出，8022 无监听）→ 11:54:12.7 起 57636 → 11:54:19.4 /health core=ready",
+    "writer_lock": "%LOCALAPPDATA%\\gen-model\\writer-locks\\AvevaMarineSample-bb23a92e….writer.lock 11:54:12 由新进程重新持有"
+  },
+  "downtime_seconds": 8.1,
+  "checks_after": {
+    "golden_no_ensure": "24384/22582 × 17496/105912 debug=1 → 200：64.42777 mm, intersects=false, outer/geometric, 法向 (−0.9993213, 0.036837157, 0), ⊥ 64.49526 method=ray, sp (−17464.125, 102.35253, 2550.0002) → tp (−17399.707, 101.22853, 2550.0002), sesno 619/729, timing 1/0/4 ms, pairs 2/1/1, warnings [] —— 与 08:27 §7.2 逐位一致（http-surface-clearance-elbo-x-wall1-7bcdd60df.json）",
+    "four_rules_alive_no_ensure": [
+      "3509b93f9 共叶剔除：FIXING 17496/137183 × 自己的 WALL 17496/105912 → 0 mm, intersects=false, opening/geometric, ⊥ 0 contact, leaves 1/1, warning source_within_target ——live 第一对读到 opening（门窗 FIXING 坐在本墙的洞里、与洞壁贴合）",
+      "83beef257 贴合：SCTN 24383/68484 × PANE 24383/68491 → 0 mm, side/pca, ⊥ 0 contact, 无 warning",
+      "7bcdd60df 棱上连线：FTUB 24384/24671 × PANE 17496/135244 → 46.603077 mm, side/pca, ⊥ 46.603077 edge, 无 warning（与 :8024 逐位相同）；FTUB 24384/22533 × WALL 17496/105935 → 1.2637867 mm, outer/geometric, ⊥ 1.2637867 edge",
+      "0dce7fee2 换面读 end：FTUB 24384/24458 × GWALL 17496/118130 → 82.74456 mm, end/pca, 无 ⊥, 无 warning（target 17 叶）"
+    ],
+    "ui_full_flow_golden": "dev :3111 ?model_source=gen-model-v1&gm_backend_port=8022&show_refno=24384_22582：4 对象 → showModelByRefnos 17496_105912 ok（117 对象）→ 测量 › 构件→墙净距 → pick_refno 过滤 CWALL/WALL/STWALL/GWALL/PANE → 墙侧最近点抬高 0.55 m 投影 (709.8, 281.4) 一次点中 → Enter → 只发一条 …surface-clearance?…&target_kind=wall → 200 → toast「外表面净距 64.4 mm（墙面外侧），垂直于墙面」→ externalRegistry clearance 记录 1 条：authoritativeText 64mm ⊥, a (−17.464125, 0.10235253, 2.5500002) / b (−17.399707, 0.10122853, 2.5500002) m → toolMode none；pageerror 0；控制台 7 条 error 全是页面加载期 projects 404 / 401（ui-7bcdd60df-full-flow-summary.json，ui-7bcdd60df-01…05.png）",
+    "ui_full_flow_edge_pair": "同流程 show_refno=24384_24671（FTUB）× PANE 17496_135244：7 → 38 对象，板侧最近点抬高 0.1 m 投影 (791.8, 380.3) 一次点中 → 一条请求 200：46.603077 mm side ⊥ 46.603077 edge → toast「外表面净距 46.6 mm（墙面），近似垂直于墙面（最近点在墙的棱上，取连线为垂距）」（前端 a34e126c 新话）→ 记录 authoritativeText 47mm ⊥, a (−10.385053, 11.770906, 1) / b (−10.424999, 11.746903, 0.99999994) m；pageerror 0（ui-7bcdd60df-edge-ftub-x-pane-full-flow-summary.json，…-04 / -05.png）",
+    "resident_records_after": 155
+  },
+  "untouched": [":8023", ":8024（7bcdd60df，pid 17572）"]
+}
