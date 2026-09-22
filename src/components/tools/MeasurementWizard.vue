@@ -36,12 +36,24 @@ function cancel() {
 </template>
 
 <style scoped>
+/*
+ * 顶部居中挂在查看器容器（.viewer-panel-container，position: relative; overflow: hidden）里：
+ * left/right 各留 12px、width: fit-content + margin auto 居中，所以卡永远在容器里；宽度随 statusText
+ * 长到 480px 就换行。以前没有 max-width，一句 70 字的提示把卡撑到 750px，再叠上宿主用内联
+ * left: 12px 覆盖了 left 却没覆盖 translateX(-50%)，左半张卡整个画在容器外面被裁掉。
+ * 位置只在这里定，宿主不要再用内联样式改 left / transform。
+ */
 .measurement-wizard-card {
   position: absolute;
-  top: 80px; /* Below Ribbon */
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 1000;
+  top: 12px;
+  left: 12px;
+  right: 12px;
+  width: fit-content;
+  min-width: min(300px, 100%);
+  max-width: 480px; /* 再宽会压到右上角的导航立方 */
+  margin: 0 auto;
+  z-index: 940;
+  box-sizing: border-box;
   
   display: flex;
   flex-direction: column;
@@ -52,7 +64,6 @@ function cancel() {
   border-radius: 8px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
   padding: 12px 16px;
-  min-width: 300px;
 }
 
 .wizard-header {
@@ -80,6 +91,7 @@ function cancel() {
   color: hsl(var(--muted-foreground));
   text-align: center;
   line-height: 1.4;
+  overflow-wrap: anywhere;
 }
 
 .wizard-footer {

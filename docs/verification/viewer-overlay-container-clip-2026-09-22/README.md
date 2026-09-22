@@ -67,7 +67,22 @@ URL 直开：`spatial_refno=24381_145018&spatial_radius=3&spatial_radius_unit=m&
 
 图：`cua-menu-01-after-flip-up.png`（菜单向上翻、7 项全在容器内）、`cua-menu-02-after-pipe-to-pipe-click.png`（真点「管-管」后向导与底部提示条出现）。单测 `src/utils/dropdownPlacement.test.ts` 6 例（向下 / 翻上 / 边界差 1 px / 两头放不下限高两侧 / margin 与负空间钳位 / 缺省值）。
 
-顺手看到但未改：`MeasurementWizard` 的向导卡在 825 px 宽的容器里左边被裁一截（横向的另一类问题，与本目录两条竖向裁切无关）。
+顺手看到：`MeasurementWizard` 的向导卡在 825 px 宽的容器里左边被裁一截 → issue #82，见 §2.5。
+
+### 2.5 `MeasurementWizard` 向导卡左半张被裁（issue [#82](https://github.com/happyrust/plant3d-web/issues/82)）
+
+不是容器窄的问题，任何宽度都裁：组件 scoped CSS 是 `left: 50%; transform: translateX(-50%)`（居中），宿主 `ViewerPanel` 用内联 `style="left: 12px"` 把它改到左上角，却没覆盖 `transform`，于是卡向左平移了自身一半；又没有 `max-width`，「管-管」那句 70 字的 statusText 把卡撑到 650–750 px，左半张画在容器外面被 `overflow: hidden` 裁掉，同时压住左侧工具栏顶上的按钮。
+
+改法：位置只在组件里定——`top: 12px; left: 12px; right: 12px; width: fit-content; margin: 0 auto`（顶部居中，永远在容器里），`min-width: min(300px, 100%)`、`max-width: 480px`（再宽压到右上角导航立方）、正文 `overflow-wrap: anywhere`，`z-index: 940` 与其他浮层同层；宿主删掉内联 position / top / left / z-index。
+
+Playwright headless（dev `:3111` + `:8027`，工具栏「测量」→「管-管」，改前用内联样式回灌 `left: 12px + translateX(-50%)`、无 max-width，同页同容器）：
+
+| 视口 → 容器 | 改前 卡 left→right（宽） | 左边被裁 | 改后 卡 left→right（宽） | 居中偏差 | 文字行数 |
+| --- | --- | --- | --- | --- | --- |
+| 1366×768 → 350→1016（666） | 35→689（654） | **315 px** | 443→923（480） | 0 | 2 |
+| 1024×700 → 350→674（324） | 206→518（312） | **144 px** | 362→662（300） | 0 | 3 |
+
+`pageerror` 0；「取消测量」两种状态都可命中（它在卡的右侧，裁的是左半张的标题与正文开头）。图：`wizard-01-before-1366x768.png` / `wizard-02-after-1366x768.png`、`wizard-01-before-1024x700.png` / `wizard-02-after-1024x700.png`。cua 那张 `cua-menu-02-after-pipe-to-pipe-click.png` 左上角就是改前的样子（825 px 容器）。
 
 ## 3. 单测 / lint
 

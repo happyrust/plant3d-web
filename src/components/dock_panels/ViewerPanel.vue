@@ -5332,7 +5332,6 @@ onUnmounted(() => {
             : '管-管 最近点测量'
       "
       :status-text="toolsRef.statusText.value"
-      style="position: absolute; top: 12px; left: 12px; z-index: 940"
       @pointerdown.stop
       @wheel.stop />
 
