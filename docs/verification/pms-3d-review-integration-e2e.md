@@ -1,7 +1,7 @@
 # PowerPMS ↔ 模型中心 ↔ plant3d-web：三维校审端到端测试案例
 
 > 2026-09-21 按真实 PowerPMS（`http://pms.powerpms.net:1801`）+ 公网模型中心（`http://123.57.182.243`）实跑重写。
-> 本文以 **两条真机跑通的测试案例** 为主线：TC-1 正向全通（SJ → JH → SH → PZ → approved）、TC-2 驳回回路（JH 批注驳回 → SJ 处理重提 → 第 2 轮同意 → approved）。
+> 本文以 **三条真机跑通的测试案例** 为主线：TC-1 正向全通（SJ → JH → SH → PZ → approved）、TC-2 驳回回路（JH 钩子批注 + 驳回 → SJ 处理重提 → 第 2 轮同意 → approved）、TC-3 真手画批注回路（JH 用文字 / 云线工具真手画 → 设计「不需解决」→ 校核「批注驳回」→ 第 3 轮同意 → approved）。
 > 每一步写清「在哪个界面点什么」「PMS 后端会调什么」「模型中心应变成什么」，并附当天的证据。旧版只覆盖到「新增打开三维页」，且假定校核人能在列表里直接找到设计人的草稿，与真实 PMS 不符，已整体替换。
 
 ## 0. 结论先行
@@ -10,8 +10,9 @@
 | --- | --- | --- | --- |
 | TC-1 正向全通 | `FORM-2EBB10854469`（task-4cd2d1a5…，包名 `E2E-PMS-JH-0921-1842`） | `form_status=approved / task_status=approved / current_node=pz` | `sj submit → jd approve → sh approve → pz approve`（4 条） |
 | TC-2 驳回回路 | `FORM-067232BF29AB`（task-581a0e26…，包名 `E2E-PMS-JH-0921-1835`） | 同上，另有 1 条批注 `round1 open/pending → round2 fixed/agreed` | `sj submit → jd return → sj approve(重提) → jd approve → sh approve → pz approve`（6 条） |
+| TC-3 真手画批注回路 | `FORM-CB658BB5921A`（task-565542bf…，包名 `E2E-PMS-CLOUD-0921-2035`） | 同上，`records=1 attachments=1`；文字批注 `r1 open → r2 fixed/agreed`，云线批注 `r1 open → r2 wont_fix→rejected → r3 fixed/agreed` | `sj submit → jd return → sj approve → jd return → sj approve → jd approve → sh approve → pz approve`（8 条） |
 
-两条链上 PMS 每次「提 交」都回 `/HD/SyncRevInfo {"message":"同步校审数据成功","success":true}`，模型中心 `workflow/sync?action=query` 与 `/api/review/tasks/{id}/workflow` 的节点、状态、history 与 PMS 审批历史逐条对得上。
+三条链上 PMS 每次「提 交」都回 `/HD/SyncRevInfo {"message":"同步校审数据成功","success":true}`，模型中心 `workflow/sync?action=query` 与 `/api/review/tasks/{id}/workflow` 的节点、状态、history 与 PMS 审批历史逐条对得上。
 
 ## 1. 环境与前提
 
@@ -89,17 +90,62 @@ $as | % { "$($_.annotationId) round=$($_.reviewRound) $($_.resolutionStatus)/$($
 # e2e-annot-1789991970507 round=2 fixed/agreed :: fixed@sj by SJ -> agree@jd by JH
 ```
 
-## 4. 今天暴露的口径问题（不阻塞，已记进对接清单待办）
+## 4. TC-3 真手画批注回路：JH 真手画文字 + 云线 → 驳回 → SJ「已修改」/「不需解决」→ JH 同意 / 批注驳回 → SJ 再改 → 第 3 轮同意 → approved
+
+TC-2 的批注是钩子造的。这条用**真实的文字 / 云线工具**在嵌入页里画，并把设计侧「**不需解决**」与校核侧「**批注驳回**」两条支路走完（2026-09-21 20:41–21:13 实跑）。
+前 4 步同 TC-1：`test:pms:cdp:full`（attach 到可见 Chrome）新建 `FORM-CB658BB5921A`（task-565542bf…，BRAN `24381_145018`，包名 `E2E-PMS-CLOUD-0921-2035`），再由 SJ 在 PMS 送审。
+
+**画批注用的浏览器**：JH 在可见 Chrome 打开待办后，取审批窗里嵌入 iframe 的地址（含 JH 的 `user_token`），在另一个 **headless Chrome（CDP 9446，SwiftShader 软渲染）** 里直接打开同一地址画图——WebGL 能渲染、截图稳定，且与同机 SJ 那边的本机草稿隔离（做法见 §6.3）。
+
+| # | 谁 | PMS / 嵌入页操作 | 后端调用 | 模型中心应变成 | 2026-09-21 证据 |
+| --- | --- | --- | --- | --- | --- |
+| 1 | SJ | 新增 → 发起（构件 `24381_145018`）→ 列表「编辑」→ **送审** → 三维编校审 → JH / SH / PZ → 下一步 → 提交 | `PreValidate` → `SyncRevInfo` → `active` | `submitted / jd`，history `sj submit` | 20:41:44 |
+| 2 | JH | 待办 → 审批窗 → 取嵌入地址 → headless 打开。**文字**：点「文字」→ 先滚轮放大到管子够粗 → 点管子表面（构件变紫红 / 模型树高亮 = 命中）→ 内联编辑器填标题、描述 | 无（本地草稿） | 批注表格「共 1 · 待处理 1」，模型上出现标记 A1 | 20:47:31 `anno-1789994851286-…`「文字批注：立管 24381_145018 与支架间距不足」 |
+| 3 | JH | **云线**：点「云线」→「使用当前选择」（BRAN 仍处选中）→ 点管子表面设锚点（提示「锚点已就绪，请拖拽绘制云线轮廓」）→ **先关掉盖在视口中央的「待保存证据」弹层** → 在画布上拖出矩形 | 自动截图 `POST /api/review/attachments` | 弹「刚创建云线的详情」：严重度选「一般错误」、填描述；批注表格「共 2 · 待处理 2」 | 20:52:46 `cloud-1789995166633-…`；附件 `att-828e1f45-…`（`type=annotation_screenshot`，描述「云线批注 1」） |
+| 4 | JH | **确认当前数据** | `POST /api/review/records`（`type=batch`，同一 slot 覆写） | `workflow/sync?query`：`records=1 attachments=1`，`records[0].annotations=1 cloud_annotations=1` | `confirmed_at 20:53:33`（文字那条在此之前已作为「修订 1」落库一次，见 §5.1 第 5 条） |
+| 5 | JH | PMS **驳回** → `WorkReturnSelect` 默认 → 意见 → 提交 | `SyncRevInfo` → `return` | `draft / sj`，history `jd return` | 20:54:49 |
+| 6 | SJ | 顶栏待审批事项（驳回）→ 嵌入页：文字批注 →「**已修改**」→ 提交处理结果；云线批注 →「**不需解决**」→ **必须填处理备注** → 提交处理结果 | `annotation-states/apply fixed` / `wont_fix` | 文字 `round2 fixed/pending`；云线 `round2 wont_fix/pending`；表格「共 2 · 待处理 0 · 已处理 1」（不需解决不计入已处理） | 20:56:13 `fixed`；21:01:03 `wont_fix` |
+| 7 | SJ | PMS **同意**（重提）→ 定义节点页人员已保留 → 下一步 → 提交 | `SyncRevInfo` → `active` | `submitted / jd`，history `sj approve` | 21:01:47 |
+| 8 | JH | 待办 → 嵌入页：文字（「已修改待确认」）→「**同意**」→ 提交确认结果；云线（「不需解决待确认」+ SJ 的备注）→「**驳回**」→ **必须填决定备注** → 提交确认结果 | `apply agree` / `apply reject` | 文字 `round2 fixed/agreed`；云线 `round2 open/rejected`，设计侧显示「已驳回 校对/审核要求重新处理」；表格「共 2 · 待处理 0 · 已处理 0」 | 21:03:56 `agree`；21:06:04 `reject` |
+| 9 | JH | PMS **驳回** → 提交 | `return` | `draft / sj`，history 第 2 条 `jd return` | 21:06:53 |
+| 10 | SJ | 待审批事项 → 云线批注 →「已修改」（填备注）→ 提交处理结果 → PMS 同意（重提） | `apply fixed`；`active` | 云线 `round3 fixed/pending`；`submitted / jd` | 21:08:27 `fixed`；21:08:54 重提 |
+| 11 | JH | 云线 →「同意」→ 提交确认结果 → PMS **同意** → 提交 | `apply agree`；`agree` | 云线 `round3 fixed/agreed`；`in_review / sh` | 21:10:20；21:10:47 |
+| 12 | SH → PZ | 顶栏待审批事项 → 同意 → 提交，各一次 | `agree` ×2 | `approved / approved / pz`；history 共 8 条；PMS 列表状态列「批准」 | 21:12:11、21:13:40 |
+
+### 4.1 断言（2026-09-22 上午复查仍一致）
+
+```text
+form_status=approved  task_status=approved  current_node=pz  records=1  attachments=1
+history: sj submit → jd return → sj approve → jd return → sj approve → jd approve → sh approve → pz approve
+annotation-states?form_id=FORM-CB658BB5921A:
+  text  anno-1789994851286-…  round=1 open/pending → round=2 fixed/agreed   (fixed@sj by SJ → agree@jd by JH)
+  cloud cloud-1789995166633-… round=1 open/pending → round=2 open/rejected  (wont_fix@sj by SJ → reject@jd by JH)
+                                                   → round=3 fixed/agreed   (fixed@sj by SJ → agree@jd by JH)
+```
+
+- 校核对处理结果「驳回」后，`annotation-states` **新开一轮**（round 3），前两轮原样保留；`resolutionStatus` 回 `open`、`decisionStatus=rejected`。
+- 处理备注 / 决定备注都在 `annotation-states.history[].note` 里；`workflow/sync?query` 的 `annotation_comments` 全程为 `[]`（那里只有「发表」的讨论），PMS 若要在审批历史里展示批注处理情况，现在拿不到。
+- 云线自动截图以附件 `type=annotation_screenshot` 挂在 `attachments`，JH / SJ 重开都能看到并带已同意星标。
+
+## 5. 今天暴露的口径问题（不阻塞，已记进对接清单待办）
 
 1. **驳回后的状态字**：`workflow/sync?query` 回 `form_status=draft / task_status=draft`，与首次建单后的草稿无法区分；嵌入页能显示「打回原因」说明前端另有判据（history / `returnReason`）。建议后端补 `returned` 或在快照里带 `returnReason`。
 2. **重提的 history 动作**：SJ 在 `sj` 节点重提被记为 `action=approve`，与首次送审 `submit` 不一致；按 submit 统计送审次数会漏。
 3. **task 上的人员字段不跟 PMS**：`task.checkerId=JH reviewerId=JH approverId=PZ` 来自发起面板默认值，而 PMS 流程里审核人是 SH；`workflow/sync agree` 照样接受了 SH 在 `sh` 节点的同意（外部流程以 PMS 为准，没错），但按 `reviewerId` 筛待办 / 出报表会错。
 4. **JH 首页自动弹旧待办**：`FORM-F2DFD64CA811`（有存根无任务，嵌入页提示「已识别 form_id，但尚未绑定内部任务，当前不可审核」）每次登录都挡在前面，是历史测试遗留，应在 PMS 里终止或删掉。
-5. **自动化残留提示**：JH 第 2 轮嵌入页顶部出现「共 1 条 —— 这是切到任务作用域之前留在旧容器里的批注，本任务下只读、不导入」，是 `addMockAnnotation` 留在 localStorage 的草稿，真实用户不会碰到。
+5. **自动化残留提示**：JH 第 2 轮嵌入页顶部出现「共 1 条 —— 这是切到任务作用域之前留在旧容器里的批注，本任务下只读、不导入」，是 `addMockAnnotation` 留在 localStorage 的草稿，真实用户不会碰到。TC-3 没再出现——画图在独立 headless 会话里、没有本机草稿，不代表已修。
 
-## 5. 自动化现状与跑法
+### 5.1 TC-3 真手画暴露的嵌入页交互问题（前端，不阻塞流程但会让真用户卡住 / 误读）
 
-### 5.1 已能一键跑的部分：`test:pms:cdp:full`（SJ 新增 → 发起 → 严格校验）
+1. **「待保存证据」弹层拦住画云线**：弹层固定在视口中央，云线拖拽起点落在它范围内就变成选中页面文字，云线不出、也不报错；要先点弹层的 `svg.lucide-x` 关掉才能画。真实用户会碰到，建议弹层不占画布（贴边 / 可折叠）或对画布放行 pointer 事件。
+2. **文字 / 锚点点击落空无反馈**：默认视角下管子很细，点空只是状态停在「点击模型表面创建」，没有任何提示；要先放大再点。建议落空给一次 toast 或状态闪动。
+3. **备注「可选」但实为必填**：设计「不需解决」与校核「驳回」不填备注只弹 toast、不提交（`ReviewCommentsTimeline.vue` `canSubmitReviewAction`），而 `textarea` 占位符写的是「可选」。改占位符文案或在未填时禁用提交按钮即可。
+4. **统计条漏计**（TC-2 已见，真手画再次复现）：`AnnotationTableView.vue` 表头只摆 `pending` / `fixed`，已同意 / 已驳回 / 不需解决 都不计入「已处理」，终态显示「共 2 · 待处理 0 · 已处理 0」。
+5. **未解释的一次自动确认**：文字批注在没点「确认完成」之前就已作为「修订 1」落库（校审面板显示「已确认到修订 1 · 有未确认修改」），怀疑内联编辑器的 Tab / blur 或随后的锚点点击误触了确认按钮，当时截图对不上，标「待核实」。
+
+## 6. 自动化现状与跑法
+
+### 6.1 已能一键跑的部分：`test:pms:cdp:full`（SJ 新增 → 发起 → 严格校验）
 
 ```bash
 cd plant3d-web
@@ -118,7 +164,7 @@ $env:CHROME_CDP_URL='http://127.0.0.1:9445'; $env:PMS_CDP_FULL_FLOW='1'; $env:PM
 npx tsx scripts/pms-chrome-devtools-flow.ts
 ```
 
-### 5.2 尚未进脚本的部分：PMS 送审 / 同意 / 驳回 与 SJ 批注处理
+### 6.2 尚未进脚本的部分：PMS 送审 / 同意 / 驳回 与 SJ 批注处理
 
 `test:pms:cdp:extended` 的 JH 段假设「JH 能在三维校审单列表里找到并双击该记录，然后在 plant3d 里点内部按钮」，这与真实 PMS 不符（见 §1 入口表）；真机上 JH 段必须先由 SJ 在 PMS **送审**，JH 再从 **待办** 进入，并在 **PMS 工具栏** 同意 / 驳回。2026-09-21 这两步是用 CDP attach 到同一 Chrome 分步驾驭完成的，选择器如下，可直接折进脚本：
 
@@ -137,7 +183,24 @@ npx tsx scripts/pms-chrome-devtools-flow.ts
 
 > attach 模式的两个坑：`frame.url()` 偶尔回空串，找嵌入 frame 要用 `frame.evaluate(() => location.href)` 兜底；`page.screenshot` 会卡在 waiting for fonts（窗口被遮挡时 CDP `Page.captureScreenshot` 也会卡），以 DOM 文本 dump 为准。
 
-### 5.3 CDP 脚本环境变量（`scripts/pms-chrome-devtools-flow.ts`）
+### 6.3 真手画批注（TC-3）：独立 headless Chrome + 真点工具
+
+文字 / 云线工具没有钩子，只能真点画布。2026-09-21 的做法：JH 在可见 Chrome 打开待办后，读审批窗里嵌入 iframe 的 `src`（`…/review/3d-view?form_id=…&user_token=<JH JWT>&output_project=…`），另起一个 **headless** Chrome 直接打开它，再用 Playwright `connectOverCDP` 驾驭——软渲染下 WebGL、拾取、截图都正常，且不会和同机其他账号的本机草稿串（见 §5 第 5 条）。
+
+```powershell
+Start-Process 'C:\Program Files\Google\Chrome\Application\chrome.exe' -ArgumentList @('--headless=new','--proxy-server=direct://','--proxy-bypass-list=*','--remote-debugging-port=9446',"--user-data-dir=$env:TEMP\pms-draw-profile",'--no-first-run','--window-size=1500,950','--use-angle=swiftshader','--enable-unsafe-swiftshader','--ignore-gpu-blocklist','about:blank')
+```
+
+| 动作 | 选择器 / 做法 |
+| --- | --- |
+| 进文字模式并落点 | `button`「文字」→ 先在 `canvas` 上 `mouse.wheel` 放大到管子够粗 → `mouse.click` 到几何上。命中与否看构件是否变紫红 / 模型树是否高亮；落空没有任何提示 |
+| 填文字批注 | `input[placeholder="输入批注标题"]` 直接 `fill`；`textarea[placeholder="输入批注描述"]` 常被弹层挡住点不到，用 JS 设 `value` + 派发 `input` 事件再 `blur` |
+| 进云线模式 | `button`「云线」→ `[data-testid=annotation-cloud-target-current]`（需已选中构件）→ `canvas` 上点几何设锚点，状态变「锚点已就绪，请拖拽绘制云线轮廓」 |
+| 画云线 | **先关「待保存证据」弹层**（`svg.lucide-x`）→ `mouse.down / move / up` 拖矩形；矩形任一边 < 6 px 会被当成再点一次锚点而不成云线（`useDtxTools.ts` `endMarquee`）→ 自动 `POST /api/review/attachments` → 详情框 `[data-testid=annotation-cloud-detail-severity-general]`、`[data-testid=annotation-cloud-detail-description]` |
+| 保存 | `button`「确认当前数据」→ `POST /api/review/records` |
+| 设计 / 校核处理 | `[data-testid=annotation-table-view]` 内 `article` 行点一下开详情（**再点会关**，已展开时别重复点）；「不需解决」/「驳回」先填 `textarea[placeholder*="处理备注"]` / `textarea[placeholder*="决定备注"]`，再点「提交处理结果」/「提交确认结果」，落 `annotation-states/apply` |
+
+### 6.4 CDP 脚本环境变量（`scripts/pms-chrome-devtools-flow.ts`）
 
 | 变量 | 说明 |
 | --- | --- |
@@ -146,7 +209,7 @@ npx tsx scripts/pms-chrome-devtools-flow.ts
 | `PMS_EMBEDDED_SITE_SUBSTRING` | 嵌入站点片段（线上 `123.57.182.243`）；设了才做嵌入地址校验与嵌入接口嗅探 |
 | `CHROME_CDP_URL` | 设了则 `connectOverCDP` 附加到已启动的 Chrome，不自起浏览器，结束只断开不关窗 |
 | `PMS_CDP_FULL_FLOW` | `1`：弹窗轮询填写 + plant3d 发起编校审（`PMS_CDP_SKIP_PMS_DIALOG=1` / `PMS_CDP_SKIP_PLANT3D_SUBMIT=1` 可关子步骤） |
-| `PMS_CDP_EXTENDED_FLOW` | `1`：发起后等 PMS 列表出现匹配键 → 清 Cookie 换 JH → 打开记录 → plant3d 内校核提交。**真机需先 PMS 送审，当前会在「JH 未能在 PMS 列表中打开已有单据」处停**，见 §5.2 |
+| `PMS_CDP_EXTENDED_FLOW` | `1`：发起后等 PMS 列表出现匹配键 → 清 Cookie 换 JH → 打开记录 → plant3d 内校核提交。**真机需先 PMS 送审，当前会在「JH 未能在 PMS 列表中打开已有单据」处停**，见 §6.2 |
 | `PMS_MOCK_PACKAGE_NAME` / `PMS_MOCK_PROJECT_CODE` / `PMS_MOCK_PROJECT_NAME` | 编校审包名、PMS 弹窗内项目代码 / 名称（extended 未设包名时自动生成 `E2E-PMS-JH-<时间戳>`） |
 | `PMS_TARGET_BRAN_REFNO` | 注入的测试 BRAN，默认 `24381_145018`，也接受 `24381/145018` |
 | `PMS_CDP_SELECTION_MODE` | `console`：在三维控制台输入 `= 24381/145018` 选中 CE 再点「添加构件」（走真实 `pdmsGetUiAttr`），失败回退 mock；`postmessage`：父页向 iframe 发 `plant3d.select_refno` |
@@ -159,17 +222,17 @@ npx tsx scripts/pms-chrome-devtools-flow.ts
 | `PMS_CDP_CHECKER_REFRESH_RESTORE` | `1`：JH 进工作区后先刷新一次再提交，验证刷新恢复 |
 | `PMS_CDP_HEADLESS` | `1` 无头（仅自起浏览器时） |
 
-### 5.4 旧 Playwright 规格（仍可用，只到「新增」）
+### 6.5 旧 Playwright 规格（仍可用，只到「新增」）
 
 - `e2e/pms-powerpms-review-new.spec.ts` + `playwright.pms.config.ts`（不起本地 Vite）：`PMS_E2E_ENABLED=1 PMS_E2E_PASSWORD=… PMS_E2E_OPEN_URL_SUBSTRING=123.57.182.243 npm run test:e2e:pms`。
 - `PMS_E2E_ROLES=SJ,SH,JD` 可串行多角色；`PMS_E2E_FULL_FLOW` / `PMS_E2E_SUBMIT_REVIEW` / `PMS_E2E_FILL_PMS_DIALOG` 与 CDP 同名开关等价。
 
-## 6. 与接口合同的对照（便于联调）
+## 7. 与接口合同的对照（便于联调）
 
 - **新增**：PMS 后端 `GetZyModelUrl → POST /api/review/embed-url`（回 `relative_path=/review/3d-view`、`query.form_id`）；页面 `GetZyModeInfo → POST /api/auth/token`（form-urlencoded 原样体即可，回 `code:0` + JWT + `form_id`）。iframe = `ModelWebUrl + relative_path + ?form_id&user_token&output_project`。**token 是 `/api/auth/token` 签的 JWT**，不是旧文档说的 SHA256 串——详见《编校审交互接口设计》§2 / §6。
 - **送审 / 同意 / 驳回**：PMS 先 `PreValidate`（→ `workflow/verify`，不写库），提交时 `SyncRevInfo`（→ `workflow/sync action=active|agree|return|stop`）。`action=query` 只读，用于打开 / 刷新时拉快照。
 - **终态**：`approved`：`task_status=approved`、`form_status=approved`；`cancelled`（`stop`）：两者 `cancelled`。本次真机只跑了 `active / agree / return`，`stop` 仍以仿 PMS 调试页（`/pms-review-simulator.html`）的证据为准。
-- **批注链**（plant3d 直连模型中心，不经 PMS）：`POST /api/review/records`（校核确认批注）→ `POST /api/review/annotation-states/apply`（设计 `fixed | wont_fix`，校核 / 审核 `agree | reject`）→ `GET /api/review/annotation-states?form_id=`。
+- **批注链**（plant3d 直连模型中心，不经 PMS）：`POST /api/review/records`（校核确认批注；云线的自动截图先走 `POST /api/review/attachments`，以 `type=annotation_screenshot` 挂到快照 `attachments`）→ `POST /api/review/annotation-states/apply`（设计 `fixed | wont_fix`，校核 / 审核 `agree | reject`；`wont_fix` 与 `reject` 带 `note`）→ `GET /api/review/annotation-states?form_id=`（同一 `annotationId` 每轮一条，`reject` 后新开一轮，取最大 `reviewRound` 为现状）。
 - **UCode / UKey** 是模型中心主动请求 PMS 辅助数据（`QueryAssistReview`）的另一条链，与本文无关，勿混测。
 
 ### 端到端时序（真机版）
@@ -199,28 +262,36 @@ sequenceDiagram
   alt 驳回
     JH->>PMS: 驳回（开始→设计）→ 提交
     PMS->>MC: workflow/sync return → draft / sj
-    SJ->>P3D: 已修改 → 提交处理结果
-    P3D->>MC: annotation-states/apply fixed
+    SJ->>P3D: 已修改 / 不需解决(备注) → 提交处理结果
+    P3D->>MC: annotation-states/apply fixed | wont_fix
     SJ->>PMS: 同意（重提）→ 提交
     PMS->>MC: workflow/sync active → submitted / jd
     JH->>P3D: 同意 → 提交确认结果
     P3D->>MC: annotation-states/apply agree
+    opt 批注驳回（TC-3）
+      JH->>P3D: 驳回(决定备注) → 提交确认结果
+      P3D->>MC: annotation-states/apply reject → 新开一轮 open/rejected
+      JH->>PMS: 驳回 → 提交
+      PMS->>MC: workflow/sync return → draft / sj
+      Note over SJ,MC: SJ 已修改 → 重提 → JH 同意，再往下走
+    end
   end
   JH->>PMS: 同意 → 提交
   PMS->>MC: workflow/sync agree → in_review / sh
   Note over PMS,MC: SH 同意 → pz；PZ 同意 → approved
 ```
 
-## 7. 嵌入页自动化钩子（`localStorage.plant3d_automation_review = '1'` 或 URL `?automation_review=1`）
+## 8. 嵌入页自动化钩子（`localStorage.plant3d_automation_review = '1'` 或 URL `?automation_review=1`）
 
 | 钩子 | 挂在 | 方法 |
 | --- | --- | --- |
 | `window.__plant3dInitiateReviewE2E` | `InitiateReviewPanel.vue`（SJ 发起面板） | `addMockComponent(refNo?, name?)`：往 `selectedComponents` 写一条与手工「添加构件」等价的 `ReviewComponent`；`getLastCreateResult()` 回 `{taskId, formId, title, error}` |
 | `window.__plant3dReviewerE2E` | `ReviewPanel.vue`（校审面板） | `addMockAnnotation(title?, desc?)`（挂到 `24381/145018`）、`addMockMeasurement(kind)`、`confirmData(note?)`（= 点「确认完成」，落 `POST /api/review/records`）、`getConfirmedRecordCount()`、`getAnnotationCount()`、`refreshAnnotationCommentThread(type, id)`、`getCloudScreenshot(id)` |
 
-Playwright / CDP 用 `registerPlant3dAutomationReviewInitScript(context)` 在上下文注入该 localStorage 项；attach 到已开的 Chrome 时，在嵌入 frame 里直接 `localStorage.setItem(...)` 后 `location.reload()` 亦可。设计侧「已修改 / 不需解决」与校核侧「同意 / 驳回」目前没有钩子，按 §5.2 的按钮文案点即可。
+Playwright / CDP 用 `registerPlant3dAutomationReviewInitScript(context)` 在上下文注入该 localStorage 项；attach 到已开的 Chrome 时，在嵌入 frame 里直接 `localStorage.setItem(...)` 后 `location.reload()` 亦可。设计侧「已修改 / 不需解决」与校核侧「同意 / 驳回」目前没有钩子，按 §6.2 的按钮文案点即可；真手画文字 / 云线也没有钩子，按 §6.3 真点画布。
 
-## 8. 变更记录
+## 9. 变更记录
 
+- 2026-09-22：补 TC-3 真手画批注回路（09-21 20:41–21:13 实跑，`FORM-CB658BB5921A`：文字 + 云线真手画、设计「不需解决」、校核「批注驳回」、第 3 轮同意 → approved，8 条 history）；§5.1 记真手画暴露的 5 个嵌入页交互问题；§6.3 记 headless Chrome 真点画布的做法与选择器；时序图补批注驳回支路。
 - 2026-09-21：按真实 PMS 两条链（TC-1 正向、TC-2 驳回回路）重写；补各角色入口、送审 / 驳回对话框、批注处理链、服务端断言、口径问题清单；`test:pms:cdp:full` 严格校验改为按 form_id 回查（`7af7a6c2`）。
 - 2026-04-02 及更早：仿 PMS 调试页 external/passive 闭环、`stop → cancelled`、附件 / 测量回读等结论保留在 git 历史与《新的三维校审流程分析》中。
