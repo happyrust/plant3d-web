@@ -870,6 +870,99 @@ describe('AnnotationOverlayBar', () => {
     host = null;
   });
 
+  it('画布等拖拽时 footer 停靠位放行 pointer 事件并把 canvasDragArmed 交给插槽（真手画云线被「待保存证据」拦拖拽）', async () => {
+    vi.doMock('@/composables/useDockApi', () => ({
+      ensurePanelAndActivate: vi.fn(),
+    }));
+    vi.doMock('@/composables/useReviewStore', () => ({
+      useReviewStore: () => ({
+        currentTask: ref(null),
+      }),
+    }));
+    vi.doMock('@/composables/useUserStore', () => ({
+      useUserStore: () => ({
+        currentUser: ref({ id: 'reviewer-1', role: 'reviewer', name: 'R' }),
+      }),
+    }));
+
+    let host: HTMLDivElement | null = document.createElement('div');
+    document.body.appendChild(host);
+
+    const [{ default: AnnotationOverlayBar }, { useToolStore }, { h }] = await Promise.all([
+      import('./AnnotationOverlayBar.vue'),
+      import('@/composables/useToolStore'),
+      import('vue'),
+    ]);
+
+    const store = useToolStore() as any;
+    store.clearAll();
+    store.setToolMode('annotation_cloud');
+
+    const pendingCloudAnchor = ref<{ refno: string } | null>(null);
+    const tools = {
+      ready: ref(true), statusText: ref('云线批注'),
+      flyToAnnotation: vi.fn(), removeAnnotation: vi.fn(),
+      flyToCloudAnnotation: vi.fn(), flyToRectAnnotation: vi.fn(),
+      removeCloudAnnotation: vi.fn(), removeRectAnnotation: vi.fn(),
+      pendingCloudAnchor,
+      clearPendingCloudAnchor: vi.fn(() => { pendingCloudAnchor.value = null; }),
+    };
+    const app = createApp({
+      render: () => h(AnnotationOverlayBar, { tools }, {
+        footer: ({ canvasDragArmed }: { canvasDragArmed: boolean }) => h('div', {
+          'data-testid': 'docked-footer-probe',
+          'data-armed': canvasDragArmed ? 'true' : 'false',
+        }, '待保存证据'),
+      }),
+    });
+    app.mount(host);
+    await nextTick();
+
+    const footerWrap = () => host!.querySelector('[data-testid="annotation-overlay-footer"]') as HTMLElement;
+    const probe = () => host!.querySelector('[data-testid="docked-footer-probe"]') as HTMLElement;
+
+    // 栈容器不接 pointer 事件、各卡自己接：否则某张卡放行后事件会被容器兜住，穿不到画布
+    const stack = footerWrap().parentElement as HTMLElement;
+    expect(stack.className).toContain('pointer-events-none');
+    expect(host.querySelector('[data-testid="annotation-overlay-bar"]')?.className).toContain('pointer-events-auto');
+
+    // 云线模式、锚点未就绪：下一步是点锚点而不是拖，停靠卡照常可点
+    expect(footerWrap().className).toContain('pointer-events-auto');
+    expect(footerWrap().hasAttribute('data-canvas-drag-armed')).toBe(false);
+    expect(probe().getAttribute('data-armed')).toBe('false');
+
+    // 锚点就绪：下一步是在画布上拖轮廓，停靠位放行 pointer 事件，并把状态交给插槽
+    pendingCloudAnchor.value = { refno: 'REF/A' };
+    await nextTick();
+    expect(footerWrap().className).toContain('pointer-events-none');
+    expect(footerWrap().getAttribute('data-canvas-drag-armed')).toBe('true');
+    expect(probe().getAttribute('data-armed')).toBe('true');
+
+    // 锚点清掉（重选锚点 / 画完）：恢复可点
+    pendingCloudAnchor.value = null;
+    await nextTick();
+    expect(footerWrap().className).toContain('pointer-events-auto');
+    expect(probe().getAttribute('data-armed')).toBe('false');
+
+    // 云线向导里点「框选目标」进入 pick_refno_box：从按下那一刻起就是拖拽，全程放行
+    (host.querySelector('[data-testid="annotation-cloud-target-box"]') as HTMLButtonElement).click();
+    await nextTick();
+    expect(store.toolMode.value).toBe('pick_refno_box');
+    expect(footerWrap().getAttribute('data-canvas-drag-armed')).toBe('true');
+    store.cancelPickRefno();
+    await nextTick();
+    expect(footerWrap().hasAttribute('data-canvas-drag-armed')).toBe(false);
+
+    // 文字批注是单击落点，不放行
+    store.setToolMode('annotation');
+    await nextTick();
+    expect(footerWrap().className).toContain('pointer-events-auto');
+
+    app.unmount();
+    host.remove();
+    host = null;
+  });
+
   it('云线创建上下文里新增一条云线时显示“已创建”成功反馈（问题：画完零反馈）', async () => {
     vi.doMock('@/composables/useDockApi', () => ({
       ensurePanelAndActivate: vi.fn(),

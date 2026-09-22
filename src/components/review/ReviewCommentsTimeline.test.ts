@@ -406,6 +406,71 @@ describe('ReviewCommentsTimeline', () => {
     mounted.unmount();
   });
 
+  it('备注占位符与提示跟着所选动作说「必填 / 可不填」，不再一律写「可选」', async () => {
+    const note = () => document.querySelector<HTMLTextAreaElement>('[data-testid="review-action-note"]')!;
+    const hint = () => document.querySelector('[data-testid="review-action-note-required-hint"]');
+    const submit = () => document.querySelector<HTMLButtonElement>('[data-testid="review-action-submit"]')!;
+    const clickAction = (label: string) => {
+      Array.from(document.querySelectorAll<HTMLButtonElement>('button'))
+        .find((button) => button.textContent?.trim() === label)?.click();
+    };
+
+    // 设计侧：未选动作时把两种口径都写明；选「不需解决」后明说必填并给内联提示；填了原因提示消失；选「已修改」回到可选
+    currentUser.value = { id: 'designer-1', name: '设计甲', role: UserRole.DESIGNER };
+    let mounted = await mountTimeline({ designerOnly: true });
+    await flushUi();
+
+    expect(note().placeholder).toBe('处理备注（已修改可不填；不需解决必填原因）');
+    expect(hint()).toBeNull();
+    expect(note().getAttribute('aria-required')).toBeNull();
+
+    clickAction('不需解决');
+    await flushUi();
+    expect(note().placeholder).toContain('处理备注（必填');
+    expect(note().getAttribute('aria-required')).toBe('true');
+    expect(hint()?.textContent).toContain('「不需解决」需先填写原因');
+    expect(submit().title).toContain('「不需解决」需先填写原因');
+    expect(submit().disabled).toBe(false);
+
+    note().value = '现场核实为临时包覆，投产前拆除';
+    note().dispatchEvent(new Event('input', { bubbles: true }));
+    await flushUi();
+    expect(hint()).toBeNull();
+    expect(submit().title).toBe('');
+
+    clickAction('已修改');
+    await flushUi();
+    expect(note().placeholder).toBe('处理备注（可选，例如修改说明）');
+    expect(note().getAttribute('aria-required')).toBeNull();
+    expect(hint()).toBeNull();
+    mounted.unmount();
+
+    // 校对侧：选「驳回」明说必填，选「同意」可选
+    reviewState.value = {
+      resolutionStatus: 'fixed',
+      decisionStatus: 'pending',
+      updatedAt: 1700000000000,
+      history: [],
+    };
+    currentUser.value = { id: 'reviewer-1', name: '校对甲', role: UserRole.PROOFREADER };
+    mounted = await mountTimeline();
+    await flushUi();
+
+    expect(note().placeholder).toBe('决定备注（同意可不填；驳回必填原因）');
+
+    clickAction('驳回');
+    await flushUi();
+    expect(note().placeholder).toContain('决定备注（必填');
+    expect(hint()?.textContent).toContain('「驳回」需先填写驳回原因');
+    expect(note().getAttribute('aria-required')).toBe('true');
+
+    clickAction('同意');
+    await flushUi();
+    expect(note().placeholder).toBe('决定备注（可选，例如同意理由）');
+    expect(hint()).toBeNull();
+    mounted.unmount();
+  });
+
   it('审核侧空备注点击驳回时不更新状态，填写说明后正常提交', async () => {
     reviewState.value = {
       resolutionStatus: 'fixed',

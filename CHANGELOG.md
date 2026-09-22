@@ -4,6 +4,11 @@
 
 ### 变更
 
+- **校审「待保存证据」卡在画布等拖拽时让路；「不需解决」/「驳回」的备注框不再写「可选」** (2026-09-22，09-21 真手画批注回路 TC-3 暴露)
+  - 「待保存证据」停靠在批注浮层栈底时正好压在画布中部，画云线拖轮廓的起点落在它上面就变成选中卡片文字、云线不出也不报错。现在 `AnnotationOverlayBar` 算一个 `canvasDragArmed`（云线锚点已就绪 / 矩形 OBB 框画 / 框选目标 = 画布正等一次拖拽），经 footer 作用域插槽交给 `ReviewConfirmation`：为真时本卡 `pointer-events: none` + 半透明 + 一行「正在绘制：本卡已让路…」，拖拽直接落到底下画布；浮层栈容器改成本身不接 pointer 事件、各卡自己接（否则放行的卡会被容器兜住）。右下角浮动版（批注浮层不在时）自己看工具模式对 OBB / 框选兜底。
+  - 设计「不需解决」与校核「驳回」一直要求先填原因（不填只弹 toast），但 textarea 占位符写的是「可选」。现在占位符跟所选动作走：未选时「处理备注（已修改可不填；不需解决必填原因）」/「决定备注（同意可不填；驳回必填原因）」，选了必填动作写「（必填：…）」并在框下给一行「「不需解决」需先填写原因，才能提交处理结果」（驳回同理），框描黄、`aria-required`、提交按钮 `title` 同文；前缀「处理备注」/「决定备注」不变，按占位符子串定位的自动化不受影响。toast 拦截照旧。
+  - 验证：vitest `AnnotationOverlayBar.test.ts` +1（锚点就绪 / 框选目标放行、清掉恢复、文字模式不放行、栈容器与主工具栏的 pointer-events 类）、`ReviewConfirmation.test.ts` +1（props 与工具模式两条路、提示、恢复）、`ReviewCommentsTimeline.test.ts` +1（设计 / 校对两侧占位符与提示切换）→ 3 文件 32 过；type-check 基线外 0 新增；ESLint 触及文件只剩 `ViewerPanel.vue:28` 那条既有的。**真机未复验**（改动未部署到 123.57.182.243，headless 复跑要先构建）。教程《三维校审批注与处理留痕操作教程》§七两处占位符改口；测试案例 `pms-3d-review-integration-e2e.md` §5.1 第 1、3 条对应。
+
 - **房间层级树里的管件带直段：抽屉加载命中的管件按整条 BRAN 装，单元级显隐 / 隔离 / 仅显示连直管一起** (2026-09-21，ADR 0068 追记)
   - gen-model 把 BRAN 的隐式直管（TUBI）全挂在 **BRAN 自己的 refno** 上（直管没有独立 refno），空间索引里一条 TUBI 都没有，两棵树的叶子只有管件。改前抽屉「加载 / 加载未加载」只画命中的管件 refno——弯头、焊口悬空没有管；单元级「隔离 / 仅显示 / 眼睛」的 refno 集里也没有 BRAN 自己，直管被当「别的」XRAY / 隐掉。模型树「加载模型」走的是生成根那条链，整条 BRAN 一直是齐的——三处不一致。
   - 现在（用户 2026-09-21 拍板方案 A，只改前端）：新 `composables/deliveryUnitScene.ts` 只读 gen-model 记录缓存——`branOwnerOfLoaded(refno)` 认管件所属 BRAN（`owner_noun == BRAN`，HANG / EQUI 根没有直管不扩）、`deliveryUnitSceneRefnos(bran)` = BRAN 自己 + 这一根缓存里的全部构件（含范围 / 房间外的）。① 抽屉批量加载（`batchLoadSpatialQueryRefnos`）装完命中项后按属主再装一批 BRAN 整体并置可见——记录已在缓存里、不多打接口，装进来的不算命中、不进 loaded / unloaded 计数；② 抽屉「仅显示 / 隔离」（单元级及以上，动作的 refno 集盖住单元列出的全部叶子才算整个单元，`spatialTree.branUnitRefnosCoveredBy`）与「全部显示 / 隐藏 / 隔离结果」（树里全部 BRAN 单元）都带上 BRAN 整体，隐掉的那一侧也带（不留没有管件的光管）；③ 房间页签单元级及以上的眼睛 / 显示 / 隐藏 / 隔离同样（`roomTreeNodes.branUnitRefnosUnder` + `useRoomTree.collectSceneRefnos`）。构件行的眼睛 / 定位、「加载模型」的计数不变。`sceneCompanions` 两处都可注桩。

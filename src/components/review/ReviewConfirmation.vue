@@ -20,8 +20,15 @@ import { emitToast } from '@/ribbon/toastBus';
 const props = withDefaults(defineProps<{
   /** floating＝独立浮在视图右下角；docked＝作为批注浮层栈底的一张卡片（问题7：合并浮层） */
   variant?: 'floating' | 'docked';
+  /**
+   * 画布正等着一次拖拽（云线锚点已就绪 / 矩形框画 / 框选目标），由 AnnotationOverlayBar 经 footer 插槽传入。
+   * 为真时本卡放行 pointer 事件并降级显示：拖拽起点落在卡上也会直接落到底下的画布，
+   * 不再变成选中卡片文字（2026-09-21 真手画云线实测踩坑）。
+   */
+  canvasDragArmed?: boolean;
 }>(), {
   variant: 'floating',
+  canvasDragArmed: false,
 });
 
 const reviewStore = useReviewStore();
@@ -31,6 +38,17 @@ const confirmNote = ref('');
 const showNoteInput = ref(false);
 const confirmSaving = ref(false);
 const confirmError = ref<string | null>(null);
+
+/**
+ * 是否给画布让路。停靠在批注浮层里时由浮层经 props 传入（它知道云线锚点是否就绪）；
+ * 浮在右下角时批注浮层不一定在（矩形 OBB 框画 / 框选目标不属于批注浮层的可见条件），
+ * 这里自己看工具模式兜底——这两种模式从按下那一刻起就是拖拽。
+ */
+const canvasDragArmed = computed(() => {
+  if (props.canvasDragArmed) return true;
+  const mode = toolStore.toolMode.value;
+  return mode === 'annotation_obb' || mode === 'pick_refno_box';
+});
 
 const pendingAnnotationCount = computed(() => {
   return (
@@ -152,9 +170,15 @@ function resolveDimensionConflict(action: 'replay' | 'discard') {
 <template>
   <Transition name="slide-up">
     <div v-if="isVisible"
-      class="pointer-events-auto w-[320px] rounded-[24px] border border-slate-800 bg-slate-950 p-4 text-white"
-      :class="props.variant === 'docked' ? 'max-w-full shadow-lg' : 'absolute bottom-4 right-4 shadow-2xl'"
+      data-testid="review-confirmation"
+      :data-canvas-drag-armed="canvasDragArmed ? 'true' : undefined"
+      class="w-[320px] rounded-[24px] border border-slate-800 bg-slate-950 p-4 text-white transition-opacity"
+      :class="[
+        props.variant === 'docked' ? 'max-w-full shadow-lg' : 'absolute bottom-4 right-4 shadow-2xl',
+        canvasDragArmed ? 'pointer-events-none select-none opacity-60' : 'pointer-events-auto',
+      ]"
       :style="props.variant === 'docked' ? undefined : 'z-index: 950;'"
+      :aria-disabled="canvasDragArmed ? 'true' : undefined"
       @pointerdown.stop
       @wheel.stop>
       <!-- 头部 -->
@@ -167,6 +191,13 @@ function resolveDimensionConflict(action: 'replay' | 'discard') {
           @click="reviewStore.setReviewMode(false)">
           <X class="h-4 w-4" />
         </button>
+      </div>
+
+      <!-- 画布等拖拽时让路：说明为什么这张卡暂时点不动 -->
+      <div v-if="canvasDragArmed"
+        data-testid="review-confirmation-drag-armed-hint"
+        class="mt-3 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-[11px] leading-relaxed text-slate-300">
+        正在绘制：本卡已让路，在这里按下拖拽也会直接落到模型上；画完再回来保存。
       </div>
 
       <!-- 统计 -->

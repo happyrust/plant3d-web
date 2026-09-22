@@ -244,10 +244,48 @@ const canDecisionAct = computed(() => {
   return canReviewDecide.value && reviewState.value?.resolutionStatus !== 'open';
 });
 
+/** 「不需解决」与「驳回」必须说明原因（applyReviewAction 里会拦）；占位符与提示要与这条校验说一样的话。 */
+const reviewActionNoteRequired = computed(() => (
+  selectedReviewAction.value === 'wont_fix' || selectedReviewAction.value === 'reject'
+));
+const reviewActionNoteMissing = computed(() => (
+  reviewActionNoteRequired.value && !actionNote.value.trim()
+));
+
+/**
+ * 备注占位符随所选动作变化：选了必填动作就明说「必填」，没选时把两种口径都写出来，
+ * 不再一律写「可选」（09-21 真机：设计点「不需解决」直接提交，被 toast 拦下才知道要填原因）。
+ * 前缀「处理备注」/「决定备注」保持不变，自动化按 placeholder 子串定位不受影响。
+ */
 const reviewActionPlaceholder = computed(() => {
-  if (canDesignHandle.value) return '处理备注（可选，例如修改说明）';
-  if (canReviewDecide.value) return '决定备注（可选，例如同意理由或驳回意见）';
+  if (canDesignHandle.value) {
+    switch (selectedReviewAction.value) {
+      case 'wont_fix':
+        return '处理备注（必填：为什么不需解决，依据是什么）';
+      case 'fixed':
+        return '处理备注（可选，例如修改说明）';
+      default:
+        return '处理备注（已修改可不填；不需解决必填原因）';
+    }
+  }
+  if (canReviewDecide.value) {
+    switch (selectedReviewAction.value) {
+      case 'reject':
+        return '决定备注（必填：驳回原因，设计要按这个重新处理）';
+      case 'agree':
+        return '决定备注（可选，例如同意理由）';
+      default:
+        return '决定备注（同意可不填；驳回必填原因）';
+    }
+  }
   return '输入意见...';
+});
+
+const reviewActionNoteRequiredHint = computed(() => {
+  if (!reviewActionNoteMissing.value) return null;
+  return selectedReviewAction.value === 'wont_fix'
+    ? '「不需解决」需先填写原因，才能提交处理结果'
+    : '「驳回」需先填写驳回原因，才能提交确认结果';
 });
 
 const reviewActionHint = computed(() => {
@@ -743,6 +781,8 @@ function canEditComment(comment: AnnotationComment): boolean {
                   ? 'bg-primary hover:bg-primary/90'
                   : 'cursor-not-allowed bg-[#D1D5DB]']"
                 :disabled="!selectedReviewAction || !canSubmitReviewAction || actionSubmitting"
+                :title="reviewActionNoteRequiredHint ?? undefined"
+                data-testid="review-action-submit"
                 @click="submitSelectedReviewAction">
                 {{ actionSubmitting ? '提交中...' : reviewActionSubmitLabel }}
               </button>
@@ -777,12 +817,22 @@ function canEditComment(comment: AnnotationComment): boolean {
                 </button>
               </div>
             </div>
-            <div class="rounded-md border border-[#D1D5DB] bg-white"
-              :class="isDockDensity ? 'mt-1.5 px-2 py-1' : 'mt-2 px-3 py-2'">
+            <div class="rounded-md border bg-white"
+              :class="[
+                isDockDensity ? 'mt-1.5 px-2 py-1' : 'mt-2 px-3 py-2',
+                reviewActionNoteMissing ? 'border-amber-400' : 'border-[#D1D5DB]',
+              ]">
               <textarea v-model="actionNote"
+                data-testid="review-action-note"
                 class="w-full resize-none text-[12px] text-[#374151] placeholder:text-[#9CA3AF] focus:outline-none"
                 :class="isDockDensity ? 'min-h-[1.75rem]' : 'min-h-[2.75rem]'"
-                :placeholder="reviewActionPlaceholder" />
+                :placeholder="reviewActionPlaceholder"
+                :aria-required="reviewActionNoteRequired ? 'true' : undefined" />
+            </div>
+            <div v-if="reviewActionNoteRequiredHint"
+              class="mt-1 text-[11px] text-amber-700"
+              data-testid="review-action-note-required-hint">
+              {{ reviewActionNoteRequiredHint }}
             </div>
             <div v-if="reviewContextWarning"
               class="mt-2 rounded-md border border-warning bg-warning-subtle px-3 py-2 text-[11px] text-warning"

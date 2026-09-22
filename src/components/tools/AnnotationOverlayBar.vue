@@ -302,6 +302,18 @@ const hasCloudTargets = computed(() => store.cloudTargetRefnos.value.length > 0)
 const hasCloudAnchor = computed(() => !!props.tools.pendingCloudAnchor?.value);
 
 /**
+ * 画布正等着一次拖拽：云线锚点已就绪（下一步是拖轮廓）、矩形（OBB）框画、框选目标。
+ * 这时栈底停靠的「待保存证据」要给画布让路——否则拖拽起点落在它上面会变成选中卡片里的文字，
+ * 云线不出、也不报错（2026-09-21 真机复现，见 docs/verification/pms-3d-review-integration-e2e.md §5.1）。
+ * 通过 footer 作用域插槽把这个状态交给停靠卡自己决定怎么让路。
+ */
+const canvasDragArmed = computed(() => {
+  const mode = store.toolMode.value;
+  if (mode === 'annotation_obb' || mode === 'pick_refno_box') return true;
+  return mode === 'annotation_cloud' && hasCloudAnchor.value;
+});
+
+/**
  * “刚画完一条云线”的短暂完成态。画完后 useDtxTools 会立刻清空目标集合，
  * 三步向导会瞬间退回第 1 步，用户得不到任何“已创建”的反馈——这里补上闭环：
  * 检测云线数量增加 → 三步全绿 + 成功横幅 + 引导去保存，几秒后自动回到可继续绘制的空态。
@@ -841,13 +853,15 @@ onUnmounted(() => {
     class="pointer-events-none fixed z-[940] flex justify-end"
     :class="hasCustomOverlayPosition ? '' : 'right-4 top-4'"
     :style="overlayPositionStyle">
-    <div class="pointer-events-auto flex max-h-[calc(100vh-2rem)] flex-col items-end gap-2"
+    <!-- 栈容器本身不接 pointer 事件，只由各张卡片自己接：这样某张卡（如画布等拖拽时的停靠「待保存证据」）
+         放行 pointer-events 后，事件能一路穿到底下的画布，而不是被容器兜住；卡片上的事件仍会冒泡到这里被 .stop -->
+    <div class="pointer-events-none flex max-h-[calc(100vh-2rem)] flex-col items-end gap-2"
       @pointerdown.stop
       @wheel.stop>
       <!-- 卡片内容区：多卡叠加超出视口时在内部滚动，避免小屏把底部“待保存证据”卡顶出屏幕（审查风险4） -->
       <div v-if="toolbarStatusText || relatedAnnotations.length > 0 || isCloudCreationContext"
         data-testid="annotation-overlay-scroll"
-        class="flex min-h-0 flex-col items-end gap-2 overflow-y-auto overflow-x-hidden pr-0.5">
+        class="pointer-events-auto flex min-h-0 flex-col items-end gap-2 overflow-y-auto overflow-x-hidden pr-0.5">
         <!-- 当前工具与操作指引（条数属于右侧校审面板，这里不重复） -->
         <div v-if="toolbarStatusText"
           data-testid="annotation-overlay-status"
@@ -1054,7 +1068,7 @@ onUnmounted(() => {
       </div>
 
       <!-- 主工具栏（跟随主题色，可拖拽；固定在栈底不随卡片区滚动，抽屉/错误类型菜单不会被裁剪） -->
-      <div class="relative flex items-center gap-1 rounded-xl border border-border bg-background/90 px-2 py-1.5 shadow-lg backdrop-blur"
+      <div class="pointer-events-auto relative flex items-center gap-1 rounded-xl border border-border bg-background/90 px-2 py-1.5 shadow-lg backdrop-blur"
         data-testid="annotation-overlay-bar">
         <button type="button"
           data-testid="annotation-overlay-drag-handle"
@@ -1353,8 +1367,14 @@ onUnmounted(() => {
         </Transition>
       </div>
 
-      <!-- 栈底停靠位：批注上下文中由 ViewerPanel 注入「待保存证据」面板，避免右上/右下两处浮层重叠 -->
-      <slot name="footer" />
+      <!-- 栈底停靠位：批注上下文中由 ViewerPanel 注入「待保存证据」面板，避免右上/右下两处浮层重叠。
+           画布等拖拽（canvasDragArmed）时整块放行 pointer 事件，拖拽落到底下的画布上；停靠卡按插槽参数自行降级显示 -->
+      <div v-if="$slots.footer"
+        data-testid="annotation-overlay-footer"
+        :data-canvas-drag-armed="canvasDragArmed ? 'true' : undefined"
+        :class="canvasDragArmed ? 'pointer-events-none' : 'pointer-events-auto'">
+        <slot name="footer" :canvas-drag-armed="canvasDragArmed" />
+      </div>
     </div>
   </div>
 </template>

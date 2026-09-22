@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createApp, h, nextTick } from 'vue';
+import { createApp, h, nextTick, ref } from 'vue';
 
 import ReviewConfirmation from './ReviewConfirmation.vue';
 
@@ -34,6 +34,7 @@ const toolStoreMock = {
   rectAnnotationCount: { value: 0 },
   obbAnnotationCount: { value: 0 },
   measurementCount: { value: 0 },
+  toolMode: ref<string>('none'),
 };
 
 vi.mock('@/composables/useReviewStore', () => ({
@@ -75,18 +76,19 @@ describe('ReviewConfirmation', () => {
     toolStoreMock.rectAnnotationCount.value = 0;
     toolStoreMock.obbAnnotationCount.value = 0;
     toolStoreMock.measurementCount.value = 0;
+    toolStoreMock.toolMode.value = 'none';
   });
 
   afterEach(() => {
     document.body.innerHTML = '';
   });
 
-  async function mountComponent() {
+  async function mountComponent(props: Record<string, unknown> = {}) {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
     createApp({
-      render: () => h(ReviewConfirmation),
+      render: () => h(ReviewConfirmation, props),
     }).mount(host);
 
     await vi.dynamicImportSettled();
@@ -215,6 +217,57 @@ describe('ReviewConfirmation', () => {
       dimensionDocument,
       dimensionDocumentVersion: 6,
     }));
+  });
+
+  it('画布等拖拽时让路：放行 pointer 事件、降级显示并给出说明，结束后恢复可点', async () => {
+    toolStoreMock.cloudAnnotationCount.value = 1;
+    toolStoreMock.cloudAnnotations.value = [{ id: 'cloud-1', title: '云线' }];
+
+    // 停靠在批注浮层里：由浮层经 props 告知（云线锚点已就绪）
+    const armed = ref(false);
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    createApp({
+      render: () => h(ReviewConfirmation, { variant: 'docked', canvasDragArmed: armed.value }),
+    }).mount(host);
+    await nextTick();
+
+    const card = () => document.querySelector('[data-testid="review-confirmation"]') as HTMLElement;
+    expect(card().className).toContain('pointer-events-auto');
+    expect(card().hasAttribute('data-canvas-drag-armed')).toBe(false);
+    expect(document.querySelector('[data-testid="review-confirmation-drag-armed-hint"]')).toBeNull();
+
+    armed.value = true;
+    await nextTick();
+    expect(card().className).toContain('pointer-events-none');
+    expect(card().className).toContain('select-none');
+    expect(card().getAttribute('data-canvas-drag-armed')).toBe('true');
+    expect(card().getAttribute('aria-disabled')).toBe('true');
+    expect(document.querySelector('[data-testid="review-confirmation-drag-armed-hint"]')?.textContent)
+      .toContain('正在绘制');
+
+    armed.value = false;
+    await nextTick();
+    expect(card().className).toContain('pointer-events-auto');
+    expect(document.querySelector('[data-testid="review-confirmation-drag-armed-hint"]')).toBeNull();
+    document.body.innerHTML = '';
+
+    // 浮在右下角（批注浮层不在）：矩形 OBB 框画 / 框选目标从按下起就是拖拽，自己看工具模式兜底
+    await mountComponent();
+    expect(card().className).toContain('pointer-events-auto');
+    toolStoreMock.toolMode.value = 'annotation_obb';
+    await nextTick();
+    expect(card().getAttribute('data-canvas-drag-armed')).toBe('true');
+    toolStoreMock.toolMode.value = 'pick_refno_box';
+    await nextTick();
+    expect(card().getAttribute('data-canvas-drag-armed')).toBe('true');
+    // 云线模式本身不算：锚点未就绪前下一步是单击，锚点状态由批注浮层经 props 传
+    toolStoreMock.toolMode.value = 'annotation_cloud';
+    await nextTick();
+    expect(card().hasAttribute('data-canvas-drag-armed')).toBe(false);
+    toolStoreMock.toolMode.value = 'none';
+    await nextTick();
+    expect(card().className).toContain('pointer-events-auto');
   });
 
   it('保存返回 504 时保留批注并允许原按钮直接重试', async () => {

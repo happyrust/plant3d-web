@@ -5304,9 +5304,10 @@ onUnmounted(() => {
       @wheel.stop />
 
     <AnnotationOverlayBar v-if="toolsRef && modelUnitCompareState?.viewMode !== 'split'" :tools="toolsRef">
-      <template #footer>
-        <!-- 问题7：批注上下文中「待保存证据」停靠进批注浮层栈底，右上只保留一列面板 -->
-        <ReviewConfirmation variant="docked" />
+      <template #footer="{ canvasDragArmed }">
+        <!-- 问题7：批注上下文中「待保存证据」停靠进批注浮层栈底，右上只保留一列面板；
+             画布等拖拽（云线锚点已就绪 / 矩形框画 / 框选目标）时停靠卡让路，拖拽直接落到画布 -->
+        <ReviewConfirmation variant="docked" :canvas-drag-armed="canvasDragArmed" />
       </template>
     </AnnotationOverlayBar>
 
