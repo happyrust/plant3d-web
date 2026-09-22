@@ -1,6 +1,6 @@
 <template>
   <div v-if="open"
-    class="pointer-events-auto absolute right-14 top-24 z-[950] flex max-h-[82vh] flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xl transition-[width]"
+    class="pointer-events-auto absolute right-14 top-24 z-[950] flex max-h-[calc(100%-7.5rem)] flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xl transition-[width]"
     :class="isMiniMode ? 'w-[260px]' : 'w-[336px]'"
     @pointerdown.stop
     @wheel.stop>

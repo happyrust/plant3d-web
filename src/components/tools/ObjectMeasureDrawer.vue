@@ -25,7 +25,9 @@ function getStepState(value: string | null | undefined, previousReady = true): S
 </script>
 
 <template>
-  <div class="pointer-events-auto absolute right-[60px] top-[120px] z-[950] flex w-[340px] flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xl"
+  <!-- max-h 按查看器容器算（top 120px = 7.5rem + 1.5rem 底边距），不能用 vh：容器上有 Ribbon、下有控制台，比视口矮，
+       按视口算会把底部按钮画到容器 overflow:hidden 外面（与空间查询抽屉 2026-09-22 同一根因） -->
+  <div class="pointer-events-auto absolute right-[60px] top-[120px] z-[950] flex max-h-[calc(100%-9rem)] w-[340px] flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xl"
     @pointerdown.stop
     @wheel.stop>
     <div class="flex items-center justify-between border-b border-gray-100 px-4 py-3">
@@ -41,7 +43,7 @@ function getStepState(value: string | null | undefined, previousReady = true): S
       </button>
     </div>
 
-    <div class="flex flex-col gap-3 px-4 py-4">
+    <div class="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 py-4">
       <section class="rounded-xl border border-gray-100 bg-gray-50/70 p-3">
         <div class="text-xs font-semibold uppercase tracking-wide text-gray-500">选择方式</div>
         <div class="mt-2 flex flex-wrap gap-2">
