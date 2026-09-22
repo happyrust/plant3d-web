@@ -92,4 +92,4 @@ Playwright headless（dev `:3111` + `:8027`，工具栏「测量」→「管-管
 
 - cua-driver 0.20.0 在本机的两个坑：`get_window_state` 落盘 PNG 为 1568 宽（`max_image_dimension`），像素点击的 x/y 用这张图的坐标系；`scroll` 的 x/y 却按物理窗口像素解释。隔离浏览器约 10 分钟后会随隐式会话结束被回收，验收分两次拉起完成。
 - 未做：全量 `type-check`（只改 class 字串 / 容器 class，不涉及类型）。
-- `wiki/Plant3d-web/raw/sources/src/components/spatial-query/SpatialQueryDrawer.vue` 是 2026-09-07 基线快照的镜像（513 行 vs 当前 1695 行，根节点还是 `top-[120px] w-[440px]` 的旧版），不参与构建；同日只把它的 `max-h-[85vh]` 同步成按容器算的 `max-h-[calc(100%-9rem)]`（它的 top 是 7.5rem，再留 1.5rem）并在文件头标注「非当前实现」，其余未动。
+- `wiki/Plant3d-web/raw/sources/src/components/spatial-query/SpatialQueryDrawer.vue` 是 2026-09-07 基线快照的镜像（513 行 vs 当前 1695 行，根节点还是 `top-[120px] w-[440px]` 的旧版），不参与构建；同日只把它的 `max-h-[85vh]` 同步成与当前实现同值的 `max-h-[calc(100%-7.5rem)]`（用户拍板取字面同值；按它自己的 `top-[120px]` 算本该是 9rem）并在文件头标注「非当前实现」，其余未动。
