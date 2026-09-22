@@ -3,6 +3,7 @@ param(
   [string]$Room = '24381_35580',
   [string]$RoomSlash = '24381/35580',
   [string]$SecondRoom = '24381_5062',
+  [string]$Bran = '24381_105030',
   [int]$Dbnum = 7997,
   [string]$Out,
   [string]$Sha = '65dacd576',
@@ -13,10 +14,10 @@ $utf8 = New-Object System.Text.UTF8Encoding($false)
 if ($Out) { New-Item -ItemType Directory -Path $Out -Force | Out-Null }
 $checks = New-Object System.Collections.ArrayList
 function Check([string]$name, [bool]$pass, $detail) { [void]$checks.Add([ordered]@{ name = $name; pass = $pass; detail = $detail }); if (-not $pass) { Write-Output "FAIL: $name" } }
-function Get-Raw([string]$url, [string]$method = 'GET') {
+function Get-Raw([string]$url, [string]$method = 'GET', [string]$body = '{}') {
   $sw = [System.Diagnostics.Stopwatch]::StartNew()
   if ($method -eq 'POST') {
-    $r = Invoke-WebRequest -Uri $url -Method POST -ContentType 'application/json' -Body '{}' -UseBasicParsing -TimeoutSec 600 -SkipHttpErrorCheck
+    $r = Invoke-WebRequest -Uri $url -Method POST -ContentType 'application/json' -Body $body -UseBasicParsing -TimeoutSec 600 -SkipHttpErrorCheck
   } else {
     $r = Invoke-WebRequest -Uri $url -Method $method -UseBasicParsing -TimeoutSec 600 -SkipHttpErrorCheck
   }
@@ -211,6 +212,58 @@ $w1 = Get-Raw "$Base/api/v1/spatial/nearby/tree?$q&rooms=$Room"
 $w2 = Get-Raw "$Base/api/v1/spatial/nearby/tree?$q100"
 $timing = [ordered]@{ room_3m_first_ms = $tree.elapsed_ms; room_3m_warm_ms = $w1.elapsed_ms; room_100m_first_ms = $big.elapsed_ms; room_100m_warm_ms = $w2.elapsed_ms; room_tree_ms = $rt.elapsed_ms; refnos_ms = $refnos.elapsed_ms }
 Check '记录：耗时（3 m 首发 / 热、100 m 首发 / 热、rooms tree）' $true $timing
+
+# 9. tubes=1（方案 B · T1，gen-model-model-cache spec §4.13.5「tubes=1」；上面 1–8 都不带 tubes=，响应形状与改前相同）
+$tubeKeys = @('tube_count', 'tubes', 'total_tube_count', 'tubes_truncated')
+function Strip($obj, [string[]]$keys) {
+  if ($null -eq $obj) { return $null }
+  if ($obj -is [System.Array]) { return @($obj | ForEach-Object { Strip $_ $keys }) }
+  if ($obj -is [pscustomobject]) { $o = [ordered]@{}; foreach ($p in $obj.PSObject.Properties) { if ($keys -notcontains $p.Name) { $o[$p.Name] = Strip $p.Value $keys } }; return [pscustomobject]$o }
+  return $obj
+}
+function TubeAudit($resp, [double]$radiusLimit) {
+  # 逐层 Σ tube_count 自洽、内联时 tubes 数 = tube_count、Σ elements + Σ tubes = leaf_count、每段字段齐且 distance ≤ 上限；回一份账。
+  $a = [ordered]@{ layers_ok = $true; inline_ok = $true; shape_ok = $true; elements = 0; tubes = 0; units_with_tubes = 0; far = 0; through_wall = 0 }
+  foreach ($rm in @($resp.rooms)) {
+    if ((Sum $rm.specs 'tube_count') -ne [int]$rm.tube_count) { $a.layers_ok = $false }
+    foreach ($spec in @($rm.specs)) {
+      if ((Sum $spec.unit_types 'tube_count') -ne [int]$spec.tube_count) { $a.layers_ok = $false }
+      foreach ($ut in @($spec.unit_types)) {
+        if ((Sum $ut.units 'tube_count') -ne [int]$ut.tube_count) { $a.layers_ok = $false }
+        foreach ($u in @($ut.units)) {
+          $a.elements += @($u.elements).Count; $a.tubes += @($u.tubes).Count
+          if (-not (Has $u 'tube_count')) { $a.inline_ok = $false }
+          if ([int]$u.tube_count -gt 0) { $a.units_with_tubes++ }
+          if ($resp.leaves_inline -and (-not (Has $u 'tubes') -or @($u.tubes).Count -ne [int]$u.tube_count)) { $a.inline_ok = $false }
+          $elemSet = @{}; foreach ($e in @($u.elements)) { $elemSet[$e.refno] = 1 }
+          foreach ($tb in @($u.tubes)) {
+            if (-not ((Has $tb 'ordinal') -and (Has $tb 'from') -and (Has $tb 'to') -and (Has $tb 'from_noun') -and (Has $tb 'to_noun') -and (Has $tb 'length') -and (Has $tb 'aabb') -and (Has $tb 'invalid') -and [double]$tb.length -gt 0 -and [double]$tb.distance -ge 0 -and $tb.from -ne $tb.to)) { $a.shape_ok = $false }
+            if ([double]$tb.distance -gt $radiusLimit) { $a.far++ }
+            if (-not ($tb.from -eq $u.refno -or $tb.to -eq $u.refno -or $elemSet.ContainsKey($tb.from) -or $elemSet.ContainsKey($tb.to))) { $a.through_wall++ }
+          }
+        }
+      }
+      foreach ($g in @($spec.others.by_noun)) { $a.elements += @($g.elements).Count }
+    }
+  }
+  $a
+}
+$leakedKeys = @(($tubeKeys + @('from_noun')) | Where-Object { $tree.body.Contains("`"$_`"") -or $rt.body.Contains("`"$_`"") })
+Check '不带 tubes= 的 nearby/tree 与 rooms/{refno}/tree 里没有任何直段键（缺省关；上面 1–8 的形状与改前相同）' ($leakedKeys.Count -eq 0) ($leakedKeys -join ',')
+$tubedNear = Get-Raw "$Base/api/v1/spatial/nearby/tree?$q&rooms=$Room&tubes=1"; $TN = $tubedNear.json
+Save '03c-nearby-tree-single-room-tubes.json' $TN
+$ta = TubeAudit $TN 3000
+Check 'nearby/tree 3 m 球 tubes=1：200、total_tube_count > 0、total_count / leaf 不变、逐层 Σ tube_count 自洽、Σ elements + Σ tubes = leaf_count、每段 distance ≤ 3000' ($tubedNear.status -eq 200 -and [int]$TN.total_tube_count -gt 0 -and $TN.tubes_truncated -eq $false -and $TN.total_count -eq $T.total_count -and $ta.layers_ok -and $ta.inline_ok -and $ta.shape_ok -and $ta.far -eq 0 -and ($ta.elements + $ta.tubes) -eq [int]$TN.leaf_count -and $ta.elements -eq [int]$T.leaf_count) "elapsed_ms=$($tubedNear.elapsed_ms) (plain $($tree.elapsed_ms)) total=$($TN.total_count) total_tube_count=$($TN.total_tube_count) leaf_count=$($TN.leaf_count) units_with_tubes=$($ta.units_with_tubes) through_wall=$($ta.through_wall)"
+$rtt = Get-Raw "$Base/api/v1/spatial/rooms/$Room/tree?tubes=1"; $RN = $rtt.json
+Save '07c-room-tree-tubes.json' $RN
+$ra = TubeAudit $RN ([double]::PositiveInfinity)
+$branUnit = $null; foreach ($spec in @($RN.rooms[0].specs)) { foreach ($ut in @($spec.unit_types)) { foreach ($u in @($ut.units)) { if ($u.refno -eq $Bran) { $branUnit = $u } } } }
+$records = Get-Raw "$Base/api/v1/model/records" 'POST' "{`"generation_root`":`"$Bran`",`"limit`":5000}"
+$tubiInsts = 0; foreach ($it in @($records.json.items)) { foreach ($i in @($it.insts)) { if ($i.is_tubi -eq $true) { $tubiInsts++ } } }
+$stripped = (Strip $RN ($tubeKeys + @('leaf_count'))) | ConvertTo-Json -Depth 32 -Compress
+$plainStripped = (Strip $R @('leaf_count')) | ConvertTo-Json -Depth 32 -Compress
+Check "rooms/{refno}/tree?tubes=1：200、逐层自洽、单房 rooms[0].tube_count = total_tube_count、BRAN $Bran 的 tube_count ≤ model/records TUBI 数、去掉直段键与 leaf_count 后与不带 tubes 逐字相同" ($rtt.status -eq 200 -and $ra.layers_ok -and $ra.inline_ok -and $ra.shape_ok -and ($ra.elements + $ra.tubes) -eq [int]$RN.leaf_count -and $RN.rooms[0].tube_count -eq $RN.total_tube_count -and $null -ne $branUnit -and [int]$branUnit.tube_count -le $tubiInsts -and $stripped -eq $plainStripped) "elapsed_ms=$($rtt.elapsed_ms) (plain $($rt.elapsed_ms)) total_tube_count=$($RN.total_tube_count) leaf_count=$($RN.leaf_count) bran_tube_count=$($branUnit.tube_count)/records_tubi=$tubiInsts through_wall=$($ra.through_wall) stripped_equal=$($stripped -eq $plainStripped)"
+Save '07c-room-tree-tubes-account.json' ([ordered]@{ total_tube_count = $RN.total_tube_count; leaf_count = $RN.leaf_count; plain_leaf_count = $R.leaf_count; audit = $ra; bran = [ordered]@{ refno = $Bran; count = $branUnit.count; tube_count = $branUnit.tube_count; model_records_tubi = $tubiInsts }; sphere_3m = [ordered]@{ total_tube_count = $TN.total_tube_count; leaf_count = $TN.leaf_count; audit = $ta }; elapsed_ms = [ordered]@{ room_tree_plain = $rt.elapsed_ms; room_tree_tubes = $rtt.elapsed_ms; near_3m_plain = $tree.elapsed_ms; near_3m_tubes = $tubedNear.elapsed_ms } })
 
 $result = [ordered]@{
   base = $Base; room = $Room; dbnum = $Dbnum; started_at = $startedAt; finished_at = (Get-Date).ToString('o')

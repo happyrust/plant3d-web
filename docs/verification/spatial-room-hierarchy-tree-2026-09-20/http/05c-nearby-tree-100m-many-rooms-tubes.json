@@ -1,0 +1,13 @@
+{
+  "status": 200,
+  "elapsed_ms": 3092,
+  "plain_elapsed_ms": 3108,
+  "rooms_requested": 60,
+  "total_count": 15578,
+  "total_tube_count": 1893,
+  "tubes_truncated": false,
+  "leaf_count": 26466,
+  "leaves_inline": false,
+  "bran_unit_placements": 759,
+  "warnings": null
+}

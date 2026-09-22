@@ -1,0 +1,41 @@
+{
+  "total_tube_count": 159,
+  "leaf_count": 1457,
+  "plain_leaf_count": 1298,
+  "audit": {
+    "layers_ok": true,
+    "inline_ok": true,
+    "shape_ok": true,
+    "elements": 1298,
+    "tubes": 159,
+    "units_with_tubes": 28,
+    "far": 0,
+    "through_wall": 0
+  },
+  "bran": {
+    "refno": "24381_105030",
+    "count": 3,
+    "tube_count": 3,
+    "model_records_tubi": 22
+  },
+  "sphere_3m": {
+    "total_tube_count": 162,
+    "leaf_count": 1460,
+    "audit": {
+      "layers_ok": true,
+      "inline_ok": true,
+      "shape_ok": true,
+      "elements": 1298,
+      "tubes": 162,
+      "units_with_tubes": 28,
+      "far": 0,
+      "through_wall": 1
+    }
+  },
+  "elapsed_ms": {
+    "room_tree_plain": 218,
+    "room_tree_tubes": 220,
+    "near_3m_plain": 428,
+    "near_3m_tubes": 414
+  }
+}

@@ -1,0 +1,343 @@
+{
+  "base": "http://127.0.0.1:8027",
+  "room": "24381_35580",
+  "dbnum": 7997,
+  "started_at": "2026-09-22T15:48:05.2016607+08:00",
+  "finished_at": "2026-09-22T15:48:25.2756442+08:00",
+  "health": {
+    "build_id": "0.1.30+g2aab735dfa9e.1790062857",
+    "started_at": "2026-09-22T15:44:31.264042400+08:00",
+    "delivery_unit_types": [
+      "BRAN",
+      "HANG",
+      "SUPPO",
+      "EQUI"
+    ]
+  },
+  "after_ensure": {
+    "state": "ready",
+    "entries": 61807,
+    "resident_records": 52386,
+    "resident_roots": 6772
+  },
+  "single_room": {
+    "total_count": 1298,
+    "leaf_count": 1298,
+    "leaves_inline": true,
+    "specs": [
+      {
+        "spec_value": 0,
+        "count": 5,
+        "unit_types": [],
+        "others": {
+          "count": 5,
+          "nouns": [
+            "GWALL:2",
+            "PANE:2",
+            "STWALL:1"
+          ]
+        }
+      },
+      {
+        "spec_value": 3,
+        "count": 1293,
+        "unit_types": [
+          {
+            "noun": "BRAN",
+            "count": 226,
+            "units": 28
+          },
+          {
+            "noun": "EQUI",
+            "count": 1067,
+            "units": 45
+          }
+        ],
+        "others": {
+          "count": 0,
+          "nouns": []
+        }
+      }
+    ]
+  },
+  "two_rooms": {
+    "total_count": 1298,
+    "rooms": [
+      "L505:0",
+      "R432:1298"
+    ],
+    "shared": 0
+  },
+  "capped_100m": {
+    "total_count": 1298,
+    "leaf_count": 1298,
+    "leaves_inline": true
+  },
+  "many_rooms_100m": {
+    "rooms_requested": 60,
+    "total_count": 15578,
+    "leaf_count": 23591,
+    "leaves_inline": false,
+    "elapsed_ms": 3089
+  },
+  "room_tree": {
+    "total_count": 1298,
+    "leaf_count": 1298,
+    "center": {
+      "x": -6379.5703,
+      "y": -11350.16,
+      "z": 5030.0,
+      "source": "refno_aabb_center"
+    }
+  },
+  "timing": {
+    "room_3m_first_ms": 428,
+    "room_3m_warm_ms": 409,
+    "room_100m_first_ms": 3001,
+    "room_100m_warm_ms": 2959,
+    "room_tree_ms": 218,
+    "refnos_ms": 406
+  },
+  "checks": [
+    {
+      "name": "health 200 且 build_id 带 2aab735df",
+      "pass": true,
+      "detail": "build=0.1.30+g2aab735dfa9e.1790062857 started=2026-09-22T15:44:31.264042400+08:00"
+    },
+    {
+      "name": "health room_membership=true",
+      "pass": true,
+      "detail": true
+    },
+    {
+      "name": "nearby/tree 单房间 200",
+      "pass": true,
+      "detail": "status=200 elapsed_ms=428 total=1298 leaf_count=1298 leaves_inline=True"
+    },
+    {
+      "name": "rooms[] 恒一条、refno/room_num 对",
+      "pass": true,
+      "detail": {
+        "refno": "24381_35580",
+        "room_num": "R432",
+        "name": "/1RX-RM04-R432",
+        "count": 1298
+      }
+    },
+    {
+      "name": "rooms[0].count = total_count（单房无跨房）",
+      "pass": true,
+      "detail": "1298 vs 1298"
+    },
+    {
+      "name": "Σ specs.count = rooms[0].count",
+      "pass": true,
+      "detail": "1298"
+    },
+    {
+      "name": "每个专业：Σ unit_types.count + others.count = spec.count；Σ by_noun.count = others.count",
+      "pass": true,
+      "detail": [
+        "0:5=0+5",
+        "3:1293=1293+0"
+      ]
+    },
+    {
+      "name": "每个单元类型：Σ units.count = unit_type.count",
+      "pass": true,
+      "detail": null
+    },
+    {
+      "name": "专业 spec_value 升序、0 在前",
+      "pass": true,
+      "detail": "0,3"
+    },
+    {
+      "name": "单元类型按 delivery_unit_types 配置表顺序",
+      "pass": true,
+      "detail": [
+        "",
+        "BRAN>EQUI"
+      ]
+    },
+    {
+      "name": "单元按 min_distance 升序",
+      "pass": true,
+      "detail": null
+    },
+    {
+      "name": "leaves_inline=true 时每个单元 / noun 组的 elements 数 = count",
+      "pass": true,
+      "detail": "placed=1298 leaf_count=1298"
+    },
+    {
+      "name": "Σ 内联叶子 = leaf_count",
+      "pass": true,
+      "detail": "1298 vs 1298"
+    },
+    {
+      "name": "单房：leaf_count = total_count",
+      "pass": true,
+      "detail": "1298 vs 1298"
+    },
+    {
+      "name": "响应带 room_status（source=memory, unresolved=0）且 delivery_unit_types 同 /health",
+      "pass": true,
+      "detail": {
+        "rooms": [
+          {
+            "refno": "24381_35580",
+            "room_num": "R432"
+          }
+        ],
+        "source": "memory",
+        "matched": 1298,
+        "unresolved": 0,
+        "definition_version": "72979202d292cb57761a3c7daec8c96f834587d574704ef12f9da8129f394211",
+        "library_alignment_current": null
+      }
+    },
+    {
+      "name": "不再给 filter_options / spec_groups / groups / results",
+      "pass": true,
+      "detail": null
+    },
+    {
+      "name": "total_count = 同参 nearby/refnos 去重 refno 数",
+      "pass": true,
+      "detail": "1298 vs unique 1298 (raw 1303, total_count 1303)"
+    },
+    {
+      "name": "树叶子集合 = refnos 全集（按 refno）",
+      "pass": true,
+      "detail": "missing=0 extra=0"
+    },
+    {
+      "name": "nearby/tree 两间房 200、rooms 两条、按 room_num 排",
+      "pass": true,
+      "detail": [
+        "L505:0",
+        "R432:1298"
+      ]
+    },
+    {
+      "name": "两间房：Σ rooms.count ≥ total_count",
+      "pass": true,
+      "detail": "1298 vs 1298"
+    },
+    {
+      "name": "带 shared_rooms 的构件在两间房下各出现一次；Σ rooms.count − total_count = 跨房构件数",
+      "pass": true,
+      "detail": "shared=0 diff=0"
+    },
+    {
+      "name": "100 m + rooms= 200",
+      "pass": true,
+      "detail": "elapsed_ms=3001 total=1298 leaf_count=1298"
+    },
+    {
+      "name": "100 m 单房叶子未超上限（记录，不判）",
+      "pass": true,
+      "detail": "leaf_count=1298 cap=5000"
+    },
+    {
+      "name": "100 m + 60 间房 200",
+      "pass": true,
+      "detail": "elapsed_ms=3089 total=15578 leaf_count=23591 rooms_with_members=57"
+    },
+    {
+      "name": "多房超上限：leaves_inline=false 且所有 elements 省略",
+      "pass": true,
+      "detail": "leaf_count=23591 cap=5000"
+    },
+    {
+      "name": "unit= 只内联点到的单元（它在的每间房都带）、inlined=unit:…、leaves_inline 仍 false",
+      "pass": true,
+      "detail": "unit=24381_30585 in_rooms=1 inlined=unit:24381_30585 elapsed_ms=3078"
+    },
+    {
+      "name": "other_noun= 只内联那个 noun 组（每间房 / 每个专业下同名组都带）",
+      "pass": true,
+      "detail": "noun=PANE groups=49 elapsed_ms=3107"
+    },
+    {
+      "name": "unit 与 other_noun 同时给 → 400",
+      "pass": true,
+      "detail": "400 unit 与 other_noun 二选一，不能同时给"
+    },
+    {
+      "name": "rooms/{refno}/tree 200、rooms 一条、center.source=refno_aabb_center、radius=0、shape=cube",
+      "pass": true,
+      "detail": "status=200 elapsed_ms=218 total=1298 leaf_count=1298 center=refno_aabb_center"
+    },
+    {
+      "name": "rooms/{refno}/tree?radius=500 外扩：total ≥ 不外扩",
+      "pass": true,
+      "detail": "1298 vs 1298"
+    },
+    {
+      "name": "rooms/{refno}/tree?nouns=PANE 过滤透传：叶子全是 PANE",
+      "pass": true,
+      "detail": "total=2"
+    },
+    {
+      "name": "nearby/tree 不带 rooms= → 400",
+      "pass": true,
+      "detail": "400 nearby/tree 需要 rooms=（房间层级树以所选房间为根；不按房间过滤请用 nearby）"
+    },
+    {
+      "name": "rooms=1_1（不在册）→ 400",
+      "pass": true,
+      "detail": "400 rooms 里的 1/1 不是在册房间（名字不含房间关键词或房间号不合规），可先 GET /api/v1/spatial/rooms 看清单"
+    },
+    {
+      "name": "rooms/abc/tree → 400",
+      "pass": true,
+      "detail": "400 房间 refno 格式非法（应为 a_b）: abc"
+    },
+    {
+      "name": "rooms/{refno}/tree?x,y,z → 400",
+      "pass": true,
+      "detail": "400 rooms/{refno}/tree 以房间自身为范围，不接受 refno / x,y,z"
+    },
+    {
+      "name": "rooms/1_1/tree（不在册）→ 400",
+      "pass": true,
+      "detail": "400 rooms 里的 1/1 不是在册房间（名字不含房间关键词或房间号不合规），可先 GET /api/v1/spatial/rooms 看清单"
+    },
+    {
+      "name": "unit=zzz → 400",
+      "pass": true,
+      "detail": "400 unit 格式非法（应为单元 refno，a/b 或 a_b）: zzz"
+    },
+    {
+      "name": "记录：耗时（3 m 首发 / 热、100 m 首发 / 热、rooms tree）",
+      "pass": true,
+      "detail": {
+        "room_3m_first_ms": 428,
+        "room_3m_warm_ms": 409,
+        "room_100m_first_ms": 3001,
+        "room_100m_warm_ms": 2959,
+        "room_tree_ms": 218,
+        "refnos_ms": 406
+      }
+    },
+    {
+      "name": "不带 tubes= 的 nearby/tree 与 rooms/{refno}/tree 里没有任何直段键（缺省关；上面 1–8 的形状与改前相同）",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "nearby/tree 3 m 球 tubes=1：200、total_tube_count > 0、total_count / leaf 不变、逐层 Σ tube_count 自洽、Σ elements + Σ tubes = leaf_count、每段 distance ≤ 3000",
+      "pass": true,
+      "detail": "elapsed_ms=414 (plain 428) total=1298 total_tube_count=162 leaf_count=1460 units_with_tubes=28 through_wall=1"
+    },
+    {
+      "name": "rooms/{refno}/tree?tubes=1：200、逐层自洽、单房 rooms[0].tube_count = total_tube_count、BRAN 24381_105030 的 tube_count ≤ model/records TUBI 数、去掉直段键与 leaf_count 后与不带 tubes 逐字相同",
+      "pass": true,
+      "detail": "elapsed_ms=220 (plain 218) total_tube_count=159 leaf_count=1457 bran_tube_count=3/records_tubi=22 through_wall=0 stripped_equal=True"
+    }
+  ],
+  "pass": 41,
+  "fail": 0
+}

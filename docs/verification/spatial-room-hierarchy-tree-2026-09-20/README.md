@@ -83,7 +83,9 @@
 
 | 文件 | 内容 |
 | --- | --- |
-| `spatial-tree-check.ps1` | HTTP 金样脚本（§3；参数 `-Base / -Room / -RoomSlash / -SecondRoom / -Dbnum / -Out / -Sha / -SkipEnsure`，缺省 `:8027` / R432 / 7997） |
+| `spatial-tree-check.ps1` | HTTP 金样脚本（§3；参数 `-Base / -Room / -RoomSlash / -SecondRoom / -Bran / -Dbnum / -Out / -Sha / -SkipEnsure`，缺省 `:8027` / R432 / `24381_105030` / 7997）；2026-09-22 加第 9 段 `tubes=1` 三条（§10） |
+| `http/00b-summary-2aab735df.json` `03c-nearby-tree-single-room-tubes.json` `07c-room-tree-tubes.json` `07c-room-tree-tubes-account.json` | 后端 T1（`2aab735df`）上 41 项全过的汇总；3 m 球 / 整房 `tubes=1` 整树（159 / 162 段直段）与账（§10） |
+| `http/05c-nearby-tree-100m-many-rooms-tubes.json` `00c-tubes-summary.json` | 仓外一次性脚本 `tubes-check.ps1` 的 100 m 多房 `tubes=1` 账（1893 段、未截断、3092 ms）与 24 项汇总（§10） |
 | `http/00-summary.json` | 17:43 全流程汇总：38 项检查、耗时、各场景关键数 |
 | `http/01-health.json` `02-dbnum-model-ensure-task.json` | `/health` 与整库 ensure 的 202 回执 + 终态 |
 | `http/03-nearby-tree-single-room.json` `03b-nearby-refnos-single-room.json` | 单房整树（1298 叶子）与同参 refnos 全集 |
@@ -168,3 +170,34 @@
 `roomTreeNodes` +1（`branUnitRefnosUnder`）、`useRoomTree` +1 + 2 例改口、`useSpatialQuery` +3 + 1 例改口 → 13 文件 163 过；type-check 基线外 0；eslint 触及文件 0。
 **e2e 回归**：两份 spec 同机 `--workers=1` **13 passed / 1 skipped（36.2 s）**，日志 `e2e-tubing-both-specs-2026-09-21-2025.txt`。抽屉那份第 5 条「隔离结果 → 其余 X-Ray」的断言改口：
 夹具 BRAN `24381_145018` 的整体（它自己 = 直管，已加载、盒在半径内时会以 viewer-local 进结果；+ 它范围外的管件）跟着留实体，此外的对象仍全部 X-Ray（helper 新增 `fetchGenerationRootRefnos`，走 `model/records` 读整根成员）。
+
+## 10. 树里列出直段——后端 T1 真机（2026-09-22 15:28–15:47；方案 B，计划 `docs/plans/2026-09-21-room-tree-tube-segments-plan.md` §4 T1；`http/03c…` `07c…` `05c…` `00b…` `00c…`）
+
+**后端**：gen-model-model-cache `86bf22f51`（T1：`nearby/tree` / `rooms/{refno}/tree` 加 opt-in `tubes=1`）+ `2aab735df`（追笔：直段归房收窄）；执行计划
+`gen-model-model-cache/docs/plans/2026-09-22-room-tree-tube-segments-backend-dev-plan.md`，契约 spec §4.13.5「`tubes=1`」。D1–D7 全按小计划推荐（用户 11:19 拍板）。
+形状：`units[].tubes[] { ordinal, from, to, from_noun, to_noun, distance, length, aabb{min,max}, invalid, shared_rooms? }`、各层 `tube_count`、顶层 `total_tube_count` / `tubes_truncated`；
+`count` / `total_count` 不变，直段放置数计入 `leaf_count`、共用 `leaf_cap`；**缺省关**——不带 `tubes=` 的响应一个直段键都没有。
+
+**环境**：同一台 `:8027`（mem 档），二进制两换：15:28 `aios-database-86bf22f51.exe`（`build_id 0.1.30+g86bf22f51536.…dirty`——dirty 只因 vendor `e3d-io` 0.1.0 → 0.2.0 让 cargo
+改了 `Cargo.lock`，随后别的会话已把它提交）→ 15:44 `aios-database-2aab735df.exe`（`0.1.30+g2aab735dfa9e.1790062857`，干净）；都在干净 worktree `.scratch\wt-tubes-86bf22f51`
+`cargo build --release --features http_api --bin aios-database`（3 m 36 s / 3 m 13 s）；起法同 §1，改用 `Win32_Process.Create`（不挂在终端下）。每换一次 7997 整库 ensure：6772 根、
+`failed 0`、`room_edges 66135`，84 s / 77 s。
+
+**金样**：`spatial-tree-check.ps1` 加第 9 段（`-Bran` 参数，缺省 `24381_105030`）**+3 条**——「不带 `tubes=` 的两条树路由里没有任何直段键」、`03c` 3 m 球 `tubes=1`、`07c` 整房 `tubes=1`；
+原 38 条一字不改。`2aab735df` 上 `-SkipEnsure` **41 过 / 0 败**（`http/00b-summary-2aab735df.json`；带 ensure 那一遍 43 项里唯一一败是脚本自己 `$tt` / `$TT` 大小写同名撞了变量，改名后复跑）。
+另有仓外一次性脚本 `.scratch\tubes-verify\tubes-check.ps1` **24 过 / 0 败**（`http/00c-tubes-summary.json`；账在下表）。
+
+| 请求 | 结果（`2aab735df`） |
+| --- | --- |
+| `rooms/24381_35580/tree?tubes=1`（`07c-room-tree-tubes.json`，220 ms；不带 218 ms） | `total_count 1298` 不变；**`total_tube_count 159`**，`leaf_count 1457 = 1298 + 159`，`leaves_inline true`；28 个 BRAN 单元**全部**带直段；逐层 Σ `tube_count` 自洽；每段 `distance 0`（都在房间盒里）、`length > 0`、`from ≠ to`、按距离排；**去掉四个直段键与 `leaf_count` 后与不带 `tubes` 的响应逐字相同（79 162 字节）** |
+| 同上，BRAN `24381_105030`（`/Copy-of-1RCS380MP-YK/301VP`） | 房里 `count 3 / tube_count 3`（`REDU→BEND` 141.5 mm、`BEND→BEND` 152.1 mm、`BEND→BEND` 652.1 mm）≤ `model/records` 里它的 22 段 TUBI——这条 BRAN 大半在房外 |
+| `nearby/tree?refno=24381/35580&radius=3000&shape=sphere&rooms=24381_35580&tubes=1`（`03c…`，414 ms；不带 428 ms） | `total_count 1298` 不变；`total_tube_count 162`，每段 `distance ≤ 3000`；整房树的 159 段 ⊆ 这 162 段（cube 外扩 0 = 与房间盒相交 ⊂ 到房间盒 ≤ 3 m）；多出的 3 段：2 段一端仍是 R432 成员、离房间盒 34 / 17 mm（`24381_105297` / `24381_148125` 的 BEND→BEND），1 段 6.4 m 长、离盒 1.29 m、两端都在 3 m 外（`24381_105222`）——两端都不在范围里、按单元的房兜底那一档 |
+| `?tubes=1&nouns=PANE` / `&nouns=ELBO` / `&nouns=ELBO,TUBI` / `&keyword=ELBO` | `0` / `0`（4 个 BRAN 单元在、直段不出）/ `24` / `0`——过滤链按 spec 走 |
+| `?tubes=abc` / `?tubes=0` | `400 tubes 只接受 true/false（收到 abc）` / 与不带相同 |
+| 100 m + 60 间房 `tubes=1`（`05c…`，3092 ms；不带 3108 ms） | `total_tube_count 1893`、759 个 BRAN 单元放置、`tubes_truncated false`（去重后的 BRAN 根 < 500 预算）、`leaf_count 26466 > 5000` → 全部省略；`unit=24381_145594` 只内联点到的单元（4 间房里都带 `tubes`），别的单元 `elements` / `tubes` 都没有 |
+
+**追笔为什么**（`86bf22f51` → `2aab735df`）：第一版整房 168 段里 **8 段两端都不在本房构件里**——BRAN `24381_105498` 的 `BEND→BEND→UNIO→VALV→REDU→TEE→BEND` 连续六段、`24381_105860` 两段，
+`distance 0` 穿过 R432 的房间盒，两端管件在范围里却被 `rooms=` 判成非成员（邻房的）。小计划 D4 的兜底「两端都解不出按单元的房归」把它们也收了进来；收窄成「任一端在范围里（是候选）却不是所选房间成员 = 属于别处、不列，
+两端都不在范围里才兜底」后整房 168 → **159**、3 m 球 284 → **162**、100 m 多房 2260 → **1893**，单测夹具加一个范围里的非成员 GWALL + 一段挂它的直管钉住。
+
+**前端**（T3，另一笔）：类型 / 端口 / 两棵树的直段行与计数句、e2e +2，见小计划 §3.2。

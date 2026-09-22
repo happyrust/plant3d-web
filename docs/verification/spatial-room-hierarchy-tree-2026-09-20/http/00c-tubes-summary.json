@@ -1,0 +1,245 @@
+{
+  "base": "http://127.0.0.1:8027",
+  "room": "24381_35580",
+  "bran": "24381_105030",
+  "started_at": "2026-09-22T15:46:37.8970777+08:00",
+  "finished_at": "2026-09-22T15:46:52.3854573+08:00",
+  "health": {
+    "build_id": "0.1.30+g2aab735dfa9e.1790062857",
+    "started_at": "2026-09-22T15:44:31.264042400+08:00",
+    "resident_roots": 6772
+  },
+  "room_tree": {
+    "total_count": 1298,
+    "total_tube_count": 159,
+    "leaf_count": 1457,
+    "plain_leaf_count": 1298,
+    "bran_units": 28,
+    "units_with_tubes": 28,
+    "bran": {
+      "refno": "24381_105030",
+      "count": 3,
+      "tube_count": 3,
+      "model_records_tubi": 22
+    }
+  },
+  "near_3m": {
+    "total_count": 1298,
+    "total_tube_count": 162,
+    "units_with_tubes": 28
+  },
+  "many_rooms": {
+    "rooms_requested": 60,
+    "total_count": 15578,
+    "total_tube_count": 1893,
+    "tubes_truncated": false,
+    "bran_unit_placements": 759
+  },
+  "sample_tubes": [
+    {
+      "ordinal": 0,
+      "from": "24381_105031",
+      "to": "24381_105032",
+      "from_noun": "REDU",
+      "to_noun": "BEND",
+      "distance": 0.0,
+      "length": 141.53638,
+      "aabb": {
+        "min": [
+          -4234.015,
+          -7995.995,
+          3663.4636
+        ],
+        "max": [
+          -4224.485,
+          -7986.465,
+          3805.0
+        ]
+      },
+      "invalid": false
+    },
+    {
+      "ordinal": 0,
+      "from": "24381_105032",
+      "to": "24381_105033",
+      "from_noun": "BEND",
+      "to_noun": "BEND",
+      "distance": 0.0,
+      "length": 152.0688,
+      "aabb": {
+        "min": [
+          -4396.6245,
+          -8110.4116,
+          3605.5237
+        ],
+        "max": [
+          -4266.6157,
+          -8015.408,
+          3618.2363
+        ]
+      },
+      "invalid": false
+    },
+    {
+      "ordinal": 0,
+      "from": "24381_105033",
+      "to": "24381_105034",
+      "from_noun": "BEND",
+      "to_noun": "BEND",
+      "distance": 0.0,
+      "length": 652.07275,
+      "aabb": {
+        "min": [
+          -4438.755,
+          -8139.355,
+          2908.2236
+        ],
+        "max": [
+          -4429.225,
+          -8129.825,
+          3560.2964
+        ]
+      },
+      "invalid": false
+    }
+  ],
+  "timing": {
+    "room_tree_plain_ms": 218,
+    "room_tree_tubes_ms": 246,
+    "near_3m_plain_ms": 427,
+    "near_3m_tubes_ms": 424,
+    "many_rooms_plain_ms": 3108,
+    "many_rooms_tubes_ms": 3092
+  },
+  "checks": [
+    {
+      "name": "health 200 且 build_id 带 2aab735df",
+      "pass": true,
+      "detail": "build=0.1.30+g2aab735dfa9e.1790062857 resident_roots=6772 tree=ready/61807"
+    },
+    {
+      "name": "rooms/{refno}/tree 不带 tubes= 200",
+      "pass": true,
+      "detail": "elapsed_ms=260 total=1298 leaf_count=1298"
+    },
+    {
+      "name": "不带 tubes= 的响应里没有任何直段键（逐字节不变的前提）",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "rooms/{refno}/tree?tubes=1 200 且带 total_tube_count / tubes_truncated=false",
+      "pass": true,
+      "detail": "elapsed_ms=216 total=1298 total_tube_count=159 leaf_count=1457 leaves_inline=True"
+    },
+    {
+      "name": "tubes=1 不改 count / total_count / candidate_count",
+      "pass": true,
+      "detail": "1298 vs 1298"
+    },
+    {
+      "name": "每层 Σ tube_count 自洽（单元 → 单元类型 → 专业 → 房间）",
+      "pass": true,
+      "detail": "room.tube_count=159"
+    },
+    {
+      "name": "单房：rooms[0].tube_count = total_tube_count",
+      "pass": true,
+      "detail": "159 vs 159"
+    },
+    {
+      "name": "leaves_inline 时每个单元带 tube_count 且 tubes 数 = tube_count",
+      "pass": true,
+      "detail": "units_with_tubes=28 bran_units=28"
+    },
+    {
+      "name": "Σ 内联 elements + Σ 内联 tubes = leaf_count；leaf_count(tubes=1) − leaf_count(不带) = Σ tubes",
+      "pass": true,
+      "detail": "elements=1298 tubes=159 leaf_count=1457 plain_leaf_count=1298"
+    },
+    {
+      "name": "每段直段：ordinal/from/to/from_noun/to_noun/distance≥0/length>0/aabb/invalid 齐、from≠to",
+      "pass": true,
+      "detail": null
+    },
+    {
+      "name": "记录：两端都不在本房构件里的「穿墙段」数（两端都解不出、按单元所在房兜底的那一档，D4）",
+      "pass": true,
+      "detail": "through_wall=0 of 159"
+    },
+    {
+      "name": "单元内 tubes 按 distance 升序",
+      "pass": true,
+      "detail": null
+    },
+    {
+      "name": "BRAN 24381_105030：整房 tube_count ≤ model/records 里 TUBI 数（相等或更少）",
+      "pass": true,
+      "detail": "tube_count=3 count=3 model_records_tubi=22 items=58"
+    },
+    {
+      "name": "去掉直段键与 leaf_count 之后，tubes=1 与不带 tubes 的响应逐字相同",
+      "pass": true,
+      "detail": "len 79162 vs 79162"
+    },
+    {
+      "name": "nearby/tree 3 m 球 tubes=1 200、每段 distance ≤ 3000、Σ tubes = total_tube_count",
+      "pass": true,
+      "detail": "elapsed_ms=445 (plain 408) total=1298 total_tube_count=162 units_with_tubes=28 far=0"
+    },
+    {
+      "name": "整房树（cube、外扩 0 = 与房间盒相交）的直段集 ⊆ 3 m 球（到房间盒 ≤ 3000）的直段集；后者可更多（出了房间盒 3 m 内的段）",
+      "pass": true,
+      "detail": "room=159 sphere=162 missing=0"
+    },
+    {
+      "name": "3 m 球：tubes=1 不改 total_count",
+      "pass": true,
+      "detail": "1298 vs 1298"
+    },
+    {
+      "name": "nouns=PANE → total_tube_count=0；nouns=ELBO → BRAN 单元在、直段 0；nouns=ELBO,TUBI → 直段 > 0",
+      "pass": true,
+      "detail": "pane=0 elbo=0/bran_units=4 elbo+tubi=24"
+    },
+    {
+      "name": "keyword=ELBO → 直段 0（容器 refno + TUBI 不含 ELBO）",
+      "pass": true,
+      "detail": "total=4 tubes=0"
+    },
+    {
+      "name": "tubes=abc → 400",
+      "pass": true,
+      "detail": "400 tubes 只接受 true/false（收到 abc）"
+    },
+    {
+      "name": "tubes=0 = 不带（无直段键）",
+      "pass": true,
+      "detail": "status=200"
+    },
+    {
+      "name": "100 m + 60 间房 tubes=1 200；耗时 ≤ 不带的 +20%（或 +200 ms），或 tubes_truncated=true 带 warning",
+      "pass": true,
+      "detail": "tubed=3092ms plain=3108ms total_tube_count=1893 truncated=False bran_placements=759 leaf_count=26466"
+    },
+    {
+      "name": "超上限 + unit=：只有点到的单元带 tubes（与 elements 一起），别的单元两者都省略",
+      "pass": true,
+      "detail": "unit=24381_145594 in_rooms=4 tube_count=1"
+    },
+    {
+      "name": "记录：耗时（整房 / 3 m 球 / 100 m 多房，各带与不带 tubes）",
+      "pass": true,
+      "detail": {
+        "room_tree_plain_ms": 218,
+        "room_tree_tubes_ms": 246,
+        "near_3m_plain_ms": 427,
+        "near_3m_tubes_ms": 424,
+        "many_rooms_plain_ms": 3108,
+        "many_rooms_tubes_ms": 3092
+      }
+    }
+  ],
+  "pass": 24,
+  "fail": 0
+}
