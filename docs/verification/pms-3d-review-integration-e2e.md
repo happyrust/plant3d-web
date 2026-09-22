@@ -137,7 +137,7 @@ annotation-states?form_id=FORM-CB658BB5921A:
 
 ### 5.1 TC-3 真手画暴露的嵌入页交互问题（前端，不阻塞流程但会让真用户卡住 / 误读）
 
-1. **「待保存证据」弹层拦住画云线**：弹层固定在视口中央，云线拖拽起点落在它范围内就变成选中页面文字，云线不出、也不报错；要先点弹层的 `svg.lucide-x` 关掉才能画。真实用户会碰到，建议弹层不占画布（贴边 / 可折叠）或对画布放行 pointer 事件。
+1. **「待保存证据」弹层拦住画云线**：弹层固定在视口中央，云线拖拽起点落在它范围内就变成选中页面文字，云线不出、也不报错；要先点弹层的 `svg.lucide-x` 关掉才能画。真实用户会碰到，建议弹层不占画布（贴边 / 可折叠）或对画布放行 pointer 事件。**已修**：`151290c1`（云线锚点就绪 / OBB 框画 / 框选目标时该卡放行 pointer 事件并降级显示 `data-canvas-drag-armed=true`，浮层栈容器改为各卡自接事件）；2026-09-22 用本地 build 在 9446 headless 上做 A/B 真机复验通过——同一落点旧包只选中文字、新包成云线，做法与数据见 §6.3.1。
 2. **文字 / 锚点点击落空无反馈**：默认视角下管子很细，点空只是状态停在「点击模型表面创建」，没有任何提示；要先放大再点。建议落空给一次 toast 或状态闪动。
 3. **备注「可选」但实为必填**：设计「不需解决」与校核「驳回」不填备注只弹 toast、不提交（`ReviewCommentsTimeline.vue` `canSubmitReviewAction`），而 `textarea` 占位符写的是「可选」。改占位符文案或在未填时禁用提交按钮即可。
 4. **统计条漏计**（TC-2 已见，真手画再次复现）：`AnnotationTableView.vue` 表头只摆 `pending` / `fixed`，已同意 / 已驳回 / 不需解决 都不计入「已处理」，终态显示「共 2 · 待处理 0 · 已处理 0」。
@@ -196,9 +196,29 @@ Start-Process 'C:\Program Files\Google\Chrome\Application\chrome.exe' -ArgumentL
 | 进文字模式并落点 | `button`「文字」→ 先在 `canvas` 上 `mouse.wheel` 放大到管子够粗 → `mouse.click` 到几何上。命中与否看构件是否变紫红 / 模型树是否高亮；落空没有任何提示 |
 | 填文字批注 | `input[placeholder="输入批注标题"]` 直接 `fill`；`textarea[placeholder="输入批注描述"]` 常被弹层挡住点不到，用 JS 设 `value` + 派发 `input` 事件再 `blur` |
 | 进云线模式 | `button`「云线」→ `[data-testid=annotation-cloud-target-current]`（需已选中构件）→ `canvas` 上点几何设锚点，状态变「锚点已就绪，请拖拽绘制云线轮廓」 |
-| 画云线 | **先关「待保存证据」弹层**（`svg.lucide-x`）→ `mouse.down / move / up` 拖矩形；矩形任一边 < 6 px 会被当成再点一次锚点而不成云线（`useDtxTools.ts` `endMarquee`）→ 自动 `POST /api/review/attachments` → 详情框 `[data-testid=annotation-cloud-detail-severity-general]`、`[data-testid=annotation-cloud-detail-description]` |
+| 画云线 | `151290c1` 之前要**先关「待保存证据」弹层**（`svg.lucide-x`），`151290c1` 起锚点就绪时该卡自动放行 pointer 事件、不必再关（见 §6.3.1）→ `mouse.down / move / up` 拖矩形；矩形任一边 < 6 px 会被当成再点一次锚点而不成云线（`useDtxTools.ts` `endMarquee`）→ 自动 `POST /api/review/attachments` → 详情框 `[data-testid=annotation-cloud-detail-severity-general]`、`[data-testid=annotation-cloud-detail-description]` |
 | 保存 | `button`「确认当前数据」→ `POST /api/review/records` |
 | 设计 / 校核处理 | `[data-testid=annotation-table-view]` 内 `article` 行点一下开详情（**再点会关**，已展开时别重复点）；「不需解决」/「驳回」先填 `textarea[placeholder*="处理备注"]` / `textarea[placeholder*="决定备注"]`，再点「提交处理结果」/「提交确认结果」，落 `annotation-states/apply` |
+
+#### 6.3.1 本地 build 真机复验：拦截换包，不部署也不起服务（2026-09-22，复验 `151290c1`）
+
+改了嵌入页想在真环境里验，不必发到 123.57.182.243：Playwright `connectOverCDP` 附到上面那个 headless Chrome（9446），`page.route` 把同源的 `/review/3d-view` 文档和 `/assets/*` 全部 `fulfill` 成本地 `dist`（`index.html` + 对应 hash 的 js / css / 字体），`/api`、`/config` 照走线上后端。换包是否成功看两处：`document.scripts` 的 src 只剩本地 hash（本次 `/assets/index-BYzxeycd.js`），以及新 build 才有的 `data-testid`（`annotation-overlay-footer`、`review-confirmation`）在 DOM 里。build 在临时 worktree 里做，不受工作区未提交改动影响：`git worktree add --detach $env:TEMP\p3d-wt HEAD` → junction `node_modules` → `npx vite build`（11.6 s）→ 验完 `git worktree remove`。脚本：`%TEMP%\pms-getzy-probe\local-build-cloud.mjs`（`MODE=local|online`，同一流程跑两遍做 A/B）、`local-build-cleanup.mjs`（还原副作用）。
+
+| 步骤 | 做法 / 坑 |
+| --- | --- |
+| 视口 | 先 `page.setViewportSize(2000×1100)`：默认 1478×852 下三维查看器只有 492 px 宽，批注浮层栈盖满画布、管子全在「待保存证据」卡底下 |
+| 选目标 | 点批注表格里已有批注的行后，`[data-testid=annotation-cloud-target-current]`「使用当前选择」直接可用（「定位到模型」不改相机，别指望它把管子挪到空处） |
+| 点锚点 | 别按「画布中心 + 偏移」点——会点到浮层卡 / 工具栏（本次曾误点工具栏「错误类型」下拉，把文字批注严重度 `PATCH …/severity` 成「原则错误」，之后 `PATCH severity=null` 还原）。改为 CDP `Page.captureScreenshot` → 页内 `<canvas>` 解码 → 找选中高亮紫红（r>140、b>140、g<130）的实心 9×9 像素块、且 `elementFromPoint` 为 `CANVAS` 的点 |
+| 拖拽起点 | 卡放行后 `elementFromPoint` 会穿到底下，底下可能恰好是已有批注的悬浮气泡（它自己接 pointer 事件，与本卡无关）；要在卡上挑一个底下就是 canvas 的文字点（本次是「批注」计数数字）。对照组旧包里卡自己接事件，探测时临时把卡 `pointer-events: none` 找同一处落点，探完恢复 |
+| 已批准的单 | JH 仍能本地画，但自动截图 `POST /api/review/attachments` 403（既非发起人也非当前 `pz` 节点负责人），toast「云线已创建，但自动截图失败，可在批注面板重拍」，云线照常生成；不点「确认当前数据」服务端不落任何记录 |
+
+A/B 结果（同一锚点 (944,730)、同一卡上落点、拖 140×110 px；`FORM-CB658BB5921A`，2026-09-22 14:57 / 14:59）：
+
+| | 本地 build `151290c1`（`index-BYzxeycd.js`） | 线上旧包（`index-3hv8nOec.js`） |
+| --- | --- | --- |
+| 锚点就绪时的卡 | `[data-testid=review-confirmation][data-canvas-drag-armed=true]`，`pointer-events: none`，opacity 0.6，出现「正在绘制：本卡已让路，在这里按下拖拽也会直接落到模型上」；`annotation-overlay-footer` 同步 `data-canvas-drag-armed=true` | 无该属性，`pointer-events: auto`，opacity 1 |
+| 起点 `elementFromPoint` | `canvas.viewer` | 卡内计数 `div`（`annotation-overlay-root` 之下） |
+| 松开后 | 弹「刚创建云线的详情」（`annotation-cloud-detail-severity-general` / `-description` 都在）、横幅「云线已创建」、卡计数 批注 2→3、「当前模型关联批注」多出「云线批注 2」、画布出现新云线虚线框；`getSelection()` 为空 | 无云线、状态仍停在「锚点已就绪，请拖拽绘制云线轮廓」；`getSelection()` =「打开批注单 待保存证据 批注 2」——§5.1 第 1 条原样复现 |
 
 ### 6.4 CDP 脚本环境变量（`scripts/pms-chrome-devtools-flow.ts`）
 
@@ -292,6 +312,7 @@ Playwright / CDP 用 `registerPlant3dAutomationReviewInitScript(context)` 在上
 
 ## 9. 变更记录
 
+- 2026-09-22（下午）：§5.1 第 1 条标已修（`151290c1`）；新增 §6.3.1「拦截换包」本地 build 真机复验做法（worktree build → `page.route` 换 document + `/assets` → 像素找锚点 → 卡上挑底下是 canvas 的落点）与新旧包 A/B 结果；§6.3「画云线」行改口：`151290c1` 起不必先关「待保存证据」。
 - 2026-09-22：补 TC-3 真手画批注回路（09-21 20:41–21:13 实跑，`FORM-CB658BB5921A`：文字 + 云线真手画、设计「不需解决」、校核「批注驳回」、第 3 轮同意 → approved，8 条 history）；§5.1 记真手画暴露的 5 个嵌入页交互问题；§6.3 记 headless Chrome 真点画布的做法与选择器；时序图补批注驳回支路。
 - 2026-09-21：按真实 PMS 两条链（TC-1 正向、TC-2 驳回回路）重写；补各角色入口、送审 / 驳回对话框、批注处理链、服务端断言、口径问题清单；`test:pms:cdp:full` 严格校验改为按 form_id 回查（`7af7a6c2`）。
 - 2026-04-02 及更早：仿 PMS 调试页 external/passive 闭环、`stop → cancelled`、附件 / 测量回读等结论保留在 git 历史与《新的三维校审流程分析》中。
