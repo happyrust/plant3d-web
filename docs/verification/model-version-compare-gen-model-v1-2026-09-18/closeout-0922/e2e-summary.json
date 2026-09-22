@@ -1,0 +1,55 @@
+{
+  "ranAt": "2026-09-22T14:58–15:15+08:00",
+  "purpose": "09-21 收口计划十笔（0f7b46ed … 18579261）的真机 / e2e 补齐；README §8.5",
+  "frontend": {
+    "dev": "vite :3111（工作树：HEAD 151290c1 + 别的会话未提交的空间查询 / 校审改动，不碰版本对比这条线的文件）",
+    "specs": [
+      "e2e/model-version-compare-gen-model-v1.spec.ts（4 条；第一条分屏后加 splitOutline 断言）",
+      "e2e/node-version-view-gen-model-v1.spec.ts（2 → 3 条；容器用例加两个勾选 + 每行「定位」；新第三条 URL 直达 → 多单元 → 分屏保持）"
+    ],
+    "config": "playwright.config.ts 新认 PLAYWRIGHT_GPU=1（--use-gl=angle --use-angle=d3d11 --ignore-gpu-blocklist）/ PLAYWRIGHT_SOFTWARE_GL=1（--use-gl=angle --use-angle=swiftshader）"
+  },
+  "backend": {
+    "exe": "_runs\\review-full-8031\\aios-database-a382b2cf3.exe",
+    "build_id": "0.1.27+ga382b2cf3ace.1789785740",
+    "launch": "cwd _runs\\node-versions-8022（DbOption.toml 同 §7），serve，Win32_Process.Create（不挂终端），env AIOS_STORE_MODE=mem RUST_MIN_STACK=134217728 AIOS_OPEN_BROWSER=0 AIOS_RESTART_HANDOFF=1 RUST_BACKTRACE=1",
+    "startedAt": "2026-09-22T14:55:55+08:00",
+    "pid": 17932,
+    "health": "status degraded（只有 dbnum_consistency）· core ready route_count 71 · features.history available · in_memory_db true",
+    "previousRun": "pid 55968，09-20 20:38 起，stdout.log 最后一行 09-21 15:00:50；日志挪到 stdout.run3-0920-2038-to-0921-1500.log",
+    "note": "用户 09-21 20:2x / 20:3x 两次「起好了」都没起来（cargo 在编、D:\\Rust\\target\\release\\aios-database.exe 仍是 09-21 10:29 的 0.1.30）；版本对比这条线的真机基线一直是 a382b2cf3，没换"
+  },
+  "command": "PLAYWRIGHT_PORT=3111 npx playwright test e2e/model-version-compare-gen-model-v1.spec.ts e2e/node-version-view-gen-model-v1.spec.ts --workers=1",
+  "runs": [
+    { "when": "14:58", "mode": "Chrome 缺省 headless · HEAD 上的 spec 原样（补断言之前，冷 :8022）", "result": "6 passed（54.9 s）" },
+    { "when": "15:06", "mode": "Chrome 缺省 headless · 补断言后", "result": "7 passed（28.9 s）", "splitOutline": { "compositor": true, "renderer": "ANGLE (AMD, AMD Radeon RX590 GME (0x00006FDF) Direct3D11 vs_5_0 ps_5_0, D3D11)" } },
+    { "when": "15:07", "mode": "PLAYWRIGHT_GPU=1", "result": "7 passed（28.9 s）", "splitOutline": { "compositor": true, "renderer": "ANGLE (AMD, AMD Radeon RX590 GME (0x00006FDF) Direct3D11 vs_5_0 ps_5_0, D3D11)" } },
+    { "when": "15:10", "mode": "PLAYWRIGHT_SOFTWARE_GL=1", "result": "7 passed（29.0 s）", "splitOutline": { "compositor": false, "renderer": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)" } },
+    { "when": "15:14", "mode": "Chrome 缺省 headless · 容器用例（两个勾选挪到选好 A / B 之后）", "result": "1 passed（6.9 s）", "annotations": { "timeline filters": "全表 299 · 只看自身变的 5 · 只看几何变的 297（A 630 / B 632）" } },
+    { "when": "15:19–15:20", "mode": "定稿后三档连跑：Chrome 缺省 / PLAYWRIGHT_GPU=1 / PLAYWRIGHT_SOFTWARE_GL=1", "result": "7 passed（25.1 s）/ 7 passed（25.5 s）/ 7 passed（31.1 s）", "splitOutline": "前两档 compositor true（RX590 D3D11），第三档 compositor false（SwiftShader）", "eslint": "e2e 两份 + playwright.config.ts → 0" }
+  ],
+  "annotations": {
+    "history/generate（第三条）": "8 份（5 组，4 侧不存在）；DELETE 8 = 生成数",
+    "pageerror": "三档都是 0"
+  },
+  "fixtures": {
+    "leaf": "FTUB 24384_23262（所属 BRAN 24384_23257）：53 版，缺省 A 626 / B 630",
+    "container": "SITE 24384_22399：subtree 298 版 + 仅属性 1（sesno 10）= 299 行；A 630 / B 632 → EQUI 24384_24776 修改 · BOX 24384_26495 删除",
+    "multi": "PIPE 24384_23225 300 → 380：变了的单元 5（24384_23257 修改 1 noop 1 / 24384_26324 删除 4 / 24384_26326 删除 2 / 32576_12 新增 9 / 32576_22 新增 11），A 侧不存在 32576_12、32576_22，B 侧不存在 24384_26324、24384_26326",
+    "unit": "EQUI 24384_26480（末版 tombstone）、幽灵 EQUI 24384_24776 618 → 628"
+  },
+  "notReached": {
+    "P2-b 阈值确认框": "ams8000 任何一段都凑不出 > 20 组（SITE 5 → 632 只有 8 组几何变过，needs_confirm 一直 false）；只在单测里",
+    "P2-c 成员 / owner 真差": "后端 gen-model-refactor src/fast_model/attribute_diff.rs 仍 untracked；这版 :8022 没有 element/attribute-diff（容器「仅自身」缺省 524 → 532 那条 404 照旧是预期的探路）",
+    "设计稿 S4 注 5 / 注 6": "Pencil 里现在没打开任何 .pen"
+  },
+  "files": {
+    "container-subtree-self-only.png/.json": "P1-a 勾「只看自身变的」后的 5 行",
+    "container-subtree-locate-deleted.png/.json": "P1-b 装好 EQUI 那组后点 BOX 24384_26495「定位」，相机飞过去",
+    "multi-url-direct-diff-summary.png/.json": "P3-a URL 直达落模型对比 tab 的差异摘要 + 5 组",
+    "multi-all-groups-progress.png": "P2-a 进度卡",
+    "multi-all-groups-3d-compare.png/.json": "P2-a 装好 5 个单元；json 里 units / absent / summaryText",
+    "multi-one-group-split-kept.png/.json": "P3-b 分屏后只看 24384_23257，viewMode 仍 split",
+    "split-direct-render-note-swiftshader.png": "P3-c SwiftShader 档分屏摘要下那一句（一次性截图脚本，1600×1000）"
+  }
+}

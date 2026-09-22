@@ -4,6 +4,11 @@
 
 ### 变更
 
+- **版本对比 09-21 收口十笔的真机 / e2e 补齐：两份 spec 补断言 + 多单元一条新用例，三档显卡各跑一遍全绿；教程配图** (2026-09-22)
+  - 09-21 那条线（时间线两个勾选 / 每行「定位」/ 折 20 行 / 容器 URL 直达 / 多单元一起进三维 + 阈值确认 / 换组分屏保持 / 软渲染退回）只过了单测。今天 `:8022` 用同一 `a382b2cf3` 构建重起后先按原 spec 跑（6 passed），再补：`model-version-compare-gen-model-v1.spec.ts` 分屏后读 `__modelUnitVersionCompare.splitOutline`，按 `isSoftwareRendererName` 判该走合成器还是直接 render、面板那一句露不露；`node-version-view-gen-model-v1.spec.ts` 容器用例加「只看自身变的」/「只看几何变的」的行数（全表 299 → 5 / 297，A / B 两行永远留着）与每行「定位」的可点 / 置灰 / title，装好组后 B 版已删的构件也能定位（相机真飞）；**新第三条**：PIPE `24384_23225` `compare_a=300&compare_b=380` URL 直达自动切「所有子节点」落模型对比 tab 即停 → 总按钮一起装 5 个单元（进度卡、A / B 卡各列 2 个不存在的单元、五个组按钮「三维中 · 只看这组」）→ 分屏后点一组「只看这组」分屏仍在 → 退出 generate 8 / DELETE 8。阈值确认框 e2e 到不了（ams8000 凑不出 > 20 组），只在单测里。
+  - `playwright.config.ts` 新认 `PLAYWRIGHT_GPU=1`（ANGLE → D3D11）/ `PLAYWRIGHT_SOFTWARE_GL=1`（ANGLE → SwiftShader）两个开关进 `launchOptions.args`；不给就是从前的行为。本机 Chrome 新 headless 缺省就拿到真显卡，要看软渲染那条路得显式开后者。
+  - 验证：dev `:3111` + `:8022`（`0.1.27+ga382b2cf3`，内存库）三档各一遍——Chrome 缺省 **7 passed 28.9 s**、`PLAYWRIGHT_GPU=1` **7 passed 28.9 s**（`compositor true`，RX590）、`PLAYWRIGHT_SOFTWARE_GL=1` **7 passed 29.0 s**（`compositor false`，那一句带 SwiftShader 串）；pageerror 0；ESLint 三文件 0。图与账 `docs/verification/model-version-compare-gen-model-v1-2026-09-18/closeout-0922/`，README §8.3 追记 / §8.5；收口计划 §8 末追记。教程 `MODEL_VERSION_VIEW_TUTORIAL.md` 嵌 10 张真机图（`docs/guides/images/model-version-view/`）。仍欠：P2-c 成员 / owner 真差（后端 `attribute_diff.rs` 未提交）、设计稿 S4 注 5 / 注 6 改口。
+
 - **校审「待保存证据」卡在画布等拖拽时让路；「不需解决」/「驳回」的备注框不再写「可选」** (2026-09-22，09-21 真手画批注回路 TC-3 暴露)
   - 「待保存证据」停靠在批注浮层栈底时正好压在画布中部，画云线拖轮廓的起点落在它上面就变成选中卡片文字、云线不出也不报错。现在 `AnnotationOverlayBar` 算一个 `canvasDragArmed`（云线锚点已就绪 / 矩形 OBB 框画 / 框选目标 = 画布正等一次拖拽），经 footer 作用域插槽交给 `ReviewConfirmation`：为真时本卡 `pointer-events: none` + 半透明 + 一行「正在绘制：本卡已让路…」，拖拽直接落到底下画布；浮层栈容器改成本身不接 pointer 事件、各卡自己接（否则放行的卡会被容器兜住）。右下角浮动版（批注浮层不在时）自己看工具模式对 OBB / 框选兜底。
   - 设计「不需解决」与校核「驳回」一直要求先填原因（不填只弹 toast），但 textarea 占位符写的是「可选」。现在占位符跟所选动作走：未选时「处理备注（已修改可不填；不需解决必填原因）」/「决定备注（同意可不填；驳回必填原因）」，选了必填动作写「（必填：…）」并在框下给一行「「不需解决」需先填写原因，才能提交处理结果」（驳回同理），框描黄、`aria-required`、提交按钮 `title` 同文；前缀「处理备注」/「决定备注」不变，按占位符子串定位的自动化不受影响。toast 拦截照旧。

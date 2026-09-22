@@ -12,6 +12,11 @@
  *
  * 前置：gen-model 在 `GEN_MODEL_V1_BASE_URL`（缺省 `http://127.0.0.1:8022`）且带 `node/versions`（gen-model-refactor a382b2cf3 起）；
  * 页面走 Playwright `baseURL` 的 Vite dev server。不满足就整文件跳过。`NODE_VERSION_E2E_EVIDENCE=<目录>` 时落截图 + 数字 JSON。
+ *
+ * 2026-09-22 按 09-21 收口计划补的真机断言：时间线两个勾选（P1-a）、属性对比 tab 每行「定位」（P1-b）、时间线缺省折 20 行（P1-c）、
+ * 容器 `compare_a / compare_b` URL 直达套到子树时间线（P3-a）、多单元一起进三维 + A / B 卡列这一侧不存在的单元（P2-a）、
+ * 换组分屏保持（P3-b）——后三条在第三个用例，夹具 PIPE `NODE_VERSION_E2E_MULTI_CONTAINER`（缺省 24384/23225，300 → 380 里 5 个单元变过）。
+ * 阈值确认框（P2-b）要 > 20 组，ams8000 任何一段都到不了（SITE 全程 5 → 632 才 8 组），只在单测里。
  */
 import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
@@ -23,13 +28,17 @@ const DBNUM = Number(process.env.NODE_VERSION_E2E_DBNUM || '8000');
 const PROJECT = process.env.NODE_VERSION_E2E_PROJECT || 'AvevaMarineSample';
 const LEAF = process.env.NODE_VERSION_E2E_LEAF || '24384_23262';
 const CONTAINER = process.env.NODE_VERSION_E2E_CONTAINER || '24384_22399';
+/** 多单元一起进三维的夹具：容器 + 一段里 2..20 个单元变过的 A → B（README §8.4 那根管道：改 1 / 删 2 / 增 2） */
+const MULTI_CONTAINER = process.env.NODE_VERSION_E2E_MULTI_CONTAINER || '24384_23225';
+const MULTI_A = Number(process.env.NODE_VERSION_E2E_MULTI_A || '300');
+const MULTI_B = Number(process.env.NODE_VERSION_E2E_MULTI_B || '380');
 const EVIDENCE_DIR = process.env.NODE_VERSION_E2E_EVIDENCE || '';
 
 type ElementVersionRow = { sesno: number; element_impact: string | null; unit_impact: string | null };
 type ElementVersionsResponse = { noun: string; unit_root: string | null; versions: ElementVersionRow[]; truncated: boolean };
 type NodeVersionRow = { sesno: number; impact: string; self_impact: string | null; units_changed: number };
 type NodeVersionsResponse = { noun: string; unit_root: string | null; versions: NodeVersionRow[]; truncated: boolean };
-type HistoryEntry = { sesno: number; user: string; comment: string; changed_count: number; changes: { name: string }[] };
+type HistoryEntry = { sesno: number; user: string; comment: string; impact: string | null; changed_count: number; changes: { name: string }[] };
 type HistoryResponse = { entries: HistoryEntry[] };
 type DiffSummaryResponse = {
   units: { changed: number; unchanged: number; total: number };
@@ -90,7 +99,7 @@ test.beforeEach(async () => {
 
 type Opened = { pageErrors: string[]; apiRequests: { method: string; url: string }[] };
 
-async function openPanel(page: Page, refno: string): Promise<Opened> {
+async function openPanel(page: Page, refno: string, extra: Record<string, string> = {}): Promise<Opened> {
   const pageErrors: string[] = [];
   const apiRequests: { method: string; url: string }[] = [];
   page.on('pageerror', (error) => pageErrors.push(error.message));
@@ -107,11 +116,36 @@ async function openPanel(page: Page, refno: string): Promise<Opened> {
     output_project: PROJECT,
     unit_refno: refno,
     compare_autorun: '1',
+    ...extra,
   });
   await page.goto(`/?${params.toString()}`, { waitUntil: 'domcontentloaded' });
   await expect(page.getByTestId('model-unit-version-compare-panel')).toBeVisible({ timeout: 60_000 });
   return { pageErrors, apiRequests };
 }
+
+/** 相机先停到这个远点，再点「定位」——找不到构件时 `focusModelUnitVersionCompare` 直接 return，相机纹丝不动（与 model-version-compare 那份同一招）。 */
+const PARKED_CAMERA = { x: 53_279, y: 62_579, z: 58_750 };
+
+async function parkCamera(page: Page): Promise<void> {
+  await page.evaluate((parked) => {
+    const viewer = (window as unknown as { __dtxViewer?: { camera: { position: { set(x: number, y: number, z: number): void } }; controls: { target: { set(x: number, y: number, z: number): void }; update(): void } } }).__dtxViewer;
+    if (!viewer) throw new Error('__dtxViewer 不在 window 上（只有 dev 构建才挂）');
+    viewer.camera.position.set(parked.x, parked.y, parked.z);
+    viewer.controls.target.set(0, 0, 0);
+    viewer.controls.update();
+  }, PARKED_CAMERA);
+}
+
+function cameraDistanceFromParked(page: Page): Promise<number> {
+  return page.evaluate((parked) => {
+    const position = (window as unknown as { __dtxViewer?: { camera: { position: { x: number; y: number; z: number } } } }).__dtxViewer?.camera.position;
+    if (!position) return 0;
+    return Math.hypot(position.x - parked.x, position.y - parked.y, position.z - parked.z);
+  }, PARKED_CAMERA);
+}
+
+type CompareWindow = { __modelUnitVersionCompare?: { unitRefno?: string; units?: string[]; viewMode?: string } };
+const compareState = (page: Page) => page.evaluate(() => (window as unknown as CompareWindow).__modelUnitVersionCompare ?? null);
 
 const timelineRows = (page: Page) => page.locator('[data-testid="model-unit-compare-timeline"] > li');
 const inScopeRows = (page: Page) => page.locator('[data-testid="model-unit-compare-timeline"] > li[data-in-scope="true"]');
@@ -253,6 +287,35 @@ test('容器节点：子树时间线来自 node/versions（不再手填会话号
   await expect(page.getByTestId('model-unit-compare-a')).toHaveAttribute('data-sesno', String(aRow.sesno));
   await expect(page.getByTestId('model-unit-compare-b')).toHaveAttribute('data-sesno', String(bRow.sesno));
 
+  // 2026-09-21 起（收口计划 P1-a，设计稿 S2）时间线头上两个勾选，各筛一维、被选为 A / B 的行永远留着（所以先选好 A / B 再勾——
+  // 缺省 A / B 恰是容器自己那两行 noop / 仅属性，勾「只看几何变的」会被它们顶着看不出效果）：
+  // 「只看自身变的」（只在「所有子节点」下露出）= 节点自身记录变过的会话（node/versions 的 self_impact ∪ 属性时间线，含只改属性的）；
+  // 「只看几何变的」= 子树影响非 null / noop 的会话（只在属性时间线里的会话按它自己那一栏的 impact）
+  const selectedNow = new Set<number>([aRow.sesno, bRow.sesno]);
+  const selfOnlyBox = page.getByTestId('model-unit-compare-self-only');
+  await expect(selfOnlyBox).toBeEnabled();
+  await selfOnlyBox.check();
+  const selfOnlyCount = new Set<number>([...selfSesnos, ...selectedNow]).size;
+  await expect(timelineRows(page)).toHaveCount(selfOnlyCount);
+  await evidence(page, 'container-subtree-self-only', { selfSesnos: [...selfSesnos], selected: [...selectedNow], rows: selfOnlyCount, all: subtreeSesnos.size });
+  await selfOnlyBox.uncheck();
+  await expect(timelineRows(page)).toHaveCount(subtreeSesnos.size);
+  const subtreeImpactBySesno = new Map<number, string | null>(subtree.versions.map((row) => [row.sesno, row.impact]));
+  for (const entry of containerHistory?.entries ?? []) if (!subtreeImpactBySesno.has(entry.sesno)) subtreeImpactBySesno.set(entry.sesno, entry.impact);
+  const geometrySesnos = [...subtreeSesnos].filter((sesno) => {
+    const impact = subtreeImpactBySesno.get(sesno) ?? null;
+    return impact !== null && impact !== 'noop';
+  });
+  const geometryOnlyBox = page.getByTestId('model-unit-compare-geometry-only');
+  await geometryOnlyBox.check();
+  const geometryOnlyCount = new Set<number>([...geometrySesnos, ...selectedNow]).size;
+  await expect(timelineRows(page)).toHaveCount(geometryOnlyCount);
+  test.info().annotations.push({ type: 'timeline filters', description: `全表 ${subtreeSesnos.size} · 只看自身变的 ${selfOnlyCount} · 只看几何变的 ${geometryOnlyCount}（A ${aRow.sesno} / B ${bRow.sesno}）` });
+  await geometryOnlyBox.uncheck();
+  await expect(timelineRows(page)).toHaveCount(subtreeSesnos.size);
+  // 勾选不折回时间线（换节点重载才折）
+  await expect(page.getByTestId('model-unit-compare-timeline-more')).toHaveCount(0);
+
   // 属性对比 tab（所有子节点）：有变的构件清单 = 差异摘要里的行数
   const summaryRows = summary.groups.flatMap((group) => group.rows);
   await expect(page.locator('[data-testid="model-unit-compare-changed-elements"] > li').filter({ has: page.locator('button') })).toHaveCount(summaryRows.length, { timeout: 120_000 });
@@ -261,6 +324,15 @@ test('容器节点：子树时间线来自 node/versions（不再手填会话号
     await page.getByTestId(`model-unit-compare-element-${underscore(modifiedRow.refno)}`).click();
     // 点开就去拉它自己的属性时间线折净差
     await expect.poll(() => apiRequests.filter((r) => /element\/attribute-history/.test(r.url)).length, { timeout: 60_000 }).toBeGreaterThan(0);
+  }
+  // 2026-09-21 起（收口计划 P1-b，设计稿 S3）每行行尾一颗「定位」：还没「在三维中对比」时 B 版已删的构件当前模型里没有 → 置灰并说明；其余可点
+  const locateButton = (refno: string) => page.getByTestId(`model-unit-compare-element-locate-${underscore(refno)}`);
+  await expect(page.locator('[data-testid^="model-unit-compare-element-locate-"]')).toHaveCount(summaryRows.length);
+  const deletedRow = summaryRows.find((row) => row.status === 'deleted');
+  if (modifiedRow) await expect(locateButton(modifiedRow.refno)).toBeEnabled();
+  if (deletedRow) {
+    await expect(locateButton(deletedRow.refno)).toBeDisabled();
+    await expect(locateButton(deletedRow.refno)).toHaveAttribute('title', /先「在三维中对比」再定位/);
   }
   await evidence(page, 'container-subtree-attr-compare', { a: aRow.sesno, b: bRow.sesno, rows: summaryRows });
 
@@ -279,6 +351,19 @@ test('容器节点：子树时间线来自 node/versions（不再手填会话号
   await expect(page.getByTestId(`model-unit-compare-run-group-${underscore(first.unit_root!)}`)).toContainText('三维中');
   await evidence(page, 'container-subtree-group-3d-compare', { unit: first.unit_root, a: aRow.sesno, b: bRow.sesno, compareText });
 
+  // P1-b 的另一半：装好这组的 A / B 后，属性对比 tab 里 B 版已删的构件也能「定位」——它在 A 那一层里，相机飞过去（找不到时相机不动）
+  const deletedInFirst = deletedRow && first.rows.some((row) => row.refno === deletedRow.refno) ? deletedRow : null;
+  if (deletedInFirst) {
+    await page.getByTestId('model-unit-compare-tab-attributes').click();
+    await expect(locateButton(deletedInFirst.refno)).toBeEnabled();
+    await expect(locateButton(deletedInFirst.refno)).toHaveAttribute('title', /A \/ B 那一版/);
+    await parkCamera(page);
+    await locateButton(deletedInFirst.refno).click();
+    await expect.poll(() => cameraDistanceFromParked(page), { timeout: 15_000 }).toBeGreaterThan(1);
+    await evidence(page, 'container-subtree-locate-deleted', { refno: deletedInFirst.refno, unit: first.unit_root });
+    await page.getByTestId('model-unit-compare-tab-model').click();
+  }
+
   // 2026-09-21 起（收口计划 P2-a）：不止一组时有一颗总按钮，变了的单元一起进三维；≤ 20 组且服务端没说要确认就直接装（多了会先弹确认框，这里不进那条路）
   if (geometryGroups.length > 1 && geometryGroups.length <= 20 && !summary.needs_confirm) {
     await page.getByTestId('model-unit-compare-run-groups').click();
@@ -296,5 +381,147 @@ test('容器节点：子树时间线来自 node/versions（不再手填会话号
   await page.getByTestId('model-unit-compare-close').click();
   expect(apiRequests.filter((r) => /node\/versions\?/.test(r.url)).length).toBeGreaterThanOrEqual(1);
   expect(apiRequests.some((r) => /node\/diff-summary/.test(r.url))).toBe(true);
+  expect(pageErrors, pageErrors.join('\n')).toEqual([]);
+});
+
+type MultiFixture = {
+  selfSesnos: Set<number>;
+  subtreeSesnos: Set<number>;
+  summary: DiffSummaryResponse;
+  geometryGroups: DiffSummaryResponse['groups'];
+};
+
+/** 第三个用例的门：夹具是容器、A / B 在它的子树时间线里、差异摘要 2..20 组几何变过且服务端没说要确认。 */
+async function multiFixtureReason(): Promise<{ reason: string | null; fixture: MultiFixture | null }> {
+  const subtree = await getJson<NodeVersionsResponse>(`node/versions?dbnum=${DBNUM}&refno=${slash(MULTI_CONTAINER)}&scope=subtree&limit=5000`);
+  if (!subtree.body) return { reason: `${MULTI_CONTAINER} node/versions HTTP ${subtree.status}`, fixture: null };
+  if (subtree.body.unit_root !== null) return { reason: `${MULTI_CONTAINER} 不是容器（所属单元 ${subtree.body.unit_root}）`, fixture: null };
+  const subtreeSesnos = new Set<number>(subtree.body.versions.map((row) => row.sesno));
+  if (!subtreeSesnos.has(MULTI_A) || !subtreeSesnos.has(MULTI_B)) {
+    return { reason: `${MULTI_CONTAINER} 子树时间线里没有 ${MULTI_A} / ${MULTI_B} 这两版`, fixture: null };
+  }
+  const self = await getJson<NodeVersionsResponse>(`node/versions?dbnum=${DBNUM}&refno=${slash(MULTI_CONTAINER)}&scope=self&limit=5000`);
+  const history = await getJson<HistoryResponse>(`element/attribute-history?dbnum=${DBNUM}&refno=${slash(MULTI_CONTAINER)}&limit=5000`);
+  const selfSesnos = new Set<number>([
+    ...(self.body?.versions ?? subtree.body.versions.filter((row) => row.self_impact !== null)).map((row) => row.sesno),
+    ...(history.body?.entries ?? []).map((entry) => entry.sesno),
+  ]);
+  const summary = await getJson<DiffSummaryResponse>(`node/diff-summary?dbnum=${DBNUM}&refno=${slash(MULTI_CONTAINER)}&a=${MULTI_A}&b=${MULTI_B}&scope=subtree`);
+  if (!summary.body) return { reason: `${MULTI_CONTAINER} node/diff-summary HTTP ${summary.status}`, fixture: null };
+  const geometryGroups = summary.body.groups.filter((group) => group.unit_root && group.geometry_changed);
+  if (geometryGroups.length < 2 || geometryGroups.length > 20 || summary.body.needs_confirm) {
+    return { reason: `${MULTI_CONTAINER} ${MULTI_A} → ${MULTI_B} 有 ${geometryGroups.length} 组几何变过（needs_confirm=${summary.body.needs_confirm ?? false}），这条要 2..20 组且不用确认`, fixture: null };
+  }
+  return { reason: null, fixture: { selfSesnos, subtreeSesnos, summary: summary.body, geometryGroups } };
+}
+
+/** 单元根那一行的状态定这一侧在不在（`modelUnitGroupSideImpactKinds`）：B 时已删 → A / B 卡的 B 侧列它；A 时还没建 → A 侧列它 */
+function absentUnitsBySide(groups: DiffSummaryResponse['groups']): { before: string[]; after: string[] } {
+  const before: string[] = [];
+  const after: string[] = [];
+  for (const group of groups) {
+    const root = group.rows.find((row) => row.refno === group.unit_root);
+    if (root?.status === 'added') before.push(underscore(group.unit_root!));
+    if (root?.status === 'deleted') after.push(underscore(group.unit_root!));
+  }
+  return { before, after };
+}
+
+test('容器 URL 直达 compare_a / compare_b → 全部变了的单元一起进三维 → 分屏 → 换成只看一组分屏保持（收口计划 P3-a / P2-a / P3-b）', async ({ page }) => {
+  const { reason, fixture } = await multiFixtureReason();
+  test.skip(reason !== null, reason ?? '');
+  const { selfSesnos, subtreeSesnos, summary, geometryGroups } = fixture!;
+  const { pageErrors, apiRequests } = await openPanel(page, MULTI_CONTAINER, { compare_a: String(MULTI_A), compare_b: String(MULTI_B) });
+
+  // P3-a：URL 那对不在「仅自身」里、只在子树里有 → 自动切「所有子节点」把它们选上，落到模型对比 tab 即停（不装几何、不报错）
+  const pairInSelf = selfSesnos.has(MULTI_A) && selfSesnos.has(MULTI_B);
+  await expect(page.getByTestId(pairInSelf ? 'model-unit-compare-scope-self' : 'model-unit-compare-scope-subtree')).toHaveAttribute('aria-pressed', 'true', { timeout: 120_000 });
+  await expect(page.getByTestId('model-unit-compare-a')).toHaveAttribute('data-sesno', String(Math.min(MULTI_A, MULTI_B)));
+  await expect(page.getByTestId('model-unit-compare-b')).toHaveAttribute('data-sesno', String(Math.max(MULTI_A, MULTI_B)));
+  await expect(page.getByTestId('model-unit-compare-tab-model')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByTestId('model-unit-compare-error')).toHaveCount(0);
+  await expect(page.getByTestId('model-unit-compare-runtime')).toHaveCount(0);
+  await expect(page.getByTestId('model-unit-compare-run')).toBeDisabled();
+  // 被选为 A / B 的行一定在画出来的那段里（时间线缺省只画最近 20 行，切点顺延到更早的 A）
+  await expect(timelineRow(page, MULTI_A)).toBeVisible();
+  await expect(timelineRow(page, MULTI_B)).toBeVisible();
+  if (subtreeSesnos.size > 20) await expect(page.getByTestId('model-unit-compare-timeline-more')).toContainText('加载更早');
+
+  // 差异摘要 + 分组 + 总按钮（P2-a）
+  await expect(page.getByTestId('model-unit-compare-diff-summary')).toContainText(`变了的单元 ${summary.units.changed}`, { timeout: 120_000 });
+  await expect(page.locator('[data-testid="model-unit-compare-groups"] > div')).toHaveCount(geometryGroups.length);
+  await expect(page.getByTestId('model-unit-compare-run-groups-row')).toContainText(`${geometryGroups.length} 个单元`);
+  await evidence(page, 'multi-url-direct-diff-summary', { container: MULTI_CONTAINER, a: MULTI_A, b: MULTI_B, units: summary.units, groups: geometryGroups.map((g) => g.unit_root) });
+
+  await page.getByTestId('model-unit-compare-run-groups').click();
+  // 进度卡「正在生成历史投影 n / m」只在装的时候露出（> 2 份才画）；装得快就直接看到结果，两者之一必须出现
+  const progress = page.getByTestId('model-unit-compare-progress');
+  const summaryTitle = page.getByTestId('model-unit-compare-summary-title');
+  await expect.poll(async () => (await progress.count()) > 0 || (await summaryTitle.count()) > 0, { timeout: 60_000 }).toBe(true);
+  if (await progress.count()) {
+    await expect(progress).toContainText('正在生成历史投影');
+    await evidence(page, 'multi-all-groups-progress');
+  }
+  await expect(summaryTitle).toContainText(`${geometryGroups.length} 个单元`, { timeout: 240_000 });
+  await expect.poll(async () => (await compareState(page))?.units?.length, { timeout: 120_000 }).toBe(geometryGroups.length);
+  const state = await compareState(page);
+  expect(new Set(state!.units)).toEqual(new Set(geometryGroups.map((group) => underscore(group.unit_root!))));
+  expect(state!.unitRefno).toBe(MULTI_CONTAINER);
+  await expect(page.getByTestId('model-unit-compare-runtime-title')).toContainText(`${geometryGroups.length} 个单元 · ${MULTI_CONTAINER} 下`);
+  await expect(page.getByTestId('model-unit-compare-run-groups')).toContainText('三维中');
+  for (const group of geometryGroups) {
+    await expect(page.getByTestId(`model-unit-compare-run-group-${underscore(group.unit_root!)}`)).toContainText('三维中 · 只看这组');
+  }
+  // A / B 卡列这一侧不存在的单元：B 时已删 → B 卡「n 个单元该版本单元已删除：…」；A 时还没建 → A 卡「n 个单元该版本没有这个单元：…」
+  const absent = absentUnitsBySide(geometryGroups);
+  await expect(page.getByTestId('model-unit-compare-absent-before')).toHaveCount(absent.before.length ? 1 : 0);
+  await expect(page.getByTestId('model-unit-compare-absent-after')).toHaveCount(absent.after.length ? 1 : 0);
+  if (absent.before.length) {
+    await expect(page.getByTestId('model-unit-compare-absent-before')).toContainText(`${absent.before.length} 个单元该版本没有这个单元`);
+    for (const unit of absent.before) await expect(page.getByTestId('model-unit-compare-absent-before')).toContainText(unit);
+  }
+  if (absent.after.length) {
+    await expect(page.getByTestId('model-unit-compare-absent-after')).toContainText(`${absent.after.length} 个单元该版本单元已删除`);
+    for (const unit of absent.after) await expect(page.getByTestId('model-unit-compare-absent-after')).toContainText(unit);
+  }
+  const allText = (await page.getByTestId('model-unit-compare-summary').textContent()) ?? '';
+  await evidence(page, 'multi-all-groups-3d-compare', { units: state!.units, absent, summaryText: allText });
+
+  // P3-b：分屏后换成只看一组（面板 close → open），分屏跟过去，不掉回单视口
+  await page.getByTestId('model-unit-compare-split-mode').click();
+  await expect(page.getByTestId('model-unit-compare-split-summary')).toContainText(`左 A · sesno ${Math.min(MULTI_A, MULTI_B)}`);
+  await expect.poll(async () => (await compareState(page))?.viewMode).toBe('split');
+  const bothSides = geometryGroups.find((group) => {
+    const root = group.rows.find((row) => row.refno === group.unit_root);
+    return root?.status !== 'added' && root?.status !== 'deleted';
+  }) ?? geometryGroups[0]!;
+  const onlyUnit = underscore(bothSides.unit_root!);
+  await page.getByTestId(`model-unit-compare-run-group-${onlyUnit}`).click();
+  await expect.poll(async () => (await compareState(page))?.unitRefno, { timeout: 240_000 }).toBe(onlyUnit);
+  await expect(page.getByTestId('model-unit-compare-summary')).toContainText(onlyUnit);
+  expect((await compareState(page))!.units).toEqual([onlyUnit]);
+  await expect(page.getByTestId('model-unit-compare-split-mode')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByTestId('model-unit-compare-split-summary')).toContainText(`右 B · sesno ${Math.max(MULTI_A, MULTI_B)}`);
+  await expect(page.getByTestId('viewer-model-unit-split-overlay')).toContainText(`A · sesno ${Math.min(MULTI_A, MULTI_B)}`);
+  expect((await compareState(page))!.viewMode).toBe('split');
+  await expect(page.getByTestId(`model-unit-compare-run-group-${onlyUnit}`)).toHaveText(/^\s*三维中\s*$/);
+  await expect(page.getByTestId('model-unit-compare-run-groups')).toContainText('在三维中对比');
+  await expect(page.getByTestId('model-unit-compare-runtime-title')).toContainText(`${onlyUnit} · DB ${DBNUM}`);
+  await evidence(page, 'multi-one-group-split-kept', { unit: onlyUnit, viewMode: (await compareState(page))!.viewMode });
+
+  // 退出：运行态没了、五个组按钮全部回「在三维中对比」、生成过的历史快照有 DELETE
+  await page.getByTestId('model-unit-compare-close').click();
+  await expect(page.getByTestId('model-unit-compare-runtime')).toHaveCount(0);
+  for (const group of geometryGroups) {
+    await expect(page.getByTestId(`model-unit-compare-run-group-${underscore(group.unit_root!)}`)).toHaveText(/^\s*在三维中对比\s*$/);
+  }
+  const generated = apiRequests.filter((r) => r.method === 'POST' && /model\/history\/generate/.test(r.url)).length;
+  const absentSides = absent.before.length + absent.after.length;
+  // 第一发：每个单元两侧各一份、这一侧不存在的不生成（两侧几何承诺相同时那个单元只取一次，所以是上限）；第二发只看一组再来两份
+  expect(generated).toBeGreaterThan(0);
+  expect(generated).toBeLessThanOrEqual(geometryGroups.length * 2 - absentSides + 2);
+  // 换组时上一轮的快照已经还回去，退出时这一轮的也还——生成过的每一份都有一条 DELETE
+  await expect.poll(() => apiRequests.filter((r) => r.method === 'DELETE' && /model\/history\//.test(r.url)).length, { timeout: 15_000 }).toBe(generated);
+  test.info().annotations.push({ type: 'history/generate', description: `${generated} 份（${geometryGroups.length} 组，${absentSides} 侧不存在）` });
   expect(pageErrors, pageErrors.join('\n')).toEqual([]);
 });

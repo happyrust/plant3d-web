@@ -27,7 +27,7 @@
 | 节点版本视图（ADR 0066，`061c83b2`） | ✅ | 范围开关、时间线点选 A/B、与上一版比 / 与最新比、属性对比 tab（时间线折净差）、模型对比 tab（差异摘要按单元分组 → 逐组「在三维中对比」）、「仅属性」（`91e7480f`）、三入口 |
 | 模型树差异模式 | ✅ | 徽章 / 幽灵行 /「当前已不在」/ 底部 `ModelVersionAttrDiffPanel` /「在 3D 中定位」/ 属性面板「已删除」登记 |
 | 三维联动（§11 / §11.1，PR #79） | ✅ | 四态着色、单视口角标 + 图例、「三维只看差异」、单视口点 A/B 构件 → 属性面板读那一版 |
-| e2e | ✅ | `model-version-compare-gen-model-v1.spec.ts` 4 条 × 两夹具、`node-version-view-gen-model-v1.spec.ts` 2 条 |
+| e2e | ✅ | `model-version-compare-gen-model-v1.spec.ts` 4 条 × 两夹具、`node-version-view-gen-model-v1.spec.ts` 2 条（09-22 起 3 条，见 §8 末） |
 
 ### 1.2 设计稿 vs 实现（逐帧读 .pen 文字核出来的）
 
@@ -240,5 +240,19 @@ P0（半天）→ P1-a / P1-b（半天）→ P3-a / P3-b（半天）→ P1-c（D
   单视口那条路不动（合成器照旧）。
 - 面板：分屏摘要下软渲染时一句「这台机子是软渲染（<显卡串>）：分屏走直接渲染、不走描边合成器……」（`model-unit-compare-split-direct-render`）。
 - **验证**：vitest `webglRendererInfo.test.ts` 2 例（名字识别 9 正 3 负；扩展 / 回落 / 空值 / 抛错 / null）、面板 +1 → 版本对比相关 10 文件 **102 过**；type-check 基线外 0 新增；ESLint 只剩 `ViewerPanel.vue:28` 既有的。
-  **真机未跑**（`:8022` 未起）——下次起 dev 时缺省 headless（SwiftShader）与 `--gpu` 各看一眼 `__modelUnitVersionCompare.splitOutline`，README §8.3 已写怎么看。
+  ~~**真机未跑**（`:8022` 未起）~~ 09-22 两档真机都过（下一节）。
 - 设计稿：S4 注 5 末句「去留待拍板」**待改口**为「留，软渲染自动退回直接 render」（Pencil 活动文件仍是别的会话的）。
+
+### 真机 / e2e 补齐（2026-09-22 14:5x–15:1x，接班会话）
+
+十笔全部只过了单测这件事今天收了。细账在 README §8.5，这里记要点：
+
+- **`:8022`**：用户 09-21 晚两次「起好了」都没起来（cargo 在编、没产出新 exe）。今天照 README §7 的做法用同一 exe（`a382b2cf3`）/ cwd / DbOption / env 经 `Win32_Process.Create` 重起（不挂终端，pid 17932，内存库）——版本对比这条线的真机基线一直是它，没换成 0.1.30 那个 exe，少一个变量。
+- **先按 HEAD 上的 spec 原样跑**：两份 6 passed（54.9 s，冷缓存）——P1-c 的折叠断言、P2-a 的守卫段真机成立。
+- **补断言**：`model-version-compare` 第一条分屏后读 `__modelUnitVersionCompare.splitOutline`，用 `isSoftwareRendererName`（spec 直接 import）判该走哪条路、那一句露不露（P3-c）；`node-version-view` 容器那条加两个勾选的行数（P1-a：全表 299 → 只看自身变的 5 → 只看几何变的 297，先选好 A 630 / B 632 再勾）、每行「定位」的可点 / 置灰 / title 与装好组后被删构件定位相机真飞（P1-b）；**新第三条**：PIPE 24384_23225 `compare_a=300&compare_b=380` URL 直达自动切「所有子节点」落模型对比 tab 即停（P3-a）→ 总按钮一起装 5 个单元、进度卡、A / B 卡各列 2 个不存在的单元、五个组按钮「三维中 · 只看这组」（P2-a）→ 分屏后点一组「只看这组」分屏仍在（P3-b）→ 退出 generate 8 / DELETE 8。
+  `playwright.config.ts` 加 `PLAYWRIGHT_GPU=1`（ANGLE D3D11）/ `PLAYWRIGHT_SOFTWARE_GL=1`（ANGLE SwiftShader）两个开关。
+- **三档全绿**：Chrome 缺省 headless 7 passed 28.9 s；`PLAYWRIGHT_GPU=1` 7 passed 28.9 s（`compositor true`，RX590）；`PLAYWRIGHT_SOFTWARE_GL=1` 7 passed 29.0 s（`compositor false`，那一句带 SwiftShader 串）。pageerror 0。
+  **本机 Chrome 新 headless 缺省就拿到真显卡**——P3-c 记录里「缺省 headless 落在 SwiftShader」是 09-21 一次性脚本用 chromium 的情形，e2e 要看软渲染那条路得显式 `PLAYWRIGHT_SOFTWARE_GL=1`。
+- **P2-b 确认框 e2e 到不了**：ams8000 任何一段都凑不出 > 20 组（SITE 全程 5 → 632 只有 8 组几何变过），只在单测里。
+- **教程配图**：`docs/guides/images/model-version-view/01…10` 嵌进 `MODEL_VERSION_VIEW_TUTORIAL.md`（09-21 写教程时欠的）。
+- **仍欠**：P2-c（后端 `attribute_diff.rs` 仍 untracked）；S4 注 5 / 注 6 改口（Pencil 里现在没打开任何 .pen）。

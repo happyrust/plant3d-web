@@ -15,8 +15,11 @@
  * 状态：2026-09-18 15:5x 对 :8022（d47d747fd）+ dev :3111 真机跑过（同一批检查点，见上面那份 README）；
  * 2026-09-19 10:2x 跟着 `061c83b2`（面板升级成「节点版本」）改了选版那几条断言——A / B 不再是两个 `<select>`，
  * 而是版本时间线上的徽章（`model-unit-compare-a/b` 的 `data-sesno`）+ 每行一对 A / B 按钮，其余检查点原样。
+ * 2026-09-22 加了分屏描边合成器按显卡串自动退回那条（P3-c）：`PLAYWRIGHT_SOFTWARE_GL=1`（SwiftShader）与 `PLAYWRIGHT_GPU=1`（真显卡）各跑一遍。
  */
 import { expect, test, type Page } from '@playwright/test';
+
+import { isSoftwareRendererName } from '../src/utils/three/webglRendererInfo';
 
 const GEN_MODEL_BASE = process.env.GEN_MODEL_V1_BASE_URL || 'http://127.0.0.1:8022';
 const UNIT = process.env.MODEL_VERSION_E2E_UNIT || '24384_26480';
@@ -208,6 +211,23 @@ test('缺省最近两版：compare_autorun 开面板、版本表来自服务端�
   await expect(page.getByTestId('viewer-model-unit-split-overlay')).toContainText(`A · sesno ${a.sesno}`);
   await expect(page.getByTestId('viewer-model-unit-split-overlay')).toContainText(`B · sesno ${b.sesno}`);
   await expect(page.getByTestId('viewer-model-unit-side-badge')).toHaveCount(0);
+
+  // 分屏每格走不走描边合成器按这块 WebGL 上下文的显卡串定（2026-09-21 收口计划 P3-c，D6「留，但软渲染自动退回」）：
+  // 软渲染（`PLAYWRIGHT_SOFTWARE_GL=1` 钉死 SwiftShader）→ 直接 render，分屏摘要下照实说一句（带显卡串）；
+  // 真显卡（`PLAYWRIGHT_GPU=1` 钉死 ANGLE → D3D11；本机 Chrome 新 headless 缺省也拿得到）→ 合成器、没那一句。
+  // 两档各跑一遍才算把这条验完；跑的是哪档记进 annotations。
+  const splitOutline = await page.evaluate(
+    () => (window as unknown as { __modelUnitVersionCompare?: { splitOutline?: { compositor: boolean; renderer: string | null } } }).__modelUnitVersionCompare?.splitOutline,
+  );
+  expect(splitOutline, '__modelUnitVersionCompare.splitOutline 没就位').toBeTruthy();
+  test.info().annotations.push({ type: 'splitOutline', description: JSON.stringify(splitOutline) });
+  const software = isSoftwareRendererName(splitOutline!.renderer);
+  expect(splitOutline!.compositor).toBe(!software);
+  const directRenderNote = page.getByTestId('model-unit-compare-split-direct-render');
+  await expect(directRenderNote).toHaveCount(software ? 1 : 0);
+  if (software) await expect(directRenderNote).toContainText(splitOutline!.renderer!);
+  if (process.env.PLAYWRIGHT_GPU) expect(software, `PLAYWRIGHT_GPU=1 却落在软渲染：${splitOutline!.renderer}`).toBe(false);
+  if (process.env.PLAYWRIGHT_SOFTWARE_GL) expect(software, `PLAYWRIGHT_SOFTWARE_GL=1 却认成真显卡：${splitOutline!.renderer}`).toBe(true);
 
   // 模型树差异模式：桥接事件把非 unchanged 行送进树；tombstone 时单元根自己也进树
   await expect(page.getByTestId('model-tree-diff-bar')).toBeVisible();

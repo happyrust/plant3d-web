@@ -279,7 +279,10 @@ pageerror 0；console error 仍是那 5 条环境噪音。`a626-b630-split-pick-
 - **2026-09-21 19:5x 拍板落地（收口计划 P3-c，D6「留，但软渲染自动退回」）**：合成器留着；`resolveModelUnitCompareSplitOutline` 按这块 WebGL 上下文的显卡串定一次（`utils/three/webglRendererInfo.ts` 读
   `WEBGL_debug_renderer_info` 的 `UNMASKED_RENDERER_WEBGL`，认 SwiftShader / llvmpipe / softpipe / Microsoft Basic Render Driver），软渲染就每格直接 `renderer.render`；读不到显卡串按真显卡处理。
   排障可用 `localStorage['plant3d-web.viewer.splitOutline'] = 'compositor' | 'direct'` 强制。就位后 `ModelUnitVersionCompareRuntimeState.splitOutline { compositor, renderer }` 与 `__modelUnitVersionCompare.splitOutline`
-  都能看到，面板分屏摘要下软渲染时照实说一句（`model-unit-compare-split-direct-render`）。**真机未跑**（`:8022` 未起）；缺省 headless（SwiftShader）跑 e2e 时分屏应走直接 render，`--gpu` 时走合成器——下次起 dev 时两档各看一眼 `__modelUnitVersionCompare.splitOutline`。
+  都能看到，面板分屏摘要下软渲染时照实说一句（`model-unit-compare-split-direct-render`）。~~**真机未跑**（`:8022` 未起）~~ **2026-09-22 15:0x 真机两档都过**（§8.5）：
+  `PLAYWRIGHT_SOFTWARE_GL=1`（ANGLE → SwiftShader）→ `{compositor: false, renderer: "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) …), SwiftShader driver)"}`、那一句露出并带显卡串（`closeout-0922/split-direct-render-note-swiftshader.png`）；
+  `PLAYWRIGHT_GPU=1`（ANGLE → D3D11）→ `{compositor: true, renderer: "ANGLE (AMD, AMD Radeon RX590 GME … Direct3D11 …)"}`、没那一句。**注意本机 Chrome 新 headless 缺省就拿到真显卡**（不是这一节上面写的「缺省 headless 落在 SwiftShader」——那是 09-21 一次性脚本用 chromium 时的情形），
+  所以要看软渲染那条路得显式 `PLAYWRIGHT_SOFTWARE_GL=1`，`playwright.config.ts` 两个开关都认。
 
 ### 8.4 从一根管道（容器）进分屏：差异摘要按单元分组 → 逐组三维 → 分屏（2026-09-21 11:5x，`3d-diff-color/pipe-24384_23225-a300-b380-*`）
 
@@ -319,3 +322,30 @@ pageerror 0；console error 6 条 = 从前那 5 条环境噪音 + 1 条 404 = `G
 | 退出 | — | 运行态 null、overlay 0、横幅 0、五个组按钮全回「在三维中对比」；pageerror 0，console 仍是那 6 条 |
 
 单测：`modelUnitVersionCompare.test.ts` +1（两侧 impactKind 五种情形 + 注脚），`ModelUnitVersionComparePanel.test.ts` 分组用例 +2 段（单元根 deleted / added → `loadVersion` 收到的 impactKind、`open` 事件两侧、A / B 卡注脚各说各的），5 个相关文件 **39 过**；`type-check` 基线外 0 新增；ESLint 只剩 `ViewerPanel.vue:28` 那条 HEAD 就有的；e2e `PLAYWRIGHT_PORT=3111` 缺省单元 **4 passed 13.1 s**（其中 B 卡「该版本单元已删除」断言不变）、`24384_23257` **4 passed 13.1 s**。
+
+### 8.5 09-21 收口计划十笔的真机 / e2e 补齐（2026-09-22 14:5x–15:1x，`closeout-0922/`）
+
+09-21 那条线（`0f7b46ed` … `18579261`：P0 / P1-a b c / P2-a b / P3-a b c）只过了单测，`:8022` 自 09-21 15:0x 起没在听。今天：
+
+- **`:8022` 重起**：同一 exe `_runs\review-full-8031\aios-database-a382b2cf3.exe`（`0.1.27+ga382b2cf3ace.1789785740`）、同 cwd `_runs\node-versions-8022\` / DbOption / env（`AIOS_STORE_MODE=mem` …），
+  照 §7 的做法走 `Win32_Process.Create`（不挂终端），14:55:55 起 pid 17932，2 s 后 `/health` ok（`degraded_sections` 只有 `dbnum_consistency`，`features.history available`，`in_memory_db true`）；上一段日志挪到 `stdout.run3-0920-2038-to-0921-1500.log`。
+  用户 09-21 20:2x / 20:3x 两次「起好了」都没起来（cargo 在编、`D:\Rust\target\release\aios-database.exe` 仍是 09-21 10:29 的 0.1.30 构建），这里没用那个 exe——版本对比这条线的真机基线一直是 `a382b2cf3`，先别换变量。
+- **先按 HEAD 上的 spec 原样跑一遍**（冷 `:8022`）：两份 **6 passed（54.9 s）**——09-21 P1-c 改的折叠断言、P2-a 的守卫段在真机上成立。
+- **补断言**（两份 spec 各改一处、`node-version-view` 加第三个用例，`.gitignore` 白名单里就有这两份）：
+
+| 收口计划 | 断言落在哪 | 真机事实 |
+|---|---|---|
+| P1-a 两个勾选 | `node-version-view` 容器用例，切「所有子节点」点开全表、选好 A 630 / B 632 之后（先选再勾：缺省 A / B 恰是容器自己那两行 noop / 仅属性，会把「只看几何变的」顶着） | SITE 24384_22399 全表 **299** 行（node/versions subtree 298 + 仅属性 sesno 10）：勾「只看自身变的」→ node/versions self ∪ attribute-history（{5, 7, 10}）∪ A / B（{630, 632}）= **5**；取消 → 299；勾「只看几何变的」→ 去掉 impact 为空 / `noop` 的两行（sesno 7 noop、sesno 10 仅属性）→ **297**；取消 → 299；两次勾选都没把「加载更早」折回来（`container-subtree-self-only.png/.json`） |
+| P1-b 每行「定位」 | 同上，选 A 630 / B 632 属性对比清单出来之后；装好组 `24384_24776` 之后再来一次 | 清单 2 行各一颗（`model-unit-compare-element-locate-*`）；没装 A / B 时 EQUI 24384_24776（修改）可点、BOX 24384_26495（删除）**置灰** 且 title「B 版已删除，当前模型里没有它；先「在三维中对比」再定位」；装好 EQUI 那组后切回属性对比 tab，BOX 那颗变可点、title「飞到三维里 A / B 那一版的它」，相机停到远点再点 → **相机飞过去了**（它只在 A 层里，`container-subtree-locate-deleted.png`） |
+| P1-c 折 20 行 | 09-21 已改（叶子 53 版折起时正好 20 行 + 「加载更早」、点开后那一行消失；容器点开再数）| 真机成立；第三个用例另加：URL 直达选到很早的 A 300 时切点顺延、A / B 两行都画出来、「加载更早 59 版…」仍在（`05-pipe-url-direct-groups.png` 教程图） |
+| P3-a 容器 URL 直达 | 新用例：`unit_refno=24384_23225&compare_a=300&compare_b=380&compare_autorun=1` | 300 / 380 不在 PIPE「仅自身」49 版里、只在子树 150 版里 → 自动切「所有子节点」（`aria-pressed`）、A 300 / B 380 选上、落到模型对比 tab（`aria-pressed`）、`model-unit-compare-error` 0、运行态 0（没装几何）、主按钮置灰 |
+| P2-a 多单元一起进 | 同一用例接着点总按钮 | 差异摘要「变了的单元 5」、5 组、总按钮行「5 个单元 · 约 6 份历史投影」；点下去进度卡「正在生成历史投影 0 / 6 · BRAN 24384_23257@300 · …」（`multi-all-groups-progress.png`）→ 摘要标题「5 个单元 · 几何差异（…）新增 18 删除 2 修改 1 未变 8」、`__modelUnitVersionCompare.units` = 5 个、`unitRefno = 24384_23225`、运行态卡「5 个单元 · 24384_23225 下 · DB 8000」、总按钮「三维中」、五个组按钮「三维中 · 只看这组」；**A 卡「2 个单元该版本没有这个单元：32576_12、32576_22」、B 卡「2 个单元该版本单元已删除：24384_26324、24384_26326」**（`multi-all-groups-3d-compare.png/.json`） |
+| P3-b 换组分屏保持 | 同一用例接着分屏、再点 `24384_23257`「只看这组」 | 分屏「左 A · sesno 300 · 右 B · sesno 380」、`viewMode split` → 点单组 → `unitRefno 24384_23257`、`units [24384_23257]`、**分屏按钮仍 pressed、overlay 两枚角标、`viewMode` 仍 `split`**；那组按钮「三维中」、总按钮回「在三维中对比」、运行态卡「24384_23257 · DB 8000」（`multi-one-group-split-kept.png`）。退出：运行态 0、五个组按钮全回「在三维中对比」、`history/generate` **8 份**（5 组两侧减 4 个不存在的侧 = 6，加只看一组 2）、DELETE **8 条** = 生成数（换组时上一轮的快照已还回去） |
+| P3-c 软渲染退回 | `model-version-compare` 第一条，分屏之后读 `splitOutline` | 见 §8.3 追记：SwiftShader 档 `compositor false` + 那一句带显卡串；D3D11 档 `compositor true` + 没那一句；`isSoftwareRendererName` 与面板判定一致（spec 直接 import 它） |
+| P2-b 阈值确认框 | **e2e 到不了** | ams8000 任何一段都凑不出 > 20 组（SITE 全程 5 → 632 只有 8 组几何变过、`needs_confirm` 一直 false），只在单测里（22 组：先问 / 取消 / 先装 20 / needsConfirm 全部） |
+
+- **三档各跑一遍，全绿**（`e2e-summary.json`）：Chrome 缺省 headless **7 passed 28.9 s**；`PLAYWRIGHT_GPU=1` **7 passed 28.9 s**；`PLAYWRIGHT_SOFTWARE_GL=1` **7 passed 29.0 s**。pageerror 三档都是 0。
+  `playwright.config.ts` 新认 `PLAYWRIGHT_GPU` / `PLAYWRIGHT_SOFTWARE_GL` 两个开关（`launchOptions.args`），别的 spec 不给就是从前的行为。
+- **教程配图**：`docs/guides/images/model-version-view/01…10`（同一台 `:8022`，1600×1000，真显卡；`10-split-direct-render-note.png` 是 SwiftShader 档），`MODEL_VERSION_VIEW_TUTORIAL.md` 各节嵌入。
+- **仍未验**：P2-c 成员 / owner 真差（后端 `attribute_diff.rs` 仍 untracked 在 gen-model-refactor 工作树里，`:8022` 这版没有 `element/attribute-diff`，容器「仅自身」缺省对 524 → 532 那条 404 照旧是预期的探路）；设计稿 S4 注 5 / 注 6 改口（Pencil 里现在没有打开任何 .pen）。
+- 前端是**工作树**（HEAD `151290c1` + 别的会话未提交的空间查询 / 校审改动），不是干净 HEAD；那些改动不碰版本对比这条线的文件。
