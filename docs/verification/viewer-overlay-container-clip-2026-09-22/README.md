@@ -103,7 +103,36 @@ cua 真机（容器 825，空间查询抽屉同时开）：卡 64→424（360 �
 
 `npx vitest run src/components/spatial-query/SpatialQueryDrawer.test.ts src/composables/useDtxTools.objectMeasure.test.ts src/utils/dropdownPlacement.test.ts` → 3 文件 49 过；`npx eslint` 触及的 `.vue` / `.ts` 0 问题（`ViewerPanel.vue` 只剩第 28 行既有那条 import 分组）；tailwindcss CLI 探针确认产出 `max-height: calc(100% - 7.5rem)` / `calc(100% - 9rem)`。
 
+## 4. 线上包验收（cua 真机，2026-09-22 20:53–21:12；main `a9358f09` 部署到 123.57.182.243）
+
+三个修复随 main `a9358f09` 用 GitHub Actions `Deploy Frontend To Ubuntu`（run 35725606280，20:10，1 分 42 秒）上线，`https://123.57.182.243/version.json` = `{commit: a9358f09…, buildDate: 2026-09-22 12:11:46 UTC}`，bundle `index-Bq92dgMb.js`。在线上包上按 §2 同一套做法再验一遍：浏览器由 cua-driver `browser_prepare` 拉起隔离 Chromium（Chrome 152，2560×1440 @1.5x），`set_window_frame` 定窗口尺寸，点击全部走 cua `click`（背景 UIA / PostMessage，未换前台），滚轮走 cua `scroll`（背景对 Chrome 的 wheel 不可用，按驱动提示改 `delivery_mode: foreground` 的 SendInput），截图走 `get_desktop_state`（本页 UIA 树太大，`get_window_state` 4 s 超时）；几何读数与「在容器内」判定用 CDP（Playwright `connectOverCDP` 到驱动给的端口，`getBoundingClientRect`，脚本 `%TEMP%\overlay-clip-online\cdp-step.mjs`，仓外）。页面 URL：`/?show_refno=24381_145018&spatial_refno=24381_145018&spatial_radius=3&spatial_radius_unit=m&spatial_autorun=1`（BRAN 24381/145018 已装进三维，距离查询 3 m → 3952 项）。图在 `online-2026-09-22/`（桌面截图裁到浏览器窗口、缩到 1707 px 宽 = CSS 1x；右上角「要恢复页面吗？」是 Chrome 自己的气泡——第一轮隔离浏览器被驱动回收后重拉才有，不在查看器容器里）。
+
+### 4.1 高容器（窗口 2560×1400 → CSS 视口 1692×839，容器 350→1342 × 83→651 = 568 px）
+
+| 浮层 | 读数 | 在容器内 | 图 |
+| --- | --- | --- | --- |
+| 空间查询抽屉（#80） | 179→627（448），`max-height: calc(100% - 120px)`，正文 `clientHeight 392 / scrollHeight 709` 可滚 | ✓（底边距容器底 24 px） | `online-01-tall-spatial-drawer.png` |
+| 「测量」下拉（#81） | 按钮 406→442；菜单 406→623，下方放得下 → `top-0` 向下开、不限高；7 项 `elementFromPoint` 全命中；**真点「管-管」→ 进向导** | ✓（距容器底 28 px） | `online-02-tall-measure-menu-down.png` |
+| 向导卡（#82，抽屉同开、模型已装、70 字提示） | 95→264，`left 414 → right 774`（360 = max-width）；`overlapsToolbar=false`（工具栏右 403）、`overlapsDrawer=false`（抽屉左 950）；「取消测量」命中，**真点 → 卡关闭、菜单关闭** | ✓ | `online-03-tall-wizard-beside-drawer.png` |
+| 构件最近点抽屉（#80） | 203→627（424），`max-height: calc(100% - 144px)`，正文 `356 / 383` 可滚 | ✓（距容器底 24 px） | `online-04-tall-object-measure-drawer.png` |
+| 「查看工具设置」弹层（#81 收尾） | 齿轮在工具栏底（531→567）；弹层判向上 `bottom-0`，自然高 648 → `max-height 476px` + `overflow-y: auto`，91→567 | ✓（顶距容器顶 8 px） | `online-05-tall-settings-popup-capped.png` |
+
+### 4.2 矮容器（`set_window_frame` 2560×1130 → CSS 视口 1692×659，容器 83→514 = 431 px）
+
+| 浮层 | 读数 | 在容器内 | 图 |
+| --- | --- | --- | --- |
+| 「测量」下拉（#81） | 按钮 338→374，下方只剩 140 px < 217 → **`bottom-0` 向上翻** 156→374，不限高，7 项全在 | ✓ | `online-06-short-measure-menu-flip-up.png` |
+| 「查看工具设置」弹层（#81 收尾） | 重新打开后判向上，`max-height 407px`（648 → 407）+ 滚动，92→499 | ✓ | `online-07-short-settings-popup-capped.png` |
+| 构件最近点抽屉（#80） | 窗口缩小后随容器重排 203→490（287），正文 `219 / 383` 可滚 | ✓ | （同 06 / 07 图右侧） |
+| 空间查询抽屉（#80） | 重载 URL：179→490（311），正文 `255 / 709`；cua 前台滚轮 20 + 40 tick → `scrollTop 454` 到底；**真点「查看结果」** → 结果展开（`scrollHeight 1213`），再滚 100 tick 到底（958）；底部行 `24381_36035 PANE` 的「飞行定位」`elementFromPoint` 命中，**真点 → 属性面板 `REFNO =24381/36035`（选中生效）** | ✓（底边距容器底 24 px） | `online-08-short-spatial-drawer.png`、`online-09-short-spatial-results-bottom-flyto.png` |
+
+注入后 `pageerror` / `console.error` 0；`document.scripts` 只有 `/assets/index-Bq92dgMb.js`。
+
+顺手看到（不属于 #80–#82，未改）：① 弹层落位只在打开那一刻算，窗口随后缩小不会重算——矮容器一节里先前在高容器打开的「查看工具设置」弹层缩窗后仍是 23→499 / `max-height 476`，顶出容器 60 px，关掉重开才按新容器落位；② 结果列表滚到底时最末一行（`24381_36083 PANE`）动作按钮中心点 `elementFromPoint` 未命中，上一行命中并真点成功，未深究。
+
 ## 备注
+
+- cua-driver 像素点击的坐标系随「本窗口是否拍过 `get_window_state` 截图」而变：拍过 → 用那张 1567/1568 宽的截图坐标；没拍过 → 直接按物理窗口像素（本轮 §4 全程用 `get_desktop_state` 截图、`click` 按物理像素，窗口放在 (0,0) 所以物理像素 = 屏幕像素）。
 
 - cua-driver 0.20.0 在本机的两个坑：`get_window_state` 落盘 PNG 为 1568 宽（`max_image_dimension`），像素点击的 x/y 用这张图的坐标系；`scroll` 的 x/y 却按物理窗口像素解释。隔离浏览器约 10 分钟后会随隐式会话结束被回收，验收分两次拉起完成。
 - 未做：全量 `type-check`（只改 class 字串 / 容器 class，不涉及类型）。
