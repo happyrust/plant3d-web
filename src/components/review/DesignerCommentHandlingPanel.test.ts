@@ -247,6 +247,11 @@ vi.mock('@/api/reviewApi', () => ({
   getReviewAnnotationCheckFromError: vi.fn(() => undefined),
 }));
 
+const syncAnnotationReviewStatesMock = vi.fn(async (_options: unknown) => ({ ok: true, appliedCount: 0, totalCount: 0 }));
+vi.mock('@/composables/useAnnotationReviewStateSync', () => ({
+  syncAnnotationReviewStates: (options: unknown) => syncAnnotationReviewStatesMock(options),
+}));
+
 vi.mock('@/ribbon/commandBus', () => ({
   emitCommand: emitCommandMock,
 }));
@@ -398,6 +403,7 @@ describe('DesignerCommentHandlingPanel', () => {
     submitTaskToNextNodeMock.mockClear();
     notifyParentWorkflowActionMock.mockClear();
     notifyParentWorkflowActionMock.mockReturnValue(false);
+    syncAnnotationReviewStatesMock.mockClear();
     reviewAnnotationCheckMock.mockClear();
     reviewAnnotationCheckMock.mockResolvedValue({
       success: true,
@@ -436,6 +442,57 @@ describe('DesignerCommentHandlingPanel', () => {
     expect(document.body.textContent).toContain('批注表格');
     expect(document.body.textContent).toContain('待处理批注');
     expect(document.body.textContent).not.toContain('其他单据批注');
+
+    mounted.unmount();
+  });
+
+  it('打开面板就按当前单据拉一次批注处理状态（内部任务带 taskId），任务切换再拉', async () => {
+    // 09-22 真机：设计侧只有点开某条详情才单条拉，整页不请求 annotation-states，已同意的批注全显示待处理
+    const task1 = createTask();
+    currentTaskRef.value = task1;
+
+    const mounted = await mountPanel();
+
+    expect(syncAnnotationReviewStatesMock).toHaveBeenCalledTimes(1);
+    expect(syncAnnotationReviewStatesMock).toHaveBeenLastCalledWith(expect.objectContaining({
+      formId: 'FORM-1001',
+      taskId: 'task-designer-1',
+    }));
+    const firstCall = syncAnnotationReviewStatesMock.mock.calls[0]?.[0] as { shouldApply?: () => boolean } | undefined;
+    expect(typeof firstCall?.shouldApply).toBe('function');
+
+    const task2 = createTask({ id: 'task-designer-2', formId: 'FORM-3003' });
+    returnedTasksRef.value = [task1, task2];
+    currentTaskRef.value = task2;
+    await flushUi();
+
+    expect(syncAnnotationReviewStatesMock).toHaveBeenCalledTimes(2);
+    expect(syncAnnotationReviewStatesMock).toHaveBeenLastCalledWith(expect.objectContaining({
+      formId: 'FORM-3003',
+      taskId: 'task-designer-2',
+    }));
+
+    mounted.unmount();
+  });
+
+  it('外部嵌入（embed_landing_state 带 form_id）按 form 维度拉批注处理状态，不带 taskId', async () => {
+    returnedTasksRef.value = [];
+    currentTaskRef.value = null;
+    sessionStorage.setItem('embed_landing_state', JSON.stringify({
+      target: 'designer',
+      formId: 'FORM-1001',
+      primaryPanelId: 'designerCommentHandling',
+      visiblePanelIds: ['designerCommentHandling'],
+      restoreStatus: 'missing',
+    }));
+
+    const mounted = await mountPanel();
+
+    expect(syncAnnotationReviewStatesMock).toHaveBeenCalledTimes(1);
+    expect(syncAnnotationReviewStatesMock).toHaveBeenLastCalledWith(expect.objectContaining({
+      formId: 'FORM-1001',
+      taskId: undefined,
+    }));
 
     mounted.unmount();
   });

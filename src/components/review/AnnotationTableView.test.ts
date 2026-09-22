@@ -214,6 +214,28 @@ describe('AnnotationTableView', () => {
     destroy();
   });
 
+  it('1b. 统计条三颗药丸相加等于总数：待处理 = pending + rejected，已处理 = fixed + wont_fix，已通过 = approved', async () => {
+    // 09-21 真机 TC-3：终态两条都「已同意」时旧统计条显示「待处理 0 · 已处理 0」，已同意 / 已驳回 / 不需解决 哪都不进
+    const { host, destroy } = mountTable({
+      items: [
+        createItem({ id: 'p', statusKey: 'pending', statusLabel: '待处理' }),
+        createItem({ id: 'r', statusKey: 'rejected', statusLabel: '已驳回' }),
+        createItem({ id: 'f', statusKey: 'fixed', statusLabel: '已修改' }),
+        createItem({ id: 'w', statusKey: 'wont_fix', statusLabel: '不需解决' }),
+        createItem({ id: 'a1', statusKey: 'approved', statusLabel: '已同意' }),
+        createItem({ id: 'a2', statusKey: 'approved', statusLabel: '已同意' }),
+      ],
+    });
+    await nextTick();
+
+    expect(host.textContent).toContain('共 6 条');
+    expect(host.querySelector('[data-testid="annotation-table-summary-pending"]')?.textContent?.trim()).toBe('待处理 2');
+    expect(host.querySelector('[data-testid="annotation-table-summary-handled"]')?.textContent?.trim()).toBe('已处理 2');
+    expect(host.querySelector('[data-testid="annotation-table-summary-approved"]')?.textContent?.trim()).toBe('已通过 2');
+
+    destroy();
+  });
+
   it('显示批注截图缩略图入口', async () => {
     const { host, destroy } = mountTable({
       items: [

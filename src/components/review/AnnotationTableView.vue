@@ -42,6 +42,7 @@ import {
   toAnnotationTableCsv,
 } from './annotationTableExport';
 import { highlightMatches } from './annotationTableHighlight';
+import { buildAnnotationWorkspaceSummary } from './annotationWorkspaceModel';
 
 import type { AnnotationTableSortKey } from './annotationTableSorting';
 import type { AnnotationWorkspaceItem } from './annotationWorkspaceModel';
@@ -371,15 +372,20 @@ function goNext() {
 // Summary pill counts（不受筛选影响，基于全量 items）
 // ----------------------------------------------------------------------
 
+/**
+ * 三颗药丸相加 = 共 N，口径与 `annotationSheetNavigation.isAnnotationActionableForRole` 一致：
+ * 待处理 = pending + rejected（要设计动手）、已处理 = fixed + wont_fix（设计已处理，等校核定）、已通过 = approved（终态）。
+ * 之前只统 pending / fixed，已同意 / 已驳回 / 不需解决 哪都不进，终态显示「待处理 0 · 已处理 0」
+ * （2026-09-21 真机 TC-3，见 docs/verification/pms-3d-review-integration-e2e.md §5.1 第 4 条）。
+ */
 const summaryCounts = computed(() => {
-  const result = { total: 0, pending: 0, fixed: 0, approved: 0 };
-  for (const item of props.items) {
-    result.total += 1;
-    if (item.statusKey === 'pending') result.pending += 1;
-    if (item.statusKey === 'fixed') result.fixed += 1;
-    if (item.statusKey === 'approved') result.approved += 1;
-  }
-  return result;
+  const summary = buildAnnotationWorkspaceSummary(props.items);
+  return {
+    total: summary.total,
+    pending: summary.pending + summary.rejected,
+    handled: summary.fixed + summary.wontFix,
+    approved: summary.approved,
+  };
 });
 
 // ----------------------------------------------------------------------
@@ -685,9 +691,11 @@ const severityOptions: { value: import('./annotationTableSorting').AnnotationTab
     <div class="flex items-center gap-2 border-b border-slate-200 bg-slate-50 px-4 py-1.5 text-[11px]">
       <span class="font-semibold text-slate-950">共 {{ summaryCounts.total }} 条</span>
       <span class="h-1 w-1 rounded-full bg-slate-300" />
-      <span class="font-medium text-warning">待处理 {{ summaryCounts.pending }}</span>
+      <span class="font-medium text-warning" data-testid="annotation-table-summary-pending">待处理 {{ summaryCounts.pending }}</span>
       <span class="h-1 w-1 rounded-full bg-slate-300" />
-      <span class="font-medium text-success">已处理 {{ summaryCounts.fixed }}</span>
+      <span class="font-medium text-brand" data-testid="annotation-table-summary-handled">已处理 {{ summaryCounts.handled }}</span>
+      <span class="h-1 w-1 rounded-full bg-slate-300" />
+      <span class="font-medium text-success" data-testid="annotation-table-summary-approved">已通过 {{ summaryCounts.approved }}</span>
       <span v-if="totalCount !== summaryCounts.total" class="ml-2 italic text-slate-400"
         data-testid="annotation-table-filter-hint">
         · 筛选后 {{ totalCount }} 条

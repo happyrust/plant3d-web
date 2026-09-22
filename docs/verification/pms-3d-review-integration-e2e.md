@@ -140,7 +140,7 @@ annotation-states?form_id=FORM-CB658BB5921A:
 1. **「待保存证据」弹层拦住画云线**：弹层固定在视口中央，云线拖拽起点落在它范围内就变成选中页面文字，云线不出、也不报错；要先点弹层的 `svg.lucide-x` 关掉才能画。真实用户会碰到，建议弹层不占画布（贴边 / 可折叠）或对画布放行 pointer 事件。**已修**：`151290c1`（云线锚点就绪 / OBB 框画 / 框选目标时该卡放行 pointer 事件并降级显示 `data-canvas-drag-armed=true`，浮层栈容器改为各卡自接事件）；2026-09-22 用本地 build 在 9446 headless 上做 A/B 真机复验通过——同一落点旧包只选中文字、新包成云线，做法与数据见 §6.3.1。
 2. **文字 / 锚点点击落空无反馈**：默认视角下管子很细，点空只是状态停在「点击模型表面创建」，没有任何提示；要先放大再点。建议落空给一次 toast 或状态闪动。
 3. **备注「可选」但实为必填**：设计「不需解决」与校核「驳回」不填备注只弹 toast、不提交（`ReviewCommentsTimeline.vue` `canSubmitReviewAction`），而 `textarea` 占位符写的是「可选」。改占位符文案或在未填时禁用提交按钮即可。**已修**：`151290c1`（占位符跟所选动作走，选了「不需解决」/「驳回」写「（必填：…）」并加 `aria-required`、框描黄、框下一行提示、提交按钮 `title` 同文；填了就消。按钮不禁用，toast 拦截照旧）；2026-09-22 用本地 build 在 9446 上两侧真机复验通过（做法同 §6.3.1，不提交、只读 DOM）：**SJ**（`打开批注单` → 详情 → `[data-testid=review-action-note]`）未选「处理备注（已修改可不填；不需解决必填原因）」→ 点「不需解决」变「处理备注（必填：为什么不需解决，依据是什么）」+ `aria-required=true` + `border-amber-400` + `[data-testid=review-action-note-required-hint]`「「不需解决」需先填写原因，才能提交处理结果」→ 填原因后提示消、清空又回来 → 点「已修改」变「处理备注（可选，例如修改说明）」；**JH** 同理：「决定备注（同意可不填；驳回必填原因）」→「驳回」→「决定备注（必填：驳回原因，设计要按这个重新处理）」+ 提示「「驳回」需先填写驳回原因，才能提交确认结果」→「同意」→「决定备注（可选，例如同意理由）」。对照线上旧包 `index-3hv8nOec`：SJ 一律「处理备注（可选，例如修改说明）」、JH 一律「决定备注（可选，例如同意理由或驳回意见）」，选什么都不变、无提示。
-4. **统计条漏计**（TC-2 已见，真手画再次复现）：`AnnotationTableView.vue` 表头只摆 `pending` / `fixed`，已同意 / 已驳回 / 不需解决 都不计入「已处理」，终态显示「共 2 · 待处理 0 · 已处理 0」。
+4. **统计条漏计**（TC-2 已见，真手画再次复现）：`AnnotationTableView.vue` 表头只摆 `pending` / `fixed`，已同意 / 已驳回 / 不需解决 都不计入「已处理」，终态显示「共 2 · 待处理 0 · 已处理 0」。**已修**（2026-09-22）：统计条改三颗药丸、相加 = 共 N，口径同 `annotationSheetNavigation.isAnnotationActionableForRole`——待处理 = pending + rejected、已处理 = fixed + wont_fix、已通过 = approved，计数复用 `buildAnnotationWorkspaceSummary`（设计面板五张卡同一份）。**顺带发现并修的 4b**：设计侧「打开批注单」进的 `DesignerCommentHandlingPanel` 从不请求 `annotation-states`（只有 `ReviewPanel` 调 `syncAnnotationReviewStates`，点开某条详情时 `ReviewCommentsTimeline` 才单条拉），所以 SJ 页面里已同意的两条全显示「待处理 2」、「已修改 / 不需解决」按钮还能点；现在该面板在聚焦单据 / 任务变化时也拉一次（外部嵌入按 form 维度，内部任务带 taskId）。本地 build 复验（§6.3.1 做法，`stats-check.mjs`，服务端真值两条均 fixed/agreed）：JH 侧「共 2 条 · 待处理 0 · 已处理 0 · 已通过 2」、两行「已同意」；SJ 侧同一串、两行「已同意」、整页 `GET /api/review/annotation-states?form_id=…` 1 次（修前 0 次、显示「待处理 2」）。未动：JH 侧加载时该接口请求 10 次（`ReviewPanel` 多个 watch 各自触发 + 每条 `ReviewCommentsTimeline` 再拉），只是浪费。
 5. **未解释的一次自动确认**：文字批注在没点「确认完成」之前就已作为「修订 1」落库（校审面板显示「已确认到修订 1 · 有未确认修改」），怀疑内联编辑器的 Tab / blur 或随后的锚点点击误触了确认按钮，当时截图对不上，标「待核实」。
 
 ## 6. 自动化现状与跑法
@@ -313,6 +313,7 @@ Playwright / CDP 用 `registerPlant3dAutomationReviewInitScript(context)` 在上
 
 ## 9. 变更记录
 
+- 2026-09-22（下午，三）：§5.1 第 4 条标已修（统计条三药丸 + 设计面板拉 annotation-states，记两侧本地 build 复验读数）。
 - 2026-09-22（下午，二）：§5.1 第 3 条标已修（`151290c1`）并记 SJ / JH 两侧本地 build 真机复验的占位符 / 提示 / `aria-required` 实测值与旧包对照；§6.3.1 补「换角色」一行（独立 context 登 PMS 取 SJ token、http→https 按主机名拦、设计侧先点「打开批注单」）。
 - 2026-09-22（下午）：§5.1 第 1 条标已修（`151290c1`）；新增 §6.3.1「拦截换包」本地 build 真机复验做法（worktree build → `page.route` 换 document + `/assets` → 像素找锚点 → 卡上挑底下是 canvas 的落点）与新旧包 A/B 结果；§6.3「画云线」行改口：`151290c1` 起不必先关「待保存证据」。
 - 2026-09-22：补 TC-3 真手画批注回路（09-21 20:41–21:13 实跑，`FORM-CB658BB5921A`：文字 + 云线真手画、设计「不需解决」、校核「批注驳回」、第 3 轮同意 → approved，8 条 history）；§5.1 记真手画暴露的 5 个嵌入页交互问题；§6.3 记 headless Chrome 真点画布的做法与选择器；时序图补批注驳回支路。

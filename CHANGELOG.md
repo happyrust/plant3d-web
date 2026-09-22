@@ -4,6 +4,11 @@
 
 ### 变更
 
+- **批注表格统计条改三颗药丸（待处理 / 已处理 / 已通过，相加 = 共 N）；设计侧「批注处理」面板打开时也拉一次批注处理状态，不再把已同意的批注全显示成「待处理」** (2026-09-22，09-21 真手画 TC-3 暴露的 §5.1 第 4 条 + 09-22 复验时发现的 4b)
+  - 统计条原来只统 `pending` / `fixed`，已同意 / 已驳回 / 不需解决 哪都不进，终态两条都「已同意」时显示「待处理 0 · 已处理 0」。现在 `AnnotationTableView` 复用 `buildAnnotationWorkspaceSummary`（设计面板五张卡同一份计数），口径同 `isAnnotationActionableForRole`：待处理 = pending + rejected（要设计动手）、已处理 = fixed + wont_fix（设计已处理、等校核定）、已通过 = approved；三颗药丸各带 `data-testid="annotation-table-summary-{pending,handled,approved}"`。
+  - `DesignerCommentHandlingPanel` 之前从不请求 `annotation-states`（只有 `ReviewPanel` 调 `syncAnnotationReviewStates`，点开某条详情时 `ReviewCommentsTimeline` 才单条拉），设计侧整页看到的都是本地默认的「待处理」、「已修改 / 不需解决」按钮照样可点。现在聚焦单据 / 当前任务一变就拉一次：外部 PMS 嵌入按 form 维度（SJ / JH 内部 taskId 可能不同），内部任务且单据一致时带 taskId；带 U0 回执守卫，请求期间切了任务不写。
+  - 验证：vitest `AnnotationTableView.test.ts` 39 过（新增 1b 三药丸相加）、`DesignerCommentHandlingPanel.test.ts` 19 过（新增 2：打开即拉 + 任务切换再拉 / 外部嵌入不带 taskId）、`src/components/review` 全部 44 文件 464 过；eslint 四文件 0；type-check 新增 0。真机：本地 build 用「拦截换包」在 9446 headless 上跑 SJ / JH 两侧（`FORM-CB658BB5921A`，服务端两条均 fixed/agreed）——修前 JH「共 2 · 待处理 0 · 已处理 0」、SJ「共 2 · 待处理 2 · 已处理 0」且整页 0 次 `annotation-states` 请求；修后两侧都是「共 2 · 待处理 0 · 已处理 0 · 已通过 2」、两行「已同意」，SJ 侧请求 1 次。做法与读数见 `docs/verification/pms-3d-review-integration-e2e.md` §5.1 第 4 条、§6.3.1。
+
 - **版本对比 09-21 收口十笔的真机 / e2e 补齐：两份 spec 补断言 + 多单元一条新用例，三档显卡各跑一遍全绿；教程配图** (2026-09-22)
   - 09-21 那条线（时间线两个勾选 / 每行「定位」/ 折 20 行 / 容器 URL 直达 / 多单元一起进三维 + 阈值确认 / 换组分屏保持 / 软渲染退回）只过了单测。今天 `:8022` 用同一 `a382b2cf3` 构建重起后先按原 spec 跑（6 passed），再补：`model-version-compare-gen-model-v1.spec.ts` 分屏后读 `__modelUnitVersionCompare.splitOutline`，按 `isSoftwareRendererName` 判该走合成器还是直接 render、面板那一句露不露；`node-version-view-gen-model-v1.spec.ts` 容器用例加「只看自身变的」/「只看几何变的」的行数（全表 299 → 5 / 297，A / B 两行永远留着）与每行「定位」的可点 / 置灰 / title，装好组后 B 版已删的构件也能定位（相机真飞）；**新第三条**：PIPE `24384_23225` `compare_a=300&compare_b=380` URL 直达自动切「所有子节点」落模型对比 tab 即停 → 总按钮一起装 5 个单元（进度卡、A / B 卡各列 2 个不存在的单元、五个组按钮「三维中 · 只看这组」）→ 分屏后点一组「只看这组」分屏仍在 → 退出 generate 8 / DELETE 8。阈值确认框 e2e 到不了（ams8000 凑不出 > 20 组），只在单测里。
   - `playwright.config.ts` 新认 `PLAYWRIGHT_GPU=1`（ANGLE → D3D11）/ `PLAYWRIGHT_SOFTWARE_GL=1`（ANGLE → SwiftShader）两个开关进 `launchOptions.args`；不给就是从前的行为。本机 Chrome 新 headless 缺省就拿到真显卡，要看软渲染那条路得显式开后者。

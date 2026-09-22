@@ -46,6 +46,7 @@ import { reviewAnnotationCheck } from '@/api/reviewApi';
 import { useAnnotationBindingResolve } from '@/composables/useAnnotationBindingResolve';
 import { useAnnotationDraftScopeSync } from '@/composables/useAnnotationDraftScopeSync';
 import { useAnnotationDraftSession } from '@/composables/useAnnotationDraftSession';
+import { syncAnnotationReviewStates } from '@/composables/useAnnotationReviewStateSync';
 import { saveAnnotationBasicFields, saveAnnotationSeverity } from '@/composables/useAnnotationSeveritySync';
 import { ensurePanelAndActivate } from '@/composables/useDockApi';
 import { useReviewStore } from '@/composables/useReviewStore';
@@ -545,6 +546,39 @@ watch(
     selectedAnnotationId.value = null;
     selectedAnnotationType.value = null;
   },
+);
+
+// 设计 / 校核 / 审核可能在不同浏览器分别操作；本面板打开、聚焦单据或任务一变就主动从后端拉一次批注处理状态，
+// 让表格行状态与统计条立刻对上对方最新的 fixed / wont_fix / agree / reject。之前只有 ReviewPanel 这么做，
+// 本面板只在点开某条详情时由 ReviewCommentsTimeline 单条拉——设计侧整页不请求 annotation-states，
+// 已同意的批注全显示「待处理」、按钮还能点（2026-09-22 真机，docs/verification/pms-3d-review-integration-e2e.md §5.1 第 4 条）。
+async function refreshAnnotationReviewStatesForCurrentScope(): Promise<void> {
+  const formId = activeReviewFormId.value;
+  if (!formId) return;
+  const task = currentTask.value;
+  const taskIdSnapshot = task?.id ?? null;
+  // U0 回执守卫：请求期间切了任务 / 用户就一条都不写（回来时本 watch 会重拉）
+  const scopeStamp = draftSession.currentStamp();
+  // 外部 PMS 嵌入按 form_id 聚焦同一张单据，SJ / JD / JH 可能恢复到不同内部 taskId，按 form 维度拉才看得到对方的处理；
+  // 内部流程且当前任务就是这张单据时才带 taskId
+  const taskId = task && !embeddedLandingFormId.value && task.formId?.trim() === formId ? task.id : undefined;
+  const result = await syncAnnotationReviewStates({
+    formId,
+    taskId,
+    shouldApply: () => draftSession.isTransientReceiptCurrent(scopeStamp),
+  });
+  if ((currentTask.value?.id ?? null) !== taskIdSnapshot) return;
+  if (!result.ok && result.errorMessage) {
+    console.warn('[DesignerCommentHandlingPanel] 拉取批注处理状态失败:', result.errorMessage);
+  }
+}
+
+watch(
+  () => `${activeReviewFormId.value ?? ''}|${currentTask.value?.id ?? ''}`,
+  () => {
+    void refreshAnnotationReviewStatesForCurrentScope();
+  },
+  { immediate: true },
 );
 
 watch(
