@@ -4,7 +4,10 @@
 > 方案 A（前端按整条 BRAN 走，`331f2e9b`，共识 `d-81`）已合入 → 用户接着选「**B 也要：树里 / 计数里列出直段，先出一份小计划（要动 gen-model-model-cache）**」。
 > 上位：ADR 0068（房间层级树，含 2026-09-21「管件带直段」追记）；计划 `2026-09-20-spatial-room-hierarchy-tree-plan.md`；教程 `SPATIAL_QUERY_TUTORIAL.md` §6.1「管件带直段」。
 > 基线：plant3d-web `main@4affeded`（方案 A `331f2e9b` 在内）；gen-model-model-cache `main@579b1d8b2`（`:8027` 验证实例，AMS，`room_membership=true`）。
-> 状态：**待拍板 D1–D7（§8）**。拍完按 §4 分 PR 做；本计划自身一笔提交。
+> 状态：**D1–D7 全按推荐拍板（2026-09-22 11:19）；T1 后端已落地**（gen-model-model-cache `fa744490a` 执行计划 / `86bf22f51` 代码 / `2aab735df` 归房收窄——
+> D4 落地时收窄成「任一端在范围里却不是所选房间成员 = 属于别处、不列，两端都不在范围里才兜底」，真机 R432 整房 159 段；spec §4.13.5「`tubes=1`」）；
+> **T3 前端已落地**（plant3d-web `8323151c`；`TreeTube.aabb` 按服务端实际形状 `{min, max}`，不是 §3.1 写的 `[[f32;3];2]`）；验证账
+> `docs/verification/spatial-room-hierarchy-tree-2026-09-20/README.md` §10 / §11。**T2 / T4 未做**。
 
 ## 0. 一句话
 
