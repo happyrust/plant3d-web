@@ -219,6 +219,32 @@ describe('ModelUnitVersionComparePanel', () => {
     app.unmount();
   });
 
+  it('旧服务端连 model/versions 都没有（ADR-081 之前的构建）：错误框照实说要新版服务端，不是裸「HTTP 404 Not Found」', async () => {
+    // 适配器在 element/versions → model/versions 的回落里两条都撞 404，抛的是 ModelVersionRouteUnavailableError('model/versions')
+    versionSourceMocks.listElementVersions.mockRejectedValue(new ModelVersionRouteUnavailableError('model/versions'));
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const app = createApp(ModelUnitVersionComparePanel);
+    app.mount(host);
+
+    const input = host.querySelector('[data-testid="model-unit-compare-refno"]') as HTMLInputElement;
+    input.value = '24384_23262';
+    input.dispatchEvent(new Event('input'));
+    (host.querySelector('[data-testid="model-unit-compare-load"]') as HTMLButtonElement).click();
+    await flushUi();
+
+    const text = host.querySelector('[data-testid="model-unit-compare-error"]')?.textContent ?? '';
+    expect(text).toContain('服务端还没有 model/versions');
+    expect(text).toContain('新版服务端');
+    expect(text).not.toContain('HTTP 404');
+    expect(host.querySelector('[data-testid="model-unit-compare-timeline"]')).toBeNull();
+    expect(host.querySelector('[data-testid="model-unit-compare-scope"]')).toBeNull();
+    expect(versionSourceMocks.listVersions).not.toHaveBeenCalled();
+
+    app.unmount();
+  });
+
   it('对比成功后把非 unchanged 行送进模型树差异模式，关闭时派发空上下文退出', async () => {
     const treeDiffEvents: CustomEvent[] = [];
     const listener = (event: Event) => treeDiffEvents.push(event as CustomEvent);

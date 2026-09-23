@@ -365,3 +365,21 @@ pageerror 0；console error 6 条 = 从前那 5 条环境噪音 + 1 条 404 = `G
 - **教程配图**：`docs/guides/images/model-version-view/01…10`（同一台 `:8022`，1600×1000，真显卡；`10-split-direct-render-note.png` 是 SwiftShader 档），`MODEL_VERSION_VIEW_TUTORIAL.md` 各节嵌入。
 - **仍未验**：~~P2-c 成员 / owner 真差（后端 `attribute_diff.rs` 仍 untracked 在 gen-model-refactor 工作树里，`:8022` 这版没有 `element/attribute-diff`，容器「仅自身」缺省对 524 → 532 那条 404 照旧是预期的探路）~~ **15:3x 拿后端工作树编了一份换到 `:8022`，P2-c 真机 + e2e 见 §5.5**；~~设计稿 S4 注 5 / 注 6 改口（Pencil 里现在没有打开任何 .pen）~~ **15:5x 已改口并重导 `S4-3d-linkage-live.png`**（收口计划 §3 / §8 末）。
 - 前端是**工作树**（HEAD `151290c1` + 别的会话未提交的空间查询 / 校审改动），不是干净 HEAD；那些改动不碰版本对比这条线的文件。
+
+## 9. 线上「版本查询 / 对比」报 404 的排查（2026-09-23 10:1x，`online-old-backend-0923/`）
+
+**结论：不是前端的错，是线上后端太旧。** 前端线上包是 main `a38bd354`（`/version.json` buildDate 09-23 01:49 UTC）；后端 `GET /api/v1/health` 报 `0.1.27+gc04a9e558b5b`、`started_at 09-21 01:48`——那是 `deploy/backend-20260918` 分支的构建（09-18 10:09），与 gen-model-refactor 的分叉点是 `d8a0c4f9e`，**在 `ef2284f12`（`model/versions`）之前**。`git grep` 该分支 `src/**/*.rs` 里 `model/versions` / `element/versions` / `node/versions` / `element/attribute-history` / `element/attribute-diff` / `node/diff-summary` 六条路由 **0 命中**；它有 `model/history/generate | query | {snapshot_key}`。线上 `route_count 71` 与本机 `:8022` 相同只是巧合。
+
+| 探针 | 线上 `123.57.182.243` | 本机 `:8022`（`0.1.30+g0b2bf527bc4e`） |
+| --- | --- | --- |
+| `GET /api/v1/model/versions?dbnum=8000&refno=24384/26480` | **404**，无信封、`Content-Length: 0`（nginx 转的 axum 404） | 200，EQUI 587 … 640 全表 |
+| `GET /api/v1/element/versions?…` | **404** | 200 |
+| `GET /api/v1/node/versions?…&scope=subtree` | **404** | 200 |
+| `GET /api/v1/element/attribute-history?…` | 未探（同批路由） | 200，`CODEX S5 …` 那串会话 |
+| `GET /api/v1/node/diff-summary?…&a=600&b=604&scope=subtree` | 未探 | 200，`deleted 2` |
+| `GET /api/v1/model/history/generate` | 405（路由在，GET 不许） | — |
+
+- **前端本身**：同一夹具对本机 `:8022`，`e2e/model-version-compare-gen-model-v1.spec.ts` 4 例 + `e2e/node-version-view-gen-model-v1.spec.ts` 4 例 `--workers=1` **8 passed 32.1 s**（dev `:3117`，Playwright 自起自关），pageerror 0。
+- **线上现状**（`01-online-a38bd354-raw-404.png`）：Playwright headless 开 `http://123.57.182.243/?unit_refno=24384_26480&compare_autorun=1`，请求账 `404 GET element/versions` → `404 GET model/versions`，面板错误框只有一句 **「HTTP 404 Not Found」**——`listElementVersions` 撞 404 回落到 `listVersions`、再撞 404 就把裸 `GenModelV1ApiError` 摆了出来，看不出是服务端缺路由。
+- **改后**（`02-fixed-dev-vs-online-backend.png`）：本仓工作树 Vite dev（脚本进程内起 `:3118`、用完关）+ `gm_backend=http://123.57.182.243` 直连线上旧后端，同一 URL：请求账相同，错误框改为「**服务端还没有 model/versions**：版本查询 / 对比要带该路由的新版服务端，当前站点接的后端还是旧构建；后端升级前这里查不出任何版本。」，时间线 / 范围开关都不渲染，pageerror 0。
+- **真修法**：把 gen-model-refactor（≥ `a382b2cf3`；`0b2bf527b` 六条都有，本机 `:8022` 就是它）并进 `deploy/backend-20260918`（该分支比 refactor 多 19 笔部署 / Linux CI 提交，refactor 比它多 50 笔）再走 `.github/workflows/deploy-linux-ubuntu.yml`（提交信息带 `[deploy]` 才真发）。线上是 rocksdb 持久库 + PMS 在用，换后端是后端仓的部署动作，本轮没做、等拍板。

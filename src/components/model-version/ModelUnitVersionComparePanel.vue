@@ -489,7 +489,10 @@ async function loadVersions(): Promise<void> {
       attributeHistory.value = null;
       nodeVersions.value = null;
       dbnum.value = null;
-      error.value = messageOf(cause);
+      // 旧构建（ADR-081 之前）连 `model/versions` 都没有：版本表本身取不到，整块都没法用；照实说要新版服务端，别露裸 404
+      error.value = cause instanceof ModelVersionRouteUnavailableError
+        ? `服务端还没有 ${cause.route}：版本查询 / 对比要带该路由的新版服务端，当前站点接的后端还是旧构建；后端升级前这里查不出任何版本。`
+        : messageOf(cause);
     }
   } finally {
     if (run === requestId) loadingVersions.value = false;

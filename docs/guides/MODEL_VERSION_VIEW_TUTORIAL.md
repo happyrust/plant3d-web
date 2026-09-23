@@ -27,7 +27,7 @@
 
 ## 1. 前置条件
 
-- 前端连的 gen-model 服务端要带版本路由（`model/versions`、`model/history/generate | query`、`element/versions`、`node/versions`……），即 **gen-model-refactor `a382b2cf3`（0.1.27）以后**的构建。旧服务端打开面板会在对应位置**照实说**「服务端还没有 xxx 路由」，能看的那一半照常能看，看不了的那一半置灰或退回手填会话号。
+- 前端连的 gen-model 服务端要带版本路由（`model/versions`、`model/history/generate | query`、`element/versions`、`node/versions`……），即 **gen-model-refactor `a382b2cf3`（0.1.27）以后**的构建。旧服务端打开面板会在对应位置**照实说**「服务端还没有 xxx 路由」，能看的那一半照常能看，看不了的那一半置灰或退回手填会话号。再旧一档、连 `model/versions` 都没有的构建（`ef2284f12` 之前，例如 `deploy/backend-20260918` 分支的 `0.1.27+gc04a9e558`）版本表本身取不到，面板整块不可用，错误框直说「服务端还没有 model/versions：…当前站点接的后端还是旧构建」——这不是前端故障，换服务端即可（2026-09-23）。
 - 三维查看器已打开、目标 dbnum 的模型已加载（环境用的就是它）。
 - 数据库开着增量：gen-model 自己监听 E3D 库变化生成版本表，不用你做什么。
 

@@ -211,6 +211,40 @@ describe('genModelV1 ModelVersionSource', () => {
     expect(listVersions).not.toHaveBeenCalled();
   });
 
+  it('listVersions 在没有 model/versions 路由的旧服务端（ADR-081 之前）上抛 ModelVersionRouteUnavailableError，不是裸 HTTP 404；服务端自己答的 404 原样抛', async () => {
+    const missingRoute = vi.fn(async () => {
+      throw new GenModelV1ApiError({ code: 'not_found', status: 404, path: '/api/v1/model/versions', message: 'HTTP 404 Not Found' });
+    });
+    const source = createGenModelV1ModelVersionSource(api({ listVersions: missingRoute }));
+
+    const error = await source.listVersions(7997, '24381_145018').catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ModelVersionRouteUnavailableError);
+    expect((error as ModelVersionRouteUnavailableError).route).toBe('model/versions');
+    expect((error as Error).message).not.toContain('HTTP 404');
+    expect(missingRoute).toHaveBeenCalledTimes(1);
+
+    const refnoMissing = vi.fn(async () => {
+      throw new GenModelV1ApiError({ code: 'REFNO_NOT_FOUND' as never, status: 404, path: '/api/v1/model/versions', message: '整条链上都没有 24381/999999' });
+    });
+    await expect(createGenModelV1ModelVersionSource(api({ listVersions: refnoMissing })).listVersions(7997, '24381_999999'))
+      .rejects.toThrow('整条链上都没有');
+  });
+
+  it('listElementVersions：element/versions 与 model/versions 都没有（线上 0.1.27 c04a9e558 那种旧构建）→ 回落里同一个 ModelVersionRouteUnavailableError(model/versions)', async () => {
+    const missing = (path: string) => vi.fn(async () => {
+      throw new GenModelV1ApiError({ code: 'not_found', status: 404, path, message: 'HTTP 404 Not Found' });
+    });
+    const listElementVersions = missing('/api/v1/element/versions');
+    const listVersions = missing('/api/v1/model/versions');
+    const source = createGenModelV1ModelVersionSource(api({ listElementVersions, listVersions }));
+
+    const error = await source.listElementVersions(8000, '24384_23262').catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ModelVersionRouteUnavailableError);
+    expect((error as ModelVersionRouteUnavailableError).route).toBe('model/versions');
+    expect(listElementVersions).toHaveBeenCalledTimes(1);
+    expect(listVersions).toHaveBeenCalledTimes(1);
+  });
+
   it('truncated 时按最后一条 sesno 作 since_sesno 连续拉到全表（Q17）', async () => {
     const pages = [
       response({ truncated: true, versions: [{ sesno: 1, session_time: null, impact_kind: 'delivery' }, { sesno: 5, session_time: null, impact_kind: 'mesh' }] }),

@@ -3,7 +3,8 @@
  *
  * - `listVersions`：`GET /api/v1/model/versions`，`truncated` 时按最后一条的 `sesno` 作 `since_sesno` 连续拉到全表
  *   （Q17；上限 `MAX_PAGES` 页），端口永远给全表，UI 不感知截断。422 `NOT_A_DELIVERY_UNIT_ROOT` 翻成
- *   `NotDeliveryUnitRootError`（noun 与项目类型集来自 `detail`）。
+ *   `NotDeliveryUnitRootError`（noun 与项目类型集来自 `detail`）；ADR-081 之前的旧构建没有这条路由（无信封 404）→
+ *   `ModelVersionRouteUnavailableError('model/versions')`。
  * - `loadVersion`：`POST model/history/generate` → 轮询 `tasks/{id}` 到 `succeeded`（`result.snapshot_key`）→
  *   `history/query tool=instances` + `tool=tubes` → 与生产 `model/records` 同一条映射（`projection_record_to_query`
  *   的 TS 对偶 + `groupInstanceEntriesByRefno`）→ `InstanceEntry[]`。`tombstone` 版本不打后端、回空集。
@@ -262,6 +263,9 @@ export function createGenModelV1ModelVersionSource(api: GenModelV1VersionApi = d
         if (isGenModelV1ApiError(error) && error.code === 'NOT_A_DELIVERY_UNIT_ROOT') {
           throw new NotDeliveryUnitRootError(normalized, readNoun(error.detail), readTypes(error.detail));
         }
+        // ADR-081 之前的旧构建连版本表这条路由都没有（无信封 404）：照实说「要新版服务端」，别把裸 `HTTP 404 Not Found` 摆到面板上。
+        // 服务端自己答的 404（`REFNO_NOT_FOUND` / `SESSION_NOT_FOUND`）带信封码，不在这里回落。
+        if (page === 0 && isMissingRoute(error)) throw new ModelVersionRouteUnavailableError('model/versions');
         throw error;
       }
       for (const row of response.versions ?? []) versions.push(toModelVersion(response, normalized, row));
@@ -279,6 +283,8 @@ export function createGenModelV1ModelVersionSource(api: GenModelV1VersionApi = d
    * 服务端还没有这条路由（旧构建回 404 / `not_found`）时回落到单元表：先把这个 refno 当单元根试
    * （它本来就是单元根的话，回落后除了左列为空以外什么都不缺）；它不是单元根就把 `NotDeliveryUnitRootError`
    * 照原样抛出去——那是旧服务端下的真实能力边界，不能假装成「这个构件一次都没变过」。
+   * 更旧的构建（ADR-081 之前）连 `model/versions` 也没有：回落里的 `listVersions` 抛 `ModelVersionRouteUnavailableError('model/versions')`，
+   * 面板据此说「要新版服务端」。
    */
   async function listElementVersions(dbnum: number, refno: string): Promise<ModelElementVersionTimeline> {
     const normalized = fromV1Refno(refno);

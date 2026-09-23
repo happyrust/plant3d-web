@@ -535,7 +535,10 @@ export type ModelNodeDiffSummary = {
  * 模型（CONTEXT，Q12），刷新环境走页面级开关下的 records + forceRefresh，不经这里。
  */
 export type ModelVersionSource = {
-  /** 该最小交付单元的全部模型版本，按 sesno 升序。 */
+  /**
+   * 该最小交付单元的全部模型版本，按 sesno 升序。
+   * 服务端没有这条路由（ADR-081 之前的旧构建）→ 抛 `ModelVersionRouteUnavailableError('model/versions')`：版本表都取不到，面板照实说要新版服务端。
+   */
   listVersions(dbnum: number, unitRefno: string): Promise<ModelVersion[]>;
   /**
    * 某个**构件**的版本时间线（「查看某个构件的所有历史版本」）：每一行两列，左列是它自己这条记录变没变、
