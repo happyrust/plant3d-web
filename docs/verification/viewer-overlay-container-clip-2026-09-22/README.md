@@ -116,6 +116,8 @@ Playwright headless 拦截换包 A/B（`pms-3d-review-integration-e2e.md` §6.3.
 
 `pageerror` 两侧 0。图：`resize-83-menu-online.png` / `resize-83-menu-local.png`（缩矮后的菜单）、`resize-83-settings-online.png` / `resize-83-settings-local.png`（缩矮后的弹层）。单测 `dropdownPlacement.test.ts` 6 → 8 例。脚本 `%TEMP%\overlay-clip-online\resize-check.mjs`（仓外，`MODE=online|local`）。
 
+上线后（main `a38bd354`）用 cua-driver 真改窗口尺寸的复验见 §4.3。
+
 ## 3. 单测 / lint
 
 `npx vitest run src/components/spatial-query/SpatialQueryDrawer.test.ts src/composables/useDtxTools.objectMeasure.test.ts src/utils/dropdownPlacement.test.ts` → 3 文件 49 过；`npx eslint` 触及的 `.vue` / `.ts` 0 问题（`ViewerPanel.vue` 只剩第 28 行既有那条 import 分组）；tailwindcss CLI 探针确认产出 `max-height: calc(100% - 7.5rem)` / `calc(100% - 9rem)`。
@@ -146,6 +148,23 @@ Playwright headless 拦截换包 A/B（`pms-3d-review-integration-e2e.md` §6.3.
 注入后 `pageerror` / `console.error` 0；`document.scripts` 只有 `/assets/index-Bq92dgMb.js`。
 
 顺手看到（不属于 #80–#82）：① 弹层落位只在打开那一刻算，窗口随后缩小不会重算——矮容器一节里先前在高容器打开的「查看工具设置」弹层缩窗后仍是 23→499 / `max-height 476`，顶出容器 60 px，关掉重开才按新容器落位 → issue [#83](https://github.com/happyrust/plant3d-web/issues/83)（同日修，见 §2.7）；② 结果列表滚到底时最末一行（`24381_36083 PANE`）动作按钮中心点 `elementFromPoint` 未命中，上一行命中并真点成功，未深究。
+
+### 4.3 #83 上线后复验（2026-09-23 09:59–10:00；main `a38bd354` 部署到 123.57.182.243）
+
+main `a38bd354`（含 #83 修复）用 GitHub Actions `Deploy Frontend To Ubuntu`（run 35807788467，09:48，约 2 分 23 秒）上线，`version.json` = `{commit: a38bd354…, buildDate: 2026-09-23 01:49:38 UTC}`，bundle `index-BDGT5ORu.js`（80 / 443 / 3100 三入口一致）。页面 URL 同 §4。
+
+做法：**窗口尺寸由 cua-driver `set_window_frame` 真改**——弹层开着，把同一个 Chrome 152 窗口在 2560×1400 ↔ 2560×1130 之间缩放（OS 级窗口尺寸变化，不是 Playwright 视口模拟），CSS 视口 1692×839 ↔ 1692×659。弹层开关（`mouse.click`）、几何读数（`getBoundingClientRect`）与截图（`page.screenshot`，CSS 1x）走 CDP：当时桌面正在使用，没有抢前台做 cua 点击 / 桌面截图。Chrome 用临时 profile 自拉（`--remote-debugging-port`，并关掉原生窗口遮挡计算——否则窗口被别的窗口盖住时页面转 hidden，ResizeObserver 不回调），验完已关、profile 已删。
+
+| 步骤（弹层一直开着） | 容器 | 读数 | 在容器内 | 图 |
+| --- | --- | --- | --- | --- |
+| 「测量」下拉：高窗口打开 | 83→651（568） | `top-0` 向下开 406→623，7 项 | ✓ | `online-2026-09-23/83-01-tall-measure-menu-down.png` |
+| cua 缩到 2560×1130 | 83→514（431） | **自动翻成 `bottom-0`** 156→374（改前旧包：仍 `top-0` 337→555，超出容器底 42 px，§2.7） | ✓ | `online-2026-09-23/83-02-short-measure-menu-flip-up.png` |
+| cua 放回 2560×1400 | 83→651 | 回到 `top-0` 406→623 | ✓ | — |
+| 「查看工具设置」：高窗口打开 | 83→651 | `bottom-0`，自然高 648 → `max-height 476px` + `overflow-y: auto`，91→567 | ✓ | `online-2026-09-23/83-03-tall-settings-popup-476.png` |
+| cua 缩到 2560×1130 | 83→514 | **自动重算 `max-height 407px`**，92→499，标题「查看工具设置」完整可见（改前旧包同一操作：仍 476，23→499，顶出容器 60 px，§4.2 顺手看到 ①） | ✓ | `online-2026-09-23/83-04-short-settings-popup-407.png` |
+| cua 放回 2560×1400 | 83→651 | `max-height` 回 476px，91→567 | ✓ | — |
+
+注入后 `error` / `unhandledrejection` / `console.error` 0；`document.scripts` 只有 `/assets/index-BDGT5ORu.js`。读数与 §2.7 Playwright A/B 的修后一列一致（菜单那边 155→373 与这里 156→374 差 1 px，是容器 430 / 431 之差）。脚本 `%TEMP%\overlay-clip-online\v83-step.mjs`（仓外）。
 
 ## 备注
 
