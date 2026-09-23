@@ -149,11 +149,11 @@ Playwright headless 拦截换包 A/B（`pms-3d-review-integration-e2e.md` §6.3.
 
 顺手看到（不属于 #80–#82）：① 弹层落位只在打开那一刻算，窗口随后缩小不会重算——矮容器一节里先前在高容器打开的「查看工具设置」弹层缩窗后仍是 23→499 / `max-height 476`，顶出容器 60 px，关掉重开才按新容器落位 → issue [#83](https://github.com/happyrust/plant3d-web/issues/83)（同日修，见 §2.7）；② 结果列表滚到底时最末一行（`24381_36083 PANE`）动作按钮中心点 `elementFromPoint` 未命中，上一行命中并真点成功，未深究。
 
-### 4.3 #83 上线后复验（2026-09-23 09:59–10:00；main `a38bd354` 部署到 123.57.182.243）
+### 4.3 #83 上线后复验（2026-09-23 10:21–10:23；main `a38bd354` 部署到 123.57.182.243）
 
 main `a38bd354`（含 #83 修复）用 GitHub Actions `Deploy Frontend To Ubuntu`（run 35807788467，09:48，约 2 分 23 秒）上线，`version.json` = `{commit: a38bd354…, buildDate: 2026-09-23 01:49:38 UTC}`，bundle `index-BDGT5ORu.js`（80 / 443 / 3100 三入口一致）。页面 URL 同 §4。
 
-做法：**窗口尺寸由 cua-driver `set_window_frame` 真改**——弹层开着，把同一个 Chrome 152 窗口在 2560×1400 ↔ 2560×1130 之间缩放（OS 级窗口尺寸变化，不是 Playwright 视口模拟），CSS 视口 1692×839 ↔ 1692×659。弹层开关（`mouse.click`）、几何读数（`getBoundingClientRect`）与截图（`page.screenshot`，CSS 1x）走 CDP：当时桌面正在使用，没有抢前台做 cua 点击 / 桌面截图。Chrome 用临时 profile 自拉（`--remote-debugging-port`，并关掉原生窗口遮挡计算——否则窗口被别的窗口盖住时页面转 hidden，ResizeObserver 不回调），验完已关、profile 已删。
+做法：**窗口尺寸由 cua-driver `set_window_frame` 真改**——弹层开着，把同一个 Chrome 152 窗口在 2560×1400 ↔ 2560×1130 之间缩放（OS 级窗口尺寸变化，不是 Playwright 视口模拟），CSS 视口 1692×839 ↔ 1692×659。打开弹层、读几何、截图走 **chrome-devtools-mcp 1.9.0**（`--browserUrl` 连这个 Chrome）：`take_snapshot` 取按钮 uid（「测量（长度/角度/标高/间距）」「查看工具设置」）→ `click`，`evaluate_script` 读 `getBoundingClientRect`，`take_screenshot` 出图（设备像素 1.5x）；换弹层前 `navigate_page` reload 复位一次。全程后台完成，没有抢前台。同一流程 10:00 先用 Playwright `connectOverCDP` 跑过一遍，读数逐项相同。Chrome 用临时 profile 自拉（`--remote-debugging-port`，并关掉原生窗口遮挡计算——否则窗口被别的窗口盖住时页面转 hidden，ResizeObserver 不回调），验完已关、profile 已删。
 
 | 步骤（弹层一直开着） | 容器 | 读数 | 在容器内 | 图 |
 | --- | --- | --- | --- | --- |
@@ -164,7 +164,7 @@ main `a38bd354`（含 #83 修复）用 GitHub Actions `Deploy Frontend To Ubuntu
 | cua 缩到 2560×1130 | 83→514 | **自动重算 `max-height 407px`**，92→499，标题「查看工具设置」完整可见（改前旧包同一操作：仍 476，23→499，顶出容器 60 px，§4.2 顺手看到 ①） | ✓ | `online-2026-09-23/83-04-short-settings-popup-407.png` |
 | cua 放回 2560×1400 | 83→651 | `max-height` 回 476px，91→567 | ✓ | — |
 
-注入后 `error` / `unhandledrejection` / `console.error` 0；`document.scripts` 只有 `/assets/index-BDGT5ORu.js`。读数与 §2.7 Playwright A/B 的修后一列一致（菜单那边 155→373 与这里 156→374 差 1 px，是容器 430 / 431 之差）。脚本 `%TEMP%\overlay-clip-online\v83-step.mjs`（仓外）。
+注入后 `error` / `unhandledrejection` / `console.error` 0；`document.scripts` 只有 `/assets/index-BDGT5ORu.js`。读数与 §2.7 Playwright A/B 的修后一列一致（菜单那边 155→373 与这里 156→374 差 1 px，是容器 430 / 431 之差）。驱动脚本 `%TEMP%\overlay-clip-online\cdtm.cjs`（仓外，本机 stdio 直连 chrome-devtools-mcp，每步一个 PHASE）。
 
 ## 备注
 
