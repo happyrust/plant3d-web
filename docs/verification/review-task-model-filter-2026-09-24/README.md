@@ -75,6 +75,26 @@ console 顺序（JH）：`[embed][form-restore] workflow snapshot resolved` → 
 
 SH / PZ 这条路要等 PMS 里把单据同意推进后才会进他们的待办（会改流程状态），本节没走；§2.2 的 SH 读数用的是直领 token。
 
+### 2.4 管道 BRAN 单据（PZ · `FORM-2EBB10854469` · `24381_145018`）：配件也亮了
+
+修前对管道 BRAN 的症状是「只剩管子亮着、配件全藏」（issue 根因 ① 末句）。用 09-21 e2e 留下的已批准单据 `FORM-2EBB10854469`（`workflow/sync?query`：`formStatus=approved currentNode=pz models=["24381_145018"]`），PZ（pz）直领 token 打开，页面「当前节点：批准 · 已通过」（11:52，headless Chrome 152 / CDP 9448，隔离 context）：
+
+| 读数 | 结果 |
+| --- | --- |
+| 状态表 240 条里有 DTX 对象的 refno | 12 个：BRAN `24381_145018` 自己 **11** 个（隐含管子 TUBI）+ 成员 `145019 / 145021 / 145023 / 145025 / 145026 / 145028 / 145029 / 145031 / 145032 / 145033 / 145035` 各 1 |
+| 其中可见 / 被藏 | **12 / 0** |
+| `getSubtreeRefnos(['24381_145018'])` | 上述 12 个（含 BRAN 自己——它有管子对象） |
+| `getAABB([BRAN])` vs `getSubtreeAABB([BRAN])` | `x∈[-4.45, 3.86]` vs `x∈[-4.45, 4.45]`、`z∈[-3.32, 2.17]` vs `z∈[-3.32, 3.32]`——配件把盒撑大，相机按子树盒飞 |
+| 「没有几何记录」文案 | 无 |
+
+![PZ 打开管道 BRAN：管子 + 弯头 / 阀 / 法兰都在](./04-pz-online-pipe-bran-24381_145018-fittings-visible.png)
+
+同页回放旧两步 `setObjectsVisible(全部,false)` → `setObjectsVisible([BRAN],true)`：有几何且可见的只剩 `['24381_145018']`（11 段管子），每个转角都断开、左端阀组消失——这就是 e2e 一直没人注意的「只剩管子」：
+
+![旧逻辑回放：只剩管子](./05-pz-online-pipe-bran-old-filter-replay-tube-only.png)
+
+再按新逻辑亮 `[BRAN, ...getSubtreeRefnos([BRAN])]` → 可见 12 / 被藏 0，回到上图。
+
 ## 3. 本地验证（提交前）
 
 - vitest：`taskModelFilter.test.ts` 5 例、`DtxCompatScene.getSubtreeAABB.test.ts` 7 例（+3 `getSubtreeRefnos`）、`useModelGeneration.genModelV1.test.ts` 29 例（+2 #84）——3 文件 41 passed。
