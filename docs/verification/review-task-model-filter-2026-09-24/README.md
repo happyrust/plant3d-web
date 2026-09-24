@@ -117,6 +117,12 @@ SH 审批窗读数（页面 console 里能看到嵌入 iframe 的日志）：`[u
 
 ![SH 审批窗全屏：BEND + STRT 亮着、面板停在审核](./08-sh-pms-approval-fullscreen-review-node.png)
 
+**SH → PZ → 结束这两步由 §2.3 的 cua 会话推的**（模型中心 history：`sh approve by SH 12:35:35`、`pz approve by PZ 12:43:30`）。我这边 12:41 同一时刻在 SH 审批窗再点「同意」撞上了它：`ReadSendNodeList(SequeID=3)` 回 PMS「严重异常，通过序号[3]未捕获到预期记录」（SH 那条任务刚被完成），随后 `PreValidate` 被模型中心 `workflow/verify` 挡下「当前单据已处于终态 approved，不可继续流转」（PMS 页面把它显示成「检测到批注未完成处理或确认」）——同一节点两处并发操作时 PMS 就是这个反应，记一笔。
+
+单据进终态后再以 PZ 直领 token 打开（12:46）：`workflow/sync?query` `formStatus=approved currentNode=pz taskStatus=approved`；页面「批准 (pz)」为当前节点、「当前节点：批准 · 当前状态：已通过」；有几何的仍只有 BEND + STRT、2 可见 / 0 被藏；无「没有几何记录」。
+
+![PZ 打开已批准的单据：终态照样只亮成员](./09-pz-online-approved-terminal-state.png)
+
 ## 3. 本地验证（提交前）
 
 - vitest：`taskModelFilter.test.ts` 5 例、`DtxCompatScene.getSubtreeAABB.test.ts` 7 例（+3 `getSubtreeRefnos`）、`useModelGeneration.genModelV1.test.ts` 29 例（+2 #84）——3 文件 41 passed。
