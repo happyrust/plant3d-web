@@ -72,7 +72,7 @@ console 顺序（JH）：`[embed][form-restore] workflow snapshot resolved` → 
 | 「没有几何记录 / 加载结束但未绘制实例」文案、snackbar | 无 | 无 | 无 |
 | cua 点「已过滤」（`help="显示所有模型"`） | 过滤关掉，47 / 47 可见——「显示全部」能恢复 | 未点 | 未点 |
 
-JH 这条隔约 10 分钟重新登录、再点同一行重跑一遍，读数相同。单据现停在批准节点（PZ 未同意）。
+JH 这条隔约 10 分钟重新登录、再点同一行重跑一遍，读数相同。12:43 PZ 在同一审批窗「同意」（cua）→「审批处理 · 即将流转到 ☑结束」，不需要选目标人，处理意见用 cua `set_value` 填入 → cua 点「提 交」→ 模型中心 `form_status=approved`、`task_status=approved`、`current_node=pz`，单据走完。
 
 ![JH 从 PMS 待办打开：审批窗里的三维页只亮成员、已过滤](./cua-jh-pms-entry-filtered.png)
 
