@@ -124,6 +124,32 @@ SH 审批窗读数（页面 console 里能看到嵌入 iframe 的日志）：`[u
 
 ![PZ 打开已批准的单据：终态照样只亮成员](./09-pz-online-approved-terminal-state.png)
 
+### 2.6 全流程复验：SJ 新建 HVAC 支管单 `FORM-6F501122F12C` → JH / SH / PZ（cua）
+
+14:00–14:09，在重新部署后的包（`d33c161d` / `index-GaXSJjGN.js`）上从头走一遍。浏览器还是 §2.3 那套 cua + 临时 profile 的 Chrome。
+
+1. **SJ 新增 + 发起**：`scripts/pms-chrome-devtools-flow.ts`（`PMS_CDP_FULL_FLOW=1`，CDP 附到这个 Chrome，`PMS_TARGET_BRAN_REFNO=24384_24935`，包名 `E2E-PMS-HVAC-0924-1356`）→ `task-4a6be325-…`、`FORM-6F501122F12C`，按 form_id 重开记录的严格校验通过；模型中心 `draft / sj`，`models=["24384_24935"]`。
+2. **SJ 送审**：Playwright 附到同一个 Chrome，按《PMS 端到端案例》§6.2 的选择器走「编辑 → 送审 → 三维编校审 → 定义节点 JH / SH / PZ → 下一步 → 意见 → 提 交」→ `active / jd / submitted`（14:03）。
+3. **JH**：个人中心「待处理的」第一行「(*NEW) 三维校审单 设计|2026-09-24」（cua UIA Invoke）→ 审批窗「[校核]」→ 读数 →「同意」（cua）→「审批处理 · 即将流转到 审核」。**目标人「审核」已预选，候选也只有这一个** → 处理意见用 cua `set_value` 填 →「提 交」（cua）→ `sh / in_review`（14:05）。
+4. **SH**：「待审批事项」12 条里第一条「校核 刚刚 三维校审单」（cua）→「[审核]」→ 读数 → 同意 →「即将流转到 批准」，**「批准」已预选** → 意见 → 提交 → `pz / in_review`（14:07）。
+5. **PZ**：「待审批事项」7 条里第一条「审核 刚刚 三维校审单」（cua）→「[批准]」→ 读数 → 同意 →「即将流转到 结束」→ 意见 → 提交 → `approved / approved / pz`（14:08）。
+
+| 读数（嵌入页） | JH | SH | PZ |
+| --- | --- | --- | --- |
+| token（PMS 当场签发） | `JH / role=jd` | `SH / role=sh` | `PZ / role=pz` |
+| 载入的包 | `d33c161d` / `index-GaXSJjGN.js` | 同 | 同 |
+| 面板 | 「校对 · 待处理」，「已过滤」开着 | 「审核 · 审核中」，「已过滤」开着 | 「批准 · 审核中」，「已过滤」开着 |
+| `scene.objects` 里 `24384_24935` / `24384_24936` / `24384_24939` | 都 `visible=true`（47 条状态里 9 条可见） | 同 | 同 |
+| 「没有几何记录 / 加载结束但未绘制实例」文案、snackbar | 无 | 无 | 无 |
+
+**顺带澄清 #85**：这张单送审时在「定义节点」里指定了 JH / SH / PZ，后面 JH、SH 两步的「审批处理」都已经预选了下一节点的人，候选也只有那一个人。`FORM-C8049FC8F784` 那两步没有预选，候选是 `U021 … U030 / 审核`、`U031 … U040 / 批准` 这样的一整组人。由此推断它送审时没有指定人员（当时的送审弹窗已经看不到了，这一点未证实）。
+
+![全流程 JH：新单从待办打开，只亮成员](./cua-flow2-jh.png)
+
+![全流程 SH：审核节点](./cua-flow2-sh.png)
+
+![全流程 PZ：批准节点](./cua-flow2-pz.png)
+
 ## 3. 本地验证（提交前）
 
 - vitest：`taskModelFilter.test.ts` 5 例、`DtxCompatScene.getSubtreeAABB.test.ts` 7 例（+3 `getSubtreeRefnos`）、`useModelGeneration.genModelV1.test.ts` 29 例（+2 #84）——3 文件 41 passed。
