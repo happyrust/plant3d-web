@@ -53,27 +53,30 @@ console 顺序（JH）：`[embed][form-restore] workflow snapshot resolved` → 
 
 ![SH 打开：同样只亮成员](./03-sh-online-0dec493d-members-visible.png)
 
-### 2.3 cua 走真实 PMS 入口（JH）
+### 2.3 cua 走真实 PMS 入口（JH / SH）
 
-§2 的 token 是向模型中心直领的；这一节补用户真实的打开路径（11:30–11:50，cua-driver 0.20.0 操作有界面的 Chrome 152，临时 profile，带 `--disable-features=CalculateNativeWinOcclusion --disable-backgrounding-occluded-windows` 保证窗口被遮挡时照常渲染）：
+§2 的 token 是向模型中心直领的；这一节补用户真实的打开路径（11:30–12:15，cua-driver 0.20.0 操作有界面的 Chrome 152，临时 profile，带 `--disable-features=CalculateNativeWinOcclusion --disable-backgrounding-occluded-windows` 保证窗口被遮挡时照常渲染）：
 
-1. PMS `sysin.html` 以 JH 登录（账号见 `AGENTS.md`；表单经 CDP 填写并提交，原因见备注）；
-2. 个人中心「我的审批 · 待处理的」第一行「三维校审单 设计|2026-09-23」——cua `click` 按 `element_token` 走 UIA Invoke 点开；
-3. PMS 弹出审批窗「[校核]」，里面嵌入的就是 `/review/3d-view?form_id=FORM-C8049FC8F784&user_token=<PMS 当场签发的 JH token，role=jd>&output_project=AvevaMarineSample`。
+1. PMS `sysin.html` 登录（账号见 `AGENTS.md`；表单经 CDP 填写并提交，原因见备注）；
+2. **JH**：个人中心「我的审批 · 待处理的」第一行「三维校审单 设计|2026-09-23」——cua `click` 按 `element_token` 走 UIA Invoke 点开，PMS 弹出审批窗「[校核]」；
+3. **SH**：12:12 前单据已在 PMS 由 JH 同意流转到审核（模型中心 `current_node=sh`、`task_status=in_review`）。SH 登录后顶栏「待审批事项」由 11 条变 12 条，点开第一条「校核 刚刚 三维校审单」（同样 UIA Invoke），PMS 弹出审批窗「[审核]」；
+4. 两个审批窗里嵌入的都是 `/review/3d-view?form_id=FORM-C8049FC8F784&user_token=<PMS 当场签发的 token>&output_project=AvevaMarineSample`，token 分别是 `JH / role=jd`、`SH / role=sh`。
 
-| 读数 | 结果 |
-| --- | --- |
-| 载入的包 / `version.json` | `index-DARS-7AE.js` / `0dec493d` |
-| 面板 | 「当前节点：校对 · 待处理」，「已过滤」开着 |
-| `scene.objects` 里 `24384_24935` / `24384_24936` / `24384_24939` | 都在，都 `visible=true`（47 条状态里 9 条可见） |
-| 「没有几何记录 / 加载结束但未绘制实例」文案、snackbar | 无 |
-| cua 点「已过滤」（`help="显示所有模型"`） | 过滤关掉，47 / 47 可见——「显示全部」能恢复 |
+| 读数 | JH（校对） | SH（审核） |
+| --- | --- | --- |
+| 载入的包 / `version.json` | `index-DARS-7AE.js` / `0dec493d` | 同 |
+| 面板 | 「当前节点：校对 · 待处理」，「已过滤」开着 | 「当前节点：审核 · 审核中」，「已过滤」开着 |
+| `scene.objects` 里 `24384_24935` / `24384_24936` / `24384_24939` | 都在，都 `visible=true`（47 条状态里 9 条可见） | 同 |
+| 「没有几何记录 / 加载结束但未绘制实例」文案、snackbar | 无 | 无 |
+| cua 点「已过滤」（`help="显示所有模型"`） | 过滤关掉，47 / 47 可见——「显示全部」能恢复 | 未点 |
 
-隔约 10 分钟重新登录、再点同一行重跑一遍，读数相同。
+JH 这条隔约 10 分钟重新登录、再点同一行重跑一遍，读数相同。
 
 ![JH 从 PMS 待办打开：审批窗里的三维页只亮成员、已过滤](./cua-jh-pms-entry-filtered.png)
 
-SH / PZ 这条路要等 PMS 里把单据同意推进后才会进他们的待办（会改流程状态），本节没走；§2.2 的 SH 读数用的是直领 token。
+![SH 从顶栏待审批事项打开：流程到审核，同样只亮成员](./cua-sh-pms-entry-filtered.png)
+
+PZ 这条路要等 SH 同意后才会进 PZ 的待办（会改流程状态），本节没走；PZ 的读数见 §2.4（直领 token、另一张管道单）。
 
 ### 2.4 管道 BRAN 单据（PZ · `FORM-2EBB10854469` · `24381_145018`）：配件也亮了
 
