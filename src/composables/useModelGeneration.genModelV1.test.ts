@@ -241,6 +241,62 @@ describe('showModelByRefno（gen-model-v1）', () => {
     expect(loadInstancesMock).toHaveBeenCalledTimes(2);
   });
 
+  it('#84 第二个实例对已画好的 BRAN：成员被 loader 跳过、只剩根自己没几何 → 按已加载收口、记 loadedRoots、不报「没有几何记录」', async () => {
+    const { useModelGeneration } = await import('./useModelGeneration');
+    // 场景里 BEND / STRT 已由 ViewerPanel 那份实例装好，BRAN 键只有 ensureRefnos 建的占位（getAABB 只并自己 → null）
+    const viewer = makeViewer();
+    viewer.scene.objects = { '24384_24935': { id: '24384_24935', visible: true, selected: false, xrayed: false } };
+    viewer.scene.getAABB = vi.fn(() => null);
+    viewer.scene.getSubtreeAABB = vi.fn(() => [32934, -26599, 21000, 34934, -24246, 22100]);
+    const gen = useModelGeneration({ viewer, db_num: 8000 });
+    typeInfoMock.mockResolvedValue({ success: true, refno: '24384_24935', noun: 'BRAN' });
+    visibleInstsMock.mockResolvedValue({ success: true, refno: '24384_24935', refnos: ['24384_24936', '24384_24939'] });
+    loadInstancesMock.mockResolvedValue({
+      ...loaderResult(1, 0),
+      skippedRefnos: 2,
+      missingRefnos: ['24384_24935'],
+      missingBreakdown: { noGeoRowsRefnos: ['24384_24935'], mesh404Refnos: [], mesh404GeoHashes: [] },
+    });
+
+    expect(gen.checkRefnoExists('24384/24935')).toBe(true); // 斜杠写法也认占位
+    expect(await gen.showModelByRefno('24384/24935', { flyTo: true })).toBe(true);
+
+    // 「已存在」分支：自己的盒为空 → 用成员并集盒飞
+    expect(viewer.scene.getSubtreeAABB).toHaveBeenCalledWith(['24384_24935']);
+    expect(viewer.cameraFlight.flyTo).toHaveBeenCalledWith(expect.objectContaining({ aabb: [32934, -26599, 21000, 34934, -24246, 22100] }));
+    // 加载范围仍是根 + 成员；成员早在场景里、根自身无几何 = 已加载
+    expect(loadInstancesMock).toHaveBeenCalledWith(expect.anything(), 8000, ['24384_24935', '24384_24936', '24384_24939'], expect.anything());
+    expect(gen.statusMessage.value).toBe('已加载 (gen-model)');
+    expect(gen.isModelActuallyLoaded('24384_24935')).toBe(true);
+    const messages = emitToastMock.mock.calls.map(([toast]) => String(toast.message));
+    expect(messages.join('\n')).not.toMatch(/没有几何记录|未绘制实例/);
+    expect(addLogMock).toHaveBeenCalledWith('info', expect.stringContaining('成员已在场景中，根自身无几何'));
+
+    // 再显示一次：已记 loadedRoots，短路，不再问 visibleInsts / loader
+    expect(await gen.showModelByRefno('24384_24935')).toBe(true);
+    expect(visibleInstsMock).toHaveBeenCalledTimes(1);
+    expect(loadInstancesMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('#84 反例：范围里只有根自己（没有成员可跳过）而根没几何 → 仍按「没有几何记录」报、回 false', async () => {
+    const { useModelGeneration } = await import('./useModelGeneration');
+    const gen = useModelGeneration({ viewer: makeViewer(), db_num: 8000 });
+    typeInfoMock.mockResolvedValue({ success: true, refno: '24384_24935', noun: 'BRAN' });
+    visibleInstsMock.mockResolvedValue({ success: true, refno: '24384_24935', refnos: [] });
+    v1Source.tree.subtreeRefnos.mockResolvedValue({ success: true, refnos: ['24384_24935'], truncated: false });
+    loadInstancesMock.mockResolvedValue({
+      ...loaderResult(1, 0),
+      missingRefnos: ['24384_24935'],
+      missingBreakdown: { noGeoRowsRefnos: ['24384_24935'], mesh404Refnos: [], mesh404GeoHashes: [] },
+    });
+
+    expect(await gen.showModelByRefno('24384_24935')).toBe(false);
+    expect(gen.isModelActuallyLoaded('24384_24935')).toBe(false);
+    expect(emitToastMock).toHaveBeenLastCalledWith(expect.objectContaining({
+      level: 'warning', message: expect.stringContaining('1 个 refno 没有几何记录'),
+    }));
+  });
+
   it('收集未完成且一个构件都没取到：提示「尚未取得可见实例」而不是「未查询到」，最终按尚未就绪收口、回 false、不记已加载', async () => {
     const { useModelGeneration } = await import('./useModelGeneration');
     const gen = useModelGeneration({ viewer: makeViewer(), db_num: 7997 });

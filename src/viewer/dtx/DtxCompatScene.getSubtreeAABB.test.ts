@@ -33,6 +33,7 @@ const loaderMocks = vi.hoisted(() => ({
   hasDtxDbnoCache: vi.fn((dbno: number) => dbno === 7997),
   resolveDtxObjectIdsByRefno: vi.fn((_dbno: number, _refno: string): string[] => []),
   resolveDtxObjectIdsByUnitRefno: vi.fn((_dbno: number, _root: string): string[] => []),
+  resolveDtxRefnosByUnitRefno: vi.fn((_dbno: number, _root: string): string[] => []),
 }));
 
 vi.mock('@/composables/useDbMetaInfo', () => ({ tryGetDbnumByRefno: dbMetaMocks.tryGetDbnumByRefno }));
@@ -40,7 +41,20 @@ vi.mock('@/composables/useDbnoInstancesDtxLoader', () => ({
   hasDtxDbnoCache: loaderMocks.hasDtxDbnoCache,
   resolveDtxObjectIdsByRefno: loaderMocks.resolveDtxObjectIdsByRefno,
   resolveDtxObjectIdsByUnitRefno: loaderMocks.resolveDtxObjectIdsByUnitRefno,
+  resolveDtxRefnosByUnitRefno: loaderMocks.resolveDtxRefnosByUnitRefno,
 }));
+
+/** 与 loader 同一条 owner 链：objectId 的 refno 自己或某个属主 = root。 */
+function isUnderRoot(objectId: string, root: string): boolean {
+  let current = refnoOf(objectId);
+  const seen = new Set<string>();
+  while (current && !seen.has(current)) {
+    if (current === root) return true;
+    seen.add(current);
+    current = OWNER[current] ?? '';
+  }
+  return false;
+}
 
 function createLayer(): DTXLayer {
   return {
@@ -62,16 +76,10 @@ describe('DtxCompatScene.getSubtreeAABB', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     loaderMocks.resolveDtxObjectIdsByRefno.mockImplementation((_dbno, refno) => Object.keys(BOXES).filter((id) => refnoOf(id) === refno));
-    loaderMocks.resolveDtxObjectIdsByUnitRefno.mockImplementation((_dbno, root) => Object.keys(BOXES).filter((id) => {
-      let current = refnoOf(id);
-      const seen = new Set<string>();
-      while (current && !seen.has(current)) {
-        if (current === root) return true;
-        seen.add(current);
-        current = OWNER[current] ?? '';
-      }
-      return false;
-    }));
+    loaderMocks.resolveDtxObjectIdsByUnitRefno.mockImplementation((_dbno, root) => Object.keys(BOXES).filter((id) => isUnderRoot(id, root)));
+    loaderMocks.resolveDtxRefnosByUnitRefno.mockImplementation((_dbno, root) => Array.from(new Set(
+      Object.keys(BOXES).filter((id) => isUnderRoot(id, root)).map(refnoOf),
+    )));
   });
 
   it('getAABB 只并自己 refno 的对象（BRAN = 管子盒）；getSubtreeAABB 并上 owner 链落到它的成员', () => {
@@ -112,5 +120,46 @@ describe('DtxCompatScene.getSubtreeAABB', () => {
     // 直接以 objectId 当 id（hasObject 命中）：只有它自己
     expect(scene.getSubtreeAABB(['o:24381_145019:1'])).toEqual([3186, 8259, 13244, 3398, 8387, 13453]);
     expect(loaderMocks.resolveDtxObjectIdsByUnitRefno).not.toHaveBeenCalledWith(expect.anything(), 'o:24381_145019:1');
+  });
+});
+
+describe('DtxCompatScene.getSubtreeRefnos（#84）', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    loaderMocks.resolveDtxObjectIdsByRefno.mockImplementation((_dbno, refno) => Object.keys(BOXES).filter((id) => refnoOf(id) === refno));
+    loaderMocks.resolveDtxRefnosByUnitRefno.mockImplementation((_dbno, root) => Array.from(new Set(
+      Object.keys(BOXES).filter((id) => isUnderRoot(id, root)).map(refnoOf),
+    )));
+  });
+
+  it('管道 BRAN：自己（管子）+ owner 链落到它的成员；别的根不算；斜杠写法也认', () => {
+    const scene = new DtxCompatScene({ dtxLayer: createLayer() });
+    expect(scene.getSubtreeRefnos(['24381_145018'])).toEqual(['24381_145018', '24381_145019', '24381_145035']);
+    expect(scene.getSubtreeRefnos(['24381/145018'])).toEqual(['24381_145018', '24381_145019', '24381_145035']);
+    expect(loaderMocks.resolveDtxRefnosByUnitRefno).toHaveBeenCalledWith(7997, '24381_145018');
+  });
+
+  it('HVAC 支管那种自己没有对象的单元：只回成员；状态表里的占位不算「已加载」', () => {
+    // 换一组数据：BRAN 24381_600000 自己没有对象，成员 BEND / STRT 各一个
+    const hvac: Record<string, string> = { '24381_600001': '24381_600000', '24381_600002': '24381_600000' };
+    loaderMocks.resolveDtxObjectIdsByRefno.mockImplementation((_dbno, refno) => (refno in hvac ? [`o:${refno}:9`] : []));
+    loaderMocks.resolveDtxRefnosByUnitRefno.mockImplementation((_dbno, root) => Object.keys(hvac).filter((refno) => hvac[refno] === root));
+    const scene = new DtxCompatScene({ dtxLayer: createLayer() });
+    scene.ensureRefnos(['24381_600000'], { computeAabb: false }); // showModelByRefno 装单元时给单元自己建的占位
+
+    expect(scene.objectIds).toContain('24381_600000');
+    expect(scene.getSubtreeRefnos(['24381_600000'])).toEqual(['24381_600001', '24381_600002']);
+  });
+
+  it('叶子构件只回自己；一个都没装回空；解不出库号或不是 refno 形状的只看自己', () => {
+    const scene = new DtxCompatScene({ dtxLayer: createLayer() });
+    expect(scene.getSubtreeRefnos(['24381_145035'])).toEqual(['24381_145035']);
+    expect(scene.getSubtreeRefnos(['24381_777777'])).toEqual([]);
+    expect(scene.getSubtreeRefnos([])).toEqual([]);
+    expect(scene.getSubtreeRefnos(['55555_1'])).toEqual([]);
+    expect(loaderMocks.resolveDtxRefnosByUnitRefno).not.toHaveBeenCalledWith(expect.anything(), '55555_1');
+    // 直接以 objectId 当 id（hasObject 命中）：只有它自己
+    expect(scene.getSubtreeRefnos(['o:24381_145019:1'])).toEqual(['o:24381_145019:1']);
+    expect(loaderMocks.resolveDtxRefnosByUnitRefno).not.toHaveBeenCalledWith(expect.anything(), 'o:24381_145019:1');
   });
 });

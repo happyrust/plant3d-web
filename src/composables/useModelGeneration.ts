@@ -296,6 +296,8 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
     invalidTubi: number
     mesh404: number
     noGeo: number
+    /** `noGeo` 那几个 refno（`a_b`）：收口要分辨「没几何的只是注入的根自己」还是「构件真没几何」 */
+    noGeoRefnos: string[]
   }
 
   /**
@@ -312,7 +314,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
     progressRange: [number, number],
     label: string,
   ): Promise<GenModelV1LoadTotals> {
-    const totals: GenModelV1LoadTotals = { loadedRefnos: 0, skippedRefnos: 0, loadedObjects: 0, invalidTubi: 0, mesh404: 0, noGeo: 0 };
+    const totals: GenModelV1LoadTotals = { loadedRefnos: 0, skippedRefnos: 0, loadedObjects: 0, invalidTubi: 0, mesh404: 0, noGeo: 0, noGeoRefnos: [] };
     const batchSize = mode.replace ? Math.max(1, refnos.length) : VISIBLE_REFNOS_PAGE_SIZE;
     const batches = Math.max(1, Math.ceil(refnos.length / batchSize));
     for (let index = 0; index < batches; index++) {
@@ -341,15 +343,19 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
       totals.invalidTubi += result.invalidTubiObjects ?? 0;
       totals.mesh404 += result.missingBreakdown.mesh404Refnos.length;
       totals.noGeo += result.missingBreakdown.noGeoRowsRefnos.length;
+      totals.noGeoRefnos.push(...result.missingBreakdown.noGeoRowsRefnos.map((r) => normalizeRefnoString(String(r ?? ''))));
       if (index + 1 < batches) await sleep(0);
     }
     return totals;
   }
 
   function checkRefnoExists(refno: string): boolean {
-    if (loadedRoots.has(refno)) return true;
+    // 调用方（模型树的 autoLocate）常拿 `a/b` 来问；loadedRoots 与场景状态表都按 `a_b` 记
+    const key = normalizeRefnoString(refno);
+    if (!key) return false;
+    if (loadedRoots.has(key)) return true;
     const v = viewer as any;
-    return !!v?.scene?.objects?.[refno];
+    return !!v?.scene?.objects?.[key];
   }
 
   function isModelActuallyLoaded(refno: string): boolean {
@@ -379,6 +385,11 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         try {
           const anyViewer = viewer as any;
           let aabb = anyViewer?.scene?.getAABB?.([normalizedRoot]) ?? null;
+          // BRAN / HANG / EQUI 自己多半没有对象（几何在成员名下，只有隐含管子挂 BRAN 键）：`getAABB` 为空先并一下场景里
+          // 已装的成员（本地 owner 链，不发请求）。成员在 → 飞成员盒；下面的加载路会按「成员已在场景」短路（#84）。
+          if (!aabb) {
+            aabb = anyViewer?.scene?.getSubtreeAABB?.([normalizedRoot]) ?? null;
+          }
           // gen-model-v1 下子树 refno 集是逐节点 BFS（一个 ZONE 几百次请求），而这里只是给「已加载的东西」飞一下；
           // 不是真加载过的（树占位）直接落到下面的加载路，加载完自会 flyTo。
           const subtreeLookupWorthIt = genuinelyLoaded;
@@ -659,12 +670,23 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         emitToast({ message: `[成功] 已从 gen-model 加载 ${v1Result.loadedObjects} 个几何实例`, level: 'success' });
         return true;
       }
-      if (v1Result.skippedRefnos > 0 && v1Result.loadedRefnos === 0) {
+      // 成员早在场景里（别的 useModelGeneration 实例 / 别的入口装的），这次只剩注入的根自己要装、而根本来就没有自己的几何
+      //（BRAN / HANG 的几何在成员名下，HVAC 支管连隐含管子都没有）：这是「已加载」，不是「没有几何记录」（#84）。
+      const onlyInjectedRootLacksGeometry =
+        v1Result.loadedObjects === 0
+        && v1Result.skippedRefnos > 0
+        && v1Result.mesh404 === 0
+        && v1Result.noGeoRefnos.length > 0
+        && v1Result.noGeoRefnos.every((refno) => refno === normalizedRoot);
+      if ((v1Result.skippedRefnos > 0 && v1Result.loadedRefnos === 0) || onlyInjectedRootLacksGeometry) {
         // 全部已在场景里（缓存命中），不是失败；没收齐的照样不记 loadedRoots
         statusMessage.value = collectionIncomplete ? `部分加载 (gen-model，${incompleteTail})` : '已加载 (gen-model)';
         syncGlobalLoadStatus();
         if (collectionIncomplete) {
           consoleStore.addLog('warning', `[model-load] gen-model-v1 refno=${normalizedRoot} 已取得的构件都在场景中，但收集未完成（${incompleteTail}）`);
+        } else if (onlyInjectedRootLacksGeometry) {
+          loadedRoots.add(normalizedRoot);
+          consoleStore.addLog('info', `[model-load] gen-model-v1 refno=${normalizedRoot} 成员已在场景中，根自身无几何，按已加载收口`);
         }
         return true;
       }
@@ -729,7 +751,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
     const fullLoad = isShowDbnumFullRequested();
 
     // 实时装载（服务端整库入口）：每批就绪根的构件立刻进 DTX，总数在这里累计；进度条只往前走
-    const totals: GenModelV1LoadTotals = { loadedRefnos: 0, skippedRefnos: 0, loadedObjects: 0, invalidTubi: 0, mesh404: 0, noGeo: 0 };
+    const totals: GenModelV1LoadTotals = { loadedRefnos: 0, skippedRefnos: 0, loadedObjects: 0, invalidTubi: 0, mesh404: 0, noGeo: 0, noGeoRefnos: [] };
     const addTotals = (part: GenModelV1LoadTotals) => {
       totals.loadedRefnos += part.loadedRefnos;
       totals.skippedRefnos += part.skippedRefnos;
@@ -737,6 +759,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
       totals.invalidTubi += part.invalidTubi;
       totals.mesh404 += part.mesh404;
       totals.noGeo += part.noGeo;
+      totals.noGeoRefnos.push(...part.noGeoRefnos);
     };
     const loadedRefnos = new Set<string>();
     let loadedRootCount = 0;

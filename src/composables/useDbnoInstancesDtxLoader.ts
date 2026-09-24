@@ -575,24 +575,45 @@ export function resolveDtxObjectIdsByRefno(dbno: number, refno: string): string[
   return cache?.refnoToObjectIds.get(key) ?? [];
 }
 
+/** 沿 `refnoToOwnerRefno` 往上走，`refno` 自己或它的某个属主就是 `root` 时为 true。 */
+function isUnderUnit(cache: DbnoRuntimeCache, refno: string, root: string): boolean {
+  let current = refno;
+  const visited = new Set<string>();
+  while (current && !visited.has(current)) {
+    if (current === root) return true;
+    visited.add(current);
+    current = cache.refnoToOwnerRefno.get(current) || '';
+  }
+  return false;
+}
+
 export function resolveDtxObjectIdsByUnitRefno(dbno: number, unitRefno: string): string[] {
   const cache = cachesByDbno.get(dbno);
   const root = normalizeRefnoKey(String(unitRefno ?? ''));
   if (!cache || !root) return [];
   const objectIds = new Set<string>();
   for (const [refno, ids] of cache.refnoToObjectIds) {
-    let current = refno;
-    const visited = new Set<string>();
-    while (current && !visited.has(current)) {
-      if (current === root) {
-        for (const objectId of ids) objectIds.add(objectId);
-        break;
-      }
-      visited.add(current);
-      current = cache.refnoToOwnerRefno.get(current) || '';
-    }
+    if (!isUnderUnit(cache, refno, root)) continue;
+    for (const objectId of ids) objectIds.add(objectId);
   }
   return [...objectIds];
+}
+
+/**
+ * `resolveDtxObjectIdsByUnitRefno` 的 refno 版：装了对象、且 owner 链落到 `unitRefno` 的 refno（含单元自己——隐含管子
+ * TUBI 挂在 BRAN 名下时 BRAN 键也算）。校审单按单元（BRAN / HANG / EQUI …）显隐时要拿这份清单：单元键自己多半
+ * 一个对象都没有，几何在成员（ELBO / VALV / BEND / STRT …）名下（#84）。
+ */
+export function resolveDtxRefnosByUnitRefno(dbno: number, unitRefno: string): string[] {
+  const cache = cachesByDbno.get(dbno);
+  const root = normalizeRefnoKey(String(unitRefno ?? ''));
+  if (!cache || !root) return [];
+  const out: string[] = [];
+  for (const [refno, ids] of cache.refnoToObjectIds) {
+    if (ids.length === 0) continue;
+    if (isUnderUnit(cache, refno, root)) out.push(refno);
+  }
+  return out;
 }
 
 export function isDtxRefnoLoaded(dbno: number, refno: string): boolean {

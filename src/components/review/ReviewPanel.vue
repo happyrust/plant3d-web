@@ -56,6 +56,7 @@ import {
   runReviewSubmitPreflight,
   submitTaskToNextNodeSafely,
 } from './reviewPanelActions';
+import { applyTaskModelFilter } from './taskModelFilter';
 import UnattributedDraftNotice from './UnattributedDraftNotice.vue';
 import { useMeasurementPathSummaries } from './useMeasurementPathSummaries';
 import { resolvePassiveWorkflowMode } from './workflowMode';
@@ -906,21 +907,19 @@ function filterModelByTask() {
   const viewer = viewerContext.viewerRef.value;
   if (!viewer || !currentTask.value) return;
 
-  const allObjectIds = Array.isArray(viewer.scene.objectIds) ? viewer.scene.objectIds : [];
-  if (allObjectIds.length === 0) return;
-
   const taskRefNos = collectTaskComponentRefnos(currentTask.value);
   if (taskRefNos.length === 0) return;
 
-  const visibleTaskRefNos = taskRefNos.filter((refno) => allObjectIds.includes(refno));
-  if (visibleTaskRefNos.length === 0) return;
-
-  // 先隐藏所有，再显示任务构件，避免无模型时误清空场景
-  viewer.scene.setObjectsVisible(allObjectIds, false);
-  viewer.scene.setObjectsVisible(visibleTaskRefNos, true);
-  const aabb = viewer.scene.getAABB(visibleTaskRefNos);
-  if (aabb) {
-    viewer.cameraFlight.flyTo({ aabb, duration: 1, fit: true });
+  // 任务清单记的是单元（BRAN / HANG / EQUI …）：几何在成员名下，单元键自己多半没有对象。按子树亮、没装就不动场景（#84）。
+  const result = applyTaskModelFilter(viewer.scene, taskRefNos);
+  if (!result.applied) {
+    if (result.reason === 'task-not-loaded') {
+      console.info('[ReviewPanel] 任务构件尚未装进场景，跳过「只显示任务构件」', { taskId: currentTask.value.id, taskRefNos });
+    }
+    return;
+  }
+  if (result.aabb) {
+    viewer.cameraFlight.flyTo({ aabb: result.aabb, duration: 1, fit: true });
   }
 
   isFilteringByTask.value = true;

@@ -11,6 +11,7 @@ import {
   markDtxTubeSegmentsHidden,
   resolveDtxObjectIdsByRefno,
   resolveDtxObjectIdsByUnitRefno,
+  resolveDtxRefnosByUnitRefno,
   resolveDtxTubeObjectIdsByKeys,
 } from '@/composables/useDbnoInstancesDtxLoader';
 
@@ -617,6 +618,26 @@ export class DtxCompatScene {
 
     if (!hasAny || box.isEmpty()) return null;
     return aabbFromBox3(box);
+  }
+
+  /**
+   * 目标**含子树**的已加载 refno 集（`getSubtreeAABB` 的 refno 版）：自己（装了对象才算）+ loader 里 owner 链落到该 refno
+   * 的构件。校审单里记的是单元（BRAN / HANG / EQUI …）：几何在成员（ELBO / VALV / BEND / STRT …）名下、只有隐含管子才挂
+   * BRAN 自己，单元键多半一个对象都没有——按 refno 显 / 隐整条单元得拿这份清单，只碰单元键会把场景藏空却什么都亮不起来
+   * （#84）。`objects` 里只有占位、没装对象的键不算；解不出库号 / 不是 refno 形状只看自己。去重、保持传入顺序。
+   */
+  getSubtreeRefnos(refnos: string[]): string[] {
+    const out = new Set<string>();
+    for (const refno of refnos) {
+      const normalized = String(refno ?? '').trim().replace('/', '_');
+      if (!normalized) continue;
+      if (this._getDtxObjectIds(normalized).length > 0) out.add(normalized);
+      if (!/^\d+_/.test(normalized)) continue;
+      const dbno = tryGetDbnumByRefno(normalized);
+      if (!dbno) continue;
+      for (const leaf of resolveDtxRefnosByUnitRefno(dbno, normalized)) out.add(leaf);
+    }
+    return Array.from(out);
   }
 
   /** `_getDtxObjectIds` 的子树版：自己的对象 + loader 里 owner 链落到该 refno 的对象；解不出库号就只有自己的。 */
