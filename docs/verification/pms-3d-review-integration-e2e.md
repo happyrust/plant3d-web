@@ -47,9 +47,11 @@
 | 3 | SJ | 回列表，选中该行 → **编辑** → 窗口顶部 **送审** | `POST /HD/PreValidate form_id=…&action=active&role=sj` → `workflow/verify`（`校审数据预验证成功`） | 不写库 | 19:07 |
 | 4 | SJ | 弹 `WorkNodeSelect.html`：**选择流程**「三维编校审」→ **定义节点** 校核 / 审核 / 批准 各点「选择人员」（`SelectUser.html`：先点部门树 `1 (5)`，姓名查 `JH` / `SH` / `PZ`，双击结果行，确定）→ **下一步** → **审批处理** 填处理意见 → **提 交** | `POST /HD/SyncRevInfo Id=<PMS 记录 Id>` → `workflow/sync action=active` | `form_status=active`，`task_status=submitted`，`current_node=jd`，history `+ sj submit by SJ` | 19:08:53 `sj submit`；PMS 记录 `Id=58c5ae27-…` |
 | 5 | JH | 登录 → 待办件 `(*NEW) 三维校审单 设计\|2026-09-21` → 审批窗（同意 / 驳回 / 转办 / 沟通 / 委派 / 终止 / 监控） | `GetZyModeInfo role=proofread` → `auth/token`（JH token `role=jd`） | 嵌入页「当前节点：校对 · 待处理」，任务详情 `1 构件 · FORM-…` | iframe `…/review/3d-view?form_id=FORM-2EBB10854469&user_token=<JH JWT>&output_project=AvevaMarineSample` |
-| 6 | JH | **同意** → 审批处理（即将流转到 **审核**）→ 意见 → **提 交** | `SyncRevInfo` → `workflow/sync action=agree` | `task_status=in_review`，`current_node=sh`，history `+ jd approve by JH` | 19:14:12 |
-| 7 | SH | 登录 → 顶栏 **待审批事项** → `校核 … 三维校审单` → 审批窗 → **同意** → 提交 | 同上 `agree` | `current_node=pz`，history `+ sh approve by SH` | 19:44:06；嵌入页「当前节点：审核 · 审核中」 |
-| 8 | PZ | 登录 → 顶栏 **待审批事项** → `审核 … 三维校审单` → **同意**（即将流转到 **结束**）→ 提交 | `agree`（终态） | `form_status=approved`，`task_status=approved`，history `+ pz approve by PZ`；PMS 列表状态列 `新增 → 审批中 → 批准` | 19:46:01 |
+| 6 | JH | **同意** → 审批处理（即将流转到 **审核**）→ **先点选目标人「审核」**（没预选时，见表下「目标人」）→ 意见 → **提 交** | `SyncRevInfo` → `workflow/sync action=agree` | `task_status=in_review`，`current_node=sh`，history `+ jd approve by JH` | 19:14:12 |
+| 7 | SH | 登录 → 顶栏 **待审批事项** → `校核 … 三维校审单` → 审批窗 → **同意**（即将流转到 **批准**）→ **先点选目标人「批准」**（没预选时）→ 提交 | 同上 `agree` | `current_node=pz`，history `+ sh approve by SH` | 19:44:06；嵌入页「当前节点：审核 · 审核中」 |
+| 8 | PZ | 登录 → 顶栏 **待审批事项** → `审核 … 三维校审单` → **同意**（即将流转到 **结束**，不需选人）→ 提交 | `agree`（终态） | `form_status=approved`，`task_status=approved`，history `+ pz approve by PZ`；PMS 列表状态列 `新增 → 审批中 → 批准` | 19:46:01 |
+
+**目标人**：`WorkNodeSelect`「审批处理」里下一节点的目标人可能没有预选——2026-09-24 `FORM-C8049FC8F784` 的 JH → 审核、SH → 批准两步都是这样（09-21 这几轮的记录里没有这一步）。没选就「提 交」只会闪一下「对不起，节点[审核]没有选择目标人」，不发 `SyncRevInfo`，单据停在原节点，下一位的待办里也看不到。所以点「同意」后先看目标人：没选就点选下一节点的人（「审核」= SH、「批准」= PZ 的显示名）再提交；流转到「结束」不需要选。PMS 侧的问题见 [#85](https://github.com/happyrust/plant3d-web/issues/85)。
 
 ### 2.2 服务端断言脚本（PowerShell，直连）
 
@@ -78,7 +80,7 @@ $w.history | % { "$($_.timestamp) $($_.node) $($_.action) $($_.operatorId)" }   
 | 5 | SJ | 批注「讨论与处理」→ **已修改** → **提交处理结果** | plant3d 直连 `POST /api/review/annotation-states/apply {action:"fixed"}` | `annotation-states`: `resolutionStatus=fixed, decisionStatus=pending, reviewRound=2`；表格「待处理 0 · 已处理 1」；时间线「SJ 20:03 标记已修改」 | 20:03:02 |
 | 6 | SJ | PMS **同意**（=重提）→ `WorkNodeSelect` 直接落在定义节点页（人员已保留）→ **下一步** → 意见 → **提 交** | `SyncRevInfo` → `active` | `submitted / jd`，history `+ sj approve by SJ`（**重提被记成 approve，不是 submit**） | 20:04:41 |
 | 7 | JH | 待办（新一条 `设计 刚刚 三维校审单`）→ 嵌入页批注显示「已修改待确认 · 设计已处理，待校对/审核确认」→ **同意** → **提交确认结果** | `annotation-states/apply {action:"agree"}` | `decisionStatus=agreed`；时间线「JH 20:08 同意」；表格「待处理 0 · 已处理 0」（已同意不再计入已处理） | 20:08:32 |
-| 8 | JH | PMS **同意** → 提交 | `agree` | `in_review / sh`，history `+ jd approve by JH` | 20:08:54 |
+| 8 | JH | PMS **同意** → 先点选目标人「审核」（没预选时，同 TC-1 第 6 步）→ 提交 | `agree` | `in_review / sh`，history `+ jd approve by JH` | 20:08:54 |
 | 9 | SH → PZ | 与 TC-1 第 7、8 步相同 | `agree` ×2 | `approved / approved / pz`；history 共 6 条 | 20:10:13、20:11:36 |
 
 ### 3.1 批注状态断言
@@ -109,8 +111,8 @@ TC-2 的批注是钩子造的。这条用**真实的文字 / 云线工具**在�
 | 8 | JH | 待办 → 嵌入页：文字（「已修改待确认」）→「**同意**」→ 提交确认结果；云线（「不需解决待确认」+ SJ 的备注）→「**驳回**」→ **必须填决定备注** → 提交确认结果 | `apply agree` / `apply reject` | 文字 `round2 fixed/agreed`；云线 `round2 open/rejected`，设计侧显示「已驳回 校对/审核要求重新处理」；表格「共 2 · 待处理 0 · 已处理 0」 | 21:03:56 `agree`；21:06:04 `reject` |
 | 9 | JH | PMS **驳回** → 提交 | `return` | `draft / sj`，history 第 2 条 `jd return` | 21:06:53 |
 | 10 | SJ | 待审批事项 → 云线批注 →「已修改」（填备注）→ 提交处理结果 → PMS 同意（重提） | `apply fixed`；`active` | 云线 `round3 fixed/pending`；`submitted / jd` | 21:08:27 `fixed`；21:08:54 重提 |
-| 11 | JH | 云线 →「同意」→ 提交确认结果 → PMS **同意** → 提交 | `apply agree`；`agree` | 云线 `round3 fixed/agreed`；`in_review / sh` | 21:10:20；21:10:47 |
-| 12 | SH → PZ | 顶栏待审批事项 → 同意 → 提交，各一次 | `agree` ×2 | `approved / approved / pz`；history 共 8 条；PMS 列表状态列「批准」 | 21:12:11、21:13:40 |
+| 11 | JH | 云线 →「同意」→ 提交确认结果 → PMS **同意** → 先点选目标人「审核」（没预选时，同 TC-1 第 6 步）→ 提交 | `apply agree`；`agree` | 云线 `round3 fixed/agreed`；`in_review / sh` | 21:10:20；21:10:47 |
+| 12 | SH → PZ | 顶栏待审批事项 → 同意 → 提交，各一次（SH 那次目标人没预选时先点选「批准」，同 TC-1 第 7 步；PZ 流转到结束不需选人） | `agree` ×2 | `approved / approved / pz`；history 共 8 条；PMS 列表状态列「批准」 | 21:12:11、21:13:40 |
 
 ### 4.1 断言（2026-09-22 上午复查仍一致）
 
@@ -176,7 +178,7 @@ npx tsx scripts/pms-chrome-devtools-flow.ts
 | 选人员 | 同上 → `Commons/SelectUser.html` | `getByText('选择人员').nth(i)` → 先点树节点 `1 (5)`（不先选部门会弹「请先选中人员所在的部门/岗位」）→ `#search_name$text` 填名 → `a.mini-button`「查询」→ `td.mini-grid-cell` 文案等于名字的行 `dblclick` → `a.mini-button`「确定」 |
 | 意见与提交 | `WorkNodeSelect.html` | `#txtMindInfo$text` → `a.mini-button` 文案 `提 交`（中间有空格） |
 | 待办进入 | 主页 | `a.dropdown-toggle[title=待审批事项]` 点开 → `a[href*="/Message/Show/"]` 选文案含「三维校审单」且时间最新的一条；打开后校验嵌入 frame 的 `form_id` |
-| 同意 / 驳回 | `ValidForm` 审批窗 | `getByText('同意')` / `getByText('驳回')`；驳回弹 `WorkReturnSelect.html`，默认项即可，同样 `#txtMindInfo$text` + `提 交` |
+| 同意 / 驳回 | `ValidForm` 审批窗 | `getByText('同意')` / `getByText('驳回')`；同意弹 `WorkNodeSelect.html`，目标人没预选时先点选下一节点的人（`U0xx … / 审核`、`U0xx … / 批准` 这一排 radio，点文字「审核」/「批准」那一项；不选会被 `CheckSelectUser()` 拦下、提示只闪一下），再 `#txtMindInfo$text` + `提 交`；驳回弹 `WorkReturnSelect.html`，默认项即可，同样 `#txtMindInfo$text` + `提 交` |
 | 校核加批注 | 嵌入 frame（`location.href` 含 `/review/3d-view`） | `window.__plant3dReviewerE2E.addMockAnnotation(title, desc)` → `confirmData(note)`；需 `localStorage.plant3d_automation_review = '1'`（同 origin 设过一次即生效） |
 | 设计处理批注 | 嵌入 frame | `button`「已修改」/「不需解决」→ `button`「提交处理结果」 |
 | 校核确认处理结果 | 嵌入 frame | `button`「同意」/「驳回」→ `button`「提交确认结果」 |
@@ -328,6 +330,7 @@ Playwright / CDP 用 `registerPlant3dAutomationReviewInitScript(context)` 在上
 
 ## 9. 变更记录
 
+- 2026-09-24：TC-1 第 6 / 7 / 8 步、TC-2 第 8 步、TC-3 第 11 / 12 步补「审批处理」目标人——没预选时先点选下一节点的人（「审核」= SH、「批准」= PZ），不选直接提交会静默不发（`FORM-C8049FC8F784` 实测，[#85](https://github.com/happyrust/plant3d-web/issues/85)）；TC-1 表下加「目标人」说明，§6.2 选择器表「同意 / 驳回」一行补选目标人的做法。
 - 2026-09-22（晚）：§6.3.1 追记第二次上线（Actions 部 main `a9358f09`，20:10）与三项线上包复验读数（与 16:36 那轮逐项相同）；补两条前置做法——9446 headless Chrome 不常驻时自拉、缓存 token 失效时登 PMS 直接 `POST /HD/GetZyModeInfo` 铸 token 拼嵌入地址（JH 列表视图无 FORM id，找行法不通）。
 - 2026-09-22（下午，五）：§6.3.1 追记上线（Actions 部 main `cf7d8f0e`，16:35）与三项线上包复验读数——云线拖拽 / 备注占位符 / 统计条与 annotation-states 次数，均与本地 build 一致。
 - 2026-09-22（下午，四）：§5.1 第 4 条追记 4c——`syncAnnotationReviewStates` 同参在飞合并 + 1.2 s 短窗复用，JH 侧一进页 10 次 GET → 2 次。
