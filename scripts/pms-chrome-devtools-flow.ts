@@ -4,6 +4,7 @@
  * 流程：登录 → 设计交付 → 三维校审单 →「新增」→（可选）轮询填写 PMS 弹窗 →（可选）URL 断言
  * →（可选）plant3d 内注入构件 + 填数据包名 + 点击「创建编校审数据」→ 等待成功提示
  * →（默认）回到三维校审单，嗅探 PMS 域名下 JSON 接口响应体是否含包名/测试 BRAN（`PMS_CDP_VERIFY_PMS_API=0` 可关）。
+ * →（可选，`PMS_CDP_SEND_FOR_REVIEW=1`）SJ 在 PMS 把本次发起的单据送审到「三维编校审」（校核 / 审核 / 批准按 `PMS_SEND_REVIEW_USERS`）。
  *
  * 通过 Playwright 驱动 Chromium，底层使用 **Chrome DevTools Protocol (CDP)**。
  *
@@ -119,6 +120,15 @@ const submitReview =
 const fillPmsDialog =
   process.env.PMS_CDP_FILL_PMS_DIALOG === '1'
   || (fullFlow && process.env.PMS_CDP_SKIP_PMS_DIALOG !== '1');
+/** 发起成功后接着以 SJ 在 PMS 送审（TC-1 第 3、4 步）；需要本次发起拿到 form_id */
+const sendForReview =
+  process.env.PMS_CDP_SEND_FOR_REVIEW === '1' || process.env.PMS_CDP_SEND_FOR_REVIEW === 'true';
+/** 定义节点里依次给 校核 / 审核 / 批准 选的人（按姓名查） */
+const sendReviewUsers = (process.env.PMS_SEND_REVIEW_USERS || 'JH,SH,PZ')
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean);
+const sendReviewOpinion = process.env.PMS_SEND_REVIEW_OPINION?.trim() || '送审（自动化）';
 
 const popupWaitMs = fullFlow ? 45_000 : 25_000;
 const pmsDialogPollMs = fullFlow ? 45_000 : 28_000;
@@ -538,6 +548,104 @@ async function clickNewInAnyFrame(page: import('playwright').Page): Promise<void
   throw new Error('未找到可点击的「新增」');
 }
 
+/**
+ * SJ 在 PMS 送审：列表选中本单 → 工具栏「编辑」→ 审批窗「送审」→ WorkNodeSelect 选「三维编校审」
+ * → 定义节点逐个「选择人员」→ 下一步 → 处理意见 → 提交。调用前页面须已在「三维校审单」列表。
+ * 定义节点这一步指定了人员，后续 JH / SH 同意时「审批处理」才会预选下一节点的人（issue #85）。
+ */
+async function sendFormForReviewInPms(
+  page: import('playwright').Page,
+  formId: string,
+  users: string[],
+  opinion: string,
+): Promise<void> {
+  const findFrame = async (
+    matches: (frame: import('playwright').Frame) => Promise<boolean>,
+    what: string,
+    timeoutMs: number,
+  ): Promise<import('playwright').Frame> => {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      for (const frame of page.frames()) {
+        if (frame.isDetached()) continue;
+        if (await matches(frame).catch(() => false)) return frame;
+      }
+      await page.waitForTimeout(500);
+    }
+    const shot = await capturePmsPageScreenshot(page, 'pms-send-review-failed');
+    throw new Error(`送审：${timeoutMs}ms 内没等到${what}${shot ? `（截图 ${shot}）` : ''}`);
+  };
+  const exactText = (text: string) => new RegExp(`^\\s*${text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*$`);
+
+  const listFrame = await findFrame(
+    async (f) => (await f.locator('tbody tr', { hasText: formId }).count()) > 0,
+    `列表里 ${formId} 那一行`,
+    40_000,
+  );
+  await listFrame.locator('tbody tr', { hasText: formId }).first().click();
+  await page.waitForTimeout(600);
+  await listFrame.getByText('编辑', { exact: true }).first().click({ timeout: 10_000 });
+
+  const editFrame = await findFrame(
+    async (f) =>
+      f.url().includes('/Form/ValidForm/')
+      && f.url().includes('/edit/')
+      && (await f.getByText('送审', { exact: true }).count()) > 0,
+    '编辑窗里的「送审」',
+    40_000,
+  );
+  await editFrame.getByText('送审', { exact: true }).first().click({ timeout: 10_000 });
+
+  const nodeFrame = await findFrame(async (f) => f.url().includes('WorkNodeSelect.html'), '「选择流程」弹窗', 40_000);
+  await nodeFrame.locator('li', { hasText: '三维编校审' }).first().click({ timeout: 15_000 });
+  await page.waitForTimeout(1500);
+
+  for (const [index, name] of users.entries()) {
+    await nodeFrame.getByText('选择人员').nth(index).click({ timeout: 15_000 });
+    const userFrame = await findFrame(async (f) => f.url().includes('SelectUser.html'), `选人弹窗（${name}）`, 20_000);
+    await userFrame.waitForLoadState('domcontentloaded').catch(() => undefined);
+    await page.waitForTimeout(800);
+    // 不先点部门会弹「请先选中人员所在的部门/岗位」
+    await userFrame.getByText('1 (5)', { exact: true }).first().click({ timeout: 15_000 });
+    await page.waitForTimeout(600);
+    await userFrame.locator('[id="search_name$text"]').fill(name);
+    await userFrame.locator('a.mini-button', { hasText: '查询' }).first().click();
+    await page.waitForTimeout(1500);
+    await userFrame.locator('td.mini-grid-cell', { hasText: exactText(name) }).first().dblclick({ timeout: 15_000 });
+    await page.waitForTimeout(600);
+    await userFrame.locator('a.mini-button', { hasText: '确定' }).first().click({ timeout: 10_000 });
+    await page.waitForTimeout(1200);
+    console.error(`[cdp] 送审：定义节点第 ${index + 1} 个已选 ${name}`);
+  }
+
+  // 「下一步」和「提 交」是同一颗 #btnNext；换字后「审批处理」还在初始化，
+  // 这时立刻点「提 交」会被静默吞掉（弹窗不关、单据仍是 draft）
+  const nextButton = nodeFrame.locator('[id="btnNext"]');
+  await nextButton.click({ timeout: 15_000 });
+  await nextButton.filter({ hasText: /提\s*交/ }).waitFor({ state: 'visible', timeout: 20_000 });
+  await page.waitForTimeout(2000);
+  await nodeFrame.locator('[id="txtMindInfo$text"]').fill(opinion);
+
+  const dialogOpen = () => page.frames().some((f) => !f.isDetached() && f.url().includes('WorkNodeSelect.html'));
+  const waitDialogClosed = async (timeoutMs: number) => {
+    const deadline = Date.now() + timeoutMs;
+    while (dialogOpen() && Date.now() < deadline) {
+      await page.waitForTimeout(500);
+    }
+    return !dialogOpen();
+  };
+  await nextButton.click({ timeout: 10_000 });
+  if (!(await waitDialogClosed(10_000))) {
+    console.error('[cdp] 送审：点「提 交」10s 后弹窗还在，再点一次');
+    await nextButton.click({ timeout: 10_000 }).catch(() => undefined);
+    if (!(await waitDialogClosed(20_000))) {
+      const shot = await capturePmsPageScreenshot(page, 'pms-send-review-not-closed');
+      throw new Error(`送审：提交后「审批处理」弹窗一直没关，可能被 PMS 校验拦下${shot ? `（截图 ${shot}）` : ''}`);
+    }
+  }
+  console.error(`[cdp] 送审：${formId} 已提交（校核 / 审核 / 批准 = ${users.join(' / ')}）`);
+}
+
 async function main(): Promise<void> {
   if (!password) {
     console.error('缺少 PMS_E2E_PASSWORD');
@@ -830,6 +938,23 @@ async function main(): Promise<void> {
               '可设 PMS_EMBED_API_URL_SUBSTRING 缩小 URL，或 PMS_CDP_VERIFY_EMBED_API=0 / PMS_CDP_VERIFY_PMS_API=0 跳过对应校验。',
           );
         }
+      }
+
+      if (sendForReview) {
+        if (!createdFormId) {
+          throw new Error('PMS_CDP_SEND_FOR_REVIEW=1：本次发起没拿到 form_id，无法在 PMS 列表里定位要送审的单据');
+        }
+        console.error(`[cdp] PMS_CDP_SEND_FOR_REVIEW=1：以 ${username} 在 PMS 送审 ${createdFormId}…`);
+        await page.bringToFront().catch(() => undefined);
+        for (let i = 0; i < 5; i++) {
+          await page.keyboard.press('Escape').catch(() => undefined);
+        }
+        if (pmsWebCenterUrl.includes('WebCenter')) {
+          await page.goto(pmsWebCenterUrl, { waitUntil: 'domcontentloaded', timeout: 60_000 });
+          await new Promise((r) => setTimeout(r, 1200));
+        }
+        await openReviewFormList(page);
+        await sendFormForReviewInPms(page, createdFormId, sendReviewUsers, sendReviewOpinion);
       }
 
       if (extendedFlow) {

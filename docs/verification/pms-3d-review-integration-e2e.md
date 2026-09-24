@@ -158,6 +158,7 @@ npm run test:pms:cdp:full
 ```
 
 - 覆盖 TC-1 第 1、2 步，并「严格校验」：回列表按 **本次发起拿到的 `form_id`** 重开记录（`7af7a6c2` 起，之前只按包名回查，而 PMS 列表不存包名，必挂），再断言嵌入站点接口里出现 BRAN / 包名。
+- 再加 `PMS_CDP_SEND_FOR_REVIEW=1` 就接着以 SJ 在 PMS **送审**，覆盖 TC-1 第 3、4 步：列表按 `form_id` 选中 → 编辑 → 送审 → 三维编校审 → 定义节点依次选 `PMS_SEND_REVIEW_USERS`（默认 `JH,SH,PZ`）→ 下一步 → 意见 → 提交；提交后「审批处理」弹窗没关就报错并截图。定义节点里指定了人员，后面 JH / SH 同意时目标人才会预选（见 TC-1 表下「目标人」）。2026-09-24 实跑：`FORM-72704FA6788E`（BRAN `24384_24935`）→ 模型中心 `active / jd / submitted`。
 - 本机代理下 Playwright 自启的 Chrome 连不上 PMS，请先手动起一个直连 Chrome 再 attach：
 
 ```powershell
@@ -166,7 +167,7 @@ $env:CHROME_CDP_URL='http://127.0.0.1:9445'; $env:PMS_CDP_FULL_FLOW='1'; $env:PM
 npx tsx scripts/pms-chrome-devtools-flow.ts
 ```
 
-### 6.2 尚未进脚本的部分：PMS 送审 / 同意 / 驳回 与 SJ 批注处理
+### 6.2 尚未进脚本的部分：PMS 同意 / 驳回 与 SJ 批注处理（送审已进脚本，见 §6.1 `PMS_CDP_SEND_FOR_REVIEW`）
 
 `test:pms:cdp:extended` 的 JH 段假设「JH 能在三维校审单列表里找到并双击该记录，然后在 plant3d 里点内部按钮」，这与真实 PMS 不符（见 §1 入口表）；真机上 JH 段必须先由 SJ 在 PMS **送审**，JH 再从 **待办** 进入，并在 **PMS 工具栏** 同意 / 驳回。2026-09-21 这两步是用 CDP attach 到同一 Chrome 分步驾驭完成的，选择器如下，可直接折进脚本：
 
@@ -250,6 +251,9 @@ A/B 结果（同一锚点 (944,730)、同一卡上落点、拖 140×110 px；`FO
 | `PMS_CDP_EXTENDED_FLOW` | `1`：发起后等 PMS 列表出现匹配键 → 清 Cookie 换 JH → 打开记录 → plant3d 内校核提交。**真机需先 PMS 送审，当前会在「JH 未能在 PMS 列表中打开已有单据」处停**，见 §6.2 |
 | `PMS_MOCK_PACKAGE_NAME` / `PMS_MOCK_PROJECT_CODE` / `PMS_MOCK_PROJECT_NAME` | 编校审包名、PMS 弹窗内项目代码 / 名称（extended 未设包名时自动生成 `E2E-PMS-JH-<时间戳>`） |
 | `PMS_TARGET_BRAN_REFNO` | 注入的测试 BRAN，默认 `24381_145018`，也接受 `24381/145018` |
+| `PMS_CDP_SEND_FOR_REVIEW` | `1`：发起成功后以 SJ 在 PMS 送审本单（TC-1 第 3、4 步，见 §6.1）；需要发起拿到 `form_id` |
+| `PMS_SEND_REVIEW_USERS` | 送审时定义节点依次给 校核 / 审核 / 批准 选的人，逗号分隔，默认 `JH,SH,PZ` |
+| `PMS_SEND_REVIEW_OPINION` | 送审的处理意见，默认 `送审（自动化）` |
 | `PMS_CDP_SELECTION_MODE` | `console`：在三维控制台输入 `= 24381/145018` 选中 CE 再点「添加构件」（走真实 `pdmsGetUiAttr`），失败回退 mock；`postmessage`：父页向 iframe 发 `plant3d.select_refno` |
 | `PMS_CDP_ADD_COMPONENT_READY_MS` / `PMS_CDP_ADD_COMPONENT_LIST_MS` | `console` 模式两个超时，默认 45000 / 90000 |
 | `PMS_CDP_WORKFLOW_MODE` | 写入嵌入页 `localStorage.plant3d_workflow_mode`；extended 未设时补 `manual`。**真实 PMS 链请勿设**——外部流程模式下同意 / 驳回在 PMS 做 |
@@ -330,6 +334,7 @@ Playwright / CDP 用 `registerPlant3dAutomationReviewInitScript(context)` 在上
 
 ## 9. 变更记录
 
+- 2026-09-24（下午，二）：`scripts/pms-chrome-devtools-flow.ts` 新增可选开关 `PMS_CDP_SEND_FOR_REVIEW`（SJ 在 PMS 送审，覆盖 TC-1 第 3、4 步）及 `PMS_SEND_REVIEW_USERS` / `PMS_SEND_REVIEW_OPINION`；§6.1 补跑法与实跑结果，§6.2 标题改为送审已进脚本，§6.4 环境变量表补三行。
 - 2026-09-24（下午）：TC-1 表下「目标人」补预选条件——送审时在「定义节点」里指定了人员，后续各步就会预选且候选只有一人（`FORM-6F501122F12C` 全流程实测）；没指定时候选是整组人、不预选。
 - 2026-09-24：TC-1 第 6 / 7 / 8 步、TC-2 第 8 步、TC-3 第 11 / 12 步补「审批处理」目标人——没预选时先点选下一节点的人（「审核」= SH、「批准」= PZ），不选直接提交会静默不发（`FORM-C8049FC8F784` 实测，[#85](https://github.com/happyrust/plant3d-web/issues/85)）；TC-1 表下加「目标人」说明，§6.2 选择器表「同意 / 驳回」一行补选目标人的做法。
 - 2026-09-22（晚）：§6.3.1 追记第二次上线（Actions 部 main `a9358f09`，20:10）与三项线上包复验读数（与 16:36 那轮逐项相同）；补两条前置做法——9446 headless Chrome 不常驻时自拉、缓存 token 失效时登 PMS 直接 `POST /HD/GetZyModeInfo` 铸 token 拼嵌入地址（JH 列表视图无 FORM id，找行法不通）。
