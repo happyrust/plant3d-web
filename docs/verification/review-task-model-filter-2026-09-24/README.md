@@ -10,6 +10,7 @@
 
 - `git push origin main`（`fe5a2786..0dec493d`）→ `gh workflow run deploy-ubuntu.yml --ref main` → run [35951124846](https://github.com/happyrust/plant3d-web/actions/runs/35951124846) `success`（03:21:43Z 起，03:23:28Z 完）。
 - 验收：`http://123.57.182.243/version.json` → `commit 0dec493d…`，`buildDate 2026-09-24 03:22:55 UTC`；80 / 443 首页同为 `assets/index-DARS-7AE.js`。
+- 13:42 按用户要求把 main `d33c161d` 重新部署了一次（run [35961109965](https://github.com/happyrust/plant3d-web/actions/runs/35961109965) `success`）。`0dec493d` 之后都是文档提交，代码没变；`version.json` → `commit d33c161d…`，`buildDate 2026-09-24 05:43:29 UTC`，bundle 换成 `assets/index-GaXSJjGN.js`。随后以直领 token 打开 `FORM-C8049FC8F784`（单据已 `approved`）复验：JH、PZ 两个角色的面板都显示「当前节点：批准 · 已通过」，「已过滤」开着，47 条状态里 9 条可见（JH 逐个核过 `24384_24935 / 24936 / 24939` 均可见），无「没有几何记录」文案，也没有 snackbar。
 
 ## 2. 线上复验：单据 `FORM-C8049FC8F784`
 
