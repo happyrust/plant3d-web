@@ -150,6 +150,42 @@ SH 审批窗读数（页面 console 里能看到嵌入 iframe 的日志）：`[u
 
 ![全流程 PZ：批准节点](./cua-flow2-pz.png)
 
+### 2.7 全流程回归：SJ 新建管道 BRAN 单 `FORM-91496A76BFB6` → 设计 / 校对 / 审核 / 批准四节点
+
+18:01–18:06，在重新部署的包（`d33c161d` / `index-GaXSJjGN.js`）上从头把一张**管道 BRAN**（`24381_145018`，11 段隐含管子 TUBI + 11 个成员配件）的单据走完设计 → 校对 → 审核 → 批准四个节点，作为 #84 的完整回归（HVAC 支管的全流程在 §2.6，这一节补管道，验「配件也亮」不只是直领 token 而是真流转）。Playwright `connectOverCDP` 附到 §2 那台 headless Chrome 152（CDP 9448），每个角色一个隔离 context，全走 PMS 真实界面；`task_id=task-01b015f5-…`。
+
+1. **SJ（设计）** `sysin.html` 登录 → 设计交付 → 三维校审单 → 选中 `FORM-91496A76BFB6` 那行 →「编辑」，编辑窗里嵌入的 `/review/3d-view`（PMS 现签 `SJ / role=sj` token）读数见下（设计侧落点无「只显示任务构件」，`已过滤` 关、47… 实为 240 条状态里 12 条有几何全可见）→ 回编辑窗「送审」→ `WorkNodeSelect` 选「三维编校审」→ 定义节点校核 / 审核 / 批准依次选 JH / SH / PZ → 下一步 → 处理意见 → 提交 → `SyncRevInfo` → 模型中心 `active / jd / submitted`（18:01:59）。
+2. **JH（校对）** 登录 → 个人中心「我的审批 · 待处理的」第一行「(\*NEW) 三维校审单 设计\|2026-09-24」→ PMS 审批窗「[校核]」（嵌入页 `form_id=FORM-91496A76BFB6`、PMS 现签 `JH / role=jd`）→ 读数 →「同意」→「审批处理 · 即将流转到 审核」，**目标人「审核」已预选、候选只有这一个**（送审时定义了节点，印证 #85）→ 处理意见 → 提交 → `sh / in_review`（18:04:38）。
+3. **SH（审核）** 登录 → 顶栏「待审批事项」（12 条）第一条「校核 刚刚 三维校审单」→ 审批窗「[审核]」（`SH / role=sh`）→ 读数 →「同意」→「即将流转到 批准」，**「批准」已预选** → 提交 → `pz / in_review`（18:05:25）。
+4. **PZ（批准）** 登录 → 「待审批事项」（7 条）第一条「审核 刚刚 三维校审单」→ 审批窗「[批准]」（`PZ / role=pz`）→ 读数 →「同意」→「即将流转到 结束」，**不需选目标人** → 提交 → 模型中心 `form_status=approved / task_status=approved / current_node=pz`（18:06:14）。单据走完。
+
+四节点嵌入页读数（页内 `window.__xeokitViewer.scene`，各节点一致）：
+
+| 读数 | SJ（设计） | JH（校对） | SH（审核） | PZ（批准） |
+| --- | --- | --- | --- | --- |
+| token（PMS 当场签发） | `SJ / role=sj` | `JH / role=jd` | `SH / role=sh` | `PZ / role=pz` |
+| 载入的包 / `version.json` | `index-GaXSJjGN.js` / `d33c161d` | 同 | 同 | 同 |
+| 状态表 `objectIds` 总数 | 240 | 240 | 240 | 240 |
+| 有 DTX 对象的 refno | 12（BRAN `24381_145018` 自己 **11** 段管子 + 成员 `145019 / 145021 / 145023 / 145025 / 145026 / 145028 / 145029 / 145031 / 145032 / 145033 / 145035` 各 1） | 同 | 同 | 同 |
+| 其中可见 / 被藏 | **12 / 0** | **12 / 0** | **12 / 0** | **12 / 0** |
+| `getSubtreeRefnos([BRAN])` | 上述 12 个（含 BRAN 自己） | 同 | 同 | 同 |
+| `getAABB([BRAN])` vs `getSubtreeAABB([BRAN])` | `x∈[-4.45, 3.86]` vs `x∈[-4.45, 4.45]`、`z∈[-3.32, 2.17]` vs `z∈[-3.32, 3.32]`——配件把盒撑大 | 同 | 同 | 同 |
+| 面板 | 设计侧落点（`已过滤` 关） | 「当前节点：校对 · 待处理」「已过滤」 | 「当前节点：审核 · 审核中」「已过滤」 | 「当前节点：批准 · 审核中」「已过滤」 |
+| 「没有几何记录 / 未绘制实例」文案、snackbar | 无 | 无 | 无 | 无 |
+| console `error` / `warn` | 0 / 0 | 0 / 0 | 0 / 0 | 0 / 0 |
+
+审核三节点 console 链一致：`嵌入模式：…外部用户 <角色> … (verified)` → `角色落点: reviewer` → `[embed][form-restore] workflow snapshot resolved` → `task components replaced from workflow snapshot` → `[embed][viewer-restore] showModelByRefnos result` → `[ModelTreePanel] … Model already loaded: 24381/145018`（修前这一步是 `Auto-load failed` + 警告 toast）。
+
+模型中心 `tasks/{id}/workflow` history 四条齐全：`sj submit @ 18:01:59` → `jd approve by JH @ 18:04:38` → `sh approve by SH @ 18:05:25` → `pz approve by PZ @ 18:06:14`，终态 `approved`。
+
+![SJ 编辑窗嵌入页：管道 BRAN 管子 + 配件全可见（设计侧，未过滤）](./flow3-pipe-sj-design.png)
+
+![JH 从待办打开审批窗[校核]：只亮任务子树，管子 + 配件都在、已过滤](./flow3-pipe-jh-proofread.png)
+
+![SH 从待审批事项打开审批窗[审核]：同样管子 + 配件都在](./flow3-pipe-sh-review.png)
+
+![PZ 从待审批事项打开审批窗[批准]：同样管子 + 配件都在](./flow3-pipe-pz-approve.png)
+
 ## 3. 本地验证（提交前）
 
 - vitest：`taskModelFilter.test.ts` 5 例、`DtxCompatScene.getSubtreeAABB.test.ts` 7 例（+3 `getSubtreeRefnos`）、`useModelGeneration.genModelV1.test.ts` 29 例（+2 #84）——3 文件 41 passed。
@@ -161,3 +197,4 @@ SH 审批窗读数（页面 console 里能看到嵌入 iframe 的日志）：`[u
 - 验证用 Chrome profile（`%TEMP%\chrome-9448-profile-84`）用完即删；token 24 h 后自然失效。
 - 修前线上包已被覆盖，「修前」证据以 §2.1 同场景回放 + issue 正文（09-23 现场）为准。
 - §2.3 的 cua 做法：Cursor 里 cua 的 MCP 回执只有文字摘要，看不到 `snapshot_id` / `element_token` / 浏览器 `tab_id`，带索引的点击和 `browser_*` 都会被拒；改用 `cua-driver call <tool> <json>` CLI，JSON 里有 `element_token`，再按它点。Chromium 网页内容对背景像素点击（PostMessage）没反应；前台 `type_text` 有一次打到一半丢了焦点、后半截按键落到别的前台窗口，所以登录表单改走 CDP。临时 profile 用完即删。
+- §2.7 的做法：Playwright `connectOverCDP` 附到 §2 那台 headless Chrome（CDP 9448），每个角色 `browser.newContext()` 独立 cookie，全走 PMS 真实界面（登录 → 待办 / 待审批事项 → 审批窗「同意」→ `WorkNodeSelect` 提交），拿到 PMS 现签的 per-role token 打开嵌入页读 `scene`；候选条目按 form_id 核对（同一角色同日有多张待办），命中 `FORM-91496A76BFB6` 才操作。辅助脚本在仓外（`%TEMP%\pms84-pipe\flow.mjs`），未入库；这台 headless Chrome 的临时 profile 是 §2 起的，沿用。
