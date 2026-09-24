@@ -35,6 +35,7 @@ import {
   tryOpenReviewEntryByCandidates,
   tryOpenReviewEntryByNeedles,
   waitForAnySubstringInPageOrChildFrames,
+  waitForSubstringInPageOrChildFrames,
 } from './pms-plant3d-initiate-flow';
 
 const base = (process.env.PMS_E2E_BASE || 'http://pms.powerpms.net:1801').replace(/\/$/, '');
