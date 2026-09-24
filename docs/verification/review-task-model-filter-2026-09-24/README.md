@@ -98,6 +98,23 @@ PZ 这条路要等 SH 同意后才会进 PZ 的待办（会改流程状态），
 
 再按新逻辑亮 `[BRAN, ...getSubtreeRefnos([BRAN])]` → 可见 12 / 被藏 0，回到上图。
 
+### 2.5 单据在 PMS 里由 JH 同意推到审核（§2.3 SH 那一行的前置动作）
+
+12:05–12:12，headless Chrome 152（CDP 9448）+ chrome-devtools-mcp，JH / SH 各一个隔离 context，全走 PMS 真实界面：
+
+1. **JH** `sysin.html` 登录 → 个人中心「我的审批 · 待处理的」第一行「三维校审单 设计|2026-09-23」→ 审批窗「[校核]」（嵌入页 `form_id=FORM-C8049FC8F784`、`role=jd`，模型正常，图 06）→ **同意**（PMS 先发 `POST /HD/PreValidate`）→ 弹「审批处理」（`WorkNodeSelect.html`）：「即将流转到 ☑ 审核」、处理意见、目标人列表 `U021 … U030 / 审核`。
+2. **坑**：这张单的审核节点没有预选目标人，直接点「提 交」什么都不发生——`CheckSelectUser()` 里 `Power.ui.warning("对不起，节点[审核]没有选择目标人")` 一闪而过，网络上没有 `SyncRevInfo`。在列表里点选「审核」（即 SH 账号的显示名）后再「提 交」→ `SyncRevInfo` → 模型中心 `workflow/sync action=agree`。
+3. 随即 `workflow/sync?query`：`formStatus=active currentNode=jd taskStatus=submitted` → **`currentNode=sh taskStatus=in_review`**，`models=["24384_24935"]` 不变。
+4. **SH** 登录 → 顶栏「待审批事项」（11 → 12）→ 第一条「校核 刚刚 三维校审单」→ 审批窗「[审核]」，嵌入页 `form_id=FORM-C8049FC8F784`、`user_token` 为 PMS 当场签的 `SH / role=sh`。
+
+SH 审批窗读数（页面 console 里能看到嵌入 iframe 的日志）：`[useUserStore] 嵌入模式：已创建并切换到外部用户 SH, workflowRole=reviewer (verified)` → `嵌入模式角色落点: reviewer` → `[embed][form-restore] workflow snapshot resolved` → `task components replaced from workflow snapshot` → `[embed][viewer-restore] showModelByRefnos result` → `[ModelTreePanel] … Model already loaded: 24384/24935`；面板「审核 (sh)」为当前节点、「当前节点：审核 · 当前状态：审核中」、「已过滤」开着、「任务详情 1 构件 · FORM-C8049FC8F784」；无「没有几何记录」文案；console error / warn 0。
+
+![JH 审批窗（同意前）](./06-jh-pms-approval-window-before-agree.png)
+
+![SH 从待审批事项打开的审批窗（审核节点）](./07-sh-pms-approval-window-review-node.png)
+
+![SH 审批窗全屏：BEND + STRT 亮着、面板停在审核](./08-sh-pms-approval-fullscreen-review-node.png)
+
 ## 3. 本地验证（提交前）
 
 - vitest：`taskModelFilter.test.ts` 5 例、`DtxCompatScene.getSubtreeAABB.test.ts` 7 例（+3 `getSubtreeRefnos`）、`useModelGeneration.genModelV1.test.ts` 29 例（+2 #84）——3 文件 41 passed。
