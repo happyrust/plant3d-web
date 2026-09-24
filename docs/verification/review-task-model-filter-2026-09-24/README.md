@@ -53,6 +53,28 @@ console 顺序（JH）：`[embed][form-restore] workflow snapshot resolved` → 
 
 ![SH 打开：同样只亮成员](./03-sh-online-0dec493d-members-visible.png)
 
+### 2.3 cua 走真实 PMS 入口（JH）
+
+§2 的 token 是向模型中心直领的；这一节补用户真实的打开路径（11:30–11:50，cua-driver 0.20.0 操作有界面的 Chrome 152，临时 profile，带 `--disable-features=CalculateNativeWinOcclusion --disable-backgrounding-occluded-windows` 保证窗口被遮挡时照常渲染）：
+
+1. PMS `sysin.html` 以 JH 登录（账号见 `AGENTS.md`；表单经 CDP 填写并提交，原因见备注）；
+2. 个人中心「我的审批 · 待处理的」第一行「三维校审单 设计|2026-09-23」——cua `click` 按 `element_token` 走 UIA Invoke 点开；
+3. PMS 弹出审批窗「[校核]」，里面嵌入的就是 `/review/3d-view?form_id=FORM-C8049FC8F784&user_token=<PMS 当场签发的 JH token，role=jd>&output_project=AvevaMarineSample`。
+
+| 读数 | 结果 |
+| --- | --- |
+| 载入的包 / `version.json` | `index-DARS-7AE.js` / `0dec493d` |
+| 面板 | 「当前节点：校对 · 待处理」，「已过滤」开着 |
+| `scene.objects` 里 `24384_24935` / `24384_24936` / `24384_24939` | 都在，都 `visible=true`（47 条状态里 9 条可见） |
+| 「没有几何记录 / 加载结束但未绘制实例」文案、snackbar | 无 |
+| cua 点「已过滤」（`help="显示所有模型"`） | 过滤关掉，47 / 47 可见——「显示全部」能恢复 |
+
+隔约 10 分钟重新登录、再点同一行重跑一遍，读数相同。
+
+![JH 从 PMS 待办打开：审批窗里的三维页只亮成员、已过滤](./cua-jh-pms-entry-filtered.png)
+
+SH / PZ 这条路要等 PMS 里把单据同意推进后才会进他们的待办（会改流程状态），本节没走；§2.2 的 SH 读数用的是直领 token。
+
 ## 3. 本地验证（提交前）
 
 - vitest：`taskModelFilter.test.ts` 5 例、`DtxCompatScene.getSubtreeAABB.test.ts` 7 例（+3 `getSubtreeRefnos`）、`useModelGeneration.genModelV1.test.ts` 29 例（+2 #84）——3 文件 41 passed。
@@ -63,3 +85,4 @@ console 顺序（JH）：`[embed][form-restore] workflow snapshot resolved` → 
 
 - 验证用 Chrome profile（`%TEMP%\chrome-9448-profile-84`）用完即删；token 24 h 后自然失效。
 - 修前线上包已被覆盖，「修前」证据以 §2.1 同场景回放 + issue 正文（09-23 现场）为准。
+- §2.3 的 cua 做法：Cursor 里 cua 的 MCP 回执只有文字摘要，看不到 `snapshot_id` / `element_token` / 浏览器 `tab_id`，带索引的点击和 `browser_*` 都会被拒；改用 `cua-driver call <tool> <json>` CLI，JSON 里有 `element_token`，再按它点。Chromium 网页内容对背景像素点击（PostMessage）没反应；前台 `type_text` 有一次打到一半丢了焦点、后半截按键落到别的前台窗口，所以登录表单改走 CDP。临时 profile 用完即删。
