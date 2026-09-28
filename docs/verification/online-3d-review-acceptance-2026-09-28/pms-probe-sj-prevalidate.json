@@ -1,0 +1,17 @@
+{
+  "pms": "http://pms.powerpms.net:1801",
+  "user": "SJ",
+  "formId": "FORM-CB658BB5921A",
+  "loggedIn": true,
+  "urlAfterLogin": "http://pms.powerpms.net:1801/WebCenter/Open/00000000-0000-0000-0000-00000000000a",
+  "getZyModeInfo": {
+    "status": 200,
+    "ms": 273,
+    "text": "{\"ip_addr\":\"http://123.57.182.243\",\"token\":\"<jwt-redacted>\"}"
+  },
+  "preValidateActive": {
+    "status": 200,
+    "ms": 855,
+    "text": "{\"message\":\"接口连通失败，异常信息：\",\"success\":false}"
+  }
+}

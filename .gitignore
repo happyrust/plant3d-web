@@ -93,6 +93,7 @@ scripts/*
 !scripts/pms-plant3d-initiate-flow.ts
 !scripts/pms-contract-sequence.ts
 !scripts/review-annotation-flow-contract.ts
+!scripts/online-review-acceptance.mjs
 !scripts/pms-simulator-bootstrap.ts
 !scripts/pms-simulator-runner.ts
 !scripts/deploy-ubuntu.sh

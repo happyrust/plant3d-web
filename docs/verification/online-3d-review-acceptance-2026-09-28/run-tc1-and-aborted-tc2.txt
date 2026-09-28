@@ -1,0 +1,85 @@
+[23:23:53] BASE=http://123.57.182.243 PROJECT=AvevaMarineSample BRAN=24381_145018 OUT=C:\Users\dpc\AppData\Local\Temp\p3d-accept-0928 which=all
+[23:23:53] 线上 version.json: {"version":"0.1.0","commit":"c8c7bb2402289c56b404f95419ead3c247df5f5d","buildDate":"2026-09-28 15:10:37 UTC"}
+[23:23:53] tokens minted: SJ,JH,SH,PZ
+[23:23:53] 
+═══ TC1 正向全通：SJ 发起 → active → JH 批注+确认 → agree → SH agree → PZ agree → approved → 终态只读 ═══
+[23:23:53] ✓ 模拟 PMS GetZyModelUrl → POST /api/review/embed-url 领 form_id — {"formId":"FORM-6485C84D52D3","form":{"form_id":"FORM-6485C84D52D3","exists":true,"status":"blank","task_created":false}}
+[23:24:55] ✓ SJ 嵌入页出现发起编校审面板 — [data-testid="designer-landing-workspace"]
+[23:24:55] ✓ 构件列表出现 BRAN — 24381_145018
+[23:24:55] 无校核/批准下拉（外部流程模式）
+[23:24:56] ✓ SJ 点击「创建编校审数据」成功 — {"toast":true,"result":{"taskId":"task-e160ca4d-187c-473c-be03-0e0f2b5a769c","formId":"FORM-6485C84D52D3","title":"ACCEPT-20260928-152353-TC1","error":null,"at":1790609096536}}
+[23:24:56] ✓ query：建单后 draft / sj — {"http":200,"code":200,"msg":"success","form_status":"draft","task_status":"draft","current_node":"sj","task_id":"task-e160ca4d-187c-473c-be03-0e0f2b5a769c","records":0,"attachments":0}
+[23:24:56] ✓ 模拟 PMS PreValidate → workflow/verify active — {"http":200,"body":"{\"code\":200,\"message\":\"ok\",\"data\":{\"passed\":true,\"action\":\"active\",\"current_node\":\"sj\",\"task_status\":\"draft\",\"next_step\":\"jd\",\"reason\":\"验证通过，可继续流转\",\"recommended_action\":\"proceed\"}}"}
+[23:24:56] ✓ 模拟 PMS SyncRevInfo → sync active：submitted / jd — {"http":200,"code":200,"msg":"success","form_status":"active","task_status":"submitted","current_node":"jd","task_id":"task-e160ca4d-187c-473c-be03-0e0f2b5a769c","records":0,"attachments":0}
+[23:24:58] ✓ JH 嵌入页出现校审工作台 — [data-testid="reviewer-landing-workspace"]
+[23:25:08] JH: 页面稳定（10s）
+[23:25:08] ✓ JH 页面显示当前节点 / 外部流程模式 / 任务详情含 form_id — {"node":"当前节点：校对","external":true,"taskBound":true,"status":"当前状态：待处理"}
+[23:25:10] 注入尝试 1: annotation=null measure=e2e-measure-1790609108467 表格共=0 pending=0 本机=「本机已存 · 未落库只在这台电脑的浏览器里，确认当前数据后才进服」
+[23:25:10] ✓ JH 添加距离测量（草稿态，作为证据） — {"annotationId":null,"measureId":"e2e-measure-1790609108467","tableCount":0}
+[23:25:11] ✓ JH「确认当前数据」→ POST /api/review/records 200，确认记录 1 — {"confirmedRecordCount":1,"posted":["POST /api/review/records → 200"],"toastSaved":true}
+[23:25:12] ✓ query：records=1（测量证据已落库） — {"http":200,"code":200,"msg":"success","form_status":"active","task_status":"submitted","current_node":"jd","task_id":"task-e160ca4d-187c-473c-be03-0e0f2b5a769c","records":1,"attachments":0}
+[23:25:12] ✓ JH verify agree（无待处理批注）→ 通过 — {"http":200,"body":"{\"code\":200,\"message\":\"ok\",\"data\":{\"passed\":true,\"action\":\"agree\",\"current_node\":\"jd\",\"task_status\":\"submitted\",\"next_step\":\"sh\",\"reason\":\"验证通过，可继续流转\",\"recommended_action\":\"proceed\"}}"}
+[23:25:13] ✓ JH sync agree：in_review / sh — {"http":200,"code":200,"msg":"success","form_status":"active","task_status":"in_review","current_node":"sh","task_id":"task-e160ca4d-187c-473c-be03-0e0f2b5a769c","records":1,"attachments":0}
+[23:25:24] SH: 页面稳定（10s）
+[23:25:24] ✓ SH 复核页面（05-sh-view） — {"landing":"[data-testid=\"reviewer-landing-workspace\"]","node":"当前节点：审核","stats":"共 0 条","external":true,"readonly":false,"expect":"/审核|sh/i"}
+[23:25:24] ✓ SH sync agree：/ pz — {"http":200,"code":200,"msg":"success","form_status":"active","task_status":"in_review","current_node":"pz","task_id":"task-e160ca4d-187c-473c-be03-0e0f2b5a769c","records":1,"attachments":0}
+[23:25:36] PZ: 页面稳定（10s）
+[23:25:36] ✓ PZ 复核页面（06-pz-view） — {"landing":"[data-testid=\"reviewer-landing-workspace\"]","node":"当前节点：批准","stats":"共 0 条","external":true,"readonly":false,"expect":"/批准|pz/i"}
+[23:25:36] ✓ PZ sync agree：approved / approved — {"http":200,"code":200,"msg":"success","form_status":"approved","task_status":"approved","current_node":"pz","task_id":"task-e160ca4d-187c-473c-be03-0e0f2b5a769c","records":1,"attachments":0}
+[23:25:48] PZ: 页面稳定（10s）
+[23:25:48] ✓ PZ 复核页面（07-pz-readonly-reopen） — {"landing":"[data-testid=\"reviewer-landing-workspace\"]","node":"当前节点：批准","stats":"共 0 条","external":true,"readonly":false,"expect":"/仅可查看|已完成|已通过|终态|approved/"}
+[23:25:48] ✓ （信息）PZ reopen 页面状态 — {"node":"当前节点：批准","stats":"共 0 条","external":true,"readonly":false}
+[23:25:48] ✓ workflow history：sj submit → jd approve → sh approve → pz approve — ["sj submit by SJ","jd approve by JH","sh approve by SH","pz approve by PZ"]
+[23:25:48] 
+═══ TC2 驳回回路：SJ 发起 → active → JH 批注 → return → SJ 已修改 → 重提 active → JH 同意 → agree → SH → PZ → approved ═══
+[23:25:48] ✓ embed-url 领 form_id — {"formId":"FORM-17160EB8879B"}
+[23:26:50] ✓ SJ 嵌入页出现发起编校审面板 — [data-testid="designer-landing-workspace"]
+[23:26:50] ✓ 构件列表出现 BRAN — 24381_145018
+[23:26:50] 无校核/批准下拉（外部流程模式）
+[23:26:51] ✓ SJ 点击「创建编校审数据」成功 — {"toast":true,"result":{"taskId":"task-2d81179d-8909-4eec-bf75-9dcae842d547","formId":"FORM-17160EB8879B","title":"ACCEPT-20260928-152353-TC2","error":null,"at":1790609211164}}
+[23:26:51] ✓ SJ sync active：submitted / jd — {"http":200,"code":200,"msg":"success","form_status":"active","task_status":"submitted","current_node":"jd","task_id":"task-2d81179d-8909-4eec-bf75-9dcae842d547","records":0,"attachments":0}
+[23:26:53] ✓ JH 嵌入页出现校审工作台 — [data-testid="reviewer-landing-workspace"]
+[23:27:03] JH: 页面稳定（10s）
+[23:27:03] ✓ JH 页面显示当前节点 / 外部流程模式 / 任务详情含 form_id — {"node":"当前节点：校对","external":true,"taskBound":true,"status":"当前状态：待处理"}
+[23:27:05] 注入尝试 1: annotation=e2e-annot-1790609223076 measure=e2e-measure-1790609223118 表格共=0 pending=1 本机=「本机已存 · 未落库只在这台电脑的浏览器里，确认当前数据后才进服」
+[23:27:13] 注入尝试 2: annotation=e2e-annot-1790609230656 measure=e2e-measure-1790609230671 表格共=0 pending=2 本机=「本机已存 · 未落库只在这台电脑的浏览器里，确认当前数据后才进服」
+[23:27:20] 注入尝试 3: annotation=e2e-annot-1790609238199 measure=e2e-measure-1790609238205 表格共=0 pending=3 本机=「本机已存 · 未落库只在这台电脑的浏览器里，确认当前数据后才进服」
+[23:27:25] ✗ JH 添加文字批注 + 距离测量（草稿态，批注表格 共 1 条） — {"annotationId":"e2e-annot-1790609238199","measureId":"e2e-measure-1790609238205","tableCount":0}
+[23:27:26] ✓ JH「确认当前数据」→ POST /api/review/records 200，确认记录 1 — {"confirmedRecordCount":1,"posted":["POST /api/review/records → 200"],"toastSaved":true}
+[23:27:27] ✓ query：records=1（批注 + 测量已落库） — {"http":200,"code":200,"msg":"success","form_status":"active","task_status":"submitted","current_node":"jd","task_id":"task-2d81179d-8909-4eec-bf75-9dcae842d547","records":1,"attachments":0}
+[23:27:27] ✓ annotation-states：round1 open/pending — ["e2e-annot-1790609238199 r1 open/pending","e2e-annot-1790609230656 r1 open/pending","e2e-annot-1790609223076 r1 open/pending"]
+[23:27:27] ✓ JH 带「待处理」批注 verify agree → 应被拦（要求先驳回） — {"http":200,"body":"{\"code\":200,\"message\":\"存在未处理批注，请逐条处理后再继续\",\"data\":{\"passed\":false,\"action\":\"agree\",\"block_code\":\"ANNOTATION_CHECK_FAILED\",\"current_node\":\"jd\",\"task_status\":\"submitted\",\"actor_id\":\"JH\",\"owner_id\":\"JH\",\"owner_source\":\"checker\",\"expected_next_node\":\"sh\",\"reason\":\""}
+[23:27:39] JH: 页面稳定（10s）
+[23:27:39] ✓ JH 在设计侧未处理前「同意」应不可用 — {"rowText":"#1 未设置 ○ 图面错误 △ 一般错误 × 原则错误 验收批注 20260928-152353 TC2 线上验收：校对人员通过自动化钩子创建的文字批注（挂 24381/145018） ⏱ 待处理","visible":true,"disabled":true}
+[23:27:40] ✓ JH sync return：current_node=sj — {"http":200,"code":200,"msg":"success","form_status":"draft","task_status":"draft","current_node":"sj","task_id":"task-2d81179d-8909-4eec-bf75-9dcae842d547","records":1,"attachments":0}
+[23:27:40] ✓ history 含 jd return — ["sj submit by SJ","jd return by JH"]
+[23:27:40] ✓ SJ 带「待处理」批注 verify active（重提）→ 应被拦 — {"http":200,"body":"{\"code\":200,\"message\":\"存在未处理批注，请逐条回复后再提交\",\"data\":{\"passed\":false,\"action\":\"active\",\"block_code\":\"ANNOTATION_CHECK_FAILED\",\"current_node\":\"sj\",\"task_status\":\"draft\",\"actor_id\":\"SJ\",\"owner_id\":\"SJ\",\"owner_source\":\"requester\",\"expected_next_node\":\"jd\",\"reason\":\"存"}
+[23:27:42] ✓ SJ 嵌入页加载 — [data-testid="reviewer-landing-workspace"]
+[23:27:51] SJ: 页面稳定（9s）
+[23:27:51] ✓ SJ 看到批注表格 — 共 3 条
+[23:27:51] 页面显示 打回原因：校对驳回：请处理批注后重提（线上验收）
+[23:27:52] 批注行：#1 未设置 验收批注 20260928-152353 TC2 线上验收：校对人员通过自动化钩子创建的文字批注（挂 24381/145018） ⏱ 待处理
+[23:27:52] ✓ SJ 打开批注详情，看到可用的「已修改」按钮 — {"rowText":"#1 未设置 验收批注 20260928-152353 TC2 线上验收：校对人员通过自动化钩子创建的文字批注（挂 24381/145018） ⏱ 待处理","disabled":false}
+[23:27:52] 备注框 placeholder=「处理备注（可选，例如修改说明）」 aria-required=null
+[23:27:52] ✓ SJ 点击「提交处理结果」→ POST annotation-states/apply — {"placeholder":"处理备注（可选，例如修改说明）","required":null,"applied":{"status":200,"body":"{\"success\":true,\"state\":{\"formId\":\"FORM-17160EB8879B\",\"taskId\":\"task-2d81179d-8909-4eec-bf75-9dcae842d547\",\"annotationId\":\"e2e-annot-1790609238199\",\"annotationType\":\"text\",\"workflowNode\":\"sj\",\"reviewRound\":2,\"resolutionStatus\":\"fixed\",\"decisionStatus\":\"pending\",\"note\":\"线上验收：已按退回意见修改\",\"updatedById\":\""}}
+[23:27:54] 提交后统计：共 3 条；行：#1 未设置 验收批注 20260928-152353 TC2 线上验收：校对人员通过自动化钩子创建的文字批注（挂 24381/145018） ⏱ 待处理 文字 待处理 未设置 验收批注 20260928-152353 TC2 线上验收：校对人员通过自动化钩子创建的文字批注（挂 24381/145018） RefNo 
+[23:27:54] ✓ annotation-states：round2 fixed/pending — ["e2e-annot-1790609238199 r2 fixed/pending","e2e-annot-1790609238199 r1 open/pending","e2e-annot-1790609230656 r1 open/pending","e2e-annot-1790609223076 r1 open/pending"]
+[23:27:54] ✗ SJ 处理完批注后 verify active → 通过 — {"http":200,"body":"{\"code\":200,\"message\":\"存在未处理批注，请逐条回复后再提交\",\"data\":{\"passed\":false,\"action\":\"active\",\"block_code\":\"ANNOTATION_CHECK_FAILED\",\"current_node\":\"sj\",\"task_status\":\"draft\",\"actor_id\":\"SJ\",\"owner_id\":\"SJ\",\"own"}
+[23:27:54] ✗ SJ sync active（重提）：submitted / jd — {"http":409,"code":409,"msg":"存在未处理批注，请逐条回复后再提交"}
+[23:27:56] ✓ JH 嵌入页加载 — [data-testid="reviewer-landing-workspace"]
+[23:28:06] JH: 页面稳定（10s）
+[23:28:06] ✓ JH 看到批注表格 — 共 3 条
+[23:28:06] 页面显示 打回原因：校对驳回：请处理批注后重提（线上验收）
+[23:28:06] 批注行：#1 未设置 ○ 图面错误 △ 一般错误 × 原则错误 验收批注 20260928-152353 TC2 线上验收：校对人员通过自动化钩子创建的文字批注（挂 24381/145018） ⏱ 待处理
+[23:28:17] ✗ JH 打开批注详情，看到可用的「同意」按钮 — {"rowText":"#1 未设置 ○ 图面错误 △ 一般错误 × 原则错误 验收批注 20260928-152353 TC2 线上验收：校对人员通过自动化钩子创建的文字批注（挂 24381/145018） ⏱ 待处理","disabled":true}
+[23:28:17] ✗ TC2 异常中止 — 按钮「同意」不可用
+
+══════ 汇总 ══════
+✓ TC1 正向全通：SJ 发起 → active → JH 批注+确认 → agree → SH agree → PZ agree → approved → 终态只读  (21/21 步通过) form=FORM-6485C84D52D3 task=task-e160ca4d-187c-473c-be03-0e0f2b5a769c
+✗ TC2 驳回回路：SJ 发起 → active → JH 批注 → return → SJ 已修改 → 重提 active → JH 同意 → agree → SH → PZ → approved  (22/27 步通过) form=FORM-17160EB8879B task=task-2d81179d-8909-4eec-bf75-9dcae842d547
+    ✗ JH 添加文字批注 + 距离测量（草稿态，批注表格 共 1 条） — {"annotationId":"e2e-annot-1790609238199","measureId":"e2e-measure-1790609238205","tableCount":0}
+    ✗ SJ 处理完批注后 verify active → 通过 — {"http":200,"body":"{\"code\":200,\"message\":\"存在未处理批注，请逐条回复后再提交\",\"data\":{\"passed\":false,\"action\":\"active\",\"block_code\":\"ANNOTATION_CHECK_FAILED\",\"current_node\":\"sj\",\"task_status\":\"draft\",\"actor_id\":\"SJ\",\"owner_id\":\"SJ\",\"own"}
+    ✗ SJ sync active（重提）：submitted / jd — {"http":409,"code":409,"msg":"存在未处理批注，请逐条回复后再提交"}
+    ✗ JH 打开批注详情，看到可用的「同意」按钮 — {"rowText":"#1 未设置 ○ 图面错误 △ 一般错误 × 原则错误 验收批注 20260928-152353 TC2 线上验收：校对人员通过自动化钩子创建的文字批注（挂 24381/145018） ⏱ 待处理","disabled":true}
+    ✗ TC2 异常中止 — 按钮「同意」不可用
+report: C:\Users\dpc\AppData\Local\Temp\p3d-accept-0928\20260928-152353-report.json

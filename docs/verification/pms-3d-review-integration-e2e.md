@@ -334,6 +334,7 @@ Playwright / CDP 用 `registerPlant3dAutomationReviewInitScript(context)` 在上
 
 ## 9. 变更记录
 
+- 2026-09-28：部署 main `c8c7bb24` 后在线上包上跑通外部流程模式全流程（模拟 PMS 后端直调模型中心 + Playwright 真点嵌入页）：TC-1 正向 21/21、TC-2 驳回回路 32/33（`verify` 对待处理批注的拦截、409、SJ「已修改」/ JH「同意」真点全部成立），做法、逐步读数、截图与脚本 `scripts/online-review-acceptance.mjs` 见 [`online-3d-review-acceptance-2026-09-28/`](./online-3d-review-acceptance-2026-09-28/README.md)。同日发现线上 **3100 口被退役的 plant-model-gen `web_server` 占着**，PMS `ModelRootUrl` 仍指 `:3100` → PMS 侧 `PreValidate` 回「接口连通失败」，真实 PMS 的新增 / 送审 / 同意 / 驳回当前不通（该目录 §7 有探测表与两条修法）；§1 环境表里「nginx 已 80 / 3100 兼听」在修好前不成立。另：重提的 history 动作现已记为 `sj submit`（§5 第 2 条所述 `approve` 已变）。
 - 2026-09-24（下午，二）：`scripts/pms-chrome-devtools-flow.ts` 新增可选开关 `PMS_CDP_SEND_FOR_REVIEW`（SJ 在 PMS 送审，覆盖 TC-1 第 3、4 步）及 `PMS_SEND_REVIEW_USERS` / `PMS_SEND_REVIEW_OPINION`；§6.1 补跑法与实跑结果，§6.2 标题改为送审已进脚本，§6.4 环境变量表补三行。
 - 2026-09-24（下午）：TC-1 表下「目标人」补预选条件——送审时在「定义节点」里指定了人员，后续各步就会预选且候选只有一人（`FORM-6F501122F12C` 全流程实测）；没指定时候选是整组人、不预选。
 - 2026-09-24：TC-1 第 6 / 7 / 8 步、TC-2 第 8 步、TC-3 第 11 / 12 步补「审批处理」目标人——没预选时先点选下一节点的人（「审核」= SH、「批准」= PZ），不选直接提交会静默不发（`FORM-C8049FC8F784` 实测，[#85](https://github.com/happyrust/plant3d-web/issues/85)）；TC-1 表下加「目标人」说明，§6.2 选择器表「同意 / 驳回」一行补选目标人的做法。
