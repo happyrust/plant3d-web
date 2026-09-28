@@ -8,7 +8,7 @@ import type { ReviewTask } from '@/types/auth';
 import { authVerifyToken, clearAuthToken, setAuthToken } from '@/api/reviewApi';
 import { restoreEmbedWorkbenchContext } from '@/components/review/embedContextRestore';
 import { restoreEmbedFormSnapshotContext } from '@/components/review/embedFormSnapshotRestore';
-import { attachEmbedPostMessageBridge } from '@/components/review/embedPostMessageBridge';
+import { attachEmbedPostMessageBridge, resolveEmbedBridgeTrust } from '@/components/review/embedPostMessageBridge';
 import {
   applyEmbedLandingState,
   buildPersistedEmbedModeParams,
@@ -374,7 +374,15 @@ function tryRegisterWorkflowSyncBridge() {
   }
   if (offWorkflowSyncBridge) return;
 
+  // 只受理挂着本 iframe 的父页面（PMS）发来的 pre_action / workflow_changed；referrer 可得时再按 origin 过滤。
+  // 此前不传 trustedOrigins，同页任意窗口都能替用户「确认当前数据」并调 workflow/sync（D9）。
+  const bridgeTrust = resolveEmbedBridgeTrust();
+  console.info('[DockLayout] workflow sync bridge trust', {
+    trustedOrigins: bridgeTrust.trustedOrigins ?? null,
+    parentOnly: !!bridgeTrust.trustedSource,
+  });
   offWorkflowSyncBridge = attachEmbedPostMessageBridge({
+    ...bridgeTrust,
     onPmsWorkflowPreAction: async (msg) => reviewStore.prepareExternalWorkflowAction({
       formId: msg.formId,
       action: msg.action,

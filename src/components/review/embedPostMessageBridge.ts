@@ -16,8 +16,38 @@ type BridgeOptions = {
     currentNode?: string;
     error?: string;
   }>;
+  /** 只受理这些 origin 发来的消息；空 / 不传 = 不按 origin 过滤（仍受 `trustedSource` 约束）。 */
   trustedOrigins?: string[];
+  /**
+   * 只受理 `event.source` 是这个窗口的消息（嵌入态就是 `window.parent`——挂着 iframe 的 PMS 页面）。
+   * `pre_action` 会自动落库未保存的确认记录、`workflow_changed` 会直接调 `workflow/sync`，不能让同页任意
+   * iframe / 弹窗都能触发（gen-model docs/plans/2026-09-28-review-workflow-defects-fix-plan.md D9 / T7，Q8=A）。
+   * 传 `null` / 不传 = 不按 source 过滤（单测与非嵌入场景）。
+   */
+  trustedSource?: (() => Window | MessageEventSource | null | undefined) | null;
 };
+
+/**
+ * 嵌入页可信来源的缺省解法：origin 取 `document.referrer`（PMS 页面把 iframe 挂进来时浏览器会带上，
+ * 拿不到就不按 origin 过滤），source 只认 `window.parent`。
+ */
+export function resolveEmbedBridgeTrust(windowLike: Window = window): Pick<BridgeOptions, 'trustedOrigins' | 'trustedSource'> {
+  let trustedOrigins: string[] | undefined;
+  try {
+    const referrer = windowLike.document?.referrer?.trim();
+    if (referrer) {
+      const origin = new URL(referrer).origin;
+      if (origin && origin !== 'null') trustedOrigins = [origin];
+    }
+  } catch {
+    trustedOrigins = undefined;
+  }
+  const isEmbedded = !!windowLike.parent && windowLike.parent !== windowLike;
+  return {
+    trustedOrigins,
+    trustedSource: isEmbedded ? () => windowLike.parent : null,
+  };
+}
 
 export function attachEmbedPostMessageBridge(options: BridgeOptions): () => void {
   const handler = async (event: MessageEvent) => {
@@ -26,6 +56,11 @@ export function attachEmbedPostMessageBridge(options: BridgeOptions): () => void
 
     if (options.trustedOrigins && options.trustedOrigins.length > 0
       && !options.trustedOrigins.includes(event.origin)) {
+      return;
+    }
+
+    const trustedSource = options.trustedSource?.();
+    if (options.trustedSource && trustedSource && source !== trustedSource) {
       return;
     }
 
