@@ -1,0 +1,36 @@
+# 换行符策略（2026-09-29 起）：文本文件一律以 LF 入库、以 LF 检出。
+# 此前仓库没有任何 EOL 声明（core.autocrlf=false），索引里 CRLF 1840 / LF 366 / 混合 76 个文件并存，
+# Windows 编辑器与 LF 工具交替触碰同一文件就会出现整文件“改动”（2026-09-28 22:41 那批 20 个纯换行符脏文件即此）。
+# 加上本文件后同一天做了一次 `git add --renormalize`，看 blame 请用 `git blame -w`；跨该提交合并请开 `merge.renormalize=true`。
+* text=auto eol=lf
+
+# 只在 Windows 上被消费的脚本 / AVEVA E3D PML 宏：检出为 CRLF（入库仍是 LF）
+*.ps1     text eol=crlf
+*.bat     text eol=crlf
+*.cmd     text eol=crlf
+*.pmlmac  text eol=crlf
+
+# shell 脚本必须 LF（Ubuntu 部署 / CI 直接 bash 执行）
+*.sh      text eol=lf
+
+# 二进制：不做换行处理、不做文本 diff
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.ico   binary
+*.webp  binary
+*.pdf   binary
+*.docx  binary
+*.xls   binary
+*.xlsx  binary
+*.7z    binary
+*.gz    binary
+*.zip   binary
+*.mesh  binary
+*.bin   binary
+*.glb   binary
+*.wasm  binary
+*.woff  binary
+*.woff2 binary
+*.ttf   binary
