@@ -997,10 +997,22 @@ async function createReviewTask(data: {
         if (!normalizedTask) {
           throw new Error('创建编校审单返回了无效任务数据');
         }
-        reviewTasks.value = [...reviewTasks.value, normalizedTask];
-        console.log('[useUserStore] Created review task:', normalizedTask.title);
+        // 同 formId 二次保存时后端返回的是**同一个** task（UPDATE 不新建），按 id 替换而不是 push，
+        // 否则本地列表会堆出重复项（gen-model 修复计划 2026-09-28 T5-2）。
+        const existingIndex = reviewTasks.value.findIndex((item) => item.id === normalizedTask.id);
+        reviewTasks.value = existingIndex === -1
+          ? [...reviewTasks.value, normalizedTask]
+          : reviewTasks.value.map((item, index) => (index === existingIndex ? normalizedTask : item));
+        console.log(
+          existingIndex === -1
+            ? '[useUserStore] Created review task:'
+            : '[useUserStore] Re-saved review task (replaced by id):',
+          normalizedTask.title,
+        );
         return normalizedTask;
       }
+      // 后端 409（单据已送审不可修改）等业务错误走 fetchJson 抛出的 ReviewApiHttpError，
+      // message 就是 error_message 原文，下面 catch 原样上抛，面板 notification.details 直接展示。
       throw new Error(response.error_message || '创建编校审单失败');
     } catch (e) {
       const message = e instanceof Error ? e.message : '创建编校审单失败';

@@ -344,6 +344,101 @@ describe('useUserStore.createReviewTask', () => {
     expect(store.reviewTasks.value).toContainEqual(task);
   });
 
+  // 后端对同 formId 的二次保存返回同一个 task（sj 节点 UPDATE，不新建；gen-model 修复计划 T1），
+  // 本地列表必须按 id 替换而不是 push，否则每保存一次就多一条重复项（T5-2）。
+  it('同 formId 二次保存返回同一 task 时按 id 替换而不是堆重复项', async () => {
+    reviewTaskCreateMock
+      .mockResolvedValueOnce({
+        success: true,
+        task: {
+          id: 'task-resave-1',
+          formId: 'FORM-RESAVE-1',
+          title: '包A',
+          components: [{ id: 'c1', name: 'Comp A', refNo: '100_1' }],
+          currentNode: 'sj',
+          status: 'draft',
+        },
+      })
+      .mockResolvedValueOnce({
+        success: true,
+        task: {
+          id: 'task-resave-1',
+          formId: 'FORM-RESAVE-1',
+          title: '包B',
+          components: [
+            { id: 'c2', name: 'Comp B', refNo: '100_2' },
+            { id: 'c3', name: 'Comp C', refNo: '100_3' },
+          ],
+          currentNode: 'sj',
+          status: 'draft',
+        },
+      });
+
+    const { useUserStore } = await import('./useUserStore');
+    const store = useUserStore();
+    store.setEmbedUser('SJ', 'sj', { verified: true });
+
+    const first = await store.createReviewTask({
+      title: '包A',
+      description: '',
+      modelName: '包A',
+      checkerId: 'JH',
+      approverId: 'SH',
+      formId: 'FORM-RESAVE-1',
+      components: [{ id: 'c1', name: 'Comp A', refNo: '100_1' }],
+    });
+    const second = await store.createReviewTask({
+      title: '包B',
+      description: '',
+      modelName: '包B',
+      checkerId: 'JH',
+      approverId: 'SH',
+      formId: 'FORM-RESAVE-1',
+      components: [
+        { id: 'c2', name: 'Comp B', refNo: '100_2' },
+        { id: 'c3', name: 'Comp C', refNo: '100_3' },
+      ],
+    });
+
+    expect(first.id).toBe('task-resave-1');
+    expect(second.id).toBe('task-resave-1');
+    expect(store.reviewTasks.value).toHaveLength(1);
+    expect(store.reviewTasks.value[0]).toMatchObject({
+      id: 'task-resave-1',
+      title: '包B',
+    });
+    expect(store.reviewTasks.value[0]?.components.map((c) => c.refNo)).toEqual(['100_2', '100_3']);
+  });
+
+  // 后端 409「单据已送审不可修改」经 fetchJson 变成带 error_message 原文的 Error（非网络错误），
+  // 必须原样上抛、不得回退本地任务，面板才能把原因原文展示出来（T5-3）。
+  it('后端 409 单据已送审时原文抛错且不回退本地任务', async () => {
+    const backendMessage = '单据已送审（当前节点 jd · 校对），不可修改；如需修改请由 PMS 驳回到编制节点';
+    reviewTaskCreateMock.mockRejectedValue(Object.assign(new Error(backendMessage), {
+      status: 409,
+      errorMessage: backendMessage,
+    }));
+
+    const { useUserStore } = await import('./useUserStore');
+    const store = useUserStore();
+    store.setEmbedUser('SJ', 'sj', { verified: true });
+
+    await expect(
+      store.createReviewTask({
+        title: '改了标题',
+        description: '',
+        modelName: '改了标题',
+        checkerId: 'JH',
+        approverId: 'SH',
+        formId: 'FORM-RESAVE-JD',
+        components: [{ id: 'c9', name: 'Comp', refNo: '100_9' }],
+      })
+    ).rejects.toThrow(backendMessage);
+
+    expect(store.reviewTasks.value).toHaveLength(0);
+    expect(store.error.value).toBe(backendMessage);
+  });
+
   it('updateTaskAttachments 仅持久化成功上传的附件元数据', async () => {
     reviewTaskCreateMock.mockResolvedValue({
       success: true,

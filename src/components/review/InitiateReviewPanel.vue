@@ -701,9 +701,28 @@ const missingFields = computed(() => {
   return fields;
 });
 
-const submitButtonLabel = computed(() => (
-  externalWorkflowMode.value ? '保存编校审单数据' : '创建并提交编校审单'
+/// 外部流程模式下，落点恢复出的草稿带 taskId = 这张单据后端已经有 task：再点保存走的是后端的
+/// 「二次保存」（同 form_id 命中 sj 节点活动任务 → UPDATE，不新建；非 sj → 409），
+/// 标题 / 按钮要说清楚这是在改已保存的单据，而不是新建
+/// （gen-model docs/plans/2026-09-28-review-workflow-defects-fix-plan.md T5-1、docs/specs/review-api.md §8.3）。
+const restoredSavedTaskId = computed<string | null>(() => {
+  if (!externalWorkflowMode.value) return null;
+  const taskId = embedLandingState.value?.restoredTaskDraft?.taskId?.trim();
+  return taskId || null;
+});
+const isEditingSavedTask = computed(() => !!restoredSavedTaskId.value);
+const panelTitle = computed(() => (
+  isEditingSavedTask.value ? '修改已保存的编校审单' : '发起编校审单'
 ));
+const editingSavedTaskHint = computed(() => (
+  restoredSavedTaskId.value
+    ? `正在修改已保存的编校审单（task ${restoredSavedTaskId.value}）：保存会覆盖构件、描述与附件；单据已送审时后端会拒绝，需由 PMS 驳回到编制节点后再改。`
+    : ''
+));
+const submitButtonLabel = computed(() => {
+  if (isEditingSavedTask.value) return '保存修改';
+  return externalWorkflowMode.value ? '保存编校审单数据' : '创建并提交编校审单';
+});
 const submitLoadingLabel = computed(() => (
   externalWorkflowMode.value ? '正在保存...' : '正在创建...'
 ));
@@ -947,7 +966,7 @@ function closePanel() {
   <div class="flex h-full flex-col overflow-y-auto p-3" data-testid="designer-landing-workspace" data-panel="initiateReview">
     <div class="flex items-center justify-between">
       <div>
-        <h3 class="text-base font-semibold text-[#111827]">发起编校审单</h3>
+        <h3 class="text-base font-semibold text-[#111827]" data-testid="initiate-review-panel-title">{{ panelTitle }}</h3>
         <p class="mt-1 text-xs text-[#6B7280]">{{ panelSubTitle }}</p>
       </div>
       <div class="flex items-center gap-2">
@@ -1011,6 +1030,11 @@ function closePanel() {
 
     <!-- 表单区域（未提交或提交失败时显示） -->
     <div v-else class="mt-4 space-y-4">
+      <div v-if="isEditingSavedTask"
+        data-testid="initiate-review-editing-saved-task"
+        class="rounded-[8px] border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+        {{ editingSavedTaskHint }}
+      </div>
       <div v-if="showDebugUi && embedLandingState?.target === 'designer'"
         data-testid="designer-landing-cta"
         class="inline-flex items-center gap-2 rounded-full bg-blue-50 px-3 py-1 text-xs font-medium text-blue-700">
