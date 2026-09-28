@@ -154,6 +154,51 @@ describe('ModelUnitVersionComparePanel', () => {
     app.unmount();
   });
 
+  it('复制当前节点与 A/B 的直达链接；剪贴板受限时仍写入地址栏', async () => {
+    const originalUrl = window.location.href;
+    const originalClipboard = navigator.clipboard;
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
+    window.history.replaceState({}, '', '/?gm_backend=http%3A%2F%2Flocalhost%3A8022');
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const app = createApp(ModelUnitVersionComparePanel);
+    app.mount(host);
+
+    const input = host.querySelector('[data-testid="model-unit-compare-refno"]') as HTMLInputElement;
+    input.value = '24381/145018';
+    input.dispatchEvent(new Event('input'));
+    (host.querySelector('[data-testid="model-unit-compare-load"]') as HTMLButtonElement).click();
+    await flushUi();
+
+    const copy = host.querySelector('[data-testid="model-unit-compare-copy-link"]') as HTMLButtonElement;
+    expect(copy.disabled).toBe(false);
+    // 只改输入框、还没重新查询：分享的仍是当前已加载节点，不能把新 refno 与旧 A/B 拼成假链接。
+    input.value = '1/999';
+    input.dispatchEvent(new Event('input'));
+    copy.click();
+    await flushUi();
+
+    const copied = new URL(String(writeText.mock.calls[0]?.[0]));
+    expect(copied.searchParams.get('gm_backend')).toBe('http://localhost:8022');
+    expect(copied.searchParams.get('unit_refno')).toBe('24381_145018');
+    expect(copied.searchParams.get('compare_a')).toBe('791');
+    expect(copied.searchParams.get('compare_b')).toBe('897');
+    expect(copied.searchParams.get('compare_autorun')).toBe('1');
+    expect(copy.getAttribute('aria-label')).toBe('对比链接已复制');
+
+    writeText.mockRejectedValueOnce(new Error('not allowed'));
+    copy.click();
+    await flushUi();
+    expect(host.querySelector('[data-testid="model-unit-compare-copy-link-status"]')?.textContent).toContain('已写入地址栏');
+    expect(window.location.search).toContain('compare_autorun=1');
+
+    app.unmount();
+    window.history.replaceState({}, '', originalUrl);
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: originalClipboard });
+  });
+
   it('填构件参考号：版本表按所属单元列、每一版标出本构件变没变，对比按单元跑且结果收窄到它', async () => {
     versionSourceMocks.listElementVersions.mockResolvedValue(elementTimeline);
     const events: CustomEvent[] = [];
@@ -495,7 +540,10 @@ describe('ModelUnitVersionComparePanel', () => {
     app.unmount();
   });
 
-  it('时间线上点 A / B 选版本并自动摆正；「与上一版比」「与最新比」', async () => {
+  it('时间线按钮和时间下拉框都能选 A / B 并自动摆正；「与上一版比」「与最新比」', async () => {
+    const events: CustomEvent[] = [];
+    const listener = (event: Event) => events.push(event as CustomEvent);
+    window.addEventListener('plant3d:model-unit-version-compare', listener);
     versionSourceMocks.listVersions.mockResolvedValue([
       version(700, '2026-07-22T00:00:00Z'), version(791, '2026-07-22T01:00:00Z'), version(897, '2026-07-22T02:00:00Z'),
     ]);
@@ -518,13 +566,38 @@ describe('ModelUnitVersionComparePanel', () => {
     ];
     expect(pair()).toEqual(['791', '897']);
 
+    (host.querySelector('[data-testid="model-unit-compare-tab-model"]') as HTMLButtonElement).click();
+    await flushUi();
+    (host.querySelector('[data-testid="model-unit-compare-run"]') as HTMLButtonElement).click();
+    await flushUi();
+    const open = events.findLast((event) => event.detail?.action === 'open')!.detail;
+    window.dispatchEvent(new CustomEvent('plant3d:model-unit-version-compare-state', {
+      detail: { detail: open, status: 'ready', activeSide: 'after', viewMode: 'single' },
+    }));
+    await flushUi();
+    expect(host.querySelector('[data-testid="model-unit-compare-runtime"]')).toBeTruthy();
     (host.querySelector('[data-testid="model-unit-compare-pick-a-700"]') as HTMLButtonElement).click();
     await flushUi();
     expect(pair()).toEqual(['700', '897']);
-    // 把比 B 还新的一版设成 A：两端对调
-    (host.querySelector('[data-testid="model-unit-compare-pick-b-700"]') as HTMLButtonElement).click();
+    expect(host.querySelector('[data-testid="model-unit-compare-runtime"]')).toBeNull();
+    const aSelect = host.querySelector('[data-testid="model-unit-compare-a-time-select"]') as HTMLSelectElement;
+    const bSelect = host.querySelector('[data-testid="model-unit-compare-b-time-select"]') as HTMLSelectElement;
+    expect([...aSelect.options].map((option) => option.textContent?.trim())).toEqual([
+      '时间未知 · 897', '时间未知 · 791', '时间未知 · 700',
+    ]);
+    aSelect.value = '791';
+    aSelect.dispatchEvent(new Event('change'));
     await flushUi();
-    expect(pair()).toEqual(['', '700']);
+    expect(pair()).toEqual(['791', '897']);
+    bSelect.value = '791';
+    bSelect.dispatchEvent(new Event('change'));
+    await flushUi();
+    expect(pair()).toEqual(['700', '791']);
+    // 把比 B 还新的一版设成 A：两端对调
+    aSelect.value = '897';
+    aSelect.dispatchEvent(new Event('change'));
+    await flushUi();
+    expect(pair()).toEqual(['791', '897']);
     (host.querySelector('[data-testid="model-unit-compare-with-latest"]') as HTMLButtonElement).click();
     await flushUi();
     expect(pair()).toEqual(['791', '897']);
@@ -534,6 +607,7 @@ describe('ModelUnitVersionComparePanel', () => {
     (host.querySelector('[data-testid="model-unit-compare-with-previous"]') as HTMLButtonElement).click();
     await flushUi();
     expect(pair()).toEqual(['700', '791']);
+    window.removeEventListener('plant3d:model-unit-version-compare', listener);
     app.unmount();
   });
 

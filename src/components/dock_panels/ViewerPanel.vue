@@ -26,6 +26,7 @@ import {
 } from 'three';
 
 import type { PtsetResponse } from '@/api/genModelPdmsAttrApi';
+
 import {
   reviewRecordCreate,
   reviewRecordGetByTaskId,
@@ -113,6 +114,7 @@ import {
   countModelUnitGeometryStatuses,
   DEFAULT_MODEL_UNIT_COMPARE_SIDE,
   DEFAULT_MODEL_UNIT_COMPARE_VIEW_MODE,
+  formatModelUnitVersionTime,
   getModelUnitCompareRenderPasses,
   locateModelUnitComparePass,
   MODEL_UNIT_GEOMETRY_STATUS_COLORS,
@@ -1970,6 +1972,8 @@ function setModelUnitCompareViewMode(viewMode: ModelUnitCompareViewMode): void {
     exitXeokitMeasureMode();
     store.setToolMode('none');
     pivotControllerRef.value?.handleMouseUp();
+    // 拖框工具会临时禁用 OrbitControls；切到分屏时必须把共享相机的控制权归还。
+    if (dtxViewerRef.value) dtxViewerRef.value.controls.enabled = true;
   }
   state.viewMode = viewMode;
   if (isDev && typeof window !== 'undefined' && (window as any).__modelUnitVersionCompare) {
@@ -4887,12 +4891,14 @@ onUnmounted(() => {
       :data-testid="modelUnitCompareState.viewMode === 'split' ? 'viewer-model-unit-split-overlay' : 'viewer-model-unit-single-overlay'">
       <template v-if="modelUnitCompareState.viewMode === 'split'">
         <div class="absolute inset-y-0 left-1/2 border-l border-white/80 shadow-[0_0_0_1px_rgba(15,23,42,0.35)]" />
-        <div class="absolute left-3 top-3 rounded bg-blue-600/90 px-2 py-1 text-xs font-semibold text-white shadow">
-          A · sesno {{ modelUnitCompareState.detail.before.sesno }}
+        <div class="absolute left-3 top-3 rounded bg-blue-600/90 px-2 py-1 text-xs font-semibold text-white shadow"
+          :title="`sesno ${modelUnitCompareState.detail.before.sesno}`">
+          A · {{ formatModelUnitVersionTime(modelUnitCompareState.detail.before.version.sessionTime ?? '') || '时间未知' }}
           <span v-if="modelUnitCompareState.detail.before.version.impactKind === 'tombstone'" class="ml-1 font-normal opacity-80">· {{ modelUnitVersionAbsentNote('before') }}</span>
         </div>
-        <div class="absolute left-[calc(50%+0.75rem)] top-3 rounded bg-emerald-600/90 px-2 py-1 text-xs font-semibold text-white shadow">
-          B · sesno {{ modelUnitCompareState.detail.after.sesno }}
+        <div class="absolute left-[calc(50%+0.75rem)] top-3 rounded bg-emerald-600/90 px-2 py-1 text-xs font-semibold text-white shadow"
+          :title="`sesno ${modelUnitCompareState.detail.after.sesno}`">
+          B · {{ formatModelUnitVersionTime(modelUnitCompareState.detail.after.version.sessionTime ?? '') || '时间未知' }}
           <span v-if="modelUnitCompareState.detail.after.version.impactKind === 'tombstone'" class="ml-1 font-normal opacity-80">· {{ modelUnitVersionAbsentNote('after') }}</span>
         </div>
       </template>
@@ -4900,9 +4906,10 @@ onUnmounted(() => {
         class="absolute left-3 top-3 rounded px-2 py-1 text-xs font-semibold text-white shadow"
         :class="modelUnitCompareState.activeSide === 'before' ? 'bg-blue-600/90' : 'bg-emerald-600/90'"
         :data-side="modelUnitCompareState.activeSide"
+        :title="`sesno ${modelUnitCompareState.activeSide === 'before' ? modelUnitCompareState.detail.before.sesno : modelUnitCompareState.detail.after.sesno}`"
         data-testid="viewer-model-unit-side-badge">
-        {{ modelUnitCompareState.activeSide === 'before' ? 'A' : 'B' }} · sesno
-        {{ modelUnitCompareState.activeSide === 'before' ? modelUnitCompareState.detail.before.sesno : modelUnitCompareState.detail.after.sesno }}
+        {{ modelUnitCompareState.activeSide === 'before' ? 'A' : 'B' }} ·
+        {{ formatModelUnitVersionTime((modelUnitCompareState.activeSide === 'before' ? modelUnitCompareState.detail.before : modelUnitCompareState.detail.after).version.sessionTime ?? '') || '时间未知' }}
         <span v-if="(modelUnitCompareState.activeSide === 'before' ? modelUnitCompareState.detail.before : modelUnitCompareState.detail.after).version.impactKind === 'tombstone'"
           class="ml-1 font-normal opacity-80">· {{ modelUnitVersionAbsentNote(modelUnitCompareState.activeSide) }}</span>
       </div>

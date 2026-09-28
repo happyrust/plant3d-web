@@ -4,6 +4,14 @@
 
 ### 变更
 
+- **三维版本对比角标改为显示版本时间** (2026-09-28)
+  - 单视口和分屏视口中的 A / B 角标统一显示会话时间，精确 `sesno` 保留在悬停提示中；版本面板仍保留 `sesno` 便于精确定位版本。
+  - 版本时间线顶部新增 A / B 时间下拉框，可直接从完整版本表选择两个时间；仍会自动保证 A 早于 B、避免两侧选择同一版本。时间改变时退出旧三维运行态，防止新摘要与旧模型混在同一屏。
+  - 双视口会在进入时归还 OrbitControls 控制权；左右任一视口均可拖拽、缩放，并通过同一个 camera 保持联动。BRAN `24384_23257` 的 `626 → 630` 已完成真实交互与端到端验证。
+- **节点版本面板可直接复制当前节点与 A/B 的对比链接** (2026-09-28)
+  - A/B 选好后点「复制链接」，生成带 `unit_refno`、`compare_a`、`compare_b`、`compare_autorun=1` 的直达 URL；保留 `gm_backend` 等已有查询参数，打开后可复现同一组版本与模型对比。
+  - 浏览器未开放剪贴板（例如非安全上下文）时，链接仍会写入地址栏并给出明确提示，用户可从地址栏复制。
+  - 验证：版本对比工具与面板单测 41 条全绿；ESLint 触及文件 0 错误。
 - **校审单流转到 JH / SH / PZ 后三维视口不再空白：审核面板「只显示任务构件」按单元子树亮、没装就不动场景；第二份 `useModelGeneration` 对已画好的 BRAN 不再误报「1 个 refno 没有几何记录」** (2026-09-23，issue [#84](https://github.com/happyrust/plant3d-web/issues/84)，线上 `123.57.182.243` 单据 `FORM-C8049FC8F784`)
   - 现场：SJ 发起的单据模型清单只有 HVAC 支管 BRAN `24384_24935`（`/-CSV-S-1-H-7801`）。JH 嵌入打开后审核面板正常、视口一片空白、toast「[警告] 加载结束但未绘制实例（refno=24384_24935）：1 个 refno 没有几何记录」；SJ 自己那侧（设计端落点）正常。后端是好的：线上 `model/ensure` → `AlreadyAvailable` 2 实例，`model/records` 回 BEND `24384_24936` + STRT `24384_24939`（`owner` 都是 BRAN，BRAN 自己没有几何行——HVAC 支管没有隐含管子）。
   - 根因 ①：`ReviewPanel.syncTaskToViewer` 装完模型自动 `filterModelByTask()`——`scene.objectIds` 是 refno 状态表的键，`showModelByRefno` 装单元时给 BRAN 自己也建了占位，所以「任务 refno 在 objectIds 里」恒成立；随后 `setObjectsVisible(全部, false)` + `setObjectsVisible([BRAN], true)`，而 `setObjectsVisible` 只解 BRAN **自己**的对象（loader 把成员各按自己 refno 建对象、只把 TUBI 挂 BRAN 键）→ 管道 BRAN 只剩管子亮着（e2e 的 `24381_145018` 一直如此没人注意），HVAC 支管什么都不剩。根因 ②：`ModelTreePanel` 自己那份 `useModelGeneration`（`autoLocateRefno` 触发）对同一 BRAN：占位命中 → `getAABB([BRAN])` 空 → 「转入真实模型加载」→ loader 里成员已在 `loadedRefnos`、`toLoad=[BRAN]` → `noGeo=1, loadedObjects=0, skipped=2` → 收口不认这是「已加载」，报「没有几何记录」、回 `false`（树上也不勾）。`checkRefnoExists` 还不归一 `a/b`。

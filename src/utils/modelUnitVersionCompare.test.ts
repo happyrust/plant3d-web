@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   applyModelUnitRefnoVisibility,
   applyModelUnitVersionSide,
+  buildModelUnitVersionCompareUrl,
   buildTreeDiffModels,
   collectModelUnitTargetObjectIds,
   compareModelUnitGeometry,
@@ -53,6 +54,23 @@ describe('modelUnitVersionCompare', () => {
     expect(shouldOpenModelUnitVersionCompareFromUrl('?unit_refno=24381_145018&compare_autorun=1')).toBe(true);
     expect(shouldOpenModelUnitVersionCompareFromUrl('?compare_autorun=1')).toBe(false);
     expect(shouldOpenModelUnitVersionCompareFromUrl('?unit_refno=24381_145018')).toBe(false);
+  });
+
+  it('分享链接保留其它查询参数、规范化 refno，并把较早版本放在 A', () => {
+    const url = new URL(buildModelUnitVersionCompareUrl(
+      'http://localhost:3111/viewer?gm_backend=http%3A%2F%2Flocalhost%3A8022#model',
+      '24381/145018',
+      897,
+      791,
+    ));
+
+    expect(url.pathname).toBe('/viewer');
+    expect(url.hash).toBe('#model');
+    expect(url.searchParams.get('gm_backend')).toBe('http://localhost:8022');
+    expect(url.searchParams.get('unit_refno')).toBe('24381_145018');
+    expect(url.searchParams.get('compare_a')).toBe('791');
+    expect(url.searchParams.get('compare_b')).toBe('897');
+    expect(url.searchParams.get('compare_autorun')).toBe('1');
   });
 
   it('buildTreeDiffModels：unchanged 不进树、被删的 ownerRefno 取 A 侧、tombstone 补单元根', () => {

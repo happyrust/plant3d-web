@@ -71,6 +71,21 @@ export function readModelUnitVersionCompareUrl(search: string): ModelUnitVersion
   };
 }
 
+/** 生成可复现当前 A/B 的直达链接；保留模型来源等其它查询参数。 */
+export function buildModelUnitVersionCompareUrl(
+  href: string,
+  unitRefno: string,
+  compareA: number,
+  compareB: number,
+): string {
+  const url = new URL(href);
+  url.searchParams.set('unit_refno', unitRefno.trim().replace(/\//g, '_'));
+  url.searchParams.set('compare_a', String(Math.min(compareA, compareB)));
+  url.searchParams.set('compare_b', String(Math.max(compareA, compareB)));
+  url.searchParams.set('compare_autorun', '1');
+  return url.toString();
+}
+
 /** `DockLayout` 用：URL 要求自动跑版本对比时先把面板打开。 */
 export function shouldOpenModelUnitVersionCompareFromUrl(search: string): boolean {
   const config = readModelUnitVersionCompareUrl(search);

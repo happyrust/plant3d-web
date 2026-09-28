@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, markRaw, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 
-import { GitCompare, RefreshCw, X } from 'lucide-vue-next';
+import { Check, GitCompare, Link, RefreshCw, X } from 'lucide-vue-next';
 
 import { ensureDbMetaInfoLoaded, getDbnumByRefno } from '@/composables/useDbMetaInfo';
 import { ensurePanelAndActivate } from '@/composables/useDockApi';
@@ -23,6 +23,7 @@ import {
 } from '@/model-source';
 import {
   buildTreeDiffModels,
+  buildModelUnitVersionCompareUrl,
   type TreeDiffDispatchInput,
   compareModelUnitGeometry,
   countGroupProjections,
@@ -192,6 +193,7 @@ const selectedAfter = computed(() => versionFor(afterSesno.value));
 /** 两个版本几何相同的承诺（`ModelVersion.geometryKey` 相等）；键缺失时不承诺 */
 const sameGeometry = computed(() => sameGeometryKey(selectedBefore.value, selectedAfter.value));
 const pairReady = computed(() => beforeSesno.value !== null && afterSesno.value !== null && beforeSesno.value < afterSesno.value);
+const shareStatus = ref<'idle' | 'copied' | 'address'>('idle');
 
 /** 属性对比（仅自身）表里实际列出的行：戳（`CACHID` 一类）缺省不列，勾「含戳」才列 */
 const selfDiffVisible = computed(() => (selfDiff.value?.changes ?? []).filter((change) => includeUnchanged.value || !change.stamp));
@@ -514,21 +516,49 @@ function setScope(next: ModelNodeDiffScope): void {
 
 function pickSide(side: 'a' | 'b', sesno: number): void {
   const pair = pickNodeVersionSide(timelineRows.value, { a: beforeSesno.value, b: afterSesno.value }, side, sesno);
+  if (pair.a === beforeSesno.value && pair.b === afterSesno.value) return;
+  closeCompare();
   beforeSesno.value = pair.a;
   afterSesno.value = pair.b;
 }
 
 function compareWithPrevious(): void {
   const pair = pairWithPrevious(timelineRows.value, { a: beforeSesno.value, b: afterSesno.value });
+  if (pair.a === beforeSesno.value && pair.b === afterSesno.value) return;
+  closeCompare();
   beforeSesno.value = pair.a;
   afterSesno.value = pair.b;
 }
 
 function compareWithLatest(): void {
   const pair = pairWithLatest(timelineRows.value, { a: beforeSesno.value, b: afterSesno.value });
+  if (pair.a === beforeSesno.value && pair.b === afterSesno.value) return;
+  closeCompare();
   beforeSesno.value = pair.a;
   afterSesno.value = pair.b;
 }
+
+async function copyCompareLink(): Promise<void> {
+  if (!pairReady.value || beforeSesno.value === null || afterSesno.value === null) return;
+  const link = buildModelUnitVersionCompareUrl(
+    window.location.href,
+    elementTimeline.value?.refno ?? normalizedRefno.value,
+    beforeSesno.value,
+    afterSesno.value,
+  );
+  window.history.replaceState(window.history.state, '', link);
+  try {
+    if (!navigator.clipboard?.writeText) throw new Error('clipboard unavailable');
+    await navigator.clipboard.writeText(link);
+    shareStatus.value = 'copied';
+  } catch {
+    shareStatus.value = 'address';
+  }
+}
+
+watch([elementTimeline, beforeSesno, afterSesno], () => {
+  shareStatus.value = 'idle';
+});
 
 /**
  * 手填 A / B（容器节点撞上旧服务端时的兜底）：子树的时间线要 `node/versions?scope=subtree`，没有这条路由的服务端上容器
@@ -1174,15 +1204,46 @@ onBeforeUnmount(() => {
             data-testid="model-unit-compare-with-latest" @click="compareWithLatest">
             与最新比
           </button>
-          <span class="ml-auto flex items-center gap-1 text-[10px] text-muted-foreground">
-            <span class="rounded bg-blue-100 px-1.5 py-0.5 font-semibold text-blue-700" data-testid="model-unit-compare-a" :data-sesno="beforeSesno ?? ''">
-              A · {{ beforeSesno ?? '—' }}
-            </span>
-            <span class="rounded bg-emerald-100 px-1.5 py-0.5 font-semibold text-emerald-700" data-testid="model-unit-compare-b" :data-sesno="afterSesno ?? ''">
-              B · {{ afterSesno ?? '—' }}
-            </span>
-          </span>
+          <button type="button"
+            class="ml-auto inline-flex h-6 w-6 shrink-0 items-center justify-center rounded border border-border bg-background text-foreground hover:bg-muted/50 disabled:cursor-not-allowed disabled:opacity-40"
+            :disabled="!pairReady"
+            :aria-label="shareStatus === 'copied' ? '对比链接已复制' : '复制对比链接'"
+            :title="shareStatus === 'copied' ? '对比链接已复制' : '复制当前节点与 A/B 版本的直达链接'"
+            data-testid="model-unit-compare-copy-link"
+            @click="copyCompareLink">
+            <Check v-if="shareStatus === 'copied'" class="h-3 w-3 text-emerald-600" />
+            <Link v-else class="h-3 w-3" />
+          </button>
         </div>
+        <div class="mt-2 grid grid-cols-1 gap-1.5 text-[10px]">
+          <label class="min-w-0 text-blue-700" data-testid="model-unit-compare-a" :data-sesno="beforeSesno ?? ''">
+            <span class="mb-0.5 block font-semibold">A 时间</span>
+            <select class="h-8 w-full rounded-md border border-blue-200 bg-blue-50 px-1.5 text-[11px] font-medium text-blue-800 outline-none focus:ring-2 focus:ring-blue-500"
+              :value="beforeSesno ?? ''"
+              aria-label="选择 A 版本时间"
+              data-testid="model-unit-compare-a-time-select"
+              @change="pickSide('a', Number(($event.target as HTMLSelectElement).value))">
+              <option v-for="row in timelineRows" :key="`a-${row.sesno}`" :value="row.sesno">
+                {{ formatModelUnitVersionTime(row.sessionTime ?? '') || '时间未知' }} · {{ row.sesno }}
+              </option>
+            </select>
+          </label>
+          <label class="min-w-0 text-emerald-700" data-testid="model-unit-compare-b" :data-sesno="afterSesno ?? ''">
+            <span class="mb-0.5 block font-semibold">B 时间</span>
+            <select class="h-8 w-full rounded-md border border-emerald-200 bg-emerald-50 px-1.5 text-[11px] font-medium text-emerald-800 outline-none focus:ring-2 focus:ring-emerald-500"
+              :value="afterSesno ?? ''"
+              aria-label="选择 B 版本时间"
+              data-testid="model-unit-compare-b-time-select"
+              @change="pickSide('b', Number(($event.target as HTMLSelectElement).value))">
+              <option v-for="row in timelineRows" :key="`b-${row.sesno}`" :value="row.sesno">
+                {{ formatModelUnitVersionTime(row.sessionTime ?? '') || '时间未知' }} · {{ row.sesno }}
+              </option>
+            </select>
+          </label>
+        </div>
+        <p v-if="shareStatus === 'address'" class="mt-1 text-right text-[10px] text-amber-700" data-testid="model-unit-compare-copy-link-status">
+          浏览器未开放剪贴板，直达链接已写入地址栏
+        </p>
 
         <form v-if="!hasUnit && !nodeVersions" class="mt-1.5 flex items-center gap-1 text-[10px] text-muted-foreground" data-testid="model-unit-compare-manual-pair" @submit.prevent="applyManualPair">
           <span>手填会话号</span>

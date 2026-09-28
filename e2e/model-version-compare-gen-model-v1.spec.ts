@@ -19,6 +19,7 @@
  */
 import { expect, test, type Page } from '@playwright/test';
 
+import { formatModelUnitVersionTime } from '../src/utils/modelUnitVersionCompare';
 import { isSoftwareRendererName } from '../src/utils/three/webglRendererInfo';
 
 const GEN_MODEL_BASE = process.env.GEN_MODEL_V1_BASE_URL || 'http://127.0.0.1:8022';
@@ -178,7 +179,7 @@ test('缺省最近两版：compare_autorun 开面板、版本表来自服务端�
   if (a.impact_kind !== 'tombstone') expect(state.beforeObjects).toBeGreaterThan(0);
 
   // 视口角标：单视口缺省显 B，角标跟 activeSide；图例四格与面板摘要同一份 rows（ADR 0066 三维联动）
-  await expect(page.getByTestId('viewer-model-unit-side-badge')).toContainText(`B · sesno ${b.sesno}`);
+  await expect(page.getByTestId('viewer-model-unit-side-badge')).toContainText(`B · ${formatModelUnitVersionTime(b.session_time ?? '')}`);
   const legend = page.getByTestId('viewer-model-unit-compare-legend');
   await expect(legend).toContainText(`修改 ${counts.modified}`);
   await expect(legend).toContainText(`新增 ${counts.added}`);
@@ -204,13 +205,57 @@ test('缺省最近两版：compare_autorun 开面板、版本表来自服务端�
   // 单视口切到 A，再进双视口分屏
   await page.getByTestId('model-unit-compare-show-before').click();
   await page.waitForFunction(() => (window as unknown as { __modelUnitVersionCompare?: { activeSide?: string } }).__modelUnitVersionCompare?.activeSide === 'before');
-  await expect(page.getByTestId('viewer-model-unit-side-badge')).toContainText(`A · sesno ${a.sesno}`);
+  await expect(page.getByTestId('viewer-model-unit-side-badge')).toContainText(`A · ${formatModelUnitVersionTime(a.session_time ?? '')}`);
+  // 复现拖框工具遗留的禁用状态：进分屏必须归还 OrbitControls，左右任一半操作同一台 camera。
+  await page.evaluate(() => {
+    const viewer = (window as unknown as { __dtxViewer?: { controls: { enabled: boolean } } }).__dtxViewer;
+    if (!viewer) throw new Error('__dtxViewer 不在 window 上');
+    viewer.controls.enabled = false;
+  });
   await page.getByTestId('model-unit-compare-split-mode').click();
+  await expect.poll(() => page.evaluate(() => (
+    (window as unknown as { __dtxViewer?: { controls: { enabled: boolean } } }).__dtxViewer?.controls.enabled
+  ))).toBe(true);
   await expect(page.getByTestId('model-unit-compare-split-summary')).toContainText(`左 A · sesno ${a.sesno}`);
   await expect(page.getByTestId('model-unit-compare-split-summary')).toContainText(`右 B · sesno ${b.sesno}`);
-  await expect(page.getByTestId('viewer-model-unit-split-overlay')).toContainText(`A · sesno ${a.sesno}`);
-  await expect(page.getByTestId('viewer-model-unit-split-overlay')).toContainText(`B · sesno ${b.sesno}`);
+  await expect(page.getByTestId('viewer-model-unit-split-overlay')).toContainText(`A · ${formatModelUnitVersionTime(a.session_time ?? '')}`);
+  await expect(page.getByTestId('viewer-model-unit-split-overlay')).toContainText(`B · ${formatModelUnitVersionTime(b.session_time ?? '')}`);
   await expect(page.getByTestId('viewer-model-unit-side-badge')).toHaveCount(0);
+
+  const cameraPosition = () => page.evaluate(() => {
+    const position = (window as unknown as { __dtxViewer?: { camera: { position: { toArray(): number[] } } } }).__dtxViewer?.camera.position;
+    if (!position) throw new Error('__dtxViewer.camera 不在 window 上');
+    return position.toArray();
+  });
+  const cameraDistance = () => page.evaluate(() => {
+    const viewer = (window as unknown as { __dtxViewer?: {
+      camera: { position: { x: number; y: number; z: number } };
+      controls: { target: { x: number; y: number; z: number } };
+    } }).__dtxViewer;
+    if (!viewer) throw new Error('__dtxViewer 不在 window 上');
+    const { position } = viewer.camera;
+    const { target } = viewer.controls;
+    return Math.hypot(position.x - target.x, position.y - target.y, position.z - target.z);
+  });
+  const canvas = page.locator('canvas.viewer');
+  const canvasBox = await canvas.boundingBox();
+  expect(canvasBox, '三维画布没有可操作区域').toBeTruthy();
+  const cameraBeforeLeft = await cameraPosition();
+  await page.mouse.move(canvasBox!.x + canvasBox!.width * 0.25, canvasBox!.y + canvasBox!.height * 0.55);
+  await page.mouse.down();
+  await page.mouse.move(canvasBox!.x + canvasBox!.width * 0.35, canvasBox!.y + canvasBox!.height * 0.45, { steps: 8 });
+  await page.mouse.up();
+  await expect.poll(async () => JSON.stringify(await cameraPosition())).not.toBe(JSON.stringify(cameraBeforeLeft));
+  const cameraBeforeRight = await cameraPosition();
+  await page.mouse.move(canvasBox!.x + canvasBox!.width * 0.75, canvasBox!.y + canvasBox!.height * 0.55);
+  await page.mouse.down();
+  await page.mouse.move(canvasBox!.x + canvasBox!.width * 0.65, canvasBox!.y + canvasBox!.height * 0.45, { steps: 8 });
+  await page.mouse.up();
+  await expect.poll(async () => JSON.stringify(await cameraPosition())).not.toBe(JSON.stringify(cameraBeforeRight));
+  const distanceBeforeWheel = await cameraDistance();
+  await page.mouse.move(canvasBox!.x + canvasBox!.width * 0.75, canvasBox!.y + canvasBox!.height * 0.55);
+  await page.mouse.wheel(0, -600);
+  await expect.poll(cameraDistance).not.toBe(distanceBeforeWheel);
 
   // 分屏每格走不走描边合成器按这块 WebGL 上下文的显卡串定（2026-09-21 收口计划 P3-c，D6「留，但软渲染自动退回」）：
   // 软渲染（`PLAYWRIGHT_SOFTWARE_GL=1` 钉死 SwiftShader）→ 直接 render，分屏摘要下照实说一句（带显卡串）；

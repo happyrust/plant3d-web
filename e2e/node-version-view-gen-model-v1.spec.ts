@@ -23,6 +23,8 @@ import path from 'node:path';
 
 import { expect, test, type Page } from '@playwright/test';
 
+import { formatModelUnitVersionTime } from '../src/utils/modelUnitVersionCompare';
+
 const GEN_MODEL_BASE = process.env.GEN_MODEL_V1_BASE_URL || 'http://127.0.0.1:8022';
 const DBNUM = Number(process.env.NODE_VERSION_E2E_DBNUM || '8000');
 const PROJECT = process.env.NODE_VERSION_E2E_PROJECT || 'AvevaMarineSample';
@@ -36,7 +38,7 @@ const EVIDENCE_DIR = process.env.NODE_VERSION_E2E_EVIDENCE || '';
 
 type ElementVersionRow = { sesno: number; element_impact: string | null; unit_impact: string | null };
 type ElementVersionsResponse = { noun: string; unit_root: string | null; versions: ElementVersionRow[]; truncated: boolean };
-type NodeVersionRow = { sesno: number; impact: string; self_impact: string | null; units_changed: number };
+type NodeVersionRow = { sesno: number; session_time: string | null; impact: string; self_impact: string | null; units_changed: number };
 type NodeVersionsResponse = { noun: string; unit_root: string | null; versions: NodeVersionRow[]; truncated: boolean };
 type HistoryEntry = { sesno: number; user: string; comment: string; impact: string | null; changed_count: number; changes: { name: string; stamp?: boolean }[] };
 type HistoryResponse = { entries: HistoryEntry[] };
@@ -417,6 +419,7 @@ test('容器节点：子树时间线来自 node/versions（不再手填会话号
 type MultiFixture = {
   selfSesnos: Set<number>;
   subtreeSesnos: Set<number>;
+  beforeTime: string;
   summary: DiffSummaryResponse;
   geometryGroups: DiffSummaryResponse['groups'];
 };
@@ -442,7 +445,9 @@ async function multiFixtureReason(): Promise<{ reason: string | null; fixture: M
   if (geometryGroups.length < 2 || geometryGroups.length > 20 || summary.body.needs_confirm) {
     return { reason: `${MULTI_CONTAINER} ${MULTI_A} → ${MULTI_B} 有 ${geometryGroups.length} 组几何变过（needs_confirm=${summary.body.needs_confirm ?? false}），这条要 2..20 组且不用确认`, fixture: null };
   }
-  return { reason: null, fixture: { selfSesnos, subtreeSesnos, summary: summary.body, geometryGroups } };
+  const beforeSesno = Math.min(MULTI_A, MULTI_B);
+  const beforeTime = formatModelUnitVersionTime(subtree.body.versions.find((row) => row.sesno === beforeSesno)?.session_time ?? '');
+  return { reason: null, fixture: { selfSesnos, subtreeSesnos, beforeTime, summary: summary.body, geometryGroups } };
 }
 
 /** 单元根那一行的状态定这一侧在不在（`modelUnitGroupSideImpactKinds`）：B 时已删 → A / B 卡的 B 侧列它；A 时还没建 → A 侧列它 */
@@ -460,7 +465,7 @@ function absentUnitsBySide(groups: DiffSummaryResponse['groups']): { before: str
 test('容器 URL 直达 compare_a / compare_b → 全部变了的单元一起进三维 → 分屏 → 换成只看一组分屏保持（收口计划 P3-a / P2-a / P3-b）', async ({ page }) => {
   const { reason, fixture } = await multiFixtureReason();
   test.skip(reason !== null, reason ?? '');
-  const { selfSesnos, subtreeSesnos, summary, geometryGroups } = fixture!;
+  const { selfSesnos, subtreeSesnos, beforeTime, summary, geometryGroups } = fixture!;
   const { pageErrors, apiRequests } = await openPanel(page, MULTI_CONTAINER, { compare_a: String(MULTI_A), compare_b: String(MULTI_B) });
 
   // P3-a：URL 那对不在「仅自身」里、只在子树里有 → 自动切「所有子节点」把它们选上，落到模型对比 tab 即停（不装几何、不报错）
@@ -532,7 +537,7 @@ test('容器 URL 直达 compare_a / compare_b → 全部变了的单元一起进
   expect((await compareState(page))!.units).toEqual([onlyUnit]);
   await expect(page.getByTestId('model-unit-compare-split-mode')).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByTestId('model-unit-compare-split-summary')).toContainText(`右 B · sesno ${Math.max(MULTI_A, MULTI_B)}`);
-  await expect(page.getByTestId('viewer-model-unit-split-overlay')).toContainText(`A · sesno ${Math.min(MULTI_A, MULTI_B)}`);
+  await expect(page.getByTestId('viewer-model-unit-split-overlay')).toContainText(`A · ${beforeTime}`);
   expect((await compareState(page))!.viewMode).toBe('split');
   await expect(page.getByTestId(`model-unit-compare-run-group-${onlyUnit}`)).toHaveText(/^\s*三维中\s*$/);
   await expect(page.getByTestId('model-unit-compare-run-groups')).toContainText('在三维中对比');
