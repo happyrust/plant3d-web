@@ -40,6 +40,7 @@ import { useClearanceStore } from '@/clearance/stores/useClearanceStore';
 import { resolveViewerToolbarSelection } from '@/components/dock_panels/viewerToolbarSelection';
 import PipeDistanceDrawer from '@/components/pipe-distance/PipeDistanceDrawer.vue';
 import ReviewConfirmation from '@/components/review/ReviewConfirmation.vue';
+import { reviewModelContextKey, type ReviewModelContext } from '@/components/review/reviewModelContext';
 import { buildReviewConfirmSnapshotPayload } from '@/components/review/reviewPanelActions';
 import SpatialQueryDrawer from '@/components/spatial-query/SpatialQueryDrawer.vue';
 import AnnotationOverlayBar from '@/components/tools/AnnotationOverlayBar.vue';
@@ -581,7 +582,7 @@ watch(clearanceStorageContext, (context) => {
   pipeDistanceStore.bindPersistence(context.key, storage, context.allowCalculations);
   spatialComputeStore.bindPersistence(context.key, storage, context.allowCalculations);
 }, { immediate: true, flush: 'sync' });
-const offReviewModelContext = reviewStore.bindModelContextProvider(() => {
+function captureReviewModelContext(): ReviewModelContext | null {
   const task = reviewStore.currentTask.value;
   const project = clearanceStorageContext.value.project;
   if (!task?.id || !task.formId || !project) return null;
@@ -594,6 +595,19 @@ const offReviewModelContext = reviewStore.bindModelContextProvider(() => {
     comparison: detail ? { dbnum: detail.dbnum, refno: detail.unitRefno, a: detail.before.sesno, b: detail.after.sesno,
       units: detail.units?.map(unit => ({ refno: unit.unitRefno, a: unit.before.sesno, b: unit.after.sesno })) ?? [],
       viewMode: runtime.viewMode, activeSide: runtime.activeSide, diffOnly: runtime.diffOnly ?? false } : null };
+}
+const offReviewModelContext = reviewStore.bindModelContextProvider(captureReviewModelContext);
+async function ensureReviewModelContext(context: ReviewModelContext, shouldApply: () => boolean): Promise<void> {
+  if (!shouldApply()) return;
+  const current = captureReviewModelContext();
+  if (!current || current.project !== context.project || current.dbnum !== context.dbnum)
+    throw new Error('确认记录属于其他项目或模型库，请打开对应项目后重试');
+  if (reviewModelContextKey({ ...current, node: 'sj' }) !== reviewModelContextKey({ ...context, node: 'sj' }))
+    throw new Error('当前模型与确认记录保存的 A/B 版本或显示状态不同，请恢复对应版本后重试；已停止标注回放');
+}
+if (viewerContext.ensureReviewModelContext) viewerContext.ensureReviewModelContext.value = ensureReviewModelContext;
+onUnmounted(() => {
+  if (viewerContext.ensureReviewModelContext?.value === ensureReviewModelContext) viewerContext.ensureReviewModelContext.value = null;
 });
 onUnmounted(offReviewModelContext);
 onUnmounted(() => { offClearanceProject(); clearanceStore.detachPersistence(); pipeDistanceStore.detachPersistence(); spatialComputeStore.detachPersistence(); });

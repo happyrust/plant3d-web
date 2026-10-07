@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 
 import {
   AlertCircle,
@@ -89,12 +89,20 @@ const embeddedLandingFormId = ref(readEmbeddedLandingFormId());
 
 const confirmedRecordsRestorer = createConfirmedRecordsRestorer({
   currentTaskId: () => reviewStore.currentTask.value?.id ?? null,
+  currentFormId: () => reviewStore.currentTask.value?.formId ?? null,
   confirmedRecords: () => reviewStore.sortedConfirmedRecords.value,
   toolStore,
   waitForViewerReady,
   getViewerTools: () => viewerContext.tools.value ?? null,
+  ensureModelContext: async (context, shouldApply) => {
+    const ensure = viewerContext.ensureReviewModelContext?.value;
+    if (!ensure) throw new Error('模型版本恢复入口尚未就绪，已停止标注回放');
+    await ensure(context, shouldApply);
+  },
   skipClearOnEmpty: true,
 });
+const restoreError = confirmedRecordsRestorer.restoreError;
+onUnmounted(confirmedRecordsRestorer.cancelPendingRestore);
 
 // U0 草稿 scope（sj 侧）：与 ReviewPanel 共用同一份同步，任务 / 用户一变就切本机草稿容器；
 // 两个面板在 dock 里同时开着时各登记一次，最后一个卸载才回到旧作用域。
@@ -759,6 +767,10 @@ onMounted(() => {
               class="mt-3 min-h-[60px] w-full resize-none rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-slate-400 focus:outline-none"
               placeholder="可补充本轮处理说明（可选）" />
             <div class="mt-3 flex flex-wrap items-center justify-end gap-2">
+              <span v-if="restoreError" role="alert" class="mr-auto text-xs text-rose-300">
+                {{ restoreError }}
+                <button type="button" class="ml-2 underline" :disabled="confirmedRecordsRestorer.restoring.value" @click="confirmedRecordsRestorer.restoreConfirmedRecordsIntoScene(true)">重试回放</button>
+              </span>
               <span v-if="confirmError" class="mr-auto text-xs text-rose-300">{{ confirmError }}</span>
               <button type="button"
                 class="rounded-xl border border-white/20 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"

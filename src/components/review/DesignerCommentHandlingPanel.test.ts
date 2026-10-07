@@ -74,6 +74,9 @@ vi.mock('./confirmedRecordsRestore', () => ({
     return {
       currentTaskRecords: computed(() => confirmedRecordsRef.value as any[]),
       lastRestoredSceneKey: ref<string | null>(null),
+      restoreError: ref<string | null>(null),
+      restoring: ref(false),
+      cancelPendingRestore: vi.fn(),
       restoreConfirmedRecordsIntoScene: restoreConfirmedRecordsIntoSceneMock,
     };
   },

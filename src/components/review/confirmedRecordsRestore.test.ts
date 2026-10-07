@@ -8,6 +8,8 @@ import {
 } from './confirmedRecordsRestore';
 import { buildReviewRecordReplayPayload } from './reviewRecordReplay';
 
+import type { ReviewModelContext } from './reviewModelContext';
+
 import { buildCommentThreadKey } from '@/review/domain/commentThread';
 import { getReviewCommentThreadStore } from '@/review/services/sharedStores';
 
@@ -26,6 +28,93 @@ function createRecord(overrides: Record<string, unknown> = {}) {
 }
 
 describe('createConfirmedRecordsRestorer', () => {
+  const modelContext = { schemaVersion: 1 as const, project: 'project-1', dbnum: 1,
+    taskId: 'task-1', formId: 'form-1', node: 'sj', comparison: null };
+
+  function contextRestorer(records = ref([createRecord({ modelContext })]),
+    ensureModelContext?: (context: ReviewModelContext, shouldApply: () => boolean) => Promise<void>) {
+    const importJSON = vi.fn();
+    const syncFromStore = vi.fn();
+    const restorer = createConfirmedRecordsRestorer({ currentTaskId: () => 'task-1', currentFormId: () => 'form-1',
+      confirmedRecords: () => records.value.map(record => ({ ...record, note: '', type: 'batch' as const })), toolStore: { clearAll: vi.fn(), importJSON },
+      waitForViewerReady: async () => true, getViewerTools: () => ({ syncFromStore }), ensureModelContext });
+    return { records, importJSON, syncFromStore, restorer };
+  }
+
+  it('模型版本检查成功后才导入标注，修订变化即使时间不变也重新恢复', async () => {
+    const order: string[] = [];
+    const ensure = vi.fn(async () => { order.push('model'); });
+    const fixture = contextRestorer(undefined, ensure);
+    fixture.importJSON.mockImplementation(() => { order.push('annotations'); });
+    await fixture.restorer.restoreConfirmedRecordsIntoScene();
+    expect(order).toEqual(['model', 'annotations']);
+    fixture.records.value = [createRecord({ modelContext, recordRevision: 'revision-2' })];
+    await fixture.restorer.restoreConfirmedRecordsIntoScene();
+    expect(ensure).toHaveBeenCalledTimes(2);
+    expect(fixture.restorer.restoreError.value).toBeNull();
+  });
+
+  it('版本入口缺失或加载失败时不导入标注、不缓存成功状态，允许重试', async () => {
+    const missing = contextRestorer();
+    await missing.restorer.restoreConfirmedRecordsIntoScene();
+    expect(missing.importJSON).not.toHaveBeenCalled();
+    expect(missing.restorer.restoreError.value).toContain('尚未就绪');
+    const ensure = vi.fn().mockRejectedValueOnce(new Error('历史投影不可用')).mockResolvedValue(undefined);
+    const fixture = contextRestorer(undefined, ensure);
+    await fixture.restorer.restoreConfirmedRecordsIntoScene();
+    expect(fixture.importJSON).not.toHaveBeenCalled();
+    expect(fixture.restorer.lastRestoredSceneKey.value).toBeNull();
+    expect(fixture.restorer.restoring.value).toBe(false);
+    await fixture.restorer.restoreConfirmedRecordsIntoScene();
+    expect(fixture.importJSON).toHaveBeenCalledTimes(1);
+  });
+
+  it('混合模型版本或混合无版本旧记录时拒绝整批回放，但前序节点同模型可回放', async () => {
+    const ensure = vi.fn(async () => {});
+    const fixture = contextRestorer(ref([createRecord({ modelContext }), createRecord({ id: 'record-2' })]), ensure);
+    await fixture.restorer.restoreConfirmedRecordsIntoScene();
+    expect(ensure).not.toHaveBeenCalled();
+    fixture.records.value = [createRecord({ modelContext }), createRecord({ id: 'record-2', modelContext: { ...modelContext, dbnum: 2 } })];
+    await fixture.restorer.restoreConfirmedRecordsIntoScene();
+    expect(fixture.importJSON).not.toHaveBeenCalled();
+    fixture.records.value = [createRecord({ modelContext }), createRecord({ id: 'record-2', modelContext: { ...modelContext, node: 'jd' } })];
+    await fixture.restorer.restoreConfirmedRecordsIntoScene();
+    expect(fixture.importJSON).toHaveBeenCalledTimes(1);
+  });
+
+  it('迟到的版本恢复回执不能覆盖更新后的记录或错误提示', async () => {
+    let finish!: () => void;
+    let oldShouldApply!: () => boolean;
+    const ensure = vi.fn().mockImplementationOnce((_context, shouldApply) => {
+      oldShouldApply = shouldApply;
+      return new Promise<void>(resolve => { finish = resolve; });
+    }).mockRejectedValueOnce(new Error('新版本加载失败'));
+    const fixture = contextRestorer(undefined, ensure);
+    const old = fixture.restorer.restoreConfirmedRecordsIntoScene();
+    await vi.waitFor(() => expect(ensure).toHaveBeenCalledTimes(1));
+    fixture.records.value = [createRecord({ modelContext, recordRevision: 'revision-2' })];
+    await fixture.restorer.restoreConfirmedRecordsIntoScene();
+    expect(oldShouldApply()).toBe(false);
+    finish();
+    await old;
+    expect(fixture.importJSON).not.toHaveBeenCalled();
+    expect(fixture.restorer.restoreError.value).toBe('新版本加载失败');
+  });
+
+  it('面板卸载取消待处理回放，版本恢复落地后不再写场景', async () => {
+    let finish!: () => void;
+    const ensure = vi.fn(() => new Promise<void>(resolve => { finish = resolve; }));
+    const fixture = contextRestorer(undefined, ensure);
+    const pending = fixture.restorer.restoreConfirmedRecordsIntoScene();
+    await vi.waitFor(() => expect(ensure).toHaveBeenCalledTimes(1));
+    fixture.restorer.cancelPendingRestore();
+    finish();
+    await pending;
+    expect(fixture.importJSON).not.toHaveBeenCalled();
+    expect(fixture.syncFromStore).not.toHaveBeenCalled();
+    expect(fixture.restorer.restoring.value).toBe(false);
+  });
+
   beforeEach(() => {
     getReviewCommentThreadStore().clear();
   });

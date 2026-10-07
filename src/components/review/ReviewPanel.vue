@@ -159,12 +159,20 @@ const unitSettings = useUnitSettingsStore();
 // 确认记录场景恢复（公共模块）
 const confirmedRecordsRestorer = createConfirmedRecordsRestorer({
   currentTaskId: () => reviewStore.currentTask.value?.id ?? null,
+  currentFormId: () => reviewStore.currentTask.value?.formId ?? null,
   confirmedRecords: () => reviewStore.sortedConfirmedRecords.value,
   toolStore,
   waitForViewerReady,
   getViewerTools: () => viewerContext.tools.value ?? null,
+  ensureModelContext: async (context, shouldApply) => {
+    const ensure = viewerContext.ensureReviewModelContext?.value;
+    if (!ensure) throw new Error('模型版本恢复入口尚未就绪，已停止标注回放');
+    await ensure(context, shouldApply);
+  },
 });
 const lastRestoredSceneKey = confirmedRecordsRestorer.lastRestoredSceneKey;
+const restoreError = confirmedRecordsRestorer.restoreError;
+onUnmounted(confirmedRecordsRestorer.cancelPendingRestore);
 
 const embedLandingState = ref<EmbedLandingState | null>(null);
 const persistedEmbedParams = ref(readPersistedEmbedModeParams());
@@ -2001,6 +2009,10 @@ function handleAnnotationQueueCompleted() {
       <div v-if="hasPendingData && canCreateReviewEvidence && !hasUnsavedPendingData && !confirmError && !hasUnsavedChanges"
         class="w-full text-xs text-muted-foreground">
         当前批注/测量已保存，新增或修改后可再次确认
+      </div>
+      <div v-if="restoreError" role="alert" class="w-full text-xs text-danger">
+        {{ restoreError }}
+        <button type="button" class="ml-2 underline" :disabled="confirmedRecordsRestorer.restoring.value" @click="restoreConfirmedRecordsIntoScene(true)">重试回放</button>
       </div>
       <div v-if="confirmError" class="w-full text-xs text-danger">{{ confirmError }}</div>
 
