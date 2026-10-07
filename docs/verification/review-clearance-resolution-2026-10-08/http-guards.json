@@ -1,0 +1,18 @@
+{
+  "isolated": true,
+  "actualHTTP": true,
+  "durableRestartVerified": true,
+  "recordRevision": "fbe05809-51c6-466b-8ce1-7eb98c43e7cf",
+  "threeSnapshotsPreserved": true,
+  "pipeDistance": 350,
+  "staleRevisionStatus": 409,
+  "missingAuthStatus": 401,
+  "wrongOwnerStatus": 403,
+  "damagedSnapshotStatus": 409,
+  "terminalStatuses": [
+    409,
+    409,
+    409
+  ],
+  "terminalReadOnlyVerified": true
+}
