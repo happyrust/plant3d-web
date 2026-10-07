@@ -32,6 +32,7 @@ import {
   readPersistedEmbedModeParams,
   resolveTrustedEmbedIdentity,
 } from '@/components/review/embedRoleLanding';
+import { reviewClearanceSnapshotKey, type ReviewClearanceSnapshot } from '@/components/review/reviewClearanceSnapshot';
 import { isReviewModelContext, reviewModelContextKey, type ReviewModelContext } from '@/components/review/reviewModelContext';
 import {
   buildReviewConfirmSnapshotPayload,
@@ -50,6 +51,7 @@ import {
 } from '@/dimension';
 
 export type ConfirmedRecord = {
+  clearanceSnapshot?: ReviewClearanceSnapshot;
   recordRevision?: string;
   currentNode?: string;
   operatorId?: string;
@@ -135,6 +137,17 @@ const error = ref<string | null>(null);
 const reviewHistory = ref<ReviewHistoryItem[]>([]);
 let activeDimensionDocumentSession: DimensionDocumentSession | null = null;
 let modelContextProvider: (() => ReviewModelContext | null) | null = null;
+let clearanceProvider: { capture: (context: ReviewModelContext) => ReviewClearanceSnapshot; prepare: (snapshot: ReviewClearanceSnapshot, context: ReviewModelContext) => () => void } | null = null;
+
+function bindClearanceSnapshotProvider(provider: NonNullable<typeof clearanceProvider>): () => void {
+  clearanceProvider = provider;
+  return () => { if (clearanceProvider === provider) clearanceProvider = null; };
+}
+
+function prepareBoundClearanceRestore(snapshot: ReviewClearanceSnapshot, context: ReviewModelContext): () => void {
+  if (!clearanceProvider) throw new Error('净距恢复入口尚未就绪，请重试');
+  return clearanceProvider.prepare(snapshot, context);
+}
 
 function bindModelContextProvider(provider: () => ReviewModelContext | null): () => void {
   modelContextProvider = provider;
@@ -187,14 +200,18 @@ function clearBoundDimensionDocumentSession(): void {
 }
 
 function getBoundDimensionConfirmPayload(): Readonly<{
+  clearanceSnapshot?: ReviewClearanceSnapshot;
   modelContext?: ReviewModelContext;
   dimensionDocument?: SnapshotDimensionDocument;
   dimensionDocumentVersion?: number;
 }> {
   const state = activeDimensionDocumentSession?.state;
   let modelContext: ReviewModelContext | undefined;
+  let clearanceSnapshot: ReviewClearanceSnapshot | undefined;
   try { modelContext = modelContextProvider?.() ?? undefined; } catch { /* 保存时会再次检查尚未就绪的对比，显示错误；渲染不抛出。 */ }
+  try { if (modelContext) clearanceSnapshot = clearanceProvider?.capture(modelContext); } catch { /* 保存入口再次执行严格校验；渲染不抛出。 */ }
   return {
+    ...(clearanceSnapshot ? { clearanceSnapshot } : {}),
     ...(modelContext ? { modelContext } : {}),
     ...(state ? {
       dimensionDocument: dimensionDocumentToSnapshot(state),
@@ -296,6 +313,7 @@ async function addConfirmedRecord(
     const dimensionDocumentVersion = record.dimensionDocumentVersion
       ?? boundDimensionState?.baseVersion;
     const modelContext = record.modelContext ?? modelContextProvider?.() ?? undefined;
+    const clearanceSnapshot = record.clearanceSnapshot ?? (modelContext ? clearanceProvider?.capture(modelContext) : undefined);
     const slotRecords = confirmedRecords.value.filter(item => item.formId === formId
       && item.currentNode === currentNode && item.operatorId === operatorId);
     if (slotRecords.length > 1) throw new Error('当前节点存在多条确认记录，请核对服务器数据后重开任务');
@@ -303,6 +321,7 @@ async function addConfirmedRecord(
     if (modelContext && (!isReviewModelContext(modelContext) || modelContext.taskId !== taskId || modelContext.formId !== formId
       || modelContext.node !== (currentTask.value?.currentNode ?? 'sj'))) throw new Error('校审模型版本上下文无效或已切换，请重新打开任务后保存');
     const response = await reviewRecordCreate({
+      clearanceSnapshot,
       recordBaseRevision,
       modelContext,
       taskId,
@@ -327,7 +346,10 @@ async function addConfirmedRecord(
       if (response.record.currentNode !== currentNode || response.record.operatorId !== operatorId) throw new Error('后端确认记录节点或作者与当前任务不一致，请重新核对');
       if (modelContext && (!isReviewModelContext(response.record.modelContext)
         || reviewModelContextKey(response.record.modelContext) !== reviewModelContextKey(modelContext))) throw new Error('后端未完整保存模型版本上下文，不能确认保存成功');
+      if (clearanceSnapshot && reviewClearanceSnapshotKey(response.record.clearanceSnapshot) !== reviewClearanceSnapshotKey(clearanceSnapshot))
+        throw new Error('后端未完整保存三类净距结果，不能确认保存成功');
       const newRecord: ConfirmedRecord = {
+        clearanceSnapshot: response.record.clearanceSnapshot,
         recordRevision: response.record.recordRevision,
         currentNode: response.record.currentNode,
         operatorId: response.record.operatorId,
@@ -507,6 +529,7 @@ async function loadConfirmedRecords(
         currentNode: r.currentNode,
         operatorId: r.operatorId,
         modelContext: r.modelContext,
+        clearanceSnapshot: r.clearanceSnapshot,
         id: r.id,
         taskId: r.taskId,
         formId: r.formId,
@@ -800,7 +823,7 @@ async function flushPendingConfirmForExternalAction(
   const toolStore = useToolStore();
   const activeDimensionState = activeDimensionDocumentSession?.state;
   const draftPayload = buildReviewConfirmSnapshotPayload({
-    modelContext: getBoundDimensionConfirmPayload().modelContext,
+    ...getBoundDimensionConfirmPayload(),
     annotations: [...toolStore.annotations.value],
     cloudAnnotations: [...toolStore.cloudAnnotations.value],
     rectAnnotations: [...toolStore.rectAnnotations.value],
@@ -1188,6 +1211,8 @@ export function useReviewStore() {
     clearCurrentTask,
     bindDimensionDocumentSession,
     bindModelContextProvider,
+    bindClearanceSnapshotProvider,
+    prepareBoundClearanceRestore,
     getBoundDimensionConfirmPayload,
     resolveDimensionDocumentConflict,
 

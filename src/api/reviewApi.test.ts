@@ -54,11 +54,15 @@ describe('reviewApi base url defaults', () => {
   });
 
   it('round-trips model context in confirmation and workflow records without silently dropping invalid context', async () => {
-    const record = { id: 'R', task_id: 'T', form_id: 'F', model_context: modelContext, record_revision: 'revision-loaded', current_node: 'jd', operator_id: 'JH', dimension_document_version: 0 };
+    const clearanceSnapshot = { schemaVersion: 1, modelContext, coordinateSpaces: { component: 'design-world-m', pipe: 'e3d-world-mm', bran: 'e3d-world-mm' },
+      component: { records: [], activeId: null }, pipe: { results: [], minDistance: null }, bran: { branGroups: [] } };
+    const record = { id: 'R', task_id: 'T', form_id: 'F', model_context: modelContext, clearance_snapshot: clearanceSnapshot, record_revision: 'revision-loaded', current_node: 'jd', operator_id: 'JH', dimension_document_version: 0 };
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ success: true, records: [record] }), { status: 200 })));
-    expect((await reviewRecordGetByTaskId('T')).records?.[0]).toEqual(expect.objectContaining({ modelContext, recordRevision: 'revision-loaded', currentNode: 'jd', operatorId: 'JH', formId: 'F', dimensionDocumentVersion: 0 }));
+    expect((await reviewRecordGetByTaskId('T')).records?.[0]).toEqual(expect.objectContaining({ modelContext, clearanceSnapshot, recordRevision: 'revision-loaded', currentNode: 'jd', operatorId: 'JH', formId: 'F', dimensionDocumentVersion: 0 }));
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ code: 200, data: { records: [record] } }), { status: 200 })));
-    expect((await reviewWorkflowSyncQuery({ formId: 'F', token: 'test-token', actor: { id: 'JH', name: 'JH', roles: 'jd' } })).data?.records[0]).toEqual(expect.objectContaining({ modelContext, recordRevision: 'revision-loaded', currentNode: 'jd', operatorId: 'JH', formId: 'F', dimensionDocumentVersion: 0 }));
+    expect((await reviewWorkflowSyncQuery({ formId: 'F', token: 'test-token', actor: { id: 'JH', name: 'JH', roles: 'jd' } })).data?.records[0]).toEqual(expect.objectContaining({ modelContext, clearanceSnapshot, recordRevision: 'revision-loaded', currentNode: 'jd', operatorId: 'JH', formId: 'F', dimensionDocumentVersion: 0 }));
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ success: true, records: [{ ...record, clearance_snapshot: { ...clearanceSnapshot, coordinateSpaces: { component: 'scene' } } }] }), { status: 200 })));
+    await expect(reviewRecordGetByTaskId('T')).rejects.toThrow('净距快照');
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ success: true, records: [{ id: 'R', modelContext: { ...modelContext, comparison: { ...modelContext.comparison, a: 630 } } }] }), { status: 200 })));
     await expect(reviewRecordGetByTaskId('T')).rejects.toThrow('上下文无效');
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ success: true, records: [{ ...record, record_revision: 12 }] }), { status: 200 })));

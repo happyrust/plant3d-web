@@ -104,4 +104,21 @@ describe('usePipeDistanceStore · 结果筛选与单条切换', () => {
     expect(store.hiddenResultIds.value.size).toBe(0);
     expect(store.resultMinDistance.value).toBeNull();
   });
+
+  it('captures design millimetres and preflights cloud restore without erasing current results', () => {
+    const store = usePipeDistanceStore();
+    const designPoints = { start: [1000, 2000, 3000], end: [1100, 2000, 3000] } as PipeDistanceResult['designPoints'];
+    store.results.value = [{ ...makeResult('cloud', 100), designPoints, measurementKind: 'surface' }];
+    const snapshot = store.captureSnapshot();
+    expect(snapshot.results[0]?.start).toEqual(designPoints!.start);
+    expect(store.results.value[0]?.start).toEqual([0, 0, 0]);
+    expect(() => store.prepareSnapshotRestore({ ...snapshot, results: [{ ...snapshot.results[0], designPoints: null }] })).toThrow();
+    expect(store.results.value[0]?.id).toBe('cloud');
+    const apply = store.prepareSnapshotRestore(snapshot);
+    snapshot.results.length = 0;
+    apply();
+    expect(store.results.value).toHaveLength(1);
+    expect(store.results.value[0]?.start).toEqual(designPoints!.start);
+    expect(store.results.value[0]?.status).toBe('stale');
+  });
 });

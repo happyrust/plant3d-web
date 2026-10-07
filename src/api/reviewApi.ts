@@ -5,6 +5,7 @@ import type { ReviewModelContext } from '@/components/review/reviewModelContext'
 import type { SnapshotDimensionDocument } from '@/dimension';
 import type { ComputationProvenance } from '@/measurement/domain/computationProvenance';
 
+import { normalizeReviewClearanceSnapshot, type ReviewClearanceSnapshot } from '@/components/review/reviewClearanceSnapshot';
 import { isReviewModelContext } from '@/components/review/reviewModelContext';
 import {
   fromBackendRole,
@@ -293,6 +294,7 @@ export type ReviewSnapshotMeasurementPayload = {
  * 写入侧通过 `buildReviewConfirmSnapshotPayload` 保证类型安全。
  */
 export type ConfirmedRecordData = {
+  clearanceSnapshot?: ReviewClearanceSnapshot;
   recordBaseRevision?: string;
   recordRevision?: string;
   currentNode?: string;
@@ -372,6 +374,7 @@ export type WorkflowAnnotationCommentData = {
 };
 
 export type WorkflowRecordData = {
+  clearanceSnapshot?: ReviewClearanceSnapshot;
   recordRevision?: string;
   formId?: string;
   currentNode?: string;
@@ -1374,6 +1377,7 @@ function normalizeConfirmedRecord(raw: Record<string, unknown>): ConfirmedRecord
     currentNode: typeof (raw.currentNode ?? raw.current_node) === 'string' ? String(raw.currentNode ?? raw.current_node) : undefined,
     operatorId: typeof (raw.operatorId ?? raw.operator_id) === 'string' ? String(raw.operatorId ?? raw.operator_id) : undefined,
     modelContext: normalizeReviewModelContext(raw.modelContext ?? raw.model_context),
+    clearanceSnapshot: normalizeReviewClearanceSnapshot(raw.clearanceSnapshot ?? raw.clearance_snapshot),
     id: String(raw.logical_id || raw.id || ''),
     taskId: String(raw.taskId || raw.task_id || ''),
     formId: raw.formId ? String(raw.formId) : (raw.form_id ? String(raw.form_id) : undefined),

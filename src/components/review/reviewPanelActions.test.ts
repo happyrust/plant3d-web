@@ -47,6 +47,16 @@ describe('reviewPanelActions', () => {
     expect(unsaved.modelContext).toEqual(current.modelContext);
     expect(hasReviewConfirmPayloadData(buildUnsavedReviewConfirmPayload(current, current))).toBe(false);
     expect(buildReviewConfirmSnapshotPayloadFromRecords([{ ...current, confirmedAt: 2 }, { ...baseline, confirmedAt: 1 }]).modelContext).toEqual(current.modelContext);
+    const clearanceSnapshot = { schemaVersion: 1 as const, modelContext: context,
+      coordinateSpaces: { component: 'design-world-m' as const, pipe: 'e3d-world-mm' as const, bran: 'e3d-world-mm' as const },
+      component: { records: [{ id: 'a', status: 'current', distanceM: 0.1 }] }, pipe: { results: [] }, bran: { branGroups: [] } };
+    const cloud = buildReviewConfirmSnapshotPayload({ ...baseline, clearanceSnapshot });
+    const stale = buildReviewConfirmSnapshotPayload({ ...cloud, clearanceSnapshot: { ...clearanceSnapshot, component: { records: [{ id: 'a', status: 'stale', distanceM: 0.1 }] } } });
+    expect(hasReviewConfirmPayloadData(buildUnsavedReviewConfirmPayload(stale, cloud))).toBe(false);
+    const changed = buildReviewConfirmSnapshotPayload({ ...cloud, clearanceSnapshot: { ...clearanceSnapshot, component: { records: [] } } });
+    expect(buildSubmitBlockingReviewConfirmPayload(changed, cloud).clearanceSnapshot).toEqual(changed.clearanceSnapshot);
+    expect(hasSubmitBlockingReviewConfirmPayloadData(buildSubmitBlockingReviewConfirmPayload(changed, cloud))).toBe(true);
+    expect(buildReviewConfirmSnapshotPayloadFromRecords([{ ...cloud, confirmedAt: 1 }, { ...changed, confirmedAt: 2 }]).clearanceSnapshot).toEqual(changed.clearanceSnapshot);
   });
   it('canFinalizeAtCurrentNode 仅在 pz 节点允许最终通过/驳回', () => {
     expect(canFinalizeAtCurrentNode(undefined)).toBe(false);

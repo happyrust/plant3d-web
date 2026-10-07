@@ -8,6 +8,7 @@ import type {
 } from '@/api/genModelSpatialApi';
 
 import { genModelV1SpatialNearestClearance, genModelV1SurfaceClearance } from '@/api/genModelV1Api';
+import { cloneResultSnapshot } from '@/clearance/services/resultSnapshot';
 import { createScopedResultPersistence } from '@/clearance/services/scopedResultPersistence';
 import { type BranParallelRunPair, describeStraightRun } from '@/composables/branParallelSpacing';
 import { useSelectionStore } from '@/composables/useSelectionStore';
@@ -516,72 +517,75 @@ export function createSpatialComputeStore() {
   const scenarios = reactive<Record<SpatialComputeScenarioKey, SpatialComputeScenarioState>>({
     branNearestClearance: createScenarioState('branNearestClearance'),
   });
-  const persistence = createScopedResultPersistence({
-    prefix: 'plant3d-bran-clearance-v1',
-    sources: [() => scenarios.branNearestClearance],
-    capture: () => {
-      const state = scenarios.branNearestClearance;
-      return { coordinateSpace: 'e3d-world-mm',
-        inputs: { suppoRefno: state.suppoRefno, structureCategory: state.structureCategory, structuralAngleDeg: state.structuralAngleDeg,
-          searchRadius: state.searchRadius, excludeNouns: state.excludeNouns },
-        queriedSourceRefno: state.queriedSourceRefno, branGroups: state.branGroups, nounFacets: state.nounFacets,
-        drawnCandidateKeys: state.drawnCandidateKeys, candidateProvenance: state.candidateProvenance,
-        excludedSelfMembers: state.excludedSelfMembers, warnings: state.warnings };
-    },
-    restore: value => {
-      const state = scenarios.branNearestClearance;
-      Object.assign(state, createScenarioState('branNearestClearance'));
-      if (value === null) return;
-      const data = value as Record<string, unknown>;
-      const inputs = data?.inputs as Record<string, unknown>;
-      if (!data || data.coordinateSpace !== 'e3d-world-mm' || !inputs || !['all', 'wall', 'column', 'beam', 'slab'].includes(String(inputs.structureCategory))
+  function captureSnapshot() {
+    const state = scenarios.branNearestClearance;
+    return cloneResultSnapshot({ coordinateSpace: 'e3d-world-mm',
+      inputs: { suppoRefno: state.suppoRefno, structureCategory: state.structureCategory, structuralAngleDeg: state.structuralAngleDeg,
+        searchRadius: state.searchRadius, excludeNouns: state.excludeNouns },
+      queriedSourceRefno: state.queriedSourceRefno, branGroups: state.branGroups, nounFacets: state.nounFacets,
+      drawnCandidateKeys: state.drawnCandidateKeys, candidateProvenance: state.candidateProvenance,
+      excludedSelfMembers: state.excludedSelfMembers, warnings: state.warnings });
+  }
+  function prepareSnapshotRestore(value: unknown): () => void {
+    const state = createScenarioState('branNearestClearance');
+    if (value === null) return () => { Object.assign(scenarios.branNearestClearance, state); };
+    value = cloneResultSnapshot(value);
+    const data = value as Record<string, unknown>;
+    const inputs = data?.inputs as Record<string, unknown>;
+    if (!data || data.coordinateSpace !== 'e3d-world-mm' || !inputs || !['all', 'wall', 'column', 'beam', 'slab'].includes(String(inputs.structureCategory))
         || !['suppoRefno', 'structuralAngleDeg', 'searchRadius', 'excludeNouns'].every(key => typeof inputs[key] === 'string')
         || typeof data.queriedSourceRefno !== 'string' || !Array.isArray(data.branGroups) || !Array.isArray(data.nounFacets)
         || !Array.isArray(data.drawnCandidateKeys) || !data.drawnCandidateKeys.every(key => typeof key === 'string')
         || !Array.isArray(data.warnings) || !data.warnings.every(warning => typeof warning === 'string')
         || typeof data.excludedSelfMembers !== 'number' || !Number.isInteger(data.excludedSelfMembers) || data.excludedSelfMembers < 0) throw new Error('BRAN净距保存格式无效');
-      const groups = normalizeBranNearestGroups(data.branGroups as BranNearestClearanceGroupResult[]);
-      const pointValid = (point: unknown) => {
-        const p = point as { x?: unknown; y?: unknown; z?: unknown } | null;
-        return !!p && [p.x, p.y, p.z].every(number => typeof number === 'number' && Number.isFinite(number));
-      };
-      const keys = new Set<string>();
-      for (const group of groups) {
-        if (typeof group.group !== 'string' || !group.group) throw new Error('BRAN净距分组无效');
-        for (const candidate of group.candidates) {
-          if (!candidate || typeof candidate.refno !== 'string' || !candidate.refno || typeof candidate.noun !== 'string'
+    const groups = normalizeBranNearestGroups(data.branGroups as BranNearestClearanceGroupResult[]);
+    const pointValid = (point: unknown) => {
+      const p = point as { x?: unknown; y?: unknown; z?: unknown } | null;
+      return !!p && [p.x, p.y, p.z].every(number => typeof number === 'number' && Number.isFinite(number));
+    };
+    const keys = new Set<string>();
+    for (const group of groups) {
+      if (typeof group.group !== 'string' || !group.group) throw new Error('BRAN净距分组无效');
+      for (const candidate of group.candidates) {
+        if (!candidate || typeof candidate.refno !== 'string' || !candidate.refno || typeof candidate.noun !== 'string'
             || !Number.isFinite(candidate.distance_mm) || candidate.distance_mm < 0 || typeof candidate.intersects !== 'boolean'
             || !candidate.annotation || candidate.annotation.label_mm !== candidate.distance_mm
             || !pointValid(candidate.annotation.start_point) || !pointValid(candidate.annotation.end_point)
             || (candidate.variant !== undefined && typeof candidate.variant !== 'string')) throw new Error('BRAN净距结果或世界坐标无效');
-          const key = branCandidateKey(group.group, candidate);
-          if (keys.has(key)) throw new Error('BRAN净距标识重复');
-          keys.add(key);
-        }
+        const key = branCandidateKey(group.group, candidate);
+        if (keys.has(key)) throw new Error('BRAN净距标识重复');
+        keys.add(key);
       }
-      const expectedAccuracy = { 'centerline-to-aabb': 'approximate-bounds', 'sampled-object': 'approximate-sampled',
-        'parallel-centerline': 'exact-centerline', 'surface-to-surface': 'exact-surface' };
-      const provenance = data.candidateProvenance as Record<string, BranClearanceProvenance>;
-      if (!provenance || typeof provenance !== 'object' || Array.isArray(provenance)) throw new Error('BRAN净距来源无效');
-      for (const item of Object.values(provenance)) {
-        if (!item || typeof item.method !== 'string' || !Object.prototype.hasOwnProperty.call(expectedAccuracy, item.method)
+    }
+    const expectedAccuracy = { 'centerline-to-aabb': 'approximate-bounds', 'sampled-object': 'approximate-sampled',
+      'parallel-centerline': 'exact-centerline', 'surface-to-surface': 'exact-surface' };
+    const provenance = data.candidateProvenance as Record<string, BranClearanceProvenance>;
+    if (!provenance || typeof provenance !== 'object' || Array.isArray(provenance)) throw new Error('BRAN净距来源无效');
+    for (const item of Object.values(provenance)) {
+      if (!item || typeof item.method !== 'string' || !Object.prototype.hasOwnProperty.call(expectedAccuracy, item.method)
           || expectedAccuracy[item.method] !== item.accuracyClass) throw new Error('BRAN净距精度口径无效');
-        if (item.modelVersion && [item.modelVersion.sourceSesno, item.modelVersion.targetSesno].some(sesno => sesno !== null && (!Number.isInteger(sesno) || sesno < 0))) throw new Error('BRAN模型版本无效');
-      }
-      const facets = data.nounFacets as BranNounFacet[];
-      if (facets.some(facet => !facet || typeof facet.noun !== 'string' || typeof facet.selected !== 'boolean'
+      if (item.modelVersion && [item.modelVersion.sourceSesno, item.modelVersion.targetSesno].some(sesno => sesno !== null && (!Number.isInteger(sesno) || sesno < 0))) throw new Error('BRAN模型版本无效');
+    }
+    const facets = data.nounFacets as BranNounFacet[];
+    if (facets.some(facet => !facet || typeof facet.noun !== 'string' || typeof facet.selected !== 'boolean'
         || !Number.isFinite(facet.count) || facet.count < 0 || !groups.some(group => group.group === facet.noun))) throw new Error('BRAN净距类型筛选无效');
-      Object.assign(state, inputs);
-      state.queriedSourceRefno = data.queriedSourceRefno;
-      state.branGroups = groups;
-      state.nounFacets = facets;
-      state.drawnCandidateKeys = (data.drawnCandidateKeys as string[]).filter(key => keys.has(key));
-      state.candidateProvenance = Object.fromEntries([...keys].map(key => [key, { ...(provenance[key] ?? SERVER_BRAN_CLEARANCE_PROVENANCE), status: 'stale' }]));
-      state.excludedSelfMembers = data.excludedSelfMembers;
-      state.warnings = [...data.warnings as string[], '已恢复本机结果，模型版本未核实；请重新查询或精算后验收。'];
-      state.responseText = '已恢复本机结果，待重算';
-      applyBranSelection(state);
-    },
+    Object.assign(state, inputs);
+    state.queriedSourceRefno = data.queriedSourceRefno;
+    state.branGroups = groups;
+    state.nounFacets = facets;
+    state.drawnCandidateKeys = (data.drawnCandidateKeys as string[]).filter(key => keys.has(key));
+    state.candidateProvenance = Object.fromEntries([...keys].map(key => [key, { ...(provenance[key] ?? SERVER_BRAN_CLEARANCE_PROVENANCE), status: 'stale' }]));
+    state.excludedSelfMembers = data.excludedSelfMembers;
+    state.warnings = [...data.warnings as string[], '已恢复本机结果，模型版本未核实；请重新查询或精算后验收。'];
+    state.responseText = '已恢复本机结果，待重算';
+    applyBranSelection(state);
+    return () => { Object.assign(scenarios.branNearestClearance, state); };
+  }
+  const persistence = createScopedResultPersistence({
+    prefix: 'plant3d-bran-clearance-v1',
+    sources: [() => scenarios.branNearestClearance],
+    capture: captureSnapshot,
+    restore: value => prepareSnapshotRestore(value)(),
     invalidate: allowed => {
       calculationsAllowed = allowed;
       requestTokens.branNearestClearance = ++nextRequestToken;
@@ -873,6 +877,11 @@ export function createSpatialComputeStore() {
 
   return {
     ...persistence,
+    captureSnapshot,
+    prepareSnapshotRestore: (value: unknown) => {
+      const apply = prepareSnapshotRestore(value);
+      return () => persistence.applyPreparedRestore(apply);
+    },
     dispose: () => { persistence.dispose(); if (typeof window !== 'undefined') window.removeEventListener('modelProjectChanged', onProjectChanged); },
     panelMode,
     activeScenario,

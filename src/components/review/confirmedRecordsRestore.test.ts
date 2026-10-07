@@ -147,6 +147,28 @@ describe('createConfirmedRecordsRestorer', () => {
     expect(fixture.restorer.restoreError.value).toBeNull();
   });
 
+  it('净距先预检再与标注回放，预检失败不清草稿，旧记录无修订时快照变化仍触发恢复', async () => {
+    const order: string[] = [];
+    const snapshot = { schemaVersion: 1 as const, modelContext, coordinateSpaces: { component: 'design-world-m' as const, pipe: 'e3d-world-mm' as const, bran: 'e3d-world-mm' as const },
+      component: { records: [], showAnnotations: true }, pipe: { results: [] }, bran: { branGroups: [] } };
+    const records = ref([{ ...createRecord(), type: 'batch' as const, note: '', modelContext, clearanceSnapshot: snapshot }]);
+    const importJSON = vi.fn(() => { order.push('annotations'); });
+    const prepare = vi.fn(() => { order.push('preflight'); return () => { order.push('clearance'); }; });
+    const restorer = createConfirmedRecordsRestorer({ currentTaskId: () => 'task-1', currentFormId: () => 'form-1',
+      confirmedRecords: () => records.value, toolStore: { clearAll: vi.fn(), importJSON }, waitForViewerReady: async () => true,
+      getViewerTools: () => ({ syncFromStore: vi.fn() }), ensureModelContext: async () => { order.push('model'); }, prepareClearanceRestore: prepare });
+    prepare.mockImplementationOnce(() => { throw new Error('本机草稿冲突'); });
+    await restorer.restoreConfirmedRecordsIntoScene();
+    expect(importJSON).not.toHaveBeenCalled();
+    expect(restorer.restoreError.value).toContain('草稿冲突');
+    order.length = 0;
+    await restorer.restoreConfirmedRecordsIntoScene();
+    expect(order).toEqual(['model', 'preflight', 'annotations', 'clearance']);
+    records.value[0]!.clearanceSnapshot.component = { records: [], showAnnotations: false };
+    await restorer.restoreConfirmedRecordsIntoScene();
+    expect(importJSON).toHaveBeenCalledTimes(2);
+  });
+
   it('版本入口缺失或加载失败时不导入标注、不缓存成功状态，允许重试', async () => {
     const missing = contextRestorer();
     await missing.restorer.restoreConfirmedRecordsIntoScene();

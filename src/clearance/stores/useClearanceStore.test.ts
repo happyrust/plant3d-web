@@ -59,6 +59,20 @@ describe('useClearanceStore', () => {
     expect(store.records.value).toEqual([]);
   });
 
+  it('preflights a detached cloud snapshot without clearing a draft or accepting later response changes', async () => {
+    const store = useClearanceStore();
+    const record = await store.compute({ sourceRefno: '24384_22582', targetRefno: '17496_105912' }, { service: serviceReturning([elboToCurvedWallResponse()]) });
+    const snapshot = store.captureSnapshot();
+    expect(() => store.prepareSnapshotRestore({ ...snapshot, records: [{ ...snapshot.records[0], id: 'wrong' }] })).toThrow();
+    expect(store.records.value[0]).toBe(record);
+    const apply = store.prepareSnapshotRestore(snapshot);
+    snapshot.records.length = 0;
+    expect(store.records.value[0]?.status).toBe('current');
+    apply();
+    expect(store.records.value).toHaveLength(1);
+    expect(store.records.value[0]?.status).toBe('stale');
+  });
+
   it('keeps corrupt persisted data intact and does not label rejected data as saved', async () => {
     const storage = memoryStorage();
     const scope = 'corrupt-test';

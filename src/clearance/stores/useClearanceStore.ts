@@ -12,6 +12,7 @@ import {
   type ClearanceService,
   type ComputeClearanceInput,
 } from '@/clearance/services/clearanceService';
+import { cloneResultSnapshot } from '@/clearance/services/resultSnapshot';
 
 /**
  * Clearance 记录的状态（09-11 PR1.1：拾取流与抽屉共享同一个 store——选择、隐藏、删除、定位、精度标签都在这里）。
@@ -81,6 +82,42 @@ function errorText(error: unknown): string {
 }
 
 export function useClearanceStore() {
+  function captureSnapshot() {
+    return cloneResultSnapshot({ records: records.value, hiddenIds: [...hiddenIds.value],
+      activeId: activeId.value, showAnnotations: showAnnotations.value });
+  }
+
+  /** 先验证并脱离外部对象；调用返回动作之前不会替换本机结果。 */
+  function prepareSnapshotRestore(value: unknown): () => void {
+    const data = JSON.parse(JSON.stringify(value));
+    if (!data || !Array.isArray(data.records) || !Array.isArray(data.hiddenIds)
+      || !data.hiddenIds.every((id: unknown) => typeof id === 'string')
+      || (data.activeId !== null && typeof data.activeId !== 'string') || typeof data.showAnnotations !== 'boolean') {
+      throw new Error('净距结果格式无效');
+    }
+    const loaded: ClearanceRecord[] = data.records.map((record: Parameters<typeof createClearanceRecord>[0]) => createClearanceRecord(record));
+    if (new Set(loaded.map(record => record.id)).size !== loaded.length
+      || loaded.some(record => record.id !== clearanceRecordId(record.inputs))) throw new Error('净距记录标识重复或不匹配');
+    const stale = loaded.map(record => withClearanceStatus(record, 'stale'));
+    const ids = new Set(stale.map(record => record.id));
+    const hidden = new Set<string>(data.hiddenIds.filter((id: string) => ids.has(id)));
+    const selected = ids.has(data.activeId) ? data.activeId : null;
+    return () => {
+      restoring = true;
+      recordEpoch += 1;
+      pendingComputations = 0;
+      pairRequests.clear();
+      isComputing.value = false;
+      try {
+        records.value = stale;
+        hiddenIds.value = hidden;
+        activeId.value = selected;
+        showAnnotations.value = data.showAnnotations;
+        lastError.value = null;
+      } finally { restoring = false; }
+    };
+  }
+
   /** 与 Viewer 的项目/库/任务/轮次/用户/节点/模型版本上下文绑定；旧请求不能写入新上下文。 */
   function bindPersistence(scope: string, storage: Pick<Storage, 'getItem' | 'setItem'> | null, allowCalculations = true) {
     if (calculationsAllowed !== allowCalculations) {
@@ -285,6 +322,8 @@ export function useClearanceStore() {
   }
 
   return {
+    captureSnapshot,
+    prepareSnapshotRestore,
     records,
     activeId,
     activeRecord,

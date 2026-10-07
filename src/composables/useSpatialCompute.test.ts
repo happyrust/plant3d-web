@@ -148,6 +148,22 @@ describe('useSpatialCompute BRAN nearest clearance', () => {
   /** 一个 `Response` 的 body 只能读一次：连发两次的用例每次都要造新的。 */
   const freshNounGroupedResponse = () => new Response(JSON.stringify(nounGroupedResponse), { status: 200 });
 
+  it('preflights BRAN cloud results atomically and detaches them from later response mutation', async () => {
+    const store = createSpatialComputeStore();
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(freshNounGroupedResponse));
+    await store.submitScenario('branNearestClearance');
+    const before = store.scenarios.branNearestClearance.resultRows.map(row => row.label);
+    const snapshot = store.captureSnapshot();
+    expect(() => store.prepareSnapshotRestore({ ...snapshot, candidateProvenance: { broken: {} } })).toThrow();
+    expect(store.scenarios.branNearestClearance.resultRows.map(row => row.label)).toEqual(before);
+    const apply = store.prepareSnapshotRestore(snapshot);
+    snapshot.branGroups.length = 0;
+    apply();
+    expect(store.scenarios.branNearestClearance.resultRows).toHaveLength(6);
+    expect(store.scenarios.branNearestClearance.resultRows[0]?.label).toContain('过期');
+    store.dispose();
+  });
+
   it('restores BRAN selections and annotations as stale without crossing project contexts', async () => {
     const values = new Map<string, string>();
     const local = { getItem: (key: string) => values.get(key) ?? null, setItem: (key: string, value: string) => { values.set(key, value); } };

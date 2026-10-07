@@ -3,6 +3,7 @@ import { computed, ref } from 'vue';
 import { isReviewModelContext, reviewModelContextKey, type ReviewModelContext } from './reviewModelContext';
 import { buildReviewRecordReplayPayload } from './reviewRecordReplay';
 
+import type { ReviewClearanceSnapshot } from './reviewClearanceSnapshot';
 import type { ConfirmedRecord } from '@/composables/useReviewStore';
 
 import { isAnnotationUxFlagEnabled } from '@/composables/useAnnotationUxFlags';
@@ -36,6 +37,7 @@ export type ConfirmedRecordsRestoreOptions = {
   waitForViewerReady: (options?: { timeoutMs?: number }) => Promise<boolean>;
   getViewerTools: () => ViewerToolsHandle | null;
   ensureModelContext?: (context: ReviewModelContext, shouldApply: () => boolean) => Promise<void>;
+  prepareClearanceRestore?: (snapshot: ReviewClearanceSnapshot, context: ReviewModelContext) => () => void;
   /** 设为 true 时，空记录不会 clearAll (避免覆盖外部快照已恢复的数据) */
   skipClearOnEmpty?: boolean;
   /**
@@ -55,7 +57,8 @@ function buildSceneKey(
   const scope = formId ? `${taskId}@${formId}` : taskId;
   if (records.length === 0) return `${scope}:empty`;
   return `${scope}:${JSON.stringify(records.map(r => [r.id, r.confirmedAt, r.recordRevision,
-    r.modelContext ? (isReviewModelContext(r.modelContext) ? reviewModelContextKey(r.modelContext) : r.modelContext) : null]))}`;
+    r.modelContext ? (isReviewModelContext(r.modelContext) ? reviewModelContextKey(r.modelContext) : r.modelContext) : null,
+    r.clearanceSnapshot ?? null]))}`;
 }
 
 function buildReplayPayload(
@@ -162,6 +165,12 @@ export function createConfirmedRecordsRestorer(options: ConfirmedRecordsRestoreO
       }
 
       const layered = isLayeredDraftsActive();
+      const latestClearance = [...records].reverse().find(record => record.clearanceSnapshot)?.clearanceSnapshot;
+      let applyClearance: (() => void) | undefined;
+      if (latestClearance) {
+        if (!contexts[0] || !options.prepareClearanceRestore) throw new Error('净距恢复入口或模型版本信息缺失，已停止回放');
+        applyClearance = options.prepareClearanceRestore(latestClearance, contexts[0]);
+      }
 
       if (!taskId || records.length === 0) {
         const shouldClear =
@@ -219,6 +228,7 @@ export function createConfirmedRecordsRestorer(options: ConfirmedRecordsRestoreO
       options.toolStore.importJSON(
         layered ? mergeConfirmedReplayWithLocalDrafts(legacyPayload, readLocalPayload(options.toolStore)).payload : legacyPayload,
       );
+      applyClearance?.();
       tools.syncFromStore();
       lastRestoredSceneKey.value = restoreKey;
     } catch (error) {

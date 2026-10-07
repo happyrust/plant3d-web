@@ -79,6 +79,12 @@ export function createScopedResultPersistence<T>(options: {
   }
 
   const stop = watch(options.sources, persistRecords, { deep: true, flush: 'sync' });
-  return { persistenceError, persistenceLabel, hasPersistenceContext, persistRecords, bindPersistence, detachPersistence,
+  /** 调用方先完成各 store 的纯校验；整组替换期间不落盘中间状态。 */
+  function applyPreparedRestore(apply: () => void) {
+    options.invalidate(allowed);
+    hydrating = true;
+    try { apply(); } finally { hydrating = false; }
+  }
+  return { persistenceError, persistenceLabel, hasPersistenceContext, persistRecords, bindPersistence, detachPersistence, applyPreparedRestore,
     dispose: () => { detachPersistence(); stop(); } };
 }

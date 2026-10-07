@@ -39,6 +39,7 @@ import { type ClearanceRecord } from '@/clearance/domain/clearanceRecord';
 import { useClearanceStore } from '@/clearance/stores/useClearanceStore';
 import { resolveViewerToolbarSelection } from '@/components/dock_panels/viewerToolbarSelection';
 import PipeDistanceDrawer from '@/components/pipe-distance/PipeDistanceDrawer.vue';
+import { captureReviewClearanceSnapshot, hasReviewClearanceResults, prepareReviewClearanceRestore, reviewClearanceSnapshotKey } from '@/components/review/reviewClearanceSnapshot';
 import ReviewConfirmation from '@/components/review/ReviewConfirmation.vue';
 import { reviewModelContextKey, type ReviewModelContext } from '@/components/review/reviewModelContext';
 import { loadReviewModelComparison, type LoadedReviewModelComparison } from '@/components/review/reviewModelContextRestore';
@@ -599,6 +600,19 @@ function captureReviewModelContext(): ReviewModelContext | null {
       viewMode: runtime.viewMode, activeSide: runtime.activeSide, diffOnly: runtime.diffOnly ?? false } : null };
 }
 const offReviewModelContext = reviewStore.bindModelContextProvider(captureReviewModelContext);
+const reviewClearanceStores = { component: clearanceStore, pipe: pipeDistanceStore, bran: spatialComputeStore };
+const offReviewClearance = reviewStore.bindClearanceSnapshotProvider({
+  capture: context => captureReviewClearanceSnapshot(context, reviewClearanceStores),
+  prepare: (snapshot, context) => {
+    const current = captureReviewModelContext();
+    if (!current || reviewModelContextKey({ ...current, node: 'sj' }) !== reviewModelContextKey({ ...context, node: 'sj' }))
+      throw new Error('净距恢复期间模型或任务已切换，请重试');
+    const local = captureReviewClearanceSnapshot(snapshot.modelContext, reviewClearanceStores);
+    if (hasReviewClearanceResults(local) && reviewClearanceSnapshotKey(local) !== reviewClearanceSnapshotKey(snapshot))
+      throw new Error('本机净距结果与云端不同，已保留本机草稿；请先确认保存或清除本机结果后重试恢复');
+    return prepareReviewClearanceRestore(snapshot, context, reviewClearanceStores);
+  },
+});
 let restoredReviewComparison: LoadedReviewModelComparison | null = null;
 let openingReviewComparison: ModelUnitVersionCompareOpenDetail | null = null;
 let reviewModelRestoreSequence = 0;
@@ -666,6 +680,7 @@ onUnmounted(() => {
   if (viewerContext.ensureReviewModelContext?.value === ensureReviewModelContext) viewerContext.ensureReviewModelContext.value = null;
 });
 onUnmounted(offReviewModelContext);
+onUnmounted(offReviewClearance);
 onUnmounted(() => { offClearanceProject(); clearanceStore.detachPersistence(); pipeDistanceStore.detachPersistence(); spatialComputeStore.detachPersistence(); });
 function publishModelUnitCompareState(): void {
   const state = modelUnitCompareState.value;

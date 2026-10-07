@@ -94,6 +94,7 @@ const confirmedRecordsRestorer = createConfirmedRecordsRestorer({
   toolStore,
   waitForViewerReady,
   getViewerTools: () => viewerContext.tools.value ?? null,
+  prepareClearanceRestore: (snapshot, context) => reviewStore.prepareBoundClearanceRestore(snapshot, context),
   ensureModelContext: async (context, shouldApply) => {
     const ensure = viewerContext.ensureReviewModelContext?.value;
     if (!ensure) throw new Error('模型版本恢复入口尚未就绪，已停止标注回放');

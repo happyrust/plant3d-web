@@ -32,6 +32,8 @@ vi.mock('@/composables/useUserStore', () => ({
 import { useReviewStore } from './useReviewStore';
 import { useToolStore } from './useToolStore';
 
+import type { ReviewClearanceSnapshot } from '@/components/review/reviewClearanceSnapshot';
+
 import { reviewRecordCreate } from '@/api/reviewApi';
 import { dimensionDocumentToSnapshot } from '@/dimension/adapters/reviewSnapshotAdapter';
 import { emptyDimensionDocument, linearRecord } from '@/dimension/domain/testFixtures';
@@ -184,6 +186,25 @@ describe('useReviewStore - confirm without OBB', () => {
     const confirmed = reviewStore.confirmedRecords.value[0];
     expect(confirmed?.taskId).toBe('task-lineage-1');
     expect(confirmed?.formId).toBe('FORM-LINEAGE-1');
+
+    const context = { schemaVersion: 1 as const, project: 'P', dbnum: null, taskId: 'task-lineage-1', formId: 'FORM-LINEAGE-1', node: 'jd', comparison: null };
+    const snapshot: ReviewClearanceSnapshot = { schemaVersion: 1, modelContext: context,
+      coordinateSpaces: { component: 'design-world-m', pipe: 'e3d-world-mm', bran: 'e3d-world-mm' },
+      component: { records: [] }, pipe: { results: [] }, bran: { branGroups: [] } };
+    const offContext = reviewStore.bindModelContextProvider(() => context);
+    const offClearance = reviewStore.bindClearanceSnapshotProvider({ capture: () => snapshot, prepare: () => () => {} });
+    const payload = { type: 'batch' as const, annotations: [], cloudAnnotations: [], rectAnnotations: [], measurements: [], note: '' };
+    try {
+      vi.mocked(reviewRecordCreate).mockResolvedValueOnce({ success: true, record: { ...payload, id: confirmed!.id, taskId: context.taskId,
+        recordRevision: 'revision-clearance-dropped', currentNode: 'jd', operatorId: 'reviewer-1', confirmedAt: Date.now(), modelContext: context } });
+      await expect(reviewStore.addConfirmedRecord(payload)).rejects.toThrow('未完整保存三类净距');
+      expect(reviewStore.confirmedRecords.value[0]?.recordRevision).toBe('revision-confirmed');
+      vi.mocked(reviewRecordCreate).mockResolvedValueOnce({ success: true, record: { ...payload, id: confirmed!.id, taskId: context.taskId,
+        recordRevision: 'revision-clearance-saved', currentNode: 'jd', operatorId: 'reviewer-1', confirmedAt: Date.now(), modelContext: context, clearanceSnapshot: snapshot } });
+      await reviewStore.addConfirmedRecord(payload);
+      expect(reviewStore.confirmedRecords.value[0]?.clearanceSnapshot).toEqual(snapshot);
+      expect(vi.mocked(reviewRecordCreate).mock.calls.at(-1)?.[0].clearanceSnapshot).toEqual(snapshot);
+    } finally { offClearance(); offContext(); }
   });
 
   it('should save and accept a versioned dimension document with the review record', async () => {

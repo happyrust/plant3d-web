@@ -8,6 +8,7 @@ import { computed, ref } from 'vue';
 import type { Vec3 } from '@/types/vec3';
 
 import { genModelV1SurfaceClearance, isGenModelV1ApiError } from '@/api/genModelV1Api';
+import { cloneResultSnapshot } from '@/clearance/services/resultSnapshot';
 import { createScopedResultPersistence } from '@/clearance/services/scopedResultPersistence';
 
 export type PipeDistanceResult = {
@@ -48,7 +49,16 @@ const resultMinDistance = ref<number | null>(null);
 let detectionSequence = 0;
 let calculationsAllowed = true;
 
-function restorePipeSnapshot(value: unknown) {
+function preparePipeSnapshot(value: unknown): () => void {
+  if (value === null) return () => resetPipeSnapshot();
+  // 脱离响应及实时 store，校验期间不改变任何显示或本机草稿。
+  value = cloneResultSnapshot(value);
+  const data = value as Record<string, unknown>;
+  const apply = validatePipeSnapshot(data);
+  return () => { resetPipeSnapshot(); apply(); };
+}
+
+function resetPipeSnapshot() {
   results.value = [];
   selectedBranRefnos.value = [];
   activeResultIndex.value = null;
@@ -58,8 +68,9 @@ function restorePipeSnapshot(value: unknown) {
   maxDistance.value = 500;
   maxAngle.value = 5;
   detectError.value = null;
-  if (value === null) return;
-  const data = value as Record<string, unknown>;
+}
+
+function validatePipeSnapshot(data: Record<string, unknown>): () => void {
   if (!data || data.coordinateSpace !== 'e3d-world-mm' || !Array.isArray(data.results) || !Array.isArray(data.selectedBranRefnos)
     || !data.selectedBranRefnos.every(item => typeof item === 'string') || !Array.isArray(data.hiddenIds)
     || !data.hiddenIds.every(item => typeof item === 'string') || typeof data.showAnnotations !== 'boolean'
@@ -80,25 +91,40 @@ function restorePipeSnapshot(value: unknown) {
     return { ...result, start: [...result.designPoints.start] as Vec3, end: [...result.designPoints.end] as Vec3, status: 'stale' as const };
   });
   if (new Set(loaded.map(result => result.id)).size !== loaded.length) throw new Error('管间结果标识重复');
-  results.value = loaded;
-  selectedBranRefnos.value = data.selectedBranRefnos as string[];
-  hiddenResultIds.value = new Set((data.hiddenIds as string[]).filter(id => loaded.some(result => result.id === id)));
-  activeResultIndex.value = typeof data.activeIndex === 'number' && Number.isInteger(data.activeIndex) && data.activeIndex >= 0 && data.activeIndex < loaded.length ? data.activeIndex : null;
-  resultMinDistance.value = data.minDistance as number | null;
-  showAnnotations.value = data.showAnnotations;
-  maxDistance.value = data.maxDistance;
-  maxAngle.value = data.maxAngle;
+  const minDistance = data.minDistance as number | null;
+  const annotations = data.showAnnotations;
+  const distanceLimit = data.maxDistance;
+  const angleLimit = data.maxAngle;
+  return () => {
+    results.value = loaded;
+    selectedBranRefnos.value = data.selectedBranRefnos as string[];
+    hiddenResultIds.value = new Set((data.hiddenIds as string[]).filter(id => loaded.some(result => result.id === id)));
+    activeResultIndex.value = typeof data.activeIndex === 'number' && Number.isInteger(data.activeIndex) && data.activeIndex >= 0 && data.activeIndex < loaded.length ? data.activeIndex : null;
+    resultMinDistance.value = minDistance;
+    showAnnotations.value = annotations;
+    maxDistance.value = distanceLimit;
+    maxAngle.value = angleLimit;
+  };
+}
+
+function restorePipeSnapshot(value: unknown) { preparePipeSnapshot(value)(); }
+
+function capturePipeSnapshot() {
+  if (results.value.some(result => !result.designPoints)) throw new Error('结果未取得世界毫米坐标，不能保存场景坐标；请重新检测。');
+  return cloneResultSnapshot({ coordinateSpace: 'e3d-world-mm',
+    results: results.value.map(result => ({ ...result,
+      start: result.designPoints!.start, end: result.designPoints!.end,
+      pipeAStart: result.designPoints!.pipeAStart, pipeAEnd: result.designPoints!.pipeAEnd,
+      pipeBStart: result.designPoints!.pipeBStart, pipeBEnd: result.designPoints!.pipeBEnd })),
+    selectedBranRefnos: selectedBranRefnos.value, hiddenIds: [...hiddenResultIds.value],
+    activeIndex: activeResultIndex.value, minDistance: resultMinDistance.value, showAnnotations: showAnnotations.value,
+    maxDistance: maxDistance.value, maxAngle: maxAngle.value });
 }
 
 const persistence = createScopedResultPersistence({
   prefix: 'plant3d-pipe-distance-v1',
   sources: [results, selectedBranRefnos, hiddenResultIds, activeResultIndex, resultMinDistance, showAnnotations, maxDistance, maxAngle],
-  capture: () => {
-    if (results.value.some(result => !result.designPoints)) throw new Error('结果未取得世界毫米坐标，不能保存场景坐标；请重新检测。');
-    return { coordinateSpace: 'e3d-world-mm', results: results.value, selectedBranRefnos: selectedBranRefnos.value, hiddenIds: [...hiddenResultIds.value],
-      activeIndex: activeResultIndex.value, minDistance: resultMinDistance.value, showAnnotations: showAnnotations.value,
-      maxDistance: maxDistance.value, maxAngle: maxAngle.value };
-  },
+  capture: capturePipeSnapshot,
   restore: restorePipeSnapshot,
   invalidate: allowed => { calculationsAllowed = allowed; detectionSequence += 1; isDetecting.value = false; },
 });
@@ -319,6 +345,11 @@ export function usePipeDistanceStore() {
 
   return {
     ...persistence,
+    captureSnapshot: capturePipeSnapshot,
+    prepareSnapshotRestore: (value: unknown) => {
+      const apply = preparePipeSnapshot(value);
+      return () => persistence.applyPreparedRestore(apply);
+    },
     showAnnotations,
     maxDistance,
     maxAngle,
