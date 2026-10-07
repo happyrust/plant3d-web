@@ -887,11 +887,11 @@ async function refreshWorkflowContext() {
 }
 
 async function handleClearConfirmedRecords() {
-  if (!window.confirm('确定要清空所有已确认的数据？此操作不可撤销。')) return;
+  if (!window.confirm('确定清空你在当前节点的已确认数据？其他节点历史会保留。此操作不可撤销。')) return;
   const cleared = await reviewStore.clearConfirmedRecords();
   if (cleared) {
     emitToast({
-      message: '已清空确认记录',
+      message: '已清空当前节点本人的确认记录，其他节点历史保留',
     });
     return;
   }

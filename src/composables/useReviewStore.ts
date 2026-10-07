@@ -266,6 +266,7 @@ async function addConfirmedRecord(
   const activationEpoch = taskActivationEpoch;
   const node = currentTask.value?.currentNode;
   const formId = currentTask.value?.formId?.trim() || record.formId;
+  if (isCurrentTaskTerminal()) throw new Error(error.value!);
 
   if (!USE_BACKEND.value) {
     const message = '校审确认记录必须保存到数据库，当前不允许切换到本地模式';
@@ -390,7 +391,15 @@ async function addConfirmedRecord(
   }
 }
 
+function isCurrentTaskTerminal(): boolean {
+  if (!['approved', 'cancelled'].includes(currentTask.value?.status?.trim().toLowerCase() ?? '')) return false;
+  error.value = '当前校审任务已结束，确认记录只读';
+  return true;
+}
+
 async function removeConfirmedRecord(id: string): Promise<void> {
+  if (isCurrentTaskTerminal()) return;
+  const activationEpoch = taskActivationEpoch;
   let canRemoveLocal = true;
 
   if (USE_BACKEND.value) {
@@ -402,20 +411,23 @@ async function removeConfirmedRecord(id: string): Promise<void> {
         throw new Error(response.error_message || '删除确认记录失败');
       }
     } catch (e) {
-      error.value = e instanceof Error ? e.message : '删除确认记录失败';
+      if (activationEpoch === taskActivationEpoch) error.value = e instanceof Error ? e.message : '删除确认记录失败';
       canRemoveLocal = false;
     } finally {
-      loading.value = false;
+      if (activationEpoch === taskActivationEpoch) loading.value = false;
     }
   }
 
-  if (canRemoveLocal) {
+  if (canRemoveLocal && activationEpoch === taskActivationEpoch) {
     confirmedRecords.value = confirmedRecords.value.filter((r) => r.id !== id);
   }
 }
 
 async function clearConfirmedRecords(): Promise<boolean> {
+  if (isCurrentTaskTerminal()) return false;
   const taskId = currentTask.value?.id;
+  const formId = currentTask.value?.formId;
+  const activationEpoch = taskActivationEpoch;
 
   if (USE_BACKEND.value && taskId) {
     loading.value = true;
@@ -425,14 +437,19 @@ async function clearConfirmedRecords(): Promise<boolean> {
       if (!response.success) {
         throw new Error(response.error_message || '清空确认记录失败');
       }
+      if (activationEpoch !== taskActivationEpoch) return false;
+      // 后端只清当前节点本人槽位，必须重读以保留其他节点的确认历史。
+      await loadConfirmedRecords(taskId, { formId });
+      return activationEpoch === taskActivationEpoch && !error.value;
     } catch (e) {
-      error.value = e instanceof Error ? e.message : '清空确认记录失败';
+      if (activationEpoch === taskActivationEpoch) error.value = e instanceof Error ? e.message : '清空确认记录失败';
       return false;
     } finally {
-      loading.value = false;
+      if (activationEpoch === taskActivationEpoch) loading.value = false;
     }
   }
 
+  if (activationEpoch !== taskActivationEpoch) return false;
   confirmedRecords.value = [];
   return true;
 }

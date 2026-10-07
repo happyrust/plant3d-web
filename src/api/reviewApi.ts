@@ -1465,7 +1465,7 @@ export async function reviewRecordDelete(recordId: string): Promise<ReviewAction
 }
 
 /**
- * 清空任务的所有确认记录
+ * 清空当前节点本人确认记录（保留其他节点历史）
  * DELETE /api/review/records/clear-task/{taskId}
  */
 export async function reviewRecordClearByTaskId(taskId: string): Promise<ReviewActionResponse> {
