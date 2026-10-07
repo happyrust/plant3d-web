@@ -2,9 +2,9 @@ import { useConsoleStore } from './useConsoleStore';
 import { useViewerContext } from './useViewerContext';
 
 import { pdmsGetTransform } from '@/api/genModelPdmsAttrApi';
+import { ensureDbMetaInfoLoaded, tryGetDbnumByRefno } from '@/composables/useDbMetaInfo';
 import { useModelProjects } from '@/composables/useModelProjects';
 import { getModelTreeInstance } from '@/composables/useModelTreeStore';
-import { ensureDbMetaInfoLoaded, tryGetDbnumByRefno } from '@/composables/useDbMetaInfo';
 import { setGlobalSelectedRefno } from '@/composables/useSelectionStore';
 import { getModelSource } from '@/model-source';
 import {

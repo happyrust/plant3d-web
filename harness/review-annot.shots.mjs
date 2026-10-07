@@ -36,8 +36,8 @@ try {
     await textareas.nth(i).fill('示例：主操作按钮着色态');
   }
   // 选中一个处理结果动作，让提交按钮 enabled
-  await page.locator('[data-shot="timeline-normal"] button:has-text("已修改")').first().click().catch(() => {});
-  await page.locator('[data-shot="timeline-dock"] button:has-text("已修改")').first().click().catch(() => {});
+  await page.locator('[data-shot="timeline-normal"] button:has-text("已修改")').first().click().catch(() => { /* Optional action may be absent in this screenshot state. */ });
+  await page.locator('[data-shot="timeline-dock"] button:has-text("已修改")').first().click().catch(() => { /* Optional action may be absent in this screenshot state. */ });
   await page.waitForTimeout(500);
 
   for (const section of SECTIONS) {

@@ -48,7 +48,7 @@ try {
     const cs = Array.from(document.querySelectorAll('canvas'));
     return cs.map((c) => ({ id: c.id, w: c.width, h: c.height, cls: (c.className || '').slice(0, 40) }));
   });
-} catch {}
+} catch (error) { console.warn('Canvas probe unavailable:', error.message); }
 
 await page.screenshot({ path: OUT, fullPage: false });
 console.log('SCREENSHOT', OUT);

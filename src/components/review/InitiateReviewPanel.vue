@@ -18,11 +18,9 @@ import { buildReviewAttachments, restoreUploadedFilesFromAttachments } from './r
 import { resolvePassiveWorkflowMode } from './workflowMode';
 
 import type { UploadedFile } from './FileUploadSection.vue';
+import type { TreeNodeDto } from '@/api/genModelE3dTypes';
 import type { ReviewComponent } from '@/types/auth';
 
-import type { TreeNodeDto } from '@/api/genModelE3dTypes';
-
-import { getModelSource } from '@/model-source';
 import Button from '@/components/ui/Button.vue';
 import Card from '@/components/ui/Card.vue';
 import Input from '@/components/ui/Input.vue';
@@ -39,6 +37,7 @@ import { useSelectionStore } from '@/composables/useSelectionStore';
 import { useToolStore } from '@/composables/useToolStore';
 import { useUserStore } from '@/composables/useUserStore';
 import { showModelByRefnosWithAck, useViewerContext, waitForViewerReady } from '@/composables/useViewerContext';
+import { getModelSource } from '@/model-source';
 import { getRoleDisplayName } from '@/types/auth';
 
 type InitiateReviewAutomationCreateResult = {

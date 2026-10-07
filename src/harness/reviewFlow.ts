@@ -146,8 +146,8 @@ if (new URLSearchParams(window.location.search).get('dialog') === '1') {
         visible: true,
         currentNode: 'sh',
         loading: false,
-        'onUpdate:visible': () => {},
-        onConfirm: () => {},
+        'onUpdate:visible': () => { /* Keep the dialog visible for screenshots. */ },
+        onConfirm: () => { /* Screenshot fixture never submits a workflow. */ },
       }),
   }).mount(document.body.appendChild(document.createElement('div')));
 }
