@@ -102,8 +102,9 @@ import {
   type DimensionDocumentState,
   type DimensionSystem,
 } from '@/dimension';
-import { getOutputProjectFromUrl } from '@/lib/currentProject';
+import { getOutputProjectFromUrl, onCurrentProjectPathChange } from '@/lib/currentProject';
 import { getModelSource, modelVersionAttributesToUiAttr } from '@/model-source';
+import { annotationScopeKey } from '@/review/domain/annotationScope';
 import { onCommand } from '@/ribbon/commandBus';
 import { emitToast } from '@/ribbon/toastBus';
 import { DEFAULT_DROPDOWN_PLACEMENT, measureNaturalHeight, resolveDropdownPlacement, type DropdownPlacement } from '@/utils/dropdownPlacement';
@@ -550,6 +551,33 @@ const dtxLayerRef = shallowRef<DTXLayer | null>(null);
 const showDbnumExtraDtxLayers: DTXLayer[] = [];
 const attachedShowDbnumExtraDtxLayers = new WeakSet<DTXLayer>();
 const modelUnitCompareState = ref<ModelUnitVersionCompareRuntimeState | null>(null);
+const clearanceProject = ref(getOutputProjectFromUrl());
+const offClearanceProject = onCurrentProjectPathChange((project) => { clearanceProject.value = project; });
+const clearanceStorageContext = computed(() => {
+  const params = new URLSearchParams(window.location.search);
+  const project = clearanceProject.value || params.get('project_id');
+  const task = reviewStore.currentTask.value;
+  const comparison = modelUnitCompareState.value?.detail;
+  const draftScope = store.annotationDraftScope.value;
+  return {
+    project,
+    key: JSON.stringify({
+      project, dbnum: params.get('show_dbnum') || '__all__', user: userStore.currentUser.value?.id || 'anonymous',
+      draft: draftScope ? annotationScopeKey(draftScope) : null,
+      taskId: task?.id || null, formId: task?.formId || null, node: task?.currentNode || null,
+      comparison: comparison ? { dbnum: comparison.dbnum, refno: comparison.unitRefno,
+        a: comparison.before.sesno, b: comparison.after.sesno,
+        units: comparison.units?.map(unit => [unit.unitRefno, unit.before.sesno, unit.after.sesno]).sort() ?? [] } : null,
+    }),
+    allowCalculations: modelUnitCompareState.value === null,
+  };
+});
+watch(clearanceStorageContext, (context) => {
+  let storage: Storage | null = null;
+  try { if (context.project) storage = window.localStorage; } catch { /* 本机存储不可用时保留内存记录 */ }
+  clearanceStore.bindPersistence(context.key, storage, context.allowCalculations);
+}, { immediate: true, flush: 'sync' });
+onUnmounted(() => { offClearanceProject(); clearanceStore.detachPersistence(); });
 function publishModelUnitCompareState(): void {
   const state = modelUnitCompareState.value;
   const detail: ModelUnitVersionCompareRuntimeState | null = state

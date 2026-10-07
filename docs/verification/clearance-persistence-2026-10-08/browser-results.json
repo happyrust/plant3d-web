@@ -1,0 +1,211 @@
+{
+  "checkedAt": "2026-10-07T19:26:41.844Z",
+  "source": "production store/service + existing geometry fixture + actual Chromium localStorage and page reload",
+  "businessAcceptance": false,
+  "initial": {
+    "id": "clearance:24384_22582:17496_105912",
+    "snapshot": {
+      "distanceM": 0.06443,
+      "intersects": false,
+      "sourcePoint": [
+        120,
+        45,
+        3.2
+      ],
+      "targetPoint": [
+        120.06439999999999,
+        44.9989,
+        3.2
+      ],
+      "vector": [
+        0.0644,
+        -0.0011,
+        0
+      ],
+      "sourceLeafRefno": "24384_22582",
+      "targetLeafRefno": "17496_105912",
+      "targetLeafNoun": "WALL",
+      "targetFace": {
+        "kind": "outer",
+        "normal": [
+          -0.9998,
+          0.0171,
+          0
+        ],
+        "confidence": "geometric"
+      },
+      "perpendicular": {
+        "distanceM": 0.0645,
+        "from": [
+          120,
+          45,
+          3.2
+        ],
+        "to": [
+          120.06449,
+          44.9989,
+          3.2
+        ],
+        "method": "ray"
+      },
+      "witness": "closest-points"
+    },
+    "modelVersion": {
+      "sourceSesno": 586,
+      "targetSesno": 729
+    },
+    "persisted": {
+      "version": 1,
+      "scope": "browser-check:1791401201101",
+      "records": [
+        {
+          "id": "clearance:24384_22582:17496_105912",
+          "kind": "component-to-wall",
+          "inputs": {
+            "sourceRefno": "24384_22582",
+            "targetRefno": "17496_105912",
+            "targetKind": "wall"
+          },
+          "sourceNoun": "ELBO",
+          "targetNoun": "WALL",
+          "provenance": {
+            "method": "surface-to-surface",
+            "accuracyClass": "exact-surface",
+            "coordinateSpace": "design-world",
+            "lengthUnit": "m",
+            "sourceModelVersion": "src:586;tgt:729",
+            "source": {
+              "entityId": "24384_22582",
+              "refno": "24384_22582",
+              "segmentRefno": "24384_22582"
+            },
+            "target": {
+              "entityId": "17496_105912",
+              "refno": "17496_105912",
+              "segmentRefno": "17496_105912"
+            },
+            "warnings": [],
+            "errorBoundM": 0.0005
+          },
+          "snapshot": {
+            "distanceM": 0.06443,
+            "intersects": false,
+            "sourcePoint": [
+              120,
+              45,
+              3.2
+            ],
+            "targetPoint": [
+              120.06439999999999,
+              44.9989,
+              3.2
+            ],
+            "vector": [
+              0.0644,
+              -0.0011,
+              0
+            ],
+            "sourceLeafRefno": "24384_22582",
+            "targetLeafRefno": "17496_105912",
+            "targetLeafNoun": "WALL",
+            "targetFace": {
+              "kind": "outer",
+              "normal": [
+                -0.9998,
+                0.0171,
+                0
+              ],
+              "confidence": "geometric"
+            },
+            "perpendicular": {
+              "distanceM": 0.0645,
+              "from": [
+                120,
+                45,
+                3.2
+              ],
+              "to": [
+                120.06449,
+                44.9989,
+                3.2
+              ],
+              "method": "ray"
+            },
+            "witness": "closest-points"
+          },
+          "modelVersion": {
+            "sourceSesno": 586,
+            "targetSesno": 729
+          },
+          "status": "current",
+          "createdAt": "2026-10-07T19:26:41.725Z",
+          "computedAt": "2026-10-07T19:26:41.725Z"
+        }
+      ],
+      "hiddenIds": [
+        "clearance:24384_22582:17496_105912"
+      ],
+      "activeId": "clearance:24384_22582:17496_105912",
+      "showAnnotations": false
+    },
+    "label": "本机已保存（未提交校审）"
+  },
+  "restored": {
+    "id": "clearance:24384_22582:17496_105912",
+    "snapshot": {
+      "distanceM": 0.06443,
+      "intersects": false,
+      "sourcePoint": [
+        120,
+        45,
+        3.2
+      ],
+      "targetPoint": [
+        120.06439999999999,
+        44.9989,
+        3.2
+      ],
+      "vector": [
+        0.0644,
+        -0.0011,
+        0
+      ],
+      "sourceLeafRefno": "24384_22582",
+      "targetLeafRefno": "17496_105912",
+      "targetLeafNoun": "WALL",
+      "targetFace": {
+        "kind": "outer",
+        "normal": [
+          -0.9998,
+          0.0171,
+          0
+        ],
+        "confidence": "geometric"
+      },
+      "perpendicular": {
+        "distanceM": 0.0645,
+        "from": [
+          120,
+          45,
+          3.2
+        ],
+        "to": [
+          120.06449,
+          44.9989,
+          3.2
+        ],
+        "method": "ray"
+      },
+      "witness": "closest-points"
+    },
+    "modelVersion": {
+      "sourceSesno": 586,
+      "targetSesno": 729
+    },
+    "status": "stale",
+    "hidden": true,
+    "showAnnotations": false,
+    "isolated": true,
+    "returned": true
+  }
+}
