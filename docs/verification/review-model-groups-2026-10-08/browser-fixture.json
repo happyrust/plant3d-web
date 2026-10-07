@@ -1,0 +1,130 @@
+{
+  "fixtureOnly": true,
+  "mockedHistoricalGeometry": true,
+  "groups": [
+    {
+      "key": "[1,\"AvevaMarineSample\",null,\"model-group-fixture\",\"group-form\",\"sj\",[1,\"1_100\",10,20,[],\"single\",\"after\",false]]",
+      "label": "AvevaMarineSample · 模型库 1 · 1_100 · 10 → 20",
+      "count": 2,
+      "disabled": false
+    },
+    {
+      "key": "[1,\"AvevaMarineSample\",null,\"model-group-fixture\",\"group-form\",\"sj\",[1,\"1_100\",10,30,[],\"single\",\"after\",false]]",
+      "label": "AvevaMarineSample · 模型库 1 · 1_100 · 10 → 30",
+      "count": 1,
+      "disabled": false
+    },
+    {
+      "key": "__legacy__",
+      "label": "旧记录（未绑定模型版本）",
+      "count": 1,
+      "disabled": true
+    }
+  ],
+  "first": {
+    "model": {
+      "unitRefno": "1_100",
+      "units": [
+        "1_100"
+      ],
+      "splitOutline": {
+        "compositor": true,
+        "renderer": "ANGLE (AMD, AMD Radeon RX590 GME (0x00006FDF) Direct3D11 vs_5_0 ps_5_0, D3D11)"
+      },
+      "beforeSesno": 10,
+      "afterSesno": 20,
+      "beforeObjects": 1,
+      "afterObjects": 1,
+      "environmentLoadedRefnos": 0,
+      "activeSide": "before",
+      "viewMode": "split",
+      "diffOnly": true,
+      "statusCounts": {
+        "added": 0,
+        "deleted": 0,
+        "modified": 1,
+        "unchanged": 0
+      },
+      "hiddenWhenDiffOnly": {
+        "before": 0,
+        "after": 0
+      }
+    },
+    "ids": [
+      "annotation-a1",
+      "annotation-a2"
+    ],
+    "calls": [
+      [
+        "1_100",
+        10
+      ],
+      [
+        "1_100",
+        20
+      ]
+    ]
+  },
+  "second": {
+    "model": {
+      "unitRefno": "1_100",
+      "units": [
+        "1_100"
+      ],
+      "splitOutline": {
+        "compositor": true,
+        "renderer": "ANGLE (AMD, AMD Radeon RX590 GME (0x00006FDF) Direct3D11 vs_5_0 ps_5_0, D3D11)"
+      },
+      "beforeSesno": 10,
+      "afterSesno": 30,
+      "beforeObjects": 1,
+      "afterObjects": 1,
+      "environmentLoadedRefnos": 0,
+      "activeSide": "after",
+      "viewMode": "single",
+      "diffOnly": false,
+      "statusCounts": {
+        "added": 0,
+        "deleted": 0,
+        "modified": 1,
+        "unchanged": 0
+      },
+      "hiddenWhenDiffOnly": {
+        "before": 0,
+        "after": 0
+      }
+    },
+    "ids": [
+      "annotation-b1"
+    ],
+    "calls": [
+      [
+        "1_100",
+        10
+      ],
+      [
+        "1_100",
+        20
+      ],
+      [
+        "1_100",
+        10
+      ],
+      [
+        "1_100",
+        30
+      ]
+    ]
+  },
+  "guarded": {
+    "error": "存在未确认的本机批注或测量，请先保存或清除草稿后切换模型版本",
+    "selected": "[1,\"AvevaMarineSample\",null,\"model-group-fixture\",\"group-form\",\"sj\",[1,\"1_100\",10,30,[],\"single\",\"after\",false]]",
+    "ids": [
+      "annotation-b1",
+      "local-draft"
+    ],
+    "afterSesno": 30,
+    "selectValue": "[1,\"AvevaMarineSample\",null,\"model-group-fixture\",\"group-form\",\"sj\",[1,\"1_100\",10,30,[],\"single\",\"after\",false]]"
+  },
+  "errors": []
+}

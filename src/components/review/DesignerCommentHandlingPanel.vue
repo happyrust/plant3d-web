@@ -24,6 +24,7 @@ import { startAnnotationMemberPick } from './cloudMemberPick';
 import { createConfirmedRecordsRestorer } from './confirmedRecordsRestore';
 import NonReturnedGuidanceCard from './NonReturnedGuidanceCard.vue';
 import ResubmissionTaskList from './ResubmissionTaskList.vue';
+import ReviewModelVersionSelector from './ReviewModelVersionSelector.vue';
 import {
   buildReviewConfirmSnapshotKey,
   buildReviewConfirmSnapshotPayload,
@@ -91,6 +92,8 @@ const confirmedRecordsRestorer = createConfirmedRecordsRestorer({
   currentTaskId: () => reviewStore.currentTask.value?.id ?? null,
   currentFormId: () => reviewStore.currentTask.value?.formId ?? null,
   confirmedRecords: () => reviewStore.sortedConfirmedRecords.value,
+  selectedModelGroupKey: () => reviewStore.getSelectedReviewModelGroup?.() ?? null,
+  onSelectModelGroup: key => reviewStore.selectReviewModelGroup?.(key),
   toolStore,
   waitForViewerReady,
   getViewerTools: () => viewerContext.tools.value ?? null,
@@ -125,7 +128,7 @@ const returnedMetadata = computed(() => (currentTask.value ? getCanonicalReturne
 const latestReturnTimestamp = computed(() => (
   currentTask.value ? getResubmissionLatestReturnTime(currentTask.value.workflowHistory || []) : null
 ));
-const currentTaskConfirmedRecords = confirmedRecordsRestorer.currentTaskRecords;
+const currentTaskConfirmedRecords = confirmedRecordsRestorer.sceneRecords;
 const activeReviewFormId = computed(() => (
   annotationProcessingEntryTarget.value?.formId?.trim()
   || currentTask.value?.formId?.trim()
@@ -753,6 +756,9 @@ onMounted(() => {
           <div v-if="currentTask"
             class="mt-4 rounded-2xl border border-slate-200 bg-slate-950 px-4 py-4 text-white shadow-lg"
             data-testid="designer-task-confirmation">
+            <ReviewModelVersionSelector :groups="confirmedRecordsRestorer.modelVersionGroups.value"
+              :selected-key="confirmedRecordsRestorer.activeModelGroup.value?.key ?? null"
+              @select="confirmedRecordsRestorer.selectModelVersionGroup" />
             <div class="flex items-start justify-between gap-4">
               <div>
                 <div class="text-sm font-semibold">确认当前数据</div>

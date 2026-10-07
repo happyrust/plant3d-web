@@ -33,7 +33,8 @@ import {
   resolveTrustedEmbedIdentity,
 } from '@/components/review/embedRoleLanding';
 import { reviewClearanceSnapshotKey, type ReviewClearanceSnapshot } from '@/components/review/reviewClearanceSnapshot';
-import { isReviewModelContext, reviewModelContextKey, type ReviewModelContext } from '@/components/review/reviewModelContext';
+import { isReviewModelContext, reviewModelContextKey, reviewModelVersionKey, type ReviewModelContext } from '@/components/review/reviewModelContext';
+import { groupReviewRecordsByModelVersion } from '@/components/review/reviewModelVersionGroups';
 import {
   buildReviewConfirmSnapshotPayload,
   buildReviewConfirmSnapshotPayloadFromRecords,
@@ -130,6 +131,14 @@ USE_BACKEND.value = persisted.useBackend;
 const reviewMode = ref<boolean>(persisted.reviewMode);
 const confirmedRecords = ref<ConfirmedRecord[]>([]);
 const currentTask = ref<ReviewTask | null>(null);
+const selectedReviewModelGroup = ref<{ scope: string; key: string | null } | null>(null);
+function reviewModelGroupScope(): string { return JSON.stringify([currentTask.value?.id ?? null, currentTask.value?.formId ?? null]); }
+function getSelectedReviewModelGroup(): string | null {
+  return selectedReviewModelGroup.value?.scope === reviewModelGroupScope() ? selectedReviewModelGroup.value.key : null;
+}
+function selectReviewModelGroup(key: string | null): void {
+  selectedReviewModelGroup.value = { scope: reviewModelGroupScope(), key };
+}
 let taskActivationEpoch = 0;
 let recordsLoadSequence = 0;
 const loading = ref(false);
@@ -313,6 +322,12 @@ async function addConfirmedRecord(
     const dimensionDocumentVersion = record.dimensionDocumentVersion
       ?? boundDimensionState?.baseVersion;
     const modelContext = record.modelContext ?? modelContextProvider?.() ?? undefined;
+    const groups = groupReviewRecordsByModelVersion(confirmedRecords.value.filter(item => item.taskId === taskId && (!item.formId || item.formId === formId)));
+    if (groups.length > 1) {
+      const selected = groups.find(group => group.key === getSelectedReviewModelGroup());
+      if (!selected || selected.disabled || !modelContext || !isReviewModelContext(modelContext) || reviewModelVersionKey(modelContext) !== selected.key)
+        throw new Error('请先选择并恢复要保存的模型版本，不能把不同版本的结果合并确认');
+    }
     const clearanceSnapshot = record.clearanceSnapshot ?? (modelContext ? clearanceProvider?.capture(modelContext) : undefined);
     const slotRecords = confirmedRecords.value.filter(item => item.formId === formId
       && item.currentNode === currentNode && item.operatorId === operatorId);
@@ -1211,6 +1226,8 @@ export function useReviewStore() {
     clearCurrentTask,
     bindDimensionDocumentSession,
     bindModelContextProvider,
+    getSelectedReviewModelGroup,
+    selectReviewModelGroup,
     bindClearanceSnapshotProvider,
     prepareBoundClearanceRestore,
     getBoundDimensionConfirmPayload,

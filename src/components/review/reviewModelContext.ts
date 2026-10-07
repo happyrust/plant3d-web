@@ -43,3 +43,9 @@ export function reviewModelContextKey(context: ReviewModelContext): string {
       comparison.units.map(unit => [unit.refno.replace('/', '_'), unit.a, unit.b]).sort(),
       comparison.viewMode, comparison.activeSide, comparison.diffOnly] : null]);
 }
+
+/** 同一几何版本的记录可分组；节点和保存时的查看方式不改变模型版本。 */
+export function reviewModelVersionKey(context: ReviewModelContext): string {
+  return reviewModelContextKey({ ...context, node: 'sj', comparison: context.comparison
+    ? { ...context.comparison, viewMode: 'single', activeSide: 'after', diffOnly: false } : null });
+}

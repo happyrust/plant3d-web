@@ -35,6 +35,7 @@ import { useToolStore } from './useToolStore';
 import type { ReviewClearanceSnapshot } from '@/components/review/reviewClearanceSnapshot';
 
 import { reviewRecordCreate } from '@/api/reviewApi';
+import { reviewModelVersionKey } from '@/components/review/reviewModelContext';
 import { dimensionDocumentToSnapshot } from '@/dimension/adapters/reviewSnapshotAdapter';
 import { emptyDimensionDocument, linearRecord } from '@/dimension/domain/testFixtures';
 import { DimensionDocumentSession } from '@/dimension/services/dimensionDocumentSession';
@@ -204,7 +205,16 @@ describe('useReviewStore - confirm without OBB', () => {
       await reviewStore.addConfirmedRecord(payload);
       expect(reviewStore.confirmedRecords.value[0]?.clearanceSnapshot).toEqual(snapshot);
       expect(vi.mocked(reviewRecordCreate).mock.calls.at(-1)?.[0].clearanceSnapshot).toEqual(snapshot);
-    } finally { offClearance(); offContext(); }
+      const saved = reviewStore.confirmedRecords.value[0]!;
+      const otherContext = { ...context, dbnum: 2 };
+      reviewStore.confirmedRecords.value = [saved, { ...saved, id: 'other-model-record', currentNode: 'sh', operatorId: 'other-user', modelContext: otherContext }];
+      reviewStore.selectReviewModelGroup(null);
+      const requests = vi.mocked(reviewRecordCreate).mock.calls.length;
+      await expect(reviewStore.addConfirmedRecord(payload)).rejects.toThrow('先选择并恢复');
+      reviewStore.selectReviewModelGroup(reviewModelVersionKey(otherContext));
+      await expect(reviewStore.addConfirmedRecord(payload)).rejects.toThrow('不同版本');
+      expect(vi.mocked(reviewRecordCreate).mock.calls).toHaveLength(requests);
+    } finally { reviewStore.selectReviewModelGroup(null); offClearance(); offContext(); }
   });
 
   it('should save and accept a versioned dimension document with the review record', async () => {

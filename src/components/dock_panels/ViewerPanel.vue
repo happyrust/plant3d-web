@@ -41,7 +41,7 @@ import { resolveViewerToolbarSelection } from '@/components/dock_panels/viewerTo
 import PipeDistanceDrawer from '@/components/pipe-distance/PipeDistanceDrawer.vue';
 import { captureReviewClearanceSnapshot, hasReviewClearanceResults, prepareReviewClearanceRestore, reviewClearanceSnapshotKey } from '@/components/review/reviewClearanceSnapshot';
 import ReviewConfirmation from '@/components/review/ReviewConfirmation.vue';
-import { reviewModelContextKey, type ReviewModelContext } from '@/components/review/reviewModelContext';
+import { reviewModelContextKey, reviewModelVersionKey, type ReviewModelContext } from '@/components/review/reviewModelContext';
 import { loadReviewModelComparison, type LoadedReviewModelComparison } from '@/components/review/reviewModelContextRestore';
 import { buildReviewConfirmSnapshotPayload } from '@/components/review/reviewPanelActions';
 import SpatialQueryDrawer from '@/components/spatial-query/SpatialQueryDrawer.vue';
@@ -605,7 +605,7 @@ const offReviewClearance = reviewStore.bindClearanceSnapshotProvider({
   capture: context => captureReviewClearanceSnapshot(context, reviewClearanceStores),
   prepare: (snapshot, context) => {
     const current = captureReviewModelContext();
-    if (!current || reviewModelContextKey({ ...current, node: 'sj' }) !== reviewModelContextKey({ ...context, node: 'sj' }))
+    if (!current || reviewModelVersionKey(current) !== reviewModelVersionKey(context))
       throw new Error('净距恢复期间模型或任务已切换，请重试');
     const local = captureReviewClearanceSnapshot(snapshot.modelContext, reviewClearanceStores);
     if (hasReviewClearanceResults(local) && reviewClearanceSnapshotKey(local) !== reviewClearanceSnapshotKey(snapshot))

@@ -41,6 +41,7 @@ import {
 import FileUploadSection, { type UploadedFile } from './FileUploadSection.vue';
 import ReviewAuxData from './ReviewAuxData.vue';
 import ReviewDataSync from './ReviewDataSync.vue';
+import ReviewModelVersionSelector from './ReviewModelVersionSelector.vue';
 import {
   buildSubmitBlockingReviewConfirmPayload,
   buildReviewConfirmSnapshotPayload,
@@ -161,6 +162,8 @@ const confirmedRecordsRestorer = createConfirmedRecordsRestorer({
   currentTaskId: () => reviewStore.currentTask.value?.id ?? null,
   currentFormId: () => reviewStore.currentTask.value?.formId ?? null,
   confirmedRecords: () => reviewStore.sortedConfirmedRecords.value,
+  selectedModelGroupKey: () => reviewStore.getSelectedReviewModelGroup?.() ?? null,
+  onSelectModelGroup: key => reviewStore.selectReviewModelGroup?.(key),
   toolStore,
   waitForViewerReady,
   getViewerTools: () => viewerContext.tools.value ?? null,
@@ -326,7 +329,7 @@ function getConfirmedMeasurementSummary(record: ConfirmedRecordEntry, measuremen
 type SeverityBucket = AnnotationSeverity | 'unset';
 
 const confirmedMeasurementPathRecords = computed(() => (
-  reviewStore.sortedConfirmedRecords.value.flatMap((record) => (
+  confirmedRecordsRestorer.sceneRecords.value.flatMap((record) => (
     record.measurements
       .filter((measurement) => measurement.kind === 'distance' || measurement.kind === 'angle')
       .map((measurement) => ({
@@ -363,7 +366,7 @@ function getConfirmedSeverityBreakdown(record: ConfirmedRecordEntry): Record<Sev
 
 const CONFIRMED_SEVERITY_ORDER: SeverityBucket[] = ['critical', 'severe', 'normal', 'suggestion', 'unset'];
 
-const currentTaskConfirmedRecords = confirmedRecordsRestorer.currentTaskRecords;
+const currentTaskConfirmedRecords = confirmedRecordsRestorer.sceneRecords;
 
 const { restoreConfirmedRecordsIntoScene } = confirmedRecordsRestorer;
 
@@ -2015,6 +2018,9 @@ function handleAnnotationQueueCompleted() {
         {{ restoreError }}
         <button type="button" class="ml-2 underline" :disabled="confirmedRecordsRestorer.restoring.value" @click="restoreConfirmedRecordsIntoScene(true)">重试回放</button>
       </div>
+      <ReviewModelVersionSelector :groups="confirmedRecordsRestorer.modelVersionGroups.value"
+        :selected-key="confirmedRecordsRestorer.activeModelGroup.value?.key ?? null"
+        @select="confirmedRecordsRestorer.selectModelVersionGroup" />
       <div v-if="confirmError" class="w-full text-xs text-danger">{{ confirmError }}</div>
 
       <!-- U0 三行状态：本机草稿 / 云端草稿（U3 前不显示）/ 已确认到修订 N（方案 §3.6，d-565 #4） -->

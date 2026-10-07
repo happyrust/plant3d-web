@@ -1,4 +1,4 @@
-import { isReviewModelContext, reviewModelContextKey, type ReviewModelContext } from './reviewModelContext';
+import { isReviewModelContext, reviewModelVersionKey, type ReviewModelContext } from './reviewModelContext';
 
 import { cloneResultSnapshot } from '@/clearance/services/resultSnapshot';
 
@@ -53,7 +53,7 @@ export function captureReviewClearanceSnapshot(modelContext: ReviewModelContext,
 
 export function prepareReviewClearanceRestore(value: unknown, context: ReviewModelContext, stores: ReviewClearanceStores): () => void {
   const snapshot = normalizeReviewClearanceSnapshot(value);
-  if (!snapshot || reviewModelContextKey({ ...snapshot.modelContext, node: 'sj' }) !== reviewModelContextKey({ ...context, node: 'sj' }))
+  if (!snapshot || reviewModelVersionKey(snapshot.modelContext) !== reviewModelVersionKey(context))
     throw new Error('云端净距与当前模型版本不匹配');
   const component = stores.component.prepareSnapshotRestore(snapshot.component);
   const pipe = stores.pipe.prepareSnapshotRestore(snapshot.pipe);
