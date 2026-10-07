@@ -6,9 +6,11 @@ import {
   isLayeredDraftRestoreActive,
   layerConfirmedReplayForStore,
 } from './confirmedRecordsRestore';
+import { loadReviewModelComparison } from './reviewModelContextRestore';
 import { buildReviewRecordReplayPayload } from './reviewRecordReplay';
 
 import type { ReviewModelContext } from './reviewModelContext';
+import type { ModelAttributeDiff, ModelVersion, ModelVersionGeometry } from '@/model-source/ports';
 
 import { buildCommentThreadKey } from '@/review/domain/commentThread';
 import { getReviewCommentThreadStore } from '@/review/services/sharedStores';
@@ -26,6 +28,97 @@ function createRecord(overrides: Record<string, unknown> = {}) {
     ...overrides,
   };
 }
+
+describe('saved historical model comparison', () => {
+  const context: ReviewModelContext = { schemaVersion: 1, project: 'p', dbnum: 1, taskId: 't', formId: 'f', node: 'sj',
+    comparison: { dbnum: 1, refno: '1_100', a: 10, b: 20, units: [], viewMode: 'split', activeSide: 'before', diffOnly: true } };
+  const diff = (refno: string, kind: ModelAttributeDiff['kind'] = 'modified'): ModelAttributeDiff => ({
+    dbnum: 1, refno, unitRefno: refno, noun: 'BRAN', unitNoun: 'BRAN', a: 10, b: 20,
+    kind, impact: null, changedCount: 0, changes: [], members: null, owner: null, attributesUnavailable: null, warnings: [],
+  });
+  const geometry = (version: ModelVersion): ModelVersionGeometry => ({
+    refnos: version.impactKind === 'tombstone' ? [] : [`${version.unitRefno}1`], entries: new Map(),
+    handle: `${version.unitRefno}@${version.sesno}`, release: vi.fn(async () => {}),
+  });
+  function source() {
+    return { attributeDiff: vi.fn(async (_dbnum: number, refno: string) => diff(refno)),
+      loadVersion: vi.fn(async (version: ModelVersion) => geometry(version)),
+      attributesAt: vi.fn(async (_geometry: ModelVersionGeometry, _refno: string) => ({ sesno: 10, exists: true, noun: 'BRAN', attributes: [] })),
+    };
+  }
+
+  it('按保存的两端会话加载、保留视图模式，属性使用同一历史句柄直到关闭', async () => {
+    const backend = source();
+    const loaded = await loadReviewModelComparison(context, backend, () => true);
+    expect(backend.attributeDiff).toHaveBeenCalledWith(1, '1_100', 10, 20);
+    expect(backend.loadVersion.mock.calls.map(([version]) => version.sesno)).toEqual([10, 20]);
+    expect(loaded.detail.viewMode).toBe('split');
+    await loaded.detail.attributesAt!('before', '1/100');
+    const before = await backend.loadVersion.mock.results[0]!.value;
+    expect(backend.attributesAt).toHaveBeenCalledWith(before, '1_100', { signal: undefined });
+    expect(before.release).not.toHaveBeenCalled();
+    await loaded.release();
+    await loaded.release();
+    expect(before.release).toHaveBeenCalledTimes(1);
+    await expect(loaded.detail.attributesAt!('before', '1_100')).rejects.toThrow('已关闭');
+  });
+
+  it.each(['created', 'deleted'] as const)('从服务端存在性恢复 %s 单元的空侧，保留删除根树信息', async kind => {
+    const backend = source();
+    backend.attributeDiff.mockResolvedValue(diff('1_100', kind));
+    const loaded = await loadReviewModelComparison(context, backend, () => true);
+    const absent = kind === 'created' ? loaded.detail.before : loaded.detail.after;
+    expect(absent.version.impactKind).toBe('tombstone');
+    expect(absent.refnos).toEqual([]);
+    if (kind === 'deleted') expect(loaded.treeContext.models).toContainEqual(expect.objectContaining({ refno: '1_100', status: 'deleted' }));
+    await loaded.release();
+  });
+
+  it('查询身份不符、会话不存在或单元不是根时不生成任何投影', async () => {
+    const backend = source();
+    backend.attributeDiff.mockResolvedValue({ ...diff('1_100'), a: 9 });
+    await expect(loadReviewModelComparison(context, backend, () => true)).rejects.toThrow('精确 A/B');
+    expect(backend.loadVersion).not.toHaveBeenCalled();
+    backend.attributeDiff.mockRejectedValue(new Error('SESSION_NOT_FOUND'));
+    await expect(loadReviewModelComparison(context, backend, () => true)).rejects.toThrow('SESSION_NOT_FOUND');
+    expect(backend.loadVersion).not.toHaveBeenCalled();
+  });
+
+  it('一侧失败也等待另一侧落地并释放，不遗留成功的历史快照', async () => {
+    const backend = source();
+    let finish!: (value: ModelVersionGeometry) => void;
+    backend.loadVersion.mockRejectedValueOnce(new Error('投影失败')).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const pending = loadReviewModelComparison(context, backend, () => true);
+    const assertion = expect(pending).rejects.toThrow('投影失败');
+    await vi.waitFor(() => expect(backend.loadVersion).toHaveBeenCalledTimes(2));
+    const held = geometry({ dbnum: 1, unitRefno: '1_100', unitNoun: 'BRAN', sesno: 20, sessionTime: null, impactKind: 'mesh' });
+    finish(held);
+    await assertion;
+    expect(held.release).toHaveBeenCalledTimes(1);
+  });
+
+  it('恢复被新任务取代时释放已获取的两份，不返回旧场景', async () => {
+    const backend = source();
+    let live = true;
+    backend.loadVersion.mockImplementation(async version => { live = false; return geometry(version); });
+    await expect(loadReviewModelComparison(context, backend, () => live)).rejects.toThrow('已取消');
+    for (const result of backend.loadVersion.mock.results) expect((await result.value).release).toHaveBeenCalledTimes(1);
+  });
+
+  it('多单元合并保持精确会话和单元根，属性不猜测不存在的构件归属', async () => {
+    const backend = source();
+    const multi: ReviewModelContext = { ...context, comparison: { ...context.comparison!, refno: '1_999',
+      units: [{ refno: '1_100', a: 10, b: 20 }, { refno: '1/200', a: 10, b: 20 }] } };
+    const loaded = await loadReviewModelComparison(multi, backend, () => true);
+    expect(loaded.detail.unitRefno).toBe('1_999');
+    expect(loaded.detail.units?.map(unit => unit.unitRefno)).toEqual(['1_100', '1_200']);
+    await loaded.detail.attributesAt!('after', '1_200');
+    expect(backend.attributesAt.mock.calls[0]![0].handle).toBe('1_200@20');
+    await expect(loaded.detail.attributesAt!('after', '1_888')).rejects.toThrow('无法唯一确定');
+    await loaded.release();
+    for (const result of backend.loadVersion.mock.results) expect((await result.value).release).toHaveBeenCalledTimes(1);
+  });
+});
 
 describe('createConfirmedRecordsRestorer', () => {
   const modelContext = { schemaVersion: 1 as const, project: 'project-1', dbnum: 1,

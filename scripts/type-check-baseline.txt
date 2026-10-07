@@ -44,7 +44,6 @@ src/components/dock_panels/ViewerPanel.vue|TS2339|Property 'hoverText' does not 
 src/components/dock_panels/ViewerPanel.vue|TS2345|Argument of type '"warn"' is not assignable to parameter of type 'LogType'.
 src/components/dock_panels/ViewerPanel.vue|TS2345|Argument of type '"warn"' is not assignable to parameter of type 'LogType'.
 src/components/dock_panels/ViewerPanel.vue|TS2554|Expected 0 arguments, but got 1.
-src/components/model-version/ModelUnitVersionComparePanel.vue|TS2345|Argument of type 'Map<string, InstanceEntry[]>' is not assignable to parameter of type 'Map<string, GeometryEntryLike[]>'.
 src/components/review/AnnotationSheetWorkspace.test.ts|TS2769|No overload matches this call.
 src/components/review/AnnotationTableView.test.ts|TS2488|Type 'any[] | undefined' must have a '[Symbol.iterator]()' method that returns an iterator.
 src/components/review/AnnotationTableView.test.ts|TS2532|Object is possibly 'undefined'.
