@@ -1,9 +1,11 @@
 // 校审管理 API 模块
 // 提供编校审单、审核任务、确认记录的 CRUD 操作
 
+import type { ReviewModelContext } from '@/components/review/reviewModelContext';
 import type { SnapshotDimensionDocument } from '@/dimension';
 import type { ComputationProvenance } from '@/measurement/domain/computationProvenance';
 
+import { isReviewModelContext } from '@/components/review/reviewModelContext';
 import {
   fromBackendRole,
   type AnnotationComment,
@@ -291,6 +293,7 @@ export type ReviewSnapshotMeasurementPayload = {
  * 写入侧通过 `buildReviewConfirmSnapshotPayload` 保证类型安全。
  */
 export type ConfirmedRecordData = {
+  modelContext?: ReviewModelContext;
   id?: string;
   taskId: string;
   formId?: string;
@@ -365,6 +368,7 @@ export type WorkflowAnnotationCommentData = {
 };
 
 export type WorkflowRecordData = {
+  modelContext?: ReviewModelContext;
   id: string;
   taskId: string;
   type: string;
@@ -529,6 +533,8 @@ type RawWorkflowAnnotationCommentData = {
 };
 
 type RawWorkflowRecordData = {
+  modelContext?: unknown;
+  model_context?: unknown;
   id?: string;
   task_id?: string;
   taskId?: string;
@@ -884,6 +890,7 @@ function normalizeWorkflowSyncResponse(raw: RawWorkflowSyncResponse): WorkflowSy
               ? record.obb_annotations
               : [],
           measurements: Array.isArray(record.measurements) ? record.measurements : [],
+          modelContext: normalizeReviewModelContext(record.modelContext ?? record.model_context),
           dimensionDocument: (
             record.dimensionDocument
             ?? record.dimension_document
@@ -1359,11 +1366,18 @@ export async function reviewPreloadCache(
 
 // ============ 确认记录 API ============
 
+function normalizeReviewModelContext(value: unknown): ReviewModelContext | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (!isReviewModelContext(value)) throw new Error('服务器返回的校审模型版本上下文无效，请核实记录后重开');
+  return value;
+}
+
 function normalizeConfirmedRecord(raw: Record<string, unknown>): ConfirmedRecordData & {
   id: string;
   confirmedAt: number;
 } {
   return {
+    modelContext: normalizeReviewModelContext(raw.modelContext ?? raw.model_context),
     id: String(raw.logical_id || raw.id || ''),
     taskId: String(raw.taskId || raw.task_id || ''),
     formId: raw.formId ? String(raw.formId) : (raw.form_id ? String(raw.form_id) : undefined),

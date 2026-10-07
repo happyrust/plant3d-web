@@ -581,6 +581,21 @@ watch(clearanceStorageContext, (context) => {
   pipeDistanceStore.bindPersistence(context.key, storage, context.allowCalculations);
   spatialComputeStore.bindPersistence(context.key, storage, context.allowCalculations);
 }, { immediate: true, flush: 'sync' });
+const offReviewModelContext = reviewStore.bindModelContextProvider(() => {
+  const task = reviewStore.currentTask.value;
+  const project = clearanceStorageContext.value.project;
+  if (!task?.id || !task.formId || !project) return null;
+  const runtime = modelUnitCompareState.value;
+  if (runtime && runtime.status !== 'ready') throw new Error('版本对比尚未就绪，不能保存校审版本上下文');
+  const detail = runtime?.detail;
+  const rawDbnum = new URLSearchParams(window.location.search).get('show_dbnum');
+  return { schemaVersion: 1, project, dbnum: rawDbnum ? Number(rawDbnum) : null,
+    taskId: task.id, formId: task.formId, node: task.currentNode ?? 'sj',
+    comparison: detail ? { dbnum: detail.dbnum, refno: detail.unitRefno, a: detail.before.sesno, b: detail.after.sesno,
+      units: detail.units?.map(unit => ({ refno: unit.unitRefno, a: unit.before.sesno, b: unit.after.sesno })) ?? [],
+      viewMode: runtime.viewMode, activeSide: runtime.activeSide, diffOnly: runtime.diffOnly ?? false } : null };
+});
+onUnmounted(offReviewModelContext);
 onUnmounted(() => { offClearanceProject(); clearanceStore.detachPersistence(); pipeDistanceStore.detachPersistence(); spatialComputeStore.detachPersistence(); });
 function publishModelUnitCompareState(): void {
   const state = modelUnitCompareState.value;

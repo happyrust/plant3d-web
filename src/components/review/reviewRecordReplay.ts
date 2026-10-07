@@ -19,10 +19,12 @@ import {
 import { isComputationProvenance } from '@/measurement/domain/computationProvenance';
 import { fromBackendRole, type AnnotationComment } from '@/types/auth';
 
-type ReplayRecordLike = Pick<
-  WorkflowRecordData,
-  'annotations' | 'cloudAnnotations' | 'rectAnnotations' | 'obbAnnotations' | 'measurements'
-> & {
+type ReplayRecordLike = {
+  annotations: unknown[];
+  cloudAnnotations: unknown[];
+  rectAnnotations: unknown[];
+  obbAnnotations: unknown[];
+  measurements: ReviewSnapshotMeasurementPayload[];
   id?: unknown;
   taskId?: unknown;
   formId?: unknown;

@@ -32,6 +32,7 @@ import {
   readPersistedEmbedModeParams,
   resolveTrustedEmbedIdentity,
 } from '@/components/review/embedRoleLanding';
+import { isReviewModelContext, reviewModelContextKey, type ReviewModelContext } from '@/components/review/reviewModelContext';
 import {
   buildReviewConfirmSnapshotPayload,
   buildReviewConfirmSnapshotPayloadFromRecords,
@@ -49,6 +50,7 @@ import {
 } from '@/dimension';
 
 export type ConfirmedRecord = {
+  modelContext?: ReviewModelContext;
   id: string;
   taskId?: string;
   formId?: string;
@@ -123,10 +125,18 @@ USE_BACKEND.value = persisted.useBackend;
 const reviewMode = ref<boolean>(persisted.reviewMode);
 const confirmedRecords = ref<ConfirmedRecord[]>([]);
 const currentTask = ref<ReviewTask | null>(null);
+let taskActivationEpoch = 0;
+let recordsLoadSequence = 0;
 const loading = ref(false);
 const error = ref<string | null>(null);
 const reviewHistory = ref<ReviewHistoryItem[]>([]);
 let activeDimensionDocumentSession: DimensionDocumentSession | null = null;
+let modelContextProvider: (() => ReviewModelContext | null) | null = null;
+
+function bindModelContextProvider(provider: () => ReviewModelContext | null): () => void {
+  modelContextProvider = provider;
+  return () => { if (modelContextProvider === provider) modelContextProvider = null; };
+}
 let activeDimensionDocumentUnsubscribe: (() => void) | null = null;
 const dimensionDocumentDirty = ref(false);
 const dimensionDocumentRecordCount = ref(0);
@@ -174,16 +184,20 @@ function clearBoundDimensionDocumentSession(): void {
 }
 
 function getBoundDimensionConfirmPayload(): Readonly<{
+  modelContext?: ReviewModelContext;
   dimensionDocument?: SnapshotDimensionDocument;
   dimensionDocumentVersion?: number;
 }> {
   const state = activeDimensionDocumentSession?.state;
-  return state
-    ? {
+  let modelContext: ReviewModelContext | undefined;
+  try { modelContext = modelContextProvider?.() ?? undefined; } catch { /* 保存时会再次检查尚未就绪的对比，显示错误；渲染不抛出。 */ }
+  return {
+    ...(modelContext ? { modelContext } : {}),
+    ...(state ? {
       dimensionDocument: dimensionDocumentToSnapshot(state),
       dimensionDocumentVersion: state.baseVersion,
-    }
-    : {};
+    } : {}),
+  };
 }
 
 function resolveDimensionDocumentConflict(
@@ -249,6 +263,8 @@ async function addConfirmedRecord(
   record: Omit<ConfirmedRecord, 'id' | 'confirmedAt'>
 ): Promise<string> {
   const taskId = currentTask.value?.id;
+  const activationEpoch = taskActivationEpoch;
+  const node = currentTask.value?.currentNode;
   const formId = currentTask.value?.formId?.trim() || record.formId;
 
   if (!USE_BACKEND.value) {
@@ -273,7 +289,11 @@ async function addConfirmedRecord(
         : undefined);
     const dimensionDocumentVersion = record.dimensionDocumentVersion
       ?? boundDimensionState?.baseVersion;
+    const modelContext = record.modelContext ?? modelContextProvider?.() ?? undefined;
+    if (modelContext && (!isReviewModelContext(modelContext) || modelContext.taskId !== taskId || modelContext.formId !== formId
+      || modelContext.node !== (currentTask.value?.currentNode ?? 'sj'))) throw new Error('校审模型版本上下文无效或已切换，请重新打开任务后保存');
     const response = await reviewRecordCreate({
+      modelContext,
       taskId,
       formId,
       type: record.type,
@@ -286,9 +306,15 @@ async function addConfirmedRecord(
       dimensionDocumentBaseVersion: dimensionDocumentVersion,
       note: record.note,
     });
+    if (activationEpoch !== taskActivationEpoch || currentTask.value?.id !== taskId || currentTask.value?.currentNode !== node) {
+      throw new Error('保存期间任务或流程节点已切换；原任务保存回执未导入当前任务，请重开原任务核对');
+    }
 
     if (response.success && response.record) {
+      if (modelContext && (!isReviewModelContext(response.record.modelContext)
+        || reviewModelContextKey(response.record.modelContext) !== reviewModelContextKey(modelContext))) throw new Error('后端未完整保存模型版本上下文，不能确认保存成功');
       const newRecord: ConfirmedRecord = {
+        modelContext: response.record.modelContext,
         id: response.record.id,
         taskId,
         formId: response.record.formId || formId,
@@ -357,10 +383,10 @@ async function addConfirmedRecord(
         throw conflictError;
       }
     }
-    error.value = e instanceof Error ? e.message : '保存确认记录失败';
+    if (activationEpoch === taskActivationEpoch) error.value = e instanceof Error ? e.message : '保存确认记录失败';
     throw e;
   } finally {
-    loading.value = false;
+    if (activationEpoch === taskActivationEpoch) loading.value = false;
   }
 }
 
@@ -416,6 +442,7 @@ async function loadConfirmedRecords(
   options?: { formId?: string | null },
 ): Promise<void> {
   if (!USE_BACKEND.value) return;
+  const sequence = ++recordsLoadSequence;
 
   loading.value = true;
   error.value = null;
@@ -423,12 +450,14 @@ async function loadConfirmedRecords(
     let response = await reviewRecordGetByTaskId(taskId, {
       formId: options?.formId,
     });
+    if (sequence !== recordsLoadSequence) return;
     const scopedFormId = options?.formId?.trim();
     let usedTaskScopeFallback = false;
     if (response.success && scopedFormId && (response.records?.length ?? 0) === 0) {
       response = await reviewRecordGetByTaskId(taskId, {
         formId: undefined,
       });
+      if (sequence !== recordsLoadSequence) return;
       usedTaskScopeFallback = true;
     }
     if (response.success && response.records) {
@@ -439,6 +468,7 @@ async function loadConfirmedRecords(
         })
         : response.records;
       confirmedRecords.value = records.map((r) => ({
+        modelContext: r.modelContext,
         id: r.id,
         taskId: r.taskId,
         formId: r.formId,
@@ -457,9 +487,9 @@ async function loadConfirmedRecords(
       throw new Error(response.error_message);
     }
   } catch (e) {
-    error.value = e instanceof Error ? e.message : '加载确认记录失败';
+    if (sequence === recordsLoadSequence) error.value = e instanceof Error ? e.message : '加载确认记录失败';
   } finally {
-    loading.value = false;
+    if (sequence === recordsLoadSequence) loading.value = false;
   }
 }
 
@@ -484,6 +514,8 @@ async function loadReviewHistory(taskId: string): Promise<void> {
 // ============ 当前任务管理 ============
 
 async function setCurrentTask(task: ReviewTask | null) {
+  const activationEpoch = ++taskActivationEpoch;
+  recordsLoadSequence += 1;
   if (task?.id !== currentTask.value?.id) {
     clearBoundDimensionDocumentSession();
   }
@@ -510,11 +542,13 @@ async function setCurrentTask(task: ReviewTask | null) {
     }
   }
 
+  if (activationEpoch !== taskActivationEpoch) return;
   currentTask.value = task;
   if (task) {
     reviewMode.value = true;
     // 任务详情与确认记录先恢复，历史流转失败或超时不阻断详情页批注/评论。
     await loadConfirmedRecords(task.id, { formId: task.formId });
+    if (activationEpoch !== taskActivationEpoch) return;
     void loadReviewHistory(task.id);
     // 连接 WebSocket 获取实时更新
     connectWebSocket(resolveRealtimeUserId());
@@ -526,6 +560,8 @@ async function setCurrentTask(task: ReviewTask | null) {
 }
 
 function clearCurrentTask() {
+  taskActivationEpoch += 1;
+  recordsLoadSequence += 1;
   clearBoundDimensionDocumentSession();
   currentTask.value = null;
   disconnectWebSocket();
@@ -726,6 +762,7 @@ async function flushPendingConfirmForExternalAction(
   const toolStore = useToolStore();
   const activeDimensionState = activeDimensionDocumentSession?.state;
   const draftPayload = buildReviewConfirmSnapshotPayload({
+    modelContext: getBoundDimensionConfirmPayload().modelContext,
     annotations: [...toolStore.annotations.value],
     cloudAnnotations: [...toolStore.cloudAnnotations.value],
     rectAnnotations: [...toolStore.rectAnnotations.value],
@@ -1112,6 +1149,7 @@ export function useReviewStore() {
     setCurrentTask,
     clearCurrentTask,
     bindDimensionDocumentSession,
+    bindModelContextProvider,
     getBoundDimensionConfirmPayload,
     resolveDimensionDocumentConflict,
 

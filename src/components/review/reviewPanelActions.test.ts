@@ -36,6 +36,18 @@ function deferred<T>() {
 }
 
 describe('reviewPanelActions', () => {
+  it('pins context-only changes in dirty detection and blocks submit until confirmed', () => {
+    const context = { schemaVersion: 1 as const, project: 'P', dbnum: 7997, taskId: 'T', formId: 'F', node: 'sj', comparison: null };
+    const baseline = buildReviewConfirmSnapshotPayload({ modelContext: context });
+    const current = buildReviewConfirmSnapshotPayload({ modelContext: { ...context, comparison: { dbnum: 7997, refno: '24381_145018', a: 626, b: 630, units: [], viewMode: 'split' as const, activeSide: 'after' as const, diffOnly: false } } });
+    expect(buildReviewConfirmSnapshotKey(current)).not.toBe(buildReviewConfirmSnapshotKey(baseline));
+    const unsaved = buildSubmitBlockingReviewConfirmPayload(current, baseline);
+    expect(hasReviewConfirmPayloadData(unsaved)).toBe(true);
+    expect(hasSubmitBlockingReviewConfirmPayloadData(unsaved)).toBe(true);
+    expect(unsaved.modelContext).toEqual(current.modelContext);
+    expect(hasReviewConfirmPayloadData(buildUnsavedReviewConfirmPayload(current, current))).toBe(false);
+    expect(buildReviewConfirmSnapshotPayloadFromRecords([{ ...current, confirmedAt: 2 }, { ...baseline, confirmedAt: 1 }]).modelContext).toEqual(current.modelContext);
+  });
   it('canFinalizeAtCurrentNode 仅在 pz 节点允许最终通过/驳回', () => {
     expect(canFinalizeAtCurrentNode(undefined)).toBe(false);
     expect(canFinalizeAtCurrentNode('sj')).toBe(false);

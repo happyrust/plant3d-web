@@ -29,6 +29,8 @@ import {
 } from './reviewApi';
 
 describe('reviewApi base url defaults', () => {
+  const modelContext = { schemaVersion: 1 as const, project: 'P', dbnum: 7997, taskId: 'T', formId: 'F', node: 'jd',
+    comparison: { dbnum: 7997, refno: '24381_145018', a: 626, b: 630, units: [], viewMode: 'split' as const, activeSide: 'after' as const, diffOnly: false } };
   function expectBackendFetch(fetchMock: ReturnType<typeof vi.fn>, path: string, body?: string) {
     expect(fetchMock).toHaveBeenCalledWith(
       expect.stringMatching(new RegExp(`(?:http://localhost:3100)?${path.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`)),
@@ -49,6 +51,15 @@ describe('reviewApi base url defaults', () => {
       removeItem: vi.fn(),
       clear: vi.fn(),
     });
+  });
+
+  it('round-trips model context in confirmation and workflow records without silently dropping invalid context', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ success: true, records: [{ id: 'R', task_id: 'T', form_id: 'F', model_context: modelContext }] }), { status: 200 })));
+    expect((await reviewRecordGetByTaskId('T')).records?.[0]?.modelContext).toEqual(modelContext);
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ code: 200, data: { records: [{ id: 'R', task_id: 'T', model_context: modelContext }] } }), { status: 200 })));
+    expect((await reviewWorkflowSyncQuery({ formId: 'F', token: 'test-token', actor: { id: 'JH', name: 'JH', roles: 'jd' } })).data?.records[0]?.modelContext).toEqual(modelContext);
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ success: true, records: [{ id: 'R', modelContext: { ...modelContext, comparison: { ...modelContext.comparison, a: 630 } } }] }), { status: 200 })));
+    await expect(reviewRecordGetByTaskId('T')).rejects.toThrow('上下文无效');
   });
 
   it('normalizes and stores standalone auth token responses', async () => {

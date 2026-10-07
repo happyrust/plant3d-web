@@ -53,6 +53,9 @@ function createLocalStorageMock() {
 }
 
 describe('useReviewStore', () => {
+  const modelContext = { schemaVersion: 1 as const, project: 'test-project', dbnum: 7997, taskId: 'task-context', formId: 'FORM-CONTEXT', node: 'jd',
+    comparison: { dbnum: 7997, refno: '24381_145018', a: 626, b: 630, units: [{ refno: '24381_145018', a: 626, b: 630 }],
+      viewMode: 'split' as const, activeSide: 'after' as const, diffOnly: true } };
   beforeEach(() => {
     vi.resetModules();
     vi.stubGlobal('localStorage', createLocalStorageMock());
@@ -97,6 +100,54 @@ describe('useReviewStore', () => {
         blockers: [],
       },
     });
+  });
+
+  it('saves and reloads the model context and rejects a missing cloud acknowledgement', async () => {
+    const { useReviewStore } = await import('./useReviewStore');
+    const store = useReviewStore();
+    await store.setCurrentTask({ id: 'task-context', formId: 'FORM-CONTEXT', currentNode: 'jd', components: [] } as never);
+    const unbind = store.bindModelContextProvider(() => modelContext);
+    const record = { type: 'batch' as const, annotations: [], cloudAnnotations: [], rectAnnotations: [], measurements: [], note: '' };
+    await store.addConfirmedRecord(record);
+    expect(reviewRecordCreateMock.mock.calls[0]?.[0].modelContext).toEqual(modelContext);
+    expect(store.confirmedRecords.value[0]?.modelContext).toEqual(modelContext);
+    reviewRecordGetByTaskIdMock.mockResolvedValue({ success: true, records: [{ ...record, id: 'saved', taskId: 'task-context', formId: 'FORM-CONTEXT', confirmedAt: 1, modelContext }] });
+    await store.loadConfirmedRecords('task-context', { formId: 'FORM-CONTEXT' });
+    expect(store.confirmedRecords.value[0]?.modelContext).toEqual(modelContext);
+    reviewRecordCreateMock.mockImplementation(async data => ({ success: true, record: { ...data, modelContext: undefined, id: 'lost', confirmedAt: 2 } }));
+    await expect(store.addConfirmedRecord(record)).rejects.toThrow('后端未完整保存');
+    expect(store.confirmedRecords.value[0]?.id).toBe('saved');
+    unbind();
+  });
+
+  it('rejects a context from another task or stale node before writing', async () => {
+    const { useReviewStore } = await import('./useReviewStore');
+    const store = useReviewStore();
+    await store.setCurrentTask({ id: 'task-context', formId: 'FORM-CONTEXT', currentNode: 'sh', components: [] } as never);
+    const unbind = store.bindModelContextProvider(() => modelContext);
+    await expect(store.addConfirmedRecord({ type: 'batch', annotations: [], cloudAnnotations: [], rectAnnotations: [], measurements: [], note: '' })).rejects.toThrow('已切换');
+    expect(reviewRecordCreateMock).not.toHaveBeenCalled();
+    unbind();
+  });
+
+  it('discards cloud load and save responses after task activation changes', async () => {
+    const { useReviewStore } = await import('./useReviewStore');
+    const store = useReviewStore();
+    await store.setCurrentTask({ id: 'A', formId: 'F-A', currentNode: 'sj', components: [] } as never);
+    let finishSave!: (value: unknown) => void;
+    reviewRecordCreateMock.mockImplementation(() => new Promise(resolve => { finishSave = resolve; }));
+    const saving = store.addConfirmedRecord({ type: 'batch', annotations: [], cloudAnnotations: [], rectAnnotations: [], measurements: [], note: '' });
+    let finishLoad!: (value: unknown) => void;
+    reviewRecordGetByTaskIdMock.mockImplementationOnce(() => new Promise(resolve => { finishLoad = resolve; }));
+    const loading = store.loadConfirmedRecords('A');
+    await store.setCurrentTask({ id: 'B', formId: 'F-B', currentNode: 'sj', components: [] } as never);
+    finishSave({ success: true, record: { id: 'A-saved', confirmedAt: 1 } });
+    await expect(saving).rejects.toThrow('未导入当前任务');
+    finishLoad({ success: true, records: [{ id: 'A-loaded', taskId: 'A', formId: 'F-A', annotations: [], cloudAnnotations: [], rectAnnotations: [], measurements: [] }] });
+    await loading;
+    expect(store.currentTask.value?.id).toBe('B');
+    expect(store.confirmedRecords.value).toEqual([]);
+    expect(store.error.value).toBeNull();
   });
 
   it('loadConfirmedRecords 会带当前 formId 查询确认记录', async () => {
