@@ -32,7 +32,7 @@ import {
   readPersistedEmbedModeParams,
   resolveTrustedEmbedIdentity,
 } from '@/components/review/embedRoleLanding';
-import { reviewClearanceSnapshotKey, type ReviewClearanceSnapshot } from '@/components/review/reviewClearanceSnapshot';
+import { ReviewClearanceConflictError, reviewClearanceSnapshotKey, type ReviewClearanceConflict, type ReviewClearanceResolution, type ReviewClearanceSnapshot } from '@/components/review/reviewClearanceSnapshot';
 import { isReviewModelContext, reviewModelContextKey, reviewModelVersionKey, type ReviewModelContext } from '@/components/review/reviewModelContext';
 import { groupReviewRecordsByModelVersion } from '@/components/review/reviewModelVersionGroups';
 import {
@@ -146,16 +146,121 @@ const error = ref<string | null>(null);
 const reviewHistory = ref<ReviewHistoryItem[]>([]);
 let activeDimensionDocumentSession: DimensionDocumentSession | null = null;
 let modelContextProvider: (() => ReviewModelContext | null) | null = null;
-let clearanceProvider: { capture: (context: ReviewModelContext) => ReviewClearanceSnapshot; prepare: (snapshot: ReviewClearanceSnapshot, context: ReviewModelContext) => () => void } | null = null;
+type ReviewClearanceProvider = { capture: (context: ReviewModelContext) => ReviewClearanceSnapshot; prepare: (snapshot: ReviewClearanceSnapshot, context: ReviewModelContext, resolution?: ReviewClearanceResolution) => () => void };
+let clearanceProvider: ReviewClearanceProvider | null = null;
+type BoundClearanceConflict = { conflict: ReviewClearanceConflict; scope: string; provider: ReviewClearanceProvider };
+const pendingClearanceConflict = ref<ReviewClearanceConflict | null>(null);
+const backupClearanceConflict = ref<ReviewClearanceConflict | null>(null);
+const keptLocalClearanceConflict = ref<ReviewClearanceConflict | null>(null);
+let pendingClearanceBinding: BoundClearanceConflict | null = null;
+let backupClearanceBinding: BoundClearanceConflict | null = null;
+let acceptedClearanceResolution: (BoundClearanceConflict & { resolution: ReviewClearanceResolution }) | null = null;
+const clearanceConflictScope = () => JSON.stringify([currentTask.value?.id, currentTask.value?.formId, currentTask.value?.currentNode, resolveRealtimeUserId(), taskActivationEpoch]);
+function isClearanceBindingCurrent(binding: BoundClearanceConflict | null): boolean {
+  if (!binding || binding.scope !== clearanceConflictScope() || binding.provider !== clearanceProvider) return false;
+  try {
+    const current = modelContextProvider?.();
+    return !current || reviewModelVersionKey(current) === reviewModelVersionKey(binding.conflict.context);
+  } catch { return false; }
+}
+const clearanceSnapshotConflict = computed(() => {
+  const conflict = pendingClearanceConflict.value;
+  return conflict && isClearanceBindingCurrent(pendingClearanceBinding) ? conflict : null;
+});
+const clearanceSnapshotBackup = computed(() => {
+  const backup = backupClearanceConflict.value;
+  return backup && isClearanceBindingCurrent(backupClearanceBinding) ? backup : null;
+});
+const clearanceSnapshotKeptLocal = computed(() => {
+  const conflict = keptLocalClearanceConflict.value;
+  return conflict && isClearanceBindingCurrent(acceptedClearanceResolution) ? conflict : null;
+});
 
-function bindClearanceSnapshotProvider(provider: NonNullable<typeof clearanceProvider>): () => void {
+function bindClearanceSnapshotProvider(provider: ReviewClearanceProvider): () => void {
+  acceptedClearanceResolution = null;
+  pendingClearanceBinding = null;
+  backupClearanceBinding = null;
+  pendingClearanceConflict.value = null;
+  backupClearanceConflict.value = null;
+  keptLocalClearanceConflict.value = null;
   clearanceProvider = provider;
-  return () => { if (clearanceProvider === provider) clearanceProvider = null; };
+  return () => {
+    if (clearanceProvider === provider) {
+      clearanceProvider = null;
+      acceptedClearanceResolution = null;
+      pendingClearanceBinding = null;
+      backupClearanceBinding = null;
+      pendingClearanceConflict.value = null;
+      backupClearanceConflict.value = null;
+      keptLocalClearanceConflict.value = null;
+    }
+  };
 }
 
 function prepareBoundClearanceRestore(snapshot: ReviewClearanceSnapshot, context: ReviewModelContext): () => void {
   if (!clearanceProvider) throw new Error('净距恢复入口尚未就绪，请重试');
-  return clearanceProvider.prepare(snapshot, context);
+  if (context.taskId !== currentTask.value?.id || context.formId !== currentTask.value?.formId)
+    throw new Error('净距恢复所属任务或单据已切换，请重新比较');
+  const provider = clearanceProvider;
+  const binding = acceptedClearanceResolution;
+  const resolution = isClearanceBindingCurrent(binding) && binding?.resolution.cloudKey === reviewClearanceSnapshotKey(snapshot) ? binding.resolution : undefined;
+  try {
+    const apply = provider.prepare(snapshot, context, resolution);
+    return () => {
+      if (clearanceProvider !== provider || (binding && resolution && !isClearanceBindingCurrent(binding))) throw new Error('净距恢复所属任务或版本已切换，请重新比较');
+      apply();
+      if (resolution?.action === 'use-cloud' && binding) {
+        backupClearanceBinding = binding;
+        backupClearanceConflict.value = binding.conflict;
+      }
+      pendingClearanceBinding = null;
+      pendingClearanceConflict.value = null;
+    };
+  } catch (error) {
+    if (error instanceof ReviewClearanceConflictError) {
+      pendingClearanceBinding = { conflict: error.conflict, scope: clearanceConflictScope(), provider };
+      pendingClearanceConflict.value = error.conflict;
+      acceptedClearanceResolution = null;
+      keptLocalClearanceConflict.value = null;
+    }
+    throw error;
+  }
+}
+
+function resolveClearanceSnapshotConflict(action: ReviewClearanceResolution['action']): boolean {
+  const binding = pendingClearanceBinding;
+  if (!isClearanceBindingCurrent(binding) || !binding) return false;
+  acceptedClearanceResolution = { ...binding, resolution: { action,
+    localKey: reviewClearanceSnapshotKey(binding.conflict.local), cloudKey: reviewClearanceSnapshotKey(binding.conflict.cloud) } };
+  keptLocalClearanceConflict.value = action === 'keep-local' ? binding.conflict : null;
+  return true;
+}
+
+function reopenClearanceSnapshotConflict(): boolean {
+  if (!isClearanceBindingCurrent(acceptedClearanceResolution)) return false;
+  acceptedClearanceResolution = null;
+  keptLocalClearanceConflict.value = null;
+  return true;
+}
+
+function restoreClearanceSnapshotBackup(): boolean {
+  const binding = backupClearanceBinding;
+  if (!binding || !isClearanceBindingCurrent(binding) || !clearanceProvider) return false;
+  const { local, cloud, context } = binding.conflict;
+  const current = clearanceProvider.capture(context);
+  if (reviewClearanceSnapshotKey(current) !== reviewClearanceSnapshotKey(cloud)) throw new Error('恢复云端后本机结果又有修改，已保留当前修改；请下载备份后分别核对');
+  const apply = clearanceProvider.prepare(local, context, { action: 'use-cloud', backup: false,
+    localKey: reviewClearanceSnapshotKey(current), cloudKey: reviewClearanceSnapshotKey(local) });
+  apply();
+  // 撤销后保留本机备份供下一次保存，旧云端回放不能再覆盖它。
+  acceptedClearanceResolution = { ...binding, resolution: { action: 'keep-local',
+    localKey: reviewClearanceSnapshotKey(local), cloudKey: reviewClearanceSnapshotKey(cloud) } };
+  keptLocalClearanceConflict.value = binding.conflict;
+  backupClearanceBinding = null;
+  backupClearanceConflict.value = null;
+  pendingClearanceBinding = null;
+  pendingClearanceConflict.value = null;
+  return true;
 }
 
 function bindModelContextProvider(provider: () => ReviewModelContext | null): () => void {
@@ -414,6 +519,13 @@ async function addConfirmedRecord(
         nextRecords.push(newRecord);
       }
       confirmedRecords.value = nextRecords;
+      if (clearanceSnapshot && isClearanceBindingCurrent(acceptedClearanceResolution)
+        && reviewClearanceSnapshotKey(clearanceSnapshot) === reviewClearanceSnapshotKey(acceptedClearanceResolution?.conflict.local)) {
+        acceptedClearanceResolution = null;
+        keptLocalClearanceConflict.value = null;
+        pendingClearanceBinding = null;
+        pendingClearanceConflict.value = null;
+      }
       dimensionDocumentConflict.value = null;
       return newRecord.id;
     }
@@ -1230,6 +1342,12 @@ export function useReviewStore() {
     selectReviewModelGroup,
     bindClearanceSnapshotProvider,
     prepareBoundClearanceRestore,
+    clearanceSnapshotConflict,
+    clearanceSnapshotBackup,
+    clearanceSnapshotKeptLocal,
+    resolveClearanceSnapshotConflict,
+    restoreClearanceSnapshotBackup,
+    reopenClearanceSnapshotConflict,
     getBoundDimensionConfirmPayload,
     resolveDimensionDocumentConflict,
 

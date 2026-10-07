@@ -13,6 +13,17 @@ export type ReviewClearanceSnapshot = Readonly<{
 
 type SnapshotStore = { captureSnapshot: () => unknown; prepareSnapshotRestore: (value: unknown) => () => void };
 export type ReviewClearanceStores = { component: SnapshotStore; pipe: SnapshotStore; bran: SnapshotStore };
+export type ReviewClearanceResolution = Readonly<{ action: 'keep-local' | 'use-cloud'; localKey: string; cloudKey: string; backup?: boolean }>;
+export type ReviewClearanceConflict = Readonly<{ local: ReviewClearanceSnapshot; cloud: ReviewClearanceSnapshot; context: ReviewModelContext }>;
+
+export class ReviewClearanceConflictError extends Error {
+  readonly conflict: ReviewClearanceConflict;
+  constructor(local: ReviewClearanceSnapshot, cloud: ReviewClearanceSnapshot, context: ReviewModelContext) {
+    super('本机净距结果与云端不同，已保留本机草稿；请选择保留本机或备份后恢复云端');
+    this.name = 'ReviewClearanceConflictError';
+    this.conflict = cloneResultSnapshot({ local, cloud, context });
+  }
+}
 
 export function reviewClearanceSnapshotKey(value: ReviewClearanceSnapshot | undefined): string {
   const normalize = (entry: unknown): unknown => {

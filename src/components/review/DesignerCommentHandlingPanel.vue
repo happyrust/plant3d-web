@@ -24,6 +24,8 @@ import { startAnnotationMemberPick } from './cloudMemberPick';
 import { createConfirmedRecordsRestorer } from './confirmedRecordsRestore';
 import NonReturnedGuidanceCard from './NonReturnedGuidanceCard.vue';
 import ResubmissionTaskList from './ResubmissionTaskList.vue';
+import { createReviewClearanceConflictActions } from './reviewClearanceConflictActions';
+import ReviewClearanceConflictNotice from './ReviewClearanceConflictNotice.vue';
 import ReviewModelVersionSelector from './ReviewModelVersionSelector.vue';
 import {
   buildReviewConfirmSnapshotKey,
@@ -106,6 +108,11 @@ const confirmedRecordsRestorer = createConfirmedRecordsRestorer({
   skipClearOnEmpty: true,
 });
 const restoreError = confirmedRecordsRestorer.restoreError;
+const clearanceConflictActions = createReviewClearanceConflictActions({
+  resolve: action => reviewStore.resolveClearanceSnapshotConflict?.(action) ?? false,
+  undo: () => reviewStore.restoreClearanceSnapshotBackup?.() ?? false,
+  recompare: () => reviewStore.reopenClearanceSnapshotConflict?.() ?? false,
+}, confirmedRecordsRestorer);
 onUnmounted(confirmedRecordsRestorer.cancelPendingRestore);
 
 // U0 草稿 scope（sj 侧）：与 ReviewPanel 共用同一份同步，任务 / 用户一变就切本机草稿容器；
@@ -759,6 +766,10 @@ onMounted(() => {
             <ReviewModelVersionSelector :groups="confirmedRecordsRestorer.modelVersionGroups.value"
               :selected-key="confirmedRecordsRestorer.activeModelGroup.value?.key ?? null"
               @select="confirmedRecordsRestorer.selectModelVersionGroup" />
+            <ReviewClearanceConflictNotice :conflict="reviewStore.clearanceSnapshotConflict?.value"
+              :kept-local="reviewStore.clearanceSnapshotKeptLocal?.value"
+              :backup="reviewStore.clearanceSnapshotBackup?.value" :busy="confirmedRecordsRestorer.restoring.value"
+              @resolve="clearanceConflictActions.resolve" @undo="clearanceConflictActions.undo" @recompare="clearanceConflictActions.recompare" />
             <div class="flex items-start justify-between gap-4">
               <div>
                 <div class="text-sm font-semibold">确认当前数据</div>

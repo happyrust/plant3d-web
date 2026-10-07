@@ -39,7 +39,7 @@ import { type ClearanceRecord } from '@/clearance/domain/clearanceRecord';
 import { useClearanceStore } from '@/clearance/stores/useClearanceStore';
 import { resolveViewerToolbarSelection } from '@/components/dock_panels/viewerToolbarSelection';
 import PipeDistanceDrawer from '@/components/pipe-distance/PipeDistanceDrawer.vue';
-import { captureReviewClearanceSnapshot, hasReviewClearanceResults, prepareReviewClearanceRestore, reviewClearanceSnapshotKey } from '@/components/review/reviewClearanceSnapshot';
+import { captureReviewClearanceSnapshot, hasReviewClearanceResults, prepareReviewClearanceRestore, ReviewClearanceConflictError, reviewClearanceSnapshotKey } from '@/components/review/reviewClearanceSnapshot';
 import ReviewConfirmation from '@/components/review/ReviewConfirmation.vue';
 import { reviewModelContextKey, reviewModelVersionKey, type ReviewModelContext } from '@/components/review/reviewModelContext';
 import { loadReviewModelComparison, type LoadedReviewModelComparison } from '@/components/review/reviewModelContextRestore';
@@ -603,14 +603,25 @@ const offReviewModelContext = reviewStore.bindModelContextProvider(captureReview
 const reviewClearanceStores = { component: clearanceStore, pipe: pipeDistanceStore, bran: spatialComputeStore };
 const offReviewClearance = reviewStore.bindClearanceSnapshotProvider({
   capture: context => captureReviewClearanceSnapshot(context, reviewClearanceStores),
-  prepare: (snapshot, context) => {
+  prepare: (snapshot, context, resolution) => {
     const current = captureReviewModelContext();
     if (!current || reviewModelVersionKey(current) !== reviewModelVersionKey(context))
       throw new Error('净距恢复期间模型或任务已切换，请重试');
+    const applyCloud = prepareReviewClearanceRestore(snapshot, context, reviewClearanceStores);
     const local = captureReviewClearanceSnapshot(snapshot.modelContext, reviewClearanceStores);
-    if (hasReviewClearanceResults(local) && reviewClearanceSnapshotKey(local) !== reviewClearanceSnapshotKey(snapshot))
-      throw new Error('本机净距结果与云端不同，已保留本机草稿；请先确认保存或清除本机结果后重试恢复');
-    return prepareReviewClearanceRestore(snapshot, context, reviewClearanceStores);
+    if ((hasReviewClearanceResults(local) || resolution) && reviewClearanceSnapshotKey(local) !== reviewClearanceSnapshotKey(snapshot)) {
+      if (!resolution || resolution.localKey !== reviewClearanceSnapshotKey(local) || resolution.cloudKey !== reviewClearanceSnapshotKey(snapshot))
+        throw new ReviewClearanceConflictError(local, snapshot, context);
+      if (resolution.action === 'keep-local') return () => {};
+      if (resolution.backup !== false) {
+        // 回放开始前保存整份本机快照；备份失败则不改变场景或结果。
+        const storage = window.localStorage;
+        storage.setItem(`plant3d-review-clearance-conflict-backup-v1:${clearanceStorageContext.value.key}`,
+          JSON.stringify({ schemaVersion: 1, snapshot: local, savedAt: new Date().toISOString() }));
+      }
+      return applyCloud;
+    }
+    return applyCloud;
   },
 });
 let restoredReviewComparison: LoadedReviewModelComparison | null = null;

@@ -40,6 +40,8 @@ import {
 } from './embedRoleLanding';
 import FileUploadSection, { type UploadedFile } from './FileUploadSection.vue';
 import ReviewAuxData from './ReviewAuxData.vue';
+import { createReviewClearanceConflictActions } from './reviewClearanceConflictActions';
+import ReviewClearanceConflictNotice from './ReviewClearanceConflictNotice.vue';
 import ReviewDataSync from './ReviewDataSync.vue';
 import ReviewModelVersionSelector from './ReviewModelVersionSelector.vue';
 import {
@@ -176,6 +178,11 @@ const confirmedRecordsRestorer = createConfirmedRecordsRestorer({
 });
 const lastRestoredSceneKey = confirmedRecordsRestorer.lastRestoredSceneKey;
 const restoreError = confirmedRecordsRestorer.restoreError;
+const clearanceConflictActions = createReviewClearanceConflictActions({
+  resolve: action => reviewStore.resolveClearanceSnapshotConflict?.(action) ?? false,
+  undo: () => reviewStore.restoreClearanceSnapshotBackup?.() ?? false,
+  recompare: () => reviewStore.reopenClearanceSnapshotConflict?.() ?? false,
+}, confirmedRecordsRestorer);
 onUnmounted(confirmedRecordsRestorer.cancelPendingRestore);
 
 const embedLandingState = ref<EmbedLandingState | null>(null);
@@ -2021,6 +2028,10 @@ function handleAnnotationQueueCompleted() {
       <ReviewModelVersionSelector :groups="confirmedRecordsRestorer.modelVersionGroups.value"
         :selected-key="confirmedRecordsRestorer.activeModelGroup.value?.key ?? null"
         @select="confirmedRecordsRestorer.selectModelVersionGroup" />
+      <ReviewClearanceConflictNotice :conflict="reviewStore.clearanceSnapshotConflict?.value"
+        :kept-local="reviewStore.clearanceSnapshotKeptLocal?.value"
+        :backup="reviewStore.clearanceSnapshotBackup?.value" :busy="confirmedRecordsRestorer.restoring.value"
+        @resolve="clearanceConflictActions.resolve" @undo="clearanceConflictActions.undo" @recompare="clearanceConflictActions.recompare" />
       <div v-if="confirmError" class="w-full text-xs text-danger">{{ confirmError }}</div>
 
       <!-- U0 三行状态：本机草稿 / 云端草稿（U3 前不显示）/ 已确认到修订 N（方案 §3.6，d-565 #4） -->

@@ -35,7 +35,8 @@ import { useToolStore } from './useToolStore';
 import type { ReviewClearanceSnapshot } from '@/components/review/reviewClearanceSnapshot';
 
 import { reviewRecordCreate } from '@/api/reviewApi';
-import { reviewModelVersionKey } from '@/components/review/reviewModelContext';
+import { ReviewClearanceConflictError, reviewClearanceSnapshotKey } from '@/components/review/reviewClearanceSnapshot';
+import { reviewModelVersionKey, type ReviewModelContext } from '@/components/review/reviewModelContext';
 import { dimensionDocumentToSnapshot } from '@/dimension/adapters/reviewSnapshotAdapter';
 import { emptyDimensionDocument, linearRecord } from '@/dimension/domain/testFixtures';
 import { DimensionDocumentSession } from '@/dimension/services/dimensionDocumentSession';
@@ -57,6 +58,44 @@ describe('useReviewStore - confirm without OBB', () => {
     vi.mocked(reviewRecordCreate).mockClear();
     memoryJournal.append.mockClear();
     memoryJournal.clear.mockClear();
+  });
+
+  it('scopes clearance decisions to the task and rejects a stale decision after local results change', async () => {
+    const review = useReviewStore();
+    await review.setCurrentTask({ id: 'conflict-task', formId: 'conflict-form', title: 'Conflict', description: '', modelName: 'Fixture',
+      status: 'in_review', priority: 'medium', requesterId: 'designer', requesterName: 'Designer', checkerId: 'reviewer-1', checkerName: 'Reviewer',
+      reviewerId: 'reviewer-1', reviewerName: 'Reviewer', approverId: 'approver', approverName: 'Approver', components: [], createdAt: 1, updatedAt: 1, currentNode: 'jd' });
+    const context = { schemaVersion: 1 as const, project: 'P', dbnum: null, taskId: 'conflict-task', formId: 'conflict-form', node: 'jd', comparison: null };
+    const cloud: ReviewClearanceSnapshot = { schemaVersion: 1, modelContext: context,
+      coordinateSpaces: { component: 'design-world-m', pipe: 'e3d-world-mm', bran: 'e3d-world-mm' },
+      component: { records: [] }, pipe: { results: [{ distance: 100 }] }, bran: { branGroups: [] } };
+    let local = { ...cloud, pipe: { results: [{ distance: 200 }] } };
+    const prepare = vi.fn((snapshot: ReviewClearanceSnapshot, target: ReviewModelContext, resolution?: { action: string; localKey: string; cloudKey: string }) => {
+      if (!resolution || resolution.localKey !== reviewClearanceSnapshotKey(local) || resolution.cloudKey !== reviewClearanceSnapshotKey(snapshot))
+        throw new ReviewClearanceConflictError(local, snapshot, target);
+      return vi.fn();
+    });
+    const offContext = review.bindModelContextProvider(() => context);
+    const offClearance = review.bindClearanceSnapshotProvider({ capture: () => local, prepare });
+    try {
+      expect(review.clearanceSnapshotConflict.value).toBeNull();
+      expect(() => review.prepareBoundClearanceRestore(cloud, context)).toThrow('已保留本机');
+      expect(review.clearanceSnapshotConflict.value?.local).toEqual(local);
+      expect(review.resolveClearanceSnapshotConflict('use-cloud')).toBe(true);
+      local = { ...cloud, pipe: { results: [{ distance: 300 }] } };
+      expect(() => review.prepareBoundClearanceRestore(cloud, context)).toThrow('已保留本机');
+      expect(review.clearanceSnapshotConflict.value?.local).toEqual(local);
+      expect(review.resolveClearanceSnapshotConflict('keep-local')).toBe(true);
+      review.prepareBoundClearanceRestore(cloud, context)();
+      expect(review.clearanceSnapshotConflict.value).toBeNull();
+      expect(review.clearanceSnapshotKeptLocal.value?.local).toEqual(local);
+      expect(review.reopenClearanceSnapshotConflict()).toBe(true);
+      expect(() => review.prepareBoundClearanceRestore(cloud, context)).toThrow();
+      review.currentTask.value = { ...review.currentTask.value!, id: 'other-task' };
+      expect(review.clearanceSnapshotConflict.value).toBeNull();
+      expect(review.resolveClearanceSnapshotConflict('use-cloud')).toBe(false);
+      expect(() => review.prepareBoundClearanceRestore(cloud, context)).toThrow('任务或单据已切换');
+    } finally { offClearance(); offContext(); }
   });
 
   it('should preserve empty obbAnnotations in confirmed records', async () => {
