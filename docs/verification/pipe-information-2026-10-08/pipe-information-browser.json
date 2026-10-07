@@ -1,0 +1,670 @@
+{
+  "records": [
+    {
+      "refno": "24381_145018",
+      "name": "/Copy-of-RCS0014-1R43012新",
+      "sesno": 339,
+      "fetchedAt": "2026-10-07T23:47:38.806Z",
+      "stale": false,
+      "anchorMm": [
+        1515.72,
+        8156.67,
+        13293.23
+      ],
+      "fields": [
+        {
+          "key": "head-bore",
+          "label": "首端通径",
+          "text": "100 mm",
+          "source": "24381_145018@339:HBOR",
+          "status": "read"
+        },
+        {
+          "key": "tail-bore",
+          "label": "末端通径",
+          "text": "100 mm",
+          "source": "24381_145018@339:TBOR",
+          "status": "read"
+        },
+        {
+          "key": "outer-diameter",
+          "label": "首个成员外径参考",
+          "text": "114.3 mm",
+          "source": "首个给出外径的成员；目录值或通径回退值，不能代表变径管道全部外径",
+          "status": "unconfirmed"
+        },
+        {
+          "key": "material",
+          "label": "业务材质",
+          "text": "未设置",
+          "source": "24381_145018@339:MATN/MATR",
+          "status": "missing"
+        },
+        {
+          "key": "insulation",
+          "label": "保温规格",
+          "text": "13246/496399",
+          "source": "24381_145018@339:ISPE（规格参考号）",
+          "status": "read"
+        },
+        {
+          "key": "envelope",
+          "label": "业务包络",
+          "text": "口径待确认（是否含保温/操作空间）",
+          "source": "专业确认",
+          "status": "unconfirmed"
+        },
+        {
+          "key": "model-bounds",
+          "label": "模型包围尺寸",
+          "text": "8906.95 mm × 3744.8 mm × 6631.66 mm",
+          "source": "model-memory",
+          "status": "unconfirmed"
+        },
+        {
+          "key": "straight-length",
+          "label": "直管段总长",
+          "text": "16521.38 mm",
+          "source": "中心线的隐式直段和 TUBI/FTUB；不含弯头弧长",
+          "status": "derived"
+        },
+        {
+          "key": "elevation",
+          "label": "标注锚点标高",
+          "text": "13293.23 mm",
+          "source": "E3D 世界 Z，非管顶/管底",
+          "status": "derived"
+        },
+        {
+          "key": "coordinates",
+          "label": "标注锚点坐标",
+          "text": "1515.72 mm, 8156.67 mm, 13293.23 mm",
+          "source": "E3D 世界 X/Y/Z",
+          "status": "derived"
+        }
+      ],
+      "warnings": [
+        "外径参考可能含估算且只代表首个成员；几何会话尚未与属性会话核实，外径和模型盒不得作为专业包络验收值",
+        "7 个成员没有长度（穿过件），不参与走廊"
+      ]
+    },
+    {
+      "refno": "24384_23257",
+      "name": "/C-OR-1R345-C",
+      "sesno": 640,
+      "fetchedAt": "2026-10-07T23:47:39.014Z",
+      "stale": false,
+      "anchorMm": [
+        8550.54,
+        14060.42,
+        2900
+      ],
+      "fields": [
+        {
+          "key": "head-bore",
+          "label": "首端通径",
+          "text": "50 mm",
+          "source": "24384_23257@640:HBOR",
+          "status": "read"
+        },
+        {
+          "key": "tail-bore",
+          "label": "末端通径",
+          "text": "50 mm",
+          "source": "24384_23257@640:TBOR",
+          "status": "read"
+        },
+        {
+          "key": "outer-diameter",
+          "label": "首个成员外径参考",
+          "text": "25 mm",
+          "source": "首个给出外径的成员；目录值或通径回退值，不能代表变径管道全部外径",
+          "status": "unconfirmed"
+        },
+        {
+          "key": "material",
+          "label": "业务材质",
+          "text": "未设置",
+          "source": "24384_23257@640:MATN/MATR",
+          "status": "missing"
+        },
+        {
+          "key": "insulation",
+          "label": "保温规格",
+          "text": "未设置",
+          "source": "24384_23257@640:ISPE（规格参考号）",
+          "status": "missing"
+        },
+        {
+          "key": "envelope",
+          "label": "业务包络",
+          "text": "口径待确认（是否含保温/操作空间）",
+          "source": "专业确认",
+          "status": "unconfirmed"
+        },
+        {
+          "key": "model-bounds",
+          "label": "模型包围尺寸",
+          "text": "未设置",
+          "source": "未生成模型",
+          "status": "missing"
+        },
+        {
+          "key": "straight-length",
+          "label": "直管段总长",
+          "text": "6300 mm",
+          "source": "中心线的隐式直段和 TUBI/FTUB；不含弯头弧长",
+          "status": "derived"
+        },
+        {
+          "key": "elevation",
+          "label": "标注锚点标高",
+          "text": "2900 mm",
+          "source": "E3D 世界 Z，非管顶/管底",
+          "status": "derived"
+        },
+        {
+          "key": "coordinates",
+          "label": "标注锚点坐标",
+          "text": "8550.54 mm, 14060.42 mm, 2900 mm",
+          "source": "E3D 世界 X/Y/Z",
+          "status": "derived"
+        }
+      ],
+      "warnings": [
+        "当前模型边界不可用，模型包围尺寸缺失",
+        "外径参考可能含估算且只代表首个成员；几何会话尚未与属性会话核实，外径和模型盒不得作为专业包络验收值"
+      ]
+    },
+    {
+      "refno": "24381_103251",
+      "name": "/Copy-of-1CIS001MT-YK/B1",
+      "sesno": 339,
+      "fetchedAt": "2026-10-07T23:47:39.194Z",
+      "stale": false,
+      "anchorMm": [
+        1090.41,
+        1500.82,
+        -2905
+      ],
+      "fields": [
+        {
+          "key": "head-bore",
+          "label": "首端通径",
+          "text": "7 mm",
+          "source": "24381_103251@339:HBOR",
+          "status": "read"
+        },
+        {
+          "key": "tail-bore",
+          "label": "末端通径",
+          "text": "7 mm",
+          "source": "24381_103251@339:TBOR",
+          "status": "read"
+        },
+        {
+          "key": "outer-diameter",
+          "label": "首个成员外径参考",
+          "text": "6.35 mm",
+          "source": "首个给出外径的成员；目录值或通径回退值，不能代表变径管道全部外径",
+          "status": "unconfirmed"
+        },
+        {
+          "key": "material",
+          "label": "业务材质",
+          "text": "未设置",
+          "source": "24381_103251@339:MATN/MATR",
+          "status": "missing"
+        },
+        {
+          "key": "insulation",
+          "label": "保温规格",
+          "text": "未设置",
+          "source": "24381_103251@339:ISPE（规格参考号）",
+          "status": "missing"
+        },
+        {
+          "key": "envelope",
+          "label": "业务包络",
+          "text": "口径待确认（是否含保温/操作空间）",
+          "source": "专业确认",
+          "status": "unconfirmed"
+        },
+        {
+          "key": "model-bounds",
+          "label": "模型包围尺寸",
+          "text": "未设置",
+          "source": "未生成模型",
+          "status": "missing"
+        },
+        {
+          "key": "straight-length",
+          "label": "直管段总长",
+          "text": "14959.77 mm",
+          "source": "中心线的隐式直段和 TUBI/FTUB；不含弯头弧长",
+          "status": "derived"
+        },
+        {
+          "key": "elevation",
+          "label": "标注锚点标高",
+          "text": "-2905 mm",
+          "source": "E3D 世界 Z，非管顶/管底",
+          "status": "derived"
+        },
+        {
+          "key": "coordinates",
+          "label": "标注锚点坐标",
+          "text": "1090.41 mm, 1500.82 mm, -2905 mm",
+          "source": "E3D 世界 X/Y/Z",
+          "status": "derived"
+        }
+      ],
+      "warnings": [
+        "当前模型边界不可用，模型包围尺寸缺失",
+        "外径参考可能含估算且只代表首个成员；几何会话尚未与属性会话核实，外径和模型盒不得作为专业包络验收值"
+      ]
+    }
+  ],
+  "render": {
+    "glyphTexts": [
+      "/Copy-of-RCS0014-1R43012新",
+      "首端通径：100 mm",
+      "末端通径：100 mm",
+      "首个成员外径参考：114.3 mm",
+      "业务材质：未设置",
+      "保温规格：13246/496399",
+      "业务包络：口径待确认（是否含保温/操作空间）",
+      "模型包围尺寸：8906.95 mm × 3744.8 mm × 6631.66 mm",
+      "直管段总长：16521.38 mm",
+      "标注锚点标高：13293.23 mm",
+      "标注锚点坐标：1515.72 mm, 8156.67 mm, 13293.23 mm"
+    ],
+    "primitiveCount": 15,
+    "svgBytes": 107126
+  },
+  "failed": "管道信息读取失败，原标注已保留：controlled read failure",
+  "reopened": {
+    "records": [
+      {
+        "refno": "24381_145018",
+        "name": "/Copy-of-RCS0014-1R43012新",
+        "sesno": 339,
+        "fetchedAt": "2026-10-07T23:47:38.806Z",
+        "stale": true,
+        "anchorMm": [
+          1515.72,
+          8156.67,
+          13293.23
+        ],
+        "fields": [
+          {
+            "key": "head-bore",
+            "label": "首端通径",
+            "text": "100 mm",
+            "source": "24381_145018@339:HBOR",
+            "status": "read"
+          },
+          {
+            "key": "tail-bore",
+            "label": "末端通径",
+            "text": "100 mm",
+            "source": "24381_145018@339:TBOR",
+            "status": "read"
+          },
+          {
+            "key": "outer-diameter",
+            "label": "首个成员外径参考",
+            "text": "114.3 mm",
+            "source": "首个给出外径的成员；目录值或通径回退值，不能代表变径管道全部外径",
+            "status": "unconfirmed"
+          },
+          {
+            "key": "material",
+            "label": "业务材质",
+            "text": "未设置",
+            "source": "24381_145018@339:MATN/MATR",
+            "status": "missing"
+          },
+          {
+            "key": "insulation",
+            "label": "保温规格",
+            "text": "13246/496399",
+            "source": "24381_145018@339:ISPE（规格参考号）",
+            "status": "read"
+          },
+          {
+            "key": "envelope",
+            "label": "业务包络",
+            "text": "口径待确认（是否含保温/操作空间）",
+            "source": "专业确认",
+            "status": "unconfirmed"
+          },
+          {
+            "key": "model-bounds",
+            "label": "模型包围尺寸",
+            "text": "8906.95 mm × 3744.8 mm × 6631.66 mm",
+            "source": "model-memory",
+            "status": "unconfirmed"
+          },
+          {
+            "key": "straight-length",
+            "label": "直管段总长",
+            "text": "16521.38 mm",
+            "source": "中心线的隐式直段和 TUBI/FTUB；不含弯头弧长",
+            "status": "derived"
+          },
+          {
+            "key": "elevation",
+            "label": "标注锚点标高",
+            "text": "13293.23 mm",
+            "source": "E3D 世界 Z，非管顶/管底",
+            "status": "derived"
+          },
+          {
+            "key": "coordinates",
+            "label": "标注锚点坐标",
+            "text": "1515.72 mm, 8156.67 mm, 13293.23 mm",
+            "source": "E3D 世界 X/Y/Z",
+            "status": "derived"
+          }
+        ],
+        "warnings": [
+          "外径参考可能含估算且只代表首个成员；几何会话尚未与属性会话核实，外径和模型盒不得作为专业包络验收值",
+          "7 个成员没有长度（穿过件），不参与走廊"
+        ]
+      },
+      {
+        "refno": "24384_23257",
+        "name": "/C-OR-1R345-C",
+        "sesno": 640,
+        "fetchedAt": "2026-10-07T23:47:39.014Z",
+        "stale": true,
+        "anchorMm": [
+          8550.54,
+          14060.42,
+          2900
+        ],
+        "fields": [
+          {
+            "key": "head-bore",
+            "label": "首端通径",
+            "text": "50 mm",
+            "source": "24384_23257@640:HBOR",
+            "status": "read"
+          },
+          {
+            "key": "tail-bore",
+            "label": "末端通径",
+            "text": "50 mm",
+            "source": "24384_23257@640:TBOR",
+            "status": "read"
+          },
+          {
+            "key": "outer-diameter",
+            "label": "首个成员外径参考",
+            "text": "25 mm",
+            "source": "首个给出外径的成员；目录值或通径回退值，不能代表变径管道全部外径",
+            "status": "unconfirmed"
+          },
+          {
+            "key": "material",
+            "label": "业务材质",
+            "text": "未设置",
+            "source": "24384_23257@640:MATN/MATR",
+            "status": "missing"
+          },
+          {
+            "key": "insulation",
+            "label": "保温规格",
+            "text": "未设置",
+            "source": "24384_23257@640:ISPE（规格参考号）",
+            "status": "missing"
+          },
+          {
+            "key": "envelope",
+            "label": "业务包络",
+            "text": "口径待确认（是否含保温/操作空间）",
+            "source": "专业确认",
+            "status": "unconfirmed"
+          },
+          {
+            "key": "model-bounds",
+            "label": "模型包围尺寸",
+            "text": "未设置",
+            "source": "未生成模型",
+            "status": "missing"
+          },
+          {
+            "key": "straight-length",
+            "label": "直管段总长",
+            "text": "6300 mm",
+            "source": "中心线的隐式直段和 TUBI/FTUB；不含弯头弧长",
+            "status": "derived"
+          },
+          {
+            "key": "elevation",
+            "label": "标注锚点标高",
+            "text": "2900 mm",
+            "source": "E3D 世界 Z，非管顶/管底",
+            "status": "derived"
+          },
+          {
+            "key": "coordinates",
+            "label": "标注锚点坐标",
+            "text": "8550.54 mm, 14060.42 mm, 2900 mm",
+            "source": "E3D 世界 X/Y/Z",
+            "status": "derived"
+          }
+        ],
+        "warnings": [
+          "当前模型边界不可用，模型包围尺寸缺失",
+          "外径参考可能含估算且只代表首个成员；几何会话尚未与属性会话核实，外径和模型盒不得作为专业包络验收值"
+        ]
+      },
+      {
+        "refno": "24381_103251",
+        "name": "/Copy-of-1CIS001MT-YK/B1",
+        "sesno": 339,
+        "fetchedAt": "2026-10-07T23:47:39.194Z",
+        "stale": true,
+        "anchorMm": [
+          1090.41,
+          1500.82,
+          -2905
+        ],
+        "fields": [
+          {
+            "key": "head-bore",
+            "label": "首端通径",
+            "text": "7 mm",
+            "source": "24381_103251@339:HBOR",
+            "status": "read"
+          },
+          {
+            "key": "tail-bore",
+            "label": "末端通径",
+            "text": "7 mm",
+            "source": "24381_103251@339:TBOR",
+            "status": "read"
+          },
+          {
+            "key": "outer-diameter",
+            "label": "首个成员外径参考",
+            "text": "6.35 mm",
+            "source": "首个给出外径的成员；目录值或通径回退值，不能代表变径管道全部外径",
+            "status": "unconfirmed"
+          },
+          {
+            "key": "material",
+            "label": "业务材质",
+            "text": "未设置",
+            "source": "24381_103251@339:MATN/MATR",
+            "status": "missing"
+          },
+          {
+            "key": "insulation",
+            "label": "保温规格",
+            "text": "未设置",
+            "source": "24381_103251@339:ISPE（规格参考号）",
+            "status": "missing"
+          },
+          {
+            "key": "envelope",
+            "label": "业务包络",
+            "text": "口径待确认（是否含保温/操作空间）",
+            "source": "专业确认",
+            "status": "unconfirmed"
+          },
+          {
+            "key": "model-bounds",
+            "label": "模型包围尺寸",
+            "text": "未设置",
+            "source": "未生成模型",
+            "status": "missing"
+          },
+          {
+            "key": "straight-length",
+            "label": "直管段总长",
+            "text": "14959.77 mm",
+            "source": "中心线的隐式直段和 TUBI/FTUB；不含弯头弧长",
+            "status": "derived"
+          },
+          {
+            "key": "elevation",
+            "label": "标注锚点标高",
+            "text": "-2905 mm",
+            "source": "E3D 世界 Z，非管顶/管底",
+            "status": "derived"
+          },
+          {
+            "key": "coordinates",
+            "label": "标注锚点坐标",
+            "text": "1090.41 mm, 1500.82 mm, -2905 mm",
+            "source": "E3D 世界 X/Y/Z",
+            "status": "derived"
+          }
+        ],
+        "warnings": [
+          "当前模型边界不可用，模型包围尺寸缺失",
+          "外径参考可能含估算且只代表首个成员；几何会话尚未与属性会话核实，外径和模型盒不得作为专业包络验收值"
+        ]
+      }
+    ],
+    "hidden": [
+      "24384_23257",
+      "24381_103251"
+    ],
+    "label": "已恢复本机记录，模型版本未核实，请重算"
+  },
+  "calls": [
+    {
+      "path": "/api/v1/element/attributes",
+      "request": {
+        "refno": "24381/145018"
+      },
+      "query": {},
+      "status": 200
+    },
+    {
+      "path": "/api/v1/spatial/centerline",
+      "request": null,
+      "query": {
+        "refno": "24381/145018"
+      },
+      "status": 200
+    },
+    {
+      "path": "/api/v1/query",
+      "request": {
+        "tool": "model.spatial.bounds",
+        "arguments": {
+          "refno": "24381/145018",
+          "scope": "subtree"
+        }
+      },
+      "query": {},
+      "status": 200
+    },
+    {
+      "path": "/api/v1/element/attributes",
+      "request": {
+        "refno": "24381/144975"
+      },
+      "query": {},
+      "status": 200
+    },
+    {
+      "path": "/api/v1/element/attributes",
+      "request": {
+        "refno": "24384/23257"
+      },
+      "query": {},
+      "status": 200
+    },
+    {
+      "path": "/api/v1/element/attributes",
+      "request": {
+        "refno": "24384/23225"
+      },
+      "query": {},
+      "status": 200
+    },
+    {
+      "path": "/api/v1/query",
+      "request": {
+        "tool": "model.spatial.bounds",
+        "arguments": {
+          "refno": "24384/23257",
+          "scope": "subtree"
+        }
+      },
+      "query": {},
+      "status": 422
+    },
+    {
+      "path": "/api/v1/spatial/centerline",
+      "request": null,
+      "query": {
+        "refno": "24384/23257"
+      },
+      "status": 200
+    },
+    {
+      "path": "/api/v1/element/attributes",
+      "request": {
+        "refno": "24381/103251"
+      },
+      "query": {},
+      "status": 200
+    },
+    {
+      "path": "/api/v1/element/attributes",
+      "request": {
+        "refno": "24381/103250"
+      },
+      "query": {},
+      "status": 200
+    },
+    {
+      "path": "/api/v1/query",
+      "request": {
+        "tool": "model.spatial.bounds",
+        "arguments": {
+          "refno": "24381/103251",
+          "scope": "subtree"
+        }
+      },
+      "query": {},
+      "status": 422
+    },
+    {
+      "path": "/api/v1/spatial/centerline",
+      "request": null,
+      "query": {
+        "refno": "24381/103251"
+      },
+      "status": 200
+    }
+  ],
+  "errors": []
+}

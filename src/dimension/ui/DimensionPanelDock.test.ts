@@ -1,12 +1,16 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createApp, nextTick } from 'vue';
 
+import { buildPipeInformation, pipeInformationToExternalDimensions } from '../adapters/pipeInformation';
 import { emptyDimensionDocument, linearRecord } from '../domain/testFixtures';
 import { ExternalDimensionRegistry } from '../services/externalDimensionRegistry';
 
 import DimensionPanelDock from './DimensionPanelDock.vue';
 
 import type { ExternalDimensionRecord } from '../adapters/normalizeExternalDimensions';
+
+import * as v1Api from '@/api/genModelV1Api';
+import { usePipeInformationStore } from '@/composables/usePipeInformationStore';
 
 const mocks = vi.hoisted(() => ({
   currentUser: {
@@ -109,6 +113,63 @@ afterEach(() => {
 });
 
 describe('DimensionPanelDock', () => {
+  it('loads business pipe tags, preserves provenance and missing fields, and isolates persisted/late responses', async () => {
+    const store = usePipeInformationStore();
+    store.detachPersistence(); store.clear();
+    const raw = new Map<string,string>();
+    const storage = { getItem: (key: string) => raw.get(key) ?? null, setItem: (key: string, value: string) => { raw.set(key, value); } };
+    store.bindPersistence('pipe-info-A', storage);
+    const attr = (name: string, value: unknown) => ({ name, value, display: String(value), is_unset: false, is_uda: false, editable: false, value_type: 'stored' });
+    const attributes = { source: 'e3d-io', refno: '7997/1', noun: 'BRAN', sesno: 42, complete: true,
+      attributes: [attr('NAME', '/PIPE-A'), attr('HBOR', 100), attr('TBOR', 50), attr('MATR', '0/0'), attr('ISPE', '0/0')] };
+    const centerline = { refno: '7997_1', dbnum: 7997, segment_count: 2, outside_diameter_mm: 110, centerline_bbox: null, warnings: [],
+      segments: [{ refno: '7997_1~7997_2', order: 0, implicit: true, noun: 'TUBI', start: { x: 1000, y: 2000, z: 3000 }, end: { x: 2000, y: 2000, z: 3000 }, length_mm: 1000, outside_diameter_mm: null },
+        { refno: '7997_2', order: 1, implicit: false, noun: 'ELBO', start: { x: 2000, y: 2000, z: 3000 }, end: { x: 2100, y: 2100, z: 3000 }, length_mm: 141.42, outside_diameter_mm: 110 }] };
+    const attrsSpy = vi.spyOn(v1Api, 'genModelV1ElementAttributes').mockResolvedValue(attributes);
+    const centerSpy = vi.spyOn(v1Api, 'genModelV1SpatialCenterline').mockResolvedValue(centerline);
+    const boundsSpy = vi.spyOn(v1Api, 'genModelV1ModelBounds').mockRejectedValue(new Error('no generated geometry'));
+    try {
+      expect(await store.refresh('7997/1')).toBe(true);
+      const record = store.records.value[0]!;
+      expect(record.fields.find(field => field.key === 'head-bore')?.text).toBe('100 mm');
+      expect(record.fields.find(field => field.key === 'material')).toMatchObject({ text: '未设置', status: 'missing' });
+      expect(record.fields.find(field => field.key === 'outer-diameter')?.status).toBe('unconfirmed');
+      expect(record.fields.find(field => field.key === 'envelope')?.status).toBe('unconfirmed');
+      expect(record.fields.find(field => field.key === 'straight-length')?.text).toBe('1000 mm');
+      expect(record.warnings.join('；')).toContain('模型边界不可用');
+      const external = pipeInformationToExternalDimensions([record])[0]!;
+      expect(external.source).toBe('pipe-information');
+      expect((external.layout as any).tag.target).toEqual([1,2,3]);
+      expect((external.layout as any).tag.lines.map((line: any) => line.text).join(' ')).toContain('业务材质：未设置');
+      const system = createSystem(); mocks.dimensionSystem.value = system;
+      const host = mountPanel(); host.querySelector('details')?.setAttribute('open', '');
+      expect(host.textContent).toContain('属性会话 42');
+      expect(host.textContent).toContain('业务材质');
+      store.setHidden('7997_1', true); store.persistRecords();
+      store.bindPersistence('pipe-info-B', storage); expect(store.records.value).toEqual([]);
+      store.bindPersistence('pipe-info-A', storage); expect(store.records.value[0]?.stale).toBe(true);
+      expect(store.hiddenRefnos.value).toEqual(['7997_1']);
+      expect((pipeInformationToExternalDimensions(store.records.value)[0]!.layout as any).tag.lines[0].text).toContain('过期');
+      const retained = JSON.parse(JSON.stringify(store.records.value));
+      centerSpy.mockRejectedValueOnce(new Error('HVAC branch'));
+      expect(await store.refresh('7997_1')).toBe(false); expect(store.records.value).toEqual(retained);
+      let finish!: (value: typeof attributes) => void;
+      attrsSpy.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+      const pending = store.refresh('7997_1'); store.bindPersistence('pipe-info-B', storage); finish(attributes);
+      expect(await pending).toBe(false); expect(store.records.value).toEqual([]);
+      attrsSpy.mockResolvedValue({ ...attributes, attributes: [...attributes.attributes, attr('MATN','ASTM A106 Gr.B')] });
+      expect(await store.refresh('7997_1')).toBe(true);
+      expect(store.records.value[0]?.fields.find(field => field.key === 'material')?.text).toBe('ASTM A106 Gr.B');
+      attrsSpy.mockImplementation(async refno => {
+        if (refno.replace('_','/') === '7997/10') return { ...attributes, refno: '7997/10', noun: 'PIPE', attributes: [attr('MATR','7997/20')] };
+        if (refno.replace('_','/') === '7997/20') return { ...attributes, refno: '7997/20', noun: 'MATE', attributes: [attr('DESC','A312 TP316L')] };
+        return { ...attributes, attributes: [...attributes.attributes, attr('OWNER','7997/10')] };
+      });
+      expect(await store.refresh('7997_1')).toBe(true);
+      expect(store.records.value[0]?.fields.find(field => field.key === 'material')).toMatchObject({ text: 'A312 TP316L', source: '7997/10@42:MATR → 7997/20@42' });
+      expect(() => buildPipeInformation({ refno: '7997_2', attributes, centerline })).toThrow('这根 BRAN');
+    } finally { attrsSpy.mockRestore(); centerSpy.mockRestore(); boundsSpy.mockRestore(); store.detachPersistence(); store.clear(); }
+  });
   it('merges external records with the document and keeps hide state visible', async () => {
     const system = createSystem();
     mocks.dimensionSystem.value = system;

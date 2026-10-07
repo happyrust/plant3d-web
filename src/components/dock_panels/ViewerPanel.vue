@@ -69,6 +69,7 @@ import { MeasurementAnnotationManager } from '@/composables/useMeasurementAnnota
 import { useModelGeneration } from '@/composables/useModelGeneration';
 import { useModelLoadStatus } from '@/composables/useModelLoadStatus';
 import { usePipeDistanceStore } from '@/composables/usePipeDistanceStore';
+import { usePipeInformationStore } from '@/composables/usePipeInformationStore';
 import { collectPtsetEntries } from '@/composables/usePtsetVisualizationEntries';
 import { usePtsetVisualizationThree } from '@/composables/usePtsetVisualizationThree';
 import { useReviewStore } from '@/composables/useReviewStore';
@@ -85,6 +86,7 @@ import {
   DIMENSION_XEOKIT_PREFIX,
   useXeokitMeasurementTools,
 } from '@/composables/useXeokitMeasurementTools';
+import { pipeInformationToExternalDimensions } from '@/dimension';
 import {
   branClearanceToExternalDimensions,
   canEditUserDimension,
@@ -188,6 +190,7 @@ const backgroundStore = useBackgroundStore();
 const displayThemeStore = useDisplayThemeStore();
 const clearanceStore = useClearanceStore();
 const pipeDistanceStore = usePipeDistanceStore();
+const pipeInformationStore = usePipeInformationStore();
 
 const initError = ref<string | null>(null);
 
@@ -583,6 +586,7 @@ watch(clearanceStorageContext, (context) => {
   try { if (context.project) storage = window.localStorage; } catch { /* 本机存储不可用时保留内存记录 */ }
   clearanceStore.bindPersistence(context.key, storage, context.allowCalculations);
   pipeDistanceStore.bindPersistence(context.key, storage, context.allowCalculations);
+  pipeInformationStore.bindPersistence(context.key, storage, context.allowCalculations);
   spatialComputeStore.bindPersistence(context.key, storage, context.allowCalculations);
 }, { immediate: true, flush: 'sync' });
 function captureReviewModelContext(): ReviewModelContext | null {
@@ -692,7 +696,7 @@ onUnmounted(() => {
 });
 onUnmounted(offReviewModelContext);
 onUnmounted(offReviewClearance);
-onUnmounted(() => { offClearanceProject(); clearanceStore.detachPersistence(); pipeDistanceStore.detachPersistence(); spatialComputeStore.detachPersistence(); });
+onUnmounted(() => { offClearanceProject(); clearanceStore.detachPersistence(); pipeDistanceStore.detachPersistence(); spatialComputeStore.detachPersistence(); pipeInformationStore.detachPersistence(); });
 function publishModelUnitCompareState(): void {
   const state = modelUnitCompareState.value;
   const detail: ModelUnitVersionCompareRuntimeState | null = state
@@ -1766,6 +1770,12 @@ const componentToWallClearance = useComponentToWallClearance({
   onRecord: flyToClearanceRecord,
 });
 useClearanceDimensionSync(viewerContext.dimensionSystem, clearanceStore, requestRender);
+watch(selectionStore.selectedRefno, value => { pipeInformationStore.suggestedRefno.value = value ?? ''; });
+watch([viewerContext.dimensionSystem, pipeInformationStore.visibleRecords], ([system, records]) => {
+  if (!system) return;
+  system.replaceExternalSource('pipe-information', pipeInformationToExternalDimensions(records));
+  requestRender();
+}, { deep: true, immediate: true });
 
 function nextDimensionId(prefix: string): string {
   return typeof crypto.randomUUID === 'function'

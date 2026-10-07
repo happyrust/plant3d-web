@@ -133,6 +133,7 @@ function actionLabel(
     case 'restore-auto-layout':
       return '恢复自动布局';
     case 'hide-external':
+      if (isExternalDimensionRecord(item) && item.source === 'pipe-information') return '隐藏';
       return hiddenExternal.value.has(item.id) ? '临时显示' : '临时隐藏';
   }
 }

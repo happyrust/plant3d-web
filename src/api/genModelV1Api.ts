@@ -437,6 +437,8 @@ export type SearchResponse = {
 };
 
 export type ElementAttribute = {
+  value?: unknown;
+  origin?: string;
   name: string;
   value_type: string;
   display: string;
@@ -446,6 +448,10 @@ export type ElementAttribute = {
 };
 
 export type ElementAttributesResponse = {
+  refno?: string;
+  noun?: string;
+  dbnum?: number;
+  sesno?: number;
   source: string;
   complete: boolean;
   attributes: ElementAttribute[];
@@ -641,6 +647,26 @@ export function genModelV1ElementAttributes(
     method: 'POST',
     body: { refno: toV1Refno(refno) },
   });
+}
+
+export type ModelBoundsResponse = {
+  refno: string;
+  scope: 'subtree';
+  min_mm: [number, number, number];
+  max_mm: [number, number, number];
+  model_count: number;
+  source: string;
+  stale: boolean | null;
+  publication_status: string;
+};
+
+/** Current generated model bounds, including tubes; does not define the business envelope. */
+export async function genModelV1ModelBounds(refno: string, options?: GenModelV1RequestOptions): Promise<ModelBoundsResponse> {
+  const response = await genModelV1Fetch<{ tool: string; result: ModelBoundsResponse }>('/api/v1/query', {
+    ...options, method: 'POST', body: { tool: 'model.spatial.bounds', arguments: { refno: toV1Refno(refno), scope: 'subtree' } },
+  });
+  if (response.tool !== 'model.spatial.bounds') throw new Error('模型边界响应类型不匹配');
+  return response.result;
 }
 
 /** `element/ptset` 里的一个 P 点：构件局部系，mm，`dir` 已归一化（spec §4.11.1）。 */
