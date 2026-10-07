@@ -1879,8 +1879,10 @@ export type GenModelV1SpatialNearestClearanceRequest = {
   /** 源构件，`a_b` / `a/b`。中心线模式必须是 BRAN（不是 → 422 `precondition`；库里没有 → 404）；`aabb` 模式任意有盒的构件 */
   sourceRefno: string;
   sourceMode?: SpatialClearanceSourceMode;
-  /** 预置组：`wall` = WALL/PANE/GWALL/STWALL，`column` = COLU/SCTN/GENSEC；服务端收逗号分隔 */
+  /** 预置组 wall/column/beam/slab；SCTN/GENSEC 按世界轴线区分梁柱，无法可靠分类的构件不进入梁柱组。 */
   targetGroups?: string[];
+  /** 梁柱轴线与水平/垂直方向的分类容差，0..45 度；缺省 5 度，待专业确认。 */
+  structuralAngleDeg?: number;
   /** 直接点名的 NOUN 白名单，与 `targetGroups` 可并用。`target_groups` 分桶下两者都不给 → 400（与 legacy 同，默认值由调用方补） */
   targetNouns?: string[];
   groupBy?: SpatialClearanceGroupBy;
@@ -1924,6 +1926,7 @@ export type SpatialClearanceCandidate = {
   /** `a_b` */
   refno: string;
   noun: string;
+  structural_class?: 'wall' | 'column' | 'beam' | 'slab' | null;
   /** 答不出为 null */
   dbnum: number | null;
   distance_mm: number;
@@ -2026,6 +2029,7 @@ function spatialNearestClearanceQuery(req: GenModelV1SpatialNearestClearanceRequ
     source_refno: toV1Refno(req.sourceRefno),
     source_mode: req.sourceMode,
     target_groups: joinCsv(req.targetGroups),
+    structural_angle_deg: req.structuralAngleDeg,
     target_nouns: joinCsv(req.targetNouns),
     group_by: req.groupBy,
     exclude_nouns: joinCsv(req.excludeNouns),

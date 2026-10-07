@@ -7,7 +7,7 @@ import type {
   BranParallelSpacingDetail,
 } from '@/api/genModelSpatialApi';
 
-import { genModelV1SpatialNearestClearance } from '@/api/genModelV1Api';
+import { genModelV1SpatialNearestClearance, genModelV1SurfaceClearance } from '@/api/genModelV1Api';
 import { type BranParallelRunPair, describeStraightRun } from '@/composables/branParallelSpacing';
 import { useSelectionStore } from '@/composables/useSelectionStore';
 import { useViewerContext } from '@/composables/useViewerContext';
@@ -40,8 +40,8 @@ export type SpatialComputeResultRow = {
  * 精确到中心线本身（`parallel-centerline / exact-centerline`），不标「≈」。
  */
 export type BranClearanceProvenance = {
-  method: 'centerline-to-aabb' | 'sampled-object' | 'parallel-centerline';
-  accuracyClass: 'approximate-bounds' | 'approximate-sampled' | 'exact-centerline';
+  method: 'centerline-to-aabb' | 'sampled-object' | 'parallel-centerline' | 'surface-to-surface';
+  accuracyClass: 'approximate-bounds' | 'approximate-sampled' | 'exact-centerline' | 'exact-surface';
 };
 
 export const SERVER_BRAN_CLEARANCE_PROVENANCE: BranClearanceProvenance = {
@@ -105,6 +105,11 @@ export type BranNounFacet = {
 export type SpatialComputeScenarioField = 'tolerance' | 'suppoType' | 'searchRadius' | 'targetNouns' | 'excludeNouns' | 'neighborWindow';
 
 type SpatialComputeScenarioState = {
+  structureCategory: 'all' | 'wall' | 'column' | 'beam' | 'slab';
+  structuralAngleDeg: string;
+  warnings: string[];
+  refiningKeys: string[];
+  queriedSourceRefno: string;
   suppoRefno: string;
   tolerance: string;
   suppoType: string;
@@ -156,7 +161,7 @@ const SCENARIO_META: SpatialComputeScenarioMeta[] = [
   {
     key: 'branNearestClearance',
     title: 'BRAN 中心线最近清距',
-    description: '沿 BRAN 中心线按类型找半径内最近的构件（墙 / 柱 / 设备 / 支架…），每类默认标注最近 1 条。',
+    description: '按墙、柱、梁、板或全部类型查找候选；先显示包围盒估算，可逐条精算实体外表面净距。',
     endpoint: BRAN_NEAREST_CLEARANCE_ENDPOINT,
     exampleRefno: '24381_145018',
     sourceLabel: 'BRAN Refno',
@@ -179,9 +184,14 @@ const DEFAULT_STATE_BY_SCENARIO: Record<
     | 'drawnCandidateKeys'
     | 'excludedSelfMembers'
     | 'candidateProvenance'
+    | 'warnings'
+    | 'refiningKeys'
+    | 'queriedSourceRefno'
   >
 > = {
   branNearestClearance: {
+    structureCategory: 'all',
+    structuralAngleDeg: '5',
     suppoRefno: '24381_145018',
     tolerance: '',
     suppoType: '',
@@ -214,6 +224,9 @@ function createScenarioState(key: SpatialComputeScenarioKey): SpatialComputeScen
     drawnCandidateKeys: [],
     excludedSelfMembers: 0,
     candidateProvenance: {},
+    warnings: [],
+    refiningKeys: [],
+    queriedSourceRefno: '',
   };
 }
 
@@ -226,6 +239,9 @@ function clearScenarioResults(state: SpatialComputeScenarioState): void {
   state.drawnCandidateKeys = [];
   state.excludedSelfMembers = 0;
   state.candidateProvenance = {};
+  state.warnings = [];
+  state.refiningKeys = [];
+  state.queriedSourceRefno = '';
 }
 
 /**
@@ -282,8 +298,10 @@ function provenanceLabel(provenance: BranClearanceProvenance | undefined): strin
       return '估算最近距离（网格采样）';
     case 'parallel-centerline':
       return '平行直段中心距';
+    case 'surface-to-surface':
+      return '实体外表面净距（网格精算）';
     default:
-      return '';
+      return '包围盒估算';
   }
 }
 
@@ -431,6 +449,8 @@ export function interactiveBranClearanceCandidate(input: InteractiveBranClearanc
 }
 
 type BranNearestClearanceQuery = {
+  structureCategory: SpatialComputeScenarioState['structureCategory'];
+  structuralAngleDeg: number;
   /** 已归一成 `a_b` */
   sourceRefno: string;
   /** 目标过滤之后再剔掉的噪声类型；空数组 = 不剔 */
@@ -450,7 +470,9 @@ async function fetchBranNearestClearance(query: BranNearestClearanceQuery): Prom
   return await genModelV1SpatialNearestClearance({
     sourceRefno: query.sourceRefno,
     sourceMode: 'bran_centerline',
-    groupBy: 'noun',
+    groupBy: query.structureCategory === 'all' ? 'noun' : 'target_groups',
+    targetGroups: query.structureCategory === 'all' ? undefined : [query.structureCategory],
+    structuralAngleDeg: query.structuralAngleDeg,
     excludeNouns: query.excludeNouns,
     radius: query.radius,
     maxPerGroup: BRAN_CLEARANCE_MAX_PER_NOUN,
@@ -524,16 +546,16 @@ export function createSpatialComputeStore() {
 
   async function submitScenario(key: SpatialComputeScenarioKey = activeScenario.value) {
     const state = scenarios[key];
+    const token = ++nextRequestToken;
+    requestTokens[key] = token;
     const refno = normalizeBranComputeRefno(state.suppoRefno);
     if (!refno) {
+      state.loading = false;
       state.error = '请输入完整 BRAN refno';
       state.responseText = '';
       clearScenarioResults(state);
       return;
     }
-
-    const token = ++nextRequestToken;
-    requestTokens[key] = token;
 
     state.loading = true;
     state.error = '';
@@ -541,7 +563,11 @@ export function createSpatialComputeStore() {
     clearScenarioResults(state);
 
     try {
+      const structuralAngleDeg = parseOptionalNumber(state.structuralAngleDeg, '分类角度') ?? 5;
+      if (structuralAngleDeg < 0 || structuralAngleDeg > 45) throw new Error('分类角度必须在 0 到 45 度之间');
       const branResponse = await fetchBranNearestClearance({
+        structureCategory: state.structureCategory,
+        structuralAngleDeg,
         sourceRefno: refno,
         excludeNouns: splitCsv(state.excludeNouns),
         radius: parseOptionalNumber(state.searchRadius, 'radius') ?? 5000,
@@ -554,6 +580,8 @@ export function createSpatialComputeStore() {
         return;
       }
       state.branGroups = normalizeBranNearestGroups(branResponse.nearest_by_group);
+      state.queriedSourceRefno = refno;
+      state.warnings = [...(branResponse.warnings ?? [])];
       state.nounFacets = buildBranNounFacets(state.branGroups, branResponse.noun_counts);
       state.drawnCandidateKeys = defaultDrawnCandidateKeys(state.branGroups);
       state.excludedSelfMembers = branResponse.excluded_self_members ?? 0;
@@ -567,6 +595,45 @@ export function createSpatialComputeStore() {
       if (requestTokens[key] === token) {
         state.loading = false;
       }
+    }
+  }
+
+  async function refineBranCandidate(candidateKey: string) {
+    const state = scenarios.branNearestClearance;
+    const candidate = state.branGroups.flatMap((group) =>
+      group.candidates.map((item) => ({ item, key: branCandidateKey(group.group, item) })),
+    ).find((item) => item.key === candidateKey)?.item;
+    if (!candidate || candidate.parallel || !state.queriedSourceRefno || state.refiningKeys.includes(candidateKey)) return;
+    const token = requestTokens.branNearestClearance;
+    const sourceRefno = state.queriedSourceRefno;
+    state.refiningKeys.push(candidateKey);
+    state.error = '';
+    try {
+      const response = await genModelV1SurfaceClearance({ sourceRefno, targetRefno: candidate.refno, targetKind: 'any' });
+      if (requestTokens.branNearestClearance !== token) return;
+      const result = response.result;
+      if (!response.success || response.unit !== 'mm' || response.accuracy_class !== 'exact-surface'
+        || !Number.isFinite(response.error_bound_mm) || response.error_bound_mm < 0 || response.error_bound_mm > 10
+        || !result || !Number.isFinite(result.distance_mm) || result.distance_mm < 0
+        || result.witness !== 'closest-points'
+        || [result.source_point, result.target_point].some((point) => !point || ![point.x, point.y, point.z].every(Number.isFinite))) {
+        throw new Error('未取得可靠的外表面最近点，保留包围盒估算；请检查网格或相交状态。');
+      }
+      candidate.distance_mm = result.distance_mm;
+      candidate.intersects = result.intersects;
+      candidate.nearest = {
+        source_segment_refno: normalizeBranComputeRefno(result.source_leaf_refno), source_segment_order: null,
+        source_point: { ...result.source_point }, target_point: { ...result.target_point },
+        vector: { dx: result.target_point.x - result.source_point.x, dy: result.target_point.y - result.source_point.y, dz: result.target_point.z - result.source_point.z },
+      };
+      candidate.annotation = { start_point: { ...result.source_point }, end_point: { ...result.target_point }, label_mm: result.distance_mm };
+      state.candidateProvenance[candidateKey] = { method: 'surface-to-surface', accuracyClass: 'exact-surface' };
+      state.warnings = [...new Set([...state.warnings, ...(response.warnings ?? []), '精算采用当前实体网格外表面；保温层/包络口径及专业 10 mm 对照验收待确认。'])];
+      applyBranSelection(state);
+    } catch (error) {
+      if (requestTokens.branNearestClearance === token) state.error = error instanceof Error ? error.message : String(error);
+    } finally {
+      if (requestTokens.branNearestClearance === token) state.refiningKeys = state.refiningKeys.filter((key) => key !== candidateKey);
     }
   }
 
@@ -733,6 +800,7 @@ export function createSpatialComputeStore() {
     resetScenario,
     applyCurrentSelection,
     submitScenario,
+    refineBranCandidate,
     toggleScenarioExpanded,
     toggleBranNounFacet,
     setAllBranNounFacets,

@@ -75,6 +75,8 @@ describe('PropertiesPanel 标题栏「历史」', () => {
 
     setGlobalSelectedRefno(REFNO);
     await flushUi();
+    // 等动态加载的数据源查询完成，避免上一个用例的请求落入下一个用例的已重置 mock。
+    await vi.waitFor(() => expect(host.textContent).toContain(`/N-${REFNO}`));
     const button = historyButton(host);
     expect(button).not.toBeNull();
     expect(button!.title).toContain(REFNO);
