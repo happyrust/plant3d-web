@@ -144,6 +144,12 @@ async function handleDetect() {
   await detectBransWithDtxFallback(store.selectedBranRefnos.value);
 }
 
+async function handleDetectNearby() {
+  const source = store.selectedBranRefnos.value[0];
+  if (source && store.selectedBranRefnos.value.length === 1)
+    await store.detectNearbyBrans(source, { transformPoint: createSceneTransformPoint() });
+}
+
 function getCurrentSelectedBrans(): string[] {
   const candidates = [
     ...selectionStore.selectedRefnos.value,
@@ -402,6 +408,12 @@ function isResultHidden(id: string): boolean {
             <p class="text-[11px] text-muted-foreground">批量检测所有管对的模型外表面净距，包含交叉和斜交；中心距估算会单独注明。</p>
 
             <!-- 重新检测 -->
+            <button v-if="store.selectedBranRefnos.value.length === 1" type="button"
+              :disabled="store.isDetecting.value"
+              class="inline-flex h-9 w-full items-center justify-center gap-2 rounded-md border border-primary px-3 text-xs text-primary disabled:opacity-50"
+              @click="handleDetectNearby">
+              检测这根管道的周边净距
+            </button>
             <button type="button"
               :disabled="store.isDetecting.value || store.selectedBranRefnos.value.length < 2"
               class="inline-flex h-9 w-full items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground shadow transition-colors hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-50"
@@ -411,7 +423,7 @@ function isResultHidden(id: string): boolean {
             </button>
             <div v-if="store.selectedBranRefnos.value.length < 2 && !store.isDetecting.value"
               class="text-xs text-muted-foreground">
-              至少选择 2 根 BRAN 管道才能检测
+              选 1 根可检测周边管道；选 2 根及以上可检测所有已选管对
             </div>
 
             <!-- 错误提示 -->

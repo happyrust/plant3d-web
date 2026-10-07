@@ -2,10 +2,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const v1ApiMocks = vi.hoisted(() => ({
   genModelV1SurfaceClearance: vi.fn(),
+  genModelV1SpatialNearbyBranches: vi.fn(),
 }));
 
 vi.mock('@/api/genModelV1Api', () => ({
   genModelV1SurfaceClearance: v1ApiMocks.genModelV1SurfaceClearance,
+  genModelV1SpatialNearbyBranches: v1ApiMocks.genModelV1SpatialNearbyBranches,
   isGenModelV1ApiError: (e: unknown) => e instanceof Error && e.name === 'GenModelV1ApiError',
 }));
 
@@ -45,10 +47,69 @@ function surfaceClearanceResponse(overrides: Record<string, unknown> = {}) {
 describe('usePipeDistanceStore · 净距检测', () => {
   beforeEach(() => {
     v1ApiMocks.genModelV1SurfaceClearance.mockReset();
+    v1ApiMocks.genModelV1SpatialNearbyBranches.mockReset();
     const store = usePipeDistanceStore();
     store.detachPersistence();
     store.clearResults();
     store.clearBranRefnos();
+  });
+
+  it('detects neighbours of the full finite branch with bounded exact queries and keeps drafts on query failure', async () => {
+    const store = usePipeDistanceStore();
+    store.maxDistance.value = 500;
+    store.setBranRefnos(['24381_1001']);
+    const nearby = { results: [1002, 1003].map(id => ({ refno: `24381/${id}`, noun: 'BRAN', distance: 20 })),
+      total_count: 2, has_more: false, truncated_candidates: false, radius: 500, center: { source: 'refno_aabb_center' }, warnings: [] };
+    v1ApiMocks.genModelV1SpatialNearbyBranches.mockResolvedValue(nearby);
+    v1ApiMocks.genModelV1SurfaceClearance.mockImplementation(async ({ targetRefno }: { targetRefno: string }) =>
+      surfaceClearanceResponse({ result: { ...surfaceClearanceResponse().result, distance_mm: targetRefno.endsWith('1002') ? 320 : 600 } }));
+    expect(await store.detectNearbyBrans('24381/1001')).toBe(true);
+    expect(v1ApiMocks.genModelV1SpatialNearbyBranches).toHaveBeenCalledWith(expect.objectContaining({ refno: '24381_1001', radius: 500 }));
+    expect(v1ApiMocks.genModelV1SurfaceClearance).toHaveBeenCalledTimes(2);
+    expect(v1ApiMocks.genModelV1SurfaceClearance).toHaveBeenCalledWith(expect.objectContaining({ sourceRefno: '24381_1001', maxDistanceMm: 500, perpendicular: false }));
+    expect(store.results.value).toHaveLength(1);
+    const saved = JSON.parse(JSON.stringify(store.results.value));
+    v1ApiMocks.genModelV1SpatialNearbyBranches.mockRejectedValue(new Error('unavailable'));
+    expect(await store.detectNearbyBrans('24381_1001')).toBe(false);
+    expect(store.results.value).toEqual(saved);
+    expect(store.detectError.value).toContain('原有结果已保留');
+    v1ApiMocks.genModelV1SpatialNearbyBranches.mockResolvedValue({ ...nearby, truncated_candidates: true });
+    expect(await store.detectNearbyBrans('24381_1001')).toBe(true);
+    expect(store.detectError.value).toContain('候选未全部计算');
+    v1ApiMocks.genModelV1SpatialNearbyBranches.mockResolvedValue({ ...nearby, results: [], total_count: 0 });
+    const last = JSON.parse(JSON.stringify(store.results.value));
+    expect(await store.detectNearbyBrans('24381_1001')).toBe(true);
+    expect(store.results.value).toEqual(last);
+    let done!: (value: unknown) => void;
+    v1ApiMocks.genModelV1SpatialNearbyBranches.mockImplementation(() => new Promise(resolve => { done = resolve; }));
+    const pending = store.detectNearbyBrans('24381_1001');
+    store.setBranRefnos(['24381_9999']);
+    done(nearby);
+    expect(await pending).toBe(false);
+    expect(store.selectedBranRefnos.value).toEqual(['24381_9999']);
+    expect(store.results.value).toEqual(last);
+    const rangeChanged = store.detectNearbyBrans('24381_9999');
+    store.maxDistance.value = 600;
+    done(nearby);
+    expect(await rangeChanged).toBe(false);
+    expect(store.detectError.value).toContain('检测范围已变化');
+    expect(store.results.value).toEqual(last);
+    store.maxDistance.value = 500;
+    store.setBranRefnos(['24381_1001']);
+    v1ApiMocks.genModelV1SpatialNearbyBranches.mockReset();
+    v1ApiMocks.genModelV1SurfaceClearance.mockClear();
+    v1ApiMocks.genModelV1SpatialNearbyBranches.mockResolvedValueOnce({ ...nearby, total_count: 3, has_more: true })
+      .mockResolvedValueOnce({ ...nearby, total_count: 3, results: [{ refno: '24381_1004', noun: 'BRAN', distance: 30 }] });
+    expect(await store.detectNearbyBrans('24381_1001')).toBe(true);
+    expect(v1ApiMocks.genModelV1SpatialNearbyBranches.mock.calls.map(([request]) => request.page)).toEqual([1, 2]);
+    expect(v1ApiMocks.genModelV1SurfaceClearance).toHaveBeenCalledTimes(3);
+    expect(store.selectedBranRefnos.value).toEqual(['24381_1001', '24381_1002', '24381_1003', '24381_1004']);
+    expect(store.detectError.value).toBeNull();
+    v1ApiMocks.genModelV1SpatialNearbyBranches.mockResolvedValue({ ...nearby, total_count: 3, has_more: true });
+    const unchanged = JSON.parse(JSON.stringify(store.results.value));
+    expect(await store.detectNearbyBrans('24381_1001')).toBe(false);
+    expect(store.detectError.value).toContain('分页没有进展');
+    expect(store.results.value).toEqual(unchanged);
   });
 
   it('restores canonical mm points as stale and isolates contexts including late requests', async () => {

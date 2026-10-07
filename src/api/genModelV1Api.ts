@@ -1664,6 +1664,21 @@ export function genModelV1SpatialNearby(
   });
 }
 
+/** Loaded BRAN owners; includes implicit tubes absent from the ordinary spatial tree. */
+export type SpatialNearbyBranchesResponse = Pick<SpatialNearbyResponse,
+  'center' | 'radius' | 'total_count' | 'returned_count' | 'has_more' | 'truncated_candidates' | 'coverage' | 'warnings'> & {
+  results: (Omit<SpatialNearbyItem, 'dbnum'> & { dbnum: number | null })[];
+};
+
+export function genModelV1SpatialNearbyBranches(
+  req: Pick<GenModelV1SpatialNearbyRequest, 'refno' | 'radius' | 'page' | 'perPage'>,
+  options?: GenModelV1RequestOptions,
+): Promise<SpatialNearbyBranchesResponse> {
+  return genModelV1Fetch<SpatialNearbyBranchesResponse>('/api/v1/spatial/nearby/branches', {
+    ...options, query: spatialNearbyQuery(req),
+  });
+}
+
 /** `GET /api/v1/spatial/nearby/refnos`：同参、不分页的完整命中 refno 集（`page / per_page` 不发）。 */
 export function genModelV1SpatialNearbyRefnos(
   req: GenModelV1SpatialNearbyRequest,

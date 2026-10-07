@@ -1,0 +1,90 @@
+[
+  {
+    "case": "branch_candidates",
+    "source_excluded": true,
+    "members_deduplicated": true,
+    "tube_only_near_long_branch_end": true,
+    "far_branch_excluded": true,
+    "historical_excluded": true,
+    "invalid_tube_excluded": true,
+    "invalid_bounds_warns": true,
+    "pagination": true,
+    "unknown_owner_warns": true,
+    "branches": [
+      "7997_3",
+      "7997_2"
+    ]
+  },
+  {
+    "case": "parallel",
+    "expected_mm": 50.0,
+    "actual_mm": 50.0,
+    "error_mm": 0.0,
+    "reversed_mm": 50.0,
+    "limit_mm": 500.0,
+    "witness": "closest-points"
+  },
+  {
+    "case": "crossing",
+    "expected_mm": 50.0,
+    "actual_mm": 50.0,
+    "error_mm": 0.0,
+    "reversed_mm": 50.0,
+    "limit_mm": 500.0,
+    "witness": "closest-points"
+  },
+  {
+    "case": "skew",
+    "expected_mm": 50.0,
+    "actual_mm": 50.0,
+    "error_mm": 0.0,
+    "reversed_mm": 50.0,
+    "limit_mm": 500.0,
+    "witness": "closest-points"
+  },
+  {
+    "case": "flat_end_gap",
+    "expected_mm": 30.0,
+    "actual_mm": 30.0,
+    "error_mm": 0.0,
+    "reversed_mm": 30.0,
+    "limit_mm": 500.0,
+    "witness": "closest-points"
+  },
+  {
+    "case": "touching",
+    "expected_mm": 0.0,
+    "actual_mm": 0.0,
+    "error_mm": 0.0,
+    "reversed_mm": 0.0,
+    "limit_mm": 500.0,
+    "witness": "aabb-overlap-center"
+  },
+  {
+    "case": "crossing_intersection",
+    "expected_mm": 0.0,
+    "actual_mm": 0.0,
+    "error_mm": 0.0,
+    "reversed_mm": 0.0,
+    "limit_mm": 500.0,
+    "witness": "aabb-overlap-center"
+  },
+  {
+    "case": "world_scale_skew",
+    "expected_mm": 50.0,
+    "actual_mm": 50.0,
+    "error_mm": 0.0,
+    "reversed_mm": 50.0,
+    "limit_mm": 500.0,
+    "witness": "closest-points"
+  },
+  {
+    "case": "inclusive_max_distance",
+    "expected_mm": 500.0,
+    "actual_mm": 500.0,
+    "error_mm": 0.0,
+    "reversed_mm": 500.0,
+    "limit_mm": 500.0,
+    "witness": "closest-points"
+  }
+]
