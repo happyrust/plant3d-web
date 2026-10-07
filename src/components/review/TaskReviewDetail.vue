@@ -420,7 +420,7 @@ onMounted(() => {
 
         <AssociatedFilesList :attachments="taskView.attachments ?? []"
           title="附件"
-          description="PDF / 图片可在预览面板中查看，其余格式下载后查看"
+          description="PDF / Word / 图片可在预览面板中查看，其余格式下载后查看"
           empty-text="暂无附件"
           :previewable="true"
           @preview="handlePreviewAttachment" />

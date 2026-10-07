@@ -75,4 +75,20 @@ describe('usePipeDistanceAnnotationThree', () => {
     );
     expect(requestRender).toHaveBeenCalled();
   });
+
+  it('keeps an estimated center distance visibly distinct in the 3D dimension label', () => {
+    const { viewerRef } = createCompatViewerMock();
+    const replaceExternalSource = vi.fn();
+    const adapter = usePipeDistanceAnnotationThree(
+      viewerRef,
+      shallowRef([{ ...pipeDistanceResult(), measurementKind: 'axis-estimate' as const }]),
+      shallowRef(true),
+      undefined,
+      shallowRef({ replaceExternalSource } as any),
+    );
+    adapter.renderAnnotations();
+    expect(replaceExternalSource).toHaveBeenCalledWith('pipe-distance', [expect.objectContaining({
+      layout: expect.objectContaining({ formattedLabel: '中心距估算 141 mm' }),
+    })]);
+  });
 });

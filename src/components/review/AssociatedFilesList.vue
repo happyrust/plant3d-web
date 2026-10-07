@@ -34,7 +34,7 @@ const props = withDefaults(defineProps<{
   emptyText?: string;
   /** 空状态补充说明；传空字符串隐藏 */
   emptyHint?: string;
-  /** 是否提供“查看”入口（仅 PDF/图片显示；Office/CAD 只显示“下载查看”） */
+  /** 是否提供“查看”入口（PDF/Word/图片；表格/CAD显示“下载查看”） */
   previewable?: boolean;
   /** 是否可编辑（显示删除按钮） */
   editable?: boolean;
@@ -43,7 +43,7 @@ const props = withDefaults(defineProps<{
   title: '关联校验文件',
   description: '以下文件根据当前选择的模型构件自动关联',
   emptyText: '暂无关联文件',
-  emptyHint: '支持 PDF、图片、CAD 图纸、表格与文档；其中 PDF 与图片可直接在「文档预览」面板中打开。',
+  emptyHint: '支持 PDF、图片、CAD 图纸、表格与文档；PDF、Word 与图片可直接在「文档预览」面板中打开。',
   previewable: false,
   editable: false,
 });

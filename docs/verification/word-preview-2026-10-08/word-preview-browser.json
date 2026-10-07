@@ -1,0 +1,11 @@
+{
+  "checkedAt": "2026-10-07T18:33:01.856Z",
+  "text": "三维校审 Word 预览验证中文正文、尺寸 1200 mm 和版本 A/B。不可信链接管线DN100",
+  "tableCount": 1,
+  "unsafeLinkCount": 0,
+  "csp": "default-src 'none'; img-src data:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'",
+  "invalidRejected": true,
+  "sandbox": "",
+  "visible": true,
+  "source": "real DOCX + browser + production preview component"
+}

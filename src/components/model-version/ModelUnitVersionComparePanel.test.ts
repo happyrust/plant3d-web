@@ -570,7 +570,7 @@ describe('ModelUnitVersionComparePanel', () => {
     await flushUi();
     (host.querySelector('[data-testid="model-unit-compare-run"]') as HTMLButtonElement).click();
     await flushUi();
-    const open = events.findLast((event) => event.detail?.action === 'open')!.detail;
+    const open = [...events].reverse().find((event) => event.detail?.action === 'open')!.detail;
     window.dispatchEvent(new CustomEvent('plant3d:model-unit-version-compare-state', {
       detail: { detail: open, status: 'ready', activeSide: 'after', viewMode: 'single' },
     }));

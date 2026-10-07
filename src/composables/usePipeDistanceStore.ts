@@ -12,6 +12,7 @@ import { genModelV1SurfaceClearance, isGenModelV1ApiError } from '@/api/genModel
 export type PipeDistanceResult = {
   id: string;
   distance: number; // mm
+  measurementKind?: 'surface' | 'axis-estimate';
   pipeA: string;
   pipeB: string;
   start: Vec3;
@@ -25,6 +26,7 @@ export type PipeDistanceResult = {
 export type PipeDistanceDetectionOptions = {
   refnos?: string[];
   transformPoint?: (point: Vec3) => Vec3 | null | undefined;
+  pairMode?: 'source-to-targets' | 'all-pairs';
 };
 
 const showAnnotations = ref(true);
@@ -38,6 +40,7 @@ const detectError = ref<string | null>(null);
 
 const hiddenResultIds = ref<Set<string>>(new Set());
 const resultMinDistance = ref<number | null>(null);
+let detectionSequence = 0;
 
 function normalizeBranRefno(refno: string): string {
   return String(refno || '').trim().replace(/\//g, '_');
@@ -132,22 +135,30 @@ export function usePipeDistanceStore() {
   }
 
   async function runDetection(options: PipeDistanceDetectionOptions = {}) {
+    const sequence = ++detectionSequence;
     if (options.refnos) {
       setBranRefnos(options.refnos);
     }
 
-    const branRefnos = selectedBranRefnos.value;
+    const branRefnos = [...selectedBranRefnos.value];
     if (branRefnos.length < 2) {
+      results.value = [];
+      activeResultIndex.value = null;
+      isDetecting.value = false;
       detectError.value = '请至少选择 2 个构件';
-      return;
+      return false;
     }
 
     isDetecting.value = true;
     detectError.value = null;
 
-    // 第一个作为源，其余为目标：逐对向 gen-model `/api/v1/spatial/surface-clearance`（`target_kind=any`）要外表面最近点。
-    // 旧后端 `/api/space/nearest-points` 一发算全部目标的路 2026-09-20 随 legacy 退役；这里一对一发，结果形状不变（E3D 世界 mm）。
-    const [sourceRefno, ...targetRefnos] = branRefnos;
+    // 工作台批量检测所有唯一管对；保留源→目标模式供既有调用使用。
+    const pairs: [string, string][] = [];
+    for (let i = 0; i < branRefnos.length - 1; i += 1) {
+      if (i > 0 && options.pairMode !== 'all-pairs') break;
+      for (let j = i + 1; j < branRefnos.length; j += 1) pairs.push([branRefnos[i]!, branRefnos[j]!]);
+    }
+    const distanceLimit = Number.isFinite(maxDistance.value) && maxDistance.value > 0 ? maxDistance.value : 500;
 
     try {
       const transform = options.transformPoint;
@@ -157,32 +168,49 @@ export function usePipeDistanceStore() {
       };
 
       const warnings: string[] = [];
-      const settled = await Promise.all(targetRefnos.map(async (targetRefno) => {
-        try {
-          const resp = await genModelV1SurfaceClearance({
-            sourceRefno: sourceRefno!,
-            targetRefno,
-            targetKind: 'any',
-            perpendicular: false,
-          });
-          if (!resp.result) {
-            warnings.push(`${targetRefno}：${resp.warnings.join('；') || '两侧网格在最大距离内没有靠近'}`);
-            return null;
+      const settled: (PipeDistanceResult | null)[] = Array(pairs.length).fill(null);
+      let cursor = 0;
+      // ponytail: O(n²) pairs; at most four mesh queries in flight, spatial candidate filtering can reduce large selections later.
+      const worker = async () => {
+        while (cursor < pairs.length && sequence === detectionSequence) {
+          const index = cursor++;
+          const [sourceRefno, targetRefno] = pairs[index]!;
+          try {
+            const resp = await genModelV1SurfaceClearance({
+              sourceRefno,
+              targetRefno,
+              targetKind: 'any',
+              perpendicular: false,
+              ...(options.pairMode === 'all-pairs' ? { maxDistanceMm: distanceLimit } : {}),
+            });
+            if (!resp.result) {
+              warnings.push(`${targetRefno}：${resp.warnings.join('；') || '两侧网格在最大距离内没有靠近'}`);
+              continue;
+            }
+            if (options.pairMode === 'all-pairs' && resp.result.distance_mm > distanceLimit) continue;
+            if (!Number.isFinite(resp.result.distance_mm) || resp.result.distance_mm < 0
+            || ![resp.result.source_point, resp.result.target_point].every(point =>
+              [point.x, point.y, point.z].every(Number.isFinite))) {
+              warnings.push(`${sourceRefno} ↔ ${targetRefno}：距离或最近点无效`);
+              continue;
+            }
+            settled[index] = {
+              id: [sourceRefno, targetRefno].sort().join('__'),
+              distance: resp.result.distance_mm,
+              measurementKind: 'surface',
+              pipeA: sourceRefno,
+              pipeB: targetRefno,
+              start: toVec3(resp.result.source_point),
+              end: toVec3(resp.result.target_point),
+            };
+          } catch (error) {
+            const message = isGenModelV1ApiError(error) ? error.message : error instanceof Error ? error.message : String(error);
+            warnings.push(`${targetRefno}：${message}`);
           }
-          return {
-            id: `${sourceRefno}__${targetRefno}`,
-            distance: resp.result.distance_mm,
-            pipeA: sourceRefno!,
-            pipeB: targetRefno,
-            start: toVec3(resp.result.source_point),
-            end: toVec3(resp.result.target_point),
-          } satisfies PipeDistanceResult;
-        } catch (error) {
-          const message = isGenModelV1ApiError(error) ? error.message : error instanceof Error ? error.message : String(error);
-          warnings.push(`${targetRefno}：${message}`);
-          return null;
         }
-      }));
+      };
+      await Promise.all(Array.from({ length: Math.min(4, pairs.length) }, worker));
+      if (sequence !== detectionSequence) return false;
 
       results.value = settled.filter((item): item is PipeDistanceResult => item !== null);
       activeResultIndex.value = results.value.length > 0 ? 0 : null;
@@ -194,22 +222,26 @@ export function usePipeDistanceStore() {
         detectError.value = warnings.join('；');
       }
     } catch (e) {
+      if (sequence !== detectionSequence) return false;
       const msg = e instanceof Error ? e.message : String(e);
       detectError.value = `检测失败: ${msg}`;
       console.error('[PipeDistance] runDetection failed:', e);
     } finally {
-      isDetecting.value = false;
+      if (sequence === detectionSequence) isDetecting.value = false;
     }
+    return true;
   }
 
   async function autoDetectBrans(refnos: string[], options: Omit<PipeDistanceDetectionOptions, 'refnos'> = {}) {
-    await runDetection({
+    return runDetection({
       ...options,
       refnos,
     });
   }
 
   function clearResults() {
+    detectionSequence += 1;
+    isDetecting.value = false;
     results.value = [];
     activeResultIndex.value = null;
     detectError.value = null;

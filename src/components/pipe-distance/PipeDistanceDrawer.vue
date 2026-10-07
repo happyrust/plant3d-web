@@ -112,16 +112,18 @@ function applyDetectionFallbackResults(refnos: string[], fallbackResults: PipeDi
   if (fallbackResults.length === 0) return false;
   store.setBranRefnos(refnos);
   store.showAnnotations.value = true;
-  store.results.value = fallbackResults;
+  store.results.value = fallbackResults.map(result => ({ ...result, measurementKind: 'axis-estimate' }));
   store.activeResultIndex.value = 0;
-  store.detectError.value = null;
+  store.detectError.value = '外表面净距未算出，当前显示模型拟合中心距估算；不能用作净距验收。';
   return true;
 }
 
 async function detectBransWithDtxFallback(refnos: string[]) {
-  await store.autoDetectBrans(refnos, {
+  const applied = await store.autoDetectBrans(refnos, {
     transformPoint: createSceneTransformPoint(),
+    pairMode: 'all-pairs',
   });
+  if (!applied) return;
   if (store.results.value.length > 0) return;
 
   const fallbackResults = createDtxAxisDistanceFallback(refnos);
@@ -374,7 +376,7 @@ function isResultHidden(id: string): boolean {
 
             <!-- 最大夹角 -->
             <div class="space-y-1">
-              <label class="text-xs font-medium text-foreground">最大夹角</label>
+              <label class="text-xs font-medium text-foreground">中心距估算的最大夹角</label>
               <div class="flex items-center gap-2">
                 <input v-model.number="clampedMaxAngle"
                   type="number"
@@ -383,6 +385,8 @@ function isResultHidden(id: string): boolean {
                 <span class="text-xs text-muted-foreground">°</span>
               </div>
             </div>
+
+            <p class="text-[11px] text-muted-foreground">批量检测所有管对的模型外表面净距，包含交叉和斜交；中心距估算会单独注明。</p>
 
             <!-- 重新检测 -->
             <button type="button"
@@ -465,6 +469,7 @@ function isResultHidden(id: string): boolean {
                   {{ result.distance }}
                 </span>
                 <span class="text-xs text-muted-foreground">mm</span>
+                <span class="text-[11px] text-muted-foreground">{{ result.measurementKind === 'axis-estimate' ? '中心距估算' : '外表面净距' }}</span>
                 <span class="flex-1 truncate text-xs text-muted-foreground">
                   {{ result.pipeA }} ↔ {{ result.pipeB }}
                 </span>

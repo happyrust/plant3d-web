@@ -132,14 +132,14 @@ describe('geomInstQueryToInstanceEntries', () => {
       insts: [{ geo_hash: 't1', transform: IDENTITY, is_tubi: true, is_invalid_tubi: false }],
       ...(tube === undefined ? {} : { tube }),
     });
-    expect(geomInstQueryToInstanceEntries(tubing({ ordinal: 2, from: '24381/145019', to: '24381_145035' }))[0]!.uniforms.tube)
+    expect(geomInstQueryToInstanceEntries(tubing({ ordinal: 2, from: '24381/145019', to: '24381_145035' }))[0]!.uniforms!.tube)
       .toEqual({ ordinal: 2, from: '24381_145019', to: '24381_145035' });
     expect(tubeIdentityOf({ ordinal: 0, from: '24381_1', to: '24381_2' })).toEqual({ ordinal: 0, from: '24381_1', to: '24381_2' });
     // 老服务端：键不出现
-    expect('tube' in geomInstQueryToInstanceEntries(tubing(undefined))[0]!.uniforms).toBe(false);
+    expect('tube' in geomInstQueryToInstanceEntries(tubing(undefined))[0]!.uniforms!).toBe(false);
     // 构件记录带了 tube（不该发生）也不挂：直段身份只属于直管实例
     const [fitting] = geomInstQueryToInstanceEntries(record({ tube: { ordinal: 0, from: '24381_1', to: '24381_2' } }));
-    expect('tube' in fitting!.uniforms).toBe(false);
+    expect('tube' in fitting!.uniforms!).toBe(false);
     // 两端缺失 / 序号非法
     expect(tubeIdentityOf({ ordinal: 0, from: '', to: '24381_2' })).toBeNull();
     expect(tubeIdentityOf({ ordinal: -1, from: '24381_1', to: '24381_2' })).toBeNull();

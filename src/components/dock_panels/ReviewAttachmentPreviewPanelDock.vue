@@ -13,6 +13,7 @@ import {
   retryReviewAttachmentPreview,
   reviewAttachmentPreviewError,
   reviewAttachmentPreviewStatus,
+  reviewAttachmentWordHtml,
 } from '@/composables/useReviewAttachmentPreview';
 import { useReviewStore } from '@/composables/useReviewStore';
 
@@ -165,13 +166,20 @@ function describeAttachment(): string {
           class="max-h-full max-w-full rounded-md object-contain shadow-lg shadow-black/40"
           @error="handleImageError" />
       </div>
+      <iframe v-else-if="activeReviewAttachmentPreview?.kind === 'word' && reviewAttachmentPreviewStatus === 'ready'"
+        data-testid="review-attachment-word"
+        :srcdoc="reviewAttachmentWordHtml || ''"
+        :title="activeReviewAttachmentPreview.attachment.name"
+        sandbox=""
+        referrerpolicy="no-referrer"
+        class="h-full w-full border-0 bg-white" />
       <div v-else
         class="flex h-full flex-col items-center justify-center gap-2.5 p-6 text-center">
         <FileSearch class="h-7 w-7 text-slate-600" aria-hidden="true" />
         <p class="text-sm text-slate-300">请从校审附件列表中选择文档</p>
         <p class="max-w-[36ch] text-xs leading-relaxed text-slate-400">
-          在附件材料里点「查看」，PDF 与图片会直接在这里打开，模型和资料可以并排看。
-          CAD 图纸、表格与 Office 文档需下载后查看。
+          在附件材料里点「查看」，PDF、Word 与图片会直接在这里打开，模型和资料可以并排看。
+          CAD 图纸与表格需下载后查看。
         </p>
       </div>
     </div>

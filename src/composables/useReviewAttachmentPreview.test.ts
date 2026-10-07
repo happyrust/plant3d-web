@@ -9,11 +9,17 @@ import {
   openReviewAttachmentPreview,
   reviewAttachmentPreviewError,
   reviewAttachmentPreviewStatus,
+  reviewAttachmentWordHtml,
+  retryReviewAttachmentPreview,
 } from './useReviewAttachmentPreview';
 
 import type { ReviewAttachment } from '@/types/auth';
 
 const ensurePanelAndActivateMock = vi.hoisted(() => vi.fn());
+const renderWordPreviewMock = vi.hoisted(() => vi.fn());
+const getAuthTokenMock = vi.hoisted(() => vi.fn());
+vi.mock('@/utils/wordPreview', () => ({ renderWordPreview: renderWordPreviewMock }));
+vi.mock('@/api/reviewApi', () => ({ getAuthToken: getAuthTokenMock }));
 
 vi.mock('@/composables/useDockApi', () => ({
   ensurePanelAndActivate: ensurePanelAndActivateMock,
@@ -34,6 +40,8 @@ describe('useReviewAttachmentPreview', () => {
   beforeEach(() => {
     clearReviewAttachmentPreview();
     ensurePanelAndActivateMock.mockClear();
+    renderWordPreviewMock.mockReset().mockResolvedValue('<html><body>Word content</body></html>');
+    getAuthTokenMock.mockReturnValue(null);
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
       if (/\.jpe?g(?:$|\?)/i.test(url)) {
@@ -53,8 +61,14 @@ describe('useReviewAttachmentPreview', () => {
     vi.unstubAllGlobals();
   });
 
-  it('recognizes only PDF and uploaded image formats', () => {
+  it('recognizes PDF, Word and uploaded image formats', () => {
     expect(getReviewAttachmentPreviewKind(attachment())).toBe('pdf');
+    expect(getReviewAttachmentPreviewKind(attachment({
+      name: 'notes.docx', mimeType: undefined,
+    }))).toBe('word');
+    expect(getReviewAttachmentPreviewKind(attachment({
+      name: 'legacy.doc', mimeType: 'application/msword',
+    }))).toBe('word');
     expect(getReviewAttachmentPreviewKind(attachment({
       name: 'snapshot.bin',
       type: 'image/jpeg',
@@ -157,8 +171,8 @@ describe('useReviewAttachmentPreview', () => {
   it('rejects unsupported files and unsafe URL protocols', () => {
     expect(openReviewAttachmentPreview('task-1', attachment())).toBe(true);
     expect(openReviewAttachmentPreview('task-1', attachment({
-      name: 'notes.docx',
-      mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      name: 'notes.xlsx',
+      mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     }))).toBe(false);
     expect(openReviewAttachmentPreview('task-1', attachment({
       url: 'javascript:alert(1)',
@@ -171,5 +185,63 @@ describe('useReviewAttachmentPreview', () => {
     }))).toBe(false);
     expect(activeReviewAttachmentPreview.value).toBeNull();
     expect(ensurePanelAndActivateMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('loads the full DOCX and renders it before marking the target ready', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(new Response(new Uint8Array([0x50, 0x4b, 3, 4, 1, 2]), {
+      headers: { 'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' },
+    }));
+    expect(openReviewAttachmentPreview('task-1', attachment({ name: 'notes.docx', mimeType: undefined }))).toBe(true);
+    await vi.waitFor(() => expect(reviewAttachmentPreviewStatus.value).toBe('ready'));
+    expect(renderWordPreviewMock).toHaveBeenCalledWith(expect.any(ArrayBuffer));
+    expect(reviewAttachmentWordHtml.value).toContain('Word content');
+    expect(vi.mocked(fetch).mock.lastCall?.[1]?.headers).toEqual({});
+  });
+
+  it('uses the authenticated legacy conversion endpoint while preserving the original download URL', async () => {
+    getAuthTokenMock.mockReturnValue('test-token');
+    vi.mocked(fetch).mockResolvedValueOnce(new Response(new Uint8Array([0x50, 0x4b, 3, 4]), {
+      headers: { 'Content-Type': 'application/octet-stream' },
+    }));
+    const original = attachment({ id: 'att-legacy', name: 'legacy.doc', mimeType: 'application/msword' });
+    openReviewAttachmentPreview('task-1', original);
+    await vi.waitFor(() => expect(reviewAttachmentPreviewStatus.value).toBe('ready'));
+    expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/api/review/attachments/att-legacy/word-preview'),
+      expect.objectContaining({ headers: { Authorization: 'Bearer test-token' } }));
+    expect(activeReviewAttachmentPreview.value?.url).toBe(new URL(original.url, window.location.href).href);
+  });
+
+  it('keeps a Word parse failure retryable and discards a stale Word conversion after switching documents', async () => {
+    const response = () => new Response(new Uint8Array([0x50, 0x4b, 3, 4]), {
+      headers: { 'Content-Type': 'application/octet-stream' },
+    });
+    vi.mocked(fetch).mockResolvedValueOnce(response()).mockResolvedValueOnce(response());
+    renderWordPreviewMock.mockRejectedValueOnce(new Error('corrupt DOCX'));
+    openReviewAttachmentPreview('task-1', attachment({ name: 'notes.docx', mimeType: undefined }));
+    await vi.waitFor(() => expect(reviewAttachmentPreviewStatus.value).toBe('error'));
+    expect(reviewAttachmentPreviewError.value).toContain('corrupt DOCX');
+    let finish!: (html: string) => void;
+    renderWordPreviewMock.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    retryReviewAttachmentPreview();
+    await vi.waitFor(() => expect(finish).toBeDefined());
+    openReviewAttachmentPreview('task-1', attachment());
+    finish('<html>stale</html>');
+    await vi.waitFor(() => expect(reviewAttachmentPreviewStatus.value).toBe('ready'));
+    expect(activeReviewAttachmentPreview.value?.kind).toBe('pdf');
+    expect(reviewAttachmentWordHtml.value).toBeNull();
+  });
+
+  it('rejects partial or oversized Word responses before parsing', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(new Response(new Uint8Array([0x50, 0x4b, 3, 4]), {
+      status: 206, headers: { 'Content-Type': 'application/octet-stream' },
+    }));
+    openReviewAttachmentPreview('task-1', attachment({ name: 'notes.docx', mimeType: undefined }));
+    await vi.waitFor(() => expect(reviewAttachmentPreviewStatus.value).toBe('error'));
+    vi.mocked(fetch).mockResolvedValueOnce(new Response(new Uint8Array([0x50, 0x4b, 3, 4]), {
+      headers: { 'Content-Type': 'application/octet-stream', 'Content-Length': String(51 * 1024 * 1024) },
+    }));
+    retryReviewAttachmentPreview();
+    await vi.waitFor(() => expect(reviewAttachmentPreviewError.value).toContain('50MB'));
+    expect(renderWordPreviewMock).not.toHaveBeenCalled();
   });
 });

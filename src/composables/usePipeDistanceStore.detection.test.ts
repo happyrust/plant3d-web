@@ -163,4 +163,60 @@ describe('usePipeDistanceStore · 净距检测', () => {
     expect(v1ApiMocks.genModelV1SurfaceClearance).not.toHaveBeenCalled();
     expect(store.detectError.value).toContain('至少选择 2 个构件');
   });
+
+  it('批量模式包含目标之间的管对，规范化重复输入且反向管对保持同一标识', async () => {
+    v1ApiMocks.genModelV1SurfaceClearance.mockResolvedValue(surfaceClearanceResponse());
+    const store = usePipeDistanceStore();
+    await store.autoDetectBrans(['24381/1001', '24381_1002', '24381_1003', '24381_1001'], { pairMode: 'all-pairs' });
+    expect(v1ApiMocks.genModelV1SurfaceClearance).toHaveBeenCalledTimes(3);
+    expect(store.results.value.map(result => [result.pipeA, result.pipeB])).toEqual([
+      ['24381_1001', '24381_1002'], ['24381_1001', '24381_1003'], ['24381_1002', '24381_1003'],
+    ]);
+    const identities = store.results.value.map(result => result.id).sort();
+    await store.autoDetectBrans(['24381_1003', '24381_1002', '24381_1001'], { pairMode: 'all-pairs' });
+    expect(store.results.value.map(result => result.id).sort()).toEqual(identities);
+    expect(store.results.value.every(result => result.measurementKind === 'surface')).toBe(true);
+  });
+
+  it('批量模式使用距离上限并保留接触零距，超限和无效端点不产生标注', async () => {
+    const store = usePipeDistanceStore();
+    v1ApiMocks.genModelV1SurfaceClearance.mockResolvedValueOnce(surfaceClearanceResponse({
+      result: { ...surfaceClearanceResponse().result, distance_mm: 0, intersects: true },
+    })).mockResolvedValueOnce(surfaceClearanceResponse({
+      result: { ...surfaceClearanceResponse().result, distance_mm: store.maxDistance.value + 1 },
+    })).mockResolvedValueOnce(surfaceClearanceResponse({
+      result: { ...surfaceClearanceResponse().result, source_point: { x: NaN, y: 0, z: 0 } },
+    }));
+    await store.autoDetectBrans(['24381_1001', '24381_1002', '24381_1003'], { pairMode: 'all-pairs' });
+    expect(v1ApiMocks.genModelV1SurfaceClearance).toHaveBeenCalledWith(expect.objectContaining({ maxDistanceMm: store.maxDistance.value }));
+    expect(store.results.value).toHaveLength(1);
+    expect(store.results.value[0]!.distance).toBe(0);
+    expect(store.detectError.value).toContain('最近点无效');
+  });
+
+  it('清空或新批次使旧查询失效，且最多同时发出4个查询', async () => {
+    const resolvers: (() => void)[] = [];
+    v1ApiMocks.genModelV1SurfaceClearance.mockImplementation(() => new Promise(resolve => {
+      resolvers.push(() => resolve(surfaceClearanceResponse()));
+    }));
+    const store = usePipeDistanceStore();
+    const pending = store.autoDetectBrans(['24381_1001', '24381_1002', '24381_1003', '24381_1004'], { pairMode: 'all-pairs' });
+    expect(v1ApiMocks.genModelV1SurfaceClearance).toHaveBeenCalledTimes(4);
+    store.clearResults();
+    resolvers.forEach(resolve => resolve());
+    expect(await pending).toBe(false);
+    expect(store.results.value).toEqual([]);
+    expect(store.isDetecting.value).toBe(false);
+    expect(v1ApiMocks.genModelV1SurfaceClearance).toHaveBeenCalledTimes(4);
+
+    let finishOld!: () => void;
+    v1ApiMocks.genModelV1SurfaceClearance.mockImplementationOnce(() => new Promise(resolve => {
+      finishOld = () => resolve(surfaceClearanceResponse());
+    })).mockResolvedValue(surfaceClearanceResponse());
+    const old = store.autoDetectBrans(['24381_1001', '24381_1002']);
+    await store.autoDetectBrans(['24381_1003', '24381_1004']);
+    finishOld();
+    expect(await old).toBe(false);
+    expect(store.results.value[0]).toMatchObject({ pipeA: '24381_1003', pipeB: '24381_1004' });
+  });
 });

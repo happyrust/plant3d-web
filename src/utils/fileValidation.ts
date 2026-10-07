@@ -1,4 +1,4 @@
-export type FileFormat = 'json' | 'glb' | 'mesh' | 'parquet' | 'pdf' | 'png' | 'jpeg';
+export type FileFormat = 'json' | 'glb' | 'mesh' | 'parquet' | 'pdf' | 'png' | 'jpeg' | 'docx';
 
 export type FileValidationIssue = Readonly<{
   source: string;
@@ -203,12 +203,13 @@ export function validateParquetBuffer(buffer: ArrayBuffer, source: string): void
 export function validateAttachmentBytes(
   bytes: Uint8Array,
   source: string,
-  format: 'pdf' | 'png' | 'jpeg',
+  format: 'pdf' | 'png' | 'jpeg' | 'docx',
 ): void {
   const signatures = {
     pdf: [0x25, 0x50, 0x44, 0x46, 0x2d],
     png: [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a],
     jpeg: [0xff, 0xd8, 0xff],
+    docx: [0x50, 0x4b, 0x03, 0x04],
   } as const;
   const expected = signatures[format];
   // ISO 32000 permits the PDF header anywhere in the first 1024 bytes.

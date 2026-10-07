@@ -61,24 +61,24 @@ function pipeDistanceToExternalRecord(
   const start = toDesign(result.start);
   const end = toDesign(result.end);
   const lines: ExplicitLayoutInput['lines'] = [
-      ...(result.pipeAStart && result.pipeAEnd
-        ? [{
-          from: toDesign(result.pipeAStart),
-          to: toDesign(result.pipeAEnd),
-          part: 'projection' as const,
-          style: 'dashed' as const,
-        }]
-        : []),
-      ...(result.pipeBStart && result.pipeBEnd
-        ? [{
-          from: toDesign(result.pipeBStart),
-          to: toDesign(result.pipeBEnd),
-          part: 'projection' as const,
-          style: 'dashed' as const,
-        }]
-        : []),
-      { from: start, to: end, part: 'dimension' as const },
-    ];
+    ...(result.pipeAStart && result.pipeAEnd
+      ? [{
+        from: toDesign(result.pipeAStart),
+        to: toDesign(result.pipeAEnd),
+        part: 'projection' as const,
+        style: 'dashed' as const,
+      }]
+      : []),
+    ...(result.pipeBStart && result.pipeBEnd
+      ? [{
+        from: toDesign(result.pipeBStart),
+        to: toDesign(result.pipeBEnd),
+        part: 'projection' as const,
+        style: 'dashed' as const,
+      }]
+      : []),
+    { from: start, to: end, part: 'dimension' as const },
+  ];
   const id = `pipe-distance:${result.id}`;
   return {
     id,
@@ -89,7 +89,7 @@ function pipeDistanceToExternalRecord(
       id,
       role: 'external',
       labelPinned: false,
-      formattedLabel: `${result.distance} mm`,
+      formattedLabel: `${result.measurementKind === 'axis-estimate' ? '中心距估算 ' : ''}${result.distance} mm`,
       lines,
       labelAnchor: midpoint(start, end),
       arrowLines: [],
