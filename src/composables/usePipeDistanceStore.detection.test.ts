@@ -46,8 +46,54 @@ describe('usePipeDistanceStore · 净距检测', () => {
   beforeEach(() => {
     v1ApiMocks.genModelV1SurfaceClearance.mockReset();
     const store = usePipeDistanceStore();
+    store.detachPersistence();
     store.clearResults();
     store.clearBranRefnos();
+  });
+
+  it('restores canonical mm points as stale and isolates contexts including late requests', async () => {
+    const storage = new Map<string, string>();
+    const local = { getItem: (key: string) => storage.get(key) ?? null, setItem: (key: string, value: string) => { storage.set(key, value); } };
+    const store = usePipeDistanceStore();
+    store.bindPersistence('project-A', local);
+    v1ApiMocks.genModelV1SurfaceClearance.mockResolvedValue(surfaceClearanceResponse());
+    await store.autoDetectBrans(['24381_1001', '24381_1002'], { transformPoint: ([x, y, z]) => [x + 100, y, z] });
+    store.bindPersistence('project-B', local);
+    expect(store.results.value).toEqual([]);
+    store.bindPersistence('project-A', local);
+    expect(store.results.value[0]).toMatchObject({ status: 'stale', designPoints: { start: [1, 2, 3], end: [1, 2, 323] }, modelVersion: { sourceSesno: 1, targetSesno: 1 } });
+    let resolve!: (value: unknown) => void;
+    v1ApiMocks.genModelV1SurfaceClearance.mockImplementation(() => new Promise(done => { resolve = done; }));
+    const pending = store.autoDetectBrans(['24381_1001', '24381_1002']);
+    store.bindPersistence('project-B', local, false);
+    resolve(surfaceClearanceResponse());
+    expect(await pending).toBe(false);
+    expect(store.results.value).toEqual([]);
+    v1ApiMocks.genModelV1SurfaceClearance.mockClear();
+    expect(await store.autoDetectBrans(['24381_1001', '24381_1002'])).toBe(false);
+    expect(v1ApiMocks.genModelV1SurfaceClearance).not.toHaveBeenCalled();
+    store.detachPersistence();
+  });
+
+  it('preserves corrupt saved data and retries quota failures from memory', async () => {
+    const values = new Map<string, string>([['plant3d-pipe-distance-v1:broken', '{broken']]);
+    let fail = false;
+    const local = { getItem: (key: string) => values.get(key) ?? null, setItem: (key: string, value: string) => { if (fail) throw new Error('quota'); values.set(key, value); } };
+    const store = usePipeDistanceStore();
+    store.bindPersistence('broken', local);
+    expect(store.persistRecords()).toBe(false);
+    expect(values.get('plant3d-pipe-distance-v1:broken')).toBe('{broken');
+    store.bindPersistence('valid', local);
+    fail = true;
+    v1ApiMocks.genModelV1SurfaceClearance.mockResolvedValue(surfaceClearanceResponse());
+    await store.autoDetectBrans(['24381_1001', '24381_1002']);
+    store.bindPersistence('other', local);
+    store.bindPersistence('valid', local);
+    expect(store.results.value[0]?.status).toBe('stale');
+    fail = false;
+    expect(store.persistRecords()).toBe(true);
+    expect(store.persistenceError.value).toBeNull();
+    store.detachPersistence();
   });
 
   it('以第一个 refno 为源、其余逐个为目标向 gen-model 要外表面最近点', async () => {

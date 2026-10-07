@@ -8,6 +8,14 @@
       </div>
     </div>
 
+    <div v-if="spatialCompute.hasPersistenceContext.value" class="border-b border-border px-5 py-2 text-xs text-muted-foreground" role="status">
+      {{ spatialCompute.persistenceLabel.value }}
+      <div v-if="spatialCompute.persistenceError.value" class="mt-1 text-destructive">
+        {{ spatialCompute.persistenceError.value }}
+        <button type="button" class="ml-2 underline" @click="spatialCompute.persistRecords()">重试保存</button>
+      </div>
+    </div>
+
     <!-- Tabs: 属性 / 计算 -->
     <div class="px-5 pt-4">
       <div class="flex rounded-[10px] border border-gray-200 bg-gray-50 p-[3px]">
@@ -263,7 +271,9 @@
                   <button v-if="row.candidateKey" type="button" :data-testid="`bran-refine-${row.candidateKey}`"
                     :disabled="computeState.refiningKeys.includes(row.candidateKey) || computeState.loading"
                     class="rounded-md border border-gray-200 px-2 py-1.5 text-[11px] disabled:opacity-50"
-                    @click="refineBranCandidate(row.candidateKey)">{{ computeState.refiningKeys.includes(row.candidateKey) ? '精算中' : '精算' }}</button>
+                    @click="refineBranCandidate(row.candidateKey)">
+                    {{ computeState.refiningKeys.includes(row.candidateKey) ? '精算中' : '精算' }}
+                  </button>
                   <button v-if="isBranScenario && row.candidateKey"
                     type="button"
                     :data-testid="`bran-draw-toggle-${row.candidateKey}`"

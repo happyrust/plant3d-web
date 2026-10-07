@@ -21,7 +21,6 @@ vi.mock('@/composables/useSelectionStore', () => ({
   }),
 }));
 
-
 describe('useSpatialCompute BRAN nearest clearance', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
@@ -148,6 +147,48 @@ describe('useSpatialCompute BRAN nearest clearance', () => {
 
   /** 一个 `Response` 的 body 只能读一次：连发两次的用例每次都要造新的。 */
   const freshNounGroupedResponse = () => new Response(JSON.stringify(nounGroupedResponse), { status: 200 });
+
+  it('restores BRAN selections and annotations as stale without crossing project contexts', async () => {
+    const values = new Map<string, string>();
+    const local = { getItem: (key: string) => values.get(key) ?? null, setItem: (key: string, value: string) => { values.set(key, value); } };
+    const store = createSpatialComputeStore();
+    store.bindPersistence('A', local);
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(freshNounGroupedResponse));
+    await store.submitScenario('branNearestClearance');
+    const keys = [...store.scenarios.branNearestClearance.drawnCandidateKeys];
+    store.bindPersistence('B', local);
+    expect(store.scenarios.branNearestClearance.branGroups).toEqual([]);
+    store.bindPersistence('A', local);
+    expect(store.scenarios.branNearestClearance.resultRows).toHaveLength(6);
+    expect(store.scenarios.branNearestClearance.drawnCandidateKeys).toEqual(keys);
+    expect(store.scenarios.branNearestClearance.resultRows[0]?.label).toContain('过期');
+    store.bindPersistence('history', local, false);
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    await store.submitScenario('branNearestClearance');
+    expect(fetchMock).not.toHaveBeenCalled();
+    store.dispose();
+  });
+
+  it('rejects missing precision metadata and keeps the original snapshot intact', async () => {
+    const values = new Map<string, string>();
+    const local = { getItem: (key: string) => values.get(key) ?? null, setItem: (key: string, value: string) => { values.set(key, value); } };
+    const store = createSpatialComputeStore();
+    store.bindPersistence('A', local);
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(freshNounGroupedResponse));
+    await store.submitScenario('branNearestClearance');
+    store.detachPersistence();
+    const key = 'plant3d-bran-clearance-v1:A';
+    const broken = JSON.parse(values.get(key)!);
+    broken.data.candidateProvenance['WALL:24381_1'] = {};
+    const raw = JSON.stringify(broken);
+    values.set(key, raw);
+    store.bindPersistence('A', local);
+    expect(store.persistenceError.value).toContain('精度');
+    expect(store.persistRecords()).toBe(false);
+    expect(values.get(key)).toBe(raw);
+    store.dispose();
+  });
 
   it.each(['wall', 'column', 'beam', 'slab'] as const)('queries the independent %s structure group and preserves warnings', async (category) => {
     const fetchMock = vi.fn().mockImplementation(async () => new Response(JSON.stringify({ ...nounGroupedResponse, warnings: ['unclassified sections'] }), { status: 200 }));

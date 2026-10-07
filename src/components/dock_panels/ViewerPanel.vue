@@ -65,6 +65,7 @@ import { useDtxTools } from '@/composables/useDtxTools';
 import { MeasurementAnnotationManager } from '@/composables/useMeasurementAnnotation';
 import { useModelGeneration } from '@/composables/useModelGeneration';
 import { useModelLoadStatus } from '@/composables/useModelLoadStatus';
+import { usePipeDistanceStore } from '@/composables/usePipeDistanceStore';
 import { collectPtsetEntries } from '@/composables/usePtsetVisualizationEntries';
 import { usePtsetVisualizationThree } from '@/composables/usePtsetVisualizationThree';
 import { useReviewStore } from '@/composables/useReviewStore';
@@ -182,6 +183,7 @@ const viewerContext = useViewerContext();
 const backgroundStore = useBackgroundStore();
 const displayThemeStore = useDisplayThemeStore();
 const clearanceStore = useClearanceStore();
+const pipeDistanceStore = usePipeDistanceStore();
 
 const initError = ref<string | null>(null);
 
@@ -576,8 +578,10 @@ watch(clearanceStorageContext, (context) => {
   let storage: Storage | null = null;
   try { if (context.project) storage = window.localStorage; } catch { /* 本机存储不可用时保留内存记录 */ }
   clearanceStore.bindPersistence(context.key, storage, context.allowCalculations);
+  pipeDistanceStore.bindPersistence(context.key, storage, context.allowCalculations);
+  spatialComputeStore.bindPersistence(context.key, storage, context.allowCalculations);
 }, { immediate: true, flush: 'sync' });
-onUnmounted(() => { offClearanceProject(); clearanceStore.detachPersistence(); });
+onUnmounted(() => { offClearanceProject(); clearanceStore.detachPersistence(); pipeDistanceStore.detachPersistence(); spatialComputeStore.detachPersistence(); });
 function publishModelUnitCompareState(): void {
   const state = modelUnitCompareState.value;
   const detail: ModelUnitVersionCompareRuntimeState | null = state

@@ -1,5 +1,5 @@
 {
-  "checkedAt": "2026-10-07T19:26:41.844Z",
+  "checkedAt": "2026-10-07T19:58:42.876Z",
   "source": "production store/service + existing geometry fixture + actual Chromium localStorage and page reload",
   "businessAcceptance": false,
   "initial": {
@@ -56,7 +56,7 @@
     },
     "persisted": {
       "version": 1,
-      "scope": "browser-check:1791401201101",
+      "scope": "browser-check:1791403122302",
       "records": [
         {
           "id": "clearance:24384_22582:17496_105912",
@@ -138,8 +138,8 @@
             "targetSesno": 729
           },
           "status": "current",
-          "createdAt": "2026-10-07T19:26:41.725Z",
-          "computedAt": "2026-10-07T19:26:41.725Z"
+          "createdAt": "2026-10-07T19:58:42.653Z",
+          "computedAt": "2026-10-07T19:58:42.653Z"
         }
       ],
       "hiddenIds": [
@@ -207,5 +207,81 @@
     "showAnnotations": false,
     "isolated": true,
     "returned": true
+  },
+  "batchInitial": {
+    "pipe": {
+      "designPoints": {
+        "start": [
+          120000,
+          45000,
+          3200
+        ],
+        "end": [
+          120064.4,
+          44998.9,
+          3200
+        ]
+      },
+      "status": "current",
+      "modelVersion": {
+        "sourceSesno": 586,
+        "targetSesno": 729
+      },
+      "id": "17496_105912__24384_22582",
+      "distance": 64.43,
+      "measurementKind": "surface",
+      "pipeA": "24384_22582",
+      "pipeB": "17496_105912",
+      "start": [
+        120000,
+        45000,
+        3200
+      ],
+      "end": [
+        120064.4,
+        44998.9,
+        3200
+      ]
+    },
+    "branRows": 1
+  },
+  "batchRestored": {
+    "pipe": {
+      "designPoints": {
+        "start": [
+          120000,
+          45000,
+          3200
+        ],
+        "end": [
+          120064.4,
+          44998.9,
+          3200
+        ]
+      },
+      "status": "stale",
+      "modelVersion": {
+        "sourceSesno": 586,
+        "targetSesno": 729
+      },
+      "id": "17496_105912__24384_22582",
+      "distance": 64.43,
+      "measurementKind": "surface",
+      "pipeA": "24384_22582",
+      "pipeB": "17496_105912",
+      "start": [
+        120000,
+        45000,
+        3200
+      ],
+      "end": [
+        120064.4,
+        44998.9,
+        3200
+      ]
+    },
+    "branRows": 1,
+    "branLabel": "（过期，待重算）包围盒估算 · segment 24384_22582#1",
+    "isolated": true
   }
 }

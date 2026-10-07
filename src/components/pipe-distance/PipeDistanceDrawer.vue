@@ -110,9 +110,19 @@ function createDtxAxisDistanceFallback(refnos: string[]): PipeDistanceResult[] {
 
 function applyDetectionFallbackResults(refnos: string[], fallbackResults: PipeDistanceResult[]): boolean {
   if (fallbackResults.length === 0) return false;
+  const matrix = (ctx.viewerRef.value as ViewerWithDtxLayerMatrix | null)?.__dtxLayer?.getGlobalModelMatrix?.();
+  const inverse = matrix && matrix.elements.every(Number.isFinite) && matrix.determinant() !== 0 ? matrix.clone().invert() : null;
+  const toDesign = (point: Vec3): Vec3 => {
+    const p = new Vector3(...point).applyMatrix4(inverse!);
+    return [p.x, p.y, p.z];
+  };
   store.setBranRefnos(refnos);
   store.showAnnotations.value = true;
-  store.results.value = fallbackResults.map(result => ({ ...result, measurementKind: 'axis-estimate' }));
+  store.results.value = fallbackResults.map(result => ({ ...result, measurementKind: 'axis-estimate', status: 'current',
+    ...(inverse ? { designPoints: { start: toDesign(result.start), end: toDesign(result.end),
+      ...(result.pipeAStart ? { pipeAStart: toDesign(result.pipeAStart) } : {}), ...(result.pipeAEnd ? { pipeAEnd: toDesign(result.pipeAEnd) } : {}),
+      ...(result.pipeBStart ? { pipeBStart: toDesign(result.pipeBStart) } : {}), ...(result.pipeBEnd ? { pipeBEnd: toDesign(result.pipeBEnd) } : {}) } } : {}),
+  }));
   store.activeResultIndex.value = 0;
   store.detectError.value = '外表面净距未算出，当前显示模型拟合中心距估算；不能用作净距验收。';
   return true;
@@ -210,7 +220,10 @@ function onResultClick(index: number, result: PipeDistanceResult) {
     viewer.scene.ensureRefnos([result.pipeA, result.pipeB]);
     viewer.scene.setObjectsSelected([result.pipeA, result.pipeB], true);
     // 飞行定位到管道对
-    const [s, e] = [result.start, result.end];
+    const transform = createSceneTransformPoint();
+    const [s, e] = result.designPoints && transform
+      ? [transform(result.designPoints.start), transform(result.designPoints.end)]
+      : [result.start, result.end];
     const aabb: [number, number, number, number, number, number] = [
       Math.min(s[0], e[0]), Math.min(s[1], e[1]), Math.min(s[2], e[2]),
       Math.max(s[0], e[0]), Math.max(s[1], e[1]), Math.max(s[2], e[2]),
@@ -402,6 +415,11 @@ function isResultHidden(id: string): boolean {
             </div>
 
             <!-- 错误提示 -->
+            <div class="text-[11px] text-muted-foreground" data-testid="pipe-distance-persistence">
+              {{ store.persistenceLabel.value }}
+              <span v-if="store.persistenceError.value" class="text-danger">：{{ store.persistenceError.value }}</span>
+              <button v-if="store.persistenceError.value || store.persistenceLabel.value.includes('未落盘')" type="button" class="ml-2 rounded border px-2 py-1" @click="store.persistRecords()">重试保存</button>
+            </div>
             <div v-if="store.detectError.value"
               class="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
               {{ store.detectError.value }}
@@ -469,7 +487,7 @@ function isResultHidden(id: string): boolean {
                   {{ result.distance }}
                 </span>
                 <span class="text-xs text-muted-foreground">mm</span>
-                <span class="text-[11px] text-muted-foreground">{{ result.measurementKind === 'axis-estimate' ? '中心距估算' : '外表面净距' }}</span>
+                <span class="text-[11px] text-muted-foreground">{{ result.status === 'stale' ? '过期，待重算 · ' : '' }}{{ result.measurementKind === 'axis-estimate' ? '中心距估算' : '外表面净距' }}</span>
                 <span class="flex-1 truncate text-xs text-muted-foreground">
                   {{ result.pipeA }} ↔ {{ result.pipeB }}
                 </span>

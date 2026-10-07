@@ -8,8 +8,13 @@ import { computed, ref } from 'vue';
 import type { Vec3 } from '@/types/vec3';
 
 import { genModelV1SurfaceClearance, isGenModelV1ApiError } from '@/api/genModelV1Api';
+import { createScopedResultPersistence } from '@/clearance/services/scopedResultPersistence';
 
 export type PipeDistanceResult = {
+  /** 与当前场景矩阵无关的 E3D 世界毫米坐标。 */
+  designPoints?: { start: Vec3; end: Vec3; pipeAStart?: Vec3; pipeAEnd?: Vec3; pipeBStart?: Vec3; pipeBEnd?: Vec3 };
+  status?: 'current' | 'stale';
+  modelVersion?: { sourceSesno: number | null; targetSesno: number | null };
   id: string;
   distance: number; // mm
   measurementKind?: 'surface' | 'axis-estimate';
@@ -41,6 +46,62 @@ const detectError = ref<string | null>(null);
 const hiddenResultIds = ref<Set<string>>(new Set());
 const resultMinDistance = ref<number | null>(null);
 let detectionSequence = 0;
+let calculationsAllowed = true;
+
+function restorePipeSnapshot(value: unknown) {
+  results.value = [];
+  selectedBranRefnos.value = [];
+  activeResultIndex.value = null;
+  hiddenResultIds.value = new Set();
+  resultMinDistance.value = null;
+  showAnnotations.value = true;
+  maxDistance.value = 500;
+  maxAngle.value = 5;
+  detectError.value = null;
+  if (value === null) return;
+  const data = value as Record<string, unknown>;
+  if (!data || data.coordinateSpace !== 'e3d-world-mm' || !Array.isArray(data.results) || !Array.isArray(data.selectedBranRefnos)
+    || !data.selectedBranRefnos.every(item => typeof item === 'string') || !Array.isArray(data.hiddenIds)
+    || !data.hiddenIds.every(item => typeof item === 'string') || typeof data.showAnnotations !== 'boolean'
+    || typeof data.maxDistance !== 'number' || !Number.isFinite(data.maxDistance) || data.maxDistance <= 0
+    || typeof data.maxAngle !== 'number' || !Number.isFinite(data.maxAngle) || data.maxAngle < 0 || data.maxAngle > 90
+    || (data.minDistance !== null && (typeof data.minDistance !== 'number' || !Number.isFinite(data.minDistance) || data.minDistance < 0))) throw new Error('管间结果格式无效');
+  const loaded = data.results.map(raw => {
+    const result = raw as PipeDistanceResult;
+    if (!result || typeof result.id !== 'string' || typeof result.pipeA !== 'string' || typeof result.pipeB !== 'string'
+      || !result.pipeA || !result.pipeB || result.pipeA === result.pipeB || !Number.isFinite(result.distance) || result.distance < 0
+      || !['surface', 'axis-estimate'].includes(result.measurementKind ?? '') || !result.designPoints
+      || !optionalVec3(result.designPoints.start) || !optionalVec3(result.designPoints.end)
+      || ['pipeAStart', 'pipeAEnd', 'pipeBStart', 'pipeBEnd'].some(key => {
+        const point = result.designPoints?.[key as keyof NonNullable<PipeDistanceResult['designPoints']>];
+        return point !== undefined && !optionalVec3(point);
+      })) throw new Error('管间结果缺少可靠的世界毫米坐标');
+    if (result.modelVersion && [result.modelVersion.sourceSesno, result.modelVersion.targetSesno].some(sesno => sesno !== null && (!Number.isInteger(sesno) || sesno < 0))) throw new Error('管间模型版本无效');
+    return { ...result, start: [...result.designPoints.start] as Vec3, end: [...result.designPoints.end] as Vec3, status: 'stale' as const };
+  });
+  if (new Set(loaded.map(result => result.id)).size !== loaded.length) throw new Error('管间结果标识重复');
+  results.value = loaded;
+  selectedBranRefnos.value = data.selectedBranRefnos as string[];
+  hiddenResultIds.value = new Set((data.hiddenIds as string[]).filter(id => loaded.some(result => result.id === id)));
+  activeResultIndex.value = typeof data.activeIndex === 'number' && Number.isInteger(data.activeIndex) && data.activeIndex >= 0 && data.activeIndex < loaded.length ? data.activeIndex : null;
+  resultMinDistance.value = data.minDistance as number | null;
+  showAnnotations.value = data.showAnnotations;
+  maxDistance.value = data.maxDistance;
+  maxAngle.value = data.maxAngle;
+}
+
+const persistence = createScopedResultPersistence({
+  prefix: 'plant3d-pipe-distance-v1',
+  sources: [results, selectedBranRefnos, hiddenResultIds, activeResultIndex, resultMinDistance, showAnnotations, maxDistance, maxAngle],
+  capture: () => {
+    if (results.value.some(result => !result.designPoints)) throw new Error('结果未取得世界毫米坐标，不能保存场景坐标；请重新检测。');
+    return { coordinateSpace: 'e3d-world-mm', results: results.value, selectedBranRefnos: selectedBranRefnos.value, hiddenIds: [...hiddenResultIds.value],
+      activeIndex: activeResultIndex.value, minDistance: resultMinDistance.value, showAnnotations: showAnnotations.value,
+      maxDistance: maxDistance.value, maxAngle: maxAngle.value };
+  },
+  restore: restorePipeSnapshot,
+  invalidate: allowed => { calculationsAllowed = allowed; detectionSequence += 1; isDetecting.value = false; },
+});
 
 function normalizeBranRefno(refno: string): string {
   return String(refno || '').trim().replace(/\//g, '_');
@@ -62,8 +123,7 @@ function transformResultPoint(point: Vec3, transformPoint?: PipeDistanceDetectio
 
 function optionalVec3(value: unknown): Vec3 | undefined {
   if (!Array.isArray(value) || value.length !== 3) return undefined;
-  const point = value.map(Number);
-  return point.every(Number.isFinite) ? point as Vec3 : undefined;
+  return value.every(item => typeof item === 'number' && Number.isFinite(item)) ? [...value] as Vec3 : undefined;
 }
 
 function transformOptionalPoint(
@@ -136,6 +196,7 @@ export function usePipeDistanceStore() {
 
   async function runDetection(options: PipeDistanceDetectionOptions = {}) {
     const sequence = ++detectionSequence;
+    if (!calculationsAllowed) { detectError.value = '历史版本对比中不能使用当前模型检测管间净距，请退出对比后重算。'; return false; }
     if (options.refnos) {
       setBranRefnos(options.refnos);
     }
@@ -183,6 +244,11 @@ export function usePipeDistanceStore() {
               perpendicular: false,
               ...(options.pairMode === 'all-pairs' ? { maxDistanceMm: distanceLimit } : {}),
             });
+            if (!resp.success || resp.unit !== 'mm' || resp.method !== 'surface_to_surface' || resp.accuracy_class !== 'exact-surface'
+              || !Number.isFinite(resp.error_bound_mm) || resp.error_bound_mm < 0 || resp.error_bound_mm > 10) {
+              warnings.push(`${sourceRefno} ↔ ${targetRefno}：净距口径或误差界无效`);
+              continue;
+            }
             if (!resp.result) {
               warnings.push(`${targetRefno}：${resp.warnings.join('；') || '两侧网格在最大距离内没有靠近'}`);
               continue;
@@ -195,6 +261,9 @@ export function usePipeDistanceStore() {
               continue;
             }
             settled[index] = {
+              designPoints: { start: [resp.result.source_point.x, resp.result.source_point.y, resp.result.source_point.z], end: [resp.result.target_point.x, resp.result.target_point.y, resp.result.target_point.z] },
+              status: 'current',
+              modelVersion: { sourceSesno: resp.model?.source_sesno ?? null, targetSesno: resp.model?.target_sesno ?? null },
               id: [sourceRefno, targetRefno].sort().join('__'),
               distance: resp.result.distance_mm,
               measurementKind: 'surface',
@@ -249,6 +318,7 @@ export function usePipeDistanceStore() {
   }
 
   return {
+    ...persistence,
     showAnnotations,
     maxDistance,
     maxAngle,

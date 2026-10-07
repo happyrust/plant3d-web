@@ -34,11 +34,11 @@ function resolveSceneWorldToDesign(
 ): ((point: [number, number, number]) => [number, number, number]) | null {
   const matrix = (viewer as ViewerWithDtxLayerMatrix | null)
     ?.__dtxLayer?.getGlobalModelMatrix?.();
-  if (!matrix) return null;
+  if (!matrix || !matrix.elements.every(Number.isFinite) || matrix.determinant() === 0) return null;
   const inverse = matrix.clone().invert();
   return (point) => {
     const p = new Vector3(point[0], point[1], point[2]).applyMatrix4(inverse);
-    return [p.x, p.y, p.z];
+    return [p.x / 1000, p.y / 1000, p.z / 1000];
   };
 }
 
@@ -57,22 +57,25 @@ function pipeDistanceToExternalRecord(
   result: PipeDistanceResult,
   sceneWorldToDesign: ((point: [number, number, number]) => [number, number, number]) | null,
 ): ExternalDimensionRecord {
-  const toDesign = sceneWorldToDesign ?? ((point: [number, number, number]) => point);
-  const start = toDesign(result.start);
-  const end = toDesign(result.end);
+  const toDesign = result.designPoints
+    ? (point: [number, number, number]): [number, number, number] => [point[0] / 1000, point[1] / 1000, point[2] / 1000]
+    : sceneWorldToDesign ?? ((point: [number, number, number]) => point);
+  const points = result.designPoints ?? result;
+  const start = toDesign(points.start);
+  const end = toDesign(points.end);
   const lines: ExplicitLayoutInput['lines'] = [
-    ...(result.pipeAStart && result.pipeAEnd
+    ...(points.pipeAStart && points.pipeAEnd
       ? [{
-        from: toDesign(result.pipeAStart),
-        to: toDesign(result.pipeAEnd),
+        from: toDesign(points.pipeAStart),
+        to: toDesign(points.pipeAEnd),
         part: 'projection' as const,
         style: 'dashed' as const,
       }]
       : []),
-    ...(result.pipeBStart && result.pipeBEnd
+    ...(points.pipeBStart && points.pipeBEnd
       ? [{
-        from: toDesign(result.pipeBStart),
-        to: toDesign(result.pipeBEnd),
+        from: toDesign(points.pipeBStart),
+        to: toDesign(points.pipeBEnd),
         part: 'projection' as const,
         style: 'dashed' as const,
       }]
@@ -89,7 +92,7 @@ function pipeDistanceToExternalRecord(
       id,
       role: 'external',
       labelPinned: false,
-      formattedLabel: `${result.measurementKind === 'axis-estimate' ? '中心距估算 ' : ''}${result.distance} mm`,
+      formattedLabel: `${result.status === 'stale' ? '（过期）' : ''}${result.measurementKind === 'axis-estimate' ? '中心距估算 ' : ''}${result.distance} mm`,
       lines,
       labelAnchor: midpoint(start, end),
       arrowLines: [],

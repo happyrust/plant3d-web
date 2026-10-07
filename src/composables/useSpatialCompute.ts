@@ -8,6 +8,7 @@ import type {
 } from '@/api/genModelSpatialApi';
 
 import { genModelV1SpatialNearestClearance, genModelV1SurfaceClearance } from '@/api/genModelV1Api';
+import { createScopedResultPersistence } from '@/clearance/services/scopedResultPersistence';
 import { type BranParallelRunPair, describeStraightRun } from '@/composables/branParallelSpacing';
 import { useSelectionStore } from '@/composables/useSelectionStore';
 import { useViewerContext } from '@/composables/useViewerContext';
@@ -40,6 +41,8 @@ export type SpatialComputeResultRow = {
  * 精确到中心线本身（`parallel-centerline / exact-centerline`），不标「≈」。
  */
 export type BranClearanceProvenance = {
+  status?: 'current' | 'stale';
+  modelVersion?: { sourceSesno: number | null; targetSesno: number | null };
   method: 'centerline-to-aabb' | 'sampled-object' | 'parallel-centerline' | 'surface-to-surface';
   accuracyClass: 'approximate-bounds' | 'approximate-sampled' | 'exact-centerline' | 'exact-surface';
 };
@@ -292,7 +295,7 @@ export function defaultDrawnCandidateKeys(groups: readonly BranNearestClearanceG
  * 表里给非服务端候选看的来源字样（2026-09-11 收敛计划 PR0.2：`sampled-object` 显示「估算最近距离」；
  * `parallel-centerline` 显示「平行直段中心距」——这一行的距离是两条轴线的垂距，不是到包围盒的净距）。
  */
-function provenanceLabel(provenance: BranClearanceProvenance | undefined): string {
+function provenanceMethodLabel(provenance: BranClearanceProvenance | undefined): string {
   switch (provenance?.method) {
     case 'sampled-object':
       return '估算最近距离（网格采样）';
@@ -303,6 +306,10 @@ function provenanceLabel(provenance: BranClearanceProvenance | undefined): strin
     default:
       return '包围盒估算';
   }
+}
+
+function provenanceLabel(provenance: BranClearanceProvenance | undefined): string {
+  return `${provenance?.status === 'stale' ? '（过期，待重算）' : ''}${provenanceMethodLabel(provenance)}`;
 }
 
 function formatMm(value: number): string {
@@ -505,8 +512,82 @@ export function createSpatialComputeStore() {
   const scenarioExpanded = ref(false);
   const requestTokens: Record<string, number> = {};
   let nextRequestToken = 0;
+  let calculationsAllowed = true;
   const scenarios = reactive<Record<SpatialComputeScenarioKey, SpatialComputeScenarioState>>({
     branNearestClearance: createScenarioState('branNearestClearance'),
+  });
+  const persistence = createScopedResultPersistence({
+    prefix: 'plant3d-bran-clearance-v1',
+    sources: [() => scenarios.branNearestClearance],
+    capture: () => {
+      const state = scenarios.branNearestClearance;
+      return { coordinateSpace: 'e3d-world-mm',
+        inputs: { suppoRefno: state.suppoRefno, structureCategory: state.structureCategory, structuralAngleDeg: state.structuralAngleDeg,
+          searchRadius: state.searchRadius, excludeNouns: state.excludeNouns },
+        queriedSourceRefno: state.queriedSourceRefno, branGroups: state.branGroups, nounFacets: state.nounFacets,
+        drawnCandidateKeys: state.drawnCandidateKeys, candidateProvenance: state.candidateProvenance,
+        excludedSelfMembers: state.excludedSelfMembers, warnings: state.warnings };
+    },
+    restore: value => {
+      const state = scenarios.branNearestClearance;
+      Object.assign(state, createScenarioState('branNearestClearance'));
+      if (value === null) return;
+      const data = value as Record<string, unknown>;
+      const inputs = data?.inputs as Record<string, unknown>;
+      if (!data || data.coordinateSpace !== 'e3d-world-mm' || !inputs || !['all', 'wall', 'column', 'beam', 'slab'].includes(String(inputs.structureCategory))
+        || !['suppoRefno', 'structuralAngleDeg', 'searchRadius', 'excludeNouns'].every(key => typeof inputs[key] === 'string')
+        || typeof data.queriedSourceRefno !== 'string' || !Array.isArray(data.branGroups) || !Array.isArray(data.nounFacets)
+        || !Array.isArray(data.drawnCandidateKeys) || !data.drawnCandidateKeys.every(key => typeof key === 'string')
+        || !Array.isArray(data.warnings) || !data.warnings.every(warning => typeof warning === 'string')
+        || typeof data.excludedSelfMembers !== 'number' || !Number.isInteger(data.excludedSelfMembers) || data.excludedSelfMembers < 0) throw new Error('BRAN净距保存格式无效');
+      const groups = normalizeBranNearestGroups(data.branGroups as BranNearestClearanceGroupResult[]);
+      const pointValid = (point: unknown) => {
+        const p = point as { x?: unknown; y?: unknown; z?: unknown } | null;
+        return !!p && [p.x, p.y, p.z].every(number => typeof number === 'number' && Number.isFinite(number));
+      };
+      const keys = new Set<string>();
+      for (const group of groups) {
+        if (typeof group.group !== 'string' || !group.group) throw new Error('BRAN净距分组无效');
+        for (const candidate of group.candidates) {
+          if (!candidate || typeof candidate.refno !== 'string' || !candidate.refno || typeof candidate.noun !== 'string'
+            || !Number.isFinite(candidate.distance_mm) || candidate.distance_mm < 0 || typeof candidate.intersects !== 'boolean'
+            || !candidate.annotation || candidate.annotation.label_mm !== candidate.distance_mm
+            || !pointValid(candidate.annotation.start_point) || !pointValid(candidate.annotation.end_point)
+            || (candidate.variant !== undefined && typeof candidate.variant !== 'string')) throw new Error('BRAN净距结果或世界坐标无效');
+          const key = branCandidateKey(group.group, candidate);
+          if (keys.has(key)) throw new Error('BRAN净距标识重复');
+          keys.add(key);
+        }
+      }
+      const expectedAccuracy = { 'centerline-to-aabb': 'approximate-bounds', 'sampled-object': 'approximate-sampled',
+        'parallel-centerline': 'exact-centerline', 'surface-to-surface': 'exact-surface' };
+      const provenance = data.candidateProvenance as Record<string, BranClearanceProvenance>;
+      if (!provenance || typeof provenance !== 'object' || Array.isArray(provenance)) throw new Error('BRAN净距来源无效');
+      for (const item of Object.values(provenance)) {
+        if (!item || typeof item.method !== 'string' || !Object.prototype.hasOwnProperty.call(expectedAccuracy, item.method)
+          || expectedAccuracy[item.method] !== item.accuracyClass) throw new Error('BRAN净距精度口径无效');
+        if (item.modelVersion && [item.modelVersion.sourceSesno, item.modelVersion.targetSesno].some(sesno => sesno !== null && (!Number.isInteger(sesno) || sesno < 0))) throw new Error('BRAN模型版本无效');
+      }
+      const facets = data.nounFacets as BranNounFacet[];
+      if (facets.some(facet => !facet || typeof facet.noun !== 'string' || typeof facet.selected !== 'boolean'
+        || !Number.isFinite(facet.count) || facet.count < 0 || !groups.some(group => group.group === facet.noun))) throw new Error('BRAN净距类型筛选无效');
+      Object.assign(state, inputs);
+      state.queriedSourceRefno = data.queriedSourceRefno;
+      state.branGroups = groups;
+      state.nounFacets = facets;
+      state.drawnCandidateKeys = (data.drawnCandidateKeys as string[]).filter(key => keys.has(key));
+      state.candidateProvenance = Object.fromEntries([...keys].map(key => [key, { ...(provenance[key] ?? SERVER_BRAN_CLEARANCE_PROVENANCE), status: 'stale' }]));
+      state.excludedSelfMembers = data.excludedSelfMembers;
+      state.warnings = [...data.warnings as string[], '已恢复本机结果，模型版本未核实；请重新查询或精算后验收。'];
+      state.responseText = '已恢复本机结果，待重算';
+      applyBranSelection(state);
+    },
+    invalidate: allowed => {
+      calculationsAllowed = allowed;
+      requestTokens.branNearestClearance = ++nextRequestToken;
+      scenarios.branNearestClearance.loading = false;
+      scenarios.branNearestClearance.refiningKeys = [];
+    },
   });
 
   const scenarioList: SpatialComputeScenarioMeta[] = [...SCENARIO_META];
@@ -546,6 +627,7 @@ export function createSpatialComputeStore() {
 
   async function submitScenario(key: SpatialComputeScenarioKey = activeScenario.value) {
     const state = scenarios[key];
+    if (!calculationsAllowed) { state.error = '历史版本对比中不能使用当前模型查询净距，请退出对比后重算。'; return; }
     const token = ++nextRequestToken;
     requestTokens[key] = token;
     const refno = normalizeBranComputeRefno(state.suppoRefno);
@@ -600,6 +682,7 @@ export function createSpatialComputeStore() {
 
   async function refineBranCandidate(candidateKey: string) {
     const state = scenarios.branNearestClearance;
+    if (!calculationsAllowed) { state.error = '历史版本对比中不能使用当前模型精算净距，请退出对比后重算。'; return; }
     const candidate = state.branGroups.flatMap((group) =>
       group.candidates.map((item) => ({ item, key: branCandidateKey(group.group, item) })),
     ).find((item) => item.key === candidateKey)?.item;
@@ -627,7 +710,8 @@ export function createSpatialComputeStore() {
         vector: { dx: result.target_point.x - result.source_point.x, dy: result.target_point.y - result.source_point.y, dz: result.target_point.z - result.source_point.z },
       };
       candidate.annotation = { start_point: { ...result.source_point }, end_point: { ...result.target_point }, label_mm: result.distance_mm };
-      state.candidateProvenance[candidateKey] = { method: 'surface-to-surface', accuracyClass: 'exact-surface' };
+      state.candidateProvenance[candidateKey] = { method: 'surface-to-surface', accuracyClass: 'exact-surface', status: 'current',
+        modelVersion: { sourceSesno: response.model?.source_sesno ?? null, targetSesno: response.model?.target_sesno ?? null } };
       state.warnings = [...new Set([...state.warnings, ...(response.warnings ?? []), '精算采用当前实体网格外表面；保温层/包络口径及专业 10 mm 对照验收待确认。'])];
       applyBranSelection(state);
     } catch (error) {
@@ -676,6 +760,7 @@ export function createSpatialComputeStore() {
    */
   function recordInteractiveBranClearance(input: InteractiveBranClearanceInput): string {
     const state = scenarios.branNearestClearance;
+    if (!calculationsAllowed) { state.error = '历史对比上下文不可使用当前模型计算，请返回当前模型后重算。'; return ''; }
     const candidate = interactiveBranClearanceCandidate(input);
     const key = branCandidateKey(candidate.noun, candidate);
 
@@ -720,6 +805,7 @@ export function createSpatialComputeStore() {
    */
   function recordBranParallelSpacing(input: BranParallelSpacingInput): string[] {
     const state = scenarios.branNearestClearance;
+    if (!calculationsAllowed) { state.error = '历史对比上下文不可使用当前模型计算，请返回当前模型后重算。'; return []; }
     const sourceBran = normalizeBranComputeRefno(input.sourceBranRefno);
     const targetBran = normalizeBranComputeRefno(input.targetBranRefno);
     const prefix = parallelVariantPrefix(sourceBran, targetBran);
@@ -776,16 +862,18 @@ export function createSpatialComputeStore() {
     return keys;
   }
 
-  if (typeof window !== 'undefined') {
-    window.addEventListener('modelProjectChanged', () => {
-      for (const k of Object.keys(scenarios) as SpatialComputeScenarioKey[]) {
-        requestTokens[k] = ++nextRequestToken;
-        Object.assign(scenarios[k], createScenarioState(k));
-      }
-    });
-  }
+  const onProjectChanged = () => {
+    if (persistence.hasPersistenceContext.value) return;
+    for (const k of Object.keys(scenarios) as SpatialComputeScenarioKey[]) {
+      requestTokens[k] = ++nextRequestToken;
+      Object.assign(scenarios[k], createScenarioState(k));
+    }
+  };
+  if (typeof window !== 'undefined') window.addEventListener('modelProjectChanged', onProjectChanged);
 
   return {
+    ...persistence,
+    dispose: () => { persistence.dispose(); if (typeof window !== 'undefined') window.removeEventListener('modelProjectChanged', onProjectChanged); },
     panelMode,
     activeScenario,
     scenarioList,
@@ -820,5 +908,6 @@ export function useSpatialCompute() {
 }
 
 export function resetSpatialComputeStore() {
+  sharedSpatialComputeStore?.dispose();
   sharedSpatialComputeStore = null;
 }

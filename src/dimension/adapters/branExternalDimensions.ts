@@ -70,7 +70,7 @@ export function branClearanceToExternalDimensions(
         role: 'external',
         labelPinned: false,
         ...(Number.isFinite(labelMm)
-          ? { authoritativeText: `${approximate ? '≈' : ''}${Math.round(labelMm)}mm` }
+          ? { authoritativeText: `${item.provenance?.status === 'stale' ? '（过期）' : ''}${approximate ? '≈' : ''}${Math.round(labelMm)}mm` }
           : {}),
         a: millimetresToDesignMetres(start),
         b: millimetresToDesignMetres(end),
