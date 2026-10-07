@@ -54,12 +54,15 @@ describe('reviewApi base url defaults', () => {
   });
 
   it('round-trips model context in confirmation and workflow records without silently dropping invalid context', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ success: true, records: [{ id: 'R', task_id: 'T', form_id: 'F', model_context: modelContext }] }), { status: 200 })));
-    expect((await reviewRecordGetByTaskId('T')).records?.[0]?.modelContext).toEqual(modelContext);
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ code: 200, data: { records: [{ id: 'R', task_id: 'T', model_context: modelContext }] } }), { status: 200 })));
-    expect((await reviewWorkflowSyncQuery({ formId: 'F', token: 'test-token', actor: { id: 'JH', name: 'JH', roles: 'jd' } })).data?.records[0]?.modelContext).toEqual(modelContext);
+    const record = { id: 'R', task_id: 'T', form_id: 'F', model_context: modelContext, record_revision: 'revision-loaded', current_node: 'jd', operator_id: 'JH', dimension_document_version: 0 };
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ success: true, records: [record] }), { status: 200 })));
+    expect((await reviewRecordGetByTaskId('T')).records?.[0]).toEqual(expect.objectContaining({ modelContext, recordRevision: 'revision-loaded', currentNode: 'jd', operatorId: 'JH', formId: 'F', dimensionDocumentVersion: 0 }));
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ code: 200, data: { records: [record] } }), { status: 200 })));
+    expect((await reviewWorkflowSyncQuery({ formId: 'F', token: 'test-token', actor: { id: 'JH', name: 'JH', roles: 'jd' } })).data?.records[0]).toEqual(expect.objectContaining({ modelContext, recordRevision: 'revision-loaded', currentNode: 'jd', operatorId: 'JH', formId: 'F', dimensionDocumentVersion: 0 }));
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ success: true, records: [{ id: 'R', modelContext: { ...modelContext, comparison: { ...modelContext.comparison, a: 630 } } }] }), { status: 200 })));
     await expect(reviewRecordGetByTaskId('T')).rejects.toThrow('上下文无效');
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ success: true, records: [{ ...record, record_revision: 12 }] }), { status: 200 })));
+    await expect(reviewRecordGetByTaskId('T')).rejects.toThrow('修订标识无效');
   });
 
   it('normalizes and stores standalone auth token responses', async () => {
@@ -497,6 +500,9 @@ describe('reviewApi base url defaults', () => {
           id: 'record-1',
           taskId: 'task-1',
           formId: 'FORM-LINEAGE-1',
+          recordRevision: 'revision-saved',
+          currentNode: 'jd',
+          operatorId: 'JH',
           type: 'batch',
           annotations: [],
           cloudAnnotations: [],
@@ -512,6 +518,7 @@ describe('reviewApi base url defaults', () => {
     const legacyResponse = await reviewRecordCreate({
       taskId: 'task-1',
       formId: 'FORM-LINEAGE-1',
+      recordBaseRevision: 'revision-loaded',
       type: 'batch',
       annotations: [],
       cloudAnnotations: [],
@@ -522,6 +529,9 @@ describe('reviewApi base url defaults', () => {
 
     expect(legacyResponse.record?.dimensionDocument).toBeUndefined();
     expect(legacyResponse.record?.dimensionDocumentVersion).toBeUndefined();
+    expect(legacyResponse.record?.recordRevision).toBe('revision-saved');
+    expect(legacyResponse.record?.currentNode).toBe('jd');
+    expect(legacyResponse.record?.operatorId).toBe('JH');
     expect(fetchMock).toHaveBeenCalledWith(
       expect.stringMatching(/\/api\/review\/records$/),
       expect.objectContaining({
@@ -529,6 +539,7 @@ describe('reviewApi base url defaults', () => {
         body: JSON.stringify({
           taskId: 'task-1',
           formId: 'FORM-LINEAGE-1',
+          recordBaseRevision: 'revision-loaded',
           type: 'batch',
           annotations: [],
           cloudAnnotations: [],

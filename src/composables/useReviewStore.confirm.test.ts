@@ -6,6 +6,9 @@ vi.mock('@/api/reviewApi', () => ({
     record: {
       ...record,
       id: 'record-mocked-1',
+      recordRevision: 'revision-confirmed',
+      currentNode: 'jd',
+      operatorId: 'reviewer-1',
       confirmedAt: 1700000000000,
       dimensionDocumentVersion: record.dimensionDocument
         ? record.dimensionDocumentBaseVersion + 1

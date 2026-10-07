@@ -293,6 +293,10 @@ export type ReviewSnapshotMeasurementPayload = {
  * 写入侧通过 `buildReviewConfirmSnapshotPayload` 保证类型安全。
  */
 export type ConfirmedRecordData = {
+  recordBaseRevision?: string;
+  recordRevision?: string;
+  currentNode?: string;
+  operatorId?: string;
   modelContext?: ReviewModelContext;
   id?: string;
   taskId: string;
@@ -368,6 +372,10 @@ export type WorkflowAnnotationCommentData = {
 };
 
 export type WorkflowRecordData = {
+  recordRevision?: string;
+  formId?: string;
+  currentNode?: string;
+  operatorId?: string;
   modelContext?: ReviewModelContext;
   id: string;
   taskId: string;
@@ -533,6 +541,14 @@ type RawWorkflowAnnotationCommentData = {
 };
 
 type RawWorkflowRecordData = {
+  recordRevision?: unknown;
+  record_revision?: unknown;
+  formId?: string;
+  form_id?: string;
+  currentNode?: string;
+  current_node?: string;
+  operatorId?: string;
+  operator_id?: string;
   modelContext?: unknown;
   model_context?: unknown;
   id?: string;
@@ -869,39 +885,16 @@ function normalizeWorkflowSyncResponse(raw: RawWorkflowSyncResponse): WorkflowSy
       models: Array.isArray(data.models) ? data.models : [],
       taskId: data.taskId || data.task_id,
       records: Array.isArray(data.records)
-        ? data.records.map((record) => ({
-          id: unwrapRecordIdDebugShape(record.id || ''),
-          taskId: String(record.taskId || record.task_id || ''),
-          type: String(record.type || 'batch'),
-          annotations: Array.isArray(record.annotations) ? record.annotations : [],
-          cloudAnnotations: Array.isArray(record.cloudAnnotations)
-            ? record.cloudAnnotations
-            : Array.isArray(record.cloud_annotations)
-              ? record.cloud_annotations
-              : [],
-          rectAnnotations: Array.isArray(record.rectAnnotations)
-            ? record.rectAnnotations
-            : Array.isArray(record.rect_annotations)
-              ? record.rect_annotations
-              : [],
-          obbAnnotations: Array.isArray(record.obbAnnotations)
-            ? record.obbAnnotations
-            : Array.isArray(record.obb_annotations)
-              ? record.obb_annotations
-              : [],
-          measurements: Array.isArray(record.measurements) ? record.measurements : [],
-          modelContext: normalizeReviewModelContext(record.modelContext ?? record.model_context),
-          dimensionDocument: (
-            record.dimensionDocument
-            ?? record.dimension_document
-          ) as SnapshotDimensionDocument | undefined,
-          dimensionDocumentVersion: (
-            record.dimensionDocumentVersion
-            ?? record.dimension_document_version
-          ) as number | undefined,
-          note: String(record.note || ''),
-          confirmedAt: String(record.confirmedAt || record.confirmed_at || ''),
-        }))
+        ? data.records.map((record): WorkflowRecordData => {
+          const normalized = normalizeConfirmedRecord(record);
+          return {
+            ...normalized,
+            obbAnnotations: normalized.obbAnnotations ?? [],
+            id: unwrapRecordIdDebugShape(record.id || ''),
+            type: String(record.type || 'batch'),
+            confirmedAt: String(record.confirmedAt || record.confirmed_at || ''),
+          };
+        })
         : [],
       annotationComments: Array.isArray(data.annotationComments)
         ? data.annotationComments.map((comment) => ({
@@ -1377,6 +1370,9 @@ function normalizeConfirmedRecord(raw: Record<string, unknown>): ConfirmedRecord
   confirmedAt: number;
 } {
   return {
+    recordRevision: normalizeRecordRevision(raw.recordRevision ?? raw.record_revision),
+    currentNode: typeof (raw.currentNode ?? raw.current_node) === 'string' ? String(raw.currentNode ?? raw.current_node) : undefined,
+    operatorId: typeof (raw.operatorId ?? raw.operator_id) === 'string' ? String(raw.operatorId ?? raw.operator_id) : undefined,
     modelContext: normalizeReviewModelContext(raw.modelContext ?? raw.model_context),
     id: String(raw.logical_id || raw.id || ''),
     taskId: String(raw.taskId || raw.task_id || ''),
@@ -1394,12 +1390,18 @@ function normalizeConfirmedRecord(raw: Record<string, unknown>): ConfirmedRecord
       : (Array.isArray(raw.obb_annotations) ? raw.obb_annotations as ReviewSnapshotAnnotationPayload[] : []),
     measurements: Array.isArray(raw.measurements) ? raw.measurements as ReviewSnapshotMeasurementPayload[] : [],
     dimensionDocument: (raw.dimensionDocument || raw.dimension_document) as SnapshotDimensionDocument | undefined,
-    dimensionDocumentVersion: typeof (raw.dimensionDocumentVersion || raw.dimension_document_version) === 'number'
-      ? Number(raw.dimensionDocumentVersion || raw.dimension_document_version)
+    dimensionDocumentVersion: typeof (raw.dimensionDocumentVersion ?? raw.dimension_document_version) === 'number'
+      ? Number(raw.dimensionDocumentVersion ?? raw.dimension_document_version)
       : undefined,
     note: String(raw.note || ''),
     confirmedAt: normalizeTimestamp(raw.confirmedAt || raw.confirmed_at || raw.created_at) || Date.now(),
   };
+}
+
+function normalizeRecordRevision(value: unknown): string | undefined {
+  if (value == null) return undefined;
+  if (typeof value !== 'string' || !value.trim() || value.length > 128) throw new Error('服务器返回的确认记录修订标识无效');
+  return value;
 }
 
 function normalizeConfirmedRecordResponse(raw: Record<string, unknown>): ConfirmedRecordResponse {

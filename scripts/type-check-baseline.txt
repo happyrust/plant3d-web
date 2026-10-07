@@ -17,7 +17,6 @@ src/api/reviewApi.test.ts|TS2322|Type '{ schemaVersion: 1; documentId: string; r
 src/api/reviewApi.test.ts|TS2532|Object is possibly 'undefined'.
 src/api/reviewApi.test.ts|TS2532|Object is possibly 'undefined'.
 src/api/reviewApi.test.ts|TS2532|Object is possibly 'undefined'.
-src/api/reviewApi.ts|TS2322|Type '{ title: string | undefined; models: (string | Record<string, unknown>)[]; taskId: string | undefined; records: { id: string; taskId: string; type: string; annotations: unknown[]; cloudAnnotations: unknown[]; ... N more ...; confirmedAt: string; }[]; ... N more ...; nextStepDetail: WorkflowNextStepDetail | undefined...' is not assignable to type 'WorkflowSyncData | undefined'.
 src/api/reviewApi.ts|TS2339|Property 'claims' does not exist on type '{ valid: boolean; claims?: { projectId: string; userId: string; userName?: string | undefined; formId?: string | undefined; role?: string | undefined; workflowMode?: string | undefined; exp: number; iat: number; } | undefined; error?: string | undefined; } | undefined'.
 src/components/DockLayout.test.ts|TS2345|Argument of type '(handler: (commandId: string) => void) => () => undefined' is not assignable to parameter of type '() => () => undefined'.
 src/components/DockLayout.test.ts|TS2345|Argument of type '(panelId: string) => panelId is "review"' is not assignable to parameter of type '() => boolean'.

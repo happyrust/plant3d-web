@@ -71,6 +71,9 @@ describe('useReviewStore', () => {
       record: {
         ...record,
         id: 'record-created',
+        recordRevision: 'revision-created',
+        currentNode: 'jd',
+        operatorId: 'checker-1',
         confirmedAt: 1710000000500,
       },
     }));
@@ -111,10 +114,11 @@ describe('useReviewStore', () => {
     await store.addConfirmedRecord(record);
     expect(reviewRecordCreateMock.mock.calls[0]?.[0].modelContext).toEqual(modelContext);
     expect(store.confirmedRecords.value[0]?.modelContext).toEqual(modelContext);
-    reviewRecordGetByTaskIdMock.mockResolvedValue({ success: true, records: [{ ...record, id: 'saved', taskId: 'task-context', formId: 'FORM-CONTEXT', confirmedAt: 1, modelContext }] });
+    reviewRecordGetByTaskIdMock.mockResolvedValue({ success: true, records: [{ ...record, id: 'saved', taskId: 'task-context', formId: 'FORM-CONTEXT', confirmedAt: 1, modelContext, recordRevision: 'cloud-revision', currentNode: 'jd', operatorId: 'checker-1' }] });
     await store.loadConfirmedRecords('task-context', { formId: 'FORM-CONTEXT' });
     expect(store.confirmedRecords.value[0]?.modelContext).toEqual(modelContext);
-    reviewRecordCreateMock.mockImplementation(async data => ({ success: true, record: { ...data, modelContext: undefined, id: 'lost', confirmedAt: 2 } }));
+    expect(store.confirmedRecords.value[0]?.recordRevision).toBe('cloud-revision');
+    reviewRecordCreateMock.mockImplementation(async data => ({ success: true, record: { ...data, recordRevision: 'revision-lost', currentNode: 'jd', operatorId: 'checker-1', modelContext: undefined, id: 'lost', confirmedAt: 2 } }));
     await expect(store.addConfirmedRecord(record)).rejects.toThrow('后端未完整保存');
     expect(store.confirmedRecords.value[0]?.id).toBe('saved');
     unbind();
@@ -128,6 +132,45 @@ describe('useReviewStore', () => {
     await expect(store.addConfirmedRecord({ type: 'batch', annotations: [], cloudAnnotations: [], rectAnnotations: [], measurements: [], note: '' })).rejects.toThrow('已切换');
     expect(reviewRecordCreateMock).not.toHaveBeenCalled();
     unbind();
+  });
+
+  it('uses only the current author/node baseline and advances it after saving', async () => {
+    const { useReviewStore } = await import('./useReviewStore');
+    const store = useReviewStore();
+    await store.setCurrentTask({ id: 'task-context', formId: 'FORM-CONTEXT', currentNode: 'jd', components: [] } as never);
+    const payload = { type: 'batch' as const, annotations: [], cloudAnnotations: [], rectAnnotations: [], measurements: [], note: 'local' };
+    const own = { ...payload, id: 'record-created', confirmedAt: 1, taskId: 'task-context', formId: 'FORM-CONTEXT', currentNode: 'jd', operatorId: 'checker-1', recordRevision: 'revision-old' };
+    store.confirmedRecords.value = [own,
+      { ...own, id: 'other-author', operatorId: 'other', recordRevision: 'wrong-author' },
+      { ...own, id: 'previous-node', currentNode: 'sj', recordRevision: 'wrong-node' },
+      { ...own, id: 'other-form', formId: 'OTHER', recordRevision: 'wrong-form' }];
+    await store.addConfirmedRecord(payload);
+    expect(reviewRecordCreateMock.mock.calls[0]?.[0].recordBaseRevision).toBe('revision-old');
+    expect(store.confirmedRecords.value.find(record => record.id === 'record-created')?.recordRevision).toBe('revision-created');
+    reviewRecordCreateMock.mockImplementationOnce(async data => ({ success: true, record: { ...data, id: 'record-created', confirmedAt: 2,
+      recordRevision: 'revision-next', currentNode: 'jd', operatorId: 'checker-1' } }));
+    await store.addConfirmedRecord(payload);
+    expect(reviewRecordCreateMock.mock.calls[1]?.[0].recordBaseRevision).toBe('revision-created');
+    expect(store.confirmedRecords.value).toHaveLength(4);
+    expect(store.confirmedRecords.value.find(record => record.id === 'record-created')?.recordRevision).toBe('revision-next');
+  });
+
+  it('preserves local confirmed state when revision conflicts or acknowledgements are incomplete', async () => {
+    const { useReviewStore } = await import('./useReviewStore');
+    const store = useReviewStore();
+    await store.setCurrentTask({ id: 'task-context', formId: 'FORM-CONTEXT', currentNode: 'jd', components: [] } as never);
+    const payload = { type: 'batch' as const, annotations: [], cloudAnnotations: [], rectAnnotations: [], measurements: [], note: 'local' };
+    const own = { ...payload, id: 'record-created', confirmedAt: 1, taskId: 'task-context', formId: 'FORM-CONTEXT', currentNode: 'jd', operatorId: 'checker-1', recordRevision: 'revision-old' };
+    store.confirmedRecords.value = [own];
+    reviewRecordCreateMock.mockRejectedValueOnce(new Error('确认记录已更新或删除，请刷新后核对本地修改再保存'));
+    await expect(store.addConfirmedRecord(payload)).rejects.toThrow('确认记录已更新或删除');
+    expect(store.confirmedRecords.value[0]).toEqual(own);
+    for (const revision of [undefined, 'revision-old']) {
+      reviewRecordCreateMock.mockImplementationOnce(async data => ({ success: true, record: { ...data, id: 'record-created', confirmedAt: 2,
+        recordRevision: revision, currentNode: 'jd', operatorId: 'checker-1' } }));
+      await expect(store.addConfirmedRecord(payload)).rejects.toThrow('不能确认保存成功');
+      expect(store.confirmedRecords.value[0]).toEqual(own);
+    }
   });
 
   it('discards cloud load and save responses after task activation changes', async () => {

@@ -50,6 +50,9 @@ import {
 } from '@/dimension';
 
 export type ConfirmedRecord = {
+  recordRevision?: string;
+  currentNode?: string;
+  operatorId?: string;
   modelContext?: ReviewModelContext;
   id: string;
   taskId?: string;
@@ -266,6 +269,8 @@ async function addConfirmedRecord(
   const activationEpoch = taskActivationEpoch;
   const node = currentTask.value?.currentNode;
   const formId = currentTask.value?.formId?.trim() || record.formId;
+  const operatorId = resolveRealtimeUserId()?.trim();
+  const currentNode = node ?? 'sj';
   if (isCurrentTaskTerminal()) throw new Error(error.value!);
 
   if (!USE_BACKEND.value) {
@@ -291,9 +296,14 @@ async function addConfirmedRecord(
     const dimensionDocumentVersion = record.dimensionDocumentVersion
       ?? boundDimensionState?.baseVersion;
     const modelContext = record.modelContext ?? modelContextProvider?.() ?? undefined;
+    const slotRecords = confirmedRecords.value.filter(item => item.formId === formId
+      && item.currentNode === currentNode && item.operatorId === operatorId);
+    if (slotRecords.length > 1) throw new Error('当前节点存在多条确认记录，请核对服务器数据后重开任务');
+    const recordBaseRevision = slotRecords[0]?.recordRevision;
     if (modelContext && (!isReviewModelContext(modelContext) || modelContext.taskId !== taskId || modelContext.formId !== formId
       || modelContext.node !== (currentTask.value?.currentNode ?? 'sj'))) throw new Error('校审模型版本上下文无效或已切换，请重新打开任务后保存');
     const response = await reviewRecordCreate({
+      recordBaseRevision,
       modelContext,
       taskId,
       formId,
@@ -312,9 +322,15 @@ async function addConfirmedRecord(
     }
 
     if (response.success && response.record) {
+      if (!response.record.recordRevision || !response.record.recordRevision.trim()) throw new Error('后端未返回确认记录修订标识，不能确认保存成功');
+      if (response.record.recordRevision === recordBaseRevision) throw new Error('后端未推进确认记录修订标识，不能确认保存成功');
+      if (response.record.currentNode !== currentNode || response.record.operatorId !== operatorId) throw new Error('后端确认记录节点或作者与当前任务不一致，请重新核对');
       if (modelContext && (!isReviewModelContext(response.record.modelContext)
         || reviewModelContextKey(response.record.modelContext) !== reviewModelContextKey(modelContext))) throw new Error('后端未完整保存模型版本上下文，不能确认保存成功');
       const newRecord: ConfirmedRecord = {
+        recordRevision: response.record.recordRevision,
+        currentNode: response.record.currentNode,
+        operatorId: response.record.operatorId,
         modelContext: response.record.modelContext,
         id: response.record.id,
         taskId,
@@ -368,7 +384,9 @@ async function addConfirmedRecord(
     throw new Error(response.error_message || '保存确认记录失败');
   } catch (e) {
     const session = activeDimensionDocumentSession;
-    if (session) {
+    const recordRevisionConflict = e instanceof Error && (e.message.includes('确认记录已更新或删除') || e.message.includes('REVIEW_RECORD_REVISION_CONFLICT'));
+    // 整条快照过期不能只重放尺寸命令，否则会覆盖另一端的批注、测量和模型上下文。
+    if (session && !recordRevisionConflict && activationEpoch === taskActivationEpoch) {
       const latest = dimensionConflictStateFromError(e, { taskId, formId });
       if (latest) {
         const preview = session.previewPendingCommands(latest);
@@ -485,6 +503,9 @@ async function loadConfirmedRecords(
         })
         : response.records;
       confirmedRecords.value = records.map((r) => ({
+        recordRevision: r.recordRevision,
+        currentNode: r.currentNode,
+        operatorId: r.operatorId,
         modelContext: r.modelContext,
         id: r.id,
         taskId: r.taskId,
