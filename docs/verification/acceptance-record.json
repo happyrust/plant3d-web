@@ -1,0 +1,11 @@
+{
+  "runId": "待填写-YYYYMMDD",
+  "candidate": "待填写-前后端commit-build_id",
+  "items": [
+    {"id":"V01","status":"待验收"},{"id":"V02","status":"待验收"},{"id":"V03","status":"待验收"},{"id":"V04","status":"待验收"},
+    {"id":"V05","status":"待验收"},{"id":"V06","status":"待验收"},{"id":"V07","status":"待验收"},{"id":"V08","status":"待验收"},
+    {"id":"V09","status":"待验收"},{"id":"V10","status":"待验收"},{"id":"V11","status":"待验收"},{"id":"V12","status":"待验收"},
+    {"id":"V13","status":"待验收"},{"id":"V14","status":"待验收"},{"id":"V15","status":"待验收"},{"id":"V16","status":"待验收"},
+    {"id":"V17","status":"待验收"},{"id":"V18","status":"待验收"},{"id":"V19","status":"待验收"}
+  ]
+}

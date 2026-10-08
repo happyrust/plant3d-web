@@ -1,0 +1,14 @@
+{
+  "frontendCommit": "待填写",
+  "backendCommit": "待填写",
+  "ciRun": "待填写",
+  "buildId": "待填写",
+  "frontendSha256": "待填写",
+  "backendSha256": "待填写",
+  "sha256sumsPath": "待填写",
+  "dirty": false,
+  "versionEndpoints": {
+    "80": {"versionJson": "待填写", "health": "待填写", "reviewHealth": "待填写"},
+    "3100": {"versionJson": "待填写", "health": "待填写", "reviewHealth": "待填写"}
+  }
+}

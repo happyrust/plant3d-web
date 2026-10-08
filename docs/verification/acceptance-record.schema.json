@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Plant3D V01-V19 acceptance record",
+  "type": "object",
+  "required": ["runId", "items"],
+  "properties": {
+    "runId": {"type": "string", "minLength": 1},
+    "candidate": {"type": "string"},
+    "items": {
+      "type": "array",
+      "minItems": 19,
+      "items": {
+        "type": "object",
+        "required": ["id", "status"],
+        "properties": {
+          "id": {"type": "string", "pattern": "^V(0[1-9]|1[0-9])$"},
+          "status": {"enum": ["待验收", "通过", "失败", "阻塞"]},
+          "evidence": {"type": "array", "items": {"type": "string"}},
+          "owner": {"type": "string"},
+          "date": {"type": "string"},
+          "defects": {"type": "array", "items": {"type": "string"}}
+        }
+      }
+    }
+  }
+}
