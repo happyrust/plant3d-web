@@ -79,6 +79,16 @@ const elevationText = (item: PipeSegmentElevation) => `中心线 ${mm(item.start
           </li>
         </ul>
       </details>
+      <details v-if="record.insulationRows?.some(row => row.status !== 'none')" class="mt-2">
+        <summary class="cursor-pointer">保温选取及来源（{{ record.insulationRows.length }}）</summary>
+        <ul class="mt-1 space-y-1">
+          <li v-for="row in record.insulationRows" :key="`${row.order}:${row.refno}`" class="rounded bg-slate-50 p-1"
+            :class="row.status !== 'read' && row.status !== 'none' ? 'text-amber-700' : ''">
+            <span class="break-all">{{ row.order + 1 }} · {{ row.refno }} · 通径 {{ mm(row.boreMm) }} · {{ row.text }}</span>
+            <p class="break-all">{{ row.source }}</p>
+          </li>
+        </ul>
+      </details>
       <details v-if="record.straightElevations?.length" class="mt-2">
         <summary class="cursor-pointer">直管段标高（{{ record.straightElevations.length }}）</summary>
         <ul class="mt-1 space-y-1">

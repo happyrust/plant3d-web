@@ -1,9 +1,9 @@
 import { computed, ref } from 'vue';
 
 import type { ElementAttributesResponse, SpatialCenterlineResponse } from '@/api/genModelV1Api';
-import type { PipeBendAngle, PipeInformationRecord, PipeMemberMaterial } from '@/dimension';
+import type { PipeBendAngle, PipeInformationRecord, PipeInsulationRow, PipeMemberMaterial } from '@/dimension';
 
-import { genModelV1ElementAttributes, genModelV1ModelBounds, genModelV1SpatialCenterline } from '@/api/genModelV1Api';
+import { genModelV1ElementAttributes, genModelV1ModelBounds, genModelV1SpatialCenterline, genModelV1TreeChildren } from '@/api/genModelV1Api';
 import { createScopedResultPersistence } from '@/clearance/services/scopedResultPersistence';
 import { attributeText, buildPipeInformation, pipeAttribute, pipeInformationRefno, validatePipeInformationRecord } from '@/dimension';
 
@@ -61,6 +61,48 @@ async function readSpecMaterial(attrs: ElementAttributesResponse, read: typeof g
   const text = attributeText(material, 'XTEX');
   if (!text) return { text: '未设置', source: `${source} → ${material.refno}@${material.sesno}:XTEX（未设置）`, status: 'missing' };
   return { text, source: `${source} → ${material.refno}@${material.sesno}:XTEX`, status: version && !matched ? 'unconfirmed' : 'read' };
+}
+
+type InsulationPick = Pick<PipeInsulationRow, 'para1Mm' | 'status' | 'text' | 'source'>;
+
+// Walk an insulation SPEC the way E3D selects: each node's QUES (TYPE/TEMP/PBOR) is answered by a child
+// SELE/SPCO whose TANS or ANSW..MAXA matches, down to the SPCO whose CATR is the GTYP INSU component.
+async function selectInsulation(specRef: string, temperature: number | null, bore: number, read: typeof genModelV1ElementAttributes,
+  version?: SpatialCenterlineResponse['source_version']): Promise<InsulationPick> {
+  let node = await read(specRef);
+  if (pipeInformationRefno(node.refno ?? '') !== pipeInformationRefno(specRef) || node.noun !== 'SPEC') throw new Error(`保温规格 ${specRef} 不是 SPEC`);
+  const matched = [checkAttributeVersion(node, version)];
+  const path = [`${node.refno}@${node.sesno}(${attributeText(node, 'NAME') ?? 'SPEC'})`];
+  for (let depth = 0; depth < 6; depth += 1) {
+    const question = attributeText(node, 'QUES');
+    const answer = question === 'TYPE' ? 'INSU' : question === 'TEMP' ? temperature : question === 'PBOR' ? bore : null;
+    if (answer === null) return { para1Mm: null, status: 'unconfirmed', text: `无法回答选择问题 ${question ?? '未设置'}`, source: path.join(' → ') };
+    let next: ElementAttributesResponse | undefined;
+    for (const kid of (await genModelV1TreeChildren(node.refno!)).nodes.filter(kid => kid.noun === 'SELE' || kid.noun === 'SPCO')) {
+      const child = await read(kid.refno);
+      const low = pipeAttribute(child, 'ANSW')?.value; const high = pipeAttribute(child, 'MAXA')?.value;
+      const hit = typeof answer === 'string' ? attributeText(child, 'TANS') === answer
+        : typeof low === 'number' && answer >= low && answer <= (typeof high === 'number' && high > low ? high : low);
+      if (hit) { next = child; break; }
+    }
+    if (!next) return { para1Mm: null, status: 'missing', text: `${question} ${answer} 无匹配行`, source: path.join(' → ') };
+    matched.push(checkAttributeVersion(next, version));
+    path.push(`${question}=${answer} ${next.refno}@${next.sesno}(${attributeText(next, 'NAME') ?? next.noun})`);
+    if (next.noun === 'SPCO') {
+      const catalogue = attributeText(next, 'CATR');
+      if (!catalogue) return { para1Mm: null, status: 'missing', text: '保温规格行未挂目录件', source: path.join(' → ') };
+      const component = await read(catalogue);
+      matched.push(checkAttributeVersion(component, version));
+      const para = pipeAttribute(component, 'PARA')?.value;
+      const first = Array.isArray(para) ? para[0] : para;
+      const source = `${path.join(' → ')} → ${component.refno}@${component.sesno}(${attributeText(component, 'NAME') ?? component.noun}):PARA[1]`;
+      if (attributeText(component, 'GTYP') !== 'INSU' || typeof first !== 'number' || !Number.isFinite(first) || first <= 0)
+        return { para1Mm: null, status: 'missing', text: '保温目录件不是 INSU 或缺 PARA[1]', source };
+      return { para1Mm: first, status: version && !matched.every(Boolean) ? 'unconfirmed' : 'read', text: `PARA[1] ${Number(first.toFixed(2))} mm`, source };
+    }
+    node = next;
+  }
+  return { para1Mm: null, status: 'unconfirmed', text: '保温规格层级过深', source: path.join(' → ') };
 }
 
 async function readMaterial(root: ElementAttributesResponse, warnings: string[], read = genModelV1ElementAttributes,
@@ -135,6 +177,7 @@ export function usePipeInformationStore() {
       });
       const memberMaterials: PipeMemberMaterial[] = new Array(targets.length);
       const bendAngles: PipeBendAngle[] = [];
+      const insulationSpecs: { ispe: string | null; source: string }[] = new Array(targets.length);
       let next = 0;
       await Promise.all(Array.from({ length: Math.min(4, targets.length) }, async () => {
         while (next < targets.length && stamp === sequence) {
@@ -148,6 +191,7 @@ export function usePipeInformationStore() {
               if (pipeInformationRefno(owner.refno ?? '') !== (head ? refno : pipeInformationRefno(from))
                 || !Number.isSafeInteger(owner.sesno) || owner.sesno! < 0) throw new Error('直管段所属成员不匹配');
               checkAttributeVersion(owner, centerline.source_version);
+              insulationSpecs[index] = { ispe: attributeText(owner, 'ISPE'), source: `${owner.refno}@${owner.sesno}:ISPE` };
               const tubeSpec = head ? 'HSTU' : 'LSTU';
               const value = await readSpecMaterial(owner, read, centerline.source_version, tubeSpec);
               memberMaterials[index] = { refno: segment.refno, noun: segment.noun, implicit: true, text: value?.text ?? '未设置',
@@ -159,6 +203,7 @@ export function usePipeInformationStore() {
               || !Number.isSafeInteger(attrs.sesno) || attrs.sesno! < 0
               || (segment.noun !== 'UNKNOWN' && attrs.noun !== segment.noun)) throw new Error('成员属性所属对象或类型不匹配');
             checkAttributeVersion(attrs, centerline.source_version);
+            insulationSpecs[index] = { ispe: attributeText(attrs, 'ISPE'), source: `${attrs.refno}@${attrs.sesno}:ISPE` };
             if (['BEND', 'ELBO'].includes(segment.noun)) {
               const angle = pipeAttribute(attrs, 'ANGL')?.value;
               bendAngles.push({ refno: segment.refno, angleDeg: typeof angle === 'number' ? angle : null, source: `${attrs.refno}@${attrs.sesno}:ANGL` });
@@ -174,10 +219,33 @@ export function usePipeInformationStore() {
         }
       }));
       if (stamp !== sequence) return false;
+      // E3D takes the insulation temperature from the BRAN; the bore is each segment's own.
+      const temperatureValue = pipeAttribute(attributes, 'TEMP')?.value;
+      const temperature = typeof temperatureValue === 'number' && Number.isFinite(temperatureValue) ? temperatureValue : null;
+      const picks = new Map<string, Promise<InsulationPick>>();
+      const insulationRows = await Promise.all(targets.map(async (segment, index): Promise<PipeInsulationRow> => {
+        const od = segment.outside_diameter_mm; const bore = segment.diameter_evidence?.arrive_bore_mm;
+        const base = { refno: segment.refno, order: segment.order,
+          boreMm: typeof bore === 'number' && Number.isFinite(bore) && bore > 0 ? bore : null,
+          outsideDiameterMm: typeof od === 'number' && Number.isFinite(od) && od > 0 ? od : null };
+        const spec = insulationSpecs[index];
+        if (!spec) return { ...base, para1Mm: null, status: 'unconfirmed', text: '成员属性未读到，保温未核实', source: memberMaterials[index]?.source ?? '' };
+        if (!spec.ispe) return { ...base, para1Mm: null, status: 'none', text: '无保温规格', source: spec.source };
+        if (base.boreMm === null) return { ...base, para1Mm: null, status: 'unconfirmed', text: '该段通径未知，不能选取保温', source: spec.source };
+        const key = `${pipeInformationRefno(spec.ispe)}|${temperature}|${base.boreMm}`;
+        if (!picks.has(key)) picks.set(key, selectInsulation(spec.ispe, temperature, base.boreMm, read, centerline.source_version));
+        try {
+          const pick = await picks.get(key)!;
+          return { ...base, ...pick, source: `${spec.source} → ${pick.source}` };
+        } catch (cause) {
+          return { ...base, para1Mm: null, status: 'unconfirmed', text: '保温规格读取失败', source: cause instanceof Error ? cause.message : String(cause) };
+        }
+      }));
+      if (stamp !== sequence) return false;
       const record = buildPipeInformation({ refno, attributes, warnings,
         centerline,
         bounds: boundsResult.status === 'fulfilled' ? boundsResult.value : undefined,
-        material, memberMaterials, bendAngles,
+        material, memberMaterials, bendAngles, insulationRows,
       });
       const index = records.value.findIndex(item => item.refno === refno);
       records.value = index < 0 ? [...records.value, record] : records.value.map((item, i) => i === index ? record : item);

@@ -10,6 +10,11 @@ export type PipeMemberDiameter = {
 export type PipeMemberMaterial = { refno: string; noun: string; implicit?: boolean; text: string; source: string; status: PipeInformationField['status'] };
 export type PipeBendAngle = { refno: string; angleDeg: number | null; source: string };
 export type PipeBendArc = { refno: string; noun: string; angleDeg: number | null; chordMm: number | null; radiusMm: number | null; arcMm: number | null; source: string };
+/** `none` = the segment has no ISPE (uninsulated); `para1Mm` is the selected INSU component's PARA[1], meaning unconfirmed. */
+export type PipeInsulationRow = {
+  refno: string; order: number; boreMm: number | null; outsideDiameterMm: number | null; para1Mm: number | null;
+  status: PipeInformationField['status'] | 'none'; text: string; source: string;
+};
 export type PipeSegmentElevation = {
   refno: string; order: number; slope: 'horizontal' | 'vertical' | 'sloped'; startZ: number; endZ: number;
   outsideDiameterMm: number | null; topMm: number | null; bottomMm: number | null;
@@ -22,6 +27,7 @@ export type PipeInformationRecord = {
   memberMaterials?: PipeMemberMaterial[];
   bendArcs?: PipeBendArc[];
   straightElevations?: PipeSegmentElevation[];
+  insulationRows?: PipeInsulationRow[];
 };
 export const PIPE_INFORMATION_SOURCE = 'pipe-information' as const;
 export const pipeInformationRefno = (value: string) => value.trim().replace(/^=/, '').replace('/', '_');
@@ -50,7 +56,7 @@ function validSourceVersion(version: NonNullable<SpatialCenterlineResponse['sour
 export function buildPipeInformation(input: {
   refno: string; attributes: ElementAttributesResponse; centerline?: SpatialCenterlineResponse;
   bounds?: ModelBoundsResponse; material?: { text: string; source: string; status?: PipeInformationField['status'] }; warnings?: string[];
-  memberMaterials?: PipeMemberMaterial[]; bendAngles?: PipeBendAngle[];
+  memberMaterials?: PipeMemberMaterial[]; bendAngles?: PipeBendAngle[]; insulationRows?: PipeInsulationRow[];
 }): PipeInformationRecord {
   const refno = pipeInformationRefno(input.refno);
   const attrs = input.attributes;
@@ -137,6 +143,12 @@ export function buildPipeInformation(input: {
   });
   const sized = straightElevations.filter(item => item.topMm !== null);
   const topBottomText = sized.length ? `管顶最高 ${mm(Math.max(...sized.map(item => item.topMm!)))}，管底最低 ${mm(Math.min(...sized.map(item => item.bottomMm!)))}（${sized.length}/${straightElevations.length}段）` : null;
+  const insulationRows = input.insulationRows;
+  const insulated = insulationRows?.filter(row => row.para1Mm !== null) ?? [];
+  const rangeOf = (values: number[]) => `${mm(Math.min(...values))}${Math.max(...values) !== Math.min(...values) ? ` ～ ${mm(Math.max(...values))}` : ''}`;
+  const paraText = insulated.length ? `PARA[1] ${[...new Set(insulated.map(row => mm(row.para1Mm!)))].join('、')}（${insulated.length}/${insulationRows!.length}段，含义待确认）` : null;
+  const withOd = insulated.filter(row => row.outsideDiameterMm !== null);
+  const insulatedOdText = withOd.length ? `按直径增量 ${rangeOf(withOd.map(row => row.outsideDiameterMm! + row.para1Mm!))}，按厚度 ${rangeOf(withOd.map(row => row.outsideDiameterMm! + 2 * row.para1Mm!))}` : null;
   // Field text is drawn with the bundled LFF font, which has no glyph for the full-width semicolon.
   let versionText = version ? `属性与中心线同版本（${version.dbnum}@${version.sesno}），模型版本待核实` : '中心线未提供版本，属性/几何对应关系待核实';
   if (bounds?.record_source_sessions) {
@@ -155,6 +167,12 @@ export function buildPipeInformation(input: {
       memberDiameters.length && memberDiameters.every(member => member.source === 'catalogue') ? 'read' : 'unconfirmed'),
     field('material', '业务材质', input.material?.text ?? attributeText(attrs, 'MATN'), input.material?.source ?? `${source}:MATN/MATR`, input.material?.status ?? 'read'),
     field('insulation', '保温规格', attributeText(attrs, 'ISPE'), `${source}:ISPE（规格参考号）`),
+    ...(insulationRows?.some(row => row.status !== 'none') ? [
+      field('insulation-parameter', '保温参数', paraText,
+        '各段 ISPE（隐式直管取 BRAN 或上游成员）按 BRAN TEMP 与该段通径逐级选取保温规格行，读 GTYP INSU 目录件 PARA[1]', 'unconfirmed'),
+      field('insulated-od', '含保温外径参考', insulatedOdText,
+        '该段外径 + PARA[1]（视为直径增量）或 + 2×PARA[1]（视为保温厚度）；PARA[1] 含义及业务包络是否含保温待专业确认', 'unconfirmed'),
+    ] : []),
     field('envelope', '业务包络', '口径待确认（是否含保温/操作空间）', '专业确认', 'unconfirmed'),
     field('model-bounds', '模型包围尺寸', modelBox, bounds?.source ?? '未生成模型', 'unconfirmed'),
     field('straight-length', '直管段总长', straightTotal === null ? null : mm(straightTotal),
@@ -182,7 +200,7 @@ export function buildPipeInformation(input: {
   warnings.push('外径是各槽位管子目录参考，非管件实体最大包络；模型发布及目录依赖对应关系尚需核实，外径和模型盒不得作为专业包络验收值');
   for (const warning of centerline?.warnings ?? []) warnings.push(warning);
   return { refno, name: attributeText(attrs, 'NAME') ?? refno, sesno: attrs.sesno!, fetchedAt: new Date().toISOString(),
-    stale: false, anchorMm: anchor, fields, memberDiameters, memberMaterials: input.memberMaterials, bendArcs, straightElevations,
+    stale: false, anchorMm: anchor, fields, memberDiameters, memberMaterials: input.memberMaterials, bendArcs, straightElevations, insulationRows,
     sourceVersion: version ?? undefined, warnings: [...new Set(warnings)] };
 }
 
@@ -230,5 +248,10 @@ export function validatePipeInformationRecord(value: unknown): PipeInformationRe
     && [item.startZ, item.endZ].every(Number.isFinite)
     && [item.outsideDiameterMm, item.topMm, item.bottomMm].every(value => value === null || (typeof value === 'number' && Number.isFinite(value))))))
     throw new Error('直管段标高保存格式无效');
+  if (record.insulationRows !== undefined && (!Array.isArray(record.insulationRows) || !record.insulationRows.every(row => row
+    && [row.refno, row.text, row.source].every(value => typeof value === 'string') && Number.isSafeInteger(row.order)
+    && ['read', 'derived', 'missing', 'unconfirmed', 'none'].includes(row.status)
+    && [row.boreMm, row.outsideDiameterMm, row.para1Mm].every(value => value === null || (typeof value === 'number' && Number.isFinite(value))))))
+    throw new Error('保温选取保存格式无效');
   return { ...record, memberDiameters: record.memberDiameters ?? [], stale: true };
 }

@@ -298,6 +298,45 @@ describe('DimensionPanelDock', () => {
       const elevationCard = (pipeInformationToExternalDimensions([elevated])[0]!.layout as any).tag.lines.map((line: any) => line.text).join('');
       expect([...elevationCard].filter(character => font.getGlyph(character.codePointAt(0)!) === font.getGlyph(0xfffd))).toEqual([]);
       expect(validatePipeInformationRecord(JSON.parse(JSON.stringify(elevated))).straightElevations).toEqual(elevated.straightElevations);
+      // Insulation: BRAN ISPE/TEMP select SPEC -> TEMP row -> PBOR row -> INSU component PARA[1]; a member without ISPE stays uninsulated.
+      const tree: Record<string, { refno: string; noun: string }[]> = {
+        '13246/10': [{ refno: '13246_11', noun: 'TEXT' }, { refno: '13246_12', noun: 'SELE' }],
+        '13246/12': [{ refno: '13246_13', noun: 'SELE' }],
+        '13246/13': [{ refno: '13246_14', noun: 'SPCO' }, { refno: '13246_15', noun: 'SPCO' }],
+      };
+      const treeSpy = vi.spyOn(v1Api, 'genModelV1TreeChildren')
+        .mockImplementation(async refno => ({ source: 'direct', parent: refno, nodes: (tree[refno.replace('_','/')] ?? []) as any }));
+      let temperature = 360;
+      const catalogue = (refno: string, noun: string, items: ReturnType<typeof attr>[]) => ({ ...currentAttrs, refno, noun, dbnum: 5054, sesno: 48, attributes: items });
+      attrsSpy.mockImplementation(async refno => {
+        const key = refno.replace('_','/');
+        if (key === '7997/2') return { ...currentAttrs, refno: '7997/2', noun: 'ELBO', attributes: [attr('OWNER','7997/1'), attr('ANGL', 90)] };
+        if (key === '13246/10') return catalogue(key, 'SPEC', [attr('NAME','/INS_TEST'), attr('QUES','TYPE')]);
+        if (key === '13246/12') return catalogue(key, 'SELE', [attr('TANS','INSU'), attr('QUES','TEMP')]);
+        if (key === '13246/13') return catalogue(key, 'SELE', [attr('ANSW', 340), attr('MAXA', 1000), attr('QUES','PBOR')]);
+        if (key === '13246/14') return catalogue(key, 'SPCO', [attr('ANSW', 8), attr('MAXA', 8), attr('CATR','13246/16')]);
+        if (key === '13246/15') return catalogue(key, 'SPCO', [attr('NAME','/INS_TEST/110A'), attr('ANSW', 40), attr('MAXA', 100), attr('CATR','13246/16')]);
+        if (key === '13246/16') return catalogue(key, 'SCOM', [attr('NAME','/A1/INS10'), attr('GTYP','INSU'), attr('PARA', [200])]);
+        return { ...currentAttrs, attributes: [...currentAttrs.attributes.filter(item => item.name !== 'ISPE'), attr('ISPE','13246/10'), attr('TEMP', temperature)] };
+      });
+      try {
+        expect(await store.refresh('7997_1')).toBe(true);
+        const insulatedRecord = store.records.value[0]!;
+        expect(insulatedRecord.insulationRows?.map(row => [row.refno, row.status, row.para1Mm])).toEqual([['7997_1~7997_2', 'read', 200], ['7997_2', 'none', null]]);
+        expect(insulatedRecord.insulationRows?.[0]?.source).toBe('7997/1@42:ISPE → 13246/10@48(/INS_TEST) → TYPE=INSU 13246/12@48(SELE)'
+          + ' → TEMP=360 13246/13@48(SELE) → PBOR=100 13246/15@48(/INS_TEST/110A) → 13246/16@48(/A1/INS10):PARA[1]');
+        expect(insulatedRecord.fields.find(field => field.key === 'insulation-parameter')).toMatchObject({ text: 'PARA[1] 200 mm（1/2段，含义待确认）', status: 'unconfirmed' });
+        expect(insulatedRecord.fields.find(field => field.key === 'insulated-od')).toMatchObject({ text: '按直径增量 314.3 mm，按厚度 514.3 mm', status: 'unconfirmed' });
+        const insulationCard = (pipeInformationToExternalDimensions([insulatedRecord])[0]!.layout as any).tag.lines.map((line: any) => line.text).join('');
+        expect([...insulationCard].filter(character => font.getGlyph(character.codePointAt(0)!) === font.getGlyph(0xfffd))).toEqual([]);
+        await nextTick();
+        expect(host.textContent).toContain('保温选取及来源');
+        expect(validatePipeInformationRecord(JSON.parse(JSON.stringify(insulatedRecord))).insulationRows).toEqual(insulatedRecord.insulationRows);
+        temperature = 200;
+        expect(await store.refresh('7997_1')).toBe(true);
+        expect(store.records.value[0]?.insulationRows?.[0]).toMatchObject({ status: 'missing', text: 'TEMP 200 无匹配行', para1Mm: null });
+        expect(store.records.value[0]?.fields.find(field => field.key === 'insulated-od')).toMatchObject({ text: '未设置', status: 'missing' });
+      } finally { treeSpy.mockRestore(); }
     } finally { attrsSpy.mockRestore(); centerSpy.mockRestore(); boundsSpy.mockRestore(); store.detachPersistence(); store.clear(); }
   });
   it('merges external records with the document and keeps hide state visible', async () => {
