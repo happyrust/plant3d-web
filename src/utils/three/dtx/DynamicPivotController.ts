@@ -7,7 +7,16 @@
  * 3. 变换中心：所有平移、旋转、缩放操作都围绕这个 pivot 点进行
  */
 
-import { Vector2, Vector3, Scene, Sprite, SpriteMaterial, CanvasTexture } from 'three';
+import {
+  Vector2,
+  Vector3,
+  Scene,
+  Sprite,
+  SpriteMaterial,
+  CanvasTexture,
+  PerspectiveCamera,
+  OrthographicCamera,
+} from 'three';
 
 import type { DTXLayer } from './DTXLayer';
 import type { DTXSelectionController } from './selection/DTXSelectionController';
@@ -22,6 +31,8 @@ export type DynamicPivotConfig = {
   pinColor?: string
   /** 图钉大小（像素） */
   pinSize?: number
+  /** 图钉显隐变化时回调；宿主按需渲染时必须借此补一帧，否则图钉要等下一次相机变化才出现 / 消失 */
+  onVisualChange?: () => void
 }
 
 export class DynamicPivotController {
@@ -57,6 +68,7 @@ export class DynamicPivotController {
       longPressDelay: config.longPressDelay ?? 300,
       pinColor: config.pinColor ?? '#FF6B35',
       pinSize: config.pinSize ?? 32,
+      onVisualChange: config.onVisualChange ?? (() => {}),
     };
 
     this.createPinGizmo();
@@ -113,9 +125,35 @@ export class DynamicPivotController {
     });
 
     this.pinSprite = new Sprite(material);
-    this.pinSprite.scale.set(this.config.pinSize / 10, this.config.pinSize / 10, 1);
+    // 针尖画在贴图 y=0.9 处（Canvas 坐标向下），对应 sprite 局部坐标自底向上 0.1；
+    // 把锚点放到针尖，这样 sprite.position 就是针尖真正"扎"在的拾取点。
+    this.pinSprite.center.set(0.5, 0.1);
+    this.pinSprite.renderOrder = 10_000;
     this.pinSprite.visible = false;
     this.scene.add(this.pinSprite);
+  }
+
+  /**
+   * 按当前相机把 pinSize（屏幕像素）换算成 sprite 的世界缩放，
+   * 图钉在屏幕上大小恒定，不随模型单位与相机远近放大成遮挡视口的大球。
+   */
+  private syncPinScale(): void {
+    const sprite = this.pinSprite;
+    if (!sprite || !sprite.visible) return;
+    const camera = this.controls.object;
+    const dom = this.controls.domElement as HTMLElement | null | undefined;
+    const viewportHeight = Math.max(1, dom?.clientHeight ?? 0);
+    let worldPerPixel = 0;
+    if (camera instanceof PerspectiveCamera) {
+      const dist = camera.position.distanceTo(sprite.position);
+      const halfFovRad = (camera.fov * Math.PI) / 360;
+      worldPerPixel = (2 * dist * Math.tan(halfFovRad)) / viewportHeight;
+    } else if (camera instanceof OrthographicCamera) {
+      worldPerPixel = (camera.top - camera.bottom) / camera.zoom / viewportHeight;
+    }
+    if (!(worldPerPixel > 0) || !Number.isFinite(worldPerPixel)) return;
+    const s = this.config.pinSize * worldPerPixel;
+    sprite.scale.set(s, s, 1);
   }
 
   /**
@@ -153,6 +191,8 @@ export class DynamicPivotController {
     this.isMouseDown = false;
     this.mouseDownPos = null;
     this.cancelLongPress();
+    // 图钉只在长按拖拽期间提示 pivot 位置；松手后 pivot 仍作为轨道中心保留，图钉收起。
+    this.hidePinGizmo();
   }
 
   /**
@@ -195,16 +235,19 @@ export class DynamicPivotController {
     this.pinSprite.position.copy(position);
     this.pinSprite.visible = true;
     this.isPinVisible = true;
+    this.syncPinScale();
+    this.config.onVisualChange();
   }
 
   /**
    * 隐藏图钉 Gizmo
    */
   private hidePinGizmo(): void {
-    if (!this.pinSprite) return;
+    if (!this.pinSprite || !this.pinSprite.visible) return;
     
     this.pinSprite.visible = false;
     this.isPinVisible = false;
+    this.config.onVisualChange();
   }
 
   /**
@@ -244,7 +287,8 @@ export class DynamicPivotController {
    * 更新（每帧调用）
    */
   update(): void {
-    // 预留用于动画或其他更新逻辑
+    // 相机距离变化时保持图钉屏幕像素大小恒定
+    this.syncPinScale();
   }
 
   /**

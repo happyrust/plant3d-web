@@ -587,6 +587,14 @@ const selectionControllerRef = shallowRef<DTXSelectionController | null>(null);
 const globalEdgeOverlayRef = shallowRef<DTXOverlayHighlighter | null>(null);
 const viewCullControllerRef = shallowRef<DTXViewCullController | null>(null);
 const pivotControllerRef = shallowRef<DynamicPivotController | null>(null);
+// 进入任何工具模式（测量/标注/拾取）时立刻收起长按图钉并取消待触发的长按计时器，
+// 避免 pointerdown 已登记、随后才切到测量模式时图钉在拾取点上冒出来。
+watch(
+  () => store.toolMode.value,
+  (mode) => {
+    if (mode && mode !== 'none') pivotControllerRef.value?.handleMouseUp();
+  }
+);
 const cadGridRef = shallowRef<CadGrid | null>(null);
 const compatViewerRef = shallowRef<DtxCompatViewer | null>(null);
 const tileLodControllerRef = shallowRef<DTXTileLodController | null>(null);
@@ -3330,6 +3338,8 @@ function renderFrame() {
       dimensionSystem?.notifyViewerChanged();
     }
 
+    pivotControllerRef.value?.update();
+
     syncGlobalEdgeOverlay();
 
     const annotationSystem = annotationSystemRef.value;
@@ -3635,6 +3645,7 @@ onMounted(async () => {
       longPressDelay: 300,
       pinColor: '#FF6B35',
       pinSize: 32,
+      onVisualChange: requestRender,
     }
   );
   pivotControllerRef.value = pivotController;
@@ -4234,8 +4245,12 @@ onMounted(async () => {
   });
 
   // 添加鼠标事件监听器，用于动态 pivot（长按 300ms 触发）
+  // 测量 / 标注 / 拾取等工具模式下用户会在拾取点上停顿按住，不能被当成"长按设 pivot"，
+  // 否则会在测量点上冒出图钉贴图；此时只走导航（toolMode === 'none'）才允许。
   const onCanvasMouseDown = (e: PointerEvent) => {
     if (isModelUnitSplitCompareReady()) return;
+    if (store.toolMode.value && store.toolMode.value !== 'none') return;
+    if (e.button !== 0) return;
     const rect = canvas.getBoundingClientRect();
     const canvasPos = new Vector2(e.clientX - rect.left, e.clientY - rect.top);
     pivotControllerRef.value?.handleMouseDown(canvasPos);
