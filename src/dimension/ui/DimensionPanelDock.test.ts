@@ -213,48 +213,73 @@ describe('DimensionPanelDock', () => {
         ? { ...currentAttrs, refno: '7997/2', noun: 'ELBO', attributes: [attr('MATN','A312 TP316L')] }
         : currentAttrs);
       expect(await store.refresh('7997_1')).toBe(true);
-      expect(store.records.value[0]?.memberMaterials).toEqual([{ refno: '7997_2', noun: 'ELBO', text: 'A312 TP316L', source: '7997/2@42:MATN', status: 'read' }]);
+      expect(store.records.value[0]?.memberMaterials).toEqual([
+        { refno: '7997_1~7997_2', noun: 'TUBI', implicit: true, text: '未设置', source: '7997/1@42:HSTU', status: 'missing' },
+        { refno: '7997_2', noun: 'ELBO', text: 'A312 TP316L', source: '7997/2@42:MATN', status: 'read' }]);
       const good = JSON.parse(JSON.stringify(store.records.value));
       attrsSpy.mockResolvedValueOnce({ ...currentAttrs, sesno: 43 });
       expect(await store.refresh('7997_1')).toBe(false); expect(store.records.value).toEqual(good);
       expect(store.error.value).toContain('版本不一致');
       store.persistRecords(); store.bindPersistence('pipe-info-A', storage); store.bindPersistence('pipe-info-B', storage);
       expect(store.records.value[0]?.sourceVersion).toEqual(version);
-      expect(store.records.value[0]?.memberMaterials?.[0]?.text).toBe('A312 TP316L');
-      // Unset MATN/MATR: the member's own spec chain SPRE -> SPCO.MATX -> SMTE.XTEX, never the BRAN material.
+      const elbow = () => store.records.value[0]?.memberMaterials?.find(member => member.refno === '7997_2');
+      const tube = () => store.records.value[0]?.memberMaterials?.find(member => member.implicit);
+      expect(elbow()?.text).toBe('A312 TP316L');
+      // Unset MATN/MATR: the member's own spec chain SPRE -> SPCO.MATX -> SMTE.XTEX, the head tube's BRAN HSTU chain,
+      // never the BRAN material.
       centerSpy.mockResolvedValue({ ...currentLine, source_version: { ...version, databases: [...version.databases, { dbnum: 5054, sesno: 48, db_type: 'CATA' }] } });
-      const spec = { member: [attr('OWNER','7997/1'), attr('SPRE','13246/1')], spco: [attr('MATX','13246/2')], smteDbnum: 5054, smteSesno: 48 };
+      const spec = { member: [attr('OWNER','7997/1'), attr('SPRE','13246/1'), attr('ANGL', 90)], spco: [attr('MATX','13246/2')], smteDbnum: 5054, smteSesno: 48 };
       attrsSpy.mockImplementation(async refno => {
         const key = refno.replace('_','/');
         if (key === '7997/2') return { ...currentAttrs, refno: '7997/2', noun: 'ELBO', attributes: spec.member };
         if (key === '13246/1') return { ...currentAttrs, refno: '13246/1', noun: 'SPCO', dbnum: 5054, sesno: 48, attributes: spec.spco };
+        if (key === '13246/3') return { ...currentAttrs, refno: '13246/3', noun: 'SPCO', dbnum: 5054, sesno: 48, attributes: [attr('MATX','13246/2')] };
         if (key === '13246/2') return { ...currentAttrs, refno: '13246/2', noun: 'SMTE', dbnum: spec.smteDbnum, sesno: spec.smteSesno, attributes: [attr('XTEX','Z2CN1810 RCCM 01')] };
-        return { ...currentAttrs, attributes: [...currentAttrs.attributes, attr('MATN','BRAN ONLY')] };
+        return { ...currentAttrs, attributes: [...currentAttrs.attributes, attr('MATN','BRAN ONLY'), attr('HSTU','13246/3')] };
       });
       expect(await store.refresh('7997_1')).toBe(true);
       const catalogued = store.records.value[0]!;
-      expect(catalogued.memberMaterials).toEqual([{ refno: '7997_2', noun: 'ELBO', text: 'Z2CN1810 RCCM 01', status: 'read',
-        source: '7997/2@42:SPRE → 13246/1@48:MATX → 13246/2@48:XTEX' }]);
-      expect(catalogued.fields.find(field => field.key === 'member-materials')).toMatchObject({ text: 'Z2CN1810 RCCM 01（1/1件）', status: 'read' });
+      expect(catalogued.memberMaterials).toEqual([
+        { refno: '7997_1~7997_2', noun: 'TUBI', implicit: true, text: 'Z2CN1810 RCCM 01', status: 'read', source: '7997/1@42:HSTU → 13246/3@48:MATX → 13246/2@48:XTEX' },
+        { refno: '7997_2', noun: 'ELBO', text: 'Z2CN1810 RCCM 01', status: 'read', source: '7997/2@42:SPRE → 13246/1@48:MATX → 13246/2@48:XTEX' }]);
+      expect(catalogued.fields.find(field => field.key === 'member-materials')).toMatchObject({ text: 'Z2CN1810 RCCM 01（2/2段）', status: 'read' });
+      // 90° ELBO with a 141.42 mm port chord: R = 100 mm, arc = 50π mm, added to the 1000 mm implicit tube.
+      expect(catalogued.bendArcs).toHaveLength(1);
+      expect(catalogued.bendArcs![0]).toMatchObject({ refno: '7997_2', noun: 'ELBO', angleDeg: 90, source: '7997/2@42:ANGL + 中心线端口弦长' });
+      expect(catalogued.bendArcs![0]!.radiusMm).toBeCloseTo(100, 6);
+      expect(catalogued.bendArcs![0]!.arcMm).toBeCloseTo(50 * Math.PI, 6);
+      expect(catalogued.fields.find(field => field.key === 'straight-length')?.text).toBe('1000 mm');
+      expect(catalogued.fields.find(field => field.key === 'length-with-bends')).toMatchObject({ text: '1157.08 mm', status: 'unconfirmed' });
       const catalogueCard = (pipeInformationToExternalDimensions([catalogued])[0]!.layout as any).tag.lines.map((line: any) => line.text).join('');
       expect([...catalogueCard].filter(character => font.getGlyph(character.codePointAt(0)!) === font.getGlyph(0xfffd))).toEqual([]);
       await nextTick();
       expect(host.textContent).toContain('成员材质及来源');
+      expect(host.textContent).toContain('7997_1~7997_2 · 隐式直管 · Z2CN1810 RCCM 01');
       expect(host.textContent).toContain('7997/2@42:SPRE → 13246/1@48:MATX → 13246/2@48:XTEX');
+      expect(host.textContent).toContain('弯头弧长及来源');
+      expect(host.textContent).toContain('弧长 157.08 mm · 推算半径 100 mm');
+      store.persistRecords(); store.bindPersistence('pipe-info-A', storage); store.bindPersistence('pipe-info-B', storage);
+      expect(store.records.value[0]?.bendArcs?.[0]?.arcMm).toBeCloseTo(50 * Math.PI, 6);
+      expect(tube()).toMatchObject({ implicit: true, status: 'read' });
       spec.smteSesno = 47;
       expect(await store.refresh('7997_1')).toBe(true);
-      expect(store.records.value[0]?.memberMaterials?.[0]).toMatchObject({ text: '未核实', status: 'unconfirmed' });
-      expect(store.records.value[0]?.memberMaterials?.[0]?.source).toContain('版本不一致');
+      expect(elbow()).toMatchObject({ text: '未核实', status: 'unconfirmed' });
+      expect(elbow()?.source).toContain('版本不一致');
+      expect(tube()).toMatchObject({ text: '未核实', status: 'unconfirmed' });
       spec.smteSesno = 48; spec.smteDbnum = 5055;
       expect(await store.refresh('7997_1')).toBe(true);
-      expect(store.records.value[0]?.memberMaterials?.[0]).toMatchObject({ text: 'Z2CN1810 RCCM 01', status: 'unconfirmed' });
+      expect(elbow()).toMatchObject({ text: 'Z2CN1810 RCCM 01', status: 'unconfirmed' });
       spec.smteDbnum = 5054; spec.spco = [];
       expect(await store.refresh('7997_1')).toBe(true);
-      expect(store.records.value[0]?.memberMaterials?.[0]).toMatchObject({ text: '未设置', status: 'missing' });
+      expect(elbow()).toMatchObject({ text: '未设置', status: 'missing' });
+      expect(tube()).toMatchObject({ text: 'Z2CN1810 RCCM 01', status: 'read' });
       spec.member = [attr('OWNER','7997/1')];
       expect(await store.refresh('7997_1')).toBe(true);
-      expect(store.records.value[0]?.memberMaterials?.[0]).toEqual({ refno: '7997_2', noun: 'ELBO', text: '未设置', status: 'missing', source: '7997/2@42:MATN/MATR/SPRE' });
-      expect(store.records.value[0]?.fields.find(field => field.key === 'member-materials')).toMatchObject({ text: '未设置', status: 'missing' });
+      expect(elbow()).toEqual({ refno: '7997_2', noun: 'ELBO', text: '未设置', status: 'missing', source: '7997/2@42:MATN/MATR/SPRE' });
+      expect(store.records.value[0]?.fields.find(field => field.key === 'member-materials')).toMatchObject({ text: 'Z2CN1810 RCCM 01（1/2段）', status: 'unconfirmed' });
+      expect(store.records.value[0]?.bendArcs?.[0]).toMatchObject({ angleDeg: null, arcMm: null });
+      expect(store.records.value[0]?.fields.find(field => field.key === 'length-with-bends')).toMatchObject({ text: '未设置', status: 'missing' });
+      expect(store.records.value[0]?.warnings.join('；')).toContain('1 个弯头/弯管缺少有效角度或端口');
     } finally { attrsSpy.mockRestore(); centerSpy.mockRestore(); boundsSpy.mockRestore(); store.detachPersistence(); store.clear(); }
   });
   it('merges external records with the document and keeps hide state visible', async () => {

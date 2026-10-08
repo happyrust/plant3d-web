@@ -1,11 +1,11 @@
 import { computed, ref } from 'vue';
 
 import type { ElementAttributesResponse, SpatialCenterlineResponse } from '@/api/genModelV1Api';
-import type { PipeInformationRecord, PipeMemberMaterial } from '@/dimension';
+import type { PipeBendAngle, PipeInformationRecord, PipeMemberMaterial } from '@/dimension';
 
 import { genModelV1ElementAttributes, genModelV1ModelBounds, genModelV1SpatialCenterline } from '@/api/genModelV1Api';
 import { createScopedResultPersistence } from '@/clearance/services/scopedResultPersistence';
-import { attributeText, buildPipeInformation, pipeInformationRefno, validatePipeInformationRecord } from '@/dimension';
+import { attributeText, buildPipeInformation, pipeAttribute, pipeInformationRefno, validatePipeInformationRecord } from '@/dimension';
 
 const records = ref<PipeInformationRecord[]>([]);
 const suggestedRefno = ref('');
@@ -42,15 +42,16 @@ function checkAttributeVersion(attrs: ElementAttributesResponse, version?: Spati
 
 type MaterialValue = { text: string; source: string; status?: PipeMemberMaterial['status'] };
 
-// Catalogue material of the component itself: SPRE -> SPCO.MATX -> SMTE.XTEX (the text ISO/MTO use).
+// Catalogue material through a spec reference: SPRE (component), HSTU/LSTU (tube) -> SPCO.MATX -> SMTE.XTEX,
+// the text ISO/MTO use.
 async function readSpecMaterial(attrs: ElementAttributesResponse, read: typeof genModelV1ElementAttributes,
-  version?: SpatialCenterlineResponse['source_version']): Promise<MaterialValue | undefined> {
-  const specRef = attributeText(attrs, 'SPRE');
+  version?: SpatialCenterlineResponse['source_version'], specAttribute: 'SPRE' | 'HSTU' | 'LSTU' = 'SPRE'): Promise<MaterialValue | undefined> {
+  const specRef = attributeText(attrs, specAttribute);
   if (!specRef) return undefined;
   const component = await read(specRef);
   if (pipeInformationRefno(component.refno ?? '') !== pipeInformationRefno(specRef) || component.noun !== 'SPCO'
     || !Number.isSafeInteger(component.sesno) || component.sesno! < 0) throw new Error(`规格引用 ${specRef} 不是可核对的 SPCO`);
-  const source = `${attrs.refno}@${attrs.sesno}:SPRE → ${component.refno}@${component.sesno}:MATX`;
+  const source = `${attrs.refno}@${attrs.sesno}:${specAttribute} → ${component.refno}@${component.sesno}:MATX`;
   const textRef = attributeText(component, 'MATX');
   if (!textRef) return { text: '未设置', source: `${source}（未设置）`, status: 'missing' };
   const material = await read(textRef);
@@ -126,25 +127,49 @@ export function usePipeInformationStore() {
         return cache.get(key)!;
       };
       const material = await readMaterial(attributes, warnings, read, centerline.source_version);
-      const members = [...new Map(centerline.segments.filter(segment => !segment.implicit).map(segment => [segment.refno, segment])).values()];
-      const memberMaterials: PipeMemberMaterial[] = new Array(members.length);
+      const seen = new Set<string>();
+      const targets = centerline.segments.filter(segment => {
+        if (segment.implicit) return true;
+        if (seen.has(segment.refno)) return false;
+        seen.add(segment.refno); return true;
+      });
+      const memberMaterials: PipeMemberMaterial[] = new Array(targets.length);
+      const bendAngles: PipeBendAngle[] = [];
       let next = 0;
-      await Promise.all(Array.from({ length: Math.min(4, members.length) }, async () => {
-        while (next < members.length && stamp === sequence) {
-          const index = next++; const segment = members[index]!;
+      await Promise.all(Array.from({ length: Math.min(4, targets.length) }, async () => {
+        while (next < targets.length && stamp === sequence) {
+          const index = next++; const segment = targets[index]!;
           try {
+            if (segment.implicit) {
+              // Implicit tube `from~to`: the head tube uses BRAN HSTU, every other tube its upstream member's LSTU.
+              const from = segment.refno.split('~')[0] ?? '';
+              const head = from === 'Head' || pipeInformationRefno(from) === refno;
+              const owner = head ? attributes : await read(from);
+              if (pipeInformationRefno(owner.refno ?? '') !== (head ? refno : pipeInformationRefno(from))
+                || !Number.isSafeInteger(owner.sesno) || owner.sesno! < 0) throw new Error('直管段所属成员不匹配');
+              checkAttributeVersion(owner, centerline.source_version);
+              const tubeSpec = head ? 'HSTU' : 'LSTU';
+              const value = await readSpecMaterial(owner, read, centerline.source_version, tubeSpec);
+              memberMaterials[index] = { refno: segment.refno, noun: segment.noun, implicit: true, text: value?.text ?? '未设置',
+                source: value?.source ?? `${owner.refno}@${owner.sesno}:${tubeSpec}`, status: value ? value.status ?? 'read' : 'missing' };
+              continue;
+            }
             const attrs = await read(segment.refno);
             if (pipeInformationRefno(attrs.refno ?? '') !== pipeInformationRefno(segment.refno)
               || !Number.isSafeInteger(attrs.sesno) || attrs.sesno! < 0
               || (segment.noun !== 'UNKNOWN' && attrs.noun !== segment.noun)) throw new Error('成员属性所属对象或类型不匹配');
             checkAttributeVersion(attrs, centerline.source_version);
+            if (['BEND', 'ELBO'].includes(segment.noun)) {
+              const angle = pipeAttribute(attrs, 'ANGL')?.value;
+              bendAngles.push({ refno: segment.refno, angleDeg: typeof angle === 'number' ? angle : null, source: `${attrs.refno}@${attrs.sesno}:ANGL` });
+            }
             const value = await readMaterial(attrs, warnings, read, centerline.source_version);
             memberMaterials[index] = { refno: segment.refno, noun: segment.noun, text: value?.text ?? '未设置',
               source: value?.source ?? `${attrs.refno}@${attrs.sesno}:MATN/MATR/SPRE`,
               status: value ? value.status ?? (attrs.complete ? 'read' : 'unconfirmed') : 'missing' };
           } catch (cause) {
-            memberMaterials[index] = { refno: segment.refno, noun: segment.noun, text: '未核实', status: 'unconfirmed',
-              source: cause instanceof Error ? cause.message : String(cause) };
+            memberMaterials[index] = { refno: segment.refno, noun: segment.noun, ...(segment.implicit ? { implicit: true } : {}),
+              text: '未核实', status: 'unconfirmed', source: cause instanceof Error ? cause.message : String(cause) };
           }
         }
       }));
@@ -152,7 +177,7 @@ export function usePipeInformationStore() {
       const record = buildPipeInformation({ refno, attributes, warnings,
         centerline,
         bounds: boundsResult.status === 'fulfilled' ? boundsResult.value : undefined,
-        material, memberMaterials,
+        material, memberMaterials, bendAngles,
       });
       const index = records.value.findIndex(item => item.refno === refno);
       records.value = index < 0 ? [...records.value, record] : records.value.map((item, i) => i === index ? record : item);

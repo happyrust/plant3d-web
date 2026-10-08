@@ -1,11 +1,17 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue';
 
+import type { PipeBendArc } from '@/dimension';
+
 import { usePipeInformationStore } from '@/composables/usePipeInformationStore';
 
 const store = usePipeInformationStore();
 const refno = ref(store.suggestedRefno.value);
 watch(store.suggestedRefno, value => { refno.value = value; });
+const mm = (value: number | null) => value === null ? '—' : `${Number(value.toFixed(2))} mm`;
+const bendText = (bend: PipeBendArc) => bend.arcMm === null
+  ? `角度 ${bend.angleDeg ?? '缺失'}° · 端口弦长 ${mm(bend.chordMm)} · 不能计算弧长`
+  : `角度 ${bend.angleDeg}° · 端口弦长 ${mm(bend.chordMm)} · 弧长 ${mm(bend.arcMm)} · 推算半径 ${mm(bend.radiusMm)}`;
 </script>
 
 <template>
@@ -54,8 +60,19 @@ watch(store.suggestedRefno, value => { refno.value = value; });
         <ul class="mt-1 space-y-1">
           <li v-for="member in record.memberMaterials" :key="member.refno" class="rounded bg-slate-50 p-1"
             :class="member.status !== 'read' ? 'text-amber-700' : ''">
-            <span class="break-all">{{ member.refno }} · {{ member.noun }} · {{ member.text }}</span>
+            <span class="break-all">{{ member.refno }} · {{ member.implicit ? '隐式直管' : member.noun }} · {{ member.text }}</span>
             <p class="break-all">{{ member.source }}</p>
+          </li>
+        </ul>
+      </details>
+      <details v-if="record.bendArcs?.length" class="mt-2">
+        <summary class="cursor-pointer">弯头弧长及来源（{{ record.bendArcs.length }}）</summary>
+        <ul class="mt-1 space-y-1">
+          <li v-for="bend in record.bendArcs" :key="bend.refno" class="rounded bg-slate-50 p-1"
+            :class="bend.arcMm === null ? 'text-amber-700' : ''">
+            <span class="break-all">{{ bend.refno }} · {{ bend.noun }}</span>
+            <p>{{ bendText(bend) }}</p>
+            <p class="break-all">{{ bend.source }}</p>
           </li>
         </ul>
       </details>

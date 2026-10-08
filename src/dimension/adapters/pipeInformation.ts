@@ -7,13 +7,16 @@ export type PipeMemberDiameter = {
   refno: string; order: number; noun: string; implicit: boolean; outsideDiameterMm: number | null;
   source: 'catalogue' | 'bore-estimate' | 'missing' | 'unknown'; sourceText: string;
 };
-export type PipeMemberMaterial = { refno: string; noun: string; text: string; source: string; status: PipeInformationField['status'] };
+export type PipeMemberMaterial = { refno: string; noun: string; implicit?: boolean; text: string; source: string; status: PipeInformationField['status'] };
+export type PipeBendAngle = { refno: string; angleDeg: number | null; source: string };
+export type PipeBendArc = { refno: string; noun: string; angleDeg: number | null; chordMm: number | null; radiusMm: number | null; arcMm: number | null; source: string };
 export type PipeInformationRecord = {
   refno: string; name: string; sesno: number; fetchedAt: string; stale: boolean;
   anchorMm: Vec3; fields: PipeInformationField[]; warnings: string[];
   memberDiameters?: PipeMemberDiameter[];
   sourceVersion?: NonNullable<SpatialCenterlineResponse['source_version']>;
   memberMaterials?: PipeMemberMaterial[];
+  bendArcs?: PipeBendArc[];
 };
 export const PIPE_INFORMATION_SOURCE = 'pipe-information' as const;
 export const pipeInformationRefno = (value: string) => value.trim().replace(/^=/, '').replace('/', '_');
@@ -42,7 +45,7 @@ function validSourceVersion(version: NonNullable<SpatialCenterlineResponse['sour
 export function buildPipeInformation(input: {
   refno: string; attributes: ElementAttributesResponse; centerline?: SpatialCenterlineResponse;
   bounds?: ModelBoundsResponse; material?: { text: string; source: string; status?: PipeInformationField['status'] }; warnings?: string[];
-  memberMaterials?: PipeMemberMaterial[];
+  memberMaterials?: PipeMemberMaterial[]; bendAngles?: PipeBendAngle[];
 }): PipeInformationRecord {
   const refno = pipeInformationRefno(input.refno);
   const attrs = input.attributes;
@@ -94,6 +97,22 @@ export function buildPipeInformation(input: {
   const diameters = memberDiameters.flatMap(member => member.outsideDiameterMm === null ? [] : [member.outsideDiameterMm]);
   const rangeText = diameters.length ? `${mm(Math.min(...diameters))}${Math.max(...diameters) !== Math.min(...diameters) ? ` ～ ${mm(Math.max(...diameters))}` : ''}（${diameters.length}/${memberDiameters.length}段）` : null;
   const modelBox = bounds ? bounds.max_mm.map((value, axis) => mm(value - bounds.min_mm[axis]!)).join(' × ') : null;
+  const straightTotal = straight?.length && validLengths ? straight.reduce((sum, segment) => sum + segment.length_mm, 0) : null;
+  // Arc from the member's own ANGL and its port-to-port chord: R = c / (2·sin(θ/2)), arc = R·θ.
+  const bendArcs: PipeBendArc[] = [...new Map((centerline?.segments ?? [])
+    .filter(segment => !segment.implicit && ['BEND', 'ELBO'].includes(segment.noun)).map(segment => [segment.refno, segment])).values()].map(segment => {
+    const angle = input.bendAngles?.find(item => item.refno === segment.refno);
+    const degrees = typeof angle?.angleDeg === 'number' && Number.isFinite(angle.angleDeg) ? angle.angleDeg : null;
+    const ports = [segment.start, segment.end].every(point => point && [point.x, point.y, point.z].every(Number.isFinite));
+    const chord = ports ? Math.hypot(segment.end.x - segment.start.x, segment.end.y - segment.start.y, segment.end.z - segment.start.z) : null;
+    const half = degrees !== null && degrees > 0 && degrees < 180 && chord !== null && chord > 0 ? degrees * Math.PI / 360 : null;
+    const radius = half === null ? null : chord! / (2 * Math.sin(half));
+    return { refno: segment.refno, noun: segment.noun, angleDeg: degrees, chordMm: chord, radiusMm: radius,
+      arcMm: radius === null ? null : radius * half! * 2, source: angle ? `${angle.source} + 中心线端口弦长` : '未读到 ANGL' };
+  });
+  const missingArcs = bendArcs.filter(bend => bend.arcMm === null).length;
+  if (missingArcs) warnings.push(`${missingArcs} 个弯头/弯管缺少有效角度或端口，不能计算含弯头弧长的管长`);
+  const lengthWithBends = straightTotal !== null && !missingArcs ? straightTotal + bendArcs.reduce((sum, bend) => sum + bend.arcMm!, 0) : null;
   // Field text is drawn with the bundled LFF font, which has no glyph for the full-width semicolon.
   let versionText = version ? `属性与中心线同版本（${version.dbnum}@${version.sesno}），模型版本待核实` : '中心线未提供版本，属性/几何对应关系待核实';
   if (bounds?.record_source_sessions) {
@@ -114,8 +133,10 @@ export function buildPipeInformation(input: {
     field('insulation', '保温规格', attributeText(attrs, 'ISPE'), `${source}:ISPE（规格参考号）`),
     field('envelope', '业务包络', '口径待确认（是否含保温/操作空间）', '专业确认', 'unconfirmed'),
     field('model-bounds', '模型包围尺寸', modelBox, bounds?.source ?? '未生成模型', 'unconfirmed'),
-    field('straight-length', '直管段总长', straight?.length && validLengths ? mm(straight.reduce((sum, segment) => sum + segment.length_mm, 0)) : null,
+    field('straight-length', '直管段总长', straightTotal === null ? null : mm(straightTotal),
       '中心线的隐式直段和 TUBI/FTUB；不含弯头弧长', 'derived'),
+    field('length-with-bends', '管长（含弯头）', lengthWithBends === null ? null : mm(lengthWithBends),
+      `直管段总长 + ${bendArcs.length} 个 BEND/ELBO 弧长（ANGL 与端口弦长推算）；不含阀门等其他管件，完整管长口径待专业确认`, 'unconfirmed'),
     field('elevation', '标注锚点标高', mm(anchor[2]), 'E3D 世界 Z，非管顶/管底', 'derived'),
     field('coordinates', '标注锚点坐标', anchor.map(mm).join(', '), 'E3D 世界 X/Y/Z', 'derived'),
     field('source-version', '版本核对', versionText, '属性/中心线实读会话；模型记录会话不替代完整生成及发布回执', 'unconfirmed'),
@@ -124,15 +145,16 @@ export function buildPipeInformation(input: {
     const members = input.memberMaterials;
     const names = [...new Set(members.filter(member => member.status === 'read').map(member => member.text))];
     const count = members.filter(member => member.status === 'read').length;
-    fields.push(field('member-materials', '成员材质', names.length ? `${names.join('、')}（${count}/${members.length}件）` : null,
-      '成员 MATN/MATR 优先，未设置时取自身规格 SPRE→MATX→SMTE:XTEX；不推断继承 BRAN/PIPE 材质', count === members.length ? 'read' : 'unconfirmed'));
+    fields.push(field('member-materials', '成员材质', names.length ? `${names.join('、')}（${count}/${members.length}段）` : null,
+      '成员 MATN/MATR 优先，未设置时取自身规格 SPRE→MATX→SMTE:XTEX；隐式直管取 BRAN HSTU 或上游成员 LSTU 的同一规格链；不推断继承 BRAN/PIPE 材质',
+      count === members.length ? 'read' : 'unconfirmed'));
   }
   if (bounds?.stale) warnings.push('模型包围尺寸来源已过期，请重新生成模型');
   if (memberDiameters.some(member => member.source !== 'catalogue')) warnings.push('部分成员外径为估算、来源未核实或缺失；不可据此完成外径验收');
   warnings.push('外径是各槽位管子目录参考，非管件实体最大包络；模型发布及目录依赖对应关系尚需核实，外径和模型盒不得作为专业包络验收值');
   for (const warning of centerline?.warnings ?? []) warnings.push(warning);
   return { refno, name: attributeText(attrs, 'NAME') ?? refno, sesno: attrs.sesno!, fetchedAt: new Date().toISOString(),
-    stale: false, anchorMm: anchor, fields, memberDiameters, memberMaterials: input.memberMaterials,
+    stale: false, anchorMm: anchor, fields, memberDiameters, memberMaterials: input.memberMaterials, bendArcs,
     sourceVersion: version ?? undefined, warnings: [...new Set(warnings)] };
 }
 
@@ -169,6 +191,11 @@ export function validatePipeInformationRecord(value: unknown): PipeInformationRe
   if (record.sourceVersion && (!validSourceVersion(record.sourceVersion) || record.sourceVersion.sesno !== record.sesno)) throw new Error('管道版本保存格式无效');
   if (record.memberMaterials !== undefined && (!Array.isArray(record.memberMaterials) || !record.memberMaterials.every(member => member
     && [member.refno, member.noun, member.text, member.source].every(value => typeof value === 'string')
+    && (member.implicit === undefined || typeof member.implicit === 'boolean')
     && ['read', 'derived', 'missing', 'unconfirmed'].includes(member.status)))) throw new Error('成员材质保存格式无效');
+  if (record.bendArcs !== undefined && (!Array.isArray(record.bendArcs) || !record.bendArcs.every(bend => bend
+    && [bend.refno, bend.noun, bend.source].every(value => typeof value === 'string')
+    && [bend.angleDeg, bend.chordMm, bend.radiusMm, bend.arcMm].every(value => value === null || (typeof value === 'number' && Number.isFinite(value))))))
+    throw new Error('弯头弧长保存格式无效');
   return { ...record, memberDiameters: record.memberDiameters ?? [], stale: true };
 }
