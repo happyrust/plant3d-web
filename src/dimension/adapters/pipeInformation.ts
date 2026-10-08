@@ -7,10 +7,13 @@ export type PipeMemberDiameter = {
   refno: string; order: number; noun: string; implicit: boolean; outsideDiameterMm: number | null;
   source: 'catalogue' | 'bore-estimate' | 'missing' | 'unknown'; sourceText: string;
 };
+export type PipeMemberMaterial = { refno: string; noun: string; text: string; source: string; status: PipeInformationField['status'] };
 export type PipeInformationRecord = {
   refno: string; name: string; sesno: number; fetchedAt: string; stale: boolean;
   anchorMm: Vec3; fields: PipeInformationField[]; warnings: string[];
   memberDiameters?: PipeMemberDiameter[];
+  sourceVersion?: NonNullable<SpatialCenterlineResponse['source_version']>;
+  memberMaterials?: PipeMemberMaterial[];
 };
 export const PIPE_INFORMATION_SOURCE = 'pipe-information' as const;
 export const pipeInformationRefno = (value: string) => value.trim().replace(/^=/, '').replace('/', '_');
@@ -29,9 +32,17 @@ function field(key: string, label: string, text: string | null, source: string, 
   return { key, label, text: text ?? '未设置', source, status: text === null ? 'missing' : status };
 }
 const mm = (value: number) => `${Number(value.toFixed(2))} mm`;
+function validSourceVersion(version: NonNullable<SpatialCenterlineResponse['source_version']>): boolean {
+  return Number.isSafeInteger(version.dbnum) && version.dbnum > 0 && Number.isSafeInteger(version.sesno) && version.sesno >= 0
+    && Array.isArray(version.databases) && version.databases.every(database => Number.isSafeInteger(database.dbnum) && database.dbnum > 0
+      && Number.isSafeInteger(database.sesno) && database.sesno >= 0 && typeof database.db_type === 'string')
+    && new Set(version.databases.map(database => database.dbnum)).size === version.databases.length
+    && version.databases.some(database => database.dbnum === version.dbnum && database.sesno === version.sesno);
+}
 export function buildPipeInformation(input: {
   refno: string; attributes: ElementAttributesResponse; centerline?: SpatialCenterlineResponse;
-  bounds?: ModelBoundsResponse; material?: { text: string; source: string; status?: 'read' | 'unconfirmed' }; warnings?: string[];
+  bounds?: ModelBoundsResponse; material?: { text: string; source: string; status?: PipeInformationField['status'] }; warnings?: string[];
+  memberMaterials?: PipeMemberMaterial[];
 }): PipeInformationRecord {
   const refno = pipeInformationRefno(input.refno);
   const attrs = input.attributes;
@@ -45,6 +56,13 @@ export function buildPipeInformation(input: {
     throw new Error('模型包围尺寸缺少可靠的世界毫米边界');
   const centerline = input.centerline;
   if (centerline && (pipeInformationRefno(centerline.refno) !== refno || !Array.isArray(centerline.segments))) throw new Error('中心线响应所属管道不匹配');
+  const version = centerline?.source_version;
+  if (version) {
+    if (!validSourceVersion(version))
+      throw new Error('中心线版本信息无效，不能合并当前属性');
+    if (attrs.dbnum !== version.dbnum || attrs.sesno !== version.sesno || centerline!.dbnum !== version.dbnum)
+      throw new Error(`属性与中心线版本不一致（属性 ${attrs.dbnum ?? '未知'}@${attrs.sesno}，中心线 ${version.dbnum}@${version.sesno}），请重新读取`);
+  }
   const first = centerline?.segments[0]?.start;
   const anchor: Vec3 | null = first && [first.x, first.y, first.z].every(Number.isFinite)
     ? [first.x, first.y, first.z] : bounds ? bounds.min_mm.map((value, axis) => (value + bounds.max_mm[axis]!) / 2) as unknown as Vec3 : null;
@@ -76,6 +94,17 @@ export function buildPipeInformation(input: {
   const diameters = memberDiameters.flatMap(member => member.outsideDiameterMm === null ? [] : [member.outsideDiameterMm]);
   const rangeText = diameters.length ? `${mm(Math.min(...diameters))}${Math.max(...diameters) !== Math.min(...diameters) ? ` ～ ${mm(Math.max(...diameters))}` : ''}（${diameters.length}/${memberDiameters.length}段）` : null;
   const modelBox = bounds ? bounds.max_mm.map((value, axis) => mm(value - bounds.min_mm[axis]!)).join(' × ') : null;
+  // Field text is drawn with the bundled LFF font, which has no glyph for the full-width semicolon.
+  let versionText = version ? `属性与中心线同版本（${version.dbnum}@${version.sesno}），模型版本待核实` : '中心线未提供版本，属性/几何对应关系待核实';
+  if (bounds?.record_source_sessions) {
+    const sessions = bounds.record_source_sessions;
+    if (!Array.isArray(sessions) || !sessions.every(item => Number.isSafeInteger(item.dbnum) && item.dbnum > 0
+      && Number.isSafeInteger(item.sesno) && item.sesno >= 0)) throw new Error('模型记录版本信息无效');
+    const different = sessions.some(item => item.dbnum === attrs.dbnum && item.sesno !== attrs.sesno);
+    const text = sessions.map(item => `${item.dbnum}@${item.sesno}`).join('、');
+    versionText += `，模型记录来源 ${text || '未知'}${different ? '（不同版本）' : '（发布完整性未核实）'}`;
+    if (different) warnings.push('模型边界包含不同源版本的生成记录，不能作为本版包络验收值');
+  }
   const fields = [
     field('head-bore', '首端通径', numericAttr('HBOR'), `${source}:HBOR`),
     field('tail-bore', '末端通径', numericAttr('TBOR'), `${source}:TBOR`),
@@ -89,13 +118,22 @@ export function buildPipeInformation(input: {
       '中心线的隐式直段和 TUBI/FTUB；不含弯头弧长', 'derived'),
     field('elevation', '标注锚点标高', mm(anchor[2]), 'E3D 世界 Z，非管顶/管底', 'derived'),
     field('coordinates', '标注锚点坐标', anchor.map(mm).join(', '), 'E3D 世界 X/Y/Z', 'derived'),
+    field('source-version', '版本核对', versionText, '属性/中心线实读会话；模型记录会话不替代完整生成及发布回执', 'unconfirmed'),
   ];
+  if (input.memberMaterials?.length) {
+    const members = input.memberMaterials;
+    const names = [...new Set(members.filter(member => member.status === 'read').map(member => member.text))];
+    const count = members.filter(member => member.status === 'read').length;
+    fields.push(field('member-materials', '成员材质', names.length ? `${names.join('、')}（${count}/${members.length}件）` : null,
+      '成员 MATN/MATR 优先，未设置时取自身规格 SPRE→MATX→SMTE:XTEX；不推断继承 BRAN/PIPE 材质', count === members.length ? 'read' : 'unconfirmed'));
+  }
   if (bounds?.stale) warnings.push('模型包围尺寸来源已过期，请重新生成模型');
   if (memberDiameters.some(member => member.source !== 'catalogue')) warnings.push('部分成员外径为估算、来源未核实或缺失；不可据此完成外径验收');
-  warnings.push('外径是各槽位管子目录参考，非管件实体最大包络；几何会话尚未与属性会话核实，外径和模型盒不得作为专业包络验收值');
+  warnings.push('外径是各槽位管子目录参考，非管件实体最大包络；模型发布及目录依赖对应关系尚需核实，外径和模型盒不得作为专业包络验收值');
   for (const warning of centerline?.warnings ?? []) warnings.push(warning);
   return { refno, name: attributeText(attrs, 'NAME') ?? refno, sesno: attrs.sesno!, fetchedAt: new Date().toISOString(),
-    stale: false, anchorMm: anchor, fields, memberDiameters, warnings: [...new Set(warnings)] };
+    stale: false, anchorMm: anchor, fields, memberDiameters, memberMaterials: input.memberMaterials,
+    sourceVersion: version ?? undefined, warnings: [...new Set(warnings)] };
 }
 
 export function pipeInformationToExternalDimensions(records: readonly PipeInformationRecord[]): ExternalDimensionRecord[] {
@@ -128,5 +166,9 @@ export function validatePipeInformationRecord(value: unknown): PipeInformationRe
     && ['catalogue', 'bore-estimate', 'missing', 'unknown'].includes(member.source)
     && (member.outsideDiameterMm === null ? member.source === 'missing' : typeof member.outsideDiameterMm === 'number'
       && Number.isFinite(member.outsideDiameterMm) && member.outsideDiameterMm > 0 && member.source !== 'missing')))) throw new Error('成员外径保存格式无效');
+  if (record.sourceVersion && (!validSourceVersion(record.sourceVersion) || record.sourceVersion.sesno !== record.sesno)) throw new Error('管道版本保存格式无效');
+  if (record.memberMaterials !== undefined && (!Array.isArray(record.memberMaterials) || !record.memberMaterials.every(member => member
+    && [member.refno, member.noun, member.text, member.source].every(value => typeof value === 'string')
+    && ['read', 'derived', 'missing', 'unconfirmed'].includes(member.status)))) throw new Error('成员材质保存格式无效');
   return { ...record, memberDiameters: record.memberDiameters ?? [], stale: true };
 }

@@ -1,8 +1,12 @@
+import { readFileSync } from 'node:fs';
+import { gunzipSync } from 'node:zlib';
+
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createApp, nextTick } from 'vue';
 
 import { buildPipeInformation, pipeInformationToExternalDimensions } from '../adapters/pipeInformation';
 import { emptyDimensionDocument, linearRecord } from '../domain/testFixtures';
+import { LffFont } from '../kernel/glyph/lffParser';
 import { ExternalDimensionRegistry } from '../services/externalDimensionRegistry';
 
 import DimensionPanelDock from './DimensionPanelDock.vue';
@@ -189,6 +193,68 @@ describe('DimensionPanelDock', () => {
       expect(await store.refresh('7997_1')).toBe(true);
       expect(store.records.value[0]?.fields.find(field => field.key === 'material')).toMatchObject({ text: 'A312 TP316L', source: '7997/10@42:MATR → 7997/20@42' });
       expect(() => buildPipeInformation({ refno: '7997_2', attributes, centerline })).toThrow('这根 BRAN');
+      const version = { dbnum: 7997, sesno: 42, databases: [{ dbnum: 7997, sesno: 42, db_type: 'DESI' }] };
+      const currentAttrs = { ...attributes, dbnum: 7997 };
+      const currentLine = { ...enrichedLine, source_version: version };
+      const matched = buildPipeInformation({ refno: '7997_1', attributes: currentAttrs, centerline: currentLine });
+      expect(matched.sourceVersion).toEqual(version);
+      expect(matched.fields.find(field => field.key === 'source-version')?.text).toContain('属性与中心线同版本');
+      expect(() => buildPipeInformation({ refno: '7997_1', attributes: { ...currentAttrs, sesno: 41 }, centerline: currentLine })).toThrow('版本不一致');
+      expect(() => buildPipeInformation({ refno: '7997_1', attributes: currentAttrs, centerline: { ...currentLine, source_version: { ...version, databases: [...version.databases, ...version.databases] } } })).toThrow('版本信息无效');
+      const oldBox = { refno: '7997_1', scope: 'subtree' as const, min_mm: [0,0,0] as [number,number,number], max_mm: [3000,3000,3000] as [number,number,number],
+        model_count: 2, source: 'model-memory', stale: null, publication_status: 'unsupported', record_source_sessions: [{ dbnum: 7997, sesno: 41 }] };
+      const versioned = buildPipeInformation({ refno: '7997_1', attributes: currentAttrs, centerline: currentLine, bounds: oldBox });
+      expect(versioned.warnings.join('；')).toContain('不同源版本');
+      const font = LffFont.fromText(gunzipSync(readFileSync('public/fonts/unicode.lff.bin')).toString('utf8'));
+      const cardText = (pipeInformationToExternalDimensions([versioned])[0]!.layout as any).tag.lines.map((line: any) => line.text).join('');
+      expect([...cardText].filter(character => font.getGlyph(character.codePointAt(0)!) === font.getGlyph(0xfffd))).toEqual([]);
+      centerSpy.mockResolvedValue(currentLine);
+      attrsSpy.mockImplementation(async refno => refno.replace('_','/') === '7997/2'
+        ? { ...currentAttrs, refno: '7997/2', noun: 'ELBO', attributes: [attr('MATN','A312 TP316L')] }
+        : currentAttrs);
+      expect(await store.refresh('7997_1')).toBe(true);
+      expect(store.records.value[0]?.memberMaterials).toEqual([{ refno: '7997_2', noun: 'ELBO', text: 'A312 TP316L', source: '7997/2@42:MATN', status: 'read' }]);
+      const good = JSON.parse(JSON.stringify(store.records.value));
+      attrsSpy.mockResolvedValueOnce({ ...currentAttrs, sesno: 43 });
+      expect(await store.refresh('7997_1')).toBe(false); expect(store.records.value).toEqual(good);
+      expect(store.error.value).toContain('版本不一致');
+      store.persistRecords(); store.bindPersistence('pipe-info-A', storage); store.bindPersistence('pipe-info-B', storage);
+      expect(store.records.value[0]?.sourceVersion).toEqual(version);
+      expect(store.records.value[0]?.memberMaterials?.[0]?.text).toBe('A312 TP316L');
+      // Unset MATN/MATR: the member's own spec chain SPRE -> SPCO.MATX -> SMTE.XTEX, never the BRAN material.
+      centerSpy.mockResolvedValue({ ...currentLine, source_version: { ...version, databases: [...version.databases, { dbnum: 5054, sesno: 48, db_type: 'CATA' }] } });
+      const spec = { member: [attr('OWNER','7997/1'), attr('SPRE','13246/1')], spco: [attr('MATX','13246/2')], smteDbnum: 5054, smteSesno: 48 };
+      attrsSpy.mockImplementation(async refno => {
+        const key = refno.replace('_','/');
+        if (key === '7997/2') return { ...currentAttrs, refno: '7997/2', noun: 'ELBO', attributes: spec.member };
+        if (key === '13246/1') return { ...currentAttrs, refno: '13246/1', noun: 'SPCO', dbnum: 5054, sesno: 48, attributes: spec.spco };
+        if (key === '13246/2') return { ...currentAttrs, refno: '13246/2', noun: 'SMTE', dbnum: spec.smteDbnum, sesno: spec.smteSesno, attributes: [attr('XTEX','Z2CN1810 RCCM 01')] };
+        return { ...currentAttrs, attributes: [...currentAttrs.attributes, attr('MATN','BRAN ONLY')] };
+      });
+      expect(await store.refresh('7997_1')).toBe(true);
+      const catalogued = store.records.value[0]!;
+      expect(catalogued.memberMaterials).toEqual([{ refno: '7997_2', noun: 'ELBO', text: 'Z2CN1810 RCCM 01', status: 'read',
+        source: '7997/2@42:SPRE → 13246/1@48:MATX → 13246/2@48:XTEX' }]);
+      expect(catalogued.fields.find(field => field.key === 'member-materials')).toMatchObject({ text: 'Z2CN1810 RCCM 01（1/1件）', status: 'read' });
+      const catalogueCard = (pipeInformationToExternalDimensions([catalogued])[0]!.layout as any).tag.lines.map((line: any) => line.text).join('');
+      expect([...catalogueCard].filter(character => font.getGlyph(character.codePointAt(0)!) === font.getGlyph(0xfffd))).toEqual([]);
+      await nextTick();
+      expect(host.textContent).toContain('成员材质及来源');
+      expect(host.textContent).toContain('7997/2@42:SPRE → 13246/1@48:MATX → 13246/2@48:XTEX');
+      spec.smteSesno = 47;
+      expect(await store.refresh('7997_1')).toBe(true);
+      expect(store.records.value[0]?.memberMaterials?.[0]).toMatchObject({ text: '未核实', status: 'unconfirmed' });
+      expect(store.records.value[0]?.memberMaterials?.[0]?.source).toContain('版本不一致');
+      spec.smteSesno = 48; spec.smteDbnum = 5055;
+      expect(await store.refresh('7997_1')).toBe(true);
+      expect(store.records.value[0]?.memberMaterials?.[0]).toMatchObject({ text: 'Z2CN1810 RCCM 01', status: 'unconfirmed' });
+      spec.smteDbnum = 5054; spec.spco = [];
+      expect(await store.refresh('7997_1')).toBe(true);
+      expect(store.records.value[0]?.memberMaterials?.[0]).toMatchObject({ text: '未设置', status: 'missing' });
+      spec.member = [attr('OWNER','7997/1')];
+      expect(await store.refresh('7997_1')).toBe(true);
+      expect(store.records.value[0]?.memberMaterials?.[0]).toEqual({ refno: '7997_2', noun: 'ELBO', text: '未设置', status: 'missing', source: '7997/2@42:MATN/MATR/SPRE' });
+      expect(store.records.value[0]?.fields.find(field => field.key === 'member-materials')).toMatchObject({ text: '未设置', status: 'missing' });
     } finally { attrsSpy.mockRestore(); centerSpy.mockRestore(); boundsSpy.mockRestore(); store.detachPersistence(); store.clear(); }
   });
   it('merges external records with the document and keeps hide state visible', async () => {

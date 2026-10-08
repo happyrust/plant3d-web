@@ -1,7 +1,7 @@
 import { computed, ref } from 'vue';
 
-import type { ElementAttributesResponse } from '@/api/genModelV1Api';
-import type { PipeInformationRecord } from '@/dimension';
+import type { ElementAttributesResponse, SpatialCenterlineResponse } from '@/api/genModelV1Api';
+import type { PipeInformationRecord, PipeMemberMaterial } from '@/dimension';
 
 import { genModelV1ElementAttributes, genModelV1ModelBounds, genModelV1SpatialCenterline } from '@/api/genModelV1Api';
 import { createScopedResultPersistence } from '@/clearance/services/scopedResultPersistence';
@@ -32,30 +32,65 @@ const persistence = createScopedResultPersistence({
   invalidate: allow => { allowed = allow; sequence += 1; loading.value = false; },
 });
 
-async function readMaterial(root: ElementAttributesResponse, warnings: string[]): Promise<{ text: string; source: string; status?: 'read' | 'unconfirmed' } | undefined> {
+function checkAttributeVersion(attrs: ElementAttributesResponse, version?: SpatialCenterlineResponse['source_version']) {
+  if (!version) return false;
+  if (!Number.isSafeInteger(attrs.dbnum) || attrs.dbnum! <= 0) throw new Error('属性缺少可核对的库号');
+  const database = version.databases.find(database => database.dbnum === attrs.dbnum);
+  if (database && attrs.sesno !== database.sesno) throw new Error(`属性版本不一致：${attrs.refno}@${attrs.sesno}，本次中心线读取 ${database.dbnum}@${database.sesno}`);
+  return Boolean(database);
+}
+
+type MaterialValue = { text: string; source: string; status?: PipeMemberMaterial['status'] };
+
+// Catalogue material of the component itself: SPRE -> SPCO.MATX -> SMTE.XTEX (the text ISO/MTO use).
+async function readSpecMaterial(attrs: ElementAttributesResponse, read: typeof genModelV1ElementAttributes,
+  version?: SpatialCenterlineResponse['source_version']): Promise<MaterialValue | undefined> {
+  const specRef = attributeText(attrs, 'SPRE');
+  if (!specRef) return undefined;
+  const component = await read(specRef);
+  if (pipeInformationRefno(component.refno ?? '') !== pipeInformationRefno(specRef) || component.noun !== 'SPCO'
+    || !Number.isSafeInteger(component.sesno) || component.sesno! < 0) throw new Error(`规格引用 ${specRef} 不是可核对的 SPCO`);
+  const source = `${attrs.refno}@${attrs.sesno}:SPRE → ${component.refno}@${component.sesno}:MATX`;
+  const textRef = attributeText(component, 'MATX');
+  if (!textRef) return { text: '未设置', source: `${source}（未设置）`, status: 'missing' };
+  const material = await read(textRef);
+  if (pipeInformationRefno(material.refno ?? '') !== pipeInformationRefno(textRef) || material.noun !== 'SMTE'
+    || !Number.isSafeInteger(material.sesno) || material.sesno! < 0) throw new Error(`材质文本引用 ${textRef} 不是可核对的 SMTE`);
+  const matched = [component, material].map(item => checkAttributeVersion(item, version)).every(Boolean);
+  const text = attributeText(material, 'XTEX');
+  if (!text) return { text: '未设置', source: `${source} → ${material.refno}@${material.sesno}:XTEX（未设置）`, status: 'missing' };
+  return { text, source: `${source} → ${material.refno}@${material.sesno}:XTEX`, status: version && !matched ? 'unconfirmed' : 'read' };
+}
+
+async function readMaterial(root: ElementAttributesResponse, warnings: string[], read = genModelV1ElementAttributes,
+  version?: SpatialCenterlineResponse['source_version']): Promise<MaterialValue | undefined> {
   let attrs = root;
+  checkAttributeVersion(attrs, version);
   if (!attributeText(attrs, 'MATN') && !attributeText(attrs, 'MATR')) {
     const owner = attributeText(attrs, 'OWNER');
     if (owner) {
       try {
-        const parent = await genModelV1ElementAttributes(owner);
+        const parent = await read(owner);
         if (pipeInformationRefno(parent.refno ?? '') !== pipeInformationRefno(owner)) throw new Error('PIPE 引用所属上下文不匹配');
         if (!Number.isSafeInteger(parent.sesno) || parent.sesno! < 0) throw new Error('PIPE 属性会话缺失');
+        checkAttributeVersion(parent, version);
         if (parent.noun === 'PIPE') attrs = parent;
       } catch { warnings.push('所属 PIPE 属性读取失败，不能补全业务材质'); }
     }
   }
   const source = `${attrs.refno}@${attrs.sesno}`;
   const materialName = attributeText(attrs, 'MATN');
-  if (materialName) return { text: materialName, source: `${source}:MATN` };
+  if (materialName) return { text: materialName, source: `${source}:MATN`, status: version && !checkAttributeVersion(attrs, version) ? 'unconfirmed' : 'read' };
   const reference = attributeText(attrs, 'MATR');
-  if (!reference) return undefined;
+  // Only the element's own spec counts; a PIPE/BRAN material is never inherited by members.
+  if (!reference) return attrs === root ? readSpecMaterial(attrs, read, version) : undefined;
   try {
-    const material = await genModelV1ElementAttributes(reference);
+    const material = await read(reference);
     if (pipeInformationRefno(material.refno ?? '') !== pipeInformationRefno(reference)) throw new Error('材质引用不匹配');
     if (!Number.isSafeInteger(material.sesno) || material.sesno! < 0) throw new Error('材质会话缺失');
+    const matched = checkAttributeVersion(material, version);
     const text = attributeText(material, 'DESC') ?? attributeText(material, 'NAME');
-    if (text) return { text, source: `${source}:MATR → ${material.refno}@${material.sesno}` };
+    if (text) return { text, source: `${source}:MATR → ${material.refno}@${material.sesno}`, status: version && !matched ? 'unconfirmed' : 'read' };
   } catch { warnings.push('业务材质引用无法解析，请核对材料库'); }
   return { text: `待解析（${reference}）`, source: `${source}:MATR（未解析）`, status: 'unconfirmed' };
 }
@@ -73,18 +108,51 @@ export function usePipeInformationStore() {
       if (stamp !== sequence) return false;
       if (attributes.noun !== 'BRAN') throw new Error('请选择管道 BRAN；风管或其他构件请使用对应标注');
       const warnings: string[] = [];
-      const [centerlineResult, boundsResult, materialResult] = await Promise.allSettled([
-        genModelV1SpatialCenterline(refno), genModelV1ModelBounds(refno), readMaterial(attributes, warnings),
+      const [centerlineResult, boundsResult] = await Promise.allSettled([
+        genModelV1SpatialCenterline(refno), genModelV1ModelBounds(refno),
       ]);
       if (stamp !== sequence) return false;
       // The backend route rejects HVAC branches. Never annotate an unsupported
       // BRAN merely because a model box exists for it.
       if (centerlineResult.status === 'rejected') throw new Error(`管道中心线不可用，风管支管不创建此标注：${centerlineResult.reason instanceof Error ? centerlineResult.reason.message : String(centerlineResult.reason)}`);
       if (boundsResult.status === 'rejected') warnings.push('当前模型边界不可用，模型包围尺寸缺失');
+      const centerline = centerlineResult.value;
+      // Reject a mixed root before reading further member/material references.
+      buildPipeInformation({ refno, attributes, centerline });
+      const cache = new Map<string, Promise<ElementAttributesResponse>>([[refno, Promise.resolve(attributes)]]);
+      const read = (input: string) => {
+        const key = pipeInformationRefno(input);
+        if (!cache.has(key)) cache.set(key, genModelV1ElementAttributes(key));
+        return cache.get(key)!;
+      };
+      const material = await readMaterial(attributes, warnings, read, centerline.source_version);
+      const members = [...new Map(centerline.segments.filter(segment => !segment.implicit).map(segment => [segment.refno, segment])).values()];
+      const memberMaterials: PipeMemberMaterial[] = new Array(members.length);
+      let next = 0;
+      await Promise.all(Array.from({ length: Math.min(4, members.length) }, async () => {
+        while (next < members.length && stamp === sequence) {
+          const index = next++; const segment = members[index]!;
+          try {
+            const attrs = await read(segment.refno);
+            if (pipeInformationRefno(attrs.refno ?? '') !== pipeInformationRefno(segment.refno)
+              || !Number.isSafeInteger(attrs.sesno) || attrs.sesno! < 0
+              || (segment.noun !== 'UNKNOWN' && attrs.noun !== segment.noun)) throw new Error('成员属性所属对象或类型不匹配');
+            checkAttributeVersion(attrs, centerline.source_version);
+            const value = await readMaterial(attrs, warnings, read, centerline.source_version);
+            memberMaterials[index] = { refno: segment.refno, noun: segment.noun, text: value?.text ?? '未设置',
+              source: value?.source ?? `${attrs.refno}@${attrs.sesno}:MATN/MATR/SPRE`,
+              status: value ? value.status ?? (attrs.complete ? 'read' : 'unconfirmed') : 'missing' };
+          } catch (cause) {
+            memberMaterials[index] = { refno: segment.refno, noun: segment.noun, text: '未核实', status: 'unconfirmed',
+              source: cause instanceof Error ? cause.message : String(cause) };
+          }
+        }
+      }));
+      if (stamp !== sequence) return false;
       const record = buildPipeInformation({ refno, attributes, warnings,
-        centerline: centerlineResult.status === 'fulfilled' ? centerlineResult.value : undefined,
+        centerline,
         bounds: boundsResult.status === 'fulfilled' ? boundsResult.value : undefined,
-        material: materialResult.status === 'fulfilled' ? materialResult.value : undefined,
+        material, memberMaterials,
       });
       const index = records.value.findIndex(item => item.refno === refno);
       records.value = index < 0 ? [...records.value, record] : records.value.map((item, i) => i === index ? record : item);

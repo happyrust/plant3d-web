@@ -49,6 +49,16 @@ watch(store.suggestedRefno, value => { refno.value = value; });
           </li>
         </ul>
       </details>
+      <details v-if="record.memberMaterials?.length" class="mt-2">
+        <summary class="cursor-pointer">成员材质及来源（{{ record.memberMaterials.length }}）</summary>
+        <ul class="mt-1 space-y-1">
+          <li v-for="member in record.memberMaterials" :key="member.refno" class="rounded bg-slate-50 p-1"
+            :class="member.status !== 'read' ? 'text-amber-700' : ''">
+            <span class="break-all">{{ member.refno }} · {{ member.noun }} · {{ member.text }}</span>
+            <p class="break-all">{{ member.source }}</p>
+          </li>
+        </ul>
+      </details>
       <ul v-if="record.warnings.length" class="mt-2 list-disc pl-4 text-amber-700"><li v-for="warning in record.warnings" :key="warning">{{ warning }}</li></ul>
     </article>
   </details>

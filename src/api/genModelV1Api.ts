@@ -658,6 +658,8 @@ export type ModelBoundsResponse = {
   source: string;
   stale: boolean | null;
   publication_status: string;
+  /** Per-record source sessions; does not prove a complete generation/publish receipt. */
+  record_source_sessions?: { dbnum: number; sesno: number }[];
 };
 
 /** Current generated model bounds, including tubes; does not define the business envelope. */
@@ -2128,6 +2130,11 @@ export type SpatialCenterlineSegment = {
 };
 
 export type SpatialCenterlineResponse = {
+  source_version?: {
+    dbnum: number;
+    sesno: number;
+    databases: { dbnum: number; sesno: number; db_type: string }[];
+  } | null;
   /** `a_b` */
   refno: string;
   dbnum: number | null;
