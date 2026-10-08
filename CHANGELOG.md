@@ -4,6 +4,10 @@
 
 ### 变更
 
+- **长按设旋转中心加 e2e 回归 `e2e/dtx-long-press-pivot.spec.ts`** (2026-10-08，下面两条用的线上 A/B 脚本整理进仓)
+  - 断言：导航态左 / 右 / 中键长按都把 orbit target 设到命中点、长按不往场景里加 sprite；距离测量态在拾取点上按住，target 不动。判法：先把 target 沿视线往相机挪开（相机不动、画布中心射线仍打在命中点上），长按若设了 pivot，target 必然跳回命中点。
+  - 跑法：缺省走 dev server + gen-model（`GEN_MODEL_V1_BASE_URL`，服务不在就跳过）；`PIVOT_E2E_URL=<带 show_refno 的站点地址>` 直接对已部署站点跑，再给 `PIVOT_E2E_DIST=<vite build 产物目录>` 就把站点前端换成本地构建、接口照走站点（部署前验改动）。`.gitignore` 的 e2e 白名单加上这一份。
+  - 验证：eslint 0 错 0 警告。对线上 `123.57.182.243/?show_refno=24381_145018`：现网包 `index-DCVJpsQz.js`（`f1ca0b8f`）通过、本地 HEAD 构建换包通过、不设 `PIVOT_E2E_URL` 且无 gen-model 时跳过；换成旧提交的构建会红——`d9d81132`（修复前）报「长按往场景里加了 sprite」与「测量态按住被当成长按设 pivot」（target 挪了 2.65），`7a3b5356`（第一版修复）报加了 sprite ×2、右键 / 中键长按没设 pivot。
 - **长按设旋转中心的图钉整体移除；右键 / 中键长按恢复设旋转中心** (2026-10-08，接上一条的用户反馈)
   - 用户要求导航态长按也不要图钉、并恢复右键 / 中键长按设 pivot。`DynamicPivotController` 删掉图钉 sprite 与相关配置（`pinColor` / `pinSize` / `onVisualChange`、构造参数 `scene`），只保留「长按 300 ms 拾取表面点设为轨道中心」；`ViewerPanel` 去掉左键限制、撤回渲染循环里为图钉加的 `update()`。测量 / 标注 / 拾取等工具模式下仍不登记长按、切工具时仍取消待触发的长按，测量选点不会把视角中心挪走。
   - 验证：eslint 触及 2 文件 0 错 0 警告；type-check 新增 0；ad-hoc tsx 脚本直驱控制器 7 项全过（不再持有场景对象 / 长按设 target 并保留 / 快速点击、拖动、中途切工具、禁用均不触发）。Playwright headless 打开线上 `/?show_refno=24381_145018` A/B：线上 `7a3b5356` 包 `index-Cc-TtVN_.js` 场景里有图钉 sprite、导航左键按住时显示，右键 / 中键长按不设 pivot；本地 build 拦截换包后场景里没有图钉 sprite，导航左 / 右 / 中键长按都把 target 设到命中点，测量态长按 target 不动，`pageerror` 0。
