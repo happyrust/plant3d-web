@@ -1,0 +1,813 @@
+{
+  "backend": "http://127.0.0.1:39738",
+  "checked_at": "2026-10-08T17:32:58",
+  "branches": [
+    {
+      "refno": "24381/145018",
+      "centerline_status": 200,
+      "centerline_ms": 320,
+      "source_version": {
+        "dbnum": 7997,
+        "sesno": 353,
+        "databases": [
+          {
+            "dbnum": 1112,
+            "sesno": 738,
+            "db_type": "DESI"
+          },
+          {
+            "dbnum": 5054,
+            "sesno": 48,
+            "db_type": "CATA"
+          },
+          {
+            "dbnum": 5100,
+            "sesno": 27,
+            "db_type": "DICT"
+          },
+          {
+            "dbnum": 5101,
+            "sesno": 7,
+            "db_type": "DICT"
+          },
+          {
+            "dbnum": 5200,
+            "sesno": 30,
+            "db_type": "PROP"
+          },
+          {
+            "dbnum": 6001,
+            "sesno": 2,
+            "db_type": "PROP"
+          },
+          {
+            "dbnum": 6002,
+            "sesno": 18,
+            "db_type": "DICT"
+          },
+          {
+            "dbnum": 6003,
+            "sesno": 4,
+            "db_type": "DESI"
+          },
+          {
+            "dbnum": 7006,
+            "sesno": 17,
+            "db_type": "DICT"
+          },
+          {
+            "dbnum": 7007,
+            "sesno": 2873,
+            "db_type": "PADD"
+          },
+          {
+            "dbnum": 7008,
+            "sesno": 47,
+            "db_type": "PROP"
+          },
+          {
+            "dbnum": 7009,
+            "sesno": 479,
+            "db_type": "DESI"
+          },
+          {
+            "dbnum": 7011,
+            "sesno": 641,
+            "db_type": "DESI"
+          },
+          {
+            "dbnum": 7015,
+            "sesno": 511,
+            "db_type": "DESI"
+          },
+          {
+            "dbnum": 7022,
+            "sesno": 254,
+            "db_type": "DESI"
+          },
+          {
+            "dbnum": 7026,
+            "sesno": 28,
+            "db_type": "PROP"
+          },
+          {
+            "dbnum": 7027,
+            "sesno": 445,
+            "db_type": "DESI"
+          },
+          {
+            "dbnum": 7043,
+            "sesno": 13,
+            "db_type": "DICT"
+          },
+          {
+            "dbnum": 7044,
+            "sesno": 66,
+            "db_type": "PADD"
+          },
+          {
+            "dbnum": 7048,
+            "sesno": 54,
+            "db_type": "DESI"
+          },
+          {
+            "dbnum": 7321,
+            "sesno": 77,
+            "db_type": "DESI"
+          },
+          {
+            "dbnum": 7322,
+            "sesno": 4491,
+            "db_type": "PADD"
+          },
+          {
+            "dbnum": 7323,
+            "sesno": 277,
+            "db_type": "DICT"
+          },
+          {
+            "dbnum": 7324,
+            "sesno": 1362,
+            "db_type": "DESI"
+          },
+          {
+            "dbnum": 7325,
+            "sesno": 3180,
+            "db_type": "PADD"
+          },
+          {
+            "dbnum": 7326,
+            "sesno": 639,
+            "db_type": "DESI"
+          },
+          {
+            "dbnum": 7327,
+            "sesno": 1470,
+            "db_type": "DESI"
+          },
+          {
+            "dbnum": 7328,
+            "sesno": 40,
+            "db_type": "PROP"
+          },
+          {
+            "dbnum": 7329,
+            "sesno": 221,
+            "db_type": "DESI"
+          },
+          {
+            "dbnum": 7330,
+            "sesno": 41,
+            "db_type": "DESI"
+          },
+          {
+            "dbnum": 7331,
+            "sesno": 23,
+            "db_type": "DESI"
+          },
+          {
+            "dbnum": 7332,
+            "sesno": 22,
+            "db_type": "DESI"
+          },
+          {
+            "dbnum": 7333,
+            "sesno": 1724,
+            "db_type": "DESI"
+          },
+          {
+            "dbnum": 7334,
+            "sesno": 312,
+            "db_type": "DESI"
+          },
+          {
+            "dbnum": 7350,
+            "sesno": 207,
+            "db_type": "DESI"
+          },
+          {
+            "dbnum": 7352,
+            "sesno": 50,
+            "db_type": "DESI"
+          },
+          {
+            "dbnum": 7353,
+            "sesno": 97,
+            "db_type": "DESI"
+          },
+          {
+            "dbnum": 7354,
+            "sesno": 266,
+            "db_type": "DESI"
+          },
+          {
+            "dbnum": 7356,
+            "sesno": 14,
+            "db_type": "DESI"
+          },
+          {
+            "dbnum": 7741,
+            "sesno": 90,
+            "db_type": "DESI"
+          },
+          {
+            "dbnum": 7742,
+            "sesno": 63,
+            "db_type": "PADD"
+          },
+          {
+            "dbnum": 7997,
+            "sesno": 353,
+            "db_type": "DESI"
+          },
+          {
+            "dbnum": 7998,
+            "sesno": 540,
+            "db_type": "DESI"
+          },
+          {
+            "dbnum": 7999,
+            "sesno": 200,
+            "db_type": "DESI"
+          },
+          {
+            "dbnum": 8000,
+            "sesno": 646,
+            "db_type": "DESI"
+          },
+          {
+            "dbnum": 250705,
+            "sesno": 9,
+            "db_type": "DESI"
+          }
+        ]
+      },
+      "cli_source_version": {
+        "dbnum": 7997,
+        "sesno": 353,
+        "databases": [
+          {
+            "dbnum": 5054,
+            "sesno": 48,
+            "db_type": "CATA"
+          },
+          {
+            "dbnum": 7997,
+            "sesno": 353,
+            "db_type": "DESI"
+          }
+        ]
+      },
+      "segments": 21,
+      "segments_equal_cli": true,
+      "response_equal_cli": false,
+      "attributes_status": 200,
+      "attributes_session": {
+        "dbnum": 7997,
+        "sesno": 353
+      },
+      "same_session": true,
+      "nearby_status": 404,
+      "nearby_ms": 13,
+      "nearby": "{\"code\":\"not_found\",\"message\":\"构件 24381/145018 在模型投影与空间树里都没有包围盒（还没生成过模型）\",\"detail\":null}"
+    },
+    {
+      "refno": "24384/23257",
+      "centerline_status": 200,
+      "centerline_ms": 93,
+      "source_version": {
+        "dbnum": 8000,
+        "sesno": 646,
+        "databases": [
+          {
+            "dbnum": 1112,
+            "sesno": 738,
+            "db_type": "DESI"
+          },
+          {
+            "dbnum": 5052,
+            "sesno": 190,
+            "db_type": "CATA"
+          },
+          {
+            "dbnum": 5100,
+            "sesno": 27,
+            "db_type": "DICT"
+          },
+          {
+            "dbnum": 5101,
+            "sesno": 7,
+            "db_type": "DICT"
+          },
+          {
+            "dbnum": 5200,
+            "sesno": 30,
+            "db_type": "PROP"
+          },
+          {
+            "dbnum": 6001,
+            "sesno": 2,
+            "db_type": "PROP"
+          },
+          {
+            "dbnum": 6002,
+            "sesno": 18,
+            "db_type": "DICT"
+          },
+          {
+            "dbnum": 6003,
+            "sesno": 4,
+            "db_type": "DESI"
+          },
+          {
+            "dbnum": 7006,
+            "sesno": 17,
+            "db_type": "DICT"
+          },
+          {
+            "dbnum": 7007,
+            "sesno": 2873,
+            "db_type": "PADD"
+          },
+          {
+            "dbnum": 7008,
+            "sesno": 47,
+            "db_type": "PROP"
+          },
+          {
+            "dbnum": 7009,
+            "sesno": 479,
+            "db_type": "DESI"
+          },
+          {
+            "dbnum": 7011,
+            "sesno": 641,
+            "db_type": "DESI"
+          },
+          {
+            "dbnum": 7015,
+            "sesno": 511,
+            "db_type": "DESI"
+          },
+          {
+            "dbnum": 7022,
+            "sesno": 254,
+            "db_type": "DESI"
+          },
+          {
+            "dbnum": 7026,
+            "sesno": 28,
+            "db_type": "PROP"
+          },
+          {
+            "dbnum": 7027,
+            "sesno": 445,
+            "db_type": "DESI"
+          },
+          {
+            "dbnum": 7043,
+            "sesno": 13,
+            "db_type": "DICT"
+          },
+          {
+            "dbnum": 7044,
+            "sesno": 66,
+            "db_type": "PADD"
+          },
+          {
+            "dbnum": 7048,
+            "sesno": 54,
+            "db_type": "DESI"
+          },
+          {
+            "dbnum": 7321,
+            "sesno": 77,
+            "db_type": "DESI"
+          },
+          {
+            "dbnum": 7322,
+            "sesno": 4491,
+            "db_type": "PADD"
+          },
+          {
+            "dbnum": 7323,
+            "sesno": 277,
+            "db_type": "DICT"
+          },
+          {
+            "dbnum": 7324,
+            "sesno": 1362,
+            "db_type": "DESI"
+          },
+          {
+            "dbnum": 7325,
+            "sesno": 3180,
+            "db_type": "PADD"
+          },
+          {
+            "dbnum": 7326,
+            "sesno": 639,
+            "db_type": "DESI"
+          },
+          {
+            "dbnum": 7327,
+            "sesno": 1470,
+            "db_type": "DESI"
+          },
+          {
+            "dbnum": 7328,
+            "sesno": 40,
+            "db_type": "PROP"
+          },
+          {
+            "dbnum": 7329,
+            "sesno": 221,
+            "db_type": "DESI"
+          },
+          {
+            "dbnum": 7330,
+            "sesno": 41,
+            "db_type": "DESI"
+          },
+          {
+            "dbnum": 7331,
+            "sesno": 23,
+            "db_type": "DESI"
+          },
+          {
+            "dbnum": 7332,
+            "sesno": 22,
+            "db_type": "DESI"
+          },
+          {
+            "dbnum": 7333,
+            "sesno": 1724,
+            "db_type": "DESI"
+          },
+          {
+            "dbnum": 7334,
+            "sesno": 312,
+            "db_type": "DESI"
+          },
+          {
+            "dbnum": 7350,
+            "sesno": 207,
+            "db_type": "DESI"
+          },
+          {
+            "dbnum": 7352,
+            "sesno": 50,
+            "db_type": "DESI"
+          },
+          {
+            "dbnum": 7353,
+            "sesno": 97,
+            "db_type": "DESI"
+          },
+          {
+            "dbnum": 7354,
+            "sesno": 266,
+            "db_type": "DESI"
+          },
+          {
+            "dbnum": 7356,
+            "sesno": 14,
+            "db_type": "DESI"
+          },
+          {
+            "dbnum": 7741,
+            "sesno": 90,
+            "db_type": "DESI"
+          },
+          {
+            "dbnum": 7742,
+            "sesno": 63,
+            "db_type": "PADD"
+          },
+          {
+            "dbnum": 7997,
+            "sesno": 353,
+            "db_type": "DESI"
+          },
+          {
+            "dbnum": 7998,
+            "sesno": 540,
+            "db_type": "DESI"
+          },
+          {
+            "dbnum": 7999,
+            "sesno": 200,
+            "db_type": "DESI"
+          },
+          {
+            "dbnum": 8000,
+            "sesno": 646,
+            "db_type": "DESI"
+          },
+          {
+            "dbnum": 250705,
+            "sesno": 9,
+            "db_type": "DESI"
+          }
+        ]
+      },
+      "cli_source_version": {
+        "dbnum": 8000,
+        "sesno": 646,
+        "databases": [
+          {
+            "dbnum": 5052,
+            "sesno": 190,
+            "db_type": "CATA"
+          },
+          {
+            "dbnum": 8000,
+            "sesno": 646,
+            "db_type": "DESI"
+          }
+        ]
+      },
+      "segments": 9,
+      "segments_equal_cli": true,
+      "response_equal_cli": false,
+      "attributes_status": 200,
+      "attributes_session": {
+        "dbnum": 8000,
+        "sesno": 646
+      },
+      "same_session": true,
+      "nearby_status": 404,
+      "nearby_ms": 1,
+      "nearby": "{\"code\":\"not_found\",\"message\":\"构件 24384/23257 在模型投影与空间树里都没有包围盒（还没生成过模型）\",\"detail\":null}"
+    },
+    {
+      "refno": "24381/103251",
+      "centerline_status": 200,
+      "centerline_ms": 129,
+      "source_version": {
+        "dbnum": 7997,
+        "sesno": 353,
+        "databases": [
+          {
+            "dbnum": 1112,
+            "sesno": 738,
+            "db_type": "DESI"
+          },
+          {
+            "dbnum": 5052,
+            "sesno": 190,
+            "db_type": "CATA"
+          },
+          {
+            "dbnum": 5100,
+            "sesno": 27,
+            "db_type": "DICT"
+          },
+          {
+            "dbnum": 5101,
+            "sesno": 7,
+            "db_type": "DICT"
+          },
+          {
+            "dbnum": 5200,
+            "sesno": 30,
+            "db_type": "PROP"
+          },
+          {
+            "dbnum": 6001,
+            "sesno": 2,
+            "db_type": "PROP"
+          },
+          {
+            "dbnum": 6002,
+            "sesno": 18,
+            "db_type": "DICT"
+          },
+          {
+            "dbnum": 6003,
+            "sesno": 4,
+            "db_type": "DESI"
+          },
+          {
+            "dbnum": 7006,
+            "sesno": 17,
+            "db_type": "DICT"
+          },
+          {
+            "dbnum": 7007,
+            "sesno": 2873,
+            "db_type": "PADD"
+          },
+          {
+            "dbnum": 7008,
+            "sesno": 47,
+            "db_type": "PROP"
+          },
+          {
+            "dbnum": 7009,
+            "sesno": 479,
+            "db_type": "DESI"
+          },
+          {
+            "dbnum": 7011,
+            "sesno": 641,
+            "db_type": "DESI"
+          },
+          {
+            "dbnum": 7015,
+            "sesno": 511,
+            "db_type": "DESI"
+          },
+          {
+            "dbnum": 7022,
+            "sesno": 254,
+            "db_type": "DESI"
+          },
+          {
+            "dbnum": 7026,
+            "sesno": 28,
+            "db_type": "PROP"
+          },
+          {
+            "dbnum": 7027,
+            "sesno": 445,
+            "db_type": "DESI"
+          },
+          {
+            "dbnum": 7043,
+            "sesno": 13,
+            "db_type": "DICT"
+          },
+          {
+            "dbnum": 7044,
+            "sesno": 66,
+            "db_type": "PADD"
+          },
+          {
+            "dbnum": 7048,
+            "sesno": 54,
+            "db_type": "DESI"
+          },
+          {
+            "dbnum": 7321,
+            "sesno": 77,
+            "db_type": "DESI"
+          },
+          {
+            "dbnum": 7322,
+            "sesno": 4491,
+            "db_type": "PADD"
+          },
+          {
+            "dbnum": 7323,
+            "sesno": 277,
+            "db_type": "DICT"
+          },
+          {
+            "dbnum": 7324,
+            "sesno": 1362,
+            "db_type": "DESI"
+          },
+          {
+            "dbnum": 7325,
+            "sesno": 3180,
+            "db_type": "PADD"
+          },
+          {
+            "dbnum": 7326,
+            "sesno": 639,
+            "db_type": "DESI"
+          },
+          {
+            "dbnum": 7327,
+            "sesno": 1470,
+            "db_type": "DESI"
+          },
+          {
+            "dbnum": 7328,
+            "sesno": 40,
+            "db_type": "PROP"
+          },
+          {
+            "dbnum": 7329,
+            "sesno": 221,
+            "db_type": "DESI"
+          },
+          {
+            "dbnum": 7330,
+            "sesno": 41,
+            "db_type": "DESI"
+          },
+          {
+            "dbnum": 7331,
+            "sesno": 23,
+            "db_type": "DESI"
+          },
+          {
+            "dbnum": 7332,
+            "sesno": 22,
+            "db_type": "DESI"
+          },
+          {
+            "dbnum": 7333,
+            "sesno": 1724,
+            "db_type": "DESI"
+          },
+          {
+            "dbnum": 7334,
+            "sesno": 312,
+            "db_type": "DESI"
+          },
+          {
+            "dbnum": 7350,
+            "sesno": 207,
+            "db_type": "DESI"
+          },
+          {
+            "dbnum": 7352,
+            "sesno": 50,
+            "db_type": "DESI"
+          },
+          {
+            "dbnum": 7353,
+            "sesno": 97,
+            "db_type": "DESI"
+          },
+          {
+            "dbnum": 7354,
+            "sesno": 266,
+            "db_type": "DESI"
+          },
+          {
+            "dbnum": 7356,
+            "sesno": 14,
+            "db_type": "DESI"
+          },
+          {
+            "dbnum": 7741,
+            "sesno": 90,
+            "db_type": "DESI"
+          },
+          {
+            "dbnum": 7742,
+            "sesno": 63,
+            "db_type": "PADD"
+          },
+          {
+            "dbnum": 7997,
+            "sesno": 353,
+            "db_type": "DESI"
+          },
+          {
+            "dbnum": 7998,
+            "sesno": 540,
+            "db_type": "DESI"
+          },
+          {
+            "dbnum": 7999,
+            "sesno": 200,
+            "db_type": "DESI"
+          },
+          {
+            "dbnum": 8000,
+            "sesno": 646,
+            "db_type": "DESI"
+          },
+          {
+            "dbnum": 250705,
+            "sesno": 9,
+            "db_type": "DESI"
+          }
+        ]
+      },
+      "cli_source_version": {
+        "dbnum": 7997,
+        "sesno": 353,
+        "databases": [
+          {
+            "dbnum": 5052,
+            "sesno": 190,
+            "db_type": "CATA"
+          },
+          {
+            "dbnum": 7997,
+            "sesno": 353,
+            "db_type": "DESI"
+          }
+        ]
+      },
+      "segments": 27,
+      "segments_equal_cli": true,
+      "response_equal_cli": false,
+      "attributes_status": 200,
+      "attributes_session": {
+        "dbnum": 7997,
+        "sesno": 353
+      },
+      "same_session": true,
+      "nearby_status": 404,
+      "nearby_ms": 17,
+      "nearby": "{\"code\":\"not_found\",\"message\":\"构件 24381/103251 在模型投影与空间树里都没有包围盒（还没生成过模型）\",\"detail\":null}"
+    }
+  ]
+}
