@@ -1,0 +1,192 @@
+{
+  "backend": "http://127.0.0.1:39738",
+  "checks": [
+    {
+      "refno": "24381/145018",
+      "r100": 9,
+      "r500": 13,
+      "r100_subset_of_r500": true,
+      "sorted_by_distance": true,
+      "pages": 4,
+      "page_sizes": [
+        4,
+        4,
+        4,
+        1
+      ],
+      "paged_equals_full": true,
+      "total_stable": true,
+      "surface_pairs": [
+        {
+          "target": "24381_144924",
+          "box_distance": 0.0,
+          "status": 200,
+          "http_ms": 802,
+          "distance_mm": 767.5,
+          "witness": "closest-points",
+          "error_bound_mm": 0.5,
+          "timing_ms": {
+            "load": 231,
+            "query": 19,
+            "total": 791
+          },
+          "warnings": []
+        },
+        {
+          "target": "24381_144941",
+          "box_distance": 0.0,
+          "status": 200,
+          "http_ms": 541,
+          "distance_mm": 650.5293,
+          "witness": "closest-points",
+          "error_bound_mm": 0.5,
+          "timing_ms": {
+            "load": 3,
+            "query": 1,
+            "total": 538
+          },
+          "warnings": []
+        },
+        {
+          "target": "24381_144947",
+          "box_distance": 0.0,
+          "status": 200,
+          "http_ms": 593,
+          "distance_mm": 364.53027,
+          "witness": "closest-points",
+          "error_bound_mm": 0.5,
+          "timing_ms": {
+            "load": 18,
+            "query": 1,
+            "total": 590
+          },
+          "warnings": []
+        }
+      ]
+    },
+    {
+      "refno": "24384/23257",
+      "r100": 7,
+      "r500": 13,
+      "r100_subset_of_r500": true,
+      "sorted_by_distance": true,
+      "pages": 4,
+      "page_sizes": [
+        4,
+        4,
+        4,
+        1
+      ],
+      "paged_equals_full": true,
+      "total_stable": true,
+      "surface_pairs": [
+        {
+          "target": "24381_145764",
+          "box_distance": 0.0,
+          "status": 200,
+          "http_ms": 682,
+          "distance_mm": 731.1977,
+          "witness": "closest-points",
+          "error_bound_mm": 0.5,
+          "timing_ms": {
+            "load": 78,
+            "query": 1,
+            "total": 679
+          },
+          "warnings": []
+        },
+        {
+          "target": "24384_23247",
+          "box_distance": 0.0,
+          "status": 200,
+          "http_ms": 545,
+          "distance_mm": 2.3053827,
+          "witness": "closest-points",
+          "error_bound_mm": 0.5,
+          "timing_ms": {
+            "load": 1,
+            "query": 0,
+            "total": 536
+          },
+          "warnings": []
+        },
+        {
+          "target": "32576_12",
+          "box_distance": 0.0,
+          "status": 200,
+          "http_ms": 557,
+          "distance_mm": 0.0,
+          "witness": "aabb-overlap-center",
+          "error_bound_mm": 0.5,
+          "timing_ms": {
+            "load": 0,
+            "query": 0,
+            "total": 537
+          },
+          "warnings": []
+        }
+      ]
+    },
+    {
+      "refno": "24381/103251",
+      "r100": 4,
+      "r500": 5,
+      "r100_subset_of_r500": true,
+      "sorted_by_distance": true,
+      "pages": 2,
+      "page_sizes": [
+        4,
+        1
+      ],
+      "paged_equals_full": true,
+      "total_stable": true,
+      "surface_pairs": [
+        {
+          "target": "24381_103281",
+          "box_distance": 0.0,
+          "status": 200,
+          "http_ms": 773,
+          "distance_mm": 16.218718,
+          "witness": "closest-points",
+          "error_bound_mm": 0.5,
+          "timing_ms": {
+            "load": 15,
+            "query": 192,
+            "total": 770
+          },
+          "warnings": []
+        },
+        {
+          "target": "24381_103294",
+          "box_distance": 0.0,
+          "status": 200,
+          "http_ms": 688,
+          "distance_mm": 0.0,
+          "witness": "aabb-overlap-center",
+          "error_bound_mm": 0.5,
+          "timing_ms": {
+            "load": 5,
+            "query": 115,
+            "total": 670
+          },
+          "warnings": []
+        },
+        {
+          "target": "24381_103339",
+          "box_distance": 0.0,
+          "status": 200,
+          "http_ms": 701,
+          "distance_mm": 8.698129,
+          "witness": "closest-points",
+          "error_bound_mm": 0.5,
+          "timing_ms": {
+            "load": 7,
+            "query": 154,
+            "total": 699
+          },
+          "warnings": []
+        }
+      ]
+    }
+  ]
+}
