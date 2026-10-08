@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue';
 
-import type { PipeBendArc } from '@/dimension';
+import type { PipeBendArc, PipeSegmentElevation } from '@/dimension';
 
 import { usePipeInformationStore } from '@/composables/usePipeInformationStore';
 
@@ -12,6 +12,9 @@ const mm = (value: number | null) => value === null ? '—' : `${Number(value.to
 const bendText = (bend: PipeBendArc) => bend.arcMm === null
   ? `角度 ${bend.angleDeg ?? '缺失'}° · 端口弦长 ${mm(bend.chordMm)} · 不能计算弧长`
   : `角度 ${bend.angleDeg}° · 端口弦长 ${mm(bend.chordMm)} · 弧长 ${mm(bend.arcMm)} · 推算半径 ${mm(bend.radiusMm)}`;
+const slopeText = { horizontal: '水平', vertical: '竖直', sloped: '倾斜' } as const;
+const elevationText = (item: PipeSegmentElevation) => `中心线 ${mm(item.startZ)} → ${mm(item.endZ)} · `
+  + (item.topMm === null ? '外径缺失，不计算管顶/管底' : `管顶 ${mm(item.topMm)} · 管底 ${mm(item.bottomMm)} · 外径 ${mm(item.outsideDiameterMm)}`);
 </script>
 
 <template>
@@ -73,6 +76,16 @@ const bendText = (bend: PipeBendArc) => bend.arcMm === null
             <span class="break-all">{{ bend.refno }} · {{ bend.noun }}</span>
             <p>{{ bendText(bend) }}</p>
             <p class="break-all">{{ bend.source }}</p>
+          </li>
+        </ul>
+      </details>
+      <details v-if="record.straightElevations?.length" class="mt-2">
+        <summary class="cursor-pointer">直管段标高（{{ record.straightElevations.length }}）</summary>
+        <ul class="mt-1 space-y-1">
+          <li v-for="item in record.straightElevations" :key="`${item.order}:${item.refno}`" class="rounded bg-slate-50 p-1"
+            :class="item.topMm === null ? 'text-amber-700' : ''">
+            <span class="break-all">{{ item.order + 1 }} · {{ item.refno }} · {{ slopeText[item.slope] }}</span>
+            <p>{{ elevationText(item) }}</p>
           </li>
         </ul>
       </details>

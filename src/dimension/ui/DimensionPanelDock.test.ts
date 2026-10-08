@@ -4,7 +4,7 @@ import { gunzipSync } from 'node:zlib';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createApp, nextTick } from 'vue';
 
-import { buildPipeInformation, pipeInformationToExternalDimensions } from '../adapters/pipeInformation';
+import { buildPipeInformation, pipeInformationToExternalDimensions, validatePipeInformationRecord } from '../adapters/pipeInformation';
 import { emptyDimensionDocument, linearRecord } from '../domain/testFixtures';
 import { LffFont } from '../kernel/glyph/lffParser';
 import { ExternalDimensionRegistry } from '../services/externalDimensionRegistry';
@@ -250,6 +250,7 @@ describe('DimensionPanelDock', () => {
       expect(catalogued.bendArcs![0]!.arcMm).toBeCloseTo(50 * Math.PI, 6);
       expect(catalogued.fields.find(field => field.key === 'straight-length')?.text).toBe('1000 mm');
       expect(catalogued.fields.find(field => field.key === 'length-with-bends')).toMatchObject({ text: '1157.08 mm', status: 'unconfirmed' });
+      expect(catalogued.fields.find(field => field.key === 'top-bottom-elevation')?.text).toBe('管顶最高 3057.15 mm，管底最低 2942.85 mm（1/1段）');
       const catalogueCard = (pipeInformationToExternalDimensions([catalogued])[0]!.layout as any).tag.lines.map((line: any) => line.text).join('');
       expect([...catalogueCard].filter(character => font.getGlyph(character.codePointAt(0)!) === font.getGlyph(0xfffd))).toEqual([]);
       await nextTick();
@@ -258,6 +259,8 @@ describe('DimensionPanelDock', () => {
       expect(host.textContent).toContain('7997/2@42:SPRE → 13246/1@48:MATX → 13246/2@48:XTEX');
       expect(host.textContent).toContain('弯头弧长及来源');
       expect(host.textContent).toContain('弧长 157.08 mm · 推算半径 100 mm');
+      expect(host.textContent).toContain('直管段标高');
+      expect(host.textContent).toContain('中心线 3000 mm → 3000 mm · 管顶 3057.15 mm · 管底 2942.85 mm · 外径 114.3 mm');
       store.persistRecords(); store.bindPersistence('pipe-info-A', storage); store.bindPersistence('pipe-info-B', storage);
       expect(store.records.value[0]?.bendArcs?.[0]?.arcMm).toBeCloseTo(50 * Math.PI, 6);
       expect(tube()).toMatchObject({ implicit: true, status: 'read' });
@@ -280,6 +283,21 @@ describe('DimensionPanelDock', () => {
       expect(store.records.value[0]?.bendArcs?.[0]).toMatchObject({ angleDeg: null, arcMm: null });
       expect(store.records.value[0]?.fields.find(field => field.key === 'length-with-bends')).toMatchObject({ text: '未设置', status: 'missing' });
       expect(store.records.value[0]?.warnings.join('；')).toContain('1 个弯头/弯管缺少有效角度或端口');
+      // Top/bottom of a straight tube: ±r for horizontal, 0 offset for vertical, r·√(1 − dz²) when sloped; no value without OD.
+      const elevationLine = { ...centerline, segments: [
+        { refno: 'Head~7997_2', order: 0, implicit: true, noun: 'TUBI', start: { x: 0, y: 0, z: 3000 }, end: { x: 1000, y: 0, z: 3000 }, length_mm: 1000, outside_diameter_mm: 100 },
+        { refno: '7997_2~7997_3', order: 1, implicit: true, noun: 'TUBI', start: { x: 1000, y: 0, z: 3000 }, end: { x: 1000, y: 0, z: 5000 }, length_mm: 2000, outside_diameter_mm: 100 },
+        { refno: '7997_3~Tail', order: 2, implicit: true, noun: 'TUBI', start: { x: 1000, y: 0, z: 5000 }, end: { x: 2000, y: 0, z: 4990 }, length_mm: 1000.05, outside_diameter_mm: null },
+      ] };
+      const elevated = buildPipeInformation({ refno: '7997_1', attributes, centerline: elevationLine });
+      expect(elevated.straightElevations?.map(item => [item.slope, item.topMm, item.bottomMm])).toEqual([['horizontal', 3050, 2950], ['vertical', 5000, 3000], ['sloped', null, null]]);
+      expect(elevated.fields.find(field => field.key === 'centerline-elevation')?.text).toBe('3000 mm ～ 5000 mm');
+      expect(elevated.fields.find(field => field.key === 'top-bottom-elevation')).toMatchObject({ text: '管顶最高 5000 mm，管底最低 2950 mm（2/3段）', status: 'unconfirmed' });
+      const sloped = buildPipeInformation({ refno: '7997_1', attributes, centerline: { ...elevationLine, segments: [{ ...elevationLine.segments[2]!, outside_diameter_mm: 100 }] } });
+      expect(sloped.straightElevations?.[0]?.topMm).toBeCloseTo(5000 + 50 * Math.sqrt(1 - (10 / Math.hypot(1000, 10)) ** 2), 9);
+      const elevationCard = (pipeInformationToExternalDimensions([elevated])[0]!.layout as any).tag.lines.map((line: any) => line.text).join('');
+      expect([...elevationCard].filter(character => font.getGlyph(character.codePointAt(0)!) === font.getGlyph(0xfffd))).toEqual([]);
+      expect(validatePipeInformationRecord(JSON.parse(JSON.stringify(elevated))).straightElevations).toEqual(elevated.straightElevations);
     } finally { attrsSpy.mockRestore(); centerSpy.mockRestore(); boundsSpy.mockRestore(); store.detachPersistence(); store.clear(); }
   });
   it('merges external records with the document and keeps hide state visible', async () => {

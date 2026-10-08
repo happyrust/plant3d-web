@@ -10,6 +10,10 @@ export type PipeMemberDiameter = {
 export type PipeMemberMaterial = { refno: string; noun: string; implicit?: boolean; text: string; source: string; status: PipeInformationField['status'] };
 export type PipeBendAngle = { refno: string; angleDeg: number | null; source: string };
 export type PipeBendArc = { refno: string; noun: string; angleDeg: number | null; chordMm: number | null; radiusMm: number | null; arcMm: number | null; source: string };
+export type PipeSegmentElevation = {
+  refno: string; order: number; slope: 'horizontal' | 'vertical' | 'sloped'; startZ: number; endZ: number;
+  outsideDiameterMm: number | null; topMm: number | null; bottomMm: number | null;
+};
 export type PipeInformationRecord = {
   refno: string; name: string; sesno: number; fetchedAt: string; stale: boolean;
   anchorMm: Vec3; fields: PipeInformationField[]; warnings: string[];
@@ -17,6 +21,7 @@ export type PipeInformationRecord = {
   sourceVersion?: NonNullable<SpatialCenterlineResponse['source_version']>;
   memberMaterials?: PipeMemberMaterial[];
   bendArcs?: PipeBendArc[];
+  straightElevations?: PipeSegmentElevation[];
 };
 export const PIPE_INFORMATION_SOURCE = 'pipe-information' as const;
 export const pipeInformationRefno = (value: string) => value.trim().replace(/^=/, '').replace('/', '_');
@@ -113,6 +118,25 @@ export function buildPipeInformation(input: {
   const missingArcs = bendArcs.filter(bend => bend.arcMm === null).length;
   if (missingArcs) warnings.push(`${missingArcs} 个弯头/弯管缺少有效角度或端口，不能计算含弯头弧长的管长`);
   const lengthWithBends = straightTotal !== null && !missingArcs ? straightTotal + bendArcs.reduce((sum, bend) => sum + bend.arcMm!, 0) : null;
+  const finiteSegment = (segment: SpatialCenterlineResponse['segments'][number]) =>
+    [segment.start, segment.end].every(point => point && [point.x, point.y, point.z].every(Number.isFinite));
+  const centerlineZ = (centerline?.segments ?? []).filter(finiteSegment).flatMap(segment => [segment.start.z, segment.end.z]);
+  // A straight tube's surface rises r·√(1 − dz²) above its axis: r for horizontal runs, 0 for vertical ones.
+  const straightElevations = (straight ?? []).filter(finiteSegment).flatMap((segment): PipeSegmentElevation[] => {
+    const delta = [segment.end.x - segment.start.x, segment.end.y - segment.start.y, segment.end.z - segment.start.z];
+    const length = Math.hypot(...delta);
+    if (!(length > 0)) return [];
+    const dz = Math.abs(delta[2]!) / length;
+    const od = segment.outside_diameter_mm;
+    const outside = typeof od === 'number' && Number.isFinite(od) && od > 0 ? od : null;
+    const rise = outside === null ? null : outside / 2 * Math.sqrt(Math.max(0, 1 - dz * dz));
+    return [{ refno: segment.refno, order: segment.order, slope: dz < 1e-4 ? 'horizontal' : dz > 1 - 1e-9 ? 'vertical' : 'sloped',
+      startZ: segment.start.z, endZ: segment.end.z, outsideDiameterMm: outside,
+      topMm: rise === null ? null : Math.max(segment.start.z, segment.end.z) + rise,
+      bottomMm: rise === null ? null : Math.min(segment.start.z, segment.end.z) - rise }];
+  });
+  const sized = straightElevations.filter(item => item.topMm !== null);
+  const topBottomText = sized.length ? `管顶最高 ${mm(Math.max(...sized.map(item => item.topMm!)))}，管底最低 ${mm(Math.min(...sized.map(item => item.bottomMm!)))}（${sized.length}/${straightElevations.length}段）` : null;
   // Field text is drawn with the bundled LFF font, which has no glyph for the full-width semicolon.
   let versionText = version ? `属性与中心线同版本（${version.dbnum}@${version.sesno}），模型版本待核实` : '中心线未提供版本，属性/几何对应关系待核实';
   if (bounds?.record_source_sessions) {
@@ -138,6 +162,10 @@ export function buildPipeInformation(input: {
     field('length-with-bends', '管长（含弯头）', lengthWithBends === null ? null : mm(lengthWithBends),
       `直管段总长 + ${bendArcs.length} 个 BEND/ELBO 弧长（ANGL 与端口弦长推算）；不含阀门等其他管件，完整管长口径待专业确认`, 'unconfirmed'),
     field('elevation', '标注锚点标高', mm(anchor[2]), 'E3D 世界 Z，非管顶/管底', 'derived'),
+    field('centerline-elevation', '中心线标高范围', centerlineZ.length ? `${mm(Math.min(...centerlineZ))} ～ ${mm(Math.max(...centerlineZ))}` : null,
+      'E3D 世界 Z，全部中心线端点（含管件端口）', 'derived'),
+    field('top-bottom-elevation', '管顶/管底标高', topBottomText,
+      '直管段中心线 ± 外径/2 × √(1 − 轴向竖直分量²)；外径为逐段目录/估算值，管件实体外形未计入；业务标高取轴线、管顶或管底待专业确认', 'unconfirmed'),
     field('coordinates', '标注锚点坐标', anchor.map(mm).join(', '), 'E3D 世界 X/Y/Z', 'derived'),
     field('source-version', '版本核对', versionText, '属性/中心线实读会话；模型记录会话不替代完整生成及发布回执', 'unconfirmed'),
   ];
@@ -154,7 +182,7 @@ export function buildPipeInformation(input: {
   warnings.push('外径是各槽位管子目录参考，非管件实体最大包络；模型发布及目录依赖对应关系尚需核实，外径和模型盒不得作为专业包络验收值');
   for (const warning of centerline?.warnings ?? []) warnings.push(warning);
   return { refno, name: attributeText(attrs, 'NAME') ?? refno, sesno: attrs.sesno!, fetchedAt: new Date().toISOString(),
-    stale: false, anchorMm: anchor, fields, memberDiameters, memberMaterials: input.memberMaterials, bendArcs,
+    stale: false, anchorMm: anchor, fields, memberDiameters, memberMaterials: input.memberMaterials, bendArcs, straightElevations,
     sourceVersion: version ?? undefined, warnings: [...new Set(warnings)] };
 }
 
@@ -197,5 +225,10 @@ export function validatePipeInformationRecord(value: unknown): PipeInformationRe
     && [bend.refno, bend.noun, bend.source].every(value => typeof value === 'string')
     && [bend.angleDeg, bend.chordMm, bend.radiusMm, bend.arcMm].every(value => value === null || (typeof value === 'number' && Number.isFinite(value))))))
     throw new Error('弯头弧长保存格式无效');
+  if (record.straightElevations !== undefined && (!Array.isArray(record.straightElevations) || !record.straightElevations.every(item => item
+    && typeof item.refno === 'string' && Number.isSafeInteger(item.order) && ['horizontal', 'vertical', 'sloped'].includes(item.slope)
+    && [item.startZ, item.endZ].every(Number.isFinite)
+    && [item.outsideDiameterMm, item.topMm, item.bottomMm].every(value => value === null || (typeof value === 'number' && Number.isFinite(value))))))
+    throw new Error('直管段标高保存格式无效');
   return { ...record, memberDiameters: record.memberDiameters ?? [], stale: true };
 }
